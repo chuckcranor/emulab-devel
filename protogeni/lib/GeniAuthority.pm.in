@@ -165,7 +165,7 @@ sub Lookup($$)
     $self->{'DOMAIN'} = $domain;
 
     # Convert URNs to objects.
-    $self->{'AUTHORITY'}->{'urnOBJ'} = GeniHRN->new($self->urn());
+    $self->{'AUTHORITY'}->{'urn'} = GeniHRN->new($self->urn());
 
     return $self;
 }
@@ -232,8 +232,7 @@ sub expires($)		{ return field($_[0], "expires"); }
 sub created($)		{ return field($_[0], "created"); }
 sub uuid_prefix($)	{ return field($_[0], "uuid_prefix"); }
 sub urn($)		{ return field($_[0], "urn"); }
-sub urnOBJ($)		{ return field($_[0], "urnOBJ"); }
-sub URN($)		{ return field($_[0], "urnOBJ"); }
+sub URN($)		{ return field($_[0], "urn"); }
 sub url($)		{ return field($_[0], "url"); }
 sub hrn($)		{ return field($_[0], "hrn"); }
 sub type($)		{ return field($_[0], "type"); }

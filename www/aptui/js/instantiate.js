@@ -1,19 +1,14 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'constraints', 'js/quickvm_sup',
-	 'js/ppwizardstart', 'js/JacksEditor', 'js/wizard-template',
-	 'js/lib/text!template/instantiate.html',
-	 'js/lib/text!template/aboutapt.html',
-	 'js/lib/text!template/aboutcloudlab.html',
-	 'js/lib/text!template/aboutpnet.html',
-	 'js/lib/text!template/waitwait-modal.html',
-	 'js/lib/text!template/rspectextview-modal.html',
-	 'formhelpers', 'filestyle', 'marked', 'jacks', 'jquery-steps'],
-function (_, Constraints, sup, ppstart, JacksEditor, wt,
-	  instantiateString, aboutaptString, aboutcloudString, aboutpnetString,
-	  waitwaitString, rspecviewString)
+$(function ()
 {
     'use strict';
 
+    var templates = APT_OPTIONS.fetchTemplateList(['instantiate', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', 'rspectextview-modal']);
+    var instantiateString = templates['instantiate'];
+    var aboutaptString = templates['aboutapt'];
+    var aboutcloudString = templates['aboutcloudlab'];
+    var aboutpnetString = templates['aboutpnet'];
+    var waitwaitString = templates['waitwait-modal'];
+    var rspecviewString = templates['rspectextview-modal'];
     var ajaxurl;
     var amlist        = null;
     var projlist      = null;
@@ -29,6 +24,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
     var doconstraints = 0;
     var amValueToKey  = {};
     var showpicker    = 0;
+    var fromrepo      = false;
     var portal        = null;
     var registered    = false;
     var JACKS_NS      = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
@@ -58,6 +54,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	multisite  = window.MULTISITE;
 	portal     = window.PORTAL;
 	ajaxurl    = window.AJAXURL;
+	fromrepo   = window.FROMREPO;
 	doconstraints = window.DOCONSTRAINTS;
 	showpicker    = window.SHOWPICKER;
 
@@ -865,7 +862,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	    var xml    = $(xmlDoc);
     
 	    /*
-	     * We now use the desciption from inside the rspec, unless there
+	     * We now use the description from inside the rspec, unless there
 	     * is none, in which case look to see if the we got one in the
 	     * rpc reply, which we will until all profiles converted over to
 	     * new format rspecs.
@@ -873,7 +870,6 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	    var description = null;
 	    $(xml).find("rspec_tour").each(function() {
 		$(this).find("description").each(function() {
-		    var marked = require("marked");
 		    description = marked($(this).text());
 		});
 	    });
@@ -888,7 +884,28 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	var $xmlthing = sup.CallServerMethod(ajaxurl,
 					     "instantiate", "GetProfile",
 					     {"uuid" : profile});
-	$xmlthing.done(callback);
+	/*
+	 * If a repo-based and we got a specific branch/tag, we have to
+	 * get the source for that, since it will be different then what
+	 * is stored in the profile descriptor.
+	 */
+	console.info("fee", fromrepo, window.BRANCH, window.TAG);
+	
+	if (fromrepo &&
+	    (window.BRANCH !== undefined || window.TAG !== undefined)) {
+	    var which =
+		(window.BRANCH !== undefined ? window.BRANCH : window.TAG);
+	    
+	    $xmlthing.done(function(json) {
+		gitrepo.GetRepoSource(uuid, which, function(source) {
+		    console.info("foo");
+		    callback(json);
+		});
+	    });
+	}
+	else {
+	    $xmlthing.done(callback);
+	}
     }
 
     /*
@@ -898,7 +915,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	// If not a registered user, we do not get an rspec back, since
 	// the user is not allowed to change the configuration.
 	if (newRspec) {
-	    $('#pp_rspec_textarea').val(newRspec);
+	    $('#rspec_textarea').val(newRspec);
 	    selected_rspec = newRspec;
 	    CreateAggregateSelectors(newRspec);
 	}
@@ -1066,7 +1083,6 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
       {
 	delete context.canvasOptions.defaults;
       }
-      constraints = new Constraints(context);
       jacks.instance = new window.Jacks({
 	mode: 'viewer',
 	source: 'rspec',
@@ -1077,6 +1093,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	  jacks.output = output;
 	  jacks.output.on('found-images', onFoundImages);
 	  jacks.output.on('found-types', onFoundTypes);
+          constraints = new JACKS_LOADER.Constraints(context);
 	  updateWhere();
 	},
 	canvasOptions: context.canvasOptions,
@@ -1125,7 +1142,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	    // is not what actually comes back. Copy before print.
 	    var mycopy = $.extend(true, {}, json.value);
 	    //console.log('json', mycopy);
-	    constraints = new Constraints(context);
+	    constraints = new JACKS_LOADER.Constraints(context);
 	    constraints.addPossibles({ images: foundImages });
 	    allowWithSites(json.value[0].images, json.value[0].constraints);
 	    CreateAggregateSelectors(selected_rspec);

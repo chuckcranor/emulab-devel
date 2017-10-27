@@ -1,9 +1,8 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup',
-	 'js/lib/text!template/waitwait-modal.html'],
-function (_, sup, waitwaitString)
+$(function ()
 {
     'use strict';
+    var templates = APT_OPTIONS.fetchTemplateList(['waitwait-modal']);
+    var waitwaitString = templates['waitwait-modal'];
     var embedded = 0;
     
     function initialize()
@@ -14,10 +13,15 @@ function (_, sup, waitwaitString)
 	// We share code with the modal version of login, and the
 	// handler for the button is installed in initialize().
 	// See comment there.
-	if (window.ISCLOUD || window.ISPNET) {
+	if (window.ISCLOUD || window.ISPNET || window.ISPOWDER) {
 	    sup.InitGeniLogin(embedded);
 	}
 	window.APT_OPTIONS.initialize(sup);
+
+	// Login takes more then non-trivial time, say something soothing.
+	$('#quickvm_login_modal_button').click(function () {
+	    sup.ShowWaitWait("We are logging you in, patience please");
+	});
     }
     $(document).ready(initialize);
 });

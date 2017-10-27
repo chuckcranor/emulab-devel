@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -262,7 +262,8 @@ sub Create($$$$$$$$)
     push(@insert_data, "creator_uuid='$owner_uuid'");
     push(@insert_data, "slice_uuid='$slice_uuid'");
     # Start out new slivers, as new.
-    push(@insert_data, "state='new'");
+    push(@insert_data, "state='new',".
+	 "status_state_timestamp=unix_timestamp(now())");
 
     if (defined($rspec)) {
 	my $rspec_string = GeniXML::Serialize($rspec);
@@ -311,6 +312,7 @@ sub aggregate_uuid($)	{ return field($_[0], "aggregate_uuid"); }
 sub rspec_string($)     { return field($_[0], "rspec_string"); }
 sub status($)		{ return field($_[0], "status"); }
 sub state($)		{ return field($_[0], "state"); }
+sub status_state_timestamp($) { return field($_[0], "status_state_timestamp"); }
 sub ErrorLog($)		{ return field($_[0], "errorlog"); }
 sub cert($)		{ return GetCertificate($_[0])->cert(); }
 sub rspec($)            { return $_[0]->{'RSPEC'}; }
@@ -513,7 +515,8 @@ sub SetStatus($$)
     
     return -1
 	if (!DBQueryWarn("update geni_slivers set ".
-			 "  status='$status' ".
+			 "  status='$status', ".
+			 "  status_state_timestamp=unix_timestamp(now()) ".
 			 "where idx='$idx'"));
     
     $self->{'SLIVER'}->{'status'} = $status;
@@ -534,7 +537,8 @@ sub SetState($$)
     
     return -1
 	if (!DBQueryWarn("update geni_slivers set ".
-			 "  state='$state' ".
+			 "  state='$state', ".
+			 "  status_state_timestamp=unix_timestamp(now()) ".
 			 "where idx='$idx'"));
     
     $self->{'SLIVER'}->{'state'} = $state;
@@ -709,6 +713,16 @@ use libdb qw(TBDB_ALLOCSTATE_RES_INIT_DIRTY TBDB_NODESTATE_SHUTDOWN
 	     TBResolveNextOSID TBDB_NODESTATE_ISUP TBDB_NODESTATE_TBFAILED
              TBDB_NODESTATE_RELOADFAILED TBDB_NODESTATE_PXEWAIT);
 
+# Little helper and debug function.
+sub mysystem($)
+{
+    my ($command) = @_;
+
+    print STDERR "Running '$command'\n"
+	if (0);
+    return system($command);
+}
+
 # Error log for local physical node. This overrides the default method above,
 # since it is stored in the node.
 sub ErrorLog($)
@@ -737,10 +751,13 @@ sub resource_urn($)
     return GeniHRN::Generate("@OURDOMAIN@", "node", $self->resource_id())
 }
 
-sub Create($$$$$$)
+sub Create($$$$$;$)
 {
     # $rspec is a LibXML element representing a single node.
-    my ($class, $slice, $user, $node, $rspec) = @_;
+    my ($class, $slice, $user, $node, $rspec, $resource_type) = @_;
+    $resource_type = "Node"
+	if (!defined($resource_type));
+    
     my $virtualization_type = GeniXML::GetVirtualizationType($rspec);
     if (!defined($virtualization_type)) {
 	print STDERR "Node does not contain a virtualization_type\n";
@@ -779,7 +796,8 @@ sub Create($$$$$$)
     my $resource_id   = $node->node_id();
     my $hrn           = "${PGENIDOMAIN}." . $node->node_id();
 
-    my $sliver = GeniSliver->Create($slice, $user, $resource_uuid, "Node",
+    my $sliver = GeniSliver->Create($slice, $user, $resource_uuid,
+				    $resource_type,
 				    $resource_id, $hrn, $nickname, $rspec);
     return undef
 	if (!defined($sliver));
@@ -937,6 +955,31 @@ sub AnnotateManifest($)
     $node->NodeAttribute( "sim_imsi", \$sim_imsi );
     GeniXML::SetText( "sim_imsi", $rspec, $sim_imsi )
 	if( defined( $sim_imsi ) );
+
+    #
+    # Add Emulab extension that says which virtnodes are instantiated
+    # on this physical host.
+    #
+    if (!$node->isvirtnode() && $node->HasVirtualNodes()) {
+	my @vnodes = ();
+	if ($node->VirtualNodes(\@vnodes)) {
+	    print STDERR "Could not get virtnode list for $node\n";
+	    return undef;
+	}
+	my $vmlistref = GeniXML::FindNodesNS("n:vmlist", $rspec,
+					     $GeniXML::EMULAB_NS)->pop();
+	if (defined($vmlistref)) {
+	    $rspec->removeChild($vmlistref);
+	}
+	$vmlistref = GeniXML::AddElement("vmlist", $rspec,
+					 $GeniXML::EMULAB_NS);
+	foreach my $child (@vnodes) {
+	    my $vmref = GeniXML::AddElement("vm", $vmlistref,
+					    $GeniXML::EMULAB_NS);
+	    GeniXML::SetText("client_id", $vmref, $child->vname());
+	    GeniXML::SetText("vnode", $vmref, $child->node_id());
+	}
+    }
     
     if ($self->UpdateRspec($rspec)) {
 	print STDERR "Could not insert annotated manifest for node $self ".
@@ -998,6 +1041,11 @@ sub Provision($;$)
 	    print STDERR "Could not get pnode object for $node\n";
 	    return -1;
 	}
+	# This would typically happen in libvtop, but we call the mapper
+	# in a way that causes it to not happen. Do not do this after
+	# initial provisioning.
+	$node->ResetStartStatus()
+	    if (!$node->genisliver_idx());
 
 	# Mark
 	$node->ModifyReservation({"genisliver_idx" => $self->idx()});
@@ -1005,6 +1053,13 @@ sub Provision($;$)
 	my $subtype = GeniXML::GetVirtualizationSubtype($self->rspec());
 	if (defined($subtype)) {
 	    if (!$pnode->sharing_mode()) {
+		# This would typically happen in libvtop, but we call the mapper
+		# in a way that causes it to not happen. Do not do this after
+		# initial provisioning.
+		$pnode->ResetStartStatus()
+		    if (!$pnode->genisliver_idx());
+
+		# Mark
 		$pnode->ModifyReservation({"genisliver_idx" => $self->idx()});
 	    }
 	}
@@ -1014,6 +1069,14 @@ sub Provision($;$)
 	# For a "raw" node, there is no vnode, so this is the pnode
 	# we need to mark for tmcd.
 	#
+	# This would typically happen in libvtop, but we call the mapper
+	# in a way that causes it to not happen. Do not do this after
+	# initial provisioning.
+	#
+	$node->ResetStartStatus()
+	    if (!$node->genisliver_idx());
+
+	# Mark
 	if ($node->ModifyReservation({"genisliver_idx" => $self->idx()})) {
 	    return -1;
 	}
@@ -1063,14 +1126,14 @@ sub UnProvision($;$)
 	#
 	if ($self->status() ne "stopped") {
 	    if ($node->isremotenode() && $node->isvirtnode()) {
-		system("$VNODESETUP -p -q -m -k $pid $eid $node_id");
+		mysystem("$VNODESETUP -p -q -m -k $pid $eid $node_id");
 		if ($?) {
 		    print STDERR "$VNODESETUP -k failed on $node_id\n";
 		    return -1;
 		}
 	    }
 	    elsif ($node->sharing_mode()) {
-		system("$VNODESETUP -j -q -m -k $pid $eid $node_id");
+		mysystem("$VNODESETUP -j -q -m -k $pid $eid $node_id");
 		if ($?) {
 		    print STDERR "$VNODESETUP -k failed on $node_id\n";
 		    return -1;
@@ -1104,13 +1167,13 @@ sub UnProvision($;$)
 	    }
 
 	    if (scalar(@vnodes) > 1 || $nophysfree) {
-		system("$NFREE -q $pid $eid $node_id");
+		mysystem("$NFREE -q $pid $eid $node_id");
 		# Unincorporate the node. Bogus, needs fixing.
 		$pnode->ModifyReservation({"genisliver_idx" => 0})
 		    if (! ($pnode->sharing_mode() || scalar(@vnodes) > 1));
 	    }
 	    else {
-		system("$NFREE -x -q $pid $eid $pnode_id");
+		mysystem("$NFREE -x -q $pid $eid $pnode_id");
 		$pnode->Refresh();
 	    }
 	}
@@ -1120,6 +1183,8 @@ sub UnProvision($;$)
 		$node->ModifyReservation({"genisliver_idx" => 0});
 		goto skip;
 	    }
+	    my $opt = "";
+	    
 	    #
 	    # Look to see if local physical node was stopped (powered off).
 	    #
@@ -1128,7 +1193,13 @@ sub UnProvision($;$)
 		$self->state() eq "stopped") {
 		system("$POWER on $node_id");
 	    }
-	    system("$NFREE -q $pid $eid $node_id");
+	    # Kill vnodes on pnode if we are deallocating a pnode.
+	    if (!$node->isvirtnode() &&
+		!$node->isremotenode() &&
+		!$node->sharing_mode()) {
+		$opt = "-x";
+	    }	    
+	    mysystem("$NFREE $opt -q $pid $eid $node_id");
 	}
 	if ($?) {
 	    print STDERR "Could not deallocate $node from $self\n";
@@ -1389,6 +1460,8 @@ sub ComputeStatus($;$)
 	print STDERR "$node was already released from $self\n";
 	return -1;
     }
+    # Make sure our object has the updated state.
+    $node->GetEventState();
     
     #
     # Special state for updating user accounts. We never go into the
@@ -1405,7 +1478,7 @@ sub ComputeStatus($;$)
 	    $self->SetState("started");
 	}
     }
-    if ($self->state() eq "imaging") {
+    if ($self->state() eq "imaging" || $self->state() eq "restarting") {
 	$status = "changing";
 	goto done;
     }
@@ -1470,7 +1543,9 @@ sub SetStatus($$)
     # out an event indicating a change.
     #
     my $query_result =
-	DBQueryWarn("update geni_slivers set status='$status' ".
+	DBQueryWarn("update geni_slivers set ".
+		    "  status='$status',".
+		    "  status_state_timestamp=unix_timestamp(now()) ".
 		    "where idx='$idx' and status!='$status'");
     return -1
 	if (!$query_result);
@@ -1497,7 +1572,9 @@ sub SetState($$)
     # lets avoid the extra noise.
     #
     my $query_result =
-	DBQueryWarn("update geni_slivers set state='$state' ".
+	DBQueryWarn("update geni_slivers set ".
+		    "  state='$state',".
+		    "  status_state_timestamp=unix_timestamp(now()) ".
 		    "where idx='$idx' and state!='$state'");
     return -1
 	if (!$query_result);
@@ -1533,6 +1610,33 @@ sub SendStatusEvent($)
 }
 
 #
+# Like above, but send frisbee status stuff.
+#
+sub SendFrisbeeEvent($$$)
+{
+    my ($self, $imagename, $mb_written) = @_;
+    my $slice = $self->GetSlice();
+    return -1
+	if (!defined($slice));
+
+    my $resource_id   = $self->resource_id();
+    my $nickname      = $self->nickname() || "";
+
+    my $blob = {
+	"component_urn" => $resource_id,
+	"client_id"     => $nickname,
+	"imagename"     => $imagename,
+	"MB_written"    => $mb_written,
+	"utc"           => time(),
+    };
+    GeniEvent->SendEvent({"type"    => "FRISBEESTATUS",
+			  "slice"   => $slice->urn(),
+			  "urn"     => $self->sliver_urn(),
+			  "details" => $blob});
+    return 0;
+}
+
+#
 # Generate the blob for status. 
 #
 sub GenerateStatusBlob($)
@@ -1544,35 +1648,54 @@ sub GenerateStatusBlob($)
     my $state         = $self->state();
     my $status        = $self->status();
     my $nickname      = $self->nickname() || "";
+    # Fall back to current time if no timestamp yet.
+    my $utc           = $self->status_state_timestamp() || time();
 
     my $node = Node->LookupSync($resource_id);
     if (!defined($node)) {
 	print STDERR "Could not map node $resource_id to its object\n";
-	return -1;
+	return undef;
     }
-    my ($nodestatus) = $node->GetStatus() || "unknown";
+    my ($nodestatus,$nodestatus_timestamp) = $node->GetStatus();
+    if (!defined($nodestatus)) {
+	$nodestatus = "unknown";
+	$nodestatus_timestamp = 0;
+    }
+    my $rawstate = $node->eventstate();
+    my $rawstate_timestamp = $node->state_timestamp();
 
     # New is the same as stopped. Separate state is handy.
     $state = "stopped"
 	if ($state eq "new");
+
+    #
+    # So we have a bunch of timestamps for various bits of state.
+    # Not much atomicity, but I think we are okay. Use the most
+    # recent timestamp, else current time.
+    #
+    $utc = $nodestatus_timestamp
+	if ($nodestatus_timestamp > $utc);
+    $utc = $rawstate_timestamp
+	if ($rawstate_timestamp > $utc);
 
     my $blob = {
 	"component_urn" => $resource_id,
 	"client_id"     => $nickname,
 	"state"         => $state,
 	"status"        => $status,
-	# We do not put this unless its for SliverStatus. Too big.
+	# We do not put this in unless its for SliverStatus. Too big.
 	"error"         => "",
-	"rawstate"      => $node->eventstate(),
+	"rawstate"      => $rawstate,
 	"nodestatus"    => $nodestatus,
-	"utc"           => time(),
+	"utc"           => $utc,
     };
 
     #
     # Startup command info.
     #
     if (defined($node) &&
-	defined($node->startupcmd()) && $node->startupcmd() ne "") {
+	((defined($node->startupcmd()) && $node->startupcmd() ne "") ||
+	 $node->HasStartupAgent())) {
 	if (defined($node->startstatus()) &&
 	    $node->startstatus() ne "none") {
 	    $blob->{'execute_state'}   = "exited";
@@ -1590,6 +1713,36 @@ sub GenerateStatusBlob($)
 	}
     }
     return $blob;
+}
+
+##########################################################################
+#
+package GeniSliver::Vhost;
+use vars qw(@ISA);
+@ISA = "GeniSliver::Node";
+
+use GeniDB;
+use GeniComponent;
+use GeniSlice;
+use GeniCredential;
+use GeniCertificate;
+use GeniUtil;
+
+#
+# This is a wrapper so that we can represent internally added hosts
+# but not treat them like normal nodes when doing rspec/manifest things.
+#
+sub Create($$$$$)
+{
+    my ($class, $slice, $user, $node, $rspec) = @_;
+
+    return GeniSliver::Node->Create($slice, $user, $node, $rspec, "Vhost");
+}
+
+# Nothing to do right now.
+sub UnProvision($$)
+{
+    return 0;
 }
 
 ##########################################################################

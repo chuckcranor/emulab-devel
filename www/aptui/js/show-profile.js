@@ -1,25 +1,26 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment',
-	 'js/lib/text!template/show-profile.html',
-	 'js/lib/text!template/waitwait-modal.html',
-	 'js/lib/text!template/renderer-modal.html',
-	 'js/lib/text!template/showtopo-modal.html',
-	 'js/lib/text!template/rspectextview-modal.html',
-	 'js/lib/text!template/guest-instantiate.html',
-	 'js/lib/text!template/instantiate-modal.html',
-	 'js/lib/text!template/oops-modal.html',
-	 'js/lib/text!template/share-modal.html',
-	 // jQuery modules
-	 'marked'],
-function (_, sup, moment,
-	  showString, waitwaitString, 
-	  rendererString, showtopoString, rspectextviewString,
-	  guestInstantiateString, instantiateString, oopsString, shareString)
+$(function ()
 {
     'use strict';
+
+    var templates = APT_OPTIONS.fetchTemplateList(['show-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'rspectextview-modal', 'guest-instantiate', 'instantiate-modal', 'oops-modal', 'share-modal']);
+    var showString = templates['show-profile'];
+    var waitwaitString = templates['waitwait-modal'];
+    var rendererString = templates['renderer-modal'];
+    var showtopoString = templates['showtopo-modal'];
+    var rspectextviewString = templates['rspectextview-modal'];
+    var guestInstantiateString = templates['guest-instantiate'];
+    var instantiateString = templates['instantiate-modal'];
+    var oopsString = templates['oops-modal'];
+    var shareString = templates['share-modal'];
+  
     var profile_uuid = null;
+    var profile_name = '';
+    var profile_pid = '';
+    var profile_version = '';
     var version_uuid = null;
+    var gotrspec     = 0;
     var gotscript    = 0;
+    var fromrepo     = 0;
     var ajaxurl      = "";
     var amlist       = null;
     var isppprofile  = false;
@@ -41,10 +42,28 @@ function (_, sup, moment,
 	var fields = JSON.parse(_.unescape($('#form-json')[0].textContent));
 	amlist     = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 
+	if (_.has(fields, "profile_rspec") && fields["profile_rspec"] != "") {
+	    gotrspec = 1;
+	}
 	if (_.has(fields, "profile_script") && fields["profile_script"] != "") {
 	    gotscript = 1;
 	}
 	
+        // If this is an existing profile, stash the name/project
+        if (_.has(fields, "profile_name")) {
+	    profile_name = fields['profile_name'];
+        }
+        if (_.has(fields, "profile_pid")) {
+	    profile_pid = fields['profile_pid'];
+        }
+        if (_.has(fields, "profile_version")) {
+	    profile_version = fields['profile_version'];
+        }
+	if (_.has(fields, "profile_repourl") &&
+	    fields["profile_repourl"] != "") {
+	    fromrepo = 1;
+	}
+      
 	// Generate the templates.
 	var show_html   = showTemplate({
 	    fields:		fields,
@@ -55,7 +74,12 @@ function (_, sup, moment,
 	    canedit:            window.CANEDIT,
 	    disabled:           window.DISABLED,
 	    withpublishing:     window.WITHPUBLISHING,
+	    fromrepo:           fromrepo,
+	    gotrspec:           gotrspec,
+	    gotscript:          gotscript,
 	});
+	show_html = aptforms.FormatFormFieldsHorizontal(show_html,
+							{"wide" : true});
 	$('#page-body').html(show_html);
 
 	$('#waitwait_div').html(waitwaitString);
@@ -68,6 +92,11 @@ function (_, sup, moment,
 	$('#oops_div').html(oopsString);
 	$('#share_div').html(shareTemplate({formfields: fields}))
 
+	// Fireoff repo stuff now.
+	if (fromrepo) {
+	    SetupRepo();
+	}
+	
 	// This activates the popover subsystem.
 	$('[data-toggle="popover"]').popover({
 	    trigger: 'hover',
@@ -100,25 +129,44 @@ function (_, sup, moment,
 	// The Show Source button.
 	$('#show_source_modal_button, #show_xml_modal_button')
 	    .click(function (event) {
-		var source = null;
+	        var source = null;
+	        var isScript = true;
 		var href   = "show-profile.php?uuid=" + profile_uuid;
 
-		if ($(this).attr("id") == "show_source_modal_button") {
-		    source = $.trim($('#profile_script_textarea').val());
-		    $('#rspec_modal_download_button')
-			.attr("href", href + "&source=true");
+	        source = $.trim($('#profile_script_textarea').val());
+	        sup.DownloadOnClick($('#rspec_modal_download_button'),
+				    function () { return source; },
+				    'profile.py');
+/*	        $('#rspec_modal_download_button')
+		  .attr("href", href + "&source=true");*/
+	        if (! source || ! source.length) {
+		    isScript = false;
 		}
-		if (!source || !source.length) {
+	        if (isScript == false ||
+		    $(this).attr("id") != "show_source_modal_button") {
+		  
 		    source = $.trim($('#profile_rspec_textarea').val());
-		    $('#rspec_modal_download_button')
-			.attr("href", href + "&rspec=true");
+	            sup.DownloadOnClick($('#rspec_modal_download_button'),
+				        function () { return source; },
+				        'profile.xml');
+//		    $('#rspec_modal_download_button')
+//		      .attr("href", href + "&rspec=true");
 		}
-		$('#rspec_modal_editbuttons').addClass("hidden");
-		$('#rspec_modal_viewbuttons').removeClass("hidden");
-		$('#modal_profile_rspec_textarea').prop("readonly", true);
-		$('#modal_profile_rspec_textarea').val(source);
-		$('#rspec_modal').modal({'backdrop':'static','keyboard':false});
-		$('#rspec_modal').modal('show');
+	        if ($(this).attr("id") == "show_source_modal_button" &&
+		    isScript && !fromrepo) {
+		    openEditor(source);
+		}
+	        else
+	        {
+		    if (!source || !source.length) {
+		    }
+		    $('#rspec_modal_editbuttons').addClass("hidden");
+		    $('#rspec_modal_viewbuttons').removeClass("hidden");
+		    $('#modal_profile_rspec_textarea').prop("readonly", true);
+		    $('#modal_profile_rspec_textarea').val(source);
+		    $('#rspec_modal').modal({'backdrop':'static','keyboard':false});
+		    $('#rspec_modal').modal('show');
+		}
 	    });
         $('#rspec_modal').on('shown.bs.modal', function() {
 	    var source = $('#modal_profile_rspec_textarea').val();
@@ -135,7 +183,7 @@ function (_, sup, moment,
 		$('#modal_profile_rspec_div').prepend(elt);
 	    }, {
 		value: source,
-                lineNumbers: false,
+                lineNumbers: true,
 		smartIndent: true,
 		autofocus: false,
 		readOnly: true,
@@ -154,7 +202,7 @@ function (_, sup, moment,
 	 */
 	$('#profile_instantiate_button').click(function (event) {
 	    window.location.replace("instantiate.php?profile=" +
-				    version_uuid);
+				    version_uuid + "&from=show-profile");
 	});
 	// Handler for normal instantiate submit button, which is in
 	// the modal.
@@ -220,12 +268,10 @@ function (_, sup, moment,
 	
 	$(xml).find("rspec_tour > description").each(function() {
 	    var text = $(this).text();
-	    var marked = require("marked");
 	    $('#profile_description').html(marked(text));
 	});
 	$(xml).find("rspec_tour > instructions").each(function() {
 	    var text = $(this).text();
-	    var marked = require("marked");
 	    $('#profile_instructions').html(marked(text));
 	});
     }
@@ -242,5 +288,73 @@ function (_, sup, moment,
 	}
     }
 
+    function openEditor(source)
+    {
+        window.SHOW_GENILIB_EDITOR(source, null, true);
+    }
+
+    function SetupRepo()
+    {
+	gitrepo.InitRepoPicker(version_uuid,
+			       function(which) {
+				   SelectRepoTarget(which);
+			       });
+	gitrepo.GetCommitInfo(version_uuid);
+    }
+    /*
+     * User has clicked on a branch/tag. We need to get that branch/tag
+     * source code and update the page.
+     */
+    function SelectRepoTarget(which)
+    {
+	var callback = function (source, hash) {
+	    console.info(source);
+
+	    // Need to put the source into correct hidden textarea.
+	    // But if its a script, we have to convert it first.
+	    if (pythonRe.test(source)) {
+		$('#profile_script_textarea').val(source);
+		ConvertScript(source);
+	    }
+	    else {
+		$('#profile_rspec_textarea').val(source);
+		ExtractFromRspec();
+	    }
+	};
+	gitrepo.GetRepoSource(version_uuid, which, callback);
+    }
+
+    //
+    // Pass a geni-lib script to the server to run (convert to XML).
+    //
+    function ConvertScript(script)
+    {
+	// Save for later.
+	$('#profile_script_textarea').val(script);
+
+	var callback = function(json) {
+	    sup.HideWaitWait();
+	    //console.info(json.value);
+
+	    if (json.code) {
+		sup.SpitOops("oops",
+			     "<pre><code>" +
+			     $('<div/>').text(json.value).html() +
+			     "</code></pre>");
+		return;
+	    }
+	    if (json.value.rspec != "") {
+		$('#profile_rspec_textarea').val(json.value.rspec);
+		ExtractFromRspec();
+	    }
+	}
+	sup.ShowWaitWait("We are converting the geni-lib script");
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "manage_profile",
+					    "CheckScript",
+					    {"script"   : script});
+	xmlthing.done(callback);
+    }
+    
     $(document).ready(initialize);
 });

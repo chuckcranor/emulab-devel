@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2015 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2017 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -102,10 +102,6 @@ int32_t next_token;
 
 simulator_agent_t primary_simulator_agent;
 
-static pid_t emcd_pid = -1;
-static pid_t vmcd_pid = -1;
-static pid_t rmcd_pid = -1;
-
 static struct agent ns_sequence_agent; /* Used for list of things to do right after swapin */
 static timeline_agent_t ns_sequence;
 static struct agent ns_teardown_agent; /* Used during experiment teardown */
@@ -114,18 +110,46 @@ static struct agent ns_swapout_agent; /* Used during experiment swapout */
 static timeline_agent_t ns_swapout;
 static struct agent ns_timeline_agent; /* Used for timeline in the experiment */
 static timeline_agent_t ns_timeline;
+static event_handle_t handle;
+static sigset_t threadmask;
+static pthread_t mainthread;
 
+/*
+ * Threads are started up mysteriously throughout the lifetime of the
+ * event scheduler. To avoid total chaos, we only process these exit
+ * actions in the main thread. All other threads just propagate the
+ * signal and go back to what they were doing.
+ */
 static void sigpass(int sig)
 {
-	info("event-sched[%d]: received signal %d, exiting\n", getpid(), sig);
-	
-	if (emcd_pid != -1)
-		kill(emcd_pid, sig);
-	if (vmcd_pid != -1)
-		kill(vmcd_pid, sig);
-	if (rmcd_pid != -1)
-		kill(rmcd_pid, sig);
+	static int called = 0;
+	char tbuf[32];
+	time_t ts = time(NULL);
+	pthread_t th = pthread_self();
 
+	info("event-sched[%d]: received signal %d in thread %p at %s",
+	     getpid(), sig, th, ctime_r(&ts, tbuf));
+
+	/* haven't fired up anything yet or seem to be stuck, just exit */
+	if (mainthread == NULL || ++called > 100)
+		exit(0);
+
+	/* whoever we are, we should not process signals after this */
+	pthread_sigmask(SIG_BLOCK, &threadmask, NULL);
+
+	if (th != mainthread) {
+		info("event-sched[%d]: wrong thread, forwarding...\n",
+		     getpid());
+		pthread_kill(mainthread, sig);
+		return;
+	}
+
+	/* Unregister with the event system: */
+	if (handle && event_unregister(handle) == 0) {
+		warning("could not unregister with event system");
+	}
+
+	info("event-sched[%d]: exiting\n", getpid());
 	exit(0);
 }
 
@@ -134,77 +158,6 @@ static void sigpanic(int sig)
 	info("event-sched[%d]: sigpanic %d\n", getpid(), sig);
 
 	abort();
-}
-
-static void sigchld(int sig)
-{
-	int status;
-	
-	if (vmcd_pid != -1) {
-		if (waitpid(vmcd_pid, &status, WNOHANG) != -1) {
-			vmcd_pid = -1;
-		}
-	}
-	if (rmcd_pid != -1) {
-		if (waitpid(rmcd_pid, &status, WNOHANG) != -1) {
-			rmcd_pid = -1;
-			if (vmcd_pid != -1)
-				kill(vmcd_pid, SIGTERM);
-		}
-	}
-
-}
-
-static char emc_path[256];
-
-static void sighup(int sig)
-{
-	if (emc_path[0] == '\0')
-		return;
-	
-	rmcd_pid = fork();
-	switch (rmcd_pid) {
-	case -1:
-		fatal("could not start rmcd");
-		break;
-	case 0:
-		execlp("rmcd",
-		       "rmcd",
-		       "-dd",
-		       "-l",
-		       "logs/rmcd.log",
-		       "-U",
-		       emc_path,
-		       NULL);
-		exit(0);
-		break;
-	default:
-		break;
-	}
-	
-	vmcd_pid = fork();
-	switch (vmcd_pid) {
-	case -1:
-		fatal("could not start vmcd");
-		break;
-	case 0:
-		sleep(1);
-		execlp("vmcd",
-		       "vmcd",
-		       "-d",
-		       "-S",
-		       "-w",
-		       "5",
-		       "-l",
-		       "logs/vmcd.log",
-		       "-U",
-		       emc_path,
-		       NULL);
-		exit(0);
-		break;
-	default:
-		break;
-	}
 }
 
 void
@@ -237,7 +190,6 @@ int
 main(int argc, char *argv[])
 {
 	address_tuple_t tuple;
-	event_handle_t handle;
 	char *server = NULL;
 	char *port = NULL;
 	char *log = NULL;
@@ -352,15 +304,19 @@ main(int argc, char *argv[])
 	if (log)
 		loginit(0, log);
 
+	sigemptyset(&threadmask);
+	sigaddset(&threadmask, SIGTERM);
+	sigaddset(&threadmask, SIGINT);
+	sigaddset(&threadmask, SIGQUIT);
+	sigaddset(&threadmask, SIGHUP);
+
+	mainthread = pthread_self();
 	signal(SIGTERM, sigpass);
 	signal(SIGINT, sigpass);
 	signal(SIGQUIT, sigpass);
 	
 	signal(SIGSEGV, sigpanic);
 	signal(SIGBUS, sigpanic);
-	
-	signal(SIGCHLD, sigchld);
-	signal(SIGHUP, sighup);
 	
 	/*
 	 * Convert server/port to elvin thing.
@@ -376,11 +332,16 @@ main(int argc, char *argv[])
 		 (port ? port : ""));
 	server = buf;
 
+	/* XXX make sure we don't catch signals in event (pubsub) dispatcher */
+	pthread_sigmask(SIG_BLOCK, &threadmask, NULL);
+
 	/* Register with the event system: */
 	handle = event_register_withkeyfile(server, 1, keyfile);
 	if (handle == NULL) {
 		fatal("could not register with event system");
 	}
+
+	pthread_sigmask(SIG_UNBLOCK, &threadmask, NULL);
 
 	/* Make a (not yet populated) list of things to do after initial swapin */
 	ns_sequence = create_timeline_agent(TA_SEQUENCE);
@@ -465,96 +426,6 @@ main(int argc, char *argv[])
 	
 	if (RPC_agentlist(handle, pid, eid))
 		fatal("Could not get agentlist from RPC server\n");
-
-	if (RPC_waitforrobots(handle, pid, eid))
-		fatal("waitforrobots: RPC failed!");
-
-	if (access("tbdata/emcd.config", R_OK) == 0) {
-
-		systemf("echo %d > tmp/event-sched.pid", getpid());
-		snprintf(emc_path,
-			 sizeof(emc_path),
-			 "%s/%s.%s.emcd",
-			 _PATH_TMP,
-			 pid,
-			 eid);
-		
-		emcd_pid = fork();
-		switch (emcd_pid) {
-		case -1:
-			fatal("could not start emcd");
-			break;
-		case 0:
-			execlp("emcd",
-			       "emcd",
-			       "-d",
-			       "-l",
-			       "logs/emcd.log",
-			       "-c",
-			       "tbdata/emcd.config",
-			       "-e",
-			       pideid,
-			       "-U",
-			       emc_path,
-			       NULL);
-			exit(0);
-			break;
-		default:
-			break;
-		}
-		
-		sleep(2);
-
-		rmcd_pid = fork();
-		switch (rmcd_pid) {
-		case -1:
-			fatal("could not start rmcd");
-			break;
-		case 0:
-			execlp("rmcd",
-			       "rmcd",
-			       "-dd",
-			       "-l",
-			       "logs/rmcd.log",
-			       "-U",
-			       emc_path,
-			       NULL);
-			exit(0);
-			break;
-		default:
-			break;
-		}
-		
-		sleep(2);
-
-#if 1
-		vmcd_pid = fork();
-		switch (vmcd_pid) {
-		case -1:
-			fatal("could not start vmcd");
-			break;
-		case 0:
-			execlp("vmcd",
-			       "vmcd",
-			       "-d",
-			       "-S",
-			       "-w",
-			       "5",
-			       "-l",
-			       "logs/vmcd.log",
-			       "-U",
-			       emc_path,
-			       NULL);
-			exit(0);
-			break;
-		default:
-			break;
-		}
-#else
-		systemf("vmcd -d -l logs/vmcd.log -e localhost -p 2626 "
-			"-c junk.flux.utah.edu -P 6969 &");
-#endif
-	}
 
 	/*
 	 * Read the static events list and schedule.
@@ -739,6 +610,42 @@ sched_event_prepare(event_handle_t handle, sched_event_t *se)
 	
 	return retval;
 }
+
+#if 0
+/*
+ * This handles the fact that pubsub will not deliver a notification
+ * back to the sender. So we call and queue it directly.
+ */
+int
+notify_local(event_handle_t handle, event_notification_t notification)
+{
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+
+	/* Add the attribute that signifies its a scheduler operation. */
+	if (!event_notification_put_int32(handle, notification,
+					  "SCHEDULER", 1)) {
+		error("could not add scheduler attribute to notification %p\n",
+		      notification);
+		return 0;
+	}
+
+	/* Add the time this event should be fired. */
+	if (!event_notification_put_int32(handle, notification, "time_sec",
+					  tv.tv_sec) ||
+	    !event_notification_put_int32(handle, notification, "time_usec",
+					  tv.tv_usec)) {
+		error("could not add time attribute to notification %p\n",
+		      notification);
+		return 0;
+	}
+
+	/* Call subscription callback directly. */
+	enqueue(handle, notification, NULL);
+
+	return 1;
+}
+#endif
 
 /* Enqueue event notifications as they arrive. */
 static void
@@ -1358,45 +1265,6 @@ info("AddEvent called with event of triggertype %s\n", triggertype);
 	return 0;
 }
 
-int
-AddRobot(event_handle_t handle,
-	 struct agent *agent,
-	 double init_x,
-	 double init_y,
-	 double init_o)
-{
-	sched_event_t se;
-	int retval = 0;
-
-	assert(agent != NULL);
-
-	se.agent.s = agent;
-	se.notification = event_notification_create(
-		handle,
-		EA_Experiment, pideid,
-		EA_Type, TBDB_OBJECTTYPE_NODE,
-		EA_Event, TBDB_EVENTTYPE_SETDEST,
-		EA_Name, agent->name,
-		EA_ArgFloat, "X", init_x,
-		EA_ArgFloat, "Y", init_y,
-		EA_ArgFloat, "ORIENTATION", init_o,
-		EA_TAG_DONE);
-	event_notification_put_int32(handle,
-				     se.notification,
-				     "TOKEN",
-				     next_token);
-	next_token += 1;
-	
-	memset(&se.time, 0, sizeof(se.time));
-	se.length = 1;
-	se.flags = SEF_SENDS_COMPLETE | SEF_SINGLE_HANDLER;
-	
-	sched_event_prepare(handle, &se);
-	timeline_agent_append(ns_sequence, &se);
-	
-	return retval;
-}
-
 /*
  * Get the static event list from the DB and schedule according to
  * the relative time stamps.
@@ -1577,6 +1445,18 @@ info("Automatically scheduling the beginning and end of time\n");
 			 EA_Event, TBDB_EVENTTYPE_START,
 			 EA_Name, ns_sequence_agent.name,
 			 EA_TAG_DONE);
+#if 0
+		notification = event_notification_create(
+			 handle,
+			 EA_Experiment, pideid,
+			 EA_Type, TBDB_OBJECTTYPE_SEQUENCE,
+			 EA_Event, TBDB_EVENTTYPE_START,
+			 EA_Name, ns_sequence_agent.name,
+			 EA_TAG_DONE);
+		if (!notify_local(handle, notification))
+			error("could not send time start to localhost\n");
+		event_notification_free(handle, notification);
+#endif
 	}
 // XXX
 // info("Returning from get_static_events()\n");	

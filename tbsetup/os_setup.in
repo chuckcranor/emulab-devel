@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -41,12 +41,13 @@ use Data::Dumper;
 
 sub usage()
 {
-    print STDERR "Usage: os_setup [-d] <pid> <eid>\n";
+    print STDERR "Usage: os_setup [-d] <pid> <eid> [node, node, ...]\n";
     exit(-1);
 }
 my $optlist  = "id";
 my $debug    = 1;
 my $impotent = 0;
+my @nodelist = ();
 
 #
 # Configure variables
@@ -73,8 +74,7 @@ use libtestbed;
 use libtblog;
 use NodeType;
 use Experiment;
-use Image;
-use OSinfo;
+use OSImage;
 use User;
 use Node;
 use EmulabFeatures;
@@ -95,7 +95,7 @@ TBDebugTimeStampsOn();
 if (! getopts($optlist, \%options)) {
     usage();
 }
-if (@ARGV != 2) {
+if (@ARGV < 2) {
     usage();
 }
 if (defined($options{"d"})) {
@@ -120,25 +120,46 @@ my $user_email_to = "$user_name <$user_email>";
 #
 # Check permission.
 #
-my $experiment = Experiment->Lookup($ARGV[0], $ARGV[1]);
+my $pid = shift(@ARGV);
+my $eid = shift(@ARGV);
+my $experiment = Experiment->Lookup($pid, $eid);
 if (!defined($experiment)) {
     die_noretry("Could not find experiment object");
 }
 if (!$experiment->AccessCheck($this_user, TB_EXPT_MODIFY)) {
     die_noretry("You do not have permission to swap this experiment!");
 }
-my $pid = $experiment->pid();
-my $eid = $experiment->eid();
+# Avoid taint.
+$pid = $experiment->pid();
+$eid = $experiment->eid();
 
 TBDebugTimeStamp("os_setup started");
 
 #
-# List of all nodes in the experiment.
+# List of all nodes in the experiment if not specified.
 #
-my @nodelist = $experiment->NodeList(0, 1);
-if (! @nodelist) {
-    tbinfo("No nodes in experiment. Exiting ...\n");
-    exit(0);
+if (@ARGV) {
+    foreach my $n (@ARGV) {
+	my $node = Node->Lookup($n);
+	if (!defined($node)) {
+	    die_noretry("No such node $n!");
+	}
+	my $reservation = $node->Reservation();
+	if (!defined($reservation)) {
+	    die_noretry("$node is not reserved!");
+	}
+	if (!$reservation->SameExperiment($experiment)) {
+	    die_noretry("$node is not reserved to $experiment");
+	}
+	push(@nodelist, $node);
+    }
+}
+else {
+    @nodelist = $experiment->NodeList(0, 1);
+    if (! @nodelist) {
+	tbinfo("No nodes in experiment. Exiting ...\n");
+	exit(0);
+    }
 }
 
 #
@@ -559,8 +580,8 @@ if (defined $tally{reload}) {
     $users_fault = 0;
 
     foreach my $osid (sort keys %{$tally{reload}}) {
-	my $osinfo  = OSinfo->Lookup($osid);
-	my $osname  = $osinfo->osname();
+	my $osimage = OSImage->Lookup($osid);
+	my $osname  = $osimage->imagename();
 	
 	my %d     = %{$tally{reload}{$osid}{any_type}};
 	my $total = $total{$osid}{any_type};
@@ -578,9 +599,9 @@ if (defined $tally{reload}) {
     $users_fault = 1;
 
     foreach my $osid (sort keys %{$tally{boot}}) {
-	my $osinfo     = OSinfo->Lookup($osid);
-	my $osname     = $osinfo->osname();
-	my $user_image = ($osinfo->pid() eq TBOPSPID() ? 0 : 1);
+	my $osimage    = OSImage->Lookup($osid);
+	my $osname     = $osimage->imagename();
+	my $user_image = ($osimage->pid() eq TBOPSPID() ? 0 : 1);
 	
 	add_defaults($tally{boot}{$osid}{any_type});
 	my %d   = %{$tally{boot}{$osid}{any_type}};
@@ -683,8 +704,8 @@ if ($exit_code == 0) {
 	    }
 	}
     }
-    Image->RecordImageHistory($experiment, 'os_setup',
-			      tblog_session(), $impotent, \%todo);
+    OSImage->RecordImageHistory($experiment, 'os_setup',
+				tblog_session(), $impotent, \%todo);
 }
 
 #

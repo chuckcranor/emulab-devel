@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -183,16 +183,6 @@ if ($isadmin || STUDLY() || OPSGUY()) {
                        "modnodeattributes_form.php3?node_id=$node_id");
 }
 
-if ($isadmin) {
-    if (!$node->reserved_pid()) {
-	WRITESUBMENUBUTTON("Pre-Reserve Node",
-			   "prereserve_node.php3?node_id=$node_id");
-    }
-    else {
-	WRITESUBMENUBUTTON("Clear Pre-Reserve",
-			   "prereserve_node.php3?node_id=$node_id&clear=1");
-    }
-}
 SUBMENUEND();
 
 #

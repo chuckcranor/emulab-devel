@@ -396,7 +396,7 @@ foreach my $power_id (keys %outlets) {
     # of object
     #
     my $errors = 0;
-    if ($type eq "IPMI" || $type eq "ipmi-ms") {
+    if ($type eq "IPMI") {
         my $device = new power_ipmi($type,$power_id,$verbose);
 	if (!defined $device) {
 	    warn "Unable to contact controller for $nodestr. Skipping...\n";
@@ -515,6 +515,60 @@ foreach my $power_id (keys %outlets) {
 	    if (iloctrl($type,$op,@unforcenodes)) {
 		print "Control of $nodestr failed.\n"; ++$exitval;
 		++$errors;
+	    }
+	}
+    } elsif ($type eq 'ipmi-ms') {
+	#
+	# XXX a "cycle" operation on IPMI will fail if the node is off.
+	# See comment above for ipmi15 case.
+	# 
+	# XXX Through a historic quirk, these speak in terms of outlets
+	# rather than nodes, so we map between the two.
+	#
+        my $device = new power_ipmi($type, $power_id, $verbose);
+	if (!defined $device) {
+	    warn "Unable to contact controller for $nodestr. Skipping...\n";
+	    next;
+	}
+	my (@forcenodes, @unforcenodes);
+	my (@forceoutlets, @unforceoutlets);
+	if ($op eq "cycle") {
+	    for (my $ix = 0; $ix < @nodes; $ix++) {
+		my $nodeid = $nodes[$ix];
+		my $outlet = $outlets[$ix];
+
+		my $node = $nodes{$nodeid};
+		if ($node->cyclewhenoff()) {
+		    push @forceoutlets, $outlet;
+		    push @forcenodes, $nodeid;
+		} else {
+		    push @unforceoutlets, $outlet;
+		    push @unforcenodes, $nodeid;
+		}
+	    }
+	} else {
+	    @unforceoutlets = @outlets;
+	    @unforcenodes = @nodes;
+	}
+	if (@forceoutlets) {
+	    $nodestr = join(',', @forcenodes);
+	    print "Calling device->power(forcecycle, @forceoutlets)\n"
+		if $verbose > 1;
+	    if ($device->power("forcecycle", @forceoutlets)) {
+		print "Control of $nodestr failed.\n";
+		$exitval++;
+		$errors++;
+	    }
+
+	}
+	if (@unforceoutlets) {
+	    $nodestr = join(',', @unforcenodes);
+	    print "Calling device->power($op, @unforceoutlets)\n"
+		if $verbose > 1;
+	    if ($device->power($op, @unforceoutlets)) {
+		print "Control of $nodestr failed.\n";
+		$exitval++;
+		$errors++;
 	    }
 	}
     } elsif ($type eq 'ilo3' || $type eq 'ilo2' || $type eq 'ilo' ||
@@ -661,10 +715,28 @@ sub dostatus(@) {
 		    next;
 		}
 
+		# XXX hack for Moonshots is slightly different
+		if ($ctrls{$ctrl} eq "ipmi-ms") {
+		    if (!exists($pernode{$ctrl})) {
+			push(@nwanted, $ctrl);
+			push(@{$pernode{$ctrl}}, $outlet);
+		    } elsif (@{$pernode{$ctrl}} > 0) {
+			push(@{$pernode{$ctrl}}, $outlet);
+		    }
+		    print "$node: $ctrl outlet $outlet\n";
+		    next;
+		}
 		print "$node is $ctrl outlet $outlet...\n";
 	    }
 	} else {
 	    $ctrl = $node;
+	    if ($ctrls{$ctrl} eq "ipmi-ms") {
+		if (!exists($pernode{$ctrl})) {
+		    push(@nwanted, $ctrl);
+		}
+		@{$pernode{$ctrl}} = ();
+		next;
+	    }
 	}
 	push(@nwanted, $ctrl);
     }
@@ -742,6 +814,44 @@ sub dostatus(@) {
 		    if (defined($status{$ostr}));
 	    }
 	    print "\n";
+	} elsif ($ctrls{$ctrl} =~ /^ipmi-ms/) {
+	    # if there is an empty list of nodes, we wall all of them.
+	    my @outlets = sort {$a <=> $b} @{$pernode{$ctrl}};
+	    if (@outlets == 0) {
+		@outlets = (1..45);
+	    }
+	    delete $pernode{$ctrl};
+
+	    print STDERR "Getting IPMI status for $ctrl outlets ", join(' ', @outlets), "\n"
+		if ($verbose);
+	    my $device = new power_ipmi("ipmi-ms", $ctrl, $verbose);
+	    if (!defined $device) {
+		warn "Unable to contact controller $ctrl.\n";
+		$errors++;
+		next;
+	    } else {
+		print "Calling device->status()\n"
+		    if $verbose > 1;
+		if ($device->status(\%status, @outlets)) {
+		    print "Could not get status for $ctrl.\n";
+		    $errors++;
+		    next;
+		}
+	    }
+	    for my $outlet (@outlets) {
+		my $oname = "outlet$outlet";
+		my $state;
+		if (!exists($status{$oname})) {
+		    $state = "<unknown>";
+		} elsif ($status{$oname} == 1) {
+		    $state = "on";
+		} elsif ($status{$oname} == 0) {
+		    $state = "off";
+		} else {
+		    $state = "<unknown>";
+		}
+		print "$ctrl Node $outlet: $state\n";
+	    }
 	} elsif (!$doall) {
 	    warn "Cannot get status for $ctrl (type " .
 		$ctrls{$ctrl} . ") yet\n";

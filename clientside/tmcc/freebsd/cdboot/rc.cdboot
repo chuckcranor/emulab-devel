@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2007-2012 University of Utah and the Flux Group.
+# Copyright (c) 2007-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -281,6 +281,12 @@ sub doboot()
 	}
     }
 
+    # XXX !BOOTINFO_EVENTS code
+    system("tmcc state PXEBOOTING");
+    sleep(1);
+    system("tmcc state BOOTING");
+    # XXX END !BOOTINFO_EVENTS code
+
     #
     # Use the bootinfo client to find out what we should do. Note that
     # like the PXE version, this client will block when told to WAIT
@@ -298,6 +304,7 @@ sub doboot()
 
     if ($bootwhat eq "reboot") {
 	print("Bootinfo says to reboot ... so thats what we gonna do!\n");
+	system("tmcc state SHUTDOWN");
 	system("sync");
 	BootNotify(0, "Bootinfo said to reboot");
 	system("reboot");
@@ -417,6 +424,10 @@ sub doboot()
     # that when doing a standard BSD boot.
     #
   mfs:
+    if (-x "$BINDIR/tbshutdown") {
+        print("Starting up shutdown notification daemon\n");
+        system("$BINDIR/tbshutdown");
+    }
     if (-x "$RCDIR/rc.mfs") {
 	print("Switching over to MFS boot setup\n");
 	system("$RCDIR/rc.mfs");

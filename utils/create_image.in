@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,6 +27,7 @@ use Getopt::Std;
 use POSIX qw(setsid :sys_wait_h);
 use File::Basename;
 use Cwd qw(realpath);
+use Errno qw(ENOSPC);
 
 #
 # Image Creation Tuneables.
@@ -125,7 +126,7 @@ sub usage()
 	  "<node>      - nodeid to create the image from\n");
     exit(-1);
 }
-my $optlist  = "p:wsNdfeDSMA:Fb:UB:";
+my $optlist  = "p:wsNdfeDSMA:Fb:UB:t:q";
 my $waitmode = 0;
 my $usessh   = 0;
 my $usenfs   = 0;
@@ -134,6 +135,7 @@ my $noemail  = 0;
 my $delta    = 0;
 my $nodelta  = 0;
 my $nomfs    = 0;
+my $quiet    = 0;
 my $signature= 0;
 my $deltapct = 0;
 my $update_prepare = 0;
@@ -167,8 +169,8 @@ use libadminmfs;
 use Experiment;
 use Node;
 use User;
-use Image;
-use OSinfo;
+use OSImage;
+use Image;  # Cause of datasets.
 use Logfile;
 use WebTask;
 use Project;
@@ -231,6 +233,7 @@ my $isec2node   = 0;
 my $onsharednode= 0;
 my $node_id;
 my $node;
+my $image;
 my ($experiment,$pid);
 my $doprovenance = 0;
 my $hacksigfile;
@@ -265,6 +268,9 @@ if (defined($options{"N"})) {
 if (defined($options{"d"})) {
     $debug = 1;
 }
+if (defined($options{"q"})) {
+    $quiet = 1;
+}
 if (defined($options{"f"})) {
     $foreground = 1;
     $waitmode = 0;
@@ -290,6 +296,15 @@ if (defined($options{"b"})) {
 	die("*** $0:\n".
 	    "    Bad data in $bsname.\n");
     }
+}
+if (defined($options{"t"})) {
+    my $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	die("*** $0:\n".
+	    "    No such webtask\n");
+    }
+    $webtask->AutoStore(1);
 }
 if (defined($options{"D"})) {
     if (!$WITHDELTAS) {
@@ -393,10 +408,26 @@ if ($UID && ! $this_user->IsAdmin()) {
 # mostly to avoid hard to track errors that would result if the user picked
 # the wrong one (which is likely to happen no matter what I do).
 #
-my $image = Image->Lookup($imagepid, $imagename);
-if (!defined($image)) {
-    die("*** $0:\n".
-	"    No such image descriptor $imagename in project $imagepid!\n");
+if (defined($bsname)) {
+    #
+    # Datasets are still special, they have no osinfo. 
+    #
+    $image = Image->Lookup($imagepid, $imagename);
+    if (!defined($image)) {
+	die("*** $0:\n".
+	    "Dataset must does not exist\n");
+    }
+    elsif (!$image->isdataset()) {
+	die("*** $0:\n".
+	    "$image is not a dataset for $bsname\n");
+    }
+}
+else {
+    $image = OSImage->Lookup($imagepid, $imagename);
+    if (!defined($image)) {
+	die("*** $0:\n".
+	    "    No such image descriptor $imagename in project $imagepid!\n");
+    }
 }
 my $imageid = $image->imageid();
 my $version = $image->version();
@@ -416,12 +447,17 @@ if ($image->isdataset() && !defined($bsname)) {
 
 #
 # Before doing anything else, check for overquota ... lets not waste
-# our time. Make sure user sees the error by exiting with 1.
+# our time. Make sure user sees the error by exiting with ENOSPC. 
 #
-if (system("$checkquota -p $imagepid $user_uid") != 0) {
-    die("*** $0:\n".
-	"    You are over your disk quota on $CONTROL; ".
-	"please login there and cleanup!\n");
+my $copt = ($image->pid() eq $image->gid() ?
+	    "-p " . $image->pid() :
+	    "-g " . $image->pid() . "/" . $image->pid());
+if (system("$checkquota $copt -m 3GB $user_uid") != 0) {
+    print STDERR
+	"*** $0:\n".	
+	"    You are over your disk quota on $CONTROL, or there is less\n".
+	"    then a minimum amount (3GB) of space. Please login and cleanup!\n";
+    exit(ENOSPC);
 }
 
 #
@@ -542,12 +578,12 @@ else {
 	#
 	# Need to know this is a xen-host to tailor method below.
 	#
-	my $pnode  = Node->Lookup($node->phys_nodeid());
-	my $osinfo = OSinfo->Lookup($pnode->def_boot_osid());
-	if (!defined($osinfo)) {
-	    fatal("Could not get osinfo for $pnode");
+	my $pnode   = Node->Lookup($node->phys_nodeid());
+	my $osimage = OSImage->Lookup($pnode->def_boot_osid());
+	if (!defined($osimage)) {
+	    fatal("Could not get OSImage for $pnode");
 	}
-	if ($osinfo->FeatureSupported("xen-host")) {
+	if ($osimage->FeatureSupported("xen-host")) {
 	    $isxenhost = 1;
 
 	    if ($image->mbr_version() == 99) {
@@ -632,14 +668,7 @@ my $filename  = $image->TempImageFile();
 my $isglobal  = $image->global();
 my $usepath   = 0;
 my $isdataset = $image->isdataset();
-my $hackprefix= ($image->pid() eq $image->gid() || $isglobal ? 
-		 $PROJROOT . "/" . $image->pid() . "/images/" :
-		 $GROUPROOT . "/" .
-		    $image->pid() . "/" . $image->gid() . "/images/");
-if ($image->IsDirPath()) {
-    # Add in the directory.
-    $hackprefix .= basename($image->path()) . "/";
-}
+my $prefixdir = $image->SaveDir();
 
 #
 # If we are creating a signature file for this image, get the
@@ -653,15 +682,15 @@ if ($signature) {
 #
 # Redirect pathname for global images. See equiv code in clone_image.
 #
-if ($isglobal && ($filename =~ /^$TB/)) {
-    $filename = $hackprefix . basename($filename);
+if ($isglobal && $image->IsSystemImage()) {
+    $filename = $prefixdir . basename($filename);
     print "*** WARNING: Writing global descriptor to $filename instead!\n";
 
     #
     # Ditto for the signature file
     #
-    if ($dstsigfile && ($dstsigfile =~ /^$TB/)) {
-	$dstsigfile = $hackprefix . basename($dstsigfile);
+    if ($signature) {
+	$dstsigfile = $prefixdir . basename($dstsigfile);
     }
 
     #
@@ -672,21 +701,6 @@ if ($isglobal && ($filename =~ /^$TB/)) {
     # it the full path contructed here rather than the imageid.
     #
     $usepath = 1;
-}
-
-#
-# For the source signature file, we actually have to copy it to
-# somewhere where we can read it as well as just fixup the path.
-#
-if ($srcsigfile && ($srcsigfile =~ /^$TB/)) {
-    my $osrcsigfile = $srcsigfile;
-    $srcsigfile = $hackprefix . basename($srcsigfile);
-    if (system("cp -fp $osrcsigfile $srcsigfile")) {
-	fatal("Could not copy source signature file ".
-	      "$osrcsigfile to $srcsigfile");
-    }
-    # XXX remember so we can cleanup later
-    $hacksigfile = $srcsigfile;
 }
 
 #
@@ -747,15 +761,14 @@ if ($image->Lock()) {
 }
 $needunlock = 1;
 
+# Now we can set the webtask.
+if (defined($webtask)) {
+    $image->SetWebTask($webtask);
+}
+
 if ($doprovenance && !$isdataset && $image->ready()) {
     $image->Unlock();
     fatal("$image ready flag is set, this is inconsistent!");
-}
-
-# See if a web task is tracking this image creation.
-$webtask = WebTask->LookupByObject($image->image_uuid());
-if (defined($webtask)) {
-    $webtask->AutoStore(1);
 }
 
 #
@@ -777,8 +790,8 @@ if ($pid ne TBOPSPID()) {
 # sure the target directory exists in the image path is a directory.
 #
 # Make sure the path directory exists.
-if ($image->IsDirPath() && ! -e $image->path() && !mkdir($image->path(), 0775)){
-    fatal("Could not mkdir " . $image->path() . ": $!");
+if ($image->CreateImageDir()) {
+    fatal("Could not create image directory");
 }
 open(FILE, "> $filename") or
     fatal("Could not create $filename: $!");
@@ -792,6 +805,22 @@ close(FILE) or
 #
 chmod(0664, $filename) or
     fatal("Could not make $filename group writable: $!");
+
+#
+# For the source signature file of global images, we actually have to copy
+# it to somewhere where frisbee can access it (in case NFS is being used).
+# Note that we wait to do this until after we are sure the imagedir exists.
+#
+if ($srcsigfile && $srcimage->IsSystemImage()) {
+    my $osrcsigfile = $srcsigfile;
+    $srcsigfile = $prefixdir . basename($srcsigfile);
+    if (system("cp -fp $osrcsigfile $srcsigfile")) {
+	fatal("Could not copy source signature file ".
+	      "$osrcsigfile to $srcsigfile");
+    }
+    # XXX remember so we can cleanup later
+    $hacksigfile = $srcsigfile;
+}
 
 if (! ($isvirtnode || $isec2node || $isdataset)) {
     #
@@ -891,6 +920,12 @@ elsif (!$doprovenance) {
     } else {
 	$command .= " $ofilename";
     }
+
+    #
+    # XXX always use ssh for now to get better log info; i.e., all
+    # the log info winds up in one logfile.
+    #
+    $usessh = 1;
 }
 #
 # Otherwise, use the new script with different argument syntax.
@@ -954,9 +989,9 @@ else {
     #
     my $needrelocs = 0;
     if ($image->loadpart()) {
-	my $pnode  = Node->Lookup($node->phys_nodeid());
-	my $osinfo = OSinfo->Lookup($pnode->def_boot_osid());
-	if (defined($osinfo) && $osinfo->OS() eq "FreeBSD") {
+	my $pnode   = Node->Lookup($node->phys_nodeid());
+	my $osimage = OSImage->Lookup($pnode->def_boot_osid());
+	if (defined($osimage) && $osimage->OS() eq "FreeBSD") {
 	    $needrelocs = 1;
 	}
     }
@@ -1021,7 +1056,8 @@ if (! $foreground) {
 	if (!$waitmode) {
 	    print("Your image from $target is being created\n".
 		  "You will be notified via email when the image has been\n".
-		  "completed, and you can load the image on another node.\n");
+		  "completed, and you can load the image on another node.\n")
+		if (!$quiet);
 	    exit(0);
 	}
 	print("Waiting for image creation to complete\n");
@@ -1047,15 +1083,6 @@ if (! $foreground) {
 	print("Done. Exited with status: $?\n");
 	exit($? >> 8);
     }
-}
-
-#
-# New process group since we get called from the web interface,
-# and so the child does not get zapped if the user types ^C
-# in waitmode. 
-#
-if (! $foreground) {
-    POSIX::setsid();
 }
 
 #
@@ -1300,6 +1327,8 @@ if (!$isdataset) {
     }
 }
 if (defined($webtask)) {
+    # Cause of the fork in run_with_ssh.
+    $webtask->Refresh();
     $webtask->status("finishing");
 }
 if (! cleanup()) {
@@ -1319,7 +1348,7 @@ if ($result eq "timeout") {
 if ($result eq "toobig") {
     fatal("FAILED: Maximum image size ($maximagesize bytes) exceeded ... \n");
 }
-if ($result != 0) {
+if ($result ne "0") {
     fatal("FAILED: Returned error code $result generating image ... \n");
 }
 
@@ -1360,16 +1389,16 @@ if ($delta && $deltapct > 0 && defined($logfile)) {
 # the case that usepath=1 (target is in /usr/testbed); we do not want
 # to rename them to the target (will not work anyway), they have to
 # stay in /proj. More succintly, we always move the new files to the
-# hackprefix location.
+# prefix location.
 #
-my $hfilename = $hackprefix .
+my $hfilename = $prefixdir .
     basename(($delta ? $image->DeltaImageFile() : $image->FullImageFile()));
 
 if (system("/bin/mv -f $filename $hfilename")) {
     fatal("Could not move new image file into place");
 }
 if ($dstsigfile &&
-    system("/bin/mv -f $dstsigfile $hackprefix" .
+    system("/bin/mv -f $dstsigfile $prefixdir" .
 	   basename(($delta ?
 		     $image->FullImageSigFile() :
 		     $image->FullImageSigFile())))) {
@@ -1473,6 +1502,8 @@ if (defined($logfile)) {
     $image->ClearLogFile();
 }
 if (defined($webtask)) {
+    # Cause of the fork in run_with_ssh.
+    $webtask->Refresh();
     $webtask->status("ready");
     $webtask->Exited(0);
 }
@@ -1498,7 +1529,7 @@ if (! ($isglobal && $pid eq TBOPSPID()) || !$doprovenance) {
 if (defined($origin_uuid)) {
     DBQueryWarn("replace into image_notifications set ".
 		"  imageid='$imageid',version='$version', ".
-		"  origin_uuid='$origin_uuid'");
+		"  origin_uuid='$origin_uuid',notified=now()");
     # This can fail, we will catch it later from the CM daemon when
     # we try again. Use the nolock option since we have it.
     system("$TRIGGERUPDATE -l $imageid");
@@ -1583,6 +1614,8 @@ sub fatal($)
 	unlink($filename);
     }
     if (defined($webtask)) {
+	# Cause of the fork in run_with_ssh.
+	$webtask->Refresh();
 	$webtask->status("failed");
 	$webtask->imagesize(0);
 	$webtask->Exited(1);
@@ -1710,9 +1743,9 @@ sub run_with_ssh($$)
 	}
 	if ($stat & 127) {
 	    # died with a signal, return the signal
-	    exit($stat & 127);
+	    POSIX::_exit($stat & 127);
 	}
-	exit($stat >> 8);
+	POSIX::_exit($stat >> 8);
     }
 
     #
@@ -1756,4 +1789,23 @@ sub run_with_ssh($$)
     }
 
     return $stat;
+}
+
+#
+# We need an END block to make sure the web task is set.
+#
+END {
+    my $saved_exitcode = $?;
+    
+    # Watch for abnormal termination. 
+    if ($? && defined($webtask)) {
+	# Cause of the fork in run_with_ssh.
+	$webtask->Refresh();
+	if (!$webtask->HasExited()) {
+	    $webtask->status("failed");
+	    $webtask->imagesize(0);
+	    $webtask->Exited(-1);
+	}
+    }
+    $? = $saved_exitcode;
 }

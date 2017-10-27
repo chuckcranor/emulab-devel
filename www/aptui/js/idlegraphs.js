@@ -1,8 +1,8 @@
 //
 // Slothd graphs
 //
-define(['underscore', 'js/quickvm_sup', 'moment'],
-    function(_, sup, moment)
+$(function () {
+window.ShowIdleGraphs = (function ()
     {
 	'use strict';
 	var uuid       = null;
@@ -97,10 +97,20 @@ define(['underscore', 'js/quickvm_sup', 'moment'],
 			var datum = {
 			    "key"    : node_id,
 			    "area"   : 0,
-			    "arrays" : {"MAX" : []}
+			    "arrays" : {"MAX" : {"tx"  : [],
+						 "rx"  : [],
+						 "sum" : []},
+					"AVG" : {"tx"  : [],
+						 "rx"  : [],
+						 "sum" : []},
+				       }
 			};
-			// Default to MAX in initial graph.
-			datum["values"] = datum.arrays["MAX"];
+			if (Array.isArray(obj.main)) {
+			    obj.main = {"MAX" : obj.main};
+			}
+			
+			// Default to MAX,sum in initial graph.
+			datum["values"] = datum.arrays["MAX"]["sum"];
 
 			for (var mac in obj.interfaces) {
 			    //console.info(mac, obj.interfaces[mac]);
@@ -127,16 +137,8 @@ define(['underscore', 'js/quickvm_sup', 'moment'],
 				thismac = "expt";
 			    }
 
-			    /*
-			     * Backwards compat. Flush soon.
-			     */
-			    if (Array.isArray(obj.interfaces[mac])) {
-				obj.interfaces[mac] =
-				    {"MAX" : obj.interfaces[mac]}
-			    }
-			    
 			    for (var type in obj.interfaces[mac]) {
-				var array  = datum.arrays[type];
+				var maxavg  = datum.arrays[type];
 			    	var values = obj.interfaces[mac][type];
 
 				//console.info(mac,type,values);
@@ -145,43 +147,76 @@ define(['underscore', 'js/quickvm_sup', 'moment'],
 				    //console.info("no info");
 				    continue;
 				}
-				if (array === undefined) {
-				    array = datum.arrays[type] = [];
+				if (maxavg === undefined) {
+				    console.info("unknown type", type);
+				    continue;
 				}
 
 				for (var j = 1; j < values.length; j++) {
 				    var netdata = values[j];
-				    var x = netdata[0] * 1000;
-				    var y = netdata[1] + netdata[2];
+				    var x   = netdata[0] * 1000;
+				    var rx  = netdata[1];
+				    var tx  = netdata[2];
+				    var sum = rx + tx;
 
 				    /*
-				     * If we already have a data point for
+				     * If we already have data points for
 				     * this index, add the new data to the
 				     * totals. 
 				     */
-				    var item = array[j - 1];
-				    if (item === undefined) {
-					// New data point.
-					item = {
+				    var rxitem  = maxavg["rx"][j - 1];
+				    var txitem  = maxavg["tx"][j - 1];
+				    var sumitem = maxavg["sum"][j - 1];
+				    
+				    if (rxitem === undefined) {
+					// New data points
+					rxitem = {
 					    "x" : x,
 					    "y" : 0,
 					    // Samples, for AVG.
 					    "samples" : []
 					};
-					array[j - 1] = item;
+					maxavg["rx"][j - 1] = rxitem;
+
+					txitem = {
+					    "x" : x,
+					    "y" : 0,
+					    // Samples, for AVG.
+					    "samples" : []
+					};
+					maxavg["tx"][j - 1] = txitem;
+
+					sumitem = {
+					    "x" : x,
+					    "y" : 0,
+					    // Samples, for AVG.
+					    "samples" : []
+					};
+					maxavg["sum"][j - 1] = sumitem;
 				    }
+				    
 				    if (type == "MAX") {
-					item.y += y;
+					txitem.y  += tx;
+					rxitem.y  += rx;
+					sumitem.y += sum;
 				    }
 				    else {
-					item.samples.push(y);
+					txitem.samples.push(tx);
+					rxitem.samples.push(rx);
+					sumitem.samples.push(sum);
 
-					var sum = 0;
-					for (var k = 0; k <
-					     item.samples.length; k++) {
-					    sum += item.samples[k];
+					var txsum = 0;
+					var rxsum = 0;
+					var ssum  = 0;
+					var ilen  = txitem.samples.length;
+					for (var k = 0; k < ilen; k++) {
+					    txsum += txitem.samples[k];
+					    rxsum += rxitem.samples[k];
+					    ssum  += sumitem.samples[k];
 					}
-					item.y = sum / item.samples.length;
+					txitem.y  = txsum / ilen;
+					rxitem.y  = rxsum / ilen;
+					sumitem.y = ssum  / ilen;
 				    }
 				}
 			    }
@@ -202,40 +237,89 @@ define(['underscore', 'js/quickvm_sup', 'moment'],
 	    return result;
 	}
 
-	function CreateOneGraph(id, datums, args) {
+	function CreateOneGraph(id, which, datums, args) {
 	    $(id).removeClass("hidden");
 	    $(id + " .collapse").addClass("in");
 
 	    window.nv.addGraph(function() {
 		var chart = window.nv.models.lineWithFocusChart();
 		CreateIdleChart(id + ' svg', chart, datums, args);
-		/*
-		 * Look to see if we have multiple strearms (max/avg).
-		 * If so we want to unhide the radio buttons to switch
-		 * between them, and setup a handler to inject the alt
-		 * data in the NVD3 chart.
-		 */
-		if (Object.keys(datums[0].arrays).length > 1) {
-		    $(id + ' .toggles').removeClass("hidden");
-		    $(id + ' .toggles input[type=radio][value=max]')
-			.prop('checked', true);
-		    
-		    $(id + ' .toggles input[type=radio]').change(function() {
-			var which = this.value;
 
-			_.each(datums, function(datum) {
-			    if (which == "max") {
-				datum.values = datum.arrays["MAX"];
-			    }
-			    else {
-				datum.values = datum.arrays["AVG"];
-			    }
+		// Always start with max.
+		$(id + ' .maxavg-toggles input[type=radio][value=max]')
+		    .prop('checked', true);
+		// And sum of packets for the control network.
+		if (which == "ctrl" || which == "expt") {
+		    $(id + ' .txrx-toggles input[type=radio][value=sum]')
+			.prop('checked', true);
+		}
+
+		// Two different radios for the control traffic graph.
+		if (which == "ctrl" || which == "expt") {
+		    $(id + ' .maxavg-toggles input[type=radio], ' +
+		      id + ' .txrx-toggles input[type=radio] ')
+			.change(function() {
+			    var maxavg =
+				$(id + ' .maxavg-toggles ' +
+				  'input[type=radio]:checked').val();
+			    var txrx =
+				$(id + ' .txrx-toggles ' +
+				  'input[type=radio]:checked').val();
+
+			    //console.info(maxavg, txrx);
+
+			    _.each(datums, function(datum) {
+				var values;
+				
+				if (maxavg == "max") {
+				    values = datum.arrays["MAX"];
+				    if (txrx != null) {
+					values = values[txrx];
+				    }
+				}
+				else {
+				    values = datum.arrays["AVG"];
+				    if (txrx != null) {
+					values = values[txrx];
+				    }
+				}
+				datum.values = values;
+			    });
+			    //console.info(datums);
+			    d3.select(id + ' svg')
+				.datum(datums)
+				.call(chart);
 			});
-			//console.info(datums);
-			d3.select(id + ' svg')
-			    .datum(datums)
-			    .call(chart);
-		    });
+		}
+		else {
+		    // Load avg and expt traffic get just max/avg.
+		    $(id + ' .maxavg-toggles input[type=radio]')
+			.change(function() {
+			    var maxavg =
+				$(id + ' .maxavg-toggles ' +
+				  'input[type=radio]:checked').val();
+
+			    //console.info(maxavg);
+
+			    _.each(datums, function(datum) {
+				var values;
+				
+				if (maxavg == "max") {
+				    values = datum.arrays["MAX"];
+				}
+				else {
+				    values = datum.arrays["AVG"];
+				}
+				if (which == "expt") {
+				    values = values["sum"];
+				}
+				datum.values = values;
+			    });
+			    //console.info(datums);
+			    d3.select(id + ' svg')
+				.datum(datums)
+				.call(chart);
+			});
 		}
 	    });
 	}
@@ -250,7 +334,7 @@ define(['underscore', 'js/quickvm_sup', 'moment'],
 		    var xmlDoc = $.parseXML(manifest);
 		    var xml = $(xmlDoc);
 
-		    $(xml).find("node").each(function() {
+		    $(xml).find("node, emulab\\:vhost").each(function() {
 			// Only nodes that match the aggregate being processed,
 			// since we send the same rspec to every aggregate.
 			var manager_urn = $(this).attr("component_manager_id");
@@ -284,12 +368,19 @@ define(['underscore', 'js/quickvm_sup', 'moment'],
 	    var callback = function(json) {
 		if (json.code) {
 		    console.info("Failed to get idledata: " + json.value);
+		    if (showWait) {
+			sup.HideWaitWait(function () {
+			    sup.SpitOops("oops",
+					 "Could not idledata: " + json.value);
+			});
+		    }
 		    return;
 		}
 		_.each(json.value, function(data, name) {
 		    var idledata = JSON.parse(data);
 		    rawData[name] = idledata;
 		});
+		console.info("raw", rawData);
 		var load = ProcessData("load", "avg");
 		var ctrl = ProcessData("ctrl", "avg");
 		var expt = ProcessData("expt", "avg");
@@ -307,10 +398,10 @@ define(['underscore', 'js/quickvm_sup', 'moment'],
 		}
 
 		if (load.length) {
-		    CreateOneGraph(loadID, load,
+		    CreateOneGraph(loadID, "load", load,
 				   {"ytype"  : "float",
 				    "ylabel" : "Unix Load Average"});
-		    $(loadID + ' .toggles').popover({
+		    $(loadID + ' .maxavg-toggles').popover({
 			trigger: 'hover',
 			placement: 'auto',
 			delay : {"hide": 500, "show": 500},
@@ -326,11 +417,44 @@ define(['underscore', 'js/quickvm_sup', 'moment'],
 		    });
 		}
 		if (ctrl.length) {
-		    CreateOneGraph(ctrlID, ctrl,
+		    CreateOneGraph(ctrlID, "ctrl", ctrl,
 				   {"ytype"  : "int",
 				    "ylabel" : "Packets Per Second"});
 
-		    $(ctrlID + ' .toggles').popover({
+		    $(ctrlID + ' .maxavg-toggles').popover({
+			trigger: 'hover',
+			placement: 'auto',
+			delay : {"hide": 500, "show": 500},
+			html: true,
+			content: "MAX is the maximum number of packets " +
+			    "within the interval, while AVG is the average "+
+			    "number of packets in the interval. The " +
+			    "reported interval in the graph is five minutes "+
+			    "for the most recent 24 hours, and then every "+
+			    "hour after that. During the first 24 hours MAX "+
+			    "and AVG will be the same since the interval is "+
+			    "so short."
+		    });
+		    $(ctrlID + ' .txrx-toggles').popover({
+			trigger: 'hover',
+			placement: 'auto',
+			delay : {"hide": 500, "show": 500},
+			html: true,
+			content: "TX is the number of packets sent " +
+			    "within the interval, RX is the number of packets "+
+			    "received, and SUM is the sum of packets sent " +
+			    "and received in the interval. The " +
+			    "reported interval in the graph is five minutes "+
+			    "for the most recent 24 hours, and then every "+
+			    "hour after that."
+		    });
+		}
+		if (expt.length) {
+		    CreateOneGraph(exptID, "expt", expt,
+				   {"ytype"  : "int",
+				    "ylabel" : "Packets Per Second"});
+		    
+		    $(exptID + ' .maxavg-toggles').popover({
 			trigger: 'hover',
 			placement: 'auto',
 			delay : {"hide": 500, "show": 500},
@@ -344,25 +468,18 @@ define(['underscore', 'js/quickvm_sup', 'moment'],
 			    "and AVG will be the same since the interval is "+
 			    "so short."
 		    });
-		}
-		if (expt.length) {
-		    CreateOneGraph(exptID, expt,
-				   {"ytype"  : "int",
-				    "ylabel" : "Packets Per Second"});
-		    
-		    $(exptID + ' .toggles').popover({
+		    $(exptID + ' .txrx-toggles').popover({
 			trigger: 'hover',
 			placement: 'auto',
 			delay : {"hide": 500, "show": 500},
 			html: true,
-			content: "MAX is the maximum number of packets sent " +
-			    "within the interval, while AVG is the average "+
-			    "number of packets sent in the interval. The " +
+			content: "TX is the number of packets sent " +
+			    "within the interval, RX is the number of packets "+
+			    "received, and SUM is the sum of packets sent " +
+			    "and received in the interval. The " +
 			    "reported interval in the graph is five minutes "+
 			    "for the most recent 24 hours, and then every "+
-			    "hour after that. During the first 24 hours MAX "+
-			    "and AVG will be the same since the interval is "+
-			    "so short."
+			    "hour after that."
 		    });
 		}
 	    };
@@ -491,11 +608,11 @@ define(['underscore', 'js/quickvm_sup', 'moment'],
 		    d3.selectAll(loadID + " svg > *").remove();
 		    d3.selectAll(ctrlID + " svg > *").remove();
 		    d3.selectAll(exptID + " svg > *").remove();
-		    $('.toggles').addClass("hidden");
 		    LoadIdleData();
 		});
 	    }
 	    LoadIdleData();
 	}
     }
-);
+)();
+});

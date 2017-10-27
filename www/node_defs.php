@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1145,8 +1145,9 @@ class Node
 	    if (!$noperm) {
 		$query_result =
 		    DBQueryFatal("select i.*,w.* from interfaces as i ".
-				 "left join wires as w on i.node_id=w.node_id1 ".
-				 "   and i.card=w.card1 and i.port=w.port1 ".
+				 "left join wires as w on ".
+                                 "     i.node_id=w.node_id1 and ".
+				 "     i.iface=w.iface1 ".
 				 "where i.node_id='$node_id' and ".
 				 "      w.node_id1 is not null ".
 				 "order by iface");

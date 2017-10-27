@@ -29,6 +29,7 @@ sub Install($$$)
 	    PhaseSkip("FSes are mounted from outside the VM");
 	}
 	my @dirs = ();
+	my @mkdirs = ();
 
 	#
 	# If we are the FS then we do not need to mount the FS file systems.
@@ -38,16 +39,22 @@ sub Install($$$)
 	# unless ops is a VM on boss (see skip above).
 	#
 	if (!ISFS($server)) {
-	    @dirs = @MOUNTPOINTS;
+	    if ($WITHZFS) {
+		@dirs = ($SHAREROOT);
+	    } else {
+		@dirs = @MOUNTPOINTS;
+	    }
+	    @mkdirs = @MOUNTPOINTS;
 	}
 	if (ISBOSSNODE($server) && !$OPSVM_ENABLE) {
 	    @dirs = (@dirs, $USERSVAR_MOUNTPOINT, $OPSDIR_MOUNTPOINT);
+	    @mkdirs = (@mkdirs, $USERSVAR_MOUNTPOINT, $OPSDIR_MOUNTPOINT);
 	}
 	PhaseSkip("Nothing to mount")
-	    if (!@dirs);
+	    if (!@mkdirs);
 
 	Phase "mountpoints", "Creating mountpoints", sub {
-	    foreach my $dir (@dirs) {
+	    foreach my $dir (@mkdirs) {
 		Phase $dir, $dir, sub {
 		    DoneIfExists($dir);
 		    mkdir $dir, 0777 or
@@ -79,7 +86,12 @@ sub Install($$$)
 			 "$USERNODE:/usr/testbed\t\t$OPSDIR_MOUNTPOINT\tnfs\t".
 			 "rw,soft,-b,$nfsopt\t0\t0");
 		}
-		else {
+		#
+		# For ZFS, we do not mount the roots of the {users,proj,groups}
+		# filesystems as each {user,proj,group} has their own FS.
+		# We only mount /share.
+		#
+		elsif (!$WITHZFS || $dir eq $SHAREROOT) {
 		    push(@lines,
 			 "$FSNODE:$dir\t\t$dir\tnfs\trw,$nfsopt\t0\t0");
 		}

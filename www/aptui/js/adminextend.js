@@ -1,16 +1,22 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment', 'js/idlegraphs',
-	 'js/lib/text!template/adminextend.html',
-	 'js/lib/text!template/waitwait-modal.html',
-	 'js/lib/text!template/oops-modal.html'],
-function (_, sup, moment, ShowIdleGraphs,
-	  mainString, waitwaitString, oopsString)
+$(function ()
 {
     'use strict';
+
+  var templates = APT_OPTIONS.fetchTemplateList(['adminextend', 'waitwait-modal', 'oops-modal', 'admin-history', 'admin-firstrow', 'admin-secondrow', 'admin-utilization', 'admin-summary']);
+    var mainString = templates['adminextend'];
+    var waitwaitString = templates['waitwait-modal'];
+    var oopsString = templates['oops-modal'];
+    var historyString = templates['admin-history'];
+    var firstrowString = templates['admin-firstrow'];
+    var secondrowString = templates['admin-secondrow'];
+    var utilizationString = templates['admin-utilization'];
+    var summaryString = templates['admin-summary'];
+
     var extensions         = null;
     var firstrowTemplate   = null;
     var secondrowTemplate  = null;
     var extensionsTemplate = null;
+    var GENIRESPONSE_REFUSED = 7;
 
     function initialize()
     {
@@ -20,9 +26,9 @@ function (_, sup, moment, ShowIdleGraphs,
 	$('#waitwait_div').html(waitwaitString);
 	$('#oops_div').html(oopsString);
 
-	firstrowTemplate = _.template($('#firstrow-template', html).html());
-	secondrowTemplate = _.template($('#secondrow-template', html).html());
-	extensionsTemplate = _.template($('#history-template', html).html());
+	firstrowTemplate = _.template(firstrowString);
+	secondrowTemplate = _.template(secondrowString);
+	extensionsTemplate = _.template(historyString);
 
 	LoadUtilization();
 	LoadIdleData();
@@ -64,6 +70,16 @@ function (_, sup, moment, ShowIdleGraphs,
 	    $("#extension-reason-row pre").text($('#extension-reason').text());
 	    $("#extension-reason-row").removeClass("hidden");
 	}
+	// This activates the popover subsystem.
+	$('#history-panel-content [data-toggle="popover"]').popover({
+	    trigger: 'hover',
+	    placement: 'auto',
+	});
+	// Extension metrics handler, to show in modal
+	$('#history-panel-content .autoapprove-metrics').click(function (e) {
+	    e.preventDefault();
+	    ShowMetricsModal(this);
+	});
 	
 	// Default number of days.
 	if (window.DAYS) {
@@ -87,6 +103,7 @@ function (_, sup, moment, ShowIdleGraphs,
 	});
 	$('#do-terminate').click(function (event) {
 	    event.preventDefault();
+	    sup.HideModal("#confirm-terminate-modal");
 	    Action("terminate");
 	    return false;
 	});
@@ -122,6 +139,11 @@ function (_, sup, moment, ShowIdleGraphs,
 		return;
 	    }
 	    LoadFirstRow();
+	    // Make it harder to repeat action unintentionally. 
+	    if (action == "extend" || action == "terminate") {
+		$('#days').val("0");
+	    }
+	    sup.ShowModal("#success-modal");
 	};
 	sup.ShowModal("#waitwait-modal");
 	var xmlthing = sup.CallServerMethod(null, "status", method,
@@ -137,16 +159,18 @@ function (_, sup, moment, ShowIdleGraphs,
 			     function (json) {
 				 console.info(json);
 				 if (json.code == 0) {
-				     var html = firstrowTemplate({"expinfo": json.value,
-							  "uuid"    : window.UUID,
-							  "uid"     : window.CREATOR,
-							  "pid"     : window.PID});
+				     var html = firstrowTemplate(
+					 {"expinfo" : json.value,
+					  "uuid"    : window.UUID,
+					  "uid"     : window.CREATOR,
+					  "pid"     : window.PID}
+				     );
 				     $("#firstrow").html(html);
 				     $('.format-date').each(function() {
 					 var date = $.trim($(this).html());
 					 if (date != "") {
 					     $(this).html(moment($(this).html())
-							  .format("MMM D h:mm A"));
+						  .format("MMM D h:mm A"));
 					 }
 				     });
 				     // lockout change event handler.
@@ -154,23 +178,40 @@ function (_, sup, moment, ShowIdleGraphs,
 					 DoLockout($(this).is(":checked"));
 				     });	
 				     // lockdown change event handler.
-				     $('#lockdown-checkbox').change(function() {
-					 DoLockdown($(this).is(":checked"));
+				     $('#user-lockdown-checkbox')
+					 .change(function() {
+					     DoLockdown("user",
+							$(this).is(":checked"));
 				     });
+				     $('#admin-lockdown-checkbox')
+					 .change(function() {
+					     DoLockdown("admin",
+							$(this).is(":checked"));
+					 });
+				     $('#quarantine-checkbox')
+					 .change(function() {
+					     DoQuarantine($(this).is(":checked"));
+					 });
 				     // This activates the popover subsystem.
 				     $('[data-toggle="popover"]').popover({
 					 trigger: 'hover',
 					 placement: 'auto',
 				     });
+				     // No termination.
+				     if (json.value.admin_lockdown) {
+					 $('#terminate-button')
+					     .attr("disabled", "disabled");
+				     }
+				     // Update the Max Extension
+				     DoMaxExtension();
+				     SetupAdminNotes();
 				 }
 			     });
     }
 
     function LoadUtilization() {
-	var util = $('#utilization-template', "html").html();
-	var summary = $('#summary-template', "html").html();
-	var utilizationTemplate = _.template(util);
-	var summaryTemplate = _.template(summary);
+	var utilizationTemplate = _.template(utilizationString);
+	var summaryTemplate = _.template(summaryString);
 	
 	var callback = function(json) {
 	    console.info(json);
@@ -181,6 +222,12 @@ function (_, sup, moment, ShowIdleGraphs,
 
 	    var html = summaryTemplate({"utilization" : json.value});
 	    $("#thirdrow").html(html);
+
+	    // This activates the tooltip subsystem.
+	    $('[data-toggle="tooltip"]').tooltip({
+		delay: {"hide" : 500, "show" : 150},
+		placement: 'auto',
+	    });
 	};
 	var xmlthing = sup.CallServerMethod(null, "status", "Utilization",
 					    {"uuid"   : window.UUID});
@@ -234,21 +281,131 @@ function (_, sup, moment, ShowIdleGraphs,
     //
     // Request lockdown set/clear.
     //
-    function DoLockdown(lockdown)
+    function DoLockdown(which, lockdown, force)
     {
-	lockdown = (lockdown ? 1 : 0);
+	var action = (lockdown ? "set" : "clear");
+	// Optional arg.
+	if (force === undefined) {
+	    force = 0;
+	}
 	
 	var callback = function(json) {
-	    sup.HideModal("#waitwait-modal");
 	    if (json.code) {
-		alert("Failed to change lockdown: " + json.value);
+		sup.HideModal("#waitwait-modal", function () {
+		    if (lockdown) {
+			// Flip the checkbox back.
+			$('#' + which + '-lockdown-checkbox')
+			    .prop("checked", false);
+		    }
+		    else {
+			// Flip the checkbox back.
+			$('#' + which + '-lockdown-checkbox')
+			    .prop("checked", true);
+		    }
+		    if (json.code != GENIRESPONSE_REFUSED) {
+			sup.SpitOops("oops",
+				     "Lockdown failed: " + json.value);
+			return;
+		    }
+		    // Refused.
+		    $('#force-lockdown').click(function (event) {
+			sup.HideModal('#lockdown-refused', function() {
+			    // Flip the checkbox again
+			    $('#' + which + '-lockdown-checkbox')
+				.prop("checked", true);
+			    // Again with force.
+			    DoLockdown(which, lockdown, 1);
+			});
+		    });
+		    $('#lockdown-refused pre').text(json.value);
+		    sup.ShowModal('#lockdown-refused', function () {
+			$('#force-lockdown').off("click");
+		    });
+		});
 		return;
+	    }
+	    sup.HideModal("#waitwait-modal");
+	    if (which == "admin") {
+		if (lockdown) {
+		    $('#terminate-button').attr("disabled", "disabled");
+		}
+		else {
+		    $('#terminate-button').removeAttr("disabled");
+		}
 	    }
 	}
 	sup.ShowModal("#waitwait-modal");
 	var xmlthing = sup.CallServerMethod(null, "status", "Lockdown",
-					     {"uuid" : window.UUID,
-					      "lockdown" : lockdown});
+					    {"uuid"   : window.UUID,
+					     "which"  : which,
+					     "action" : action,
+					     "force"  : force});
+	xmlthing.done(callback);
+    }
+
+    //
+    // Request panic mode set/clear.
+    //
+    function DoQuarantine(mode)
+    {
+	mode = (mode ? 1 : 0);
+	
+	var callback = function(json) {
+	    if (json.code) {
+		sup.HideModal('#waitwait-modal', function () {
+		    sup.SpitOops("oops",
+				 "Failed to change Quarantine mode: " +
+				 json.value);
+		    if (mode) {
+			// Flip the checkbox back.
+			$('#quarantine-checkbox')
+			    .prop("checked", false);
+		    }
+		    else {
+			// Flip the checkbox back.
+			$('#quarantine-checkbox')
+			    .prop("checked", true);
+		    }
+		});
+		return;
+	    }
+	    sup.HideModal('#waitwait-modal');
+	}
+	sup.ShowModal('#waitwait-modal');
+	var xmlthing = sup.CallServerMethod(ajaxurl, "status", "Quarantine",
+					     {"uuid" : uuid,
+					      "quarantine" : mode});
+	xmlthing.done(callback);
+    }
+
+    //
+    // Get Max Extension and update the table.
+    //
+    function DoMaxExtension()
+    {
+	var callback = function(json) {
+	    if (json.code) {
+		console.info("Failed to get max extension: " + json.value);
+		return;
+	    }
+	    $('#max-extension').html(moment(json.value)
+				     .format("MMM D, YYYY h:mm A"));
+
+	    /*
+	     * Look to see if the number of days requested is going to be
+	     * greater then the max slice extension. If it is, then we want
+	     * to make sure that is noticed.
+	     */
+	    var now = new Date();
+	    var max = new Date(json.value);
+	    now.setDate(now.getDate() + window.DAYS);
+	    if (now.getTime() > max.getTime()) {
+		alert("Granting this full extension would violate the " +
+		      "current maximum allowed extension.");
+	    }
+	}
+	var xmlthing = sup.CallServerMethod(null, "status", "MaxExtension",
+					    {"uuid" : window.UUID});
 	xmlthing.done(callback);
     }
 
@@ -284,13 +441,74 @@ function (_, sup, moment, ShowIdleGraphs,
     	var xmlthing = sup.CallServerMethod(null, "status", "OpenstackStats",
 					    {"uuid" : window.UUID});
 	xmlthing.done(callback);
+    }
 
+    //
+    // Setup the admin notes panel for editing
+    //
+    function SetupAdminNotes()
+    {
+	var modified = 0;
+	
+	// Panel starts out collapsed.
+	$('#adminnotes-collapse').on('show.bs.collapse', function () {
+	    $('#adminnotes-row .toggle').html('Hide');
+	});
+	$('#adminnotes-collapse').on('hide.bs.collapse', function () {
+	    var label = "View";
+	    if ($("#adminnotes-collapse textarea").val() == "") {
+		label = "Add";
+	    }
+	    $('#adminnotes-row .toggle').html(label);
+	});
+	$("#adminnotes-collapse textarea")
+	    .on("change input paste keyup", function() {
+		modified = 1;
+		$('#adminnotes-save-button').removeClass('hidden');
+	    });
+	$('#adminnotes-save-button').click(function (event) {
+	    event.preventDefault();
+	    if (modified) {
+		SaveAdminNotes(function () {
+		    modified = 0;
+		    $('#adminnotes-save-button').addClass('hidden');
+		});
+	    }
+	});
+    }
+    function SaveAdminNotes(done)
+    {
+	var notes = $("#adminnotes-collapse textarea").val();
+	
+	var callback = function(json) {
+	    if (json.code) {
+		sup.SpitOops("oops", "Failed to save admin notes: " +
+			     json.value);
+		return;
+	    }
+	    done();
+	};
+    	var xmlthing = sup.CallServerMethod(null, "status", "SaveAdminNotes",
+					    {"uuid"  : window.UUID,
+					     "notes" : notes});
+	xmlthing.done(callback);
+    }
+    function ShowMetricsModal(target)
+    {
+	var idx = $(target).data("idx");
+	var str = extensions[idx].autoapproved_metrics;
+	str.replace(/\\"/g, '"');
+	var obj = JSON.parse(str);
+	str = JSON.stringify(obj, null, 2); 
+	console.info(str);
+	$('#metrics-content').text(str);
+	sup.ShowModal('#metrics-modal');
     }
 
     // Helper.
     function decodejson(id) {
 	return JSON.parse(_.unescape($(id)[0].textContent));
     }
-    
-    $(document).ready(initialize);
+
+    initialize();
 });

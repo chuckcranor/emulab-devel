@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w -T
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2869,6 +2869,7 @@ sub sim_event {
 	}
 
 	system($PATH_TEVC,
+	       "-s", $EVENTSERVER,
 	       "-e", $EVENTID,
 	       "-k", $PATH_KEYFILE,
 	       "now",
@@ -2888,6 +2889,7 @@ sub sim_event2 {
 	}
 
 	system($PATH_TEVC,
+	       "-s", $EVENTSERVER,
 	       "-e", $EVENTID,
 	       "-k", $PATH_KEYFILE,
 	       "now",

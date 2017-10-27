@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -63,7 +63,7 @@ use libdb;
 use Project;
 use User;
 use Node;
-use Image;
+use OSImage;
 use Experiment;
 
 #
@@ -84,7 +84,7 @@ my @nodes       = ();
 my $type	= TB_DEFAULT_RELOADTYPE;
 my $project;
 my $experiment;
-my @imageids;
+my @images      = ();
 my %imagenodes  = ();
 
 # un-taint path
@@ -149,24 +149,24 @@ if (defined($options{"i"})) {
 
     for my $id (split /,/, $options{"i"}) {
 	# Look up image in project.
-	my $image = Image->Lookup($imagepid, $id);
+	my $image = OSImage->Lookup($imagepid, $id);
 	if (!defined($image)) {
 	    die("*** $0:\n".
 		"    No such image: $imagepid/$id\n");
 	}
 	# This is untainted.
-	push @imageids, $image->imageid();
+	push @images, $image;
     }
 }
 elsif (defined($options{"m"})) {
     for my $id (split /,/, $options{"m"}) {
-	my $image = Image->Lookup($id);
+	my $image = OSImage->Lookup($id);
 	if (!defined($image)) {
 	    die("*** $0:\n".
 		"    No such image: $id\n");
 	}
 	# This is untainted.
-	push @imageids, $image->imageid();
+	push @images, $image;
     }
 }
 
@@ -286,7 +286,28 @@ my @load_list=();
 foreach my $node (@nodes) {
     my $pc = $node->node_id();
     my $allocated  = 0;
-    my $this_imageid = @imageids ? join ',', @imageids : undef;
+    my $failed = 0;
+    my @this_imageids = ();
+
+    #
+    # Watch for image aliases.
+    #
+    foreach my $image (@images) {
+	if ($image->isImageAlias()) {
+	    my $tmp = $image->MapToImage($node->type());
+	    if (!defined($tmp)) {
+		print STDERR "Could not map $image to an image for $pc!";
+		$failed = 1;
+		next;
+	    }
+	    $image = $tmp;
+	}
+	push(@this_imageids, $image->imageid());
+    }
+    next
+	if ($failed);
+    
+    my $this_imageid = @this_imageids ? join ',', @this_imageids : undef;
 
     #
     # Get default imageid for this node if none specified on comand line.
@@ -309,7 +330,7 @@ foreach my $node (@nodes) {
 	else {
 	    $eid = $RELOADEID;
 	}
-	my $cmd = "$nalloc $RELOADPID $eid $pc";
+	my $cmd = "$nalloc -f $RELOADPID $eid $pc";
 
         if ( system($cmd) != 0 ) {
 	    print STDERR "WARNING: Could not reserve $pc!\n";

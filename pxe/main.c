@@ -40,6 +40,13 @@
 #include "bootwhat.h"
 #include "bootinfo.h"
 
+#ifdef LIBWRAP
+#include <syslog.h>
+#include <tcpd.h>
+int allow_severity = LOG_TESTBED|LOG_INFO;
+int deny_severity  = LOG_TESTBED|LOG_WARNING;
+#endif
+
 /*
  * Minimum number of seconds that must pass before we send another
  * event for a node. This is to decrease the number of spurious events
@@ -165,13 +172,25 @@ main(int argc, char **argv)
 	signal(SIGHUP, onhup);
 	while (1) {
 		int esent = 0;
-
+#ifdef LIBWRAP
+		struct request_info req;
+#endif
 		if ((mlen = recvfrom(sock, &boot_info, sizeof(boot_info),
 				     0, (struct sockaddr *)&client, &length))
 		    < 0) {
 			errorc("receiving datagram packet");
 			exit(1);
 		}
+#ifdef LIBWRAP
+		request_init(&req, RQ_DAEMON, "bootinfo",
+			     RQ_CLIENT_SIN, (struct sockaddr *)&client, 0);
+		sock_methods(&req);
+		if (!hosts_access(&req)) {
+			info("%s: request denied by tcp wrappers\n",
+			     inet_ntoa(client.sin_addr));
+			continue;
+		}
+#endif
 		err = bootinfo(client.sin_addr, (char *) NULL,
 			       &boot_info, (void *) NULL, noevents, &esent);
 		if (err < 0)

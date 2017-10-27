@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2015 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -41,6 +41,7 @@ use Data::Dumper;
 sub usage()
 {
     print STDERR "Usage: $0 [-n] [-p project] <urn> <email>\n";
+    print STDERR "Usage: $0 -r <urn>\n";
     exit(1);
 }
 my $optlist  = "nrp:";
@@ -53,9 +54,11 @@ my $TB		  = "@prefix@";
 my $TBACCT	  = "$TB/sbin/tbacct";
 my $MKUSERCERT    = "$TB/sbin/mkusercert";
 my $MODGROUPS     = "$TB/sbin/modgroups";
+my $WAP           = "$TB/sbin/withadminprivs";
 
 use lib '@prefix@/lib';
 use emutil;
+use emdb;
 use User;
 use Project;
 use GeniCertificate;
@@ -113,9 +116,22 @@ my $usr_uid;
 fatal("Invalid email")
     if (! User->ValidEmail($email));
 
+#
 # Must not be a user with same nonlocal ID.
+# We need to lock for concurrent attempt to create this user.
+# Lets use a DB process lock, named by the URN.
+#
+my $safe_urn = DBQuoteSpecial($urn);
+my $lock_result = DBQueryWarn("select GET_LOCK($safe_urn, 90)");
+if (!$lock_result ||
+    !$lock_result->numrows) {
+    fatal("Could not get SQL lock for a long time!");
+}
 if (User->LookupNonLocal($urn)) {
-    fatal("We already have a user with that nonlocal ID (urn)");
+    print "Already have a user with that nonlocal ID (urn)\n";
+    DBQueryWarn("select RELEASE_LOCK($safe_urn)");
+    # Caller looks for non-zero status. 
+    exit(1);
 }
 
 #
@@ -195,8 +211,9 @@ if ($?) {
     $project->GetProjectGroup()->DeleteMemberShip($user)
 	if (defined($project));
     # Make sure the entire account is deleted. Leave DB record on failure
-    # so that we can try again later. 
-    if (system("$TBACCT -f del $usr_uid") == 0) {
+    # so that we can try again later. We are invoked as elabman, so we
+    # cap use wap here (required for -f option).
+    if (system("$WAP $TBACCT -f del $usr_uid") == 0) {
 	$user->Delete();
     }
     fatal("Could not instantiate user account!")
@@ -216,6 +233,8 @@ if ($?) {
     }
     fatal("Could not create local SSL certificate");
 }
+# Do not really need to do this, all locks released on exit.
+DBQueryWarn("select RELEASE_LOCK($safe_urn)");
 exit(0);
 
 #

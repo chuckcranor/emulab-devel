@@ -1,29 +1,18 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'js/aptforms',
-	 'js/lib/text!template/about-account.html',
-	 'js/lib/text!template/verify-modal.html',
-	 'js/lib/text!template/signup-personal.html',
-	 'js/lib/text!template/signup-project.html',
-	 'js/lib/text!template/signup.html',
-	 'js/lib/text!template/toomany-modal.html',
-	 // jQuery modules
-	 'formhelpers'],
-function (_, sup, aptforms,
-	  aboutString, verifyString, personalString,
-	  projectString, signupString, toomanyString)
+$(function ()
 {
     'use strict';
 
-    var aboutTemplate = _.template(aboutString);
-    var verifyTemplate = _.template(verifyString);
-    var personalTemplate = _.template(personalString);
-    var projectTemplate = _.template(projectString);
-    var signupTemplate = _.template(signupString);
+    var templates = APT_OPTIONS.fetchTemplateList(['about-account', 'verify-modal', 'signup-personal', 'signup-project', 'signup', 'toomany-modal']);
+    var aboutTemplate = _.template(templates['about-account']);
+    var verifyTemplate = _.template(templates['verify-modal']);
+    var personalTemplate = _.template(templates['signup-personal']);
+    var projectTemplate = _.template(templates['signup-project']);
+    var signupTemplate = _.template(templates['signup']);
 
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
-	$('#toomany_div').html(toomanyString);
+	$('#toomany_div').html(templates['toomany-modal']);
 
 	var fields = JSON.parse(_.unescape($('#form-json')[0].textContent));
 	var errors = JSON.parse(_.unescape($('#error-json')[0].textContent));
@@ -45,13 +34,13 @@ function (_, sup, aptforms,
 	$("input[id='startorjoin']").change(function(e){
 	    if ($(this).val() == "join") {
 		$('#start_project_rollup').addClass("hidden");
-		$('#submit_button').text("Join Project");
-		$('#signup_panel_title').text("Join Project");
+		$('#submit_button').text("Submit Request");
+		$('#signup_panel_title').text("Request to join a project");
 	    }
 	    else {
 		$('#start_project_rollup').removeClass("hidden");
-		$('#submit_button').text("Start Project");
-		$('#signup_panel_title').text("Start Project");
+		$('#submit_button').text("Submit Request");
+		$('#signup_panel_title').text("Request to start a project");
 	    }
 	});
 	if (window.APT_OPTIONS.toomany) {
@@ -62,11 +51,16 @@ function (_, sup, aptforms,
     function renderForm(formfields, errors, joinproject, showVerify,
 			thisUser, promoting)
     {
-	var buttonLabel = (joinproject ? "Join Project" : "Start Project");
+	var buttonLabel = "Submit Request";
+	var pageTitle   = (joinproject ?
+			   "Request to join a project" :
+			   "Request to start a project");
+	
 	var about = aboutTemplate({});
 	var verify = verifyTemplate({
 	    id: 'verify_modal',
-	    label: buttonLabel
+	    label: buttonLabel,
+	    title: pageTitle
 	});
 	var personal_html = personalTemplate({
 	    formfields: formfields,
@@ -78,6 +72,7 @@ function (_, sup, aptforms,
 	});
 	var signup = signupTemplate({
 	    button_label: buttonLabel,
+	    pagetitle: pageTitle,
 	    general_error: (errors.error || ''),
 	    about_account: (window.ISAPT && !thisUser ? about : null),
 	    this_user: thisUser,

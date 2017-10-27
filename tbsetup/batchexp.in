@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,7 +25,7 @@ use English;
 use Getopt::Std;
 use POSIX qw(isatty setsid);
 use POSIX qw(strftime);
-use Errno qw(EDQUOT);
+use Errno qw(EDQUOT ENOSPC);
 use RPC::XML;
 use Cwd qw(realpath);
 
@@ -237,7 +237,7 @@ if (system("$checkquota -p $pid $user_uid") != 0) {
 	     error => ['over_disk_quota', $CONTROL]},
 	    "You are over your disk quota on $CONTROL; ".
 	    "please login there and cleanup!");
-    exit(1);
+    exit(ENOSPC);
 }
 
 if (! -e "$TB/expinfo/$pid") {
@@ -384,6 +384,15 @@ $justexit = 0;
 # Set error reporting info
 # 
 tblog_set_info($pid,$eid,$UID);
+
+#
+# Create the per-experiment RSA key pair and derived ssh pubkey
+#
+if ($experiment->GenerateKeys() != 0) {
+    fatal({type => 'secondary', severity => SEV_SECONDARY,
+	   error => ['create_experiment_keys_failed']},
+	  "Failed to create experiment RSA/SSH keys");
+}
 
 #
 # Create a directory structure for the experiment.

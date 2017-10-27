@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -58,12 +58,12 @@ my $ELABINELAB     = @ELABINELAB@;
 my $THISHOMEBASE   = "@THISHOMEBASE@";
 my $TESTMODE       = @TESTMODE@;
 my $DISABLE_EVENTS = "@DISABLE_EVENT_SCHED@";
-my $piper          = "$TBROOT/sbin/locpiper";
 my $mapper         = "$TBROOT/bin/mapper";
 my $wrapper        = "$TBROOT/libexec/assign_wrapper";
 my $SNMPIT	   = "$TBROOT/bin/snmpit";
 my $RFLINKS	   = "$TBROOT/bin/rflinks";
 my $IMAGESETUP     = "$TBROOT/sbin/image_setup";
+my $PUSHROOTKEY	   = "$TBROOT/sbin/pushrootkey";
 my $portstats	   = "$TBROOT/bin/portstats";
 my $TCPP           = "$TBROOT/sbin/tcpp";
 my $NFSTRACESUPPORT= @NFSTRACESUPPORT@;
@@ -523,19 +523,6 @@ sub doSwapout($) {
 			    "Failed to stop the event system.");
 		    $swapout_errors = 1;
 		}
-
-		#
-		# Stop the location piper.
-		#
-		if (0 && -x $piper) {
-		    print "Stopping the location piper\n";
-		    if (system("$piper -k $pid $eid")) {
-			tberror({type => 'secondary', severity => SEV_SECONDARY,
-				 error => ['piper_stop_failed']},
-				"Failed to stop location piper.");
-			$swapout_errors = 1;
-		    }
-		}
 	    }
 	}
 	
@@ -752,23 +739,11 @@ sub doSwapout($) {
 	}
 
 	#
-	# Clear away Geni slivers. Do not proceed if this fails.
-	#
-	if ($PGENISUPPORT) {
-	    require libGeni;
-	    
-	    if (libGeni::DeleteAllSlivers($experiment, $this_user)) {
-		tberror("Could not delete slivers\n");
-		return 1;
-	    }
-	}
-
-	#
 	# Clear logical interfaces and wires. This might move to support
 	# swapmod.
 	#
 	print "Removing logical wires.\n";
-	if (Interface::Wire->DeleteLogicalWires($experiment)) {
+	if (Interface::LogicalWire->DeleteLogicalWires($experiment)) {
 	    tberror("Could not delete logical wires and interfaces\n");
 	    return 1;
 	}
@@ -791,7 +766,7 @@ sub doSwapout($) {
 	# Since this is an actual swapout, 
 	# reset our count of swap out nag emails sent.
 	#
-	DBQueryWarn("update experiments set swap_requests='', ".
+	DBQueryWarn("update experiments set swap_requests='0', ".
 		    "   sim_reswap_count='0' ".
 		    "where eid='$eid' and pid='$pid'");
     } else {
@@ -992,6 +967,12 @@ sub doSwapin($) {
     # Just the physnodes ...
     my @deleted_pnodes = ();
 
+    if ($type == REAL) {
+	if ($experiment->CheckForDeprecatedImages($this_user, 1)) {
+	    return 1;
+	}
+    }
+
     # Special IP assignment. Must do before mapper runs and moves
     # IPs from virt_lans to interfaces table.
     if ($experiment->SetupNetworkFabrics()) {
@@ -1087,7 +1068,7 @@ sub doSwapin($) {
 
 	    tberror "Failed ($exitcode) to map to reality.";
 
-	    # Wrapper sets this bit when recovery is possible.
+	    # Wrapper sets this bit when recoveryppxu is possible.
 	    if ($exitcode & 64) {
 		# We can recover. 
 		tbreport(SEV_SECONDARY, 'assign_wrapper_failed', $exitcode);
@@ -1331,7 +1312,7 @@ sub doSwapin($) {
     # If there are any Plab dslice nodes in the experiment, create the
     # dslice now
     #
-    if ($type > MODIFY_RECOVER) {
+    if (0 && $type > MODIFY_RECOVER) {
 	# Are there any Plab nodes?  First get a list of node types in the exp;
 	# if any are types hosted by any of the PLCs we know about, create
 	# all slices necessary for the experiment in a single plabslice call.
@@ -1343,7 +1324,7 @@ sub doSwapin($) {
 			 "    on nt.type = ppi.node_type".
 			 " where r.pid='$pid' and r.eid='$eid'".
 			 "    and ppi.node_type is not NULL".
-			 " group by nt.type");
+			 " group by nt.type,ppi.plc_name");
 
 	if ($db_result->numrows) {
 	    my $info_str = "";
@@ -1404,6 +1385,13 @@ sub doSwapin($) {
 	#
     }
     TBDebugTimeStamp("named finished");
+
+    #
+    # Determine the distribution of per-experiment root private/public keys
+    # to the experiment nodes.
+    #
+    print "Determining root keypair distribution.\n";
+    $experiment->InitKeyDist();
 
     if ($NFSTRACESUPPORT) {
 	print "Cleaning NFS traces.\n";
@@ -1682,6 +1670,18 @@ sub doSwapin($) {
     }
 
     #
+    # Before we fire off any async activity, push out any experiment
+    # specific root private key.
+    #
+    my $privkey = $experiment->GetPrivkey();
+    if (-x $PUSHROOTKEY && $privkey) {
+	print "Pushing per-experiment root private key.\n";
+	if (system("$PUSHROOTKEY -e $pid/$eid")) {
+	    tbwarn "Could not push private key, this may cause problems!";
+	}
+    }
+
+    #
     # Okay, start the event system now that we know all the nodes have
     # rebooted (os_setup is done). This only takes a moment (puts itself
     # in the background), so its not enough of a delay to worry about.
@@ -1689,18 +1689,6 @@ sub doSwapin($) {
     # event system previously, so starting it again will fail!
     # 
     if (! ($DISABLE_EVENTS || $elabinelab)) {
-	#
-	# For the robot testbed, start the location piper *before* the event
-	# system.
-	#
-	if (0 && -x $piper && ($type != MODIFY && $type != MODIFY_RECOVER)) {
-	    print "Starting the location piper.\n";
-	    if (system("$piper $pid $eid")) {
-		tberror "Failed to start the location piper.";
-		return 1;
-	    }
-	}
-
 	if (($update_Eventsys_restart || 
 	    ($type != MODIFY && $type != MODIFY_RECOVER))) {
 	    print "Starting the event system.\n";

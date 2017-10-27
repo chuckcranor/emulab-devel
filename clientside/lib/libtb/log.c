@@ -37,7 +37,7 @@
 #include "log.h"
 
 static int	usesyslog = 0;
-static char    *filename;
+static char const   *filename;
 #define LOG_IDENT   "Testbed"
 
 /*
@@ -46,7 +46,7 @@ static char    *filename;
  * a logfile to which stdout and stderr are redirected.
  */
 int
-loginit(int slog, char *name)
+loginit(int slog, char const *name)
 {
 	if (slog) {
 		usesyslog = 1;

@@ -418,9 +418,9 @@ REPLACE INTO state_timeouts VALUES ('PXEFBSD','REBOOTING',120,'REBOOT');
 REPLACE INTO state_timeouts VALUES ('PXEFBSD','REBOOTED',60,'NOTIFY');
 REPLACE INTO state_timeouts VALUES ('PXEFBSD','BOOTING',180,'REBOOT');
 REPLACE INTO state_timeouts VALUES ('NORMALv2','TBSETUP',600,'NOTIFY');
-REPLACE INTO state_timeouts VALUES ('NORMALv2','BOOTING',180,'REBOOT');
+REPLACE INTO state_timeouts VALUES ('NORMALv2','BOOTING',240,'REBOOT');
 REPLACE INTO state_timeouts VALUES ('GARCIA-STARGATEv1','TBSETUP',600,'NOTIFY');
-REPLACE INTO state_timeouts VALUES ('PXEKERNEL','PXEWAKEUP',20,'REBOOT');
+REPLACE INTO state_timeouts VALUES ('PXEKERNEL','PXEWAKEUP',120,'REBOOT');
 REPLACE INTO state_timeouts VALUES ('SECUREBOOT','BOOTING',300,'STATE:SECVIOLATION');
 REPLACE INTO state_timeouts VALUES ('SECUREBOOT','GPXEBOOTING',60,'STATE:SECVIOLATION');
 REPLACE INTO state_timeouts VALUES ('SECUREBOOT','PXEBOOTING',60,'STATE:SECVIOLATION');
@@ -439,6 +439,7 @@ REPLACE INTO state_timeouts VALUES ('WIMRELOAD','SHUTDOWN',240,'REBOOT');
 REPLACE INTO state_timeouts VALUES ('WIMRELOAD','RELOADSETUP',60,'NOTIFY');
 REPLACE INTO state_timeouts VALUES ('WIMRELOAD','RELOADING',1800,'NOTIFY');
 REPLACE INTO state_timeouts VALUES ('WIMRELOAD','RELOADDONE',60,'NOTIFY');
+REPLACE INTO state_timeouts VALUES ('PXEKERNEL','PXEBOOTING',180,'REBOOT');
 
 --
 -- Dumping data for table `state_transitions`
@@ -707,6 +708,9 @@ REPLACE INTO state_transitions VALUES ('RELOAD-PCVM','RELOADING','RELOADFAILED',
 REPLACE INTO state_transitions VALUES ('RELOAD-PCVM','RELOADFAILED','SHUTDOWN','');
 REPLACE INTO state_transitions VALUES ('RELOAD-UE','RELOADING','RELOADDONE','ReloadDone');
 REPLACE INTO state_transitions VALUES ('RELOAD-UE','SHUTDOWN','RELOADING','Booting');
+REPLACE INTO state_transitions VALUES ('NORMALv2','BOOTING','PXEWAIT','MoonshotPxeWait');
+REPLACE INTO state_transitions VALUES ('PXEKERNEL','PXEWAKEUP','SHUTDOWN','MoonshotBootDisk');
+REPLACE INTO state_transitions VALUES ('PXEKERNEL','PXEWAKEUP','BOOTING','PxeBootWakeup');
 
 --
 -- Dumping data for table `state_triggers`
@@ -741,6 +745,7 @@ REPLACE INTO state_triggers VALUES ('*','WIMRELOAD','PXEBOOTING','REBOOT');
 REPLACE INTO state_triggers VALUES ('*','WIMRELOAD','BOOTING','REBOOT');
 REPLACE INTO state_triggers VALUES ('*','WIMRELOAD','ISUP','REBOOT');
 REPLACE INTO state_triggers VALUES ('*','RELOAD-UE','RELOADDONE','RELOADDONE');
+REPLACE INTO state_triggers VALUES ('*','NORMALv2','PXEWAIT','PXEBOOT');
 
 --
 -- Dumping data for table `table_regex`
@@ -773,6 +778,7 @@ REPLACE INTO table_regex VALUES ('experiments','sync_server','text','redirect','
 REPLACE INTO table_regex VALUES ('groups','project','text','redirect','projects:pid',0,0,NULL);
 REPLACE INTO table_regex VALUES ('groups','pid_idx','text','redirect','projects:pid_idx',0,0,NULL);
 REPLACE INTO table_regex VALUES ('groups','gid','text','regex','^[a-zA-Z][-\\w]+$',2,32,NULL);
+REPLACE INTO table_regex VALUES ('groups','newgid','text','regex','^[a-zA-Z][-a-zA-Z0-9]+$',2,32,NULL);
 REPLACE INTO table_regex VALUES ('groups','gid_idx','text','regex','^[\\d]+$',1,12,NULL);
 REPLACE INTO table_regex VALUES ('groups','group_id','text','redirect','groups:gid',2,32,NULL);
 REPLACE INTO table_regex VALUES ('groups','group_leader','text','redirect','users:uid',2,8,NULL);
@@ -937,6 +943,8 @@ REPLACE INTO table_regex VALUES ('virt_nodes','sharing_mode','text','regex','^[-
 REPLACE INTO table_regex VALUES ('virt_nodes','osname','text','regex','^((([-\\w]+\\/{0,1})[-\\w\\.+]+(:\\d+){0,1})|((http|https|ftp)\\:\\/\\/[-\\w\\.\\/\\@\\:\\~\\?\\=\\&]*))$',2,128,NULL);
 REPLACE INTO table_regex VALUES ('virt_nodes','parent_osname','text','redirect','virt_nodes:osname',2,128,NULL);
 REPLACE INTO table_regex VALUES ('virt_nodes','nfsmounts','text','redirect','experiments:nfsmounts',0,0,NULL);
+REPLACE INTO table_regex VALUES ('virt_nodes','rootkey_private','int','redirect','default:tinyint',0,0,NULL);
+REPLACE INTO table_regex VALUES ('virt_nodes','rootkey_public','int','redirect','default:tinyint',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_programs','pid','text','redirect','projects:pid',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_programs','eid','text','redirect','experiments:eid',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_programs','vnode','text','redirect','virt_nodes:vname',0,0,NULL);
@@ -977,8 +985,8 @@ REPLACE INTO table_regex VALUES ('projects','num_ron','int','redirect','default:
 REPLACE INTO table_regex VALUES ('experiments','encap_style','text','regex','^(alias|veth|veth-ne|vlan|vtun|egre|gre|default)$',0,0,NULL);
 REPLACE INTO table_regex VALUES ('experiments','veth_encapsulate','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('experiments','allowfixnode','int','redirect','default:boolean',0,0,NULL);
-REPLACE INTO table_regex VALUES ('experiments','jail_osname','text','redirect','os_info:osname',0,0,NULL);
-REPLACE INTO table_regex VALUES ('experiments','delay_osname','text','redirect','os_info:osname',0,0,NULL);
+REPLACE INTO table_regex VALUES ('experiments','jail_osname','text','redirect','virt_nodes:osname',0,0,NULL);
+REPLACE INTO table_regex VALUES ('experiments','delay_osname','text','redirect','virt_nodes:osname',0,0,NULL);
 REPLACE INTO table_regex VALUES ('experiments','use_ipassign','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('experiments','ipassign_args','text','regex','^[\\w\\s-]*$',0,255,NULL);
 REPLACE INTO table_regex VALUES ('experiments','expt_name','text','redirect','default:fulltext',1,255,NULL);
@@ -1099,9 +1107,11 @@ REPLACE INTO table_regex VALUES ('images','relocatable','text','redirect','defau
 REPLACE INTO table_regex VALUES ('images','origin_uuid','text','regex','^\\w+\\-\\w+\\-\\w+\\-\\w+\\-\\w+$',0,64,NULL);
 REPLACE INTO table_regex VALUES ('images','origin_name','text','regex','^[-\\w\\.+:\\/]+$',0,128,NULL);
 REPLACE INTO table_regex VALUES ('images','origin_urn','text','redirect','projects:manager_urn',0,0,NULL);
+REPLACE INTO table_regex VALUES ('images','architecture','text','regex','^[\\w,]*$',0,0,NULL);
 REPLACE INTO table_regex VALUES ('node_types','new_type','text','redirect','default:tinytext',0,0,NULL);
 REPLACE INTO table_regex VALUES ('node_types','node_type','text','regex','^[-\\w]+$',1,30,NULL);
 REPLACE INTO table_regex VALUES ('node_types','class','text','regex','^[\\w]+$',1,30,NULL);
+REPLACE INTO table_regex VALUES ('node_types','architecture','text','regex','^[\\w,]*$',0,0,NULL);
 REPLACE INTO table_regex VALUES ('node_types','isvirtnode','text','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('node_types','isjailed','text','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('node_types','isswitch','text','redirect','default:boolean',0,0,NULL);
@@ -1307,12 +1317,12 @@ REPLACE INTO table_regex VALUES ('default','html_text','text','regex','^[\\040-\
 
 REPLACE INTO table_regex VALUES ('default','default','text','regex','^[\\040-\\073\\075\\077-\\176]*$',0,256,'Default regex if one is not defined for a table/slot. Allow any standard ascii character, but no binary data');
 
-REPLACE INTO table_regex VALUES ('default','tinyint','int','regex','^[\\d]+$',-128,127,'Default regex for tiny int fields. Allow any standard ascii integer, but no binary data');
+REPLACE INTO table_regex VALUES ('default','tinyint','int','regex','^[-+]?[\\d]+$',-128,127,'Default regex for tiny int fields. Allow any standard ascii integer, but no binary data');
 REPLACE INTO table_regex VALUES ('default','boolean','int','regex','^(0|1)$',0,1,'Default regex for tiny int fields that are int booleans. Allow any 0 or 1');
 REPLACE INTO table_regex VALUES ('default','tinyuint','int','regex','^[\\d]+$',0,255,'Default regex for tiny int fields. Allow any standard ascii integer, but no binary data');
-REPLACE INTO table_regex VALUES ('default','int','int','regex','^[\\d]+$',-2147483648,2147483647,'Default regex for int fields. Allow any standard ascii integer, but no binary data');
+REPLACE INTO table_regex VALUES ('default','int','int','regex','^[-+]?[\\d]+$',-2147483648,2147483647,'Default regex for int fields. Allow any standard ascii integer, but no binary data');
 REPLACE INTO table_regex VALUES ('default','float','float','regex','^[+-]?\\ *(\\d+(\\.\\d*)?|\\.\\d+)([eE][+-]?\\d+)?$',-2147483648,2147483647,'Default regex for float fields. Allow any digits and the decimal point');
-REPLACE INTO table_regex VALUES ('default','bigint','int','regex','^[\\d]+$',0,0,'Allow any ascii 64-bit integer');
+REPLACE INTO table_regex VALUES ('default','bigint','int','regex','^[-+]?[\\d]+$',0,0,'Allow any ascii 64-bit integer');
 REPLACE INTO table_regex VALUES ('default','tinytext_utf8','text','regex','^(?:[\\x20-\\x7E]|[\\xC2-\\xDF][\\x80-\\xBF]|\\xE0[\\xA0-\\xBF][\\x80-\\xBF]|[\\xE1-\\xEC\\xEE\\xEF][\\x80-\\xBF]{2}|\\xED[\\x80-\\x9F][\\x80-\\xBF])*$',0,256,'adopted from http://www.w3.org/International/questions/qa-forms-utf-8.en.php');
 REPLACE INTO table_regex VALUES ('default','text_utf8','text','regex','^(?:[\\x20-\\x7E]|[\\xC2-\\xDF][\\x80-\\xBF]|\\xE0[\\xA0-\\xBF][\\x80-\\xBF]|[\\xE1-\\xEC\\xEE\\xEF][\\x80-\\xBF]{2}|\\xED[\\x80-\\x9F][\\x80-\\xBF])*$',0,65535,'adopted from http://www.w3.org/International/questions/qa-forms-utf-8.en.php');
 REPLACE INTO table_regex VALUES ('default','fulltext_utf8','text','regex','^(?:[\\x09\\x0A\\x0D\\x20-\\x7E]|[\\xC2-\\xDF][\\x80-\\xBF]|\\xE0[\\xA0-\\xBF][\\x80-\\xBF]|[\\xE1-\\xEC\\xEE\\xEF][\\x80-\\xBF]{2}|\\xED[\\x80-\\x9F][\\x80-\\xBF])*$',0,65535,'adopted from http://www.w3.org/International/questions/qa-forms-utf-8.en.php');
@@ -1325,10 +1335,13 @@ REPLACE INTO table_regex VALUES ('apt_profiles','listed','int','redirect','defau
 REPLACE INTO table_regex VALUES ('apt_profiles','shared','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('apt_profiles','topdog','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('apt_profiles','disabled','int','redirect','default:boolean',0,0,NULL);
+REPLACE INTO table_regex VALUES ('apt_profiles','nodelete','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('apt_profiles','description','text','redirect','default:html_fulltext',0,512,NULL);
 REPLACE INTO table_regex VALUES ('apt_profiles','rspec','text','redirect','default:html_fulltext',0,262143,NULL);
-REPLACE INTO table_regex VALUES ('apt_profiles','script','text','redirect','default:html_fulltext',0,65535,NULL);
-
+REPLACE INTO table_regex VALUES ('apt_profiles','script','text','redirect','default:html_fulltext',0,262143,NULL);
+REPLACE INTO table_regex VALUES ('apt_profiles','repourl','text','redirect','default:tinytext',0,0,NULL);
+REPLACE INTO table_regex VALUES ('apt_profiles','repohash','text','regex','^[\\w]+$',0,64,NULL);
+REPLACE INTO table_regex VALUES ('apt_profiles','portal_converted','int','redirect','default:boolean',0,0,NULL);
 --
 -- Dumping data for table `testsuite_preentables`
 --

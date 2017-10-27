@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2015 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -30,6 +30,7 @@
 use strict;
 use English;
 use Getopt::Std;
+use vars qw($GENI_DBNAME);
 
 #
 # Initialize an emulab to act as a protogeni emulab. Add optional -c
@@ -74,6 +75,7 @@ my $GENCRL        = "$TB/sbin/protogeni/gencrl";
 my $GENCRLBUNDLE  = "$TB/sbin/protogeni/gencrlbundle";
 my $INITCERTS	  = "$TB/sbin/protogeni/initcerts";
 my $REGISTERCERTS = "$TB/sbin/protogeni/reregister";
+my $CACONTROL     = "$TB/sbin/protogeni/cacontrol";
 my $MKSYSCERT	  = "$TB/sbin/mksyscert";
 my $MKUSERCERT	  = "$TB/sbin/mkusercert";
 my $BATCHEXP      = "$TB/bin/batchexp";
@@ -83,6 +85,8 @@ my $CMCERT	  = "$TB/etc/genicm.pem";
 my $CHCERT	  = "$TB/etc/genich.pem";
 my $SESCERT	  = "$TB/etc/genises.pem";
 my $RPCCERT	  = "$TB/etc/genirpc.pem";
+my $CRL		  = "$TB/ssl/crl.pem";
+my $CRLBUNDLE	  = "$TB/etc/genicrl.bundle";
 my $SUDO	  = "/usr/local/bin/sudo";
 my $MYSQL         = "/usr/local/bin/mysql";
 my $MYSQLADMIN    = "/usr/local/bin/mysqladmin";
@@ -92,7 +96,9 @@ my $PKG_INFO      = "/usr/sbin/pkg_info";
 my $FETCH	  = "/usr/bin/fetch";
 my $OPENSSL       = "/usr/bin/openssl";
 my $FIXROOTCERT   = "$TB/sbin/fixrootcert";
+my $MYSAURN       = "urn:publicid:IDN+@OURDOMAIN@+authority+sa";
 my $APACHEPREFIX  = ("@APACHE_VERSION@" == "22" ? "apache22" : "apache");
+my $APACHE_START  = "@APACHE_START_COMMAND@";
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -115,7 +121,7 @@ use emutil qw(TBGetUniqueIndex);
 use User;
 use Project;
 use Experiment;
-use OSinfo;
+use OSImage;
 use libinstall;
 use installvars;
 
@@ -284,10 +290,12 @@ Phase "bundles", "Installing SSL bundles", sub {
 	ExecQuietFatal("$CP $TB/etc/emulab.pem $TB/etc/genica.bundle");
 	ExecQuietFatal("$CHMOD 0644 $TB/etc/genica.bundle");
     };
-    Phase "genicrl", "Installing genicrl.bundle", sub {
-	DoneIfExists("$TB/etc/genicrl.bundle");
-	ExecQuietFatal("$TOUCH $TB/etc/genicrl.bundle");
-	ExecQuietFatal("$CHMOD 0644 $TB/etc/genicrl.bundle");
+    Phase "genicrl", "Creating initial CRL", sub {
+	ExecQuietFatal("$GENCRL -f");
+    };
+    Phase "crl", "Installing genicrl.bundle", sub {
+	ExecQuietFatal("$CP -f $CRL $CRLBUNDLE");
+	ExecQuietFatal("$CHMOD 0644 $CRLBUNDLE");
     };
 };
 if ($asch) {
@@ -330,9 +338,12 @@ Phase "apache", "Updating apache config", sub {
     ExecQuietFatal("$GMAKE -C @top_builddir@/apache pgeni-install");
 };
 Phase "rcconf", "Updating $RCCONF", sub {
+    my $flags = "-DSSL -DPGENI";
+    $flags .= " -DPGENI_FCGID" if ($PORTAL_ENABLE);
+    
     DoneIfEdited($RCCONF);
     AppendToFileFatal($RCCONF,
-		      "${APACHEPREFIX}_flags=\"-DSSL -DPGENI\"",
+		      "${APACHEPREFIX}_flags=\"$flags\"",
 		      "${APACHEPREFIX}_profiles=\"www geni\"",
 		      "${APACHEPREFIX}_geni_configfile=\"$HTTPD_GENI_CONF\"",
 		      "${APACHEPREFIX}_geni_enable=\"YES\"");
@@ -424,11 +435,11 @@ Phase "dbstuff", "Adding a few things to Emulab DB", sub {
     #
     # It would be unusual if this OSID did not exist.
     #
-    my $osinfo = OSinfo->Lookup(TBOPSPID(), "RHL-STD");
+    my $osimage = OSImage->Lookup(TBOPSPID(), "RHL-STD");
     PhaseFail("RHL-STD does not exist")
-	if (!defined($osinfo));
+	if (!defined($osimage));
 
-    my $osid = $osinfo->osid();
+    my $osid = $osimage->osid();
 
     DBQueryWarn("replace into node_types (type,class,isvirtnode,isdynamic) ".
 		"values ('pcfake','pcvm',1,1)")
@@ -502,10 +513,31 @@ if (!$asch) {
     };
 }
 else {
+    # Restart to pick up initial CRL created above.
+    Phase "apcahe", "Restarting Apache", sub {
+	ExecQuietFatal("$APACHE_START restart");
+    };
+    
     #
-    # But on the clearinghouse, we have to generate the CRL bundle for 
-    # downloading by remote sites.
+    # Need to initialize CAs in the geni-ch DB with our own, so we can
+    # talk to the CH from ourself.
     #
+    Phase "cacontrol", "Running cacontrol", sub {
+	ExecQuietFatal("$CACONTROL -i");
+    };
+
+    #
+    # Now we can post our initial CRL to our CH database. Yes, we could
+    # just do insert into the DB, but if this fails we might as bail now. 
+    #
+    Phase "postcrl", "Posting initial CRL", sub {
+	ExecQuietFatal("$POSTCRL -f");
+    };
+    
+    #
+    # On clearinghouse, we have to generate the CRL bundle for downloading
+    # by remote sites each night.
+    # 
     Phase "crontab", "Updating $CRONTAB", sub {
 	DoneIfEdited($CRONTAB);
 	AppendToFileFatal($CRONTAB,

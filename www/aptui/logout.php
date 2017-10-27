@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -45,8 +45,7 @@ if ($this_user) {
 	    SPITHEADER();
 	    echo "<center><font color=red>Logout failed!</font></failed>\n";
             echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-            echo "<script src='js/lib/bootstrap.js'></script>\n";
-            echo "<script src='js/lib/require.js' data-main='js/main'></script>";
+	    SPITNULLREQUIRE();
 	    SPITFOOTER();
 	}
     }
@@ -55,5 +54,5 @@ if ($ajax_request) {
     SPITAJAX_RESPONSE("");
     exit();
 }
-header("Location: instantiate.php");
+header("Location: landing.php");
 ?>

@@ -19,10 +19,21 @@ sub Install($$$)
 {
     my ($server, $isupdate, $impotent) = @_;
 
+    #
     # Configure can override setting it here.
+    #
+    # XXX defaulting this based on the OS running on the boss node is sketchy.
+    # It should really be based on the LCD of the experiment nodes. Quite
+    # likely, multiple MFSes will be needed as newer HW will not be supported
+    # by older MFSes and vice versa.
+    #
     if ($MFSVERSION eq "") {
 	if ($FBSD_MAJOR > 8 || ($FBSD_MAJOR == 8 && $FBSD_MINOR >= 2)) {
-	    $MFSVERSION = "82";
+	    if ($FBSD_ARCH eq "amd64") {
+		$MFSVERSION = "8-64";
+	    } else {
+		$MFSVERSION = "82";
+	    }
 	}
 	elsif ($FBSD_MAJOR > 7 || $FBSD_MAJOR == 7 && $FBSD_MINOR >= 2) {
 	    $MFSVERSION = "72";
@@ -56,6 +67,7 @@ sub Install($$$)
 
     Phase "mfs", "Setting up MFSs", sub {
 	my $localfile = "$TFTP_DIR/tftpboot.tar.gz";
+	my $kernelvers;
 	
 	Phase "mfsfetch", "Fetching MFS tarball", sub {
 	    DoneIfExists($localfile);
@@ -91,10 +103,26 @@ sub Install($$$)
 	Phase "freemv", "Using freebsd${fv} version of admin MFS", sub {
 	    DoneIfExists("$TFTP_DIR/freebsd");
 	    ExecQuietFatal("cd $TFTP_DIR; $MV freebsd${fv} freebsd");
+	    # find the best MFS kernel to use
+	    if (!$kernelvers) {
+		if (-x "$TFTP_DIR/freebsd/boot/kernel10") {
+		    $kernelvers = 10;
+		} elsif (-x "$TFTP_DIR/freebsd/boot/kernel9") {
+		    $kernelvers = 9;
+		}
+	    }
 	};
 	Phase "frismv", "Using frisbee${fv} version of disk load MFS", sub {
 	    DoneIfExists("$TFTP_DIR/frisbee");
 	    ExecQuietFatal("cd $TFTP_DIR; $MV frisbee${fv} frisbee");
+	    # find the best MFS kernel to use
+	    if (!$kernelvers) {
+		if (-x "$TFTP_DIR/frisbee/boot/kernel10") {
+		    $kernelvers = 10;
+		} elsif (-x "$TFTP_DIR/frisbee/boot/kernel9") {
+		    $kernelvers = 9;
+		}
+	    }
 	};
 	#
 	# Older tarballs didn't have FBSD-specific versions of newnode MFS.
@@ -104,6 +132,14 @@ sub Install($$$)
 		DoneIfExists("$TFTP_DIR/freebsd.newnode");
 		ExecQuietFatal("cd $TFTP_DIR; ".
 			       "$MV freebsd${fv}.newnode freebsd.newnode");
+		# find the best MFS kernel to use
+		if (!$kernelvers) {
+		    if (-x "$TFTP_DIR/freebsd.newnode/boot/kernel10") {
+			$kernelvers = 10;
+		    } elsif (-x "$TFTP_DIR/freebsd.newnode/boot/kernel9") {
+			$kernelvers = 9;
+		    }
+		}
 	    };
 	}
 
@@ -161,6 +197,9 @@ sub Install($$$)
 	# This opt says to include igb cruft. Needed on G8s.
 	#
 	my $opt = ($PROTOGENI_GENIRACK ? "-i" : "");
+	if ($kernelvers) {
+	    $opt .= " -F $kernelvers";
+	}
 	
 	Phase "localize", "Localizing the MFSes", sub {
 	    foreach my $mfs ("frisbee", "freebsd", "freebsd.newnode") {

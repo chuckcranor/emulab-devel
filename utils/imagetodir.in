@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2012-2016 University of Utah and the Flux Group.
+# Copyright (c) 2012-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,17 +33,20 @@ use File::Basename;
 sub usage()
 {
     print("Usage: imagetodir [-nq] <imageid>\n" .
+	  "       imagetodir [-nq] -P pid\n" .
 	  "       imagetodir [-nq] -a\n" .
 	  "Options:\n".
+	  "   -P pid    Do all images for a specific project\n".
 	  "   -a        Do ALL images\n".
 	  "   -n        Impotent mode\n".
 	  "   -q        Quiet mode\n");
     exit(-1);
 }
-my $optlist   = "qna";
+my $optlist   = "qnaP:";
 my $impotent  = 0;
 my $quiet     = 0;
 my $doall     = 0;
+my $doallpid;
 
 #
 # Configure variables
@@ -82,8 +85,9 @@ $| = 1;
 use lib "@prefix@/lib";
 use emutil;
 use Node;
-use Image;
+use OSImage;
 use User;
+use Project;
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -99,13 +103,21 @@ if (defined($options{"n"})) {
 if (defined($options{"q"})) {
     $quiet = 1;
 }
+if (defined($options{"P"})) {
+    if ($options{"P"} =~ /^([-\w]+)$/) {
+	$doallpid = $1;
+    } else {
+	fatal("Invalid project name for -P");
+    }
+    if (!Project->Lookup($doallpid)) {
+	fatal("No such project '$doallpid'");
+    }
+}
 if (defined($options{"a"})) {
     $doall = 1;
-    # XXX for now
-    $impotent = 1;
 }
 usage() 
-    if (!$doall && @ARGV != 1);
+    if (!$doall && !$doallpid && @ARGV != 1);
 
 sub ConvertImage($)
 {
@@ -116,8 +128,9 @@ sub ConvertImage($)
 	return 0;
     }
     my @images = ();
-    if ($image->AllVersions(\@images)) {
-	fatal("Could not get list of image (versions)");
+    if ($image->AllVersions(\@images, 1)) {
+	print STDERR "Could not get list of (versions) for $image\n";
+	return -1;
     }
     my $newpath = dirname($image->path()) . "/" . $image->imagename() . "/";
     if (-e $newpath && -f $newpath) {
@@ -144,7 +157,7 @@ sub ConvertImage($)
 	    $gid = $project->unix_gid();
 
 	    my $user = User->Lookup($image->creator_idx());
-	    if (!defined($project)) {
+	    if (!defined($user)) {
 		print STDERR "No creator for image\n";
 		return -1;
 	    }
@@ -162,6 +175,10 @@ sub ConvertImage($)
 		print STDERR "Could not mkdir $newpath: $!\n";
 		return -1;
 	    }
+	    if (! chmod(0775, "$newpath")) {
+		print STDERR "Could not chown $newpath: $!\n";
+		return -1;
+	    }
 	    if (! chown($uid, $gid, $newpath)) {
 		print STDERR "Could not chown($uid,$gid) $newpath: $!\n";
 		return -1;
@@ -175,7 +192,7 @@ sub ConvertImage($)
 	my $filename = $imageversion->path();
 	my $basename = basename($filename);
 
-	if ($imageversion->isdelta()) {
+	if ($imageversion->isdelta() || $imageversion->HaveDeltaImage()) {
 	    $basename =~ s/\.ndz/\.ddz/;
 	}
 
@@ -228,25 +245,57 @@ sub ConvertImage($)
     }
 }
 
-if ($doall) {
-    my @images = Image->ListAll(undef, undef);
+if ($doall || $doallpid) {
+    my @images = OSImage->ListAll(undef, $doallpid);
 
+    if ($doallpid && @images == 0) {
+	print "No images in project '$doallpid'\n";
+	exit(0);
+    }
+
+    my %lastactive = ();
     if ($WITHZFS && $ZFS_NOEXPORT) {
 	#
 	# Have to force the new directories to be exported.
 	# See ZFS code in exports_setup
 	#
+	my %projs = ();
 	foreach my $imagename (@images) {
+	    # XXX OSImage->Lookup blows up on old multi-partition images
 	    my $image = Image->Lookup($imagename);
+	    if ($image && $image->ezid()) {
+		$image = OSImage->Lookup($imagename);
+	    }
 	    my $project = $image->GetProject();
-
-	    $project->BumpActivity();
+	    if (!exists($projs{$project->pid()})) {
+		$projs{$project->pid()} = $project;
+	    }
 	}
-	system($EXPORTSSETUP) == 0 or
-	    fatal("$EXPORTSSETUP failed");
+	foreach my $pname (keys %projs) {
+	    if (! -d "$PROJROOT/$pname/images") {
+		my $project = $projs{$pname};
+		$lastactive{$pname}{'obj'} = $project;
+		$lastactive{$pname}{'last'} = $project->GetActivity();
+		if (!$impotent) {
+		    $project->BumpActivity();
+		}
+	    }
+	}
+	if (keys(%lastactive) > 0) {
+	    my $activate = int(keys %lastactive);
+	    print STDERR "Found $activate inactive projects, activating ...\n";
+	    if (!$impotent) {
+		system($EXPORTSSETUP) == 0 or
+		    fatal("$EXPORTSSETUP failed");
+	    }
+	}
     }
     foreach my $imagename (@images) {
+	# XXX OSImage->Lookup blows up on old multi-partition images
 	my $image = Image->Lookup($imagename);
+	if ($image && $image->ezid()) {
+	    $image = OSImage->Lookup($imagename);
+	}
 	next
 	    if (!defined($image->path()));
 	
@@ -258,15 +307,32 @@ if ($doall) {
 	    # There is some lag before the automounter can mount the new volume.
 	    #
 	    if (emutil::waitForMount("$PROJROOT/$pid") < 0) {
-		fatal("Could not access $PROJROOT/$pid");
+		print STDERR "Could not access $PROJROOT/$pid, ignoring\n";
+		next;
 	    }
 	}
 	print "--> $image\n";
 	ConvertImage($image);
     }
+
+    # Restore last legit activity timestamp for otherwise inactive projects
+    if ($WITHZFS && $ZFS_NOEXPORT && keys(%lastactive) > 0) {
+	print STDERR "Restoring last activity stamps ...\n";
+	foreach my $pname (keys %lastactive) {
+	    my $project = $lastactive{$pname}{'obj'};
+	    my $last = $lastactive{$pname}{'last'};
+	    if (!$impotent) {
+		$project->SetActivity($last);
+	    }
+	}
+	if (!$impotent) {
+	    system($EXPORTSSETUP) == 0 or
+		fatal("$EXPORTSSETUP failed");
+	}
+    }
 }
 else {
-    my $image = Image->Lookup($ARGV[0]);
+    my $image = OSImage->Lookup($ARGV[0]);
     if (!defined($image)) {
 	fatal("No such image exists");
     }

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2007-2015 University of Utah and the Flux Group.
+# Copyright (c) 2007-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -131,7 +131,11 @@ Linux)
         rel=1.0  # XXX probably wrong
     fi
     if [ "$dist" = "Ubuntu" -a `uname -m` = "aarch64" ]; then
-	tag=Moonshot
+	if [ "$rel" = "16.04" ]; then
+	    tag=MoonshotUbuntu16
+	else
+	    tag=Moonshot
+	fi
     fi
     ;;
 CYGWIN_NT-*)	# aka Windows XP/7

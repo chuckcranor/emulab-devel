@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2016 University of Utah and the Flux Group.
+# Copyright (c) 2003-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,7 +34,7 @@ use File::Temp qw(tempfile);
 #
 sub usage()
 {
-    print STDERR "Usage: addspecialiface -b <speed> [-s <switchinfo>] ".
+    print STDERR "Usage: addspecialiface -b <speed> -s <switchinfo> ".
 	"<node_id> <iface_id>\n";
     print STDERR "Usage: addspecialiface [-t] -r <node_id> <iface_id>\n";
     print STDERR "Options:\n";
@@ -57,6 +57,7 @@ my $force     = 0;
 my $notrunk   = 0;
 my $speed;
 my $switchinfo;
+my ($interface1,$interface2);
 
 # Protos
 sub fatal($);
@@ -65,7 +66,7 @@ sub fatal($);
 # Configure variables
 #
 my $TB          = "@prefix@";
-my $SNMPIT      = "$TB/bin/snmpit_test";
+my $SNMPIT      = "$TB/bin/snmpit";
 
 #
 # Testbed Support libraries
@@ -78,6 +79,7 @@ use User;
 use Node;
 use NodeType;
 use OSinfo;
+use Lan;
 use Interface;
 
 #
@@ -125,7 +127,7 @@ if (defined($options{'s'})) {
     $switchinfo = $options{"s"};
 }
 usage()
-    if (@ARGV != 2);
+    if (@ARGV != 2 || (!$removing && !defined($switchinfo)));
 
 my $node_id  = $ARGV[0];
 my $iface_id = $ARGV[1];
@@ -154,38 +156,54 @@ else {
 	if (defined($interface));
 }
 if ($removing) {
-    my $query_result =
-	DBQueryWarn("select lma1.lanid from lan_member_attributes as lma1, " .
-		    "lan_member_attributes as lma2 where " .
-		    "lma1.lanid = lma2.lanid and lma1.memberid=lma2.memberid " .
-		    "and lma1.attrkey='node_id' and " .
-		    "lma1.attrvalue='$node_id' and " .
-		    "lma2.attrkey='iface' and " .
-		    "lma2.attrvalue='$iface_id'");
-    if( $query_result && $query_result->numrows > 0 ) {
-	if( $force ) {
-	    print "$node_id:$iface_id appears to be in use; " .
-		"continuing anyway...\n";
-	} else {
-	    print "warning: $node_id:$iface_id appears to be in use; " .
+    my $otheriface;
+
+    if (Lan->FindLansByMember($node, $interface->iface())) {
+	if ($force) {
+	    print "$interface appears to be in use; continuing anyway...\n";
+	}
+	else {
+	    print "warning: $interface appears to be in use; " .
 		"entering impotent mode (use -f to force removal)\n";
 	    $impotent = 1;
 	}
     }
-    if( !$impotent ) {
+    
+    #
+    # Find the wire so we can delete the other interface too.
+    #
+    my $wire = Interface::Wire->Lookup($interface);
+    if (defined($wire)) {
+	$otheriface = Interface->LookupByIface($wire->node_id2(), $wire->iface2());
+
+	if (Lan->FindLansByMember($otheriface->node_id(), $otheriface->iface())) {
+	    if ($force) {
+		print "$interface appears to be in use; continuing anyway...\n";
+	    }
+	    else {
+		print "warning: $interface appears to be in use; " .
+		    "entering impotent mode (use -f to force removal)\n";
+		$impotent = 1;
+	    }
+	}
+    }
+    if (!$impotent) {
 	if ($node->IsReserved() &&
 	    $node->erole() eq "sharedhost" && !$notrunk) {
 	    print "Turning off trunk mode for $node_id:$iface_id\n";
 	    system("$SNMPIT -U $node_id:$iface_id") == 0
 		or fatal("Could not turn off port trunking mode");
 	}
-
 	$interface->DeleteWire() == 0
 	    or fatal("Could not delete wire for $interface");
 
 	# Flag indicates it is okay to delete real interface.
 	$interface->Delete(1) == 0
 	    or fatal("Could not delete $interface");
+	if ($otheriface) {
+	    $otheriface->Delete(1) == 0
+		or fatal("Could not delete $otheriface");
+	}
     }
 
     exit(0);
@@ -242,53 +260,65 @@ if (defined($wire)) {
 }
 
 #
-# Add the interface.
+# Add the interfaces.
 #
-my $type;
-my $max_speed;
-if( $speed eq "100Mb" ) {
-    $type = "generic";
-    $max_speed = "100";
-
-
-} elsif( $speed eq "10Gb" ) {
-    $type = "generic_10G";
-    $max_speed = "10000";
-} elsif( $speed eq "40Gb" ) {
-    $type = "generic_40G";
-    $max_speed = "40000";
-} elsif( $speed eq "100Gb" ) {
-    $type = "generic_100G";
-    $max_speed = "100000";
-} else { # default is 1G for backward compatibility
-    $type = "generic_1G";
-    $max_speed = "1000";
+my $type = Interface::Type->GenericType($speed);
+if (!defined($type)) {
+    # default is 1G for backward compatibility
+    $type = Interface::Type->Lookup("generic_1G");
+    if (!defined($type)) {
+	fatal("Could not find a generic type for $speed");
+    }
 }
-my $ifaceargs = {
+my $ifaceargs1 = {
+    "card"        => $switchcard,
+    "port"        => $switchport,
+    "iface"       => $switchcard . "/" . $switchport,
+    "role"        => TBDB_IFACEROLE_OTHER(),
+    "type"        => $type->type(),
+    "max_speed"   => $type->max_speed(),
+    "mac"         => "000000000000",
+};
+print "Creating switch interface with arguments:\n";
+print Dumper($ifaceargs1);
+if (!$impotent) {
+    $interface2 = Interface->Create($switch, $ifaceargs1)
+	or fatal("Could not create interface entry for switch");
+}
+
+my $ifaceargs2 = {
     "card"        => $nodecard,
     "iface"       => $iface_id,
     "role"        => TBDB_IFACEROLE_EXPERIMENT(),
-    "type"        => $type,
-    "max_speed"   => $max_speed,
-    "switch_id"   => $switchid,
-    "switch_port" => $switchport,
-    "switch_card" => $switchcard,
+    "type"        => $type->type(),
+    "max_speed"   => $type->max_speed(),
     "trunk"       => ($node->IsReserved() &&
 		      $node->erole() eq "sharedhost" ? 1 : 0),
     "mac"         => "000000000000",
 };
 print "Creating interface with arguments:\n";
-print Dumper($ifaceargs);
+print Dumper($ifaceargs2);
 if (!$impotent) {
-    Interface->Create($node, $ifaceargs)
+    $interface1 = Interface->Create($node, $ifaceargs2)
 	or fatal("Could not create interface entry");
-
-    if ($node->IsReserved() &&
-	$node->erole() eq "sharedhost" && !$notrunk) {
-	print "Setting $node_id:$iface_id to trunking mode\n";
-	system("$SNMPIT -E $node_id:$iface_id") == 0
-	    or fatal("Could not put port into trunking mode");
-    }
+}
+if (!$impotent) {
+    my $wireargs = {
+	"card1"  => $switchcard,
+	"port1"  => $switchport,
+	"card2"  => $nodecard,
+	"port2"  => 1,
+    };
+    print "Creating wire for $interface1,$interface2:\n";
+    $wire = Interface::Wire->Create($interface1, $interface2, 'Node', {})
+	or fatal("Could not create wire");
+}
+if (!$impotent &&
+    $node->IsReserved() &&
+    $node->erole() eq "sharedhost" && !$notrunk) {
+    print "Setting $node_id:$iface_id to trunking mode\n";
+    system("$SNMPIT -E $node_id:$iface_id") == 0
+	or fatal("Could not put port into trunking mode");
 }
 exit(0);
 

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2016 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,6 +42,8 @@ use Cwd 'abs_path';
 use libsetup;
 use libtmcc;
 
+my $VGNAME;
+
 # Load up the paths. Its conditionalized to be compatabile with older images.
 # Note this file has probably already been loaded by the caller.
 BEGIN
@@ -51,10 +53,19 @@ BEGIN
 	import emulabpaths;
     }
     else {
-	my $ETCDIR  = "/etc/rc.d/testbed";
-	my $BINDIR  = "/etc/rc.d/testbed";
-	my $VARDIR  = "/etc/rc.d/testbed";
-	my $BOOTDIR = "/etc/rc.d/testbed";
+	$ETCDIR  = "/etc/rc.d/testbed";
+	$BINDIR  = "/etc/rc.d/testbed";
+	$VARDIR  = "/etc/rc.d/testbed";
+	$BOOTDIR = "/etc/rc.d/testbed";
+    }
+
+    $VGNAME = "emulab";
+    if (INXENVM() && -r "$VARDIR/boot/vmname") {
+	my $vname = `cat $VARDIR/boot/vmname`;
+	chomp $vname;
+	if ($vname =~ /^([-\w]+)$/) {
+	    $VGNAME = "emulab-$1";
+	}
     }
 }
 
@@ -74,6 +85,7 @@ my $SGDISK	= "/sbin/sgdisk";
 my $GDISK	= "/sbin/gdisk";
 my $PPROBE	= "/sbin/partprobe";
 my $FRISBEE     = "/usr/local/bin/frisbee";
+my $HDPARM	= "/sbin/hdparm";
 
 #
 #
@@ -195,11 +207,12 @@ sub init_serial_map()
     # XXX this is a total hack and maybe distro dependent?
     #
     my %snmap = ();
-    my @lines = `ls -l /sys/block/sd[a-z] /sys/block/sd[a-z][a-z] 2>&1`;
+    my @lines = `ls -l /sys/block/sd[a-z] /sys/block/sd[a-z][a-z] /sys/block/nvme[0-9]* 2>&1`;
     foreach (@lines) {
 	# XXX if a pci device, assume a local disk
 	# XXX for moonshots (arm64), it is different
 	if (m#/sys/block/(sd[a-z][a-z]?) -> ../devices/pci\d+# ||
+	    m#/sys/block/(nvme\d+n\d+) -> ../devices/pci\d+# ||
 	    m#/sys/block/(sd[a-z][a-z]?) -> ../devices/soc.\d+#) {
 	    my $dev = $1;
 	    $sn = find_serial($dev);
@@ -226,6 +239,87 @@ sub serial_to_dev($$)
 }
 
 #
+# Determine if a disk is "SSD" or "HDD"
+#
+sub get_disktype($)
+{
+    my ($dev) = @_;
+    my @lines;
+
+    #
+    # Assume NVMe is SSSD.
+    # Older hdparm and smartctl don't seem to handle NVMe
+    #
+    if ($dev =~ /^nvme\d+n\d+/) {
+	return "SSD";
+    }
+
+    #
+    # Try hdparm first since it is a standard utility
+    #
+    if (-x "$HDPARM") {
+	if (open(HFD, "$HDPARM -I /dev/$dev 2>/dev/null |")) {
+	    my $isssd = 0;
+
+	    while (my $line = <HFD>) {
+		chomp($line);
+		if ($line =~ /:\s+solid state device$/i) {
+		    $isssd = 1;
+		    last;
+		}
+	    }
+	    close(HFD);
+
+	    return ($isssd ? "SSD" : "HDD");
+	}
+    }
+
+    #
+    # Try using "smartctl -i"
+    #
+    if (-x "$SMARTCTL") {
+	if (open(HFD, "$SMARTCTL -i /dev/$dev 2>&1 |")) {
+	    my $isssd = -1;
+	    my $model ="";
+
+	    while (my $line = <HFD>) {
+		chomp($line);
+		if ($line =~ /^rotation rate:\s+(\S.*)/i) {
+		    if ($1 =~ /solid state device/i) {
+			$isssd = 1;
+		    } else {
+			$isssd = 0;
+		    }
+		    last;
+		}
+		# XXX if we don't find rotation rate, we will fall back on this
+		if ($line =~ /^device model:\s+(\S.*)/i) {
+		    $model = $1;
+		    next;
+		}
+	    }
+	    close(HFD);
+
+	    if ($isssd >= 0) {
+		return ($isssd ? "SSD" : "HDD");
+	    }
+	    
+	    #
+	    # XXX older versions of smartctl (e.g., in CentOS 6-ish)
+	    # don't return "Rotation Rate". This is a fall-back hack as
+	    # we know that at least Intel SSDs have SSD in the model name.
+	    #
+	    if ($model =~ /SSD/) {
+		return "SSD";
+	    }
+	}
+    }
+
+    # Assume it is a spinning disk.
+    return "HDD";
+}
+
+#
 # Return the name (e.g., "sda") of the boot disk, aka the "system volume".
 #
 sub get_bootdisk()
@@ -235,7 +329,9 @@ sub get_bootdisk()
 
     if ($line && $line =~ qr{^(/dev/\S+) on /}) {
 	my $device = abs_path($1);
-	if ($device && $device =~ qr{^/dev/(\S+)\d+}) {
+	if ($device &&
+	    ($device =~ qr{^/dev/(nvme\S+)p\d+} ||
+	     $device =~ qr{^/dev/(\S+)\d+})) {
 	    $disk = $1;
 	}
     }
@@ -253,7 +349,7 @@ sub get_ptabtype($)
     }
 
     # if sfdisk fails, assume unknown
-    my $pinfo = `$SFDISK -l /dev/sda 2>&1`;
+    my $pinfo = `$SFDISK -l /dev/$dev 2>&1`;
     if ($?) {
 	return "unknown";
     }
@@ -261,6 +357,11 @@ sub get_ptabtype($)
     # if sfdisk doesn't recognize it, assume unknown
     if ($pinfo =~ /unrecognized partition table type/) {
 	return "unknown";
+    }
+
+    # newer sfdisk recognizes GPT
+    if ($pinfo =~ /Disklabel type: gpt/) {
+	return "GPT";
     }
 
     # if sfdisk detects a GPT, go with it
@@ -282,7 +383,8 @@ sub get_partsize($)
 	return $size;
     }
     while (<FD>) {
-	if (/^\s+\d+\s+\d+\s+(\d+)\s+(sd[a-z][a-z]?(?:\d+)?)/) {
+	if (/^\s+\d+\s+\d+\s+(\d+)\s+((?:xvd|sd)[a-z][a-z]?(?:\d+)?)/ ||
+	    /^\s+\d+\s+\d+\s+(\d+)\s+(nvme\d+n\d+(?:p\d+)?)/) {
 	    my ($_size,$_dev) = ($1,$2);
 
 	    if ($dev eq $_dev) {
@@ -327,9 +429,9 @@ sub get_parttype($$$)
     }
 
     my $ptype = `$SFDISK /dev/$dev -c $pnum 2>/dev/null`;
-    if ($? == 0 && $ptype) {
+    if ($? == 0 && $ptype ne "") {
 	chomp($ptype);
-	if ($ptype =~ /^([\da-fA-F]+)$/) {
+	if ($ptype =~ /^\s*([\da-fA-F]+)$/) {
 	    $ptype = hex($1);
 	} else {
 	    $ptype = -1;
@@ -350,10 +452,10 @@ sub is_lvm_initialized($)
 {
     my $pvsp = shift;
 
-    my $vg = `vgs -o vg_name,pv_count --noheadings emulab 2>/dev/null`;
+    my $vg = `vgs -o vg_name,pv_count --noheadings $VGNAME 2>/dev/null`;
     if ($vg) {
 	if ($pvsp) {
-	    if ($vg =~ /emulab\s+(\d+)/) {
+	    if ($vg =~ /${VGNAME}\s+(\d+)/) {
 		$$pvsp = $1;
 	    } else {
 		$$pvsp = 1;
@@ -387,8 +489,9 @@ sub get_diskinfo()
 	return undef;
     }
     while (<FD>) {
-	if (/^\s+\d+\s+\d+\s+(\d+)\s+((xvd|sd)[a-z][a-z]?)(\d+)?/) {
-	    my ($size,$dev,$part) = ($1,$2,$4);
+	if (/^\s+\d+\s+\d+\s+(\d+)\s+((?:xvd|sd)[a-z][a-z]?)(\d+)?/ ||
+	    /^\s+\d+\s+\d+\s+(\d+)\s+(nvme\d+n\d+)(?:p(\d+))?/) {
+	    my ($size,$dev,$part) = ($1,$2,$3);
 	    # DOS partition
 	    if (defined($part)) {
 		my $pttype = "MBR";
@@ -400,6 +503,9 @@ sub get_diskinfo()
 		next if ($pttype eq "MBR" && ($part < 1 || $part > 4));
 
 		my $pdev = "$dev$part";
+		if ($dev =~ /^nvme/) {
+		    $pdev = "${dev}p${part}";
+		}
 		$geominfo{$pdev}{'level'} = 1;
 		$geominfo{$pdev}{'type'} = "PART";
 		$geominfo{$pdev}{'size'} = int($size / 1024);
@@ -419,6 +525,7 @@ sub get_diskinfo()
 		$geominfo{$dev}{'size'} = int($size / 1024);
 		$geominfo{$dev}{'inuse'} = 0;
 		$geominfo{$dev}{'ptabtype'} = get_ptabtype($dev);
+		$geominfo{$dev}{'disktype'} = get_disktype($dev);
 	    }
 	}
     }
@@ -430,7 +537,7 @@ sub get_diskinfo()
 	return undef;
     }
     while (<FD>) {
-	if (/^\/dev\/((xvd|sd)\S+)/) {
+	if (/^\/dev\/((?:xvd|sd|nvme)\S+)/) {
 	    my $dev = $1;
 	    if (exists($geominfo{$dev}) && $geominfo{$dev}{'inuse'} == 0) {
 		$geominfo{$dev}{'inuse'} = -1;
@@ -446,7 +553,7 @@ sub get_diskinfo()
     foreach my $dev (keys %geominfo) {
 	if ($geominfo{$dev}{'type'} eq "PART" &&
 	    $geominfo{$dev}{'level'} == 1 &&
-	    $dev =~ /^(.*)\d+$/) {
+	    ($dev =~ /^(nvme\d+n\d+)p\d+$/ || $dev =~ /^(.*)\d+$/)) {
 	    if (exists($geominfo{$1}) && $geominfo{$1}{'inuse'} == 0) {
 		$geominfo{$1}{'inuse'} = 1;
 	    }
@@ -484,7 +591,7 @@ sub get_diskinfo()
     if ($gotvgs &&
 	open(FD, "lvs -o vg_name,lv_name,lv_size,lv_attr --units m --noheadings|")) {
 	while (<FD>) {
-	    if (/^\s+(\S+)\s+(\S+)\s+(\d+)\.\d+m\s+([-a-zA-Z]{9})$/) {
+	    if (/^\s+(\S+)\s+(\S+)\s+(\d+)\.\d+m\s+([-a-zA-Z]{9,})$/) {
 		my $vg = $1;
 		my $lv = $2;
 		my $size = $3;
@@ -495,7 +602,7 @@ sub get_diskinfo()
 		$geominfo{$dev}{'type'} = "LVM";
 		$geominfo{$dev}{'size'} = $size;
 		$geominfo{$dev}{'inuse'} = 1;
-		if ($attrs =~ /^....a....$/) {
+		if ($attrs =~ /^....a/) {
 		    $geominfo{$dev}{'active'} = 1;
 		} else {
 		    $geominfo{$dev}{'active'} = 0;
@@ -676,7 +783,7 @@ sub os_init_storage($)
 	} elsif ($href->{'CMD'} eq "SLICE") {
 	    $gotslice++;
 	    if ($href->{'BSID'} eq "SYSVOL" ||
-		$href->{'BSID'} eq "ONSYSVOL") {
+		$href->{'BSID'} eq "NONSYSVOL") {
 		$needavol = 1;
 	    } elsif ($href->{'BSID'} eq "ANY") {
 		$needall = 1;
@@ -799,7 +906,8 @@ sub os_show_storage($)
 	    my $inuse = sprintf("%X", $dinfo->{$dev}->{'inuse'});
 	    print STDERR "    name=$dev, type=$type, level=$lev, size=$size, inuse=$inuse";
 	    if ($type eq "DISK") {
-		print STDERR ", pttype=", $dinfo->{$dev}->{'ptabtype'};
+		print STDERR ", disktype=", $dinfo->{$dev}->{'disktype'},
+		    ", pttype=", $dinfo->{$dev}->{'ptabtype'};
 	    }
 	    elsif ($type eq "LVM") {
 		print STDERR ", active=", $dinfo->{$dev}->{'active'};
@@ -886,7 +994,7 @@ sub os_check_storage_element($$)
 	my $session;
 	@lines = `$ISCSI -m session 2>&1`;
 	foreach (@lines) {
-	    if (/^tcp: \[(\d+)\].*$uuid */) {
+	    if (/^tcp: \[(\d+)\].*$uuid *$/) {
 		$session = $1;
 		last;
 	    }
@@ -1025,16 +1133,12 @@ sub os_check_storage_slice($$)
     # local storage:
     #  if BSID==SYSVOL:
     #    see if 4th part of boot disk exists (eg: da0s4) and
-    #    is of type freebsd
+    #    is of type linux
     #  else if BSID==NONSYSVOL:
-    #    see if there is a concat volume with appropriate name
+    #    see if there is a logical volume with appropriate name
     #  else if BSID==ANY:
-    #    see if there is a concat volume with appropriate name
+    #    see if there is a logical volume with appropriate name
     #  if there is a mountpoint, see if it exists in /etc/fstab
-    #
-    # List all volumes:
-    #   gvinum lv
-    #
     #
     if ($href->{'CLASS'} eq "local") {
 	my $lv = $href->{'VOLNAME'};
@@ -1047,13 +1151,19 @@ sub os_check_storage_slice($$)
 
 	# figure out the device of interest
 	if ($bsid eq "SYSVOL") {
-	    $dev = $rdev = "${bdisk}4";
+	    my $pchr = "";
+	    if ($bdisk =~ /^nvme/) {
+		$pchr = "p";
+	    }
+	    $dev = $rdev = "${bdisk}${pchr}4";
 	    $devtype = "PART";
 	    $pttype = $ginfo->{$bdisk}->{'ptabtype'};
 	} else {
-	    $dev = "emulab/$lv";
+	    $dev = "$VGNAME/$lv";
 	    # XXX the real path is returned by mount
-	    $rdev = "mapper/emulab-$lv";
+	    # XXX note that any '-'s in the mapper name are doubled
+	    (my $rlv = $lv) =~ s/-/--/g;
+	    $rdev = "mapper/${VGNAME}-$rlv";
 	    $devtype = "LVM";
 	    # XXX LVM rounds up to physical extent size (4 MiB)
 	    # on every physical volume that is in the VG
@@ -1129,6 +1239,10 @@ sub os_check_storage_slice($$)
 		# additional sanity checks (right now fsck'ing the alleged FS)
 		# and if it passes, re-add the mount line.
 		#
+		# XXX It might also be because we have re-loaded the OS
+		# and not only the fstab line but the mountpoint might be
+		# missing. We attempt to repair this case as well.
+		#
 		$line = `grep '^/dev/$dev\[\[:space:\]\]' /etc/fstab`;
 		if (!$line) {
 		    warn("  $lv: mount of /dev/$dev missing from fstab; sanity checking and re-adding...\n");
@@ -1145,6 +1259,14 @@ sub os_check_storage_slice($$)
 			return -1;
 		    }
 		    undef $href->{'LVDEV'};
+
+		    # make sure the mount point exists (case of reloaded OS)
+		    if (! -d "$mpoint" &&
+			mysystem("$MKDIR -p $mpoint")) {
+			warn("*** $lv: could not create mountpoint '$mpoint'\n");
+			return -1;
+		    }
+
 		    if (!open(FD, ">>/etc/fstab")) {
 			warn("*** $lv: could not add mount to /etc/fstab\n");
 			return -1;
@@ -1270,8 +1392,11 @@ sub os_create_storage($$)
 		$proxyopt = "-P $nodeid";
 	    }
 
-	    my $command = "$FRISBEE -f -M 128 $proxyopt ".
-		"         -S $server -B 30 -F $imageid $imagepath";
+	    # Allow the server to enable heartbeat reports in the client
+	    my $heartbeat = "-H 0";
+
+	    my $command = "$FRISBEE -f -M 128 $proxyopt $heartbeat ".
+		"-S $server -B 30 -F $imageid $imagepath";
 
 	    print STDERR "$command\n";
 
@@ -1382,7 +1507,7 @@ sub os_create_storage_element($$$)
 	#
 	@lines = `$ISCSI -m session 2>&1`;
 	foreach (@lines) {
-	    if (/^tcp: \[(\d+)\].*$uuid */) {
+	    if (/^tcp: \[(\d+)\].*$uuid *$/) {
 		$session = $1;
 		last;
 	    }
@@ -1472,7 +1597,11 @@ sub os_create_storage_slice($$$)
 	# dostype -f /dev/sda 4 131
 	#
 	if ($bsid eq "SYSVOL") {
-	    $mdev = "$bdisk" . "4";
+	    my $pchr = "";
+	    if ($bdisk =~ /^nvme/) {
+		$pchr = "p";
+	    }
+	    $mdev = "${bdisk}${pchr}4";
 
 	    if ($ginfo->{$bdisk}->{'ptabtype'} eq "GPT") {
 		if (exists($ginfo->{$mdev})) {
@@ -1517,8 +1646,23 @@ sub os_create_storage_slice($$$)
 		my @devs = ();
 		my $dev;
 
+		#
+		# Deterimine if we should use SSDs in the construction
+		# of the volume group.
+		#
+		my $disktype = "";
+		if ($href->{'PROTO'} eq "SATA") {
+		    $disktype = "HDD";
+		} elsif ($href->{'PROTO'} eq "NVMe") {
+		    $disktype = "SSD";
+		}
+
 		if ($bsid eq "ANY") {
-		    $dev = $bdisk . "4";
+		    my $pchr = "";
+		    if ($bdisk =~ /^nvme/) {
+			$pchr = "p";
+		    }
+		    $dev = "${bdisk}${pchr}4";
 
 		    if ($ginfo->{$bdisk}->{'ptabtype'} eq "GPT") {
 			if (exists($ginfo->{$dev})) {
@@ -1550,14 +1694,19 @@ sub os_create_storage_slice($$$)
 			push(@devs, "/dev/$dev");
 		    }
 		    elsif (exists($ginfo->{$dev}) &&
-			$ginfo->{$dev}->{'inuse'} == 0) {
+			   $ginfo->{$dev}->{'inuse'} == 0 &&
+			   (!$disktype ||
+			    $ginfo->{$bdisk}->{'disktype'} eq $disktype)) {
 			push(@devs, "/dev/$dev");
 		    }
 		}
 	      skipp4:
+
 		foreach $dev (keys %$ginfo) {
 		    if ($ginfo->{$dev}->{'type'} eq "DISK" &&
-			$ginfo->{$dev}->{'inuse'} == 0) {
+			$ginfo->{$dev}->{'inuse'} == 0 &&
+			(!$disktype ||
+			 $ginfo->{$dev}->{'disktype'} eq $disktype)) {
 			push(@devs, "/dev/$dev");
 		    }
 		}
@@ -1575,11 +1724,11 @@ sub os_create_storage_slice($$$)
 		# pvcreate /dev/sdb			(NONSYSVOL)
 		# vgcreate emulab /dev/sdb		(NONSYSVOL)
 		#
-		if (mysystem("pvcreate @devs $redir")) {
+		if (mysystem("pvcreate -f @devs $redir")) {
 		    warn("*** $lv: could not create PVs '@devs'$logmsg\n");
 		    return 0;
 		}
-		if (mysystem("vgcreate emulab @devs $redir")) {
+		if (mysystem("vgcreate $VGNAME @devs $redir")) {
 		    warn("*** $lv: could not create VG from '@devs'$logmsg\n");
 		    return 0;
 		}
@@ -1596,7 +1745,7 @@ sub os_create_storage_slice($$$)
 	    # lvcreate -n h2d2 -L 100m emulab
 	    #
 	    if ($lvsize == 0) {
-		my $sz = `vgs -o vg_size --units m --noheadings emulab`;
+		my $sz = `vgs -o vg_size --units m --noheadings $VGNAME`;
 		if ($sz =~ /([\d\.]+)/) {
 		    $lvsize = int($1);
 		} else {
@@ -1606,16 +1755,16 @@ sub os_create_storage_slice($$$)
 	    # try a striped LV first
 	    my $pvs = $so->{'LVM_VGDEVS'};
 	    if (defined($pvs) && $pvs > 1 &&
-		!mysystem("lvcreate -i $pvs -n $lv -L ${lvsize}m emulab $redir")) {
-		$href->{'LVDEV'} = "/dev/emulab/$lv";
+		!mysystem("lvcreate -i $pvs -n $lv -L ${lvsize}m $VGNAME $redir")) {
+		$href->{'LVDEV'} = "/dev/$VGNAME/$lv";
 		return 1;
 	    }
-	    if (mysystem("lvcreate -n $lv -L ${lvsize}m emulab $redir")) {
+	    if (mysystem("lvcreate -n $lv -L ${lvsize}m $VGNAME $redir")) {
 		warn("*** $lv: could not create LV$logmsg\n");
 		return 0;
 	    }
 
-	    $mdev = "emulab/$lv";
+	    $mdev = "$VGNAME/$lv";
 	}
 
 	$href->{'LVDEV'} = "/dev/$mdev";
@@ -1715,11 +1864,17 @@ sub os_remove_storage_slice($$$)
 	# figure out the device of interest
 	my ($dev, $devtype, $mdev);
 	if ($bsid eq "SYSVOL") {
-	    $dev = $mdev = "${bdisk}4";
+	    my $pchr = "";
+	    if ($bdisk =~ /^nvme/) {
+		$pchr = "p";
+	    }
+	    $dev = $mdev = "${bdisk}${pchr}4";
 	    $devtype = "PART";
 	} else {
-	    $dev = "emulab/$lv";
-	    $mdev = "mapper/emulab-$lv";
+	    $dev = "$VGNAME/$lv";
+	    # XXX note that any '-'s in the mapper name are doubled
+	    (my $rlv = $lv) =~ s/-/--/g;
+	    $mdev = "mapper/${VGNAME}-$rlv";
 	    $devtype = "LVM";
 	}
 
@@ -1849,7 +2004,7 @@ sub os_remove_storage_slice($$$)
 	    #
 	    # lvremove -f emulab/h2d2
 	    #
-	    if (mysystem("lvremove -f emulab/$lv $redir")) {
+	    if (mysystem("lvremove -f $VGNAME/$lv $redir")) {
 		warn("*** $lv: could not destroy$logmsg\n");
 	    }
 
@@ -1862,12 +2017,12 @@ sub os_remove_storage_slice($$$)
 	    #  pvremove -f /dev/sda4 /dev/sdb
 	    #
 	    my $gotlvs = 0;
-	    my $lvs = `lvs -o vg_name --noheadings emulab 2>/dev/null`;
+	    my $lvs = `lvs -o vg_name --noheadings $VGNAME 2>/dev/null`;
 	    if ($lvs) {
 		return 1;
 	    }
 
-	    if (mysystem("vgremove -f emulab $redir")) {
+	    if (mysystem("vgremove -f $VGNAME $redir")) {
 		warn("*** $lv: could not destroy VG$logmsg\n");
 	    }
 

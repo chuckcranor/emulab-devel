@@ -98,7 +98,7 @@ int simulator_agent_invariant(simulator_agent_t sa)
 
 int add_report_data(simulator_agent_t sa,
 		    sa_report_data_kind_t rdk,
-		    char *data,
+		    char const *data,
 		    unsigned long flags)
 {
 	char *new_data;
@@ -450,14 +450,17 @@ static int do_reset(simulator_agent_t sa, char *args)
 
 static int do_snapshot(simulator_agent_t sa, char *args)
 {
-	char *loghole_args;
+	char const *loghole_args;
+	char *event_args;
 	int retval = 0;
 
 	assert(sa != NULL);
 	assert(args != NULL);
 	
-	if (event_arg_get(args, "LOGHOLE_ARGS", &loghole_args) <= 0) {
+	if (event_arg_get(args, "LOGHOLE_ARGS", &event_args) <= 0) {
 		loghole_args = "";
+	} else {
+	        loghole_args = event_args;
 	}
 	
 	if (systemf("loghole --port=%d sync %s",
@@ -490,7 +493,7 @@ static int do_stoprun(simulator_agent_t sa, int token, char *args)
 static int strreltime(char *buf, size_t buflen, time_t secs)
 {
     int hours, mins, retval = 0;
-    char *signage = "";
+    char const *signage = "";
     
     assert(buf != NULL);
     
@@ -512,7 +515,7 @@ static int strreltime(char *buf, size_t buflen, time_t secs)
     return retval;
 }
 
-static int do_log(simulator_agent_t sa, char *message)
+static int do_log(simulator_agent_t sa, char const *message)
 {
 	time_t current_time;
 	int retval = -1;

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2009-2015 University of Utah and the Flux Group.
+# Copyright (c) 2009-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -121,6 +121,11 @@ close(XM);
 # Filled in later.
 $xminfo{"disksizes"} = "";
 
+# For safety, only local vnc
+if (exists($xminfo{"vnc"})) {
+    $xminfo{"vnclisten"} = "127.0.0.1";
+}
+
 #
 # Copy the kernel (and ramdisk) into the directory and change xminfo.
 #
@@ -168,7 +173,8 @@ foreach my $device (keys(%diskinfo)) {
     my $spec = $diskinfo{$device}->{"spec"};
     my $dev;
     my $filename;
-    if ($spec =~ /,(sd\w+),/ || $spec =~ /,(xvd\w+),/) {
+    if ($spec =~ /,(sd\w+),/ || $spec =~ /,(hd\w+),/ ||
+	$spec =~ /,(xvd\w+),/) {
 	$dev = $1;
     }
     else {

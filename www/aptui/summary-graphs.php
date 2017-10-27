@@ -46,8 +46,12 @@ echo "<div id='page-body'></div>\n";
 
 echo "<script type='text/javascript' src='js/lib/d3.v3.js'></script>";
 echo "<script type='text/javascript' src='js/lib/d3.tip.v0.6.3.js'></script>";
-echo "<script src='js/lib/bootstrap.js'></script>\n";
-echo "<script src='js/lib/require.js' data-main='js/summary-graphs'></script>\n";
 
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+SPITREQUIRE("js/summary-graphs.js");
+
+AddTemplate("summary-graphs");
 SPITFOOTER();
 ?>

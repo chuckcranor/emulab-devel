@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (c) 2000-2010 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,21 +47,21 @@ while (($node, $iface) = $result->fetchrow_array) {
 }
 
 # Get the set of node, card, iface, roles associated with all nodes in an exp
-$result = DBQueryFatal("select m.node_id,i.card,i.iface,i.role from lans as l left join lan_members as m on l.lanid=m.lanid left join interfaces as i on m.node_id=i.node_id where l.pid='$proj' and l.eid='$exp'");
-while (($node, $card, $iface, $role) =$result->fetchrow_array) {
+$result = DBQueryFatal("select m.node_id,w.card1,w.port1,i.iface,i.role from lans as l left join lan_members as m on l.lanid=m.lanid left join interfaces as i on m.node_id=i.node_id left join wires as w on w.node_id1=i.node_id and w.iface1=i.iface where l.pid='$proj' and l.eid='$exp'");
+while (($node, $card, $port, $iface, $role) =$result->fetchrow_array) {
     $foundNodes = 1;
     $should = 0;
     if (exists($valid{"$node:$iface"}) || $role eq "ctrl") {
 	$should = 1;
     }
-    $should_enable{"$node:$card"} = $should;
+    $should_enable{"$node:$card.$port"} = $should;
 }
 
 # Command line to get all port info (enabled yes/no, up/down status)
 $portinfo = `/usr/testbed/sbin/wap /usr/testbed/bin/snmpit -s | tail -n +2`;
 @portlist = split(/\n/, $portinfo);
 foreach $port (@portlist) {
-    if ($port =~ /^([a-zA-Z:0-9]+)\s+([a-z]+)\s+([a-z]+)/) {
+    if ($port =~ /^([a-zA-Z:0-9\.]+)\s+([a-z]+)\s+([a-z]+)/) {
 	$name = $1;
 	$enabledText = $2;
 	$upText = $3;

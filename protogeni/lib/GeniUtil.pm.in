@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -37,15 +37,18 @@ use vars qw(@ISA @EXPORT);
 @EXPORT = qw(GENI_PURGEFLAG FindHostname FindVHostname);
 
 use English;
+use Carp;
 use Data::Dumper;
 use XML::Simple;
 use File::Temp qw(tempfile);
 use POSIX qw(strftime);
 use Date::Parse;
 use Time::Local;
+use emdb;
 use GeniHRN;
 use GeniResponse;
 use EmulabConstants;
+use User;
 
 # Configure variables
 my $TB		       = "@prefix@";
@@ -69,7 +72,6 @@ my $WAP                = "$TB/sbin/withadminprivs";
 my $NEWGROUP           = "$TB/bin/newgroup";
 my $NEWPROJECT         = "$TB/sbin/newproj";
 my $MAKEPROJECT        = "$TB/sbin/mkproj";
-my $EXPORTSSETUP       = "$TB/sbin/exports_setup";
 my $MODGROUPS          = "$TB/sbin/modgroups";
 my $CREATEGENIUSER     = "$TB/sbin/protogeni/creategeniuser";
 
@@ -112,6 +114,7 @@ sub FlipToUser($$;$)
 	$default_gid = $unix_gid;
 	$glist = "$unix_gid $unix_gid";
     }
+    
     $GID            = $default_gid;
     $EGID           = $glist;
     $EUID = $UID    = $unix_uid;
@@ -133,6 +136,14 @@ sub FlipToElabMan()
 {
     $EUID = 0;
     return FlipToUser($PROTOUSER, $PROTOPROJ);
+}
+
+#
+# Lookup the geniuser.
+#
+sub GetGeniUser()
+{
+    return User->Lookup($GENIUSER);
 }
 
 #
@@ -279,12 +290,26 @@ sub ExecQuiet($)
     #
     my ($command) = @_;
     my $output    = "";
-    
-    open(PIPE,"$command 2>&1 |") or return -1;
-    while (<PIPE>) {
-	$output .= $_;
+
+    my $pid = open(PIPE, "-|");
+    if (!defined($pid)) {
+	print STDERR "ExecQuiet Failure; popen failed!\n";
+	return -1;
     }
-    close(PIPE);
+    if ($pid) {
+	while (<PIPE>) {
+	    $output .= $_;
+	}
+	close(PIPE);
+    }
+    else {
+	open(STDERR, ">&STDOUT");
+	for (my $i = 3; $i < 256; $i++) {
+	    POSIX::close($i);
+	}
+	exec($command);
+	die("ExecQuiet: Could not exec('$command')");
+    }
     return $output;
 }
 
@@ -292,10 +317,12 @@ sub ExecQuiet($)
 # Lookup and create project and group for a given SA domain.
 # Return the group, the caller can get the project from it.
 #
-sub GetHoldingProject($$)
+sub GetHoldingProject($$;$)
 {
-    my ($urn, $creator) = @_;
+    my ($urn, $creator, $noexports) = @_;
     my ($project, $group);
+    my $lock_urn;
+    $noexports = 0 if (!defined($noexports));
 
     require Project;
     require Group;
@@ -317,18 +344,25 @@ sub GetHoldingProject($$)
 		# Local user. Confirm a member of the project, and if so
 		# operate in that project (as that user).
 		#
-		$project = Project->Lookup($subauth);
+		my $pid = $hrn->project();
+		my $gid = $hrn->group();
+		
+		$project = Project->Lookup($pid);
 		if (!defined($project)) {
 		    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 						"local project does not exist");
 		}
-		if ($creator->IsLocal() &&
-		    $creator->emulab_user()->IsLocal() &&
-		    defined($project->LookupUser($creator->emulab_user()))) {
-		    $group = $project->GetProjectGroup();
-		    goto done;
+		if (defined($gid)) {
+		    $group = $project->LookupGroup($gid);
 		}
-		# Fall through.
+		else {
+		    $group = $project->GetProjectGroup();
+		}
+		if (!defined($group)) {
+		    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+						"local group does not exist");
+		}
+		goto done;
 	    }
 	    
 	    #
@@ -337,13 +371,24 @@ sub GetHoldingProject($$)
 	    # to form a unique name. Also, in an attempt to avoid conflict
 	    # with future local project names, always append to the name.
 	    #
-	    $project_urn = GeniHRN::Generate($domainsubauth, "authority", "sa");
-	    $project_id  = $subauth;
+	    $project_urn =
+		GeniHRN::Generate($hrn->domain() . ":" . $hrn->project(),
+				  "authority", "sa");
+	    $project_id  = $hrn->project();
 	    $project_id  =~ s/\./-/g;
 
 	    if (! (defined($project_urn) && Project->ValidPID($project_id))) {
 		return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 			"Not a valid local project name for $domainsubauth");
+	    }
+	    if (defined($hrn->group())) {
+		$group_id  = $hrn->group();
+		$group_id  =~ s/\./-/g;
+
+		if (! Group->ValidGID($group_id)) {
+		    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+			"Not a valid local group name: $group_id");
+		}
 	    }
 	}
 	else {
@@ -356,7 +401,7 @@ sub GetHoldingProject($$)
 	    #
 	    $project_urn = GeniHRN::Generate($domain, "authority", "sa");
 	    $project_id  = $domain;
-	    $group_id    = $subauth;
+	    $group_id    = $hrn->project();
 	    #
 	    # For now, lets assume that the domain has legal chars, except
 	    # of course for the dots, which we transform to dashes cause
@@ -368,10 +413,20 @@ sub GetHoldingProject($$)
 		    "Cannot form a valid local project name from $project_urn");
 	    }
 	}
+	$lock_urn = DBQuoteSpecial($project_urn);
 
 	#
 	# See if the project exists. 
 	#
+	# We need to lock for concurrent attempt to create this user.
+	# Lets use a DB process lock, named by the URN.
+	#
+	my $lock_result = DBQueryWarn("select GET_LOCK($lock_urn, 120)");
+	if (!$lock_result ||
+	    !$lock_result->numrows) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Could not SQL lock for a long time");
+	}
 	$project = Project->LookupNonLocal($project_urn);
 	if (!defined($project)) {
 	    #
@@ -394,6 +449,7 @@ sub GetHoldingProject($$)
 		    }
 		}
 		if (!defined($project_id)) {
+		    DBQueryWarn("select RELEASE_LOCK($lock_urn)");
 		    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 		     "Could not create a unique project name for $project_urn");
 		}
@@ -404,6 +460,7 @@ sub GetHoldingProject($$)
 	    #
 	    my ($fh, $filename) = tempfile(UNLINK => 0);
 	    if (!defined($fh)) {
+		DBQueryWarn("select RELEASE_LOCK($lock_urn)");
 		print STDERR "Could not create temp file for $project_id\n";
 		return GeniResponse->Create(GENIRESPONSE_ERROR);
 	    }
@@ -426,6 +483,7 @@ sub GetHoldingProject($$)
 	    print $fh "</project>\n";
 	    close($fh);
 	    if (! chmod(0755, $filename)) {
+		DBQueryWarn("select RELEASE_LOCK($lock_urn)");
 		print STDERR "Could not chmod $filename\n";
 		return GeniResponse->Create(GENIRESPONSE_ERROR);
 	    }
@@ -436,6 +494,7 @@ sub GetHoldingProject($$)
 	    my $output = GeniUtil::ExecQuiet("$WAP $NEWPROJECT -l $filename");
 	    if ($?) {
 		GeniUtil::FlipToGeniUser();
+		DBQueryWarn("select RELEASE_LOCK($lock_urn)");
 		print STDERR $output;
 		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 			    "Internal error creating project description");
@@ -446,12 +505,14 @@ sub GetHoldingProject($$)
 	    my $ecode  = $?;
 	    GeniUtil::FlipToGeniUser();
 	    if ($ecode) {
+		DBQueryWarn("select RELEASE_LOCK($lock_urn)");
 		print STDERR $output;
 		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 					    "Internal error creating project");
 	    }
 	    $project = Project->LookupNonLocal($project_urn);
 	    if (!defined($project)) {
+		DBQueryWarn("select RELEASE_LOCK($lock_urn)");
 		print STDERR "Cannot lookup new project for $project_id\n";
 		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 			    "Internal error locating project after creation");
@@ -464,6 +525,7 @@ sub GetHoldingProject($$)
 	#
 	if (defined($group_id)) {
 	    if (!Group->ValidGID($group_id)) {
+		DBQueryWarn("select RELEASE_LOCK($lock_urn)");
 		return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 				    "Invalid  local group name $group_id");
 	    }
@@ -478,7 +540,8 @@ sub GetHoldingProject($$)
 		#
 		my ($fh, $filename) = tempfile(UNLINK => 0);
 		if (!defined($fh)) {
-		    print STDERR "Could not create temp file for group $group_id\n";
+		    DBQueryWarn("select RELEASE_LOCK($lock_urn)");
+		    print STDERR "Could not create temp file for $group_id\n";
 		    return GeniResponse->Create(GENIRESPONSE_ERROR);
 		}
 		print $fh "<group>\n";
@@ -498,6 +561,7 @@ sub GetHoldingProject($$)
 		close($fh);
 		my $output = GeniUtil::ExecQuiet("$NEWGROUP $filename");
 		if ($?) {
+		    DBQueryWarn("select RELEASE_LOCK($lock_urn)");
 		    print STDERR $output;
 		    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 					    "Internal error creating group");
@@ -506,6 +570,7 @@ sub GetHoldingProject($$)
 
 		$group = $project->LookupGroup($group_id);
 		if (!defined($group)) {
+		    DBQueryWarn("select RELEASE_LOCK($lock_urn)");
 		    print STDERR "Cannot lookup new group for $group_id\n";
 		    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 			"Internal error locating group after creation");
@@ -513,7 +578,7 @@ sub GetHoldingProject($$)
 	    }
 	}
     }
-    if ($PROTOGENI_LOCALUSER) {
+    if ($PROTOGENI_LOCALUSER && $creator) {
 	#
 	# The user is added to both the holding project, and the group
 	# if a sub authority is provided. 
@@ -526,6 +591,7 @@ sub GetHoldingProject($$)
 	if (!defined($project->LookupUser($creator->emulab_user()))) {
 	    system("$MODGROUPS -a $pid:$pid:$trust $uid");
 	    if ($?) {
+		DBQueryWarn("select RELEASE_LOCK($lock_urn)");
 		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 			"Internal error adding new user to local project");
 	    }
@@ -534,33 +600,20 @@ sub GetHoldingProject($$)
 	    !defined($group->LookupUser($creator->emulab_user()))) {
 	    system("$MODGROUPS -a $pid:$gid:$trust $uid");
 	    if ($?) {
+		DBQueryWarn("select RELEASE_LOCK($lock_urn)");
 		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 			"Internal error adding new user to local group");
 	    }
 	}
 	$ENV{'EMULAB_REAL_USER'} = $creator->emulab_user()->uid_idx();
     }
+    DBQueryWarn("select RELEASE_LOCK($lock_urn)");
   done:
-    if ($WITHZFS) {
-	if ($ZFS_NOEXPORT) {
-	    #
-	    # Have to force the new directories to be exported.
-	    # See ZFS code in exports_setup
-	    #
-	    $project->BumpActivity();
-	    system($EXPORTSSETUP) == 0 or
-		fatal("$EXPORTSSETUP failed");
-	} elsif (!$WITHAMD) {
-	    #
-	    # If we are using autofs, we need to recreate the local autofs
-	    # mapfile so it includes the newly created directories. Otherwise,
-	    # accesses to those new directories will not force a mount and
-	    # the waitForMount() calls below will always fail.
-	    #
-	    $project->BumpActivity();
-	    system("$EXPORTSSETUP -B") == 0 or
-		fatal("$EXPORTSSETUP -B failed");
+    if (!$noexports) {
+	if (defined($creator) && $creator->IsLocal()) {
+	    $creator->UpdateExports();
 	}
+	$project->UpdateExports();
     }
     return $group;
 }
@@ -579,21 +632,28 @@ sub CreateLocalUser($$)
     #
     my $safe_email = GeniUtil::escapeshellarg($email);
     my $safe_urn   = GeniUtil::escapeshellarg($urn);
-    
+
+    #
+    # The script is going to lock for concurrent creation, and return
+    # non-negative value if the user already exists.
+    #
     FlipToElabMan();
     system("$CREATEGENIUSER $safe_urn $safe_email");
-    if ($?) {
+    if ($? && $? >> 8 < 0) {
 	FlipToGeniUser();
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Could not create local user")
     }
     FlipToGeniUser();
-    my $user = GeniUser->Lookup($urn, 1);
+    # Direct user lookup since GeniUser->Lookup is going to look in
+    # geni-cm database, and the new user is not there. 
+    my $user = User->LookupNonLocal($urn);
     if (!defined($user)) {
+	Carp::cluck("Could not lookup localuser '$urn' after creategeniuser");
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Could not lookup local user after create")
     }
-    return $user;
+    return GeniUser->CreateFromLocal($user);
 }    
 
 sub escapeshellarg($)

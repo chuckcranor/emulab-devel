@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,6 +27,7 @@ include_once("geni_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
 include_once("instance_defs.php");
+include_once("aggregate_defs.php");
 $page_title = "Cluster Status";
 
 #
@@ -37,23 +38,25 @@ $this_user = CheckLoginOrRedirect();
 $isadmin   = (ISADMIN() ? 1 : 0);
 $isfadmin  = (ISFOREIGN_ADMIN() ? 1 : 0);
 
-if (! (ISADMIN() || ISFOREIGN_ADMIN())) {
-    SPITUSERERROR("You do not have permission to view the dashboard");
-}
 SPITHEADER(1);
 
 #
 # The apt_aggregates table should tell us what clusters, but for
 # now it is always the local cluster
 #
-$aggregates =
-    array("Emulab"    => "urn:publicid:IDN+emulab.net+authority+cm",
-          "APT"       => "urn:publicid:IDN+apt.emulab.net+authority+cm",
-          "Wisconsin" => "urn:publicid:IDN+wisc.cloudlab.us+authority+cm",
-          "Clemson"   => "urn:publicid:IDN+clemson.cloudlab.us+authority+cm",
-          "Utah"      => "urn:publicid:IDN+utah.cloudlab.us+authority+cm");
-          
-
+if ($TBMAINSITE && $ISCLOUD) {
+    $aggregates =
+        array("Emulab"    => "urn:publicid:IDN+emulab.net+authority+cm",
+              "APT"       => "urn:publicid:IDN+apt.emulab.net+authority+cm",
+              "Wisconsin" => "urn:publicid:IDN+wisc.cloudlab.us+authority+cm",
+              "Clemson"   => "urn:publicid:IDN+clemson.cloudlab.us+authority+cm",
+              "Utah"      => "urn:publicid:IDN+utah.cloudlab.us+authority+cm",
+              "OneLab"    => "urn:publicid:IDN+lab.onelab.eu+authority+cm");
+}
+else {
+    $aggregate  = Aggregate::Lookup($DEFAULT_AGGREGATE_URN);
+    $aggregates = array($aggregate->nickname() => $aggregate->urn());
+}
 echo "<link rel='stylesheet'
             href='css/tablesorter.css'>\n";
 
@@ -69,10 +72,15 @@ echo "<script type='text/plain' id='agglist-json'>\n";
 echo htmlentities(json_encode($aggregates)) . "\n";
 echo "</script>\n";
 
-SPITREQUIRE("cluster-status",
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+SPITREQUIRE("js/cluster-status.js",
             "<script src='js/lib/jquery.tablesorter.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
             "<script src='js/lib/sugar.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+
+AddTemplateList(array("cluster-status", "cluster-status-templates"));
 SPITFOOTER();
 ?>

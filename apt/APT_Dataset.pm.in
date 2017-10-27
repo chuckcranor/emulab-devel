@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2015 University of Utah and the Flux Group.
+# Copyright (c) 2007-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,6 +25,7 @@ package APT_Dataset;
 
 use strict;
 use English;
+use Date::Parse;
 use Data::Dumper;
 use Carp;
 use Exporter;
@@ -68,7 +69,8 @@ sub Lookup($$;$)
 	$query_result =
 	    DBQueryWarn("select * from apt_datasets where uuid='$token'");
     }
-    elsif ($token =~ /^([-\w]+)\/([-\w]+)$/) {
+    elsif ($token =~ /^([-\w]+)\/([-\w]+)$/ ||
+	   $token =~ /^([-\w]+),([-\w]+)$/) {
 	$query_result =
 	    DBQueryWarn("select * from apt_datasets ".
 			"where pid='$1' and dataset_id='$2'");
@@ -81,9 +83,31 @@ sub Lookup($$;$)
 
     my $self            = {};
     $self->{'DATASET'}  = $query_result->fetchrow_hashref();
+    $self->{'HASH'}     = {};
 
     bless($self, $class);
+
+    #
+    # Grab the webtask. Backwards compat mode, see if there is one associated
+    # with the object, use that. Otherwise create a new one.
+    #
+    my $webtask;
     
+    if (defined($self->webtask_id())) {
+	$webtask = WebTask->Lookup($self->webtask_id());
+    }
+    if (!defined($webtask)) {
+	$webtask = WebTask->LookupByObject($self->uuid());
+	if (!defined($webtask)) {
+	    $webtask = WebTask->Create();
+	    return undef
+		if (!defined($webtask));
+	}
+	$self->Update({"webtask_id" => $webtask->task_id()}) == 0
+	    or return undef;
+    }
+    $self->{'WEBTASK'} = $webtask;
+
     return $self;
 }
 
@@ -118,15 +142,28 @@ AUTOLOAD {
     if (exists($self->{'DATASET'}->{$name})) {
 	return $self->{'DATASET'}->{$name};
     }
+    # Or it is for a local storage slot.
+    elsif ($name =~ /^_.*$/) {
+	if (scalar(@_) == 2) {
+	    return $self->{'HASH'}->{$name} = $_[1];
+	}
+	elsif (exists($self->{'HASH'}->{$name})) {
+	    return $self->{'HASH'}->{$name};
+	}
+	return undef;
+    }
     carp("No such slot '$name' field in class $type");
     return undef;
 }
+sub webtask($)  { return $_[0]->{'WEBTASK'}; }
 
 # Break circular reference someplace to avoid exit errors.
 sub DESTROY {
     my $self = shift;
 
     $self->{'DATASET'} = undef;
+    $self->{'HASH'}    = undef;
+    $self->{'WEBTASK'} = undef;
 }
 
 # Valid Blockstore backend.
@@ -159,7 +196,6 @@ sub Refresh($)
 	if (!$query_result || !$query_result->numrows);
 
     $self->{'DATASET'} = $query_result->fetchrow_hashref();
-
     return 0;
 }
 
@@ -169,6 +205,8 @@ sub Refresh($)
 sub Create($$)
 {
     my ($class, $argref) = @_;
+    my $pid = $argref->{'pid'};
+    my $id  = $argref->{'dataset_id'};
     my $uuid;
 
     if (exists($argref->{'uuid'})) {
@@ -192,6 +230,16 @@ sub Create($$)
     if ($query_result->numrows) {
 	DBQueryWarn("unlock tables");
 	tberror("Dataset uuid $uuid already exists!");
+	return undef;
+    }
+
+    $query_result =
+	DBQueryWarn("select uuid from apt_datasets ".
+		    "where pid='$pid' and dataset_id='$id'");
+
+    if ($query_result->numrows) {
+	DBQueryWarn("unlock tables");
+	tberror("Dataset $pid/$id already exists!");
 	return undef;
     }
 
@@ -265,9 +313,9 @@ sub Delete($)
     my $certificate = $self->GetCertificate();
     $certificate->Delete()
 	if (defined($certificate));
-
-    DBQueryWarn("delete from web_tasks where object_uuid='$uuid'") or
-	return -1;
+    $self->webtask()->Delete()
+	if ($self->webtask());
+    
     DBQueryWarn("delete from apt_datasets where uuid='$uuid'") or
 	return -1;
 
@@ -291,6 +339,22 @@ sub SetStatus($$)
     $self->{'DATASET'}->{'status'} = $status;
     return 0;
     
+}
+
+#
+# Is dataset expired?
+#
+sub IsExpired($)
+{
+    my ($self) = @_;
+
+    my $expires = $self->expires();
+    return 0
+	if (!defined($expires));
+    
+    $expires = str2time($expires);
+
+    return (time() >= $expires);
 }
 
 #
@@ -421,8 +485,16 @@ sub CreateCertificate($)
 {
     my ($self) = @_;
     my $pid  = $self->pid();
+    my $gid  = $self->gid();
     my $id   = $self->dataset_id();
-    my $urn  = GeniHRN::Generate("$OURDOMAIN:$pid", "dataset", $id);
+    my $type = $self->type();
+
+    # New domain format for datasets.
+    my $domain = $OURDOMAIN;
+    $domain .= ":${pid}";
+    $domain .= ":${gid}" if ($pid ne $gid);
+    
+    my $urn  = GeniHRN::Generate($domain, $type, $id);
 
     # Kill stale certificate.
     my $certificate = GeniCertificate->Lookup($urn);
@@ -430,6 +502,7 @@ sub CreateCertificate($)
 	if (defined($certificate));
     
     $certificate = GeniCertificate->Create({"urn"   => $urn,
+					    "uuid"  => $self->uuid(),
 					    "email" => "$TBOPS",
 					    "hrn"   => "$OURDOMAIN.$pid.$id"});
     return -1
@@ -444,11 +517,15 @@ sub CreateCertificate($)
 sub GetCertificate($)
 {
     my ($self) = @_;
-    my $pid  = $self->pid();
-    my $id   = $self->dataset_id();
-    my $urn  = GeniHRN::Generate("$OURDOMAIN:$pid", "dataset", $id);
-
-    return GeniCertificate->Lookup($urn);
+    my $cert = GeniCertificate->Lookup($self->uuid());
+    # Old style
+    if (!defined($cert)) {
+	my $pid  = $self->pid();
+	my $id   = $self->dataset_id();
+	my $urn  = GeniHRN::Generate("$OURDOMAIN:$pid", "dataset", $id);
+	$cert = GeniCertificate->Lookup($urn);
+    }
+    return $cert;
 }
 
 #
@@ -473,10 +550,10 @@ sub CreateDataset($)
 
     my $args = {
 	"size"        => $self->size(),
-	"name"        => $self->dataset_id(),
 	"type"        => $self->type(),
 	"read_access" => $self->read_access(),
 	"write_access"=> $self->write_access(),
+	"dataset_urn" => $cert->urn(),
 	"credentials" => [$credential->asString(),
 			  $speaksfor_credential->asString()],
     };
@@ -504,17 +581,19 @@ sub DeleteDataset($)
     return undef
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($context) && defined($cert)));
-    
-    my ($credential, $speaksfor_credential) =
-	APT_Geni::GenCredentials($cert, $geniuser, ["blockstores"]);
-    return undef
-	if (! (defined($speaksfor_credential) &&
-	       defined($credential)));
 
+    my ($credential, $speaksfor_credential) =
+	APT_Geni::GenCredentials($cert, $geniuser, ["blockstores"], 1);
+    return undef
+	if (!defined($credential));
+
+    my $credentials = [$credential->asString()];
+    if (defined($speaksfor_credential)) {
+	$credentials = [@$credentials, $speaksfor_credential->asString()];
+    }
     my $args = {
-	"name"        => $self->dataset_id(),
-	"credentials" => [$credential->asString(),
-			  $speaksfor_credential->asString()],
+	"dataset_urn" => $cert->urn(),
+	"credentials" => $credentials,
     };
     my $cmurl = $authority->url();
     $cmurl =~ s/protogeni/protogeni\/stoller/ if ($usemydevtree);
@@ -535,19 +614,21 @@ sub ModifyDataset($)
     return undef
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($context) && defined($cert)));
-    
-    my ($credential, $speaksfor_credential) =
-	APT_Geni::GenCredentials($cert, $geniuser, ["blockstores"]);
-    return undef
-	if (! (defined($speaksfor_credential) &&
-	       defined($credential)));
 
+    my ($credential, $speaksfor_credential) =
+	APT_Geni::GenCredentials($cert, $geniuser, ["blockstores"], 1);
+    return undef
+	if (!defined($credential));
+
+    my $credentials = [$credential->asString()];
+    if (defined($speaksfor_credential)) {
+	$credentials = [@$credentials, $speaksfor_credential->asString()];
+    }
     my $args = {
-	"name"        => $self->dataset_id(),
+	"dataset_urn" => $cert->urn(),
+	"credentials" => $credentials,
 	"read_access" => $self->read_access(),
 	"write_access"=> $self->write_access(),
-	"credentials" => [$credential->asString(),
-			  $speaksfor_credential->asString()],
     };
     my $cmurl = $authority->url();
     $cmurl =~ s/protogeni/protogeni\/stoller/ if ($usemydevtree);
@@ -568,17 +649,19 @@ sub ExtendDataset($)
     return undef
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($context) && defined($cert)));
-    
-    my ($credential, $speaksfor_credential) =
-	APT_Geni::GenCredentials($cert, $geniuser, ["blockstores"]);
-    return undef
-	if (! (defined($speaksfor_credential) &&
-	       defined($credential)));
 
+    my ($credential, $speaksfor_credential) =
+	APT_Geni::GenCredentials($cert, $geniuser, ["blockstores"], 1);
+    return undef
+	if (!defined($credential));
+
+    my $credentials = [$credential->asString()];
+    if (defined($speaksfor_credential)) {
+	$credentials = [@$credentials, $speaksfor_credential->asString()];
+    }
     my $args = {
-	"name"        => $self->dataset_id(),
-	"credentials" => [$credential->asString(),
-			  $speaksfor_credential->asString()],
+	"dataset_urn" => $cert->urn(),
+	"credentials" => $credentials,
 	"extend"      => 1,
     };
     my $cmurl = $authority->url();
@@ -602,20 +685,52 @@ sub DescribeDataset($)
 	       defined($context) && defined($cert)));
     
     my ($credential, $speaksfor_credential) =
-	APT_Geni::GenCredentials($cert, $geniuser, ["blockstores"]);
+	APT_Geni::GenCredentials($cert, $geniuser, ["blockstores"], 1);
     return undef
-	if (! (defined($speaksfor_credential) &&
-	       defined($credential)));
+	if (!defined($credential));
 
+    my $credentials = [$credential->asString()];
+    if (defined($speaksfor_credential)) {
+	$credentials = [@$credentials, $speaksfor_credential->asString()];
+    }
     my $args = {
-	"name"        => $self->dataset_id(),
-	"credentials" => [$credential->asString(),
-			  $speaksfor_credential->asString()],
+	"dataset_urn" => $cert->urn(),
+	"credentials" => $credentials,
     };
     my $cmurl = $authority->url();
     $cmurl =~ s/protogeni/protogeni\/stoller/ if ($usemydevtree);
 
     return Genixmlrpc::CallMethod($cmurl, $context, "DescribeDataset", $args);
+}
+
+#
+# Get a new credential so we can operate on the dataset.
+#
+sub GetCredential($)
+{
+    my ($self) = @_;
+    my $authority = $self->GetGeniAuthority();
+    my $geniuser  = $self->GetGeniUser();
+    my $context   = APT_Geni::GeniContext();
+    my $cert      = $self->GetCertificate();
+    return undef
+	if (! (defined($geniuser) && defined($authority) &&
+	       defined($context) && defined($cert)));
+    
+    my ($credential) =
+	APT_Geni::GenAuthCredential($cert, ["blockstores"]);
+    return undef
+	if (!defined($credential));
+
+    my $args = {
+	"dataset_urn" => $cert->urn(),
+	"credentials" => [$credential->asString()],
+    };
+    my $cmurl = $authority->url();
+    $cmurl =~ s/protogeni/protogeni\/stoller/ if ($usemydevtree);
+
+    return Genixmlrpc::CallMethod($cmurl, $context,
+				  "GetDatasetCredential", $args);
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

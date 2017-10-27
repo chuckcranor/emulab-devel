@@ -1,0 +1,66 @@
+<style>
+ .panel-body {
+     padding: 2px;
+ }
+.table-dashboard {
+     margin: 1px;
+ }
+ .resgraph-size {
+     max-height:500px;
+     height:500px;
+ }
+ .counts-size {
+     max-height:475px;
+     overflow-y:scroll;
+ }
+</style>
+<div>
+  <% _.each(amlist, function(details, urn) { %>
+    <div class='row' id='<%- details.nickname %>'>
+      <div class='col-sm-3 counts-panel'>
+	<!-- Template goes here -->	    
+      </div>
+      <div class='col-sm-9 resgraph-panel'>
+	<!-- Template goes here -->	    
+      </div>
+    </div>
+  <% }) %>
+  <div id='waitwait_div'></div>
+  <div id='oops_div'></div>
+</div>
+<!-- Graph Help -->
+<div id='resgraph-help-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<br>
+	<p>
+	  The graph tells you how many of each node type are available
+	  for use in an experiment, at a specific time in the
+	  future. Note that nodes available immediately might not be
+	  available later, although in general as you move further out
+	  in time, more nodes are available.  Here are some helpful
+	  features of the graphs:<ul>
+	    <li> Click on a node type label to turn off that type's
+	      line. This will rescale the other lines, sometimes
+	      making it easier to see those other lines.</li>
+	    <li> Hover over and move around the graph to show a
+	      tooltip that will provide the date and time, and the free
+	      count for all of the node types at the time stamp you are
+	      hovering over.</li>
+	    <li> Use the <em>focus</em> bar under the graph to expand,
+	      contract, and move the window. This will make it easier
+	      to see ranges that have a lot of activity (such as the
+	      first week).</li>
+	    <li> Beyond the right side of the X-axis there are no
+	      longer any changes in the number of nodes available.</li>
+	    <li> To reserve nodes for an experiment, please visit the
+	      <a href="reserve.php">reservation</a> page.
+	  </ul>
+	</p>
+      </div>
+    </div>
+  </div>
+</div>

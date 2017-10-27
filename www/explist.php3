@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -127,7 +127,8 @@ $query_result =
 		 " from experiments as e ".
 		 "left join experiment_stats as s on s.exptidx=e.idx ".
 		 "left join experiment_resources as rs on rs.idx=s.rsrcidx ".
-		 "where rs.pnodes-rs.delaynodes>2 and ".
+		 "where (cast(rs.pnodes as signed) - ".
+                 "       cast(rs.delaynodes as signed)) > 2 and ".
 		 "      rs.thumbnail is not null and ".
 		 "      e.state='" . $TB_EXPTSTATE_SWAPPED . "' " .
 		 "order by s.swapout_last desc ".

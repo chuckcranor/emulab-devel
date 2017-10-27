@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2015 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,7 +47,8 @@ class Profile
 	    #
 	    $query_result =
 		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
-                            "    i.disabled as profile_disabled ".
+                            "    i.disabled as profile_disabled, ".
+                            "    i.nodelete as profile_nodelete ".
 			    "  from apt_profiles as i ".
 			    "left join apt_profile_versions as v on ".
 			    "     v.profileid=i.profileid and ".
@@ -57,7 +58,8 @@ class Profile
 	    if (!$query_result || !mysql_num_rows($query_result)) {
 		$query_result =
 		    DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
-                                "    i.disabled as profile_disabled ".
+                                "    i.disabled as profile_disabled, ".
+                                "    i.nodelete as profile_nodelete ".
 				"  from apt_profile_versions as v ".
 				"left join apt_profiles as i on ".
 				"     v.profileid=i.profileid ".
@@ -68,7 +70,8 @@ class Profile
 	elseif (is_null($version)) {
 	    $query_result =
 		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
-                            "    i.disabled as profile_disabled ".
+                            "    i.disabled as profile_disabled, ".
+                            "    i.nodelete as profile_nodelete ".
 			    "  from apt_profiles as i ".
 			    "left join apt_profile_versions as v on ".
 			    "     v.profileid=i.profileid and ".
@@ -79,7 +82,8 @@ class Profile
 	    $safe_version = addslashes($version);
 	    $query_result =
 	        DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
-                            "    i.disabled as profile_disabled ".
+                            "    i.disabled as profile_disabled, ".
+                            "    i.nodelete as profile_nodelete ".
 			    "  from apt_profile_versions as v ".
 			    "left join apt_profiles as i on ".
 			    "     i.profileid=v.profileid ".
@@ -105,6 +109,8 @@ class Profile
     function version()      { return $this->field('version'); }
     function creator()	    { return $this->field('creator'); }
     function creator_idx()  { return $this->field('creator_idx'); }
+    function updater()	    { return $this->field('updater'); }
+    function updater_idx()  { return $this->field('updater_idx'); }
     function pid()	    { return $this->field('pid'); }
     function pid_idx()	    { return $this->field('pid_idx'); }
     function created()	    { return $this->field('created'); }
@@ -122,9 +128,19 @@ class Profile
     function status()	    { return $this->field('locked'); }
     function topdog()	    { return $this->field('topdog'); }
     function disabled()	    { return $this->field('disabled'); }
+    function nodelete()	    { return $this->field('nodelete'); }
+    function repourl()	    { return $this->field('repourl'); }
+    function reponame()	    { return $this->field('reponame'); }
+    function repohash()	    { return $this->field('repohash'); }
+    function repokey()	    { return $this->field('repokey'); }
+    function webtask_id()   { return $this->field('webtask_id'); }
+    function lastused()     { return $this->field('lastused'); }
+    function usecount()     { return $this->field('usecount'); }
     function profile_disabled()    { return $this->field('profile_disabled'); }
     function parent_profileid()    { return $this->field('parent_profileid'); }
     function parent_version()      { return $this->field('parent_version'); }
+    function profile_nodelete()    { return $this->field('profile_nodelete'); }
+    function portal_converted()    { return $this->field('portal_converted'); }
 
     # Private means only in the same project.
     function IsPrivate() {
@@ -138,7 +154,30 @@ class Profile
     function isDisabled() {
 	return ($this->disabled() || $this->profile_disabled());
     }
-    
+    # Ditto nodelete.
+    function isLocked() {
+	return ($this->nodelete() || $this->profile_nodelete());
+    }
+    # Grab the webtask. Backwards compat mode, see if there is one associated
+    # with the object, use that. Otherwise create a new one.
+    function WebTask() {
+        if ($this->webtask_id()) {
+            return WebTask::Lookup($this->webtask_id());
+        }
+        $webtask = WebTask::LookupByObject($this->uuid());
+        if (!$webtask) {
+            $webtask = WebTask::CreateAnonymous();
+            if (!$webtask) {
+                return null;
+            }
+        }
+        $profileid  = $this->profileid();
+        $webtask_id = $webtask->task_id();
+        DBQueryFatal("update apt_profiles set ".
+                     "  webtask_id='$webtask_id' ".
+                     "where profileid='$profileid'");
+        return $webtask;
+    }
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
 	return !is_null($this->profile);
@@ -156,7 +195,12 @@ class Profile
     }
 
     function LookupByName($project, $name, $version = null) {
-	$pid = $project->pid();
+        if (is_object($project)) {
+            $pid = $project->pid();
+        }
+        else {
+            $pid = addslashes($project);
+        }
 	$safe_name = addslashes($name);
 
 	if (preg_match("/^\w+\-\w+\-\w+\-\w+\-\w+$/", $name)) {
@@ -175,7 +219,7 @@ class Profile
 	else {
 	    $safe_version = addslashes($version);
 	    $query_result =
-		DBQueryWarn("select i.profileid,i.version ".
+		DBQueryWarn("select i.profileid,v.version ".
 			    "  from apt_profiles as i ".
 			    "left join apt_profile_versions as v on ".
 			    "     v.profileid=i.profileid ".
@@ -232,6 +276,16 @@ class Profile
 	$this->profile    = mysql_fetch_array($query_result);
 	$this->project    = null;
 	return 0;
+    }
+
+    function UserHasProfiles($user) {
+	$uid = $user->uid();
+
+	$query_result =
+	    DBQueryFatal("select profileid from apt_profile_versions ".
+			 "where creator='$uid' and deleted is null");
+
+	return mysql_num_rows($query_result);
     }
 
     #
@@ -393,6 +447,9 @@ class Profile
     function CanInstantiate($user) {
 	$profileid = $this->profileid();
 
+        if (ISADMIN()) {
+            return 1;
+        }
 	if ($this->shared() || $this->ispublic() ||
 	    $this->creator_idx() == $user->uid_idx()) {
 	    return 1;
@@ -420,24 +477,20 @@ class Profile
         return 0;
     }
     function CanDelete($user) {
+        if ($this->nodelete()) {
+            return 0;
+        }
 	# Want to know if the project is APT or Cloud/Emulab. APT projects
         # may not delete profiles (yet).
 	$project = Project::Lookup($this->pid_idx());
 	if (!$project) {
 	    return 0;
 	}
-        if (!$this->IsHead()) {
+        if ($project->isAPT()) {
             return 0;
         }
-        if (ISADMIN() || STUDLY()) {
-            return 1;
-        }
-        if (!$project->isAPT()) {
-            return 1;
-        }
-        # APT profiles may not be deleted if published.
-        if (!$this->published()) {
-            return 1;
+        if ($this->creator_idx() == $user->uid_idx() || ISADMIN()) {
+	    return 1;
         }
         return 0;
     }
@@ -601,9 +654,10 @@ class Profile
 	return null;
     }
 
-    function GenerateFormFragment() {
-	$json_data = $this->paramdefs();
-	
+    function GenerateFormFragment($json_data = null) {
+        if (is_null($json_data)) {
+            $json_data = $this->paramdefs();
+        }
 	if (!$json_data || $json_data == "") {
 	    return "";
 	}
@@ -689,6 +743,36 @@ class Profile
 			"value='$oval'>$okey</option>";
 		}
 		$form .= "</select>";
+	    }
+	    elseif ($type == "image") {
+	        $form .=
+		    "<div class='format-me' ".
+		    "data-key='$name' ".
+		    "data-label='$prompt' ".
+		    "data-type='$type' ".
+		    "$data_help_string $advanced_attr >".
+
+		    "<div class='input-group'>".
+
+		    "<input id='image-display' ".
+		    "type='text' readonly ".
+		    "class='form-control' ".
+		    "value='<% var label = formfields.${name}; var sp = label.split('+'); var image_display; if (sp.length >= 4){ if (sp[3].substr(0, 12) == 'emulab-ops//') { image_display = sp[3].substr(12) } else { image_display = sp[3] } } else { image_display = formfields.${name} } %><%- image_display %>' >".
+
+
+		    "<span class='input-group-btn'><button class='btn btn-success' id='image-select' ".
+		    "style='height: 34px' ".
+		    "type='button' ".
+		    "$data_help_string $advanced_attr ".
+		    "><span class='glyphicon glyphicon-pencil'></span></button></span> ".
+
+		    "</div>".
+		    
+		    "<input id='image-value' ".
+		    "name='$name' type='hidden' ".
+		    "value='<%- formfields.${name} %>' >".
+
+		    "</div>";
 	    }
 	    else {
 		$form .=

@@ -64,9 +64,6 @@ echo "<link rel='stylesheet'
 $whereclause1 = "where l.owner_uid='$target_uid' and ad.uuid is null";
 $whereclause2 = "where v.creator='$target_uid' and v.isdataset=1";
 $whereclause3 = "where d.creator_uid='$target_uid'";
-$orderclause1 = "order by l.owner_uid";
-$orderclause2 = "order by v.creator";
-$orderclause3 = "order by d.creator_uid";
 $joinclause1  = "";
 $joinclause2  = "left join image_versions as v on ".
     "              v.imageid=i.imageid and v.version=i.version ";
@@ -110,20 +107,24 @@ if ($ISEMULAB) {
 }
 
 $classic_result =
-    DBQueryFatal("(select l.uuid,'lease' as type from project_leases as l ".
-                 " $joinclause1 ".
-                 " left join apt_datasets as ad on ad.remote_uuid=l.uuid ".
-                 " $whereclause1 $orderclause1) ".
-                 "union ".
-                 "(select i.uuid,'image' as type from images as i ".
-                 " $joinclause2 ".
-                 " $whereclause2 $orderclause2)");
+    DBQueryFatal(
+        "select uuid,type,name from ".
+        "  ((select l.uuid as uuid,'lease' as type,l.lease_id as name ".
+        "      from project_leases as l ".
+        "    $joinclause1 ".
+        "    left join apt_datasets as ad on ad.remote_uuid=l.uuid ".
+        "     $whereclause1) ".
+        "   union ".
+        "   (select i.uuid as uuid,'image' as type,i.imagename as name ".
+        "       from images as i ".
+        "    $joinclause2 ".
+        "    $whereclause2)) as foo order by name");
 
 $portal_result =
     DBQueryFatal("select d.uuid,'dataset' as type from apt_datasets as d ".
                  "left join apt_aggregates as agg on agg.urn=d.aggregate_urn ".
                  "$joinclause3 ".
-                 "$whereclause3 $orderclause3");
+                 "$whereclause3 order by d.dataset_id");
 
 echo "<div class='row'>
        <div class='col-lg-12 col-lg-offset-0
@@ -179,9 +180,10 @@ function SPITTABLE($which, $results) {
                 $name</a></td>\n";
 
             if (isset($all) && ISADMIN()) {
-                echo "<td>$creator</td>";
+                echo "<td><a href='user-dashboard.php?user=$creator'>
+		       $creator</a></td>";
             }
-            echo "  <td style='white-space:nowrap'>$pid</td>
+            echo "<td><a href='show-project.php?project=$pid'>$pid</a></td>
                     <td>$dtype</td>
                     <td class='format-date'>$expires</td>
                    <td>$urn</td>
@@ -223,7 +225,10 @@ echo "</div></div>\n";
 echo "<script type='text/javascript'>\n";
 echo "    window.AJAXURL  = 'server-ajax.php';\n";
 echo "</script>\n";
-SPITREQUIRE("list-datasets",
+
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+SPITREQUIRE("js/list-datasets.js",
          "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
          "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n");
 SPITFOOTER();

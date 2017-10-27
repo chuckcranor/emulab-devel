@@ -1,9 +1,28 @@
+.navbar-nav > li > a,
+.navbar-nav > li > p {
+  margin-top: 25px;
+}
+
+.navbar-btn.btn-xs,
+.navbar-btn {
+  margin-top: 25px;
+}
+
+.navbar-brand {
+  height: 85px;
+}
+
+.navbar-nav > li > a.admin-toggle {
+  margin-top: 30px;
+}
+/*
 .navbar img {
   margin: 5 auto;
   height: 65px;
 }
+*/
 
-.navbar-static-top {
+.navbar {
   background-color: #cc0000;
 }
 
@@ -13,10 +32,6 @@
 
 #footer {
   background-color: #cc0000;
-}
-
-.btn-quickvm-home, .btn-quickvm-home:hover {
-  background-color: #e8eeef
 }
 
 .btn-success {
@@ -38,4 +53,18 @@
 .btn-danger {
   background-color: #9c2a2a;
   border-color:     #882525;
+}
+
+.nav > li > a.btn-quickvm-home,
+.nav > li > a.btn-quickvm-home.dropdown-toggle {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.nav > li > a.btn-quickvm-home:hover,
+.nav > li > a.btn-quickvm-home:active, 
+.nav > li > a.btn-quickvm-home:focus,
+.nav > li > a.btn-quickvm-home.dropdown-toggle:hover,
+.nav > li > a.btn-quickvm-home.dropdown-toggle:active, 
+.nav > li > a.btn-quickvm-home.dropdown-toggle:focus {
+  background-color: rgba(255, 255, 255, 0.25);
 }

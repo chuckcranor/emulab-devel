@@ -70,7 +70,7 @@ use librc;
 # Not all clients support this.
 #
 exit(0)
-    if (MFS() || REMOTE() || JAILED() || INXENVM() || PLAB());
+    if (MFS() || REMOTE() || JAILED() || INXENVM() || INDOCKERVM() || PLAB());
 
 # Protos.
 sub doboot();

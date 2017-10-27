@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2014 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2017 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -200,6 +200,7 @@ main(int argc, char **argv)
 		}
 	}
 	alarm(0);
+	dbclose();
 
 	syslog(LOG_NOTICE, "genlastlog ending");
 	exit(errors);

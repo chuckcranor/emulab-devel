@@ -856,6 +856,10 @@ sub Release($$)
     #
     $experiment->ClearUnusedReservedVlanTags();
 
+    # Make sure we have nothing in the Node cache, since we probably
+    # released the slivers before we called this.
+    Node->FlushAll();
+
     #
     # Release nodes.
     #

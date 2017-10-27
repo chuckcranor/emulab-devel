@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2015 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -45,24 +45,24 @@ use Getopt::Std;
 # The following commands are for persistent blockstores.
 # For these, a blockstore name, "bsname", had better be unique.
 #
-# bscontrol [ -S server [ -P pool ] ] [-l leaseidx] [-f fstype] -s size -t type create bsname
+# bscontrol [ -S server [ -P pool ] ] [-f fstype] -l leaseidx -s size -t type create bsname
 #	Create a blockstore of the given size with the given name.
 #	If the server is not specified, we pick the "best" server,
 #	based on availability of space.
 #
-# bscontrol snapshot [ -S server -P pool ] bsname [ tstamp ]
+# bscontrol snapshot [ -S server [ -P pool ] ] bsname [ tstamp ]
 #	Create a snapshot of the named blockstore with the indicated
 #	timestamp. If timestamp is not provided, it will use the
 #	current time. bsname needs to be unique across all servers
 #	or the server and pool need to be explicitly specified.
 #
-# bscontrol desnapshot [ -S server -P pool ] bsname [ tstamp ]
+# bscontrol desnapshot [ -S server [ -P pool ] ] bsname [ tstamp ]
 #	Delete the snapshot of the named blockstore with the indicated
 #	timestamp. If timestamp is not provided, delete all snapshots
 #	associated with the blockstore. bsname needs to be unique across
 #	all servers or the server and pool need to be explicitly specified.
 #
-# bscontrol destroy [ -S server -P pool ] bsname
+# bscontrol destroy [ -S server [ -P pool ] ] bsname
 #	Destroy the named blockstore freeing up the space. Also destroys
 #	any associated snapshots. bsname needs to be unique across all
 #	servers or the server and pool need to be explicitly specified.
@@ -73,16 +73,21 @@ use Getopt::Std;
 #
 sub usage()
 {
-    print STDERR "Usage: bscontrol command args\n";
+    print STDERR "Usage: bscontrol [-hd] command args\n";
     print STDERR "   -h       This message\n";
     print STDERR "   -d       Print additional debug info\n";
     print STDERR "commands:\n";
     print STDERR "   list     List all blockstore servers\n";
     print STDERR "   avail    For each server, show available storage\n";
     print STDERR "   info     For each server, show all extant volumes\n";
+    print STDERR "\nAdditional persistent blockstore commands.\n";
+    print STDERR "bscontrol [-S server [-P pool]] [-f fstype] -l leaseidx -s size -t type create bsname\n";
+    print STDERR "bscontrol [-S server -P pool] destroy bsname\n";
+    print STDERR "bscontrol [-S server [-P pool]] snapshot bsname [tstamp]\n";
+    print STDERR "bscontrol [-S server [-P pool]] desnapshot bsname [tstamp]\n";
     exit(-1);
 }
-my $optlist  = "hds:t:l:S:P:Ff:";
+my $optlist  = "hds:t:l:S:P:Ff:I";
 my $debug = 0;
 my $server;
 my $pool;
@@ -91,6 +96,7 @@ my $type = "stdataset";
 my $leaseidx = 0;
 my $fstype = "";
 my $fakeit = 0;
+my $ignoredb = 0;
 
 # Protos
 sub fatal($);
@@ -193,6 +199,9 @@ if (defined($options{f})) {
 }
 if (defined($options{F})) {
     $fakeit = 1;
+}
+if (defined($options{I})) {
+    $ignoredb = 1;
 }
 if (@ARGV < 1) {
     usage();
@@ -504,6 +513,9 @@ sub getpools($$)
 	if (bsserver_cmd($srv, "$PROXYCMD pools", \$outref) == 0) {
 	    foreach my $pstr (@$outref) {
 		my $attrs = parseattrs($pstr);
+		# XXX ignore bogus lines that don't include pool=...
+		next
+		    if (!exists($attrs->{'pool'}));
 		my $pool = $attrs->{'pool'};
 		if (!defined($dpool) || $dpool eq $pool) {
 		    $attrs->{'server'} = $srv;
@@ -535,6 +547,9 @@ sub getvolumes($$)
 	if (bsserver_cmd($srv, "$PROXYCMD volumes", \$outref) == 0) {
 	    foreach my $vstr (@$outref) {
 		my $attrs = parseattrs($vstr);
+		# XXX ignore bogus lines that don't include volume=...
+		next
+		    if (!exists($attrs->{'volume'}));
 		my $pool = $attrs->{'pool'};
 		if (!defined($dpool) || $dpool eq $pool) {
 		    $attrs->{'server'} = $srv;
@@ -547,6 +562,19 @@ sub getvolumes($$)
 	    foreach my $str (@$outref) {
 		print STDERR "  $str\n";
 	    }
+	}
+    }
+
+    if ($debug && keys(%volumes) > 0) {
+	print STDERR "Found volumes:\n";
+	foreach my $v (keys(%volumes)) {
+	    my $attrs = $volumes{$v};
+	    print STDERR "  $v: ";
+	    foreach my $k (keys(%$attrs)) {
+		my $v = $attrs->{$k};
+		print STDERR "$k=$v ";
+	    }
+	    print STDERR "\n";
 	}
     }
 
@@ -566,6 +594,9 @@ sub getblockstores($$)
 	if (bsserver_cmd($srv, "$PROXYCMD volumes", \$outref) == 0) {
 	    foreach my $vstr (@$outref) {
 		my $attrs = get_bsattrs(parseattrs($vstr));
+		# XXX ignore bogus lines that don't include volume=...
+		next
+		    if (!exists($attrs->{'volume'}));
 		if (!defined($dpool) || $dpool eq $attrs->{'pool'}) {
 		    $attrs->{'server'} = $srv;
 
@@ -950,17 +981,16 @@ sub bs_destroy($$$@)
     }
 
     #
-    # Delete the blockstore object
+    # Verify that the blockstore object exists and is of the right type.
+    # We will delete the blockstore object *after* we destroy the server-side
+    # object. See XXX below for rationale.
     #
     my $bstore = Blockstore->Lookup($srv, $name);
-    if (!$bstore) {
+    if (!$bstore && !$ignoredb) {
 	fatal("destroy: no blockstore '$srv/$name' in DB");
     }
-    if ($bstore->role() ne "partition") {
+    if ($bstore && $bstore->role() ne "partition") {
 	fatal("destroy: wrong type of blockstore '$srv/$name'");
-    }
-    if ($bstore->Delete()) {
-	fatal("destroy: could not delete blockstore '$srv/$name' from DB");
     }
 
     #
@@ -969,16 +999,17 @@ sub bs_destroy($$$@)
     my $outref;
 
     #
-    # First destroy any snapshots
+    # First destroy any snapshots.
     #
-    if (exists($volattrs->{'snapshots'}) &&
-	bsserver_cmd($srv, "$PROXYCMD desnapshot $pool $name", \$outref)) {
+    # We do this regardless of whether $volattrs indicates there are
+    # any snapshots. That state only includes blockstore related snapshots
+    # and we need to make sure all snapshots are gone, even explicitly
+    # created ones (e.g., for backup purposes).
+    #
+    if (bsserver_cmd($srv, "$PROXYCMD desnapshotall $pool $name", \$outref)) {
 	print STDERR "*** destroy: ".
 	    "could not destroy snapshots for '$name' on $srv/$pool:";
-	foreach my $str (@$outref) {
-	    print STDERR "  $str\n";
-	}
-	exit(-1);
+	goto fail;
     }
 
     #
@@ -990,13 +1021,45 @@ sub bs_destroy($$$@)
     if (bsserver_cmd($srv, "$PROXYCMD destroy $pool $name", \$outref)) {
 	print STDERR "*** destroy: ".
 	    "could not deallocate storage for '$name' on $srv/$pool:";
-	foreach my $str (@$outref) {
-	    print STDERR "  $str\n";
-	}
-	exit(-1);
+	goto fail;
     }
 
+    #
+    # After everything else works, delete the actual blockstore object.
+    #
+    # XXX There is a nasty circular dependency here where if we were to
+    # destroy the blockstore DB state first and then the object destruction
+    # fails, we leave behind a dangling object and potentially Lease DB
+    # state. But if we destroy the object first and the DB state removal
+    # fails, we are left with a blockstore with no server object and thus
+    # we cannot look it up in the future to retry the destruction.
+    #
+    # We choose to go with the latter and just create a tiny server-side
+    # stub object if the DB state removal fails.
+    #
+    if ($bstore && $bstore->Delete()) {
+	print STDERR "*** destroy: ".
+	    "could not destroy Blockstore DB state, ".
+	    "recreating a stub server-side object.\n";
+	if (bsserver_cmd($srv, "$PROXYCMD create $pool $name 1", \$outref)) {
+	    print STDERR "*** destroy: ".
+		"re-creation of server-side object failed, ".
+		"before you can destroy this blockstore ".
+		"you must manually re-create the object with:\n";
+	    print STDERR "    $PROXYCMD create $pool $name 1\n";
+	    goto fail;
+	}
+	fatal("destroy: could not delete blockstore '$srv/$name' from DB");
+    }
+
+
     return 0;
+
+  fail:
+    foreach my $str (@$outref) {
+	print STDERR "  $str\n";
+    }
+    exit(-1);
 }
 
 sub fatal($)

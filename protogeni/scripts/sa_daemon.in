@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2015 University of Utah and the Flux Group.
+# Copyright (c) 2008-2016 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -122,12 +122,8 @@ use Node;
 use libtestbed;
 use emutil;
 use libEmulab;
+use APT_Instance;
 use POSIX qw(strftime ceil);
-
-# Experimental
-if ($MAINSITE) {
-    require APT_Instance;
-}
 
 #
 # So we know who/what we are acting as.
@@ -299,14 +295,11 @@ sub WarnSlices()
 	    print STDERR
 		"Sending mail to $geniuser about expiring slice $idx,$hrn\n";
 
-	    # Experimental
-	    if ($MAINSITE) {
-		# Do not expose slices to APT/Cloud users.
-		my $instance = APT_Instance->LookupBySlice($slice->uuid());
-		if (defined($instance)) {
-		    $instance->WarnExpiring("$diff $unit");
-		    goto noemail;
-		}
+	    # Do not expose slices to APT/Cloud users.
+	    my $instance = APT_Instance->LookupBySlice($slice->uuid());
+	    if (defined($instance)) {
+		$instance->WarnExpiring("$diff $unit");
+		goto noemail;
 	    }
 	    SENDMAIL($emailaddr, "Slice $urn expiring",
 		     "Slice $urn\n".
@@ -364,18 +357,15 @@ sub ExpireSlices()
 	    $slice->UnLock();
 	    goto skip;
 	}
-	# Experimental
-	if ($MAINSITE) {
-	    my $instance = APT_Instance->LookupBySlice($slice->uuid());
-	    if (defined($instance)) {
-		#
-		# If this is for an APT instance, skip it and let the
-		# apt_daemon deal with it.
-		#
-		print STDERR "Skipping slice for $instance\n";
-		$slice->UnLock();
-		goto skip;
-	    }
+	my $instance = APT_Instance->LookupBySlice($slice->uuid());
+	if (defined($instance)) {
+	    #
+	    # If this is for an APT instance, skip it and let the
+	    # apt_daemon deal with it.
+	    #
+	    print STDERR "Skipping slice for $instance\n";
+	    $slice->UnLock();
+	    goto skip;
 	}
 	
 	my $geniuser  = GeniUser->Lookup($slice->creator_uuid(), 1);

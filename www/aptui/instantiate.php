@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -57,7 +57,8 @@ $optargs = OptionalPageArguments("create",        PAGEARG_STRING,
 				 "project",       PAGEARG_PROJECT,
 				 "asguest",       PAGEARG_BOOLEAN,
 				 "default",       PAGEARG_STRING,
-                                 "classic",       PAGEARG_STRING,
+				 "from",          PAGEARG_STRING,
+				 "refspec",       PAGEARG_STRING,
 				 "formfields",    PAGEARG_ARRAY);
 
 if ($ISAPT && !$this_user) {
@@ -80,27 +81,12 @@ if ($ISAPT && !$this_user) {
     }
 }
 
-#
-# Alternate version of the picker, temporary.
-#
-if (isset($classic)) {
-    #
-    # This file is the default picker.
-    #
-    if ($classic == "true") {
-        setcookie("picker", "classic", 0, "/", $TBAUTHDOMAIN, 0);
-        $classic = 1;
-    }
-    else {
-        setcookie("picker", "new", 0, "/", $TBAUTHDOMAIN, 0);
-        $classic = 0;
-    }
-}
-elseif (isset($_COOKIE['picker'])) {
-    $classic = ($_COOKIE['picker'] == "classic" ? 1 : 0);
-}
-else {
-    $classic = 0;
+# Need to make non-hardcoded
+$maxduration = 16;
+
+$skipfirststep = 0;
+if (isset($from) && ($from == "manage-profile" || $from == "show-profile")) {
+    $skipfirststep = 1;
 }
 
 if ($this_user) {
@@ -127,19 +113,21 @@ if ($this_user) {
     }
 }
 if ($ISCLOUD) {
-    $profile_default     = "OpenStack";
-    $profile_default_pid = "emulab-ops";
+    $portal_default_profile = TBGetSiteVar("cloudlab/default_profile");
+    list ($profile_default_pid,
+          $profile_default) = explode(',', $portal_default_profile);
 }
 elseif ($ISPNET) {
-    $profile_default     = "OneVM";
-    $profile_default_pid = $TBOPSPID;
+    $portal_default_profile = TBGetSiteVar("phantomnet/default_profile");
+    list ($profile_default_pid,
+          $profile_default) = explode(',', $portal_default_profile);
 }
 else {
-    $profile_default     = "OneVM";
-    $profile_default_pid = $TBOPSPID;
+    $portal_default_profile = TBGetSiteVar("portal/default_profile");
+    list ($profile_default_pid,
+          $profile_default) = explode(',', $portal_default_profile);
 }
 $profile_array  = array();
-$am_array       = Instance::DefaultAggregateList();
 
 #
 # if using the super secret URL, make sure the profile exists, and
@@ -237,14 +225,13 @@ else {
     }
 
     $query_result =
-	DBQueryFatal("select p.*,v.* from apt_profiles as p ".
+	DBQueryFatal("select p.uuid,p.name,p.pid from apt_profiles as p ".
 		     "left join apt_profile_versions as v on ".
 		     "     v.profileid=p.profileid and ".
 		     "     v.version=p.version ".
 		     "$joinclause ".
 		     "where locked is null and p.disabled=0 and ".
-                     "      v.disabled=0 and ($whereclause) ".
-		     "order by p.topdog desc");
+                     "      v.disabled=0 and ($whereclause) ");
     while ($row = mysql_fetch_array($query_result)) {
 	$profile_array[$row["uuid"]] = $row["name"];
         if ($row["pid"] == $profile_default_pid &&
@@ -273,6 +260,14 @@ else {
                 SPITUSERERROR("This profile is disabled!");
                 exit();
             }
+            #
+            # See if we have the version or profile uuid in the list
+            # already, do not add twice since we do not show versions
+            # in the picker list.
+            #
+            if (array_key_exists($obj->profile_uuid(), $profile_array)) {
+                unset($profile_array[$obj->profile_uuid()]);
+            }
             $profile_array[$obj->uuid()] = $obj->name();
             $profile_default = $obj->uuid();
         }
@@ -286,53 +281,59 @@ else {
 #
 # Rebuild the array with extra info for the profile picker.
 #
+if (isset($this_user)) {
+    $usageinfo = UserUsageInfo($this_user);
+}
 $tmp_array = array();
-
 while (list ($uuid, $title) = each ($profile_array)) {
     $tmp = Profile::Lookup($uuid);
     if ($tmp) {
-        list ($lastused, $count) = $tmp->UsageInfo($this_user);
-        if ($lastused == 0) {
-            list ($unused, $count) = $tmp->UsageInfo(null);
+        if (1) {
+            # If profile never used, no need to ask if user has used it.
+            if (!$tmp->usecount()) {
+                $count = $lastused = 0;
+            }
+            elseif (isset($this_user)) {
+                $profileid = $tmp->profileid();
+                if (array_key_exists($profileid, $usageinfo)) {
+                    $count    = $usageinfo[$profileid]["count"];
+                    $lastused = $usageinfo[$profileid]["lastused"];
+                }
+                else {
+                    # Use global count instead.
+                    $count    = $tmp->usecount();
+                    $lastused = 0;
+                }
+            }
+            else {
+                # Guest user; just use the global usage count.
+                $count    = $tmp->usecount();
+                $lastused = 0;
+            }
         }
-        
+        else {
+            $lastused = time();
+            $count = 0;
+        }
         $tmp_array[$uuid] =
             array("name"     => $tmp->name(),
                   "project"  => $tmp->pid(),
+                  "pid"      => $tmp->pid(), # JS messes with project.
+                  "creator"  => $tmp->creator(),
                   "favorite" => $tmp->isFavorite($this_user),
                   "lastused" => $lastused,
                   "usecount" => $count);
     }
 }
-#
-# Now we want to order the list.
-#
-if ($this_user) {
-    uasort($tmp_array, function($a, $b) {
-        if ($a["lastused"] == $b["lastused"]) {
-            return 0;
-        }
-        return ($a["lastused"] > $b["lastused"]) ? -1 : 1;
-    });
-}
-else {
-    uasort($tmp_array, function($a, $b) {
-        if ($a["usecount"] == $b["usecount"]) {
-            return 0;
-        }
-        return ($a["usecount"] > $b["usecount"]) ? -1 : 1;
-    });
-}
 $profile_array = $tmp_array;
-#TBERROR(print_r($profile_array, true), 0);
 
 function SPITFORM($formfields, $newuser, $errors)
 {
     global $TBBASE, $APTMAIL, $ISAPT, $ISCLOUD, $ISPNET, $PORTAL_NAME;
-    global $profile_array, $this_user, $profilename, $profile, $am_array;
-    global $projlist, $classic;
-    $amlist     = array();
-    $fedlist    = array();
+    global $profile_array, $this_user, $profilename, $profile;
+    global $projlist, $skipfirststep, $maxduration, $TBMAINSITE;
+    global $refspec;
+    
     $showabout  = ($ISAPT && !$this_user ? 1 : 0);
     $registered = (isset($this_user) ? "true" : "false");
     # We use webonly to mark users that have no project membership
@@ -353,9 +354,7 @@ function SPITFORM($formfields, $newuser, $errors)
     }
     SPITHEADER(1);
 
-    if (!$classic) {
-        echo "<link rel='stylesheet' href='css/picker.css'>\n";
-    }
+    echo "<link rel='stylesheet' href='css/picker.css'>\n";
 
     # I think this will take care of XSS prevention?
     echo "<script type='text/plain' id='form-json'>\n";
@@ -384,35 +383,15 @@ function SPITFORM($formfields, $newuser, $errors)
     # Spit out a project selection list if a real user.
     #
     if ($this_user && !$this_user->webonly()) {
-        $plist = array();
-        while (list($project) = each($projlist)) {
-            $plist[] = $project;
-        }
         echo "<script type='text/plain' id='projects-json'>\n";
-        echo htmlentities(json_encode($plist));
+        echo htmlentities(json_encode($projlist));
         echo "</script>\n";
     }
     #
     # And AM list if that is allowed.
     #
     if (isset($this_user) && !$this_user->webonly() && !$ISAPT && !$ISPNET) {
-	$am_options = "";
-	while (list($am, $urn) = each($am_array)) {
-	    $amlist[$urn] = $am;
-            #
-            # We need to mark federated sites for the cluster dropdown.
-            #
-            $aggregate = Aggregate::Lookup($urn);
-            if ($aggregate && $aggregate->isfederate()) {
-                $fedlist[] = "'" . $aggregate->name() . "'";
-            }
-        }
-	echo "<script type='text/plain' id='amlist-json'>\n";
-	echo htmlentities(json_encode($amlist));
-	echo "</script>\n";
-        echo "<script type='text/javascript'>\n";
-        echo "    window.FEDERATEDLIST  = [". implode(",", $fedlist) . "];\n";
-        echo "</script>\n";
+        SpitAggregateStatus();
     }
     SpitOopsModal("oops");
     echo "<script type='text/javascript'>\n";
@@ -426,22 +405,45 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "    window.WEBONLY    = $webonly;\n";
     echo "    window.PORTAL     = '$portal';\n";
     echo "    window.SHOWPICKER = $showpicker;\n";
+    echo "    window.MAXDURATION = $maxduration;\n";
     echo "    window.CANCOPY = $cancopy;\n";
     $isadmin = (isset($this_user) && ISADMIN() ? 1 : 0);
     echo "    window.ISADMIN    = $isadmin;\n";
-    $multisite = (isset($this_user) ? 1 : 0);
+    $multisite = (isset($this_user) && $ISCLOUD ? 1 : 0);
     echo "    window.MULTISITE  = $multisite;\n";
-    $doconstraints = (isset($this_user) &&
-                      (ISADMINISTRATOR() || STUDLY()) ? 1 : 0);
-    echo "    window.DOCONSTRAINTS = 1;\n";
+    $doconstraints = $TBMAINSITE;
+    echo "    window.DOCONSTRAINTS = $doconstraints;\n";
+    echo "    window.SKIPFIRSTSTEP = " . ($skipfirststep ? "true" : "false") . ";\n";
     echo "    window.PORTAL_NAME = '$PORTAL_NAME';\n";
-    echo "    window.CLASSIC = " . ($classic ? "true" : "false") . ";\n";
+    echo "    window.USERNAME = '" . $formfields["username"] . "';\n";
+    if (isset($profile) && $profile->repourl()) {
+        echo "    window.FROMREPO = true;\n";
+        if (isset($refspec)) {
+            echo "    window.REFSPEC = '$refspec';\n";
+        }
+    }
+    else {
+        echo "    window.FROMREPO = false;\n";
+    }
     echo "</script>\n";
-    echo "<script src='js/lib/jquery-2.0.3.min.js?nocache=asdfasdf'></script>\n";
-    echo "<script src='js/lib/bootstrap.js?nocache=asdfasdf'></script>\n";
-    echo "<script src='js/lib/require.js?nocache=asdfasdf' ".
-        "data-main='js/instantiate" . ($classic ? "" : "-new") .
-        ".js?nocache=asdfasdf'></script>";
+    echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+    echo "<script src='https://www.emulab.net/protogeni/jacksmod/stable/jacksmod.js'></script>";
+    echo "<script src='https://www.emulab.net/protogeni/jacksmod/stable/imagepicker.js'></script>";
+    
+    REQUIRE_UNDERSCORE();
+    REQUIRE_SUP();
+    REQUIRE_PPWIZARDSTART();
+    REQUIRE_JACKS_EDITOR();
+    REQUIRE_WIZARD_TEMPLATE();
+    REQUIRE_PICKER();
+    REQUIRE_FORMHELPERS();
+    REQUIRE_FILESTYLE();
+    REQUIRE_MARKED();
+    REQUIRE_MOMENT();
+    REQUIRE_JACKS();
+    REQUIRE_JQUERY_STEPS();
+    AddLibrary("js/gitrepo.js");
+    SPITREQUIRE("js/instantiate-new.js");
 }
 
 if (!isset($create)) {
@@ -452,13 +454,26 @@ if (!isset($create)) {
     $defaults["profile"]  = (isset($profile) ?
                              $profile->uuid() : $profile_default);
     $defaults["where"]    = $DEFAULT_AGGREGATE;
+    #
+    # If the user is in the same project as the profile, default to that
+    # project, else use the first in the list (which is ordered by last
+    # time the user instantiated in it).
+    #
     if ($this_user && count($projlist)) {
-	list($project, $grouplist) = each($projlist);
+        if (isset($profile) &&
+            array_key_exists($profile->pid(), $projlist)) {
+            $project = $profile->pid();
+        }
+        else {
+            list($project, $grouplist) = each($projlist);
+            reset($projlist);
+        }
         $defaults["pid"] = $project;
-        reset($projlist);
+        $defaults["gid"] = $project;
     }
     else {
         $defaults["pid"] = "";
+        $defaults["gid"] = "";
     }
 
     # 
@@ -515,6 +530,8 @@ if (!isset($create)) {
 
     SPITFORM($defaults, false, array());
     echo "<div style='display: none'><div id='jacks-dummy'></div></div>\n";
+
+    AddTemplateList(array("instantiate", "instantiate-new", "aboutapt", "aboutcloudlab", "aboutpnet", "waitwait-modal", "rspectextview-modal", "picker-template"));
     SPITFOOTER();
     return;
 }

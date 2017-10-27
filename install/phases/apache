@@ -100,6 +100,16 @@ sub Install($$$)
 		    "Redirect /wikidocs http://users.emulab.net/trac/emulab");
 	    }
 	}
+	if (ISBOSSNODE($server)) {
+	    Phase "fcgid-fixup", "Fixing mod_fcgid permissions", sub {
+		# We run apache as nobody.
+		PhaseSkip("already fixed")
+		    if (! -e "/var/run/fcgidsock");
+		
+		ExecQuietFatal("chown nobody:nobody /var/run/fcgidsock");
+		ExecQuietFatal("chmod 770 /var/run/fcgidsock");
+	    };
+	}
     };
     return 0;
 }

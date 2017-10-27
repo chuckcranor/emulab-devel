@@ -33,7 +33,6 @@ SPITHEADER();
 echo "The URL you gave: <b>" . htmlentities( $_SERVER["REQUEST_URI"] ) . "</b>
            is not available or is broken.";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-echo "<script src='js/lib/bootstrap.js'></script>\n";
-echo "<script src='js/lib/require.js' data-main='js/main'></script>";
+SPITNULLREQUIRE();
 SPITFOOTER();
 

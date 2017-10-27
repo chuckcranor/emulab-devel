@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2016 University of Utah and the Flux Group.
+# Copyright (c) 2007-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -45,15 +45,19 @@ use vars qw(@ISA @EXPORT $AUTOLOAD);
 # Must come after package declaration!
 use EmulabConstants;
 use emutil;
+use WebTask;
 use emdb;
 use APT_Dataset;
 use GeniXML;
 use GeniHRN;
 use libtestbed;
+use Project;
 use Lease;
 use English;
 use Data::Dumper;
+use File::Basename;
 use File::Temp qw(tempfile :mktemp tmpnam :POSIX);
+use URI::URL;
 use overload ('""' => 'Stringify');
 
 # Configure variables
@@ -61,6 +65,8 @@ my $TB		  = "@prefix@";
 my $TBOPS         = "@TBOPSEMAIL@";
 my $OURDOMAIN     = "@OURDOMAIN@";
 my $MYURN         = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+my $MAINSITE      = @TBMAINSITE@;
+my $CONVERTER     = "$TB/bin/rspec2genilib";
 
 # Concat id/vers.
 sub versid($)
@@ -84,8 +90,45 @@ sub BlessRow($$)
     
     my $self           = {};
     $self->{'DBROW'}   = $row;
-
     bless($self, $class);
+
+    #
+    # Grab the webtask. Backwards compat mode, see if there is one associated
+    # with the object, use that. Otherwise create a new one.
+    #
+    my $webtask;
+    
+    if (defined($self->webtask_id())) {
+	$webtask = WebTask->Lookup($self->webtask_id());
+    }
+    if (!defined($webtask)) {
+	$webtask = WebTask->LookupByObject($self->uuid());
+	if (!defined($webtask)) {
+	    $webtask = WebTask->Create();
+	    return undef
+		if (!defined($webtask));
+	}
+	my $profileid  = $self->profileid();
+	my $webtask_id = $webtask->task_id();
+	
+	DBQueryWarn("update apt_profiles set webtask_id='$webtask_id' ".
+		    "where profileid='$profileid'")
+	    or return undef;
+    }
+    $self->{'WEBTASK'} = $webtask;
+
+    #
+    # If not deleted, then grab the image info records.
+    #
+    if (!defined($self->deleted())) {
+	my $images;
+	return undef
+	    if (APT_Profile::ImageInfo->LookupForProfile($self, \$images));
+	$self->{'IMAGES'} = $images;
+    }
+    else {
+	$self->{'IMAGES'} = {};
+    }
     return $self;
 }
 
@@ -103,7 +146,9 @@ sub Lookup($$;$$)
     if (!defined($arg2)) {
 	if ($arg1 =~ /^(\d*)$/) {
 	    my $result =
-		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid ".
+		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+                            "    i.disabled as profile_disabled, ".
+                            "    i.nodelete as profile_nodelete ".
 			    " from apt_profiles as i ".
 			    "left join apt_profile_versions as v on ".
 			    "     v.profileid=i.profileid and ".
@@ -117,7 +162,9 @@ sub Lookup($$;$$)
 	elsif ($arg1 =~ /^([-\w]*),([-\w\.\+]*)$/ ||
 		$arg1 =~ /^([-\w]*)\/([-\w\.\+]*)$/) {
 	    my $result =
-		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid ".
+		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+                            "    i.disabled as profile_disabled, ".
+                            "    i.nodelete as profile_nodelete ".
 			    " from apt_profiles as i ".
 			    "left join apt_profile_versions as v on ".
 			    "     v.profileid=i.profileid and ".
@@ -131,7 +178,9 @@ sub Lookup($$;$$)
 	elsif ($arg1 =~ /^([-\w]*),([-\w\.\+]*):(\d*)$/ ||
 		$arg1 =~ /^([-\w]*)\/([-\w\.\+]*):(\d*)$/) {
 	    my $result =
-		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid ".
+		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+                            "    i.disabled as profile_disabled, ".
+                            "    i.nodelete as profile_nodelete ".
 			    " from apt_profiles as i ".
 			    "left join apt_profile_versions as v on ".
 			    "     v.profileid=i.profileid ".
@@ -149,7 +198,9 @@ sub Lookup($$;$$)
 	    # version with the uuid.
 	    #
 	    my $result =
-		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid ".
+		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+                            "    i.disabled as profile_disabled, ".
+                            "    i.nodelete as profile_nodelete ".
 			    "  from apt_profiles as i ".
 			    "left join apt_profile_versions as v on ".
 			    "     v.profileid=i.profileid and ".
@@ -161,7 +212,9 @@ sub Lookup($$;$$)
 		if ($result->numrows);
 
 	    $result =
-		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid ".
+		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+                            "    i.disabled as profile_disabled, ".
+                            "    i.nodelete as profile_nodelete ".
 			    "  from apt_profile_versions as v ".
 			    "left join apt_profiles as i on ".
 			    "     v.profileid=i.profileid ".
@@ -176,7 +229,9 @@ sub Lookup($$;$$)
     elsif (!defined($arg3)) {
 	if ($arg1 =~ /^\d+$/ && $arg2 =~ /^\d+$/) {
 	    my $result =
-		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid ".
+		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+                            "    i.disabled as profile_disabled, ".
+                            "    i.nodelete as profile_nodelete ".
 			    "  from apt_profiles as i ".
 			    "left join apt_profile_versions as v on ".
 			    "     v.profileid=i.profileid ".
@@ -189,7 +244,9 @@ sub Lookup($$;$$)
 	}
 	elsif ($arg1 =~ /^[-\w]*$/ && $arg2 =~ /^([-\w\.\+]*):(\d+)$/) {
 	    my $result =
-		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid ".
+		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+                            "    i.disabled as profile_disabled, ".
+                            "    i.nodelete as profile_nodelete ".
 			    " from apt_profiles as i ".
 			    "left join apt_profile_versions as v on ".
 			    "     v.profileid=i.profileid ".
@@ -202,7 +259,9 @@ sub Lookup($$;$$)
 	}
 	elsif ($arg1 =~ /^[-\w]*$/ && $arg2 =~ /^[-\w\.\+]*$/) {
 	    my $result =
-		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid ".
+		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+                            "    i.disabled as profile_disabled, ".
+                            "    i.nodelete as profile_nodelete ".
 			    "  from apt_profiles as i ".
 			    "left join apt_profile_versions as v on ".
 			    "     v.profileid=i.profileid and ".
@@ -233,6 +292,26 @@ sub Lookup($$;$$)
     }
     return undef;
 }
+#
+# Lookup by repo key.
+#
+sub LookupByRepoKey($$)
+{
+    my ($class, $token) = @_;
+
+    return undef
+	if ($token !~ /^\w+$/);
+
+    my $query_result =
+	DBQueryWarn("select uuid from apt_profile_versions ".
+		    "where repokey='$token'");
+
+    return undef
+	if (!defined($query_result) || !$query_result->numrows);
+
+    my ($uuid) = $query_result->fetchrow_array();
+    return Lookup($class, $uuid);
+}
 
 AUTOLOAD {
     my $self  = $_[0];
@@ -247,12 +326,47 @@ AUTOLOAD {
     carp("No such slot '$name' field in class $type");
     return undef;
 }
+sub images($;$)
+{
+    my ($self, $client_id) = @_;
+    if (!defined($client_id)) {
+	return $self->{'IMAGES'};
+    }
+    elsif (exists($self->{'IMAGES'}->{$client_id})) {
+	return $self->{'IMAGES'}->{$client_id};
+    }
+    return undef;
+}
 
 # Break circular reference someplace to avoid exit errors.
 sub DESTROY {
     my $self = shift;
 
-    $self->{'DBROW'} = undef;
+    $self->{'WEBTASK'} = undef;
+    $self->{'DBROW'}   = undef;
+    $self->{'IMAGES'}  = undef;
+}
+
+sub IsRepoBased($) {
+    my ($self) = @_;
+
+    return (defined($self->repourl()) ? 1 : 0);
+}
+sub webtask($)  { return $_[0]->{'WEBTASK'}; }
+
+# A profile is disabled if version is disabled or entire profile is disabled
+sub isDisabled($)
+{
+    my ($self) = @_;
+
+    return ($self->disabled() || $self->profile_disabled() ? 1 : 0);
+}
+# Ditto nodelete.
+sub isLocked($)
+{
+    my ($self) = @_;
+
+    return ($self->nodelete() || $self->profile_nodelete() ? 1 : 0);
 }
 
 #
@@ -290,30 +404,39 @@ sub Create($$$$$$)
     my $name    = DBQuoteSpecial($argref->{'name'});
     my $pid     = $project->pid();
     my $pid_idx = $project->pid_idx();
+    my $gid     = $project->pid();
+    my $gid_idx = $project->pid_idx();
     my $uid     = $creator->uid();
     my $uid_idx = $creator->uid_idx();
+    my $puuid   = NewUUID();
+    my $vuuid   = NewUUID();
+    my $webtask = WebTask->Create();
+    return undef
+	if (!defined($webtask));
 
     #
     # The pid/imageid has to be unique, so lock the table for the check/insert.
     #
-    DBQueryWarn("lock tables apt_profiles write, apt_profile_versions write, ".
-		"            emulab_indicies write")
-	or return undef;
-
+    if (!DBQueryWarn("lock tables apt_profiles write, ".
+		     "     apt_profile_versions write, ".
+		     "     emulab_indicies write")) {
+	$webtask->Delete();
+	return undef;
+    }
     my $query_result =
 	DBQueryWarn("select name from apt_profiles ".
 		    "where pid_idx='$pid_idx' and name=$name");
 
     if ($query_result->numrows) {
 	DBQueryWarn("unlock tables");
+	$webtask->Delete();
 	$$usrerr_ref = "Profile already exists in project!";
 	return undef;
     }
     
     my $profileid = TBGetUniqueIndex("next_profile", undef, 1);
-    my $puuid     = NewUUID();
-    my $vuuid     = NewUUID();
-    my $rspec     = DBQuoteSpecial($argref->{'rspec'});
+    my $rspec     = DBQuoteSpecial($argref->{'rspec'})
+	if (exists($argref->{'rspec'}));
     my $cquery    = "";
     my $vquery    = "";
 
@@ -322,12 +445,13 @@ sub Create($$$$$$)
     #
     $cquery .= "name=$name,profileid='$profileid'";
     $cquery .= ",pid='$pid',pid_idx='$pid_idx'";
+    $cquery .= ",gid='$gid',gid_idx='$gid_idx'";
 
     # And the versions table.
     $vquery  = $cquery;
     $vquery .= ",uuid='$vuuid',created=now()";
     $vquery .= ",creator='$uid',creator_idx='$uid_idx'";
-    $vquery .= ",rspec=$rspec";
+    $vquery .= ",rspec=$rspec" if (defined($rspec));
 
     # Set derived from pointer.
     if (defined($parent)) {
@@ -340,9 +464,21 @@ sub Create($$$$$$)
 	    $vquery .= ",paramdefs=" . DBQuoteSpecial($argref->{'paramdefs'});
 	}
     }
+    if (exists($argref->{'repourl'}) && $argref->{'repourl'} ne "") {
+	$vquery .= ",repourl="  . DBQuoteSpecial($argref->{'repourl'});
+	$vquery .= ",reponame=" . DBQuoteSpecial($argref->{'reponame'});
+	$vquery .= ",repohash=" . DBQuoteSpecial($argref->{'repohash'});
+	$vquery .= ",repokey="  . DBQuoteSpecial($argref->{'repokey'});
+    }
+    if (exists($argref->{'portal_converted'}) &&
+	$argref->{'portal_converted'} ne "") {
+	$vquery .= ",portal_converted="  .
+	    DBQuoteSpecial($argref->{'portal_converted'});
+    }
 
     # Back to the main table.
     $cquery .= ",uuid='$puuid'";
+    $cquery .= ",webtask_id="  . DBQuoteSpecial($webtask->task_id());
     $cquery .= ",public=1"
 	if (exists($argref->{'public'}) && $argref->{'public'});
     $cquery .= ",listed=1"
@@ -356,6 +492,7 @@ sub Create($$$$$$)
     if (! DBQueryWarn("insert into apt_profiles set $cquery")) {
 	DBQueryWarn("unlock tables");
 	tberror("Error inserting new apt_profiles record!");
+	$webtask->Delete();
 	return undef;
     }
     # And the versions entry.
@@ -363,6 +500,7 @@ sub Create($$$$$$)
 	DBQueryWarn("delete from apt_profiles where profileid='$profileid'");
 	DBQueryWarn("unlock tables");
 	tberror("Error inserting new apt_profile_versions record!");
+	$webtask->Delete();
 	return undef;
     }
     DBQueryWarn("unlock tables");
@@ -403,12 +541,18 @@ sub NewVersion($$)
     goto bad
 	if (! DBQueryWarn("insert into apt_profile_versions ".
 			  "  (name,profileid,version,pid,pid_idx, ".
-			  "   creator,creator_idx,created,uuid, ".
+			  "   gid,gid_idx, ".
+			  "   creator,creator_idx,updater,updater_idx, ".
+			  "   created,uuid, ".
 			  "   parent_profileid,parent_version,rspec, ".
-			  "   script,paramdefs) ".
+			  "   script,paramdefs,reponame,repourl, ".
+			  "   portal_converted) ".
 			  "select name,profileid,'$newvers',pid,pid_idx, ".
-			  "  '$uid','$uid_idx',now(),uuid(),'$profileid', ".
-			  "  '$version',rspec,script,paramdefs ".
+			  "  gid,gid_idx, ".
+			  "  creator,creator_idx,'$uid','$uid_idx',".
+			  "  now(),uuid(),'$profileid', ".
+			  "  '$version',rspec,script,paramdefs, ".
+			  "  reponame,repourl,portal_converted ".
 			  "from apt_profile_versions as v ".
 			  "where v.profileid='$profileid' and ".
 			  "      v.version='$version'"));
@@ -454,7 +598,10 @@ sub UpdateVersion($$)
     my $version   = $self->version();
 
     my $query = "update apt_profile_versions set ".
-	join(",", map("$_=" . DBQuoteSpecial($argref->{$_}), keys(%{$argref})));
+	join(",", map("$_=" .
+		      (defined($argref->{$_}) ?
+		       DBQuoteSpecial($argref->{$_}) : "NULL"),
+		      keys(%{$argref})));
 
     $query .= " where profileid='$profileid' and version='$version'";
 
@@ -527,7 +674,8 @@ sub Delete($$)
 	if (!defined($purge));
     
     DBQueryWarn("lock tables apt_profiles write, apt_profile_versions write, ".
-		"     web_tasks write, apt_profile_favorites write")
+		"     web_tasks write, apt_profile_favorites write, ".
+		"     apt_profile_images write")
 	or return -1;
 
     if ($purge) {
@@ -542,13 +690,19 @@ sub Delete($$)
 	DBQueryWarn("update apt_profile_versions set deleted=now() ".
 		    "where profileid='$profileid'")
 	    or goto bad;
-	# Delete any leftover webtasks.
+	# Delete any leftover webtasks. These are old ones.
 	DBQueryWarn("delete web_tasks from apt_profile_versions ".
 		    "left join web_tasks on ".
 		    "   web_tasks.object_uuid=apt_profile_versions.uuid ".
 		    "where apt_profile_versions.profileid='$profileid'");
+	# Primary webtask.
+	$self->webtask()->Delete()
+	    if ($self->webtask());
     }
     DBQueryWarn("delete from apt_profile_favorites ".
+		"where profileid='$profileid'")
+	or goto bad;
+    DBQueryWarn("delete from apt_profile_images ".
 		"where profileid='$profileid'")
 	or goto bad;
     DBQueryWarn("delete from apt_profiles where profileid='$profileid'")
@@ -571,7 +725,8 @@ sub DeleteVersion($)
     my ($self) = @_;
 
     DBQueryWarn("lock tables apt_profile_versions write, ".
-		"     apt_profiles write, web_tasks write")
+		"     apt_profiles write, web_tasks write, ".
+		"     apt_profile_images write")
 	or return -1;
 
     my $profileid = $self->profileid();
@@ -606,10 +761,69 @@ sub DeleteVersion($)
 	if (!DBQueryWarn("update apt_profiles set version=$newhead ".
 			 "where profileid='$profileid' and ".
 			 "      version='$version'"));
+
+    goto bad 
+	if (!DBQueryWarn("delete from apt_profile_images ".
+			 "where profileid='$profileid' and ".
+			 "      version='$version'"));
     DBQueryWarn("unlock tables");
     return 0;
   bad:
     DBQueryWarn("unlock tables");
+    return -1;
+}
+
+#
+# Recover a deleted version of a profile.
+# The profile itself cannot be fully deleted for this to work.
+#
+sub UnDeleteVersion($$)
+{
+    my ($self, $version);
+    my $profileid = $self->profileid();
+
+    DBQueryWarn("lock tables apt_profile_versions write, ".
+		"     apt_profiles write, web_tasks write")
+	or return -1;
+
+    #
+    # Confirm if this is going to become the new head version.
+    #
+    my $query_result =
+	DBQueryWarn("select version from apt_profiles ".
+		    "where profileid='$profileid'");
+    goto bad
+	if (!$query_result || !$query_result->numrows);
+    
+    my ($curhead) = $query_result->fetchrow_array();
+
+    #
+    # We need a new web task.
+    #
+    my $webtask = WebTask->CreateAnonymous();
+    if (!defined($webtask)) {
+	print STDERR "Could not create a new webtask\n";
+	goto bad;
+    }
+    my $webtask_id = $webtask->task_id();
+    goto bad
+	if (!DBQueryWarn("update apt_profile_versions set ".
+			 "   webtask_id='$webtask_id', deleted=null ".
+			 "where profileid='$profileid' and ".
+			 "      version='$version'"));
+
+    # Is this the new head version? 
+    if ($version > $curhead) {
+	goto bad
+	    if (!DBQueryWarn("update apt_profiles set version='$version' ".
+			     "where profileid='$profileid'"));
+    }
+    DBQueryWarn("unlock tables");
+    return 0;
+  bad:
+    DBQueryWarn("unlock tables");
+    $webtask->Delete()
+	if (defined($webtask));
     return -1;
 }
 
@@ -727,9 +941,9 @@ sub Unlock($)
 # specified node, and if $all is set, we change all nodes with the
 # same original disk image as the specified node.
 #
-sub UpdateDiskImage($$@)
+sub UpdateDiskImage($$$$$)
 {
-    my ($self, $node_id, $newimage, $all) = @_;
+    my ($self, $node_id, $newimage, $all, $impotent) = @_;
     my $rspec = GeniXML::Parse($self->rspec());
     if (! defined($rspec)) {
 	print STDERR "UpdateDiskImage: Could not parse rspec\n";
@@ -740,78 +954,88 @@ sub UpdateDiskImage($$@)
     # all with the same image.
     #
     my @nodes = ();
+    my @list  = ();
     my $node;
 
-    # First find the specified node.
+    # First find the specified node and generate list to examine.
     foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	if (GeniXML::GetVirtualId($ref) eq $node_id) {
 	    $node = $ref;
-	    last;
+	    push(@list, $node);
+	}
+	elsif ($all) {
+	    push(@list, $ref);
 	}
     }
     if (!defined($node)) {
 	print STDERR "$node_id not in rspec\n";
 	return -1;
     }
-    if ($all) {
-	#
-	# Pull out the disk url/urn of the specified node.
-	#
-	my $Odiskref = GeniXML::GetDiskImage($node);
-	my $image_urn;
-	my $image_url;
-	if (defined($Odiskref)) {
-	    $image_url = GeniXML::GetText("url", $Odiskref);
-	    $image_urn = GeniXML::GetText("name", $Odiskref);
-	    if (defined($image_url) || defined($image_urn)) {
-		# Watch for url in the name, flipflop. 
-		if (defined($image_urn) && $image_urn =~ /^http/) {
-		    $image_url = $image_urn;
-		    $image_urn = undef;
-		}
-	    }
-	}
-	#
-	# Now find all nodes using the same disk urn/url and change.
-	#
-	foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
-	    my $diskref   = GeniXML::GetDiskImage($ref);
-	    #
-	    # If the both this node and the original node did not
-	    # specify a disk image, then we update it. 
-	    #
-	    if (!defined($diskref)) {
-		push(@nodes, $ref)
-		    if (!defined($Odiskref));
-		next;
-	    }
-	    my $this_url = GeniXML::GetText("url", $diskref);
-	    my $this_urn = GeniXML::GetText("name", $diskref);
-	    next
-		if (!(defined($image_url) || defined($image_urn)));
-
+    #
+    # Pull out the disk url/urn of the specified node.
+    #
+    my $Odiskref = GeniXML::GetDiskImage($node);
+    my $image_urn;
+    my $image_url;
+    if (defined($Odiskref)) {
+	$image_url = GeniXML::GetText("url", $Odiskref);
+	$image_urn = GeniXML::GetText("name", $Odiskref);
+	if (defined($image_url) || defined($image_urn)) {
 	    # Watch for url in the name, flipflop. 
-	    if (defined($this_urn) && $this_urn =~ /^http/) {
-		$this_url = $this_urn;
-		$this_urn = undef;
-	    }
-	    if (defined($image_url)) {
-		push(@nodes, $ref)
-		    if ((defined($this_url) && $this_url eq $image_url));
-	    }
-	    else {
-		push(@nodes, $ref)
- 		    if (defined($this_urn) && $this_urn eq $image_urn);
+	    if (defined($image_urn) && $image_urn =~ /^http/) {
+		$image_url = $image_urn;
+		$image_urn = undef;
 	    }
 	}
     }
-    else {
-	@nodes = ($node);
+    #
+    # Now find all nodes using the same disk urn/url and change.
+    #
+    foreach my $ref (@list) {
+	my $diskref   = GeniXML::GetDiskImage($ref);
+	#
+	# If the both this node and the original node did not
+	# specify a disk image, then we update it. 
+	#
+	if (!defined($diskref)) {
+	    push(@nodes, $ref)
+		if (!defined($Odiskref));
+	    next;
+	}
+	my $this_url = GeniXML::GetText("url", $diskref);
+	my $this_urn = GeniXML::GetText("name", $diskref);
+	next
+	    if (!(defined($image_url) || defined($image_urn)));
+
+	# Watch for url in the name, flipflop. 
+	if (defined($this_urn) && $this_urn =~ /^http/) {
+	    $this_url = $this_urn;
+	    $this_urn = undef;
+	}
+	if (defined($image_url)) {
+	    # Watch for actually needing to change, for impotent mode.
+	    # Might not change if the cluster is not doing image
+	    # versioning.
+	    push(@nodes, $ref)
+		if (defined($this_url) && $this_url eq $image_url &&
+		    $this_url ne $newimage);
+	}
+	else {
+	    # Watch for actually needing to change, for impotent mode.
+	    # Might not change if the cluster is not doing image
+	    # versioning.
+	    push(@nodes, $ref)
+		if (defined($this_urn) && $this_urn eq $image_urn &&
+		    $this_urn ne $newimage);
+	}
     }
-    if (!@nodes) {
-	print STDERR "Could not find any nodes to update disk image\n";
-	return -1;
+    # Impotent mode, return number of nodes to be changed.
+    if ($impotent) {
+	return scalar(@nodes);
     }
+    return 0
+	if (!@nodes);
+
     foreach my $node (@nodes) {
 	GeniXML::SetDiskImage($node, $newimage);
     }
@@ -911,12 +1135,11 @@ sub CheckNodeConstraints($$$)
 }
 
 #
-# Check blockstores. 
+# Check dataset validity.
 #
-sub CheckDatasets($$$)
+sub CheckDatasets($$)
 {
-    my ($xml, $ppid, $pmsg) = @_;
-    my $pid = $ppid;
+    my ($xml, $pmsg) = @_;
     
     my $rspec = GeniXML::Parse($xml);
     if (! defined($rspec)) {
@@ -963,63 +1186,60 @@ sub CheckDatasets($$$)
 		$$pmsg = "Persistent dataset is not a valid URN";
 		return 1;
 	    }
-	    my $dataset_urn = $dataset_id;
-	    my ($dataset_authority, $type, $id) = GeniHRN::Parse($dataset_urn);
-	    my ($dataset_domain) = split(":", $dataset_authority);
+	    my $dataset_urn = GeniHRN->new($dataset_id);
 	    
 	    #
-	    # Separate project from name; this is how the rspec specifies
-	    # the dataset they want, since it might be in another project
+	    # For leases, the domain of the dataset has to match the
+	    # domain of aggregate, but for image backed datasets, we now
+	    # to transfer them as needed.
 	    #
-	    if ($id =~ /^([-\w]+)\/\/(.+)$/) {
-		$pid = $1;
-		$id  = $2;
-	    }
-
-	    #
-	    # The domain of the dataset has to match the domain of aggregate.
-	    # We also use this when creating a profile, so rspec might not
-	    # be bound.
-	    #
-	    if (defined($manager_urn)) {
-		my ($manager_authority) = GeniHRN::Parse($manager_urn);
-		my ($manager_domain) = split(":", $manager_authority);
+	    if ($class ne "local") {
+		if (defined($manager_urn)) {
+		    $manager_urn = GeniHRN->new($manager_urn);
 		
-		if ($manager_domain ne $dataset_domain) {
-		    $$pmsg = "Dataset $id is not located on $manager_authority";
-		    return 1;
-		}
-	    }
-	    next
-		if ($class eq "local");
-	    
-	    #
-	    # Not all backends have blockstore support.
-	    #
-	    if (!APT_Dataset::ValidBlockstoreBackend($dataset_urn)) {
-		$$pmsg = "Dataset $id is not on a valid aggregate";
-		return 1;
-	    }
-
-	    my $dataset = APT_Dataset->Lookup("$pid/$id");
-	    if (!defined($dataset)) {
-		$dataset = APT_Dataset->LookupByRemoteURN($dataset_urn);
-		if (!defined($dataset)) {
-		    # If it is for a local dataset, see if it plain lease
-		    # created via the classic interface or command line.
-		    # The backend can find those.
-		    if ($dataset_domain eq $OURDOMAIN) {
-			$dataset = Lease->Lookup($pid, $id);
-		    }
-		    if (!defined($dataset)) {
-			$$pmsg = "Persistent dataset '$pid/$id' does not exist";
+		    if ($manager_urn->domain() ne $dataset_urn->domain()) {
+			$$pmsg = "$dataset_urn is not located on $manager_urn";
 			return 1;
 		    }
 		}
+		#
+		# Not all backends have blockstore (lease) support.
+		#
+		if (!APT_Dataset::ValidBlockstoreBackend($dataset_urn)) {
+		    $$pmsg = "Dataset $dataset_urn is not on a valid aggregate";
+		    return 1;
+		}
 	    }
 	    #
-	    # XXX Need basic frontend permission checks?
+	    # So the rspec will refer to the dataset by the remote URN.
+	    # And it might be a classic dataset (so not in the apt_datasets
+	    # table). We want to be able to handle either of these cases.
 	    #
+	    my $dataset = APT_Dataset->LookupByRemoteURN($dataset_urn);
+	    if (!defined($dataset)) {
+		#
+		# Local image backed dataset or lease.
+		#
+		if ($dataset_urn->domain() eq $OURDOMAIN) {
+		    my $pid = $dataset_urn->project();
+		    my $id  = $dataset_urn->id();
+
+		    if ($dataset_urn->type() eq "imdataset") {
+			$dataset = Image->Lookup($pid, $id);
+			if ($dataset && !$dataset->isdataset()) {
+			    $$pmsg = "$dataset_urn is an image not a dataset ";
+			    return 1;
+			}
+		    }
+		    else {
+			$dataset = Lease->Lookup($pid, $id);
+		    }
+		}
+	    }
+	    if (!defined($dataset)) {
+		$$pmsg = "Persistent dataset '$dataset_urn' does not exist";
+		return 1;
+	    }
 	}
     }
     return 0;
@@ -1116,8 +1336,115 @@ sub SetSites($$$$$$)
 	$$pneedstitcher = 1
 	    if (keys(%linksites) > 1);
     }
+    foreach my $ref (GeniXML::FindNodesNS("n:routable_pool", $rspec,
+					$GeniXML::EMULAB_NS)->get_nodelist()) {
+	my $client_id   = GetVirtualId($ref);
+	my $manager_urn = GetManagerId($ref);	
+	my $site_id     = GeniXML::GetJacksSiteId($ref);
+
+	# Already bound in the rspec.
+	if (defined($manager_urn)) {
+	    if (!GeniHRN::IsValid($manager_urn)) {
+		$$perrmsg = "$client_id has an invalid manager URN";
+		return 1;
+	    }
+	}
+	# Or there is a site tag, and a site mapping for it.
+	elsif (defined($site_id)) {
+	    if (defined($sitemap)) {
+		my $site_mid = "site:" . $site_id;
+
+		if (!exists($sitemap->{$site_mid})) {
+		    $$perrmsg =
+			"No site mapping for node $client_id ($site_id)";
+		    return -1;
+		}
+		$manager_urn = $sitemap->{$site_mid};
+	    }
+	    else {
+		$manager_urn = $default_aggregate_urn;
+	    }
+	    if (!GeniHRN::IsValid($manager_urn)) {
+		$$perrmsg = "$site_id has an invalid manager URN";
+		return 1;
+	    }
+	    GeniXML::SetManagerId($ref, $manager_urn);
+	    GeniXML::SetJacksSiteManagerId($ref, $manager_urn);
+	}
+    }
+    
     $$prspecstr = GeniXML::Serialize($rspec);
     @$paggregate_urns = keys(%aggregates);
+    return 0;
+}
+
+#
+# Set the repository for the rspec. This is a top level element. At
+# some point we can think about per-node repos.
+#
+sub SetRepo($$$$$$)
+{
+    my ($prspecstr, $repourl, $reporef, $repohash, $geniuser, $perrmsg) = @_;
+
+    my $rspec = GeniXML::Parse($$prspecstr);
+    if (! defined($rspec)) {
+	$$perrmsg = "Could not parse rspec\n";
+	return -1;
+    }
+    my $repo = GeniXML::FindNodesNS("n:repository", $rspec,
+				    $GeniXML::EMULAB_NS)->pop();
+    if (! defined($repo)) {
+	$repo = GeniXML::AddElement("repository", $rspec, $GeniXML::EMULAB_NS);
+	GeniXML::SetText("type", $repo, "git");
+	GeniXML::SetText("url", $repo, $repourl);
+	GeniXML::SetText("refspec", $repo, $reporef);
+	GeniXML::SetText("commit", $repo, $repohash);
+    }
+    #
+    # Temporary, lets just throw an execute service onto each node.
+    # We put it before any existing execute services.
+    #
+    my $owner   = $geniuser->uid();
+    my $command = "cd /local && sudo chmod 777 . && umask 002 && ".
+	"git clone -n '$repourl' repository && " .
+	"cd repository && " .
+	"git config --add core.sharedRepository group && ".
+	"git checkout $repohash ";
+    if ($reporef =~ m"^(refs/|)heads/(.+)") {
+	my $branchname = $2;
+	$command .= "&& git branch -ft $branchname origin/$branchname" .
+	    "&& git checkout -B $branchname HEAD ";
+    }
+    $command .= "&& sudo chown -R $owner . ";
+
+    #
+    # Generate an SSH url and make that the push url so users can easily
+    # push up (assuming they have the proper credentials loaded).
+    #
+    my $url = new URI::URL $repourl;
+    my $host = $url->host();
+    my ($org,$project) = ($url->path() =~ /^\/([^\/]+)(\/.*)$/);
+    if (defined($org) && defined($project)) {
+	my $sshurl = "git\@${host}:${org}${project}";
+	$command .= "&& git remote set-url --push origin '$sshurl'";
+    }
+    
+    foreach my $node (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $service;
+	my $services = FindNodes("n:services", $node)->shift();
+	if (!defined($services)) {
+	    $services = GeniXML::AddElement("services", $node);
+	    $service  = GeniXML::AddElement("execute", $services);
+	}
+	else {
+	    $service = XML::LibXML::Element->new("execute");
+	    $services->insertBefore($service,
+				    FindNodes("n:execute", $services)->shift());
+	}
+	GeniXML::SetText("shell", $service, "/bin/sh");
+	GeniXML::SetText("command", $service, $command);
+    }
+    $$prspecstr = GeniXML::Serialize($rspec);
     return 0;
 }
 
@@ -1224,6 +1551,175 @@ sub IsHead($)
     return ($head == $self->version() ? 1 : 0);
 }
 
+sub HeadVersionNumber($)
+{
+    my ($self) = @_;
+
+    my $profileid = $self->profileid();
+
+    my $query_result =
+	DBQueryWarn("select max(version) from apt_profile_versions ".
+		    "where profileid='$profileid' and deleted is null");
+    return -1
+	if (!$query_result || !$query_result->numrows);
+
+    my ($head) = $query_result->fetchrow_array();
+    return $head;
+}
+
+# Number of undeleted versions.
+sub VersionCount($)
+{
+    my ($self) = @_;
+
+    my $profileid = $self->profileid();
+
+    my $query_result =
+	DBQueryWarn("select count(*) from apt_profile_versions ".
+		    "where profileid='$profileid' and deleted is null");
+    return -1
+	if (!$query_result || !$query_result->numrows);
+
+    my ($count) = $query_result->fetchrow_array();
+    return $count;
+}
+
+# Insert an image record.
+sub InsertImageRecord($$$)
+{
+    my ($self, $client_id, $image) = @_;
+    my $name      = $self->name();
+    my $profileid = $self->profileid();
+    my $version   = $self->version();
+    my $pid       = $self->pid();
+    my $pid_idx   = $self->pid_idx();
+    my $gid       = $self->gid();
+    my $gid_idx   = $self->gid_idx();
+    my $safe_id   = DBQuoteSpecial($client_id);
+    my $safe_image= DBQuoteSpecial($image);
+    my $safe_auth = "null";
+    my $safe_ospid= "null";
+    my $safe_os   = "null";
+    my $safe_vers = "null";
+    my $safe_lpid = "null";
+
+    if (GeniHRN::IsValid($image)) {
+	my $hrn = GeniHRN->new($image);
+	my ($authority, $ospid, $os, $vers) = $hrn->ParseImage();
+	if (defined($authority) && $authority ne "") {
+	    $safe_auth = DBQuoteSpecial($authority)
+	}
+	if (defined($ospid) && $ospid ne "") {
+	    $safe_ospid = DBQuoteSpecial($ospid);
+	}
+	if (defined($os) && $os ne "") {
+	    $safe_os = DBQuoteSpecial($os);
+	}
+	if (defined($vers) && $vers =~ /^\d+$/) {
+	    $safe_vers = DBQuoteSpecial($vers);
+	}
+	# Strip version;
+	$image =~ s/:\d+$//;
+	# This // vs : thing is a pain.
+	$image =~ s/\/\//:/;
+	my $safe_foo = DBQuoteSpecial($image);
+
+	# Try to map local project.
+	my $lpid;
+
+	if ($hrn->domain() eq $OURDOMAIN && defined($ospid)) {
+	    my $project = Project->Lookup($ospid);
+	    if (defined($project)) {
+		$lpid = $project->pid();
+	    }
+	}
+	if (!defined($lpid) && $MAINSITE) {
+	    #
+	    # Use the image server to map the image to a local project urn.
+	    #
+	    my $query_result =
+		DBQueryWarn("select project_urn from ims.images ".
+			    "where urn=$safe_foo");
+	    if ($query_result && $query_result->numrows) {
+		my ($project_urn) = $query_result->fetchrow_array();
+		my $phrn = GeniHRN->new($project_urn);
+		$lpid = $phrn->project();
+	    }
+	}
+	$safe_lpid = DBQuoteSpecial($lpid)
+	    if (defined($lpid));
+    }
+    return -1
+	if (!DBQueryWarn("replace into apt_profile_images set ".
+			 "  name='$name', profileid=$profileid, ".
+			 "  version='$version', ".
+			 "  pid='$pid',pid_idx='$pid_idx', ".
+			 "  gid='$gid',gid_idx='$gid_idx', ".
+			 "  client_id=$safe_id, ".
+			 "  authority=$safe_auth,ospid=$safe_ospid, ".
+			 "  os=$safe_os,osvers=$safe_vers,".
+			 "  local_pid=$safe_lpid, ".
+			 "  image=$safe_image"));
+
+    return 0;
+}
+
+#
+# Look at the rspec and find all images being used. 
+#
+sub InsertImageRecords($$)
+{
+    my ($self, $perrmsg) = @_;
+    my $profileid = $self->profileid();
+    my $version   = $self->version();
+
+    return 0
+	if ($self->rspec() eq "");
+    
+    my $rspec = GeniXML::Parse($self->rspec());
+    if (! defined($rspec)) {
+	$$perrmsg = "Could not parse rspec\n";
+	return -1;
+    }
+    #
+    # First make sure we can find all the images.
+    #
+    my %images = ();
+
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $client_id = GetVirtualId($ref);
+	my $diskref = GeniXML::GetDiskImage($ref);
+	my $image_urn;
+
+	if (defined($diskref)) {
+	    $image_urn = GeniXML::GetText("name", $diskref);
+	}
+	if (defined($image_urn)) {
+	    next if
+		(!GeniHRN::IsValid($image_urn));
+	    
+	    my $hrn = GeniHRN->new($image_urn);
+	    my ($authority, $ospid, $os, $vers) = $hrn->ParseImage();
+	    if (!defined($ospid)) {
+		print STDERR "$image_urn\n";
+		next;
+	    }
+	    $images{$client_id} = $image_urn;
+	}
+    }
+    # Now delete the existing records.
+    DBQueryWarn("delete from apt_profile_images ".
+		"where profileid='$profileid' and version='$version'")
+	or return -1;
+
+    # And new ones.
+    foreach my $client_id (keys(%images)) {
+	$self->InsertImageRecord($client_id, $images{$client_id}) == 0
+	    or return -1;
+    }
+    return 0;
+}
+
 #
 # Publish a profile. Not sure what this really means yet.
 #
@@ -1240,7 +1736,21 @@ sub Publish($)
     
     $self->{'DBROW'}->{'published'} = time();
     return 0;
+}
 
+#
+# Set the lastused datetime and usecount for the Picker.
+#
+sub BumpLastUsed($)
+{
+    my ($self) = @_;
+    my $profileid = $self->profileid();
+
+    return -1
+	if (! DBQueryWarn("update apt_profiles set ".
+			  "  lastused=now(),usecount=usecount+1 ".
+			  "where profileid='$profileid'"));
+    return 0;
 }
 
 #
@@ -1262,6 +1772,226 @@ sub AdminURL($)
 	if ($project->Brand()->isEmulab());
 
     return $wwwbase . "/manage_profile.php?uuid=$uuid";
+}
+
+#
+# Return a list of all profile versions.
+#
+sub AllVersions($)
+{
+    my ($self) = @_;
+    my $profileid = $self->profileid();
+    my @result = ();
+
+    my $query_result =
+	DBQueryWarn("select profileid,version from apt_profile_versions ".
+		    "where profileid='$profileid' and deleted is null ".
+		    "order by version desc");
+    return ()
+	if (!$query_result || !$query_result->numrows);
+
+    while (my ($profileid,$version) = $query_result->fetchrow_array()) {
+	my $profile = APT_Profile->Lookup($profileid, $version);
+	push(@result, $profile)
+	    if ($profile);
+    }
+    return @result;
+}
+
+#
+# List of node client ids for a profile.
+#
+sub NodeClientIDs($)
+{
+    my ($self) = @_;
+    my %result = ();
+
+    my $rspec = GeniXML::Parse($self->rspec());
+    if (! defined($rspec)) {
+	print STDERR "NodeClientIDs: Could not parse rspec\n";
+	return -1;
+    }
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $client_id = GeniXML::GetVirtualId($ref);
+	$result{$client_id} = $client_id;
+    }
+    return values(%result);
+}
+
+#
+# Run a portal converted profile rspec though the converter to update
+# the geni-lib script.
+#
+sub Convert2Genilib($)
+{
+    my ($self) = @_;
+    my $profileid = $self->profileid();
+    my $version   = $self->version();
+
+    my ($in, $filename) = tempfile("/tmp/convertXXXXX", UNLINK => 1);
+    if (!defined($in)) {
+	print STDERR "Could not open temporary file for rspec\n";
+	return -1;
+    }
+    print $in $self->rspec();
+    my $output = emutil::ExecQuiet("$CONVERTER -r $filename");
+    if ($?) {
+	print STDERR $output;
+	print STDERR "*** Could not convert rspec to geni-lib\n";
+	return -1;
+    }
+    my $safe_script = DBQuoteSpecial($output);
+    return -1
+	if (! DBQueryWarn("update apt_profile_versions set ".
+			  "   script=$safe_script ".
+			  "where profileid='$profileid' and ".
+			  "      version='$version'"));
+    $self->{'DBROW'}->{'script'} = $output;
+    return 0;
+}
+
+###################################################################
+package APT_Profile::ImageInfo;
+use emdb;
+use Carp;
+use English;
+use GeniHRN;
+use Data::Dumper;
+use overload ('""' => 'Stringify');
+use vars qw($AUTOLOAD);
+
+#
+# Stringify for output.
+#
+sub Stringify($)
+{
+    my ($self) = @_;
+    
+    my $pid       = $self->pid();
+    my $os        = $self->os();
+    my $client_id = $self->client_id();
+    my $name      = $self->name();
+    my $version   = $self->version();
+    my $osvers    = "";
+    if ($self->osvers()) {
+	$osvers = ":" . $self->osvers();
+    }
+    return "[ImageInfo: $pid,$name,$version,$client_id,${os}${osvers}]";
+}
+
+#
+# Lookup all image records for a profile. This is for a specfic
+# version of a profile.
+#
+sub LookupForProfile($$$)
+{
+    my ($class, $profile, $pref) = @_;
+    my $profileid = $profile->profileid();
+    my $version   = $profile->version();
+    my %result    = ();
+
+    my $query_result =
+	DBQueryWarn("select * from apt_profile_images ".
+		    "where profileid='$profileid' and version='$version'");
+    return -1
+	if (!defined($query_result));
+
+    while (my $row = $query_result->fetchrow_hashref()) {
+	my $client_id      = $row->{'client_id'};
+	my $self           = {};
+	$self->{'DBROW'}   = $row;
+	bless($self, $class);
+	$result{$client_id} = $self;
+    }
+    $$pref = \%result;
+    return 0;
+}
+
+#
+# Find profiles using this image, that are not the profile associated
+# with this image.
+#
+sub FindProfilesUsing($$)
+{
+    my ($self, $pref) = @_;
+    my $safe_urn;
+    my @result    = ();
+
+    if (ref($self)) {
+	$safe_urn = DBQuoteSpecial($self->image());
+    }
+    elsif (GeniHRN::IsValid($self)) {
+	$safe_urn = DBQuoteSpecial($self);
+    }
+    else {
+	return -1;
+    }
+
+    my $query_result =
+	DBQueryWarn("select distinct profileid,version,name ".
+		    "   from apt_profile_images ".
+		    "where image=$safe_urn ".
+		    "order by name,version");
+    return -1
+	if (!$query_result);
+
+    while (my ($id,$vers) = $query_result->fetchrow_array()) {
+	my $profile = APT_Profile->Lookup($id, $vers);
+	next
+	    if (!defined($profile));
+	push(@result, $profile);
+    }
+    @$pref = @result;
+    return 0;
+}
+
+#
+# Find Images by local_pid,osname so we can figure out who is using
+# images created in a profile, any version.
+#
+sub FindImagesByName($$$$)
+{
+    my ($class, $lpid, $osname, $pref) = @_;
+    my @result        = ();
+
+    my $safe_lpid   = DBQuoteSpecial($lpid);
+    my $safe_osname = DBQuoteSpecial($osname);
+
+    my $query_result =
+	DBQueryWarn("select distinct * from apt_profile_images ".
+		    "where local_pid=$safe_lpid and os=$safe_osname ".
+		    "order by name,version");
+    return -1
+	if (!$query_result);
+
+    while (my $row = $query_result->fetchrow_hashref()) {
+	my $self           = {};
+	$self->{'DBROW'}   = $row;
+	bless($self, $class);
+	push(@result, $self);
+    }
+    @$pref = @result;
+    return 0;
+}
+
+AUTOLOAD {
+    my $self  = $_[0];
+    my $type  = ref($self) or croak "$self is not an object";
+    my $name  = $AUTOLOAD;
+    $name =~ s/.*://;   # strip fully-qualified portion
+
+    # A DB row proxy method call.
+    if (exists($self->{'DBROW'}->{$name})) {
+	return $self->{'DBROW'}->{$name};
+    }
+    carp("No such slot '$name' field in class $type");
+    return undef;
+}
+
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'DBROW'} = undef;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

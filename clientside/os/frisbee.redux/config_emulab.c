@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2016 University of Utah and the Flux Group.
+ * Copyright (c) 2010-2017 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -56,9 +56,10 @@ struct emulab_configstate {
 	int image_maxwait;	/* sitevar:images/create/maxwait (in min) */
 	int image_maxiwait;	/* sitevar:images/create/idlewait (in min) */
 	int image_maxrate_dyn;	/* sitevar:images/frisbee/maxrate_dynamic */
-	int image_maxrate_std;	/* sitevar:images/frisbee/maxrate_std (in MB/s) */
-	int image_maxrate_usr;	/* sitevar:images/frisbee/maxrate_usr (in MB/s) */
+	int image_maxrate_std;	/* sitevar:images/frisbee/maxrate_std (in Mb/s) */
+	int image_maxrate_usr;	/* sitevar:images/frisbee/maxrate_usr (in Mb/s) */
 	int image_maxlinger;	/* sitevar:images/frisbee/maxlinger (in sec) */
+	int image_clientreport;	/* sitevar:images/frisbee/heartbeat (in sec) */
 };
 
 /* Extra info associated with a image information entry */
@@ -131,6 +132,8 @@ static uint32_t get_maxrate_dyn = 0;		/* non-zero means use dynamic */
 static uint32_t get_maxrate_std = 72000000;	/* zero means no limit */
 static uint32_t get_maxrate_usr = 54000000;	/* zero means no limit */
 static int      get_maxlinger = 3600;		/* zero means forever */
+static int	get_clientreport = 0;		/* zero means none */
+static char *	get_eserver = "localhost";	/* not a sitevar right now */
 
 /* Standard image directory: assumed to be "TBROOT/images" */
 static char *STDIMAGEDIR;
@@ -198,18 +201,18 @@ emulab_read(void)
 	if (val) {
 		ival = atoi(val);
 		/* in GB, allow up to 10TB */
-		if (ival >= 0 && ival < 10000)
-			put_maxsize = (uint64_t)ival * 1024 * 1024 * 1024;
+		if (ival >= 0 && ival <= 10000)
+			put_maxsize = (uint64_t)ival * 1000 * 1000 * 1000;
 		free(val);
 	}
 	FrisLog("  image_put_maxsize = %d GB",
-		(int)(put_maxsize/(1024*1024*1024)));
+		(int)(put_maxsize/(1000*1000*1000)));
 
 	val = emulab_getsitevar("images/create/maxwait");
 	if (val) {
 		ival = atoi(val);
 		/* in minutes, allow up to about 10TB @ 10MB/sec */
-		if (ival >= 0 && ival < 20000)
+		if (ival >= 0 && ival <= 20000)
 			put_maxwait = (uint32_t)ival * 60;
 		free(val);
 	}
@@ -220,7 +223,7 @@ emulab_read(void)
 	if (val) {
 		ival = atoi(val);
 		/* in minutes, allow up to about 10TB @ 10MB/sec */
-		if (ival >= 0 && ival < 20000)
+		if (ival >= 0 && ival <= 20000)
 			put_maxiwait = (uint32_t)ival * 60;
 		free(val);
 	}
@@ -240,29 +243,44 @@ emulab_read(void)
 	if (val) {
 		ival = atoi(val);
 		/* in bytes/sec, allow up to 2Gb/sec */
-		if (ival >= 0 && ival < 2000000000)
+		if (ival >= 0 && ival <= 2000000000)
 			get_maxrate_std = (uint32_t)ival;
 		free(val);
 	}
-	if (get_maxrate_dyn)
-		FrisLog("  image_get_maxrate_std = N/A");
+	if (get_maxrate_std == 0)
+		FrisLog("  image_get_maxrate_std = unlimited");
 	else
-		FrisLog("  image_get_maxrate_std = %d MB/sec",
+		FrisLog("  image_get_maxrate_std = %d Mbit/sec",
 			(int)(get_maxrate_std/1000000));
 
 	val = emulab_getsitevar("images/frisbee/maxrate_usr");
 	if (val) {
 		ival = atoi(val);
 		/* in bytes/sec, allow up to 2Gb/sec */
-		if (ival >= 0 && ival < 2000000000)
+		if (ival >= 0 && ival <= 2000000000)
 			get_maxrate_usr = (uint32_t)ival;
 		free(val);
 	}
-	if (get_maxrate_dyn)
-		FrisLog("  image_get_maxrate_usr = N/A");
+	if (get_maxrate_usr == 0)
+		FrisLog("  image_get_maxrate_usr = unlimited");
 	else
-		FrisLog("  image_get_maxrate_usr = %d MB/sec",
+		FrisLog("  image_get_maxrate_usr = %d Mbit/sec",
 			(int)(get_maxrate_usr/1000000));
+
+	val = emulab_getsitevar("images/frisbee/heartbeat");
+	if (val) {
+		ival = atoi(val);
+		if (ival < 0)
+			ival = 0;
+		get_clientreport = ival;
+		free(val);
+	}
+	if (get_clientreport > 0) {
+		FrisLog("  clients report progress every %d seconds",
+			get_clientreport);
+		if (get_eserver)
+			FrisLog("  progress events sent to %s", get_eserver);
+	}
 
 	val = emulab_getsitevar("images/frisbee/maxlinger");
 	if (val) {
@@ -295,6 +313,7 @@ emulab_save(void)
 	cs->image_maxrate_std = get_maxrate_std;
 	cs->image_maxrate_usr = get_maxrate_usr;
 	cs->image_maxlinger = get_maxlinger;
+	cs->image_clientreport = get_clientreport;
 
 	return (void *)cs;
 }
@@ -306,7 +325,7 @@ emulab_restore(void *state)
 
 	put_maxsize = cs->image_maxsize;
 	FrisLog("  image_put_maxsize = %d GB",
-		(int)(put_maxsize/(1024*1024*1024)));
+		(int)(put_maxsize/(1000*1000*1000)));
 	put_maxwait = cs->image_maxwait;
 	FrisLog("  image_put_maxwait = %d min",
 		(int)(put_maxwait/60));
@@ -317,17 +336,24 @@ emulab_restore(void *state)
 	FrisLog("  image_get_maxrate_dyn = %s",
 		get_maxrate_dyn ? "true" : "false");
 	get_maxrate_std = cs->image_maxrate_std;
-	if (get_maxrate_dyn)
-		FrisLog("  image_get_maxrate_std = N/A");
+	if (get_maxrate_std == 0)
+		FrisLog("  image_get_maxrate_std = unlimited");
 	else
-		FrisLog("  image_get_maxrate_std = %d MB/sec",
+		FrisLog("  image_get_maxrate_std = %d Mbit/sec",
 			(int)(get_maxrate_std/1000000));
 	get_maxrate_usr = cs->image_maxrate_usr;
-	if (get_maxrate_dyn)
-		FrisLog("  image_get_maxrate_usr = N/A");
+	if (get_maxrate_usr == 0)
+		FrisLog("  image_get_maxrate_usr = unlimited");
 	else
-		FrisLog("  image_get_maxrate_usr = %d MB/sec",
+		FrisLog("  image_get_maxrate_usr = %d Mbit/sec",
 			(int)(get_maxrate_usr/1000000));
+	get_clientreport = cs->image_clientreport;
+	if (get_clientreport > 0) {
+		FrisLog("  clients report progress every %d seconds",
+			get_clientreport);
+		if (get_eserver)
+			FrisLog("  progress events sent to %s", get_eserver);
+	}
 	get_maxlinger = cs->image_maxlinger;
 	if (get_maxlinger == -1)
 		FrisLog("  server exits after last client leaves");
@@ -361,6 +387,7 @@ set_get_values(struct config_host_authinfo *ai, int ix)
 {
 	struct config_imageinfo *ii = &ai->imageinfo[ix];
 	char str[256];
+	int maxrate;
 
 	/* get_methods */
 	ii->get_methods = CONFIG_IMAGE_MCAST;
@@ -392,13 +419,33 @@ set_get_values(struct config_host_authinfo *ai, int ix)
 		ii->get_timeout = 60;
 
 	/*
-	 * get_options: for dynamic rate adjustment, we use the std/usr
-	 * bandwidth value as the maximum bandwidth.
+	 * get_options:
+	 *  - max std/usr rate of zero means unlimited.
+	 *  - for dynamic rate adjustment, we use the std/usr
+	 *    bandwidth value as the maximum bandwidth.
 	 */
-	snprintf(str, sizeof str, " %s-W %u",
-		 get_maxrate_dyn ? "-D " : "",
-		 isindir(STDIMAGEDIR, ii->path) ?
-		 get_maxrate_std : get_maxrate_usr);
+	maxrate = isindir(STDIMAGEDIR, ii->path) ?
+		get_maxrate_std : get_maxrate_usr;
+	if (maxrate)
+		snprintf(str, sizeof str, " -W %u", maxrate);
+	else
+		snprintf(str, sizeof str, " -G 0");
+	if (get_maxrate_dyn)
+		strcat(str, " -D");
+
+	/*
+	 * for client reporting we set the interval and the event server
+	 */
+	if (get_clientreport > 0) {
+		int len = strlen(str);
+		snprintf(&str[len], sizeof(str) - len, " -H %d",
+			 get_clientreport);
+		if (get_eserver) {
+			len = strlen(str);
+			snprintf(&str[len], sizeof(str) - len, " -E %s",
+				 get_eserver);
+		}
+	}
 #if 0
 	/*
 	 * Should not be needed anymore. If the multicast group is getting
@@ -415,6 +462,18 @@ set_get_values(struct config_host_authinfo *ai, int ix)
 	ii->put_itimeout = 0;
 	ii->put_options = NULL;
 	ii->put_oldversion = NULL;
+
+	/*
+	 * parent GET options:
+	 *  - if we are making client reports, make sure that our downloads
+	 *    from a parent enable those.
+	 *    XXX right now, the server always dictates the interval.
+	 */
+	if (get_clientreport > 0) {
+		snprintf(str, sizeof str, " -H 0");
+		ii->pget_options = mystrdup(str);
+	} else
+		ii->pget_options = NULL;
 }
 
 /*
@@ -464,6 +523,9 @@ set_put_values(struct config_host_authinfo *ai, int ix)
 	ii->get_methods = 0;
 	ii->get_timeout = 0;
 	ii->get_options = NULL;
+
+	/* and the pget_* fields */
+	ii->pget_options = NULL;
 }
 
 #define FREE(p) { if (p) free(p); }
@@ -488,6 +550,7 @@ emulab_free_host_authinfo(struct config_host_authinfo *ai)
 			FREE(ai->imageinfo[i].get_options);
 			FREE(ai->imageinfo[i].put_oldversion);
 			FREE(ai->imageinfo[i].put_options);
+			FREE(ai->imageinfo[i].pget_options);
 			FREE(ai->imageinfo[i].extra);
 		}
 		free(ai->imageinfo);
@@ -1520,9 +1583,11 @@ emulab_get_host_authinfo(struct in_addr *req, struct in_addr *host,
 	assert(res != NULL);
 
 	nrows = mysql_num_rows(res);
-	if (nrows > MAXGIDS)
+	if (nrows > MAXGIDS) {
 		FrisWarning("User '%s' in more than %d groups, truncating list",
 			    ei->sname, MAXGIDS);
+		nrows = MAXGIDS;
+	}
 	for (i = 0; i < nrows; i++) {
 		row = mysql_fetch_row(res);
 		if (get != NULL) {
@@ -1641,7 +1706,7 @@ emulab_get_host_authinfo(struct in_addr *req, struct in_addr *host,
 		} else {
 			/* Find all images that this pid/gid can PUT */
 			res = mydb_query("SELECT i.pid,i.gid,i.imagename,"
-					 "v.path,i.imageid,v.version"
+					 "v.path,i.imageid,v.version,NULL"
 					 " FROM images as i"
 					 " LEFT JOIN image_versions as v on "
 					 "    v.imageid=i.imageid and "
@@ -1650,7 +1715,7 @@ emulab_get_host_authinfo(struct in_addr *req, struct in_addr *host,
 					 " AND (i.gid='%s' OR"
 					 "     (i.gid=i.pid AND v.shared=1))"
 					 " ORDER BY i.pid,i.gid,i.imagename",
-					 6, ei->pid, ei->gid);
+					 7, ei->pid, ei->gid);
 		}
 		assert(res != NULL);
 

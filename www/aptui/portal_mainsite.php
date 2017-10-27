@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,6 +40,7 @@ if ($_SERVER["SERVER_NAME"] == "www.aptlab.net") {
     $WWWHOST      = "www.aptlab.net";
     $APTBASE      = "https://www.aptlab.net";
     $APTMAIL      = "APT Operations <portal-ops@aptlab.net>";
+    $SUPPORT      = "portal-ops@aptlab.net";
     $APTTITLE     = "APT";
     $FAVICON      = "aptlab.ico";
     $APTLOGO      = "aptlogo.png";
@@ -53,10 +54,9 @@ if ($_SERVER["SERVER_NAME"] == "www.aptlab.net") {
         $APTBASE .= "/" . $matches[1];
     }
     $PORTAL_MANUAL         = "http://docs.aptlab.net";
-    $PORTAL_MOTD_SITEVAR   = "aptlab/message";
     $PORTAL_HELPFORUM      = "apt-users";
     $PORTAL_PASSWORD_HELP  = "Aptlab.net or Emulab.net Username";
-    $PORTAL_NSFNUMBER      = "CNS-1338155";
+    $PORTAL_NSFNUMBER      = "1338155";
     $DEFAULT_AGGREGATE     = "Utah APT";
     $DEFAULT_AGGREGATE_URN = "urn:publicid:IDN+apt.emulab.net+authority+cm";
     $PORTAL_GENESIS        = "aptlab";
@@ -70,6 +70,7 @@ elseif ($_SERVER["SERVER_NAME"] == "www.cloudlab.us") {
     $WWWHOST      = "www.cloudlab.us";
     $APTBASE      = "https://www.cloudlab.us";
     $APTMAIL      = "CloudLab Operations <portal-ops@cloudlab.us>";
+    $SUPPORT      = "portal-ops@cloudlab.us";
     $APTTITLE     = "CloudLab";
     $FAVICON      = "cloudlab.ico";
     $APTLOGO      = "cloudlogo.png";
@@ -85,10 +86,9 @@ elseif ($_SERVER["SERVER_NAME"] == "www.cloudlab.us") {
 	$APTBASE .= "/" . $matches[1];
     }
     $PORTAL_MANUAL       = "http://docs.cloudlab.us";
-    $PORTAL_MOTD_SITEVAR = "cloudlab/message";
     $PORTAL_HELPFORUM    = "cloudlab-users";
     $PORTAL_PASSWORD_HELP= "CloudLab.us or Emulab.net Username";
-    $PORTAL_NSFNUMBER    = "CNS-1302688";
+    $PORTAL_NSFNUMBER    = "1419199";
     $DEFAULT_AGGREGATE   = "Utah Cloudlab";
     $PORTAL_GENESIS      = "cloudlab";
     $PORTAL_NAME         = "CloudLab";
@@ -101,6 +101,7 @@ elseif ($ISALTDOMAIN && $_SERVER["SERVER_NAME"] == "www.phantomnet.org") {
     $WWWHOST      = "www.phantomnet.org";
     $APTBASE      = "https://www.phantomnet.org";
     $APTMAIL      = "PhantomNet Operations <portal-ops@phantomnet.org>";
+    $SUPPORT      = "portal-ops@phantomnet.org";
     $APTTITLE     = "PhantomNet";
     $FAVICON      = "phantomnet.ico";
     $APTLOGO      = "phantomlogo.png";
@@ -116,13 +117,44 @@ elseif ($ISALTDOMAIN && $_SERVER["SERVER_NAME"] == "www.phantomnet.org") {
 	$APTBASE .= "/" . $matches[1];
     }
     $PORTAL_MANUAL         = "http://docs.phantomnet.org";
-    $PORTAL_MOTD_SITEVAR   = "phantomnet/message";
     $PORTAL_HELPFORUM      = "phantomnet-users";
     $PORTAL_PASSWORD_HELP  = "PhantomNet.org or Emulab.net Username";
-    $PORTAL_NSFNUMBER      = "CNS-1305384";
+    $PORTAL_NSFNUMBER      = "1305384";
     $DEFAULT_AGGREGATE     = "Emulab";
     $DEFAULT_AGGREGATE_URN = "urn:publicid:IDN+emulab.net+authority+cm";
     $PORTAL_GENESIS        = "phantomnet";
     $PORTAL_NAME           = "PhantomNet";
+}
+elseif ($_SERVER["SERVER_NAME"] == "www.powderwireless.net") {
+    $ISVSERVER    = 1;
+    $TBAUTHDOMAIN = ".powderwireless.net";
+    $COOKDIEDOMAIN= "www.powderwireless.net";
+    $APTHOST      = "www.powderwireless.net";
+    $WWWHOST      = "www.powderwireless.net";
+    $APTBASE      = "https://www.powderwireless.net";
+    $APTMAIL      = "Powder Wireless Operations <powder-ops@powderwireless.net>";
+    $SUPPORT      = "powder-ops@powderwireless.net";
+    $APTTITLE     = "Powder";
+    $FAVICON      = "powder.ico";
+    $APTLOGO      = "powderlogo.png";
+    $APTSTYLE     = "powder.css";
+    $ISEMULAB     = 0;
+    $ISPOWDER     = 1;
+    #$GOOGLEUA     = 'UA-42844769-2';
+    $TBMAILTAG    = "powderwireless.net";
+    $EXTENSIONS   = "portal-extensions@powderwireless.net";
+    $TBAUTHTIMEOUT= (24 * 3600 * 14);
+    # For devel trees
+    if (preg_match("/\/([\w\/]+)$/", $WWW, $matches)) {
+	$APTBASE .= "/" . $matches[1];
+    }
+    $PORTAL_MANUAL         = "http://docs.powderwireless.net";
+    $PORTAL_HELPFORUM      = "powder-users";
+    $PORTAL_PASSWORD_HELP  = "powderwireless.net or emulab.net Username";
+    $PORTAL_NSFNUMBER      = "??????";
+    $DEFAULT_AGGREGATE     = "Emulab";
+    $DEFAULT_AGGREGATE_URN = "urn:publicid:IDN+emulab.net+authority+cm";
+    $PORTAL_GENESIS        = "powder";
+    $PORTAL_NAME           = "Powder";
 }
 ?>

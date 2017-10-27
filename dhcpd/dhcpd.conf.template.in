@@ -57,6 +57,22 @@ class "PXE" {
 	option PXE.discovery-control 8;
 }
 
+on commit {
+    if (@BOOTINFO_EVENTS@ = 0) {
+	if (substring (option vendor-class-identifier, 0, 9) = "PXEClient") {
+	    set boot = "PXE";
+        } elsif (substring (option vendor-class-identifier, 0, 6) = "U-boot") {
+	    set boot = "PXE";
+        } else {
+	    set boot = "OS";
+        }
+        set clip = binary-to-ascii(10, 8, ".", leased-address);
+    	set clhw = binary-to-ascii(16, 8, ":", substring(hardware, 1, 6));
+
+	execute("@prefix@/sbin/reportboot", clip, clhw, boot);
+    }
+}
+
 @DHCPD_CONTROLNET_DECL@
  
 shared-network emulab {

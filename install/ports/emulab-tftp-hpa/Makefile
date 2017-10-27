@@ -7,7 +7,7 @@
 
 PORTNAME=	tftp-hpa
 PORTVERSION=	5.2
-PORTREVISION=	1
+PORTREVISION=	2
 #CATEGORIES=	net
 CATEGORIES=	misc
 MASTER_SITES=	http://www.emulab.net/distributions/
@@ -23,8 +23,6 @@ GNU_CONFIGURE=	YES
 USES=		gmake
 
 DESTDIRNAME=	INSTALLROOT
-
-CONFIGURE_ARGS+=--without-tcpwrappers
 
 # for now only install the daemon
 INSTALL_WRKSRC=	${WRKSRC}/tftpd

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2015 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -39,11 +39,14 @@ use Data::Dumper;
 sub usage()
 {
     print "Usage: deleteimagedata [-d] <image urn> <image uuid>\n";
+    print "Usage: deleteimagedata [-d] <imageid>\n";
     exit(1);
 }
 my $optlist  = "d";
 my $debug    = 0;
 my $errormsg;
+my $imageurn;
+my $imageuuid;
 
 #
 # Configure variables
@@ -80,8 +83,7 @@ use GeniAuthority;
 use GeniImage;
 use GeniHRN;
 use libEmulab;
-use Image;
-use OSinfo;
+use OSImage;
 
 if (!$PGENISUPPORT) {
     print STDERR "You are not a protogeni site\n";
@@ -102,10 +104,34 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{"d"})) {
     $debug = 1;
 }
-usage()
-    if (@ARGV != 2);
-usage()
-    if (! GeniHRN::IsValid($ARGV[0]));
+if (@ARGV == 2) {
+    usage()
+	if (! GeniHRN::IsValid($ARGV[0]));
+    usage()
+	if (! ValidUUID($ARGV[1]));
+    ($imageurn,$imageuuid) = @ARGV;
+}
+elsif (@ARGV == 1) {
+    my $image = OSImage->Lookup($ARGV[0]);
+    if (!defined($image)) {
+	fatal("No such image!");
+    }
+    $imageurn = $image->urn();
+    
+    #
+    # If no version on the command line, we want to delete the entire
+    # descriptor at the server.
+    #
+    if ($ARGV[0] =~ /:\d+$/) {
+	$imageuuid = $image->uuid();
+    }
+    else {
+	$imageuuid = $image->image_uuid();
+    }
+}
+else {
+    usage();
+}
 
 # Connect to the proper DB.
 DBConnect(GENICM_DBNAME());
@@ -125,7 +151,7 @@ Genixmlrpc->SetContext($context);
 # Shorten default timeout.
 Genixmlrpc->SetTimeout(15);
 
-if (GeniImage::DeleteImageData($ARGV[0], $ARGV[1], \$errormsg)) {
+if (GeniImage::DeleteImageData($imageurn, $imageuuid, \$errormsg)) {
     fatal($errormsg);
 }
 exit(0);

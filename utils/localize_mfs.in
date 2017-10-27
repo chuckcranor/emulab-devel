@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2014 University of Utah and the Flux Group.
+# Copyright (c) 2010-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -31,10 +31,17 @@ use Data::Dumper;
 #
 sub usage()
 {
-    print("Usage: localize_mfs [-d] [-c vga|sio|sio2|sio3|sio4|null] <path>\n");
+    print("Usage: localize_mfs [-d] [-c console] [-F version] <path>\n");
+    print("  -d          Turn on debugging.\n");
+    print("  -c console  Set the MFS console device to one of:\n");
+    print("              'vga', 'sio', 'sio2', 'sio3', 'sio4', 'null'\n");
+    print("              NOTE: not needed with newer MFS setups\n");
+    print("  -F version  Set kernel version used in a FreeBSD MFS:\n");
+    print("              One of: '8', '9', or '10'\n");
+    print("              Only applies to FreeBSD MFSes (duh!)\n");
     exit(-1);
 }
-my $optlist = "dc:i";
+my $optlist = "dc:F:i";
 my $debug   = 0;
 my $igbcruft= 0;
 
@@ -46,6 +53,7 @@ my $ETCDIR	= "$TB/etc";
 my $ELABINELAB  = @ELABINELAB@;
 my $MFSCONSOLE  = "@NODECONSOLE@";
 my $OURTIMEZONE = "@OURTIMEZONE@";
+my $FBSDKERNEL  = 8;
 
 # Need these below.
 my $FBSD_MAJOR;
@@ -90,6 +98,7 @@ my $NTPCONF	= "$ETCDIR/image_ntp.conf";
 
 # Protos
 sub fatal($);
+sub RootPubkeyList();
 sub LocalizeBSD();
 sub LocalizeLinux($);
 sub ExecQuiet($);
@@ -110,6 +119,15 @@ if (defined($options{"i"})) {
 }
 if (defined($options{"c"})) {
     $MFSCONSOLE = $options{"c"};
+    if ($MFSCONSOLE !~ /^(vga|sio|sio2|sio3|sio4|null)$/) {
+	fatal("Invalid console type '$MFSCONSOLE'");
+    }
+}
+if (defined($options{"F"})) {
+    $FBSDKERNEL = $options{"F"};
+    if ($FBSDKERNEL !~ /^(8|9|10)$/) {
+	fatal("Invalid FreeBSD kernel version '$FBSDKERNEL'");
+    }
 }
 usage() 
     if (@ARGV != 1);
@@ -165,6 +183,93 @@ foreach my $extension ("lzma", "bz2", "gz") {
 fatal("Do not know what to do with $path");
 
 #
+# Figure out what root pubkey(s) to use. Originally, we just copied over
+# *.pub, but that gets a whole lot of weird crap on the mothership. So now
+# we try to be more selective:
+#
+# To keep up with the cool kids, we want to use an Ed25519 key
+# (id_ed25519.pub) if possible.
+#
+# However since ed25519 is not supported by older sshds, we better have
+# an RSA alternative (id_rsa.pub) as well.
+#
+# But that key may be really old and less than 2048 bits, so we may have
+# a bigger one as well (id_rsa_new.pub, note: requires changing the default
+# ssh_config on your boss since this is not a default key file name to try).
+#
+# We really don't want to use a DSA key (id_dsa.pub) anymore unless there
+# is no alternative.
+#
+# Finally, if we are an Elabinelab setup, include the outer boss root key.
+#
+sub RootPubkeyList()
+{
+    my $keyfiles = "";
+
+    if (-r "/root/.ssh/id_ed25519.pub") {
+	$keyfiles .= "/root/.ssh/id_ed25519.pub ";
+    }
+
+    if (-r "/root/.ssh/id_rsa.pub") {
+	$keyfiles .= "/root/.ssh/id_rsa.pub ";
+	if (-r "/root/.ssh/id_rsa_new.pub") {
+	    $keyfiles .= "/root/.ssh/id_rsa_new.pub ";
+	}
+    }
+
+    if ($keyfiles eq "" && -r "/root/.ssh/id_dsa.pub") {
+	$keyfiles .= "/root/.ssh/id_dsa.pub ";
+    }
+
+    if ($ELABINELAB && -r "/etc/emulab/outer_bossrootkey.pub") {
+	$keyfiles .= "/etc/emulab/outer_bossrootkey.pub ";
+    }
+
+    if ($keyfiles) {
+	print "Installing root authorized keys: $keyfiles.\n";
+    }
+
+    return $keyfiles;
+}
+
+sub UpdateSSHD($$)
+{
+    my ($mpoint,$sfscript) = @_;
+    my $cfile = "$mpoint/etc/ssh/sshd_config";
+
+    if (-r "$mpoint$sfscript" &&
+	system("grep -q '# Emulab config' $mpoint$sfscript 2>/dev/null")) {
+	print STDERR "*** WARNING: slicefix script does not add Emulab sshd_config security options!\n";
+	print STDERR "  Upgrade your MFS.\n";
+    }
+
+    if (! -r "$cfile" ||
+	!system("grep -q '^# Emulab config' $cfile 2>/dev/null")) {
+	return 1;
+    }
+
+    ExecQuiet("$SED -e '/^Protocol /d' ".
+	      "-e '/^PasswordAuthentication /d' ".
+	      "-e '/^ChallengeResponseAuthentication /d' ".
+	      "-e '/^PermitRootLogin /d' ".
+	      "-e '/^# Emulab/d' $cfile") == 0
+	or return 0;
+
+    open(FD, ">>$cfile")
+	or return 0;
+    print FD "\n# Emulab config\n";
+    print FD "Protocol 2\n";
+    print FD "PasswordAuthentication no\n";
+    print FD "ChallengeResponseAuthentication no\n";
+    print FD "PermitRootLogin without-password\n";
+    close(FD);
+
+    print "Updating sshd configuration.\n";
+
+    return 1;
+}
+
+#
 # Localize a FreeBSD MFS.
 #
 sub LocalizeBSD()
@@ -214,6 +319,32 @@ sub LocalizeBSD()
     }
 
     #
+    # Get the correct kernel version
+    # XXX note that the 8.x kernel is usually the default "kernel",
+    # we move it to "kernel8" for consistency with the other kernels.
+    # XXX except in the latest 10.x MFS in which there is only a kernel10.
+    #
+    if (-e "kernel" && ! -e "kernel8") {
+	ExecQuiet("mv kernel kernel8") == 0
+	    or fatal("Could not move kernel to kernel8");
+    }
+    if (-s "kernel${FBSDKERNEL}") {
+	print "Using FreeBSD $FBSDKERNEL kernel.\n";
+	ExecQuiet("cp -fp kernel${FBSDKERNEL} kernel") == 0
+	    or fatal("Could not copy FreeBSD ${FBSDKERNEL}.x kernel");
+    } elsif ($FBSDKERNEL != 10 && -e "kernel10") {
+	$FBSDKERNEL = 10;
+	print "FreeBSD 10 MFS, using FreeBSD 10 kernel.\n";
+	ExecQuiet("cp -fp kernel${FBSDKERNEL} kernel") == 0
+	    or fatal("Could not copy FreeBSD ${FBSDKERNEL}.x kernel");
+	# XXX create empty kernel8 and kernel9 files so we won't use those
+	ExecQuiet("cp /dev/null kernel8");
+	ExecQuiet("cp /dev/null kernel9");
+    } else {
+	fatal("No FreeBSD ${FBSDKERNEL}.x kernel");
+    }
+    
+    #
     # Work on a copy.
     #
     ExecQuiet("$CP -pf $mfsroot ${mfsroot}.new") == 0
@@ -242,16 +373,31 @@ sub LocalizeBSD()
 	ExecQuiet("$MKDIR -m 700 $mpoint/root/.ssh")) {
 	goto bad;
     }
-    if ($ELABINELAB &&
-	# Combine with outer boss root user ssh keys.
-	ExecQuiet("$CAT $AUTHKEYS > $mpoint/root/.ssh/authorized_keys2")) {
+
+    # Configure root authorized_keys file
+    my $keyfiles = RootPubkeyList();
+    if (!$keyfiles) {
+	print STDERR "No suitable boss root key found!\n";
 	goto bad;
     }
-    # And add the current boss root user ssh keys.
-    if (ExecQuiet("$CAT /root/.ssh/*.pub >> $mpoint/root/.ssh/authorized_keys2") ||
+    if (ExecQuiet("$CAT $keyfiles > $mpoint/root/.ssh/authorized_keys")) {
+	goto bad;
+    }
+    #
+    # Copy to authorized_keys2 which is what is installed on nodes
+    #
+    # XXX in theory this could be different than what the MFS itself allows,
+    # but we don't do that.
+    #
+    # XXX we use authorized_keys2 for this purpose for some long lost reason;
+    # we have to keep using it for backward compat (i.e., we are localizing
+    # an old MFS).
+    #
+    if (ExecQuiet("$CP $mpoint/root/.ssh/authorized_keys $mpoint/root/.ssh/authorized_keys2") ||
 	ExecQuiet("$CHMOD 600 $mpoint/root/.ssh/authorized_keys2")) {
 	goto bad;
     }
+
     # Boss certificate. Need emulab.pem for TPM. 
     ExecQuiet("$CP -p $ETCDIR/emulab.pem $ETCDIR/client.pem $mpoint/etc/emulab")
 	== 0 or goto bad;
@@ -271,9 +417,16 @@ sub LocalizeBSD()
 	== 0 or goto bad;
 
     #
-    # IGB cruft; See the comment in loader.conf.orig about this. 
+    # Update sshd security
     #
-    if ($igbcruft) {
+    UpdateSSHD($mpoint, "/etc/testbed/slicefix")
+	or goto bad;
+
+    #
+    # IGB cruft; See the comment in loader.conf.orig about this. 
+    # No longer needed as of FreeBSD 10.
+    #
+    if ($igbcruft && $FBSDKERNEL < 10) {
 	ExecQuiet("$SED -i -e 's,^#kern\.ipc\.nmb,kern.ipc.nmb,' " .
 		  "     loader.conf.orig") == 0 or goto bad;
     }
@@ -408,18 +561,21 @@ sub LocalizeLinux($)
 	ExecQuiet("$MKDIR -m 700 root/.ssh")) {
 	goto bad;
     }
-    if ($ELABINELAB &&
-	# Combine with outer boss root user ssh keys.
-	ExecQuiet("$CAT $AUTHKEYS > root/.ssh/authorized_keys")) {
+
+    # Configure root authorized_keys file
+    my $keyfiles = RootPubkeyList();
+    if (!$keyfiles) {
+	print STDERR "No suitable boss root key found!\n";
 	goto bad;
     }
-    # And add the current boss root user ssh keys.
-    if (ExecQuiet("$CAT /root/.ssh/*.pub >> root/.ssh/authorized_keys") ||
-	ExecQuiet("$CHMOD 600 root/.ssh/authorized_keys")) {
+    if (ExecQuiet("$CAT $keyfiles > root/.ssh/authorized_keys")) {
 	goto bad;
     }
+
     # Boss certificate. Need emulab.pem for TPM. 
     ExecQuiet("$CP -p $ETCDIR/emulab.pem $ETCDIR/client.pem etc/emulab")
+	== 0 or goto bad;
+    ExecQuiet("$CHOWN root:wheel $ETCDIR/emulab.pem $ETCDIR/client.pem")
 	== 0 or goto bad;
     # All MFSs and images get the same ssh host keys.
     ExecQuiet("$CP -p $IMAGEKEYS_DIR/* etc/ssh")
@@ -438,6 +594,12 @@ sub LocalizeLinux($)
 	      "              -e 's,^toor:\([^:]*\),toor:$passhash,' ".
 	      "     $pfile")
 	== 0 or goto bad;
+
+    #
+    # Update sshd security
+    #
+    UpdateSSHD($mpoint, "/etc/testbed/slicefix")
+	or goto bad;
 
     #
     # Mark as "localized". This tells slicefix that it should copy all

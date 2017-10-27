@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2016 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -62,6 +62,9 @@ sub Create($$)
     elsif ($brand =~ /phantomnet/) {
 	$brand = "phantomnet";
     }
+    elsif ($brand =~ /powder/) {
+	$brand = "powder";
+    }
     else {
 	# This means the new Portal interface.
 	$brand = "emulab";
@@ -76,6 +79,7 @@ sub brand($)		{ return $_[0]->{'BRAND'}; }
 sub isAPT($)	        { return $_[0]->brand() eq "aptlab" ? 1 : 0; }
 sub isCloud($)	        { return $_[0]->brand() eq "cloudlab" ? 1 : 0; }
 sub isPNet($)           { return $_[0]->brand() eq "phantomnet" ? 1 : 0; }
+sub isPowder($)         { return $_[0]->brand() eq "powder" ? 1 : 0; }
 sub isEmulab($)         { return $_[0]->brand() eq "emulab" ? 1 : 0; }
 sub isClassic($)        { return $_[0]->brand() eq "classic" ? 1 : 0; }
 
@@ -86,6 +90,7 @@ sub wwwBase($)
     return ($self->isAPT() ? "https://www.aptlab.net" :
 	    $self->isCloud() ? "https://www.cloudlab.us" :
 	    $self->isPNet() ? "https://www.phantomnet.org" :
+	    $self->isPowder() ? "@TBBASE@" . "/portal" :
 	    $self->isEmulab() ?	"@TBBASE@" . "/portal" :
 	    "@TBBASE@");
 }
@@ -97,6 +102,7 @@ sub ApprovalEmailAddress($)
     return ($self->isAPT() ? "aptlab-approval\@aptlab.net" :
 	    $self->isCloud() ? "cloudlab-approval\@cloudlab.us" :
 	    $self->isPNet() ? "phantomnet-approval\@phantomnet.org" :
+	    $self->isPowder() ? "powder-approval\@powderwireless.net" :
 	    "@TBAPPROVALEMAIL@");
 }
 
@@ -107,6 +113,7 @@ sub OpsEmailAddress($)
     return ($self->isAPT() ? "portal-ops\@aptlab.net" :
 	    $self->isCloud() ? "portal-ops\@cloudlab.us" :
 	    $self->isPNet() ? "portal-ops\@phantomnet.org" :
+	    $self->isPowder() ? "portal-ops\@powderwireless.net" :
 	    $TBOPS);
 }
 
@@ -117,6 +124,7 @@ sub LogsEmailAddress($)
     return ($self->isAPT() ? "apt-logs\@aptlab.net" :
 	    $self->isCloud() ? "cloudlab-logs\@cloudlab.us" :
 	    $self->isPNet() ? "phantomnet-logs\@phantomnet.org" :
+	    $self->isPowder() ? "portal-logs\@portal.org" :
 	    $TBLOGS);
 }
 
@@ -127,6 +135,7 @@ sub ExtensionsEmailAddress($)
     return ($self->isAPT() ? "portal-extensions\@aptlab.net" :
 	    $self->isCloud() ? "portal-extensions\@cloudlab.us" :
 	    $self->isPNet() ? "portal-extensions\@phantomnet.org" :
+	    $self->isPowder() ? "portal-extensions\@powderwireless.net" :
 	    $TBOPS);
 }
 
@@ -137,6 +146,7 @@ sub EmailTag($)
     return ($self->isAPT() ? "aptlab.net" :
 	    $self->isCloud() ? "cloudlab.us" :
 	    $self->isPNet() ? "phantomnet.org" :
+	    $self->isPowder() ? "powderwireless.net" :
 	    "@THISHOMEBASE@");
 }
 
@@ -147,7 +157,7 @@ sub SignupURL($$)
     my $pid     = $project->pid();
 
     return ($self->isAPT() || $self->isCloud() ||
-	    $self->isPNet() || $self->isEmulab() ? 
+	    $self->isPNet() || $self->isPowder() || $self->isEmulab() ? 
 	    "${wwwbase}/signup.php?pid=$pid" :
 	    "${wwwbase}/joinproject.php3?target_pid=$pid");
 }
@@ -159,6 +169,7 @@ sub UsersGroupName($)
     return ($self->isAPT() ? "apt-users\@googlegroups.com" :
 	    $self->isCloud() ? "cloudlab-users\@googlegroups.com" :
 	    $self->isPNet() ? "phantomnet-users\@googlegroups.com" :
+	    $self->isPowder() ? "powder-users\@googlegroups.com" :
 	    "emulab-users\@googlegroups.com");
 }
 
@@ -170,6 +181,7 @@ sub UsersGroupURL($)
     return ($self->isAPT() ? "$url/apt-users" : 
 	    $self->isCloud() ? "$url/cloudlab-users" :
 	    $self->isPNet() ? "$url/phantomnet-users" :
+	    $self->isPowder() ? "$url/powder-users" :
 	    "$url/emulab-users");
 }
 

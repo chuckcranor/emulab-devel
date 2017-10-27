@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,9 +47,10 @@ $this_idx  = $this_user->uid_idx();
 $optargs = OptionalPageArguments("create",      PAGEARG_STRING,
 				 "action",      PAGEARG_STRING,
 				 "uuid",        PAGEARG_STRING,
-                                 "fromexp",      PAGEARG_STRING,
+                                 "fromexp",     PAGEARG_STRING,
 				 "copyuuid",    PAGEARG_STRING,
 				 "snapuuid",    PAGEARG_STRING,
+				 "snapnode_id", PAGEARG_NODEID,
 				 "finished",    PAGEARG_BOOLEAN,
 				 "formfields",  PAGEARG_ARRAY);
 
@@ -59,22 +60,27 @@ $optargs = OptionalPageArguments("create",      PAGEARG_STRING,
 function SPITFORM($formfields, $errors)
 {
     global $this_user, $projlist, $action, $profile, $DEFAULT_AGGREGATE;
-    global $notifyupdate, $notifyclone, $copyuuid, $snapuuid, $am_array;
+    global $notifyupdate, $notifyclone, $copyuuid, $snapuuid, $snapnode_id;
     global $ISCLOUD, $fromexp;
     global $version_array, $WITHPUBLISHING;
     $viewing    = 0;
     $candelete  = 0;
+    $nodelete   = 0;
     $canmodify  = 0;
     $canpublish = 0;
     $history    = 0;
     $activity   = 0;
     $ispp       = 0;
     $isadmin    = (ISADMIN() ? 1 : 0);
-    $multisite  = 1;
+    $isstud     = (STUDLY() ? 1 : 0);
+    $canrepo    = (ISADMIN() || STUDLY() ? 1 : 0);
+    $multisite  = ($ISCLOUD ? 1 : 0);
     $cloning    = 0;
+    $copying    = 0;
     $disabled   = 0;
     $version_uuid = "null";
     $profile_uuid = "null";
+    $this_version = "null";
     $latest_uuid    = "null";
     $latest_version = "null";
 
@@ -84,12 +90,14 @@ function SPITFORM($formfields, $errors)
 	$version_uuid = "'" . $profile->uuid() . "'";
 	$profile_uuid = "'" . $profile->profile_uuid() . "'";
 	$candelete    = ($profile->CanDelete($this_user) ? 1 : 0);
+	$nodelete     = ($profile->isLocked() ? 1 : 0);
 	$history      = ($profile->HasHistory() ? 1 : 0);
 	$canmodify    = ($profile->CanModify() ? 1 : 0);
 	$canpublish   = ($profile->CanPublish() ? 1 : 0);
 	$activity     = ($profile->HasActivity() ? 1 : 0);
 	$ispp         = ($profile->isParameterized() ? 1 : 0);
         $disabled     = ($profile->isDisabled() ? 1 : 0);
+        $this_version = $profile->version();
 	if ($canmodify) {
 	    $title    = "Modify Profile";
 	}
@@ -106,6 +114,9 @@ function SPITFORM($formfields, $errors)
             if ($action == "clone") {
                 $cloning = 1;
             }
+            else {
+                $copying = 1;
+            }
 	    $action = "create";
         }
 	$button_label = "Create";
@@ -116,7 +127,15 @@ function SPITFORM($formfields, $errors)
 
     echo "<div id='ppviewmodal_div'></div>\n";
     # Place to hang the toplevel template.
-    echo "<div id='manage-body'></div>\n";
+    echo "<div id='page-body'></div>\n";
+
+    # Place to hang the genilib-editor template.
+    echo "<div id='genilib-editor-body'></div>\n";
+
+    # These two modals live outside so that genilib-editor can
+    # use them as well.
+    echo "<div id='waitwait_div'></div>
+          <div id='oops_div'></div>";
 
     # I think this will take care of XSS prevention?
     echo "<script type='text/plain' id='form-json'>\n";
@@ -126,21 +145,10 @@ function SPITFORM($formfields, $errors)
     echo htmlentities(json_encode($errors));
     echo "</script>\n";
 
-    $amlist = array();
-    $amdefault = "";
-    if ($viewing && ($ISCLOUD || ISADMIN() || STUDLY())) {
- 	while (list($am) = each($am_array)) {
-	    $amlist[] = $am;
-	}
-	$amdefault = $DEFAULT_AGGREGATE;
-	# Temporary override until constraint system in place.
-	if ($profile->BestAggregate()) {
-	    $amdefault = $profile->BestAggregate();
-	}
-    }
-    echo "<script type='text/plain' id='amlist-json'>\n";
-    echo htmlentities(json_encode($amlist));
-    echo "</script>\n";
+    # Needed for genilib-editor
+    echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/ace.js'></script>\n";
+    echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-vim.js'></script>\n";
+    echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-emacs.js'></script>\n";
 
     # Pass project list through. Need to convert to list without groups.
     # When editing, pass through a single value. The template treats a
@@ -171,28 +179,33 @@ function SPITFORM($formfields, $errors)
     # For progress bubbles in the imaging modal.
     echo "<link rel='stylesheet' href='css/progress.css'>\n";
     echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
+    echo "<link rel='stylesheet' href='css/genilib-editor.css'>\n";
 
+    SpitAggregateStatus();
     echo "<script type='text/javascript'>\n";
     echo "    window.VIEWING  = $viewing;\n";
     echo "    window.VERSION_UUID = $version_uuid;\n";
     echo "    window.PROFILE_UUID = $profile_uuid;\n";
     echo "    window.LATEST_UUID = $latest_uuid;\n";
     echo "    window.LATEST_VERSION = $latest_version;\n";
+    echo "    window.THIS_VERSION = $this_version;\n";
     echo "    window.UPDATED  = $notifyupdate;\n";
     echo "    window.SNAPPING = $notifyclone;\n";
     echo "    window.AJAXURL  = 'server-ajax.php';\n";
     echo "    window.ACTION   = '$action';\n";
     echo "    window.CANDELETE= $candelete;\n";
+    echo "    window.NODELETE = $nodelete;\n";
     echo "    window.CANMODIFY= $canmodify;\n";
     echo "    window.CANPUBLISH= $canpublish;\n";
     echo "    window.DISABLED= $disabled;\n";
     echo "    window.ISADMIN  = $isadmin;\n";
+    echo "    window.ISSTUD  = $isstud;\n";
     echo "    window.MULTISITE  = $multisite;\n";
     echo "    window.HISTORY  = $history;\n";
     echo "    window.CLONING  = $cloning;\n";
+    echo "    window.COPYING  = $copying;\n";
     echo "    window.ACTIVITY = $activity;\n";
     echo "    window.TITLE    = '$title';\n";
-    echo "    window.AMDEFAULT= '$amdefault';\n";
     echo "    window.BUTTONLABEL = '$button_label';\n";
     echo "    window.ISPPPROFILE = $ispp;\n";
     echo "    window.WITHPUBLISHING = $WITHPUBLISHING;\n";
@@ -201,22 +214,35 @@ function SPITFORM($formfields, $errors)
     }
     elseif (isset($snapuuid)) {
 	echo "    window.SNAPUUID = '$snapuuid';\n";
+        if (isset($snapnode_id)) {
+            echo "    window.SNAPNODE_ID = '$snapnode_id';\n";
+        }
     }
     if (isset($fromexp)) {
 	echo "    window.EXPUUID = '$fromexp';\n";
     }
+    echo "    window.CANREPO = $canrepo;\n";
     echo "</script>\n";
     echo "<script src='js/lib/jquery-ui.js'></script>\n";
     echo "<script src='js/lib/jquery.appendGrid-1.3.1.min.js'></script>\n";
     echo "<script src='js/lib/codemirror-min.js'></script>\n";
-    echo "<script src='js/lib/bootstrap.js'></script>\n";
-    echo "<script src='js/lib/require.js' data-main='js/manage_profile'>
-          </script>";
-    
+
+    REQUIRE_UNDERSCORE();
+    REQUIRE_SUP();
+    REQUIRE_FILESIZE();
+    REQUIRE_JACKS_EDITOR();
+    REQUIRE_IMAGE();
+    REQUIRE_MOMENT();
+    REQUIRE_APTFORMS();
+    REQUIRE_FILESTYLE();
+    REQUIRE_MARKED();
+    REQUIRE_GENILIB_EDITOR();
+    AddLibrary("js/gitrepo.js");
+    SPITREQUIRE("js/manage_profile.js");
+
+    AddTemplateList(array('manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'share-modal', 'gitrepo-picker', 'profile-list-modal', 'confirm-delete-profile'));
     SPITFOOTER();
 }
-
-$am_array = Instance::DefaultAggregateList();
 
 #
 # See what projects the user can do this in.
@@ -236,7 +262,7 @@ if (isset($action) && ($action == "edit" || $action == "copy")) {
 	    SPITUSERERROR("Profile is currently locked!");
 	}
 	else if ($profile->deleted()) {
-	    SPITUSERERROR("Profile is has been deleted!");
+	    SPITUSERERROR("Profile has been deleted!");
 	}
 	if ($action == "edit") {
 	    if ($this_idx != $profile->creator_idx() && !ISADMIN()) {
@@ -260,9 +286,8 @@ if (isset($action) && ($action == "edit" || $action == "copy")) {
                          "     v.parent_profileid is not null and ".
                          "     vp.profileid=v.parent_profileid and ".
                          "     vp.version=v.parent_version ".
-                         "where v.profileid='$profileid' and ".
-                         "      v.deleted is null ".
-                         "order by v.created desc");
+                         "where v.profileid='$profileid' ".
+                         "order by v.version asc");
 
         while ($row = mysql_fetch_array($query_result)) {
             $uuid    = $row["uuid"];
@@ -270,7 +295,9 @@ if (isset($action) && ($action == "edit" || $action == "copy")) {
             $version = $row["version"];
             $pversion= $row["parent_version"];
             $created = $row["created"];
+            $deleted = (isset($row["deleted"]) ? 1 : 0);
             $published = $row["published"];
+            $repourl = $row["repourl"];
             $rspec   = $row["rspec"];
             $desc    = '';
             $obj     = array();
@@ -291,11 +318,11 @@ if (isset($action) && ($action == "edit" || $action == "copy")) {
             $obj["version"] = $version;
             $obj["description"] = $desc;
             $obj["created"]     = $created;
+            $obj["deleted"]     = $deleted;
             $obj["published"]   = $published;
             $obj["parent_uuid"] = $puuid;
             $obj["parent_version"] = $pversion;
-            
-            $version_array[] = $obj;
+            $version_array[]  = $obj;
         }
     }
 }
@@ -311,29 +338,35 @@ if (! isset($create)) {
     if (! isset($action) || $action == "") {
 	$action = "create";
     }
-    
+
     if (! (isset($projlist) && count($projlist))) {
-	$errors["error"] =
-	    "You do not appear to be a member of any projects in which ".
-	    "you have permission to create new profiles";
+	SPITUSERERROR("You do not appear to be a member of any projects in ".
+                      "which you have permission to create new profiles");
+    }
+    if (isset($snapuuid)) {
+        if (!IsValidUUID($snapuuid)) {
+            SPITUSERERROR("Not a valid UUID for clone");
+        }
+        else {
+            $instance = Instance::Lookup($snapuuid);
+            if (!$instance) {
+                SPITUSERERROR("No such instance to clone!");
+            }
+            else if ($this_idx != $instance->creator_idx() && !ISADMIN()) {
+                SPITUSERERROR("Not enough permission!");
+            }
+            else if ($instance->status() != "ready") {
+                SPITUSERERROR("Instance is busy, cannot clone it. " .
+                              "Please try again later.");
+            }
+        }
     }
     if ($action == "edit" || $action == "clone" || $action == "copy") {
 	if ($action == "clone" || $action == "copy") {
 	    if ($action == "clone") {
-		if (! (isset($snapuuid) && IsValidUUID($snapuuid))) {
-		    $errors["error"] = "No experiment specified for clone!";
+		if (! isset($instance)) {
+		    SPITUSERERROR("No experiment specified for clone!");
 		}
-		$instance = Instance::Lookup($snapuuid);
-		if (!$instance) {
-		    SPITUSERERROR("No such instance to clone!");
-		}
-		else if ($this_idx != $instance->creator_idx() && !ISADMIN()) {
-		    SPITUSERERROR("Not enough permission!");
-		}
-                else if ($instance->status() != "ready") {
-		    SPITUSERERROR("Instance is busy, cannot clone it. " .
-                                  "Please try again later.");
-                }
 		$profile = Profile::Lookup($instance->profile_id(),
 					   $instance->profile_version());
 		if (!$profile) {
@@ -347,27 +380,52 @@ if (! isset($create)) {
                 # Pass this along through the new create page.
                 $copyuuid = $profile->uuid();
             }
-	    $defaults["profile_rspec"]  = $profile->rspec();
 	    $defaults["profile_who"]   = "private";
+	    if ($profile->rspec() && $profile->rspec() != "") {
+                $defaults["profile_rspec"]  = $profile->rspec();
+            }
 	    if ($profile->script() && $profile->script() != "") {
 		$defaults["profile_script"] = $profile->script();
 	    }
+            $defaults["portal_converted"]
+                = ($profile->portal_converted() == 1 ? "yes" : "no");
+            
             # Default the project if in only one project.
 	    if (count($projlist) == 1) {
 		list($project) = each($projlist);
 		reset($projlist);
 		$defaults["profile_pid"] = $project;
 	    }
+            elseif (array_key_exists($profile->pid(), $projlist)) {
+                #
+                # Default to same project as the original, *if* the user
+                # is a member of that project. Convenient.
+                #
+		$defaults["profile_pid"] = $profile->pid();
+            }
 	}
 	else {
 	    $defaults["profile_pid"]         = $profile->pid();
 	    $defaults["profile_name"]        = $profile->name();
 	    $defaults["profile_version"]     = $profile->version();
-	    $defaults["profile_rspec"]       = $profile->rspec();
+	    if ($profile->rspec() && $profile->rspec() != "") {
+                $defaults["profile_rspec"] = $profile->rspec();
+            }
 	    if ($profile->script() && $profile->script() != "") {
 		$defaults["profile_script"] = $profile->script();
 	    }
+            $defaults["portal_converted"]
+                = ($profile->portal_converted() == 1 ? "yes" : "no");
+	    if ($profile->repourl() && $profile->repourl() != "") {
+		$defaults["profile_repourl"]  = $profile->repourl();
+                # Need this so JS code knows when HEAD changes.
+		$defaults["profile_repohash"]  = $profile->repohash();
+		$defaults["profile_repopushurl"]
+                    = "https://www.emulab.net:51369/githook/" .
+                    $profile->repokey();
+	    }
 	    $defaults["profile_creator"]     = $profile->creator();
+	    $defaults["profile_updater"]     = $profile->updater();
 	    $defaults["profile_created"]     =
 		DateStringGMT($profile->created());
 	    $defaults["profile_published"]   =
@@ -384,6 +442,8 @@ if (! isset($create)) {
 		($profile->topdog() ? "checked" : "");
 	    $defaults["profile_disabled"]      =
 		($profile->isDisabled() ? "checked" : "");
+	    $defaults["profile_nodelete"]      =
+		($profile->isLocked() ? "checked" : "");
 
 	    # Warm fuzzy message.
 	    if (isset($_SESSION["notifyupdate"])) {
@@ -392,18 +452,17 @@ if (! isset($create)) {
 		session_destroy();
 		session_commit();
 	    }
-
-	    #
-	    # See if we have a task running in the background
-	    # for this profile. At the moment it can only be a
-	    # clone task. If there is one, we have to tell
-	    # the js code to show the status of the clone.
-	    #
-	    $webtask = WebTask::LookupByObject($profile->uuid());
-	    if ($webtask && ! $webtask->exited()) {
-		$notifyclone = 1;
-	    }
 	}
+        #
+        # See if we have a task running in the background
+        # for this profile. At the moment it can only be a
+        # clone task. If there is one, we have to tell
+        # the js code to show the status of the clone.
+        #
+        $webtask = $profile->webtask();
+        if ($webtask->TaskValue("cloning")) {
+            $notifyclone = 1;
+        }
     }
     else {
 	# Default the project if in only one project.
@@ -412,6 +471,14 @@ if (! isset($create)) {
 	    reset($projlist);
 	    $defaults["profile_pid"] = $project;
 	}
+        elseif (isset($instance) &&
+                array_key_exists($instance->pid(), $projlist)) {
+            #
+            # Default to same project as the original, *if* the user
+            # is a member of that project. Convenient.
+            #
+            $defaults["profile_pid"] = $instance->pid();
+        }
 	$defaults["profile_who"]   = "private";
 
         #
@@ -428,285 +495,11 @@ if (! isset($create)) {
                               "this classic emulab experiment");
             }
 	    $defaults["profile_pid"] = $experiment->pid();
+	    $defaults["profile_name"] = $experiment->eid();
         }
     }
     SPITFORM($defaults, $errors);
     return;
 }
-
-#
-# Otherwise, must validate and redisplay if errors
-#
-$errors = array();
-
-#
-# Quick check for required fields.
-#
-$required = array("pid", "name");
-
-foreach ($required as $key) {
-    if (!isset($formfields["profile_${key}"]) ||
-	strcmp($formfields["profile_${key}"], "") == 0) {
-	$errors["profile_${key}"] = "Missing Field";
-    }
-    elseif (! TBcheck_dbslot($formfields["profile_${key}"], "apt_profiles", $key,
-			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
-	$errors["profile_${key}"] = TBFieldErrorString();
-    }
-}
-
-if (isset($formfields["profile_rspec"]) &&
-	$formfields["profile_rspec"] != "") {
-    if (! TBvalid_rspec($formfields["profile_rspec"])) {
-	$errors["profile_rspec"] = TBFieldErrorString();	
-    }
-    else {
-	$rspec = $formfields["profile_rspec"];
-    }
-}
-else {
-    # Best place to put the error. 
-    $errors["sourcefile"] = "Missing Field";
-}
-
-# Present these errors before we call out to do anything else.
-if (count($errors)) {
-    SPITFORM($formfields, $errors);
-    return;
-}
-
-#
-# Project has to exist. We need to know it for the SUEXEC call
-# below. 
-#
-$project = Project::LookupByPid($formfields["profile_pid"]);
-if (!$project) {
-    $errors["profile_pid"] = "No such project";
-}
-# User better be a member.
-if (!ISADMIN() && $project && 
-    (!$project->IsMember($this_user, $isapproved) || !$isapproved)) {
-    $errors["profile_pid"] = "Illegal project";
-}
-
-#
-# Convert profile_who to arguments.
-#
-if (!isset($formfields["profile_who"]) || $formfields["profile_who"] == "") {
-    $errors["profile_who"] = "Missing value";
-}
-else {
-    $who = $formfields["profile_who"];
-    if (! ($who == "private" || $who == "shared" || $who == "public")) {
-	$errors["profile_who"] = "Illegal value";
-    }
-}
-
-#
-# Sanity check the snapuuid argument when doing a clone.
-#
-if (isset($action) && $action == "clone") {
-    if (!isset($snapuuid) || $snapuuid == "" || !IsValidUUID($snapuuid)) {
-	$errors["error"] = "Invalid experiment specified for clone!";
-    }
-    $instance = Instance::Lookup($snapuuid);
-    if (!$instance) {
-	$errors["error"] = "No such experiment to clone!";
-    }
-    else if ($this_idx != $instance->creator_idx() && !ISADMIN()) {
-	$errors["error"] = "Not enough permission!";
-    }
-    else if (! Profile::Lookup($instance->profile_id(),
-			       $instance->profile_version())) {
-	$errors["error"] = "Cannot load profile for instance!";    }
-}
-
-# Present these errors before we call out to do anything else.
-if (count($errors)) {
-    SPITFORM($formfields, $errors);
-    return;
-}
-
-#
-# Pass to the backend as an XML data file. If this gets too complicated,
-# we might eed to do all the checking in the backend and have it pass
-# back the error set. 
-#
-# Generate a temporary file and write in the XML goo.
-#
-$xmlname = tempnam("/tmp", "newprofile");
-if (! $xmlname) {
-    TBERROR("Could not create temporary filename", 0);
-    $errors["error"] = "Internal error; Could not create temp file";
-    SPITFORM($formfields, $errors);
-    return;
-}
-elseif (! ($fp = fopen($xmlname, "w"))) {
-    TBERROR("Could not open temp file $xmlname", 0);
-    $errors["error"] = "Internal error; Could not open temp file";
-    SPITFORM($formfields, $errors);
-    unlink($xmlname);
-    return;
-}
-else {
-    fwrite($fp, "<profile>\n");
-    fwrite($fp, "<attribute name='profile_pid'>");
-    fwrite($fp, "  <value>" . $formfields["profile_pid"] . "</value>");
-    fwrite($fp, "</attribute>\n");
-    fwrite($fp, "<attribute name='profile_name'>");
-    fwrite($fp, "  <value>" .
-	   htmlspecialchars($formfields["profile_name"]) . "</value>");
-    fwrite($fp, "</attribute>\n");
-    fwrite($fp, "<attribute name='rspec'>");
-    fwrite($fp, "  <value>" . htmlspecialchars($rspec) . "</value>");
-    fwrite($fp, "</attribute>\n");
-    if (isset($formfields["profile_script"]) &&
-	$formfields["profile_script"] != "") {
-	fwrite($fp, "<attribute name='script'>");
-	fwrite($fp, "  <value>" .
-	       htmlspecialchars($formfields["profile_script"]) .
-	       "</value>");
-	fwrite($fp, "</attribute>\n");
-    }
-    #
-    # When the profile is created we mark it listed=public if a mere
-    # user. Mere users cannot change the value later. Admin users can
-    # always set/change the value.
-    #
-    if ($action != "edit" || ISADMIN()) {
-        fwrite($fp, "<attribute name='profile_listed'><value>");
-        if (ISADMIN()) {
-            if (isset($formfields["profile_listed"]) &&
-                $formfields["profile_listed"] == "checked") {
-                fwrite($fp, "1");
-            }
-            else {
-                fwrite($fp, "0");
-            }
-        }
-        elseif ($action != "edit") {
-            fwrite($fp, ($who == "public" ? "1" : "0"));
-        }
-        fwrite($fp, "</value></attribute>\n");
-    }
-    fwrite($fp, "<attribute name='profile_shared'><value>" .
-	   ($who == "shared" ? 1 : 0) . "</value></attribute>\n");
-    fwrite($fp, "<attribute name='profile_public'><value>" .
-	   ($who == "public" ? 1 : 0) . "</value></attribute>\n");
-    if (ISADMIN()) {
-	fwrite($fp, "<attribute name='profile_topdog'><value>");
-	if (isset($formfields["profile_topdog"]) &&
-	    $formfields["profile_topdog"] == "checked") {
-	    fwrite($fp, "1");
-	}
-	else {
-	    fwrite($fp, "0");
-	}
-	fwrite($fp, "</value></attribute>\n");
-	fwrite($fp, "<attribute name='profile_disabled'><value>");
-	if (isset($formfields["profile_disabled"]) &&
-	    $formfields["profile_disabled"] == "checked") {
-	    fwrite($fp, "1");
-	}
-	else {
-	    fwrite($fp, "0");
-	}
-	fwrite($fp, "</value></attribute>\n");
-	fwrite($fp, "<attribute name='profile_disable_all'><value>");
-	if (isset($formfields["profile_disable_all"]) &&
-	    $formfields["profile_disable_all"] == "checked") {
-	    fwrite($fp, "1");
-	}
-	else {
-	    fwrite($fp, "0");
-	}
-	fwrite($fp, "</value></attribute>\n");
-    }
-    fwrite($fp, "</profile>\n");
-    fclose($fp);
-    chmod($xmlname, 0666);
-}
-
-#
-# Call out to the backend.
-#
-$webtask    = WebTask::CreateAnonymous();
-$webtask_id = $webtask->task_id();
-$command    = "webmanage_profile ";
-
-if ($action == "edit") {
-    $command .= " update -t $webtask_id " . $profile->uuid();
-}
-else {
-    $command .= " create -t $webtask_id ";
-    if (isset($copyuuid)) {
-        $command .= "-c " . escapeshellarg($copyuuid);
-    }
-    elseif (isset($snapuuid)) {
-        $command .= "-s " . escapeshellarg($snapuuid);
-    }
-}
-$command .= " $xmlname";
-
-$retval = SUEXEC($this_user->uid(), $project->unix_gid(), $command,
-		 SUEXEC_ACTION_IGNORE);
-if ($retval) {
-    if ($retval < 0) {
-	$errors["error"] = "Internal Error; please try again later.";
-	SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-    }
-    else {
-        $webtask->Refresh();
-        if ($webtask->TaskValue("output")) {
-            $parsed = simplexml_load_string($webtask->TaskValue("output"));
-        }
-	if (!$parsed) {
-	    $errors["error"] = "Internal Error; please try again later.";
-	    TBERROR("Could not parse XML output:\n$suexec_output\n", 0);
-	}
-	else {
-	    foreach ($parsed->error as $error) {
-		$errors[(string)$error['name']] = (string)$error;
-	    }
-	}
-    }
-    $webtask->Delete();
-}
-unlink($xmlname);
-if (count($errors)) {
-    SPITFORM($formfields, $errors);
-    return;
-}
-
-#
-# Need the index to pass back through. But when its an edit operation,
-# we have to let the backend tell us it created a new version, since
-# we want to return to that.
-#
-if ($action == "edit") {
-    $webtask->Refresh();
-    if ($webtask->TaskValue("newProfile")) {
-        $profile = Profile::Lookup($webtask->TaskValue("newProfile"));
-    }
-}
-else {
-    $profile = Profile::LookupByName($project, $formfields["profile_name"]);
-}
-
-# Done with this, unless doing a snapshot (needed for imaging status).
-if (!isset($snapuuid)) {
-    $webtask->Delete();
-}
-
-if ($profile) {
-    $uuid = $profile->uuid();
-}
-else {
-    header("Location: $APTBASE/user-dashboard.php#profiles");
-}
-if ($action == "edit") {
-    $_SESSION["notifyupdate"] = 1;
-}
-header("Location: $APTBASE/manage_profile.php?action=edit&uuid=$uuid");
 
 ?>

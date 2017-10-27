@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2015 University of Utah and the Flux Group.
+# Copyright (c) 2006-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -113,6 +113,17 @@ class WebTask {
 	$task_id = $this->task_id();
 	DBQueryWarn("delete from web_tasks where task_id='$task_id'");
 	return 0;
+    }
+
+    # Reset to clean state.
+    function Reset() {
+        $task_id = $this->task_id();
+
+        DBQueryFatal("update web_tasks set ".
+                     " exited=null,process_id=0,exitcode=0,task_data=''".
+                     "where task_id='$task_id'");
+
+        return $this->Refresh();
     }
 
     # accessors

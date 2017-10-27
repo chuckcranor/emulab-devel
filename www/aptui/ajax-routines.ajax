@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,12 @@
 # 
 # }}}
 #
+chdir("..");
+include("lease_defs.php");
+include("blockstore_defs.php");
+include("imageid_defs.php");
+chdir("apt");
+include("dataset_defs.php");
 
 function ClassicExperimentList($which, $target, $state = "active")
 {
@@ -39,16 +45,25 @@ function ClassicExperimentList($which, $target, $state = "active")
         $target_idx = $target->uid_idx();
         $whereclause = "where e.swapper_idx='$target_idx'";
     }
+    elseif ($which == "group") {
+        $target_pid  = $target->pid();
+        $target_gid  = $target->gid();
+        $whereclause = "where e.pid='$target_pid' and e.gid='$target_gid'";
+    }
     else {
         $target_pid = $target->pid();
         $whereclause = "where e.pid='$target_pid'";
     }
     $whereclause .= " and e.geniflags=0";
+    $whereclause .= " and t.tid is null";
     $results = array();
 
     $query_result =
         DBQueryFatal("select idx from experiments as e ".
-                     "$whereclause $stateclause order by e.eid");
+                     "left join experiment_templates as t on ".
+                     "     t.pid=e.pid and t.eid=e.eid ".
+                     "$whereclause $stateclause ".
+                     "order by e.eid");
 
     while ($row = mysql_fetch_array($query_result)) {
         $idx = $row["idx"];
@@ -70,6 +85,7 @@ function ClassicExperimentList($which, $target, $state = "active")
         $blob["idx"]      = $idx;
         $blob["pid"]      = "<a href='show-project.php?project=$pid'>$pid</a>";
         $blob["eid"]      = "<a href='$url'>$eid</a>";
+        $blob["uuid"]     = $experiment->uuid();
 
         if (ISADMIN() || $which == "project") {
             $blob["creator"] =
@@ -88,7 +104,7 @@ function ClassicExperimentList($which, $target, $state = "active")
         $blob["swapped"]      = $swapped;
         $blob["created"]      = $created;
         $blob["state"]        = $experiment->state();
-        $blob["description"]  = CleanString($experiment->description());
+        $blob["description"]  = $experiment->description();
         $results["$pid:$eid"] = $blob;
     }
     return $results;
@@ -98,10 +114,25 @@ function ExperimentList($which, $target)
 {
     global $urn_mapping, $TBBASE;
     global $this_user;
+    $extraclause = "";
 
     if ($which == "user") {
         $target_uuid = $target->uuid();
         $whereclause = "where a.creator_uuid='$target_uuid'";
+    }
+    elseif ($which == "group") {
+        $target_pid = $target->pid();
+        $target_gid = $target->gid();
+        $whereclause = "where a.pid='$target_pid' and a.gid='$target_gid'";
+    }
+    elseif ($which == "membership") {
+        $target_uuid = $target->uuid();
+        $target_idx  = $target->idx();
+        $whereclause = "where a.creator_uuid='$target_uuid' or ".
+                       "      g.uid_idx is not null ";
+        $extraclause = "left join group_membership as g on ".
+                       "     g.uid_idx='$target_idx' and  ".
+                       "     g.pid_idx=a.pid_idx ";
     }
     else {
         $target_pid = $target->pid();
@@ -128,6 +159,7 @@ function ExperimentList($which, $target)
                      "left join geni.geni_slices as s on ".
                      "     s.uuid=a.slice_uuid ".
                      "left join geni.geni_users as u on u.uuid=a.creator_uuid ".
+                     "$extraclause ".
                      "$whereclause");
 
     while ($row = mysql_fetch_array($query_result)) {
@@ -218,6 +250,11 @@ function ProfileList($which, $target)
         $target_idx  = $target->uid_idx();
         $whereclause = "where v.creator_idx='$target_idx'";
     }
+    elseif ($which == "group") {
+        $target_pid  = $target->pid();
+        $target_gid  = $target->gid();
+        $whereclause = "where v.pid='$target_pid' and v.gid='$target_gid'";
+    }
     else {
         $target_idx  = $target->pid_idx();
         $whereclause = "where v.pid_idx='$target_idx'";
@@ -277,6 +314,203 @@ function ProfileList($which, $target)
                 "<a href='show-profile.php?uuid=$uuid'>$name</a>";
         }
         $results["$pid:$name"] = $blob;
+    }
+    return $results;
+}
+
+function DatasetList($which, $target)
+{
+    global $urn_mapping, $TBBASE, $ISEMULAB, $DEFAULT_AGGREGATE_URN;
+    global $this_user;
+
+    if ($which == "user") {
+        $target_idx  = $target->uid_idx();
+        $whereclause = "where v.creator_idx='$target_idx'";
+        $orderclause = "order by v.dataset_id";
+    }
+    elseif ($which == "group") {
+        $target_pid  = $target->pid();
+        $target_gid  = $target->gid();
+        $whereclause = "where v.pid='$target_pid' and v.gid='$target_gid'";
+        $orderclause = "order by v.creator_uid";
+    }
+    else {
+        $target_idx  = $target->pid_idx();
+        $whereclause = "where v.pid_idx='$target_idx'";
+        $orderclause = "order by v.creator_uid";
+    }
+    #
+    # In the main portal, we show only those datasets on the local cluster.
+    #
+    if ($ISEMULAB) {
+        $whereclause .= "and agg.urn='$DEFAULT_AGGREGATE_URN'";
+    }
+    $results = array();
+
+    $query_result =
+        DBQueryFatal("select v.* from apt_datasets as v ".
+                     "left join apt_aggregates as agg ".
+                     "on agg.urn=v.aggregate_urn ".
+                     "$whereclause $orderclause");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $uuid         = $row["uuid"];
+        $name         = $row["dataset_id"];
+        $type         = $row["type"];
+        $pid          = $row["pid"];
+        $pid_idx      = $row["pid_idx"];
+        $gid          = $row["gid"];
+        $gid_idx      = $row["gid_idx"];
+        $creator_uid  = $row["creator_uid"];
+        $creator_idx  = $row["creator_idx"];
+        $aggregate_urn= $row["aggregate_urn"];
+        $created      = $row["created"];
+        $expires      = $row["expires"];
+
+        $blob = array();
+        $blob["uuid"]         = $uuid;
+        $blob["name"]         = $name;
+        $blob["type"]         = $type;
+        $blob["pid"]          = $pid;
+        $blob["pid_idx"]      = $pid_idx;
+        $blob["gid"]          = $gid;
+        $blob["gid_idx"]      = $gid_idx;
+        $blob["creator_uid"]  = $creator_uid;
+        $blob["creator_idx"]  = $creator_idx;
+        $blob["created"]      = $created;
+        $blob["expires"]      = ($type != "imdataset" ? $expires : "");
+        $blob["aggregate_urn"]= $aggregate_urn;
+
+        $results[$uuid] = $blob;
+    }
+    return $results;
+}
+
+function ClassicDatasetList($which, $target)
+{
+    global $urn_mapping, $TBBASE, $ISEMULAB;
+    global $this_user;
+
+    if ($which == "user") {
+        $target_uid   = $target->uid();
+        $whereclause1 = "where l.owner_uid='$target_uid' and ad.uuid is null";
+        $whereclause2 = "where v.creator='$target_uid' and ".
+                      "ad.uuid is null and v.isdataset=1";
+        $orderclause  = "order by name";
+    }
+    elseif ($which == "group") {
+        $target_pid   = $target->pid();
+        $target_gid   = $target->gid();
+        $whereclause1 = "where l.pid='$target_pid' and ".
+                      "where l.gid='$target_gid' and ad.uuid is null";
+        $whereclause2 = "where v.pid='$target_pid' and ad.uuid is null and ".
+                      "v.gid='$target_gid' and v.isdataset=1";
+        $orderclause  = "order by creator";
+    }
+    else {
+        $target_pid   = $target->pid();
+        $whereclause1 = "where l.pid='$target_pid' and ad.uuid is null";
+        $whereclause2 = "where v.pid='$target_pid' and ".
+                      "ad.uuid is null and v.isdataset=1 ";
+        $orderclause  = "order by creator";
+    }
+    $results = array();
+
+    $query_result =
+        DBQueryFatal(
+            "select uuid,type,name,creator from ".
+            " ((select l.uuid as uuid,'lease' as type, ".
+            "          l.lease_id as name,l.owner_uid as creator ".
+            "      from project_leases as l ".
+            "  left join apt_datasets as ad on ad.remote_uuid=l.uuid ".
+            "  $whereclause1) ".
+            "  union ".
+            "  (select i.uuid as uuid,'image' as type, ".
+            "          i.imagename as name,v.creator as creator ".
+            "       from images as i ".
+            "  left join image_versions as v on ".
+            "       v.imageid=i.imageid and v.version=i.version ".
+            "  left join apt_datasets as ad on ad.remote_uuid=i.uuid ".
+            "  $whereclause2)) as foo $orderclause");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $uuid    = $row["uuid"];
+        $type    = $row["type"];
+
+        if ($type == "image") {
+            $dataset = ImageDataset::Lookup($uuid);
+        }
+        elseif ($type == "lease") {
+            $dataset = Lease::Lookup($uuid);
+        }     
+
+        $blob = array();
+        $blob["uuid"]         = $uuid;
+        $blob["name"]         = $dataset->id();
+        $blob["type"]         = $dataset->type();
+        $blob["pid"]          = $dataset->pid();
+        $blob["gid"]          = $dataset->gid();
+        $blob["creator_uid"]  = $dataset->owner_uid();
+        $blob["created"]      = $dataset->created();
+        $blob["expires"]      = $dataset->expires();
+
+        $results[$uuid] = $blob;
+    }
+    return $results;
+}
+
+#
+# Classic images. For now, just one list. Maybe this will be per
+# user/project/group in the future.
+#
+function ClassicImageList($target)
+{
+    global $urn_mapping, $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    global $this_user;
+
+    $target_idx = $target->uid_idx();
+    $results    = array();
+
+    $query =
+           "select distinct i.imagename,iv.*,ov.* from images as i ".
+           "left join image_versions as iv on ".
+           "          iv.imageid=i.imageid and iv.version=i.version ".
+           "left join os_info_versions as ov on ".
+           "          i.imageid=ov.osid and ov.vers=i.version ".
+           "left join osidtoimageid as map on map.osid=i.imageid ".
+           "where (iv.ezid = 1 and iv.isdataset=0) and ".
+           "      iv.creator_urn is null and ".
+           "      iv.creator_idx='$target_idx' ".
+           "order by i.imagename";
+
+    $query_result = DBQueryFatal($query);
+
+    $domain = $OURDOMAIN;
+    if ($TBMAINSITE) {
+        $domain = "emulab.net";
+    }
+
+    while ($row = mysql_fetch_array($query_result)) {
+	$imageid = $row["imageid"];
+        $name    = $row["imagename"];
+        $pid     = $row["pid"];
+        $urn     = "urn:publicid:IDN+${domain}+image+${pid}//${name}";
+        $blob    = array();
+
+        $blob["imageid"]     = $imageid;
+        $blob["description"] = $row["description"];
+        $blob["imagename"]   = $row["imagename"];
+        $blob["created"]     = DateStringGMT($row["created"]);
+        $blob["pid"]         = $row["pid"];
+        $blob["pid_idx"]     = $row["pid_idx"];
+        $blob["global"]      = $row["global"];
+        $blob["creator"]     = $row["creator"];
+        $blob["creator_idx"] = $row["creator_idx"];
+        $blob["urn"]         = $urn;
+	$blob["url"]         = $TBBASE . "/" .
+                             CreateURL("showimageid",
+                                       URLARG_IMAGEID, $imageid);
+        $results[] = $blob;
     }
     return $results;
 }

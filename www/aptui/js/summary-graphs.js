@@ -1,9 +1,9 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment',
-	 'js/lib/text!template/summary-graphs.html'],
-function (_, sup, moment, templateString)
+$(function ()
 {
     'use strict';
+
+    var templates = APT_OPTIONS.fetchTemplateList(['summary-graphs']);
+    var templateString = templates['summary-graphs'];
     var isadmin           = 0;
 
     function initialize()

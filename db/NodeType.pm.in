@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2014, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2005-2014, 2016, 2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -88,7 +88,9 @@ sub LookupRow($$$)
     # Do not use the embedded type field, cause of auxtypes.
     $self->{"TYPE"}  = $type;
     $self->{"DBROW"} = $row;
+    $self->{"CLASS"} = ($type eq $row->{"class"} ? $type : undef);
     $self->{"ATTRS"} = undef;
+    $self->{"ISAUX"} = 0;
 
     bless($self, $class);
 
@@ -102,6 +104,8 @@ sub field($$)  { return ((! ref($_[0])) ? -1 : $_[0]->{'DBROW'}->{$_[1]}); }
 # Do not use the embedded type field, cause of auxtypes.
 sub type($)           { return $_[0]->{'TYPE'}; }
 sub class($)          { return field($_[0], 'class'); }
+sub IsAuxType($)      { return $_[0]->{'ISAUX'}; }
+sub architecture($)   { return field($_[0], 'architecture'); }
 sub isvirtnode($)     { return field($_[0], 'isvirtnode'); }
 sub isjailed($)       { return field($_[0], 'isjailed'); }
 sub isdynamic($)      { return field($_[0], 'isdynamic'); }
@@ -147,19 +151,15 @@ sub LookupAny($$)
 	if (!$query_result);
     if ($query_result->numrows) {
 	my ($ntype) = $query_result->fetchrow_array();
-	return NodeType->Lookup($ntype);
+	my $obj = NodeType->Lookup($ntype);
+	return undef
+	    if (!defined($obj));
+	$obj->{'CLASS'} = $type;
+	return $obj;
     }
 
-    $query_result =
-	DBQueryWarn("select type from node_types_auxtypes ".
-		    "where auxtype='$type' limit 1");
-    return undef
-	if (!$query_result);
-    if ($query_result->numrows) {
-	my ($ntype) = $query_result->fetchrow_array();
-	return NodeType->Lookup($ntype);
-    }
-    return undef;
+    # Try for an auxtype.
+    return NodeType->LookupAuxType($type);
 }
 
 #
@@ -188,6 +188,82 @@ sub AllTypes($)
     return @alltypes;
 }
 
+#
+# Lookup all types of a given architecture.
+#
+sub LookupArchitectureTypes($$)
+{
+    my ($class,$arch)  = @_;
+    my @alltypes = ();
+    
+    my $query_result =
+	DBQueryWarn("select type from node_types where architecture='$arch'");
+    
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    while (my ($type) = $query_result->fetchrow_array()) {
+	my $typeinfo = Lookup($class, $type);
+
+	# Something went wrong?
+	return undef
+	    if (!defined($typeinfo));
+	
+	push(@alltypes, $typeinfo);
+    }
+    return @alltypes;
+}
+
+#
+# Lookup an auxtype.
+#
+sub LookupAuxType($$)
+{
+    my ($class, $auxtype)  = @_;
+    
+    my $query_result =
+	DBQueryWarn("select nt.type from node_types_auxtypes as at ".
+		    "left join node_types as nt on nt.type=at.type ".
+		    "where at.auxtype='$auxtype'");
+    
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my ($type) = $query_result->fetchrow_array();
+    my $typeinfo = Lookup($class, $type);
+
+    # Something went wrong?
+    return undef
+	if (!defined($typeinfo));
+
+    #
+    # Generate a new type entry, but named by the auxtype instead.
+    # Underlying data is shared; might need to change that.
+    #
+    my $newtype         = {};
+    $newtype->{"TYPE"}  = $auxtype;
+    $newtype->{"DBROW"} = $typeinfo->{"DBROW"};
+    $newtype->{"ATTRS"} = $typeinfo->{"ATTRS"};
+    $newtype->{"ISAUX"} = 1;
+    $newtype->{"BASE"}  = $typeinfo;
+    bless($newtype, $class);
+
+    # Add to cache.
+    $nodetypes{$auxtype} = $newtype;
+    return $newtype;
+}
+sub BaseType($)
+{
+    my ($self) = @_;
+    
+    return undef
+	if (!$self->IsAuxType());
+    return $self->{'BASE'};
+}
+
+#
+# Return list of all auxtypes.
+#
 sub AuxTypes($)
 {
     my ($class)  = @_;
@@ -202,26 +278,13 @@ sub AuxTypes($)
 	if (!$query_result || !$query_result->numrows);
 
     while (my ($auxtype, $type) = $query_result->fetchrow_array()) {
-	my $typeinfo = Lookup($class, $type);
+	my $typeinfo = LookupAuxType($class, $auxtype);
 
 	# Something went wrong?
 	return undef
 	    if (!defined($typeinfo));
-
-	#
-	# Generate a new type entry, but named by the auxtype instead.
-	# Underlying data is shared; might need to change that.
-	#
-	my $newtype         = {};
-	$newtype->{"TYPE"}  = $auxtype;
-	$newtype->{"DBROW"} = $typeinfo->{"DBROW"};
-	$newtype->{"ATTRS"} = $typeinfo->{"ATTRS"};
-	bless($newtype, $class);
-
-	# Add to cache.
-	$nodetypes{$auxtype} = $newtype;
 	
-	push(@auxtypes, $newtype);
+	push(@auxtypes, $typeinfo);
     }
     return @auxtypes;
 }
@@ -269,6 +332,17 @@ sub Stringify($)
     my $class = $self->class();
 
     return "[NodeType: $type/$class]";
+}
+
+#
+# Did we find this type cause it was a class lookup. Bogus, need a
+# different object for this.
+#
+sub IsClass($)
+{
+    my ($self) = @_;
+
+    return (defined($self->{'CLASS'}) ? 1 : 0);
 }
 
 #
@@ -430,7 +504,29 @@ sub Counts($)
 	($free) = $query_result->fetchrow_array();
     }
     return {"total" => $total, "free" => $free};
-}    
+}
+
+#
+# Utility function to look up a global vtype and return the list.
+#
+sub GlobalVtypeTypes($$)
+{
+    my ($class, $vtype) = @_;
+    my @result = ();
+
+    my $query_result =
+	DBQueryWarn("select types from global_vtypes where vtype='$vtype'");
+    return ()
+	if (!defined($query_result) || !$query_result->numrows);
+
+    my ($typestring) = $query_result->fetchrow_array();
+    foreach my $t (split(/\s+/, $typestring)) {
+	my $type = NodeType->Lookup($t);
+	push(@result, $type)
+	    if (defined($type));
+    }
+    return @result;
+}
 
 # _Always_ make sure that this 1 is at the end of the file...
 

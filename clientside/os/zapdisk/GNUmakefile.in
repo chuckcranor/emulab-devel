@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,35 +27,44 @@ SUBDIR		= $(subst $(TESTBED_SRCDIR)/,,$(SRCDIR))
 
 CBINDIR		= $(DESTDIR)$(CLIENT_BINDIR)
 LBINDIR		= $(DESTDIR)/usr/local/bin
-IZSRCDIR	= $(TESTBED_SRCDIR)/os/imagezip
+IZSRCDIR	= $(SRCDIR)/../imagezip
+IZOBJDIR	= ../imagezip
 
 #
 # XXX should be in sync with imagezip/GNUmakefile
 #
 WITH_MBR	= 1
 WITH_GPT	= 1
+WITH_ERASE	= 1
 
 include $(OBJDIR)/Makeconf
 
 PARTFLAGS	= -I$(IZSRCDIR)
 PARTLIBS	=
 ifeq ($(WITH_MBR),1)
-PARTLIBS	+= $(OBJDIR)/os/imagezip/mbr/libmbr.a
+PARTLIBS	+= $(IZOBJDIR)/mbr/libmbr.a
 PARTFLAGS	+= -DWITH_MBR
 endif
 ifeq ($(WITH_GPT),1)
-PARTLIBS	+= $(OBJDIR)/os/imagezip/gpt/libgpt.a
+PARTLIBS	+= $(IZOBJDIR)/gpt/libgpt.a
 PARTFLAGS	+= -DWITH_GPT
+endif
+ifeq ($(WITH_ERASE),1)
+EFLAGS		=
+EOBJS		= erase.o
+else
+EFLAGS		+= -DNO_ERASE
+EOBJS		= 
 endif
 
 all:
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
-CFLAGS		= -O -g $(LDSTATIC) $(PARTFLAGS)
+CFLAGS		= -O -g $(LDSTATIC) $(PARTFLAGS) $(EFLAGS)
 
-zapdisk: zapdisk.o disksize.o erase.o $(PARTLIBS)
-	$(CC) $(CFLAGS) zapdisk.o disksize.o erase.o $(PARTLIBS) -o zapdisk
+zapdisk: zapdisk.o disksize.o $(EOBJS) $(PARTLIBS)
+	$(CC) $(CFLAGS) zapdisk.o disksize.o $(EOBJS) $(PARTLIBS) -o zapdisk
 	cp zapdisk zapdisk.debug
 	strip zapdisk
 
@@ -66,7 +75,7 @@ erase.o:	$(IZSRCDIR)/erase.c
 	$(CC) -c $(CFLAGS) -o erase.o $<
 
 $(PARTLIBS):
-	@$(MAKE) -C $(OBJDIR)/os/imagezip partlibs
+	@$(MAKE) -C $(IZOBJDIR) partlibs
 
 install:
 

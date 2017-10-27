@@ -1,9 +1,17 @@
-.navbar img {
-  margin: 5 auto;
-  height: 65px;
+.navbar-brand > img {
+  border: 5px solid #5e8a90;
+  border-radius: 35px;
 }
 
-.navbar-static-top {
+.navbar-nav > li > a.admin-toggle {
+  margin-top: 15px;
+}
+
+.portal-navbar {
+  margin-bottom: 25px;
+}
+
+.navbar {
   background-color: #5e8a90;
 }
 
@@ -13,10 +21,6 @@
 
 #footer {
   background-color: #5e8a90;
-}
-
-.btn-quickvm-home, .btn-quickvm-home:hover {
-  background-color: #e8eeef
 }
 
 .btn-success {

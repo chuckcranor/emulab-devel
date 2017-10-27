@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -126,22 +126,24 @@ foreach my $vlan (@vlans) {
 	my $iface;
 
 	if ($member->GetNodeIface(\$node, \$iface) != 0) {
-	    die("*** $0:\n".
-		"    Missing attributes for $member in $vlan\n");
+	    print STDERR "Missing attributes for $member in $vlan\n";
+	    next;
 	}
 	my $nodeid = $node->node_id();
 
 	#
 	# Find out which switch this interface is connected to
 	#
-	my $result2 =
-	    DBQueryFatal("select node_id2 from wires as w ".
-			 "left join interfaces as i on ".
-			 "     w.node_id1=i.node_id AND w.card1=i.card " .
-			 "where node_id='$nodeid' and iface='$iface'");
-	# We assume only one response here!
-	my ($switch) = $result2->fetchrow_array();
-	$switches{$switch}++;
+	my $interface = Interface->LookupByIface($nodeid, $iface);
+	if (!defined($interface)) {
+	    print STDERR "No interface for $nodeid:$iface\n";
+	    next;
+        }
+	if (!$interface->wiredup()) {
+	    print STDERR "Interface for $nodeid:$iface is not wired up\n";
+	    next;
+        }
+	$switches{$interface->switch_id()}++;
     }
 
     #

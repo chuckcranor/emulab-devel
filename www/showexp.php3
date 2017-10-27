@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,6 +26,9 @@ require("Sajax.php");
 include("showstuff.php3");
 include_once("node_defs.php");
 include_once("template_defs.php");
+chdir("apt");
+include_once("instance_defs.php");
+chdir("..");
 sajax_init();
 sajax_export("GetExpState", "Show", "ModifyAnno", "FreeNodeHtml");
 
@@ -347,10 +350,21 @@ while ($row = mysql_fetch_array($query_result)) {
     }
 }
 
+if ($geniflags) {
+    # We would not see this unless it was an active experiment.
+    $aptinstance = Instance::LookupBySlice($experiment_stats->slice_uuid());
+}
+
 SUBPAGESTART();
 
 SUBMENUSTART("$tag Options");
 
+if (isset($aptinstance)) {
+    WRITESUBMENUBUTTON("Go to Portal Page",
+                       "$TBBASE/portal/status.php?uuid=" .
+                       $aptinstance->uuid());
+}
+else {
 if ($expstate && !$geniflags) {
     if ($experiment->logfile() && $experiment->logfile() != "") {
 	WRITESUBMENUBUTTON("View Activity Logfile",
@@ -488,7 +502,8 @@ if (!$geniflags && $expstate == $TB_EXPTSTATE_ACTIVE) {
     }
 }
 
-if (($expstate == $TB_EXPTSTATE_ACTIVE ||
+if (!$geniflags &&
+    ($expstate == $TB_EXPTSTATE_ACTIVE ||
      $expstate == $TB_EXPTSTATE_ACTIVATING ||
      $expstate == $TB_EXPTSTATE_MODIFY_RESWAP) &&
     (STUDLY() || $EXPOSELINKTEST)) {
@@ -498,7 +513,7 @@ if (($expstate == $TB_EXPTSTATE_ACTIVE ||
 		       ($linktest_running ? "&kill=1" : ""));
 }
 
-if ($expstate == $TB_EXPTSTATE_ACTIVE) {
+if (!$geniflags && $expstate == $TB_EXPTSTATE_ACTIVE) {
     if (!$geniflags && STUDLY() && isset($classes['pcvm'])) {
 	WRITESUBMENUBUTTON("Record Feedback Data",
 			   CreateURL("feedback", $experiment) .
@@ -528,7 +543,7 @@ if ($wireless) {
 WRITESUBMENUDIVIDER();
 
 # History
-if (! $instance) {
+if (! ($instance || $geniflags)) {
     WRITESUBMENUBUTTON("Show History",
 		       "showstats.php3?showby=expt&exptidx=$expindex");
 }
@@ -536,7 +551,7 @@ if (! $instance) {
 if (!$geniflags) {
     WRITESUBMENUBUTTON("Duplicate Experiment",
 		       "beginexp.php?copyid=$expindex");
-    if (ISADMIN() || STUDLY()) {
+    if (1) {
         $uuid = $experiment->uuid();
         WRITESUBMENUBUTTON("Create Profile from Experiment",
                            "portal/manage_profile.php?fromexp=$uuid");
@@ -597,7 +612,7 @@ if ($isadmin) {
 	SUBMENUSECTIONEND();
     }
 }
-    
+}    
 SUBMENUEND_2A();
 
 echo "<br>\n";

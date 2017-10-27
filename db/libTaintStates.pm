@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2014 University of Utah and the Flux Group.
+# Copyright (c) 2014-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -185,19 +185,19 @@ sub RemoveTaintState($;$)
 #
 sub InheritTaintStates($$)
 {
-    my ($obj, $osinfo) = @_;
-    require OSinfo;
+    my ($obj, $osimage) = @_;
+    require OSImage;
 
-    if (!ref($osinfo)) {
-	my $tmp = OSinfo->Lookup($osinfo);
+    if (!ref($osimage)) {
+	my $tmp = OSImage->Lookup($osimage);
 	if (!defined($tmp)) {
-	    warn "Cannot lookup osinfo for $osinfo\n";
+	    warn "Cannot lookup OSImage for $osimage\n";
 	    return -1;
 	}
-	$osinfo = $tmp;
+	$osimage = $tmp;
     }
 
-    my @taint_states = GetTaintStates($osinfo);
+    my @taint_states = GetTaintStates($osimage);
     return 0
 	if (!@taint_states);
     push @taint_states, GetTaintStates($obj);

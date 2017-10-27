@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2015 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -672,7 +672,6 @@ function VerifyPageArguments($argspec, $required)
 	    break;
 	    
 	case PAGEARG_STRING:
-	default:
 	    if (isset($_REQUEST[$name])) {
 		$object = $_REQUEST[$name];
 		$yep = 1;
@@ -685,8 +684,19 @@ function VerifyPageArguments($argspec, $required)
 	    }
 	    break;
 	    
+	case PAGEARG_NODEID:
+	    if (isset($_REQUEST[$name])) {
+		$object = $_REQUEST[$name];
+		$yep = 1;
+
+		if (!ValidateArgument($name, PAGEARG_NODEID, $object)) {
+		    $object = htmlspecialchars($object);
+		    PAGEARGERROR("Invalid characters in '$name': $object");
+		}
+	    }
+	    break;
+	    
 	case PAGEARG_PASSWORD:
-	default:
 	    if (isset($_REQUEST[$name])) {
 		$object = $_REQUEST[$name];
 		$yep = 1;

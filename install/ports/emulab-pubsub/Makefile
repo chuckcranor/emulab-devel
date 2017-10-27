@@ -2,7 +2,7 @@
 
 PORTNAME=	pubsub
 PORTVERSION=	0.99
-PORTREVISION=	2
+PORTREVISION=	7
 CATEGORIES=	misc
 MASTER_SITES=	http://www.emulab.net/distributions/
 DISTFILES=      ${PORTNAME}-${PORTVERSION}_${PORTREVISION}.tar.gz

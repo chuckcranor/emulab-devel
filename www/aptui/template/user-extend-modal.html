@@ -128,5 +128,50 @@
     </div> <!-- /modal-content -->
   </div> <!-- /modal-dialog -->
 </div> <!-- /modal -->
-
-
+<div id='restricted_extend_modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<center><h3>Warning</h3></center>
+	<div>
+	  Your experiment cannot be extended beyond <span id="hours"></span>
+	  hour(s) from now because of a pre-scheduled resource
+	  reservation.  Clicking confirm below will result in your
+	  experiment be extended for as long as possible, but be sure to
+	  save all your work before your experiment is terminated. If
+	  this is going to cause undue hardship, please contact
+	  <a class="supportmail"></a> to plead your case.
+	</div>
+	<div style="margin-top: 10px">
+          <button class='btn btn-primary btn-sm align-center'
+                  type='submit' id='confirm-max'>Confirm</button>
+	</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='no_extend_modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<center><h3>Warning</h3></center>
+	<div>
+	  Your experiment cannot be extended because of a
+          pre-scheduled resource reservation. Please be sure to save
+          all your work before your experiment is terminated. If this
+          is going to cause undue hardship, please contact
+	  <a class="supportmail"></a> to plead your case. 
+	</div>
+	<div style="margin-top: 10px">
+          <button class='btn btn-primary btn-sm align-center'
+		  data-dismiss='modal'
+                  type='button'>Dismiss</button>
+	</div>
+      </div>
+    </div>
+  </div>
+</div>

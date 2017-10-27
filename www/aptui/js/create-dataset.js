@@ -1,14 +1,12 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment', 'js/aptforms',
-	 'js/lib/text!template/create-dataset.html',
-	 'js/lib/text!template/dataset-help.html',
-	 'js/lib/text!template/oops-modal.html',
-	 'js/lib/text!template/waitwait-modal.html'],
-function (_, sup, moment, aptforms,
-	  mainString, helpString, oopsString, waitwaitString)
+$(function ()
 {
     'use strict';
 
+    var templates = APT_OPTIONS.fetchTemplateList(['create-dataset', 'dataset-help', 'oops-modal', 'waitwait-modal']);
+    var mainString = templates['create-dataset'];
+    var helpString = templates['dataset-help'];
+    var oopsString = templates['oops-modal'];
+    var waitwaitString = templates['waitwait-modal'];
     var mainTemplate = _.template(mainString);
     var fields       = null;
     var fstypes      = null;
@@ -204,7 +202,9 @@ function (_, sup, moment, aptforms,
 	    }
 	    aptforms.SubmitForm('#create_dataset_form', "dataset",
 				(editing ? "modify" : "create"),
-				submit_callback);
+				submit_callback,
+				"This will take a minute or two; " +
+				"please be patient!");
 	};
 	aptforms.CheckForm('#create_dataset_form', "dataset",
 			   (editing ? "modify" : "create"),

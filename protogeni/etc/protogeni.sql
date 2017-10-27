@@ -98,6 +98,7 @@ CREATE TABLE `geni_slivers` (
   `aggregate_uuid` varchar(40) default NULL,
   `status` varchar(16) NOT NULL default 'created',
   `state` varchar(16) NOT NULL default 'stopped',
+  `status_state_timestamp` int(10) unsigned default NULL,
   `errorlog` text,
   `rspec_string` mediumtext,
   PRIMARY KEY  (`idx`),
@@ -124,6 +125,7 @@ CREATE TABLE `geni_aggregates` (
   `aggregate_idx` int(10) unsigned default NULL,
   `status` varchar(16) NOT NULL default 'created',
   `state` varchar(16) NOT NULL default 'stopped',
+  `status_state_timestamp` int(10) unsigned default NULL,
   `errorlog` text,
   `boot_failure` tinyint(1) default '0',
   PRIMARY KEY  (`idx`),
@@ -133,7 +135,7 @@ CREATE TABLE `geni_aggregates` (
 
 DROP TABLE IF EXISTS `geni_tickets`;
 CREATE TABLE `geni_tickets` (
-  `idx` mediumint(8) unsigned NOT NULL default '0',
+  `idx` int(10) unsigned NOT NULL default '0',
   `ticket_uuid` varchar(40) NOT NULL default '',
   `owner_uuid` varchar(40) NOT NULL default '',
   `slice_uuid` varchar(40) NOT NULL default '',
@@ -155,7 +157,7 @@ CREATE TABLE `geni_tickets` (
 
 DROP TABLE IF EXISTS `geni_credentials`;
 CREATE TABLE `geni_credentials` (
-  `idx` mediumint(8) unsigned NOT NULL default '0',
+  `idx` int(10) unsigned NOT NULL default '0',
   `uuid` varchar(40) NOT NULL default '',
   `owner_uuid` varchar(40) NOT NULL default '',
   `this_uuid` varchar(40) NOT NULL default '',
@@ -241,10 +243,10 @@ CREATE TABLE `geni_resources` (
   `expires` datetime default NULL,
   `updated` datetime default NULL,
   `slice_idx` mediumint(8) unsigned NOT NULL default '0',
-  `credential_idx` mediumint(8) unsigned NOT NULL default '0',
+  `credential_idx` int(10) unsigned NOT NULL default '0',
   `manifest_idx` mediumint(8) unsigned NOT NULL default '0',
-  `ticket_idx` mediumint(8) unsigned NOT NULL default '0',
-  `newticket_idx` mediumint(8) unsigned NOT NULL default '0',
+  `ticket_idx` int(10) unsigned NOT NULL default '0',
+  `newticket_idx` int(10) unsigned NOT NULL default '0',
   `rspec_idx` mediumint(8) unsigned default NULL,
   PRIMARY KEY  (`idx`),
   UNIQUE KEY `manager` (`exptidx`,`manager_urn`(255))
@@ -340,7 +342,7 @@ CREATE TABLE `manifest_history` (
 
 DROP TABLE IF EXISTS `ticket_history`;
 CREATE TABLE `ticket_history` (
-  `idx` mediumint(8) unsigned NOT NULL default '0',
+  `idx` int(10) unsigned NOT NULL default '0',
   `uuid` varchar(40) NOT NULL default '',
   `owner_urn` tinytext,
   `owner_uuid` varchar(40) NOT NULL default '',

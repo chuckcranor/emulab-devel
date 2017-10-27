@@ -1,6 +1,6 @@
 # -*- tcl -*-
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -159,6 +159,10 @@ Node instproc init {s} {
     $self set next_rule 100
     $self instvar fw_rules
     array set fw_rules {}
+
+    # Distribution of per-experiment root keypair
+    $self set rootkey_private -1
+    $self set rootkey_public -1
 }
 
 Bridge instproc init {s} {
@@ -244,6 +248,8 @@ Node instproc updatedb {DB} {
     $self instvar topo
     $self instvar fw_style
     $self instvar fw_rules
+    $self instvar rootkey_private
+    $self instvar rootkey_public
     $self instvar X_
     $self instvar Y_
     $self instvar orientation_
@@ -271,7 +277,7 @@ Node instproc updatedb {DB} {
     # If we haven't specified a osid so far then we should fill it
     # with the id from the node_types table now.
     if {$osid == {}} {
-	if {$virthost == 0} {
+	if {$virthost == 0 && $role != "bridge" } {
 	    if {[info exists default_osids($type)]} {
 		set osid $default_osids($type)
 	    }
@@ -313,7 +319,8 @@ Node instproc updatedb {DB} {
         if { [regexp {:} $parent_osid] } {
 	    set pos [lindex [split $parent_osid {:}] 0]
 	}
-	if {[lsearch -exact $subosids($os) $pos] == -1} {
+	if {![info exists subosids($os)] ||
+	    [lsearch -exact $subosids($os) $pos] == -1} {
 	    perror "subOSID $osid does not run on parent OSID $parent_osid!"
 	    return
 	}
@@ -432,6 +439,11 @@ Node instproc updatedb {DB} {
 	lappend values $fw_style
     }
 
+    lappend fields "rootkey_private"
+    lappend values $rootkey_private
+    lappend fields "rootkey_public"
+    lappend values $rootkey_public
+    
     $sim spitxml_data "virt_nodes" $fields $values
 
     if {$topo != "" && ($type == "robot" || $hwtype_class($type) == "robot")} {
@@ -951,6 +963,25 @@ Node instproc add-rule {rule} {
 
     set fw_rules($next_rule) $rule
     incr next_rule
+}
+
+Node instproc rootkey {key onoff} {
+    $self instvar rootkey_public
+    $self instvar rootkey_private
+
+    if {$key != "public" && $key != "private"} {
+	perror "\[rootkey] key must be public or private"
+	return
+    }
+    if {$onoff != 0 && $onoff != 1} {
+	perror "\[rootkey] value must be 0/1"
+	return
+    }
+    if {$key == "public"} {
+	set rootkey_public $onoff
+    } elseif {$key == "private"} {
+	set rootkey_private $onoff
+    }
 }
 
 #

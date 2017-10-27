@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -64,7 +64,9 @@ my $IPTABLES	= "/sbin/iptables";
 my $IPBIN	= "/sbin/ip";
 my $IFCONFIG    = "/sbin/ifconfig";
 my $OVSCTL      = "/usr/local/bin/ovs-vsctl";
-
+if (! -x "$OVSCTL") {
+    $OVSCTL   = "/usr/bin/ovs-vsctl";
+}
 usage()
     if (@ARGV  < 4);
 

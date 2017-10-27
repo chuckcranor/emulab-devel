@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2008-2015 University of Utah and the Flux Group.
+# Copyright (c) 2008-2016 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -52,7 +52,7 @@ PSBIN_STUFF	= register_resources expire_daemon gencrl postcrl \
 		  mondbd parsecert creategeniuser webcreategeniuser \
 		  updategeniuser webupdategeniuser verifycert webverifycert \
 		  postimagedata getimagedata triggerimageupdate \
-		  deleteimagedata
+		  deleteimagedata secureimageget
 
 ifeq ($(ISCLEARINGHOUSE),1)
 PSBIN_STUFF     += ch_daemon

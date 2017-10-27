@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,7 +26,7 @@ include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
-$page_title = "Ranking";
+$page_title = "User/Project List";
 
 #
 # Get current user.
@@ -116,10 +116,14 @@ function SpitProjectList($days)
 SpitUserList($days);
 SpitProjectList($days);
 
-SPITREQUIRE("lists",
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+SPITREQUIRE("js/lists.js",
             "<script src='js/lib/jquery.tablesorter.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
             "<script src='js/lib/sugar.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+
+AddTemplate("lists");
 SPITFOOTER();
 ?>

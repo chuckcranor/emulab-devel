@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -64,6 +64,7 @@ simple-install:	common-install script-install bin-install
 dir-install:
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/dhcp
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/init
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/init.d
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/network
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/rsyslog.d
 
@@ -97,6 +98,7 @@ sysetc-fixup:
 	$(INSTALL) -m 644 $(SRCDIR)/rsyslog-emulab.conf $(SYSETCDIR)/rsyslog.d/60-emulab.conf
 	$(INSTALL) -m 755 $(SRCDIR)/rc.local $(SYSETCDIR)/rc.local
 	$(INSTALL) -m 644 $(SRCDIR)/interfaces $(SYSETCDIR)/network/interfaces
+	$(INSTALL) -m 755 $(SRCDIR)/ntp $(SYSETCDIR)/init.d/
 
 script-install:	dir-install $(SCRIPTS)
 	(cd ../linux; $(MAKE) DESTDIR=$(DESTDIR) RCDIR=$(RCDIR) script-install)

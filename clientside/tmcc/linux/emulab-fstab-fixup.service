@@ -1,14 +1,14 @@
 [Unit]
 Description=Emulab fstab fixup (swap)
-Before=swap.target
-After=remount-rootfs.service
+After=swap.target
+After=systemd-remount-fs.service
 DefaultDependencies=no
 Conflicts=shutdown.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=no
-ExecStart=/usr/local/etc/emulab/initscripts/emulab-systemd-swaps
+ExecStart=/usr/local/etc/emulab/initscripts/fstab-generator-finish
 Restart=no
 
 [Install]

@@ -109,26 +109,30 @@ if ($? == 0) {
 open(MAP, "$TMDELMAP")
     or die("Could not open $TMDELMAP");
 while (<MAP>) {
-    if ($_ =~ /^([-\w]+) simplex [-\w]+ ([-\w]+) (\d+)/ &&
-	$1 eq $linkname) {
-	$linktype = "simplex";
-	$iface    = $2;
-	$pipe1    = $3;
+    if ($_ =~ /^([-\w]+) simplex [-\w]+ ([-\w]+) (\d+)/) {
 	if ($debug) {
 	    print "Found simplex link: iface:$iface, pipe:$pipe1\n";
 	}
+	if ($1 eq $linkname) {
+	    $linktype = "simplex";
+	    $iface    = $2;
+	    $pipe1    = $3;
+	    last;
+	}
     }
     elsif ($_ =~
-	   /^([-\w]+) duplex [-\w]+ [-\w]+ ([-\w]+) ([-\w]+) (\d+) (\d+)/ &&
-	   $1 eq $linkname) {
-	$linktype = "duplex";
-	$iface    = $2;
-	$idev     = $3;
-	$pipe1    = $4;
-	$pipe2    = $5;
+	   /^([-\w]+) duplex [-\w]+ [-\w]+ ([-\w]+) ([-\w]+) (\d+) (\d+)/) {
 	if ($debug) {
 	    print "Found duplex link: iface:$iface, idev:$idev, ".
 		"pipe1:$pipe1, pipe2:$pipe2\n";
+	}
+	if ($1 eq $linkname) {
+	    $linktype = "duplex";
+	    $iface    = $2;
+	    $idev     = $3;
+	    $pipe1    = $4;
+	    $pipe2    = $5;
+	    last;
 	}
     }
     else {
@@ -136,6 +140,10 @@ while (<MAP>) {
     }
 }
 close(MAP);
+
+if (!$iface) {
+    die("Could not find interface $linkname!\n");
+}
 
 #
 # We are looking for bw/delay/plr primarily, but also queue info.

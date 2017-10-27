@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2012-2015 University of Utah and the Flux Group.
+# Copyright (c) 2012-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,6 +25,7 @@ use English;
 use strict;
 use Getopt::Std;
 use File::stat;
+use bigint;
 
 #
 # Get basic info for an image.
@@ -41,20 +42,24 @@ sub usage()
 	  "   -d        Turn on debug mode\n".
 	  "   -N nodeid Use the frisbee master server to get info on behalf of nodeid\n".
 	  "   -q        Don't print message on error, just exit non-zero\n".
-	  "   -s        Just print the size of the image in bytes\n".
-	  "   -m        Just print the modtime of the image in seconds since epoch\n".
-	  "   -r	Print the range of sectors covered by the image\n".
+	  "   -s        Print just the size of the image in bytes\n".
+	  "   -u        Print just the uncompressed data size of the image (if available)\n".
+	  "   -m        Print just the modtime of the image in seconds since epoch\n".
+	  "   -r        Print the range of sectors covered by the image\n".
+          "   -U k|m    Show sizes in KB or MB instead of bytes\n".
           "   -x        Show delta image info instead of full image info\n");
     exit(-1);
 }
-my $optlist   = "dsmN:qr";
+my $optlist   = "dsumN:qrU:";
 my $debug     = 0;
 my $quiet     = 0;
 my $forcedelta= 0;
 my $showall   = 1;
 my $showsize  = 0;
+my $showusize = 0;
 my $showmtime  = 0;
 my $showrange = 0;
+my $units;
 my $nodeid;
 
 #
@@ -91,7 +96,7 @@ $| = 1;
 #
 use lib "@prefix@/lib";
 use Node;
-use Image;
+use OSImage;
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -110,17 +115,27 @@ if (defined($options{"q"})) {
 if (defined($options{"x"})) {
     $forcedelta = 1;
 }
+if (defined($options{"U"})) {
+    $units = $options{"U"};
+    if ($units ne "k" && $units ne "m") {
+	usage();
+    }
+}
 if (defined($options{"s"})) {
     $showsize = 1;
-    $showall = $showmtime = $showrange = 0;
+    $showall = $showusize = $showmtime = $showrange = 0;
+}
+if (defined($options{"u"})) {
+    $showusize = 1;
+    $showall = $showsize = $showmtime = $showrange = 0;
 }
 if (defined($options{"m"})) {
     $showmtime = 1;
-    $showall = $showsize = $showrange = 0;
+    $showall = $showsize = $showusize = $showrange = 0;
 }
 if (defined($options{"r"})) {
     $showrange = 1;
-    $showall = $showsize = $showmtime = 0;
+    $showall = $showsize = $showusize = $showmtime = 0;
 }
 if (defined($options{"N"})) {
     my $node = Node->Lookup($options{"N"});
@@ -132,7 +147,7 @@ if (defined($options{"N"})) {
 usage() 
     if (@ARGV != 1);
 
-my $image   = Image->Lookup($ARGV[0]);
+my $image   = OSImage->Lookup($ARGV[0]);
 if (!defined($image)) {
     fatal("No such image exists");
 }
@@ -158,28 +173,38 @@ if (! -R $imagepath) {
     if (!defined($nodeid)) {
 	fatal("$imagepath: file is not readable, must use -N\n");
     }
+    if ($showusize) {
+	fatal("$imagepath: image file is not readable, ".
+	      "cannot determine uncompressed size\n");
+    }
     if ($showrange) {
 	fatal("$imagepath: image file is not readable, ".
 	      "cannot determine sector range\n");
     }
 }
 
-my ($isize, $imtime, $secmin, $secmax, $relocatable);
+my ($isize, $usize, $imtime, $secmin, $secmax, $relocatable);
 
 #
-# Use imagedump to get the sector range and whether the image is relocatable.
-# It prints:
+# Use imagedump to get the uncompressed data size, sector range, and whether
+# the image is relocatable. It prints:
 # ...
 #   1 relocations covering 276 bytes
 #   covered sector range: [0-12305790]
 # ...
+#   2.36x compression of allocated data (7636131840 bytes)
+# ...    
 # Note that even if an image has no relocations, it might still be relocatable.
 # But, this is the best we can do!
 #
 $relocatable = 0;
-if ($showrange) {
+if ($showusize || $showrange) {
     if (-x $imagedump) {
 	foreach my $line (`$imagedump $imagepath 2>&1`) {
+	    if ($line =~ /compression of allocated data \((\d+) bytes\)/) {
+		$usize = $1;
+		next;
+	    }
 	    if ($line =~ /covered sector range: \[(\d+)-(\d+)\]/) {
 		$secmin = $1;
 		$secmax = $2;
@@ -193,7 +218,11 @@ if ($showrange) {
 	    }
 	}
     }
-    if (!defined($secmin)) {
+    if ($showsize && !defined($usize)) {
+	fatal("$imagepid/$imagename: could not determine uncompressed data size ".
+	      "from imagefile $imagepath\n");
+    }
+    if ($showrange && !defined($secmin)) {
 	fatal("$imagepid/$imagename: could not determine sector range ".
 	      "from imagefile $imagepath\n");
     }
@@ -221,6 +250,17 @@ if (!defined($nodeid)) {
     }
 }
 
+if (defined($units)) {
+    if ($units eq "k") {
+	$isize = $isize / 1024;
+	$usize = $usize / 1024;
+    }
+    elsif ($units eq "m") {
+	$isize = $isize / (1024 * 1024);
+	$usize = $usize / (1024 * 1024);
+    }
+}
+
 if ($showall) {
     if (defined($isize)) {
 	printf "size=%lu\n", $isize;
@@ -230,6 +270,8 @@ if ($showall) {
     }
 } elsif ($showsize && defined($isize)) {
     printf "%lu\n", $isize;
+} elsif ($showusize && defined($usize)) {
+    printf "%lu\n", $usize;
 } elsif ($showmtime && defined($imtime)) {
     printf "%lu\n", $imtime;
 } elsif ($showrange && defined($secmin)) {

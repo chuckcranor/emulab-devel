@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -69,12 +69,13 @@ use Time::Local;
 use Compress::Zlib;
 use File::Temp qw(tempfile);
 use MIME::Base64;
-use Errno;
+use Errno qw(:POSIX);
 use List::Util qw(shuffle);
 
 # Configure variables
 my $TB		   = "@prefix@";
 my $TBOPS          = "@TBOPSEMAIL@";
+my $TBLOGS         = "@TBLOGSEMAIL@";
 my $TBAPPROVAL     = "@TBAPPROVALEMAIL@";
 my $TBAUDIT   	   = "@TBAUDITEMAIL@";
 my $BOSSNODE       = "@BOSSNODE@";
@@ -103,11 +104,17 @@ my $SNMPIT         = "$TB/bin/snmpit";
 my $CLONEIMAGE     = "$TB/sbin/clone_image";
 my $CREATEIMAGE    = "$TB/bin/create_image";
 my $DELETEIMAGE    = "$TB/sbin/delete_image";
+my $CREATEDATASET  = "$TB/bin/createdataset";
+my $DELETEDATASET  = "$TB/bin/deletelease";
+my $EXTENDDATASET  = "$TB/bin/extendlease";
+my $GRANTDATASET   = "$TB/bin/grantlease";
+my $GRANTIMAGE     = "$TB/sbin/grantimage";
 my $WAP            = "$TB/sbin/withadminprivs";
 my $SHAREVLAN      = "$TB/sbin/sharevlan";
 my $PANIC          = "$TB/sbin/panic";
 my $LINKTEST       = "$TB/sbin/linktest_control";
 my $XMLLINT	   = "/usr/local/bin/xmllint";
+my $IMAGEINFO      = "$TB/sbin/imageinfo";
 my $PRERENDER      = "$TB/libexec/vis/prerender";
 my $IMPORTER       = "$TB/sbin/image_import";
 my $POSTIMAGEDATA  = "$TB/sbin/protogeni/postimagedata";
@@ -645,6 +652,7 @@ sub DeleteSliver($)
     my $authority = GeniCertificate->LoadFromFile($EMULAB_PEMFILE);
     if (!defined($authority)) {
 	print STDERR " Could not load $EMULAB_PEMFILE\n";
+	$slice->UnLock();
 	return GeniResponse->Create(GENIRESPONSE_ERROR);
 	
     }
@@ -652,12 +660,16 @@ sub DeleteSliver($)
     # We need the user to sign the new ticket to. 
     #
     my $user = GeniCM::CreateUserFromCertificate($credential);
-    return $user
-	if (GeniResponse::IsResponse($user));
+    if (GeniResponse::IsResponse($user)) {
+	$slice->UnLock();
+	return $user;
+    }
     
     my $response = GeniCM::DeleteSliverAux($credential, $impotent, 1);
-    return $response
-	if (GeniResponse::IsResponse($response));
+    if (GeniResponse::IsResponse($response)) {
+	$slice->UnLock();
+	return $response;
+    }
 
     #
     # In the v2 API, return a new ticket for the resources
@@ -886,7 +898,7 @@ sub StartSliver($)
     my $manifest     = $argref->{'manifest'};
     
     return SliverAction("start",
-			$slice_urn, $sliver_urns, $credentials, $manifest);
+			$slice_urn, $sliver_urns, $credentials, $manifest, 0);
 }
 
 sub StopSliver($)
@@ -897,7 +909,7 @@ sub StopSliver($)
     my $credentials  = $argref->{'credentials'};
 
     return SliverAction("stop",
-			$slice_urn, $sliver_urns, $credentials, undef);
+			$slice_urn, $sliver_urns, $credentials, undef, 0);
 }
 
 sub RestartSliver($)
@@ -907,9 +919,12 @@ sub RestartSliver($)
     my $sliver_urns  = $argref->{'sliver_urns'} || $argref->{'component_urns'};
     my $credentials  = $argref->{'credentials'};
     my $manifest     = $argref->{'manifest'};
+    my $asyncmode    = (exists($argref->{'asyncmode'}) ?
+			$argref->{'asyncmode'} : 0);
 
     return SliverAction("restart",
-			$slice_urn, $sliver_urns, $credentials, $manifest);
+			$slice_urn, $sliver_urns, $credentials, $manifest,
+			$asyncmode);
 }
 
 sub ReloadSliver($)
@@ -920,12 +935,13 @@ sub ReloadSliver($)
     my $credentials  = $argref->{'credentials'};
 
     return SliverAction("reload",
-			$slice_urn, $sliver_urns, $credentials, undef);
+			$slice_urn, $sliver_urns, $credentials, undef, 0);
 }
 
-sub SliverAction($$$$$)
+sub SliverAction($$$$$$)
 {
-    my ($action, $slice_urn, $sliver_urns, $credentials, $manifest) = @_;
+    my ($action, $slice_urn, $sliver_urns, $credentials,
+	$manifest, $asyncmode) = @_;
     my $response;
     my $isasync = 0;
 
@@ -1051,7 +1067,7 @@ sub SliverAction($$$$$)
 	return 0;
     };
     my $PerformAction = sub {
-	my ($object, $action) = @_;
+	my ($object, $action, @slivers) = @_;
 
 	my $exitval = 0;
 
@@ -1062,10 +1078,20 @@ sub SliverAction($$$$$)
 	    $exitval = $object->Stop($API_VERSION);
 	}
 	elsif ($action eq "restart") {
-	    $exitval = $object->Restart($API_VERSION);
+	    if (@slivers) {
+		$exitval = $object->BatchAction("restart", @slivers);
+	    }
+	    else {
+		$exitval = $object->Restart($API_VERSION);
+	    }
 	}
 	elsif ($action eq "reload") {
-	    $exitval = $object->Reload($API_VERSION);
+	    if (@slivers) {
+		$exitval = $object->BatchAction("reload", @slivers);
+	    }
+	    else {
+		$exitval = $object->Reload($API_VERSION);
+	    }
 	}
 	return GeniResponse->Create(GENIRESPONSE_ERROR, 
 				    "Could not $action sliver")
@@ -1149,12 +1175,38 @@ sub SliverAction($$$$$)
 		    goto bad;
 		}
 	    }
-	    $response = &$PerformAction($sliver, $action);
+	}
+	if ($asyncmode && $action =~ /^(restart|reload)$/) {
+	    #
+	    # At this point we want to return and let the startsliver proceed
+	    # in the background
+	    #
+	    my $mypid = main::WrapperFork();
+	    if ($mypid) {
+		return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+	    }
+	    # Remember our pid in case callee forks again.
+	    $isasync = $PID;
+
+	    $response = &$PerformAction($aggregate, $action, @slivers);
 	    goto bad
 		if (GeniResponse::IsResponse($response));
+
+	    # Callee did not fork again, we can unlock.
+	    if ($isasync == $PID) {
+		$slice->UnLock();
+	    }
+	}
+	else {
+	    foreach my $sliver (@slivers) {
+		$response = &$PerformAction($sliver, $action);
+		goto bad
+		    if (GeniResponse::IsResponse($response));
+	    }
 	}
 	$slice->UnLock();
-	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+	return ($isasync ? GENIRESPONSE_SUCCESS :
+		GeniResponse->Create(GENIRESPONSE_SUCCESS));
     }
   bad:
     $slice->UnLock();
@@ -1240,7 +1292,8 @@ sub SliverStatus($)
 		if (! (ref($sliver) eq "GeniAggregate::Link" ||
 		       ref($sliver) eq "GeniAggregate::Tunnel"));
 	}
-	elsif ($sliver->resource_type() ne "Node") {
+	elsif ($sliver->resource_type() ne "Node" &&
+	       $sliver->resource_type() ne "Vhost") {
 	    next;
 	}
 	my $sliver_urn = $sliver->sliver_urn();
@@ -1704,8 +1757,14 @@ sub AddNodes($)
     #  {"node45" : {"diskimage" : "urn...",
     #               "startup"   : "/bin/echo",
     #               "tarballs"  : ["tarball1", "tarball2", ...],
-    #               "lans"      : ["lan1", "lan2", ...]
+    #               "lans"      : ["lan1", "lan2", ...],
+    #               "hardware_type" : "type",
     #               "node"      : "pc189"}}
+    #
+    # "tarballs" may also be a list of ["tarball","installpath"] tuples.
+    # "lans" may also be a a list of hashes, where each hash looks like
+    # {'name':'lan-1','address':'10.0.0.1','netmask':'255.0.0.0','type':'ipv4'}
+    # or similar.
     #
     if (ref($nodelist) ne "HASH") {
 	return GeniResponse->MalformedArgsResponse("nodes is not a hash");
@@ -1784,10 +1843,19 @@ sub AddNodes($)
 						       "is not a list");
 	}
 	foreach my $lan (@{ $blob->{'lans'} }) {
-	    if (!exists($ifacestoaddtolans{$lan})) {
-		$ifacestoaddtolans{$lan} = [];
+	    if (ref($lan) eq 'HASH') {
+		my $lanname = $lan->{'name'};
+		if (!exists($ifacestoaddtolans{$lanname})) {
+		    $ifacestoaddtolans{$lanname} = [];
+		}
+		push(@{ $ifacestoaddtolans{$lanname} }, "$nodeid:$lanname");
 	    }
-	    push(@{ $ifacestoaddtolans{$lan} }, "$nodeid:$lan");
+	    else {
+		if (!exists($ifacestoaddtolans{$lan})) {
+		    $ifacestoaddtolans{$lan} = [];
+		}
+		push(@{ $ifacestoaddtolans{$lan} }, "$nodeid:$lan");
+	    }
 	}
     }
     # But make sure all these lans exist.
@@ -1835,6 +1903,10 @@ sub AddNodes($)
 	    $xml .= "    <disk_image name='$urn'/>\n";
 	}
 	$xml .= "  </sliver_type>\n";
+	if (exists($blob->{'hardware_type'})) {
+	    my $hwtype = $blob->{'hardware_type'};
+	    $xml .= "  <hardware_type name='$hwtype'/>\n";
+	}
 	if (exists($blob->{'tarballs'}) || exists($blob->{'startup'})) {
 	    $xml .= "  <services>\n";
 
@@ -1844,19 +1916,71 @@ sub AddNodes($)
 							   "is not a list");
 	    }
 	    foreach my $tarball (@{ $blob->{'tarballs'} }) {
-		$xml .= "      <install url='$tarball' install_path='/' />\n";
+		if (ref($tarball) eq "ARRAY") {
+		    if (@$tarball == 2) {
+			$xml .= "      <install url='".@{$tarball}[0]."'".
+			    " install_path='".@{$tarball}[1]."' />\n";
+		    }
+		    else {
+			my $resp = "tarballs (for $nodeid) malformed; tarballs".
+			    " is a list of tarballs, or a list of [ tarball,".
+			    " install-path ] tuples!";
+			return GeniResponse->MalformedArgsResponse($resp);
+		    }
+		}
+		else {
+		    $xml .= "      <install url='$tarball' install_path='/' />\n";
+		}
 	    }
 	    if (exists($blob->{'startup'})) {
 		my $command = $blob->{'startup'};
 		
-		$xml .= "      <execute shell='/bin/bash' ".
-		    "command='$command' />\n";
+		if (ref($command) eq "ARRAY") {
+		    if (@$command == 2) {
+			$xml .= "      <execute shell='".@{$command}[1]."'".
+			    " command='".@{$command}[0]."' />\n";
+		    }
+		    else {
+			my $resp = "startup commands (for $nodeid) malformed;".
+			    " startup commands is a list of startup commands,".
+			    " or a list of [ command, shell ] tuples!";
+			return GeniResponse->MalformedArgsResponse($resp);
+		    }
+		}
+		else {
+		    $xml .= "      <execute shell='/bin/bash' ".
+			"command='$command' />\n";
+		}
 	    }
 	    $xml .= "  </services>\n";
 	}
 	if (exists($blob->{'lans'})) {
 	    foreach my $lan (@{ $blob->{'lans'} }) {
-		$xml .= "    <interface client_id='$nodeid:$lan' />\n";
+		if (ref($lan) eq 'HASH') {
+		    my $lanname = $lan->{'name'};
+		    $xml .= "    <interface client_id='$nodeid:$lanname'>";
+		    if (exists($lan->{'address'}) || exists($lan->{'netmask'})
+			|| exists($lan->{'type'})) {
+			$xml .= "<ip ";
+			if (exists($lan->{'address'})) {
+			    $xml .= " address='" . $lan->{'address'} . "'";
+			}
+			if (exists($lan->{'netmask'})) {
+			    $xml .= " netmask='" . $lan->{'netmask'} . "'";
+			}
+			if (exists($lan->{'type'})) {
+			    $xml .= " type='" . $lan->{'type'} . "'";
+			}
+			else {
+			    $xml .= " type='ipv4'";
+			}
+			$xml .= " />";
+		    }
+		    $xml .= "</interface>\n";
+		}
+		else {
+		    $xml .= "    <interface client_id='$nodeid:$lan' />\n";
+		}
 	    }
 	}
 	$xml .= "</node>";
@@ -1954,7 +2078,8 @@ sub AddNodes($)
     $mypid = $PID;
     
     if ($aggregate->Start($API_VERSION,
-			  $GeniAggregate::ACTION_FLAGS_SYNCVLANS) != 0) {
+			  $GeniAggregate::ACTION_FLAGS_SYNCVLANS|
+			  $GeniAggregate::ACTION_FLAGS_NOEVENTSTART) != 0) {
 	if ($PID == $mypid) {
 	    $slice->UnLock();
 	    print STDERR "Could not start sliver.\n";
@@ -2139,7 +2264,8 @@ sub DeleteNodes($)
     $mypid = $PID;
     
     if ($aggregate->Start($API_VERSION,
-			  $GeniAggregate::ACTION_FLAGS_SYNCVLANS) != 0) {
+			  $GeniAggregate::ACTION_FLAGS_SYNCVLANS|
+			  $GeniAggregate::ACTION_FLAGS_NOEVENTSTART) != 0) {
 	if ($PID == $mypid) {
 	    $slice->UnLock();
 	    print STDERR "Could not start sliver.\n";
@@ -2967,13 +3093,18 @@ sub CreateImage($)
     my $credentials  = $argref->{'credentials'};
     my $imagename    = $argref->{'imagename'};
     my $sliver_urn   = $argref->{'sliver_urn'};
+    my $no_versions  = 0;
     my $wholedisk    = 0;
+    my $nosnapshot   = 0;
+    my $mustnotexist = 0;
     my $update_prepare = 0;
-    my $bsname;
+    my ($bsname,$blockstore);
     my $copyback_uuid;
+    my $response;
 
     require EmulabConstants;
-    require Image;
+    require Logfile;
+    require OSImage;
     require WebTask;
     require GeniEvent;
     
@@ -2984,10 +3115,16 @@ sub CreateImage($)
     if (! ($imagename =~ /^[-\w\.\+]*$/)) {
 	return GeniResponse->MalformedArgsResponse("Improper name argument");
     }
+    $no_versions = 1
+	if (exists($argref->{'no_versions'}) && $argref->{'no_versions'});
     $wholedisk = 1
 	if (exists($argref->{'wholedisk'}) && $argref->{'wholedisk'});
     $update_prepare = 1
 	if (exists($argref->{'update_prepare'}) && $argref->{'update_prepare'});
+    $nosnapshot = 1
+	if (exists($argref->{'nosnapshot'}) && $argref->{'nosnapshot'});
+    $mustnotexist = 1
+	if (exists($argref->{'mustnotexist'}) && $argref->{'mustnotexist'});
     # Optional blockstore name.
     if (exists($argref->{'bsname'})) {
 	$bsname = $argref->{'bsname'};
@@ -3067,19 +3204,45 @@ sub CreateImage($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Node is not in the proper experiment");
     }
+    if (defined($bsname)) {
+	my @blockstores = $experiment->LookupBlockstoresForNode($node->vname());
+	if (!@blockstores) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+					"No such blockstore on node");
+	}
+	foreach my $bs (@blockstores) {
+	    if ($bs->vname() eq $bsname) {
+		$blockstore = $bs;
+		last;
+	    }
+	}
+	if (!defined($blockstore)) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+					"No such blockstore on node");
+	}
+    }
 
     #
-    # On this path, we do not allow system images to be shadowed.
-    # We define system images as those in the emulab-ops project.
+    # On this path, we do not allow system images to be shadowed by mere
+    # users. We define system images as those in the emulab-ops project.
+    # Note the admin test; this just says they are an administrator, not
+    # that they are operating in withadminprivs context. Need a credential
+    # to provide that, maybe later.
     #
-    if (Image->LookupByName($imagename)) {
+    if (OSImage->LookupByName($imagename) &&
+	!($user->IsLocal() && $user->emulab_user()->admin())) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 				    "Not allowed to shadow system images; ".
 				    "use a different name for your image");
     }
+
     # See if it already exists and check ownership permission.
-    my $image = Image->Lookup($experiment->pid(), $imagename);
+    my $image = OSImage->Lookup($experiment->pid(), $imagename);
     if (defined($image)) {
+	if ($mustnotexist) {
+	    return GeniResponse->Create(GENIRESPONSE_ALREADYEXISTS, undef,
+					"Image name already in use");
+	}
 	if (!((defined($image->creator_urn()) &&
 	       ($image->creator_urn() eq $user->urn() ||
 		$image->creator_urn() eq $ENV{'REALGENIURN'})) ||
@@ -3095,12 +3258,65 @@ sub CreateImage($)
 	}
     }
     elsif (defined($bsname)) {
-	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
-				    "Dataset for $bsname does not exist");
+	#
+	# For datasets, the image must always exist first, via CreateDataset.
+	# If we do not find it, it might be an imported dataset, which means
+	# we are taking a snapshot to overwrite that imported dataset
+	# All datasets are imported into the GeniSlices project, so we have to
+	# find it. But there is a complication; the imported dataset might have
+	# a different name cause of name collisions (between projects). So
+	# lets find it via the blockstore on the node we are taking the snapshot
+	# from. 
+	#
+	if (!exists($blockstore->{'attributes'}->{'dataset'})) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				"No dataset associated with $bsname on $node");
+	}
+	$image = OSImage->Lookup($blockstore->{'attributes'}->{'dataset'});
+	if (!defined($image)) {
+	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				"Dataset for $bsname does not exist");
+	}
+	#
+	# For simplicity and consistency with how existing image snapshot
+	# works, lets create a new dataset in the current project so that
+	# we can just travel the imaging path as it exists, and take a
+	# snapshot to that new image descriptor. Ditto copyback to origin.
+	#
+	if (!defined(GeniCM::FlipToUser($slice, $user))) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"FlipToUser failed");
+	}
+	my $output =
+	    GeniUtil::ExecQuiet("$CREATEDATASET -t imdataset $pid/$imagename");
+	# Not a typical op, so always print debugging info;
+	print STDERR $output;
+	if ($?) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				"Could not create new dataset descriptor");
+	}
+	my $clone = OSImage->Lookup("$pid/$imagename");
+	if (!defined($clone)) {
+	    print STDERR "Could not look up clone: $pid/$imagename\n";
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				"Could not look up clone $pid/$imagename");
+	}
+	# Need this for copyback. 
+	$clone->Update({"origin_urn" => $image->origin_urn()});
+	$image = $clone;
     }
     if (!defined(GeniCM::FlipToUser($slice, $user))) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "FlipToUser failed");
+    }
+    if (defined($bsname)) {
+	#
+	# These always go into the current project.
+	#
+	if ($image->pid() ne $pid) {
+	    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+					"Dataset not in same project as node");
+	}
     }
     
     #
@@ -3128,6 +3344,8 @@ sub CreateImage($)
 	# Force shared (within project). 
 	$opt .= " -r 1";
     }
+    print STDERR "CM: '$CLONEIMAGE $opt -s $imagename $node_id'\n";
+    
     my $output =
 	GeniUtil::ExecQuiet("$CLONEIMAGE $opt -s $imagename $node_id");
     # Not a typical op, so always print debugging info;
@@ -3141,7 +3359,7 @@ sub CreateImage($)
     # Make sure we can get the image descriptor.
     #
     if (!defined($image)) {
-	$image = Image->Lookup($experiment->pid(), $imagename);
+	$image = OSImage->Lookup($experiment->pid(), $imagename);
 	if (!defined($image)) {
 	    $slice->UnLock();
 	    print STDERR "Cannot lookup descriptor for $imagename\n";
@@ -3159,7 +3377,6 @@ sub CreateImage($)
 			    (defined($speaksfor) ?
 			     $speaksfor->target_urn() : $ENV{'GENIURN'})});
     }
-dataset:    
     #
     # Form an image URN so the user knows how to request the new image.
     #
@@ -3170,42 +3387,36 @@ dataset:
 	$image->image_uuid();
     my $version_url = "$TBBASE/image_metadata.php?uuid=" .
 	$image->uuid();
+    # This goes back to the caller.
+    my $retval = [$image_urn, $image_url, $version_urn, $version_url];
+
+    # We just create the descriptor and return info.
+    if ($nosnapshot) {
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $retval);
+    }
+
+    #
+    # Create a web task for this. We pass the id to create image so
+    # that we do not change the image descriptor until it is locked.
+    #
+    my $webtask = WebTask->CreateAnonymous();
+    if (!defined($webtask)) {
+	print STDERR "Could not create web task\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR);
+    }
+    $webtask->status("preparing");
+    $webtask->imagesize(0);
+    $webtask->Store();
 
     # Mark the sliver for sliver status calls. We can also unlock
     # since the state will prevent anything from being done.
     $sliver->SetState("imaging");
 
     #
-    # Create a task object to track the status. The backend
-    # updates the task structure as the imaging proceeds, and
-    # ImageInfo below can reference that status.
-    #
-    my $webtask = WebTask->Create($image->image_uuid());
-    if (!defined($webtask)) {
-	print STDERR "Could not create new web task structure\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR);
-    }
-    $webtask->status("preparing");
-    $webtask->imagesize(0);
-    $webtask->Store();
-    
-    #
-    # We used the -s (nosnapshot) option above, to get the descriptor
-    # built, so now run create_image so that we can capture its output.
-    # At some point this might change to let clone do the snapshot,
-    # but when that happens, the email is sent to geniuser.
-    #
-    my $mypid = main::WrapperFork();
-    if ($mypid) {
-	my @blob = ($image_urn, $image_url, $version_urn, $version_url);
-	return GeniResponse->Create(GENIRESPONSE_SUCCESS, \@blob);
-    }
-    $slice->UnLock();
-
-    #
     # Do the snapshot.
     #
-    $opt  = "";
+    $opt  = " -t " . $webtask->task_id();
     $opt .= " -b $bsname" if (defined($bsname));
     $opt .= " -B $copyback_uuid" if (defined($copyback_uuid));
     $opt .= " -U " if ($update_prepare);
@@ -3214,67 +3425,112 @@ dataset:
     # was handled in clone_image.
     $imagename = $image->imagename() . ":" . $image->version();
 
+    print STDERR "CreateImage(): '$CREATEIMAGE -F -e $opt -q ".
+	"-p $pid $imagename $node_id'\n";
+
+    $output = GeniUtil::ExecQuiet("$CREATEIMAGE -F -e $opt -q ".
+				  "   -p $pid $imagename $node_id");
+    # Not a typical op, so always print debugging info;
+    print STDERR $output;
+    if ($?) {
+	$slice->UnLock();
+	if ($? >> 8 == ENOSPC) {
+	    $response = GeniResponse->Create(GENIRESPONSE_NOSPACE,
+					     undef, $output);
+	}
+	else {
+	    $response = GeniResponse->Create(GENIRESPONSE_ERROR,
+					     undef, $output);
+	}
+	goto bad;
+    }
     #
-    # Okay we are going to fork again and watch the webtask for
-    # size changes (and exit of course) and generate Geni style
-    # events.
-    #
-    $mypid = main::WrapperFork();
+    # The imaging operation is running in the background. We can return
+    # the blob and wait for it to finish.
+    # 
+    my $mypid = main::WrapperFork();
     if ($mypid) {
-	my $lastsize = 0;
-	my $laststatus = "";
-	
-	do {
-	    sleep(5);
-	    # Probably deleted.
-	    $webtask->Refresh() == 0
-		or last;
-	    # Check the child, if it is gone we want to stop too.
-	    if (kill(0, $mypid) == 0) {
-		last
-		    if ($!{ESRCH});
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $retval);
+    }
+    $slice->UnLock();
+
+    #
+    # We want to read the output file and splat it into this log file. 
+    #
+    my $logfile = $image->GetLogFile();
+    if (!defined($logfile)) {
+	print STDERR "Cannot find logfile $image\n";
+    }
+    elsif ($logfile->OpenFile()) {
+	$logfile = undef;
+    }
+
+    #
+    # Now wait and watch the web task for exit and for size changes
+    # and generate Geni style events.
+    #
+    my $lastsize = 0;
+    my $laststatus = "";
+
+    while (!$webtask->HasExited()) {
+	#
+	# Watch for writes to the logfile, spew to STDERR.
+	#
+	if (defined($logfile)) {
+	    my $buf;
+	    my $cc = $logfile->ReadFile(\$buf);
+	    if (defined($cc) && $cc && defined($buf)) {
+		print STDERR $buf;
+		$output .= $buf;
 	    }
-	    if ($webtask->imagesize() != $lastsize ||
-		$webtask->status() ne $laststatus) {
-		GeniEvent->SendEvent({"type"    => "IMAGESTATUS",
-				      "slice"   => $slice->urn(),
-				      "urn"     => $image_urn,
-				      "details" =>
+	    elsif (!defined($cc)) {
+		# The file was closed, nothing else to do.
+		$logfile = undef;
+	    }
+	}
+	if ($webtask->imagesize() != $lastsize ||
+	    $webtask->status() ne $laststatus) {
+	    GeniEvent->SendEvent({"type"    => "IMAGESTATUS",
+				  "slice"   => $slice->urn(),
+				  "urn"     => $image_urn,
+				  "details" =>
 				          { "utc"    => time(),
 					    "size"   => $webtask->imagesize(),
 					    "status" => $webtask->status()}});
-		$lastsize   = $webtask->imagesize();
-		$laststatus = $webtask->status();
-	    }
-	} while (!$webtask->HasExited());
-	# Sleep a little while to give the caller time to pick up status
-	# since it is polling. Then delete the webtask.
-	sleep(30);
-	$webtask->Delete();
-	waitpid($mypid, &WNOHANG);
-	return 0;
+	    $lastsize   = $webtask->imagesize();
+	    $laststatus = $webtask->status();
+	}
+	sleep(5);
+	# Deleted, but not supposed to happen.
+	if ($webtask->Refresh()) {
+	    print STDERR "$webtask was deleted, not supposed to happen\n";
+	    $webtask = undef;
+	    last;
+	}
     }
-    $output =
-	GeniUtil::ExecQuiet("$CREATEIMAGE -F -e -f $opt ".
-			    "   -p $pid $imagename $node_id");
-    # Not a typical op, so always print debugging info;
-    print STDERR $output;
     # Return to normal state even if it failed.
     $sliver->SetState("started");
-    if ($?) {
-	print STDERR "Failed to take the snapshot of $node_id\n";
-	$slice->UnLock();
-	if ($user->email()) {
-	    libtestbed::SENDMAIL($user->email(),
-				 ($image->isdataset() ?
-				 "Failed to snapshot dataset" :
-				 "Failed to clone image"),
-				 "$output\n",
-				 $user->email(),
-				 "Bcc: $TBOPS");
+
+    # If we still have the logfile opened read the rest.
+    if (defined($logfile)) {
+	while (1) {
+	    my $buf;
+	    my $cc = $logfile->ReadFile(\$buf);
+	    if (!defined($cc) || $cc == 0) {
+		last;
+	    }
+	    if (defined($buf)) {
+		print STDERR $buf;
+		$output .= $buf;
+	    }
 	}
-	return -1;
+	$logfile->CloseFile();
     }
+    if (!defined($webtask) || $webtask->exitcode()) {
+	print STDERR "Failed to take the snapshot of $node_id\n";
+	goto bad;
+    }
+    
     #
     # If we are using the image tracker, but but not copying the image
     # back (copyback_uuid) then post the image data to the IMS. We do
@@ -3284,6 +3540,13 @@ dataset:
     if (GetSiteVar("protogeni/use_imagetracker") && !defined($copyback_uuid)) {
 	system("$POSTIMAGEDATA " . $image->versname());
 	# Failure is okay, the daemon will pick it up.
+    }
+    
+    # Sleep a little while to give the caller time to pick up status
+    # since it is polling. Then delete the webtask.
+    if (defined($webtask)) {
+	sleep(30);
+	# $webtask->Delete();
     }
     
     if ($user->email()) {
@@ -3297,9 +3560,30 @@ dataset:
 			     "-----------------------------------------\n".
 			     "$output\n",
 			     $user->email(),
-			     "Bcc: $TBOPS");
+			     "Bcc: $TBLOGS");
     }
     return 0;
+  bad:
+    # Return to normal state even if it failed.
+    $sliver->SetState("started");
+    
+    print STDERR "Failed to take the snapshot of $node_id\n";
+    if ($user->email()) {
+	libtestbed::SENDMAIL($user->email(),
+			     ($image->isdataset() ?
+			      "Failed to snapshot dataset" :
+			      "Failed to clone image"),
+			     "$output\n",
+			     $user->email(),
+			     "Bcc: $TBOPS");
+    }
+    # Sleep a little while to give the caller time to pick up status
+    # since it is polling. Then delete the webtask.
+    sleep(30);
+    $webtask->Delete()
+	if (defined($webtask));
+    
+    return (defined($response) ? $response : -1);
 }
 
 #
@@ -3310,11 +3594,12 @@ sub DeleteImage($)
     my ($argref) = @_;
     my $image_urn    = $argref->{'image_urn'};
     my $credentials  = $argref->{'credentials'};
+    my $impotent     = $argref->{'impotent'};
     my $overide_urn  = (exists($argref->{'creator_urn'}) ?
 			$argref->{'creator_urn'} : undef);
-    my ($imagename,$imagepid);
+    my ($imagename,$imagepid,$imagevers);
 
-    require Image;
+    require OSImage;
     
     if (! (defined($credentials) && defined($image_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
@@ -3336,25 +3621,21 @@ sub DeleteImage($)
     return $authority
 	if (GeniResponse::IsResponse($authority));
 
-    my ($auth,undef,$id) = GeniHRN::Parse($image_urn);
-    return GeniResponse->MalformedArgsResponse("Malformed URN")
-	if (!defined($id));
+    my ($auth, $ospid, $os, $vers) = GeniHRN::ParseImage($image_urn);
+    return GeniResponse->MalformedArgsResponse("Malformed URN: $image_urn")
+	if (!defined($os));
     
-    if ($id =~ m{(.*)//(.*)}) {
-	$imagepid  = $1;
-	$imagename = $2;
-    }
-    else {
-	return GeniResponse->MalformedArgsResponse("Could not parse $id");
-    }
+    $imagepid  = $ospid;
+    $imagename = $os;
+    $imagevers = $vers;
 
     #
     # Make sure we can get the image descriptor.
     #
-    my $image = Image->Lookup($imagepid, $imagename);
+    my $image = OSImage->Lookup($imagepid, $imagename, $imagevers);
     if (!defined($image)) {
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
-				    "No such image");
+				    "No such image: $image_urn");
     }
     my $imageid     = $image->imageid();
     my $creator_urn = $image->creator_urn();
@@ -3378,14 +3659,32 @@ sub DeleteImage($)
     # accidental removal of images not belonging to current user.
     # Note that not all images have the creator_urn set (yet).
     #
-    if (defined($creator_urn) &&
-	!($creator_urn eq $user->urn() ||
-	  $creator_urn eq $ENV{'REALGENIURN'})) {
+    if (!((defined($creator_urn) &&
+	   !($creator_urn eq $user->urn() ||
+	     $creator_urn eq $ENV{'REALGENIURN'})) ||
+	  ($user->IsLocal() &&
+	   $image->AccessCheck($user->emulab_user(),
+			       EmulabConstants::TB_IMAGEID_DESTROY())))) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 		    "Not your image; please specify original creator urn")
 	    if (!defined($overide_urn) || $overide_urn ne $creator_urn);
     }
-    my $output = GeniUtil::ExecQuiet("$DELETEIMAGE -p $imageid"); 
+
+    if (!defined(GeniCM::FlipToUser($image, $user))) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "FlipToUser failed");
+    }
+    
+    # Delete only the version if directed to.
+    my $opt = (defined($imagevers) ? "-V" : "");
+    $opt   .= (defined($impotent) && $impotent ? " -n" : "");
+    $opt   .= " -F"
+	if (($user->IsLocal() && $user->emulab_user()->admin() &&
+	     $image->AccessCheck($user->emulab_user(),
+				 EmulabConstants::TB_IMAGEID_DESTROY())));
+    $opt   .= " $imageid";
+    $opt   .= (defined($imagevers) ? ":$imagevers" : "");
+    my $output = GeniUtil::ExecQuiet("$DELETEIMAGE -p $opt");
     print STDERR $output;
     if ($?) {
 	print STDERR $output;
@@ -3406,7 +3705,7 @@ sub ImageInfo($)
     my $credentials  = $argref->{'credentials'};
     my ($imagename,$imagepid);
 
-    require Image;
+    require OSImage;
     require File::stat;
     require WebTask;
     
@@ -3445,7 +3744,7 @@ sub ImageInfo($)
     #
     # Make sure we can get the image descriptor.
     #
-    my $image = Image->Lookup($imagepid, $imagename);
+    my $image = OSImage->Lookup($imagepid, $imagename);
     if (!defined($image)) {
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
 				    "No such image");
@@ -3466,7 +3765,10 @@ sub ImageInfo($)
 	   (defined($creator_urn) &&
 	    ($creator_urn eq $user->urn() ||
 	     $creator_urn eq $ENV{'REALGENIURN'})) ||
-	   GeniHRN::SameDomain($project->nonlocal_id(), $authority->urn()))) {
+	   GeniHRN::SameDomain($project->nonlocal_id(), $authority->urn()) ||
+	   ($user->IsLocal() &&
+	    $image->AccessCheck($user->emulab_user(),
+				EmulabConstants::TB_IMAGEID_ACCESS())))) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 		    "Not enough permission to access image");
     }
@@ -3476,7 +3778,7 @@ sub ImageInfo($)
     # Is there an active webtask, then we are taking a snapshot, so
     # report that info. Otherwise the current file.
     #
-    my $webtask = WebTask->LookupByObject($image->image_uuid());
+    my $webtask = $image->webtask();
     if (defined($webtask)) {
 	$blob->{'size'}   = $webtask->imagesize() . "KB";
 	$blob->{'status'} = $webtask->status();
@@ -3503,7 +3805,7 @@ sub TriggerImageUpdate($)
     my ($argref) = @_;
     my $blob         = $argref->{'info'};
     my $credentials  = $argref->{'credentials'};
-    require Image;
+    require OSImage;
     require emdb;
 
     if (! (defined($credentials) && defined($blob))) {
@@ -3524,7 +3826,7 @@ sub TriggerImageUpdate($)
     }
 
     # Force debugging log.
-    print STDERR Dumper($blob);
+    #print STDERR Dumper($blob);
 
     # Must have all these:
     foreach my $key ("origin_uuid", "imagename", "metadata_url",
@@ -3538,12 +3840,12 @@ sub TriggerImageUpdate($)
 				"invalid updater urn")
 	if (! GeniHRN::IsValid($blob->{'updater_urn'}));
     
-    my $localimage = Image->Lookup($blob->{'origin_uuid'});
+    my $localimage = OSImage->Lookup($blob->{'origin_uuid'});
     return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
 	if (!defined($localimage));
 
     # Need the most recent version of the image.
-    my $currentimage = Image->Lookup($localimage->image_uuid());
+    my $currentimage = OSImage->Lookup($localimage->image_uuid());
     return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				"Internal error getting most current image")
 	if (!defined($currentimage));
@@ -3601,9 +3903,14 @@ sub TriggerImageUpdate($)
 	
 	$update_fields = ", updater='$updater',updater_idx='$updater_idx'";
     }
+    # We need the credential for secure download (datasets).
+    if (exists($blob->{"credential"})) {
+	$update_fields .= ", credential_string=" .
+	    DBQuoteSpecial($blob->{"credential"});
+    }
     emdb::DBQueryWarn("insert into image_updates set ".
 		      "  imageid='$imageid',url=$safe_url, ".
-		      "  updater_urn=$safe_urn $update_fields");
+		      "  updater_urn=$safe_urn,updated=now() $update_fields");
     $localimage->Unlock();
 
     #
@@ -3631,7 +3938,8 @@ sub ListImages($)
     my ($argref) = @_;
     my $user_urn     = $argref->{'user_urn'};
     my $credentials  = $argref->{'credentials'};
-    require Image;
+    my @images       = ();
+    require OSImage;
     
     if (! defined($credentials)) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
@@ -3665,22 +3973,60 @@ sub ListImages($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 				    "No permission to list images")
 	    if ($userauth ne $thisauth && !$isadmin);
+
+	@images = OSImage->ListForURN($user_urn);
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, [])
+	    if (!@images);
     }
     else {
 	$user_urn = $user->urn();
+	@images = OSImage->ListForURN($user_urn);
+	if (!@images) {
+	    $user_urn = $credential->owner_urn();
+	    @images = OSImage->ListForURN($user_urn);
+	    return GeniResponse->Create(GENIRESPONSE_SUCCESS, [])
+		if (!@images);
+	}
     }
-    my @images = Image->ListForURN($user_urn);
-    return GeniResponse->Create(GENIRESPONSE_SUCCESS, [])
-	if (!@images);
-
     my @result = ();
     foreach my $image (@images) {
+	# Do not include imported images in this list, user cannot delete them.
+	# Need to think about this.
+	next
+	    if (!$image->IsLocal());
+	
 	my $image_urn = GeniHRN::Generate($OURDOMAIN, "image",
 				  $image->pid() . "//" . $image->imagename());
 	my $image_url = "$TBBASE/image_metadata.php?uuid=" . $image->uuid();
+
+	my $blob = {"urn"     => $image_urn . ":" . $image->version(),
+		    "url"     => $image_url,
+		    "created" => emutil::TBDateStringGMT($image->created()),
+		    "updated" => emutil::TBDateStringGMT($image->updated()),
+	};
 	
-	push(@result, {"urn" => $image_urn,
-		       "url" => $image_url});
+	#
+	# Get the file size on disk.
+	#
+	if ($image->size()) {
+	    $blob->{"filesize"} = $image->size() / (1024 * 1024) . "MB";
+	}
+	else {
+	    my $iname = $image->versname();
+	    my $isize = `$IMAGEINFO -s -U m $iname`;
+	    if (!$?) {
+		chomp($isize);
+		$blob->{"filesize"} = "${isize}MB";
+	    }
+	}
+	#
+	# Add the project URN, that the caller can map to a local project.
+	#
+	my $project = $image->GetProject();
+	if (defined($project)) {
+	    $blob->{'project_urn'} = $project->nonlocalurn();
+	}
+	push(@result, $blob);
     }
     print STDERR "Image for $user_urn:\n";
     print STDERR Dumper(\@result);
@@ -4158,42 +4504,77 @@ sub ConsoleInfo($)
 #
 # Blockstore support.
 #
-my $CREATEDATASET   = "$TB/bin/createdataset";
-my $DELETEDATASET   = "$TB/bin/deletelease";
-my $EXTENDDATASET   = "$TB/bin/extendlease";
-my $GRANTDATASET    = "$TB/bin/grantlease";
-my $GRANTIMAGE      = "$TB/sbin/grantimage";
-
 sub CreateDataset($)
 {
     my ($argref) = @_;
     my $credentials  = $argref->{'credentials'};
-    my $dataset      = $argref->{'name'};
+    my $dataset_urn  = $argref->{'dataset_urn'};
     require Lease;
     require Image;
     require EmulabConstants;
+    require GeniImage;
 
-    if (! (defined($credentials) && defined($dataset))) {
+    if (! (defined($credentials) && defined($dataset_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
     }
-    if ($dataset !~ /^[-\w]+$/) {
-	return GeniResponse->MalformedArgsResponse("Bad dataset name");
+    if (!GeniHRN::IsValid($dataset_urn)) {
+	return GeniResponse->MalformedArgsResponse("Invalid dataset urn");
+    }
+    $dataset_urn = GeniHRN->new($dataset_urn);
+    if ($dataset_urn->type() !~ /^(im|lt|st)?dataset$/) {
+	return GeniResponse->MalformedArgsResponse("Bad dataset type");
     }
     my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
     return $credential
 	if (GeniResponse::IsResponse($credential));
 
     #
-    # Only real local users can do blockstores, or the credential
-    # must include the correct priv.
+    # The supplied dataset_urn must either match the credential target
+    # (say, coming from the portal with a minted credential), or the
+    # authority of the dataset_urn must match credential target to ensure
+    # that the project/group match (say, a user talking directly to the
+    # CM). This implies that the user has a project scoped self credential
+    # (which of course, Protogeni can issue). 
+    #
+    return GeniResponse->MalformedArgsResponse("Credential does not match urn")
+	if (! ($dataset_urn->urn() eq $credential->target_urn() ||
+	       $dataset_urn->authority() eq
+	       $credential->target_urn()->authority()));
+
+    #
+    # Check for project scoping. We know the credential matches cause
+    # of the previous check.
+    #
+    return GeniResponse->MalformedArgsResponse("No project specified")
+	if (!defined($dataset_urn->project()));
+    
+    #
+    # So we want to mark the dataset with urn of the dataset, as for the
+    # portal. This is how we can map from the urn at the portal to the
+    # local object. This allows the portal to get a credential from us to
+    # operate on the dataset. Sorta like a slice credential; whoever holds
+    # the minted credential has permission to operate on or use it.
+    #
+    # Otherwise, only real local users can create datasets, cause we have
+    # no way to verify their project membership without a minted credential
+    # from someone we trust (something like the slice credential). Anyway,
+    # normal users can still get a local credential since they own the
+    # dataset, and then can delegate that credential as needed. The
+    # difference though, is that the minted credential is usable just here
+    # (create) and in GetDatasetCredential() below, to get that local
+    # credential.
+    #
+    # Note also, that there are legacy datasets, and we want them to be
+    # usable by the portal. The minted credential allows that too.
     #
     my $user = GeniCM::CreateUserFromCertificate($credential);
     return $user
 	if (GeniResponse::IsResponse($user));
-
+    
     return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
 	if (! ((defined($user) && $user->IsLocal()) ||
-	       $credential->HasActualPrivilege("blockstores")));
+	       # minted credential
+	       $dataset_urn->urn() eq $credential->target_urn()));
 
     my $authority = GeniCM::CreateAuthorityFromCertificate($credential);
     return $authority
@@ -4204,11 +4585,11 @@ sub CreateDataset($)
     return $group
 	if (GeniResponse::IsResponse($group));
 
-    my $image = Image->Lookup($group->pid(), $dataset);
+    my $image = Image->Lookup($group->pid(), $dataset_urn->id());
     if (defined($image)) {
 	GeniResponse->Create(GENIRESPONSE_ALREADYEXISTS);
     }
-    my $lease = Lease->Lookup($group->pid(), $dataset);
+    my $lease = Lease->Lookup($group->pid(), $dataset_urn->id());
     if (defined($lease)) {
 	GeniResponse->Create(GENIRESPONSE_ALREADYEXISTS);
     }
@@ -4231,6 +4612,8 @@ sub CreateDataset($)
 	my $type = $argref->{'type'};
 	return GeniResponse->MalformedArgsResponse("Bad type")
 	    if ($type !~ /^[-\w]+$/);
+	return GeniResponse->MalformedArgsResponse("Mismatching type")
+	    if ($type ne $credential->target_urn()->type());
 	$cmd .= " -t $type";
     }
     if (exists($argref->{'fstype'})) {
@@ -4265,7 +4648,7 @@ sub CreateDataset($)
 	}
 	$cmd .= " -e '" . emutil::TBDateStringLocal($expiration) . "' ";
     }
-    $cmd .= " " . $group->pid() . "/" . $group->gid() . "/" . $dataset;
+    $cmd .= " " . $group->pid() . "/" . $group->gid() . "/" . $dataset_urn->id();
     my $output = GeniUtil::ExecQuiet($cmd);
     # Not a typical op, so always print debugging info;
     print STDERR $output;
@@ -4276,28 +4659,30 @@ sub CreateDataset($)
 	if ($PROTOGENI_LOCALUSER);
 
     # Stuff to put in the return blob.
-    my ($state,$uuid,$busy,$msg,$urn,$url);
+    my ($state,$uuid,$busy,$msg,$urn,$url,$cred);
 
     #
     # Grab the lease or image to see if its been created/approved, we want
     # to tell the user something.
     #
     if (exists($argref->{'type'}) && $argref->{'type'} eq "imdataset") {
-	my $image = Image->Lookup($group->pid(), $dataset);
+	my $image = Image->Lookup($group->pid(), $dataset_urn->id());
 	if (!defined($image)) {
 	    print STDERR "Could not lookup image after createdataset\n";
 	    GeniResponse->Create(GENIRESPONSE_ERROR);
 	}
 	$image->Update({"creator_urn" => $user->urn()});
+	$image->Update({"authority_urn" => $dataset_urn});
 	$uuid  = $image->image_uuid();
 	$state = "new";
 	$busy  = 0;
-	$urn   = GeniHRN::Generate($OURDOMAIN . ":" . $image->pid(), "dataset",
-				   $image->gid() . "//" . $image->imagename());
+	$urn   = $image->urn();
 	$url   = $image->LocalURL();
+	$cred  = GeniImage::CreateDatasetCredential($image, $user);
     }
     else {
-	my $lease = Lease->Lookup($group->pid(), $group->gid(), $dataset);
+	my $lease = Lease->Lookup($group->pid(),
+				  $group->gid(), $dataset_urn->id());
 	if (!defined($lease)) {
 	    print STDERR "Could not lookup lease after createdataset\n";
 	    GeniResponse->Create(GENIRESPONSE_ERROR);
@@ -4305,7 +4690,8 @@ sub CreateDataset($)
 	# Set the manager URN for same-SA permission checks.
 	$lease->SetAttribute("manager_urn", $credential->target_urn());
 	$lease->SetAttribute("creator_urn", $user->urn());
-    
+	$lease->SetAttribute("authority_urn", $dataset_urn);
+	    
 	if ($lease->state() eq "unapproved") {
 	    if ($lease->locked()) {
 		$msg = "Your dataset is being allocated.";
@@ -4318,14 +4704,15 @@ sub CreateDataset($)
 	$uuid  = $lease->uuid();
 	$state = $lease->state();
 	$busy  = $lease->locked() ? 1 : 0;
-	$urn   = GeniHRN::Generate($OURDOMAIN . ":" . $lease->pid(), "dataset",
-				   $lease->gid() . "//" . $lease->lease_id());
+	$urn   = $lease->urn();
+	$cred  = GeniImage::CreateDatasetCredential($lease, $user);
     }
     my $blob = {
 	"state" => $state,
 	"uuid"  => $uuid,
 	"urn"   => $urn,
 	"busy"  => $busy,
+	"credential" => $cred->asString(),
     };
     $blob->{'url'} = $url if (defined($url));
     
@@ -4335,65 +4722,41 @@ sub DeleteDataset($)
 {
     my ($argref) = @_;
     my $credentials  = $argref->{'credentials'};
-    my $dataset      = $argref->{'name'};
+    my $dataset_urn  = $argref->{'dataset_urn'};
     my $cmd;
     require Image;
     require Lease;
     require EmulabConstants;
 
-    if (! (defined($credentials) && defined($dataset))) {
+    if (! (defined($credentials) && defined($dataset_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
     }
-    if ($dataset !~ /^[-\w]+$/) {
-	return GeniResponse->MalformedArgsResponse("Bad dataset name");
+    $dataset_urn = GeniHRN->new($dataset_urn);
+    if ($dataset_urn->type() !~ /^(im|lt|st)?dataset$/) {
+	return GeniResponse->MalformedArgsResponse("Bad dataset type");
     }
     my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
     return $credential
 	if (GeniResponse::IsResponse($credential));
 
-    #
-    # Only real local users can do blockstores, or the credential
-    # must include the correct priv.
-    #
-    my $user = GeniCM::CreateUserFromCertificate($credential);
-    return $user
-	if (GeniResponse::IsResponse($user));
+    my $dataset = Credential2Dataset($dataset_urn, $credential);
+    return $dataset
+	if (GeniResponse::IsResponse($dataset));
 
-    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
-	if (! ((defined($user) && $user->IsLocal()) ||
-	       $credential->HasActualPrivilege("blockstores")));
-
-    # Get the project and group. This needs more thought. 
-    my $group = GeniUtil::GetHoldingProject($credential->target_urn(), $user);
-    return $group
-	if (GeniResponse::IsResponse($group));
-
-    my $lease = Lease->Lookup($group->pid(), $group->gid(), $dataset);
-    if (defined($lease)) {
+    if (ref($dataset) eq "Lease") {
 	#
-	# Only the creator until we are using credentials here.
+	# If the lease is in use, return a busy error.
+	# We make this test unlocked, but that is okay. 
 	#
-	my $lease_owner = $lease->GetAttribute("creator_urn");
-	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
-	    if (! (defined($lease_owner) &&
-		   ($lease_owner eq $user->urn() ||
-		    $lease_owner eq $ENV{'REALGENIURN'})));
-
+	if ($dataset->InUse()) {
+	    return GeniResponse->Create(GENIRESPONSE_BUSY, undef,
+					"$dataset is in use, try again later");
+	}
 	$cmd = "$DELETEDATASET -b -f " .
-	    $group->pid() . "/" . $group->gid() . "/" . $dataset;
+	    $dataset->pid() . "/" . $dataset->gid() . "/" . $dataset->lease_id();
     }
     else {
-	my $image = Image->Lookup($group->pid(), $dataset);
-	if (!defined($image)) {
-	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED);
-	}
-	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
-	    if (!$image->isdataset() ||
-		!defined($image->creator_urn()) ||
-		($image->creator_urn() ne $user->urn() &&
-		 $image->creator_urn() ne $ENV{'REALGENIURN'}));
-	
-	$cmd = "$DELETEIMAGE -p ". $image->imageid();
+	$cmd = "$DELETEIMAGE -p ". $dataset->imageid();
     }
     if ($PROTOGENI_LOCALUSER) {
 	$cmd = "$WAP $cmd";
@@ -4415,62 +4778,35 @@ sub ModifyDataset($)
 {
     my ($argref) = @_;
     my $credentials  = $argref->{'credentials'};
-    my $dataset      = $argref->{'name'};
+    my $dataset_urn  = $argref->{'dataset_urn'};
     my $islease      = 0;
+    my ($lease, $image);
     require Image;
     require Lease;
     require EmulabConstants;
 
-    if (! (defined($credentials) && defined($dataset))) {
+    if (! (defined($credentials) && defined($dataset_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
     }
-    if ($dataset !~ /^[-\w]+$/) {
-	return GeniResponse->MalformedArgsResponse("Bad dataset name");
+    $dataset_urn = GeniHRN->new($dataset_urn);
+    if ($dataset_urn->type() !~ /^(im|lt|st)?dataset$/) {
+	return GeniResponse->MalformedArgsResponse("Bad dataset type");
     }
     my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
     return $credential
 	if (GeniResponse::IsResponse($credential));
 
-    #
-    # Only real local users can do blockstores, or the credential
-    # must include the correct priv.
-    #
-    my $user = GeniUser->Lookup($credential->owner_cert()->urn(), 1);
-    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
-	if (! ((defined($user) && $user->IsLocal()) ||
-	       $credential->HasActualPrivilege("blockstores")));
+    my $dataset = Credential2Dataset($dataset_urn, $credential);
+    return $dataset
+	if (GeniResponse::IsResponse($dataset));
 
-    # Get the project and group. This needs more thought. 
-    my $group = GeniUtil::GetHoldingProject($credential->target_urn(), $user);
-    return $group
-	if (GeniResponse::IsResponse($group));
-
-    my $image;
-    my $lease = Lease->Lookup($group->pid(), $group->gid(), $dataset);
-    if (defined($lease)) {
-	#
-	# Only the creator until we are using credentials here.
-	#
-	my $lease_owner = $lease->GetAttribute("creator_urn");
-	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
-	    if (! (defined($lease_owner) &&
-		   ($lease_owner eq $user->urn() ||
-		    $lease_owner eq $ENV{'REALGENIURN'})));
+    if (ref($dataset) eq "Lease") {
+	$lease = $dataset;
 	$islease = 1;
     }
     else {
-	$image = Image->Lookup($group->pid(), $dataset);
-	if (!defined($image)) {
-	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED);
-	}
-	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
-	    if (!$image->isdataset() ||
-		!defined($image->creator_urn()) ||
-		($image->creator_urn() ne $user->urn() &&
-		 $image->creator_urn() ne $ENV{'REALGENIURN'}));
-	$islease = 0;
+	$image = $dataset;
     }
-
     my $cmd;
     #
     # All we can handle is extend and modify permission bits.
@@ -4503,10 +4839,11 @@ sub ModifyDataset($)
 	return GeniResponse->MalformedArgsResponse("unknown operation");
     }
     if ($islease) {
-	$cmd .= " " . $group->pid() . "/" . $group->gid() . "/" . $dataset;
+	$cmd .= " " . $lease->pid() . "/" . $lease->gid() . "/" .
+	    $lease->lease_id();
     }
     else {
-	$cmd .= " " . $group->pid() . "," . $dataset;
+	$cmd .= " " . $image->pid() . "," . $image->imagename();
     }
     if ($PROTOGENI_LOCALUSER) {
 	$cmd = "$WAP $cmd";
@@ -4536,7 +4873,7 @@ sub DescribeDataset($)
 {
     my ($argref) = @_;
     my $credentials  = $argref->{'credentials'};
-    my $dataset      = $argref->{'name'};
+    my $dataset_urn  = $argref->{'dataset_urn'};
     my $blob = {};
     require Image;
     require Lease;
@@ -4544,40 +4881,23 @@ sub DescribeDataset($)
     require EmulabConstants;
     require WebTask;
 
-    if (! (defined($credentials) && defined($dataset))) {
+    if (! (defined($credentials) && defined($dataset_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
     }
-    if ($dataset !~ /^[-\w]+$/) {
-	return GeniResponse->MalformedArgsResponse("Bad dataset name");
+    $dataset_urn = GeniHRN->new($dataset_urn);
+    if ($dataset_urn->type() !~ /^(im|lt|st)?dataset$/) {
+	return GeniResponse->MalformedArgsResponse("Bad dataset type");
     }
     my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
     return $credential
 	if (GeniResponse::IsResponse($credential));
 
-    #
-    # Only real local users can do blockstores, or the credential
-    # must include the correct priv.
-    #
-    my $user = GeniUser->Lookup($credential->owner_cert()->urn(), 1);
-    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
-	if (! ((defined($user) && $user->IsLocal()) ||
-	       $credential->HasActualPrivilege("blockstores")));
+    my $dataset = Credential2Dataset($dataset_urn, $credential);
+    return $dataset
+	if (GeniResponse::IsResponse($dataset));
 
-    # Get the project and group. This needs more thought. 
-    my $group =  GeniUtil::GetHoldingProject($credential->target_urn(), $user);
-    return $group
-	if (GeniResponse::IsResponse($group));
-
-    my $lease = Lease->Lookup($group->pid(), $group->gid(), $dataset);
-    if (defined($lease)) {
-	#
-	# Only the creator until we are using credentials here.
-	#
-	my $lease_owner = $lease->GetAttribute("creator_urn");
-	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
-	    if (! (defined($lease_owner) &&
-		   ($lease_owner eq $user->urn() ||
-		    $lease_owner eq $ENV{'REALGENIURN'})));
+    if (ref($dataset) eq "Lease") {
+	my $lease = $dataset;
 	$blob->{'state'}    = $lease->state();
 	$blob->{'type'}     = $lease->type();
 	$blob->{"busy"}     = $lease->locked() ? 1 : 0;
@@ -4591,16 +4911,7 @@ sub DescribeDataset($)
 	}
     }
     else {
-	my $image = Image->Lookup($group->pid(), $dataset);
-	if (!defined($image)) {
-	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED);
-	}
-	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
-	    if (!$image->isdataset() ||
-		!defined($image->creator_urn()) ||
-		($image->creator_urn() ne $user->urn() &&
-		 $image->creator_urn() ne $ENV{'REALGENIURN'}));
-
+	my $image = $dataset;
 	$blob->{'state'}    = "valid";
 	$blob->{'type'}     = "imdataset";
 	$blob->{"busy"}     = 0;
@@ -4613,27 +4924,14 @@ sub DescribeDataset($)
 	# Is there an active webtask, then we are taking a snapshot, so
 	# report that info. 
 	#
-	my $webtask = WebTask->LookupByObject($image->image_uuid());
+	my $webtask = $image->webtask();
 	if (defined($webtask)) {
+	    print STDERR Dumper($webtask);
+	    
 	    $blob->{'image_size'}   = $webtask->imagesize() . "KB";
 	    $blob->{'image_status'} = $webtask->status();
 
-	    #
-	    # We have reported status, kill it. So if two parties are
-	    # trying to determine the status, one gets nothing. Maybe
-	    # we need a notion of staleness.
-	    #
-	    if ($webtask->HasExited()) {
-		# Final size.
-		if ($image->size()) {
-		    my $kbytes = int(($image->lba_high() -
-				      $image->lba_low() + 1) /
-				     (1024 / $image->lba_size()));
-		    $blob->{'image_size'} = $kbytes . "KB";
-		}
-		$webtask->Delete();
-	    }
-	    else {
+	    if (!$webtask->HasExited()) {
 		$blob->{'state'} = "allocating";
 		$blob->{'busy'}  = 1;
 	    }
@@ -4645,9 +4943,277 @@ sub DescribeDataset($)
 	    $blob->{'size'} =
 		Blockstore::ConvertToMebi("$kbytes" . "KB");
 	}
-	print STDERR Dumper($blob);
+	#print STDERR Dumper($blob);
     }
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+}
+
+sub GetDatasetCredential($)
+{
+    my ($argref) = @_;
+    my $credentials  = $argref->{'credentials'};
+    my $dataset_urn  = $argref->{'dataset_urn'};
+    my $blob = {};
+    require Image;
+    require Lease;
+    require EmulabConstants;
+    require GeniImage;
+
+    if (! (defined($credentials) && defined($dataset_urn))) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    $dataset_urn = GeniHRN->new($dataset_urn);
+    if ($dataset_urn->type() !~ /^(im|lt|st)?dataset$/) {
+	return GeniResponse->MalformedArgsResponse("Bad dataset type");
+    }
+    my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
+    return $credential
+	if (GeniResponse::IsResponse($credential));
+
+    my $dataset = Credential2Dataset($dataset_urn, $credential);
+    return $dataset
+	if (GeniResponse::IsResponse($dataset));
+    
+    my $dataset_credential =
+	GeniImage::CreateDatasetCredential($dataset, $credential->owner_cert());
+    if (!defined($dataset_credential)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR);
+    }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS,
+				$dataset_credential->asString());
+}
+
+#
+# Map a credential to a dataset and check basic permission to access it.
+#
+sub Credential2Dataset($$)
+{
+    my ($dataset_urn, $credential) = @_;
+    require Image;
+    require Lease;
+    require EmulabConstants;
+    require GeniImage;
+
+    #
+    # See comments in CreateDataset() about these checks. In addition, we also
+    # allow a local credential to be used (GetDatasetCredential()) since that
+    # can be delegated by the owner.
+    #
+    return GeniResponse->MalformedArgsResponse("Credential does not match urn")
+	if (! ($dataset_urn->urn() eq $credential->target_urn() ||
+	       # Self credential with subauth matching dataset subauth.
+	       $dataset_urn->authority() eq
+	       $credential->target_urn()->authority() ||
+	       # Locally issued credential with GetDatasetCredential().
+	       $credential->target_urn()->domain() eq $OURDOMAIN));
+    
+    return GeniResponse->MalformedArgsResponse("No project specified")
+	if (!defined($dataset_urn->project()));
+
+    # Locally issued credential, use the urn in the credential.
+    if ($credential->target_urn()->domain() eq $OURDOMAIN &&
+	$credential->target_urn()->type() =~ /^(im|lt|st)?dataset$/) {
+	$dataset_urn = $credential->target_urn();
+    }
+
+    my ($target, $authority_urn, $creator_urn, $creator_uid);
+
+    if ($dataset_urn->type() eq "imdataset" ||
+	$dataset_urn->type() eq "dataset") {
+
+	# Check for a locally created dataset (not via the geni path).
+	$target = Image->Lookup($dataset_urn->project(), $dataset_urn->id());
+	if (!defined($target)) {
+	    # Datasets created on the geni path have the authority_urn set
+	    # to the dataset_urn supplied to CreateSliver().
+	    $target = Image->LookupByAuthorityURN($dataset_urn);
+	}
+	# Sigh, backwards compat, we did not always save the urn in the table.
+	if (!defined($target)) {
+	    my $project_urn =
+		GeniHRN::Generate($dataset_urn->authority(), "authority", "sa");
+	    my $project = Project->LookupNonLocal($project_urn);
+	    if (defined($project)) {
+		$target = Image->Lookup($project->pid(), $dataset_urn->id());
+		if (defined($target) && !$target->isdataset()) {
+		    $target = undef;
+		}
+	    }
+	}
+	if (defined($target)) {
+	    $creator_uid   = $target->creator();
+	    $creator_urn   = $target->creator_urn();
+	    $authority_urn = $target->authority_urn();
+	}
+    }
+    # Datasets used to all have type "dataset";
+    if (!defined($target) && $dataset_urn->type() ne "imdataset") {
+	#
+	# Check for a locally created dataset (not via the geni path).
+	#
+	$target = Lease->Lookup($dataset_urn->project(),
+				($dataset_urn->group() ?
+				 $dataset_urn->group() :
+				 $dataset_urn->project()),
+				$dataset_urn->id());
+	if (!defined($target)) {
+	    # Datasets created on the geni path have the authority_urn set
+	    # to the dataset_urn supplied to CreateSliver().
+	    $target = Lease->LookupByAuthorityURN($dataset_urn);
+	}
+	# Sigh, backwards compat, we did not always save the urn in the table.
+	if (!defined($target)) {
+	    my $project_urn = GeniHRN::Generate($dataset_urn->authority(),
+						"authority", "sa");
+	    my $project = Project->LookupNonLocal($project_urn);
+	    if (defined($project)) {
+		$target = Lease->Lookup($project->pid(),
+					$project->pid(),
+					$dataset_urn->id());
+	    }
+	}
+	if (defined($target)) {
+	    $creator_uid   = $target->owner();
+	    $creator_urn   = $target->GetAttribute("creator_urn");
+	    $authority_urn = $target->GetAttribute("authority_urn");
+	}
+    }
+    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
+	if (!defined($target));
+
+    #
+    # Now we can do the permission checks.
+    #
+    # 1. The creator of the dataset is asking for a credential.
+    # 2. The caller has supplied a minted credential (say, the portal).
+    #
+    # Note that the portal might be the caller (cause the speaksfor is expired).
+    #
+    my $user = GeniUser->Lookup($credential->owner_urn(), 1)
+	if ($credential->owner_urn()->type() eq "user");
+
+    # This covers datasets created by this local user, on or off the geni path.
+    goto okay
+	if (defined($user) &&
+	    ($creator_urn eq $user->urn || $creator_uid eq $user->uid()));
+    
+    #
+    # Lastly, if the portal gave us a minted credential, it is allowed.
+    #
+    goto okay
+	if ($dataset_urn->urn() eq $credential->target_urn() &&
+	    $credential->owner_urn()->IsSA());
+    
+    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN);
+  okay:
+    return $target;
+}
+
+#
+# Secure image download, by credential.
+#
+sub SecureImageDownload($)
+{
+    my ($argref)  = @_;
+    my $credentials = $argref->{'credentials'};
+
+    if (! (defined($credentials))) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
+    return $credential
+	if (GeniResponse::IsResponse($credential));
+
+    my $image_urn = $credential->target_urn();
+    return GeniResponse->MalformedArgsResponse("Improper image type")
+	if ($image_urn->type() ne "imdataset");
+    return GeniResponse->MalformedArgsResponse("No project in URN")
+	if (!defined($image_urn->project()));
+
+    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
+	if ($credential->target_urn()->domain() ne $OURDOMAIN);
+
+    #
+    # Use the UUID for lookup, since that will reference the correct
+    # image version. Not sure how we want to do versions yet.
+    #
+    my $image = Image->Lookup($credential->target_uuid());   
+    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
+	if (!defined($image));
+    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
+	if ($image->urn() ne $credential->target_urn());
+    my $group = $image->GetGroup();
+    return GeniResponse->Create(GENIRESPONSE_ERROR)
+	if (!defined($group));
+
+    # Better make sure we have project mounted.
+    $group->GetProject()->UpdateExports();
+
+    # Need to set our groups so we can read the file.
+    GeniUtil::FlipToUser("root", $group->pid(), $group->unix_gid());
+    my $file = $image->FullImageFile();
+    
+    if (! -r $file) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+			    "Image file does not exist or cannot be read");
+    }
+    #
+    # Stat the file to get the bytelen for spewing.
+    #
+    my (undef,undef,undef,undef,undef,undef,undef,$bytelen) = stat($file);
+
+    open(FD, "< $file") or
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Could not open file for reading");
+
+    # This sets STDOUT back to apache.
+    main::AbortLogging();
+    print "Content-Type: application/octet-stream\n";
+    print "Cache-Control: no-cache, must-revalidate\n";
+    print "Pragma: no-cache\n\n";
+    
+    #
+    # Deal with NFS read failures
+    #
+    my $foffset = 0;
+    my $retries = 5;
+    my $buf;
+
+    while ($bytelen) {
+	my $rlen = sysread(FD, $buf, 8192);
+
+	if (! defined($rlen)) {
+	    #
+	    # Retry a few times on error to avoid the
+	    # changing-exports-file server problem.
+	    #
+	    if ($retries > 0 && sysseek(FD, $foffset, 0)) {
+		$retries--;
+		sleep(1);
+		next;
+	    }
+	    print STDERR "Error reading $file: $!\n";
+	    last;
+	}
+        if ($rlen == 0) {
+	    last;
+	}
+	if (! syswrite(STDOUT, $buf, $rlen)) {
+	    print STDERR "Error writing file to stdout: $!\n";
+	    last;
+	}
+	$foffset += $rlen;
+	$bytelen -= $rlen;
+	$retries = 5;
+    }
+    close(FD);
+    if ($bytelen) {
+	print STDERR "Did not get the entire file! $bytelen bytes left.\n";
+	# Cannot return XML at this point.
+	return -1;
+    }
+    # Cannot return XML at this point.
+    return 0;
 }
 
 #
@@ -4659,6 +5225,8 @@ sub Lockdown($)
     my $slice_urn    = $argref->{'slice_urn'};
     my $clear        = $argref->{'clear'};
     my $credentials  = $argref->{'credentials'};
+    my $force        = $argref->{'force'};
+    require Reservation;
     
     if (! (defined($credentials) && defined($slice_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
@@ -4686,21 +5254,58 @@ sub Lockdown($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
+    my $experiment = $slice->GetExperiment();
+    if (!defined($experiment)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No local experiment for slice");
+    }
+
     #
     # Only the SA for the slice can do this.
     #
     my $caller = GeniHRN->new($credential->owner_urn());
     if (! ($caller->IsSA() && 
-	   $caller->domain() eq $slice->urnOBJ()->domain())) {
+	   $caller->domain() eq $slice->urn()->domain())) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 			    "Not enough permission to set/clr lockdown");
     }
     main::AddLogfileMetaDataFromSlice($slice);
-
-    if ($slice->SetLockdown(defined($clear) && $clear ? 1 : 0)) {
-	return GeniResponse->Create(GENIRESPONSE_ERROR);
+    if (defined($clear) && $clear) {
+	if ($slice->SetLockdown(1)) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR);
+	}
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
     }
-    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+    
+    #
+    # Ask Reservation system if locking down this experiment will
+    # throw the Reservation system into chaos.
+    #
+    my $error = "unknown error";
+    
+    my $rval = Reservation->Lockdown($slice, \$error, 1, 0);
+    if (!$rval) {
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+    }
+    if (defined($force) && $force) {
+	#
+	# Override the Reservation system, chaos ensues. 
+	#
+	if (Reservation->Lockdown($slice, \$error, 0, 1)) {
+	    print STDERR "Unable to force lockdown: $error\n";
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Unable to force lockdown: $error");
+	}
+	libtestbed::SENDMAIL($TBOPS, "Slice lockdown forced!",
+			     "$slice_urn has been forcibly locked down,\n".
+			     "throwing the reservation system into chaos.\n\n".
+			     "Slice: $slice\n".
+			     "Experiment: $experiment\n",
+			     $TBOPS);
+	
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+    }
+    return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, $error);
 }
 
 #
@@ -4745,7 +5350,7 @@ sub Panic($)
     #
     my $caller = GeniHRN->new($credential->owner_urn());
     if (! ($caller->IsSA() && 
-	   $caller->domain() eq $slice->urnOBJ()->domain())) {
+	   $caller->domain() eq $slice->urn()->domain())) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 			    "Not enough permission to turn on/off panic mode");
     }
@@ -4904,6 +5509,8 @@ sub RunLinktest($)
     }
     else {
 	my $command = "$LINKTEST -e -l $level -t 3600 ";
+	$command .= "-N "
+	    if ($experiment->HasNoNFSMounts());
 	$command .= "-o " . $logfile->filename() . " "
 	    if (defined($async));
 	$command .= "$pid $eid";

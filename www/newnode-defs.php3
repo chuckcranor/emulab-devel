@@ -112,8 +112,8 @@ function guess_node_type($proc,$disk) {
 	    ($disk < ($HD * (1.0 + $fudge_factor)))) {
 	    if ($node_type != "") {
 	        # We found two potential matches, choose neither
-		echo "Found a second match ($type), bailing\n";
-		return "";
+		echo "Found another match ($type), using that\n";
+		$node_type = $type;
 	    } else {
 		echo "Found a first match ($type)\n";
 	        $node_type = $type;

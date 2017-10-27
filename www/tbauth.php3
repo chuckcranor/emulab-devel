@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -69,6 +69,7 @@ define("CHECKLOGIN_WIKIONLY",		0x0200000);
 define("CHECKLOGIN_OPSGUY",		0x0400000);  # Member of emulab-ops.
 define("CHECKLOGIN_ISFOREIGN_ADMIN",	0x0800000);  # Admin of another Emulab.
 define("CHECKLOGIN_NONLOCAL",		0x1000000);
+define("CHECKLOGIN_INACTIVE",		0x2000000);
 
 #
 # Constants for tracking possible login attacks.
@@ -82,6 +83,7 @@ define("DOLOGIN_STATUS_OKAY",		0);
 define("DOLOGIN_STATUS_ERROR",		-1);
 define("DOLOGIN_STATUS_IPFREEZE",	-2);
 define("DOLOGIN_STATUS_WEBFREEZE",	-3);
+define("DOLOGIN_STATUS_INACTIVE",	-4);
 
 # So we can redefine this in the APT pages.
 $CHANGEPSWD_PAGE = "moduserinfo.php3";
@@ -417,7 +419,12 @@ function LoginStatus() {
 	$CHECKLOGIN_STATUS = CHECKLOGIN_NOTLOGGEDIN;
 	return $CHECKLOGIN_STATUS;
     }
-
+    $ga_userid = $CHECKLOGIN_USER->ga_userid();
+    if (!$ga_userid) {
+        $ga_userid = substr(GENHASH(), 0, 32);
+        $CHECKLOGIN_USER->SetGaUserid($ga_userid);
+    }
+    
     #
     # Now add in the modifiers.
     #
@@ -448,6 +455,8 @@ function LoginStatus() {
 	$CHECKLOGIN_STATUS |= CHECKLOGIN_UNVERIFIED;
     if (strcmp($status, TBDB_USERSTATUS_ACTIVE) == 0)
 	$CHECKLOGIN_STATUS |= CHECKLOGIN_ACTIVE;
+    if (strcmp($status, TBDB_USERSTATUS_INACTIVE) == 0)
+	$CHECKLOGIN_STATUS |= CHECKLOGIN_INACTIVE;
     if (isset($wikiname) && $wikiname != "")
 	$CHECKLOGIN_WIKINAME = $wikiname;
     if ($opsguy)
@@ -572,7 +581,7 @@ function LOGGEDINORDIE($uid, $modifier = 0, $login_url = NULL) {
 #
 function CheckLoginConditions($status)
 {
-    global $CHANGEPSWD_PAGE;
+    global $CHANGEPSWD_PAGE, $TBMAILADDR;
     
     if ($status & CHECKLOGIN_PSWDEXPIRED)
         USERERROR("Your password has expired. ".
@@ -580,6 +589,10 @@ function CheckLoginConditions($status)
 		  1, HTTP_403_FORBIDDEN);
     if ($status & CHECKLOGIN_FROZEN)
         USERERROR("Your account has been frozen!",
+		  1, HTTP_403_FORBIDDEN);
+    if ($status & CHECKLOGIN_INACTIVE)
+        USERERROR("Your account has gone inactive. ".
+                  "Please contact $TBMAILADDR to restore it.",
 		  1, HTTP_403_FORBIDDEN);
     if ($status & (CHECKLOGIN_UNVERIFIED|CHECKLOGIN_NEWUSER))
         USERERROR("You have not verified your account yet!",
@@ -876,6 +889,7 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 	$usr_name    = $user->name();
 	$uid_idx     = $user->uid_idx();
 	$usr_email   = $user->email();
+        $ga_userid   = $user->ga_userid();
 
 	# Check for frozen accounts. We do not update the IP record when
 	# an account is frozen.
@@ -883,7 +897,6 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 	    $user->UpdateWebLoginFail();
 	    return DOLOGIN_STATUS_WEBFREEZE;
 	}
-
 	if (!$nopassword) {
 	    $encoding = crypt("$password", $db_encoding);
 	    if (strcmp($encoding, $db_encoding)) {
@@ -911,6 +924,20 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 	#
 	# Pass!
 	#
+        if (!$ga_userid) {
+            $ga_userid = substr(GENHASH(), 0, 32);
+            $user->SetGaUserid($ga_userid);
+        }
+        
+        # But inactive users need special handling.
+	if ($user->status() == TBDB_USERSTATUS_INACTIVE) {
+            # Try to reactivate the user. If we fail for some reason, fall
+            # back to just telling them they are inactive. Otherwise we can
+            # proceed with login.
+            if (ReactivateUser($user)) {
+                return DOLOGIN_STATUS_INACTIVE;
+            }
+	}
 
 	#
 	# Set adminmode off on new logins, unless user requested to be
@@ -1023,34 +1050,38 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
     # Ug. When using ZFS in NOEXPORT mode, we have to call exports_setup
     # to get the mounts exported to back to boss. We do not want to do this
     # every time the user logs in of course, and since exports_setup is 
-    # using one week as its threshold, we can just do it on a daily basis.
+    # using one week as its threshold, we can use that as the limit.
     #
-    if ($WITHZFS && $ZFS_NOEXPORT) {
+    $exports_active = TBGetSiteVar("general/export_active");
+    
+    if ($WITHZFS && $ZFS_NOEXPORT && $exports_active) {
+        $limit = (($exports_active * 24) - 12) * 3600;
+        
         $query_result =
-	    DBQueryFatal("select UNIX_TIMESTAMP(weblogin_last),weblogin_last ".
+	    DBQueryFatal("select UNIX_TIMESTAMP(last_activity),last_activity ".
 			 "  from users as u ".
 			 "left join user_stats as s on s.uid_idx=u.uid_idx ".
 			 "where u.uid_idx='$uid_idx' and ".
                          "      u.nonlocal_id is null");
-	if (mysql_num_rows($query_result)) {
-		$lastrow      = mysql_fetch_row($query_result);
-		$lastlogin    = $lastrow[0];
-		$lastloginstr = $lastrow[1];
-	
-		if (time() - $lastlogin > (24 * 3600)) {
-			# Update weblogin_last first so exports_setup
-			# will do something.
-			DBQueryFatal("update user_stats set ".
-				     " weblogin_last=now() ".
-				     "where uid_idx='$uid_idx'");
 
+        # Update last_activity first so exports_setup will do something
+        # and to mark activity to keep the mount active.
+        DBQueryFatal("update user_stats set last_activity=now() ".
+                     "where uid_idx='$uid_idx'");
+        
+	if (mysql_num_rows($query_result)) {
+		$lastrow       = mysql_fetch_row($query_result);
+		$lastactive    = $lastrow[0];
+		$lastactivestr = $lastrow[1];
+	
+		if (time() - $lastactive > $limit) {
 			$rv = SUEXEC("nobody", "nobody", "webexports_setup",
 				     SUEXEC_ACTION_IGNORE);
 
 			# failed, reset the timestamp
 			if ($rv) {
 				DBQueryFatal("update user_stats set ".
-					     " weblogin_last='$lastloginstr' ".
+					     " last_activity='$lastactivestr' ".
 					     "where uid_idx='$uid_idx'");
 				SUEXECERROR(SUEXEC_ACTION_DIE);
 				return;
@@ -1358,6 +1389,22 @@ function BumpLogoutTime()
 	DBQueryFatal("UPDATE login set timeout='$timeout' ".
 		     "where uid_idx='$CHECKLOGIN_IDX' and ".
 		     "      hashkey='$CHECKLOGIN_HASHKEY'");
+    }
+    return 0;
+}
+
+#
+# Reactivate user.
+#
+function ReactivateUser($user)
+{
+    $user->SetStatus(TBDB_USERSTATUS_ACTIVE);
+    $uid = $user->uid();
+
+    if (SUEXEC($uid, "nobody",
+               "webtbacct reactivate $uid", SUEXEC_ACTION_CONTINUE)) {
+        $user->SetStatus(TBDB_USERSTATUS_INACTIVE);
+        return -1;
     }
     return 0;
 }

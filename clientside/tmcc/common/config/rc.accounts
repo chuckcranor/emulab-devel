@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2010 University of Utah and the Flux Group.
+# Copyright (c) 2004-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -411,11 +411,26 @@ sub doboot()
 		print "Adding: $login/$uid/$gid/$root/$name/$hdir/$glist\n";
 		push(@addedUsers, $login);
 
-		if ($doit &&
-		    os_useradd($login, $uid, $gid, $pswd, 
-			       "$glist", $hdir, $name, $root, $shell)) {
-		    warning("Error adding new user $login");
-		    next;
+		if ($doit) {
+		    #
+		    # XXX when "tmcc mount" returns FSTYPE=LOCAL, we may
+		    # have created homedirs in rc.mounts that will be
+		    # owned by root (since there were no accounts at that
+		    # time!). Fix up the owner/group here for those dirs.
+		    # XXX we are very conservative so we don't accidentally
+		    # change the ownership of a directory that we didn't
+		    # create in rc.mounts.
+		    #
+		    if (-e $hdir && os_islocaldir($hdir) &&
+			(stat($hdir))[4] == 0 && -e "$hdir/.emulabcreated") {
+			unlink("$hdir/.emulabcreated");
+			chown($uid, $gid, $hdir);
+		    }
+		    if (os_useradd($login, $uid, $gid, $pswd, 
+				   "$glist", $hdir, $name, $root, $shell)) {
+			warning("Error adding new user $login");
+			next;
+		    }
 		}
 		
 		if (PLAB() && ! -e $hdir) {
@@ -676,19 +691,8 @@ sub docleanup()
 	$retval = os_account_cleanup($updatemasterpasswdfiles);
     }
 
-    my $pdb = $PASSDB . ".db";
-    my $gdb = $GROUPDB . ".db";
-
-    # RHL9 sillyness; they do not append the .db suffix!
-    unlink $PASSDB
-	if (-e $PASSDB);
-    unlink $GROUPDB
-	if (-e $GROUPDB);
-    
-    unlink $pdb
-	if (-e $pdb);
-    unlink $gdb
-	if (-e $gdb);
+    unlink("$PASSDB", "$PASSDB.db", "$PASSDB.dir", "$PASSDB.pag");
+    unlink("$GROUPDB", "$GROUPDB.db", "$GROUPDB.dir", "$GROUPDB.pag");
 
     return $retval;
 }

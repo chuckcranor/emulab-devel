@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2009, 2010 University of Utah and the Flux Group.
+# Copyright (c) 2009-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -67,8 +67,7 @@ use libtestbed;
 use NodeType;
 use Experiment;
 use User;
-use OSinfo;
-use Image;
+use OSImage;
 
 #
 # This should run as root.
@@ -197,7 +196,7 @@ if (!defined($elabman)) {
 #
 # We need to have this image available.
 #
-my $image = Image->Lookup(TBOPSPID(), "FEDORA8-OVZ-STD");
+my $image = OSImage->Lookup(TBOPSPID(), "FEDORA8-OVZ-STD");
 if (!defined($image)) {
     print STDERR "Pool Daemon exiting since there is suitable image\n";
     cleanup();
@@ -383,8 +382,8 @@ while (!$killme) {
 	my $vname  = $node->vname();
 	my $nodeid = $node->node_id();
 	my $osid   = $node->def_boot_osid();
-	my $osinfo = OSinfo->Lookup($osid);
-	my $osname = $osinfo->osname();
+	my $osimage= OSImage->Lookup($osid);
+	my $osname = $osimage->imagename();
 
 	print NS "set $vname [\$ns node]\n";
 	print NS "tb-set-node-os \$$vname $osname\n";

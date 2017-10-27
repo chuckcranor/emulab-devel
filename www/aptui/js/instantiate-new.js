@@ -1,24 +1,20 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'constraints', 'js/quickvm_sup',
-	 'js/ppwizardstart', 'js/JacksEditor', 'js/wizard-template',
-	 'js/lib/text!template/instantiate-new.html',
-	 'js/lib/text!template/aboutapt.html',
-	 'js/lib/text!template/aboutcloudlab.html',     
-	 'js/lib/text!template/aboutpnet.html',
-	 'js/lib/text!template/waitwait-modal.html',
-	 'js/lib/text!template/rspectextview-modal.html',
-	 'formhelpers', 'filestyle', 'marked', 'jacks', 'jquery-steps'],
-function (_, Constraints, sup, ppstart, JacksEditor, wt,
-	  instantiateString, aboutaptString, aboutcloudString, aboutpnetString,
-	  waitwaitString, rspecviewString)
+$(function ()
 {
     'use strict';
 
+    var templates = APT_OPTIONS.fetchTemplateList(['instantiate-new', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', 'rspectextview-modal']);
+    var instantiateString = templates['instantiate-new'];
+    var aboutaptString = templates['aboutapt'];
+    var aboutcloudString = templates['aboutcloudlab'];
+    var aboutpnetString = templates['aboutpnet'];
+    var waitwaitString = templates['waitwait-modal'];
+    var rspecviewString = templates['rspectextview-modal'];
     var ajaxurl;
     var amlist        = null;
+    var amstatus      = null;
     var projlist      = null;
-    var sysprojlist   = ['emulab-ops', 'emulab-ops-test'];
-    var psysprojlist  = ['PhantomNet', 'testproject'];
+    var sysprojlist   = ['emulab-ops', 'PortalProfiles'];
+    var psysprojlist  = ['PhantomNet', 'PortalProfiles'];
     var profilelist   = null;
     var recentcount   = 5;
     var amdefault     = null;
@@ -35,6 +31,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
     var amValueToKey  = {};
     var showpicker    = 0;
     var portal        = null;
+    var fromrepo      = false;
     var registered    = false;
     var JACKS_NS      = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
     var jacks = {
@@ -47,6 +44,9 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
     var ppchanged     = false;
     var monitor       = null;
     var types         = null;
+    var hardware      = null;
+    var resinfo       = null;
+    var deprecatedList = [];
     var mainTemplate  = _.template(instantiateString);
 
     function initialize()
@@ -63,6 +63,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	multisite  = window.MULTISITE;
 	portal     = window.PORTAL;
 	ajaxurl    = window.AJAXURL;
+	fromrepo   = window.FROMREPO;
 	doconstraints = window.DOCONSTRAINTS;
 	showpicker    = window.SHOWPICKER;
 
@@ -71,13 +72,32 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	    _.each(_.keys(amlist), function (key) {
 		amValueToKey[amlist[key]] = key;
 	    });
+	    amstatus = decodejson('#amstatus-json');
+	    console.info(amstatus);
 	}
 	if ($('#projects-json').length) {
 	    projlist = decodejson('#projects-json');
 	}
 	profilelist = decodejson('#profiles-json');
-
 	var profileToArray = _.pairs(profilelist);
+
+	/*
+	 * Sort the entire list by recently used if a registered user,
+	 * else just the use count.
+	 */
+	if (registered) {
+	    profileToArray = _.sortBy(profileToArray, function (value) {
+		return value[1].lastused;
+	    });
+	}
+	else {
+	    profileToArray = _.sortBy(profileToArray, function (value) {
+		return value[1].usecount;
+	    });
+	}
+	// Note that sortBy orders by ascending, so reverse.
+	profileToArray = profileToArray.reverse();
+	
 	var recentlist = _.filter(profileToArray, function(value) {
 	    return value[1]['usecount'] > 0;
 	});
@@ -87,14 +107,8 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	    neverUsed = 1;
 	    recentlist = profileToArray;
 	}
-
-	// Note that sortBy orders by ascending, so the most recent
-	// are at the end of the array.
-	recentlist = _.sortBy(recentlist, function(obj) {
-	    return obj[1].lastused;
-	});
-	recentlist = _.last(recentlist, recentcount);
-
+	recentlist = _.first(recentlist, recentcount);
+	
 	_.each(recentlist, function(obj, key) {
 	    if (window.ISPNET) {
 		if (_.contains(psysprojlist, obj[1].project)) {
@@ -107,11 +121,17 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 		}
 	    }
 	});
-	var projcategories = MakeProfileCategories(profilelist);	
+	var projcategories = MakeProfileCategories(profileToArray);
+
+	// Fire this off right away.
+	if (window.REGISTERED) {
+	    LoadReservationInfo();
+	}
 
 	var html = mainTemplate({
 	    formfields:         decodejson('#form-json'),
 	    profiles:           profilelist,
+	    myprofiles:         projcategories.myprofiles,
 	    projprofiles:       projcategories.inproj,
 	    systemprofiles:        projcategories.sysproj,
 	    otherprofiles:      projcategories.otherproj,
@@ -126,58 +146,23 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	    profilevers:        window.PROFILEVERS,     
 	    showpicker:         showpicker,
 	    cancopy:            window.CANCOPY,
+	    fromrepo:           fromrepo,
 	    clustername:        window.PORTAL_NAME,
 	    admin:		isadmin,
+	    maxduration:        window.MAXDURATION,
 	});
 	$('#main-body').html(html);
-
-
-	// TEMPORARY BUTTON FOR CLASSIC PICKER
-	// To be removed when the new picker becomes default
-	
-	// Quick and dirty
-	var btntext = 'Use Classic Picker';
-	var btnhtml = window.location.href;
-	var whichchar = (btnhtml.indexOf('?') > -1) ? '&' : '?';
-
-	if (window.CLASSIC === undefined || window.CLASSIC) {
-	    btntext = 'Try the New Picker!';
-	    btnhtml = btnhtml.replace('classic=true','');
-	    btnhtml += whichchar + 'classic=false';
-	}
-	else {
-	    btnhtml = btnhtml.replace('classic=false','');
-	    btnhtml += whichchar + 'classic=true';
-	}
-	btnhtml = btnhtml.replace('&&','&').replace('?&','?');
-	btnhtml.replace('#','');
-
-	$('#quickvm_topomodal #showtopo_dialog .modal-header').append('<a '+
-		' href="'+btnhtml+'"'+
-		'>'+
-		'<button'+
-		' id="whichPicker"'+
-		' class="btn btn-info btn-sm"'+
-		' style="position: absolute;top:14px;right:40px"'+
-		'>'+btntext+'</button>'+
-		'</a>');
-
-	// END TEMPORARY BUTTON
-
+	if (projlist)
+	    UpdateGroupSelector();
 
 	// Check if the browser has cookies stating what they previoiusly had minimized.
-	CookieCollapse('#profile_name > span', 'pp_collpased');
-
-	var jqxhr =
-	    $.get('https://ops.emulab.net/servicemon/?names=urn')
-	    .done(function(data) {
-		monitor = JSON.parse(data);
-		CreateClusterStatus();
-	    }).error(function(a) {
-		console.log(a);
-	    });
-
+        CookieCollapse('#profile_name > span', 'pp_collpased');
+        _.defer(function () {
+	    monitor = JSON.parse(_.unescape($('script#amstatus-json').html()));
+	    //CreateClusterStatus();
+        });
 	$('#waitwait_div').html(waitwaitString);
+        $('#waitwait-modal').modal({ backdrop: 'static', keyboard: false, show: false });
 	$('#rspecview_div').html(rspecviewString);
 	$('#rspec_modal_download_button').addClass("hidden");
 	
@@ -202,6 +187,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 		return Instantiate(this, event);
 	    },
 	});
+
 	// This activates the popover subsystem. 
 	$('[data-toggle="popover"]').popover({
 	    trigger: 'hover',
@@ -226,29 +212,55 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	    event.preventDefault();
 	    resetForm($('#quickvm_form'));
 	});
-	$('button#profile').click(function (event) {
+	$('button#change-profile').click(function (event) {
 	    event.preventDefault();
+	    PickerEvent("show");
 	    $('#quickvm_topomodal').modal('show');
+	});
+	$('button#showtopo_cancel').click(function (event) {
+	    event.preventDefault();
+	    PickerEvent("hide");
+	    $('#quickvm_topomodal').modal('hide');
 	});
 	$('li.profile-item').click(function (event) {
 	    event.preventDefault();
+	    // Ignore clicks over the project. Probably a better way to do this.
+	    if (! $(event.target).is("li")) {
+		return;
+	    }
+	    PickerEvent("switch", $(event.target),
+			$('#profile_name').scrollTop());
 	    ShowProfileSelection(event.target);
 	});
 	$('button#showtopo_select').click(function (event) {
 	    event.preventDefault();
-	    ChangeProfileSelection($('#quickvm_topomodal .selected'));
-	    selected_uuid = $('#quickvm_topomodal .selected').attr('value');
+	    var selected = $('#quickvm_topomodal .selected');
+	    PickerEvent("select", selected, $('#profile_name').scrollTop());
+	    ChangeProfileSelection(selected);
+	    selected_uuid = selected.attr('value');
 	    console.log(selected_uuid);
 	    $('#quickvm_topomodal').modal('hide');
 	    $('.steps .error').removeClass('error');
+	});
+	/*
+	 * Handler for scroll inside the picker. We want to send the
+	 * event when the user stops scrolling.
+	 */
+	$('#profile_name').scroll(function (event) {
+	    clearTimeout($.data(this, 'scrollTimer'));
+	    $.data(this, 'scrollTimer', setTimeout(function() {
+		PickerEvent("scroll", $('#profile_name').scrollTop());
+	    }, 750));	    
 	});
 	/*
 	 * Need to update image constraints when the project selector
 	 * is changed.
 	 */
 	$('#profile_pid').change(function (event) {
-	  console.log('profile-pid change');
+	    //console.log('profile-pid change');
+	    UpdateGroupSelector();
 	    UpdateImageConstraints();
+	    ShowClusterReservations();
 	    return true;
 	});
 	$('#profile_copy_button').click(function (event) {
@@ -258,6 +270,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 			     "a profile.");
 		return;
 	    }
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    var url = "manage_profile.php?action=copy&uuid=" + selected_uuid;
 	    window.location.replace(url);
 	    return false;
@@ -270,6 +283,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 			     "profile details.");
 		return;
 	    }
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    var url = "show-profile.php?uuid=" + selected_uuid;
 	    window.location.replace(url);
 	    return false;
@@ -296,7 +310,8 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	});
 
 	// Profile picker search box.
-	var profile_picker_timeout = null;
+	var profile_picker_timeout  = null;
+	var profile_picker_searched = false;
 	
 	$("#profile_picker_search").on("keyup", function (event) {
 	    var options   = $('#profile_name');
@@ -317,18 +332,23 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 			});
 		    options.children("ul").children("li").hide();
 		    matches.show();
-
+		    
 		    if (userInput == '') {
 			$('#title_recently_used').removeClass('hidden');
 			$('#recently_used').removeClass('hidden');
 			$('#title_favorites').removeClass('hidden');
 			$('#favorites').removeClass('hidden');
+			profile_picker_searched = false;
 		    }
 		    else {
 			$('#title_recently_used').addClass('hidden');
 			$('#recently_used').addClass('hidden');
 			$('#title_favorites').addClass('hidden');
 			$('#favorites').addClass('hidden');
+			if (profile_picker_searched == false) {
+			    PickerEvent("search");
+			}
+			profile_picker_searched = true;
 		    }
 		}, 500);
 
@@ -340,6 +360,8 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 			return (!$(this).parent().hasClass('hidden') && $(this).css('display') == 'block');
 		    });
 		if (matches && matches.length == 1) {
+		    PickerEvent("select", $(matched[0]),
+				$('#profile_name').scrollTop());
 		    ShowProfileSelection(matches[0]);
 		}
 	    }
@@ -365,7 +387,12 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	    
 	var startProfile = $('#profile_name li[value = ' + window.PROFILE + ']:first');
 	ChangeProfileSelection(startProfile);
-	_.delay(function () {$('.dropdown-toggle').dropdown();}, 500);
+	_.delay(function () {
+	    $('.dropdown-toggle').dropdown();
+	    if (window.SKIPFIRSTSTEP) {
+		$('#stepsContainer').steps('next');
+	    }
+	}, 500);
 
 	// Set up the click function for expanding and collapsing profile groups
 	$('#profile_name > span').click(function() {
@@ -414,11 +441,14 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 
     // Put profiles into the correct categories to be built in the template
     function MakeProfileCategories(profiles) {
-      var result = {favorite:{},inproj:{},sysproj:{},otherproj:{}};
+      var result = {favorite:{},myprofiles:{},inproj:{},sysproj:{},otherproj:{}};
 
       // This section should probably be rethought as it's not very clean. 
       // Didn't have time to refactor for initial release.
-      _.each(profilelist, function(obj, key) {
+      _.each(profiles, function(obj, key) {
+	  key = obj[0];
+	  obj = obj[1];
+	  
 	    var isSystem = (window.ISPNET && _.contains(psysprojlist, obj.project)) || (!window.ISPNET &&_.contains(sysprojlist, obj.project))
 	    if (obj.favorite == 1) {
 	      if (isSystem	) {
@@ -429,10 +459,16 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 		result.favorite[key] = obj;
 	      }
 	    }
+
+	    if (window.USERNAME == obj.creator) {
+		result.myprofiles[key] = obj;
+	    }
+
 	    if (isSystem) {
 	      result.sysproj[key] = obj;
 	    }
-	    if (_.contains(projlist, obj.project)) {
+
+	    if (projlist && _.has(projlist, obj.project)) {
 	      if (!result.inproj[obj.project]) {
 		result.inproj[obj.project] = {};
 	      }
@@ -537,8 +573,9 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 
     // Step is done changing.
     function StepChanged(step, event, currentIndex, priorIndex) {
+        APT_OPTIONS.updatePage({ 'instantiate-step': currentIndex });
 	var cIndex = currentIndex;
-	if (currentIndex == 1) {
+        if (currentIndex == 1) {
 	    // If the profile isn't parameterized, skip the second step
 	    if (!ispprofile) {
 		if (priorIndex < currentIndex) {
@@ -567,7 +604,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	    // https://gitlab.flux.utah.edu/emulab/emulab-devel/issues/71
 	    if ($('#pp_form #hwinfo').length == 0) {
 		$('#pp_form input[data-key=osNodeType]').parent().append(''+
-		    '<a href="http://docs.cloudlab.us/hardware.html" style="'+
+		    '<a href="' + window.MANUAL + '/hardware.html" style="'+
 			'position:absolute;'+
 			'right:21px;'+
 			'top: 8.5px;'+
@@ -706,74 +743,80 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	xmlthing.done(callback);
     };
 
-    function Instantiate()
-    {
-	if (webonly != 0) {
-	    event.preventDefault();
-	    sup.SpitOops("oops",
-			 "You do not belong to any projects at your Portal, " +
-			 "so you have have very limited capabilities. Please " +
-			 "join or create a project at your " +
-			 (portal && portal != "" ?
-			  "<a href='" + portal + "'>Portal</a>" : "Portal") +
-			 " to enable more capabilities. Thanks!")
-	    return false;
-	}
-	// Prevent double click.
-	if ($(this).data('submitted') === true) {
-	    // Previously submitted - don't submit again
-	    console.info("Ignoring double submit");
-	    event.preventDefault();
-	    return false;
-	}
-	else {
-	    // See if all cluster selections have been made. Seems
-	    // to be a common problem.
-	    if (!AllClustersSelected()) {
-		alert("Please make all your cluster selections!");
-		event.preventDefault();
-		return false;
+    var Instantiate = function () {
+        var submitted = false;
+
+        return function (dom, event)
+        {
+	    if (webonly != 0) {
+	        event.preventDefault();
+	        sup.SpitOops("oops",
+			     "You do not belong to any projects at your Portal, " +
+			     "so you have have very limited capabilities. Please " +
+			     "join or create a project at your " +
+			     (portal && portal != "" ?
+			     "<a href='" + portal + "'>Portal</a>" : "Portal") +
+			     " to enable more capabilities. Thanks!")
+	        return false;
 	    }
-	    // Mark it so that the next submit can be ignored
-	    $(this).data('submitted', true);
-	}
-	
-	// Submit with checkonly first, then for real
-	SubmitForm(1, 2, function (json) {
-	    console.info(json);
-	    // Internal error.
-	    if (json.code < 0) {
-		sup.SpitOops("oops", json.value);
-		return;
+	    // Prevent double click.
+	    if (submitted === true) {
+	        // Previously submitted - don't submit again
+	        console.info("Ignoring double submit");
+	        event.preventDefault();
+	        return false;
+	    } else {
+	        // See if all cluster selections have been made. Seems
+	        // to be a common problem.
+	        if (!AllClustersSelected()) {
+		    alert("Please make all your cluster selections!");
+		    event.preventDefault();
+		    return false;
+	        }
+	        // Mark it so that the next submit can be ignored
+	        submitted = true;
 	    }
-	    // Form error
-	    if (json.code == 2) {
-		ShowFormErrors(json.value);
-		return;
-	    }
-	    $("#waitwait-modal").modal('show');
-	    SubmitForm(0, 2, function(json) {
-		$("#waitwait-modal").modal('hide');
-		if (json.code) {
-		    console.info(json);
-		    if (json.code == 2) {
-			ShowFormErrors(json.value);
-			return;
+
+            // Submit with checkonly first, then for real
+	    SubmitForm(1, 2, function (json) {
+	        console.info(json);
+	        // Internal error.
+	        if (json.code < 0) {
+		    sup.SpitOops("oops", json.value);
+		    submitted = false;
+		    return;
+	        }
+	        // Form error
+	        if (json.code == 2) {
+	            ShowFormErrors(json.value);
+	            submitted = false;
+		    return;
+	        }
+	        $("#waitwait-modal").modal('show');
+	        SubmitForm(0, 2, function(json) {
+		    $("#waitwait-modal").modal('hide');
+		    if (json.code) {
+		        console.info(json);
+		        if (json.code == 2) {
+		            ShowFormErrors(json.value);
+		            submitted = false;
+			    return;
+		        }
+		        sup.SpitOops("oops", json.value);               
 		    }
-		    sup.SpitOops("oops", json.value);               
-		}
-		/*
-		 * The return value will have a redirect url in it,
-		 * and some optional cookies.
-		 */
-		if (_.has(json.value, "cookies")) {
-		    SetCookies(json.value.cookies);
-		}
-		window.location.replace(json.value.redirect);
+		    /*
+		     * The return value will have a redirect url in it,
+		     * and some optional cookies.
+		     */
+		    if (_.has(json.value, "cookies")) {
+		        SetCookies(json.value.cookies);
+		    }
+		    window.location.replace(json.value.redirect);
+	        });
 	    });
-	});
-	return true;
-    }
+	    return true;
+        };
+    }();
 
     function ShowFormErrors(errors) {
 	$('.step-forms').find('.format-me').each(function () {
@@ -795,7 +838,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
     function ClearFormErrors() {
 	$('.step-forms').find('.format-me').each(function () {
 	    var input = $(this).find(":input")[0];
-	    var label = $(this).find(".control-label")[0];
+	    var label = $(this).find(".control-error")[0];
 	    var key   = $(input).data("key");
 	    if (key) {
 		$(this).removeClass("has-error");
@@ -892,7 +935,6 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
     }
     
     function CreateClusterStatus() {
-	//console.log("CreateClusterStatus", monitor);
 	if (monitor == null || $.isEmptyObject(monitor)) {
 	    return;
 	}
@@ -917,47 +959,69 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	    }
 	    var which = $(this).parent().attr('id');
 
-	    var html = wt.ClusterStatusHTML($('#'+which+' .form-control option'), window.FEDERATEDLIST);
+	    // Decide what classes each option element should have
+	    var pickerTarget = '#'+which+' .select_where';
+	    var attributes = {}
 
-	    $('#'+which+' .form-control').after(html);
-	    $('#'+which+' select.form-control').addClass('hidden');
+	    $(pickerTarget).find('option').each(function() {
+		var attrs = {}
+		var siteName = $(this).attr('value');
 
-	    html.find('.dropdown-menu a').on('click', function() {    
-		wt.StatusClickEvent(html, this);
-		$('#'+which+' .form-control').val($('#'+which+' .cluster_picker_status .value').html()); 
+		// Hide "Please Select" option
+		if (siteName == "") {
+		    attrs['class'] = 'hidden enabled';
+		}
+		else if ($(this).prop('disabled')) {
+		    attrs['class'] = 'disabled';
+		    attrs['tooltip'] = {
+			placement: 'right',
+			title: '<div>This testbed is incompatible with the selected profile</div>'
+		    }
+		}
+		else {
+		    attrs['class'] = 'enabled';
+		}
+
+		if (_.contains(window.FEDERATEDLIST, $(this).attr('value'))) {
+		    attrs['class'] += " federated";
+		}
+
+		attributes[siteName] = attrs;
 	    });
 
+	    var dividers = [{ match: 'class',
+			      key: 'federated',
+			      text: 'Federated Clusters'
+			    },
+			    { match: 'class',
+			      key: 'disabled'
+			    }];
+
+	    picker.MakePicker(pickerTarget, wt.StatusClickEvent, attributes, dividers, {class: 'cluster_picker_status'});
+
+	    // Assign health ratings and icons
 	    _.each(amlist, function(name, key) {
 		var data = monitor[key];
+		var rating, classes;
 		var target = $('#'+which+' .cluster_picker_status .dropdown-menu .enabled a:contains("'+name+'")');
 		if (data && !$.isEmptyObject(data)) {
 		    // Calculate testbed rating and set up tooltips.
-		    var rating = wt.CalculateRating(data, resourceTypes);
-		    
-		    target.parent().attr('data-health', rating[0]).attr('data-rating', rating[1]);
-		    
-		    var classes = wt.AssignStatusClass(rating[0], rating[1]);
-		    target.addClass(classes[0]).addClass(classes[1]);
-
-		    target.append(wt.StatsLineHTML(classes, rating[2]));
+		    rating = wt.CalculateRating(data, resourceTypes);
+		    classes = wt.AssignStatusClass(rating[0], rating[1]);
 		}
+		else {
+		    rating = wt.InactiveRating();
+		    classes = wt.AssignInactiveClass();
+		}
+		target.parent().attr('data-health', rating[0]).attr('data-rating', rating[1]).attr('urn', key);
+		    
+		target.addClass(classes[0]).addClass(classes[1]);
+
+		target.append(wt.StatsLineHTML(classes, rating[2]));
 	    });
 
-	    var sort = function (a, b) {
-		var aHealth = Math.ceil((+a.dataset.health)/50);
-		var bHealth = Math.ceil((+b.dataset.health)/50);
-
-		if (aHealth > bHealth) {
-		    return -1;
-		}
-		else if (aHealth < bHealth) {
-		    return 1;
-		}
-		return +b.dataset.rating - +a.dataset.rating;
-	    };
-
-	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.native').sort(sort).prependTo($('#'+which+' .cluster_picker_status .dropdown-menu'));
-	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.federated').sort(sort).insertAfter($('#'+which+' .cluster_picker_status .dropdown-menu .federatedDivider'));
+	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.native').sort(SortClusterStatus).prependTo($('#'+which+' .cluster_picker_status .dropdown-menu'));
+	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.federated').sort(SortClusterStatus).insertAfter($('#'+which+' .cluster_picker_status .dropdown-menu .federatedDivider'));
 
 	    var pickerStatus = $('#'+which+' .cluster_picker_status .dropdown-menu .enabled a');
 	    if (pickerStatus.length == 2) {
@@ -966,9 +1030,248 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	    else {
 		pickerStatus[0].click();
 	    }
-	});
+	});	  
 	
 	$('[data-toggle="tooltip"]').tooltip();
+
+	ShowClusterReservations();
+    }
+
+    function ShowClusterReservations() {
+	if (resinfo == null || $.isEmptyObject(resinfo)) {
+	    return
+	}
+
+	var project = $('#profile_pid').val();
+	var projectReservations = {}
+	var requested = 0;
+	var inuse = 0;
+	var ready = 0;
+	var reloading = 0;
+
+	$('#reservation_confirmation').addClass('hidden');
+	$('#reservation_warning').addClass('hidden');
+	$('#reservation_future').addClass('hidden');
+
+	$('#finalize_options .cluster-group').each(function() {
+	    var click  = false;
+	    var siteid = $(this).find("> label").attr("name");
+
+	    $(this).find('.dropdown-menu > .enabled:not(.hidden)').each(function() {
+		$(this).find('.reservation_tooltip').remove();
+
+		var start = null;
+		var end = null;
+		var earliest = null;
+		var hasReservation = false;
+		var currentReservations = false;
+
+		var target = $(this).find('a');
+		var cluster = $(this).attr('urn');
+
+		if (_.has(resinfo, cluster) && resinfo[cluster] != null) {
+		    if (typeof(resinfo[cluster]) == "string") {
+			console.info("Timed out getting reservation system " +
+				     "info for cluster " + cluster);
+			return;
+		    }
+		    /*
+		     * Upcoming is lower priority so do first.
+		     */
+		    if (_.has(resinfo[cluster], 'upcoming') &&
+			resinfo[cluster]['upcoming'] != null) {
+			_.each(resinfo[cluster]['upcoming'],
+			       function(thelist, resproj) {
+				   _.each(thelist, 
+					  function(obj) {
+			    console.info("upcoming", obj.starttime,
+					 resproj, project);
+			    
+			    // Current project has a future reservation
+			    // Used for cluster icons
+			    if (project == resproj) {
+				hasReservation = true;
+				click = true;
+
+				// Find earliest starting reservation time
+				if (earliest == null ||
+				    earliest > obj.starttime) {
+				    earliest = obj.starttime;
+				}
+			    }
+			    // Do not override a current entry (from above).
+			    if (!_.has(projectReservations, resproj)) {
+				projectReservations[resproj] = {
+				    // Icon for projects
+				    class: "futureReservation",
+				    // Used for sorting projects
+				    attr: {'data-priority': 2}
+				}
+			    }
+			 });
+		      });
+		    }
+
+		    if (_.has(resinfo[cluster], 'current') &&
+			resinfo[cluster]['current'] != null) {
+			_.each(resinfo[cluster]['current'],
+			       function(thelist, resproj) {
+				   _.each(thelist, 
+					  function(obj) {
+			    var req        = obj.reserved;
+			    var used       = obj.used;
+			    var type       = obj.nodetype;
+
+			    console.info("current", req, used, obj.ready,
+					 obj.reloading, type, resproj, project);
+			    
+			    // Current project has a current reservation
+			    // Used for cluster icons
+			    if (project == resproj) {
+				hasReservation = true;
+				click = true;
+				// All nodes for current project reservations.
+				requested += parseInt(req);
+				inuse += parseInt(used);
+				ready += parseInt(obj.ready);
+				reloading += parseInt(obj.reloading);
+				currentReservations = true;
+			    }
+			    projectReservations[resproj] = {
+				// Icon for projects
+				class: "hasReservation",
+				// Used for sorting projects
+				attr: {'data-priority': 1}
+			    }
+			  });
+		       });
+		    }
+		    // These are reservations that could interfere with
+		    // the user getting nodes. 
+		    if (!hasReservation && 
+			_.has(resinfo[cluster], 'pressure') &&
+			resinfo[cluster]['pressure'] != null) {
+			_.each(resinfo[cluster]['pressure'],
+			       function(reslist, type) {
+				   //console.info("P1", reslist,
+				   //             type, hardware, siteid);
+				   if (_.has(hardware, siteid) &&
+				       _.has(hardware[siteid], type) &&
+				       _.has(reslist, project)) {
+				       //console.info("P", siteid,
+				       //              type, project);
+				       if (start == null ||
+					   start > reslist[project][0][0]) {
+					   start = reslist[project][0][0];
+					   end = reslist[project][0][1];
+				       }
+				   }
+			       });
+		    }
+
+		    if (hasReservation || start != null) {
+			if (0) {
+			    console.info("res", project, start, end, earliest,
+					 requested, inuse, ready, reloading);
+			}
+			$(this).attr('data-res-pid', project);
+			$(this).attr('data-res-requested', requested);
+			$(this).attr('data-res-used', inuse);
+			$(this).attr('data-res-ready', ready);
+			$(this).attr('data-res-reloading', reloading);
+			if (hasReservation) {
+			    $(this).removeAttr('data-res-end');
+			    $(this).removeAttr('data-res-upcoming');
+			    
+			    if (currentReservations) {
+				$(this).attr('data-now', 'true');
+				target.append(wt.HasReservationHTML(project, 'cluster', 2));
+			    }
+			    else {
+				$(this).attr('data-res-upcoming', earliest);
+				$(this).attr('data-now', 'false');
+				target.append(wt.FutureReservationHTML(project, 'cluster', 2));
+			    }
+			}
+			else if (start) {
+			    $(this).attr('data-res-start', start);
+			    if (end != null) {
+				$(this).removeAttr('data-now');
+
+				$(this).attr('data-res-end', end);
+				target.append(wt.ReservationWarningHTML('cluster', 2));
+			    }
+			}
+			$('.reservation_tooltip > div').tooltip();
+		    }
+		    else {
+			$(this).removeAttr('data-now');
+			$(this).removeAttr('data-res-pid');
+			$(this).removeAttr('data-res-start');
+			$(this).removeAttr('data-res-end');
+			$(this).removeAttr('data-res-requested');
+			$(this).removeAttr('data-res-used');
+			$(this).removeAttr('data-res-ready');
+			$(this).removeAttr('data-res-reloading');
+			$(this).removeAttr('data-res-upcoming');
+		    }
+		}
+	    });
+
+	    var which = $(this).parent().attr('id');
+
+	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.native').sort(SortClusterStatus).prependTo($('#'+which+' .cluster_picker_status .dropdown-menu'));
+	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.federated').sort(SortClusterStatus).insertAfter($('#'+which+' .cluster_picker_status .dropdown-menu .federatedDivider'));
+
+	    var pickerStatus = $('#'+which+' .cluster_picker_status .dropdown-menu .enabled a');
+	    if (click) {
+		console.info("pickerStatus", pickerStatus);
+		pickerStatus[1].click();
+	    }
+	    else {
+		$('#'+which+' .cluster_picker_status .dropdown-menu .selected a').click();
+	    }
+	});
+	if (_.keys(projectReservations).length > 0 && $('#profile_pid_picker').length == 0) {
+	    picker.MakePicker('#profile_pid', wt.ResClickEvent, projectReservations);
+
+	    // Add icons
+	    $('#profile_pid_picker .dropdown-menu .hasReservation a').append(wt.HasReservationHTML(project, 'project', 1))
+	    $('#profile_pid_picker .dropdown-menu .futureReservation a').append(wt.FutureReservationHTML(project, 'project', 1))
+
+	    $('#profile_pid_picker .dropdown-menu > li').sort(SortProfileList).prependTo($('#profile_pid_picker .dropdown-menu'));
+
+	    $($('#profile_pid_picker .dropdown-menu a')[0]).click();
+	}
+    }
+
+    function SortClusterStatus(a, b) {
+	if ((a.dataset.now && !b.dataset.now) || (a.dataset.now == 'true' && b.dataset.now == 'false')) {
+	    return -1;
+	}
+
+	if ((b.dataset.now && !a.dataset.now) || (b.dataset.now == 'true' && a.dataset.now == 'false')) {
+	    return 1;
+	}
+
+	var aHealth = Math.ceil((+a.dataset.health)/50);
+	var bHealth = Math.ceil((+b.dataset.health)/50);
+
+	if (aHealth > bHealth) {
+	    return -1;
+	}
+	else if (aHealth < bHealth) {
+	    return 1;
+	}
+	return +b.dataset.rating - +a.dataset.rating;
+    }
+
+    function SortProfileList(a, b) {
+	if ((!a.dataset.priority && b.dataset.priority) || (a.dataset.priority < b.dataset.priority)) {
+	    return 1;
+	}
+
+	return -1;
     }
 
     function SwitchJacks(which) {
@@ -1132,8 +1435,24 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	    selected_version = profile_blob.version;
 	    amdefault        = profile_blob.amdefault;
 
+	    // Not allowed to copy a repo based profile.
+	    if (profile_blob.fromrepo) {
+		$('#profile_copy_button').addClass("hidden");
+	    }
+	    else {
+		$('#profile_copy_button').removeClass("hidden");
+	    }
+
+	    /*
+	     * Change the project; if the user's project list includes
+	     * the project the profile belongs to, that becomes the default.
+	     */
+	    if (projlist && _.has(projlist, profile_blob.pid)) {
+		$('#project_selector #profile_pid').val(profile_blob.pid);
+		UpdateGroupSelector();
+	    }
 	    CreateAggregateSelectors(selected_rspec);
-	    
+    
 	    // Set the default aggregate.
 	    if ($('#profile_where').length) {
 		// Deselect current option.
@@ -1167,7 +1486,6 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	    var description = null;
 	    $(xml).find("rspec_tour").each(function() {
 		$(this).find("description").each(function() {
-		    var marked = require("marked");
 		    description = marked($(this).text());
 		});
 	    });
@@ -1180,7 +1498,86 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	var $xmlthing = sup.CallServerMethod(ajaxurl,
 					     "instantiate", "GetProfile",
 					     {"uuid" : profile});
-	$xmlthing.done(callback);
+
+	/*
+	 * If a repo-based and we got a specific branch/tag, we have to
+	 * get the source for that, since it will be different then what
+	 * is stored in the profile descriptor.
+	 */
+	if (fromrepo && window.REFSPEC !== undefined) {
+	    var which = window.REFSPEC;
+	    
+	    $xmlthing.done(function(json) {
+		gitrepo.GetRepoSource(profile, which, function(source, hash) {
+		    var pythonRe = /^import/m;
+		    
+		    $('#repohash').val(hash);
+		    $('#reporef').val(which);
+
+		    if (pythonRe.test(source)) {
+			ConvertScript(source, function(rspec, paramdefs) {
+			    // Need to pass these along at submit.
+			    $('#rspec_textarea').val(rspec);
+			    $('#script_textarea').val(source);
+			    json.value.rspec      = rspec;
+			    json.value.isscript   = true;
+			    //
+			    // We can get a parameterized profile, or not.
+			    //
+			    if (paramdefs === undefined) {
+				json.value.ispprofile = false;
+			    }
+			    else {
+				$('#paramdefs').val(paramdefs);
+				json.value.ispprofile = true;
+			    }
+			    callback(json);
+			});
+		    }
+		    else {
+			// New rspec, proceed
+			json.value.rspec = source;
+			// Need to pass this along at submit.
+			$('#rspec_textarea').val(source);
+			callback(json);
+		    }
+		});
+	    });
+	}
+	else {
+	    $xmlthing.done(callback);
+	}
+    }
+
+    //
+    // Pass a geni-lib script to the server to run (convert to XML).
+    // We use this on repo-based profiles, where we have to get the
+    // source code from the repo, and convert to an rspec. 
+    //
+    function ConvertScript(script, continuation)
+    {
+	var callback = function(json) {
+	    sup.HideWaitWait();
+
+	    if (json.code) {
+		sup.SpitOops("oops",
+			     "<pre><code>" +
+			     $('<div/>').text(json.value).html() +
+			     "</code></pre>");
+		return;
+	    }
+	    if (json.value.rspec != "") {
+		continuation(json.value.rspec, json.value.paramdefs);
+	    }
+	}
+	sup.ShowWaitWait("We are converting the geni-lib script to an rspec. " +
+			 "Patience please.");
+	var xmlthing = sup.CallServerMethod(null,
+					    "manage_profile",
+					    "CheckScript",
+					    {"script"     : script,
+					     "getparams"  : true});
+	xmlthing.done(callback);
     }
 
     /*
@@ -1190,7 +1587,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	// If not a registered user, we do not get an rspec back, since
 	// the user is not allowed to change the configuration.
 	if (newRspec) {
-	    $('#pp_rspec_textarea').val(newRspec);
+	    $('#rspec_textarea').val(newRspec);
 	    selected_rspec = newRspec;
 	    CreateAggregateSelectors(newRspec);
 	}
@@ -1265,31 +1662,43 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	siteIdToSiteNum = {};
 	var sitenum = 0;
 
-	// Create the dropdown selection lists.
+	// Create the dropdown selection lists. If only one, then force
+	// that one to be selected.
 	var options = "";
 	_.each(amlist, function(name, key) {
-	    options = options +
-		"<option value='" + name + "'>" + name + "</option>";
+	    options = options + "<option value='" + name + "'";
+	    if (amlist.count == 1) {
+		options = options + " selected";
+	    }
+	    options = options + ">" + name + "</option>";
 	});
 
 	// If multisite is disabled for the user, or no sites or 1 site.
 	if (!multisite || Object.keys(sites).length <= 1) {
+	    var siteid;
+	    if (Object.keys(sites).length == 0) {
+		siteid = "Site 1";
+	    }
+	    else {
+		siteid = _.values(sites)[0]
+	    }
 	    html = 
 		"<div id='nosite_selector' " +
 		"     class='form-horizontal experiment_option'>" +
 		"  <div class='form-group cluster-group'>" +
-		"    <label class='col-sm-4 control-label' name='" + _.values(sites)[0] + "' " +
+		"    <label class='col-sm-4 control-label' name='" + siteid + "' " +
 		"           style='text-align: right;'>Cluster:</a>" +
 		"    </label> " +
 		"    <div class='col-sm-6'>" +
 		"      <select name='where' id='profile_where' " +
-		"              class='form-control'>" +
+		"              class='form-control select_where'>" +
 		"        <option value=''>Please Select</option>" +
 		options +
 		"      </select>" +
 		"    </div>" +
 		"<div class='col-sm-4'></div>" +
-		"<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This site <b>will not work on any clusters</b>. All clusters are unselectable.</div>" +
+		"<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This profile <b>will not work on any clusters</b>. Please check your profile or parameters for errors. If you are sure they are correct, you can report the problem to support@cloudlab.us and make sure to link to the problematic profile.</div>" +
+		"<div class='col-sm-6 alert alert-warning' id='where-deprecated' style='display: none; margin-top: 5px; margin-bottom: 5px'></div>" +
 		"  </div>" +
 		"</div>";
 	}
@@ -1306,15 +1715,16 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 		    "          Site " + siteid  + " Cluster:</a>" +
 		    "    </label> " +
 		    "    <div class='col-sm-6'>" +
-		    "      <select name=\"sites[" + siteid + "]\"" +
-		    "              class='form-control'>" +
+		    "      <select id='site"+sitenum+"_selector' name=\"sites[" + siteid + "]\"" +
+		    "              class='form-control select_where'>" +
 		    "        <option value=''>Please Select</option>" +
 		    options +
 		    "      </select>" +
 		    "    </div>" +
 		    "<div class='col-sm-4'></div>" +
 		    "<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This site <b>will not work on any clusters</b>. All clusters are unselectable.</div>" +
-		    "  </div>" +
+		    "<div class='col-sm-6 alert alert-warning' id='where-deprecated' style='display: none; margin-top: 5px; margin-bottom: 5px'></div>" +
+	            "  </div>" +
 		    "</div>";
 		sitenum++;
 	    });
@@ -1324,7 +1734,6 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	$("#cluster_selector").html("");
 	$("#cluster_selector").html(html);
 	updateWhere();  
-	CreateClusterStatus();
 	$("#cluster_selector").removeClass("hidden");
     }
 
@@ -1358,7 +1767,6 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
       {
 	delete context.canvasOptions.defaults;
       }
-      constraints = new Constraints(context);
       jacks.instance = new window.Jacks({
 	mode: 'viewer',
 	source: 'rspec',
@@ -1369,6 +1777,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	  jacks.output = output;
 	  jacks.output.on('found-images', onFoundImages);
 	  jacks.output.on('found-types', onFoundTypes);
+          constraints = new JACKS_LOADER.Constraints(context);
 	  updateWhere();
 	},
 	canvasOptions: context.canvasOptions,
@@ -1393,9 +1802,12 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 
     function onFoundTypes(t) 
     {
+	//console.info("onFoundTypes", t);
 	types = {};
+	hardware = {};
 	_.each(t, function(item) {
 	    types[item.name] = item.types;
+	    hardware[item.name] = item.hardware;
 	});
     }
 
@@ -1417,7 +1829,8 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	    // is not what actually comes back. Copy before print.
 	    var mycopy = $.extend(true, {}, json.value);
 	    //console.log('json', mycopy);
-	    constraints = new Constraints(context);
+	    updateDeprecated(json.value[0].images)
+	    constraints = new JACKS_LOADER.Constraints(context);
 	    constraints.addPossibles({ images: foundImages });
 	    allowWithSites(json.value[0].images, json.value[0].constraints);
 	    CreateAggregateSelectors(selected_rspec);
@@ -1437,6 +1850,17 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	return true;
     }
 
+  function updateDeprecated(images)
+  {
+    deprecatedList = [];
+    _.each(images, function (image) {
+      if (image.deprecated)
+      {
+	deprecatedList.push(image);
+      }
+    });
+  }
+  
   function allowWithSites(newImages, newConstraints)
   {
     console.log('newImages', newImages);
@@ -1519,6 +1943,10 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 
     function updateWhere()
     {
+	// Temporary
+	if (!window.MAINSITE) {
+	    return;
+	}
 	//console.info("updateWhere");
 	
 	if (jacks.input && constraints && selected_rspec)
@@ -1540,7 +1968,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 		var nodes   = nodesBySite[siteId];
 		var sitenum = siteIdToSiteNum[siteId];
 		var domid   = '#cluster_selector #site' + sitenum + 'cluster' +
-		    '.cluster-group';
+		    ' .cluster-group';
 		if (nodes) {
 		    updateSiteConstraints(nodes, $(domid));
 		}
@@ -1549,6 +1977,13 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 		}
 	    })
 	}
+
+	// Moved here to deal with race condition of custer status
+      // getting built before constraints were finished running
+        if ($('#profile_pid').val() != $('#profile_pid_picker .dropdown-toggle .value').html()) {
+	    $($('#profile_pid_picker .dropdown-menu a')[0]).click();
+        }
+	CreateClusterStatus();
     }
 
     function updateSiteConstraints(nodes, domNode)
@@ -1583,6 +2018,24 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
       {
 	domNode.find('#where-warning').hide();
 	domNode.find('#where-nowhere').hide();
+      }
+      if (deprecatedList.length === 0)
+      {
+	domNode.find('#where-deprecated').hide();
+      }
+      else
+      {
+	var current = domNode.find('#where-deprecated');
+	current.html('');
+	_.each(deprecatedList, function (item) {
+	  var errorMessage = '';
+	  if (item.deprecated_iserror)
+	  {
+	    errorMessage = ': Using this image will cause your experiment to fail.';
+	  }
+	  current.append('<p>Image ' + sup.ImageDisplay(item.id) + ' is deprecated:' + item.deprecated_message + errorMessage + '</p>');
+	});
+	current.show();
       }
       domNode.find('select').children().each(function () {
 	var value = $(this).attr('value');
@@ -1620,5 +2073,81 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
       });
     }
 
+    // When the project is changed, look to see if the new project includes
+    // multiple subgroups. If only one subgroup, hide the group selector.
+    // Otherwise build/show a group selector.
+    function UpdateGroupSelector()
+    {
+	var pid = $('#project_selector #profile_pid').val();
+	var glist = projlist[pid];
+	console.info(pid, glist);
+
+	if (glist.length == 1) {
+	    var gid = glist[0];
+	    // No need to show it.
+	    $('#group_selector').addClass("hidden");
+
+	    // But need to add an option so we can select it for submit.
+	    var html = "<option selected value=" + gid + ">" + gid + "</option>";
+	    $('#group_selector #profile_gid').html(html);
+	    $('#group_selector #profile_gid').val(gid);
+	    return;
+	}
+	var html = "";
+	_.each(glist, function(gid) {
+	    var selected = "";
+	    // Select the project group by default.
+	    if (gid == pid) {
+		selected = "selected";
+	    }
+	    html = html +
+		"<option " + selected + " value=" + gid + ">" + gid + "</option>";
+	});
+	$('#group_selector #profile_gid').html(html);
+	$('#group_selector').removeClass("hidden");
+    }
+
+    function LoadReservationInfo()
+    {
+	var callback = function(json) {
+	    if (json.code) {
+		console.info("Could not get reservation info: " + json.value);
+		return;
+	    }
+	    console.info("resinfo", json.value);
+	    resinfo = json.value;
+	    
+	    ShowClusterReservations();
+	};
+	var $xmlthing =
+	    sup.CallServerMethod(null, "reserve", "ReservationInfo", null);
+	$xmlthing.done(callback);
+    }
+
+    // Google Analytics.
+    function PickerEvent(action, selected, value)
+    {
+	if (window.GOOGLEUA === undefined) {
+	    return;
+	}
+	var id = "default";
+	if (value === undefined) {
+	    value = 0;
+	}
+	if (action == "scroll") {
+	    id = selected.toString();
+	    value = selected;
+	}
+	else if (selected !== undefined) {
+	    var info = profilelist[selected.attr('value')];
+	    if (info === undefined) {
+		// Not sure why this happens
+		return;
+	    }
+	    id = info.pid + "," + info.name;
+	}
+	console.info("picker event", action, id, value);
+	ga('send', 'event', 'picker', action, id, value);
+    }
     $(document).ready(initialize);
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -35,8 +35,29 @@
 #
 use strict;
 use English;
-use Frontier::Responder;
-use Frontier::RPC2;
+
+BEGIN {
+    require Frontier::Responder;
+    require Frontier::RPC2;
+
+    # Original version of traversal function.
+    my $rpc2_item = \&Frontier::RPC2::_item;
+
+    {
+	no warnings 'redefine';
+
+	# Redefine to handle the URN object. It would be nice if this was
+	# a builtin feature (being able to handle arbitrary classes).
+	*Frontier::RPC2::_item = sub {
+	    my ($self,$item) = @_;
+	    if (ref($item) eq "GeniHRN") {
+		# Just a string.
+		return Frontier::RPC2::_scalar($self,$item->urn());
+	    }
+	    return &$rpc2_item($self, $item);
+	};
+    }
+}
 
 #
 # Turn off line buffering on output
@@ -76,15 +97,6 @@ use Crypt::OpenSSL::X509;
 use Time::HiRes qw( gettimeofday tv_interval );
 use Carp qw(cluck confess);
 
-# Yack. apache does not close fds before the exec, and if this dies
-# we are left with a giant mess.
-BEGIN {
-    no warnings;
-    for (my $i = 3; $i < 1024; $i++) {
-      POSIX:close($i);
-    }
-}
-
 # Configure variables
 my $MAINSITE 	     = @TBMAINSITE@;
 my $TBOPS            = "@TBOPSEMAIL@";
@@ -109,6 +121,7 @@ my %GENI_MODULES = ( "cm"        => "@prefix@/lib/protogeni-cm.pm",
 		     "ses"       => "@prefix@/lib/protogeni-ses.pm",
 		     "portal"    => "@prefix@/lib/protogeni-portal.pm",
 		     "ims"       => "@prefix@/lib/protogeni-ims.pm",
+		     "cluster"   => "@prefix@/lib/protogeni-cluster.pm",
 		     # XXX This is temporary! 
 		     "instools"  =>
 		             "@prefix@/lib/instools/protogeni-instools.pm",
@@ -143,6 +156,7 @@ my $noanything = 0;
 # Flag for XMLERROR.
 my $logging    = 0;
 my $logforked  = 0;
+my $logaborted = 0;
 my $iserror    = 0;
 my $rpcerror   = 0;
 my $logfile    = undef;
@@ -393,7 +407,14 @@ if (!defined($group)) {
     die("*** $0:\n".
 	"    Could not resolve lookup group $GENIGROUP\n");
 }
-$logfile = Logfile->Create($group);
+my $logfilename = TBMakeLogname("pgwrapper");
+# So tbops people can read the files ...
+if (!chmod(0664, $logfilename)) {
+    unlink($logfilename);
+    die("*** $0:\n".
+	"    Could not chmod $logfilename\n");
+}
+$logfile = Logfile->Create($group, $logfilename);
 if (!defined($logfile)) {
     die("*** $0:\n".
 	"    Could not create a new logfile\n");
@@ -480,6 +501,11 @@ sub AddLogfileMetaDataFromSpeaksFor($)
     AddLogfileMetaData("speaking_urn",   $speaksfor->owner_urn());
     AddLogfileMetaData("speaking_uuid",  $speaksfor->owner_uuid());
 }
+sub AbortLogging()
+{
+    LogEnd(0);
+    $logaborted = 1;
+}
 
 #
 # Okay, we want to catch warning, specifically uninitialized
@@ -544,12 +570,13 @@ if ($call->{'type'} ne 'call') {
 }
 my $method = $call->{'method_name'};
 if (!defined($GENI_METHODS->{$method})) {
-    XMLError(XMLRPC_APPLICATION_ERROR() + 3, "no such method $method\n");
+    XMLError(XMLRPC_NO_SUCH_METHOD(), "no such method $method\n");
 }
 # Debugging overrides, to avoid email blasting.
 # Too much output.
 if ($method eq "ListResources" ||
     $method eq "GetVersion" ||
+    $method eq "SliverStatus" ||
     $method eq "ListUsage" ||
     $method eq "GetKeys" ||
     $method eq "RegisterSliver" ||
@@ -579,6 +606,8 @@ if ($method eq "CreateSliver"    ||
     $method eq "Provision"       ||
     $method eq "Allocate"        ||
     $method eq "Update"          ||
+    $method eq "AddNodes"        ||
+    $method eq "DeleteNodes"     ||
     $method eq "DeleteSlice") {
     $debug = 2;
     $nostorelogs = 0;
@@ -709,20 +738,22 @@ else {
 	    push(@metadata, ["Code", $result->{'code'}])
 	}
     }
-    # Add first line of result output to metadata. Bigger stuff
-    # will land at the end of the file. 
-    if (ref($result) && defined($result->{'output'}) &&
-	$result->{'output'} ne "") {
-	push(@metadata, ["Output", ( split /\n/, $result->{'output'} )[0]]);
-    }
-    # Purge old data; if we forked we want latest. 
-    $logfile->SetMetadata(\@metadata, 1);
+    if (!$logaborted) {
+	# Add first line of result output to metadata. Bigger stuff
+	# will land at the end of the file. 
+	if (ref($result) && defined($result->{'output'}) &&
+	    $result->{'output'} ne "") {
+	    push(@metadata, ["Output", ( split /\n/, $result->{'output'} )[0]]);
+	}
+	# Purge old data; if we forked we want latest. 
+	$logfile->SetMetadata(\@metadata, 1);
     
-    foreach my $foo (@metadata) {
-	my ($key,$val) = @{$foo};
-	$message .= sprintf("%-15s: %s\n", $key, $val);
+	foreach my $foo (@metadata) {
+	    my ($key,$val) = @{$foo};
+	    $message .= sprintf("%-15s: %s\n", $key, $val);
+	}
+	AddAuditInfo("message", $message);
     }
-    AddAuditInfo("message", $message);
 
     # Do not send debugging mail for these two errors and do not save
     # the logfiles.
@@ -791,7 +822,8 @@ else {
 # Abort the log capture so that we can print the response to STDOUT
 # for the web server. But first deal with the email.
 #
-LogAbort();
+LogAbort()
+    if (!$logaborted);
 
 #
 # If nothing in the log and no error, then we just store the metadata
@@ -818,7 +850,7 @@ if (!$logforked) {
 }
 
 print "Content-Type: text/xml \n\n" . $response
-    if (defined($response));
+    if (defined($response) && !$logaborted);
 exit(0);
 
 #

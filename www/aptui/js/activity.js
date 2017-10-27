@@ -1,11 +1,8 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment',
-	 'js/lib/text!template/activity.html'],
-function (_, sup, moment, profileString)
-{
+$(function () {
     'use strict';
     var ajaxurl = null;
-    var profileTemplate = _.template(profileString);
+    var templates = APT_OPTIONS.fetchTemplateList(['activity']);
+    var profileTemplate = _.template(templates['activity']);
 
     function initialize()
     {
@@ -29,7 +26,7 @@ function (_, sup, moment, profileString)
 	$('.format-date').each(function() {
 	    var date = $.trim($(this).html());
 	    if (date != "") {
-		$(this).html(moment($(this).html()).format("ll"));
+		$(this).html(moment($(this).html()).format("lll"));
 	    }
 	});
 	$("#date-slider").dateRangeSlider({

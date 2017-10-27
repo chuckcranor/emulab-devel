@@ -269,3 +269,6 @@
 
 /* Use ZFS on FS node for shared filesystems */
 #undef WITHZFS
+
+/* We aree mapping geni users to local users. Ditto projects and groups. */
+#undef PROTOGENI_LOCALUSER

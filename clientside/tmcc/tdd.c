@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 University of Utah and the Flux Group.
+ * Copyright (c) 2013-2016 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -87,7 +87,7 @@ main(int argc, char **argv, char **envp)
 	}
 	if (gotit) {
 		argc--;
-		argv[argc] = '\0';
+		argv[argc] = NULL;
 	}
 
 	/*

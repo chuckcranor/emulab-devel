@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -119,8 +119,8 @@ sub Lookup($$)
     bless($self, $class);
     my $cert = $self->cert();
 
-    # Convert urn to object now.
-    $self->{'CERT'}->{'urnOBJ'} = GeniHRN->new($self->{'CERT'}->{'urn'})
+    # Convert urn to object. Stringify overload will allow old code to work.
+    $self->{'CERT'}->{'urn'} = GeniHRN->new($self->{'CERT'}->{'urn'})
 	if (defined($self->{'CERT'}->{'urn'}));
 
     # Add to cache. 
@@ -159,7 +159,6 @@ sub certfile($)		{ return field($_[0], "certfile"); }
 sub passphrase($)	{ return undef; }
 sub uri($)              { return field($_[0], "uri"); }
 sub urn($)              { return field($_[0], "urn"); }
-sub urnOBJ($)           { return field($_[0], "urnOBJ"); }
 sub rootcert($)	        { return $_[0]->{'ROOTCERT'}; }
 sub GetCertificate($)   { return $_[0]; }
 
@@ -194,6 +193,17 @@ sub email($)
 	$self->DN() =~ /^emailAddress=(.*),/) {
 	return $1
 	    if ($1 ne "");
+    }
+    # Normally the email is in the DN (subject name), but fall back on
+    # the subject alt name for compatibility with onelab certificates.
+    if (exists($self->{'email'})) {
+	return $self->{'email'};
+    }
+    if ($self->{'stored'}) {
+	my $cert = GeniCertificate->LoadFromString($self->cert());
+	if (exists($cert->{'email'})) {
+	    return $cert->{'email'};
+	}
     }
     print STDERR "Cannot find email inside DN: '" . $self->DN() . "'\n";
     return "unknown";
@@ -574,6 +584,7 @@ sub LoadFromArray($$@)
     my $altname = 0;
     my $accessinfo = 0;
     my $uuid = undef;
+    my $email = undef;
     while (@certlines) {
 	my $line = shift(@certlines);
 	last
@@ -589,11 +600,13 @@ sub LoadFromArray($$@)
 		    and $alturi = $1;
 		m'^\s*URI:urn:uuid:([-\w]+)\s*$'
 		    and $uuid = $1;
+		m'^\s*email:([^\s]+)\s*$'
+		    and $email = $1;
 	    }
 	    $altname = 0;
 	} elsif( $accessinfo ) {
-	    m'^\s*[0-9.]+ - URI:([-!#$%()*+,./0-9:;=?@A-Z_a-z~]+)\s*$' 
-		and $accessuri = $1 foreach split( /, /, $line );
+	    m'^\s*([0-9.]+|CA Issuers) - URI:([-!#$%()*+,./0-9:;=?@A-Z_a-z~]+)\s*$' 
+		and $accessuri = $2 foreach split( /, /, $line );
 	    $accessinfo = 0;
 	}
     }
@@ -642,6 +655,9 @@ sub LoadFromArray($$@)
     $self->{'stored'} = 0;
     bless($self, $class);
 
+    if (defined($email)) {
+	$self->{'email'} = $email;
+    }
     $self->{'CERT'}->{'uuid'}      = $uuid;
     $self->{'CERT'}->{'cert'}      = $contents;
     $self->{'CERT'}->{'DN'}        = $DN;
@@ -656,7 +672,7 @@ sub LoadFromArray($$@)
     $self->{'CERT'}->{'enddate'}   = undef;
     $self->{'CERT'}->{'serial'}    = undef;
     # Convert URNs to objects.
-    $self->{'CERT'}->{'urnOBJ'}    = GeniHRN->new($urn)	if (defined($urn));
+    $self->{'CERT'}->{'urn'}       = GeniHRN->new($urn)	if (defined($urn));
 
     return $self;
 }
@@ -667,7 +683,7 @@ sub LoadFromArray($$@)
 sub LoadFromStringFast($$)
 {
     my ($class, $string) = @_;
-    my ($urn,$uuid);
+    my ($urn,$uuid,$email);
 
     if (! ($string =~ /^[\012\015\040-\176]*$/)) {
 	print STDERR "Improper chars in certificate string\n";
@@ -721,6 +737,9 @@ sub LoadFromStringFast($$)
 	elsif ($tmp =~ /^uniformResourceIdentifier=urn:uuid:([-\w]+)$/) {
 	    $uuid = $1;
 	}
+	elsif ($tmp =~ /^rfc822Name=(.*)$/) {
+	    $email = $1;
+	}
     }
     # Ditto if the SubjectAltName does not have a URN in it.
     if (!defined($urn) || !GeniHRN::IsValid($urn)) {
@@ -753,6 +772,9 @@ sub LoadFromStringFast($$)
     $self->{'stored'} = 0;
     bless($self, $class);
 
+    if (defined($email)) {
+	$self->{'email'} = $email;
+    }
     $self->{'CERT'}->{'uuid'}      = $uuid;
     $self->{'CERT'}->{'cert'}      = $string;
     $self->{'CERT'}->{'DN'}        = $DN;
@@ -768,7 +790,7 @@ sub LoadFromStringFast($$)
     $self->{'CERT'}->{'enddate'}   = TBDateStringGMT($x509->notAfter());
     $self->{'CERT'}->{'serial'}    = $x509->serial();
     # Convert URNs to objects.
-    $self->{'CERT'}->{'urnOBJ'}    = GeniHRN->new($urn);
+    $self->{'CERT'}->{'urn'}       = GeniHRN->new($urn);
 
     return $self;
 }
@@ -1007,7 +1029,7 @@ sub URL($)
 		foreach split( /, / );
 	    $altname = 0;
 	} elsif( $accessinfo ) {
-	    m'^\s*[0-9.]+ - URI:([-!#$%()*+,./0-9:;=?@A-Z_a-z~]+)\s*$' and $accessurl = $1
+	    m'^\s*([0-9.]+|CA Issuers) - URI:([-!#$%()*+,./0-9:;=?@A-Z_a-z~]+)\s*$' and $accessurl = $2
 		foreach split( /, / );
 	    $accessinfo = 0;
 	}
@@ -1209,6 +1231,12 @@ sub StoreCRL($$$)
 	return -1;
     }
     $expires =~ s/^nextupdate=//i;
+    my $converted = str2time($expires);
+    if (!$converted) {
+	print STDERR "Could not parse expiration: '$expires'\n";
+	return -1;
+    }
+    $converted  = $converted - (3600 * 24);
     my $issuer = `$OPENSSL crl -noout -issuer -in $filename`;
     chomp($issuer);
     if (! (defined($issuer) && ($issuer =~ /^issuer/i))) {
@@ -1217,10 +1245,8 @@ sub StoreCRL($$$)
     }
     $issuer =~ s/^issuer=//i;
     my $safe_cert    = DBQuoteSpecial($string);
-    my $safe_expires = DBQuoteSpecial($expires);
     my $safe_issuer  = DBQuoteSpecial($issuer);
-    my $dateconvert  = "DATE_SUB(STR_TO_DATE($safe_expires, ".
-	"'%b %e %T %Y'), INTERVAL 1 DAY)";
+    my $dateconvert  = "FROM_UNIXTIME($converted)";
 
     DBQueryWarn("replace into geni_crls set ".
 		"  uuid='$uuid', created=now(), expires=$dateconvert, ".
@@ -1563,6 +1589,8 @@ sub SplitCertBundle($)
 # Wrapper for local users.
 #
 package GeniCertificate::LocalUser;
+use vars qw(@ISA);
+@ISA = "GeniCertificate";
 
 use English;
 use GeniHRN;
@@ -1592,7 +1620,7 @@ sub Create($$)
     bless($self, $class);
 
     # Convert URNs to objects.
-    $self->{'CERT'}->{'urnOBJ'} = GeniHRN->new($self->urn());
+    $self->{'CERT'}->{'urn'} = GeniHRN->new($self->urn());
 
     return $self;
 }
@@ -1606,13 +1634,11 @@ sub revoked($)		{ return field($_[0], "revoked"); }
 sub passphrase($)	{ return field($_[0], "password"); }
 sub uri($)              { return undef; }
 sub urn($)              { return field($_[0], "urn"); }
-sub urnOBJ($)           { return field($_[0], "urnOBJ"); }
 sub URL($)              { return undef; }
 sub URN($)              { return field($_[0], "urn"); }
 sub certfile($)		{ return undef; }
 sub GetCertificate($)   { return $_[0]; }
-sub WriteToFile($$)     { return GeniCertificate::WriteToFile($_[0], $_[1]); }
-sub toString($)		{ return GeniCertificate::toString($_[0]); }
+
 #
 # Need to add DN to the emulab table.
 #

@@ -51,7 +51,12 @@ sub Install($$$)
 	    }
 	    if (ISFS($server)) {
 		# The fileserver exports these too.
-		@dirs = (@dirs, @MOUNTPOINTS);
+		# But only /share if ZFS.
+		if ($WITHZFS) {
+		    @dirs = (@dirs, $SHAREROOT);
+		} else {
+		    @dirs = (@dirs, @MOUNTPOINTS);
+		}
 	    }
 	    foreach my $dir (@dirs) {
 		if ($dir ne $SHAREROOT) {

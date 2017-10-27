@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2015 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2017 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -45,6 +45,7 @@
 #include "utils.h"
 
 #include "trace.h"
+#include "event.h"
 
 /* Globals */
 int		debug = 0;
@@ -70,8 +71,10 @@ struct in_addr	mcastaddr;
 struct in_addr	mcastif;
 char	       *addrfilename;
 char	       *filename;
+char	       *hserver;
+unsigned int	hinterval;
 struct timeval  IdleTimeStamp, FirstReq, LastReq;
-volatile int	activeclients;
+volatile int	activeclients, totalclients;
 
 /* Forward decls */
 void		quit(int);
@@ -80,18 +83,27 @@ static ssize_t	mypread(int fd, void *buf, size_t nbytes, off_t offset);
 static void	calcburst(void);
 static void	compute_sendrate(void);
 static void	dumpstats(void);
+static int	findclient(uint32_t id);
+
+/*
+ * Progress tracking.
+ *
+ * Since JOIN/LEAVE messages are UDP like everything else and can be lost,
+ * this is not definitive.
+ */
+#define MAXCLIENTS 1024	/* not a real limit, just for stats */
+static struct {
+	unsigned int id;
+	unsigned int ip;
+	unsigned int lastseq;
+} clients[MAXCLIENTS];
+static int nextclientix = 0, maxclientnum = 0;
 
 #ifdef STATS
 /*
  * Track duplicate chunks/joins for stats gathering
  */
 char		*chunkmap;
-
-#define MAXCLIENTS 256	/* not a realy limit, just for stats */
-struct {
-	unsigned int id;
-	unsigned int ip;
-} clients[MAXCLIENTS];
 
 /*
  * Stats gathering.
@@ -101,6 +113,7 @@ struct {
 	unsigned long	joins;
 	unsigned long	leaves;
 	unsigned long	requests;
+	unsigned long	reports, reportslogged;
 	unsigned long	joinrep;
 	unsigned long	blockssent;
 	unsigned long   dupsent;
@@ -152,6 +165,10 @@ typedef struct {
 } WQelem_t;
 static queue_head_t     WorkQ;
 static pthread_mutex_t	WorkQLock;
+#ifdef CONDVARS_WORK
+static pthread_cond_t	WorkQCond;
+static struct timespec	WorkQTimespec;
+#endif
 static int		WorkQDelay = -1;
 static int		WorkQSize = 0;
 static int		WorkChunk, WorkBlock, WorkCount;
@@ -184,6 +201,12 @@ WorkQueueInit(void)
 	if (WorkQDelay < 0)
 		WorkQDelay = sleeptime(1, NULL, 1);
 
+#ifdef CONDVARS_WORK
+	pthread_cond_init(&WorkQCond, NULL);
+	WorkQTimespec.tv_sec = WorkQDelay / 1000000;
+	WorkQTimespec.tv_nsec = (WorkQDelay % 1000000) * 1000;
+#endif
+
 #ifdef STATS
 	chunkmap = calloc(FileInfo.chunks, 1);
 #endif
@@ -215,6 +238,9 @@ WorkQueueEnqueueJoin(int vers, unsigned int clientid)
 		WorkQMax = WorkQSize;
 #endif
 
+#ifdef CONDVARS_WORK
+	pthread_cond_signal(&WorkQCond);
+#endif
 	pthread_mutex_unlock(&WorkQLock);
 }
 
@@ -309,6 +335,9 @@ WorkQueueEnqueueChunk(int chunk, BlockMap_t *map, int count)
 		WorkQMaxBlocks = qblocks;
 #endif
 
+#ifdef CONDVARS_WORK
+	pthread_cond_signal(&WorkQCond);
+#endif
 	pthread_mutex_unlock(&WorkQLock);
 
 	EVENT(1, EV_WORKENQ, mcastaddr, chunk, count, WorkQSize, 0);
@@ -324,14 +353,28 @@ WorkQueueDequeue(int *chunkp, int *blockp, int *countp)
 	pthread_mutex_lock(&WorkQLock);
 
 	/*
-	 * Condvars broken in linux threads impl, so use this rather bogus
-	 * sleep to keep from churning cycles. 
+	 * We use a timed wait here because our caller gathers stats
+	 * about idle time.
 	 */
 	if (queue_empty(&WorkQ)) {
+#ifdef CONDVARS_WORK
+		int rv;
+
+		WorkChunk = -1;
+		rv = pthread_cond_timedwait(&WorkQCond, &WorkQLock,
+					    &WorkQTimespec);
+		if (rv != 0) {
+			assert(rv == ETIMEDOUT);
+			pthread_mutex_unlock(&WorkQLock);
+			return 0;
+		}
+		assert(!queue_empty(&WorkQ));
+#else
 		WorkChunk = -1;
 		pthread_mutex_unlock(&WorkQLock);
 		fsleep(WorkQDelay);
 		return 0;
+#endif
 	}
 	
 	wqel = (WQelem_t *) queue_first(&WorkQ);
@@ -433,43 +476,66 @@ ClientJoin(Packet_t *p, int version)
 {
 	struct in_addr	ipaddr   = { p->hdr.srcip };
 	unsigned int    clientid = p->msg.join.clientid;
+	int		i, j;
 
 	EVENT(1, EV_JOINREQ, ipaddr, clientid, version, 0, 0);
 	WorkQueueEnqueueJoin(version, clientid);
-#ifdef STATS
-	{
-		int i, j = -1;
 
-		for (i = 0; i < MAXCLIENTS; i++) {
-			if (clients[i].id == clientid) {
-				if (clients[i].ip != ipaddr.s_addr) {
-					FrisLog("%s reuses active client id",
-						inet_ntoa(ipaddr));
-					clients[i].ip = ipaddr.s_addr;
+	/*
+	 * Sanity check the new client.
+	 */
+	j = -1;
+	for (i = 0; i < nextclientix; i++) {
+		if (clients[i].id == clientid) {
+			if (clients[i].ip != ipaddr.s_addr) {
+				FrisLog("%s reuses active client id",
+					inet_ntoa(ipaddr));
+				clients[i].ip = ipaddr.s_addr;
+			}
+			break;
+		}
+		if (clients[i].ip == ipaddr.s_addr) {
+			int k;
+
+			FrisLog("%s rejoins with different cid, ocid=%u",
+				inet_ntoa(ipaddr), clients[i].id);
+
+			/*
+			 * Index is assumed to be unique, so look for other
+			 * users. We just report it now.
+			 */
+			for (k = i + 1; k < nextclientix; k++)
+				if (clients[k].id == clients[i].id) {
+					FrisLog("%s also using cid; "
+						"pooch screwed",
+						clients[k].ip);
 				}
-				break;
-			}
-			if (clients[i].ip == ipaddr.s_addr) {
-				FrisLog("%s rejoins with different cid, ocid=%u",
-					inet_ntoa(ipaddr), clients[i].id);
-				clients[i].id = clientid;
-				break;
-			}
-			if (j == -1 && clients[i].id == 0)
-				j = i;
+
+			clients[i].id = clientid;
+			break;
 		}
-		if (i == MAXCLIENTS) {
+		if (j == -1 && clients[i].id == 0)
+			j = i;
+	}
+	if (i == nextclientix) {
+		if (j == -1 && nextclientix < MAXCLIENTS) {
+			j = nextclientix++;
+			if (nextclientix > maxclientnum)
+				maxclientnum = nextclientix;
+		}
+		if (j != -1) {
 			activeclients++;
-			if (j != -1) {
-				clients[j].id = clientid;
-				clients[j].ip = ipaddr.s_addr;
-			}
+			totalclients++;
+			clients[j].id = clientid;
+			clients[j].ip = ipaddr.s_addr;
+			clients[j].lastseq = 0;
+		} else {
+			FrisLog("more than %d clients, not tracking %s",
+				MAXCLIENTS, inet_ntoa(ipaddr));
 		}
+		i = j;
 	}
 	DOSTAT(joinrep++);
-#else
-	activeclients++;
-#endif
 
 	EVENT(1, EV_JOINREP, ipaddr, CHUNKSIZE, BLOCKSIZE,
 	      (FileInfo.filesize >> 32), FileInfo.filesize);
@@ -492,36 +558,25 @@ ClientLeave(Packet_t *p)
 {
 	struct in_addr	ipaddr = { p->hdr.srcip };
 	unsigned int clientid = p->msg.leave.clientid;
+	int i;
 
 	EVENT(1, EV_LEAVEMSG, ipaddr, clientid, p->msg.leave.elapsed, 0, 0);
 
-#ifdef STATS
-	{
-		int i;
-
-		for (i = 0; i < MAXCLIENTS; i++)
-			if (clients[i].id == clientid) {
-				activeclients--;
-				clients[i].id = 0;
-				clients[i].ip = 0;
-				FrisLog("%s (id %u, image %s): leaves at %s, "
-					"ran for %d seconds.  %d active clients",
-					inet_ntoa(ipaddr), clientid, filename,
-					CurrentTimeString(),
-					p->msg.leave.elapsed, activeclients);
-				break;
-			}
-		if (i == MAXCLIENTS)
-			FrisLog("%s (id %u): spurious leave ignored",
-				inet_ntoa(ipaddr), clientid);
-	}
-#else
-	activeclients--;
-	FrisLog("%s (id %u, image %s): leaves at %s, ran for %d seconds.  "
-		"%d active clients",
-		inet_ntoa(ipaddr), clientid, filename, CurrentTimeString(),
-		p->msg.leave.elapsed, activeclients);
-#endif
+	i = findclient(clientid);
+	if (i >= 0) {
+		clients[i].id = clients[i].ip = 0;
+		clients[i].lastseq = 0;
+		if (nextclientix == i + 1)
+			nextclientix = i;
+		activeclients--;
+		FrisLog("%s (id %u, image %s): leaves at %s, "
+			"ran for %d seconds.  %d active clients",
+			inet_ntoa(ipaddr), clientid, filename,
+			CurrentTimeString(), p->msg.leave.elapsed,
+			activeclients);
+	} else
+		FrisLog("%s (id %u): spurious leave ignored",
+			inet_ntoa(ipaddr), clientid);
 }
 
 /*
@@ -533,37 +588,28 @@ ClientLeave2(Packet_t *p)
 {
 	struct in_addr	ipaddr = { p->hdr.srcip };
 	unsigned int clientid = p->msg.leave2.clientid;
+	int i;
 
 	EVENT(1, EV_LEAVEMSG, ipaddr, clientid, p->msg.leave2.elapsed, 0, 0);
 
+	i = findclient(clientid);
+	if (i >= 0) {
+		clients[i].id = clients[i].ip = 0;
+		clients[i].lastseq = 0;
+		if (nextclientix == i + 1)
+			nextclientix = i;
+		activeclients--;
+		FrisLog("%s (id %u, image %s): leaves at %s, "
+			"ran for %d seconds.  %d active clients",
+			inet_ntoa(ipaddr), clientid, filename,
+			CurrentTimeString(), p->msg.leave2.elapsed,
+			activeclients);
 #ifdef STATS
-	{
-		int i;
-
-		for (i = 0; i < MAXCLIENTS; i++)
-			if (clients[i].id == clientid) {
-				clients[i].id = 0;
-				clients[i].ip = 0;
-				activeclients--;
-				FrisLog("%s (id %u, image %s): leaves at %s, "
-					"ran for %d seconds.  %d active clients",
-					inet_ntoa(ipaddr), clientid, filename,
-					CurrentTimeString(),
-					p->msg.leave2.elapsed, activeclients);
-				ClientStatsDump(clientid, &p->msg.leave2.stats);
-				break;
-			}
-		if (i == MAXCLIENTS)
-			FrisLog("%s (id %u): spurious leave ignored",
-				inet_ntoa(ipaddr), clientid);
-	}
-#else
-	activeclients--;
-	FrisLog("%s (id %u, image %s): leaves at %s, ran for %d seconds.  "
-		"%d active clients",
-		inet_ntoa(ipaddr), clientid, filename, CurrentTimeString(),
-		p->msg.leave2.elapsed, activeclients);
+		ClientStatsDump(clientid, &p->msg.leave2.stats);
 #endif
+	} else
+		FrisLog("%s (id %u): spurious leave ignored",
+			inet_ntoa(ipaddr), clientid);
 }
 
 /*
@@ -627,6 +673,107 @@ ClientPartialRequest(Packet_t *p)
 		FrisLog("Client %s requests %d blocks of chunk:%d",
 			inet_ntoa(ipaddr), count, chunk);
 	}
+}
+
+static void
+ClientReport(Packet_t *p)
+{
+	struct in_addr ipaddr = { p->hdr.srcip };
+	uint32_t seq = 0, tstamp = 0;
+	ClientSummary_t *sump = NULL;
+	ClientStats_t *statp = NULL;
+	uint32_t lastseq;
+	int i;
+
+	if (p->hdr.type != PKTTYPE_REPLY ||
+	    p->msg.progress.hdr.clientid == 0 ||
+	    p->msg.progress.hdr.when == 0 ||
+	    (p->msg.progress.hdr.what != 0 &&
+	     p->hdr.datalen < sizeof(p->msg.progress)))
+		return;
+
+	if ((i = findclient(p->msg.progress.hdr.clientid)) < 0)
+		return;
+
+	lastseq = clients[i].lastseq;
+	DOSTAT(reportslogged++);
+
+	/* XXX keep the server alive */
+	gettimeofday(&IdleTimeStamp, 0);
+
+	tstamp = p->msg.progress.hdr.when;
+	seq = p->msg.progress.hdr.seq;
+
+	/*
+	 * For a proxied request, we report the node we are proxying
+	 * on behalf of rather than the source of the packet.
+	 */
+	if (p->msg.progress.hdr.who != 0 &&
+	    p->msg.progress.hdr.who != p->hdr.srcip)
+		ipaddr.s_addr = p->msg.progress.hdr.who;
+
+	if (p->msg.progress.hdr.what == 0) {
+		FrisLog("%s (id %u): reports at %u",
+			inet_ntoa(ipaddr),
+			p->msg.progress.hdr.clientid, tstamp);
+	} else {
+		if (p->msg.progress.hdr.what & PKTPROGRESS_SUMMARY) {
+			sump = &p->msg.progress.summary;
+			FrisLog("%s (id %u): reports summary at %u: "
+				"recv=%u, decomp=%u, written=%llu",
+				inet_ntoa(ipaddr),
+				p->msg.progress.hdr.clientid,
+				tstamp,
+				p->msg.progress.summary.chunks_in,
+				p->msg.progress.summary.chunks_out,
+				p->msg.progress.summary.bytes_out);
+		}
+#ifdef STATS
+		if (p->msg.progress.hdr.what & PKTPROGRESS_STATS) {
+			statp = &p->msg.progress.stats;
+			FrisLog("%s (id %u): reports stats at %u: ",
+				inet_ntoa(ipaddr),
+				p->msg.progress.hdr.clientid, tstamp);
+			ClientStatsDump(p->msg.progress.hdr.clientid, statp);
+		}
+#endif
+	}
+
+	if (seq != lastseq + 1)
+		FrisLog("%s (id %u): lost reports: last=%u, this=%u",
+			inet_ntoa(ipaddr),
+			p->msg.progress.hdr.clientid, lastseq, seq);
+	clients[i].lastseq = seq;
+
+#ifdef EMULAB_EVENTS
+	/*
+	 * Send an event to whoever might be tracking progress of the
+	 * image load. XXX-y stuff:
+	 *
+	 * - We don't know the Emulab node_id so we pass the IP address
+	 *
+	 * - We don't know the official Emulab "pid/image:version" tag
+	 *   either, but we try to intuit it from the image pathname.
+	 *   That code (in utils.c) is awful, awful, awful!
+	 */
+	if (hserver) {
+		static char *image = NULL;
+		static int failed = 0;
+		char *node;
+
+		node = inet_ntoa(ipaddr);
+		if (image == NULL)
+			image = extract_imageid(filename);
+
+		if (image == NULL ||
+		    EventSendClientReport(node, image, tstamp, seq,
+					  sump, statp) != 0) {
+			if (failed++ == 0)
+				FrisWarning("unable to send event!");
+		} else
+			failed = 0;
+	}
+#endif
 }
 
 /*
@@ -717,7 +864,10 @@ ServerRecvThread(void *arg)
 			DOSTAT(requests++);
 			ClientPartialRequest(p);
 			break;
-
+		case PKTSUBTYPE_PROGRESS:
+			DOSTAT(reports++);
+			ClientReport(p);
+			break;
 		}
 	}
 }
@@ -778,27 +928,27 @@ PlayFrisbee(void)
 				continue;
 			}
 			
-#ifdef STATS
 			/* If less than zero, exit when last client leaves */
 			if (timeout < 0 &&
-			    Stats.joins > 0 && activeclients == 0) {
+			    totalclients > 0 && activeclients == 0) {
 				fsleep(2000000);
 				FrisLog("Last client left!");
 				break;
 			}
-#endif
 
 			if (idlelastloop) {
 				if (timeout > 0 &&
 				    stamp.tv_sec - IdleTimeStamp.tv_sec >
 				    timeout) {
-					FrisLog("No requests for %d seconds!",
-						timeout);
+					FrisLog("No requests or reports "
+						"for %d seconds "
+						"(%d remaining clients)",
+						timeout, activeclients);
 					break;
 				}
 			} else {
 				DOSTAT(goesidle++);
-				IdleTimeStamp = stamp;
+				IdleTimeStamp.tv_sec = stamp.tv_sec;
 				idlelastloop = 1;
 			}
 			continue;
@@ -865,6 +1015,28 @@ PlayFrisbee(void)
 				p->msg.join2.bytecount = FileInfo.filesize;
 			}
 			PacketSend(p, 0);
+
+			/*
+			 * Arrange for clients to report at the indicated interval.
+			 * Note that this request is broadcast, but only the
+			 * indicated client should effect the changes indicated.
+			 *
+			 * XXX for now we just hardwire the type.
+			 */
+			if (hinterval > 0) {
+				if (debug)
+					FrisLog("sending PROGRESS request to %u",
+						clientid);
+				p->hdr.type = PKTTYPE_REQUEST;
+				p->hdr.subtype = PKTSUBTYPE_PROGRESS;
+				p->hdr.datalen = sizeof(p->msg.progress.hdr);
+				p->msg.progress.hdr.clientid = clientid;
+				p->msg.progress.hdr.who = 0;
+				p->msg.progress.hdr.when = hinterval;
+				p->msg.progress.hdr.what = PKTPROGRESS_SUMMARY;
+				p->msg.progress.hdr.seq = 1;
+				PacketSend(p, 0);
+			}
 			continue;
 		}
 
@@ -879,7 +1051,7 @@ PlayFrisbee(void)
 			int	readbytes;
 			int	resends;
 			int	resid = 0;
-#if defined(NEVENTS) || defined(STATS)
+#if defined(TRACE_EVENTS) || defined(STATS)
 			struct timeval rstamp;
 			gettimeofday(&rstamp, 0);
 #endif
@@ -1064,7 +1236,7 @@ main(int argc, char **argv)
 	off_t		fsize;
 	void		*ignored;
 
-	while ((ch = getopt(argc, argv, "dhp:k:m:i:tbDT:R:B:G:L:W:K:A:")) != -1)
+	while ((ch = getopt(argc, argv, "dhp:k:m:i:tbDT:R:B:G:L:W:K:A:E:H:")) != -1)
 		switch(ch) {
 		case 'b':
 			broadcast++;
@@ -1143,6 +1315,23 @@ main(int argc, char **argv)
 		case 'A':
 			addrfilename = optarg;
 			break;
+		case 'E':
+#ifdef EMULAB_EVENTS
+			hserver = optarg;
+			break;
+#else
+			fprintf(stderr, "Not compiled for Emulab events\n");
+			exit(1);
+#endif
+		case 'H':
+			/*
+			 * For now this is just the reporting interval.
+			 */
+			hinterval = atoi(optarg);
+			if (hinterval > 3600)
+				hinterval = 3600;
+			break;
+
 		case 'h':
 		case '?':
 		default:
@@ -1223,6 +1412,10 @@ main(int argc, char **argv)
 		close(afd);
 	}
 
+#ifdef EMULAB_EVENTS
+	if (hserver && EventInit(hserver))
+		FrisWarning("not forwarding heartbeat events");
+#endif
 	if (tracing) {
 		ServerTraceInit("frisbeed");
 		TraceStart(tracing);
@@ -1245,6 +1438,11 @@ main(int argc, char **argv)
 		TraceDump(1, tracing);
 	}
 	subtime(&LastReq, &LastReq, &FirstReq);
+
+#ifdef EMULAB_EVENTS
+	if (hserver)
+		EventDeinit();
+#endif
 
 	dumpstats();
 
@@ -1315,17 +1513,19 @@ mypread(int fd, void *buf, size_t nbytes, off_t offset)
 	return count;
 }
 
+static int
+findclient(uint32_t id)
+{
+	int i;
+
+	for (i = 0; i < nextclientix; i++)
+		if (clients[i].id == id)
+			return i;
+	return -1;
+}
+
 #define LINK_OVERHEAD	(14+4+8+12)	/* ethernet (hdr+CRC+preamble+gap) */
 #define IP_OVERHEAD	(20+8)		/* IP + UDP hdrs */
-
-static unsigned long
-compute_bandwidth(int bsize, int binterval)
-{
-	int wireblocksize = (sizeof(Packet_t)+IP_OVERHEAD+LINK_OVERHEAD) * 8;
-	double burstspersec = 1000000.0 / binterval;
-
-	return (unsigned long)(burstspersec*bsize*wireblocksize);
-}
 
 #define LOSS_INTERVAL	500	/* interval in which we collect data (ms) */
 #define MULT_DECREASE	0.90	/* mult factor to decrease burst rate */
@@ -1472,9 +1672,17 @@ compute_sendrate(void)
 	int clockres, wireblocksize, minburst;
 
 	if (burstinterval == 0) {
-		burstsize = 1;
-		FrisLog("Maximum send bandwidth unlimited");
-		return;
+		if (!dynburst) {
+			burstsize = 1;
+			FrisLog("Maximum send bandwidth unlimited");
+			return;
+		}
+		/*
+		 * XXX in order for dynamic rate adjustment to work, we
+		 * have to have burstsize/rate params set. So we just pick
+		 * a high bandwidth cap here (10Gb/sec).
+		 */
+		bandwidth = 10000000000;
 	}
 
 	/* clock resolution in usec */
@@ -1485,7 +1693,7 @@ compute_sendrate(void)
 
 	if (bandwidth != 0) {
 		/*
-		 * Convert Mbits/sec to blocks/sec
+		 * Convert bits/sec to blocks/sec
 		 */
 		blockspersec = bandwidth / wireblocksize;
 
@@ -1534,7 +1742,7 @@ compute_sendrate(void)
 #endif
 	}
 
-	if (burstsize * sizeof(Packet_t) > GetSockbufSize()) {
+	if (!dynburst && burstsize * sizeof(Packet_t) > GetSockbufSize()) {
 		FrisWarning("NOTE: burst size exceeds socket buffer size, "
 			    "may drop packets");
 	}
@@ -1545,6 +1753,17 @@ compute_sendrate(void)
 		FrisLog("  burstsize=%d, burstinterval=%dus",
 			burstsize, burstinterval);
 }
+
+#ifdef STATS
+static unsigned long
+compute_bandwidth(int bsize, int binterval)
+{
+	int wireblocksize = (sizeof(Packet_t)+IP_OVERHEAD+LINK_OVERHEAD) * 8;
+	double burstspersec = 1000000.0 / binterval;
+
+	return (unsigned long)(burstspersec*bsize*wireblocksize);
+}
+#endif
 
 static void
 dumpstats(void)
@@ -1576,9 +1795,12 @@ dumpstats(void)
 	FrisLog("  user/sys CPU time: %d.%03d/%d.%03d",
 		ru.ru_utime.tv_sec, ru.ru_utime.tv_usec/1000,
 		ru.ru_stime.tv_sec, ru.ru_stime.tv_usec/1000);
+	FrisLog("  max/total clients: %d/%d",
+		maxclientnum, totalclients);
 	FrisLog("  msgs in/out:       %d/%d",
 		Stats.msgin, Stats.joinrep + Stats.blockssent);
 	FrisLog("  joins/leaves:      %d/%d", Stats.joins, Stats.leaves);
+	FrisLog("  reports recv/log:  %d/%d", Stats.reports, Stats.reportslogged);
 	FrisLog("  requests:          %d (%d merged in queue)",
 		Stats.requests, Stats.qmerges);
 	FrisLog("  partial req/blks:  %d/%d",

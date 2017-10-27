@@ -39,6 +39,8 @@ my %EXPERIMENTS =
      "openflow-vlans"=> {"pid"      => "emulab-ops",
 			 "description" =>
 			     "Holding experiment for static openflow vlans"},
+     "shared-vlans"  => {"pid"         => "emulab-ops",
+			 "description" => "Holding experiment for shared vlans"},
     );
 
 sub Install($$$)

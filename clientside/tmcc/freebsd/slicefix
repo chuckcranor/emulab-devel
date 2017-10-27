@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -254,6 +254,168 @@ getloadervar() {
     echo $_val
 }
 
+#
+# Make sure /root/.ssh contains only an authorized_keys file with the boot
+# root pubkey.
+#
+# Called with arg=1 if you just want to see if anything is wrong (returns
+# non-zero if so), 0 to fix.
+#
+dofixauthkeys() {
+    _test=$1
+
+    if [ $_test -ne 0 ]; then
+	if [ ! -d /mnt/root/.ssh ]; then
+	    return 1
+	fi
+	if [ -x /usr/bin/stat ]; then
+	    _stat=`/usr/bin/stat -f '%u,%g,%p' /mnt/root/.ssh`
+	    if [ "$_stat" != "0,0,40700" ]; then
+		return 1
+	    fi
+	fi
+	if [ ! -e /mnt/root/.ssh/authorized_keys ]; then
+	    return 1
+	fi
+	if [ -e /mnt/root/.ssh/authorized_keys2 ]; then
+	    return 1
+	fi
+    fi
+
+    #
+    # If we are a localized MFS, we just need to use the authorized_keys2
+    # file from the MFS. Otherwise we get the key(s) from tmcd and put
+    # them into the MFS authorized_keys2 file.
+    #
+    if ! islocalized; then
+	rm -f /root/.ssh/authorized_keys2
+	_key=`$BINDIR/tmcc localization | grep 'ROOTPUBKEY=' | head -1 | \
+	      sed -e "s/^ROOTPUBKEY='//" | sed -e "s/'$//"`
+	if [ $? -ne 0 -o -z "$_key" ]; then
+	    echo "WARNING: no boss pubkey returned!"
+	else
+	    echo "$_key" > /root/.ssh/authorized_keys2
+	fi
+    fi
+
+    if [ $_test -ne 0 ]; then
+	cmp -s /root/.ssh/authorized_keys2 /mnt/root/.ssh/authorized_keys
+	if [ $? -ne 0 ]; then
+	    return 1
+	fi
+    else
+	echo "  updating /root/.ssh"
+
+	# make sure /root/.ssh exists and has proper permissions
+	mkdir -p /mnt/root/.ssh
+	chown root:0 /mnt/root/.ssh
+	chmod 700 /mnt/root/.ssh
+	rm -f /mnt/root/.ssh/authorized_keys2
+
+	#
+	# XXX no proper pubkey, just leave the current file intact.
+	# XXX maybe we should just nuke it instead?
+	#
+	if [ ! -r /root/.ssh/authorized_keys2 ]; then
+	    return 0
+	fi
+
+	# create authkeys file with just root key(s)
+	rm -f /mnt/root/.ssh/authorized_keys 
+	cp /root/.ssh/authorized_keys2 /mnt/root/.ssh/authorized_keys
+	chmod 644 /mnt/root/.ssh/authorized_keys
+    fi
+
+    return 0
+}
+
+#
+# Make sshd more secure by default: no password based login.
+# We will fix if there are multiple settings of the same variable,
+# if it is set incorrectly, or it is not set at all.
+#
+# Called with arg=1 if you just want to see if anything is wrong (returns
+# non-zero if so), 0 to fix.
+#
+dofixsshd() {
+    _test=$1
+
+    if [ $_test -ne 0 ]; then
+	# sshd_config doesn't exist, call it okay
+	if [ ! -f /mnt/etc/ssh/sshd_config ]; then
+	    echo "WARNING: no sshd_config found!"
+	    return 0
+	fi
+
+	# find all uncommented instances of variables we care about
+	OIFS="$IFS"
+	IFS='
+'
+	_fix=0
+	_valP=
+	_valPA=
+	_valCRA=
+	_valPRL=
+	for _opt in `grep -E '^(Protocol|PasswordAuthentication|ChallengeResponseAuthentication|PermitRootLogin) ' /mnt/etc/ssh/sshd_config`; do
+	    _k=${_opt%% *}
+	    _v=${_opt#* }
+	    case $_k in
+	    Protocol)
+		if [ -n "$_valP" -o "$_v" != "2" ]; then
+		    _fix=1
+		fi
+		_valP=$_v
+		;;
+	    PasswordAuthentication)
+		if [ -n "$_valPA" -o "$_v" != "no" ]; then
+		    _fix=1
+		fi
+		_valPA=$_v
+		;;
+	    ChallengeResponseAuthentication)
+		if [ -n "$_valCRA" -o "$_v" != "no" ]; then
+		    _fix=1
+		fi
+		_valCRA=$_v
+		;;
+	    PermitRootLogin)
+		if [ -n "$_valPRL" -o "$_v" != "without-password" ]; then
+		    _fix=1
+		fi
+		_valPRL=$_v
+		;;
+	    esac
+	done
+	IFS=$OIFS
+	# a var had wrong value or more than one setting, fix
+	if [ $_fix -ne 0 ]; then
+	    return 1
+	fi
+	# a var was not explicitly set, fix
+	if [ -z "$_valP" -o -z "$_valPA" -o -z "$_valCRA" -o -z "$_valPRL" ]; then
+	    return 1
+	fi
+    else
+	echo "  updating /etc/ssh/sshd_config"
+
+	sed -i .preemulab \
+	    -e '/^Protocol /d' \
+	    -e '/^PasswordAuthentication /d' \
+	    -e '/^ChallengeResponseAuthentication /d' \
+	    -e '/^PermitRootLogin /d' \
+	    -e '/^# Emulab/d' /mnt/etc/ssh/sshd_config
+	cat <<EOF8 >>/mnt/etc/ssh/sshd_config
+# Emulab config
+Protocol 2
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+PermitRootLogin without-password
+EOF8
+    fi
+
+    return 0
+}
+
 dofreebsd() {
 	#
 	# ARGH!  FreeBSD 5, which primarily uses UFS2, internally converts
@@ -326,6 +488,8 @@ dofreebsd() {
 	changerootkeys=0
 	changezone=0
 	changentp=0
+	changesshd=0
+	changeauth=0
 
 	fixit=0
 
@@ -489,37 +653,18 @@ dofreebsd() {
 		fi
 	    fi
 
-	    # Check the root keys.
-	    if [ -e /root/.ssh/authorized_keys2 ]; then
-		cmp -s /root/.ssh/authorized_keys2 /mnt/root/.ssh/authorized_keys
-		if [ $? -ne 0 ]; then
-		    changerootkeys=1
-		    fixit=1
-		fi
-	    fi
+	    # Root keys are handled by dofixauthkeys() below
 	
 	    # Check the host keys.
-	    if [ -e /etc/ssh/ssh_host_key ]; then
-		cmp -s /etc/ssh/ssh_host_key /mnt/etc/ssh/ssh_host_key
-		if [ $? -ne 0 ]; then
-		    changehostkeys=1
-		    fixit=1
+	    for k in "" dsa_ ecdsa_ ed25519_ rsa_; do
+		if [ -e /etc/ssh/ssh_host_${k}key ]; then
+		    cmp -s /etc/ssh/ssh_host_${k}key /mnt/etc/ssh/ssh_host_${k}key
+		    if [ $? -ne 0 ]; then
+			changehostkeys=1
+			fixit=1
+		    fi
 		fi
-	    fi
-	    if [ -e /etc/ssh/ssh_host_rsa_key ]; then
-		cmp -s /etc/ssh/ssh_host_rsa_key /mnt/etc/ssh/ssh_host_rsa_key
-		if [ $? -ne 0 ]; then
-		    changehostkeys=1
-		    fixit=1
-		fi
-	    fi
-	    if [ -e /etc/ssh/ssh_host_dsa_key ]; then
-		cmp -s /etc/ssh/ssh_host_dsa_key /mnt/etc/ssh/ssh_host_dsa_key
-		if [ $? -ne 0 ]; then
-		    changehostkeys=1
-		    fixit=1
-		fi
-	    fi
+	    done
 
 	    # Check the time zone.
 	    if [ -e /etc/localtime ]; then
@@ -539,6 +684,18 @@ dofreebsd() {
 		fi
 	    fi
 
+	fi
+
+	# See if we need to update sshd_config
+	if ! dofixsshd 1; then
+	    changesshd=1
+	    fixit=1
+	fi
+
+	# See if we need to update root's .ssh directory
+	if ! dofixauthkeys 1; then
+	    changeauth=1
+	    fixit=1
 	fi
 
 	if [ $fixit -eq 0 ]; then
@@ -768,29 +925,7 @@ EOF1
 	    }
 	fi
 
-	# Copy in new root keys
-	if [ $changerootkeys -eq 1 ]; then
-	    echo "  updating /root/.ssh/authorized_keys"
-
-	    if [ ! -d /mnt/root/.ssh ]; then
-		mkdir -m 700 /mnt/root/.ssh || {
-	            echo "Failed to mkdir /root/.ssh"
-		    umount $rootdev
-		    return 1
-		}
-	    fi
-	    # copy to both authorized_keys and _keys2
-	    cp -p /root/.ssh/authorized_keys2 /mnt/root/.ssh/authorized_keys || {
-	        echo "Failed to create /root/.ssh/authorized_keys"
-		umount $rootdev
-		return 1
-	    }
-	    cp -p /root/.ssh/authorized_keys2 /mnt/root/.ssh/ || {
-	        echo "Failed to create /root/.ssh/authorized_keys2"
-		umount $rootdev
-		return 1
-	    }
-	fi
+	# Copy in new root keys handled by dofixauthkeys() below
 
 	# Copy in new host keys
 	if [ $changehostkeys -eq 1 ]; then
@@ -832,12 +967,25 @@ EOF1
 	    }
 	fi
 
+	if [ $changesshd -eq 1 ]; then
+	    dofixsshd 0
+	fi
+
+	if [ $changeauth -eq 1 ]; then
+	    dofixauthkeys 0
+	fi
+
 	# actually run any postconfig scripts if we're supposed to:
 	if [ $doosconfig -eq 1 -a -x $BINDIR/osconfig ]; then
 	    $BINDIR/osconfig -m /mnt -D $rootdev -s FreeBSD postload
 	fi
 
-	umount $rootdev
+	umount $rootdev || {
+	    echo "WARNING: unmount of FS failed, beware corruption"
+	    sync
+	    sleep 2
+	    umount $rootdev
+	}
 
 	# XXX need to fixup FS, see big comment above
 	if [ "x$vers" != "x4" -a -n "$OLDBSD" ]; then
@@ -898,9 +1046,13 @@ dolinux() {
 		;;
 	# NVM disks
 	nvd[0-9])
-		dtype="nvme0n1"
+		dtype="nvme"
 		dunit=`echo $disk | sed -e 's/nvd\([0-9][0-9]*\)$/\1/'`
 		lrootdev="8${dunit}${part}"
+
+		# XXX assume "n1"
+		ldisk="${dtype}${dunit}n1p"
+		rootdev="/dev/${disk}s${part}"
 		;;
 	# SCSI
 	da[0-7])
@@ -930,9 +1082,44 @@ dolinux() {
 		return 1
 		;;
 	esac
-	dunit=`echo $dunit | sed -e 'y/01234567/abcdefgh/'`;
-	ldisk=$dtype$dunit
-	rootdev=/dev/${disk}s${part}
+
+	dunit=`echo $dunit | sed -e 'y/0123456789/abcdefghij/'`;
+	if [ "$dtype" != "nvme" ]; then
+	    ldisk=$dtype$dunit
+	    rootdev=/dev/${disk}s${part}
+	fi
+
+	#
+	# XXX Ugh, we seem to be facing any number of FS issues. Now we
+	# are seeing cases where the image is not captured cleanly.
+	# In an attempt to compensate for this, we do a precautionary
+	# fsck here out of an abundance of caution.
+	#
+	echo "  running precautionary fsck on $rootdev"
+	e2fsck -p $rootdev >/dev/null 2>&1
+	if [ $? -ne 0 ]; then
+	    echo "WARNING: loaded image had filesystem problems (exit $?)."
+	fi
+	
+	needfsck=0
+
+	#
+	# XXX FreeBSD 9.x had a buggy implementation of support for the
+	# Linux dir_index feature that could cause filesystem corruption.
+	# If we are a FreeBSD 9.x kernel and that feature is enabled,
+	# we turn off the feature, make our changes, reenable the feature
+	# and then run e2fsck to re-index the directories.
+	#
+	vers=`uname -v | sed -e 's/FreeBSD \([0-9][0-9]*\).*/\1/'`
+	GOTDI=""
+	if [ -x /usr/local/sbin/dumpe2fs -a "x$vers" = "x9" ]; then
+	    GOTDI=`dumpe2fs -h $rootdev 2>/dev/null | grep '^Filesystem features:.*dir_index'`
+	    if [ -n "$GOTDI" ]; then
+		echo "  temporarily disabling EXT dir_index"
+		tune2fs -O '^dir_index' $rootdev
+		needfsck=1
+	    fi
+	fi
 
 	#
 	# See if there is a valid filesystem UUID to use in fstab and grub.
@@ -991,7 +1178,13 @@ dolinux() {
 
 	# change the devices in fstab
 	echo "  updating /etc/fstab"
-	sed -i .preemulab -e "s;^/dev/[hs]d.\([0-7]\);/dev/${ldisk}\1;" /mnt/etc/fstab || {
+	sed -i .preemulab -e "s;^/dev/[hs]d.\([0-9]\);/dev/${ldisk}\1;" /mnt/etc/fstab || {
+	    echo "Failed to update /etc/fstab"
+	    umount $rootdev
+	    return 1
+	}
+	# XXX handle NVMe too...
+	sed -i '' -e "s;^/dev/nvme.n1p\([0-9]\);/dev/${ldisk}\1;" /mnt/etc/fstab || {
 	    echo "Failed to update /etc/fstab"
 	    umount $rootdev
 	    return 1
@@ -1016,7 +1209,6 @@ dolinux() {
 	# If there's a GRUB config file, update all root=X kernel params.
 	# Also fix up console parameters.
 	#
-	needfsck=0
 	fgconf=""
 	for d in grub2 grub; do
 	    for f in grub.conf grub.cfg menu.lst; do
@@ -1117,7 +1309,7 @@ dolinux() {
 	    # fix up any terminal_{input,output} lines (for grub2).
 	    #
 	    # For sio[1-3], add:
-	    #   serial --unit=N --speed=S
+	    #   serial --unit=N --port=P --speed=S
 	    #   terminal --dumb --timeout=0 serial console # grub1
 	    #   terminal_input serial			   # grub2
 	    #   terminal_output serial			   # grub2
@@ -1186,12 +1378,8 @@ dolinux() {
 	    sio*)
 		u=`expr ${CONSOLE#sio} - 1`
 		s=$SPEED
+		pstr="--port=$PORT"
 
-		# XXX we only put in the --port=NNN option if this is grub2
-		if grep -q '^terminal_input' $tgconf 2>/dev/null; then
-		    pstr="--port=$PORT"
-		fi
-		
 		# put back the "serial" line
 		sstr="serial --unit=$u $pstr --speed=$s"
 		if ! grep -q -- "^$sstr" $tgconf 2>/dev/null; then
@@ -1378,6 +1566,20 @@ EOF7
 	fi
 
 	#
+	# Fixup sshd config
+	#
+	if ! dofixsshd 1; then
+	    dofixsshd 0
+	fi
+
+	#
+	# Fixup root authorized keys
+	#
+	if ! dofixauthkeys 1; then
+	    dofixauthkeys 0
+	fi
+
+	#
 	# Localize the image. We only do this if the MFS we are running in
 	# has the necessary files.
 	#
@@ -1396,16 +1598,40 @@ EOF7
 		-D $rootdev -s Linux postload
 	fi
 
-	umount $rootdev
+	umount $rootdev || {
+	    echo "WARNING: unmount of FS failed, beware corruption"
+	    sync
+	    sleep 2
+	    umount $rootdev
+	}
 
 	#
-	# XXX woeful hack. On an SELinux-enabled filesystem, grub.conf
+	# There are a couple of conditions under which we might need to fsck:
+	#
+	# XXX woeful hack I: on an SELinux-enabled filesystem, grub.conf
 	# might have an SELinux context and the BSD extfs implmentation
 	# doesn't know how to deal with extended attributes and leaves
 	# the FS in an inconsistent state. So if we changed grub.conf,
 	# we must fsck the filesystem to clean up.
 	#
-	if [ $needfsck -ne 0 -a -e /mnt/etc/selinux/config ]; then
+	# XXX woeful hack II: on a FreeBSD 9.x MFS and an EXT filesystem
+	# with the dir_index feature set ($GOTDI != ""), we had to disable
+	# that feature above to avoid filesystem corruption. We need to
+	# re-enable that feature and clean up the filesystem.
+	#
+	if [ $needfsck -ne 0 ]; then
+	    if [ -n "$GOTDI" ]; then
+		echo "  reeabling EXT dir_index"
+		tune2fs -O dir_index $rootdev || {
+		    echo "WARNING: could not reenable EXT dir_index"
+		    needfsck=0
+		}
+	    elif [ ! -e /mnt/etc/selinux/config ]; then
+		needfsck=0
+	    fi
+	fi
+
+	if [ $needfsck -ne 0 ]; then
 	    echo -n "  ensuring FS is consistent..."
 	    e2fsck -yf $rootdev >/dev/null 2>&1
 	    if [ $? -ne 0 ]; then

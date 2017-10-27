@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2008,2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -123,7 +123,7 @@ if (defined($args{"ver"})) {
   $cond .= " and d.version='".$args{"ver"}."'" if $args{"ver"} ne '='; 
 }
 if ($os) {
-  $join .= " left join partitions as c on a.node_id=c.node_id";
+  $join .= " left join `partitions` as c on a.node_id=c.node_id";
   $join .= " left join os_info as d on c.osid=d.osid";
 }
 if (defined($args{"prereserve"})) {

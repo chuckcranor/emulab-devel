@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -221,7 +221,7 @@ AC_SUBST(PYTHON_INCLUDE)
 # based on which variables are defined.
 
 # Win7 Pro x86
-if test -n ${WINDOWS_KEY_7PRO_X86}; then
+if test -n "${WINDOWS_KEY_7PRO_X86}"; then
    WIN7_IMNAME="Windows 7 PROFESSIONAL"
    sed -e "s/@WIN7_IMNAME@/$WIN7_IMNAME/" < $srcdir/tmcc/cygwinseven/unattend-x86.xml.in.tmpl > $srcdir/tmcc/cygwinseven/unattend-7pro-x86.xml.in
    winfiles="$winfiles tmcc/cygwinseven/unattend-7pro-x86.xml"
@@ -285,7 +285,9 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/freebsd/init/9/GNUmakefile \
 	  tmcc/freebsd/init/10/GNUmakefile \
 	  tmcc/freebsd/init/10.3/GNUmakefile \
+	  tmcc/freebsd/init/10.4/GNUmakefile \
 	  tmcc/freebsd/init/11/GNUmakefile \
+	  tmcc/freebsd/init/12/GNUmakefile \
 	  tmcc/freebsd/supfile tmcc/freebsd/sethostname \
 	  tmcc/linux/GNUmakefile tmcc/linux/supfile \
 	  tmcc/linux/sethostname.dhclient \
@@ -297,6 +299,8 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/ubuntu11/GNUmakefile \
 	  tmcc/ubuntu14/GNUmakefile \
 	  tmcc/ubuntu15/GNUmakefile \
+	  tmcc/ubuntu16/GNUmakefile \
+	  tmcc/ubuntu16-ms/GNUmakefile \
 	  tmcc/linux-ms/GNUmakefile \
 	  tmcc/freebsd5/GNUmakefile tmcc/freebsd5/supfile \
 	  tmcc/freebsd6/GNUmakefile tmcc/freebsd6/supfile \
@@ -305,7 +309,9 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/freebsd9/GNUmakefile tmcc/freebsd9/netif-emulab \
 	  tmcc/freebsd10/GNUmakefile tmcc/freebsd10/netif-emulab \
 	  tmcc/freebsd11/GNUmakefile tmcc/freebsd11/netif-emulab \
+	  tmcc/freebsd12/GNUmakefile tmcc/freebsd12/netif-emulab \
 	  tmcc/freenas8/GNUmakefile tmcc/freenas9/GNUmakefile \
+	  tmcc/freenas11/GNUmakefile \
 	  tmcc/cygwinxp/GNUmakefile tmcc/dp/GNUmakefile \
 	  tmcc/openbsd/GNUmakefile tmcc/ron/GNUmakefile \
 	  tmcc/plab/GNUmakefile tmcc/cygwinseven/GNUmakefile \

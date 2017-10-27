@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -300,6 +300,12 @@ sub Flush($)
     my ($self) = @_;
 
     delete($users{$self->idx()});
+}
+sub FlushAll($)
+{
+    my ($class) = @_;
+    
+    %users = ();
 }
 
 # Return the URN.
@@ -755,6 +761,25 @@ sub Register($)
 					$self->cert());
 }
 
+#
+# Send email. 
+#
+sub SendEmail($$$;$)
+{
+    my ($self, $subject, $body, $from) = @_;
+    require libtestbed;
+
+    $from = $TBOPS
+	if (!defined($from));
+
+    my $user_email = $self->email();
+    my $user_name  = $self->name();
+
+    libtestbed::SENDMAIL("$user_name <$user_email>",
+			 $subject, $body, $from, "Bcc: $TBAUDIT");
+    return 0;
+}
+
 ############################################################################
 #
 # Wrapper for local users.
@@ -806,6 +831,7 @@ sub Create($$)
 
 sub emulab_user()       { return $_[0]->{'USER'}; }
 sub idx($)		{ return $_[0]->{'USER'}->uid_idx(); }
+sub uid_idx($)		{ return $_[0]->{'USER'}->uid_idx(); }
 sub uid($)		{ return $_[0]->{'USER'}->uid(); }
 sub uuid                { return $_[0]->{'USER'}->uuid(); }
 sub created($)		{ return $_[0]->{'USER'}->created(); }
@@ -817,6 +843,8 @@ sub admin($)		{ return $_[0]->{'USER'}->admin(); }
 sub BumpActivity($)     { return $_[0]->{'USER'}->BumpActivity(); }
 sub DefaultProject($)   { return $_[0]->{'USER'}->DefaultProject(); }
 sub FlipTo($$)          { return $_[0]->{'USER'}->FlipTo($_[1]); }
+sub UpdateExports($)    { return $_[0]->{'USER'}->UpdateExports(); }
+sub SendEmail($$$;$)    { return $_[0]->{'USER'}->SendEmail($_[1],$_[2],$_[3]); }
 
 # Need to construct this since not in User structure.
 sub hrn($)		{ return "${PGENIDOMAIN}." . $_[0]->uid(); }
@@ -834,7 +862,7 @@ sub urn($)
 {
     my ($self) = @_;
 
-    return GeniHRN::Generate("@OURDOMAIN@", "user", $self->uid());
+    return $self->emulab_user()->urn();
 }
 
 #

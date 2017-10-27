@@ -1,6 +1,11 @@
 ErrorDocument 404 /error.php
 ErrorDocument 403 /error.php
 
+<FilesMatch "\.(js|css|html)$">
+   Header append Cache-Control "no-cache, must-revalidate"
+   Header set Pragma "no-cache"
+</FilesMatch>
+
 DirectoryIndex landing.php
 
 RewriteBase /

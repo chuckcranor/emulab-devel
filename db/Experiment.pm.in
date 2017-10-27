@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2016 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,6 +40,7 @@ use Logfile;
 use English;
 use Data::Dumper;
 use File::Basename;
+use File::Temp;
 use overload ('""' => 'Stringify');
 use libtblog_simple;
 
@@ -53,7 +54,7 @@ use vars qw($EXPT_PRELOAD $EXPT_START $EXPT_SWAPIN $EXPT_SWAPUPDATE
 	    @EXPORT_OK
 	    $TB $BOSSNODE $CONTROL $TBOPS $PROJROOT $STAMPS $TBBASE  
 	    $TEVC $DBCONTROL $RSYNC $MKEXPDIR $TBPRERUN $TBSWAP   
-	    $TBREPORT $TBEND $DU $MD5
+	    $TBREPORT $TBEND $DU $MD5 $OPENSSL $SSHKEYGEN
 	    $EXPT_ACCESS_READINFO $EXPT_ACCESS_MODIFY $EXPT_ACCESS_DESTROY
 	    $EXPT_ACCESS_UPDATE $EXPT_ACCESS_MIN $EXPT_ACCESS_MAX);
 	  
@@ -76,6 +77,8 @@ $TBEND       = "$TB/bin/tbend";
 $DU          = "/usr/bin/du";
 $MD5         = "/sbin/md5";
 $RSYNC       = "/usr/local/bin/rsync";
+$OPENSSL     = "/usr/bin/openssl";
+$SSHKEYGEN   = "/usr/bin/ssh-keygen";
 
 # To avoid writting out all the methods.
 AUTOLOAD {
@@ -846,6 +849,9 @@ sub Delete($;$)
     }
     libArchive::TBDeleteExperimentArchive($pid, $eid);
 
+    DBQueryWarn("DELETE from experiment_keys ".
+		"WHERE eid='$eid' and pid='$pid'");
+
     DBQueryWarn("DELETE from experiments ".
 		"WHERE eid='$eid' and pid='$pid'");
 
@@ -1349,6 +1355,38 @@ sub SetBatchMode($$) {
     DBQueryFatal("unlock tables");
 
     return ($success ? 0 : -1);
+}
+
+#
+# We use this for admission control of geni slices.
+#
+sub SetExpiration($$)
+{
+    my ($self, $expires) = @_;
+    my $idx = $self->idx();
+
+    if ($expires =~ /^\d+$/) {
+	$expires = "FROM_UNIXTIME($expires)";
+    }
+    else {
+	$expires = "'$expires'";
+    }
+    my $query_result =
+	DBQueryWarn("update experiments set expt_expires=$expires " .
+		    "where idx='$idx'");
+    return -1
+	if (!$query_result);
+
+    # Has to be in the correct format.
+    $query_result =
+	DBQueryWarn("select expt_expires from experiments ".
+		    "where idx='$idx'");
+    return -1
+	if (!$query_result || !$query_result->numrows);
+    ($expires) = $query_result->fetchrow_array();
+    
+    $self->{'EXPT'}->{'expt_expires'} = $expires;
+    return 0;
 }
 
 #
@@ -2256,7 +2294,7 @@ sub SwapFail($$$$;$)
 	# This is pointless.
 	DBQueryWarn("update experiment_stats set ".
 		    "  swap_errors=swap_errors+1, ".
-		    "  swap_exitcode=$ecode, ".
+		    "  swap_exitcode='$ecode', ".
 		    "  last_error=$session ".
 		    "where exptidx=$exptidx");
     }
@@ -2358,6 +2396,7 @@ sub PostSwap($$$$)
     my $pnodes       = 0;
     my $vnodes       = 0;
     my $duration     = 0;
+    my $timein       = 0;
     my $prev_uid_idx = 0;
     my $prev_swapper = $swapper;
     my $query_result;
@@ -2389,14 +2428,16 @@ sub PostSwap($$$$)
 	if ($which eq $EXPT_SWAPOUT) {
 	    $query_result =
 		DBQueryWarn("select r.pnodes,r.vnodes,r.uid_idx, ".
-			    "  r.swapout_time - r.swapin_time ".
+			    "  r.swapout_time - r.swapin_time, ".
+			    "  r.swapin_time ".
 			    " from experiment_resources as r ".
 			    "where r.idx='$rsrcidx'");
 	}
 	else {
 	    $query_result =
 		DBQueryWarn("select r.pnodes,r.vnodes,r.uid_idx, ".
-			    "  r.swapmod_time - r.swapin_time ".
+			    "  r.swapmod_time - r.swapin_time, ".
+			    "  r.swapmod_time ".
 			    " from experiment_resources as r ".
 			    "where r.idx='$lastrsrc'");
 	}
@@ -2404,11 +2445,14 @@ sub PostSwap($$$$)
 	    if (!$query_result);
 	
 	if ($query_result->numrows) {
-	    ($pnodes,$vnodes,$prev_uid_idx,$duration) =
+	    ($pnodes,$vnodes,$prev_uid_idx,$duration,$timein) =
 		$query_result->fetchrow_array;
 	    # Might happen if swapin stats got losts.
 	    $duration = 0
 		if (! defined($duration) || $duration < 0);
+	    # Ditto. This happens on the geni path, need to fix it.
+	    $duration = 0
+		if ($timein == 0);
 
 	    $prev_swapper = User->Lookup($prev_uid_idx);
 	    $prev_swapper = $swapper
@@ -2560,6 +2604,9 @@ sub GatherSwapStats($$$;$$)
 	if (!defined($flags));
     $ecode = 0
 	if (!defined($ecode));
+    # Perl/mysql sillyness. 
+    $ecode = -1
+	if ($ecode == 255);
 
     #
     # If this is a start time marker, then just record the time in a global
@@ -2594,7 +2641,7 @@ sub GatherSwapStats($$$;$$)
 		"(idx, uid, uid_idx, start_time, end_time, exptidx, rsrcidx, ".
 		" action, exitcode, log_session) ".
 		"values (0, '$uid', '$uid_idx',  $starttime, now(), ".
-		"        $exptidx, $rsrcidx, '$mode', $ecode, $session)")
+		"        $exptidx, $rsrcidx, '$mode', '$ecode', $session)")
 	or return -1;
 
     return 0;
@@ -3156,6 +3203,20 @@ sub NoNFSMounts($)
     return 0;
 }
 
+sub HasNoNFSMounts($)
+{
+    my ($self) = @_;
+    my $idx   = $self->idx();
+    
+    my $query_result = 
+	DBQueryWarn("select nonfsmounts,nfsmounts from experiments ".
+		    "where idx='$idx' and ".
+		    "      (nonfsmounts=1 or nfsmounts='none')");
+    return 1
+	if (!$query_result);
+    return $query_result->numrows;
+}
+
 #
 # Clear the panic bit.
 #
@@ -3195,19 +3256,19 @@ sub IsFirewalled($;$$$)
 }
 
 #
-# Get the firewall node name and port number for an experiment;
+# Get the firewall node name and iface for an experiment;
 # e.g., for use in an snmpit call.
 # Return 1 if successful, 0 on error.
 #
-sub FirewallAndPort($$$)
+sub FirewallAndIface($$$)
 {
-    my ($self, $fwnodep, $fwportp) = @_;
+    my ($self, $fwnodep, $fwifacep) = @_;
 
     # Must be a real reference. 
     return -1
 	if (! ref($self));
 
-    TBExptFirewallAndPort($self->pid(), $self->eid(), $fwnodep, $fwportp)
+    TBExptFirewallAndPort($self->pid(), $self->eid(), $fwnodep, $fwifacep)
 	or return -1;
     return 0;
 }
@@ -4725,9 +4786,9 @@ sub UnBindNonLocalUsers($)
 #
 # Bind nonlocal user to experiment (slice, in Geni).
 #
-sub BindNonLocalUser($$$$$$)
+sub BindNonLocalUser($$$$$$;$)
 {
-    my ($self, $keys, $uid, $urn, $name, $email) = @_;
+    my ($self, $keys, $uid, $urn, $name, $email, $privs) = @_;
 
     return -1
 	if (! ref($self));
@@ -4772,6 +4833,10 @@ sub BindNonLocalUser($$$$$$)
 	push(@insert_data, "name=$safe_name");
 	push(@insert_data, "email=$safe_email");
 	push(@insert_data, "uid_uuid=uuid()");
+	if (defined($privs)) {
+	    my $safe_privs = DBQuoteSpecial($privs);
+	    push(@insert_data, "privs=$safe_privs");
+	}
 
 	# Insert into DB.
 	my $insert_result =
@@ -5411,6 +5476,7 @@ sub AllocatePublicAddrPools($)
     my $pid = $self->pid();
     my $eid = $self->eid();
     my %old_addrs;
+    my %new_addrs;
     my %pools= ();
     my $db_result;
     
@@ -5488,14 +5554,45 @@ sub AllocatePublicAddrPools($)
 		}
 
 		DBQueryFatal( "UNLOCK TABLES" );
-
-		return -1;
+		# Return allocation failure to the user.
+		return 1;
 	    }
 	}
     }
 	
+    $db_result = DBQueryWarn( "SELECT IP,pool_id FROM virt_node_public_addr " .
+			      "WHERE pid='$pid' AND eid='$eid'" );
+    while( my ($addr,$pool) = $db_result->fetchrow_array() ) {
+	$new_addrs{$addr} = $pool;
+    }
+
     DBQueryFatal( "UNLOCK TABLES" );
 
+    # Record any changes made in addr_pool_history
+    my $uid = $self->swapper();
+    my $uid_idx = $self->swapper_idx();
+    my $exptidx = $self->idx();
+    
+    while( my ($addr,$pool) = each( %old_addrs ) ) {
+	if( !exists( $new_addrs{$addr} ) || $new_addrs{$addr} ne $pool ) {
+	    DBQueryWarn( "INSERT INTO addr_pool_history SET " .
+			 "pool_id='$pool', op='free', uid='$uid', " .
+			 "uid_idx='$uid_idx', exptidx='$exptidx', " .
+			 "stamp=UNIX_TIMESTAMP(), addr='$addr', " .
+			 "version='ipv4'" );
+	}
+    }
+    
+    while( my ($addr,$pool) = each( %new_addrs ) ) {
+	if( !exists( $old_addrs{$addr} ) || $old_addrs{$addr} ne $pool ) {
+	    DBQueryWarn( "INSERT INTO addr_pool_history SET " .
+			 "pool_id='$pool', op='alloc', uid='$uid', " .
+			 "uid_idx='$uid_idx', exptidx='$exptidx', " .
+			 "stamp=UNIX_TIMESTAMP(), addr='$addr', " .
+			 "version='ipv4'" );
+	}
+    }
+    
     return 0;
 }
 
@@ -5507,6 +5604,20 @@ sub ReleasePublicAddrPools($)
     my ($self) = @_;
     my $pid = $self->pid();
     my $eid = $self->eid();
+    my $uid = $self->swapper();
+    my $uid_idx = $self->swapper_idx();
+    my $exptidx = $self->idx();
+    my $db_result;
+
+    $db_result = DBQueryWarn( "SELECT IP,pool_id FROM virt_node_public_addr " .
+			      "WHERE pid='$pid' AND eid='$eid'" );
+    while( my ($addr,$pool) = $db_result->fetchrow_array() ) {
+	DBQueryWarn( "INSERT INTO addr_pool_history SET " .
+		     "pool_id='$pool', op='free', uid='$uid', " .
+		     "uid_idx='$uid_idx', exptidx='$exptidx', " .
+		     "stamp=UNIX_TIMESTAMP(), addr='$addr', " .
+		     "version='ipv4'" );
+    }
     
     DBQueryWarn( "UPDATE virt_node_public_addr SET pool_id=NULL, " .
 		 "pid=NULL, eid=NULL WHERE pid='$pid' AND " .
@@ -5769,7 +5880,7 @@ sub SyncPortLans($)
 	}
 
 	print "Syncing target vlan $idx in $experiment\n";
-	mysystem("$TB/bin/snmpit_test -f --redirect-err -X $pid $eid $idx");
+	mysystem("$TB/bin/snmpit -f --redirect-err -X $pid $eid $idx");
 	if ($?) {
 	    $portvlan->Unlock();
 	    return -1;
@@ -6012,7 +6123,7 @@ sub ClearPortLans($;$@)
 	my $lanid = $portvlan->lanid();
 	
 	print "Syncing target vlan $lanid in $experiment\n";
-	mysystem("$TB/bin/snmpit_test -f --redirect-err -X $pid $eid $lanid");
+	mysystem("$TB/bin/snmpit -f --redirect-err -X $pid $eid $lanid");
 	if ($?) {
 	    $portvlan->Unlock()
 		if (!$nolock);
@@ -6456,6 +6567,203 @@ sub AddProfileParameter($$$)
     
     return 0;
 }
+
+#
+# Check for deprecated images.
+#
+sub CheckForDeprecatedImages($$$)
+{
+    my ($self, $user, $sendmail) = @_;
+    my $pid = $self->pid();
+    my $eid = $self->eid();
+    my %needwarning = ();
+    require OSImage;
+    
+    my $deprecated_result =
+	DBQueryFatal("select vname,osname from virt_nodes ".
+		     "where pid='$pid' and eid='$eid' and ".
+		     "      osname is not null and osname!=''");
+    while (my ($vname,$osname) = $deprecated_result->fetchrow_array()) {
+	my $image = OSImage->Lookup($osname);
+	if (!defined($image)) {
+	    $image = OSImage->LookupByName($osname);
+	    if (!defined($image)) {
+		# Lets not worry, we will catch is later.
+		next;
+	    }
+	}
+	# Skip anything that looks like an OSID instead of an image.
+	# XXX Need to deal with image aliases.
+	next
+	    if (! $image->isImage());
+	
+	my $deprecated = 0;
+	my $iserror    = 0;
+	if ($image->IsDeprecated(\$deprecated, undef, \$iserror)) {
+	    tberror("Could not get deprecation info for $image\n");
+	    return -1;
+	}
+	next
+	    if (!$deprecated);
+
+	if ($iserror && !$user->IsAdmin()) {
+	    tberror($image->DeprecatedMessage() . "\n");
+	    return 1;
+	}
+	$needwarning{$image->imageid()} = $image;
+    }
+    foreach my $image (values(%needwarning)) {
+	print STDERR "*** WARNING: " . $image->DeprecatedMessage() . "\n";
+	if ($sendmail) {
+	    $image->SendDeprecatedMail($user, $self);
+	}
+    }
+    return 0;
+}
+
+#
+# Create rsa/ssh keys for experiment.
+#
+sub GenerateKeys($)
+{
+    my ($self) = @_;
+    my $rsa_privkey = "";
+    my $rsa_pubkey;
+    my $ssh_pubkey;
+    my $errmsg;
+
+    #
+    # Generate unencrypted RSA key. 
+    #
+    if (!open(RSA, "$OPENSSL genrsa 4096 2>/dev/null | ")) {
+	print STDERR "*** Could not start genrsa for RSA key\n";
+	return -1;
+    }
+    while (<RSA>) {
+	$rsa_privkey .= $_;
+    }
+    if (!close(RSA)) {
+	print STDERR "*** Could not generate RSA key\n";
+	return -1;
+    }
+    #
+    # Extract public key from it.
+    #
+    $rsa_pubkey =
+	emutil::PipeCommand("$OPENSSL rsa -pubout 2>/dev/null",
+			    $rsa_privkey, \$errmsg);
+    if (!defined($rsa_pubkey) || $rsa_pubkey eq "") {
+	print STDERR "*** Could not extract public RSA key\n";
+	if (defined($errmsg)) {
+	    print STDERR $errmsg;
+	}
+	return -1;
+    }
+    #
+    # Extract SSH public key from it. Does not accept the privkey on stdin. SAD!
+    #
+    my $fp = File::Temp->new();
+    if (!$fp) {
+	print STDERR "*** Could not create temp file for RSA key\n";
+	return -1;
+    }
+    print $fp $rsa_privkey;
+    if (!open(GEN, "$SSHKEYGEN -y -f $fp |")) {
+	print STDERR "*** Could not start ssh-keygen for RSA key\n";
+	return -1;
+    }
+    while (<GEN>) {
+	$ssh_pubkey .= $_;
+    }
+    if (!close(GEN)) {
+	print STDERR "*** Could not extract SSH pub key from RSA key\n";
+	return -1;
+    }
+    chomp($ssh_pubkey);
+    my $pid = $self->pid();
+    my $eid = $self->eid();
+    my $idx = $self->idx();
+    DBQueryWarn("replace into experiment_keys set ".
+		"  pid='$pid', eid='$eid', exptidx='$idx', ".
+		"  rsa_privkey=" . DBQuoteSpecial($rsa_privkey) . ", ".
+		"  rsa_pubkey="  . DBQuoteSpecial($rsa_pubkey) . ", ".
+		"  ssh_pubkey="  . DBQuoteSpecial($ssh_pubkey))
+	or return -1;
+    return 0;
+}
+
+#
+# Return the per-experiment private key.
+#
+sub GetPrivkey($)
+{
+    my ($self) = @_;
+    my $key = "";
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    my $idx = $self->idx();
+    my $result = DBQueryWarn("select rsa_privkey from experiment_keys ".
+			     "where exptidx='$idx'");
+    if ($result && $result->numrows) {
+	($key) = $result->fetchrow_array();
+    }
+
+    return $key;
+}
+
+#
+# For all nodes in the experiment, determine which should receive
+# per-experiment root private/public keys based on what the user wants
+# and modified by Emulab policy (as encoded in Node::InitKeyDist).
+#
+# Here we enforce one bit of experiment-specific policy:
+#
+# If the user has set *any* key distribution manually within an experiment,
+# we default all other unspecified nodes/keys to 0. The assumption here is
+# that if the user specifies anything at all, they probably have a specific
+# setup in mind and we don't want the resulting behavior to be different
+# depending on the system default.
+#
+sub InitKeyDist($)
+{
+    my ($self) = @_;
+    my $idx = $self->idx();
+
+    #
+    # Determine a default for all unspecified node key distributions:
+    # - if the system default is "disabled", no key distribution is done
+    # - if the user has specified any explicit values, the default is off
+    # - otherwise use the on/off system default.
+    #
+    my $sysdef = -1;
+    if (TBGetSiteVar("general/root_keypair", \$sysdef) && $sysdef != -1) {
+	my $result =
+	    DBQueryWarn("select v.rootkey_private,v.rootkey_public ".
+			" from virt_nodes as v, reserved as r ".
+			" where v.exptidx=r.exptidx and v.vname=r.vname ".
+			"  and v.exptidx=$idx");
+
+	if ($result && $result->numrows > 0) {
+	    while (my ($priv,$pub) = $result->fetchrow_array()) {
+		if ($priv != -1 || $pub != -1) {
+		    $sysdef = 0;
+		    last;
+		}
+	    }
+	}
+    }
+
+    my @nodelist = $self->NodeList(0, 1);
+    foreach my $node (@nodelist) {
+	$node->InitKeyDist($self, $sysdef);
+    }
+
+    return 0;
+}
+
 
 # _Always_ make sure that this 1 is at the end of the file...
 1;

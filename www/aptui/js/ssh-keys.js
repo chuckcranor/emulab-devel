@@ -1,13 +1,12 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup',
-	 'js/lib/text!template/ssh-keys.html',
-	 'js/lib/text!template/oops-modal.html',
-	 'js/lib/text!template/waitwait-modal.html',
-	 'filestyle',
-	],
-function (_, sup, sshkeysString, oopsString, waitwaitString)
+$(function ()
 {
     'use strict';
+
+    var templates = APT_OPTIONS.fetchTemplateList(['ssh-keys', 'oops-modal', 'waitwait-modal']);
+    var sshkeysString = templates['ssh-keys'];
+    var oopsString = templates['oops-modal'];
+    var waitwaitString = templates['waitwait-modal'];
+
     var embedded        = 0;
     var target_uid      = "";
     var nonlocal        = false;

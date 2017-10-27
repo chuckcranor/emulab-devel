@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -347,16 +347,29 @@ class User
     function mailman_password() { return $this->field("mailman_password"); }
     function nonlocal_id()	{ return $this->field("nonlocal_id"); }
     function portal()	     { return $this->field("portal"); }
+    function ga_userid()     { return $this->field("ga_userid"); }
     function isAPT()	     { return ($this->portal() &&
                                        $this->portal() == "aptlab" ? 1 : 0); }
     function isCloud()	     { return ($this->portal() &&
                                        $this->portal() == "cloudlab" ? 1 : 0); }
     function isPNet()	     { return ($this->portal() &&
-                                       $this->portal() == "phantomnet" ? 1 : 0);}
+                                       $this->portal() == "phantomnet" ? 1 :0);}
+    function isPowder()	     { return ($this->portal() &&
+                                       $this->portal() == "powder" ? 1 : 0);}
     function isEmulab()	     { return ($this->portal() &&
                                        $this->portal() == "emulab" ? 1 : 0); }
     # Not via the Portal interface.
     function isClassic()     { return ($this->portal() ? 0 : 1); }
+
+    function urn() {
+      global $OURDOMAIN;
+      if ($this->IsNonLocal()) {
+          return $this->nonlocal_id();
+      } else {
+          return 'urn:publicid:IDN+' .
+	      $OURDOMAIN . '+user+' . $this->uid();
+      }
+    }
 
     function IsNonLocal() {
 	return ($this->field("nonlocal_id") ? 1 : 0);
@@ -379,7 +392,8 @@ class User
             ($this->isAPT() ? "aptlab-approval@aptlab.net" :
              ($this->isCloud() ? "cloudlab-approval@cloudlab.us" :
               ($this->isPNet() ? "phantomnet-approval@phantomnet.org" :
-               $TBMAIL_APPROVAL)));
+               ($this->isPNet() ? "powder-approval@powderwireless.net" :
+                $TBMAIL_APPROVAL))));
     }
 
     #
@@ -1199,6 +1213,28 @@ class User
 					   
 	return mysql_num_rows($query_result);
     }
+    #
+    # Generate an encrypted certificate using existing passphrase or
+    # randomized one.
+    #
+    function GenEncryptedCert() {
+        $project = $this->FirstApprovedProject();
+        $pid = (isset($project) ? $project->pid() : "nobody");
+        $uid = $this->uid();
+        
+        SUEXEC($uid, $pid,
+               "webmkusercert -r -P -G $uid",
+               SUEXEC_ACTION_CONTINUE);
+    }
+    
+    function SetGaUserid($id) {
+	$idx = $this->uid_idx();
+
+	DBQueryFatal("update users set ga_userid='$id' ".
+		     "where uid_idx='$idx'");
+	$this->user["ga_userid"] = $id;
+	return 0;
+    }
 
     #
     # Return project access list for a user. This returns just pid,eid for
@@ -1213,7 +1249,7 @@ class User
 
 	$uid_idx     = $this->uid_idx();
 	$result      = array();
-	$user_clause = "where uid_idx='$uid_idx' and";
+	$user_clause = "where uid_idx='$uid_idx' and p.nonlocal_id is null and";
 	$trust_clause= "";
 
 	# Constants.
@@ -1251,8 +1287,10 @@ class User
 	}
     
 	$query_result =
-	    DBQueryFatal("SELECT distinct pid,gid FROM group_membership ".
-			 "$user_clause $trust_clause order by pid");
+	    DBQueryFatal("SELECT distinct g.pid,g.gid ".
+                         "   FROM group_membership as g ".
+                         "left join projects as p on p.pid=g.pid ".
+			 "$user_clause $trust_clause order by g.pid");
 
 	if (mysql_num_rows($query_result) == 0) {
 	    return $result;
@@ -1270,12 +1308,12 @@ class User
             DBQueryFatal("(select pid,max(UNIX_TIMESTAMP(s.last_activity)) ".
                          "   as last from experiment_stats as s ".
                          " where s.creator_idx='$uid_idx' and pid_idx!=0 ".
-                         " group by s.pid_idx order by last desc) ".
+                         " group by s.pid,s.pid_idx order by last desc) ".
                          "union ".
                          "(select pid,max(UNIX_TIMESTAMP(created)) as last ".
                          " from apt_instances ".
                          " where creator_idx='$uid_idx' and pid is not null ".
-                         " group by pid_idx order by last desc)");
+                         " group by pid,pid_idx order by last desc)");
         
 	$ordered = array();
 	while ($row = mysql_fetch_array($query_result)) {
@@ -1424,16 +1462,22 @@ class User
     #
     # Return list of experiments for a user, or just a count.
     #
-    function ExperimentList($listify = 1, $group = null) {
+    function ExperimentList($listify = 1, $target = null) {
 	$uid_idx = $this->uid_idx();
 	$gclause = "";
 
 	# within optional group only.
-	if ($group) {
-	    $pid     = $group->pid();
-	    $gid     = $group->gid();
-	    $gclause = "and pid='$pid' and gid='$gid'";
-	}
+        if ($target) {
+            if (get_class($target) == "Group") {
+                $pid     = $target->pid();
+                $gid     = $target->gid();
+                $gclause = "and pid='$pid' and gid='$gid'";
+            }
+            else {
+                $pid     = $target->pid();
+                $gclause = "and pid='$pid'";
+            }
+        }
 
 	$query_result =
 	    DBQueryFatal("select idx from experiments ".

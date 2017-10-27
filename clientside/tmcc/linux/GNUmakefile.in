@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,6 +56,20 @@ INSTALL		?= /usr/bin/install -c
 COMMON		?= $(SRCDIR)/../common
 DEFRUNLVLDIR	?= $(RCDIR)/rc3.d
 ISMFS		= $(ETCDIR)/ismfs
+
+#
+# If we are installing in Xen dom0, see what version of Xen
+#
+XENVERS	= 0
+ifneq ($(wildcard /usr/lib/xen-4.4),)
+XENVERS	= 4.4
+endif
+ifneq ($(wildcard /usr/lib/xen-4.5),)
+XENVERS	= 4.5
+endif
+ifneq ($(wildcard /usr/lib/xen-4.6),)
+XENVERS	= 4.6
+endif
 
 #
 # If callers set the USES_SYSTEMD var to 1, we do the systemd sysetc-install and
@@ -147,6 +161,8 @@ dir-install:
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(RCDIR)/rc6.d
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(ETCDIR)
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(BINDIR)
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(BINDIR)/prepare.pre.d
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(BINDIR)/prepare.post.d
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(RCDIR)
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(VARDIR)
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(VARDIR)/db
@@ -163,6 +179,7 @@ systemd-dir-install: dir-install
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/multi-user.target.wants
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system-generators
 
 common-install:	dir-install
 	(cd ../common; $(MAKE) DESTDIR=$(DESTDIR) local-install)
@@ -241,7 +258,11 @@ sysetc-install-systemd: systemd-dir-install
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) \
 		$(SRCDIR)/testbed $(BINDIR)/initscripts/
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) \
-		$(SRCDIR)/emulab-systemd-swaps $(BINDIR)/initscripts
+		$(SRCDIR)/fstab-generator-finish $(BINDIR)/initscripts
+	# Install our fstab generator wrapper
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) \
+		$(SRCDIR)/fstab-generator \
+		$(SYSETCDIR)/systemd/system-generators/systemd-fstab-generator
 	# Install the service unit files
 	$(INSTALL) -m 644 -o root -g $(DIRGROUP) \
 		$(SRCDIR)/testbed.service $(SYSETCDIR)/systemd/system
@@ -250,9 +271,9 @@ sysetc-install-systemd: systemd-dir-install
 	$(INSTALL) -m 644 -o root -g $(DIRGROUP) \
 		$(SRCDIR)/emulab-fstab-fixup.service $(SYSETCDIR)/systemd/system
 	# Install our two services (tbprepare doesn't get "started" at boot)
-	ln -sf $(SYSETCDIR)/systemd/system/testbed.service \
+	ln -sf ../testbed.service \
 		$(SYSETCDIR)/systemd/system/multi-user.target.wants/testbed.service
-	ln -sf $(SYSETCDIR)/systemd/system/emulab-fstab-fixup.service \
+	ln -sf ../emulab-fstab-fixup.service \
 		$(SYSETCDIR)/systemd/system/multi-user.target.wants/emulab-fstab-fixup.service
 	# Kick the init process to read our newly-installed unit files
 	# (i.e., so an immediate tbprepare will work...)
@@ -369,7 +390,11 @@ xen-upstart-install:
 		$(INSTALL) -m 644 $$f /etc/init/; \
 	    done; \
 	fi
+	@if [ ! -e /etc/init/plymouth-upstart-bridge.conf ]; then \
+		rm /etc/init/plymouth-upstart-bridge.override; \
+	fi
 
+# NOTE: Custom /etc/xen/xen not needed on Xen 4.6.
 xen-install:	dir-install xen-udev-install xen-upstart-install
 	$(INSTALL) -m 755 $(SRCDIR)/../common/vnodesetup $(BINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/../common/mkvnode.pl $(BINDIR)/
@@ -386,7 +411,9 @@ xen-install:	dir-install xen-udev-install xen-upstart-install
 	$(INSTALL) -m 755 $(SRCDIR)/xen/xl.conf $(SYSETCDIR)/xen/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/30-emulab.conf $(SYSETCDIR)/sysctl.d/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/rsyslog $(SYSETCDIR)/logrotate.d/
-	$(INSTALL) -m 755 $(SRCDIR)/xen/xen $(SYSETCDIR)/init.d/
+	@if [ "$(XENVERS)" = "4.4" ]; then \
+		$(INSTALL) -m 755 $(SRCDIR)/xen/xen $(SYSETCDIR)/init.d/; \
+	fi
 	$(INSTALL) -m 755 $(SRCDIR)/xen/interfaces $(SYSETCDIR)/network/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/emulab-cnet.pl $(SYSETCDIR)/xen/scripts/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/emulab-enet.pl $(SYSETCDIR)/xen/scripts/
@@ -399,12 +426,7 @@ xen-install:	dir-install xen-udev-install xen-upstart-install
 	$(INSTALL) -m 755 $(SRCDIR)/xen/gc-xen-images $(BINDIR)/
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(BINDIR)/grub
 	$(INSTALL) -m 755 $(SRCDIR)/xen/pygrub $(BINDIR)/
-	@if [ ! -e "/usr/lib/xen-default" -a -d "/usr/lib/xen-4.5" ]; then \
-	    ln -sf xen-4.5 /usr/lib/xen-default; \
-	fi
-	@if [ ! -e "/usr/lib/xen-default" -a -d "/usr/lib/xen-4.4" ]; then \
-	    ln -sf xen-4.4 /usr/lib/xen-default; \
-	fi
+	ln -sf xen-$(XENVERS) /usr/lib/xen-default
 	$(INSTALL) -m 755 $(SRCDIR)/xen/GrubConf.py \
 		/usr/lib/xen-default/lib/python/grub/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/topd $(BINDIR)/
@@ -439,3 +461,35 @@ openvz-guest-pack: $(OPENVZGUEST_TEMPLATE)
 	@if [ -e "$(OPENVZGUEST)" ]; then \
 		cp -fp $(OPENVZGUEST_TEMPLATE) $(OPENVZGUEST); \
 	fi
+
+docker-install:	dir-install
+	$(INSTALL) -m 755 $(SRCDIR)/../common/vnodesetup $(BINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/../common/mkvnode.pl $(BINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/../common/libutil.pm $(BINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/../common/bootvnodes $(BINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/libvnode.pm $(BINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/docker/libvnode_docker.pm $(BINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/docker/dockerclient.pm $(BINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/docker/dockerclient-cli $(BINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/docker/container2pty.py $(BINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/docker/create-docker-image $(LBINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/docker/emulabize-image $(LBINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/vnodectl $(BINDIR)/
+	# Note that we install this, but do not enable it.  It is dynamically
+	# started and stopped as needed by libvnode_docker.pm .
+	$(INSTALL) -m 644 -o root -g $(DIRGROUP) \
+		$(SRCDIR)/docker/sshd-docker-exec.service \
+		$(SYSETCDIR)/systemd/system
+	echo "docker" > $(ETCDIR)/genvmtype
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(ETCDIR)/docker
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(ETCDIR)/docker/scripts
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(ETCDIR)/docker/container-utils
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(ETCDIR)/docker/dockerfiles
+	rsync -a --delete $(SRCDIR)/docker/scripts/ $(ETCDIR)/docker/scripts/
+	rsync -a --delete $(SRCDIR)/docker/container-utils/ $(ETCDIR)/docker/container-utils/
+	rsync -a --delete $(SRCDIR)/docker/dockerfiles/ $(ETCDIR)/docker/dockerfiles/
+#	$(INSTALL) -m 755 $(SRCDIR)/docker/analyze.sh $(ETCDIR)/docker/
+#	$(INSTALL) -m 755 $(SRCDIR)/docker/analyze-image.sh $(ETCDIR)/docker/
+
+docker-guest-install:
+	$(INSTALL) -m 755 $(SRCDIR)/docker/prepare $(BINDIR)/prepare

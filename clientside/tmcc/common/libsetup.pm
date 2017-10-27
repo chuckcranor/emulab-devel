@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,8 +42,9 @@ use Exporter;
          getlinkdelayconfig getloadinfo getbootwhat getnodeattributes
 	 copyfilefromnfs getnodeuuid getarpinfo
 	 getstorageconfig getstoragediskinfo getimagesize
-         getmanifest fetchmanifestblobs runbootscript runhooks 
+         getrcmanifest fetchrcmanifestblobs runbootscript runhooks 
          build_fake_macs getenvvars getpnetnodeattrs
+         sortedlistallfilesindir sortedreadallfilesindir genhostslistfromtopo
 
 	 TBDebugTimeStamp TBDebugTimeStampWithDate
 	 TBDebugTimeStampsOn TBDebugTimeStampsOff
@@ -61,7 +62,7 @@ use Exporter;
 	 TMGATEDCONFIG TMSYNCSERVER TMKEYHASH TMNODEID TMNODEUUID TMEVENTKEY
 	 TMCREATOR TMSWAPPER TMFWCONFIG TMGENVNODECONFIG
 	 TMSTORAGEMAP TMDISKINFO TMEXTRAFS
-	 INXENVM INVZVM
+	 INXENVM INVZVM INDOCKERVM
        );
 
 # Must come after package declaration!
@@ -83,7 +84,7 @@ use librc;
 # IMPORTANT NOTE: if you change the version here, you must also change it
 # in clientside/lib/tmcd/tmcd.h!
 #
-sub TMCD_VERSION()	{ 40; };
+sub TMCD_VERSION()	{ 42; };
 libtmcc::configtmcc("version", TMCD_VERSION());
 
 # Control tmcc timeout.
@@ -561,6 +562,7 @@ sub setFSRVTYPE($) {
 #
 sub INXENVM()	{ return ($ingenvnode && GENVNODETYPE() eq "xen"); }
 sub INVZVM()	{ return ($ingenvnode && GENVNODETYPE() eq "openvz"); }
+sub INDOCKERVM(){ return ($ingenvnode && GENVNODETYPE() eq "docker"); }
 
 #
 # Reset to a moderately clean state.
@@ -803,40 +805,114 @@ sub donodeuuid()
     return 0;
 }
 
+sub rcordersort($$) {
+    my ($a,$b) = @_;
+    my $ca = substr($a,0,1);
+    my $cb = substr($b,0,1);
+    my $na = ($ca ge '0' && $ca le '9');
+    my $nb = ($cb ge '0' && $cb le '9');
+
+    if ($na && $nb) {
+	return int($a) <=> int($b);
+    }
+    elsif ($na && !$nb) {
+	return -1;
+    }
+    elsif (!$na && $nb) {
+	return 1;
+    }
+    else {
+	return $a cmp $b;
+    }
+}
+
+sub sortedlistallfilesindir($$;$) {
+    my ($dir,$rptr,$qualify) = @_;
+
+    my $DIRH;
+    my $rc = opendir($DIRH,$dir);
+    if (!$rc) {
+	return $rc;
+    }
+    my @files = grep { /^[^\.\#].*[^\~]$/ && -f "$dir/$_" } readdir($DIRH);
+    closedir($DIRH);
+    my @sfiles = sort rcordersort @files;
+    if (defined($qualify) && $qualify != 0) {
+	my @tfiles = ();
+	for my $file (@sfiles) {
+	    push(@tfiles,"$dir/$file");
+	}
+	@sfiles = @tfiles;
+    }
+    @$rptr = @sfiles;
+
+    return 0;
+}
+
+sub sortedreadallfilesindir($$) {
+    my ($dir,$rptr) = @_;
+
+    my @sfiles = ();
+    my $rc = sortedlistallfilesindir($dir,\@sfiles,1);
+    return $rc if ($rc);
+    for my $file (@sfiles) {
+	my $FH;
+	if (!open($FH,"$file")) {
+	    next;
+	}
+	my @lines = <$FH>;
+	close($FH);
+	push(@$rptr,@lines);
+    }
+
+    return 0;
+}
+
 #
 # Get the boot script manifest -- whether scripts are enabled, or hooked, and 
 # how and when they or their hooks run!
 #
-sub getmanifest($;$)
+sub getrcmanifest($;$)
 {
     my ($rptr,$nofetch) = @_;
-    my @tmccresults;
+    my @tmccresults = ();
     my %manifest = ();
+    my $retval = 0;
 
     print "Checking manifest...\n";
 
     if (tmcc(TMCCCMD_MANIFEST, undef, \@tmccresults) < 0) {
 	warn("*** WARNING: Could not get manifest from server!\n");
 	%$rptr = ();
-	return -1;
+	$retval = -1;
     }
+    # Always allow local manifests to be run, so add them into our results.
+    sortedreadallfilesindir("$DYNRUNDIR/rcmanifest.d",\@tmccresults);
+    sortedreadallfilesindir("$STATICRUNDIR/rcmanifest.d",\@tmccresults);
     if (@tmccresults == 0) {
 	%$rptr = ();
-	return 0;
+	return $retval;
     }
 
     my $servicepat = q(SERVICE NAME=([\w\.\-]+) ENV=(\w+) WHENCE=(\w+));
     $servicepat   .= q( ENABLED=(0|1) HOOKS_ENABLED=(0|1));
-    $servicepat   .= q( FATAL=(0|1) BLOBID=([\w\-]*));
+    $servicepat   .= q( FATAL=(0|1) (BLOBID)=([\w\-]*));
+    my $servicepatfile = q(SERVICE NAME=([\w\.\-]+) ENV=(\w+) WHENCE=(\w+));
+    $servicepatfile   .= q( ENABLED=(0|1) HOOKS_ENABLED=(0|1));
+    $servicepatfile   .= q( FATAL=(0|1) (FILE)=([^ ]*));
 
     my $hookpat = q(HOOK SERVICE=([\w\.\-]+) ENV=(\w+) WHENCE=(\w+));
     $hookpat   .= q( OP=(\w+) POINT=(\w+));
-    $hookpat   .= q( FATAL=(0|1) BLOBID=([\w\-]+));
+    $hookpat   .= q( FATAL=(0|1) (BLOBID)=([\w\-]+));
     $hookpat   .= q( ARGV="([^"]*)");
+    my $hookpatfile = q(HOOK SERVICE=([\w\.\-]+) ENV=(\w+) WHENCE=(\w+));
+    $hookpatfile   .= q( OP=(\w+) POINT=(\w+));
+    $hookpatfile   .= q( FATAL=(0|1) (FILE)=([^ ]+));
+    $hookpatfile   .= q( ARGV="([^"]*)");
 
     my @loadinforesults = ();
     if (tmcc(TMCCCMD_LOADINFO, undef, \@loadinforesults) < 0) {
-	warn("*** WARNING: getmanifest could not get loadinfo from server,\n".
+	warn("*** WARNING: getrcmanifest could not get loadinfo from server,\n".
 	     "             unsure if node is in MFS and reloading, continuing!\n");
     }
 
@@ -872,12 +948,16 @@ sub getmanifest($;$)
 	my $line = $tmccresults[$i];
 	my %service;
 
-	if ($line =~ /^$servicepat/) {
+	if ($line =~ /^$servicepat/ || $line =~ /^$servicepatfile/) {
 	    my %service = ( 'ENABLED' => $4,
 			    'HOOKS_ENABLED' => $5,
-			    'BLOBID' => $7,
+			    "$7" => $8,
 			    'WHENCE' => $3,
 			    'FATAL' => $6 );
+	    if (exists($service{'FILE'})) {
+		$service{'BLOBPATH'} = $service{'FILE'};
+	    }
+
 	    #
 	    # Filter the service part of the manifest so that only the 
 	    # settings that apply here are passed to scripts.
@@ -905,7 +985,7 @@ sub getmanifest($;$)
 		next;
 	    }
 	}
-	elsif ($line =~ /^$hookpat/) {
+	elsif ($line =~ /^$hookpat/ || $line =~ /^$hookpatfile/) {
 	    #
 	    # Filter the service part of the manifest so that only the 
 	    # settings that apply here are passed to scripts.
@@ -916,11 +996,14 @@ sub getmanifest($;$)
 		    $manifest{$1}{$hookstr} = [];
 		}
 
-		my $hook = { 'BLOBID' => $7,
+		my $hook = { "$7" => $8,
 			     'OP' => $4, 
 			     'WHENCE' => $3, 
 			     'FATAL' => $6, 
-			     'ARGV' => $8 };
+			     'ARGV' => $9 };
+		if (exists($hook->{'FILE'})) {
+		    $hook->{'BLOBPATH'} = $hook->{'FILE'};
+		}
 
 		$manifest{$1}{$hookstr}->[@{$manifest{$1}{$hookstr}}] = $hook;
 	    }
@@ -935,19 +1018,19 @@ sub getmanifest($;$)
 	}
     }
 
-    my $retval = 0;
+    $retval = 0;
 
     if (!defined($nofetch) || $nofetch != 1) {
 	print "Downloading any manifest blobs...\n";
 	%$rptr = %manifest;
-	$retval = fetchmanifestblobs($rptr,undef,'manifest');
+	$retval = fetchrcmanifestblobs($rptr,undef,'manifest');
     }
 
     %$rptr = %manifest;
     return $retval;
 }
 
-sub fetchmanifestblobs($;$$)
+sub fetchrcmanifestblobs($;$$)
 {
     my ($manifest,$savedir,$basename) = @_;
     if (!defined($savedir)) {
@@ -968,7 +1051,7 @@ sub fetchmanifestblobs($;$$)
 	    $retval = libtmcc::blob::getblob($manifest->{$script}{'BLOBID'},
 					     $bpath);
 	    if ($retval == -1) {
-		print STDERR "ERROR(fetchmanifestblobs): could not fetch " . 
+		print STDERR "ERROR(fetchrcmanifestblobs): could not fetch " . 
 		    $manifest->{$script}{'BLOBID'} . "!\n";
 		++$failed;
 	    }
@@ -982,13 +1065,14 @@ sub fetchmanifestblobs($;$$)
 	my @hooktypes = ('_PREHOOKS','_POSTHOOKS');
 	foreach my $hooktype (@hooktypes) {
 	    next 
-		if (!exists($manifest->{$script}{$hooktype}));
+		if (!exists($manifest->{$script}{$hooktype})
+		    || !exists($manifest->{$script}{'BLOBID'}));
 
 	    foreach my $hook (@{$manifest->{$script}{$hooktype}}) {
 		my $bpath = $blobpath . "." . $hook->{'BLOBID'};
 		$retval = libtmcc::blob::getblob($hook->{'BLOBID'},$bpath);
 		if ($retval == -1) {
-		    print STDERR "ERROR(fetchmanifestblobs): could not fetch " . 
+		    print STDERR "ERROR(fetchrcmanifestblobs): could not fetch " . 
 			$hook->{'BLOBID'} . "!\n";
 		    ++$failed;
 		}
@@ -1023,6 +1107,13 @@ sub runhooks($$$$)
 
 	for (my $i = 0; $i < @{$manifest->{$script}{$hookstr}}; ++$i) {
 	    my $hook = $manifest->{$script}{$hookstr}->[$i];
+
+	    if (!exists($hook->{'BLOBID'}) && exists($hook->{'BLOBPATH'})) {
+		# This is a local manifest hook; turn the path into an ID.
+		$hook->{'BLOBID'} = $hook->{'BLOBPATH'};
+		$hook->{'BLOBID'} =~ tr/\//_/;
+	    }
+
 	    my $blobid = $hook->{'BLOBID'};
 	    my $argv = $hook->{'ARGV'};
 	    my $hookrunfile = "$VARDIR/db/$script.${which}hook.$blobid.run";
@@ -1140,7 +1231,7 @@ sub runbootscript($$$$;@)
 	else {
 	    $argv .= " $what";
 	}
-	if ($havemanifest && $manifest->{$script}{'BLOBID'} ne '') {
+	if ($havemanifest && $manifest->{$script}{'BLOBPATH'} ne '') {
 	    my $blobpath = $manifest->{$script}{'BLOBPATH'};
 	    print "  Running $blobpath (instead of $path/$script)\n";
 	    system("$blobpath $argv");
@@ -1155,6 +1246,10 @@ sub runbootscript($$$$;@)
 	    if (exists($manifest->{$script}) 
 		&& exists($manifest->{$script}{'FATAL'}) 
 		&& $manifest->{$script}{'FATAL'} == 1) {
+		fatal("  Failed running $script ($?)!");
+	    }
+	    # XXX failure of the firewall script is always fatal
+	    elsif ($script eq "rc.firewall") {
 		fatal("  Failed running $script ($?)!");
 	    }
 	    else {
@@ -1590,6 +1685,22 @@ sub genhostsfile($@)
 	return 1;
     }
 
+    #
+    # Read any hosts.head files.  We prefer /etc/hosts.head ; then
+    # $DYNRUNDIR/hosts.head ; then $STATICRUNDIR/hosts.head .  However,
+    # we'll take from all three places, so all three had better be
+    # correct!
+    #
+    my @hdirs = ("/etc",$DYNRUNDIR,$STATICRUNDIR);
+    foreach my $dir (@hdirs) {
+	next if (! -f "$dir/hosts.head");
+	if (!open(my $FH,"$dir/hosts.head") == 0) {
+	    my @lines = <$FH>;
+	    close($FH);
+	    print HOSTS @lines;
+	}
+    }
+
     my $localaliases = "loghost";
 
     #
@@ -1628,6 +1739,22 @@ sub genhostsfile($@)
 	    warn("Ignoring bad hosts line: $str");
 	}
     }
+
+    #
+    # Read any hosts.tail files.  We prefer /etc/hosts.tail ; then
+    # $DYNRUNDIR/hosts.tail ; then $STATICRUNDIR/hosts.tail .  However,
+    # we'll take from all three places, so all three had better be
+    # correct!
+    #
+    foreach my $dir (@hdirs) {
+	next if (! -f "$dir/hosts.tail");
+	if (!open(my $FH,"$dir/hosts.tail") == 0) {
+	    my @lines = <$FH>;
+	    close($FH);
+	    print HOSTS @lines;
+	}
+    }
+
     close(HOSTS);
     system("mv -f $HTEMP $pathname");
     if ($?) {
@@ -1635,6 +1762,109 @@ sub genhostsfile($@)
 	return 1;
     }
 
+    return 0;
+}
+
+#
+# Generate hosts list (as if it came from tmcd) locally if we have a topo file.
+# You want to run the above genhostsfile on the result array of this, as
+# rc.hostnames does.
+#
+sub genhostslistfromtopo($$)
+{
+    my ($mapfile,$rptr)	= @_;
+    my @results = ();
+    my $topomap;
+    my ($pid, $eid, $vname) = check_nickname();
+    my %nodes = ();
+    my %lans  = ();;
+
+    if (gettopomap(\$topomap)) {
+	return -1;
+    }
+
+    # Special case of experiment with no lans; no hostfile stuff needed.
+    if (! scalar(@{ $topomap->{"lans"} })) {
+	@$rptr = ();
+	return 0;
+    }
+
+    # The nodes section tells us the name of each node, and all its links.
+    foreach my $noderef (@{ $topomap->{"nodes"} }) {
+	my $vname  = $noderef->{"vname"};
+	my $links  = $noderef->{"links"};
+	my $count  = 0;
+
+	next
+	    if (!defined($links));
+
+	$nodes{$vname} = [];
+
+	# Links is a string of "$lan1:$ip1 $lan2:$ip2 ..."
+	foreach my $link (split(" ", $links)) {
+	    my ($lan,$ip) = split(":", $link);
+
+	    push(@{ $nodes{$vname} }, "$count:$ip");
+	    $lans{"$vname:$count"} = $lan;
+	    $count++;
+	}
+    }
+
+    #
+    # Construct input for external program. 
+    #
+    if (! open(MAP, ">$mapfile")) {
+	warn("*** WARNING: Could not create $mapfile!\n");
+	@$rptr  = ();
+	return -1;
+    }
+
+    #
+    # First spit out virt_nodes
+    #
+    print MAP scalar(keys(%nodes)) . "\n";
+
+    foreach my $node (keys(%nodes)) {
+	my @members = @{ $nodes{$node} };
+
+	print MAP "$node,";
+	print MAP join(" ", @members);
+	print MAP "\n";
+    }
+    #
+    # Then spit out virt_lans.
+    # 
+    print MAP scalar(keys(%lans)) . "\n";
+
+    foreach my $member (keys(%lans)) {
+	my $lan = $lans{$member};
+
+	print MAP "$lan,$member\n";
+    }
+    close(MAP);
+
+    #
+    # Now run the dijkstra program on the input. 
+    # 
+    if (!open(GENH, "cat $mapfile | $BINDIR/genhostsfile $vname |")) {
+	warn("*** WARNING: Could not invoke genhostsfile on mapfile!\n");
+	@$rptr  = ();
+	return -1;
+    }
+    while (<GENH>) {
+	push(@results, $_);
+    }
+    if (! close(GENH)) {
+	if ($?) {
+	    warn("*** WARNING: genhostsfile exited with status $?!\n");
+	}
+	else {
+	    warn("*** WARNING: Error closing genhostsfile pipe: $!\n");
+	}
+	@$rptr  = ();
+	return -1;
+    }
+    @$rptr = @results;
     return 0;
 }
 
@@ -3012,7 +3242,7 @@ sub getgenvnodeconfig($)
 sub genvnodesetup($;$$)
 {
     my ($vid) = @_;
-    my $issharedhost = SHAREDHOST();
+    my $issharedhost = (SHAREDHOST() || STORAGEHOST());
 
     #
     # Set global vnodeid for tmcc commands.
@@ -3082,10 +3312,8 @@ sub genvnodesetup($;$$)
     }
 
     #
-    # Tell libtmcc to get the full config for the jail. At the moment
-    # we do not use SFS inside jails, so okay to do this now (usually
-    # have to call initsfs() first). The full config will be copied
-    # to the proper location inside the jail by mkjail.
+    # Tell libtmcc to get the full config for the jail. The full config
+    # will be copied to the proper location inside the jail by mkjail.
     #
     tmccclrconfig()
 	if ($issharedhost);
@@ -3315,6 +3543,40 @@ sub getenvvars($)
 }
 
 #
+# Return the service info in a key/value array.
+#
+sub getserviceinfo($)
+{
+    my ($rptr) = @_;
+    my @tmccresults = ();
+    my %result = ();
+    my $issharedhost = SHAREDHOST();
+
+    my %tmccopts = ();
+    if ($issharedhost) {
+	$tmccopts{"nocache"} = 1;
+    }
+
+    if (tmcc(TMCCCMD_SERVINCEINFO, undef, \@tmccresults, %tmccopts) < 0) {
+	warn("*** WARNING: Could not get service info from server!\n");
+	%$rptr = ();
+	return -1;
+    }
+
+    foreach my $line (@tmccresults) {
+	foreach my $token (split(/\s+/, $line)) {
+	    if ($token =~ /^(.*)="(.*)"$/ ||
+		$token =~ /^(.*)=(.+)$/) {
+		$result{$1} = $2;
+	    }
+	}
+    }
+
+    %$rptr = %result;
+    return 0;
+}
+
+#
 # Return the hostname or IP to use for a local event server.
 # Defaults to "localhost" for most nodes or the physical host IP for Xen VMs.
 # The value can be overridden on a per-host basis via a local file.
@@ -3482,7 +3744,7 @@ sub getarpinfo($;$)
 #
 # SLICE format:
 #
-# CMD=SLICE IDX=<index> CLASS=local PROTO=<SAS|SCSI|SATA> \
+# CMD=SLICE IDX=<index> CLASS=local PROTO=<SAS|SCSI|SATA|NVMe> \
 #   BSID=<local-disk-id> VOLNAME=<id> VOLSIZE=<size-in-MiB> MOUNTPOINT=<dir>
 #
 # Where:
@@ -3526,9 +3788,9 @@ sub getstorageconfig($;$) {
 	'CLASS'	  => '(SAN|local)',
 	'HOSTID'  => '[-\w\.]+',
 	'MOUNTPOINT' => '\/[-\w\/\.]+',
-	'PERMS'	  => '(RO|RW)',
+	'PERMS'	  => '(RO|RW|CLONE)',
 	'PERSIST' => '(0|1)',
-	'PROTO'	  => '(iSCSI|local|SCSI|SAS|SATA|PATA|IDE)',
+	'PROTO'	  => '(iSCSI|local|SCSI|SAS|SATA|PATA|IDE|NVMe)',
 	'UUID'	  => '[-\w\.:]+',
 	'UUID_TYPE'=> '(iqn|serial)',
 	'VOLNAME' => '[-\w]+',
@@ -3559,9 +3821,13 @@ sub getstorageconfig($;$) {
 	    #
 	    # Validate the info and untaint.
 	    #
+	    # Ignore unknown keywords (for compat), fail on unknown values.
+	    # XXX we could also ignore unknown values, but that might leave
+	    # us with an undefined/unexpected/undesirable default value.
+	    #
 	    if (!exists($fields{$key})) {
-		warn("*** WARNING: invalid keyword in storageinfo: '$key'\n");
-		return -1;
+		warn("*** WARNING: invalid keyword '$key' in storageinfo ignored\n");
+		next;
 	    }
 	    if ($val !~ /^$fields{$key}$/) {
 		warn("*** WARNING: invalid value for $key in storageinfo: '$val'\n");

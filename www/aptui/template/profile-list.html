@@ -5,7 +5,7 @@
     <thead>
       <tr>
 	<th>Name</th>
-	<th>&nbsp</th>
+	<th class="sorter-false">&nbsp</th>
 	<% if (showCreator) { %>
 	  <th>Creator</th>
 	<% } %>
@@ -21,10 +21,24 @@
     <tbody>
       <% _.each(profiles, function(value, name) { %>
 	<tr>
-	  <td style='text-align:center'><%= value.link %></td>
-	  <td style='text-align:center'>
-            <button class='btn btn-primary btn-xs showtopo_modal_button'
-                    data-profile=<%= value.profile_uuid %>>Topo</button></td>
+	  <td><%= value.link %></td>
+	  <td style='white-space: nowrap;'>
+            <a href="instantiate.php?profile=<%- value.profile_uuid %>"
+	      <span class='glyphicon glyphicon-play'
+		    data-toggle='tooltip'
+		    data-container="body"
+		    data-trigger="hover"
+		    title='Instantiate this profile'></span>
+	    </a>
+	    <a class='showtopo_modal_button'
+               data-profile=<%= value.profile_uuid %>>	    
+	      <span class='glyphicon glyphicon-modal-window'
+		    data-toggle='tooltip'
+		    data-container="body"
+		    data-trigger="hover"
+		    title='Show topology'></span>
+	    </a>
+	  </td>
 	  <% if (showCreator) { %>
 	    <td><%= value.creator %></td>
 	  <% } %>

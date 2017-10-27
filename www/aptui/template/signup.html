@@ -5,8 +5,15 @@
        col-xs-12'>
     <div class='panel panel-default'>
       <div class='panel-heading'>
+	<% if (window.ISCLOUD) { %>
+	  <span class="pull-right">
+	    Please see our
+	    <a href="http://www.cloudlab.us/aup.php" target="_blank">
+	      Acceptable Use Policy</a>
+	  </span>
+	<% } %>
         <h3 class='panel-title' id='signup_panel_title'>
-	  <%- button_label %>
+	  <%- pagetitle %>
 	</h3>
       </div>
       <div class='panel-body'>

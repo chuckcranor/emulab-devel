@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2016 University of Utah and the Flux Group.
+# Copyright (c) 2010-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -35,7 +35,7 @@ use vars qw(@ISA @EXPORT);
 
 @ISA = "Exporter";
 @EXPORT = qw(Parse ParseFile GetXmlVersion IsVersion0 FindNodes FindNodesNS
-FindFirst FindElement FindAttr GetNodeByVirtualId GetLinkByVirtualId
+FindFirst FindFirstNS FindElement FindAttr GetNodeByVirtualId GetLinkByVirtualId
 IsLanNode IsLocalNode IsTunnel GetExpires GetBandwidth GetIp GetVnodeId
 GetNodeId GetVirtualId GetInterfaceId GetInterfaceNodeId GetSliverId
 GetManagerId GetColocate GetSubnodeOf GetStartupCommand GetTarball
@@ -154,10 +154,23 @@ sub GetXmlVersion($)
 
 sub IsVersion0($)
 {
+    my ($node) = @_;
+    
+    #
+    # Yuck, we call this all over the place, but if the thing we call
+    # it on (say, an emulab:vhost) is in its own namespace, then the
+    # test above in GetXmlVersion makes no sense and fails.
+    #
+    my $ns = $node->namespaceURI();
+    return 0
+	if (defined($ns) &&
+	    $ns !~ /protogeni.net\/resources\/rspec\/[\d\.]+$/);
+    
     my $version = GetXmlVersion($_[0]);
     return defined($version)
 	&& ($version eq $RSPEC_0_1 || $version eq $RSPEC_0_2);
 }
+
 
 # Returns a NodeList for a given XPath using a given node as
 # context. 'n' is defined to be the prefix for the namespace of the
@@ -237,6 +250,13 @@ sub FindFirst($$)
     return FindNodes($path, $node)->pop();
 }
 
+# Returns the first Node which matches a given XPath.
+sub FindFirstNS($$$)
+{
+    my ($path, $node, $ns) = @_;
+    return FindNodesNS($path, $node, $ns)->pop();
+}
+
 # Returns the first Element which matches a given XPath.
 sub FindElement($$)
 {
@@ -280,6 +300,14 @@ sub GetNodeByVirtualId($$)
 {
     my ($name, $node) = @_;
     return GetElementByVirtualId($name, 'node', $node);
+}
+
+sub GetVhostByVirtualId($$)
+{
+    my ($name, $node) = @_;
+
+    return FindNodesNS('n:vhost[@client_id = "'.$name.'"]',
+		       $node, $EMULAB_NS)->pop();
 }
 
 sub GetLinkByVirtualId($$)
@@ -580,7 +608,24 @@ sub GetSubnodeOf($)
     } else {
 	my @relations = FindNodes("n:relation", $node)->get_nodelist();
 	foreach my $current (@relations) {
-	    if (GetText("type", $current) == "subnode_of") {
+	    if (GetText("type", $current) eq "subnode_of") {
+		$result = GetText("client_id", $current);
+		last;
+	    }
+	}
+    }
+    return $result;
+}
+sub GetInstantiateOn($)
+{
+    my ($node) = @_;
+    my $result = undef;
+    if (IsVersion0($node)) {
+	$result = GetText("instantiate_on", $node);
+    } else {
+	my @relations = FindNodes("n:relation", $node)->get_nodelist();
+	foreach my $current (@relations) {
+	    if (GetText("type", $current) eq "instantiate_on") {
 		$result = GetText("client_id", $current);
 		last;
 	    }
@@ -619,6 +664,37 @@ sub GetServices($)
 	    else {
 		next;
 	    }
+	    push(@result, $item);
+	}
+    }
+    return @result;
+}
+
+#
+# Program agents are also in the services element, but they are in the
+# Emulab name space.
+#
+sub GetProgramAgents($)
+{
+    my ($node) = @_;
+    my @result = ();
+    my @services = FindNodes("n:services", $node)->get_nodelist();
+
+    foreach my $service (@services) {
+	my @agents = FindNodesNS("n:program-agent",
+				 $service, $EMULAB_NS)->get_nodelist();
+	foreach my $agent (@agents) {
+	    my $name       = GetText("name", $agent);
+	    my $command    = GetText("command", $agent);
+	    my $directory  = GetText("directory", $agent);
+	    my $start      = GetText("onexpstart", $agent);
+
+	    my $item = {"name"       => $name,
+			"command"    => $command,
+			"dir"        => $directory,
+			"onexpstart" => (defined($start) &&
+					 lc("$start") eq "true" ? 1 : 0),
+	    };
 	    push(@result, $item);
 	}
     }
@@ -673,6 +749,42 @@ sub GetStartupCommand($)
 	}
     }
     return $result;
+}
+
+#
+# Get root ssh key directive. Returns a list (pub,priv) booleans.
+#
+sub GetRootKey($)
+{
+    my ($node) = @_;
+    my $keyref = GeniXML::FindNodesNS("n:rootkey", $node,
+				      $EMULAB_NS)->pop();
+    return (undef,undef)
+	if (!defined($keyref));
+    
+    my $priv = GetText("private", $keyref);
+    if (defined($priv)) {
+	$priv = (lc("$priv") eq "true" ? 1 : 0);
+    }
+    my $pub  = GetText("public", $keyref);
+    if (defined($pub)) {
+	$pub = (lc("$pub") eq "true" ? 1 : 0);
+    }
+    return ($pub,$priv);
+}
+
+#
+# Are keys disabled at top level.
+#
+sub DisableRootKey($)
+{
+    my ($rspec) = @_;
+    my $keyref = GeniXML::FindNodesNS("n:disablerootkey", $rspec,
+				      $EMULAB_NS)->pop();
+    return 0
+	if (!defined($keyref));
+
+    return 1;
 }
 
 sub GetTarball($)
@@ -740,6 +852,20 @@ sub GetVirtualizationSubtype($)
 	my $type = FindFirst("n:sliver_type", $node);
 	if (defined($type)) {
 	    $result = GetText("name", $type);
+	}
+    }
+    return $result;
+}
+
+sub IsAvailable($)
+{
+    my ($node) = @_;
+    my $result = 0;
+    my $available = FindFirst("n:available", $node);
+    if (defined($available)) {
+	my $now = GetText("now", $available);
+	if (defined($now) && lc($now) eq "true") {
+	    $result = 1;
 	}
     }
     return $result;
@@ -881,6 +1007,19 @@ sub HasXenSettings($)
     return 0;
 }
 
+sub UseTypeDefaultImage($)
+{
+    my ($node) = @_;
+    my $result = 0;
+    my @foo    = FindNodesNS("n:use_type_default_image", $node,
+			     $EMULAB_NS)->get_nodelist();
+    if (scalar(@foo) > 0) {
+	my $enabled = GetText("enabled", $foo[0]);
+	$result = defined($enabled) && $enabled eq "true";
+    }
+    return $result;
+}
+
 sub XenPtype($)
 {
     my ($node) = @_;
@@ -1013,6 +1152,35 @@ sub GetElabInElabSettings($)
     return $result;
 }
 
+#
+# Experiment firewalls are different then node firewalls
+#
+sub GetExperimentFirewallSettings($)
+{
+    my ($node) = @_;
+    my $style  = "basic";
+    my @rules  = ();
+
+    my $type = FindFirst("n:sliver_type", $node);
+    return undef
+	if (!defined($type));
+    
+    my $settings = FindNodesNS("n:firewall_config", $type, $EMULAB_NS)->pop();
+    return undef
+	if (!defined($settings));
+    
+    my $tmp = GetText("style", $settings);
+    $style = $tmp
+	if (defined($tmp));
+
+    foreach my $ruleref (FindNodesNS("n:rule", $settings,
+				     $EMULAB_NS)->get_nodelist()) {
+	my $rule = $ruleref->textContent();
+	push(@rules, $rule);
+    }
+    return { "style" => $style, "rules" => \@rules };
+}
+
 sub HasFirewallSettings($)
 {
     my ($node) = @_;
@@ -1092,6 +1260,22 @@ sub HasBestEffortSetting($)
     my @tagged = FindNodesNS("n:best_effort", $link,
 			     $EMULAB_NS)->get_nodelist();
     return scalar(@tagged);
+}
+
+sub HasForceShapingSetting($)
+{
+    my ($link) = @_;
+    my @foo = FindNodesNS("n:force_shaping", $link,
+			  $EMULAB_NS)->get_nodelist();
+    return scalar(@foo);
+}
+
+sub HasNoBandwidthShapingSetting($)
+{
+    my ($link) = @_;
+    my @foo = FindNodesNS("n:force_nobwshaping", $link,
+			  $EMULAB_NS)->get_nodelist();
+    return scalar(@foo);
 }
 
 sub HasTrivialSetting($)
@@ -1182,6 +1366,28 @@ sub GetAddressPools($)
 		 "type" => $type,
 		 "cmurn" => $cmurn
 	     });
+    }
+    return $result;
+}
+
+sub RoutingStyle($)
+{
+    my ($rspec) = @_;
+    my $result  = undef;
+    my $element = FindNodesNS("n:routing_style", $rspec, $EMULAB_NS)->pop();
+    if (defined($element)) {
+	$result = GetText("style", $element);
+    }
+    return $result;
+}
+
+sub DelayImage($)
+{
+    my ($rspec) = @_;
+    my $result  = undef;
+    my $element = FindNodesNS("n:delay_image", $rspec, $EMULAB_NS)->pop();
+    if (defined($element)) {
+	$result = GetText("urn", $element);
     }
     return $result;
 }
@@ -1494,6 +1700,33 @@ sub GetProfileParameters($)
 	    "name" => $name,
 	    "value" => $value
 	      } );
+    }
+    return $result;
+}
+
+sub HasRepositories($)
+{
+    my ($rspec) = @_;
+    
+    return FindNodesNS("n:repository", $rspec, $EMULAB_NS)->pop();
+}
+
+sub GetRepositories($)
+{
+    my ($rspec) = @_;
+    my $result = [];
+    
+    foreach my $repo (FindNodesNS("n:repository", $rspec,
+				  $EMULAB_NS)->get_nodelist()) {
+	my $type    = GetText("type", $repo);
+	my $url     = GetText("url", $repo);
+	my $refspec = GetText("refspec", $repo);
+	my $commit  = GetText("commit", $repo);
+	
+	push(@{ $result }, { "type"     => $type,
+			     "url "     => $url,
+			     "refspec " => $refspec,
+			     "commit"   => $commit});
     }
     return $result;
 }

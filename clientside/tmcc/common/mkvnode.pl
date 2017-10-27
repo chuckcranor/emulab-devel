@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2009-2015 University of Utah and the Flux Group.
+# Copyright (c) 2009-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -84,10 +84,16 @@ use libvnode;
 
 # Helpers
 sub MyFatal($);
-sub safeLibOp($$$;@);
+sub hasLibOp($);
+sub safeLibOp($$$$;@);
+sub blockOurSignals($);
+sub unblockOurSignals($);
 sub CleanupVM();
 sub TearDownStaleVM();
 sub StoreState();
+sub ReadState();
+sub BackendVnodePoll();
+sub DefaultVnodePoll();
 
 # Locals
 my $CTRLIPFILE = "/var/emulab/boot/myip";
@@ -100,6 +106,7 @@ my $rebooting  = 0;
 my $reload     = 0;
 my ($vmid,$vmtype,$ret,$err);
 my $ISXENVM    = (GENVNODETYPE() eq "xen" ? 1 : 0);
+my $ISDOCKERVM = (GENVNODETYPE() eq "docker" ? 1 : 0);
 
 # Flags for leaveme.
 my $LEAVEME_REBOOT = 0x1;
@@ -223,7 +230,7 @@ foreach my $type (@nodetypes) {
     }
     $libops{$type}{'init'}->();
 
-    # need to do this for each type encountered. 
+    # need to do this for each type encountered.
     TBDebugTimeStampWithDate("starting $type rootPreConfig()");
     $libops{$type}{'rootPreConfig'}->($BOSSIP);
     TBDebugTimeStampWithDate("finished $type rootPreConfig()");
@@ -263,7 +270,7 @@ if ($showstate) {
     # So the lib op works.
     $vnstate = $tmp;
 
-    ($ret,$err) = safeLibOp('vnodeState', 1, 0);
+    ($ret,$err) = safeLibOp('vnodeState', 1, 0, 1);
     if ($err) {
 	fatal("Failed to get status for existing container: $err");
     }
@@ -547,7 +554,7 @@ if (-e "$VNDIR/vnode.info") {
 		$vnstate->{'private'} = $tmp->{'private'};
 	    }
 	}
-	($ret,$err) = safeLibOp('vnodeState', 1, 0);
+	($ret,$err) = safeLibOp('vnodeState', 1, 0, 1);
 	if ($err) {
 	    fatal("Failed to get status for existing container: $err");
 	}
@@ -626,9 +633,16 @@ if (! -e "$VNDIR/vnode.info") {
     #
     $vmtype = GENVNODETYPE();
 
-    ($ret,$err) = safeLibOp('vnodeCreate',0,0);
+    #
+    # Manually block signals for vnodeCreate, because we are vulnerable
+    # to a race after we successfully create a vnode, until we have
+    # written the vnode.info, $vnodeid files, and our state.
+    #
+    my $sigset;
+    blockOurSignals(\$sigset);
+    ($ret,$err) = safeLibOp('vnodeCreate',0,0,1);
     if ($err) {
-	MyFatal("vnodeCreate failed");
+	MyFatal("vnodeCreate failed: $err");
     }
     $vmid = $ret;
 
@@ -637,6 +651,14 @@ if (! -e "$VNDIR/vnode.info") {
 
     # bootvnodes wants this to be here...
     mysystem("mkdir -p /var/emulab/jails/$vnodeid");
+
+    # Store the state to disk.
+    if (StoreState()) {
+	MyFatal("Could not store container state to disk");
+    }
+
+    # Ok, now safe to unblock our signals; we're consistent.
+    unblockOurSignals($sigset);
 }
 else {
     #
@@ -653,6 +675,8 @@ else {
 	        if (exists($tmp->{'os'}));
 	    $vnstate->{'private'}->{'rootpartition'} = $tmp->{'rootpartition'}
 	        if (exists($tmp->{'rootpartition'}));
+	    $vnstate->{'private'}->{'ishvm'} = $tmp->{'ishvm'}
+	        if (exists($tmp->{'ishvm'}));
 	}
     }
 }
@@ -665,6 +689,8 @@ $vnstate->{'os'} = $vnstate->{'private'}->{'os'}
     if (exists($vnstate->{'private'}->{'os'}));
 $vnstate->{'rootpartition'} = $vnstate->{'private'}->{'rootpartition'}
     if (exists($vnstate->{'private'}->{'rootpartition'}));
+$vnstate->{'ishvm'} = $vnstate->{'private'}->{'ishvm'}
+    if (exists($vnstate->{'private'}->{'ishvm'}));
 
 # Store the state to disk.
 if (StoreState()) {
@@ -697,12 +723,11 @@ sub callback($)
 	my $sshdport = VNCONFIG('SSHDPORT');
 
 	mysystem2("echo '# EmulabJail' >> $path/etc/ssh/sshd_config");
-	mysystem2("echo '# DO NOT MAKE ANY CHANGES BELOW THIS LINE!' ".
-		  "      >> $path/etc/ssh/sshd_config");
 	mysystem2("echo 'Port $sshdport' >> $path/etc/ssh/sshd_config");
 	if (VNCONFIG('CTRLIP') ne $ext_ctrlip) {
 	    mysystem2("echo 'Port 22' >> $path/etc/ssh/sshd_config");
 	}
+	mysystem2("echo '# EndEmulabJail' >> $path/etc/ssh/sshd_config");
     }
     # Localize the timezone.
     mysystem2("cp -fp /etc/localtime $path/etc");
@@ -711,12 +736,12 @@ sub callback($)
 }
 
 # OP: preconfig
-if (safeLibOp('vnodePreConfig', 1, 1, \&callback)) {
+if (safeLibOp('vnodePreConfig', 1, 1, 1, \&callback)) {
     MyFatal("vnodePreConfig failed");
 }
 
 # OP: control net preconfig
-if (safeLibOp('vnodePreConfigControlNetwork',1,1,
+if (safeLibOp('vnodePreConfigControlNetwork',1,1,1,
 	      VNCONFIG('CTRLIP'),
 	      VNCONFIG('CTRLMASK'),$cnet_mac,
 	      $ext_ctrlip,$vname,$longdomain,$DOMAINNAME,$BOSSIP)) {
@@ -724,20 +749,23 @@ if (safeLibOp('vnodePreConfigControlNetwork',1,1,
 }
 
 # OP: exp net preconfig
-if (safeLibOp('vnodePreConfigExpNetwork', 1, 1)) {
+if (safeLibOp('vnodePreConfigExpNetwork', 1, 1, 1)) {
     MyFatal("vnodePreConfigExpNetwork failed");
 }
-if (safeLibOp('vnodeConfigResources', 1, 1)) {
+if (safeLibOp('vnodeConfigResources', 1, 1, 1)) {
     MyFatal("vnodeConfigResources failed");
 }
-if (safeLibOp('vnodeConfigDevices', 1, 1)) {
+if (safeLibOp('vnodeConfigDevices', 1, 1, 1)) {
     MyFatal("vnodeConfigDevices failed");
 }
 
 #
 # Route to inner ssh, but not if the IP is routable, no need to.
+# We don't do this in this wrapper for Docker, because Docker handles it
+# differently.
 #
 if (defined(VNCONFIG('SSHDPORT')) && VNCONFIG('SSHDPORT') ne "" &&
+    !$ISDOCKERVM &&
     !isRoutable(VNCONFIG('CTRLIP'))) {
     my $ref = {};
     $ref->{'ext_ip'}   = $ext_ctrlip;
@@ -755,7 +783,14 @@ if (defined(VNCONFIG('SSHDPORT')) && VNCONFIG('SSHDPORT') ne "" &&
 # it running in its new context. Still, lets protect it with a timer
 # since it might get hung up inside and we do not want to get stuck here.
 #
+my $needschildmon;
 if (!$ISXENVM) {
+    $needschildmon = 1;
+}
+else {
+    $needschildmon = 0;
+}
+if ($needschildmon) {
     my $childpid = fork();
     if ($childpid) {
 	my $timedout = 0;
@@ -788,13 +823,24 @@ if (!$ISXENVM) {
 	    print STDERR "*** ERROR: vnodeBoot failed\n";
 	    exit(1);
 	}
+	# NB: store the state, so that vnodeBoot too has writable $private!
+	if (StoreState()) {
+	    MyFatal("Could not store container state to disk");
+	}
 	exit(0);
     }
 }
-elsif (safeLibOp('vnodeBoot', 1, 1)) {
+elsif (safeLibOp('vnodeBoot', 1, 1, 1)) {
     MyFatal("$vnodeid container startup failed.");
 }
-if (safeLibOp('vnodePostConfig', 1, 1)) {
+if ($needschildmon) {
+    # NB: before continuing, read the state stored in the child above
+    # after vnodeBoot!
+    if (ReadState()) {
+	MyFatal("Could not read container state from disk after vnodeBoot");
+    }
+}
+if (safeLibOp('vnodePostConfig', 1, 1, 1)) {
     MyFatal("vnodePostConfig failed");
 }
 # XXX: need to do this for each type encountered!
@@ -816,60 +862,131 @@ mysystem("touch $RUNNING_FILE");
 $running = 1;
 
 #
+# Poll as desired by the backend.  See comments below for
+# BackendVnodePoll() and DefaultVnodePoll().
+#
+if (hasLibOp("vnodePoll")) {
+    BackendVnodePoll();
+}
+else {
+    DefaultVnodePoll();
+}
+exit(CleanupVM());
+
+#
+# Invoke the backend to poll the vnode for status changes that mkvnode
+# should/must respond to.  This means that honoring the
+# vnodesetup/mkvnode semantics is now in the hands of the backend, if it
+# wants.  For instance, the backend can choose to allow this mkvnode
+# monitor to continue waiting even if the vnode is stopped for long
+# periods of time.
+#
+# (More recently, other backends (Docker) require that we catch VM state
+# transitions more frequently than this loop allows.  Note the special
+# case in the loop where there's a 15-second special case check to see
+# if a Xen VM was reoboted from the inside, and ends up restarting
+# successfully.  To handle these kinds of special cases, it's no problem
+# to allow backends to control the loop; if we are interrupted via
+# signal, and are supposed to be cleaning = 1 or whatever, we just don't
+# call vnodePoll again (and just call vnodeState a final couple times),
+# as in the original loop.  As long as backends don't override our
+# signal handlers, we're good to follow the original semantics of
+# vnodesetup/mkvnode.  We can also modify the semantics slightly,
+# i.e. to allow the mkvnode monitor to hang around even if the vnode is
+# down (like if the user manually invokes `docker stop`).
+#
+sub BackendVnodePoll()
+{
+    while (1) {
+	my ($status,$event) = ('','');
+
+	my $ret = eval {
+	    $libops{$vmtype}{'vnodePoll'}->($vnodeid, $vmid,
+					    \%vnconfig, $vnstate->{'private'},
+					    \$status,\$event);
+	};
+	my $err = $@;
+	if ($err) {
+	    fatal("*** ERROR: vnodePoll: $err\n");
+	    return (-1,$err);
+	}
+
+	if ($ret == libgenvnode::VNODE_POLL_STOP()) {
+	    TBDebugTimeStamp("vnodePoll told us to stop polling; cleaning up!");
+	    last;
+	}
+	elsif ($ret == libgenvnode::VNODE_POLL_ERROR()) {
+	    TBDebugTimeStamp("vnodePoll errored ($err); cleaning up!".
+			     " status=$status, event=$event");
+	    last;
+	}
+	else {
+	    TBDebugTimeStamp("vnodePoll told us to continue polling;".
+			     " status=$status, event=$event");
+	}
+    }
+}
+
+#
+# The default polling implementation.
+#
 # This loop is to catch when the container stops. We used to run a sleep
 # inside and wait for it to exit, but that is not portable across the
 # backends, and the return value did not indicate how it exited. So, lets
-# just loop, asking for the status every few seconds. 
+# just loop, asking for the status every few seconds.
 #
-# XXX Turn off debugging during this loop to keep the log file from growing.
-#
-TBDebugTimeStampsOff()
-    if ($debug);
+sub DefaultVnodePoll()
+{
+    # XXX Turn off debugging during this loop to keep the log file from
+    # growing.
+    TBDebugTimeStampsOff()
+	if ($debug);
 
-while (1) {
-    sleep(5);
+    while (1) {
+	sleep(5);
     
-    #
-    # If the container exits, either it rebooted from the inside or
-    # the physical node is rebooting, or we are actively trying to kill
-    # it cause our parent (vnodesetup) told us to. In all cases, we just
-    # exit and let the parent decide what to do. 
-    #
-    my ($ret,$err) = safeLibOp('vnodeState', 0, 0);
-    if ($err) {
-	fatal("*** ERROR: vnodeState: $err\n");
-    }
-    if ($ret ne VNODE_STATUS_RUNNING()) {
-	print "Container is no longer running.\n";
-	if (!$cleaning) {
-	    #
-	    # Rebooted from inside, but not cause we told it to, so
-	    # leave intact.
-	    #
-	    # But before we fold, lets wait a moment and check again
-	    # since in XEN, the user can type reboot, which causes the
-	    # domain to disappear for a while. We do not want to be
-	    # fooled by that. Halt is another issue; if the user halts
-	    # from inside the container it is never coming back and the 
-	    # user has screwed himself. Need to restart from the frontend.
-	    #
-	    sleep(15);
-	    ($ret,$err) = safeLibOp('vnodeState', 0, 0);
-	    if ($err) {
-		fatal("*** ERROR: vnodeState: $err\n");
-	    }
-	    if ($ret eq VNODE_STATUS_RUNNING()) {
-		print "Container has restarted itself.\n";
-		next;
-	    }
-	    $leaveme = $LEAVEME_REBOOT;
+	#
+	# If the container exits, either it rebooted from the inside or
+	# the physical node is rebooting, or we are actively trying to kill
+	# it cause our parent (vnodesetup) told us to. In all cases, we just
+	# exit and let the parent decide what to do. 
+	#
+	my ($ret,$err) = safeLibOp('vnodeState', 0, 0, 1);
+	if ($err) {
+	    fatal("*** ERROR: vnodeState: $err\n");
 	}
-	last;
+	if ($ret ne VNODE_STATUS_RUNNING()) {
+	    print "Container is no longer running.\n";
+	    if (!$cleaning) {
+		#
+		# Rebooted from inside, but not cause we told it to, so
+		# leave intact.
+		#
+		# But before we fold, lets wait a moment and check again
+		# since in XEN, the user can type reboot, which causes the
+		# domain to disappear for a while. We do not want to be
+		# fooled by that. Halt is another issue; if the user halts
+		# from inside the container it is never coming back and the 
+		# user has screwed himself. Need to restart from the frontend.
+		#
+		sleep(15);
+		($ret,$err) = safeLibOp('vnodeState', 0, 0, 1);
+		if ($err) {
+		    fatal("*** ERROR: vnodeState: $err\n");
+		}
+		if ($ret eq VNODE_STATUS_RUNNING()) {
+		    print "Container has restarted itself.\n";
+		    next;
+		}
+		$leaveme = $LEAVEME_REBOOT;
+	    }
+	    last;
+	}
     }
+
+    TBDebugTimeStampsOn()
+	if ($debug);
 }
-TBDebugTimeStampsOn()
-    if ($debug);
-exit(CleanupVM());
 
 #
 # Teardown a container. This should not be used if the mkvnode process
@@ -971,8 +1088,13 @@ sub CleanupVM()
 	}
     }
 
+    # If we might have been polling, make sure that is cleaned up.
+    if (hasLibOp("vnodePollCleanup")) {
+	safeLibOp("vnodePollCleanup",1,0,1);
+    }
+
     # if not halted, try that first
-    my ($ret,$err) = safeLibOp('vnodeState', 1, 0);
+    my ($ret,$err) = safeLibOp('vnodeState', 1, 0, 1);
     if ($err) {
 	print STDERR "*** ERROR: vnodeState: ".
 	    "failed to cleanup $vnodeid: $err\n";
@@ -980,7 +1102,7 @@ sub CleanupVM()
     }
     if ($ret eq VNODE_STATUS_RUNNING()) {
 	print STDERR "cleanup: $vnodeid not stopped, trying to halt it.\n";
-	($ret,$err) = safeLibOp('vnodeHalt', 1, 1);
+	($ret,$err) = safeLibOp('vnodeHalt', 1, 1, 1);
 	if ($err) {
 	    print STDERR "*** ERROR: vnodeHalt: ".
 		"failed to halt $vnodeid: $err\n";
@@ -989,7 +1111,7 @@ sub CleanupVM()
     }
     elsif ($ret eq VNODE_STATUS_MOUNTED()) {
 	print STDERR "cleanup: $vnodeid is mounted, trying to unmount it.\n";
-	($ret,$err) = safeLibOp('vnodeUnmount', 1, 1);
+	($ret,$err) = safeLibOp('vnodeUnmount', 1, 1, 1);
 	if ($err) {
 	    print STDERR "*** ERROR: vnodeUnmount: ".
 		"failed to unmount $vnodeid: $err\n";
@@ -1010,7 +1132,7 @@ sub CleanupVM()
 	    # down the transient state, but we do not handle that yet.
 	    # Not hard to add though.
 	    #
-	    ($ret,$err) = safeLibOp('vnodeTearDown', 1, 1);
+	    ($ret,$err) = safeLibOp('vnodeTearDown', 1, 1, 1);
 	    # Always store in case some progress was made. 
 	    StoreState();
 	    if ($err) {
@@ -1022,7 +1144,7 @@ sub CleanupVM()
     }
 
     # now destroy
-    ($ret,$err) = safeLibOp('vnodeDestroy', 1, 1);
+    ($ret,$err) = safeLibOp('vnodeDestroy', 1, 1, 1);
     if ($err) {
 	print STDERR "*** ERROR: failed to destroy $vnodeid: $err\n";
 	return -1;
@@ -1059,8 +1181,41 @@ sub MyFatal($)
 #
 # Helpers:
 #
-sub safeLibOp($$$;@) {
-    my ($op,$autolog,$autoerr,@args) = @_;
+sub hasLibOp($) {
+    my ($op,) = @_;
+
+    return 1
+	if (exists($libops{$vmtype}{$op}) && defined($libops{$vmtype}{$op}));
+
+    return 0;
+}
+
+sub blockOurSignals($) {
+    my ($old_sigset_ref,) = @_;
+
+    my $new_sigset = POSIX::SigSet->new(SIGHUP, SIGINT, SIGUSR1, SIGUSR2);
+    $$old_sigset_ref = POSIX::SigSet->new;
+    if (! defined(sigprocmask(SIG_BLOCK, $new_sigset, $$old_sigset_ref))) {
+	print STDERR "sigprocmask (BLOCK) failed!\n";
+	return -1;
+    }
+
+    return 0;
+}
+
+sub unblockOurSignals($) {
+    my ($old_sigset,) = @_;
+
+    if (! defined(sigprocmask(SIG_SETMASK, $old_sigset))) {
+	print STDERR "sigprocmask (UNBLOCK) failed!\n";
+	return -1;
+    }
+
+    return 0;
+}
+
+sub safeLibOp($$$$;@) {
+    my ($op,$autolog,$autoerr,$blocksigs,@args) = @_;
 
     my $sargs = '';
     if (@args > 0) {
@@ -1069,24 +1224,23 @@ sub safeLibOp($$$;@) {
     TBDebugTimeStampWithDate("starting $vmtype $op($sargs)")
 	if ($debug);
 
-    #
-    # Block signals that could kill us in the middle of a library call.
-    # Might be better to do this down in the library, but this is an
-    # easier place to do it. This ensure that if we have to tear down
-    # in the middle of setting up, the state is consistent. 
-    #
-    my $new_sigset = POSIX::SigSet->new(SIGHUP, SIGINT, SIGUSR1, SIGUSR2);
-    my $old_sigset = POSIX::SigSet->new;
-    if (! defined(sigprocmask(SIG_BLOCK, $new_sigset, $old_sigset))) {
-	print STDERR "sigprocmask (BLOCK) failed!\n";
+    my $old_sigset;
+    if ($blocksigs) {
+	#
+	# Block signals that could kill us in the middle of a library call.
+	# Might be better to do this down in the library, but this is an
+	# easier place to do it. This ensure that if we have to tear down
+	# in the middle of setting up, the state is consistent. 
+	#
+	blockOurSignals(\$old_sigset);
     }
     my $ret = eval {
 	$libops{$vmtype}{$op}->($vnodeid, $vmid,
 				\%vnconfig, $vnstate->{'private'}, @args);
     };
     my $err = $@;
-    if (! defined(sigprocmask(SIG_SETMASK, $old_sigset))) {
-	print STDERR "sigprocmask (UNBLOCK) failed!\n";
+    if ($blocksigs) {
+	unblockOurSignals($old_sigset);
     }
     if ($err) {
 	if ($autolog) {
@@ -1123,5 +1277,20 @@ sub StoreState()
 	print STDERR "$@";
 	return -1;
     }
+    return 0;
+}
+
+sub ReadState()
+{
+    # Read the state from disk.
+    print "Reading state from disk ...\n"
+	if ($debug);
+
+    my $ret = eval { $vnstate = Storable::retrieve("$VNDIR/vnode.state"); };
+    if ($@) {
+	print STDERR "$@";
+	return -1;
+    }
+
     return 0;
 }

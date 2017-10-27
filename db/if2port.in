@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -102,15 +102,16 @@ if (@ARGV < 1) {
 }
 
 while (my $arg = shift @ARGV) {
-	my ($node,$card) = split /:/,$arg;
+	my ($node,$iface) = split /:/,$arg;
 	&debug("Node is $node");
-	&debug("Card is $card") if (defined $card);
+	&debug("iface is $iface") if (defined $iface);
 
-	printf("\n%9s %5s%s%s %9s %5s %5s %5s %3s %7s %7s\n",
-	       "nodeid1", "card1",
+	printf("\n%9s %9s %5s%s%s %9s %9s %5s %5s %5s %3s %7s %7s\n",
+	       "nodeid1", "iface1", "card1",
 	       $opt{I} ? "              IP" : "",
 	       $opt{m} ? "          MAC" : "",
-	       "nodeid2", "card2", "port2", "cable", "len", "wtype", "ntype");
+	       "nodeid2", "iface2", "card2", "port2", "cable", "len", "wtype",
+	       "ntype");
 
 	my $query;
 	my $ix = 0;
@@ -124,18 +125,19 @@ while (my $arg = shift @ARGV) {
 		$query .= "i.mac,";
 		$ix++;
 	    }
-	    $query .= "w.node_id2,w.card2,w.port2,w.cable,w.len,w.type,n.type".
+	    $query .= "w.node_id2,w.card2,w.port2,w.cable,w.len,w.type,".
+		"  n.type,w.iface1,w.iface2 ".
 		" FROM wires AS w,nodes AS n,interfaces AS i".
-		" WHERE w.node_id1=n.node_id AND".
-		" w.node_id1=i.node_id AND w.card1=i.card";
+		" WHERE w.node_id1=n.node_id AND ".
+		"       w.node_id1=i.node_id AND w.iface1=i.iface";
 	} else {
 	    $query = "SELECT w.node_id1,w.card1,w.node_id2,w.card2,w.port2,".
-		"w.cable,w.len,w.type,n.type ".
+		"w.cable,w.len,w.type,n.type,w.iface1,w.iface2 ".
 		"FROM wires AS w,nodes AS n WHERE w.node_id1=n.node_id";
 	}
 	$query .= " AND node_id1='$node'";
-	if (defined $card) {
-	    $query .= " AND card1='$card'";
+	if (defined $iface) {
+	    $query .= " AND iface1='$iface'";
 	}
 
 	&debug("Sending query $query\n");
@@ -156,7 +158,7 @@ while (my $arg = shift @ARGV) {
 		$wireinfo = "black"
 		    if ($row[2+$ix] eq "arista1" && $wireinfo eq "yellow");
 		$row[5] = "0" if (!defined($row[5+$ix]));
-		print "$row[0] port $row[1] ($cardinfo) ".
+		print "$row[0] $row[9+$ix] port $row[1] ($cardinfo) ".
 		    "connects to $row[2+$ix] ($switchinfo), ".
 		    "module $row[3+$ix], port $row[4+$ix] via ".
 		    "wire #$row[5+$ix] (length $row[6+$ix], color $wireinfo)\n";
@@ -165,13 +167,13 @@ while (my $arg = shift @ARGV) {
 	    while (my @row = $result->fetchrow) {
 		my $i = 0;
 		$row[5+$ix] = "0" if (!defined($row[5+$ix]));
-		printf("%9s %5d", $row[$i++], $row[$i++]);
+		printf("%9s %9s %5d", $row[$i++], $row[9+$ix], $row[$i++]);
 		printf("%16s", $row[$i++])
 		    if ($opt{I});
 		printf(" %12s", $row[$i++])
 		    if ($opt{m});
-		printf(" %9s %5d %5d %5d %3d %7s %7s\n",
-		       $row[$i++], $row[$i++], $row[$i++], $row[$i++],
+		printf(" %9s %9s %5d %5d %5d %3d %7s %7s\n",
+		       $row[$i++], $row[10+$ix], $row[$i++], $row[$i++], $row[$i++],
 		       $row[$i++],$row[$i++],$row[$i++]);
 	    }
 	}
@@ -180,7 +182,7 @@ while (my $arg = shift @ARGV) {
 sub debug { warn @_,"\n" if $opt{d}; }
 
 sub usage {
-	print "Usage: $0 [-vdm] <node | node:if> ... \n";
+	print "Usage: $0 [-vdm] <node | node:ethNNN> ... \n";
 	print "-v: Verbose, prose, output\n";
 	print "-d: Enable debugging output\n";
 	print "-m: Show MAC addresses\n";

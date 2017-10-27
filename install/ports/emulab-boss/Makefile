@@ -89,11 +89,14 @@ RUN_DEPENDS+=	\
 	curl:${PORTSDIR}/ftp/curl \
 	git:${PORTSDIR}/devel/git \
 	gmake:${PORTSDIR}/devel/gmake \
+	hg:${PORTSDIR}/devel/mercurial \
 	kmetis:${PORTSDIR}/math/metis4 \
 	libtool:${PORTSDIR}/devel/libtool \
 	neato:${PORTSDIR}/graphics/graphviz \
 	otclsh:${PORTSDIR}/misc/otcl \
+	pssh:${PORTSDIR}/security/pssh \
 	rpm:${PORTSDIR}/archivers/rpm4 \
+	rrdtool:${PORTSDIR}/databases/rrdtool \
 	rsync:${PORTSDIR}/net/rsync \
 	swig2.0:${PORTSDIR}/devel/swig20 \
 	sudo:${PORTSDIR}/security/sudo \
@@ -144,12 +147,16 @@ RUN_DEPENDS+=	\
 # apache related ports
 RUN_DEPENDS+=	\
 	${LOCALBASE}/libexec/apache22/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
-	${LOCALBASE}/libexec/apache22/mod_fastcgi.so:${PORTSDIR}/www/mod_fastcgi
+	${LOCALBASE}/libexec/apache22/mod_fcgid.so:${PORTSDIR}/www/mod_fcgid
 
 # Port versions of current or former "core" utilties
 RUN_DEPENDS+=	\
 	dhcpd:${PORTSDIR}/net/isc-dhcp43-server \
 	${LOCALBASE}/sbin/rndc:${PORTSDIR}/dns/bind99
+
+# XXX For building loghole doc from www/tutorial
+RUN_DEPENDS+=	\
+	man2html:${PORTSDIR}/textproc/man2html
 
 USE_PERL5=	yes
 USES=		python:2.7

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2002-2011 University of Utah and the Flux Group.
+# Copyright (c) 2002-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,7 +27,7 @@ OBJDIR		= ../..
 SUBDIR		= event/example
 
 SYSTEM	       := $(shell uname -s)
-PROGRAMS	= tbrecv tbsend tbrecv.py tbsend.py eventdebug.pl
+PROGRAMS	= tbrecv tbsend tbrecv.py tbsend.py eventdebug.pl tbfrisbee.pl
 
 include $(OBJDIR)/Makeconf
 

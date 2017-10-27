@@ -6,9 +6,6 @@
   <attribute name="features">
     <value>ping,ssh,isup,linktest</value>
   </attribute>
-  <attribute name="version">
-    <value>12</value>
-  </attribute>
   <attribute name="reboot_waittime">
     <value>240</value>
   </attribute>

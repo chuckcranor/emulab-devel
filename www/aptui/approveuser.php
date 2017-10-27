@@ -94,7 +94,7 @@ echo "    window.AJAXURL = 'server-ajax.php';\n";
 echo "</script>\n";
 
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-echo "<script src='js/lib/bootstrap.js'></script>\n";
-echo "<script src='js/lib/require.js' data-main='js/approveuser'></script>\n";
+REQUIRE_SUP();
+SPITREQUIRE("js/approveuser.js");
 
 SPITFOOTER();

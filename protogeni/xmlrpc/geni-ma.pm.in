@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2013 University of Utah and the Flux Group.
+# Copyright (c) 2008-2016 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -81,8 +81,8 @@ if (defined($GENI_VERSION)) {
          };
      }
 } else {
-    print STDERR "No API version specified in URL\n";
-    print STDERR "Will fall back to supporting both API version 1 and version 2. get_version will fall back to version 2.\n";
+    #print STDERR "No API version specified in URL\n";
+    #print STDERR "Will fall back to supporting both API version 1 and version 2. get_version will fall back to version 2.\n";
 
     $GENI_METHODS = {
             "get_version"                     => \&GeniMA::GetVersion,

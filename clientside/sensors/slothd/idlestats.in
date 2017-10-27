@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2016 University of Utah and the Flux Group.
+# Copyright (c) 2016-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -147,7 +147,8 @@ if ($opts{'e'}) {
 	warn "You ($user) do not have access to experiment $g_experiment\n";
 	exit 1;
     }
-    if ($g_experiment->state() ne EXPTSTATE_ACTIVE) {
+    if ($g_experiment->state() ne EXPTSTATE_ACTIVE &&
+	$g_experiment->state() ne EXPTSTATE_PANICED) {
 	warn "Experiment $g_experiment is not active!\n";
 	exit 1;
     }

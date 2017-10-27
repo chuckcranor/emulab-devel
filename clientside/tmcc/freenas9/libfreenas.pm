@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2016 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,8 +28,7 @@
 #
 # XXX things the API cannot do yet:
 #
-# 1. create a zvol volume; no API exists,
-# 2. create an authorized initiator (POST); always return 302 FOUND
+# 1. create an authorized initiator (POST); always return 302 FOUND
 #
 # API also does not report an error for:
 #
@@ -161,14 +160,14 @@ my $server;
 
 sub freenasPoolList();
 sub freenasVolumeList($;$);
-sub freenasVolumeCreate($$$);
+sub freenasVolumeCreate($$$;$);
 sub freenasVolumeDestroy($$);
 sub freenasFSCreate($$$);
 sub freenasRunCmd($$);
 sub freenasParseListing($);
 
 sub freenasVolumeSnapshot($$;$);
-sub freenasVolumeDesnapshot($$;$);
+sub freenasVolumeDesnapshot($$;$$);
 sub freenasVolumeClone($$$;$);
 sub freenasVolumeDeclone($$);
 
@@ -394,6 +393,10 @@ sub freenasVolumeList($;$)
 	    my $vol = $snap->{'filesystem'};
 	    next if (!$vol);
 
+	    # XXX only track snapshots we create (10 digit timestamp)
+	    # XXX note that we do return these if $snapinfo==2
+	    next if ($snap->{'name'} !~ /^\d{10}$/ && $snapinfo != 2);
+
 	    # XXX only handle zvols right now
 	    next if ($snap->{'parent_type'} ne 'volume');
 
@@ -423,8 +426,14 @@ sub freenasVolumeList($;$)
 	}
     }
 
-    # XXX unbelievable: the API does not return the volsize of a zvol!
-    # Gotta do it ourselves...
+    #
+    # XXX unbelievable: the storage/volume API does not return the volsize
+    # of a zvol! Gotta do it ourselves...
+    #
+    # XXX we could now get this through storage/volume/<pool>/zvols for
+    # each pool, or storage/volume/<pool>/zvols/<volume> for each zvol.
+    # But for now, let's just stick with the ZFS command.
+    #
     if (open(ZFS, "$ZFS_CMD get -t volume -o name,value -Hp volsize |")) {
 	while (my $line = <ZFS>) {
 	    chomp $line;
@@ -494,17 +503,16 @@ sub freenasPoolList() {
 
 #
 # Create a ZFS zvol.
-# Unbelievably, the FreeNAS 1.0 API does not support creation of a zvol
-# so we have to use the old, hacky interface.
 #
-sub freenasVolumeCreate($$$)
+sub freenasVolumeCreate($$$;$)
 {
-    my ($pool, $volname, $size) = @_;
+    my ($pool, $volname, $size, $sparse) = @_;
 
     # Untaint arguments since they are passed to a command execution
     $pool = untaintHostname($pool);
     $volname = untaintHostname($volname);
     $size = untaintNumber($size);
+    $sparse = untaintNumber($sparse);
     if (!$pool || !$volname || !$size) {
 	warn("*** ERROR: freenasVolumeCreate: ".
 	     "Invalid arguments");
@@ -530,15 +538,35 @@ sub freenasVolumeCreate($$$)
 	return -1;
     }
 
-    # Allocate volume in zpool
-    eval { freenasRunCmd($FREENAS_CLI_VERB_VOLUME, 
-			 "add $pool $volname ${size}M off") };
-    if ($@) {
-	my $msg = "  $@";
-	$msg =~ s/\\n/\n  /g;
-	warn("*** ERROR: freenasVolumeCreate: ".
-	     "volume allocation failed:\n$msg");
+    # XXX the traditional default for FreeNAS seems to be true
+    my $sparsearg = JSON::PP::true;
+    if (defined($sparse) && $sparse == 0) {
+	$sparsearg = JSON::PP::false;
+    }
+
+    my $msg;
+    my $res = freenasRequest("$FREENAS_API_RESOURCE_VOLUME/${pool}/zvols",
+			     "POST", undef,
+			     {"name" => "$volname",
+			      "volsize" => "${size}M",
+			      "sparse" => $sparsearg },
+			     undef, \$msg);
+    if (!$res) {
+	if ($msg) {
+	    warn("*** ERROR: freenasVolumeCreate: ".
+		 "volume creation failed:\n$msg");
+	} else {
+	    warn("*** ERROR: freenasVolumeCreate: volume creation failed");
+	}
 	return -1;
+    }
+
+    # Make sure compression is disabled. Could be an option?
+    $res =
+	freenasRequest("$FREENAS_API_RESOURCE_VOLUME/${pool}/zvols/${volname}",
+		       "PUT", undef, { "compression" => "off" });
+    if (!$res) {
+	warn("*** ERROR: freenasVolumeCreate: could not disable compression");
     }
 
     return 0;
@@ -599,9 +627,9 @@ sub freenasVolumeSnapshot($$;$)
     return 0;
 }
 
-sub freenasVolumeDesnapshot($$;$)
+sub freenasVolumeDesnapshot($$;$$)
 {
-    my ($pool, $volname, $tstamp) = @_;
+    my ($pool, $volname, $tstamp, $force) = @_;
 
     # Untaint arguments that are passed to a command execution
     $pool = untaintHostname($pool);
@@ -618,7 +646,7 @@ sub freenasVolumeDesnapshot($$;$)
     }
 
     # Get volume and snapshot info
-    my $vollist = freenasVolumeList(0, 1);
+    my $vollist = freenasVolumeList(0, ($force ? 2 : 1));
 
     # The base volume must exist
     my $vref = $vollist->{$volname};
@@ -823,7 +851,7 @@ sub volumeDestroy($$$$) {
     # Volume must not have snapshots
     if (exists($vref->{'snapshots'})) {
 	warn("*** ERROR: $tag: ".
-	     "Volume '$volname' has clones, cannot destroy");
+	     "Volume '$volname' has clones and/or snapshots, cannot destroy");
 	return -1;
     }
  

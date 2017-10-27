@@ -267,8 +267,11 @@ sub fix_swap_partitions
 	}
 
 	@buffer = grep {!/^[^#].*\bswap\b.*$/} <FSTAB>;
-	for (@swapdevs) {
-		push @buffer, "$_\tnone\tswap\tsw\t0 0\n";
+	if (@swapdevs > 0) {
+		push @buffer, "# the following swap devices added by linux_slicefix\n";
+		for (@swapdevs) {
+			push @buffer, "$_\tnone\tswap\tsw\t0 0\n";
+		}
 	}
 	seek FSTAB, 0, 0;
 	print FSTAB @buffer;
@@ -1129,6 +1132,40 @@ sub fix_grub_console
 	return;
 }
 
+sub fix_sshd_config
+{
+	my ($imageroot) = @_;
+	my $cfile = "$imageroot/etc/ssh/sshd_config";
+
+	print STDERR "Adding security options to SSHD config\n";
+	open FILE, "+<$cfile" ||
+	    die "Couldn't open $cfile: $!\n";
+
+	my @buffer = ();
+	while (<FILE>) {
+		s/^Protocol .*//;
+		s/^PasswordAuthentication .*//;
+		s/^ChallengeResponseAuthentication .*//;
+		s/^PermitRootLogin .*//;
+		s/^# Emulab.*//;
+		push @buffer, $_;
+	}
+	push @buffer, "\n# Emulab config\n";
+	push @buffer, "Protocol 2\n";
+	push @buffer, "PasswordAuthentication no\n";
+	push @buffer, "ChallengeResponseAuthentication no\n";
+	push @buffer, "PermitRootLogin without-password\n";
+
+	seek FILE, 0, 0;
+	truncate FILE, 0;
+
+	print FILE @buffer;
+
+	close FILE;
+
+	return;
+}
+
 #
 # Localize the image. We only do this if the MFS we are running in
 # has the necessary files.
@@ -1152,7 +1189,7 @@ sub localize
 	system("cmp -s $ETCDIR/emulab.pem $imageroot/etc/emulab/emulab.pem >/dev/null 2>&1");
 	if ($?) {
 	    print "Updating $imageroot/etc/emulab/emulab.pem\n";
-	    system("cp -p $ETCDIR/emulab.pem $imageroot/etc/emulab/");
+	    system("cp -pf $ETCDIR/emulab.pem $imageroot/etc/emulab/");
 	    if ($?) {
 		print STDERR "Failed to create $ETCDIR/emulab.pem\n";
 		return;
@@ -1163,7 +1200,7 @@ sub localize
 	system("cmp -s $ETCDIR/client.pem $imageroot/etc/emulab/client.pem >/dev/null 2>&1");
 	if ($?) {
 	    print "Updating $imageroot/etc/emulab/client.pem\n";
-	    system("cp -p $ETCDIR/client.pem $imageroot/etc/emulab/");
+	    system("cp -pf $ETCDIR/client.pem $imageroot/etc/emulab/");
 	    if ($?) {
 		print STDERR "Failed to create $ETCDIR/client.pem\n";
 		return;
@@ -1182,15 +1219,10 @@ sub localize
 		    return;
 		}
 	    }
-	    # copy to both authorized_keys and _keys2
-	    system("cp -p /root/.ssh/authorized_keys2 $imageroot/root/.ssh/authorized_keys");
+	    # copy authorized_keys
+	    system("cp -pf /root/.ssh/authorized_keys2 $imageroot/root/.ssh/authorized_keys");
 	    if ($?) {
 		print STDERR "Failed to create /root/.ssh/authorized_keys\n";
-		return;
-	    }
-	    system("cp -p /root/.ssh/authorized_keys2 $imageroot/root/.ssh/");
-	    if ($?) {
-		print STDERR "Failed to create /root/.ssh/authorized_keys2\n";
 		return;
 	    }
 	}
@@ -1198,26 +1230,16 @@ sub localize
 
     # Check the host keys.
     my $changehostkeys = 0;
-    if (-e "/etc/ssh/ssh_host_key") {
-	system("cmp -s /etc/ssh/ssh_host_key $imageroot/etc/ssh/ssh_host_key >/dev/null 2>&1");
-	if ($?) {
-	    $changehostkeys = 1;
-	}
-    }
-    if (-e "/etc/ssh/ssh_host_rsa_key") {
-	system("cmp -s /etc/ssh/ssh_host_rsa_key $imageroot/etc/ssh/ssh_host_rsa_key >/dev/null 2>&1");
-	if ($?) {
-	    $changehostkeys = 1;
-	}
-    }
-    if (-e "/etc/ssh/ssh_host_dsa_key") {
-	system("cmp -s /etc/ssh/ssh_host_dsa_key $imageroot/etc/ssh/ssh_host_dsa_key >/dev/null 2>&1");
-	if ($?) {
-	    $changehostkeys = 1;
+    foreach my $kt ("", "dsa_", "ecdsa_", "ed25519_", "rsa_") {
+	if (-e "/etc/ssh/ssh_host_${kt}key") {
+	    system("cmp -s /etc/ssh/ssh_host_${kt}key $imageroot/etc/ssh/ssh_host_${kt}key >/dev/null 2>&1");
+	    if ($?) {
+		$changehostkeys = 1;
+	    }
 	}
     }
     if ($changehostkeys) {
-	print "Updating /etc/ssh/hostkeys\n";
+	print "Updating /etc/ssh host keys\n";
 
 	if (! -d "$imageroot/etc/ssh") {
 	    if (!mkdir("$imageroot/etc/ssh", 0755)) {
@@ -1225,7 +1247,7 @@ sub localize
 		return;
 	    }
 	}
-	system("cp -p /etc/ssh/ssh_host_* $imageroot/etc/ssh/");
+	system("cp -pf /etc/ssh/ssh_host_* $imageroot/etc/ssh/");
 	if ($?) {
 	    print STDERR "Failed to create /etc/ssh/hostkeys\n";
 	    return;
@@ -1238,7 +1260,7 @@ sub localize
 	if ($?) {
 	    print "Updating /etc/localtime\n";
 
-	    system("cp -p /etc/localtime $imageroot/etc/localtime");
+	    system("cp -pf /etc/localtime $imageroot/etc/localtime");
 	    if ($?) {
 		print STDERR "Failed to create /etc/localtime\n";
 		return;
@@ -1248,15 +1270,19 @@ sub localize
 
     # Check the NTP configuration.
     if (-e "/etc/ntp.conf") {
-	system("cmp -s /etc/ntp.conf $imageroot/etc/ntp.conf >/dev/null 2>&1");
-	if ($?) {
-	    print "Updating /etc/ntp.conf\n";
+	print "Updating /etc/ntp.conf\n";
 
-	    system("cp -p /etc/ntp.conf $imageroot/etc/ntp.conf");
-	    if ($?) {
-		print STDERR "Failed to create /etc/ntp.conf\n";
-		return;
-	    }
+	system("cp -pf /etc/ntp.conf $imageroot/etc/ntp.conf");
+	if ($?) {
+	    print STDERR "Failed to create /etc/ntp.conf\n";
+	    return;
+	}
+
+	# XXX cannot use /etc/ntp.drift for Linux
+	if (-d "$imageroot/var/lib/ntp") {
+	    file_replace_string($imageroot, "/etc/ntp.conf",
+				"/etc/ntp.drift",
+				"/var/lib/ntp/ntp.drift");
 	}
     }
 }
@@ -1446,6 +1472,7 @@ sub main
 
 	update_random_seed($imageroot);
 	localize($imageroot);
+	fix_sshd_config($imageroot);
 	hardwire_boss_node($imageroot);
 
 	# Run any postconfig scripts

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2014 University of Utah and the Flux Group.
+# Copyright (c) 2001- 2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -276,11 +276,11 @@ sub GetObject($$) {
       };
 
       /^os$/ && do {
-	  require OSinfo;
+	  require OSImage;
 	  my ($ospid, $osname) = split("/", $oid);
 	  fatal("OS identifier must be specified as '<project_id>/<os_name>'") 
 	      if (!defined($osname));
-	  $retobj = OSinfo->Lookup($ospid, $osname);
+	  $retobj = OSImage->Lookup($ospid, $osname);
 	  last TYPE;
       };
 

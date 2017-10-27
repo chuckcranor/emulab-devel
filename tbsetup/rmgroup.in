@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -92,6 +92,7 @@ $| = 1;
 use lib "@prefix@/lib";
 use libaudit;
 use libdb;
+use emutil;
 use libtestbed;
 use User;
 use Group;
@@ -190,7 +191,7 @@ if (system("grep -q '^${unix_gid}:' /etc/group")) {
     #
     print "Removing group $unix_name ($unix_gid) on local node.\n";
 
-    if (system("$GROUPDEL $unix_name")) {
+    if (runBusyLoop("$GROUPDEL $unix_name")) {
 	if (($? >> 8) != 65) {
 	    fatal("Could not remove group $unix_name from local node!");
 	}

@@ -1,6 +1,6 @@
 # -*- tcl -*-
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -422,6 +422,21 @@ Link instproc implemented_by {impl} {
 	set implemented_by $impl
     } else {
         perror "\[$self implemented_by] must be a link or a path!"
+        return
+    }
+}
+
+#
+# A lan can be implemented in terms of a path only.
+#
+Lan instproc implemented_by {impl} {
+    $self instvar implemented_by
+    $self instvar layer
+    
+    if {[$impl info class] == "Path"} {
+	set implemented_by $impl
+    } else {
+        perror "\[$self implemented_by] must be a path!"
         return
     }
 }
@@ -1248,6 +1263,7 @@ Lan instproc updatedb {DB} {
     $self instvar member_settings
     $self instvar mustdelay
     $self instvar fixed_iface
+    $self instvar implemented_by
     $self instvar ofenabled
     $self instvar ofcontroller
     $self instvar bridge_links
@@ -1366,6 +1382,9 @@ Lan instproc updatedb {DB} {
             lappend fields "fixed_iface"
         }
 
+	if { $implemented_by != {} } {
+	    lappend fields "implemented_by_path"
+	}
 	# IP aliases
 	set ipaliases [$node get_ipaliases_port $port]
 	if {[llength $ipaliases] > 0} {
@@ -1396,7 +1415,9 @@ Lan instproc updatedb {DB} {
         if {$fixed_iface($nodeport) != 0} {
             lappend values $fixed_iface($nodeport)
         }
-
+	if { $implemented_by != {} } {
+	    lappend values $implemented_by
+	}
 	# IP aliases
 	if {[llength $ipaliases] > 0} {
 	    set ipaliasesraw [join $ipaliases ","]

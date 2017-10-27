@@ -1,11 +1,10 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup',
-	 'js/lib/text!template/profile-history.html'],
-function (_, sup, profileString)
+$(function ()
 {
-    'use strict';
+  'use strict';
+
+    var templates = APT_OPTIONS.fetchTemplateList(['profile-history']);
     var ajaxurl = null;
-    var profileTemplate = _.template(profileString);
+    var profileTemplate = _.template(templates['profile-history']);
 
     function initialize()
     {

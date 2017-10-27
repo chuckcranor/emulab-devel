@@ -285,7 +285,7 @@ void ConservativeAssigner::populateSuperPartitionTree(size_t superPartition,
     using namespace ptree;
 
     if (   superPartition < m_superPartitionList.size()
-        && superPartition >= 0 && tree != NULL)
+        && tree != NULL)
     {
         for (size_t i = 0; i < m_superPartitionList[superPartition].size();
              ++i)
@@ -310,7 +310,7 @@ void ConservativeAssigner::populatePartitionTree(size_t partition,
 
     cerr << "Partition: " << partition << endl;
 
-    if (partition < m_partitionCount && partition >= 0 && tree != NULL)
+    if (partition < m_partitionCount && tree != NULL)
     {
         for (size_t i = 0; i < m_lanList.size(); ++i)
         {

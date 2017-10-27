@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2015 University of Utah and the Flux Group.
+# Copyright (c) 2008-2016 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -113,6 +113,9 @@ elsif ($GENI_VERSION eq "2.0") {
 	"DeleteDataset"     => \&GeniCMV2::DeleteDataset,
 	"DescribeDataset"   => \&GeniCMV2::DescribeDataset,
 	"ModifyDataset"     => \&GeniCMV2::ModifyDataset,
+	"GetDatasetCredential" => \&GeniCMV2::GetDatasetCredential,
+	# This will not work in the fcgid world without more work.
+	"SecureImageDownload"  => \&GeniCMV2::SecureImageDownload,
 	"Lockdown"          => \&GeniCMV2::Lockdown,
 	"TriggerImageUpdate"=> \&GeniCMV2::TriggerImageUpdate,
 	"AddNodes"          => \&GeniCMV2::AddNodes,

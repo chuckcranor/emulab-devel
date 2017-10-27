@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -77,7 +77,9 @@ function SPITFORM($formfrag, $formfields, $errors)
     $amlist = array();
     $amdefault = "";
     if ($ISCLOUD || ISADMIN() || STUDLY()) {
- 	while (list($am) = each($am_array)) {
+        while (list($index, $aggregate) = each($am_array)) {
+            $urn = $aggregate->urn();
+            $am  = $aggregate->name();
 	    $amlist[] = $am;
 	}
 	$amdefault = $DEFAULT_AGGREGATE;

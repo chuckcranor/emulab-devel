@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2015 University of Utah and the Flux Group.
+# Copyright (c) 2008-2016 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -362,7 +362,10 @@ sub CheckCredentials($;$)
 			$error = $cred;
 			goto bad;
 		    }
-		    if ($cred->owner_urn() ne $speaksfor->target_urn()) {
+		    # We also allow credentials whose target is the
+		    # local authority.
+		    if ($cred->owner_urn() ne $speaksfor->target_urn() &&
+			$cred->owner_urn() ne $ENV{'MYURN'}) {
 			$error = GeniResponse->Create(GENIRESPONSE_FORBIDDEN,
 						      undef,
 			   "Credential owner does not match speaksfor target");

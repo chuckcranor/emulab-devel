@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2015 University of Utah and the Flux Group.
+# Copyright (c) 2004-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -193,6 +193,16 @@ sub doboot()
 		    warning("Could not make directory $local");
 		    next;
 		}
+		#
+		# XXX if we make the directory, we tag it so that
+		# rc.accounts can fix up the owner/group later.
+		# This is a little bit paranoid, but we want to make
+		# sure that rc.accounts doesn't change the owner/group
+		# of an arbitrary directory if something gets out of sync.
+		#
+		if ($dolocaldirs) {
+		    system("cp /dev/null $remote/.emulabcreated");
+		}
 	    }
 	
 	    if (!$dolocaldirs) {
@@ -253,8 +263,18 @@ sub doboot()
 	    if ($localfsdir ne "/") {
 		$remote = "$localfsdir$local";
 	    }
-	    if (! -d "$remote" && !os_mkdir($remote, "0770")) {
-		fatal("Could not make directory $remote: $!");
+	    if (! -d "$remote") {
+		if (!os_mkdir($remote, "0770")) {
+		    fatal("Could not make directory $remote: $!");
+		}
+		#
+		# XXX if we make the directory, we tag it so that
+		# rc.accounts can fix up the owner/group later.
+		# This is a little bit paranoid, but we want to make
+		# sure that rc.accounts doesn't change the owner/group
+		# of an arbitrary directory if something gets out of sync.
+		#
+		system("cp /dev/null $remote/.emulabcreated");
 	    }
 	    
 	    #
@@ -548,13 +568,8 @@ sub doreconfig()
 #
 sub docleanup()
 {
-    my $mdb = $MOUNTDB . ".db";
-    my $sdb = $SFSMOUNTDB . ".db";
-    
-    unlink $mdb
-	if (-e $mdb);
-    unlink $sdb
-	if (-e $sdb);
+    unlink("$MOUNTDB.db", "$MOUNTDB.dir", "$MOUNTDB.pag");
+    unlink("$SFSMOUNTDB.db", "$SFSMOUNTDB.dir", "$SFSMOUNTDB.pag");
 }
 
 #

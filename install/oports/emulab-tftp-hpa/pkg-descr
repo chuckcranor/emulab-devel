@@ -1,4 +1,4 @@
-The tftpd-hpa TFTP distribution as configured for Emulab:
+The tftpd-hpa TFTP distribution (5.2) as configured for Emulab:
 
 	- install in a reasonable place for FreeBSD
 	- install only the daemon, not the user client

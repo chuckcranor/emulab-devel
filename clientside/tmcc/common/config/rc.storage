@@ -366,14 +366,16 @@ sub doboot()
 	#
 	# First see if there is an unused partition or disk.
 	# Remember the largest.
+	# XXX make sure it is at least 10MB.
 	#
 	my $edev;
 	my $isdisk = 0;
-	$size = 0;
+	$size = 9;
 	foreach my $dev (keys %$dinfo) {
 	    my $href = $dinfo->{$dev};
 	    if ($href->{'inuse'} == 0 && $href->{'size'} > $size) {
 		$edev = $dev;
+		$size = $href->{'size'};
 		if ($href->{'type'} eq "DISK") {
 		    $isdisk = 1;
 		}
@@ -484,10 +486,9 @@ sub doinfo()
 # $doteardown == 2 is for cleaning up after any partial or failed setups.
 #	This means terminating with extreme prejudice. It destroys all
 #	existing blockstores but ignores any errors along the way.
-# $doteardown == 3 is (rather, will be) for taking an image.
+# $doteardown == 3 is for taking an image.
 #	This means also removing entries from /etc/fstab and removing
 #	other ZFS/LVM/gvinum state stored in the imagable filesystems.
-#	Not implemented yet.
 #
 sub docleanup($)
 {
@@ -660,6 +661,9 @@ sub process($$$$)
 	    warn("*** Unknown storage slice bsid '".$href->{'BSID'}."'\n");
 	    return 0;
 	}
+	if (!exists($href->{'PROTO'})) {
+	    $href->{'PROTO'} = "local";
+	}
 	if (exists($href->{'DATASET'}) && $dosetup) {
 	    #
 	    # We are going to load from a dataset image via frisbee.
@@ -791,6 +795,8 @@ sub process($$$$)
 		}
 		if ($href->{'PERMS'} eq "RO") {
 		    $msg .= " read-only";
+		} elsif ($href->{'PERMS'} eq "CLONE") {
+		    $msg .= " read-write clone of";
 		}
 		print "  $msg iSCSI node attached as $dev";
 	    }

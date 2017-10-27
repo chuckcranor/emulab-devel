@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -74,6 +74,7 @@ use libtblog;
 use User;
 use Experiment;
 use Template;
+use OSImage;
 
 #
 # Turn off line buffering on output
@@ -220,6 +221,14 @@ my $events_result =
 		 "  (ov.os is NULL or ov.os='Linux' or ov.os='Fedora')");
 if ($events_result->num_rows) {
     fatal("Oops, cannot send static events to linkdelay agents on Linux!");
+}
+
+#
+# Prelim check for deprecated images.
+#
+if ($experiment->CheckForDeprecatedImages($this_user, 0)) {
+    cleanup();
+    exit(-1);
 }
 
 #

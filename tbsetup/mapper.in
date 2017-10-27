@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,6 +24,7 @@
 use strict;
 use English;
 use Getopt::Std;
+use Data::Dumper;
 use POSIX qw(setsid ceil);
 use POSIX ":sys_wait_h";
 
@@ -102,6 +103,7 @@ my $userspec   = 0;
 my $usecontrol = 0;
 my $use_old_ptopgen  = 0;
 my $vtop;
+my $retval;
 
 #
 # Configure variables
@@ -116,6 +118,7 @@ my $PTOPGEN     = "$TB/libexec/ptopgen";
 my $PTOPGEN_NEW = "$TB/libexec/ptopgen_new";
 my $VTOPGEN     = "$TB/bin/vtopgen";
 my $NFREE       = "$TB/bin/nfree";
+my $PREDICT     = "$TB/sbin/predict";
 my $XERCES	= "@HAVE_XERCES@";
 
 #
@@ -123,6 +126,7 @@ my $XERCES	= "@HAVE_XERCES@";
 #
 use lib "@prefix@/lib";
 use libdb;
+use emutil;
 use libtestbed;
 use libtblog;
 use libvtop;
@@ -130,6 +134,7 @@ use libadminctrl;
 use libEmulab;
 use User;
 use EmulabFeatures;
+use Reservation;
 
 # Protos
 sub fatal(@);
@@ -138,8 +143,9 @@ sub chat($);
 sub RunAssign($$);
 sub FinalizeRegression($);
 sub AssignLoop();
-sub MapperWrapper();
+sub MapperWrapper(;$);
 sub PrintSolution();
+sub DumpReservationInfo($$);
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin';
@@ -341,7 +347,96 @@ $vtopflags |= $libvtop::VTOP_FLAGS_ALLOCONLY
 $vtopflags |= $libvtop::VTOP_FLAGS_REGRESSION
     if ($regression);
 
-MapperWrapper();
+if (IsMultiPCArchitecture()) {
+    my @architectures = PCArchitectures();
+
+    $vtop = libvtop->Create($experiment, $this_user, $vtopflags, $real_user);
+    if (!defined($vtop)) {
+	fatal("Could not create vtop structure for $experiment");
+    }
+    $vtop->CreateVtop() == 0
+	or fatal("Could not create vtop for $experiment");
+
+    #
+    # If all nodes are explicitly typed, we run the mapper normally.
+    #
+    if ($vtop->AllNodesTyped()) {
+	$retval = MapperWrapper();
+    }
+    else {
+	my $ordered = 0;
+	
+	#
+	# If all of the typed nodes are of one type, then try assign with
+	# that type first. In other words, set the order in which to try the
+	# different types, according to how many nodes of that architecture.
+	#
+	my %architectures = map { $_ => 0 } @architectures;
+
+	foreach my $type (keys(%{ $vtop->types() })) {
+	    $type = NodeType->Lookup($type);
+
+	    # If no architecture defined for this type, then we do not count.
+	    if (defined($type->architecture())) {
+		$architectures{$type->architecture()} +=
+		    $vtop->types()->{$type->type()};
+	    }
+	    $ordered += $vtop->types()->{$type->type()};
+	}
+	#
+	# If no types specified, and thus no implied ordering, then we
+	# fall back to the ordering specified in the sitevar.
+	#
+	if (!$ordered) {
+	    my $string   = GetSiteVar("general/architecture_priority");
+	    my @archs    = split(",", $string);
+	    my $count    = scalar(@archs);
+
+	    print "Forcing architecture ordering: @archs\n";
+	    
+	    foreach my $arch (@archs) {
+		# Set decreasing count for sort below.
+		$architectures{$arch} = $count--;
+	    }
+	}
+	# sort the array.
+	@architectures = sort { $architectures{$b} <=>
+				    $architectures{$a} } keys(%architectures);
+
+	#
+	# Run through each architecture.
+	#
+	foreach my $architecture (@architectures) {
+	    $retval = MapperWrapper($architecture);
+	    last
+		if (!$retval);
+	    #
+	    # If we managed to reserve any nodes, we have to free them
+	    # before moving onto the next architecture. 
+	    #
+	    if ($vtop->newreservednodes()) {
+		my @newreservednodes = $vtop->newreservednodes();
+		if (system("$NFREE -x $pid $eid @newreservednodes")) {
+		    # Clear this so that we do not try again in fatal();
+		    $vtop->clearnewreserved();
+		    fatal("Could not release new nodes after $architecture");
+		}
+		# Kill this, we are done with it now that nodes are released
+		# (do not want to release them again). 
+		$vtop = undef;
+	    }
+	}
+    }
+    if (ref($retval)) {
+	fatal(@{ $retval });
+    }
+}
+else {
+    my $retval = MapperWrapper();
+    if (ref($retval)) {
+	fatal(@{ $retval });
+    }
+}
 if ($regression) {
     if (0) {
 	$updating   = 1;
@@ -359,10 +454,14 @@ PrintSolution()
     if ($outfile);
 exit(0);
 
-sub MapperWrapper()
+sub MapperWrapper(;$)
 {
+    my ($architecture) = @_;
+    
     chat("Starting the new and improved mapper wrapper.\n")
 	if (!$toponly);
+    chat("Forcing untyped nodes to $architecture\n")
+	if (defined($architecture));
 
     # Need to do this cause libvtop will add them again.
     # Must be done before nodes are released.
@@ -377,7 +476,7 @@ sub MapperWrapper()
     TBDebugTimeStamp("Create libvtop ended");
 
     TBDebugTimeStamp("vtopgen started");
-    $vtop->CreateVtop() == 0
+    $vtop->CreateVtop($architecture) == 0
 	or fatal("Could not create vtop for $experiment");
     TBDebugTimeStamp("vtopgen finished");
     
@@ -397,9 +496,7 @@ sub MapperWrapper()
 	    fatal("Not allowed to mix <=1Gb and >1Gb links");
 	}
     }
-
-    AssignLoop();
-    return 0;
+    return AssignLoop();
 }
 
 #
@@ -460,9 +557,9 @@ sub AssignLoop()
 	}
 	# Hack for Kirk.
 	if (!($impotent || $regression) &&
-	    ($pid eq "PNWorkshop" || $project->IsNonLocal())) {
+	    ($pid eq "MobiCom2017" || $project->IsNonLocal())) {
 	    while (1) {
-		if (libEmulab::EmulabCountLock("mapperlock", 4) == 0) {
+		if (libEmulab::EmulabCountLock("mapperlock", 3) == 0) {
 		    $seriallock = 1;
 		    last;
 		}
@@ -501,9 +598,9 @@ sub AssignLoop()
 	    FinalizeRegression(1)
 		if ($regression);
 
-	    fatal({type => 'primary', severity => SEV_ERROR,
-		   error => ['unretriable_assign_error']},
-		  "Unretriable error. Giving up.");
+	    return [{type  => 'primary', severity => SEV_ERROR,
+		     error => ['unretriable_assign_error']},
+		    "Unretriable error. Giving up."];
 	}
     
 	#
@@ -522,15 +619,15 @@ sub AssignLoop()
 	    $impotent  = 1;
 	    my $retval = RunAssign(1, $prefix . ".empty");
 	    if ($retval != 0) {
-		fatal({type=>'extra', cause=>'user', severity=>SEV_ERROR,
-	           error=>['infeasible_resource_assignment']}, 
-		  "This experiment cannot be instantiated on this ".
-                  "testbed. You have most likely asked for hardware ".
-                  "this testbed does not have, such as nodes of a type ".
-                  "it does not contain, or nodes with too many network ".
-                  "interfaces.  You will need to modify this experiment ".
-                  "before it can be swapped in - re-submitting the ".
-                  "experiment as-is will always result in failure.");
+		return [{type=>'extra', cause=>'user', severity=>SEV_ERROR,
+			 error=>['infeasible_resource_assignment']}, 
+			"This experiment cannot be instantiated on this ".
+			"testbed. You have most likely asked for hardware ".
+			"this testbed does not have, such as nodes of a type ".
+			"it does not contain, or nodes with too many network ".
+			"interfaces.  You will need to modify this experiment ".
+			"before it can be swapped in - re-submitting the ".
+			"experiment as-is will always result in failure."];
 	    }
 	    chat("Assign succeeded on an empty testbed.\n");
 	    $impotent = $save_impotent;
@@ -540,9 +637,9 @@ sub AssignLoop()
 	# always changing. But once we hit the maxrun, we continue
 	# only if progress on the last loop.
 	if ($currentrun >= $maxrun && !$progress) {
-	    fatal({type => 'primary', severity => SEV_ERROR,
-		   error => ['reached_assign_run_limit']},
-		  "Reached run limit. Giving up.");
+	    return [{type => 'primary', severity => SEV_ERROR,
+		     error => ['reached_assign_run_limit']},
+		    "Reached run limit. Giving up."];
 	}
 	# See if we made progress or not.
 	# Keep going if we allocated some nodes.
@@ -575,7 +672,8 @@ sub RunAssign($$)
 	$vtopfile .= ".xml";
     }
     my $assignexitcode = 0;
-    my $assignlog = "assign.log";
+    my $assignlog  = "assign.log";
+    my $resinfolog = "resinfo.log";
 
     #
     # Now generate a vtop file and dump it to a file.
@@ -638,6 +736,47 @@ sub RunAssign($$)
 	}
     }
 
+    # Bound the results to avoid future reservation conflicts.
+    Reservation->FlushAll();
+    my $reservation_bounds = Reservation->MaxSwapInMap($experiment);
+    # Dump to file.
+    DumpReservationInfo($resinfolog, $reservation_bounds);
+    foreach my $type (keys(%$reservation_bounds)) {
+	if (exists($admission_control{$type})) {
+	    if ($reservation_bounds->{$type} < $admission_control{$type}) {
+		$admission_control{$type} = $reservation_bounds->{$type};
+	    }
+	}
+	else {
+	    $admission_control{$type} = $reservation_bounds->{$type};
+	}
+	#
+	# Look to see if topology specifies nodes with this specific
+	# type. If so, we can tell right away that the user is asking for
+	# more then is available.
+	#
+	# This only works for nodes with hard types. Auxtypes and vtypes
+	# will still need to go through assign. Might be able to handle
+	# auxtypes though.
+	#
+	if (exists($vtop->types()->{$type})) {
+	    my $bound  = $reservation_bounds->{$type};
+	    my $wanted = $vtop->types()->{$type};
+
+	    if ($wanted > $bound) {
+		tberror({type => 'primary', cause => 'temp',
+			 severity => SEV_ERROR,
+			 error => ['admission_control_failure']},
+		"*** Resource reservation violation: ".
+		"$wanted nodes of type $type requested, but only $bound ".
+		"available because of existing resource reservations ".
+		"to other projects.\n");
+		# Unretriable error
+		return -1;
+	    }
+	}
+    }
+    
     #
     # Append this admission control results to ptopgen.
     #
@@ -806,11 +945,13 @@ sub RunAssign($$)
     #
     system("/bin/cp -fp $assignlog ${prefix}.assign");
     system("/bin/cp -fp $assignlog ${pid}-${eid}.assign") if ($debug);
+    system("/bin/cp -fp $resinfolog ${prefix}-${resinfolog}");
 
     if ($assignexitcode) {
 	print "Assign exited with $assignexitcode\n" if ($debug);
 	
 	system("/bin/cat $assignlog");
+	
 	#
 	# assign returns two positive error codes (that we care about).
 	# The distinction between them is somewhat murky. An exitval of
@@ -1046,4 +1187,26 @@ sub chat($)
     if (! $quiet) {
 	print $_[0];
     }
+}
+
+sub DumpReservationInfo($$)
+{
+    my ($file, $bounds) = @_;
+
+    if (!open(RES, ">$file")) {
+	print STDERR "Could not open $file for writing: $!\n";
+	return;
+    }
+    if (! scalar(keys(%$bounds))) {
+	close(RES);
+	return;
+    }
+    foreach my $type (keys(%$bounds)) {
+	my $bound  = $bounds->{$type};
+	print RES "Running predict for $type:$bound\n";
+	my $output = emutil::ExecQuiet("$PREDICT $type");
+	print RES $output;
+	print RES "--------\n";
+    }
+    close(RES);
 }

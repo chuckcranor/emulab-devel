@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2014 University of Utah and the Flux Group.
+# Copyright (c) 2004-2014, 2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -23,6 +23,7 @@
 #
 # TODO: ntpinfo table.
 #       Current source directory? From where?
+#       need to remove management (IPMI) interfaces from interfaces/wires.
 #
 use English;
 use Getopt::Std;
@@ -696,25 +697,6 @@ sub DumpDBGoo()
 	"    Could not get elabinelab attributes\n")
 	if (!defined($attributes));
 
-    if (exists($attributes->{'CONFIG_OPSVM'}) && $attributes->{'CONFIG_OPSVM'}){
-	#
-	# Need to assign an IP to the ops node for the jail.
-	#
-	my $pnode = Node->Lookup($bossnode);
-	die("*** $0:\n".
-	    "    Could not lookup $bossnode\n")
-	    if (!defined($pnode));
-	my ($ip,$ipmask) = $pnode->GetJailIP();
-	die("*** $0:\n".
-	    "    Could not generate an IP for OPS jail\n")
-	    if (!defined($ip));
-	
-	print "Setting the IP for OPS jail to $ip\n";
-	$experiment->SetElabInElabAttr("boss", "OPSIP", $ip);
-	$experiment->SetElabInElabAttr("ops",  "OPSIP", $ip);
-	$experiment->SetElabInElabAttr("fs",   "OPSIP", $ip);
-    }
-
     #
     # These tables are dumped completely.
     #
@@ -897,7 +879,8 @@ sub DumpDBGoo()
 		    "where (gm.pid='$pid' or ".
 		    "       gm.pid='" . TBOPSPID() . "') and gm.gid=gm.pid ".
 		    " and t.uid_idx is not NULL and ".
-		    " u.status='" . USERSTATUS_ACTIVE() . "'")
+		    " (u.status='" . USERSTATUS_ACTIVE() . "' or ".
+		    "  u.status='" . USERSTATUS_INACTIVE() . "')")
 	    or die("*** $0:\n".
 		   "    Could not create table temp_$table\n");
 
@@ -946,7 +929,8 @@ sub DumpDBGoo()
 		"left join users as u on u.uid_idx=gm.uid_idx ".
 		"where (gm.pid='$pid' or ".
 		"       (gm.pid='" . TBOPSPID() . "' and gm.pid=gm.gid)) and ".
-		" u.status='" . USERSTATUS_ACTIVE() . "' and ".
+		" (u.status='" . USERSTATUS_ACTIVE() . "' or ".
+		"  u.status='" . USERSTATUS_INACTIVE() . "') and ".
 		" gm.uid!='elabman' and gm.uid!='elabckup' and ".
 		" gm.uid!='operator' ".
 		"into outfile '$statedir/group_membership'")
@@ -954,93 +938,17 @@ sub DumpDBGoo()
 	       "    Could not dump table group_membership\n");
 
     #
-    # Initial images; note that these images are not going to exist inside!
-    # Note that we exclude any encrypted images because we cannot expose
-    # the encryption keys that they would need to decode the images!
-    # 
-    DBQueryWarn("select i.* from images as i ".
-		"left join image_versions as v on ".
-		"     v.imageid=i.imageid and v.version=i.version ".
-		"where (i.pid='$pid' or (i.pid='$TBOPSPID' and v.global=1)) ".
-		"  and decryption_key is null ".
-		"into outfile '$statedir/images'")
-	or die("*** $0:\n".
-	       "    Could not dump table images\n");
-	    
-    DBQueryWarn("select v.* from images as i ".
-		"left join image_versions as v on ".
-		"     v.imageid=i.imageid and v.version=i.version ".
-		"where (i.pid='$pid' or (i.pid='$TBOPSPID' and v.global=1)) ".
-		"  and decryption_key is null ".
-		"into outfile '$statedir/image_versions'")
-	or die("*** $0:\n".
-	       "    Could not dump table image_versions\n");
-	    
-    DBQueryWarn("select o.* from os_info as o ".
-		"left join os_info_versions as v on ".
-		"     v.osid=o.osid and v.vers=o.version ".
-		"where o.pid='$pid' or (o.pid='$TBOPSPID' and v.shared=1) ".
-		"into outfile '$statedir/os_info'")
-	or die("*** $0:\n".
-	       "    Could not dump table os_info\n");
-
-    DBQueryWarn("create temporary table temp_os_info ".
-		"select v.* from os_info as o ".
-		"left join os_info_versions as v on ".
-		"     v.osid=o.osid and v.vers=o.version ".
-		"where o.pid='$pid' or (o.pid='$TBOPSPID' and v.shared=1)")
-	or die("*** $0:\n".
-	       "    Could not create table temp_os_info\n");
-
-    # Ack. The MFS paths have a hardcoded "boss" in them, but that is going
-    # to resolve incorrectly to an inner control IP, which will not work
-    # from the pxeboot kernel since it uses the outer control network.
-    # Just remove the host spec; pxeboot will do the right thing.
-    my $query_result =
-	DBQueryFatal("select osid,path from temp_os_info ".
-		     "where path like '%:%'");
-    
-    while (my ($osid,$hostpath) = $query_result->fetchrow_array()) {
-	my ($host,$path) = $hostpath =~ /^(.*):(.*)$/;
-
-	DBQueryFatal("update temp_os_info set path='$path' where osid='$osid'");
-    }
-
-    DBQueryWarn("select * from temp_os_info ".
-		"into outfile '$statedir/os_info_versions'")
-	or die("*** $0:\n".
-	       "    Could not dump table os_info_versions\n");
-	    
-    DBQueryWarn("select o.* from osidtoimageid as o ".
-		"left join image_versions as i on i.imageid=o.imageid ".
-		"where i.pid='$pid' or (i.pid='$TBOPSPID' and i.global=1) ".
-		"into outfile '$statedir/osidtoimageid'")
-	or die("*** $0:\n".
-	       "    Could not dump table osidtoimageid\n");
-	    
-    # Subosids.  Only take the mapping to parents for those children that
-    # are in the e-in-e pid or are in emulab-ops and are shared.
-    DBQueryWarn("select osm.* from os_submap as osm ".
-		"left join os_info as osi on osm.osid=osi.osid ".
-		"left join os_info_versions as osv on ".
-		"     osv.osid=osi.osid and osv.vers=osi.version ".
-		"where osi.pid='$pid' or (osi.pid='$TBOPSPID' and osv.shared=1) ".
-		"into outfile '$statedir/os_submap'")
-	or die("*** $0:\n".
-	       "    Could not dump table os_submap\n");
-
-    #
     # interfaces table. Need to tag the interfaces being used as the control
     # network, with the proper tag so they do not say they experimental
     # interfaces in the inner emulab. Use a temp table again.
     #
     DBQueryWarn("create temporary table temp_interfaces ".
-		"select t.* from reserved as r ".
-		"left join interfaces as t on t.node_id=r.node_id ".
-		"left join virt_nodes as v on v.vname=r.vname and ".
-		"     v.pid=r.pid and v.eid=r.eid ".
-		"where r.pid='$pid' and r.eid='$eid' and ".
-		"      v.inner_elab_role in ('node','ops','fs','ops+fs')")
+		"select t.* ".
+		"from reserved as r, interfaces as t, virt_nodes as v where ".
+		"  t.node_id=r.node_id and ".
+		"  v.vname=r.vname and v.pid=r.pid and v.eid=r.eid and ".
+		"  r.pid='$pid' and r.eid='$eid' and ".
+		"  v.inner_elab_role in ('node','ops','fs','ops+fs')")
 	or die("*** $0:\n".
 	       "    Could not create temporary table temp_interfaces\n");
 
@@ -1088,13 +996,13 @@ sub DumpDBGoo()
 
     # And the wires table. Strip out the control wires; not needed.
     DBQueryWarn("create temporary table temp_wires ".
-		"select t.* from reserved as r ".
-		"left join virt_nodes as v on v.vname=r.vname and ".
-		"     v.pid=r.pid and v.eid=r.eid ".
-		"left join wires as t on t.node_id1=r.node_id ".
-		($elabinelab_singlenet == 0 ? " and t.type='Node' " : " ") .
-		"where r.pid='$pid' and r.eid='$eid' and ".
-		"      v.inner_elab_role in ('node','ops','fs','ops+fs') ")
+		"select t.* ".
+		"from reserved as r, virt_nodes as v, wires as t where ".
+		"  v.vname=r.vname and v.pid=r.pid and v.eid=r.eid and ".
+		"  t.node_id1=r.node_id and ".
+		   ($elabinelab_singlenet ? "" : "t.type='Node' and ") .
+		"  r.pid='$pid' and r.eid='$eid' and ".
+		"  v.inner_elab_role in ('node','ops','fs','ops+fs')")
 	or die("*** $0:\n".
 	       "    Could not create temporary table temp_wires\n");
 
@@ -1116,13 +1024,12 @@ sub DumpDBGoo()
 	# But we need to take out the wires that are being used as the
 	# inner control network, or at least mark them as Control.
 	$query_result =
-	    DBQueryWarn("select node_id,card,port from temp_interfaces ".
+	    DBQueryWarn("select node_id,iface from temp_interfaces ".
 			"where role='" . TBDB_IFACEROLE_CONTROL() . "' ");
 
-	while (my ($node_id,$card,$port) = $query_result->fetchrow_array()) {
+	while (my ($node_id,$iface) = $query_result->fetchrow_array()) {
 	    DBQueryWarn("update temp_wires set type='Control' ".
-			"where node_id1='$node_id' and card1=$card and ".
-			"      port1=$port");
+			"where node_id1='$node_id' iface1='$iface'");
 	}
     }
     # Okay, now add the "trunk" wires in without any alteration.
@@ -1174,7 +1081,7 @@ sub DumpDBGoo()
 	       "    Could not dump table reserved\n");
 
     # Copy tiplines table for all nodes so web form gives us a console icon!
-    DBQueryWarn("select t.tipname,t.node_id,'',t.disabled,0,0,NULL ".
+    DBQueryWarn("select t.tipname,t.node_id,'',t.disabled,0,0,NULL,NULL,0,0 ".
 		"from reserved as r ".
 		"left join virt_nodes as v on v.vname=r.vname and ".
 		"     v.pid=r.pid and v.eid=r.eid ".

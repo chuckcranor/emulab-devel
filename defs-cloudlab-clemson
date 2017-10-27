@@ -109,7 +109,7 @@ MIN_UNIX_GID=2000
 # Which console to use in the MFS. We need to set this for GeniRacks.
 NODECONSOLE="vga"
 # Which version of the MFS.
-MFSVERSION="82"
+MFSVERSION="8-64"
 PROTOGENI_SUPPORT=1
 PROTOGENI_DOMAIN="clemsoncloudlab"
 PROTOGENI_LOCALUSER=1
@@ -136,7 +136,10 @@ NOVIRTNFSMOUNTS=0
 
 # Image versioning and deltas.
 IMAGEPROVENANCE=1
-IMAGEDELTAS=0
+IMAGEDELTAS=1
+
+# Image directories
+IMAGEDIRECTORIES=1
 
 # ZFS.
 WITHZFS=1

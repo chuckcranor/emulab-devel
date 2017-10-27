@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2015 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -50,7 +50,9 @@ use vars qw(@ISA @EXPORT);
 	      GENIRESPONSE_INSUFFICIENT_NODES GENIRESPONSE_SERVER_UNAVAILABLE
               GENIRESPONSE_INSUFFICIENT_MEMORY GENIRESPONSE_NO_MAPPING
 	      GENIRESPONSE_STITCHER_ERROR
+	      GENIRESPONSE_NOSPACE
 	      XMLRPC_PARSE_ERROR XMLRPC_SERVER_ERROR XMLRPC_APPLICATION_ERROR
+	      XMLRPC_NO_SUCH_METHOD
 	      XMLRPC_SYSTEM_ERROR XMLRPC_TRANSPORT_ERROR);
 
 use overload ('""' => 'Stringify');
@@ -77,6 +79,7 @@ sub GENIRESPONSE_BUSY()           {14; }
 sub GENIRESPONSE_EXPIRED()        {15; }
 sub GENIRESPONSE_INPROGRESS()     {16; }
 sub GENIRESPONSE_ALREADYEXISTS()  {17; }
+sub GENIRESPONSE_NOSPACE()        {23; }
 sub GENIRESPONSE_VLAN_UNAVAILABLE(){24; }
 sub GENIRESPONSE_INSUFFICIENT_BANDWIDTH()  {25; }
 sub GENIRESPONSE_INSUFFICIENT_NODES()      {26; }
@@ -114,7 +117,7 @@ my @GENIRESPONSE_STRINGS =
      "Error 20",
      "Error 21",
      "Error 22",
-     "Error 23",
+     "Not Enough Space",
      "Vlan Unavailable",
      "Insufficient Bandwidth",
      "Insufficient Nodes",
@@ -138,6 +141,7 @@ sub GENIRESPONSE_STRING($)
 sub XMLRPC_PARSE_ERROR()	{ -32700; }
 sub XMLRPC_SERVER_ERROR()       { -32600; }
 sub XMLRPC_APPLICATION_ERROR()  { -32500; }
+sub   XMLRPC_NO_SUCH_METHOD()   { XMLRPC_APPLICATION_ERROR() + 3; }
 sub XMLRPC_SYSTEM_ERROR()       { -32400; }
 sub XMLRPC_TRANSPORT_ERROR()    { -32300; }
 
@@ -204,10 +208,16 @@ sub Create($$;$$)
 sub field($$)           { return ($_[0]->{$_[1]}); }
 sub code($)		{ return field($_[0], "code"); }
 sub value($)		{ return field($_[0], "value"); }
-sub output($)		{ return field($_[0], "output"); }
 # This is very optional.
 sub logurl($) {
     return (exists($_[0]->{"logurl"}) ? $_[0]->{"logurl"} : undef);
+}
+sub output($;$) {
+    my ($self,$string) = @_;
+    if (defined($string)) {
+	$self->{'output'} = $string;
+    }
+    return field($_[0], "output");
 }
 
 # Check for response object. Very bad, but the XML encoder does not
@@ -299,6 +309,16 @@ sub BadArgsResponse(;$)
 	if (!defined($msg));
     
     return GeniResponse->Create(GENIRESPONSE_BADARGS, undef, $msg);
+}
+
+sub SearchFailedResponse(;$)
+{
+    my ($msg) = @_;
+
+    $msg = "Search Failure"
+	if (!defined($msg));
+    
+    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef, $msg);
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

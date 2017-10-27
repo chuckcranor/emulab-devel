@@ -58,10 +58,10 @@ my $BASEURL = "https://gitlab.flux.utah.edu/";
 
 # Path where gitlab repos live in the FS - doesn't seem available through
 # the gitlab API
-my $BASEPATH = "/home/git/repositories";
+my $BASEPATH = "/var/opt/gitlab/git-data/repositories";
 
 # Path where logging info will be sent
-my $LOGFILE = "/home/git/gitmaild.log";
+my $LOGFILE = "/var/log/gitlab/gitmaild/gitmaild.log";
 
 # If set, send to members, not archivemail, by default - ie. act as if 
 # noarchive=1 was passed in the URL
@@ -260,6 +260,9 @@ sub run_gitmail($$) {
 
     # gitlab's URL for this project
     $options{'weburl'} = $repoinfo->{web_url};
+
+    # This enables us to put in a link to diffs as well
+    $options{'gitlaburl'} = $repoinfo->{web_url};
 
     # Turn all of this into a string to pass on the command line
     my $optionstr = format_options(%options);

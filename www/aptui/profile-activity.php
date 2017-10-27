@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2014, 2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -55,26 +55,40 @@ $instances = array();
 # First existing instances and then the history table.
 #
 $query1_result =
-    DBQueryFatal("select i.uuid,i.profile_version,i.created,'' as destroyed, ".
-		 "   i.creator,p.uuid as profile_uuid,u.email ".
+    DBQueryFatal("select 1 as active, ".
+                 "   i.uuid,i.profile_version,i.created,'' as destroyed, ".
+		 "   i.creator,p.uuid as profile_uuid,u.email,".
+                 "   GROUP_CONCAT(ia.public_url) as public_urls, ".
+                 "   i.slice_uuid,f.exitmessage,f.exitcode ".
 		 "  from apt_instances as i ".
+                 "left join apt_instance_failures as f ".
+                 "     on f.uuid=i.uuid ".
+                 "left join apt_instance_aggregates as ia ".
+                 "     on ia.uuid=i.uuid ".
 		 "left join apt_profile_versions as p on ".
 		 "     p.profileid=i.profile_id and ".
 		 "     p.version=i.profile_version ".
 		 "left join geni.geni_users as u on u.uuid=i.creator_uuid ".
 		 "where i.profile_id='$profileid' ".
-		 "order by i.created desc");
+		 "group by i.uuid order by i.created desc");
 
 $query2_result =
-    DBQueryFatal("select h.uuid,h.profile_version,h.created,h.destroyed, ".
-		 "    h.creator,p.uuid as profile_uuid,u.email ".
+    DBQueryFatal("select 0 as active, ".
+                 "    h.uuid,h.profile_version,h.created,h.destroyed, ".
+		 "    h.creator,p.uuid as profile_uuid,u.email, ".
+                 "    GROUP_CONCAT(ia.public_url) as public_urls, ".
+                 "    h.slice_uuid,f.exitmessage,f.exitcode ".
 		 "  from apt_instance_history as h ".
+                 "left join apt_instance_failures as f ".
+                 "     on f.uuid=h.uuid ".
+                 "left join apt_instance_aggregate_history as ia ".
+                 "     on ia.uuid=h.uuid ".
 		 "left join apt_profile_versions as p on ".
 		 "     p.profileid=h.profile_id and ".
 		 "     p.version=h.profile_version ".
 		 "left join geni.geni_users as u on u.uuid=h.creator_uuid ".
 		 "where h.profile_id='$profileid' ".
-		 "order by h.created desc");
+		 "group by h.uuid order by h.created desc");
 
 if (mysql_num_rows($query1_result) == 0 &&
     mysql_num_rows($query2_result) == 0) {
@@ -85,6 +99,7 @@ if (mysql_num_rows($query1_result) == 0 &&
 
 foreach (array($query1_result, $query2_result) as $query_result) {
     while ($row = mysql_fetch_array($query_result)) {
+        $active    = $row["active"];
 	$uuid      = $row["uuid"];
 	$puuid     = $row["profile_uuid"];
 	$pversion  = $row["profile_version"];
@@ -92,18 +107,51 @@ foreach (array($query1_result, $query2_result) as $query_result) {
 	$destroyed = $row["destroyed"];
 	$creator   = $row["creator"];
 	$email     = $row["email"];
+        $exitmessage= $row["exitmessage"];
+        $exitcode   = $row["exitcode"];
+        $public_urls= $row["public_urls"];
+        $slice_uuid= $row["slice_uuid"];
 	# If a guest user, use email instead.
 	if (isset($email)) {
 	    $creator = $email;
 	}
-
+        #
+        # If the slice is gone, the public url needs to be replaced.
+        #
+        $tmp = array();
+        foreach (preg_split("/,/", $public_urls) as $url) {
+            if ($destroyed != "" && preg_match("/publicid=\w*/", $url)) {
+                $url = "https://" . parse_url($url, PHP_URL_HOST) .
+                     "/showslicelogs.php?slice_uuid=" . $slice_uuid;
+            }
+            $tmp[] = $url;
+        }
+        $public_urls = implode(",", $tmp);
 	$instance = array();
+        $instance["active"]      = intval($active);
 	$instance["uuid"]        = $uuid;
 	$instance["p_uuid"]      = $puuid;
 	$instance["p_version"]   = $pversion;
 	$instance["creator"]     = $creator;
 	$instance["created"]     = $created;
 	$instance["destroyed"]   = $destroyed;
+        if (ISADMIN()) {
+            $instance["public_urls"]  = $public_urls;
+        }
+        if (isset($exitcode)) {
+            $instance["iserror"]       = 1;
+
+            if ($exitcode >= 0 && $exitcode <= count($geni_response_codes)) {
+                $instance["error_reason"] = $geni_response_codes[$exitcode];
+            }
+            elseif ($exitcode == GENIRESPONSE_STITCHER_ERROR) {
+                $instance["error_reason"] = "Stitcher Failed";
+            }
+            else {
+                $instance["error_reason"]  = $exitcode;
+            }
+            $instance["error_message"] = $exitmessage;
+        }
 	$instances[] = $instance;
     }
 }
@@ -113,13 +161,18 @@ echo "<div id='activity-body'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "    window.AJAXURL  = 'server-ajax.php';\n";
+echo "    window.ISADMIN  = " . ISADMIN() . ";\n";
 echo "</script>\n";
 echo "<script type='text/plain' id='instances-json'>\n";
-echo json_encode($instances);
+echo json_encode($instances,
+                 JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
 echo "</script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-echo "<script src='js/lib/bootstrap.js'></script>\n";
-echo "<script src='js/lib/require.js' data-main='js/profile-activity'></script>\n";
 
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+SPITREQUIRE("js/profile-activity.js");
+
+AddTemplate("profile-activity");
 SPITFOOTER();
 ?>

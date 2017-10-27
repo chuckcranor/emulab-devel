@@ -103,6 +103,7 @@ foreach my $node ($wiringdoc->documentElement()->find("./wire")->get_nodelist())
 	'location' => $location,
 	'iface' => GetText('iface', $node),
 	'role' => GetText('role', $node),
+	'type' => GetText('interface_type', $node),
 	'card' => GetText('card1', $node),
 	'port' => GetText('port1', $node),
 	'switch' => GetText('node_id2', $node),
@@ -149,7 +150,10 @@ foreach my $current (@wires) {
     my $device = $devices{$location};
     my $mac;
     my $role = $current->{'role'};
-    my $type = "bce";
+    my $type = $current->{'type'};
+    if (!defined($type)) {
+	$type = "bce";
+    }
     if ($role eq "mngmnt") {
 	$type = "ilo3";
 	$mac = $device->{'ilomac'};

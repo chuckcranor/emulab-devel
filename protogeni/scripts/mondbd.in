@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2014 University of Utah and the Flux Group.
+# Copyright (c) 2014-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -100,7 +100,7 @@ use Experiment;
 use Interface;
 use Lan;
 use Node;
-use OSinfo;
+use OSImage;
 use GeniHRN;
 
 # Connect to the monitoring DB.
@@ -347,10 +347,10 @@ while (1) {
 
     foreach my $n ( @nodes ) {
 	my $node = Node->Lookup( $n );
-	my $os = OSinfo->Lookup( $node->def_boot_osid(),
-				 $node->def_boot_osid_vers() );
+	my $osimage = OSImage->Lookup( $node->def_boot_osid(),
+				       $node->def_boot_osid_vers() );
 
-	next unless $os->osname =~ /XEN/;
+	next unless $osimage->imagename() =~ /XEN/;
 
 	my $mem = $node->memory() * 1024;
 
@@ -378,7 +378,7 @@ while (1) {
     my @fakenodenames = ();
     my @switchnodenames = ();
     my %fakenodemap = ();
-    my $query_result = emdbi::DBQueryWarnN( $tbdb, "SELECT e.node_id, w.node_id1, w.card1, w.port1, w.node_id2, w.card2, w.port2 " .
+    my $query_result = emdbi::DBQueryWarnN( $tbdb, "SELECT e.node_id, w.node_id1, w.card1, w.port1, w.iface1, w.node_id2, w.card2, w.port2, w.iface2 " .
 					    "FROM external_networks as e, " .
 					    "wires as w WHERE " .
 					    "e.node_id=w.node_id1 OR " .
@@ -387,18 +387,15 @@ while (1) {
 	my @fakenodes;
 
 	while( @fakenodes = $query_result->fetchrow_array() ) {
-	    my ($external, $node1, $card1, $port1, $node2, $card2, $port2) = @fakenodes;
+	    my ($external, $node1, $card1, $port1, $iface1,
+		$node2, $card2, $port2, $iface2) = @fakenodes;
 	    my $extnode = $external eq $node1 ? $node1 : $node2;
-	    my $extcard = $external eq $node1 ? $card1 : $card2;
-	    my $extport = $external eq $node1 ? $port1 : $port2;
+	    my $extiface = $external eq $node1 ? $iface1 : $iface2;
 	    my $switchnode = $external eq $node1 ? $node2 : $node1;
 	    my $switchcard = $external eq $node1 ? $card2 : $card1;
 	    my $switchport = $external eq $node1 ? $port2 : $port1;
 
-	    my $iface = Interface->Lookup( $extnode, $extcard, $extport );
-	    my $ifacename = $iface->iface();
-	    
-	    $fakenodemap{ "$extnode:$ifacename" } =
+	    $fakenodemap{ "$extnode:$extiface" } =
 		"$switchnode:$switchcard:$switchport";
 	    
 	    next if grep { $_ eq $switchnode } @switchnodenames;
@@ -497,10 +494,8 @@ while (1) {
 			$pquery_result = emdbi::DBQueryWarnN(
 			    $tbdb, "SELECT external_interface FROM " .
 			    "wires AS w, interfaces AS i WHERE " .
-			    "( ( w.node_id1='$nodeid' AND w.card1=i.card " .
-			    "AND w.port1=i.port ) OR " .
-			    "( w.node_id2='$nodeid' AND w.card2=i.card " .
-			    "AND w.port2=i.port ) ) AND " .
+			    "( ( w.node_id1='$nodeid' AND w.iface1=i.iface) " .
+			    "  ( w.node_id2='$nodeid' AND w.iface2=i.iface)) " .
 			    "i.node_id='$nodeid' AND i.iface='$iface'" );
 
 			if( $pquery_result && $pquery_result->numrows ) {

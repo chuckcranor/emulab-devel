@@ -115,10 +115,13 @@ if ($onoff ne "on" && $onoff ne "off") {
 #
 # Verify user and get his DB uid and other info for later.
 #
-my $this_user = User->ThisUser();
-if (! defined($this_user)) {
-    die("*** $0:\n".
-	"    You ($UID) do not exist!\n");
+my $this_user;
+if ($UID) {
+    $this_user = User->ThisUser();
+    if (! defined($this_user)) {
+	die("*** $0:\n".
+	    "    You ($UID) do not exist!\n");
+    }
 }
 
 if (defined($options{"e"})) {

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -116,6 +116,21 @@ cnet_dhcp()
 	if [ -x /usr/local/sbin/dhclient ]; then
 	    echo "`date`: Using dhclient port..."
 	    dhclient_program="/usr/local/sbin/dhclient"
+
+	    # newer dhcp ports also don't have -i timeout option
+	    _vers=`/usr/local/sbin/dhclient --version 2>&1`
+	    if [ $? -eq 0 ]; then
+		case "$_vers" in
+		isc-dhclient-V3*)
+		    ;;
+		*)
+		    dhclient_flags=`echo $dhclient_flags | sed -e 's/-i [0-9][0-9]*//'`
+		    dhclient_flags="$dhclient_flags -d"
+		    ;;
+		esac
+		echo "`date`: port version \"$_vers\", flags: $dhclient_flags"
+	    fi
+
 	    ${dhclient_program} ${dhclient_flags} $*
 	    echo "`date`: $dhclient_program returned $?"
 	else

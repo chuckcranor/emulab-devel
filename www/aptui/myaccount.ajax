@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,7 +56,6 @@ function CheckPageArgs()
     }
     $target_user = User::LookupByUid($uid);
     if (!$target_user) {
-        sleep(2);
 	SPITAJAX_ERROR(-1, "Unknown target uid");
         return -1;
     }
@@ -64,7 +63,7 @@ function CheckPageArgs()
         return 0;
     
     if (!ISADMIN()) {
-	SPITAJAX_ERROR(-1, "Not enough permissin");
+	SPITAJAX_ERROR(-1, "Not enough permission");
 	return -1;
     }
     return 0;
@@ -139,21 +138,6 @@ function CheckForm()
     }
     elseif (! TBvalid_city($formfields["city"])) {
         $errors["city"] = TBFieldErrorString();
-    }
-    if (isset($formfields["password1"]) && $formfields["password1"] != "") {
-        if (!isset($formfields["password2"]) ||
-            strcmp($formfields["password2"], "") == 0) {
-            $errors["password2"] = "Missing Field";
-        }
-        elseif (strcmp($formfields["password1"], $formfields["password2"])) {
-            $errors["password2"] = "Does not match password";
-        }
-        elseif (! CHECKPASSWORD($formfields["uid"],
-                                $formfields["password1"],
-                                $formfields["name"],
-                                $formfields["email"], $checkerror)) {
-            $errors["password1"] = "$checkerror";
-        }
     }
 
     # Present these errors before we call out to do anything else.
@@ -254,34 +238,12 @@ function Do_Update()
     if ($formfields["affiliation"] != $target_user->affil()) {
         $args["affiliation"] = $formfields["affiliation"];
     }
-    if (isset($formfields["password1"]) && $formfields["password1"] != "") {
-        $args["password1"] = $formfields["password1"];
-        $args["password2"] = $formfields["password2"];
-    }
     if (count($args) &&
         !User::ModUserInfo($target_user,
                            $target_user->uid(), $args, $errors)) {
 	SPITAJAX_ERROR(2, $errors);
         return;
     }
-    #
-    # Change the passphrase on the SSL key. If not an active user, it will
-    # happen when the user is approved. 
-    # 
-    if ($target_user->IsActive() &&
-        isset($formfields["password1"]) && $formfields["password1"] != "") {
-        $safe_password = escapeshellarg($formfields["password1"]);
-
-        # Do not send email, mkusercert sends email and hides the password.
-        $retval = SUEXEC($target_uid, "nobody",
-                         "webmkusercert -C -p $safe_password $target_uid",
-                         SUEXEC_ACTION_IGNORE);
-        if ($retval) {
-            SPITAJAX_ERROR(-1, "Could not reset password on SSL private key");
-            return;
-        }
-    }
-    
     #
     # The user can change their email on this pass, but the backend
     # does not allow that, so have to call tbacct directly with an
@@ -301,7 +263,7 @@ function Do_Update()
                              SUEXEC_ACTION_CONTINUE);
         }
         if ($retval) {
-            $errors["error"] = "Internal error changing password";
+            $errors["error"] = "Internal error changing email";
             SPITAJAX_ERROR(2, $errors);
             return;
         }

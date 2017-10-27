@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2015 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2017 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -83,8 +83,8 @@ findnode_bootinfo_db(struct in_addr ipaddr, int *events)
 	}
 
 	row = mysql_fetch_row(res);
-	if ((row[0] && strcmp(row[0], "pxelinux") == 0) ||
-	    (row[1] && strcmp(row[1], "pxelinux") == 0))
+	if ((row[1] && strcmp(row[1], "pxelinux") == 0) ||
+	    (row[2] && strcmp(row[2], "pxelinux") == 0))
 		*events = 0;
 	else
 		*events = 1;
@@ -155,17 +155,17 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 		 */
 		res = mydb_query("select n.def_boot_osid, n.def_boot_cmd_line, "
 				 "        odef.path, odef.mfs, "
-				 "        odef.osfeatures, pdef.partition, "
+				 "        odef.osfeatures, pdef.`partition`, "
 				 "       n.temp_boot_osid, "
 				 "        otemp.path, otemp.mfs, "
-				 "        otemp.osfeatures, ptemp.partition, "
+				 "        otemp.osfeatures, ptemp.`partition`, "
 				 "       n.next_boot_osid, n.next_boot_cmd_line, "
 				 "        onext.path, onext.mfs, "
-				 "        onext.osfeatures, pnext.partition, "
+				 "        onext.osfeatures, pnext.`partition`, "
 				 "       r.pid,n.pxe_boot_path "
 				 " from nodes as n "
 				 "left join reserved as r on n.node_id=r.node_id "
-				 "left join partitions as pdef on "
+				 "left join `partitions` as pdef on "
 				 "     n.node_id=pdef.node_id and "
 				 "     n.def_boot_osid=pdef.osid "
 				 "left join os_info as oidef on "
@@ -173,7 +173,7 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 				 "left join os_info_versions as odef on "
 				 "     odef.osid=oidef.osid and "
 				 "     odef.vers=oidef.version "
-				 "left join partitions as ptemp on "
+				 "left join `partitions` as ptemp on "
 				 "     n.node_id=ptemp.node_id and "
 				 "     n.temp_boot_osid=ptemp.osid "
 				 "left join os_info as oitemp on "
@@ -181,7 +181,7 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 				 "left join os_info_versions as otemp on "
 				 "     otemp.osid=oitemp.osid and "
 				 "     otemp.vers=oitemp.version "
-				 "left join partitions as pnext on "
+				 "left join `partitions` as pnext on "
 				 "     n.node_id=pnext.node_id and "
 				 "     n.next_boot_osid=pnext.osid "
 				 "left join os_info as oinext on "
@@ -192,7 +192,7 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 				 "left outer join "
 				 "  (select type,attrvalue from node_type_attributes "
 				 "     where attrkey='nobootinfo' and attrvalue='1' "
-				 "     group by type) as nobootinfo_types "
+				 "     group by type,attrvalue) as nobootinfo_types "
 				 "  on n.type=nobootinfo_types.type "
 				 "where n.node_id='%s' "
 				 "  and nobootinfo_types.attrvalue is NULL",
@@ -201,18 +201,18 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 	else if (! haskey) {
 		res = mydb_query("select n.def_boot_osid, n.def_boot_cmd_line, "
 				 "        odef.path, odef.mfs, "
-				 "        odef.osfeatures, pdef.partition, "
+				 "        odef.osfeatures, pdef.`partition`, "
 				 "       n.temp_boot_osid, "
 				 "        otemp.path, otemp.mfs, "
-				 "        otemp.osfeatures, ptemp.partition, "
+				 "        otemp.osfeatures, ptemp.`partition`, "
 				 "       n.next_boot_osid, n.next_boot_cmd_line, "
 				 "        onext.path, onext.mfs, "
-				 "        onext.osfeatures, pnext.partition, "
+				 "        onext.osfeatures, pnext.`partition`, "
 				 "       r.pid,n.pxe_boot_path "
 				 " from interfaces as i "
 				 "left join nodes as n on i.node_id=n.node_id "
 				 "left join reserved as r on i.node_id=r.node_id "
-				 "left join partitions as pdef on "
+				 "left join `partitions` as pdef on "
 				 "     n.node_id=pdef.node_id and "
 				 "     n.def_boot_osid=pdef.osid "
 				 "left join os_info as oidef on "
@@ -220,7 +220,7 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 				 "left join os_info_versions as odef on "
 				 "     odef.osid=oidef.osid and "
 				 "     odef.vers=oidef.version "
-				 "left join partitions as ptemp on "
+				 "left join `partitions` as ptemp on "
 				 "     n.node_id=ptemp.node_id and "
 				 "     n.temp_boot_osid=ptemp.osid "
 				 "left join os_info as oitemp on "
@@ -228,7 +228,7 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 				 "left join os_info_versions as otemp on "
 				 "     otemp.osid=oitemp.osid and "
 				 "     otemp.vers=oitemp.version "
-				 "left join partitions as pnext on "
+				 "left join `partitions` as pnext on "
 				 "     n.node_id=pnext.node_id and "
 				 "     n.next_boot_osid=pnext.osid "
 				 "left join os_info as oinext on "
@@ -239,7 +239,7 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 				 "left outer join "
 				 "  (select type,attrvalue from node_type_attributes "
 				 "     where attrkey='nobootinfo' and attrvalue='1' "
-				 "     group by type) as nobootinfo_types "
+				 "     group by type,attrvalue) as nobootinfo_types "
 				 "  on n.type=nobootinfo_types.type "
 				 "where i.IP='%s' "
 				 "  and nobootinfo_types.attrvalue is NULL",
@@ -280,18 +280,18 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 		/* This is meant to be similar to the above, but queries on the wideareanodekey instead. */
 		res = mydb_query("SELECT n.def_boot_osid, n.def_boot_cmd_line, "
 				 " odef.path, odef.mfs, "
-				 " odef.osfeatures, pdef.partition, "
+				 " odef.osfeatures, pdef.`partition`, "
 				 "n.temp_boot_osid, "
 				 " otemp.path, otemp.mfs, "
-				 " otemp.osfeatures, ptemp.partition, "
+				 " otemp.osfeatures, ptemp.`partition`, "
 				 "n.next_boot_osid, n.next_boot_cmd_line, "
 				 " onext.path, onext.mfs, "
-				 " onext.osfeatures, pnext.partition, "
+				 " onext.osfeatures, pnext.`partition`, "
 				 "r.pid,n.pxe_boot_path "
 				 "FROM nodes AS n "
 				 "LEFT JOIN reserved AS r ON "
 				 "     n.node_id=r.node_id "
-				 "LEFT JOIN partitions AS pdef ON "
+				 "LEFT JOIN `partitions` AS pdef ON "
 				 "     n.node_id=pdef.node_id AND "
 				 "     n.def_boot_osid=pdef.osid "
 				 "LEFT JOIN os_info AS oidef ON "
@@ -299,7 +299,7 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 				 "left join os_info_versions as odef on "
 				 "     odef.osid=oidef.osid and "
 				 "     odef.vers=oidef.version "
-				 "LEFT JOIN partitions AS ptemp ON"
+				 "LEFT JOIN `partitions` AS ptemp ON"
 				 "     n.node_id=ptemp.node_id AND "
 				 "     n.temp_boot_osid=ptemp.osid "
 				 "LEFT JOIN os_info AS oitemp ON "
@@ -307,7 +307,7 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 				 "left join os_info_versions as otemp on "
 				 "     otemp.osid=oitemp.osid and "
 				 "     otemp.vers=oitemp.version "
-				 "LEFT JOIN partitions AS pnext ON "
+				 "LEFT JOIN `partitions` AS pnext ON "
 				 "     n.node_id=pnext.node_id AND "
 				 "     n.next_boot_osid=pnext.osid "
 				 "LEFT JOIN os_info AS oinext ON "
@@ -319,7 +319,8 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 					"(SELECT type,attrvalue FROM "
 				 "         node_type_attributes WHERE "
 				 "           attrkey='nobootinfo' AND "
-				 "           attrvalue='1' GROUP BY type) "
+				 "           attrvalue='1' "
+				 "          GROUP BY type,attrvalue) "
 				 	"AS nobootinfo_types ON "
 				 "         n.type=nobootinfo_types.type "
 				 "WHERE n.node_id IN "

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -261,6 +261,7 @@ AC_SUBST(PROTOGENI_LOCALUSER)
 AC_SUBST(PROTOGENI_MAXSERVERLOAD)
 AC_SUBST(PROTOGENI_GENIWEBLOGIN)
 AC_SUBST(PROTOGENI_NONFSMOUNTS)
+AC_SUBST(PORTAL_ENABLE)
 AC_SUBST(GENI_PUBRPCPORT)
 AC_SUBST(PROTOGENI_URL)
 AC_SUBST(PROTOGENI_GENIRACK)
@@ -308,6 +309,9 @@ AC_SUBST(ZFS_ROOT)
 AC_SUBST(ZFS_QUOTA_USER)
 AC_SUBST(ZFS_QUOTA_PROJECT)
 AC_SUBST(ZFS_QUOTA_GROUP)
+AC_SUBST(ZFS_QUOTA_USER_X)
+AC_SUBST(ZFS_QUOTA_PROJECT_X)
+AC_SUBST(ZFS_QUOTA_GROUP_X)
 AC_SUBST(ZFS_NOEXPORT)
 AC_SUBST(INCREMENTAL_MOUNTD)
 AC_SUBST(WITHAMD)
@@ -432,6 +436,7 @@ PROTOGENI_MAXSERVERLOAD=12
 PROTOGENI_NONFSMOUNTS=0
 GENI_PUBRPCPORT=12370
 PROTOGENI_GENIRACK=0
+PORTAL_ENABLE=0
 PROTOGENI_NICKNAME="unknown"
 STANDALONE_CLEARINGHOUSE=0
 NODE_USAGE_SUPPORT=0
@@ -478,6 +483,9 @@ ZFS_ROOT=z
 ZFS_QUOTA_USER="1G"
 ZFS_QUOTA_PROJECT="100G"
 ZFS_QUOTA_GROUP="10G"
+ZFS_QUOTA_USER_X="1.0"
+ZFS_QUOTA_PROJECT_X="1.0"
+ZFS_QUOTA_GROUP_X="1.0"
 ZFS_NOEXPORT=0
 INCREMENTAL_MOUNTD=0
 WITHAMD=0
@@ -706,6 +714,9 @@ fi
 if test $WITHAMD -eq 1; then
     AC_DEFINE_UNQUOTED(WITHAMD, 1, [Run AMD on boss node to handle shared FS mounts])
     AC_DEFINE_UNQUOTED(AMD_ROOT, "$AMD_ROOT", [Actual FS mount directory for AMD])
+fi
+if test $PROTOGENI_LOCALUSER -eq 1; then
+    AC_DEFINE_UNQUOTED(PROTOGENI_LOCALUSER, 1, [Map geni users to local users,projects,groups])
 fi
 AC_DEFINE_UNQUOTED(IMPORT_TMPDIR, "$IMPORT_TMPDIR", [Directory to use for imported images])
 
@@ -1207,6 +1218,18 @@ else
 fi
 
 #
+# Check to see if snmpit is a plain file, delete it if so. It is now
+# a directory. This only matters when reconfiguring an existing tree.
+#
+if test -f "tbsetup/snmpit"; then
+    echo "Removing old snmpit file, now a directory";
+    /bin/rm -f tbsetup/snmpit
+    if test $? -ne 0; then
+        AC_MSG_ERROR([Cannot remove old tbsetup/snmpit file]);
+    fi 
+fi
+
+#
 # Determine the timezone (stupidity in PHP5, see apache/php.ini)
 #
 if test -e "$srcdir/utils/gettimezone.pl"; then
@@ -1255,7 +1278,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	db/nalloc db/nfree db/if2port db/backup \
 	db/webcontrol db/node_status db/genelists db/genelists.proxy \
 	db/dumperrorlog.proxy \
-	db/setsitevar db/newwanode db/audit db/changeuid db/changepid \
+	db/setsitevar db/audit db/changeuid db/changepid \
 	db/libdb.pm db/libtbdb.pm db/inuse db/avail db/nodeip db/showgraph \
 	db/emdb.pm db/emdbi.pm db/emutil.pm \
 	db/dhcpd_makeconf db/nodelog db/unixgroups \
@@ -1282,8 +1305,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	backend/editnodetype backend/editsitevars backend/newimageid \
 	backend/editgroup backend/newimageid_ez \
 	tbsetup/GNUmakefile tbsetup/console_setup tbsetup/spewlogfile \
-	tbsetup/snmpit_test/GNUmakefile  \
-	tbsetup/snmpit_old/GNUmakefile  \
+	tbsetup/snmpit/GNUmakefile  \
 	tbsetup/spewrpmtar tbsetup/gentopofile tbsetup/power_sgmote.pm \
 	tbsetup/console_reset tbsetup/bwconfig tbsetup/power_rpc27.pm \
 	tbsetup/power_mail.pm tbsetup/power_whol.pm \
@@ -1295,7 +1317,6 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	tbsetup/wanlinkinfo tbsetup/wanassign \
 	tbsetup/swapexp	tbsetup/endexp tbsetup/elabinelab \
 	tbsetup/eventsys.proxy \
-	tbsetup/snmpit.proxy \
 	tbsetup/ns2ir/GNUmakefile \
 	tbsetup/ns2ir/parse.tcl tbsetup/ns2ir/tb_compat.tcl \
 	tbsetup/ns2ir/parse-ns tbsetup/ns2ir/parse.proxy \
@@ -1364,7 +1385,8 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	utils/mkblob utils/rmblob utils/ctrladdr utils/tcppd \
 	utils/mktestbedtest utils/pxelinux_makeconf \
 	utils/addvpubaddr utils/attend utils/atten utils/addrfdevice \
-	utils/addrfpath utils/reserve \
+	utils/addrfpath utils/reserve utils/predict utils/notify-reservations \
+	utils/setzfsquotas \
 	www/GNUmakefile www/defs.php3 www/dbdefs.php3 www/xmlrpc.php3 \
 	www/xmlrpcpipe.php3 \
 	www/swish.conf www/websearch \
@@ -1467,7 +1489,9 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/freebsd/init/9/GNUmakefile \
  clientside/tmcc/freebsd/init/10/GNUmakefile \
  clientside/tmcc/freebsd/init/10.3/GNUmakefile \
+ clientside/tmcc/freebsd/init/10.4/GNUmakefile \
  clientside/tmcc/freebsd/init/11/GNUmakefile \
+ clientside/tmcc/freebsd/init/12/GNUmakefile \
  clientside/tmcc/freebsd/supfile clientside/tmcc/freebsd/sethostname \
  clientside/tmcc/linux/GNUmakefile clientside/tmcc/linux/supfile \
  clientside/tmcc/linux/sethostname.dhclient \
@@ -1481,6 +1505,8 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/ubuntu11/GNUmakefile \
  clientside/tmcc/ubuntu14/GNUmakefile \
  clientside/tmcc/ubuntu15/GNUmakefile \
+ clientside/tmcc/ubuntu16/GNUmakefile \
+ clientside/tmcc/ubuntu16-ms/GNUmakefile \
  clientside/tmcc/linux-ms/GNUmakefile \
  clientside/tmcc/freebsd5/GNUmakefile clientside/tmcc/freebsd5/supfile \
  clientside/tmcc/freebsd6/GNUmakefile clientside/tmcc/freebsd6/supfile \
@@ -1489,6 +1515,7 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/freebsd9/GNUmakefile clientside/tmcc/freebsd9/netif-emulab \
  clientside/tmcc/freebsd10/GNUmakefile clientside/tmcc/freebsd10/netif-emulab \
  clientside/tmcc/freebsd11/GNUmakefile clientside/tmcc/freebsd11/netif-emulab \
+ clientside/tmcc/freebsd12/GNUmakefile clientside/tmcc/freebsd12/netif-emulab \
  clientside/tmcc/cygwinxp/GNUmakefile clientside/tmcc/dp/GNUmakefile \
  clientside/tmcc/openbsd/GNUmakefile clientside/tmcc/ron/GNUmakefile \
  clientside/tmcc/plab/GNUmakefile clientside/tmcc/cygwinseven/GNUmakefile \

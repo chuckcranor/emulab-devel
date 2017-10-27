@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 University of Utah and the Flux Group.
+ * Copyright (c) 2010-2017 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -54,6 +54,8 @@ char *imagedir = NULL;
 static char *rimagedir;
 static uint32_t maxrate = 100000000;
 static int dynrate = 0;
+static char *eserver = NULL;
+static int clientreport = 0;
 
 /*
  * We use a small server inactive timeout since we no longer have
@@ -84,11 +86,18 @@ null_read(void)
 {
 	/* "Reading" the config file is a no-op. Just echo settings. */
 	FrisLog("  dynamic bandwidth = %s", dynrate ? "true" : "false");
-	if (dynrate)
-		FrisLog("  max bandwidth = N/A");
+	if (maxrate == 0)
+		FrisLog("  max bandwidth = unlimited");
 	else
-		FrisLog("  max bandwidth = %d Mb/sec",
+		FrisLog("  max bandwidth = %d Mbit/sec",
 			(int)(maxrate/1000000));
+
+	if (clientreport > 0) {
+		FrisLog("  clients report progress every %d seconds",
+			clientreport);
+		if (eserver)
+			FrisLog("  progress events sent to %s", eserver);
+	}
 
 	if (maxlinger < 0)
 		FrisLog("  server exits after last client leaves");
@@ -114,11 +123,18 @@ static int
 null_restore(void *state)
 {
 	FrisLog("  dynamic bandwidth = %s", dynrate ? "true" : "false");
-	if (dynrate)
-		FrisLog("  max bandwidth = N/A");
+	if (maxrate == 0)
+		FrisLog("  max bandwidth = unlimited");
 	else
-		FrisLog("  max bandwidth = %d MB/sec",
+		FrisLog("  max bandwidth = %d Mbit/sec",
 			(int)(maxrate/1000000));
+
+	if (clientreport > 0) {
+		FrisLog("  clients report progress every %d seconds",
+			clientreport);
+		if (eserver)
+			FrisLog("  progress events sent to %s", eserver);
+	}
 
 	if (maxlinger < 0)
 		FrisLog("  server exits after last client leaves");
@@ -166,10 +182,29 @@ set_get_values(struct config_host_authinfo *ai, int ix)
 	/* get_timeout */
 	ai->imageinfo[ix].get_timeout = maxlinger;
 
-	/* get_options */
-	snprintf(str, sizeof str, " %s-W %u",
-		 dynrate ? "-D " : "", maxrate);
+	/*
+	 * get_options:
+	 *  - maxrate of zero means unlimited.
+	 *  - for dynamic rate adjustment, we use the std/usr
+	 *    bandwidth value as the maximum bandwidth.
+	 */
+	if (maxrate)
+		snprintf(str, sizeof str, " -W %u", maxrate);
+	else
+		snprintf(str, sizeof str, " -G 0");
+	if (dynrate)
+		strcat(str, " -D");
 	strcat(str, " -K 15");
+	if (clientreport > 0) {
+		int len = strlen(str);
+		snprintf(&str[len], sizeof(str) - len, " -H %d",
+			 clientreport);
+		if (eserver) {
+			len = strlen(str);
+			snprintf(&str[len], sizeof(str) - len, " -E %s",
+				 eserver);
+		}
+	}
 	ai->imageinfo[ix].get_options = mystrdup(str);
 
 	/* and whack the put_* fields */
@@ -178,6 +213,18 @@ set_get_values(struct config_host_authinfo *ai, int ix)
 	ai->imageinfo[ix].put_itimeout = 0;
 	ai->imageinfo[ix].put_oldversion = NULL;
 	ai->imageinfo[ix].put_options = NULL;
+
+	/*
+	 * parent GET options:
+	 *  - if we are making client reports, make sure that our downloads
+	 *    from a parent enable those.
+	 *    XXX right now, the server always dictates the interval.
+	 */
+	if (clientreport > 0) {
+		snprintf(str, sizeof str, " -H 0");
+		ai->imageinfo[ix].pget_options = mystrdup(str);
+	} else
+		ai->imageinfo[ix].pget_options = NULL;
 }
 
 /*
@@ -209,6 +256,9 @@ set_put_values(struct config_host_authinfo *ai, int ix)
 	ii->get_methods = 0;
 	ii->get_timeout = 0;
 	ii->get_options = NULL;
+
+	/* and pget fields */
+	ii->pget_options = NULL;
 }
 
 #define FREE(p) { if (p) free(p); }
@@ -233,6 +283,7 @@ null_free_host_authinfo(struct config_host_authinfo *ai)
 			FREE(ai->imageinfo[i].get_options);
 			FREE(ai->imageinfo[i].put_oldversion);
 			FREE(ai->imageinfo[i].put_options);
+			FREE(ai->imageinfo[i].pget_options);
 			FREE(ai->imageinfo[i].extra);
 		}
 		free(ai->imageinfo);
@@ -779,9 +830,28 @@ null_init(char *opts)
 	/*
 	 * Options:
 	 *   mcaddr=A.B.C.D      MC base address
+	 *   mcportbase=N	 MC base portnum (0 for any ephem)
+	 *   mcportnum=N	 Number of MC ports (0 for all above base)
 	 *   bandwidth=NNNNNNNN  Max bandwidth of a server
 	 *   dynamicbw=(1|0)	 Use dynamic bandwidth control
 	 *   maxlinger=N	 Server lingers for N seconds after last req
+	 *   report=N		 Clients report progress every N seconds
+	 *   eventserver=host	 Host to sent client report events to
+	 *
+	 * Dependencies:
+	 *
+	 *   If "bandwidth" is zero, max bandwidth is unlimited.
+	 *
+	 *   "maxlinger" should be at least as long as "report" to ensure
+	 *   you don't exit between reports.
+	 *
+	 *   If reporting is disabled, then "maxlinger" should be set higher
+	 *   (say, 3-5 minutes) to account for clients with lots of memory
+	 *   that download all the chunks well before they finish writing
+	 *   them to disk. Not critical, but you could lose client stats.
+	 *
+	 *   If "report" is non-zero but "eventserver" is not set, reports
+	 *   are only logged to the server log.
 	 */
 	if (opts && opts[0]) {
 		char *opt;
@@ -792,7 +862,11 @@ null_init(char *opts)
 			if (cp) {
 				*cp = 0;
 				if (strcmp(opt, "mcaddr") == 0)
-					DEFAULT_MCADDR = cp + 1;
+					DEFAULT_MCADDR = mystrdup(cp + 1);
+				else if (strcmp(opt, "mcportbase") == 0)
+					DEFAULT_MCPORT = mystrdup(cp + 1);
+				else if (strcmp(opt, "mcportnum") == 0)
+					DEFAULT_MCNUMPORT = mystrdup(cp + 1);
 				else if (strcmp(opt, "bandwidth") == 0)
 					maxrate = (uint32_t)
 						strtol(cp+1, NULL, 10);
@@ -802,9 +876,20 @@ null_init(char *opts)
 						1 : 0;
 				else if (strcmp(opt, "maxlinger") == 0)
 					maxlinger = strtol(cp+1, NULL, 10);
+				else if (strcmp(opt, "report") == 0)
+					clientreport = strtol(cp+1, NULL, 10);
+				else if (strcmp(opt, "eventserver") == 0)
+					eserver = mystrdup(cp + 1);
 			}
 		}
 		free(opts);
+	}
+
+	/* XXX we should attempt to validate the event server here */
+	if (eserver && clientreport == 0) {
+		FrisError("null_init: no report interval specified, event server disabled");
+		free(eserver);
+		eserver = NULL;
 	}
 
 	if (imagedir == NULL)

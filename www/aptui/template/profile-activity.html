@@ -10,6 +10,10 @@
 	  <th>Creator</th>
 	  <th>Created</th>
 	  <th>Destroyed</th>
+	  <th>Error</th>
+	  <% if (window.ISADMIN) { %>
+	    <th>Logs</th>
+	  <% } %>
 	</tr>
       </thead>
       <tbody>
@@ -21,7 +25,35 @@
 	  </td>
 	  <td><%- instance.creator %></td>
 	  <td><%- instance.created %></td>
-	  <td><%- instance.destroyed %></td>
+	  <% if (instance.active) { %>
+	    <td><a href='status.php?uuid=<%- instance.uuid %>' target="_blank">
+	      <span class="glyphicon glyphicon-eye-open"></span></a></td>
+	  <% } else { %>
+	    <td><%- instance.destroyed %></td>
+	  <% } %>
+	  <td class="text-danger">
+	    <% if (_.has(instance, "iserror")) { %>
+	      <% if (_.has(instance, "error_message")) { %>
+		<span style="text-decoration: underline;"
+		      data-toggle='popover'
+		      data-delay='{"hide":100, "show":500}'
+		      data-html='true'
+		      data-uuid="<%- instance.uuid %>"
+		      data-content="<code style='white-space: pre-wrap'><%- instance.error_message %></code>"
+		><%- instance.error_reason %></span>
+	      <% } else { %>
+		<%- instance.error_reason %>
+	      <% } %>
+	    <% } %>
+	  </td>
+	  <% if (window.ISADMIN) { %>
+	    <td>
+	      <% _.each(instance.public_urls.split(","), function(url) { %>
+		<a href='<%- url %>' target="_blank">
+		  <span class="glyphicon glyphicon-link"></span></a>
+	      <% }); %>
+	    </td>
+	  <% } %>
 	</tr>
 	<% }); %>
       </tbody>

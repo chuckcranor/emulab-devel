@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2009-2014 University of Utah and the Flux Group.
+# Copyright (c) 2009-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -541,14 +541,14 @@ done:
 	my $op;
 
 	if ($doall) {
-	    my $fwport;
-	    if ($experiment->FirewallAndPort(\$fwnode, \$fwport) != 0 ||
-		system("$SNMPIT -d ${fwnode}:${fwport}") != 0) {
+	    my $fwiface;
+	    if ($experiment->FirewallAndIface(\$fwnode, \$fwiface) != 0 ||
+		system("$SNMPIT -d ${fwnode}:${fwiface}") != 0) {
 		push(@fwstate,
-		     "Firewall cnet interface ${fwnode}:${fwport} NOT disabled");
+		     "Firewall cnet interface ${fwnode}:${fwiface} NOT disabled");
 	    } else {
 		push(@fwstate,
-		     "Firewall cnet interface ${fwnode}:${fwport} disabled");
+		     "Firewall cnet interface ${fwnode}:${fwiface} disabled");
 	    }
 	    $experiment->SetPanicBit(2);
 	    $op = "Swapout";
@@ -600,9 +600,9 @@ sub Panic($$$)
     my $eid = $experiment->eid();
 
     my $firewalled = $experiment->IsFirewalled();
-    my ($firewall, $port);
+    my ($firewall, $iface);
     if ($firewalled) {
-	if ($experiment->FirewallAndPort(\$firewall, \$port) != 0) {
+	if ($experiment->FirewallAndIface(\$firewall, \$iface) != 0) {
 	    print STDERR "Could not determine firewall port for $experiment\n";
 	    return -1;
 	}
@@ -728,7 +728,7 @@ sub Panic($$$)
 	else {
 	    print "Enabling the control network ...\n";
 	    if ($firewalled) {
-		system("$SNMPIT -e ${firewall}:${port}");
+		system("$SNMPIT -e ${firewall}:${iface}");
 	    }
 	    else {
 		system("$SNMPIT -R $pid $eid");
@@ -779,7 +779,7 @@ sub Panic($$$)
 	  level2:
 	    print "Disabling the control network ...\n";
 	    if ($firewalled) {
-		system("$SNMPIT -d ${firewall}:${port}");
+		system("$SNMPIT -d ${firewall}:${iface}");
 	    }
 	    else {
 		system("$SNMPIT -D $pid $eid");

@@ -42,6 +42,7 @@ INSERT INTO sitevariables VALUES ('plab/setup/vnode_batch_size',NULL,'40','Numbe
 INSERT INTO sitevariables VALUES ('plab/setup/vnode_wait_time','300','960','Number of seconds to wait for a plab node to setup',0);
 INSERT INTO sitevariables VALUES ('watchdog/rusage','30','300','Interval in _seconds_ between node resource usage reports (0==never report)',0);
 INSERT INTO sitevariables VALUES ('watchdog/hostkeys',NULL,'999999','Interval in minutes between host key reports (0=never report, 999999=once only)',0);
+INSERT INTO sitevariables VALUES ('watchdog/rootpswd',NULL,'60','Interval in minutes between forced resets of root password to Emulab-assigned value (0=never reset)',0);
 INSERT INTO sitevariables VALUES ('plab/message',NULL,'','Message to display at the top of the plab_ez page',0);
 INSERT INTO sitevariables VALUES ('node/ssh_pubkey','ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAIEA5pIVUkDhVdgGUcsUTQgmI/N4AhJba05gGn7/Ja46OorcKH12sbn9uH4XImdXRF16VVPMTytcOUAqsMsQ20cUcGyvXHnmmNANrLO2htCzNUdrbPkx5X63FNujjp7mLgdlnwzh/Zuoxw65DVXeVp3T5+9Ad25O4u9ybYsHFc8RmBM= root@boss.emulab.net','','Boss SSH public key to install on nodes',0);
 INSERT INTO sitevariables VALUES ('web/banner',NULL,'','Message to place in large lettering at top of home page (typically a special message)',0);
@@ -109,10 +110,11 @@ INSERT INTO sitevariables VALUES ('images/create/maxwait',NULL,'72','Max time (m
 INSERT INTO sitevariables VALUES ('images/create/idlewait',NULL,'8','Max time (minutes) to allow between periods of progress (image file getting larger) when saving an image (should be <= maxwait)',0);
 INSERT INTO sitevariables VALUES ('images/create/maxsize',NULL,'6','Max size (GB) of a created image',0);
 INSERT INTO sitevariables VALUES ('general/testbed_shutdown',NULL,'0','Non-zero value indicates that the testbed is shutdown and scripts should not do anything when they run. DO NOT SET THIS BY HAND!',0);
-INSERT INTO sitevariables VALUES ('images/frisbee/maxrate_std',NULL,'72000000','Max bandwidth (Bytes/sec) at which to distribute standard images from the /usr/testbed/images directory.',0);
-INSERT INTO sitevariables VALUES ('images/frisbee/maxrate_usr',NULL,'54000000','Max bandwidth (Bytes/sec) at which to distribute user-defined images from the /proj/.../images directory.',0);
+INSERT INTO sitevariables VALUES ('images/frisbee/maxrate_std',NULL,'72000000','Max bandwidth (Bits/sec) at which to distribute standard images from the /usr/testbed/images directory.',0);
+INSERT INTO sitevariables VALUES ('images/frisbee/maxrate_usr',NULL,'54000000','Max bandwidth (Bits/sec) at which to distribute user-defined images from the /proj/.../images directory.',0);
 INSERT INTO sitevariables VALUES ('images/frisbee/maxrate_dyn',NULL,'0','If non-zero, use bandwidth throttling on all frisbee servers; maxrate_{std,usr} serve as initial BW values.',0);
 INSERT INTO sitevariables VALUES ('images/frisbee/maxlinger',NULL,'180','Seconds to wait after last request before exiting; 0 means never exit, -1 means exit after last client leaves.',0);
+INSERT INTO sitevariables VALUES ('images/frisbee/heartbeat',NULL,'15','Interval at which frisbee client should report progress (0==never report).',0);
 INSERT INTO sitevariables VALUES ('general/idlepower_enable',NULL,'0','Enable idle power down to conserve electricity',0);
 INSERT INTO sitevariables VALUES ('general/idlepower_idletime',NULL,'3600','Maximum number of seconds idle before a node is powered down to conserve electricity',0);
 INSERT INTO sitevariables VALUES ('general/autoswap_max',NULL,'120','Maximum number of hours for the experiment autoswap limit.',0);
@@ -153,6 +155,7 @@ INSERT INTO sitevariables VALUES ('storage/ltdataset/graceperiod',NULL,'180','Ti
 INSERT INTO sitevariables VALUES ('storage/ltdataset/maxidle',NULL,'180','Max time (days) from last use before lease is marked expired (0 == unlimited)',0);
 INSERT INTO sitevariables VALUES ('general/disk_trim_interval',NULL,'0','If non-zero, minimum interval (seconds) between attempts to TRIM boot disk during disk reloading. Zero disables all TRIM activity. Node must also have non-zero bootdisk_trim attribute.',0);
 INSERT INTO sitevariables VALUES ('storage/simultaneous_ro_datasets',NULL,'0','If set, allow simultaneous read-only mounts of datasets',0);
+INSERT INTO sitevariables VALUES ('storage/local/disktypes',NULL,'Any','Types of local disks used to provision blockstores. One of: any, hdd-only, ssd-only.',0);
 INSERT INTO sitevariables VALUES ('aptlab/message',NULL,'','Message to display at the top of the APT interface',0);
 INSERT INTO sitevariables VALUES ('cloudlab/message',NULL,'','Message to display at the top of the CloudLab interface',0);
 INSERT INTO sitevariables VALUES ('aptui/autoextend_maximum',NULL,'7','Maximum number of days requested that will automaticaly be granted; zero means only admins can extend an experiment.',0);
@@ -164,6 +167,24 @@ INSERT INTO sitevariables VALUES ('general/no_openflow',NULL,'0','Disallow topol
 INSERT INTO sitevariables VALUES ('phantomnet/message',NULL,'','Message to display at the top of the PhantomNet portal.',0);
 INSERT INTO sitevariables VALUES ('ue/sim_sequence_default',NULL,'1000000','Default initial sequence number for PhantomNet UE SIMs',0);
 INSERT INTO sitevariables VALUES ('ue/sim_sequence_increment',NULL,'1000000','Sequence number increment amount for PhantomNet UE SIMs',0);
+INSERT INTO sitevariables VALUES ('portal/default_profile',NULL,'emulab-ops,OneVM','Default profile for portal instantiate page.',0);
+INSERT INTO sitevariables VALUES ('cloudlab/default_profile',NULL,'emulab-ops,OpenStack','Default profile for portal instantiate page.',0);
+INSERT INTO sitevariables VALUES ('phantomnet/default_profile',NULL,'emulab-ops,OneVM','Default profile for portal instantiate page.',0);
+INSERT INTO sitevariables VALUES ('reload/retrytime',NULL,'20','If a node has been in reloading for longer than this period (minutes), try rebooting it. If zero, never try reboot.',0);
+INSERT INTO sitevariables VALUES ('reload/failtime',NULL,'0','If a node has been in reloading for longer than this period (minutes), send it to hwdown. If zero, leave nodes in reloading.',0);
+INSERT INTO sitevariables VALUES ('reload/warnonretry',NULL,'1','If non-zero send e-mail to testbed-ops when a retry is attempted.',0);
+INSERT INTO sitevariables VALUES ('reload/hwdownaction',NULL,'nothing','What to do when nodes are moved to hwdown. One of: poweroff, adminmode, or nothing.',0);
+INSERT INTO sitevariables VALUES ('general/architecture_priority',NULL,'x86_64,aarch64','Default mapper ordering for multi architecture testbeds.',0);
+INSERT INTO sitevariables VALUES ('general/admission_control','0','0','When set, refuse node allocation if reservation admission control fails.',0);
+INSERT INTO sitevariables VALUES ('general/cnet_firewalls','0','0','When set, control network firewalls are supported via control network vlans.',0);
+INSERT INTO sitevariables VALUES ('general/export_active',NULL,'0','Stop exporting shared user and project directories when they have been inactive for this number of days or longer (0==do not inactivate).',0);
+INSERT INTO sitevariables VALUES ('general/root_keypair',NULL,'-1','Default distribution of per-experiment root keypairs (-1==disable root keypair mechanism, 0==do not distribute to any nodes, 1==distribute to all nodes).',0);
+INSERT INTO sitevariables VALUES ('cnetwatch/check_interval',NULL,'600','Interval in seconds at which to collect info (should be at least 10 seconds, 0 means do not run cnetwatch)',0);
+INSERT INTO sitevariables VALUES ('cnetwatch/alert_interval',NULL,'600','Interval in seconds over which to calculate packet/bit rates and to log alerts (should be an integer multiple of check_interval)',0);
+INSERT INTO sitevariables VALUES ('cnetwatch/pps_threshold',NULL,'50000','Packet rate in packets/sec in excess of which to log an alert (0 means do not generate packet rate alerts)',0);
+INSERT INTO sitevariables VALUES ('cnetwatch/bps_threshold',NULL,'500000000','Data rate in bits/sec in excess of which to log an alert (0 means do not generate data rate alerts)',0);
+INSERT INTO sitevariables VALUES ('cnetwatch/mail_interval',NULL,'600','Interval in seconds at which to send email for all alerts logged during the interval (0 means do not send alert email)',0);
+INSERT INTO sitevariables VALUES ('cnetwatch/mail_max',NULL,'1000','Maximum number of alert emails to send; after this alerts are only logged (0 means no limit to the emails)',0);
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

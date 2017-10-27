@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2016 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -61,7 +61,7 @@ use vars qw($NODEROLE_TESTNODE $MFS_INITIAL $STATE_INITIAL
 $NODEROLE_TESTNODE	= 'testnode';
 
 # Why, why, why?
-@EXPORT_OK = qw($NODEROLE_TESTNODE);
+@EXPORT = qw($NODEROLE_TESTNODE);
 
 # Cache of instances to avoid regenerating them.
 %nodes = ();
@@ -379,7 +379,7 @@ sub Create($$$$)
     my ($class, $node_id, $experiment, $argref) = @_;
     my ($control_iface,$virtnode_capacity,$adminmfs,$adminmfs_osid);
     my ($priority, $osid, $osid_vers, $opmode, $state);
-    require OSinfo;
+    require OSImage;
     require NodeType;
 
     # Defaults. Leave these here to avoid startup costs of libdb.
@@ -428,15 +428,15 @@ sub Create($$$$)
 	    if (defined($typeinfo->default_osid())) {
 		$osid = $typeinfo->default_osid();
 		
-		my $osinfo = OSinfo->Lookup($osid);
-		if (!defined($osinfo)) {
+		my $osimage = OSImage->Lookup($osid);
+		if (!defined($osimage)) {
 		    print STDERR
-			"*** Could not find OSinfo object for $osid!\n";
+			"*** Could not find OSImage object for $osid!\n";
 		    return undef;
 		}
-		$osid      = $osinfo->osid();
-		$osid_vers = $osinfo->vers();
-		$opmode    = $osinfo->op_mode();
+		$osid      = $osimage->osid();
+		$osid_vers = $osimage->version();
+		$opmode    = $osimage->op_mode();
 	    }
 	}
 	else {
@@ -446,18 +446,18 @@ sub Create($$$$)
 	    }
 	    # Find object for the adminfs.
 	    if (defined($adminmfs_osid)) {
-		$adminmfs = OSinfo->Lookup($adminmfs_osid);
+		$adminmfs = OSImage->Lookup($adminmfs_osid);
 	    }
 	    else {
-		$adminmfs = OSinfo->Lookup(TBOPSPID(), $MFS_INITIAL);
+		$adminmfs = OSImage->Lookup(TBOPSPID(), $MFS_INITIAL);
 	    }
 	    if (!defined($adminmfs)) {
 		print STDERR
-		    "*** Could not find OSinfo object for adminmfs!\n";
+		    "*** Could not find OSImage object for adminmfs!\n";
 		return undef;
 	    }
 	    $osid      = $adminmfs->osid();
-	    $osid_vers = $adminmfs->vers();
+	    $osid_vers = $adminmfs->version();
 	    $opmode    = $adminmfs->op_mode();
 	}
     }
@@ -946,7 +946,7 @@ sub GetAllocState($$)
 #
 # We do this cause we always want to go to the DB.
 #
-sub GetEventState($$;$)
+sub GetEventState($;$$)
 {
     my ($self, $pstate, $popmode) = @_;
     my $node_id = $self->node_id();
@@ -965,7 +965,8 @@ sub GetEventState($$;$)
 
     $self->{'DBROW'}->{'eventstate'} = $state
 	if (defined($self->{'DBROW'}));
-    $$pstate = $state;
+    $$pstate = $state
+     	if (defined($pstate));
     $$popmode= $op_mode
  	if (defined($popmode));
     return 0;
@@ -1325,6 +1326,7 @@ sub sharing_mode($)	{ return L__reservation($_[0], 'sharing_mode'); }
 sub erole($)		{ return L__reservation($_[0], 'erole'); }
 sub eid($)              { return L__reservation($_[0], 'eid'); }
 sub pid($)              { return L__reservation($_[0], 'pid'); }
+sub exptidx($)          { return L__reservation($_[0], 'exptidx'); }
 sub genisliver_idx($)   { return L__reservation($_[0], 'genisliver_idx'); }
 sub external_resource_index($) {
     return L__reservation($_[0], 'external_resource_index'); }
@@ -1336,6 +1338,153 @@ sub inner_elab_role($) {
     return L__reservation($_[0], 'inner_elab_role'); }
 sub inner_elab_boot($) {
     return L__reservation($_[0], 'inner_elab_boot'); }
+sub OnSharedNode($) {
+    my ($self) = @_;
+    my $sharing_mode = $self->sharing_mode();
+    return 1
+	if (defined($sharing_mode) && $sharing_mode eq "using_shared_local");
+    return 0;
+}
+
+#
+# This function takes the user-provided values for root key distribution
+# from virt_nodes and adjusts them according to system restrictions, putting
+# the result into the reserved table. The Get/Set accessor functions below
+# use the values from reserved.
+#
+# If the user-provided value is -1 for any nodes/keys, then we use the given
+# default value if provided or sitevar general/root_keypair (0 == don't
+# distribute either key to any nodes, 1 == distribute both keys to all nodes)
+# otherwise. However, if the default value is -1 then the mechanism is
+# disabled entirely and we do not distribute any keys to anyone regardless
+# of what the user says.
+#
+# The current "policy" restrictions are that we do *not* distribute a root
+# pubkey to tainted nodes (as it opens a path to root on a node where no one
+# should be root) or any keys to firewall nodes, virtnode hosts, delay nodes,
+# subbosses, storagehosts, etc. which are not really part of the user
+# topology. We also do not distribute to non "PC" nodes as they might not
+# support ssh anyway.
+#
+sub InitKeyDist($;$$)
+{
+    my ($self,$experiment,$def) = @_;
+    my ($priv,$pub);
+
+    return -1
+	if (!ref($self) || !$self->IsReserved());
+
+    if (!$experiment) {
+	$experiment = $self->Reservation();
+	return -1
+	    if (!$experiment);
+    }
+    
+    # If no default is specified, use the system default
+    if (!defined($def)) {
+	if (!TBGetSiteVar("general/root_keypair", \$def)) {
+	    $def = -1;
+	}
+    }
+
+    # If the system default is "disabled", no key distribution
+    if ($def == -1) {
+	$priv = $pub = 0;
+	goto done;
+    }
+
+    # XXX only PC class nodes for now, since we have to ssh to it
+    if ($self->class ne "pc" && $self->class ne "pcvm") {
+	$priv = $pub = 0;
+	goto done;
+    }
+
+    my $node_id = $self->node_id();
+
+    # Get user-supplied values from virt_nodes
+    my $result =
+	DBQueryWarn("select v.rootkey_private,v.rootkey_public ".
+		    " from virt_nodes as v, reserved as r ".
+		    " where v.exptidx=r.exptidx and v.vname=r.vname ".
+		    "  and r.node_id='$node_id'");
+
+    if ($result && $result->numrows > 0) {
+	($priv, $pub) = $result->fetchrow_array();
+	my $fwnode;
+	
+	# start with default if user didn't specify
+	$priv = $def if ($priv == -1);
+	$pub = $def if ($pub == -1);
+
+	# tainted node: no pub key
+	if ($self->IsTainted()) {
+	    $pub = 0;
+	}
+
+	# special hosts: no keys at all
+	elsif ($self->erole() ne TBDB_RSRVROLE_NODE()) {
+	    $priv = $pub = 0;
+	}
+
+	# firewall node for an experiment: no keys at all
+	elsif ($experiment->IsFirewalled(\$fwnode) && $fwnode eq $node_id) {
+	    $priv = $pub = 0;
+	}
+    }
+
+  done:
+    return $self->SetKeyDist($priv, $pub);
+}
+
+sub GetKeyDist($$$)
+{
+    my ($self,$privref,$pubref) = @_;
+    
+    return -1
+	if (!ref($self));
+    return -1
+	if (! $self->IsReserved());
+
+    if ($privref) {
+	$$privref = ($self->{"RSRV"}->{'rootkey_private'} ? 1 : 0);
+    }
+    if ($pubref) {
+	$$pubref = ($self->{"RSRV"}->{'rootkey_public'} ? 1 : 0);
+    }
+
+    return 0;
+}
+
+sub SetKeyDist($$$)
+{
+    my ($self,$privval,$pubval) = @_;
+    
+    return -1
+	if (!ref($self));
+    return -1
+	if (! $self->IsReserved());
+
+    my $clause = "";
+    if (defined($privval)) {
+	$privval = 1
+	    if ($privval != 0);
+	$clause = "rootkey_private=$privval";
+    }
+    if (defined($pubval)) {
+	$pubval = 1
+	    if ($pubval != 0);
+	$clause .= ","
+	    if ($clause);
+	$clause .= "rootkey_public=$pubval";
+    }
+    if ($clause) {
+	my $node_id = $self->node_id();
+	DBQueryWarn("update reserved set $clause where node_id='$node_id'")
+	    or return -1;
+	$self->FlushReserved();
+    }
+    return 0;
+}
 
 #
 # Load all attributes from the node_attributes table, 
@@ -1596,6 +1745,7 @@ sub default_osid($;$) {
 sub adminmfs_osid($;$) {
     my ($self,$stuff) = @_;
     my $val = undef;
+    require OSImage;
 
     if (NodeAttribute($self, "adminmfs_osid", \$val) == 0 &&
 	defined($val)) {
@@ -1605,12 +1755,13 @@ sub adminmfs_osid($;$) {
 	defined($val)) {
 	return $val;
     }
-    return OSinfo->Lookup(TBOPSPID(), TB_OSID_FREEBSD_MFS())->osid();
+    return OSImage->Lookup(TBOPSPID(), TB_OSID_FREEBSD_MFS())->osid();
 }
 
 sub diskloadmfs_osid($;$) {
     my ($self,$stuff) = @_;
     my $val = undef;
+    require OSImage;
 
     if (NodeAttribute($self, "diskloadmfs_osid", \$val) == 0 &&
 	defined($val)) {
@@ -1620,7 +1771,7 @@ sub diskloadmfs_osid($;$) {
 	defined($val)) {
 	return $val;
     }
-    return OSinfo->Lookup(TBOPSPID(), TB_OSID_FRISBEE_MFS())->osid();
+    return OSImage->Lookup(TBOPSPID(), TB_OSID_FRISBEE_MFS())->osid();
 }
 
 sub default_imageid($;$) {
@@ -2313,13 +2464,13 @@ sub CreateVnodes($$$)
     # table. 
     #
     my $osid = $nodetype->default_osid();
-    my $osinfo = OSinfo->Lookup($osid);
-    if (!defined($osinfo)) {
+    my $osimage = OSImage->Lookup($osid);
+    if (!defined($osimage)) {
 	print STDERR "*** CreateVnodes: No such OSID '$osid'\n";
 	return -1;
     }
-    my ($opmode)  = $osinfo->op_mode();
-    my $osid_vers = $osinfo->vers();
+    my ($opmode)  = $osimage->op_mode();
+    my $osid_vers = $osimage->version();
 
     #
     # Need IP for jailed nodes.
@@ -2502,7 +2653,7 @@ sub CreateVnodes($$$)
 		( $jailip, $jailmask ) = $query_result->fetchrow_array();
 
 		DBQueryFatal( "UPDATE virt_node_public_addr SET " .
-			      "node_id='$vnodeid', card='0', port='1' " .
+			      "node_id='$vnodeid' " .
 			      "WHERE IP='$jailip'" )
 		    if (!$impotent);
 	    } else {
@@ -2562,6 +2713,7 @@ sub CreateVnodes($$$)
 			"priority" => $vpriority,
 		        "op_mode" => $opmode,
 			"eventstate" => $eventstate,
+			"state_timestamp" => time(),
 			"allocstate" => $allocstate,
 			"def_boot_osid" => $osid,
 			"def_boot_osid_vers" => $osid_vers,
@@ -2658,8 +2810,6 @@ sub CreateVnodes($$$)
 	if ($isjailed && !$isremote) {
 	    my $ifaceargs = {
 		"node_id"   => $vnodeid,
-		"card"      => 0,
-		"port"      => 1,
 		"iface"     => "eth0",
 		"role"      => TBDB_IFACEROLE_CONTROL(),
 		"MAC"       => "genfake",
@@ -2729,7 +2879,7 @@ sub CreateVnodes($$$)
 	}
 	foreach my $vnodeid (@created) {
 	    DBQueryWarn("update virt_node_public_addr set ".
-			"  node_id=NULL,card='0',port='0' ".
+			"  node_id=NULL ".
 			"where node_id='$vnodeid'");
 	    DBQueryWarn("delete from reserved where node_id='$vnodeid'");
 	    DBQueryWarn("delete from nodes where node_id='$vnodeid'");
@@ -2765,7 +2915,7 @@ sub DeleteVnodes(@)
 	    $interface->Delete();
 	}
 	DBQueryWarn("update virt_node_public_addr set ".
-		    "  node_id=NULL,card='0',port='0' ".
+		    "  node_id=NULL ".
 		    "where node_id='$vnodeid'");
 	
 	DBQueryWarn("delete from node_bootlogs where node_id='$vnodeid'");
@@ -2776,7 +2926,7 @@ sub DeleteVnodes(@)
 	# Need to clean out some additional tables since some vnodes can be
 	# reimaged now!
 	DBQueryWarn("delete from current_reloads where node_id='$vnodeid'");
-	DBQueryWarn("delete from partitions where node_id='$vnodeid'");
+	DBQueryWarn("delete from `partitions` where node_id='$vnodeid'");
 	# Slothd updates/creates these records.
 	DBQueryWarn("delete from node_activity where node_id='$vnodeid'");
 	DBQueryWarn("delete from node_idlestats where node_id='$vnodeid'");
@@ -2979,7 +3129,7 @@ sub ClearPartitions($)
 
     my $node_id = $self->node_id();
 
-    DBQueryWarn("delete from partitions where node_id='$node_id'");
+    DBQueryWarn("delete from `partitions` where node_id='$node_id'");
 
     return 0;
 }
@@ -3254,47 +3404,47 @@ sub GetStatus($)
 #
 sub OSSelect($$$$)
 {
-    my ($self, $osinfo, $field, $debug) = @_;
+    my ($self, $osimage, $field, $debug) = @_;
     my $nodeid  = $self->node_id();
     my $curmode = $self->op_mode();
-    require OSinfo;
+    require OSImage;
 
     # Why? When will this happen?
     return 0
 	if (!$curmode);
 
     # Special token, sorry.
-    if (defined($osinfo) && "$osinfo" eq "<DEFAULT>") {
-	$osinfo = OSinfo->Lookup($self->default_osid());
-	if (!defined($osinfo)) {
+    if (defined($osimage) && "$osimage" eq "<DEFAULT>") {
+	$osimage = OSImage->Lookup($self->default_osid());
+	if (!defined($osimage)) {
 	    print STDERR "Could not map default_osid for $nodeid\n";
 	    return -1;
 	}
-	my $nextosinfo = $osinfo->ResolveNextOSID();
-	if (!defined($nextosinfo)) {
-	    print STDERR "Could not resolve nextosid for $osinfo\n";
+	my $nextosimage = $osimage->ResolveNextOSID();
+	if (!defined($nextosimage)) {
+	    print STDERR "Could not resolve nextosid for $osimage\n";
 	    return -1;
 	}
-	$osinfo = $nextosinfo;
+	$osimage = $nextosimage;
     }
 
     # Make sure the node is tainted if the OS selected is tainted.
-    if (defined($osinfo) && $osinfo->IsTainted()) {
-	if ($self->InheritTaintStates($osinfo) != 0) {
-	    print STDERR "Could not inherit taint states from $osinfo\n";
+    if (defined($osimage) && $osimage->IsTainted()) {
+	if ($self->InheritTaintStates($osimage) != 0) {
+	    print STDERR "Could not inherit taint states from $osimage\n";
 	    return -1;
 	}
     }
     
-    if (defined($osinfo) && !defined($field)) {
+    if (defined($osimage) && !defined($field)) {
 	print STDERR "No field specified for OSSelect on $nodeid\n";
 	return -1;
     }
 
     if ($debug) {
 	print STDERR "Current opmode for $nodeid is $curmode.\n";
-	if (defined($osinfo)) {
-	    print STDERR "Setting $field for $nodeid to $osinfo.\n";
+	if (defined($osimage)) {
+	    print STDERR "Setting $field for $nodeid to $osimage\n";
 	} elsif (defined($field)) {
 	    print STDERR "Clearing $field for $nodeid.\n";
 	} else {
@@ -3313,8 +3463,8 @@ sub OSSelect($$$$)
 	    or return -1;
     } else {
 	# Set/Clear the osid.
-	my $osid = (defined($osinfo) ? "'" . $osinfo->osid() . "'" : "NULL");
-	my $vers = (defined($osinfo) ? "'" . $osinfo->vers() . "'" : "'0'");
+	my $osid = (defined($osimage) ? "'" . $osimage->osid() . "'" : "NULL");
+	my $vers = (defined($osimage) ? "'" . $osimage->version() . "'" : "'0'");
 	
 	DBQueryWarn("update nodes set ${field}=$osid,${field}_vers=$vers ".
 		    "where node_id='$nodeid'")
@@ -3386,6 +3536,15 @@ sub ResetNextOpMode($$)
     #
     if ($bootosid == 0) {
 	return 0;
+    }
+    #
+    # XXX this has only ever happened once, when a newnode failed to boot
+    # up properly, but since it will cause stated to die, let's check for it.
+    # I have no idea if this is the correct thing to set it to, but we do
+    # this below as well, so I am going with it...
+    #
+    if (!defined($bootopmode)) {
+	$bootopmode = "";
     }
 
     print STDERR "Bootwhat says: $nodeid => $bootosid,$bootopmode\n"
@@ -3578,23 +3737,23 @@ sub LookupWideArea($$)
 #
 sub IsOSLoaded($$)
 {
-    my ($self, $osinfo) = @_;
-    require OSinfo;
+    my ($self, $osimage) = @_;
+    require OSImage;
 
-    if (!ref($osinfo)) {
-	my $tmp = OSinfo->Lookup($osinfo);
+    if (!ref($osimage)) {
+	my $tmp = OSImage->Lookup($osimage);
 	if (!defined($tmp)) {
-	    print STDERR "Cannot lookup osinfo for $osinfo\n";
+	    print STDERR "Cannot lookup osimage for $osimage\n";
 	    return -1;
 	}
-	$osinfo = $tmp;
+	$osimage = $tmp;
     }
-    my $osid   = $osinfo->osid();
-    my $vers   = $osinfo->vers();
+    my $osid   = $osimage->osid();
+    my $vers   = $osimage->version();
     my $nodeid = $self->node_id();
 
     my $query_result =
-	DBQueryWarn("select osid from partitions as p ".
+	DBQueryWarn("select osid from `partitions` as p ".
 		    "where p.node_id='$nodeid' and p.osid='$osid' and ".
 		    "      p.osid_vers='$vers'");
     return -1
@@ -3657,7 +3816,7 @@ sub GetJailIP($;$)
     my $node_id = $self->node_id();
     my $query_result =
 	DBQueryWarn( "SELECT IP, mask FROM virt_node_public_addr WHERE " .
-		     "node_id='$node_id' AND card='0' AND port='1'" );
+		     "node_id='$node_id'" );
 
     if( $query_result && $query_result->numrows ) {
 	# we've assigned a public address to this one
@@ -3932,37 +4091,19 @@ sub GetOutletAuthInfo($$)
 #
 sub RunningOsImage($)
 {
-    require OSinfo;
-    require Image;
+    require OSImage;
 
     my ($self)  = @_;
     my $nodeid  = $self->node_id();
     my $osid    = $self->def_boot_osid();
     my $vers    = $self->def_boot_osid_vers();
-    my $image;
     
-    my $osinfo = OSinfo->Lookup($osid, $vers);
+    my $osimage = OSImage->Lookup($osid, $vers);
     return ()
-	if (!defined($osinfo));
+	if (!defined($osimage));
 
-    #
-    # No partition entries for virtnodes, they are plain EZ images.
-    #
-    if ($self->isvirtnode()) {
-	# XXX No version info, need that.
-	$image = Image->Lookup($osid, $vers);
-    }
-    else {
-	my $query_result =
-	    DBQueryWarn("select imageid,imageid_version from partitions as p ".
-			"where p.node_id='$nodeid' and p.osid='$osid'");
-	return ()
-	    if (!$query_result || !$query_result->numrows);
-
-	my ($imageid,$version) = $query_result->fetchrow_array();
-	$image = Image->Lookup($imageid, $version);	
-    }
-    return ($osinfo, $image);
+    # Backwards compatibility; callers want old osinfo and image separately.
+    return ($osimage, $osimage);
 }
 
 #
@@ -4089,13 +4230,21 @@ sub SetTaintStates($@) {
     my ($self, @taint_states) = @_;
     require libTaintStates;
 
-    return libTaintStates::SetTaintStates($self, @taint_states);
+    my $rv = libTaintStates::SetTaintStates($self, @taint_states);
+    if (!$rv && libTaintStates::IsTainted($self)) {
+	$self->SetKeyDist(undef, 0);
+    }
+    return $rv;
 }
 sub AddTaintState($$) {
     my ($self, $taint) = @_;
     require libTaintStates;
 
-    return libTaintStates::AddTaintState($self, $taint);
+    my $rv = libTaintStates::AddTaintState($self, $taint);
+    if (!$rv && libTaintStates::IsTainted($self)) {
+	$self->SetKeyDist(undef, 0);
+    }
+    return $rv;
 }
 sub RemoveTaintState($;$) {
     my ($self, $taint) = @_;
@@ -4104,10 +4253,14 @@ sub RemoveTaintState($;$) {
     return libTaintStates::RemoveTaintState($self, $taint);
 }
 sub InheritTaintStates($$) {
-    my ($self, $osinfo) = @_;
+    my ($self, $osimage) = @_;
     require libTaintStates;
 
-    return libTaintStates::InheritTaintStates($self, $osinfo);
+    my $rv = libTaintStates::InheritTaintStates($self, $osimage);
+    if (!$rv && libTaintStates::IsTainted($self)) {
+	$self->SetKeyDist(undef, 0);
+    }
+    return $rv;
 }
 
 
@@ -4120,20 +4273,20 @@ sub SyncDiskPartitionTaintStates($)
 {
     my ($self) = @_;
     my $error = 0;
-    require OSinfo;
+    require OSImage;
 
     my $node_id = $self->node_id();
 
     my $query_result =
-	DBQueryWarn("select osid,osid_vers from partitions ".
+	DBQueryWarn("select osid,osid_vers from `partitions` ".
 		    "where node_id='$node_id' and osid is not null");
     return -1
 	if (!$query_result);
 
     while (my ($osid, $vers) = $query_result->fetchrow_array()) {
-	my $osinfo = OSinfo->Lookup($osid, $vers);
-	if (defined($osinfo) && $osinfo->IsTainted()) {
-	    $error += $self->InheritTaintStates($osinfo);
+	my $osimage = OSImage->Lookup($osid, $vers);
+	if (defined($osimage) && $osimage->IsTainted()) {
+	    $error += $self->InheritTaintStates($osimage);
 	}
     }
 
@@ -4286,6 +4439,20 @@ sub RusageData($)
 				"300"  => $row->{"load_5min"},
 				"900"  => $row->{"load_15min"}}};
     return $blob;
+}
+
+sub HasStartupAgent($)
+{
+    my ($self)  = @_;
+    my $vname   = $self->vname();
+    my $exptidx = $self->exptidx();
+    my $query_result =
+	DBQueryWarn("select arguments from eventlist ".
+		    "where exptidx='$exptidx' and vnode='$vname' and time=0");
+    return 0
+	if (!$query_result);
+
+    return $query_result->numrows;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

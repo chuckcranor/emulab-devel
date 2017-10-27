@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2016 University of Utah and the Flux Group.
+# Copyright (c) 2003-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -31,13 +31,14 @@ use Date::Parse;
 #
 sub usage()
 {
-    print STDERR "Usage: prereserve [-t typelist] [-p priority] ".
+    print STDERR "Usage: prereserve [-f] [-t typelist] [-p priority] ".
 	"[-s start] [-e end [-r]] [-n resname] pid [count | node_id ...\n";
     print STDERR "       prereserve -c [-r] -n resname pid\n";
     print STDERR "       prereserve -i -n resname pid\n";
     print STDERR "       prereserve -a -n resname pid\n";
     print STDERR "       prereserve -l\n";
     print STDERR "   -h   This message\n";
+    print STDERR "   -f   Force pre-reservation, even if admission control is violated\n";
     print STDERR "   -t   Comma separated list of node types\n";
     print STDERR "   -p   Priority. Defaults to zero (least priority)\n";
     print STDERR "   -n   Reservation name; defaults to 'default'\n";
@@ -51,7 +52,7 @@ sub usage()
     print STDERR "   -a   Activate a pending reservation (internal option)\n";
     exit(-1);
 }
-my $optlist  = "hdct:n:ilre:s:map:";
+my $optlist  = "hdct:n:ilre:s:map:f";
 my $priority = 0;
 my $debug    = 0;
 my $info     = 0;
@@ -60,6 +61,7 @@ my $clear    = 0;
 my $revoke   = 0;
 my $sendmail = 0;
 my $activate = 0;
+my $force    = 0;
 my @nodelist = ();
 my $resname;
 my $starttime;
@@ -90,6 +92,7 @@ use libtestbed;
 use Experiment;
 use Project;
 use User;
+use Reservation;
 
 #
 # Turn off line buffering on output
@@ -141,6 +144,9 @@ if (defined($options{i})) {
 }
 if (defined($options{l})) {
     $list = 1;
+}
+if (defined($options{f})) {
+    $force = 1;
 }
 if (defined($options{"e"})) {
     $endtime = $options{"e"};
@@ -445,16 +451,68 @@ if ($UID == 0) {
 my $uid = $this_user->uid();
 my $uid_idx = $this_user->uid_idx();
 
+my %nodetypes = ();
+
 # Sanity check the type list.
 if (defined($typelist)) {
     my @types = split(",", $typelist);
+
+    if( @types > 1 && !$force ) {
+	fatal( "Sorry, can't handle admission control check with multiple " .
+	       "node types.\nEither make multiple pre-reservations with a " .
+	       "dedicated node count per\nnode type, or retry with -f if " .
+	       "you want a single count covering multiple\ntypes, bypassing " .
+	       "admission control." );
+    }
+
+    $nodetypes{ $types[ 0 ] } = $count;
+    
     foreach my $typename (@types) {
 	my $type = NodeType->Lookup($typename);
 	if (!defined($type)) {
 	    fatal("No such node type $typename");
 	}
     }
+} else {
+    foreach my $nodeid (@nodelist) {
+	my $node = Node->Lookup( $nodeid );
+	if( exists( $nodetypes{ $node->type() } ) ) {
+	    $nodetypes{ $node->type() }++;
+	} else {
+	    $nodetypes{ $node->type() } = 1;
+	}
+    }
 }
+
+# Run admission control now -- unfortunately there's a nasty race condition
+# here.  Unfortunately it's messy to make the admission control check and
+# the reservation table updates atomic, because of MySQL's stupid locking
+# semantics (both components want to independently lock different tables
+# and MySQL forbids acquiring more locks if any are held, which precludes
+# nesting either section inside the other).
+#
+# Let's just ignore all that for now, because the intention is that
+# future reservations will eventually be used everywhere and
+# prereservations will be deprecated.
+
+if( !$force ) {
+    my $start = defined( $starttime ) ? str2time( $starttime ) : 0;
+    my $end = defined( $endtime ) ? str2time( $endtime ) : 0x7FFFFFFF;
+    foreach my $type ( keys( %nodetypes ) ) {
+	my $reservations = Reservation->LookupAll( $type );
+	my $res = Reservation->Create( $pid, undef, $start, $end, $type,
+				       $nodetypes{ $type } );
+	push( @$reservations, $res );
+	my $error;
+	if( !Reservation->IsFeasible( $reservations, \$error ) ) {
+	    print STDERR "prereserve: $error\n";
+	    exit( 1 );
+	}
+    }
+}
+
+# Ideally, we would now call Reservation->BeginTransaction, but that won't
+# work because we will later want to acquire table locks, so don't bother.
 
 # 
 # Lets say that a current request is an error. delete and recreate.
@@ -614,11 +672,11 @@ sub StartReservation($$)
 		#
 		# Someone else still has it, skip.
 		#
-		print "$node_id is still reserved to project $curpid, will".
-		    "be done later.\n"
+		print "$node_id is still reserved to project $curpid, ".
+		    "will be done later.\n"
 		    if (defined($curpid));
-		print "$node_id is still pre-reserved to project $rpid, will".
-		    "be done later.\n"
+		print "$node_id is still pre-reserved to project $rpid, ".
+		    "will be done later.\n"
 		    if (defined($rpid));
 		next;
 	    }
@@ -670,6 +728,7 @@ sub StartReservation($$)
 			     "   reservation_name='$resname' ".
 			     "where node_id='$node_id'");
 		$tcount++;
+		$current++;
 	    }
 	    #
 	    # It is unlikely this will happen, unless someone mucks with

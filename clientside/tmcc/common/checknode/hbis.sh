@@ -97,6 +97,11 @@ hbis() {
 		((++c))
 		[[ $x -ge $bytes ]] && break
 	    done
+	    # make sure the number is even
+	    # 10.3-PRERELEASE (freebeMfs) returns real memory  = 13690208256 (13056 MB)
+	    # while 10.0-RELEASE-p18-utah-20150806 returns real memory  = 12884901888 (12288 MB)
+	    c=$((c / 2))
+	    c=$((c * 2))
 #echo ${FUNCNAME[0]}:${LINENO} base:$base number:$number bytes=$bytes c=$c
             # make sure it a mult of 4
             cd8=$(( c / 8 ))

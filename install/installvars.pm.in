@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2016 University of Utah and the Flux Group.
+# Copyright (c) 2003-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -177,6 +177,7 @@ $PREFIX			= $TBROOT;
 $MAINSITE		= @TBMAINSITE@;
 $PGENISUPPORT		= @PROTOGENI_SUPPORT@;
 $PROTOGENI_GENIRACK     = @PROTOGENI_GENIRACK@;
+$PORTAL_ENABLE          = @PORTAL_ENABLE@;
 $ELABINELAB		= @ELABINELAB@;
 $DBNAME			= "@TBDBNAME@";
 $ERRORLOG_DBNAME	= "@TBERRORLOGDBNAME@";
@@ -221,6 +222,8 @@ $OPSVM_ENABLE		= @OPSVM_ENABLE@;
 $NEEDMROUTED		= 0;
 $ARCHSUPPORT		= @ARCHIVESUPPORT@;
 $BROWSER_CONSOLE_ENABLE = @BROWSER_CONSOLE_ENABLE@;
+$WITHZFS		= @WITHZFS@;
+$WITHAMD		= @WITHAMD@;
 
 #
 # Python/Perl paths
@@ -297,6 +300,8 @@ $CRONTAB		= "/etc/crontab";
 $TIPLOG_DIR		= "/var/log/tiplogs";
 $OPSWWWDIR		= "/usr/local/www/data";
 $WWWDIR			= "$PREFIX/www";
+$TBBASE			= "@TBBASE@";
+$THISHOMEBASE           = "@THISHOMEBASE@";
 $AUTHKEYS		= "/root/.ssh/authorized_keys";
 $RCCAPTURE		= "$PREFIX/etc/rc.capture";
 $RCLOCAL		= "/etc/rc.local";
@@ -319,12 +324,14 @@ $TBOPSEMAIL		= "@TBOPSEMAIL@";
 $TBTESTSUITEEMAIL	= "@TBTESTSUITEEMAIL@";
 
 # For installing mysqld
+$MYSQLD			= "/usr/local/libexec/mysqld";
 $MYSQLADMIN		= "/usr/local/bin/mysqladmin";
 $MYSQLSHOW		= "/usr/local/bin/mysqlshow";
 $MYSQLDUMP		= "/usr/local/bin/mysqldump";
 $MYSQLINSTALL		= "/usr/local/bin/mysql_install_db";
 $MYSQLDBDIR		= "/var/db/mysql";
 $MYSQL_LOGDIR		= "$LOGDIR/mysql";
+$MYSQL_CNF		= "/usr/local/etc/mysql/my.cnf";
 
 $PROTOUSER		= "elabman";
 $CHECKUPUSER		= "elabckup";

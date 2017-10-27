@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -54,7 +54,7 @@ use Exporter;
 	     TMCCCMD_TPMBLOB TMCCCMD_TPMPUB TMCCCMD_DHCPDCONF TMCCCMD_MANIFEST
 	     TMCCCMD_NODEUUID TMCCCMD_NODEATTRIBUTES TMCCCMD_DISKS
 	     TMCCCMD_ARPINFO TMCCCMD_STORAGE TMCCCMD_IMAGESIZE
-             TMCCCMD_PNETNODEATTRS
+             TMCCCMD_PNETNODEATTRS TMCCCMD_SERVINCEINFO
 	     );
 
 # Must come after package declaration!
@@ -222,6 +222,7 @@ my %commandset =
       "storageconfig"	=> {TAG => "storageconfig"},
       "imagesize"	=> {TAG => "imagesize"},
       "pnetnodeattrs"	=> {TAG => "pnetnodeattrs"},
+      "serviceinfo"	=> {TAG => "serviceinfo"},
     );
 
 #
@@ -299,6 +300,7 @@ sub TMCCCMD_ARPINFO()   { $commandset{"arpinfo"}->{TAG}; }
 sub TMCCCMD_STORAGE()	{ $commandset{"storageconfig"}->{TAG}; }
 sub TMCCCMD_IMAGESIZE()	{ $commandset{"imagesize"}->{TAG}; }
 sub TMCCCMD_PNETNODEATTRS() {$commandset{"pnetnodeattrs"}->{TAG}; }
+sub TMCCCMD_SERVINCEINFO() {$commandset{"serviceinfo"}->{TAG}; }
 
 #
 # Caller uses this routine to set configuration of this library
@@ -761,7 +763,7 @@ sub hash($) {
 
     return undef unless defined( $struct->{'existing'} );
 
-    my $digest = Digest::SHA1->new;
+    my $digest = Digest::SHA->new(1);
     my $hex;
 
     $digest->addfile( $struct->{'existing'} );
@@ -848,7 +850,7 @@ sub getblob($$;\@$) {
 	);
 
     $debug = 1 if( $options ); # the only option right now
-    require Digest::SHA1;
+    require Digest::SHA;
     require LWP::UserAgent;
 
     open NICKNAME, $NICKNAMEFILE or die "$NICKNAMEFILE: $!";

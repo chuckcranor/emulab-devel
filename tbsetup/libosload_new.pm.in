@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,9 +40,10 @@ use libreboot;
 use libtblog;
 use Node;
 use NodeType;
-use Image;
+use Interface;
+use OSImage;
 use User;
-use OSinfo;
+use EmulabConstants;
 use English;
 use event;
 use Data::Dumper;
@@ -60,9 +61,6 @@ my $WITHPROVENANCE= @IMAGEPROVENANCE@;
 my $WITHDELTAS	= @IMAGEDELTAS@;
 my $IMAGEINFO	= "$TB/sbin/imageinfo";
 
-# Paths to binaries
-my $TBUISP	    = "$TB/bin/tbuisp";
-
 # XXX windows load
 my $MAKECONF	    = "$TB/sbin/dhcpd_makeconf";
 my $IMAGEX_OSNAME   = "IMAGEX-MFS";
@@ -73,6 +71,11 @@ my $IMAGEX_PXEPATH  = "/tftpboot/pxelinux/winpe";
 # for the occasional pxeboot failure.
 #
 $MAXRETRIES  = 1;
+
+#
+# This could also be a sitevar, but let's not right now.
+#
+my $DEFAULT_DEBUG_LEVEL = 10;
 
 #
 # Hack constant factor (slop) to add to the max reload wait time for any node
@@ -113,7 +116,7 @@ sub New($$$;@)
 
     bless($self, $class);
 
-    # We need this guy right away!
+    # We need this guy right away, else we get errors about no debug slot.
     $self->debug(0);
 
     return $self;
@@ -219,21 +222,25 @@ sub nodeflag($$$;$)
     my ($self,$nodeobject,$flagname,$flagval) = @_;
 
     my $retval;
+    my $dbgop = '';
 
     my $node_id = $nodeobject->node_id();
     if (defined($flagval)) {
 	$self->{NODEFLAGS}->{$node_id}->{$flagname} = $flagval;
 	$retval = $flagval;
+	$dbgop = 'w';
     }
     elsif (exists($self->{NODEFLAGS}->{$node_id}->{$flagname})) {
 	$retval = $self->{NODEFLAGS}->{$node_id}->{$flagname};
+	$dbgop = 'rn';
     }
     elsif (exists($self->{FLAGS}->{$flagname})) {
 	$retval = $self->{FLAGS}->{$flagname};
+	$dbgop = 'rg';
     }
 
     my $pretval = defined($retval) ? $retval : "undef";
-    $self->dprint(2,"nodeflag($node_id,$flagname) -> $pretval");
+    $self->dprint(2,"nodeflag($node_id,$flagname) ($dbgop) -> $pretval");
 
     return $retval;
 }
@@ -285,9 +292,15 @@ sub NewType($$)
     if ($@) {
 	$self->dprint(2,"NewType($type): simple module load failed: " . $@);
 	eval "require libosload_${type}";
+	if ($@) {
+	    if ($@ !~ /Can't locate libosload_/) {
+		print STDERR "$self NewType($type): module load failed: " . $@;
+	    }
+	    return undef;
+	}
 	$newtype  = eval { $packname->New($self); };
 	if ($@) {
-	    $self->dprint(1,"$self NewType($type): module load failed: " . $@);
+	    $self->dprint(1,"$self NewType($type): New() failed: " . $@);
 	    return undef;
 	}
     }
@@ -414,6 +427,8 @@ sub osload($$$) {
     my @imageids;
     my @nodes       = ();
     my %nodeflags   = ();
+    # For frisbee events, which come with IP.
+    my %iptonode    = ();
 
     # Locals
     my $mereuser    = 0;
@@ -430,13 +445,25 @@ sub osload($$$) {
     #
     # Although the object can support multiple osloads in flight at once,
     # don't allow multiple reloads per node in different osload invocations!
+    # Also, remove duplicate nodes from the list and warn on them!
     #
+    my %seen = ();
+    my @tmpnodes = ();
     foreach my $node (@nodes) {
 	if (exists($self->{NODES}->{$node})) {
 	    tberror "$self is already loading $node!\n";
 	    return -1;
 	}
+	if (!exists($seen{$node})) {
+	    $seen{$node} = 1;
+	    push(@tmpnodes, $node);
+	}
+	else {
+	    tbwarn("$self osload: Duplicate node '$node' in nodelist;".
+		   " ignoring!\n");
+	}
     }
+    @nodes = @tmpnodes;
 
     # override our defaults
     foreach my $flag (keys(%$args)) {
@@ -501,7 +528,7 @@ sub osload($$$) {
 
     if (@imageids) {
 	foreach my $imageid (@imageids) {
-	    my $image = Image->Lookup($imageid);
+	    my $image = OSImage->Lookup($imageid);
 	    if (!defined($image)) {
 		tberror("No such imageid $imageid");
 		return -1;
@@ -510,14 +537,8 @@ sub osload($$$) {
 	}
     }
 
-    foreach my $i (0 .. $#imageids) {
-	my $imageid = $imageids[$i];
-	$images[$i] = Image->Lookup($imageid);
+    foreach my $i (0 .. $#images) {
 	my $image = $images[$i];
-	if (!defined($image)) {
-	    tberror("Could not map $imageid to its object!");
-	    return -1;
-	}
 
 	#
 	# Check permission to use the imageid.
@@ -592,6 +613,21 @@ sub osload($$$) {
 	    goto failednode;
 	}
 
+	# For frisbee events.
+	my $interface = Interface->LookupControl($nodeobject);
+	if (!defined($interface)) {
+	    print STDERR "*** No control interface for $node\n";
+	}
+	else {
+	    my $ctrlip = $interface->IP();
+	    if (!defined($ctrlip) || $ctrlip eq "") {
+		print STDERR "*** No control IP for $node\n";
+	    }
+	    else {
+		$iptonode{$ctrlip} = $node;
+	    }
+	}
+
 	#
 	# Look for type specific module first.
 	#
@@ -652,6 +688,24 @@ sub osload($$$) {
 	#if (exists($nargs{nowait})) {
 	#    $nargs{waitmode} = $nargs{nowait};
 	#}
+	if (@images) {
+	    my $node_id = $nodeobject->node_id();
+	    my @tmp = ();
+
+	    foreach my $image (@images) {
+		if ($image->isImageAlias()) {
+		    my $im = $image->MapToImage($nodeobject->type());
+		    if (!defined($im)) {
+			tberror("Could not map $image to an image ".
+				"for $node_id!");
+			return -1;
+		    }
+		    $image = $im;
+		}
+		push(@tmp, $image);
+	    }
+	    @images = @tmp;
+	}
 
 	#
 	# Add the node with the given images and arguments
@@ -664,7 +718,6 @@ sub osload($$$) {
 	if ($self->AddNode($nodeobject,\@images,\%nargs)) {
 	    goto failednode;
 	}
-	$self->typeobject($nodeobject,$object);
 	
 	#
 	# Setup a bunch of database state before setting up the actual reload:
@@ -794,17 +847,37 @@ sub osload($$$) {
     
 	my $node_id = event_notification_get_objname($handle,$notification);
 	my $event   = event_notification_get_eventtype($handle,$notification);
+	my $objtype = event_notification_get_objtype($handle,$notification);
 
 	return
 	    if (!defined($eventnodes));
 
 	$eventnodes->{'GOTONE'} = 1;
+
+	# These events have IP instead of node_id.
+	if ($objtype eq TBDB_TBEVENT_FRISBEESTATUS()) {
+	    return
+		if (!exists($iptonode{$node_id}));
+	    
+	    $node_id = $iptonode{$node_id};
+	}
 	if (exists($eventnodes->{$node_id})) {
 	    my $et = time();
 	    if ($self->debug()) {
-		print "$self: eventhandler: $node_id => $event @ $et\n"
+		print STDERR "$self: eventhandler: $node_id => $event @ $et\n"
 	    }
 	    $eventnodes->{$node_id} = $et;
+
+	    if ($objtype eq TBDB_TBEVENT_FRISBEESTATUS()) {
+		my $nodeobject = $self->node($node_id);
+		my $wbytes = event_notification_get_string($handle,
+							   $notification,
+							   "MBYTES_WRITTEN");
+		$self->nodeinfo($nodeobject, 'frisbeestatus',
+				{"when"    => $et,
+				 "wbytes"  => $wbytes,
+				 "image"   => $event});
+	    }
 	}
     };
     my $evhandle = $self->SetupEventHandler($handler);
@@ -817,6 +890,13 @@ sub osload($$$) {
 	goto done;
     }
 
+    # Prime the event handler above.
+    $eventnodes = {} if (!defined($eventnodes));
+    foreach my $node (@nodes) {
+	$eventnodes->{$node} = 0;
+    }
+    $self->dprintts("event handler enabled");
+
     while (@nodes) {
 	my ($reboot_nodes, $noreboot_nodes)
 	    = $self->GetNodesRequiringReboot(@nodes);
@@ -825,13 +905,6 @@ sub osload($$$) {
 	    print "$self: ".
 		"Issuing reboot for @$reboot_nodes and then waiting ...\n";
 
-	    # Prime the event handler above.
-	    $eventnodes = {} if (!defined($eventnodes));
-	    foreach my $node (@$reboot_nodes) {
-		$eventnodes->{$node} = 0;
-	    }
-	    $self->dprintts("event handler enabled");
-	    
 	    my %reboot_args     = ();
 	    my %reboot_failures = ();
 
@@ -853,6 +926,8 @@ sub osload($$$) {
 		    }
 		    else {
 			push(@temp, $node);
+			# Mark node as being rebooted for waitloop
+			$self->nodeinfo($self->node($node), 'rebooted',1);
 		    }
 		}
 		@nodes = (@temp,@$noreboot_nodes);
@@ -913,6 +988,14 @@ sub osload($$$) {
     my $failures = $self->failed();
     print "$self: Done! There were $failures failures.\n";
 
+    #
+    # Since we use this in long running daemons, be sure to release
+    # the event system connection, or else we stack up lots of handles
+    # and socket connections to the event server.
+    #
+    event_unregister($evhandle)
+	if (defined($evhandle));
+
     if ($flags{asyncmode}) {
 	$self->dprint(3,"osload: asyncmode osload writing results");
 	#
@@ -972,7 +1055,7 @@ sub WaitTillReloadDone($$$$$@)
 
     foreach my $node ( @nodes ) {
 	my $nodeobject = $self->node($node);
-	if (1 && !$self->nodeflag($nodeobject,'nowait')) {
+	if (!$self->nodeflag($nodeobject,'nowait')) {
 	    $done{$node} = 0;
 	}
 	else {
@@ -1128,45 +1211,99 @@ sub WaitTillReloadDone($$$$$@)
 		$waittime = time - $startwait;
 		
 		# If the node doesn't made a transition within $REBOOTWAIT
-		# minutes of booting, we declare it stuck.
+		# minutes of booting, we declare it stuck. 
 		my $isstuck = ($minutes > $REBOOTWAIT &&
 			       exists($eventnodes->{$node}) &&
+			       $self->nodeinfo($nodeobject, 'rebooted') &&
 			       $eventnodes->{$node} == 0);
+
+		#
+		# But, if we are in reloading, then we obviously missed
+		# a state transition in our handler. Probably just
+		# need to increase $MAXEVENTS above.
+		#
+		if ($isstuck &&
+		    $eventstate eq TBDB_NODESTATE_RELOADING()) {
+		    tbnotice("$self: missed state transition to RELOADING".
+			     " for $node; faking it.");
+		    $eventnodes->{$node} = time();
+		    goto okay;
+		}
+
+		#
+		# Another form of being stuck is no frisbee events for
+		# too long. But only if we are getting frisbee events
+		# and only if we are still in the RELOADING state.
+		#
+		if (! $isstuck &&
+		    $eventstate eq TBDB_NODESTATE_RELOADING()) {
+		    my $frisbeestatus =
+			$self->nodeinfo($nodeobject, "frisbeestatus");
+		    if (defined($frisbeestatus)) {
+			my $lastevent = $frisbeestatus->{'when'};
+			my $diff = time() - $lastevent;
+			if ($diff > 180) {
+			    $isstuck = 1;
+			    print STDERR "$self: $node: ".
+				"Frisbee events have stopped coming in.\n"
+				if ($self->debug());
+			}
+		    }
+		}
 
 		if ($waittime > $maxwait ||
 		    $eventstate eq TBDB_NODESTATE_TBFAILED() ||
 		    $eventstate eq TBDB_NODESTATE_PXEFAILED() ||
+		    $eventstate eq TBDB_NODESTATE_RELOADFAILED() ||
 		    $isstuck) {
 
-		    #
-		    # If we are in reloading, then we obviously missed
-		    # a state transition in our handler. Probably just
-		    # need to increase $MAXEVENTS above.
-		    #
-		    if ($isstuck &&
-			$eventstate eq TBDB_NODESTATE_RELOADING()) {
-			tbnotice("$self: missed state transition to RELOADING".
-				 " for $node; faking it.");
-			$eventnodes->{$node} = time();
-			goto okay;
-		    }
-
 		    my $t = (int ($waittime / 60));
-		    tbnotice "$self: $node appears wedged; ".
-			"it has been $t minutes since it was rebooted.";
+		    my $msg = "$self: $node appears wedged; ".
+			"it has been $t minutes since it was rebooted.\n";
 
 		    if ($eventstate eq TBDB_NODESTATE_TBFAILED() ||
+			$eventstate eq TBDB_NODESTATE_RELOADFAILED() ||
 			$eventstate eq TBDB_NODESTATE_PXEFAILED()) {
-			tbnotice("$self: $node is stuck in $eventstate.");
-		    }
-		    elsif ($eventstate eq TBDB_NODESTATE_RELOADING()) {
-			tbnotice("$self: $node did not finish reloading.");
+			$msg .= "$self: $node is stuck in $eventstate.";
 		    }
 		    elsif ($isstuck) {
-			tbnotice("$self: $node failed to make a state ".
-				 "transition after $REBOOTWAIT minutes; ".
-				 "stuck in $eventstate.");
+			if ($eventstate eq TBDB_NODESTATE_RELOADING()) {
+			    $msg .= "$self: $node has not made any ".
+				"frisbee progress in a long time.";
+			}
+			else {
+			    $msg .= "$self: $node failed to make a state ".
+				"transition after $REBOOTWAIT minutes; ".
+				"stuck in $eventstate.";
+			}
 		    }
+		    else {
+			#
+			# We have waited longer then maxwait. If we are
+			# getting frisbee events then we ignore that limit
+			# since that is soooo old school. Now frisbee tells
+			# us it is making progress, so we wait until there
+			# have been no frisbee events (no progress) for too
+			# long, and then call it stuck.
+			#
+			my $frisbeestatus =
+			    $self->nodeinfo($nodeobject, "frisbeestatus");
+			if (defined($frisbeestatus)) {
+			    my $lastevent = $frisbeestatus->{'when'};
+			    my $diff = time() - $lastevent;
+			    if ($diff < 120) {
+				print STDERR "$self: $node: ".
+				    "waiting for another frisbee event.\n"
+				    if ($self->debug());
+				goto okay;
+			    }
+			    print STDERR "$self: $node: ".
+				"Frisbee events have stopped coming in.\n"
+				if ($self->debug());
+			}
+			$msg .= "$self: $node did not finish reloading.";
+		    }
+		    tbnotice($msg);
 		    TBNodeConsoleTail($node, *STDERR);
 
 		    $count--;
@@ -1177,8 +1314,17 @@ sub WaitTillReloadDone($$$$$@)
 	      okay:
 		if (int($waittime / 60) > $minutes) {
 		    $minutes = int($waittime / 60);
-		    print STDERR "$self ($node): still waiting; ".
-			"it has been $minutes minute(s)\n";
+		    print STDERR "$self ($node): still waiting in ".
+			$eventstate . "; " .
+			"it has been $minutes minute(s). ";
+
+		    my $frisbeestatus =
+			$self->nodeinfo($nodeobject, "frisbeestatus");
+		    if (defined($frisbeestatus)) {
+			my $wbytes = $frisbeestatus->{"wbytes"};
+			print STDERR "${wbytes}MB written.";
+		    }
+		    print STDERR "\n";
 		}
 	    }
 	}
@@ -1197,6 +1343,7 @@ sub WaitTillReloadDone($$$$$@)
 				     (60*6),
 				     \$actual_state,
 				     (TBDB_NODESTATE_TBFAILED,
+				      TBDB_NODESTATE_RELOADFAILED,
 				      TBDB_NODESTATE_PXEFAILED,
 				      TBDB_NODESTATE_ISUP))) {
 		    $done{$node} = $waitmode;
@@ -1321,6 +1468,17 @@ sub osload_wait($$)
     return $retval;
 }
 
+sub osload_kill($$)
+{
+    my ($self,$childpid) = @_;
+
+    $self->dprintts("osload_kill($childpid): starting");
+    kill('TERM', $childpid);
+    waitpid($childpid, 0);
+    $self->dprintts("osload_kill($childpid) finished");
+    return 0;
+}
+
 #
 # Save signature files and boot partition info for all nodes in an experiment
 # (or just the listed nodes).  We call this when swapping in an experiment or
@@ -1357,13 +1515,13 @@ sub osload_setupswapinfo($$$;@)
     # set to an MFS at other times.
     #
     my $query_result = DBQueryWarn(
-	"select r.node_id,r.vname,r.pid,r.eid,r.erole,n.osid,p.partition,".
+	"select r.node_id,r.vname,r.pid,r.eid,r.erole,n.osid,p.`partition`,".
 	"       p.imageid,p.imageid_version,p.imagepid,i.imagename,".
 	"       iv.loadpart,e.savedisk ".
 	"from reserved as r ".
 	"left join nodes as n on n.node_id=r.node_id ".
 	"left join node_types as nt on nt.type=n.type ".
-	"left join partitions as p on p.node_id=n.node_id and ".
+	"left join `partitions` as p on p.node_id=n.node_id and ".
 	"          p.osid=n.def_boot_osid ".
         "left join images as i on i.imageid=p.imageid and ".
 	"          i.version=p.imageid_version ".
@@ -1397,7 +1555,7 @@ sub osload_setupswapinfo($$$;@)
 		if (!$allnodes);
 	    return 1;
 	}
-	my $image = Image->Lookup($imageid, $imageid_version);
+	my $image = OSImage->Lookup($imageid, $imageid_version);
 	if (!defined($image)) {
 	    print "*** swapinfo: Image $imageid,$imageid_version not found!\n";
 	    next
@@ -1505,10 +1663,8 @@ sub osload_setupswapinfo($$$;@)
 	if (! -r $basesig) {
 	    $mustcopy = 1;
 	} elsif (!defined($gotsig{$basesig})) {
-	    my (undef,undef,undef,undef,undef,undef,undef,undef,
-		undef,$fromtime,undef,undef,undef) = stat("$sigdir/$signame");
-	    my (undef,undef,undef,undef,undef,undef,undef,undef,
-		undef,$totime,undef,undef,undef) = stat($basesig);
+	    my $fromtime = stat("$sigdir/$signame")->mtime;
+	    my $totime = stat($basesig)->mtime;
 	    if ($fromtime > $totime) {
 		print "*** swapinfo: WARNING: ".
 		    "$rimagename.sig out of date, updating...\n";
@@ -1604,6 +1760,17 @@ sub SetupEventHandler($$)
 	print STDERR "*** event: Could not subscribe to events\n";
 	return undef;
     }
+    
+    $tuple = address_tuple_alloc();
+    if (!$tuple) {
+	print STDERR "*** event: Could not allocate an address tuple\n";
+	return undef;
+    }
+    %$tuple = (objtype   => TBDB_TBEVENT_FRISBEESTATUS());
+    if (!event_subscribe($EVhandle, $handler, $tuple)) {
+	print STDERR "*** event: Could not subscribe to events\n";
+	return undef;
+    }
     return $EVhandle;
 }
 
@@ -1625,7 +1792,7 @@ use libtestbed;
 use libdb;
 use libtblog;
 use Node;
-use Image;
+use OSImage;
 use English;
 use Data::Dumper;
 use overload ('""' => 'Stringify');
@@ -1673,7 +1840,7 @@ sub _LoadDefaultImages($$)
     my @default_imageids = split(/,/, $default_imageid);
     my @default_images;
     foreach my $default_imageid (@default_imageids) {
-	my $default_image = Image->Lookup($default_imageid);
+	my $default_image = OSImage->Lookup($default_imageid);
 	if (!defined($default_image)) {
 	    tberror("Could not find $default_imageid in the DB!");
 	    return -1;
@@ -1697,14 +1864,14 @@ sub _LoadCurrentImages($$)
 
     my $def_boot_osid  = $nodeobject->def_boot_osid();
     my $def_boot_vers  = $nodeobject->def_boot_osid_vers();
-    my $osinfo = OSinfo->Lookup($def_boot_osid, $def_boot_vers);
-    if (! defined($osinfo)) {
+    my $osimage = OSImage->Lookup($def_boot_osid, $def_boot_vers);
+    if (! defined($osimage)) {
 	tberror("Could not find OS $def_boot_osid in the DB!");
 	return undef;
     }
-    my $best_image = $osinfo->MapToImage($nodeobject->type());
+    my $best_image = $osimage->MapToImage($nodeobject->type());
     if (!defined($best_image)) {
-	tberror("Could not map $osinfo to an image for $node_id!");
+	tberror("Could not map $osimage to an image for $node_id!");
 	return undef;
     }
 
@@ -1766,7 +1933,7 @@ sub AddNode($$$$)
 
     if ($self->nodeflag($nodeobject,'usedefault')) {
 	if (defined($imagelistref) && scalar(@$imagelistref)) {
-	    tbwarn("$self AddNode($node_id): we were given $imagelist, but are " . 
+	    tbwarn("$self AddNode($node_id): we were given $imagelist, but are " .
 		   " going to use the default OS instead!");
 	}
 
@@ -1776,7 +1943,7 @@ sub AddNode($$$$)
     }
     elsif ($self->nodeflag($nodeobject,'usecurrent')) {
 	if (defined($imagelistref) && scalar(@$imagelistref)) {
-	    tbwarn("$self AddNode($node_id): we were given $imagelist, but are " . 
+	    tbwarn("$self AddNode($node_id): we were given $imagelist, but are " .
 		   " going to use the current OS instead!");
 	}
 
@@ -1828,7 +1995,7 @@ sub _CheckImages($$)
 	    #
 	    if ($self->GetImageSize($image, $nodeobject)) {
 		tberror "$nodeobject: no full or delta image file!";
-		goto failednode;
+		return -1;
 	    }
 	}
 	if (! ($image->size() || $image->deltasize())) {
@@ -1850,22 +2017,22 @@ sub SetBootOS($$)
 
     my @images = @{$self->GetImages($nodeobject)};
     #
-    # When loading multiple images, use the osinfo from the
+    # When loading multiple images, use the osimage from the
     # last image
     #
     my $image = $images[-1];
     my $imageid = $image->imageid();
 
     my $defosid = $image->default_osid();
-    my $osinfo = OSinfo->Lookup($defosid);
-    if (!defined($osinfo)) {
+    my $osimage = OSImage->Lookup($defosid);
+    if (!defined($osimage)) {
 	tberror("$self SetBootOS($node_id): could not map OSID $defosid to its object!");
 	return -1;
     }
 
-    print "$self SetBootOS($node_id): changing default OS to $osinfo\n";
+    print "$self SetBootOS($node_id): changing default OS to $osimage\n";
     if (!$TESTMODE) {
-	if ($nodeobject->OSSelect($osinfo,"def_boot_osid",$self->debug())) {
+	if ($nodeobject->OSSelect($image,"def_boot_osid",$self->debug())) {
 	    tberror "$self SetBootOS($node_id): os_select $defosid failed!";
 	    return -1;
 	}
@@ -1880,7 +2047,7 @@ sub SetBootOS($$)
 	$ocmdline = $nodeobject->def_boot_cmd_line();
 	$ocmdline = ""
 	    if (!defined($ocmdline));
-	$osinfo->OSBootCmd("delay", \$ncmdline);
+	$osimage->OSBootCmd("delay", \$ncmdline);
 	$ncmdline = ""
 	    if (!defined($ncmdline));
 	if ($ocmdline ne $ncmdline) {
@@ -1918,8 +2085,8 @@ sub SaveNodeDiskInfo($$)
     # Save the old ones off first!
     #
     my $dbres;
-    $dbres = DBQueryFatal("select node_id,partition,osid,imageid,imagepid" . 
-			  " from partitions where node_id='$node_id'");
+    $dbres = DBQueryFatal("select node_id,`partition`,osid,imageid,imagepid" . 
+			  " from `partitions` where node_id='$node_id'");
     if (defined($dbres) && $dbres->numrows()) {
 	my @rows = ();
 	while (my $rowref = $dbres->fetchrow_hashref()) {
@@ -1951,14 +2118,14 @@ sub RestoreNodeDiskInfo($$)
 
     my $partref = $self->nodeinfo($nodeobject,'old_partitions');
     if (defined($partref) && @$partref) {
-	DBQueryFatal("delete from partitions where node_id='$node_id'");
+	DBQueryFatal("delete from `partitions` where node_id='$node_id'");
 
 	foreach my $rowref (@$partref) {
 	    my ($part,$osid,$imageid,$imagepid) = 
 		( $rowref->{'partition'},$rowref->{'osid'},
 		  $rowref->{'imageid'},$rowref->{'imagepid'} );
-	    DBQueryFatal("insert into partitions " . 
-			 " (node_id,partition,osid,imageid,imagepid)" . 
+	    DBQueryFatal("insert into `partitions` " . 
+			 " (node_id,`partition`,osid,imageid,imagepid)" . 
 			 " values" . 
 			 " ('$node_id','$part','$osid','$imageid','$imagepid')");
 	}
@@ -2013,7 +2180,7 @@ sub UpdatePartitions($$)
     if (!$prepare) {
 	my $dbresult =
 	    DBQueryWarn("select p.*,v.mbr_version ".
-			" from partitions as p,image_versions as v ".
+			" from `partitions` as p,image_versions as v ".
 			" where p.imageid=v.imageid and ".
 			"       p.imageid_version=v.version and ".
 			"       v.deleted is null ".
@@ -2045,7 +2212,6 @@ sub UpdatePartitions($$)
 
 	my $loadpart   = $image->loadpart();
 	my $loadlen    = $image->loadlength();
-	my $imagepath  = $image->path();
 	my $imagepid   = $image->pid();
 
 	#
@@ -2088,25 +2254,28 @@ sub UpdatePartitions($$)
 	# Now we loop through the image partitions and set/clear
 	# the existing partition info as appropriate.
 	#
+	# NOTE: We no longer do multi-os images ... but this loop
+	# is harmless. 
+	#
 	for (my $i = $startpart; $i < $endpart; $i++) {
 	    my $partname = "part${i}_osid";
 	    my $partvers = "part${i}_vers";
 
-	    my $osid = $image->DBData()->{$partname};
-	    my $vers = $image->DBData()->{$partvers};
+	    my $osid = $image->field($partname);
+	    my $vers = $image->field($partvers);
 	    if (defined($osid)) {
-		my $osinfo = OSinfo->Lookup($osid, $vers);
-		if (!defined($osinfo)) {
-		    tberror "No OSinfo found for osid $osid!\n";
+		my $osimage = OSImage->Lookup($osid, $vers);
+		if (!defined($osimage)) {
+		    tberror "No OSImage found for osid $osid!\n";
 		    return -1;
 		}
 		my %part = (
 		    'node_id' => $node_id,
 		    'partition' => $i,
 		    'osid' => $osid,
-		    'osid_vers' => $osinfo->vers(),
-		    'imageid' => $imageid,
-		    'imageid_version' => $image->version(),
+		    'osid_vers' => $osimage->version(),
+		    'imageid' => $osimage->imageid(),
+		    'imageid_version' => $osimage->version(),
 		    'imagepid' => $imagepid,
 		    'mbr_version' => $curmbrvers
 		    );
@@ -2133,16 +2302,16 @@ sub UpdatePartitions($$)
 	    my $imvers = $href->{'imageid_version'};
 	    my $impid = $href->{'imagepid'};
 	    $dbresult =
-		DBQueryWarn("replace into partitions ".
-			    "(node_id,partition,osid,imageid,imagepid,".
+		DBQueryWarn("replace into `partitions` ".
+			    "(node_id,`partition`,osid,imageid,imagepid,".
 			    " osid_vers,imageid_version) ".
 			    "values ".
 			    "('$node_id','$i','$osid','$imid','$impid',".
 			    " '$osvers','$imvers')");
 	} else {
 	    $dbresult =
-		DBQueryWarn("delete from partitions ".
-			    "where node_id='$node_id' and partition='$i'");
+		DBQueryWarn("delete from `partitions` ".
+			    "where node_id='$node_id' and `partition`='$i'");
 	}
 	if (!$dbresult) {
 	    tberror "$node_id: Could not update partitions table";
@@ -2179,13 +2348,15 @@ sub ComputeMaxLoadWaitTime($$)
     my @images = @{$self->GetImages($nodeobject)};
     foreach my $image (@images) {
 	my $imageid = $image->imageid();
+	my $isfull     = $image->HaveFullImage();
+	my $imagesize  = ($isfull ? $image->size() : $image->deltasize());
 	#
 	# Compute a maxwait time based on the image size plus a constant
 	# factor for the reboot cycle.  This is used later in
 	# WaitTillReloadDone().  Arguably, this should be part of the
 	# image DB state, so we store it in the imageinfo array too.
 	#
-	my $chunks = $image->size() >> 20;# size may be > 2^31, shift is unsigned
+	my $chunks = $imagesize >> 20;# size may be > 2^31, shift is unsigned
 
 	# XXX aren't we multi-counting reboots??
 	# ok, moved constant factor out.
@@ -2299,7 +2470,7 @@ use libtestbed;
 use libdb;
 use libtblog;
 use Node;
-use Image;
+use OSImage;
 use English;
 use Data::Dumper;
 use overload ('""' => 'Stringify');
@@ -2318,7 +2489,7 @@ sub SetupReload($$)
 {
     my ($self,$nodeobject) = @_;
     my $node_id = $nodeobject->node_id();
-    my $osinfo;
+    my $osimage;
 
     $self->dprint(0,"SetupReload($node_id): setting up reload");
 
@@ -2342,7 +2513,7 @@ sub SetupReload($$)
 		    $pimage = $pimage->Parent();
 		    if (!$pimage) {
 			tberror "$node_id: delta image $image has no parent!";
-			goto failednode;
+			return -1;
 		    }
 		    push(@ilist, $pimage);
 		} while (!$pimage->HaveFullImage());
@@ -2352,10 +2523,29 @@ sub SetupReload($$)
 	    push(@allimages, $image);
 	}
 	#
-	# XXX we need to recompute access keys here.
+	# NB: we need to recompute access keys here.  Needs a refactor...
 	#
 	if ($founddelta) {
-	    ;
+	    #
+	    # This is a bad place for access_keys handling as stated above...
+	    #
+	    my %access_keys = ();
+	    foreach my $image (@allimages) {
+		# This is passed along so that remote node can request the file.
+		# Make sure the image object has an access key defined.
+		if (defined($image->access_key()) && $image->access_key() ne '') {
+		    $access_keys{$image} = $image->access_key();
+		}
+		elsif ($nodeobject->isremotenode()
+		       && !defined($access_keys{$image})) {
+		    $access_keys{$image} = TBGenSecretKey();
+
+		    if ($image->Update({'access_key' => $access_keys{$image}}) != 0) {
+			tberror "$self ($node_id): Could not initialize image access key";
+			return -1;
+		    }
+		}
+	    }
 	}
     } else {
 	@allimages = @images;
@@ -2411,13 +2601,19 @@ sub SetupReload($$)
 	    return -1;
 	}
 	# Look up the magic osid for the imageX loader
-	$osinfo = OSinfo->Lookup(TB_OPSPID, $IMAGEX_OSNAME);
+	$osimage = OSImage->Lookup(TB_OPSPID, $IMAGEX_OSNAME);
     }
     else {
-	$osinfo = OSinfo->Lookup($osid);
+	$osimage = OSImage->Lookup($osid);
     }
 
-    if ($nodeobject->OSSelect($osinfo,"next_boot_osid",$self->debug())) {
+    #
+    # We used to invoke os_select here and it checks for MODIFYINFO permission
+    # on the node. Since we have already checked for LOADIMAGE permission,
+    # which requires the same user privilege, we do not need to check further.
+    #
+    if (!defined($osimage)
+	|| $nodeobject->OSSelect($osimage,"next_boot_osid",$self->debug())) {
 	tberror "$self: os_select $osid failed!";
 	return -1;
     }
@@ -2473,11 +2669,15 @@ sub New($$;$)
 }
 
 # NOTE that virtnodes don't have default imageids -- they are only 
-# loaded (and thus arrive here) if the user specifically set a loadable
+# loaded (and thus arrive in osload) if the user specifically set a loadable
 # subOS for the node.
 sub _LoadDefaultImages($$)
 {
-    return 0;
+    my ($self,$nodeobject) = @_;
+
+    my $node_id = $nodeobject->node_id();
+    tberror("virtnodes do not have default images; bug? ($node_id)");
+    return -1;
 }
 #
 # But we *do* want the user to be able to simply reload the current OS.
@@ -2519,11 +2719,32 @@ sub ComputeMaxLoadWaitTime($$)
     # given how synchronous our scripts are, so give it 8 mins 
     # for now.
     #
-    if (!$nodeobject->_onsharednode()) {
+    if (!$nodeobject->OnSharedNode()) {
 	$maxwait += 8 * 60;
     }
 
     return $maxwait;
+}
+
+package libosload_pcvm;
+use base qw(libosload_virtnode);
+
+use libdb;
+use libtestbed;
+use libtblog;
+use Node;
+use English;
+use Data::Dumper;
+use overload ('""' => 'Stringify');
+
+sub New($$)
+{
+    my ($class, $parent, $type) = @_;
+
+    my $self = $class->SUPER::New($parent,defined($type)?$type:"pcvm");
+    bless($self, $class);
+
+    return $self;
 }
 
 package libosload_mote;
@@ -2533,10 +2754,12 @@ use libtestbed;
 use libdb;
 use libtblog;
 use Node;
-use Image;
+use OSImage;
 use English;
 use Data::Dumper;
 use overload ('""' => 'Stringify');
+
+my $TBUISP	    = "$TB/bin/tbuisp";
 
 sub New($$;$)
 {
@@ -2553,13 +2776,19 @@ sub AddNode($$$$)
     my ($self, $nodeobject, $imagelist, $args) = @_;
     my $node_id = $nodeobject->node_id();
 
-    # Motes don't support these flags, so clear them so libosload doesn't
-    # try to do anything with them!
-    if (defined($self->nodeflag($nodeobject,'reboot'))) {
-	$self->nodeflag($nodeobject,'reboot',0);
-    }
+    #
+    # First, initialize our flags and image list.
+    #
+    my $rc = $self->SUPER::AddNode($nodeobject, $imagelist, $args);
 
-    return $self->SUPER::AddNode($nodeobject, $imagelist, $args);
+    #
+    # Now setup our custom flags.
+    #
+    # Motes don't support reboot, so set the noreboot bit so libosload doesn't
+    # try to do anything with them!
+    $self->nodeflag($nodeobject,'noreboot',1);
+
+    return $rc;
 }
 
 #
@@ -2592,6 +2821,8 @@ sub SetupReload($$)
     # The mote goes 'down', then starts to reload
     #
     TBSetNodeEventState($node_id,TBDB_NODESTATE_SHUTDOWN);
+
+    return 0;
 }
 
 sub Reload($$) 
@@ -2641,9 +2872,8 @@ sub Reload($$)
     #
     TBSetNodeEventState($node_id,TBDB_NODESTATE_RELOADDONE);
 
-
-    my $osinfo = OSinfo->Lookup($osid);
-    if ($nodeobject->OSSelect($osinfo,"def_boot_osid",$self->debug())) {
+    my $osimage = OSImage->Lookup($osid);
+    if ($nodeobject->OSSelect($osimage,"def_boot_osid",$self->debug())) {
 	tberror "$self Reload($node_id): os_select $osid failed!";
 	return -1;
     }

@@ -114,7 +114,7 @@ if [ -f "/etc/emulab/ismfs" ] ; then
 
     if [ ! -d $mountpoint/nodecheck/`uname -s`/bin-`uname -m` ] ; then
 	echo "Nodecheck - Can not run in MFS mode without having helper programs."
-	echo "Expecting to have $MFSPROJDIR/nodecheck/`uname -s`/bin-`uname -m` avaiable"
+	echo "Expecting to have $MFSPROJDIR/nodecheck/`uname -s`/bin-`uname -m` available"
 	exit 0
     fi
 

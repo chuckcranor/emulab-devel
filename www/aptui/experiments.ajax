@@ -1,0 +1,281 @@
+<?php
+#
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+chdir("..");
+chdir("apt");
+include_once("profile_defs.php");
+include_once("instance_defs.php");
+include_once("ajax-routines.ajax");
+
+#
+# Need to check the permission, since we allow admins to mess with
+# other accounts.
+#
+function CheckPageArgs()
+{
+    global $this_user;
+    global $ajax_args;
+
+    if (!(ISADMIN() || ISFOREIGN_ADMIN())) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    return 0;
+}
+
+function Do_ExperimentList()
+{
+    global $this_user, $urn_mapping;
+    global $ajax_args;
+    $results = array();
+
+    if (CheckPageArgs()) {
+        return;
+    }
+
+    $query_result = 
+        DBQueryFatal("select a.*,s.expires,s.hrn,u.email,users.usr_name, ".
+                     " (UNIX_TIMESTAMP(now()) > ".
+                     "  UNIX_TIMESTAMP(s.expires)) as expired, ".
+                     "  truncate(a.physnode_count * ".
+                     "   ((UNIX_TIMESTAMP(now()) - ".
+                     "     UNIX_TIMESTAMP(a.created)) / 3600.0),2) as phours, ".
+                     " IFNULL(aggs.count,0) as aggrows, ".
+                     " agg.aggregate_urn as aggrow_urn ".
+                     "  from apt_instances as a ".
+                     "left join (".
+                     "    select uuid, COUNT(*) AS count ".
+                     "    from apt_instance_aggregates group by uuid) AS aggs ".
+                     "  on aggs.uuid=a.uuid ".
+                     "left join apt_instance_aggregates as agg ".
+                     "     on agg.uuid=a.uuid ".
+                     "left join geni.geni_slices as s on ".
+                     "     s.uuid=a.slice_uuid ".
+                     "left join geni.geni_users as u on u.uuid=a.creator_uuid ".
+                     "left join users on users.uid_idx=a.creator_idx");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $profile_id   = $row["profile_id"];
+        $version      = $row["profile_version"];
+        $uuid         = $row["uuid"];
+        $name         = $row["name"];
+        $status       = $row["status"];
+        $canceled     = $row["canceled"];
+        $created      = DateStringGMT($row["created"]);
+        $expires      = DateStringGMT($row["expires"]);
+        $creator_idx  = $row["creator_idx"];
+        $profile_name = "$profile_id:$version";
+        $creator_uid  = $row["creator"];
+        $pid          = $row["pid"];
+        $pcount       = $row["physnode_count"];
+        $vcount       = $row["virtnode_count"];
+        $user_lockdown= $row["user_lockdown"];
+        $admin_lockdown= $row["admin_lockdown"];
+        $lockdown     = ($user_lockdown || $admin_lockdown ? 1 : 0);
+        $phours       = $row["phours"];
+        $email        = $row["email"];
+        $extending    = $row["extension_requested"];
+        $blob         = array();
+
+        # If a guest user, use email instead.
+        if (isset($email)) {
+            $blob["creator"] = $email;
+        }
+        else {
+            $blob["creator"] =
+                "<a href='user-dashboard.php?user=$creator_uid'>".
+                "$creator_uid</a>";
+        }
+        if ($row["expired"]) {
+            $status = "expired";
+        }
+        elseif ($canceled) {
+            $status = "canceled";
+        }
+        $blob["status"] = $status;
+        
+        $profile = Profile::Lookup($profile_id, $version);
+        if ($profile) {
+            $blob["profile_name"] = $profile->name();
+            $blob["profile_uuid"] = $profile->uuid();
+        }
+        else {
+            $blob["profile_name"] = $profile_name;
+        }
+        
+        #
+        # If arows non-zero, then we use that for aggregate_urn,
+        # and if its more then 1, we need to consume the extras rows
+        # to get the rest of the aggregate urns.
+        #
+        if ($row["aggrows"] > 0) {
+            $cluster = $urn_mapping[$row["aggrow_urn"]];
+
+            for ($i = 1; $i < $row["aggrows"]; $i++) {
+                $row = mysql_fetch_array($query_result);
+                $cluster .= "," . $urn_mapping[$row["aggrow_urn"]];
+            }
+        }
+        else {
+            $cluster = $urn_mapping[$row["aggregate_urn"]];
+        }
+        $blob["name"]     = "<a href='adminextend.php?uuid=$uuid'>$name</a>";
+        $blob["project"]  = "<a href='show-project.php?project=$pid'>$pid</a>";
+        $blob["cluster"]        = $cluster;
+        $blob["pcount"]         = $pcount;
+        $blob["phours"]         = $phours;
+        $blob["vcount"]         = $vcount;
+        $blob["created"]        = $created;
+        $blob["expires"]        = $expires;
+        $blob["user_lockdown"]  = ($user_lockdown ? 1 : 0);
+        $blob["admin_lockdown"] = ($admin_lockdown ? 1 : 0);
+        $blob["lockdown"]       = $lockdown;
+        $blob["extension_requested"] = $extending;
+
+        #
+        # For admins, we includes a filters field.
+        #
+        $filters = array();
+        if ($lockdown) {
+            $filters[] = "locked";
+        }
+        if ($status == "expired") {
+            $filters[] = "expired";
+        }
+        if ($extending) {
+            $filters[] = "extending";
+        }
+        if (time() - strtotime($created) > (45 * 24 * 3600)) {
+            $filters[] = "old";
+        }
+        $blob["filter"] = implode(",", $filters);
+        
+        $results["$pid:$name"] = $blob;
+    }
+    SPITAJAX_RESPONSE($results);    
+}
+
+function Do_ExperimentErrors()
+{
+    global $this_user, $urn_mapping, $geni_response_codes;
+    global $ajax_args;
+    $clause  = "";
+    $results = array();
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (isset($ajax_args["stamp"]) && TBvalid_integer($ajax_args["stamp"])) {
+        $stamp = $ajax_args["stamp"];
+        $clause = "where UNIX_TIMESTAMP(f.created) <= $stamp";
+    }
+    $query_result =
+        DBQueryFatal("select f.name,exitcode,f.created,f.public_url,f.uuid,".
+                     "  IF(i.uuid,1,0) as active,f.exitmessage, ".
+                     "  p.uuid as profile_uuid,p.name as profile_name, ".
+                     "  IF(i.uuid,i.aggregate_urn,h.aggregate_urn) ".
+                     "    as aggregate_urn, ".
+                     "  f.slice_uuid,f.logfileid,f.creator ".
+                     "from apt_instance_failures as f ".
+                     "left join apt_instances as i on ".
+                     "     i.uuid=f.uuid ".
+                     "left join apt_instance_history as h on ".
+                     "     h.uuid=f.uuid ".
+                     "left join apt_profiles as p on ".
+                     "     p.profileid=f.profile_id ".
+                     $clause . " " .
+                     "order by f.created desc limit 25");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $name       = $row["name"];
+        $exitcode   = $row["exitcode"];
+        $url        = $row["public_url"];
+        $logfileid  = $row["logfileid"];
+        $active     = $row["active"] ? 1 : 0;
+        $uuid       = $row["uuid"];
+        $created    = DateStringGMT($row["created"]);
+        $creator    = $row["creator"];
+        $message    = $row["exitmessage"];
+        $reason     = $exitcode;
+        $slice_uuid = $row["slice_uuid"];
+        $profile_uuid = $row["profile_uuid"];
+        $profile_name = $row["profile_name"];
+        $aggregate_urn= $row["aggregate_urn"];
+        $cluster      = "N/A";
+
+        if ($exitcode >= 0 && $exitcode <= count($geni_response_codes)) {
+            $reason = $geni_response_codes[$exitcode];
+        }
+        elseif ($exitcode == GENIRESPONSE_STITCHER_ERROR) {
+            $reason = "Stitcher Failed";
+        }
+        if ($aggregate_urn && $aggregate_urn != "") {
+            $cluster = $urn_mapping[$aggregate_urn];
+        }
+        #
+        # Ick. If the url is for the showslicepub link, we have a problem;
+        # the link is good only while the slice is alive. After that, we have
+        # to use a private url (which is okay, cause only admins are going
+        # to see it and be able to use it).
+        #
+        if (ISFOREIGN_ADMIN()) {
+            $url = null;
+        }
+        elseif (!$url) {
+            #
+            # If there is a log file, show that instead.
+            #
+            if ($logfileid) {
+                $url = $TBBASE . "/" .
+                    CreateURL("spewlogfile", "logfile", $logfileid);
+            }
+        }
+        elseif (preg_match("/^(https:.*)\/showslicepub/", $url, $matches)) {
+            if (ISADMIN()) {
+                $url = $matches[1] . "/showslicelogs.php?slice_uuid=".
+                    $slice_uuid;
+            }
+            else {
+                $url = null;
+            }
+        }
+        $results[$uuid] = array("name"     => $name,
+                                "uuid"     => $uuid,
+                                "exitcode" => $exitcode,
+                                "active"   => $active,
+                                "created"  => $created,
+                                "creator"  => $creator,
+                                "reason"   => $reason,
+                                "message"  => $message,
+                                "url"      => $url,
+                                "cluster"  => $cluster,
+                                "profile_uuid" => $profile_uuid,
+                                "profile_name" => $profile_name);
+    }
+    SPITAJAX_RESPONSE($results);    
+}
+
+# Local Variables:
+# mode:php
+# End:
+?>

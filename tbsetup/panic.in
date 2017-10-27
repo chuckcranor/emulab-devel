@@ -1,6 +1,6 @@
-#!/usr/bin/perl -wT
+#!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,13 +38,15 @@ sub usage()
 	  "-l level - Level 1; reboot nodes into the admin MFS\n".
 	  "         - Level 2; disable the control network\n".
 	  "-r       - Reset panic state (admin people only)\n".
+	  "-c       - Clear panic state but do not do anything else\n".
 	  "-w       - From web interface, create a log file.\n".
 	  "<pid>    - The project the experiment belongs to\n".
 	  "<eid>    - The experiment name (id)\n");
     exit(-1);
 }
-my $optlist = "rl:w";
+my $optlist = "rl:wc";
 my $reset   = 0;
+my $clear   = 0;
 my $level   = 1;
 my $dolog   = 0;
 
@@ -119,6 +121,9 @@ if (! getopts($optlist, \%options)) {
 if (@ARGV != 2) {
     usage();
 }
+if (defined($options{"c"})) {
+    $clear = 1;
+}
 if (defined($options{"r"})) {
     $reset = 1;
 }
@@ -179,7 +184,7 @@ $experiment->LockTables() == 0
 #
 # Called from user (via web interface).
 #
-if ($reset) {
+if ($reset || $clear) {
     ExitWithStatus(1, "Experiment $pid/$eid is not paniced!\n")
 	if ($experiment->state() ne EXPTSTATE_PANICED &&
 	    $experiment->paniced());
@@ -193,11 +198,23 @@ else {
 	       $experiment->state() eq EXPTSTATE_SWAPPING));
 }
 
+if ($clear && $level == 2) {
+    fatal("Not allowed to clear panic state for a level 2 panic")
+}
+
 #
 # Change experiment state and lock it. Unlock tables at same time.
 #
-$experiment->Lock(($reset ? EXPTSTATE_ACTIVE : EXPTSTATE_PANICED), 1) == 0
+$experiment->Lock(($reset || $clear ?
+		   EXPTSTATE_ACTIVE : EXPTSTATE_PANICED), 1) == 0
     or fatal("Could not lock $experiment");
+
+if ($clear) {
+    $experiment->SetPanicBit(0);
+    $experiment->Unlock();
+    print "Panic state has been cleared, but nodes are still in the MFS\n";
+    exit(0);
+}
 
 # Force level 2 for firewalled experiments.
 if ($experiment->IsFirewalled()) {

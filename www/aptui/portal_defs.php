@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,7 +29,7 @@ $APTHOST	= "$WWWHOST";
 $COOKDIEDOMAIN  = "$WWWHOST";
 $APTBASE	= "$TBBASE/portal";
 $APTMAIL        = $TBMAIL_OPS;
-$EXTENSIONS     = $TBMAIL_OPS;
+$SUPPORT        = $TBMAILADDR_OPS;
 $APTTITLE       = "Emulab";
 $FAVICON        = "../favicon.ico";
 $APTLOGO        = "emulab-logo.svg";
@@ -38,8 +38,9 @@ $ISEMULAB       = 1;
 $ISAPT		= 0;
 $ISCLOUD        = 0;
 $ISPNET         = 0;
+$ISPOWDER       = 0;
 $ISVSERVER      = 0;
-$GOOGLEUA       = 'UA-45161989-1';
+$GOOGLEUA       = 'UA-42844769-6';
 # See tbauth.php3
 $CHANGEPSWD_PAGE= "changepswd.php";
 $MAXGUESTINSTANCES = 10;
@@ -48,11 +49,10 @@ $WITHPUBLISHING = 0;
 #
 # Other Portal globals. 
 #
-$PORTAL_MANUAL          = "https://wiki.emulab.net/wikidocs/wiki";
-$PORTAL_MOTD_SITEVAR    = "web/banner";
+$PORTAL_MANUAL          = "http://docs.emulab.net";
 $PORTAL_HELPFORUM       = "emulab-users";
 $PORTAL_PASSWORD_HELP   = "Emulab Username or Email";
-$PORTAL_NSFNUMBER       = "CNS-58502134";
+$PORTAL_NSFNUMBER       = "1513121";
 $PORTAL_GENESIS         = "emulab";
 $DEFAULT_AGGREGATE      = "Emulab";
 $DEFAULT_AGGREGATE_URN	= "urn:publicid:IDN+${OURDOMAIN}+authority+cm";

@@ -88,12 +88,12 @@ typedef pubsub_subscription_t *event_subscription_t;
  */
 typedef struct _address_tuple {
 	char		*site;		/* Which Emulab site. God only */
-	char		*expt;		/* Project and experiment IDs */
+	char const	*expt;		/* Project and experiment IDs */
 	char		*group;		/* User defined group of nodes */
-	char		*host;		/* A specific host */		
-	char		*objtype;	/* LINK, TRAFGEN, etc ... */
-        char		*objname;	/* link0, cbr0, cbr1, etc ... */
-        char		*eventtype;	/* START, STOP, UP, DOWN, etc ... */
+	char const	*host;		/* A specific host */		
+	char const	*objtype;	/* LINK, TRAFGEN, etc ... */
+        char const	*objname;	/* link0, cbr0, cbr1, etc ... */
+        char const	*eventtype;	/* START, STOP, UP, DOWN, etc ... */
 	int		scheduler;	/* A dynamic event to schedule */
 	char		*timeline;	/* The timeline to schedule under */
 } address_tuple, *address_tuple_t;
@@ -202,14 +202,14 @@ typedef void (*event_subscription_callback_t)(event_handle_t handle,
  */
 
 /* event.c */
-event_handle_t event_register(char *name, int threaded);
-event_handle_t event_register_withkeyfile(char *name, int threaded,
+event_handle_t event_register(char const *name, int threaded);
+event_handle_t event_register_withkeyfile(char const *name, int threaded,
 					  char *keyfile);
-event_handle_t event_register_withkeydata(char *name, int threaded,
+event_handle_t event_register_withkeydata(char const *name, int threaded,
 					  unsigned char *keydata, int len);
-event_handle_t event_register_withkeyfile_withretry(char *name, int threaded,
+event_handle_t event_register_withkeyfile_withretry(char const *name, int threaded,
 					  char *keyfile, int retrycount);
-event_handle_t event_register_withkeydata_withretry(char *name, int threaded,
+event_handle_t event_register_withkeydata_withretry(char const *name, int threaded,
 					  unsigned char *keydata, int len,
 					  int retrycount);
 int event_unregister(event_handle_t handle);
@@ -228,42 +228,42 @@ event_notification_t event_notification_clone(event_handle_t handle,
 					event_notification_t notification);
 int event_notification_get_double(event_handle_t handle,
                                   event_notification_t notification,
-                                  char *name, double *value);
+                                  char const *name, double *value);
 int event_notification_get_int32(event_handle_t handle,
                                  event_notification_t notification,
-                                 char *name, int32_t *value);
+                                 char const *name, int32_t *value);
 int event_notification_get_int64(event_handle_t handle,
                                  event_notification_t notification,
-                                 char *name, int64_t *value);
+                                 char const *name, int64_t *value);
 int event_notification_get_opaque_length(event_handle_t handle,
 					 event_notification_t notification,
-					 char *name);
+					 char const *name);
 int event_notification_get_string_length(event_handle_t handle,
 					 event_notification_t notification,
-					 char *name);
+					 char const *name);
 int event_notification_get_opaque(event_handle_t handle,
                                   event_notification_t notification,
-                                  char *name, void *buffer, int length);
+                                  char const *name, void *buffer, int length);
 int event_notification_get_string(event_handle_t handle,
                                   event_notification_t notification,
-                                  char *name, char *buffer, int length);
+                                  char const *name, char *buffer, int length);
 int event_notification_put_double(event_handle_t handle,
                                   event_notification_t notification,
-                                  char *name, double value);
+                                  char const *name, double value);
 int event_notification_put_int32(event_handle_t handle,
                                  event_notification_t notification,
-                                 char *name, int value);
+                                 char const *name, int value);
 int event_notification_put_int64(event_handle_t handle,
                                  event_notification_t notification,
-                                 char *name, int64_t value);
+                                 char const *name, int64_t value);
 int event_notification_put_opaque(event_handle_t handle,
                                   event_notification_t notification,
-                                  char *name, void *buffer, int length);
+                                  char const *name, void *buffer, int length);
 int event_notification_put_string(event_handle_t handle,
                                   event_notification_t notification,
-                                  char *name, char *value);
+                                  char const *name, char const *value);
 int event_notification_remove(event_handle_t handle,
-                              event_notification_t notification, char *name);
+                              event_notification_t notification, char const *name);
 event_subscription_t event_subscribe(event_handle_t handle,
                                      event_notify_callback_t callback,
                                      address_tuple_t tuple, void *data);
@@ -292,8 +292,8 @@ int event_notification_unpack(event_handle_t handle,
 int event_set_idle_period(event_handle_t handle, int seconds) ;
 int event_set_failover(event_handle_t handle, int dofail) ;
 
-int event_arg_get(char *args, char *key, char **value);
-int event_arg_dup(char *args, char *key, char **value);
+int event_arg_get(char *args, char const *key, char **value);
+int event_arg_dup(char *args, char const *key, char **value);
 
 typedef enum {
     EA_TAG_DONE,

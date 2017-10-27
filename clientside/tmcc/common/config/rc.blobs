@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2012 University of Utah and the Flux Group.
+# Copyright (c) 2004-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,9 +46,15 @@ if ($EUID != 0) {
 }
 
 # Script specific goo
-my $FRISBEE     = "/usr/local/etc/emulab/frisbee -N ";
+my $OFRISBEE    = "/usr/local/etc/emulab/frisbee";
+my $NFRISBEE    = "/usr/local/bin/frisbee";
+my $FRISBEEOPTS = "-N -T 300 -B 30";
 my $TARINSTALL  = "/usr/local/bin/install-tarfile";
 my $TARDBFILE   = "$DBDIR/testbed.tarfiles";
+
+my $FRISBEE = $NFRISBEE;
+$FRISBEE = $OFRISBEE if (! -x $NFRISBEE);
+$FRISBEE .= " $FRISBEEOPTS";
 
 #
 # Load the OS independent support library. It will load the OS dependent

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2017 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -75,6 +75,8 @@ struct diskinfo {
 	unsigned long disksize;
 	struct dospart *parts;
 } diskinfo;
+
+#define MAXSECT	((unsigned long)0xFFFFFFFF)
 
 char optionstr[] =
 "[-fhvW] [disk]\n"
@@ -204,8 +206,10 @@ getdiskinfo(char *disk)
 			nhead = 0;
 		diskinfo.tpc = nhead;
 		if (nsect && nhead) {
+			/* make sure we truncate to a "cylinder" boundary */
 			diskinfo.cpu = diskinfo.disksize / (nsect * nhead);
-			chs = diskinfo.cpu * diskinfo.tpc * diskinfo.spt;
+			chs = (unsigned long)diskinfo.cpu *
+				diskinfo.tpc * diskinfo.spt;
 		} else {
 			diskinfo.cpu = 0;
 			chs = diskinfo.disksize;
@@ -343,6 +347,16 @@ tweakdiskinfo(char *disk)
 	}
 	dp = &diskinfo.parts[lastunused];
 
+	/*
+	 * XXX since we are still in MBR-land, we cannot have a partition
+	 * larger than 4G - 1 sectors.
+	 */
+	if ((unsigned long)(diskinfo.disksize-firstfree) > MAXSECT) {
+		warnx("WARNING! Disk has %lu sectors, "
+		      "will only use %lu", diskinfo.disksize, MAXSECT);
+		diskinfo.disksize = MAXSECT + firstfree;
+	}
+	
 	if (fdisk) {
 		printf("p %d %d %ld %ld\n",
 		       lastunused+1, dp->dp_typ ? dp->dp_typ : DOSPTYP_386BSD,

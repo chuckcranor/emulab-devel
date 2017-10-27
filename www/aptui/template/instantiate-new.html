@@ -37,25 +37,21 @@
 		  </center>
 		</h3>
 	      <% } %>
-	    <% } %>
-	    <!-- If linked to a specific profile, description goes here -->
-	    <% if (profilename) { %>
-	      <% if (!registered) { %>
+	      <!-- If linked to a specific profile, description goes here -->
+	      <% if (profilename) { %>
 		<p>
 		  Fill out the form below to run an experiment
 		  using this profile:
 		</p>
+		<blockquote>
+		  <p><span id='selected_profile_description'></span></p>
+		</blockquote>
+		<p>
+		  When you click the 'Create' button, the virtual or
+		  physical machines described in the profile will be booted
+		  on <%= clustername %>'s hardware
+		</p>
 	      <% } %>
-	      <blockquote>
-		<p><span id='selected_profile_description'></span></p>
-	      </blockquote>
-	      <p>
-		When you click the 'Create' button, the virtual or
-		physical machines described in the profile will be booted
-		on <%= clustername %>'s hardware
-	      </p>
-	    <% } %>
-	    <% if (!registered) { %>
 	      <div class='form-group format-me'>
 		<input name="username"
 		       id='input_username'
@@ -146,54 +142,56 @@
 		  </div>
 		</div>
 	      </div>
-	      <% } %>
-	      <!-- Profile selection box -->
-	      <% if (showpicker) { %>
-		<div class='form-group row' style='margin-bottom: 0px;'>
-		  <div class='col-md-12'>
-		    <div class='panel panel-default'>
-		      <div class='panel-heading'>
-			<span class='panel-title'>
-			  <strong>Selected Profile:</strong> 
-			  <span id='selected_profile_text'></span>
-			</span>
-		      </div>
-		      <div class='panel-body'>
-			<div id='selected_profile_description'></div>
-		      </div>
-		      <div class='panel-footer'>
-			<% if (cancopy) { %>
-			  <button class='btn btn-default btn-sm pull-left' 
-				  type='button' id='profile_copy_button'
-				  style='margin-right: 10px;'
-				  data-toggle='popover'
-				  data-delay='{hide:1500, show:500}'
-				  data-html='true'
-				  data-content='When you copy a profile you are
+	    <% } %>
+	    <% if (registered || !profilename) { %>
+	      <div class='form-group row' style='margin-bottom: 0px;'>
+		<div class='col-md-12'>
+		  <div class='panel panel-default'>
+		    <div class='panel-heading'>
+		      <span class='panel-title'>
+			<strong>Selected Profile:</strong> 
+			<span id='selected_profile_text'></span>
+		      </span>
+		    </div>
+		    <div class='panel-body'>
+		      <div id='selected_profile_description'></div>
+		    </div>
+		    <div class='panel-footer'>
+		      <% if (cancopy && !fromrepo) { %>
+			<button class='btn btn-default btn-sm pull-left' 
+				type='button' id='profile_copy_button'
+				style='margin-right: 10px;'
+				data-toggle='popover'
+				data-delay='{hide:1500, show:500}'
+				data-html='true'
+				data-content='When you copy a profile you are
 				  creating a new profile that uses the same
 				  source code and metadata (description,
 				  instructions) as the original profile, but
 				  without creating a new disk image. Instead,
 				  the new profile uses whatever images the
 				  original profile uses.'>
-			    Copy Profile
-			  </button>
-			  <button class='btn btn-default btn-sm pull-left'
-				  type='button' id='profile_show_button'>
-			    Show Profile
-			  </button>
-			<% } %>
-			<button id='profile'
+			  Copy Profile
+			</button>
+			<button class='btn btn-default btn-sm pull-left'
+				type='button' id='profile_show_button'>
+			  Show Profile
+			</button>
+		      <% } %>
+		      <!-- Profile selection box -->
+		      <% if (showpicker) { %>
+			<button id='change-profile'
 				class='btn btn-primary btn-sm pull-right' 
 				type='button' name='profile_button'>
 			  Change Profile
 			</button>
-			<div class='clearfix'></div>
-		      </div>
+		      <% } %>
+		      <div class='clearfix'></div>
 		    </div>
 		  </div>
 		</div>
-	      <% } %>
+	      </div>
+	    <% } %>
 	  </div>
 	</div>
       </form>
@@ -234,16 +232,16 @@
 	      <table class='table table-condensed nospaceafter border-none'
 		     style="font-size: 14px; font-family: Arial,sans-serif;">
 		<tr>
-		  <td style="padding: 0px;">
+		  <td style="padding: 0px; border: 0;">
 		    <span style="font-weight: bolder;">Profile:</span>
 		    <span id='finalize_profile_name'><%= profilename %></span>
 		  </td>
-		  <td style="padding: 0px;">
+		  <td style="padding: 0px; border: 0;">
 		    <span style="font-weight: bolder;">Version:</span>
 		    <span id='finalize_profile_version'><%= profilevers %>
 		    </span>
 		  </td>
-		  <td style="padding: 0px;">
+		  <td style="padding: 0px; border: 0;">
 		    <button class='btn btn-primary btn-xs'
 			    type='button'
 			    id="show_xml_modal_button">
@@ -252,19 +250,26 @@
 	      </table>
 	    </div>
 	  </div>
-	  <div class='panel panel-default'>
-	    <div class='panel-heading'>
-	      Please review the selections below and then click Finish.
+	  <% if (!registered) { %>
+	    <!-- Show non-specific errors here. -->
+	    <div style='margin-bottom: 10px;'>
+	      <font color=red>
+		<center><span id="general_error"></span></center>
+	      </font>
 	    </div>
-	    <div class='panel-body'>
-	      <!-- Show non-specific errors here. -->
-	      <div style='margin-bottom: 10px;'>
-		<font color=red>
-		  <center><span id="general_error"></span></center>
-		</font>
+	  <% } else { %>
+	    <div class='panel panel-default'>
+	      <div class='panel-heading'>
+		Please review the selections below and then click Finish.
 	      </div>
-	      <div id='finalize_options'>
-		<% if (registered) { %>
+	      <div class='panel-body'>
+		<!-- Show non-specific errors here. -->
+		<div style='margin-bottom: 10px;'>
+		  <font color=red>
+		    <center><span id="general_error"></span></center>
+		  </font>
+		</div>
+		<div id='finalize_options'>
 		  <!-- Optional experiment name -->
 		  <div id='name_selector'
 		       class='form-horizontal experiment_option'>               
@@ -276,7 +281,7 @@
 			   data-delay='{hide:1500, show:500}'
 			   data-html='true'
 			   data-content='Provide a unique name to
-			   identity your new experiment. If you are in 
+			   identify your new experiment. If you are in 
 			   the habit of starting more than one
 			   experiment at a time, this is really handy
 			   when trying to tell one experiment from
@@ -293,90 +298,163 @@
 		      </div>
 		    </div>
 		  </div>
-		<% } %>
-		<% if (projects) { %>
-		  <% if (projects.length == 1) { %>
-		    <!-- We need this to look like the selector below,
-		    for the JS code. -->
-		    <div class='hidden' id='project_selector'>
-		      <input id='profile_pid' type='hidden'
-			     name='pid'
-			     value='<%- formfields.pid %>'>
-		    </div>
-		  <% } %>
-		  <% if (projects.length > 1) { %>
-		    <div class='form-horizontal experiment_option'
-			 id='project_selector'>
+		  <% if (projects && Object.keys(projects).length) { %>
+		    <% if (Object.keys(projects).length == 1) { %>
+		      <!-- We need this to look like the selector below,
+			   for the JS code. -->
+		      <div class='hidden' id='project_selector'>
+			<input id='profile_pid' type='hidden'
+			       name='pid'
+			       value='<%- formfields.pid %>'>
+		      </div>
+		    <% } else { %>
+		      <div class='form-horizontal experiment_option'
+			   id='project_selector'>
+			<div class='form-group format-me'>
+			  <label class='col-sm-4 control-label'
+				 style='text-align: right;'>Project:</label>
+			  <div class='col-sm-6'>
+			    <select name="pid"
+				    data-key='pid'
+				    id='profile_pid'
+				    class='form-control'>
+			      <% _.each(projects, function(gids, name) { %>
+				<option 
+				    <% if (formfields.pid == name) { %>
+				    selected
+				    <% } %>
+				    value='<%- name %>'><%- name %>
+				</option>
+			      <% }); %>
+			    </select>
+			    <label class='control-label control-error hidden'
+				   for='profile_pid'></label>
+			  </div>
+			</div>
+		      </div>
+		    <% } %>
+		    <div class='form-horizontal experiment_option hidden'
+			 id='group_selector'>
 		      <div class='form-group format-me'>
 			<label class='col-sm-4 control-label'
-			       style='text-align: right;'>Project:</label>
+			       style='text-align: right;'>Group:</label>
 			<div class='col-sm-6'>
-			  <select name="pid"
-				  data-key='pid'
-				  id='profile_pid'
-				  class='form-control'>
-			    <% _.each(projects, function(name) { %>
-			      <option 
-				  <% if (formfields.pid == name) { %>
-				  selected
-				  <% } %>
-				  value='<%- name %>'><%- name %>
-			      </option>
-			    <% }); %>
-			  </select>
+			  <select name='gid'
+				  data-key='gid'
+				  id='profile_gid'
+				  class='form-control'></select>
 			  <label class='control-label control-error hidden'
-				 for='profile_pid'></label>
+				 for='profile_gid'></label>
 			</div>
 		      </div>
 		    </div>
 		  <% } %>
-		<% } %>
-		<% if (amlist) { %>
-		  <div id='aggregate_selector'>
-		    <!-- The JS code fills this in -->
-		    <div id='cluster_selector' class='hidden'></div>
-		  </div>
-		<% } %>
-		<% if (1) { %>
-		  <div class='form-horizontal experiment_option'>
-		    <div class='form-group format-me'>
-		      <div class="row">
-			<label class='col-sm-4 control-label'
-			       style='text-align: right;'>Ignore Failures:</label>
-			<div class='col-sm-2'>
-			  <input id='failure_okay' type="checkbox" value="checked"
-				 class=''
-				 data-key='failure_okay'
-				 name='failure_okay'
-				 <%= formfields.failure_okay %>>
+		  <% if (amlist) { %>
+		    <div id='aggregate_selector'>
+		      <!-- The JS code fills this in -->
+		      <div id='cluster_selector' class='hidden'></div>
+		      <div id='reservation_warning' class='hidden col-sm-12'>
+			<label id='reservation_text' class='alert-warning col-sm-10 col-sm-offset-1'>There is an upcoming reservation on this cluster that may impact your ability to reserve or extend resources. This reservation is from <span class='reservation_start'>start</span> until <span class='reservation_end'>end</span>.</label> 
+		      </div>
+		      <div id='reservation_confirmation'
+			   class='hidden col-sm-12'>
+			<label id='reservation_text'
+			       class='alert-success col-sm-10 col-sm-offset-1'>
+			</label> 
+		      </div>
+		      <div id='reservation_future' class='hidden col-sm-12'>
+			<label id='reservation_text' class='alert-warning col-sm-10 col-sm-offset-1'>Project <span class="reservation_project"></span> has a reservation on this cluster beginning <span class='reservation_start'>start</span>.</label> 
+		      </div>
+		    </div>
+		  <% } %>
+		  <% if (1) { %>
+		    <h5>
+		      <a href="#advanced_options_dropdown" data-toggle="collapse">
+			<span class="glyphicon glyphicon-plus-sign pull-left" 
+			      style="font-weight: bold;"></span>
+			<span style="font-weight: bold; margin-left: 12px">Advanced Options</span>
+		      </a>
+		    </h5>
+		    <div id="advanced_options_dropdown"
+			 class="panel-collapse collapse">
+		      <div class='form-horizontal experiment_option'>
+			<div class='form-group format-me'>
+			  <label class='col-sm-4 control-label'
+				 style='text-align: right;'>Experiment Duration:</label>
+			  <div class="col-sm-6"
+			       data-toggle='popover'
+			       data-delay='{hide:1500, show:500}'
+			       data-html='true'
+			       data-content="Sets the intial amount of time that the 
+			       experiment will run. Limit: <%- maxduration %> hours. If more time is needed, the duration can be extended after the
+			       experiment has been created.">
+			    <input id='experiment_duration'
+				   class='form-control'
+				   data-key='duration'
+				   name='duration'
+				   value='<%- maxduration %>'>
+			    <label style='position: absolute;
+					  top: 6px;
+					  right: 22px;
+					  font-weight: normal;
+					  color: #aaa'>
+			      hours
+			    </label>
+			    <label class='control-label control-error hidden'
+				   for='duration'></label>
+			  </div>
 			</div>
 		      </div>
-		      <label class='control-label control-error hidden'
-			     for='failure_okay'></label>
+		      <div class='form-horizontal experiment_option'>
+			<div class='form-group format-me'>
+			  <div class="row">
+			    <label class='col-sm-4 control-label'
+				   style='text-align: right;'>Ignore Failures:</label>
+			    <div class='col-sm-2'>
+			      <input id='failure_okay' type="checkbox"
+				     value="checked"
+				     class=''
+				     data-key='failure_okay'
+				     name='failure_okay'
+				     <%= formfields.failure_okay %>>
+			    </div>
+			  </div>
+			  <label class='control-label control-error hidden'
+				 for='failure_okay'></label>
+			</div>
+		      </div>
 		    </div>
-		  </div>
-		<% } %>
-	      </div>
-	      <div id="cluster_status_link"><center>
-		<a target="_blank" href="cluster-graphs.php">
-		  Check Cluster Status</a></center>
+		  <% } %>
+		</div>
+		<div id="cluster_status_link"><center>
+		  <a target="_blank" href="resinfo.php">
+		    Check Cluster Status</a></center>
+		</div>
 	      </div>
 	    </div>
-	  </div>
+	  <% } %>
 	</div>
-	<div id='inline_container'
+	<div id='inline_container' style="min-height: 150px;"
 	     class='col-lg-4 col-md-4 col-sm-4 col-xs-12'>
 	  <a id='inline_overlay' href='#'>
 	    <span class='glyphicon glyphicon-fullscreen'
 		  aria-hidden='true'></span>
 	  </a> 
-	  <div id='inline_jacks'></div>
+	  <div id='inline_jacks' style="min-height: 150px;"></div>
 	</div>
-	<!-- This is for a PP rspec. -->
-	<textarea name='pp_rspec'
-		  id='pp_rspec_textarea'
+	<!-- This is for a PP rspec or a repo-based profile -->
+	<textarea name='rspec'
+		  id='rspec_textarea'
 		  class='form-control hidden'
 		  type='textarea'></textarea>
+	<textarea name='script'
+		  id='script_textarea'
+		  class='form-control hidden'
+		  type='textarea'></textarea>
+	<!-- JS code sets these for repo based profiles -->
+	<input id='reporef' type='hidden' name='reporef'>
+	<input id='repohash' type='hidden' name='repohash'>
+	<input id='paramdefs' type='hidden' name='paramdefs'>
       </form>
     </div>
   </div>
@@ -436,7 +514,7 @@
 		  <span class='category_collapsable expanded'></span>
 		</span>
 		<ul class='list-category' id='recently_used'>
-		<% for (var i = recent.length-1; i >= 0; i--) { 
+		<% for (var i = 0; i < recent.length; i++) { 
 		  var key = recent[i][0]; var value = recent[i][1]; %>
 		  <li class='list-group-item profile-item clearfix'
 		      value='<%- key %>' name='<%- value.name %>'><%- value.name %>
@@ -445,8 +523,8 @@
 		<% }; %>
 		</ul>
 
-	      <% var hide = (registered && !$.isEmptyObject(favorites)) ? '' : 'hidden';%>
-		<span id='title_favorites' class='<%- hide %>'>
+	      <% var hidefav = (registered && !$.isEmptyObject(favorites)) ? '' : 'hidden';%>
+		<span id='title_favorites' class='<%- hidefav %>'>
 		  Favorites
 		  <span class='category_collapsable expanded'></span>
 		</span>
@@ -458,6 +536,20 @@
 		  </li>
 		<% }); %>
 		</ul>   
+
+		<% var hidemy = (registered && !$.isEmptyObject(myprofiles)) ? '' : 'hidden';%>
+		<span id='title_myprofiles' class='<%- hidemy %>'>
+		  My Profiles
+		  <span class='category_collapsable expanded'></span>
+		</span>
+		<ul class='list-category' id='myprofiles'>
+		<% _.each(myprofiles, function(value, key) {  %>
+		  <li class='list-group-item profile-item clearfix'
+		      value='<%- key %>' name='<%- value.name %>'><%- value.name %>
+		    <div class="project_info pull-right"><%- value.project %></div>
+		  </li>
+		<% }); %>
+		</ul>
 
 	      <% _.each(projprofiles, function(value, key) { %>
 		<span id='title_<%- key %>_profiles'>
@@ -533,7 +625,8 @@
 		  class='btn btn-primary btn-sm'
 		  type='submit' name='select'>
 	    Select Profile</button>
-	  <button type='button' class='btn btn-default btn-sm' 
+	  <button type='button' class='btn btn-default btn-sm'
+		  id='showtopo_cancel'		  
 		  data-dismiss='modal' aria-hidden='true'>
 	    Cancel</button>
 	</div>
