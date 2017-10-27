@@ -142,6 +142,8 @@ function Do_GetInstanceStatus()
     # Reflect errors back to the user.
     $webtask = $instance->WebTask();
     if ($webtask && $webtask->exited()) {
+        $blob["code"] = $webtask->exitcode();
+        
         if ($webtask->exitcode() == GENIRESPONSE_INSUFFICIENT_NODES) {
             # All the info in the results from the cluster.
             $blob["reason"]  = "";

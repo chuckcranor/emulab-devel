@@ -491,6 +491,10 @@ $(function ()
 		    status_message = "Something went wrong, sorry! " +
 			"We've been notified.";
 		}
+		if (_.has(json.value, "code") &&
+		    json.value.code == GENIRESPONSE_INSUFFICIENT_NODES) {
+		    $('#error_panel .resource-error').removeClass("hidden");
+		}
 		status_html = "<font color=red>failed</font>";
 		ProgressBarUpdate();
 		DisableButtons();
