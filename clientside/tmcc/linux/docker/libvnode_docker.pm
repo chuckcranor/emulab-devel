@@ -2711,6 +2711,11 @@ sub vnodeCreate($$$$)
     # network right away!)
     #
     my %args = ( "Tty" => JSON::PP::true,"Image" => $newimagename );
+    # XXX: I wonder if not all containers will want this, but who knows.
+    $args{'AttachStdin'} = JSON::PP::true;
+    $args{'AttachStdout'} = JSON::PP::true;
+    $args{'AttachStderr'} = JSON::PP::true;
+    $args{'OpenStdin'} = JSON::PP::true;
 
     my @hostspairs = ();
     genhostspairlist($vnode_id,\@hostspairs);
