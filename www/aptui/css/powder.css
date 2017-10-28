@@ -1,10 +1,18 @@
-
 /*
 .navbar-brand > img {
   border: 5px solid #708238;
   border-radius: 35px;
 }
 */
+
+body {
+    font-family: "Raleway", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.42857143;
+    color: #222;
+    background-color: #fff;
+}
+
 
 .navbar-nav > li > a.admin-toggle {
   margin-top: 15px;
@@ -24,26 +32,31 @@
 
 #footer {
   background-color: #a2d2df;
+  color: #222;
+}
+
+#footer a {
+  color: #222;
 }
 
 .btn-success {
-  background-color: #289328;
+  background-color: #56b770;
   border-color:     #237f23;
 }
 .btn-primary {
-  background-color: #2f8ead;
+  background-color: #469592;
   border-color:     #2a7e99;
 }
 .btn-info {
-  background-color: #2f64ad;
+  background-color: #488998;
   border-color:     #2a5899;
 }
 .btn-warning {
-  background-color: #8a7626;
+  background-color: #f5b473;
   border-color:     #766520;
 }
 .btn-danger {
-  background-color: #9c2a2a;
+  background-color: #f5b473;
   border-color:     #882525;
 
 }
