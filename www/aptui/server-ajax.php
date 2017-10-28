@@ -358,6 +358,8 @@ $routing = array("myprofiles" =>
                                                      "Do_Approve",
                                                  "WarnUser" =>
                                                      "Do_WarnUser",
+                                                 "Delete" =>
+                                                     "Do_Delete",
                                                  "RequestInfo" =>
                                                      "Do_RequestInfo",
                                                  "ReservationInfo" =>
