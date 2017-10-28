@@ -60,3 +60,25 @@ body {
   border-color:     #882525;
 
 }
+
+/* Copied from quickvm.css */
+.navbar-brand > img {
+  top: 0px;
+}
+
+.nav > li > a.btn-quickvm-home,
+.nav > li > a.btn-quickvm-home:hover,
+.nav > li > a.btn-quickvm-home:focus,
+.nav > li > a.btn-quickvm-home.dropdown-toggle,
+.nav > li > a.btn-quickvm-home.dropdown-toggle:hover,
+.nav > li > a.btn-quickvm-home.dropdown-toggle:focus,
+.nav > li > a.btn-quickvm-signup,
+.nav > li > a.btn-quickvm-signup:hover,
+.nav > li > a.btn-quickvm-signup:focus,
+.nav > li > a.btn-quickvm-signup.dropdown-toggle,
+.nav > li > a.btn-quickvm-signup.dropdown-toggle:hover,
+.nav > li > a.btn-quickvm-signup.dropdown-toggle:focus {
+  font-weight: normal;
+  color: #222;
+}
+
