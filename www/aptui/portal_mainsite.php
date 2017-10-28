@@ -151,7 +151,7 @@ elseif ($_SERVER["SERVER_NAME"] == "www.powderwireless.net") {
     $PORTAL_MANUAL         = "http://docs.powderwireless.net";
     $PORTAL_HELPFORUM      = "powder-users";
     $PORTAL_PASSWORD_HELP  = "powderwireless.net or emulab.net Username";
-    $PORTAL_NSFNUMBER      = "??????";
+    $PORTAL_NSFNUMBER      = false;
     $DEFAULT_AGGREGATE     = "Emulab";
     $DEFAULT_AGGREGATE_URN = "urn:publicid:IDN+emulab.net+authority+cm";
     $PORTAL_GENESIS        = "powder";
