@@ -74,8 +74,8 @@ define("CHECKLOGIN_INACTIVE",		0x2000000);
 #
 # Constants for tracking possible login attacks.
 #
-define("DOLOGIN_MAXUSERATTEMPTS",	15);
-define("DOLOGIN_MAXIPATTEMPTS",		25);
+define("DOLOGIN_MAXUSERATTEMPTS",	10);
+define("DOLOGIN_MAXIPATTEMPTS",		15);
 
 # Return codes for DOLOGIN so that the caller can say something helpful.
 #
