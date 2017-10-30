@@ -2913,6 +2913,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     $output =
 	GeniUtil::ExecQuiet("$MAPPER -a -d -v $aopts -z -o $tmpfile $pid $eid");
     if ($?) {
+	my $done         = 0;
 	my $logstuff     = "";
 	my $errorstr     = "";
 	my $solution;
@@ -2953,16 +2954,16 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	    #
 	    # The assign_wrapper2 script wraps assign, and basically
 	    # prints a bunch of stuff a second time. But it helpfully
-	    # print a tag line we can watch for. We can stop parsing
-	    # when we see it.
-	    #
-	    last
-		if ($line =~ /^ASSIGN FAILED/);
+	    # print a tag line we can watch for. Now we can ignore
+	    # anything until we see another assign exit statement, which
+	    # means we ran assign multiple times.
+	    if ($line =~ /^ASSIGN FAILED/) {
+		$done = 1;
+		next;
+	    }
 
-	    # Want just the first set of violations / solution / precheck.
-	    if (!defined($precheck) && $line =~ /precheck:$/) {
+	    if ($line =~ /precheck:$/) {
 		$inprecheck = 1;
-		$precheck   = "";
 		# Eat the line.
 		next;
 	    }
