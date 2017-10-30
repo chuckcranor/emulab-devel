@@ -1034,6 +1034,10 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
     }
     $now = time();
 
+    if (isset($_SERVER['REMOTE_ADDR'])) {
+	$IP = $_SERVER['REMOTE_ADDR'];
+    }
+        
     #
     # Insert a record in the login table for this uid with
     # the new hash value. If the user is already logged in, thats
@@ -1068,6 +1072,17 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
         # and to mark activity to keep the mount active.
         DBQueryFatal("update user_stats set last_activity=now() ".
                      "where uid_idx='$uid_idx'");
+
+        $history = "insert into login_history set ".
+            "   idx=null,uid='$uid',uid_idx='$uid_idx',tstamp=now()";
+        
+        if (isset($IP)) {
+            $history .= ",IP='$IP'";
+        }
+        if (isset($PORTAL_GENESIS)) {
+            $history .= ",portal='$PORTAL_GENESIS'";
+        }
+        DBQueryFatal($history);
         
 	if (mysql_num_rows($query_result)) {
 		$lastrow       = mysql_fetch_row($query_result);
@@ -1087,6 +1102,15 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
 				return;
 			}
 		}
+                if (time() - $lastactive > (3600 * 24 * 365)) {
+                    TBMAIL($TBMAIL_OPS,
+                           "Web Login Inactivity Alert: '$uid'",
+                           "Login by $uid ($uid_idx) after extended period ".
+                           "of inactivity!\n",
+                           "From: $TBMAIL_OPS\n".
+                           "Bcc: $TBMAIL_AUDIT\n".
+                           "Errors-To: $TBMAIL_WWW");
+                }
 	}
     }
 

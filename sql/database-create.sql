@@ -3028,6 +3028,23 @@ CREATE TABLE `login_failures` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `login_history`
+--
+
+DROP TABLE IF EXISTS `login_history`;
+CREATE TABLE `login_history` (
+  `idx` int(11) NOT NULL auto_increment,
+  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `uid` varchar(10) NOT NULL default '',
+  `tstamp` datetime NOT NULL default '0000-00-00 00:00:00',
+  `IP` varchar(16) default NULL,
+  `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
+  PRIMARY KEY (`idx`),
+  KEY  (`uid_idx`,`tstamp`),
+  KEY `uidstamp` (`uid`,`tstamp`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `loginmessage`
 --
 
