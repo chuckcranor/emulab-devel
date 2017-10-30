@@ -30,7 +30,6 @@ import traceback
 import syslog
 import string
 import socket
-import SocketServer
 import BaseHTTPServer
 
 from SimpleXMLRPCServer import SimpleXMLRPCDispatcher
@@ -47,17 +46,9 @@ from libdb        import *
 try:
     from M2Crypto import SSL
     from M2Crypto.SSL import SSLError
-    from M2Crypto.SSL import Checker
 except ImportError, e:
     sys.stderr.write("error: The py-m2crypto port is not installed\n")
     sys.exit(1)
-    pass
-try:
-    from M2Crypto.SSL import SSLTimeoutError
-    have_ssl_timeout_error = True
-except:
-    sys.stderr.write("warning: old m2crypto, cannot warn about ssl timeouts")
-    have_ssl_timeout_error = False
     pass
 
 # When debugging, runs in foreground printing to stdout instead of syslog
@@ -73,12 +64,48 @@ ADDR            = "0.0.0.0"
 server_cert     = "@prefix@/etc/server.pem"
 ca_cert         = "@prefix@/etc/emulab.pem"
 
+#
+# This is an optional feature, off by default except at the MAINSITE, to
+# ensure the SSL part of accept() does not block the main thread.  Our
+# server is single-threaded, and thus if a client such as a
+# connection-based scanner connects and sends no data, that connection
+# will block the server from accept()ing other incoming connections
+# until socket timeout, probably around 30 seconds.
+#
+# However, this feature depends on certain m2crypto internals (and
+# cannot be done more cleanly, at least on 0.21.1, given m2crypto's
+# model).  Thus, it is off by default.
+#
+LIMIT_SSL_ACCEPT_TIME = False
+TBMAINSITE = "@TBMAINSITE@"
+if TBMAINSITE == "1":
+    LIMIT_SSL_ACCEPT_TIME = True
 # Set a timeout for the SSL_accept phase of the client session setup.
 # This allows us to not block the main thread indefinitely if a non-SSL
 # or malicious client connects to us and says nothing.
 SSL_CLIENT_ACCEPT_TIMEOUT = 3
 # Set a timeout that is used for the client socket *after* SSL accept.
 SSL_CLIENT_REQUEST_TIMEOUT = -1.0
+
+have_ssl_timeout_error = False
+try:
+    from M2Crypto.SSL import SSLTimeoutError
+    have_ssl_timeout_error = True
+except:
+    sys.stderr.write(
+        "warning: old m2crypto, cannot warn about ssl timeouts")
+    have_ssl_timeout_error = False
+    pass
+if LIMIT_SSL_ACCEPT_TIME:
+    try:
+        import SocketServer
+        from M2Crypto.SSL import Checker
+    except:
+        sys.stderr.write(
+            "error: you must disable LIMIT_SSL_ACCEPT_TIME; necessary"
+            " M2Crypto modules not found!")
+        sys.exit(1)
+    pass
 
 #
 # By default, run a wrapper class that includes all off the modules.
@@ -229,38 +256,39 @@ class MyConnection(SSL.Connection):
 class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
     def __init__(self, debug):
         self.debug         = debug
-	self.logRequests   = 0
+        self.logRequests   = 0
         self.emulabserver  = None;
         self.glist         = [];
         self.plist         = {};
         self.flipped       = 0;
         
-	ctx = SSL.Context('sslv23')
-	ctx.load_cert(server_cert, server_cert)
-	ctx.load_verify_info(ca_cert)
+        ctx = SSL.Context('sslv23')
+        ctx.load_cert(server_cert, server_cert)
+        ctx.load_verify_info(ca_cert)
         ctx.set_verify(SSL.verify_peer | SSL.verify_fail_if_no_peer_cert, 16)
-	ctx.set_allow_unknown_ca(0)
-	#ctx.set_info_callback()
+        ctx.set_allow_unknown_ca(0)
+        #ctx.set_info_callback()
         
         dargs = (self,)
         if sys.version_info[0] >= 2 and sys.version_info[1] >= 5:
             dargs = (self,False,None)
             pass
         SimpleXMLRPCDispatcher.__init__(*dargs)
-        #
-        # Ugh -- duplicate the SSL.SSLServer constructor body, other
-        # than to use our little MyConnection wrapper instead of
-        # SSLConnection.
-        #
-        #SSL.SSLServer.__init__(self, (ADDR, PORT),
-        #                       MyXMLRPCRequestHandler, ctx)
-        SocketServer.BaseServer.__init__(self, (ADDR,PORT),
-                                         MyXMLRPCRequestHandler)
-        self.ssl_ctx = ctx
-        self.socket = MyConnection(self.ssl_ctx)
-        self.server_bind()
-        self.server_activate()
-	pass
+        if LIMIT_SSL_ACCEPT_TIME:
+            #
+            # Ugh -- duplicate the SSL.SSLServer constructor body, other
+            # than to use our little MyConnection wrapper instead of
+            # SSLConnection.
+            SocketServer.BaseServer.__init__(self, (ADDR,PORT),
+                                             MyXMLRPCRequestHandler)
+            self.ssl_ctx = ctx
+            self.socket = MyConnection(self.ssl_ctx)
+            self.server_bind()
+            self.server_activate()
+        else:
+            SSL.SSLServer.__init__(self, (ADDR, PORT),
+                                   MyXMLRPCRequestHandler, ctx)
+        pass
 
     ##
     # Log a message to stdout, if in debug mode, otherwise write to syslog.
