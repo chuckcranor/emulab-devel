@@ -1089,6 +1089,17 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
 		$lastactive    = $lastrow[0];
 		$lastactivestr = $lastrow[1];
 	
+                if ($lastactive && 
+                    time() - $lastactive > (3600 * 24 * 365)) {
+                    TBMAIL($TBMAIL_OPS,
+                           "Web Login Inactivity Alert: '$uid'",
+                           "Login by $uid ($uid_idx) after extended period ".
+                           "of inactivity!\n".
+                           "Last activity was $lastactivestr\n",
+                           "From: $TBMAIL_OPS\n".
+                           "Bcc: $TBMAIL_AUDIT\n".
+                           "Errors-To: $TBMAIL_WWW");
+                }
 		if (time() - $lastactive > $limit) {
 			$rv = SUEXEC("nobody", "nobody", "webexports_setup",
 				     SUEXEC_ACTION_IGNORE);
@@ -1102,15 +1113,6 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
 				return;
 			}
 		}
-                if (time() - $lastactive > (3600 * 24 * 365)) {
-                    TBMAIL($TBMAIL_OPS,
-                           "Web Login Inactivity Alert: '$uid'",
-                           "Login by $uid ($uid_idx) after extended period ".
-                           "of inactivity!\n",
-                           "From: $TBMAIL_OPS\n".
-                           "Bcc: $TBMAIL_AUDIT\n".
-                           "Errors-To: $TBMAIL_WWW");
-                }
 	}
     }
 
