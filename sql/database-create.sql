@@ -3040,7 +3040,7 @@ CREATE TABLE `login_history` (
   `IP` varchar(16) default NULL,
   `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   PRIMARY KEY (`idx`),
-  KEY  (`uid_idx`,`tstamp`),
+  KEY `idxstamp` (`uid_idx`,`tstamp`),
   KEY `uidstamp` (`uid`,`tstamp`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
