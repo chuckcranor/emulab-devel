@@ -472,6 +472,13 @@ function CheckLoginForAjax($route)
                 SPITAJAX_ERROR(222, "Your account is no longer active");
                 exit(1);
             }
+            # Known user, but inactive.
+            if ($check_status & CHECKLOGIN_INACTIVE) {
+                SPITAJAX_ERROR(222, "Your account has gone inactive cause ".
+                               "your last login was so long ago: " .
+                               $this_user->weblogin_last());
+                exit(1);
+            }
         }
         # Kludge, still thinking about it. If a geni user has no project
         # permissions at their SA, then we mark the acount as WEBONLY, and

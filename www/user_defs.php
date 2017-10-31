@@ -30,6 +30,7 @@ $user_cache = array();
 class User
 {
     var	$user;
+    var $stats;
     var $tempdata;		# For temporary data values ...
 
     #
@@ -56,6 +57,16 @@ class User
 	    return;
 	}
 	$this->user = mysql_fetch_array($query_result);
+
+	$query_result =
+	    DBQueryWarn("select * from user_stats ".
+                        "where uid_idx='$safe_uid_idx'");
+
+	if (!$query_result || !mysql_num_rows($query_result)) {
+	    $this->user = NULL;
+	    return;
+	}
+	$this->stats = mysql_fetch_array($query_result);
     }
 
     # Hmm, how does one cause an error in a php constructor?
@@ -294,6 +305,9 @@ class User
     function field($name) {
 	return (is_null($this->user) ? -1 : $this->user[$name]);
     }
+    function stats($name) {
+	return (is_null($this->stats) ? -1 : $this->stats[$name]);
+    }
     function uid_idx()		{ return $this->field("uid_idx"); }
     function idx()		{ return $this->field("uid_idx"); }
     function uid()		{ return $this->field("uid"); }
@@ -346,6 +360,7 @@ class User
     function wikionly()		{ return $this->field("wikionly"); }
     function mailman_password() { return $this->field("mailman_password"); }
     function nonlocal_id()	{ return $this->field("nonlocal_id"); }
+    function weblogin_last()	{ return $this->stats("weblogin_last"); }
     function portal()	     { return $this->field("portal"); }
     function ga_userid()     { return $this->field("ga_userid"); }
     function isAPT()	     { return ($this->portal() &&

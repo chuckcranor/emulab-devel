@@ -295,7 +295,8 @@ else {
 
 	SPITHEADER();
 	echo "<h4>
-              Your account has gone <b>inactive</b>. Please contact $TBMAILADDR 
+              Your account has gone <b>inactive</b> since it has been so
+              long since your last login. Please contact $TBMAILADDR 
               to have your account restored. <br> <br>
               Please do not attempt to login again; it will not work!
               </h4>\n";

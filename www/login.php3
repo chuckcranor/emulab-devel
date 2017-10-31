@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -267,7 +267,8 @@ else {
 
 	PAGEHEADER("Login", $view);
 	echo "<h4>
-              Your account has gone <b>inactive</b>. Please contact $TBMAILADDR 
+              Your account has gone <b>inactive</b> since it has been so
+              long since your last login. Please contact $TBMAILADDR 
               to have your account restored. <br> <br>
               Please do not attempt to login again; it will not work!
               </h4>\n";

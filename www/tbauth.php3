@@ -346,6 +346,11 @@ function LoginStatus() {
 	$CHECKLOGIN_STATUS = CHECKLOGIN_NOTLOGGEDIN;
 	return $CHECKLOGIN_STATUS;
     }
+    if ($status == TBDB_USERSTATUS_INACTIVE) {
+	DBQueryFatal("DELETE FROM login WHERE uid_idx='$uid_idx'");
+	$CHECKLOGIN_STATUS = CHECKLOGIN_NOTLOGGEDIN;
+	return $CHECKLOGIN_STATUS;
+    }
 
     #
     # Check for expired login. Remove this entry from the logins table to
@@ -591,8 +596,8 @@ function CheckLoginConditions($status)
         USERERROR("Your account has been frozen!",
 		  1, HTTP_403_FORBIDDEN);
     if ($status & CHECKLOGIN_INACTIVE)
-        USERERROR("Your account has gone inactive. ".
-                  "Please contact $TBMAILADDR to restore it.",
+        USERERROR("Your account has gone inactive since your last login was ".
+                  "so long ago. Please contact $TBMAILADDR to restore it.",
 		  1, HTTP_403_FORBIDDEN);
     if ($status & (CHECKLOGIN_UNVERIFIED|CHECKLOGIN_NEWUSER))
         USERERROR("You have not verified your account yet!",
@@ -890,6 +895,7 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 	$uid_idx     = $user->uid_idx();
 	$usr_email   = $user->email();
         $ga_userid   = $user->ga_userid();
+        $lastlogin   = $user->weblogin_last();
 
 	# Check for frozen accounts. We do not update the IP record when
 	# an account is frozen.
@@ -911,7 +917,11 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 			   "Web Login Freeze: '$uid'",
 			   "Your login has been frozen because there were too many\n".
 			   "login failures from " . $_SERVER['REMOTE_ADDR'] . ".\n\n".
-			   "Testbed Operations has been notified.\n",
+			   "Testbed Operations has been notified.\n".
+                           (isset($PORTAL_GENESIS) ?
+                            "Portal: $PORTAL_GENESIS" :
+                            "Classic Interface") . "\n",
+                           
 			   "From: $TBMAIL_OPS\n".
 			   "Cc: $TBMAIL_OPS\n".
 			   "Bcc: $TBMAIL_AUDIT\n".
@@ -931,6 +941,18 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
         
         # But inactive users need special handling.
 	if ($user->status() == TBDB_USERSTATUS_INACTIVE) {
+            if (1) {
+                TBMAIL($TBMAIL_OPS,
+                       "Web Login Inactivity Alert: '$uid'",
+                       "Login attempt by $uid ($uid_idx) after extended ".
+                       "period of inactivity!\n".
+                       "Login was denied, last activity was $lastlogin\n",
+                       "From: $TBMAIL_OPS\n".
+                       "Bcc: $TBMAIL_AUDIT\n".
+                       "Errors-To: $TBMAIL_WWW");
+                
+                return DOLOGIN_STATUS_INACTIVE;
+            }
             # Try to reactivate the user. If we fail for some reason, fall
             # back to just telling them they are inactive. Otherwise we can
             # proceed with login.
@@ -998,7 +1020,9 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 	TBMAIL($TBMAIL_OPS,
 	       "Web Login Freeze: '$IP'",
 	       "Logins has been frozen because there were too many login\n".
-	       "failures from $IP. Last attempted uid was '$token'.\n\n",
+	       "failures from $IP. Last attempted uid was '$token'.\n".
+               (isset($PORTAL_GENESIS) ?
+                "Portal: $PORTAL_GENESIS" : "Classic Interface") . "\n\n",
 	       "From: $TBMAIL_OPS\n".
 	       "Bcc: $TBMAIL_AUDIT\n".
 	       "Errors-To: $TBMAIL_WWW");
