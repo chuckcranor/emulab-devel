@@ -138,7 +138,9 @@ $(function ()
 		    "<td><a href='user-dashboard.php?user=" + user.usr_uid + "'>" +
 		    user.usr_uid + "</a></td>" +
 		    "<td>" + user.usr_name + "</td>" +
-		    "<td>" + user.usr_affil + "</td></tr>";
+		    "<td>" + user.usr_email + "</td>" +
+		    "<td>" + user.usr_affil + "</td>" +
+		    "<td>" + user.portal + "</td></tr>";
 	    }
 	    $('#search_users_table tbody').html(html);
 	    $('#search_users_table').trigger("update", [false]);
@@ -168,7 +170,8 @@ $(function ()
 		    project.pid + "</a></td>" +
 		    "<td><a href='user-dashboard.php?user=" + project.usr_uid + "'>" +
 		    project.usr_name + "</a></td>" +
-		    "<td>" + project.usr_affil + "</td></tr>";
+		    "<td>" + project.usr_affil + "</td>" +
+		    "<td>" + project.portal + "</td></tr>";
 	    }
 	    $('#search_projects_table tbody').html(html);
 	    $('#search_projects_table').trigger("update", [false]);
