@@ -258,8 +258,9 @@ if (! defined($target_user)) {
 my $this_user;
 
 if (getpwuid($UID) eq "nobody") {
-    $this_user = $target_user;
-}
+    # The web interface sets this.
+    $this_user = User->ImpliedUser();
+x}
 else {
     $this_user = User->ThisUser();
 
