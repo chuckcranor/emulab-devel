@@ -260,7 +260,7 @@ my $this_user;
 if (getpwuid($UID) eq "nobody") {
     # The web interface sets this.
     $this_user = User->ImpliedUser();
-x}
+}
 else {
     $this_user = User->ThisUser();
 
