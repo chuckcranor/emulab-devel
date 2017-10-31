@@ -283,7 +283,7 @@ window.APT_OPTIONS.Announcements = function () {
 	    newhtml = "";
 	}
 	$('#portal-announcement-div').html(newhtml);
-	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 10000);
+	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 60000);
     }
 
     var xmlthing =
