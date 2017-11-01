@@ -2943,7 +2943,23 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	    # Did we actually run assign?
 	    if ($line =~ /^Assign exited with/) {
 		$isassignerror = 1;
+
+		$done         = 0;
+		$logstuff     = "";
+		$errorstr     = "";
+		$solution     = undef;
+		$insolution   = 0;
+		$violations   = undef;
+		$inviolations = 0;
+		$precheck     = undef;
+		$inprecheck   = 0;
+		$insummary    = 0;
+		$errorcode     = GENIRESPONSE_NO_MAPPING;
 	    }
+	    # Skipping ahead looking for another assign run
+	    next
+		if ($done);
+
 	    if ($line =~
 		/^\s*\*\*\*\s* Resource reservation violation:/) {
 		$logstuff  = $line;
