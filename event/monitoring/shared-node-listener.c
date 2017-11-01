@@ -25,6 +25,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include "event.h"
 
 static MYSQL db;
@@ -68,6 +70,31 @@ extern int main( void ) {
     address_tuple_t tuple;
     char *eid, buf[ 0x100 ];
 
+    if (getuid() != 0)
+    {
+        printf("Can only run as root\n");
+        exit(1);
+    }
+    FILE    *fp;
+    char    mybuf[BUFSIZ];
+    int pid;
+    
+    sprintf(mybuf, "/var/run/shared-node-listener.pid");
+    fp = fopen(mybuf, "r");
+    if (fp != NULL) 
+    {
+        fscanf(fp, "%d\n",&pid);
+        (void) fclose(fp);
+        if(kill(pid,0) == 0)
+        {
+            printf("process already runnning\n");
+            exit (1);
+        }
+    }
+
+    (void)daemon(0, 0);
+
+
     /* Shared pool experiments are not named consistently... grr. */
     if( !eaccess( "/proj/emulab-ops/exp/shared-nodes/tbdata/eventkey", R_OK ) )
 	eid = "shared-nodes";
@@ -109,6 +136,13 @@ extern int main( void ) {
 	fputs( "failed to subscribe", stderr );
 
 	return 1;
+    }
+
+    fp = fopen(mybuf, "w");
+    if (fp != NULL) 
+    {
+        fprintf(fp, "%d\n", getpid());
+        (void) fclose(fp);
     }
 
     event_main( h );
