@@ -2947,6 +2947,13 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	    if ($line =~
 		/^\s*\*\*\*\s* Resource reservation violation:/) {
 		$logstuff  = $line;
+		# Snarf up next couple of lines.
+		while ($output =~ /^(.*)$/gm) {
+		    my $l = $1 . "\n";
+		    last
+			if ($l =~ /^\s*\*\*\*/);
+		    $logstuff .= $l;
+		}
 		$errorcode = GENIRESPONSE_INSUFFICIENT_NODES();
 		last;
 	    }
