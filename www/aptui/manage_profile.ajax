@@ -1412,6 +1412,11 @@ function Do_UpdateRepository()
             return;
         }
     }
+    elseif ($profile->script() == $blob["source"]) {
+        if (UpdateMaster($profile, null, null)) {
+            return;
+        }
+    }
     SPITAJAX_RESPONSE($blob);
 }
 
@@ -1441,9 +1446,11 @@ function UpdateMaster($profile, $script, $rspec)
     fwrite($fp, "  <value>" .
 	   htmlspecialchars($profile->name()) . "</value>");
     fwrite($fp, "</attribute>\n");
-    fwrite($fp, "<attribute name='rspec'>");
-    fwrite($fp, "  <value>" . htmlspecialchars($rspec) . "</value>");
-    fwrite($fp, "</attribute>\n");
+    if ($rspec) {
+        fwrite($fp, "<attribute name='rspec'>");
+        fwrite($fp, "  <value>" . htmlspecialchars($rspec) . "</value>");
+        fwrite($fp, "</attribute>\n");
+    }
     if ($script) {
 	fwrite($fp, "<attribute name='script'>");
 	fwrite($fp, "  <value>" . htmlspecialchars($script) . "</value>");

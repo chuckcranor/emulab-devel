@@ -654,6 +654,9 @@ sub UpdateMetaData($$)
 	    $mods{$key} = $argref->{$key};
 	}
     }
+    return 0
+	if (!keys(%mods));
+    
     my $query = "update apt_profiles set ".
 	join(",", map("$_=" . DBQuoteSpecial($mods{$_}), keys(%mods)));
 
