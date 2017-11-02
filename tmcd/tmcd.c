@@ -2665,6 +2665,7 @@ COMMAND_PROTOTYPE(doaccounts)
 	int		tbadmin, didwidearea = 0, nodetypeprojects = 0;
 	int		didnonlocal = 0;
 	int             swapper_only = 0;
+	int		dohashes = 0;
 
 	if (! tcp) {
 		error("ACCOUNTS: %s: Cannot give account info out over UDP!\n",
@@ -2895,9 +2896,28 @@ COMMAND_PROTOTYPE(doaccounts)
 #endif /* EVENTSYS */
 
 	/*
+	 * For local nodes, see if we should return password hashes.
+	 * This is controlled by the node/user_passwords sitevar.
+	 */
+	res = mydb_query("select value,defaultvalue from sitevariables "
+			 "where name='node/user_passwords'", 2);
+	if (res) {
+		if ((int)mysql_num_rows(res) > 0) {
+			row = mysql_fetch_row(res);
+			if (row[0] && row[0][0])
+				dohashes = atoi(row[0]);
+			else if (row[1] && row[1][0])
+				dohashes = atoi(row[1]);
+		}
+		mysql_free_result(res);
+	}
+
+	/*
 	 * Now onto the users in the project.
 	 */
 	if (reqp->iscontrol) {
+		char *passwdfield = dohashes ? "u.usr_pswd" : "'*'";
+
 		/*
 		 * All users! This is not currently used. The problem
 		 * is that returning a list of hundreds of users whenever
@@ -2906,7 +2926,7 @@ COMMAND_PROTOTYPE(doaccounts)
 		 * but is not scalable.
 		 */
 		res = mydb_query("select distinct "
-				 "  u.uid,u.usr_pswd,u.unix_uid,u.usr_name, "
+				 "  u.uid,%s,u.unix_uid,u.usr_name, "
 				 "  p.trust,g.pid,g.gid,g.unix_gid,u.admin, "
 				 "  u.emulab_pubkey,u.home_pubkey, "
 				 "  UNIX_TIMESTAMP(u.usr_modified), "
@@ -2918,7 +2938,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				 "      and u.webonly=0 "
                                  "      and g.unix_id is not NULL "
 				 "      and u.status='active' order by u.uid",
-				 15, reqp->pid, reqp->gid);
+				 15, passwdfield);
 	}
 	else if (nodetypeprojects) {
 		/*
@@ -2994,7 +3014,8 @@ COMMAND_PROTOTYPE(doaccounts)
 		 * groups for that user.
 		 */
 	  	char adminclause[MYBUFSIZE];
-		char *passwdfield = (!reqp->islocal && reqp->isdedicatedwa) ? 
+		char *passwdfield =
+			(!dohashes || (!reqp->islocal && reqp->isdedicatedwa))?
 			"'*'" : "u.usr_pswd";
 		strcpy(adminclause, "");
 #ifdef ISOLATEADMINS
