@@ -260,6 +260,10 @@ my $this_user;
 if (getpwuid($UID) eq "nobody") {
     # The web interface sets this.
     $this_user = User->ImpliedUser();
+    # This can happen using the forget password link; user not logged in.
+    if (!defined($this_user)) {
+	$this_user = $target_user;
+    }
 }
 else {
     $this_user = User->ThisUser();
