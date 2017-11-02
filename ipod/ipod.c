@@ -66,8 +66,12 @@ void icmp_info(struct icmp *icmp, char *outbuf, int maxlen);
 struct hostdesc {
 	char *hostname;
 	struct in_addr hostaddr;
+	struct in_addr srcaddr;
 	struct hostdesc *next;
+	int s;
 };
+int use_hdrincl = 0;
+int get_icmp_socket();
 
 struct hostdesc *hostnames;
 struct hostdesc *hosttail;
@@ -76,7 +80,7 @@ struct hostdesc *hosttail;
  * Set up the list of hosts.  Return the count.
  */
 
-int makehosts(char **hostlist)
+int makehosts(char **hostlist, struct in_addr srcaddr)
 {
 	int i;
 	struct hostent *hp;
@@ -133,6 +137,8 @@ int makehosts(char **hostlist)
 		}
 		hosttail->hostaddr = tmpaddr;
 		hosttail->next = NULL;
+		hosttail->srcaddr = srcaddr;
+		hosttail->s = get_icmp_socket();
 		hostcount++;
 	}
 	return hostcount;
@@ -182,20 +188,21 @@ void initpacket(char *buf, int querytype, struct in_addr fromaddr)
  * Send all of the ICMP queries.
  */
 
-void sendpings(int s, int querytype, struct hostdesc *head, int delay,
+void sendpings(int querytype, struct hostdesc *head, int delay,
 	       struct in_addr fromaddr)
      
 {
 	char buf[1500];
 	struct ip *ip = (struct ip *)buf;
-	struct sockaddr_in dst;
+	size_t len = IPOD_IPLEN;
+	char *bufp = buf;
 
 	bzero(buf, 1500);
 	initpacket(buf, querytype, fromaddr);
-	dst.sin_family = AF_INET;
-#ifdef DA_HAS_SIN_LEN
-	dst.sin_len = sizeof(dst);
-#endif
+	if (use_hdrincl == 0) {
+	    bufp += sizeof(*ip);
+	    len -= sizeof(*ip);
+	}
 
 	while (head != NULL) {
 		int rc;
@@ -203,12 +210,9 @@ void sendpings(int s, int querytype, struct hostdesc *head, int delay,
 		printf("pinging %s\n", head->hostname);
 #endif
 		ip->ip_dst.s_addr = head->hostaddr.s_addr;
-		dst.sin_addr = head->hostaddr;
-		rc = sendto(s, buf, ip->ip_len, 0,
-			   (struct sockaddr *)&dst,
-			   sizeof(dst));
-                if (rc != ip->ip_len) {
-			perror("sendto");
+		rc = send(head->s, bufp, len, 0);
+                if (rc != len) {
+			perror("send");
 		}
 		/* Don't flood small pipes. */
 		if (delay)
@@ -227,6 +231,13 @@ void myexit(int whatsig)
 	exit(0);
 }
 
+void sockaddr_from_ip(struct sockaddr_in *sin, struct in_addr ipaddr) {
+    bzero(sin, sizeof(*sin));
+    sin->sin_len = sizeof(*sin);
+    sin->sin_family = AF_INET;
+    sin->sin_addr = ipaddr;
+}
+
 /*
  * Open a raw socket for receiving ICMP.  Tell the kernel we want
  * to supply the IP headers.
@@ -236,14 +247,27 @@ int get_icmp_socket()
 {
 	int s;
 	int on = 1;
+	struct sockaddr_in src, dst;
 	if ((s = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0) {
 		perror("socket");
 		exit(1);
 	}
-	if (setsockopt(s, IPPROTO_IP, IP_HDRINCL,
+	if (use_hdrincl && setsockopt(s, IPPROTO_IP, IP_HDRINCL,
 		       (const char *)&on, sizeof(on)) < 0) {
 		perror("IP_HDRINCL");
 		exit(1);
+	}
+	if (*(u_int32_t *)(&hosttail->srcaddr)) {
+	    sockaddr_from_ip(&src, hosttail->srcaddr);
+	    if (bind(s, (const struct sockaddr *)&src, sizeof(src)) < 0) {
+		perror("bind");
+		exit(1);
+	    }
+	}
+	sockaddr_from_ip(&dst, hosttail->hostaddr);
+	if (connect(s, (const struct sockaddr *)&dst, sizeof(dst)) < 0) {
+	    perror("connect");
+	    exit(1);
 	}
 	return s;
 }
@@ -332,13 +356,11 @@ main(int argc, char **argv)
 	   }
        }
    }
-   hostcount = makehosts(argv);
-
-   s = get_icmp_socket();
+   hostcount = makehosts(argv, fromaddr);
 
    signal(SIGALRM, myexit);
    alarm(timeout);
-   sendpings(s, querytype, hostnames, delay, fromaddr);
+   sendpings(querytype, hostnames, delay, fromaddr);
    exit(0);
 }
    
