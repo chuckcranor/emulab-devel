@@ -55,7 +55,7 @@ window.ShowResGraph = (function ()
 		 */
 		array = array.slice();
 		array.push($.extend({}, array[0]));
-		array[1].t = parseInt(array[1].t) + (1 * 3600 * 24);
+		array[1].t = parseInt(array[1].t) + (45 * 3600 * 24);
 	    }
 	    else if (array.length > 1) {
 		/*
@@ -134,6 +134,7 @@ window.ShowResGraph = (function ()
 	 */
 	var array = Object.keys(stamps).map(function (key) {
 	    return {stamp  : key,
+		    date   : new Date(parseInt(key) * 1000),
 		    counts : stamps[key]};
 	});
 	array = array.sort(function(obj1, obj2) {
@@ -159,6 +160,9 @@ window.ShowResGraph = (function ()
 	
 	// The first array element now has all the types we want to graph.
 	var types = Object.keys(array[0].counts);
+
+	// Sort them so they are always in the same order/color.
+	types = types.sort();
 
 	/*
 	 * Okay, since each time stamp has to have data points for every
