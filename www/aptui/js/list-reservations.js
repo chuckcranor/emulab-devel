@@ -79,7 +79,7 @@ $(function ()
 		$('#' + name + ' .format-date').each(function() {
 		    var date = $.trim($(this).html());
 		    if (date != "") {
-			$(this).html(moment($(this).html()).format("lll"));
+			$(this).html(moment(date).format("lll"));
 		    }
 		});
 		$('#' + name + ' .tablesorter')
