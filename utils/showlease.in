@@ -222,26 +222,32 @@ if (@lids > 0) {
     my $fmt;
 
     if ($showlockers) {
-	$fmt = "%-48s %-8s %-10s %-6s %-15s %s\n";
+	$fmt = "%-48s %-8s %4s %-6s %-15s %s\n";
 
 	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "State",
 	    "Lock Time", "Locker Proc ID";
     } elsif ($showgrace) {
-	$fmt = "%-48s %-8s %-10s %-11s %-15s %-15s %-15s %-15s %-15s\n";
+	$fmt = "%-48s %-8s %5s %8s %-11s %-15s %-15s %-15s %-15s %-15s\n";
 
-	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "Exp Policy", "Grace Start", "Grace End", "Last Checked", "Last Used", "Expiration";
+	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "Size", "Exp Policy", "Grace Start", "Grace End", "Last Checked", "Last Used", "Expiration";
     } elsif ($verbose) {
-	$fmt = "%-48s %-8s %-10s %-6s %3s %3s %-15s %-15s %-15s %s\n";
+	$fmt = "%-48s %-8s %5s %8s %-6s %3s %3s %-15s %-15s %-15s %s\n";
 
-	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "State", "Use", "Ext",
+	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "Size", "State", "Use", "Ext",
 	    "Inception", "End", "Last used", "Attrs";
     } else {
-	$fmt = "%-48s %-8s %-10s %-6s %3s\n";
+	$fmt = "%-48s %-8s %5s %8s %-6s %3s\n";
 
-	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "State", "Use";
+	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "Size", "State", "Use";
     }
 
     foreach my $lease (@lids) {
+	my $ltype = $lease->type();
+	if ($ltype eq "ltdataset") {
+	    $ltype = "long";
+	} elsif ($ltype eq "stdataset") {
+	    $ltype = "short";
+	}
 	if ($showlockers) {
 	    my $lname = $lease->pid() . "/" .
 		$lease->gid() . "/" . $lease->lease_id();
@@ -253,7 +259,7 @@ if (@lids > 0) {
 		$ltime = "Unlocked";
 		$lproc = "";
 	    }
-	    printf $fmt, $lname, $lease->owner(), $lease->type(),
+	    printf $fmt, $lname, $lease->owner(), $ltype,
 	        $states{$lease->state()}, $ltime, $lproc;
 	    next;
 	}
@@ -264,27 +270,47 @@ if (@lids > 0) {
 	    next;
 	}
 
+	#
+	# Get the attributes.
+	# Note that we treat size special and remove it from the attrlist.
+	#
+	my $lsize = "";
+	my $attrstr = "";
+	my $attrs = $lease->GetAttributes();
+	if ($attrs) {
+	    my $del = "";
+	    foreach my $k (sort keys %{$attrs}) {
+		my $v = $attrs->{$k}->{'value'};
+		if ($k eq "size") {
+		    $lsize = $v;
+		    next;
+		}
+		$attrstr .= "$del$k=$v";
+		$del = ",";
+	    }
+	}
+
 	if ($showgrace) {
 	    next
 		if ($lease->state() ne LEASE_STATE_GRACE());
 
-	    my $ltype = $lease->type();
-	    if (!exists($sitevars{$ltype})) {
-		$sitevars{$ltype} = Lease->SiteVars($ltype);
+	    my $lt = $lease->type();
+	    if (!exists($sitevars{$lt})) {
+		$sitevars{$lt} = Lease->SiteVars($lt);
 	    }
-	    my $grace = $sitevars{$ltype}->{'graceperiod'};
+	    my $grace = $sitevars{$lt}->{'graceperiod'};
 	    next
 		if (!defined($grace));
 	    $grace += $lease->statestamp();
 
 	    my $policy = "none";
-	    if ($sitevars{$ltype}->{'maxlease'} != 0) {
-		if ($sitevars{$ltype}->{'maxidle'} != 0) {
+	    if ($sitevars{$lt}->{'maxlease'} != 0) {
+		if ($sitevars{$lt}->{'maxidle'} != 0) {
 		    $policy = "expire+idle";
 		} else {
 		    $policy = "expire";
 		}
-	    } elsif ($sitevars{$ltype}->{'maxidle'} != 0) {
+	    } elsif ($sitevars{$lt}->{'maxidle'} != 0) {
 		$policy = "idle";
 	    }
 	    my $lname = $lease->pid() . "/" .
@@ -294,21 +320,9 @@ if (@lids > 0) {
 	    my $lchecked = datestr($lease->last_checked());
 	    my $lused = datestr($lease->last_used());
 	    my $expire = datestr($lease->lease_end());
-	    printf $fmt, $lname, $lease->owner(), $ltype, $policy,
+	    printf $fmt, $lname, $lease->owner(), $ltype, $lsize, $policy,
 	        $stime, $etime, $lchecked, $lused, $expire;
 	    next;
-	}
-
-	# Attributes
-	my $attrstr = "";
-	my $attrs = $lease->GetAttributes();
-	if ($attrs) {
-	    my $del = "";
-	    foreach my $k (keys %{$attrs}) {
-		my $v = $attrs->{$k}->{'value'};
-		$attrstr .= "$del$k=$v";
-		$del = ",";
-	    }
 	}
 
 	my $lname = $lease->pid() . "/" .
@@ -321,11 +335,11 @@ if (@lids > 0) {
 	    $lusers = ();
 	}
 	if ($verbose) {
-	    printf $fmt, $lname, $lease->owner(), $lease->type(),
+	    printf $fmt, $lname, $lease->owner(), $ltype, $lsize,
 		$states{$lease->state()}, int(@$lusers), $lease->renewals(),
 		$stime, $etime, $ltime, $attrstr;
 	} else {
-	    printf $fmt, $lname, $lease->owner(), $lease->type(),
+	    printf $fmt, $lname, $lease->owner(), $ltype, $lsize,
 		$states{$lease->state()}, int(@$lusers);
 	}
     }
