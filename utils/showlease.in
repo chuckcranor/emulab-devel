@@ -222,26 +222,34 @@ if (@lids > 0) {
     my $fmt;
 
     if ($showlockers) {
-	$fmt = "%-48s %-8s %4s %-6s %-15s %s\n";
+	$fmt = "%-44s %-8s %4s %-6s %-15s %s\n";
 
-	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "State",
+	printf $fmt, "Pid/(Gid/)Name", "Owner", "Type", "State",
 	    "Lock Time", "Locker Proc ID";
     } elsif ($showgrace) {
-	$fmt = "%-48s %-8s %5s %8s %-11s %-15s %-15s %-15s %-15s %-15s\n";
+	$fmt = "%-44s %-8s %5s %8s %-11s %-15s %-15s %-15s %-15s %-15s\n";
 
-	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "Size", "Exp Policy", "Grace Start", "Grace End", "Last Checked", "Last Used", "Expiration";
+	printf $fmt, "Pid/(Gid/)Name", "Owner", "Type", "Size", "Exp Policy", "Grace Start", "Grace End", "Last Checked", "Last Used", "Expiration";
     } elsif ($verbose) {
-	$fmt = "%-48s %-8s %5s %8s %-6s %3s %3s %-15s %-15s %-15s %s\n";
+	$fmt = "%-44s %-8s %5s %8s %-6s %3s %3s %-15s %-15s %-15s %s\n";
 
-	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "Size", "State", "Use", "Ext",
+	printf $fmt, "Pid/(Gid/)Name", "Owner", "Type", "Size", "State", "Use", "Ext",
 	    "Inception", "End", "Last used", "Attrs";
     } else {
-	$fmt = "%-48s %-8s %5s %8s %-6s %3s\n";
+	$fmt = "%-44s %-8s %5s %8s %-6s %3s\n";
 
-	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "Size", "State", "Use";
+	printf $fmt, "Pid/(Gid/)Name", "Owner", "Type", "Size", "State", "Use";
     }
 
     foreach my $lease (@lids) {
+	my $lname;
+	if ($lease->pid() eq $lease->gid()) {
+	    $lname = $lease->pid() . "/" . $lease->lease_id();
+	} else {
+	    $lname = $lease->pid() . "/" . $lease->gid() . "/" .
+		$lease->lease_id();
+	}
+
 	my $ltype = $lease->type();
 	if ($ltype eq "ltdataset") {
 	    $ltype = "long";
@@ -249,8 +257,6 @@ if (@lids > 0) {
 	    $ltype = "short";
 	}
 	if ($showlockers) {
-	    my $lname = $lease->pid() . "/" .
-		$lease->gid() . "/" . $lease->lease_id();
 	    my $lproc = $lease->lockpid();
 	    my $ltime;
 	    if ($lproc != 0) {
@@ -313,8 +319,6 @@ if (@lids > 0) {
 	    } elsif ($sitevars{$lt}->{'maxidle'} != 0) {
 		$policy = "idle";
 	    }
-	    my $lname = $lease->pid() . "/" .
-		$lease->gid() . "/" . $lease->lease_id();
 	    my $stime = datestr($lease->statestamp());
 	    my $etime = datestr($grace);
 	    my $lchecked = datestr($lease->last_checked());
@@ -325,8 +329,6 @@ if (@lids > 0) {
 	    next;
 	}
 
-	my $lname = $lease->pid() . "/" .
-	    $lease->gid() . "/" . $lease->lease_id();
 	my $stime = datestr($lease->inception());
 	my $etime = datestr($lease->lease_end());
 	my $ltime = datestr($lease->last_used());
