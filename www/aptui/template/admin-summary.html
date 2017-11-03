@@ -32,7 +32,7 @@
 		    <td>
 		      <%- info.free %>
 		      <% if (_.has(info, "reserve_free")) { %>
-			(<%- info.reserve_free %>)
+			(<%- Number(info.reserve_free).toFixed(3) %>)
 		      <% } else { %>
 			(n/a)
 		      <% } %>
