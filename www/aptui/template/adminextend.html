@@ -79,10 +79,25 @@ pre {
 		style='margin-left: 20px;'
 		id='do-extension'
 		type='submit' name='request'>Extend</button>
+	<span data-toggle='popover'
+	      data-delay='{"hide":500, "show":500}'
+	      data-content="When checked, the portal will force the cluster to grant
+			    the extension even if it causes a reservation system
+			    overbooking situation. Be careful!">
+	  Force: <input type="checkbox" id="force-extension-checkbox"></span>
 	<button class='btn btn-primary btn-sm'
 		style='margin-left: 30px;'
 		id='do-moreinfo'
 		type='submit' name='moreinfo'>More Info</button>
+      </div>
+      <div id="max-extension-warning" class="hidden">
+	<span class="text-danger">Granting an extension to
+	  <span class="max-extension-date"></span>
+	  may cause a reservation overbook situation!</span>
+      </div>
+      <div id="max-extension-nomax" class="hidden">
+	<span class="text-danger">Granting any extension
+	  may cause a reservation overbook situation!</span>
       </div>
     </center>
   </div>

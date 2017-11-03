@@ -1364,7 +1364,7 @@ sub DoTerminate()
 #
 sub DoExtend()
 {
-    my $force = 0;
+    my $force    = 0;
     my $lockdown = 0;
     my $errcode  = 1;
     my $autoextend_maximum = GetSiteVar("aptui/autoextend_maximum");
@@ -1391,7 +1391,7 @@ sub DoExtend()
     usage()
 	if (!@ARGV);
 
-    my $optlist = "m:f:h";
+    my $optlist = "m:f:hF";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
@@ -1399,7 +1399,12 @@ sub DoExtend()
     usage()
 	if (!@ARGV);
     my $wanted = shift(@ARGV);
-
+    
+    if (defined($options{"F"})) {
+	# Be careful
+	$force = 1
+	    if (defined($this_user) && $this_user->IsAdmin());
+    }
     if (defined($options{"m"})) {
 	$reason = $options{"m"};
     }
@@ -1639,7 +1644,7 @@ sub DoExtend()
 	my $seconds = $granted * 3600;
 	$seconds *= 24 if (!$inhours);
 	    
-	if ($errcode = ExtendInternal($slice, $seconds, 0, 0, \$errmsg)) {
+	if ($errcode = ExtendInternal($slice, $seconds, $force, 0, \$errmsg)) {
 	    goto bad;
 	}
     }
@@ -1821,7 +1826,7 @@ sub ExtendInternal($$$$$)
 	my $domain   = $sliver->domain();
 	my $errmsg;
 
-	my $response = $sliver->Extend($new_expires, $this_user);
+	my $response = $sliver->Extend($new_expires, $this_user, $force);
 	if (!defined($response)) {
 	    $errmsg = "Internal error calling Renew at $domain";
 	    goto bad;
@@ -2050,8 +2055,7 @@ sub DoMaxExtension()
 	    goto bad;
 	}
 	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    $errmsg = "Failed to get max extension at $domain: ".
-		$response->output();
+	    $errmsg = $response->output();
 	    
 	    # This is something the user should see.
 	    if ($response->code() == GENIRESPONSE_REFUSED ||
@@ -2292,7 +2296,7 @@ sub DoExtendOld()
 	my $domain   = $sliver->domain();
 	my $errmsg;
 
-	my $response = $sliver->Extend($new_expires, $this_user);
+	my $response = $sliver->Extend($new_expires, $this_user, $force);
 	if (!defined($response)) {
 	    $errmsg = "Internal error calling Renew at $domain";
 	    goto bad;

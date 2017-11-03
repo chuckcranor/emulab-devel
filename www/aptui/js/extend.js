@@ -212,7 +212,7 @@ window.ShowExtendModal = (function()
 	    else {
 		setvalue = 100;
 	    }
-	    console.info("setvalue", day, setvalue);
+	    //console.info("setvalue", day, setvalue);
 	    return setvalue;
 	}
 
@@ -291,7 +291,7 @@ window.ShowExtendModal = (function()
 		    return;
 		}
 	    }
-	    console.info(howlong);
+	    //console.info(howlong);
 	    $('#extend_value').html(extend_value);
 
 	    $('#label' + lastlabel + "_request").addClass("hidden");
@@ -519,7 +519,7 @@ window.ShowExtendModal = (function()
 		/*
 		 * See if the difference is less then a day.
 		 */
-		var now   = new Date();
+		var now   = new Date(window.APT_OPTIONS.sliceExpires);
 		var hours = Math.floor((later.getTime() -
 					now.getTime()) / (1000 * 3600.0));
 	
@@ -533,8 +533,9 @@ window.ShowExtendModal = (function()
 		    RequestMaxExtension(hours);
 		}
 		else {
-		    maxextend = DateToDays(later);
-		    console.info("Max extension days: ", maxextend);
+		    // Maximum number of days beyond current expiration!
+		    maxextend = Math.floor(hours / 24);
+		    console.info("Max extension days: ", maxextend, hours);
 		    // Show the modal, it is initialized above. 
 		    $(modalname).modal('show');
 		}

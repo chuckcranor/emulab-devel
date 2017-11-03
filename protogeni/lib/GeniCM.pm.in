@@ -655,7 +655,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	}
 	# Note "checkonly" flag; we do not actually change the slice
 	# until the ticket is redeemed. 
-	my $tmp = SetSliceExpiration($slice, $expires, 1, 0, @{ $credentials });
+	my $tmp = SetSliceExpiration($slice, $expires, 1, 0, 0, @{ $credentials });
 	if (GeniResponse::IsResponse($tmp)) {
 	    return $tmp;
 	}
@@ -4007,7 +4007,7 @@ sub SliverWorkAux($$$$$$$$)
 	    $message = "Illegal valid_until in rspec";
 	    goto bad;
 	}
-	my $tmp = SetSliceExpiration($slice, $expires, 0, 0, $credential);
+	my $tmp = SetSliceExpiration($slice, $expires, 0, 0, 0, $credential);
 	if (GeniResponse::IsResponse($tmp)) {
 	    $message = GeniResponse::output($tmp);
 	    goto bad;
@@ -5217,12 +5217,12 @@ sub RenewSlice($)
     return $credential
 	if (GeniResponse::IsResponse($credential));
 
-    return RenewSliverAux([$credential], $expires, 0);
+    return RenewSliverAux([$credential], $expires, 0, 0);
 }
 
-sub RenewSliverAux($$$)
+sub RenewSliverAux($$$$)
 {
-    my ($credentials, $expires, $alap) = @_;
+    my ($credentials, $expires, $alap, $force) = @_;
     my $credential  = $credentials->[0];
     my $message     = "Error renewing aggregate";
     my $when;
@@ -5295,7 +5295,7 @@ sub RenewSliverAux($$$)
     }
 
     my $response = SetSliceExpiration($slice,
-				      $expires, 0, $alap, @{ $credentials });
+				      $expires, 0, $alap, $force, @{ $credentials });
     if (GeniResponse::IsError($response)) {
 	$slice->UnLock();
 	return $response;
@@ -7700,16 +7700,28 @@ sub KillMonitor($)
 #
 # alap => extend as long as possible
 #
-sub SetSliceExpiration($$$$@)
+sub SetSliceExpiration($$$$$@)
 {
-    my ($slice, $expiration, $checkonly, $alap, @credentials) = @_;
+    my ($slice, $expiration, $checkonly, $alap, $force, @credentials) = @_;
     my $message     = "Error renewing sliver";
     my $when;
-    
+    require Reservation;
+
     #
     # Ick, assume first credential is the slice credential. Bad.
     #
     my $slice_credential = shift(@credentials);
+
+    #
+    # Make sure that a proper credential accompanies the force option.
+    #
+    if ($force) {
+	if (!$slice_credential->HasActualPrivilege("admin")) {
+	    $message = "SetSliceExpiration: Refused force mode ".
+		"cause credential was too weak";
+	    goto bad;
+	}
+    }
     
     #
     # Maximum expiration is what the credential says, but we might
@@ -7834,10 +7846,41 @@ sub SetSliceExpiration($$$$@)
 	    goto bad;
 	}
     }
+    #
+    # Now that we have the number we want, make sure the reservation system
+    # will allow it.
+    #
+    if (!$force &&
+	Reservation->ExtendSlice($slice, $when, \$message, 1, 0)) {
+	print STDERR "SetSliceExpiration: ExtendSlice(checkonly): $message\n";
+	$message = "Extension refused by reservation system: $message";
+	goto bad;
+    }
+    
     if (!$checkonly) {
-	if ($slice->SetExpiration($when) != 0) {
-	    $message = "could not set expiration time";
-	    goto bad;
+	if (Reservation->ExtendSlice($slice, $when, \$message, 0, 0)) {
+	    if ($force) {
+		#
+		# Do it again, we want to send mail only when we violate.
+		#
+		if (Reservation->ExtendSlice($slice, $when, \$message, 0, $force)) {
+		    print STDERR "SetSliceExpiration: ExtendSlice(force): $message\n";
+		    $message = "Forcible extension refused by reservation ".
+		      "system: $message";
+		    goto bad;
+		}
+		SENDMAIL($TBOPS, "Slice extension forced by administrator!",
+			 "$slice was forcibly extended!\n".
+			 "The new expiration is " . TBDateStringLocal($when) . "\n\n".
+			 "This may have put the reservation system into overbook.\n",
+			 $TBOPS);
+		print STDERR "Slice extension forced by administrator!\n";
+	    }
+	    else {
+		print STDERR "SetSliceExpiration: ExtendSlice(real): $message\n";
+		$message = "Extension refused by reservation system: $message";
+		goto bad;
+	    }
 	}
 	#
 	# Mark the expires slot in the experiment, for admission control

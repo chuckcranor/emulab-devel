@@ -2113,9 +2113,9 @@ sub Terminate($)
 #
 # Ask to extend. 
 #
-sub Extend($$$)
+sub Extend($$$$)
 {
-    my ($self, $new_expires, $this_user) = @_;
+    my ($self, $new_expires, $this_user, $force) = @_;
     my $credentials;
     my $method;
     my @params;
@@ -2209,10 +2209,14 @@ sub Extend($$$)
 	unlink($credname);
 	chomp($extcred);
 
-	@params = ({"slice_urn"   => $slice->urn(),
+	my $args = {"slice_urn"   => $slice->urn(),
 		    "expiration"  => $new_expires,
 		    "credentials" => [@$credentials, $extcred],
-		   });
+	};
+	if ($force) {
+	    $args->{"force"} = 1;
+	}
+	@params = ($args);
 	$method = "RenewSlice";
     }
     my $cmurl = $authority->url();

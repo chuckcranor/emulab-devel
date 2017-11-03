@@ -16,6 +16,7 @@ $(function ()
     var firstrowTemplate   = null;
     var secondrowTemplate  = null;
     var extensionsTemplate = null;
+    var maxextension       = null;
     var GENIRESPONSE_REFUSED = 7;
 
     function initialize()
@@ -122,6 +123,11 @@ $(function ()
 			"MoreInfo" :
 			(action == "terminate" ?
 			 "SchedTerminate" : "DenyExtension")));
+	// Only an extend option for now.
+	var force = 0;
+	if (action == "extend" && $('#force-extension-checkbox').is(":checked")) {
+	    force = 1;
+	}
 
 	var callback = function(json) {
 	    sup.HideModal("#waitwait-modal");
@@ -149,7 +155,8 @@ $(function ()
 	var xmlthing = sup.CallServerMethod(null, "status", method,
 					    {"uuid"   : window.UUID,
 					     "howlong": howlong,
-					     "reason" : reason});
+					     "reason" : reason,
+					     "force"  : force});
 	xmlthing.done(callback);	
     }
 
@@ -169,8 +176,8 @@ $(function ()
 				     $('.format-date').each(function() {
 					 var date = $.trim($(this).html());
 					 if (date != "") {
-					     $(this).html(moment($(this).html())
-						  .format("MMM D h:mm A"));
+					     $(this).html(moment(date)
+							 .format("MMM D, YYYY h:mm A"));
 					 }
 				     });
 				     // lockout change event handler.
@@ -203,7 +210,7 @@ $(function ()
 					     .attr("disabled", "disabled");
 				     }
 				     // Update the Max Extension
-				     DoMaxExtension();
+				     DoMaxExtension(json.value.expires);
 				     SetupAdminNotes();
 				 }
 			     });
@@ -381,27 +388,101 @@ $(function ()
     //
     // Get Max Extension and update the table.
     //
-    function DoMaxExtension()
+    function DoMaxExtension(expires)
     {
+	// Warn if changing days violates max extension.
 	var callback = function(json) {
+	    $("#days").on("keyup", function (event) {
+		if (!maxextension) {
+		    $('#max-extension-nomax').removeClass("hidden");
+		    return;
+		}
+		$('#max-extension-nomax').addClass("hidden");
+		var days  = $.trim($("#days").val());
+		if (days != "") {
+		    days = parseInt(days) || 0;
+		    if (days) {
+			var when = moment(expires).add(days, "days");
+			//console.info("when", when.format('lll'));
+			//console.info("max", maxextension.format('lll'));
+			if (when.isAfter(maxextension)) {
+			    $('#max-extension-warning .max-extension-date')
+				.html(when.format('lll'));
+			    $('#max-extension-warning').removeClass("hidden");
+			}
+			else {
+			    $('#max-extension-warning').addClass("hidden");
+			    $('#max-extension-warning .max-extension-date').html("");
+			}
+			return;
+		    }
+		}
+		$('#max-extension-warning').addClass("hidden");
+		$('#max-extension-warning .max-extension-date').html("");
+	    });
+	    
 	    if (json.code) {
-		console.info("Failed to get max extension: " + json.value);
+		console.info("Failed to get max extension", json);
+		$('#days').val("0");
+		$('#max-extension-nomax').removeClass("hidden");
+		
+		/*
+		 * Special case, the cluster is saying no extension is possible,
+		 * so it does not even provide a date.
+		 */
+		if (json.code == GENIRESPONSE_REFUSED) {
+		    $('#max-extension').html("<span class='text-danger'>" +
+					     "No Extension Possible!</span>");
+		    if (window.DAYS) {
+			alert("The cluster says no extension is possible at all! " +
+			      "Granting any extension can potentially throw the " +
+			      "reservation system into overbook.");
+		    }
+		}
+		else {
+		    $('#max-extension').html("<span class='text-danger'>" +
+					     "Cannot Get Max Extension!</span>");
+		    alert("Unable to get the maximum allowed extension from " +
+			  "the cluster. " +
+			  "Granting any extension can potentially throw the " +
+			  "reservation system into overbook.");
+		}
 		return;
 	    }
+	    // Save for checking the extension input field.
+	    maxextension = moment(json.value);
+	    
 	    $('#max-extension').html(moment(json.value)
 				     .format("MMM D, YYYY h:mm A"));
-
+	    
 	    /*
 	     * Look to see if the number of days requested is going to be
 	     * greater then the max slice extension. If it is, then we want
 	     * to make sure that is noticed.
 	     */
-	    var now = new Date();
-	    var max = new Date(json.value);
-	    now.setDate(now.getDate() + window.DAYS);
-	    if (now.getTime() > max.getTime()) {
-		alert("Granting this full extension would violate the " +
-		      "current maximum allowed extension.");
+	    if (window.DAYS) {
+		var exp = new Date(expires);
+		var max = new Date(json.value);
+		exp.setDate(exp.getDate() + window.DAYS);
+	    
+		if (exp.getTime() > max.getTime()) {
+		    var m1   = moment(exp.getTime());
+		    var m2   = moment(max.getTime());
+		    var diff = m1.diff(m2, "days");
+		
+		    alert("Granting this full extension would violate the " +
+			  "current maximum allowed extension by " + diff + " days. " +
+			  "Granting the extension can potentially throw the " +
+			  "reservation system into overbook.");
+
+		    // Change the box number to reflect a legal extension.
+		    if (window.DAYS >= diff) {
+			$('#days').val(window.DAYS - diff);
+		    }
+		    else {
+			$('#days').val("0");
+		    }
+		}
 	    }
 	}
 	var xmlthing = sup.CallServerMethod(null, "status", "MaxExtension",

@@ -329,6 +329,7 @@ function Do_RequestExtension()
     global $instance, $creator, $this_user, $suexec_output;
     global $ajax_args;
     $inhours = 0;
+    $force   = 0;
     $autoextend_maximum = TBGetSiteVar("aptui/autoextend_maximum");
 
     if (StatusSetupAjax(1)) {
@@ -374,6 +375,9 @@ function Do_RequestExtension()
 	if (isset($ajax_args["reason"]) && $ajax_args["reason"] != "") {
             $reason = $ajax_args["reason"];
         }
+	if (isset($ajax_args["force"]) && $ajax_args["force"]) {
+            $force = 1;
+        }
     }
     elseif (isset($ajax_args["inhours"])) {
         #
@@ -407,7 +411,8 @@ function Do_RequestExtension()
 		     "webmanage_instance -t " . $webtask->task_id() . " -- ".
                      "  extend $uuid " .
                      (isset($filename) ? "-f $filename " : "").
-                     ($inhours ? "-h " : "") . "$wanted",
+                     ($inhours ? "-h " : "") .
+                     ($force ? "-F " : "") . "$wanted",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
     if (isset($filename)) {
@@ -1933,6 +1938,12 @@ function Do_OpenstackStats()
 function Do_MaxExtension()
 {
     global $instance, $creator, $TBADMINGROUP, $suexec_output;
+
+    if (0) {
+        $blob = "2017-11-06T18:09:59Z";
+        SPITAJAX_RESPONSE($blob);
+        return;
+    }
 
     if (StatusSetupAjax(0)) {
 	return;
