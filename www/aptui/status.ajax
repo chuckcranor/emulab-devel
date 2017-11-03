@@ -153,7 +153,8 @@ function Do_GetInstanceStatus()
         }
         elseif ($webtask->exitcode() == GENIRESPONSE_NO_MAPPING) {
             $blob["reason"]  = "Your topology could not be mapped to physical ".
-                "resources. Clicking the 'Sliver' button above will provide ".
+                "resources. In addition to any information below, you can ".
+                "click on the 'Sliver' button above, which will provide ".
                 "lots of info, some of which might be useful in figuring out ".
                 "why it failed.\n\n";
         }
