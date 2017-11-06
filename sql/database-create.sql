@@ -2137,6 +2137,7 @@ CREATE TABLE `future_reservations` (
   `type` varchar(30) NOT NULL DEFAULT '',
   `start` datetime DEFAULT NULL,
   `end` datetime DEFAULT NULL,
+  `destruct` datetime DEFAULT NULL,
   `uid` varchar(8) NOT NULL DEFAULT '',
   `uid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `notes` mediumtext,
