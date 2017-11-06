@@ -1034,6 +1034,10 @@ sub Usage($$$)
 
     while (my ($eid,$idx,$urn,$swapin_time,$swapout_time,$count,$type) =
 	   $query_result->fetchrow_array()) {
+	# No phys nodes.
+	next
+	    if ($count == 0 || !defined($type));
+	
 	# The order by clause is important.
 	if ($swapin_time != $lastin) {
 	    unshift(@summary, {"eid"    => $eid,
