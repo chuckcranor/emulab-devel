@@ -993,5 +993,62 @@ sub UpdateExports($)
     return 0;
 }
 
+#
+# Return usage records for experiments that have terminated (were running)
+# between two dates.
+#
+sub Usage($$$)
+{
+    my ($self, $start, $end) = @_;
+    my $pid_idx = $self->pid_idx();
+    my @results = ();
+
+    my $query_result =
+	DBQueryWarn("select s.eid,r.idx,s.nonlocal_id, ".
+		    "       r.swapin_time,r.swapout_time,r.pnodes,n.type, ".
+		    "      count(n.type) ".
+		    "  from experiment_resources as r ".
+		    "left join experiment_stats as s on ".
+		    "     s.exptidx=r.exptidx  ".
+		    "left join node_history as h on ".
+		    "     h.exptidx=r.exptidx and h.op='alloc' and ".
+		    "     h.stamp >= r.swapin_time - 120 and ".
+		    "     (r.swapout_time=0 or ".
+		    "      h.stamp < r.swapout_time) ".
+		    "left join nodes as n on n.node_id=h.node_id ".
+		    "where s.pid_idx='$pid_idx' and ".
+		    "     r.swapin_time!=0 and ".
+		    "    ((r.swapin_time >= $start and ".
+		    "      r.swapin_time <= $end) or ".
+		    "     (r.swapout_time > $start and ".
+		    "      r.swapout_time < $end)) ".
+		    "group by s.eid,r.idx,s.nonlocal_id, ".
+		    "         r.swapin_time,r.swapout_time,r.pnodes,n.type ".
+		    "order by r.swapin_time desc");
+
+    return undef
+	if (!defined($query_result));
+
+    my @summary = ();
+    my $lastin  = 0;
+
+    while (my ($eid,$idx,$urn,$swapin_time,$swapout_time,$count,$type) =
+	   $query_result->fetchrow_array()) {
+	# The order by clause is important.
+	if ($swapin_time != $lastin) {
+	    unshift(@summary, {"eid"    => $eid,
+			       "urn"    => $urn || "",
+			       "start"  => $swapin_time,
+			       "end"    => $swapout_time || "",
+			       "types"  => {$type => {"count"  => $count}}});
+	    $lastin = $swapin_time;
+	    next;
+	}
+	my $blob = $summary[0];
+	$blob->{"types"}->{$type} = {"count" => $count};
+    }
+    return \@summary;
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;

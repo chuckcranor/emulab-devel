@@ -1031,6 +1031,8 @@ sub Reservations($)
     # Current reservations by pid,type so we can tell the caller
     # how many are actually reserved now.
     my %current = ();
+    # Project usage numbers;
+    my %history = ();
 
     while (my $row = $query_result->fetchrow_hashref()) {
 	my $blob = {};
@@ -1046,6 +1048,8 @@ sub Reservations($)
 	    print STDERR "Reservations: No such project $pid\n";
 	    next;
 	}
+	my $projurn = $project->nonlocalurn();
+	
 	my $user = User->Lookup($uid);
 	if (!defined($user)) {
 	    print STDERR "Reservations: No such user $uid\n";
@@ -1075,7 +1079,7 @@ sub Reservations($)
 	
 	$blob->{"idx"}         = $idx;
 	$blob->{"uuid"}        = $uuid;
-	$blob->{"project"}     = $project->nonlocalurn();
+	$blob->{"project"}     = $projurn,
 	$blob->{"user"}        = $user->nonlocalurn();
 	$blob->{"nodes"}       = $row->{'nodes'};
 	$blob->{"type"}        = $type;
@@ -1086,9 +1090,14 @@ sub Reservations($)
 	$blob->{"notes"}       = $row->{'notes'} || "";
 	$blob->{"approved"}    = $row->{'approved'} || "";
 	$results{"$idx"}       = $blob;
+
+	if (!exists($history{$projurn})) {
+	    $history{$projurn} = $project->Usage(time() - (3600 * 48), time());
+	}
     }
     my $blob = {"api_version"  => $API_VERSION,
 		"reservations" => \%results,
+		"history"      => \%history,
     };
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
