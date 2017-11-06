@@ -97,6 +97,7 @@ function Do_ProjectList()
         $blob["leader_name"]  = $leader->name();
         $blob["leader_affil"] = $leader->affil();
         $blob["leader_email"] = $leader->email();
+        $blob["leader_notyet"]= ($leader->status() == TBDB_USERSTATUS_NEWUSER ? 1 : 0);
 
         $results[$project->pid()] = $blob;
     }
