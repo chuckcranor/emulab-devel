@@ -336,6 +336,10 @@ sub create($$$;$)
     my $rv = freenasVolumeCreate($pool, $vol, $size, $sparse);
     if ($rv == 0 && $fstype ne "none") {
 	$rv = freenasFSCreate($pool, $vol, $fstype);
+	if (freenasVolumeDestroy($pool, $vol)) {
+	    print STDERR "bscontrol_proxy: could not destroy new volume ".
+		"after FS creation failure.\n";
+	}
     }
 
     return $rv;
