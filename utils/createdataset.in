@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2016 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -292,6 +292,10 @@ if ($dstype eq "imdataset") {
 #		(0 == unlimited)
 # usequotas	If non-zero, enforce per-project dataset quotas
 #
+# Note that policy-related failures exit with a distinct exit code (2)
+# so that our caller can distinguish these failures.
+#
+my $POLICY_FAIL = 2;
 my $vars = Lease->SiteVars($dstype);
 
 #
@@ -305,10 +309,14 @@ if ($approveme && $vars->{"maxsize"} > 0 && $size > $vars->{"maxsize"}) {
     print STDERR
 	"Requested size ($size) is larger than allowed by default (" .
 	$vars->{"maxsize"} . ").\n";
-    print STDERR
-	"Try again with '-U' option and request special approval by testbed-ops.\n"
-	if (!$alwayscreate);
-    exit(1);
+    if (!$alwayscreate) {
+	print STDERR
+	    "Try again with '-U' option and request special approval by testbed-ops.\n"
+	    if (!$background);
+	exit($POLICY_FAIL);
+    } else {
+	print STDERR "WARNING: creating anyway!\n";
+    }
 }
 
 #
@@ -346,10 +354,15 @@ if (!defined($expire)) {
 	$needapproval = 1;
     }
 }
-if ($needapproval && !$alwayscreate) {
-    print STDERR
-	"Try again with '-U' to request special approval by testbed-ops.\n";
-    exit(1);
+if ($needapproval) {
+    if (!$alwayscreate) {
+	print STDERR
+	    "Try again with '-U' to request special approval by testbed-ops.\n"
+	    if (!$background);
+	exit($POLICY_FAIL);
+    } else {
+	print STDERR "WARNING: creating anyway!\n";
+    }
 }
 
 #
@@ -435,7 +448,7 @@ if ($vars->{"usequotas"}) {
     # Unless they have an unlimited quota, add up all the existing
     # ltdataset datasets to see if the new one will put them over quota.
     #
-    if (!$quota->IsUnlimited()) {
+    if ($approveme && !$quota->IsUnlimited()) {
 	my $qsize = $quota->size();
 	my $allocated = 0;
 
@@ -447,7 +460,17 @@ if ($vars->{"usequotas"}) {
 	    $allocated += $lsize;
 	}
 	if ($allocated + $size > $qsize) {
-	    fatal("Allocation of $size would put $pid over quota ($qsize).");
+	    print STDERR
+		"Allocation of $size would put $pid over quota ($qsize).\n";
+	    if (!$alwayscreate) {
+		print STDERR
+		    "Try again with '-U' to request special approval by testbed-ops.\n"
+		    if (!$background);
+		$quota->Unlock();
+		exit($POLICY_FAIL);
+	    } else {
+		print STDERR "WARNING: creating anyway!\n";
+	    }
 	}
     }
 }
@@ -515,8 +538,7 @@ if ($approveme) {
 	sleep(2);
     }
     if ($lease->AllocResources("valid")) {
-	print STDERR "WARNING: could not allocate resources, contact testbed-ops.\n";
-	$approveme = 0;
+	print STDERR "Could not allocate resources, contact testbed-ops.\n";
 
 	#
 	# Need to notify on error, if ran in the background.
@@ -524,9 +546,14 @@ if ($approveme) {
 	if ($background) {
 	    SENDMAIL($TBOPS, "Lease allocation failed!",
 	     "Background resource allocation for Lease '$pid/$gid/$lname' ".
-	     "failed!\n\n",
+	     "failed; lease destroyed!\n\n",
 	     $TBOPS, undef, $logname);
 	}
+
+	if ($lease->Delete()) {
+	    print STDERR "WARNING: could not destroy lease DB state.\n";
+	}
+	fatal("Lease not created.");
     }
     $lease->Unlock();
 
