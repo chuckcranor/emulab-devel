@@ -2,10 +2,11 @@ $(function ()
 {
     'use strict';
 
-    var template_list   = ["reservation-list", "oops-modal", "confirm-modal",
-			   "waitwait-modal"];
+    var template_list   = ["reservation-list", "resusage-list",
+			   "oops-modal", "confirm-modal", "waitwait-modal"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
     var listTemplate    = _.template(templates["reservation-list"]);
+    var usageTemplate   = _.template(templates["resusage-list"]);
     var confirmString   = templates["confirm-modal"];
     var oopsString      = templates["oops-modal"];
     var waitwaitString  = templates["waitwait-modal"];
@@ -107,6 +108,66 @@ $(function ()
 		    $('#' + name + ' .warn-button').click(function() {
 			ReservationInfoOrWarning("warn", $(this).closest('tr'));
 			return false;
+		    });
+		}
+		if (_.has(json.value, "history")) {
+		    var history = json.value.history;
+		    console.info("history", name, history);
+
+		    $('#' + name + " table tbody tr").each(function () {
+			// Grab the uuid, it is the key into the reservation list.
+			var uuid = $(this).attr('data-uuid');
+			var details = reservations[uuid];
+			var type    = details.type;
+			var urn     = details.project;
+			var pid     = details.pid;
+
+			//console.info("uuid", uuid, details);
+
+			// No history for the project.
+			if (!_.has(history, urn))
+			    return;
+
+			//console.info("history", urn, history[urn]);
+			/*
+			 * Search history entries and prune to only
+			 * those using the type reserved. Might not be
+			 * any experiments using this type.
+			 */
+			var entries = [];
+
+			for (var i = 0; i < history[urn].length; i++) {
+			    var entry = history[urn][i];
+
+			    if (_.has(entry.types, type)) {
+				entries.push(entry);
+			    }
+			}
+			if (entries.length == 0)
+			    return;
+
+			// Contents of the new modal.
+			var html = usageTemplate({"uuid"    : uuid,
+						  "type"    : type,
+						  "project" : pid,
+						  "history" : entries});
+			// And add to all the new modals.
+			$('#resusage-modals').append(html);
+
+			// Show/Activate the button in the list that shows modal.
+			$(this).find(".resusage-button").click(function (event) {
+			    event.preventDefault();
+			    sup.ShowModal('#' + "resusage-modal-" + uuid);
+			});
+			$(this).find(".resusage-button").removeClass("hidden");
+
+			// Format dates in the modal with moment before display.
+			$('#resusage-modal-' + uuid + ' .format-date').each(function() {
+			    var date = $.trim($(this).html());
+			    if (date != "") {
+				$(this).html(moment(date * 1000).format("lll"));
+			    }
+			});
 		    });
 		}
 		// This activates the tooltip subsystem.

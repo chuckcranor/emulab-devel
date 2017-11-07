@@ -86,6 +86,7 @@ use libtestbed;
 use WebTask;
 use APT_Geni;
 use APT_Aggregate;
+use APT_Instance;
 use GeniResponse;
 use GeniUser;
 
@@ -451,6 +452,9 @@ sub DoList()
 	fatal($response->output());
     }
     my $list = $response->value()->{'reservations'};
+    my $history = $response->value()->{'history'}
+        if (exists($response->value()->{'history'}));
+    
     #
     # Map remote URNs to local projects and users. Not all of them can
     # be mapped of course, we leave those as is. 
@@ -477,6 +481,34 @@ sub DoList()
 	else {
 	    $details->{'pid'} = $projhrn->id();
 	}
+
+	#
+	# If we have the history, then go through and map the
+	# experiments to local experiments so we can link to them in
+	# the web interface.
+	#
+	if (exists($history->{$projhrn})) {
+	    foreach my $ref (@{ $history->{$projhrn} }) {
+		#print Dumper($ref);
+		    
+		# Local experiment on the remote cluster.
+		next
+		    if (!(exists($ref->{'urn'}) && exists($ref->{'slice_uuid'})));
+		# Already processed.
+		next
+		    if (exists($ref->{'instance_uuid'}));
+
+		my $hrn = GeniHRN->new($ref->{'urn'});
+		if (defined($hrn) &&
+		    $hrn->domain() eq $OURDOMAIN && defined($hrn->project())) {
+		    my $instance = APT_Instance->LookupBySlice($hrn);
+		    if (defined($instance) &&
+			$instance->slice_uuid() eq $ref->{'slice_uuid'}) {
+			$ref->{'instance_uuid'} = $instance->uuid();
+		    }
+		}
+	    }
+	}
     }
     #
     # Strip out unwanted results if we asked as an admin for a specific
@@ -487,16 +519,25 @@ sub DoList()
 	
 	foreach my $key (keys(%$list)) {
 	    my $details = $list->{$key};
+	    my $projhrn = $details->{'project'};
 
 	    if (defined($project)) {
-		next
-		    if (!defined($details->{'pid_idx'}) ||
-			$details->{'pid_idx'} != $project->pid_idx());
+		if (!defined($details->{'pid_idx'}) ||
+		    $details->{'pid_idx'} != $project->pid_idx()) {
+		    # Kill the history entry when skipping.
+		    delete($history->{$projhrn})
+			if (defined($history) && exists($history->{$projhrn}));
+		    next
+		}
 	    }
 	    else {
-		next
-		    if (!defined($details->{'uid_idx'}) ||
-			$details->{'uid_idx'} != $user->uid_idx());
+		if (!defined($details->{'uid_idx'}) ||
+		    $details->{'uid_idx'} != $user->uid_idx()) {
+		    # Kill the history entry when skipping.
+		    delete($history->{$projhrn}) 
+			if (defined($history) && exists($history->{$projhrn}));
+		    next
+		}
 	    }
 	    $tmp->{$key} = $details;
 	}

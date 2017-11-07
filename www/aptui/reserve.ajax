@@ -549,6 +549,7 @@ function Do_ListReservations()
         else {
             $blob["approved"] = null;
         }
+        $blob["project"]     = $details['project'];
         $blob["count"]       = $details['nodes'];
         $blob["type"]        = $details['type'];
         $blob["created"]     = $details['created'];

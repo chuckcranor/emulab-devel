@@ -69,11 +69,11 @@
 				     <% } %>				     
 	        <% } %>>
 	      <% if (showidx) { %>
-		<td>
-		<% if (isadmin) { %>
-		  <a href="#" class="deny-button">
+		<td style='white-space: nowrap;'>
+		  <% if (isadmin) { %>
+		    <a href="#" class="deny-button">
 		      <span class='glyphicon glyphicon-thumbs-down pull-left'
-			    style='color: red; margin-right: 5px;
+			    style='color: red; margin-left: 0px;
 				   margin-bottom: 4px;'
 			    data-toggle='tooltip'
 			    data-container="body"
@@ -83,7 +83,7 @@
 		  <% } %>
 		  <a href="#" class="delete-button">
 		    <span class='glyphicon glyphicon-remove pull-left'
-			  style='color: red; margin-right: 5px;
+			  style='color: red; margin-left: 5px;
 				 margin-bottom: 4px;'
 			  data-toggle='tooltip'
 			  data-container="body"
@@ -92,34 +92,47 @@
 		  </a>
 		  <a href="reserve.php?edit=1&cluster=<%- value.cluster %>&uuid=<%- value.uuid %>"
 		     class="edit-button">
-		    <span class='glyphicon glyphicon-pencil pull-left'
-			  style='color: red; margin-right: 5px;
-				 margin-bottom: 4px;'
+		    <span class='glyphicon glyphicon-pencil pull-left text-primary'
+			  style='margin-left: 5px;
+			         margin-bottom: 4px;'
 			  data-toggle='tooltip'
 			  data-container="body"
 			  data-trigger="hover"
 			  title='Edit reservation details'></span>
 		  </a>
-		  <% if (value.creator_idx) { %>
-		    <a href="#" class="info-button">
-		      <span class='glyphicon glyphicon-info-sign pull-left'
-			    style='color: red; margin-bottom: 4px;
-				   margin-right: 5px;'
-			    data-toggle='tooltip'
-			    data-container="body"
-			    data-trigger="hover"
-			    title='Send a message to user'></span>
-		    </a>
+		  <% if (isadmin) { %>
+		    <% if (value.creator_idx) { %>
+		      <a href="#" class="info-button">
+			<span class='glyphicon glyphicon-info-sign pull-left
+				     text-warning'
+			      style='margin-bottom: 4px;
+				     margin-left: 5px;'
+			      data-toggle='tooltip'
+			      data-container="body"
+			      data-trigger="hover"
+			      title='Send a message to user'></span>
+		      </a>
+		    <% } %>
 		    <a href="#" class="warn-button">
-		      <span class='glyphicon glyphicon-warning-sign pull-left'
-			    style='color: red; margin-bottom: 4px;
-				   margin-right: 0px;'
+		      <span class='glyphicon glyphicon-warning-sign pull-left
+				   text-warning'
+			    style='margin-bottom: 4px;
+				   margin-left: 5px;'
 			    data-toggle='tooltip'
 			    data-container="body"
 			    data-trigger="hover"
 			    title='Warn user about unused reservaton'></span>
 		    </a>
-		<% } %>
+		  <% } %>	    
+		  <a href="#" class="resusage-button hidden">
+		    <span class='glyphicon glyphicon-list-alt pull-left text-info'
+			  style='margin-bottom: 4px;
+				 margin-left: 5px;'
+			  data-toggle='tooltip'
+			  data-container="body"
+			  data-trigger="hover"
+			  title='Show recent project activity'></span>
+		  </a>
 		</td>
 	      <% } %>	    
 	      <% if (showuser) { %>
@@ -232,3 +245,4 @@
     </div>
   </div>
 </div>
+<div id="resusage-modals"></div>

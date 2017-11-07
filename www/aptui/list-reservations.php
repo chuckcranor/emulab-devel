@@ -99,7 +99,7 @@ echo "</script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
-AddTemplateList(array("reservation-list", "confirm-modal",
+AddTemplateList(array("reservation-list", "confirm-modal", "resusage-list",
                       "oops-modal", "waitwait-modal"));
 SPITREQUIRE("js/list-reservations.js",
             "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
