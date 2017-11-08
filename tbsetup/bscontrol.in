@@ -819,7 +819,7 @@ sub bs_create($$$@)
     my $outref;
     if (bsserver_cmd($srv, "$PROXYCMD create $pool $name $size $fstype", \$outref)) {
 	$pbstore->Delete();
-	print STDERR "*** create: could not allocate storage for '$name' on $srv/$pool:";
+	print STDERR "*** create: could not allocate storage for '$name' on $srv/$pool:\n";
 	foreach my $str (@$outref) {
 	    print STDERR "  $str\n";
 	}
