@@ -530,6 +530,7 @@ $(function ()
     function SetupAdminNotes()
     {
 	var modified = 0;
+	var notes = $.trim($("#adminnotes-collapse textarea").val());
 	
 	// Panel starts out collapsed.
 	$('#adminnotes-collapse').on('show.bs.collapse', function () {
@@ -556,6 +557,9 @@ $(function ()
 		});
 	    }
 	});
+	if (notes != "") {
+	    $('#adminnotes-collapse').collapse('show');	    
+	}
     }
     function SaveAdminNotes(done)
     {
