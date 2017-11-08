@@ -347,7 +347,7 @@ function Do_GetImageInfo()
                 #
                 list ($auth) = Instance::ParseURN($row["project_urn"]);
                 list ($domain,$impid) = preg_split('/:/', $auth);
-                if ($impid && $impid == $pid) {
+                if ($impid && strtolower($impid) == strtolower($pid)) {
                     goto allowed;
                 }
 
