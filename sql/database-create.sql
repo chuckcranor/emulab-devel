@@ -4333,7 +4333,7 @@ CREATE TABLE `project_leases` (
   `lease_end` timestamp NOT NULL default '2037-01-19 03:14:07',
   `last_used` timestamp NOT NULL default '0000-00-00 00:00:00',
   `last_checked` timestamp NOT NULL default '0000-00-00 00:00:00',
-  `state` enum('valid','unapproved','grace','locked','expired') NOT NULL default 'unapproved',
+  `state` enum('valid','unapproved','grace','locked','expired','failed') NOT NULL default 'unapproved',
   `statestamp` timestamp NOT NULL default '0000-00-00 00:00:00',
   `renewals` int(10) unsigned NOT NULL default '0',
   `locked` datetime default NULL, 
