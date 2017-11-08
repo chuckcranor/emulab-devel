@@ -468,8 +468,8 @@ $(function ()
 		if (exp.getTime() > max.getTime()) {
 		    var m1   = moment(exp.getTime());
 		    var m2   = moment(max.getTime());
-		    var diff = m1.diff(m2, "days");
-		
+		    var diff = Math.ceil(m1.diff(m2, "hours") / 24);
+
 		    alert("Granting this full extension would violate the " +
 			  "current maximum allowed extension by " + diff + " days. " +
 			  "Granting the extension can potentially throw the " +
