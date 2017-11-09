@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -150,7 +150,7 @@ function Do_MemberList()
         $blob["uid"]      = $user->uid();
         $blob["name"]     = $user->name();
         $blob["email"]    = $user->email();
-        $blob["joined"]   = DateStringGMT($user->created());
+        $blob["joined"]   = DateStringGMT($membership["date_applied"]);
         $blob["trust"]    = $newTrustMap[$membership["trust"]];
         $blob["approved"] = ($target_project->UserTrust($user) ==
                              TBDB_TRUSTSTRING_NONE ? 0 : 1);

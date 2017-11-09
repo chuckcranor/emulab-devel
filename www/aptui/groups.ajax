@@ -273,7 +273,7 @@ function Do_MemberList()
         $blob["uid"]      = $user->uid();
         $blob["name"]     = $user->name();
         $blob["email"]    = $user->email();
-        $blob["joined"]   = DateStringGMT($user->created());
+        $blob["joined"]   = DateStringGMT($membership["date_applied"]);
         #
         # Need to tag the group leader explicitly.
         #
