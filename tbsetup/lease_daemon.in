@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2013-2016 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,6 +34,8 @@ use POSIX qw(strftime);
 #
 # * For 'unapproved' leases, periodically (low frequency) ping testbed-ops
 #   and let them know there are leases that need approving.
+#
+# * Ditto for 'failed' leases.
 #
 # * For 'locked' leases, ignore them. Maybe periodically tell testbed-ops
 #   about them.
@@ -72,12 +74,14 @@ use POSIX qw(strftime);
 
 my $CHECK		= (15 * 60);
 my $REPORT_UNAPPROVED	= ( 1 * 24 * 60 * 60);
+my $REPORT_FAILED	= ( 1 * 24 * 60 * 60);
 my $REPORT_LOCKED	= (30 * 24 * 60 * 60);
 my $REPORT_EXPIRED	= ( 1 * 24 * 60 * 60);
 
 ## debugging
 #my $CHECK		= (1 * 60);
 #my $REPORT_UNAPPROVED	= (2 * 60);
+#my $REPORT_FAILED	= (2 * 60);
 #my $REPORT_LOCKED	= (3 * 60);
 #my $REPORT_EXPIRED	= (2 * 60);
 
@@ -270,6 +274,35 @@ while (1) {
 		logit("  Reporting unapproved leases: " . join(' ', @report));
 	    }
 	    notify("Leases awaiting approval:\n" . lease_list(@report));
+	}
+	@report = ();
+    }
+
+    #
+    # 1b. Failed leases.
+    #    Check for failed leases that have not been reported on in
+    #    the last day and report them.
+    #
+    logit("Checking failed leases...");
+    foreach my $lease (@{$leases{LEASE_STATE_FAILED()}}) {
+	logit("  $lease")
+	    if ($debug);
+
+	# If we are in the first interval of the reporting period, we report.
+	my $delta = $now - $lease->statestamp();
+	if (($delta % $REPORT_FAILED) < $checkint) {
+	    push(@report, $lease);
+	}
+	$lease->BumpLastChecked();
+    }
+    if (@report > 0) {
+	if ($impotent) {
+	    logit("  Would report failed leases: " . join(' ', @report));
+	} else {
+	    if ($debug) {
+		logit("  Reporting failed leases: " . join(' ', @report));
+	    }
+	    notify("Failed leases awaiting handling:\n" . lease_list(@report));
 	}
 	@report = ();
     }

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2016 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -214,6 +214,7 @@ print STDERR "Found ", scalar(@lids), " leases\n"
 if (@lids > 0) {
     my %states = (
 	"valid" =>      'valid',
+	"failed" =>     'failed',
 	"unapproved" => 'unappr',
 	"grace" =>      'grace',
 	"locked" =>     'locked',

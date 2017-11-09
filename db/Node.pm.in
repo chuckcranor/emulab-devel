@@ -1394,11 +1394,17 @@ sub InitKeyDist($;$$)
     }
 
     # XXX only PC class nodes for now, since we have to ssh to it
-    if ($self->class ne "pc" && $self->class ne "pcvm") {
+    if ($self->class() ne "pc" && $self->class() ne "pcvm") {
 	$priv = $pub = 0;
 	goto done;
     }
 
+    # XXX blockstore vnodes are not real nodes
+    if ($self->type() eq "blockstore") {
+	$priv = $pub = 0;
+	goto done;
+    }
+    
     my $node_id = $self->node_id();
 
     # Get user-supplied values from virt_nodes

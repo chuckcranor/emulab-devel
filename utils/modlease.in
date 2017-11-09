@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2014 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -319,7 +319,8 @@ if ($state) {
 		      "requires allocation of resources, use -R");
 	    }
 	}
-	if ($state eq LEASE_STATE_UNAPPROVED()) {
+	if ($state eq LEASE_STATE_UNAPPROVED() &&
+	    $curstate ne LEASE_STATE_FAILED) {
 	    if ($doresources) {
 		if ($lease->DeallocResources()) {
 		    fatal("$pid/$lname: could not deallocate resources ".
@@ -388,7 +389,7 @@ if ($addattr) {
 	$lease->SetAttribute($1, $2)) {
 	fatal("$pid/$lname: could not set attribute '$addattr'.");
     } else {
-	print "$pid/$lname: added attribute '$addattr'.\n";
+	print "$pid/$lname: added/changed attribute '$addattr'.\n";
     }
 }
 

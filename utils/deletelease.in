@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2014 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -232,8 +232,12 @@ if ($lease->DeallocResources()) {
 	 "Background resource deallocation for Lease '$pid/$gid/$lname' ".
 	 "failed!\n\n",
 	 $TBOPS, undef, $logname);
+	unlink($logname);
     }
     fatal("$pid/$lname: could not deallocate resources, left in 'locked' state.");
+}
+if ($background) {
+    unlink($logname);
 }
 
 if ($lease->Delete()) {

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2014 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,11 +38,13 @@ sub usage()
     print STDERR "   -s state   New state for the lease (defaults to 'valid')\n";
     print STDERR "   -w time    Try for up to time seconds to lock lease (0 means forever)\n";
     print STDERR "   -D reason  Deny the lease and destroy it\n";
+    print STDERR "   -b         Allocate resources for approved leases in the background\n";
     print STDERR "   name       Name of lease (of form <pid>/<id>)\n";
     exit(-1);
 }
-my $optlist  = "dhs:w:D:";
+my $optlist  = "dhs:w:D:b";
 my $debug = 0;
+my $background = 0;
 my $pid;
 my $gid;
 my $state = "valid";
@@ -95,6 +97,9 @@ if (defined($options{h})) {
 }
 if (defined($options{d})) {
     $debug++;
+}
+if (defined($options{b})) {
+    $background++;
 }
 if (defined($options{s})) {
     $state = $options{s};
@@ -152,7 +157,7 @@ if (!$lease->AccessCheck($this_user, LEASE_ACCESS_MODIFY())) {
     fatal("$pid/$lname: you are not allowed to modify lease.");
 }
 
-# Aquire the lease lock before we start making state changes.
+# Acquire the lease lock before we start making state changes.
 if (!defined($waittime)) {
     fatal("$pid/$lname: could not acquire lock, try again with -w")
 	if ($lease->Lock());
@@ -174,7 +179,7 @@ if ($lease->state() ne LEASE_STATE_UNAPPROVED()) {
 	print "$pid/$lname: has already been approved.\n";
 	exit(0);
     }
-    fatal("$pid/$lname: lease is in invalid state '$state'.");
+    fatal("$pid/$lname: lease is in invalid state '". $lease->state(). "'.");
 }
 if (!$lease->ValidTransition($state)) {
     fatal("$pid/$lname: cannot approve lease to state '$state'.");
@@ -190,9 +195,39 @@ if (defined($deny)) {
     exit(0);
 }
 
-# Allocate the resources.
-if ($lease->AllocResources($state)) {
+# Finally, allocate the resources.
+my $logname;
+if ($background) {
+    print "Resource allocation proceeding the background ...\n";
+    
+    $logname = TBMakeLogname("approvelease");
+    if (my $childpid = TBBackGround($logname)) {
+	exit(0);
+    }
+    # We want the lock in the child.
+    $lease->TakeLock();
+    # Let parent exit;
+    sleep(2);
+}
+my $rv = $lease->AllocResources($state);
+if ($rv != LEASE_ERROR_NONE()) {
+    my $msg = ($rv == LEASE_ERROR_ALLOCFAILED() ?
+	       "Resource allocation failed" : "Unexpected failure");
+    print STDERR "$msg, contact testbed-ops.\n";
+
+    if ($background) {
+	SENDMAIL($TBOPS, "Lease resources allocation failed during approval!",
+		 "Background $msg for Lease '$pid/$gid/$lname'; ".
+		 "lease left in failed state!\n\n",
+		 $TBOPS, undef, $logname);
+	unlink($logname);
+    }
+
+    $lease->UpdateState("failed");
     fatal("$pid/$lname: could not approve lease into state '$state'");
+}
+if ($background) {
+    unlink($logname);
 }
 
 $lease->Unlock();

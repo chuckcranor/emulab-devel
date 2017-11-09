@@ -537,23 +537,33 @@ if ($approveme) {
 	# Let parent exit;
 	sleep(2);
     }
-    if ($lease->AllocResources("valid")) {
-	print STDERR "Could not allocate resources, contact testbed-ops.\n";
+    my $rv = $lease->AllocResources("valid");
+    if ($rv != LEASE_ERROR_NONE()) {
+	my $msg = ($rv == LEASE_ERROR_ALLOCFAILED() ?
+		   "Resource allocation failed" : "Unexpected failure");
+	print STDERR "$msg, contact testbed-ops.\n";
 
 	#
 	# Need to notify on error, if ran in the background.
 	#
 	if ($background) {
 	    SENDMAIL($TBOPS, "Lease allocation failed!",
-	     "Background resource allocation for Lease '$pid/$gid/$lname' ".
-	     "failed; lease destroyed!\n\n",
-	     $TBOPS, undef, $logname);
+		     "Background $msg for Lease '$pid/$gid/$lname'; ".
+		     "lease left in failed state!\n\n",
+		     $TBOPS, undef, $logname);
+	    unlink($logname);
+	} else {
+	    if ($lease->Delete() == 0) {
+		fatal("Lease not created.");
+	    }
 	}
 
-	if ($lease->Delete()) {
-	    print STDERR "WARNING: could not destroy lease DB state.\n";
-	}
-	fatal("Lease not created.");
+	$lease->UpdateState("failed");
+	$lease->Unlock();
+	fatal("Lease left in failed state.");
+    }
+    if ($background) {
+	unlink($logname);
     }
     $lease->Unlock();
 

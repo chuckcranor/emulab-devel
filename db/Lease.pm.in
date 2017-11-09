@@ -122,8 +122,9 @@ my %LEASE_VAR_DEFAULTS = (
 #    All leases are in this state when they are created. No resources are
 #    allocated in this state, but the desired resources may count against
 #    a quota. A lease in this state can not be accessed other than to
-#    destroy or approve it. The latter moves it to the valid state, a
-#    step that triggers resource allocation.
+#    destroy or approve it. The latter moves it to the valid state, a step
+#    that triggers resource allocation. If the allocation fails, the lease
+#    instead moves to the failed state.
 #
 # "valid"
 #    A valid lease can be mapped into an experiment. A lease remains valid
@@ -136,6 +137,12 @@ my %LEASE_VAR_DEFAULTS = (
 #    the locked state if an admin administratively decides to prohibit
 #    access to a resource. Again, it is not clear what happens if the
 #    lease is currently mapped.
+#
+# "failed"
+#    If resource allocation fails while approving a lease, the lease winds
+#    up here. In the failed state, a lease has no resources assigned and
+#    it can only transition back to the unapproved state (to try again) or
+#    it can be destroyed. 
 #
 # "grace"
 #    A lease in the grace state may still make resources available to
@@ -163,14 +170,16 @@ my %LEASE_VAR_DEFAULTS = (
 my @LEASE_STATES = (
     "unapproved",
     "valid",
+    "failed",
     "grace",
     "locked",
     "expired");
 
 # Valid transitions for each state.
 my %LEASE_TRANSITIONS = (
-    "unapproved" => { "valid" => 1, "DEAD" => 1 },
+    "unapproved" => { "valid" => 1, "failed" => 1, "DEAD" => 1 },
     "valid"      => { "grace" => 1, "locked" => 1 },
+    "failed"     => { "unapproved" => 1, "DEAD" => 1 },
     "grace"      => { "valid" => 1, "expired" => 1, "locked" => 1 },
     "locked"     => { "valid" => 1, "expired" => 1 },
     "expired"    => { "unapproved" => 1, "DEAD" => 1 },
@@ -566,7 +575,8 @@ sub GetReservations($) {
     # Before doing a big honkin query, see if the lease has resources
     # allocated to it.
     #
-    if ($self->type() =~ /dataset$/ && $self->state() ne "unapproved") {
+    if ($self->type() =~ /dataset$/ &&
+	!($self->state() eq "unapproved" || $self->state() eq "failed")) {
 	my $lidx = $self->lease_idx();
 
 	my $query_result =
@@ -670,8 +680,13 @@ sub AllocResources($;$$) {
 	}
 	if ($rv) {
 	    print STDERR "$self: AllocResources: could not allocate storage.\n";
+	    # XXX why is this here? Should already be unapproved.
+	    # XXX perhaps because of the potential long duration of bscontrol
+	    #     and non-atomicity allowing for a change of state? Seems
+	    #     like that should be the caller's concern.
 	    $self->UpdateState("unapproved");
-	    return LEASE_ERROR_FAILED();
+
+	    return LEASE_ERROR_ALLOCFAILED();
 	}
 
 	#
@@ -703,9 +718,9 @@ sub DeallocResources($) {
 	if (!ref($self));
 
     #
-    # If lease is in the unapproved state, assume there is nothing to do.
+    # If lease is unapproved or failed, assume there is nothing to do.
     #
-    if ($self->state() eq "unapproved") {
+    if ($self->state() eq "unapproved" || $self->state eq "failed") {
 	return 0;
     }
 
@@ -749,9 +764,9 @@ sub CreateResourceSnapshot($$) {
 	if (!ref($self));
 
     #
-    # If lease is in the unapproved state, assume there is nothing to do.
+    # If lease is unapproved or failed, assume there is nothing to do.
     #
-    if ($self->state() eq "unapproved") {
+    if ($self->state() eq "unapproved" || $self->state eq "failed") {
 	return 0;
     }
 
@@ -805,9 +820,9 @@ sub DestroyResourceSnapshot($$) {
 	if (!ref($self));
 
     #
-    # If lease is in the unapproved state, assume there is nothing to do.
+    # If lease is unapproved or failed, assume there is nothing to do.
     #
-    if ($self->state() eq "unapproved") {
+    if ($self->state() eq "unapproved" || $self->state eq "failed") {
 	return 0;
     }
 
@@ -883,7 +898,7 @@ sub Extend($$)
     # can transition to valid.
     #
     my $cstate = $self->state();
-    if ($cstate eq "unapproved" || $cstate eq "valid" ||
+    if ($cstate eq "unapproved" || $cstate eq "failed" || $cstate eq "valid" ||
 	!$self->ValidTransition("valid")) {
 	print STDERR
 	    "$self: Extend: cannot transition from '$cstate' -> 'valid'\n";
