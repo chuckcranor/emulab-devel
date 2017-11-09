@@ -5199,6 +5199,11 @@ sub lvmDestroyVolume($$)
 	$dmname =~ s#/#-#;
 	foreach my $part (1..4) {
 	    my $dev = "${dmname}p$part";
+	    if (-e "/dev/mapper/$dev") {
+	        # Many cases the partition needs to be unmounted before it can be 
+	        # removed
+	        mysystem2("umount /dev/mapper/$dev");
+	    }
 	    if (-e "/dev/mapper/$dev" && !mysystem2("dmsetup remove $dev")) {
 		print STDERR "WARNING: removed leftover partdev '$dev'\n";
 		$tryagain = 1;
