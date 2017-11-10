@@ -379,8 +379,8 @@ $(function ()
 	    sup.HideModal('#waitwait-modal');
 	}
 	sup.ShowModal('#waitwait-modal');
-	var xmlthing = sup.CallServerMethod(ajaxurl, "status", "Quarantine",
-					     {"uuid" : uuid,
+	var xmlthing = sup.CallServerMethod(null, "status", "Quarantine",
+					     {"uuid" : window.UUID,
 					      "quarantine" : mode});
 	xmlthing.done(callback);
     }
