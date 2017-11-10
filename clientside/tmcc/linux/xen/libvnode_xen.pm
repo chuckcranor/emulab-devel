@@ -1815,6 +1815,16 @@ sub vnodePreConfig($$$$$){
     return 0
 	if (! ($vninfo->{'os'} eq "Linux" || $vninfo->{'os'} eq "FreeBSD"));
     
+    #
+    # XXX total cop-out.
+    # These two functions die on errors and we want them to do that before
+    # we mount the filesystem so we don't leave it mounted on failure.
+    # We should really fix these functions, but the die case "should never
+    # happen", so I am making the least invasive change.
+    #
+    my (undef, $ctrlip) = findControlNet();
+    my ($d0ctrlip) = domain0ControlNet();
+
     mkpath(["/mnt/xen/$vnode_id"]);
     my $dev = $private->{'rootpartition'};
     my $vnoderoot = "/mnt/xen/$vnode_id";
@@ -1909,7 +1919,6 @@ sub vnodePreConfig($$$$$){
     # Use the physical host pubsub daemon. If the vnode has a routable IP
     # use the physical host's routable IP, otherwise use the jail net IP.
     #
-    my (undef, $ctrlip) = findControlNet();
     if (!$ctrlip || $ctrlip !~ /^(\d+\.\d+\.\d+\.\d+)$/) {
 	if ($?) {
 	    print STDERR
@@ -1928,7 +1937,7 @@ sub vnodePreConfig($$$$$){
 	    $evip = $ctrlip;
 	}
 	else {
-	    ($evip) = domain0ControlNet();
+	    $evip = $d0ctrlip;
 	}
 	mysystem2("echo '$evip' > $vnoderoot/var/emulab/boot/localevserver");
 	goto bad
@@ -2060,7 +2069,9 @@ sub vnodePreConfig($$$$$){
     if (!exists($vnconfig->{'attributes'}->{'XEN_EXTRAFS'}) &&
 	!exists($vnconfig->{'attributes'}->{'XEN_EXTRADISKS'}) &&
 	-d "$vnoderoot/var/emulab/boot") {
-	mysystem("echo 'FS=/' > $vnoderoot/var/emulab/boot/extrafs");
+	mysystem2("echo 'FS=/' > $vnoderoot/var/emulab/boot/extrafs");
+	goto bad
+	    if ($?);
     } else {
 	unlink("$vnoderoot/var/emulab/boot/extrafs");
     }
@@ -5192,6 +5203,9 @@ sub lvmDestroyVolume($$)
     # left-over partition device. Not sure why kpartx doesn't catch it,
     # but we try to clean it up manually.
     #
+    # XXX Turns out there can be mounts left over too (which is probably
+    # why kpartx doesn't completely clean up), so check and unmount those.
+    #
     if ($force) {
 	my $tryagain = 0;
 	my $dmname = "$VGNAME/$name";
@@ -5200,13 +5214,13 @@ sub lvmDestroyVolume($$)
 	foreach my $part (1..4) {
 	    my $dev = "${dmname}p$part";
 	    if (-e "/dev/mapper/$dev") {
-	        # Many cases the partition needs to be unmounted before it can be 
-	        # removed
-	        mysystem2("umount /dev/mapper/$dev");
-	    }
-	    if (-e "/dev/mapper/$dev" && !mysystem2("dmsetup remove $dev")) {
-		print STDERR "WARNING: removed leftover partdev '$dev'\n";
-		$tryagain = 1;
+		if (!mysystem2("umount /dev/mapper/$dev")) {
+		    print STDERR "WARNING: unmounted partdev '$dev'\n";
+		}
+		if (!mysystem2("dmsetup remove $dev")) {
+		    print STDERR "WARNING: removed leftover partdev '$dev'\n";
+		    $tryagain = 1;
+		}
 	    }
 	}
 	if ($tryagain && !mysystem2("lvremove -f $VGNAME/$name")) {
