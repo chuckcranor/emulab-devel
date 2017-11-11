@@ -531,7 +531,7 @@ window.ShowIdleGraphs = (function ()
 	    chart.brushExtent([minTime,maxTime]);
 
 	    // Update the display on the X axis after brush change.
-	    chart.focus.brush.on("brushend", function () {
+	    chart.focus.dispatch.on("brushEnd", function () {
 		UpdateXaxisLabel(chart);
 	    });
 

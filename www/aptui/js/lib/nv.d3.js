@@ -4669,7 +4669,7 @@ nv.models.focus = function(content) {
         , y
         , brushExtent = null
         , duration = 250
-        , dispatch = d3.dispatch('brush', 'onBrush', 'renderEnd')
+        , dispatch = d3.dispatch('brush', 'onBrush', 'renderEnd', 'brushEnd')
         , syncBrushing = true
         ;
 
@@ -4750,6 +4750,7 @@ nv.models.focus = function(content) {
                 });
 
             brush.on('brushend', function () {
+                dispatch.brushEnd(brush.empty() ? x.domain() : brush.extent());
                 if (!syncBrushing) {
                     dispatch.onBrush(brush.empty() ? x.domain() : brush.extent());
                 }
