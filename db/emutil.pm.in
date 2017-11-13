@@ -33,7 +33,8 @@ use vars qw(@ISA @EXPORT);
 	     TBDB_CHECKDBSLOT_ERROR TBcheck_dbslot TBFieldErrorString
 	     TBGetUniqueIndex ParRun VersionInfo UpdateVersionInfo
 	     SpanningTree GenFakeMac BackTraceOnWarning PassWordHash
-             SSHwithTimeout TBDateStringGMT TBDateStringLocal runBusyLoop
+             SSHwithTimeout TBDateStringGMT TBDateStringLocal TBDateStringUTC
+	     runBusyLoop
 	     MapEventType MapEventObjectType MapEventTriggerType ValidUUID
 );
 
@@ -854,6 +855,19 @@ sub TBDateStringLocal($)
 	$date = str2time($date);
     }
     return POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime($date));
+}
+# Convert date to readable UTC
+sub TBDateStringUTC($)
+{
+    my ($date) = @_;
+
+    return ""
+	if (!defined($date) || "$date" eq "");
+
+    if ($date !~ /^\d+$/) {
+	$date = str2time($date);
+    }
+    return POSIX::strftime("20%y-%m-%d %H:%M UTC", gmtime($date));
 }
 
 sub isMounted($)
