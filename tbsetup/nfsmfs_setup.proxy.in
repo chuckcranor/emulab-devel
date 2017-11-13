@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,6 +50,7 @@ my $ZFSROOT	= "@ZFS_ROOT@";
 
 my $MOUNTPOINT  = "/nfsroot";
 my $ZFS         = "/sbin/zfs";
+my $MOUNT	= "/sbin/mount";
 
 # XXX this should be constructed per node type based on info passed in
 my $GOLDEN      = "$ZFSROOT$MOUNTPOINT/m400\@current";
@@ -115,14 +116,20 @@ if (!$destroy && system("$ZFS list -o name -t snapshot | grep -q $GOLDEN")) {
 #
 # Get a list of existing ZFS-based mount points.
 #
+# XXX "zfs list" can be super-slow (i.e., 10s of seconds) when you have
+# 1000+ filesystems. So we use "mount" instead. This makes a big difference
+# when we are called from nfree to destroy the MFS for all nodes in an
+# experiment that would use the NFS MFS, even if they not are actually in
+# the MFS at the time.
+#
 my %mfs = ();
-my @mounts = `zfs list -o mountpoint,name 2>/dev/null | grep $MOUNTPOINT`;
+my @mounts = `$MOUNT | fgrep ' on $MOUNTPOINT'`;
 if ($?) {
-    fatal("zfs list failed!?");
+    fatal("$MOUNTPOINT does not exist!?");
 }
 foreach my $line (@mounts) {
-    if ($line =~ /^$MOUNTPOINT\/(\S+)\s+(\S+)/) {
-	$mfs{$1} = $2;
+    if ($line =~ /^(\S+) on $MOUNTPOINT\/(\S+)/) {
+	$mfs{$2} = $1;
     }
 }
 
@@ -130,6 +137,7 @@ foreach my $line (@mounts) {
 # For each node, see if we need to do something and do it!
 #
 my @failed = ();
+my $changed = 0;
 foreach my $nodeid (@ARGV) {
     my $cmd;
 
@@ -153,6 +161,7 @@ foreach my $nodeid (@ARGV) {
 	    print STDERR "$nodeid: WARNING: could not remove old FS\n";
 	}
 	delete $mfs{$onodeid};
+	$changed++;
     }
 
     if ($destroy) {
@@ -173,6 +182,7 @@ foreach my $nodeid (@ARGV) {
 	if (mysystem($cmd)) {
 	    push(@failed, $nodeid);
 	}
+	$changed++;
     } else {
 	# If forcing, first get rid of current MFS
 	if ($force && exists($mfs{$nodeid})) {
@@ -182,6 +192,7 @@ foreach my $nodeid (@ARGV) {
 		next;
 	    }
 	    delete $mfs{$nodeid};
+	    $changed++;
 	}
 
 	# Create the MFS
@@ -191,12 +202,20 @@ foreach my $nodeid (@ARGV) {
 	    if (mysystem($cmd)) {
 		push(@failed, $nodeid);
 	    }
+	    $changed++;
 	}
     }
 }
 
+#
 # Odd...sometimes the (un)export doesn't happen
-mysystem("$ZFS share -a");
+#
+# XXX again, this can be a brutally expensive command, so only do it if
+# we have to.
+#
+if ($changed) {
+    mysystem("$ZFS share -a");
+}
 
 if (@failed > 0) {
     my $action = $destroy ? "destroy" : "create";
