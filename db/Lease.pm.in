@@ -2133,6 +2133,26 @@ sub GetProject($)
 }
 
 #
+# Load the Creator
+#
+sub GetCreator($)
+{
+    my ($self) = @_;
+
+    # Must be a real reference. 
+    return undef
+	if (! ref($self));
+
+    my $creator = User->Lookup($self->owner_uid());
+    
+    if (! defined($creator)) {
+	print("*** WARNING: Could not lookup creator object for $self!\n");
+	return undef;
+    }
+    return $creator;
+}
+
+#
 # Lookup by origin, as for portal created leases.
 #
 sub LookupByAuthorityURN($$)
