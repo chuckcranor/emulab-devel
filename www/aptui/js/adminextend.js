@@ -222,6 +222,10 @@ $(function ()
 	
 	var callback = function(json) {
 	    console.info(json);
+	    if (json.code) {
+		console.info("Could not load utilization");
+		return;
+	    }
 	    var html = utilizationTemplate({"utilization" : json.value});
 	    $("#utilization-panel-content").html(html);
 	    InitTable("utilization");

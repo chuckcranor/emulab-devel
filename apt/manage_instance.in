@@ -2039,6 +2039,10 @@ sub DoMaxExtension()
 		$webtask->Exited($response->code());
 		return 1;
 	    }
+	    # Forbidden means cluster does not allow it, ignore.
+	    if ($response->code() == GENIRESPONSE_FORBIDDEN) {
+		return 0;
+	    }
 	    goto bad;
 	}
 	$webtask->MaxExtension($response->value());
@@ -2073,6 +2077,9 @@ sub DoMaxExtension()
 	    $errcode = $agg->webtask()->exitcode();
 	    goto bad;
 	}
+	next
+	    if (!defined($agg->webtask()->MaxExtension()));
+	
 	my $max = str2time($agg->webtask()->MaxExtension());
 	$newmax = $max
 	    if (!defined($newmax));
@@ -3671,6 +3678,12 @@ sub DoUtilization()
 	foreach my $node (@nodes) {
 	    my $client_id = GeniXML::GetVirtualId($node);
 	    my $node_id   = GeniXML::GetVnodeId($node);
+	    my $manager_urn = GeniXML::GetManagerId($node);
+
+	    # Combined rspec.
+	    next
+		if (!defined($manager_urn) ||
+		    $manager_urn ne $aggregate->aggregate_urn());
 
 	    $client_ids{$aggregate->aggregate_urn()}->{$node_id} = $client_id;
 	}
@@ -4408,7 +4421,7 @@ sub CallAggregateMethod($$@)
 	    $$prval = $errmsg;
 	    return $code;
 	}
-	push(@return_values, $webtask->results());
+	push(@return_values, $agg->webtask()->results());
     }
     $$prval = \@return_values;
     return 0;
