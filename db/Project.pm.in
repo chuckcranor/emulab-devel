@@ -1004,12 +1004,23 @@ sub Usage($$$)
     my @results = ();
 
     my $query_result =
-	DBQueryWarn("select s.eid,r.idx,s.nonlocal_id,s.slice_uuid, ".
-		    "       r.swapin_time,r.swapout_time,r.pnodes,n.type, ".
+	DBQueryWarn("(select e.eid,s.rsrcidx,s.nonlocal_id,s.slice_uuid, ".
+		    "       UNIX_TIMESTAMP(s.swapin_last),0,n.type,".
+		    "       count(n.type) ".
+		    " from experiments as e ".
+		    "left join experiment_stats as s on ".
+		    "     s.exptidx=e.idx  ".
+		    "left join reserved as r on r.exptidx=e.idx ".
+		    "left join nodes as n on n.node_id=r.node_id ".
+		    "where e.pid_idx='$pid_idx' and e.state='active' ".
+		    "group by e.eid,s.rsrcidx,s.nonlocal_id,s.slice_uuid, ".
+		    "         UNIX_TIMESTAMP(s.swapin_last),n.type ".
+		    "order by r.swapin_time desc) ".
+		    "union ".
+		    "(select s.eid,r.idx,s.nonlocal_id,s.slice_uuid, ".
+		    "       r.swapin_time,r.swapout_time,n.type, ".
 		    "      count(n.type) ".
 		    "  from experiment_resources as r ".
-		    "left join experiments as e on ".
-		    "     e.idx=r.exptidx  ".
 		    "left join experiment_stats as s on ".
 		    "     s.exptidx=r.exptidx  ".
 		    "left join node_history as h on ".
@@ -1023,11 +1034,11 @@ sub Usage($$$)
 		    "    ((r.swapin_time >= $start and ".
 		    "      r.swapin_time <= $end) or ".
 		    "     (r.swapout_time > $start and ".
-		    "      r.swapout_time < $end) or ".
-		    "     e.state='active') ".
+		    "      r.swapout_time < $end)) ".
 		    "group by s.eid,r.idx,s.nonlocal_id,s.slice_uuid, ".
-		    "         r.swapin_time,r.swapout_time,r.pnodes,n.type ".
-		    "order by r.swapin_time desc");
+		    "         r.swapin_time,r.swapout_time,n.type ".
+		    "order by r.swapin_time desc) "
+	);
 
     return undef
 	if (!defined($query_result));
@@ -1036,7 +1047,7 @@ sub Usage($$$)
     my $lastin  = 0;
 
     while (my ($eid,$idx,$urn,$slice_uuid,
-	       $swapin_time,$swapout_time,$count,$type) =
+	       $swapin_time,$swapout_time,$type,$count) =
 	   $query_result->fetchrow_array()) {
 	# No phys nodes.
 	next
