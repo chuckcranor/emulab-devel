@@ -1549,7 +1549,7 @@ sub SetEndTime($$) {
     return LEASE_ERROR_FAILED()
 	if (!ref($self));
 
-    if ($ntime < time()) {
+    if ($ntime != 0 && $ntime < time()) {
 	print STDERR "Lease->SetEndTime: Can't move lease end time into the past.\n";
 	return LEASE_ERROR_FAILED();
     }
