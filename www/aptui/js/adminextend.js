@@ -31,10 +31,14 @@ $(function ()
 	secondrowTemplate = _.template(secondrowString);
 	extensionsTemplate = _.template(historyString);
 
-	LoadUtilization();
-	LoadIdleData();
-	LoadFirstRow();
-	LoadOpenStack();
+	// Need to serialize this stuff cause of locking in the backend.
+	LoadFirstRow(function () {
+	    LoadUtilization(function () {
+		LoadIdleData(function () {
+		    LoadOpenStack();
+		});
+	    });
+	});
 
 	// Second row is the user/project usage summarys. We make two calls
 	// and use jquery "when" to wait for both to finish before running
@@ -161,7 +165,7 @@ $(function ()
     }
 
     // First Row is the experiment summary info.
-    function LoadFirstRow() {
+    function LoadFirstRow(continuation) {
 	sup.CallServerMethod(null, "status", "ExpInfo", {"uuid" : window.UUID},
 			     function (json) {
 				 console.info(json);
@@ -210,18 +214,24 @@ $(function ()
 					     .attr("disabled", "disabled");
 				     }
 				     // Update the Max Extension
-				     DoMaxExtension(json.value.expires);
+				     DoMaxExtension(json.value.expires,
+						    continuation);
 				     SetupAdminNotes();
 				 }
 			     });
     }
 
-    function LoadUtilization() {
+    function LoadUtilization(continuation) {
+	console.info("LoadUtilization", continuation);
 	var utilizationTemplate = _.template(utilizationString);
 	var summaryTemplate = _.template(summaryString);
 	
 	var callback = function(json) {
-	    console.info(json);
+	    console.info("LoadUtilization", json);
+	    // Fire off the next part.
+	    if (continuation !== undefined) {
+		continuation();
+	    }
 	    if (json.code) {
 		console.info("Could not load utilization");
 		return;
@@ -392,10 +402,15 @@ $(function ()
     //
     // Get Max Extension and update the table.
     //
-    function DoMaxExtension(expires)
+    function DoMaxExtension(expires, continuation)
     {
+	console.info("DoMaxExtension", expires, continuation);
+	
 	// Warn if changing days violates max extension.
 	var callback = function(json) {
+	    if (continuation !== undefined) {
+		continuation();
+	    }
 	    $("#days").on("keyup", function (event) {
 		if (!maxextension) {
 		    $('#max-extension-nomax').removeClass("hidden");
@@ -497,13 +512,22 @@ $(function ()
     //
     // Slothd graphs.
     //
-    function LoadIdleData()
+    function LoadIdleData(continuation)
     {
+	console.info("LoadIdleData", continuation);
+
+	var callback = function (gotdata) {
+	    console.info("LoadIdleData callback");
+	    if (continuation !== undefined) {
+		continuation();
+	    }
+	};
 	ShowIdleGraphs({"uuid"     : window.UUID,
 			"showwait" : false,
 			"loadID"   : "#loadavg-panel-div",
 			"ctrlID"   : "#ctrl-traffic-panel-div",
-			"exptID"   : "#expt-traffic-panel-div"});
+			"exptID"   : "#expt-traffic-panel-div",
+			"callback" : callback});
     }
 
     //
@@ -511,6 +535,8 @@ $(function ()
     //
     function LoadOpenStack()
     {
+	console.info("LoadIdleData");
+
 	var callback = function(json) {
 	    if (json.code) {
 		return;

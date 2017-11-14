@@ -1447,12 +1447,29 @@ sub DoExtend()
 	$errcode = 1;
 	goto bad;
     }
-    if (!TBcheck_dbslot($wanted, "default", "int",
-			 TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
-	$errmsg  = "Illegal integer for length";
-	$errcode = 1;
-	goto bad;
+    # Lets allow a date too.
+    if ($wanted !~ /^\d+$/) {
+	my $when = str2time($wanted);
+	if (!$when) {
+	    $errmsg  = "Illegal number of days or date";
+	    $errcode = 1;
+	    goto bad;
+	}
+	if ($when < time() + 3600) {
+	    $errmsg  = "Expiration is too soon";
+	    $errcode = 1;
+	    goto bad;
+	}
+	my $hours = int(($when - time()) / 3600);
+	if ($hours < 24) {
+	    $wanted  = $hours;
+	    $inhours = 1;
+	}
+	else {
+	    $wanted = int($hours / 24);
+	}
     }
+    
     # Helper function.
     my $needAdminApproval = sub {
 	my ($wanted, $granted, $reason, $message) = @_;
@@ -3649,7 +3666,18 @@ sub DoUtilization()
 {
     my $utilization;
     my $errmsg;
+    my $errcode;
     my @aggregates = ();
+
+    my $slice = $instance->GetGeniSlice();
+    if (!defined($slice)) {
+	fatal("No slice for instance!");
+    }
+    if ($slice->Lock()) {
+	$errcode = GENIRESPONSE_BUSY;
+	$errmsg  ="Experiment is busy, cannot lock it. Try again later.";
+	goto bad;
+    }
     
     #
     # Get the nodeid to client id mapping
@@ -3688,7 +3716,7 @@ sub DoUtilization()
 	    $client_ids{$aggregate->aggregate_urn()}->{$node_id} = $client_id;
 	}
     }
-    my $errcode = CallAggregateMethod("Utilization",\$utilization,@aggregates);
+    $errcode = CallAggregateMethod("Utilization",\$utilization,@aggregates);
     if ($errcode) {
 	$errmsg = $utilization;
 	goto bad;
@@ -3707,6 +3735,7 @@ sub DoUtilization()
 	}
 	$aggregate->webtask()->results($blob);
     }
+    $slice->UnLock();
     exit(0);
   bad:
     print STDERR $errmsg . "\n";
@@ -3714,6 +3743,7 @@ sub DoUtilization()
 	$webtask->output($errmsg);
 	$webtask->Exited($errcode);
     }
+    $slice->UnLock();
     exit($errcode);
 }
 
@@ -3807,8 +3837,18 @@ sub DoIdleData()
 {
     my $idledata;
     my $errmsg;
+    my $errcode;
     my @aggregates = ();
     
+    my $slice = $instance->GetGeniSlice();
+    if (!defined($slice)) {
+	fatal("No slice for instance!");
+    }
+    if ($slice->Lock()) {
+	$errcode = GENIRESPONSE_BUSY;
+	$errmsg  ="Experiment is busy, cannot lock it. Try again later.";
+	goto bad;
+    }
     #
     # Cull out any aggregates with no nodes.
     #
@@ -3816,7 +3856,7 @@ sub DoIdleData()
 	push(@aggregates, $aggregate)
 	    if ($aggregate->physnode_count() || $aggregate->virtnode_count());
     }
-    my $errcode = CallAggregateMethod("IdleData", \$idledata, @aggregates);
+    $errcode = CallAggregateMethod("IdleData", \$idledata, @aggregates);
     if ($errcode) {
 	$errmsg = $idledata;
 	goto bad;
@@ -3829,6 +3869,7 @@ sub DoIdleData()
 	}
 	$aggregate->webtask()->idledata($json);
     }
+    $slice->UnLock();
     exit(0);
   bad:
     print STDERR $errmsg . "\n";
@@ -3836,6 +3877,7 @@ sub DoIdleData()
 	$webtask->output($errmsg);
 	$webtask->Exited($errcode);
     }
+    $slice->UnLock();
     exit($errcode);
 }
 
