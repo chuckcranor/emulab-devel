@@ -76,6 +76,22 @@ $(function ()
 
 		$('#main-body').prepend(html);
 
+		// Show the proper status now, we might change it later.
+		_.each(reservations, function(value, uuid) {
+		    var id = '#' + name +
+			' tr[data-uuid="' + uuid + '"] .status-column';
+
+		    if (value.cancel) {
+			$(id + " .status-canceled").removeClass("hidden");
+		    }
+		    else if (value.approved) {
+			$(id + " .status-approved").removeClass("hidden");
+		    }
+		    else {
+			$(id + " .status-pending").removeClass("hidden");
+		    }
+		});
+
 		// Format dates with moment before display.
 		$('#' + name + ' .format-date').each(function() {
 		    var date = $.trim($(this).html());
@@ -107,6 +123,11 @@ $(function ()
 		    });
 		    $('#' + name + ' .warn-button').click(function() {
 			ReservationInfoOrWarning("warn", $(this).closest('tr'));
+			return false;
+		    });
+		    // Bind a cancel cancellation handler.
+		    $('#' + name + ' .cancel-cancel-button').click(function() {
+			CancelCancellation($(this).closest('tr'));
 			return false;
 		    });
 		}
@@ -281,13 +302,21 @@ $(function ()
 	var warning = (which == "warn" ? 1 : 0);
 	var modal   = (warning ? "#warn-modal" : "#info-modal");
 	var method  = (warning ? "WarnUser" : "RequestInfo");
-	
+	var cancel  = 0;
+
 	var callback = function (json) {
 	    sup.HideModal('#waitwait-modal');
 	    console.log("info/warn", json);
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
 		return;
+	    }
+	    // Reset the status column.
+	    if (cancel) {
+		$(row).find(".status-column .status-approved")
+		    .addClass("hidden");
+		$(row).find(".status-column .status-canceled")
+		    .removeClass("hidden");
 	    }
 	};
 	// Bind the confirm button in the modal. 
@@ -297,14 +326,21 @@ $(function ()
 		$(modal + ' .nomessage-error').removeClass("hidden");
 		return;
 	    }
+	    if (warning && $('#schedule-cancellation').is(":checked")) {
+		cancel = 1;
+	    }
+	    var args = {"uuid"    : uuid,
+			"pid"     : pid,
+			"uid_idx" : uid_idx,
+			"cluster" : cluster,
+			"cancel"  : cancel,
+			"message" : message};
+	    console.info("warninfo", args);
+	    
 	    sup.HideModal(modal, function () {
 		sup.ShowModal('#waitwait-modal');
-		var xmlthing = sup.CallServerMethod(null, "reserve", method,
-						    {"uuid"    : uuid,
-						     "pid"     : pid,
-						     "uid_idx" : uid_idx,
-						     "cluster" : cluster,
-						     "message" : message});
+		var xmlthing = sup.CallServerMethod(null, "reserve",
+						    method, args);
 		xmlthing.done(callback);
 	    });
 	});
@@ -319,6 +355,49 @@ $(function ()
 	    $(modal + ' .nomessage-error').addClass("hidden");
 	}
 	sup.ShowModal(modal);
+    }
+
+    function CancelCancellation(row) {
+	// This is what we are working on.
+	var uuid    = $(row).attr('data-uuid');
+	var pid     = $(row).attr('data-pid');
+	var cluster = $(row).attr('data-cluster');
+	var table   = $(row).closest("table");
+	
+	// Callback for the request.
+	var callback = function (json) {
+	    sup.HideModal('#waitwait-modal');
+	    if (json.code) {
+		console.log("cancel cancel", json);
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    // Reset the status column.
+	    $(row).find(".status-column .status-canceled")
+		.addClass("hidden");
+	    $(row).find(".status-column .status-approved")
+		.removeClass("hidden");
+	};
+	// Bind the confirm button in the modal. 
+	$('#confirm-cancel-cancel-button').click(function () {
+	    sup.HideModal('#cancel-cancel-modal', function () {
+		sup.ShowModal('#waitwait-modal');
+		var xmlthing = sup.CallServerMethod(null, "reserve",
+						    "Cancel",
+						    {"uuid"    : uuid,
+						     "clear"   : 1,
+						     "pid"     : pid,
+						     "cluster" : cluster});
+		xmlthing.done(callback);
+	    });
+	});
+	// Handler so we know the user closed the modal. We need to
+	// clear the confirm button handler.
+	$('#cancel-cancel-modal').on('hidden.bs.modal', function (e) {
+	    $('#confirm-cancel-cancel-button').unbind("click");
+	    $('#cancel-cancel-modal').off('hidden.bs.modal');
+	})
+	sup.ShowModal("#cancel-cancel-modal");
     }
     
     // Helper.

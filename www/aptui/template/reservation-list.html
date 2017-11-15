@@ -174,11 +174,24 @@
 		<% } %>
 	      </td>
 	      <td class="format-date"><%- value.end %></td>
-	      <% if (value.approved) { %>
-		<td>Approved</td>
-	      <% } else {%>
-		<td><span class="text-danger">Pending</span></td>
-	      <% } %>
+	      <td class="status-column">
+		<span class="status-approved hidden">Approved</span>
+		<span class="status-pending hidden text-danger">Pending</span>
+		<span class="status-canceled hidden">
+		  <span class="text-danger">Canceled</span>
+		  <% if (isadmin) { %>
+		    <a href="#" class="cancel-cancel-button">
+		      <span class='glyphicon glyphicon-thumbs-up'
+			    style='color: green; margin-left: 5px;
+				   margin-bottom: 4px;'
+			    data-toggle='tooltip'
+			    data-container="body"
+			    data-trigger="hover"
+			    title='Cancel Cancellation'></span>
+		    </a>
+		  <% } %>
+		</span>
+	      </td>
 	    </tr>
 	  <% }); %>
 	</tbody>
@@ -238,8 +251,28 @@
 	    <textarea class='form-control user-message'
 		      rows=5></textarea>
 	  </div>
-	  <br>
-          <button class='btn btn-danger btn-sm confirm-button'>Confirm</button>
+	  <input type=checkbox id='schedule-cancellation' value=yes>
+	  Cancel reservation in 24 hours?
+	  <div style="margin-top:10px;">
+            <button class='btn btn-danger btn-sm confirm-button'>Confirm</button>
+	  </div>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='cancel-cancel-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+        <center><h4>Confirm to Cancel Cancellation</h4>
+	  <div style="margin-top:10px;">
+            <button id="confirm-cancel-cancel-button"
+		    class='btn btn-danger btn-sm confirm-button'>
+	      Confirm</button>
+	  </div>
 	</center>
       </div>
     </div>

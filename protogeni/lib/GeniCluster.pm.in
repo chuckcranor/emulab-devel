@@ -990,7 +990,8 @@ sub Reservations($)
 	$query_result =
 	    DBQueryWarn("select *,UNIX_TIMESTAMP(start) as start, ".
 			"   UNIX_TIMESTAMP(end) as end, ".
-			"   UNIX_TIMESTAMP(created) as created ".
+			"   UNIX_TIMESTAMP(created) as created, ".
+			"   UNIX_TIMESTAMP(cancel) as cancel ".
 			"  from future_reservations ".
 			(defined($target) ? "where $target " : "") .
 			"order BY start");
@@ -1007,7 +1008,8 @@ sub Reservations($)
 	    $query_result =
 		DBQueryWarn("select *,UNIX_TIMESTAMP(start) as start, ".
 			    "   UNIX_TIMESTAMP(end) as end, ".
-			    "   UNIX_TIMESTAMP(created) as created ".
+			    "   UNIX_TIMESTAMP(created) as created, ".
+			    "   UNIX_TIMESTAMP(cancel) as cancel ".
 			    "  from future_reservations ".
 			    "where pid='$pid' ".
 			    (defined($target) ? "and $target" : ""));
@@ -1017,7 +1019,8 @@ sub Reservations($)
 	    $query_result =
 		DBQueryWarn("select *,UNIX_TIMESTAMP(start) as start, ".
 			    "   UNIX_TIMESTAMP(end) as end, ".
-			    "   UNIX_TIMESTAMP(created) as created ".
+			    "   UNIX_TIMESTAMP(created) as created, ".
+			    "   UNIX_TIMESTAMP(cancel) as cancel ".
 			    "  from future_reservations ".
 			    "where uid='$uid'");
 	}
@@ -1089,6 +1092,9 @@ sub Reservations($)
 	$blob->{"end"}         = TBDateStringGMT($row->{'end'});
 	$blob->{"notes"}       = $row->{'notes'} || "";
 	$blob->{"approved"}    = $row->{'approved'} || "";
+	if (defined($row->{'cancel'})) {
+	    $blob->{"cancel"} = TBDateStringGMT($row->{'cancel'});
+	}
 	$results{"$idx"}       = $blob;
 
 	if (!exists($history{$projurn})) {
@@ -1249,6 +1255,81 @@ sub DeleteReservation($)
     }
     GeniUtil::FlipToElabMan();
     my $output = GeniUtil::ExecQuiet("$WAP $TB/sbin/reserve -c $idx $args");
+    if ($?) {
+	GeniUtil::FlipToGeniUser();
+	print STDERR "$output\n";
+	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, $output);
+    }
+    GeniUtil::FlipToGeniUser();
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+}
+
+#
+# Schedule (or clear) a reservation for destruction in the future. 
+#
+sub CancelReservation($)
+{
+    my ($argref)  = @_;
+    my $args  = "";
+    my $target;
+
+    #
+    # The Portal decides the user has permission and then uses "admin" mode
+    # to do the deletion.
+    #
+    my $hasperm = CheckPermission(1);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    if (exists($argref->{'idx'})) {
+	return GeniResponse->MalformedArgsResponse("Illegal reservation idx")
+	    if ($argref->{'idx'} !~ /^\d+$/);
+	$target = $argref->{'idx'};
+    }
+    elsif (exists($argref->{'uuid'})) {
+	return GeniResponse->MalformedArgsResponse("Illegal reservation uuid")
+	    if (!ValidUUID($argref->{'uuid'}));
+	$target = $argref->{'uuid'};
+    }
+    else {
+	return GeniResponse->MalformedArgsResponse("Missing reservation ID");
+    }
+
+    if (exists($argref->{"clear"}) && $argref->{"clear"} == 1) {
+	$args = "-O ";
+    }
+    else {
+	return GeniResponse->MalformedArgsResponse("Missing termination date")
+	    if (! (exists($argref->{"when"}) && $argref->{"when"} ne ""));
+
+	my $when = $argref->{"when"};
+	return GeniResponse->MalformedArgsResponse("Invalid termination date")
+	    if (! ($when =~ /^\d+$/ || str2time($when)));
+
+	$args = "-E '$when' ";
+    }
+
+    my $reservation = Reservation->Lookup($target);
+    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
+	if (!defined($reservation));
+    my $idx = $reservation->idx();
+
+    # Write the reason to a tempfile to pass in. This will auto unlink.
+    my $fp;
+    if (exists($argref->{"reason"}) && $argref->{"reason"} ne "") {
+	my $reason = $argref->{"reason"};
+	
+	if (!TBcheck_dbslot($reason, "default", "fulltext",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    return GeniResponse->MalformedArgsResponse("Invalid reason")
+	}
+	$fp = File::Temp->new();
+	print $fp $reason;
+	$args .= " -D $fp";
+	chmod(0755, "$fp");
+    }
+    GeniUtil::FlipToElabMan();
+    my $output = GeniUtil::ExecQuiet("$WAP $TB/sbin/reserve -m $idx $args");
     if ($?) {
 	GeniUtil::FlipToGeniUser();
 	print STDERR "$output\n";

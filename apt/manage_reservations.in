@@ -98,9 +98,12 @@ sub DoDelete();
 sub DoApprove();
 sub DoSystemInfo();
 sub DoPrediction();
+sub DoCancel();
 sub readfile($);
 sub AddAnnouncement($$$$$$$);
 sub DeleteAnnouncement($);
+sub RetireAnnouncement($);
+sub RestoreAnnouncement($);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -173,6 +176,9 @@ elsif ($action eq "systeminfo") {
 }
 elsif ($action eq "prediction") {
     DoPrediction();
+}
+elsif ($action eq "cancel") {
+    DoCancel();
 }
 else {
     usage();
@@ -678,6 +684,93 @@ sub DoApprove()
 }
 
 #
+# Schedule (or clear) reservation cancellation
+#
+sub DoCancel()
+{
+    my $optlist = "p:ce:N:";
+    my $clear   = 0;
+    my $when;
+    my $portal;
+    my $reason;
+
+    if (!$this_user->IsAdmin()) {
+	fatal("No permission to schedule reservation cancellation")
+    }    
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"N"})) {
+	$reason = readfile($options{"N"});
+	chomp($reason);
+    }
+    if (defined($options{"p"})) {
+	$portal = $options{"p"}
+    }
+    if (defined($options{"c"})) {
+	$clear = 1;
+    }
+    elsif (defined($options{"e"})) {
+	$when = $options{"e"};
+	if ($when !~ /^\d+$/) {
+	    $when = str2time($when);
+	    if (!defined($when)) {
+		fatal("Could not parse -e option.");
+	    }
+	}
+    }
+    else {
+	usage();
+    }
+    usage()
+	if (@ARGV != 1 || !defined($portal));
+    my $uuid = shift(@ARGV);
+    
+    # Check this since Reservation->Lookup() does not validate.
+    fatal("Invalid uuid")
+	if (!ValidUUID($uuid));
+
+    my $brand = Brand->Create($portal);
+    if (!defined($brand)) {
+	fatal("Bad branding");
+    }
+    my $args = {"uuid" => $uuid};
+    if ($clear) {
+	$args->{"clear"} = 1;
+    }
+    else {
+	$args->{"when"} = $when;
+    }
+    $args->{'reason'} = $reason if (defined($reason));
+
+    # PortalRPC will use the root context in this case, which is
+    # essentially saying the caller is an admin.
+    my $response =
+	APT_Geni::PortalRPC($authority, undef, "CancelReservation", $args);
+    if (GeniResponse::IsError($response)) {
+	#
+	# All errors are fatal.
+	#
+	fatal($response->output());
+    }
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    else {
+	print Dumper($response);
+    }
+    if ($clear) {
+	RestoreAnnouncement($uuid);
+    }
+    else {
+	RetireAnnouncement($uuid);
+    }
+    exit(0);
+}
+
+#
 # Get the reservation system info.
 #
 sub DoSystemInfo()
@@ -837,7 +930,7 @@ sub DoPrediction()
 	    push(@projlist, $project->urn());
 	}
     }
-    else {
+    elsif (!$this_user->IsAdmin()) {
 	my @plist;
 	if ($this_user->ProjectMembershipList(\@plist)) {
 	    fatal("Could not get project membership list");
@@ -1062,6 +1155,18 @@ sub DeleteAnnouncement($)
     my ($uuid) = @_;
 
     system("$ANNOUNCE -R $uuid");    
+}
+sub RetireAnnouncement($)
+{
+    my ($uuid) = @_;
+
+    system("$ANNOUNCE -r $uuid");    
+}
+sub RestoreAnnouncement($)
+{
+    my ($uuid) = @_;
+
+    system("$ANNOUNCE -w $uuid");    
 }
 
 

@@ -343,6 +343,7 @@ function Do_InfoOrWarn($warning = false)
     global $this_user;
     global $ajax_args;
     global $TB_PROJECT_CREATEEXPT, $suexec_output, $APTBASE, $APTMAIL;
+    $cancel = 0;
 
     if (!isset($ajax_args["uuid"])) {
 	SPITAJAX_ERROR(-1, "Missing uuid");
@@ -386,10 +387,14 @@ function Do_InfoOrWarn($warning = false)
 	SPITAJAX_ERROR(-1, "No such user");
 	return;
     }
-    if (!warning &&
+    if (!$warning &&
         (!isset($ajax_args["message"]) || $ajax_args["message"] == "")) {
 	SPITAJAX_ERROR(-1, "Missing message");
 	return;
+    }
+    if ($warning &&
+        isset($ajax_args["cancel"]) && $ajax_args["cancel"] == 1) {
+        $cancel = 1;
     }
     if (!ISADMIN()) {
 	SPITAJAX_ERROR(-1, "Only administrators can ask for info or warn");
@@ -402,9 +407,14 @@ function Do_InfoOrWarn($warning = false)
         $subject = "Unused Reservation Warning";
         $message = "Your reservation in project $pid is currently either\n".
             "underused or unused. Tying up resources in this manner means\n".
-            "other users may not be able to get their work done. If your\n".
-            "reservation is still underused in 24 hours, the reservation\n".
-            "will be deleted.\n\n";
+            "other users may not be able to get their work done.\n".
+            ($cancel ?
+             "Your reservation is now scheduled to be canceled in 24 hours,\n".
+             "please contact the support staff if you would like to keep\n".
+             "your reservation.\n"
+             :
+             "If your reservation is still underused in 24 hours, it\n".
+             "will be canceled.\n") . "\n";
 
         if (isset($ajax_args["message"]) && $ajax_args["message"] != "") {
             $message .= $ajax_args["message"] . "\n";
@@ -420,6 +430,11 @@ function Do_InfoOrWarn($warning = false)
            "From: $APTMAIL\n".
            "CC: $APTMAIL");
 
+    if ($cancel) {
+        if (Do_CancelAux($uuid, $aggregate, 0, time() + (3600 * 24))) {
+            return;
+        }
+    }
     sleep(1);
     SPITAJAX_RESPONSE(1);
 }
@@ -480,6 +495,76 @@ function Do_Approve()
 	return;
     }
     SPITAJAX_RESPONSE("list-reservations.php");
+}
+
+#
+# Cancel (or clear).
+#
+function Do_Cancel()
+{
+    global $this_user;
+    global $ajax_args;
+    global $TB_PROJECT_CREATEEXPT, $suexec_output, $PORTAL_GENESIS;
+
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Only administrators can cancel reservations");
+	return;
+    }
+    if (!isset($ajax_args["uuid"])) {
+	SPITAJAX_ERROR(-1, "Missing uuid");
+	return -1;
+    }
+    $uuid = $ajax_args["uuid"];
+    if (!IsValidUUID($uuid)) {
+        SPITAJAX_ERROR(-1, "Invalid uuid");
+	return;
+    }
+    if (!isset($ajax_args["clear"]) && $ajax_args["clear"] == 1) {
+	SPITAJAX_ERROR(-1, "Only clear supported.");
+	return;
+    }
+    if (!isset($ajax_args["cluster"])) {
+	SPITAJAX_ERROR(-1, "Missing cluster");
+	return;
+    }
+    if (!preg_match("/^[-\w]+$/", $ajax_args["cluster"])) {
+        SPITAJAX_ERROR(-1, "Invalid cluster name");
+        return;
+    }
+    $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
+    if (!$aggregate) {
+        SPITAJAX_ERROR(-1, "No such cluster");
+        return;
+    }
+    if (Do_CancelAux($uuid, $aggregate, 1, null)) {
+        return;
+    }
+    SPITAJAX_RESPONSE(0);
+}
+
+function Do_CancelAux($uuid, $aggregate, $clear, $when)
+{
+    global $this_user;
+    global $TB_PROJECT_CREATEEXPT, $suexec_output, $PORTAL_GENESIS;
+
+    $this_uid = $this_user->uid();
+    $urn = $aggregate->urn();
+
+    if ($clear) {
+        $opts = "-c";
+    }
+    else {
+        $opts = "-e '$when'";
+    }
+    $retval = SUEXEC($this_uid, "nobody",
+                     "webmanage_reservations -a '$urn' ".
+                     "   cancel -p $PORTAL_GENESIS $opts $uuid",
+                     SUEXEC_ACTION_CONTINUE);
+
+    if ($retval) {
+        SPITAJAX_ERROR(-1, $suexec_output);
+	return;
+    }
 }
 
 #
@@ -548,6 +633,12 @@ function Do_ListReservations()
         }
         else {
             $blob["approved"] = null;
+        }
+        if (isset($details['cancel']) && $details['cancel'] != "") {
+            $blob["cancel"] = $details["cancel"];
+        }
+        else {
+            $blob["cancel"] = null;
         }
         $blob["project"]     = $details['project'];
         $blob["count"]       = $details['nodes'];

@@ -360,6 +360,8 @@ $routing = array("myprofiles" =>
                                                      "Do_WarnUser",
                                                  "Delete" =>
                                                      "Do_Delete",
+                                                 "Cancel" =>
+                                                     "Do_Cancel",
                                                  "RequestInfo" =>
                                                      "Do_RequestInfo",
                                                  "ReservationInfo" =>
