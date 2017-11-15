@@ -96,6 +96,7 @@ sysetc-fixup:
 	rm -f $(SYSETCDIR)/rc.local
 	$(INSTALL) -m 644 $(SRCDIR)/rc-sysinit.conf $(SYSETCDIR)/init/rc-sysinit.conf
 	$(INSTALL) -m 644 $(SRCDIR)/rsyslog-emulab.conf $(SYSETCDIR)/rsyslog.d/40-emulab.conf
+	rm -f $(SYSETCDIR)/rsyslog.d/60-emulab.conf
 	$(INSTALL) -m 755 $(SRCDIR)/rc.local $(SYSETCDIR)/rc.local
 	$(INSTALL) -m 644 $(SRCDIR)/interfaces $(SYSETCDIR)/network/interfaces
 	$(INSTALL) -m 755 $(SRCDIR)/ntp $(SYSETCDIR)/init.d/
