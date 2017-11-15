@@ -341,8 +341,29 @@
 	</form>
       </div>
     </div>
-    <!-- place to hang the modals for now -->
   </div>
+  <div id="needapproval-modal" class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <button type='button' class='close' data-dismiss='modal'
+                  aria-hidden='true'>&times;</button>
+          <center><h4>Your dataset needs to be approved!</h4></center>
+	</div>
+	<div class='modal-body'>
+	  Your dataset needs to be approved by an administrator. The
+	  reason (if one was provided by the target cluster) is
+	  below. Approval typically happens pretty quickly, watch
+	  your email for notification.
+          <div>
+	    <br>
+	    <code style="white-space: pre-wrap" id="needapproval-text"></code>
+	  </div>
+	</div>
+      </div>
+    </div>
+  </div>
+  <!-- place to hang the modals for now -->
   <div id='oops_div'></div>
   <div id='waitwait_div'></div>
 </div>

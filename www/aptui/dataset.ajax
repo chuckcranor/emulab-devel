@@ -54,12 +54,8 @@ function Do_CreateDataSet()
     }
     $formfields = $ajax_args["formfields"];
     $errors  = array();
-    if ($embedded) {
-	$command = "webcreatedataset ";
-    }
-    else {
-	$command  = "webmanage_dataset create ";
-    }
+    $options = "";
+    
     $required = array("dataset_pid", "dataset_name", "dataset_type",
 		      "dataset_fstype", "dataset_read", "dataset_modify");
 
@@ -95,7 +91,7 @@ function Do_CreateDataSet()
 	$errors["dataset_type"] = "Illegal value";
     }
     else {
-	$command .= " -t " . $formfields["dataset_type"];
+	$options .= " -t " . $formfields["dataset_type"];
     }
     if ($formfields["dataset_type"] == "stdataset") {
 	if (!isset($formfields["dataset_expires"]) ||
@@ -106,7 +102,7 @@ function Do_CreateDataSet()
 	    $errors["dataset_expires"] = "Illegal value";
 	}
 	else {
-	    $command .= " -e " .
+	    $options .= " -e " .
 		escapeshellarg($formfields["dataset_expires"]);
 	}
     }
@@ -116,7 +112,7 @@ function Do_CreateDataSet()
             $errors["dataset_fstype"] = "Illegal value";
         }
         elseif ($formfields["dataset_fstype"] != "none") {
-            $command .= " -f " . $formfields["dataset_fstype"];
+            $options .= " -f " . $formfields["dataset_fstype"];
         }
         if (! (isset($formfields["dataset_size"]) &&
                $formfields["dataset_size"] != "")) {
@@ -127,7 +123,7 @@ function Do_CreateDataSet()
             $errors["dataset_size"] = "Illegal value";
         }
         else {
-            $command .= " -s " . $formfields["dataset_size"];
+            $options .= " -s " . $formfields["dataset_size"];
         }
         if (!$embedded) {
             if (! (isset($formfields["dataset_cluster"]) &&
@@ -139,7 +135,7 @@ function Do_CreateDataSet()
                 $errors["dataset_cluster"] = "Illegal value";
             }
             else {
-                $command .= " -a '" . $formfields["dataset_cluster"] . "' ";
+                $options .= " -a '" . $formfields["dataset_cluster"] . "' ";
             }
         }
     }
@@ -204,13 +200,13 @@ function Do_CreateDataSet()
                     }
                     elseif ($instance =
                             Instance::Lookup($formfields["dataset_instance"])){
-                        $command .= " -i " . $instance->uuid();
+                        $options .= " -i " . $instance->uuid();
                     }
                     else {
                         $errors["dataset_instance"] = "No such instance";
                     }
                 }
-                $command .= " -I ${nodeid},${bsname}";
+                $options .= " -I ${nodeid},${bsname}";
             }
         }
     }
@@ -220,14 +216,14 @@ function Do_CreateDataSet()
         $errors["dataset_read"] = "Illegal value";
     }
     else {
-        $command .= " -R " . $formfields["dataset_read"];
+        $options .= " -R " . $formfields["dataset_read"];
     }
     if ($formfields["dataset_modify"] != "creator" &&
         $formfields["dataset_modify"] != "project") {
         $errors["dataset_modify"] = "Illegal value";
     }
     else {
-        $command .= " -W " . $formfields["dataset_modify"];
+        $options .= " -W " . $formfields["dataset_modify"];
     }
     if (count($errors)) {
 	SPITAJAX_ERROR(2, $errors);
@@ -237,12 +233,25 @@ function Do_CreateDataSet()
 	SPITAJAX_RESPONSE(0);
 	return;
     }
-    $command .= " " . escapeshellarg($pid . "/" .
+    $options .= " " . escapeshellarg($pid . "/" .
 				     $formfields["dataset_name"]);
 
+    # Need a webtask for policy messages.
+    $webtask = WebTask::CreateAnonymous();
+    
+    if ($embedded) {
+        $wopt    = "-C -b -T " . $webtask->task_id();
+	$command = "webcreatedataset $wopt $options";
+    }
+    else {
+        $wopt     = "-t " . $webtask->task_id();
+	$command  = "webmanage_dataset $wopt -- create $options";
+    }
+    
     $retval = SUEXEC($this_uid, $pid, $command, SUEXEC_ACTION_CONTINUE);
     if ($retval) {
-	SPITAJAX_ERROR(1, $suexec_output);
+        $webtask->Delete();
+	SPITAJAX_ERROR(-1, $suexec_output);
 	return;
     }
     if ($embedded) {
@@ -259,11 +268,28 @@ function Do_CreateDataSet()
 	$dataset = Dataset::LookupByName($project, $formfields["dataset_name"]);
     }
     if (!$dataset) {
+        $webtask->Delete();
 	SPITAJAX_ERROR(-1, "Could not find lease after creation");
 	return 1;
     }
     $dataset_uuid = $dataset->uuid();
-    SPITAJAX_RESPONSE("show-dataset.php?uuid=$dataset_uuid");
+    $blob = array("dataset_uuid" => $dataset_uuid, "needapproval" => 0);
+    
+    #
+    # If the dataset was not approved, we want to notify the user instead
+    # of zapping over to the show dataset page, since we are going to lose
+    # the reason. At some point we probably want to store this with the
+    # dataset (or local lease).
+    #
+    $webtask->Refresh();
+    if ($webtask->TaskValue("needapproval")) {
+        $blob["needapproval"] = 1;
+        if ($webtask->TaskValue("unapproved_reason")) {
+            $blob["unapproved_reason"] =
+                $webtask->TaskValue("unapproved_reason");
+        }
+    }
+    SPITAJAX_RESPONSE($blob);
 }
 
 #
@@ -506,7 +532,7 @@ function Do_DeleteDataset()
 	$error = "Transient error; please try again later";
 	
 	if ($retval && count($suexec_output_array)) {
-	    $error = $suexec_output_array[0];
+	    $error = $suexec_output;
 	}
 	SPITAJAX_ERROR(1, $error);
 	return;
@@ -527,9 +553,15 @@ function Do_ApproveDataset()
 	SPITAJAX_ERROR(1, "Missing uuid");
 	return;
     }
-    $lease_uuid = $ajax_args["uuid"];
-    $lease = Lease::Lookup($lease_uuid);
-    if (!$lease) {
+    $dataset_uuid = $ajax_args["uuid"];
+    #
+    # Either a local lease or a remote dataset. 
+    #
+    $dataset = Lease::Lookup($dataset_uuid);
+    if (!$dataset) {
+        $dataset = Dataset::Lookup($dataset_uuid);
+    }
+    if (!$dataset) {
 	SPITAJAX_ERROR(1, "Unknown dataset");
 	return;
     }
@@ -537,28 +569,45 @@ function Do_ApproveDataset()
 	SPITAJAX_ERROR(1, "Not enough permission");
 	return;
     }
-    if ($lease->state() != "unapproved") {
+    if ($dataset->state() != "unapproved") {
 	SPITAJAX_ERROR(1, "Dataset does not need to be approved.");
 	return;
     }
-    #
-    # Invoke backend.
-    #
-    $retval = SUEXEC($this_uid, $lease->pid(),
-		     "webapprovelease " .
-		     $lease->pid() . "/" .
-		        $lease->gid() . "/" . $lease->lease_id(),
-		     SUEXEC_ACTION_CONTINUE);
-    if ($retval != 0) {
-	$error = "Transient error; please try again later";
+    if ($dataset->islocal()) {
+        $retval = SUEXEC($this_uid, $dataset->pid(),
+                         "webapprovelease " .
+                         $dataset->pid() . "/" .
+                         $dataset->gid() . "/" . $dataset->lease_id(),
+                         SUEXEC_ACTION_CONTINUE);
+        if ($retval != 0) {
+            $error = "Transient error; please try again later";
 	
-	if ($retval && count($suexec_output_array)) {
-	    $error = $suexec_output;
-	}
-	SPITAJAX_ERROR(1, $error);
-	return;
+            if ($retval && count($suexec_output_array)) {
+                $error = $suexec_output;
+            }
+            SPITAJAX_ERROR(1, $error);
+            return;
+        }
     }
-    SPITAJAX_RESPONSE("show-dataset.php?uuid=$lease_uuid");
+    else {
+        $retval = SUEXEC($this_uid, $dataset->pid(),
+                         "webmanage_dataset approve " .
+                         $dataset->pid() . "/" . $dataset->id(),
+                         SUEXEC_ACTION_IGNORE);
+        if ($retval != 0) {
+            if ($retval < 0) {
+                SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            }
+            $error = "Transient error; please try again later";
+	
+            if ($retval && count($suexec_output_array)) {
+                $error = $suexec_output;
+            }
+            SPITAJAX_ERROR(1, $error);
+            return;
+        }
+    }
+    SPITAJAX_RESPONSE("show-dataset.php?uuid=$dataset_uuid");
 }
 
 function Do_RefreshDataset()
@@ -704,8 +753,14 @@ function Do_GetInfo()
     }
     $blob["size"] = $dataset->size() ? $dataset->size() : "0";
 
+    # A local lease via Classic interface (embedded).
+    if ($islease) {
+        SPITAJAX_RESPONSE($blob);
+        return;
+    }
+
     #
-    # If we were generating an image.
+    # If we were generating an image. 
     #
     $webtask = $dataset->WebTask();
     if (!$webtask) {

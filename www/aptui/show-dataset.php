@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -69,8 +69,8 @@ if (!$dataset->AccessCheck($this_user, $LEASE_ACCESS_READINFO)) {
 $candelete  = (ISADMIN() || $dataset->owner_uid() == $this_uid ? 1 : 0);
 
 # An admin can approve an unapproved lease.
-$canapprove = ($dataset->islocal() && ISADMIN() &&
-	       $dataset->state() == "unapproved" ? 1 : 0);
+$canapprove = ((ISADMIN() && !$dataset->locked() &&
+                $dataset->state() == "unapproved") ? 1 : 0);
 
 # Remote datasets can be refreshed.
 $canrefresh = ($dataset->islocal() ? 0 : 1);

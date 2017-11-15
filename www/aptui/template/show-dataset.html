@@ -67,17 +67,12 @@
 	      </tr>
 	      <tr>
 		<td>State</td>
-		<td id='dataset_state'><%- formfields.dataset_state %> 
- 		  <% if (formfields.dataset_state == "unapproved") { %>
+		<td id='dataset_state'><%- formfields.dataset_state %>
 		  <a href='#' class='btn btn-xs'
-		     data-toggle='popover'
-		     data-delay='{"hide":1500}'
-		     data-content="Your dataset needs to be approved by an
-				   administrator before it can be used. You
-				   will receive email when that happens.">
-		    (What does this mean?)
-		  </a>
-		  <% } %>
+     		     data-toggle='modal' data-target='#state-descriptions'>
+		    <span class='glyphicon glyphicon-question-sign'
+			  style='margin-bottom: 4px;'></span>
+		  </a>		  
 		</td>
 	      </tr>
 	      <tr>
@@ -137,7 +132,7 @@
                   type='button'>Refresh
 	  </button>
 	<% } %>
- 	<% if (canapprove) { %>
+ 	<% if (canapprove && formfields.dataset_state == "unapproved") { %>
 	  <button class='btn btn-primary btn-sm'
                   id='dataset_approve_button'
                   style='margin-right: 10px;'
@@ -155,7 +150,7 @@
 		  data-content="Modify dataset settings."
                   type='button'>Modify
 	  </a>
-	  <% if (formfields.dataset_type != "imdataset") { %>
+	  <% if (formfields.dataset_state == "grace") { %>
 	  <a class='btn btn-primary btn-sm'
                   id='dataset_extend_button'
                   style='margin-right: 10px;'
@@ -230,6 +225,58 @@
               <a class='btn btn-danger btn-sm'
 		 id='extend-confirm'
 		 type='button' name='approve'>Confirm</a></center>
+	  </div>
+	</div>
+      </div>
+    </div>
+    <!-- State descriptions -->
+    <div id='state-descriptions' class='modal fade'>
+      <div class='modal-dialog'>
+	<div class='modal-content'>
+	  <div class="modal-header text-center">
+            <button type='button' class='close' data-dismiss='modal'
+                    aria-hidden='true'>&times;</button>
+	    <center><h4>Dataset States Explained</h4></center>
+	  </div>
+	  <div class='modal-body'>
+	    <dl class="dl-horizontal">
+	      <dt>valid</dt>
+	      <dd>Dataset is ready to use.</dd>
+	      
+	      <dt>unapproved</dt>
+	      <dd>Your dataset needs to be approved by an
+		administrator before it can be used. You will receive
+		email when that happens.</dd>
+
+	      <dt>allocating</dt>
+	      <dd>The target cluster is still creating your dataset.
+		If you requested a file system, this might take a few
+		minutes. You will receive email when allocation is
+		complete and you can start an experiment using your
+		dataset.</dd>
+
+	      <dt>grace</dt>
+	      <dd>A Dataset enters the grace state either because it
+		reached the explicit end date, or because it has been
+		idle (not used) for too long. In the grace state, your
+		dataset can be used read-only. It can also be <em>extended</em>
+		by clicking on the <b>Extend</b> button, which will move it
+		back to the valid state so you can use it normally.</dd>
+
+	      <dt>locked</dt>
+	      <dd>Once the grace period expires, datasets can enter
+	      the locked state for a time, giving the owner another
+	      opportunity to save it from destruction. The dataset
+	      cannot be used or extended, you must contact the support
+	      staff to unlock it for use (or extension).</dd>
+
+	      <dt>expired</dt>
+	      <dd>Datasets enter the expired state to be reclaimed by
+		the storage reaper. This is done automatically if the
+		dataset stays in the grace or locked state for too
+		long, which indicates that it is no longer of any use
+		to the owner.</dd>
+	    </dl>	    
 	  </div>
 	</div>
       </div>

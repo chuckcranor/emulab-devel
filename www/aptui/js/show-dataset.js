@@ -16,6 +16,7 @@ $(function ()
     var canrefresh      = 0;
     var cansnapshot     = 0;
     var instances       = null;
+    var current_state   = null;
     
     function initialize()
     {
@@ -109,14 +110,15 @@ $(function ()
 	 * If the state is busy, then lets poll watching for it to
 	 * go valid.
 	 */
-	if (fields.dataset_state == "busy" ||
-	    fields.dataset_state == "allocating") {
-	    if (cansnapshot) {
-		ShowProgressModal();
-	    }
-	    else {
-		StateWatch();
-	    }
+	current_state = fields.dataset_state;
+	if (fields.dataset_type == "imdataset" &&
+	    (fields.dataset_state == "busy" ||
+	     fields.dataset_state == "allocating")) {
+	    ShowProgressModal();
+	}
+	else {
+	    // Always poll for st/lt change in status.
+	    setTimeout(function f() { StateWatch() }, 5000);
 	}
     }
 
@@ -124,20 +126,22 @@ $(function ()
     function StateWatch()
     {
 	var callback = function(json) {
-	    console.info(json);
 	    if (json.code) {
+		console.info(json);
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
-	    if (! (json.value.state == "busy" ||
-		   json.value.state == "allocating")) {
+	    if (current_state != json.value.state) {
 		window.location.reload(true);
 		return;
 	    }
 	    if (json.size) {
 		$('#dataset_size').html(json.size);
 	    }
-	    setTimeout(function f() { StateWatch() }, 5000);
+	    var next = (json.value.state == "busy" ||
+			json.value.state == "allocating" ? 10000 : 60000);
+	    
+	    setTimeout(function f() { StateWatch() }, next);
 	}
 	var xmlthing = sup.CallServerMethod(null, "dataset",
 					    "getinfo",

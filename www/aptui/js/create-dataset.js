@@ -182,16 +182,31 @@ $(function ()
     function SubmitForm()
     {
 	var submit_callback = function(json) {
+	    console.info(json);
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
-	    if (embedded) {
-		window.parent.location.replace("../" + json.value);
+	    var dataset_uuid = json.value.dataset_uuid;
+	    var url = "show-dataset.php?uuid=" + dataset_uuid;
+
+	    var reload = function () {
+		if (embedded) {
+		    window.parent.location.replace("../" + url);
+		}
+		else {
+		    window.location.replace(url);
+		}
 	    }
-	    else {
-		window.location.replace(json.value);
+	    // Delay reload to show popup.
+	    if (json.value.needapproval) {
+		if (_.has(json.value, "unapproved_reason")) {
+		    $('#needapproval-text').text(json.value.unapproved_reason);
+		}
+		sup.ShowModal('#needapproval-modal', function () { reload(); });
+		return;
 	    }
+	    reload();
 	};
 	var checkonly_callback = function(json) {
 	    if (json.code) {

@@ -39,6 +39,7 @@ sub usage()
     print STDERR "Usage: manage_dataset [options --] refresh ...\n";
     print STDERR "Usage: manage_dataset [options --] modify ...\n";
     print STDERR "Usage: manage_dataset [options --] extend ...\n";
+    print STDERR "Usage: manage_dataset [options --] approve ...\n";
     print STDERR "Usage: manage_dataset [options --] snapshot ...\n";
     print STDERR "Usage: manage_dataset [options --] getcredential ...\n";
     exit(-1);
@@ -101,6 +102,7 @@ sub DoRefreshInternal($$);
 sub DoGetCredential();
 sub DoModify();
 sub DoExtend();
+sub DoApprove();
 sub DoSnapshot();
 sub DoSnapShotInternal($$$$$);
 sub PollDatasetStatus($$$);
@@ -163,6 +165,9 @@ elsif ($action eq "snapshot") {
 }
 elsif ($action eq "getcredential") {
     exit(DoGetCredential());
+}
+elsif ($action eq "approve") {
+    exit(DoApprove());
 }
 else {
     usage();
@@ -381,22 +386,47 @@ sub DoCreate()
 	$dataset->Update({"remote_url" => $blob->{"url"}});
     }
 
-    #
-    # Okay, this is silly; there is no distinct state for resource allocation.
-    # It is unapproved and locked. The other side tells us its locked in the
-    # blob (busy), so look for this and set the state to busy. Then we poll
-    # waiting for the lease to go nonbusy and approved. Ick.
-    #
-    if ($blob->{"busy"}) {
-	$dataset->Update({"state" => "busy"});
-    }
-    else {
-	$dataset->Update({"state" => $blob->{"state"}});
-	if ($type ne "imdataset" || !defined($instance)) {
+    if ($type ne "imdataset") {
+	#
+	# Okay, this is silly; there is no distinct state for resource
+	# allocation. The other side now tells us expicitly that the
+	# dataset (lease) was approved or not. If not approved there is
+	# no reason to continue, we just want to tell the user in the
+	# web UI an send email to local tbops.
+	#
+	# If approved, then it is probably busy and we need to wait for
+	# it to finish.
+	#
+	if (! $blob->{'approved'}) {
+	    $dataset->Update({"state" => "unapproved"});
+	    if (defined($webtask)) {
+		$webtask->needapproval(1);
+		$webtask->unapproved_reason($blob->{'unapproved_reason'})
+		    if (exists($blob->{'unapproved_reason'}));
+	    }
+	    $dataset->Unlock();
+	    return 0;
+	}
+	if ($blob->{"busy"}) {
+	    # Will poll for completion below.
+	    $dataset->Update({"state" => "busy"});
+	}
+	else {
+	    # This should no longer happen.
+	    $dataset->Update({"state" => $blob->{"state"}});
 	    $dataset->Unlock();
 	    return 0;
 	}
     }
+    else {
+	$dataset->Update({"state" => $blob->{"state"}});
+	# Not doing a snapshot so just exit. Not sure this actually happens.
+	if (!defined($instance)) {
+	    $dataset->Unlock();
+	    return 0;
+	}
+    }
+
     #
     # Handoff to snapshot if an imdataset.
     #
@@ -477,9 +507,23 @@ sub DoDelete()
 sub DoRefresh()
 {
     my $errmsg;
-    
+    my $errcode;
+
+    my $usage = sub {
+	print STDERR "Usage: manage_dataset refresh [-p] uuid\n";
+	exit(-1);
+    };
+    my $optlist = "p";
+    my $poll    = 0;
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	&$usage();
+    }
+    if (defined($options{"p"})) {
+	$poll = 1;
+    }
     if (@ARGV != 1) {
-	fatal("usage: $0 refresh pid/name");
+	&$usage();
     }
     my $token   = shift(@ARGV);
     my $dataset = APT_Dataset->Lookup($token);
@@ -489,9 +533,17 @@ sub DoRefresh()
     if ($dataset->Lock()) {
 	uerror("dataset is busy, cannot lock it");
     }
-    my $errcode = DoRefreshInternal($dataset, \$errmsg);
-    goto failed
-	if ($errcode);
+    if ($poll) {
+	if (PollDatasetStatus($dataset, $dataset->GetAggregate(), \$errmsg)) {
+	    # Parent exits;
+	    return 0;
+	}
+    }
+    else {
+	$errcode = DoRefreshInternal($dataset, \$errmsg);
+	goto failed
+	    if ($errcode);
+    }
     $dataset->Unlock();
     return 0;
 
@@ -867,10 +919,35 @@ sub PollDatasetStatus($$$)
     
     while ($seconds > 0) {
 	$seconds -= $interval;
-	if (!defined($aggregate) ||
+	#
+	# The second part of the test is to distingush between an
+	# imdataset snapshot at its home aggregate, and an imdataset
+	# taking place at another cluster and thus needing a copy
+	# back. We use a different polling function for the later,
+	# since there is no dataset to ask about, just an image that
+	# is doing a snapshot. This needs more thought, its not a
+	# great way to do this.
+	#
+	if ($dataset->type() =~ /^(lt|st)dataset$/ ||
 	    $aggregate->aggregate_urn() eq $dataset->aggregate_urn()) {
-	    if (DoRefreshInternal($dataset, $perrmsg)) {
+	    my $errcode = DoRefreshInternal($dataset, $perrmsg);
+	    if ($errcode) {
 		print STDERR $$perrmsg;
+		if ($errcode == GENIRESPONSE_SEARCHFAILED) {
+		    #
+		    # The dataset is gone, so it failed allocation.
+		    # This should not happen for an imdataset of course.
+		    # Mark the dataset as failed, we do not know why
+		    # though, the allocation is asynchronous, and the error
+		    # went out in email. But we can tell the user in the
+		    # web UI.
+		    #
+		    $dataset->Update({"state" => "failed"});
+		    $dataset->webtask()->output("allocation failure");
+		    $dataset->webtask()->Exited(GENIRESPONSE_SEARCHFAILED);
+		    last;
+		}
+		# Otherwise we keep trying. 
 		sleep($interval);
 		next;
 	    }
@@ -883,6 +960,7 @@ sub PollDatasetStatus($$$)
 	    }
 	}
 	if ($dataset->state() eq "valid") {
+	    print "Dataset is now valid\n";
 	    $project->SendEmail($this_user->email(),
 			"Your dataset is now ready to use",
 			"Dataset '$dname' is now ready to use.\n",
@@ -892,6 +970,7 @@ sub PollDatasetStatus($$$)
 	}
 	sleep($interval);
     }
+    unlink($logfile) if (defined($logfile));
     $dataset->webtask()->Exited(-1)
 	if ($seconds <= 0);
     return 0;
@@ -1081,6 +1160,130 @@ sub PollImageStatus($$$)
 	}
     }
     return 0;
+}
+
+#
+# Approve
+#
+sub DoApprove()
+{
+    my $errmsg;
+    my $logname;
+    
+    my $usage = sub {
+	print STDERR "Usage: manage_dataset approve pid/name\n";
+	exit(-1);
+    };
+    if (@ARGV != 1) {
+	&$usage();
+    }
+    my $token   = shift(@ARGV);
+    my $dataset = APT_Dataset->Lookup($token);
+    if (!defined($dataset)) {
+	fatal("No such dataset");
+    }
+    my $dname   = $dataset->dataset_id();
+
+    if (!$this_user->IsAdmin()) {
+	fatal("No permission to schedule reservation cancellation")
+    }    
+    if ($dataset->Lock()) {
+	uerror("dataset is busy, cannot lock it");
+    }
+    my $project = $dataset->GetProject();
+    my $creator = $dataset->GetCreator();
+    
+    my $response = $dataset->ApproveDataset();
+    if (!defined($response)) {
+	$errmsg = "RPC Error calling ExtendDataset";
+	goto failed;
+    }
+    if ($response->code() != GENIRESPONSE_SUCCESS) {
+	if ($response->code() == GENIRESPONSE_SEARCHFAILED) {
+	    $errmsg = "Dataset no longer exists at the target\n";
+	}
+	else {
+	    $errmsg = "ApproveDataset failed: ". $response->output() . "\n";
+	}
+	goto failed;
+    }
+    # No failure, change the state now so the web interface sees a change.
+    $dataset->Update({"state" => "busy"});
+    
+    #
+    # Now we want to poll for allocation completion so we can tell the
+    # web interface when it is done (or failed). We know this when the
+    # state changes to valid or failed.
+    #
+    if (! $debug) {
+        $logname = TBMakeLogname("approvedataset");
+
+	if (my $childpid = TBBackGround($logname)) {
+	    exit(0);
+	}
+	# Let parent exit;
+	sleep(2);
+    }
+    $dataset->webtask()->SetProcessID($PID);
+
+    # Arbitrary max wait.
+    my $seconds  = 1200;
+    my $interval = 15;
+    
+    while ($seconds > 0) {
+	my $errcode = DoRefreshInternal($dataset, \$errmsg);
+	if ($errcode) {
+	    print STDERR $errmsg;
+	    if ($errcode == GENIRESPONSE_SEARCHFAILED) {
+		#
+		# The dataset is gone, so it failed allocation.
+		# This should not happen for an imdataset of course.
+		# Mark the dataset as failed, we do not know why
+		# though, the allocation is asynchronous, and the error
+		# went out in email. But we can tell the user in the
+		# web UI.
+		#
+		$dataset->Update({"state" => "failed"});
+		$dataset->webtask()->output("allocation failure");
+		$dataset->webtask()->Exited(GENIRESPONSE_SEARCHFAILED);
+		last;
+	    }
+	    # Otherwise we keep trying. 
+	    goto again;
+	}
+	if ($dataset->state() eq "valid") {
+	    $creator->SendEmail("Your dataset is now ready to use",
+				"Dataset '$dname' is now ready to use.\n",
+				$project->LogsEmailAddress(), $TBOPS);
+	    $dataset->webtask()->Exited(0);
+	    last;
+	}
+	if ($dataset->state() eq "failed") {
+	    $creator->SendEmail("Your dataset failed to allocate!",
+				"Dataset '$dname' could not be allocated!\n",
+				$project->LogsEmailAddress(), $TBOPS);
+	    $dataset->webtask()->Exited(0);
+	}
+      again:
+	$seconds -= $interval;
+	sleep($interval);
+    }
+    if ($seconds <= 0) {
+	$creator->SendEmail("Your dataset timed out while allocating!",
+			    "Dataset '$dname' timed out while allocating!\n",
+			    $project->LogsEmailAddress(), $TBOPS);
+	$dataset->Update({"state" => "failed"});
+	$dataset->webtask()->Exited(-1);
+    }
+    unlink($logname) if (defined($logname));
+    $dataset->Unlock();
+    return 0;
+
+  failed:
+    unlink($logname) if (defined($logname));
+    $dataset->Unlock();
+    # This will set the webtask, see below.
+    fatal($errmsg);
 }
 
 sub fatal($)

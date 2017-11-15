@@ -108,6 +108,7 @@ my $CREATEDATASET  = "$TB/bin/createdataset";
 my $DELETEDATASET  = "$TB/bin/deletelease";
 my $EXTENDDATASET  = "$TB/bin/extendlease";
 my $GRANTDATASET   = "$TB/bin/grantlease";
+my $APPROVEDATASET = "$TB/bin/approvelease";
 my $GRANTIMAGE     = "$TB/sbin/grantimage";
 my $WAP            = "$TB/sbin/withadminprivs";
 my $SHAREVLAN      = "$TB/sbin/sharevlan";
@@ -4512,6 +4513,10 @@ sub CreateDataset($)
     my ($argref) = @_;
     my $credentials  = $argref->{'credentials'};
     my $dataset_urn  = $argref->{'dataset_urn'};
+    my $POLICY_FAIL  = 2;
+    my $needapproval = 0;
+    my $unapproved_reason;
+    require WebTask;
     require Lease;
     require Image;
     require EmulabConstants;
@@ -4596,9 +4601,11 @@ sub CreateDataset($)
     if (defined($lease)) {
 	GeniResponse->Create(GENIRESPONSE_ALREADYEXISTS);
     }
-    my $cmd = "$CREATEDATASET -C -b ";
+    my $opts = "-b ";
+    my $cmd  = "$CREATEDATASET ";
     if ($PROTOGENI_LOCALUSER) {
-	$cmd = "$WAP $cmd -o ". $user->uid() . " ";
+	$opts .= "-o ". $user->uid() . " ";
+	$cmd   = "$WAP $cmd ";
 	#
 	# We do this as admin so that we create dataset owned by this
 	# user and in the target project. 
@@ -4609,7 +4616,7 @@ sub CreateDataset($)
 	my $size = $argref->{'size'};
 	return GeniResponse->MalformedArgsResponse("Bad size, use MiBs")
 	    if ($size !~ /^\d+$/);
-	$cmd .= " -s $size";
+	$opts .= " -s $size ";
     }
     if (exists($argref->{'type'})) {
 	my $type = $argref->{'type'};
@@ -4617,26 +4624,26 @@ sub CreateDataset($)
 	    if ($type !~ /^[-\w]+$/);
 	return GeniResponse->MalformedArgsResponse("Mismatching type")
 	    if ($type ne $credential->target_urn()->type());
-	$cmd .= " -t $type";
+	$opts .= " -t $type ";
     }
     if (exists($argref->{'fstype'})) {
 	my $fstype = $argref->{'fstype'};
 	return GeniResponse->MalformedArgsResponse("Bad FS type")
 	    if ($fstype !~ /^[-\w]+$/);
-	$cmd .= " -f $fstype";
+	$opts .= " -f $fstype ";
     }
     if (exists($argref->{'read_access'})) {
 	my $read_access = $argref->{'read_access'};
 	return GeniResponse->MalformedArgsResponse("Bad read access")
 	    if (! ($read_access eq "project" || $read_access eq "global"));
-	$cmd .= " -R $read_access";
+	$opts .= " -R $read_access ";
 	
     }
     if (exists($argref->{'write_access'})) {
 	my $write_access = $argref->{'write_access'};
 	return GeniResponse->MalformedArgsResponse("Bad write access")
 	    if (! ($write_access eq "project" || $write_access eq "creator"));
-	$cmd .= " -W $write_access";
+	$opts .= " -W $write_access ";
 	
     }
     if (exists($argref->{'expires'})) {
@@ -4649,17 +4656,37 @@ sub CreateDataset($)
 	if (!str2time($expiration)) {
 	    return GeniResponse->MalformedArgsResponse("Bad expiration");
 	}
-	$cmd .= " -e '" . emutil::TBDateStringLocal($expiration) . "' ";
+	$opts .= " -e '" . emutil::TBDateStringLocal($expiration) . "' ";
     }
-    $cmd .= " " . $group->pid() . "/" . $group->gid() . "/" . $dataset_urn->id();
-    my $output = GeniUtil::ExecQuiet($cmd);
+    $opts .= $group->pid() . "/" . $group->gid() . "/" . $dataset_urn->id();
+
+    #
+    # Use a webtask to get back policy failure information, when a lease
+    # is created but no approved. Not currently used for imdatasets.
+    #
+    my $webtask = WebTask->CreateAnonymous();
+    if (!defined($webtask)) {
+	print STDERR "Could not create web task\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR);
+    }
+    $opts = " -C -T ". $webtask->task_id() . " $opts";
+	
+    my $output = GeniUtil::ExecQuiet("$cmd $opts");
     # Not a typical op, so always print debugging info;
     print STDERR $output;
     if ($?) {
+	$webtask->Delete();
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
     }
     GeniUtil::FlipToGeniUser()
 	if ($PROTOGENI_LOCALUSER);
+
+    $webtask->Refresh();
+    if ($webtask->needapproval()) {
+	$needapproval = 1;
+	$unapproved_reason = $webtask->unapproved_reason();
+    }
+    $webtask->Delete();
 
     # Stuff to put in the return blob.
     my ($state,$uuid,$busy,$msg,$urn,$url,$cred);
@@ -4672,7 +4699,9 @@ sub CreateDataset($)
 	my $image = Image->Lookup($group->pid(), $dataset_urn->id());
 	if (!defined($image)) {
 	    print STDERR "Could not lookup image after createdataset\n";
-	    GeniResponse->Create(GENIRESPONSE_ERROR);
+	    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				 "Could not lookup image after createdataset");
+				 
 	}
 	$image->Update({"creator_urn" => $user->urn()});
 	$image->Update({"authority_urn" => $dataset_urn});
@@ -4688,21 +4717,19 @@ sub CreateDataset($)
 				  $group->gid(), $dataset_urn->id());
 	if (!defined($lease)) {
 	    print STDERR "Could not lookup lease after createdataset\n";
-	    GeniResponse->Create(GENIRESPONSE_ERROR);
+	    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				 "Could not lookup image after createdataset");
 	}
 	# Set the manager URN for same-SA permission checks.
 	$lease->SetAttribute("manager_urn", $credential->target_urn());
 	$lease->SetAttribute("creator_urn", $user->urn());
 	$lease->SetAttribute("authority_urn", $dataset_urn);
-	    
-	if ($lease->state() eq "unapproved") {
-	    if ($lease->locked()) {
-		$msg = "Your dataset is being allocated.";
-	    }
-	    else {
-		$msg = "Your dataset has not been approved yet. ".
-		    "Watch for email.";
-	    }
+
+	if ($needapproval) {
+	    $msg = "Your dataset has not been approved yet. Watch for email.";
+	}
+	else {
+	    $msg = "Your dataset is being allocated.";
 	}
 	$uuid  = $lease->uuid();
 	$state = $lease->state();
@@ -4717,6 +4744,14 @@ sub CreateDataset($)
 	"busy"  => $busy,
 	"credential" => $cred->asString(),
     };
+    if ($needapproval) {
+	$blob->{'approved'} = 0;
+	$blob->{'unapproved_reason'} = $unapproved_reason
+	    if (defined($unapproved_reason));
+    }
+    else {
+	$blob->{'approved'} = 1;
+    }
     $blob->{'url'} = $url if (defined($url));
     
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob, $msg);
@@ -4755,7 +4790,7 @@ sub DeleteDataset($)
 	    return GeniResponse->Create(GENIRESPONSE_BUSY, undef,
 					"$dataset is in use, try again later");
 	}
-	$cmd = "$DELETEDATASET -b -f " .
+	$cmd = "$DELETEDATASET -b -f -G " .
 	    $dataset->pid() . "/" . $dataset->gid() . "/" . $dataset->lease_id();
     }
     else {
@@ -4949,6 +4984,64 @@ sub DescribeDataset($)
 	#print STDERR Dumper($blob);
     }
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+}
+
+#
+# Approve a dataset (lease). Must have an SA auth credential.
+#
+sub ApproveDataset($)
+{
+    my ($argref) = @_;
+    my $credentials  = $argref->{'credentials'};
+    my $dataset_urn  = $argref->{'dataset_urn'};
+    my $blob = {};
+    require Image;
+    require Lease;
+    require EmulabConstants;
+    require GeniImage;
+
+    if (! (defined($credentials) && defined($dataset_urn))) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    $dataset_urn = GeniHRN->new($dataset_urn);
+    if ($dataset_urn->type() !~ /^(lt|st)dataset$/) {
+	return GeniResponse->MalformedArgsResponse("Bad dataset type");
+    }
+    my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
+    return $credential
+	if (GeniResponse::IsResponse($credential));
+
+    my $lease = Credential2Dataset($dataset_urn, $credential);
+    return $lease
+	if (GeniResponse::IsResponse($lease));
+
+    # Already approved. 
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS)
+	if ($lease->state() ne "unapproved");
+
+    #
+    # We had to get an "auth" credential with explicit admin priv.
+    #
+    if (! (($dataset_urn->authority() eq
+	    $credential->target_urn()->authority()) && 
+	   $credential->owner_urn()->IsSA() &&
+	   $credential->HasActualPrivilege("admin"))) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN);
+    }
+    my $name = $lease->pid() . "/" . $lease->lease_id();
+
+    #
+    # We do this as admin of course, so must flip.
+    #
+    my $cmd = "$WAP $APPROVEDATASET -b -w 10 '$name'";
+    GeniUtil::FlipToElabMan();
+    my $output = GeniUtil::ExecQuiet($cmd);
+    # Not a typical op, so always print debugging info;
+    print STDERR $output;
+    if ($?) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
+    }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
 
 sub GetDatasetCredential($)

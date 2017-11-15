@@ -47,15 +47,17 @@ use GeniResponse;
 use GeniCertificate;
 use GeniAuthority;
 use GeniCredential;
+use WebTask;
 use overload ('""' => 'Stringify');
 
 # Configure variables
 my $TB		  = "@prefix@";
 my $TBOPS         = "@TBOPSEMAIL@";
 my $OURDOMAIN     = "@OURDOMAIN@";
+my $MAINSITE      = @TBMAINSITE@;
 
 # Debugging
-my $usemydevtree  = 0;
+my $usemydevtree  = ($MAINSITE ? 0 : 0);
 
 #
 # Lookup by uuid.
@@ -129,6 +131,26 @@ sub LookupByRemoteURN($$)
 	if (!$query_result || !$query_result->numrows);
 
     my ($uuid) = $query_result->fetchrow_array();
+    return Lookup($class, $uuid);
+}
+
+#
+# Lookup by remote UUID
+#
+sub LookupByRemoteUUID($$)
+{
+    my ($class, $uuid) = @_;
+
+    return undef
+	if ($uuid !~ /^\w+\-\w+\-\w+\-\w+\-\w+$/);
+    
+    my $query_result =
+	DBQueryWarn("select uuid from apt_datasets ".
+		    "where remote_uuid='$uuid'");
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    ($uuid) = $query_result->fetchrow_array();
     return Lookup($class, $uuid);
 }
 
@@ -358,7 +380,7 @@ sub IsExpired($)
 }
 
 #
-# Load the project object for an experiment.
+# Load the project.
 #
 sub GetProject($)
 {
@@ -372,6 +394,23 @@ sub GetProject($)
 	return undef;
     }
     return $project;
+}
+
+#
+# Load the creator
+#
+sub GetCreator($)
+{
+    my ($self) = @_;
+    require User;
+
+    my $creator = User->Lookup($self->creator_idx());
+    
+    if (! defined($creator)) {
+	print("*** WARNING: Could not lookup creator object for $self!\n");
+	return undef;
+    }
+    return $creator;
 }
 
 #
@@ -463,6 +502,13 @@ sub GetGeniAuthority($)
     require GeniAuthority;
 
     return APT_Geni::GetAuthority($self->aggregate_urn());
+}
+
+sub GetAggregate($)
+{
+    my ($self) = @_;
+
+    return APT_Aggregate->Lookup($self->aggregate_urn());
 }
 
 #
@@ -731,6 +777,36 @@ sub GetCredential($)
 
     return Genixmlrpc::CallMethod($cmurl, $context,
 				  "GetDatasetCredential", $args);
+}
+
+#
+# Approve a dataset using an auth credential.
+#
+sub ApproveDataset($)
+{
+    my ($self) = @_;
+    my $authority = $self->GetGeniAuthority();
+    my $geniuser  = $self->GetGeniUser();
+    my $context   = APT_Geni::GeniContext();
+    my $cert      = $self->GetCertificate();
+    return undef
+	if (! (defined($geniuser) && defined($authority) &&
+	       defined($context) && defined($cert)));
+    
+    my ($credential) =
+	APT_Geni::GenAuthCredential($cert, ["admin"]);
+    return undef
+	if (!defined($credential));
+
+    my $args = {
+	"dataset_urn" => $cert->urn(),
+	"credentials" => [$credential->asString()],
+    };
+    my $cmurl = $authority->url();
+    $cmurl =~ s/protogeni/protogeni\/stoller/ if ($usemydevtree);
+
+    return Genixmlrpc::CallMethod($cmurl, $context,
+				  "ApproveDataset", $args);
 }
 
 # _Always_ make sure that this 1 is at the end of the file...
