@@ -36,14 +36,16 @@ sub usage()
     print STDERR "   -d       Print additional debug info\n";
     print STDERR "   -f       Force destruction even if lease is not in the correct state\n";
     print STDERR "   -F       Force destruction even if lease is in use (admin only)\n";
+    print STDERR "   -G       Force destruction even if lease is Geni created (admin only)\n";
     print STDERR "   -w time  Try for up to time seconds to lock lease (0 means forever)\n";
     print STDERR "   lname    Name of lease in <pid>/<id> form\n";
     exit(-1);
 }
-my $optlist  = "dhfFw:b";
+my $optlist  = "dhfFw:bG";
 my $debug = 0;
 my $force = 0;
 my $background = 0;
+my $geniforce = 0;
 my $logname;
 my $pid;
 my $gid;
@@ -70,6 +72,7 @@ use Lease;
 use Project;
 use Group;
 use User;
+use APT_Dataset;
 
 #
 # Turn off line buffering on output
@@ -103,6 +106,9 @@ if (defined($options{f})) {
 }
 if (defined($options{F})) {
     $force = 2;
+}
+if (defined($options{G})) {
+    $geniforce = 2;
 }
 if (defined($options{w})) {
     $waittime = $options{w};
@@ -141,6 +147,13 @@ if (! defined($this_user)) {
 $lease = Lease->Lookup($pid, $gid, $lname);
 if (!defined($lease)) {
     fatal("No such lease $pid/$lname.");
+}
+#
+# Do not allow leases created via the Portal interface to be deleted
+# via the command line. This confuses things. 
+#
+if (!$geniforce && APT_Dataset->LookupByRemoteUUID($lease->uuid())) {
+    fatal("Not allowed to delete portal created dataset via this interface");
 }
 if (!$lease->AccessCheck($this_user, LEASE_ACCESS_DESTROY())) {
     fatal("Cannot access lease $pid/$lname.");
@@ -244,6 +257,7 @@ if ($lease->Delete()) {
     fatal("$pid/$lname: could not destroy lease.");
 }
 
+unlink($logname) if (defined($logname));
 print "Deleted lease '$pid/$lname'.\n";
 exit(0);
 
@@ -251,6 +265,8 @@ sub fatal($)
 {
     my ($mesg) = $_[0];
 
+    unlink($logname)
+	if (defined($logname));
     $lease->Unlock()
 	if (defined($lease) && $lease->GotLock());
     die("*** $0:\n".
