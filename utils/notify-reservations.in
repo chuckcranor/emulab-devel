@@ -51,6 +51,7 @@ use lib "@prefix@/lib";
 use emdb;
 use libtestbed;
 use emutil;
+use Reservation;
 
 #
 # Turn off line buffering on output
@@ -118,7 +119,8 @@ while( my ($idx, $pid, $count, $type, $end, $email) =
 	      "system failures.  Please send reports about the\n" .
 	      "reservation system to $TBOPS.\n" .
 	      "Thank you for your assistance in debugging this\n" .
-	      "feature!\n" );
+	      "feature!\n",
+	      $TBOPS);
     DBQueryFatal( "UPDATE future_reservations SET notified=NOW() WHERE idx=$idx" );
 }
 
@@ -157,8 +159,39 @@ while( my ($idx, $pid, $count, $type, $start, $end, $email) =
 	      "system failures.  Please send reports about the\n" .
 	      "reservation system to $TBOPS.\n" .
 	      "Thank you for your assistance in debugging this\n" .
-	      "feature!\n" );
+	      "feature!\n",
+	      $TBOPS);
     DBQueryFatal( "UPDATE future_reservations SET notified=NOW() WHERE idx=$idx" );
+}
+
+#
+# Handle cancellations. 
+#
+
+$query_result = DBQueryFatal( "SELECT r.idx, r.pid, r.nodes, r.type, " .
+			      "r.start, r.end, u.usr_email, r.cancel FROM " .
+			      "future_reservations AS r, users AS u " .
+			      "WHERE r.uid_idx=u.uid_idx AND " .
+			      "r.cancel IS NOT NULL AND " .
+			      "r.cancel < NOW()" );
+
+while( my ($idx, $pid, $count, $type, $start, $end, $email, $cancel) =
+       $query_result->fetchrow_array() ) {
+    print STDERR "Reservation $idx for project $pid, $count x $type from " .
+	"$start-$end <$email> canceled\n" if( $debug );
+
+    my $res = Reservation->Lookup($idx);
+    next if (!defined($res)); 
+
+    next if( $impotent );
+
+    $res->Cancel();
+    
+    SENDMAIL( $email, "$SITE reservation",
+	      "Your reservation for $count $type nodes in project $pid,\n" .
+	      "starting at $start and ending at $end,\n".
+	      "was canceled at $cancel, and has now been removed.\n",
+	      $TBOPS);
 }
 
 exit( 0 );
