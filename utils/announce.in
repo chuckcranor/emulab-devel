@@ -53,13 +53,14 @@ sub usage()
     print STDERR "   -U   In add mode, specify a specific target user.\n";
     exit(-1);
 }
-my $optlist  = "haA:cp:s:b:u:m:lr:R:i:U:t:I:S:E:";
+my $optlist  = "haA:cp:s:b:u:m:lr:R:i:U:t:I:S:E:w:";
 my $add_mode = 0;
 my $update_mode = 0;
 my $update_target;
 my $list_mode = 0;
 my $retire_mode = 0;
 my $purge_mode = 0;
+my $sees_mode = 0;
 my $info_mode = 0;
 my $portal = undef;
 my $style = "alert-info";
@@ -137,6 +138,10 @@ if (defined($options{"R"})) {
     $purge_mode = 1;
     $retire_idx = $options{"R"};
 }
+if (defined($options{"w"})) {
+    $sees_mode  = 1;
+    $retire_idx = $options{"w"};
+}
 if (defined($options{"i"})) {
     $info_mode = 1;
     $info_idx = $options{"i"};
@@ -213,7 +218,7 @@ if ($add_mode)
 }
 
 if ($add_mode + $update_mode + $list_mode +
-    $retire_mode + $purge_mode + $info_mode != 1) {
+    $retire_mode + $sees_mode + $purge_mode + $info_mode != 1) {
     print STDERR "No mode selected. Must use one of -a, -A, -r, -R, -l, or -i\n\n";
     usage();
 }
@@ -332,14 +337,24 @@ if ($add_mode) {
     #
     # Retire an announcement
     #
+    my $clause = (ValidUUID($retire_idx) ?
+		  "uuid='$retire_idx'" : "idx='$retire_idx'");
     $query_result =
 	DBQueryFatal("update apt_announcements ".
-		     "set retired=1 where idx=".
-		     DBQuoteSpecial($retire_idx));
+		     "set retired=1 where $clause");
     if ($compatibility)
     {
 	TBSetSiteVar("web/banner", "");
     }
+} elsif ($sees_mode) {
+    #
+    # Force a retired announcement back to work.
+    #
+    my $clause = (ValidUUID($retire_idx) ?
+		  "uuid='$retire_idx'" : "idx='$retire_idx'");
+    $query_result =
+	DBQueryFatal("update apt_announcements ".
+		     "set retired=0 where $clause");
 } elsif ($info_mode) {
     #
     # Details about an announcement
