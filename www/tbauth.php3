@@ -942,13 +942,14 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
         # But inactive users need special handling.
 	if ($user->status() == TBDB_USERSTATUS_INACTIVE) {
             if (1) {
-                TBMAIL($TBMAIL_OPS,
+                TBMAIL($user->email(),
                        "Web Login Inactivity Alert: '$uid'",
                        "Login attempt by $uid ($uid_idx) after extended ".
                        "period of inactivity!\n".
                        "Login was denied, last activity was $lastlogin\n",
                        "From: $TBMAIL_OPS\n".
                        "Bcc: $TBMAIL_AUDIT\n".
+                       "CC: $TBMAIL_OPS\n".
                        "Errors-To: $TBMAIL_WWW");
                 
                 return DOLOGIN_STATUS_INACTIVE;
@@ -1081,17 +1082,30 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
     # using one week as its threshold, we can use that as the limit.
     #
     $exports_active = TBGetSiteVar("general/export_active");
+
+    # We get the email at the same time for inactivity warning.
+    $query_result =
+        DBQueryFatal("select UNIX_TIMESTAMP(last_activity),last_activity, ".
+                     "       UNIX_TIMESTAMP(weblogin_last),weblogin_last, ".
+                     "       usr_email ".
+                     "  from users as u ".
+                     "left join user_stats as s on s.uid_idx=u.uid_idx ".
+                     "where u.uid_idx='$uid_idx' and ".
+                     "      u.nonlocal_id is null");
+    
+    if (!mysql_num_rows($query_result)) {
+        return -1;
+    }
+    $lastrow       = mysql_fetch_row($query_result);
+    $lastactive    = $lastrow[0];
+    $lastactivestr = $lastrow[1];
+    $lastlogin     = $lastrow[2];
+    $lastloginstr  = $lastrow[3];
+    $usr_email     = $lastrow[4];
     
     if ($WITHZFS && $ZFS_NOEXPORT && $exports_active) {
         $limit = (($exports_active * 24) - 12) * 3600;
         
-        $query_result =
-	    DBQueryFatal("select UNIX_TIMESTAMP(last_activity),last_activity ".
-			 "  from users as u ".
-			 "left join user_stats as s on s.uid_idx=u.uid_idx ".
-			 "where u.uid_idx='$uid_idx' and ".
-                         "      u.nonlocal_id is null");
-
         # Update last_activity first so exports_setup will do something
         # and to mark activity to keep the mount active.
         DBQueryFatal("update user_stats set last_activity=now() ".
@@ -1108,38 +1122,32 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
         }
         DBQueryFatal($history);
         
-	if (mysql_num_rows($query_result)) {
-		$lastrow       = mysql_fetch_row($query_result);
-		$lastactive    = $lastrow[0];
-		$lastactivestr = $lastrow[1];
-	
-                if ($lastactive && 
-                    time() - $lastactive > (3600 * 24 * 365)) {
-                    TBMAIL($TBMAIL_OPS,
-                           "Web Login Inactivity Alert: '$uid'",
-                           "Login by $uid ($uid_idx) after extended period ".
-                           "of inactivity!\n".
-                           "Last activity was $lastactivestr\n",
-                           "From: $TBMAIL_OPS\n".
-                           "Bcc: $TBMAIL_AUDIT\n".
-                           "Errors-To: $TBMAIL_WWW");
-                }
-		if (time() - $lastactive > $limit) {
-			$rv = SUEXEC("nobody", "nobody", "webexports_setup",
-				     SUEXEC_ACTION_IGNORE);
-
-			# failed, reset the timestamp
-			if ($rv) {
-				DBQueryFatal("update user_stats set ".
-					     " last_activity='$lastactivestr' ".
-					     "where uid_idx='$uid_idx'");
-				SUEXECERROR(SUEXEC_ACTION_DIE);
-				return;
-			}
-		}
-	}
+        if (time() - $lastactive > $limit) {
+            $rv = SUEXEC("nobody", "nobody", "webexports_setup",
+                         SUEXEC_ACTION_IGNORE);
+            
+            # failed, reset the timestamp
+            if ($rv) {
+                DBQueryFatal("update user_stats set ".
+                             " last_activity='$lastactivestr' ".
+                             "where uid_idx='$uid_idx'");
+                SUEXECERROR(SUEXEC_ACTION_DIE);
+                return;
+            }
+        }
     }
-
+    if ($lastlogin && 
+        time() - $lastlogin > (3600 * 24 * 365)) {
+        TBMAIL($usr_email,
+               "Web Login Inactivity Alert: '$uid'",
+               "Login by $uid ($uid_idx) after extended period ".
+               "of inactivity!\n".
+               "Last activity was $lastloginstr\n",
+               "From: $TBMAIL_OPS\n".
+               "Bcc: $TBMAIL_AUDIT\n".
+               "CC: $TBMAIL_OPS\n".
+               "Errors-To: $TBMAIL_WWW");
+    }
     DBQueryFatal("replace into login ".
 		 "  (uid,uid_idx,hashkey,hashhash,timeout,adminon,opskey) ".
                  " values ".
