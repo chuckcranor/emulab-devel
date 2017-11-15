@@ -1015,7 +1015,7 @@ sub Usage($$$)
 		    "where e.pid_idx='$pid_idx' and e.state='active' ".
 		    "group by e.eid,s.rsrcidx,s.nonlocal_id,s.slice_uuid, ".
 		    "         UNIX_TIMESTAMP(s.swapin_last),n.type ".
-		    "order by r.swapin_time desc) ".
+		    "order by s.swapin_last desc) ".
 		    "union ".
 		    "(select s.eid,r.idx,s.nonlocal_id,s.slice_uuid, ".
 		    "       r.swapin_time,r.swapout_time,n.type, ".
@@ -1023,6 +1023,8 @@ sub Usage($$$)
 		    "  from experiment_resources as r ".
 		    "left join experiment_stats as s on ".
 		    "     s.exptidx=r.exptidx  ".
+		    "left join experiments as e on ".
+		    "     e.idx=r.exptidx  ".
 		    "left join node_history as h on ".
 		    "     h.exptidx=r.exptidx and h.op='alloc' and ".
 		    "     h.stamp >= r.swapin_time - 120 and ".
@@ -1030,7 +1032,7 @@ sub Usage($$$)
 		    "      h.stamp < r.swapout_time) ".
 		    "left join nodes as n on n.node_id=h.node_id ".
 		    "where s.pid_idx='$pid_idx' and ".
-		    "     r.swapin_time!=0 and ".
+		    "     r.swapin_time!=0 and r.swapout_time!=0 and ".
 		    "    ((r.swapin_time >= $start and ".
 		    "      r.swapin_time <= $end) or ".
 		    "     (r.swapout_time > $start and ".
