@@ -42,6 +42,7 @@ use libtestbed;
 use Project;
 use Reservation;
 use WebTask;
+use emutil;
 
 sub usage()
 {
@@ -66,6 +67,8 @@ sub usage()
     print STDERR "   -l   List all existing reservations\n";
     print STDERR "   -s   Start time when reservation begins\n";
     print STDERR "   -e   End time when reservation expires\n";
+    print STDERR "   -E   Schedule reservation for cancellation\n";
+    print STDERR "   -O   Clear scheduled reservation cancellation\n";
     print STDERR "   -a   Approve reservation (auto for small, otherwise admin-only)\n";
     print STDERR "   -p   Create pending reservation (do not auto-approve)\n";
     print STDERR "   -m   Modify existing reservation\n";
@@ -76,7 +79,7 @@ sub usage()
     exit( -1 );
 }
 
-my $optlist    = "ac:de:fhilm:npqs:t:uA:CD:N:S:U:T:";
+my $optlist    = "ac:de:fhilm:npqs:t:uA:CD:N:S:U:T:E:Oy";
 my $debug      = 0;
 my $info       = 0;
 my $list       = 0;
@@ -93,6 +96,9 @@ my $adminnotes = undef;
 my $denynotes  = undef;
 my $approve    = 0;
 my $pending    = 0;
+my $tidy       = 0;
+my $cancel;
+my $abortcancel= 0;
 my $type;
 my $pid;
 my $count;
@@ -191,6 +197,9 @@ if (defined($options{f})) {
 if (defined($options{n})) {
     $impotent = 1;
 }
+if (defined($options{t})) {
+    $tidy = 1;
+}
 if (defined($options{q})) {
     $quiet = 1;
 }
@@ -260,6 +269,25 @@ if (defined($options{'a'})) {
 }
 if (defined($options{'p'})) {
     $pending = 1;
+}
+if (defined($options{'E'})) {
+    fatal( "-E option requires administrator privileges" ) unless( $admin );
+    $cancel = $options{'E'};
+    if ($cancel !~ /^\d+$/) {
+	$cancel = str2time($cancel);
+	if (!defined($cancel)) {
+	    fatal("Could not parse -E option.");
+	}
+    }
+}
+elsif (defined($options{'O'})) {
+    fatal( "-O option requires administrator privileges" ) unless( $admin );
+    $abortcancel = 1;
+}
+if ($tidy) {
+    usage() if( @ARGV );
+    Reservation->Tidy();
+    exit(0);
 }
 if ($info) {
     usage() if( @ARGV != 1 );
@@ -410,7 +438,63 @@ if ($info) {
     
     exit(0);
 }
+
+#
+# Schedule cancellation and exit.
+#
+if ($cancel || $abortcancel) {
+    my $res;
+
+    if( $modify_idx ) {
+	$res = Reservation->Lookup( $modify_idx );
+    } else {
+	$res = Reservation->Lookup( $pid, $starttime, $endtime, $type, $count );
+    }
     
+    if( !defined( $res ) ) {
+	print STDERR "-E or -O option: no matching reservation found.\n";
+	
+	exit( 1 );
+    }
+
+    $res->SetCancel(($abortcancel ? undef : $cancel));
+
+    while (1) {
+	if (!defined(Reservation->BeginTransaction(Reservation->GetVersion()))) {
+	    sleep(1);
+	    next;
+	}
+	$res->Book($res->idx());
+	Reservation->EndTransaction();
+	last;
+    }
+    
+    my $user = User->Lookup( $res->uid() );
+    my $count = $res->nodes();
+    my $type = $res->type();
+    my $s = TBDateStringUTC( $res->start() );
+    my $e = TBDateStringUTC( $res->end() );
+    my $d = TBDateStringUTC( $cancel );
+    my $msg = "Your reservation request for $count $type nodes,\n" .
+	"starting at $s and ending at $e\n";
+    my $subject;
+
+    if ($abortcancel) {
+	$subject = "Reservation cancellation has been rescinded";
+	$msg .= "is no longer scheduled for cancellation.\n";
+    }
+    else {
+	$subject = "Reservation scheduled for cancellation";
+	$msg .= "has been scheduled for cancellation at $d\n" .
+	    ( defined( $denynotes ) ?
+	      "The reason for cancellation is:\n\n" .
+	      $denynotes . "\n" : "" ),
+    }
+    SENDMAIL($user->email(), $subject, $msg, $TBOPS) unless( $quiet );
+	
+    exit( 0 );
+}
+
 #
 # Clear and exit.
 #
