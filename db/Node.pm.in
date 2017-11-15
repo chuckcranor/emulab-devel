@@ -2322,6 +2322,12 @@ sub SetEventState($$)
 sub ResetStartStatus($)
 {
     my ($self) = @_;
+
+    #
+    # Do not do this on certain node types.
+    #
+    return 0
+	if ($self->type() eq "blockstore");
     
     $self->{"DBROW"}->{'startstatus'} = 'none';
     return $self->Update({"startstatus" => 'none'});

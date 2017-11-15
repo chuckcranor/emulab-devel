@@ -7670,8 +7670,13 @@ sub InitializePhysNode($$$)
 		     "loadlist"          => $loadlist || '',
 		     "failureaction"     => $failureaction,
 		     "routertype"        => $routertype);
-	$nodesets{"startstatus"} = 'none'
-	    if (!exists($self->oldreservednodes()->{$pnodename}));
+	# They never report status, need to set them.
+	if (defined($virtnode->_blockstore())) {
+	    $nodesets{"startstatus"} = 0;
+	}
+	elsif (!exists($self->oldreservednodes()->{$pnodename})) {
+	    $nodesets{"startstatus"} = 'none';
+	}
 		
 	%rsrvsets = ("vname"             => $vnodename,
 		     "erole"             => $role,
