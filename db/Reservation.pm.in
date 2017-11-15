@@ -94,6 +94,7 @@ sub CreateCommon($$$$$$$$)
     $self->{'APPROVED'}    = undef;
     $self->{'APPROVER'}    = undef;
     $self->{'UUID'}        = undef;
+    $self->{'CANCEL'}      = undef;
 	
     bless($self, $class);
     
@@ -158,7 +159,8 @@ sub Lookup($$;$$$$)
 	$query_result = DBQueryWarn( "SELECT *, UNIX_TIMESTAMP(start) AS s, " .
 				     "UNIX_TIMESTAMP(end) AS e, " .
 				     "UNIX_TIMESTAMP(created) AS c, " .
-				     "UNIX_TIMESTAMP(approved) AS a " .
+				     "UNIX_TIMESTAMP(approved) AS a, " .
+				     "UNIX_TIMESTAMP(cancel) AS d " .
 				     "FROM future_reservations " .
 				     "WHERE pid_idx='$pid_idx' AND " .
 				     "nodes='$nodes' AND " .
@@ -184,7 +186,8 @@ sub Lookup($$;$$$$)
 	$query_result = DBQueryWarn( "SELECT *, UNIX_TIMESTAMP(start) AS s, " .
 				     "UNIX_TIMESTAMP(end) AS e, " .
 				     "UNIX_TIMESTAMP(created) AS c, " .
-				     "UNIX_TIMESTAMP(approved) AS a " .
+				     "UNIX_TIMESTAMP(approved) AS a, " .
+				     "UNIX_TIMESTAMP(cancel) AS d " .
 				     "FROM future_reservations " .
 				     "WHERE $clause" );
 
@@ -202,6 +205,7 @@ sub Lookup($$;$$$$)
     $self->{'START'}       = $record->{'s'};
     $self->{'END'}         = $record->{'e'};
     $self->{'CREATED'}     = $record->{'c'};
+    $self->{'CANCEL'}      = $record->{'d'};
     $self->{'TYPE'}        = $record->{'type'};
     $self->{'NODES'}       = $record->{'nodes'};
     $self->{'UID'}         = $record->{'uid'};
@@ -223,6 +227,7 @@ sub pid_idx($)     { return $_[0]->{"PID_IDX"}; }
 sub eid($)         { return $_[0]->{"EID"}; }
 sub start($)       { return $_[0]->{"START"}; }
 sub end($)         { return $_[0]->{"END"}; }
+sub cancel($)      { return $_[0]->{"CANCEL"}; }
 sub created($)     { return $_[0]->{"CREATED"}; }
 sub type($)        { return $_[0]->{"TYPE"}; }
 sub nodes($)       { return $_[0]->{"NODES"}; }
@@ -286,6 +291,13 @@ sub SetAdminNotes($$)
     my ($self, $notes) = @_;
 
     $self->{'ADMIN_NOTES'} = $notes;
+}
+
+sub SetCancel($$)
+{
+    my ($self, $cancel) = @_;
+
+    $self->{'CANCEL'} = $cancel;
 }
 
 # Mark the reservation as approved.  This DOES NOT update the database
@@ -391,6 +403,7 @@ sub Book($;$)
     my $admin_notes = DBQuoteSpecial( $self->admin_notes() );
     my $approved = $self->approved();
     my $approver = $self->approver();
+    my $cancel = $self->cancel();
 
     my $base_query = "SET pid='$pid', " .
 		     "pid_idx='$pid_idx', " .
@@ -406,6 +419,8 @@ sub Book($;$)
 		       ", admin_notes=$admin_notes" : "" ) .
 		     ( defined( $approved ) ?
 		       ", approved=FROM_UNIXTIME($approved)" : "" ) .
+		     ( defined( $cancel ) ?
+		       ", cancel=FROM_UNIXTIME($cancel)" : ", cancel=null" ) .
 		     ( defined( $approver ) ? ", approver='$approver'" : "" );
 
     my $query_result =
