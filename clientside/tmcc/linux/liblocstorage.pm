@@ -994,7 +994,7 @@ sub os_check_storage_element($$)
 	my $session;
 	@lines = `$ISCSI -m session 2>&1`;
 	foreach (@lines) {
-	    if (/^tcp: \[(\d+)\].*$uuid *$/) {
+	    if (/^tcp: \[(\d+)\].*$uuid\b/) {
 		$session = $1;
 		last;
 	    }
@@ -1505,9 +1505,11 @@ sub os_create_storage_element($$$)
 	#
 	# Make sure we are connected
 	#
+	my $session;
 	@lines = `$ISCSI -m session 2>&1`;
 	foreach (@lines) {
-	    if (/^tcp: \[(\d+)\].*$uuid *$/) {
+	    chomp;
+	    if (/^tcp: \[(\d+)\].*$uuid\b/) {
 		$session = $1;
 		last;
 	    }
