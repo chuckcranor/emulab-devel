@@ -54,7 +54,7 @@ sub usage()
     print STDERR "   name           Name (in the form <pid>/<id> or <pid>/<gid>/<id>)\n";
     exit(-1);
 }
-my $optlist  = "dhUo:s:t:e:a:f:bCR:W:I:";
+my $optlist  = "dhUo:s:t:e:a:f:bCR:W:I:T:";
 my $debug = 0;
 my $background = 0;
 my $pid;
@@ -71,6 +71,10 @@ my $attrstr = "";
 my %attrs = ();
 my $read_access;
 my $write_access;
+my $needapproval = 0;
+my $unapproved_reason;
+my $webtask_id;
+my $webtask;
 
 my $qprefix = "global_";
 my $quota;
@@ -112,6 +116,7 @@ use Group;
 use User;
 use Image;  # For datasets
 use Node;
+use WebTask;
 
 #
 # Turn off line buffering on output
@@ -201,6 +206,14 @@ if (defined($options{"W"})) {
 	print STDERR "Illegal write access setting\n";
 	usage();
     }
+}
+if (defined($options{"T"})) {
+    $webtask_id = $options{"T"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not get webtask object");
+    }
+    $webtask->AutoStore(1);
 }
 
 if (@ARGV != 1) {
@@ -305,17 +318,12 @@ my $vars = Lease->SiteVars($dstype);
 if ($size <= 0) {
     fatal("Size must be greater than zero.");
 }
-if ($approveme && $vars->{"maxsize"} > 0 && $size > $vars->{"maxsize"}) {
-    print STDERR
-	"Requested size ($size) is larger than allowed by default (" .
-	$vars->{"maxsize"} . ").\n";
-    if (!$alwayscreate) {
-	print STDERR
-	    "Try again with '-U' option and request special approval by testbed-ops.\n"
-	    if (!$background);
-	exit($POLICY_FAIL);
-    } else {
-	print STDERR "WARNING: creating anyway!\n";
+if ($vars->{"maxsize"} > 0 && $size > $vars->{"maxsize"}) {
+    if ($approveme) {
+	$unapproved_reason = 
+	    "Requested size ($size) is larger than allowed by default (" .
+	    $vars->{"maxsize"} . ").";
+	$needapproval = 1;
     }
 }
 
@@ -325,7 +333,6 @@ if ($approveme && $vars->{"maxsize"} > 0 && $size > $vars->{"maxsize"}) {
 # If the user did not specify a value, we use the system max value.
 #
 my $now = time();
-my $needapproval = 0;
 if (!defined($expire)) {
     # no user specified expiration, use default max (which may be unlimited)
     if ($vars->{"maxlease"} > 0) {
@@ -337,7 +344,7 @@ if (!defined($expire)) {
     # user specified unlimited, requires approval unless max is also unlimited
     if ($vars->{"maxlease"} > 0) {
 	if ($approveme) {
-	    print STDERR "Unlimited expiration not allowed by default.\n";
+	    $unapproved_reason = "Unlimited expiration not allowed by default.";
 	    $needapproval = 1;
 	}
     }
@@ -349,18 +356,25 @@ if (!defined($expire)) {
     if ($approveme && ($expire - $now) > $vars->{"maxlease"}) {
 	my $mdate = localtime($now + $vars->{"maxlease"});
 	my $rdate = localtime($expire);
-	print STDERR "Expiration is beyond the maximum allowed by default ".
-	    "($rdate > $mdate).\n";
+	$unapproved_reason =
+	    "Expiration is beyond the maximum allowed by default ".
+	    "($rdate > $mdate).";
 	$needapproval = 1;
     }
 }
 if ($needapproval) {
+    print STDERR $unapproved_reason . "\n";
     if (!$alwayscreate) {
 	print STDERR
 	    "Try again with '-U' to request special approval by testbed-ops.\n"
 	    if (!$background);
+	if (defined($webtask)) {
+	    $webtask->output($unapproved_reason);
+	    $webtask->Exited($POLICY_FAIL);
+	}
 	exit($POLICY_FAIL);
     } else {
+	$approveme = 0;
 	print STDERR "WARNING: creating anyway!\n";
     }
 }
@@ -460,15 +474,20 @@ if ($vars->{"usequotas"}) {
 	    $allocated += $lsize;
 	}
 	if ($allocated + $size > $qsize) {
-	    print STDERR
-		"Allocation of $size would put $pid over quota ($qsize).\n";
+	    $unapproved_reason =
+		"Allocation of $size would put $pid over quota ($qsize).";
 	    if (!$alwayscreate) {
 		print STDERR
 		    "Try again with '-U' to request special approval by testbed-ops.\n"
 		    if (!$background);
 		$quota->Unlock();
+		if (defined($webtask)) {
+		    $webtask->output($unapproved_reason);
+		    $webtask->Exited($POLICY_FAIL);
+		}
 		exit($POLICY_FAIL);
 	    } else {
+		$approveme = 0;
 		print STDERR "WARNING: creating anyway!\n";
 	    }
 	}
@@ -587,9 +606,18 @@ if (!$approveme) {
     # Note that the lease daemon sends out periodic email about
     # unapproved leases.
     SENDMAIL($TBOPS, "Lease approval required",
-	     "Lease '$pid/$gid/$lname' requires approval. You can view it at\n".
+	     "Lease '$pid/$gid/$lname' requires approval.\n".
+	     (defined($unapproved_reason) ? "$unapproved_reason\n\n" : "\n") .
+	     "You can view it at\n".
 	     "$TBBASE/show-dataset.php?uuid=$lease_uuid\n\n");
     print "NOTE: lease must still be approved before it can be used\n";
+
+    # Tell the web server the reason for not being approved.
+    if (defined($webtask)) {
+	$webtask->needapproval(1);
+	$webtask->unapproved_reason($unapproved_reason)
+	    if (defined($unapproved_reason));
+    }
 }
 
 exit(0);
@@ -708,6 +736,11 @@ sub fatal($)
 
     $quota->Unlock()
 	if (defined($quota));
+    
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(-1);
+    }
     die("*** $0:\n".
 	"    $mesg\n");
 }
