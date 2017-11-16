@@ -55,7 +55,10 @@ if test -z "$CP" ; then
 fi
 AC_PATH_PROG(YACC, byacc)
 if test -z "$YACC" ; then
-    AC_MSG_ERROR([no byacc found in \$PATH])
+    AC_PATH_PROG(YACC, yacc)
+    if test -z "$YACC" ; then
+        AC_MSG_ERROR([no byacc nor yacc found in \$PATH])
+    fi
 fi
 AC_PATH_PROG(TAR, tar)
 if test -z "$TAR" ; then
@@ -302,6 +305,7 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/ubuntu16/GNUmakefile \
 	  tmcc/ubuntu16-ms/GNUmakefile \
 	  tmcc/linux-ms/GNUmakefile \
+	  tmcc/archlinux/GNUmakefile \
 	  tmcc/freebsd5/GNUmakefile tmcc/freebsd5/supfile \
 	  tmcc/freebsd6/GNUmakefile tmcc/freebsd6/supfile \
 	  tmcc/freebsd6/netif-emulab \

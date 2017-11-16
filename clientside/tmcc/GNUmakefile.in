@@ -109,6 +109,11 @@ endif
 ifeq ($(MDSUBDIR),debian8)
 MDSUBDIR  = ubuntu15
 endif
+# We don't want to have a dir named "arch"; that would be confusing.
+# Hence archlinux.
+ifeq ($(MDSUBDIR),arch)
+MDSUBDIR  = archlinux
+endif
 ifeq ($(findstring fedora,$(MDSUBDIR)),fedora)
 ifeq ($(MDREL),15)
 MDSUBDIR  = fedora15
