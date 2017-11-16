@@ -42,8 +42,8 @@ fi
 if [ -z "$dist" -a -r /etc/os-release ]; then
     dist=`(. /etc/os-release ; echo $ID | tr '[A-Z]' '[a-z]')`
     rel=`(. /etc/os-release ; echo $VERSION_ID)`
-    major=$rel
-    minor=''
+    major=`echo $rel | cut -d. -f1`
+    minor=`echo $rel | cut -d. -f2`
 fi
 if [ -z "$dist" -a -r /etc/redhat-release ]; then
     trel=`grep 'Red Hat' /etc/redhat-release | sed -e 's/Red Hat Linux release \([0-9]\(\.[0-9]\)\?\).*/\1/'`
@@ -127,6 +127,18 @@ if [ -n "$dist" ]; then
 	    basepkgtype='deb'
 	fi
 	;;
+    alpine)
+  if [ -z "$pkgtool" -a -f /sbin/apk ]; then
+      pkgtool=/sbin/apk
+      pkgtool=/sbin/apk
+  else
+      pkgtool=`which apk`
+      basepkgtool=`which apk`
+  fi
+  if [ -n "$pkgtool" ]; then
+      basepkgtype='apk'
+  fi
+  ;;
     *)
 	if [ -z "$pkgtool" ]; then 
 	    if [ -f /usr/bin/apt-get ]; then
@@ -212,6 +224,14 @@ elif [ -n "$basepkgtype" -a "$basepkgtype" = "rpm" ]; then
 	#    SSHD_ENABLED=1
 	#fi
     fi
+elif [ -n "$basepkgtype" -a "$basepkgtype" = "apk" ]; then
+    SSHD_PACKAGE=openssh
+    apk update
+    apk add openssh-server | grep -iq OK >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+  HAS_SSHD=1
+  SSHD_PACKAGE=openssh-server
+    fi
 fi
 
 #
@@ -244,6 +264,20 @@ elif [ -n "$basepkgtype" -a "$basepkgtype" = "rpm" ]; then
 	    SYSLOG_PACKAGE=syslog-ng
 	    HAS_SYSLOG=1
 	fi
+    fi
+elif [ -n "$basepkgtype" -a "$basepkgtype" = "apk" ]; then
+    apk update
+    apk add rsyslog | grep -iq OK >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+  SYSLOG_PACKAGE=rsyslog
+  HAS_SYSLOG=1
+    fi
+    if [ $HAS_SYSLOG -eq 0 ]; then
+  apk add syslog=ng | grep -iq OK >/dev/null 2>&1
+  if [ $? -eq 0 ]; then
+      SYSLOG_PACKAGE=syslog-ng
+      HAS_SYSLOG=1
+  fi
     fi
 fi
 
