@@ -813,6 +813,8 @@ sub rcordersort($$) {
     my $nb = ($cb ge '0' && $cb le '9');
 
     if ($na && $nb) {
+	if ($a =~ /^(\d+)/) { $a = $1 }
+	if ($b =~ /^(\d+)/) { $b = $1 }
 	return int($a) <=> int($b);
     }
     elsif ($na && !$nb) {
