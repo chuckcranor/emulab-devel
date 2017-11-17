@@ -3123,7 +3123,7 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
 	my $ssh_style = $attributes->{DOCKER_SSH_STYLE};
 	my $exec_shell = $attributes->{DOCKER_EXEC_SHELL};
 
-	if (defined($exec_shell) && $exec_shell =~ /^[\/\w\d\-_]+$/) {
+	if (defined($exec_shell) && $exec_shell =~ /^([\/\w\d\-_]+)$/) {
 	    $exec_shell = $1;
 	}
 	else {
