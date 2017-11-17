@@ -38,15 +38,16 @@ use Data::Dumper;
 # 
 sub usage()
 {
-    print "Usage: deleteimagedata [-d] <image urn> <image uuid>\n";
-    print "Usage: deleteimagedata [-d] <imageid>\n";
+    print "Usage: deleteimagedata [-dn] <image urn> <image uuid>\n";
+    print "Usage: deleteimagedata [-dn] <imageid>\n";
+    print "Usage: deleteimagedata [-dn] prune\n";
     exit(1);
 }
-my $optlist  = "d";
+my $optlist  = "dn";
 my $debug    = 0;
+my $impotent = 0;
 my $errormsg;
-my $imageurn;
-my $imageuuid;
+my @images = ();
 
 #
 # Configure variables
@@ -75,12 +76,14 @@ $| = 1;
 
 # Now we can load the libraries after setting the proper DB.
 use lib '@prefix@/lib';
+use emdb;
 use libaudit;
 use emutil;
-use GeniDB;
+use GeniDB qw(GENICM_DBNAME DBConnect);
 use GeniCertificate;
 use GeniAuthority;
 use GeniImage;
+use GeniResponse;
 use GeniHRN;
 use libEmulab;
 use OSImage;
@@ -104,29 +107,57 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{"d"})) {
     $debug = 1;
 }
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
 if (@ARGV == 2) {
     usage()
 	if (! GeniHRN::IsValid($ARGV[0]));
     usage()
 	if (! ValidUUID($ARGV[1]));
-    ($imageurn,$imageuuid) = @ARGV;
+    my ($imageurn,$imageuuid) = @ARGV;
+    push(@images, [$imageurn, $imageuuid]);
+}
+elsif (@ARGV == 1 && $ARGV[0] eq "prune") {
+    my $query_result =
+	emdb::DBQueryFatal("select pid,gid,imagename,isdataset,uuid ".
+			   "   from image_versions ".
+			   "where deleted is not null and ".
+			   "      ims_reported is not null");
+
+    while (my ($pid,$gid,$name,$isdataset,$uuid) =
+	   $query_result->fetchrow_array()) {
+	my $domain = $OURDOMAIN;
+	my $urn;
+
+	if ($isdataset) {
+	    $domain .= ":${pid}";
+	    $domain .= ":${gid}" if ($pid ne $gid);
+	    
+	    $urn = GeniHRN::Generate($domain, "imdataset", $name);
+	}
+	else {
+	    $urn = GeniHRN::Generate($domain, "image", $pid . "//" . $name);
+	}
+	push(@images, [$urn, $uuid]);
+    }
 }
 elsif (@ARGV == 1) {
     my $image = OSImage->Lookup($ARGV[0]);
     if (!defined($image)) {
 	fatal("No such image!");
     }
-    $imageurn = $image->urn();
+    my $imageurn = $image->urn();
     
     #
     # If no version on the command line, we want to delete the entire
     # descriptor at the server.
     #
     if ($ARGV[0] =~ /:\d+$/) {
-	$imageuuid = $image->uuid();
+	push(@images, [$imageurn, $image->uuid()]);
     }
     else {
-	$imageuuid = $image->image_uuid();
+	push(@images, [$imageurn, $image->image_uuid()]);
     }
 }
 else {
@@ -151,8 +182,31 @@ Genixmlrpc->SetContext($context);
 # Shorten default timeout.
 Genixmlrpc->SetTimeout(15);
 
-if (GeniImage::DeleteImageData($imageurn, $imageuuid, \$errormsg)) {
-    fatal($errormsg);
+foreach my $ref (@images) {
+    my ($imageurn, $imageuuid) = @{ $ref };
+
+    if ($impotent) {
+	print "Would ask IMS to delete $imageurn\n";
+	next;
+    }
+    # Retry a few times if we get an RPC error, usually transient.
+    my $count = 3;
+    while ($count) {
+	my $rval = GeniImage::DeleteImageData($imageurn,
+					      $imageuuid, \$errormsg);
+	last
+	    if ($rval == 0);
+
+	fatal($errormsg)
+	    if ($rval != GENIRESPONSE_RPCERROR);
+
+	$count--;
+	if ($count == 0) {
+	    fatal("Too many RPC errors for $imageurn,$imageuuid");
+	}
+	print "Transient RPC error, will retry in five seconds\n";
+	sleep(5);
+    }
 }
 exit(0);
 
