@@ -88,6 +88,7 @@ use GeniCertificate;
 use GeniAuthority;
 use GeniHRN;
 use Genixmlrpc;
+use GeniResponse;
 use GeniRegistry;
 use libEmulab;
 use OSImage;
@@ -162,6 +163,8 @@ Genixmlrpc->SetContext($context);
 # Shorten default timeout.
 Genixmlrpc->SetTimeout(15);
 
+# Does not return if error.
+my $credential = GetServerCredential();
 
 if (@ARGV) {
     foreach my $imageid (@ARGV) {
@@ -197,15 +200,13 @@ if (@ARGV) {
     }
 }
 else {
-    # Update allows updating all images previously reported
-    my $ims_reported_clause =
-	($update ? "ims_reported is not null or" : "ims_reported is null or");
-
+    my $query_result;
     my $which_clause = ($datasets ? "isdataset=1" : "(ezid=1 or isdataset=1)");
-    
-    # List of all images that have not been reported to the IMS.
-    my $query_result =
-	emdb::DBQueryFatal("select v.imageid,v.version from ".
+
+    if (!$update) {
+	# List of all images that have not been reported to the IMS.
+	$query_result =
+	    emdb::DBQueryFatal("select v.imageid,v.version from ".
 			   "  image_versions as v ".
 			   "left join images as i on i.imageid=v.imageid ".
 			   "where $which_clause and ".
@@ -217,11 +218,24 @@ else {
                            "      v.metadata_url is null and ".
 			   "      (creator_urn is not null or ".
 			   "       (v.pid='$TBOPSPID' and v.global=1)) and ".
-			   "      ($ims_reported_clause ".
+			   "      (ims_reported is null or ".
 			   "       created > ims_reported or ".
 			   "       updated > ims_reported) ".
 			   "order by v.imageid,v.version");
-
+    }
+    else {
+	my $dateclause = "and ims_reported<'2017-11-16 10:48:53'";
+	
+	# List of all images that have already been reported to the IMS.
+	$query_result =
+	    emdb::DBQueryFatal("select v.imageid,v.version from ".
+			       "  image_versions as v ".
+			       "left join images as i on i.imageid=v.imageid ".
+			       "where $which_clause and ".
+			       "      ims_reported is not null and ".
+			       "      deleted is null ".
+			       "order by ims_reported asc");
+    }
     while (my ($imageid,$version) = $query_result->fetchrow_array()) {
 	my $image = OSImage->Lookup($imageid,$version);
 	if (!defined($image)) {
@@ -251,6 +265,11 @@ sub PostImageInfo($)
     if (!$image->isdataset()) {
 	$osfeatures = $image->osfeatures();
     }
+    if (!defined($image->hash())) {
+	print STDERR "No sha1hash for $image\n";
+	# Just skip.
+	return 0;
+    }
     my $project = $image->GetProject();
     if (!defined($project)) {
 	print STDERR "Could not lookup project: $imageid,$version\n";
@@ -273,9 +292,6 @@ sub PostImageInfo($)
 	return -1;
     }
 
-    # Does not return if error.
-    my $credential = GetServerCredential();
-    
     # This stuff is not needed for datasets.
     my $arch  = "";
     my $virtualization = "";
@@ -443,28 +459,32 @@ sub PostImageInfo($)
 	print "Pushing $image\n";
     }
     #
-    # Push the blob to the image server.
+    # Push the blob to the image server. Retry a couple of times on
+    # tranient RPC error.
     #
-    my $response =
-	Genixmlrpc::CallMethod(IMSURL(), undef, "PostImageInfo",
-			       {"credential" => $credential->asString(),
-				"imageinfo"  => $blob});
-    if (!defined($response) || $response->code()) {
+    my $errmsg;
+    my $count = 3;
+    while ($count) {
 	my $msg = "PostImageInfo failed for image " . $image->versname() . " :";
-	
-	if (!defined($response)) {
-	    # Bail, we will try again later.
-	    print STDERR "$msg RPC error\n";
+	my $args ={"credential" => $credential->asString(),
+		   "imageinfo"  => $blob};
+
+	my $rval = GeniImage::PostImageData($args, \$errmsg);
+
+	last
+	    if ($rval == 0);
+
+	if ($rval != GENIRESPONSE_RPCERROR) {
+	    print STDERR "$msg: $errmsg\n";
 	    return -1;
 	}
-	elsif (defined($response->output())) {
-	    print STDERR "$msg " . $response->output() . "\n";
+	$count--;
+	if ($count == 0) {
+	    print STDERR "$msg: Too many RPC failures, done trying.\n";
 	    return -1;
 	}
-	else {
-	    print STDERR "$msg " . $response->code() . "\n";
-	    return -1;
-	}
+	print "Transient RPC error, will retry in five seconds.\n";
+	sleep(5);
     }
     # Mark as reported.
     $image->MarkIMSReported();
@@ -475,9 +495,6 @@ sub PostImageAlias($)
 {
     my ($image) = @_;
     my @target_urns = ();
-
-    # Does not return if error.
-    my $credential = GetServerCredential();
 
     foreach my $tmp ($image->imagelist()) {
 	my $target_urn;
@@ -515,28 +532,32 @@ sub PostImageAlias($)
 	print "Pushing $image\n";
     }
     #
-    # Push the blob to the image server.
+    # Push the blob to the image server. We retry a few times if we get
+    # an RPC error since that is usually transient.
     #
-    my $response =
-	Genixmlrpc::CallMethod(IMSURL(), undef, "PostImageInfo",
-			       {"credential" => $credential->asString(),
-				"imageinfo"  => $blob});
-    if (!defined($response) || $response->code()) {
-	my $msg = "PostImageInfo failed for $image:";
-	
-	if (!defined($response)) {
-	    # Bail, we will try again later.
-	    print STDERR "$msg RPC error\n";
+    my $errmsg;
+    my $count = 3;
+    while ($count) {
+	my $msg = "PostImageInfo failed for image " . $image->versname() . " :";
+	my $args ={"credential" => $credential->asString(),
+		   "imageinfo"  => $blob};
+
+	my $rval = GeniImage::PostImageData($args, \$errmsg);
+
+	last
+	    if ($rval == 0);
+
+	if ($rval != GENIRESPONSE_RPCERROR) {
+	    print STDERR "$msg: $errmsg\n";
 	    return -1;
 	}
-	elsif (defined($response->output())) {
-	    print STDERR "$msg " . $response->output() . "\n";
+	$count--;
+	if ($count == 0) {
+	    print STDERR "$msg: Too many RPC failures, done trying.\n";
 	    return -1;
 	}
-	else {
-	    print STDERR "$msg " . $response->code() . "\n";
-	    return -1;
-	}
+	print "Transient RPC error, will retry in five seconds.\n";
+	sleep(5);
     }
     return 0;
 }
