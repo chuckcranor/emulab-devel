@@ -470,8 +470,13 @@ sub makeIfaceMaps()
 	    next;
 	}
 
+	#
+	# To ensure this can be run without a lock, don't die on a failed
+	# open.  The only reason we'll fail to open here is if the device
+	# has gone away after the initial dir listing.
+	#
 	open(FD,"/sys/class/net/$iface/address") 
-	    or die "could not open /sys/class/net/$iface/address!";
+	    or next;
 	my $mac = <FD>;
 	close(FD);
 	next if (!defined($mac) || $mac eq '');
