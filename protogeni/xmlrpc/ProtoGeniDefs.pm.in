@@ -287,5 +287,24 @@ ProtoGeniDefs::AddModule("cluster",
 	      }},
 	  });
 
+package ProtoGeniDefs::ProtogeniIMS;
+
+use lib '@prefix@/lib';
+use GeniIMS;
+
+ProtoGeniDefs::AddModule("ims",
+	  {
+	      "PEMFILE"    => "@prefix@/etc/genich.pem",
+	      "DBNAME"     => "geni-ch",
+	      "DEFVERSION" => "1.01",
+	      "METHODS"    => {"1.01" => {
+		  "GetVersion"        => \&GeniIMS::GetVersion,
+		  "GetCredential"     => \&GeniIMS::GetCredential,
+		  "PostImageInfo"     => \&GeniIMS::PostImageInfo,
+		  "GetImageInfo"      => \&GeniIMS::GetImageInfo,
+		  "DeleteImageInfo"   => \&GeniIMS::DeleteImageInfo,
+	      }},
+	  });
+
 1;
 

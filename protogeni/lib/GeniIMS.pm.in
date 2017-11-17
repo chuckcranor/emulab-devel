@@ -89,7 +89,7 @@ my $DB;
 
 sub InitDBHandle()
 {
-    $DB = GeniDB->New("ims");
+    $DB = GeniDB->New("ims") if (!defined($DB));
 }
 
 #
