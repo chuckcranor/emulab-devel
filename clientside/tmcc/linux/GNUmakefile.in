@@ -472,6 +472,11 @@ docker-install:	dir-install
 	$(INSTALL) -m 755 $(SRCDIR)/docker/dockerclient.pm $(BINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/docker/dockerclient-cli $(BINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/docker/container2pty.py $(BINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/docker/update-clientside.sh $(BINDIR)/
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(BINDIR)/run
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(BINDIR)/run/rcmanifest.d
+	$(INSTALL) -m 755 $(SRCDIR)/docker/10.update-clientside-pre-bootvnodes \
+		$(BINDIR)/run/rcmanifest.d
 	$(INSTALL) -m 755 $(SRCDIR)/docker/create-docker-image $(LBINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/docker/emulabize-image $(LBINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/vnodectl $(BINDIR)/
