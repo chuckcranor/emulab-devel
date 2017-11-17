@@ -1418,7 +1418,7 @@ sub doimage($)
     if ($path && ($validate{"all"} || $validate{"range"})) {
 	my ($lo,$hi,$ssize) = (-1,0,0);
 	my $isreloc = $relocatable;
-	my $out = `imageinfo -r $pidimage 2>&1`;
+	my $out = `$IMAGEINFO -r $pidimage 2>&1`;
 	if ($?) {
 	    print("$pidimage: range: could not get sector range:\n$out");
 	} else {
