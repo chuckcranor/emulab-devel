@@ -134,19 +134,25 @@ if ($debug) {
 # First, try to login to the registry with user/pass.
 #
 my $i = 10;
+my $code;
 while ($i > 0) {
     if ($usecli) {
 	system("docker login -p '$pass' -u '$user' $registry");
+	$code = $?;
     }
     else {
-	my ($code) = $client->registry_auth($registry,$user,$pass);
-	$? = $code;
+	($code,) = $client->registry_auth($registry,$user,$pass);
     }
     last
-	if ($? == 0);
-    print STDERR "ERROR: failed to login to registry $registry; sleeping and trying again...\n";
+	if ($code == 0);
+    print STDERR "ERROR: failed to login to registry $registry ($code);".
+	" sleeping and trying again...\n";
     sleep(4);
     $i -= 1;
+}
+if ($code) {
+    print STDERR "ERROR: failed to login to registry $registry; aborting!\n";
+    exit(-2);
 }
 
 #
