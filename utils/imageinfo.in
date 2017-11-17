@@ -164,8 +164,11 @@ else {
     if ($image->HaveFullImage()) {
 	$imagepath = $image->FullImageFile();
     }
-    else {
+    elsif ($image->HaveDeltaImage()) {
 	$imagepath = $image->DeltaImageFile();
+    } else {
+	# Size may not have been initialized yet, assume full image
+	$imagepath = $image->FullImageFile();
     }
 }
     
