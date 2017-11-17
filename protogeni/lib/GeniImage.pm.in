@@ -172,6 +172,7 @@ sub DeleteImageData($$;$)
     my ($urn, $uuid, $pmsg) = @_;
     my $safe_urn = DBQuoteSpecial($urn);
     my $errormsg;
+    my $errorcode = -1;
 
     my $credential = GetServerCredential();
     if (!defined($credential)) {
@@ -190,8 +191,9 @@ sub DeleteImageData($$;$)
 	
 	if (!defined($response)) {
 	    $errormsg = "$msg RPC error";
+	    goto bad;
 	}
-	elsif ($response->code() == GENIRESPONSE_SEARCHFAILED) {
+	if ($response->code() == GENIRESPONSE_SEARCHFAILED) {
 	    goto done;
 	}
 	elsif (defined($response->output())) {
@@ -200,6 +202,7 @@ sub DeleteImageData($$;$)
 	else {
 	    $errormsg = "$msg " . GENIRESPONSE_STRING($response->code());
 	}
+	$errorcode = $response->code();
 	goto bad;
     }
     #
@@ -214,7 +217,46 @@ sub DeleteImageData($$;$)
     if (defined($pmsg)) {
 	$$pmsg = $errormsg;
     }
-    return -1;
+    return $errorcode;
+}
+
+#
+# Post image data blob to the IMS.
+#
+sub PostImageData($;$)
+{
+    my ($blob, $pmsg) = @_;
+    my $errormsg;
+    my $errorcode = -1;
+
+    my $response =
+	Genixmlrpc::CallMethod($IMSURL, undef, "PostImageInfo", $blob);
+    
+    if (!defined($response) || $response->code()) {
+	if (!defined($response)) {
+	    $errormsg = "RPC error";
+	    goto bad;
+	}
+	if ($response->code() == GENIRESPONSE_SEARCHFAILED) {
+	    goto done;
+	}
+	elsif (defined($response->output())) {
+	    $errormsg = $response->output();
+	}
+	else {
+	    $errormsg = GENIRESPONSE_STRING($response->code());
+	}
+	$errorcode = $response->code();
+	goto bad;
+    }
+  done:
+    return 0;
+
+  bad:
+    if (defined($pmsg)) {
+	$$pmsg = $errormsg;
+    }
+    return $errorcode;
 }
 
 #
@@ -389,20 +431,10 @@ sub MapToLocalImage($$)
 sub MapToLocalDataset($$@)
 {
     my ($urn, $experiment, @credentials) = @_;
-    my $pid = $experiment->pid();
+    #    my $pid = $experiment->pid();
+    my $pid = "";
     $urn = GeniHRN->new($urn);
     my $blob;
-
-    if (exists($localblobcache{$urn})) {
-	$blob = $localblobcache{$urn};
-    }
-    else {
-	$blob = GetImageData($urn);
-	return $blob
-	    if (GeniResponse::IsError($blob));
-	$localblobcache{$urn} = $blob;
-    }
-    my $url  = $blob->{'metadata_url'};
 
     #
     # Look for version;
@@ -411,6 +443,32 @@ sub MapToLocalDataset($$@)
 	print STDERR "Not supporting dataset versions yet\n";
 	return undef;
     }
+
+    if (exists($localblobcache{$urn})) {
+	$blob = $localblobcache{$urn};
+    }
+    else {
+	$blob = GetImageData($urn);
+	if (GeniResponse::IsError($blob)) {
+	    return $blob
+		if ($blob->{'code'} != GENIRESPONSE_SEARCHFAILED);
+
+	    ## Look for a pid, used to support this.
+	    my ($ignore,$id) = split("//", $urn->id());
+	    return $blob
+		if (!defined($id));
+	    $urn = GeniHRN::Generate($urn->authority(), $urn->type(), $id);
+	    $urn = GeniHRN->new($urn);
+						  
+	    $blob = GetImageData($urn);
+	    return $blob
+		if (GeniResponse::IsError($blob));
+	}
+	$localblobcache{$urn} = $blob;
+    }
+    return $blob if (1);
+    my $url  = $blob->{'metadata_url'};
+
     #
     # If the ID includes a project, strip it. We no longer
     # put the project there, but old URNs might have it.
