@@ -1352,6 +1352,7 @@ sub Lookup($$$)
 
     # Kludge
     $self->{'ISAL2S'}   = ($self->aggregate_urn() =~ /al2s/ ? 1 : 0);
+    $self->{'ISSTITCH'} = ($self->aggregate_urn() =~ /stitch/ ? 1 : 0);
     return $self;
 }
 
@@ -1380,6 +1381,7 @@ AUTOLOAD {
 sub instance($)	        { return $_[0]->{'INSTANCE'}; }
 sub domain($)		{ return $_[0]->{'AGGURN'}->domain(); }
 sub isAL2S($)           { return $_[0]->{'ISAL2S'}; }
+sub isStitch($)         { return $_[0]->{'ISSTITCH'}; }
 
 #
 # Grab the webtask.

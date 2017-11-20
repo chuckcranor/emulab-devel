@@ -2022,82 +2022,37 @@ sub CheckReservationInternal($$$)
 sub DoMaxExtension()
 {
     my $slice = $instance->GetGeniSlice();
-    my $errcode = -1;
+    my $maxinfo;
     my $errmsg;
     my $newmax;
+    my @aggregates = ();
 
-    if ($slice->Lock()) {
+    foreach my $aggregate ($instance->AggregateList()) {
+	next
+	    if ($aggregate->isAL2S() || $aggregate->isStitch());
+	push(@aggregates, $aggregate);
+    }
+    #
+    # No need to lock if only one aggregate, we do not use the per-agg
+    # web tasks down in CallAggregateMethod(). Hack, needs more thought.
+    #
+    if (scalar(@aggregates) > 1 && $slice->WaitForLock(15)) {
 	print STDERR "Experiment is busy, cannot lock it. Try again later.\n";
 	exit(GENIRESPONSE_BUSY);
     }
-    my $coderef = sub {
-	my ($sliver) = @_;
-	my $webtask  = $sliver->webtask();
-	my $domain   = $sliver->domain();
-	my $errmsg;
-
-	return 0
-	    if ($sliver->isAL2S());
-
-	my $response = $sliver->MaxExtension();
-	if (!defined($response)) {
-	    $errmsg = "Internal error calling MaxExtension at $domain";
-	    goto bad;
-	}
-	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    $errmsg = $response->output();
-	    
-	    # This is something the user should see.
-	    if ($response->code() == GENIRESPONSE_REFUSED ||
-		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
-		$response->code() == GENIRESPONSE_BUSY ||
-		$response->code() == GENIRESPONSE_SEARCHFAILED) {
-		$webtask->output($errmsg);
-		$webtask->Exited($response->code());
-		return 1;
-	    }
-	    # Forbidden means cluster does not allow it, ignore.
-	    if ($response->code() == GENIRESPONSE_FORBIDDEN) {
-		return 0;
-	    }
-	    goto bad;
-	}
-	$webtask->MaxExtension($response->value());
-	return 0;
-      bad:
-	print STDERR "$errmsg\n";
-	$webtask->output($errmsg);
-	$webtask->Exited(-1);
-	return -1;
-    };
-    my @return_codes = ();
-    my @agglist =      $instance->AggregateList();
-    if (ParRun({"maxwaittime" => 99999,
-		"maxchildren" => scalar(@agglist)},
-	    \@return_codes, $coderef, @agglist)) {
-	#
-	# The parent caught a signal. Leave things intact so that we can
-	# kill things cleanly later.
-	#
-	$errmsg = "Internal error calling MaxExtension\n";
+    my $errcode = CallAggregateMethod("MaxExtension", \$maxinfo, @aggregates);
+    if ($errcode) {
+	$errmsg = $maxinfo;
 	goto bad;
     }
-    #
-    # Check the exit codes. 
-    #
-    foreach my $agg (@agglist) {
-	my $code = shift(@return_codes);
+    # Process the max extension from each aggregate
+    foreach my $aggregate (@aggregates) {
+	my $result = shift(@{$maxinfo});
+	my $max = str2time($result);
 
-	$agg->webtask()->Refresh();
-	if ($code) {
-	    $errmsg  = $agg->webtask()->output();
-	    $errcode = $agg->webtask()->exitcode();
-	    goto bad;
+	if ($debug) {
+	    print "$aggregate: $result, $max\n";
 	}
-	next
-	    if (!defined($agg->webtask()->MaxExtension()));
-	
-	my $max = str2time($agg->webtask()->MaxExtension());
 	$newmax = $max
 	    if (!defined($newmax));
 	$newmax = $max
@@ -2110,16 +2065,17 @@ sub DoMaxExtension()
 	$webtask->MaxExtension(TBDateStringGMT($newmax));
 	$webtask->Exited(0);
     }
-    $slice->UnLock();
+    $slice->UnLock()
+	if (scalar(@aggregates) > 1);
     exit(0);
   bad:
-    $slice->UnLock();
+    $slice->UnLock()
+	if (scalar(@aggregates) > 1);
     if (defined($webtask)) {
 	$webtask->output($errmsg);
 	$webtask->Exited($errcode);
     }
     exit($errcode);
-    
 }
 
 #
@@ -3673,7 +3629,7 @@ sub DoUtilization()
     if (!defined($slice)) {
 	fatal("No slice for instance!");
     }
-    if ($slice->Lock()) {
+    if ($slice->WaitForLock(10)) {
 	$errcode = GENIRESPONSE_BUSY;
 	$errmsg  ="Experiment is busy, cannot lock it. Try again later.";
 	goto bad;
@@ -3844,7 +3800,7 @@ sub DoIdleData()
     if (!defined($slice)) {
 	fatal("No slice for instance!");
     }
-    if ($slice->Lock()) {
+    if ($slice->WaitForLock(10)) {
 	$errcode = GENIRESPONSE_BUSY;
 	$errmsg  ="Experiment is busy, cannot lock it. Try again later.";
 	goto bad;
