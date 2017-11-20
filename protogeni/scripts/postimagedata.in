@@ -579,6 +579,10 @@ sub GetServerCredential()
     }
     if ($response->IsError()) {
 	print STDERR "GetCredential: " . $response->Dump() . "\n";
+	if ($response->code() == GENIRESPONSE_RPCERROR()) {
+	    # Will catch it later.
+	    exit(1);
+	}
 	fatal("Error getting credential");
     }
     $IMS_credential = GeniCredential->CreateFromSigned($response->value(), 1);
