@@ -1471,7 +1471,7 @@ sub HandleImageTracking()
     # Trigger a posting to the IMS for any new images.
     my $output = emutil::ExecQuiet("$POSTIMAGEDATA -v $opt all");
     print $output;
-    if ($?) {
+    if ($? && $? >> 8 == 256) {
 	SENDMAIL($TBOPS,
 		 "Could not post image data to the IMS",
 		 $output,
