@@ -1090,8 +1090,7 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
                      "       usr_email ".
                      "  from users as u ".
                      "left join user_stats as s on s.uid_idx=u.uid_idx ".
-                     "where u.uid_idx='$uid_idx' and ".
-                     "      u.nonlocal_id is null");
+                     "where u.uid_idx='$uid_idx'");
     
     if (!mysql_num_rows($query_result)) {
         return -1;
