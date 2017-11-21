@@ -905,9 +905,12 @@ COMMAND: foreach my $command (@commands) {
 	(/synctables/) && do {
             # We operate on all stacks on which we think VLANs do, or should,
             # exist.
+	    my @oldvlans = ();
 	    @vlans = getExperimentVlans($pid,$eid,@optvlanids);
-	    my @oldvlans;
-	    VLan->StaleVlanList($experiment,\@oldvlans);
+	    
+	    if (!@optvlanids) {
+		VLan->StaleVlanList($experiment,\@oldvlans);
+	    }
 
 	    #
 	    # No old or new vlans, then skip all of this. 
