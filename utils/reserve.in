@@ -197,7 +197,7 @@ if (defined($options{f})) {
 if (defined($options{n})) {
     $impotent = 1;
 }
-if (defined($options{t})) {
+if (defined($options{y})) {
     $tidy = 1;
 }
 if (defined($options{q})) {
