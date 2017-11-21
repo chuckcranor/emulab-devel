@@ -272,6 +272,7 @@ sub Gather($)
 {
     my ($resref) = @_;
     my $portstr  = "";
+    my $result   = "";
 
     foreach my $sw1 (keys(%trunks)) {
 	foreach my $sw2 (keys(%{ $trunks{$sw1} })) {
@@ -299,14 +300,24 @@ sub Gather($)
     open(PS, "$PORTSTATS -i -r -s -c $portstr 2>&1 |") or
 	fatal("Could not get portstats");
     while (<PS>) {
-	if ($_ !~ /^[-\w]+:\w+/) {
+	$result .= $_;
+    }
+    close(PS);
+    if ($?) {
+	print STDERR $result;
+	exit(-1);
+    }
+    while ($result =~ /^(.*)$/gm) {
+	my $line = $1;
+	
+	if ($line !~ /^[-\w]+:\w+/) {
 	    print $_
 		if ($debug);
 	    next;
 	}
-	chomp($_);
+	chomp($line);
 	
-	my ($swport, @counts) = split(",", $_);
+	my ($swport, @counts) = split(",", $line);
 	if (@counts != 6) {
 	    print STDERR "*** $swport: invalid portstats!?\n"; 
 	    next;
@@ -334,7 +345,6 @@ sub Gather($)
 	    
 	$resref->{$switch}->{"$port"} = $counts;
     }
-    close(PS);
 }
 
 #
