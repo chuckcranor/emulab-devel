@@ -180,7 +180,7 @@ frisbee-mfs-install: destdircheck
 	    $(INSTALL) -m 644 $(SRCDIR)/group $(SYSETCDIR); \
 	fi
 
-mfs-install:
+mfs-install: destdircheck
 	(cd ../freebsd5; $(MAKE) all mfs-install)
 	rm -f $(SYSETCDIR)/testbed/dhclient
 	rm -rf $(SYSETCDIR)/rc.conf.d
@@ -191,6 +191,7 @@ mfs-install:
 	ln -s /etc/dhclient-enter-hooks $(LETCDIR)/
 	ln -s /etc/dhclient-exit-hooks $(LETCDIR)/
 	ln -s /etc/dhclient.conf $(LETCDIR)/
+	$(INSTALL) -m 644 $(SRCDIR)/mfs-rc.conf $(SYSETCDIR)/rc.conf
 	$(INSTALL) -m 555 ./netif-emulab $(SYSETCDIR)/rc.d/netif-emulab
 	@if [ -r $(SRCDIR)/master.passwd ]; then \
 	    $(INSTALL) -m 600 $(SRCDIR)/master.passwd $(SYSETCDIR); \
@@ -199,3 +200,8 @@ mfs-install:
 	@if [ -r $(SRCDIR)/group ]; then \
 	    $(INSTALL) -m 644 $(SRCDIR)/group $(SYSETCDIR); \
 	fi
+
+newnode-mfs-install: mfs-install
+	(cd ../../tools/teachswitch; $(MAKE) DESTDIR=$(DESTDIR) client-install)
+	$(INSTALL) -m 755 $(SRCDIR)/../freebsd/newclient $(BINDIR)/newclient
+	$(INSTALL) -m 755 $(SRCDIR)/mfs-newnode-testbed.sh $(RCDIR)/testbed.sh

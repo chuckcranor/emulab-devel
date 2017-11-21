@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2016 University of Utah and the Flux Group.
+# Copyright (c) 2003-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -274,10 +274,13 @@ if (!$testing) {
     $identifier = 314;
 }
 
-print "This node's identifier is: $identifier\n";
-
-if ($writefloppy) {
-    writefloppy($identifier);
+if (defined($identifier)) {
+    print "This node's identifier is: $identifier\n";
+    if ($writefloppy) {
+	writefloppy($identifier);
+    }
+} else {
+    print "No ID returned by boss, node already exists?\n";
 }
 
 #
