@@ -59,6 +59,7 @@ use EmulabConstants;
 use Interface;
 use English;
 use Node;
+use Carp qw(cluck);
 use Data::Dumper;
 use overload ('""' => 'Stringify');
 
@@ -554,7 +555,8 @@ sub LookupByTriple($$;$$)
     #
     # Now see if we really want the logical wire.
     #
-    if ($node->role() eq $NODEROLE_TESTNODE && $node->isswitch()) {
+    if ($node->role() eq $NODEROLE_TESTNODE && $node->isswitch() &&
+	ref($wire) eq "Interface::LogicalWire") {
 	my $logwire =
 	    Interface::LogicalWire->LookupByPhysIface($nodeid,
 						      $wire->physiface1());
