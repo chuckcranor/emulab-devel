@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2003, 2004 University of Utah and the Flux Group.
+# Copyright (c) 2003-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -23,8 +23,8 @@
 
 SRCDIR          = @srcdir@
 TESTBED_SRCDIR  = @top_srcdir@
-OBJDIR          = ../..
-SUBDIR          = tools/teachswitch
+OBJDIR          = @top_builddir@
+SUBDIR          = $(subst $(TESTBED_SRCDIR)/,,$(SRCDIR))
 
 include $(OBJDIR)/Makeconf
 
