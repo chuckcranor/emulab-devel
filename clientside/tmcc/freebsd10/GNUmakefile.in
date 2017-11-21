@@ -205,3 +205,4 @@ newnode-mfs-install: mfs-install
 	(cd ../../tools/teachswitch; $(MAKE) DESTDIR=$(DESTDIR) client-install)
 	$(INSTALL) -m 755 $(SRCDIR)/../freebsd/newclient $(BINDIR)/newclient
 	$(INSTALL) -m 755 $(SRCDIR)/mfs-newnode-testbed.sh $(RCDIR)/testbed.sh
+	$(INSTALL) -m 644 $(SRCDIR)/mfs-newnode-rc.conf $(SYSETCDIR)/rc.conf

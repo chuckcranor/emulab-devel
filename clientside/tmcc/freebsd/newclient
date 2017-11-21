@@ -149,7 +149,7 @@ sub usage {
 # XXX for now, auto detect whether we should check for IB.
 # Otherwise you have to modify the FS of the MFS to add the option..messy!
 #
-if (system("sysctl -q sys.class.infiniband_verbs.abi_version") == 0) {
+if (system("sysctl -q sys.class.infiniband_verbs.abi_version >/dev/null 2>&1") == 0) {
     $checkib = 1;
 } else {
     $checkib = 0;
@@ -182,14 +182,29 @@ if ($checkib) {
     # XXX if IB checking is enabled and we have a Mellanox VPI-enabled
     # card, put the card in autodetect.
     #
-    elsif (!$testing) {
+    # Note that if it is in "auto (eth)" we first force it to IB mode and
+    # then into auto again. The goal here is to detect IB capable interfaces,
+    # so we want it to show up at "ib" if it can.
+    #
+    else {
 	my @out = `sysctl sys.device | grep mlx4_core`;
 	foreach my $line (@out) {
-	    if ($line =~ /^(sys.device.mlx4_core0.mlx4_port)(\d+):\s+(\S+)/) {
-		if (($3 eq "ib" || $3 eq "eth") && system("sysctl $1$2=auto")) {
-		    message("WARNING: Could not put mlx4 port $2 in auto\n");
-		} else {
-		    sleep(1);
+	    if ($line =~ /^(sys.device.mlx4_core0.mlx4_port)(\d+):\s+(.*)$/) {
+		my ($mib,$port,$mode) = ($1,$2,$3);
+		if ($mode eq "auto (eth)") {
+		    print STDERR "Forcing VPI port $port to IB mode\n";
+		    if (system("sysctl $mib$port=ib") == 0) {
+			$mode = "ib";
+			sleep(2);
+		    }
+		}
+		if ($mode eq "ib" || $mode eq "eth") {
+		    print STDERR "Forcing VPI port $port to auto mode\n";
+		    if (system("sysctl $mib$port=auto")) {
+			message("WARNING: Could not put mlx4 port $port in auto\n");
+		    } else {
+			sleep(2);
+		    }
 		}
 	    }
 	}
@@ -279,8 +294,6 @@ if (defined($identifier)) {
     if ($writefloppy) {
 	writefloppy($identifier);
     }
-} else {
-    print "No ID returned by boss, node already exists?\n";
 }
 
 #
@@ -500,9 +513,23 @@ sub freebsd_find_interfaces {
 	my $ibix = 0;
 	my @ibout = `$IBSTAT -p`;
 	chomp @ibout;
-	foreach my $line (@ibout) {
+LINE:	foreach my $line (@ibout) {
 	    if ($line =~ /^0x([0-9a-fA-F]{16})/) {
 		my $mac = $1;
+		#
+		# XXX if the last 6 digits of this mac match the last six
+		# of an ethernet interface, then we have a VPI interface
+		# this is hardwired to ethernet mode.
+		#
+		my $macss1 = substr($mac, -6);
+		foreach my $aref (@ifaces) {
+		    my ($iface,$mac2,undef) = @$aref;
+		    if ($macss1 eq substr($mac2, -6)) {
+			print STDERR "Found ib$ibix as ethernet $iface, skipped\n";
+			$ibix++;
+			next LINE;
+		    }
+		}
 		my $iface = "ib$ibix";
 		$ibix++;
 		push @ifaces, [$iface, $mac, "down"];
