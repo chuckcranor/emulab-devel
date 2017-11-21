@@ -163,9 +163,6 @@ Genixmlrpc->SetContext($context);
 # Shorten default timeout.
 Genixmlrpc->SetTimeout(15);
 
-# Does not return if error.
-my $credential = GetServerCredential();
-
 if (@ARGV) {
     foreach my $imageid (@ARGV) {
 	my $image = OSImage->Lookup($imageid);
@@ -458,6 +455,9 @@ sub PostImageInfo($)
     if ($verbose) {
 	print "Pushing $image\n";
     }
+    # Does not return if error.
+    my $credential = GetServerCredential();
+    
     #
     # Push the blob to the image server. Retry a couple of times on
     # tranient RPC error.
@@ -531,6 +531,9 @@ sub PostImageAlias($)
     if ($verbose) {
 	print "Pushing $image\n";
     }
+    # Does not return if error.
+    my $credential = GetServerCredential();
+    
     #
     # Push the blob to the image server. We retry a few times if we get
     # an RPC error since that is usually transient.
