@@ -6780,9 +6780,16 @@ sub RegisterAux($$)
 	    print STDERR "Could not find creator for $slice\n";
 	    return -1;
 	}
+	my $creator_urn;
+	if ($creator->IsLocal()) {
+	    $creator_urn = $creator->nonlocalurn();
+	}
+	else {
+	    $creator_urn = $creator->urn();
+	}
 	my $blob = {
 	    "urn"           => $aggregate->urn(),
-	    "creator_urn"   => $creator->urn(),
+	    "creator_urn"   => $creator_urn,
 	    "created"       => $slice->created(),
 	    "expires"       => $slice->expires(),
 	    "manifest"      => $aggregate->GetManifest(1),

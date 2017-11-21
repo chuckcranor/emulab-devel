@@ -864,6 +864,12 @@ sub urn($)
 
     return $self->emulab_user()->urn();
 }
+sub nonlocalurn($)
+{
+    my ($self) = @_;
+
+    return $self->emulab_user()->nonlocalurn();
+}
 
 #
 # Get the key bundle for a local user, which are just sshkeys. 
