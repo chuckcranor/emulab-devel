@@ -189,7 +189,7 @@ sub cmd_loadimage($@) {
     die "tbadb::cmd_loadimage: No such image descriptor $imagename in project $imagepid!\n"
 	if (!defined($image));
     my $imageid = $image->imageid();
-    my $imagepath = $image->path();
+    my $imagefile = $image->FullImageFile();
     $imagename  = $image->imagename(); # strip any version
     my $size  = $image->size();
     my $mtime;
@@ -199,8 +199,8 @@ sub cmd_loadimage($@) {
     die "tbadb::cmd_loadimage: You do not have permission to use imageid $imageid!\n"
 	if (!$isroot && !$this_user->IsAdmin() &&
 	    !$image->AccessCheck($this_user, TB_IMAGEID_ACCESS));
-    die "tbadb::cmd_loadimage: Cannot access image file: $imagepath\n"
-	if (!-r $imagepath);
+    die "tbadb::cmd_loadimage: Cannot access image file: $imagefile\n"
+	if (!-r $imagefile);
 
     # Make sure user has access to requested node too.
     my $node = Node->Lookup($node_id);
@@ -278,9 +278,9 @@ sub cmd_loadimage($@) {
 	print "tbadb::cmd_loadimage: Transferring $imagename to $rhost\n";
 	my $SAVEUID = $UID; 
 	$EUID = $UID = 0; # Flip to root to run!
-	die "tbadb::cmd_loadimage: Failed to transfer image to $rhost: $imagepath\n"
+	die "tbadb::cmd_loadimage: Failed to transfer image to $rhost: $imagefile\n"
 	    if (system($SCP, '-q', '-B', '-p', 
-		       "$imagepath", "$rhost:$rpath/$imagename") != 0);
+		       "$imagefile", "$rhost:$rpath/$imagename") != 0);
 	$EUID = $UID = $SAVEUID; # Flip back.
 	print "tbadb::cmd_loadimage: Transfer complete\n";
     }
