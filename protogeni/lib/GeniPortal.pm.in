@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2015 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -134,7 +134,7 @@ sub GetCredential($)
     my $slice;
     my $client_certificate;
 
-    if (1 && $MAINSITE) {
+    if (0 && $MAINSITE) {
 	print STDERR "Debugging getslicecred()\n";
     }
 
