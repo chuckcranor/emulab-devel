@@ -1540,7 +1540,9 @@ okay:
     }
 
     #
-    # Extract kernel and ramdisk.
+    # (Maybe) extract kernel and ramdisk.  We only allow user to force
+    # HVM for non-FreeBSD iff the attribute is set and this is a
+    # whole-disk image.
     #
     if ($os eq "FreeBSD") {
 	my $kernel =
@@ -1570,6 +1572,13 @@ okay:
 	} else {
 	    $image{'kernel'} = $kernel;
 	}
+	undef $image{'ramdisk'};
+    }
+    elsif (exists($attributes->{'XEN_FORCE_HVM'})
+	&& "$attributes->{'XEN_FORCE_HVM'}" eq '1'
+	&& "$imagemetadata->{'PART'}" eq '0') {
+	$ishvm = 1;
+	undef $image{'kernel'};
 	undef $image{'ramdisk'};
     }
     else {
@@ -1697,31 +1706,32 @@ okay:
     }
     addConfig($vninfo, "disk = [" . join(",", @alldisks) . "]", 2);
 
-    if ($os eq "FreeBSD") {
-	if ($ishvm) {
-	    # XXX newer xen tools disallow command line params with direct boot
-	    #addConfig($vninfo, "extra = 'boot_verbose=1'", 2);
+    if ($ishvm) {
+	# XXX newer xen tools disallow command line params with direct boot
+	#addConfig($vninfo, "extra = 'boot_verbose=1'", 2);
 
-	    addConfig($vninfo, "builder='hvm'", 2);
-	    addConfig($vninfo, "xen_platform_pci=1", 2);
-	    addConfig($vninfo, "boot='c'", 2);
-	    addConfig($vninfo, "serial='pty'", 2);
-	    addConfig($vninfo, "apic=1", 2);
-	    addConfig($vninfo, "acpi=1", 2);
-	    addConfig($vninfo, "pae=1", 2);
+	addConfig($vninfo, "builder='hvm'", 2);
+	addConfig($vninfo, "xen_platform_pci=1", 2);
+	addConfig($vninfo, "boot='c'", 2);
+	addConfig($vninfo, "serial='pty'", 2);
+	addConfig($vninfo, "apic=1", 2);
+	addConfig($vninfo, "acpi=1", 2);
+	addConfig($vninfo, "pae=1", 2);
 	    # XXX wont start without vnc=1
-	    addConfig($vninfo, "vnc=1", 2);
-	    addConfig($vninfo, "sdl=0", 2);
-	    addConfig($vninfo, "stdvga=0", 2);
-	} else {
+	addConfig($vninfo, "vnc=1", 2);
+	addConfig($vninfo, "sdl=0", 2);
+	addConfig($vninfo, "stdvga=0", 2);
+    } else {
+	if ($os eq "FreeBSD") {
 	    addConfig($vninfo, "extra = 'boot_verbose=1" .
 		      ",vfs.root.mountfrom=ufs:/dev/da0s1a".
 		      ",kern.bootfile=/boot/kernel/kernel'", 2);
 	}
-    } else {
-	addConfig($vninfo, "root = '/dev/$rootvdisk ro'", 2);
-	addConfig($vninfo, "extra = ".
-		  "        'console=hvc0 xencons=tty apparmor=0 selinux=0'", 2);
+	else {
+	    addConfig($vninfo, "root = '/dev/$rootvdisk ro'", 2);
+	    addConfig($vninfo, "extra = ".
+		      "        'console=hvc0 xencons=tty apparmor=0 selinux=0'", 2);
+	}
     }
   done:
 
