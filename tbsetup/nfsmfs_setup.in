@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,8 +59,11 @@ my $TBOPS       = "@TBOPSEMAIL@";
 my $TESTMODE    = @TESTMODE@;
 my $FSNODE      = "@FSNODE@";
 my $WITHZFS     = @WITHZFS@;
+my $ZFSNOEXPORT	= "@ZFS_NOEXPORT@";
 my $SSH		= "$TB/bin/sshtb -n -l root -host $FSNODE";
 my $PROG	= "$TB/sbin/nfsmfs_setup.proxy";
+my $EXPORTSSETUP= "$TB/sbin/exports_setup";
+my $NFSROOT	= "@NFSMFS_ROOT@";
 
 #
 # We don't want to run this script unless its the real version.
@@ -76,6 +79,11 @@ if ($EUID != 0) {
 if ($WITHZFS == 0) {
     die("*** $0:\n".
 	"    Only implemented with ZFS FS node right now.\n");
+}
+
+if ($NFSROOT eq "") {
+    die("*** $0:\n".
+	"    Must set NFSMFS_ROOT in defs file.");
 }
 
 # un-taint path
@@ -152,7 +160,8 @@ foreach my $nodeid (@ARGV) {
     }
 
     if (!$nocheck) {
-	if (OSImage->Lookup($nodeobj->adminmfs_osid())->IsNfsMfs()) {
+	if (OSImage->Lookup($nodeobj->adminmfs_osid())->IsNfsMfs() &&
+	    $nodeobj->NeedsAdminMFS()) {
 	    push @nodes, $nodeid;
 	}
     } else {
@@ -183,6 +192,12 @@ if (!$TESTMODE) {
   }
   system("$SSH $PROG $opts @nodes") == 0 or
       fatal("Failed: $SSH $PROG $opts @nodes: $?");
+
+  # XXX do exports_setup
+  if ($ZFSNOEXPORT) {
+      system($EXPORTSSETUP) == 0 or
+	  fatal("$EXPORTSSETUP failed");
+  }
 
   #
   # Release the lock!

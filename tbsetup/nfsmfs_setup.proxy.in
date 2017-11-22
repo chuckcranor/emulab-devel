@@ -47,8 +47,9 @@ my $force = 0;
 #
 my $TBOPS       = "@TBOPSEMAIL@";
 my $ZFSROOT	= "@ZFS_ROOT@";
+my $ZFSNOEXPORT	= "@ZFS_NOEXPORT@";
 
-my $MOUNTPOINT  = "/nfsroot";
+my $MOUNTPOINT  = "@NFSMFS_ROOT@";
 my $ZFS         = "/sbin/zfs";
 my $MOUNT	= "/sbin/mount";
 
@@ -89,6 +90,10 @@ if (! -x "$ZFS") {
     fatal("Can only be used with ZFS right now!");
 }
 
+if ($MOUNTPOINT eq "") {
+    fatal("Must set NFSMFS_ROOT in defs file!");
+}
+
 if (defined($opts{'D'})) {
     $destroy = 1;
 }
@@ -109,7 +114,7 @@ if (@ARGV < 1) {
 #
 # Make sure the golden filesystem exists
 #
-if (!$destroy && system("$ZFS list -o name -t snapshot | grep -q $GOLDEN")) {
+if (!$destroy && system("$ZFS list -H $GOLDEN >/dev/null 2>&1")) {
     fatal("ZFS snapshot '$GOLDEN' does not exist");
 }
 
@@ -197,8 +202,10 @@ foreach my $nodeid (@ARGV) {
 
 	# Create the MFS
 	if (!exists($mfs{$nodeid})) {
-	    $cmd = "$ZFS clone -o sharenfs='$nodeid -maproot=root' $GOLDEN".
-		" $ZFSROOT$MOUNTPOINT/$nodeid";
+	    # For ZFS_NOEXPORT, we rely on exports_setup to expose the FS
+	    my $opt = $ZFSNOEXPORT ?
+		"" : "-o sharenfs='$nodeid -maproot=root'";
+	    $cmd = "$ZFS clone $opt $GOLDEN $ZFSROOT$MOUNTPOINT/$nodeid";
 	    if (mysystem($cmd)) {
 		push(@failed, $nodeid);
 	    }
@@ -208,12 +215,12 @@ foreach my $nodeid (@ARGV) {
 }
 
 #
-# Odd...sometimes the (un)export doesn't happen
+# Odd...sometimes the (un)export doesn't happen.
 #
 # XXX again, this can be a brutally expensive command, so only do it if
 # we have to.
 #
-if ($changed) {
+if (!$ZFSNOEXPORT && $changed) {
     mysystem("$ZFS share -a");
 }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2016 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -60,6 +60,7 @@ my $TB		= "@prefix@";
 my $TESTMODE    = @TESTMODE@;
 my $TBOPS       = "@TBOPSEMAIL@";
 my $ELABINELAB  = @ELABINELAB@;
+my $NFSMFS	= "@NFSMFS_ROOT@";
 
 my $nodereboot	= "$TB/bin/node_reboot";
 my $power	= "$TB/bin/power";
@@ -623,6 +624,8 @@ sub TBAdminMfsCreate($$@)
     my ($args, $failedref, @nodes) = @_;
 
     return 0
+	if (!$NFSMFS);
+    return 0
 	if (@nodes == 0);
 
     my $me = $args->{'name'};
@@ -681,6 +684,8 @@ sub TBAdminMfsDestroy($$@)
 {
     my ($args, $failedref, @nodes) = @_;
 
+    return 0
+	if (!$NFSMFS);
     return 0
 	if (@nodes == 0);
 

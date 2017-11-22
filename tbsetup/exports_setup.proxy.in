@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -45,6 +45,7 @@ my $TBOPS       = "@TBOPSEMAIL@";
 my $LINUX_FSNODE= @LINUX_FSNODE@;
 my $INC_MOUNTD  = @INCREMENTAL_MOUNTD@;
 my $DIFFDIR	= "@prefix@/log/exports";
+my $NFSROOT     = "@NFSMFS_ROOT@";
 
 my $etcdir;
 my $exports;
@@ -163,8 +164,19 @@ EOF
 # We do this without any pre-checking of the contents to optimize the
 # relatively common case of being called when nothing has changed.
 #
+# XXX one exception: if this is an NFS-based MFS filesystem, we have to
+# check and see if the FS has been renamed. When we do a "node_admin off"
+# we rename the "pcX" FS to "pcX-DEAD" because we don't want to yank the
+# FS out from under the node while it is still running. But this is done
+# on "fs" (nfsmfs_setup.proxy) and "boss" doesn't know about it, so it will
+# continue to tell us "pcX" should be exported.
+#
 open(TAIL, ">$exportstail") || fatal("Couldn't open $exportstail\n");
 while (<STDIN>) {
+    if (/^($NFSROOT\/\S+)/ && ! -d "$1" && -d "$1-DEAD") {
+	my $str = $1;
+	s/$str/$str-DEAD/;
+    }
     print TAIL $_;
 }
 close(TAIL);

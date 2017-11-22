@@ -82,6 +82,7 @@ my $WITHAMD     = @WITHAMD@;
 my $INC_MOUNTD  = @INCREMENTAL_MOUNTD@;
 my $NOVNODENFS	= @NOVIRTNFSMOUNTS@;
 my $TBLOG	= "@TBLOGFACIL@";
+my $NFSMFSROOT	= "@NFSMFS_ROOT@";
 
 # XXX for TESTMODE: output to stdout
 my $TOSTDOUT	= 0;
@@ -249,7 +250,8 @@ $nodes_result =
 		 "       i.IP,u.admin,r.sharing_mode,r.erole,nt.isvirtnode, ".
 		 "       e.nfsmounts as e_nfsmounts, ".
 		 "       n.nfsmounts as n_nfsmounts, ".
-		 "       va.attrvalue as routable_ip ".
+		 "       va.attrvalue as routable_ip, ".
+		 "       n.op_mode,n.next_op_mode ".
 		 "from reserved as r ".
 		 "left join experiments as e on r.pid=e.pid and r.eid=e.eid ".
 		 "left join nodes as n on r.node_id=n.node_id ".
@@ -338,6 +340,7 @@ my $lastpid     = "";
 my $lastgid     = "";
 my $lastadmin	= "";
 my $lasterole   = "";
+my @nfsmfsnodes = ();
 
 my @mountpoints = fsinit();
 
@@ -376,6 +379,17 @@ while ($row = $nodes_result->fetchrow_hashref) {
         logit("WARNING: skipping database row with undefined values".
 	      defined($node_id) ? " ($node_id)" : "");
 	next;
+    }
+
+    # If we support NFS-based MFS, remember nodes that need an MFS exported
+    # XXX we do this before eliminating non-nfs experiment nodes
+    if ($NFSMFSROOT && $WITHZFS && $ZFS_NOEXPORT) {
+	if (defined($row->{'op_mode'}) && defined($row->{'next_op_mode'}) &&
+	    ($row->{'op_mode'} eq "PXEFBSD" ||
+	     $row->{'next_op_mode'} eq "PXEFBSD") &&
+	    TBNodeNFSAdmin($node_id)) {
+	    push(@nfsmfsnodes, $node_id);
+	}
     }
 
     # Skip nodes that belong to a "no nfs" experiment or are marked "no nfs".
@@ -600,6 +614,24 @@ if ($ZFS_NOEXPORT) {
 	# remember all valid mount points
 	if ($bossdirlist) {
 	    push(@bossmounts, $fs);
+	}
+    }
+
+    #
+    # If we have any NFS-based MFS filesystems, export those.
+    #
+    foreach my $node (sort(@nfsmfsnodes)) {
+	my $str = "$NFSMFSROOT/$node";
+
+	if ($LINUX_FSNODE) {
+	    print MAP "$str -rw,no_root_squash,no_subtree_check $node\n";
+	    print "$str -rw,no_root_squash,no_subtree_check $node\n"
+		if ($debug);
+	}
+	else {
+	    print MAP "$str -maproot=$NFSMAPTOUSER $node\n";
+	    print "$str -maproot=$NFSMAPTOUSER $node\n"
+		if ($debug);
 	}
     }
 }

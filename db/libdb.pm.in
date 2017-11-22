@@ -69,7 +69,7 @@ use vars qw(@ISA @EXPORT);
 	 TBSetExptFirewallVlan TBClearExptFirewallVlan
 	 TBNodeConsoleTail TBExptGetSwapoutAction TBExptGetSwapState
 	 TBNodeSubNodes
-	 TBNodeAdminOSID TBNodeDiskloadOSID
+	 TBNodeAdminOSID TBNodeNFSAdmin TBNodeDiskloadOSID
 	 TBNodeType TBNodeTypeProcInfo TBNodeTypeBiosWaittime
 	 TBExptPortRange
 	 TBWideareaNodeID TBTipServers
@@ -1528,6 +1528,22 @@ sub TBNodeAdminOSID($)
     my $node = LocalNodeLookup($nodeid);
     if ($node) {
 	return $node->adminmfs_osid();
+    }
+    return 0;
+}
+
+#
+# Returns 1 if node uses NFS-based admin MFS, 0 ow.
+#
+sub TBNodeNFSAdmin($)
+{
+    my ($nodeid) = @_;
+
+    my $node = LocalNodeLookup($nodeid);
+    if ($node) {
+	require OSImage;
+
+	return OSImage->Lookup($node->adminmfs_osid())->IsNfsMfs();
     }
     return 0;
 }

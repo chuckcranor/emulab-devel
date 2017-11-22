@@ -50,6 +50,7 @@ my $quiet                 = 0;
 # Configure variables
 my $TB       = "@prefix@";
 my $TESTMODE = @TESTMODE@;
+my $NFSMFS   = "@NFSMFS_ROOT";
 
 # Turn off line buffering on output
 $| = 1;
@@ -473,7 +474,7 @@ foreach my $node (@freed_nodes) {
     #
     # Remember if node has a dynamic (aka, NFS) MFS
     #
-    if (OSImage->Lookup($node->adminmfs_osid())->IsNfsMfs()) {
+    if ($NFSMFS && OSImage->Lookup($node->adminmfs_osid())->IsNfsMfs()) {
 	push(@dynmfsnodes, $node_id);
     }
 
@@ -717,7 +718,7 @@ if (@dynanodes) {
 # XXX make sure that the nodes have destroyed their dynamic
 # (aka NFS-based) MFSes.
 #
-if (@dynmfsnodes) {
+if ($NFSMFS && @dynmfsnodes) {
     system("$dynmfssetup -Df @dynmfsnodes") == 0 ||
 	print STDERR "*** WARNING: could not remove MFSes for @dynmfsnodes!\n";
 }
