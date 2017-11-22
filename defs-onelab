@@ -424,6 +424,16 @@ AMD_ROOT=/.amd_mnt/ops
 ZFS_NOEXPORT=1
 
 #
+# If you use an NFS-based admin MFS, this is the root of the exported
+# NFS filesystems.
+#
+# N.B. Just setting this will not automatically give you an NFS MFS!
+# There is a lot of manual machinery that needs to take place and that
+# has only been done for Moonshot m400 nodes.
+#
+NFSMFS_ROOT="/nfsroot"
+
+#
 # Only supported on the Mother Ship (emulab.net) right now.
 #
 WIKISUPPORT=0
