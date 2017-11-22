@@ -50,7 +50,7 @@ my $quiet                 = 0;
 # Configure variables
 my $TB       = "@prefix@";
 my $TESTMODE = @TESTMODE@;
-my $NFSMFS   = "@NFSMFS_ROOT";
+my $NFSMFS   = "@NFSMFS_ROOT@";
 
 # Turn off line buffering on output
 $| = 1;
