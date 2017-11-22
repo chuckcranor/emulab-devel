@@ -2764,6 +2764,23 @@ sub syncVlansFromTables($$@) {
 	    goto bad;
 	}
     }
+    #
+    # 
+    #
+    foreach my $vlan (values(%expvlans)) {
+	next
+	    if (!$vlan->IsShared());
+
+	my $switchpath = getSwitchTrunkPath($vlan);
+	debug("Storing switch trunk path for $vlan: $switchpath\n");
+	
+	next
+	    if ($impotent);
+
+	# Useful info, currently goes into Geni manifest. Needs to
+	# be updated as the lan changes with each experiment using it.
+	$vlan->SetAttribute("switchtrunks", $switchpath, "string");
+    }
     return 0;
 
  bad:

@@ -65,7 +65,8 @@ $PORT_FORMAT_PORTINDEX= 5;
                 convertPortFromString convertPortsFromStrings
                 mapVlansToSwitches mapStaleVlansToSwitches
 		getTrunksForVlan getExperimentTrunksForVlan
-		setSwitchTrunkPath mapPortsToSwitches findAndDumpLan
+		getSwitchTrunkPath setSwitchTrunkPath
+		mapPortsToSwitches findAndDumpLan
 		$PORT_FORMAT_IFINDEX $PORT_FORMAT_MODPORT
                 $PORT_FORMAT_NODEPORT $PORT_FORMAT_PORT $PORT_FORMAT_PORTINDEX
 );
@@ -1558,7 +1559,7 @@ sub mapPortsToSwitches(@)
 #
 # 
 #
-sub setSwitchTrunkPath($)
+sub getSwitchTrunkPath($)
 {
     my ($vlan) = @_;
     my %switches = ();
@@ -1566,9 +1567,15 @@ sub setSwitchTrunkPath($)
     my @ports   = getVlanPorts($vlan->lanid());
     my %map     = mapPortsToDevices(@ports);
     my @trunks  = getTrunksForVlan($vlan->lanid(), keys(%map));
-    my $path    = join(" ", map { join(":", @$_) } @trunks);
 
-    return $vlan->SetSwitchPath($path);
+    return join(" ", map { join(":", @$_) } @trunks);
+}
+
+sub setSwitchTrunkPath($)
+{
+    my ($vlan) = @_;
+
+    return $vlan->SetSwitchPath(getSwitchTrunkPath($vlan));
 }
 
 #
