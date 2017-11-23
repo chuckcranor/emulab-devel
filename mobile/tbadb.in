@@ -198,7 +198,7 @@ sub cmd_loadimage($@) {
     # Check user's access to the image.
     die "tbadb::cmd_loadimage: You do not have permission to use imageid $imageid!\n"
 	if (!$isroot && !$this_user->IsAdmin() &&
-	    !$image->AccessCheck($this_user, TB_IMAGEID_ACCESS));
+	    !$image->AccessCheck($this_user, TB_IMAGEID_READINFO));
     die "tbadb::cmd_loadimage: Cannot access image file: $imagefile\n"
 	if (!-r $imagefile);
 
