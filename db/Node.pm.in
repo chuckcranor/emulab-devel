@@ -4485,7 +4485,7 @@ sub NeedsAdminMFS($)
     }
 
     # scheduled to go into admin MFS next
-    if ($self->next_op_mode() eq "PXEFBSD") {
+    if ($self->next_op_mode() && $self->next_op_mode() eq "PXEFBSD") {
 	return 1;
     }
 
