@@ -4479,10 +4479,26 @@ sub NeedsAdminMFS($)
 {
     my ($self)  = @_;
 
-    if ($self->op_mode() eq "PXEFBSD" || $self->next_op_mode() eq "PXEFBSD") {
+    # currently in admin MFS
+    if ($self->op_mode() eq "PXEFBSD") {
 	return 1;
     }
 
+    # scheduled to go into admin MFS next
+    if ($self->next_op_mode() eq "PXEFBSD") {
+	return 1;
+    }
+
+    # set to go into admin MFS after one-time boot
+    # XXX needs more work, MFS never gets created in this case
+    #     only comes up if we turn on node_admin while a frisbee is scheduled
+    if (0 && $self->next_boot_osid() && $self->temp_boot_osid()) {
+	require OSImage;
+	
+	if (OSImage->Lookup($self->temp_boot_osid)->IsNfsMfs()) {
+	    return 1;
+	}
+    }
     return 0;
 }
 

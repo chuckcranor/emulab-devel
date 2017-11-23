@@ -386,7 +386,7 @@ sub TB_OSID_VERSLEN()		{ 12; }
 sub TB_OSID_MBKERNEL()          { "_KERNEL_"; } # multiboot kernel OSID
 
 # Magic OSID path
-sub TB_OSID_PATH_NFS()		{ "@NFSMFS_ROOT@" ? "fs:@NFSMFS_ROOT@" : "" };
+sub TB_OSID_PATH_NFS()		{ "@NFSMFS_ROOT@" ne "" ? "fs:@NFSMFS_ROOT@" : "" };
 
 # Magic MFS constants
 sub TB_OSID_FREEBSD_MFS()	{ "FREEBSD-MFS" };
