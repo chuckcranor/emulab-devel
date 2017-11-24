@@ -1209,10 +1209,21 @@ sub MaxSliceExtension($$$;$) {
 
     my $cur_expire = str2time( $slice->expires() );
     my $max_expire = $cur_expire + 60 * 60 * 24 * 180;
-    
-    my $exptidx = $slice->exptidx();
-    my $expt = Experiment->Lookup( $exptidx );
-	
+
+    my $expt = $slice->GetExperiment();
+    if (!defined($expt)) {
+	if( ref( $error ) ) {
+	    $$error = "No experiment for slice, cannot compute max.";
+	}
+	return -1;
+    }
+    if (! $expt->NodeList(1)) {
+	if( ref( $error ) ) {
+	    $$error = "No physical nodes, no max to compute.";
+	}
+	return -1;
+    }
+    my $exptidx = $expt->idx();
     my @types = ExptTypes( $exptidx );
     
     foreach my $type ( @types ) {

@@ -685,7 +685,11 @@ sub SliceMaxExtension($)
     if (!defined($experiment)) {
 	return GeniResponse->Create(GENIRESPONSE_BUSY);
     }
-
+    if (! $experiment->NodeList(1)) {
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS,
+				    TBDateStringGMT(0x7fff0000));
+    }
+    
     if (Reservation->MaxSliceExtension($slice, \$max, \$reserror)) {
 	Reservation->FlushAll();
 	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, $reserror);
