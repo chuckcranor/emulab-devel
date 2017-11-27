@@ -4986,6 +4986,19 @@ sub SliverWorkAux($$$$$$$$)
 	    next;
 	}
 	GeniXML::SetText("vlantag", $linkref, $tag);
+	#
+ 	# Add switch path in an extension.
+	#
+	my $path = $vlan->GetSwitchPath();
+	if (defined($path)) {
+	    my $el = GeniXML::FindFirstNS("n:switchpath",
+					  $linkref, $GeniXML::EMULAB_NS);
+	    if (!defined($el)) {
+		$el = GeniXML::AddElement("switchpath",
+					  $linkref, $GeniXML::EMULAB_NS);
+	    }
+	    $el->appendText($path);
+	}
     }
 
     if( !$isupdate ) {
@@ -7283,53 +7296,50 @@ sub UpdateManifest($)
 	print STDERR "No manifest for $slice/$aggregate\n";
 	return -1;
     }
-    my @vlanlist = ();
-    my %vlantags = ();
-    VLan->ExperimentVLans($experiment, \@vlanlist);
-    foreach my $vlan (@vlanlist) {
-	my $tag;
-	$vlan->GetTag(\$tag);
-	if (!defined($tag)) {
-	    print STDERR "UpdateManifest: No tag for $vlan\n";
+    my @vlanlist  = ();
+    my %vlanpaths = ();
+    if ($experiment->PortLanList(\@vlanlist) == 0) {
+	foreach my $vlan (@vlanlist) {
+	    # Need to pick up the changes.
+	    $vlan->Refresh();
+	    
+	    my $target_lanid;
+	    if ($vlan->GetAttribute("target_lanid", \$target_lanid) ||
+		!defined($target_lanid)) {
+		print STDERR "Could not get target_lanid for $vlan\n";
+		next;
+	    }
+	    my $portvlan = Lan->Lookup($target_lanid);
+	    if (!defined($portvlan)) {
+		print STDERR "Could not lookup portvlan $target_lanid\n";
+		next;
+	    }
+	    # Need to pick up the changes.
+	    $portvlan->Refresh();
+	    
+	    my $switchtrunks;
+	    if ($portvlan->GetAttribute("switchtrunks", \$switchtrunks) == 0) {
+		$vlanpaths{$vlan->vname()} = $switchtrunks;
+	    }
 	}
-	$vlantags{$vlan->vname()} = $tag;
+	foreach my $linkref (GeniXML::FindNodes("n:link",
+						$rspec)->get_nodelist()){
+	    my $vname = GeniXML::GetVirtualId($linkref);
 
-	#
-	# Encapsulation vlan, so need to find the actual link name.
-	#
-	my $linklan;
+	    next
+		if (! (defined($vname) && exists($vlanpaths{$vname})));
 
-	if ($vlan->GetAttribute("link/lan", \$linklan) == 0 &&
-	    defined($linklan)) {
-	    $vlantags{$linklan} = $tag;
+	    my $el = GeniXML::FindFirstNS("n:switchpath",
+					  $linkref, $GeniXML::EMULAB_NS);
+	    if (defined($el)) {
+		$linkref->removeChild($el);
+	    }
+	    $el = GeniXML::AddElement("switchpath",
+				      $linkref, $GeniXML::EMULAB_NS);
+	    $el->appendText($vlanpaths{$vname});
 	}
+	return $aggregate->UpdateManifest($rspec);
     }
-    foreach my $linkref (GeniXML::FindNodes("n:link", $rspec)->get_nodelist()){
-	my $vname = GeniXML::GetVirtualId($linkref);
-	my $tag = undef;
-	if (defined($vname) && exists($vlantags{$vname})) {
-	    $tag = $vlantags{$vname};
-	}
-	if (!defined($tag)) {
-	    GeniXML::RemoveChild("vlantag", $linkref);
-	}
-	else {
-	    GeniXML::SetText("vlantag", $linkref, $tag);
-	}
-	
-    }
-    my $manifest = GeniXML::Serialize($rspec);
-    
-    #
-    # Move this elsewhere.
-    #
-    $manifest = DBQuoteSpecial($manifest);
-    my $slice_uuid = $slice->uuid();
-
-    DBQueryWarn("update geni_manifests set ".
-		"  manifest=$manifest ". 
-		"where slice_uuid='$slice_uuid'");
-
     return 0;
 }
 

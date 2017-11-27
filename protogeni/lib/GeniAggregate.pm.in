@@ -53,6 +53,7 @@ use GeniComponent;
 use GeniHRN;
 use GeniEvent;
 use GeniXML;
+use GeniCM;
 use emutil;
 use EmulabConstants;
 use EmulabFeatures;
@@ -1048,7 +1049,7 @@ sub Reload($$;$)
 }
 
 #
-# New version of start that ises libossetup.
+# New version of start that uses libossetup.
 #
 sub ActionStart($$;$)
 {
@@ -1288,6 +1289,7 @@ sub ActionStart($$;$)
 	    $msg .= "Failed to add ports to shared vlans";
 	    goto bad;
 	}
+	GeniCM::UpdateManifest($slice);
     }
     $sliver = undef;
 
@@ -1539,6 +1541,12 @@ sub Action($$$;$)
     }
     my $pid = $experiment->pid();
     my $eid = $experiment->eid();
+
+    my $slice = $self->GetSlice();
+    if (!defined($slice)) {
+	$msg .= "Could not map $self to its slice";
+	goto bad;
+    }
 
     #
     # External node management means that someone else is going to be
@@ -2094,6 +2102,7 @@ sub Action($$$;$)
 	    $msg .= "Failed to add ports to shared vlans";
 	    goto bad;
 	}
+	GeniCM::UpdateManifest($slice);
     }
 
     #
