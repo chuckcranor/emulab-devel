@@ -20,7 +20,8 @@ sub Install($$$)
 	    }
 	    DoneIfEdited($CRONTAB);
 
-	    my @cronlist = ("0 \t6\t*\t*\t*\troot\t$PREFIX/sbin/quotamail");
+	    my @cronlist = ("0 \t6\t*\t*\t*\troot\t$PREFIX/sbin/quotamail",
+			    "3 \t5\t*\t*\t*\troot\t$PREFIX/sbin/pruneexpdirs");
 	    if ($WIKISUPPORT) {
 		push(@cronlist,
 		     "*/15 \t*\t*\t*\t*\troot\t(cd $OPSWWWDIR/twiki/bin;".
