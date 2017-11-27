@@ -716,24 +716,6 @@
                      style='margin-right: 10px;'
                      type='submit' name='create'>Instantiate
 		  </a>
-		  <% if (isapt) { %>
-		    <span class='pull-right'
-			  data-toggle='popover'
-			  data-delay='{"hide":1500, "show":250}'
-			  data-html='true'
-			  data-content="When you instantiate as a guest, you get
-					to see exactly how another user will
-					experience your profile. This allows you to
-					better debug your profile for other users">
-		      <button class='btn btn-success btn-xs' disabled
-			      id='guest_instantiate_button'
-			      style='margin-right: 10px;'
-     			      data-toggle='modal'
-			      data-target='#guest_instantiate_modal'
-			      type='button'>Instantiate as Guest
-		      </button>
-		    </span>
-		  <% } %>
 		  <% if (!fromrepo) { %>
 		  <a class='btn btn-primary btn-xs pull-left'
                      id='profile_copy_button'

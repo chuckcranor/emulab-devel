@@ -44,7 +44,7 @@ $this_user = CheckLogin($check_status);
 if (isset($this_user)) {
     CheckLoginOrDie(CHECKLOGIN_NONLOCAL|CHECKLOGIN_WEBONLY);
 }
-elseif (!$ISAPT) {
+else {
     RedirectLoginPage();
 }
 
@@ -55,31 +55,10 @@ $optargs = OptionalPageArguments("create",        PAGEARG_STRING,
 				 "profile",       PAGEARG_STRING,
 				 "version",       PAGEARG_INTEGER,
 				 "project",       PAGEARG_PROJECT,
-				 "asguest",       PAGEARG_BOOLEAN,
 				 "default",       PAGEARG_STRING,
 				 "from",          PAGEARG_STRING,
 				 "refspec",       PAGEARG_STRING,
 				 "formfields",    PAGEARG_ARRAY);
-
-if ($ISAPT && !$this_user) {
-    #
-    # If user appears to have an account, go to login page.
-    # Continue as guest on that page.
-    #
-    if (REMEMBERED_ID()) {
-	if (isset($asguest) && $asguest) {
-	    # User clicked on continue as guest. If we do not delete the
-	    # cookie, then user will go through the same loop next time
-            # they click the Home button, since that points here. So delete
-	    # the UID cookie. Not sure I like this.
-	    ClearRememberedID();
-	}
-	else {
-            header("Location: login.php?from=instantiate&referrer=".
-                   urlencode($_SERVER['REQUEST_URI']));
-	}
-    }
-}
 
 # Need to make non-hardcoded
 $maxduration = 16;

@@ -2,13 +2,12 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['show-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'rspectextview-modal', 'guest-instantiate', 'instantiate-modal', 'oops-modal', 'share-modal']);
+    var templates = APT_OPTIONS.fetchTemplateList(['show-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'rspectextview-modal', 'instantiate-modal', 'oops-modal', 'share-modal']);
     var showString = templates['show-profile'];
     var waitwaitString = templates['waitwait-modal'];
     var rendererString = templates['renderer-modal'];
     var showtopoString = templates['showtopo-modal'];
     var rspectextviewString = templates['rspectextview-modal'];
-    var guestInstantiateString = templates['guest-instantiate'];
     var instantiateString = templates['instantiate-modal'];
     var oopsString = templates['oops-modal'];
     var shareString = templates['share-modal'];
@@ -84,7 +83,6 @@ $(function ()
 
 	$('#waitwait_div').html(waitwaitString);
 	$('#showtopomodal_div').html(showtopoString);
-	$('#guest_div').html(guestInstantiateString);
     	var instantiate_html = InstTemplate({ amlist: amlist,
 					      amdefault: window.AMDEFAULT});
 	$('#instantiate_div').html(instantiate_html);

@@ -82,7 +82,7 @@ $routing = array("myprofiles" =>
 						      "Do_GetDurationInfo")),
 		 "instantiate" =>
 			array("file"    => "instantiate.ajax",
-			      "guest"   => true,
+			      "guest"   => false,
 			      "methods" => array("GetProfile" =>
 						     "Do_GetProfile",
 						 "CheckForm" =>
@@ -116,8 +116,6 @@ $routing = array("myprofiles" =>
 						     "Do_DeleteProfile",
 						 "PublishProfile" =>
 						     "Do_PublishProfile",
-						 "InstantiateAsGuest" =>
-						     "Do_GuestInstantiate",
 						 "CheckScript" =>
 						     "Do_CheckScript",
 						 "BindParameters" =>
@@ -144,7 +142,7 @@ $routing = array("myprofiles" =>
                                                      "Do_GetCommitList")),
 		 "status" =>
 			array("file"    => "status.ajax",
-			      "guest"   => true,
+			      "guest"   => false,
 			      "methods" => array("GetInstanceStatus" =>
 						   "Do_GetInstanceStatus",
 						 "ExpInfo" =>
@@ -377,7 +375,7 @@ $routing = array("myprofiles" =>
                                                      "Do_ClassicImageList")),
 		 "news" =>
 			array("file"    => "news.ajax",
-			      "guest"   => true,
+			      "guest"   => false,
 			      "methods" => array("create" =>
 						      "Do_CreateNews",
 						 "modify" =>

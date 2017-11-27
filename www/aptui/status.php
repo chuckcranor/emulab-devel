@@ -40,8 +40,7 @@ $this_user = CheckLogin($check_status);
 if (isset($this_user)) {
     CheckLoginOrDie(CHECKLOGIN_NONLOCAL);
 }
-elseif (!$ISAPT && GETUID()) {
-    # User with an account, redirect to login. APT allows guest users.
+else {
     RedirectLoginPage();
 }
 #
@@ -65,6 +64,7 @@ if (!isset($uuid)) {
               What experiment would you like to look at?
             </p>
           </div>\n";
+    SPITNULLREQUIRE();
     SPITFOOTER();
     return;
 }
@@ -80,6 +80,7 @@ if (!$instance) {
               Experiment does not exist. Redirecting to the front page.
             </p>
           </div>\n";
+    SPITNULLREQUIRE();
     SPITFOOTER();
     flush();
     sleep(3);
@@ -97,6 +98,7 @@ if (!$creator) {
                Hmm, there seems to be a problem.
             </p>
           </div>\n";
+    SPITNULLREQUIRE();
     SPITFOOTER();
     TBERROR("No creator for instance: $uuid", 0);
     return;

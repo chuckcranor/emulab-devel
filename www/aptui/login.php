@@ -73,16 +73,6 @@ else {
     $cleanmode = 0;
 }
 
-#
-# We want to show guest login, when redirected from the landing page
-# or from the instantiate page. APT only.
-#
-$showguestlogin = 0;
-if ($ISAPT && isset($from) &&
-    ($from == "landing" || $from == "instantiate")) {
-    $showguestlogin = 1;
-}
-
 if (NOLOGINS() && !$adminmode) {
     if ($ajax_request) {
 	SPITAJAX_ERROR(1, "logins are temporarily disabled");
@@ -104,7 +94,7 @@ function SPITFORM($uid, $referrer, $error)
 {
     global $PORTAL_PASSWORD_HELP;
     global $TBDB_UIDLEN, $TBBASE, $refer;
-    global $ISAPT, $ISCLOUD, $ISPNET, $ISPOWDER, $showguestlogin;
+    global $ISAPT, $ISCLOUD, $ISPNET, $ISPOWDER;
     global $adminmode, $cleanmode;
 
     header("Last-Modified: " . gmdate("D, d M Y H:i:s") . " GMT");
@@ -194,13 +184,6 @@ function SPITFORM($uid, $referrer, $error)
                     data-toggle="tooltip" data-placement="left"
 		    title="You can use your geni credentials to login"
                     id='quickvm_geni_login_button'>Geni User?</button>
-        <?php
-    }
-    if ($ISAPT && REMEMBERED_ID() && $showguestlogin) {
-	?>
-                 <a class='btn btn-info btn-sm pull-left'
-	            href='instantiate.php?asguest=1'
-		    type='button'>Continue as Guest</a>
         <?php
     }
 ?>

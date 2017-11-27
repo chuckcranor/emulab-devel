@@ -2,14 +2,13 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'share-modal', 'gitrepo-picker','profile-list-modal','confirm-delete-profile']);
+    var templates = APT_OPTIONS.fetchTemplateList(['manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'publish-modal', 'share-modal', 'gitrepo-picker','profile-list-modal','confirm-delete-profile']);
     var manageString = templates['manage-profile'];
     var waitwaitString = templates['waitwait-modal'];
     var rendererString = templates['renderer-modal'];
     var showtopoString = templates['showtopo-modal'];
     var oopsString = templates['oops-modal'];
     var rspectextviewString = templates['rspectextview-modal'];
-    var guestInstantiateString = templates['guest-instantiate'];
     var publishString = templates['publish-modal'];
     var shareString = templates['share-modal'];
     var gitrepoString = templates['gitrepo-picker'];
@@ -44,7 +43,6 @@ $(function ()
     var showtopoTemplate  = _.template(showtopoString);
     var rspectextTemplate = _.template(rspectextviewString);
     var oopsTemplate      = _.template(oopsString);
-    var guestInstTemplate = _.template(guestInstantiateString);
     var shareTemplate     = _.template(shareString);
     var gitrepoTemplate   = _.template(gitrepoString);
     var plistTemplate     = _.template(plistString);
@@ -173,8 +171,6 @@ $(function ()
 	$('#renderer_div').html(renderer_html);
     	var oops_html = oopsTemplate({});
 	$('#oops_div').html(oops_html);
-    	var guest_html = guestInstTemplate({});
-	$('#guest_div').html(guest_html);
 	$('#publish_div').html(publishString);
     	var rspectext_html = rspectextTemplate({});
 	$('#rspectext_div').html(rspectext_html);
@@ -580,12 +576,6 @@ $(function ()
 		$('#renderer_modal_div').html($(this).html());
 		sup.ShowModal("#renderer_modal");
 	    });
-	// Handler for guest instantiate submit button, which is in
-	// the modal.
-	$('#guest_instantiate_submit_button').click(function (event) {
-	    event.preventDefault();
-	    InstantiateAsGuest();
-	});
 	// Handler for normal instantiate submit button, which is in
 	// the modal.
 	$('#instantiate_submit_button').click(function (event) {
@@ -1103,41 +1093,6 @@ $(function ()
     }
 
     //
-    // Instantiate a profile as a guest User.
-    //
-    function InstantiateAsGuest()
-    {
-	var callback = function(json) {
-	    sup.HideModal("#waitwait-modal");
-	
-	    if (json.code) {
-		sup.SpitOops("oops", json.value);
-		return;
-	    }
-	    //
-	    // Need to set the cookies we get back so that we can
-	    // redirect to the status page.
-	    //
-	    document.cookie =
-		'quickvm_user=' + json.value.quickvm_user +
-		'; max-age=86400; path=/; secure';
-	    document.cookie =
-		'quickvm_authkey=' + json.value.quickvm_authkey +
-		'; max-age=86400; path=/; secure';
-
-	    var url = "status.php?uuid=" + json.value.quickvm_uuid;
-	    window.location.replace(url);
-	}
-	sup.HideModal("#guest_instantiate_modal");
-	WaitWait();
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "manage_profile",
-					    "InstantiateAsGuest",
-					    {"uuid"   : version_uuid});
-	xmlthing.done(callback);
-    }
-
-    //
     // Instantiate a profile.
     //
     function Instantiate()
@@ -1206,7 +1161,6 @@ $(function ()
 	EnableButton("profile_instantiate_button");
 	EnableButton("profile_submit_button");
 	EnableButton("profile_copy_button");
-	EnableButton("guest_instantiate_button");
 	EnableButton("profile_publish_button");
     }
     function DisableButtons()
@@ -1215,7 +1169,6 @@ $(function ()
 	DisableButton("profile_instantiate_button");
 	DisableButton("profile_submit_button");
 	DisableButton("profile_copy_button");
-	DisableButton("guest_instantiate_button");
 	DisableButton("profile_publish_button");
     }
     function EnableButton(button)

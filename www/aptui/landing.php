@@ -44,8 +44,7 @@ if (!$ISAPT) {
 #
 # Verify page arguments.
 #
-$optargs = OptionalPageArguments("asguest", PAGEARG_BOOLEAN,
-				 "from",    PAGEARG_STRING);
+$optargs = OptionalPageArguments("from",    PAGEARG_STRING);
 
 #
 # Redirect logged in user.
@@ -74,43 +73,5 @@ if ($this_user) {
     return;
 }
 
-#
-# APT users might be guests.
-#
-if ($ISAPT) {
-    #
-    # If user appears to have an account, go to login page.
-    # Continue as guest on that page.
-    #
-    if (REMEMBERED_ID()) {
-	if (isset($asguest) && $asguest) {
-	    # User clicked on continue as guest. If we do not delete the
-	    # cookie, then user will go through the same loop next time
-            # they click the Home button, since that points here. So delete
-	    # the UID cookie. Not sure I like this.
-	    ClearRememberedID();
-	}
-	else {
-	    header("Location: login.php?from=landing");
-	    return;
-	}
-    }
-}
-#
-# A guest user. Go directly to status page.
-#
-if (isset($_COOKIE['quickvm_user'])) {
-    $geniuser = GeniUser::Lookup("sa", $_COOKIE['quickvm_user']);
-    if ($geniuser) {
-	#
-        # Look for existing quickvm. Show that.
-	#
-	$instance = Instance::LookupByCreator($geniuser->uuid());
-	if ($instance && $instance->status() != "terminating") {
-	    header("Location: status.php?uuid=" . $instance->uuid());
-	    return;
-	}
-    }
-}
 header("Location: $APTBASE/instantiate.php");
 ?>

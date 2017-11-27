@@ -177,15 +177,16 @@ $xmlfile = shift(@ARGV);
 # Check the filename when invoked from the web interface; must be a
 # file in /tmp.
 #
-if (getpwuid($UID) ne "nobody") {
-    $this_user = User->ThisUser();
+if (getpwuid($UID) eq "nobody") {
 
-    if (! defined($this_user)) {
-	fatal("You ($UID) do not exist!");
-    }
-    $localuser = 1;
-    $maxduration = 16; # Hours.
 }
+$this_user = User->ThisUser();
+if (! defined($this_user)) {
+    fatal("You ($UID) do not exist!");
+}
+$localuser = 1;
+$maxduration = 16; # Hours.
+
 if (!defined($this_user) || !$this_user->IsAdmin()) {
     if ($xmlfile =~ /^([-\w\.\/]+)$/) {
 	$xmlfile = $1;

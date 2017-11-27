@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,10 +32,9 @@ $page_title = "News";
 # Get current user.
 #
 RedirectSecure();
-$this_user = CheckLogin($check_status);
+$this_user = CheckLoginOrDie($check_status);
 $isadmin   = 0;
-# Guests are okay on this page.
-if (isset($this_user) && ISADMIN()) {
+if (ISADMIN()) {
     $isadmin = 1;
 }
 
