@@ -199,7 +199,36 @@ else {
 exit(0);
 
 #
-# Check to see if we access a remote URL.
+# Run with retry, lets see if this helps with the transient NFS/ZFS
+# problems. The commands we run through here should generally not fail.
+# The only time I see errors is due to transient access problems, which
+# is kinda strange.
+#
+sub runCommandRetry($)
+{
+    my ($cmd) = @_;
+
+    if ($debug) {
+	print STDERR $debug;
+    }
+    my $output;
+    my $count = 3;
+    while ($count) {
+	$output = emutil::ExecQuiet($cmd);
+	last
+	    if ($? == 0);
+
+	print STDERR "Failed: '$cmd'\n";
+	
+	$count--;
+	sleep(1)
+	    if ($count);
+    }
+    return $output;
+}
+
+#
+# Check to see if we can access a remote URL.
 #
 sub DoCheckRemote()
 {
@@ -667,12 +696,7 @@ sub GetCommitField($$$)
 	fatal("Could not chdir to $REPODIR/$reponame");
 
     my $cmd = "$GIT log -n 1 --pretty=tformat:$field $refspec";
-    
-    if ($debug) {
-	print "'$cmd'\n";
-    }
-
-    my $output = emutil::ExecQuiet($cmd);
+    my $output = runCommandRetry($cmd);
     if ($?) {
 	print STDERR $output;
 	fatal("Could not get $field from repository")
@@ -741,7 +765,7 @@ sub GetBranchList($)
     # multiple branches can point to the same hash, so we have to record
     # the list for the second step below.
     #
-    my $output = emutil::ExecQuiet("$GIT show-ref --abbrev --heads");
+    my $output = runCommandRetry("$GIT show-ref --abbrev --heads");
     if ($?) {
 	print STDERR $output;
 	fatal("Could not get branch list from repository")
@@ -835,7 +859,7 @@ sub GetTagList($)
 	fatal("Could not chdir to $REPODIR/$reponame");
 
     # See if any tags to list.
-    my $taglist = emutil::ExecQuiet("$GIT tag --list");
+    my $taglist = runCommandRetry("$GIT tag --list");
     if ($?) {
 	print STDERR $taglist;
 	fatal("Could not check for tag list from repository");
@@ -849,7 +873,7 @@ sub GetTagList($)
     # here; we need to dereference annotated tags. This complicates the
     # output though. 
     #
-    my $output = emutil::ExecQuiet("$GIT show-ref --abbrev -d --tags");
+    my $output = runCommandRetry("$GIT show-ref --abbrev -d --tags");
     if ($?) {
 	print STDERR $output;
 	fatal("Could not get tag list from repository")
@@ -950,7 +974,7 @@ sub GetCommitList($$)
     my $cmd = "$GIT log '--format=%h%x1f%an%x1f%ad%x1f%s%x1e' ";
     $cmd .= $branch if (defined($branch));
     
-    my $output = emutil::ExecQuiet($cmd);
+    my $output = runCommandRetry($cmd);
     if ($?) {
 	print STDERR $output;
 	fatal("Could not get branch list from repository")
@@ -999,7 +1023,7 @@ sub DoCommitInfo()
     my $cmd = "$GIT log -n 1 '--format=%h%x1f%an%x1f%ad%x1f%s%x1e'";
     $cmd .= " $which" if (defined($which));
     
-    my $output = emutil::ExecQuiet($cmd);
+    my $output = runCommandRetry($cmd);
     if ($?) {
 	print STDERR $output;
 	fatal("Could not get branch list from repository")
