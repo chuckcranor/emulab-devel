@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'publish-modal', 'share-modal', 'gitrepo-picker','profile-list-modal','confirm-delete-profile']);
+    var templates = APT_OPTIONS.fetchTemplateList(['manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'publish-modal', 'share-modal', 'gitrepo-picker','profile-list-modal','confirm-delete-profile', 'copy-repobased-profile']);
     var manageString = templates['manage-profile'];
     var waitwaitString = templates['waitwait-modal'];
     var rendererString = templates['renderer-modal'];
@@ -14,6 +14,7 @@ $(function ()
     var gitrepoString = templates['gitrepo-picker'];
     var plistString = templates['profile-list-modal'];
     var deleteString = templates['confirm-delete-profile'];
+    var copyrepoString = templates['copy-repobased-profile'];
 
     var profile_uuid = null;
     var profile_name = '';
@@ -175,6 +176,7 @@ $(function ()
     	var rspectext_html = rspectextTemplate({});
 	$('#rspectext_div').html(rspectext_html);
 	$('#share_div').html(shareTemplate({formfields: fields}))
+	$('#copy_repobased_profile_div').html(copyrepoString);
 	$('#confirm_delete_div').html(deleteString);
 	// Extra warning in the confirm delete modal.
 	if (window.THIS_VERSION == window.LATEST_VERSION) {
@@ -184,6 +186,17 @@ $(function ()
 	// Fireoff repo stuff now.
 	if (fromrepo) {
 	    SetupRepo();
+
+	    // Handler for the copy repobased profile help modal.
+	    // Need to fill in the URL.
+	    $('#copy-repobased-profile-modal input')
+		.val(fields["profile_repourl"]);
+	    $('#copy-repobased-profile-modal .copy-to-clipboard')
+		.click(function (e) {
+		    e.preventDefault();
+		    $('#copy-repobased-profile-modal .gitrepo-url').select();
+		    document.execCommand("copy");
+		});
 	}
 	
 	//

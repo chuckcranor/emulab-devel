@@ -716,24 +716,27 @@
                      style='margin-right: 10px;'
                      type='submit' name='create'>Instantiate
 		  </a>
-		  <% if (!fromrepo) { %>
 		  <a class='btn btn-primary btn-xs pull-left'
                      id='profile_copy_button'
                      style='margin-right: 10px;'
-                     type='button'
+		     <% if (fromrepo) { %>
+     		     data-toggle='modal'
+		     data-target='#copy-repobased-profile-modal'
+		     <% } else { %>
 		     href='manage_profile.php?action=copy&uuid=<%= version_uuid %>'
 		     data-toggle='popover'
 		     data-delay='{"hide":1500, "show":250}'
 		     data-html='true'
 		     data-content="When you <em>copy</em> (instead of
-				   clone), you are creating a new profile that
-				   uses the same source code and metadata (description,
-				   instructions) as the original profile, but without
-				   creating a new disk image. Instead, the new profile uses
-				   whatever images the original profile uses."> 
+			   clone), you are creating a new profile that
+			   uses the same source code and metadata (description,
+			   instructions) as the original profile, but without
+			   creating a new disk image. Instead, the new profile
+			   uses whatever images the original profile uses."
+		    <% } %>
+                    type='button'>
                     Copy
 		  </a>
-		  <% } %>
 		  <span class='pull-left'
 			data-toggle='popover'
 			data-delay='{"hide":1500, "show":250}'
@@ -1207,6 +1210,7 @@ Instructions are optional.
   <div id='profile_list_modal_div'></div>
   <div id='share_div'></div>
   <div id='confirm_delete_div'></div>
+  <div id='copy_repobased_profile_div'></div>
 </div>
 <% if (viewing && Object.keys(versions).length > 1) { %>
 <div class='row'>

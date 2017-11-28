@@ -177,7 +177,7 @@ SPITREQUIRE("js/show-profile.js",
             "<script src='js/lib/jquery-ui.js'></script>\n".
             "<script src='js/lib/jquery.appendGrid-1.3.1.min.js'></script>");
 
-AddTemplateList(array("show-profile", "waitwait-modal", "renderer-modal", "showtopo-modal", "rspectextview-modal", "instantiate-modal", "oops-modal", "share-modal", "gitrepo-picker"));
+AddTemplateList(array("show-profile", "waitwait-modal", "renderer-modal", "showtopo-modal", "rspectextview-modal", "instantiate-modal", "oops-modal", "share-modal", "gitrepo-picker", "copy-repobased-profile"));
 SPITFOOTER();
 
 ?>

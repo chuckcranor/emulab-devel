@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['show-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'rspectextview-modal', 'instantiate-modal', 'oops-modal', 'share-modal']);
+    var templates = APT_OPTIONS.fetchTemplateList(['show-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'rspectextview-modal', 'instantiate-modal', 'oops-modal', 'share-modal', 'copy-repobased-profile']);
     var showString = templates['show-profile'];
     var waitwaitString = templates['waitwait-modal'];
     var rendererString = templates['renderer-modal'];
@@ -11,6 +11,7 @@ $(function ()
     var instantiateString = templates['instantiate-modal'];
     var oopsString = templates['oops-modal'];
     var shareString = templates['share-modal'];
+    var copyrepoString = templates['copy-repobased-profile'];
   
     var profile_uuid = null;
     var profile_name = '';
@@ -88,11 +89,23 @@ $(function ()
 	$('#instantiate_div').html(instantiate_html);
 	$('#rspectext_div').html(rspectextviewString);
 	$('#oops_div').html(oopsString);
+	$('#copy_repobased_profile_div').html(copyrepoString);
 	$('#share_div').html(shareTemplate({formfields: fields}))
 
 	// Fireoff repo stuff now.
 	if (fromrepo) {
 	    SetupRepo();
+
+	    // Handler for the copy repobased profile help modal.
+	    // Need to fill in the URL.
+	    $('#copy-repobased-profile-modal input')
+		.val(fields["profile_repourl"]);
+	    $('#copy-repobased-profile-modal .copy-to-clipboard')
+		.click(function (e) {
+		    e.preventDefault();
+		    $('#copy-repobased-profile-modal .gitrepo-url').select();
+		    document.execCommand("copy");
+		});
 	}
 	
 	// This activates the popover subsystem.

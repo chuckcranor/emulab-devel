@@ -214,14 +214,17 @@
 		    name='create'>Instantiate
 	    </button>
 	  <% } %>
-	  <% if (!fromrepo) { %>
-	  <a class='btn btn-primary btn-xs pull-right'
+	  <a id="copy-profile-button"
+	     class='btn btn-primary btn-xs pull-right'
              style='margin-right: 10px;'
-             type='button'
-	     href='manage_profile.php?action=copy&uuid=<%= version_uuid %>'>
+	     <% if (fromrepo) { %>
+     	     data-toggle='modal' data-target='#copy-repobased-profile-modal'
+	     <% } else { %>
+             href='manage_profile.php?action=copy&uuid=<%= version_uuid %>'
+	     <% } %>
+	     type='button'>
             Copy
 	  </a>
-	  <% } %>
 	<% } %>
 	<% if (canedit) { %>
 	  <a class='btn btn-primary btn-xs pull-right'
@@ -260,8 +263,8 @@
   <div id='publish_div'></div>
   <div id='instantiate_div'></div>
   <div id='rspectext_div'></div>
-  <div id='share_div'>
-  </div>
+  <div id='share_div'></div>
+  <div id='copy_repobased_profile_div'></div>
 </div>
 <div class='row hidden' id="gitpicker-div">
   <div class='col-sm-12'>
