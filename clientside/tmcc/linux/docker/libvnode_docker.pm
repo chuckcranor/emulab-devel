@@ -2746,6 +2746,13 @@ sub vnodeCreate($$$$)
 		 "$mntdir/var.emulab/lock") {
 	mkdir($dir);
     }
+    if ($newization >= DOCKER_EMULABIZE_CORE()) {
+	my ($boss_name,$boss_ip) = tmccbossinfo();
+	open(FD,">$mntdir/bossnode");
+	print FD "$boss_name\n";
+	close(FD);
+	push(@{$args{"HostConfig"}{"Binds"}},"$mntdir/bossnode:/etc/emulab/bossnode:ro");
+    }
     # Populate the tmcc info.
     mysystem2("rsync -a /var/emulab/boot/tmcc.$vnode_id/".
 	      " $mntdir/var.emulab/boot/tmcc/");
