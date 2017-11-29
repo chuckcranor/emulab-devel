@@ -10,4 +10,4 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-exec docker run --rm -t -v /etc/emulab/docker:/tmp/emulab:ro $1 /tmp/emulab/analyze.sh
+exec docker run --rm -t -v /etc/emulab/docker/container-utils:/tmp/emulab:ro $1 /tmp/emulab/analyze.sh

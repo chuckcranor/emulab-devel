@@ -291,7 +291,7 @@ if [ -f /etc/emulab/emulabization-type ]; then
     EMULABIZATION=`cat /etc/emulab/emulabization-type`
 fi
 if [ -f /etc/emulab/version ]; then
-    EMULABIZATION=`cat /etc/emulab/version`
+    EMULABVERSION=`cat /etc/emulab/version`
 fi
 
 echo "# Result variables:"
