@@ -823,7 +823,6 @@ $(function () {
 	  dom.find('button#image-select').click(function (event) {
 	    var callback = function(json) {
 	      $('#waitwait-modal').modal('hide');
-	      console.log('imagepicker', json);
 
 	      if (json.code == 0) {
 		sup.ShowModal('#imagepicker-modal');

@@ -140,15 +140,18 @@ function ImagesWhere($where, $dblink)
 {
     $result = array();
     $query_result = DBQueryFatal(
-      "select i.urn, v.description, v.version from ".
+      "select i.urn, v.description, v.version, v.deprecated is not NULL, v.deprecated_message, v.types_known_working from ".
       "image_versions as v left join images as i on ".
-      "v.urn=i.urn ".$where,
+      "v.urn=i.urn ".$where." and (deprecated is NULL or deprecated_iserror=0)",
     $dblink);
     while ($row = mysql_fetch_array($query_result)) {
       array_push($result, array(
           'urn' => $row[0],
           'description' => $row[1],
-          'version' => $row[2]));
+          'version' => $row[2],
+	  'deprecated' => $row[3],
+	  'deprecated_messsage' => $row[4],
+	  'types' => $row[5]));
     }
     return $result;
 }

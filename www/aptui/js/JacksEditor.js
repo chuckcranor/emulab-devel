@@ -110,6 +110,11 @@ $(function () {
     {
 	$('#edit_topo_modal_button').prop('disabled', false);
         context = data;
+      var callback = function(json) {
+	if (json.code == 0)
+	{
+	  context.canvasOptions.dynamicImages = json.value[0];
+	}
         if ($('#amlist-json').length > 0)
         {
           var amlist = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
@@ -124,6 +129,9 @@ $(function () {
         _.each(waitingInstances, function (f) {
 	  f();
 	});
+      };
+      var xmlthing = sup.CallServerMethod(null, "instantiate", "GetImageList");
+      xmlthing.done(callback);
     }
 
     function contextFail(fail1, fail2)
