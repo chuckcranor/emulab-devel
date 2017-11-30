@@ -940,6 +940,26 @@ sub Unlock($)
 }
 
 #
+# Wait for lock with timeout (in seconds).
+#
+sub WaitForLock($$)
+{
+    my ($self, $timeout) = @_;
+
+    return $self->Lock()
+	if (! $timeout);
+	
+    while ($timeout >= 0) {
+	return 0
+	    if ($self->Lock() == 0);
+	
+	$timeout--;
+	sleep(1);
+    }
+    return -1;
+}
+
+#
 # Update the disk image inside a profile. We update the URL for the
 # specified node, and if $all is set, we change all nodes with the
 # same original disk image as the specified node.

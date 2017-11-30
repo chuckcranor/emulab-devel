@@ -908,7 +908,7 @@ sub UpdateProfileFromRepo()
     elsif (!$project->AccessCheck($this_user, TB_PROJECT_MAKEIMAGEID())) {
 	fatal("Not enough permission in this project");
     }
-    if ($profile->Lock()) {
+    if ($profile->WaitForLock(10)) {
 	print STDERR "Profile is busy, cannot lock it.\n";
 	exit(1);
     }
