@@ -58,25 +58,33 @@ pre {
       <br>
       <textarea id='reason'
 		class='form-control'
-		rows=5></textarea>
+		rows=3></textarea>
       <div style="margin-top: 10px;">
 	<span data-toggle='popover'
 	     data-delay='{"hide":500, "show":500}'
 	     data-content='Schedule termination for the future (in days)
 			   or right away (leave days zero).'>
-	  <button class='btn btn-primary btn-sm'
-		  style='margin-right: 20px;'
+	  <button class='btn btn-danger btn-sm'
+		  style='margin-left: 0px; margin-right: 0px;'
 		  id="terminate-button"
 		  data-toggle='modal' data-target='#confirm-terminate-modal'
 		  type='button' name='terminate'>Schedule Termination</button>
 	</span>
+	<span style='margin-left: 0px; margin-right: 0px;'
+	      data-toggle='popover'
+	      data-delay='{"hide":500, "show":500}'
+	      data-content="When checked, Deny and Schedule Termination
+			    buttons will also disable any new extension
+			    requests.">
+	  Lockout: <input type="checkbox" id="deny-lockout-checkbox" checked>
+	</span>
 	<button class='btn btn-danger btn-sm'
-		style='margin-right: 20px;'
+		style='margin-left: 0px; margin-right: 30px;'
 		id='deny-extension'
 		type='submit' name='request'>Deny</button>
-	<input id="days" value="0" type="text" size="4" placeholder="days">
+	<input id="howlong" value="0" type="text" size="7">
 	<button class='btn btn-primary btn-sm'
-		style='margin-left: 20px;'
+		style='margin-left: 30px;'
 		id='do-extension'
 		type='submit' name='request'>Extend</button>
 	<span data-toggle='popover'
@@ -85,6 +93,15 @@ pre {
 			    the extension even if it causes a reservation system
 			    overbooking situation. Be careful!">
 	  Force: <input type="checkbox" id="force-extension-checkbox"></span>
+	<span style="margin-left: 5px;"
+	      data-toggle='popover'
+	      data-delay='{"hide":500, "show":500}'
+	      data-content="When checked, the experiment will be extended
+			    out to the maximum allowed by the current
+			    reservation scheule. See above for the current
+			    maximum extension. The value in the input field
+			    will be ignored.">
+	  Max: <input type="checkbox" id="maximum-extension-checkbox"></span>
 	<button class='btn btn-primary btn-sm'
 		style='margin-left: 30px;'
 		id='do-moreinfo'
@@ -409,6 +426,23 @@ pre {
 		  id='cancel-lockdown'>Cancel</button>
           <button class='btn btn-danger btn-sm'
 		  id='force-lockdown'>Lockdown</button>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='disable-extension-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+        <center><h4>Confirm to Disable Extensions</h4>
+	  <div>
+	    <textarea class='form-control reason'rows=5></textarea>
+	  </div>
+	  <br>
+          <button class='btn btn-danger btn-sm confirm-button'>Confirm</button>
 	</center>
       </div>
     </div>

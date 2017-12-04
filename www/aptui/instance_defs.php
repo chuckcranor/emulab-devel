@@ -121,9 +121,13 @@ class Instance
     function user_lockdown(){ return $this->field('user_lockdown'); }
     function extension_count()   { return $this->field('extension_count'); }
     function extension_days()    { return $this->field('extension_days'); }
+    function extension_hours()   { return $this->field('extension_hours'); }
     function extension_reason()  { return $this->field('extension_reason'); }
     function extension_history() { return $this->field('extension_history'); }
     function extension_lockout() { return $this->field('extension_adminonly'); }
+    function extension_disabled(){ return $this->field('extension_disabled'); }
+    function extension_disabled_reason(){
+        return $this->field('extension_disabled_reason');}
     function extension_requested(){return $this->field('extension_requested');}
     function extension_denied()  { return $this->field('extension_denied');}
     function extension_denied_reason(){
@@ -179,6 +183,18 @@ class Instance
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
 	return !is_null($this->instance);
+    }
+
+    # URL to the status page.
+    function StatusURL() {
+        global $APTBASE;
+
+        return $APTBASE . "/status.php?uuid=" . $this->uuid();
+    }
+    function AdminURL() {
+        global $APTBASE;
+
+        return $APTBASE . "/adminextend.php?uuid=" . $this->uuid();
     }
 
     # Lookup up an instance by idx. 
@@ -473,15 +489,6 @@ class Instance
                     "where uuid='$uuid'");
     }
 
-    function BumpExtensionCount($granted)
-    {
-	$uuid = $this->uuid();
-
-        DBQueryWarn("update apt_instances set ".
-                    "  extension_count=extension_count+1, ".
-                    "  extension_days=extension_days+${granted} ".
-                    "where uuid='$uuid'");
-    }
     #
     # Permission check; does user have permission to view instance.
     #
@@ -943,6 +950,31 @@ class ExtensionInfo
 	$this->info = mysql_fetch_assoc($query_result);
         $this->info["reason"]  = trim($this->info["reason"]);
         $this->info["message"] = trim($this->info["message"]);
+
+        #
+        # Convert wanted/granted hours to handy 5D14H string.
+        #
+        $wdays  = intval($this->info["wanted"] / 24.0);
+        $whours = $this->info["wanted"] % 24;
+        $gdays  = intval($this->info["granted"] / 24.0);
+        $ghours = $this->info["granted"] % 24;
+        if ($wdays) {
+            $wantstring = "${wdays}D" . "${whours}H";
+        }
+        else {
+            $wantstring = "${whours}H";
+        }
+        if ($gdays) {
+            $grantstring = "${gdays}D" . "${ghours}H";
+        }
+        elseif ($ghours) {
+            $grantstring = "${ghours}H";
+        }
+        else {
+            $grantstring = "0";
+        }
+        $this->info["wantedstring"]  = $wantstring;
+        $this->info["grantedstring"] = $grantstring;
     }
     # accessors
     function field($name) {

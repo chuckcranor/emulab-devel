@@ -1126,4 +1126,16 @@ function DBAffectedRows($linkid = NULL)
     return mysql_affected_rows($linkid);
 }
 
+#
+# Properly escape string for insertion.
+# 
+function DBQuoteSpecial($stuff, $linkid = NULL)
+{
+    global      $DBlinkid;
+
+    $linkid = is_null($linkid) ? $DBlinkid : $linkid;
+
+    return mysql_real_escape_string($stuff, $linkid);
+}
+
 ?>

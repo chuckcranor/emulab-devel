@@ -25,7 +25,6 @@ $(function ()
     var isscript    = 0;
     var dossh       = 1;
     var profile_uuid= null;
-    var extend      = null;
     var jacksIDs    = {};
     var publicURLs  = null;
     var status_collapsed  = false;
@@ -43,7 +42,7 @@ $(function ()
     var diskimages        = {};
     var showlinktest      = false;
     var hidelinktest      = false;
-    var extensions        = null;
+    var extension_blob    = null;
     var projlist          = null;
     var changingtopo      = false;
     var EMULAB_OPS        = "emulab-ops";
@@ -63,7 +62,6 @@ $(function ()
 	isguest = (window.APT_OPTIONS.registered ? false : true);
 	wholedisk = window.APT_OPTIONS.wholedisk;
 	dossh   = window.APT_OPTIONS.dossh;
-	extend  = window.APT_OPTIONS.extend || null;
 	isscript = window.APT_OPTIONS.isscript;
 	profile_uuid = window.APT_OPTIONS.profileUUID;
 	paniced      = window.APT_OPTIONS.paniced;
@@ -75,9 +73,9 @@ $(function ()
 	hidelinktest   = window.APT_OPTIONS.hidelinktest;
 	var errorURL = window.HELPFORUM;
 
-	if ($('#extensions-json').length) {
-	    extensions = decodejson('#extensions-json');
-	    console.info(extensions);
+	if ($('#extension-blob-json').length) {
+	    extension_blob = decodejson('#extension-blob-json');
+	    console.info(extension_blob);
 	}
 	if ($('#projects-json').length) {
 	    projlist = decodejson('#projects-json');
@@ -100,7 +98,7 @@ $(function ()
 	    isadmin:            window.APT_OPTIONS.isadmin,
 	    isfadmin:           window.APT_OPTIONS.isfadmin,
 	    isstud:             window.APT_OPTIONS.isstud,
-	    extensions:         extensions,
+	    extensions:         extension_blob.extensions,
 	    errorURL:           errorURL,
 	    paniced:            paniced,
 	    project:            window.APT_OPTIONS.project,
@@ -115,6 +113,7 @@ $(function ()
 	    reporef:		window.APT_OPTIONS.reporef,
 	    repohash:		window.APT_OPTIONS.repohash,
 	    hasnotes:          	window.APT_OPTIONS.hasnotes,
+	    extension_reason:   extension_blob.extension_reason,
 	};
 	var status_html   = statusTemplate(template_args);
 	$('#status-body').html(status_html);
@@ -125,7 +124,7 @@ $(function ()
 	$('#oneonly_div').html(oneonlyString);
 	$('#approval_div').html(approvalString);
 	$('#linktest_div').html(linktestString);
-
+	
 	// Not allowed to copy repobased profiles.
 	if (window.APT_OPTIONS.repourl !== undefined) {
 	    $('#copy_button').addClass("hidden");
@@ -189,11 +188,21 @@ $(function ()
 		sup.ShowModal("#extend_history_modal");
 		return;
 	    }
+	    if (lockout) {
+		if (extension_blob.extension_disabled_reason != "") {
+		    $("#extensions-disabled-reason .reason")
+			.text(extension_blob.extension_disabled_reason);
+		    $("#extensions-disabled-reason").removeClass("hidden");
+		}
+		sup.ShowModal("#no-extensions-modal");
+		return;
+	    }
 	    if (isadmin) {
 		window.location.replace("adminextend.php?uuid=" + uuid);
 		return;
 	    }
             ShowExtendModal(uuid, RequestExtensionCallback, isstud, isguest,
+			    extension_blob,
                             window.APT_OPTIONS.physnode_count,
                             window.APT_OPTIONS.physnode_hours);
 	});
@@ -311,15 +320,6 @@ $(function ()
 	}
 	else if (window.APT_OPTIONS.snapping) {
 	    ShowProgressModal();
-	}
-	else if (window.APT_OPTIONS.extend) {
-	    if (isadmin) {
-		window.location.replace("adminextend.php?uuid=" + uuid);
-		return;
-	    }
-	    ShowExtendModal(uuid, RequestExtensionCallback, isstud, isguest,
-			    window.APT_OPTIONS.physnode_count,
-			    window.APT_OPTIONS.physnode_hours);
 	}
     }
 
@@ -782,13 +782,15 @@ $(function ()
 	var callback = function(json) {
 	    if (json.code) {
 		alert("Failed to change lockout: " + json.value);
+		// Flip the checkbox back.
+		$('#lockout_checkbox').prop("checked", false);
 		return;
 	    }
 	    lockout = enable;
 	}
 	var xmlthing = sup.CallServerMethod(ajaxurl, "status", "Lockout",
 					     {"uuid" : uuid,
-					      "lockout" : lockout});
+					      "lockout" : enable});
 	xmlthing.done(callback);
     }
 
@@ -3050,9 +3052,9 @@ $(function ()
 
     function ShowExtensionDeniedModal()
     {
-	if ($('#extension_denied_reason').length) {
+	if (extension_blob.extension_denied_reason != "") {
 	    $("#extension-denied-modal-reason")
-		.text($('#extension_denied_reason').text());
+		.text(extension_blob.extension_denied_reason);
 	}
 	$('#extension-denied-modal-dismiss').click(function () {
 	    sup.HideModal("#extension-denied-modal");

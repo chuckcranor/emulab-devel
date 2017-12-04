@@ -690,7 +690,7 @@ sub SliceMaxExtension($)
 				    TBDateStringGMT(0x7fff0000));
     }
     
-    if (Reservation->MaxSliceExtension($slice, \$max, \$reserror)) {
+    if (Reservation->MaxSliceExtension($slice, \$max, \$reserror, 3600)) {
 	Reservation->FlushAll();
 	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, $reserror);
     }

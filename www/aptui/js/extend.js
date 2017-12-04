@@ -17,7 +17,9 @@ window.ShowExtendModal = (function()
 	var uuid       = 0;
 	var callback   = null;
 	var maxextend  = null;
-	var howlong    = 1; // Number of days being requested.
+	var howlong    = 24; // Number of hours being requested.
+	var SLIDERLIMIT= 84 * 24;
+	var extension_info  = null;
 	var physnode_count  = 0;
 	var physnode_hours  = 0;
 
@@ -51,8 +53,9 @@ window.ShowExtendModal = (function()
 			$("#datepicker").focus();
 			return false;
 		    }
-		    var howlong = DateToDays($('#datepicker').val());
-		    $('#future_usage').val(Math.round(physnode_count * howlong * 24));
+		    var howlong = DateToHours($('#datepicker').val());
+		    $('#future_usage')
+			.val(Math.round(physnode_count * howlong));
 		});
 	    }
 	    
@@ -82,7 +85,7 @@ window.ShowExtendModal = (function()
 	    labels[3] = "Longer";
 
 	    $(slidername).slider({value:0,
-			   max: 100,
+			   max: 1000,
 			   slide: function(event, ui) {
 			       return SliderChanged(event, ui.value);
 			   },
@@ -135,17 +138,28 @@ window.ShowExtendModal = (function()
 	     * let the user slide to, since it is beyond the maximum
 	     * allowed extension (cause of a reservation).
 	     */
-	    if (maxextend != null && maxextend < 84) {
-		var setvalue = DayToSetvalue(maxextend);
+	    if (maxextend != null && maxextend < SLIDERLIMIT) {
+		var setvalue = HoursToSetvalue(maxextend);
 		var block = $( "<div id='maxextend-div'>" )
 		    .appendTo($(slidername));
 		block.addClass('ui-slider-range');
 		block.addClass('ui-slider-range-max');
 		block.css("background", "grey");
-		block.css("width", "" + (100-setvalue)/100 * 100 + "%");
+		block.css("width", "" + (1000-setvalue)/1000 * 100 + "%");
 
+		var days   = parseInt(maxextend / 24);
+		var hours  = maxextend % 24;
+		var length;
+		if (days) {
+		    length = days + " days";
+		}
+		if (hours) {
+		    if (days)
+			length = length + " and ";
+		    length = length + hours + " hours ";
+		}
 		var message = "You may not extend this experiment " +
-		    "beyond " + maxextend + " day(s) " +
+		    "beyond " + length +
 		    "because of a pre-scheduled resource reservation. " +
 		    "Please be sure to save your " +
 		    "work before your experiment is terminated!";
@@ -173,7 +187,8 @@ window.ShowExtendModal = (function()
 	 * Pick which instructions to show (label number) based on number
 	 * of phys/virt nodes. Hacky.
 	 */
-	function PickInstructions(days) {
+	function PickInstructions(hours) {
+	    var days = hours / 24;
 	    // No physical nodes, we require minimal info and will always
 	    // grant the extension.
 	    if (physnode_count == 0) return 0;
@@ -193,26 +208,27 @@ window.ShowExtendModal = (function()
 	    return 2;
 	}
 
-	function DayToSetvalue(day)
+	function HoursToSetvalue(hours)
 	{
 	    var setvalue = 0;
+	    var day = hours / 24;
 
 	    if (day == 0) {
 		setvalue = 0;
 	    }
 	    else if (day > 0 && day <= 6) {
-		setvalue = Math.floor((day - 1) * (33 / 6.0));
+		setvalue = Math.floor((day - 1) * (330 / 6.0));
 	    }
 	    else if (day <= 20) {
-		setvalue = Math.round((day - 7) * (33 / 20.0)) + 33;
+		setvalue = Math.round((day - 7) * (330 / 20.0)) + 330;
 	    }
-	    else if (day <= 84) {
-		setvalue = Math.round(((day / 7) - 4) * (33 / 8.0)) + 66;
+	    else if (day <= SLIDERLIMIT) {
+		setvalue = Math.round(((day / 7) - 4) * (330 / 8.0)) + 660;
 	    }
 	    else {
-		setvalue = 100;
+		setvalue = 1000;
 	    }
-	    //console.info("setvalue", day, setvalue);
+	    console.info("setvalue", hours, day, setvalue);
 	    return setvalue;
 	}
 
@@ -225,7 +241,6 @@ window.ShowExtendModal = (function()
 	var setvalue  = 0;   // where to jump the slider to after stop.
 	function SliderChanged(event, which) {
 	    var slider   = $(slidername);
-	    var label    = 0;
 
 	    if (lastvalue == which) {
 		return false;
@@ -235,40 +250,36 @@ window.ShowExtendModal = (function()
 	     * This is hack to achive a non-linear slider. 
 	     */
 	    var extend_value = "1 day";
-	    if (which <= 33) {
-		var divider  = 33 / 6.0;
+	    if (which <= 330) {
+		var divider  = 330 / 6.0;
 		var day      = Math.round(which / divider) + 1;
 		extend_value = day + " days";
 		setvalue     = Math.round((day - 1) * divider);
-		howlong      = day;
-		label        = PickInstructions(howlong);
+		howlong      = day * 24;
 	    }
-	    else if (which <= 66) {
-		var divider  = 33 / 20.0;
-		var day      = Math.round((which - 33) / divider) + 7;
+	    else if (which <= 660) {
+		var divider  = 330 / 20.0;
+		var day      = Math.round((which - 330) / divider) + 7;
 		extend_value = day + " days";
-		setvalue     = Math.round((day - 7) * divider) + 33;
-		howlong      = day;
-		label        = PickInstructions(howlong);
+		setvalue     = Math.round((day - 7) * divider) + 330;
+		howlong      = day * 24;
 	    }
-	    else if (which <= 97) {
-		var divider  = 33 / 8.0;
-		var week     = Math.round((which - 66) / divider) + 4;
+	    else if (which <= 970) {
+		var divider  = 330 / 8.0;
+		var week     = Math.round((which - 660) / divider) + 4;
 		extend_value = week + " weeks";
-		setvalue     = Math.round((week - 4) * divider) + 66;
-		howlong      = week * 7;
-		label        = PickInstructions(howlong);
+		setvalue     = Math.round((week - 4) * divider) + 660;
+		howlong      = week * 7 * 24;
 	    }
 	    else {
 		extend_value = "Longer";
-		setvalue     = 100;
-		label        = 2;
+		setvalue     = 1000;
 		// User has to fill in the date box, then we can figure
 		// it out. 
 		howlong      = null;
 	    }
 	    if (maxextend != null) {
-		if (howlong && howlong >= maxextend) {
+		if (howlong && howlong > maxextend) {
 		    if (! $('#maxextend-div').data("popped")) {
 			$('#maxextend-div').popover("show");
 			$('#maxextend-div').data("popped", 1);
@@ -280,25 +291,32 @@ window.ShowExtendModal = (function()
 			$('#maxextend-div').data("popped", 0);
 		    }
 		}
-		if ((howlong == null && maxextend < 84) ||
+		if ((howlong == null && maxextend < SLIDERLIMIT) ||
 		    howlong > maxextend) {
 		    event.preventDefault();
 		    howlong = maxextend;
-		    setvalue = DayToSetvalue(maxextend);
+		    setvalue = which = HoursToSetvalue(maxextend);
 		    $(slidername).slider("value", setvalue);
 		    // "trigger" another slider changed event
-		    SliderChanged(event, $(slidername).slider("value"));
-		    return;
+		    //SliderChanged(event, $(slidername).slider("value"));
+		    //return;
 		}
 	    }
-	    //console.info(howlong);
+	    console.info(howlong);
 	    $('#extend_value').html(extend_value);
 
+	    var label = 0;
+	    if (howlong) {
+		label = PickInstructions(howlong);
+	    }
+	    else {
+		label = 2;
+	    }
 	    $('#label' + lastlabel + "_request").addClass("hidden");
 	    $('#label' + label + "_request").removeClass("hidden");
 
 	    if (howlong) {
-		$('#future_usage').val(Math.round(physnode_count * howlong * 24));
+		$('#future_usage').val(Math.round(physnode_count * howlong));
 	    }
 
 	    // For the char countdown below.
@@ -312,7 +330,7 @@ window.ShowExtendModal = (function()
 
 	// Jump to closest stop when user finishes moving.
 	function SliderStopped(which) {
-	    $(slidername).slider("value", setvalue);
+	   // $(slidername).slider("value", setvalue);
 	}
 
 	function UpdateCountdown() {
@@ -343,9 +361,8 @@ window.ShowExtendModal = (function()
 	/*
 	 * Convert date to howlong in days.
 	 */
-	function DateToDays(str)
+	function DateToHours(str)
 	{
-	    var days  = 0;
 	    var today = new Date();
 	    var later = new Date(str);
 	    var diff  = (later - today);
@@ -354,9 +371,8 @@ window.ShowExtendModal = (function()
 		$("#datepicker").focus();
 		return 0;
 	    }
-	    days = parseInt((diff / 1000) / (3600 * 24));
-
-	    return (days < 1 ? 1 : days);
+	    var hours = parseInt((diff / 1000) / 3600);
+	    return (hours < 1 ? 1 : hours);
 	}
 	
 	//
@@ -375,7 +391,7 @@ window.ShowExtendModal = (function()
 		    $("#datepicker").focus();
 		    return;
 		}
-		howlong = DateToDays($('#datepicker').val());
+		howlong = DateToHours($('#datepicker').val());
 	    }
 	    reason = $("#why_extend").val();
 	    if (reason.trim().length == 0) {
@@ -390,7 +406,8 @@ window.ShowExtendModal = (function()
 		      "we really do read these!");
 		return;
 	    }
-	    $('#extension_reason').val(reason);
+	    // Save this for next time we show the modal.
+	    extension_info.extension_reason = reason;
 
 	    sup.HideModal('#extend_modal');
 	    sup.ShowModal("#waitwait-modal");
@@ -432,8 +449,7 @@ window.ShowExtendModal = (function()
 						    "status",
 						    "RequestExtension",
 						    {"uuid"   : uuid,
-						     "howlong": hours,
-						     "inhours":  1});
+						     "howlong": hours});
 		xmlthing.done(requestcallback);
 	    });
 	    sup.ShowModal('#restricted_extend_modal');
@@ -456,11 +472,12 @@ window.ShowExtendModal = (function()
 		$(button).attr("disabled", "disabled");
 	    }
 	}
-	return function(thisuuid, func, studly, guest, pcount, phours)
+	return function(thisuuid, func, studly, guest, info, pcount, phours)
 	{
 	    isguest  = guest;
 	    uuid     = thisuuid;
 	    callback = func;
+	    extension_info = info;
 	    physnode_count = pcount;
 	    physnode_hours = phours;
 
@@ -477,8 +494,8 @@ window.ShowExtendModal = (function()
 	    // some of the content, since we need to know its width.
 	    $(modalname).on('shown.bs.modal', function (e) {
 		Initialize();
-		if ($('#extension_reason').length) {
-		    $("#why_extend").text($('#extension_reason').val());
+		if (extension_info.extension_reason != "") {
+		    $("#why_extend").text(extension_info.extension_reason);
 		    $("#why_extend_div").removeClass("hidden");
 		}
 		if (! guest) {
@@ -520,36 +537,29 @@ window.ShowExtendModal = (function()
 		 * See if the difference is less then a day.
 		 */
 		var now   = new Date(window.APT_OPTIONS.sliceExpires);
-		var hours = Math.floor((later.getTime() -
-					now.getTime()) / (1000 * 3600.0));
+		var diff  = (later.getTime() - now.getTime()) / (1000 * 3600.0);
+		var hours = Math.floor(diff);
+		console.info("MaxExtension", now, later, diff, hours);
 	
 		if (hours == 0) {
 		    sup.ShowModal('#no_extend_modal');
 		}
 		else if (hours < 24) {
-		    console.info("Max extension hours: ", hours);
-		    
 		    // Different path; request as much as we can get.
 		    RequestMaxExtension(hours);
 		}
 		else {
 		    // Maximum number of days beyond current expiration!
-		    maxextend = Math.floor(hours / 24);
-		    console.info("Max extension days: ", maxextend, hours);
+		    maxextend = hours;
 		    // Show the modal, it is initialized above. 
 		    $(modalname).modal('show');
 		}
 	    }
-	    if (1) {
-		sup.ShowModal('#waitwait-modal');
-		var xmlthing =
-		    sup.CallServerMethod(null, "status", "MaxExtension",
-					 {"uuid" : uuid});
-		xmlthing.done(maxcallback);
-	    }
-	    else {
-		$(modalname).modal('show');
-	    }
+	    sup.ShowModal('#waitwait-modal');
+	    var xmlthing =
+		sup.CallServerMethod(null, "status", "MaxExtension",
+				     {"uuid" : uuid});
+	    xmlthing.done(maxcallback);
 	}
     }
 )();

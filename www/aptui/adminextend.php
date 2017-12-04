@@ -48,6 +48,7 @@ if (!isset($uuid)) {
               What experiment would you like to look at?
             </p>
           </div>\n";
+    SPITNULLREQUIRE();
     SPITFOOTER();
     return;
 }
@@ -59,6 +60,7 @@ if (!$instance) {
               Experiment does not exist.
             </p>
           </div>\n";
+    SPITNULLREQUIRE();
     SPITFOOTER();
     return;
 }
@@ -67,7 +69,7 @@ $extensions = ExtensionInfo::LookupForInstance($instance);
 #
 # If we have an outstanding extension, look to see how much more is left.
 #
-$days = "null";
+$hours = "null";
 
 if ($instance->extension_requested()) {
     #
@@ -77,7 +79,7 @@ if ($instance->extension_requested()) {
     foreach ($extensions as $extension) {
         if ($extension->action() == "request") {
             if ($extension->granted() < $extension->wanted()) {
-                $days = $extension->wanted() - $extension->granted();
+                $hours = $extension->wanted() - $extension->granted();
             }
             break;
         }
@@ -103,7 +105,7 @@ echo "<script type='text/javascript'>\n";
 echo "  window.UUID = '" . $uuid . "';\n";
 echo "  window.PID = '" . $pid . "';\n";
 echo "  window.CREATOR = '" . $creator . "';\n";
-echo "  window.DAYS = $days;\n";
+echo "  window.HOURS = $hours;\n";
 echo "</script>\n";
 
 echo "<link rel='stylesheet'

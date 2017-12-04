@@ -70,6 +70,7 @@ use overload ('""' => 'Stringify');
 # Configure variables
 my $TB		  = "@prefix@";
 my $TBOPS         = "@TBOPSEMAIL@";
+my $TBAUDIT       = "@TBAUDITEMAIL@";
 my $GENEXTENDCRED = "$TB/sbin/protogeni/genextendcred";
 my $GENIUSER      = "geniuser";
 my $MAINSITE      = @TBMAINSITE@;
@@ -608,6 +609,14 @@ sub webURL($)
 
     return $link;
 }
+sub adminURL($)
+{
+    my ($self) = @_;
+    my $link = $self->Brand()->wwwBase();
+    $link    = $link . "/adminextend.php?uuid=" . $self->uuid();
+
+    return $link;
+}
 
 #
 # Find the profile for this instance.
@@ -640,7 +649,7 @@ sub RecordHistory($$)
 		"       gid,gid_idx, ".
 		"       aggregate_urn,public_url,logfileid, ".
 		"       created,now(),$expired, ".
-		"       extension_count,extension_days, ".
+		"       extension_count,extension_days,extension_hours, ".
 		"       physnode_count,virtnode_count, ".
 		"       servername,repourl,reponame,reporef,repohash, ".
 		"       rspec,script,params,manifest ".
@@ -1140,7 +1149,7 @@ sub ExtensionRequested($$$)
 		       "  extension_reason=$safe_text,".
 		       "  extension_requested=1, ".
 		       "  extension_count=extension_count+1, ".
-		       "  extension_days=extension_days+${granted} ".
+		       "  extension_hours=extension_hours+${granted} ".
 		       "where uuid='$uuid'");
 }
 
@@ -1151,7 +1160,7 @@ sub BumpExtensionCount($$)
 
     return DBQueryWarn("update apt_instances set ".
 		       "  extension_count=extension_count+1, ".
-		       "  extension_days=extension_days+${granted} ".
+		       "  extension_hours=extension_hours+${granted} ".
 		       "where uuid='$uuid'");
 }
 

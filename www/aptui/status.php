@@ -184,7 +184,9 @@ $extension_denied_reason= ($instance->extension_denied_reason() ?
                     CleanString($instance->extension_denied_reason()) : "");
 $extension_denied= $instance->extension_denied();
 $freenodes_url   = Aggregate::Lookup($instance->aggregate_urn())->FreeNodesURL();
-$lockout         = $instance->extension_lockout();
+$extension_disabled = $instance->extension_disabled();
+$extension_disabled_reason = ($instance->extension_disabled_reason() ?
+                    CleanString($instance->extension_disabled_reason()) : "");
 $isopenstack     = $instance->isopenstack();
 $paniced         = $instance->paniced();
 $pid             = $instance->pid();
@@ -260,7 +262,7 @@ echo "  window.APT_OPTIONS.isscript = $isscript;\n";
 echo "  window.APT_OPTIONS.publicURL = $public_url;\n";
 echo "  window.APT_OPTIONS.user_lockdown = $user_lockdown;\n";
 echo "  window.APT_OPTIONS.admin_lockdown = $admin_lockdown;\n";
-echo "  window.APT_OPTIONS.lockout = $lockout;\n";
+echo "  window.APT_OPTIONS.lockout = $extension_disabled;\n";
 echo "  window.APT_OPTIONS.isopenstack = $isopenstack;\n";
 echo "  window.APT_OPTIONS.paniced = $paniced;\n";
 echo "  window.APT_OPTIONS.project = '$pid';\n";
@@ -318,19 +320,26 @@ echo "<link rel='stylesheet'
 # For progress bubbles in the imaging modal.
 echo "<link rel='stylesheet' href='css/progress.css'>\n";
 echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
-echo "<div class='hidden'><textarea id='extension_reason'>$extension_reason</textarea></div>\n";
+
+#
+# Build up a blob of stuff to json encode. This should be moved to
+# an ajax method on the instance ...
+#
+$blob = array();
+
+$blob["extension_reason"] = $extension_reason;
+$blob["extension_denied_reason"] = $extension_denied_reason;
+$blob["extension_disabled_reason"] = $extension_disabled_reason;
 if (count($extensions)) {
     $foo = array();
     foreach ($extensions as $extension) {
         $foo[$extension->idx()] = $extension->info;
     }
-    echo "<script type='text/plain' id='extensions-json'>\n";
-    echo json_encode($foo, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_TAG);
-    echo "</script>\n";
+    $blob["extensions"] = $foo;
 }
-if ($extension_denied_reason != "") {
-   echo "<pre class='hidden' id='extension_denied_reason'>$extension_denied_reason</pre>\n";
-}
+echo "<script type='text/plain' id='extension-blob-json'>\n";
+echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
+echo "</script>\n";
 
 # This is for Clone.
 if (isset($this_user)) {

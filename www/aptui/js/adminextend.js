@@ -87,8 +87,8 @@ $(function ()
 	});
 	
 	// Default number of days.
-	if (window.DAYS) {
-	    $('#days').val(window.DAYS);
+	if (window.HOURS) {
+	    $('#howlong').val(convertHours(window.HOURS));
 	}
 	// Handlers for Extend and Deny buttons.
 	$('#deny-extension').click(function (event) {
@@ -112,6 +112,71 @@ $(function ()
 	    Action("terminate");
 	    return false;
 	});
+	/*
+	 * Handler for the Maximum Extension button, which just overwrites
+	 * the value in the input box. We want to save off the current
+	 * value to restore if later unchecked.
+	 */
+	var current_extension_input = null;
+	$('#maximum-extension-checkbox').change(function (e) {
+	    if ($('#maximum-extension-checkbox').is(":checked")) {
+		current_extension_input = $('#howlong').val();
+		if (maxextension == null) {
+		    alert("There is maximum extension!");
+		    // Flip the checkbox back.
+		    $('#maximum-extension-checkbox').prop("checked", false);
+		    return;
+		}
+		// Kill the input field, it will be ignored.
+		$('#howlong').val("");
+	    }
+	    else {
+		$('#howlong').val(current_extension_input);
+	    }
+	});
+    }
+
+    //
+    // Convert xDyH into hours. A plain integer is just days.
+    //
+    function getHowlong()
+    {
+	var howlong = $.trim($('#howlong').val());
+
+	// Nothing means zero.
+	if (howlong == "") {
+	    return 0;
+	}
+
+	var matches = howlong.match(/^(\d+)(D|H)?$/i);
+	if (matches) {
+	    if (matches[2] === undefined || matches[2] == "D") {
+		return parseInt(matches[1]) * 24;
+	    }
+	    return parseInt(matches[1]);
+	}
+	matches = howlong.match(/^(\d+)D(\d+)H$/i);
+	if (matches) {
+	    return (parseInt(matches[1]) * 24) + parseInt(matches[2]);
+	}
+	return undefined;
+    }
+    function convertHours(hours)
+    {
+        /*
+         * Convert hours to handy 5D14H string or just days integer.
+         */
+	var days  = parseInt(hours / 24);
+	var hours = hours % 24;
+	var str;
+
+        if (days) {
+	    if (!hours) {
+		return days;
+	    }
+	    return days + "D" + hours + "H";
+        }
+	return hours + "H";
     }
 
     //
@@ -119,7 +184,7 @@ $(function ()
     //
     function Action(action)
     {
-	var howlong = $('#days').val();
+	var howlong = getHowlong();
 	var reason  = $("#reason").val();
 	var method  = (action == "extend" ?
 		       "RequestExtension" :
@@ -127,10 +192,20 @@ $(function ()
 			"MoreInfo" :
 			(action == "terminate" ?
 			 "SchedTerminate" : "DenyExtension")));
-	// Only an extend option for now.
+	// Only an extend option.
 	var force = 0;
-	if (action == "extend" && $('#force-extension-checkbox').is(":checked")) {
+	if (action == "extend" &&
+	    $('#force-extension-checkbox').is(":checked")) {
 	    force = 1;
+	}
+	// Extend out to currently allowed maximum extension.
+	if (action == "extend" &&
+	    $('#maximum-extension-checkbox').is(":checked")) {
+	    howlong = maxextension.toString();
+	}
+	else if (howlong === undefined) {
+	    alert("Cannot parse extension duration");
+	    return;
 	}
 
 	var callback = function(json) {
@@ -148,10 +223,15 @@ $(function ()
 		sup.SpitOops("oops", message);
 		return;
 	    }
+	    // Must change this so that reloading maxextension does not
+	    // throw a hissy fit.
+	    if (window.HOURS) {
+		window.HOURS = window.HOURS - howlong;
+	    }
 	    LoadFirstRow();
 	    // Make it harder to repeat action unintentionally. 
 	    if (action == "extend" || action == "terminate") {
-		$('#days').val("0");
+		$('#howlong').val("0");
 	    }
 	    sup.ShowModal("#success-modal");
 	};
@@ -286,13 +366,38 @@ $(function ()
     function DoLockout(lockout)
     {
 	lockout = (lockout ? 1 : 0);
-	
+
 	var callback = function(json) {
 	    if (json.code) {
 		alert("Failed to change lockout: " + json.value);
+		// Flip the checkbox back
+		$('#lockout-checkbox').prop("checked", false);
 		return;
 	    }
 	}
+	if (lockout) {
+	    // Bind the confirm button in the modal. 
+	    $('#disable-extension-modal .confirm-button').click(function () {
+		sup.HideModal('#disable-extension-modal', function () {
+		    var reason  = $('#disable-extension-modal .reason').val();
+		    var xmlthing = sup.CallServerMethod(null,
+							"status", "Lockout",
+							{"uuid"   : window.UUID,
+							 "lockout": lockout,
+							 "reason" : reason});
+		    xmlthing.done(callback);
+		});
+	    });
+	    // Handler so we know the user closed the modal. We need to
+	    // clear the confirm button handler.
+	    $('#disable-extension-modal').on('hidden.bs.modal', function (e) {
+		$('#disable-extension-modal .confirm-button').unbind("click");
+		$('#disable-extension-modal').off('hidden.bs.modal');
+	    });
+	    sup.ShowModal("#disable-extension-modal");
+	    return;
+	}
+	// Clearing the lockout.
 	var xmlthing = sup.CallServerMethod(null, "status", "Lockout",
 					     {"uuid" : window.UUID,
 					      "lockout" : lockout});
@@ -411,19 +516,19 @@ $(function ()
 	    if (continuation !== undefined) {
 		continuation();
 	    }
-	    $("#days").on("keyup", function (event) {
+	    $("#howlong").on("keyup", function (event) {
 		if (!maxextension) {
 		    $('#max-extension-nomax').removeClass("hidden");
 		    return;
 		}
 		$('#max-extension-nomax').addClass("hidden");
-		var days  = $.trim($("#days").val());
-		if (days != "") {
-		    days = parseInt(days) || 0;
-		    if (days) {
-			var when = moment(expires).add(days, "days");
-			//console.info("when", when.format('lll'));
-			//console.info("max", maxextension.format('lll'));
+		var hours = getHowlong();
+		console.info("getHowlong returns ", hours);
+		if (hours !== undefined) {
+		    if (hours) {
+			var when = moment(expires).add(hours, "hours");
+			console.info("when", when.format('lll'));
+			console.info("max", maxextension.format('lll'));
 			if (when.isAfter(maxextension)) {
 			    $('#max-extension-warning .max-extension-date')
 				.html(when.format('lll'));
@@ -431,7 +536,8 @@ $(function ()
 			}
 			else {
 			    $('#max-extension-warning').addClass("hidden");
-			    $('#max-extension-warning .max-extension-date').html("");
+			    $('#max-extension-warning .max-extension-date')
+				.html("");
 			}
 			return;
 		    }
@@ -442,7 +548,7 @@ $(function ()
 	    
 	    if (json.code) {
 		console.info("Failed to get max extension", json);
-		$('#days').val("0");
+		$('#howlong').val("0");
 		$('#max-extension-nomax').removeClass("hidden");
 		
 		/*
@@ -475,31 +581,44 @@ $(function ()
 				     .format("MMM D, YYYY h:mm A"));
 	    
 	    /*
-	     * Look to see if the number of days requested is going to be
+	     * Look to see if the number of hours requested is going to be
 	     * greater then the max slice extension. If it is, then we want
 	     * to make sure that is noticed.
 	     */
-	    if (window.DAYS) {
+	    if (window.HOURS) {
 		var exp = new Date(expires);
 		var max = new Date(json.value);
-		exp.setDate(exp.getDate() + window.DAYS);
+		exp.setTime(exp.getTime() + window.HOURS * 3600 * 1000);
 	    
 		if (exp.getTime() > max.getTime()) {
 		    var m1   = moment(exp.getTime());
 		    var m2   = moment(max.getTime());
-		    var diff = Math.ceil(m1.diff(m2, "hours") / 24);
+		    var diff = m1.diff(m2, "hours");
 
+		    var d = parseInt(diff / 24);
+		    var h = diff % 24;
+		    var str;
+
+		    if (d) {
+			str = d + "days";
+			if (h) {
+			    str = str + "and " + h + " hours";
+			}
+		    }
+		    else {
+			str = d + "hours";
+		    }
 		    alert("Granting this full extension would violate the " +
-			  "current maximum allowed extension by " + diff + " days. " +
+			  "current maximum allowed extension by " + str + ". " +
 			  "Granting the extension can potentially throw the " +
 			  "reservation system into overbook.");
 
 		    // Change the box number to reflect a legal extension.
-		    if (window.DAYS >= diff) {
-			$('#days').val(window.DAYS - diff);
+		    if (window.HOURS >= diff) {
+			$('#howlong').val(convertHours(window.HOURS - diff));
 		    }
 		    else {
-			$('#days').val("0");
+			$('#howlong').val("0");
 		    }
 		}
 	    }

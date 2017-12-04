@@ -1036,8 +1036,8 @@ pre {
 		      admin<% } else { %><%- extension.action %><% } %>
 		  </td>
 		  <% if (extension.action == "request") { %>
-		    <td><%- extension.wanted %></td>
-		    <td><%- extension.granted %></td>
+		    <td><%- extension.wantedstring %></td>
+		    <td><%- extension.grantedstring %></td>
 		  <% } else { %>
 		    <td>n/a</td>
 		    <td>n/a</td>
@@ -1228,6 +1228,35 @@ pre {
             <button class='btn btn-danger btn-sm'
 		    id='force-lockdown'>Lockdown</button>
 	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <!-- This is the no extensions allowed modal -->
+  <div id='no-extensions-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <button type='button' class="close"
+                  data-dismiss='modal' aria-hidden='true'>&times;</button>
+          <center><h4>Oops, no extensions are permitted</h4></center>
+	</div>
+	<div class='modal-body'>
+	  <p>
+	    Extension requests for this experiment have been disabled
+	    by an administrator.
+	  </p>
+	  <div id="extensions-disabled-reason" class="hidden">
+	    <p>
+	      The reason is: <span class="reason"></span>
+	    </p>
+	  </div>
+	  <p>
+	    Please contact the
+	    <a href="mailto:<%- window.SUPPORT %>?subject=Experiment%20<%- project %>/<%- name %>"
+	       target="_blank">
+	      support staff</a> for more information.
+	  </p>
 	</div>
       </div>
     </div>

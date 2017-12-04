@@ -17,8 +17,8 @@
 		admin<% } else { %><%- extension.action %><% } %>
 	    </td>
 	    <% if (extension.action == "request") { %>
-	      <td><%- extension.wanted %></td>
-	      <td><%- extension.granted %></td>
+	      <td><%- extension.wantedstring %></td>
+	      <td><%- extension.grantedstring %></td>
 	      <td>
 		<% if (extension.autoapproved == "1") { %>
 		  Yes
