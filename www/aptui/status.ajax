@@ -387,7 +387,7 @@ function Do_RequestExtension()
             $force = 1;
         }
     }
-    else {
+    else if ($wanted > 24) {
 	if (!isset($ajax_args["reason"]) || $ajax_args["reason"] == "") {
 	    SPITAJAX_ERROR(1, "Missing reason");
 	    goto bad;
