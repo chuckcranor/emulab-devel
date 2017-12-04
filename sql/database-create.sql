@@ -174,6 +174,40 @@ CREATE TABLE `apt_datasets` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_extension_group_policies`
+--
+
+DROP TABLE IF EXISTS `apt_extension_group_policies`;
+CREATE TABLE `apt_extension_group_policies` (
+  `pid` varchar(48) default NULL,
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `gid` varchar(32) NOT NULL default '',
+  `gid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `creator` varchar(8) default NULL,
+  `creator_idx` mediumint(8) unsigned default NULL,
+  `disabled` tinyint(1) NOT NULL default '0',
+  `created` datetime default NULL,
+  `reason` mediumtext,
+  PRIMARY KEY (`pid_idx`,`gid_idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_extension_user_policies`
+--
+
+DROP TABLE IF EXISTS `apt_extension_user_policies`;
+CREATE TABLE `apt_extension_user_policies` (
+  `uid` varchar(8) default NULL,
+  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `creator` varchar(8) default NULL,
+  `creator_idx` mediumint(8) unsigned default NULL,
+  `disabled` tinyint(1) NOT NULL default '0',
+  `created` datetime default NULL,
+  `reason` mediumtext,
+  PRIMARY KEY (`uid_idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_instance_aggregate_history`
 --
 

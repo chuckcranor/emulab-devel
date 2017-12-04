@@ -63,6 +63,7 @@ sub usage()
     print("Usage: manage_instance idledata instance\n");
     print("Usage: manage_instance openstackstats instance\n");
     print("Usage: manage_instance getmanifests instance\n");
+    print("Usage: manage_instance applyextensionpolicy instance\n");
     exit(-1);
 }
 my $optlist     = "dt:s";
@@ -142,6 +143,7 @@ sub DoCheckAutoApprove();
 sub CheckAutoApprove($$);
 sub CheckReservationInternal($$$);
 sub DoMaxExtension();
+sub DoApplyExtensionPolicy();
 sub WriteCredentials();
 sub StartMonitor();
 sub StartMonitorInternal(;$@);
@@ -277,6 +279,9 @@ elsif ($action eq "maxextension") {
 }
 elsif ($action eq "checkautoapprove") {
     DoCheckAutoApprove()
+}
+elsif ($action eq "applyextensionpolicy") {
+    DoApplyExtensionPolicy()
 }
 else {
     usage();
@@ -4274,6 +4279,20 @@ sub DoSchedTerminate()
 	$webtask->Exited($errcode);
     }
     exit($errcode);
+}
+
+#
+# Apply extension policies.
+#
+sub DoApplyExtensionPolicy()
+{
+    if ($instance->ApplyExtensionPolicies()) {
+	fatal("Could not apply extension policies!");
+    }
+    $instance->Refresh();
+    my $disabled = ($instance->extension_disabled() ? "disabled" : "enabled");
+
+    print "Extensions are now $disabled\n";
 }
 
 #

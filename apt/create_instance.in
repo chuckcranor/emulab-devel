@@ -874,6 +874,11 @@ if (!defined($instance)) {
     fatal(defined($errmsg) ? $errmsg :
 	  "Could not create instance record for $quickvm_uuid");
 }
+# Apply policies,
+if ($instance->ApplyExtensionPolicies()) {
+    $instance->Delete();
+    fatal("Error applying policies");
+}
 
 #
 # Get the set of keys (accounts) that need to be sent along. We build

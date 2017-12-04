@@ -1183,6 +1183,98 @@ sub AptAggregateList($)
     return @results;
 }
 
+#
+# Apply extension policies.
+#
+sub ApplyExtensionPolicies($)
+{
+    my ($self)   = @_;
+    my $uuid     = $self->uuid();
+    my $pid      = $self->pid();
+    my $name     = $self->name();
+    my $pid_idx  = $self->pid_idx();
+    my $gid_idx  = $self->gid_idx();
+    my $uid_idx  = $self->creator_idx();
+    my $current  = $self->extension_disabled();
+    my $policy;
+    my $disabled = 0;
+    my $reason;
+
+    #
+    # Apply in order project, group, then user.
+    #
+    my $query_result =
+	DBQueryWarn("select disabled,reason from apt_extension_group_policies ".
+		    "where pid_idx='$pid_idx' and gid_idx=pid_idx");
+    return -1
+	if (!defined($query_result));
+    if ($query_result->numrows) {
+	($disabled,$reason) = $query_result->fetchrow_array();
+	if ($disabled && !defined($reason)) {
+	    $reason = "project restriction";
+	}
+	$policy = "Project";
+    }
+    $query_result =
+	DBQueryWarn("select disabled,reason from apt_extension_group_policies ".
+		    "where pid_idx='$pid_idx' and gid_idx='$gid_idx'");
+    return -1
+	if (!defined($query_result));
+    if ($query_result->numrows) {
+	my ($d,$r) = $query_result->fetchrow_array();
+	if ($d) {
+	    $disabled = 1;
+	    $reason   = (defined($r) ? $r : "group restriction");
+	}
+	else {
+	    $disabled = 0;
+	    $reason   = undef;
+	}
+	$policy = "Group";
+    }
+    $query_result =
+	DBQueryWarn("select disabled,reason from apt_extension_user_policies ".
+		    "where uid_idx='$uid_idx'");
+    return -1
+	if (!defined($query_result));
+    if ($query_result->numrows) {
+	my ($d,$r) = $query_result->fetchrow_array();
+	if ($d) {
+	    $disabled = 1;
+	    $reason   = (defined($r) ? $r : "user restriction");
+	}
+	else {
+	    $disabled = 0;
+	    $reason   = undef;
+	}
+	$policy = "User";
+    }
+    # Apply disabled flag
+    $self->Update({"extension_disabled" => $disabled}) == 0
+	    or return -1;
+    # Set the reason only if disabled, clear otherwise.
+    if ($disabled && defined($reason)) {
+	$self->Update({"extension_disabled_reason" => $reason}) == 0
+	    or return -1;
+    }
+    else {
+	DBQueryWarn("update apt_instances set extension_disabled_reason=NULL ".
+		    "where uuid='$uuid'")
+	    or return -1;
+    }
+    if ($disabled != $current) {
+	my $which = ($disabled ? "disabled" : "enabled");
+
+	SENDMAIL($TBAUDIT,
+		 "Portal experiment $uuid extensions $which",
+		 "$policy policy has $which extensions for $pid/$name\n\n".
+		 (defined($reason) ? "Reason:\n$reason\n\n" : "").
+		 $self->adminURL() . "\n",
+		 $TBOPS);
+    }
+    return 0;
+}
+
 ###################################################################
 package APT_Instance::ExtensionInfo;
 use emdb;
