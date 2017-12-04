@@ -1026,7 +1026,8 @@ sub Reservations($)
 			    "   UNIX_TIMESTAMP(created) as created, ".
 			    "   UNIX_TIMESTAMP(cancel) as cancel ".
 			    "  from future_reservations ".
-			    "where uid='$uid'");
+			    "where uid='$uid' ".
+			    (defined($target) ? "and $target" : ""));
 	}
     }
     return GeniResponse->Create(GENIRESPONSE_ERROR)
