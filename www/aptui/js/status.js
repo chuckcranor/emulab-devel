@@ -188,7 +188,7 @@ $(function ()
 		sup.ShowModal("#extend_history_modal");
 		return;
 	    }
-	    if (lockout) {
+	    if (lockout && !isadmin) {
 		if (extension_blob.extension_disabled_reason != "") {
 		    $("#extensions-disabled-reason .reason")
 			.text(extension_blob.extension_disabled_reason);
