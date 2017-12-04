@@ -376,8 +376,12 @@ $(function ()
 	    }
 	}
 	if (lockout) {
+	    // So we can clear the checkbox if user cancels the modal.
+	    var confirmed = 0;
+	    
 	    // Bind the confirm button in the modal. 
 	    $('#disable-extension-modal .confirm-button').click(function () {
+		confirmed = 1;
 		sup.HideModal('#disable-extension-modal', function () {
 		    var reason  = $('#disable-extension-modal .reason').val();
 		    var xmlthing = sup.CallServerMethod(null,
@@ -393,6 +397,10 @@ $(function ()
 	    $('#disable-extension-modal').on('hidden.bs.modal', function (e) {
 		$('#disable-extension-modal .confirm-button').unbind("click");
 		$('#disable-extension-modal').off('hidden.bs.modal');
+		if (!confirmed) {
+		    // Flip the checkbox back
+		    $('#lockout-checkbox').prop("checked", false);
+		}
 	    });
 	    sup.ShowModal("#disable-extension-modal");
 	    return;
