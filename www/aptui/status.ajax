@@ -451,6 +451,7 @@ function Do_DenyOrMoreinfo($action)
 {
     global $instance, $creator, $this_user, $suexec_output;
     global $ajax_args;
+    $lockout  = 0;
     $extrargs = "";
 
     # Really, only admins can do this.
@@ -473,6 +474,10 @@ function Do_DenyOrMoreinfo($action)
                        "it can terminated.");
         return;
 
+    }
+    if (($action == "terminate" || $action == "deny") &&
+        isset($ajax_args["lockout"]) && $ajax_args["lockout"] != "0") {
+        $lockout = 1;
     }
     if (isset($ajax_args["reason"]) && $ajax_args["reason"] != "") {
         $reason = $ajax_args["reason"];
@@ -533,7 +538,16 @@ function Do_DenyOrMoreinfo($action)
         goto bad;
     }
     $webtask->Delete();
+    if ($lockout) {
+        if (Do_Lockout()) {
+            SPITAJAX_ERROR(-1, "Could not disable extensions");
+            return;
+        }
+        # Do_Lockout() issued a success.
+        return;
+    }
     SPITAJAX_RESPONSE("Success");
+    return;
 bad:
     $webtask->Delete();
     sleep(1);
@@ -1102,24 +1116,24 @@ function Do_Lockout()
 
     if (!isset($this_user) || !ISADMIN()) {
 	SPITAJAX_ERROR(1, "Not enough permission.");
-	return;
+	return -1;
     }
     $this_idx = $this_user->uid_idx();
 
     if (!isset($ajax_args["uuid"])) {
 	SPITAJAX_ERROR(1, "Missing profile uuid");
-	return;
+	return -1;
     }
     if (!isset($ajax_args["lockout"])) {
 	SPITAJAX_ERROR(1, "Missing lockout value");
-	return;
+	return -1;
     }
     if (isset($ajax_args["reason"]) && $ajax_args["reason"] != "") {
         $reason = $ajax_args["reason"];
         
         if (!TBvalid_fulltext($reason)) {
 	    SPITAJAX_ERROR(1, "Illegal characters in message");
-            return;
+            return -1;
         }
         $safe_reason = DBQuoteSpecial($reason);
     }
@@ -1127,7 +1141,7 @@ function Do_Lockout()
     $instance = Instance::Lookup($uuid);
     if (!$instance) {
 	SPITAJAX_ERROR(1, "Unknown instance uuid");
-	return;
+	return -1;
     }
     $lockout = ($ajax_args["lockout"] == 0 ? 0 : 1);
     if ($lockout) {
@@ -1141,7 +1155,7 @@ function Do_Lockout()
                      "  extension_disabled='$lockout' $reason_clause ".
                      "where uuid='$uuid'")) {
 	SPITAJAX_ERROR(1, "Database failure.");
-	return;
+	return -1;
     }
     $this_uid = $this_user->uid();
     $pid      = $instance->pid();
@@ -1155,6 +1169,7 @@ function Do_Lockout()
            "From: $TBMAIL_OPS");
     
     SPITAJAX_RESPONSE("Success");
+    return 0;
 }
 
 #

@@ -207,7 +207,11 @@ $(function ()
 	    alert("Cannot parse extension duration");
 	    return;
 	}
-
+	var lockout = 0;
+	if ((action == "deny" || action == "terminate") &&
+	    $('#deny-lockout-checkbox').is(":checked")) {
+	    lockout = 1;
+	}
 	var callback = function(json) {
 	    sup.HideModal("#waitwait-modal");
 
@@ -240,7 +244,8 @@ $(function ()
 					    {"uuid"   : window.UUID,
 					     "howlong": howlong,
 					     "reason" : reason,
-					     "force"  : force});
+					     "force"  : force,
+					     "lockout": lockout});
 	xmlthing.done(callback);	
     }
 
