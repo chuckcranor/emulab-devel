@@ -28,7 +28,8 @@ my %STDIMAGES     = (
 );
 
 my %NEWIMAGES     = (
-    "UBUNTU16-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=7683ca8e-5e37-11e6-ac8a-90e2ba22fee4"
+    "UBUNTU16-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=7683ca8e-5e37-11e6-ac8a-90e2ba22fee4",
+    "FBSD111-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=560f4743-795d-11e7-ac90-90e2ba22fee4"
 );
 
 #
@@ -94,6 +95,20 @@ sub Install($$$)
 		ExecQuietFatal("$SUDO -u $PROTOUSER ".
 			       "         $WAP $IMAGEIMPORT -g '$url'");
 	    };
+	}
+	if ($FBSD_MAJOR > 10) {
+	    foreach my $imagename (keys(%NEWIMAGES)) {
+		my $url = $NEWIMAGES{$imagename};
+		
+		Phase "$imagename", "Fetching $imagename. Patience!", sub {
+		    my $image = OSImage->Lookup(TBOPSPID(), $imagename);
+		    PhaseSkip("already fetched")
+			if (defined($image));
+
+		    ExecQuietFatal("$SUDO -u $PROTOUSER ".
+				   "         $WAP $IMAGEIMPORT -g '$url'");
+		};
+	    }
 	}
 	foreach my $mbr (@MBRS) {
 	    my $localfile = "$PREFIX/images/$mbr";

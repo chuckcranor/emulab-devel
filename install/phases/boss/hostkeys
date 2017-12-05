@@ -23,12 +23,15 @@ sub Install($$$)
 	ExecQuietFatal("$CHGRP tbadmin $IMAGEKEYS_DIR");
     };
     my %keytypes = (
-	"rsa1"	  => "ssh_host_key",
 	"rsa"	  => "ssh_host_rsa_key",
-	"dsa"	  => "ssh_host_dsa_key",
 	"ecdsa"	  => "ssh_host_ecdsa_key",
 	"ed25519" => "ssh_host_ed25519_key");
-	    
+    # XXX backward compat
+    if ($FBSD_MAJOR < 11) {
+	$keytypes{'rsa1'} = "ssh_host_key";
+	$keytypes{'dsa'} = "ssh_host_dsa_key";
+    }
+
     Phase "imagekeys", "Creating host keys for images", sub {
 	foreach my $type (keys(%keytypes)) {
 	    my $name = $keytypes{$type};

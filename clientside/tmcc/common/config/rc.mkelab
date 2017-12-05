@@ -648,7 +648,7 @@ sub doboot()
 	$emulabconfig{EXTRA_PKG}    = "emulab-extras-6.2";
 	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-10.2-packages${suf}.tar.gz";
 	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-6.2";
-    } elsif ($FBSD_VERSION >= 10.3) {
+    } elsif ($FBSD_VERSION >= 10.3 && $FBSD_VERSION < 11.0) {
 	my $suf = ($FBSD_ARCH eq "amd64") ? "-64" : "";
 	$emulabconfig{FS_PKG_DIR} = "/share/freebsd/10.3/packages${suf}";
 	$emulabconfig{OPS_PKG_DIR}  = $emulabconfig{FS_PKG_DIR};
@@ -660,6 +660,18 @@ sub doboot()
 	$emulabconfig{EXTRA_PKG}    = "emulab-extras-6.3";
 	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-10.3-packages${suf}.tar.gz";
 	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-6.3";
+    } elsif ($FBSD_VERSION >= 11.0) {
+	my $suf = ($FBSD_ARCH eq "amd64") ? "-64" : "";
+	$emulabconfig{FS_PKG_DIR} = "/share/freebsd/11.1/packages${suf}";
+	$emulabconfig{OPS_PKG_DIR}  = $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{BOSS_PKG_DIR} = $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{EXTRA_PKG_DIR}= $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{FS_PKG}       = "emulab-fs-7.1";
+	$emulabconfig{OPS_PKG}      = "emulab-ops-7.1";
+	$emulabconfig{BOSS_PKG}     = "emulab-boss-7.1";
+	$emulabconfig{EXTRA_PKG}    = "emulab-extras-7.1";
+	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-11.1-packages${suf}.tar.gz";
+	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-7.1";
     }
     #
     # If there is a package tarball, prefer that and grab it now.
@@ -2659,6 +2671,8 @@ sub SetupBossNode($)
     # doing things like power control, vlan setup, etc.
     #
     mysystem("cp -p $stuffdir/emulab.pem $RPCCERT");
+    # Make sure it is world readable; N.B. an error is not fatal
+    system("chmod 644 $RPCCERT");
 
     goto skipsetup
 	if ($emulabconfig{"CONFIG_NODBINIT"});

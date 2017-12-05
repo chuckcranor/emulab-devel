@@ -28,7 +28,11 @@ sub Install($$$)
     # by older MFSes and vice versa.
     #
     if ($MFSVERSION eq "") {
-	if ($FBSD_MAJOR > 8 || ($FBSD_MAJOR == 8 && $FBSD_MINOR >= 2)) {
+	if (($FBSD_MAJOR > 10 || ($FBSD_MAJOR == 10 && $FBSD_MINOR >= 3)) &&
+	    $FBSD_ARCH eq "amd64") {
+	    $MFSVERSION = "10-64";
+	}
+	elsif ($FBSD_MAJOR > 8 || ($FBSD_MAJOR == 8 && $FBSD_MINOR >= 2)) {
 	    if ($FBSD_ARCH eq "amd64") {
 		$MFSVERSION = "8-64";
 	    } else {
@@ -82,7 +86,11 @@ sub Install($$$)
 	#
 	my $fv = $MFSVERSION;
 	if (! -e "$TFTP_DIR/freebsd${fv}") {
-	    $fv = "47";
+	    if ($fv eq "10-64") {
+		$fv = "8-64";
+	    } else {
+		$fv = "47";
+	    }
 	}
 	my $pdir = ".";
 	if (-d "$TFTP_DIR/pxeboot${fv}") {
