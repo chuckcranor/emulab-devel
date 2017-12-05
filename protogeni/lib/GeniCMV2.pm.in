@@ -5379,7 +5379,7 @@ sub Lockdown($)
     #
     my $error = "unknown error";
     
-    my $rval = Reservation->Lockdown($slice, \$error, 1, 0);
+    my $rval = Reservation->Lockdown($slice, \$error, 0, 0);
     if (!$rval) {
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
     }
