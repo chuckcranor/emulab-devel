@@ -19,7 +19,7 @@ PKGORIGIN=		misc/emulab-py-m2crypto
 RUN_DEPENDS+=   ${PYTHON_PKGNAMEPREFIX}typing>0:${PORTSDIR}/devel/py-typing
 .endif
 
-.if (${PORTVERSION} == "0.25.1" || ${PORTVERSION} == "0.26.0")
+.if (${PORTVERSION} == "0.25.1" || ${PORTVERSION} == "0.26.0" || ${PORTVERSION} == "0.26.4")
 # Fix bug in 0.25.1 and 0.26
 EXTRA_PATCHES+= $(FILESDIR)/emulab-patch-httpslib
 .endif
