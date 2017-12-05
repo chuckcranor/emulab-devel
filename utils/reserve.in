@@ -563,6 +563,10 @@ if( defined( $modify_idx ) ) {
 	    
 	exit( 1 );
     }
+    # Okay, user is shrinking a reservation, always leave that in same state.
+    if (!$admin) {
+	$approve = $res->approved() ? 1 : 0;
+    }
     $res->SetStart( $starttime );
     $res->SetEnd( $endtime );
     $res->SetNodes( $count );
