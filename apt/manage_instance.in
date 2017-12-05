@@ -1524,7 +1524,7 @@ sub DoExtend()
 	$message = "Your experiment was extended by the site administrator.";
 	$granted = $wanted;
     }
-    elsif (1) {
+    elsif (0) {
 	$message = "Testing extension stuff";
 	$granted = 0;
 	$needapproval = 1;
