@@ -48,6 +48,7 @@ function Do_Reserve()
     global $ajax_args;
     global $suexec_output, $TB_PROJECT_CREATEEXPT;
     global $PORTAL_GENESIS;
+    $validate = 0;
 
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(-1, "Missing formfields");
@@ -138,6 +139,11 @@ function Do_Reserve()
         SPITAJAX_RESPONSE(0);
         return;
     }
+    # Validate request only, do not submit.
+    if (isset($ajax_args["validate"]) && $ajax_args["validate"]) {
+        $validate = 1;
+    }
+    
     # Next we check the validity of the reservation.
     $this_uid = $this_user->uid();
     $pid      = $project->pid();
@@ -155,48 +161,7 @@ function Do_Reserve()
           " -e $end $pid " . $formfields["count"];
 
     #
-    # Do a precheck.
-    #
-    $retval = SUEXEC($this_uid, $pid,
-                     "webmanage_reservations -t " . $webtask->task_id() . " ".
-                     "-a $urn reserve -n $args", SUEXEC_ACTION_IGNORE);
-    $webtask->Refresh();
-
-    #
-    # Exit code "2" indicates OK, but will need approval.
-    #
-    if ($retval && $retval != 2) {
-        #
-        # Positive value means the reservation is not possible. Treat
-        # as a form error for the caller.
-        # Otherwise internal error.
-        #
-        if ($retval < 0) {
-            SPITAJAX_ERROR(-1, $suexec_output);
-            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-        }
-        else {
-            $errors["error"] = $webtask->TaskValue("output");
-            SPITAJAX_ERROR(2, $errors);
-        }
-        $webtask->Delete();
-	return;
-    }
-    # Return if that is all the caller wanted,
-    if (isset($ajax_args["validate"]) && $ajax_args["validate"]) {
-        # Positive retval means will need approval.
-        $result = array("approved" => ($retval ? 0 : 1));
-        SPITAJAX_RESPONSE($result);
-        $webtask->Delete();
-        return;
-    }
-    #
-    # Do it for real, Cause of locking, this might fail anyway.
-    #
-    $webtask->Reset();
-
-    #
-    # But if we have a reason, send it along now.
+    # If we have a reason, send it along too.
     #
     if (isset($formfields["reason"]) && $formfields["reason"] != "") {
         $reasonfile = tempnam("/tmp", "reason");
@@ -207,9 +172,17 @@ function Do_Reserve()
         chmod($reasonfile, 0666);
         $args = "-N $reasonfile $args";
     }
+
+    #
+    # If doing a validate only, add that flag.
+    #
+    $opt = "";
+    if ($validate) {
+        $opt = "-n";
+    }
     $retval = SUEXEC($this_uid, $pid,
                      "webmanage_reservations -t " . $webtask->task_id() . " ".
-                     "-a $urn reserve $args", SUEXEC_ACTION_IGNORE);
+                     "-a $urn reserve $opt $args", SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
 
     #
@@ -234,6 +207,17 @@ function Do_Reserve()
         }
         $webtask->Delete();
 	return;
+    }
+    # Return if that is all the caller wanted,
+    if ($validate) {
+        # Positive retval means will need approval.
+        $result = array("approved" => ($retval ? 0 : 1));
+        SPITAJAX_RESPONSE($result);
+        if (isset($reasonfile)) {
+            unlink($reasonfile);
+        }
+        $webtask->Delete();
+        return;
     }
     if (isset($reasonfile)) {
         unlink($reasonfile);
