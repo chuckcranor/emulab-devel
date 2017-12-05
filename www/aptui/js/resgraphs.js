@@ -83,9 +83,24 @@ window.ShowResGraph = (function ()
 		    }
 		    temp.push(data);
 		}
-		// Tack on last one.
-		if (temp[temp.length - 1].t != array[array.length - 1].t) {
-		    temp.push(array[array.length - 1]);
+		/*
+		 * Yuck, after all that we got only one distinct data point!
+		 */
+		if (temp.length == 0) {
+		    /*
+		     * As above, generate two points.
+		     */
+		    var data = $.extend({}, array[0]);
+		    data.t = parseInt(data.t);
+		    temp.push(data);
+		    temp.push($.extend({}, data));
+		    temp[1].t = parseInt(temp[1].t) + (45 * 3600 * 24);
+		}
+		else {
+		    // Tack on last one.
+		    if (temp[temp.length - 1].t != array[array.length - 1].t) {
+			temp.push(array[array.length - 1]);
+		    }
 		}
 		array = temp;
 	    }
@@ -133,7 +148,7 @@ window.ShowResGraph = (function ()
 	 * Create a sorted (by timestamp) array of the per-stamp hashes.
 	 */
 	var array = Object.keys(stamps).map(function (key) {
-	    return {stamp  : key,
+	    return {stamp  : parseInt(key),
 		    date   : new Date(parseInt(key) * 1000),
 		    counts : stamps[key]};
 	});
@@ -203,11 +218,19 @@ window.ShowResGraph = (function ()
 
 			var data = $.extend({}, array[i]);
 			data.stamp = stamp;
+			data.date  = new Date(parseInt(stamp) * 1000),
 			temp.push(data);
 		    }
 		}
 	    }
 	}
+	// Gack, throw in a padding data point so that it is possible to click
+	// at the very right hand side of the graph.
+	var data = $.extend({}, array[array.length - 1]);
+	data.stamp = data.stamp + (3600 * 24);
+	data.date  = new Date(parseInt(data.stamp) * 1000),
+	temp.push(data);
+	
 	array = temp;
 	console.info(array);
 
