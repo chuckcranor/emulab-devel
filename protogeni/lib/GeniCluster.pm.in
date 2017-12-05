@@ -890,6 +890,34 @@ sub Reserve($)
 	($asadmin ? "-U $uid " : "") . 
 	(!defined($update) ? "$pid $count" : "");
 
+    #
+    # If asking to update a reservation, make sure we leave it in the
+    # same state (assuming it is feasible).
+    #
+    if (defined($update)) {
+	if ($reservation->approved()) {
+	    #
+	    # In the non admin cause, reserve will not allow reservations
+	    # to grow, but shrinkage is okay and so the reservation will
+	    # be left in the same state it was. But if its an admin, we
+	    # want to make sure we keep an approved reservation approved
+	    # even if it is growing; we assume that admins know what they
+	    # are doing.
+	    #
+	    $args = "-a $args" if ($asadmin);
+	}
+	else {
+	    $args = "-p $args" if ($asadmin);
+	}
+    }
+    else {
+	#
+	# For now all reservations need approval. Even admins, which is
+	# better for testing.
+	#
+	$args = "-p $args";
+    }
+
     # Write the reason to a tempfile to pass in. This will auto unlink.
     my $fp;
     if (defined($reason)) {
@@ -898,7 +926,7 @@ sub Reserve($)
 	$args = "-N $fp $args";
 	chmod(0755, "$fp");
     }
-    my $command = ($asadmin ? "$WAP " : "") . "$TB/sbin/reserve -p $args";
+    my $command = ($asadmin ? "$WAP " : "") . "$TB/sbin/reserve $args";
     print STDERR "$command\n";
 
     if ($asadmin) {
@@ -922,6 +950,7 @@ sub Reserve($)
 	}
 	return GeniResponse->Create(GENIRESPONSE_REFUSED, $code, $mesg);
     }
+    
     my $approved = ($? >> 8 == 2 ? 0 : 1);
     GeniUtil::FlipToGeniUser();
     if ($check) {
@@ -929,6 +958,10 @@ sub Reserve($)
 	my $blob = {
 	    "approved" => $approved,
 	};
+	if (defined($update)) {
+	    $blob->{"idx"}  = $reservation->idx();
+	    $blob->{"uuid"} = $reservation->uuid();
+	}
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
     }
     if (!$update) {
