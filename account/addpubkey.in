@@ -525,33 +525,6 @@ sub InitUser()
     my $command = "$ACCOUNTPROXY createsshkey $user_uid $user_gid ";
     	
     $UID = 0;
-    open ERR, "$SSH -host $CONTROL '$command rsa1' 2>&1 > $outfile |";
-    $UID = $SAVEUID;
-
-    my $errs = "";
-    while (<ERR>) {
-	$errs .= $_;
-    }
-    close(ERR);
-    print STDERR $errs;
-    if ($?) {
-	unlink($outfile);
-	fatal("Could not create rsa1 key");
-    }
-    my $pubkey      = `cat $outfile`;
-    chomp($pubkey);
-    my $safe_pubkey = DBQuoteSpecial($pubkey);
-    my $comment     = "rsa\@${OURDOMAIN}";
-    
-    if (! DBQueryWarn("replace into user_pubkeys set ".
-		      " uid='$user_uid', uid_idx='$user_dbid', ".
-		      " internal='1', nodelete='1', idx=NULL, stamp=now(), ".
-		      " pubkey=$safe_pubkey, comment='$comment'")) {
-	unlink($outfile);
-	fatal("Could not add rsa1 key to database");
-    }
-	
-    $UID = 0;
     open ERR, "$SSH -host $CONTROL '$command rsa' 2>&1 > $outfile |";
     $UID = $SAVEUID;
 
@@ -569,7 +542,7 @@ sub InitUser()
     $pubkey      = `cat $outfile`;
     chomp($pubkey);
     $safe_pubkey = DBQuoteSpecial($pubkey);
-    $comment     = "rsa1\@${OURDOMAIN}";
+    $comment     = "rsa\@${OURDOMAIN}";
     
     if (! DBQueryWarn("replace into user_pubkeys set ".
 		      " uid='$user_uid', uid_idx='$user_dbid', ".
