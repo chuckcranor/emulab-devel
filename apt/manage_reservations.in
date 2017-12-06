@@ -463,9 +463,15 @@ sub DoList()
 	APT_Geni::PortalRPC($authority, $context, "Reservations", (\%rpcargs));
     if (GeniResponse::IsError($response)) {
 	#
-	# All errors are fatal.
+	# Do not throw a fatal error if we get a search failure, no need
+	# to send any email.
 	#
-	fatal($response->output());
+	if (defined($uuid) && $response->code() == GENIRESPONSE_SEARCHFAILED) {
+	    UserError($response->output());
+	}
+	else {
+	    fatal($response->output());
+	}
     }
     my $list = $response->value()->{'reservations'};
     my $history = $response->value()->{'history'}

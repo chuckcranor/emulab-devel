@@ -531,6 +531,8 @@ $(function ()
 	    }
 	    // Need this in Delete().
 	    window.PID = details.pid;
+	    // Now enable delete button
+	    $('#reserve-delete-button').removeAttr("disabled");
 	};
 	sup.ShowWaitWait();
 	var xmlthing = sup.CallServerMethod(null, "reserve",

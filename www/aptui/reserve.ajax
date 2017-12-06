@@ -677,10 +677,16 @@ function Do_GetReservation()
     $retval = SUEXEC($this_uid, "nobody",
                      "webmanage_reservations -a '$urn' ".
                      "   -t $webtask_id list -i $uuid",
-                     SUEXEC_ACTION_CONTINUE);
+                     SUEXEC_ACTION_IGNORE);
     if ($retval) {
         $webtask->Delete();
-        SPITAJAX_ERROR(-1, $suexec_output);
+        if ($retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, $suexec_output);
+        }
+        else {
+            SPITAJAX_ERROR(1, $suexec_output);
+        }
 	return;
     }
     $webtask->Refresh();
