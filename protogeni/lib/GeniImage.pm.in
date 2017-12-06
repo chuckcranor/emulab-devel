@@ -466,7 +466,7 @@ sub MapToLocalDataset($$@)
 	}
 	$localblobcache{$urn} = $blob;
     }
-    return $blob if (1);
+    return $blob if (0);
     my $url  = $blob->{'metadata_url'};
 
     #
