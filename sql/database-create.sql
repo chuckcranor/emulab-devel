@@ -336,7 +336,6 @@ CREATE TABLE `apt_instance_history` (
   KEY `profile_id` (`profile_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
-
 --
 -- Table structure for table `apt_instance_slice_status`
 --
@@ -556,6 +555,45 @@ CREATE TABLE `apt_profiles` (
   UNIQUE KEY `pidname` (`pid_idx`,`name`,`version`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
+--
+-- Table structure for table `apt_reservation_history_actions`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_history_actions`;
+CREATE TABLE `apt_reservation_history_actions` (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `reservation_uuid` varchar(40) default NULL,
+  `stamp` datetime default NULL,
+  `action` enum('validate','submit','approve','delete','cancel','restore') NOT NULL default 'validate',
+  PRIMARY KEY (`idx`),
+  KEY `agguuid` (`aggregate_urn`,`reservation_uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_reservation_history_details`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_history_details`;
+CREATE TABLE `apt_reservation_history_details` (
+  `idx` mediumint(8) unsigned NOT NULL default '0',
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `reservation_uuid` varchar(40) default NULL,
+  `pid` varchar(48) default NULL,
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `uid` varchar(8) default NULL,
+  `uid_idx` mediumint(8) unsigned default NULL,
+  `stamp` datetime default NULL,
+  `nodes` smallint(5) NOT NULL DEFAULT '0',
+  `type` varchar(30) NOT NULL DEFAULT '',
+  `start` datetime DEFAULT NULL,
+  `end` datetime DEFAULT NULL,
+  `refused` tinyint(1) NOT NULL default '0',
+  `approved` tinyint(1) NOT NULL default '0',
+  `reason` mediumtext,
+  PRIMARY KEY (`idx`),
+  KEY `agguuid` (`aggregate_urn`,`reservation_uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
 -- Table structure for table `apt_announcements`

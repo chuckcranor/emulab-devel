@@ -104,6 +104,12 @@ sub AddAnnouncement($$$$$$$);
 sub DeleteAnnouncement($);
 sub RetireAnnouncement($);
 sub RestoreAnnouncement($);
+sub RecordReservationRequest($$$$;$);
+sub UpdateReservationRequest($$$);
+my $RESERVATION_RECORD_APPROVE  = 1;
+my $RESERVATION_RECORD_DELETE   = 2;
+my $RESERVATION_RECORD_CANCEL   = 3;
+my $RESERVATION_RECORD_UNCANCEL = 4;
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -305,6 +311,8 @@ sub DoReserve()
 	# Watch for a refused error, we want to tell the user that.
 	#
 	if ($response->code() == GENIRESPONSE_REFUSED) {
+	    RecordReservationRequest($this_user,
+				     $project, $aggregate, \%rpcargs);
 	    UserError($response->output());
 	}
 	fatal($response->output());
@@ -332,6 +340,8 @@ sub DoReserve()
 	if (defined($uuid) && !ValidUUID($uuid)) {
 	    fatal("Bad format for uuid from cluster");
 	}
+	RecordReservationRequest($this_user,
+				 $project, $aggregate, \%rpcargs, $blob);
     }
     else {
 	# Backwards compat.
@@ -611,6 +621,7 @@ sub DoDelete()
 	#
 	fatal($response->output());
     }
+    UpdateReservationRequest($aggregate, $uuid, $RESERVATION_RECORD_DELETE);
     DeleteAnnouncement($uuid);
     if (defined($webtask)) {
 	$webtask->Exited(0);
@@ -663,6 +674,8 @@ sub DoApprove()
 	#
 	fatal($response->output());
     }
+    UpdateReservationRequest($aggregate, $uuid, $RESERVATION_RECORD_APPROVE);
+    
     #
     # Schedule an announcement for the user.
     #
@@ -762,10 +775,14 @@ sub DoCancel()
 	print Dumper($response);
     }
     if ($clear) {
+	UpdateReservationRequest($aggregate, $uuid,
+				 $RESERVATION_RECORD_UNCANCEL);
 	RestoreAnnouncement($uuid);
     }
     else {
 	RetireAnnouncement($uuid);
+	UpdateReservationRequest($aggregate, $uuid,
+				 $RESERVATION_RECORD_CANCEL);
     }
     exit(0);
 }
@@ -1169,4 +1186,128 @@ sub RestoreAnnouncement($)
     system("$ANNOUNCE -w $uuid");    
 }
 
+#
+# Reservation history support.
+#
+sub RecordReservationRequest($$$$;$)
+{
+    my ($user, $project, $aggregate, $details, $response) = @_;
+    my $uid        = $user->uid();
+    my $uid_idx    = $user->uid_idx();
+    my $pid        = $project->pid();
+    my $pid_idx    = $project->pid_idx();
+    my $urn        = $aggregate->urn();
+    my $nodes      = $details->{'count'};
+    my $type       = $details->{'type'};
+    my $start      = $details->{'start'};
+    my $end        = $details->{'end'};
+    my $reason     = $details->{'reason'};
+    my $checkonly  = $details->{'check'};
+    my $update     = $details->{'update'}; # reservation_uuid
+    my $stamp      = time();
+    my @action_sets = ();
+    my @detail_sets = ();
 
+    push(@detail_sets, "uid='$uid'");
+    push(@detail_sets, "uid_idx='$uid_idx'");
+    push(@detail_sets, "pid='$pid'");
+    push(@detail_sets, "pid_idx='$pid_idx'");
+    push(@detail_sets, "nodes='$nodes'");
+    push(@detail_sets, "type='$type'");
+    push(@detail_sets, "end=FROM_UNIXTIME(" . str2time($end) . ")");    
+    push(@detail_sets, "start=FROM_UNIXTIME(" . str2time($start) . ")")
+	if (defined($start));
+    push(@detail_sets, "reason=" . DBQuoteSpecial($reason))
+	if (defined($reason));
+    
+    push(@action_sets, "aggregate_urn='$urn'");
+    push(@action_sets, "stamp=now()");
+    if (defined($response)) {
+	push(@action_sets, "reservation_uuid=" .
+	     DBQuoteSpecial($response->{'uuid'}));
+	push(@detail_sets, "approved='1'") if ($response->{'approved'});
+    }
+    elsif (defined($update)) {
+	push(@action_sets, "reservation_uuid=" . DBQuoteSpecial($update));
+	push(@detail_sets, "refused='1'");
+    }
+    else {
+	push(@detail_sets, "refused='1'");
+    }
+    @detail_sets = (@action_sets, @detail_sets);
+
+    if ($checkonly) {
+	push(@action_sets, "action='validate'");
+    }
+    else {
+	push(@action_sets, "action='submit'");
+    }
+
+    DBQueryWarn("lock tables apt_reservation_history_actions write, ".
+		"            apt_reservation_history_details write")
+	or return -1;
+
+    #
+    # Insert the action record, the idx becomes the idx for the details
+    #
+    my $query = "insert into apt_reservation_history_actions set ".
+	join(",", @action_sets);
+    my $query_result = DBQueryWarn($query);
+    if (!defined($query_result)) {
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    my ($idx) = $query_result->insertid();
+    push(@detail_sets, "idx='$idx'");
+
+    $query = "insert into apt_reservation_history_details set ".
+	join(",", @detail_sets);
+    if (!DBQueryWarn($query)) {
+	DBQueryWarn("delete from apt_reservation_history_actions ".
+		    "where idx='$idx'");
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    DBQueryWarn("unlock tables");
+    return 0;
+}
+
+#
+# Update a reservation request for approval,deletion,etc.
+#
+sub UpdateReservationRequest($$$)
+{
+    my ($aggregate, $uuid, $flags) = @_;
+    my $urn = $aggregate->urn();
+    if ($flags == $RESERVATION_RECORD_APPROVE) {
+	$action = "approve";
+    }
+    elsif ($flags == $RESERVATION_RECORD_DELETE) {
+	$action = "delete";
+    }
+    elsif ($flags == $RESERVATION_RECORD_CANCEL) {
+	$action = "cancel";
+    }
+    elsif ($flags == $RESERVATION_RECORD_UNCANCEL) {
+	$action = "restore";
+    }
+    else {
+	return -1;
+    }
+    DBQueryWarn("lock tables apt_reservation_history_actions write, ".
+		"            apt_reservation_history_details write")
+	or return -1;
+
+    #
+    # Insert an action record.
+    #
+    if (!DBQueryWarn("insert into apt_reservation_history_actions set ".
+		     " aggregate_urn='$urn', reservation_uuid='$uuid', ".
+		     " stamp=now(), action='$action'")) {
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    DBQueryWarn("unlock tables")
+	or return -1;
+    return 0;
+}
