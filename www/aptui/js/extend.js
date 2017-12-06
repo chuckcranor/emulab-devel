@@ -429,7 +429,7 @@ window.ShowExtendModal = (function()
 	// Request as much time as possible, up to the maximum allowed
 	// by the reservation system. Put up a modal for confirmation.
 	//
-	function RequestMaxExtension(hours)
+	function RequestMaxExtension(hours, actual)
 	{
 	    $('#restricted_extend_modal #hours').html(hours);
 
@@ -449,7 +449,7 @@ window.ShowExtendModal = (function()
 						    "status",
 						    "RequestExtension",
 						    {"uuid"   : uuid,
-						     "howlong": hours});
+						     "howlong": actual});
 		xmlthing.done(requestcallback);
 	    });
 	    sup.ShowModal('#restricted_extend_modal');
@@ -546,7 +546,7 @@ window.ShowExtendModal = (function()
 		}
 		else if (hours < 24) {
 		    // Different path; request as much as we can get.
-		    RequestMaxExtension(hours);
+		    RequestMaxExtension(hours, later);
 		}
 		else {
 		    // Maximum number of days beyond current expiration!

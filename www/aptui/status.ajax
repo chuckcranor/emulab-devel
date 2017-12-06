@@ -363,20 +363,14 @@ function Do_RequestExtension()
 	goto bad;
     }
     $wanted = $ajax_args["howlong"];
-    if (! preg_match("/^\d+$/", $wanted)) {
-        if (strtotime($wanted)) {
-            if (!ISADMIN()) {
-                SPITAJAX_ERROR(1, "Only administrators can use a datetime");
-                goto bad;
-            }
-        }
-        else {
-            SPITAJAX_ERROR(1, "Invalid characters in hours");
+    if (preg_match("/^\d+$/", $wanted)) {
+        if ($wanted < 1) {
+            SPITAJAX_ERROR(1, "Hours must be an integer greater then 1");
             goto bad;
         }
     }
-    else if ($wanted < 1) {
-        SPITAJAX_ERROR(1, "Hours must be an integer greater then 1");
+    elseif (!strtotime($wanted)) {
+        SPITAJAX_ERROR(1, "Invalid characters in hours");
         goto bad;
     }
     if (ISADMIN()) {
