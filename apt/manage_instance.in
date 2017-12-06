@@ -1535,7 +1535,7 @@ sub DoExtend()
 	#
 	# If admin lockout, we are refusing any more free time.
 	#
-	if ($instance->extension_adminonly()) {
+	if ($instance->extension_disabled()) {
 	    $message = "because you are not allowed any more extensions";
 	    $granted = 0;
 	}
@@ -4049,7 +4049,7 @@ sub DoSchedTerminate()
 	goto bad;
     }
     # No free time.
-    $instance->Update({"extension_adminonly" => 1});
+    $instance->Update({"extension_disabled" => 1});
 
     #
     # Need to set the new expiration before we clear the lockdown bit,

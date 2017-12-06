@@ -157,7 +157,7 @@ function Do_GetStatus()
                         $diff  = $slice_expires - time();
                         $cdiff = time() - $slice_created;
 
-                        if ($instance->extension_lockout() ||
+                        if ($instance->extension_disabled() ||
                             ($cdiff > (3600 * 24 * $autoextend_maxage))) {
                             $maxttl = $slice_expires - time();
                         }
