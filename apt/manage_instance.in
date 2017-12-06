@@ -57,7 +57,6 @@ sub usage()
     print("Usage: manage_instance checkreservation instance days\n");
     print("Usage: manage_instance maxextension instance\n");
     print("Usage: manage_instance moreinfo instance [-m message] [filename]\n");
-    print("Usage: manage_instance extendold instance [-f] seconds\n");
     print("Usage: manage_instance utilization instance\n");
     print("Usage: manage_instance schedterminate instance [-m message] days [filename]\n");
     print("Usage: manage_instance idledata instance\n");
@@ -124,7 +123,6 @@ sub DoConsole();
 sub DoTerminate();
 sub DoSchedTerminate();
 sub DoExtend();
-sub DoExtendOld();
 sub DoDenyOrMoreInfo($);
 sub DoRefresh();
 sub DoReboot();
@@ -210,9 +208,6 @@ if ($action eq "snapshot") {
 }
 if ($action eq "extend") {
     DoExtend();
-}
-if ($action eq "extendold") {
-    DoExtendOld();
 }
 elsif ($action eq "denyextension") {
     DoDenyOrMoreInfo("deny")
@@ -2176,140 +2171,6 @@ sub DoDenyOrMoreInfo($)
 			   "extension_denied_reason" => $reason});
     }
     return 0;
-}
-
-#
-# Old Extend.
-#
-sub DoExtendOld()
-{
-    my $force = 0;
-    my $lockdown = 0;
-    my $errcode = -1;
-    
-    usage()
-	if (!@ARGV);
-
-    if (@ARGV == 2) {
-	my $arg = shift(@ARGV);
-	if ($arg eq "-f") {
-	    $force = 1;
-	}
-	else {
-	    usage();
-	}
-    }
-    my $seconds = shift(@ARGV);
-    if ($seconds !~ /^\d*$/) {
-	usage();
-    }
-
-    if ($instance->status() eq "failed" && !$force) {
-	fatal("Cannot extend failed instance!");
-    }
-    my $slice = $instance->GetGeniSlice();
-    if (!defined($slice)) {
-	fatal("No slice for instance!");
-    }
-
-    #
-    # Lock the slice in case it is doing something else, like taking
-    # a disk image. This happens all the time, users are silly. Lets
-    # stop the email about it.
-    #
-    if ($slice->Lock()) {
-	print STDERR "Experiment is busy, cannot lock it. Try again later.\n";
-	exit(GENIRESPONSE_BUSY);
-    }
-    # Save in case of error.
-    my $oldexpires = $slice->expires();
-
-    # Lockdown on admin extensions longer then XX days. 
-    if (defined($this_user) && $this_user->IsAdmin() &&
-	($seconds / (24 * 60 * 60)) > 10) {
-	$lockdown = 1
-    }
-    
-    # Need to update slice before creating new credential. 
-    $slice->AddToExpiration($seconds);
-    my $new_expires = $slice->ExpirationGMT();
-
-    my $coderef = sub {
-	my ($sliver) = @_;
-	my $webtask  = $sliver->webtask();
-	my $domain   = $sliver->domain();
-	my $errmsg;
-
-	my $response = $sliver->Extend($new_expires, $this_user, $force);
-	if (!defined($response)) {
-	    $errmsg = "Internal error calling Renew at $domain";
-	    goto bad;
-	}
-	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    # This is something the user should see.
-	    if ($response->code() == GENIRESPONSE_REFUSED ||
-		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
-		$response->code() == GENIRESPONSE_BUSY) {
-		print STDERR $response->output() . "\n";
-		# For web interface.
-		$webtask->output($response->output());
-		$webtask->Exited($response->code());
-		return 1;
-	    }
-	    $errmsg = "Failed to extend slice at $domain: ".
-		$response->output();
-	    goto bad;
-	}
-	return 0;
-      bad:
-	print STDERR "$errmsg\n";
-	$webtask->output($errmsg);
-	$webtask->Exited(-1);
-	return -1;
-    };
-    my @return_codes = ();
-    my @agglist =      $instance->AggregateList();
-    if (ParRun({"maxwaittime" => 99999,
-		"maxchildren" => scalar(@agglist)},
-	    \@return_codes, $coderef, @agglist)) {
-	#
-	# The parent caught a signal. Leave things intact so that we can
-	# kill things cleanly later.
-	#
-	print STDERR "Internal error calling Extend\b";
-	goto bad;
-    }
-    #
-    # Check the exit codes. 
-    #
-    foreach my $agg (@agglist) {
-	my $code = shift(@return_codes);
-
-	if ($code) {
-	    $agg->webtask()->Refresh();
-	    print STDERR "Some slivers could not be extended.\n";
-	    $errcode = $agg->webtask()->exitcode();
-	    goto bad;
-	}
-    }
-    # Lockdown.
-    if ($lockdown) {
-	if (DoLockdownInternal("set", "user", 0, undef)) {
-	    SENDMAIL($TBOPS,
-		     "Failed to lock down APT Instance",
-		     "Failed to lock down $instance\n".
-		     $instance->webURL() . "\n",
-		     $TBOPS);
-	}
-    }
-    $slice->UnLock();
-    exit(0);
-
-  bad:
-    # Reset back to original expiration, sorry.
-    $slice->SetExpiration($oldexpires);
-    $slice->UnLock();
-    exit($errcode);
 }
 
 #
