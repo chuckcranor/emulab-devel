@@ -198,9 +198,7 @@ $routing = array("myprofiles" =>
 						 "MaxExtension" =>
 						     "Do_MaxExtension",
 						 "dismissExtensionDenied" =>
-						     "Do_DismissExtensionDenied",
-						 "GetHealthStatus" =>
-						    "Do_GetHealthStatus")),
+                                                 "Do_DismissExtensionDenied")),
 		 "approveuser" =>
 			array("file"    => "approveuser.ajax",
 			      "guest"   => false,
@@ -404,6 +402,12 @@ $routing = array("myprofiles" =>
                                                      "Do_Deny",
                                                  "Approve" =>
                                                      "Do_Approve")),
+		 "frontpage" =>
+			array("file"    => "frontpage.ajax",
+			      "guest"   => true,
+			      "methods" => array("GetHealthStatus" =>
+						    "Do_GetHealthStatus")),
+
 );
 
 #
