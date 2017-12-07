@@ -431,8 +431,6 @@ sub MapToLocalImage($$)
 sub MapToLocalDataset($$@)
 {
     my ($urn, $experiment, @credentials) = @_;
-    #    my $pid = $experiment->pid();
-    my $pid = "";
     $urn = GeniHRN->new($urn);
     my $blob;
 
@@ -575,6 +573,8 @@ sub MapToLocalDataset($$@)
     # access so it can use the dataset.
     #
     if (!$image->global()) {
+	my $pid = $experiment->pid();
+
 	print STDERR "Granting read privs for $image to $pid/$pid\n";
 	GeniUtil::ExecuteAsGeniUser("$GRANTIMAGE -g $pid/$pid $imageid");
     }
