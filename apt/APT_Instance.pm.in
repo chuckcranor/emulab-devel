@@ -1219,7 +1219,7 @@ sub ApplyExtensionPolicies($)
 	($disabled,$reason,
 	 $limit,$admin_after_limit) = $query_result->fetchrow_array();
 	if (($disabled || $limit) && !defined($reason)) {
-	    $reason = "project restriction";
+	    $reason = "because of a project restriction";
 	}
 	$policy = "Project";
     }
@@ -1236,7 +1236,7 @@ sub ApplyExtensionPolicies($)
 	$reason   = $r;
 	$policy   = "Group";
 	if (($disabled || $limit) && !defined($reason)) {
-	    $reason = "group restriction";
+	    $reason = "because of a group restriction";
 	}
     }
     $query_result =
@@ -1252,7 +1252,7 @@ sub ApplyExtensionPolicies($)
 	$reason   = $r;
 	$policy   = "User";
 	if (($disabled || $limit) && !defined($reason)) {
-	    $reason = "user restriction";
+	    $reason = "because of user restriction";
 	}
     }
     # Apply flags
