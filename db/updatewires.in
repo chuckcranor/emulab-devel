@@ -98,6 +98,14 @@ my %ifaces = ();
 my %wires  = ();
 
 #
+# Minor ordering problem between DB updates and update scripts. 
+#
+my $NOSAVED = 0;
+if (!DBSlotExists("interfaces", "card_saved")) {
+    $NOSAVED = 1;
+}
+
+#
 # Grab interfaces and wires.
 #
 my $query_result =
@@ -119,8 +127,15 @@ while (my ($node_id,$iface) = $query_result->fetchrow_array()) {
 	print STDERR "No interface object for $node_id:$iface\n";
 	next;
     }
-    my $card = $interface->card_saved();
-    my $port = $interface->port_saved();
+    my ($card,$port);
+    if ($NOSAVED) {
+	$card = $interface->{'card'};
+	$port = $interface->{'port'};
+    }
+    else {
+	$card = $interface->card_saved();
+	$port = $interface->port_saved();
+    }
     $ifaces{"$node_id:$card:$port"} = $interface;
 
     my $node = Node->Lookup($node_id);
@@ -152,9 +167,16 @@ my %ifacenames = ();
 
 foreach my $interface (values(%ifaces)) {
     my $node_id = $interface->node_id();
-    my $card    = $interface->card_saved();
-    my $port    = $interface->port_saved();
     my $iface   = $interface->iface();
+    my ($card, $port);
+    if ($NOSAVED) {
+	$card = $interface->{'card'};
+	$port = $interface->{'port'};
+    }
+    else {
+	$card = $interface->card_saved();
+	$port = $interface->port_saved();
+    }
     
     if (!defined($interface->iface()) || $interface->iface() eq "") {
 	my $update_state = 0;
@@ -216,9 +238,15 @@ foreach my $interface (values(%ifaces)) {
 	else {
 	    print STDERR "Creating missing interface_state for ".
 		"$node_id:$iface\n";
-	    DBQueryFatal("insert into interface_state set ".
-			 "  node_id='$node_id',card_saved='$card',".
-			 "  port_saved='$port',iface='$iface'");
+	    my $q = "insert into interface_state set ".
+		"node_id='$node_id', iface='$iface'";
+	    if ($NOSAVED) {
+		$q .= ", card='$card', port='$port'";
+	    }
+	    else {
+		$q .= ", card_saved='$card', port_saved='$port'";
+	    }
+	    DBQueryFatal($q);
 	}
     }
     my $ifacename = $interface->node_id() . ":" . $interface->iface();
