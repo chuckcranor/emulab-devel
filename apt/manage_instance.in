@@ -1562,7 +1562,7 @@ sub DoExtend()
 		if ($diff + ($wanted * 3600) > $max) {
 		    $granted = int(($max - $diff) / 3600);
 		    $message = "because your extension is limited by local ".
-			"policy to " . APT_Instance::HoursToEnglish($granted);
+			"policy";
 		}
 		else {
 		    $granted = $wanted;
@@ -1768,8 +1768,13 @@ sub DoExtend()
     else {
 	my $pre = "A request to extend your experiment was made, you were\n".
 	    "granted ";
-	if ($granted == 0) {
-	    $pre .= "nothing";
+	if ($granted < $wanted) {
+	    if ($granted == 0) {
+		$pre .= "nothing";
+	    }
+	    else {
+		$pre .= "only $grantstring";
+	    }
 	    if (defined($mailmessage)) {
 		$pre .= " $mailmessage";
 	    }
