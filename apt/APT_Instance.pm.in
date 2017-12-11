@@ -398,7 +398,10 @@ sub Update($$)
     my $uuid = $self->uuid();
 
     my $query = "update apt_instances set ".
-	join(",", map("$_=" . DBQuoteSpecial($argref->{$_}), keys(%{$argref})));
+	join(",", map("$_=" .
+		      (defined($argref->{$_}) ?
+		       DBQuoteSpecial($argref->{$_}) : "NULL"),
+		      keys(%{$argref})));
 
     $query .= " where uuid='$uuid'";
 
@@ -1195,84 +1198,146 @@ sub ApplyExtensionPolicies($)
     my $pid_idx  = $self->pid_idx();
     my $gid_idx  = $self->gid_idx();
     my $uid_idx  = $self->creator_idx();
-    my $current  = $self->extension_disabled();
+    my $current_disable = $self->extension_disabled();
+    my $current_limit   = $self->extension_limit();
     my $policy;
     my $disabled = 0;
+    my $limit    = 0;
+    my $admin_after_limit = 0;
     my $reason;
 
     #
     # Apply in order project, group, then user.
     #
     my $query_result =
-	DBQueryWarn("select disabled,reason from apt_extension_group_policies ".
+	DBQueryWarn("select disabled,reason,`limit`,admin_after_limit ".
+		    " from apt_extension_group_policies ".
 		    "where pid_idx='$pid_idx' and gid_idx=pid_idx");
     return -1
 	if (!defined($query_result));
     if ($query_result->numrows) {
-	($disabled,$reason) = $query_result->fetchrow_array();
-	if ($disabled && !defined($reason)) {
+	($disabled,$reason,
+	 $limit,$admin_after_limit) = $query_result->fetchrow_array();
+	if (($disabled || $limit) && !defined($reason)) {
 	    $reason = "project restriction";
 	}
 	$policy = "Project";
     }
     $query_result =
-	DBQueryWarn("select disabled,reason from apt_extension_group_policies ".
+	DBQueryWarn("select disabled,reason,`limit`,admin_after_limit ".
+		    "  from apt_extension_group_policies ".
 		    "where pid_idx='$pid_idx' and gid_idx='$gid_idx'");
     return -1
 	if (!defined($query_result));
     if ($query_result->numrows) {
-	my ($d,$r) = $query_result->fetchrow_array();
-	if ($d) {
-	    $disabled = 1;
-	    $reason   = (defined($r) ? $r : "group restriction");
+	my ($d,$r,$l,$admin_after_limit) = $query_result->fetchrow_array();
+	$disabled = $d;
+	$limit    = $l;
+	$reason   = $r;
+	$policy   = "Group";
+	if (($disabled || $limit) && !defined($reason)) {
+	    $reason = "group restriction";
 	}
-	else {
-	    $disabled = 0;
-	    $reason   = undef;
-	}
-	$policy = "Group";
     }
     $query_result =
-	DBQueryWarn("select disabled,reason from apt_extension_user_policies ".
+	DBQueryWarn("select disabled,reason,`limit`,admin_after_limit ".
+		    "  from apt_extension_user_policies ".
 		    "where uid_idx='$uid_idx'");
     return -1
 	if (!defined($query_result));
     if ($query_result->numrows) {
-	my ($d,$r) = $query_result->fetchrow_array();
-	if ($d) {
-	    $disabled = 1;
-	    $reason   = (defined($r) ? $r : "user restriction");
+	my ($d,$r,$l,$admin_after_limit) = $query_result->fetchrow_array();
+	$disabled = $d;
+	$limit    = $l;
+	$reason   = $r;
+	$policy   = "User";
+	if (($disabled || $limit) && !defined($reason)) {
+	    $reason = "user restriction";
 	}
-	else {
-	    $disabled = 0;
-	    $reason   = undef;
-	}
-	$policy = "User";
     }
-    # Apply disabled flag
-    $self->Update({"extension_disabled" => $disabled}) == 0
-	    or return -1;
+    # Apply flags
+    $self->Update({"extension_disabled" => $disabled,
+		   "extension_limit"    => $limit,
+		   "extension_admin_after_limit" => $admin_after_limit})
+	== 0 or return -1;
+    
     # Set the reason only if disabled, clear otherwise.
-    if ($disabled && defined($reason)) {
-	$self->Update({"extension_disabled_reason" => $reason}) == 0
+    if ($disabled) {
+	$self->Update({"extension_disabled_reason" => $reason}) == 0	
 	    or return -1;
     }
     else {
-	DBQueryWarn("update apt_instances set extension_disabled_reason=NULL ".
-		    "where uuid='$uuid'")
+	$self->Update({"extension_disabled_reason" => undef}) == 0	
 	    or return -1;
     }
-    if ($disabled != $current) {
-	my $which = ($disabled ? "disabled" : "enabled");
+    # Ditto the limit.
+    if ($limit) {
+	$self->Update({"extension_limit_reason" => $reason}) == 0	
+	    or return -1;
+    }
+    else {
+	$self->Update({"extension_limit_reason" => undef}) == 0	
+	    or return -1;
+    }
+    #
+    # Basically, disable overrides limit when requesting an extension.
+    #
+    $current_limit = -1 if (!defined($current_limit));
+    $limit         = -1 if (!defined($limit));
+    
+    if ($disabled != $current_disable || $limit != $current_limit) {
+	my $message = "$policy policy applied to $pid/$name:\n";
 
+	if ($disabled != $current_disable) {
+	    my $which = ($disabled ? "disabled" : "enabled");
+	    $message .= "Extensions have been ${which}.\n";
+	}
+	if ($limit != $current_limit) {
+	    my $which = ($limit ? "limited to $limit days" :
+			 "set to unlimited");
+	    $message .= "Extensions have been ${which}.\n";
+	    if ($limit && $admin_after_limit) {
+		$message .=
+		    "Additional extension requests will require ".
+		    "admin approval.\n";
+	    }
+	}
 	SENDMAIL($TBAUDIT,
-		 "Portal experiment $uuid extensions $which",
-		 "$policy policy has $which extensions for $pid/$name\n\n".
+		 "Portal experiment $uuid extension policy changed",
+		 $message . "\n" .
 		 (defined($reason) ? "Reason:\n$reason\n\n" : "").
 		 $self->adminURL() . "\n",
 		 $TBOPS);
     }
     return 0;
+}
+
+#
+# Convert hours to days and hours string.
+#
+sub HoursToEnglish($)
+{
+    my ($hours) = @_;
+    my $string;
+    
+    my $wdays  = int($hours / 24);
+    my $whours = $hours % 24;
+    if ($wdays) {
+	$string = "$wdays day";
+	$string .= "s" if ($wdays > 1);
+	if ($whours) {
+	    $string .= " ${whours} hour";
+	    $string .= "s" if ($whours > 1);
+	}
+    }
+    elsif ($whours) {
+	$string = "$whours hour";
+	$string .= "s" if ($whours > 1);
+    }
+    else {
+	$string = "nothing";
+    }
+    return $string;
 }
 
 ###################################################################

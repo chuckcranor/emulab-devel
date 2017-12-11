@@ -38,14 +38,20 @@ sub usage()
 	  "  manage_extensions disable [-a] [-m reason]".
 	  " -p pid | -g pid,gid | -u uid\n".
 	  "  manage_extensions enable [-a] -p pid | -g pid,gid | -u uid\n".
+	  "  manage_extensions limit [-a] [-m reason] -A ".
+	  " -p pid | -g pid,gid | -u uid <days>\n".
+	  "  manage_extensions unlimit [-a] -p pid | -g pid,gid | -u uid\n".
 	  "  manage_extensions remove [-a] -p pid | -g pid,gid | -u uid\n".
 	  "  manage_extensions show [-p pid | -u uid]\n".
+	  "  manage_extensions apply [-p pid | -u uid]\n".
 	  "Options:\n".
 	  "  -p     - Apply to entire project.\n".
 	  "  -g     - Apply to project group. \n".
 	  "  -u     - Apply to user.\n".
 	  "  -m     - Short explanation if desired.\n".
-	  "  -a     - Apply changes to matching experiments.\n"
+	  "  -a     - Apply changes to matching experiments.\n".
+	  "  -A     - For 'limit', extensions require admin approval\n".
+	  "           instead of being outright denied.\n"
 	);
     exit(-1);
 }
@@ -87,8 +93,9 @@ use APT_Instance;
 
 # Protos
 sub fatal($);
-sub DoEnableDisable($);
+sub DoAction($);
 sub DoShow();
+sub DoApply();
 sub Apply($);
 
 # Locals
@@ -118,11 +125,15 @@ if (!$this_user->IsAdmin()) {
     fatal("Only admins can do this");
 }
 
-if ($action eq "disable" || $action eq "enable" || $action eq "remove") {
-    DoEnableDisable($action);
+if ($action eq "disable" || $action eq "enable" || $action eq "remove" ||
+    $action eq "limit" || $action eq "unlimit") {
+    DoAction($action);
 }
 elsif ($action eq "show") {
     DoShow();
+}
+elsif ($action eq "apply") {
+    DoApply();
 }
 else {
     usage();
@@ -132,11 +143,11 @@ exit(0);
 #
 # Enable/Disable extensions.
 #
-sub DoEnableDisable($)
+sub DoAction($)
 {
     my ($action) = @_;
     
-    my $optlist = "ap:g:u:m:";
+    my $optlist = "ap:g:u:m:A";
     my $apply   = 0;
     my $target;
     my $reason;
@@ -197,7 +208,33 @@ sub DoEnableDisable($)
 	}
     }
     else {
-	my $disabled = ($action eq "disable" ? 1 : 0);
+	my $clause = "";
+	if ($action eq "enable" || $action eq "disable") {
+	    my $disabled = ($action eq "disable" ? 1 : 0);
+	    $clause = "disabled='$disabled'";
+	}
+	elsif ($action eq "limit" || $action eq "unlimit") {
+	    # When setting a limit, clear the disable flag.
+	    $clause  = "disabled='0',`limit`=";
+	    if ($action eq "unlimit") {
+		$clause .= "'0'";
+	    }
+	    else {
+		usage()
+		    if (!@ARGV);
+		my $days = shift(@ARGV);
+		usage()
+		    if ($days !~ /^\d+$/);
+		$clause .= "'" . $days * 24 . "'";
+
+		if (defined($options{"A"})) {
+		    $clause .= ",admin_after_limit='1'";
+		}
+		else {
+		    $clause .= ",admin_after_limit='0'";
+		}
+	    }
+	}
 	my $reason_clause = "";
 	if (defined($reason)) {
 	    $reason_clause = "reason=" . DBQuoteSpecial($reason) . ", ";
@@ -207,7 +244,7 @@ sub DoEnableDisable($)
 	    my $pid     = $target->pid();
 	    my $pid_idx = $target->pid_idx();
 	    DBQueryFatal("replace into apt_extension_group_policies set ".
-			 " disabled='$disabled', created=now(), ".
+			 " $clause, created=now(), ".
 			 " creator='$creator', creator_idx='$creator_idx', ".
 			 " $reason_clause ".
 			 " pid='$pid', gid='$pid', ".
@@ -219,7 +256,7 @@ sub DoEnableDisable($)
 	    my $gid     = $target->gid();
 	    my $gid_idx = $target->gid_idx();
 	    DBQueryFatal("replace into apt_extension_group_policies set ".
-			 " disabled='$disabled', created=now(), ".
+			 " $clause, created=now(), ".
 			 " creator='$creator', creator_idx='$creator_idx', ".
 			 " $reason_clause ".
 			 " pid='$pid', gid='$gid', ".
@@ -229,7 +266,7 @@ sub DoEnableDisable($)
 	    my $uid     = $target->uid();
 	    my $uid_idx = $target->uid_idx();
 	    DBQueryFatal("replace into apt_extension_user_policies set ".
-			 " disabled='$disabled', created=now(), ".
+			 " $clause, created=now(), ".
 			 " creator='$creator', creator_idx='$creator_idx', ".
 			 " $reason_clause ".
 			 " uid_idx='$uid_idx', uid='$uid'");
@@ -334,6 +371,36 @@ sub DoShow()
     exit(0);
 }
 
+#
+# Apply policies to target.
+#
+sub DoApply()
+{
+    my $optlist = "p:u:";
+    my $target;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"p"})) {
+	$target = Project->Lookup($options{"p"});
+	fatal("No such project")
+	    if (!defined($target));
+	
+    }
+    elsif (defined($options{"u"})) {
+	$target = User->Lookup($options{"u"});
+	fatal("No such user")
+	    if (!defined($target));
+    }
+    else {
+	usage();
+    }
+    Apply($target);
+    return 0;
+}
+
 sub Apply($)
 {
     my ($target)  = @_;
@@ -356,7 +423,10 @@ sub Apply($)
 	my $instance = APT_Instance->Lookup($uuid);
 	next
 	    if (!defined($instance));
-	my $current = $instance->extension_disabled();
+	my $current_disabled = $instance->extension_disabled();
+	my $current_limit    = $instance->extension_limit();
+	# Perl is stupid.
+	$current_limit = -1 if (!defined($current_limit));
 
 	if ($instance->ApplyExtensionPolicies()) {
 	    print STDERR "Could not apply extension policies to $instance\n";
@@ -365,12 +435,19 @@ sub Apply($)
 	$instance->Refresh();
 	my $disabled = ($instance->extension_disabled() ?
 			"disabled" : "enabled");
-	my $which    = ($current != $instance->extension_disabled() ?
-			"now" : "still");
-	my $pid   = $instance->pid();
-	my $name  = $instance->name();
+	my $limit    = $instance->extension_limit();
+	$limit = -1 if (!defined($limit));
+	my $limited  = ($limit > 0 ?
+			"limited to " . APT_Instance::HoursToEnglish($limit) :
+			"unlimited");
+	my $pid      = $instance->pid();
+	my $name     = $instance->name();
+	my $which1   = ($current_disabled != $instance->extension_disabled() ?
+			"now" : "still");	
+	my $which2   = ($current_limit != $limit ? "now" : "still");	
 	
-	print "Extensions for $pid/$name are $which $disabled\n";
+	print "Extensions for $pid/$name are $which1 $disabled\n";
+	print "Extensions for $pid/$name are $which2 $limited\n";
     }
 }
 

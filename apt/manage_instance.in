@@ -1491,7 +1491,7 @@ sub DoExtend()
 
 	# Need to return this to the web interface via the webtask.
 	return "Your request requires admininstrator approval".
-	    ($message ? " because $message" : "") . ". " .
+	    ($message ? " $message" : "") . ". " .
 	    "You will receive email if/when your ".
 	    "request is granted (or denied). Thanks!";
     };
@@ -1505,9 +1505,9 @@ sub DoExtend()
     }
 
     #
-    # Always grant if <= 24 hours.
+    # Always grant if < 24 hours, unless an extension limit.
     #
-    if ($wanted <= 24) {
+    if ($wanted < 24 && !$instance->extension_limit()) {
 	$message = "Short extension granted for $wanted hours.";
 	$reason  = $message if (!defined($reason));
 	$granted = $wanted;
@@ -1520,7 +1520,7 @@ sub DoExtend()
 	$granted = $wanted;
     }
     elsif (0) {
-	$message = "Testing extension stuff";
+	$message = "because we are testing extension stuff";
 	$granted = 0;
 	$needapproval = 1;
     }
@@ -1529,7 +1529,9 @@ sub DoExtend()
 	my $cdiff = time() - $created_time;
 
 	if (! defined($reason)) {
-	    fatal("You must supply a reason for this extension");
+	    $errcode = -1;
+	    $errmsg  = "You must supply a reason for this extension";
+	    goto bad;
 	}
 
 	#
@@ -1538,6 +1540,57 @@ sub DoExtend()
 	if ($instance->extension_disabled()) {
 	    $message = "because you are not allowed any more extensions";
 	    $granted = 0;
+	}
+	#
+	# Is there an extension limit.
+	#
+	elsif ($instance->extension_limit()) {
+	    my $diff = $expires_time - $created_time;
+	    my $max  = 3600 * $instance->extension_limit();
+
+	    if ($diff >= $max) {
+		#
+		# Already out to the limit.
+		#
+		$granted = 0;
+	    }
+	    else {
+		#
+		# Give them up to as much as the extension limits them to. 
+		# Note that this could turn out to be zero.
+		#
+		if ($diff + ($wanted * 3600) > $max) {
+		    $granted = int(($max - $diff) / 3600);
+		    $message = "because your extension is limited by local ".
+			"policy to " . APT_Instance::HoursToEnglish($granted);
+		}
+		else {
+		    $granted = $wanted;
+		}
+	    }
+	    if ($granted == 0) {
+		if (defined($instance->extension_limit_reason())) {
+		    $message = $instance->extension_limit_reason();
+		}
+		else {
+		    $message = "because you have exceeded the maximum ".
+			"extension allowed by local policy";
+		}
+		#
+		# Mark as admin disabled now so they do not get to ask again,
+		# but not if admin_after_limit is set, then it goes through
+		# the need admin approval path.
+		#
+		if ($instance->extension_admin_after_limit()) {
+		    $needapproval = 1;
+		}
+		else {
+		    $instance->Update({"extension_disabled" => 1,
+				       "extension_disabled_reason" =>$message});
+		}
+	    }
+	    # Avoid any change to granted below.
+	    goto grant;
 	}
 	#
 	# After maxage, all extension requests require admin approval.
@@ -1642,31 +1695,8 @@ sub DoExtend()
 				  localtime($expires_time));
 
     # Format hours into days/hours.
-    my $wdays  = int($wanted / 24);
-    my $whours = $wanted % 24;
-    my $gdays  = int($granted / 24);
-    my $ghours = $granted % 24;
-    if ($wdays) {
-	$wantstring = "$wdays days";
-	if ($whours) {
-	    $wantstring .= " ${whours} hours";
-	}
-    }
-    else {
-	$wantstring = "$whours hours";
-    }
-    if ($gdays) {
-	$grantstring = "$gdays days";
-	if ($ghours) {
-	    $grantstring .= " ${ghours} hours";
-	}
-    }
-    elsif ($ghours) {
-	$grantstring = "$ghours hours";
-    }
-    else {
-	$grantstring = "nothing";
-    }
+    $wantstring  = APT_Instance::HoursToEnglish($wanted);
+    $grantstring = APT_Instance::HoursToEnglish($granted);
 
     #
     # New extension mechanism
@@ -1730,13 +1760,31 @@ sub DoExtend()
 	$errcode = 2;
 	goto bad;
     }
+    my $mailmessage = $message;
+	
+    if ($this_user->IsAdmin()) {
+	$mailmessage .= "\n\n" . $reason if (defined($reason));
+    }
+    else {
+	my $pre = "A request to extend your experiment was made, you were\n".
+	    "granted ";
+	if ($granted == 0) {
+	    $pre .= "nothing";
+	    if (defined($mailmessage)) {
+		$pre .= " $mailmessage";
+	    }
+	    $mailmessage = $pre . ". ";
+	}
+	else {
+	    $mailmessage = $pre . $grantstring . ". ";
+	}
+	$mailmessage .= "\n\n" . "The request was for ${wantstring}.";
+	$mailmessage .= "\n\nYour reason was:\n${reason}"
+	    if (defined($reason));
+    }
     $instance->Brand()->SendEmail($creator->email(),
-		"Experiment Extension: $name",
-               ($this_user->IsAdmin() ?
-		"$message\n\n" . (defined($reason) ? $reason : "") :
-                "A request to extend your experiment was made and ".
-                "granted.\n".
-		(defined($reason) ? "Your reason was:\n\n${reason}" : "")) .
+	       "Experiment Extension: $name",
+	       $mailmessage .
                "\n\n".
                "Your experiment was started on $created\n".
  	       "Your experiment will now expire at $expires\n".
@@ -1764,6 +1812,8 @@ sub DoExtend()
     }
     $instance->BumpExtensionCount($granted);
     if (defined($webtask)) {
+	$webtask->granted($granted);
+	$webtask->message(defined($message) ? $message : "");
 	$webtask->Exited(0);
     }
     $slice->UnLock();

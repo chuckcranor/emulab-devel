@@ -767,9 +767,25 @@ $(function ()
 	}
 	var expiration = json.value.expiration;
 	$("#quickvm_expires").html(moment(expiration).format('lll'));
-	
 	// Reset the countdown clock.
 	StartCountdownClock.reset = expiration;
+
+	// Warn the user if we granted nothing.
+	if (json.value.granted == 0) {
+	    if (json.value.message != "") {
+		$('#no-extension-granted-modal .reason')
+		    .text(json.value.message);
+		$('#no-extension-granted-modal .reason-div')
+		    .removeClass("hidden");
+	    }
+	    else {
+		$('#no-extension-granted-modal .reason')
+		    .text("");
+		$('#no-extension-granted-modal .reason-div')
+		    .addClass("hidden");
+	    }
+	    sup.ShowModal('#no-extension-granted-modal');
+	}
     }
 
     //

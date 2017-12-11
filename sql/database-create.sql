@@ -186,6 +186,8 @@ CREATE TABLE `apt_extension_group_policies` (
   `creator` varchar(8) default NULL,
   `creator_idx` mediumint(8) unsigned default NULL,
   `disabled` tinyint(1) NOT NULL default '0',
+  `limit` int(10) unsigned default NULL,
+  `admin_after_limit  tinyint(1) NOT NULL default '0',
   `created` datetime default NULL,
   `reason` mediumtext,
   PRIMARY KEY (`pid_idx`,`gid_idx`)
@@ -202,6 +204,8 @@ CREATE TABLE `apt_extension_user_policies` (
   `creator` varchar(8) default NULL,
   `creator_idx` mediumint(8) unsigned default NULL,
   `disabled` tinyint(1) NOT NULL default '0',
+  `limit` int(10) unsigned default NULL,
+  `admin_after_limit  tinyint(1) NOT NULL default '0',
   `created` datetime default NULL,
   `reason` mediumtext,
   PRIMARY KEY (`uid_idx`)
@@ -407,6 +411,9 @@ CREATE TABLE `apt_instances` (
   `extension_adminonly` tinyint(1) NOT NULL default '0',
   `extension_disabled` tinyint(1) NOT NULL default '0',
   `extension_disabled_reason` mediumtext,
+  `extension_limit` int(10) unsigned default NULL,
+  `extension_limit_reason` mediumtext,
+  `extension_admin_after_limit tinyint(1) NOT NULL default '0',
   `extension_requested` tinyint(1) NOT NULL default '0',
   `extension_denied` tinyint(1) NOT NULL default '0',
   `extension_denied_reason` mediumtext,

@@ -1239,7 +1239,7 @@ pre {
 	<div class='modal-header'>
           <button type='button' class="close"
                   data-dismiss='modal' aria-hidden='true'>&times;</button>
-          <center><h4>Oops, no extensions are permitted</h4></center>
+          <center><h4>Oops, no extensions are permitted!</h4></center>
 	</div>
 	<div class='modal-body'>
 	  <p>
@@ -1247,6 +1247,34 @@ pre {
 	    by an administrator.
 	  </p>
 	  <div id="extensions-disabled-reason" class="hidden">
+	    <p>
+	      The reason is: <span class="reason"></span>
+	    </p>
+	  </div>
+	  <p>
+	    Please contact the
+	    <a href="mailto:<%- window.SUPPORT %>?subject=Experiment%20<%- project %>/<%- name %>"
+	       target="_blank">
+	      support staff</a> for more information.
+	  </p>
+	</div>
+      </div>
+    </div>
+  </div>
+  <!-- This is the no extension was granted modal -->
+  <div id='no-extension-granted-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <button type='button' class="close"
+                  data-dismiss='modal' aria-hidden='true'>&times;</button>
+          <center><h4>Oops, no extension was granted!</h4></center>
+	</div>
+	<div class='modal-body'>
+	  <p>
+	    No extension was granted for your experiment!
+	  </p>
+	  <div class="reason-div hidden">
 	    <p>
 	      The reason is: <span class="reason"></span>
 	    </p>

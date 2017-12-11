@@ -374,6 +374,26 @@ window.ShowExtendModal = (function()
 	    var hours = parseInt((diff / 1000) / 3600);
 	    return (hours < 1 ? 1 : hours);
 	}
+
+	function HoursToEnglish(hours)
+	{
+	    var days  = parseInt(hours / 24);
+	    var hours = hours % 24;
+	    var str;
+
+            if (days) {
+		str = days + " days";
+		if (hours) {
+                    str = str + " " + hours + " hours";
+		}
+            }
+	    else if (hours) {
+		str = hours + " hours";
+            }
+            else {
+		str = "nothing";
+            }
+	}
 	
 	//
 	// Request experiment extension. 
@@ -418,9 +438,10 @@ window.ShowExtendModal = (function()
 						 "howlong": howlong,
 						 "reason" : reason});
 	    xmlthing.done(function(json) {
-		sup.HideModal("#waitwait-modal");
 		console.info(json.value);
-		callback(json);
+		sup.HideModal("#waitwait-modal", function () {
+		    callback(json);
+		});
 		return;
 	    });
 	}
