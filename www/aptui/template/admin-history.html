@@ -14,7 +14,8 @@
 	    <td rowspan="2" class="history-tstamp"><%- extension.tstamp %></td>
 	    <td>
 	      <% if (extension.action == "request" && extension.admin == "1") { %>
-		admin<% } else { %><%- extension.action %><% } %>
+		admin (<%- extension.uid %>)
+	      <% } else { %><%- extension.action %><% } %>
 	    </td>
 	    <% if (extension.action == "request") { %>
 	      <td><%- extension.wantedstring %></td>
