@@ -402,6 +402,7 @@ COMMAND_PROTOTYPE(doimagesize);
 COMMAND_PROTOTYPE(dopnetnodeattrs);
 COMMAND_PROTOTYPE(doserviceinfo);
 COMMAND_PROTOTYPE(dosubbossinfo);
+COMMAND_PROTOTYPE(dopublicaddrinfo);
 #if PROTOGENI_SUPPORT
 COMMAND_PROTOTYPE(dogeniclientid);
 COMMAND_PROTOTYPE(dogenisliceurn);
@@ -541,6 +542,7 @@ struct command {
 	{ "pnetnodeattrs", FULLCONFIG_NONE, F_ALLOCATED, dopnetnodeattrs},
 	{ "serviceinfo",  FULLCONFIG_NONE, 0, doserviceinfo },
 	{ "subbossinfo",  FULLCONFIG_NONE, 0, dosubbossinfo },
+	{ "publicaddrinfo",  FULLCONFIG_NONE, F_ALLOCATED, dopublicaddrinfo },
 #if PROTOGENI_SUPPORT
 	{ "geni_client_id", FULLCONFIG_NONE, 0, dogeniclientid },
 	{ "geni_slice_urn", FULLCONFIG_NONE, 0, dogenisliceurn },
@@ -14165,6 +14167,47 @@ COMMAND_PROTOTYPE(dosubbossinfo)
 	}
 	if (curservice)
 		free(curservice);
+
+	return 0;
+}
+
+/*
+ * Return virt_node_public_addr dump to any node in an experiment.
+ */
+COMMAND_PROTOTYPE(dopublicaddrinfo)
+{
+	MYSQL_RES   *res;
+	MYSQL_ROW   row;
+	int         nrows = 0;
+	char	    buf[MYBUFSIZE];
+	char	    *bufp = buf, *ebufp = &buf[sizeof(buf)];
+
+	res = mydb_query("select IP,mask,node_id,pool_id"
+			 " from virt_node_public_addr"
+			 " where pid='%s' and eid='%s'",
+			 4, reqp->pid, reqp->eid);
+	if (!res) {
+		error("dopublicaddrinfo: %s: "
+		      "DB Error checking for experiment public addrs\n",
+		      reqp->nodeid);
+		return 1;
+	}
+	if (mysql_num_rows(res) == 0) {
+		mysql_free_result(res);
+		return 0;
+	}
+
+	nrows = (int)mysql_num_rows(res);
+	while (nrows-- > 0) {
+		row = mysql_fetch_row(res);
+		bufp += OUTPUT(bufp, ebufp - buf,
+			       "IP=\"%s\" MASK=\"%s\" NODE_ID=\"%s\""
+			       " POOL_ID=\"%s\"\n",
+			       row[0],row[1] ? row[1] : "",row[2] ? row[2] : "",
+			       row[3] ? row[3] : "");
+	}
+	mysql_free_result(res);
+	client_writeback(sock, buf, strlen(buf), tcp);
 
 	return 0;
 }

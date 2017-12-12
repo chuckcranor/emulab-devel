@@ -2760,6 +2760,52 @@ sub getfwconfig($$;$)
 	}
     }
 
+    @tmccresults = ();
+    if (tmcc(TMCCCMD_PUBLICADDRINFO, undef, \@tmccresults) < 0) {
+	warn("*** WARNING: Could not get public addr info from server;".
+	     " ignoring!\n");
+    }
+    else {
+	my @publicaddrs = ();
+	my $papat = q(IP="([0-9\.]+)" MASK="([0-9\.]*)" NODE_ID="([-\w]*)" POOL_ID="([-\w]*)");
+	foreach my $line (@tmccresults) {
+	    if ($line =~ /$papat/) {
+		# Just pass along the IP address for now; it's unclear
+		# what the node_id and pool_id should mean to the
+		# firewall.  So just treat all publicaddrs as equal.
+		push(@publicaddrs,$1);
+	    }
+	    else {
+		warn("*** WARNING: Bad public addr info line: $line\n");
+	    }
+	}
+	$fwinfo->{"PUBLICADDRS"} = \@publicaddrs;
+	$fwvars{"EMULAB_PUBLICADDRS"} = join(",",@publicaddrs);
+    }
+
+    #
+    # Define the local experiment domain so that people can use
+    # nickname-based FQDNs to refer to the control net IPs of nodes.
+    #
+    my $mydomain = `cat $BOOTDIR/mydomain`;
+    chomp($mydomain);
+    if (!defined($fwvars{"EMULAB_EXPDOMAIN"})) {
+	my $nickname = `cat $BOOTDIR/nickname`;
+	chomp($nickname);
+	if ($nickname =~ /[^.]+\.(.+)/) {
+	    $fwvars{"EMULAB_EXPDOMAIN"} = "${1}.${mydomain}";
+	}
+    }
+    #
+    # Define the local cluster domain so that people can use FQDNs to
+    # refer to the control net IPs of key servers.
+    #
+    if (!defined($fwvars{"EMULAB_DOMAIN"})) {
+	my $mydomain = `cat $BOOTDIR/mydomain`;
+	chomp($mydomain);
+	$fwvars{"EMULAB_DOMAIN"} = $mydomain;
+    }
+
     #
     # XXX inner elab: make sure we have "myops" and "myfs" entries.
     #

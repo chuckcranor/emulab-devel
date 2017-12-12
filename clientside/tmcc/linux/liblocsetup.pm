@@ -1546,7 +1546,7 @@ sub os_fwconfig_line($@) {
 		#
 		# Setup proxy ARP entries.
 		#
-		if (defined($fwinfo->{MACS})) {
+		if (defined($fwinfo->{MACS}) || defined($fwinfo->{PUBLICADDRS})) {
 			$upline .= "ebtables -t nat -F PREROUTING\n";
 			# publish servers (including GW) on inside and for us on outside
 			if (defined($fwinfo->{SRVMACS})) {
@@ -1560,17 +1560,41 @@ sub os_fwconfig_line($@) {
 			}
 
 			# provide node MACs to outside
-			my $href = $fwinfo->{MACS};
-			while (my ($node,$mac) = each %$href) {
+			if (defined($fwinfo->{MACS})) {
+			    my $href = $fwinfo->{MACS};
+			    while (my ($node,$mac) = each %$href) {
 				my $ip = $fwinfo->{IPS}{$node};
 				$upline .= "ebtables -t nat -A PREROUTING -i $pdev " .
 				  "-p ARP --arp-opcode Request " .
 				    "--arp-ip-dst $ip -j arpreply " .
 				      "--arpreply-mac $mac\n";
-			}
+			    }
+		        }
 
 			$upline .= "ebtables -t nat -A PREROUTING -p ARP " .
 			  "--arp-ip-dst $myip -j ACCEPT\n";
+
+			#
+			# Enable proxy arp for PUBLICADDRS, but only
+			# allow requests/replies for them.  This allows
+			# the PUBLICADDRS to be used by any physical
+			# node in the expt, which is what we want by
+			# default.
+			#
+			if (defined($fwinfo->{PUBLICADDRS})) {
+			    $upline .= "echo 1 > /proc/sys/net/ipv4/conf/br0/proxy_arp\n";
+			    foreach my $pip (@{$fwinfo->{PUBLICADDRS}}) {
+				$upline .= "ip ro add $pip/32 dev br0\n";
+				$upline .= "ebtables -t nat -A PREROUTING " .
+				    "-i $pdev -p ARP --arp-opcode Request " .
+				    "--arp-ip-dst $pip -j ACCEPT\n";
+				$upline .= "ebtables -t nat -A PREROUTING " .
+				    "-i $vlandev -p ARP --arp-opcode Reply " .
+				    "--arp-ip-src $pip -j ACCEPT\n";
+				$downline .= "ip ro del $pip/32 dev br0\n";
+			    }
+			    $downline .= "echo 0 > /proc/sys/net/ipv4/conf/br0/proxy_arp\n";
+			}
 
 			$upline .= "ebtables -t nat -A PREROUTING -p ARP -j DROP\n";
 
