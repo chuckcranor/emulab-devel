@@ -1,6 +1,6 @@
 # -*- tcl -*-
 #
-# Copyright (c) 2000-2006 University of Utah and the Flux Group.
+# Copyright (c) 2000-2006, 2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -102,7 +102,17 @@ Program instproc updatedb {DB} {
     }
 
     # Update the DB
-    spitxml_data "virt_programs" [list "vnode" "vname" "command" "dir" "timeout" "expected_exit_code"] [list $progvnode $self $command $dir $timeout ${expected-exit-code} ]
+    set fields [list "vnode" "vname" "command" "dir"]
+    set values [list $progvnode $self $command $dir]
+    if {$timeout != {}} {
+	lappend fields "timeout"
+	lappend values $timeout
+    }
+    if {${expected-exit-code} != {}} {
+	lappend fields "expected_exit_code"
+	lappend values ${expected-exit-code}
+    }
+    $sim spitxml_data "virt_programs" $fields $values    
 
     $sim spitxml_data "virt_agents" [list "vnode" "vname" "objecttype" ] [list $progvnode $self $objtypes(PROGRAM) ]
 }
