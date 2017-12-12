@@ -354,6 +354,13 @@ class Group
 	}
 
 	if ($access_type == $TB_PROJECT_READINFO) {
+            #
+            # Group root in the project can see any group.
+	    #
+	    if (TBMinTrust(TBGrpTrust($uid, $pid, $pid),
+			   $TBDB_TRUST_GROUPROOT)) {
+		return 1;
+	    }
 	    $mintrust = $TBDB_TRUST_USER;
 	}
 	elseif ($access_type == $TB_PROJECT_MAKEGROUP ||
