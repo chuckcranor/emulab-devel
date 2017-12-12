@@ -2865,6 +2865,15 @@ sub FullImagePath($)
     my $path   = $self->path();
     my $vers   = $self->version();
     my $name   = $self->imagename();
+
+    #
+    # Watch for an unreleased system image; in that case we want to
+    # target that unreleased file in /proj. So we ignore the path in
+    # the DB and construct the /proj path instead. 
+    #
+    if ($self->IsSystemImage() && !$self->released()) {
+	$path = $self->SaveDir();
+    }
     
     if ($self->IsDirPath()) {
 	return $path . $name . ".ndz" . ($vers ? ":$vers" : "");
@@ -2877,6 +2886,15 @@ sub DeltaImagePath($)
     my $path   = $self->path();
     my $vers   = $self->version();
     my $name   = $self->imagename();
+    
+    #
+    # Watch for an unreleased system image; in that case we want to
+    # target that unreleased file in /proj. So we ignore the path in
+    # the DB and construct the /proj path instead.
+    #
+    if ($self->IsSystemImage() && !$self->released()) {
+	$path = $self->SaveDir();
+    }
     
     if ($self->IsDirPath()) {
 	return $path . $name . ".ddz" . ($vers ? ":$vers" : "");
