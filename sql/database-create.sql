@@ -1642,7 +1642,7 @@ CREATE TABLE `experiment_stats` (
   `swapmod_count` smallint(5) unsigned default '0',
   `swapmod_last` datetime default NULL,
   `swap_errors` smallint(5) unsigned default '0',
-  `swap_exitcode` tinyint(3) unsigned default '0',
+  `swap_exitcode` tinyint(3) default '0',
   `idle_swaps` smallint(5) unsigned default '0',
   `swapin_duration` int(10) unsigned default '0',
   `batch` tinyint(3) unsigned default '0',
