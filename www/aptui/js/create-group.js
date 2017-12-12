@@ -5,7 +5,7 @@ $(function ()
     var templates = APT_OPTIONS.fetchTemplateList(['create-group', 'oops-modal', 'waitwait-modal']);
     var mainString = templates['create-group'];
     var oopsString = templates['oops-modal'];
-    var waitwaitString = templates['waitwaitString'];
+    var waitwaitString = templates['waitwait-modal'];
     var mainTemplate = _.template(mainString);
     var fields       = null;
     var isadmin      = false;
