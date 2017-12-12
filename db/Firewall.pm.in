@@ -435,7 +435,7 @@ sub undoFWNodes($;$@) {
 	TBDebugTimeStamp("Powering down nodes");
 	system("$POWER off @nodes");
 	if ($?) {
-	    tbreport(SEV_SECONDARY, 'power_off_failed');
+	    tberror(SEV_SECONDARY, 'power_off_failed');
 	    $fwerr = "Failed to power off all nodes!";
 	    @fwstate = ("Firewall is still in place",
 			"Some nodes may NOT be powered off",
@@ -511,7 +511,7 @@ sub undoFWNodes($;$@) {
 	$myargs{'retry'} = 1;
 	if (TBAdminMfsRunCmd(\%myargs, \@failed, @nodes)) {
 	    foreach my $failed (@failed) {
-		tbreport(SEV_ERROR, 'invalidate_bootblock_failed', $failed);
+		tberror(SEV_ERROR, 'invalidate_bootblock_failed', $failed);
 	    }
 	    $fwerr = "Failed to invalidate bootblocks on @failed!";
 	    @fwstate = ("Firewall is NOT in place",
