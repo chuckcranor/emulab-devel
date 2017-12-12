@@ -160,6 +160,16 @@ $(function ()
     {
 	// Watch for form modifications.
 	var modified = false;
+
+	// Kill previous handler.
+	$(window).off('beforeunload.portal');
+
+	// Warn user if they have not saved changes.
+	$(window).on('beforeunload.portal', function() {
+	    if (! modified)
+		return undefined;
+	    return "You have unsaved changes!";
+	});
 	
 	var callback = function(json) {
 	    console.info("members", json);
@@ -259,12 +269,6 @@ $(function ()
 		    console.info("changed");
 		    modified = true;
 		});
-	    // Warn user if they have not saved changes.
-	    $(window).on('beforeunload.portal', function() {
-		if (! modified)
-		    return undefined;
-		return "You have unsaved changes!";
-	    });
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "groups", "MemberList",
