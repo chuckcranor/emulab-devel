@@ -1874,11 +1874,12 @@ sub enablePortTrunking2($$$$) {
     # was requested, and untagged if not. Refuse to do this if the
     # requested vlan is vlan 1.
     if ($native_vlan != 1) {
-	# Next, add it as tagged if 'dual' mode, untagged if 'equal' mode.
+	# Next, add it as untagged if 'dual' mode, tagged if 'equal' mode.
 	my $portmask = $self->convertIfindexesToBitmask([$pifindex]);
-	my $allzeromask = pack("B*", "00000000" x length($portmask));
-	my $ubitmask = $equalmode ? $allzeromask : $portmask;
-	if ($self->setPortMembership("on", $portmask, $ubitmask, 
+	my ($vlebits, $vlubits) = $self->getMemberBitmask($native_ifindex,1);
+	my $ubitmask = $equalmode ? $vlubits : ($vlubits | $portmask);
+	my $ebitmask = $vlebits | $portmask;
+	if ($self->setPortMembership("on", $ebitmask, $ubitmask, 
 				     $native_ifindex) != 0) {
 	    warn "$id: ERROR: Could not add port $port to vlan ".
 		"$native_vlan.\n";
