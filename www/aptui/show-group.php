@@ -53,6 +53,8 @@ $emulablink = "$TBBASE/showgroup.php3?group=" . $group->gid_idx();
 $canapprove = $group->AccessCheck($this_user, $TB_PROJECT_ADDUSER) ? 1 : 0;
 $candelete  = $group->AccessCheck($this_user, $TB_PROJECT_DELGROUP) ? 1 : 0;
 $canedit    = $group->AccessCheck($this_user, $TB_PROJECT_EDITGROUP) ? 1 : 0;
+$canbestow  = $group->AccessCheck($this_user,
+                                  $TB_PROJECT_BESTOWGROUPROOT) ? 1 : 0;
 # Never allowed to delete project group.
 if ($group->pid() == $group->gid()) {
     $candelete = 0;
@@ -68,6 +70,7 @@ echo "  window.ISADMIN        = $isadmin;\n";
 echo "  window.CANAPPROVE     = $canapprove;\n";
 echo "  window.CANDELETE      = $candelete;\n";
 echo "  window.CANEDIT        = $canedit;\n";
+echo "  window.CANBESTOW      = $canbestow;\n";
 echo "  window.EMULAB_LINK    = '$emulablink';\n";
 echo "  window.TARGET_PROJECT = '" . $group->pid() . "';\n";
 echo "  window.TARGET_GROUP   = '" . $group->gid() . "';\n";

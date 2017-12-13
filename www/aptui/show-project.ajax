@@ -154,6 +154,10 @@ function Do_MemberList()
         $blob["trust"]    = $newTrustMap[$membership["trust"]];
         $blob["approved"] = ($target_project->UserTrust($user) ==
                              TBDB_TRUSTSTRING_NONE ? 0 : 1);
+        # Can the current user delete this user from the project.
+        $blob["candelete"]=
+            (ISADMIN() ||
+             $target_project->CanDeleteUser($this_user, $user) ? 1 : 0);
 
         $results[$user->uid()] = $blob;
     }

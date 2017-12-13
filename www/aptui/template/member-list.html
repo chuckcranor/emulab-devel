@@ -41,12 +41,14 @@
 			 <% if (!value.approved) { %>text-danger<% } %>">
 	      <%- value.joined %></span>
 	  </td>
-	  <% if ((canedit || canapprove) && value.trust != "leader") { %>
+	  <% if ((canedit || canapprove) &&
+	         value.trust != "leader" && value.candelete) { %>
 	    <% var trustvalues = ["none", "user","root","manager"]; %>
 	    <td>
 	      <select class="editprivs" data-uid="<%- uid %>">
 		<% _.each(trustvalues, function(trust) { %>
 		  <% if (value.approved && trust == "none") { return; } %>
+		  <% if (!canbestow && trust == "manager") { return; } %>
 		  <option value="<%- trust %>"
 			  <% if (value.trust == trust) { %>selected<% } %>>
 		    <% if (trust == "none") { trust = "Please Select"; } %>
@@ -69,7 +71,7 @@
 	    <td><%- value.trust %></td>
 	  <% } %>
 	  <% if (canedit || canapprove) { %>
-	    <% if (value.trust != "leader") { %>
+	    <% if (value.trust != "leader" && value.candelete) { %>
 	      <td><input class="remove-checkbox" data-uid="<%- uid %>"
 			 type="checkbox"></td>	      
 	    <% } else {%>
@@ -114,6 +116,7 @@
 	    <td>
 	      <select class="editprivs" data-uid="<%- uid %>">
 		<% _.each(trustvalues, function(trust) { %>
+		  <% if (!canbestow && trust == "manager") { return; } %>
 		  <option value="<%- trust %>"
 			  <% if (value.trust == trust) { %>selected<% } %>>
 		    <% if (trust == "none") { trust = "Please Select"; } %>

@@ -445,13 +445,37 @@ class Group
 	    $mintrust = $TBDB_TRUST_GROUPROOT;
 	}
 	elseif ($access_type == $TB_PROJECT_DELUSER) {
-	    $mintrust = $TBDB_TRUST_PROJROOT;
+            #
+            # Only project leaders can delete group root in the main
+            # group, group roots cannot delete each other, but that
+            # cannot be tested here, so we have to have a seprate
+            # CanDeleteUser() user function that wraps this check.
+            #
+            # In subgroups, group_root can delete each other. Hmm.
+            #
+            if ($pid != $gid) {
+	        if (TBMinTrust(TBGrpTrust($uid, $pid, $pid),
+			       $TBDB_TRUST_GROUPROOT)) {
+		    return 1;
+		}
+            }
+	    $mintrust = $TBDB_TRUST_GROUPROOT;
 	}
 	else {
 	    TBERROR("Unexpected access type: $access_type!", 1);
 	}
 
 	return TBMinTrust(TBGrpTrust($uid, $pid, $gid), $mintrust);
+    }
+
+    # Can the user delete the target user. 
+    function CanDeleteUser($user, $target_user) {
+        global $TB_PROJECT_DELUSER;
+
+        if ($this->IsProjectGroup()) {
+            return $this->Project()->CanDeleteUser($user, $target_user);
+        }
+        return $this->AccessCheck($user, $TB_PROJECT_DELUSER);
     }
 
     #
@@ -1202,10 +1226,11 @@ class Group
     #
     # Pretty display of group members.
     #
-    function ShowMembers($prived = 0) {
+    function ShowMembers($this_user = null) {
 	$gid_idx = $this->gid_idx();
 	$pid_idx = $this->pid_idx();
 	$project = $this->Project();
+        global $TB_PROJECT_DELUSER;
 
 	$query_result =
 	    DBQueryFatal("select uid_idx,trust from group_membership ".
@@ -1214,7 +1239,9 @@ class Group
 	if (! mysql_num_rows($query_result)) {
 	    return;
 	}
-	$showdel  = (($prived && $pid_idx == $gid_idx) ? 1 : 0);
+	$showdel =
+            ($pid_idx == $gid_idx && $this_user &&
+             $this->AccessCheck($this_user, $TB_PROJECT_DELUSER) ? 1 : 0);
 	$projgrp  = $this->IsProjectGroup();
 
 	echo "<center>\n";
@@ -1273,9 +1300,14 @@ class Group
 		echo "<td>$trust</td>\n";
 
 	    if ($showdel) {
-		echo "<td align=center>
+                if ($this->CanDeleteUser($this_user, $target_user)) {
+                    echo "<td align=center>
 		          <a href='$deluser_url'>
                              <img alt='Delete User' src=redball.gif></td>\n";
+                }
+                else {
+                    echo "<td></td>\n";
+                }
 	    }
 	    echo "</tr>\n";
 	}

@@ -82,10 +82,11 @@ if (isset($request) && $request) {
 if (isset($target_project)) {
     $target_pid = $target_project->pid();
     
-    if (! $isadmin &&
-	! $target_project->AccessCheck($this_user, $TB_PROJECT_DELUSER)) {
-	USERERROR("You do not have permission to remove user ".
-		  "$target_uid from project $target_pid!", 1);
+    if (! $isadmin) {
+        if (! $target_project->CanDeleteUser($this_user, $target_user)) {
+            USERERROR("You do not have permission to remove user ".
+                      "$target_uid from project $target_pid!", 1);
+        }
     }
     
     $leader = $target_project->GetLeader();

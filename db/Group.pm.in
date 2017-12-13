@@ -823,7 +823,7 @@ sub AccessCheck($$$)
 	$mintrust = PROJMEMBERTRUST_GROUPROOT();
     }
     elsif ($access_type == TB_PROJECT_DELUSER()) {
-	$mintrust = PROJMEMBERTRUST_PROJROOT();
+	$mintrust = PROJMEMBERTRUST_GROUPROOT();
     }
     else {
 	print "*** Invalid access type: $access_type!\n";

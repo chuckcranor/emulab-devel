@@ -327,7 +327,8 @@ $(function ()
 				"pid"        : window.TARGET_PROJECT,
 				"gid"        : window.TARGET_PROJECT,
 				"canedit"    : window.CANAPPROVE,
-				"canapprove" : window.CANAPPROVE}));
+				"canapprove" : window.CANAPPROVE,
+				"canbestow"  : window.CANBESTOW}));
 	    
 	    // Format dates with moment before display.
 	    $('#members_table .format-date').each(function() {

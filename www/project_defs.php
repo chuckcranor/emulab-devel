@@ -399,6 +399,21 @@ class Project
 	return $group->AccessCheck($user, $access_type);
     }
 
+    # Can the user delete the target user.
+    function CanDeleteUser($user, $target_user) {
+        global $TB_PROJECT_DELUSER;
+        
+        # Not allowed to delete yourself from a group.
+        if ($user->SameUser($target_user)) {
+            return 0;
+        }
+        if (! $this->AccessCheck($user, $TB_PROJECT_DELUSER) ||
+            $this->UserTrust($target_user) >= $this->UserTrust($user)) {
+            return 0;
+        }
+        return 1;
+    }
+
     # Return the user trust within the project, which is really for the
     # default group.
     function UserTrust($user) {

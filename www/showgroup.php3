@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -64,14 +64,6 @@ if (! ($group->AccessCheck($this_user, $TB_PROJECT_READINFO) ||
 }
 
 #
-# See if user is privledged for deletion.
-#
-$prived = 0;
-if ($isadmin || $project->AccessCheck($this_user, $TB_PROJECT_DELUSER)) {
-    $prived = 1;
-}
-
-#
 # This menu only makes sense for people with privs to use them.
 #
 $showmenu = ($group->AccessCheck($this_user, $TB_PROJECT_EDITGROUP) ||
@@ -99,7 +91,7 @@ if ($showmenu) {
 }
 
 $group->Show();
-$group->ShowMembers($prived);
+$group->ShowMembers($this_user);
 
 if ($showmenu) {
     SUBPAGEEND();

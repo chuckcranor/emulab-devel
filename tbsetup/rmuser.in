@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -160,7 +160,9 @@ if (defined($pid)) {
 #
 if (! $this_user->IsAdmin()) {
     if (! defined($project) ||
-	! $project->AccessCheck($this_user, TB_PROJECT_DELUSER)) {
+	! $project->AccessCheck($this_user, TB_PROJECT_DELUSER) ||
+	# This prevents group_root from deleting other group_roots or leader.
+	$project->Trust($target_user) >= $project->Trust($this_user)) {
 	fatal("You do not have permission to remove user $target_user!");
     }
 }

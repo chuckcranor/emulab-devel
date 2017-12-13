@@ -286,6 +286,11 @@ function Do_MemberList()
         $blob["approved"] = ($target_group->UserTrust($user) ==
                              TBDB_TRUSTSTRING_NONE ? 0 : 1);
 
+        # Can the current user delete this user from the group.
+        $blob["candelete"]= 
+            (ISADMIN() ||
+             $target_group->CanDeleteUser($this_user, $user) ? 1 : 0);
+
         $members[$user->uid()] = $blob;
     }
     foreach ($nonmemberlist as $user) {
@@ -327,7 +332,7 @@ function Do_GroupProfile()
 function Do_EditMembership()
 {
     global $this_user, $target_group, $ajax_args;
-    global $newTrustMap, $TB_PROJECT_ADDUSER;
+    global $newTrustMap, $TB_PROJECT_ADDUSER, $TB_PROJECT_BESTOWGROUPROOT;
 
     if (CheckPageArgs()) {
         return;
@@ -382,11 +387,32 @@ function Do_EditMembership()
             SPITAJAX_ERROR(-1, "User is still heading up experiments: $uid");
             return -1;
         }
-        # Check trust values unless removing from the group/project.
-        if ($action != "remove" &&
-            !array_key_exists($trust, $newTrustMap)) {
-            SPITAJAX_ERROR(-1, "Invalid privilege: $trust");
-            return -1;
+        if ($action == "remove") {
+            # Check permission to do this. This is really a project test.
+            if (!$target_group->CanDeleteUser($this_user, $target_user)) {
+                SPITAJAX_ERROR(-1, "Not allowed to remove user: $uid");
+                return -1;
+            }
+        }
+        else {
+            # Check trust values unless removing from the group/project.
+            if (!array_key_exists($trust, $newTrustMap)) {
+                SPITAJAX_ERROR(-1, "Invalid privilege: $trust");
+                return -1;
+            }
+            $trust = $newTrustMap[$trust];
+
+            #
+            # If changing to manager privs, then make sure current user can
+            # bestow manager.
+            #
+            if ($trust == TBDB_TRUSTSTRING_GROUPROOT && !ISADMIN() && 
+                !$target_group->AccessCheck($this_user,
+                                            $TB_PROJECT_BESTOWGROUPROOT)) {
+                SPITAJAX_ERROR(-1,
+                               "You are not allowed to bestow manager privs");
+                return -1;
+            }
         }
     }
     reset($users);
@@ -425,6 +451,7 @@ function Do_EditPrivs()
 {
     global $this_user, $target_group, $ajax_args;
     global $newTrustMap, $TB_PROJECT_EDITGROUP, $TBADMINGROUP;
+    global $TB_PROJECT_BESTOWGROUPROOT;
 
     if (CheckPageArgs()) {
         return;
@@ -459,6 +486,16 @@ function Do_EditPrivs()
     $trust    = $newTrustMap[$ajax_args["priv"]];
     $pid      = $target_group->pid();
     $gid      = $target_group->gid();
+
+    #
+    # If adding with manager privs, then make sure current user can
+    # bestow manager.
+    #
+    if ($trust == TBDB_TRUSTSTRING_GROUPROOT && !ISADMIN() && 
+        !$target_group->AccessCheck($this_user, $TB_PROJECT_BESTOWGROUPROOT)) {
+	SPITAJAX_ERROR(-1, "You are not allowed to bestow manager privs");
+	return -1;
+    }
 
     # Create the user if it is not yet approved.
     if ($target_user->status() == TBDB_USERSTATUS_UNAPPROVED) {
