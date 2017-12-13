@@ -266,6 +266,7 @@ CREATE TABLE `apt_instance_extension_info` (
   `autoapproved` tinyint(1) NOT NULL default '0',
   `autoapproved_reason` tinytext,
   `autoapproved_metrics` mediumtext,
+  `maxextension` datetime default NULL,
   `admin` tinyint(1) NOT NULL default '0',
   `reason` mediumtext,
   `message` mediumtext,
