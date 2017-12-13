@@ -493,6 +493,24 @@ sub CreateIface($$)
     if (!defined($interface)) {
 	fatal("Could not create new interface");
     }
+    if (!$NOSAVED) {
+	#
+	# Update the saved fields in the interface so we do not lose it.
+	# And so we can rerun the script and have the right stuff happen.
+	#
+	if ($interface->card_saved() != $card ||
+	    $interface->port_saved() != $port) {
+	    print STDERR "Updating saved card,port for $interface\n";
+	    
+	    my $q = "update interfaces set ".
+		"card_saved='$card', port_saved='$port' ".
+		"where node_id='$node_id' and iface='$iface'";
+
+	    if (!$impotent) {
+		DBQueryFatal($q);
+	    }
+	}
+    }
 }
     
 sub fatal($)
