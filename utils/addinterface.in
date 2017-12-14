@@ -130,7 +130,7 @@ else {
 }
 if (defined($options{'m'})) {
     $mac = $options{'m'};
-    if ($mac !~ /^\w\w\w\w\w\w\w\w\w\w\w\w\w/)  {
+    if ($mac !~ /^\w\w\w\w\w\w\w\w\w\w\w\w/)  {
 	fatal("Invalid mac address format");
     }
 }
