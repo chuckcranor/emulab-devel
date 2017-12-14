@@ -1471,9 +1471,18 @@ sub os_fwconfig_line($@) {
 		$upline .= "ifconfig $vlandev up\n";
 		$upline .= "brctl addbr br0\n";
 		$upline .= "brctl stp br0 off\n";
+		#
+		# As of 12/14/2017, these stp-type-specific rules have
+		# no affect on STP packet forwarding across the bridge.
+		# The unspecific drop-everything-destined-to-the-BGA
+		# rule works effectively, however.  See
+		# https://sourceforge.net/p/ebtables/mailman/message/5974070/
+		# for same symptom; no resolution.
+		#
 		$upline .= "ebtables -A FORWARD -d BGA --stp-type 0x0 -j DROP\n";
 		$upline .= "ebtables -A FORWARD -d BGA --stp-type 0x80 -j DROP\n";
 		$upline .= "ebtables -A FORWARD -d BGA --stp-type 0x02 -j DROP\n";
+		$upline .= "ebtables -A FORWARD -d BGA -j DROP\n";
 		$upline .= "ifconfig br0 up\n";
 		#
 		# This is very, very messy.  We have to save the
