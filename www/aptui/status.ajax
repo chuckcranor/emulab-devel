@@ -373,6 +373,13 @@ function Do_RequestExtension()
         SPITAJAX_ERROR(1, "Invalid characters in hours");
         goto bad;
     }
+    if (isset($ajax_args["maxextension"]) && $ajax_args["maxextension"] != "") {
+        $maxextension = $ajax_args["maxextension"];
+        if (!strtotime($maxextension)) {
+            SPITAJAX_ERROR(1, "Invalid max extension date");
+            goto bad;
+        }
+    }
     if (ISADMIN()) {
 	if (isset($ajax_args["reason"]) && $ajax_args["reason"] != "") {
             $reason = $ajax_args["reason"];
@@ -403,6 +410,7 @@ function Do_RequestExtension()
 		     "webmanage_instance -t " . $webtask->task_id() . " -- ".
                      "  extend $uuid " .
                      (isset($filename) ? "-f $filename " : "").
+                     (isset($maxextension) ? "-e '$maxextension' " : "").
                      ($force ? "-F " : "") . "'$wanted'",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();

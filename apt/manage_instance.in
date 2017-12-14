@@ -141,6 +141,7 @@ sub DoCheckAutoApprove();
 sub CheckAutoApprove($$);
 sub CheckReservationInternal($$$);
 sub DoMaxExtension();
+sub DoMaxExtensionInternal($$$);
 sub DoApplyExtensionPolicy();
 sub WriteCredentials();
 sub StartMonitor();
@@ -1382,6 +1383,7 @@ sub DoExtend()
     my $granted       = 0;
     my $needapproval  = 0;
     my $autoapprove_info;
+    my $maxextension;
     my $message;
     my $reason;
     my $errmsg;
@@ -1391,7 +1393,7 @@ sub DoExtend()
     usage()
 	if (!@ARGV);
 
-    my $optlist = "m:f:hF";
+    my $optlist = "m:f:hFe:";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
@@ -1423,6 +1425,14 @@ sub DoExtend()
 	    $reason .= $_;
 	}
 	close(MSG);
+    }
+    if (defined($options{"e"})) {
+	$maxextension = str2time($options{"e"});
+	if (!$maxextension) {
+	    $errmsg  = "Illegal max extension date";
+	    $errcode = -1;
+	    goto bad;
+	}	
     }
 
     #
@@ -1709,6 +1719,9 @@ sub DoExtend()
     };
     if ($needapproval) {
 	$extensionargs->{"needapproval"} = 1;
+    }
+    if (defined($maxextension)) {
+	$extensionargs->{"maxextension"} = TBDateStringLocal($maxextension);
     }
     if (defined($message)) {
 	$extensionargs->{"message"} = $message;
@@ -2063,6 +2076,34 @@ sub CheckReservationInternal($$$)
 sub DoMaxExtension()
 {
     my $slice = $instance->GetGeniSlice();
+    my $result;
+    my $errmsg;
+
+    my $errcode = DoMaxExtensionInternal($instance, \$result, 0);
+    if ($errcode) {
+	$errmsg = $result;
+	goto bad;
+    }
+    if ($debug) {
+	print "Max extension: " . TBDateStringLocal($result)  . "\n";
+    }
+    if (defined($webtask)) {
+	$webtask->MaxExtension(TBDateStringGMT($result));
+	$webtask->Exited(0);
+    }
+    exit(0);
+  bad:
+    if (defined($webtask)) {
+	$webtask->output($errmsg) if (defined($errmsg));
+	$webtask->Exited($errcode);
+    }
+    exit($errcode);
+}
+
+sub DoMaxExtensionInternal($$$)
+{
+    my ($instance, $prval, $nolock) = @_;
+    my $slice = $instance->GetGeniSlice();
     my $maxinfo;
     my $errmsg;
     my $newmax;
@@ -2077,9 +2118,9 @@ sub DoMaxExtension()
     # No need to lock if only one aggregate, we do not use the per-agg
     # web tasks down in CallAggregateMethod(). Hack, needs more thought.
     #
-    if (scalar(@aggregates) > 1 && $slice->WaitForLock(15)) {
+    if (!$nolock && scalar(@aggregates) > 1 && $slice->WaitForLock(15)) {
 	print STDERR "Experiment is busy, cannot lock it. Try again later.\n";
-	exit(GENIRESPONSE_BUSY);
+	return GENIRESPONSE_BUSY;
     }
     my $errcode = CallAggregateMethod("MaxExtension", \$maxinfo, @aggregates);
     if ($errcode) {
@@ -2099,24 +2140,15 @@ sub DoMaxExtension()
 	$newmax = $max
 	    if ($max < $newmax);
     }
-    if ($debug) {
-	print "Max extension: " . TBDateStringLocal($newmax)  . "\n";
-    }
-    if (defined($webtask)) {
-	$webtask->MaxExtension(TBDateStringGMT($newmax));
-	$webtask->Exited(0);
-    }
     $slice->UnLock()
-	if (scalar(@aggregates) > 1);
-    exit(0);
+	if (scalar(@aggregates) > 1 && !$nolock);
+    $$prval = $newmax;
+    return 0;
+    
   bad:
     $slice->UnLock()
-	if (scalar(@aggregates) > 1);
-    if (defined($webtask)) {
-	$webtask->output($errmsg);
-	$webtask->Exited($errcode);
-    }
-    exit($errcode);
+	if (scalar(@aggregates) > 1 && !$nolock);
+    return $errcode;
 }
 
 #

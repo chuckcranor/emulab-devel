@@ -20,6 +20,7 @@ window.ShowExtendModal = (function()
 	var howlong    = 24; // Number of hours being requested.
 	var SLIDERLIMIT= 84 * 24;
 	var extension_info  = null;
+	var maxextend_date  = null;
 	var physnode_count  = 0;
 	var physnode_hours  = 0;
 
@@ -429,20 +430,25 @@ window.ShowExtendModal = (function()
 	    // Save this for next time we show the modal.
 	    extension_info.extension_reason = reason;
 
-	    sup.HideModal('#extend_modal');
-	    sup.ShowModal("#waitwait-modal");
-	    var xmlthing = sup.CallServerMethod(null,
-						"status",
-						"RequestExtension",
-						{"uuid"   : uuid,
-						 "howlong": howlong,
-						 "reason" : reason});
-	    xmlthing.done(function(json) {
-		console.info(json.value);
-		sup.HideModal("#waitwait-modal", function () {
-		    callback(json);
+	    var args = {"uuid"   : uuid,
+			"howlong": howlong,
+			"reason" : reason};
+	    // Pass through to store with the extension info; harmless if
+	    // the user browser messes with it.
+	    if (maxextend_date) {
+		args["maxextension"] = maxextend_date;
+	    }
+	    sup.HideModal('#extend_modal', function () {
+		sup.ShowModal("#waitwait-modal");
+		var xmlthing = sup.CallServerMethod(null, "status",
+						    "RequestExtension", args);
+		xmlthing.done(function(json) {
+		    console.info(json.value);
+		    sup.HideModal("#waitwait-modal", function () {
+			callback(json);
+		    });
+		    return;
 		});
-		return;
 	    });
 	}
 	
@@ -551,6 +557,7 @@ window.ShowExtendModal = (function()
 		}
 		else {
 		    later = new Date(json.value);
+		    maxextend_date = json.value;
 		}
 		console.info("Max extension date:", later);
 		
