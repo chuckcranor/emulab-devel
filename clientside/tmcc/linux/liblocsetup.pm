@@ -1470,7 +1470,10 @@ sub os_fwconfig_line($@) {
 		$upline .= "vconfig add $pdev $vlanno > /dev/null\n";
 		$upline .= "ifconfig $vlandev up\n";
 		$upline .= "brctl addbr br0\n";
-		$upline .= "brctl stp br0 on\n";
+		$upline .= "brctl stp br0 off\n";
+		$upline .= "ebtables -A FORWARD -d BGA --stp-type 0x0 -j DROP\n";
+		$upline .= "ebtables -A FORWARD -d BGA --stp-type 0x80 -j DROP\n";
+		$upline .= "ebtables -A FORWARD -d BGA --stp-type 0x02 -j DROP\n";
 		$upline .= "ifconfig br0 up\n";
 		#
 		# This is very, very messy.  We have to save the
