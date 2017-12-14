@@ -1716,6 +1716,7 @@ sub DoExtend()
 	"wanted"   => $wanted,
 	"granted"  => $granted,
 	"admin"    => $this_user->IsAdmin() ? 1 : 0,
+	"expiration" => TBDateStringLocal($expires_time),
     };
     if ($needapproval) {
 	$extensionargs->{"needapproval"} = 1;
