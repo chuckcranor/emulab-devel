@@ -1182,6 +1182,7 @@ sub ExtendSlice($$$;$$$) {
 	my $version = GetVersion( $class );
 	foreach my $type ( @types ) {
 	    my $reservations = LookupAll( $class, $type );
+	    my $conflicttime;
 	    foreach my $res ( @$reservations ) {
 		if( defined( $res->pid() ) && defined( $res->eid() ) &&
 		    $res->pid() eq $expt->pid() &&
@@ -1190,7 +1191,8 @@ sub ExtendSlice($$$;$$$) {
 		    last;
 		}
 	    }
-	    if( !$force && !IsFeasible( $class, $reservations, $error ) ) {
+	    if( !$force && !IsFeasible( $class, $reservations, $error,
+		\$conflicttime ) && $conflicttime < $new_expire ) {
 		return -1;
 	    }
 	}
