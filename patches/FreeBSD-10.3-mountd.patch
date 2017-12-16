@@ -1,3 +1,15 @@
+#
+# Utah changes to speed up mountd updates in the presence of 2000+ entries
+# in the exports file. This includes doing incremental updates to the kernel
+# export info (as opposed to completely removing the info and then putting
+# it all in again), caching of "--maproot=root" credentials, and some stats
+# collection and reporting. N.B. I have only ever tested these changes with
+# NFSv3 and I doubt very much they will work with v4! 
+#
+#   cd /usr/src/usr.sbin
+#   sudo patch < patchfile
+#
+
 diff -Nu mountd.orig/Makefile mountd/Makefile
 --- mountd.orig/Makefile	2016-05-27 09:23:16.000000000 -0600
 +++ mountd/Makefile	2017-02-13 14:04:00.887455000 -0700
