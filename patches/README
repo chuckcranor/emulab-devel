@@ -52,6 +52,14 @@ E. FreeBSD-10.x-vfs_exports.patch
      cd /usr/src
      sudo patch -p0 < patchfile
 
+F. FreeBSD-10.3-ipod.patch
+
+   Utah kernel modification to allow an authenticated ICMP "Ping Of Death"
+   ("ipod") packet. (Yes, we came before that other ipod...) We only define
+   this on node kernels and not on the servers.
+
+     cd /usr/src
+     sudo patch -p0 < patchfile
 
 II. Old, irrelevant:
 
