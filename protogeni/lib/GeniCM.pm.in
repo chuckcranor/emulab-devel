@@ -7863,6 +7863,9 @@ sub SetSliceExpiration($$$$$@)
 	    goto bad;
 	}
     }
+    return 0
+	if ($checkonly && !$slice_experiment);
+    
     #
     # Now that we have the number we want, make sure the reservation system
     # will allow it.
