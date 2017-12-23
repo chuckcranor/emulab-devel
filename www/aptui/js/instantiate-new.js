@@ -1400,7 +1400,21 @@ $(function ()
     function ShowProfileSelectionInline(selectedElement, root, selectionPane) {
 	console.info("ShowProfileSelectionInline: " +
 		     $(selectedElement).attr('value'));
+
+	var xmlDoc = $.parseXML(selected_rspec);
+	var nodecount  = $(xmlDoc).find("node").length;
 	
+	if (nodecount > 100) {
+	    $('#stepsContainer #inline_overlay').addClass("hidden");
+	    $('#inline_jacks #edit_dialog #edit_container')
+		.addClass("hidden");
+	    return;
+	}
+	else {
+	    $('#stepsContainer #inline_overlay').removeClass("hidden");
+	    $('#inline_jacks #edit_dialog #edit_container')
+		.removeClass("hidden");
+	}
 	editor = new JacksEditor(root, true, true,
 				 selectionPane, true, !multisite);
 	editor.show(selected_rspec);
@@ -1614,7 +1628,14 @@ $(function ()
 	var count  = 0;
 	sites = {};
 
-	//console.info("CreateAggregateSelectors");
+	var nodecount  = $(xmlDoc).find("node").length;
+	if (nodecount > 100) {
+	    doconstraints = 0;
+	}
+	else {
+	    doconstraints = 1;
+	}
+	//console.info("CreateAggregateSelectors: ", nodecount, doconstraints);
 
 	/*
 	 * Find the sites. Might not be any if not a multisite topology
@@ -1945,6 +1966,10 @@ $(function ()
     {
 	// Temporary
 	if (!window.MAINSITE) {
+	    return;
+	}
+	if (!doconstraints) {
+	    CreateClusterStatus();
 	    return;
 	}
 	//console.info("updateWhere");

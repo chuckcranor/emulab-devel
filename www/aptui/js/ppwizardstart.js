@@ -704,6 +704,15 @@ $(function () {
 	    xmlthing.done(callback);
 	}
 
+	function countNodes()
+	{
+	    console.info("countNodes");
+	    var xmlDoc = $.parseXML(RSPEC);
+	    var count  = $(xmlDoc).find("node").length;
+	    console.info(count);
+	    return count;
+	}
+
 	function StartPP(args) {
 	    uuid = args.uuid;
 	    registered = args.registered;
@@ -764,18 +773,40 @@ $(function () {
 	}
 
 	function ChangeJacksRoot(root, selectionPane) {
-//	  console.log(RSPEC);
+	  // console.info("ChangeJacksRoot: ", root, selectionPane);
 	  if (RSPEC)
-	  {
-	    editor = new JacksEditor(root, true, true, selectionPane, true);
-	    editor.show(RSPEC);
+	    {
+	      if (countNodes() > 100) {
+		  $('#stepsContainer #inline_overlay').addClass("hidden");
+		  $('#inline_jacks #edit_dialog #edit_container')
+		      .addClass("hidden");
+		  return;
+	      }
+	      else {
+		  $('#stepsContainer #inline_overlay').removeClass("hidden");
+		  $('#inline_jacks #edit_dialog #edit_container')
+		      .removeClass("hidden");
+	      }
+	      editor = new JacksEditor(root, true, true, selectionPane, true);
+	      editor.show(RSPEC);
 	  }
 	}
 	function ShowEditor() {
-//	  console.log(RSPEC);
+	  // console.info("ShowEditor");
 	  if (RSPEC)
 	  {
-	    editor.show(RSPEC);
+	      if (countNodes() > 100) {
+		  $('#stepsContainer #inline_overlay').addClass("hidden");
+		  $('#inline_jacks #edit_dialog #edit_container')
+		      .addClass("hidden");
+		  return;
+	      }
+	      else {
+		  $('#stepsContainer #inline_overlay').removeClass("hidden");
+		  $('#inline_jacks #edit_dialog #edit_container')
+		      .removeClass("hidden");
+	      }
+	      editor.show(RSPEC);
 	  }
 	}
 
