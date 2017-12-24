@@ -837,7 +837,11 @@ sub FetchImageFile($$$)
 	system("sshtb -host $CONTROL $cmdargs ");
 	if ($?) {
 	    $EUID = $UID = $SAVEUID;
-	    print STDERR "Fetch of image file failed\n";
+	    if ($urlarg =~ /sigfile=1/) {
+		print STDERR "WARNING: Fetch of image signature file failed\n";
+	    } else {
+		print STDERR "Fetch of image file failed\n";
+	    }
 	    return -1;
 	}
 	$UID = $SAVEUID;
@@ -947,6 +951,8 @@ sub FetchSigFile($)
 	# Do not need this.
 	unlink("${localfile}.sha1")
 	    if (-e "${localfile}.sha1");
+    } else {
+	unlink($localfile);
     }
     return 0;
 }
