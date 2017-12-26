@@ -70,6 +70,7 @@ define("CHECKLOGIN_OPSGUY",		0x0400000);  # Member of emulab-ops.
 define("CHECKLOGIN_ISFOREIGN_ADMIN",	0x0800000);  # Admin of another Emulab.
 define("CHECKLOGIN_NONLOCAL",		0x1000000);
 define("CHECKLOGIN_INACTIVE",		0x2000000);
+define("CHECKLOGIN_NOPROJECTS",		0x4000000);
 
 #
 # Constants for tracking possible login attacks.
@@ -291,6 +292,7 @@ function LoginStatus() {
     $workbench = 0;
     $frozen    = 0;
     $nonlocal  = 0;
+    $pcount    = 0;
     
     while ($row = mysql_fetch_array($query_result)) {
 	$expired = $row[0];
@@ -299,9 +301,17 @@ function LoginStatus() {
 	$status  = $row[3];
 	$admin   = $row[4];
 	$cvsweb  = $row[5];
+        $trust   = $row[6];
 
-	if (! strcmp($row[6], "project_root") ||
-	    ! strcmp($row[6], "group_root")) {
+        #
+        # Count up number of projects where user has local_root or better.
+        # These are projects where user has viable permission to do things,
+        # like create experiments.
+        #
+        if ($trust != "none" && $trust != "user") {
+            $pcount++;
+        }
+	if ($trust == "project_root" || $trust == "group_root") {
 	    $trusted = 1;
 	}
 	$adminon  = $row[7];
@@ -470,6 +480,21 @@ function LoginStatus() {
 	$CHECKLOGIN_STATUS |= CHECKLOGIN_ISFOREIGN_ADMIN;
     if ($nonlocal)
 	$CHECKLOGIN_STATUS |= CHECKLOGIN_NONLOCAL;
+    #
+    # A local user that has no privs in at least one project, or a nonlocal
+    # user where webonly=1 (which means they have project membership at
+    # their home portal). 
+    #
+    if ($nonlocal) {
+        if ($webonly) {
+            $CHECKLOGIN_STATUS |= CHECKLOGIN_NOPROJECTS;
+        }
+    }
+    else {
+        if (!$pcount) {
+            $CHECKLOGIN_STATUS |= CHECKLOGIN_NOPROJECTS;
+        }
+    }
 
     #
     # Set the magic enviroment variable, if appropriate, for the sake of
@@ -739,6 +764,14 @@ function WIKIONLY() {
     return (($CHECKLOGIN_STATUS &
 	     (CHECKLOGIN_LOGGEDIN|CHECKLOGIN_WIKIONLY)) ==
 	    (CHECKLOGIN_LOGGEDIN|CHECKLOGIN_WIKIONLY));
+}
+
+function NOPROJECTMEMBERSHIP() {
+    global $CHECKLOGIN_STATUS;
+
+    return (($CHECKLOGIN_STATUS &
+	     (CHECKLOGIN_LOGGEDIN|CHECKLOGIN_NOPROJECTS)) ==
+	    (CHECKLOGIN_LOGGEDIN|CHECKLOGIN_NOPROJECTS));
 }
 
 # Is this user a real administrator (ignore onoff bit).

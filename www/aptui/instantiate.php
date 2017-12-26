@@ -43,6 +43,9 @@ RedirectSecure();
 $this_user = CheckLogin($check_status);
 if (isset($this_user)) {
     CheckLoginOrDie(CHECKLOGIN_NONLOCAL|CHECKLOGIN_WEBONLY);
+    if (NOPROJECTMEMBERSHIP()) {
+        return NoProjectMembershipError($this_user);
+    }
 }
 else {
     RedirectLoginPage();

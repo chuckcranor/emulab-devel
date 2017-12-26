@@ -40,6 +40,9 @@ $notifyclone = 0;
 RedirectSecure();
 $this_user = CheckLoginOrRedirect();
 $this_idx  = $this_user->uid_idx();
+if ((!isset($action) || $action == "create") && NOPROJECTMEMBERSHIP()) {
+    return NoProjectMembershipError($this_user);
+}
 
 #
 # Verify page arguments.

@@ -49,7 +49,7 @@ if (isset($_SERVER['SERVER_NAME'])) {
 #
 # Redefine this so APT errors are styled properly. Called by PAGEERROR();.
 #
-$PAGEERROR_HANDLER = function($msg, $status_code = 0) {
+$PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
     global $drewheader, $ISCLOUD, $ISPNET, $ISEMULAB, $ISAPT, $ISPOWDER;
     global $spatrequired, $TBMAINSITE, $PORTAL_HELPFORUM;
 
@@ -57,7 +57,9 @@ $PAGEERROR_HANDLER = function($msg, $status_code = 0) {
 	SPITHEADER();
     }
     echo "<br>";
-    echo $msg;
+    if ($msg) {
+        echo $msg;
+    }
     echo "<script type='text/javascript'>\n";
     echo "    window.ISEMULAB  = " . ($ISEMULAB ? "1" : "0") . ";\n";
     echo "    window.ISCLOUD   = " . ($ISCLOUD  ? "1" : "0") . ";\n";
@@ -622,6 +624,41 @@ function SPITFOOTER($ignored = null)
 function SPITUSERERROR($msg)
 {
     PAGEERROR($msg, 0);
+}
+
+function NoProjectMembershipError($this_user)
+{
+    global $drewheader, $PAGEERROR_HANDLER;
+    
+    if (! $drewheader) {
+	SPITHEADER();
+    }
+    echo "<br>";
+    echo "<p class=lead>";
+    echo "Oops, you are not a member of any projects in which you have ".
+        "permission to access this page! ";
+    echo "</p>";
+    echo "<p>";
+    if ($this_user->IsNonLocal()) {
+        echo
+            "Typically this is because you are not a member of any projects ".
+            "at your home portal (say, the Geni Portal). You must log into ".
+            "your home portal and request membership in a project, or start ".
+            "your own project. Once your membership or project is approved ".
+            "at your home portal, you can come back here and log back in.";
+    }
+    else {
+        echo
+            "Typically this is because you are not yet an approved member of ".
+            "any projects with sufficient privileges. If you are still ".
+            "awaiting approval or need your privileges adjusted, please ".
+            "contact your project leader. If you are waiting for a new ".
+            "project to be approved, please be patient, it can take a week ".
+            "to approve a new project request.";
+    }
+    echo "</p>";
+    echo "<br>";
+    $PAGEERROR_HANDLER();
 }
 
 #

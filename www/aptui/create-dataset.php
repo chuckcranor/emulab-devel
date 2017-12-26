@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,6 +35,9 @@ $page_title = "Create Dataset";
 #
 RedirectSecure();
 $this_user = CheckLoginOrRedirect();
+if (NOPROJECTMEMBERSHIP()) {
+    return NoProjectMembershipError($this_user);
+}
 $this_idx  = $this_user->uid_idx();
 
 #

@@ -35,6 +35,9 @@ $page_title = "Reservations";
 #
 RedirectSecure();
 $this_user = CheckLoginOrRedirect();
+if (NOPROJECTMEMBERSHIP()) {
+    return NoProjectMembershipError($this_user);
+}
 $isadmin   = (ISADMIN() ? 1 : 0);
 $isfadmin  = (ISFOREIGN_ADMIN() ? 1 : 0);
 
