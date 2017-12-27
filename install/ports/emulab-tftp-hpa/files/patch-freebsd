@@ -558,6 +558,23 @@ diff -rcN tftp-hpa-5.2.orig/tftpd/tftpd.c tftp-hpa-5.2/tftpd/tftpd.c
   
   #ifdef HAVE_TCPWRAPPERS
 ***************
+*** 950,956 ****
+                   RQ_CLIENT_SIN, &from, RQ_SERVER_SIN, &myaddr, 0);
+      sock_methods(&wrap_request);
+  
+!     tmp_p = (char *)inet_ntop(myaddr.sa.sa_family, SOCKADDR_P(&myaddr),
+                                tmpbuf, INET6_ADDRSTRLEN);
+      if (!tmp_p) {
+          tmp_p = tmpbuf;
+--- 1084,1090 ----
+                   RQ_CLIENT_SIN, &from, RQ_SERVER_SIN, &myaddr, 0);
+      sock_methods(&wrap_request);
+  
+!     tmp_p = (char *)inet_ntop(from.sa.sa_family, SOCKADDR_P(&from),
+                                tmpbuf, INET6_ADDRSTRLEN);
+      if (!tmp_p) {
+          tmp_p = tmpbuf;
+***************
 *** 1119,1141 ****
                   exit(0);
               }
