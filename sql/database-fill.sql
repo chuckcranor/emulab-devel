@@ -1005,6 +1005,7 @@ REPLACE INTO table_regex VALUES ('experiments','noidleswap_reason','text','redir
 REPLACE INTO table_regex VALUES ('experiments','autoswap','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('experiments','autoswap_timeout','int','redirect','default:int',1,2147483647,NULL);
 REPLACE INTO table_regex VALUES ('experiments','savedisk','int','redirect','default:boolean',0,0,NULL);
+REPLACE INTO table_regex VALUES ('experiments','lockdown','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('experiments','cpu_usage','int','redirect','default:tinyint',0,5,NULL);
 REPLACE INTO table_regex VALUES ('experiments','mem_usage','int','redirect','default:tinyint',0,5,NULL);
 REPLACE INTO table_regex VALUES ('experiments','batchmode','int','redirect','default:boolean',0,0,NULL);
