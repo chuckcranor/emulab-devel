@@ -1,7 +1,7 @@
-# $FreeBSD: releng/10.2/etc/master.passwd 256366 2013-10-12 06:08:18Z rpaulo $
+# $FreeBSD: releng/10.3/etc/master.passwd 256366 2013-10-12 06:08:18Z rpaulo $
 #
 root:*:0:0::0:0:Charlie &:/root:/bin/csh
-toor:*:0:0::0:0:Chaplin &:/root:/bin/csh
+toor:*:0:0::0:0:Bourne-again Superuser:/root:/bin/sh
 daemon:*:1:1::0:0:Owner of many system processes:/root:/usr/sbin/nologin
 operator:*:2:5::0:0:System &:/:/usr/sbin/nologin
 bin:*:3:7::0:0:Binaries Commands and Source:/:/usr/sbin/nologin

@@ -1,6 +1,6 @@
-# $FreeBSD: releng/10.2/etc/group 256366 2013-10-12 06:08:18Z rpaulo $
+# $FreeBSD: releng/10.3/etc/group 256366 2013-10-12 06:08:18Z rpaulo $
 #
-wheel:*:0:root,toor
+wheel:*:0:root
 daemon:*:1:
 kmem:*:2:
 sys:*:3:
