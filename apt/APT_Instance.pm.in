@@ -1293,7 +1293,8 @@ sub ApplyExtensionPolicies($)
 	    $message .= "Extensions have been ${which}.\n";
 	}
 	if ($limit != $current_limit) {
-	    my $which = ($limit ? "limited to $limit days" :
+	    my $which = ($limit ?
+			 "limited to " .  HoursToEnglish($limit) :
 			 "set to unlimited");
 	    $message .= "Extensions have been ${which}.\n";
 	    if ($limit && $admin_after_limit) {
