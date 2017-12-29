@@ -450,20 +450,6 @@ class Experiment
     #
     # Flip lockdown bit.
     #
-    function SetLockDown($mode) {
-	$idx      = $this->idx();
-	$mode     = ($mode ? 1 : 0);
-
-	$query_result =
-	    DBQueryFatal("update experiments set lockdown='$mode' ".
-			 "where idx='$idx'");
-
-	return 0;
-    }
-
-    #
-    # Flip lockdown bit.
-    #
     function SetSkipVlans($mode) {
 	$idx      = $this->idx();
 	$mode     = ($mode ? 1 : 0);
@@ -1080,17 +1066,6 @@ class Experiment
                       <td class=\"left\">$lastswapreq</td>
                   </tr>\n";
 	    }
-
-            if (ISADMIN()) {
-                $lockflip = ($lockdown ? 0 : 1);
-                $lockval  = ($lockdown ? "Yes" : "No");
-                echo "<tr>
-                   <td>Locked Down:</td>
-                   <td>$lockval (<a href='toggle.php?pid=$pid&eid=$eid".
-		       "&type=lockdown&value=$lockflip'>Toggle</a>)
-                   </td>
-                  </tr>\n";
-            }
 
 	    if (ISADMIN() || STUDLY() || OPSGUY()) {
 		$thisflip = ($skipvlans ? 0 : 1);

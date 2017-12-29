@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -143,6 +143,27 @@ function SPITFORM($experiment, $formfields, $errors)
                       </td>
                       <td>
 	                   Idle Ignore
+                      </td>
+                  </tr>\n";
+
+        #
+        # Lockdown
+        #
+	echo "    <tr>
+  	              <td>
+                           <input type=checkbox
+                                  name='formfields[lockdown]'
+                                  value=1";
+
+	if (isset($formfields["lockdown"]) &&
+	    strcmp($formfields["lockdown"], "1") == 0) {
+	    echo " checked='1'";
+	}
+
+	echo ">
+                      </td>
+                      <td>
+	                   Lockdown
                       </td>
                   </tr>\n";
 
@@ -346,6 +367,7 @@ function SPITFORM($experiment, $formfields, $errors)
 #
 $defaults                      = array();
 $defaults["description"]       = $experiment->description();
+$defaults["lockdown"]          = $experiment->lockdown();
 $defaults["idle_ignore"]       = $experiment->idle_ignore();
 $defaults["batchmode"]         = $experiment->batchmode();
 $defaults["swappable"]         = $experiment->swappable();
@@ -397,6 +419,13 @@ if ($isadmin) {			# A couple of admin-only options.
 	 strcmp($formfields["idle_ignore"], "1")) ? 0 : 1;
     if ($formfields["idle_ignore"] != $experiment->idle_ignore()) {
 	$args["idle_ignore"] = $formfields["idle_ignore"];
+    }
+
+    $formfields["lockdown"] = 
+	(!isset($formfields["lockdown"]) ||
+	 strcmp($formfields["lockdown"], "1")) ? 0 : 1;
+    if ($formfields["lockdown"] != $experiment->lockdown()) {
+	$args["lockdown"] = $formfields["lockdown"];
     }
 
     $formfields["swappable"] = (!isset($formfields["swappable"]) ||

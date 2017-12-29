@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -188,17 +188,6 @@ elseif ($type == "widearearoot") {
     }
     $zapurl = CreateURL("showuser", $target_user);
     $target_user->SetWideAreaRoot($value);
-}
-elseif ($type == "lockdown") {
-    # must be admin
-    if (! $isadmin) {
-	USERERROR("You do not have permission to toggle $type!", 1);
-    }
-    if (! ($experiment = Experiment::LookupByPidEid($pid, $eid))) {
-	PAGEARGERROR("Experiment $pid/$eid is not a valid experiment!");
-    }
-    $zapurl = CreateURL("showexp", $experiment);
-    $experiment->SetLockDown($value);
 }
 elseif ($type == "skipvlans") {
     # Must validate the pid,eid since we allow non-admins to do this.

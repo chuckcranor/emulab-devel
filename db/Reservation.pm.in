@@ -59,24 +59,24 @@ sub FlushAll($)
 sub CreateCommon($$$$$$$$)
 {
     my ($class, $pid, $eid, $uid, $start, $end, $type, $nodes) = @_;
-
+    my $uid_idx;
     my $project;
     
     if( defined( $pid ) ) {
 	$project = Project->Lookup( $pid );
 	if( !defined( $project ) ) {
+	    print STDERR "Res->CreateCommon: no DB record for project: $pid\n";
 	    return undef;
 	}
     }
 
-    my $user;
     if( defined( $uid ) ) {
-	$user = User->Lookup( $uid );
-    } else {
-	$user = User->ThisUser();
-    }
-    if( !defined( $user ) ) {
-	return undef;
+	my $user = User->Lookup( $uid );
+	if (!defined($user)) {
+	    print STDERR "Res->CreateCommon: no DB record for user: $uid\n";
+	    return undef;
+	}
+	$uid_idx = $user->uid_idx();
     }
     
     my $self               = {};
@@ -87,8 +87,8 @@ sub CreateCommon($$$$$$$$)
     $self->{'END'}         = $end;
     $self->{'TYPE'}        = $type;
     $self->{'NODES'}       = $nodes;
-    $self->{'UID'}         = $user->uid();
-    $self->{'UID_IDX'}     = $user->uid_idx();
+    $self->{'UID'}         = $uid,
+    $self->{'UID_IDX'}     = $uid_idx,
     $self->{'NOTES'}       = undef;
     $self->{'ADMIN_NOTES'} = undef;
     $self->{'APPROVED'}    = undef;
@@ -350,12 +350,17 @@ sub GetVersion($)
 # possibly invalidating the checks already made, and the entire operation
 # must be retried from the beginning.  Otherwise, the caller is free
 # to proceed with the updates and then complete with EndTransaction().
-sub BeginTransaction($$)
+sub BeginTransaction($$;@)
 {
-    my ($self, $old_version) = @_;
-    
+    my ($self, $old_version, @tables) = @_;
+    my $moretables = "";
+
+    if (@tables) {
+	@tables = join(", ", map {"$_ write"} @tables);
+	$moretables = ", @tables";
+    }
     DBQueryFatal( "LOCK TABLES future_reservations WRITE, " .
-		  "reservation_version WRITE" );
+		  "reservation_version WRITE $moretables" );
     
     my $version = GetVersion( $self );
 
@@ -551,21 +556,29 @@ sub LookupAll($$;$)
     return $cache{$type} if( exists( $cache{$type} ) );
 
     Tidy( $class );
+
+    # Mysql 5.7 group by nonsense. Revisit later, like when hell freezes. 
+    DBQueryWarn("SET SESSION sql_mode=(SELECT REPLACE(\@\@sql_mode,".
+		"'ONLY_FULL_GROUP_BY',''))");
     
     my @reservations = ();
 
     my $query = $PGENISUPPORT ? "SELECT COUNT(*), e.pid, e.eid, " .
 				"e.expt_swap_uid, " .
-				"UNIX_TIMESTAMP( e.expt_swapped ) + " .
+				"UNIX_TIMESTAMP( stats.swapin_last ) + " .
 				"e.autoswap_timeout * 60, e.autoswap, " .
 				"nr.pid, UNIX_TIMESTAMP( s.expires ), " .
-				"s.lockdown, n.reserved_pid, " .
-				"UNIX_TIMESTAMP( pr.end ) " .
+				"s.lockdown as slice_lockdown, ".
+				"n.reserved_pid, " .
+				"UNIX_TIMESTAMP( pr.end ), ".
+				"e.lockdown, e.swappable " .
 				"FROM nodes AS n " .
 				"LEFT OUTER JOIN " .
 				"reserved AS r ON n.node_id=r.node_id " .
 				"LEFT OUTER JOIN experiments AS e ON " .
-				"r.pid=e.pid AND r.eid=e.eid LEFT " .
+				"r.pid=e.pid AND r.eid=e.eid " .
+				"LEFT OUTER JOIN experiment_stats AS stats ON ".
+				"r.pid=stats.pid AND r.eid=stats.eid LEFT " .
 				"OUTER JOIN next_reserve AS nr ON " .
 				"n.node_id=nr.node_id LEFT OUTER JOIN " .
 				"project_reservations AS pr ON " .
@@ -579,16 +592,19 @@ sub LookupAll($$;$)
 				"UNIX_TIMESTAMP( pr.end )" :
 				"SELECT COUNT(*), e.pid, e.eid, " .
 				"e.expt_swap_uid, " .
-				"UNIX_TIMESTAMP( e.expt_swapped ) + " .
+				"UNIX_TIMESTAMP( stats.swapin_last ) + " .
 				"e.autoswap_timeout * 60, e.autoswap, " .
 				"nr.pid, NULL, " .
 				"NULL, n.reserved_pid, " .
-				"UNIX_TIMESTAMP( pr.end ) " .
+				"UNIX_TIMESTAMP( pr.end ), " .
+				"e.lockdown, e.swappable " .
 				"FROM nodes AS n " .
 				"LEFT OUTER JOIN " .
 				"reserved AS r ON n.node_id=r.node_id " .
 				"LEFT OUTER JOIN experiments AS e ON " .
-				"r.pid=e.pid AND r.eid=e.eid LEFT " .
+				"r.pid=e.pid AND r.eid=e.eid " .
+				"LEFT OUTER JOIN experiment_stats AS stats ON ".
+				"r.pid=stats.pid AND r.eid=stats.eid LEFT " .
 				"OUTER JOIN next_reserve AS nr ON " .
 				"n.node_id=nr.node_id " .
 				"LEFT OUTER JOIN " .
@@ -601,10 +617,11 @@ sub LookupAll($$;$)
     my $query_result = DBQueryWarn( $query );
     
     while( my($count, $pid, $eid, $uid, $end, $autoswap, $next_reserve,
-	      $slice_expire, $slice_lockdown, $reserved_pid, $pr_end ) =
+	      $slice_expire, $slice_lockdown, $reserved_pid, $pr_end,
+	      $expt_lockdown, $swappable) =
 	   $query_result->fetchrow_array() ) {
 	my $endtime;
-	
+
 	if( defined( $slice_expire ) ) {
 	    # Node(s) allocated to a GENI slice.  Treat as unavailable
 	    # if locked down, otherwise assume released at slice expiry
@@ -613,7 +630,8 @@ sub LookupAll($$;$)
 	} else {
 	    # A non-GENI slice.  Use the computed autoswap duration,
 	    # if autoswap is enabled.
-	    $endtime = $autoswap ? $end : undef;
+	    $endtime = ($expt_lockdown || !$swappable ? undef :
+			$autoswap ? $end : undef);
 	}
 
 	# If next_reserve is set, assume unavailable indefinitely.
@@ -1193,6 +1211,60 @@ sub ExtendSlice($$$;$$$) {
 }
 
 #
+# This is identical to above, but for experiment autoswap.
+#
+sub AutoSwapTimeout($$$;$$$) {
+
+    my ($class, $expt, $minutes, $error, $impotent, $force) = @_;
+
+    if( $minutes <= $expt->autoswap_timeout()) {
+	if( $impotent ) {
+	    return 0;
+	} else {
+	    my $result = $expt->SetAutoswapTimeout($minutes);
+
+	    if( $result < 0 && ref( $error ) ) {
+		$$error = "Couldn't update experiment autoswap_timeout";
+	    }
+
+	    return $result;
+	}
+    }
+    my @types = ExptTypes( $expt->idx() );
+    
+    while( 1 ) {
+	my $version = GetVersion( $class );
+	foreach my $type ( @types ) {
+	    my $reservations = LookupAll( $class, $type );
+	    foreach my $res ( @$reservations ) {
+		if( defined( $res->pid() ) && defined( $res->eid() ) &&
+		    $res->pid() eq $expt->pid() &&
+		    $res->eid() eq $expt->eid() ) {
+		    $res->{'END'} = time() + ($minutes * 60);
+		    last;
+		}
+	    }
+	    if( !$force && !IsFeasible( $class, $reservations, $error ) ) {
+		return -1;
+	    }
+	}
+	return 0
+	    if( $impotent );
+	next if( !defined( BeginTransaction( $class, $version, "experiments")));
+
+	my $result = $expt->SetAutoswapTimeout($minutes);
+
+	if( $result < 0 && ref( $error ) ) {
+	    $$error = "Couldn't update experiment autoswap_timeout";
+	}
+	
+	EndTransaction( $class );
+	
+	return $result;
+    }
+}
+
+#
 # Estimate an upper bound for permissible expiry times on a slice.
 #
 # Reservation->MaxSliceExtension( $slice, $max, $error, $granularity )
@@ -1259,11 +1331,11 @@ sub MaxSliceExtension($$$;$$) {
 }
 
 #
-# Attempt to lock down an existing slice.
+# Attempt to lock down an existing slice or experiment.
 #
-# Reservation->Lockdown( $slice, $error, $impotent, $force )
+# Reservation->Lockdown( $target, $error, $impotent, $force )
 #
-# $slice must be a reference to a GeniSlice object.
+# $target must be a reference to a GeniSlice object or Experiment object.
 # $error (if defined) is a reference to a scalar; if defined and lockdown is
 # not possible, a reason will be given here.
 # $impotent (if defined and true) will attempt a hypothetical lockdown and
@@ -1272,16 +1344,92 @@ sub MaxSliceExtension($$$;$$) {
 # admission control constraints.
 sub Lockdown($$;$$$) {
 
-    my ($class, $slice, $error, $impotent, $force) = @_;
-
-    # It's always a successful no-op if already locked down.
-    return 0 if( $slice->lockdown() );
-
-    my $exptidx = $slice->exptidx();
-    my $expt = Experiment->Lookup( $exptidx );
-	
-    my @types = ExptTypes( $exptidx );
+    my ($class, $target, $error, $impotent, $force) = @_;
+    my $expt;
     
+    # It's always a successful no-op if already locked down.
+    if (ref($target) eq "GeniSlice") {
+	return 0 if( $target->lockdown() );
+	$expt = Experiment->Lookup( $target->exptidx() );
+	return -1
+	    if (!defined($expt));
+    }
+    elsif (ref($target) eq "Experiment") {
+	return 0 if( $target->lockdown() );
+	$expt = $target;
+    }
+    else {
+	$$error = "Do not know how to lockdown $target" if (defined($error));
+	return -1;
+    }
+
+    my $coderef = sub {
+	my ($error) = @_;
+	my $result;
+	
+	if (ref($target) eq "GeniSlice") {
+	    $result = $target->SetLockdown( 0 );
+	}
+	else {
+	    $result = $target->LockDown( 1 );
+	}
+	if( $result < 0 && ref( $error ) ) {
+	    $$error = "Couldn't update slice or experiment lockdown";
+	}
+	return $result;
+    };
+    return LockdownAux($class, $expt, $coderef, $error, $impotent, $force);
+}
+
+#
+# Ditto swappable and autoswap. We can use the same support function below.
+#
+sub DisableSwapping($$;$$$)
+{
+    my ($class, $experiment, $error, $impotent, $force) = @_;
+
+    my $coderef = sub {
+	my ($error) = @_;
+	my $result;
+
+	$result = $experiment->SetSwappable(0);
+
+	if( $result < 0 && ref( $error ) ) {
+	    $$error = "Couldn't update swappable";
+	}
+	return $result;
+    };
+    return LockdownAux($class, $experiment,
+		       $coderef, $error, $impotent, $force);
+}
+sub DisableAutoSwap($$;$$$)
+{
+    my ($class, $experiment, $error, $impotent, $force) = @_;
+
+    my $coderef = sub {
+	my ($error) = @_;
+	my $result;
+
+	$result = $experiment->SetAutoswap(0);
+
+	if( $result < 0 && ref( $error ) ) {
+	    $$error = "Couldn't update autoswap";
+	}
+	return $result;
+    };
+    return LockdownAux($class, $experiment,
+		       $coderef, $error, $impotent, $force);
+}
+
+#
+# Support for above.
+#
+sub LockdownAux($$$$$$)
+{
+    my ($class, $expt, $coderef, $error, $impotent, $force) = @_;
+    my $exptidx = $expt->idx();
+    my @types = ExptTypes( $exptidx );
+
     while( 1 ) {
 	my $version = GetVersion( $class );
 	foreach my $type ( @types ) {
@@ -1300,13 +1448,9 @@ sub Lockdown($$;$$$) {
 	}
 	return 0
 	    if( $impotent );
-	next if( !defined( BeginTransaction( $class, $version ) ) );
+	next if (!defined(BeginTransaction($class, $version, "experiments")));
 
-	my $result = $slice->SetLockdown( 0 );
-
-	if( $result < 0 && ref( $error ) ) {
-	    $$error = "Couldn't update slice lockdown";
-	}
+	my $result = &$coderef($error);
 	
 	EndTransaction( $class );
 	
@@ -1318,8 +1462,15 @@ sub ExpectedEnd($$) {
     
     my ($class, $experiment) = @_;
 
-    if( $experiment->autoswap() ) {
-	return time() + $experiment->autoswap_timeout * 60;
+    if ($experiment->lockdown() || !$experiment->swappable()) {
+	return undef;
+    } elsif( $experiment->autoswap() ) {
+	if ($experiment->state() eq EXPTSTATE_SWAPPED() ||
+	    $experiment->state() eq EXPTSTATE_ACTIVATING()) {
+	    return time() + ($experiment->autoswap_timeout * 60);
+	}
+	return str2time($experiment->swapin_last()) +
+	    ($experiment->autoswap_timeout * 60);
     } elsif( defined( $experiment->expt_expires() ) ) {
 	return str2time( $experiment->expt_expires() );
     } else {

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,9 +43,10 @@ my $verify  = 0;	# Check data and return status only.
 #
 # Configure variables
 #
-my $TB		= "@prefix@";
-my $TBOPS       = "@TBOPSEMAIL@";
-my $TBAUDIT	= "@TBAUDITEMAIL@";
+my $TB		   = "@prefix@";
+my $TBOPS          = "@TBOPSEMAIL@";
+my $TBAUDIT	   = "@TBAUDITEMAIL@";
+my $MANAGESETTINGS = "$TB/sbin/manage_expsettings";
 
 #
 # Untaint the path
@@ -63,6 +64,7 @@ $| = 1;
 #
 use lib "@prefix@/lib";
 use libdb;
+use emutil;
 use libtestbed;
 use User;
 use Project;
@@ -153,6 +155,7 @@ my %xmlfields =
      # The rest are optional, so we can skip passing ones that are not changing
      "description"	=> ["description",	$SLOT_OPTIONAL],
      "idle_ignore"	=> ["idle_ignore",	$SLOT_OPTIONAL],
+     "lockdown"	        => ["lockdown",		$SLOT_OPTIONAL],
      "swappable"	=> ["swappable",	$SLOT_OPTIONAL],
      "noswap_reason"	=> ["noswap_reason",	$SLOT_OPTIONAL],
      "idleswap"		=> ["idleswap",		$SLOT_OPTIONAL],
@@ -304,6 +307,8 @@ if (!defined($experiment)) {
 if (!$experiment->AccessCheck($this_user, TB_EXPT_MODIFY())) {
     UserError("Experiment: Not enough permission");
 }
+my $pid = $experiment->pid();
+my $eid = $experiment->eid();
 
 #
 # Description must not be blank.
@@ -331,31 +336,123 @@ if (exists($editexp_args{"idle_ignore"})) {
 }
 
 #
+# Lockdown
+#
+if (exists($editexp_args{"lockdown"})) {
+    my $requested = ($editexp_args{"lockdown"} eq "1" ? 1 : 0);
+    
+    if ($requested != $experiment->lockdown()) {
+	if ($editexp_args{"lockdown"} eq "1" && !$this_user->IsAdmin()) {
+	    UserError("lockdown: Only Administrators can lockdown experiments");
+	}
+	#
+	# New path; have to deal with this via the reservation system.
+	#
+	my $which  = ($requested ? "set" : "clear");
+	my $output = emutil::ExecQuiet("$MANAGESETTINGS ".
+				       "lockdown $pid,$eid $which");
+	if ($?) {
+	    my $rval = $? >> 8;
+	    if ($rval == 1) {
+		UserError("lockdown: locking down this experiment would ".
+			  "cause a reservation system overbook situation");
+	    }
+	    else {
+		print STDERR $output;
+		fatal($output);
+	    }
+	}
+    }
+    delete($editexp_args{"lockdown"});
+}
+
+#
 # Swappable
 #
 if (exists($editexp_args{"swappable"})) {
-    if ($editexp_args{"swappable"} ne "1") {
-	$editexp_args{"swappable"} = 0;
-
-	# Turning off swappable, must provide justification.
-	if ((exists($editexp_args{"noswap_reason"}) ?
-	     $editexp_args{"noswap_reason"} eq "" :
-	     $experiment->noswap_reason() eq "")) {
-	    if (!$this_user->IsAdmin()) {
-		UserError("Swappable: No justification provided");
+    my $requested = ($editexp_args{"swappable"} eq "0" ? 0 : 1);
+    
+    if ($requested != $experiment->swappable()) {
+	if ($requested == 0 && !$this_user->IsAdmin()) {
+	    UserError("swappable: Only Administrators can turn off swappable");
+	}
+	#
+	# New path; have to deal with this via the reservation system.
+	#
+	my $which  = ($requested ? "set" : "clear");
+	my $output = emutil::ExecQuiet("$MANAGESETTINGS ".
+				       "swappable $pid,$eid $which");
+	if ($?) {
+	    my $rval = $? >> 8;
+	    if ($rval == 1) {
+		UserError("swappable: disabling swappable would ".
+			  "cause a reservation system overbook situation");
 	    }
 	    else {
-		$editexp_args{"noswap_reason"} = "ADMIN";
+		print STDERR $output;
+		fatal($output);
 	    }
 	}
-	if ($experiment->swappable()) {
-	    $doemail = 1;
+    }
+    delete($editexp_args{"swappable"});
+}
+
+#
+# AutoSwap
+#
+my $autoswap_max = TBGetSiteVar("general/autoswap_max");
+if (exists($editexp_args{"autoswap"}) ||
+    exists($editexp_args{"autoswap_timeout"})) {
+    my $hours;
+    my $which;
+
+    if (exists($editexp_args{"autoswap"})) {
+	my $requested = ($editexp_args{"autoswap"} eq "1" ? 1 : 0);
+    
+	if ($requested != $experiment->autoswap()) {
+	    if ($requested == 0 && !$this_user->IsAdmin()) {
+		UserError("Max Duration: ".
+			  "Only Administrators can turn off Max Duration");
+	    }
+	    $which = ($requested ? "set" : "clear");
 	}
     }
-}
-if (exists($editexp_args{"noswap_reason"})) {
-    $editexp_args{"noswap_reason"} = 
-	escapeshellarg($editexp_args{"noswap_reason"});
+    if (exists($editexp_args{"autoswap_timeout"})) {
+	my $requested = $editexp_args{"autoswap_timeout"};
+	
+	if ($requested != $experiment->autoswap_timeout()) {
+	    if ($requested <= 0) {
+		UserError("Max Duration: Invalid time provided");
+	    }
+	    if ($requested > $autoswap_max && !$this_user->IsAdmin()) {
+		UserError("Max Duration: $autoswap_max hours maximum - ".
+			  "you must ask testbed operations for more");
+	    }
+	    $hours = $editexp_args{"autoswap_timeout"};
+	}
+    }
+    if (defined($hours) || defined($which)) {
+	# If only changing the timeout, we still need a set/clear argument.
+	$which = ($experiment->autoswap() ? "set" : "clear")
+	    if (!defined($which));
+	$hours = "" if (!defined($hours));
+	
+	my $output = emutil::ExecQuiet("$MANAGESETTINGS ".
+				       "autoswap $pid,$eid $which $hours");
+	if ($?) {
+	    my $rval = $? >> 8;
+	    if ($rval == 1) {
+		UserError("autoswap: modifying autoswap would ".
+			  "cause a reservation system overbook situation");
+	    }
+	    else {
+		print STDERR $output;
+		fatal($output);
+	    }
+	}
+    }
+    delete($editexp_args{"autoswap"});
+    delete($editexp_args{"autoswap_timeout"});
 }
 
 #
@@ -394,30 +491,6 @@ if (exists($editexp_args{"idleswap"})) {
 if (exists($editexp_args{"noidleswap_reason"})) {
     $editexp_args{"noidleswap_reason"} =
 	escapeshellarg($editexp_args{"noidleswap_reason"});
-}
-
-#
-# AutoSwap
-#
-if (exists($editexp_args{"autoswap"})) {
-    if ($editexp_args{"autoswap"} ne "1") {
-	if (!$this_user->IsAdmin()) {
-	    UserError("Max Duration: ".
-		      "you must ask testbed operations to disable this");
-	}
-	$editexp_args{"autoswap"} = 0;
-    }
-}
-my $autoswap_max = TBGetSiteVar("general/autoswap_max");
-if (exists($editexp_args{"autoswap_timeout"})) {
-    if ($editexp_args{"autoswap_timeout"} <= 0) {
-	UserError("Max Duration: Invalid time provided");
-    }
-    if ($editexp_args{"autoswap_timeout"} > $autoswap_max &&
-	!$this_user->IsAdmin()) {
-	UserError("Max Duration: $autoswap_max hours maximum - ".
-		  "you must ask testbed operations for more");
-    }
 }
 
 #

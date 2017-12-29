@@ -1231,8 +1231,8 @@ sub EditExp($$$$$$)
 	    ($mods{"autoswap_timeout"} = $argref->{"autoswap_timeout"});
     }
 
-    foreach my $col ("idle_ignore", "swappable", "noswap_reason",
-		     "idleswap", "noidleswap_reason", "autoswap", "savedisk",
+    foreach my $col ("idle_ignore", "noswap_reason",
+		     "idleswap", "noidleswap_reason", "savedisk",
 		     "cpu_usage", "mem_usage", "linktest_level") {
 	# Copy args we want so that others can't get through.
 	if (exists($argref->{$col})) {
@@ -1254,7 +1254,6 @@ sub EditExp($$$$$$)
 	    return undef;
 	}
     }
-
     my $creator = $experiment->creator();
     my $swapper = $experiment->swapper();
     my $uid = $user->uid();
@@ -1262,11 +1261,7 @@ sub EditExp($$$$$$)
     my $eid = $experiment->eid();
 
     if (!keys %mods) {
-	if (!$noreport) {
-	    # Warn the user that the submit button was pressed with no effect.
-	    $$usrerr_ref = "Submit: Nothing changed";
-	    return undef;
-	}
+	return 1;
     }
     # Do not send this email if the user is an administrator
     # (adminmode does not matter), and is changing an expt he created
@@ -3235,6 +3230,69 @@ sub SetPanicBit($$)
 	if (!DBQueryWarn("update experiments set ".
 			 "  paniced=$onoff,panic_date=$when ".
 			 "where idx='$idx'"));
+    return 0;
+}
+
+sub SetSwappable($$)
+{
+    my ($self, $arg) = @_;
+
+    my $idx   = $self->idx();
+    my $onoff = ($arg ? 1 : 0);
+    
+    return -1
+	if (!DBQueryWarn("update experiments set ".
+			 "  swappable='$onoff' ".
+			 "where idx='$idx'"));
+
+    $self->{'EXPT'}->{'swappable'} = $onoff;
+    return 0;
+}
+
+sub SetLockdown($$)
+{
+    my ($self, $arg) = @_;
+
+    my $idx   = $self->idx();
+    my $onoff = ($arg ? 1 : 0);
+    
+    return -1
+	if (!DBQueryWarn("update experiments set ".
+			 "  lockdown='$onoff' ".
+			 "where idx='$idx'"));
+
+    $self->{'EXPT'}->{'lockdown'} = $onoff;
+    return 0;
+}
+
+sub SetAutoswap($$)
+{
+    my ($self, $arg) = @_;
+
+    my $idx   = $self->idx();
+    my $onoff = ($arg ? 1 : 0);
+    
+    return -1
+	if (!DBQueryWarn("update experiments set ".
+			 "  autoswap='$onoff' ".
+			 "where idx='$idx'"));
+
+    $self->{'EXPT'}->{'lockdown'} = $onoff;
+    return 0;
+}
+
+sub SetAutoswapTimeout($$)
+{
+    my ($self, $minutes) = @_;
+
+    my $idx   = $self->idx();
+    
+    return -1
+	if (!DBQueryWarn("update experiments set ".
+			 "  autoswap_timeout='$minutes' ".
+			 "where idx='$idx'"));
+
+    $self->{'EXPT'}->{'autoswap_timeout'} = $minutes;
     return 0;
 }
 
