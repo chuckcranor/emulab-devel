@@ -36,7 +36,7 @@ use File::Temp qw(tempfile);
 #
 sub usage()
 {
-    print STDERR "Usage: management_iface -t <type> -a [key|pswd] ";
+    print STDERR "Usage: addmanagementiface -t <type> -a [key|pswd] ";
     print STDERR "[-s <switchinfo>] <node_id> mac IP key_uid key\n";
     print STDERR "       management_iface -r <node_id>\n";
     print STDERR "       management_iface -i <node_id>\n";
@@ -48,12 +48,13 @@ sub usage()
     print STDERR "  -a key   SSH key auth; provide login and key path.\n";
     print STDERR "  -c cable Cable ID\n";
     print STDERR "  -l len   Cable length\n";
+    print STDERR "  -T info  Optional tipline info; server[,tipname]\n";
     print STDERR "  -r       Remove management interface from DB.\n";
     print STDERR "  -i       Display management interface from DB.\n";
     print STDERR "  -n       Do not restart daemons after changing DB.\n";
     exit(-1);
 }
-my $optlist  = "ht:a:rs:nic:l:";
+my $optlist  = "ht:a:rs:nic:l:T:";
 my $debug    = 0;
 my $remove   = 0;
 my $info     = 0;
@@ -63,6 +64,7 @@ my $type;
 my $cable;
 my $cablelen;
 my $switchinfo;
+my $tipinfo;
 
 # Protos
 sub fatal($);
@@ -133,6 +135,9 @@ if (defined($options{'n'})) {
 }
 if (defined($options{'s'})) {
     $switchinfo = $options{'s'};
+}
+if (defined($options{'T'})) {
+    $tipinfo = $options{'T'};
 }
 if (defined($options{'t'})) {
     $type = $options{'t'};
@@ -260,6 +265,17 @@ $node->AddOutlet($type, 0,
 		  "key_uid"   => $ARGV[0],
 		  "key"       => $ARGV[1]}) == 0
     or fatal("Could not add outlet records");
+
+#
+# Optional tipline.
+#
+if (defined($tipinfo)) {
+    my ($server,$tipname) = split(",", $tipinfo);
+    $tipname = $node_id if (!defined($tipname));
+
+    DBQueryFatal("replace into tiplines (tipname, node_id, server) values ".
+		 "('$tipname', '$node_id', '$server')");
+}
 
 #
 # Add the interface, if not there.
