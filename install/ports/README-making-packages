@@ -425,9 +425,10 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
    f. Make sure the package tool is installed. To avoid occasional issues
       with certs, I have found the easiest thing to do is:
 
-      cd /share/freebsd/10.3/packages-64
+      pushd /share/freebsd/10.3/packages-64
       pkg add pkg-*
       pkg add ca_root*
+      popd
 
    g. Make sure port options are correctly set:
 
@@ -465,7 +466,16 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
 
        pkg create -a -o $PACKAGES/All/
 
-   k. Save packages and update tarball and repo. On boss:
+   k. Create the alternate ipmitool package. The Moonshot chassis require
+      an older ipmitool embodied in the emulab-ipmitool-old port. It conflicts
+      with the regular packages so we have to remove that first.
+
+       pkg delete -f ipmitool
+       cd /usr/ports/misc/emulab-ipmitool-old
+       make clean all install
+       make package
+
+   l. Save packages and update tarball and repo. On boss:
 
       cd /share/freebsd/10.3
       mkdir packages
