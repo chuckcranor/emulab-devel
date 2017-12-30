@@ -1,7 +1,7 @@
 # Created by: Dmitry Frolov <frol@nov.net>
 # $FreeBSD: branches/2016Q1/sysutils/ipmitool/Makefile 402946 2015-12-04 12:33:07Z sunpoet $
 
-PORTNAME=	ipmitool-old
+PORTNAME=	emulab-ipmitool-old
 PORTVERSION=	1.8.15
 PORTREVISION=	1
 CATEGORIES=	misc
