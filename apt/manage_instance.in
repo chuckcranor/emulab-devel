@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2094,6 +2094,7 @@ sub DoMaxExtension()
     }
     exit(0);
   bad:
+    print STDERR "$errmsg\n" if (defined($errmsg));
     if (defined($webtask)) {
 	$webtask->output($errmsg) if (defined($errmsg));
 	$webtask->Exited($errcode);
@@ -2125,7 +2126,7 @@ sub DoMaxExtensionInternal($$$)
     }
     my $errcode = CallAggregateMethod("MaxExtension", \$maxinfo, @aggregates);
     if ($errcode) {
-	$errmsg = $maxinfo;
+	$$prval = $maxinfo;
 	goto bad;
     }
     # Process the max extension from each aggregate
