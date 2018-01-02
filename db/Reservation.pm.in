@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2016-2017 University of Utah and the Flux Group.
+# Copyright (c) 2016-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1462,7 +1462,12 @@ sub ExpectedEnd($$) {
     
     my ($class, $experiment) = @_;
 
-    if ($experiment->lockdown() || !$experiment->swappable()) {
+    #
+    # Geni experiments are locked down and not swappable, so we want
+    # to use the expt_expires instead.
+    #
+    if (($experiment->lockdown() || !$experiment->swappable()) &&
+	!$experiment->geniflags()) {
 	return undef;
     } elsif( $experiment->autoswap() ) {
 	if ($experiment->state() eq EXPTSTATE_SWAPPED() ||
