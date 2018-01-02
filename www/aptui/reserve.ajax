@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -739,6 +739,13 @@ function Do_ReservationInfo()
         $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
         if (!$aggregate) {
             SPITAJAX_ERROR(-1, "No such cluster");
+            return;
+        }
+        #
+        # This can be turned off temporarily, say during maintenance. 
+        #
+        if (!$aggregate->reservations()) {
+            SPITAJAX_ERROR(-1, "Reservations are disabled");
             return;
         }
         $urn = $aggregate->urn();
