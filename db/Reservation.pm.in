@@ -578,7 +578,7 @@ sub LookupAll($$;$)
 				"LEFT OUTER JOIN experiments AS e ON " .
 				"r.pid=e.pid AND r.eid=e.eid " .
 				"LEFT OUTER JOIN experiment_stats AS stats ON ".
-				"r.pid=stats.pid AND r.eid=stats.eid LEFT " .
+				"e.idx=stats.exptidx LEFT " .
 				"OUTER JOIN next_reserve AS nr ON " .
 				"n.node_id=nr.node_id LEFT OUTER JOIN " .
 				"project_reservations AS pr ON " .
