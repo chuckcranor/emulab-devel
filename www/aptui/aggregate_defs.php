@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -83,6 +83,7 @@ class Aggregate
     function nickname()	    { return $this->field('nickname'); }
     function abbreviation() { return $this->field('abbreviation'); }
     function weburl()	    { return $this->field('weburl'); }
+    function disabled()     { return $this->field('disabled'); }
     function has_datasets() { return $this->field('has_datasets'); }
     function reservations() { return $this->field('reservations'); }
     function isfederate()   { return $this->field('isfederate'); }

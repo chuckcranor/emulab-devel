@@ -744,7 +744,7 @@ function Do_ReservationInfo()
         #
         # This can be turned off temporarily, say during maintenance. 
         #
-        if (!$aggregate->reservations()) {
+        if ($aggregate->disabled() || !$aggregate->reservations()) {
             SPITAJAX_ERROR(-1, "Reservations are disabled");
             return;
         }
