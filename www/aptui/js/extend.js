@@ -541,8 +541,10 @@ window.ShowExtendModal = (function()
 	    var maxcallback = function(json) {
 		sup.HideModal('#waitwait-modal');
 		if (json.code) {
-		    console.info("Failed to get max extension: " + json.value);
-		    $(modalname).modal('show');
+		    console.info("Failed to get max extension: ", json);
+		    sup.SpitOops("oops", "Unable to contact the cluster(s) " +
+				 "for this experiment, " +
+				 "please try again later.");
 		    return;		    
 		}
 		/*
