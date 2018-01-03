@@ -13,22 +13,25 @@ majmin=${version%.*}
 major=${majmin%%.*}
 minor=${majmin##*.}
 
-opts="-O long_query_time=2 -O max_connections=300 -O key_buffer=32M"
+opts="-O long_query_time=2 --skip-innodb"
+opts="$opts -O max_connections=300 -O key_buffer=32M"
 opts="$opts -O table_cache=256 -O sort_buffer=4M -O record_buffer=1M"
 
-logopt="--log-long-format --log=@prefix@/log/mysql/base --log-slow-queries=@prefix@/log/mysql/slowqueries"
+logopt="--log-long-format --log=@prefix@/log/mysql/base --log-bin=@prefix@/log/mysql/update --log-slow-queries=@prefix@/log/mysql/slowqueries"
 
 if [ $major -eq 5 ]; then
 	safeprog=/usr/local/bin/mysqld_safe
 	if [ $minor -gt 1 ]; then
 	    logopt="--general_log=1 --general_log_file=@prefix@/log/mysql/base"
-	    logopt="$logopt --slow_query_log=1 --slow_query_log_file=@prefix@/log/mysql/slowqueries"
+	    logopt="$logopt --log-bin=@prefix@/log/mysql/update"
+	    logopt="$logopt --slow_query_log=1 --binlog-format=MIXED"
+	    logopt="$logopt --slow_query_log_file=@prefix@/log/mysql/slowqueries"
 
 	    # XXX awkward: no -O, a couple of name changes
 	    opts="--default-storage-engine=MyISAM --long_query_time=2"
-	    opts="$opts --max_connections=300"
-	    opts="$opts --table_open_cache=256"
-	    opts="$opts --read_buffer_size=1M"
+	    opts="$opts --key_buffer_size=32M --table_open_cache=256"
+	    opts="$opts --sort_buffer_size=4M"
+	    opts="$opts --read_buffer_size=1M --max_connections=300"
 	fi
 	# so we can start using innodb tables, maybe with compression.
 	if [ $minor -gt 5 ]; then
@@ -42,9 +45,19 @@ else
 	safeprog=/usr/local/bin/safe_mysqld
 fi
 
-logopt="$logopt --log-bin=@prefix@/log/mysql/update"
-
 case "$1" in
+	#
+	# XXX hack, might need --skip-grant-tables when starting after mysql
+    	# has been upgraded but before mysql_upgrade has been run. In fact,
+    	# you probably won't be able to start mysqld to run mysql_upgrade
+    	# without this!
+    	#
+	upgradestart)
+		if [ -x $safeprog ]; then
+			$safeprog --pid-file=/var/db/mysql/mysqld.pid --user=mysql --skip-grant-tables $opts $logopt > /dev/null 2>&1 &
+			echo -n ' mysqld'
+		fi
+		;;
 	start|faststart|quietstart|onestart|forcestart)
 		if [ -x $safeprog ]; then
 			$safeprog --pid-file=/var/db/mysql/mysqld.pid --user=mysql $opts $logopt > /dev/null 2>&1 &

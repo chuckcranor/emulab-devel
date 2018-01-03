@@ -33,6 +33,12 @@ worth it to avoid a total screw up.
 
 A. Updating the base FreeBSD system with freebsd-update
 
+-1.Things you can do in advance.
+
+   * The "fetch" part of freebsd-update (A2 and A4)
+   * Build any custom kernel (A3)
+   * Stash state about ports/packages (B0)
+
 0. If you are on the boss node, shutdown the testbed and mysqld right off
    the bat. The ports upgrade is going to replace mysql and testbed daemons
    will wig out if running when this happens. On ops, you just need to
@@ -42,6 +48,7 @@ A. Updating the base FreeBSD system with freebsd-update
 
    sudo /usr/testbed/sbin/testbed-control shutdown
    sudo /usr/local/etc/rc.d/2.mysql-server.sh stop
+   sudo /usr/local/etc/rc.d/capture stop
 
    ops:
    sudo /usr/local/etc/rc.d/1.mysql-server.sh stop
@@ -87,9 +94,10 @@ A. Updating the base FreeBSD system with freebsd-update
    # XXX you are supposed to "buildworld" before "buildkernel", but I don't
    cd src
    sudo make -j 8 buildkernel KERNCONF=CUSTOM
-   sudo make installkernel KERNCONF=CUSTOM
 
-   # you can reboot here if you are extra paranoid
+   # XXX I wait to install the custom kernel til after doing the
+   # freebsd-update, since it will want to patch /boot/kernel files...
+   #sudo make installkernel KERNCONF=CUSTOM
 
 4. Now upgrade the base system:
 
@@ -100,14 +108,27 @@ A. Updating the base FreeBSD system with freebsd-update
      sudo -E EDITOR=emacs freebsd-update -r 10.3-RELEASE upgrade
 
    It will crunch for a long time and then probably want you to merge
-   some conflicts. It will show you a long, long list of files that it
-   will be adding, deleting, etc. You can 'q' out of those.
+   some conflicts. Here are a couple to take note of:
+
+     * /etc/ssh/sshd_config: make sure Protocol does not include 1,
+       otherwise it will spit out constant warnings to the console.
+
+     * /etc/ttys: for Xen VMs make sure the getty on ttyu0 is "off"
+       and not "onifconsole". Otherwise you will have competing gettys
+       on /dev/console.
+   
+   It will then show you a long, long list of files that it will be adding,
+   deleting, etc. You can 'q' out of those.
 
 5. Install the new system binaries/libraries/etc:
 
     sudo /usr/sbin/freebsd-update install
 
-   After a while it will want you to reboot the new kernel.
+   After a while it will want you to reboot the new kernel. Before you reboot,
+   install any custom kernel:
+
+   cd /usr/src
+   sudo make installkernel KERNCONF=CUSTOM
 
    NOTE: I have noticed a couple of times on VM-based elabinelab boss/ops
    upgrades that the root filesystem has some issues after the upgrade,
@@ -122,7 +143,20 @@ A. Updating the base FreeBSD system with freebsd-update
    fsck -y /
    reboot
 
-   When it comes back up, you should again run freebsd-update to finish:
+   NOTE: when rebooting boss, mysqlcheck might take awhile when rebooting.
+
+   When it comes back up, you should login and shutdown services that
+   restarted:
+
+   boss:
+
+   sudo /usr/local/etc/rc.d/2.mysql-server.sh stop
+   sudo /usr/local/etc/rc.d/capture stop
+
+   ops:
+   sudo /usr/local/etc/rc.d/1.mysql-server.sh stop
+
+   and then again run freebsd-update to finish:
 
     sudo /usr/sbin/freebsd-update install
 
@@ -274,7 +308,8 @@ EOF
       sudo /usr/local/etc/rc.d/2.mysql-server.sh start
 
       # on ops
-      sudo /usr/local/etc/rc.d/1.mysql-server.sh start
+      # XXX note the "upgradestart" command!
+      sudo /usr/local/etc/rc.d/1.mysql-server.sh upgradestart
       sleep 2
       sudo mysql_upgrade -p`cat /usr/testbed/etc/mysqld.pwd`
       sudo /usr/local/etc/rc.d/1.mysql-server.sh stop
@@ -283,27 +318,15 @@ EOF
 
 5. Reinstall local ports.
 
-   Look at boss.pkg.reinstall you created earlier, and use "pkg upgrade"
-   WITHOUT "-r Emulab". Pay attention to what it wants to do. It is important
-   that you not overwrite any of the packages installed from the standard
-   Emulab package set!
+   To find ports that are installed but that are not part of the Emulab
+   repository:
+   
+   pkg query "%t %n-%v %R" `cat boss.pkg.reinstall` |\
+       grep -v Emulab | sort -n
 
-   Note also that due to post 10.2 changes to Emulab, there might be a couple
-   of local ports that we have added to the standard Emulab packages since.
-   In particular:
-
-     gnuplot
-     ipmitool
-     medusa
-     p5-Digest-SHA1
-     pssh
-     rrdtool
-
-   Probably best to run
-
-     pkg info | grep <pkg>
-
-   for each extra port and see if it might already be installed.
+   These will be sorted by install time. You can see ones that are old
+   and attempt to reinstall them with "pkg install". Note that just because
+   they are old that doesn't mean they need to be reinstalled.
 
 C. Repeat steps A and B for ops.
 
@@ -361,6 +384,11 @@ D. Update Emulab software
    sudo /usr/testbed/sbin/testbed-control boot
 
 4. Reboot boss and ops again!
+
+   NOTE: if you reboot ops after boss, you may need to restart all the
+   event schedulers from boss:
+
+   sudo /usr/testbed/sbin/eventsys_start
 
 E. Update the MFSes
 
