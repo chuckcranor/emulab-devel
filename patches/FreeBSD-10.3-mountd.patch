@@ -147,18 +147,42 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  
  struct exportlist *exphead;
  struct mountlist *mlhead;
-@@ -241,6 +288,10 @@
+@@ -241,6 +288,11 @@
  int dolog = 0;
  int got_sighup = 0;
  int xcreated = 0;
 +#ifdef SPLIT_MOUNT
++int forceincremental = 0;
 +int got_sigusr1 = 0;
 +char *tsfile = "/var/run/mountd.ts";
 +#endif
  
  char *svcport_str = NULL;
  static int	mallocd_svcport = 0;
-@@ -467,7 +518,7 @@
+@@ -380,7 +432,7 @@
+ 	else
+ 		close(s);
+ 
+-	while ((c = getopt(argc, argv, "2deh:lnop:rS")) != -1)
++	while ((c = getopt(argc, argv, "2deh:lnop:rSI")) != -1)
+ 		switch (c) {
+ 		case '2':
+ 			force_v2 = 1;
+@@ -435,6 +487,13 @@
+ 		case 'S':
+ 			suspend_nfsd = 1;
+ 			break;
++#ifdef SPLIT_MOUNT
++		case 'I':
++			forceincremental = 1;
++			break;
++#else
++			usage();
++#endif
+ 		default:
+ 			usage();
+ 		};
+@@ -467,7 +526,7 @@
  	openlog("mountd", LOG_PID, LOG_DAEMON);
  	if (debug)
  		warnx("getting export list");
@@ -167,7 +191,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  	if (debug)
  		warnx("getting mount list");
  	get_mountlist();
-@@ -479,6 +530,9 @@
+@@ -479,6 +538,9 @@
  		signal(SIGQUIT, SIG_IGN);
  	}
  	signal(SIGHUP, huphandler);
@@ -177,12 +201,16 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  	signal(SIGTERM, terminate);
  	signal(SIGPIPE, SIG_IGN);
  
-@@ -638,9 +692,15 @@
+@@ -638,9 +700,19 @@
  	/* Expand svc_run() here so that we can call get_exportlist(). */
  	for (;;) {
  		if (got_sighup) {
 -			get_exportlist();
++#ifdef SPLIT_MOUNT
++			get_exportlist(forceincremental);
++#else
 +			get_exportlist(0);
++#endif
  			got_sighup = 0;
  		}
 +#ifdef SPLIT_MOUNT
@@ -194,7 +222,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  		readfds = svc_fdset;
  		switch (select(svc_maxfd + 1, &readfds, NULL, NULL, NULL)) {
  		case -1:
-@@ -1020,6 +1080,9 @@
+@@ -1020,6 +1092,9 @@
  
  	sigemptyset(&sighup_mask);
  	sigaddset(&sighup_mask, SIGHUP);
@@ -204,7 +232,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  	saddr = svc_getrpccaller(transp)->buf;
  	switch (saddr->sa_family) {
  	case AF_INET6:
-@@ -1296,6 +1359,9 @@
+@@ -1296,6 +1371,9 @@
  
  	sigemptyset(&sighup_mask);
  	sigaddset(&sighup_mask, SIGHUP);
@@ -214,7 +242,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  	sigprocmask(SIG_BLOCK, &sighup_mask, NULL);
  	ep = exphead;
  	while (ep) {
-@@ -1404,11 +1470,152 @@
+@@ -1404,11 +1482,152 @@
  int linesize;
  FILE *exp_file;
  
@@ -368,7 +396,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  {
  	struct exportlist *ep, *ep2;
  	struct grouplist *grp, *tgrp;
-@@ -1421,9 +1628,11 @@
+@@ -1421,9 +1640,11 @@
  
  	v4root_phase = 0;
  	dirhead = (struct dirlist *)NULL;
@@ -380,7 +408,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  		cp = line;
  		nextfield(&cp, &endcp);
  		if (*cp == '#')
-@@ -1463,6 +1672,7 @@
+@@ -1463,6 +1684,7 @@
  		len = endcp-cp;
  		tgrp = grp = get_grp();
  		while (len > 0) {
@@ -388,7 +416,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  			if (len > MNTNAMLEN) {
  			    getexp_err(ep, tgrp);
  			    goto nextline;
-@@ -1475,8 +1685,14 @@
+@@ -1475,8 +1697,14 @@
  			    if (debug)
  				warnx("doing opt %s", cp);
  			    got_nondir = 1;
@@ -405,7 +433,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  				getexp_err(ep, tgrp);
  				goto nextline;
  			    }
-@@ -1534,7 +1750,12 @@
+@@ -1534,7 +1762,12 @@
  					 * See if this directory is already
  					 * in the list.
  					 */
@@ -418,7 +446,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  					if (ep == (struct exportlist *)NULL) {
  					    ep = get_exp();
  					    ep->ex_fs = fsb.f_fsid;
-@@ -1576,6 +1797,7 @@
+@@ -1576,6 +1809,7 @@
  				goto nextline;
  			    }
  
@@ -426,7 +454,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  			    /*
  			     * Get the host or netgroup.
  			     */
-@@ -1604,6 +1826,10 @@
+@@ -1604,6 +1838,10 @@
  			    } while (netgrp && getnetgrent(&hst, &usr, &dom));
  			    endnetgrent();
  			    *endcp = savedc;
@@ -437,7 +465,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  			}
  			cp = endcp;
  			nextfield(&cp, &endcp);
-@@ -1654,11 +1880,17 @@
+@@ -1654,11 +1892,17 @@
  		 */
  		grp = tgrp;
  		do {
@@ -457,7 +485,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  		} while (grp->gr_next && (grp = grp->gr_next));
  
  		/*
-@@ -1682,6 +1914,7 @@
+@@ -1682,6 +1926,7 @@
  		/*
  		 * Success. Update the data structures.
  		 */
@@ -465,7 +493,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  		if (has_host) {
  			hang_dirp(dirhead, tgrp, ep, opt_flags);
  			grp->gr_next = grphead;
-@@ -1689,13 +1922,22 @@
+@@ -1689,13 +1934,22 @@
  		} else {
  			hang_dirp(dirhead, (struct grouplist *)NULL, ep,
  				opt_flags);
@@ -488,7 +516,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  			/*
  			 * Insert in the list in alphabetical order.
  			 */
-@@ -1706,8 +1948,15 @@
+@@ -1706,8 +1960,15 @@
  			if (ep2)
  				ep->ex_next = ep2;
  			*epp = ep;
@@ -504,7 +532,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  nextline:
  		v4root_phase = 0;
  		if (dirhead) {
-@@ -1715,75 +1964,63 @@
+@@ -1715,75 +1976,63 @@
  			dirhead = (struct dirlist *)NULL;
  		}
  	}
@@ -617,7 +645,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  
  	if (num > 0) {
  		build_iovec(&iov, &iovlen, "fstype", NULL, 0);
-@@ -1795,7 +2032,10 @@
+@@ -1795,7 +2044,10 @@
  	}
  
  	for (i = 0; i < num; i++) {
@@ -629,7 +657,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  		if (getvfsbyname(fsp->f_fstypename, &vfc) != 0) {
  			syslog(LOG_ERR, "getvfsbyname() failed for %s",
  			    fsp->f_fstypename);
-@@ -1834,6 +2074,7 @@
+@@ -1834,6 +2086,7 @@
  			    "can't delete exports for %s: %m %s",
  			    fsp->f_mntonname, errmsg);
  		}
@@ -637,7 +665,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  	}
  
  	if (iov != NULL) {
-@@ -1848,7 +2089,325 @@
+@@ -1848,7 +2101,326 @@
  		/* free iov, allocated by realloc() */
  		free(iov);
  		iovlen = 0;
@@ -916,6 +944,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
 +	}
 +#endif
 +
++	syslog(LOG_INFO, "Doing %s update\n", incremental ? "incremental" : "full");
 +	TS_GET(tsexport);
 +	if (!incremental && suspend_nfsd != 0) {
 +		TS_GET(suspend);
@@ -963,7 +992,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  
  	/*
  	 * Read in the exports file and build the list, calling
-@@ -1862,7 +2421,7 @@
+@@ -1862,7 +2434,7 @@
  			syslog(LOG_WARNING, "can't open %s", exnames[i]);
  			continue;
  		}
@@ -972,7 +1001,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  		fclose(exp_file);
  		done++;
  	}
-@@ -1871,6 +2430,28 @@
+@@ -1871,6 +2443,28 @@
  		exit(2);
  	}
  
@@ -1001,7 +1030,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  	/*
  	 * If there was no public fh, clear any previous one set.
  	 */
-@@ -1879,6 +2460,87 @@
+@@ -1879,6 +2473,87 @@
  
  	/* Resume the nfsd. If they weren't suspended, this is harmless. */
  	(void)nfssvc(NFSSVC_RESUMENFSD, NULL);
@@ -1089,7 +1118,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  }
  
  /*
-@@ -1954,6 +2616,8 @@
+@@ -1954,6 +2629,8 @@
  {
  	struct dirlist *dp;
  
@@ -1098,7 +1127,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  	dp = (struct dirlist *)malloc(sizeof (struct dirlist) + len);
  	if (dp == (struct dirlist *)NULL)
  		out_of_mem();
-@@ -2376,7 +3040,7 @@
+@@ -2376,7 +3053,7 @@
  			ai->ai_flags |= AI_CANONNAME;
  		}
  		if (debug)
@@ -1107,7 +1136,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  		/*
  		 * Sanity check: make sure we don't already have an entry
  		 * for this host in the grouplist.
-@@ -2467,7 +3131,8 @@
+@@ -2467,7 +3144,8 @@
   */
  int
  do_mount(struct exportlist *ep, struct grouplist *grp, int exflags,
@@ -1117,7 +1146,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  {
  	struct statfs fsb1;
  	struct addrinfo *ai;
-@@ -2481,6 +3146,8 @@
+@@ -2481,6 +3159,8 @@
  	int ret;
  	struct nfsex_args nfsea;
  
@@ -1126,7 +1155,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  	if (run_v4server > 0)
  		eap = &nfsea.export;
  	else
-@@ -2586,7 +3253,34 @@
+@@ -2586,7 +3266,34 @@
  			iov[5].iov_len = strlen(fsb->f_mntfromname) + 1;
  			errmsg[0] = '\0';
  	
@@ -1162,7 +1191,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  				if (cp)
  					*cp-- = savedc;
  				else
-@@ -2692,6 +3386,12 @@
+@@ -2692,6 +3399,12 @@
  		/* free iov, allocated by realloc() */
  		free(iov);
  	}
@@ -1175,7 +1204,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  	return (ret);
  }
  
-@@ -2906,6 +3606,15 @@
+@@ -2906,6 +3619,15 @@
  	struct group *gr;
  	gid_t groups[XU_NGROUPS + 1];
  	int ngroups;
@@ -1191,7 +1220,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  
  	cr->cr_version = XUCRED_VERSION;
  	/*
-@@ -2932,17 +3641,44 @@
+@@ -2932,17 +3654,44 @@
  			syslog(LOG_ERR, "unknown user: %s", name);
  			return;
  		}
@@ -1240,7 +1269,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  		return;
  	}
  	/*
-@@ -3150,6 +3886,7 @@
+@@ -3150,6 +3899,7 @@
  
  /*
   * Check an absolute directory path for any symbolic links. Return true
@@ -1248,7 +1277,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
   */
  int
  check_dirpath(char *dirp)
-@@ -3168,7 +3905,7 @@
+@@ -3168,7 +3918,7 @@
  		}
  		cp++;
  	}
@@ -1257,7 +1286,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  		ret = 0;
  	return (ret);
  }
-@@ -3292,9 +4029,14 @@
+@@ -3292,9 +4042,14 @@
  }
  
  void
@@ -1274,7 +1303,7 @@ diff -Nu mountd.orig/mountd.c mountd/mountd.c
  }
  
  void terminate(int sig __unused)
-@@ -3304,4 +4046,3 @@
+@@ -3304,4 +4059,3 @@
  	rpcb_unset(MOUNTPROG, MOUNTVERS3, NULL);
  	exit (0);
  }
