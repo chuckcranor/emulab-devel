@@ -1126,6 +1126,14 @@ sub DoConsole()
     if (!defined($response)) {
 	fatal("RPC Error calling ConsoleInfo");
     }
+    if ($response->code() == GENIRESPONSE_RPCERROR) {
+	print STDERR "RPC Error; CM may be offline temporarily.\n";
+	if (defined($webtask)) {
+	    $webtask->output($response->output());
+	    $webtask->Exited($response->code());
+	}
+	exit($response->code());
+    }
     if ($response->code() == GENIRESPONSE_UNAVAILABLE) {
 	print STDERR "Server says there is no console for $node_id\n";
 	if (defined($webtask)) {
@@ -1210,6 +1218,7 @@ sub DoConsole()
 sub DoTerminate()
 {
     my $errmsg;
+    my $errcode = -1;
     my $logfile;
     my $expired = $RECORDHISTORY_TERMINATED;
 
@@ -1282,13 +1291,15 @@ sub DoTerminate()
 	my ($sliver) = @_;
 	my $urn = $sliver->aggregate_urn();
 	my $errmsg;
+	my $errcode = -1;
 
 	return 0
 	    if ($sliver->status() eq "terminated");
 
 	my $response = $sliver->Terminate();
 	if (!defined($response)) {
-	    $errmsg = "RPC Error calling Terminate";
+	    $errmsg  = "RPC Error calling Terminate";
+	    $errcode = GENIRESPONSE_RPCERROR();
 	    goto bad;
 	}
 
@@ -1297,17 +1308,17 @@ sub DoTerminate()
 	    $response->code() != GENIRESPONSE_SEARCHFAILED) {
 	    if ($response->code() == GENIRESPONSE_BUSY ||
 		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE) {
-		$errmsg = "Slice was busy for too long; try again later?";
-		goto bad;
+		$errmsg  = "Slice was busy for too long; try again later?";
+		$errcode = $response->code();
 	    }
-	    $errmsg = "Could not delete slice: ". $response->output();
-	    goto bad;
+	    $errmsg  = "Could not delete slice: ". $response->output();
+	    $errcode = $response->code();
 	}
 	$instance->SetStatus("terminated");
 	return 0;
       bad:
 	print STDERR "$urn: $errmsg\n";
-	return -1;
+	return $errcode;
     };
     #print STDERR Dumper($instance);
     
@@ -1328,7 +1339,8 @@ sub DoTerminate()
     #
     foreach my $code (@return_codes) {
 	if ($code) {
-	    $errmsg = "Some slivers would not terminate";
+	    $errmsg  = "Some slivers would not terminate";
+	    $errcode = $code;
 	    goto bad;
 	}
     }
@@ -1345,7 +1357,15 @@ sub DoTerminate()
     print STDERR $errmsg . "\n";
     $instance->SetStatus($old_status);
     $slice->UnLock();
-    if (defined($logfile)) {
+    #
+    # If the error is an RPC error, do not bother to report it, we cannot
+    # do anything about it.
+    #
+    if ($errcode == GENIRESPONSE_RPCERROR() ||
+	$errcode == GENIRESPONSE_SERVER_UNAVAILABLE()) {
+	unlink($logfile) if (defined($logfile));
+    }
+    elsif (defined($logfile)) {
 	my $instance_name = $instance->name();
 	my $slice_uuid    = $slice->uuid();
 	SENDMAIL($TBOPS,
@@ -1357,7 +1377,12 @@ sub DoTerminate()
 	    if (!$silent);
 	unlink($logfile);
     }
-    exit(1);
+    #
+    # Also, mark the instance as canceled so that the apt daemon will
+    # pick it up later (for the case that the instance is not expired)
+    #
+    $instance->MarkCanceled();
+    exit($errcode);
 }
 
 #
