@@ -33,6 +33,10 @@ if [ $major -eq 5 ]; then
 	    opts="$opts --sort_buffer_size=4M"
 	    opts="$opts --read_buffer_size=1M --max_connections=300"
 	fi
+	# so that we can dump tables
+	if [ $minor -gt 4 ]; then
+	    opts="$opts --secure-file-priv="
+	fi
 	# so we can start using innodb tables, maybe with compression.
 	if [ $minor -gt 5 ]; then
 	    opts="$opts --innodb_file_per_table=1 --innodb_file_format=Barracuda"
