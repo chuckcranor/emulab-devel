@@ -316,6 +316,27 @@ EOF
       sleep 2
       sudo /usr/local/etc/rc.d/1.mysql-server.sh start
 
+   It is possible that on the ops node you will have an old password.
+   If you do:
+
+      mysql -u root -p`sudo cat /usr/testbed/etc/mysqld.pwd` mysql
+
+   and it complains about an invalid user, then you will need to:
+     
+      sudo /usr/local/etc/rc.d/1.mysql-server.sh stop
+      sleep 2
+      sudo /usr/local/etc/rc.d/1.mysql-server.sh upgradestart
+      sleep 2
+      # XXX fix up the password info
+      set foo=`sudo cat /usr/testbed/etc/mysqld.pwd`
+      echo \
+        "UPDATE user SET authentication_string=password('$foo') WHERE User='root';" \
+        | mysql mysql
+      sudo /usr/local/etc/rc.d/1.mysql-server.sh stop
+      sleep 2
+      sudo /usr/local/etc/rc.d/1.mysql-server.sh start
+
+
 5. Reinstall local ports.
 
    To find ports that are installed but that are not part of the Emulab
