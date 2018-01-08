@@ -287,9 +287,9 @@ sub TBSCRIPTLOCK_INTERRUPTIBLE(){ 0x40; }
 #                 need to make sure that everyone waits for the one that is
 #		  running to finish. Use the global option for this.
 #
-sub TBScriptLock($;$$$)
+sub TBScriptLock($;$$$$)
 {
-    my ($token, $flags, $waittime, $lockhandle_ref) = @_;
+    my ($token, $flags, $waittime, $lockhandle_ref, $lockfile_msg) = @_;
     local *LOCK;
     my $global = 0;
     my $shared = 0;
@@ -308,6 +308,8 @@ sub TBScriptLock($;$$$)
     $interruptible = 1
 	if (defined($flags) && ($flags & TBSCRIPTLOCK_INTERRUPTIBLE()));
     $lockname = "/var/tmp/testbed_${token}_lockfile";
+    my $lockmsgname = "/var/tmp/testbed_${token}_lockfile_msg";
+    my $lastmsg = "";
 
     my $oldmask = umask(0000);
 
@@ -341,9 +343,22 @@ sub TBScriptLock($;$$$)
 	while (flock(LOCK, $ltype|LOCK_NB) == 0) {
 	    return TBSCRIPTLOCK_WOULDBLOCK()
 		if (defined($flags) && ($flags & TBSCRIPTLOCK_NONBLOCKING()));
-	    
-	    print "Another $token is in progress (${tries}s). Waiting ...\n"
-		if (($tries++ % 60) == 0);
+
+	    local *LOCKMSG;
+	    my $msg = "";
+	    my $rc = open(LOCKMSG,"$lockmsgname");
+	    if (defined($rc)) {
+		my @lines = <LOCKMSG>;
+		close(LOCKMSG);
+		$msg = join('\n',@lines);
+		chomp($msg);
+		$msg = ", ($msg)";
+	    }
+	    if (($tries++ % 60) == 0 || ($lastmsg ne $msg)) {
+		print "Another $token is in progress (${tries}s${msg}).".
+		    " Waiting ...\n";
+		$lastmsg = $msg;
+	    }
 
 	    $waittime--;
 	    if ($waittime == 0) {
@@ -362,6 +377,17 @@ sub TBScriptLock($;$$$)
 	}
 	else {
 	    $lockhandle = *LOCK;
+	}
+	if (defined($lockfile_msg)) {
+	    if (open(LOCKMSG,">$lockmsgname")) {
+		print LOCKMSG "$lockfile_msg\n";
+		LOCKMSG->flush();
+		close(LOCKMSG);
+	    }
+	    else {
+		print STDERR "WARNING: Could not open >$lockmsgname".
+		    " for debugging: $!\n";
+	    }
 	}
 	return TBSCRIPTLOCK_OKAY();
     }

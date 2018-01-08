@@ -129,7 +129,7 @@ my $XM          = "/usr/sbin/xm";
 my $FSCK	= "/sbin/e2fsck";
 my $FSCKUFS	= "/sbin/fsck.ufs";
 my $debug  = 0;
-my $lockdebug = 0;
+my $lockdebug = 1;
 my $sleepdebug = 0;
 
 #
@@ -5805,10 +5805,15 @@ sub RunWithLock($$)
     my ($token, $command) = @_;
     my $lockref;
 
-    if (TBScriptLock($token, undef, 900, \$lockref) != TBSCRIPTLOCK_OKAY()) {
+    TBDebugTimeStamp("grabbing vnode lock $token")
+	if ($lockdebug);
+    if (TBScriptLock($token, undef, 900, \$lockref, $command)
+	!= TBSCRIPTLOCK_OKAY()) {
 	print STDERR "Could not get $token lock after a long time!\n";
 	return -1;
     }
+    TBDebugTimeStamp("  got vnode lock")
+	if ($lockdebug);
     mysystem2($command);
     my $status = $?;
     print "waiting 1 sec after RunWithLock...\n" if ($sleepdebug);
