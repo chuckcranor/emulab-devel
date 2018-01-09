@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -234,7 +234,7 @@ sub HandleSliverStatus($$$$)
 {
     my ($site, $sliver_urn, $instance, $json) = @_;
 
-    print "HandleSliverStatus: $site, $sliver_urn, $instance\n";
+    #print "HandleSliverStatus: $site, $sliver_urn, $instance\n";
 
     if (exists($instance->AggregateHash()->{$site})) {
 	my $sliver = $instance->AggregateHash()->{$site};
@@ -262,7 +262,7 @@ sub HandleSliceStatus($$$)
 {
     my ($site, $instance, $json) = @_;
 
-    print "HandleSliceStatus: $site, $instance\n";
+    #print "HandleSliceStatus: $site, $instance\n";
 
     if (exists($instance->AggregateHash()->{$site})) {
 	my $sliver = $instance->AggregateHash()->{$site};
