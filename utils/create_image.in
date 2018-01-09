@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -931,30 +931,33 @@ elsif (!$doprovenance) {
 # Otherwise, use the new script with different argument syntax.
 #
 else {
-    $command = ($isxenhost && !$isdataset ? "$createxenimage" : "$createimage");
+    my $script = ($isxenhost && !$isdataset ?
+		  "$createxenimage" : "$createimage");
+    my $sopts = "";
+    my $oargs = "";
 
     #
     # XEN Hosts cannot do provenance/delta without client side update.
     # We need to provide these arguments for backwards compat though.
     #
     if ($isxenhost && !$isdataset) {
-	$command .= " $node_id";
+	$oargs .= " $node_id";
 	if ($usefup || $usessh) {
-	    $command .= " -";
+	    $oargs .= " -";
 	} else {
-	    $command .= " $ofilename";
+	    $oargs .= " $ofilename";
 	}
     }
 
     my $id;
     if ($usefup) {
-	$command .= " METHOD=frisbee SERVER=$BOSSIP";
+	$oargs .= " METHOD=frisbee SERVER=$BOSSIP";
 
 	# if the node has a subboss, use that for downloads
 	my $subboss;
 	$node->GetSubboss("frisbee", \$subboss);
 	if (defined($subboss)) {
-	    $command .= " DOWNSERVER=$subboss";
+	    $oargs .= " DOWNSERVER=$subboss";
 	}
 
 	if ($usepath) {
@@ -965,21 +968,35 @@ else {
     } else {
 	$id = $ofilename;
     }
-    $command .= " IMAGENAME=$id";
+
+    #
+    # XXX more backward compat:
+    #
+    # create-xen-image expects the server and image name via options
+    # *unless* a *SIGFILE= argument is given. In that case it invokes
+    # the newer create-versioned-image script where it will use the
+    # SERVER= and IMAGENAME= key-value args. If we don't do this, the
+    # images winds up in the logfile!
+    #
+    if ($isxenhost && !$isdataset && !$srcsigfile && !$dstsigfile) {
+	$sopts = " -S $BOSSIP -F $id";
+    }
+
+    $oargs .= " IMAGENAME=$id";
     if ($srcsigfile) {
 	if (!$usefup) {
-	    $command .= " OLDSIGFILE=$srcsigfile";
+	    $oargs .= " OLDSIGFILE=$srcsigfile";
 	} else {
 	    my $sid = $srcimage->pid() . "/" . $srcimage->imagename() .
 		":" . $srcimage->version();
-	    $command .= " OLDSIGFILE=$sid,sig";
+	    $oargs .= " OLDSIGFILE=$sid,sig";
 	}
     }
     if ($dstsigfile) {
 	if (!$usefup || $usepath) {
-	    $command .= " NEWSIGFILE=$dstsigfile";
+	    $oargs .= " NEWSIGFILE=$dstsigfile";
 	} else {
-	    $command .= " NEWSIGFILE=$id,sig";
+	    $oargs .= " NEWSIGFILE=$id,sig";
 	}
     }
 
@@ -1009,23 +1026,23 @@ else {
 
     if ($isdataset) {
 	# This is not backward compatable, but none of the BS code is.
-	$command .= " BSNAME=$bsname";
+	$oargs .= " BSNAME=$bsname";
     }
     else {
 	$startslice = $image->loadpart();
 	$loadlength = $image->loadlength();
 
 	if ($startslice || $loadlength == 1) {
-	    $command .= " PART=$startslice";
+	    $oargs .= " PART=$startslice";
 	}
 	if (!$isxenhost) {
 	    # The XEN host will figure out what device on its own.
-	    $command .= " DISK=$device";
+	    $oargs .= " DISK=$device";
 	}
     }
 
     if ($zipperopts) {
-	$command .= " IZOPTS=$zipperopts";
+	$oargs .= " IZOPTS=$zipperopts";
     }
 
     #
@@ -1033,6 +1050,8 @@ else {
     # the log info winds up in one logfile.
     #
     $usessh = 1;
+
+    $command = "$script$sopts$oargs";
 }
 
 #
