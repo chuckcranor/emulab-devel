@@ -1577,7 +1577,7 @@ okay:
     elsif (exists($attributes->{'XEN_FORCE_HVM'})
 	&& "$attributes->{'XEN_FORCE_HVM'}" eq '1'
 	&& "$imagemetadata->{'PART'}" eq '0') {
-	$ishvm = 1;
+	$private->{'ishvm'} = $ishvm = 1;
 	undef $image{'kernel'};
 	undef $image{'ramdisk'};
     }
