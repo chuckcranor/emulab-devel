@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -575,10 +575,11 @@ sub DoRefreshInternal($$)
     my $blob = $response->value();
     print Dumper($blob);
     
-    $dataset->Update({"last_used" => TBDateStringLocal($blob->{"lastused"}),
-		      "expires"   => TBDateStringLocal($blob->{"expires"})});
-    $dataset->Update({"updated"   => TBDateStringLocal($blob->{"updated"})})
+    $dataset->Update({"expires"   => TBDateStringLocal($blob->{"expires"})});
+    $dataset->Update({"updated"  => TBDateStringLocal($blob->{"updated"})})
 	if ($blob->{"updated"});
+    $dataset->Update({"last_used" => TBDateStringLocal($blob->{"lastused"})})
+	if ($blob->{"lastused"} && $blob->{"lastused"} ne "");
 
     if ($blob->{"busy"}) {
 	$dataset->Update({"state" => "busy"});
