@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1082,7 +1082,7 @@ class Group
 	$trust_project= TBDB_TRUSTSTRING_PROJROOT;
 
 	$query_result =
-	    DBQueryFatal("select distinct usr_name,u.uid,usr_email ".
+	    DBQueryFatal("select distinct usr_name,u.uid,usr_email,trust ".
 			 "   from users as u ".
 			 "left join group_membership as gm on ".
 			 "     gm.uid_idx=u.uid_idx ".
