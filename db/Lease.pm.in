@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2012-2017 University of Utah and the Flux Group.
+# Copyright (c) 2012-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1488,12 +1488,15 @@ sub SetLastUsedTime($$) {
 	print STDERR "Lease->SetLastUsedTime: Can't set lease last-used time in the future.\n";
 	return LEASE_ERROR_FAILED();
     }
-    if ($ntime < $self->inception()) {
-	$ntime = 0;
+    my $estr;
+    if ($ntime == 0 || $ntime < $self->inception()) {
+	$estr = "DEFAULT(last_used)";
+    } else {
+	$estr = "FROM_UNIXTIME($ntime)";
     }
 
     my $idx = $self->idx();
-    DBQueryWarn("update project_leases set last_used=FROM_UNIXTIME($ntime) where lease_idx=$idx")
+    DBQueryWarn("update project_leases set last_used=$estr where lease_idx=$idx")
 	or return LEASE_ERROR_FAILED();
 
     $self->Refresh();
