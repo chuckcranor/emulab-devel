@@ -309,7 +309,7 @@ sub HandleImageStatus($$$)
 		print STDERR "Could not decode json data: $json\n";
 		return;
 	    }
-	    $instance->UpdateImageStatusNew($hash, $json);
+	    $instance->UpdateImageStatus($hash, $json);
 	}
     }
 }
