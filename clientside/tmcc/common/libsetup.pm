@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -3485,11 +3485,15 @@ sub ixpsetup($)
 # Report startupcmd status back to TMCD. Called by the runstartup
 # script.
 #
-sub startcmdstatus($)
+sub startcmdstatus($;$)
 {
-    my($status) = @_;
+    my($status,$timeout) = @_;
+    my %opthash;
+    if (defined($timeout)) {
+	$opthash{'timeout'} = $timeout;
+    }
 
-    return(tmcc(TMCCCMD_STARTSTAT, "$status"));
+    return(tmcc(TMCCCMD_STARTSTAT, "$status", undef, %opthash));
 }
 
 #

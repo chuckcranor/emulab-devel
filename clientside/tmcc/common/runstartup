@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2010 University of Utah and the Flux Group.
+# Copyright (c) 2000-2010, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -31,6 +31,7 @@ BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
 #
 sub fatal($);
 sub background();
+sub safe_startcmdstatus($;$$);
 
 #
 # Turn off line buffering on output
@@ -150,8 +151,35 @@ print STDOUT "$runcmd returned $stat\n";
 #
 # Use the TMCC to tell the TMCD what the exit status was.
 #
-startcmdstatus($stat);
+safe_startcmdstatus($stat);
 exit(0);
+
+sub safe_startcmdstatus($;$$)
+{
+    my ($stat,$retries,$interval) = @_;
+    if (!defined($retries)) {
+	$retries = -1;
+    }
+    if (!defined($interval)) {
+	$interval = 4;
+    }
+
+    my $tries = 0;
+    my $ret = -1;
+    while ($retries <= 0 || ++$tries <= $retries) {
+	print "*** retrying startcmdstatus($stat) (code $ret)\n"
+	    if ($tries > 1);
+	($ret,) = startcmdstatus($stat,5);
+	if ($ret == 0) {
+	    print "*** succeeded sending startcmdstatus after $tries tries\n"
+		if ($tries > 1);
+	    return 0;
+	}
+	sleep($interval);
+    }
+    print "*** failed to send startcmdstatus after ".($tries-1)." tries!\n";
+    return $ret;
+}
 
 sub fatal($)
 {
@@ -162,7 +190,12 @@ sub fatal($)
     #
     # Use the TMCC to tell the TMCD that we screwed the pooch.
     #
-    startcmdstatus(666);
+    # We do use a retry strategy, but it is limited; we cannot block our
+    # caller indefinitely if we are not in the background.  We will wait
+    # for approximately 8 * (5 + 2) seconds, because
+    # safe_startcmdstatus calls tmcc with timeout 5.
+    #
+    safe_startcmdstatus(666,8,2);
     exit(-1);
 }
 
