@@ -563,7 +563,8 @@ $(function ()
 			isadmin      : isadmin,
 			callback     : ConfigureDone,
 			rspec        : null,
-			multisite    : multisite
+		        multisite    : multisite,
+		        jacksGraphCallback: updateJacksGraph
 		    });
 		    loaded_uuid = selected_uuid;
 		    ppchanged = true; 
@@ -602,7 +603,7 @@ $(function ()
 		    else {
 			$('#stepsContainer-t-1').parent().addClass('error');
 		    }
-		});
+		}, updateJacksGraph);
 		// We do not proceed until the form is submitted
 		// properly. This has a bad side effect; the steps
 		// code assumes this means failure and adds the error
@@ -650,8 +651,9 @@ $(function ()
 	    if (!ispprofile) {
 		if (priorIndex < currentIndex) {
 		    // Generate the profile on the third tab
-		    ShowProfileSelectionInline($('#profile_name .current'),
-			       $('#stepsContainer-p-2 #inline_jacks'), true);
+		    ppstart.ShowThumbnail(selected_rspec, updateJacksGraph);
+		    //ShowProfileSelectionInline($('#profile_name .current'),
+			       //$('#stepsContainer-p-2 #inline_jacks'), true);
 
 		    $(step).steps('next');
 		    $('#stepsContainer-t-1').parent().removeClass('done')
@@ -1449,46 +1451,63 @@ $(function ()
 	return -1;
     }
 
-    function SwitchJacks(which) {
-	if (which == 'small' && $('#stepsContainer-p-2 #inline_jacks').html() == '') {
-			$('#stepsContainer #finalize_container').removeClass('col-lg-12 col-md-12 col-sm-12');
-		$('#stepsContainer #finalize_container').addClass('col-lg-8 col-md-8 col-sm-8');
-			$('#stepsContainer #inline_large_jacks').html('');
-			$('#inline_large_container').addClass('hidden');
-			if (ispprofile) {
-				ppstart.ChangeJacksRoot($('#stepsContainer-p-2 #inline_jacks'), true);
-			}
-			else {
-				ShowProfileSelectionInline($('#profile_name .current'), $('#stepsContainer-p-2 #inline_jacks'), true);
-			}
-			$('#stepsContainer-p-2 #inline_container').removeClass('hidden');
-	}
-	else if (which == 'large') {
-		// Sometimes the steps library will clean up the added elements
-		if ($('#inline_large_container').length === 0) {        
-			$('<div id="inline_large_container" class="hidden"></div>').insertAfter('#stepsContainer .content');
-				$('#inline_large_container').html(''
-					+'<button id="closeLargeInline" type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>'
-					+'<div id="inline_large_jacks"></div>');
-				$('#stepsContainer #inline_large_container').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
+    function SwitchJacks(which)
+    {
+      if (which == 'small')
+      {
+	$('#stepsContainer #finalize_container')
+	  .removeClass('col-lg-12 col-md-12 col-sm-12');
+	$('#stepsContainer #finalize_container')
+	  .addClass('col-lg-8 col-md-8 col-sm-8');
+	$('#stepsContainer #inline_large_jacks').html('');
+	$('#inline_large_container').addClass('hidden');
+	ppstart.ShowThumbnail(selected_rspec, updateJacksGraph);
+			//if (ispprofile) {
+				//ppstart.ChangeJacksRoot($('#stepsContainer-p-2 #inline_jacks'), true);
+			//}
+			//else {
+				//ShowProfileSelectionInline($('#profile_name .current'), $('#stepsContainer-p-2 #inline_jacks'), true);
+			//}
+	$('#stepsContainer-p-2 #inline_container')
+	  .removeClass('hidden');
+      }
+      else if (which == 'large')
+      {
+	// Sometimes the steps library will clean up the added elements
+	if ($('#inline_large_container').length === 0)
+	{        
+	  $('<div id="inline_large_container" class="hidden"></div>')
+	    .insertAfter('#stepsContainer .content');
+	  $('#inline_large_container')
+	    .html(''
+		  +'<button id="closeLargeInline" type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>'
+		  +'<div id="inline_large_jacks"></div>');
+	  $('#stepsContainer #inline_large_container')
+	    .addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
 		
-				$('#closeLargeInline').click(function() {
-					SwitchJacks('small');
-				});
-		}
-
-		$('#stepsContainer #finalize_container').removeClass('col-lg-8 col-md-8 col-sm-8');
-			$('#stepsContainer #finalize_container').addClass('col-lg-12 col-md-12 col-sm-12');
-			$('#stepsContainer-p-2 #inline_jacks').html('');
-			$('#stepsContainer-p-2 #inline_container').addClass('hidden');
-			if (ispprofile) {
-				ppstart.ChangeJacksRoot($('#stepsContainer #inline_large_jacks'), false);
-			}
-			else {
-				ShowProfileSelectionInline($('#profile_name .current'), $('#stepsContainer #inline_large_jacks'), false);
-			}
-			$('#inline_large_container').removeClass('hidden');
+	  $('#closeLargeInline').click(function() {
+	    SwitchJacks('small');
+	  });
 	}
+
+	$('#stepsContainer #finalize_container')
+	  .removeClass('col-lg-8 col-md-8 col-sm-8');
+	$('#stepsContainer #finalize_container')
+	  .addClass('col-lg-12 col-md-12 col-sm-12');
+	//$('#stepsContainer-p-2 #inline_jacks').html('');
+	$('#stepsContainer-p-2 #inline_container')
+	  .addClass('hidden');
+
+	if (ispprofile)
+	{
+	  ppstart.ChangeJacksRoot($('#stepsContainer #inline_large_jacks'), false);
+	}
+	else
+	{
+	  ShowProfileSelectionInline($('#profile_name .current'), $('#stepsContainer #inline_large_jacks'), false);
+	}
+	$('#inline_large_container').removeClass('hidden');
+      }
     }
 
     function resetForm($form) {
@@ -1578,6 +1597,7 @@ $(function ()
 	$xmlthing.done(callback);
     }
 
+
     // Used to generate the topology on Tab 3 of the wizard for non-pp profiles
     function ShowProfileSelectionInline(selectedElement, root, selectionPane) {
 	console.info("ShowProfileSelectionInline: " +
@@ -1586,21 +1606,23 @@ $(function ()
 	var xmlDoc = $.parseXML(selected_rspec);
 	var nodecount  = $(xmlDoc).find("node").length;
 	
-	if (nodecount > 100) {
-	    $('#stepsContainer #inline_overlay').addClass("hidden");
-	    $('#inline_jacks #edit_dialog #edit_container')
-		.addClass("hidden");
-	    return;
-	}
-	else {
+//	if (nodecount > 100) {
+//	    $('#stepsContainer #inline_overlay').addClass("hidden");
+//	    $('#inline_jacks #edit_dialog #edit_container')
+//		.addClass("hidden");
+//	    return;
+//	}
+//	else {
 	    $('#stepsContainer #inline_overlay').removeClass("hidden");
 	    $('#inline_jacks #edit_dialog #edit_container')
 		.removeClass("hidden");
-	}
+//	}
 	editor = new JacksEditor(root, true, true,
 				 selectionPane, true, !multisite);
-	editor.show(selected_rspec);
+      editor.show(selected_rspec);
     }
+
+
 
     function ChangeProfileSelection(selectedElement) {
 	if (!$(selectedElement).hasClass('current')) {
@@ -1821,7 +1843,7 @@ $(function ()
 	}
 
 	var nodecount  = $(xmlDoc).find("node").length;
-	if (nodecount > 100) {
+	if (nodecount > 3000) {
 	    doconstraints = 0;
 	}
 	else {
@@ -1903,7 +1925,7 @@ $(function ()
 		"    <label class='col-sm-4 control-label' name='" + siteid + "' " +
 		"           style='text-align: right;'>Cluster:</a>" +
 		"    </label> " +
-		"    <div class='col-sm-6'>" +
+		"    <div class='col-sm-6 site-selector'>" +
 		"      <select name='where' id='profile_where' " +
 		"              class='form-control select_where'>" +
 		"        <option value=''>Please Select</option>" +
@@ -1912,7 +1934,8 @@ $(function ()
 		"    </div>" +
 		"<div class='col-sm-4'></div>" +
 		"<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This profile <b>will not work on any clusters</b>. Please check your profile or parameters for errors. If you are sure they are correct, you can report the problem to support@cloudlab.us and make sure to link to the problematic profile.</div>" +
-		"<div class='col-sm-6 alert alert-warning' id='where-deprecated' style='display: none; margin-top: 5px; margin-bottom: 5px'></div>" +
+	        "<div class='col-sm-6 alert alert-warning' id='where-deprecated' style='display: none; margin-top: 5px; margin-bottom: 5px'></div>" +
+	        "<div class='col-sm-2 site-wait'><img src='images/spinner.gif' /></div>" +
 		"  </div>" +
 		"</div>";
 	}
@@ -1928,7 +1951,7 @@ $(function ()
 		    "           style='text-align: right;'>"+
 		    "          Site " + siteid  + " Cluster:</a>" +
 		    "    </label> " +
-		    "    <div class='col-sm-6'>" +
+		    "    <div class='col-sm-6 site-selector'>" +
 		    "      <select id='site"+sitenum+"_selector' name=\"sites[" + siteid + "]\"" +
 		    "              class='form-control select_where'>" +
 		    "        <option value=''>Please Select</option>" +
@@ -1938,6 +1961,7 @@ $(function ()
 		    "<div class='col-sm-4'></div>" +
 		    "<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This site <b>will not work on any clusters</b>. All clusters are unselectable.</div>" +
 		    "<div class='col-sm-6 alert alert-warning' id='where-deprecated' style='display: none; margin-top: 5px; margin-bottom: 5px'></div>" +
+	            "<div class='col-sm-2 site-wait'><img src='images/spinner.gif' /></div>" +
 	            "  </div>" +
 		    "</div>";
 		sitenum++;
@@ -1974,6 +1998,8 @@ $(function ()
     }
 
     var constraints;
+    var validList;
+    var jacksGraph;
     var context;
 
     function contextReady(data)
@@ -1987,22 +2013,26 @@ $(function ()
       {
 	delete context.canvasOptions.defaults;
       }
+      
       jacks.instance = new window.Jacks({
 	mode: 'viewer',
 	source: 'rspec',
 	root: '#jacks-dummy',
 	nodeSelect: true,
 	readyCallback: function (input, output) {
-	  jacks.input = input;
-	  jacks.output = output;
-	  jacks.output.on('found-images', onFoundImages);
-	  jacks.output.on('found-types', onFoundTypes);
+	  //jacks.input = input;
+	  //jacks.output = output;
+	  //jacks.output.on('found-images', onFoundImages);
+	  //jacks.output.on('found-types', onFoundTypes);
           constraints = new JACKS_LOADER.Constraints(context);
 	  updateWhere();
 	},
 	canvasOptions: context.canvasOptions,
 	constraints: context.constraints
       });
+      
+      //constraints = new JACKS_LOADER.Constraints(context);
+      //updateWhere();
     }
 
     var foundImages = [];
@@ -2161,6 +2191,22 @@ $(function ()
 	alert('Failed to fetch context from ' + contextUrl + '\n\n' + 'Check your network connection and try again or contact testbed support with this message and the URL of this webpage.');
     }
 
+    function updateJacksGraph(newGraph)
+    {
+      jacksGraph = newGraph;
+      validList = new JACKS_LOADER.ValidList(jacksGraph, constraints);
+      var images = [];
+      _.each(newGraph.nodes, function (node) {
+	if (node.image)
+	{
+	  images = _.union(images, [node.image]);
+	}
+      }.bind(this));
+      onFoundImages(images);
+      console.log('updateJacksGraph');
+      updateWhere();
+    }
+
     function updateWhere()
     {
 	// Temporary
@@ -2173,16 +2219,29 @@ $(function ()
 	}
 	//console.info("updateWhere");
 	
-	if (jacks.input && constraints && selected_rspec)
-	{
-	  jacks.input.trigger('change-topology',
-			      [{ rspec: selected_rspec }],
-			      { constrainedFields: finishUpdateWhere });
-	}
+	//if (jacks.input && constraints && selected_rspec)
+	//{
+	//  jacks.input.trigger('change-topology',
+	//		      [{ rspec: selected_rspec }],
+	//		      { constrainedFields: finishUpdateWhere });
+      //}
+      if (jacksGraph && validList && constraints)
+      {
+	finishUpdateWhere(validList.getNodeCandidates(true),
+			  validList.getNodeCandidatesBySite(true));
+	$('.site-wait').hide();
+	$('.site-selector').show();
+      }
+      else
+      {
+      	$('.site-wait').show();
+	$('.site-selector').hide();
+      }
     }
 
     function finishUpdateWhere(allNodes, nodesBySite)
-    {
+  {
+    console.log('finishUpdateWhere');
 	if (!multisite || Object.keys(sites).length <= 1) {
 	    updateSiteConstraints(allNodes,
 				  $('#cluster_selector .cluster-group'));

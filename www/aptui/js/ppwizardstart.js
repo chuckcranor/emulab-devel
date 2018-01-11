@@ -565,7 +565,7 @@ $(function () {
 	    return root;
 	}
 
-	function HandleSubmit(callback)
+        function HandleSubmit(callback, jacksGraphCallback)
 	{
 	    /*
 	     * If not a registered user, then continue takes them back.
@@ -582,7 +582,7 @@ $(function () {
 	      
 	    // Submit with check only at first, since this will return
 	    // very fast, so no need to throw up a waitwait.
-	    SubmitForm(1, callback);
+	  SubmitForm(1, callback, jacksGraphCallback);
 	}
 
 	//
@@ -600,7 +600,7 @@ $(function () {
 	// Submit the form. If no errors, we get back the rspec. Throw that
 	// up in a Jack editor window. 
 	//
-	function SubmitForm(checkonly, steps_callback)
+        function SubmitForm(checkonly, steps_callback, jacksGraphCallback)
 	{
 	    // Current form contents as formfields array.
 	    var formfields  = {};
@@ -651,7 +651,7 @@ $(function () {
 		}
 		if (checkonly) {
 		    // Form checked out okay, submit again to generate rspec.
-		    SubmitForm(0, steps_callback);
+		    SubmitForm(0, steps_callback, jacksGraphCallback);
 		}
 		else {
 		    RSPEC = json.value.rspec;
@@ -659,7 +659,8 @@ $(function () {
 		    // Must be after the callback, so that any changes to
 		    // the aggregate selector is reflected in the final tab
 		    steps_callback(true);
-		    ShowEditor();
+		    ShowThumbnail(RSPEC, jacksGraphCallback);
+		    //ShowEditor();
 		}
 	    }
 	    // Convert form data into formfields array, like all our
@@ -724,8 +725,8 @@ $(function () {
 		return;
 	    }
 	    // Caller might already have an editor instance.
-	    editor = new JacksEditor($('#inline_jacks'), true, true,
-				     true, true, !multisite);
+	    //editor = new JacksEditor($('#inline_jacks'), true, true,
+		//		     true, true, !multisite);
 	    configuredone_callback = args.callback;
 	    
 	    /*
@@ -756,7 +757,8 @@ $(function () {
 		if (args.rspec) {
 		    RSPEC = args.rspec;
 		    ConfigureDone();
-		    ShowEditor();
+		    //ShowEditor();
+		    ShowThumbnail(RSPEC, args.jacksGraphCallback);
 		}
 	    }
 	    var blob = {"uuid" : args.uuid};
@@ -771,6 +773,43 @@ $(function () {
 						"GetParameters", blob);
 	    xmlthing.done(callback);
 	}
+
+      var thumbnail = null;
+      var jacksGraphCallback = null;
+      function ShowThumbnail(selected_rspec, updateJacksGraph)
+      {
+	if (updateJacksGraph)
+	{
+	  jacksGraphCallback = updateJacksGraph;
+	}
+	var root = $('#stepsContainer-p-2 #inline_jacks');
+	if (! thumbnail)
+	{
+	  thumbnail = new jacksmod.Thumb(setJacksGraph);
+	  root.append(thumbnail.el);
+	}
+	thumbnail.replaceRspec(selected_rspec);
+	if (countNodes() > 100)
+	{
+	  $('#stepsContainer #inline_overlay').addClass("hidden");
+	}
+	else
+	{
+	  $('#stepsContainer #inline_overlay').removeClass("hidden");
+	}
+	
+      }
+
+      function setJacksGraph(newGraph)
+      {
+	console.log('setJacksGraph');
+	if (jacksGraphCallback)
+	{
+	  console.log('jacksGraphCallback');
+	  jacksGraphCallback(newGraph);
+	}
+      }
+ 
 
 	function ChangeJacksRoot(root, selectionPane) {
 	  // console.info("ChangeJacksRoot: ", root, selectionPane);
@@ -795,17 +834,17 @@ $(function () {
 	  // console.info("ShowEditor");
 	  if (RSPEC)
 	  {
-	      if (countNodes() > 100) {
-		  $('#stepsContainer #inline_overlay').addClass("hidden");
-		  $('#inline_jacks #edit_dialog #edit_container')
-		      .addClass("hidden");
-		  return;
-	      }
-	      else {
+//	      if (countNodes() > 100) {
+//		  $('#stepsContainer #inline_overlay').addClass("hidden");
+//		  $('#inline_jacks #edit_dialog #edit_container')
+//		      .addClass("hidden");
+//		  return;
+//	      }
+//	      else {
 		  $('#stepsContainer #inline_overlay').removeClass("hidden");
 		  $('#inline_jacks #edit_dialog #edit_container')
 		      .removeClass("hidden");
-	      }
+//	      }
 	      editor.show(RSPEC);
 	  }
 	}
@@ -907,7 +946,8 @@ $(function () {
 	return {
 		HandleSubmit: HandleSubmit,
 		StartPP: StartPP,
-		ChangeJacksRoot: ChangeJacksRoot,
+	        ChangeJacksRoot: ChangeJacksRoot,
+	        ShowThumbnail: ShowThumbnail,
 	};
     }
 )();
