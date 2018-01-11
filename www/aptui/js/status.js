@@ -49,6 +49,15 @@ $(function ()
     var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
     var GENIRESPONSE_REFUSED = 7;
     var GENIRESPONSE_INSUFFICIENT_NODES = 26;
+    var MAXJACKSNODES = 200;
+
+    function TimeStamp(message)
+    {
+	if (0) {
+	    var microtime = window.performance.now() / 1000.0
+	    console.info("TIMESTAMP: " + microtime + " " + message);
+	}
+    }
 
     function initialize()
     {
@@ -556,7 +565,8 @@ $(function ()
 	    else {
 		status_html = "<font color=green>ready</font>";
 	    }
-	    $("#quickvm_status").html(status_html);
+		$("#quickvm_status").html(status_html);
+	    }
 
 	    // This will happen when the user clicks the Reload Topology
 	    // button, ww want to redraw with the new manifests.
@@ -972,6 +982,9 @@ $(function ()
     // Helper for above and called from the status callback.
     function UpdateSliverStatus(oblob)
     {
+	if (nodecount > MAXJACKSNODES) {
+	    return;
+	}
 	$.each(oblob , function(urn, iblob) {
 	    $.each(iblob , function(node_id, details) {
 		if (details.status == "ready") {
@@ -1591,6 +1604,8 @@ $(function ()
 	// Process the nodes in a single manifest.
 	//
 	var ProcessNodes = function(aggregate_urn, xml) {
+	    var rawcount = $(xml).find("node, emulab\\:vhost").length;
+	    
 	    // Find all of the nodes, and put them into the list tab.
 	    // Clear current table.
 	    $(xml).find("node, emulab\\:vhost").each(function() {
@@ -1603,6 +1618,7 @@ $(function ()
 		var tag    = $(this).prop("tagName");
 		var isvhost= (tag == "emulab:vhost" ? 1 : 0);
 		var node   = $(this).attr("client_id");
+		TimeStamp("Processing node " + node);
 		var stype  = $(this).find("sliver_type");
 		var login  = $(this).find("login");
 		var coninfo= this.getElementsByTagNameNS(EMULAB_NS, 'console');
@@ -1619,31 +1635,29 @@ $(function ()
 
 		// Change the ID of the clone so its unique.
 		clone.attr('id', 'listview-row-' + node);
-		// Insert into the table, we will attach the handlers below.
-		$('#listview_table > tbody:last').append(clone);
 		// Set the client_id in the first column.
-		$('#listview-row-' + node + " [name=client_id]").html(node);
+		clone.find(" [name=client_id]").html(node);
 		// And the node_id/type
 		if (vnode.length) {
-		    $('#listview-row-' + node + " [name=node_id]")
+		    clone.find(" [name=node_id]")
 			.html($(vnode).attr("name"));
-		    $('#listview-row-' + node + " [name=type]")
+		    clone.find(" [name=type]")
 			.html($(vnode).attr("hardware_type"));
 		    clientid2nodeid[node] = $(vnode).attr("name");
 		}
 		// Convenience.
-		$('#listview-row-' + node + " [name=select]").attr("id", node);
+		clone.find(" [name=select]").attr("id", node);
 
 		if (stype.length &&
 		    $(stype).attr("name") === "emulab-blockstore") {
-		    $('#listview-row-' + node + " [name=menu]").text("n/a");
+		    clone.find(" [name=menu]").text("n/a");
 		    return;
 		}
 		if (stype.length &&
 		    $(stype).attr("name") === "firewall") {
 		    isfw = 1;
 		}
-		
+
 		if (login.length && dossh) {
 		    var user   = window.APT_OPTIONS.thisUid;
 		    var host   = $(login).attr("hostname");
@@ -1657,10 +1671,10 @@ $(function ()
 		    hostportList[node] = hostport;
 
 		    // Update the row.
-		    $('#listview-row-' + node + ' [name=sshurl]').html(href);
+		    clone.find(' [name=sshurl]').html(href);
 		    
 		    // Attach handler to the menu button.
-		    $('#listview-row-' + node + ' [name=shell]')
+		    clone.find(' [name=shell]')
 			.click(function (e) {
 			    window.APT_OPTIONS.gaButtonEvent(e);
 			    e.preventDefault();
@@ -1674,7 +1688,7 @@ $(function ()
 		// hide it.
 		//
 		if (isfadmin) {
-		    $('#listview-row-' + node + ' [name=action-menu]')
+		    clone.find(' [name=action-menu]')
 			.addClass("invisible");
 		}
 
@@ -1683,12 +1697,12 @@ $(function ()
 		//
 		if (coninfo.length) {
 		    // Attach handler to the menu button.
-		    $('#listview-row-' + node + ' [name=console]')
+		    clone.find(' [name=console]')
 			.click(function (e) {
 			    window.APT_OPTIONS.gaButtonEvent(e);
 			    ActionHandler("console", [node]);
 			});
-		    $('#listview-row-' + node + ' [name=consolelog]')
+		    clone.find(' [name=consolelog]')
 			.click(function (e) {
 			    window.APT_OPTIONS.gaButtonEvent(e);
 			    ActionHandler("consolelog", [node]);
@@ -1698,23 +1712,23 @@ $(function ()
 		}
 		else {
 		    // Need to do this on the context menu too, but painful.
-		    $('#listview-row-' + node + ' [name=consolelog]')
+		    clone.find(' [name=consolelog]')
 			.parent().addClass('disabled');		    
-		    $('#listview-row-' + node + ' [name=console]')
+		    clone.find(' [name=console]')
 			.parent().addClass('disabled');		    
 		}
 		if (!isvhost && !isfw) {
 		    //
 		    // Delete button handler
 		    //
-		    $('#listview-row-' + node + ' [name=delete]')
+		    clone.find(' [name=delete]')
 			.click(function (e) {
 			    window.APT_OPTIONS.gaButtonEvent(e);
 			    ActionHandler("delete", [node]);
 			});
 		}
 		else {
-		    $('#listview-row-' + node + ' [name=delete]')
+		    clone.find(' [name=delete]')
 			.parent().addClass('disabled');		    
 		}
 
@@ -1731,39 +1745,38 @@ $(function ()
 		    }
 		}
 
+		// Insert into the table, we will attach the handlers below.
+		$('#listview_table > tbody:last').append(clone);
+
 		/*
 		 * Make a copy of the master context menu and init.
 		 */
-		var clone = $("#context-menu").clone();
+		if (rawcount <= MAXJACKSNODES) {
+		    var clone = $("#context-menu").clone();
 
-		// Change the ID of the clone so its unique.
-		clone.attr('id', "context-menu-" + node);
+		    // Change the ID of the clone so its unique.
+		    clone.attr('id', "context-menu-" + node);
 	    
-		// Insert into the context-menus div.
-		$('#context-menus').append(clone);
+		    // Insert into the context-menus div.
+		    $('#context-menus').append(clone);
 
-		// If no console, then grey out the options.
-		if (!_.has(consolenodes, node)) {
-		    $(clone).find("li[id=console]").addClass("disabled");
-		    $(clone).find("li[id=consolelog]").addClass("disabled");
+		    // If no console, then grey out the options.
+		    if (!_.has(consolenodes, node)) {
+			$(clone).find("li[id=console]").addClass("disabled");
+			$(clone).find("li[id=consolelog]").addClass("disabled");
+		    }
+		    // If a vhost, then grey out options.
+		    if (isvhost || isfw) {
+			$(clone).find("li[id=delete]").addClass("disabled");
+		    }
+		    contextMenus[node] = clone;
 		}
-		// If a vhost, then grey out options.
-		if (isvhost || isfw) {
-		    $(clone).find("li[id=delete]").addClass("disabled");
-		}
-		contextMenus[node] = clone;
-		
 		nodecount++;
 	    });
 	}
 	
 	var callback = function(json) {
 	    //console.info(json);
-
-	    // Pass all the manifests to the viewer.
-	    $("#showtopo_container").removeClass("invisible");
-	    $('#quicktabs_ul a[href="#topology"]').tab('show');
-	    ShowViewer('#showtopo_statuspage', json.value);
 
 	    // Process all the manifests to create the list view.
 	    // Clear the list view table before adding nodes. Not needed?
@@ -1777,6 +1790,7 @@ $(function ()
 	    // manifest again needlessly.
 	    var xml = null;
 
+	    TimeStamp("Proccessing manifest");
 	    _.each(json.value, function(manifest, aggregate_urn) {
 		var xmlDoc = $.parseXML(manifest);
 		xml = $(xmlDoc);
@@ -1784,6 +1798,17 @@ $(function ()
 		MakeUriData(xml,uridata);
 		ProcessNodes(aggregate_urn, xml);
 	    });
+	    TimeStamp("Done proccessing manifest");
+
+	    $("#showtopo_container").removeClass("invisible");
+	    if (nodecount <= MAXJACKSNODES) {
+		// Pass all the manifests to the viewer.
+		$('#quicktabs_ul a[href="#topology"]').tab('show');
+		ShowViewer('#showtopo_statuspage', json.value);
+	    }
+	    else {
+		$('#quicktabs_ul a[href="#listview"]').tab('show');
+	    }
 
 	    // Handler for select/deselect all rows in the list view.
 	    if (!isupdate) {
@@ -1823,7 +1848,8 @@ $(function ()
 			}
 		    });
 	    }
-	    
+
+	    TimeStamp("Instructions and LinkTest");
 	    if (xml != null) {
 		UpdateInstructions(xml,uridata);
 		// Do not show secrets if viewing using foreign admin creds
@@ -1847,6 +1873,7 @@ $(function ()
 		});
 		SetupLinktest(instanceStatus);
 	    }
+	    TimeStamp("Instructions and LinkTest done");
 
 	    // Setup the snapshot modal.
 	    SetupSnapshotModal();
