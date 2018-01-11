@@ -565,8 +565,7 @@ $(function ()
 	    else {
 		status_html = "<font color=green>ready</font>";
 	    }
-		$("#quickvm_status").html(status_html);
-	    }
+	    $("#quickvm_status").html(status_html);
 
 	    // This will happen when the user clicks the Reload Topology
 	    // button, ww want to redraw with the new manifests.
@@ -583,7 +582,7 @@ $(function ()
 	    UpdateSliverStatus(json.value.sliverstatus);
 	}
 	lastStatus = instanceStatus;
-    }
+}
 
     //
     // Enable/Disable buttons. 
