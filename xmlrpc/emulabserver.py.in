@@ -3466,12 +3466,11 @@ class node:
             result = {}
             # gotta enumerate the list of nodes of this type that are avail
             for row in res:
-                avail = freecounts[ row[ 1 ] ] > 0
+                avail = row[2] == 1 and row[3] == 1 and row[8] == 1 and freecounts[ row[ 1 ] ] > 0
                 result[row[0]] = {
                     "node_id" : row[0],
                     "type" : row[1],
-                    "free" : (avail and row[2] == 1 and row[3] == 1 and
-                              row[8] == 1),
+                    "free" : avail,
                     }
                 if row[4]:
                     result[row[0]]["site"] = row[4]
