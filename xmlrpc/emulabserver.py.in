@@ -3441,7 +3441,7 @@ class node:
             for row in res:
                 freecounts[ row[ 1 ] ] = 0
 
-            predict_cmd = [ PREDICT ]
+            predict_cmd = [ PREDICT, "-n" ]
                 
             if argdict.has_key( "start" ):
                 if not re.match( "^[-:0-9 ]+*$", str( argdict[ "start" ] ) ):
@@ -3453,12 +3453,12 @@ class node:
                 if not re.match( "^[0-9]+*$", str( argdict[ "duration" ] ) ):
                     return EmulabResponse( RESPONSE_BADARGS,
                                            output="Bad chars in duration" )
-                dur_arg = "-D " + argdict[ "duration" ] + " "
+                predict_cmd.append( "-D" )
+                predict_cmd.append( argdict[ "duration" ] )
             else:
                 # use 75 hours if not specified, since that's the CHPC default
-                dur_arg = "-D 75 "
-
-            predict_cmd.append( dur_arg )
+                predict_cmd.append( "-D" )
+                predict_cmd.append( "75" )
 
             for t in freecounts:
                 freecounts[ t ] = int( subprocess.check_output( predict_cmd + [ t ] ) )
