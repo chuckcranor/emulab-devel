@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2017 University of Utah and the Flux Group.
+# Copyright (c) 2005-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -946,18 +946,18 @@ sub GetAllocState($$)
 #
 # We do this cause we always want to go to the DB.
 #
-sub GetEventState($;$$)
+sub GetEventState($;$$$)
 {
-    my ($self, $pstate, $popmode) = @_;
+    my ($self, $pstate, $popmode, $pstamp) = @_;
     my $node_id = $self->node_id();
 
     my $query_result =
-	DBQueryWarn("select eventstate,op_mode from nodes ".
+	DBQueryWarn("select eventstate,op_mode,state_timestamp from nodes ".
 		    "where node_id='$node_id'");
     return -1
 	if (!$query_result || !$query_result->numrows);
 
-    my ($state,$op_mode) = $query_result->fetchrow_array();
+    my ($state,$op_mode,$stamp) = $query_result->fetchrow_array();
     $state = TBDB_NODESTATE_UNKNOWN
 	if (!defined($state));
     $op_mode = TBDB_NODEOPMODE_UNKNOWN
@@ -969,6 +969,8 @@ sub GetEventState($;$$)
      	if (defined($pstate));
     $$popmode= $op_mode
  	if (defined($popmode));
+    $$pstamp= $stamp
+ 	if (defined($pstamp));
     return 0;
 }
 
