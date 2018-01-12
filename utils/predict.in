@@ -47,12 +47,15 @@ sub usage()
     print STDERR "Usage: predict [-p] [-u] [-t time] type\n";
     print STDERR "       predict -c type [pid...]\n";
     print STDERR "       predict -l type [pid...]\n";
+    print STDERR "       predict -n [-t time] [-D duration] type [pid...]\n";
     print STDERR "       predict -P type [pid...]\n";
     print STDERR "       predict -x [-T type] pid...\n";
     print STDERR "   -h   This message\n";
     print STDERR "   -c   Give an oversimplified free node count\n";
     print STDERR "   -l   Give a list of node allocation status counts " .
 	"over time\n";
+    print STDERR "   -n   Compute the minimum free pool size over a time " .
+	"period\n";
     print STDERR "   -P   Identify periods of node pressure\n";
     print STDERR "   -x   Show earliest unfulfilled reservation\n";
     print STDERR "   -p   Identify by pid only, not pid/eid\n";
@@ -62,9 +65,11 @@ sub usage()
     exit( -1 );
 }
 
-my $optlist     = "cdhlpPt:T:x";
+my $optlist     = "cdD:hlnpPt:T:x";
 my $debug       = 0;
+my $duration    = 365 * 24 * 60 * 60; # default to 1 year ~= infinity
 my $time        = time; # default to now
+my $minfree     = 0;
 my $pidonly     = 0;
 my $countonly   = 0;
 my $pressure    = 0;
@@ -126,6 +131,13 @@ if (defined($options{"t"})) {
 	}
     }
 }
+if (defined($options{"D"})) {
+    $duration = $options{"D"};
+    if ($duration !~ /^\d+$/) {
+	fatal("Could not parse -D option.");
+    }
+    $duration *= 60 * 60;
+}
 if (defined($options{T})) {
     $type = $options{T};
 }
@@ -135,10 +147,14 @@ if (defined($options{"c"})) {
 if (defined($options{"l"})) {
     $timeseries = 1;
 }
+if (defined($options{"n"})) {
+    $minfree = 1;
+}
 if (defined($options{"x"})) {
     $unfulfilled = 1;
 }
-usage() if( ( $countonly || $timeseries || $pressure || $unfulfilled ) ?
+usage() if( ( $countonly || $timeseries || $pressure || $unfulfilled ||
+	      $minfree ) ?
 	    @ARGV < 1 : @ARGV != 1 );
 if( !$unfulfilled ) {
     $type = shift( @ARGV );
@@ -150,6 +166,29 @@ if( !$unfulfilled ) {
 if( $countonly ) {
     print( int( Reservation->FreeCount( $type, \@ARGV ) + 0.5 ) . "\n" );
     
+    exit( 0 );
+}
+
+if( $minfree ) {
+    my $min = 0xFFFF;
+    foreach my $rec ( Reservation->Forecast( $type, \@ARGV ) ) {
+	my $sample = $rec->{'held'} + $rec->{'free'}; 
+	if( $rec->{'t'} < $time ) {
+	    # record is before period of interest; retain only the
+	    # newest available
+	    $min = $sample;
+	} elsif( $rec->{'t'} <= $time + $duration ) {
+	    # record is during period of interest; compute the minimum
+	    $min = $sample if( $sample < $min );
+	} else {
+	    # we've gone past the end of the period and no longer care
+	    # about the future
+	    last;
+	}
+    }
+
+    print "$min\n";
+
     exit( 0 );
 }
 

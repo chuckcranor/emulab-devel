@@ -39,6 +39,7 @@ import signal
 import types
 import datetime
 import syslog
+import subprocess
 
 # Configure variables
 TBDIR = "@prefix@"
@@ -49,6 +50,7 @@ USERNODE = "@USERNODE@"
 BASEADDR = "@FRISEBEEMCASTADDR@"
 BASEPORT = "@FRISEBEEMCASTPORT@"
 SUBBOSS_UID = "elabman"
+PREDICT = "@prefix@/sbin/predict"
 
 TBPATH = os.path.join(TBDIR, "lib")
 if TBPATH not in sys.path:
@@ -3432,13 +3434,44 @@ class node:
             result = {}
             pass
         else:
+            # compute the set of types in the result list, because
+            # we'll want to run reservation admission control against
+            # each type
+            freecounts = {}
+            for row in res:
+                freecounts[ row[ 1 ] ] = 0
+
+            predict_cmd = [ PREDICT ]
+                
+            if argdict.has_key( "start" ):
+                if not re.match( "^[-:0-9 ]+*$", str( argdict[ "start" ] ) ):
+                    return EmulabResponse( RESPONSE_BADARGS,
+                                           output="Bad chars in start time" )
+                predict_cmd.append( "-t " + argdict[ "start" ] )
+            
+            if argdict.has_key( "duration" ):
+                if not re.match( "^[0-9]+*$", str( argdict[ "duration" ] ) ):
+                    return EmulabResponse( RESPONSE_BADARGS,
+                                           output="Bad chars in duration" )
+                dur_arg = "-D " + argdict[ "duration" ] + " "
+            else:
+                # use 75 hours if not specified, since that's the CHPC default
+                dur_arg = "-D 75 "
+
+            predict_cmd.append( dur_arg )
+
+            for t in freecounts:
+                freecounts[ t ] = int( subprocess.check_output( predict_cmd + [ t ] ) )
+            
             result = {}
             # gotta enumerate the list of nodes of this type that are avail
             for row in res:
+                avail = freecounts[ row[ 1 ] ] > 0
                 result[row[0]] = {
                     "node_id" : row[0],
                     "type" : row[1],
-                    "free" : (row[2] == 1 and row[3] == 1 and row[8] == 1),
+                    "free" : (avail and row[2] == 1 and row[3] == 1 and
+                              row[8] == 1),
                     }
                 if row[4]:
                     result[row[0]]["site"] = row[4]
@@ -3452,6 +3485,8 @@ class node:
                 if row[7] and row[7] != "":
                     result[row[0]]["hostname"] = row[7]
                     pass
+                if avail:
+                    freecounts[ row[ 1 ] ] -= 1
                 pass
             pass
 
