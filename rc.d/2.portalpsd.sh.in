@@ -12,27 +12,33 @@
 TBROOT="@prefix@"
 MAINSITE="@TBMAINSITE@"
 PROTOGENI="@PROTOGENI_SUPPORT@"
+CLUSTER_PORTAL="@CLUSTER_PORTAL@"
+BOSSNODE="@BOSSNODE@"
 
 if [ $PROTOGENI == "0" ]; then
     exit 0
 fi
-if [ $MAINSITE == "0" ]; then
+if [ $CLUSTER_PORTAL == "" -o $CLUSTER_PORTAL != $BOSSNODE ]; then
     exit 0
 fi
+
+. /etc/rc.conf
+pubsubd_flags=${pubsubd_flags:-""}
 
 pubsubd=/usr/local/libexec/pubsubd
 pidfile=/var/run/portalpsd.pid
 certfile=$TBROOT/etc/emulab.pem
 keyfile=$TBROOT/etc/emulab.key
 bundlefile=$TBROOT/etc/genica.bundle
-sslport=@CLUSTER_PUBSUBD_PORT@
+sslport=@CLUSTER_PUBSUBD_SSLPORT@
 localport=16507
-args="-T 10 -K $keyfile -C $certfile -A $bundlefile -S -P $sslport -p $localport"
+pubsubd_flags="$pubsubd_flags -K $keyfile -C $certfile "
+pubsubd_flags="$pubsubd_flags -A $bundlefile -S -P $sslport -p $localport"
 
 case "$1" in
     start|faststart|quietstart|onestart|forcestart)
 	if [ -x $clusterd ]; then
-	    $pubsubd -e $pidfile $args
+	    $pubsubd -e $pidfile $pubsubd_flags
 	    echo -n "portalpsd";
 	fi
 	;;

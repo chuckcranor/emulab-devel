@@ -24,7 +24,7 @@ forwarder=/usr/local/libexec/pubsub_forward
 pidfile=/var/run/pubsub_forward_wrapper.pid
 certfile=$TBROOT/etc/emulab.pem
 keyfile=$TBROOT/etc/emulab.key
-remoteport=@CLUSTER_PUBSUBD_PORT@
+remoteport=@CLUSTER_PUBSUBD_SSLPORT@
 args="-s $CLUSTER_PORTAL -p $remoteport -K $keyfile -C $certfile -S"
 
 case "$1" in

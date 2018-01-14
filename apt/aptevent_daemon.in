@@ -54,9 +54,12 @@ my $TB		     = "@prefix@";
 my $TBOPS            = "@TBOPSEMAIL@";
 my $TBLOGS           = "@TBLOGSEMAIL@";
 my $MAINSITE         = @TBMAINSITE@;
+my $BOSSNODE         = "@BOSSNODE@";
 my $LOGFILE          = "$TB/log/aptevent_daemon.log";
-# Portal pubsubd running on this port.
-my $PSDPORT          = 16507;
+# Portal SSL pubsubd running on this host:port
+my $CLUSTER_PORTAL          = "@CLUSTER_PORTAL@";
+my $CLUSTER_PUBSUBD_SSLPORT = "@CLUSTER_PUBSUBD_SSLPORT@";
+my $CLUSTER_PUBSUBD_ALTPORT = "@CLUSTER_PUBSUBD_ALTPORT@";
 	  
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -137,8 +140,8 @@ if (!$impotent) {
 # Cloudlab that are forwarding to to the Mothership. 
 #
 my $url = "elvin://localhost";
-if ($MAINSITE) {
-    $url .= ":$PSDPORT";
+if ($CLUSTER_PORTAL ne "" && $CLUSTER_PORTAL eq $BOSSNODE) {
+    $url .= ":${CLUSTER_PUBSUBD_ALTPORT}";
 }
 my $localhandle = event_register($url, 0);
 if (!$localhandle) {

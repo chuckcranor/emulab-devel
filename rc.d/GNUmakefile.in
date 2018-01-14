@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,6 +33,7 @@ ELVINCOMPAT	= @ELVIN_COMPAT@
 TBMAINSITE	= @TBMAINSITE@
 PROTOGENI       = @PROTOGENI_SUPPORT@
 CLUSTER_PORTAL  = @CLUSTER_PORTAL@
+BOSSNODE        = @BOSSNODE@
 
 SYSTEM         := $(shell uname -s)
 
@@ -43,8 +44,10 @@ RC_SCRIPTS	= 2.mysql-server.sh 3.mfrisbeed.sh 3.testbed.sh \
 SUBBOSS_SCRIPTS	= 2.dhcpd.sh 3.mfrisbeed-subboss.sh arplock.sh \
 		  3.reportboot-subboss.sh
 OPS_SCRIPTS     = 3.and.sh 1.mysql-client.sh 1.mysql-server.sh arplock-opsfs.sh
-ifeq ($(TBMAINSITE),1)
+ifneq ($(CLUSTER_PORTAL),)
+ifeq ($(CLUSTER_PORTAL),$(BOSSNODE))
 RC_SCRIPTS     += 2.portalpsd.sh
+endif
 endif
 ifeq ($(ELVINCOMPAT),1)
 OPS_SCRIPTS    += 2.elvind.sh 3.elvin_gateway.sh
