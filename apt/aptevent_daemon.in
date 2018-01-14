@@ -130,6 +130,9 @@ if (!$impotent) {
     }
 }
 
+# We receive a lot of events but we do not send any.
+event_set_sockbufsizes(1024 * 32, 1024 * 192);
+
 #
 # At the Mothership (Cloudlab Portal) we get events from the SSL
 # enabled version of pubsubd, which is getting events from all of the
