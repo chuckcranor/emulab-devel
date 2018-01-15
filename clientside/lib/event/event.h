@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -54,6 +54,9 @@ struct event_handle {
     unsigned char *keydata;
     int keylen;
     int do_loop;
+    int dossl;
+    char *certfile;
+    char *keyfile;
     /* API function pointers: */
     int (*connect)(char *server, int portnum, pubsub_handle_t **);
     int (*disconnect)(pubsub_handle_t *handle);
@@ -203,6 +206,8 @@ typedef void (*event_subscription_callback_t)(event_handle_t handle,
 
 /* event.c */
 event_handle_t event_register(char const *name, int threaded);
+event_handle_t event_register_withssl(char const *name, int threaded,
+				      char const *certfile, char const *keyfile);
 event_handle_t event_register_withkeyfile(char const *name, int threaded,
 					  char *keyfile);
 event_handle_t event_register_withkeydata(char const *name, int threaded,
@@ -291,6 +296,7 @@ int event_notification_unpack(event_handle_t handle,
 #endif
 int event_set_idle_period(event_handle_t handle, int seconds) ;
 int event_set_failover(event_handle_t handle, int dofail) ;
+int event_set_sockbufsizes(int, int);
 
 int event_arg_get(char *args, char const *key, char **value);
 int event_arg_dup(char *args, char const *key, char **value);

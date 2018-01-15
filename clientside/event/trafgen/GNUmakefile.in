@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2012, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -65,9 +65,9 @@ CFLAGS   += -I/usr/local/include
 CFLAGS	 += -DUSEEVENTS
 
 LDFLAGS  += -L${TESTBED_LIBOBJDIR}/event -L${TESTBED_LIBOBJDIR}/libtb
-LIBS     += -levent -ltb -lcrypto
+LIBS     += -levent -ltb
 # Expand the elvin-config list now so it can be filtered below.
-LIBS     += -L/usr/local/lib -lpubsub -lm
+LIBS     += -L/usr/local/lib -lpubsub -lm -lssl -lcrypto -lcrypt
 LDFLAGS  += $(LDSTATIC)
 
 SYSTEM   := $(shell uname -s)

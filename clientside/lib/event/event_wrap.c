@@ -3803,6 +3803,69 @@ XS(_wrap_event_register) {
 }
 
 
+XS(_wrap_event_register_withssl) {
+  {
+    char *arg1 = (char *) 0 ;
+    int arg2 ;
+    char *arg3 = (char *) 0 ;
+    char *arg4 = (char *) 0 ;
+    int res1 ;
+    char *buf1 = 0 ;
+    int alloc1 = 0 ;
+    int res3 ;
+    char *buf3 = 0 ;
+    int alloc3 = 0 ;
+    int res4 ;
+    char *buf4 = 0 ;
+    int alloc4 = 0 ;
+    int val2 ;
+    int ecode2 = 0 ;
+    int argvi = 0;
+    event_handle_t result;
+    dXSARGS;
+    
+    if ((items < 4) || (items > 4)) {
+      SWIG_croak("Usage: event_register_withssl(name,threaded,cert,key);");
+    }
+    res1 = SWIG_AsCharPtrAndSize(ST(0), &buf1, NULL, &alloc1);
+    if (!SWIG_IsOK(res1)) {
+      SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "event_register_withssl" "', argument " "1"" of type '" "char *""'");
+    }
+    arg1 = (char *)(buf1);
+    ecode2 = SWIG_AsVal_int SWIG_PERL_CALL_ARGS_2(ST(1), &val2);
+    if (!SWIG_IsOK(ecode2)) {
+      SWIG_exception_fail(SWIG_ArgError(ecode2), "in method '" "event_register_withssl" "', argument " "2"" of type '" "int""'");
+    } 
+    arg2 = (int)(val2);
+
+    res3 = SWIG_AsCharPtrAndSize(ST(2), &buf3, NULL, &alloc3);
+    if (!SWIG_IsOK(res3)) {
+      SWIG_exception_fail(SWIG_ArgError(res3), "in method '" "event_register_withssl" "', argument " "3"" of type '" "char *""'");
+    }
+    arg3 = (char *)(buf3);
+    res4 = SWIG_AsCharPtrAndSize(ST(3), &buf4, NULL, &alloc4);
+    if (!SWIG_IsOK(res4)) {
+      SWIG_exception_fail(SWIG_ArgError(res4), "in method '" "event_register_withssl" "', argument " "4"" of type '" "char *""'");
+    }
+    arg4 = (char *)(buf4);
+    
+    result = (event_handle_t)event_register_withssl(arg1,arg2,arg3,arg4);
+    ST(argvi) = SWIG_NewPointerObj(SWIG_as_voidptr(result), SWIGTYPE_p_event_handle, 0 | SWIG_SHADOW); argvi++ ;
+    if (alloc1 == SWIG_NEWOBJ) free((char*)buf1);
+    if (alloc3 == SWIG_NEWOBJ) free((char*)buf3);
+    if (alloc4 == SWIG_NEWOBJ) free((char*)buf4);
+    
+    XSRETURN(argvi);
+  fail:
+    if (alloc1 == SWIG_NEWOBJ) free((char*)buf1);
+    if (alloc3 == SWIG_NEWOBJ) free((char*)buf3);
+    if (alloc4 == SWIG_NEWOBJ) free((char*)buf4);
+    
+    SWIG_croak_null();
+  }
+}
+
+
 XS(_wrap_event_register_withkeyfile) {
   {
     char *arg1 = (char *) 0 ;
@@ -5551,6 +5614,43 @@ XS(_wrap_event_set_failover) {
   }
 }
 
+XS(_wrap_event_set_sockbufsizes) {
+  {
+    int arg1 ;
+    int val1 ;
+    int ecode1 = 0 ;
+    int arg2 ;
+    int val2 ;
+    int ecode2 = 0 ;
+    int argvi = 0;
+    int result;
+    dXSARGS;
+    
+    if ((items < 2) || (items > 2)) {
+      SWIG_croak("Usage: event_set_idle_period(handle,seconds);");
+    }
+    ecode1 = SWIG_AsVal_int SWIG_PERL_CALL_ARGS_2(ST(0), &val1);
+    if (!SWIG_IsOK(ecode1)) {
+      SWIG_exception_fail(SWIG_ArgError(ecode1), "in method '" "event_set_sockbufsizes" "', argument " "1"" of type '" "int""'");
+    } 
+    arg1 = (int)(val1);
+    
+    ecode2 = SWIG_AsVal_int SWIG_PERL_CALL_ARGS_2(ST(1), &val2);
+    if (!SWIG_IsOK(ecode2)) {
+      SWIG_exception_fail(SWIG_ArgError(ecode2), "in method '" "event_set_sockbufsizes" "', argument " "2"" of type '" "int""'");
+    } 
+    arg2 = (int)(val2);
+    result = (int)event_set_sockbufsizes(arg1,arg2);
+    ST(argvi) = SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(result)); argvi++ ;
+    
+    
+    XSRETURN(argvi);
+  fail:
+    
+    
+    SWIG_croak_null();
+  }
+}
 
 XS(_wrap_event_arg_get) {
   {
@@ -7159,6 +7259,7 @@ static swig_command_info swig_commands[] = {
 {"eventc::address_tuple_alloc", _wrap_address_tuple_alloc},
 {"eventc::address_tuple_free", _wrap_address_tuple_free},
 {"eventc::event_register", _wrap_event_register},
+{"eventc::event_register_withssl", _wrap_event_register_withssl},
 {"eventc::event_register_withkeyfile", _wrap_event_register_withkeyfile},
 {"eventc::event_register_withkeydata", _wrap_event_register_withkeydata},
 {"eventc::event_register_withkeyfile_withretry", _wrap_event_register_withkeyfile_withretry},
@@ -7193,6 +7294,7 @@ static swig_command_info swig_commands[] = {
 {"eventc::event_async_unsubscribe", _wrap_event_async_unsubscribe},
 {"eventc::event_notification_insert_hmac", _wrap_event_notification_insert_hmac},
 {"eventc::event_set_idle_period", _wrap_event_set_idle_period},
+{"eventc::event_set_sockbufsizes", _wrap_event_set_sockbufsizes},
 {"eventc::event_set_failover", _wrap_event_set_failover},
 {"eventc::event_arg_get", _wrap_event_arg_get},
 {"eventc::event_arg_dup", _wrap_event_arg_dup},

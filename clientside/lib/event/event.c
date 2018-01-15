@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -113,10 +113,26 @@ static int handles_in_use = 0;
  * the Elvin server.
  */
 event_handle_t
+event_register_internal(char const *name, int threaded,
+			unsigned char *keydata, int keylen,
+			int retrycount,
+			const char *certfile, const char *keyfile);
+
+event_handle_t
 event_register(char const *name, int threaded)
 {
 	return event_register_withkeydata(name, threaded, NULL, 0);
 }
+
+#ifdef WITHSSL
+event_handle_t
+event_register_withssl(char const *name, int threaded,
+		       char const *certfile, char const *keyfile)
+{
+	return event_register_internal(name, threaded, NULL, 
+				       0, INT_MAX, certfile, keyfile);
+}
+#endif
 
 event_handle_t
 event_register_withkeyfile(char const *name, int threaded, char *keyfile) {
@@ -149,25 +165,35 @@ event_register_withkeyfile_withretry(char const *name, int threaded,
 		return 0;
 	}
 	fclose(fp);
-	return event_register_withkeydata_withretry(name, threaded, 
-					  buf, cc, retrycount);
+	return event_register_internal(name, threaded, 
+				       buf, cc, retrycount,
+				       NULL, NULL);
     }
-    return event_register_withkeydata_withretry(name, threaded, NULL, 
-						0, retrycount);
+    return event_register_internal(name, threaded, NULL, 
+				   0, retrycount, NULL, NULL);
 }
 
 event_handle_t
 event_register_withkeydata(char const *name, int threaded,
 			   unsigned char *keydata, int keylen){
-    return event_register_withkeydata_withretry(name, threaded, keydata,
-						keylen, INT_MAX);
-
+    return event_register_internal(name, threaded, keydata,
+				   keylen, INT_MAX, NULL, NULL);
 }
 
 event_handle_t
 event_register_withkeydata_withretry(char const *name, int threaded,
-			   unsigned char *keydata, int keylen,
-			   int retrycount)
+				     unsigned char *keydata, int keylen,
+				     int retrycount)
+{
+    return event_register_internal(name, threaded, keydata,
+				   keylen, INT_MAX, NULL, NULL);
+}
+
+event_handle_t
+event_register_internal(char const *name, int threaded,
+			unsigned char *keydata, int keylen,
+			int retrycount,
+			const char *certfile, const char *keyfile)
 {
 #ifndef __CYGWIN__
     extern int pubsub_is_threaded[] __attribute__ ((weak));
@@ -253,9 +279,35 @@ event_register_withkeydata_withretry(char const *name, int threaded,
 	memcpy(handle->keydata, keydata, keylen);
 	handle->keydata[keylen] = (unsigned char)0;
     }
+    /* Watch for SSL option */
+    if (certfile && keyfile) {
+#ifndef WITHSSL
+        ERROR("could not get IP from local file %s either!\n", IPADDRFILE);
+	return 0;
+#else
+	int ps_client_sslinit(const char *certfile, const char *keyfile);
+
+	handle->dossl = 1;
+	handle->certfile = strdup(certfile);
+	handle->keyfile  = strdup(keyfile);
+
+	if (ps_client_sslinit(handle->certfile, handle->keyfile)) {
+		ERROR("ps_client_sslinit() failed!\n");
+		return 0;
+	}
+#endif
+    }
 
     /* Set up the interface pointers: */
-    handle->connect = pubsub_connect;
+    if (handle->dossl) {
+#ifdef WITHSSL
+	handle->connect = pubsub_sslconnect;
+#endif
+    }
+    else {
+	handle->connect = pubsub_connect;
+    }
+
     handle->disconnect = pubsub_disconnect;
 #ifdef THREADED
     assert(threaded == 1);
@@ -2424,4 +2476,18 @@ int event_set_failover(event_handle_t handle, int dofail) {
     pubsub_error_fprintf(stderr, &handle->status);
   }
   return retval;
+}
+
+/*
+ * Dig into pubsub to change the socket buffer sizes. Note that this
+ * function went in with SSL changes, so if libpubsub does not have
+ * SSL symbols, it will not have this one either.
+ */
+int event_set_sockbufsizes(int sendsockbufsize, int recvsockbufsize)
+{
+#ifdef WITHSSL
+    return pubsub_set_sockbufsizes(sendsockbufsize, recvsockbufsize);
+#else
+    return 0;
+#endif
 }

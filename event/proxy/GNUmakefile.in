@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2011, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -64,13 +64,13 @@ PFLAGS   += -L/usr/local/lib -lpubsub_r -ltb -lm
 
 PLDFLAGS += -L$(TESTBED_LIBOBJDIR)
 PLDFLAGS += -L$(TESTBED_LIBOBJDIR)/libtb -L$(TESTBED_LIBOBJDIR)/event
-PLIBS     = -levent_r -ltb -lcrypto
+PLIBS     = -levent_r -ltb -lssl -lcrypto -lcrypt
 PLIBS    += -L/usr/local/lib -lpubsub_r -ltb -lm
 PLDFLAGS += $(LDSTATIC)
 
 LDFLAGS  += -L$(TESTBED_LIBOBJDIR)
 LDFLAGS  += -L$(TESTBED_LIBOBJDIR)/libtb -L$(TESTBED_LIBOBJDIR)/event
-LIBS      = -levent -ltb -lcrypto
+LIBS      = -levent -ltb -lssl -lcrypto -lcrypt
 LIBS     += -L/usr/local/lib -lpubsub -ltb -lm
 LDFLAGS  += $(LDSTATIC)
 
@@ -99,7 +99,7 @@ endif
 
 version0_gateway:    version0_gateway.c
 	$(CC) $(CFLAGS) $(PLDFLAGS) -pthread -o $@ $< -L/usr/local/lib \
-		-lpubsub_r -ltb -lm
+		-lpubsub_r -ltb -lm -lssl -lcrypto -lcrypt
 
 eventping-debug: eventping.o
 	$(CC) $(LDFLAGS) -o $@ eventping.o -pthread $(LIBS)

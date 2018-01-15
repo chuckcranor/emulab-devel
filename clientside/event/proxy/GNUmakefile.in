@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2014, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -61,14 +61,14 @@ PFLAGS   += -L/usr/local/lib -lpubsub_r -ltb -lm
 
 PLDFLAGS += -L$(TESTBED_LIBOBJDIR)
 PLDFLAGS += -L$(TESTBED_LIBOBJDIR)/libtb -L$(TESTBED_LIBOBJDIR)/event
-PLIBS     = -levent_r -ltb -lcrypto
-PLIBS    += -L/usr/local/lib -lpubsub_r -ltb -lm
+PLIBS     = -levent_r -ltb
+PLIBS    += -L/usr/local/lib -lpubsub_r -ltb -lm -lssl -lcrypto -lcrypt
 PLDFLAGS += $(LDSTATIC)
 
 LDFLAGS  += -L$(TESTBED_LIBOBJDIR)
 LDFLAGS  += -L$(TESTBED_LIBOBJDIR)/libtb -L$(TESTBED_LIBOBJDIR)/event
-LIBS      = -levent -ltb -lcrypto
-LIBS     += -L/usr/local/lib -lpubsub -ltb -lm
+LIBS      = -levent -ltb
+LIBS     += -L/usr/local/lib -lpubsub -ltb -lm -lssl -lcrypto -lcrypt
 LDFLAGS  += $(LDSTATIC)
 
 # Deal with the presence/absence of kerberos in the linux ssl library
