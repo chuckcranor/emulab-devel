@@ -996,8 +996,12 @@ else {
 	exit($rval);
     }
 }
-$instance->SetStatus("provisioned");
-$instance->ComputeNodeCounts();
+
+#
+# Cause of early return, we have to Check to see if all aggregates provisioned.
+# This will update status and node counts.
+#
+$instance->CheckProvisioned();
 
 #
 # Now wait for the sliver to be ready, which means polling.
@@ -1254,6 +1258,7 @@ sub CreateSliver($)
     my $authority = $aggobj->_authority();
     my $cmurl     = $authority->url();
     my $urn       = $authority->urn();
+    my $manifest;
     $webtask->Refresh();
 
     # Debugging
@@ -1267,6 +1272,7 @@ sub CreateSliver($)
     #
     my $tries = 15;
     my $response;
+    my $earlyreturn = 0;
 
     while (1) {
 	$response =
@@ -1286,9 +1292,8 @@ sub CreateSliver($)
 				     "usetracker"  => $usetracker,
 				   });
 
-	if (!defined($response) || $response->code() != GENIRESPONSE_SUCCESS) {
-	    if (defined($response) &&
-		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE &&
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    if ($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE &&
 		$tries >= 0) {
 		print STDERR "Server for $urn reports too busy, ".
 		    "waiting a while ...\n";
@@ -1296,16 +1301,39 @@ sub CreateSliver($)
 		$tries--;
 		next;
 	    }
-	    if (defined($response)) {
-		$webtask->output($response->output());
-		$webtask->Exited($response->code());
+	    elsif ($response->code() == GENIRESPONSE_RPCERROR) {
+		#
+		# See if a read timeout for a setup that is taking a long
+		# time. If so, lets not fail yet, but instead see if we can
+		# sync back up during WaitForSlivers().
+		#
+		if ($response->output() =~ /read timeout/) {
+		    Genixmlrpc->SetTimeout(15);
+		    my $tmp = $aggobj->SliceResolve();
+		    print STDERR "SliceStatus: " . $tmp->code() . "\n";
+		    
+		    if ($tmp->code() == GENIRESPONSE_RPCERROR ||
+			$tmp->code() == GENIRESPONSE_SEARCHFAILED) {
+			#
+			# Okay, we can bail. 
+			#
+			print STDERR "Read timeout, bailing\n";
+		    }
+		    else {
+			#
+			# Accept that we do not have a manifest, but the CM
+			# is reachable and the slice exists.
+			#
+			$earlyreturn = 1;
+			last;
+		    }
+		}
 	    }
-	    else {
-		$webtask->Exited(-1);
-	    }
+	    $webtask->output($response->output());
+	    $webtask->Exited($response->code());
 	    $aggobj->SetStatus("failed");
 	    
-	    if (defined($response) && defined($response->logurl())) {
+	    if (defined($response->logurl())) {
 		$aggobj->SetPublicURL($response->logurl());
 	    }
 	    print STDERR "CreateSliver failed on $urn: ".
@@ -1315,34 +1343,38 @@ sub CreateSliver($)
 	last;
     }
     # This will get overwritten later.
-    if (defined($response) && defined($response->logurl())) {
+    if (defined($response->logurl())) {
 	$aggobj->SetPublicURL($response->logurl());
     }
-    my $manifest = $response->value()->[1];
-    if (!defined($manifest)) {
-	$webtask->Exited(-1);
-	$aggobj->SetStatus("failed");
-	print STDERR "CreateSliver $urn: No manifest returned\n";
-	return -1;
+
+    #
+    # If earlyreturn is set, we got a read timeout and so we will not
+    # have a manifest. We will hopefully catch up with it later during
+    # WaitForSlivers().
+    #
+    if ($earlyreturn) {
+	print STDERR "Read timeout forcing early return mode\n";
     }
-    #
-    # This needs to be done differently; passing an extra credential
-    # and setting the valid_until in the rspec. 
-    #
-    if ($duration > $maxduration) {
-	print "Forcing correct slice expiration\n";
-	$response = $aggobj->Extend($slice->ExpirationGMT(), $this_user);
-	if (!defined($response) ||
-	    $response->code() != GENIRESPONSE_SUCCESS) {
-	    $aggobj->SetStatus("failed");
-	    $webtask->output("Renew failed on $urn");
+    elsif (ref($response->value()) eq "ARRAY") {
+	$manifest = $response->value()->[1];
+	if (!defined($manifest)) {
 	    $webtask->Exited(-1);
-	    print STDERR "Renew failed on $urn\n";
+	    $aggobj->SetStatus("failed");
+	    print STDERR "CreateSliver $urn: No manifest returned\n";
 	    return -1;
 	}
     }
-    $aggobj->SetStatus("provisioned");
-    $aggobj->SetManifest($manifest);
+    else {
+	$webtask->Exited(-1);
+	$aggobj->SetStatus("failed");
+	print STDERR "CreateSliver $urn: Unexpected return\n";
+	return -1;
+    }
+    
+    if (defined($manifest)) {
+	$aggobj->SetStatus("provisioned");
+	$aggobj->SetManifest($manifest);
+    }
     return 0;
 }
 
@@ -1651,18 +1683,18 @@ sub RunStitcher()
 	}
 	$aggobj->SetStatus("provisioned");
 	print "Requesting manifest from $urn\n";
-	my $manifest = $aggobj->GetManifest();
-	if (!defined($manifest)) {
+	my $response = $aggobj->GetManifest();
+	if (!defined($response)) {
 	    $aggobj->SetStatus("failed");
 	    $webtask->output("Could not get manifest from $urn");
 	    $webtask->Exited(-1);
 	    return -1;
 	}
 	# Web interface wants this as soon as possible.
-	$aggobj->SetManifest($manifest);
+	$aggobj->SetManifest($response->value()->{'manifest'});
 	
 	print "Forcing correct slice expiration\n";
-	my $response = $aggobj->Extend($slice->ExpirationGMT(), $this_user);
+	$response = $aggobj->Extend($slice->ExpirationGMT(), $this_user);
 	if (!defined($response) ||
 	    $response->code() != GENIRESPONSE_SUCCESS) {
 	    $aggobj->SetStatus("failed");

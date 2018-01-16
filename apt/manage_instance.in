@@ -2573,12 +2573,17 @@ sub DoManifests()
 	my $webtask  = $sliver->webtask();
 	my $errmsg;
 
-	my $manifest = $sliver->GetManifest();
-	if (!defined($manifest)) {
+	my $response = $sliver->GetManifest();
+	if (!defined($response)) {
 	    $errmsg = "RPC Error calling GetManifest";
 	    goto bad;
 	}
-	my $response = $sliver->SliceStatus();
+	my $manifest = $response->value()->{'manifest'};
+	if ($debug) {
+	    print STDERR $manifest . "\n";
+	}
+	
+	$response = $sliver->SliceStatus();
 	if (!defined($response)) {
 	    $errmsg = "RPC Error calling SliceStatus";
 	    goto bad;

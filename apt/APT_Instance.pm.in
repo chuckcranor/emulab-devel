@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2017 University of Utah and the Flux Group.
+# Copyright (c) 2007-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1341,6 +1341,43 @@ sub HoursToEnglish($)
     return $string;
 }
 
+#
+# Check to see if all aggregates provisioned, and update node counts.
+#
+sub CheckProvisioned($)
+{
+    my ($self) = @_;
+    my $provisioned = 1;
+
+    DBQueryWarn("lock tables apt_instances write, ".
+		"            apt_instance_aggregates write, ".
+		"            web_tasks read")
+	or return -1;
+
+    #print STDERR "CheckProvisioned: " . $self->status() . "\n";
+
+    # We only do this while we are provisioning.
+    $self->Refresh();
+    goto done
+	if ($self->status() ne "provisioning");
+
+    foreach my $agg ($self->AggregateList()) {
+	$agg->Refresh();
+
+	$provisioned = 0
+	    if (!defined($agg->manifest()));
+    }
+    if ($provisioned) {
+	#print STDERR "CheckProvisioned: provisioned\n";
+	
+	$self->SetStatus("provisioned");
+	$self->ComputeNodeCounts();
+    }
+  done:
+    DBQueryWarn("unlock tables");
+    return 0;
+}
+
 ###################################################################
 package APT_Instance::ExtensionInfo;
 use emdb;
@@ -2473,7 +2510,7 @@ sub SliceStatus($)
 }
 
 #
-# Ask for the manifest
+# Ask for the manifest. Returns a response object.
 #
 sub GetManifest($)
 {
@@ -2548,11 +2585,68 @@ sub GetManifest($)
 	}
 	last;
     }
-    return $response->value()
+    return GeniResponse->new($response->code(),
+			     {"manifest" => $response->value()})
 	if ($self->isAL2S());
     return undef
 	if (! exists($response->value()->{'manifest'}));
-    return $response->value()->{'manifest'};
+    return $response;
+}
+
+#
+# General resolve
+#
+sub SliceResolve($)
+{
+    my ($self) = @_;
+    my $credentials;
+    my $method;
+    my @params;
+    my $authority = $self->GetGeniAuthority();
+    my $geniuser  = $self->instance()->GetGeniUser();
+    my $urn       = $self->aggregate_urn();
+    my $slice     = $self->instance()->GetGeniSlice();
+    my $context   = APT_Geni::GeniContext();
+    return undef
+	if (! (defined($geniuser) && defined($authority) &&
+	       defined($slice) && defined($context)));
+
+    if ($self->isAL2S()) {
+	my $slice_credential = APT_Geni::GenAuthCredential($slice);
+	if (!defined($slice_credential)) {
+	    print STDERR "Could not generate slice credential\n";
+	    return undef;
+	}
+	$method = "ListResources";
+
+	# This breaks, cause perl encodes '3' as an integer, but the
+	# python on the other side demands a string. 
+	@params = ([$slice_credential->asString()],
+		   {"geni_slice_urn" => $slice->urn(),
+		    "geni_rspec_version" => {'version' => '3',
+					     'type'    => 'GENI'},
+		   });
+    }
+    else {
+	my $credentials;
+
+	my ($slice_credential, $speaksfor_credential) =
+	    APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
+	return undef
+	    if (!defined($slice_credential));
+
+	$credentials = [$slice_credential->asString()];
+	if (defined($speaksfor_credential)) {
+	    $credentials = [@$credentials, $speaksfor_credential->asString()];
+	}
+	$method = "Resolve";
+	@params = ({"urn"   => $slice->urn(),
+		    "credentials" => $credentials});
+    }
+    my $cmurl = $authority->url();
+    $cmurl = devurl($cmurl) if ($usemydevtree);
+
+    return Genixmlrpc::CallMethod($cmurl, $context, $method, @params);
 }
 
 sub Provision($$$$)
@@ -3115,14 +3209,42 @@ sub WaitForSliver($)
     my $ready    = 0;
     my $failed   = 0;
     my $rpcfail  = 0;
-    my $public_url;
     my $repblob;
     my $laststatus;
 
     while ($seconds > 0) {
 	sleep($interval);
 	$seconds -= $interval;
-    
+
+	print STDERR "WaitForSliver: " . TBTimeStamp() . "\n";
+
+	#
+	# If we do not have a manifest, then we want to ask for the manifest
+	# since SliverStatus() might fail if the CreateSliver() failed cause
+	# of a read timeout before the slice aggregate has been created.
+	#
+	if (!defined($aggobj->manifest())) {
+	    print STDERR "No manifest. asking\n";
+	    my $response = $aggobj->GetManifest();
+	    
+	    if (defined($response)) {
+		print STDERR "Got manifest\n";
+		
+		$aggobj->SetStatus("provisioned");
+		$aggobj->SetManifest($response->value()->{'manifest'});
+		$aggobj->instance()->CheckProvisioned();
+
+		# We will not have this since CreateSliver() timed out, so 
+		# make sure we get it now.
+		if (defined($response->logurl())) {
+		    $aggobj->SetPublicURL($response->logurl());
+		}
+	    }
+	    else {
+		print STDERR "Still no manifest, looping\n";
+		next;
+	    }
+	}
 	my $response = $aggobj->SliceStatus();
 	if (!defined($response) || !defined($response->value()) ||
 	    ($response->code() != GENIRESPONSE_SUCCESS &&
@@ -3237,7 +3359,7 @@ sub WaitForSliver($)
 	$laststatus = $statusblob;
 
 	if (exists($repblob->{'public_url'})) {
-	    $public_url = $repblob->{'public_url'};
+	    my $public_url = $repblob->{'public_url'};
 	    $aggobj->SetPublicURL($public_url);
 	}
 	if ($repblob->{'status'} eq "ready") {
