@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -136,6 +136,15 @@ my $PROTOGENI_NONFSMOUNTS = @PROTOGENI_NONFSMOUNTS@;
 my $default_longitude = undef;
 my $default_latitude  = undef;
 my $default_country   = undef;
+
+sub DebugTimeStamp($)
+{
+    my ($message)  = @_;
+
+    if (1) {
+	print STDERR "TIMESTAMP: " . TBTimeStamp() . " $message\n";
+    }
+}
 
 #
 # Tell the client what API revision we support.  The correspondence
@@ -1070,6 +1079,8 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     }
 
     print GeniXML::Serialize($rspec);
+
+    DebugTimeStamp("Processing nodes");
 
     foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	my $component_id  = GeniXML::GetNodeId($ref);
@@ -2138,9 +2149,12 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	($sync_server) = keys(%nodemap);
 	$virtexperiment->sync_server($sync_server);
     }
+    DebugTimeStamp("Processing nodes done");
     
     goto skiplinks
 	if (!defined(GeniXML::FindFirst("n:link", $rspec)));
+
+    DebugTimeStamp("Processing links");
 
     GeniStitch->LookupAll($rspec);
     
@@ -2264,7 +2278,6 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 					     {"vname" => $lanname});
 	    }
 	}
-
 	my $isshared = 0;
 	my $emulated = 0;
 	my $encap    = "default";
@@ -2808,8 +2821,11 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	}
 	$linknum++;
     }
+    DebugTimeStamp("Processing links done");
   skiplinks:
+    DebugTimeStamp("Dumping topo");
     $virtexperiment->Dump();
+    DebugTimeStamp("Dumping topo done");
     {
 	#
 	# Want to capture this output and return to user.
@@ -2817,6 +2833,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	my $warnings = "";
 	local $SIG{__WARN__} = sub { $warnings .= $_[0] };
 	
+	DebugTimeStamp("Storing topo");
 	if ($virtexperiment->Store()) {
 	    print STDERR $warnings
 		if ($warnings ne "");
@@ -2829,6 +2846,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 					     undef, $warnings);
 	    goto bad;
 	}
+	DebugTimeStamp("Storing topo done");
     }
     $response = CheckForDeprecatedImages($slice_experiment, $user);
     goto bad
@@ -2841,6 +2859,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     }
 
     # Do IP assignment.
+    DebugTimeStamp("Starting ipassign");
     my $poutput = GeniUtil::ExecQuiet("$IPASSIGN $pid $eid");
     if ($?) {
 	print STDERR $poutput;
@@ -2848,6 +2867,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 					 $poutput);
 	goto bad;
     }
+    DebugTimeStamp("Finished ipassign");
 
     # Allocate any public address pools.
     my $tmp = $slice_experiment->AllocatePublicAddrPools();
@@ -2889,8 +2909,9 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     # without allocating any nodes. If we get a solution, and we can
     # allocate the nodes, we update the rspec with the physical info.
     #
-    my $tmpfile = POSIX::tmpnam();
+    my $tmpfile = tmpnam();
 
+    DebugTimeStamp("Starting vtopgen");
     # First a prerun to get the node counts and verify topo.
     $output = GeniUtil::ExecQuiet("$VTOPGEN -p $pid $eid");
     if ($?) {
@@ -2900,6 +2921,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 				 "Could not verify topo:\n$output");
 	goto bad;
     }
+    DebugTimeStamp("Finished vtopgen");
     $slice_experiment->CleanLogFiles();
 
     #
@@ -2909,9 +2931,12 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     #
     my $aopts = ($isupdate ? "-u" : "");
     $aopts   .= " -S $packing_option" if (defined($packing_option));
-    
+
+    DebugTimeStamp("Starting mapper");
     $output =
 	GeniUtil::ExecQuiet("$MAPPER -a -d -v $aopts -z -o $tmpfile $pid $eid");
+    DebugTimeStamp("Finished mapper");
+    
     if ($?) {
 	my $done         = 0;
 	my $logstuff     = "";
@@ -3346,10 +3371,12 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 
     # Store the virt topo again since we changed it above.
     $virtexperiment->Dump();
+    DebugTimeStamp("Storing topo again");
     if ($virtexperiment->Store()) {
 	$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef);
 	goto bad;
     }
+    DebugTimeStamp("Storing topo finished");
     # Now we can setup the agents.
     if ($slice_experiment->SetupProgramAgents()) {
 	print STDERR "Could not setup program agent support\n";
