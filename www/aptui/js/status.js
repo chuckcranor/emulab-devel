@@ -582,7 +582,7 @@ $(function ()
 	    UpdateSliverStatus(json.value.sliverstatus);
 	}
 	lastStatus = instanceStatus;
-}
+    }
 
     //
     // Enable/Disable buttons. 
