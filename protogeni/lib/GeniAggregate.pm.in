@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -108,6 +108,15 @@ $ACTION_FLAGS_SYNCVLANS	        = 0x01;
 $ACTION_FLAGS_NOEVENTSTART	= 0x02;
 
 @EXPORT_OK = qw($ACTION_FLAGS_SYNCVLANS $ACTION_FLAGS_NOEVENTSTART);
+
+sub DebugTimeStamp($)
+{
+    my ($message)  = @_;
+
+    if (1) {
+	print STDERR "TIMESTAMP: " . TBTimeStamp() . " $message\n";
+    }
+}
 
 #
 # Lookup by URN, idx, or uuid.
@@ -909,7 +918,6 @@ sub GetManifest($$)
 		    "where slice_uuid='$slice_uuid'");
     
     if (!$query_result || !$query_result->numrows) {
-	print STDERR "GetManifest: Could not locate manifest for $self\n";
 	return undef;
     }
     my ($xml) = $query_result->fetchrow_array();
@@ -1144,6 +1152,8 @@ sub ActionStart($$;$)
 
 	# Want to make sure we see fresh logs (and do not store the same log).
 	$node->ClearBootLog();
+	# Must be defined for below.
+	$node->_bootlog(undef);
 
 	# Back pointer, see below.
 	$node->_sliver($sliver);
@@ -1165,6 +1175,8 @@ sub ActionStart($$;$)
 		$nodes{$pnode->node_id()} = $pnode;
 
 		$pnode->ClearBootLog();
+		# Must be defined for below.
+		$pnode->_bootlog(undef);
 	    }
 	}
     }
@@ -1232,23 +1244,29 @@ sub ActionStart($$;$)
 	    $msg .= "$GENELISTS failed\n";
 	    goto bad;
 	}
+	DebugTimeStamp("gentopofile");
 	if (system("$GENTOPOFILE $pid $eid")) {
 	    $msg .= "$GENTOPOFILE failed\n";
 	    goto bad;
 	}
+	DebugTimeStamp("exports_setup");
 	if (system("$EXPORTS_SETUP")) {
 	    $msg .= "$EXPORTS_SETUP failed\n";
 	    goto bad;
 	}
+	DebugTimeStamp("arplockdown");
 	if (system("$ARPLOCKDOWN ")) {
 	    $msg .= "$ARPLOCKDOWN failed\n";
 	    goto bad;
 	}
 	# The nodes will not boot locally unless there is a DNS record.
+	DebugTimeStamp("named_setup");
 	if (system("$NAMEDSETUP")) {
 	    $msg .= "$NAMEDSETUP failed\n";
 	    goto bad;
 	}
+	if (0) {
+	DebugTimeStamp("snmpit");
 	if ($flags & $ACTION_FLAGS_SYNCVLANS) {
 	    if (Lan->CompareVlansWithSwitches2($experiment)) {
 		$msg .= "CompareVlansWithSwitches2 failed!\n";
@@ -1281,14 +1299,18 @@ sub ActionStart($$;$)
 		goto bad;
 	    }
 	}
+	}
+	DebugTimeStamp("setuportvlans");
 	if ($experiment->SetupPortLans()) {
 	    $msg .= "Failed to setup shared vlan ports";
 	    goto bad;
 	}
+	DebugTimeStamp("syncportvlans");
 	if ($experiment->SyncPortLans()) {
 	    $msg .= "Failed to add ports to shared vlans";
 	    goto bad;
 	}
+	DebugTimeStamp("syncportvlans done");
 	GeniCM::UpdateManifest($slice);
     }
     $sliver = undef;
@@ -1305,6 +1327,62 @@ sub ActionStart($$;$)
     # generally do not do on the geni path. 
     #
     $experiment->SetState(EXPTSTATE_ACTIVATING());
+
+    #
+    # We want to let snmpit run in parallel with os_setup, like the
+    # classic path does. 
+    #
+    my $snmpit_child = fork();
+    if ($snmpit_child) {
+	#
+	# Parent just continues on, but will wait later, we cannot
+	# return to the caller until snmpit is done. 
+	#
+	print STDERR "Forked off snmpit: process $snmpit_child\n";
+    }
+    else {
+	my $msg;
+	
+	DebugTimeStamp("snmpit started");
+	if ($flags & $ACTION_FLAGS_SYNCVLANS) {
+	    if (Lan->CompareVlansWithSwitches2($experiment)) {
+		$msg .= "CompareVlansWithSwitches2 failed!\n";
+		goto badsnmpit;
+	    }
+	    system("$SNMPIT -X $pid $eid");
+	    if ($?) {
+		$msg .= "Failed to synchronize vlans";
+		goto badsnmpit;
+	    }
+	}
+	else {
+	    my @diff = ();
+	    my @same = ();
+	    
+	    if (Lan->CompareVlansWithSwitches($experiment, \@diff, \@same)) {
+		print STDERR "CompareVlansWithSwitches failed!\n";
+		goto badsnmpit;
+	    }
+	    if (@diff) {
+		system("$SNMPIT -f ". join(" ", map("-o $_", @diff)));
+		if ($?) {
+		    $msg .= "Failed to remove obsolete VLANs.";
+		    goto badsnmpit;
+		}
+	    }
+	    system("$SNMPIT -t $pid $eid");
+	    if ($?) {
+		$msg .= "Failed to setup vlans";
+		goto badsnmpit;
+	    }
+	}
+	DebugTimeStamp("snmpit finished");
+	exit(0);
+	
+      badsnmpit:
+	print STDERR "Failed to setup vlans: $msg\n";
+	exit(-1);
+    }
     
     my @nodes = keys(%nodes);
     print STDERR "Calling os_setup @nodes\n";
@@ -1373,6 +1451,27 @@ sub ActionStart($$;$)
 		 "in $urn failed.\n\n" .
 		 "$logs\n\n",
 		 $TBOPS, "Cc: $TBOPS");
+    }
+    #
+    # Must wait for snmpit to finish before we do anything else.
+    #
+    if (defined($snmpit_child)) {
+	print STDERR "Waiting for snmpit process to finish\n";
+
+	my $kid = waitpid($snmpit_child, 0);
+	if ($kid == $snmpit_child) {
+	    if ($?) {
+		$msg = "Wait for snmpit returned error $?\n";
+		goto bad;
+	    }
+	    else {
+		print STDERR "Waiting for snmpit process done\n";
+	    }
+	}
+	else {
+	    $msg = "Waitpid for snmpit process problem: $kid";
+	    goto bad;
+	}
     }
     if ($rval) {
 	$msg .= "$OSSETUP failed\n";
