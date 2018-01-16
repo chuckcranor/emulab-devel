@@ -2447,6 +2447,17 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		$besteffort = 1;
 	    }
 	}
+	#
+	# On a really big lan, we do not want to search the properties
+	# over and over.
+	#
+	my %properties = ();
+	my @properties = GeniXML::GetLinkProperties($linkref);
+	foreach my $property (@properties) {
+	    my $source = GetText("source_id", $property);
+	    my $dest   = GetText("dest_id", $property);
+	    $properties{"$source:$dest"} = $property;
+	}
 
 	my $edgecount = 0;
 
@@ -2688,8 +2699,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		}
 		$bridge_vname = $bblob->{'name'};
 	    }
-	    elsif (GeniXML::GetLinkProperties($linkref)) {
-		my @properties = GeniXML::GetLinkProperties($linkref);
+	    elsif (@properties) {
 		$uselinkdelay = 1
 		    if (!$nobwshaping);
 		
@@ -2730,23 +2740,20 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		    }
 		}
 		else {
-		    foreach my $property (@properties) {
-			my $source = GetText("source_id", $property);
-			my $dest   = GetText("dest_id", $property);
-
-			if ($source eq $iface_id && $dest eq $lanname) {
-			    if (defined(GetText("capacity", $property))) {
-				$bandwidth  = GetText("capacity", $property);
-				$rbandwidth = $bandwidth;
-			    }
-			    if (defined(GetText("latency", $property))) {
-				$latency  = GetText("latency", $property);
-				$rlatency = $latency;
-			    }
-			    if (defined(GetText("packet_loss", $property))) {
-				$lossrate  = GetText("packet_loss", $property);
-				$rlossrate = $lossrate;
-			    }
+		    if (exists($properties{"$iface_id:$lanname"})) {
+			my $property = $properties{"$iface_id:$lanname"};
+			
+			if (defined(GetText("capacity", $property))) {
+			    $bandwidth  = GetText("capacity", $property);
+			    $rbandwidth = $bandwidth;
+			}
+			if (defined(GetText("latency", $property))) {
+			    $latency  = GetText("latency", $property);
+			    $rlatency = $latency;
+			}
+			if (defined(GetText("packet_loss", $property))) {
+			    $lossrate  = GetText("packet_loss", $property);
+			    $rlossrate = $lossrate;
 			}
 		    }
 		}
@@ -2798,6 +2805,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 					  "uselinkdelay"=> $uselinkdelay,
 					  "protocol"    => $protocol
 					 });
+
 	    if ($ofcontroller && $ofcontroller ne "" && !$ignore_openflow) {
 		if ($no_openflow) {
 		    $response =
@@ -3166,6 +3174,14 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     
     # So we can find things later.
     $slice_experiment->SaveLogFiles();
+
+    #
+    # Save off the assign solution to a known name so we can feed it
+    # back into the mapper in redeem ticket. This is only going to work
+    # from CreateSliver() which combines GetTicket() and RedeemTicket().
+    #
+    system("/bin/rm -rf solution.${PID}");
+    system("/bin/cp -p assign.log solution.${PID}");
 
     my $solution = GeniXML::ParseFile($tmpfile);
     if ($@) {
@@ -4288,9 +4304,19 @@ sub SliverWorkAux($$$$$$$$)
 	$experiment->SetState(EXPTSTATE_ACTIVATING());
     }
     $didpreswap = 1;
+
+    #
+    # Look for an assign solution file from GetTicket() via CreateSliver()
+    # If we find it, feed it into the mapper.
+    #
+    my $solfile = "";
+    if (-e "solution.${PID}") {
+	$solfile = "-L solution.${PID}";
+	print STDERR "Using assign solution file solution.${PID}\n";
+    }
     
     # Add -u for update mode, but not -f (fixnode). 
-    my $output = GeniUtil::ExecQuiet("$MAPPER -d -v -z -u $pid $eid");
+    my $output = GeniUtil::ExecQuiet("$MAPPER -d -v $solfile -z -u $pid $eid");
     if ($?) {
 	my $logstuff = "";
 	$message = "Could not map to resources";
@@ -4336,8 +4362,11 @@ sub SliverWorkAux($$$$$$$$)
 
 	# So we can find things later.
 	$experiment->SaveLogFiles();
+	unlink("solution.${PID}") if ($solfile ne "");
 	goto bad;
     }
+    unlink("solution.${PID}") if ($solfile ne "");
+    
     $shouldrollback = 1;
     # Dump the output to STDERR for debugging.
     print STDERR $output;
