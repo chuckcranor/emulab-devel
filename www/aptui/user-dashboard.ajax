@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -111,6 +111,17 @@ function Do_ProfileList()
         return;
     }
     $results = ProfileList("user", $target_user);
+    SPITAJAX_RESPONSE($results);
+}
+
+function Do_ProjectProfileList()
+{
+    global $this_user, $target_user;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $results = ProjectProfileList($target_user);
     SPITAJAX_RESPONSE($results);
 }
 

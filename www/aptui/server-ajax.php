@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -269,6 +269,8 @@ $routing = array("myprofiles" =>
                                                       "Do_UsageSummary",
                                                  "ProfileList" =>
                                                       "Do_ProfileList",
+                                                 "ProjectProfileList" =>
+                                                      "Do_ProjectProfileList",
                                                  "Toggle" =>
                                                      "Do_Toggle",
                                                  "SendTestMessage" =>

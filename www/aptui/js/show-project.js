@@ -197,11 +197,12 @@ $(function ()
 
 	    $('#profiles_content')
 		.html(template({"profiles"    : json.value,
+				"tablename"   : "project-profiles",
 				"showCreator" : true,
 				"showProject" : false}));
 	    
 	    // Format dates with moment before display.
-	    $('#profiles_table .format-date').each(function() {
+	    $('#project-profiles-table .format-date').each(function() {
 		var date = $.trim($(this).html());
 		if (date != "") {
 		    $(this).html(moment($(this).html()).format("ll"));
@@ -218,7 +219,7 @@ $(function ()
 		ShowTopology($(this).data("profile"));
 	    });
 	    
-	    var table = $('#profiles_table')
+	    var table = $('#' + 'project-profiles-table')
 		.tablesorter({
 		    theme : 'green',
 		    widgets: ["filter"],
@@ -239,7 +240,8 @@ $(function ()
 			filter_liveSearch : true,
 		    },
 		});
-	    $.tablesorter.filter.bindSearch(table, $('#profile_search'));
+	    $.tablesorter.filter.bindSearch(table,
+					    $('#' + 'project-profiles-search'));
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "show-project", "ProfileList",

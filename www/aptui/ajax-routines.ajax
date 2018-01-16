@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -259,8 +259,6 @@ function ProfileList($which, $target)
         $target_idx  = $target->pid_idx();
         $whereclause = "where v.pid_idx='$target_idx'";
     }
-    $results = array();
-
     $query_result =
         DBQueryFatal("select p.*,v.*,DATE(v.created) as created ".
                      "   from apt_profiles as p ".
@@ -268,6 +266,42 @@ function ProfileList($which, $target)
                      "     v.profileid=p.profileid and ".
                      "     v.version=p.version ".
                      "$whereclause");
+
+    return ProfileListAux($query_result);
+}
+
+#
+# Return list of profiles in all projects the user is a member of.
+#
+function ProjectProfileList($target_user)
+{
+    global $urn_mapping, $TBBASE;
+    global $this_user;
+
+    $creator_idx = $target_user->uid_idx();
+
+    $query_result =
+        DBQueryFatal("select p.*,v.*,DATE(v.created) as created ".
+                     "   from apt_profiles as p ".
+                     "left join apt_profile_versions as v on ".
+                     "     v.profileid=p.profileid and ".
+                     "     v.version=p.version ".
+                     "left join group_membership as g on ".
+                     "     g.pid_idx=p.pid_idx and g.gid_idx=p.gid_idx ".
+                     "where g.uid_idx='$creator_idx' ".
+                     "order by p.pid");
+
+    return ProfileListAux($query_result);
+}
+
+#
+# Helper function
+#
+function ProfileListAux($query_result)
+{
+    global $urn_mapping, $TBBASE;
+    global $this_user;
+    $results = array();
 
     while ($row = mysql_fetch_array($query_result)) {
         $idx     = $row["profileid"];

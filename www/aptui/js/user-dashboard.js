@@ -60,6 +60,7 @@ $(function ()
 	LoadClassicExperiments();
 	// Should we do these on demand?
 	LoadProfileListTab();
+	LoadProjectProfiles();
 	LoadClassicProfiles();
 	LoadProjectsTab();
 	LoadProfileTab();
@@ -235,11 +236,12 @@ $(function ()
 
 	    $('#profiles_content')
 		.html(template({"profiles"    : json.value,
+				"tablename"   : "user-profiles",
 				"showCreator" : false,
 				"showProject" : true}));
 	    
 	    // Format dates with moment before display.
-	    $('#profiles_table .format-date').each(function() {
+	    $('#user-profiles-table .format-date').each(function() {
 		var date = $.trim($(this).html());
 		if (date != "") {
 		    $(this).html(moment($(this).html()).format("ll"));
@@ -256,7 +258,7 @@ $(function ()
 		ShowTopology($(this).data("profile"));
 	    });
 	    
-	    var table = $('#profiles_table')
+	    var table = $('#' + 'user-profiles-table')
 		.tablesorter({
 		    theme : 'green',
 		    widgets: ["filter"],
@@ -277,10 +279,80 @@ $(function ()
 			filter_liveSearch : true,
 		    },
 		});
-	    $.tablesorter.filter.bindSearch(table, $('#profile_search'));
+	    $.tablesorter.filter.bindSearch(table,
+					    $('#' + 'user-profiles-search'));
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "user-dashboard", "ProfileList",
+					    {"uid" : window.TARGET_USER});
+	xmlthing.done(callback);
+    }
+
+    function LoadProjectProfiles()
+    {
+	var callback = function(json) {
+	    console.info("LoadProjectProfiles", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (json.value.length == 0) {
+		return;
+	    }
+	    var template = _.template(profileListString);
+
+	    $('#projectprofiles_content')
+		.html(template({"profiles"    : json.value,
+				"tablename"   : "project-profiles",
+				"showCreator" : true,
+				"showProject" : true}));
+	    
+	    // Format dates with moment before display.
+	    $('#project-profiles-table .format-date').each(function() {
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
+	    // This activates the tooltip subsystem.
+	    $('[data-toggle="tooltip"]').tooltip({
+		delay: {"hide" : 500, "show" : 500},
+		placement: 'auto',
+	    });
+	    // Display the topo.
+	    $('.showtopo_modal_button').click(function (event) {
+		event.preventDefault();
+		ShowTopology($(this).data("profile"));
+	    });
+	    
+	    var table = $('#' + 'project-profiles-table')
+		.tablesorter({
+		    theme : 'green',
+		    widgets: ["filter"],
+		    widgetOptions: {
+			// include child row content while filtering, if true
+			filter_childRows  : true,
+			// include all columns in the search.
+			filter_anyMatch   : true,
+			// class name applied to filter row and each input
+			filter_cssFilter  : 'form-control',
+			// search from beginning
+			filter_startsWith : false,
+			// Set this option to false for case sensitive search
+			filter_ignoreCase : true,
+			// Only one search box.
+			filter_columnFilters : false,
+			// Search as typing
+			filter_liveSearch : true,
+		    },
+		});
+	    $.tablesorter.filter.bindSearch(table,
+					    $('#' + 'project-profiles-search'));
+	}
+	var xmlthing = sup.CallServerMethod(null,
+					    "user-dashboard",
+					    "ProjectProfileList",
 					    {"uid" : window.TARGET_USER});
 	xmlthing.done(callback);
     }
