@@ -172,10 +172,10 @@ event_wrap_py.So: $(SRCDIR)/event_wrap_py.c event.h
 	$(CC) -fpic -DPIC -c $(SWIGCFLAGS) $(CFLAGS_NOWARN) $(PYCORE) -o event_wrap_py.So $<
 
 event.so:	event.So event_wrap.So util.So
-	ld -shared $^ $(PUBSUBLIB) -lcrypto -o event.so
+	ld -shared $^ $(PUBSUBLIBS) -o event.so
 
 _tbevent.so:	event.So event_wrap_py.So util.So
-	ld -shared $^ $(PUBSUBLIB) -lcrypto -o $@
+	ld -shared $^ $(PUBSUBLIBS) -o $@
 
 LIB_STUFF       = event.pm event.so tbevent.py _tbevent.so
 
