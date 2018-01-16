@@ -575,7 +575,8 @@ sub DoRefreshInternal($$)
     my $blob = $response->value();
     print Dumper($blob);
     
-    $dataset->Update({"expires"   => TBDateStringLocal($blob->{"expires"})});
+    $dataset->Update({"expires"   => TBDateStringLocal($blob->{"expires"})})
+	if ($blob->{"expires"} && $blob->{"expires"} ne "");
     $dataset->Update({"updated"  => TBDateStringLocal($blob->{"updated"})})
 	if ($blob->{"updated"});
     $dataset->Update({"last_used" => TBDateStringLocal($blob->{"lastused"})})

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -345,8 +345,8 @@ sub VerifyBlob($)
 	if (!$blob->{'isdataset'} &&
 	    $blob->{'arch'} !~ /^(i386|x86_64|aarch64)$/);
     return GeniResponse->MalformedArgsResponse("Illegal virtualization")
-	if (!exists($blob->{'virtualizaton'}) &&
-	    $blob->{'virtualizaton'} !~ /^[-\w]+$/);
+	if (!$blob->{'isdataset'} &&
+	    $blob->{'virtualizaton'} !~ /^(raw-pc|emulab-xen|emulab-docker)$/);
     return GeniResponse->MalformedArgsResponse("Illegal visibility")
 	if ($blob->{'visibility'} !~ /^(project|public)$/);
     # We allow an empty list here.
@@ -468,13 +468,16 @@ sub UpdateImage($$)
 	"lba_high" => $blob->{'lba_high'},
 	"lba_size" => $blob->{'lba_size'},
 	"mbr_version" => $blob->{'mbr_version'},
-	"arch" => $blob->{'arch'},
 	"visibility" => $blob->{'visibility'},
-	"virtualizaton" => $blob->{'virtualizaton'},
 	"osfeatures" => $blob->{'osfeatures'},
 	"metadata_url" => $blob->{'metadata_url'},
 	"types_known_working" => join(",", sort(keys(%types_known_working))),
 	);
+    $sets{"virtualizaton"} = $blob->{'virtualizaton'}
+        if ($blob->{'virtualizaton'} && $blob->{'virtualizaton'} ne "");
+    $sets{"arch"} = $blob->{'arch'}
+        if ($blob->{'arch'} && $blob->{'arch'} ne "");
+    
     my $created = timelocal(strptime($blob->{'created'}));
 
     #
@@ -647,13 +650,15 @@ sub NewImage($)
 	"lba_high" => $blob->{'lba_high'},
 	"lba_size" => $blob->{'lba_size'},
 	"mbr_version" => $blob->{'mbr_version'},
-	"arch" => $blob->{'arch'},
 	"visibility" => $blob->{'visibility'},
-	"virtualizaton" => $blob->{'virtualizaton'},
 	"osfeatures" => $blob->{'osfeatures'},
 	"metadata_url" => $blob->{'metadata_url'},
 	"types_known_working" => join(",", sort(keys(%types_known_working))),
 	);
+    $sets{"virtualizaton"} = $blob->{'virtualizaton'}
+        if ($blob->{'virtualizaton'} && $blob->{'virtualizaton'} ne "");
+    $sets{"arch"} = $blob->{'arch'}
+        if ($blob->{'arch'} && $blob->{'arch'} ne "");
     my $created = timelocal(strptime($blob->{'created'}));
 
     #
