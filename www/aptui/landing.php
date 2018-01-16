@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -54,6 +54,9 @@ if ($this_user) {
         # Take them to the myaccount page, they will see a banner
         # message there.
 	header("Location: $APTBASE/myaccount.php");
+    }
+    elseif ($this_user->IsNonLocal() && $this_user->webonly()) {
+	header("Location: $APTBASE/nomembership.php");
     }
     elseif (Instance::UserHasInstances($this_user)) {
 	header("Location: $APTBASE/user-dashboard.php");

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -478,32 +478,30 @@ echo " <li class='divider'></li>
       <a class='btn btn-quickvm-home navbar-btn' href='$PORTAL_MANUAL' target='_blank'>Docs</a>
     </li>
 ";
-    if ($login_user && ! ($login_status & CHECKLOGIN_WEBONLY)) {
-echo "
+
+   echo "
     <li id='quickvm_actions_menu' class='dropdown apt-left apt-nav-item'> 
       <a href='#'
 	 class='dropdown-toggle btn btn-quickvm-home navbar-btn'
 	 data-toggle='dropdown'>
 	$login_uid <b class='caret'></b></a>
-      <ul class='dropdown-menu'>
-	<li><a href='myaccount.php'>Manage Account</a></li>
-	<li><a href='signup.php'>Start/Join Project</a></li>
-	<li><a href='changepswd.php'>Change Password</a></li>
-	";
-	if ($login_user->isActive()) {
-echo "
-        <li><a href='getcreds.php'>Download Credentials</a></li>
-	<li><a href='ssh-keys.php'>Manage SSH Keys</a></li>
-        <li class='divider'></li>
-	<li><a href='logout.php'>Logout</a></li>
-";
-	}
-    }
-
-echo "
-      </ul>
-    </li>
-  </ul>";
+      <ul class='dropdown-menu'>\n";
+       if ($login_user && ! ($login_status & CHECKLOGIN_WEBONLY)) {
+           echo "
+	        <li><a href='myaccount.php'>Manage Account</a></li>
+   	        <li><a href='signup.php'>Start/Join Project</a></li>
+	        <li><a href='changepswd.php'>Change Password</a></li>";
+               if ($login_user->isActive()) {
+                   echo "
+                 <li><a href='getcreds.php'>Download Credentials</a></li>
+    	         <li><a href='ssh-keys.php'>Manage SSH Keys</a></li>
+                 <li class='divider'></li>";
+               }
+       }
+       echo "<li><a href='logout.php'>Logout</a></li>";
+       echo "</ul>
+           </li>
+         </ul>";
   echo "</div></div>";
 
 }
