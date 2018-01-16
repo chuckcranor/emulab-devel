@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2017 University of Utah and the Flux Group.
+# Copyright (c) 2010-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -136,14 +136,14 @@ sub GetXmlVersion($)
     my $result = undef;
     my $ns = $node->namespaceURI();
     if (defined($ns)) {
-	if ($ns =~ /protogeni.net\/resources\/rspec\/0.1$/) {
+	if ($ns =~ /geni.net\/resources\/rspec\/3$/) {
+	    $result = $RSPEC_3;
+	} elsif ($ns =~ /protogeni.net\/resources\/rspec\/0.1$/) {
 	    $result = $RSPEC_0_1;
 	} elsif ($ns =~ /protogeni.net\/resources\/rspec\/0.2$/) {
 	    $result = $RSPEC_0_2;
 	} elsif ($ns =~ /protogeni.net\/resources\/rspec\/2$/) {
 	    $result = $RSPEC_2;
-	} elsif ($ns =~ /geni.net\/resources\/rspec\/3$/) {
-	    $result = $RSPEC_3;
 	} else {
 	    carp("Unknown rspec namespace: " . $ns);
 	    $result = $RSPEC_0_1;
@@ -151,6 +151,8 @@ sub GetXmlVersion($)
     }
     return $result;
 }
+
+my $pgre = qr/protogeni.net\/resources\/rspec\/[\d\.]+$/;
 
 sub IsVersion0($)
 {
@@ -163,9 +165,11 @@ sub IsVersion0($)
     #
     my $ns = $node->namespaceURI();
     return 0
-	if (defined($ns) &&
-	    $ns !~ /protogeni.net\/resources\/rspec\/[\d\.]+$/);
+	if (!defined($ns));
     
+    return 0
+	if (defined($ns) && $ns !~ $pgre);
+
     my $version = GetXmlVersion($_[0]);
     return defined($version)
 	&& ($version eq $RSPEC_0_1 || $version eq $RSPEC_0_2);
@@ -516,8 +520,8 @@ sub GetVnodeId($)
 sub GetNodeId($)
 {
     my ($node) = @_;
-    my $result = GetFirstText($node, "component_urn", "component_id",
-			      "component_uuid", "uuid");
+    my $result = GetFirstText($node, "component_uuid", "component_id",
+			      "component_urn", "uuid");
     if (defined($result) && $result eq "") {
 	$result = undef;
     }
@@ -527,14 +531,14 @@ sub GetNodeId($)
 sub GetVirtualId($)
 {
     my ($node) = @_;
-    return GetFirstText($node, "virtual_id", "nickname", "client_id");
+    return GetFirstText($node, "client_id", "virtual_id", "nickname");
 }
 
 sub GetInterfaceId($)
 {
     my ($node) = @_;
-    return GetFirstText($node, "virtual_interface_id", "iface_name",
-			"client_id", "virtual_port_id", "virtual_id");
+    return GetFirstText($node, "client_id", "virtual_interface_id",
+			"iface_name", "virtual_port_id", "virtual_id");
 }
 
 sub GetInterfaceNodeId($)
@@ -546,7 +550,7 @@ sub GetInterfaceNodeId($)
 sub GetSliverId($)
 {
     my ($node) = @_;
-    return GetFirstText($node, "sliver_urn", "sliver_id");
+    return GetFirstText($node, "sliver_id", "sliver_urn");
 }
 
 sub DeleteSliverId($)
@@ -559,8 +563,8 @@ sub DeleteSliverId($)
 sub GetManagerId($)
 {
     my ($node) = @_;
-    my $result = GetFirstText($node, "component_manager_urn",
-			      "component_manager_id",
+    my $result = GetFirstText($node, "component_manager_id",
+			      "component_manager_urn",
 			      "component_manager_uuid");
     if (defined($result) && $result eq "") {
 	$result = undef;
