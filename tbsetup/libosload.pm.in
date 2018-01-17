@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,7 +37,7 @@ use vars qw(@ISA @EXPORT);
 use libtestbed; # for TBGenSecretKey();
 use libdb;
 use libreboot;
-use libtblog;
+use libtblog_simple;
 use Node;
 use NodeType;
 use OSImage;
@@ -153,14 +153,6 @@ sub osload ($$) {
     if (defined($args->{'nodeflags'})) {
 	%nodeflags = %{$args->{'nodeflags'}};
     }
-
-    #
-    # Start a new logging sub-process
-    #
-    my $old_env = \%ENV;
-    local %ENV;
-    copy_hash %ENV, $old_env;
-    tblog_sub_process("osload", @nodes);
 
     #
     # Figure out who called us. Root and admin types can do whatever they

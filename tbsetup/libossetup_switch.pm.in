@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2010 University of Utah and the Flux Group.
+# Copyright (c) 2000-2010, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,7 +39,7 @@ use libossetup;
 # XXX only works with newer version of libosload!
 use libosload_new;
 use libosload_switch;
-use libtblog;
+use libtblog_simple;
 use Node;
 use English;
 use Data::Dumper;

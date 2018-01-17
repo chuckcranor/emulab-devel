@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,7 +37,7 @@ use base qw( Exporter );
 use libtestbed; # for TBGenSecretKey();
 use libdb;
 use libreboot;
-use libtblog;
+use libtblog_simple;
 use Node;
 use NodeType;
 use Interface;
@@ -494,16 +494,6 @@ sub osload($$$) {
     }
 
     $self->{FLAGS} = \%flags;
-
-    if (!$self->debug() || $flags{asyncmode}) {
-	#
-	# Start a new logging sub-process
-	#
-	my $old_env = \%ENV;
-	local %ENV;
-	copy_hash %ENV, $old_env;
-	tblog_sub_process("osload", @nodes);
-    }
 
     #
     # Figure out who called us. Root and admin types can do whatever they
@@ -1790,7 +1780,7 @@ use base qw(libosload_new);
 
 use libtestbed;
 use libdb;
-use libtblog;
+use libtblog_simple;
 use Node;
 use OSImage;
 use English;
@@ -2468,7 +2458,7 @@ use base qw(libosload_common);
 
 use libtestbed;
 use libdb;
-use libtblog;
+use libtblog_simple;
 use Node;
 use OSImage;
 use English;
@@ -2641,7 +2631,7 @@ use base qw(libosload_pc);
 use libdb;
 use libtestbed;
 use libossetup;
-use libtblog;
+use libtblog_simple;
 use Node;
 use English;
 use Data::Dumper;
@@ -2652,7 +2642,7 @@ use base qw(libosload_pc);
 
 use libtestbed;
 use libdb;
-use libtblog;
+use libtblog_simple;
 use Node;
 use English;
 use Data::Dumper;
@@ -2731,7 +2721,7 @@ use base qw(libosload_virtnode);
 
 use libdb;
 use libtestbed;
-use libtblog;
+use libtblog_simple;
 use Node;
 use English;
 use Data::Dumper;
@@ -2752,7 +2742,7 @@ use base qw(libosload_common);
 
 use libtestbed;
 use libdb;
-use libtblog;
+use libtblog_simple;
 use Node;
 use OSImage;
 use English;

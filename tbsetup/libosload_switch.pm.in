@@ -9,7 +9,7 @@ use vars qw($AUTOLOAD);
 
 use libdb;
 use libtestbed;
-use libtblog;
+use libtblog_simple;
 use libreboot;
 use Node;
 use Group;

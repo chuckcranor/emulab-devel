@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,7 +40,7 @@ use vars qw(@ISA @EXPORT);
 # Must come after package declaration!
 use lib '@prefix@/lib';
 use libdb;
-use libtblog;
+use libtblog_simple;
 use English;
 
 #
@@ -141,14 +141,6 @@ sub nodereboot($$)
     my ($args, $result) = @_;
     my @nodes       = @{ $args->{'nodelist'}};
     my %nodeobjects = ();	# Not in the mood to rewrite this function.
-
-    #
-    # Start a new logging sub-process
-    #
-    my $old_env = \%ENV;
-    local %ENV;
-    copy_hash %ENV, $old_env;
-    tblog_sub_process("reboot", @nodes);
 
     # Reset our few globals.
     $debug    = 0;
@@ -631,14 +623,6 @@ sub RebootNode {
     my ($nodeobject, $reconfig, $killmode, $rebootmode, $prepare) = @_;
     my ($status, $syspid, $mypid, $nodestate);
     my $pc = $nodeobject->node_id();
-
-    #
-    # Start a new logging sub-process
-    #
-    my $old_env = \%ENV;
-    local %ENV;
-    copy_hash %ENV, $old_env;
-    tblog_sub_process("reboot_node", $pc);
 
     if ($reconfig) {
 	print "reboot ($pc): Attempting to reconfigure ...\n"
