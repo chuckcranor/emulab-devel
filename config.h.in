@@ -1,5 +1,8 @@
 /* config.h.in.  Generated from configure.ac by autoheader.  */
 
+/* The Mothership. */
+#undef TBMAINSITE
+
 /* Actual FS mount directory for AMD */
 #undef AMD_ROOT
 

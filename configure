@@ -5333,6 +5333,9 @@ cat >>confdefs.h <<_ACEOF
 #define TBDBNAME "$TBDBNAME"
 _ACEOF
 
+cat >>confdefs.h <<_ACEOF
+#define TBMAINSITE $TBMAINSITE
+_ACEOF
 
 cat >>confdefs.h <<_ACEOF
 #define TBERRORLOGDBNAME "$TBERRORLOGDBNAME"

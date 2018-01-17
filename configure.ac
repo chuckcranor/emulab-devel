@@ -608,6 +608,7 @@ if test x"$prefix" = x"NONE"; then
 else
     AC_DEFINE_UNQUOTED(TBROOT, "$prefix", [FS base for Emulab files])
 fi
+AC_DEFINE_UNQUOTED(TBMAINSITE, $TBMAINSITE, [The Mothership])
 AC_DEFINE_UNQUOTED(TBDBNAME, "$TBDBNAME", [Emulab DB name])
 AC_DEFINE_UNQUOTED(TBERRORLOGDBNAME, "$TBERRORLOGDBNAME", [Emulab errorlog DB])
 AC_DEFINE_UNQUOTED(TBADMINGROUP, "$TBADMINGROUP", [Unix group of admin user])
