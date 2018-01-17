@@ -479,6 +479,7 @@ echo " <li class='divider'></li>
     </li>
 ";
 
+   if ($login_user) {
    echo "
     <li id='quickvm_actions_menu' class='dropdown apt-left apt-nav-item'> 
       <a href='#'
@@ -486,7 +487,7 @@ echo " <li class='divider'></li>
 	 data-toggle='dropdown'>
 	$login_uid <b class='caret'></b></a>
       <ul class='dropdown-menu'>\n";
-       if ($login_user && ! ($login_status & CHECKLOGIN_WEBONLY)) {
+       if (! ($login_status & CHECKLOGIN_WEBONLY)) {
            echo "
 	        <li><a href='myaccount.php'>Manage Account</a></li>
    	        <li><a href='signup.php'>Start/Join Project</a></li>
@@ -500,8 +501,9 @@ echo " <li class='divider'></li>
        }
        echo "<li><a href='logout.php'>Logout</a></li>";
        echo "</ul>
-           </li>
-         </ul>";
+           </li>";
+    }
+  echo "</ul>";
   echo "</div></div>";
 
 }
