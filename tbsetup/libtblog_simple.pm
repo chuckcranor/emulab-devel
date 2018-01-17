@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2005-2012 University of Utah and the Flux Group.
+# Copyright (c) 2005-2012, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -241,6 +241,10 @@ sub format_message ( $$$ ) {
     my ($scriptname, $priority, $mesg) = @_;
 
     $mesg =~ s/\s+$//;
+
+    if ($mesg eq "") {
+	return $mesg;
+    }
 
     my $header;
 
