@@ -168,7 +168,7 @@ $SIG{HUP} = \&handler
 GeniUtil::FlipToGeniUser();
 
 # We process a lot of events!
-event_set_sockbufsizes(1024 * 64, 1024 * 192);
+event_set_sockbufsizes(1024 * 128, 1024 * 128);
 
 #
 # Capture all events from the local pubsubd and transform them into
@@ -236,11 +236,24 @@ if (!event_subscribe($localhandle, \&callback, $tuple)) {
 # Flag to know when there are no more events to process. 
 #
 my $gotone;
+my @notifications = ();
 
 sub callback($$$)
 {
     my ($handle, $notification, $data) = @_;
     $gotone++;
+
+    my $clone = event_notification_clone($handle, $notification);
+    if (!$clone) {
+	print STDERR "Could not clone notification\n";
+	return;
+    }
+    unshift(@notifications, $clone);
+}
+
+sub HandleNotification($$)
+{
+    my ($handle, $notification) = @_;
 
     my $site = event_notification_get_site($handle, $notification);
 
@@ -415,6 +428,11 @@ while (1)
     while ($gotone) {
 	$gotone = 0;
 	event_poll($localhandle);
+    }
+    while (@notifications) {
+	my $notification = pop(@notifications);
+	HandleNotification($localhandle, $notification);
+	event_notification_free($localhandle, $notification);
     }
     event_poll_blocking($localhandle, 1000);
     
