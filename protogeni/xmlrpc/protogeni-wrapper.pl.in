@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -830,11 +830,11 @@ LogAbort()
 # and skip the message.
 #
 if ((-s $logfile->filename() || $iserror) && !$noanything) {
-    my $to       = ($rpcerror ? $TBOPS : ($MAINSITE ? $PGERRORS : $TBLOGS));
+    my $to       = ($MAINSITE ? $PGERRORS : $TBLOGS);
     my $cc       = ($MAINSITE ? undef : "CC: $PGERRORS");
     SENDMAIL($to, "protogeni-wrapper.pl", $message,
 	     $TBOPS, $cc,
-	     ($mailsendlog || $rpcerror ? ($logfile->filename()) : undef));
+	     ($mailsendlog ? ($logfile->filename()) : undef));
     $nostorelogs = 0;
 }
 
