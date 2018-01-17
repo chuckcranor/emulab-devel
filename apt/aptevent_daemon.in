@@ -166,12 +166,24 @@ if (!event_subscribe($localhandle, \&callback, $tuple)) {
 # Flag to know when there are no more events to process. 
 #
 my $gotone;
+my @notifications = ();
 
 sub callback($$$)
 {
-    my ($handle, $note, $data) = @_;
+    my ($handle, $notification, $data) = @_;
     $gotone++;
 
+    my $clone = event_notification_clone($handle, $notification);
+    if (!$clone) {
+	print STDERR "Could not clone notification\n";
+	return;
+    }
+    unshift(@notifications, $clone);
+}
+
+sub HandleNotification($$)
+{
+    my ($handle, $note) = @_;
     my $time      = time();
     my $site      = event_notification_get_site($handle, $note);
     my $slice     = event_notification_get_string($handle, $note, "slice");
@@ -198,7 +210,7 @@ sub callback($$$)
 	if (0 && $slice !~ /stoller/);
     $count++;
     
-    if ($debug || $verbose) {
+    if ($debug || $verbose || $slice =~ /XXpurpnurp/) {
 	print "Event: $count $time $site $type $urn $slice $details\n";
     }
     my $instance = APT_Instance->LookupBySlice($slice);
@@ -364,7 +376,25 @@ while (1)
 	$gotone = 0;
 	event_poll($localhandle);
     }
-    event_poll_blocking($localhandle, 100);
+    if (@notifications) {
+	while (@notifications) {
+	    my $notification = pop(@notifications);
+	    HandleNotification($localhandle, $notification);
+	    event_notification_free($localhandle, $notification);
+
+	    #
+	    # Keep the incoming queue drained! If the socket buffer
+	    # fills up cause we are running slow, we lose events and
+	    # pubsubd starts throwing errors back to the sender.
+	    #
+	    $gotone = 1;
+	    while ($gotone) {
+		$gotone = 0;
+		event_poll($localhandle);
+	    }
+	}
+    }
+    event_poll_blocking($localhandle, 1000);
 }
 
 exit(0);

@@ -424,23 +424,38 @@ my $counter  = 0;
 
 while (1)
 {
+    $counter++;
+    
     $gotone = 1;
     while ($gotone) {
 	$gotone = 0;
 	event_poll($localhandle);
     }
-    while (@notifications) {
-	my $notification = pop(@notifications);
-	HandleNotification($localhandle, $notification);
-	event_notification_free($localhandle, $notification);
+    if (@notifications) {
+	while (@notifications) {
+	    my $notification = pop(@notifications);
+	    HandleNotification($localhandle, $notification);
+	    event_notification_free($localhandle, $notification);
+
+	    #
+	    # Keep the incoming queue drained! If the socket buffer
+	    # fills up cause we are running slow, we lose events and
+	    # pubsubd starts throwing errors back to the sender, and
+	    # that is bad.
+	    #
+	    $gotone = 1;
+	    while ($gotone) {
+		$gotone = 0;
+		event_poll($localhandle);
+	    }
+	}
     }
-    event_poll_blocking($localhandle, 1000);
     
     #
-    # Every 60 seconds compute new status for all slices. This might
+    # Periodically compute new status for all slices. This might
     # generate new events for the loop above.
     #
-    if ($counter++ >= 10) {
+    if ($counter >= 120) {
 	$counter = 0;
 	
 	my @slices;
@@ -457,6 +472,8 @@ while (1)
 	}
 	GeniUtil::FlushCaches();
     }
+    
+    event_poll_blocking($localhandle, 1000);
 }
 exit(0);
 
