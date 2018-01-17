@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2017 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2018 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -956,7 +956,7 @@ makesockets(int portnum, int *udpsockp, int *tcpsockp)
 	if (getsockname(tcpsock, (struct sockaddr *) &name, &length)) {
 		pfatal("getsockname");
 	}
-	if (listen(tcpsock, 128) < 0) {
+	if (listen(tcpsock, 512) < 0) {
 		pfatal("listen");
 	}
 	info("listening on TCP port %d\n", ntohs(name.sin_port));
@@ -8098,6 +8098,14 @@ checkdbredirect(tmcdreq_t *reqp)
 int
 event_connect()
 {
+#ifdef  TBMAINSITE
+	/*
+	 * On the Mothership we send a lot of events to stated, so shift
+	 * the buffer sizes from the receive side to the send size.
+	 */
+	event_set_sockbufsizes(1024 * 128, 1024 * 8);
+#endif
+	
 	if (!event_handle) {
 		event_handle =
 		  event_register("elvin://localhost:" BOSSEVENTPORT, 0);
