@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -344,6 +344,7 @@ sub TBDebugTimeStamp(@)
     if ($TIMESTAMPS) {
 	print "TIMESTAMP: ", TBTimeStamp(), " ", join("",@strings), "\n";
     }
+    return 0;
 }
 
 #
