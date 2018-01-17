@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1971,6 +1971,9 @@ my $eventpoll;
 
 sub StartEvents()
 {
+    # We process a lot of events!
+    event_set_sockbufsizes(1024 * 64, 1024 * 192);
+    
     my $URL = "elvin://$server";
     if ($port) {
 	$URL .= ":$port";
