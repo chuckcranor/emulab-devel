@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004 University of Utah and the Flux Group.
+# Copyright (c) 2004, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -137,7 +137,8 @@ sub doreconfig()
 #
 sub docleanup()
 {
-    unlink TMNODEID(), TMCREATOR(), TMSWAPPER();
+    unlink TMNODEID(), TMCREATOR(), TMSWAPPER(), TMNODETYPE();
+    unlink TMNODEUUID();
 }
 
 #
@@ -145,26 +146,7 @@ sub docleanup()
 # 
 sub donodeid()
 {
-    my $nodeid;
-    my @tmccresults;
-
-    if (tmcc(TMCCCMD_NODEID, undef, \@tmccresults) < 0) {
-	fatal("Could not get nodeid from server!");
-    }
-    return 0
-	if (! @tmccresults);
-    
-    #
-    # There should be just one string. Ignore anything else.
-    #
-    if ($tmccresults[0] =~ /([-\w]*)/) {
-	$nodeid = $1;
-    }
-    else {
-	fatal("Bad nodeid line: $tmccresults[0]");
-    }
-    
-    system("echo '$nodeid' > ". TMNODEID);
+    libsetup::donodeid();
     return 0;
 }
 
