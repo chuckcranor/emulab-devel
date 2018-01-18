@@ -2273,12 +2273,14 @@ $(function ()
     {
       var allowed = [];
       var rejected = [];
+      var breakdown = {};
       var bound = nodes;
       var subclause = 'node';
       var clause = 'aggregates';
       allowed = constraints.getValidList(bound, subclause,
-					 clause, rejected);
-
+					 clause, rejected,
+					 breakdown);
+      console.log('REJECT BREAKDOWN', breakdown);
       if (0) {
 	console.info("updateSiteConstraints");
 	console.info(domNode);
