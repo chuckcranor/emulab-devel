@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -347,7 +347,7 @@ $vtopflags |= $libvtop::VTOP_FLAGS_ALLOCONLY
 $vtopflags |= $libvtop::VTOP_FLAGS_REGRESSION
     if ($regression);
 
-if (IsMultiPCArchitecture()) {
+if (IsMultiPCArchitecture() && !$assignfile) {
     my @architectures = PCArchitectures();
 
     $vtop = libvtop->Create($experiment, $this_user, $vtopflags, $real_user);
@@ -864,8 +864,10 @@ sub RunAssign($$)
 	if (!$vtop->sharednodecount());
     $args = "-F $args"
 	if (!$updating);
-    $args = "-uod -c .75 -H 3 $args"
+    $args = "-uod -c .75 $args"
 	if ($vtop->virtnodecount() || $vtop->simnodecount());
+    $args = "-H 3 $args"
+	if ($vtop->virtnodecount() < 200);
     $args = "-n $args"
     	if ($precheck);
     $args = "-S $packoption $args"
