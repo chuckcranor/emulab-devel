@@ -880,6 +880,7 @@ sub WaitForNodes($@)
 	    my $node_id = $node->node_id();
 	    my $typehandler = $node->_typehandler();
 	    my $state;
+	    my $state_timestamp;
 
 	    #
 	    # Call typehandler specific wait function; 
@@ -890,15 +891,33 @@ sub WaitForNodes($@)
 	    #
 	    if ($retval) {
 		# The handler has to set the node state to something useful.
-		goto node_error
-		    if ($retval < 0);
-		goto node_done
-		    if ($retval > 0);
+		if ($retval < 0) {
+		    delete($nodes{$node_id});
+		    $typehandler->WaitDone($node);
+		    next;
+		}
+		#
+		# The handler has decided to stop waiting for now and
+		# send the node back through later. 
+		#
+		if ($retval == 1) {
+		    delete($nodes{$node_id});
+		    next;
+		}
+		#
+		# We are going to kick the node and wait again. This will
+		# make sure it stays on the node list and get called up
+		# the time we ask for volunteers.
+		#
+		if ($retval > 0) {
+		    delete($nodes{$node_id});
+		    $typehandler->WaitDone($node);
+		    next;
+		}
 	    }
-	    if ($node->GetEventState(\$state)) {
+	    if ($node->GetEventState(\$state, undef, \$state_timestamp)) {
 		print STDERR "*** Error getting event state for $node_id.\n";
 		$node->_setupstatus($SETUP_FAILED);
-	      node_error:
 		delete($nodes{$node_id});
 		$typehandler->WaitDone($node);
 		next;
@@ -906,7 +925,6 @@ sub WaitForNodes($@)
 	    if (grep {$_ eq $state} @waitstates) {
 		print "$node_id has reported state $state\n";
 		$node->_setupstatus($SETUP_OKAY);
-	      node_done:
 		delete($nodes{$node_id});
 		$typehandler->WaitDone($node);
 		next;
@@ -940,8 +958,9 @@ sub WaitForNodes($@)
 		# Changing minutes is why we get this print for just
 		# a single node each time. 
 		$minutes = int($waittime / 60);
+		my $state_minutes = int((time() - $state_timestamp) / 60);
 		tbnotice("Still waiting for $node_id ($state) - ".
-			 "it's been $minutes minute(s).\n");
+			 "it's been $minutes/$state_minutes minute(s).\n");
 	    }
 	}
 	sleep(5);
@@ -1610,6 +1629,19 @@ sub AddNode($$)
 	    or die_noretry("Could not add blackbox taint state to vnode host!\n");
     }
 
+    # No retry for VMs, 
+    $node->_retrycount(0);
+
+    #
+    # A flag in case the node got stuck in a manner that we can try a
+    # reboot.  This is different then _retrycount() which is a
+    # more general retry that we do not do with VMs. For now, we are
+    # going to retry only once when kickme is set. See below for more.
+    #
+    # Set to 1 to kick.
+    #
+    $node->_kickme(0);
+
     #
     # See if a "reload" is required; some virtual nodes can get
     # custom guest OSs, which are loaded on the client side with
@@ -1702,9 +1734,6 @@ sub Volunteers($)
 	$node->Refresh();
 	$pnode->Refresh();
 
-	# No retry.
-	$node->_retrycount(0);
-
 	#
 	# If the physnode is not ours, the vnode always has to do the
 	# setup, since the physnode does not reboot.
@@ -1721,10 +1750,18 @@ sub Volunteers($)
 	#
 	if ($reservation->SameExperiment($parent->experiment())) {
 	    #
+	    # Watch for needing to ke kicked (just once).
+	    #
+	    if ($node->_kickme()) {
+		$node->_setupoperation($libossetup::REBOOT);
+		# Tell vnode_setup to really do it.
+		$node->SetAllocState(TBDB_ALLOCSTATE_RES_REBOOT());
+	    }
+	    #
 	    # If the node was rebooted, then we can determine if
 	    # the vnode is dead, or worth waiting for.
 	    #
-	    if ($pnode->_rebooted()) {
+	    elsif ($pnode->_rebooted()) {
 		#
 		# Virtnodes automatically boot up, but we still have
 		# to wait for them. 
@@ -1783,7 +1820,7 @@ sub Volunteers($)
 	    $node->_setupoperation($libossetup::REBOOT);
 	}
 	push(@nodelist, $node);
-	
+
         #
         # Base the maxwait for vnodes on the reboot_waittime field for
         # their respective OSIDs, with some slop time that scales up
@@ -1793,14 +1830,22 @@ sub Volunteers($)
 	my $reboot_time = $osinfo->reboot_waittime() || 90;
 
 	#
-	# The wait times are totally bogus! Need a better way to do this.
+	# Special case; kicking nodes that got stuck the first time
+	# around.
 	#
-	$node->_maxwait($reboot_time + (120 * $pnode->_vnodecount()));
+	if ($node->_kickme()) {
+	    $node->_maxwait($reboot_time + (120 * scalar($self->todolist())));
+	}
+	else {
+	    #
+	    # The wait times are totally bogus! Need a better way to do this.
+	    #
+	    $node->_maxwait($reboot_time + (120 * $pnode->_vnodecount()));
 
-	# Add some time if the node is getting a reload. Also bogus.
-	$node->_maxwait($node->_maxwait() + 500)
-	    if ($node->_reloaded());
-	
+	    # Add some time if the node is getting a reload. Also bogus.
+	    $node->_maxwait($node->_maxwait() + 500)
+		if ($node->_reloaded());
+	}
 	$node->_setupstatus($libossetup::SETUP_OKAY);
     }
     return @nodelist;
@@ -1812,12 +1857,41 @@ sub Volunteers($)
 sub WaitForNode($$)
 {
     my ($self, $node) = @_;
+    my $node_id = $node;
 
     return -1
 	if ($node->allocstate() eq TBDB_ALLOCSTATE_DOWN() ||
 	    $node->allocstate() eq TBDB_ALLOCSTATE_DEAD());
 
-    return 0;
+    #
+    # Look to see how long in VNODEBOOTSTART; too long means the VM
+    # never got to a point where it pinged. Typically, kicking it will
+    # get it fixed, but we want to wait till the rest of the nodes have
+    # finished and then send them through again. 
+    #
+    my ($eventstate, $stamp);
+    if ($node->GetEventState(\$eventstate, undef, \$stamp)) {
+	print STDERR "*** Error getting event state for $node_id.\n";
+	return -1;
+    }
+    return 0
+	if ($eventstate ne TBDB_NODESTATE_VNODEBOOTSTART());
+    return 0
+	if (time() - $stamp < 240);
+    # Already kicked it, so now we fail if get stuck here again.
+    if ($node->_kickme()) {
+	print STDERR "Already kicked $node_id, giving up for good!\n";
+	return -1;
+    }
+
+    #
+    # Ok, too long in VNODEBOOTSTART. Mark the node as needing to be
+    # kicked. See above where we ask for volunteers.
+    #
+    $node->_kickme(1);
+
+    # Specific return value for caller.
+    return 1;
 }
 
 #
@@ -1907,6 +1981,20 @@ sub WaitDone($@)
 	$parent->add_failed_node_fatal($node_id);
     }
     return 0;
+}
+
+#
+# Function to retry a node, called by the wait function. 
+#
+sub Retry($$)
+{
+    my ($self, $node) = @_;
+    my $node_id = $node->node_id();
+
+    tbnotice("Rebooting $node_id and waiting again ...\n");
+
+    system("$NODEREBOOT $node_id");
+    return $?;
 }
 
 #####################################################################

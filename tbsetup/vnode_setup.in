@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2014, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -327,6 +327,10 @@ foreach my $node (@nodes) {
 			print "$node will $mode with local node $pnode.\n";
 			next;
 		    }
+		}
+		elsif ($allocstate eq TBDB_ALLOCSTATE_RES_REBOOT()) {
+		    print "$node needs a reboot on $pnode\n";
+		    $mode = "reboot";
 		}
 		elsif ($allocstate eq TBDB_ALLOCSTATE_RES_READY()) {
 		    print "$node is already setting up on local node $pnode\n";
