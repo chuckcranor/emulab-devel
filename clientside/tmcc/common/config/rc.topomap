@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2012 University of Utah and the Flux Group.
+# Copyright (c) 2004-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,6 +39,8 @@ $| = 1;
 
 # Drag in path stuff so we can find emulab stuff.
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
+
+my $LTGZIPONLY_FILE = "$ETCDIR/ltmap-gzip";
 
 #
 # Load the OS independent support library. It will load the OS dependent
@@ -227,9 +229,17 @@ sub dotopomap()
     }
 
     if (-s $templt) {
-	system("cat ${templt} | gunzip > " . TMLTMAP());
-	if ($?) {
-	    fatal("Could not unzip ltmap");
+	if (-e $LTGZIPONLY_FILE) {
+	    system("mv ${templt} " . TMLTMAPGZ());
+	    if ($?) {
+		fatal("Could not mv ${templt} to " . TMLTMAPGZ());
+	    }
+	}
+	else {
+	    system("cat ${templt} | gunzip > " . TMLTMAP());
+	    if ($?) {
+		fatal("Could not unzip ltmap");
+	    }
 	}
     }
     else {
@@ -237,9 +247,17 @@ sub dotopomap()
     }
 
     if (-s $templtp) {
-	system("cat ${templtp} | gunzip > " . TMLTPMAP());
-	if ($?) {
-	    fatal("Could not unzip ltpmap");
+	if (-e $LTGZIPONLY_FILE) {
+	    system("mv ${templtp} " . TMLTPMAPGZ());
+	    if ($?) {
+		fatal("Could not mv ${templtp} to " . TMLTPMAPGZ());
+	    }
+	}
+	else {
+	    system("cat ${templtp} | gunzip > " . TMLTPMAP());
+	    if ($?) {
+		fatal("Could not unzip ltpmap");
+	    }
 	}
     }
     else {

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w -T
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -195,8 +195,6 @@ use constant FALSE => 0;
 # Globals
 ##############################################################################
 
-my $topology_file;    # location of the topology input file.
-my $ptopology_file;   # location of the physical topology input file.
 my $synserv;    # synch server node
 my $rtproto;    # routing protocol
 my $hostname;   # this hosts name
@@ -353,6 +351,8 @@ my $PATH_SCHEDFILE = "$VARDIR/logs/linktest.sched";
 my $PATH_SYNCSERVER = "$VARDIR/boot/syncserver";
 my $PATH_TOPOFILE = "$VARDIR/boot/ltmap";
 my $PATH_PTOPOFILE = "$VARDIR/boot/ltpmap";
+my $PATH_TOPOFILE_GZ = "${PATH_TOPOFILE}.gz";
+my $PATH_PTOPOFILE_GZ = "${PATH_PTOPOFILE}.gz";
 my $PATH_WINPING = "/cygdrive/c/windows/system32/ping.exe";
 
 my $schedfile = $PATH_SCHEDFILE;
@@ -396,8 +396,6 @@ $EVENTID = "$proj_id/$exp_id"
 # the current ns file and the output file for topology info.
 #
 $linktest_path = "$LOGDIR/linktest";
-$topology_file = $PATH_TOPOFILE;
-$ptopology_file = $PATH_PTOPOFILE;
 
 #
 # Determine what OS we are.  Used for handling the occasional difference
@@ -415,7 +413,7 @@ sleep(int(rand(5)));
 if (! $STANDALONE) {
     &my_system($PATH_RCTOPO, "reconfig");
 }
-&get_topo($topology_file, $ptopology_file);
+&get_topo();
 &debug_top();
 
 #
@@ -2246,14 +2244,20 @@ sub print_edge {
 # Handles reading the topology map(s).
 # Note: the topo map file can be huge, so we read it line at a time
 # rather than en masse with read_file.
+# We will also try to read from the gzip'd variants if they exist.
 #
 sub get_topo {
-    my ($top_file, $ptop_file) = @_;
+    if (-e $PATH_TOPOFILE) {
+	open TOPO, $PATH_TOPOFILE || die ("Could not open $PATH_TOPOFILE\n");
+    }
+    elsif (-e $PATH_TOPOFILE_GZ) {
+	open TOPO, "gzip -c -d $PATH_TOPOFILE_GZ |"
+	    || die ("Could not open $PATH_TOPOFILE_GZ\n");
+    }
+    else {
+	die "Attempted to open missing file $PATH_TOPOFILE\n";
+    }
 
-    die "Attempted to open missing file $top_file\n" 
-	unless -e $top_file;
-
-    open TOPO, $top_file || die ("Could not open $top_file\n");
     while(<TOPO>) {
 	# load the output from ns.
 	# the file format is simple:
@@ -2305,7 +2309,16 @@ sub get_topo {
     #
     # Augment with physical info if present
     #
-    if (open(TOPO, $ptop_file)) {
+    my $have_ptop = 0;
+    if (-e $PATH_PTOPOFILE) {
+	$have_ptop = 1
+	    if (open TOPO, $PATH_PTOPOFILE);
+    }
+    elsif (-e $PATH_PTOPOFILE_GZ) {
+	$have_ptop = 1
+	    if (open TOPO, "gzip -c -d $PATH_PTOPOFILE_GZ |");
+    }
+    if ($have_ptop) {
 	my $vers = 1;
 	while(<TOPO>) {
 	    my @row = split;
