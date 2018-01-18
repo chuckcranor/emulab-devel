@@ -313,6 +313,7 @@ static event_handle_t	event_handle = NULL;
 
 COMMAND_PROTOTYPE(doreboot);
 COMMAND_PROTOTYPE(donodeid);
+COMMAND_PROTOTYPE(donodetype);
 COMMAND_PROTOTYPE(donodeuuid);
 COMMAND_PROTOTYPE(domanifest);
 COMMAND_PROTOTYPE(dostatus);
@@ -454,6 +455,7 @@ struct command {
 } command_array[] = {
 	{ "reboot",	  FULLCONFIG_NONE, 0, doreboot },
 	{ "nodeid",	  FULLCONFIG_ALL,  0, donodeid },
+	{ "nodetype",	  FULLCONFIG_ALL,  0, donodetype },
 	{ "nodeuuid",	  FULLCONFIG_ALL,  0, donodeuuid },
 	{ "manifest",	  FULLCONFIG_ALL,  0, domanifest },
 	{ "status",	  FULLCONFIG_NONE, 0, dostatus },
@@ -1624,6 +1626,18 @@ COMMAND_PROTOTYPE(donodeid)
 	char		buf[MYBUFSIZE];
 
 	OUTPUT(buf, sizeof(buf), "%s\n", reqp->nodeid);
+	client_writeback(sock, buf, strlen(buf), tcp);
+	return 0;
+}
+
+/*
+ * Return emulab node type.
+ */
+COMMAND_PROTOTYPE(donodetype)
+{
+	char		buf[MYBUFSIZE];
+
+	OUTPUT(buf, sizeof(buf), "%s\n", reqp->type);
 	client_writeback(sock, buf, strlen(buf), tcp);
 	return 0;
 }

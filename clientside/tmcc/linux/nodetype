@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2011, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,6 +22,13 @@
 # }}}
 #
 . /etc/emulab/paths.sh
+
+# We can ditch this script, I think.
+if [ -r $BOOTDIR/nodeid -a -r $BOOTDIR/nodetype ]; then
+    nt=`cat $BOOTDIR/nodetype`
+    echo $nt
+    exit 0
+fi
 
 # Why am I trying to fix this script!?
 if [ -r $BOOTDIR/nodeid -a -r $BOOTDIR/ltpmap ]; then

@@ -62,7 +62,7 @@ use Exporter;
 	 TMGATEDCONFIG TMSYNCSERVER TMKEYHASH TMNODEID TMNODEUUID TMEVENTKEY
 	 TMCREATOR TMSWAPPER TMFWCONFIG TMGENVNODECONFIG
 	 TMSTORAGEMAP TMDISKINFO TMEXTRAFS
-	 INXENVM INVZVM INDOCKERVM
+	 INXENVM INVZVM INDOCKERVM TMNODETYPE
        );
 
 # Must come after package declaration!
@@ -382,6 +382,7 @@ sub TMSYNCSERVER()	{ CONFDIR() . "/syncserver";}
 sub TMKEYHASH()		{ CONFDIR() . "/keyhash";}
 sub TMEVENTKEY()	{ CONFDIR() . "/eventkey";}
 sub TMNODEID()		{ CONFDIR() . "/nodeid";}
+sub TMNODETYPE()	{ CONFDIR() . "/nodetype";}
 sub TMNODEUUID()	{ CONFDIR() . "/nodeuuid";}
 sub TMROLE()		{ CONFDIR() . "/role";}
 sub TMSIMRC()		{ CONFDIR() . "/rc.simulator";}
@@ -746,6 +747,7 @@ sub donodeid()
 
     # Do this too.
     donodeuuid();
+    donodetype();
 
     if (tmcc(TMCCCMD_NODEID, undef, \@tmccresults) < 0) {
 	warn("*** WARNING: Could not get nodeid from server!\n");
@@ -768,6 +770,39 @@ sub donodeid()
     system("echo '$nodeid' > ". TMNODEID);
     if ($?) {
 	warn "*** WARNING: Could not write nodeid to " . TMNODEID() . "\n";
+    }
+    return 0;
+}
+
+#
+# Get the nodetype
+#
+sub donodetype()
+{
+    my $nodetype;
+    my @tmccresults;
+
+    if (tmcc(TMCCCMD_NODETYPE, undef, \@tmccresults) < 0) {
+	warn("*** WARNING: Could not get nodetype from server!\n");
+	return -1;
+    }
+    return 0
+	if (! @tmccresults);
+
+    #
+    # There should be just one string. Ignore anything else.
+    #
+    if ($tmccresults[0] =~ /([-\w]*)/) {
+	$nodetype = $1;
+    }
+    else {
+	warn "*** WARNING: Bad nodetype line: $tmccresults[0]";
+	return -1;
+    }
+
+    system("echo '$nodetype' > ". TMNODETYPE);
+    if ($?) {
+	warn "*** WARNING: Could not write nodetype to " . TMNODETYPE() . "\n";
     }
     return 0;
 }

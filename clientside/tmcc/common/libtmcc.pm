@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -55,6 +55,7 @@ use Exporter;
 	     TMCCCMD_NODEUUID TMCCCMD_NODEATTRIBUTES TMCCCMD_DISKS
 	     TMCCCMD_ARPINFO TMCCCMD_STORAGE TMCCCMD_IMAGESIZE
              TMCCCMD_PNETNODEATTRS TMCCCMD_SERVINCEINFO TMCCCMD_PUBLICADDRINFO
+             TMCCCMD_NODETYPE
 	     );
 
 # Must come after package declaration!
@@ -180,6 +181,7 @@ my %commandset =
       "syncserver"	=> {TAG => "syncserver"},
       "keyhash"		=> {TAG => "keyhash"},
       "nodeid"		=> {TAG => "nodeid"},
+      "nodetype"	=> {TAG => "nodetype"},
       "ipodinfo"	=> {TAG => "ipodinfo", PERM => "0600"},
       "ntpinfo"		=> {TAG => "ntpinfo"},
       "ntpdrift"	=> {TAG => "ntpdrift"},
@@ -261,6 +263,7 @@ sub TMCCCMD_PROGRAMS()  { $commandset{"programs"}->{TAG}; }
 sub TMCCCMD_SYNCSERVER(){ $commandset{"syncserver"}->{TAG}; }
 sub TMCCCMD_KEYHASH()   { $commandset{"keyhash"}->{TAG}; }
 sub TMCCCMD_NODEID()    { $commandset{"nodeid"}->{TAG}; }
+sub TMCCCMD_NODETYPE()  { $commandset{"nodetype"}->{TAG}; }
 sub TMCCCMD_NTPINFO()   { $commandset{"ntpinfo"}->{TAG}; }
 sub TMCCCMD_NTPDRIFT()  { $commandset{"ntpdrift"}->{TAG}; }
 sub TMCCCMD_EVENTKEY()  { $commandset{"eventkey"}->{TAG}; }
