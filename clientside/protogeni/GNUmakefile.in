@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013-2014 University of Utah and the Flux Group.
+# Copyright (c) 2013-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -52,7 +52,7 @@ CFLAGS   += -I/usr/local/include
 LDFLAGS  += -L$(TESTBED_LIBOBJDIR)
 LDFLAGS  += -L$(TESTBED_LIBOBJDIR)/event
 LIBS     += -levent -lcrypto
-LIBS     += -lm -L/usr/local/lib -lpubsub 
+LIBS     += -lm -L/usr/local/lib -lpubsub -lssl
 LDFLAGS  += $(LDSTATIC)
 
 ifeq ($(SYSTEM),Linux)

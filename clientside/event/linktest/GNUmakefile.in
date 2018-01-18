@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -58,7 +58,7 @@ CFLAGS   += -I/usr/local/include
 
 LDFLAGS  += -L${LIBEVENTDIR} -L${LIBTBDIR}
 LIBS     += -levent -lcrypto -lssl
-LIBS     += -L/usr/local/lib -lpubsub -lm
+LIBS     += -L/usr/local/lib -lpubsub -lm -lssl
 LDFLAGS  += $(LDSTATIC)
 
 # Deal with the presence/absence of kerberos in the linux ssl library
