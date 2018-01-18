@@ -1408,8 +1408,7 @@ sub ActionStart($$;$)
 		if (defined($node->_sliver()));
 	}
 	if (grep {$_ eq $node->eventstate()}
-	    (TBDB_NODESTATE_TBFAILED, TBDB_NODESTATE_RELOADFAILED,
-	     TBDB_NODESTATE_ISUP)) {
+	    (TBDB_NODESTATE_TBFAILED, TBDB_NODESTATE_RELOADFAILED)) {
 	    my $bootlog;
 	    if ($node->GetBootLog(\$bootlog) == 0 && $bootlog ne "") {
 		my $logfile = Logfile->CreateFromString($group, $bootlog);
