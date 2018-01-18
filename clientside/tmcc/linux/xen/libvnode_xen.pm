@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1537,6 +1537,20 @@ okay:
 	print "waiting $mustsleep sec after kpartx call...\n"
 	    if ($sleepdebug);
 	sleep($mustsleep);
+	# Wait for $private->{'rootpartition'} to show up, at least for
+	# a little while.
+	my $waittime = 60;
+	while (--$waittime && ! -e $private->{'rootpartition'}) {
+	    sleep(1);
+	    if ($waittime % 4 == 0) {
+		TBDebugTimeStamp("still waiting for $private->{'rootpartition'}".
+				 " to appear after kpartx...");
+	    }
+	}
+	if (! -e $private->{'rootpartition'}) {
+	    TBDebugTimeStamp("$private->{'rootpartition'} still does not exist,".
+			     " there will be problems!");
+	}
     }
 
     #
