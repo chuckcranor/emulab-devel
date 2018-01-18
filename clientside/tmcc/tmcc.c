@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2014 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2014, 2018 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -95,6 +95,7 @@ static int portlist[] = {
 static int	numports = sizeof(portlist)/sizeof(int);
 static int	debug = 0;
 static char    *logfile = NULL;
+static int	do_proxy_retries = 1;
 
 /* Forward decls */
 static int	getbossnode(char **, int *);
@@ -124,6 +125,7 @@ char *usagestr =
  " -f datafile     Extra stuff to send to tmcd (tcp mode only)\n"
  " -i              Do not use SSL protocol\n"
  " -T              Use the TPM for SSL negotiation\n"
+ " -R              Do not retry failed proxy request forwarding\n"
  "\n";
 
 void
@@ -233,7 +235,7 @@ main(int argc, char **argv)
 	int			proxyport = 0;
 	char			*datafile = NULL;
 
-	while ((ch = getopt(argc, argv, "v:s:p:un:t:k:x:X:l:do:if:T")) != -1)
+	while ((ch = getopt(argc, argv, "v:s:p:un:t:k:x:X:l:do:if:TR")) != -1)
 		switch(ch) {
 		case 'd':
 			debug++;
@@ -288,6 +290,9 @@ main(int argc, char **argv)
 			break;
 		case 'T':
 			usetpm = 1;
+			break;
+		case 'R':
+			do_proxy_retries = 0;
 			break;
 		default:
 			usage();
@@ -1024,6 +1029,7 @@ beproxy(int tcpsock, int udpsock, struct in_addr serverip, char *partial)
 	char			*bp, *cp;
 	fd_set			rfds;
 	int			fdcount = 0;
+	int			retries = 0;
 	
 	proxymode = 1;
 	if (logfile) {
@@ -1086,6 +1092,7 @@ beproxy(int tcpsock, int udpsock, struct in_addr serverip, char *partial)
 		 * clients but there really shouldn't be much UDP traffic.
 		 */
 		if (tcpsock >= 0 && FD_ISSET(tcpsock, &fds)) {
+			retries = 0;
 			/*
 			 * Accept and read the message
 			 */
@@ -1098,6 +1105,7 @@ beproxy(int tcpsock, int udpsock, struct in_addr serverip, char *partial)
 			}
 			cc = read(newsock, buf, sizeof(buf) - 1);
 		} else if (udpsock >= 0 && FD_ISSET(udpsock, &fds)) {
+			retries = 0;
 			/*
 			 * Read the message and create a reply socket
 			 */
@@ -1167,11 +1175,74 @@ beproxy(int tcpsock, int udpsock, struct in_addr serverip, char *partial)
 		/*
 		 * Set a timeout for the server-side operation
 		 */
+	retry:
+		if (retries) {
+			int count = 10;
+			/*
+			 * If we are retrying, check to see if we have a
+			 * new incoming request, and quit retrying if we
+			 * do.  In the udp case, we cannot know if the
+			 * client has given up on us.  In the tcp case,
+			 * we can see if we get a 0-length read and then
+			 * give up, so we expand the select rfds to
+			 * handle that.  Note, either a new tcp OR udp
+			 * request will scuttle our retry attempts, due
+			 * to the nature of this loop!
+			 */
+			fprintf(stderr, "Request failed, will retry (%d)!\n",
+				retries);
+			rval = 0;
+			while (!rval && count--) {
+				fd_set retry_rfds;
+				int retry_fdcount = 0;
+				struct timeval notime = { 1, 0 };
+				struct timespec timerem = { 0, 0 };
+				FD_ZERO(&retry_rfds);
+				if (tcpsock >= 0) {
+					FD_SET(tcpsock, &retry_rfds);
+					retry_fdcount = tcpsock;
+				}
+				if (udpsock >= 0) {
+					FD_SET(udpsock, &retry_rfds);
+					if (udpsock > retry_fdcount)
+						retry_fdcount = udpsock;
+				}
+				if (!usingudp && newsock >= 0) {
+					FD_SET(newsock, &retry_rfds);
+					if (newsock > retry_fdcount)
+						retry_fdcount = newsock;
+				}
+				retry_fdcount++;
+
+				rval = select(retry_fdcount, &retry_rfds,
+					      NULL, NULL, &notime);
+				if (rval > 0) {
+					if ((tcpsock >= 0
+					     && FD_ISSET(tcpsock, &retry_rfds))
+					    || (udpsock >= 0
+						&& FD_ISSET(udpsock, &retry_rfds))) {
+						fprintf(stderr,
+							"new request; halting "
+							" proxy retry (%d)\n",
+							retries);
+						close(newsock);
+						retries = 0;
+						continue;
+					}
+				}
+				timerem.tv_nsec = notime.tv_usec * 1000;
+				nanosleep(&timerem,NULL);
+			}
+			if (retries == 0)
+				continue;
+		}
 		if (waitfor) {
 			if (sigsetjmp(progtimo, 1) != 0) {
 				fprintf(stderr,
 					"Server %s request timeout on: %s\n",
 					usingudp ? "UDP" : "TCP", command);
+				if (do_proxy_retries)
+					goto retry_init;
 				if (newsock >= 0)
 					close(newsock);
 				if (reqsock >= 0) {
@@ -1198,6 +1269,11 @@ beproxy(int tcpsock, int udpsock, struct in_addr serverip, char *partial)
 		if (rval < 0 && debug) {
 			fprintf(stderr, "Request failed!\n");
 			fflush(stderr);
+		}
+		if (rval < 0 && do_proxy_retries) {
+		retry_init:
+			++retries;
+			goto retry;
 		}
 		if (newsock >= 0)
 			close(newsock);
