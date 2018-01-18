@@ -684,7 +684,12 @@ dotcp(char *data, int outfd, struct in_addr serverip)
 				    sizeof(name)) == 0) {
 				goto foundit;
 			}
-			if (errno != ECONNREFUSED) {
+			if (errno == ECONNRESET || errno == ETIMEDOUT
+			    || errno == EAGAIN || errno == EINTR) {
+				fprintf(stderr,"retrying failed connect (%s)\n",
+					strerror(errno));
+			}
+			else if (errno != ECONNREFUSED) {
 				perror("connecting stream socket");
 				CLOSE(sock);
 				reqsock = -1;
@@ -715,7 +720,27 @@ dotcp(char *data, int outfd, struct in_addr serverip)
 	while (n) {
 		if ((cc = WRITE(sock, bp, n)) <= 0) {
 			if (cc < 0) {
-				perror("Writing to socket");
+				if (errno == EAGAIN || errno == ECONNRESET
+				    || errno == EINTR || errno == EPIPE) {
+					if (bp == data) {
+						fprintf(stderr,
+							"write error (nothing "
+							"written): %s; retrying\n",
+							strerror(errno));
+						CLOSE(sock);
+						reqsock = -1;
+						goto again;
+					}
+					else {
+						fprintf(stderr,
+							"write error (sent %ld "
+							" bytes): %s, not "
+							" retrying\n",
+							bp-data,strerror(errno));
+					}
+				}
+				else
+				    perror("Writing to socket");
 				goto bad;
 			}
 			fprintf(stderr, "write aborted");
