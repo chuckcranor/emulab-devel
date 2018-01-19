@@ -55,6 +55,7 @@ use GeniEvent;
 use GeniXML;
 use GeniCM;
 use emutil;
+use event;
 use EmulabConstants;
 use EmulabFeatures;
 use User;
@@ -1341,6 +1342,7 @@ sub ActionStart($$;$)
 	print STDERR "Forked off snmpit: process $snmpit_child\n";
     }
     else {
+	EventFork();
 	my $msg;
 	
 	DebugTimeStamp("snmpit started");
