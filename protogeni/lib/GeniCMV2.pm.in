@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -553,6 +553,9 @@ sub CreateSliver($)
     # We get the manifest from the aggregate object, so that the
     # expiration goes in.
     my $sliver_manifest = $aggregate->GetManifest(1);
+
+    # Free this possibly massive XML structure, we do not need it anymore.
+    undef $rspec;
 
     #
     # At this point we want to return and let the startsliver proceed
