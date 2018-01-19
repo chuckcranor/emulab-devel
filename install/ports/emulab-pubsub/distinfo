@@ -12,3 +12,7 @@ SHA256 (pubsub-0.99_8.tar.gz) = b14481af37048f40f831d98b4203c680e56a3be8b13f2fa8
 SIZE (pubsub-0.99_8.tar.gz) = 110725
 SHA256 (pubsub-0.99_9.tar.gz) = aa4780a5b1c41bb62c57bf507fe49d7c3ec6ea45f72b63716e4cd02f20b6036c
 SIZE (pubsub-0.99_9.tar.gz) = 110265
+SHA256 (pubsub-0.99_10.tar.gz) = 36890b0b777f9b5216371f7c60561d227c54d7204712ceb6d0f35a26df486c51
+SIZE (pubsub-0.99_10.tar.gz) = 111168
+SHA256 (pubsub-0.99_11.tar.gz) = 78d3708e925f5f55fa8b8ed625a47cf2fa1c80a65186d76cd866e36ba4f28eee
+SIZE (pubsub-0.99_11.tar.gz) = 112308
