@@ -3643,7 +3643,6 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	    goto bad;
 	}
     }
-    print GeniXML::Serialize($rspec);
 
     #
     # For the version 2 minimal API, just return the annotated rspec.
@@ -3654,6 +3653,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	$slice->UnLock();
 	return $rspec;
     }
+    print GeniXML::Serialize($rspec);
     
     #
     # Create a new ticket.
