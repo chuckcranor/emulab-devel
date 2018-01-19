@@ -1,6 +1,6 @@
 #!/usr/bin/perl -T
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2726,14 +2726,14 @@ sub vnodeCreate($$$$)
     #
     # Add NFS mounts.
     #
-    my @binds = ();
+    $args{"HostConfig"}{"Binds"} = [];
     foreach my $path (values(%mounts)) {
 	my $bind = "${path}:${path}";
 	if ($NFS_MOUNTS_READONLY) {
 	    $bind .= ":ro";
 	}
+	push(@{$args{"HostConfig"}{"Binds"}},$bind);
     }
-    $args{"HostConfig"}{"Binds"} = \@binds;
 
     #
     # Add some Emulab-specific mount points that contain information:
