@@ -3362,6 +3362,9 @@ sub vnodeBootHook($$$$)
     # survive when the container reboots or shuts down.
     #
     my $PTYLINKFILE = "$VMDIR/$vnode_id/vnode.pty";
+    if (-e $PTYLINKFILE) {
+	unlink($PTYLINKFILE);
+    }
     TBDebugTimeStamp("vnodeBootHook: starting container2pty;".
 		     " symlink $PTYLINKFILE");
     mysystem("$C2P $vnode_id $PTYLINKFILE &");
