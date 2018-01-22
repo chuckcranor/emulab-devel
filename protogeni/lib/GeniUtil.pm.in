@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -206,6 +206,32 @@ sub FlushCaches()
 {
     foreach my $ref (@ourcaches) {
 	%$ref = ();
+    }
+}
+sub DumpCaches()
+{
+    require Devel::Size;
+    my $total = 0;
+
+    foreach my $cache (@ourcaches) {
+	my $subtotal = 0;
+	my @values = values(%{$cache});
+	next
+	    if (!@values);
+	print STDERR "Dumping cache:\n";
+	foreach my $ref (@values) {
+	    my $size = Devel::Size::total_size($ref);
+	    
+	    print STDERR " $ref: $size\n";
+	    $subtotal += $size;
+	    $total += $size;
+	}
+	my $realsize = Devel::Size::total_size($cache);
+	print STDERR "Cache total: $subtotal, $realsize\n";
+    }
+    if ($total) {
+	my $realsize = Devel::Size::total_size(\@ourcaches);
+	print STDERR "All caches total: $total, $realsize\n";
     }
 }
 
