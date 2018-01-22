@@ -453,6 +453,11 @@ sub WrapperFork()
 	# Tell caller we are the parent,
 	return $mypid;
     }
+    # We want to form new event handles in the child. 
+    if (defined(&event::EventFork)) {
+	EventFork();
+    }
+    
     # Reset in the child so that we can WrapperFork() again.
     $logforked = 0;
     
