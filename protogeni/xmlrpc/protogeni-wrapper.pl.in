@@ -455,7 +455,7 @@ sub WrapperFork()
     }
     # We want to form new event handles in the child. 
     if (defined(&event::EventFork)) {
-	EventFork();
+	event::EventFork();
     }
     
     # Reset in the child so that we can WrapperFork() again.
