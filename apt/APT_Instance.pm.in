@@ -3216,7 +3216,7 @@ sub WaitForSliver($)
 	sleep($interval);
 	$seconds -= $interval;
 
-	print STDERR "WaitForSliver: " . TBTimeStamp() . "\n";
+	#print STDERR "WaitForSliver: " . TBTimeStamp() . "\n";
 
 	#
 	# If we do not have a manifest, then we want to ask for the manifest
