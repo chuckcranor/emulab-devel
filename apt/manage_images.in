@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -160,7 +160,7 @@ sub DoListImages()
     }
     Genixmlrpc->SetContext($context);
     # Shorten default timeout.
-    Genixmlrpc->SetTimeout(60);
+    Genixmlrpc->SetTimeout(90);
 
     my $authority = GeniAuthority->Lookup($aggregate_urn);
     if (!defined($authority)) {
