@@ -698,7 +698,7 @@ sub RunAssign($$)
     return 0
 	if ($toponly);
 
-    if (! ($impotent || $regression || $alloconly)) {
+    if (! ($impotent || $regression)) {
 	if ($experiment->Update({"maximum_nodes" => $vtop->maximum_nodes(),
 				 "minimum_nodes" => $vtop->minimum_nodes(),
 				 "virtnode_count"=> $vtop->virtnodecount() })){

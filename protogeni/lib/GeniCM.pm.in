@@ -2909,8 +2909,11 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     #print STDERR $output;
 
     # Do a render cause its nice to have on the show experiment page.
-    system("$PRERENDER -r $pid $eid");
-    system("$PRERENDER -t $pid $eid");
+    # But skip for really big topos, too much overhead.
+    if (scalar(keys(%nodemap)) <= 500) {
+	system("$PRERENDER -r $pid $eid");
+	system("$PRERENDER -t $pid $eid");
+    }
 
     #
     # Now run the mapper in impotent mode. The idea is get a solution
@@ -2919,6 +2922,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     #
     my $tmpfile = tmpnam();
 
+    if (0) {
     DebugTimeStamp("Starting vtopgen");
     # First a prerun to get the node counts and verify topo.
     $output = GeniUtil::ExecQuiet("$VTOPGEN -p $pid $eid");
@@ -2930,6 +2934,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	goto bad;
     }
     DebugTimeStamp("Finished vtopgen");
+    }
     $slice_experiment->CleanLogFiles();
 
     #
