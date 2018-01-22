@@ -3648,6 +3648,11 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	    goto bad;
 	}
     }
+    #
+    # Kill this, it sucks up a lot of memory and if this is a CreateSliver()
+    # we will hang onto it in the next two phases.
+    #
+    $virtexperiment->Flush();
 
     #
     # For the version 2 minimal API, just return the annotated rspec.

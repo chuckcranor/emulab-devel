@@ -143,15 +143,6 @@ sub Lookup($$)
     $self->{'RSPEC'}       = undef;	# server
     $self->{'CERTIFICATE'} = undef;
 
-    my $rspec_string = $self->{'SLIVER'}->{'rspec_string'};
-    if (defined($rspec_string) && $rspec_string ne "") {
-	my $rspec = GeniXML::Parse($rspec_string);
-	if (!defined($rspec)) {
-	    return undef;
-	}
-	$self->{'RSPEC'} = $rspec;
-    }
-
     #
     # Grab the certificate, since we will probably want it.
     #
@@ -284,12 +275,15 @@ sub Create($$$$$$$$)
     return undef
 	if (!defined($sliver));
 
+    # This is lazy, but since we have it, keep it. 
+    $sliver->{'RSPEC'}     = $rspec;
+    $sliver->{'AGGREGATE'} = undef;
+    $sliver->{'SLICE'}     = undef;
+
     if (GeniUsage->NewSliver($sliver, $slice, $owner)) {
 	print STDERR
 	    "GeniSliver::Create: GeniUsage->NewSliver($sliver) failed\n";
     }
-    $sliver->{'AGGREGATE'} = undef;
-    $sliver->{'SLICE'}     = undef;
 
     return $sliver;
 }
@@ -315,7 +309,6 @@ sub state($)		{ return field($_[0], "state"); }
 sub status_state_timestamp($) { return field($_[0], "status_state_timestamp"); }
 sub ErrorLog($)		{ return field($_[0], "errorlog"); }
 sub cert($)		{ return GetCertificate($_[0])->cert(); }
-sub rspec($)            { return $_[0]->{'RSPEC'}; }
 # Watch for slivers that no longer get a certificate.
 sub GetCertificate($)
 {
@@ -403,6 +396,39 @@ sub GetManifest($$)
     
     my $xml = GeniXML::Serialize($self->rspec());
     return $xml;
+}
+
+#
+# Lets create this lazily, these XML objects are really big and we do not
+# need them very often.
+#
+sub rspec($)
+{
+    my ($self) = @_;
+
+    return $self->{'RSPEC'}
+        if (defined($self->{'RSPEC'}));
+
+    my $rspec_string = $self->{'SLIVER'}->{'rspec_string'};
+    return undef
+	if (!defined($rspec_string) || $rspec_string eq "");
+    
+    my $rspec = GeniXML::Parse($rspec_string);
+    return undef
+	if (!defined($rspec));
+    
+    $self->{'RSPEC'} = $rspec;
+    return $rspec;
+}
+
+#
+# Purge all the rspecs from the cached slivers. 
+#
+sub PurgeRspecs($)
+{
+    foreach my $sliver (values(%slivers)) {
+	$sliver->{'RSPEC'} = undef;
+    }
 }
 
 #

@@ -556,6 +556,8 @@ sub CreateSliver($)
 
     # Free this possibly massive XML structure, we do not need it anymore.
     undef $rspec;
+    # Purge all the XML objects from the slivers, we do not need them again.
+    GeniSliver->PurgeRspecs();
 
     #
     # At this point we want to return and let the startsliver proceed
