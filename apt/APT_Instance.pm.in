@@ -3240,6 +3240,11 @@ sub WaitForSliver($)
 		    $aggobj->SetPublicURL($response->logurl());
 		}
 	    }
+	    elsif ($response->code() == GENIRESPONSE_SEARCHFAILED) {
+		print STDERR "Slice is gone, must have failed\n";
+		# This will result in a timed out error. Not good.
+		last;
+	    }
 	    else {
 		print STDERR "Still no manifest, looping\n";
 		next;
