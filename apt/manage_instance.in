@@ -3222,12 +3222,12 @@ sub DoPanic()
 	my $response = $sliver->Panic(($setclr eq "clear" ? 1 : 0));
 	if (!defined($response)) {
 	    print STDERR "RPC Error calling Panic\n";
-	    return -1;
+	    return GENIRESPONSE_RPCERROR;
 	}
 	if ($response->code() != GENIRESPONSE_SUCCESS) {
 	    print STDERR "Could not panic sliver: ".
 		$response->output() . "\n";
-	    return -1;
+	    return $response->code();
 	}
 	return 0;
     };
@@ -3330,7 +3330,7 @@ sub DoLinktest()
 	my $response = $sliver->RunLinktest($action, $level);
 	if (!defined($response)) {
 	    print STDERR "RPC Error calling linktest on $sliver\n";
-	    return -1;
+	    return GENIRESPONSE_RPCERROR;
 	}
 	if ($response->code() != GENIRESPONSE_SUCCESS) {
 	    print STDERR "Could not $action linktest on sliver: ".
@@ -3532,7 +3532,7 @@ sub DoUpdateKeys()
 	my $response = $sliver->UpdateKeys($users);
 	if (!defined($response)) {
 	    print STDERR "RPC Error calling updatekeys on $sliver\n";
-	    return -1;
+	    return GENIRESPONSE_RPCERROR;
 	}
 	if ($response->code() != GENIRESPONSE_SUCCESS) {
 	    print STDERR "Could not update keys on sliver: ".
@@ -4342,13 +4342,21 @@ sub CallAggregateMethod($$@)
 	my $response = $sliver->$method();
 	if (!defined($response)) {
 	    $errmsg  = "RPC Error calling $method on $sliver";
-	    $errcode = -1;
+	    $errcode = GENIRESPONSE_RPCERROR;
 	    goto bad;
 	}
 	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    $errmsg = "Could not call $method for $sliver: " .
-		$response->output();
-	    $errcode = $response->code();
+	    if ($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
+		$response->code() == GENIRESPONSE_RPCERROR) {
+		$errcode = GENIRESPONSE_RPCERROR;
+		$errmsg  = "RPC Error calling $method on $sliver; ".
+		    "server unavailable, try again later";
+	    }
+	    else {
+		$errcode = $response->code();
+		$errmsg  = "Error calling $method for $sliver: " .
+		    $response->output();
+	    }
 	    goto bad;
 	}
 	if (defined($pref)) {
@@ -4402,7 +4410,7 @@ sub CallAggregateMethod($$@)
 		$errmsg .= ": " . $agg->webtask()->output();
 	    }
 	    $$prval = $errmsg;
-	    return $code;
+	    return $agg->webtask()->exitcode();
 	}
 	push(@return_values, $agg->webtask()->results());
     }

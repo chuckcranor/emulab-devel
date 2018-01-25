@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -849,16 +849,18 @@ sub DoSystemInfo()
 	    #
 	    if (defined($webtask)) {
 		$webtask->output($response->output());
-		$webtask->Exited(-1);
+		$webtask->Exited($response->code());
+		$webtask->Store();
 	    }
 	    else {
 		print STDERR "$authority: " . $response->output() . "\n";
 	    }
-	    return -1;
+	    return $response->code();
 	}
 	if (defined($webtask)) {
 	    $webtask->value($response->value());
 	    $webtask->Exited(0);
+	    $webtask->Store();
 	}
 	return 0;
     };
@@ -1006,12 +1008,13 @@ sub DoPrediction()
 	    #
 	    if (defined($webtask)) {
 		$webtask->output($response->output());
-		$webtask->Exited(-1);
+		$webtask->Exited($response->code());
+		$webtask->Store();
 	    }
 	    else {
 		print STDERR "$authority: " . $response->output() . "\n";
 	    }
-	    return -1;
+	    return $response->code();
 	}
 	if (defined($webtask)) {
 	    $webtask->value($response->value());
@@ -1042,7 +1045,7 @@ sub DoPrediction()
 	# The parent caught a signal. Leave things intact so that we can
 	# kill things cleanly later.
 	#
-	$errmsg = "Internal error get reservation prediction info";
+	$errmsg = "Internal error getting reservation prediction info";
 	goto bad;
     }
     #
