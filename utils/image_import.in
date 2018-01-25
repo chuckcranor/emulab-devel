@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2017 University of Utah and the Flux Group.
+# Copyright (c) 2010-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -626,6 +626,11 @@ sub CreateImage($$$$$)
 	} while ($index < 100 && OSImage->Lookup($group->pid(), $imagename));
 	if ($index >= 100) {
 	    fatal("Could not generate a unique image name");
+	}
+	# This can happen if the munged name is too long. 
+	if (! TBcheck_dbslot($imagename, "images",
+			     "imagename", TBDB_CHECKDBSLOT_ERROR)) {
+	    $imagename = substr(TBGenSecretKey(), 0, 12);
 	}
 	$xmlparse->{'attribute'}->{"imagename"}->{'value'} = $imagename;
     }
