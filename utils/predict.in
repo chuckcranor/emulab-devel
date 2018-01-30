@@ -44,7 +44,7 @@ use Reservation;
 
 sub usage()
 {
-    print STDERR "Usage: predict [-p] [-u] [-t time] type\n";
+    print STDERR "Usage: predict [-p] [-u] [-t time] [-v] type\n";
     print STDERR "       predict -c type [pid...]\n";
     print STDERR "       predict -l type [pid...]\n";
     print STDERR "       predict -n [-t time] [-D duration] type [pid...]\n";
@@ -61,11 +61,12 @@ sub usage()
     print STDERR "   -p   Identify by pid only, not pid/eid\n";
     print STDERR "   -t   Give time/date for prediction (defaults to now)\n";
     print STDERR "   -u   Interpret/display all times in UTC\n";
+    print STDERR "   -v   Verbose (debugging) output for node usage\n";
     
     exit( -1 );
 }
 
-my $optlist     = "cdD:hlnpPt:T:x";
+my $optlist     = "cdD:hlnpPt:T:xv";
 my $debug       = 0;
 my $duration    = 365 * 24 * 60 * 60; # default to 1 year ~= infinity
 my $time        = time; # default to now
@@ -115,6 +116,9 @@ if (defined($options{"u"})) {
 }
 if (defined($options{h})) {
     usage();
+}
+if (defined($options{v})) {
+    $debug = 1;
 }
 if (defined($options{p})) {
     $pidonly = 1;
@@ -230,12 +234,16 @@ if( $unfulfilled ) {
     exit( 0 );
 }
 
-my $reservations = Reservation->LookupAll( $type );
+my $details;
+my $reservations = Reservation->LookupAll( $type, 0,
+					   $debug ? \$details : undef );
 my @timeline = ();
 my $free = 0;
 my %used = ();
 my %reserved = ();
 my %usedexp = ();
+
+print $details if( $debug );
 
 foreach my $reservation ( @$reservations ) {
     my $start;

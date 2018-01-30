@@ -549,9 +549,9 @@ sub Tidy($)
     return 1;
 }
 
-sub LookupAll($$;$)
+sub LookupAll($$;$$)
 {
-    my ($class, $type, $include_pending) = @_;
+    my ($class, $type, $include_pending, $details) = @_;
     
     return $cache{$type} if( exists( $cache{$type} ) );
 
@@ -615,12 +615,21 @@ sub LookupAll($$;$)
 				"GROUP BY e.pid, e.eid, n.reserved_pid, " .
 				"nr.pid, UNIX_TIMESTAMP( pr.end )";
     my $query_result = DBQueryWarn( $query );
+
+    $$details = "--- Node usage:\n" if( ref( $details ) );
     
     while( my($count, $pid, $eid, $uid, $end, $autoswap, $next_reserve,
 	      $slice_expire, $slice_lockdown, $reserved_pid, $pr_end,
 	      $expt_lockdown, $swappable) =
 	   $query_result->fetchrow_array() ) {
 	my $endtime;
+
+	if( ref( $details ) ) {
+	    no warnings 'uninitialized';
+	    $$details = $$details . "$count, $pid, $eid, $uid, $end, " .
+		"$autoswap, $next_reserve, $slice_expire, $slice_lockdown, " .
+		"$reserved_pid, $pr_end, $expt_lockdown, $swappable\n";
+	}
 
 	if( defined( $slice_expire ) ) {
 	    # Node(s) allocated to a GENI slice.  Treat as unavailable
@@ -681,6 +690,8 @@ sub LookupAll($$;$)
 	    push( @reservations, $res );	    
 	}
     }
+
+    $$details = $$details . "\n--- Reservations:\n" if( ref( $details ) );
     
     $query_result = DBQueryWarn( "SELECT pid, uid, UNIX_TIMESTAMP( start ), " .
 				 "UNIX_TIMESTAMP( end ), nodes, idx FROM " .
@@ -693,6 +704,11 @@ sub LookupAll($$;$)
 	my $res = Create( $class, $pid, $uid, $start, $end, $type, $nodes );
 	$res->{'IDX'} = $idx;
 	push( @reservations, $res );
+	
+	if( ref( $details ) ) {
+	    no warnings 'uninitialized';
+	    $$details = $$details . "$pid, $uid, $start, $end, $nodes, $idx\n";
+	}
     }
 
     $cache{$type} = \@reservations;
