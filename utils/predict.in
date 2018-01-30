@@ -328,7 +328,7 @@ if( $pidonly ) {
 foreach my $reserved ( sort { $reserved{$b} <=> $reserved{$a} }
 		       keys( %reserved ) ) {
     my $val = $reserved{ $reserved };
-    print "[$reserved: $val]\n" if( $val > 0 );
+    print "[$reserved: $val ($used{$reserved} used)]\n" if( $val > 0 );
 }
 
 if( $free >= 0 ) {
