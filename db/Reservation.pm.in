@@ -710,6 +710,7 @@ sub IsFeasible($$;$$$$$)
     my %used = ();
     my %reserved = ();
     my $answer = 1;
+    my $now = time();
     
     foreach my $reservation ( @$reservations ) {
 	my $pid = $reservation->pid();
@@ -742,9 +743,15 @@ sub IsFeasible($$;$$$$$)
 
 	    # Ignore reservations for listed projects.
 	    next if( grep( $_ eq $reservation->pid(), @$projlist ) );
-		      
+
+	    # Ignore past reservations.
+	    next if( $reservation->end() < $now );
+	    
+	    my $starttime = $reservation->start();
+	    $starttime = $now if( $starttime < $now );
+	    
 	    $start = { 'pid' => $reservation->pid(),
-		       't' => $reservation->start(),
+		       't' => $starttime,
 		       'used' => 0,
 		       'reserved' => $reservation->nodes() };
 	    $end = { 'pid' => $reservation->pid(),
