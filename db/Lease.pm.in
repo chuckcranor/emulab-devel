@@ -907,10 +907,10 @@ sub Extend($$)
 
     #
     # If the expiration time has been reached, extend it by the
-    # indicated time.
+    # indicated time (from the current time).
     #
     if ($self->IsExpired()) {
-	if ($self->AddTime($addtime)) {
+	if ($self->SetEndTime(time() + $addtime)) {
 	    print STDERR
 		"$self: Extend: could not extend lease\n";
 	    return LEASE_ERROR_FAILED();
