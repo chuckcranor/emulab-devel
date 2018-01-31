@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -250,10 +250,11 @@ class Lease
 	return "urn:publicid:IDN+${domain}+${type}+${id}";
     }
 
-    function deleteCommand() {
+    # We ignore webtasks for classic UI
+    function deleteCommand($webtask) {
 	return  "webdeletelease -f -b " . $this->pid() . "/" . $this->id();
     }
-    function grantCommand() {
+    function grantCommand($webtask) {
 	return  "webgrantlease ";
     }
 }
@@ -443,10 +444,11 @@ class ImageDataset
         return "$TBBASE/image_metadata.php?uuid=$image_uuid";
     }
     
-    function deleteCommand() {
+    # We ignore webtasks for classic UI
+    function deleteCommand($webtask) {
 	return  "webdelete_image -F -p " . $this->image->imageid();
     }
-    function grantCommand() {
+    function grantCommand($webtask) {
 	return  "webgrantimage ";
     }
 }
