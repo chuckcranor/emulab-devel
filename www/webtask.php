@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -90,6 +90,21 @@ class WebTask {
         }
         return WebTask::Lookup($task_id);
     }
+    #
+    # And a normal webtask.
+    #
+    function Create($uuid) {
+        $task_id = WebTask::GenerateID();
+
+        $query_result = 
+            DBQueryWarn("insert into web_tasks set task_id='$task_id', ".
+                        "  created=now(), object_uuid='$uuid'");
+        
+	if (!$query_result) {
+            return null;
+        }
+        return WebTask::Lookup($task_id);
+    }
 
     function Refresh() {
 	if (! $this->IsValid())
@@ -105,6 +120,7 @@ class WebTask {
 	    return -1;
 	}
 	$this->webtask = mysql_fetch_array($query_result);
+        $this->decoded = null;
         return 0;
     }
 
@@ -162,6 +178,18 @@ class WebTask {
 	}
 	return null;
     }
+    function SetTaskValue($key, $value) {
+        if (! $this->decoded) {
+            if ($this->task_data()) {
+		$this->decoded = json_decode($this->task_data(), true);
+	    }
+            else {
+                $this->decoded = array();
+            }
+        }
+        $this->decoded[$key] = $value;
+	return $value;
+    }
 
     function ValidTaskID($id) {
 	if (preg_match("/^[-\w]+$/", $id)) {
@@ -172,6 +200,20 @@ class WebTask {
 
     function GenerateID() {
 	return md5(uniqid(rand(),1));
+    }
+
+    # convenience function
+    function output($value = null) {
+        if ($value) {
+            return $this->SetTaskValue("output", $value);
+        }
+        return $this->TaskValue("output");
+    }
+    function code($value = null) {
+        if ($value) {
+            return $this->SetTaskValue("code", $value);
+        }
+        return $this->TaskValue("code");
     }
 }
 ?>
