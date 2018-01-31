@@ -465,14 +465,15 @@ sub DoDeleteImage()
 		my $snapname = $profile->name() . "." . $client_id;
 		if ($imageinfo->os() eq $profile->name() ||
 		    $imageinfo->os() eq $snapname) {
-		    $conflict = $imageinfo->image();
+		    $conflict = $imageinfo;
 		}
 	    }
 	    if ($usingimage && $conflict) {
 		my $mesg =
 		    "Version " . $version->version() . " of the " .
 		    $version->name() . " profile has another ".
-		    "image that would be deleted as well: $conflict. ".
+		    "image that would be deleted as well: ".
+		    $conflict->image() . ". ".
 		    "You will need to go to the profile page and delete ".
 		    "that profile version before you can delete this image.";
 
