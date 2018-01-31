@@ -30,10 +30,13 @@ $(function ()
     function LoadData()
     {
 	var amcount  = Object.keys(amlist).length;
-	var rescount = 0;
+	var rescount = 0;	
 	
 	_.each(amlist, function(urn, name) {
 	    var callback = function(json) {
+		var error = null;
+		var reservations = null;
+		
 		console.log("LoadData", json);
 		
 		// Kill the spinner.
@@ -44,17 +47,19 @@ $(function ()
 		if (json.code) {
 		    console.log("Could not get reservation data for " +
 				name + ": " + json.value);
-		    return;
+		    error = json.value;
 		}
-		var reservations = json.value.reservations;
-		rescount += reservations.length;
+		else {
+		    reservations = json.value.reservations;
+		    rescount += reservations.length;
 		
-		if (reservations.length == 0) {
-		    if (amcount == 0 && rescount == 0) {
-			// No reservations at all, show the message.
-			$('#noreservations').removeClass("hidden");
+		    if (reservations.length == 0) {
+			if (amcount == 0 && rescount == 0) {
+			    // No reservations at all, show the message.
+			    $('#noreservations').removeClass("hidden");
+			}
+			return;
 		    }
-		    return;
 		}
 
 		// Generate the main template.
@@ -67,6 +72,7 @@ $(function ()
 		    "anonymous"    : false,
 		    "name"         : name,
 		    "isadmin"      : window.ISADMIN,
+		    "error"        : error,
 		});
 		html =
 		    "<div class='row' id='" + name + "'>" +
@@ -75,6 +81,10 @@ $(function ()
 		    "</div>";
 
 		$('#main-body').prepend(html);
+
+		// On error, no need for the rest of this.
+		if (error)
+		    return;
 
 		// Show the proper status now, we might change it later.
 		_.each(reservations, function(value, uuid) {
@@ -89,6 +99,24 @@ $(function ()
 		    }
 		    else {
 			$(id + " .status-pending").removeClass("hidden");
+
+			if (window.ISADMIN) {
+			    id = '#' + name +
+				' tr[data-uuid="' + uuid + '"] ';
+			    
+			    // Bind a deny handler,
+			    $(id + ' .deny-button').click(function() {
+				DenyReservation($(this).closest('tr'));
+				return false;
+			    });
+			    $(id + ' .deny-button').removeClass("invisible");
+			    // Bind an approve handler
+			    $(id + ' .approve-button').click(function() {
+				ApproveReservation($(this).closest('tr'));
+				return false;
+			    });
+			    $(id + ' .approve-button').removeClass("invisible");
+			}
 		    }
 		});
 
@@ -111,11 +139,6 @@ $(function ()
 		    return false;
 		});
 		if (window.ISADMIN) {
-		    // Bind a deny handler.
-		    $('#' + name + ' .deny-button').click(function() {
-			DenyReservation($(this).closest('tr'));
-			return false;
-		    });
 		    // Bind info and warning handler.
 		    $('#' + name + ' .info-button').click(function() {
 			ReservationInfoOrWarning("info", $(this).closest('tr'));
@@ -290,6 +313,48 @@ $(function ()
     }
     
     /*
+     * Approve a reservation.
+     */
+    function ApproveReservation(row) {
+	// This is what we are deleting.
+	var uuid = $(row).attr('data-uuid');
+	var cluster = $(row).attr('data-cluster');
+	
+	var callback = function (json) {
+	    sup.HideModal('#waitwait-modal');
+	    console.log("approve", json);
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    $(row).find(".status-column .status-pending")
+		.addClass("hidden");
+	    $(row).find(".status-column .status-approved")
+		.removeClass("hidden");
+	    $(row).find('.approve-button').addClass("invisible");
+	    $(row).find('.deny-button').addClass("invisible");
+	};
+	// Bind the confirm button in the modal. Do the approval.
+	$('#approve-modal #confirm-approve').click(function () {
+	    sup.HideModal('#approve-modal', function () {
+		sup.ShowModal('#waitwait-modal');
+		var xmlthing = sup.CallServerMethod(null, "reserve",
+						    "Approve",
+						    {"uuid"    : uuid,
+						     "cluster" : cluster});
+		xmlthing.done(callback);
+	    });
+	});
+	// Handler so we know the user closed the modal. We need to
+	// clear the confirm button handler.
+	$('#approve-modal').on('hidden.bs.modal', function (e) {
+	    $('#approve-modal #confirm-approve').unbind("click");
+	    $('#approve-modal').off('hidden.bs.modal');
+	})
+	sup.ShowModal("#approve-modal");
+    }
+    
+    /*
      * Ask for info about reservation (usage, lack of usage, etc).
      */
     function ReservationInfoOrWarning(which, row) {
@@ -306,7 +371,7 @@ $(function ()
 
 	var callback = function (json) {
 	    sup.HideModal('#waitwait-modal');
-	    console.log("info/warn", json);
+	    console.log(method, json);
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
 		return;
