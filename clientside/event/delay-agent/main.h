@@ -36,7 +36,13 @@
 /* for setsockopt and stuff */
 #include <sys/param.h>
 #include <sys/socket.h>
+/*
+ * This ifdef mirrors the one in main.c.  Not all libc impls offer the
+ * sysctl interface; and we only use it in this specific case on FreeBSD.
+ */
+#if !defined(USESOCKET) && (__FreeBSD_version >= 800000 && __FreeBSD_version < 803000)
 #include <sys/sysctl.h>
+#endif
 #include <sys/time.h>
 #include <sys/wait.h>
 #ifndef linux

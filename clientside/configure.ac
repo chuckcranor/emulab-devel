@@ -306,6 +306,7 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/ubuntu16-ms/GNUmakefile \
 	  tmcc/linux-ms/GNUmakefile \
 	  tmcc/archlinux/GNUmakefile \
+	  tmcc/alpine/GNUmakefile \
 	  tmcc/freebsd5/GNUmakefile tmcc/freebsd5/supfile \
 	  tmcc/freebsd6/GNUmakefile tmcc/freebsd6/supfile \
 	  tmcc/freebsd6/netif-emulab \

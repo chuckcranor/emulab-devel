@@ -1512,6 +1512,7 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/ubuntu16-ms/GNUmakefile \
  clientside/tmcc/linux-ms/GNUmakefile \
  clientside/tmcc/archlinux/GNUmakefile \
+ clientside/tmcc/alpine/GNUmakefile \
  clientside/tmcc/freebsd5/GNUmakefile clientside/tmcc/freebsd5/supfile \
  clientside/tmcc/freebsd6/GNUmakefile clientside/tmcc/freebsd6/supfile \
  clientside/tmcc/freebsd6/netif-emulab \

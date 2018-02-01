@@ -1630,6 +1630,9 @@ start_program(struct proginfo *pinfo, unsigned long token, char *args)
 	 * Exec the shell.  We will reap children by catching SIGCHLD and
 	 * causing an Elvin I/O handler to fire.
 	 */
+#ifndef _PATH_CSHELL
+#define _PATH_CSHELL "/bin/csh"
+#endif
 	execl(_PATH_CSHELL, "csh", "-f", "-c", pinfo->cmdline, (char *)NULL);
 
 	/* Ug */
