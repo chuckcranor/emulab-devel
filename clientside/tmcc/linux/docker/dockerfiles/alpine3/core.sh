@@ -9,7 +9,11 @@ apk update
 
 # missing perl-modules package from ubuntu version
 apk add ca-certificates sudo python wget patch nano file \
-  perl perl-libwww psmisc tcsh@testing zsh mksh
+    perl perl-libwww psmisc tcsh@testing zsh mksh shadow \
+    'g++' gcc openssl-dev boost
+
+# the apk tcsh doesnt include a csh symlink so we'll add one
+ln -s /bin/tcsh /bin/csh
 
 #
 # Create these traditional NFS mountpoints now.  Scripts get unhappy
