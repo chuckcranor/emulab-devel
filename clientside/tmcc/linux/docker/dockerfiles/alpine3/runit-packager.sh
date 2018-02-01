@@ -8,8 +8,5 @@ set -x
 
 # sudo chown packager:packager ~/.abuild/
 abuild-keygen -a -i -n
-cd /tmp/runit
-ls -la
-cd alpine
-ls -la
+cd /tmp/runit/alpine
 abuild -r -P /tmp

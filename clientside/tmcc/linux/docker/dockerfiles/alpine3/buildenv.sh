@@ -10,24 +10,30 @@
 
 set -x
 
+DIRNAME=`pwd`
+
+echo "@testing http://nl.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
+
 apk update
 
-apk add git ca-certificates \
+apk add git ca-certificates tcsh@testing perl \
     gcc make libc-dev byacc libtool openssl-dev 'g++' \
     sudo python python-dev libpcap-dev boost-dev wget patch flex
 
-if [ -z "$EMULABSRC" ]; then
+ln -s /bin/tcsh /bin/csh
+
+if [ -z "$EMULABTMPSRC" ]; then
     echo "WARNING: missing EMULABSRC environment variable pointer to src; cloning!"
     export EMULABSRC=/tmp/emulab-devel
     cd /tmp
-    git clone https://gitlab.flux.utah.edu/emulab/emulab-devel $EMULABSRC
+    git clone https://gitlab.flux.utah.edu/emulab/emulab-devel.git $EMULABSRC
     [ ! $? -eq 0 ] && exit 1
 fi
 if [ -z "$PUBSUBSRC" ]; then
     echo "WARNING: missing PUBSUBSRC environment variable pointer to src; cloning!"
     export PUBSUBSRC=/tmp/pubsub
     cd /tmp
-    git clone https://gitlab.flux.utah.edu/emulab/pubsub $PUBSUBSRC
+    git clone https://gitlab.flux.utah.edu/emulab/pubsub.git $PUBSUBSRC
     [ ! $? -eq 0 ] && exit 1
 fi
 
@@ -53,15 +59,15 @@ fi
 echo /usr/local/lib > /etc/ld.so.conf.d/pubsub.conf
 ldconfig
 
-# mkdir -p /tmp/emulab.obj
-# cd /tmp/emulab.obj
-# export NONTP=1
-# $EMULABSRC/clientside/configure --with-TBDEFS=$EMULABSRC/defs-utahclient \
-#     && make client && make client-install \
-#     && make -C tmcc/linux docker-guest-install
-# [ ! $? -eq 0 ] && exit 1
-# cd /tmp
-# rm -rf /tmp/emulab.obj
+mkdir -p /tmp/emulab.obj
+cd /tmp/emulab.obj
+export NONTP=1
+$EMULABSRC/clientside/configure --with-TBDEFS=$EMULABSRC/defs-utahclient \
+    && make client && make client-install \
+    && make -C tmcc/linux docker-guest-install
+[ ! $? -eq 0 ] && exit 1
+cd /tmp
+rm -rf /tmp/emulab.obj
 
 #
 # Create these traditional NFS mountpoints now.  Scripts get unhappy
