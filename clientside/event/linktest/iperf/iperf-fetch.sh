@@ -22,8 +22,19 @@
 # }}}
 #
 
-version=2.0.2
-srcurl="http://sourceforge.net/projects/iperf/files/iperf/iperf 2.02 source"
+if [ -n "$3" ]; then
+    version="$3"
+fi
+if [ -z "$version" ]; then
+    version=2.0.2
+fi
+# The old versions use this funny old URL, and I can't make any sense of
+# why it still works.  But of course it doesn't work for new versions.
+if [ "$version" = "2.0.2" ]; then
+    srcurl="http://sourceforge.net/projects/iperf/files/iperf/iperf 2.02 source"
+else
+    srcurl="https://sourceforge.net/projects/iperf2/files/iperf-${version}.tar.gz"
+fi
 tarball="iperf-$version.tar.gz"
 
 if [ -x /usr/bin/fetch ]; then
@@ -37,7 +48,7 @@ fi
 
 if [ -n "$1" ]; then srcdir=$1; else srcdir=$PWD ; fi
 if [ -n "$2" ]; then tarball=$2; fi
-if [ -n "$3" ]; then host=$3; else host=www.emulab.net ; fi
+if [ -n "$4" ]; then host=$4; else host=www.emulab.net ; fi
 dir=`pwd`
 
 if [ ! -d $dir/iperf-$version/src ]; then
@@ -67,7 +78,7 @@ if [ ! -d $dir/iperf-$version/src ]; then
         srcdir="../$srcdir"
 	;;
     esac
-    cd iperf-$version && patch -p0 < $srcdir/iperf-patch || {
+    cd iperf-$version && patch -p0 < $srcdir/iperf-${version}.patch || {
         echo "ERROR: iperf-fetch.sh: patch failed"
 	exit 1
     }

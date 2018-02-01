@@ -24,8 +24,16 @@ SRCDIR		= @srcdir@
 TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= @top_builddir@
 SUBDIR		= $(subst $(TESTBED_SRCDIR)/,,$(SRCDIR))
+SYSTEM         := $(shell $(SRCDIR)/../../../tmcc/osstuff.sh -o)
 
-TARBALL		= iperf-2.0.2.tar.gz
+IPERFVERSION    = 2.0.2
+ifeq ($(SYSTEM),Linux)
+OSTAG=$(shell $(SRCDIR)/../../../tmcc/osstuff.sh -t)
+ifeq ($(OSTAG),alpine)
+IPERFVERSION    = 2.0.10
+endif
+endif
+TARBALL		= iperf-$(IPERFVERSION).tar.gz
 
 include $(OBJDIR)/Makeconf
 
@@ -62,6 +70,7 @@ endif
 all: $(TARGETS)
 
 vars:
+	@echo "IPERFVERSION=$(IPERFVERSION)"
 	@echo "SYSTEM=$(SYSTEM)"
 	@echo "ISBROKEN=$(ISBROKEN)"
 	@echo "TARGETS=$(TARGETS)"
@@ -75,7 +84,7 @@ include $(TESTBED_SRCDIR)/GNUmakerules
 %-recursive:	Makefile force
 	$(MAKE) -f Makefile $@
 
-src/emulab-iperf:	iperf-2.0.2 config.status build-iperf
+src/emulab-iperf:	iperf-$(IPERFVERSION) config.status build-iperf
 
 build-iperf: Makefile
 	$(MAKE) -f Makefile all
@@ -90,10 +99,10 @@ client-install: $(ITARGETS)
 # Note: GNU make wants to pass options in MAKEFLAGS (w) that are incompatible
 # with BSD make.  So we just force configure to assume/use gmake for BSD.
 config.status:
-	MAKE=$(MAKE) iperf-2.0.2/configure $(CONFIG_ARGS)
+	MAKE=$(MAKE) iperf-$(IPERFVERSION)/configure $(CONFIG_ARGS)
 
-iperf-2.0.2:
-	$(SRCDIR)/iperf-fetch.sh $(SRCDIR) $(TARBALL)
+iperf-$(IPERFVERSION):
+	$(SRCDIR)/iperf-fetch.sh $(SRCDIR) $(TARBALL) $(IPERFVERSION)
 
 clean:
 	if [ -r Makefile ]; then $(MAKE) -f Makefile clean; fi
@@ -101,7 +110,7 @@ clean:
 
 reallyclean: clean
 	rm -rf config.status Makefile compat doc include src \
-	    iperf-2.0.2 $(TARBALL)
+	    iperf-$(IPERFVERSION) $(TARBALL)
 
 Makefile: config.status
 
