@@ -71,7 +71,9 @@
 #include <sys/param.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#ifdef __FreeBSD__
 #include <sys/sysctl.h>
+#endif
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <net/ethernet.h>
