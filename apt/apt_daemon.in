@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -169,10 +169,6 @@ sub KillInstances()
 	print "$instance is in the $status state\n";
 	print "$instance has its canceled flag set\n"
 	    if ($instance->canceled());
-	if ($instance->canceled() && $status eq "ready") {
-	    print "Ignoring canceled flag since instance is ready\n";
-	    next;
-	}
 
 	#
 	# Try to terminate the instance. We cannot take the lock since
