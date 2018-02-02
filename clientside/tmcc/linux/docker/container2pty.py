@@ -17,6 +17,7 @@ import traceback
 import pty
 import docker
 import select
+import signal
 
 if docker.version_info[0] < 2:
     import docker.client
@@ -40,22 +41,63 @@ flags = fcntl.fcntl(mfd,fcntl.F_GETFL)
 fcntl.fcntl(mfd,fcntl.F_SETFL,flags | os.O_NONBLOCK)
 
 retval = 0
+
+def cleanup(signum,frame):
+    global retval
+
+    if signum:
+        sys.stderr.write("Caught signal %s, exiting!\n" % (str(signum),))
+    if signum in [signal.SIGPIPE,signal.SIGALRM,signal.SIGABRT]:
+        retval = -signum
+    try:
+        os.close(mfd)
+        os.close(sfd)
+        socket.close()
+    except:
+        pass
+    if len(sys.argv) > 2:
+        try:
+            os.unlink(sys.argv[2])
+        except:
+            pass
+    sys.exit(retval)
+
+signal.signal(signal.SIGINT,cleanup)
+signal.signal(signal.SIGALRM,cleanup)
+signal.signal(signal.SIGPIPE,cleanup)
+signal.signal(signal.SIGHUP,cleanup)
+signal.signal(signal.SIGABRT,cleanup)
+signal.signal(signal.SIGTERM,cleanup)
+signal.signal(signal.SIGUSR1,signal.SIG_IGN)
+signal.signal(signal.SIGUSR2,signal.SIG_IGN)
+
 try:
     (sockbuf,mbuf) = ('','')
     while True:
-        (rlist,wlist,xlist) = select.select([sockfd,mfd],[sockfd,mfd],[],None)
+        iwlist = []
+        if len(sockbuf):
+            iwlist.append(mfd)
+        if len(mbuf):
+            iwlist.append(sockfd)
+        (rlist,wlist,xlist) = select.select([sockfd,mfd],iwlist,[],None)
         if sockfd in rlist:
+            l = len(sockbuf)
             sockbuf += socket.recv(4096)
+            sys.stderr.write("reads: %d\n" % (len(sockbuf[l:])))
         if mfd in rlist:
+            l = len(mbuf)
             mbuf += os.read(mfd,4096)
+            sys.stderr.write("readm: %d\n" % (len(mbuf[l:])))
         if len(mbuf) and sockfd in wlist:
             n = socket.send(mbuf)
+            sys.stderr.write("sents: %d\n" % (len(mbuf[:n])))
             if n < len(mbuf):
                 mbuf = mbuf[n:]
             else:
                 mbuf = ''
         if len(sockbuf) and mfd in wlist:
             n = os.write(mfd,sockbuf)
+            sys.stderr.write("sentm: %d\n" % (len(mbuf[:n])))
             if n < len(sockbuf):
                 sockbuf = sockbuf[n:]
             else:
@@ -64,12 +106,4 @@ except:
     traceback.print_exc()
     retval = -1
 
-try:
-    os.close(mfd)
-    os.close(sfd)
-    socket.close()
-except:
-    pass
-if len(sys.argv) > 2:
-    os.unlink(sys.argv[2])
-sys.exit(retval)
+cleanup(None,None)
