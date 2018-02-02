@@ -83,6 +83,9 @@ try:
         if sockfd in rlist:
             l = len(sockbuf)
             sockbuf += socket.recv(4096)
+            if (len(sockbuf[l:])) == 0:
+                sys.stderr.write("container went away, exiting\n")
+                cleanup(None,None)
             sys.stderr.write("reads: %d\n" % (len(sockbuf[l:])))
         if mfd in rlist:
             l = len(mbuf)
