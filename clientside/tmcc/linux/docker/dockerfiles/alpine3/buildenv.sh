@@ -12,14 +12,15 @@ set -x
 
 DIRNAME=`pwd`
 
-echo "@testing http://nl.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
+# echo "@testing http://nl.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
 
 apk update
 
-apk add git ca-certificates tcsh@testing perl \
+apk add git ca-certificates bash perl \
     gcc make libc-dev byacc libtool openssl-dev 'g++' \
     sudo python python-dev libpcap-dev boost-dev wget patch flex
 
+ln -s /bin/bash /bin/tcsh
 ln -s /bin/tcsh /bin/csh
 
 if [ -z "$EMULABTMPSRC" ]; then
