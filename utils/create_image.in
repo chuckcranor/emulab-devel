@@ -978,8 +978,17 @@ else {
     # SERVER= and IMAGENAME= key-value args. If we don't do this, the
     # images winds up in the logfile!
     #
+    # And the slice argument too! Otherwise we take a whole disk image
+    # and sell it as a slice image.
+    #
     if ($isxenhost && !$isdataset && !$srcsigfile && !$dstsigfile) {
 	$sopts = " -S $BOSSIP -F $id";
+
+	$startslice = $image->loadpart();
+	$loadlength = $image->loadlength();
+	if ($startslice || $loadlength == 1) {
+	    $sopts .= " -s $startslice";
+	}
     }
 
     $oargs .= " IMAGENAME=$id";
