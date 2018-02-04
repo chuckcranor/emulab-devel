@@ -1,3 +1,3 @@
 #!/bin/sh
 
-exec getty 115200 console linux
+exec agetty 115200 console linux
