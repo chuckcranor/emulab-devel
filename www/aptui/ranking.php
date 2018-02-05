@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -133,7 +133,8 @@ $query_result =
                  "   v.profileid=h.profile_id and ".
                  "   v.version=h.profile_version ".
                  "where h.created>DATE_SUB(now(),INTERVAL $days DAY) ".
-                 "group by profile_id order by count desc limit 100");
+                 "group by profile_id,v.pid,v.name ".
+		 "order by count desc limit 100");
 
 while ($row = mysql_fetch_array($query_result)) {
     $name       = $row["name"];
