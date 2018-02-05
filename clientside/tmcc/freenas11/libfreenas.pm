@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2017 University of Utah and the Flux Group.
+# Copyright (c) 2013-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -513,24 +513,17 @@ sub freenasVolumeCreate($$$;$)
 			     "POST", undef,
 			     {"name" => "$volname",
 			      "volsize" => "${size}M",
+			      "compression" => "off",
 			      "sparse" => $sparsearg },
-			     undef, \$msg);
+			     202, \$msg);
     if (!$res) {
 	if ($msg) {
 	    warn("*** ERROR: freenasVolumeCreate: ".
-		 "volume creation failed:\n$msg");
+		 "volume '$pool/$volname' creation failed:\n$msg");
 	} else {
 	    warn("*** ERROR: freenasVolumeCreate: volume creation failed");
 	}
 	return -1;
-    }
-
-    # Make sure compression is disabled. Could be an option?
-    $res =
-	freenasRequest("$FREENAS_API_RESOURCE_VOLUME/${pool}/zvols/${volname}",
-		       "PUT", undef, { "compression" => "off" });
-    if (!$res) {
-	warn("*** ERROR: freenasVolumeCreate: could not disable compression");
     }
 
     return 0;
