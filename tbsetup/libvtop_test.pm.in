@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2017 University of Utah and the Flux Group.
+# Copyright (c) 2005-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1543,7 +1543,8 @@ sub LoadVirtNodes($)
 	$self->exptstats()->{"maxlinks"} = $ipcount
 	    if ($ipcount > $self->exptstats()->{"maxlinks"});
 	$self->exptstats()->{"minlinks"} = $ipcount
-	    if ($ipcount < $self->exptstats()->{"minlinks"});
+	    if (!defined($self->exptstats()->{"minlinks"}) ||
+		$ipcount < $self->exptstats()->{"minlinks"});
 
 	# Add to the list.
 	$self->vnodes()->{$vname} = $vnode;
@@ -4296,7 +4297,7 @@ sub CreateVtop($;$)
 	'wirelesslans' => 0,
 	'shapedlinks' => 0,
 	'shapedlans'  => 0,
-	'minlinks'    => 100000,
+	'minlinks'    => undef,
 	# includes emulated links. Maybe thats wrong.
 	'maxlinks'    => 0,
     };
