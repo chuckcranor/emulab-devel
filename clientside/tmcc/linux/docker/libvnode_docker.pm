@@ -2746,7 +2746,9 @@ sub vnodeCreate($$$$)
 		 "$mntdir/var.emulab/lock") {
 	mkdir($dir);
     }
-    if ($newization >= DOCKER_EMULABIZE_CORE()) {
+    if ($newization eq DOCKER_EMULABIZE_CORE()
+	|| $newization eq DOCKER_EMULABIZE_BUILDENV()
+	|| $newization eq DOCKER_EMULABIZE_FULL()) {
 	my ($boss_name,$boss_ip) = tmccbossinfo();
 	open(FD,">$mntdir/bossnode");
 	print FD "$boss_name\n";
