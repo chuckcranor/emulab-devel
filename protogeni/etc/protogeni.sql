@@ -74,6 +74,9 @@ CREATE TABLE `geni_slices` (
   `expiration_max` datetime default NULL,
   `renew_limit` time default NULL,
   `description` mediumtext default NULL,
+  `async_mode` tinyint(1) NOT NULL default '0',
+  `async_code` int(11) default '0',
+  `async_output` text,
   PRIMARY KEY  (`idx`),
   UNIQUE KEY `hrn` (`hrn`),
   UNIQUE KEY `uuid` (`uuid`)
