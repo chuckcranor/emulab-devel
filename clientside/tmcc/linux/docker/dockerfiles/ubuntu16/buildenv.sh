@@ -15,7 +15,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get install -y --no-install-suggests --no-install-recommends \
     git ca-certificates \
     gcc make libc-dev byacc libtool-bin libssl-dev 'g++' \
-    sudo python python-dev libpcap-dev libboost-dev wget patch flex
+    sudo python python-dev libpcap-dev libboost-dev wget patch flex ntp
 
 if [ -z "$EMULABSRC" ]; then
     echo "WARNING: missing EMULABSRC environment variable pointer to src; cloning!"
