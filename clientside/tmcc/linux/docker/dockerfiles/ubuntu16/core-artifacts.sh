@@ -9,8 +9,6 @@ if [ -n "$DESTDIR" ]; then
     mkdir -p $DESTDIR
 fi
 
-ubuntu/prepare.sh
-ubuntu16/buildenv.sh
-ubuntu/cleanup.sh
+ubuntu/prepare.sh && ubuntu16/buildenv.sh && ubuntu/cleanup.sh
 
 exit $?
