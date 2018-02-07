@@ -3617,7 +3617,8 @@ sub UpdateAccounts($$)
 	my $node = Node->Lookup($sliver->resource_id());
 	next
 	    if (!defined($node) ||
-		$node->erole() ne EmulabConstants::TBDB_RSRVROLE_NODE());
+		$node->erole() ne EmulabConstants::TBDB_RSRVROLE_NODE() ||
+		$node->op_mode() eq EmulabConstants::TBDB_NODESTATE_ALWAYSUP());
 
 	$node->MarkForUpdate();
 
