@@ -966,9 +966,7 @@ sub DoPrediction()
 	foreach my $project (@plist) {
 	    push(@projlist, $project->urn());
 	}
-	if (!@projlist) {
-	    fatal("No projects to create experiments in");
-	}
+	# Okay not to be in any projects ... 
     }
 
     #
