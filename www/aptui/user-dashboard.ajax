@@ -236,6 +236,8 @@ function Do_AccountDetails()
         $results["nonlocal_id"]   = ($target_user->nonlocal_id() ?
                                      $target_user->nonlocal_id() : "");
         $results["last_weblogin"] = DateStringGMT(LASTWEBLOGIN($target_idx));
+        $results["inactive"]       = ($target_user->status() ==
+                                      TBDB_USERSTATUS_INACTIVE ? true : false);
     }
 
     SPITAJAX_RESPONSE($results);
@@ -306,7 +308,8 @@ function Do_Toggle()
 	SPITAJAX_ERROR(-1, "Not enough permission");
         return;
     }
-    if ($target_user->status() != TBDB_USERSTATUS_ACTIVE) {
+    if ($target_user->status() != TBDB_USERSTATUS_ACTIVE &&
+        $target_user->status() != TBDB_USERSTATUS_INACTIVE) {
 	SPITAJAX_ERROR(-1, "User not been activated yet!");
         return;
     }
@@ -337,6 +340,18 @@ function Do_Toggle()
         }
         if (SUEXEC($this_uid, $TBADMINGROUP,
                    "webmodgroups $target_uid", SUEXEC_ACTION_CONTINUE)) {
+            SPITAJAX_ERROR(-1, $suexec_output);
+            return -1;
+        }
+    }
+    elseif ($toggle == "inactive") {
+        $newstatus = ($target_user->IsActive() ?
+                      TBDB_USERSTATUS_INACTIVE : TBDB_USERSTATUS_ACTIVE);
+        $command   = ($target_user->IsActive() ? "deactivate" : "reactivate");
+    
+        $target_user->SetStatus($newstatus);
+        if (SUEXEC($this_uid, $TBADMINGROUP,
+                   "webtbacct $command $target_uid", SUEXEC_ACTION_CONTINUE)) {
             SPITAJAX_ERROR(-1, $suexec_output);
             return -1;
         }
