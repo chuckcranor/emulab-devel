@@ -3004,6 +3004,7 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
     #my ($host_ip,$host_mask,$vmac) = hostControlNet();
     my ($host_iface,$host_ip,$host_mask,$host_maskbits,$host_net,
 	$host_mac,$host_gw) = findControlNet();
+    my ($vip,undef,undef) = hostControlNet();
     my ($bossdomain,$boss_ip) = tmccbossinfo();
     if (!$boss_ip) {
 	$boss_ip = `cat $BOOTDIR/bossip`;
@@ -3168,12 +3169,12 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
     push(@grules,
 	 "-t nat -A PREROUTING -j DNAT -p tcp ".
 	 "--dport $TMCD_PORT -d $boss_ip -s $ip ".
-	 "--to-destination $host_ip:$local_tmcd_port");
+	 "--to-destination $vip:$local_tmcd_port");
 
     push(@grules,
 	 "-t nat -A PREROUTING -j DNAT -p udp ".
 	 "--dport $TMCD_PORT -d $boss_ip -s $ip ".
-	 "--to-destination $host_ip:$local_tmcd_port");
+	 "--to-destination $vip:$local_tmcd_port");
 
     # Reroute evproxy to use the local daemon.
     push(@grules,
