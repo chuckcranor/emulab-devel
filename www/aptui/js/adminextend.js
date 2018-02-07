@@ -122,16 +122,19 @@ $(function ()
 	    if ($('#maximum-extension-checkbox').is(":checked")) {
 		current_extension_input = $('#howlong').val();
 		if (maxextension == null) {
-		    alert("There is maximum extension!");
+		    alert("There is no maximum extension!");
 		    // Flip the checkbox back.
 		    $('#maximum-extension-checkbox').prop("checked", false);
 		    return;
 		}
 		// Kill the input field, it will be ignored.
 		$('#howlong').val("");
+		// And make it read only to make it clear.
+		$('#howlong').prop("readonly", true);
 	    }
 	    else {
 		$('#howlong').val(current_extension_input);
+		$('#howlong').prop("readonly", false);
 	    }
 	});
     }
