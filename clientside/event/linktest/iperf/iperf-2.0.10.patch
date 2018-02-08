@@ -160,10 +160,18 @@ diff -Nurb src/main.cpp src/main.cpp
      // Check for either having specified client or server
      if ( ext_gSettings->mThreadMode == kMode_Client
           || ext_gSettings->mThreadMode == kMode_Listener ) {
-diff -Nurb src/stdio.c src/stdio.c
 --- src/stdio.c	2017-08-08 21:54:14.000000000 -0600
-+++ src/stdio.c	2017-11-15 09:33:55.119085470 -0700
-@@ -264,7 +264,7 @@
++++ src/stdio.c	2018-02-07 17:19:31.001255017 -0700
+@@ -255,8 +255,6 @@
+  * ------------------------------------------------------------------- */
+ 
+ void redirect(const char *inOutputFileName) {
+-#ifdef WIN32
+-
+     FILE *fp;
+ 
+     if ( inOutputFileName == NULL ) {
+@@ -264,14 +262,12 @@
          return;
      }
  
@@ -172,3 +180,10 @@ diff -Nurb src/stdio.c src/stdio.c
      if ( fp == NULL ) {
          fprintf(stderr, "redirect stdout failed!\n");
          return;
+     }
+ 
+-#endif
+-
+     return;
+ }
+ 
