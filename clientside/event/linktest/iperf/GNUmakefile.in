@@ -31,6 +31,9 @@ ifeq ($(SYSTEM),Linux)
 OSTAG=$(shell $(SRCDIR)/../../../tmcc/osstuff.sh -t)
 ifeq ($(OSTAG),alpine)
 IPERFVERSION    = 2.0.10
+# If 2.0.10, we have to disable 64-bit seq numbers; they mess up the
+# client_hdr size in a backwards-incompat way.
+CONFIG_ARGS     = --disable-seqno64b
 endif
 endif
 TARBALL		= iperf-$(IPERFVERSION).tar.gz

@@ -1,6 +1,6 @@
 diff -Nurb include/Settings.hpp include/Settings.hpp
 --- include/Settings.hpp	2017-08-08 21:54:14.000000000 -0600
-+++ include/Settings.hpp	2017-11-15 09:33:55.118085453 -0700
++++ include/Settings.hpp	2018-02-08 11:11:05.297576181 -0700
 @@ -139,6 +139,7 @@
      int mBufLen;                    // -l
      int mMSS;                       // -M
@@ -37,8 +37,44 @@ diff -Nurb include/Settings.hpp include/Settings.hpp
  
 diff -Nurb src/Client.cpp src/Client.cpp
 --- src/Client.cpp	2017-08-08 21:54:14.000000000 -0600
-+++ src/Client.cpp	2017-11-15 09:33:55.118085453 -0700
-@@ -886,6 +886,7 @@
++++ src/Client.cpp	2018-02-08 12:07:00.907572372 -0700
+@@ -573,9 +573,11 @@
+         if (isUDP(mSettings)) {
+             // store datagram ID into buffer
+ 	    mBuf_UDP->id      = htonl((reportstruct->packetID & 0xFFFFFFFFL));
++#ifdef HAVE_SEQNO64b
+ 	    if (isSeqNo64b(mSettings)) {
+ 		mBuf_UDP->id2      = htonl(((reportstruct->packetID & 0xFFFFFFFF00000000LL) >> 32));
+ 	    }
++#endif
+ 	    mBuf_UDP->tv_sec  = htonl(reportstruct->packetTime.tv_sec);
+ 	    mBuf_UDP->tv_usec = htonl(reportstruct->packetTime.tv_usec);
+ 	    reportstruct->packetID++;
+@@ -679,10 +681,13 @@
+         // The negative datagram ID signifies termination to the server.
+ 
+         // store datagram ID into buffer
++#ifdef HAVE_SEQNO64b
+ 	if (isSeqNo64b(mSettings)) {
+ 	    mBuf_UDP->id      = htonl((reportstruct->packetID & 0xFFFFFFFFFL));
+ 	    mBuf_UDP->id2     = htonl((((reportstruct->packetID & 0xFFFFFFFF00000000LL) >> 32) | 0x80000000L));
+-	} else {
++	} else
++#endif
++	{
+ 	    mBuf_UDP->id      = htonl(((reportstruct->packetID & 0xFFFFFFFFL) | 0x80000000L));
+ 	}
+         mBuf_UDP->tv_usec = htonl( reportstruct->packetTime.tv_usec );
+@@ -709,7 +714,7 @@
+             temp_hdr = (client_hdr*)mBuf;
+         }
+ 	flags = Settings_GenerateClientHdr( mSettings, temp_hdr );
+-	if (flags & (HEADER_EXTEND | HEADER_VERSION1)) {
++	if (flags & (HEADER_EXTEND | HEADER_VERSION1 | HEADER_EMULAB)) {
+ 	    //  This test requires the pre-test header messages
+ 	    //  The extended headers require an exchange
+ 	    //  between the client and server/listener
+@@ -886,6 +891,7 @@
  
      int count = 0;
      int packetid;
@@ -46,7 +82,7 @@ diff -Nurb src/Client.cpp src/Client.cpp
      while ( count < 10 ) {
          count++;
  
-@@ -906,8 +907,8 @@
+@@ -906,8 +912,8 @@
          // wait until the socket is readable, or our timeout expires
          FD_ZERO( &readSet );
          FD_SET( mSettings->mSock, &readSet );
@@ -57,7 +93,7 @@ diff -Nurb src/Client.cpp src/Client.cpp
  
          rc = select( mSettings->mSock+1, &readSet, NULL, NULL, &timeout );
          FAIL_errno( rc == SOCKET_ERROR, "select", mSettings );
-@@ -929,6 +930,6 @@
+@@ -929,6 +935,6 @@
          }
      }
  
@@ -67,7 +103,7 @@ diff -Nurb src/Client.cpp src/Client.cpp
  // end write_UDP_FIN
 diff -Nurb src/Locale.c src/Locale.c
 --- src/Locale.c	2017-08-11 12:41:20.000000000 -0600
-+++ src/Locale.c	2017-11-15 09:33:55.118085453 -0700
++++ src/Locale.c	2018-02-08 11:11:05.297576181 -0700
 @@ -373,7 +373,7 @@
  "WARNING: Path MTU Discovery may not be enabled.\n";
  
@@ -77,9 +113,26 @@ diff -Nurb src/Locale.c src/Locale.c
  
  const char warn_ack_failed[]=
  "[%3d] WARNING: ack of last datagram failed after %d tries.\n";
+diff -Nurb src/Server.cpp src/Server.cpp
+--- src/Server.cpp	2017-08-08 21:54:14.000000000 -0600
++++ src/Server.cpp	2018-02-08 10:59:38.116942057 -0700
+@@ -313,9 +313,12 @@
+ 
+             if (!reportstruct->emptyreport) {
+                 // read the datagram ID and sentTime out of the buffer
++#ifdef HAVE_SEQNO64b
+ 		if (isSeqNo64b(mSettings)) {
+ 		    reportstruct->packetID = (((max_size_t) (ntohl(mBuf_UDP->id2)) << 32) | ntohl(mBuf_UDP->id));
+-		} else {
++		} else
++#endif
++		{
+ 		    reportstruct->packetID = ntohl(mBuf_UDP->id);
+ 		}
+                 reportstruct->sentTime.tv_sec = ntohl( mBuf_UDP->tv_sec  );
 diff -Nurb src/Settings.cpp src/Settings.cpp
 --- src/Settings.cpp	2017-08-11 11:55:44.000000000 -0600
-+++ src/Settings.cpp	2017-11-15 09:33:55.118085453 -0700
++++ src/Settings.cpp	2018-02-08 12:11:03.680668904 -0700
 @@ -114,6 +114,7 @@
  {"realtime",         no_argument, NULL, 'z'},
  
@@ -115,7 +168,21 @@ diff -Nurb src/Settings.cpp src/Settings.cpp
          case 'B': // specify bind address
  	    if (mExtSettings->mLocalhost == NULL) {
  		mExtSettings->mLocalhost = new char[ strlen( optarg ) + 1 ];
-@@ -887,6 +892,9 @@
+@@ -843,6 +848,13 @@
+         if ( hdr->base.bufferlen != 0 ) {
+             (*client)->mBufLen = ntohl(hdr->base.bufferlen);
+         }
++        if ( hdr->base.mWinBand != 0 ) {
++            if ( isUDP( server ) ) {
++                (*client)->mUDPRate = ntohl(hdr->base.mWinBand);
++            } else {
++                (*client)->mTCPWin = ntohl(hdr->base.mWinBand);
++            }
++        }
+ 	(*client)->mAmount     = ntohl(hdr->base.mAmount);
+         if ( ((*client)->mAmount & 0x80000000) > 0 ) {
+             setModeTime( (*client) );
+@@ -887,6 +899,9 @@
                         (*client)->mHost, REPORT_ADDRLEN);
          }
  #endif
@@ -125,17 +192,27 @@ diff -Nurb src/Settings.cpp src/Settings.cpp
      } else {
          *client = NULL;
      }
-@@ -907,6 +915,9 @@
+@@ -907,11 +922,19 @@
      }
      if ( client->mMode != kTest_Normal ) {
  	flags |= HEADER_VERSION1;
 +	if ( hdr->base.mAckTimo >= 0 ) {
-+ 	    hdr->base.flags  |= htonl(HEADER_EMULAB);
++ 	    flags  |= HEADER_EMULAB;
 +	}
  	if ( isBuflenSet( client ) ) {
  	    hdr->base.bufferlen = htonl(client->mBufLen);
  	} else {
-@@ -924,6 +935,9 @@
+ 	    hdr->base.bufferlen = 0;
+ 	}
++	if ( isUDP( client ) ) {
++	    hdr->base.mWinBand  = htonl(client->mUDPRate);
++	} else {
++	    hdr->base.mWinBand  = htonl(client->mTCPWin);
++	}
+ 	if ( client->mListenPort != 0 ) {
+ 	    hdr->base.mPort  = htonl(client->mListenPort);
+ 	} else {
+@@ -924,6 +947,9 @@
  	    hdr->base.mAmount = htonl((long)client->mAmount);
  	    hdr->base.mAmount &= htonl( 0x7FFFFFFF );
  	}
@@ -147,7 +224,7 @@ diff -Nurb src/Settings.cpp src/Settings.cpp
  	}
 diff -Nurb src/main.cpp src/main.cpp
 --- src/main.cpp	2017-08-08 21:54:14.000000000 -0600
-+++ src/main.cpp	2017-11-15 09:33:55.119085470 -0700
++++ src/main.cpp	2018-02-08 11:11:05.298576198 -0700
 @@ -166,6 +166,11 @@
      // read settings from command-line parameters
      Settings_ParseCommandLine( argc, argv, ext_gSettings );
@@ -160,8 +237,9 @@ diff -Nurb src/main.cpp src/main.cpp
      // Check for either having specified client or server
      if ( ext_gSettings->mThreadMode == kMode_Client
           || ext_gSettings->mThreadMode == kMode_Listener ) {
+diff -Nurb src/stdio.c src/stdio.c
 --- src/stdio.c	2017-08-08 21:54:14.000000000 -0600
-+++ src/stdio.c	2018-02-07 17:19:31.001255017 -0700
++++ src/stdio.c	2018-02-08 11:11:05.298576198 -0700
 @@ -255,8 +255,6 @@
   * ------------------------------------------------------------------- */
  
