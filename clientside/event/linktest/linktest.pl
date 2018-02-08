@@ -152,6 +152,7 @@ use constant EXIT_OK => 0;
 # Protos
 sub TimeStamp();
 sub PATH_NICE();
+sub NICE_ARGS();
 
 # struct for representing a link.
 struct ( edge => {
@@ -525,7 +526,7 @@ if (&dotest(TEST_BW)) {
     if ($printsched) {
 	&schedlog("start iperf listener");
     } else {
-	$listener_iperf = &start_listener(PATH_NICE, "-n", "-10",
+	$listener_iperf = &start_listener(NICE_ARGS(),
 					  $PATH_IPERF,"-s","-f","b","-u",
 					  "-w","200000","-l",IPERF_PKTSIZE);
     }
@@ -1861,7 +1862,7 @@ sub bw_test {
 				  " (bw=${bw}bps, time=${duration}s," .
 				  " sbsize=200000, acktime=${acktime}ms)");
 		    } else {
-			&my_system(PATH_NICE, "-n", "-10", $PATH_IPERF,
+			&my_system(NICE_ARGS(), $PATH_IPERF,
 				   "-c", $edge->src . "-" . $edge->name,
 				   "-t", "$duration", "-f", "b",
 				   "-r", "-u", "-w", "200000",
@@ -3127,4 +3128,26 @@ sub PATH_NICE()
     return "/bin/nice" if (-x "/bin/nice");
     return "/usr/bin/nice" if (-x "/usr/bin/nice");
     return "nice";
+}
+
+my $CAN_NICE;
+sub NICE_ARGS()
+{
+    if (!defined($CAN_NICE)) {
+	system(PATH_NICE()." -n -10 /bin/true");
+	if ($?) {
+	    print STDERR "WARNING: cannot nice; skipping for iperf!\n";
+	    $CAN_NICE = 0;
+	}
+	else {
+	    $CAN_NICE = 1;
+	}
+    }
+
+    if ($CAN_NICE) {
+	return (PATH_NICE(),"-n","-10")
+    }
+    else {
+	return ();
+    }
 }
