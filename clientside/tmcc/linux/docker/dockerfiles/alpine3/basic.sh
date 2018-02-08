@@ -6,7 +6,7 @@ apk update
 
 # missing iputils-ping package from ubuntu process
 apk add openssh-server rsyslog logrotate iproute2 iputils net-tools sudo bash \
-    util-linux
+    util-linux openssh-client
 
 ## Permissions on these should be the same as the host, so preserve them.
 #cp -p /tmp/src/ssh-host-keys/ssh_host* /etc/ssh/
