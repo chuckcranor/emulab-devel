@@ -130,7 +130,7 @@ CREATE TABLE `geni_aggregates` (
   `state` varchar(16) NOT NULL default 'stopped',
   `status_state_timestamp` int(10) unsigned default NULL,
   `errorlog` text,
-  `boot_failure` tinyint(1) default '0',
+  `boot_failure` int(10) default '0',
   PRIMARY KEY  (`idx`),
   UNIQUE KEY `uuid` (`uuid`),
   INDEX `slice_uuid` (`slice_uuid`)
