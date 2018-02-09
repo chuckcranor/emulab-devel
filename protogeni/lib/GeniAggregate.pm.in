@@ -745,6 +745,8 @@ sub SetBootFailure($)
 	if (!DBQueryWarn("update geni_aggregates set ".
 			 "  boot_failure='1' ".
 			 "where idx='$idx'"));
+    
+    $self->{'AGGREGATE'}->{'boot_failure'} = 1;
     return 0;
 }
 
@@ -761,6 +763,8 @@ sub ClearBootFailure($)
 	if (!DBQueryWarn("update geni_aggregates set ".
 			 "  boot_failure='0' ".
 			 "where idx='$idx'"));
+
+    $self->{'AGGREGATE'}->{'boot_failure'} = 0;
     return 0;
 }
 
@@ -1072,6 +1076,8 @@ sub ActionStart($$;$)
 
     # Clear last error.
     $self->SetErrorLog("");    
+    # Set new status so ComputeState() knows what is going on.
+    $self->SetStatus("working");
 
     my $experiment = Experiment->Lookup($self->slice_uuid());
     if (!defined($experiment)) {
@@ -1114,7 +1120,7 @@ sub ActionStart($$;$)
 		if ($sliver->state() eq "started");
 
 	    $sliver->Start($version) == 0
-		or return -1;
+		or goto bad;
 	    next;
 	}
 	#
@@ -1379,11 +1385,13 @@ sub ActionStart($$;$)
 	    }
 	}
 	DebugTimeStamp("snmpit finished");
-	exit(0);
+	# Avoid END block processing
+	POSIX::_exit(0);
 	
       badsnmpit:
 	print STDERR "Failed to setup vlans: $msg\n";
-	exit(-1);
+	# Avoid END block processing
+	POSIX::_exit(-1);
     }
     
     my @nodes = keys(%nodes);
@@ -1393,7 +1401,9 @@ sub ActionStart($$;$)
     $experiment->SetState($expstate);
 
     #
-    # See what nodes succeeded or failed. 
+    # See what nodes succeeded or failed. We want to hold off setting
+    # the new state on the slivers until the end so that we do not flip
+    # aggregate status to ready before we actually finish up in here. 
     #
     foreach my $node_id (keys(%nodes)) {
 	my $node = $nodes{$node_id};
@@ -1462,7 +1472,7 @@ sub ActionStart($$;$)
 	my $kid = waitpid($snmpit_child, 0);
 	if ($kid == $snmpit_child) {
 	    if ($?) {
-		$msg = "Wait for snmpit returned error $?\n";
+		$msg = "Failed to set up networks\n";
 		goto bad;
 	    }
 	    else {
@@ -1475,7 +1485,7 @@ sub ActionStart($$;$)
 	}
     }
     if ($rval) {
-	$msg .= "$OSSETUP failed\n";
+	$msg .= "Unable to OS setup nodes\n";
 	goto bad;
     }
 
@@ -1501,38 +1511,52 @@ sub ActionStart($$;$)
 	# @failed list returned from WaitForNodes().n
 	#
 	if (@failed) {
-	    print STDERR
-		"Some nodes did not boot, not doing elabinelab setup\n";
-	    return -1;
+	    $msg .= "Some nodes did not boot, not doing elabinelab setup";
+	    goto bad;
 	}
 	print STDERR "Setting up elabinelab. This could take a while!\n";
 	if (system("$ELAB_SETUP $pid $eid")) {
-	    print STDERR "Failed to setup elabinelab!\n";
-	    return -1;
+	    $msg .= "Failed to setup elabinelab!";
+	    goto bad;
 	}
     }
-    elsif (($flags & $ACTION_FLAGS_NOEVENTSTART) == 0) {
-	$self->ComputeState();
-
-	if ($self->status() eq "ready") {
-	    #
-	    # Start the event scheduler. Note that the experiment is already
-	    # in the ACTIVE state, so the scheduler is going to fire off the
-	    # timeline automatically. 
-	    #
-	    system("$EVENTSYS start $pid,$eid");
-	    if ($?) {
-		$msg .= "Failed to (re)start the event system";
-		if ($TB ne "/usr/testbed") {
-		    # Not sure why this is failing.
-		    print STDERR "$msg\n";
-		}
-		else {
-		    goto bad;
-		}
+    elsif (($flags & $ACTION_FLAGS_NOEVENTSTART) == 0 && !@failed) {
+	#
+	# Start the event scheduler. Note that the experiment is already
+	# in the ACTIVE state, so the scheduler is going to fire off the
+	# timeline automatically. 
+	#
+	system("$EVENTSYS start $pid,$eid");
+	if ($?) {
+	    $msg .= "Failed to (re)start the event system";
+	    if ($TB ne "/usr/testbed") {
+		# Not sure why this is failing.
+		print STDERR "$msg\n";
+	    }
+	    else {
+		goto bad;
 	    }
 	}
     }
+    if (0) {
+	# Testing.
+	@failed = values(%nodes);
+    }
+    if (@failed) {
+	my @node_ids = map { $_->node_id() } @failed;
+	$self->SetBootFailure();
+	$self->SetErrorLog("The following nodes failed to setup: " .
+			   join(" ", @node_ids));
+    }
+    elsif (0) {
+	# Testing.
+	$self->SetBootFailure();
+	$self->SetErrorLog("Testing");
+    }
+    # This has to be last so that SliverStatus() does not hand back a
+    # ready or failed state until we are fully done here.
+    $self->SetStatus("mixed");
+    $self->ComputeState();
     return 0;
 
   bad:
@@ -1546,6 +1570,10 @@ sub ActionStart($$;$)
 	$sliver->SetStatus("failed");
 	$sliver->SetErrorLog($msg)
 	    if (defined($msg));
+    }
+    if ($self->status() eq "working") {
+	$self->SetStatus("mixed");
+	$self->ComputeState();
     }
     return -1;
 }
@@ -1633,6 +1661,8 @@ sub Action($$$;$)
 
     # Clear last error.
     $self->SetErrorLog("");    
+    # Set new status so ComputeState() knows what is going on.
+    $self->SetStatus("working");
 
     my $experiment = Experiment->Lookup($self->slice_uuid());
     if (!defined($experiment)) {
@@ -1744,7 +1774,7 @@ sub Action($$$;$)
 		if ($sliver->state() eq "started" && !$restart);
 
 	    $sliver->Start($version) == 0
-		or return -1;
+		or goto bad;
 	    next;
 	}
 	my $node = Node->Lookup($sliver->resource_id());
@@ -2433,11 +2463,12 @@ sub Action($$$;$)
 	    }
 	}
     }
-    my @failed   = ();
-    return -1
-	if ($self->WaitForNodes(\@failed, $osload_object, \@reload_children,
-				@waitpnodes, @waitvnodes));
-
+    my @failed = ();
+    if ($self->WaitForNodes(\@failed, $osload_object, \@reload_children,
+			    @waitpnodes, @waitvnodes)) {
+	$msg .= "Not all nodes booted successfully";
+	goto bad;
+    }
 
     #
     # Before we fire off any async activity, push out any experiment
@@ -2463,40 +2494,37 @@ sub Action($$$;$)
 	# @failed list returned from WaitForNodes().n
 	#
 	if (@failed) {
-	    print STDERR
-		"Some nodes did not boot, not doing elabinelab setup\n";
-	    return -1;
+	    $msg .= "Some nodes did not boot, not doing elabinelab setup";
+	    goto bad;
 	}
 	print STDERR "Setting up elabinelab. This could take a while!\n";
 	if (system("$ELAB_SETUP $pid $eid")) {
-	    print STDERR "Failed to setup elabinelab!\n";
-	    return -1;
+	    $msg .= "Failed to setup elabinelab!";
+	    goto bad;
 	}
     }
-    elsif (($action eq "start" || $action eq "restart") &&
+    elsif (($action eq "start" || $action eq "restart") && !@failed &&
 	   ($flags & $ACTION_FLAGS_NOEVENTSTART) == 0) {
-	$self->ComputeState();
-
-	if ($self->status() eq "ready") {
-	    #
-	    # Start the event scheduler. Note that the experiment is already
-	    # in the ACTIVE state, so the scheduler is going to fire off the
-	    # timeline automatically. 
-	    #
-	    my $action = ($restart ? "replay" : "start");
-	    system("$EVENTSYS $action $pid,$eid");
-	    if ($?) {
-		$msg .= "Failed to (re)start the event system";
-		if ($TB ne "/usr/testbed") {
-		    # Not sure why this is failing.
-		    print STDERR "$msg\n";
-		}
-		else {
-		    goto bad;
-		}
+	#
+	# Start the event scheduler. Note that the experiment is already
+	# in the ACTIVE state, so the scheduler is going to fire off the
+	# timeline automatically. 
+	#
+	my $action = ($restart ? "replay" : "start");
+	system("$EVENTSYS $action $pid,$eid");
+	if ($?) {
+	    $msg .= "Failed to (re)start the event system";
+	    if ($TB ne "/usr/testbed") {
+		# Not sure why this is failing.
+		print STDERR "$msg\n";
+	    }
+	    else {
+		goto bad;
 	    }
 	}
     }
+    $self->SetStatus("mixed");
+    $self->ComputeState();
     return 0;
 
   bad:
@@ -2518,6 +2546,10 @@ sub Action($$$;$)
 	$sliver->SetStatus("failed");
 	$sliver->SetErrorLog($msg)
 	    if (defined($msg));
+    }
+    if ($self->status() eq "working") {
+	$self->SetStatus("mixed");
+	$self->ComputeState();
     }
     return -1;
 }
@@ -3133,6 +3165,9 @@ sub BatchAction($$@)
 
     # Clear last error.
     $self->SetErrorLog("");    
+    $self->ClearBootFailure();
+    # Set new status so ComputeState() knows what is going on.
+    $self->SetStatus("working");
 
     my $experiment = Experiment->Lookup($self->slice_uuid());
     if (!defined($experiment)) {
@@ -3237,8 +3272,10 @@ sub BatchAction($$@)
 	map { $_->_reloaded(1) } values(%reloads);
 	
 	system("$OSLOAD -c -s @node_ids");
-	return -1
-	    if ($?);
+	if ($?) {
+	    $msg .= "OSload failed on @node_ids";
+	    goto bad;
+	}
     }
     #
     # Then power on any physical nodes that had been stopped.
@@ -3283,6 +3320,9 @@ sub BatchAction($$@)
     foreach my $sliver (@slivers) {
 	$sliver->SetState("started");
     }
+    # Flip back to mixed to allow ComputeState to do its thing. 
+    $self->SetStatus("mixed");
+    $self->ComputeState();
     return 0;
 
   bad:
@@ -3294,6 +3334,10 @@ sub BatchAction($$@)
     if (defined($msg)) {
 	$self->SetErrorLog($msg);
 	print STDERR "$msg\n";
+    }
+    if ($self->status() eq "working") {
+	$self->SetStatus("mixed");
+	$self->ComputeState();
     }
     return -1;
 }
@@ -3557,7 +3601,11 @@ sub ComputeState($)
     else {
 	$newstate = "mixed";
     }
-    if ($ready == $count) {
+    # Internal status, we do not want to force a change while in this status.
+    if ($self->status() eq "working") {
+	$newstatus = $self->status();
+    }
+    elsif ($ready == $count) {
 	$newstatus = "ready";
     }
     elsif ($notready == $count) {

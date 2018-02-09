@@ -142,6 +142,8 @@ sub GetVersion()
 	"output_rspec" => "2",
 	"ad_rspec" => \@ad_rspec_versions
     };
+    #POSIX::_exit(1);
+    #sleep(30);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
@@ -267,7 +269,16 @@ sub Resolve($)
 					"No permission to resolve $slice\n");
 	}
 	# Return a blob.
-	my $blob = { "urn"          => $urn };
+	my $blob = { "urn" => $urn };
+
+	#
+	# We stored an error after a wrapperfork; return that error now.
+	#
+	if ($slice->async_code()) {
+	    $blob->{"async_code"}   = $slice->async_code();
+	    $blob->{"async_output"} = $slice->async_output();
+	    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+	}
 
 	my $aggregate = GeniAggregate->SliceAggregate($slice);
 	if (defined($aggregate)) {
@@ -412,6 +423,9 @@ sub CreateSliver($)
     my $keys         = $argref->{'keys'};
     my $impotent     = $argref->{'impotent'} || 0;
     my $usetracker   = $argref->{'usetracker'} || 0;
+    my $async        = $argref->{'asyncmode'} || 0;
+    my $mypid        = $PID;
+    my $cachedebug   = 0;
     require Node;
     require Experiment;
     require libtestbed;
@@ -484,12 +498,34 @@ sub CreateSliver($)
 					"Must delete existing slice first");
 	}
     }
-    my $rspec = GeniCM::GetTicketAux($credential, $rspecstr,
-				     0, $impotent, 1, 0, $usetracker,
-				     undef, $speaksfor, @morecreds);
-    return $rspec
-	if (GeniResponse::IsResponse($rspec));
-
+    my $rspec = GeniCM::GetTicketAux({"credential" => $credential,
+				      "rspecstr"   => $rspecstr,
+				      "isupdate"   => 0,
+				      "impotent"   => $impotent,
+				      "v2"         => 1,
+				      "level"      => 0,
+				      "usetracker" => $usetracker,
+				      "ticket"     => undef,
+				      "speaksfor"  => $speaksfor,
+				      "morecreds"  => \@morecreds,
+				      "async"      => $async});
+    if ($async) {
+	if ($PID == $mypid) {
+	    # Did not fork or the parent, so we just return the response.
+	    return $rspec
+		if (GeniResponse::IsResponse($rspec));
+	}
+	else {
+	    # Forked, return status code only for failure, otherwise
+	    # we keep on going.
+	    return $rspec->{'code'}
+		if (GeniResponse::IsError($rspec));
+	}
+    }
+    else {
+	return $rspec
+	    if (GeniResponse::IsResponse($rspec));
+    }
     $slice = GeniSlice->Lookup($credential->target_urn());
     if (!defined($slice)) {
 	print STDERR "CreateSliver: Could not find slice for $credential\n";
@@ -512,6 +548,10 @@ sub CreateSliver($)
     # Make sure that the next phase sees all changes.
     Experiment->FlushAll();
     Node->FlushAll();
+    if ($cachedebug) {
+	GeniUtil::DumpCaches();
+	emutil::DumpCaches();
+    }
 
     my $response = GeniCM::SliverWorkAux($credential, $rspec,
 					 $keys, 0, $impotent, 1, 0, $speaksfor);
@@ -525,12 +565,22 @@ sub CreateSliver($)
 	#
 	$slice = GeniSlice->Lookup($credential->target_urn());
 	if (defined($slice)) {
-	    if ($slice->Lock() != 0) {
+	    if ($slice->WaitForLock(30) != 0) {
 		print STDERR
 		    "CreateSliver: Could not lock $slice before delete\n";
 		return $response;
 	    }
-	    GeniCM::CleanupDeadSlice($slice, 1);
+	    # In async mode store off error info.
+	    if ($async) {
+		$slice->SetAsyncError($response);
+	    }
+	    # In async mode we are going to leave the slice record around
+	    # so the client can pickup the error info.
+	    GeniCM::CleanupDeadSlice($slice, !$async);
+	    # And unlock since it still exists.
+	    if ($async) {
+		$slice->UnLock();
+	    }
 	}
 	return $response;
     }
@@ -563,15 +613,24 @@ sub CreateSliver($)
     # At this point we want to return and let the startsliver proceed
     # in the background. Parent never returns, just the child.
     #
-    my $mypid = main::WrapperFork();
-    if ($mypid) {
-	return GeniResponse->Create(GENIRESPONSE_SUCCESS,
+    # But in async mode, GetTicketAux has already forked, so do not do
+    # it again here. 
+    #
+    if (!$async) {
+	$mypid = main::WrapperFork();
+	if ($mypid) {
+	    return GeniResponse->Create(GENIRESPONSE_SUCCESS,
 				    [$sliver_credential, $sliver_manifest]);
+	}
     }
 
     # Make sure that the next phase sees all changes.
     Experiment->FlushAll();
     Node->FlushAll();
+    if ($cachedebug) {
+	GeniUtil::DumpCaches();
+	emutil::DumpCaches();
+    }
 
     #
     # The callee might also do a wrapper fork, so remember our PID
@@ -588,10 +647,18 @@ sub CreateSliver($)
 	else {
 	    print STDERR "Error waiting for nodes.\n";
 	}
+	if ($cachedebug) {
+	    GeniUtil::DumpCaches();
+	    emutil::DumpCaches();
+	}
 	return -1;
     }
     if ($PID == $mypid) {
 	$slice->UnLock();
+    }
+    if ($cachedebug) {
+	GeniUtil::DumpCaches();
+	emutil::DumpCaches();
     }
     return 0;
 }
@@ -1269,6 +1336,18 @@ sub SliverStatus($)
 	$slice->UnLock();
 	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
+    my $status = $aggregate->status();
+    #
+    # Regardless of what the aggregate status is, we are "changing" if there
+    # is an active monitor process running.
+    #
+    # If the status is "working" convert to "changing" for the caller, this
+    # is an internal status for the newer start/restart code.
+    #
+    GeniCM::CheckMonitor($slice);
+    if ($slice->monitor_pid() || $status eq "working") {
+	$status = "changing";
+    }
 
     #
     # Grab all the slivers for this slice, and then
@@ -1283,14 +1362,23 @@ sub SliverStatus($)
 
     my $blob = {
 	"state"   => $aggregate->state(),
-	"status"  => $aggregate->status(),
+	"status"  => $status,
 	"utc"     => time(),
 	"details" => {},
+	"boot_failure" => $aggregate->boot_failure(),
     };
     $blob->{'public_url'} =
 	"$TBBASE/showslicepub.php?publicid=" .	$slice->publicid()
 	if (defined($slice->publicid()));
     $blob->{"error"} = $aggregate->ErrorLog() || "";
+    
+    #
+    # If running async mode and we have an error, add this too.
+    #
+    if ($slice->async_code()) {
+	$blob->{"async_code"}   = $slice->async_code();
+	$blob->{"async_output"} = $slice->async_output();
+    }
     
     foreach my $sliver (@slivers) {
 	if ($sliver->isa("GeniAggregate")) {
@@ -1546,9 +1634,16 @@ sub GetTicket($)
     else {
 	# Slice does not exist yet. 
     }
-    return GeniCM::GetTicketAux($credential, $rspecstr,
-				0, $impotent, 1, 1, $usetracker,
-				undef, $speaksfor);
+    return GeniCM::GetTicketAux({"credential" => $credential,
+				 "rspecstr"   => $rspecstr,
+				 "isupdate"   => 0,
+				 "impotent"   => $impotent,
+				 "v2"         => 1,
+				 "level"      => 1,
+				 "usetracker" => $usetracker,
+				 "ticket"     => undef,
+				 "speaksfor"  => $speaksfor,
+				 "async"      => 0});
 }    
 	
 #
@@ -1656,10 +1751,18 @@ sub UpdateTicket($)
 				    "This ticket is for another slice");
     }
     
-    return GeniCM::GetTicketAuxAux($slice, $user,
-				   $rspecstr, 1, $impotent, 1, 1,
-				   $usetracker, $ticket,
-				   [$credential, @morecreds], $speaksfor);
+    return GeniCM::GetTicketAuxAux({"slice"      => $slice,
+				    "user"       => $user,
+				    "rspecstr"   => $rspecstr,
+				    "isupdate"   => 1,
+				    "impotent"   => $impotent,
+				    "v2"         => 1,
+				    "level"      => 1,
+				    "usetracker" => $usetracker,
+				    "ticket"     => $ticket,
+				    "credentials"=> [$credential, @morecreds],
+				    "speaksfor"  => $speaksfor,
+				    "async"      => 0});
 }
 
 #
@@ -1740,10 +1843,18 @@ sub UpdateSliver($)
     return $user
 	if (GeniResponse::IsResponse($user));
     
-    return GeniCM::GetTicketAuxAux($slice, $user,
-				   $rspecstr, 1, $impotent, 1, 1,
-				   $usetracker, undef,
-				   [$credential, @morecreds], $speaksfor);
+    return GeniCM::GetTicketAuxAux({"slice"      => $slice,
+				    "user"       => $user,
+				    "rspecstr"   => $rspecstr,
+				    "isupdate"   => 1,
+				    "impotent"   => $impotent,
+				    "v2"         => 1,
+				    "level"      => 1,
+				    "usetracker" => $usetracker,
+				    "ticket"     => undef,
+				    "credentials"=> [$credential, @morecreds],
+				    "speaksfor"  => $speaksfor,
+				    "async"      => 0});
 }
 
 #
@@ -2030,9 +2141,19 @@ sub AddNodes($)
     return $user
 	if (GeniResponse::IsResponse($user));
 
-    my $rspec = GeniCM::GetTicketAuxAux($slice, $user,
-					$rspecstr, 1, 0, 1, -1, 0, undef,
-					[$credential, @morecreds], $speaksfor);
+    my $rspec = GeniCM::GetTicketAuxAux({"slice"      => $slice,
+					 "user"       => $user,
+					 "rspecstr"   => $rspecstr,
+					 "isupdate"   => 1,
+					 "impotent"   => 0,
+					 "v2"         => 1,
+					 "level"      => -1,
+					 "usetracker" => 0,
+					 "ticket"     => undef,
+					 "credentials"=> [$credential,
+							  @morecreds],
+					 "speaksfor"  => $speaksfor,
+					 "async"      => 0});
     return $rspec
 	if (GeniResponse::IsResponse($rspec));
 
@@ -2216,9 +2337,19 @@ sub DeleteNodes($)
     return $user
 	if (GeniResponse::IsResponse($user));
 
-    my $rspec = GeniCM::GetTicketAuxAux($slice, $user,
-					$rspecstr, 1, 0, 1, -1, 0, undef,
-					[$credential, @morecreds], $speaksfor);
+    my $rspec = GeniCM::GetTicketAuxAux({"slice"      => $slice,
+					 "user"       => $user,
+					 "rspecstr"   => $rspecstr,
+					 "isupdate"   => 1,
+					 "impotent"   => 0,
+					 "v2"         => 1,
+					 "level"      => -1,
+					 "usetracker" => 0,
+					 "ticket"     => undef,
+					 "credentials"=> [$credential,
+							  @morecreds],
+					 "speaksfor"  => $speaksfor,
+					 "async"      => 0});
     return $rspec
 	if (GeniResponse::IsResponse($rspec));
 

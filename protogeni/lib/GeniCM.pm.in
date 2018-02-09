@@ -492,19 +492,39 @@ sub GetTicket($;$)
 	if (GeniResponse::IsResponse($credential));
 
     if ($isupdate) {
-	$ticket = CheckTicket($tickstr, $credential->target_urn());
+	$ticket = CheckTicket($tickstr,
+			      $credential->target_urn());
 	return $ticket
 	    if (GeniResponse::IsResponse($ticket));
     }
-    return GetTicketAux($credential,
-			$rspecstr, $isupdate, $impotent, 0, 1, 0, $ticket);
+    return GetTicketAux({"credential" => $credential,
+			 "rspecstr"   => $rspecstr.
+			 "isupdate"   => $isupdate,
+			 "impotent"   => $impotent,
+			 "v2"         => 0,
+			 "level"      => 1,
+			 "usetracker" => 0,
+			 "ticket"     => $ticket,
+			 "speaksfor"  => undef,
+			 "morecreds"  => [],
+			 "async"      => 0});
 }
 
-sub GetTicketAux($$$$$$$$$@)
+sub GetTicketAux($)
 {
-    my ($credential, $rspecstr, $isupdate, $impotent, $v2, $level, $usetracker,
-	$ticket, $speaksfor, @morecreds) = @_;
-    
+    my ($argref) = @_;
+    my $credential = $argref->{"credential"};
+    my $rspecstr   = $argref->{"rspecstr"};
+    my $isupdate   = $argref->{"isupdate"};
+    my $impotent   = $argref->{"impotent"};
+    my $v2         = $argref->{"v2"};
+    my $level      = $argref->{"level"};
+    my $usetracker = $argref->{"usetracker"};
+    my $ticket     = $argref->{"ticket"};
+    my $speaksfor  = $argref->{"speaksfor"};
+    my $morecreds  = $argref->{"morecreds"};
+    my $async      = $argref->{"async"};
+
     defined($credential) &&
 	($credential->HasPrivilege( "pi" ) or
 	 $credential->HasPrivilege( "instantiate" ) or
@@ -544,15 +564,35 @@ sub GetTicketAux($$$$$$$$$@)
 	
     main::AddLogfileMetaDataFromSlice($slice);
     
-    return GetTicketAuxAux($slice, $user, $rspecstr,
-			   $isupdate, $impotent, $v2, $level, $usetracker,
-			   $ticket, [$credential, @morecreds], $speaksfor);
+    return GetTicketAuxAux({"slice"      => $slice,
+			    "user"       => $user,
+			    "rspecstr"   => $rspecstr,
+			    "isupdate"   => $isupdate,
+			    "impotent"   => $impotent,
+			    "v2"         => $v2,
+			    "level"      => $level,
+			    "usetracker" => $usetracker,
+			    "ticket"     => $ticket,
+			    "credentials"=> [$credential, @$morecreds],
+			    "speaksfor"  => $speaksfor,
+			    "async"      => $async});
 }
-sub GetTicketAuxAux($$$$$$$$$$$)
+
+sub GetTicketAuxAux($)
 {
-    my ($slice, $user, $rspecstr, $isupdate,
-	$impotent, $v2, $level, $usetracker,
-	$ticket, $credentials, $speaksfor) = @_;
+    my ($argref) = @_;
+    my $slice       = $argref->{"slice"};
+    my $user        = $argref->{"user"};
+    my $rspecstr    = $argref->{"rspecstr"};
+    my $isupdate    = $argref->{"isupdate"};
+    my $impotent    = $argref->{"impotent"};
+    my $v2          = $argref->{"v2"};
+    my $level       = $argref->{"level"};
+    my $usetracker  = $argref->{"usetracker"};
+    my $ticket      = $argref->{"ticket"};
+    my $credentials = $argref->{"credentials"};
+    my $speaksfor   = $argref->{"speaksfor"};
+    my $async       = $argref->{"async"};
     my $response    = undef;
     my $restorevirt = 0;	# Flag to restore virtual state
     my $restorephys = 0;	# Flag to restore physical state
@@ -596,6 +636,15 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     if (! defined($rspecVersion)) {
 	return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 				    "Unknown RSpec Version");
+    }
+
+    # Quick check for no nodes or links. It actually happens and the mapper
+    # is not happy with a virtual topo that has no nodes or links.
+    my @nodelist = GeniXML::FindNodes("n:node", $rspec)->get_nodelist();
+    my @linklist = GeniXML::FindNodes("n:link", $rspec)->get_nodelist();
+    if (! (@nodelist || @linklist)) {
+	return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				    "No nodes or links in your topology");
     }
 
     #
@@ -2908,6 +2957,18 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     }
     #print STDERR $output;
 
+    #
+    # Async operation.
+    #
+    if ($async) {
+	my $mypid = main::WrapperFork();
+	if ($mypid) {
+	    return GeniResponse->Create(GENIRESPONSE_INPROGRESS);
+	}
+	# Flag the slice as operating in async mode.
+	$slice->SetAsyncMode(1);
+    }
+
     # Do a render cause its nice to have on the show experiment page.
     # But skip for really big topos, too much overhead.
     if (scalar(keys(%nodemap)) <= 500) {
@@ -3748,6 +3809,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	# so need to call this as a function instead of a method.
 	VLan::ClearReservedVlanTag($lanid, $vlan_tag);
     }
+    # We keep the slice for a while in async mode.
     if ($v2 && $level == 0) {
 	if (defined($slice_experiment) && -e $slice_experiment->WorkDir()) {
 	    my $dir = $slice_experiment->WorkDir();
@@ -3755,9 +3817,16 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	    system("/bin/rm -rf ${dir}.failed");
 	    system("/bin/cp -rp ${dir} ${dir}.failed");
 	}
-	CleanupDeadSlice($slice, 1)
-	    if (defined($slice));
-	return $response;
+	if (!$async) {
+	    CleanupDeadSlice($slice, 1)
+	      if (defined($slice));
+	    return $response;
+	}
+    }
+    # In async mode we leave the slice intact but store the error info
+    # with it so the caller can get at it (for a while).
+    if ($async && defined($slice)) {
+	$slice->SetAsyncError($response);
     }
     $slice->UnLock()
 	if (defined($slice));
@@ -3834,6 +3903,11 @@ sub SliverWorkAux($$$$$$$$)
     my $oldmanifest;
     require Interface;
     require User;
+
+    if (0) {
+	sleep(30);
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, "Testing mode");
+    }
 
     # V2 API support.
     if (($v2 && $level == 0) || ref($object) ne "GeniTicket") {
@@ -3972,6 +4046,7 @@ sub SliverWorkAux($$$$$$$$)
     # We need this for accounting. 
     $experiment->SetSwapInfo($realuser->emulab_user());
 
+    DebugTimeStamp("Redeem starting");
     #
     # Figure out what nodes to allocate or free. 
     #
@@ -4014,7 +4089,7 @@ sub SliverWorkAux($$$$$$$$)
 	    $schemaLocation->setValue($value);
 	}
     }
-
+    DebugTimeStamp("Manifest cloned");
 
     #
     # Find current slivers and save.
@@ -4155,6 +4230,7 @@ sub SliverWorkAux($$$$$$$$)
 	    next;
 	}
     }
+    DebugTimeStamp("Node alloc check");
 
     #
     # What *slivers* need to be released? This may result in physical
@@ -4196,6 +4272,7 @@ sub SliverWorkAux($$$$$$$$)
 	    push(@freenodes, $sliver);
 	}
     }
+    DebugTimeStamp("Release check done");
 
     #
     # What vhost slivers need to be deleted. 
@@ -4216,6 +4293,8 @@ sub SliverWorkAux($$$$$$$$)
 	    push(@freevhosts, $sliver);
 	}
     }
+    DebugTimeStamp("sliver delete check done");
+    
 
     #
     # We are actually an Aggregate, so return an aggregate of slivers,
@@ -4258,6 +4337,7 @@ sub SliverWorkAux($$$$$$$$)
 	    delete($linkmap{$linkname});
 	}
     }
+    DebugTimeStamp("link teardown done");
 
     if ($isupdate) {
 	#
@@ -4324,6 +4404,7 @@ sub SliverWorkAux($$$$$$$$)
 	$solfile = "-L solution.${PID}";
 	print STDERR "Using assign solution file solution.${PID}\n";
     }
+    DebugTimeStamp("Starting mapper");
     
     # Add -u for update mode, but not -f (fixnode). 
     my $output = GeniUtil::ExecQuiet("$MAPPER -d -v $solfile -z -u $pid $eid");
@@ -4375,6 +4456,9 @@ sub SliverWorkAux($$$$$$$$)
 	unlink("solution.${PID}") if ($solfile ne "");
 	goto bad;
     }
+    DebugTimeStamp("Mapper run done");
+
+    # Do not leave this around.
     unlink("solution.${PID}") if ($solfile ne "");
     
     $shouldrollback = 1;
@@ -4395,6 +4479,7 @@ sub SliverWorkAux($$$$$$$$)
 	goto bad;
     }
 
+    DebugTimeStamp("Creating node slivers");
     #
     # Now for each resource (okay, node) in the ticket create a sliver and
     # add it to the aggregate.
@@ -4456,7 +4541,7 @@ sub SliverWorkAux($$$$$$$$)
 	    }
 	}
 	
-	if (grep {$_ eq $virtual_id} keys(%nodemap)) {
+	if (exists($nodemap{$virtual_id})) {
 	    #
 	    # Already in the aggregate, so reuse sliver.
 	    #
@@ -4561,14 +4646,16 @@ sub SliverWorkAux($$$$$$$$)
     goto skiplinks
 	if (!defined(GeniXML::FindFirst("n:link", $rspec)));
     
+    DebugTimeStamp("Creating link slivers");
+
     foreach my $linkref (GeniXML::FindNodes("n:link",
 					    $rspec)->get_nodelist()) {
 	my @linkslivers  = ();
 	my $inaggregate  = 0;
 	my %managers     = ();
 	my $linkname     = GeniXML::GetVirtualId($linkref);
-	my @interfaces   = GeniXML::FindNodes("n:linkendpoints | ".
-					      "n:interface_ref",
+	my @interfaces   = GeniXML::FindNodes("n:interface_ref | ".
+					      "n:linkendpoints",
 					      $linkref)->get_nodelist();
 
 	if (! ($linkname =~ /^[-\w]*$/)) {
@@ -4920,6 +5007,7 @@ sub SliverWorkAux($$$$$$$$)
     # since we might have changed the interfaces down inside the node in
     # the loop above. 
     #
+    DebugTimeStamp("Updating node manifests");
     foreach my $ref (GeniXML::FindNodes("n:node",
 					$manifest)->get_nodelist()) {
 	my $node_id = GeniXML::GetVirtualId($ref);
@@ -4932,6 +5020,8 @@ sub SliverWorkAux($$$$$$$$)
 	    }
 	}
     }
+    DebugTimeStamp("Done updating node manifests");
+    
   skiplinks:
     #
     # Create a planetlab slice before provisioning (which creates nodes).
@@ -5195,6 +5285,8 @@ sub SliverWorkAux($$$$$$$$)
     $experiment->SaveExperimentState();
     $experiment->SaveLogFiles();
     $experiment->InitKeyDist();
+
+    DebugTimeStamp("Redeem done!");
     
     if ($v2) {
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS,
