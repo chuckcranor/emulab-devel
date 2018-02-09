@@ -447,7 +447,7 @@ sub GetHoldingProject($$;$)
 	# We need to lock for concurrent attempt to create this user.
 	# Lets use a DB process lock, named by the URN.
 	#
-	my $lock_result = DBQueryWarn("select GET_LOCK($lock_urn, 120)");
+	my $lock_result = DBQueryWarn("select GET_LOCK($lock_urn, 300)");
 	if (!$lock_result ||
 	    !$lock_result->numrows) {
 	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
