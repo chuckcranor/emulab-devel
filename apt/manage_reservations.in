@@ -38,7 +38,6 @@ sub usage()
     print("Usage: manage_reservations [-a <urn>] list [-u uid | -p pid]\n");
     print("Usage: manage_reservations [-a <urn>] delete pid uuid\n");
     print("Usage: manage_reservations [-a <urn>] approve -p portal uuid\n");
-    print("Usage: manage_reservations [-a <urn>] systeminfo\n");
     print("Usage: manage_reservations [-a <urn>] prediction\n");
     exit(-1);
 }
@@ -92,11 +91,12 @@ use GeniUser;
 
 # Protos
 sub fatal($);
+sub UserError($);
+sub ExitWithError($);
 sub DoReserve();
 sub DoList();
 sub DoDelete();
 sub DoApprove();
-sub DoSystemInfo();
 sub DoPrediction();
 sub DoCancel();
 sub readfile($);
@@ -157,6 +157,9 @@ $authority = APT_Geni::GetAuthority($aggregate->urn());
 if (!defined($authority)) {
     fatal("Could not look up authority");
 }
+# In general, these calls should not take a lot of time, so reduce the
+# RPC timeout value. We will adjust them below if needed.
+Genixmlrpc->SetTimeout(30);
 
 # For credentials.
 my $this_user = User->ThisUser();
@@ -176,9 +179,6 @@ elsif ($action eq "delete") {
 }
 elsif ($action eq "approve") {
     DoApprove();
-}
-elsif ($action eq "systeminfo") {
-    DoSystemInfo();
 }
 elsif ($action eq "prediction") {
     DoPrediction();
@@ -207,6 +207,7 @@ sub DoReserve()
     my %rpcargs = ();
     my $context;
     my ($credential,$speaksfor);
+    my $errmsg;
     
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -304,18 +305,19 @@ sub DoReserve()
 	$rpcargs{"credentials"} = $credentials;
 	$context = APT_Geni::GeniContext();
     }
+    # We can check for disabled aggregate now, nothing below matters.
+    if ($aggregate->CheckStatus(\$errmsg, 1)) {
+	UserError($errmsg);
+    }
     my $response =
 	APT_Geni::PortalRPC($authority, $context, "Reserve", \%rpcargs);
     if (GeniResponse::IsError($response)) {
-	#
-	# Watch for a refused error, we want to tell the user that.
-	#
+	# Watch for a refused error, we want to record these.
 	if ($response->code() == GENIRESPONSE_REFUSED) {
 	    RecordReservationRequest($this_user,
 				     $project, $aggregate, \%rpcargs);
-	    UserError($response->output());
 	}
-	fatal($response->output());
+	ExitWithError($response);
     }
     print Dumper($response);
     #
@@ -397,6 +399,7 @@ sub DoList()
     my $user;
     my %rpcargs = ();
     my $context;
+    my $errmsg;
     
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -459,19 +462,14 @@ sub DoList()
     if (defined($uuid)) {
 	$rpcargs{"uuid"} = $uuid;
     }
+    # We can check for disabled aggregate now, nothing below matters.
+    if ($aggregate->CheckStatus(\$errmsg, 1)) {
+	UserError($errmsg);
+    }
     my $response =
 	APT_Geni::PortalRPC($authority, $context, "Reservations", (\%rpcargs));
     if (GeniResponse::IsError($response)) {
-	#
-	# Do not throw a fatal error if we get a search failure, no need
-	# to send any email.
-	#
-	if (defined($uuid) && $response->code() == GENIRESPONSE_SEARCHFAILED) {
-	    UserError($response->output());
-	}
-	else {
-	    fatal($response->output());
-	}
+	ExitWithError($response);
     }
     my $list = $response->value()->{'reservations'};
     my $history = $response->value()->{'history'}
@@ -587,6 +585,7 @@ sub DoDelete()
     #
     my $optlist = "N:";
     my $reason;
+    my $errmsg;
     
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -619,13 +618,14 @@ sub DoDelete()
     if ($this_user->IsAdmin() && defined($reason) && $reason ne "") {
 	$blob->{'reason'} = $reason;
     }
+    # We can check for disabled aggregate now, nothing below matters.
+    if ($aggregate->CheckStatus(\$errmsg, 1)) {
+	UserError($errmsg);
+    }
     my $response =
 	APT_Geni::PortalRPC($authority, undef, "DeleteReservation", $blob);
     if (GeniResponse::IsError($response)) {
-	#
-	# All errors are fatal.
-	#
-	fatal($response->output());
+	ExitWithError($response);
     }
     UpdateReservationRequest($aggregate, $uuid, $RESERVATION_RECORD_DELETE);
     DeleteAnnouncement($uuid);
@@ -645,6 +645,7 @@ sub DoApprove()
 {
     my $optlist = "p:";
     my $portal;
+    my $errmsg;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -669,16 +670,17 @@ sub DoApprove()
     if (!$this_user->IsAdmin()) {
 	fatal("No permission to approve reservations")
     }
+    # We can check for disabled aggregate now, nothing below matters.
+    if ($aggregate->CheckStatus(\$errmsg, 1)) {
+	UserError($errmsg);
+    }
     # PortalRPC will use the root context in this case, which is
     # essentially saying the caller is an admin.
     my $response =
 	APT_Geni::PortalRPC($authority, undef, "ApproveReservation",
 			    {"uuid" => $uuid});
     if (GeniResponse::IsError($response)) {
-	#
-	# All errors are fatal.
-	#
-	fatal($response->output());
+	ExitWithError($response);
     }
     UpdateReservationRequest($aggregate, $uuid, $RESERVATION_RECORD_APPROVE);
     
@@ -712,6 +714,7 @@ sub DoCancel()
     my $when;
     my $portal;
     my $reason;
+    my $errmsg;
 
     if (!$this_user->IsAdmin()) {
 	fatal("No permission to schedule reservation cancellation")
@@ -764,15 +767,16 @@ sub DoCancel()
     }
     $args->{'reason'} = $reason if (defined($reason));
 
+    # We can check for disabled aggregate now, nothing below matters.
+    if ($aggregate->CheckStatus(\$errmsg, 1)) {
+	UserError($errmsg);
+    }
     # PortalRPC will use the root context in this case, which is
     # essentially saying the caller is an admin.
     my $response =
 	APT_Geni::PortalRPC($authority, undef, "CancelReservation", $args);
     if (GeniResponse::IsError($response)) {
-	#
-	# All errors are fatal.
-	#
-	fatal($response->output());
+	ExitWithError($response);
     }
     if (defined($webtask)) {
 	$webtask->Exited(0);
@@ -794,139 +798,6 @@ sub DoCancel()
 }
 
 #
-# Get the reservation system info.
-#
-sub DoSystemInfo()
-{
-    my $optlist = "p:";
-    my $portal;
-    my $errmsg;
-    my @aggregates = ($authority);
-    my @webtasks   = ();
-
-    my %options = ();
-    if (! getopts($optlist, \%options)) {
-	usage();
-    }
-    if (defined($options{"p"})) {
-	$portal = $options{"p"}
-    }
-    usage()
-	if (@ARGV);
-
-    #
-    # Portal argument says to ignore aggregate argument, and contact
-    # all aggregates listed for the portal. 
-    #
-    if (defined($portal)) {
-	@aggregates = ();
-	
-	my @list = APT_Aggregate->LookupForPortal($portal);
-	foreach my $agg (@list) {
-	    my $authority = APT_Geni::GetAuthority($agg->urn());
-	    if (!defined($authority)) {
-		$errmsg = "Cannot lookup authority for $agg";
-		goto bad;
-	    }
-	    push(@aggregates, $authority);
-	}
-    }
-
-    my $coderef = sub {
-	my ($blob) = @_;
-	my $authority = $blob->{"authority"};
-	my $webtask   = $blob->{"webtask"};
-	
-	# PortalRPC will use the root context in this case, which is
-	# essentially saying the caller is an admin. But thats okay
-	# for this call, it is just informational.
-	my $response =
-	    APT_Geni::PortalRPC($authority, undef, "ReservationSystemInfo");
-	
-	if (GeniResponse::IsError($response)) {
-	    #
-	    # All errors are fatal.
-	    #
-	    if (defined($webtask)) {
-		$webtask->output($response->output());
-		$webtask->Exited($response->code());
-		$webtask->Store();
-	    }
-	    else {
-		print STDERR "$authority: " . $response->output() . "\n";
-	    }
-	    return $response->code();
-	}
-	if (defined($webtask)) {
-	    $webtask->value($response->value());
-	    $webtask->Exited(0);
-	    $webtask->Store();
-	}
-	return 0;
-    };
-    #
-    # Multiple aggregates, we use parrun. We need a webtask for each
-    # authority to communicate the results back to the parent, who
-    # then combines them all.
-    #
-    my @return_codes = ();
-    my @agglist = ();
-
-    foreach my $auth (@aggregates) {
-	my $temptask = WebTask->CreateAnonymous();
-	# For delete below.
-	push(@webtasks, $temptask);
-	push(@agglist, {"authority" => $auth,
-			"webtask"   => $temptask});
-    }
-    if (ParRun({"maxwaittime" => 60,
-		"maxchildren" => scalar(@agglist)},
-	    \@return_codes, $coderef, @agglist)) {
-	#
-	# The parent caught a signal. Leave things intact so that we can
-	# kill things cleanly later.
-	#
-	$errmsg = "Internal error get reservation info";
-	goto bad;
-    }
-    #
-    # Check the exit codes, create return structure for the web interface.
-    #
-    my $blob = {};
-    
-    foreach my $agg (@agglist) {
-	my $code  = shift(@return_codes);
-	my $auth  = $agg->{'authority'};
-	my $wtask = $agg->{'webtask'};
-
-	$wtask->Refresh();
-
-	if ($code) {
-	    $errmsg  = "$auth: " . $wtask->output();
-	    goto bad;
-	}
-	$blob->{$auth->urn()} = $wtask->value();
-    }
-    if (defined($webtask)) {
-	$webtask->value($blob);
-	$webtask->Exited(0);
-    }
-    else {
-	print Dumper($blob);
-    }
-    foreach my $temptask (@webtasks) {
-	$temptask->Delete();
-    }
-    exit(0);
-
-  bad:
-    foreach my $temptask (@webtasks) {
-	$temptask->Delete();
-    }
-    fatal($errmsg);
-}
-
-#
 # Get the prediction data.
 #
 sub DoPrediction()
@@ -937,6 +808,7 @@ sub DoPrediction()
     my @aggregates = ($authority);
     my @webtasks   = ();
     my @projlist   = ();
+    my $blob       = {};
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -978,12 +850,26 @@ sub DoPrediction()
 	
 	my @list = APT_Aggregate->LookupForPortal($portal);
 	foreach my $agg (@list) {
+	    if ($agg->disabled()) {
+		print STDERR "The " . $aggregate->name() . " cluster ".
+		    "is currently offline, please try again later.";
+		next;
+	    }
 	    my $authority = APT_Geni::GetAuthority($agg->urn());
 	    if (!defined($authority)) {
 		$errmsg = "Cannot lookup authority for $agg";
 		goto bad;
 	    }
 	    push(@aggregates, $authority);
+	}
+	if (!@aggregates) {
+	    UserError("No clusters are online, please try again later.");
+	}
+    }
+    else {
+	if ($aggregate->disabled()) {
+	    UserError("The " . $aggregate->name() . " cluster ".
+		      "is currently offline, please try again later.");
 	}
     }
 
@@ -999,28 +885,33 @@ sub DoPrediction()
 	    APT_Geni::PortalRPC($authority, undef,
 				"ReservationPrediction",
 				{"projlist" => \@projlist});
-	
+	$webtask->response($response);
+
 	if (GeniResponse::IsError($response)) {
-	    #
 	    # All errors are fatal.
-	    #
-	    if (defined($webtask)) {
-		$webtask->output($response->output());
-		$webtask->Exited($response->code());
-		$webtask->Store();
-	    }
-	    else {
-		print STDERR "$authority: " . $response->output() . "\n";
-	    }
-	    return $response->code();
-	}
-	if (defined($webtask)) {
-	    $webtask->value($response->value());
-	    $webtask->Exited(0);
-	    $webtask->Store();
+	    return -1;
 	}
 	return 0;
     };
+
+    #
+    # Do not bother with ParRun if only one aggregate.
+    #
+    if (@aggregates == 1) {
+	my $authority = $aggregates[0];
+	my $temptask  = WebTask->CreateAnonymous();
+	my $retval    = &$coderef({"authority" => $authority,
+				   "webtask"   => $temptask});
+	my $response  = $temptask->response();
+	$temptask->Delete();
+
+	if ($retval == 0) {
+	    $blob->{$authority->urn()} = $response->value();
+	    goto done;
+	}
+	ExitWithError($response);
+    }
+    
     #
     # Multiple aggregates, we use parrun. We need a webtask for each
     # authority to communicate the results back to the parent, who
@@ -1031,6 +922,7 @@ sub DoPrediction()
 
     foreach my $auth (@aggregates) {
 	my $temptask = WebTask->CreateAnonymous();
+	$temptask->AutoStore(1);
 	# For delete below.
 	push(@webtasks, $temptask);
 	push(@agglist, {"authority" => $auth,
@@ -1038,19 +930,15 @@ sub DoPrediction()
     }
     if (ParRun({"maxwaittime" => 30,
 		"maxchildren" => scalar(@agglist)},
-	    \@return_codes, $coderef, @agglist)) {
-	#
-	# The parent caught a signal. Leave things intact so that we can
-	# kill things cleanly later.
-	#
-	$errmsg = "Internal error getting reservation prediction info";
-	goto bad;
+	       \@return_codes, $coderef, @agglist)) {
+	       
+	map { $_->Delete(); } @webtasks;
+	fatal("Internal error getting reservation prediction info");
     }
+    
     #
     # Check the exit codes, create return structure for the web interface.
     #
-    my $blob = {};
-    
     foreach my $agg (@agglist) {
 	my $code  = shift(@return_codes);
 	my $auth  = $agg->{'authority'};
@@ -1060,20 +948,19 @@ sub DoPrediction()
 
 	if ($code) {
 	    #
-	    # If this timed out, lets not return a fatal error since
+	    # If this failed, lets not return a fatal error since
 	    # this info is informational and does not prevent the web
 	    # server from operating normally.
 	    #
-	    if ($code == 15) {
-		$blob->{$auth->urn()} = "Timed out getting reservation ".
-		    "system information";
-		next;
-	    }
-	    $errmsg  = "$auth: " . $wtask->output();
-	    goto bad;
+	    my $msg = "Could not get reservation data: ".
+		$wtask->response()->error();
+	    
+	    $blob->{$auth->urn()} = $msg;
+	    print STDERR $msg . "\n";
 	}
-	$blob->{$auth->urn()} = $wtask->value();
+	$blob->{$auth->urn()} = $wtask->response()->value();
     }
+  done:
     if (defined($webtask)) {
 	$webtask->value($blob);
 	$webtask->Exited(0);
@@ -1099,7 +986,7 @@ sub fatal($)
 
     if (defined($webtask)) {
 	$webtask->output($mesg);
-	$webtask->code(-1);
+	$webtask->Exited(-1);
     }
     print STDERR "*** $0:\n".
 	         "    $mesg\n";
@@ -1113,11 +1000,41 @@ sub UserError($)
 
     if (defined($webtask)) {
 	$webtask->output($mesg);
-	$webtask->code(1);
+	$webtask->Exited(1);
     }
     print STDERR "*** $0:\n".
 	         "    $mesg\n";
     exit(1);
+}
+
+#
+# These are errors which the user might need to see. Some errors are
+# exceptions though, and those we want to treat as internal errors.
+#
+sub ExitWithError($)
+{
+    my ($response) = @_;
+    my $mesg = $response->error();
+    my $code = $response->code();
+
+    #
+    # In general, these errors are to be expected by the caller.
+    #
+    if ($code == GENIRESPONSE_REFUSED ||
+	$code == GENIRESPONSE_SEARCHFAILED ||
+	$code == GENIRESPONSE_SERVER_UNAVAILABLE ||
+	$code == GENIRESPONSE_NETWORK_ERROR ||
+	$code == GENIRESPONSE_BUSY) {
+
+	if (defined($webtask)) {
+	    $webtask->output($mesg);
+	    $webtask->Exited($code);
+	}
+	print STDERR "*** $0:\n".
+	             "    $mesg\n";
+	exit(1);
+    }
+    fatal($mesg);
 }
 
 sub readfile($) {

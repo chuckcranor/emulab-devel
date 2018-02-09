@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -251,7 +251,8 @@ sub Start($$)
     # Check for NoLogins; return XMLRPC
     #
     if (NoLogins()) {
-	return XMLError(503, "CM temporarily offline; please try again later");
+	return XMLError(HTTP_SERVICE_UNAVAILABLE(),
+			"CM temporarily offline; please try again later");
     }
     if (0) {
 	# For timing.
@@ -367,10 +368,10 @@ sub Start($$)
 	# Check Emulab users table. 
 	#
 	my $user = User->Lookup($hrn->id());
-	return XMLError(XMLRPC_APPLICATION_ERROR(),
+	return XMLError(GENIRESPONSE_REFUSED(),
 			"Not a valid local user. Who are you really?")
 	    if (!defined($user));
-	return XMLError(XMLRPC_APPLICATION_ERROR(),
+	return XMLError(GENIRESPONSE_FORBIDDEN(),
 			"Your account is no longer active!")
 	    if ($user->status() ne USERSTATUS_ACTIVE());
     }
@@ -379,7 +380,7 @@ sub Start($$)
     # So we know who/what we are acting as, in case we have to make a
     # callout RPC. The "context" is a global variable.
     #
-    return XMLError(XMLRPC_SERVER_ERROR(),
+    return XMLError(XMLRPC_SYSTEM_ERROR(),
 		    "There is no certificate for this server")
 	if (!exists($MODULEDEFS->{"CERTIFICATE"}));
 
@@ -421,7 +422,7 @@ sub Start($$)
 	return XMLError(XMLRPC_PARSE_ERROR(), "error decoding RPC:\n" . "$@");
     }
     if ($call->{'type'} ne 'call') {
-	return XMLError(XMLRPC_APPLICATION_ERROR(),
+	return XMLError(XMLRPC_PARSE_ERROR(),
 			"expected RPC methodCall, got $call->{'type'}");
     }
     my $method = $call->{'method_name'};
@@ -548,7 +549,7 @@ sub Start($$)
 	#
 	$rpcerror = $iserror = 1;
 	print STDERR "Error executing RPC method $method:\n" . $@ . "\n\n";
-	$response = $decoder->encode_fault(XMLRPC_SERVER_ERROR(),
+	$response = $decoder->encode_fault(XMLRPC_SYSTEM_ERROR(),
 					   "Internal Error executing $method");
 	
 	print STDERR "-------------- Request -----------------\n";
@@ -716,6 +717,11 @@ sub CreateLogFile($)
 {
     my ($fname) = @_;
 
+    # So tbops people can read the files ...
+    if (!chmod(0664, $fname)) {
+	print STDERR "Could not chmod $fname\n";
+	return undef;
+    }
     my $group = Group->Lookup($GENIGROUP, $GENIGROUP);
     if (!defined($group)) {
 	print STDERR "Could not lookup group $GENIGROUP";

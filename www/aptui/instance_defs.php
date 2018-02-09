@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,8 +56,10 @@ $geni_response_codes =
           "No Mapping Possible",
     );
 define("GENIRESPONSE_BADARGS",   	       1);
+define("GENIRESPONSE_ERROR",       	       2);
 define("GENIRESPONSE_REFUSED",                 7);
 define("GENIRESPONSE_TIMEDOUT",                8);
+define("GENIRESPONSE_RPCERROR",                10);
 define("GENIRESPONSE_SEARCHFAILED",            12);
 define("GENIRESPONSE_ALREADYEXISTS",           17);
 define("GENIRESPONSE_NOSPACE",                 23);
@@ -286,11 +288,8 @@ class Instance
     #
     # Class function to create a new Instance
     #
-    function Instantiate($creator, $options, $args, &$errors) {
+    function Instantiate($uuid, $creator, $options, $args, $webtask) {
 	global $suexec_output, $suexec_output_array;
-
-	# So we can look up the slice after the backend creates it.
-	$uuid = NewUUID();
 
 	#
         # Generate a temporary file and write in the XML goo. 
@@ -298,12 +297,14 @@ class Instance
 	$xmlname = tempnam("/tmp", "quickvm");
 	if (! $xmlname) {
 	    TBERROR("Could not create temporary filename", 0);
-	    $errors["error"] = "Transient error(1); please try again later.";
+            $webtask->output("Internal error creating experiment");
+            $webtask->code(GENIRESPONSE_ERROR);
 	    return null;
 	}
 	elseif (! ($fp = fopen($xmlname, "w"))) {
 	    TBERROR("Could not open temp file $xmlname", 0);
-	    $errors["error"] = "Transient error(2); please try again later.";
+            $webtask->output("Internal error creating experiment");
+            $webtask->code(GENIRESPONSE_ERROR);
 	    return null;
 	}
 	else {
@@ -335,40 +336,31 @@ class Instance
 	if (isset($_SERVER['SERVER_NAME'])) { 
 	    putenv("SERVER_NAME=" . $_SERVER['SERVER_NAME']);
 	}
+        $options .= " -t " . $webtask->task_id();
+        
 	$retval = SUEXEC($uid, $pid,
 			 "webcreate_instance $options -u $uuid $xmlname",
 			 SUEXEC_ACTION_IGNORE);
 	unlink($xmlname);
 
 	if ($retval != 0) {
-	    if ($retval < 0) {
+            $webtask->Refresh();
+
+            # Did not get a clean exit.
+            if (! $webtask->exited() || $retval < 0) {
 		SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-		$errors["error"] =
-		    "Transient error(3); please try again later.";
-	    }
-	    else {
-		if (count($suexec_output_array)) {
-		    $line = $suexec_output_array[0];
-		    $errors["error"] = $line;
-		}
-		else {
-		    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-		    $errors["error"] =
-			"Transient error(4); please try again later.";
-		}
-	    }
-	    return null;
+                $webtask->output("Internal error creating experiment");
+                $webtask->code(GENIRESPONSE_ERROR);
+                return null;
+            }
+            # Error in the webtask for the caller.
+            return null;
 	}
 	$instance = Instance::Lookup($uuid);
 	if (!$instance) {
-	    $errors["error"] = "Transient error(5); please try again later.";
-	    return null;
-	}
-	if (!$creator) {
-	    $creator = GeniUser::Lookup("sa", $instance->creator_uuid());
-	}
-	if (!$creator) {
-	    $errors["error"] = "Transient error(6); please try again later.";
+	    TBERROR("Could not lookup instance after create: $uuid", 0);
+            $webtask->output("Internal error creating experiment");
+            $webtask->code(GENIRESPONSE_ERROR);
 	    return null;
 	}
 	return array($instance, $creator);

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1019,18 +1019,28 @@ function Do_Submit()
         $formfields["failure_okay"] == "checked") {
         $options .= " -i ";
     }
-    
+
+    # So we can look up the slice after the backend creates it.
+    $uuid = NewUUID();
+
+    # Create this here. If the instantiate fails, we delete it.
+    # Otherwise, the instance owns it.
+    $webtask = WebTask::Create($uuid);
+    $webtask_id = $webtask->task_id();
+           
     #
     # Invoke the backend.
     #
     list ($instance, $creator) =
-        Instance::Instantiate($this_user, $options, $args, $errors);
+        Instance::Instantiate($uuid, $this_user, $options, $args, $webtask);
 
     if (!$instance) {
-	SPITAJAX_ERROR(2, $errors);
+        # Create error is handled differently.
+	SPITAJAX_ERROR(3, $webtask->output());
         if (isset($keyname)) {
             unlink($keyname);
         }
+        $webtask->Delete();
         return;
     }
     if (isset($keyname)) {

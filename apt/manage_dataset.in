@@ -82,9 +82,11 @@ use User;
 use Project;
 use APT_Dataset;
 use APT_Instance;
+use APT_Geni;
 use WebTask;
 use Blockstore;
 use GeniResponse;
+use Genixmlrpc;
 use GeniXML;
 use GeniUser;
 use GeniAuthority;
@@ -94,11 +96,11 @@ use GeniImage;
 
 # Protos
 sub fatal($);
-sub uerror($;$);
+sub UserError($;$);
 sub DoCreate();
 sub DoDelete();
 sub DoRefresh();
-sub DoRefreshInternal($$);
+sub DoRefreshInternal($);
 sub DoGetCredential();
 sub DoModify();
 sub DoExtend();
@@ -107,6 +109,7 @@ sub DoSnapshot();
 sub DoSnapShotInternal($$$$$);
 sub PollDatasetStatus($$$);
 sub DoImageTrackerStuff($$$$$);
+sub ExitWithError($);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -128,6 +131,10 @@ if (defined($options{"t"})) {
     }
     $webtask->AutoStore(1);
 }
+# In general, these calls should not take a lot of time, so reduce the
+# RPC timeout value. We will adjust them below if needed.
+Genixmlrpc->SetTimeout(30);
+
 if (@ARGV < 1) {
     usage();
 }
@@ -318,7 +325,7 @@ sub DoCreate()
     # Check for expired certs and speaksfor.
     if (my $retval = APT_Geni::VerifyCredentials($geniuser, \$errmsg)) {
 	if ($retval) {
-	    ($retval < 0 ? fatal($errmsg) : uerror($errmsg));
+	    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
 	}
     }
 
@@ -430,19 +437,29 @@ sub DoCreate()
     #
     # Handoff to snapshot if an imdataset.
     #
-    if ($type eq "imdataset" &&
-	DoSnapShotInternal($dataset, $aggregate, $bsname, $nodeid, \$errmsg)) {
-	$response = $dataset->DeleteDataset();
-	if ($response->code() == GENIRESPONSE_SUCCESS ||
-	    $response->code() == GENIRESPONSE_SEARCHFAILED) {
-	    $instance->Unlock();
-	    goto failed;
+    if ($type eq "imdataset") {
+	my $errcode = DoSnapShotInternal($dataset, $aggregate,
+					 $bsname, $nodeid, \$errmsg);
+	if ($errcode) {
+	    $response = $dataset->DeleteDataset();
+	    if ($response->code() == GENIRESPONSE_SUCCESS ||
+		$response->code() == GENIRESPONSE_SEARCHFAILED) {
+		$instance->Unlock();
+		$dataset->Delete();
+	    }
+	    else {
+		# We want to keep the local dataset record around
+		# since we could not delete it remotely.
+		$instance->Unlock();
+	    }
+	    if ($errcode < 0) {
+		# This will set the webtask, see below.
+		fatal($errmsg);
+	    }
+	    else {
+		UserError($errmsg);
+	    }
 	}
-	# We want to keep the local dataset record around since we could
-	# not delete it remotely.
-	$instance->Unlock();
-	# This will set the webtask, see below.
-	fatal($errmsg);
     }
     if (PollDatasetStatus($dataset, $aggregate, \$errmsg)) {
 	# Exit and let child poll
@@ -450,6 +467,9 @@ sub DoCreate()
     }
     $dataset->Unlock();
     $instance->Unlock() if (defined($instance));
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
     return 0;
 
   failed:
@@ -475,30 +495,25 @@ sub DoDelete()
 	fatal("No such dataset");
     }
     if ($dataset->Lock()) {
-	uerror("dataset is busy, cannot lock it");
+	UserError("dataset is busy, cannot lock it");
+    }
+    # Check if the aggregate is online and reachable. 
+    my $aggregate = $dataset->GetAggregate();
+    if ($aggregate->CheckStatus(\$errmsg)) {
+	$dataset->Unlock();
+	UserError($errmsg);
     }
     my $response = $dataset->DeleteDataset();
-    if (!defined($response)) {
-	$errmsg = "RPC Error calling DeleteDataset";
-	goto failed;
-    }
-    if ($response->code() != GENIRESPONSE_SUCCESS &&
-	$response->code() != GENIRESPONSE_SEARCHFAILED &&
-	$response->code() != GENIRESPONSE_BUSY) {
-	$errmsg = "DeleteDataset failed: ". $response->output() . "\n";
-	goto failed;
-    }
-    if ($response->code() == GENIRESPONSE_BUSY) {
+    if (GeniResponse::IsError($response) &&
+	$response->code() != GENIRESPONSE_SEARCHFAILED()) {
 	$dataset->Unlock();
-	uerror("dataset was busy at the remote cluster, try again later");
+	ExitWithError($response);
     }
     $dataset->Delete();
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
     return 0;
-
-  failed:
-    $dataset->Unlock();
-    # This will set the webtask, see below.
-    fatal($errmsg);
 }
 
 #
@@ -530,8 +545,13 @@ sub DoRefresh()
     if (!defined($dataset)) {
 	fatal("No such dataset");
     }
+    # Check if the aggregate is online and reachable. 
+    my $aggregate = $dataset->GetAggregate();
+    if ($aggregate->CheckStatus(\$errmsg)) {
+	UserError($errmsg);
+    }
     if ($dataset->Lock()) {
-	uerror("dataset is busy, cannot lock it");
+	UserError("dataset is busy, cannot lock it");
     }
     if ($poll) {
 	if (PollDatasetStatus($dataset, $dataset->GetAggregate(), \$errmsg)) {
@@ -540,37 +560,26 @@ sub DoRefresh()
 	}
     }
     else {
-	$errcode = DoRefreshInternal($dataset, \$errmsg);
-	goto failed
-	    if ($errcode);
+	my $response = DoRefreshInternal($dataset);
+	if (GeniResponse::IsError($response)) {
+	    $dataset->Unlock();
+	    ExitWithError($response);
+	}
     }
     $dataset->Unlock();
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
     return 0;
-
-  failed:
-    $dataset->Unlock();
-    # This will set the webtask, see below.
-    ($errcode < 0 ? fatal($errmsg) : uerror($errmsg, $errcode));
 }
 
-sub DoRefreshInternal($$)
+sub DoRefreshInternal($)
 {
-    my ($dataset, $pmesg) = @_;
+    my ($dataset) = @_;
     
     my $response = $dataset->DescribeDataset();
-    if (!defined($response)) {
-	$$pmesg = "RPC Error calling DescribeDataset";
-	return -1;
-    }
-    if ($response->code() != GENIRESPONSE_SUCCESS) {
-	if ($response->code() == GENIRESPONSE_SEARCHFAILED) {
-	    $$pmesg = "Dataset no longer exists at the remote cluster\n";
-	    return GENIRESPONSE_SEARCHFAILED;
-	}
-	else {
-	    $$pmesg = "DescribeDataset failed: ". $response->output() . "\n";
-	}
-	return -1;
+    if (GeniResponse::IsError($response)) {
+	return $response;
     }
     my $blob = $response->value();
     print Dumper($blob);
@@ -644,40 +653,37 @@ sub DoModify()
 	    if ($write_access !~ /^(creator|project)$/);
 	$blob->{'write_access'} = $write_access;
     }
+    # Check if the aggregate is online and reachable. 
+    my $aggregate = $dataset->GetAggregate();
+    if ($aggregate->CheckStatus(\$errmsg)) {
+	UserError($errmsg);
+    }
+    
     if ($dataset->Lock()) {
-	uerror("dataset is busy, cannot lock it");
+	UserError("dataset is busy, cannot lock it");
     }
     if (keys(%$blob)) {
 	if ($dataset->Update($blob)) {
 	    $errmsg = "Could not update privacy settings!";
-	    goto failed;
+	    $dataset->Unlock();
+	    # This will set the webtask, see below.
+	    fatal($errmsg);
 	}
     }
     my $response = $dataset->ModifyDataset();
-    if (!defined($response)) {
-	$errmsg = "RPC Error calling ModifyDataset";
-	goto failed;
-    }
-    if ($response->code() != GENIRESPONSE_SUCCESS) {
-	if ($response->code() == GENIRESPONSE_SEARCHFAILED) {
-	    $errmsg = "Dataset no longer exists at the target\n";
-	}
-	else {
-	    $errmsg = "ModifyDataset failed: ". $response->output() . "\n";
-	}
-	goto failed;
+    if (GeniResponse::IsError($response)) {
+	$dataset->Unlock();
+	ExitWithError($response);
     }
     $blob = $response->value();
     if ($dataset->type() ne "imdataset") {
 	$dataset->Update({"expires" => TBDateStringLocal($blob->{"expires"})});
     }
     $dataset->Unlock();
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
     return 0;
-
-  failed:
-    $dataset->Unlock();
-    # This will set the webtask, see below.
-    fatal($errmsg);
 }
 
 #
@@ -699,22 +705,18 @@ sub DoExtend()
     if (!defined($dataset)) {
 	fatal("No such dataset");
     }
+    # Check if the aggregate is online and reachable. 
+    my $aggregate = $dataset->GetAggregate();
+    if ($aggregate->CheckStatus(\$errmsg)) {
+	UserError($errmsg);
+    }
     if ($dataset->Lock()) {
-	uerror("dataset is busy, cannot lock it");
+	UserError("dataset is busy, cannot lock it");
     }
     my $response = $dataset->ExtendDataset();
-    if (!defined($response)) {
-	$errmsg = "RPC Error calling ExtendDataset";
-	goto failed;
-    }
-    if ($response->code() != GENIRESPONSE_SUCCESS) {
-	if ($response->code() == GENIRESPONSE_SEARCHFAILED) {
-	    $errmsg = "Dataset no longer exists at the target\n";
-	}
-	else {
-	    $errmsg = "ExtendDataset failed: ". $response->output() . "\n";
-	}
-	goto failed;
+    if (GeniResponse::IsError($response)) {
+	$dataset->Unlock();
+	ExitWithError($response);
     }
     my $blob = $response->value();
     $dataset->Update({"expires" => TBDateStringLocal($blob->{"expires"})});
@@ -722,12 +724,10 @@ sub DoExtend()
 	$dataset->Update({"state" => $blob->{'state'}});
     }
     $dataset->Unlock();
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
     return 0;
-
-  failed:
-    $dataset->Unlock();
-    # This will set the webtask, see below.
-    fatal($errmsg);
 }
 
 #
@@ -736,6 +736,7 @@ sub DoExtend()
 sub DoSnapshot()
 {
     my $errmsg;
+    my $errcode = -1;
     my ($copyback_uuid, $sha1hash);
     
     my $usage = sub {
@@ -769,6 +770,10 @@ sub DoSnapshot()
     if (!defined($aggregate)) {
 	fatal("Could not find aggregate for $nodeid");
     }
+    # Check if the aggregate is online and reachable. 
+    if ($aggregate->CheckStatus(\$errmsg)) {
+	UserError($errmsg);
+    }
     if (GetSiteVar("protogeni/use_imagetracker")) {
 	if (DoImageTrackerStuff($dataset, $aggregate,
 				\$copyback_uuid,\$sha1hash,\$errmsg)) {
@@ -776,11 +781,11 @@ sub DoSnapshot()
 	}
     }
     if ($dataset->Lock()) {
-	uerror("dataset is busy, cannot lock it");
+	UserError("dataset is busy, cannot lock it");
     }
     if ($instance->Lock()) {
 	$dataset->Unlock();
-	uerror("instance is busy, cannot lock it");
+	UserError("instance is busy, cannot lock it");
     }
     # Clear the webtask, starting a new snapshot.
     $dataset->webtask()->Reset();
@@ -799,10 +804,12 @@ sub DoSnapshot()
     }
     $dataset->webtask()->Store();
     $dataset->webtask()->AutoStore(1);
-    
-    if (DoSnapShotInternal($dataset, $aggregate, $bsname, $nodeid, \$errmsg)) {
-	goto failed;
-    }
+
+    $errcode = DoSnapShotInternal($dataset, $aggregate,
+				  $bsname, $nodeid, \$errmsg);
+    goto failed
+	if ($errcode);
+
     if (PollDatasetStatus($dataset, $aggregate, \$errmsg)) {
 	# Exit and let child poll
 	exit(0);
@@ -814,8 +821,13 @@ sub DoSnapshot()
   failed:
     $instance->Unlock();
     $dataset->Unlock();
-    # This will set the webtask, see below.
-    fatal($errmsg);
+    if ($errcode < 0) {
+	# This will set the webtask, see below.
+	fatal($errmsg);
+    }
+    else {
+	UserError($errmsg);
+    }
 }
 
 sub DoSnapShotInternal($$$$$)
@@ -863,8 +875,15 @@ sub DoSnapShotInternal($$$$$)
 					   $dataset->_copyback_uuid(),
 					   $bsname, 0, 0, 0);
     if ($response->code() != GENIRESPONSE_SUCCESS) {
-	$errmsg = "SnapshotDataset failed: ". $response->output() . "\n";
-	goto failed;
+	$$perrmsg = $response->output();
+	if ($response->code() == GENIRESPONSE_REFUSED ||
+	    $response->code() == GENIRESPONSE_SEARCHFAILED ||
+	    $response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
+	    $response->code() == GENIRESPONSE_NETWORK_ERROR ||
+	    $response->code() == GENIRESPONSE_BUSY) {
+	    return 1;
+	}
+	return -1;
     }
     $dataset->Update({"state" => "busy"});
     #
@@ -900,7 +919,7 @@ sub PollDatasetStatus($$$)
     # polling got any non-small length of time will lead to trouble.
     #
     if (! $debug) {
-        $logfile = TBMakeLogname("createdataset");
+        $logfile = TBMakeLogname("polldataset");
 
 	if (my $childpid = TBBackGround($logfile)) {
 	    return $childpid;
@@ -932,9 +951,10 @@ sub PollDatasetStatus($$$)
 	#
 	if ($dataset->type() =~ /^(lt|st)dataset$/ ||
 	    $aggregate->aggregate_urn() eq $dataset->aggregate_urn()) {
-	    my $errcode = DoRefreshInternal($dataset, $perrmsg);
-	    if ($errcode) {
-		print STDERR $$perrmsg;
+	    my $response = DoRefreshInternal($dataset);
+	    if (GeniResponse::IsError($response)) {
+		my $errcode = $response->code();
+		print STDERR $response->error() . "\n";
 		if ($errcode == GENIRESPONSE_SEARCHFAILED) {
 		    #
 		    # The dataset is gone, so it failed allocation.
@@ -947,6 +967,7 @@ sub PollDatasetStatus($$$)
 		    $dataset->Update({"state" => "failed"});
 		    $dataset->webtask()->output("allocation failure");
 		    $dataset->webtask()->Exited(GENIRESPONSE_SEARCHFAILED);
+		    $perrmsg = $response->error();
 		    last;
 		}
 		# Otherwise we keep trying. 
@@ -1018,8 +1039,13 @@ sub DoGetCredential()
     if (!defined($dataset)) {
 	fatal("No such dataset");
     }
+    # Check if the aggregate is online and reachable. 
+    my $aggregate = $dataset->GetAggregate();
+    if ($aggregate->CheckStatus(\$errmsg)) {
+	UserError($errmsg);
+    }
     if ($dataset->Lock()) {
-	uerror("dataset is busy, cannot lock it");
+	UserError("dataset is busy, cannot lock it");
     }
     #
     # If we have a stored unexpired credential, we can just use that.
@@ -1032,23 +1058,9 @@ sub DoGetCredential()
 	    if (defined($credential) && !$credential->IsExpired());
     }
     my $response = $dataset->GetCredential();
-    if (!defined($response)) {
-	$errmsg = "RPC Error calling GetCredential";
-	goto failed;
-    }
-    if ($response->code() != GENIRESPONSE_SUCCESS &&
-	$response->code() != GENIRESPONSE_SEARCHFAILED &&
-	$response->code() != GENIRESPONSE_BUSY) {
-	$errmsg = "GetCredential failed: ". $response->output() . "\n";
-	goto failed;
-    }
-    if ($response->code() == GENIRESPONSE_BUSY) {
+    if (GeniResponse::IsError($response)) {
 	$dataset->Unlock();
-	uerror("dataset was busy at the remote cluster, try again later");
-    }
-    if ($response->code() == GENIRESPONSE_SEARCHFAILED) {
-	$dataset->Unlock();
-	uerror("dataset could not be found at the remote cluster");
+	ExitWithError($response);
     }
     $credential = GeniCredential->CreateFromSigned($response->value());
     if (!defined($credential)) {
@@ -1064,12 +1076,10 @@ sub DoGetCredential()
     }
     print $credential->asString();
     $dataset->Unlock();
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
     return 0;
-
-  failed:
-    $dataset->Unlock();
-    # This will set the webtask, see below.
-    fatal($errmsg);
 }
 
 sub DoImageTrackerStuff($$$$$)
@@ -1133,7 +1143,7 @@ sub PollImageStatus($$$)
 	
 	my $response = $aggregate->ImageInfo($image_urn);
 	if ($response->code() != GENIRESPONSE_SUCCESS &&
-	    $response->code() != GENIRESPONSE_RPCERROR &&
+	    $response->code() != GENIRESPONSE_NETWORK_ERROR &&
 	    $response->code() != GENIRESPONSE_SERVER_UNAVAILABLE &&
 	    $response->code() != GENIRESPONSE_BUSY) {
 	    $$perrmsg = "Imageinfo failed: ". $response->output() . "\n";
@@ -1142,7 +1152,7 @@ sub PollImageStatus($$$)
 	return 0
 	    if ($response->code() == GENIRESPONSE_BUSY ||
 		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
-		$response->code() == GENIRESPONSE_RPCERROR);
+		$response->code() == GENIRESPONSE_NETWORK_ERROR);
 
 	my $blob = $response->value();
 	print Dumper($response->value());
@@ -1189,28 +1199,27 @@ sub DoApprove()
     if (!$this_user->IsAdmin()) {
 	fatal("No permission to schedule reservation cancellation")
     }    
+    # Check if the aggregate is online and reachable. 
+    my $aggregate = $dataset->GetAggregate();
+    if ($aggregate->CheckStatus(\$errmsg)) {
+	UserError($errmsg);
+    }
     if ($dataset->Lock()) {
-	uerror("dataset is busy, cannot lock it");
+	UserError("dataset is busy, cannot lock it");
     }
     my $project = $dataset->GetProject();
     my $creator = $dataset->GetCreator();
     
     my $response = $dataset->ApproveDataset();
-    if (!defined($response)) {
-	$errmsg = "RPC Error calling ExtendDataset";
-	goto failed;
-    }
-    if ($response->code() != GENIRESPONSE_SUCCESS) {
-	if ($response->code() == GENIRESPONSE_SEARCHFAILED) {
-	    $errmsg = "Dataset no longer exists at the target\n";
-	}
-	else {
-	    $errmsg = "ApproveDataset failed: ". $response->output() . "\n";
-	}
-	goto failed;
+    if (GeniResponse::IsExpired($response)) {
+	$dataset->Unlock();
+	ExitWithError($response);
     }
     # No failure, change the state now so the web interface sees a change.
     $dataset->Update({"state" => "busy"});
+    
+    # Clear the webtask, starting approval.
+    $dataset->webtask()->Reset();
     
     #
     # Now we want to poll for allocation completion so we can tell the
@@ -1221,6 +1230,9 @@ sub DoApprove()
         $logname = TBMakeLogname("approvedataset");
 
 	if (my $childpid = TBBackGround($logname)) {
+	    if (defined($webtask)) {
+		$webtask->Exited(0);
+	    }
 	    exit(0);
 	}
 	# Let parent exit;
@@ -1233,9 +1245,10 @@ sub DoApprove()
     my $interval = 15;
     
     while ($seconds > 0) {
-	my $errcode = DoRefreshInternal($dataset, \$errmsg);
-	if ($errcode) {
-	    print STDERR $errmsg;
+	my $response = DoRefreshInternal($dataset);
+	if (GeniResponse::IsError($response)) {
+	    my $errcode = $response->code();
+	    print STDERR $response->error() . "\n";
 	    if ($errcode == GENIRESPONSE_SEARCHFAILED) {
 		#
 		# The dataset is gone, so it failed allocation.
@@ -1280,12 +1293,6 @@ sub DoApprove()
     unlink($logname) if (defined($logname));
     $dataset->Unlock();
     return 0;
-
-  failed:
-    unlink($logname) if (defined($logname));
-    $dataset->Unlock();
-    # This will set the webtask, see below.
-    fatal($errmsg);
 }
 
 sub fatal($)
@@ -1301,7 +1308,7 @@ sub fatal($)
     exit(-1);
 }
 
-sub uerror($;$)
+sub UserError($;$)
 {
     my ($mesg, $code) = @_;
     $code = 1 if (!defined($code));
@@ -1311,7 +1318,37 @@ sub uerror($;$)
 	$webtask->Exited($code);
     }
     print STDERR "$mesg\n";
-    exit($code);
+    exit(1);
+}
+
+#
+# These are errors which the user might need to see. Some errors are
+# exceptions though, and those we want to treat as internal errors.
+#
+sub ExitWithError($)
+{
+    my ($response) = @_;
+    my $mesg = $response->error();
+    my $code = $response->code();
+
+    #
+    # In general, these errors are to be expected by the caller.
+    #
+    if ($code == GENIRESPONSE_REFUSED ||
+	$code == GENIRESPONSE_SEARCHFAILED ||
+	$code == GENIRESPONSE_SERVER_UNAVAILABLE ||
+	$code == GENIRESPONSE_NETWORK_ERROR ||
+	$code == GENIRESPONSE_BUSY) {
+
+	if (defined($webtask)) {
+	    $webtask->output($mesg);
+	    $webtask->Exited($code);
+	}
+	print STDERR "*** $0:\n".
+	             "    $mesg\n";
+	exit(1);
+    }
+    fatal($mesg);
 }
 
 sub escapeshellarg($)

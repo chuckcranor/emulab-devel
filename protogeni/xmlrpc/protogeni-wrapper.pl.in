@@ -81,7 +81,7 @@ BEGIN {
 	if ($1 > @PROTOGENI_MAXSERVERLOAD@) {
 	    sleep(5);
 	    my $decoder = Frontier::RPC2->new();
-	    my $string  = $decoder->encode_fault(503, 
+	    my $string  = $decoder->encode_fault(HTTP_SERVICE_UNAVAILABLE(), 
 		     "Server is WAY too busy; please try again later");
 	    print "Content-Type: text/xml \n\n";
 	    print $string;
@@ -191,14 +191,16 @@ sub XMLError($$)
 # Check for NoLogins; return XMLRPC
 #
 if (NoLogins()) {
-    XMLError(503, "CM temporarily offline; please try again later");
+    XMLError(HTTP_SERVICE_UNAVAILABLE(),
+	     "Server temporarily offline; please try again later");
 }
 
 #
 # Sanity check.
 #
 if ($EUID != 0) {
-    XMLError(503, "Server configuration error; please try again later");
+    XMLError(XMLRPC_SYSTEM_ERROR,
+	     "Server configuration error; please try again later");
 }
 
 #
@@ -294,13 +296,13 @@ XMLError(XMLRPC_APPLICATION_ERROR(),
 my ($authority, $type, $id) = GeniHRN::Parse($GENIURN);
 if ($type eq "user" && GeniHRN::Authoritative($GENIURN, "@OURDOMAIN@")) {
     #
-    # Check Emulab users table. 
+    # Check Emulab users table. These are permission errors, not XML errors.
     #
     my $user = User->Lookup($id);
-    XMLError(XMLRPC_APPLICATION_ERROR(),
+    XMLError(GENIRESPONSE_REFUSED(),
 	     "Not a valid local user. Who are you really?")
 	if (!defined($user));
-    XMLError(XMLRPC_APPLICATION_ERROR(),
+    XMLError(GENIRESPONSE_FORBIDDEN(),
 	     "Your account is no longer active!")
 	if ($user->status() ne "active");
 }
@@ -324,12 +326,12 @@ my $return = do $file;
 if (!defined($return)) {
     SENDMAIL($TBOPS, "Error loading module",
 	     ($@ ? $@ : ($! ? $! : Dumper(%ENV))));
-    XMLError(XMLRPC_APPLICATION_ERROR(), "Internal error loading module");
+    XMLError(XMLRPC_SYSTEM_ERROR(), "Internal error loading module");
 }
 if (!(defined($GENI_METHODS) && defined($EMULAB_PEMFILE))) {
     SENDMAIL($TBOPS, "Error loading module $MODULE",
 	     "No definition for GENI_METHODS or EMULAB_PEMFILE");
-    XMLError(XMLRPC_APPLICATION_ERROR(),
+    XMLError(XMLRPC_SYSTEM_ERROR(),
 	     "Internal error loading module; missing definitions");
 }
 
@@ -531,7 +533,8 @@ $SIG{__WARN__} = sub {
 $SIG{__DIE__} = sub {
     my $message = shift;
     if ($warned) {
-	die($message);
+	print STDERR $message;
+	exit(-1);
     }
     else {
  	confess($message);
@@ -570,7 +573,7 @@ if ($@) {
     XMLError(XMLRPC_PARSE_ERROR(), "error decoding RPC:\n" . "$@");
 }
 if ($call->{'type'} ne 'call') {
-    XMLError(XMLRPC_APPLICATION_ERROR(),
+    XMLError(XMLRPC_PARSE_ERROR(),
 	     "expected RPC methodCall, got $call->{'type'}");
 }
 my $method = $call->{'method_name'};
@@ -710,9 +713,10 @@ if ($@) {
     #
     $rpcerror = $iserror = 1;
     print STDERR "Error executing RPC method $method:\n" . $@ . "\n\n";
-    $response = $decoder->encode_fault(XMLRPC_SERVER_ERROR(),
-				       "Internal Error executing $method");
+    $response = $decoder->encode_fault(XMLRPC_SYSTEM_ERROR(),
+		       "Internal Error executing $method:\n" . $@ . "\n");
 
+    push(@metadata, ["LogURL", $logurl]);
     $logfile->SetMetadata(\@metadata, 0);
     foreach my $foo (@metadata) {
 	my ($key,$val) = @{$foo};

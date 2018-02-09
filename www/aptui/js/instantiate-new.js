@@ -802,7 +802,9 @@ $(function ()
 		            submitted = false;
 			    return;
 		        }
-		        sup.SpitOops("oops", json.value);               
+		        sup.SpitOops("oops", json.value);
+		        submitted = false;
+			return;
 		    }
 		    /*
 		     * The return value will have a redirect url in it,

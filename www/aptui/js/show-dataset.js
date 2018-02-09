@@ -116,7 +116,7 @@ $(function ()
 	     fields.dataset_state == "allocating")) {
 	    ShowProgressModal();
 	}
-	else {
+	else if (fields.dataset_type != "imdataset") {
 	    // Always poll for st/lt change in status.
 	    setTimeout(function f() { StateWatch() }, 5000);
 	}

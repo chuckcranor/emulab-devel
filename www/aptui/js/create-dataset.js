@@ -187,9 +187,15 @@ $(function ()
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
-	    var dataset_uuid = json.value.dataset_uuid;
-	    var url = "show-dataset.php?uuid=" + dataset_uuid;
-
+	    var url = null;
+	    
+	    if (editing) {
+		url = json.value;
+	    }
+	    else {
+		var dataset_uuid = json.value.dataset_uuid;
+		url = "show-dataset.php?uuid=" + dataset_uuid;
+	    }
 	    var reload = function () {
 		if (embedded) {
 		    window.parent.location.replace("../" + url);

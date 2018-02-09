@@ -341,6 +341,9 @@ $(function ()
 		if (json.code) {
 		    console.log("Could not get reservation data for " +
 				details.name + ": " + json.value);
+		    
+		    $('#' + id + ' .resgraph-error').html(json.value);
+		    $('#' + id + ' .resgraph-error').removeClass("hidden");
 		    return;
 		}
 

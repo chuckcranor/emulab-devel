@@ -36,6 +36,9 @@ $(function ()
 	
 	_.each(amlist, function(urn, name) {
 	    var callback = function(json) {
+		var error = null;
+		var images = null;
+
 		console.info(name, json);
 
 		// Kill the spinner.
@@ -44,28 +47,29 @@ $(function ()
 		    $('#spinner').addClass("hidden");
 		}
 		if (json.code) {
-		    console.info("Could not get image list for " +
-				 name + ": " + json.value);
-		    return;
+		    console.info(name + ": " + json.value);
+		    error = json.value;
 		}
-		var images = json.value;
-		if (images.length == 0) {
-		    // No images, say something.
-		    console.info("foo", count, imagelist);
-		    if (count <= 0 && Object.keys(imagelist) == 0) {
-			$('#no-images-message').removeClass("hidden");
+		else {
+		    images = json.value;
+		    
+		    if (images.length == 0) {
+			// No images, say something.
+			if (count <= 0 && Object.keys(imagelist) == 0) {
+			    $('#no-images-message').removeClass("hidden");
+			}
+			return;
 		    }
-		    return;
+		    // Save for later
+		    imagelist[name] = images;
 		}
-		// Save for later
-		imagelist[name] = images;
-
 		// Generate the main template.
 		var html = listTemplate({
 		    "images"       : images,
 		    "showproject"  : false,
 		    "showuser"     : false,
 		    "name"         : name,
+		    "error"        : error,
 		});
 		html =
 		    "<div class='row' id='" + name + "'>" +
@@ -74,6 +78,10 @@ $(function ()
 		    "</div>";
 
 		$('#main-body').prepend(html);
+
+		// On error, no need for the rest of this.
+		if (error)
+		    return;
 
 		// Format dates with moment before display.
 		$('#' + name + ' .format-date').each(function() {

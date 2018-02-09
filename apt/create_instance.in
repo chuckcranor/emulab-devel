@@ -44,7 +44,7 @@ sub usage()
     print "Usage: quickvm [-u uuid] [--site site:1=aggregate ...] <xmlfile>\n";
     exit(1);
 }
-my @optlist = ('d', 'v', 'u=s', 'a=s', 'S', 'k=s', 'i');
+my @optlist = ('d', 'v', 'u=s', 'a=s', 'S', 'k=s', 'i', 't=s');
 my $debug   = 0;
 my $verbose = 1;
 my $ignorefailures = 0;
@@ -167,6 +167,14 @@ if (defined($options{"S"})) {
 }
 if (defined($options{"u"})) {
     $quickuuid = $options{"u"};
+}
+if (defined($options{"t"})) {
+    $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not lookup/create webtask!");
+    }
+    $webtask->AutoStore(1);
 }
 if (@ARGV < 1) {
     usage();
@@ -854,22 +862,9 @@ if (defined($project)) {
     $blob->{"gid"}     = $group->gid();
     $blob->{"gid_idx"} = $group->gid_idx();
 }
-#
-# Create a webtask so that we can store additional information about
-# the sliver while we wait.
-#
-$webtask = WebTask->Create($quickvm_uuid);
-if (!defined($webtask)) {
-    fatal("Could not create a webtask!");
-}
-$webtask_id = $webtask->task_id();
-$webtask->AutoStore(1);
-$blob->{"webtask_id"} = $webtask_id;
-
 $errmsg = undef;
 $instance = APT_Instance->Create($blob, \$errmsg);
 if (!defined($instance)) {
-    $webtask->Delete();
     fatal(defined($errmsg) ? $errmsg :
 	  "Could not create instance record for $quickvm_uuid");
 }
@@ -897,19 +892,21 @@ foreach my $aggregate_urn (@aggregate_urns) {
     if (!defined($aptaggregate)) {
 	$slice->Delete();
 	$instance->Delete();
-        UserError("$aggregate_urn is not a valid (known) aggregate");
+        UserError("$aggregate_urn is not a valid (known) aggregate.");
     }
-    # Check for disabled/adminonly aggregates.
-    if ($aptaggregate->disabled()) {
+    my $aggregate_name = $aptaggregate->name();
+
+    # Check to make sure the aggregate is online and reachable
+    if ($aptaggregate->CheckStatus(\$errmsg)) {
 	$slice->Delete();
 	$instance->Delete();
-        UserError("$aggregate_urn is currently offline, try again later");
+        UserError($errmsg);
     }
     if ($aptaggregate->adminonly() &&
         !(defined($this_user) && $this_user->IsAdmin())) {
 	$slice->Delete();
 	$instance->Delete();
-        UserError("Only administrators may use $aggregate_urn");
+        UserError("Only administrators may use the $aggregate_name cluster.");
     }
     my $authority = GeniAuthority->Lookup($aggregate_urn);
     if (!defined($authority)) {
@@ -925,6 +922,19 @@ foreach my $aggregate_urn (@aggregate_urns) {
     $aggobj->_authority($authority);
     push(@aggregate_list, $aggobj);
 }
+
+# Must create a webtask if we did not get one on the command line.
+if (!defined($webtask)) {
+    $webtask = WebTask->Create($quickvm_uuid);
+    if (!defined($webtask)) {
+	fatal("Could not create a webtask!");
+    }
+    $webtask_id = $webtask->task_id();
+    $webtask->AutoStore(1);
+}
+# The instance now owns this webtask, even if it was a command line arg.
+# The caller is not allowed to delete it.
+$instance->Update({'webtask_id' => $webtask_id});
 
 # To keep stuff happy until multisite support finished.
 $instance->Update({'aggregate_urn' => $aggregate_urns[0]});
@@ -1270,9 +1280,11 @@ sub CreateSliver($)
     # This creates the sliver and starts it. We have to watch for the
     # server being too busy.
     #
-    my $tries = 15;
+    my $tries = 5;
     my $response;
     my $earlyreturn = 0;
+    my $async = 0;
+    my $errmsg;
 
     while (1) {
 	$response =
@@ -1290,46 +1302,64 @@ sub CreateSliver($)
 				     "key"         =>
 				        $alt_certificate->PrivKeyDelimited(),
 				     "usetracker"  => $usetracker,
+				     "asyncmode"   => 1,
 				   });
 
 	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    if ($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE &&
-		$tries >= 0) {
-		print STDERR "Server for $urn reports too busy, ".
-		    "waiting a while ...\n";
-		sleep(int(rand(20)) + 10);
-		$tries--;
-		next;
-	    }
-	    elsif ($response->code() == GENIRESPONSE_RPCERROR) {
-		#
-		# See if a read timeout for a setup that is taking a long
-		# time. If so, lets not fail yet, but instead see if we can
-		# sync back up during WaitForSlivers().
-		#
-		if ($response->output() =~ /read timeout/) {
-		    Genixmlrpc->SetTimeout(15);
-		    my $tmp = $aggobj->SliceResolve();
-		    print STDERR "SliceStatus: " . $tmp->code() . "\n";
-		    
-		    if ($tmp->code() == GENIRESPONSE_RPCERROR ||
-			$tmp->code() == GENIRESPONSE_SEARCHFAILED) {
-			#
-			# Okay, we can bail. 
-			#
-			print STDERR "Read timeout, bailing\n";
-		    }
-		    else {
-			#
-			# Accept that we do not have a manifest, but the CM
-			# is reachable and the slice exists.
-			#
-			$earlyreturn = 1;
-			last;
-		    }
+	    if ($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
+		($response->code() == GENIRESPONSE_NETWORK_ERROR &&
+		 $response->value() == GENIRESPONSE_NETWORK_ERROR_NOCONNECT)) {
+		if ($tries) {
+		    print STDERR "Server for $urn reports too busy or not ".
+			"reachable; waiting a while ...\n";
+		    sleep(int(rand(20)) + 10);
+		    $tries--;
+		    next;
 		}
 	    }
-	    $webtask->output($response->output());
+	    elsif ($response->code() == GENIRESPONSE_NETWORK_ERROR &&
+		   $response->value() == GENIRESPONSE_NETWORK_ERROR_TIMEDOUT) {
+		#
+		# If the slice actually exists, then lets not fail
+		# yet, but instead see if we can sync back up during
+		# WaitForSlivers().
+		#
+		Genixmlrpc->SetTimeout(15);
+		my $tmp = $aggobj->SliceResolve();
+		print STDERR "SliceStatus: " . $tmp->code() . "\n";
+		    
+		if ($tmp->code() == GENIRESPONSE_RPCERROR ||
+		    $tmp->code() == GENIRESPONSE_SEARCHFAILED) {
+		    #
+		    # Okay, we can bail. 
+		    #
+		    print STDERR "Read timeout, bailing\n";
+		}
+		else {
+		    #
+		    # Accept that we do not have a manifest, but the CM
+		    # is reachable and the slice exists.
+		    #
+		    $earlyreturn = 1;
+		    last;
+		}
+	    }
+	    elsif ($response->code() == GENIRESPONSE_INPROGRESS()) {
+		$async = 1;
+		print STDERR Dumper($response);
+		last;
+	    }
+	    #
+	    # We do not want to show some errors to users, we are going to
+	    # end up sending email to tbops.
+	    #
+	    if ($response->code() == GENIRESPONSE_RPCERROR()) {
+		$errmsg = "Internal RPC error creating sliver";
+	    }
+	    else {
+		$errmsg = $response->error();
+	    }
+	    $webtask->output($errmsg);
 	    $webtask->Exited($response->code());
 	    $aggobj->SetStatus("failed");
 	    
@@ -1348,53 +1378,138 @@ sub CreateSliver($)
     }
 
     #
-    # If earlyreturn is set, we got a read timeout and so we will not
-    # have a manifest. We will hopefully catch up with it later during
-    # WaitForSlivers().
+    # Watch for async return. We will keep looping waiting for an error
+    # or completion.
     #
-    if ($earlyreturn) {
-	print STDERR "Read timeout forcing early return mode\n";
-    }
-    elsif (ref($response->value()) eq "ARRAY") {
-	$manifest = $response->value()->[1];
-	if (!defined($manifest)) {
-	    $webtask->Exited(-1);
+    if ($async || $earlyreturn) {
+	if ($earlyreturn) {
+	    print STDERR "Server returned early for read timeout\n";
+	}
+	else {
+	    print STDERR "Server returned early for async mode\n";
+	}
+	Genixmlrpc->SetTimeout(30);
+
+	my $code;
+	my $errmsg;
+	#
+	# Loop waiting for a manifest or the slice to disappear or for an
+	# async error indicator. Hard to say how long we should wait ...
+	#
+	my $seconds  = 3600;
+	my $interval = 15;
+	while ($seconds > 0) {
+	    sleep($interval);
+	    $seconds -= $interval;
+	    
+	    my $tmp = $aggobj->SliceResolve();
+	    $code = $tmp->code();
+
+	    print STDERR "Resolve returned $code\n";
+	    print STDERR Dumper($tmp);
+
+	    # Just keep going, we will get there eventually.
+	    # Lets say RPC errors will clear up at some point, even though
+	    # they are more drastic. 
+	    if ($code == GENIRESPONSE_SERVER_UNAVAILABLE ||
+		$code == GENIRESPONSE_NETWORK_ERROR ||
+		$code == GENIRESPONSE_RPCERROR) {
+		next;
+	    }
+	    # Slice is gone. Unusual.	    
+	    if ($code == GENIRESPONSE_SEARCHFAILED()) {
+		$code = GENIRESPONSE_ERROR;
+		$errmsg = "Experiment no longer exists";
+		last;
+	    }
+	    # Other errors are unusual.
+	    if ($code != GENIRESPONSE_SUCCESS) {
+		$errmsg = $tmp->error();
+		last;
+	    }
+	    my $blob = $tmp->value();
+	    if (ref($blob) ne "HASH") {
+		$code = GENIRESPONSE_ERROR;
+		$errmsg = "Unexpected return value from resolve";
+		last;
+	    }
+	    if (exists($blob->{'manifest'})) {
+		# We have forward motion, so keep going.
+		print STDERR "We got a manifest from resolve\n";
+		$manifest = $blob->{'manifest'};
+		last;
+	    }
+	    if (exists($blob->{'async_code'})) {
+		# We are getting back async error status.
+		$code   = $blob->{'async_code'};
+		$errmsg = $blob->{'async_output'};
+		last;
+	    }
+	}
+	if ($seconds < 0) {
+	    # XXX Need better handling for timeout.
+	    $code = GENIRESPONSE_TIMEDOUT;
+	    $errmsg = "Experiment setup timed out";
+	}
+	if ($code != GENIRESPONSE_SUCCESS) {
+	    print STDERR "Resolve loop failure: $code, $errmsg\n";
+	    $webtask->Exited($code);
+	    $webtask->output($errmsg);
 	    $aggobj->SetStatus("failed");
-	    print STDERR "CreateSliver $urn: No manifest returned\n";
 	    return -1;
 	}
     }
     else {
-	$webtask->Exited(-1);
-	$aggobj->SetStatus("failed");
-	print STDERR "CreateSliver $urn: Unexpected return\n";
-	return -1;
+	my $code = 0;
+	my $errmsg;
+	
+	if (ref($response->value()) ne "ARRAY") {
+	    $code = GENIRESPONSE_ERROR;
+	    $errmsg = "Unexpected return value";
+	}
+	else {
+	    $manifest = $response->value()->[1];
+	    if (!defined($manifest)) {
+		$code = GENIRESPONSE_ERROR;
+		$errmsg = "No manifest returned";
+	    }
+	}
+	if ($code) {
+	    print STDERR "CreateSliver $urn: $errmsg\n";
+	    $webtask->Exited($code);
+	    $webtask->output($errmsg);
+	    $aggobj->SetStatus("failed");
+	    return -1;
+	}
     }
-    
-    if (defined($manifest)) {
-	$aggobj->SetStatus("provisioned");
-	$aggobj->SetManifest($manifest);
-    }
+    $aggobj->SetStatus("provisioned");
+    $aggobj->SetManifest($manifest);
     return 0;
 }
 
 sub CreateSlivers()
 {
     my ($perrmsg) = @_;
+    my @return_codes = ();
 
     $instance->SetStatus("provisioning");
     
-    my @return_codes = ();
-    if (ParRun({"maxwaittime" => 99999,
-		"maxchildren" => scalar(@aggregate_list)},
-	       \@return_codes, \&CreateSliver, @aggregate_list)) {
-	#
-	# The parent caught a signal. Leave things intact so that we can
-	# kill things cleanly later.
-	#
-	$slice->UnLock();
-	$instance->SetStatus("failed");
-	return -1;
+    # Single aggregate most of the time, no reason for ParRun.
+    if (@aggregate_list == 1) {
+	@return_codes = (CreateSliver($aggregate_list[0]));
+    }
+    else {
+	if (ParRun({"maxwaittime" => 99999,
+		    "maxchildren" => scalar(@aggregate_list)},
+		   \@return_codes, \&CreateSliver, @aggregate_list)) {
+	    #
+	    # The parent caught a signal. Leave things intact so that we can
+	    # kill things cleanly later.
+	    #
+	    $slice->UnLock();
+	    $instance->SetStatus("failed");
+	    return -1;
+	}
     }
     #
     # Check the exit codes; any failure is a total failure (for now).
@@ -1768,7 +1883,10 @@ sub fatal($) {
 	if (defined($slice));
     $instance->SetStatus("failed")
 	if (defined($instance));
-
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(-1);
+    }
     print STDERR Dumper($xmlparse)
 	if (defined($xmlparse));
 
@@ -1779,6 +1897,10 @@ sub fatal($) {
 sub UserError($) {
     my($mesg) = $_[0];
 
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(1);
+    }
     AuditAbort()
 	if (!$debug);
     print $mesg . "\n";

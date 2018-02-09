@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2017 University of Utah and the Flux Group.
+# Copyright (c) 2007-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -574,6 +574,18 @@ sub GetCertificate($)
     return $cert;
 }
 
+# Helper functions for below.
+sub ContextError()
+{
+    return GeniResponse->Create(GENIRESPONSE_ERROR(), undef,
+				"Could not generate context for RPC");
+}
+sub CredentialError()
+{
+    return GeniResponse->Create(GENIRESPONSE_ERROR(), undef,
+				"Could not generate credentials for RPC");
+}
+
 #
 # Create a dataset on the remote aggregate.
 #
@@ -584,13 +596,14 @@ sub CreateDataset($)
     my $geniuser  = $self->GetGeniUser();
     my $context   = APT_Geni::GeniContext();
     my $cert      = $self->GetCertificate();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($context) && defined($cert)));
     
     my ($credential, $speaksfor_credential) =
 	APT_Geni::GenCredentials($cert, $geniuser, ["blockstores"]);
-    return undef
+
+    return CredentialError
 	if (! (defined($speaksfor_credential) &&
 	       defined($credential)));
 
@@ -624,13 +637,13 @@ sub DeleteDataset($)
     my $geniuser  = $self->GetGeniUser();
     my $context   = APT_Geni::GeniContext();
     my $cert      = $self->GetCertificate();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($context) && defined($cert)));
 
     my ($credential, $speaksfor_credential) =
 	APT_Geni::GenCredentials($cert, $geniuser, ["blockstores"], 1);
-    return undef
+    return CredentialError()
 	if (!defined($credential));
 
     my $credentials = [$credential->asString()];
@@ -657,13 +670,13 @@ sub ModifyDataset($)
     my $geniuser  = $self->GetGeniUser();
     my $context   = APT_Geni::GeniContext();
     my $cert      = $self->GetCertificate();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($context) && defined($cert)));
 
     my ($credential, $speaksfor_credential) =
 	APT_Geni::GenCredentials($cert, $geniuser, ["blockstores"], 1);
-    return undef
+    return CredentialError()
 	if (!defined($credential));
 
     my $credentials = [$credential->asString()];
@@ -692,13 +705,13 @@ sub ExtendDataset($)
     my $geniuser  = $self->GetGeniUser();
     my $context   = APT_Geni::GeniContext();
     my $cert      = $self->GetCertificate();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($context) && defined($cert)));
 
     my ($credential, $speaksfor_credential) =
 	APT_Geni::GenCredentials($cert, $geniuser, ["blockstores"], 1);
-    return undef
+    return CredentialError()
 	if (!defined($credential));
 
     my $credentials = [$credential->asString()];
@@ -726,13 +739,13 @@ sub DescribeDataset($)
     my $geniuser  = $self->GetGeniUser();
     my $context   = APT_Geni::GeniContext();
     my $cert      = $self->GetCertificate();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($context) && defined($cert)));
     
     my ($credential, $speaksfor_credential) =
 	APT_Geni::GenCredentials($cert, $geniuser, ["blockstores"], 1);
-    return undef
+    return CredentialError()
 	if (!defined($credential));
 
     my $credentials = [$credential->asString()];
@@ -759,13 +772,13 @@ sub GetCredential($)
     my $geniuser  = $self->GetGeniUser();
     my $context   = APT_Geni::GeniContext();
     my $cert      = $self->GetCertificate();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($context) && defined($cert)));
     
     my ($credential) =
 	APT_Geni::GenAuthCredential($cert, ["blockstores"]);
-    return undef
+    return CredentialError()
 	if (!defined($credential));
 
     my $args = {
@@ -789,13 +802,13 @@ sub ApproveDataset($)
     my $geniuser  = $self->GetGeniUser();
     my $context   = APT_Geni::GeniContext();
     my $cert      = $self->GetCertificate();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($context) && defined($cert)));
     
     my ($credential) =
 	APT_Geni::GenAuthCredential($cert, ["admin"]);
-    return undef
+    return CredentialError()
 	if (!defined($credential));
 
     my $args = {

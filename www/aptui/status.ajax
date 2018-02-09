@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -207,8 +207,6 @@ function Do_TerminateInstance()
 	return;
     }
     $uuid = $instance->uuid();
-    $webtask = WebTask::CreateAnonymous();
-    $webtask_id = $webtask->task_id();
 
     if ($instance->admin_lockdown()) {
         SPITAJAX_ERROR(1, "This experiment has been locked down by an ".
@@ -217,11 +215,15 @@ function Do_TerminateInstance()
         return;
 
     }
+    $webtask = WebTask::CreateAnonymous();
+    $webtask_id = $webtask->task_id();
+
     if ($instance->user_lockdown()) {
         if (! (isset($this_user) &&
                ($instance->creator() == $this_user->uid() || ISADMIN()))) {
             SPITAJAX_ERROR(1, "Not enough permission to terminate; ".
                            "experiment is locked down.");
+            $webtask->Delete();
             return;
         }
         $override = substr($uuid, 2, 5);
@@ -240,8 +242,7 @@ function Do_TerminateInstance()
             $webtask->Refresh();
 
             if ($webtask && $webtask->exited()) {
-                SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
-                $webtask->Delete();
+                SPITAJAX_ERROR(1, $webtask->output());
             }
             else {
                 SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
@@ -258,13 +259,19 @@ function Do_TerminateInstance()
     $retval = SUEXEC("nobody", "nobody",
                      "webmanage_instance -t $webtask_id terminate $uuid",
                      SUEXEC_ACTION_IGNORE);
-
-    if ($retval == 0) {
-	SPITAJAX_RESPONSE("");
+    if ($retval) {
+        $webtask->Refresh();
+        if (!$webtask->exited() || $retval < 0) {
+            # Email sent by manage_instance in this case.
+            SPITAJAX_ERROR(-1, "Internal error terminating experiment");
+        }
+        else {
+            SPITAJAX_ERROR(1, "Unable to terminate experiment at this time: " .
+                           $webtask->output());
+        }
     }
     else {
-        SPITAJAX_ERROR(-1, "Your experiment is probably busy, ".
-                       "please try again later.");
+	SPITAJAX_RESPONSE("");
     }
     $webtask->Delete();
 }
@@ -418,23 +425,17 @@ function Do_RequestExtension()
         unlink($filename);
     }
     if ($retval != 0) {
-        if ($webtask->exited()) {
-            SPITAJAX_ERROR($webtask->exitcode(), $webtask->TaskValue("output"));
-
-            #
-            # This is an important error, tell tbops.
-            #
-            if ($webtask->exitcode() == GENIRESPONSE_REFUSED) {
-                SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-            }
-        }
-        elseif ($retval < 0) {
-            SPITAJAX_ERROR($retval, "Internal error, cannot proceed.");
-            # Notify tbops.
+        if (!$webtask->exited() || $retval < 0) {
             SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error extending experiment");
         }
         else {
-            SPITAJAX_ERROR($retval, $suexec_output);
+            if ($webtask->exitcode() == GENIRESPONSE_REFUSED) {
+                # This is an important error, tell tbops.
+                SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            }
+            # Need to pass exitcode through on this one.
+            SPITAJAX_ERROR($webtask->exitcode(), $webtask->output());
         }
         $webtask->Delete();
         goto bad;
@@ -520,26 +521,20 @@ function Do_DenyOrMoreinfo($action)
         unlink($filename);
     }
     if ($retval != 0) {
-        if ($webtask->exited()) {
-            SPITAJAX_ERROR($webtask->exitcode(), $webtask->TaskValue("output"));
-
-            #
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error");
+        }
+        else {
             # This is an important error, tell tbops.
-            #
             if ($webtask->exitcode() == GENIRESPONSE_REFUSED) {
                 SUEXECERROR(SUEXEC_ACTION_CONTINUE);
             }
-        }
-        elseif ($retval < 0) {
-            SPITAJAX_ERROR($retval, "Internal error, cannot proceed.");
-            # Notify tbops.
-            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-        }
-        else {
-            SPITAJAX_ERROR($retval, $suexec_output);
+            # Need to pass exitcode through on this one.
+            SPITAJAX_ERROR($webtask->exitcode(), $webtask->output());
         }
         $webtask->Delete();
-        goto bad;
+        return;
     }
     $webtask->Delete();
     if ($lockout) {
@@ -604,34 +599,40 @@ function Do_ConsoleURL()
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
 
-    if ($retval == 0) {
-        #
-        # If the user has 'user' privs in the current project/group
-        # then we do not return the root password. They can still look
-        # at the console though.
-        #
-        $group = $instance->Group();
-        $trust = $group->UserTrust($this_user);
-        
-        $taskdata = $webtask->TaskData();
-        $blob = array();
-        $blob["url"] = $taskdata["url"];
-        if (isset($taskdata["password"]) &&
-            TBMinTrust($trust, $TBDB_TRUST_LOCALROOT)) {
-            $blob["password"] = $taskdata["password"];
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error getting console info");
         }
-        if (isset($taskdata["logurl"])) {
-            $blob["logurl"] = $taskdata["logurl"];
+        else {
+            # JS needs this exitcode.
+            SPITAJAX_ERROR($webtask->exitcode(),
+                           "Could not get console info: ". $webtask->output());
         }
-	SPITAJAX_RESPONSE($blob);
-	$webtask->Delete();
+        $webtask->Delete();
 	return;
     }
-    elseif ($retval < 0) {
-        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+    #
+    # If the user has 'user' privs in the current project/group
+    # then we do not return the root password. They can still look
+    # at the console though.
+    #
+    $group = $instance->Group();
+    $trust = $group->UserTrust($this_user);
+        
+    $taskdata = $webtask->TaskData();
+    $blob = array();
+    $blob["url"] = $taskdata["url"];
+    if (isset($taskdata["password"]) &&
+        TBMinTrust($trust, $TBDB_TRUST_LOCALROOT)) {
+        $blob["password"] = $taskdata["password"];
     }
-    SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
+    if (isset($taskdata["logurl"])) {
+        $blob["logurl"] = $taskdata["logurl"];
+    }
+    SPITAJAX_RESPONSE($blob);
     $webtask->Delete();
+    return;
 }
 
 #
@@ -735,13 +736,13 @@ function Do_Snapshot()
     $webtask->Refresh();
 
     if ($retval != 0) {
-	if ($retval < 0) {
-	    SPITAJAX_ERROR(-11, "Internal error, cannot proceed.");
-	    # Notify tbops.
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-	}
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-11, "Internal error creating snapshot");
+        }
         else {
-            SPITAJAX_ERROR($retval, $webtask->TaskValue("output"));
+            SPITAJAX_ERROR(1, "Could not create snapshot: ".
+                           $webtask->output());
         }
         $webtask->Delete();
 	return;
@@ -849,13 +850,12 @@ function Do_Refresh()
     $webtask->Refresh();
 
     if ($retval != 0) {
-	if ($retval < 0) {
-	    SPITAJAX_ERROR(-11, "Internal error, cannot proceed.");
-	    # Notify tbops.
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-	}
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-11, "Internal error refreshing status");
+        }
         else {
-            SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
+            SPITAJAX_ERROR(1, "Could not refresh status: ". $webtask->output());
         }
         $webtask->Delete();
 	return;
@@ -888,13 +888,12 @@ function Do_ReloadTopology()
     $webtask->Refresh();
 
     if ($retval != 0) {
-	if ($retval < 0) {
-	    SPITAJAX_ERROR(-11, "Internal error, cannot proceed.");
-	    # Notify tbops.
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-	}
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-11, "Internal error getting manifests");
+        }
         else {
-            SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
+            SPITAJAX_ERROR(1, $webtask->output());
         }
         $webtask->Delete();
 	return;
@@ -963,13 +962,12 @@ function Do_RebootOrReload($which)
     $webtask->Refresh();
 
     if ($retval != 0) {
-	if ($retval < 0) {
-	    SPITAJAX_ERROR(-11, "Internal error, cannot proceed.");
-	    # Notify tbops.
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-	}
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error");
+        }
         else {
-            SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
+            SPITAJAX_ERROR(1, $webtask->output());
         }
         $webtask->Delete();
 	return;
@@ -1036,13 +1034,12 @@ function Do_DeleteNodes()
     $webtask->Refresh();
 
     if ($retval != 0) {
-	if ($retval < 0) {
-	    SPITAJAX_ERROR(-11, "Internal error, cannot proceed.");
-	    # Notify tbops.
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-	}
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error deleting nodes");
+        }
         else {
-            SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
+            SPITAJAX_ERROR(1, $webtask->output());
         }
         $webtask->Delete();
 	return;
@@ -1177,6 +1174,28 @@ function Do_Lockout()
 }
 
 #
+# Ignore a failure.
+#
+function Do_IgnoreFailure()
+{
+    global $this_user;
+    global $ajax_args, $instance;
+
+    if (StatusSetupAjax(1)) {
+	return;
+    }
+    $uuid = $instance->uuid();
+    if (!DBQueryWarn("update apt_instances set ".
+                     "  status='ready',status_timestamp=now() ".
+                     "where uuid='$uuid'")) {
+	SPITAJAX_ERROR(1, "Internal Error");
+	return -1;
+    }
+    SPITAJAX_RESPONSE("Success");
+    return 0;
+}
+
+#
 # Set or clear the lockdown flag
 #
 function Do_Lockdown()
@@ -1243,13 +1262,13 @@ function Do_Lockdown()
     $webtask->Refresh();
 
     if ($retval != 0) {
-	if ($retval < 0) {
-	    SPITAJAX_ERROR(-11, "Internal error, cannot proceed.");
-	    # Notify tbops.
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-	}
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error changing lockdown");
+        }
         else {
-            SPITAJAX_ERROR($webtask->exitcode(), $webtask->TaskValue("output"));
+            # Need to pass exitcode through.
+            SPITAJAX_ERROR($webtask->exitcode(), $webtask->output());
         }
         $webtask->Delete();
 	return;
@@ -1326,13 +1345,12 @@ function Do_Quarantine()
     $webtask->Refresh();
 
     if ($retval != 0) {
-	if ($retval < 0) {
-	    SPITAJAX_ERROR(-11, "Internal error, cannot proceed.");
-	    # Notify tbops.
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-	}
-	else {
-	    SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error changing quarantine");
+        }
+        else {
+            SPITAJAX_ERROR(1, $webtask->output());
         }
         $webtask->Delete();
 	return;
@@ -1378,13 +1396,13 @@ function Do_Linktest()
         $webtask->Refresh();
 
         if ($retval != 0) {
-            if ($retval < 0) {
-                SPITAJAX_ERROR(-11, "Internal error, cannot proceed.");
-                # Notify tbops.
+            if (!$webtask->exited() || $retval < 0) {
                 SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+                SPITAJAX_ERROR(-1, "Internal error starting linktest");
             }
             else {
-                SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
+                SPITAJAX_ERROR(1, "Could not start linktest: ".
+                               $webtask->output());
             }
             $webtask->Delete();
             return;
@@ -1425,13 +1443,13 @@ function Do_Linktest()
         $webtask->Refresh();
 
         if ($retval != 0) {
-            if ($retval < 0) {
-                SPITAJAX_ERROR(-11, "Internal error, cannot proceed.");
-                # Notify tbops.
+            if (!$webtask->exited() || $retval < 0) {
                 SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+                SPITAJAX_ERROR(-1, "Internal error stopping  linktest");
             }
             else {
-                SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
+                SPITAJAX_ERROR(1, "Could not stop linktest: ".
+                               $webtask->output());
             }
             $webtask->Delete();
             return;
@@ -1547,21 +1565,16 @@ function Do_Utilization()
     $webtask->Refresh();
 
     if ($retval != 0) {
-        if ($webtask->exited()) {
-            SPITAJAX_ERROR($webtask->exitcode(), $webtask->TaskValue("output"));
-        }
-        elseif ($retval < 0) {
-            SPITAJAX_ERROR($retval, "Internal error, cannot proceed.");
-            # Notify tbops.
+        if (!$webtask->exited() || $retval < 0) {
             SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error getting utilization");
         }
         else {
-            SPITAJAX_ERROR($retval, $suexec_output);
+            SPITAJAX_ERROR($webtask->exitcode(), $webtask->output());
         }
         $webtask->Delete();
         return;
     }
-    
     $webtask->Delete();
     $blob = array();
     # Look at per sliver.
@@ -1604,16 +1617,12 @@ function Do_IdleData()
     $webtask->Refresh();
 
     if ($retval != 0) {
-        if ($webtask->exited()) {
-            SPITAJAX_ERROR($webtask->exitcode(), $webtask->TaskValue("output"));
-        }
-        elseif ($retval < 0) {
-            SPITAJAX_ERROR($retval, "Internal error, cannot proceed.");
-            # Notify tbops.
+        if (!$webtask->exited() || $retval < 0) {
             SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error getting utilization");
         }
         else {
-            SPITAJAX_ERROR($retval, $suexec_output);
+            SPITAJAX_ERROR($webtask->exitcode(), $webtask->output());
         }
         $webtask->Delete();
         return;
@@ -1701,16 +1710,14 @@ function Do_MaxExtension()
     $webtask->Refresh();
 
     if ($retval != 0) {
-        if ($webtask->exited()) {
-            SPITAJAX_ERROR($webtask->exitcode(), $webtask->TaskValue("output"));
-        }
-        elseif ($retval < 0) {
-            SPITAJAX_ERROR($retval, "Internal error, cannot proceed.");
-            # Notify tbops.
+        if (!$webtask->exited() || $retval < 0) {
             SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Unable to extend your experiment at this ".
+                           "time, please try again later");
         }
         else {
-            SPITAJAX_ERROR($retval, $suexec_output);
+            SPITAJAX_ERROR(1, "Unable to extend your experiment at this ".
+                           "time: ". $webtask->output());
         }
         $webtask->Delete();
         return;

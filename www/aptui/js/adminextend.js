@@ -31,12 +31,11 @@ $(function ()
 	secondrowTemplate = _.template(secondrowString);
 	extensionsTemplate = _.template(historyString);
 
+	LoadFirstRow();
 	// Need to serialize this stuff cause of locking in the backend.
-	LoadFirstRow(function () {
-	    LoadUtilization(function () {
-		LoadIdleData(function () {
-		    LoadOpenStack();
-		});
+	LoadUtilization(function () {
+	    LoadIdleData(function () {
+		LoadOpenStack();
 	    });
 	});
 
@@ -322,6 +321,10 @@ $(function ()
 	    }
 	    if (json.code) {
 		console.info("Could not load utilization");
+		$("#thirdrow .thirdrow-error .well")
+		    .html("Could not get summary/utilization data: " +
+			  json.value);
+		$("#thirdrow .thirdrow-error").removeClass("hidden");
 		return;
 	    }
 	    var html = utilizationTemplate({"utilization" : json.value});
@@ -651,8 +654,15 @@ $(function ()
     {
 	console.info("LoadIdleData", continuation);
 
-	var callback = function (gotdata) {
+	var callback = function (status, json) {
 	    console.info("LoadIdleData callback");
+	    if (status < 0) {
+		// Error, show something that indicates we could not get
+		// the idle data.
+		$('#idledata-error').html("Could not get graph data: " +
+					  json.value);
+		$('#idledata-error').removeClass("hidden");
+	    }
 	    if (continuation !== undefined) {
 		continuation();
 	    }
