@@ -16,7 +16,7 @@ yum -y install rpmdevtools glibc-static which gcc make
 cd /tmp
 if [ -z "$RUNITSRC" ]; then
     yum -y install git
-    git clone https://gitlab.flux.utah.edu/emulab/runit runit
+    git clone https://gitlab.flux.utah.edu/emulab/runit.git runit
 else
     mkdir -p runit
     cp -pR $RUNITSRC/* runit

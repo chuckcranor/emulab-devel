@@ -4,10 +4,13 @@ set -x
 
 export CENTOS_MIRROR=http://mirror.chpc.utah.edu/pub/centos/
 
-if [ -n "$UBUNTU_MIRROR" -a ! -f /tmp/sources.list.backup ]; then
-    cp -p /etc/apt/sources.list /tmp/sources.list.backup
-    sed -i -r -e "s|http://.*.ubuntu.com/ubuntu|$UBUNTU_MIRROR|" \
-	/etc/apt/sources.list
+if [ -n "$CENTOS_MIRROR" -a ! -d /tmp/yum.repos.d ]; then
+    cp -pR /etc/yum.repos.d /tmp/
+    repofiles=`ls -1 /etc/yum.repos.d | xargs`
+    for f in $repofiles ; do
+	sed -i -e 's/^\(mirrorlist.*\)$/#\1/' /etc/yum.repos.d/$f
+	sed -i -e "s|^\(.*baseurl.*\)\(\$rel.*\)$|baseurl=$CENTOS_MIRROR\/\2|" /etc/yum.repos.d/$f
+    done
 fi
 
 [ ! -f /tmp/yum-updated ] && yum updateinfo && touch /tmp/yum-updated

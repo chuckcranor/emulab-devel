@@ -3,4 +3,4 @@
 set -x
 
 yum install -y \
-    iproute brctl vlan less
+    iproute bridge-utils less

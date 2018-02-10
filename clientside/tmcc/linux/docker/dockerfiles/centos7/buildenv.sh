@@ -20,14 +20,14 @@ if [ -z "$EMULABSRC" ]; then
     echo "WARNING: missing EMULABSRC environment variable pointer to src; cloning!"
     export EMULABSRC=/tmp/emulab-devel
     cd /tmp
-    git clone https://gitlab.flux.utah.edu/emulab/emulab-devel $EMULABSRC
+    git clone https://gitlab.flux.utah.edu/emulab/emulab-devel.git $EMULABSRC
     [ ! $? -eq 0 ] && exit 1
 fi
 if [ -z "$PUBSUBSRC" ]; then
     echo "WARNING: missing PUBSUBSRC environment variable pointer to src; cloning!"
     export PUBSUBSRC=/tmp/pubsub
     cd /tmp
-    git clone https://gitlab.flux.utah.edu/emulab/pubsub $PUBSUBSRC
+    git clone https://gitlab.flux.utah.edu/emulab/pubsub.git $PUBSUBSRC
     [ ! $? -eq 0 ] && exit 1
 fi
 
@@ -41,7 +41,7 @@ cp -pRv $PUBSUBSRC/* /tmp/pubsub.obj
 cd /tmp
 rm -rf /tmp/pubsub.obj
 
-unset CFLAGS
+unset CXXFLAGS
 
 #
 # If we installed to a DESTDIR, well, we're going to need pubsub dropped

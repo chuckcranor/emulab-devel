@@ -2,8 +2,8 @@
 
 set -x
 
-if [ -f /tmp/sources.list.backup ]; then
-    mv /tmp/sources.list.backup /etc/apt/sources.list
+if [ -d /tmp/yum.repos.d ]; then
+    cp -p /tmp/yum.repos.d/* /etc/yum.repos.d
 fi
 
 yum clean all
