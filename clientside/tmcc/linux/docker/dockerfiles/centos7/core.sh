@@ -4,7 +4,7 @@ set -x
 
 yum install -y \
     ca-certificates sudo python wget patch nano file \
-    perl perl-libwww-perl psmisc tcsh zsh ksh
+    perl perl-libwww-perl psmisc tcsh zsh ksh util-linux
 
 #
 # Create these traditional NFS mountpoints now.  Scripts get unhappy
