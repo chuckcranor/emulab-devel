@@ -504,7 +504,6 @@ $(function ()
 		    status_message = "Something went wrong!";
 		    $('#error_panel_text').text(json.value.reason);
 		    $('#error_panel').removeClass("hidden");
-		    $('#ignore-failure').removeClass("hidden");
 		}
 		else {
 		    status_message = "Something went wrong, sorry! " +
@@ -514,6 +513,10 @@ $(function ()
 		    json.value.code == GENIRESPONSE_INSUFFICIENT_NODES) {
 		    $('#error_panel .resource-error').removeClass("hidden");
 		}
+		if (isadmin) {
+		    $('#ignore-failure').removeClass("hidden");
+		}
+		
 		status_html = "<font color=red>failed</font>";
 		ProgressBarUpdate();
 		DisableButtons();
