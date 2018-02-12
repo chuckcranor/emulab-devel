@@ -424,18 +424,16 @@ if ($update && $newhash ne $image->hash()) {
 	    }
 	    $image = $clone;
 
-	    if (!$getimage) {
-		#
-		# So, here is a bit of a quandry. We want this new version
-		# of the image to be the released version (for mapping),
-		# even though we do not have image file yet. So we will
-		# force the image to be released even though it is not
-		# "ready" yet.
-		#
-		$image->MarkReady();
-		$image->Release();
-		$image->ClearReady();
-	    }
+	    #
+	    # So, here is a bit of a quandry. We want this new version
+	    # of the image to be the released version (for mapping),
+	    # even though we do not have image file yet. So we will
+	    # force the image to be released even though it is not
+	    # "ready" yet.
+	    #
+	    $image->MarkReady();
+	    $image->Release();
+	    $image->ClearReady();
 	}
     }
     # Update these in the descriptor.
