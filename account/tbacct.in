@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -721,20 +721,18 @@ sub UpdatePassword()
 	if ($isnonlocal);
 
     # Send auditing email before next step in case of failure.
-    SENDMAIL("$fullname <$user_email>",
+    $target_user->SendEmail(
 	     "Password for '$user' has been changed",
 	     "\n".
-	     "Emulab password for '$user' has been changed by " .
+	     "Password for '$user' has been changed by " .
 	            $this_user->uid() ."\n".
 	     "\n".
 	     "Name:              " . $target_user->name()  . "\n".
 	     "IDX:               " . $target_user->uid_idx()  . "\n".
 	     "\n".
-	     "If this is unexpected, please contact Testbed Operations\n".
-	     "($TBOPS) immediately!\n".
-	     "\n",
-	     "$TBOPS",
-	     "Bcc: $TBAUDIT");
+	     "If this is unexpected, please contact support ".
+	     "(" . $target_user->OpsEmailAddress() . ") immediately!\n".
+	     "\n");
 
     # Go no further if a webonly user.
     return 0
