@@ -892,9 +892,11 @@ sub rootPreConfig($)
 	    mysystem("mdadm --detail --scan | sed -e 's/spares=1//' ".
 		     ">>/etc/mdadm/mdadm.conf");
 	    $blockdevstr = $rdev;
+	    # XXX wait for the RAID device to come ready, ow pvcreate will fail
+	    sleep(5);
 	}
 
-	mysystem("pvcreate $blockdevstr");
+	mysystem("pvcreate -f $blockdevstr");
 	mysystem("vgcreate $VGNAME $blockdevstr");
 
 	my $size = lvmVGSize($VGNAME);
