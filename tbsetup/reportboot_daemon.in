@@ -322,8 +322,18 @@ sub findnode($$)
 
 	# XXX this should never happen since dhcpd looked up the IP by mac.
 	if ($iface->mac() ne $mac) {
-	    logit("$IP: came in on $mac but expected " . $iface->mac());
-	    return undef;
+	    #
+	    # XXX okay, one way it might happen is if someone changes the
+	    # DB behind our back (the Interface module caches DB info).
+	    # So we retry once after flushing the cache.
+	    #
+	    $iface->Flush();
+	    $iface = Interface->LookupByIP($IP);
+	    if (!$iface || $iface->mac() ne $mac) {
+		logit("$IP: came in on $mac but expected " . $iface->mac())
+		    if ($iface);
+		return undef;
+	    }
 	}
 
 	return $iface->node_id();
