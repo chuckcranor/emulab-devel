@@ -2722,9 +2722,8 @@ sub StartMonitorInternal(;$)
 	    # going to ready, if we failed initially, the user can get
 	    # themselves out of failure mode for the instance, say by
 	    # reboot or reload.
-	    $sliver->SetStatus("ready")
-		if ($sliver->status() eq "failed");
-	    
+	    $sliver->SetStatus("ready");
+
 	    return $response
 		if (!$executing || !$waitforstartup);
 	}
@@ -2772,6 +2771,8 @@ sub StartMonitorInternal(;$)
 	foreach my $aggregate (@aggregates) {
 	    my $response = shift(@{$response});
 	    my $code = $response->code();
+	    # Updated in the forked child, need to refresh.
+	    $aggregate->Refresh();
 
 	    next
 		if ($code == GENIRESPONSE_SUCCESS);
@@ -4260,9 +4261,10 @@ sub CallMethodOnAggregates($$$@)
 	my $response;
 
 	if (0) {
+	    # Need unblessed ref to store into webtask.
 	    $response =
-		GeniResponse->new(GENIRESPONSE_SERVER_UNAVAILABLE,
-				  undef, "Testing mode");
+		GeniResponse->Create(GENIRESPONSE_SERVER_UNAVAILABLE,
+				     undef, "Testing mode");
 	    $webtask->response($response);
 	    return -1;
 	}
@@ -4273,9 +4275,10 @@ sub CallMethodOnAggregates($$$@)
 	# the clusters that are up (say, terminate). 
 	#
 	if ($aggregate->CheckStatus(\$errmsg)) {
+	    # Need unblessed ref to store into webtask.
 	    $response =
-		GeniResponse->new(GENIRESPONSE_SERVER_UNAVAILABLE,
-				  undef, $errmsg);
+		GeniResponse->Create(GENIRESPONSE_SERVER_UNAVAILABLE,
+				     undef, $errmsg);
 	    $webtask->response($response);
 	    return -1;
 	}
@@ -4297,6 +4300,8 @@ sub CallMethodOnAggregates($$$@)
 				      "$sliver");
 		last;
 	    }
+	    print Dumper($response);
+	    
 	    # We can keep trying for these, but not an RPC error.
 	    last
 		if (! ($response->code() == GENIRESPONSE_BUSY ||
@@ -4312,7 +4317,8 @@ sub CallMethodOnAggregates($$$@)
 		sleep(15);
 	    }
 	}
-	$webtask->response($response);
+	# Need unblessed ref to store into webtask.
+	$webtask->response($response->Unbless());
 	return ($response->code() == GENIRESPONSE_SUCCESS ? 0 : -1);
     };
     my @return_codes  = ();
@@ -4329,8 +4335,10 @@ sub CallMethodOnAggregates($$$@)
 	@return_codes = (&$coderef([$aggregate, $method, $webtask]));
     }
     else {
-	my @tmp = map { [$_, $method, $webtask] } @aggregates;
-	    
+	my @tmp = ();
+	for (my $i = 0; $i < scalar(@aggregates); $i++) {
+	    push(@tmp, [$aggregates[$i], $method, $webtasks[$i]]);
+	}
 	if (ParRun({"maxwaittime" => 99999,
 		    "maxchildren" => scalar(@aggregates)},
 		   \@return_codes, $coderef, @tmp)) {
@@ -4345,10 +4353,12 @@ sub CallMethodOnAggregates($$$@)
     #
     foreach my $agg (@aggregates) {
 	my $webtask = shift(@webtasks);
+
+	print "$agg\n";
 	
 	# No need to refresh if we did not use ParRun above.
 	$webtask->Refresh() if (@aggregates > 1);
-	push(@return_values, $webtask->response());
+	push(@return_values, GeniResponse->Bless($webtask->response()));
     }
     $$prval = \@return_values;
     map { $_->Delete(); } @webtasks;

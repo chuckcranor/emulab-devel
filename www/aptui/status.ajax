@@ -192,6 +192,9 @@ function Do_GetInstanceStatus()
             $blob["reason"] = "";
         }
         $blob["reason"] .= htmlentities($webtask->TaskValue("output"));
+        $blob["canclearerror"]
+            = ($webtask->exitcode() ==
+               GENIRESPONSE_SETUPFAILURE_BOOTFAILED ? 1 : 0);
     }
     SPITAJAX_RESPONSE($blob);
 }

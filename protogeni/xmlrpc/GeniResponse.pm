@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -53,7 +53,15 @@ use vars qw(@ISA @EXPORT);
 	      GENIRESPONSE_NOSPACE
 	      XMLRPC_PARSE_ERROR XMLRPC_SERVER_ERROR XMLRPC_APPLICATION_ERROR
 	      XMLRPC_NO_SUCH_METHOD
-	      XMLRPC_SYSTEM_ERROR XMLRPC_TRANSPORT_ERROR);
+	      XMLRPC_SYSTEM_ERROR XMLRPC_TRANSPORT_ERROR
+	      HTTP_INTERNAL_SERVER_ERROR HTTP_SERVICE_UNAVAILABLE
+              GENIRESPONSE_NETWORK_ERROR GENIRESPONSE_NETWORK_ERROR_TIMEDOUT
+              GENIRESPONSE_NETWORK_ERROR_NOCONNECT
+	      GENIRESPONSE_SETUPFAILURE GENIRESPONSE_SETUPFAILURE_OSSETUP
+              GENIRESPONSE_SETUPFAILURE_NETWORK
+	      GENIRESPONSE_SETUPFAILURE_BOOTFAILED
+	      GENIRESPONSE_SETUPFAILURE_EVENTSYS
+	      GENIRESPONSE_SETUPFAILURE_MAXERROR);
 
 use overload ('""' => 'Stringify');
 my $current_response = undef;
@@ -85,11 +93,23 @@ sub GENIRESPONSE_INSUFFICIENT_BANDWIDTH()  {25; }
 sub GENIRESPONSE_INSUFFICIENT_NODES()      {26; }
 sub GENIRESPONSE_INSUFFICIENT_MEMORY()     {27; }
 sub GENIRESPONSE_NO_MAPPING()              {28; }
+sub GENIRESPONSE_NETWORK_ERROR()           {35; }
+sub GENIRESPONSE_NETWORK_ERROR_TIMEDOUT()  {1;}
+sub GENIRESPONSE_NETWORK_ERROR_NOCONNECT() {2;}
 sub GENIRESPONSE_NOT_IMPLEMENTED()         {100; }
+# These are boot failure indicators.
+sub GENIRESPONSE_SETUPFAILURE()            {150; }
+sub GENIRESPONSE_SETUPFAILURE_BOOTFAILED() {151; }
+sub GENIRESPONSE_SETUPFAILURE_OSSETUP()    {152; }
+sub GENIRESPONSE_SETUPFAILURE_NETWORK()    {153; }
+sub GENIRESPONSE_SETUPFAILURE_EVENTSYS()   {154; }
+sub GENIRESPONSE_SETUPFAILURE_MAXERROR()   {170; }
+
 # Yes, an odd place for this but I need it defined someplace.
 sub GENIRESPONSE_STITCHER_ERROR()          {101; }
-# This is HTTP_SERVICE_UNAVAILABLE
-sub GENIRESPONSE_SERVER_UNAVAILABLE() {503;}
+sub HTTP_INTERNAL_SERVER_ERROR()           {500; }
+sub HTTP_SERVICE_UNAVAILABLE()             {503; }
+sub GENIRESPONSE_SERVER_UNAVAILABLE()      {HTTP_SERVICE_UNAVAILABLE();}
 sub GENIRESPONSE()		  { return $current_response; }
 
 my @GENIRESPONSE_STRINGS =
@@ -102,7 +122,7 @@ my @GENIRESPONSE_STRINGS =
      "Server Error",
      "Too Big",
      "Operation Refused",
-     "Operation Times Out",
+     "Operation Timed Out",
      "Database Error",
      "RPC Error",
      "Unavailable",
@@ -123,6 +143,13 @@ my @GENIRESPONSE_STRINGS =
      "Insufficient Nodes",
      "Insufficient Memory",
      "No Mapping Possible",
+     "Error 29",
+     "Error 30",
+     "Error 31",
+     "Error 32",
+     "Error 33",
+     "Error 34",
+     "Server timed out or could not be reached",
     );
 $GENIRESPONSE_STRINGS[GENIRESPONSE_NOT_IMPLEMENTED] = "Not Implemented";
 sub GENIRESPONSE_STRING($)
@@ -140,8 +167,8 @@ sub GENIRESPONSE_STRING($)
 #
 sub XMLRPC_PARSE_ERROR()	{ -32700; }
 sub XMLRPC_SERVER_ERROR()       { -32600; }
+sub XMLRPC_NO_SUCH_METHOD()     { -32601; }
 sub XMLRPC_APPLICATION_ERROR()  { -32500; }
-sub   XMLRPC_NO_SUCH_METHOD()   { XMLRPC_APPLICATION_ERROR() + 3; }
 sub XMLRPC_SYSTEM_ERROR()       { -32400; }
 sub XMLRPC_TRANSPORT_ERROR()    { -32300; }
 
@@ -204,20 +231,60 @@ sub Create($$;$$)
     return $self;
 }
 
+#
+# Convert hash to a blessed object.
+#
+sub Bless($$)
+{
+    my ($class,$ref) = @_;
+    bless($ref, $class);
+    return $ref;
+}
+sub Unbless($)
+{
+    my ($ref) = @_;
+    return GeniResponse->Create($ref->code(), $ref->value(), $ref->output());
+}
+
 # accessors
 sub field($$)           { return ($_[0]->{$_[1]}); }
-sub code($)		{ return field($_[0], "code"); }
-sub value($)		{ return field($_[0], "value"); }
 # This is very optional.
 sub logurl($) {
     return (exists($_[0]->{"logurl"}) ? $_[0]->{"logurl"} : undef);
+}
+sub code($;$)
+{
+    my ($self,$code) = @_;
+    if (defined($code)) {
+	$self->{'code'} = $code;
+    }
+    return $self->{'code'};
+}
+sub value($;$)
+{
+    my ($self,$value) = @_;
+    if (defined($value)) {
+	$self->{'value'} = $value;
+    }
+    return $self->{'value'};
 }
 sub output($;$) {
     my ($self,$string) = @_;
     if (defined($string)) {
 	$self->{'output'} = $string;
     }
-    return field($_[0], "output");
+    return $self->{'output'};
+}
+sub error($)
+{
+    my ($self) = @_;
+    my $output = $self->output();
+
+    return $output
+	if (defined($output) && $output ne "");
+
+    # Generic error message.
+    return GENIRESPONSE_STRING($self->code);
 }
 
 # Check for response object. Very bad, but the XML encoder does not

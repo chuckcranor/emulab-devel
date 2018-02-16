@@ -426,6 +426,9 @@ sub CreateSliver($)
     my $async        = $argref->{'asyncmode'} || 0;
     my $mypid        = $PID;
     my $cachedebug   = 0;
+    my $rspec;
+    my $response;
+    my $retval;
     require Node;
     require Experiment;
     require libtestbed;
@@ -448,6 +451,12 @@ sub CreateSliver($)
 	if (GeniResponse::IsResponse($credential));
 
     main::AddLogfileMetaData("slice_urn", $slice_urn);
+
+    my $user = GeniCM::CreateUserFromCertificate($credential);
+    if (GeniResponse::IsResponse($user)) {
+	print STDERR "Could not create geni user for $credential\n";
+	return $user;
+    }
     
     #
     # In this implementation, the user must provide a slice credential,
@@ -480,12 +489,6 @@ sub CreateSliver($)
 		return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 					    "Slice certificate mismatch");
 	    }
-	    my $user =
-		GeniCM::CreateUserFromCertificate($credential);
-	    if (GeniResponse::IsResponse($user)) {	    
-		$slice->UnLock();
-		return $user;
-	    }
 	    if ($slice->ConvertPlaceholder($user) != 0) {
 		$slice->UnLock();
 		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
@@ -498,40 +501,76 @@ sub CreateSliver($)
 					"Must delete existing slice first");
 	}
     }
-    my $rspec = GeniCM::GetTicketAux({"credential" => $credential,
-				      "rspecstr"   => $rspecstr,
-				      "isupdate"   => 0,
-				      "impotent"   => $impotent,
-				      "v2"         => 1,
-				      "level"      => 0,
-				      "usetracker" => $usetracker,
-				      "ticket"     => undef,
-				      "speaksfor"  => $speaksfor,
-				      "morecreds"  => \@morecreds,
-				      "async"      => $async});
+    else {
+	#
+	# Create the slice here so we can lock it for the duration.
+	#
+	$slice = GeniCM::CreateSliceFromCertificate($credential, $user);
+	return $slice
+	    if (GeniResponse::IsResponse($slice));
+    }
+    main::AddLogfileMetaDataFromSlice($slice);
+    
+    #
+    # Just in case a SliceStatus() snuck in ...
+    #
+    if ($slice->WaitForLock(10) != 0) {
+	print STDERR "CreateSliver: Could not lock $slice\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Internal Error locking slice");
+    }
+    eval {$rspec = GeniCM::GetTicketAux({"credential" => $credential,
+					 "rspecstr"   => $rspecstr,
+					 "isupdate"   => 0,
+					 "impotent"   => $impotent,
+					 "v2"         => 1,
+					 "level"      => 0,
+					 "usetracker" => $usetracker,
+					 "ticket"     => undef,
+					 "speaksfor"  => $speaksfor,
+					 "morecreds"  => \@morecreds,
+					 "async"      => $async,
+					 "slice"      => $slice}); };
+    if ($@) {
+	# Cons up a response for the check below.
+	$rspec = GeniResponse->Create(GENIRESPONSE_SERVERERROR, undef,
+				      "Internal Error: $@");
+	if ($async) {
+	    $slice->SetAsyncError($rspec);
+	}
+    }
+
+    #
+    # Slice is returned locked, but if we got an error and are going to
+    # give up, then be sure to unlock it so we can kill it.
+    #
     if ($async) {
 	if ($PID == $mypid) {
-	    # Did not fork or the parent, so we just return the response.
-	    return $rspec
-		if (GeniResponse::IsResponse($rspec));
+	    # Did not fork or we are the parent, so we just return the response.
+	    if (GeniResponse::IsResponse($rspec)) {
+		$slice->UnLock();
+		return $rspec;
+	    }
 	}
 	else {
 	    # Forked, return status code only for failure, otherwise
 	    # we keep on going.
-	    return $rspec->{'code'}
-		if (GeniResponse::IsError($rspec));
+	    if (GeniResponse::IsError($rspec)) {
+		$slice->UnLock();
+		return $rspec->{'code'};
+	    }
 	}
     }
     else {
-	return $rspec
-	    if (GeniResponse::IsResponse($rspec));
+	if (GeniResponse::IsResponse($rspec)) {
+	    #
+	    # Depending on how this failed, we might not have a slice
+	    # any more. But okay to call UnLock() on it, harmless.
+	    #
+	    $slice->UnLock();
+	    return $rspec;
+	}
     }
-    $slice = GeniSlice->Lookup($credential->target_urn());
-    if (!defined($slice)) {
-	print STDERR "CreateSliver: Could not find slice for $credential\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,"Internal Error");
-    }
-    main::AddLogfileMetaDataFromSlice($slice);
 
     #
     # If we got a cert/key, record them for the slice. This is a
@@ -553,8 +592,22 @@ sub CreateSliver($)
 	emutil::DumpCaches();
     }
 
-    my $response = GeniCM::SliverWorkAux($credential, $rspec,
-					 $keys, 0, $impotent, 1, 0, $speaksfor);
+    eval { $response =
+	       GeniCM::SliverWorkAux({"credential"  => $credential,
+				      "object"      => $rspec,
+				      "keys"        => $keys,
+				      "isupdate"    => 0,
+				      "impotent"    => $impotent,
+				      "v2"          => 1,
+				      "level"       => 0,
+				      "speaksfor"   => $speaksfor,
+				      # Currently locked, leave it locked.
+				      "nolock"      => 1}); };
+    if ($@) {
+	# Cons up a response for the check below.
+	$response = GeniResponse->Create(GENIRESPONSE_SERVERERROR, undef,
+					 "Internal Error: $@");
+    }
 
     if (GeniResponse::IsError($response)) {
 	#
@@ -563,13 +616,12 @@ sub CreateSliver($)
 	# up by the daemon. This is mostly cause I am reaching into
 	# the V1 code, and its messy.
 	#
-	$slice = GeniSlice->Lookup($credential->target_urn());
-	if (defined($slice)) {
-	    if ($slice->WaitForLock(30) != 0) {
-		print STDERR
-		    "CreateSliver: Could not lock $slice before delete\n";
-		return $response;
-	    }
+	my $tmp = GeniSlice->Lookup($credential->target_urn());
+	if (defined($tmp)) {
+	    #
+	    # If SliverWork() killed the slice, nothing more to do.
+	    # Otherwise, it is still locked.
+	    #
 	    # In async mode store off error info.
 	    if ($async) {
 		$slice->SetAsyncError($response);
@@ -584,21 +636,17 @@ sub CreateSliver($)
 	}
 	return $response;
     }
+    #
+    # Slice is still locked.
+    #
     my ($sliver_credential) = @{ $response->{'value'} };
 
-    #
-    # Leave the slice intact on error, so we can go look at it. 
-    #
-    if ($slice->WaitForLock(30) != 0) {
-	print STDERR "CreateSliver: Could not lock $slice before start\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "Internal Error");
-    }
+    # This should never happen
     $aggregate = GeniAggregate->SliceAggregate($slice);
     if (!defined($aggregate)) {
 	print STDERR "CreateSliver: Could not find aggregate for $slice\n";
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "Internal Error");
+				    "Internal Error, no aggregate for slice");
     }
     # We get the manifest from the aggregate object, so that the
     # expiration goes in.
@@ -638,14 +686,22 @@ sub CreateSliver($)
     # fork. Child runs with slice unlocked for now. 
     #
     $mypid = $PID;
-    
-    if ($aggregate->Start($API_VERSION) != 0) {
+
+    eval { $retval = $aggregate->Start($API_VERSION); };
+    if ($@) {
+	#
+	# This will cause the slice status to be failure.
+	#
+	$aggregate->SetBootFailure(GENIRESPONSE_SERVERERROR);
+	$aggregate->SetErrorLog("Internal Error: $@");
+	$retval = -1;
+    }
+    if ($retval) {
+	print STDERR "Could not start sliver.\n";
+	
+	# Only parent unlocks.
 	if ($PID == $mypid) {
 	    $slice->UnLock();
-	    print STDERR "Could not start sliver.\n";
-	}
-	else {
-	    print STDERR "Error waiting for nodes.\n";
 	}
 	if ($cachedebug) {
 	    GeniUtil::DumpCaches();
@@ -653,6 +709,7 @@ sub CreateSliver($)
 	}
 	return -1;
     }
+    # Only parent unlocks.
     if ($PID == $mypid) {
 	$slice->UnLock();
     }
@@ -1360,17 +1417,16 @@ sub SliverStatus($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
 
-    my $blob = {
-	"state"   => $aggregate->state(),
-	"status"  => $status,
-	"utc"     => time(),
-	"details" => {},
-	"boot_failure" => $aggregate->boot_failure(),
-    };
+    my $blob = {"state"   => $aggregate->state(),
+		"status"  => $status,
+		"utc"     => time(),
+		"details" => {},
+		"boot_failure" => $aggregate->boot_failure(),
+		"error"   => $aggregate->ErrorLog() || "",
+	       };
     $blob->{'public_url'} =
 	"$TBBASE/showslicepub.php?publicid=" .	$slice->publicid()
 	if (defined($slice->publicid()));
-    $blob->{"error"} = $aggregate->ErrorLog() || "";
     
     #
     # If running async mode and we have an error, add this too.
@@ -1643,7 +1699,9 @@ sub GetTicket($)
 				 "usetracker" => $usetracker,
 				 "ticket"     => undef,
 				 "speaksfor"  => $speaksfor,
-				 "async"      => 0});
+				 "morecreds"  => [],
+				 "async"      => 0,
+				 "slice"      => undef});
 }    
 	
 #
@@ -2161,8 +2219,15 @@ sub AddNodes($)
     Experiment->FlushAll();
     Node->FlushAll();
 
-    $response = GeniCM::SliverWorkAux($credential, $rspec,
-					 undef, 1, 0, 1, 1, $speaksfor);
+    $response = GeniCM::SliverWorkAux({"credential"  => $credential,
+				       "object"      => $rspec,
+				       "keys"        => undef,
+				       "isupdate"    => 1,
+				       "impotent"    => 0,
+				       "v2"          => 1,
+				       "level"       => 1,
+				       "speaksfor"   => $speaksfor,
+				       "nolock"      => 0});
 
     if (GeniResponse::IsError($response)) {
 	print STDERR "Redeem failed\n";
@@ -2357,8 +2422,15 @@ sub DeleteNodes($)
     Experiment->FlushAll();
     Node->FlushAll();
 
-    $response = GeniCM::SliverWorkAux($credential, $rspec,
-					 undef, 1, 0, 1, 1, $speaksfor);
+    $response = GeniCM::SliverWorkAux({"credential"  => $credential,
+				       "object"      => $rspec,
+				       "keys"        => undef,
+				       "isupdate"    => 1,
+				       "impotent"    => 0,
+				       "v2"          => 1,
+				       "level"       => 1,
+				       "speaksfor"   => $speaksfor,
+				       "nolock"      => 0});
 
     if (GeniResponse::IsError($response)) {
 	print STDERR "Redeem failed\n";
@@ -2500,8 +2572,15 @@ sub RedeemTicket($)
     }
     my $isupdate = defined($aggregate);
 
-    return GeniCM::SliverWorkAux($credential, $open_ticket, $keys,
-				 $isupdate, $impotent, 1, 1, $speaksfor);
+    return GeniCM::SliverWorkAux({"credential"  => $credential,
+				  "object"      => $open_ticket,
+				  "keys"        => $keys,
+				  "isupdate"    => $isupdate,
+				  "impotent"    => $impotent,
+				  "v2"          => 1,
+				  "level"       => 1,
+				  "speaksfor"   => $speaksfor,
+				  "nolock"      => 0});
 }
 
 #

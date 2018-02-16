@@ -51,6 +51,7 @@ use GeniUtil;
 use GeniUser;
 use GeniComponent;
 use GeniHRN;
+use GeniResponse;
 use GeniEvent;
 use GeniXML;
 use GeniCM;
@@ -732,9 +733,10 @@ sub SetErrorLog($$)
     return 0;
 }
 
-sub SetBootFailure($)
+sub SetBootFailure($;$)
 {
-    my ($self) = @_;
+    my ($self, $code) = @_;
+    $code = GENIRESPONSE_SETUPFAILURE() if (!defined($code));
 
     return undef
 	if (! ref($self));
@@ -743,10 +745,10 @@ sub SetBootFailure($)
 
     return -1
 	if (!DBQueryWarn("update geni_aggregates set ".
-			 "  boot_failure='1' ".
+			 "  boot_failure='$code' ".
 			 "where idx='$idx'"));
     
-    $self->{'AGGREGATE'}->{'boot_failure'} = 1;
+    $self->{'AGGREGATE'}->{'boot_failure'} = $code;
     return 0;
 }
 
@@ -1067,15 +1069,18 @@ sub Reload($$;$)
 sub ActionStart($$;$)
 {
     my ($self, $version, $flags) = @_;
-    $self->ClearBootFailure();
-    my $msg = "Internal Error: ";
+    my $msg = "SliverStart: ";
+    my $bootfailure_code = GENIRESPONSE_SETUPFAILURE();
     $flags      = 0 if (!defined($flags));
     require Lan;
     require OSImage;
     require libossetup;
 
+    #die("Yippie");
+
     # Clear last error.
     $self->SetErrorLog("");    
+    $self->ClearBootFailure();
     # Set new status so ComputeState() knows what is going on.
     $self->SetStatus("working");
 
@@ -1272,48 +1277,15 @@ sub ActionStart($$;$)
 	    $msg .= "$NAMEDSETUP failed\n";
 	    goto bad;
 	}
-	if (0) {
-	DebugTimeStamp("snmpit");
-	if ($flags & $ACTION_FLAGS_SYNCVLANS) {
-	    if (Lan->CompareVlansWithSwitches2($experiment)) {
-		$msg .= "CompareVlansWithSwitches2 failed!\n";
-		goto bad;
-	    }
-	    system("$SNMPIT -X $pid $eid");
-	    if ($?) {
-		$msg .= "Failed to synchronize vlans";
-		goto bad;
-	    }
-	}
-	else {
-	    my @diff = ();
-	    my @same = ();
-	    
-	    if (Lan->CompareVlansWithSwitches($experiment, \@diff, \@same)) {
-		print STDERR "CompareVlansWithSwitches failed!\n";
-		goto bad;
-	    }
-	    if (@diff) {
-		system("$SNMPIT -f ". join(" ", map("-o $_", @diff)));
-		if ($?) {
-		    $msg .= "Failed to remove obsolete VLANs.";
-		    goto bad;
-		}
-	    }
-	    system("$SNMPIT -t $pid $eid");
-	    if ($?) {
-		$msg .= "Failed to setup vlans";
-		goto bad;
-	    }
-	}
-	}
 	DebugTimeStamp("setuportvlans");
 	if ($experiment->SetupPortLans()) {
+	    $bootfailure_code = GENIRESPONSE_SETUPFAILURE_NETWORK();
 	    $msg .= "Failed to setup shared vlan ports";
 	    goto bad;
 	}
 	DebugTimeStamp("syncportvlans");
 	if ($experiment->SyncPortLans()) {
+	    $bootfailure_code = GENIRESPONSE_SETUPFAILURE_NETWORK();
 	    $msg .= "Failed to add ports to shared vlans";
 	    goto bad;
 	}
@@ -1409,7 +1381,7 @@ sub ActionStart($$;$)
 	my $node = $nodes{$node_id};
 	$node->Refresh();
 
-	# os_setup will make failed nodes
+	# os_setup will set failed nodes to this state.
 	if ($node->allocstate() eq TBDB_ALLOCSTATE_DOWN()) {
 	    push(@failed, $node);
 	    $node->_sliver()->SetState("failed")
@@ -1472,7 +1444,8 @@ sub ActionStart($$;$)
 	my $kid = waitpid($snmpit_child, 0);
 	if ($kid == $snmpit_child) {
 	    if ($?) {
-		$msg = "Failed to set up networks\n";
+		$msg .= "Failed to set up experimental networks\n";
+		$bootfailure_code = GENIRESPONSE_SETUPFAILURE_NETWORK();
 		goto bad;
 	    }
 	    else {
@@ -1480,11 +1453,15 @@ sub ActionStart($$;$)
 	    }
 	}
 	else {
-	    $msg = "Waitpid for snmpit process problem: $kid";
+	    $bootfailure_code = GENIRESPONSE_SETUPFAILURE_NETWORK();
+	    $msg .= "Waitpid for snmpit process problem: $kid";
 	    goto bad;
 	}
     }
-    if ($rval) {
+    if ($rval < 0) {
+	# More serious error. Otherwise if its just that some nodes
+	# failed, we will catch that below.
+	$bootfailure_code = GENIRESPONSE_SETUPFAILURE_OSSETUP();
 	$msg .= "Unable to OS setup nodes\n";
 	goto bad;
     }
@@ -1534,6 +1511,7 @@ sub ActionStart($$;$)
 		print STDERR "$msg\n";
 	    }
 	    else {
+		$bootfailure_code = GENIRESPONSE_SETUPFAILURE_EVENTSYS();
 		goto bad;
 	    }
 	}
@@ -1544,14 +1522,14 @@ sub ActionStart($$;$)
     }
     if (@failed) {
 	my @node_ids = map { $_->node_id() } @failed;
-	$self->SetBootFailure();
+	$self->SetBootFailure(GENIRESPONSE_SETUPFAILURE_BOOTFAILED());
 	$self->SetErrorLog("The following nodes failed to setup: " .
 			   join(" ", @node_ids));
     }
     elsif (0) {
 	# Testing.
-	$self->SetBootFailure();
-	$self->SetErrorLog("Testing");
+	$self->SetBootFailure(GENIRESPONSE_SETUPFAILURE_NETWORK);
+	$self->SetErrorLog("Testing network failure");
     }
     # This has to be last so that SliverStatus() does not hand back a
     # ready or failed state until we are fully done here.
@@ -1560,7 +1538,7 @@ sub ActionStart($$;$)
     return 0;
 
   bad:
-    $self->SetBootFailure();
+    $self->SetBootFailure($bootfailure_code);
     if (defined($msg)) {
 	$self->SetErrorLog($msg);
 	print STDERR "$msg\n";
@@ -1648,8 +1626,8 @@ sub ActionRestart($$;$)
 sub Action($$$;$)
 {
     my ($self, $version, $action, $flags) = @_;
-    $self->ClearBootFailure();
     my $msg = "Internal Error: ";
+    my $bootfailure_code = GENIRESPONSE_SETUPFAILURE();
     my $restart = ($action eq "restart" ? 1 : 0);
     my $reload  = ($action eq "reload" ? 1 : 0);
     $flags      = 0 if (!defined($flags));
@@ -1661,6 +1639,7 @@ sub Action($$$;$)
 
     # Clear last error.
     $self->SetErrorLog("");    
+    $self->ClearBootFailure();
     # Set new status so ComputeState() knows what is going on.
     $self->SetStatus("working");
 
@@ -2112,7 +2091,7 @@ sub Action($$$;$)
     $sliver = undef;
 
     # Want to make sure we see fresh logs (and do not store the same log).
-    foreach my $node (@waitpnodes, @waitpnodes) {
+    foreach my $node (@waitpnodes, @waitvnodes) {
 	$node->ClearBootLog();
     }
     
@@ -2523,6 +2502,22 @@ sub Action($$$;$)
 	    }
 	}
     }
+    if (0) {
+	# Testing.
+	@failed = (@waitpnodes, @waitvnodes);
+    }
+    if (@failed) {
+	my @node_ids = map { $_->node_id() } @failed;
+	$self->SetBootFailure(GENIRESPONSE_SETUPFAILURE_BOOTFAILED());
+	$self->SetErrorLog("The following nodes failed to setup: " .
+			   join(" ", @node_ids));
+    }
+    elsif (0) {
+	# Testing.
+	$self->SetBootFailure(GENIRESPONSE_SETUPFAILURE);
+	$self->SetErrorLog("Testing");
+    }
+    # Allow ComputeState to do its thing.
     $self->SetStatus("mixed");
     $self->ComputeState();
     return 0;
@@ -2536,7 +2531,7 @@ sub Action($$$;$)
 	    $osload_object->osload_kill($childpid);	
 	}
     }
-    $self->SetBootFailure();
+    $self->SetBootFailure($bootfailure_code);
     if (defined($msg)) {
 	$self->SetErrorLog($msg);
 	print STDERR "$msg\n";
@@ -3007,13 +3002,13 @@ sub WaitForNodes($$$$@)
 sub Stop($$;$)
 {
     my ($self, $version, $flags) = @_;
-    $self->ClearBootFailure();
     my $msg = "Internal Error: ";
 
     return -1
 	if (! ref($self));
 
     # Clear last error.
+    $self->ClearBootFailure();
     $self->SetErrorLog("");    
 
     my $experiment = Experiment->Lookup($self->slice_uuid());
@@ -3163,11 +3158,15 @@ sub BatchAction($$@)
     my $restart = ($action eq "restart" ? 1 : 0);
     my $reload  = ($action eq "reload" ? 1 : 0);
 
-    # Clear last error.
-    $self->SetErrorLog("");    
-    $self->ClearBootFailure();
     # Set new status so ComputeState() knows what is going on.
     $self->SetStatus("working");
+    # Clear last error.
+    $self->SetErrorLog("");
+    # Clear boot failure but only if its for failed nodes. If the user
+    # gets all the nodes running, the state will flip to ready. We cannot
+    # clear other failures here.
+    $self->ClearBootFailure()
+	if ($self->boot_failure() == GENIRESPONSE_SETUPFAILURE_BOOTFAILED());
 
     my $experiment = Experiment->Lookup($self->slice_uuid());
     if (!defined($experiment)) {
@@ -3620,7 +3619,7 @@ sub ComputeState($)
     else {
 	$newstatus = "mixed";
     }
-    if ($boot_failure == 1) {
+    if ($boot_failure) {
 	$newstatus = "failed";
     }
     $self->SetStateStatus($newstate, $newstatus);

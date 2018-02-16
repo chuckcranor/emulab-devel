@@ -507,7 +507,8 @@ sub GetTicket($;$)
 			 "ticket"     => $ticket,
 			 "speaksfor"  => undef,
 			 "morecreds"  => [],
-			 "async"      => 0});
+			 "async"      => 0,
+			 "slice"      => undef});
 }
 
 sub GetTicketAux($)
@@ -524,6 +525,8 @@ sub GetTicketAux($)
     my $speaksfor  = $argref->{"speaksfor"};
     my $morecreds  = $argref->{"morecreds"};
     my $async      = $argref->{"async"};
+    my $slice      = $argref->{"slice"};
+    my $nolock     = (defined($slice) ? 1 : 0);
 
     defined($credential) &&
 	($credential->HasPrivilege( "pi" ) or
@@ -548,22 +551,23 @@ sub GetTicketAux($)
     #
     # Create slice from the certificate.
     #
-    my $slice = GeniSlice->Lookup($slice_urn);
     if (!defined($slice)) {
-	if ($isupdate) {
-	    print STDERR "Could not locate slice $slice_urn for Update\n";
-	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-					"No slice found for UpdateTicket");
+	$slice = GeniSlice->Lookup($slice_urn);
+	if (!defined($slice)) {
+	    if ($isupdate) {
+		print STDERR "Could not locate slice $slice_urn for Update\n";
+		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					    "No slice found for UpdateTicket");
+	    }
+	    $slice = CreateSliceFromCertificate($credential, $user);
+	    return $slice
+		if (GeniResponse::IsResponse($slice));
 	}
-	$slice = CreateSliceFromCertificate($credential, $user);
-	return $slice
-	    if (GeniResponse::IsResponse($slice));
+	main::AddLogfileMetaDataFromSlice($slice);
     }
     $slice->SetSpeaksFor($speaksfor)
 	if (defined($speaksfor));
-	
-    main::AddLogfileMetaDataFromSlice($slice);
-    
+
     return GetTicketAuxAux({"slice"      => $slice,
 			    "user"       => $user,
 			    "rspecstr"   => $rspecstr,
@@ -575,7 +579,10 @@ sub GetTicketAux($)
 			    "ticket"     => $ticket,
 			    "credentials"=> [$credential, @$morecreds],
 			    "speaksfor"  => $speaksfor,
-			    "async"      => $async});
+			    "morecreds"  => [],
+			    "async"      => $async,
+			    # Leave locked if passing the slice around.
+			    "nolock"     => $nolock});
 }
 
 sub GetTicketAuxAux($)
@@ -593,6 +600,7 @@ sub GetTicketAuxAux($)
     my $credentials = $argref->{"credentials"};
     my $speaksfor   = $argref->{"speaksfor"};
     my $async       = $argref->{"async"};
+    my $nolock      = $argref->{"nolock"} || 0;
     my $response    = undef;
     my $restorevirt = 0;	# Flag to restore virtual state
     my $restorephys = 0;	# Flag to restore physical state
@@ -733,14 +741,14 @@ sub GetTicketAuxAux($)
     #
     # Lock the slice from further access.
     #
-    if ($slice->Lock() != 0) {
+    if (!$nolock && $slice->Lock() != 0) {
 	$ticket->UnLock()
 	    if (defined($ticket) && $ticket->stored());
 	return GeniResponse->BusyResponse("slice");
     }
     # Shutdown slices get nothing.
     if ($slice->shutdown()) {
-	$slice->UnLock();
+	$slice->UnLock() if (!$nolock);
 	$ticket->UnLock()
 	    if (defined($ticket) && $ticket->stored());
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
@@ -748,7 +756,7 @@ sub GetTicketAuxAux($)
     }
     # Ditto for expired.
     if ($slice->IsExpired()) {
-	$slice->UnLock();
+	$slice->UnLock() if (!$nolock);
 	$ticket->UnLock()
 	    if (defined($ticket) && $ticket->stored());
 	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
@@ -3721,7 +3729,7 @@ sub GetTicketAuxAux($)
     if ($v2 && $level <= 0) {
 	# Bad, should leave it locked, but Redeem below would fail, and
 	# this whole arrangement is temporary, so lets not worry about it.
-	$slice->UnLock();
+	$slice->UnLock() if (!$nolock);
 	return $rspec;
     }
     print GeniXML::Serialize($rspec);
@@ -3759,7 +3767,7 @@ sub GetTicketAuxAux($)
 	$ticket->Delete(TICKET_RELEASED)
 	    if ($ticket->stored());
     }
-    $slice->UnLock();
+    $slice->UnLock() if (!$nolock);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $newticket->asString());
   bad:
     system("$PRERENDER -r $pid $eid")
@@ -3829,7 +3837,7 @@ sub GetTicketAuxAux($)
 	$slice->SetAsyncError($response);
     }
     $slice->UnLock()
-	if (defined($slice));
+	if (defined($slice) && !$nolock);
     $ticket->UnLock()
 	if (defined($ticket) && $ticket->stored());
     return $response;
@@ -3885,14 +3893,29 @@ sub SliverWork($$)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "This ticket was already redeemed!");
     }
-    return SliverWorkAux($credential, $ticket,
-			 $keys, $isupdate, $impotent, 0, 0, undef);
+    return SliverWorkAux({"credential"  => $credential,
+			  "object"      => $ticket,
+			  "keys"        => $keys,
+			  "isupdate"    => $isupdate,
+			  "impotent"    => $impotent,
+			  "v2"          => 0,
+			  "level"       => 0,
+			  "speaksfor"   => undef,
+			  "nolock"      => 0});
 }
 
-sub SliverWorkAux($$$$$$$$)
+sub SliverWorkAux($)
 {
-    my ($credential, $object,
-	$keys, $isupdate, $impotent, $v2, $level, $speaksfor) = @_;
+    my ($argref) = @_;
+    my $credential = $argref->{"credential"};
+    my $object     = $argref->{"object"};
+    my $keys       = $argref->{"keys"};
+    my $isupdate   = $argref->{"isupdate"};
+    my $impotent   = $argref->{"impotent"};
+    my $v2         = $argref->{"v2"};
+    my $level      = $argref->{"level"};
+    my $speaksfor  = $argref->{"speaksfor"};
+    my $nolock     = $argref->{"nolock"};
     my $didfwsetup  = 0;
     my $shouldrollback = 0;
     my $restorephys = 0;	# Flag to restore physical state
@@ -3971,23 +3994,25 @@ sub SliverWorkAux($$$$$$$$)
 
     $ticket->SetSlice($slice)
 	if (defined($ticket));
-    
-    if ($slice->Lock() != 0) {
-	$ticket->UnLock()
-	    if (defined($ticket));
-	return GeniResponse->BusyResponse("slice");
+
+    if (!$nolock) {
+	if ($slice->Lock() != 0) {
+	    $ticket->UnLock()
+		if (defined($ticket));
+	    return GeniResponse->BusyResponse("slice");
+	}
     }
 
     # Do not redeem an expired ticket.
     if (defined($ticket) && $ticket->Expired()) {
-	$slice->UnLock();
+	$slice->UnLock() if (!$nolock);
 	$ticket->UnLock();
 	return GeniResponse->Create(GENIRESPONSE_EXPIRED, undef,
 				    "Ticket has expired");
     }
     # Shutdown slices get nothing.
     if ($slice->shutdown()) {
-	$slice->UnLock();
+	$slice->UnLock() if (!$nolock);
 	$ticket->UnLock()
 	    if (defined($ticket));
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
@@ -3995,7 +4020,7 @@ sub SliverWorkAux($$$$$$$$)
     }
     # Ditto expired slices.
     if ($slice->IsExpired()) {
-	$slice->UnLock();
+	$slice->UnLock() if (!$nolock);
 	$ticket->UnLock()
 	    if (defined($ticket));
 	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
@@ -4015,14 +4040,14 @@ sub SliverWorkAux($$$$$$$$)
     # And the experiment.
     my $experiment = GeniExperiment($slice, $owner);
     if (GeniResponse::IsResponse($experiment)) {
-	$slice->UnLock();
+	$slice->UnLock() if (!$nolock);
 	$ticket->UnLock()
 	    if (defined($ticket));
 	return $experiment;
     }
     my $realuser = FlipToUser($slice, $owner);
     if (!defined($realuser) || !$realuser) {
-	$slice->UnLock();
+	$slice->UnLock() if (!$nolock);
 	$ticket->UnLock()
 	    if (defined($ticket));
 	
@@ -4036,7 +4061,7 @@ sub SliverWorkAux($$$$$$$$)
     if (defined($keys)) {
 	$response = AddKeys($slice, $owner, $keys);
 	if (GeniResponse::IsResponse($response)) {
-	    $slice->UnLock();
+	    $slice->UnLock() if (!$nolock);
 	    $ticket->UnLock()
 		if (defined($ticket));
 	    return $response;
@@ -5250,7 +5275,7 @@ sub SliverWorkAux($$$$$$$$)
 	
 	$ticket->Redeem()
 	    if (defined($ticket));
-	$slice->UnLock();
+	$slice->UnLock() if (!$nolock);
 
 	# Update this info now that we are done. 
 	$experiment->SaveExperimentState();
@@ -5279,7 +5304,7 @@ sub SliverWorkAux($$$$$$$$)
     $ticket->Redeem()
 	if (defined($ticket));
     $aggregate->SetRegistered(0);
-    $slice->UnLock();
+    $slice->UnLock() if (!$nolock);
 
     # Update this info now that we are done. 
     $experiment->SaveExperimentState();
@@ -5365,7 +5390,7 @@ sub SliverWorkAux($$$$$$$$)
 	}
     }
     
-    $slice->UnLock();
+    $slice->UnLock() if (!$nolock);
     $ticket->UnLock()
 	if (defined($ticket));
     return $response ||

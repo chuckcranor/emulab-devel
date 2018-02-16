@@ -1032,6 +1032,7 @@ sub SetAsyncError($$)
 {
     my ($self, $response) = @_;
     my $uuid   = $self->uuid();
+    # Not a blessed reference.
     my $code   = $response->{'code'};
     my $output = $response->{'output'};
     if (defined($output) && $output ne "") {

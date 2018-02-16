@@ -2660,19 +2660,19 @@ sub SliceResolve($)
 
 sub Provision($$$$)
 {
-    my ($self, $perrmsg, $users, $cert, $key) = @_;
+    my ($self, $users, $cert, $key) = @_;
     my $authority = $self->GetGeniAuthority();
     my $urn       = $self->aggregate_urn();
     my $geniuser  = $self->instance()->GetGeniUser();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
-    return -1
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
     my ($slice_credential, $speaksfor_credential) =
 	APT_Geni::GenCredentials($slice, $geniuser, undef, 0);
-    return -1
+    return CredentialError()
 	if (! (defined($speaksfor_credential) &&
 	       defined($slice_credential)));
 
@@ -2701,31 +2701,7 @@ sub Provision($$$$)
     $cmurl = devurl($cmurl) if ($usemydevtree);
     $cmurl .= "/3.0";
 
-    my $tries = 10;
-    while ($tries) {
-	my $response =
-	    Genixmlrpc::CallMethod($cmurl, $context, "Provision", @params);
-
-	if (defined($response) && defined($response->logurl())) {
-	    $self->SetPublicURL($response->logurl());
-	}
-	if (!defined($response) || $response->code() != GENIRESPONSE_SUCCESS) {
-	    if (defined($response) &&
-		($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
-		 $response->code() == GENIRESPONSE_BUSY) &&
-		$tries >= 0) {
-		print STDERR "Server for $urn reports too busy or slice busy, ".
-		    "waiting a while ...\n";
-		sleep(int(rand(20)) + 10);
-		$tries--;
-		next;
-	    }
-	    $$perrmsg = $response->error();
-	    return -1;
-	}
-	last;
-    }
-    return 0;
+    return Genixmlrpc::CallMethod($cmurl, $context, "Provision", @params);
 }
 
 #
@@ -3141,8 +3117,8 @@ sub WaitForSliver($)
     my $ready    = 0;
     my $failed   = 0;
     my $rpcfail  = 0;
-    my $async_code;
-    my $async_output;
+    my $failure_code;
+    my $failure_output;
     my $repblob;
     my $laststatus;
 
@@ -3158,7 +3134,8 @@ sub WaitForSliver($)
 	     $response->code() != GENIRESPONSE_SERVER_UNAVAILABLE &&
 	     $response->code() != GENIRESPONSE_BUSY &&
 	     $response->code() != GENIRESPONSE_NETWORK_ERROR)) {
-	    print STDERR "SliverStatus failed: " . $response->error() . "\n";
+	    $failure_code = $response->code();
+	    $failure_output = "SliverStatus failed: " . $response->error();
 	    $failed = 1;
 	    last;
 	}
@@ -3251,8 +3228,8 @@ sub WaitForSliver($)
 	#
 	if (exists($repblob->{'async_code'})) {
 	    # We are getting back async error status.
-	    $async_code   = $repblob->{'async_code'};
-	    $async_output = $repblob->{'async_output'};
+	    $failure_code   = $repblob->{'async_code'};
+	    $failure_output = $repblob->{'async_output'};
 	    $failed = 1;
 	    last;
 	}
@@ -3261,13 +3238,20 @@ sub WaitForSliver($)
 	    last;
 	}
 	elsif ($repblob->{'status'} eq "failed") {
+	    print STDERR Dumper($repblob);
 	    $failed = 1;
-	    my $msg = $repblob->{'error'}
-	        if (defined($repblob->{'error'}) && $repblob->{'error'} ne "");
-	    print STDERR "*** $urn failed\n";
-	    print STDERR "    " .  $repblob->{'error'} . "\n" if ($msg);
-	    $webtask->output("Experiment setup on the $aggname cluster failed" .
-			     ($msg ? ": $msg" : "."));
+	    $failure_code = GENIRESPONSE_SETUPFAILURE_BOOTFAILED();
+	    # Backwards compat; boot_failure is new, and used to be only 1.
+	    # If it is not set, that usually means node failure.
+	    if (exists($repblob->{"boot_failure"})) {
+		if ($repblob->{"boot_failure"} > 1) {
+		    $failure_code = $repblob->{"boot_failure"};
+		}
+	    }
+	    $failure_output = "Experiment setup on the $aggname cluster failed";
+	    if (exists($repblob->{'error'}) && $repblob->{'error'} ne "") {
+		$failure_output .= ": " . $repblob->{'error'};
+	    }
 	    last;
 	}
 	elsif ($aggobj->instance()->IsCanceled()) {
@@ -3281,23 +3265,22 @@ sub WaitForSliver($)
     if ($failed || !$ready) {
 	$aggobj->SetStatus("failed");
 	if ($failed) {
-	    if (defined($async_code)) {
-		$webtask->output($async_output);
-		$webtask->Exited($async_code);
-	    }
-	    else {
-		# Output set above.
-		$webtask->Exited(GENIRESPONSE_ERROR);
-	    }
+	    print STDERR "*** $urn failure\n";
+	    print STDERR "    $failure_output\n";	    
+	    $webtask->output($failure_output);
+	    $webtask->Exited($failure_code);
 	}
 	elsif (!$ready) {
 	    # XXX Need better handling for timeout.
 	    print STDERR "*** $urn timed out.\n";
-	    $webtask->output("Experiment setup on $urn timed out");
+	    $webtask->output("Experiment setup on the $aggobj cluster".
+			     "timed out");
 	    $webtask->Exited(GENIRESPONSE_TIMEDOUT);
 	}
 	else {
-	    $webtask->Exited(1);
+	    print STDERR "*** $urn unknown error\n";
+	    $webtask->output("Unknown setup failure on the $aggobj cluster");
+	    $webtask->Exited(GENIRESPONSE_ERROR);
 	}
 	return $webtask->exitcode();
     }

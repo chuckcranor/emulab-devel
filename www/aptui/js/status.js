@@ -513,7 +513,7 @@ $(function ()
 		    json.value.code == GENIRESPONSE_INSUFFICIENT_NODES) {
 		    $('#error_panel .resource-error').removeClass("hidden");
 		}
-		if (isadmin) {
+		if (json.value.canclearerror) {
 		    $('#ignore-failure').removeClass("hidden");
 		}
 		
@@ -554,6 +554,9 @@ $(function ()
 		status_message = "Your experiment has been terminated!";
 		DisableButtons();
 		StartCountdownClock.stop = 1;
+		if (lastStatus == "failed") {
+		    $('#ignore-failure').addClass("hidden");
+		}
 	    }
 	    else if (instanceStatus == "unknown") {
 		status_html = "<font color=red>" + instanceStatus + "</font>";

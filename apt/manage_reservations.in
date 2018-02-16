@@ -277,6 +277,10 @@ sub DoReserve()
     $rpcargs{"reason"}= $reason if (defined($reason));
     $rpcargs{"update"}= $update if (defined($update));
     
+    # We can check for disabled aggregate now, nothing below matters.
+    if ($aggregate->CheckStatus(\$errmsg, 1)) {
+	UserError($errmsg);
+    }
     if ($this_user->IsAdmin()) {
 	#
 	# We do not have a very good notion of cross site admin.
@@ -304,10 +308,6 @@ sub DoReserve()
 	}
 	$rpcargs{"credentials"} = $credentials;
 	$context = APT_Geni::GeniContext();
-    }
-    # We can check for disabled aggregate now, nothing below matters.
-    if ($aggregate->CheckStatus(\$errmsg, 1)) {
-	UserError($errmsg);
     }
     my $response =
 	APT_Geni::PortalRPC($authority, $context, "Reserve", \%rpcargs);
@@ -805,7 +805,8 @@ sub DoPrediction()
     my $optlist = "p:";
     my $portal;
     my $errmsg;
-    my @aggregates = ($authority);
+    my @aggregates  = ($aggregate);
+    my @authorities = ($authority);
     my @webtasks   = ();
     my @projlist   = ();
     my $blob       = {};
@@ -846,7 +847,8 @@ sub DoPrediction()
     # all aggregates listed for the portal. 
     #
     if (defined($portal)) {
-	@aggregates = ();
+	@authorities = ();
+	@aggregates  = ();
 	
 	my @list = APT_Aggregate->LookupForPortal($portal);
 	foreach my $agg (@list) {
@@ -860,24 +862,30 @@ sub DoPrediction()
 		$errmsg = "Cannot lookup authority for $agg";
 		goto bad;
 	    }
-	    push(@aggregates, $authority);
+	    push(@aggregates, $agg);
+	    push(@authorities, $authority);
 	}
 	if (!@aggregates) {
 	    UserError("No clusters are online, please try again later.");
-	}
-    }
-    else {
-	if ($aggregate->disabled()) {
-	    UserError("The " . $aggregate->name() . " cluster ".
-		      "is currently offline, please try again later.");
 	}
     }
 
     my $coderef = sub {
 	my ($blob) = @_;
 	my $authority = $blob->{"authority"};
+	my $aggregate = $blob->{"aggregate"};
 	my $webtask   = $blob->{"webtask"};
+	my $errmsg;
 	
+	if ($aggregate->CheckStatus(\$errmsg, 1)) {
+	    # Need unblessed ref to store into webtask.
+	    my $response =
+		GeniResponse->Create(GENIRESPONSE_SERVER_UNAVAILABLE,
+				     undef, $errmsg);
+	    $webtask->response($response);
+	    print "$aggregate offline\n";
+	    return 1;
+	}
 	# PortalRPC will use the root context in this case, which is
 	# essentially saying the caller is an admin. But thats okay
 	# for this call, it is just informational.
@@ -885,6 +893,10 @@ sub DoPrediction()
 	    APT_Geni::PortalRPC($authority, undef,
 				"ReservationPrediction",
 				{"projlist" => \@projlist});
+	# Need unblessed ref to store into webtask.
+	$response = GeniResponse->Create($response->code(),
+					 $response->value(),
+					 $response->output);
 	$webtask->response($response);
 
 	if (GeniResponse::IsError($response)) {
@@ -898,11 +910,16 @@ sub DoPrediction()
     # Do not bother with ParRun if only one aggregate.
     #
     if (@aggregates == 1) {
-	my $authority = $aggregates[0];
+	my $authority = $authorities[0];
+	my $aggregate = $aggregates[0];
 	my $temptask  = WebTask->CreateAnonymous();
-	my $retval    = &$coderef({"authority" => $authority,
+	my $retval    = &$coderef({"aggregate" => $aggregate,
+				   "authority" => $authority,
 				   "webtask"   => $temptask});
-	my $response  = $temptask->response();
+	my $response = $temptask->response();
+	# No longer a blessed object (see above).
+	$response = GeniResponse->Bless($response);
+
 	$temptask->Delete();
 
 	if ($retval == 0) {
@@ -920,12 +937,17 @@ sub DoPrediction()
     my @return_codes = ();
     my @agglist = ();
 
-    foreach my $auth (@aggregates) {
+    while (@aggregates) {
+	my $aggregate = shift(@aggregates);
+	my $authority = shift(@authorities);
+
 	my $temptask = WebTask->CreateAnonymous();
 	$temptask->AutoStore(1);
 	# For delete below.
 	push(@webtasks, $temptask);
-	push(@agglist, {"authority" => $auth,
+	
+	push(@agglist, {"aggregate" => $aggregate,
+			"authority" => $authority,
 			"webtask"   => $temptask});
     }
     if (ParRun({"maxwaittime" => 30,
@@ -939,12 +961,16 @@ sub DoPrediction()
     #
     # Check the exit codes, create return structure for the web interface.
     #
-    foreach my $agg (@agglist) {
+    foreach my $ref (@agglist) {
 	my $code  = shift(@return_codes);
-	my $auth  = $agg->{'authority'};
-	my $wtask = $agg->{'webtask'};
+	my $auth  = $ref->{'authority'};
+	my $agg   = $ref->{'aggregate'};
+	my $wtask = $ref->{'webtask'};
 
 	$wtask->Refresh();
+	my $response = $wtask->response();
+	# No longer a blessed object (see above).
+	$response = GeniResponse->Bless($response);
 
 	if ($code) {
 	    #
@@ -953,12 +979,12 @@ sub DoPrediction()
 	    # server from operating normally.
 	    #
 	    my $msg = "Could not get reservation data: ".
-		$wtask->response()->error();
+		$response->error();
 	    
 	    $blob->{$auth->urn()} = $msg;
 	    print STDERR $msg . "\n";
 	}
-	$blob->{$auth->urn()} = $wtask->response()->value();
+	$blob->{$auth->urn()} = $response->value();
     }
   done:
     if (defined($webtask)) {

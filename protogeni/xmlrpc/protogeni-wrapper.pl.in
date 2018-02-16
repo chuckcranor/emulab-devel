@@ -150,7 +150,6 @@ use Group;
 
 # Need a command line option.
 my $debug      = 0;
-my $mailsendlog= 0;
 my $nostorelogs= 0;
 my $noanything = 0;
 # Flag for XMLERROR.
@@ -386,14 +385,6 @@ elsif (lc($MODULE) eq "emulab") {
     # XXX Special case, obviously
     $debug = 2;
 }
-# Override default setting above.
-if (SiteVarExists("protogeni/wrapper_debug_sendlog")) {
-    my $debug_sendlog;
-    if (GetSiteVar("protogeni/wrapper_debug_sendlog", \$debug_sendlog) == 0) {
-	$mailsendlog = $debug_sendlog
-	    if (defined($debug_sendlog));
-    }
-}
 
 #
 # Create and set our RPC context for any calls we end up making.
@@ -533,10 +524,13 @@ $SIG{__WARN__} = sub {
 $SIG{__DIE__} = sub {
     my $message = shift;
     if ($warned) {
-	print STDERR $message;
-	exit(-1);
+	# Its okay to call die from here. we do this so that we do not
+	# do END block processing when inside an eval.
+	die($message);
     }
     else {
+	# Its okay to call confess (die) from here. we do this so that
+	# we do not do END block processing when inside an eval.
  	confess($message);
     }
 };
@@ -717,11 +711,15 @@ if ($@) {
 		       "Internal Error executing $method:\n" . $@ . "\n");
 
     push(@metadata, ["LogURL", $logurl]);
+    push(@metadata, ["Error", GENIRESPONSE_RPCERROR()]);
+    push(@metadata, ["Output", "Internal error executing method $method"]);
+    
     $logfile->SetMetadata(\@metadata, 0);
     foreach my $foo (@metadata) {
 	my ($key,$val) = @{$foo};
 	$message .= sprintf("%-15s: %s\n", $key, $val);
     }
+
     print STDERR "-------------- Request -----------------\n";
     print STDERR Dumper($request) . "\n";
     print STDERR "----------------------------------------\n";
@@ -839,11 +837,9 @@ LogAbort()
 # and skip the message.
 #
 if ((-s $logfile->filename() || $iserror) && !$noanything) {
-    my $to       = ($MAINSITE ? $PGERRORS : $TBLOGS);
+    my $to       = ($rpcerror ? $TBOPS : ($MAINSITE ? $PGERRORS : $TBLOGS));
     my $cc       = ($MAINSITE ? undef : "CC: $PGERRORS");
-    SENDMAIL($to, "protogeni-wrapper.pl", $message,
-	     $TBOPS, $cc,
-	     ($mailsendlog ? ($logfile->filename()) : undef));
+    SENDMAIL($to, "protogeni-wrapper.pl", $message, $TBOPS, $cc);
     $nostorelogs = 0;
 }
 
@@ -872,7 +868,7 @@ END {
 	if ($logging) {
 	    # In case the callee flipped.
 	    GeniUtil::FlipToGeniUser();
-	    LogEnd(0);
+	    LogEnd($exitcode >> 8);
 	    if (!$logforked) {
                 # Use eval to avoid messing up the output stream if any errors.
 		eval { $logfile->Store(); };
