@@ -1608,8 +1608,10 @@ okay:
 	    #
 	    # See if we can dig the kernel out from the image.
 	    #
-	    my ($kernel,$ramdisk) =
-		ExtractKernelFromLinuxImage($vnode_id, "$VMDIR/$vnode_id");
+	    my ($kernel,$ramdisk,$kernelconfig) =
+		ExtractKernelFromLinuxImage($vnode_id,
+					    $private->{'rootpartition'},
+					    "$VMDIR/$vnode_id");
 
 	    if (defined($kernel)) {
 		my $usebootloader = 1;
@@ -1621,7 +1623,7 @@ okay:
 		if ($imagemetadata->{'PARTOS'} =~ /ubuntu/i ||
 		    $imagename =~ /ubuntu/i ||
 		    system("strings $kernel | grep -q -i ubuntu") == 0) {
-		    my $ramres = FixRamFs($vnode_id, $ramdisk);
+		    my $ramres = FixRamFs($vnode_id, $ramdisk,$kernelconfig);
 		    if ($ramres < 0) {
 			fatal("xen_vnodeCreate: Failed to fix ramdisk");
 		    }
@@ -5626,12 +5628,17 @@ sub ReleaseRouteTables($$)
 # Note that we use our own lightly hacked version of pygrub, that
 # can look inside our images, and can hand simple submenus properly.
 #
-sub ExtractKernelFromLinuxImage($$)
+sub ExtractKernelFromLinuxImage($$$)
 {
-    my ($lvname, $outdir) = @_;
+    my ($lvname, $rootpartition, $outdir) = @_;
     my $lvmpath = lvmVolumePath($lvname);
     my $PYGRUB  = "$BINDIR/pygrub";
+    my $configfile = "$outdir/kernel-config";
 
+    # Must kill this in case we cannot extract it.
+    unlink($configfile)
+	if (-e $configfile);
+	
     #
     # Not sure what is going here; pygrub sometimes heads off into
     # inifinity, looping and using 100% CPU. So, lets put a timer
@@ -5639,6 +5646,7 @@ sub ExtractKernelFromLinuxImage($$)
     #
     my $childpid = fork();
     if ($childpid) {
+	
 	local $SIG{ALRM} = sub { kill("TERM", $childpid); };
 	alarm 60;
 	waitpid($childpid, 0);
@@ -5649,7 +5657,32 @@ sub ExtractKernelFromLinuxImage($$)
 	    print STDERR "pygrub returned $stat ... \n";
 	    return ();
 	}
-	return ("$outdir/kernel", "$outdir/ramdisk");	
+	my @ret = ("$outdir/kernel", "$outdir/ramdisk");
+
+	#
+	# Since that worked, also extract the config file for the kernel.
+	#
+	my $kstring = `file $outdir/kernel`;
+	if (!$? && $kstring ne "") {
+	    if ($kstring =~ /version ([-\.\w]+) /i) {
+		my $fname = "config-" . $1;
+		my $vnoderoot = "/mnt/xen/$lvname";
+		
+		mkpath(["$vnoderoot"]);
+		mysystem2("mount $rootpartition $vnoderoot");
+		if (!$?) {
+		    if (-e "$vnoderoot/boot/$fname") {
+			mysystem2("/bin/cp -f $vnoderoot/boot/$fname ".
+				  "$configfile");
+			if (!$?) {
+			    push(@ret, $configfile);
+			}
+		    }
+		    mysystem2("umount $vnoderoot");
+		}
+	    }
+	}
+	return @ret;
     }
     else {
 	#
@@ -5776,13 +5809,25 @@ sub LoadImageMetadata($$)
 # Fix up the initramfs so that it loads the xen-blkfront driver.
 # This is really stupid and appears to be necessary on ubuntu.
 #
-sub FixRamFs($$)
+sub FixRamFs($$$)
 {
-    my ($vnode_id, $ramfspath)  = @_;
+    my ($vnode_id, $ramfspath, $kernelconfig)  = @_;
     my $tempdir = "$EXTRAFS/$vnode_id/ramfs";
     my $modules = "$EXTRAFS/$vnode_id/ramfs/conf/modules";
     my $rval    = 0;
 
+    #
+    # Newer kernels and images have the driver built into the kernel, so
+    # first look at the config file to see if we need to do anything.
+    #
+    if (defined($kernelconfig) && -e $kernelconfig) {
+	my $option = `grep CONFIG_XEN_BLKDEV_FRONTEND $kernelconfig`;
+	if (!$? && $option ne "" && $option =~ /=y\s*$/i) {
+	    # Tell caller ramfs was okay.
+	    print STDERR "FixRamFs: xen-blkfront built into kernel\n";
+	    return 1;
+	}
+    }
     return -1
 	if (-e $tempdir && mysystem2("/bin/rm -rf $tempdir"));
 
@@ -5799,6 +5844,7 @@ sub FixRamFs($$)
     #
     if (-e $modules) {
 	if (mysystem2("grep -q xen-blkfront $modules") == 0) {
+	    print STDERR "FixRamFs: xen-blkfront already in the modules file\n";
 	    # Tell caller ramfs was okay. 
 	    $rval = 1;
 	    goto done;
