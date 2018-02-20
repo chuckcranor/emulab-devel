@@ -1396,7 +1396,7 @@ sub CreateSliver($)
 	# Loop waiting for a manifest or the slice to disappear or for an
 	# async error indicator. Hard to say how long we should wait ...
 	#
-	my $seconds  = 3600;
+	my $seconds  = 7200;
 	my $interval = 15;
 	while ($seconds > 0) {
 	    sleep($interval);
@@ -1493,23 +1493,22 @@ sub CreateSlivers()
     my @return_codes = ();
 
     $instance->SetStatus("provisioning");
-    
-    # Single aggregate most of the time, no reason for ParRun.
-    if (@aggregate_list == 1) {
-	@return_codes = (CreateSliver($aggregate_list[0]));
-    }
-    else {
-	if (ParRun({"maxwaittime" => 99999,
-		    "maxchildren" => scalar(@aggregate_list)},
-		   \@return_codes, \&CreateSliver, @aggregate_list)) {
-	    #
-	    # The parent caught a signal. Leave things intact so that we can
-	    # kill things cleanly later.
-	    #
-	    $slice->UnLock();
-	    $instance->SetStatus("failed");
-	    return -1;
-	}
+
+    #
+    # Use parrun here even for a single aggregate; then we can kill
+    # the child if something goes wrong, and the parent will do the
+    # correct cleanup.
+    #
+    if (ParRun({"maxwaittime" => 99999,
+		"maxchildren" => scalar(@aggregate_list)},
+	       \@return_codes, \&CreateSliver, @aggregate_list)) {
+	#
+	# The parent caught a signal. Leave things intact so that we can
+	# kill things cleanly later.
+	#
+	$slice->UnLock();
+	$instance->SetStatus("failed");
+	return -1;
     }
     #
     # Check the exit codes; any failure is a total failure (for now).

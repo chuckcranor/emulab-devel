@@ -3112,7 +3112,7 @@ sub WaitForSliver($)
     $webtask->output("");
     $webtask->exitcode(0);
 
-    my $seconds  = 3600;
+    my $seconds  = 7200;
     my $interval = 15;
     my $ready    = 0;
     my $failed   = 0;
