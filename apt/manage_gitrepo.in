@@ -591,6 +591,11 @@ sub GetRepoSource($;$)
     $refspec = "refs/heads/master"
 	if (!defined($refspec));
 
+    # Lets see if this helps. We know there is a source file, but
+    # we sometimes get failures cause of NFS/ZFS.
+    system("/usr/bin/fsync $repodir");
+    sleep(1);
+
     chdir("$repodir") or
 	fatal("Could not chdir to $repodir: $!");
 
