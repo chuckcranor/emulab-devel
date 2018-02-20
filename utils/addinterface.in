@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2017 University of Utah and the Flux Group.
+# Copyright (c) 2003-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,7 +33,7 @@ use Data::Dumper;
 sub usage()
 {
     print STDERR "Usage: addinterface [-b speed | -t ifacetype] [-m mac] ".
-	"[-r role] node_id iface_id\n";
+	"[-e role] node_id iface_id\n";
     print STDERR "Usage: addinterface -r <node_id> <iface_id>\n";
     print STDERR "Usage: addinterface -i <node_id> <iface_id>\n";
     print STDERR "Options:\n";
