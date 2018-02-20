@@ -2231,16 +2231,15 @@ sub rootPreConfigNetwork($$$$)
 	#
 	if (exists($ifc->{IPMASK}) && exists($ifc->{IPADDR})) {
 	    # Figure out the subnet for this network:
-	    my $netaddr = inet_aton($ifc->{IPADDR}) & inet_aton($ifc->{IPMASK});
+	    my $bcast = inet_aton($ifc->{IPMASK});
 	    my $maskbits = 0;
-	    foreach my $octet (split(/\./,$ifc->{IPMASK})) {
-		my $cval = int($octet);
-		for (my $i = 0; $i < 8; ++$i) {
-		    $maskbits += $cval & 1;
-		    $cval = $cval >> 1;
-		}
+	    my $cval = unpack("N",$bcast);
+	    for (my $i = 0; $i < 32; ++$i) {
+		last if (($cval & 1) == 0);
+		++$maskbits;
+		$cval = $cval >> 1;
 	    }
-	    $brs{$brname}{CIDR} = inet_ntoa($netaddr) . "/$maskbits";
+	    $brs{$brname}{CIDR} = $ifc->{IPMASK} . "/$maskbits";
 
 	    #
 	    # NB XXX: Use the final address in the subnet as the
@@ -2253,9 +2252,7 @@ sub rootPreConfigNetwork($$$$)
 	    # single experiment case, but I'm not sure how to check for
 	    # a shared LAN.  Anyway, we'll just document this too...
 	    #
-	    my $bcast = ~inet_aton($ifc->{IPMASK});
-	    $brs{$brname}{GW} =
-		inet_ntoa($netaddr | pack("N",unpack("N",$bcast) - 1));
+	    $brs{$brname}{GW} = inet_ntoa(pack("N",unpack("N",$bcast) - 1));
 	}
 	else {
 	    warn("Fatal: all Docker network interfaces *must* have an".
