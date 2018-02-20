@@ -76,7 +76,7 @@ CREATE TABLE `geni_slices` (
   `description` mediumtext default NULL,
   `async_mode` tinyint(1) NOT NULL default '0',
   `async_code` int(11) default '0',
-  `async_output` text,
+  `async_output` mediumtext,
   PRIMARY KEY  (`idx`),
   UNIQUE KEY `hrn` (`hrn`),
   UNIQUE KEY `uuid` (`uuid`)
