@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -284,6 +284,9 @@ elsif ($opt{p}) {
 		next;
 	    }
 	    foreach my $interface (@interfaces) {
+		next
+		    if (! $interface->wiredup());
+		
 		my $port = Port->LookupByIface($interface->node_id(),
 					       $interface->iface());
 		push(@ports, $port)
