@@ -5648,7 +5648,7 @@ sub ExtractKernelFromLinuxImage($$$)
     if ($childpid) {
 	
 	local $SIG{ALRM} = sub { kill("TERM", $childpid); };
-	alarm 60;
+	alarm 120;
 	waitpid($childpid, 0);
 	my $stat = $?;
 	alarm 0;
