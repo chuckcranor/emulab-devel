@@ -226,7 +226,7 @@ my $wireargs = {
     "port2"  => $port2,
 };
 $wireargs->{"cable"}  = $cable if (defined($cable));
-$wireargs->{"length"} = $cablelen if (defined($cablelen));
+$wireargs->{"len"} = $cablelen if (defined($cablelen));
 
 if ($impotent || $verbose) {
     if ($verbose) {
