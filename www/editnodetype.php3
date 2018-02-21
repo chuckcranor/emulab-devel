@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -98,6 +98,8 @@ $initial_switch_attributes = array(
 	  "attrtype" => "boolean"),
     array("attrkey" => "rebootable", "attrvalue" => "0",
 	  "attrtype" => "boolean"),
+    array("attrkey" => "forwarding_protocols", "attrvalue" => "ethernet",
+	  "attrtype" => "string"),
     );
 
 $initial_attributes = array(
