@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2017 University of Utah and the Flux Group.
+# Copyright (c) 2003-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -207,15 +207,11 @@ if (defined($wire)) {
     fatal("Wire using interface two already exists: $wire\n");
 }
 # Another check using card/port info, just to be sure.
-$wire = Interface::Wire->LookupAny($node_id1,
-				   $interface1->card(),
-				   $interface1->port());
+$wire = Interface::Wire->LookupAny($node_id1, $card1, $port1);
 if (defined($wire)) {
     fatal("Wire using interface two already exists: $wire\n");
 }
-$wire = Interface::Wire->LookupAny($node_id1,
-				   $interface2->card(),
-				   $interface2->port());
+$wire = Interface::Wire->LookupAny($node_id1, $card2, $port2);
 if (defined($wire)) {
     fatal("Wire using interface two already exists: $wire\n");
 }
