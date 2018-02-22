@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2017 University of Utah and the Flux Group.
+# Copyright (c) 2003-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,7 +33,7 @@ sub usage()
 {
     print STDERR "Usage: prereserve [-f] [-t typelist] [-p priority] ".
 	"[-s start] [-e end [-r]] [-n resname] pid [count | node_id ...\n";
-    print STDERR "       prereserve -c [-r] -n resname pid\n";
+    print STDERR "       prereserve -r -n resname pid\n";
     print STDERR "       prereserve -i -n resname pid\n";
     print STDERR "       prereserve -a -n resname pid\n";
     print STDERR "       prereserve -l\n";
@@ -42,22 +42,20 @@ sub usage()
     print STDERR "   -t   Comma separated list of node types\n";
     print STDERR "   -p   Priority. Defaults to zero (least priority)\n";
     print STDERR "   -n   Reservation name; defaults to 'default'\n";
-    print STDERR "   -c   Clear pending prereserve for project\n";
-    print STDERR "   -r   Revoke current prereserve for project (use with -c)\n";
+    print STDERR "   -r   Clear/Revoke prereserve for project\n";
     print STDERR "   -i   Show pending prereserve for project\n";
     print STDERR "   -l   List all pending prereserves\n";
     print STDERR "   -s   Optional start time to begin pre reservation\n";
     print STDERR "   -e   Optional end time for pre reservation.\n";
-    print STDERR "        Implies -c -r options at termination time.\n";
+    print STDERR "        Implies -r options at termination time.\n";
     print STDERR "   -a   Activate a pending reservation (internal option)\n";
     exit(-1);
 }
-my $optlist  = "hdct:n:ilre:s:map:f";
+my $optlist  = "hdt:n:ilre:s:map:f";
 my $priority = 0;
 my $debug    = 0;
 my $info     = 0;
 my $list     = 0;
-my $clear    = 0;
 my $revoke   = 0;
 my $sendmail = 0;
 my $activate = 0;
@@ -121,9 +119,6 @@ if (defined($options{p})) {
 if (defined($options{n})) {
     $resname = $options{n};
 }
-if (defined($options{c})) {
-    $clear = 1;
-}
 if (defined($options{r})) {
     $revoke = 1;
 }
@@ -162,9 +157,9 @@ if (defined($options{"s"})) {
     }
 }
 
-if ($info || $clear || ($revoke && !$endtime)) {
+if ($info || $revoke) {
     usage()
-	if (@ARGV != 1 || ($revoke && !$clear));
+	if (@ARGV != 1);
     usage()
 	if (!defined($resname));
     
@@ -386,9 +381,9 @@ if ($UID) {
 }
 
 #
-# Clear and exit.
+# Revoke/Clear and exit.
 #
-if ($clear) {
+if ($revoke) {
     my $query_result =
 	DBQueryFatal("select name from project_reservations ".
 		     "where pid_idx='$pid_idx' and name='$resname'");
@@ -404,36 +399,22 @@ if ($clear) {
 		 "where pid_idx='$pid_idx' and name='$resname'");
 
     #
-    # If we are revoking the reservation, lets see if any nodes can be
+    # When revoking the reservation, lets see if any nodes can be
     # moved to a another prereserve instead of going into the free pool.
     #
-    # If NOT revoking the reservation, then we need to leave the reserved_pid
-    # set, but we have to do something with the reservation_name since we
-    # need to be able to reuse the reservation name in a new one. We cannot
-    # clear it, since a NULL reservation_name means it was reserved via the
-    # web interface and not allowed to be messed with by the pre-reservation
-    # code. Look at Node::CheckPreReserve() to see what I mean. So instead,
-    # we set it to something not likely to be an actual reservation name.
-    #
-    if ($revoke) {
-	my $query_result =
-	    DBQueryFatal("select node_id from nodes ".
-			 "where reserved_pid='$pid' and ".
-			 "      reservation_name='$resname'");
-	while (my ($node_id) = $query_result->fetchrow_array()) {
-	    my $node = Node->Lookup($node_id);
-	    $node->CheckPreReserve(0, 0);
-	}
-	DBQueryFatal("update nodes set reserved_pid=null, ".
-		     "   reservation_name=null ".
+    my $query_result =
+	DBQueryFatal("select node_id from nodes ".
 		     "where reserved_pid='$pid' and ".
 		     "      reservation_name='$resname'");
+    while (my ($node_id) = $query_result->fetchrow_array()) {
+	my $node = Node->Lookup($node_id);
+	$node->CheckPreReserve(0, 0);
     }
-    else {
-	DBQueryFatal("update nodes set reservation_name='__${resname}__' ".
-		     "where reserved_pid='$pid' and ".
-		     "      reservation_name='$resname'");
-    }
+    DBQueryFatal("update nodes set reserved_pid=null, ".
+		 "   reservation_name=null ".
+		 "where reserved_pid='$pid' and ".
+		 "      reservation_name='$resname'");
+
     DBQueryFatal("delete from node_reservations ".
 		 "where pid_idx='$pid_idx' and reservation_name='$resname'");
     DBQueryFatal("delete from project_reservations ".
