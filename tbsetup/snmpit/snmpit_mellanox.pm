@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2013 University of Utah and the Flux Group.
+# Copyright (c) 2013-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -68,9 +68,14 @@ my %cmdPaths =
      "disable"  => ["set-modify", "enabled=false", undef],
     );
 
-my $PORT_FORMAT_IFINDEX   = 1;
-my $PORT_FORMAT_PORT      = 2;
-my $PORT_FORMAT_MLNX      = 3;
+
+# Most are defined in snmpit_lib, let's not repeat or change
+#my $PORT_FORMAT_IFINDEX   = 1;
+#my $PORT_FORMAT_MODPORT   = 2;
+#my $PORT_FORMAT_NODEPORT  = 3;
+#my $PORT_FORMAT_PORT      = 4;
+#my $PORT_FORMAT_PORTINDEX = 5;
+my $PORT_FORMAT_MLNX      = 6;
 
 #
 # Creates a new object. 
@@ -258,7 +263,7 @@ sub readifIndex($) {
 
     foreach my $rowref (@$rows) {
 	my ($name,$ifindex,$descr) = @$rowref;
-	$self->debug("got $name, $ifindex, description: $descr\n", 3);
+	$self->debug("$id: got $name, $ifindex, description: $descr\n", 3);
 	if ($name ne "ifDescr") {
 	    warn "$id: WARNING: Foreign snmp var returned: $name";
 	    return 0;
@@ -389,8 +394,11 @@ sub convertPortFormat($$@) {
 	$input = $PORT_FORMAT_PORT;
     } elsif ($sample =~ /^Eth/ || $sample =~ /^Po/) {
 	$input = $PORT_FORMAT_MLNX;
-    } else {
+    } elsif ($sample =~ /^\d+$/) {
 	$input = $PORT_FORMAT_IFINDEX;
+    } else {
+	warn "$id: do not support input port format of '$sample'\n";
+	return undef;
     }
     
     #
@@ -640,6 +648,7 @@ sub portControl ($$@) {
 	'auto'      => 1,
         '1000mbit'  => 1,
 	'10000mbit' => 1,
+	'25000mbit' => 1,
 	'40000mbit' => 1,
 	'full'      => 1,
 	);
@@ -1395,12 +1404,16 @@ sub getChannelIfIndex($@) {
     # If no port channel was found, but only one port was provided, attempt
     # to set the return value to its ifindex.  This follows the semantics in
     # snmpit_cisco.pm
-    if (!defined($chifindex) && scalar(@swports) == 1 && 
-	exists($self->{IFINDEX}{$swports[0]})) {
-	$chifindex = $self->{IFINDEX}{$swports[0]};
+    if (!defined($chifindex) && scalar(@swports) == 1 && $swports[0]) {
+	$chifindex = $swports[0];
     }
 
-    $self->debug("$id gets $chifindex\n",1);
+    if (defined($chifindex)) {
+	$self->debug("$id: found channel index $chifindex\n",1);
+    } else {
+	$self->debug("$id: no channel found for $ports[0] ($swports[0])\n",1);
+    }
+
     return $chifindex;
 }
 
