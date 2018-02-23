@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -124,6 +124,7 @@ my $IFC_100MBS  = "100baseTx";
 my $IFC_10MBS   = "10baseT";
 my $IFC_FDUPLEX = "FD";
 my $IFC_HDUPLEX = "HD";
+my $IFC_AUTO    = "$IFC_1000MBS,$IFC_100MBS,$IFC_10MBS";
 my @LOCKFILES   = ("/etc/group.lock", "/etc/gshadow.lock");
 my $MKDIR	= "/bin/mkdir";
 my $GATED	= "/usr/sbin/gated";
@@ -668,7 +669,10 @@ sub os_ifconfig_line($$$$$$$$;$$$)
 		warn("*** Bad speed units $2 in ifconfig, default to 100Mbps\n");
 		$speed = 100;
 	    }
-	    if ($speed == 10000) {
+	    if ($speed == 25000 || $speed == 40000) {
+		$media = "";
+	    }
+	    elsif ($speed == 10000) {
 		$media = $IFC_10000MBS;
 	    }
 	    elsif ($speed == 1000) {
@@ -681,20 +685,23 @@ sub os_ifconfig_line($$$$$$$$;$$$)
 		$media = $IFC_10MBS;
 	    }
 	    elsif ($speed == 0) {
-		warn("*** Speed was 0 in ifconfig, defaulting to auto negotiation (and Gb media)\n");
-		$media = $IFC_1000MBS;
+		warn("*** Speed was 0 in ifconfig, default to autoconfig\n");
+		$media = "$IFC_AUTO";
 	    }
 	    else {
-		warn("*** Bad Speed $speed in ifconfig, default to 100Mbps\n");
-		$speed = 100;
-		$media = $IFC_100MBS;
+		warn("*** Bad Speed $speed in ifconfig, default to autoconfig\n");
+		$speed = 0;
+		$media = $IFC_AUTO;
 	    }
 	}
 	if (!defined($duplex)) {
 	    warn("*** No duplex defined, default to full\n");
 	    $duplex = "full";
 	}
-	if ($duplex eq "full") {
+	if ($media eq '' || $media eq $IFC_AUTO) {
+	    ;
+	}
+	elsif ($duplex eq "full") {
 	    $media = "$media-$IFC_FDUPLEX";
 	}
 	elsif ($duplex eq "half") {
@@ -741,10 +748,24 @@ sub os_ifconfig_line($$$$$$$$;$$$)
 		    "  $ethtool -s $iface autoneg off speed $speed duplex $duplex\n    " .
 		    "  sleep 2 # needed due to likely bug in e100 driver on pc850s\n    ";
 	    }
-	    $uplines .= 
-		"else\n    " .
-		"  /sbin/mii-tool --force=$media $iface\n    " .
-		"fi\n    ";
+	    if ($media eq '') {
+		$uplines .= 
+		    "else\n    " .
+		    "  echo WARNING: cannot set speed $speed for $iface via mii-tool!\n    " .
+		    "fi\n    ";
+	    }
+	    elsif ($media eq $IFC_AUTO) {
+		$uplines .= 
+		    "else\n    " .
+		    "  /sbin/mii-tool -A $IFC_AUTO\n    " .
+		    "fi\n    ";
+	    }
+	    else {
+		$uplines .= 
+		    "else\n    " .
+		    "  /sbin/mii-tool --force=$media $iface\n    " .
+		    "fi\n    ";
+	    }
 	} else {
 	    $uplines = "/sbin/mii-tool --force=$media $iface\n    ";
 	}
