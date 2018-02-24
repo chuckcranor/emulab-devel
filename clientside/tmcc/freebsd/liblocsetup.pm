@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -177,8 +177,8 @@ sub os_ifconfig_line($$$$$$$$;$$%)
 		warn("*** Bad speed units $2 in ifconfig, default to 100Mbps\n");
 		$speed = 100;
 	    }
-	    if ($speed == 10000) {
-		# 10G is 10G, take it or leave it
+	    if ($speed >= 10000) {
+		# autoconfig 10Gb or greater
 		$media = $IFC_AUTO;
 	    }
 	    elsif ($speed == 1000) {
@@ -204,8 +204,8 @@ sub os_ifconfig_line($$$$$$$$;$$%)
 	    $mediaopt = $IFC_ADUPLEX;
 	} else {
 	    if ($duplex eq "full") {
-		if ($speed == 10000) {
-		    # 10G is always full duplex, no need to set
+		if ($speed >= 10000) {
+		    # 10G and above is always full duplex, no need to set
 		    $mediaopt = $IFC_ADUPLEX;
 		} else {
 		    $mediaopt = $IFC_FDUPLEX;
