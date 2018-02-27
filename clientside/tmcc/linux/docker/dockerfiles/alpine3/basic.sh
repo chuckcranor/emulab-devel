@@ -2,11 +2,17 @@
 
 set -x
 
+# add testing branch to repo for tcsh package
+echo "@testing http://nl.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
+
 apk update
 
 # missing iputils-ping package from ubuntu process
 apk add openssh-server rsyslog logrotate iproute2 iputils net-tools sudo bash \
-    util-linux openssh-client
+    util-linux openssh-client tcsh@testing
+
+# the apk tcsh doesnt include a csh symlink so we'll add one
+ln -s /bin/tcsh /bin/csh
 
 ## Permissions on these should be the same as the host, so preserve them.
 #cp -p /tmp/src/ssh-host-keys/ssh_host* /etc/ssh/

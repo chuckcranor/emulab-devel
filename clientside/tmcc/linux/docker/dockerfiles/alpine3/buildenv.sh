@@ -16,12 +16,9 @@ DIRNAME=`pwd`
 
 apk update
 
-apk add git ca-certificates bash perl \
+apk add git ca-certificates perl \
     gcc make libc-dev byacc libtool openssl-dev 'g++' \
     sudo python python-dev libpcap-dev boost-dev wget patch flex
-
-ln -s /bin/bash /bin/tcsh
-ln -s /bin/tcsh /bin/csh
 
 if [ -z "$EMULABTMPSRC" ]; then
     echo "WARNING: missing EMULABSRC environment variable pointer to src; cloning!"
