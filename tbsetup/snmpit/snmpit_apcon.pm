@@ -1,7 +1,7 @@
 #!/usr/bin/perl -W
 
 #
-# Copyright (c) 2010 University of Utah and the Flux Group.
+# Copyright (c) 2010, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -214,7 +214,8 @@ sub createExpectObject($)
 {
     my $self = shift;
     
-    my $spawn_cmd = "ssh -l admin $self->{NAME}";
+    my $spawn_cmd = "ssh -l admin ".
+	"-o KexAlgorithms=+diffie-hellman-group1-sha1 $self->{NAME}";
     # Create Expect object and initialize it:
     my $exp = new Expect();
     if (!$exp) {
