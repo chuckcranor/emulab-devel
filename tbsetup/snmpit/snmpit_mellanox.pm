@@ -797,25 +797,57 @@ sub createVlan($$$;$) {
 	return 0;
     }
 
+    $self->debug("createVlan: name $vlan_id number $vlan_number \n");
+
     $self->lock();
     my $check_number = $self->findVlan($vlan_id,1);
     if (defined($check_number)) {
 	if ($check_number != $vlan_number) {
 	    warn "$id: WARNING: Not creating $vlan_id because it already ".
-	         "exists with name $check_number\n";
+	         "exists with VLAN number $check_number instead of $vlan_number\n";
 	    $self->unlock();
             return 0;
 	}
+	print "  VLAN $vlan_id already exists as VLAN #$vlan_number on " .
+	    "$self->{NAME} ...\n";
+	$self->unlock();
+	return $vlan_number;
     }
     
-    $self->debug("createVlan: name $vlan_id number $vlan_number \n");
-
     print "  Creating VLAN $vlan_id as VLAN #$vlan_number on " .
 	"$self->{NAME} ...\n";
 
     my $crcmd = ["action", "$MLNX_VLAN_PREFIX/add", {vlan_id => $vlan_number}];
     my $nmcmd = ["set-modify","$MLNX_VLAN_PREFIX/$vlan_number/name=$vlan_id"];
     my $resp = $self->callRPC([$crcmd, $nmcmd]);
+
+    #
+    # XXX creating a VLAN has the most unfortunate side-effect of adding that
+    # VLAN to every trunk port. Since we know at this point that we are a
+    # brand new VLAN, just remove it from ALL trunks here.
+    #
+    # Note that this works, but is probably overkill. It seem that if you just
+    # delete a VLAN from a trunk port once, it changes the default (implicit)
+    # config from:
+    #    ... switchport trunk allowed-vlan all
+    # to:
+    #    ... switchport trunk allowed-vlan none
+    #    ... switchport trunk allowed-vlan add 260
+    #    ... switchport trunk allowed-vlan add 271
+    #    ...
+    #
+    # In other words, it changes to the more desired behavior of forcing you
+    # to explicitly add any VLAN you want on a trunk. But this behavior is not
+    # documented and could probably change at any time.
+    #
+    # So, we stick with this overkill method since it is safe. What we would
+    # really like is a documented API call that directly enables us to set
+    # "allowed-vlan none". We could then call that when setting up a trunk.
+    #
+    if (defined($resp)) {
+	$self->removeTrunkPortsFromVlan($vlan_number);
+    }
+
     $self->unlock();
     
     if (!defined($resp)) {
@@ -1049,6 +1081,91 @@ sub delPortVlan($$@) {
 	my $resp = $self->callRPC(\@setcmds);
 	if (!defined($resp)) {
 	    $errors = scalar(@ports);
+	}
+    }
+
+    $self->unlock();
+    return $errors;
+}
+
+#
+# This is a Mellanox-specific version of removePortsFromVlan that is
+# optimized to remove only trunk ports from a single Vlan.
+#
+sub removeTrunkPortsFromVlan($$) {
+    my $self = shift;
+    my $vlan = shift;
+    my $errors = 0;
+    my $id = $self->{NAME} . "::removeTrunkPortsFromVlan($vlan)";
+
+    $self->debug($id."\n");
+    
+    return 0 if (!defined($vlan));
+
+    #
+    # Get the state for all ports
+    #
+    my @swports = grep {/^\d+$/} keys %{$self->{IFINDEX}};
+    my @didports = ();
+    $self->lock();
+    my $pstates = $self->getPortState(\@swports);
+    if (!defined($pstates)) {
+	warn "$id: WARNING: Failed to get port states.\n";
+	$self->unlock();
+	return $errors;
+    }
+
+    my @setcmds = ();
+    foreach my $ifindex (@swports) {
+	my %ifc = %{$pstates->{$ifindex}};
+
+	next
+	    if ($ifc{MODE} ne "trunk");
+
+	$self->debug("$id: trunk before: ifindex=$ifindex, vlans: " .
+		     join(' ', keys %{$ifc{ALLOWED}}) . "\n", 1);
+
+	#
+	# If the vlan is in the allowed list for this trunk link, then remove
+	# it from the list. We make sure that all trunks are left with at least
+	# the default VLAN.
+	#
+	if (exists($ifc{ALLOWED}{$vlan})) {
+	    if (keys(%{$ifc{ALLOWED}}) == 1) {
+		#
+		# We are the only VLAN, emit a warning and add the default vlan
+		# since trunk ports must be a member of at least one vlan.
+		#
+		push @setcmds, ["action", "$MLNX_IFC_PREFIX/$ifindex/vlans/allowed/add", { vlan_ids => $MLNX_DEF_VLAN }];
+		$ifc{ALLOWED}{$MLNX_DEF_VLAN} = 1;
+		warn "$id: WARNING: Removing last vlan from an ".
+		    "equal-mode trunk's allowed list ".
+		    "(ifindex: $ifindex).\n";
+	    }
+	    push @setcmds, ["action", "$MLNX_IFC_PREFIX/$ifindex/vlans/allowed/delete", {vlan_ids => $vlan}];
+	    delete $ifc{ALLOWED}{$vlan};
+	    push @didports, $ifindex;
+	}
+    }
+
+    if (@setcmds) {
+	my $resp = $self->callRPC(\@setcmds);
+	if (!defined($resp)) {
+	    $errors = 1;
+	}
+
+	if (@didports && $self->{DEBUG} > 0) {
+	    my $pstates = $self->getPortState(\@didports);
+	    if (defined($pstates)) {
+		foreach my $ifindex (@didports) {
+		    my %ifc = %{$pstates->{$ifindex}};
+		    next
+			if ($ifc{MODE} ne "trunk");
+
+		    print STDERR "$id: trunk after: ifindex=$ifindex, vlans: ",
+			join(' ', keys %{$ifc{ALLOWED}}), "\n";
+		}
+	    }
 	}
     }
 
@@ -1570,6 +1687,12 @@ sub enablePortTrunking2($$$$) {
 	my $resp = $self->callRPC(\@setcmds);
 	if (!defined($resp)) {
 	    $retval = 0;
+	}
+	elsif (1) {
+	    my $pstate = $self->getPortState([$ifindex]);
+	    if (defined($pstate)) {
+		print STDERR "$id: trunk: ifindex=$ifindex, vlans: ", join(' ', keys %{$pstate->{$ifindex}{ALLOWED}}), "\n";
+	    }
 	}
     }
 
