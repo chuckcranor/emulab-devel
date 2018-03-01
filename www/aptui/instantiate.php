@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -319,7 +319,7 @@ function SPITFORM($formfields, $newuser, $errors)
     global $TBBASE, $APTMAIL, $ISAPT, $ISCLOUD, $ISPNET, $PORTAL_NAME;
     global $profile_array, $this_user, $profilename, $profile;
     global $projlist, $skipfirststep, $maxduration, $TBMAINSITE;
-    global $refspec;
+    global $refspec, $ISPOWDER;
     
     $showabout  = ($ISAPT && !$this_user ? 1 : 0);
     $registered = (isset($this_user) ? "true" : "false");
@@ -342,6 +342,7 @@ function SPITFORM($formfields, $newuser, $errors)
     SPITHEADER(1);
 
     echo "<link rel='stylesheet' href='css/picker.css'>\n";
+    echo "<link rel='stylesheet' href='css/nv.d3.css'>\n";
 
     # I think this will take care of XSS prevention?
     echo "<script type='text/plain' id='form-json'>\n";
@@ -374,12 +375,12 @@ function SPITFORM($formfields, $newuser, $errors)
         echo htmlentities(json_encode($projlist));
         echo "</script>\n";
     }
-    #
-    # And AM list if that is allowed.
-    #
-    if (isset($this_user) && !$this_user->webonly() && !$ISAPT && !$ISPNET) {
-        SpitAggregateStatus();
-    }
+    SpitAggregateStatus(true);
+
+    echo "<script type='text/plain' id='skiptypes-json'>\n";
+    echo htmlentities(json_encode(Instance::NodeTypePruneList()));
+    echo "</script>\n";
+    
     SpitOopsModal("oops");
     echo "<script type='text/javascript'>\n";
     echo "    window.PROFILE    = '" . $formfields["profile"] . "';\n";
@@ -412,7 +413,17 @@ function SPITFORM($formfields, $newuser, $errors)
     else {
         echo "    window.FROMREPO = false;\n";
     }
+    # Do we show an aggregate selector?
+    if (isset($this_user) && !$this_user->webonly()
+        && !$ISAPT && !$ISPNET && !$ISPOWDER) {
+        echo "    window.CLUSTERSELECT = true;\n";
+    }
+    else {
+        echo "    window.CLUSTERSELECT = false;\n";
+    }
     echo "</script>\n";
+    echo "<script src='js/lib/d3.v3.js'></script>\n";
+    echo "<script src='js/lib/nv.d3.js'></script>\n";
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
     echo "<script src='https://www.emulab.net/protogeni/jacksmod/stable/jacksmod.js'></script>";
     echo "<script src='https://www.emulab.net/protogeni/jacksmod/stable/imagepicker.js'></script>";
@@ -429,6 +440,7 @@ function SPITFORM($formfields, $newuser, $errors)
     REQUIRE_MOMENT();
     REQUIRE_JACKS();
     REQUIRE_JQUERY_STEPS();
+    AddLibrary("js/resgraphs.js");
     AddLibrary("js/gitrepo.js");
     SPITREQUIRE("js/instantiate-new.js");
 }
@@ -518,7 +530,7 @@ if (!isset($create)) {
     SPITFORM($defaults, false, array());
     echo "<div style='display: none'><div id='jacks-dummy'></div></div>\n";
 
-    AddTemplateList(array("instantiate", "instantiate-new", "aboutapt", "aboutcloudlab", "aboutpnet", "waitwait-modal", "rspectextview-modal", "picker-template"));
+    AddTemplateList(array("instantiate", "instantiate-new", "aboutapt", "aboutcloudlab", "aboutpnet", "waitwait-modal", "rspectextview-modal", "picker-template","reservation-graph"));
     SPITFOOTER();
     return;
 }

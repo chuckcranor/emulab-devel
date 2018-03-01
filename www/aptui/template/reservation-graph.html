@@ -1,4 +1,4 @@
-    <div id='resgraph-<%- details.nickname %>'>
+    <div id='<%- graphid %>'>
       <div class='col-xs-12 col-xs-offset-0 reservation-details'>
 	<div class='panel panel-default'>
 	  <div class="panel-heading">
@@ -11,7 +11,7 @@
 				 glyphicon-fullscreen pull-right'></span>
 		  </a>
 		<% } %>
-		<%- details.nickname %> Availability
+		<%- title %> Availability
 		<% if (showhelp) { %>
 		  <a href='#' class='btn btn-xs resgraph-help-button'
 		     data-toggle='tooltip'

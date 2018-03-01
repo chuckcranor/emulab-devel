@@ -1027,7 +1027,8 @@ class ExtensionInfo
 }
 
 # $amlist, $fedlist, and $status are all output arrays
-function CalculateAggregateStatus(&$amlist, &$fedlist, &$status) {
+function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
+                                  $extended = false) {
     global $TBMAINSITE, $DEFAULT_AGGREGATE_URN, $CHECKLOGIN_USER;
     $am_array = Instance::DefaultAggregateList();
 
@@ -1038,8 +1039,14 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status) {
         $aggregate = $am_array[$DEFAULT_AGGREGATE_URN];
         $urn = $aggregate->urn();
         $am  = $aggregate->name();
-        $amlist[$urn] = $am;
-
+        if ($extended) {
+            $amlist[$urn] = array("urn"      => $urn,
+                                  "name"     => $am,
+                                  "nickname" => $aggregate->nickname());
+        }
+        else {
+            $amlist[$urn] = $am;
+        }
         $freevms = $vmcount = 0;
         TBVMCounts($vmcount, $freevms);
 
@@ -1055,7 +1062,14 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status) {
     while (list($ignore, $aggregate) = each($am_array)) {
         $urn = $aggregate->urn();
         $am  = $aggregate->name();
-        $amlist[$urn] = $am;
+        if ($extended) {
+            $amlist[$urn] = array("urn"      => $urn,
+                                  "name"     => $am,
+                                  "nickname" => $aggregate->nickname());
+        }
+        else {
+            $amlist[$urn] = $am;
+        }
         #
         # We need to mark federated sites for the cluster dropdown.
         #
@@ -1080,11 +1094,11 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status) {
     }
 }
 
-function SpitAggregateStatus() {
+function SpitAggregateStatus($extended = false) {
     $amlist     = array();
     $fedlist    = array();
     $status     = array();
-    CalculateAggregateStatus($amlist, $fedlist, $status);
+    CalculateAggregateStatus($amlist, $fedlist, $status, $extended);
     echo "<script type='text/plain' id='amlist-json'>\n";
     echo htmlentities(json_encode($amlist));
     echo "</script>\n";

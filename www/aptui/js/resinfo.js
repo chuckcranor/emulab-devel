@@ -46,12 +46,16 @@ $(function ()
 	$('#main-body').html(html);
 	// Per clusters rows filled in with templates.
 	_.each(amlist, function(details, urn) {
+	    var graphid = 'resgraph-' + details.nickname;
+	    
 	    $('#' + details.nickname + " .counts-panel")
 		.html(totalsTemplate({"details"      : details,
 				      "urn"          : urn}));
 	    
 	    $('#' + details.nickname + " .resgraph-panel")
 		.html(graphTemplate({"details"        : details,
+				     "graphid"        : graphid,
+				     "title"          : details.nickname,
 				     "urn"            : urn,
 				     "showhelp"       : true,
 				     "showfullscreen" : false}));

@@ -1,3 +1,22 @@
+<style>
+ .panel-heading-list {
+     padding: 2px;
+ }
+ .panel-body-dashboard {
+     padding: 2px;
+ }
+ .resgraph-size {
+     max-height:300px;
+     height:300px;
+ }
+ .resgraph-modal-size {
+     max-height:600px;
+     height:600px;
+ }
+ svg {
+     display: block;
+ } 
+</style>  
 <div>
   <div id='about_div'
        class='col-lg-8  col-lg-offset-2
@@ -349,7 +368,7 @@
 		      </div>
 		    </div>
 		  <% } %>
-		  <% if (amlist) { %>
+		  <% if (clusterselect) { %>
 		    <div id='aggregate_selector'>
 		      <!-- The JS code fills this in -->
 		      <div id='cluster_selector' class='hidden'></div>
@@ -458,6 +477,27 @@
       </form>
     </div>
   </div>
+  <% if (amlist) { %>
+    <div class='col-lg-10  col-lg-offset-1
+		col-md-10  col-md-offset-1
+		col-sm-10  col-sm-offset-1
+		col-xs-12  col-xs-offset-0 hidden'
+	 style="margin-top: 10px;"
+	 id='resgraph-div'>
+      <% _.each(amlist, function(details, urn) { %>
+	<div class='row' id='<%- details.nickname %>'>
+	  <div class='col-sm-6 resgraph-panel-radios'
+	       style="padding: 0px;">
+	    <!-- Template goes here -->	    
+	  </div>
+	  <div class='col-sm-6 resgraph-panel-servers'
+	       style="padding: 0px;">
+	    <!-- Template goes here -->	    
+	  </div>
+	</div>
+      <% }) %>
+    </div>
+  <% } %>
 </div>
 <!-- This is the user verify modal -->
 <div id='verify_modal' class='modal fade'
@@ -638,6 +678,36 @@
 		  data-dismiss='modal' aria-hidden='true'>
 	    Cancel</button>
 	</div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Graph Help -->
+<div id='resgraph-help-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<br>
+	<p>
+	  The graph tells you how many of each node type are available
+	  for use in an experiment, at a specific time in the
+	  future. Note that nodes available immediately might not be
+	  available later, although in general as you move further out
+	  in time, more nodes are available.  Here are some helpful
+	  features of the graphs:<ul>
+	  <li> Click on a node type label to turn off that type's
+	    line. This will rescale the other lines, sometimes
+	    making it easier to see those other lines.</li>
+	  <li> Hover over and move around the graph to show a
+	    tooltip that will provide the date and time, and the free
+	    count for all of the node types at the time stamp you are
+	    hovering over.</li>
+	  <li> To reserve nodes for an experiment, please visit the
+	    <a href="reserve.php">reservation</a> page.
+	  </ul>
+	</p>
       </div>
     </div>
   </div>

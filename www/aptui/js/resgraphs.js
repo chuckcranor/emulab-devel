@@ -10,15 +10,28 @@ window.ShowResGraph = (function ()
 	var forecast = args.forecast;
 	// For the availablity page instead of reserve page.
 	var foralloc = args.foralloc;
-	var skiptypes= args.skiptypes;
+	var skiptypes= args.skiptypes;	
+	var showtypes= args.showtypes;	
+	var maxdays  = args.maxdays;
 	var index    = 0;
 	var datums   = [];
+	var maxstamp = null;
 
 	if (foralloc === undefined) {
 	    foralloc = false;
 	}
 	if (skiptypes === undefined) {
 	    skiptypes = null;
+	}
+	if (showtypes === undefined) {
+	    showtypes = null;
+	}
+	if (maxdays === undefined) {
+	    maxdays = null;
+	}
+	else {
+	    var now = Date.now() / 1000;
+	    maxstamp = now + (maxdays * 3600 * 24);
 	}
 
 	/*
@@ -32,6 +45,9 @@ window.ShowResGraph = (function ()
 	// Each node type
 	for (var type in forecast) {
 	    if (skiptypes && _.has(skiptypes, type)) {
+		continue;
+	    }
+	    if (showtypes && !_.has(showtypes, type)) {
 		continue;
 	    }
 	    // This is an array of objects.
@@ -55,7 +71,8 @@ window.ShowResGraph = (function ()
 		 */
 		array = array.slice();
 		array.push($.extend({}, array[0]));
-		array[1].t = parseInt(array[1].t) + (45 * 3600 * 24);
+		array[1].t = parseInt(array[1].t) +
+		    ((maxdays ? maxdays : 45) * 3600 * 24);
 	    }
 	    else if (array.length > 1) {
 		/*
@@ -81,6 +98,15 @@ window.ShowResGraph = (function ()
 			//console.info("toss2", type, data, nextdata);
 			continue;
 		    }
+		    /*
+		     * Stop processing after we reach maxdays out. 
+		     */
+		    if (maxstamp) {
+			var t = parseInt(data.t);
+			if (t > maxstamp) {
+			    break;
+			}
+		    }
 		    temp.push(data);
 		}
 		/*
@@ -94,12 +120,26 @@ window.ShowResGraph = (function ()
 		    data.t = parseInt(data.t);
 		    temp.push(data);
 		    temp.push($.extend({}, data));
-		    temp[1].t = parseInt(temp[1].t) + (45 * 3600 * 24);
+		    temp[1].t = parseInt(temp[1].t) +
+			((maxdays ? maxdays : 45) * 3600 * 24);
 		}
 		else {
-		    // Tack on last one.
+		    // Tack on last one unless it violates maxdays limit.
 		    if (temp[temp.length - 1].t != array[array.length - 1].t) {
-			temp.push(array[array.length - 1]);
+			var data = array[array.length - 1];
+			var t = parseInt(data.t);
+
+			if (maxstamp && (t > maxstamp)) {
+			    // If only one point need to generate another.
+			    if (temp.length == 1) {
+				data = $.extend({}, data);
+				data.t = maxstamp;
+				temp.push(data);
+			    }
+			}
+			else {
+			    temp.push(data);
+			}
 		    }
 		}
 		array = temp;
@@ -261,17 +301,30 @@ window.ShowResGraph = (function ()
 	return datums;
     }
 
-    function CreateGraph(datums, selector, click_callback) {
+    function CreateGraph(datums, selector, click_callback, showbrush) {
 	var id = '#' + selector;
 	$(id + ' svg').html("");
 
-	window.nv.addGraph(function() {
-	    var chart  = window.nv.models.lineWithFocusChart();
+	// New option
+	if (showbrush === undefined) {
+	    showbrush = true;
+	}
 
+	window.nv.addGraph(function() {
+	    var chart;
+
+	    if (showbrush) {
+		chart  = window.nv.models.lineWithFocusChart();
+	    }
+	    else {
+		chart =  window.nv.models.lineChart();
+	    }
+	    chart.margin({"left":25,"right":15,"top":20,"bottom":20});
+	    
 	    /*
 	     * We need the min,max of the time stamps for the brush. We can use
 	     * just one of the nodes.
-	     */ 
+	     */
 	    var minTime = d3.min(datums[0].values,
 				 function (d) { return d.x; });
 	    var maxTime = d3.max(datums[0].values,
@@ -280,13 +333,13 @@ window.ShowResGraph = (function ()
 	    if (maxTime - minTime > (3600 * 24 * 7 * 1000)) {
 		maxTime = minTime + (3600 * 24 * 7 * 1000);
 	    }
-	    chart.brushExtent([minTime,maxTime]);
+	    if (showbrush) {
+		chart.brushExtent([minTime,maxTime]);
 
-	    chart.x2Axis.tickFormat(function(d) {
-		return d3.time.format('%m/%d')(new Date(d))
-            });	    
-	    chart.margin({"left":25,"right":15,"top":20,"bottom":20});
-	    
+		chart.x2Axis.tickFormat(function(d) {
+		    return d3.time.format('%m/%d')(new Date(d))
+		});
+	    }
 	    chart.xAxis.tickFormat(function(d) {
 		return d3.time.format('%m/%d')(new Date(d))
             });	    
@@ -338,7 +391,8 @@ window.ShowResGraph = (function ()
 	    return;
 	}
 	console.info("datums", datums);
-	CreateGraph(datums, args.selector, args.click_callback);
+	CreateGraph(datums, args.selector, args.click_callback,
+		    args.showbrush);
     };
 }
 )();

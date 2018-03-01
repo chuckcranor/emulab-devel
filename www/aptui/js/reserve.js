@@ -73,7 +73,11 @@ $(function ()
 	// Graph list(s).
 	html = "";
 	_.each(amlist, function(details, urn) {
+	    var graphid = 'resgraph-' + details.nickname;
+
 	    html += graphTemplate({"details"        : details,
+				   "graphid"        : graphid,
+				   "title"          : details.nickname,
 				   "urn"            : urn,
 				   "showhelp"       : true,
 				   "showfullscreen" : true});

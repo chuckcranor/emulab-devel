@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['instantiate-new', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', 'rspectextview-modal']);
+    var templates = APT_OPTIONS.fetchTemplateList(['instantiate-new', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', 'rspectextview-modal', 'reservation-graph']);
     var instantiateString = templates['instantiate-new'];
     var aboutaptString = templates['aboutapt'];
     var aboutcloudString = templates['aboutcloudlab'];
@@ -46,8 +46,11 @@ $(function ()
     var types         = null;
     var hardware      = null;
     var resinfo       = null;
+    var graphsdrawn   = false;
+    var currentStep   = 0;
     var deprecatedList = [];
     var mainTemplate  = _.template(instantiateString);
+    var graphTemplate = _.template(templates["reservation-graph"]);
 
     function initialize()
     {
@@ -70,7 +73,7 @@ $(function ()
 	if ($('#amlist-json').length) {
 	    amlist = decodejson('#amlist-json');
 	    _.each(_.keys(amlist), function (key) {
-		amValueToKey[amlist[key]] = key;
+		amValueToKey[amlist[key].name] = key;
 	    });
 	    amstatus = decodejson('#amstatus-json');
 	    console.info(amstatus);
@@ -123,11 +126,6 @@ $(function ()
 	});
 	var projcategories = MakeProfileCategories(profileToArray);
 
-	// Fire this off right away.
-	if (window.REGISTERED) {
-	    LoadReservationInfo();
-	}
-
 	var html = mainTemplate({
 	    formfields:         decodejson('#form-json'),
 	    profiles:           profilelist,
@@ -150,8 +148,15 @@ $(function ()
 	    clustername:        window.PORTAL_NAME,
 	    admin:		isadmin,
 	    maxduration:        window.MAXDURATION,
+	    clusterselect:      window.CLUSTERSELECT,
 	});
 	$('#main-body').html(html);
+
+	// Fire this off right away.
+	if (window.REGISTERED) {
+	    LoadReservationInfo();
+	}
+
 	if (projlist)
 	    UpdateGroupSelector();
 
@@ -181,6 +186,8 @@ $(function ()
 		return StepChanging(this, event, currentIndex, newIndex);
 	    },
 	    onStepChanged: function(event, currentIndex, priorIndex) {
+		// Globally record what step we are on.
+		currentStep = currentIndex;
 		return StepChanged(this, event, currentIndex, priorIndex);
 	    },
 	    onFinishing: function(event, currentIndex) {
@@ -565,6 +572,9 @@ $(function ()
 	if (currentIndex == 2) {
 	    SwitchJacks('small');
 	}
+	if (currentIndex == 2 && newIndex != 2) {
+	    HideClusterGraphs();
+	}
 	if (currentIndex == 0 && selected_uuid == null) {
 	    return false;
 	}
@@ -628,11 +638,15 @@ $(function ()
 	else if (currentIndex == 2 && priorIndex == 1) {
 	    // Keep the two panes the same height
 	    $('#inline_container').css('height',
-				       $('#finalize_container').outerHeight());
-	// Chrome was having an issue where Jacks was not responding to
-	// the height change. Had to also add to Jacks root.
-	$('#inline_jacks').css('height',
-			      $('#finalize_container').outerHeight());
+			       $('#finalize_container').outerHeight() - 15);
+
+	    // Chrome was having an issue where Jacks was not responding to
+	    // the height change. Had to also add to Jacks root.
+	    $('#inline_jacks').css('height',
+			       $('#finalize_container').outerHeight() - 15);
+	}
+	if (currentIndex == 2) {
+	    ShowClusterGraphs();
 	}
 	if (currentIndex < priorIndex) {
 	    // Disable going forward by clicking on the labels
@@ -940,6 +954,10 @@ $(function ()
 	if (monitor == null || $.isEmptyObject(monitor)) {
 	    return;
 	}
+	// No need to do this if not showing selectors.
+	if (!window.CLUSTERSELECT) {
+	    return;
+	}
 
 	$('#finalize_options .cluster-group').each(function() {
 	    if ($(this).hasClass("pickered")) {
@@ -999,10 +1017,17 @@ $(function ()
 			      key: 'disabled'
 			    }];
 
-	    picker.MakePicker(pickerTarget, wt.StatusClickEvent, attributes, dividers, {class: 'cluster_picker_status'});
+	    picker.MakePicker(pickerTarget,
+			      function (container, that, target) {
+				  ClusterSelected(that, true);
+				  wt.StatusClickEvent(container, that, target);
+			      },
+			      attributes, dividers,
+			      {class: 'cluster_picker_status'});
 
 	    // Assign health ratings and icons
-	    _.each(amlist, function(name, key) {
+	    _.each(amlist, function(details, key) {
+		var name = details.name;
 		var data = monitor[key];
 		var rating, classes;
 		var target = $('#'+which+' .cluster_picker_status .dropdown-menu .enabled a:contains("'+name+'")');
@@ -1642,6 +1667,11 @@ $(function ()
 	var count  = 0;
 	sites = {};
 
+	// No need to do this if not showing selectors.
+	if (!window.CLUSTERSELECT) {
+	    return;
+	}
+
 	var nodecount  = $(xmlDoc).find("node").length;
 	if (nodecount > 100) {
 	    doconstraints = 0;
@@ -1700,7 +1730,8 @@ $(function ()
 	// Create the dropdown selection lists. If only one, then force
 	// that one to be selected.
 	var options = "";
-	_.each(amlist, function(name, key) {
+	_.each(amlist, function(details, key) {
+	    var name = details.name;
 	    options = options + "<option value='" + name + "'";
 	    if (amlist.count == 1) {
 		options = options + " selected";
@@ -1770,6 +1801,12 @@ $(function ()
 	$("#cluster_selector").html(html);
 	updateWhere();  
 	$("#cluster_selector").removeClass("hidden");
+
+	// This event will be overriden when the fancy cluster status
+	// stuff is initialized.
+	$('.select_where').change(function (event) {
+	    ClusterSelected(event, false);
+	});
     }
 
     /*
@@ -2148,6 +2185,8 @@ $(function ()
 
     function LoadReservationInfo()
     {
+	InitClusterGraphs();
+	
 	var callback = function(json) {
 	    if (json.code) {
 		console.info("Could not get reservation info: " + json.value);
@@ -2157,6 +2196,7 @@ $(function ()
 	    resinfo = json.value;
 	    
 	    ShowClusterReservations();
+	    ShowClusterGraphs();
 	};
 	var $xmlthing =
 	    sup.CallServerMethod(null, "reserve", "ReservationInfo", null);
@@ -2188,5 +2228,127 @@ $(function ()
 	console.info("picker event", action, id, value);
 	ga('send', 'event', 'picker', action, id, value);
     }
+
+    function InitClusterGraphs()
+    {
+	// Only the Powder portal for now.
+	if (!window.ISPOWDER) {
+	    return;
+	}
+
+	// Per clusters rows filled in with templates.
+	// For POWDER there are two graphs, one for
+	_.each(amlist, function(details, urn) {
+	    var graphid = "resgraph-" + details.nickname;
+		
+	    $('#' + details.nickname + " .resgraph-panel-radios")
+		.html(graphTemplate({"details"        : details,
+				     "graphid"        : graphid + "-radios",
+				     "title"          : "Radio",
+				     "urn"            : urn,
+				     "showhelp"       : true,
+				     "showfullscreen" : false}));
+	    
+	    $('#' + details.nickname + " .resgraph-panel-servers")
+		.html(graphTemplate({"details"        : details,
+				     "graphid"        : graphid + "-servers",
+				     "title"          : "Server",
+				     "urn"            : urn,
+				     "showhelp"       : true,
+				     "showfullscreen" : false}));
+	    
+	    // Handler for the Reservation Graph Help button
+	    $('.resgraph-help-button').click(function (event) {
+		event.preventDefault();
+		sup.ShowModal('#resgraph-help-modal');
+	    });
+	});
+    }
+
+    function ShowClusterGraphs()
+    {
+	// Only the Powder portal for now.
+	if (!window.ISPOWDER) {
+	    return;
+	}
+	if (currentStep != 2) {
+	    return;
+	}
+	// Make visible, in case we hid it.
+	// Must be visible to draw graphs.
+	$('#resgraph-div').removeClass("hidden");
+	
+	if (graphsdrawn || !resinfo) {
+	    return;
+	}
+	var skiptypes = decodejson('#skiptypes-json');
+
+	// Per clusters rows filled in with templates.
+	_.each(amlist, function(details, urn) {
+	    var graphid = 'resgraph-' + details.nickname;
+
+	    if (! (_.has(resinfo, urn) && resinfo[urn])) {
+		$('#' + graphid).addClass("hidden");
+		return;
+	    }
+	    // Kill the spinners
+	    $('#' + details.nickname + ' .resgraph-spinner')
+		.addClass("hidden");
+
+	    ShowResGraph({"forecast"       : resinfo[urn].forecast,
+			  "selector"       : graphid + "-radios",
+			  "foralloc"       : true,
+			  "maxdays"        : 7,
+			  "showbrush"      : false,
+			  "skiptypes"      : skiptypes,
+			  "showtypes"      : {"nuc5300"   : true,
+					      "nuc6260"   : true,
+					      "enodeb"    : true,
+					      "sdr"       : true},
+			  "click_callback" : null});
+	    
+	    ShowResGraph({"forecast"       : resinfo[urn].forecast,
+			  "selector"       : graphid + "-servers",
+			  "foralloc"       : true,
+			  "maxdays"        : 7,
+			  "showbrush"      : false,
+			  "skiptypes"      : skiptypes,
+			  "showtypes"      : {"d430"   : true,
+					      "d710"   : true,
+					      "pc3000" : true,
+					      "d820"   : true},
+			  "click_callback" : null});
+	});
+	graphsdrawn = true;
+    }
+    function HideClusterGraphs()
+    {
+	// Only the Powder portal for now.
+	if (!window.ISPOWDER) {
+	    return;
+	}
+	// Hide when switching to a different step.
+	$('#resgraph-div').addClass("hidden");
+    }
+    
+    function ClusterSelected(selected, pickered)
+    {
+	console.info("ClusterSelected: ", selected);
+	var cluster = null;
+	window.foo = selected;
+
+	/*
+	 * Dig out which cluster has been selected. Depending on whether
+	 * it came from the plain drop down or the pickered dropdown.
+	 */
+	if (pickered) {
+	    cluster = $(selected).attr("value");
+	}
+	else {
+	    cluster = $(selected.target).find(":selected").val()
+	}
+	console.info("ClusterSelected: " + cluster);
+    }
+
     $(document).ready(initialize);
 });
