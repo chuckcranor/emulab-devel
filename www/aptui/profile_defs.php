@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -594,6 +594,9 @@ class Profile
 	}
 	$parsed_xml = simplexml_load_string($rspec);
 
+        if (count($parsed_xml->node) == 0) {
+            return null;
+        }
 	foreach ($parsed_xml->node as $node) {
 	    # No XEN VMs on Cloudlab yet.
 	    if ($node->sliver_type &&
