@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1656,6 +1656,127 @@ function Do_GetRepoHash()
 	return;
     }
     SPITAJAX_RESPONSE($profile->repohash());
+}
+
+#
+# Return info about a profile.
+#
+function Do_GetProfile()
+{
+    global $this_user;
+    global $ajax_args;
+    
+    $this_idx = $this_user->uid_idx();
+
+    if (!isset($ajax_args["uuid"])) {
+	SPITAJAX_ERROR(1, "Missing profile uuid");
+	return;
+    }
+    $profile = Profile::Lookup($ajax_args["uuid"]);
+    if (!$profile) {
+	SPITAJAX_ERROR(1, "Unknown profile uuid");
+	return;
+    }
+    if (!ISADMIN() &&
+        !ISFOREIGN_ADMIN() &&
+	!$profile->CanView($this_user)) {
+	SPITAJAX_ERROR(1, "Not enough permission");
+	return;
+    }
+    SPITAJAX_RESPONSE(array('rspec' => $profile->rspec(),
+			    'name'  => $profile->name()));
+}
+
+#
+# Admin search function.
+#
+function Do_SearchProfiles()
+{
+    global $this_user;
+    global $ajax_args;
+
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return;
+    }
+    $results = array();
+
+    if (!isset($ajax_args["text"])) {
+	SPITAJAX_ERROR(-1, "Missing text to search for");
+	return -1;
+    }
+    $text = $ajax_args["text"];
+    if (!preg_match("/^[\w\s]*$/", $text)) {
+	SPITAJAX_ERROR(-1, "Illegal text to search for");
+	return -1;
+    }
+    $safe_text = addslashes("%${text}%");
+    
+    $query_result
+        = DBQueryFatal("select p.*,v.*,DATE(v.created) as created ".
+                       "   from apt_profiles as p ".
+                       "left join apt_profile_versions as v on ".
+                       "     v.profileid=p.profileid and ".
+                       "     v.version=p.version ".
+                       "where (v.creator like '$safe_text' or ".
+                       "       p.pid like '$safe_text' or ".
+                       "       v.rspec like ".
+                       "        '%<description%>$safe_text</description>%' or ".
+                       "       p.name like '$safe_text') ".
+                       "order by v.creator");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $blob = array();
+
+        $blob["profileid"] = $row["profileid"];
+        $blob["uuid"]      = $row["uuid"];
+        $blob["version"]   = $row["version"];
+        $blob["name"]      = $row["name"];
+        $blob["pid"]       = $row["pid"];
+        $blob["desc"]      = CleanString($row["description"]);
+        $blob["created"]   = DateStringGMT($row["created"]);
+        $blob["public"]    = $row["public"];
+        $blob["listed"]    = $row["listed"] ? "Yes" : "No";
+        $blob["shared"]    = $row["shared"];
+        $blob["creator"]   = $row["creator"];
+
+        if ($public)
+            $privacy = "Public";
+        elseif ($shared)
+            $privacy = "Site";
+        else
+            $privacy = "Project";
+        $blob["privacy"] = $privacy;
+
+        $parsed_xml = simplexml_load_string($row["rspec"]);
+        if ($parsed_xml &&
+            $parsed_xml->rspec_tour && $parsed_xml->rspec_tour->description) {
+            $desc = $parsed_xml->rspec_tour->description;
+            $blob["desc"] = CleanString($desc);
+        }
+        #
+        # Convenience.
+        #
+        $uuid     = $row["uuid"];
+        $name     = $row["name"];
+        $pid      = $row["pid"];
+        $pid_idx  = $row["pid_idx"];
+        $creator  = $row["creator"];
+
+        $blob["profile_link"]
+            = "<a href='manage_profile.php?action=edit&uuid=$uuid' ".
+            "target='_blank'>$name</a>";
+        $blob["creator_link"]
+            = "<a href='user-dashboard.php?user=$creator' ".
+            "target='_blank'>$creator</a>";
+        $blob["project_link"]
+            = "<a href='show-project.php?pid=$pid_idx' ".
+            "target='_blank'>$pid</a>";
+                              
+        $results[] = $blob;
+    }
+    SPITAJAX_RESPONSE($results);
+    
 }
 
 # Local Variables:

@@ -147,7 +147,7 @@ $(function ()
 	    });
 	};
 	var $xmlthing = sup.CallServerMethod(null,
-					     "myprofiles",
+					     "manage_profile",
 					     "GetProfile",
 				     	     {"uuid" : profile});
 	$xmlthing.done(callback);
