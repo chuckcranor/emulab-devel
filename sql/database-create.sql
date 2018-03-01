@@ -5374,6 +5374,7 @@ CREATE TABLE `users` (
   `nocollabtools` tinyint(1) default '0',
   `initial_passphrase` varchar(128) default NULL,
   `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
+  `require_aup` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `ga_userid` varchar(32) default NULL,
   PRIMARY KEY  (`uid_idx`),
   KEY `unix_uid` (`unix_uid`),
