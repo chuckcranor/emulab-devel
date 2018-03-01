@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2017 University of Utah and the Flux Group.
+# Copyright (c) 2007-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -523,25 +523,61 @@ sub PortalRPC($$$@)
     if ($usemydevtree) {
 	$cmurl =~ s/protogeni/protogeni\/stoller/;
     }
-
     #
     # We use the root context to talk to the Cluster RPC server
     #
     if (!defined($context)) {
 	$context = RootContext();
 	if (!defined($context)) {
-	    return GeniResponse->Create(GENIRESPONSE_RPCERROR(), undef,
+	    return GeniResponse->Create(GENIRESPONSE_ERROR(), undef,
 					"Could not get root context for RPC");
 	}
     }
     my $response = Genixmlrpc::CallMethod($cmurl, $context, $method, @args);
     if ($response->code() != GENIRESPONSE_SUCCESS()) {
 	if (!defined($response->output())) {
-	    $response->output("Operation failed, returned " .
-			      $response->code());
+	    $response->output(GENIRESPONSE_STRING($response->code()));
 	}
     }
     return $response;
+}
+
+#
+# Ping an aggregate to see if its alive, using getversion.
+#
+sub PingAggregate($$;$)
+{
+    my ($aggregate, $perrmsg, $portalrpc) = @_;
+    my $authority   = GetAuthority($aggregate->urn());
+    my $context     = RootContext();
+
+    if (!defined($authority)) {
+	$$perrmsg = "Could not lookup authority for $aggregate!";
+	return -1;
+    }
+    if (!defined($context)) {
+	$$perrmsg = "Could generate root context!";
+	return -1;
+    }
+    my $cmurl = $authority->url();
+    if (defined($portalrpc)) {
+	$cmurl =~ s/\/cm$/\/cluster/;
+    }
+    if ($usemydevtree) {
+	$cmurl =~ s/protogeni/protogeni\/stoller/;
+    }
+    my $oldto = Genixmlrpc->SetTimeout(10);
+    my $response = Genixmlrpc::CallMethod($cmurl, $context, "GetVersion");
+    Genixmlrpc->SetTimeout($oldto);
+
+    # Success is good!
+    return 0
+	if ($response->code() == GENIRESPONSE_SUCCESS());
+
+    #print STDERR Dumper($response);
+
+    $$perrmsg = $response->error();
+    return $response->code();
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

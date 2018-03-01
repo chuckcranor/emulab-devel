@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -186,11 +186,16 @@ class Dataset
         return $this->remote_url();
     }
 
-    function deleteCommand() {
-	return  "webmanage_dataset delete " . $this->pid() . "/" . $this->id();
+    function deleteCommand($webtask) {
+        $command = " webmanage_dataset " .
+                 "-t " . $webtask->task_id() . " delete " .
+                 $this->pid() . "/" . $this->id();
+        return $command;
     }
-    function grantCommand() {
-	return  "webmanage_dataset modify ";
+    function grantCommand($webtask) {
+        $command = " webmanage_dataset " .
+                 "-t " . $webtask->task_id() . " modify ";
+        return $command;
     }
 
     # Grab the webtask. Backwards compat mode, see if there is one associated

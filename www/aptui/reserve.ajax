@@ -194,9 +194,9 @@ function Do_Reserve()
         # as a form error for the caller.
         # Otherwise internal error.
         #
-        if ($retval < 0) {
-            SPITAJAX_ERROR(-1, $suexec_output);
+        if (!$webtask->exited() || $retval < 0) {
             SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error submitting reservation");
         }
         else {
             $errors["error"] = $webtask->TaskValue("output");
@@ -302,20 +302,32 @@ function Do_Delete()
             $opt = "-N $reasonfile";
         }
     }
+    $webtask  = WebTask::CreateAnonymous();
     $this_uid = $this_user->uid();
     $pid = $project->pid();
     $urn = $aggregate->urn();
 
     $retval = SUEXEC($this_uid, $pid,
-                     "webmanage_reservations -a '$urn' delete $opt $pid $uuid",
-                     SUEXEC_ACTION_CONTINUE);
+                     "webmanage_reservations -a '$urn' ".
+                     "-t " . $webtask->task_id() . " delete $opt $pid $uuid",
+                     SUEXEC_ACTION_IGNORE);
     if (isset($reasonfile)) {
         unlink($reasonfile);
     }
     if ($retval) {
-        SPITAJAX_ERROR(-1, $suexec_output);
+        $webtask->Refresh();
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error deleting reservation");
+        }
+        else {
+            SPITAJAX_ERROR(1, "Could not delete reservation: ".
+                           $webtask->output());
+        }
+        $webtask->Delete();
 	return;
     }
+    $webtask->Delete();
     SPITAJAX_RESPONSE(1);
 }
 
@@ -410,15 +422,19 @@ function Do_InfoOrWarn($warning = false)
         $message = $ajax_args["message"] . "\n\n";
         $message .= "$url\n";
     }
-    TBMAIL($user->email(), $subject, $message,
-           "From: $APTMAIL\n".
-           "CC: $APTMAIL");
-
+    #
+    # Do this before we send mail. If we cannot get to the cluster,
+    # we do not want spit out an email message each time we retry.
+    #
     if ($cancel) {
         if (Do_CancelAux($uuid, $aggregate, 0, time() + (3600 * 24))) {
             return;
         }
     }
+    TBMAIL($user->email(), $subject, $message,
+           "From: $APTMAIL\n".
+           "CC: $APTMAIL");
+
     sleep(1);
     SPITAJAX_RESPONSE(1);
 }
@@ -466,18 +482,30 @@ function Do_Approve()
 	SPITAJAX_ERROR(-1, "Only administrators can approve reservations");
 	return;
     }
+    $webtask  = WebTask::CreateAnonymous();
     $this_uid = $this_user->uid();
     $urn = $aggregate->urn();
 
     $retval = SUEXEC($this_uid, "nobody",
                      "webmanage_reservations -a '$urn' ".
-                     "   approve -p $PORTAL_GENESIS $uuid",
-                     SUEXEC_ACTION_CONTINUE);
+                     "-t " . $webtask->task_id() .
+                     "  approve -p $PORTAL_GENESIS $uuid",
+                     SUEXEC_ACTION_IGNORE);
 
     if ($retval) {
-        SPITAJAX_ERROR(-1, $suexec_output);
+        $webtask->Refresh();
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error approving reservation");
+        }
+        else {
+            SPITAJAX_ERROR(1, "Could not approve reservation: ".
+                           $webtask->output());
+        }
+        $webtask->Delete();
 	return;
     }
+    $webtask->Delete();
     SPITAJAX_RESPONSE("list-reservations.php");
 }
 
@@ -531,6 +559,7 @@ function Do_CancelAux($uuid, $aggregate, $clear, $when)
     global $this_user;
     global $TB_PROJECT_CREATEEXPT, $suexec_output, $PORTAL_GENESIS;
 
+    $webtask  = WebTask::CreateAnonymous();
     $this_uid = $this_user->uid();
     $urn = $aggregate->urn();
 
@@ -542,13 +571,26 @@ function Do_CancelAux($uuid, $aggregate, $clear, $when)
     }
     $retval = SUEXEC($this_uid, "nobody",
                      "webmanage_reservations -a '$urn' ".
+                     "-t " . $webtask->task_id() .
                      "   cancel -p $PORTAL_GENESIS $opts $uuid",
-                     SUEXEC_ACTION_CONTINUE);
+                     SUEXEC_ACTION_IGNORE);
 
     if ($retval) {
-        SPITAJAX_ERROR(-1, $suexec_output);
-	return;
+        $webtask->Refresh();
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error");
+        }
+        else {
+            SPITAJAX_ERROR(1,
+                           "Could not modify reservation: ".
+                           $webtask->output());
+        }
+        $webtask->Delete();
+	return 1;
     }
+    $webtask->Delete();
+    return 0;
 }
 
 #
@@ -585,10 +627,19 @@ function Do_ListReservations()
     $retval = SUEXEC($this_uid, "nobody",
                      "webmanage_reservations -a '$urn' ".
                      "   -t $webtask_id list $anonarg",
-                     SUEXEC_ACTION_CONTINUE);
+                     SUEXEC_ACTION_IGNORE);
     if ($retval) {
+        $webtask->Refresh();
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error retrieving reservations");
+        }
+        else {
+            SPITAJAX_ERROR($retval,
+                           "Could not get reservation list: ".
+                           $webtask->output());
+        }
         $webtask->Delete();
-        SPITAJAX_ERROR(-1, $suexec_output);
 	return;
     }
     $webtask->Refresh();
@@ -679,14 +730,17 @@ function Do_GetReservation()
                      "   -t $webtask_id list -i $uuid",
                      SUEXEC_ACTION_IGNORE);
     if ($retval) {
-        $webtask->Delete();
-        if ($retval < 0) {
+        $webtask->Refresh();
+        if (!$webtask->exited() || $retval < 0) {
             SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-            SPITAJAX_ERROR(-1, $suexec_output);
+            SPITAJAX_ERROR(-1, "Internal error retrieving reservations");
         }
         else {
-            SPITAJAX_ERROR(1, $suexec_output);
+            SPITAJAX_ERROR($retval,
+                           "Could not retrieve reservation info: ".
+                           $webtask->output());
         }
+        $webtask->Delete();
 	return;
     }
     $webtask->Refresh();
@@ -744,8 +798,8 @@ function Do_ReservationInfo()
         #
         # This can be turned off temporarily, say during maintenance. 
         #
-        if ($aggregate->disabled() || !$aggregate->reservations()) {
-            SPITAJAX_ERROR(-1, "Reservations are disabled");
+        if (!$aggregate->reservations()) {
+            SPITAJAX_ERROR(-1, "Reservations are not supported");
             return;
         }
         $urn = $aggregate->urn();
@@ -759,10 +813,19 @@ function Do_ReservationInfo()
     $retval = SUEXEC($this_user->uid(), "nobody",
                      "webmanage_reservations $sopts ".
                      "   -t $webtask_id prediction $popts ",
-                     SUEXEC_ACTION_CONTINUE);
+                     SUEXEC_ACTION_IGNORE);
     if ($retval) {
+        $webtask->Refresh();
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error retrieving reservation info");
+        }
+        else {
+            SPITAJAX_ERROR($retval,
+                           "Could not get reservation data: " .
+                           $webtask->output());
+        }
         $webtask->Delete();
-        SPITAJAX_ERROR(-1, $suexec_output);
 	return;
     }
     $webtask->Refresh();

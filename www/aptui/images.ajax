@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -98,14 +98,20 @@ function Do_ListImages()
 
     $retval = SUEXEC($uid, "nobody",
                      "webmanage_images -t $webtask_id list -a '$urn'",
-                     SUEXEC_ACTION_CONTINUE);
+                     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
 
     if ($retval) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error getting image list");
+        }
+        else {
+            SPITAJAX_ERROR(1, "Cannot get image list: " . $webtask->output());
+        }
         $webtask->Delete();
-        SPITAJAX_ERROR(-1, $suexec_output);
-	return;
+        return;
     }
-    $webtask->Refresh();
     $images = $webtask->TaskValue("value");
     $webtask->Delete();
     SPITAJAX_RESPONSE($images);
@@ -160,12 +166,18 @@ function Do_DeleteImage()
     $retval = SUEXEC($uid, "nobody",
                      "webmanage_images -t $webtask_id ".
                      "  delete -a '$aggurn' $pdarg $image_urn",
-                     SUEXEC_ACTION_CONTINUE);
-
+                     SUEXEC_ACTION_IGNORE);
     if ($retval) {
+        $webtask->Refresh();
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error deleting image");
+        }
+        else {
+            SPITAJAX_ERROR(1, "Cannot delete image: " . $webtask->output());
+        }
         $webtask->Delete();
-        SPITAJAX_ERROR(-1, $suexec_output);
-	return;
+        return;
     }
     $webtask->Delete();
     SPITAJAX_RESPONSE(0);

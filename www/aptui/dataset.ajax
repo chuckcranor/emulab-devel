@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -248,11 +248,18 @@ function Do_CreateDataSet()
 	$command  = "webmanage_dataset $wopt -- create $options";
     }
     
-    $retval = SUEXEC($this_uid, $pid, $command, SUEXEC_ACTION_CONTINUE);
+    $retval = SUEXEC($this_uid, $pid, $command, SUEXEC_ACTION_IGNORE);
     if ($retval) {
+        $webtask->Refresh();
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error creating dataset");
+        }
+        else {
+            SPITAJAX_ERROR(1, "Cannot create dataset: " . $webtask->output());
+        }
         $webtask->Delete();
-	SPITAJAX_ERROR(-1, $suexec_output);
-	return;
+        return;
     }
     if ($embedded) {
         if ($formfields["dataset_type"] == "imdataset") {
@@ -269,7 +276,7 @@ function Do_CreateDataSet()
     }
     if (!$dataset) {
         $webtask->Delete();
-	SPITAJAX_ERROR(-1, "Could not find lease after creation");
+	SPITAJAX_ERROR(-1, "Could not find dataset after creation");
 	return 1;
     }
     $dataset_uuid = $dataset->uuid();
@@ -289,6 +296,7 @@ function Do_CreateDataSet()
                 $webtask->TaskValue("unapproved_reason");
         }
     }
+    $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
 }
 
@@ -345,10 +353,10 @@ function Do_ModifyDataSet()
 	    $errors["dataset_read"] = "Illegal value";
 	}
     }
-    if (isset($formfields["dataset_write"])) {
-	if ($formfields["dataset_write"] != "creator" &&
-	    $formfields["dataset_write"] != "project") {
-	    $errors["dataset_write"] = "Illegal value";
+    if (isset($formfields["dataset_modify"])) {
+	if ($formfields["dataset_modify"] != "creator" &&
+	    $formfields["dataset_modify"] != "project") {
+	    $errors["dataset_modify"] = "Illegal value";
 	}
     }
     $nodeid = null;
@@ -432,30 +440,52 @@ function Do_ModifyDataSet()
 	return;
     }
     $leaseid = $dataset->pid() . "/" . $dataset->id();
-    $command = $dataset->grantCommand();
-    
+    $opt     = "";
+
     if (isset($formfields["dataset_read"])) {
-        $perm   = $formfields["dataset_read"];
+        $perm = $formfields["dataset_read"];
         if ($perm != $dataset->read_access()) {
+            $opt .= "-R $perm ";
+        }
+    }
+    if (isset($formfields["dataset_modify"])) {
+        $perm = $formfields["dataset_modify"];
+        if ($perm != $dataset->write_access()) {
+            $opt .= "-W $perm ";
+        }
+    }
+    if ($opt != "") {
+        if ($dataset->islocal()) {
+            $command = $dataset->grantCommand() . " ";
             $retval = SUEXEC($this_uid, $dataset->pid(),
-                             "$command -R $perm $leaseid",
+                             "$command $opt $leaseid",
                              SUEXEC_ACTION_CONTINUE);
             if ($retval) {
                 SPITAJAX_ERROR(1, $suexec_output);
                 return;
             }
         }
-    }
-    if (isset($formfields["dataset_write"])) {
-        $perm   = $formfields["dataset_write"];
-        if ($perm != $dataset->write_access()) {
+        else {
+            $webtask = WebTask::CreateAnonymous();
+            $command = $dataset->grantCommand($webtask);
             $retval = SUEXEC($this_uid, $dataset->pid(),
-                             "$command -W $perm $leaseid",
-                             SUEXEC_ACTION_CONTINUE);
+                             "$command $opt $leaseid",
+                             SUEXEC_ACTION_IGNORE);
             if ($retval) {
-                SPITAJAX_ERROR(1, $suexec_output);
+                $webtask->Refresh();
+                if (!$webtask->exited() || $retval < 0) {
+                    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+                    SPITAJAX_ERROR(-1, "Internal error modifying ".
+                                   "dataset permissions");
+                }
+                else {
+                    SPITAJAX_ERROR(1, "Cannot modify dataset permissions: " .
+                                   $webtask->output());
+                }
+                $webtask->Delete();
                 return;
             }
+            $webtask->Delete();
         }
     }
     if ($dataset->type() == "imdataset" && $nodeid) {
@@ -465,23 +495,40 @@ function Do_ModifyDataSet()
         $pid         = $dataset->pid();
 
         if ($embedded || $dataset->islocal()) {
-                    $retval = SUEXEC($this_uid, $dataset->pid(),
+            $retval = SUEXEC($this_uid, $dataset->pid(),
                              "webclone_image -b $safe_bsname ".
                              "$dname $safe_nodeid",
                              SUEXEC_ACTION_IGNORE);
+            if ($retval) {
+                if ($retval < 1) {
+                    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+                }
+                SPITAJAX_ERROR(1, $suexec_output);
+                return;
+            }
         }
         else {
+            $webtask = WebTask::CreateAnonymous();
             $retval = SUEXEC($this_uid, $dataset->pid(),
-                             "webmanage_dataset snapshot -i $instance_uuid ".
+                             "webmanage_dataset -t ". $webtask->task_id() .
+                             " snapshot -i $instance_uuid ".
                              "   -b $safe_bsname $pid/$dname $safe_nodeid",
                              SUEXEC_ACTION_IGNORE);
-        }
-        if ($retval) {
-            if ($retval < 1) {
-                SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            if ($retval) {
+                $webtask->Refresh();
+                if (!$webtask->exited() || $retval < 0) {
+                    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+                    SPITAJAX_ERROR(-1,
+                                   "Internal error taking dataset snapshot");
+                }
+                else {
+                    SPITAJAX_ERROR(1, "Cannot snapshot dataset: " .
+                                   $webtask->output());
+                }
+                $webtask->Delete();
+                return;
             }
-            SPITAJAX_ERROR(1, $suexec_output);
-            return;
+            $webtask->Delete();
         }
     }
     SPITAJAX_RESPONSE("show-dataset.php?uuid=$dataset_uuid");
@@ -519,23 +566,46 @@ function Do_DeleteDataset()
 	SPITAJAX_ERROR(1, "Not enough permission");
 	return;
     }
-    $command = $dataset->deleteCommand();
+
     #
     # Invoke backend.
     #
-    $retval = SUEXEC($this_uid, $dataset->pid(), $command,
-		     SUEXEC_ACTION_IGNORE);
-    if ($retval != 0) {
-        if ($retval < 0) {
-            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-        }
-	$error = "Transient error; please try again later";
+    if ($dataset->islocal()) {
+        $command = $dataset->deleteCommand();
+        $retval = SUEXEC($this_uid, $dataset->pid(), $command,
+                         SUEXEC_ACTION_IGNORE);
+        if ($retval != 0) {
+            if ($retval < 0) {
+                SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            }
+            $error = "Transient error; please try again later";
 	
-	if ($retval && count($suexec_output_array)) {
-	    $error = $suexec_output;
-	}
-	SPITAJAX_ERROR(1, $error);
-	return;
+            if ($retval && count($suexec_output_array)) {
+                $error = $suexec_output;
+            }
+            SPITAJAX_ERROR(1, $error);
+            return;
+        }
+    }
+    else {
+        $webtask = WebTask::CreateAnonymous();
+        $command = $dataset->deleteCommand($webtask);
+        $retval = SUEXEC($this_uid, $dataset->pid(), $command,
+                         SUEXEC_ACTION_IGNORE);
+        if ($retval) {
+            $webtask->Refresh();
+            if (!$webtask->exited() || $retval < 0) {
+                SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+                SPITAJAX_ERROR(-1, "Internal error deleting dataset");
+            }
+            else {
+                SPITAJAX_ERROR(1, "Cannot delete dataset: " .
+                               $webtask->output());
+            }
+            $webtask->Delete();
+            return;
+        }
+        $webtask->Delete();
     }
     SPITAJAX_RESPONSE("list-datasets.php");
 }
@@ -590,22 +660,26 @@ function Do_ApproveDataset()
         }
     }
     else {
+        $webtask = WebTask::CreateAnonymous();
+    
         $retval = SUEXEC($this_uid, $dataset->pid(),
-                         "webmanage_dataset approve " .
-                         $dataset->pid() . "/" . $dataset->id(),
+                         "webmanage_dataset -t ". $webtask->task_id() .
+                         " approve " . $dataset->pid() . "/" . $dataset->id(),
                          SUEXEC_ACTION_IGNORE);
-        if ($retval != 0) {
-            if ($retval < 0) {
+        if ($retval) {
+            $webtask->Refresh();
+            if (!$webtask->exited() || $retval < 0) {
                 SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+                SPITAJAX_ERROR(-1, "Internal error approving dataset");
             }
-            $error = "Transient error; please try again later";
-	
-            if ($retval && count($suexec_output_array)) {
-                $error = $suexec_output;
+            else {
+                SPITAJAX_ERROR(1, "Cannot approve dataset: " .
+                               $webtask->output());
             }
-            SPITAJAX_ERROR(1, $error);
+            $webtask->Delete();
             return;
         }
+        $webtask->Delete();
     }
     SPITAJAX_RESPONSE("show-dataset.php?uuid=$dataset_uuid");
 }
@@ -636,22 +710,26 @@ function Do_RefreshDataset()
     #
     # Invoke backend.
     #
+    $webtask  = WebTask::CreateAnonymous();
+    
     $retval = SUEXEC($this_uid, $dataset->pid(),
-		     "webmanage_dataset refresh " .
-		     $dataset->pid() . "/" . $dataset->id(),
+		     "webmanage_dataset -t ". $webtask->task_id() . 
+                     " refresh " . $dataset->pid() . "/" . $dataset->id(),
 		     SUEXEC_ACTION_IGNORE);
-    if ($retval != 0) {
-        if ($retval < 0) {
+    if ($retval) {
+        $webtask->Refresh();
+        if (!$webtask->exited() || $retval < 0) {
             SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error refreshing dataset");
         }
-	$error = "Transient error; please try again later";
-	
-	if ($retval && count($suexec_output_array)) {
-	    $error = $suexec_output;
-	}
-	SPITAJAX_ERROR(1, $error);
-	return;
+        else {
+            SPITAJAX_ERROR(1, "Cannot refresh dataset info: " .
+                           $webtask->output());
+        }
+        $webtask->Delete();
+        return;
     }
+    $webtask->Delete();
     SPITAJAX_RESPONSE(0);
 }
 
@@ -685,30 +763,50 @@ function Do_ExtendDataset()
 	SPITAJAX_ERROR(1, "Not enough permission");
 	return;
     }
+
+    #
+    # For Portal datasets, we use a webtask. The native CLI does not
+    # to webtasks.
+    #
     if ($islease) {
-	$command = "webextendlease ";
+	$command  = "webextendlease ";
+        $command .= $dataset->pid() . "/" . $dataset->id();
+        
+        $retval = SUEXEC($this_uid, $dataset->pid(), $command,
+                         SUEXEC_ACTION_IGNORE);
+        if ($retval != 0) {
+            if ($retval < 0) {
+                SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            }
+            $error = "Transient error; please try again later";
+	
+            if ($retval && count($suexec_output_array)) {
+                $error = $suexec_output_array;
+            }
+            SPITAJAX_ERROR(1, $error);
+            return;
+        }
     }
     else {
-	$command = "webmanage_dataset extend ";
-    }
-    $command .= $dataset->pid() . "/" . $dataset->id();
-    
-    #
-    # Invoke backend.
-    #
-    $retval = SUEXEC($this_uid, $dataset->pid(), $command,
-		     SUEXEC_ACTION_IGNORE);
-    if ($retval != 0) {
-        if ($retval < 0) {
-            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        $webtask  = WebTask::CreateAnonymous();
+        $retval = SUEXEC($this_uid, $dataset->pid(),
+                         "webmanage_dataset -t ". $webtask->task_id() .
+                         " extend ". $dataset->pid() . "/" . $dataset->id(),
+                         SUEXEC_ACTION_IGNORE);
+        if ($retval) {
+            $webtask->Refresh();
+            if (!$webtask->exited() || $retval < 0) {
+                SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+                SPITAJAX_ERROR(-1, "Internal error extending dataset");
+            }
+            else {
+                SPITAJAX_ERROR(1, "Cannot extend dataset: " .
+                               $webtask->output());
+            }
+            $webtask->Delete();
+            return;
         }
-	$error = "Transient error; please try again later";
-	
-	if ($retval && count($suexec_output_array)) {
-	    $error = $suexec_output_array;
-	}
-	SPITAJAX_ERROR(1, $error);
-	return;
+        $webtask->Delete();
     }
     $dataset_uuid = $dataset->uuid();
     SPITAJAX_RESPONSE("show-dataset.php?uuid=$dataset_uuid");

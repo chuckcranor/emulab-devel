@@ -81,12 +81,14 @@ use GeniXML;
 use GeniUser;
 use APT_Geni;
 use APT_Profile;
+use APT_Aggregate;
 
 # Protos
 sub fatal($);
 sub UserError($);
 sub DoListImages();
 sub DoDeleteImage();
+sub ExitWithError($);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -162,9 +164,17 @@ sub DoListImages()
     # Shorten default timeout.
     Genixmlrpc->SetTimeout(90);
 
+    # Lets do a cluster check to make sure its reachable.
+    my $aggregate = APT_Aggregate->Lookup($aggregate_urn);
+    if (!defined($aggregate)) {
+	fatal("No such aggregate");
+    }
+    if ($aggregate->CheckStatus(\$errmsg)) {
+	UserError($errmsg);
+    }
     my $authority = GeniAuthority->Lookup($aggregate_urn);
     if (!defined($authority)) {
-	fatal("No such aggregate");
+	fatal("No authority for aggregate");
     }
     my $cmurl = $authority->url();
     if ($usemydevtree) {
@@ -184,23 +194,8 @@ sub DoListImages()
     my $response = Genixmlrpc::CallMethod($cmurl, undef, "ListImages", $args);
 
     if ($response->code() != GENIRESPONSE_SUCCESS) {
-	if ($response->output()) {
-	    print STDERR $response->output() . "\n";
-	    if (defined($webtask)) {
-		$webtask->output($response->output());
-	    }
-	}
-	else {
-	    print STDERR "Operation failed, returned " .
-		$response->code() . "\n";
-	    if (defined($webtask)) {
-		$webtask->output("Operation failed");
-	    }
-	}
-	if (defined($webtask)) {
-	    $webtask->Exited($response->code());
-	}
-	exit($response->code());
+	print STDERR $response->error() . "\n";
+	ExitWithError($response);
     }
     #
     # We get back a flat list, which can include mulitple versions of
@@ -526,9 +521,17 @@ sub DoDeleteImage()
     # Shorten default timeout.
     Genixmlrpc->SetTimeout(90);
 
+    # Lets do a cluster check to make sure its reachable.
+    my $aggregate = APT_Aggregate->Lookup($aggregate_urn);
+    if (!defined($aggregate)) {
+	fatal("No such aggregate");
+    }
+    if ($aggregate->CheckStatus(\$errmsg)) {
+	UserError($errmsg);
+    }
     my $authority = GeniAuthority->Lookup($aggregate_urn);
     if (!defined($authority)) {
-	fatal("No such aggregate");
+	fatal("No authority for aggregate");
     }
     my $cmurl = $authority->url();
     if ($usemydevtree) {
@@ -608,5 +611,35 @@ sub escapeshellarg($)
 
     $str =~ s/[^[:alnum:]]/\\$&/g;
     return $str;
+}
+
+#
+# These are errors which the user might need to see. Some errors are
+# exceptions though, and those we want to treat as internal errors.
+#
+sub ExitWithError($)
+{
+    my ($response) = @_;
+    my $mesg = $response->error();
+    my $code = $response->code();
+
+    #
+    # In general, these errors are to be expected by the caller.
+    #
+    if ($code == GENIRESPONSE_REFUSED ||
+	$code == GENIRESPONSE_SEARCHFAILED ||
+	$code == GENIRESPONSE_SERVER_UNAVAILABLE ||
+	$code == GENIRESPONSE_NETWORK_ERROR ||
+	$code == GENIRESPONSE_BUSY) {
+
+	if (defined($webtask)) {
+	    $webtask->output($mesg);
+	    $webtask->Exited($code);
+	}
+	print STDERR "*** $0:\n".
+	             "    $mesg\n";
+	exit(1);
+    }
+    fatal($mesg);
 }
 

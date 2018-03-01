@@ -74,15 +74,20 @@ pre {
               <span id='quickvm_status'>
 		<font></font>
               </span>
+	      <span class="hidden" id="ignore-failure"
+		    style='margin-left: 10px;'>
+		(<a id='ignore-failure-button'
+		    data-target='#ignore-failure-modal'
+		    data-toggle='modal'>Ignore this failure?</a>)</span>
 	    </td>
 	  </tr>
 	  <% if (profileUUID && profileUUID != "") { %>
-	  <tr>
-	    <td class='border-none'>Profile:</td>
-	    <td class='border-none'>
-	      <a target=_blank href='show-profile.php?uuid=<%- profileUUID %>'>
-		 <%- profileName %></a></td>
-	  </tr>
+	    <tr>
+	      <td class='border-none'>Profile:</td>
+	      <td class='border-none'>
+		<a target=_blank href='show-profile.php?uuid=<%- profileUUID %>'>
+		  <%- profileName %></a></td>
+	    </tr>
 	  <% } %>
 	  <% if (reporef !== undefined) { %>
 	    <tr>
@@ -113,10 +118,10 @@ pre {
 		    <a href="show-project.php?pid=<%- project %>">
 		      <%- project %></a></td>
 		<% } else { %>
-		  <td class='border-none'>Group:</td>
-		  <td class='border-none'>
-		    <a href="show-group.php?pid=<%- project %>&gid=<%- group %>">
-		      <%- project %>:<%- group %></a></td>
+		    <td class='border-none'>Group:</td>
+		    <td class='border-none'>
+		      <a href="show-group.php?pid=<%- project %>&gid=<%- group %>">
+			<%- project %>:<%- group %></a></td>
 		<% } %>
 	      </tr>
 	    <% } %>
@@ -160,10 +165,10 @@ pre {
 	       id='sliverinfo_button'
                href='#'
 	       target='_blank'
-               type='button'>Sliver</a>
+               type='button'>Logs</a>
 	    <div id='sliverinfo_dropdown' class='hidden'>
 	      <select style='margin-right: 0px;'>
-		<option value='selectme'>Slivers</option>
+		<option value='selectme'>Logs</option>
 	      </select>
 	      <a class='btn btn-info btn-tiny'
 		 style='margin-right: 10px;'
@@ -178,7 +183,7 @@ pre {
 	       id='logfile_button'
                href='#'
 	       target='_blank'
-               type='button'>Logfile</a>
+               type='button'>Stitcher</a>
 	  </div>
 	  <div class='pull-right'>
 	    <% if (registered && !isfadmin) { %>
@@ -190,29 +195,29 @@ pre {
 			data-content='Stop a running or wedged linktest'>
  		  Stop Linktest</button>
 	      </span>
-	    <button class='btn btn-xs btn-primary hidden' disabled
-		    id='snapshot_button' type=button
-		    data-toggle='popover'
-	            data-delay='{"hide":1000, "show":500}'
-		    data-html='true'
-		    data-content="Create a disk image from one of your nodes.
-				  Click for more info."> 
-              Create Disk Image</button>
-	    <% if (profileUUID && profileUUID != "") { %>
-	    <a class='btn btn-xs btn-primary'
-		    href='manage_profile.php?action=copy&uuid=<%= profileUUID %>'
-		    id='copy_button' type=button
-		    data-toggle='popover'
-	            data-delay='{"hide":1000, "show":500}'
-		    data-html='true'
-		    data-content="When you <em>copy</em> a profile,
-	            you are creating a new profile that
-		    uses the same source code and metadata (description,
-		    instructions) as the original profile, but without
-		    creating a new disk image. Instead, the new profile uses
-		    whatever images the original profile uses."> 
-	      Copy</a>
-	    <% } %>
+	      <button class='btn btn-xs btn-primary hidden' disabled
+		      id='snapshot_button' type=button
+		      data-toggle='popover'
+	              data-delay='{"hide":1000, "show":500}'
+		      data-html='true'
+		      data-content="Create a disk image from one of your nodes.
+				    Click for more info."> 
+		Create Disk Image</button>
+	      <% if (profileUUID && profileUUID != "") { %>
+		<a class='btn btn-xs btn-primary'
+		   href='manage_profile.php?action=copy&uuid=<%= profileUUID %>'
+		   id='copy_button' type=button
+		   data-toggle='popover'
+	           data-delay='{"hide":1000, "show":500}'
+		   data-html='true'
+		   data-content="When you <em>copy</em> a profile,
+				 you are creating a new profile that
+				 uses the same source code and metadata (description,
+				 instructions) as the original profile, but without
+				 creating a new disk image. Instead, the new profile uses
+				 whatever images the original profile uses."> 
+		  Copy</a>
+	      <% } %>
 	    <% } %>
 	    <button class='btn btn-xs btn-success' disabled
 		    id='extend_button' type=button>
@@ -235,7 +240,7 @@ pre {
 				 this experiment. No free time is granted to
 				 user at all."> 
 		<label class="checkbox-inline" style='margin-right: 10px;'>
-		  <input type="checkbox" id="lockout_checkbox"
+		  <input type="checkbox" id="lockout_checkbox" readonly
 			 <% if (lockout) { %>checked<% } %> >Lockout</label>
 	      </div>
 	    </div>
@@ -252,7 +257,7 @@ pre {
 			       Use the admin lockdown flag to fully prevent
 			       termination."> 
 	      <label class="checkbox-inline" style='margin-right: 10px;'>
-		<input type="checkbox" id="user_lockdown_checkbox"
+		<input type="checkbox" id="user_lockdown_checkbox" readonly
 		       <% if (user_lockdown) { %>checked<% } %> >
 		User Lockdown</label>
 	    </div>
@@ -263,7 +268,7 @@ pre {
 			       cannot be terminated by the user. Only an
 			       admin can do it.">
 	      <label class="checkbox-inline" style='margin-right: 10px;'>
-		<input type="checkbox" id="admin_lockdown_checkbox"
+		<input type="checkbox" id="admin_lockdown_checkbox" readonly
 		       <% if (admin_lockdown) { %>checked<% } %> >
 		Admin Lockdown</label>
 	    </div>
@@ -273,7 +278,7 @@ pre {
 		 data-content="When checked, the experiment is put into
 			       Quarantine (emulab panic) mode.">
 	      <label class="checkbox-inline" style='margin-right: 10px;'>
-		<input type="checkbox" id="quarantine_checkbox"
+		<input type="checkbox" id="quarantine_checkbox" readonly
 		       <% if (paniced) { %>checked<% } %> >
 		<span <% if (paniced) { %>class="text-danger"<% } %> >
 		  Quarantined</span></label>
@@ -295,9 +300,9 @@ pre {
 <!-- Add a hidden div for errors returned by the instantiation. -->
 <div class='row hidden' id='error_panel'>
   <div class='col-lg-6  col-lg-offset-3
-       col-md-8  col-md-offset-2
-       col-sm-8  col-sm-offset-2
-       col-xs-12 col-xs-offset-0'>
+	      col-md-8  col-md-offset-2
+	      col-sm-8  col-sm-offset-2
+	      col-xs-12 col-xs-offset-0'>
     <div class="panel panel-danger">
       <div class="panel-heading">
         <center><h4 class="panel-title">Error Message</h4></center>
@@ -337,19 +342,19 @@ pre {
         <a href='<%= errorURL %>'>users group</a> and ask a question. Be
         sure to include the error message in your question, and the name
 	of your profile and experiment: '<%= profileName %>/<%= name %>'.
-	</div>
       </div>
     </div>
   </div>
+</div>
 </div>
 <!-- Add a div for the instructions if there are instructions. The cliet
      will actually fill in the div though, since it is markdown and that
      is more easily done on the client side for now. -->
 <div class='row hidden' id='instructions_panel'>
   <div class='col-lg-6  col-lg-offset-3
-       col-md-8  col-md-offset-2
-       col-sm-8  col-sm-offset-2
-       col-xs-12 col-xs-offset-0'>
+	      col-md-8  col-md-offset-2
+	      col-sm-8  col-sm-offset-2
+	      col-xs-12 col-xs-offset-0'>
     <!-- Collapsable panel -->
     <div class="panel panel-info">
       <div class="panel-heading">
@@ -370,9 +375,9 @@ pre {
 <!-- The topo diagram goes inside this div, when it becomes available. -->
 <div class='row'>
   <div class='col-lg-10  col-lg-offset-1
-       col-md-10  col-md-offset-1
-       col-sm-10  col-sm-offset-1
-       col-xs-12 col-xs-offset-0'>
+	      col-md-10  col-md-offset-1
+	      col-sm-10  col-sm-offset-1
+	      col-xs-12 col-xs-offset-0'>
     <div class='panel panel-default invisible' id='showtopo_container'>
       <div class='panel-body'>
 	<div id='quicktabs_div'>
@@ -391,8 +396,8 @@ pre {
               <a href='#Idlegraphs' id='show_idlegraphs_tab'
 		 data-toggle='tab'>Graphs
 		<button class='close hidden'
-			style="margin-top:0px;"
-			type='button' id="graphs-refresh-button">
+style="margin-top:0px;"
+type='button' id="graphs-refresh-button">
 		  <span class='glyphicon glyphicon-repeat'></span></button>
 	      </a>
             </li>
@@ -400,8 +405,8 @@ pre {
               <a href='#Openstack' id='show_openstack_tab'
 		 data-toggle='tab'>Openstack Data
 		<button class='close hidden'
-			style="margin-top:0px;"
-			type='button' id="openstack-refresh-button">
+style="margin-top:0px;"
+type='button' id="openstack-refresh-button">
 		  <span class='glyphicon glyphicon-repeat'></span></button>
 	      </a>
             </li>
@@ -413,10 +418,10 @@ pre {
                 Click and drag to move things around.</small>
 	      <% if (registered) { %>
 		<button class='btn btn-xs btn-success pull-right' disabled
-			id='refresh_button' type=button
-			data-toggle='popover'
-			data-delay='{"hide":1000, "show":500}'
-			data-content='Ask cluster for updated node status'>
+id='refresh_button' type=button
+data-toggle='popover'
+data-delay='{"hide":1000, "show":500}'
+data-content='Ask cluster for updated node status'>
 		  Refresh Status</button>
 		<span>
 		  <button class='btn btn-xs btn-success pull-right hidden'
@@ -453,7 +458,7 @@ pre {
                       <th>Node</th>
                       <th>Type</th>
                       <th>SSH command <small>
-			  (if you provided your own key)</small>
+			(if you provided your own key)</small>
                       </th>
                       <th style='text-align: left;'>
 			<div id='listview-action-menu' class='dropdown'>
@@ -483,7 +488,7 @@ pre {
               <div id='manifest_textarea' style='width: 100%;'></div>
 	    </div>
 	    <div class='tab-pane hidden' id='Idlegraphs'>
-	      <div class="hidden"id="nodata">
+	      <div class="hidden" id="nodata">
 		<br>
 		<center>
 		  There is insufficient data to graph, please check back later.
@@ -510,7 +515,7 @@ pre {
 		    <div class='col-xs-12 col-xs-offset-0'
 			 style="padding:0px;">
 		      <div id="loadavg-chart"
-			class='fixedsize-panel with-3d-shadow with-transitions'>
+class='fixedsize-panel with-3d-shadow with-transitions'>
 			<svg></svg>
 		      </div>
 		    </div>
@@ -554,7 +559,7 @@ pre {
 		    <div class='col-xs-12 col-xs-offset-0'
 			 style="padding:0px;">
 		      <div id="ctrl-traffic-chart"
-			class='fixedsize-panel with-3d-shadow with-transitions'>
+class='fixedsize-panel with-3d-shadow with-transitions'>
 			<svg></svg>
 		      </div>
 		    </div>
@@ -596,7 +601,7 @@ pre {
 		    <div class='col-xs-12 col-xs-offset-0'
 			 style="padding:0px;">
 		      <div id="expt-traffic-chart"
-			class='fixedsize-panel with-3d-shadow with-transitions'>
+class='fixedsize-panel with-3d-shadow with-transitions'>
 			<svg></svg>
 		      </div>
 		    </div>
@@ -725,7 +730,7 @@ pre {
 		  partition of your disk. For example, you created a file system on
 		  parition two, and want to include that in your new disk image. 
 		  <b><em>Do not check this box if you do not need to do this or 
-		  do not know what this means!</em></b>
+		    do not know what this means!</em></b>
 		</div>
 	      </div>
 	    </div>
@@ -951,15 +956,15 @@ pre {
     </div>
   </div>
   <div id="context-menu">
-      <ul class="dropdown-menu" role="menu"
-	  style='cursor: pointer; cursor: hand'>
-	<li id="shell"><a name="shell">Shell</a></li>
-	<li id="console"><a name="console">Console</a></li>
-	<li id="consolelog"><a name="consolelog">Console Log</a></li>
-	<li id="reboot"><a name="reboot">Reboot</a></li>
-	<li id="reload"><a name="reload">Reload</a></li>
-	<li id="delete"><a name="delete">Delete Node</a></li>
-      </ul>
+    <ul class="dropdown-menu" role="menu"
+	style='cursor: pointer; cursor: hand'>
+      <li id="shell"><a name="shell">Shell</a></li>
+      <li id="console"><a name="console">Console</a></li>
+      <li id="consolelog"><a name="consolelog">Console Log</a></li>
+      <li id="reboot"><a name="reboot">Reboot</a></li>
+      <li id="reload"><a name="reload">Reload</a></li>
+      <li id="delete"><a name="delete">Delete Node</a></li>
+    </ul>
   </div>
   <div id="context"></div>
   <div id="context-menus"></div>
@@ -970,7 +975,7 @@ pre {
           <button type='button' class='close' data-dismiss='modal'
                   aria-hidden='true'>&times;</button>
           <center><h4>Console Password for
-	      <span id='console_password_clientid'></span></h4></center>
+	    <span id='console_password_clientid'></span></h4></center>
 	</div>
 	<div class='modal-body'>
 	  <form class="form-horizontal">
@@ -1097,8 +1102,8 @@ pre {
 	    sure you want to do this?
 	  </p>
 	  <p>
-	  <em>Reminder:</em> You will need to run <tt>imagerelease</tt> on 
-	  the cluster (command line).
+	    <em>Reminder:</em> You will need to run <tt>imagerelease</tt> on 
+	    the cluster (command line).
 	  </p>
 	  <center>
             <button type='button' style='margin-right: 20px;'
@@ -1145,63 +1150,63 @@ pre {
     </div>
   </div>
   <div class="hidden" id="clone-help-div">
-  <!-- This is the Clone help box -->
-  <div id="clone-help-panel" class="panel panel-info">
-    <div class="panel-body">
-      <button type='button' class='close clone-popover-close'>
-        &times;</button>
-      <br>
-      <p>
-	You can quickly convert a running experiment into
-	a <em>new</em> profile, capturing the disk contents of your
-	node and saving it away for later use by experiments based on
-	the new profile.
-      </p>
-      <p>
-	You can also create a new disk image, but start with an empty
-	(blank profile), and use the new image for the nodes in whatever
-	topology you create.
-      </p>
-      <p>
-	The node in your experiment will be shutdown, and a disk image
-	of the <b>primary</b> partition captured. You will be able to
-	track the progress of the image capture as it proceeds. 
-      </p>
-      <p>
-	<em>The contents of your home directory is <b>NOT</b> saved</em>. You
-	should install your software and data files in standard locations like
-	<tt>/usr/local</tt> or <tt>/opt</tt>. The reason for this is so
-	that dependencies on specific user home directories do not
-	become embedded in your images.
-      </p>
+    <!-- This is the Clone help box -->
+    <div id="clone-help-panel" class="panel panel-info">
+      <div class="panel-body">
+	<button type='button' class='close clone-popover-close'>
+          &times;</button>
+	<br>
+	<p>
+	  You can quickly convert a running experiment into
+	  a <em>new</em> profile, capturing the disk contents of your
+	  node and saving it away for later use by experiments based on
+	  the new profile.
+	</p>
+	<p>
+	  You can also create a new disk image, but start with an empty
+	  (blank profile), and use the new image for the nodes in whatever
+	  topology you create.
+	</p>
+	<p>
+	  The node in your experiment will be shutdown, and a disk image
+	  of the <b>primary</b> partition captured. You will be able to
+	  track the progress of the image capture as it proceeds. 
+	</p>
+	<p>
+	  <em>The contents of your home directory is <b>NOT</b> saved</em>. You
+	  should install your software and data files in standard locations like
+	  <tt>/usr/local</tt> or <tt>/opt</tt>. The reason for this is so
+	  that dependencies on specific user home directories do not
+	  become embedded in your images.
+	</p>
+      </div>
     </div>
-  </div>
   </div>
   <div class="hidden" id="snapshot-help-div">
     <div class="panel panel-info">
       <div class="panel-body">
-      <button type='button' class='close snapshot-popover-close'>
-        &times;</button>
-      <br>
-      <p>
-	Create a disk image, saving it away for future experiments
-	based on the same profile. This is a complete disk copy of the
-	<b>primary</b> partition on your node, everything is saved.
-	The next user to instantiate this profile will use this new
-	disk image.
-      </p>
-      <p>
-	After you click to confirm, the node in your experiment will
-	be shutdown, and a disk image captured. You will be able to
-	track the progress of the image capture as it proceeds.
-      </p>
-      <p>
-	<em>The contents of your home directory is <b>NOT</b> saved</em>. You
-	should install your software and data files in standard locations like
-	<tt>/usr/local</tt> or <tt>/opt</tt>. The reason for this is so
-	that dependencies on specific user home directories do not
-	become embedded in your images.
-      </p>
+	<button type='button' class='close snapshot-popover-close'>
+          &times;</button>
+	<br>
+	<p>
+	  Create a disk image, saving it away for future experiments
+	  based on the same profile. This is a complete disk copy of the
+	  <b>primary</b> partition on your node, everything is saved.
+	  The next user to instantiate this profile will use this new
+	  disk image.
+	</p>
+	<p>
+	  After you click to confirm, the node in your experiment will
+	  be shutdown, and a disk image captured. You will be able to
+	  track the progress of the image capture as it proceeds.
+	</p>
+	<p>
+	  <em>The contents of your home directory is <b>NOT</b> saved</em>. You
+	  should install your software and data files in standard locations like
+	  <tt>/usr/local</tt> or <tt>/opt</tt>. The reason for this is so
+	  that dependencies on specific user home directories do not
+	  become embedded in your images.
+	</p>
       </div>
     </div>
   </div>    
@@ -1285,6 +1290,52 @@ pre {
 	       target="_blank">
 	      support staff</a> for more information.
 	  </p>
+	</div>
+      </div>
+    </div>
+  </div>
+  <!-- Ignore failures modal-->
+  <div id='ignore-failure-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <button type='button' class="close"
+                  data-dismiss='modal' aria-hidden='true'>&times;</button>
+          <center><h4>Ignore this failure?</h4></center>
+	</div>
+	<div class='modal-body'>
+	  <p>
+	    A failed experiment is typically reaped by the system
+	    within a short amount of time, to release the resources so
+	    they are available for other users and experiments. If you
+	    want to ignore this failure and keep your experiment,
+	    click on the ignore button below and your experiment will
+	    be moved from the <em>failed</em> state to the <em>ready</em>
+	    state.
+	  </p>
+	  <p>
+	    There are many reasons for a failed experiment, some of
+	    which can be repaired or even ignored. For example, if
+	    some of your nodes fail to boot you can often log in on
+	    the console and fix the problem and then reboot. Another
+	    example is if your experiment can tolerate a few failed
+	    nodes and you want to continue your experiment.
+	  </p>
+	  <p>
+	    Other errors cannot be easily fixed, for example failed
+   	    hardware or a bad cable that causes your network to fail.
+   	    You cannot those failures of course since your experiment
+   	    cannot be productively used.
+	  </p>
+	  <center>
+            <button type='button' style='margin-right: 20px;'
+		    data-dismiss='modal'
+                    class='btn btn-primary btn-sm'>
+	      Cancel</button>
+            <button class='btn btn-danger btn-sm'
+		    id='ignore-failure-confirm'>
+	      Ignore Failure</button>
+	  </center>
 	</div>
       </div>
     </div>

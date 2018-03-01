@@ -142,6 +142,8 @@ sub GetVersion()
 	"output_rspec" => "2",
 	"ad_rspec" => \@ad_rspec_versions
     };
+    #POSIX::_exit(1);
+    #sleep(30);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
@@ -267,7 +269,16 @@ sub Resolve($)
 					"No permission to resolve $slice\n");
 	}
 	# Return a blob.
-	my $blob = { "urn"          => $urn };
+	my $blob = { "urn" => $urn };
+
+	#
+	# We stored an error after a wrapperfork; return that error now.
+	#
+	if ($slice->async_code()) {
+	    $blob->{"async_code"}   = $slice->async_code();
+	    $blob->{"async_output"} = $slice->async_output();
+	    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+	}
 
 	my $aggregate = GeniAggregate->SliceAggregate($slice);
 	if (defined($aggregate)) {
@@ -412,6 +423,12 @@ sub CreateSliver($)
     my $keys         = $argref->{'keys'};
     my $impotent     = $argref->{'impotent'} || 0;
     my $usetracker   = $argref->{'usetracker'} || 0;
+    my $async        = $argref->{'asyncmode'} || 0;
+    my $mypid        = $PID;
+    my $cachedebug   = 0;
+    my $rspec;
+    my $response;
+    my $retval;
     require Node;
     require Experiment;
     require libtestbed;
@@ -434,6 +451,12 @@ sub CreateSliver($)
 	if (GeniResponse::IsResponse($credential));
 
     main::AddLogfileMetaData("slice_urn", $slice_urn);
+
+    my $user = GeniCM::CreateUserFromCertificate($credential);
+    if (GeniResponse::IsResponse($user)) {
+	print STDERR "Could not create geni user for $credential\n";
+	return $user;
+    }
     
     #
     # In this implementation, the user must provide a slice credential,
@@ -466,12 +489,6 @@ sub CreateSliver($)
 		return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 					    "Slice certificate mismatch");
 	    }
-	    my $user =
-		GeniCM::CreateUserFromCertificate($credential);
-	    if (GeniResponse::IsResponse($user)) {	    
-		$slice->UnLock();
-		return $user;
-	    }
 	    if ($slice->ConvertPlaceholder($user) != 0) {
 		$slice->UnLock();
 		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
@@ -484,18 +501,76 @@ sub CreateSliver($)
 					"Must delete existing slice first");
 	}
     }
-    my $rspec = GeniCM::GetTicketAux($credential, $rspecstr,
-				     0, $impotent, 1, 0, $usetracker,
-				     undef, $speaksfor, @morecreds);
-    return $rspec
-	if (GeniResponse::IsResponse($rspec));
-
-    $slice = GeniSlice->Lookup($credential->target_urn());
-    if (!defined($slice)) {
-	print STDERR "CreateSliver: Could not find slice for $credential\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,"Internal Error");
+    else {
+	#
+	# Create the slice here so we can lock it for the duration.
+	#
+	$slice = GeniCM::CreateSliceFromCertificate($credential, $user);
+	return $slice
+	    if (GeniResponse::IsResponse($slice));
     }
     main::AddLogfileMetaDataFromSlice($slice);
+    
+    #
+    # Just in case a SliceStatus() snuck in ...
+    #
+    if ($slice->WaitForLock(10) != 0) {
+	print STDERR "CreateSliver: Could not lock $slice\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Internal Error locking slice");
+    }
+    eval {$rspec = GeniCM::GetTicketAux({"credential" => $credential,
+					 "rspecstr"   => $rspecstr,
+					 "isupdate"   => 0,
+					 "impotent"   => $impotent,
+					 "v2"         => 1,
+					 "level"      => 0,
+					 "usetracker" => $usetracker,
+					 "ticket"     => undef,
+					 "speaksfor"  => $speaksfor,
+					 "morecreds"  => \@morecreds,
+					 "async"      => $async,
+					 "slice"      => $slice}); };
+    if ($@) {
+	# Cons up a response for the check below.
+	$rspec = GeniResponse->Create(GENIRESPONSE_SERVERERROR, undef,
+				      "Internal Error: $@");
+	if ($async) {
+	    $slice->SetAsyncError($rspec);
+	}
+    }
+
+    #
+    # Slice is returned locked, but if we got an error and are going to
+    # give up, then be sure to unlock it so we can kill it.
+    #
+    if ($async) {
+	if ($PID == $mypid) {
+	    # Did not fork or we are the parent, so we just return the response.
+	    if (GeniResponse::IsResponse($rspec)) {
+		$slice->UnLock();
+		return $rspec;
+	    }
+	}
+	else {
+	    # Forked, return status code only for failure, otherwise
+	    # we keep on going.
+	    if (GeniResponse::IsError($rspec)) {
+		$slice->UnLock();
+		return $rspec->{'code'};
+	    }
+	}
+    }
+    else {
+	if (GeniResponse::IsResponse($rspec)) {
+	    #
+	    # Depending on how this failed, we might not have a slice
+	    # any more. But okay to call UnLock() on it, harmless.
+	    #
+	    $slice->UnLock();
+	    return $rspec;
+	}
+    }
 
     #
     # If we got a cert/key, record them for the slice. This is a
@@ -512,9 +587,27 @@ sub CreateSliver($)
     # Make sure that the next phase sees all changes.
     Experiment->FlushAll();
     Node->FlushAll();
+    if ($cachedebug) {
+	GeniUtil::DumpCaches();
+	emutil::DumpCaches();
+    }
 
-    my $response = GeniCM::SliverWorkAux($credential, $rspec,
-					 $keys, 0, $impotent, 1, 0, $speaksfor);
+    eval { $response =
+	       GeniCM::SliverWorkAux({"credential"  => $credential,
+				      "object"      => $rspec,
+				      "keys"        => $keys,
+				      "isupdate"    => 0,
+				      "impotent"    => $impotent,
+				      "v2"          => 1,
+				      "level"       => 0,
+				      "speaksfor"   => $speaksfor,
+				      # Currently locked, leave it locked.
+				      "nolock"      => 1}); };
+    if ($@) {
+	# Cons up a response for the check below.
+	$response = GeniResponse->Create(GENIRESPONSE_SERVERERROR, undef,
+					 "Internal Error: $@");
+    }
 
     if (GeniResponse::IsError($response)) {
 	#
@@ -523,32 +616,37 @@ sub CreateSliver($)
 	# up by the daemon. This is mostly cause I am reaching into
 	# the V1 code, and its messy.
 	#
-	$slice = GeniSlice->Lookup($credential->target_urn());
-	if (defined($slice)) {
-	    if ($slice->Lock() != 0) {
-		print STDERR
-		    "CreateSliver: Could not lock $slice before delete\n";
-		return $response;
+	my $tmp = GeniSlice->Lookup($credential->target_urn());
+	if (defined($tmp)) {
+	    #
+	    # If SliverWork() killed the slice, nothing more to do.
+	    # Otherwise, it is still locked.
+	    #
+	    # In async mode store off error info.
+	    if ($async) {
+		$slice->SetAsyncError($response);
 	    }
-	    GeniCM::CleanupDeadSlice($slice, 1);
+	    # In async mode we are going to leave the slice record around
+	    # so the client can pickup the error info.
+	    GeniCM::CleanupDeadSlice($slice, !$async);
+	    # And unlock since it still exists.
+	    if ($async) {
+		$slice->UnLock();
+	    }
 	}
 	return $response;
     }
+    #
+    # Slice is still locked.
+    #
     my ($sliver_credential) = @{ $response->{'value'} };
 
-    #
-    # Leave the slice intact on error, so we can go look at it. 
-    #
-    if ($slice->WaitForLock(30) != 0) {
-	print STDERR "CreateSliver: Could not lock $slice before start\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "Internal Error");
-    }
+    # This should never happen
     $aggregate = GeniAggregate->SliceAggregate($slice);
     if (!defined($aggregate)) {
 	print STDERR "CreateSliver: Could not find aggregate for $slice\n";
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "Internal Error");
+				    "Internal Error, no aggregate for slice");
     }
     # We get the manifest from the aggregate object, so that the
     # expiration goes in.
@@ -563,15 +661,24 @@ sub CreateSliver($)
     # At this point we want to return and let the startsliver proceed
     # in the background. Parent never returns, just the child.
     #
-    my $mypid = main::WrapperFork();
-    if ($mypid) {
-	return GeniResponse->Create(GENIRESPONSE_SUCCESS,
+    # But in async mode, GetTicketAux has already forked, so do not do
+    # it again here. 
+    #
+    if (!$async) {
+	$mypid = main::WrapperFork();
+	if ($mypid) {
+	    return GeniResponse->Create(GENIRESPONSE_SUCCESS,
 				    [$sliver_credential, $sliver_manifest]);
+	}
     }
 
     # Make sure that the next phase sees all changes.
     Experiment->FlushAll();
     Node->FlushAll();
+    if ($cachedebug) {
+	GeniUtil::DumpCaches();
+	emutil::DumpCaches();
+    }
 
     #
     # The callee might also do a wrapper fork, so remember our PID
@@ -579,19 +686,36 @@ sub CreateSliver($)
     # fork. Child runs with slice unlocked for now. 
     #
     $mypid = $PID;
-    
-    if ($aggregate->Start($API_VERSION) != 0) {
+
+    eval { $retval = $aggregate->Start($API_VERSION); };
+    if ($@) {
+	#
+	# This will cause the slice status to be failure.
+	#
+	$aggregate->SetBootFailure(GENIRESPONSE_SERVERERROR);
+	$aggregate->SetErrorLog("Internal Error: $@");
+	$retval = -1;
+    }
+    if ($retval) {
+	print STDERR "Could not start sliver.\n";
+	
+	# Only parent unlocks.
 	if ($PID == $mypid) {
 	    $slice->UnLock();
-	    print STDERR "Could not start sliver.\n";
 	}
-	else {
-	    print STDERR "Error waiting for nodes.\n";
+	if ($cachedebug) {
+	    GeniUtil::DumpCaches();
+	    emutil::DumpCaches();
 	}
 	return -1;
     }
+    # Only parent unlocks.
     if ($PID == $mypid) {
 	$slice->UnLock();
+    }
+    if ($cachedebug) {
+	GeniUtil::DumpCaches();
+	emutil::DumpCaches();
     }
     return 0;
 }
@@ -1269,6 +1393,18 @@ sub SliverStatus($)
 	$slice->UnLock();
 	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
+    my $status = $aggregate->status();
+    #
+    # Regardless of what the aggregate status is, we are "changing" if there
+    # is an active monitor process running.
+    #
+    # If the status is "working" convert to "changing" for the caller, this
+    # is an internal status for the newer start/restart code.
+    #
+    GeniCM::CheckMonitor($slice);
+    if ($slice->monitor_pid() || $status eq "working") {
+	$status = "changing";
+    }
 
     #
     # Grab all the slivers for this slice, and then
@@ -1281,16 +1417,24 @@ sub SliverStatus($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
 
-    my $blob = {
-	"state"   => $aggregate->state(),
-	"status"  => $aggregate->status(),
-	"utc"     => time(),
-	"details" => {},
-    };
+    my $blob = {"state"   => $aggregate->state(),
+		"status"  => $status,
+		"utc"     => time(),
+		"details" => {},
+		"boot_failure" => $aggregate->boot_failure(),
+		"error"   => $aggregate->ErrorLog() || "",
+	       };
     $blob->{'public_url'} =
 	"$TBBASE/showslicepub.php?publicid=" .	$slice->publicid()
 	if (defined($slice->publicid()));
-    $blob->{"error"} = $aggregate->ErrorLog() || "";
+    
+    #
+    # If running async mode and we have an error, add this too.
+    #
+    if ($slice->async_code()) {
+	$blob->{"async_code"}   = $slice->async_code();
+	$blob->{"async_output"} = $slice->async_output();
+    }
     
     foreach my $sliver (@slivers) {
 	if ($sliver->isa("GeniAggregate")) {
@@ -1546,9 +1690,18 @@ sub GetTicket($)
     else {
 	# Slice does not exist yet. 
     }
-    return GeniCM::GetTicketAux($credential, $rspecstr,
-				0, $impotent, 1, 1, $usetracker,
-				undef, $speaksfor);
+    return GeniCM::GetTicketAux({"credential" => $credential,
+				 "rspecstr"   => $rspecstr,
+				 "isupdate"   => 0,
+				 "impotent"   => $impotent,
+				 "v2"         => 1,
+				 "level"      => 1,
+				 "usetracker" => $usetracker,
+				 "ticket"     => undef,
+				 "speaksfor"  => $speaksfor,
+				 "morecreds"  => [],
+				 "async"      => 0,
+				 "slice"      => undef});
 }    
 	
 #
@@ -1656,10 +1809,18 @@ sub UpdateTicket($)
 				    "This ticket is for another slice");
     }
     
-    return GeniCM::GetTicketAuxAux($slice, $user,
-				   $rspecstr, 1, $impotent, 1, 1,
-				   $usetracker, $ticket,
-				   [$credential, @morecreds], $speaksfor);
+    return GeniCM::GetTicketAuxAux({"slice"      => $slice,
+				    "user"       => $user,
+				    "rspecstr"   => $rspecstr,
+				    "isupdate"   => 1,
+				    "impotent"   => $impotent,
+				    "v2"         => 1,
+				    "level"      => 1,
+				    "usetracker" => $usetracker,
+				    "ticket"     => $ticket,
+				    "credentials"=> [$credential, @morecreds],
+				    "speaksfor"  => $speaksfor,
+				    "async"      => 0});
 }
 
 #
@@ -1740,10 +1901,18 @@ sub UpdateSliver($)
     return $user
 	if (GeniResponse::IsResponse($user));
     
-    return GeniCM::GetTicketAuxAux($slice, $user,
-				   $rspecstr, 1, $impotent, 1, 1,
-				   $usetracker, undef,
-				   [$credential, @morecreds], $speaksfor);
+    return GeniCM::GetTicketAuxAux({"slice"      => $slice,
+				    "user"       => $user,
+				    "rspecstr"   => $rspecstr,
+				    "isupdate"   => 1,
+				    "impotent"   => $impotent,
+				    "v2"         => 1,
+				    "level"      => 1,
+				    "usetracker" => $usetracker,
+				    "ticket"     => undef,
+				    "credentials"=> [$credential, @morecreds],
+				    "speaksfor"  => $speaksfor,
+				    "async"      => 0});
 }
 
 #
@@ -2030,9 +2199,19 @@ sub AddNodes($)
     return $user
 	if (GeniResponse::IsResponse($user));
 
-    my $rspec = GeniCM::GetTicketAuxAux($slice, $user,
-					$rspecstr, 1, 0, 1, -1, 0, undef,
-					[$credential, @morecreds], $speaksfor);
+    my $rspec = GeniCM::GetTicketAuxAux({"slice"      => $slice,
+					 "user"       => $user,
+					 "rspecstr"   => $rspecstr,
+					 "isupdate"   => 1,
+					 "impotent"   => 0,
+					 "v2"         => 1,
+					 "level"      => -1,
+					 "usetracker" => 0,
+					 "ticket"     => undef,
+					 "credentials"=> [$credential,
+							  @morecreds],
+					 "speaksfor"  => $speaksfor,
+					 "async"      => 0});
     return $rspec
 	if (GeniResponse::IsResponse($rspec));
 
@@ -2040,8 +2219,15 @@ sub AddNodes($)
     Experiment->FlushAll();
     Node->FlushAll();
 
-    $response = GeniCM::SliverWorkAux($credential, $rspec,
-					 undef, 1, 0, 1, 1, $speaksfor);
+    $response = GeniCM::SliverWorkAux({"credential"  => $credential,
+				       "object"      => $rspec,
+				       "keys"        => undef,
+				       "isupdate"    => 1,
+				       "impotent"    => 0,
+				       "v2"          => 1,
+				       "level"       => 1,
+				       "speaksfor"   => $speaksfor,
+				       "nolock"      => 0});
 
     if (GeniResponse::IsError($response)) {
 	print STDERR "Redeem failed\n";
@@ -2216,9 +2402,19 @@ sub DeleteNodes($)
     return $user
 	if (GeniResponse::IsResponse($user));
 
-    my $rspec = GeniCM::GetTicketAuxAux($slice, $user,
-					$rspecstr, 1, 0, 1, -1, 0, undef,
-					[$credential, @morecreds], $speaksfor);
+    my $rspec = GeniCM::GetTicketAuxAux({"slice"      => $slice,
+					 "user"       => $user,
+					 "rspecstr"   => $rspecstr,
+					 "isupdate"   => 1,
+					 "impotent"   => 0,
+					 "v2"         => 1,
+					 "level"      => -1,
+					 "usetracker" => 0,
+					 "ticket"     => undef,
+					 "credentials"=> [$credential,
+							  @morecreds],
+					 "speaksfor"  => $speaksfor,
+					 "async"      => 0});
     return $rspec
 	if (GeniResponse::IsResponse($rspec));
 
@@ -2226,8 +2422,15 @@ sub DeleteNodes($)
     Experiment->FlushAll();
     Node->FlushAll();
 
-    $response = GeniCM::SliverWorkAux($credential, $rspec,
-					 undef, 1, 0, 1, 1, $speaksfor);
+    $response = GeniCM::SliverWorkAux({"credential"  => $credential,
+				       "object"      => $rspec,
+				       "keys"        => undef,
+				       "isupdate"    => 1,
+				       "impotent"    => 0,
+				       "v2"          => 1,
+				       "level"       => 1,
+				       "speaksfor"   => $speaksfor,
+				       "nolock"      => 0});
 
     if (GeniResponse::IsError($response)) {
 	print STDERR "Redeem failed\n";
@@ -2369,8 +2572,15 @@ sub RedeemTicket($)
     }
     my $isupdate = defined($aggregate);
 
-    return GeniCM::SliverWorkAux($credential, $open_ticket, $keys,
-				 $isupdate, $impotent, 1, 1, $speaksfor);
+    return GeniCM::SliverWorkAux({"credential"  => $credential,
+				  "object"      => $open_ticket,
+				  "keys"        => $keys,
+				  "isupdate"    => $isupdate,
+				  "impotent"    => $impotent,
+				  "v2"          => 1,
+				  "level"       => 1,
+				  "speaksfor"   => $speaksfor,
+				  "nolock"      => 0});
 }
 
 #

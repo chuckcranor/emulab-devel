@@ -31,12 +31,11 @@ $(function ()
 	secondrowTemplate = _.template(secondrowString);
 	extensionsTemplate = _.template(historyString);
 
+	LoadFirstRow();
 	// Need to serialize this stuff cause of locking in the backend.
-	LoadFirstRow(function () {
-	    LoadUtilization(function () {
-		LoadIdleData(function () {
-		    LoadOpenStack();
-		});
+	LoadUtilization(function () {
+	    LoadIdleData(function () {
+		LoadOpenStack();
 	    });
 	});
 
@@ -122,16 +121,19 @@ $(function ()
 	    if ($('#maximum-extension-checkbox').is(":checked")) {
 		current_extension_input = $('#howlong').val();
 		if (maxextension == null) {
-		    alert("There is maximum extension!");
+		    alert("There is no maximum extension!");
 		    // Flip the checkbox back.
 		    $('#maximum-extension-checkbox').prop("checked", false);
 		    return;
 		}
 		// Kill the input field, it will be ignored.
 		$('#howlong').val("");
+		// And make it read only to make it clear.
+		$('#howlong').prop("readonly", true);
 	    }
 	    else {
 		$('#howlong').val(current_extension_input);
+		$('#howlong').prop("readonly", false);
 	    }
 	});
     }
@@ -319,6 +321,10 @@ $(function ()
 	    }
 	    if (json.code) {
 		console.info("Could not load utilization");
+		$("#thirdrow .thirdrow-error .well")
+		    .html("Could not get summary/utilization data: " +
+			  json.value);
+		$("#thirdrow .thirdrow-error").removeClass("hidden");
 		return;
 	    }
 	    var html = utilizationTemplate({"utilization" : json.value});
@@ -648,8 +654,15 @@ $(function ()
     {
 	console.info("LoadIdleData", continuation);
 
-	var callback = function (gotdata) {
+	var callback = function (status, json) {
 	    console.info("LoadIdleData callback");
+	    if (status < 0) {
+		// Error, show something that indicates we could not get
+		// the idle data.
+		$('#idledata-error').html("Could not get graph data: " +
+					  json.value);
+		$('#idledata-error').removeClass("hidden");
+	    }
 	    if (continuation !== undefined) {
 		continuation();
 	    }

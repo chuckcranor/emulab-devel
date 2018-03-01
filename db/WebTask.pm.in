@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2017 University of Utah and the Flux Group.
+# Copyright (c) 2013-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -71,7 +71,7 @@ sub Lookup($$)
 	$self->{'DATA'} =
 	    eval { decode_json($self->{'DBROW'}->{'task_data'}); };
 	if ($@) {
-	    print STDERR "Could not json decode task data\n";
+	    print STDERR "Could not json decode task data: $@\n";
 	    return undef
 	}
     }
@@ -236,7 +236,7 @@ sub Store($)
     my $id       = $self->{'DBROW'}->{'task_id'};
     my $data     = eval { encode_json($self->{'DATA'}); };
     if ($@) {
-	print STDERR "Could not json encode task data\n";
+	print STDERR "Could not json encode task data: $@\n";
 	return -1;
     }
     $data = emdb::DBQuoteSpecial($data);
@@ -274,7 +274,7 @@ sub Refresh($)
 	$self->{'DATA'} =
 	    eval { decode_json($self->{'DBROW'}->{'task_data'}); };
 	if ($@) {
-	    print STDERR "Could not json decode task data\n";
+	    print STDERR "Could not json decode task data: $@\n";
 	    return -1;
 	}
     }

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2016, 2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -361,7 +361,7 @@ sub CreateFromRegistry($$$)
 	# Check for expiration.
 	#
 	if (!$authority->urn() || $authority->IsExpired()) {
-	    print STDERR "Aged out stale or expired $authority ...\n";
+	    #print STDERR "Aged out stale or expired $authority ...\n";
 	    $authority->Delete();
 	    $authority = undef;
 	}

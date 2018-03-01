@@ -367,12 +367,16 @@ window.ShowIdleGraphs = (function ()
 
 	    var callback = function(json) {
 		if (json.code) {
-		    console.info("Failed to get idledata: " + json.value);
+		    console.info("Failed to get graph data: " + json.value);
 		    if (showWait) {
 			sup.HideWaitWait(function () {
 			    sup.SpitOops("oops",
-					 "Could not idledata: " + json.value);
+					 "Could not get idledata: " +
+					 json.value);
 			});
+		    }
+		    if (C_callback) {
+			C_callback(-1, json);
 		    }
 		    return;
 		}

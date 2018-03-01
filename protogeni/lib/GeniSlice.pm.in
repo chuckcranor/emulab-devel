@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -55,6 +55,7 @@ my $TB		   = "@prefix@";
 my $TBOPS          = "@TBOPSEMAIL@";
 my $TBAPPROVAL     = "@TBAPPROVALEMAIL@";
 my $TBAUDIT   	   = "@TBAUDITEMAIL@";
+my $TBBASE         = "@TBBASE@";
 my $BOSSNODE       = "@BOSSNODE@";
 my $CONTROL	   = "@USERNODE@";
 my $OURDOMAIN      = "@OURDOMAIN@";
@@ -328,6 +329,9 @@ sub speaksfor_uuid($)	{ return field($_[0], "speaksfor_uuid"); }
 sub expiration_max($)	{ return field($_[0], "expiration_max"); }
 sub renew_limit($)	{ return field($_[0], "renew_limit"); }
 sub description($)      { return field($_[0], "description"); }
+sub async_mode($)       { return field($_[0], "async_mode"); }
+sub async_code($)       { return field($_[0], "async_code"); }
+sub async_output($)     { return field($_[0], "async_output"); }
 sub cert($)		{ return $_[0]->{'CERT'}->cert(); }
 sub GetCertificate($)   { return $_[0]->{'CERT'}; }
 sub LOCKED($)           { return $_[0]->{'LOCKED'}; }
@@ -1005,6 +1009,45 @@ sub IsExpired($)
     $slice_expires = str2time($slice_expires);
 
     return (time() >= $slice_expires);
+}
+
+#
+# Set async mode
+#
+sub SetAsyncMode($$)
+{
+    my ($self, $onoff) = @_;
+    my $uuid = $self->uuid();
+    $onoff = ($onoff ? 1 : 0);
+
+    DBQueryWarn("update geni_slices set async_mode='$onoff' " .
+		"where uuid='$uuid'")
+	or return -1;
+
+    $self->{'SLICE'}->{'async_mode'} = $onoff;
+    return 0;
+}
+
+sub SetAsyncError($$)
+{
+    my ($self, $response) = @_;
+    my $uuid   = $self->uuid();
+    # Not a blessed reference.
+    my $code   = $response->{'code'};
+    my $output = $response->{'output'};
+    if (defined($output) && $output ne "") {
+	$output = DBQuoteSpecial($output);
+    }
+    else {
+	$output = "''";
+    }
+    DBQueryWarn("update geni_slices set async_code='$code', ".
+		"  async_output=$output ".
+		"where uuid='$uuid'")
+	or return -1;
+
+    $self->{'SLICE'}->{'async_code'} = $code;
+    return 0;
 }
 
 #

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2016, 2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -41,10 +41,8 @@ sub usage()
 }
 my $optlist   = "da:";
 my $debug     = 0;
+my $errmsg;
 my $aggurn;
-
-# For development.
-my $usemydevtree = 0;
 
 #
 # Configure variables
@@ -77,6 +75,8 @@ use GeniHRN;
 use Genixmlrpc;
 use GeniResponse;
 use GeniAuthority;
+use APT_Aggregate;
+use APT_Geni;
 
 my %options = ();
 if (! getopts($optlist, \%options)) {
@@ -103,15 +103,20 @@ Genixmlrpc->SetContext($context);
 # Shorten default timeout.
 Genixmlrpc->SetTimeout(15);
 
-my $authority = GeniAuthority->Lookup($aggurn);
-if (!defined($authority)) {
+my $aggregate = APT_Aggregate->Lookup($aggurn);
+if (!defined($aggregate)) {
     fatal("No such aggregate: $aggurn");
 }
-my $cmurl = $authority->url();
-$cmurl =~ s/\/cm$/\/cluster/;
-if ($usemydevtree) {
-    $cmurl =~ s/protogeni/protogeni\/stoller/;
+my $authority = GeniAuthority->Lookup($aggurn);
+if (!defined($authority)) {
+    fatal("No such aggregate authority: $aggurn");
 }
+# Check online and reachable. Additional arg says to test Portal RPC.
+if ($aggregate->CheckStatus(\$errmsg, 1)) {
+    print STDERR $errmsg . "\n";
+    exit(1);
+}
+
 my @args = ();
 if (@ARGV) {
     my $args = {};
@@ -128,16 +133,11 @@ if (@ARGV) {
     @args = ($args);
 }
 my $starttime = [gettimeofday()];
-my $response  = Genixmlrpc::CallMethod($cmurl, undef, $method, @args);
+my $response  = APT_Geni::PortalRPC($authority, undef, $method, @args);
 my $elapsed   = tv_interval($starttime);
 
 if ($response->code() != GENIRESPONSE_SUCCESS) {
-    if ($response->output()) {
-	print STDERR $response->output() . "\n";
-    }
-    else {
-	print STDERR "Operation failed, returned " . $response->code() . "\n";
-    }
+    print STDERR $response->error() . "\n";
     exit($response->code());
 }
 print encode_json($response->value());

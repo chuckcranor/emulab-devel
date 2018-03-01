@@ -568,11 +568,27 @@ $(function ()
     //
     function Toggle(item) {
 	var name = item.dataset["name"];
+	var wait = false;
 
+	// These take longer to show the wait modal.
+	if (name == "admin" || name == "inactive") {
+	    sup.ShowModal("#waitwait-modal");
+	    wait = true;
+	}
 	var callback = function(json) {
 	    if (json.code) {
-		sup.SpitOops("oops", json.value);
+		if (wait) {
+		    sup.HideModal("#waitwait-modal", function () {
+			sup.SpitOops("oops", json.value);
+		    });
+		}
+		else {
+		    sup.SpitOops("oops", json.value);
+		}
 		return;
+	    }
+	    if (wait) {
+		sup.HideModal("#waitwait-modal");
 	    }
 	    LoadProfileTab();
 	};

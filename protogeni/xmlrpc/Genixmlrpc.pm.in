@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -152,9 +152,10 @@ sub GetContext($)
 sub SetTimeout($$)
 {
     my ($class, $to) = @_;
+    my $old = $timeout;
 
     $timeout = $to;
-    return 0;
+    return $old;
 }
 
 BEGIN {
@@ -215,8 +216,13 @@ sub CallMethodInternal($$$$@)
     # But must have a context;
     if (!defined($context)) {
 	print STDERR "Must provide an rpc context\n";	
-	return GeniResponse->new(GENIRESPONSE_RPCERROR, -1,
+	return GeniResponse->new(GENIRESPONSE_RPCERROR, XMLRPC_SYSTEM_ERROR,
 				 "Must provide an rpc context");
+    }
+    # Testing mode.
+    if (0) {
+	return GeniResponse->new(GENIRESPONSE_RPCERROR, XMLRPC_SYSTEM_ERROR,
+				 "Testing mode!");
     }
 
     # Callback to write the data, when streaming to a file.
@@ -242,7 +248,7 @@ sub CallMethodInternal($$$$@)
     else {
 	print STDERR
 	    "Could not determine what version of FreeBSD you are running!\n";	
-	return GeniResponse->new(GENIRESPONSE_RPCERROR, -1,
+	return GeniResponse->new(GENIRESPONSE_RPCERROR, XMLRPC_SYSTEM_ERROR,
 	    "Could not determine what version of FreeBSD you are running!");
     }
     
@@ -338,14 +344,68 @@ sub CallMethodInternal($$$$@)
     delete($ENV{'HTTPS_PKCS12_FILE'});
     delete($ENV{'HTTPS_PKCS12_PASSWORD'});
     
-    if ($debug > 1 || ($debug && !$hresp->is_success())) {
+    if ($debug > 1) {
 	print STDERR "xml response: " . $hresp->as_string();
 	print STDERR "\n";
+	print STDERR "------------------\n";
     }
     
     if (!$hresp->is_success()) {
-	return GeniResponse->new(GENIRESPONSE_RPCERROR,
-				 $hresp->code(), $hresp->message());
+	my $code = $hresp->code();
+	my $message = $hresp->message();
+	
+	if ($debug > 1) {
+	    print STDERR "RPC Failure $code, $message\n";
+	    print STDERR "------------------\n";
+	}
+	if ($code == HTTP_INTERNAL_SERVER_ERROR()) {
+	    #
+	    # We get here for what seems to be for one of three reasons:
+	    #
+	    # 1. Unable to reach the server. We do not know why, we just
+	    #    cannot connect.
+	    # 2. The connection times out. We do not know where it timed
+	    #    out but typically it is because the server is taking too
+	    #    long to answer. Note that the connection has probably been
+	    #    successful and the server is working away. But we do not
+	    #    know that for sure.
+	    # 3. A total server error, either in apache or in the backend
+	    #    scripts that are invoked.
+	    #
+	    # Sadly, we have to look at the string to know, which makes all
+	    # this pretty damn fragile. 
+	    #
+	    # The first two errors are not something we can do much to
+	    # fix, but in general the user does not care, he just needs to
+	    # know the request cannot be completed cause of a network
+	    # error.  So turn that into an error that the caller knows to
+	    # pass through without generating (tons of) email.
+	    #
+	    if ($message =~ /read timeout/i) {
+		return GeniResponse->new(GENIRESPONSE_NETWORK_ERROR,
+					 GENIRESPONSE_NETWORK_ERROR_TIMEDOUT,
+					 "Timed out talking to server");
+	    }
+	    if ($message =~ /Can\'t connect to/i ||
+		# In case this changes to proper english
+		$message =~ /Cannot connect to/i) {
+		return GeniResponse->new(GENIRESPONSE_NETWORK_ERROR,
+					 GENIRESPONSE_NETWORK_ERROR_NOCONNECT, 
+					 "Cannot connect to server");
+	    }
+	    #
+	    # The third one is bad, we want to make sure we whine about
+	    # it, but do not send a bunch of gibberish to the user. 
+	    #
+	    if ($message =~ /Internal Server Error/i) {
+		return GeniResponse->new(GENIRESPONSE_SERVERERROR,
+					 $code, $message);
+	    }
+	}
+	#
+	# Otherwise bad news, we want to whine.
+	#
+	return GeniResponse->new(GENIRESPONSE_RPCERROR, $code, $message);
     }
     # Streamed the data okay, we are done.
     if (defined($fp) && !defined($xmlgoo)) {
@@ -376,18 +436,26 @@ sub CallMethodInternal($$$$@)
     if (!ref($goo)) {
         print STDERR "Error in XMLRPC parse: $xmlgoo\n";
 	$code   = GENIRESPONSE_RPCERROR();
-	$value  = undef;
+	$value  = XMLRPC_SYSTEM_ERROR;
 	$output = "Could not parse XMLRPC return value: $xmlgoo";
     }
     elsif ($goo->value()->is_fault() 
 	|| (ref($goo->value()) && UNIVERSAL::isa($goo->value(),"HASH") 
 	    && exists($goo->value()->{'faultCode'}))) {
-	$code   = $goo->value()->{"faultCode"}->value;
+	$code   = GENIRESPONSE_RPCERROR();
 	$value  = $goo->value()->{"faultCode"}->value;
 	$output = $goo->value()->{"faultString"}->value;
 	# EXO returns a bad fault structure.
 	if (!$code) {
-	    $code = $value = GENIRESPONSE_ERROR();
+	    $value = GENIRESPONSE_ERROR();
+	}
+	#
+	# Negative values are XMLRPC errors, these are bad and we want
+	# to whine. Positive are different, look to see if they are one
+	# of the ones we expect our servers to generate and convert.
+	#
+	if ($value == HTTP_SERVICE_UNAVAILABLE()) {
+	    $code = GENIRESPONSE_SERVER_UNAVAILABLE();
 	}
     }
     elsif (! (ref($goo->value()) && UNIVERSAL::isa($goo->value(),"HASH") 
@@ -413,18 +481,24 @@ sub CallMethodInternal($$$$@)
 	}
 	else {
 	    $value  = $goo->value()->{'value'}->value;
-	    $logurl = $goo->value()->{'protogeni_error_url'}->value
-		if (exists($goo->value()->{'protogeni_error_url'}));
 	}
 	$output = $goo->value()->{'output'}->value
 	    if (exists($goo->value()->{'output'}));
+	$logurl = $goo->value()->{'protogeni_error_url'}->value
+	    if (exists($goo->value()->{'protogeni_error_url'}));
+    }
+    #
+    # For consistency, make sure there is a subcode for RPCERROR.
+    #
+    if ($code == GENIRESPONSE_RPCERROR && !defined($value)) {
+	$value = XMLRPC_SYSTEM_ERROR;
     }
     if ($debug > 1 && $code) {
 	print STDERR "CallMethod: $method failed: $code";
 	print STDERR ", $output\n" if (defined($output) && $output ne "");
     }
-    if ($code == GENIRESPONSE_SERVER_UNAVAILABLE) {
-	$code = GENIRESPONSE_RPCERROR;
+    if ($debug > 1 && $code == GENIRESPONSE_RPCERROR) {
+	print STDERR "RPC Failure $value, $output\n";
     }
     return GeniResponse->new($code, $value, $output, $logurl);
 

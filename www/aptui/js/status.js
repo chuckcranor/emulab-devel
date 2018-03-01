@@ -228,6 +228,11 @@ $(function ()
 	    event.preventDefault();
 	    DoReloadTopology();
 	});
+	// Handler for the ignore failure button (in the modal).
+	$('button#ignore-failure-confirm').click(function (event) {
+	    event.preventDefault();
+	    IgnoreFailure();
+	});
 
 	// Terminate an experiment.
 	$('button#terminate').click(function (event) {
@@ -249,7 +254,7 @@ $(function ()
 		sup.HideModal("#waitwait-modal");
 		if (json.code) {
 		    EnableButtons();
-		    sup.SpitOops("oops", "Failed to terminate: " + json.value);
+		    sup.SpitOops("oops", json.value);
 		    return;
 		}
 		var url = 'landing.php';
@@ -411,7 +416,12 @@ $(function ()
 	    instanceStatus = json.value.status;
 	}
 	var status_html = "";
-    
+
+	// This can show up at any time cause of async/early return.
+	if (_.has(json.value, "sliverurls")) {
+	    ShowSliverInfo(json.value.sliverurls);
+	}
+
 	if (instanceStatus != lastStatus) {
             APT_OPTIONS.updatePage({ 'instance-status': instanceStatus });
 	    console.info(json);
@@ -429,15 +439,10 @@ $(function ()
 		seenmanifests = true;
 		ShowTopo(false);
 	    }
-	    // Ditto the publicURL.
-	    if (_.has(json.value, "sliverurls")) {
-		ShowSliverInfo(json.value.sliverurls);
-	    }
 	    // Ditto the logfile.
 	    if (_.has(json.value, "logfile_url")) {
 		ShowLogfile(json.value.logfile_url);
 	    }
-
 	    if (instanceStatus == 'stitching') {
 		status_html = "stitching";
 	    }
@@ -477,6 +482,10 @@ $(function ()
 		else {
 		    status_html = "<font color=green>ready</font>";
 		}
+		if (lastStatus == "failed") {
+		    $('#error_panel').addClass("hidden");
+		    $('#ignore-failure').addClass("hidden");
+		}
 		ProgressBarUpdate();
 		EnableButtons();
 		// We should be looking at the node status instead.
@@ -504,6 +513,10 @@ $(function ()
 		    json.value.code == GENIRESPONSE_INSUFFICIENT_NODES) {
 		    $('#error_panel .resource-error').removeClass("hidden");
 		}
+		if (json.value.canclearerror) {
+		    $('#ignore-failure').removeClass("hidden");
+		}
+		
 		status_html = "<font color=red>failed</font>";
 		ProgressBarUpdate();
 		DisableButtons();
@@ -541,6 +554,9 @@ $(function ()
 		status_message = "Your experiment has been terminated!";
 		DisableButtons();
 		StartCountdownClock.stop = 1;
+		if (lastStatus == "failed") {
+		    $('#ignore-failure').addClass("hidden");
+		}
 	    }
 	    else if (instanceStatus == "unknown") {
 		status_html = "<font color=red>" + instanceStatus + "</font>";
@@ -759,19 +775,12 @@ $(function ()
 	var message;
 	
 	if (json.code) {
-	    if (json.code < 0) {
-		message = "Could not extend experiment. " +
-		    "Please try again later";
-	    }
-	    else if (json.code == 2) {
+	    if (json.code == 2) {
 		$('#approval_text').html(json.value);
 		sup.ShowModal('#approval_modal');
 		return;
 	    }
-	    else {
-		message = "Could not extend experiment: " + json.value;
-	    }
-	    sup.SpitOops("oops", message);
+	    sup.SpitOops("oops", json.value);
 	    return;
 	}
 	var expiration = json.value.expiration;
@@ -922,7 +931,7 @@ $(function ()
 	    //console.info(json);
 	    
 	    if (json.code) {
-		sup.SpitOops("oops", "Failed to refresh status: " + json.value);
+		sup.SpitOops("oops", json.value);
 		return;
 	    }
 	    // Trigger status update.
@@ -990,16 +999,25 @@ $(function ()
 		    // Greenish.
 		    $('#' + jacksIDs[node_id] + ' .node .nodebox')
 			.css("fill", "#91E388");
+		    $('#listview-row-' + node_id + ' td[name="node_id"], ' +
+		      '#listview-row-' + node_id + ' td[name="client_id"]')
+			.css("color", "#3c763d;");
 		}
 		else if (details.status == "failed") {
 		    // Bootstrap bg-danger color
 		    $('#' + jacksIDs[node_id] + ' .node .nodebox')
 			.css("fill", "#f2dede");
+		    $('#listview-row-' + node_id + ' td[name="node_id"], ' +
+		      '#listview-row-' + node_id + ' td[name="client_id"]')
+			.css("color", "#a94442");
 		}
 		else {
 		    // Bootstrap bg-warning color
 		    $('#' + jacksIDs[node_id] + ' .node .nodebox')
 			.css("fill", "#fcf8e3");
+		    $('#listview-row-' + node_id + ' td[name="node_id"], ' +
+		      '#listview-row-' + node_id + ' td[name="client_id"]')
+			.css("color", "");
 		}
 		
 		var html =
@@ -1207,7 +1225,6 @@ $(function ()
 		sup.HideWaitWait();
 		
 		if (json.code) {
-		    sup.SpitOops("oops", "Failed to delete nodes");
 		    $('#error_panel_text').text(json.value);
 		    $('#error_panel').removeClass("hidden");
 		    return;
@@ -1216,7 +1233,7 @@ $(function ()
 		// Trigger status to change the nodes.
 		GetStatus();
 	    }
-	    sup.ShowWaitWait("This will take 30-60 seconds. " +
+	    sup.ShowWaitWait("This will take several minutes. " +
 			     "Patience please.");
 	    var xmlthing = sup.CallServerMethod(ajaxurl,
 						"status",
@@ -1225,6 +1242,7 @@ $(function ()
 						 "node_ids" : nodeList});
 	    xmlthing.done(callback);
 	});
+        $('#error_panel').addClass("hidden");
 	sup.ShowModal('#deletenode_modal');
     }
 	
@@ -2362,8 +2380,7 @@ $(function ()
 				 "delete the existing image first</a>.");
 		    return;
 		}
-		sup.SpitOops("oops", "Could not start snapshot:<br>" +
-			     "<pre><code>" + json.value + "</code></pre>");
+		sup.SpitOops("oops", json.value);
 		return;
 	    }
 	    ShowProgressModal();
@@ -2429,8 +2446,7 @@ $(function ()
 				     "delete the existing image first</a>.");
 			return;
 		    }
-		    sup.SpitOops("oops",
-				 "Error creating new image: " + json.value);
+		    sup.SpitOops("oops", json.value);
 		});
 		return;
 	    }
@@ -2498,7 +2514,7 @@ $(function ()
 	    sup.HideModal('#waitwait-modal');
 	    
 	    if (json.code) {
-		sup.SpitOops("oops", "Could not start console: " + json.value);
+		sup.SpitOops("oops", json.value);
 		return;
 	    }
 	    var url = json.value.url + '&noclose=1';
@@ -2639,7 +2655,7 @@ $(function ()
 	    
 	    if (json.code) {
 		win.close();
-		sup.SpitOops("oops", "Could not get log: " + json.value);
+		sup.SpitOops("oops", json.value);
 		return;
 	    }
 	    var url   = json.value.logurl;
@@ -2782,11 +2798,25 @@ $(function ()
 		});
 	    });
 	}
-	// URLs change over time.
-	publicURLs = urls;
 	if (urls.length == 0) {
 	    return;
 	}
+	// URLs change over time, but we do not want to redo this
+	// after they stop changing.
+	if (publicURLs && publicURLs.length == urls.length) {
+	    var changed = false;
+
+	    for (var i = 0; i < urls.length; i++) {
+		if (urls[i].url != publicURLs[i].url) {
+		    changed = true;
+		}
+	    }
+	    if (!changed) {
+		return;
+	    }
+	}
+	publicURLs = urls;
+	
 	if (urls.length == 1) {
 	    $("#sliverinfo_button").attr("href", urls[0].url);
 	    $("#sliverinfo_button").removeClass("hidden");
@@ -3187,7 +3217,7 @@ $(function ()
 	/*
 	 * This callback is to let us know if there is any actual data.
 	 */
-	var callback = function (gotdata) {
+	var callback = function (gotdata, ignored) {
 	    if (!gotdata) {
 		$('#Idlegraphs #nodata').removeClass("hidden");
 	    }
@@ -3244,6 +3274,41 @@ $(function ()
 	    sup.CallServerMethod(null, "status", "MaxExtension",
 				 {"uuid" : uuid});
 	xmlthing.done(maxcallback);
+    }
+
+    /*
+     * Ask to ignore the current failure.
+     */
+    function IgnoreFailure() {
+	var checkstatus = function() {
+	    console.info("ignore checkstatus", instanceStatus);
+	    if (instanceStatus == "ready") {
+		sup.HideWaitWait();
+		return;
+	    }
+	    setTimeout(function() { checkstatus() }, 1000);
+	};
+	var callback = function(json) {
+	    console.info("ignore callback", json);
+	    if (json.code) {
+		sup.HideWaitWait(function () {
+		    sup.SpitOops("oops", "Could not ignore failure: " +
+				 json.value);
+		});
+		return;
+	    }
+	    checkstatus();
+	};
+	sup.HideModal('#ignore-failure-modal', function () {
+	    sup.ShowWaitWait();
+	    // Oh jeez, the RPC can return before the waitwait modal displays
+	    setTimeout(function() {
+		var xmlthing =
+		    sup.CallServerMethod(null, "status", "IgnoreFailure",
+					 {"uuid" : uuid});
+		xmlthing.done(callback);
+	    }, 1000);
+	});
     }
 
     // Helper.

@@ -28,7 +28,7 @@ use Carp;
 use English;
 use Data::Dumper;
 use Date::Parse;
-use POSIX qw(tmpnam);
+use File::Temp qw(tempfile tmpnam);
 use JSON;
 use Exporter;
 use vars qw(@ISA @EXPORT $AUTOLOAD
@@ -420,7 +420,8 @@ sub Delete($)
 	$agg->Delete() == 0
 	    or return -1;
     }
-    $self->webtask()->Delete();
+    # We do not "own" the webtask until create_sliver exits successfully.
+    $self->webtask()->Delete() if (defined($self->{'WEBTASK'}));
     DBQueryWarn("delete from apt_instances where uuid='$uuid'") or
 	return -1;
 
@@ -447,6 +448,15 @@ sub Unlock($)
 	return -1;
     }
     return $slice->UnLock();
+}
+sub Locked($)
+{
+    my ($self) = @_;
+    my $slice  = $self->GetGeniSlice();
+    if (!defined($slice)) {
+	return 0;
+    }
+    return $slice->locked();
 }
 
 sub SetStatus($$)
@@ -1511,7 +1521,7 @@ use EmulabConstants;
 use WebTask;
 use libtestbed;
 use Carp;
-use POSIX qw(tmpnam);
+use File::Temp qw(tempfile tmpnam);
 use JSON;
 use English;
 use GeniResponse;
@@ -1549,6 +1559,7 @@ sub Lookup($$$)
     $self->{'INSTANCE'} = $instance;
     $self->{'WEBTASK'}  = undef;
     $self->{'STATUS'}   = undef;
+    $self->{'AGGREGATE'}= undef;
     bless($self, $class);
 
     # Handy;
@@ -1716,6 +1727,7 @@ sub DESTROY {
     $self->{'DBROW'}    = undef;
     $self->{'WEBTASK'}  = undef;
     $self->{'HASH'}     = undef;
+    $self->{'AGGREGATE'}= undef;
 }
 
 #
@@ -1915,6 +1927,23 @@ sub GetGeniAuthority($)
     require GeniAuthority;
 
     return APT_Geni::GetAuthority($self->aggregate_urn());
+}
+
+sub GetAptAggregate($)
+{
+    my ($self) = @_;
+
+    return $self->{"AGGREGATE"}
+    if (defined($self->{"AGGREGATE"}));
+
+    $self->{"AGGREGATE"} = APT_Aggregate->Lookup($self->aggregate_urn());
+    return $self->{"AGGREGATE"};
+}
+sub AptAggregateName($)
+{
+    my ($self) = @_;
+
+    return $self->GetAptAggregate()->name();
 }
 
 #
@@ -2224,6 +2253,18 @@ sub UpdateSliverStatusAll($$)
     return 0;
 }
 
+# Helper functions for below.
+sub ContextError()
+{
+    return GeniResponse->Create(GENIRESPONSE_ERROR(), undef,
+				"Could not generate context for RPC");
+}
+sub CredentialError()
+{
+    return GeniResponse->Create(GENIRESPONSE_ERROR(), undef,
+				"Could not generate credentials for RPC");
+}
+
 #
 # Ask aggregate to terminate a sliver.
 #
@@ -2237,7 +2278,7 @@ sub Terminate($)
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
 
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
@@ -2251,7 +2292,7 @@ sub Terminate($)
 	my $slice_credential = APT_Geni::GenAuthCredential($slice);
 	if (!defined($slice_credential)) {
 	    print STDERR "Could not generate slice credential\n";
-	    return undef;
+	    return CredentialError()
 	}
 	$method = "DeleteSliver";
 	@params = ($slice->urn(), [$slice_credential->asString()], {});
@@ -2260,7 +2301,7 @@ sub Terminate($)
 	my $credentials;
 	my ($slice_credential, $speaksfor_credential) =
 	    APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
-	return undef
+	return CredentialError()
 	    if (!defined($slice_credential));
 
 	$credentials = [$slice_credential->asString()];
@@ -2285,34 +2326,7 @@ sub Terminate($)
     #
     Genixmlrpc->SetTimeout(900);
 
-    #
-    # We have to watch for resource busy errors, and retry. For a while
-    # at least. Eventually give up cause it might be a permanently locked
-    # slice cause of earlier error. 
-    #
-    my $response;
-    my $tries = 10;
-    while ($tries) {
-	$response =
-	    Genixmlrpc::CallMethod($cmurl, $context, $method, @params);
-
-	# SEARCHFAILED is success.
-	return $response
-	    if ($response->code() == GENIRESPONSE_SUCCESS ||
-		$response->code() == GENIRESPONSE_SEARCHFAILED);
-
-	return $response
-	    if ($response->code() != GENIRESPONSE_BUSY);
-
-	#
-	# Wait for a while and try again. 
-	#
-	$tries--;
-	if ($tries) {
-	    print STDERR "Slice is busy, will retry again in a bit ...\n";
-	    sleep(30);
-	}
-    }
+    my $response = Genixmlrpc::CallMethod($cmurl, $context, $method, @params);
     return $response;
 }
 
@@ -2330,7 +2344,7 @@ sub Extend($$$$)
     my $geniuser  = $self->instance()->GetGeniUser();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
@@ -2338,7 +2352,7 @@ sub Extend($$$$)
 	my $slice_credential = APT_Geni::GenAuthCredential($slice);
 	if (!defined($slice_credential)) {
 	    print STDERR "Could not generate slice credential\n";
-	    return undef;
+	    return CredentialError()
 	}
 	$method = "RenewSliver";
 	@params = ($slice->urn(), [$slice_credential->asString()],
@@ -2351,7 +2365,7 @@ sub Extend($$$$)
 	}
 	my ($slice_credential, $speaksfor_credential) =
 	    APT_Geni::GenCredentials($slice, $geniuser, \@privs, 1);
-	return undef
+	return CredentialError()
 	    if (!defined($slice_credential));
 
 	$credentials = [$slice_credential->asString()];
@@ -2381,14 +2395,14 @@ sub Extend($$$$)
 		$geniuser->emulab_user()->GetStoredCredential();
 	    if (! defined($certificate_string)) {
 		print STDERR "Could not get stored certificate for $geniuser\n";
-		return undef;
+		return CredentialError();
 	    }
 	    my $certificate =
 		GeniCertificate->LoadFromString($certificate_string);
 	    if (!defined($certificate)) {
 		print STDERR
 		    "Could not load stored certificate for $geniuser\n";
-		return undef;
+		return CredentialError();
 	    }
 	    # This file will be auto deleted.
 	    $certfile = $certificate->WriteToFile();
@@ -2402,11 +2416,11 @@ sub Extend($$$$)
 	       "    -a -o $credname -s $slice_urn -t $days $userarg");
 	if ($?) {
 	    print STDERR "Could not create extended credential\n";
-	    return undef;
+	    return CredentialError();
 	}
 	if (!open(EXT, $credname)) {
 	    print STDERR "Could not open ext credfile $credname\n";
-	    return undef;
+	    return CredentialError();
 	}
 	while (<EXT>) {
 	    $extcred .= $_;
@@ -2432,10 +2446,6 @@ sub Extend($$$$)
     my $response;
     while ($tries) {
 	$response = Genixmlrpc::CallMethod($cmurl, $context, $method, @params);
-
-	return undef
-	    if (!defined($response));
-
 	if ($response->code() != GENIRESPONSE_SUCCESS) {
 	    if (($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
 		 $response->code() == GENIRESPONSE_BUSY) &&
@@ -2467,7 +2477,7 @@ sub SliceStatus($)
     # Shorten default timeout
     Genixmlrpc->SetTimeout(30);
 
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
@@ -2477,7 +2487,7 @@ sub SliceStatus($)
     my $slice_credential = APT_Geni::GenAuthCredential($slice);
     if (!defined($slice_credential)) {
 	print STDERR "Could not generate slice credential\n";
-	return undef;
+	return CredentialError();
     }
     if ($self->isAL2S()) {
 	@params = ($slice->urn(), [$slice_credential->asString()], {});
@@ -2523,7 +2533,7 @@ sub GetManifest($)
     my $urn       = $self->aggregate_urn();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
@@ -2531,7 +2541,7 @@ sub GetManifest($)
 	my $slice_credential = APT_Geni::GenAuthCredential($slice);
 	if (!defined($slice_credential)) {
 	    print STDERR "Could not generate slice credential\n";
-	    return undef;
+	    return CredentialError();
 	}
 	$method = "ListResources";
 
@@ -2548,7 +2558,7 @@ sub GetManifest($)
 
 	my ($slice_credential, $speaksfor_credential) =
 	    APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
-	return undef
+	return CredentialError()
 	    if (!defined($slice_credential));
 
 	$credentials = [$slice_credential->asString()];
@@ -2579,8 +2589,7 @@ sub GetManifest($)
 		$tries--;
 		next;
 	    }
-	    print STDERR "Resolve failed on $urn: ".
-		(defined($response) ? $response->output() : "") . "\n";
+	    print STDERR "Resolve failed on $urn: ". $response->error() . "\n";
 	    return undef;
 	}
 	last;
@@ -2607,7 +2616,7 @@ sub SliceResolve($)
     my $urn       = $self->aggregate_urn();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
@@ -2615,7 +2624,7 @@ sub SliceResolve($)
 	my $slice_credential = APT_Geni::GenAuthCredential($slice);
 	if (!defined($slice_credential)) {
 	    print STDERR "Could not generate slice credential\n";
-	    return undef;
+	    return CredentialError();
 	}
 	$method = "ListResources";
 
@@ -2632,7 +2641,7 @@ sub SliceResolve($)
 
 	my ($slice_credential, $speaksfor_credential) =
 	    APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
-	return undef
+	return CredentialError()
 	    if (!defined($slice_credential));
 
 	$credentials = [$slice_credential->asString()];
@@ -2651,19 +2660,19 @@ sub SliceResolve($)
 
 sub Provision($$$$)
 {
-    my ($self, $perrmsg, $users, $cert, $key) = @_;
+    my ($self, $users, $cert, $key) = @_;
     my $authority = $self->GetGeniAuthority();
     my $urn       = $self->aggregate_urn();
     my $geniuser  = $self->instance()->GetGeniUser();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
-    return -1
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
     my ($slice_credential, $speaksfor_credential) =
 	APT_Geni::GenCredentials($slice, $geniuser, undef, 0);
-    return -1
+    return CredentialError()
 	if (! (defined($speaksfor_credential) &&
 	       defined($slice_credential)));
 
@@ -2692,32 +2701,7 @@ sub Provision($$$$)
     $cmurl = devurl($cmurl) if ($usemydevtree);
     $cmurl .= "/3.0";
 
-    my $tries = 10;
-    while ($tries) {
-	my $response =
-	    Genixmlrpc::CallMethod($cmurl, $context, "Provision", @params);
-
-	if (defined($response) && defined($response->logurl())) {
-	    $self->SetPublicURL($response->logurl());
-	}
-	if (!defined($response) || $response->code() != GENIRESPONSE_SUCCESS) {
-	    if (defined($response) &&
-		($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
-		 $response->code() == GENIRESPONSE_BUSY) &&
-		$tries >= 0) {
-		print STDERR "Server for $urn reports too busy or slice busy, ".
-		    "waiting a while ...\n";
-		sleep(int(rand(20)) + 10);
-		$tries--;
-		next;
-	    }
-	    $$perrmsg = $response->output()
-		if (defined($response));
-	    return -1;
-	}
-	last;
-    }
-    return 0;
+    return Genixmlrpc::CallMethod($cmurl, $context, "Provision", @params);
 }
 
 #
@@ -2730,13 +2714,13 @@ sub ConsoleInfo($$)
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
     my $geniuser  = $self->instance()->GetGeniUser();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
     my ($slice_credential, $speaksfor_credential) =
 	APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
-    return undef
+    return CredentialError()
 	if (! defined($slice_credential));
 
     my $credentials = [$slice_credential->asString()];
@@ -2764,13 +2748,13 @@ sub ConsoleURL($$)
     my $geniuser  = $self->instance()->GetGeniUser();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
     my ($slice_credential, $speaksfor_credential) =
 	APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
-    return undef
+    return CredentialError()
 	if (!defined($slice_credential));
 
     my $credentials = [$slice_credential->asString()];
@@ -2799,7 +2783,7 @@ sub CreateImage($$$$;$$$$$)
     my $geniuser  = $self->instance()->GetGeniUser();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
@@ -2809,7 +2793,7 @@ sub CreateImage($$$$;$$$$$)
     #
     my ($slice_credential, $speaksfor_credential) =
 	APT_Geni::GenCredentials($slice, $geniuser, undef, 0);
-    return undef
+    return CredentialError()
 	if (! (defined($speaksfor_credential) &&
 	       defined($slice_credential)));
 
@@ -2843,9 +2827,9 @@ sub CreateImage($$$$;$$$$$)
 #
 # Reboot some nodes
 #
-sub SliverAction($$$;@)
+sub SliverAction($$;@)
 {
-    my ($self, $perrmsg, $which, @slivers) = @_;
+    my ($self, $which, @slivers) = @_;
     my $method    = ($which eq "reboot" ? "RestartSliver" :
 		     ($which eq "start" ? "StartSliver" : "ReloadSliver"));
     my $authority = $self->GetGeniAuthority();
@@ -2853,13 +2837,13 @@ sub SliverAction($$$;@)
     my $urn       = $self->aggregate_urn();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
     my ($slice_credential, $speaksfor_credential) =
 	APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
-    return undef
+    return CredentialError()
 	if (!defined($slice_credential));
 
     my $credentials = [$slice_credential->asString()];
@@ -2882,29 +2866,7 @@ sub SliverAction($$$;@)
     my $cmurl = $authority->url();
     $cmurl = devurl($cmurl) if ($usemydevtree);
 
-    my $response;
-    my $tries = 5;
-    while ($tries) {
-	$response = Genixmlrpc::CallMethod($cmurl, $context, $method, $args);
-	
-	if (!defined($response) || $response->code() != GENIRESPONSE_SUCCESS) {
-	    if (defined($response) &&
-		($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
-		 $response->code() == GENIRESPONSE_BUSY) &&
-		$tries >= 0) {
-		print STDERR "Server for $urn reports too busy or slice busy, ".
-		    "waiting a while ...\n";
-		sleep(int(rand(20)) + 10);
-		$tries--;
-		next;
-	    }
-	    $$perrmsg = $response->output()
-		if (defined($response));
-	    return $response;
-	}
-	last;
-    }
-    return $response;
+    return Genixmlrpc::CallMethod($cmurl, $context, $method, $args);
 }
 
 #
@@ -2916,13 +2878,12 @@ sub Lockdown($$$)
     my $authority = $self->GetGeniAuthority();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
-    my $oldexpires;
-    return undef
+    return ContextError()
 	if (! (defined($authority) &&
 	       defined($slice) && defined($context)));
 
     my $slice_credential = APT_Geni::GenAuthCredential($slice);
-    goto bad
+    return CredentialError()
 	if (! defined($slice_credential));
 
     my $args = {
@@ -2936,14 +2897,7 @@ sub Lockdown($$$)
     my $cmurl = $authority->url();
     $cmurl = devurl($cmurl) if ($usemydevtree);
 
-    my $response = Genixmlrpc::CallMethod($cmurl, $context, "Lockdown", $args);
-    $slice->SetExpiration($oldexpires)
-	if (defined($oldexpires));
-    return $response;
-  bad:
-    $slice->SetExpiration($oldexpires)
-	if (defined($oldexpires));
-    return undef;
+    return Genixmlrpc::CallMethod($cmurl, $context, "Lockdown", $args);
 }
 
 #
@@ -2955,12 +2909,12 @@ sub Panic($$)
     my $authority = $self->GetGeniAuthority();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
-    return undef
+    return ContextError()
 	if (! (defined($authority) &&
 	       defined($slice) && defined($context)));
 
     my $slice_credential = APT_Geni::GenAuthCredential($slice);
-    return undef
+    return CredentialError()
 	if (! defined($slice_credential));
 
     my $args = {
@@ -2972,8 +2926,7 @@ sub Panic($$)
     my $cmurl = $authority->url();
     $cmurl = devurl($cmurl) if ($usemydevtree);
 
-    my $response = Genixmlrpc::CallMethod($cmurl, $context, "Panic", $args);
-    return $response;
+    return Genixmlrpc::CallMethod($cmurl, $context, "Panic", $args);
 }
 
 #
@@ -2987,13 +2940,13 @@ sub RunLinktest($$$)
     my $urn       = $self->aggregate_urn();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
     my ($slice_credential, $speaksfor_credential) =
 	APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
-    return undef
+    return CredentialError()
 	if (!defined($slice_credential));
     
     my $credentials = [$slice_credential->asString()];
@@ -3018,11 +2971,10 @@ sub RunLinktest($$$)
     my $cmurl = $authority->url();
     $cmurl = devurl($cmurl) if ($usemydevtree);
 
-    my $response = Genixmlrpc::CallMethod($cmurl,
-					  $context, "RunLinktest", $args);
-    return $response;
-  bad:
-    return undef;
+    # Shorten default timeout
+    Genixmlrpc->SetTimeout(30);
+
+    return Genixmlrpc::CallMethod($cmurl, $context, "RunLinktest", $args);
 }
 
 #
@@ -3035,13 +2987,13 @@ sub ImageInfo($$)
     my $geniuser  = $self->instance()->GetGeniUser();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
     my ($slice_credential, $speaksfor_credential) =
 	APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
-    return undef
+    return CredentialError()
 	if (!defined($slice_credential));
 
     my $credentials = [$slice_credential->asString()];
@@ -3069,13 +3021,13 @@ sub UpdateKeys($$)
     my $urn       = $self->aggregate_urn();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
-    return -1
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
     my ($slice_credential, $speaksfor_credential) =
 	APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
-    return -1
+    return CredentialError()
 	if (!defined($slice_credential));
 
     my $options = {"geni_users" => $users};
@@ -3105,49 +3057,28 @@ sub UpdateKeys($$)
     $cmurl = devurl($cmurl) if ($usemydevtree);
     $cmurl .= "/3.0";
 
-    my $tries = 10;
-    my $response;
-    while ($tries) {
-	$response =
-	    Genixmlrpc::CallMethod($cmurl, $context,
-				   "PerformOperationalAction", @params);
-
-	if (!defined($response) || $response->code() != GENIRESPONSE_SUCCESS) {
-	    if (defined($response) &&
-		($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
-		 $response->code() == GENIRESPONSE_BUSY) &&
-		$tries >= 0) {
-		print STDERR "Server for $urn reports too busy or slice busy, ".
-		    "waiting a while ...\n";
-		sleep(int(rand(20)) + 10);
-		$tries--;
-		next;
-	    }
-	    return $response;
-	}
-	last;
-    }
-    return $response;
+    return Genixmlrpc::CallMethod($cmurl, $context,
+				  "PerformOperationalAction", @params);
 }
 
 #
 # Delete some nodes
 #
-sub DeleteNodes($$@)
+sub DeleteNodes($@)
 {
-    my ($self, $perrmsg, @nodes) = @_;
+    my ($self, @nodes) = @_;
     my $authority = $self->GetGeniAuthority();
     my $geniuser  = $self->instance()->GetGeniUser();
     my $urn       = $self->aggregate_urn();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
-    return undef
+    return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
     my ($slice_credential, $speaksfor_credential) =
 	APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
-    return undef
+    return CredentialError()
 	if (!defined($slice_credential));
 
     my $credentials = [$slice_credential->asString()];
@@ -3162,30 +3093,10 @@ sub DeleteNodes($$@)
     my $cmurl = $authority->url();
     $cmurl = devurl($cmurl) if ($usemydevtree);
 
-    my $response;
-    my $tries = 5;
-    while ($tries) {
-	$response = Genixmlrpc::CallMethod($cmurl, $context,
-					   "DeleteNodes", $args);
-	
-	if (!defined($response) || $response->code() != GENIRESPONSE_SUCCESS) {
-	    if (defined($response) &&
-		($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
-		 $response->code() == GENIRESPONSE_BUSY) &&
-		$tries >= 0) {
-		print STDERR "Server for $urn reports too busy or slice busy, ".
-		    "waiting a while ...\n";
-		sleep(int(rand(20)) + 10);
-		$tries--;
-		next;
-	    }
-	    $$perrmsg = $response->output()
-		if (defined($response));
-	    return $response;
-	}
-	last;
-    }
-    return $response;
+    # Longer timeout since this can take a while.
+    Genixmlrpc->SetTimeout(900);
+
+    return Genixmlrpc::CallMethod($cmurl, $context, "DeleteNodes", $args);
 }
 
 sub WaitForSliver($)
@@ -3195,107 +3106,54 @@ sub WaitForSliver($)
     $aggobj->Refresh();
     my $webtask   = $aggobj->webtask();
     my $authority = $aggobj->GetGeniAuthority();
-    my $cmurl     = $authority->url();
     my $urn       = $authority->urn();
+    my $aggname   = $aggobj->GetAptAggregate->name();
     $webtask->Refresh();
     $webtask->output("");
     $webtask->exitcode(0);
 
-    # Debugging
-    $cmurl = APT_Instance::devurl($cmurl);
-
-    my $seconds  = 900;
+    my $seconds  = 7200;
     my $interval = 15;
     my $ready    = 0;
     my $failed   = 0;
     my $rpcfail  = 0;
+    my $failure_code;
+    my $failure_output;
     my $repblob;
     my $laststatus;
 
     while ($seconds > 0) {
 	sleep($interval);
 	$seconds -= $interval;
-
-	#print STDERR "WaitForSliver: " . TBTimeStamp() . "\n";
-
-	#
-	# If we do not have a manifest, then we want to ask for the manifest
-	# since SliverStatus() might fail if the CreateSliver() failed cause
-	# of a read timeout before the slice aggregate has been created.
-	#
-	if (!defined($aggobj->manifest())) {
-	    print STDERR "No manifest. asking\n";
-	    my $response = $aggobj->GetManifest();
-	    
-	    if (defined($response)) {
-		print STDERR "Got manifest\n";
-		
-		$aggobj->SetStatus("provisioned");
-		$aggobj->SetManifest($response->value()->{'manifest'});
-		$aggobj->instance()->CheckProvisioned();
-
-		# We will not have this since CreateSliver() timed out, so 
-		# make sure we get it now.
-		if (defined($response->logurl())) {
-		    $aggobj->SetPublicURL($response->logurl());
-		}
-	    }
-	    elsif ($response->code() == GENIRESPONSE_SEARCHFAILED) {
-		print STDERR "Slice is gone, must have failed\n";
-		# This will result in a timed out error. Not good.
-		last;
-	    }
-	    else {
-		print STDERR "Still no manifest, looping\n";
-		next;
-	    }
-	}
 	my $response = $aggobj->SliceStatus();
-	if (!defined($response) || !defined($response->value()) ||
-	    ($response->code() != GENIRESPONSE_SUCCESS &&
+
+	print STDERR "WaitForSliver: " . TBTimeStamp() . ": code:" .
+	    $response->code() . "\n";
+
+	if (($response->code() != GENIRESPONSE_SUCCESS &&
 	     $response->code() != GENIRESPONSE_SERVER_UNAVAILABLE &&
 	     $response->code() != GENIRESPONSE_BUSY &&
-	     $response->code() != GENIRESPONSE_RPCERROR)) {
-	    print STDERR "SliverStatus failed";
-	    
-	    if (defined($response)) {
-		print STDERR ": " . $response->output();
-		print STDERR Dumper($response);
-		if ($response->output() =~ /read timeout/) {
-		    $webtask->output("Lost contact with the aggregate. " .
-				     "Possibly a network failure, ".
-				     "please try again later.");
-		}
-		else {
-		    $webtask->output($response->output());
-		}
-	    }
-	    print STDERR "\n";
+	     $response->code() != GENIRESPONSE_NETWORK_ERROR)) {
+	    $failure_code = $response->code();
+	    $failure_output = "SliverStatus failed: " . $response->error();
 	    $failed = 1;
 	    last;
 	}
-	if ($response->code() == GENIRESPONSE_RPCERROR) {
-	    if ($rpcfail > 10) {
-		if ($response->output() =~ /read timeout/) {
-		    $webtask->output("Lost contact with the aggregate. " .
-				     "Possibly a network failure, ".
-				     "please try again later.");
-		}
-		else {
-		    $webtask->output($response->output());
-		}
-		$failed = 1;
-		last;
-	    }
-	    $rpcfail++;
-	    next;
+	if ($response->code() == GENIRESPONSE_NETWORK_ERROR) {
+	    #
+	    # We just keep going, hoping to get back in touch. This is
+	    # better then giving up and hosing the extire experiment.
+	    #
+	    print STDERR "Lost contact with $urn. Possibly a network failure\n";
 	}
-	$rpcfail = 0;
 	next
 	    if ($response->code() == GENIRESPONSE_BUSY ||
-		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE);
-
+		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
+		$response->code() == GENIRESPONSE_NETWORK_ERROR);
+		
 	$repblob = $response->value();
+	#print STDERR Dumper($repblob);
+
 	#
 	# Convert to something smaller, with info the web interface
 	# cares about. We get this on each loop, update so the web
@@ -3303,8 +3161,6 @@ sub WaitForSliver($)
 	#
 	my $statusblob = {};
 
-	#print STDERR Dumper($statusblob);
-	
 	my $changed = 0;
 	foreach my $urn (keys(%{$repblob->{'details'}})) {
 	    my $details = $repblob->{'details'}->{$urn};
@@ -3367,18 +3223,35 @@ sub WaitForSliver($)
 	    my $public_url = $repblob->{'public_url'};
 	    $aggobj->SetPublicURL($public_url);
 	}
-	if ($repblob->{'status'} eq "ready") {
+	#
+	# Watch for an async error indicator. Bail immediately.
+	#
+	if (exists($repblob->{'async_code'})) {
+	    # We are getting back async error status.
+	    $failure_code   = $repblob->{'async_code'};
+	    $failure_output = $repblob->{'async_output'};
+	    $failed = 1;
+	    last;
+	}
+	elsif ($repblob->{'status'} eq "ready") {
 	    $ready = 1;
 	    last;
 	}
 	elsif ($repblob->{'status'} eq "failed") {
+	    print STDERR Dumper($repblob);
 	    $failed = 1;
-	    my $msg = $repblob->{'error'}
-	        if (defined($repblob->{'error'}) && $repblob->{'error'} ne "");
-	    print STDERR "*** $urn failed\n";
-	    print STDERR "    " .  $repblob->{'error'} . "\n" if ($msg);
-	    $webtask->output("Experiment setup on $urn failed" .
-			     ($msg ? ": $msg" : "."));
+	    $failure_code = GENIRESPONSE_SETUPFAILURE_BOOTFAILED();
+	    # Backwards compat; boot_failure is new, and used to be only 1.
+	    # If it is not set, that usually means node failure.
+	    if (exists($repblob->{"boot_failure"})) {
+		if ($repblob->{"boot_failure"} > 1) {
+		    $failure_code = $repblob->{"boot_failure"};
+		}
+	    }
+	    $failure_output = "Experiment setup on the $aggname cluster failed";
+	    if (exists($repblob->{'error'}) && $repblob->{'error'} ne "") {
+		$failure_output .= ": " . $repblob->{'error'};
+	    }
 	    last;
 	}
 	elsif ($aggobj->instance()->IsCanceled()) {
@@ -3392,17 +3265,22 @@ sub WaitForSliver($)
     if ($failed || !$ready) {
 	$aggobj->SetStatus("failed");
 	if ($failed) {
-	    # Output set above.
-	    $webtask->Exited(GENIRESPONSE_ERROR);
+	    print STDERR "*** $urn failure\n";
+	    print STDERR "    $failure_output\n";	    
+	    $webtask->output($failure_output);
+	    $webtask->Exited($failure_code);
 	}
 	elsif (!$ready) {
 	    # XXX Need better handling for timeout.
 	    print STDERR "*** $urn timed out.\n";
-	    $webtask->output("Experiment setup on $urn timed out");
+	    $webtask->output("Experiment setup on the $aggobj cluster".
+			     "timed out");
 	    $webtask->Exited(GENIRESPONSE_TIMEDOUT);
 	}
 	else {
-	    $webtask->Exited(1);
+	    print STDERR "*** $urn unknown error\n";
+	    $webtask->output("Unknown setup failure on the $aggobj cluster");
+	    $webtask->Exited(GENIRESPONSE_ERROR);
 	}
 	return $webtask->exitcode();
     }
@@ -3420,7 +3298,7 @@ sub Utilization($)
     my $authority = $self->GetGeniAuthority();
     my $context   = APT_Geni::RootContext();
     my $slice     = $self->instance()->GetGeniSlice();
-    return undef
+    return ContextError()
 	if (! (defined($authority) && defined($context) &&
 	       defined($slice)));
 
@@ -3434,8 +3312,6 @@ sub Utilization($)
     my $response = Genixmlrpc::CallMethod($cmurl, $context,
 					  "SliceUtilizationData", $args);
     return $response;
-  bad:
-    return undef;
 }
 
 #
@@ -3447,7 +3323,7 @@ sub IdleData($)
     my $authority = $self->GetGeniAuthority();
     my $context   = APT_Geni::RootContext();
     my $slice     = $self->instance()->GetGeniSlice();
-    return undef
+    return ContextError()
 	if (! (defined($authority) && defined($context) &&
 	       defined($slice)));
 
@@ -3461,8 +3337,6 @@ sub IdleData($)
     my $response = Genixmlrpc::CallMethod($cmurl, $context,
 					  "SliceIdleData", $args);
     return $response;
-  bad:
-    return undef;
 }
 
 #
@@ -3474,7 +3348,7 @@ sub OpenstackData($$)
     my $authority = $self->GetGeniAuthority();
     my $context   = APT_Geni::RootContext();
     my $slice     = $self->instance()->GetGeniSlice();
-    return undef
+    return ContextError()
 	if (! (defined($authority) && defined($context) &&
 	       defined($slice)));
 
@@ -3489,40 +3363,10 @@ sub OpenstackData($$)
     my $response = Genixmlrpc::CallMethod($cmurl, $context,
 					  "SliceOpenstackData", $args);
     return $response;
-  bad:
-    return undef;
 }
 
 #
-# Check to see if we can extend a slice.
-#
-sub CheckReservation($$)
-{
-    my ($self, $new_expires) = @_;
-    my $authority = $self->GetGeniAuthority();
-    my $context   = APT_Geni::RootContext();
-    my $slice     = $self->instance()->GetGeniSlice();
-    return undef
-	if (! (defined($authority) && defined($context) &&
-	       defined($slice)));
-
-    my $args = {
-	"slice_urn"   => $slice->urn(),
-	"expiration"  => $new_expires,
-    };
-    my $cmurl = $authority->url();
-    $cmurl =~ s/\/cm$/\/cluster/;
-    $cmurl = devurl($cmurl) if ($usemydevtree);
-
-    my $response = Genixmlrpc::CallMethod($cmurl, $context,
-					  "SliceCheckReservation", $args);
-    return $response;
-  bad:
-    return undef;
-}
-
-#
-# Ask the cluster for the maximum extension allowed; return a GMT of
+# Ask the cluster for the maximum extension allowed; returns a GMT.
 #
 sub MaxExtension($$)
 {
@@ -3530,7 +3374,7 @@ sub MaxExtension($$)
     my $authority = $self->GetGeniAuthority();
     my $context   = APT_Geni::RootContext();
     my $slice     = $self->instance()->GetGeniSlice();
-    return undef
+    return ContextError()
 	if (! (defined($authority) && defined($context) &&
 	       defined($slice)));
 
@@ -3544,8 +3388,6 @@ sub MaxExtension($$)
     my $response = Genixmlrpc::CallMethod($cmurl, $context,
 					  "SliceMaxExtension", $args);
     return $response;
-  bad:
-    return undef;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

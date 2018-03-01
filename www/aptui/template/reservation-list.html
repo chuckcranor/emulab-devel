@@ -42,6 +42,9 @@
       </h5>
     </div>
     <div class='panel-body panel-body-dashboard'>
+      <% if (error) { %>
+	<div class="text-center text-danger"><%- error %></div>
+      <% } else { %>
       <table class='tablesorter' id='reservations-table-<%- name %>'>
 	<thead>
 	  <tr>
@@ -71,7 +74,7 @@
 	      <% if (showidx) { %>
 		<td style='white-space: nowrap;'>
 		  <% if (isadmin) { %>
-		    <a href="#" class="deny-button">
+		    <a href="#" class="deny-button invisible">
 		      <span class='glyphicon glyphicon-thumbs-down pull-left'
 			    style='color: red; margin-left: 0px;
 				   margin-bottom: 4px;'
@@ -79,6 +82,15 @@
 			    data-container="body"
 			    data-trigger="hover"
 			    title='Deny with reason'></span>
+		    </a>
+		    <a href="#" class="approve-button invisible">
+		      <span class='glyphicon glyphicon-thumbs-up pull-left'
+			    style='color: red; margin-left: 5px;
+				   margin-bottom: 4px;'
+			    data-toggle='tooltip'
+			    data-container="body"
+			    data-trigger="hover"
+			    title='Approve reservation'></span>
 		    </a>
 		  <% } %>
 		  <a href="#" class="delete-button">
@@ -196,6 +208,7 @@
 	  <% }); %>
 	</tbody>
       </table>
+      <% } %>
     </div>
   </div>
 </div>
@@ -215,6 +228,21 @@
 	  <br>
           <button class='btn btn-danger btn-sm'
 		  id='confirm-deny'>Confirm</a>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='approve-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+        <center><h4>Confirm to Approve Reservation</h4>
+	  <br>
+          <button class='btn btn-danger btn-sm'
+		  id='confirm-approve'>Confirm</a>
 	</center>
       </div>
     </div>

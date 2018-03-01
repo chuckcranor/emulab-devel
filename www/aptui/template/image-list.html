@@ -33,6 +33,9 @@
       </h5>
     </div>
     <div class='panel-body panel-body-dashboard'>
+      <% if (error) { %>
+	<div class="text-center text-danger"><%- error %></div>
+      <% } else { %>
       <table class='tablesorter hidden' id='images-table-no-profiles'>
 	<caption>
 	  <center>Images not used by any of your profiles
@@ -301,6 +304,7 @@
 	  <% }); %>
 	</tbody>
       </table>
+      <% } %>
     </div>
   </div>
 </div>

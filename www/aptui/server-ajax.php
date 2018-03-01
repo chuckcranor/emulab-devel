@@ -197,6 +197,8 @@ $routing = array("myprofiles" =>
 						     "Do_OpenstackStats",
 						 "MaxExtension" =>
 						     "Do_MaxExtension",
+						 "IgnoreFailure" =>
+						     "Do_IgnoreFailure",
 						 "dismissExtensionDenied" =>
                                                  "Do_DismissExtensionDenied")),
 		 "approveuser" =>
