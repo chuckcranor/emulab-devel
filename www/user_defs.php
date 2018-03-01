@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -738,6 +738,31 @@ class User
 	}
 	$html .= "</table>\n";
 	return $html;
+    }
+
+    #
+    # Does the user need to accept the AUP. Always goto the DB for this
+    # since the user might have multiple windows/tabs.
+    #
+    function RequireAUP() {
+        global $PORTAL_GENESIS;
+	$uid_idx = $this->uid_idx();
+	
+	$query_result =
+	    DBQueryFatal("select require_aup from users ".
+			 "where uid_idx='$uid_idx' and ".
+                         "      FIND_IN_SET(require_aup, '$PORTAL_GENESIS')");
+
+        return mysql_num_rows($query_result);
+    }
+    function AcceptAUP($portal) {
+	$uid_idx = $this->uid_idx();
+
+        DBQueryFatal("update users set ".
+                     "  require_aup=TRIM(BOTH ',' FROM ".
+                     "      REPLACE(CONCAT(',', require_aup, ','), ".
+                     "              CONCAT(',', '$portal', ','), ',')) ".
+                     "where uid_idx='$uid_idx'");
     }
 
     function Show($html = FALSE) {

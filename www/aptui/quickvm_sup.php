@@ -108,6 +108,12 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     if ($login_user && !($login_status & CHECKLOGIN_WEBONLY)) {
         $showmenus = 1;
     }
+    if ($login_user && $login_user->RequireAUP() &&
+        $page_title != "AUP" && $page_title != "Logout") {
+        $referrer = urlencode($_SERVER['REQUEST_URI']);
+        header("Location: aup.php?referrer=$referrer");
+        return;
+    }
 
     header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
     header("Cache-Control: no-cache, must-revalidate");
@@ -450,7 +456,7 @@ echo " <li class='divider'></li>
                             Extension Requests</a></li>";
 		               echo "<li><a href='experiments.php#all'>
                             All Experiments</a></li>
-		                 <li><a href='myprofiles.php?all=1'>
+		                 <li><a href='list-profiles.php'>
                             All Profiles</a></li>
                                  <li><a href='list-reservations.php'>
                             All Reservations</a></li>

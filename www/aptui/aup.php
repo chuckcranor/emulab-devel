@@ -25,35 +25,38 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
-$page_title = "Logout";
+$page_title = "AUP";
 
 #
-# Verify page arguments.
+# Only POWDER.
 #
-$optargs = OptionalPageArguments("ajax_request", PAGEARG_BOOLEAN);
+$AUPURL = "https://www.powderwireless.net/3536bfae4004e76584f504ceefe7744f53a50d32/powder/templates/powder-aup.md";
 
 #
 # Get current user.
 #
-$this_user = CheckLogin($check_status);
-if ($this_user) {
-    if (DOLOGOUT($this_user) != 0) {
-	if ($ajax_request) {
-	    SPITAJAX_ERROR(1, "Logout failed");
-	    exit();
-	}
-	else {
-	    SPITHEADER();
-	    echo "<center><font color=red>Logout failed!</font></failed>\n";
-            echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-	    SPITNULLREQUIRE();
-	    SPITFOOTER();
-	}
-    }
+RedirectSecure();
+$this_user = CheckLoginOrRedirect();
+$optargs = OptionalPageArguments("referrer", PAGEARG_STRING);
+
+SPITHEADER(1);
+
+echo "<div id='main-body'></div>\n";
+
+echo "<script type='text/javascript'>\n";
+echo "    window.AUPURL = '$AUPURL';\n";
+if ($referrer) {
+    $referrer = CleanString($referrer);
+    echo "    window.REFERRER = '$referrer';\n";
 }
-if ($ajax_request) {
-    SPITAJAX_RESPONSE("");
-    exit();
-}
-header("Location: landing.php");
+echo "</script>\n";
+echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+
+REQUIRE_UNDERSCORE();
+REQUIRE_MARKED();
+REQUIRE_SUP();
+AddTemplateList(array("aup"));
+SPITREQUIRE("js/aup.js");
+
+SPITFOOTER();
 ?>

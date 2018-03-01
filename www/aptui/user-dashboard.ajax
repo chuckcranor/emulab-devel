@@ -450,6 +450,15 @@ function Do_NagPI()
     SPITAJAX_RESPONSE("nagged");
 }
 
+function Do_AcceptAUP()
+{
+    global $this_user, $PORTAL_GENESIS;
+
+    $this_user->AcceptAUP($PORTAL_GENESIS);
+
+    SPITAJAX_RESPONSE("accepted");
+}
+
 # Local Variables:
 # mode:php
 # End:

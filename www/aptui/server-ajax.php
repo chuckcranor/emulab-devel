@@ -44,12 +44,7 @@ $session_interactive  = 0;
 #
 # Poor man routing description.
 #
-$routing = array("myprofiles" =>
-			array("file"    => "myprofiles.ajax",
-			      "guest"   => false,
-			      "methods" => array("GetProfile" =>
-						      "Do_GetProfile")),
-		 "geni-login" =>
+$routing = array("geni-login" =>
 			array("file"    => "geni-login.ajax",
 			      "guest"   => true,
 			      "methods" => array("GetSignerInfo" =>
@@ -139,7 +134,11 @@ $routing = array("myprofiles" =>
 						 "GetRepoHash" =>
                                                      "Do_GetRepoHash",
 						 "GetCommitList" =>
-                                                     "Do_GetCommitList")),
+                                                     "Do_GetCommitList",
+						 "SearchProfiles" =>
+                                                     "Do_SearchProfiles",
+						 "GetProfile" =>
+                                                     "Do_GetProfile")),
 		 "status" =>
 			array("file"    => "status.ajax",
 			      "guest"   => false,
@@ -280,7 +279,9 @@ $routing = array("myprofiles" =>
                                                  "NagPI" =>
                                                      "Do_NagPI",
                                                  "AccountDetails" =>
-                                                     "Do_AccountDetails")),
+                                                     "Do_AccountDetails",
+                                                 "AcceptAUP" =>
+                                                     "Do_AcceptAUP")),
 		 "nag" =>
 			array("file"    => "user-dashboard.ajax",
                               "unapproved" => true,
