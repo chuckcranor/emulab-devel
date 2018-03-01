@@ -76,6 +76,9 @@ function Do_GetProfile()
 			    'ispprofile'  => $ispp,
                             'isscript'    => ($profile->script() ? 1 : 0),
                             'fromrepo'    => ($profile->repourl() ? 1 : 0),
+                            'repohash'    => ($profile->repourl() ?
+                                              substr($profile->repohash(),0,8)
+                                              : ""),
 			    'amdefault'   => $amdefault));
 }
 

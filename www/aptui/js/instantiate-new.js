@@ -1347,6 +1347,13 @@ $(function ()
 	    $('#showtopo_version').html(profile_blob.version); 
 	    $('#showtopo_last_updated').html(profile_blob.created);
 	    $('#showtopo_description').html(profile_blob.description);
+	    if (profile_blob.fromrepo) {
+		$('#showtopo_repohash').html(profile_blob.repohash);
+		$('.showtopo_repoinfo').removeClass("hidden");
+	    }
+	    else {
+		$('.showtopo_repoinfo').addClass("hidden");
+	    }
 
 	    sup.maketopmap('#showtopo_div',
 			   profile_blob.rspec, false, !multisite);
@@ -1454,6 +1461,9 @@ $(function ()
 	    // Not allowed to copy a repo based profile.
 	    if (profile_blob.fromrepo) {
 		$('#profile_copy_button').addClass("hidden");
+		$('#selected_profile_text')
+		    .html(profile_name + " (Repohash: " +
+			  profile_blob.repohash + ")");
 	    }
 	    else {
 		$('#profile_copy_button').removeClass("hidden");
@@ -1529,6 +1539,8 @@ $(function ()
 		    
 		    $('#repohash').val(hash);
 		    $('#reporef').val(which);
+		    // Pass along.
+		    json.value.repohash = hash;
 
 		    if (pythonRe.test(source)) {
 			ConvertScript(source, function(rspec, paramdefs) {
