@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -148,8 +148,9 @@ function SPITTABLE($which, $results) {
         }
         echo "     <th>Project</th>
                    <th>Type</th>
+                   <th>State</th>
+                   <th>Size</th>
                    <th>Expires</th>
-                   <th>URN</th>
               </tr>
             </thead>
           <tbody>\n";
@@ -173,7 +174,20 @@ function SPITTABLE($which, $results) {
             $pid     = $dataset->pid();
             $creator = $dataset->owner_uid();
             $expires = $dataset->expires();
-            $urn     = $dataset->URN();
+            $size    = $dataset->size() ? $dataset->size() : "0";
+            #
+            # The state is a bit of a problem, since local leases do not have
+            # an "allocating" state. For a remote dataset, we get set to busy.
+            # Need to unify this. But the main point is that we want to tell
+            # the user that the dataset is busy allocation.
+            #
+            if ($dataset->state() == "busy" ||
+                ($dataset->state() == "unapproved" && $dataset->locked())) {
+                $state = "allocating";
+            }
+            else {
+                $state = $dataset->state();
+            }
             
             echo " <tr>
                 <td><a href='show-dataset.php?uuid=$uuid&embedded=$embedded'>
@@ -185,8 +199,9 @@ function SPITTABLE($which, $results) {
             }
             echo "<td><a href='show-project.php?project=$pid'>$pid</a></td>
                     <td>$dtype</td>
+                    <td>$state</td>
+                    <td>$size MiB</td>
                     <td class='format-date'>$expires</td>
-                   <td>$urn</td>
                  </tr>\n";
         }
         echo "   </tbody>
