@@ -197,6 +197,8 @@ if( $minfree ) {
 }
 
 if( $timeseries ) {
+    my $error = 0;
+    
     print "Time       Unavailable  Held  Free\n";
     print "----------       -----  ----  ----\n";
     
@@ -204,9 +206,11 @@ if( $timeseries ) {
 	printf( "%s %5d %5d %5d\n",
 		strftime( "%Y-%m-%d %H:%M", localtime( $rec->{'t'} ) ),
 		$rec->{'unavailable'}, $rec->{'held'}, $rec->{'free'} );
+	if ($rec->{'free'} < 0) {
+	    $error = 1;
+	}
     }
-    
-    exit( 0 );
+    exit( $error );
 }
 
 if( $pressure ) {
