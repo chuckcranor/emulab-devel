@@ -2886,7 +2886,13 @@ sub DoLockdownInternal($$$$)
 	my $code = $response->code();
 
 	if ($code != GENIRESPONSE_SUCCESS) {
-	    ($errcode, $errmsg) = ResponseErrorMessage($agg, $response);
+	    if ($code == GENIRESPONSE_REFUSED) {
+		$errcode = $code;
+		$errmsg  = $response->error();
+	    }
+	    else {
+		($errcode, $errmsg) = ResponseErrorMessage($agg, $response);
+	    }
 	    next;
 	}
     }
