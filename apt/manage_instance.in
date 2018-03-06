@@ -3586,8 +3586,9 @@ sub DoIdleData()
 	fatal("No slice for instance!");
     }
     if ($slice->WaitForLock(10)) {
-	$errcode = GENIRESPONSE_BUSY;
-	$errmsg  ="Experiment is busy, cannot lock it. Try again later.";
+	$errcode  = GENIRESPONSE_BUSY;
+	$exitcode = 1;
+	$errmsg   ="Experiment is busy, cannot lock it. Try again later.";
 	goto bad;
     }
     #

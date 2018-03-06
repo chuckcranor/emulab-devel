@@ -1718,6 +1718,11 @@ function Do_MaxExtension()
             SPITAJAX_ERROR(-1, "Unable to extend your experiment at this ".
                            "time, please try again later");
         }
+        elseif ($webtask->exitcode() == GENIRESPONSE_REFUSED) {
+            SPITAJAX_ERROR($webtask->exitcode(),
+                           "No extension is possible at this time because of ".
+                           "prior commitments to other projects or users.");
+        }
         else {
             SPITAJAX_ERROR(1, "Unable to extend your experiment at this ".
                            "time: ". $webtask->output());
