@@ -111,7 +111,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     if ($login_user && $login_user->RequireAUP() &&
         $page_title != "AUP" && $page_title != "Logout") {
         $referrer = urlencode($_SERVER['REQUEST_URI']);
-        header("Location: aup.php?referrer=$referrer");
+        header("Location: portal-aup.php?referrer=$referrer");
         return;
     }
 
