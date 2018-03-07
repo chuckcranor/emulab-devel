@@ -740,13 +740,16 @@ sub os_ifconfig_line($$$$$$$$;$$$)
 	    if ($speed eq '0' || $speed eq '1000') {
 		$uplines .= "  $ethtool -s $iface autoneg on\n    ";
 	    }
-	    elsif ($speed eq '10000') {
-		$uplines .= "  true\n    ";
-	    }
 	    else {
 		$uplines .=
-		    "  $ethtool -s $iface autoneg off speed $speed duplex $duplex\n    " .
-		    "  sleep 2 # needed due to likely bug in e100 driver on pc850s\n    ";
+		    "  if $ethtool -s $iface autoneg off speed $speed duplex $duplex >/dev/null 2>&1 ; then\n    " .
+		    "    sleep 2 # needed due to likely bug in e100 driver on pc850s\n    " .
+		    "  else\n    " .
+		    "    echo ERROR: failed to set speed $speed on iface $iface; falling back to autonegotiation!\n    " .
+		    "    if ! $ethtool -s $iface autoneg on ; then\n    " .
+		    "      echo ERROR: failed to fall back to autonegotiation on $iface!\n    " .
+		    "    fi\n    " .
+		    "  fi\n    ";
 	    }
 	    if ($media eq '') {
 		$uplines .= 
