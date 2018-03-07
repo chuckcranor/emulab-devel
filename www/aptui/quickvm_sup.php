@@ -128,7 +128,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
         <link rel='stylesheet' href='css/quickvm.css'>
         <link rel='stylesheet' href='css/$APTSTYLE'>";
     if ($ISPOWDER) {
-        echo "<link href='https://fonts.googleapis.com/css?family=Raleway' rel='stylesheet'>";
+        echo "<link href='https://www.powderwireless.net/powder/fonts/raleway/style.css' rel='stylesheet'>";
     }
     echo "<script src='js/lib/jquery.min.js'></script>\n";
     echo "<script>APT_CACHE_TOKEN='" . Instance::CacheToken() . "';</script>";
