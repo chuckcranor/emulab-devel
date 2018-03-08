@@ -787,6 +787,7 @@ class Instance
         
         $skiptypes = array("dboxvm"    => true,
                            "d430k"     => true,
+                           "d530"      => true,
                            "pcivy"     => true,
                            "pc2830qx2" => true,
                            "pc2400hp"  => true,
