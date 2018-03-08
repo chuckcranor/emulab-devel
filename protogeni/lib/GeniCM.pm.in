@@ -1744,7 +1744,10 @@ sub GetTicketAuxAux($)
 		$nodeblob->{'startupcmd'} = $startupcmd;
 	    }
 	}
-	elsif (my @services = GeniXML::GetServices($ref)) {
+	elsif ((my @services = GeniXML::GetServices($ref)) &&
+	       (!defined($osinfo) ||
+		$osinfo->op_mode() ne
+		EmulabConstants::TBDB_NODEOPMODE_ALWAYSUP())) {
 	    my $startupCommand = undef;
 	    my $startupCount = 0;
 	    foreach my $service (@services) {
