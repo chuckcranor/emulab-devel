@@ -46,7 +46,6 @@ $(function ()
     var types         = null;
     var hardware      = null;
     var resinfo       = null;
-    var graphsdrawn   = false;
     var currentStep   = 0;
     var deprecatedList = [];
     var mainTemplate  = _.template(instantiateString);
@@ -572,9 +571,6 @@ $(function ()
 	if (currentIndex == 2) {
 	    SwitchJacks('small');
 	}
-	if (currentIndex == 2 && newIndex != 2) {
-	    HideClusterGraphs();
-	}
 	if (currentIndex == 0 && selected_uuid == null) {
 	    return false;
 	}
@@ -644,9 +640,6 @@ $(function ()
 	    // the height change. Had to also add to Jacks root.
 	    $('#inline_jacks').css('height',
 			       $('#finalize_container').outerHeight() - 15);
-	}
-	if (currentIndex == 2) {
-	    ShowClusterGraphs();
 	}
 	if (currentIndex < priorIndex) {
 	    // Disable going forward by clicking on the labels
@@ -2185,8 +2178,6 @@ $(function ()
 
     function LoadReservationInfo()
     {
-	InitClusterGraphs();
-	
 	var callback = function(json) {
 	    if (json.code) {
 		console.info("Could not get reservation info: " + json.value);
@@ -2196,7 +2187,6 @@ $(function ()
 	    resinfo = json.value;
 	    
 	    ShowClusterReservations();
-	    ShowClusterGraphs();
 	};
 	var $xmlthing =
 	    sup.CallServerMethod(null, "reserve", "ReservationInfo", null);
@@ -2229,108 +2219,6 @@ $(function ()
 	ga('send', 'event', 'picker', action, id, value);
     }
 
-    function InitClusterGraphs()
-    {
-	// Only the Powder portal for now.
-	if (!window.ISPOWDER) {
-	    return;
-	}
-
-	// Per clusters rows filled in with templates.
-	// For POWDER there are two graphs, one for
-	_.each(amlist, function(details, urn) {
-	    var graphid = "resgraph-" + details.nickname;
-		
-	    $('#' + details.nickname + " .resgraph-panel-radios")
-		.html(graphTemplate({"details"        : details,
-				     "graphid"        : graphid + "-radios",
-				     "title"          : "Radio",
-				     "urn"            : urn,
-				     "showhelp"       : true,
-				     "showfullscreen" : false}));
-	    
-	    $('#' + details.nickname + " .resgraph-panel-servers")
-		.html(graphTemplate({"details"        : details,
-				     "graphid"        : graphid + "-servers",
-				     "title"          : "Server",
-				     "urn"            : urn,
-				     "showhelp"       : true,
-				     "showfullscreen" : false}));
-	    
-	    // Handler for the Reservation Graph Help button
-	    $('.resgraph-help-button').click(function (event) {
-		event.preventDefault();
-		sup.ShowModal('#resgraph-help-modal');
-	    });
-	});
-    }
-
-    function ShowClusterGraphs()
-    {
-	// Only the Powder portal for now.
-	if (!window.ISPOWDER) {
-	    return;
-	}
-	if (currentStep != 2) {
-	    return;
-	}
-	// Make visible, in case we hid it.
-	// Must be visible to draw graphs.
-	$('#resgraph-div').removeClass("hidden");
-	
-	if (graphsdrawn || !resinfo) {
-	    return;
-	}
-	var skiptypes = decodejson('#skiptypes-json');
-
-	// Per clusters rows filled in with templates.
-	_.each(amlist, function(details, urn) {
-	    var graphid = 'resgraph-' + details.nickname;
-
-	    if (! (_.has(resinfo, urn) && resinfo[urn])) {
-		$('#' + graphid).addClass("hidden");
-		return;
-	    }
-	    // Kill the spinners
-	    $('#' + details.nickname + ' .resgraph-spinner')
-		.addClass("hidden");
-
-	    ShowResGraph({"forecast"       : resinfo[urn].forecast,
-			  "selector"       : graphid + "-radios",
-			  "foralloc"       : true,
-			  "maxdays"        : 7,
-			  "showbrush"      : false,
-			  "skiptypes"      : skiptypes,
-			  "showtypes"      : {"nuc5300"   : true,
-					      "nuc6260"   : true,
-					      "enodeb"    : true,
-					      "sdr"       : true},
-			  "click_callback" : null});
-	    
-	    ShowResGraph({"forecast"       : resinfo[urn].forecast,
-			  "selector"       : graphid + "-servers",
-			  "foralloc"       : true,
-			  "maxdays"        : 7,
-			  "showbrush"      : false,
-			  "skiptypes"      : skiptypes,
-			  "showtypes"      : {"d430"   : true,
-					      "d710"   : true,
-					      "pc3000" : true,
-					      "d820"   : true},
-			  "click_callback" : null});
-	});
-	graphsdrawn = true;
-    }
-    function HideClusterGraphs()
-    {
-	// Only the Powder portal for now.
-	if (!window.ISPOWDER) {
-	    return;
-	}
-	// Hide when switching to a different step.
-	$('#resgraph-div').addClass("hidden");
-    }
-    
     function ClusterSelected(selected, pickered)
     {
 	console.info("ClusterSelected: ", selected);

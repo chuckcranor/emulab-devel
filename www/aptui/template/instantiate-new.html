@@ -447,7 +447,7 @@
 		</div>
 		<div id="cluster_status_link"><center>
 		  <a target="_blank" href="resinfo.php">
-		    Check Cluster Status</a></center>
+		    Check Resource Availability</a></center>
 		</div>
 	      </div>
 	    </div>
@@ -477,27 +477,6 @@
       </form>
     </div>
   </div>
-  <% if (amlist) { %>
-    <div class='col-lg-10  col-lg-offset-1
-		col-md-10  col-md-offset-1
-		col-sm-10  col-sm-offset-1
-		col-xs-12  col-xs-offset-0 hidden'
-	 style="margin-top: 10px;"
-	 id='resgraph-div'>
-      <% _.each(amlist, function(details, urn) { %>
-	<div class='row' id='<%- details.nickname %>'>
-	  <div class='col-sm-6 resgraph-panel-radios'
-	       style="padding: 0px;">
-	    <!-- Template goes here -->	    
-	  </div>
-	  <div class='col-sm-6 resgraph-panel-servers'
-	       style="padding: 0px;">
-	    <!-- Template goes here -->	    
-	  </div>
-	</div>
-      <% }) %>
-    </div>
-  <% } %>
 </div>
 <!-- This is the user verify modal -->
 <div id='verify_modal' class='modal fade'

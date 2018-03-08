@@ -51,11 +51,23 @@ $(function ()
 	    $('#' + details.nickname + " .counts-panel")
 		.html(totalsTemplate({"details"      : details,
 				      "urn"          : urn}));
-	    
-	    $('#' + details.nickname + " .resgraph-panel")
+
+	    if (window.ISPOWDER) {
+		$('#' + details.nickname + " .resgraph-panel-radios")
+		    .html(graphTemplate({"details"        : details,
+					 "graphid"        : graphid + "-radios",
+					 "title"          :
+					       details.nickname + " Radio",
+					 "urn"            : urn,
+					 "showhelp"       : true,
+					 "showfullscreen" : false}));
+	    }
+	    $('#' + details.nickname + " .resgraph-panel-servers")
 		.html(graphTemplate({"details"        : details,
-				     "graphid"        : graphid,
-				     "title"          : details.nickname,
+				     "graphid"        : graphid + "-servers",
+				     "title"          :
+				     (!window.ISPOWDER ? details.nickname :
+				      details.nickname + " Server"),
 				     "urn"            : urn,
 				     "showhelp"       : true,
 				     "showfullscreen" : false}));
@@ -98,11 +110,36 @@ $(function ()
 				details.name + ": " + json.value);
 		    return;
 		}
+		// Just POWDER
+		var radiotypes = {"nuc5300"   : true,
+				  "nuc6260"   : true,
+				  "enodeb"    : true,
+				  "sdr"       : true};
+
+		if (window.ISPOWDER) {
+		    ShowResGraph({"forecast"       : json.value.forecast,
+				  "selector"       : graphid + "-radios",
+				  "foralloc"       : true,
+				  "maxdays"        : 14,
+				  "skiptypes"      : skiptypes,
+				  "showtypes"      : radiotypes,
+				  "click_callback" : null});
+		}
+		if (window.ISPOWDER) {
+		    // For the servers panel, do not show the radios.
+		    skiptypes = Object.assign(skiptypes, radiotypes);
+		}
 		ShowResGraph({"forecast"       : json.value.forecast,
-			      "selector"       : graphid,
+			      "selector"       : graphid + "-servers",
 			      "foralloc"       : true,
 			      "skiptypes"      : skiptypes,
 			      "click_callback" : null});
+		if (window.ISPOWDER) {
+		    // But for the counts panel, we want to show the radios.
+		    for (var type in radiotypes) {
+			delete skiptypes[type];
+		    }
+		}
 
 		/*
 		 * Fill in the counts panel. The first tuple in the forecast
