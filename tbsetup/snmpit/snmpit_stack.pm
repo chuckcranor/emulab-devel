@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2015, 2018 University of Utah and the Flux Group.
 # Copyright (c) 2004-2009 Regents, University of California.
 # 
 # {{{EMULAB-LGPL
@@ -1685,6 +1685,12 @@ sub snap($) {
 		    && do {
  		require snmpit_h3c;
 		$device = new snmpit_h3c($devicename,$self->{DEBUG});
+		last;
+	        }; # /comware.*/
+	    (/netscout/)
+		    && do {
+ 		require snmpit_netscout;
+		$device = new snmpit_netscout($devicename,$self->{DEBUG});
 		last;
 	        }; # /comware.*/
 	    print "Device $devicename is not of a known type\n";
