@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -696,6 +696,7 @@ $experiment->SetState(EXPTSTATE_PRERUN) == 0
 if (!$nonsfile &&
     $experiment->PreRun($nsfile, ($zeeopt ? "-z" : ""))) {
     $errorstat = $? >> 8;
+    $errorstat = -1 if ($errorstat == 255);
     fatal({type => 'secondary', severity => SEV_SECONDARY,
 	   error => ['tbprerun_failed']},
 	  "tbprerun failed!");
@@ -714,6 +715,7 @@ if (! ($frontend || $batchmode)) {
     if (!$nonsfile &&
 	$experiment->Swap($Experiment::EXPT_SWAPIN) != 0) {
 	$errorstat = $? >> 8;
+	$errorstat = -1 if ($errorstat == 255);
 	fatal({type => 'secondary', severity => SEV_SECONDARY,
 	       error => ['tbswap_in_failed']},
 	      "tbswap in failed!");
