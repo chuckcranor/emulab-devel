@@ -39,6 +39,9 @@ $(function ()
 	ajaxurl       = window.AJAXURL;
 	isppprofile   = window.ISPPPROFILE;
 
+	// Standard option
+	marked.setOptions({"sanitize" : true});
+
 	var fields = JSON.parse(_.unescape($('#form-json')[0].textContent));
 	amlist     = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 

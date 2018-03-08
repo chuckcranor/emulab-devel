@@ -82,6 +82,9 @@ $(function ()
 	hidelinktest   = window.APT_OPTIONS.hidelinktest;
 	var errorURL = window.HELPFORUM;
 
+	// Standard option
+	marked.setOptions({"sanitize" : true});
+
 	if ($('#extension-blob-json').length) {
 	    extension_blob = decodejson('#extension-blob-json');
 	    console.info(extension_blob);

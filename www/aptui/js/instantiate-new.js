@@ -56,6 +56,8 @@ $(function ()
     // Get context for constraints
 	var contextUrl = 'https://www.emulab.net/protogeni/jacks-context/cloudlab-utah.json';
 	$.get(contextUrl).then(contextReady, contextFail);
+	// Standard view option
+	marked.setOptions({"sanitize" : true});
 
 	window.APT_OPTIONS.initialize(sup);
 	window.APT_OPTIONS.initialize(ppstart);

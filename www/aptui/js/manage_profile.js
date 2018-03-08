@@ -64,6 +64,9 @@ $(function ()
 	isadmin       = window.ISADMIN;
 	multisite     = window.MULTISITE;
 
+	// Standard option
+	marked.setOptions({"sanitize" : true});
+
 	var fields   = JSON.parse(_.unescape($('#form-json')[0].textContent));
 	var errors   = JSON.parse(_.unescape($('#error-json')[0].textContent));
 	var projlist = JSON.parse(_.unescape($('#projects-json')[0].textContent));
