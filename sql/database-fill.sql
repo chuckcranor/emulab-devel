@@ -992,6 +992,7 @@ REPLACE INTO table_regex VALUES ('experiments','ipassign_args','text','regex','^
 REPLACE INTO table_regex VALUES ('experiments','expt_name','text','redirect','default:fulltext',1,255,NULL);
 REPLACE INTO table_regex VALUES ('experiments','dpdb','int','redirect','default:tinyint',0,1,NULL);
 REPLACE INTO table_regex VALUES ('experiments','nonfsmounts','int','redirect','default:tinyint',0,1,NULL);
+REPLACE INTO table_regex VALUES ('experiments','skipvlans','int','redirect','default:tinyint',0,1,NULL);
 REPLACE INTO table_regex VALUES ('experiments','nfsmounts','text','regex','^(emulabdefault|genidefault|all|none)$',0,0,NULL);
 REPLACE INTO table_regex VALUES ('experiments','packing_strategy','text','regex','^(pack|balance)$',0,0,NULL);
 

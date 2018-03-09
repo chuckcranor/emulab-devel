@@ -877,6 +877,13 @@ sub GetTicketAuxAux($)
     my $disablerootkeys = GeniXML::DisableRootKey($rspec);
 
     #
+    # Allow caller to turn off vlan creation. 
+    #
+    if (GeniXML::SkipVlans($rspec)) {
+	$virtexperiment->skipvlans(1);
+    }
+
+    #
     # User can turn off routing.
     #
     my $routertype = GeniXML::RoutingStyle($rspec);

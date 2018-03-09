@@ -1311,59 +1311,63 @@ sub ActionStart($$;$)
     # We want to let snmpit run in parallel with os_setup, like the
     # classic path does. 
     #
-    my $snmpit_child = fork();
-    if ($snmpit_child) {
-	#
-	# Parent just continues on, but will wait later, we cannot
-	# return to the caller until snmpit is done. 
-	#
-	print STDERR "Forked off snmpit: process $snmpit_child\n";
-    }
-    else {
-	EventFork();
-	my $msg;
-	
-	DebugTimeStamp("snmpit started");
-	if ($flags & $ACTION_FLAGS_SYNCVLANS) {
-	    if (Lan->CompareVlansWithSwitches2($experiment)) {
-		$msg .= "CompareVlansWithSwitches2 failed!\n";
-		goto badsnmpit;
-	    }
-	    system("$SNMPIT -X $pid $eid");
-	    if ($?) {
-		$msg .= "Failed to synchronize vlans";
-		goto badsnmpit;
-	    }
+    my $snmpit_child;
+
+    if (!$experiment->skipvlans()) {
+	$snmpit_child = fork();
+	if ($snmpit_child) {
+	    #
+	    # Parent just continues on, but will wait later, we cannot
+	    # return to the caller until snmpit is done. 
+	    #
+	    print STDERR "Forked off snmpit: process $snmpit_child\n";
 	}
 	else {
-	    my @diff = ();
-	    my @same = ();
-	    
-	    if (Lan->CompareVlansWithSwitches($experiment, \@diff, \@same)) {
-		print STDERR "CompareVlansWithSwitches failed!\n";
-		goto badsnmpit;
-	    }
-	    if (@diff) {
-		system("$SNMPIT -f ". join(" ", map("-o $_", @diff)));
+	    EventFork();
+	    my $msg;
+	
+	    DebugTimeStamp("snmpit started");
+	    if ($flags & $ACTION_FLAGS_SYNCVLANS) {
+		if (Lan->CompareVlansWithSwitches2($experiment)) {
+		    $msg .= "CompareVlansWithSwitches2 failed!\n";
+		    goto badsnmpit;
+		}
+		system("$SNMPIT -X $pid $eid");
 		if ($?) {
-		    $msg .= "Failed to remove obsolete VLANs.";
+		    $msg .= "Failed to synchronize vlans";
 		    goto badsnmpit;
 		}
 	    }
-	    system("$SNMPIT -t $pid $eid");
-	    if ($?) {
-		$msg .= "Failed to setup vlans";
-		goto badsnmpit;
+	    else {
+		my @diff = ();
+		my @same = ();
+	    
+		if (Lan->CompareVlansWithSwitches($experiment, \@diff,\@same)) {
+		    print STDERR "CompareVlansWithSwitches failed!\n";
+		    goto badsnmpit;
+		}
+		if (@diff) {
+		    system("$SNMPIT -f ". join(" ", map("-o $_", @diff)));
+		    if ($?) {
+			$msg .= "Failed to remove obsolete VLANs.";
+			goto badsnmpit;
+		    }
+		}
+		system("$SNMPIT -t $pid $eid");
+		if ($?) {
+		    $msg .= "Failed to setup vlans";
+		    goto badsnmpit;
+		}
 	    }
+	    DebugTimeStamp("snmpit finished");
+	    # Avoid END block processing
+	    POSIX::_exit(0);
+	    
+	  badsnmpit:
+	    print STDERR "Failed to setup vlans: $msg\n";
+	    # Avoid END block processing
+	    POSIX::_exit(-1);
 	}
-	DebugTimeStamp("snmpit finished");
-	# Avoid END block processing
-	POSIX::_exit(0);
-	
-      badsnmpit:
-	print STDERR "Failed to setup vlans: $msg\n";
-	# Avoid END block processing
-	POSIX::_exit(-1);
     }
     
     my @nodes = keys(%nodes);

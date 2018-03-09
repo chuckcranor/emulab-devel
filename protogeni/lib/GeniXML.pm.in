@@ -791,6 +791,17 @@ sub DisableRootKey($)
     return 1;
 }
 
+sub SkipVlans($)
+{
+    my ($rspec) = @_;
+    
+    my $tmp = GeniXML::FindNodesNS("n:skipvlans", $rspec, $EMULAB_NS)->pop();
+    return 1
+	if (defined($tmp));
+
+    return 0;
+}
+
 sub GetTarball($)
 {
     my ($node) = @_;
