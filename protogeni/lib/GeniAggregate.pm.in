@@ -1283,14 +1283,16 @@ sub ActionStart($$;$)
 	    $msg .= "Failed to setup shared vlan ports";
 	    goto bad;
 	}
-	DebugTimeStamp("syncportvlans");
-	if ($experiment->SyncPortLans()) {
-	    $bootfailure_code = GENIRESPONSE_SETUPFAILURE_NETWORK();
-	    $msg .= "Failed to add ports to shared vlans";
-	    goto bad;
+	if (!$experiment->skipvlans()) {
+	    DebugTimeStamp("syncportvlans");
+	    if ($experiment->SyncPortLans()) {
+		$bootfailure_code = GENIRESPONSE_SETUPFAILURE_NETWORK();
+		$msg .= "Failed to add ports to shared vlans";
+		goto bad;
+	    }
+	    DebugTimeStamp("syncportvlans done");
+	    GeniCM::UpdateManifest($slice);
 	}
-	DebugTimeStamp("syncportvlans done");
-	GeniCM::UpdateManifest($slice);
     }
     $sliver = undef;
 
