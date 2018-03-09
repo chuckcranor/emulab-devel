@@ -2326,10 +2326,10 @@ sub LoadVirtLans($)
 	    my $virtnode0 = $member0->virt_node();
 	    my $virtnode1 = $member1->virt_node();
 	    # Look for VMs that have been "fixed" to another node.
-	    if ($virtnode0->fixed()) {
+	    if ($virtnode0->_isvirtnode() && $virtnode0->fixed()) {
 		$virtnode0 = $self->vnodes()->{$virtnode0->fixed()};
 	    }
-	    if ($virtnode1->fixed()) {
+	    if ($virtnode1->_isvirtnode() && $virtnode1->fixed()) {
 		$virtnode1 = $self->vnodes()->{$virtnode1->fixed()};
 	    }
 	    my $firstnode = $vpath->firstmember()->virt_node();
