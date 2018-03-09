@@ -6149,10 +6149,11 @@ sub InterpLinks($)
 	    my ($member0,$member1) = $virtlan->memberlist();
 	    my $firstmember = $vpath->firstmember();
 	    my $lastmember  = $vpath->lastmember();
+	    my $direct      = $virtlan->_layer() == 3 ? 1 : 0;
 
 	    $self->printdb("Adding link $virtlan, implemented by $vpath\n");
 
-	    $self->AddLinkToSolution($vlink, 0, 0,
+	    $self->AddLinkToSolution($vlink, 0, $direct,
 				     $firstmember->_pnode(),
 				     $firstmember->_pport(),
 				     $lastmember->_pnode(),
@@ -9154,7 +9155,7 @@ sub UpLoadIPAddresses($)
 	my $mask     = $virtlan->_mask();
 
 	next
-	    if ($virtlan->_layer() != 2);
+	    if ($virtlan->_layer() != 2 && $virtlan->_layer() != 3);
 
 	foreach my $member ($virtlan->memberlist()) {
 	    # Will this happen?

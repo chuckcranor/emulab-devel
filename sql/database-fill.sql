@@ -901,7 +901,7 @@ REPLACE INTO table_regex VALUES ('virt_lans','trace_db','int','redirect','defaul
 REPLACE INTO table_regex VALUES ('virt_lans','fixed_iface','text','redirect','default:tinytext',0,128,NULL);
 REPLACE INTO table_regex VALUES ('virt_lans','modbase','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_lans','compat','int','redirect','default:boolean',0,0,NULL);
-REPLACE INTO table_regex VALUES ('virt_lans','layer','int','redirect','default:tinyint',1,2,NULL);
+REPLACE INTO table_regex VALUES ('virt_lans','layer','int','redirect','default:tinyint',1,3,NULL);
 REPLACE INTO table_regex VALUES ('virt_lans','ofenabled','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_lans','ofcontroller','text','regex','^tcp:(\\d+\\.+){3,3}\\d+:\\d+$',0,32,NULL);
 
