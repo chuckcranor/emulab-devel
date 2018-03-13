@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2014, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -974,7 +974,7 @@ sub CreateSliverInfo($$$$)
 
     my $created = defined($fields->{'SLIVER_INFO_CREATION'}) ? 
     $fields->{'SLIVER_INFO_CREATION'} : 
-    POSIX::strftime("20%y-%m-%dT%H:%M:%SZ", gmtime(time())); #now
+    POSIX::strftime("20%y-%m-%d %H:%M:%S", gmtime(time())); #now
 
     my $blob= {
         'creator_urn' => $fields->{'SLIVER_INFO_CREATOR_URN'},
