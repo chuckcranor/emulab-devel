@@ -621,7 +621,7 @@ sub AssignLoop()
 	    if ($retval != 0) {
 		return [{type=>'extra', cause=>'user', severity=>SEV_ERROR,
 			 error=>['infeasible_resource_assignment']}, 
-			"This experiment cannot be instantiated on this ".
+			"*** This experiment cannot be instantiated on this ".
 			"testbed. You have most likely asked for hardware ".
 			"this testbed does not have, such as nodes of a type ".
 			"it does not contain, or nodes with too many network ".
