@@ -2002,7 +2002,17 @@ sub DoMaxExtensionInternal($$)
 	my $code     = $response->code();
 
 	if ($code) {
-	    ($errcode,$errmsg) = ResponseErrorMessage($aggregate, $response);
+	    if ($code == GENIRESPONSE_REFUSED) {
+		# We want the user to see REFUSED.
+		$errmsg = "No extension possible at ".
+		    $aggregate->GetAptAggregate()->name() . ": " .
+		    $response->error();
+		$errcode = $code;
+	    }
+	    else {
+		($errcode,$errmsg) =
+		    ResponseErrorMessage($aggregate, $response);
+	    }
 	    goto bad;
 	}
 	my $max = str2time($result);
