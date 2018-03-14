@@ -3090,6 +3090,18 @@ sub GetTicketAuxAux($)
 		$errorcode = GENIRESPONSE_INSUFFICIENT_NODES();
 		last;
 	    }
+	    if ($line =~ /cannot be instantiated on this testbed/) {
+		$logstuff  = $line;
+		# Snarf up next couple of lines.
+		while ($output =~ /^(.*)$/gm) {
+		    my $l = $1 . "\n";
+		    last
+			if ($l =~ /^\s*\*\*\*/);
+		    $logstuff .= $l;
+		}
+		$errorcode = GENIRESPONSE_MAPPING_IMPOSSIBLE();
+		last;
+	    }
 
 	    #
 	    # The assign_wrapper2 script wraps assign, and basically
@@ -3167,10 +3179,13 @@ sub GetTicketAuxAux($)
 		$violations .= $line;
 
 		# Attempt to parse the violations into something human readable.
-		if ($line =~ /no_connect:\s*[1-9]/ ||
-		    $line =~ /bandwidth:\s*[+-]?[1-9]/) {
+		if ($line =~ /bandwidth:\s*[+-]?[1-9]/) {
 		    $errorstr  = "Not enough bandwidth to connect some nodes"; 
 		    $errorcode = GENIRESPONSE_INSUFFICIENT_BANDWIDTH();
+		}
+		elsif ($line =~ /no_connect:\s*[1-9]/) {
+		    $errorstr  = "Cannot map some links to physical devices"; 
+		    $errorcode = GENIRESPONSE_NO_CONNECT();
 		}
 		elsif ($line =~ /pnode_load:\s*[1-9]/) {
 		    $errorstr  = "Too many VMs requested on physical host"; 

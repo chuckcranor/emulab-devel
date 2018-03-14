@@ -1006,6 +1006,8 @@ else {
 	    $rval == GENIRESPONSE_INSUFFICIENT_MEMORY ||
 	    $rval == GENIRESPONSE_INSUFFICIENT_BANDWIDTH ||
 	    $rval == GENIRESPONSE_NOSPACE ||
+	    $rval == GENIRESPONSE_NO_CONNECT ||
+	    $rval == GENIRESPONSE_MAPPING_IMPOSSIBLE ||
 	    $rval == GENIRESPONSE_NO_MAPPING) {
 	    AuditAbort()
 		if (!$debug);

@@ -151,6 +151,15 @@ function Do_GetInstanceStatus()
         elseif ($webtask->exitcode() == GENIRESPONSE_INSUFFICIENT_BANDWIDTH) {
             $blob["reason"]  = "Not enough available bandwidth for a link.\n\n";
         }
+        elseif ($webtask->exitcode() == GENIRESPONSE_NO_CONNECT) {
+            $blob["reason"]  = "Could not map all requested links to physical ".
+	    "resources. Not enough free resources currently. ".
+	    "Please try again later.\n\n";
+	}
+        elseif ($webtask->exitcode() == GENIRESPONSE_MAPPING_IMPOSSIBLE) {
+            $blob["reason"]  = "Your topology cannot instantiated. ".
+	    "You have most likely asked for hardware that does not exist.\n\n";
+        }
         elseif ($webtask->exitcode() == GENIRESPONSE_NO_MAPPING) {
             $blob["reason"]  = "Your topology could not be mapped to physical ".
                 "resources. In addition to any information below, you can ".
