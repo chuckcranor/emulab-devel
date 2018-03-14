@@ -6608,7 +6608,8 @@ sub InterpLinksAux($)
 		    # sees that wire (as for snmpit).
 		    #
 		    my $logicalwire =
-			Interface::LogicalWire->Create($self->impotent(),
+			Interface::LogicalWire->Create($self->impotent() ||
+						       $self->alloconly(),
 						       $nodeA, $portA,
 						       $nodeB, $portB);
 		    return -1
