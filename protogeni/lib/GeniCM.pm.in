@@ -1752,7 +1752,7 @@ sub GetTicketAuxAux($)
 	    }
 	}
 	elsif ((my @services = GeniXML::GetServices($ref)) &&
-	       (!defined($osinfo) ||
+	       (!defined($osinfo) || $osinfo->isImageAlias() || 
 		$osinfo->op_mode() ne
 		EmulabConstants::TBDB_NODEOPMODE_ALWAYSUP())) {
 	    my $startupCommand = undef;
