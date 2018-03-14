@@ -750,7 +750,11 @@ else {
 	# will land at the end of the file. 
 	if (ref($result) && defined($result->{'output'}) &&
 	    $result->{'output'} ne "") {
-	    push(@metadata, ["Output", ( split /\n/, $result->{'output'} )[0]]);
+	    my $line = (split(/\n/, $result->{'output'}))[0];
+	    if (length($line) > 128) {
+		$line = substr($line, 0, 128);
+	    }
+	    push(@metadata, ["Output", $line]);
 	}
 	# Purge old data; if we forked we want latest. 
 	$logfile->SetMetadata(\@metadata, 1);
