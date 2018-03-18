@@ -1916,14 +1916,15 @@ sub ExtendInternal($$$$$)
 	my $code = $response->code();
     
 	if ($code) {
-	    ($errcode,$errmsg) = ResponseErrorMessage($agg, $response);
-
-	    if ($errcode == GENIRESPONSE_REFUSED) {
+	    if ($code == GENIRESPONSE_REFUSED) {
 		# We want the user to see REFUSED.
 		$errmsg = "Extension refused at ".
 		    $agg->GetAptAggregate()->name() . ": " .
 		    $response->error();
 		$errcode = 1;
+	    }
+	    else {
+		($errcode,$errmsg) = ResponseErrorMessage($agg, $response);
 	    }
 	    goto bad;
 	}
@@ -2326,7 +2327,17 @@ sub DoRebootOrReload($)
 
 	if ($code != GENIRESPONSE_SUCCESS) {
 	    $errcode = $code;
-	    ($exitcode, $errmsg) = ResponseErrorMessage($agg, $response);
+	    
+	    if ($code == GENIRESPONSE_REFUSED) {
+		# We want the user to see REFUSED.
+		$errmsg = "Not able to $which at ".
+		    $agg->GetAptAggregate()->name() . ": " .
+		    $response->error();
+		$exitcode = 1;
+	    }
+	    else {
+		($exitcode, $errmsg) = ResponseErrorMessage($agg, $response);
+	    }
 	    next;
 	}
     }
