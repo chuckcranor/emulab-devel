@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2017 University of Utah and the Flux Group.
+# Copyright (c) 2005-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1353,14 +1353,18 @@ sub SetBatchMode($$) {
 }
 
 #
-# We use this for admission control of geni slices.
+# We use this for admission control of geni slices and classic
+ # experiments that have an autoswap set.
 #
 sub SetExpiration($$)
 {
     my ($self, $expires) = @_;
     my $idx = $self->idx();
 
-    if ($expires =~ /^\d+$/) {
+    if (!defined($expires)) {
+	$expires = "NULL";
+    }
+    elsif ($expires =~ /^\d+$/) {
 	$expires = "FROM_UNIXTIME($expires)";
     }
     else {
@@ -2572,6 +2576,10 @@ sub PostSwap($$$$)
 			"    batchmode=$batchmode ".
 			"where idx=$rsrcidx");
 	}
+    }
+    # Lets clear this since a swaped experiment has no expiration.
+    if ($which eq $EXPT_SWAPOUT) {
+	$self->SetExpiration(undef);
     }
 
     #
