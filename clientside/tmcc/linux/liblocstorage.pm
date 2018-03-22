@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2017 University of Utah and the Flux Group.
+# Copyright (c) 2013-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1417,18 +1417,20 @@ sub os_create_storage($$)
 	#
 	else {
 	    my $failed = 1;
-	    my $fsopts = "-F -q";
+	    my $fsopts;
 	    if ($failed) {
 		$fstype = "ext4";
-		$fsopts .= " -E lazy_itable_init=1";
+		$fsopts = "-F -q -E lazy_itable_init=1,nodiscard";
 		$failed = mysystem("$MKFS -t $fstype $fsopts $mdev $redir");
 	    }
 	    if ($failed) {
 		$fstype = "ext3";
+		$fsopts = "-F -q";
 		$failed = mysystem("$MKFS -t $fstype $fsopts $mdev $redir");
 	    }
 	    if ($failed) {
 		$fstype = "ext2";
+		$fsopts = "-F -q";
 		$failed = mysystem("$MKFS -t $fstype $fsopts $mdev $redir");
 	    }
 	    if ($failed) {
@@ -1757,15 +1759,14 @@ sub os_create_storage_slice($$$)
 	    # try a striped LV first
 	    my $pvs = $so->{'LVM_VGDEVS'};
 	    if (defined($pvs) && $pvs > 1 &&
-		!mysystem("lvcreate -i $pvs -n $lv -L ${lvsize}m $VGNAME $redir")) {
+		!mysystem("lvcreate -Zy --yes -i $pvs -n $lv -L ${lvsize}m $VGNAME $redir")) {
 		$href->{'LVDEV'} = "/dev/$VGNAME/$lv";
 		return 1;
 	    }
-	    if (mysystem("lvcreate -n $lv -L ${lvsize}m $VGNAME $redir")) {
+	    if (mysystem("lvcreate -Zy --yes -n $lv -L ${lvsize}m $VGNAME $redir")) {
 		warn("*** $lv: could not create LV$logmsg\n");
 		return 0;
 	    }
-
 	    $mdev = "$VGNAME/$lv";
 	}
 
@@ -2006,7 +2007,18 @@ sub os_remove_storage_slice($$$)
 	    #
 	    # lvremove -f emulab/h2d2
 	    #
-	    if (mysystem("lvremove -f $VGNAME/$lv $redir")) {
+	    my $rmopts = "";
+
+	    #
+	    # XXX this significantly speeds the lvremove, which otherwise will
+	    # be causing erase operations on the device, but it also causes a
+	    # lot of stale metadata to get left behind which can affect
+	    # recreation of the device. For now we opt to slow the less common
+	    # remove operation.
+	    #
+	    $rmopts .= "--config devices/issue_discards=0";
+
+	    if (mysystem("lvremove $rmopts -f $VGNAME/$lv $redir")) {
 		warn("*** $lv: could not destroy$logmsg\n");
 	    }
 
