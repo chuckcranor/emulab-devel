@@ -2245,6 +2245,7 @@ sub GetTicketAuxAux($)
 	my $vindex     = 0;
 	my $trivial_ok = 1;
 	my $protocol   = "ethernet";
+	my $layer      = (GeniXML::IsLayer1($linkref) ? 1 : 2);
 
 	if (!defined($lanname)) {
 	    $response = GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
@@ -2870,7 +2871,8 @@ sub GetTicketAuxAux($)
 					  "encap_style" => $encap,
 					  "fixed_iface" => $iface_name,
 					  "uselinkdelay"=> $uselinkdelay,
-					  "protocol"    => $protocol
+					  "protocol"    => $protocol,
+					  "layer"       => $layer,
 					 });
 
 	    if ($ofcontroller && $ofcontroller ne "" && !$ignore_openflow) {
