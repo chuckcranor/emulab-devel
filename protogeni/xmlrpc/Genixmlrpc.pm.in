@@ -334,9 +334,21 @@ sub CallMethodInternal($$$$@)
     $hreq->content_type('text/xml');
     $hreq->content($reqstr);
     $hreq->protocol('HTTP/1.0')	if ($FBSD_MAJOR >= 8);
-    my $hresp = (defined($fp) ?
-		 $ua->request($hreq, $callback, 0x20000) :
-		 $ua->request($hreq));
+
+    #
+    # Wrap this in an eval, so that if we get signaled, we can return
+    # a proper response. 
+    #
+    my $hresp;
+    eval {
+	$hresp = (defined($fp) ?
+		  $ua->request($hreq, $callback, 0x20000) :
+		  $ua->request($hreq));
+    };
+    if ($@) {
+	# Bad news, we want to whine.
+	return GeniResponse->new(GENIRESPONSE_RPCERROR, undef, $@);
+    }
 
     # Do this or the next call gets messed up.
     delete($ENV{'HTTPS_CERT_FILE'});
