@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2017 University of Utah and the Flux Group.
+# Copyright (c) 2003-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -214,6 +214,7 @@ my $nodecard;
 my $switchid;
 my $switchcard;
 my $switchport;
+my $switchiface;
 
 if (!$impotent && $node->IsReserved() &&
     $node->erole() eq "sharedhost" && $notrunk && !$force) {
@@ -234,13 +235,19 @@ if ($iface_id =~ /^[^\d]*(\d*)$/) {
 else {
     fatal("iface_id is not in the proper format");
 }
-if (Interface->Lookup($node, $nodecard)) {
-    fatal("Node already has an interface with card=$nodecard");
+if (Interface->LookupByIface($node, $iface_id)) {
+    fatal("Node already has an interface with iface=$iface_id");
+}
+# But also need to look for any thing using this card,port;
+my $wire = Interface::Wire->LookupAny($node, $nodecard, 1);
+if (defined($wire)) {
+    fatal("Node $node_id already has a wire: $wire");
 }
 if ($switchinfo =~ /^([-\w]+),(\d+),(\d+)$/) {
     $switchid   = $1;
     $switchcard = $2;
     $switchport = $3;
+    $switchiface= $switchcard . "/" . $switchport;
 }
 else {
     fatal("Invalid switch info");
@@ -249,12 +256,12 @@ my $switch = Node->Lookup($switchid);
 if (!defined($switch)) {
     fatal("Switch $switchid does not exist");
 }
-if (Interface->Lookup($node, $switchcard, $switchport)) {
+if (Interface->LookupByIface($node, $switchiface)) {
     fatal("Switch $switchid already has an interface with ".
-	  "card=$switchcard,port=$switchport");
+	  "iface=$switchiface");
 }
-# But also need to look for any thing using this port;
-my $wire = Interface::Wire->LookupAny($switchid, $switchcard, $switchport);
+# But also need to look for any thing using this card,port;
+$wire = Interface::Wire->LookupAny($switchid, $switchcard, $switchport);
 if (defined($wire)) {
     fatal("Switch $switchid already using this interface: $wire");
 }
@@ -273,7 +280,7 @@ if (!defined($type)) {
 my $ifaceargs1 = {
     "card"        => $switchcard,
     "port"        => $switchport,
-    "iface"       => $switchcard . "/" . $switchport,
+    "iface"       => $switchiface,
     "role"        => TBDB_IFACEROLE_OTHER(),
     "type"        => $type->type(),
     "max_speed"   => $type->max_speed(),
@@ -304,13 +311,13 @@ if (!$impotent) {
 }
 if (!$impotent) {
     my $wireargs = {
-	"card1"  => $switchcard,
-	"port1"  => $switchport,
-	"card2"  => $nodecard,
-	"port2"  => 1,
+	"card1"  => $nodecard,
+	"port1"  => 1,
+	"card2"  => $switchcard,
+	"port2"  => $switchport,
     };
     print "Creating wire for $interface1,$interface2:\n";
-    $wire = Interface::Wire->Create($interface1, $interface2, 'Node', {})
+    $wire = Interface::Wire->Create($interface1, $interface2, 'Node', $wireargs)
 	or fatal("Could not create wire");
 }
 if (!$impotent &&
