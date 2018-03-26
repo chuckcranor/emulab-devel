@@ -34,7 +34,7 @@ use File::Temp qw(tempfile);
 #
 sub usage()
 {
-    print STDERR "Usage: addswitch -t <type> [-S <stack>] <switch_id>\n";
+    print STDERR "Usage: addswitch -t <type> [-u] [-S <stack>] <switch_id>\n";
     print STDERR "Usage: addswitch -r <switch_id>\n";
     print STDERR "Options:\n";
     print STDERR " -d       - Turn on debugging\n";
@@ -45,13 +45,15 @@ sub usage()
     print STDERR " -1       - Indicate a layer one switch instead\n";
     print STDERR " -S stack - Add switch to switch stack.\n";
     print STDERR "            Stack (type) must already exist, use mysql.\n";
+    print STDERR " -u       - A user allocatable switch.\n";
     exit(-1);
 }
-my $optlist   = "t:dnr1S:";
+my $optlist   = "t:dnr1S:u";
 my $debug     = 0;
 my $impotent  = 0;
 my $remove    = 0;
 my $layer1    = 0;
+my $usersw    = 0;
 my $stack;
 my $type;
 
@@ -113,6 +115,9 @@ if (defined($options{'1'})) {
 }
 if (defined($options{'r'})) {
     $remove = 1;
+}
+if (defined($options{'u'})) {
+    $usersw = 1;
 }
 usage()
     if (@ARGV != 1);
@@ -220,7 +225,8 @@ sub CreateSwitch()
 {
     my $blob = {
 	"type"               => $type,
-	"role"               => ($layer1 ? "widearea_switch" : "testswitch"),
+	"role"               => ($layer1 ? "widearea_switch" :
+				 ($usersw ? "testnode" : "testswitch")),
 	"initial_eventstate" => TBDB_NODESTATE_ISUP(),
     };
     my $node;
