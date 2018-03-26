@@ -8728,7 +8728,7 @@ sub CheckForDeprecatedImages($$)
 	}
 	# Skip anything that looks like an OSID instead of an image.
 	next
-	    if (!defined($image->image()));
+	    if ($image->isImageAlias() || !defined($image->image()));
 	
 	my $deprecated = 0;
 	my $iserror    = 0;
