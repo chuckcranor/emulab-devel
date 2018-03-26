@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2012 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2018 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -34,7 +34,6 @@
 #include <err.h>
 #include <errno.h>
 #include "bootwhat.h"
-#include "bootinfo.h"
 #include "config.h"
 
 int		debug = 0;

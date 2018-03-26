@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -41,6 +41,7 @@ include $(TESTBED_SRCDIR)/GNUmakerules
 CFLAGS	+= -O -g -Wall -DUDP \
 		-I${OBJDIR} -I/usr/local/include \
 		-I${TESTBED_LIBSRCDIR}/libtb -I${TESTBED_SRCDIR}/pxe \
+		-I${TESTBED_SRCDIR}/clientside/os/bootinfo \
 		-I${TESTBED_LIBSRCDIR}/tmcd
 TMLIBS	 = ${TESTBED_LIBOBJDIR}/libtb/libtb.a
 BOOTINFO = ${OBJDIR}/pxe/bootinfo.o ${OBJDIR}/pxe/bootinfo_mysql.o

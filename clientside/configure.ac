@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -327,6 +327,7 @@ outfiles="Makeconf GNUmakefile setversion \
 	  os/frisbee.redux/GNUmakefile \
 	  os/capture/GNUmakefile \
 	  os/growdisk/GNUmakefile \
+	  os/bootinfo/GNUmakefile \
 	  os/zapdisk/GNUmakefile \
 	  os/imagezip/GNUmakefile \
 	  os/imagezip/libndz/GNUmakefile \

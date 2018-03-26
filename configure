@@ -7197,6 +7197,7 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/plab/GNUmakefile clientside/tmcc/cygwinseven/GNUmakefile \
  clientside/os/dijkstra/GNUmakefile clientside/os/genhostsfile/GNUmakefile \
  clientside/os/growdisk/GNUmakefile \
+ clientside/os/bootinfo/GNUmakefile \
  clientside/os/zapdisk/GNUmakefile \
  clientside/os/frisbee.redux/GNUmakefile \
  clientside/os/imagezip/GNUmakefile \
