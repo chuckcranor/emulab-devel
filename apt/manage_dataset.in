@@ -319,7 +319,7 @@ sub DoCreate()
 	if ($type eq "stdataset" && !defined($expires));
 
     if (APT_Dataset->Lookup("$pid/$name")) {
-	fatal("Dataset already exists!");
+	UserError("Dataset already exists!");
     }
 
     # Check for expired certs and speaksfor.
