@@ -66,6 +66,7 @@ dir-install:
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/init
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/network
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/rsyslog.d
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/network-online.target.wants
 
 common-install:	dir-install
 	(cd ../common; $(MAKE) DESTDIR=$(DESTDIR) local-install)
@@ -99,7 +100,7 @@ sysetc-fixup:
 	$(INSTALL) -m 755 $(SRCDIR)/rc.local $(SYSETCDIR)/rc.local
 	$(INSTALL) -m 644 $(SRCDIR)/interfaces $(SYSETCDIR)/network/interfaces
 
-systemd-fixup:
+systemd-fixup: dir-install
 	$(INSTALL) -m 644 $(SRCDIR)/ifup-wait-emulab-cnet.service \
 		 $(SYSETCDIR)/systemd/system/ifup-wait-emulab-cnet.service
 	$(INSTALL) -m 644 $(SRCDIR)/ifup-wait-emulab-cnet.service \

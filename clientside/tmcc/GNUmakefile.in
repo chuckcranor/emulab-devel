@@ -109,6 +109,9 @@ endif
 ifeq ($(MDSUBDIR),debian8)
 MDSUBDIR  = ubuntu15
 endif
+ifeq ($(MDSUBDIR),debian9)
+MDSUBDIR  = ubuntu16
+endif
 # We don't want to have a dir named "arch"; that would be confusing.
 # Hence archlinux.
 ifeq ($(MDSUBDIR),arch)
