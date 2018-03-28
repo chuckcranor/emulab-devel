@@ -760,10 +760,11 @@ class Group
 	if ($project->isEmulab() ||
             $project->isAPT() || $project->isCloud() ||
             $project->isPNet() || $project->isPowder()) {
-	    $url .= "/approveuser.php?uid=$joining_uid&pid=$pid";
             if ($project->isEmulab()) {
-                $url = "/portal${url}";
+                $url .= "/portal";
             }
+	    $url .= "/approveuser.php?uid=$joining_uid&pid=$pid";
+	    
             $message =
                 "$usr_name is trying to join your group $gid ".
                 "in project $pid.\n";
