@@ -1396,7 +1396,7 @@ sub LoadVirtNodes($)
 		$osimage = OSImage->Lookup($parent_osname);
 	    }
 	    else {
-		$osimage = OSImage->LookupByName($pid, $parent_osname);
+		$osimage = OSImage->Lookup($pid, $parent_osname);
 		if (!defined($osimage)) {
 		    $osimage = OSImage->LookupByName($parent_osname);
 		}
