@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -292,7 +292,8 @@ sub MapToLocalImage($$)
     my $url = $blob->{'metadata_url'};
     if (!defined($url)) {
 	print STDERR "No metadata url in info returned from image server.\n";
-	return undef;
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "No url for $urn at the image server");
     }
 
     #print STDERR Dumper($blob);
