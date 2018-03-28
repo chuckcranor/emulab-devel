@@ -399,8 +399,10 @@ sub LinkType($)
 
 sub IsLayer1($)
 {
+    my $linktype = LinkType($_[0]);
+    
     return 1
-	if (LinkType($_[0]) eq "layer1");
+	if (defined($linktype) && $linktype eq "layer1");
     
     return 0;
 }
