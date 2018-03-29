@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2014, 2017 University of Utah and the Flux Group.
+# Copyright (c) 2004-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1100,8 +1100,16 @@ sub DumpDBGoo()
     my $schemafile = "$expdir/outer_db_schema";
     system("rm -f $schemafile")
 	if (-f $schemafile);
-    my $isvers5     = system("mysql -V | egrep -q -s 'Distrib 5.'") == 0;
-    my $extraopts   = ($isvers5 ? "--skip-quote-names" : "");
+
+    my $extraopts  = "";
+    my $sqlversion = `/usr/local/bin/mysql_config --version`;
+    chomp($sqlversion);
+    if ($sqlversion >= 5) {
+	$extraopts .= " --skip-quote-names";
+    }
+    if ($sqlversion >= 5.8) {
+	$extraopts .= " --compact --set-gtid-purged=OFF";
+    }
     #
     # XXX: Requires that mysqldump be in caller's $PATH - probably an OK
     # assumption, but maybe not always
