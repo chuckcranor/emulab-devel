@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,9 +38,10 @@ sub usage()
 	  "       manage_expsettings autoswap experiment clear\n");
     exit(-1);
 }
-my $optlist     = "ds";
+my $optlist     = "dsn";
 my $debug       = 0;
 my $silent      = 0;
+my $impotent    = 0;
 my $this_user;
 
 #
@@ -94,6 +95,9 @@ if (! getopts($optlist, \%options)) {
 }
 if (defined($options{"d"})) {
     $debug++;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
 }
 if (defined($options{"s"})) {
     $silent = 1;
@@ -187,7 +191,8 @@ sub DoLockdown()
 	    }
 	}
 	else {
-	    if (Reservation->Lockdown($experiment, \$errmsg, 0, $force)) {
+	    if (Reservation->Lockdown($experiment,
+				      \$errmsg, $impotent, $force)) {
 		$errcode = 1;
 		$errmsg  = "Could not lockdown experiment"
 		    if (!defined($errmsg));
@@ -256,28 +261,38 @@ sub DoAutoswap()
 	goto bad;
     }
     if ($which eq "set") {
-	my $current = $experiment->autoswap();
 	my $current_timeout = $experiment->autoswap_timeout();
-	
-	if ($experiment->Update({"autoswap" => 1})) {
-	    $errmsg  = "Could not update database";
-	    $errcode = -1;
-	    goto bad;
+
+	#
+	# If the experiment is not running, then this operation is
+	# trivial; just update the database since there is no effect
+	# on the reservation system. 
+	#
+	if ($experiment->state() eq EXPTSTATE_SWAPPED()) {
+	    if ($experiment->Update({"autoswap" => 1,
+				     "autoswap_timeout" => $timeout})) {
+		$errmsg  = "Could not update database";
+		$errcode = -1;
+		goto bad;
+	    }
 	}
 	#
+	# Otherwise we ask the reservation system to do it.
+	# 
 	# This is a bit problematic; this experiment might have already
-	# have out the system into overbook, but we cannot really tell
+	# have put the system into overbook, but we cannot really tell
 	# that (that it is this experiment). We only know when making a
 	# change puts the system into overbook. So go ahead and do it and
 	# if the change is rejected, we can report that.
 	#
 	if (Reservation->AutoSwapTimeout($experiment, $timeout, 
-					 \$errmsg, 0, $force)) {
+					 \$errmsg, $impotent, $force)) {
 	    $errcode = 1;
 	    $errmsg  = "Could not change autoswap timeout for experiment"
 		if (!defined($errmsg));
 	    goto bad;
 	}
+	
     }
     else {
 	if ($experiment->state() eq EXPTSTATE_SWAPPED()) {
@@ -289,7 +304,7 @@ sub DoAutoswap()
 	}
 	else {
 	    if (Reservation->DisableAutoSwap($experiment,
-					     \$errmsg, 0, $force)) {
+					     \$errmsg, $impotent, $force)) {
 		$errcode = 1;
 		$errmsg  = "Could not disable autoswap for experiment"
 		    if (!defined($errmsg));
@@ -386,7 +401,7 @@ sub DoSwappable()
 	}
 	else {
 	    if (Reservation->DisableSwapping($experiment,
-					     \$errmsg, 0, $force)) {
+					     \$errmsg, $impotent, $force)) {
 		$errcode = 1;
 		$errmsg  = "Could not disable swappable for experiment"
 		    if (!defined($errmsg));

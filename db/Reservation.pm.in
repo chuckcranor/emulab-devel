@@ -555,7 +555,7 @@ sub LookupAll($$;$$)
     
     return $cache{$type} if( exists( $cache{$type} ) );
 
-    Tidy( $class );
+#    Tidy( $class );
 
     # Mysql 5.7 group by nonsense. Revisit later, like when hell freezes. 
     DBQueryWarn("SET SESSION sql_mode=(SELECT REPLACE(\@\@sql_mode,".
@@ -565,8 +565,8 @@ sub LookupAll($$;$$)
 
     my $query = $PGENISUPPORT ? "SELECT COUNT(*), e.pid, e.eid, " .
 				"e.expt_swap_uid, " .
-				"UNIX_TIMESTAMP( stats.swapin_last ) + " .
-				"e.autoswap_timeout * 60, e.autoswap, " .
+				"UNIX_TIMESTAMP( e.expt_expires ), ".
+				"e.autoswap, " .
 				"nr.pid, UNIX_TIMESTAMP( s.expires ), " .
 				"s.lockdown as slice_lockdown, ".
 				"n.reserved_pid, " .
@@ -592,8 +592,8 @@ sub LookupAll($$;$$)
 				"UNIX_TIMESTAMP( pr.end )" :
 				"SELECT COUNT(*), e.pid, e.eid, " .
 				"e.expt_swap_uid, " .
-				"UNIX_TIMESTAMP( stats.swapin_last ) + " .
-				"e.autoswap_timeout * 60, e.autoswap, " .
+				"UNIX_TIMESTAMP( e.expt_expires ), " .
+				"e.autoswap, " .
 				"nr.pid, NULL, " .
 				"NULL, n.reserved_pid, " .
 				"UNIX_TIMESTAMP( pr.end ), " .
@@ -1236,26 +1236,63 @@ sub ExtendSlice($$$;$$$) {
 }
 
 #
-# This is identical to above, but for experiment autoswap.
+# This is similar to above, but for experiment autoswap.
 #
 sub AutoSwapTimeout($$$;$$$) {
 
     my ($class, $expt, $minutes, $error, $impotent, $force) = @_;
 
-    if( $minutes <= $expt->autoswap_timeout()) {
-	if( $impotent ) {
+    #
+    # So if the timeout is smaller then current, it is okay to just
+    # change it: If autoswap is currently on, then this is safe. If
+    # autoswap is currently off (and expt not locked down), then we
+    # are going from no expiration set, so clearly that is safe too.
+    #
+    if ($minutes <= $expt->autoswap_timeout() || !$expt->autoswap()) {
+	if ($impotent) {
 	    return 0;
-	} else {
-	    my $result = $expt->SetAutoswapTimeout($minutes);
+	}
+	else {
+	    my $expires;
 
-	    if( $result < 0 && ref( $error ) ) {
-		$$error = "Couldn't update experiment autoswap_timeout";
+	    if ($expt->state() eq EXPTSTATE_ACTIVATING()) {
+		$expires = $expt->tstamp();
 	    }
-
-	    return $result;
+	    else {
+		$expires = str2time($expt->swapin_last());
+	    }
+	    $expires += ($minutes * 60);
+	    
+	    if ($expt->SetExpiration($expires) ||
+		$expt->SetAutoswapTimeout($minutes) ||
+		$expt->SetAutoswap(1)) {
+		if (ref($error)) {
+		    $$error = "Could not update experiment autoswap_timeout";
+		}
+		return -1;
+	    }
+	    return 0;
 	}
     }
     my @types = ExptTypes( $expt->idx() );
+
+    #
+    # We need a new expiration time, based on when the experiment actually
+    # started. swapin_last does not work since it is set at the end of
+    # swapin, which can take an arbitrary amount of time. We know that
+    # autoswap() was already on (see above) so we can use the current
+    # expiration time to compute a new expiration.
+    #
+    my $expires = $expt->expt_expires();
+    if (!defined($expires)) {
+	if (ref($error)) {
+	    $$error = "experiment does not have expiration set";
+	}
+	return -1;
+    }
+    $expires = str2time($expires);
+    # Add difference in autoswap_timeout to expiration;
+    $expires += (($minutes - $expt->autoswap_timeout()) * 60);
     
     while( 1 ) {
 	my $version = GetVersion( $class );
@@ -1265,7 +1302,7 @@ sub AutoSwapTimeout($$$;$$$) {
 		if( defined( $res->pid() ) && defined( $res->eid() ) &&
 		    $res->pid() eq $expt->pid() &&
 		    $res->eid() eq $expt->eid() ) {
-		    $res->{'END'} = time() + ($minutes * 60);
+		    $res->{'END'} = $expires;
 		    last;
 		}
 	    }
@@ -1277,15 +1314,19 @@ sub AutoSwapTimeout($$$;$$$) {
 	    if( $impotent );
 	next if( !defined( BeginTransaction( $class, $version, "experiments")));
 
-	my $result = $expt->SetAutoswapTimeout($minutes);
-
-	if( $result < 0 && ref( $error ) ) {
-	    $$error = "Couldn't update experiment autoswap_timeout";
+	if ($expt->SetExpiration($expires) ||
+	    # This must be after above line.
+	    $expt->SetAutoswapTimeout($minutes) ||
+	    $expt->SetAutoswap(1)) {
+	    if (ref($error)) {
+		$$error = "Couldn't update experiment autoswap_timeout";
+	    }
+	    EndTransaction($class);
+	    return -1;
 	}
-	
 	EndTransaction( $class );
 	
-	return $result;
+	return 0;
     }
 }
 
@@ -1435,12 +1476,13 @@ sub DisableAutoSwap($$;$$$)
 	my ($error) = @_;
 	my $result;
 
-	$result = $experiment->SetAutoswap(0);
-
-	if( $result < 0 && ref( $error ) ) {
-	    $$error = "Couldn't update autoswap";
+	if ($experiment->SetAutoswap(0) || $experiment->SetExpiration(undef)) {
+	    if (ref($error)) {
+		$$error = "Couldn't update autoswap";
+	    }
+	    return -1;
 	}
-	return $result;
+	return 0;
     };
     return LockdownAux($class, $experiment,
 		       $coderef, $error, $impotent, $force);
@@ -1483,6 +1525,14 @@ sub LockdownAux($$$$$$)
     }    
 }
 
+#
+# Strictly for admission control in the mapper. For geni experiments,
+# LookupAll uses the current slice expiration to determine when the
+# experiment ends. But for mapper admission control we use experiment
+# expires, since on the geni path you can both modify an expriment and
+# change its expiration at the same time. We do not want to change the
+# slice expiration until we confirm that the mapper allows it. 
+#
 sub ExpectedEnd($$) {
     
     my ($class, $experiment) = @_;
@@ -1494,18 +1544,28 @@ sub ExpectedEnd($$) {
     if (($experiment->lockdown() || !$experiment->swappable()) &&
 	!$experiment->geniflags()) {
 	return undef;
-    } elsif( $experiment->autoswap() ) {
-	if ($experiment->state() eq EXPTSTATE_SWAPPED() ||
-	    $experiment->state() eq EXPTSTATE_ACTIVATING()) {
-	    return time() + ($experiment->autoswap_timeout * 60);
-	}
-	return str2time($experiment->swapin_last()) +
-	    ($experiment->autoswap_timeout * 60);
-    } elsif( defined( $experiment->expt_expires() ) ) {
-	return str2time( $experiment->expt_expires() );
-    } else {
-	return undef;
     }
+    elsif ($experiment->geniflags()) {
+	if (!defined($experiment->expt_expires())) {
+	    print STDERR "ExpectedEnd: No expiration for $experiment\n";
+	    return undef;
+	}
+	return str2time($experiment->expt_expires());
+    }
+    elsif (defined($experiment->expt_expires())) {
+	return str2time($experiment->expt_expires());
+    }
+    #
+    # This should not happen, execpt that we sometimes run the mapper in
+    # debugging mode. So if we are here and the experiment is swapped, use
+    # the current time.
+    #
+    print STDERR "ExpectedEnd: No expiration for $experiment\n";
+    if ($experiment->state() eq EXPTSTATE_SWAPPED() &&
+	$experiment->autoswap()) {
+	return time() + ($experiment->autoswap_timeout() * 60);
+    }
+    return undef;
 }
 
 #

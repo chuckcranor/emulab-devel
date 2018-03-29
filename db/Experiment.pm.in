@@ -2223,6 +2223,29 @@ sub PreSwap($$$$)
 	#
     }
 
+    #
+    # Before we allocate any resources we have to make sure the reservation
+    # system and the autoswapper are on the same page wrt when these
+    # resources are going to be released. We can no longer wait till the
+    # end of swapin (when swapin_last is updated), we need to base it from
+    # the current time, or else the res system can get into an overbook
+    # situation. As a result, users will see somewhat shorter autoswap then
+    # they are used to, depending on how long the experiment takes to
+    # swapin. So add a little padding, not worth worrying too much since
+    # this is Emulab Classic. Expiration is handled on the geni path so
+    # skip.
+    #
+    if (!$self->geniflags() &&
+	($which eq $EXPT_SWAPIN || $which eq $EXPT_START)) {
+	if ($self->autoswap() && $self->autoswap_timeout()) {
+	    $self->SetExpiration(time() +
+				 (($self->autoswap_timeout() + 30) * 60));
+	}
+	else {
+	    $self->SetExpiration(undef);
+	}
+    }
+
     # Old swap gathering stuff.
     $self->GatherSwapStats($swapper, $which, 0,
 			   TBDB_STATS_FLAGS_START()) == 0
@@ -2297,7 +2320,11 @@ sub SwapFail($$$$;$)
 		    "  last_error=$session ".
 		    "where exptidx=$exptidx");
     }
-
+    # Clear this on failed swapin.
+    if ($which eq $EXPT_START || $which eq $EXPT_SWAPIN) {
+	$self->SetExpiration(undef);
+    }
+    
     #
     # Get current and last rsrc record direct from DB to avoid local cache.
     #
@@ -2578,7 +2605,8 @@ sub PostSwap($$$$)
 	}
     }
     # Lets clear this since a swaped experiment has no expiration.
-    if ($which eq $EXPT_SWAPOUT) {
+    # Expiration is handled on the geni path so skip.
+    if (!$self->geniflags() && $which eq $EXPT_SWAPOUT) {
 	$self->SetExpiration(undef);
     }
 

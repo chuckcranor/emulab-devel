@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -311,15 +311,16 @@ EOT
     }
 
     $sql  = <<EOT;
-select e.pid,e.eid,e.autoswap_timeout,
+select e.pid,e.eid,e.autoswap_timeout,e.expt_expires,
 (unix_timestamp(now()) - unix_timestamp(s.swapin_last))/60 as activemin
 from experiments as e
 left join experiment_stats as s on s.exptidx=e.idx
 where e.swappable>0 and e.state="active" and e.expt_locked is null
 and e.autoswap>0
+and now()>e.expt_expires
 and e.geniflags=0
 and e.paniced=0 
-having activemin>=e.autoswap_timeout order by e.pid,e.eid
+order by e.pid,e.eid
 EOT
     $q = DBQueryFatal($sql);
     while (%r = $q->fetchhash()) {
@@ -327,8 +328,10 @@ EOT
 	$eid = $r{'eid'};
 	my $autotimo  = $r{'autoswap_timeout'};
 	my $activemin = $r{'activemin'};
+	my $expires   = $r{'expt_expires'};
 
-	Notify("$pid/$pid: active:$activemin, autotimo:$autotimo\n");
+	Notify("$pid/$eid: active:$activemin, ".
+	       "autotimo:$autotimo, expires:$expires\n");
 	    
 	if ($i) {
 	    Debug("Would autoswap $pid,$eid\n");
@@ -383,13 +386,14 @@ EOT
 
     if ($auto_warnmin>0) {
 	$sql  = <<EOT;
-select e.pid,e.eid,e.autoswap_timeout,
+select e.pid,e.eid,e.autoswap_timeout,e.expt_expires,
 (unix_timestamp(now()) - unix_timestamp(s.swapin_last))/60 as activemin
 from experiments as e
 left join experiment_stats as s on s.exptidx=e.idx
-where e.swappable>0 and e.state="active" and e.autoswap>0
-having activemin+$auto_warnmin>=e.autoswap_timeout and
-activemin+$auto_warnmin<=e.autoswap_timeout+$window order by e.pid,e.eid
+where e.swappable>0 and e.state="active" and e.autoswap>0 and
+now()>=date_sub(e.expt_expires, interval $auto_warnmin minute) and
+now()<=date_sub(e.expt_expires, interval ${auto_warnmin}-${window} minute)>now()
+order by e.pid,e.eid
 EOT
         $q = DBQueryFatal($sql);
 	while (%r = $q->fetchhash()) {

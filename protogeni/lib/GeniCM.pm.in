@@ -702,8 +702,9 @@ sub GetTicketAuxAux($)
     }
 
     if (!$allow_externalusers && !$isExempted && !$user->IsLocal()) {
-	    return GeniResponse->Create(GENIRESPONSE_UNAVAILABLE, undef,
-				    "External users temporarily denied");
+	$response = GeniResponse->Create(GENIRESPONSE_UNAVAILABLE, undef,
+					 "External users temporarily denied");
+	goto bad;
     }
     
     #
@@ -711,19 +712,28 @@ sub GetTicketAuxAux($)
     # ticket is redeemed, it will expire according to the rspec request.
     # If nothing specified in the rspec, then it will expire when the
     # slice record expires, which was given by the expiration time of the
-    # slice credential, or the local policy max_sliver_lifetime. See
-    # CreateSliceFromCertificate() in this file.
+    # slice credential, or the local policy max_sliver_lifetime. 
     #
     my $expires = GeniXML::GetExpires($rspec);
-    if (defined($expires)) {
-	if (GeniResponse::IsResponse($expires)) {
-	    return $expires;
-	}
-	# Note "checkonly" flag; we do not actually change the slice
-	# until the ticket is redeemed. 
-	my $tmp = SetSliceExpiration($slice, $expires, 1, 0, 0, @{ $credentials });
-	if (GeniResponse::IsResponse($tmp)) {
-	    return $tmp;
+    if (defined($expires) && GeniResponse::IsResponse($expires)) {
+	$response = $expires;
+	goto bad;
+    }
+    #
+    # We no longer allow changing the expiration during an update call.
+    # Too much hassle cause of the reservation system and the fact that
+    # an abnormal exit can leave the slice with the new expiration. The
+    # problem with the reservation system is that we have to change the
+    # expiration so that admission control will check all of the resources
+    # based on the new expiration. Before the reservation system, we did
+    # not need to change the slice expiration until later in redeem ticket,
+    # thus ensuring that if the ticket was not redeemed, the resources
+    # would be released.
+    #
+    if ($isupdate) {
+	if (SliceExpirationChanged($slice, $expires, @{$credentials})) {
+	    return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
+			"Not allowed to change expiration when updating");
 	}
     }
 
@@ -764,6 +774,10 @@ sub GetTicketAuxAux($)
     }
 
     #
+    # Gotto goto bad below this point!
+    #
+    
+    #
     # For now, there can be only a single toplevel aggregate per slice.
     # The existence of an aggregate means the slice is active here. 
     #
@@ -790,29 +804,25 @@ sub GetTicketAuxAux($)
 	$slice_experiment = undef;
 	goto bad;
     }
+    my $pid = $slice_experiment->pid();
+    my $eid = $slice_experiment->eid();
+
     #
-    # Mark the expires slot in the experiment, for admission control
-    # during the mapper run. 
+    # Set the slice expiration. First off, this does a policy check on the
+    # desired expiration. Since this is a new slice, there are no resources
+    # allocated and so the reservation system check will succeed. The
+    # experiment expiration will also be set, for admission control.
     #
-    # Convert to a localtime.
+    # See above, we no longer allow expiration to change during update,
+    # so skip when doing an update.
     #
-    if (defined($expires)) {
-	$expires = eval { timegm(strptime($expires)); };
-	if ($@ || !defined($expires)) {
-	    $response = GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-					     "Could not parse expiration");
-	    goto bad;
-	}
+    if (!$isupdate) {
+	$response =
+	    SetSliceExpiration($slice, $expires, 0, 0, 0, @{$credentials});
+	goto bad
+	    if (GeniResponse::IsResponse($response));
     }
-    else {
-	$expires = $slice->expires();
-    }
-    if ($slice_experiment->SetExpiration($expires)) {
-	$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-					 "set experiment expiration");
-	print STDERR "Could not set experiment expiration\n";
-	goto bad;
-    }
+    
     my $realuser = FlipToUser($slice, $user);
     if (! (defined($realuser) && $realuser)) {
 	$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
@@ -820,8 +830,6 @@ sub GetTicketAuxAux($)
 	print STDERR "Error flipping to real user\n";
 	goto bad;
     }
-    my $pid = $slice_experiment->pid();
-    my $eid = $slice_experiment->eid();
 
     #
     # Mark the experiment locally as coming from the cooked interface.
@@ -3864,7 +3872,7 @@ sub GetTicketAuxAux($)
 	$slice->SetAsyncError($response);
     }
     $slice->UnLock()
-	if (defined($slice) && !$nolock);
+	if (defined($slice) && !$nolock && $slice->LOCKED());
     $ticket->UnLock()
 	if (defined($ticket) && $ticket->stored());
     return $response;
@@ -4174,23 +4182,6 @@ sub SliverWorkAux($)
 		$message = "Only nodes or links allowed";
 		goto bad;
 	    }
-	}
-    }
-
-    #
-    # Figure out new expiration time; this is the time at which we can
-    # idleswap the slice out. 
-    #
-    my $expires = GeniXML::GetExpires($rspec);
-    if (defined($expires)) {
-	if (GeniResponse::IsResponse($expires)) {
-	    $message = "Illegal valid_until in rspec";
-	    goto bad;
-	}
-	my $tmp = SetSliceExpiration($slice, $expires, 0, 0, 0, $credential);
-	if (GeniResponse::IsResponse($tmp)) {
-	    $message = GeniResponse::output($tmp);
-	    goto bad;
 	}
     }
 
@@ -6624,39 +6615,8 @@ sub CreateSliceFromCertificate($$)
 				"Cannot create slice object")
 	if (!defined($slice));
 
-    #
-    # The slice expires when the credential expires, or when the local policy
-    # limit says, which ever is shorter. 
-    #
-    my $max_sliver_lifetime = 0;
-    if (!GetSiteVar('protogeni/max_sliver_lifetime', \$max_sliver_lifetime)) {
-	# Cannot get the value, default it to 90 days.
-	$max_sliver_lifetime = 90;
-    }
-    my $initial_sliver_lifetime = 0;
-    if (!GetSiteVar('protogeni/initial_sliver_lifetime',
-		    \$initial_sliver_lifetime)) {
-	# Cannot get the value, default it to 6 hours.
-	$initial_sliver_lifetime = 6;
-    }
-    elsif ($initial_sliver_lifetime == 0) {
-	$initial_sliver_lifetime = $max_sliver_lifetime * 24;
-    }
-    my $expires = $credential->expires();
-    # This is already a localtime.
-    my $when = eval { timelocal(strptime($expires)); };
-    if ($@) {
-	$expires = time() + (3600 * $max_sliver_lifetime);
-    }
-    else {
-	my $diff = $when - time();
-
-	if ($diff > (3600 * 24 * $max_sliver_lifetime)) {
-	    # Shorten to policy maximum. Okay to use a unix time.
-	    $expires = time() + (3600 * $max_sliver_lifetime);
-	}
-    }
-    $slice->SetExpiration($expires);
+    # Initial expiration of an hour, we will set this for real very soon.
+    $slice->SetExpiration(time() + 3600);
     $slice->SetPublicID();
     return $slice;
 }
@@ -7388,6 +7348,8 @@ sub GeniExperiment($;$)
 			      (defined($creator) ? $creator->urn() : undef),
 			      "protogeni");
     $slice->SetExperiment($experiment);
+    # Initialize, this will get reset in GetTicket().
+    $experiment->SetExpiration($slice->expires());
 
     #
     # Check for feature to back off and let something else manage the
@@ -8018,7 +7980,7 @@ sub SetSliceExpiration($$$$$@)
 	}
     }
     else {
-	$when = $slice_expires;
+	$when = $slice_when;
     }
     # The slice is already set correctly, skip the rest of this. This
     # avoids an issue with ticket update, whereby the extra permission
@@ -8075,6 +8037,16 @@ sub SetSliceExpiration($$$$$@)
     }
     return 0
 	if ($checkonly && !$slice_experiment);
+
+    #
+    # No slice experiment, just set it since this is a new slice and no
+    # resources are allocated, clearly will not cause a violation.
+    # The mapper will determine that later when it does admission control.
+    #
+    if (!$slice_experiment) {
+	$slice->SetExpiration($when);
+	return 0;
+    }
     
     #
     # Now that we have the number we want, make sure the reservation system
@@ -8114,7 +8086,7 @@ sub SetSliceExpiration($$$$$@)
 	}
 	#
 	# Mark the expires slot in the experiment, for admission control
-	# during the mapper run. 
+	# during the mapper run.
 	#
 	if (defined($slice_experiment) &&
 	    $slice_experiment->SetExpiration($when)) {
@@ -8126,6 +8098,41 @@ sub SetSliceExpiration($$$$$@)
     
   bad:
     return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, $message);
+}
+
+#
+# Helper function to see if caller is requesting a change to expiration.
+#
+sub SliceExpirationChanged($$@)
+{
+    my ($slice, $expires, @credentials) = @_;
+    my $current_slice_expiration = str2time($slice->expires());
+    my $message;
+
+    if (!defined($expires)) {
+	#
+	# Ick, assume first credential is the slice credential. Bad.
+	#
+	my $slice_credential = shift(@credentials);
+
+	#
+	# Maximum expiration is what the credential says.
+	#
+	$expires = $slice_credential->expires();
+	if (!defined($expires)) {
+	    print STDERR "SliceExpirationChanged: ".
+		"No expiration time in credential\n";
+	    return 1;
+	}
+    }
+    # Convert slice expiration to a time.
+    my $slice_when = str2time($expires);
+    if (!defined($slice_when)) {
+	print STDERR "SliceExpirationChanged: ".
+	    "Could not parse expiration in credential\n";
+	return 1;
+    }
+    return $current_slice_expiration != $slice_when ? 1 : 0;
 }
 
 #
