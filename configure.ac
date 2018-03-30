@@ -1406,7 +1406,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	rc.d/GNUmakefile rc.d/2.mysql-server.sh rc.d/3.testbed.sh \
 	rc.d/2.elvind.sh rc.d/3.plab.sh rc.d/2.dhcpd.sh rc.d/3.and.sh \
 	rc.d/3.elvin_gateway.sh rc.d/pelab.sh rc.d/capture.sh \
-	rc.d/3.mfrisbeed.sh rc.d/3.mfrisbeed-subboss.sh \
+	rc.d/3.mfrisbeed.sh rc.d/3.mfrisbeed-subboss.sh rc.d/3.mfrisbeed-ops.sh \
 	tools/GNUmakefile rc.d/1.mysql-server.sh tools/svn/GNUmakefile \
         tools/webcamapplet/GNUmakefile tools/whol/GNUmakefile \
         tools/selectapplet/GNUmakefile tools/rmanage/GNUmakefile \
