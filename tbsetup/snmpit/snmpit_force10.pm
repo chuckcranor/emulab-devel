@@ -111,6 +111,13 @@ my $ChassisInfo = {
 	"zeroBased"             => 1,   # Whether ports/mods are 0 or 1-based
 	"nybbleEncoded"         => 1,   # Nybble-per-phy-port PortSet encoding
     },
+    "force10-s5048" => {
+        "moduleSlots"           => 1,   # Max # of modules in chassis
+        "maxPortsPerModule"     => 54,  # Max # of ports in any module
+        "bitmaskBitsPerModule"  => 144, # Number of bits per module
+	"zeroBased"             => 0,   # Whether ports/mods are 0 or 1-based
+	"nybbleEncoded"         => 0,   # Nybble-per-phy-port PortSet encoding
+    },
 };
 
 #
