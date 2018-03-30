@@ -34,8 +34,8 @@
 #     Unset to use mfrisbeed default.
 # DEBUG: set to run with debugging enabled.
 #
-BASEPORT=6000
-NUMPORT=100
+BASEPORT="@FRISEBEEMCASTPORT@"
+NUMPORT="@FRISEBEENUMPORTS@"
 MAXSIZE=20
 MAXWAIT=60
 MAXIDLE=5
