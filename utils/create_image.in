@@ -157,6 +157,8 @@ my $GROUPROOT   = "@GROUPSROOT_DIR@";
 my $WITHPROVENANCE= @IMAGEPROVENANCE@;
 my $WITHDELTAS  = @IMAGEDELTAS@;
 my $ISFS        = ("@BOSSNODE_IP@" eq "@FSNODE_IP@") ? 1 : 0;
+my $UPLOADTOFS  = "@IMAGEUPLOADTOFS@";
+my $FSIP	= "@FSNODE_IP@";
 
 #
 # Testbed Support libraries
@@ -681,10 +683,14 @@ if ($signature) {
 
 #
 # Redirect pathname for global images. See equiv code in clone_image.
+# We also need to do this when uploading images directly to ops since
+# ops has no way sure fire way to translate imageids into pathes (because
+# of subgroup images that wind up in /groups instead of /proj).
 #
-if ($isglobal && $image->IsSystemImage()) {
+if ($UPLOADTOFS || ($isglobal && $image->IsSystemImage())) {
     $filename = $prefixdir . basename($filename);
-    print "*** WARNING: Writing global descriptor to $filename instead!\n";
+    print "*** WARNING: Writing global descriptor to $filename instead!\n"
+	if ($isglobal && $image->IsSystemImage());
 
     #
     # Ditto for the signature file
@@ -846,6 +852,8 @@ my $startslice;
 my $loadlength;
 my $command;
 
+my $SERVER = ($UPLOADTOFS ? $FSIP : $BOSSIP)
+;
 #
 # EC2 images use a special command which is hardwired below.
 #
@@ -865,7 +873,7 @@ elsif ($isvirtnode && !$isdataset && (!$doprovenance || !$isxenhost)) {
 	} else {
 	    $id = $image->pid() . "/" . $image->imagename();
 	}
-	$command .= " -S $BOSSIP -F $id";
+	$command .= " -S $SERVER -F $id";
     }
 
     #
@@ -899,7 +907,7 @@ elsif (!$doprovenance) {
 	} else {
 	    $id = $image->pid() . "/" . $image->imagename();
 	}
-	$command .= " -S $BOSSIP -F $id";
+	$command .= " -S $SERVER -F $id";
     }
 
     if ($isdataset) {
@@ -951,7 +959,7 @@ else {
 
     my $id;
     if ($usefup) {
-	$oargs .= " METHOD=frisbee SERVER=$BOSSIP";
+	$oargs .= " METHOD=frisbee SERVER=$SERVER";
 
 	# if the node has a subboss, use that for downloads
 	my $subboss;
@@ -982,7 +990,7 @@ else {
     # and sell it as a slice image.
     #
     if ($isxenhost && !$isdataset && !$srcsigfile && !$dstsigfile) {
-	$sopts = " -S $BOSSIP -F $id";
+	$sopts = " -S $SERVER -F $id";
 
 	$startslice = $image->loadpart();
 	$loadlength = $image->loadlength();

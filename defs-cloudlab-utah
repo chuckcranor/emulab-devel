@@ -141,6 +141,9 @@ IMAGEDELTAS=0
 # Image directories
 IMAGEDIRECTORIES=1
 
+# Image uploading straight to fs/ops node
+IMAGEUPLOADTOFS=1
+
 # ZFS.
 WITHZFS=1
 ZFS_ROOT=z
