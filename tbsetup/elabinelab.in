@@ -1103,11 +1103,13 @@ sub DumpDBGoo()
 
     my $extraopts  = "";
     my $sqlversion = `/usr/local/bin/mysql_config --version`;
-    chomp($sqlversion);
+    if ($sqlversion =~ /^(\d+\.\d+)\.\d+$/) {
+	$sqlversion = $1;
+    }
     if ($sqlversion >= 5) {
 	$extraopts .= " --skip-quote-names";
     }
-    if ($sqlversion >= 5.8) {
+    if ($sqlversion >= 5.7) {
 	$extraopts .= " --compact --set-gtid-purged=OFF";
     }
     #

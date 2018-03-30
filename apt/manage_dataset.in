@@ -1211,7 +1211,7 @@ sub DoApprove()
     my $creator = $dataset->GetCreator();
     
     my $response = $dataset->ApproveDataset();
-    if (GeniResponse::IsExpired($response)) {
+    if (GeniResponse::IsError($response)) {
 	$dataset->Unlock();
 	ExitWithError($response);
     }
