@@ -6373,9 +6373,13 @@ COMMAND_PROTOTYPE(doloadinfo)
 			}
 		}
 
-		/* If this is a Docker vnode, hand back the path too. */
-		if (reqp->isvnode && row[20] && row[20][0]
-		    && strcmp("docker",row[20]) == 0) {
+		/*
+		 * If this is a Docker vnode, hand back the path too.
+		 * Updated for version 43, always return path.
+		 */
+		if (vers >= 43 ||
+		    (reqp->isvnode && row[20] && row[20][0]
+		     && strcmp("docker",row[20]) == 0)) {
 			if (row[10])
 				bufp += OUTPUT(bufp,ebufp - bufp,
 					       " PATH=%s",row[10]);
