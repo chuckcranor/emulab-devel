@@ -559,7 +559,7 @@ sub LookupAll($$;$$)
     return $cache{$cachekey} if( exists( $cache{$cachekey} ) &&
 				 !ref( $details ) );
 
-#    Tidy( $class );
+    Tidy( $class );
 
     # Mysql 5.7 group by nonsense. Revisit later, like when hell freezes. 
     DBQueryWarn("SET SESSION sql_mode=(SELECT REPLACE(\@\@sql_mode,".
