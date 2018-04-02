@@ -453,6 +453,13 @@ sub doboot()
 	#
 	if (-x "/usr/local/libexec/pubsubd") {
 	    system("killall pubsubd");
+	    my $ws = 8;
+	    while ($ws > 0
+		   && system("killall -0 pubsubd >/dev/null 2>&1") == 0) {
+		print("Waiting for pubsubd to exit...\n");
+		sleep(1);
+		$ws -= 1;
+	    }
 	    print("Starting pubsubd in cluster mode\n");
 	    system("/usr/local/libexec/pubsubd $clusteringoptions");
 	    if ($?) {
