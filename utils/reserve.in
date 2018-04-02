@@ -587,6 +587,7 @@ print "$res\n" if( $debug );
 while( 1 ) {
     my $version = Reservation->GetVersion();
     my $reservations = Reservation->LookupAll( $type );
+    my $found = 0;
     if( defined( $modify_idx ) ) {
 	my $i;
 
@@ -595,8 +596,15 @@ while( 1 ) {
 
 	    if( defined( $r->idx() ) && $r->idx() == $modify_idx ) {
 		$$reservations[ $i ] = $res;
+		$found = 1;
 		last;
 	    }
+	}
+
+	if( !$found ) {
+	    # Couldn't find existing reservation in LookupAll() results:
+	    # probably because it wasn't previously approved.
+	    push( @$reservations, $res );	    
 	}
     } else {
 	push( @$reservations, $res );

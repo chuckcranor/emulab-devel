@@ -552,8 +552,12 @@ sub Tidy($)
 sub LookupAll($$;$$)
 {
     my ($class, $type, $include_pending, $details) = @_;
+
+    $include_pending = 0 if( !defined( $include_pending ) );
+    my $cachekey = $type . ":" . $include_pending;
     
-    return $cache{$type} if( exists( $cache{$type} ) );
+    return $cache{$cachekey} if( exists( $cache{$cachekey} ) &&
+				 !ref( $details ) );
 
 #    Tidy( $class );
 
@@ -711,9 +715,9 @@ sub LookupAll($$;$$)
 	}
     }
 
-    $cache{$type} = \@reservations;
+    $cache{$cachekey} = \@reservations;
     
-    return $cache{$type};
+    return $cache{$cachekey};
 }
 
 sub IsFeasible($$;$$$$$)
