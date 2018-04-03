@@ -503,6 +503,7 @@ $(function ()
 
 	    $('#datasets_content')
 		.html(template({"datasets"    : json.value,
+				"showcluster" : true,
 				"showuser"    : false,
 				"showproject" : true}));
 	    
@@ -542,6 +543,7 @@ $(function ()
 
 	    $('#classic_datasets_content_div')
 		.html(template({"datasets"    : json.value,
+				"showcluster" : false,
 				"showuser"    : false,
 				"showproject" : true}));
 	    

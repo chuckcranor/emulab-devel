@@ -121,7 +121,8 @@ $classic_result =
         "    $whereclause2)) as foo order by name");
 
 $portal_result =
-    DBQueryFatal("select d.uuid,'dataset' as type from apt_datasets as d ".
+    DBQueryFatal("select d.uuid,agg.nickname, ".
+                 "  'dataset' as type from apt_datasets as d ".
                  "left join apt_aggregates as agg on agg.urn=d.aggregate_urn ".
                  "$joinclause3 ".
                  "$whereclause3 order by d.dataset_id");
@@ -132,7 +133,7 @@ echo "<div class='row'>
                    col-sm-12 col-sm-offset-0
                    col-xs-12 col-xs-offset-0'>\n";
 
-function SPITTABLE($which, $results) {
+function SPITTABLE($which, $results, $where) {
     global $all,$embedded;
 
     if ($which == "main") {
@@ -147,8 +148,11 @@ function SPITTABLE($which, $results) {
             echo " <th>Creator</th>";
         }
         echo "     <th>Project</th>
-                   <th>Type</th>
-                   <th>State</th>
+                   <th>Type</th>\n";
+        if ($where == "portal") {
+            echo " <th>Cluster</th>\n";
+        }
+        echo "     <th>State</th>
                    <th>Size</th>
                    <th>Expires</th>
               </tr>
@@ -198,8 +202,12 @@ function SPITTABLE($which, $results) {
 		       $creator</a></td>";
             }
             echo "<td><a href='show-project.php?project=$pid'>$pid</a></td>
-                    <td>$dtype</td>
-                    <td>$state</td>
+                    <td>$dtype</td>\n";
+            if ($where == "portal") {
+                $cluster = $row["nickname"];
+                echo "<td>$cluster</th>";
+            }
+            echo "  <td>$state</td>
                     <td>$size MiB</td>
                     <td class='format-date'>$expires</td>
                  </tr>\n";
@@ -218,7 +226,7 @@ if ($embedded) {
         echo $message;
     }
     else {
-        SPITTABLE("main", $classic_result);
+        SPITTABLE("main", $classic_result, "classic");
     }
 }
 else {
@@ -226,12 +234,12 @@ else {
         echo $message;
     }
     else {
-        SPITTABLE("main", $portal_result);
+        SPITTABLE("main", $portal_result, "portal");
     }
     if (mysql_num_rows($classic_result)) {
         echo "<br>\n";
         echo "<center><h4>Classic Emulab Datasets</h4></center>\n";
-        SPITTABLE("classic", $classic_result);
+        SPITTABLE("classic", $classic_result, "classic");
         echo "<br>\n";
     }
 }

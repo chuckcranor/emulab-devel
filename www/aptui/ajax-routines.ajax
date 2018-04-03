@@ -382,7 +382,7 @@ function DatasetList($which, $target)
     $results = array();
 
     $query_result =
-        DBQueryFatal("select v.* from apt_datasets as v ".
+        DBQueryFatal("select v.*,agg.nickname from apt_datasets as v ".
                      "left join apt_aggregates as agg ".
                      "on agg.urn=v.aggregate_urn ".
                      "$whereclause $orderclause");
@@ -400,6 +400,7 @@ function DatasetList($which, $target)
         $aggregate_urn= $row["aggregate_urn"];
         $created      = $row["created"];
         $expires      = $row["expires"];
+        $cluster      = $row["nickname"];
 
         $blob = array();
         $blob["uuid"]         = $uuid;
@@ -414,6 +415,7 @@ function DatasetList($which, $target)
         $blob["created"]      = $created;
         $blob["expires"]      = ($type != "imdataset" ? $expires : "");
         $blob["aggregate_urn"]= $aggregate_urn;
+        $blob["cluster"]      = $cluster;
 
         $results[$uuid] = $blob;
     }
