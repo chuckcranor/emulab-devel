@@ -225,10 +225,17 @@ sub CreateSwitch()
 {
     my $blob = {
 	"type"               => $type,
-	"role"               => ($layer1 ? "widearea_switch" :
-				 ($usersw ? "testnode" : "testswitch")),
+	"role"               => ($layer1 ? "widearea_switch" : "testswitch"),
 	"initial_eventstate" => TBDB_NODESTATE_ISUP(),
     };
+
+    #
+    # User switches needs some different stuff.
+    #
+    if ($usersw) {
+	$blob->{"role"} = "testnode";
+	$blob->{"initial_eventstate"} = TBDB_NODESTATE_SHUTDOWN();
+    }
     my $node;
     
     print "Creating new node $node_id\n";
