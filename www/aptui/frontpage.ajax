@@ -39,6 +39,15 @@ function Do_GetHealthStatus()
     SPITAJAX_RESPONSE($status);
 }
 
+# Fetch wireless health status.
+# Can be done without logging in (for front page status).
+function Do_GetWirelessStatus()
+{
+    $status     = array();
+    CalculateWirelessStatus($status);
+    SPITAJAX_RESPONSE($status);
+}
+
 # Local Variables:
 # mode:php
 # End:

@@ -411,7 +411,9 @@ $routing = array("geni-login" =>
 			array("file"    => "frontpage.ajax",
 			      "guest"   => true,
 			      "methods" => array("GetHealthStatus" =>
-						    "Do_GetHealthStatus")),
+						    "Do_GetHealthStatus",
+						 "GetWirelessStatus" =>
+						    "Do_GetWirelessStatus")),
 
 );
 

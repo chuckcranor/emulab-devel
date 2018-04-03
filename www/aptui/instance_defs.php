@@ -1097,15 +1097,13 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
     }
 }
 
-function CalculateWirelessStatus() {
-    $result = array();
-
+function CalculateWirelessStatus(&$result) {
     $query_result =
         DBQueryFatal( "SELECT COUNT(DISTINCT w.node_id1) AS c FROM wires AS w " .
 		      "LEFT OUTER JOIN reserved AS r1 ON " .
 		      "w.node_id1=r1.node_id LEFT OUTER JOIN reserved AS r2 " .
 		      "ON w.node_id2=r2.node_id WHERE w.node_id1 LIKE 'nuc%' " .
-		      "AND w.node_id2 LIKE 'ue%' AND w.external_wire IS NULL" .
+		      "AND w.node_id2 LIKE 'ue%' AND w.external_wire IS NULL " .
 		      "OR w.external_wire=''" );
     $row = mysql_fetch_array( $query_result );
     $radiated1 = $row[ 'c' ];
@@ -1115,7 +1113,7 @@ function CalculateWirelessStatus() {
 		      "LEFT OUTER JOIN reserved AS r1 ON " .
 		      "w.node_id1=r1.node_id LEFT OUTER JOIN reserved AS r2 " .
 		      "ON w.node_id2=r2.node_id WHERE w.node_id2 LIKE 'nuc%' " .
-		      "AND w.node_id1 LIKE 'ue%' AND w.external_wire IS NULL" .
+		      "AND w.node_id1 LIKE 'ue%' AND w.external_wire IS NULL " .
 		      "OR w.external_wire=''" );
     $row = mysql_fetch_array( $query_result );
     $radiated2 = $row[ 'c' ];
@@ -1138,10 +1136,8 @@ function CalculateWirelessStatus() {
     $row = mysql_fetch_array( $query_result );
     $controlled2 = $row[ 'c' ];
 
-    return array(
-        "radiated" => $radiated1 + $radiated2;
-        "controlled" => $controlled1 + $controlled2;
-    );
+    $result["radiated"] = $radiated1 + $radiated2;
+    $result["controlled"] = $controlled1 + $controlled2;
 }
     
 function SpitAggregateStatus($extended = false) {
