@@ -187,7 +187,7 @@ CREATE TABLE `apt_extension_group_policies` (
   `creator_idx` mediumint(8) unsigned default NULL,
   `disabled` tinyint(1) NOT NULL default '0',
   `limit` int(10) unsigned default NULL,
-  `admin_after_limit  tinyint(1) NOT NULL default '0',
+  `admin_after_limit` tinyint(1) NOT NULL default '0',
   `created` datetime default NULL,
   `reason` mediumtext,
   PRIMARY KEY (`pid_idx`,`gid_idx`)
@@ -205,7 +205,7 @@ CREATE TABLE `apt_extension_user_policies` (
   `creator_idx` mediumint(8) unsigned default NULL,
   `disabled` tinyint(1) NOT NULL default '0',
   `limit` int(10) unsigned default NULL,
-  `admin_after_limit  tinyint(1) NOT NULL default '0',
+  `admin_after_limit` tinyint(1) NOT NULL default '0',
   `created` datetime default NULL,
   `reason` mediumtext,
   PRIMARY KEY (`uid_idx`)
