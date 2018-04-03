@@ -1265,7 +1265,31 @@ sub GetTicketAuxAux($)
 					 "Malformed image URN: $dname");
 		    goto bad;
 		}
-		$osinfo = OSImage->Lookup($ospid, $os, $vers);
+		# See if we have any version of this image.
+		$osinfo = OSImage->Lookup($ospid, $os);
+		#
+		# If we do and the request was for a specific version of
+		# the image and this image was imported, then the version
+		# number probably refers to the version at the origin. We
+		# want to use the hash to resolve it instead, down in
+		# MapToLocalImage.
+		# 
+		if (defined($osinfo) && defined($vers)) {
+		    if ($osinfo->IsLocal()) {
+			$osinfo = OSImage->Lookup($ospid, $os, $vers);
+			if (!defined($osinfo)) {
+			    $response =
+				GeniResponse->Create(GENIRESPONSE_BADARGS,
+						     undef,
+						     "Unknown image URN: ".
+						     "$dname");
+			    goto bad;
+			}
+		    }
+		    else {
+			$osinfo = undef;
+		    }
+		}
 		if (!defined($osinfo)) {
 		    if ($use_imagetracker) {
 			my $image = GeniImage::MapToLocalImage($dname, $pid);
@@ -1273,9 +1297,14 @@ sub GetTicketAuxAux($)
 			    $response = $image;
 			    goto bad;
 			}
-			$osname = ($image->IsLocal() ?
-				   $image->versname() :
-				   $image->metadata_url());
+			if ($image->IsLocal() || $image->IsSystemImage()) {
+			    # No need for image_setup to look at it.
+			    # System images are never auto imported.
+			    $osname = $image->versname();
+			}
+			else {
+			    $osname = $image->metadata_url();
+			}
 		    }
 		    else {
 			$response =

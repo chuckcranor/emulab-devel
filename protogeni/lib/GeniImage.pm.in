@@ -298,6 +298,39 @@ sub MapToLocalImage($$)
 
     #print STDERR Dumper($blob);
 
+    # The image might be version specific.
+    my ($ospid,$imagename,$version) = split("\/\/", $hrn->id());
+    if (defined($version) && $version !~ /^\d+$/) {
+	print STDERR "Bad version number in $urn\n";
+	return undef;
+    }
+
+    #
+    # We used to handle this in the caller, but if a user wants a specific
+    # version of an imported image we already have locally, that version
+    # number almost certainly refers to the version history at the origin,
+    # not the local history which might not have all of the versions that
+    # are present at the origin. This is a flaw in the original design; we
+    # should have been synchronizing the image history. But at this point
+    # there is nothing we can do except hope that the local history has a
+    # version with the same hash as what the image server tells us.
+    #
+    if (defined($version)) {
+	my $image = OSImage->Lookup($ospid, $imagename);
+	if (defined($image)) {
+	    my @allversions = ();
+	    if ($image->AllVersions(\@allversions) == 0) {
+		foreach my $im (@allversions) {
+		    if (defined($im->hash()) && exists($blob->{'sha1hash'}) &&
+			$im->hash() eq $blob->{'sha1hash'}) {
+			print STDERR "MapToLocalImage: Found local image $im\n";
+			return $im;
+		    }
+		}
+	    }
+	}
+    }
+
     #
     # So, look to see if the user is trying to use an image that is
     # present in the current project. This will happen if after an import
@@ -309,12 +342,6 @@ sub MapToLocalImage($$)
     # We are looking for an image with the same name, but we verify with
     # the hash that is stored at the image server. 
     #
-    # The image might be version specific.
-    my (undef,$imagename,$version) = split("\/\/", $hrn->id());
-    if (defined($version) && $version !~ /^\d+$/) {
-	print STDERR "Bad version number in $urn\n";
-	return undef;
-    }
     my $image = OSImage->Lookup($pid,$imagename);
     if (defined($image)) {
 	#
