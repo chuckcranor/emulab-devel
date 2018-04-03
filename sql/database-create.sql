@@ -415,7 +415,7 @@ CREATE TABLE `apt_instances` (
   `extension_disabled_reason` mediumtext,
   `extension_limit` int(10) unsigned default NULL,
   `extension_limit_reason` mediumtext,
-  `extension_admin_after_limit tinyint(1) NOT NULL default '0',
+  `extension_admin_after_limit` tinyint(1) NOT NULL default '0',
   `extension_requested` tinyint(1) NOT NULL default '0',
   `extension_denied` tinyint(1) NOT NULL default '0',
   `extension_denied_reason` mediumtext,
