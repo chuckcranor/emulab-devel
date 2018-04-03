@@ -417,11 +417,7 @@ sub Create($$$$)
 	    print STDERR "*** No virtnode_capacity for $type! Using zero.\n";
 	    $virtnode_capacity = 0;
 	}
-	if ($typeinfo->isswitch()) {
-	    $osid   = "NULL";
-	    $opmode = "ALWAYSUP";
-	}
-	elsif ($isremote || $typeinfo->isfakenode()) {
+	if ($isremote || $typeinfo->isfakenode()) {
 	    $osid   = "NULL";
 	    $opmode = "";
 
@@ -440,25 +436,31 @@ sub Create($$$$)
 	    }
 	}
 	else {
-	    if ($typeinfo->adminmfs_osid(\$adminmfs_osid)) {
+	    if ($typeinfo->adminmfs_osid(\$adminmfs_osid) == 0) {
+		# Find object for the adminfs.
+		if (defined($adminmfs_osid)) {
+		    $adminmfs = OSImage->Lookup($adminmfs_osid);
+		}
+		else {
+		    $adminmfs = OSImage->Lookup(TBOPSPID(), $MFS_INITIAL);
+		}
+		if (!defined($adminmfs)) {
+		    print STDERR
+			"*** Could not find OSImage object for adminmfs!\n";
+		    return undef;
+		}
+		$osid      = $adminmfs->osid();
+		$osid_vers = $adminmfs->version();
+		$opmode    = $adminmfs->op_mode();
+	    }
+	    elsif ($typeinfo->isswitch()) {
+		$osid   = "NULL";
+		$opmode = "ALWAYSUP";
+	    }
+	    else {
 		print STDERR "*** No adminmfs osid for $type!\n";
 		return undef;
 	    }
-	    # Find object for the adminfs.
-	    if (defined($adminmfs_osid)) {
-		$adminmfs = OSImage->Lookup($adminmfs_osid);
-	    }
-	    else {
-		$adminmfs = OSImage->Lookup(TBOPSPID(), $MFS_INITIAL);
-	    }
-	    if (!defined($adminmfs)) {
-		print STDERR
-		    "*** Could not find OSImage object for adminmfs!\n";
-		return undef;
-	    }
-	    $osid      = $adminmfs->osid();
-	    $osid_vers = $adminmfs->version();
-	    $opmode    = $adminmfs->op_mode();
 	}
     }
     else {
