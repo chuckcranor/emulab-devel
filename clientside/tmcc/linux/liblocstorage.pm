@@ -1759,11 +1759,11 @@ sub os_create_storage_slice($$$)
 	    # try a striped LV first
 	    my $pvs = $so->{'LVM_VGDEVS'};
 	    if (defined($pvs) && $pvs > 1 &&
-		!mysystem("lvcreate -Zy --yes -i $pvs -n $lv -L ${lvsize}m $VGNAME $redir")) {
+		!mysystem("lvcreate -Zy -i $pvs -n $lv -L ${lvsize}m $VGNAME $redir")) {
 		$href->{'LVDEV'} = "/dev/$VGNAME/$lv";
 		return 1;
 	    }
-	    if (mysystem("lvcreate -Zy --yes -n $lv -L ${lvsize}m $VGNAME $redir")) {
+	    if (mysystem("lvcreate -Zy -n $lv -L ${lvsize}m $VGNAME $redir")) {
 		warn("*** $lv: could not create LV$logmsg\n");
 		return 0;
 	    }
