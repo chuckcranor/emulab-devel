@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -87,6 +87,7 @@ use libtestbed;
 use User;
 use EmulabConstants();
 use emutil;
+use Brand;
 
 # Protos
 sub fatal($);
@@ -214,8 +215,8 @@ print STDERR Dumper($xmlparse)
 if (exists($xmlparse->{'attribute'}->{"portal"})) {
     $portal = $xmlparse->{'attribute'}->{"portal"}->{'value'};
     delete($xmlparse->{'attribute'}->{"portal"});
-    if (! ($portal eq "aptlab" || $portal eq "cloudlab" || 
-	   $portal eq "phantomnet" || $portal eq "emulab")) {
+    my $brand = Brand->Create($portal);
+    if (!defined($brand)) {
 	fatal("Bad portal: $portal");
     }
     # Remove these, we do not require them on the APT path.
