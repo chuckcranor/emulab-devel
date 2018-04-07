@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -38,6 +38,7 @@ use CGI;
 my $TB               = "@prefix@";
 my $MAINSITE 	     = @TBMAINSITE@;
 my $TBOPS            = "@TBOPSEMAIL@";
+my $TBLOGS           = "@TBLOGSEMAIL@";
 my $MANAGEPROFILE    = "$TB/bin/manage_profile";
 
 # Locals
@@ -86,9 +87,10 @@ sub SendStatus($)
 }
 
 #
-# Send logs to tblogs
+# Send logs to tblogs (only)
 #
-LogStart(0, undef, LIBAUDIT_LOGTBLOGS());
+LogStart(0, undef, LIBAUDIT_LOGONLY() | LIBAUDIT_LOGTBLOGS());
+AddAuditInfo("to", $TBLOGS);
 
 # The query holds the token we need to find the profile.
 my $query = new CGI();
