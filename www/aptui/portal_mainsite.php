@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -140,7 +140,7 @@ elseif ($_SERVER["SERVER_NAME"] == "www.powderwireless.net") {
     $APTSTYLE     = "powder.css";
     $ISEMULAB     = 0;
     $ISPOWDER     = 1;
-    #$GOOGLEUA     = 'UA-42844769-2';
+    $GOOGLEUA     = 'UA-42844769-7';
     $TBMAILTAG    = "powderwireless.net";
     $EXTENSIONS   = "portal-extensions@powderwireless.net";
     $TBAUTHTIMEOUT= (24 * 3600 * 14);
