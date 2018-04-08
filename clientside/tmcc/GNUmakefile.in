@@ -204,6 +204,10 @@ frisbee-mfs: client
 frisbee-mfs-install: frisbee-mfs
 	@$(MAKE) -C $(MDSUBDIR) frisbee-mfs-install
 
+onie-dongle: tmcc tmcc-nossl
+onie-dongle-install: onie-dongle
+	@$(MAKE) -C onie onie-dongle-install
+
 newnode-mfs: client
 
 newnode-mfs-install: newnode-mfs

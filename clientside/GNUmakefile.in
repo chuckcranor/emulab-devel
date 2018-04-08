@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -62,6 +62,16 @@ subboss-install: client client-mkdirs subboss-install-subdirs
 post-install:	post-install-subdirs
 clean:		clean-subdirs
 distclean:	distclean-subdirs
+
+onie-dongle:
+	$(MAKE) -C lib onie-dongle
+	$(MAKE) -C os onie-dongle
+	$(MAKE) -C tmcc onie-dongle
+
+onie-dongle-install: onie-dongle
+	$(MAKE) -C lib onie-dongle-install
+	$(MAKE) -C os onie-dongle-install
+	$(MAKE) -C tmcc onie-dongle-install
 
 destdircheck:
 	@if [ -z "$(DESTDIR)" ]; then \

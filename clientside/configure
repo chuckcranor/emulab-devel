@@ -4634,6 +4634,7 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/plab/GNUmakefile tmcc/cygwinseven/GNUmakefile \
 	  tmcc/centos6/GNUmakefile \
 	  tmcc/centos7/GNUmakefile \
+	  tmcc/onie/GNUmakefile \
 	  os/GNUmakefile os/syncd/GNUmakefile \
 	  os/dijkstra/GNUmakefile os/genhostsfile/GNUmakefile \
 	  os/frisbee.redux/GNUmakefile \
