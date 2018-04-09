@@ -2405,6 +2405,7 @@ $(function ()
 			    "profile_who"  : "public",
 			    "snapuuid"     : window.APT_OPTIONS.uuid,
 			    "snapnode_id"  : args.node_id,
+			    "update_prepare" : args["update_prepare"],
 			   },
 	    "checkonly"  : 1,
 	};
