@@ -2482,6 +2482,13 @@ sub DoDeleteNodes()
 	    fatal("Could not parse manifest");
 	}
 	my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
+	# Not allowed to delete last node.
+	if (@nodes == 1) {
+	    $errmsg   = "Only one node left, not allowed to delete any more.";
+	    $errcode  = 1;
+	    $exitcode = 1;
+	    goto bad;
+	}
 	foreach my $node (@nodes) {
 	    my $client_id = GeniXML::GetVirtualId($node);
 	    if (grep {$_ eq $client_id} @ARGV) {
