@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2016-2017 University of Utah and the Flux Group.
+# Copyright (c) 2016-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -536,7 +536,7 @@ if ($clear || $clear_idx) {
 # how far into the future the reservation starts, existing approved
 # reservations for the same project, the phase of the moon...
 # who knows.
-if( $count * ( $endtime - $starttime ) / 3600 <= 0x40 ) {
+if( $count * ( $endtime - $starttime ) / 3600 <= 128 ) {
     $approve = 1;
 }
 
