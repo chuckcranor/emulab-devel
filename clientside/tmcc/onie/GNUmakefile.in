@@ -71,10 +71,15 @@ etc-install:	dir-install sysetc-install
 	-ln -sf ../init.d/testbed.sh $(DEFRUNLVLDIR)/S90testbed
 	$(INSTALL) -m 755 $(SRCDIR)/exec_installer $(SYSBINDIR)/exec_installer
 
-sysetc-install:	dir-install
+sysetc-install:	dir-install tweak-networking
 	$(INSTALL) -m 755 $(SRCDIR)/rc.testbed $(SYSETCDIR)/testbed/rc.testbed
 	$(INSTALL) -m 755 $(SRCDIR)/rc.reload $(SYSETCDIR)/testbed/rc.reload
 	# Onie has a broken broken resolver
 	echo "boss" > $(SYSETCDIR)/testbed/bossnode
+
+tweak-networking:
+	if ! `grep -q 'Added by Emulab' $(RCDIR)/networking.sh`; then \
+	    patch $(RCDIR)/networking.sh $(SRCDIR)/dell.patch; \
+	fi
 
 clean:

@@ -79,6 +79,7 @@ waitmode()
     # otherwise we just return to query bootwhat again.
     #
     local WHAT=`$BINDIR/bootinfoclient -s boss`
+    rc=$?
     if [ $rc -ne 0 ]; then
 	echo "bootinfoclient returned $rc."
 	# Wait so we do not go into a tight loop trying to query. No rush.
@@ -107,6 +108,7 @@ reload_nos()
     $TMCC state BOOTING
 
     $BINDIR/rc.reload
+    rc=$?
     if [ $rc -ne 0 ]; then
 	echo "Dropping into admin shell"
 	return 1
@@ -125,12 +127,14 @@ boot_nos()
     
     if [ ! -s $EMULABENV ]; then
 	grub-editenv $EMULABENV create
+	rc=$?
 	if [ $rc -ne 0 ]; then
 	    echo "Failed to create new grub env"
 	    return 1
 	fi
     fi
     grub-editenv $EMULABENV set bootnos=yes
+    rc=$?
     if [ $rc -ne 0 ]; then
 	echo "Failed to update grub env with bootnos=yes"
 	return 1
