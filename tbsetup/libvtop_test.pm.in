@@ -5925,7 +5925,7 @@ sub AllocVirtNodes($)
 	    while (scalar(@newvlist) && scalar(@delvlist)) {
 		my $del_vnode = pop(@delvlist);
 		if (exists($self->current_v2v->{$del_vnode})) {
-		    my $reserved_node = $$self->current_v2v()->{$del_vnode};
+		    my $reserved_node = $self->current_v2v()->{$del_vnode};
 		    push(@oplist, $reserved_node);
 		    my $new_vnode = pop(@newvlist);
 		    push(@ovlist, $new_vnode);
