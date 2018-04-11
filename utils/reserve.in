@@ -43,6 +43,7 @@ use Project;
 use Reservation;
 use WebTask;
 use emutil;
+use libEmulab;
 
 sub usage()
 {
@@ -531,12 +532,19 @@ if ($clear || $clear_idx) {
     exit( 0 );
 }
 
-# For now, auto-approve reservation requests up to 64 node-hours.
+# For now, auto-approve reservation requests up to some number node-hours
+# as defined by a nifty site variable.
 # Later we'll probably want this threshold to vary based on the node type,
 # how far into the future the reservation starts, existing approved
 # reservations for the same project, the phase of the moon...
 # who knows.
-if( $count * ( $endtime - $starttime ) / 3600 <= 128 ) {
+#
+my $approval_threshold;
+if (! GetSiteVar("reservations/approval_threshold", \$approval_threshold)) {
+    $approval_threshold = 128;
+}
+if ($approval_threshold == 0 ||
+    ($count * ( $endtime - $starttime ) / 3600 <= $approval_threshold)) {
     $approve = 1;
 }
 

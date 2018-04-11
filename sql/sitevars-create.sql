@@ -186,6 +186,7 @@ INSERT INTO sitevariables VALUES ('cnetwatch/pps_threshold',NULL,'50000','Packet
 INSERT INTO sitevariables VALUES ('cnetwatch/bps_threshold',NULL,'500000000','Data rate in bits/sec in excess of which to log an alert (0 means do not generate data rate alerts)',0);
 INSERT INTO sitevariables VALUES ('cnetwatch/mail_interval',NULL,'600','Interval in seconds at which to send email for all alerts logged during the interval (0 means do not send alert email)',0);
 INSERT INTO sitevariables VALUES ('cnetwatch/mail_max',NULL,'1000','Maximum number of alert emails to send; after this alerts are only logged (0 means no limit to the emails)',0);
+INSERT INTO sitevariables VALUES ('reservations/approval_threshold',NULL,'128','Maximum number of node hours for automatic approval of reservation requests (0 means no limit).',0);
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
