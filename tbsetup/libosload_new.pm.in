@@ -1,4 +1,4 @@
-#!/usr/bin/perl -wT
+#!/usr/bin/perl -w
 #
 # Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
@@ -285,9 +285,11 @@ sub NewType($$)
     my ($self, $type) = @_;
 
     $self->dprint(2,"NewType($type): trying to create type object");
+    # Dashes in type names are bad in this code.
+    $type =~ s/\-/\_/g;
 
     my $packname = "libosload_${type}";
-    my $newtype  = eval { $packname->New($self); };
+    my $newtype  = eval { $packname->New($self, $type); };
     # Not loaded?
     if ($@) {
 	$self->dprint(2,"NewType($type): simple module load failed: " . $@);
@@ -298,7 +300,7 @@ sub NewType($$)
 	    }
 	    return undef;
 	}
-	$newtype  = eval { $packname->New($self); };
+	$newtype  = eval { $packname->New($self, $type); };
 	if ($@) {
 	    $self->dprint(1,"$self NewType($type): New() failed: " . $@);
 	    return undef;
@@ -2727,7 +2729,7 @@ use English;
 use Data::Dumper;
 use overload ('""' => 'Stringify');
 
-sub New($$)
+sub New($$;$)
 {
     my ($class, $parent, $type) = @_;
 

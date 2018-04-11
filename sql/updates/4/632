@@ -4,6 +4,7 @@ use libdb;
 sub DoUpdate($$$)
 {
     my ($dbhandle, $dbname, $version) = @_;
+
     my $svar = 'reservations/approval_threshold';
     
     DBQueryFatal("INSERT INTO `sitevariables` VALUES ".

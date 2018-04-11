@@ -981,7 +981,17 @@ sub NewType($$)
     #
     my $typeinfo = NodeType->Lookup($type);
 
-    if ($type eq "pcfedphys" || $type eq "pcfed") {
+    # Switches are special.
+    if (defined($typeinfo) && $typeinfo->isswitch()) {
+	eval "require libossetup_switch";
+	if ($@) {
+	    print STDERR "$self libossetup_switch load failed: " . $@;
+	    return undef;
+	}
+	# Dashes in type names are bad in this code.
+	$type =~ s/\-/\_/g;
+    }
+    elsif ($type eq "pcfedphys" || $type eq "pcfed") {
 	$type = "protogeni";
     }
     elsif (defined($typeinfo) && $typeinfo->issubnode()) {
@@ -1198,7 +1208,7 @@ sub Stringify($)
     
     my $type = $self->type();
 
-    return "[$type]";
+    return "libossetup_$type";
 }
 
 #####################################################################

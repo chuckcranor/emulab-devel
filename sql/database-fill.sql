@@ -356,6 +356,9 @@ REPLACE INTO mode_transitions VALUES ('ALWAYSUP','SHUTDOWN','RELOAD-UE','SHUTDOW
 REPLACE INTO mode_transitions VALUES ('ALWAYSUP','ISUP','RELOAD-UE','SHUTDOWN','ReloadStart');
 REPLACE INTO mode_transitions VALUES ('ALWAYSUP','ISUP','RELOAD-UE','ISUP','ReloadStart');
 REPLACE INTO mode_transitions VALUES ('RELOAD-UE','SHUTDOWN','ALWAYSUP','ISUP','ReloadDone');
+REPLACE INTO mode_transitions VALUES ('ALWAYSUP','SHUTDOWN','RELOAD','SHUTDOWN','');
+REPLACE INTO mode_transitions VALUES ('RELOAD','SHUTDOWN','ALWAYSUP','SHUTDOWN','');
+REPLACE INTO mode_transitions VALUES ('RELOAD','RELOADDONE','ALWAYSUP','SHUTDOWN','');
 
 --
 -- Dumping data for table `priorities`

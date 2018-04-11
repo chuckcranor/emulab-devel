@@ -874,6 +874,14 @@ sub RebootNode {
     }
 
     #
+    # Switches do not do ipod, so jump to powercycle.
+    #
+    if ($nodeobject->isswitch()) {
+	info("$pc: is a switch, skipping ipod, power cycling");
+	exit(2);
+    }
+
+    #
     # Haven't yet tried an ipod, try that and wait again.
     # This further slows down reboot but is probably worth it
     # since this should be a rare case (reboot says it worked but

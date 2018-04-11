@@ -1,0 +1,381 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+package libosload_mlnx_sn2410;
+
+use strict;
+use English;
+use Data::Dumper;
+use Expect;
+
+#
+# Configure stuff
+#
+my $TB		= "@prefix@";
+my $TESTMODE    = @TESTMODE@;
+
+use libosload_switch;
+use base qw(libosload_switch);
+use libEmulab;
+use emutil;
+use EmulabConstants;
+
+# Initial switch user/password. We change this as soon as we can.
+my $ADMIN_USER    = "admin";
+my $ADMIN_PSWD    = "admin";
+my $USER_PROMPT   = '[standalone: master] > ';
+my $ADMIN_PROMPT  = "[standalone: master] # ";
+my $CONFIG_PROMPT = "[standalone: master] (config) # ";
+my $CONN_TIMEOUT  = 10;
+my $EXPECT_DEBUG_LOG    = "/tmp/osload_switch.log";
+
+sub New($$$)
+{
+    my ($class, $parent, $type) = @_;
+
+    my $self = $class->SUPER::New($parent, $type);
+    bless($self, $class);
+
+    return $self;
+}
+
+#
+# Create an Expect object that spawns the ssh process to the switch.
+#
+sub createExpectObject($$;$)
+{
+    my ($self, $nodeobject, $initialize) = @_;
+    my $node_id = $nodeobject->node_id();
+    my ($admin_user, $admin_pswd);
+    my $prompt = "$node_id $USER_PROMPT";
+    my $error = 0;
+
+    #
+    # Initialize mode; the switch is booted with the initial password
+    # and we use the initial user. After the initial config, we use
+    # elabman and the default switch password stored in $TB/etc.
+    # We assume (Hmm) the user will not mess with the elabman user.
+    #
+    if ($initialize) {
+	$admin_user = $ADMIN_USER;
+	$admin_pswd = $ADMIN_PSWD;
+    }
+    else {
+	$admin_user = PROTOUSER();
+	$admin_pswd = $self->DefaultPassword();
+	return -1
+	    if (!defined($admin_pswd));
+    }
+
+    if (0 && !exists($INC{'libtblog.pm'})) {
+	close(SOUT);
+	close(SERR);
+	print "Closing SOUT\n";
+    }
+    $self->dprint(0,"$self createExpectObject($node_id): ".
+		  "$admin_user, $admin_pswd, '$prompt'");
+
+    # Host keys change every reload, do not want to save them.
+    my $spawn_cmd = "ssh -o userknownhostsfile=/dev/null ".
+	"-l $admin_user $node_id";
+    
+    # Create Expect object and initialize it:
+    my $exp = new Expect();
+    if (!$exp) {
+        # upper layer will check this
+        return -1;
+    }
+    $exp->log_stdout(1);
+    # Copious debugging.
+    $exp->exp_internal(1);
+
+    if (!$exp->spawn($spawn_cmd)) {
+	warn "$self createExpectObject($node_id): ".
+	    "Cannot spawn $spawn_cmd: $!\n";
+	return -1;
+    }
+    $exp->raw_pty(1);
+
+    $exp->expect($CONN_TIMEOUT,
+		 ["Password:" =>
+		  sub { my $e = shift;
+			$e->send("$admin_pswd\n");
+			exp_continue;}],
+		 ["wizard for initial configuration\? " =>
+		  sub { my $e = shift;
+			$e->send("no\n");
+			exp_continue;}],
+		 ["Permission denied" =>
+		  sub { $error = "password incorrect!";} ],
+		 [timeout =>
+		  sub { $error = "Timeout connecting to switch!";} ],
+		 ["-ex", "$node_id $USER_PROMPT"  =>
+		   sub { my $e = shift;
+			 $e->send("enable\n");
+			 exp_continue;}],
+		 ["-ex", "$node_id $ADMIN_PROMPT"  =>
+		   sub { my $e = shift;
+			 $e->send("configure terminal\n");
+			 exp_continue;}],
+		 "$node_id $CONFIG_PROMPT"
+		);
+
+    if (!$error && $exp->error()) {
+	$error = $exp->error();
+    }
+
+    if ($error) {
+	warn "$self createExpectObject($node_id): ".
+	    "Could not connect to switch: $error\n";
+	return -1;
+    }
+    $self->expectobj($exp);
+    return 0;
+}
+
+#
+# Generate initial switch config for MLNX-OS. 
+#
+sub generateConfig($$;$)
+{
+    my ($self,$nodeobject,$initialize) = @_;
+    my $node_id       = $nodeobject->node_id();
+    my $experiment    = $nodeobject->Reservation();
+    my $protouser     = PROTOUSER();
+    my @userlines     = ();
+
+    #
+    # Initialize mode; We are setting the password to the default switch
+    # password in $TB/etc so that it is not sitting on the network with
+    # a well known password.
+    #
+    # Once a switch is dragged into an experiment, we are going to reconfig
+    # it and change the admin password and add a user account, using
+    # current node root_password. We leave the elabman account alone, that
+    # is our way back in.
+    #
+    # FTOS does not accept modular crypt strings. So just send it the
+    # cleartext password, it will not be visible. I should clarify; I
+    # cannot figure out how to give it an encrypted string. :-)
+    #
+    if ($initialize) {
+	$cleartext = $self->DefaultPassword();
+	return ()
+	    if (!defined($cleartext));
+    }
+    else {
+	$cleartext = $nodeobject->root_password();
+    }
+    my $salt      = "\$5\$" . substr(emutil::GenHash(), 0, 16) . "\$";
+    my $encrypted = crypt($cleartext, $salt);
+
+    push(@userlines,
+	 "username admin password 7 $encrypted",
+	 "username monitor password 7 $encrypted",
+	 # Need this account for snmpit.
+	 "username xmladmin password 7 $encrypted",
+	 "username xmluser password 7 $encrypted",
+	 "username monitor disable",
+	 "username xmluser disable",
+	);
+
+    if ($initialize) {
+	push(@userlines,
+	     "username $protouser capability admin",
+	     "username $protouser full-name \"\"",
+	     "username $protouser password 7 $encrypted");
+
+	# Install boss' root key into elabman for easier login.
+	my $pubkey;
+	TBGetSiteVar("node/ssh_pubkey", \$pubkey);
+	if (defined($pubkey) && $pubkey ne '') {
+	    push(@userlines,
+		 "ssh client user $protouser authorized-key sshv2 \"$pubkey\"");
+	}
+    }
+
+    #
+    # Experiment creator keys go into the admin account. Not going to
+    # create accounts for all users at this time, does not seem necessary.
+    #
+    if (!$initialize && defined($experiment)) {
+	my $user = $experiment->GetSwapper();
+	if (!defined($user)) {
+	    print STDERR "generateConfig: No swapper defined for $experiment\n";
+	}
+	else {
+	    my $uid  = $user->uid();
+	    push(@userlines,
+		 "username $uid capability admin",
+		 "username $uid full-name \"\"",
+		 "username $uid password 7 $encrypted");
+	    
+	    if ($user->GetSSHKeys(\@keys) || !@keys) {
+		print STDERR "generateConfig: No keys for $user\n";
+	    }
+	    else {
+		foreach my $key (@keys) {
+		    push(@userlines,
+			 "ssh client user admin authorized-key sshv2 \"$key\"");
+		}
+	    }
+	}
+    }
+
+    my @config =
+	(@userlines,
+	 "no ipv6 enable",
+	 # These switches always have a vlan 1. Clear IP just in case.
+	 "no interface vlan 1 ip address",
+	 # "write memory local",
+	);
+
+    if ($self->debug()) {
+	foreach my $cl (@config) {
+	    $self->dprint(4,"Reconfigure($node_id): config line: $cl\n");
+	}
+    }
+    return @config;
+}
+
+#
+# Write a configuration to the switch using the expect object.
+#
+sub writeConfig($$@)
+{
+    my ($self, $nodeobject, @config) = @_;
+    my $node_id = $nodeobject->node_id();
+    my $exp     = $self->expectobj();
+
+    $self->dprint(0,"$self writeConfig($node_id): \n");
+
+    #
+    # Write each line, look for some that resembles an error.
+    #
+    foreach my $line (@config) {
+	my $output;
+	my $error;
+	
+	$exp->clear_accum(); # Clean the accumulated output, as a rule.
+	$exp->send($line . "\n");
+	
+	$exp->expect($CONN_TIMEOUT,
+		     [qr/% (.*)\n/,
+		      sub { my $e = shift;
+			    $error = ($e->matchlist)[0];}],
+		     ["-ex", "$node_id $CONFIG_PROMPT"  =>
+		      sub { my $e = shift;
+			    $output = $e->before();}],
+		     );
+
+	if (!$error && $exp->error()) {
+	    $error = $exp->error();
+	}
+	if ($error) {
+	    $self->dprint(0, "$self writeConfig($node_id): ".
+			 "cmd: '$line', error: '$error'\n");
+	    return (1, $error);
+	}
+    }
+    return (0);
+}
+
+#
+# It takes about 30 minutes to write MLNX to the flash drive. Add some
+# padding of course.
+#
+sub MaxWaitTime($$)
+{    
+    my ($self, $nodeobject) = @_;
+
+    return 45 * 60;
+}
+
+#
+# Try to reboot a switch, first looking to see if its running the NOS,
+# and if it is doing it the NOS way. If not running NOS, call up a level
+# for a standard reboot, which will work fine if its runnng ONIE, failing
+# back to a power cycle. 
+#
+sub RebootNOS($$)
+{
+    my ($self, $nodeobject) = @_;
+    my $node_id  = $nodeobject->node_id();
+    my $error;
+
+    #
+    # If its dead, use normal reboot which will power cycle.
+    #
+    if (! $self->Pingable($nodeobject)) {
+	goto reboot;
+    }
+    # Running something else, we use normal reboot.
+    if (0 && ! $self->RunningNOS($nodeobject)) {
+	goto reboot;
+    }
+    if ($self->createExpectObject($nodeobject)) {
+	goto reboot;
+    }
+    my $exp = $self->expectobj();
+
+    $exp->clear_accum();  # Clean the accumulated output, as a rule.
+    $exp->send("\n");     # Get us a prompt.
+	
+    $exp->expect($CONN_TIMEOUT,
+		 [qr/% (.*)\n/,
+		  sub { my $e = shift;
+			$error = ($e->matchlist)[0];}],
+		 ["-ex", "$node_id $CONFIG_PROMPT"  =>
+		  sub { my $e = shift;
+			$e->send("exit\n");
+			exp_continue;}],
+		 ["-ex", "$node_id $USER_PROMPT"  =>
+		   sub { my $e = shift;
+			 $e->send("enable\n");
+			 exp_continue;}],
+		 ["-ex", "$ADMIN_PROMPT"  =>
+		   sub { my $e = shift;
+			 $e->send("reload\n");
+			 exp_continue;}],
+		 [qr/save first\? \[yes\] / =>
+		   sub { my $e = shift;
+			 $e->send("no\n");}],
+		);
+
+    if (!$error && $exp->error()) {
+	$error = $exp->error();
+    }
+    if ($error) {
+	$self->dprint(0, "$self RebootNOS($node_id): error: '$error'\n");
+	goto reboot;
+    }
+    return 0;
+
+  reboot:
+    if (1) {
+	return 0;
+    }
+    return $self->Reboot($nodeobject);
+}
+
+1;
