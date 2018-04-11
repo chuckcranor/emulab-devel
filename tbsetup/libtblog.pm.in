@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2005-2011 University of Utah and the Flux Group.
+# Copyright (c) 2005-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -286,6 +286,11 @@ my $TBLOG_PID;
 my $FORCED_SESSION = 0;
 
 my $REVISION_STR = '$Revision: 2.27 $';
+
+open SOUT ,">&=STDOUT"; # Must be "&=" not "&" to avoid creating a
+                        # new low level file descriper as this
+                        # interacts strangly with the fork in swapexp.
+autoflush SOUT 1;
 
 #
 # Internal Utility Functions
