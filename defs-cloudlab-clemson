@@ -55,9 +55,9 @@ NTPSERVER=ops
 #EXTERNAL_NTPSERVER4=ntp1.emulab.net
 DISABLE_NSE=1
 TBCOOKIESUFFIX="ClemsonCloudLab"
-# XXX hack to work around perl bug
 # Start a multicast IGMP querier
-NEEDMCQUERIER=0
+NEEDMCQUERIER=1
+# XXX hack to work around perl bug
 TBUSEDBI=1
 #
 # SSL Certificate stuff. Used to customize config files in ssl directory.
