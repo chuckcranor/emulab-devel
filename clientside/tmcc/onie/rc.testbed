@@ -74,6 +74,10 @@ waitmode()
 {
     echo "Waiting for something to do"
 
+    # This tells stated we are in the PXEKERNEL state machine.
+    $TMCC state PXEBOOTING
+    sleep 1
+
     #
     # We use bootinfoclient. If we get a reboot command do that,
     # otherwise we just return to query bootwhat again.
@@ -104,18 +108,16 @@ reload_nos()
 {
     echo "Setting up to reload the NOS"
 
-    # Tell boss we are booting.
+    # Tell boss we are booting into reload MFS.
     $TMCC state BOOTING
 
     $BINDIR/rc.reload
     rc=$?
     if [ $rc -ne 0 ]; then
-	echo "Dropping into admin shell"
-	return 1
+	echo "Dropping into the shell after failed reload"
+	exit 1
     fi
-    boot_nos
-    # Should not return
-    return 1;
+    return 0
 }
 
 #
@@ -124,7 +126,7 @@ reload_nos()
 boot_nos()
 {
     echo "Setting up to boot the NOS"
-    
+
     if [ ! -s $EMULABENV ]; then
 	grub-editenv $EMULABENV create
 	rc=$?
@@ -139,6 +141,10 @@ boot_nos()
 	echo "Failed to update grub env with bootnos=yes"
 	return 1
     fi
+    # Tell boss we are booting into reload MFS.
+    $TMCC state BOOTING
+    sleep 5
+    
     echo "Rebooting into the NOS"
     /sbin/reboot
     exit 0;
@@ -176,8 +182,8 @@ while : ; do
 	    ;;
 	*onie_reload)
 	    reload_nos
-	    # Does not return
-	    exit 1
+	    # We loop again to see what we do next. If we got here by the
+	    # reload daemon, we are probably going into waitmode.
 	    ;;
 	*onie_admin)
 	    echo "Dropping into admin mode"

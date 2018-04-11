@@ -36,6 +36,7 @@ my $TBOPS       = "@TBOPSEMAIL@";
 my $OURDOMAIN   = "@OURDOMAIN@";
 my $PING        = "/sbin/ping";
 my $NETCAT      = "/usr/local/bin/netcat";
+my $BISEND      = "$TB/sbin/bootinfosend";
 
 my $EXPECT_CONN_TIMEOUT = 10;
 
@@ -375,9 +376,24 @@ sub Reconfigure($$$)
 {
     my ($self, $nodeobject, $dowait) = @_;
     my $node_id = $nodeobject->node_id();
+    my $reconfig_only = 0;
+    my $running_onie  = 0;
     my $retval;
-    
+
     $self->dprint(0, "$self: Reconfigure($node_id): starting, dowait:$dowait");
+
+    # os_setup is doing only a reconfig.
+    if (!$dowait && !$self->nodeflag($nodeobject, 'reconfig_will_follow')) {
+	$reconfig_only = 1;
+	#
+	# See if the switch is in PXEWAIT, which says we can reboot it
+	# with with node_reboot directly which will tell ONIE to query.
+	#
+	$nodeobject->Refresh();
+	if ($nodeobject->eventstate() eq TBDB_NODESTATE_PXEWAIT()) {
+	    $running_onie = 1;
+	}
+    }
 
     #
     # For now, we allow Reconfigure to block -- it will be called from Reload
@@ -406,6 +422,73 @@ sub Reconfigure($$$)
 	    return 0;
 	}
     }
+    #
+    # Again, $dowait is our indicator we are called from os_setup.
+    # There is a bit of mismatch between the what libossetup_switch
+    # does and what we expect; the switch should be in the ONIE
+    # MFS at this point, so we need to reboot it and wait for it
+    # to come back online before we can actually reconfig.
+    #
+    # If this is a reconfig after reload from os_setup, then the
+    # switch is already in the NOS and ready for us. 
+    #
+    # Need to clean this up, but going to wait until MLNX support.
+    #
+    if ($reconfig_only) {
+	if ($running_onie) {
+	    system("$BISEND -q $node_id");
+	    if ($?) {
+		goto failed;
+	    }
+	}
+	elsif ($self->Reboot($nodeobject)) {
+	    goto failed;
+	}
+
+	#
+	# Now we are waiting for reboot to complete and the switch to come back
+	# online. Should be very quick, although there will some delay before
+	# DHCP finishes and we can ssh over.
+	#
+	my $seconds = 180;
+	$self->dprint(0,"Reconfigure($node_id): ".
+		      "waiting $seconds seconds for ping");
+	# Need time for node to actually reboot;
+	sleep(30);
+	$seconds -= 30;
+	while ($seconds >= 0) {
+	    sleep(15);
+	    $seconds -= 15;
+
+	    last
+		if ($self->Pingable($nodeobject));
+	}
+	if ($seconds < 0) {
+	    tbwarn "$self Reconfigure($node_id): timed out waiting for ping\n";
+	    goto failed;
+	}
+
+	#
+	# Now we wait for sshd to come online. 
+	#
+	$seconds = 180;
+	$self->dprint(0,"Reconfigure($node_id): ".
+		      "waiting $seconds seconds for sshd");
+    
+	while ($seconds >= 0) {
+	    sleep(15);
+	    $seconds -= 15;
+
+	    system("$NETCAT -z -w 3 $node_id 22 > /dev/null ");
+	    if ($? == 0) {
+		last
+	    }
+	}
+	if ($seconds < 0) {
+	    tbwarn "$self Reconfigure($node_id): timed out waiting for sshd\n";
+	    goto failed;
+	}
+    }
 
     #
     # Hand this off to the device dependent library. Which is actually
@@ -415,7 +498,7 @@ sub Reconfigure($$$)
 	goto failed;
     }
     # Signal ossetup that we are done with reconfig.
-    if ($nodeobject->eventstate() eq TBDB_NODESTATE_SHUTDOWN()) {
+    if (!$dowait) {
 	TBSetNodeEventState($node_id, TBDB_NODESTATE_ISUP());
     }
     return 0;

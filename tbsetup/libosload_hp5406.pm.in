@@ -602,6 +602,13 @@ sub Reconfigure($$;$)
 	    return -1;
 	}
 
+	$self->dprint(2,"$self: Reconfigure($node_id): ".
+		      "setting state to SHUTDOWN");
+
+	# Need to do this before we return to ossetup, since it is looking
+	# for a transition to ISUP to know when the Reconfigure is done.
+	TBSetNodeEventState($node_id, TBDB_NODESTATE_SHUTDOWN);
+
 	#
 	# Reload can't block, so fork and make a note of ourself!
 	#

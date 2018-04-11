@@ -394,6 +394,7 @@ sub Reboot($$)
 	$self->dprint(0, "$self RebootNOS($node_id): error: '$error'\n");
 	goto reboot;
     }
+    TBSetNodeEventState($node_id, TBDB_NODESTATE_SHUTDOWN);
     return 0;
 
   reboot:

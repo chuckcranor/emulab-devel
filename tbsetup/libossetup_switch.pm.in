@@ -104,13 +104,6 @@ sub AddNode($$)
 	    || $node->allocstate() eq TBDB_ALLOCSTATE_RES_INIT_DIRTY()) {
 	    $self->{OPLIST}->{$node_id} = [ $libossetup::RECONFIG ];
 	    $node->_setupoperation($libossetup::RECONFIG);
-	    #
-	    # XXX hack -- our node is already ISUP, and we need to force it
-	    # out of that state so taht WaitForNodes doesn't beat our type
-	    # handler object to forcing it to SHUTDOWN
-	    #
-	    print STDERR "$self AddNode($node_id): forcing to SHUTDOWN before RECONFIG\n";
-	    TBSetNodeEventState($node_id,TBDB_NODESTATE_SHUTDOWN);
 	}
 	elsif ($node->allocstate() ne TBDB_ALLOCSTATE_RES_READY()) {
 	    # only reboot node if assign_wrapper just pulled it into expt.
