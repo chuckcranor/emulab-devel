@@ -40,6 +40,7 @@ use libossetup;
 use libosload_new;
 use libtblog_simple;
 use Node;
+use libreboot;
 use English;
 use Data::Dumper;
 use overload ('""' => 'Stringify');

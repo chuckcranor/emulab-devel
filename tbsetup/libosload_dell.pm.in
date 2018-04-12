@@ -40,6 +40,7 @@ my $BOSSNODE_IP = "@BOSSNODE_IP@";
 
 use libosload_switch;
 use base qw(libosload_switch);
+use libdb;
 use libEmulab;
 use emutil;
 use EmulabConstants;
@@ -144,7 +145,7 @@ sub createExpectObject($$)
 	    "Could not connect to switch: $error\n";
 	return -1;
     }
-    $self->expectobj($exp);
+    $self->expectobj($nodeobject,$exp);
     return 0;
 }
 
@@ -207,7 +208,7 @@ sub writeConfig($$@)
 {
     my ($self, $nodeobject, @config) = @_;
     my $node_id = $nodeobject->node_id();
-    my $exp     = $self->expectobj();
+    my $exp     = $self->expectobj($nodeobject);
 
     $self->dprint(0,"$self writeConfig($node_id): \n");
 
@@ -280,7 +281,7 @@ sub DeviceReconfigure($$)
 	return -1;
     }
     if (!defined($experiment)) {
-	$self->expectobj()->soft_close();
+	$self->expectobj($nodeobject)->soft_close();
 	return 0;
     }
     my $user = $experiment->GetSwapper();
@@ -296,12 +297,23 @@ sub DeviceReconfigure($$)
     # to use that flash file for a user. Why can't it be simple like
     # MLNX-OS, where you just send a bunch of strings over!
     #
-    my @keys;
+    my @keys = ();
     $user->GetSSHKeys(\@keys);
+
+    #
+    # ssh-rsa keys only, need to have at least one.
+    #
+    my @tmp = ();
+    foreach my $key (@keys) {
+	next
+	    if ($key !~ /^ssh-rsa/);
+	push(@tmp, $key);
+    }
+    @keys = @tmp;
     if (!@keys) {
 	print STDERR "No ssh keys for $uid\n";
 	return 0;
-    }
+    }    
     
     #
     # Create a temporary file to write the keys to.
@@ -313,8 +325,6 @@ sub DeviceReconfigure($$)
 	return -1;
     }
     foreach my $key (@keys) {
-	next
-	    if ($key !~ /^ssh-rsa/);
 	print $fp $key . "\n";
     }
     close($fp);
@@ -365,7 +375,7 @@ sub Reboot($$)
     if ($self->createExpectObject($nodeobject)) {
 	goto reboot;
     }
-    my $exp = $self->expectobj();
+    my $exp = $self->expectobj($nodeobject);
 
     $exp->clear_accum();  # Clean the accumulated output, as a rule.
     $exp->send("exit\n"); # Back into admin mode.

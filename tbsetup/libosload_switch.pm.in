@@ -60,11 +60,28 @@ sub New($$$)
     my $self = $class->SUPER::New($parent, $type);
     bless($self, $class);
 
+    # Need to store the expectobj someplace for the node.
+    $self->{'EXPECT'} = {};
+
     # We always want debugging output for switches
     if ($self->debug() == 0) {
 	$self->debug(1);
     }
     return $self;
+}
+sub expectobj($$;$)
+{
+    my ($self,$nodeobject,$obj) = @_;
+    my $node_id = $nodeobject->node_id();
+
+    if (defined($obj)) {
+	$self->{'EXPECT'}->{$node_id} = $obj;
+    }
+    else {
+	return undef
+	    if (!exists($self->{'EXPECT'}->{$node_id}));
+    }
+    return $self->{'EXPECT'}->{$node_id};
 }
 
 sub AddNode($$$$) 
@@ -527,28 +544,26 @@ sub Pingable($$)
 }
 
 #
-# Is the switch running the NOS. Imperfect test of course.
+# Is the switch running the NOS. Imperfect test of course, but we
+# really want to avoid power cycle, so if the switch def_boot_osid is
+# set to the node type default, try and log into the switch. Only our
+# switches running our NOS images will have the right username and
+# password, so if we can log in, it is running the NOS.
 #
 sub RunningNOS($$)
 {
     my ($self, $nodeobject) = @_;
     my $node_id  = $nodeobject->node_id();
 
-    #
-    # See if we think its running the NOS. Going to use the current
-    # op_mode for this, looking to see if its the same as the op_mode
-    # for the nodetype default image.
-    #
-    my $default_imageid = $nodeobject->default_imageid();
-    my $default_image   = OSImage->Lookup($default_imageid);
-    if (!defined($default_image)) {
-	tberror("$self: RunningNOS($node_id) Could not get $default_image\n");
+    my $default_osid    = $nodeobject->default_osid();
+    my $def_boot_osid   = $nodeobject->def_boot_osid();
+    if ($def_boot_osid != $default_osid) {
 	return 0;
     }
-    if ($default_image->op_mode() ne $nodeobject->op_mode()) {
-	$self->dprint(0, "$self RuningNOS($node_id): not running the NOS\n");
+    if ($self->createExpectObject($nodeobject)) {
 	return 0;
     }
+    $self->expectobj($nodeobject)->soft_close();
     $self->dprint(0, "$self RuningNOS($node_id): running the NOS\n");
     return 1;
 }
