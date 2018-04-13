@@ -3636,6 +3636,7 @@ sub RemovePhysicalState($;$)
 {
     my ($self, $purge) = @_;
     require Lan;
+    require Interface;
 
     # Must be a real reference. 
     return -1
@@ -3670,6 +3671,9 @@ sub RemovePhysicalState($;$)
     }
     return -1
 	if (Lan->DestroyExperimentLans($self, $purge) != 0);
+
+    return -1
+	if (Interface::LogicalWire->DeleteLogicalWires($self) != 0);
     
     if (@pnodenames || @vnodenames) {
 	my $clause1 = join(" or ", map("node_id='$_'",  @pnodenames))
@@ -3712,6 +3716,7 @@ sub BackupPhysicalState($;$$)
 {
     my ($self, $directory, $regression) = @_;
     require Lan;
+    require Interface;
 
     # Must be a real reference. 
     return -1
@@ -3754,6 +3759,9 @@ sub BackupPhysicalState($;$$)
     }
     return -1
 	if (Lan->BackupExperimentLans($self, $pstateDir) != 0);
+
+    return -1
+	if (Interface::LogicalWire->BackupLogicalWires($self, $pstateDir) != 0);
 
     if (@pnodenames || @vnodenames) {
 	my $clause = join(" or ", map("node_id='$_'",
@@ -3823,6 +3831,7 @@ sub RestorePhysicalState($)
 {
     my ($self) = @_;
     require Lan;
+    require Interface;
 
     # Must be a real reference. 
     return -1
@@ -3836,6 +3845,9 @@ sub RestorePhysicalState($)
 
     return -1
 	if (Lan->RestoreExperimentLans($self, $pstateDir) != 0);
+    
+    return -1
+	if (Interface::LogicalWire->RestoreLogicalWires($self, $pstateDir));
     
     foreach my $table (keys(%physicalTables),
 		       "vinterfaces", "interface_settings") {

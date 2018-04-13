@@ -7127,6 +7127,10 @@ sub CleanupDeadSlice($;$)
 		return -1;
 	    }
 	}
+	if (Interface::LogicalWire->DeleteLogicalWires($experiment)) {
+	    print STDERR "Could not delete logical wires and interfaces\n";
+	    return -1;
+	}
 
 	#
 	# A firewalled slice gets special treatment.
