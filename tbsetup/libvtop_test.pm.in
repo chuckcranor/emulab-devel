@@ -29,7 +29,7 @@ use vars qw(@ISA @EXPORT @EXPORT_OK
 	    $VTOP_FLAGS_UPDATE $VTOP_FLAGS_VERBOSE $VTOP_FLAGS_QUIET
 	    $VTOP_FLAGS_FIXNODES $VTOP_FLAGS_IMPOTENT $VTOP_FLAGS_ALLOCONLY
 	    $VTOP_FLAGS_REGRESSION $VTOP_FLAGS_FIXLANNODES
-	    $VTOP_FLAGS_PREASSIGN);
+	    $VTOP_FLAGS_PREASSIGN $VTOP_FLAGS_COMMITMODE);
 
 @ISA    = "Exporter";
 @EXPORT = qw( );
@@ -86,11 +86,12 @@ $VTOP_FLAGS_QUIET       = 0x20;
 $VTOP_FLAGS_ALLOCONLY	= 0x40;
 $VTOP_FLAGS_FIXLANNODES	= 0x80;
 $VTOP_FLAGS_PREASSIGN	= 0x100;
+$VTOP_FLAGS_COMMITMODE	= 0x200;
 
 @EXPORT_OK = qw($VTOP_FLAGS_UPDATE $VTOP_FLAGS_VERBOSE $VTOP_FLAGS_FIXNODES
 		$VTOP_FLAGS_IMPOTENT $VTOP_FLAGS_REGRESSION $VTOP_FLAGS_QUIET
 		$VTOP_FLAGS_ALLOCONLY $VTOP_FLAGS_FIXLANNODES
-		$VTOP_FLAGS_PREASSIGN);
+		$VTOP_FLAGS_PREASSIGN $VTOP_FLAGS_COMMITMODE);
 
 #
 # Create an object representing the stuff we need to create the vtop file.
@@ -247,6 +248,7 @@ sub impotent($)		{ return $_[0]->flags() & $VTOP_FLAGS_IMPOTENT; }
 sub alloconly($)	{ return $_[0]->flags() & $VTOP_FLAGS_ALLOCONLY; }
 sub regression($)	{ return $_[0]->flags() & $VTOP_FLAGS_REGRESSION; }
 sub preassign($)	{ return $_[0]->flags() & $VTOP_FLAGS_PREASSIGN; }
+sub commitmode($)	{ return $_[0]->flags() & $VTOP_FLAGS_COMMITMODE; }
 sub printdb($$)		{ print $_[1] if ($_[0]->verbose()); return 1; }
 
 # We name delay nodes internally as they are needed.
@@ -5599,8 +5601,16 @@ sub AllocNodes($)
 	    # Node is being reused, but for a different purpose, so
 	    # it should be rebooted.
 	    #
+	    # XXX Note that when we use alloconly mode, and then we
+	    # "commit" the allocations, we do not want to change the
+	    # allocstate cause that messes up os_setup later. This is
+	    # relevant to the Geni path only.
+	    #
 	    $pnode->SetAllocState(TBDB_ALLOCSTATE_RES_REBOOT())
-		if (! $self->impotent());
+		if (! ($self->impotent() ||
+		       ($self->commitmode() &&
+			$pnode->allocstate() eq
+			TBDB_ALLOCSTATE_RES_INIT_DIRTY())));
 	}
     }
   skip:
@@ -6608,8 +6618,9 @@ sub InterpLinksAux($)
 		    # sees that wire (as for snmpit).
 		    #
 		    my $logicalwire =
-			Interface::LogicalWire->Create($self->impotent() ||
-						       $self->alloconly(),
+			Interface::LogicalWire->Create(($self->impotent() ||
+							$self->alloconly()
+							? 1 : 0),
 						       $nodeA, $portA,
 						       $nodeB, $portB);
 		    return -1

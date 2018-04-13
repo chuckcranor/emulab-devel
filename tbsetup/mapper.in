@@ -72,7 +72,7 @@ sub usage ()
     print STDERR " -A   - Tell ptopgen all nodes are free; only with -n\n";
     exit($WRAPPER_FAILED);
 }
-my $optlist    = "dvunfprqczxm:ko:altzZACFNL:S:G";
+my $optlist    = "dvunfprqczxm:ko:abltzZACFNL:S:G";
 my $verbose    = 0;
 my $debug      = 0;
 my $fixmode    = 0;
@@ -84,6 +84,7 @@ my $allnodesfree = 0;
 my $toponly    = 0;
 my $prepass    = 0;
 my $alloconly  = 0;
+my $commitmode = 0;
 my $gblinkcheck= 0;
 my $outfile;
 my $mfactor;
@@ -180,6 +181,9 @@ if (defined($options{"v"})) {
 }
 if (defined($options{"a"})) {
     $alloconly++;
+}
+if (defined($options{"b"})) {
+    $commitmode++;
 }
 if (defined($options{"A"})) {
     $allnodesfree++;
@@ -344,6 +348,8 @@ $vtopflags |= $libvtop::VTOP_FLAGS_IMPOTENT
     if ($impotent);
 $vtopflags |= $libvtop::VTOP_FLAGS_ALLOCONLY
     if ($alloconly);
+$vtopflags |= $libvtop::VTOP_FLAGS_COMMITMODE
+    if ($commitmode);
 $vtopflags |= $libvtop::VTOP_FLAGS_REGRESSION
     if ($regression);
 

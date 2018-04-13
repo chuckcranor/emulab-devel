@@ -4479,7 +4479,8 @@ sub SliverWorkAux($)
     DebugTimeStamp("Starting mapper");
     
     # Add -u for update mode, but not -f (fixnode). 
-    my $output = GeniUtil::ExecQuiet("$MAPPER -d -v $solfile -z -u $pid $eid");
+    my $output =
+	GeniUtil::ExecQuiet("$MAPPER -b -d -v $solfile -z -u $pid $eid");
     if ($?) {
 	my $logstuff = "";
 	$message = "Could not map to resources";
