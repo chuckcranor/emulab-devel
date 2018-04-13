@@ -284,22 +284,70 @@ sub DeviceReconfigure($$)
 	$self->expectobj($nodeobject)->soft_close();
 	return 0;
     }
-    my $user = $experiment->GetSwapper();
+    #
+    # Deal with SSH keys.
+    #
+    my $nonlocal = 0;
+    my @keys = ();
+    my $user;
+
+    #
+    # Nonlocal (geni experiments) are a little more trouble, since the
+    # swapper is "geniuser" and the keys are in nonlocal_user_pubkeys.
+    #
+    if ($experiment->geniflags()) {
+	#
+	# Look at the project, if its a nonlocal project then we need
+	# the nonlocal keys. But with PROTOGENI_LOCALUSER, we might
+	# have a local project (and thus a local user).
+	#
+	my $project = $experiment->GetProject();
+	
+	if (!defined($project)) {
+	    print STDERR "generateConfig: No project for $experiment\n";
+	    return 0;
+	}
+	$nonlocal = $project->IsNonLocal();
+	$user = $experiment->GetCreator();
+    }
+    else {
+	$user = $experiment->GetSwapper();
+    }
     if (!defined($user)) {
 	print STDERR "generateConfig: No swapper defined for $experiment\n";
 	return 0;
     }
     my $uid = $user->uid();
 
+    # Now the keys.
+    if ($nonlocal) {
+	#
+	# Grab all the nonlocal users and then find the keys for the
+	# experiment creator.
+	#
+	my $tmp;
+	$experiment->NonLocalUsers(\$tmp);
+	if (defined($tmp)) {
+	    foreach my $ref (@{$tmp}) {
+		if ($ref->{'urn'} eq $user->nonlocal_id()) {
+		    foreach my $key (@{ $ref->{'keys'} }) {
+			push(@keys, $key->{'key'})
+		    }
+		    $uid = $ref->{'login'};
+		    last;
+		}
+	    }
+	}
+    }
+    else {
+	$user->GetSSHKeys(\@keys);
+    }
+    
     #
     # More fun. FTOS is highly stupid when it comes to SSH keys. You have
     # to copy them over via tftp to a local flash file, and then tell FTOS
     # to use that flash file for a user. Why can't it be simple like
     # MLNX-OS, where you just send a bunch of strings over!
-    #
-    my @keys = ();
-    $user->GetSSHKeys(\@keys);
-
     #
     # ssh-rsa keys only, need to have at least one.
     #
@@ -335,14 +383,24 @@ sub DeviceReconfigure($$)
     # Local file name for the switch
     my $basename = basename($filename);
 
-    @config =
-	("copy tftp://$BOSSNODE_IP/ualloc-downloads/$basename ".
+    @config = ();
+
+    #
+    # For geni experiments, we have to create the user since the uid
+    # is different (see above).
+    #
+    if ($nonlocal) {
+	@config = ("configure",
+		   "username $uid nopassword privilege 15 role sysadmin",
+		   "exit");
+    }
+    push(@config,
+	 "copy tftp://$BOSSNODE_IP/ualloc-downloads/$basename ".
 	 " flash://$basename",
 	 "ip ssh rsa-authentication username $uid ".
 	 " authorized-keys flash://$basename",
-	 "write memory",
-	);
-
+	 "write memory");
+    
     if ($self->writeConfig($nodeobject, @config)) {
 	print STDERR "Could not send ssh keys to $node_id\n";
 	return -1;
