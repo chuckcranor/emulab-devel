@@ -223,9 +223,6 @@ sub createExpectObject($)
     }
     $exp->raw_pty(0);
     $exp->log_stdout(0);
-    if ($self->{DEBUG}) {
-	$exp->log_file("/tmp/snmpit_netscout.log");
-    }
     $exp->spawn($spawn_cmd)
     or die "Cannot spawn $spawn_cmd: $!\n";
     $exp->expect($CLI_TIMEOUT,
@@ -786,10 +783,6 @@ sub removePortsFromVlan($@) {
 		warn("$id: ERROR: Failed to deactivate $vlan_id: $output\n");
 		$errors++;
 	    }
-	}
-	if (keys(%{$ports})) {
-
-
 	}
     }
     return $errors;
