@@ -64,7 +64,15 @@ $BOSS_PORT = "emulab-boss-1.8";
 $OPS_PORT  = "emulab-ops-1.4"; 
 $FS_PORT   = "emulab-fs-1.4";
 if ($FBSD_MAJOR > 4) {
-    if ($FBSD_MAJOR > 10 || ($FBSD_MAJOR == 10 && $FBSD_MINOR > 1)) {
+    if ($FBSD_MAJOR > 10) {
+	$BOSS_PORT = "emulab-boss-7.1";
+	$OPS_PORT = "emulab-ops-7.1";
+	$FS_PORT = "emulab-fs-7.1";
+    } elsif ($FBSD_MAJOR == 10 && $FBSD_MINOR > 2) {
+	$BOSS_PORT = "emulab-boss-6.3";
+	$OPS_PORT = "emulab-ops-6.3";
+	$FS_PORT = "emulab-fs-6.3";
+    } elsif ($FBSD_MAJOR == 10 && $FBSD_MINOR > 1) {
 	$BOSS_PORT = "emulab-boss-6.2";
 	$OPS_PORT = "emulab-ops-6.2";
 	$FS_PORT = "emulab-fs-6.2";
