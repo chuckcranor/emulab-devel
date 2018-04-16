@@ -36,7 +36,7 @@ sub usage()
 }
 my $optlist   = "vn";
 my $verbose   = 0;
-my $impotent  = 1;
+my $impotent  = 0;
 
 # Protos
 sub fatal($);
