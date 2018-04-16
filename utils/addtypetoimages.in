@@ -113,6 +113,7 @@ while (my ($imageid) = $query_result->fetchrow_array()) {
     my $image = Image->Lookup($imageid);
     if (!defined($image)) {
 	print STDERR "Cannot lookup $imageid, skipping\n";
+	next;
     }
     my @typelist = $image->TypeList();
     next
