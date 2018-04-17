@@ -232,7 +232,7 @@ $ARCHSUPPORT		= @ARCHIVESUPPORT@;
 $BROWSER_CONSOLE_ENABLE = @BROWSER_CONSOLE_ENABLE@;
 $WITHZFS		= @WITHZFS@;
 $WITHAMD		= @WITHAMD@;
-$IMAGEUPLOADONFS	= @IMAGEUPLOADONFS@;
+$IMAGEUPLOADTOFS	= @IMAGEUPLOADTOFS@;
 
 #
 # Python/Perl paths
@@ -246,6 +246,7 @@ $EMULAB_PERL_PATH	= "/usr/bin/perl";
 $EMULAB_PYTHON_PATH	= "/usr/local/bin/python";
 $PORT_PERL_PATH		= "/usr/local/bin/perl5";
 $PORT_PYTHON_PATH	= "/usr/local/bin/python2";
+$PORT_PYTHON_PATH2	= "/usr/local/bin/python2.7";
 
 #
 # Some programs we use

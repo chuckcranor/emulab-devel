@@ -18,7 +18,7 @@ sub Install($$$)
     return 0
 	if ($isupdate);
 
-    if ($IMAGEUPLOADONFS) {
+    if ($IMAGEUPLOADTOFS) {
 	push(@LOGFILES, "$LOGDIR/mfrisbeed.log");
 	push(@LOGFILES, "$LOGDIR/frisuploadd.log");
     }
@@ -110,7 +110,7 @@ sub Install($$$)
 	    print SC "*.*\t\t\t\t\t\t${LOGDIR}/elvin_gateway.log\n";
 	    print SC "!shellinabox\n";
 	    print SC "*.*\t\t\t\t\t\t${LOGDIR}/shellinabox.log\n";
-	    if ($IMAGEUPLOADONFS) {
+	    if ($IMAGEUPLOADTOFS) {
 		print SC "!mfrisbeed\n";
 		print SC "*.*\t\t\t\t\t\t${LOGDIR}/mfrisbeed.log\n";
 		print SC "!frisuploadd\n";
