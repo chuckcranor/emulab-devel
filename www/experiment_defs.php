@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -714,6 +714,7 @@ class Experiment
 	$exp_swapuid = $exprow["expt_swap_uid"];
 	$exp_end     = $exprow["expt_end"];
 	$exp_created = $exprow["expt_created"];
+	$exp_expires = $exprow["expt_expires"];
 	$exp_head    = $exprow["expt_head_uid"];
 	$exp_swapper = $exprow["swapper_idx"];
 	$exp_state   = $exprow["state"];
@@ -941,6 +942,12 @@ class Experiment
               </tr>\n";
 
 	    if (ISADMIN()) {
+	        if ($exp_expires) {
+		    echo "<tr>
+		          <td>Expires: </td>
+		          <td class=\"left\">$exp_expires</td>
+		          </tr>\n";
+                }
 		echo "<tr>
                     <td>Idle Ignore:</td>
                     <td class=\"left\">$idle_ignore</td>
