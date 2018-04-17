@@ -1373,9 +1373,12 @@ sub ActionStart($$;$)
     }
     
     my @nodes = keys(%nodes);
-    print STDERR "Calling os_setup @nodes\n";
-    my $rval = system("$OSSETUP $pid $eid @nodes");
-    print STDERR "os_setup exited with status $rval\n";
+    my $rval  = 0;
+    if (@nodes) {
+	print STDERR "Calling os_setup @nodes\n";
+	$rval = system("$OSSETUP $pid $eid @nodes");
+	print STDERR "os_setup exited with status $rval\n";
+    }
     $experiment->SetState($expstate);
 
     #
@@ -3189,12 +3192,16 @@ sub BatchAction($$@)
     my %starts  = ();
     my %poweron = ();
     my %states  = ();
+    my %switches= ();
     
     foreach my $sliver (@slivers) {
+	my $sliver_idx = $sliver->idx();
+	
 	next
 	    if (ref($sliver) ne "GeniSliver::Node" &&
 		ref($sliver) ne "GeniSliver::Vhost");
-	$states{"$sliver->idx()"} = $sliver->state();
+	
+	$states{"$sliver_idx"} = $sliver->state();
 
 	my $node = Node->Lookup($sliver->resource_id());
 	if (!defined($node)) {
@@ -3244,6 +3251,9 @@ sub BatchAction($$@)
 		    $reboots{$node_id} = $node;
 		}
 	    }
+	    if ($node->isswitch()) {
+		$switches{$node_id} = $node;
+	    }
 	}
 	else {
 	    $msg .= "$node is reserved to another, not $self";
@@ -3276,7 +3286,14 @@ sub BatchAction($$@)
 	# Mark them as being reloaded See below.
 	map { $_->_reloaded(1) } values(%reloads);
 	
-	system("$OSLOAD -c -s @node_ids");
+	#
+	# XXX basically, tell devices that might be reconfig'd via push
+	# from us (like switches) that a reconfig should follow the reload!
+	# Do this in waitmode, since we have wrapper forked, and we want
+	# the output to go our log file. If we do it in the background,
+	# the log output goes to /dev/null.
+	#
+	system("$OSLOAD -R -d -c @node_ids");
 	if ($?) {
 	    $msg .= "OSload failed on @node_ids";
 	    goto bad;
@@ -3298,13 +3315,32 @@ sub BatchAction($$@)
     if (keys(%reboots)) {
 	my @node_ids = keys(%reboots);
 
-	# Mark them as being rebooted. See below.
-	map { $_->_rebooted(1) } values(%reboots);
+	#
+	# Need to cull out the switches and do them special, since we
+	# we do not have switch specific reboot in libreboot. Need to
+	# work on that at some point.
+	#
+	if (keys(%switches)) {
+	    @node_ids = map { exists($switches{$_}) ? () : $_ } @node_ids;
+	}
 
-	system("$NODEREBOOT @node_ids");
-	if ($?) {
-	    $msg .= "Failed to reboot @node_ids";
-	    goto bad;
+	if (@node_ids) {
+	    # Mark them as being rebooted. See below.
+	    map { $_->_rebooted(1) } values(%reboots);
+	
+	    system("$NODEREBOOT @node_ids");
+	    if ($?) {
+		$msg .= "Failed to reboot @node_ids";
+		goto bad;
+	    }
+	}
+	if (keys(%switches)) {
+	    if ($self->RebootSwitches(values(%switches))) {
+		my @ids = keys(%switches);
+		
+		$msg .= "Failed to reboot switches @ids";
+		goto bad;
+	    }
 	}
     }
     if (keys(%starts)) {
@@ -3331,9 +3367,12 @@ sub BatchAction($$@)
     return 0;
 
   bad:
+    # Revert the state to original.
     foreach my $sliver (@slivers) {
-	if (exists($states{$sliver->idx()})) {
-	    $sliver->SetState($states{$sliver->idx()});
+	my $sliver_idx = $sliver->idx();
+	
+	if (exists($states{"$sliver_idx"})) {
+	    $sliver->SetState($states{"$sliver_idx"});
 	}
     }
     if (defined($msg)) {
@@ -3738,6 +3777,28 @@ sub GenerateStatusBlob($)
 	"utc"           => time(),
     };
     return $blob;
+}
+
+#
+# Reboot switches. This is messy until we get libreboot recast into
+# type specific modules.
+#
+sub RebootSwitches($@)
+{
+    my ($self, @switches) = @_;
+    require libosload_switch;
+
+    foreach my $switch (@switches) {
+	my $object = libosload_new->New();
+	my $typeobj = $object->NewType($switch->type());
+	$object->debug(1);
+
+	if ($typeobj->RebootWait($switch) != 0) {
+	    print STDERR "RebootNOS of switch $switch failed\n";
+	    return -1;
+	}
+    }
+    return 0;
 }
 
 ############################################################################

@@ -1063,9 +1063,12 @@ sub ReloadSliver($)
     my $slice_urn    = $argref->{'slice_urn'};
     my $sliver_urns  = $argref->{'sliver_urns'} || $argref->{'component_urns'};
     my $credentials  = $argref->{'credentials'};
+    my $asyncmode    = (exists($argref->{'asyncmode'}) ?
+			$argref->{'asyncmode'} : 0);
 
     return SliverAction("reload",
-			$slice_urn, $sliver_urns, $credentials, undef, 0);
+			$slice_urn, $sliver_urns, $credentials, undef,
+			$asyncmode);
 }
 
 sub SliverAction($$$$$$)
