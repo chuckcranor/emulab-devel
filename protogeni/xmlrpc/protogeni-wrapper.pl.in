@@ -35,6 +35,9 @@
 #
 use strict;
 use English;
+# Need to load this early for BEGIN.
+use lib '@prefix@/lib';
+use GeniResponse;
 
 BEGIN {
     require Frontier::Responder;
@@ -135,7 +138,6 @@ use vars qw($EMULAB_PEMFILE $GENI_METHODS $GENI_VERSION
 	    $GENI_RESPONSE_CONVERTER $PROJECT);
 
 # Testbed libraries.
-use lib '@prefix@/lib';
 use emutil;
 use Genixmlrpc;
 use GeniResponse;
