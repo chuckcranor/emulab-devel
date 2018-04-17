@@ -2062,11 +2062,12 @@ sub ExperimentLogicalWires($$$)
 #
 # Delete all logical wires for an experiment, as for swapout.
 #
-sub DeleteLogicalWires($$)
+sub DeleteLogicalWires($$;$)
 {
-    my ($class, $experiment) = @_;
+    my ($class, $experiment, $force) = @_;
     my @wires  = ();
     my $errors = 0;
+    $force = 0 if (!defined($force));
 
     return -1
 	if (! ref($experiment));
@@ -2079,9 +2080,10 @@ sub DeleteLogicalWires($$)
     foreach my $wire (@wires) {
 	print STDERR "Deleting $wire\n";
 	
-	if ($wire->IsActive()) {
+	if ($wire->IsActive() && !$force) {
 	    print STDERR "$wire is still active; cannot delete!\n";
 	    $errors++;
+	    next;
 	}
 	my ($interface1, $interface2) = $wire->Interfaces();
 
@@ -2143,6 +2145,17 @@ sub RestoreLogicalWires($$$)
 	    or return -1;
     }
     return 0;
+}
+
+#
+# Remove all logical wires for an experiment, as for modify.
+#
+sub RemoveLogicalWires($$)
+{
+    my ($class, $experiment) = @_;
+
+    # Force deletion of active logical wires for swapmod. 
+    return DeleteLogicalWires($class, $experiment, 1);
 }
 
 ##############################################################################

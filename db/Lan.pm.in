@@ -587,7 +587,8 @@ sub CompareVlansWithSwitches2($$)
 	   $query_result->fetchrow_array()) {
 
 	my $vlan = VLan->Lookup($experiment, $vname);
-	if (!defined($vlan) || $vlan->type ne "vlan") {
+	if (!defined($vlan) ||
+	    ($vlan->type ne "vlan" && $vlan->type ne "wire")) {
 	    #
 	    # The vlan was deleted.
 	    #

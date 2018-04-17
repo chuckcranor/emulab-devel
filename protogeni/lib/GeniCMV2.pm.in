@@ -2348,12 +2348,23 @@ sub DeleteNodes($)
 	    print STDERR "No virtual node for $noderef\n";
 	    return GeniResponse->Create(GENIRESPONSE_ERROR());
 	}
-	$allnodes{$id} = $id;
+	my $vnode_id = GeniXML::GetVnodeId($noderef);
+	my $pnode = GeniUtil::LookupNode($vnode_id);
+	if (!defined($pnode)) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Bad resource $vnode_id in manifest");
+	}
+	$allnodes{$id} = $pnode;
     }
     foreach my $nodeid (keys(%nodelist)) {
 	if (!exists($allnodes{$nodeid})) {
 	    return GeniResponse->Create(GENIRESPONSE_BADARGS(), undef,
-					"No such node $nodeid in the topology!");
+				"No such node $nodeid in the topology!");
+	}
+	my $pnode = $allnodes{$nodeid};
+	if ($pnode->isswitch()) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS(), undef,
+			"Not allowed to delete switches from topology!");
 	}
     }
     main::AddLogfileMetaDataFromSlice($slice);
@@ -2382,6 +2393,8 @@ sub DeleteNodes($)
     if (keys(%ifacestoremovefromlans)) {
 	foreach my $linkref (GeniXML::FindNodes("n:link",
 						$manifest)->get_nodelist()) {
+	    my $link_id = GeniXML::GetVirtualId($linkref);
+	    
 	    foreach my $iref (GeniXML::FindNodes("n:interface_ref",
 						 $linkref)->get_nodelist()) {
 		my $client_id = GeniXML::GetInterfaceId($iref);
@@ -2390,6 +2403,15 @@ sub DeleteNodes($)
 
 		$linkref->removeChild($iref);
 	    }
+	}
+    }
+    # Purge links if we reduced the number of interfaces to <= 1.
+    foreach my $linkref (GeniXML::FindNodes("n:link",
+					    $manifest)->get_nodelist()) {
+	my @ifaces = GeniXML::FindNodes("n:interface_ref",
+					$linkref)->get_nodelist();
+	if (@ifaces <= 1) {
+	    $manifest->removeChild($linkref);
 	}
     }
     my $rspecstr = GeniXML::Serialize($manifest);

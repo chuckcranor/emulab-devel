@@ -3673,7 +3673,7 @@ sub RemovePhysicalState($;$)
 	if (Lan->DestroyExperimentLans($self, $purge) != 0);
 
     return -1
-	if (Interface::LogicalWire->DeleteLogicalWires($self) != 0);
+        if (Interface::LogicalWire->RemoveLogicalWires($self) != 0);
     
     if (@pnodenames || @vnodenames) {
 	my $clause1 = join(" or ", map("node_id='$_'",  @pnodenames))
@@ -3845,7 +3845,7 @@ sub RestorePhysicalState($)
 
     return -1
 	if (Lan->RestoreExperimentLans($self, $pstateDir) != 0);
-    
+
     return -1
 	if (Interface::LogicalWire->RestoreLogicalWires($self, $pstateDir));
     
