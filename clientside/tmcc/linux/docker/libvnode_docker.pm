@@ -4335,6 +4335,7 @@ sub emulabizeImage($;$$$$$$$$)
 	$newimage = $image;
 	$newimage =~ tr/:/-/;
 	$newimagecdirname = $newimage;
+	$newimagecdirname =~ tr/\//---/;
 	$newimage .= ":emulab-$newzation";
 	$newimagecdirname .= "--emulab-$newzation";
     }
@@ -4342,6 +4343,7 @@ sub emulabizeImage($;$$$$$$$$)
 	$newimage = $$newimageref;
 	$newimagecdirname = "$newimage--emulab-$newzation";
 	$newimagecdirname =~ tr/:/-/;
+	$newimagecdirname =~ tr/\//---/;
     }
 
     #
