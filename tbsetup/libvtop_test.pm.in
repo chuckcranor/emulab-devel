@@ -9167,7 +9167,8 @@ sub UpLoadIPAddresses($)
 	my $mask     = $virtlan->_mask();
 
 	next
-	    if ($virtlan->_layer() != 2 && $virtlan->_layer() != 3);
+	    if (!($virtlan->_layer() == 2 || $virtlan->_layer() == 3 ||
+		  ($virtlan->_layer() == 1 && $self->experiment()->geniflags)));
 
 	foreach my $member ($virtlan->memberlist()) {
 	    # Will this happen?

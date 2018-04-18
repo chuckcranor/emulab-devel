@@ -2729,8 +2729,15 @@ sub GetTicketAuxAux($)
 	    }
 
 	    # XXX
-	    $ip     = "10.10.${linknum}.${ifacenum}" if (!defined($ip));
-	    $mask   = "255.255.255.0" if (!defined($mask));
+	    if ($layer == 1 && !defined($ip)) {
+		# Do not provide an IP for layer 1 links unless user says to.
+		$ip   = "";
+		$mask = "255.255.255.0"
+	    }
+	    elsif (!defined($ip)) {
+		$ip     = "10.10.${linknum}.${ifacenum}";
+		$mask = "255.255.255.0" if (!defined($mask));
+	    }
 	    my $member    = "$node_nickname:$iface_vport";
 	    my $bandwidth = $default_bandwidth;
 	    my $rbandwidth= $default_bandwidth;
