@@ -3881,6 +3881,10 @@ sub DeleteImage($)
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
 				    "No such image: $image_urn");
     }
+    if (defined($image->deleted())) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Already deleted: $image_urn");
+    }
     my $imageid     = $image->imageid();
     my $creator_urn = $image->creator_urn();
 
