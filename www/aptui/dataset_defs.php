@@ -25,6 +25,7 @@
 class Dataset
 {
     var	$dataset;
+    var $project;
 
     #
     # Constructor by lookup on unique index.
@@ -48,6 +49,8 @@ class Dataset
 	    return;
 	}
 	$this->dataset = mysql_fetch_array($query_result);
+	# Load lazily;
+	$this->project    = null;
     }
 
     # Hmm, how does one cause an error in a php constructor?
@@ -217,6 +220,19 @@ class Dataset
                          "  webtask_id='$webtask_id' ".
                          "where idx='$idx'");
         return $webtask;
+    }
+
+    function Project() {
+	$pid = $this->pid();
+
+	if ($this->project)
+	    return $this->project;
+
+	$this->project = Project::Lookup($pid);
+	if (! $this->project) {
+	    TBERROR("Could not lookup project $pid!", 1);
+	}
+	return $this->project;
     }
 }
 
