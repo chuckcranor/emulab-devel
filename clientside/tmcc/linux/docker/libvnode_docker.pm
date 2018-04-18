@@ -2798,6 +2798,24 @@ sub vnodeCreate($$$$)
     push(@{$args{"HostConfig"}{"Binds"}},
 	 "/etc/emulab/emulab.pem:/etc/emulab/emulab.pem:ro");
 
+    # piping through custom CMD and PATH variables for users of the docker
+    # images. Just have to write them to a file and let the runit utility
+    # do the rest
+    my $dockerenvdir = "$mntdir/etc.emulabdocker";
+    mkdir($dockerenvdir);
+    if (exists($attributes->{'DOCKER_ENV'})) {
+	open(FD, ">$dockerenvdir/dockerenv");
+	print FD $attributes->{'DOCKER_ENV'};
+	close(FD);
+	push(@{$args{"HostConfig"}{"Binds"}}, "$dockerenvdir/dockerenv:/etc/emulab/docker/dockerenv:ro");
+    }
+    if (exists($attributes->{'DOCKER_CMD'})) {
+	open(FD, ">$dockerenvdir/dockercmd");
+	print FD $attributes->{'DOCKER_CMD'};
+	close(FD);
+	push(@{$args{"HostConfig"}{"Binds"}}, "$dockerenvdir/dockercmd:/etc/emulab/docker/dockercmd:ro");
+    }
+
     #
     # We allow the server to tell us how many VCPUs to allocate to the
     # guest. 
@@ -4512,6 +4530,84 @@ sub emulabizeImage($;$$$$$$$$)
 		mysystem2("rsync -a $DOCKERFILES/$dir/fs/ $hdir/");
 	    }
 	}
+
+	mkdir("$hdir/etc/service/dockerentrypoint");
+
+	open(my $runitfile, ">", "$hdir/etc/service/dockerentrypoint/run");
+
+	print $runitfile "#!/bin/sh\n";
+	print $runitfile "\n";
+	print $runitfile "# This is an automatically generated runit file based on the docker image's entrypoint and cmd\n\n";
+
+	my $dockerenvironmentvars;
+
+	if (exists($iattrs{DOCKER_ENV})) {
+	    $dockerenvironmentvars = $iattrs{DOCKER_ENV};
+	    foreach my $elem (@$dockerenvironmentvars) {
+		print $runitfile $elem;
+		print $runitfile "\n";
+	    }
+	}
+
+	# handle if a user enters in extra environment variables using the 
+	# profile parameters section
+	print $runitfile "if [ -f /etc/emulab/docker/dockerenv ]; then\n";
+	print $runitfile "  . /etc/emulab/docker/dockerenv\n";
+	print $runitfile "fi\n";
+
+	print $runitfile "\n";
+
+	my $dockerentrypoint;
+	my $dockercmd;
+
+	print $runitfile "if [ ! -f /etc/emulab/docker/dockercmd ]; then\n";
+
+	if (exists($iattrs{DOCKER_ENTRYPOINT})) {
+	    $dockerentrypoint = $iattrs{DOCKER_ENTRYPOINT};
+	    # check if first arg is /bin/sh
+	    if ($dockerentrypoint->[0] ne "/bin/sh") {
+		print $runitfile "exec ";
+	    }
+	    # print whole thing to file
+	    # need to be careful about variables to be expanded
+	    foreach my $elem (@$dockerentrypoint) {
+		print $runitfile $elem;
+		print $runitfile " ";
+	    }
+	}
+
+	if (exists($iattrs{DOCKER_CMD})) {
+	    $dockercmd = $iattrs{DOCKER_CMD};
+	    if ($dockercmd->[0] ne "/bin/sh" and !defined($dockerentrypoint)) {
+		print $runitfile "exec ";
+	    }
+
+	    foreach my $elem (@$dockercmd) {
+		print $runitfile $elem;
+		print $runitfile " ";
+	    }
+	}
+
+	print $runitfile "\n";
+	print $runitfile "else\n";
+	print $runitfile "exec ";
+
+	if (exists($iattrs{DOCKER_ENTRYPOINT})) {
+	    $dockerentrypoint = $iattrs{DOCKER_ENTRYPOINT};
+	    # print whole thing to file
+	    # need to be careful about variables to be expanded
+	    foreach my $elem (@$dockerentrypoint) {
+		print $runitfile $elem;
+		print $runitfile " ";
+	    }
+	}
+
+	print $runitfile '"$(cat /var/emulab/docker/dockercmd)"';
+	print $runitfile "\n";
+	print $runitfile "fi\n";
+	print $runitfile "\n\n";
+	print $runitfile "exit 0";
+	close $runitfile;
 
 	#
 	# Before we start setting up the new image Dockerfile, run
