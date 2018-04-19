@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1271,6 +1271,55 @@ sub CheckIdle()
 }
 
 #
+# Check Aggregate states/status. 
+#
+sub CheckAggregates()
+{
+    my $query_result =
+	GeniDB::DBQueryWarn("select idx from geni_aggregates ".
+			    "where type='Aggregate' and status!='ready'");
+
+    while (my ($idx) = $query_result->fetchrow_array()) {
+	my $aggregate = GeniAggregate->Lookup($idx);
+
+	if (!defined($aggregate)) {
+	    # aggregate is gone, lets not worry.
+	    next;
+	}
+	my $slice = $aggregate->GetSlice();
+	if (!defined($slice)) {
+	    # slice is gone, lets not worry.
+	    $aggregate->Flush();
+	    next;
+	}
+	if ($slice->Lock() != 0) {
+	    goto skip;
+	}
+	my $state  = $aggregate->state();
+	my $status = $aggregate->status();
+	my $stamp  = $aggregate->status_state_timestamp();
+	
+	#
+	# If an aggregate have been trying to update users for more then
+	# 30 minutes, kill that and return the aggregate to normal status.
+	#
+	if ($state eq "updating_users" && time() - $stamp > 1 * 60) {
+	    if ($impotent) {
+		print STDERR "Would cancel update accounts for $aggregate\n";
+	    }
+	    else {
+		print STDERR "Canceling update accounts for $aggregate\n";
+		$aggregate->CancelUpdateAccounts();
+	    }
+	}
+	$slice->UnLock();
+      skip:
+	$slice->Flush();
+	$aggregate->Flush();
+    }
+}
+
+#
 # Notify the "portal" of the status of all slivers. Might be the local
 # portal or the Cloudlab portal. Or both since a cluster might be part
 # of Cloudlab, but allowing use of the local portal UI.
@@ -1543,6 +1592,7 @@ while (1) {
     }
     NotifyPortal();
     HandleImageTracking();
+    CheckAggregates();
 
     # Be certain stale info is gone.
     Experiment->FlushAll();
