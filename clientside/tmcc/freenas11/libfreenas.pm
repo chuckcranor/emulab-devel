@@ -50,6 +50,7 @@ use Exporter;
 	freenasVolumeSnapshot freenasVolumeClone
 	freenasVolumeDesnapshot freenasVolumeDeclone
 	freenasParseListing freenasRequest
+        freenasLock freenasUnlock
 	$FREENAS_API_RESOURCE_IFACE $FREENAS_API_RESOURCE_IST_EXTENT
 	$FREENAS_API_RESOURCE_IST_AUTHI $FREENAS_API_RESOURCE_IST_TARGET
 	$FREENAS_API_RESOURCE_IST_TGTGROUP
@@ -119,28 +120,28 @@ my $BS_UUID_TYPE_IQN     = "iqn";
 #
 # Global variables
 #
-my $debug  = 0;
+my $debug  = 1;
 my $auth;
 my $server;
 
 sub freenasPoolList();
 sub freenasVolumeList($;$);
-sub freenasVolumeCreate($$$;$);
-sub freenasVolumeDestroy($$);
-sub freenasFSCreate($$$);
+sub freenasVolumeCreate($$$;$$);
+sub freenasVolumeDestroy($$;$);
+sub freenasFSCreate($$$;$);
 sub freenasParseListing($);
 
-sub freenasVolumeSnapshot($$;$);
-sub freenasVolumeDesnapshot($$;$$);
-sub freenasVolumeClone($$$;$);
-sub freenasVolumeDeclone($$);
+sub freenasVolumeSnapshot($$;$$);
+sub freenasVolumeDesnapshot($$;$$$);
+sub freenasVolumeClone($$$;$$);
+sub freenasVolumeDeclone($$;$);
 
 #
 # Local Functions
 #
 sub listPools();
 sub convertZfsToMebi($);
-sub volumeDestroy($$$$);
+sub volumeDestroy($$$$$);
 sub snapshotHasClone($$);
 sub getZvolsFromVolinfo($);
 sub parseSliceName($);
@@ -157,6 +158,38 @@ sub setDebug($)
     $debug = shift;
     print "libfreenas: debug=$debug\n"
 	if ($debug);
+}
+
+#
+# Make sure we don't race with libvnode_blockstore operations.
+#
+sub freenasLock(;$)
+{
+    my ($timo) = @_;
+    $timo = 900
+	if (!defined($timo));	# XXX same as libvnode_blockstore
+
+    print STDERR time() . ": Grabbing blockstore lock\n"
+	if ($debug);
+
+    my $locked = TBScriptLock($GLOBAL_CONF_LOCK, 0, $timo);
+    if ($locked != TBSCRIPTLOCK_OKAY()) {
+	print STDERR time() .
+	    ": Could not get blockstore lock after $timo seconds!\n";
+	return -1;
+    }
+
+    print STDERR time() . ": Got blockstore lock\n"
+	if ($debug);
+
+    return 0;
+}
+
+sub freenasUnlock()
+{
+    print STDERR time() . ": Releasing blockstore lock\n"
+	if ($debug);
+    TBScriptUnlock();
 }
 
 #
@@ -321,6 +354,12 @@ sub freenasRequest($;$$$$$)
     return undef;
 }
 
+#
+# Get a full listing of extant volume information.
+#
+# Note that we don't bother to lock here, the caller will have to
+# lockout if it wants a consistent picture of affairs.
+#
 sub freenasVolumeList($;$)
 {
     my ($inameinfo,$snapinfo) = @_;
@@ -468,9 +507,9 @@ sub freenasPoolList() {
 #
 # Create a ZFS zvol.
 #
-sub freenasVolumeCreate($$$;$)
+sub freenasVolumeCreate($$$;$$)
 {
-    my ($pool, $volname, $size, $sparse) = @_;
+    my ($pool, $volname, $size, $sparse, $dolock) = @_;
 
     # Untaint arguments since they are passed to a command execution
     $pool = untaintHostname($pool);
@@ -482,6 +521,11 @@ sub freenasVolumeCreate($$$;$)
 	     "Invalid arguments");
 	return -1;
     }
+    $dolock = 1
+	if (!defined($dolock));
+
+    freenasLock()
+	if ($dolock);
 
     # Does the requested pool exist?
     my $pools = listPools();
@@ -491,6 +535,8 @@ sub freenasVolumeCreate($$$;$)
     } else {
 	warn("*** ERROR: freenasVolumeCreate: ".
 	     "Requested pool not found: $pool!");
+	freenasUnlock()
+	    if ($dolock);
 	return -1;
     }
 
@@ -499,6 +545,8 @@ sub freenasVolumeCreate($$$;$)
     if ($size + $ZPOOL_LOW_WATERMARK > $destpool->{'avail'}) {
 	warn("*** ERROR: freenasVolumeCreate: ". 
 	     "Not enough space remaining in requested pool: $pool");
+	freenasUnlock()
+	    if ($dolock);
 	return -1;
     }
 
@@ -523,15 +571,19 @@ sub freenasVolumeCreate($$$;$)
 	} else {
 	    warn("*** ERROR: freenasVolumeCreate: volume creation failed");
 	}
+	freenasUnlock()
+	    if ($dolock);
 	return -1;
     }
 
+    freenasUnlock()
+	if ($dolock);
     return 0;
 }
 
-sub freenasVolumeSnapshot($$;$)
+sub freenasVolumeSnapshot($$;$$)
 {
-    my ($pool, $volname, $tstamp) = @_;
+    my ($pool, $volname, $tstamp, $dolock) = @_;
 
     # Untaint arguments that are passed to a command execution
     $pool = untaintHostname($pool);
@@ -546,6 +598,11 @@ sub freenasVolumeSnapshot($$;$)
 	     "Invalid arguments");
 	return -1;
     }
+    $dolock = 1
+	if (!defined($dolock));
+
+    freenasLock()
+	if ($dolock);
 
     # Get volume and snapshot info
     my $vollist = freenasVolumeList(0, 1);
@@ -555,6 +612,8 @@ sub freenasVolumeSnapshot($$;$)
     if (!$vref || $vref->{'pool'} ne $pool) {
 	warn("*** ERROR: freenasVolumeSnapshot: ".
 	     "Base volume '$volname' does not exist in pool '$pool'");
+	freenasUnlock()
+	    if ($dolock);
 	return -1;
     }
 
@@ -567,6 +626,8 @@ sub freenasVolumeSnapshot($$;$)
 	    if ($snapshot eq $sname) {
 		warn("*** ERROR: freenasVolumeSnapshot: ".
 		     "Snapshot '$snapshot' already exists");
+		freenasUnlock()
+		    if ($dolock);
 		return -1;
 	    }
 	}
@@ -578,15 +639,19 @@ sub freenasVolumeSnapshot($$;$)
 			      "name" => "$tstamp"});
     if (!$res) {
 	warn("*** ERROR: freenasVolumeSnapshot: could not create snapshot");
+	freenasUnlock()
+	    if ($dolock);
 	return -1;
     }
 
+    freenasUnlock()
+	if ($dolock);
     return 0;
 }
 
-sub freenasVolumeDesnapshot($$;$$)
+sub freenasVolumeDesnapshot($$;$$$)
 {
-    my ($pool, $volname, $tstamp, $force) = @_;
+    my ($pool, $volname, $tstamp, $force, $dolock) = @_;
 
     # Untaint arguments that are passed to a command execution
     $pool = untaintHostname($pool);
@@ -601,6 +666,11 @@ sub freenasVolumeDesnapshot($$;$$)
 	     "Invalid arguments");
 	return -1;
     }
+    $dolock = 1
+	if (!defined($dolock));
+
+    freenasLock()
+	if ($dolock);
 
     # Get volume and snapshot info
     my $vollist = freenasVolumeList(0, ($force ? 2 : 1));
@@ -610,6 +680,8 @@ sub freenasVolumeDesnapshot($$;$$)
     if (!$vref || $vref->{'pool'} ne $pool) {
 	warn("*** ERROR: freenasVolumeDesnapshot: ".
 	     "Base volume '$volname' does not exist in pool '$pool'");
+	freenasUnlock()
+	    if ($dolock);
 	return -1;
     }
 
@@ -663,6 +735,8 @@ sub freenasVolumeDesnapshot($$;$$)
 	}
     }
 
+    freenasUnlock()
+	if ($dolock);
     return $rv;
 }
 
@@ -672,9 +746,9 @@ sub freenasVolumeDesnapshot($$;$$)
 # $tag is interpreted as a timestamp. If $tag == 0, use the most recent
 # (i.e., largest timestamp) snapshot.
 #
-sub freenasVolumeClone($$$;$)
+sub freenasVolumeClone($$$;$$)
 {
-    my ($pool, $ovolname, $nvolname, $tag) = @_;
+    my ($pool, $ovolname, $nvolname, $tag, $dolock) = @_;
 
     # Untaint arguments that are passed to a command execution
     $pool = untaintHostname($pool);
@@ -690,6 +764,11 @@ sub freenasVolumeClone($$$;$)
 	     "Invalid arguments");
 	return -1;
     }
+    $dolock = 1
+	if (!defined($dolock));
+
+    freenasLock()
+	if ($dolock);
 
     # Get volume and snapshot info
     my $vollist = freenasVolumeList(0, 1);
@@ -699,11 +778,15 @@ sub freenasVolumeClone($$$;$)
     if (!$ovref || $ovref->{'pool'} ne $pool) {
 	warn("*** ERROR: freenasVolumeClone: ".
 	     "Base volume '$ovolname' does not exist in pool '$pool'");
+	freenasUnlock()
+	    if ($dolock);
 	return -1;
     }
     if (exists($vollist->{$nvolname})) {
 	warn("*** ERROR: freenasVolumeClone: ".
 	     "Volume '$nvolname' already exists");
+	freenasUnlock()
+	    if ($dolock);
 	return -1;
     }
 
@@ -711,6 +794,8 @@ sub freenasVolumeClone($$$;$)
     if (!exists($ovref->{'snapshots'})) {
 	warn("*** ERROR: freenasVolumeClone: ".
 	     "Base volume '$ovolname' has no snapshots");
+	freenasUnlock()
+	    if ($dolock);
 	return -1;
     }
     my @snaps = split(',', $ovref->{'snapshots'});
@@ -729,6 +814,8 @@ sub freenasVolumeClone($$$;$)
 	if (!$found) {
 	    warn("*** ERROR: freenasVolumeClone: ".
 		 "Snapshot '$snapshot' does not exist");
+	    freenasUnlock()
+		if ($dolock);
 	    return -1;
 	}
     }
@@ -750,15 +837,19 @@ sub freenasVolumeClone($$$;$)
 			     {"name" => "$pool/$nvolname"}, 202);
     if (!$res) {
 	warn("*** ERROR: freenasVolumeClone: could not create clone");
+	freenasUnlock()
+	    if ($dolock);
 	return -1;
     }
 
+    freenasUnlock()
+	if ($dolock);
     return 0;
 }
 
-sub freenasVolumeDeclone($$)
+sub freenasVolumeDeclone($$;$)
 {
-    my ($pool, $volname) = @_;
+    my ($pool, $volname, $dolock) = @_;
 
     # Untaint arguments since they are passed to a command execution
     $pool = untaintHostname($pool);
@@ -768,13 +859,15 @@ sub freenasVolumeDeclone($$)
 	     "Invalid arguments");
 	return -1;
     }
+    $dolock = 1
+	if (!defined($dolock));
 
-    return volumeDestroy($pool, $volname, 1, "freenasVolumeDeclone");
+    return volumeDestroy($pool, $volname, 1, "freenasVolumeDeclone", $dolock);
 }
 
-sub freenasVolumeDestroy($$)
+sub freenasVolumeDestroy($$;$)
 {
-    my ($pool, $volname) = @_;
+    my ($pool, $volname, $dolock) = @_;
 
     # Untaint arguments since they are passed to a command execution
     $pool = untaintHostname($pool);
@@ -784,85 +877,111 @@ sub freenasVolumeDestroy($$)
 	     "Invalid arguments");
 	return -1;
     }
+    $dolock = 1
+	if (!defined($dolock));
 
-    return volumeDestroy($pool, $volname, 0, "freenasVolumeDestroy");
+    return volumeDestroy($pool, $volname, 0, "freenasVolumeDestroy", $dolock);
 }
 
 #
 # The guts of destroy and declone
 #
-sub volumeDestroy($$$$) {
-    my ($pool, $volname, $declone, $tag) = @_;
+sub volumeDestroy($$$$$) {
+    my ($pool, $volname, $declone, $tag, $dolock) = @_;
+    my $tries = 0;
+
+  retry:
+    if (++$tries > $MAX_RETRY_COUNT) {
+	warn("*** WARNING: $tag: ".
+	     "Could not free volume after $MAX_RETRY_COUNT attempts!");
+	return -1;
+    }
+    
+    freenasLock()
+      if ($dolock);
 
     # Get volume and snapshot info
     my $vollist = freenasVolumeList(0, 1);
 
+    #
     # Volume must exist
+    # XXX let's not consider this an error if it disappears after we
+    # have tried once. It probably means that someone else removed it.
+    # Maybe we should not consider this an error even on the first try?
+    #
     my $vref = $vollist->{$volname};
     if (!$vref || $vref->{'pool'} ne $pool) {
-	warn("*** ERROR: $tag: ".
-	     "Volume '$volname' does not exist in pool '$pool'");
-	return -1;
+	if ($tries > 1) {
+	    warn("*** ERROR: $tag: ".
+		 "Volume '$volname' does not exist in pool '$pool'");
+	    freenasUnlock()
+		if ($dolock);
+	    return -1;
+	}
+	warn("*** WARNING: $tag: ".
+	     "Volume '$volname' in pool '$pool' disappeared while we slept");
+	freenasUnlock()
+	    if ($dolock);
+	return 0;
     }
 
-    # Volume must not have snapshots
+    #
+    # Volume must not have snapshots.
+    # Note that in the case of a clone volume, we are talking about snapshots
+    # of the clone itself, not the snapshot that the clone is based on.
+    # I.e., this is not inconsistant with the "If decloning" section below.
+    #
     if (exists($vref->{'snapshots'})) {
 	warn("*** ERROR: $tag: ".
 	     "Volume '$volname' has clones and/or snapshots, cannot destroy");
+	freenasUnlock()
+	    if ($dolock);
 	return -1;
     }
  
-    # Deallocate volume.  Wrap in loop to enable retries.
-    my $count;
-    for ($count = 1; $count <= $MAX_RETRY_COUNT; $count++) {
-	my $resource = "$FREENAS_API_RESOURCE_VOLUME/$pool/datasets/$volname";
-	my $msg;
+    #
+    # Deallocate volume.
+    # If it fails, we retry on some errors up to MAX_RETRY times.
+    # Note that we release the lock between retries, so we must restart
+    # from scratch each time as the volume status might have changed while
+    # we slept.
+    #
+    my $resource = "$FREENAS_API_RESOURCE_VOLUME/$pool/datasets/$volname";
+    my $msg;
 
-	my $res = freenasRequest($resource, "DELETE", undef, undef,
-				 undef, \$msg);
-
-	# Retry on some errors
-	if (!$res) { 
-	    if ($msg =~ /dataset is busy/) {
-		warn("*** WARNING: $tag: ".
-		     "Volume is busy. ".
-		     "Waiting $VOLUME_BUSY_WAIT seconds before trying again ".
-		     "(count=$count).");
-		sleep $VOLUME_BUSY_WAIT;
-	    }
-	    elsif ($msg =~ /does not exist/) {
-		if ($count < $MAX_RETRY_COUNT) {
-		    warn("*** WARNING: $tag: ".
-			 "Volume seems to be gone, retrying.");
-		    # Bump counter to just under termination to try once more.
-		    $count = $MAX_RETRY_COUNT-1;
-		    sleep $VOLUME_GONE_WAIT;
-		} else {
-		    warn("*** WARNING: $tag: ".
-			 "Volume still seems to be gone.");
-		    # Bail now because we don't want to report this as an
-		    # error to the caller.
-		    return 0;
-		}
-	    } 
-	    else {
-		$msg =~ s/\\n/\n  /g;
-		warn("*** ERROR: $tag: ".
-		     "Volume removal failed:\n$msg");
-		return -1;
-	    }
-	} else {
-	    # No error condition - jump out of loop.
-	    last;
+    my $res = freenasRequest($resource, "DELETE", undef, undef, undef, \$msg);
+    if (!$res) { 
+	if ($msg =~ /dataset is busy/) {
+	    warn("*** WARNING: $tag: Volume is busy. ".
+		 "Waiting $VOLUME_BUSY_WAIT seconds before trying again ".
+		 "(tries=$tries).");
+	    freenasUnlock()
+		if ($dolock);
+	    sleep $VOLUME_BUSY_WAIT;
+	    goto retry;
 	}
-    }
+	if ($msg =~ /does not exist/) {
+	    if ($tries < $MAX_RETRY_COUNT) {
+		warn("*** WARNING: $tag: Volume seems to be gone, retrying.");
+		freenasUnlock()
+		    if ($dolock);
+		# Bump counter to just under termination to try once more.
+		$tries = $MAX_RETRY_COUNT-1;
+		sleep $VOLUME_GONE_WAIT;
+		goto retry;
+	    }
+	    warn("*** WARNING: $tag: Volume still seems to be gone.");
+	    freenasUnlock()
+		if ($dolock);
 
-    # Note: Checks for lingering volumes will be performed separately in
-    # consistency checking routines.
-
-    if ($count > $MAX_RETRY_COUNT) {
-	warn("*** WARNING: $tag: ".
-	     "Could not free volume after several attempts!");
+	    # Bail now because we don't want to report this as an
+	    # error to the caller.
+	    return 0;
+	} 
+	$msg =~ s/\\n/\n  /g;
+	warn("*** ERROR: $tag: Volume removal failed:\n$msg");
+	freenasUnlock()
+	    if ($dolock);
 	return -1;
     }
 
@@ -886,6 +1005,8 @@ sub volumeDestroy($$$$) {
 		$msg =~ s/\\n/\n  /g;
 		warn("*** ERROR: freenasVolumeDeclone: ".
 		     "'del $pool/$snapshot' failed:\n$msg");
+		freenasUnlock()
+		    if ($dolock);
 		return -1;
 	    }
 	} else {
@@ -894,6 +1015,8 @@ sub volumeDestroy($$$$) {
 	}
     }
 
+    freenasUnlock()
+	if ($dolock);
     return 0;
 }
 
@@ -910,8 +1033,8 @@ sub snapshotHasClone($$)
     return 0;
 }
 
-sub freenasFSCreate($$$) {
-    my ($pool,$vol,$fstype) = @_;
+sub freenasFSCreate($$$;$) {
+    my ($pool,$vol,$fstype,$dolock) = @_;
     my $cmd;
 
     if ($fstype =~ /^ext[234]$/) {
@@ -923,11 +1046,17 @@ sub freenasFSCreate($$$) {
 	return -1;
     }
     my $redir = ">/dev/null 2>&1";
+    freenasLock()
+	if ($dolock);
     if (system("$cmd /dev/zvol/$pool/$vol $redir") != 0) {
 	warn("*** WARNING: freenasFSCreate: '$cmd /dev/zvol/$pool/$vol' failed");
+	freenasUnlock()
+	    if ($dolock);
 	return -1;
     }
 
+    freenasUnlock()
+	if ($dolock);
     return 0;
 }
 

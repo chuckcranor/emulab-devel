@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2017 University of Utah and the Flux Group.
+# Copyright (c) 2013-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -333,10 +333,10 @@ sub create($$$;$)
 	return 1;
     }
 
-    my $rv = freenasVolumeCreate($pool, $vol, $size, $sparse);
+    my $rv = freenasVolumeCreate($pool, $vol, $size, $sparse, 1);
     if ($rv == 0 && $fstype ne "none") {
-	$rv = freenasFSCreate($pool, $vol, $fstype);
-	if ($rv && freenasVolumeDestroy($pool, $vol)) {
+	$rv = freenasFSCreate($pool, $vol, $fstype, 1);
+	if ($rv && freenasVolumeDestroy($pool, $vol, 1)) {
 	    print STDERR "bscontrol_proxy: could not destroy new volume ".
 		"after FS creation failure.\n";
 	}
@@ -368,7 +368,7 @@ sub snapshot($$$)
 	return 1;
     }
 
-    return freenasVolumeSnapshot($pool, $vol, $tstamp);
+    return freenasVolumeSnapshot($pool, $vol, $tstamp, 1);
 }
 
 sub desnapshot($$$)
@@ -396,7 +396,7 @@ sub desnapshot($$$)
 	}
     }
 
-    return freenasVolumeDesnapshot($pool, $vol, $tstamp, 0);
+    return freenasVolumeDesnapshot($pool, $vol, $tstamp, 0, 1);
 }
 
 sub desnapshotall($$)
@@ -416,7 +416,7 @@ sub desnapshotall($$)
 	return 1;
     }
 
-    return freenasVolumeDesnapshot($pool, $vol, undef, 1);
+    return freenasVolumeDesnapshot($pool, $vol, undef, 1, 1);
 }
 
 sub clone($$$;$)
@@ -453,7 +453,7 @@ sub clone($$$;$)
 	$tstamp = 0;
     }
 
-    return freenasVolumeClone($pool, $ovol, $nvol, $tstamp);
+    return freenasVolumeClone($pool, $ovol, $nvol, $tstamp, 1);
 }
 
 sub destroy($$$)
@@ -473,7 +473,7 @@ sub destroy($$$)
 	return 1;
     }
 
-    return freenasVolumeDestroy($pool, $vol);
+    return freenasVolumeDestroy($pool, $vol, 1);
 }
 
 sub declone($$$)
@@ -493,5 +493,5 @@ sub declone($$$)
 	return 1;
     }
 
-    return freenasVolumeDeclone($pool, $vol);
+    return freenasVolumeDeclone($pool, $vol, 1);
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2017 University of Utah and the Flux Group.
+# Copyright (c) 2013-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -651,7 +651,7 @@ sub allocSlice($$$$) {
 
     $priv->{'pool'} = $bsid;
     $priv->{'volume'} = $vnode_id;
-    return freenasVolumeCreate($bsid, $vnode_id, $size, $sparse);
+    return freenasVolumeCreate($bsid, $vnode_id, $size, $sparse, 0);
 }
 
 # Setup device export.
@@ -736,16 +736,17 @@ sub exportSlice($$$$) {
 	# we assume another mapping has already gone through here and
 	# we just use the same snapshot.
 	#
-	# XXX could this race with another vnode setup? If so, we could
-	# wind up creating multiple snapshots for the same volume.
-	# That does not matter right now, but something to watch out for.
+	# N.B. the global lock serializes vnode_creates here so we do
+	# not have to worry about racing and creating multiple snapshots.
+	# However, the OOB path through bscontrol.proxy needs to respect
+	# the lock as well or we *will* wind up with multiple snapshots.
 	#
 	if (!exists($priv->{'lastsnapshot'})) {
 	    # XXX this will be an error
 	    warn("*** WARNING: blockstore_exportSlice: $volname: ".
 		 "no snapshot found; created one for now");
 	    my $tstamp = time();
-	    if (freenasVolumeSnapshot($pool, $volume, $tstamp)) {
+	    if (freenasVolumeSnapshot($pool, $volume, $tstamp, 0)) {
 		warn("*** ERROR: blockstore_exportSlice: $volname: ".
 		     "Could not create snapshot for RO/Clone mapping");
 		return -1;
@@ -760,7 +761,7 @@ sub exportSlice($$$$) {
 	# Clone will use the most recent snapshot (though there should
 	# only be one anyway).
 	#
-	if (freenasVolumeClone($pool, $volume, $vnode_id)) {
+	if (freenasVolumeClone($pool, $volume, $vnode_id, 0, 0)) {
 	    warn("*** ERROR: blockstore_exportSlice: $volname: ".
 		 "Could not create clone for RO/Clone mapping");
 	    return -1;
@@ -1403,9 +1404,9 @@ sub deallocSlice($$$$) {
 		# which could be a long time ago (and hence very stale).
 		#
 		if (defined($snaps) && $cloneof eq (split(',', $snaps))[0]) {
-		    return freenasVolumeDestroy($pool, $vnode_id);
+		    return freenasVolumeDestroy($pool, $vnode_id, 0);
 		}
-		return freenasVolumeDeclone($pool, $vnode_id);
+		return freenasVolumeDeclone($pool, $vnode_id, 0);
 	    }
 	    warn("*** WARNING: blockstore_deallocSlice: $volname: ".
 		 "Found stale clone volume '$pool/$vnode_id'");
@@ -1425,7 +1426,7 @@ sub deallocSlice($$$$) {
     # to worry about keeping the latest snapshot as there will only be one
     # and it should go away on last use.
     #
-    return freenasVolumeDeclone($bsid, $vnode_id);
+    return freenasVolumeDeclone($bsid, $vnode_id, 0);
 }
 
 # Required perl foo
