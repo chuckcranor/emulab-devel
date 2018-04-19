@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2014, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2013-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -157,7 +157,9 @@ if (!defined($vars)) {
 # Make sure lease type supports extensions.
 #
 if ($vars->{'extendperiod'} == 0) {
-    fatal("$pid/$lname: cannot extend '$ltype' leases");
+    # Lets call this a user error.
+    print STDERR "$pid/$lname: cannot extend '$ltype' leases\n";
+    exit(1);
 }
 
 #
@@ -165,12 +167,16 @@ if ($vars->{'extendperiod'} == 0) {
 #
 if (!defined($waittime)) {
     if ($lease->Lock()) {
-	fatal("$pid/$lname: could not acquire lock, try again with -w");
+	# Lets call this a user error.
+	print STDERR "$pid/$lname: could not acquire lock, try again with -w\n";
+	exit(1);
     }
 }
 else {
     if ($lease->WaitLock($waittime, 1)) {
-	fatal("$pid/$lname: could not acquire lock after $waittime seconds");
+	print STDERR
+	    "$pid/$lname: could not acquire lock after $waittime seconds\n";
+	exit(1);
     }
 }
 
@@ -178,7 +184,9 @@ else {
 # Make sure the lease is expired (i.e., is in the 'grace' state).
 #
 if ($lease->state() ne LEASE_STATE_GRACE()) {
-    fatal("$pid/$lname: can only renew leases in the 'grace' state");
+    # Lets call this a user error.
+    print STDERR "$pid/$lname: can only renew leases in the 'grace' state\n";
+    exit(1);
 }
 
 #
@@ -186,7 +194,9 @@ if ($lease->state() ne LEASE_STATE_GRACE()) {
 #
 if (!$this_user->IsAdmin() &&
     $vars->{'maxextend'} > 0 && $lease->renewals() >= $vars->{'maxextend'}) {
-    fatal("$pid/$lname: already extended maximum number of times");
+    # Lets call this a user error.
+    print STDERR "$pid/$lname: already extended maximum number of times\n";
+    exit(1);
 }
 
 #
