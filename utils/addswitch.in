@@ -223,9 +223,33 @@ sub CreateType($)
 #
 sub CreateSwitch()
 {
+    my $role = "testswitch";
+
+    if ($usersw) {
+	$role = "testnode";
+    }
+    elsif ($layer1) {
+	# XXX Huh?
+	$role = "widearea_switch";
+    }
+    elsif (defined($stack)) {
+	if ($stack eq "Control") {
+	    $role = "ctrlswitch";
+	}
+	elsif ($stack eq "Experiment") {
+	    $role = "testswitch";
+	}
+	else {
+	    fatal("Do not know how to handle stack $stack wrt role");
+	}
+    }
+    else {
+	print STDERR "No -S argument, defaulting to role=$role\n";
+    }
+	
     my $blob = {
 	"type"               => $type,
-	"role"               => ($layer1 ? "widearea_switch" : "testswitch"),
+	"role"               => $role,
 	"initial_eventstate" => TBDB_NODESTATE_ISUP(),
     };
 
@@ -233,8 +257,7 @@ sub CreateSwitch()
     # User switches needs some different stuff.
     #
     if ($usersw) {
-	$blob->{"role"} = "testnode";
-	$blob->{"initial_eventstate"} = TBDB_NODESTATE_SHUTDOWN();
+	$blob->{"initial_eventstate"} = TBDB_NODESTATE_ALWAYSUP();
     }
     my $node;
     
