@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -112,7 +112,7 @@ sub CanDelete($$);
 sub PublishProfile($);
 sub InsertImageRecords($);
 sub ListImages();
-sub HandleScript($);
+sub GetScriptParameters($$);
 sub VerifyXML($$);
 sub ModifyProfileInternal($$$);
 		      
@@ -320,9 +320,15 @@ sub CreateProfile()
 	$new_args{'repokey'} = $repokey;
     }
     # Script parameters
-    if (defined($script) && $script ne "") {
-	my $paramdefs = HandleScript($script);
-
+    if (defined($script) && $script ne "" && $script =~ /^import/m) {
+	my $paramdefs;
+	my $retval = GetScriptParameters($script, \$paramdefs);
+	if ($retval) {
+	    if ($retval < 0) {
+		fatal("Could not get paramdefs: $paramdefs!");
+	    }
+	    UserError($paramdefs);
+	}
 	$new_args{"paramdefs"} =
 	    $paramdefs if (defined($paramdefs) && $paramdefs ne "");
     }
@@ -684,19 +690,14 @@ sub ModifyProfileInternal($$$)
 	# For a Parameterized Profile, need to generate and store the form
 	# data. Only python scripts of course.
 	#
-	my ($fh, $filename) = tempfile(UNLINK => 1);
-	if (!defined($fh)) {
-	    $$pmsg = "Could not open temporary file for script";
-	    return -1;
+	my $output;
+	my $retval = GetScriptParameters($script, \$output);
+	if ($retval) {
+	    if ($retval < 0) {
+		fatal("Could not get paramdefs: $output!");
+	    }
+	    UserError($output);
 	}
-	print $fh $script;
-	my $output = emutil::ExecQuiet("$RUNGENILIB -p $filename");
-	if ($?) {
-	    $$pmsg = $output;
-	    return $? >> 8;
-	}
-	chomp($output);
-
 	# No versioning so need to clear existing paramdefs.
 	$update_args{"paramdefs"} = ($output ne "" ? $output : undef);
     }
@@ -946,7 +947,7 @@ sub UpdateProfileFromRepo()
 	if ($?) {
 	    print STDERR $output;
 	    $profile->Unlock();
-	    print STDERR "$RUNGENILIB failed\n";
+	    print STDERR "UpdateProfileFromRepo: $RUNGENILIB failed\n";
 	    # Pass along the exit value.
 	    exit($? >> 8);
 	}
@@ -989,23 +990,26 @@ sub UpdateProfileFromRepo()
 # For a Parameterized Profile, need to generate and store the form
 # data. Only python scripts of course. Does not return on error.
 #
-sub HandleScript($)
+sub GetScriptParameters($$)
 {
-    my ($script) = @_;
-
-    return undef
-	if ($script !~ /^import/m);
+    my ($script, $pref) = @_;
 
     my ($fh, $filename) = tempfile(UNLINK => 1);
-    fatal("Could not open temporary file for script")
-	if (!defined($fh));
+    if (!defined($fh)) {
+	$$pref = "Could not open temporary file for script";
+	return -1;
+    }
     print $fh $script;
-    my $paramdefs = `$RUNGENILIB -p $filename`;
-    fatal("$RUNGENILIB failed")
-	if ($?);
-    chomp($paramdefs);
-    
-    return $paramdefs;
+
+    my $output = emutil::ExecQuiet("$RUNGENILIB -p $filename");
+    if ($?) {
+	$$pref = $output;
+	return $? >> 8;
+    }
+    chomp($output);
+
+    $$pref = $output;
+    return 0;
 }
 
 exit(0);
