@@ -170,16 +170,18 @@ if (@ARGV < 2) {
     usage();
 }
 my $action   = shift(@ARGV);
-my $uuid     = shift(@ARGV);
-my $instance = APT_Instance->Lookup($uuid);
+my $token    = shift(@ARGV);
+my $instance = APT_Instance->Lookup($token);
 if (!defined($instance)) {
-    $instance = APT_Instance->LookupBySlice($uuid);
+    $instance = APT_Instance->LookupBySlice($token);
 }
 if (!defined($instance)) {
     # Lets not make this a fatal error; when coming from the web interface,
     # we do not need to send email. 
-    UserError("No such instance $uuid");
+    UserError("No such instance $token");
 }
+my $uuid = $instance->uuid();
+
 #
 # Grab the webtask object.
 #
