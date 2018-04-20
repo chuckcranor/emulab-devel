@@ -927,7 +927,7 @@ sub Reserve($)
 	chmod(0755, "$fp");
     }
     my $command = ($asadmin ? "$WAP " : "") . "$TB/sbin/reserve $args";
-    print STDERR "$command\n";
+    #print STDERR "$command\n";
 
     if ($asadmin) {
 	GeniUtil::FlipToElabMan();
@@ -980,7 +980,7 @@ sub Reserve($)
 	"uuid"     => $reservation->uuid(),
 	"approved" => $approved,
     };
-    print STDERR Dumper($blob);
+    #print STDERR Dumper($blob);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
@@ -1174,10 +1174,20 @@ sub ApproveReservation($)
     my $reservation = Reservation->Lookup($target);
     return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
 	if (!defined($reservation));
-    my $idx = $reservation->idx();
+    my $idx  = $reservation->idx();
+    my $args = "-a -m $idx";
+
+    # Write the message to a tempfile to pass in. This will auto unlink.
+    my $fp;
+    if (exists($argref->{"message"}) && $argref->{"message"} ne "") {
+	$fp = File::Temp->new();
+	print $fp $argref->{"message"};
+	$args = "-F $fp $args";
+	chmod(0644, "$fp");
+    }
 
     GeniUtil::FlipToElabMan();
-    my $output = GeniUtil::ExecQuiet("$WAP $TB/sbin/reserve -a -m $idx");
+    my $output = GeniUtil::ExecQuiet("$WAP $TB/sbin/reserve $args");
     
     if ($?) {
 	GeniUtil::FlipToGeniUser();

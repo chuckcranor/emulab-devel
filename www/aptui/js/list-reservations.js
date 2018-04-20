@@ -219,6 +219,11 @@ $(function ()
 		    delay: {"hide" : 250, "show" : 250},
 		    placement: 'auto',
 		});
+		// This activates the popover subsystem.
+		$('[data-toggle="popover"]').popover({
+		    placement: 'auto',
+		    container: 'body',
+		});
 	    }
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
 						"ListReservations",
@@ -337,10 +342,12 @@ $(function ()
 	// Bind the confirm button in the modal. Do the approval.
 	$('#approve-modal #confirm-approve').click(function () {
 	    sup.HideModal('#approve-modal', function () {
+		var message = $('#approve-modal .user-message').val().trim();
 		sup.ShowModal('#waitwait-modal');
 		var xmlthing = sup.CallServerMethod(null, "reserve",
 						    "Approve",
 						    {"uuid"    : uuid,
+						     "message" : message,
 						     "cluster" : cluster});
 		xmlthing.done(callback);
 	    });

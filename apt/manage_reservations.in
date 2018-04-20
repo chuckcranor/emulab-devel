@@ -643,9 +643,10 @@ sub DoDelete()
 #
 sub DoApprove()
 {
-    my $optlist = "p:";
+    my $optlist = "p:F:";
     my $portal;
     my $errmsg;
+    my $message;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -653,6 +654,10 @@ sub DoApprove()
     }
     if (defined($options{"p"})) {
 	$portal = $options{"p"}
+    }
+    if (defined($options{"F"})) {
+	$message = readfile($options{"F"});
+	chomp($message);
     }
     usage()
 	if (@ARGV != 1 || !defined($portal));
@@ -666,7 +671,6 @@ sub DoApprove()
     if (!defined($brand)) {
 	fatal("Bad branding");
     }
-
     if (!$this_user->IsAdmin()) {
 	fatal("No permission to approve reservations")
     }
@@ -674,11 +678,14 @@ sub DoApprove()
     if ($aggregate->CheckStatus(\$errmsg, 1)) {
 	UserError($errmsg);
     }
+    my $blob = {"uuid" => $uuid};
+    if (defined($message) && $message ne "") {
+	$blob->{'message'} = $message;
+    }
     # PortalRPC will use the root context in this case, which is
     # essentially saying the caller is an admin.
     my $response =
-	APT_Geni::PortalRPC($authority, undef, "ApproveReservation",
-			    {"uuid" => $uuid});
+	APT_Geni::PortalRPC($authority, undef, "ApproveReservation", $blob);
     if (GeniResponse::IsError($response)) {
 	ExitWithError($response);
     }
@@ -687,7 +694,7 @@ sub DoApprove()
     #
     # Schedule an announcement for the user.
     #
-    my $blob = $response->value();
+    $blob = $response->value();
     if (exists($blob->{'user'})) {
 	my $geniuser = GeniUser->Lookup($blob->{'user'}, 1);
 	if (defined($geniuser) && $geniuser->IsLocal()) {

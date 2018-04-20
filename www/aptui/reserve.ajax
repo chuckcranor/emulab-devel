@@ -482,6 +482,22 @@ function Do_Approve()
 	SPITAJAX_ERROR(-1, "Only administrators can approve reservations");
 	return;
     }
+    $opt = "";
+    if (isset($ajax_args["message"])) {
+        $message  = $ajax_args["message"];
+
+        if (!TBvalid_fulltext($message)) {
+            SPITAJAX_ERROR(-1, "Illegal characters in message");
+            return;
+        }
+        $messagefile = tempnam("/tmp", "message");
+
+        $fp = fopen($messagefile, "w");
+        fwrite($fp, $message);
+        fclose($fp);
+        chmod($messagefile, 0666);
+        $opt = "-F $messagefile";
+    }
     $webtask  = WebTask::CreateAnonymous();
     $this_uid = $this_user->uid();
     $urn = $aggregate->urn();
@@ -489,9 +505,11 @@ function Do_Approve()
     $retval = SUEXEC($this_uid, "nobody",
                      "webmanage_reservations -a '$urn' ".
                      "-t " . $webtask->task_id() .
-                     "  approve -p $PORTAL_GENESIS $uuid",
+                     "  approve -p $PORTAL_GENESIS $opt $uuid",
                      SUEXEC_ACTION_IGNORE);
-
+    if (isset($messagefile)) {
+        unlink($messagefile);
+    }
     if ($retval) {
         $webtask->Refresh();
         if (!$webtask->exited() || $retval < 0) {
@@ -505,6 +523,7 @@ function Do_Approve()
         $webtask->Delete();
 	return;
     }
+    
     $webtask->Delete();
     SPITAJAX_RESPONSE("list-reservations.php");
 }
@@ -681,6 +700,7 @@ function Do_ListReservations()
         $blob["created"]     = $details['created'];
         $blob["start"]       = $details['start'];
         $blob["end"]         = $details['end'];
+        $blob["notes"]       = $details['notes'];
         $blob["cluster"]     = $aggregate->nickname();
         $rlist[$uuid] = $blob;
     }

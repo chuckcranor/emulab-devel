@@ -456,20 +456,34 @@ $(function ()
      */
     function Approve()
     {
-	var callback = function(json) {
-	    sup.HideWaitWait();
+	var callback = function (json) {
+	    sup.HideModal('#waitwait-modal');
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
 	    window.location.reload(true);
 	};
-	sup.ShowWaitWait();
-	var xmlthing = sup.CallServerMethod(null, "reserve",
-					    "Approve",
-					    {"cluster" : window.CLUSTER,
-					     "uuid"    : window.UUID});
-	xmlthing.done(callback);
+	// Bind the confirm button in the modal. Do the approval.
+	$('#approve-modal #confirm-approve').click(function () {
+	    sup.HideModal('#approve-modal', function () {
+		var message = $('#approve-modal .user-message').val().trim();
+		sup.ShowModal('#waitwait-modal');
+		var xmlthing = sup.CallServerMethod(null, "reserve",
+						    "Approve",
+						    {"cluster" : window.CLUSTER,
+						     "uuid"    : window.UUID,
+						     "message" : message});
+		xmlthing.done(callback);
+	    });
+	});
+	// Handler so we know the user closed the modal. We need to
+	// clear the confirm button handler.
+	$('#approve-modal').on('hidden.bs.modal', function (e) {
+	    $('#approve-modal #confirm-approve').unbind("click");
+	    $('#approve-modal').off('hidden.bs.modal');
+	})
+	sup.ShowModal("#approve-modal");
     }
 
     function PopulateReservation()

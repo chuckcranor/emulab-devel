@@ -23,6 +23,9 @@
  .panel-heading-list {
      padding: 2px;
  }
+ .tablesorter-green th.sorter-false .tablesorter-header-inner {
+     padding-left: 4px;
+ }
 </style>
 <div>
   <div class='panel panel-default'>
@@ -60,6 +63,7 @@
 	    <th>Starts</th>
 	    <th>Ends</th>
 	    <th>Status</th>
+	    <th class="sorter-false">Notes</th>
 	  </tr>
 	</thead>
 	<tbody>
@@ -204,6 +208,17 @@
 		  <% } %>
 		</span>
 	      </td>
+	      <td align="center">
+		<a href="#" 
+		   data-toggle='popover'
+		   data-html='true'
+		   data-trigger='hover'
+		   data-title="Reservation Notes"
+		   data-content="<div class='form-control'
+			 style='height: auto;'><%- value.notes %></div>">
+		  <span>&#8230;</span>
+		</a>
+	      </td>
 	    </tr>
 	  <% }); %>
 	</tbody>
@@ -240,6 +255,11 @@
         <button type='button' class='close' data-dismiss='modal'
                 aria-hidden='true'>&times;</button>
         <center><h4>Confirm to Approve Reservation</h4>
+	  Additional text to send with approval (no text is okay):
+	  <div>
+	    <textarea class='form-control user-message'
+		      rows=5></textarea>
+	  </div>
 	  <br>
           <button class='btn btn-danger btn-sm'
 		  id='confirm-approve'>Confirm</a>
@@ -274,7 +294,7 @@
         <button type='button' class='close' data-dismiss='modal'
                 aria-hidden='true'>&times;</button>
         <center><h4>Confirm to Send Warning Message</h4>
-	  Additional text to send with warning (no text is okay):</span>
+	  Additional text to send with warning (no text is okay):
 	  <div>
 	    <textarea class='form-control user-message'
 		      rows=5></textarea>

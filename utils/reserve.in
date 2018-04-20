@@ -26,6 +26,7 @@ use English;
 use Getopt::Std;
 use Date::Parse;
 use POSIX;
+use Text::Wrap;
 
 #
 # Configure variables
@@ -77,10 +78,11 @@ sub usage()
     print STDERR "   -A   Supply file containing admin-only notes about reservation\n";
     print STDERR "   -N   Supply file containing user notes justifying reservation\n";
     print STDERR "   -D   Supply file containing reason why reservation was denied\n";
+    print STDERR "   -F   Supply file containing messsage to accompany approval\n";
     exit( -1 );
 }
 
-my $optlist    = "ac:de:fhilm:npqs:t:uA:CD:N:S:U:T:E:Oy";
+my $optlist    = "ac:de:fhilm:npqs:t:uA:CD:N:S:U:T:E:OyF:";
 my $debug      = 0;
 my $info       = 0;
 my $list       = 0;
@@ -95,6 +97,7 @@ my $endtime    = time + 24 * 60 * 60; # default to ending tomorrow
 my $notes      = undef;
 my $adminnotes = undef;
 my $denynotes  = undef;
+my $approvenotes = undef;
 my $approve    = 0;
 my $pending    = 0;
 my $tidy       = 0;
@@ -251,6 +254,9 @@ if (defined($options{"A"})) {
 }
 if (defined($options{"D"})) {
     $denynotes = readfile( $options{"D"} );
+}
+if (defined($options{"F"})) {
+    $approvenotes = readfile( $options{"F"} );
 }
 if (defined($options{"U"})) {
     fatal( "-U option requires administrator privileges" ) unless( $admin );
@@ -640,6 +646,8 @@ while( 1 ) {
     my $s = convert( $starttime );
     my $e = convert( $endtime );
     if( $approve ) {
+	$Text::Wrap::columns = 60;
+	
 	# The reservation is approved -- presumably it is either newly
 	# approved or edited since first approval.  E-mail the user
 	# unconditionally, since it's probably good for them to hear
@@ -650,6 +658,11 @@ while( 1 ) {
 		  "starting at $s and ending at\n" .
 		  "$e, has been approved.\n" .
 		  "\n" .
+		  ($approvenotes ?
+		   "*****************************************************\n".
+		   wrap("", "", "$approvenotes\n") .
+		   "*****************************************************\n\n"
+		   : "") .
 		  "If you do not intend to use these resources, please\n" .
 		  "cancel this reservation as soon as possible, since\n" .
 		  "the nodes are currently unavailable to other users for\n" .
