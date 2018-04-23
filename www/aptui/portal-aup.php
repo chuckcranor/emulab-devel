@@ -30,7 +30,7 @@ $page_title = "AUP";
 #
 # Only POWDER.
 #
-$AUPURL = "https://www.powderwireless.net/3536bfae4004e76584f504ceefe7744f53a50d32/powder/templates/powder-aup.md";
+$AUPURL = "https://www.powderwireless.net/powder/templates/powder-aup.md";
 
 #
 # Get current user.
