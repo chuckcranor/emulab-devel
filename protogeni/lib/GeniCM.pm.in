@@ -2692,7 +2692,8 @@ sub GetTicketAuxAux($)
 		$external_linkmap{$lanname} = $linkref;
 		$external_lanrefs{"${lanname}:${manager_id}"} = $external_noderef;
 		# Allow rspec to provide IP for other side.
-		$ip = GeniXML::GetIp($ref, $external_noderef);
+		$ip   = GeniXML::GetIp($ref, $external_noderef);
+		$mask = GeniXML::GetMask($ref, $external_noderef);
 	    }
 	    else {
 		#
