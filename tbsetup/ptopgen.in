@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1363,7 +1363,8 @@ foreach $node (@nodenames) {
     my $trivspeed = $typemap{$type}->{'TRIVSPEED'};
     my $uuid = $nodetouuid{$node};
     
-    my @types = ("$type:1");
+    my @types = ("$type:1")
+	if (!$sharing_mode{$node} || $current->is_subnode());
     my @sliver_types = ();
     my @features = ();
     my @flags;
