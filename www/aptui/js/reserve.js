@@ -12,11 +12,11 @@ $(function ()
     var fields       = null;
     var projlist     = null;
     var amlist       = null;
-    var amorder      = [];
     var skiptypes    = null;
     var isadmin      = false;
     var editing      = false;
     var buttonstate  = "check";
+    var forecasts    = {};
     
     function initialize()
     {
@@ -50,7 +50,15 @@ $(function ()
 	// Not really sure why they do not.
 	setTimeout(function () {
 	    LoadReservations();
-	}, 100);	
+	}, 100);
+
+	if (1) {
+	    $('#reserve-request-form .findfit-button')
+		.click(function (event) {
+		    event.preventDefault();
+		    FindFit();
+		});
+	}
     }
 
     //
@@ -215,6 +223,9 @@ $(function ()
     //
     function CheckForm()
     {
+	var start = null;
+	var end   = null;
+	
 	var checkonly_callback = function(json) {
 	    if (json.code) {
 		if (json.code != 2) {
@@ -222,6 +233,13 @@ $(function ()
 		}
 		return;
 	    }
+	    // Set the number of days, so that user can then search if
+	    // the start/end selected do not work.
+	    var hours = end.diff(start, "hours");
+	    var days  = hours / 24;
+	    $('#reserve-request-form [name=days]')
+		.val(days.toFixed(1));
+	    
 	    // Now check the actual reservation validity.
 	    ValidateReservation();
 	}
@@ -241,7 +259,7 @@ $(function ()
 	    return;
 	}
 	else if (start_day && start_hour) {
-	    var start = moment(start_day, "MM/DD/YYYY");
+	    start = moment(start_day, "MM/DD/YYYY");
 	    start.hour(start_hour);
 	    $('#reserve-request-form [name=start]').val(start.format());
 	}
@@ -258,7 +276,7 @@ $(function ()
 	    return;
 	}
 	else if (end_day && end_hour) {
-	    var end = moment(end_day, "MM/DD/YYYY");
+	    end = moment(end_day, "MM/DD/YYYY");
 	    end.hour(end_hour);
 	    $('#reserve-request-form [name=end]').val(end.format());
 	}
@@ -350,6 +368,7 @@ $(function ()
 		    $('#' + id + ' .resgraph-error').removeClass("hidden");
 		    return;
 		}
+		ProcessForecast(urn, json.value.forecast);
 
 		ShowResGraph({"forecast"  : json.value.forecast,
 			      "selector"  : id,
@@ -387,6 +406,148 @@ $(function ()
 						 "anonymous" : 1});
 	    xmlthing.done(callback);
 	});
+    }
+
+    //
+    // Process the forecast so we use it for reservation fitting.
+    //
+    function ProcessForecast(cluster, forecast)
+    {
+	// Each node type
+	for (var type in forecast) {
+	    // This is an array of objects.
+	    var array = forecast[type];
+
+	    for (var i = 0; i < array.length; i++) {
+		var data = array[i];
+		data.t     = parseInt(data.t);
+		data.free  = parseInt(data.free);
+		data.held  = parseInt(data.held);
+	    }
+
+	    // No data or just one data point, nothing to do.
+	    if (array.length <= 1) {
+		continue;
+	    }
+	    
+	    /*
+	     * Gary says there can be duplicate entries for the same time
+	     * stamp, and we want the last one. So have to splice those
+	     * out before we process. Yuck.
+	     */
+	    var temp = [];
+	    for (var i = 0; i < array.length - 1; i++) {
+		var data     = array[i];
+		var nextdata = array[i + 1];
+		
+		if (data.t == nextdata.t) {
+		    continue;
+		}
+		/*
+		 * Oh, turns out two consecutive timestamps can have
+		 * the same free/held values. Cull those out too.
+		 */
+		if (data.free == nextdata.free &&
+		    data.held == nextdata.held) {
+		    continue;
+		}
+		temp.push(data);
+	    }
+	    forecast[type] = temp;
+	}
+	//console.info("forecast", cluster, forecast);
+	forecasts[cluster] = forecast;
+    }
+    /*
+     * Try to find the first fit.
+     */
+    function FindFit()
+    {
+	var days     = $('#reserve-request-form [name=days]').val();
+	var count    = $('#reserve-request-form [name=count]').val();
+	var type;
+	var cluster;
+
+	if (editing) {
+	    type     = $('#reserve-request-form [name=type]').val();
+	    cluster  = $('#reserve-request-form [name=cluster]').val();
+	}
+	else {
+	    type     = $('#reserve-request-form ' +
+			 '[name=type] option:selected').val();
+	    cluster  = $('#reserve-request-form ' +
+			 '[name=cluster] option:selected').val();
+	}
+
+	if (! (days && count && type && cluster)) {
+	    alert("Please provide the project name, the number of days, " +
+		  "number of nodes, and which cluster.");
+	    return;
+	}
+	console.info("FindFit: ", days, count, type, cluster);
+
+	var starttime = null;
+	var startdata = null;
+
+	var tmp = forecasts[cluster][type].slice(0);
+	while (tmp.length && starttime == null) {
+	    var data = tmp.shift();
+
+	    if (data.free >= count) {
+		starttime = data.t;
+		startdata = data;
+
+		for (var i = 0; i < tmp.length; i++) {
+		    var next = tmp[i];
+
+		    if (starttime + (3600 * 24 * days) + 3600 < next.t) {
+			// The next time stamp is beyond the days requested,
+			// so it fits. 
+			break;
+		    }
+		    if (next.free >= count) {
+			// The next time stamp still has enough nodes,
+			// keep checking.
+			continue;
+		    }
+		    // Otherwise, we no longer fit, need to start over.
+		    starttime = null;
+		    break;
+		}
+	    }
+	}
+	if (starttime == null) {
+	    return;
+	}
+	console.info("FindFit: ", startdata);
+
+	var start = moment(starttime * 1000);
+	/*
+	 * Need to push out the start to the top of hour.
+	 */
+	var minutes = (start.hours() * 60) + start.minutes();
+	start.hour(Math.ceil(minutes / 60));
+	var end = moment(start.valueOf() + ((3600 * 24 * days) * 1000));
+
+	var start_day  = $('#reserve-request-form [name=start_day]').val();
+	var start_hour = $('#reserve-request-form [name=start_hour]').val();
+	var end_day    = $('#reserve-request-form [name=end_day]').val();
+	var end_hour   = $('#reserve-request-form [name=end_hour]').val();
+	var new_start_day  = start.format("MM/DD/YYYY");
+	var new_start_hour = start.format("H");
+	var new_end_day    = end.format("MM/DD/YYYY");
+	var new_end_hour   = end.format("H");
+
+	$('#reserve-request-form [name=start_day]').val(new_start_day);
+	$('#reserve-request-form [name=start_hour]').val(new_start_hour);
+	$('#reserve-request-form [name=end_day]').val(new_end_day);
+	$('#reserve-request-form [name=end_hour]').val(new_end_hour);
+
+	// And if we actually changed anything.
+	if (start_day != new_start_day || start_hour != new_start_hour ||
+	    end_day != new_end_day || end_hour != new_end_hour) {
+	    ToggleSubmit(true, "check");
+	}
     }
 
     //
@@ -514,6 +675,11 @@ $(function ()
 		.val(end.format("MM/DD/YYYY"));
 	    $('#reserve-request-form [name=end_hour]')
 		.val(end.format("H"));
+	    var hours = end.diff(start, "hours");
+	    var days  = hours / 24;
+	    $('#reserve-request-form [name=days]')
+		.val(days.toFixed(1));
+
 	    //console.log(start, end);
 
 	    // Set the hour selectors properly in the datepicker object.

@@ -86,7 +86,12 @@ $(function () {
 		    if (_.has(item.dataset, "label")) {
 			var label_text =
 			    "<label for='" + key + "' " +
-			    " class='col-sm-3 control-label'> " +
+			    " class='col-sm-3 control-label' ";
+			if (_.has(item.dataset, "optional")) {
+			    label_text = label_text +
+				"style='padding-top: 0px;'";
+			}
+			label_text = label_text + ">" +
 			    item.dataset['label'];
 
 			if (_.has(item.dataset, "help")) {
@@ -100,6 +105,10 @@ $(function () {
 				"  class='glyphicon " +
 				"      glyphicon-question-sign'>" +
 				" </span></a>";
+			}
+			if (_.has(item.dataset, "optional")) {
+			    label_text = label_text +
+				"<br><small>(Optional)</small>";
 			}
 			label_text = label_text + "</label>";
 			wrapper.append($(label_text));
