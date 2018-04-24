@@ -313,7 +313,7 @@ sub DoCreate()
 	fatal("No such project");
     }
     if (!$project->AccessCheck($this_user, TB_PROJECT_CREATELEASE())) {
-	fatal("Not enough permission in project");
+	UserError("Not enough permission to create datasets in project $pid");
     }
     &$usage()
 	if ($type eq "stdataset" && !defined($expires));
