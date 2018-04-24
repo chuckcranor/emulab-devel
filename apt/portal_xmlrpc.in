@@ -124,7 +124,12 @@ if (@ARGV) {
     while (@ARGV) {
 	my $opt = shift(@ARGV);
 	if ($opt =~ /^(.*)=(.*)$/) {
-	    $args->{$1} = $2;
+	    if ($2 eq "[]") {
+		$args->{$1} = [];
+	    }
+	    else {
+		$args->{$1} = $2;
+	    }
 	}
 	else {
 	    fatal("Bad option: $opt");
