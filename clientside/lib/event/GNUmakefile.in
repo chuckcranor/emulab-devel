@@ -60,7 +60,7 @@ SWIG		= swig2.0
 
 # We should be able to use va_copy everywhere, but be conservative
 SWIGCFLAGS	=
-ifeq ($(ARCH),amd64)
+ifeq ($(ARCH),$(filter $(ARCH),amd64 x86_64))
 SWIGCFLAGS     += -DHAVE_VA_COPY
 endif
 
@@ -88,8 +88,11 @@ TCFLAGS = $(CFLAGS) $(PUBSUBMTFLAGS)
 # Special CFLAGS w/o warnings, for SWIG-generated code
 CFLAGS_NOWARN += -O2 -g -I. $(PUBSUBFLAGS)
 ifeq ($(SYSTEM),Linux)
-PCORE  = -I$(shell find /usr/lib/perl5/$(PERLVERS) | grep CORE\$$$") \
-	`perl -e 'use Config; print $$Config{ccflags};'`
+PCORELIB  = -I$(shell find /usr/lib/perl5/$(PERLVERS) | grep CORE\$$$")
+ifeq ($(PCORE),)
+PCORELIB  = -I$(shell find /usr/lib/*/perl/$(PERLVERS) | grep CORE\$$$")
+endif
+PCORE = $(PCORELIB) `perl -e 'use Config; print $$Config{ccflags};'`
 PYCORE = -I@PYTHON_INCLUDE@
 else
 
