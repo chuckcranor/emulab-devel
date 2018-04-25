@@ -1937,11 +1937,11 @@ sub os_create_storage_slice($$$)
 			my $ptype = "freebsd";
 
 			#
-			# If pnum==0, we need an MBR first
+			# If pnum==0, we need a GPT first
 			#
 			if ($pnum == 0) {
 			    if (mysystem("$GPART create -s gpt $disk $redir")) {
-				warn("*** $lv: could not create MBR on $disk$logmsg\n");
+				warn("*** $lv: could not create GPT on $disk$logmsg\n");
 				return 0;
 			    }
 			    $pnum = $spacemap{$disk}{'pnum'} = 1;
@@ -2498,7 +2498,7 @@ sub os_remove_storage_slice($$$)
 		# Destroy the pool
 		#
 		if (mysystem("$ZPOOL destroy emulab $redir")) {
-		    warn("*** $lv: could not destroy$logmsg\n");
+		    warn("*** $lv: could not destroy zpool$logmsg\n");
 		}
 
 		#
