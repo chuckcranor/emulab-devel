@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2017 University of Utah and the Flux Group.
+# Copyright (c) 2013-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -239,8 +239,15 @@ sub init_serial_map()
 {
     my %snmap = ();
     my $compatnames = 1;
+    my @lines;
 
-    my @lines = `ls /dev/ad* /dev/da* /dev/mfid* /dev/mfisyspd* /dev/nvd* 2>&1`;
+    # XXX see if there are any old /dev/ad? names
+    @lines = `ls /dev/ad[0-9]* 2>/dev/null`;
+    if (@lines == 0) {
+	$compatnames = 0;
+    }
+
+    @lines = `ls /dev/ad* /dev/da* /dev/mfid* /dev/mfisyspd* /dev/nvd* 2>/dev/null`;
   again:
     foreach (@lines) {
 	# XXX just use the /dev/ad? traditional names for now
