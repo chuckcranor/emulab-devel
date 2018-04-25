@@ -274,6 +274,8 @@ $routing = array("geni-login" =>
                                                       "Do_ProjectProfileList",
                                                  "Toggle" =>
                                                      "Do_Toggle",
+                                                 "FreezeOrThaw" =>
+                                                     "Do_FreezeOrThaw",
                                                  "SendTestMessage" =>
                                                      "Do_SendTestMessage",
                                                  "NagPI" =>

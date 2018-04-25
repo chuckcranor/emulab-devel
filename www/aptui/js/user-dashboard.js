@@ -475,6 +475,20 @@ $(function ()
 		$('#admin_content .toggle').click(function() {
 		    Toggle(this);
 		});
+		// Freeze or Thaw.
+		if (json.value.status == "active" ||
+		    json.value.status == "frozen") {
+		    if (json.value.status == "active") {
+			$('#admin_content .freeze').html("Freeze");
+		    }
+		    else {
+			$('#admin_content .freeze').html("Thaw");
+		    }
+		    $('#admin_content .freezethaw').removeClass("hidden");
+		    $('#admin_content .freeze').click(function (event) {
+			FreezeOrThaw(json.value.status);
+		    });
+		}
 	    }
 	    $('#myprofile_content')
 		.html(template({"fields"  : json.value,
@@ -598,6 +612,45 @@ $(function ()
 			     {"uid" : window.TARGET_USER,
 			      "toggle" : name},
 			     callback);
+    }
+
+    //
+    // Freeze or Thaw
+    //
+    function FreezeOrThaw(status) {
+	var tag = (status == "active" ? "Freeze" : "Thaw");
+
+	console.info("FreezeOrThaw: ", status, tag);
+	
+	// Handler for hide modal to unbind the click handler.
+	$('#confirm-freezethaw-modal').on('hidden.bs.modal', function (event) {
+	    $(this).unbind(event);
+	    $('#confirm-freezethaw').unbind("click.freezethaw");
+	});
+	$('#confirm-freezethaw').bind("click.freezethaw", function (event) {
+	    var callback = function(json) {
+		sup.HideWaitWait();
+	    
+		if (json.code) {
+		    sup.SpitOops("oops",
+				 "Failed to " + tag + " user");
+		    return;
+		}
+		LoadProfileTab();
+	    };
+	    var doit = function () {
+		sup.ShowWaitWait("This will take a minute. Patience please.");
+		var xmlthing =
+		    sup.CallServerMethod(null, "user-dashboard",
+					 "FreezeOrThaw",
+					 {"uid"   : window.TARGET_USER,
+					  "which" : tag});
+		xmlthing.done(callback);
+	    };
+	    sup.HideModal('#confirm-freezethaw-modal', doit);
+	});
+	$('#confirm-freezethaw-modal .which').html(tag);
+	sup.ShowModal('#confirm-freezethaw-modal');
     }
 
     function SendTestMessage()

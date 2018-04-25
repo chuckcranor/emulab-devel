@@ -298,7 +298,7 @@ function Do_UsageSummary()
 function Do_Toggle()
 {
     global $this_user, $target_user;
-    global $ajax_args;
+    global $ajax_args, $suexec_output;
     global $TBMAIL_OPS, $TBMAIL_AUDIT, $TBMAIL_WWW, $TBADMINGROUP;
 
     if (CheckPageArgs()) {
@@ -368,6 +368,49 @@ function Do_Toggle()
     else {
 	SPITAJAX_ERROR(-1, "Unknown toggle name: $toggle");
         return;
+    }
+    SPITAJAX_RESPONSE(1);
+}
+
+#
+# Freeze or Thaw.
+#
+function Do_FreezeOrThaw()
+{
+    global $this_user, $target_user;
+    global $ajax_args, $suexec_output;
+    global $TBADMINGROUP;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+        return;
+    }
+    if ($target_user->status() != TBDB_USERSTATUS_ACTIVE &&
+        $target_user->status() != TBDB_USERSTATUS_FROZEN) {
+	SPITAJAX_ERROR(-1, "User is not active or frozen!");
+        return;
+    }
+    $target_idx  = $target_user->uid_idx();
+    $target_uid  = $target_user->uid();
+    $this_uid    = $this_user->uid();
+
+    if (!isset($ajax_args["which"])) {
+	SPITAJAX_ERROR(-1, "What am I supposed to do?");
+	return -1;
+    }
+    $which = strtolower($ajax_args["which"]);
+    if ($which != "freeze" && $which != "thaw") {
+	SPITAJAX_ERROR(-1, "Cannot do that: $which");
+	return -1;
+    }
+    # Use -u (update) and -f (force) to make it happen.
+    if (SUEXEC($this_uid, $TBADMINGROUP,
+               "webtbacct -u -f $which $target_uid", SUEXEC_ACTION_CONTINUE)) {
+        SPITAJAX_ERROR(-1, $suexec_output);
+        return -1;
     }
     SPITAJAX_RESPONSE(1);
 }

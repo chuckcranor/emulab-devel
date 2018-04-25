@@ -1,6 +1,9 @@
 <style>
 .toggle {
-	cursor: pointer;
+    cursor: pointer;
+}
+.freeze {
+    cursor: pointer;
 }
 </style>
 <div>
@@ -51,7 +54,11 @@
       </tr>
       <tr>
 	<td>Status</td>
-	<td><%= fields.status %></td>
+	<td><%= fields.status %>
+	  <span class="freezethaw hidden">
+	    (<a class="freeze text-danger">foo</a>)
+	  </span>
+	</td>
       </tr>
       <% if (fields.nonlocal_id != "") { %>
 	<tr>
