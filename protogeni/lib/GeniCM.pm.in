@@ -1294,7 +1294,16 @@ sub GetTicketAuxAux($)
 		    if ($use_imagetracker) {
 			my $image = GeniImage::MapToLocalImage($dname, $pid);
 			if (GeniResponse::IsError($image)) {
+			    #
+			    # Map SEARCHFAILED to BADARGS on this path.
+			    #
 			    $response = $image;
+			    if ($response->{'code'} ==
+				GENIRESPONSE_SEARCHFAILED) {
+				$response->{'code'} = GENIRESPONSE_BADARGS;
+				$response->{'output'} = "Could not lookup ".
+				    "image at the image server: $dname";
+			    }
 			    goto bad;
 			}
 			if ($image->IsLocal() || $image->IsSystemImage()) {
