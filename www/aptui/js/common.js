@@ -273,7 +273,7 @@ window.APT_OPTIONS.Announcements = function () {
 	var newhtml = "";
 	
 	if (json.value.length) {
-	    console.info("announcements", json);
+	    //console.info("announcements", json);
 	    _.each(json.value, function(html) {
 		newhtml += html;
 	    });
