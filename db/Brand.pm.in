@@ -90,7 +90,7 @@ sub wwwBase($)
     return ($self->isAPT() ? "https://www.aptlab.net" :
 	    $self->isCloud() ? "https://www.cloudlab.us" :
 	    $self->isPNet() ? "https://www.phantomnet.org" :
-	    $self->isPowder() ? "@TBBASE@" . "/portal" :
+	    $self->isPowder() ? "https://www.powderwireless.net" :
 	    $self->isEmulab() ?	"@TBBASE@" . "/portal" :
 	    "@TBBASE@");
 }

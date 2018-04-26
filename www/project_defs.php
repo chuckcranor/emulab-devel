@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -188,7 +188,7 @@ class Project
 	return ($this->isAPT() ? "https://www.aptlab.net" :
 		($this->isCloud() ? "https://www.cloudlab.us" : 
 		 ($this->isPNet() ? "https://www.phantomnet.org" :
-                  ($this->isPowder() ? $TBBASE :
+                  ($this->isPowder() ? "https://www.powderwireless.net" :
                    $TBBASE))));
     }
     function ApprovalEmailAddress() {

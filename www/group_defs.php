@@ -693,7 +693,7 @@ class Group
     # Notify leaders of new (and verified) group member.
     #
     function NewMemberNotify($user, $nag = false) {
-	global $TBWWW, $APTBASE,
+	global $TBWWW, $APTBASE, $TBMAILTAG,
 	       $TBMAIL_APPROVAL, $TBMAIL_AUDIT, $TBMAIL_WWW, $TBMAIL_NOREPLY;
 	
 	if (! $this->project) {
@@ -807,6 +807,10 @@ class Group
                 "Country:         $usr_country\n".
                 "Phone:           $usr_phone\n";
 	}
+        # Make sure this goes out with the right subject tag,
+        $oldmailtag = $TBMAILTAG;
+        $TBMAILTAG  = $project->EmailTag();
+        
 	TBMAIL("$leader_name '$leader_uid' <$leader_email>",
                "$joining_uid $pid Project Join Request",
                $message . 
@@ -822,6 +826,7 @@ class Group
                "Bcc: $TBMAIL_AUDIT\n".
                "Errors-To: $TBMAIL_WWW");
 
+        $TBMAILTAG = $oldmailtag;
 	return 0;
     }
 
