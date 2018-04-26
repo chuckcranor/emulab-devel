@@ -827,7 +827,14 @@ function Do_ReservationInfo()
         $sopts = "-a '$urn'";
         $popts = "";
     }
-
+    if (isset($ajax_args["project"])) {
+        $project = Project::Lookup($ajax_args["project"]);
+        if (!$project) {
+            SPITAJAX_ERROR(-1, "No such project");
+            return;
+        }
+        $popts .= " " . $project->pid();
+    }
     $webtask = WebTask::CreateAnonymous();
     $webtask_id = $webtask->task_id();
 

@@ -46,11 +46,13 @@ $(function ()
 		Delete();
 	    });
 	}
-	// Give this a slight delay so that the spinners appear.
-	// Not really sure why they do not.
-	setTimeout(function () {
-	    LoadReservations();
-	}, 100);
+	else {
+	    // Give this a slight delay so that the spinners appear.
+	    // Not really sure why they do not.
+	    setTimeout(function () {
+		LoadReservations();
+	    }, 100);
+	}
 
 	if (1) {
 	    $('#reserve-request-form .findfit-button')
@@ -350,7 +352,7 @@ $(function ()
      * Load anonymized reservations from each am in the list and
      * generate tables.
      */
-    function LoadReservations()
+    function LoadReservations(project)
     {
 	_.each(amlist, function(details, urn) {
  	    var callback = function(json) {
@@ -400,10 +402,12 @@ $(function ()
 			});
 		    });
  	    }
+	    var args = {"cluster" : details.nickname};
+	    if (project !== undefined) {
+		args["project"] = project;
+	    }
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
-						"ReservationInfo",
-						{"cluster" : details.nickname,
-						 "anonymous" : 1});
+						"ReservationInfo", args);
 	    xmlthing.done(callback);
 	});
     }
@@ -423,6 +427,7 @@ $(function ()
 		data.t     = parseInt(data.t);
 		data.free  = parseInt(data.free);
 		data.held  = parseInt(data.held);
+		data.stamp = new Date(parseInt(data.t) * 1000);
 	    }
 
 	    // No data or just one data point, nothing to do.
@@ -441,14 +446,6 @@ $(function ()
 		var nextdata = array[i + 1];
 		
 		if (data.t == nextdata.t) {
-		    continue;
-		}
-		/*
-		 * Oh, turns out two consecutive timestamps can have
-		 * the same free/held values. Cull those out too.
-		 */
-		if (data.free == nextdata.free &&
-		    data.held == nextdata.held) {
 		    continue;
 		}
 		temp.push(data);
@@ -486,6 +483,22 @@ $(function ()
 	}
 	console.info("FindFit: ", days, count, type, cluster);
 
+	/*
+	 * Slightly cheesy way to wait for the cluster data to come in.
+	 */
+	if (forecasts[cluster] === undefined) {
+	    sup.ShowWaitWait("Waiting for cluster reservation data");
+	    var waitfordata = function() {
+		if (forecasts[cluster] !== undefined) {
+		    sup.HideWaitWait();
+		    FindFit();
+		    return;
+		}
+		setTimeout(function() { waitfordata() }, 200);
+	    };
+	    setTimeout(function() { waitfordata() }, 200);
+	    return;
+	}
 	var starttime = null;
 	var startdata = null;
 
@@ -502,7 +515,7 @@ $(function ()
 
 		    if (starttime + (3600 * 24 * days) + 3600 < next.t) {
 			// The next time stamp is beyond the days requested,
-			// so it fits. 
+			// so it fits.
 			break;
 		    }
 		    if (next.free >= count) {
@@ -547,6 +560,7 @@ $(function ()
 	if (start_day != new_start_day || start_hour != new_start_hour ||
 	    end_day != new_end_day || end_hour != new_end_hour) {
 	    ToggleSubmit(true, "check");
+	    aptforms.MarkFormUnsaved();
 	}
     }
 
@@ -720,6 +734,9 @@ $(function ()
 	    window.PID = details.pid;
 	    // Now enable delete button
 	    $('#reserve-delete-button').removeAttr("disabled");
+
+	    // Now we can load the graph since we know the project.
+	    LoadReservations(details.pid);
 	};
 	sup.ShowWaitWait();
 	var xmlthing = sup.CallServerMethod(null, "reserve",
