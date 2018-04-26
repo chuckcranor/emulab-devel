@@ -621,10 +621,6 @@ if ($localuser) {
     if (!defined($project)) {
 	fatal("Project provided does not exist");
     }
-    if (!$project->AccessCheck($emulab_user, TB_PROJECT_CREATEEXPT)) {
-	fatal("No permission to create experiments in project ".
-	      $project->pid());
-    }
     $pid = $project->pid();
 
     # Option subgroup.
@@ -636,8 +632,16 @@ if ($localuser) {
 	if (!defined($group)) {
 	    fatal("Group $val does not exist in project $pid");
 	}
+	if (!$group->AccessCheck($emulab_user, TB_PROJECT_CREATEEXPT)) {
+	    UserError("No permission to create experiments in group ".
+		      $group->pid() . "/" . $group->gid());
+	}
     }
     else {
+	if (!$project->AccessCheck($emulab_user, TB_PROJECT_CREATEEXPT)) {
+	    UserError("No permission to create experiments in project ".
+		      $project->pid());
+	}
 	$group = $project->GetProjectGroup();
     }
     $gid = $group->gid();
