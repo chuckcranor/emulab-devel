@@ -410,7 +410,8 @@ function Do_InfoOrWarn($warning = false)
              "your reservation.\n"
              :
              "If your reservation is still underused in 24 hours, it\n".
-             "will be canceled.\n") . "\n";
+             "will be canceled. You may also reduce/shorten and/or split the\n".
+             "reservation so that you are not wasting resources.\n") . "\n";
 
         if (isset($ajax_args["message"]) && $ajax_args["message"] != "") {
             $message .= $ajax_args["message"] . "\n";
