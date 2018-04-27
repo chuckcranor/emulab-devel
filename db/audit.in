@@ -46,6 +46,7 @@ my $TBOPS       = "@TBOPSEMAIL@";
 my $ISOLATEADMINS = @ISOLATEADMINS@;
 my $TBBASE      = "@TBBASE@";
 my $MKCERT      = "$TB/sbin/mkusercert";
+my $CHECKQUOTA  = "$TB/sbin/checkquota";
 my $SUDO	= "/usr/local/bin/sudo";
 my $PROTOUSER   = "elabman";
 my $MAINSITE    = @TBMAINSITE@;
@@ -425,6 +426,15 @@ else {
     print "".$query_result->numrows()." stale logins would be deleted.\n";
 }
 
+my %overquota = ();
+
+sub checkquota($) {
+    if (!exists($overquota{$_[0]})) {
+	$overquota{$_[0]} = system("$CHECKQUOTA $_[0]");
+    }
+    return $overquota{$_[0]};
+}
+
 #
 # Generate any missing certs.  There was a time when nonlocal users did
 # not automatically receive unencrypted certs, for instance.  Don't tell
@@ -453,6 +463,12 @@ while (my $row = $query_result->fetchrow_hashref()) {
     if (!defined($unenc_ctime) || $unenc_ctime eq '') {
 	print STDERR
 	    "Unencrypted Certificate for $uid missing. Regenerating.\n";
+
+	if (checkquota($uid)) {
+	    print STDERR "User $uid over quota, not generating certificate!\n";
+	    next;
+	}
+
 	next
 	    if ($impotent);
 
@@ -472,6 +488,12 @@ while (my $row = $query_result->fetchrow_hashref()) {
     if (!defined($enc_ctime) || $enc_ctime eq '') {
 	print STDERR
 	    "Encrypted Certificate for $uid missing. Regenerating.\n";
+
+	if (checkquota($uid)) {
+	    print STDERR "User $uid over quota, not generating certificate!\n";
+	    next;
+	}
+
 	next
 	    if ($impotent);
 
@@ -526,6 +548,11 @@ while (my $row = $query_result->fetchrow_hashref()) {
 	print STDERR 
 	"Unencrypted Certificate for $uid expires on $expires. Regenerating.\n";
 
+	if (checkquota($uid)) {
+	    print STDERR "User $uid over quota, not generating certificate!\n";
+	    next;
+	}
+
 	next
 	    if ($impotent);
 
@@ -545,6 +572,11 @@ while (my $row = $query_result->fetchrow_hashref()) {
 
     print STDERR
 	"Encrypted Certificate for $uid expires on $expires. Regenerating\n";
+
+    if (checkquota($uid)) {
+	print STDERR "User $uid over quota, not generating certificate!\n";
+	next;
+    }
 
     if (!$impotent) {
 	system("$SUDO -u $PROTOUSER $MKCERT -P $uid_idx");
