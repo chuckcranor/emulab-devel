@@ -272,6 +272,7 @@ class User
 		    }
 		}
 		else
+		    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 		    $errors[] = "Transient error(4, $retval); please try again later.";
 	    }
 	    unlink($xmlname);
