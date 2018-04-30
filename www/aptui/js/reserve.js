@@ -17,6 +17,7 @@ $(function ()
     var editing      = false;
     var buttonstate  = "check";
     var forecasts    = {};
+    var IDEAL_STARTHOUR = 7;	// 7am start time preferred. 
     
     function initialize()
     {
@@ -183,7 +184,11 @@ $(function ()
     
     /*
      * When the date selected is today, need to disable the hours
-     * before the current hour.
+     * before the current hour. Also set the initial hour to a
+     * reasonable hour, like 7am since that is a good start work time
+     * for most people. Basically, try to avoid unused reservations
+     * between midnight and 7am, unless people specifically want that
+     * time.
      */
     function DateChange(which)
     {
@@ -197,6 +202,10 @@ $(function ()
 	else {
 	    selecter = "#reserve-request-form #end_hour";
 	}
+	// Remember if the user already set the hour.
+	var hourset =
+	    ($(selecter + " option:selected").val() == "" ? false : true);
+	
 	if (moment(date).isSame(Date.now(), "day")) {
 	    for (var i = 0; i <= now.getHours(); i++) {
 
@@ -216,6 +225,13 @@ $(function ()
 		$(selecter + " option[value='" + i + "']")
 		    .removeAttr("disabled");
 	    }
+	}
+	/*
+	 * Ok, init the hour if not set.
+	 */
+	if (!hourset) {
+	    $(selecter + ' option[value=' + IDEAL_STARTHOUR + ']')
+		.prop('selected', 'selected');
 	}
     }
 
@@ -501,6 +517,7 @@ $(function ()
 	}
 	var starttime = null;
 	var startdata = null;
+	var enddata   = null;
 
 	var tmp = forecasts[cluster][type].slice(0);
 	while (tmp.length && starttime == null) {
@@ -516,6 +533,7 @@ $(function ()
 		    if (starttime + (3600 * 24 * days) + 3600 < next.t) {
 			// The next time stamp is beyond the days requested,
 			// so it fits.
+			enddata = next;
 			break;
 		    }
 		    if (next.free >= count) {
@@ -532,7 +550,7 @@ $(function ()
 	if (starttime == null) {
 	    return;
 	}
-	console.info("FindFit: ", startdata);
+	console.info("FindFit: ", startdata, enddata);
 
 	var start = moment(starttime * 1000);
 	/*
@@ -540,6 +558,21 @@ $(function ()
 	 */
 	var minutes = (start.hours() * 60) + start.minutes();
 	start.hour(Math.ceil(minutes / 60));
+
+	/*
+	 * Try to shift the reservation from the middle of the night.
+	 * It is okay if we cannot do this, we still want to give the
+	 * user the earliest possible reservation.
+	 */
+	if (start.hour() < IDEAL_STARTHOUR) {
+	    var tmp = moment(start);
+	    tmp.hour(IDEAL_STARTHOUR);
+	    
+	    if (tmp.unix() + ((3600 * 24 * days)) < enddata.t) {
+		console.info("Shifting to later start time");
+		start = tmp;
+	    }
+	}
 	var end = moment(start.valueOf() + ((3600 * 24 * days) * 1000));
 
 	var start_day  = $('#reserve-request-form [name=start_day]').val();
