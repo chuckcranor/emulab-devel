@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2009-2017 University of Utah and the Flux Group.
+# Copyright (c) 2009-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -405,7 +405,7 @@ sub imagefield($$)
 {
     my ($self, $field) = @_;
 
-    if (defined($self->{'IMAGEPARSE'})) {
+    if (!defined($self->{'IMAGEPARSE'})) {
 	my (undef, $ospid, $os, $vers) = $self->ParseImage();
 
 	$self->{'IMAGEPARSE'} = {
