@@ -1374,7 +1374,7 @@ sub CreateSliver($)
 	    print STDERR "CreateSliver failed on $urn: " .
 		$response->error() . "\n";
 	    
-	    $webtask->output($errmsg);
+	    $webtask->output($response->error());
 	    $webtask->Exited($response->code());
 	    $aggobj->SetStatus("failed");
 	    
