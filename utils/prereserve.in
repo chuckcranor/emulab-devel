@@ -402,7 +402,7 @@ if ($revoke) {
     # When revoking the reservation, lets see if any nodes can be
     # moved to a another prereserve instead of going into the free pool.
     #
-    my $query_result =
+    $query_result =
 	DBQueryFatal("select node_id from nodes ".
 		     "where reserved_pid='$pid' and ".
 		     "      reservation_name='$resname'");
