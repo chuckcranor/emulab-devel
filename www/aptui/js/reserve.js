@@ -729,6 +729,12 @@ $(function ()
 
 	    //console.log(start, end);
 
+	    /*
+	     * Need this in case the start date is in the past.
+	     */
+	    $("#reserve-request-form #start_day")
+		.datepicker("option", "minDate", start.format("MM/DD/YYYY"));
+
 	    // Set the hour selectors properly in the datepicker object.
 	    $("#reserve-request-form #start_day")
 		.datepicker("setDate", start.format("MM/DD/YYYY"));
