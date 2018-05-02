@@ -32,7 +32,9 @@
    "howfull": 100,
    "url": "http://docs.cloudlab.us/hardware.html#%28part._cloudlab-wisconsin%29",
    "children": [ { "name": "c220g1", "size": 30, "howfull": 3, "url": "http://docs.cloudlab.us/hardware.html#%28part._cloudlab-wisconsin%29" },
-		 { "name": "c220g2", "size": 163, "howfull": 3, "url": "http://docs.cloudlab.us/hardware.html#%28part._cloudlab-wisconsin%29" } ]
+		 { "name": "c220g2", "size": 163, "howfull": 3, "url": "http://docs.cloudlab.us/hardware.html#%28part._cloudlab-wisconsin%29" },
+		 { "name": "c220g5", "size": 225, "howfull": 3, "url": "http://docs.cloudlab.us/hardware.html#%28part._cloudlab-wisconsin%29" },
+		 { "name": "c240g5", "size": 32, "howfull": 3, "url": "http://docs.cloudlab.us/hardware.html#%28part._cloudlab-wisconsin%29" } ]
   }
  ]
 }
