@@ -2770,6 +2770,16 @@ sub vnodeCreate($$$$)
 	 "$mntdir/vmname:/var/emulab/boot/vmname:ro");
 
     #
+    # Tell the clientside to use the gzip'd versions of ltmap and
+    # ltpmap; if we don't use these, on multi-thousand node topos, they
+    # suck up too much space in the host.
+    #
+    open(FD,">$mntdir/ltmap-gzip");
+    close(FD);
+    push(@{$args{"HostConfig"}{"Binds"}},
+	 "$mntdir/ltmap-gzip:/etc/emulab/ltmap-gzip:ro");
+
+    #
     # Tell the inside clientside which event server to use.  NB: we do
     # this as an read-only mount because the container removes it on
     # reboot, and we don't want to have to rewrite it in time.
