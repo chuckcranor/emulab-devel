@@ -4047,6 +4047,7 @@ sub analyzeImage($$)
     my $output;
     my @outlines;
     my ($code,$json,$resp,$retval);
+    my $iid;
 
     TBDebugTimeStamp("analyzing image $image...");
 
@@ -4060,6 +4061,7 @@ sub analyzeImage($$)
 	if (ref($json) eq 'ARRAY') {
 	    $jstate = $json->[0];
 	}
+	$iid = $jstate->{'Id'};
 	$jstate = $jstate->{'Config'};
 
 	if (exists($jstate->{'Cmd'})) {
@@ -4084,6 +4086,27 @@ sub analyzeImage($$)
 	    $rethash->{DOCKER_USER} = $jstate->{'User'};
 	}
     }
+    my $needunlock = 0;
+    if (defined($iid)) {
+	if (! -f "/vms/contexts/analyze-$iid") {
+	    if (TBScriptLock("analyze-$iid",
+			     TBSCRIPTLOCK_INTERRUPTIBLE(),
+			     1800) != TBSCRIPTLOCK_OKAY()) {
+		fatal("Could not get analyze-$iid lock for $image analysis!");
+	    }
+	    TBDebugTimeStamp("  got image analysis lock analyze-$iid for $image")
+		if ($lockdebug);
+	    $needunlock = 1;
+	}
+	if (-f "/vms/contexts/analyze-$iid") {
+	    TBDebugTimeStamp("not running analysis script for image $image;".
+		" already in /vms/contexts/analyze-$iid\n");
+	    open(FD,"/vms/contexts/analyze-$iid");
+	    @outlines = <FD>;
+	    close(FD);
+	    goto outlines;
+	}
+    }
 
     TBDebugTimeStamp("running analysis script for image $image...");
     my $args = {
@@ -4098,9 +4121,19 @@ sub analyzeImage($$)
 	sub { $buf .= $_[0]; });
     if ($code) {
 	warn("failed to run analysis script container $tmpname for $image");
+	TBScriptUnlock()
+	    if ($needunlock);
 	return $code;
     }
+    TBDebugTimeStamp("analyze.sh output:\n$buf");
+    open(FD,">/vms/contexts/analyze-$iid");
+    print FD $buf;
+    close(FD);
     @outlines = split("\n",$buf);
+
+  outlines:
+    TBScriptUnlock()
+      if ($needunlock);
     for my $res (@outlines) {
 	if ($res =~ /^[a-zA-Z0-9_]*=[^=]*$/) {
 	    chomp($res);
