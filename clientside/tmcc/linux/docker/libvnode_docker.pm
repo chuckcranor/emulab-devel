@@ -1760,7 +1760,7 @@ sub rootPreConfig($)
 	#
 	# If we are instead using the devicemapper direct-lvm backend,
 	# we need both $EXTRAFS and $INFOFS, but we also need a beefy
-	# thinpool for Docker.  In this case, we use max(5GB,3%VG) LV
+	# thinpool for Docker.  In this case, we use min(32GB,15%VG) LV
 	# for $INFOFS; use min(32GB,15%remainingVG) for the $EXTRAFS;
 	# then we provision the thin pool with 90% of the remaining
 	# space (i.e., 0.90*(totalVG - sizeof($EXTRAFS) -
@@ -1777,11 +1777,11 @@ sub rootPreConfig($)
 
 	if (!$USE_DOCKER_LVM) {
 	    # We will only create $EXTRAFS and $INFOFS.
-	    if (0.03 * $remaining < 5) {
-		$infosize = 0.03 * $remaining;
+	    if (0.15 * $remaining < 32) {
+		$infosize = 0.15 * $remaining;
 	    }
 	    else {
-		$infosize = 5;
+		$infosize = 32;
 	    }
 	    $remaining -= $infosize;
 	    $extrasize = 0.90 * $remaining;
@@ -1790,11 +1790,11 @@ sub rootPreConfig($)
 	else {
 	    # We will create $EXTRAFS and $INFOFS, as well as the Docker
 	    # thin pool.
-	    if (0.03 * $remaining < 5) {
-		$infosize = 0.03 * $remaining;
+	    if (0.15 * $remaining < 32) {
+		$infosize = 0.15 * $remaining;
 	    }
 	    else {
-		$infosize = 5;
+		$infosize = 32;
 	    }
 	    $remaining -= $infosize;
 	    if (0.15 * $remaining < 32) {
