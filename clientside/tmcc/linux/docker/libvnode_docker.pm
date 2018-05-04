@@ -5584,6 +5584,14 @@ sub CreateRoutingScripts($$)
 	warn("Could not get router configuration from libsetup!");
 	return -1;
     }
+    #
+    # Remove this temp file that getrouterconfig/calcroutes created as
+    # input for the dijkstra calculator; on a 2k-node topo, it can be
+    # >80MB.
+    #
+    if (-f CONFDIR() . "/linkmap") {
+	unlink(CONFDIR() . "/linkmap");
+    }
 
     my $script = CONFDIR()."/routing.sh";
 
