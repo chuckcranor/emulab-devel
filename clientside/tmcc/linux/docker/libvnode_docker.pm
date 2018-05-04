@@ -1008,8 +1008,11 @@ sub getDockerNetMemberIds($)
     if ($code) {
 	return undef;
     }
-    if (!ref($content) eq 'HASH') {
+    if (ref($content) eq 'ARRAY') {
 	$content = $content->[0];
+    }
+    if (ref($content) ne 'HASH') {
+	return undef;
     }
     if (!exists($content->{"Containers"})) {
 	return ();
