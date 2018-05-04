@@ -293,6 +293,8 @@ if [ -f /etc/emulab/version ]; then
 fi
 
 echo "# Result variables:"
+echo ""
+echo "TAG=$tag"
 echo "TAG=$tag"
 echo "MINTAG=$mintag"
 echo "DIST=$dist"
