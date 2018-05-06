@@ -4128,6 +4128,12 @@ sub analyzeImage($$)
 	    if ($needunlock);
 	return $code;
     }
+    # Santize the output.  For whatever reason(s), under heavy load, it
+    # comes with non-printable chars occasionally, and with CRLF.  Odd.
+    #$buf =~ s/[^[:ascii:]]//g;
+    #$buf =~ s/\r\n//g;
+    $buf =~ s/[\000-\011\014\015-\037\176-\255]//g;
+
     TBDebugTimeStamp("analyze.sh output:\n$buf");
     open(FD,">/vms/contexts/analyze-$iid");
     print FD $buf;

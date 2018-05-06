@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (c) 2017 University of Utah and the Flux Group.
+# Copyright (c) 2017, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -282,6 +282,7 @@ sub container_run($$$$;$$$) {
     }
     $args->{'Image'} = $image;
     $args->{'Cmd'} = $cmd;
+    $args->{'Tty'} = JSON::PP::false;
     my ($code,$content,$resp);
     ($code,$content) = $self->container_create($id,$args);
     if ($code) {
