@@ -158,12 +158,18 @@ my $USE_DOCKER_CE = 1;
 #
 my $USE_LVM = 1;
 #
+# Which docker storage driver should we use; see rootPreConfig().  Note,
+# if you change this, you should change USE_DOCKER_LVM to 0 if
+# !devicemapper; 1 if devicemapper.
+#
+my $DOCKER_STORAGE_DRIVER = 'overlay2';
+#
 # Should we use the Docker devicemapper direct-lvm storage backend?
 # This should remain set, so that it is used for shared hosts.  User
 # should be able to change to the default AUFS backend on dedicated
 # hosts.
 #
-my $USE_DOCKER_LVM = 1;
+my $USE_DOCKER_LVM = 0;
 #
 # Default NFS mounts to read-only for now so that nothing in the
 # container can blow them away accidentally!
@@ -1275,9 +1281,9 @@ sub init($)
 # Called on each vnode, but should only be executed once per boot.
 # We use a file in /var/run (cleared on reboots) to ensure this.
 #
-sub rootPreConfig($)
+sub rootPreConfig($;$)
 {
-    my $bossip = shift;
+    my ($bossip,$hostattributes) = @_;
     my ($code,$content,$resp);
 
     #
@@ -1307,6 +1313,25 @@ sub rootPreConfig($)
     }
     
     TBDebugTimeStamp("Configuring root vhost context");
+
+    #
+    # Check if we are using an alternate storage driver.
+    #
+    if (defined($hostattributes)
+	&& exists($hostattributes->{"DOCKER_STORAGE_DRIVER"})) {
+	my $driver = $hostattributes->{"DOCKER_STORAGE_DRIVER"};
+	if ($driver eq 'overlay2' || $driver eq 'aufs') {
+	    $DOCKER_STORAGE_DRIVER = $driver;
+	    $USE_DOCKER_LVM = 0;
+	}
+	elsif ($driver eq 'devicemapper') {
+	    $DOCKER_STORAGE_DRIVER = $driver;
+	    $USE_DOCKER_LVM = 1;
+	}
+	else {
+	    warn("bogus storage driver $driver; ignoring!\n");
+	}
+    }
 
     #
     # Ensure we have the latest bridge/iface state!
@@ -1878,9 +1903,11 @@ sub rootPreConfig($)
 	    mysystem("lvchange --metadataprofile $VGNAME-thinpool".
 		     " $VGNAME/thinpool");
 	    mysystem("lvs -o+seg_monitor");
-
+	}
+	if (defined($DOCKER_STORAGE_DRIVER)) {
 	    #
-	    # Setup the Docker devicemapper direct-lvm storage backend.
+	    # Setup the Docker storage backend.
+	    # If devicemapper direct-lvm storage backend, like
 	    # { "storage-driver": "devicemapper",
 	    #   "storage-opts": [
 	    #     "dm.thinpooldev=/dev/mapper/docker-thinpool",
@@ -1909,12 +1936,14 @@ sub rootPreConfig($)
 	    # Write our config.
 	    # Don't restart docker; that happens at the end of $USE_LVM.
 	    $needdockerrestart = 1;
-	    $json->{"storage-driver"} = "devicemapper";
-	    $json->{"storage-opts"} = [
-		"dm.thinpooldev=/dev/mapper/${VGNAME}-thinpool",
-		"dm.use_deferred_removal=true",
-		"dm.use_deferred_deletion=true"
-		];
+	    $json->{"storage-driver"} = "$DOCKER_STORAGE_DRIVER";
+	    if ($DOCKER_STORAGE_DRIVER eq 'devicemapper') {
+		$json->{"storage-opts"} = [
+		    "dm.thinpooldev=/dev/mapper/${VGNAME}-thinpool",
+		    "dm.use_deferred_removal=true",
+		    "dm.use_deferred_deletion=true"
+		    ];
+	    }
 
 	    TBDebugTimeStamp("Updating /etc/docker/daemon.json");
 
@@ -1950,7 +1979,8 @@ sub rootPreConfig($)
 		TBScriptUnlock();
 		return -1;
 	    }
-	    mysystem2("mount -t aufs | grep /var/lib/docker/");
+	    my $rca = mysystem2("mount -t aufs | grep /var/lib/docker/");
+	    my $rco = mysystem2("mount -t overlay2 | grep /var/lib/docker/");
 	    if ($? == 0) {
 		warn("filesystems still mounted in /var/lib/docker; aborting!");
 		TBScriptUnlock();

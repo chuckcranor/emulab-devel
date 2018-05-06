@@ -577,9 +577,9 @@ sub ImageLVName($)
 # Called on each vnode, but should only be executed once per boot.
 # We use a file in /var/run (cleared on reboots) to ensure this.
 #
-sub rootPreConfig($)
+sub rootPreConfig($;$)
 {
-    my $bossip = shift;
+    my ($bossip,$hostattributes) = @_;
     #
     # Haven't been called yet, grab the lock and double check that someone
     # didn't do it while we were waiting.
