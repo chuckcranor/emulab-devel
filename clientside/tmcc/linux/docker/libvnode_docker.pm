@@ -511,11 +511,11 @@ sub setConcurrency($)
 
 	if ($cpus > 0 && $disks > 0 && $ram > 0) {
 	    if ($ram < 1024 || (!SHAREDHOST() && $hasswapped)) {
-		$MAXCONCURRENT = 1;
-	    } elsif ($cpus <= 2 || $disks == 1 || $ram <= 2048) {
 		$MAXCONCURRENT = 3;
-	    } else {
+	    } elsif ($cpus <= 2 || $disks == 1 || $ram <= 2048) {
 		$MAXCONCURRENT = 5;
+	    } else {
+		$MAXCONCURRENT = 16;
 	    }
 	}
     }
