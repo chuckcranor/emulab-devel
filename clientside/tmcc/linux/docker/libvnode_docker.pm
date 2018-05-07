@@ -1336,7 +1336,7 @@ sub rootPreConfig($;$)
 	TBDebugTimeStamp("rootPreConfig: grabbing global lock $GLOBAL_CONF_LOCK")
 	    if ($lockdebug);
 	my $locked = TBScriptLock($GLOBAL_CONF_LOCK,
-				  TBSCRIPTLOCK_GLOBALWAIT(), 900);
+				  TBSCRIPTLOCK_GLOBALWAIT(), 1200);
 	if ($locked != TBSCRIPTLOCK_OKAY()) {
 	    return 0
 		if ($locked == TBSCRIPTLOCK_IGNORE());
@@ -2146,7 +2146,7 @@ sub rootPreConfigNetwork($$$$)
 		     " $GLOBAL_CONF_LOCK")
 	if ($lockdebug);
     if (TBScriptLock($GLOBAL_CONF_LOCK,
-		     TBSCRIPTLOCK_INTERRUPTIBLE(), 900) != TBSCRIPTLOCK_OKAY()){
+		     TBSCRIPTLOCK_INTERRUPTIBLE(), 1200) != TBSCRIPTLOCK_OKAY()){
 	print STDERR "Could not get the global lock!\n";
 	return -1;
     }
@@ -3871,7 +3871,7 @@ sub vnodeTearDown($$$$)
     # Lots of shared resources 
     TBDebugTimeStamp("vnodeTearDown: grabbing global lock $GLOBAL_CONF_LOCK")
 	if ($lockdebug);
-    if (TBScriptLock($GLOBAL_CONF_LOCK, 0, 900) != TBSCRIPTLOCK_OKAY()) {
+    if (TBScriptLock($GLOBAL_CONF_LOCK, 0, 1200) != TBSCRIPTLOCK_OKAY()) {
 	print STDERR "Could not get the global lock after a long time!\n";
 	return -1;
     }
