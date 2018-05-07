@@ -834,34 +834,13 @@ sub ensureDockerInstalled()
 
     # Check to ensure the docker iface has a non-172.16 subnet, unless
     # we already fixed that:
-    if (!exists($json->{'bip'})) {
-	my $waittime = 900;
-	while ($waittime > 0) {
-	    $waittime -= 1;
-	    my $rc = system("docker network ls docker0");
-	    if (!$rc) {
-		TBDebugTimeStamp("docker0 network exists ($waittime)");
-		last;
-	    }
-	    else {
-		TBDebugTimeStamp("docker0 network does not yet exist; waiting...\n");
-		sleep(1);
-	    }
-	}
+    if (!exists($json->{'bip'})
+	|| $json->{'bip'} ne $DOCKER_DEFAULT_BRIDGE_CIDR) {
+	TBDebugTimeStamp("Moving docker0 to $DOCKER_DEFAULT_BRIDGE_CIDR");
 
-	my $diface = ifaceInfo("docker0");
-	if (!defined($diface)) {
-	    fatal("Could not find default docker network interface; aborting!");
-	}
-	if ($diface->{'ip'} ne $DOCKER_DEFAULT_BRIDGE_IP
-	    || !defined($json) || !exists($json->{'bip'})
-	    || $json->{'bip'} ne $DOCKER_DEFAULT_BRIDGE_CIDR) {
-	    TBDebugTimeStamp("Moving docker0 to $DOCKER_DEFAULT_BRIDGE_CIDR");
-
-	    # Blast our docker opts into the right place:
-	    $json->{'bip'} = $DOCKER_DEFAULT_BRIDGE_CIDR;
-	    $changed = 1;
-	}
+	# Blast our docker opts into the right place:
+	$json->{'bip'} = $DOCKER_DEFAULT_BRIDGE_CIDR;
+	$changed = 1;
     }
 
     # Check to ensure we're doing the right thing w.r.t. iptables:
