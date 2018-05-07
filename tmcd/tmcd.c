@@ -185,6 +185,7 @@ typedef struct {
 	char gid[TBDB_FLEN_GID];
 	char name[TBDB_FLEN_IMAGENAME];
 	char version[11]; /* Max size of a 32-bit int in string form. */
+	char *path; /* A dynamically-allocated path string, if relevant. */
 } imstrings_t;
 
 int		debug = 0;
@@ -298,6 +299,7 @@ static int	checkdbredirect(tmcdreq_t *);
 static int      sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, 
 			      char *vname, int dopersist, char *localproto);
 static int      get_imagestrings(tmcdreq_t *reqp, imstrings_t *imstrings);
+static void     free_imagestrings_content(imstrings_t *imstrings);
 
 #ifdef EVENTSYS
 int			myevent_send(address_tuple_t address);
@@ -8734,6 +8736,12 @@ COMMAND_PROTOTYPE(dojailconfig)
 				       imstrings.version);
 		}
 		bufp += OUTPUT(bufp, ebufp - bufp, "\"\n");
+		if (imstrings.path) {
+			bufp += OUTPUT(bufp, ebufp - bufp,
+				       "IMAGEPATH=\"%s\"\n", 
+				       imstrings.path);
+		}
+		free_imagestrings_content(&imstrings);
 	}
 	client_writeback(sock, buf, strlen(buf), tcp);
 	return 0;
@@ -8750,6 +8758,7 @@ COMMAND_PROTOTYPE(doimageid)
 		       imstrings.pid, imstrings.gid, 
 		       imstrings.name, imstrings.version);
 		client_writeback(sock, buf, strlen(buf), tcp);
+		free_imagestrings_content(&imstrings);
 	}
 
 	return 0;
@@ -8768,7 +8777,8 @@ int get_imagestrings(tmcdreq_t *reqp, imstrings_t *imstrings)
 	}
 
 	/* We want data on the default OS set for this node. */
-	res = mydb_query("select p.pid,g.gid,iv.imagename,iv.version "
+	res = mydb_query("select p.pid,g.gid,iv.imagename,iv.version,"
+			 " iv.format,iv.path "
 			 "  from nodes as n "
 			 "left join `partitions` as pa on "
 			 "     pa.node_id=n.node_id and "
@@ -8779,7 +8789,7 @@ int get_imagestrings(tmcdreq_t *reqp, imstrings_t *imstrings)
 			 "left join projects as p on iv.pid_idx=p.pid_idx "
 			 "left join groups as g on iv.gid_idx=g.gid_idx "
 			 "where n.node_id='%s'",
-			 4, reqp->nodeid);
+			 6, reqp->nodeid);
 
 	if (!res) {
 		error("get_imagestrings: %s: DB Error getting image info!\n",
@@ -8790,7 +8800,7 @@ int get_imagestrings(tmcdreq_t *reqp, imstrings_t *imstrings)
 	/* Fill out the imstrings struct passed in with info from the DB. */
 	if (mysql_num_rows(res)) {
 		row = mysql_fetch_row(res);
-		if (!row[0] || !row[1] || !row[3] || !row[4]) {
+		if (!row[0] || !row[1] || !row[2] || !row[3]) {
 			error("get_imagestrings: %s: invalid data returned "
 			      "from DB query!\n", reqp->nodeid);
 			return 1;
@@ -8799,12 +8809,23 @@ int get_imagestrings(tmcdreq_t *reqp, imstrings_t *imstrings)
 		strncpy(imstrings->gid, row[1], sizeof(imstrings->gid));
 		strncpy(imstrings->name, row[2], sizeof(imstrings->name));
 		strncpy(imstrings->version, row[3], sizeof(imstrings->version));
+		if (row[4] && row[4][0] && strcmp("docker",row[4]) == 0
+		    && row[5] && row[5][0]) {
+			imstrings->path = strdup(row[5]);
+		}
+		else {
+			imstrings->path = NULL;
+		}
 
-		if (debug)
+		if (debug) {
 			info("get_imagestrings: %s: PID=%s GID=%s NAME=%s "
 			     "VERSION=%s",
 			     reqp->nodeid, imstrings->pid, imstrings->gid, 
 			     imstrings->name, imstrings->version);
+			if (imstrings->path)
+				info("get_imagestrings: %s: IMAGEPATH=%s",
+				     reqp->nodeid, imstrings->path);
+		}
 		retval = 0;
 	} else {
 		error("get_imagestrings: %s: No info returned for image "
@@ -8814,6 +8835,18 @@ int get_imagestrings(tmcdreq_t *reqp, imstrings_t *imstrings)
 
 	mysql_free_result(res);
 	return retval;
+}
+
+void free_imagestrings_content(imstrings_t *imstrings)
+{
+	/* Sanity. */
+	if (imstrings == NULL) {
+		error("free_imagestrings_content: NULL pointer argument!\n");
+	}
+	if (imstrings->path) {
+		free(imstrings->path);
+		imstrings->path = NULL;
+	}
 }
 
 /*

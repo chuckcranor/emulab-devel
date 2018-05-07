@@ -2835,11 +2835,17 @@ sub vnodeCreate($$$$)
 	chomp($pass);
 	close(FD);
 
-	print "raref:" . Dumper($raref) . "\n";
-	if (!exists($raref->{"PATH"}) || !$raref->{"PATH"}) {
-	    fatal("reload specified, but not external image, and no image PATH!");
+	if (exists($raref->{"PATH"}) && $raref->{"PATH"}) {
+	    $imagename = $raref->{"PATH"};
 	}
-	$imagename = $raref->{"PATH"};
+	elsif (exists($vnconfig->{"config"}->{'IMAGEPATH'})
+	       && $vnconfig->{"config"}->{'IMAGEPATH'}) {
+	    $imagename = $vnconfig->{"config"}->{'IMAGEPATH'};
+	}
+	else {
+	    fatal("reload or image specified, but not external image," .
+		  " and no image PATH nor jailconfig IMAGEPATH!");
+	}
     }
     else {
 	$imagename = $defaultImage{'name'};
