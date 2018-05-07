@@ -319,13 +319,33 @@ sub MapToLocalImage($$)
 	my $image = OSImage->Lookup($ospid, $imagename);
 	if (defined($image)) {
 	    my @allversions = ();
-	    if ($image->AllVersions(\@allversions) == 0) {
-		foreach my $im (@allversions) {
-		    if (defined($im->hash()) && exists($blob->{'sha1hash'}) &&
-			$im->hash() eq $blob->{'sha1hash'}) {
-			print STDERR "MapToLocalImage: Found local image $im\n";
-			return $im;
-		    }
+	    #
+	    # This might be an image alias, and on this path it is okay to
+	    # look at all versions of all images to see if we can find one
+	    # with correct hash. Image alias does not export AllVersions,
+	    # cause that generally does not make sense, so we have to do
+	    # it specially here.
+	    #
+	    if ($image->isImageAlias()) {
+		my $coderef = sub {
+		    my $image = $_[0];
+		    my @tmp   = ();
+
+		    $image->AllVersions(\@tmp);
+		    push(@allversions, @tmp)
+			if (@tmp);
+		    return 0;
+		};
+		$image->ImageIterate($coderef);
+	    }
+	    else {
+		$image->AllVersions(\@allversions);
+	    }
+	    foreach my $im (@allversions) {
+		if (defined($im->hash()) && exists($blob->{'sha1hash'}) &&
+		    $im->hash() eq $blob->{'sha1hash'}) {
+		    print STDERR "MapToLocalImage: Found local image $im\n";
+		    return $im;
 		}
 	    }
 	}

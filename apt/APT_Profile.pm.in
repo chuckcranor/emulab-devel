@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2017 University of Utah and the Flux Group.
+# Copyright (c) 2007-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1429,6 +1429,7 @@ sub SetRepo($$$$$$)
     #
     my $owner   = $geniuser->uid();
     my $command = "cd /local && sudo chmod 777 . && umask 002 && ".
+	"rm -rf repository && ".
 	"git clone -n '$repourl' repository && " .
 	"cd repository && " .
 	"git config --add core.sharedRepository group && ".
