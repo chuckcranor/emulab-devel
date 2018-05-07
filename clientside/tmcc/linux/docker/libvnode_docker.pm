@@ -779,6 +779,31 @@ sub ensureDockerInstalled()
 	}
     }
 
+    #
+    # Wait for docker to be running and responding; this may take awhile if
+    # we are running hundreds of containers.
+    #
+    my @lines = `systemctl is-active docker.service 2>&1`;
+    my $needrestart = 0;
+    if (!($? == 0 || (@lines > 0 && $lines[0] =~ /^activ/))) {
+	$needrestart = 1;
+    }
+    if ($needrestart) {
+	mysystem2("systemctl try-restart docker.service");
+    }
+    my $startwaittime = time();
+    while ((time() - $startwaittime) < 900) {
+	my $rc = system("docker info");
+	if (!$rc) {
+	    TBDebugTimeStamp("docker appears to be running\n");
+	    last;
+	}
+	else {
+	    TBDebugTimeStamp("docker is not yet running; waiting...\n");
+	    sleep(1);
+	}
+    }
+
     #if (aptNotInstalled("systemd-container")
     #	&& aptGetInstall("systemd-container")) {
     #	die("Failed to install systemd-container; aborting!\n");
@@ -804,19 +829,36 @@ sub ensureDockerInstalled()
 	$json = decode_json($origjsontext);
     }
 
-    # Check to ensure the docker iface has a non-172.16 subnet:
-    my $diface = getIfaceInfo("docker0");
-    if (!defined($diface)) {
-	fatal("Could not find default docker network interface; aborting!");
-    }
-    if ($diface->{'ip'} ne $DOCKER_DEFAULT_BRIDGE_IP
-	|| !defined($json) || !exists($json->{'bip'})
-	|| $json->{'bip'} ne $DOCKER_DEFAULT_BRIDGE_CIDR) {
-	TBDebugTimeStamp("Moving docker0 to $DOCKER_DEFAULT_BRIDGE_CIDR");
+    # Check to ensure the docker iface has a non-172.16 subnet, unless
+    # we already fixed that:
+    if (!exists($json->{'bip'})) {
+	my $waittime = 900;
+	while ($waittime > 0) {
+	    $waittime -= 1;
+	    my $rc = system("docker network ls docker0");
+	    if (!$rc) {
+		TBDebugTimeStamp("docker0 network exists ($waittime)");
+		last;
+	    }
+	    else {
+		TBDebugTimeStamp("docker0 network does not yet exist; waiting...\n");
+		sleep(1);
+	    }
+	}
 
-	# Blast our docker opts into the right place:
-	$json->{'bip'} = $DOCKER_DEFAULT_BRIDGE_CIDR;
-	$changed = 1;
+	my $diface = ifaceInfo("docker0");
+	if (!defined($diface)) {
+	    fatal("Could not find default docker network interface; aborting!");
+	}
+	if ($diface->{'ip'} ne $DOCKER_DEFAULT_BRIDGE_IP
+	    || !defined($json) || !exists($json->{'bip'})
+	    || $json->{'bip'} ne $DOCKER_DEFAULT_BRIDGE_CIDR) {
+	    TBDebugTimeStamp("Moving docker0 to $DOCKER_DEFAULT_BRIDGE_CIDR");
+
+	    # Blast our docker opts into the right place:
+	    $json->{'bip'} = $DOCKER_DEFAULT_BRIDGE_CIDR;
+	    $changed = 1;
+	}
     }
 
     # Check to ensure we're doing the right thing w.r.t. iptables:
