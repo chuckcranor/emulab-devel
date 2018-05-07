@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,7 +28,7 @@ use Exporter;
 @ISA    = "Exporter";
 @EXPORT = qw( makeIfaceMaps makeBridgeMaps makeMacvlanMaps
 	      findControlNet existsIface findIface findMac getIfaceInfo
-	      existsBridge findBridge findBridgeIfaces
+	      getIfaceInfoNoCache existsBridge findBridge findBridgeIfaces
               existsMacvlanParent findMacvlanParent findMacvlanIfaces
               downloadImage getKernelVersion createExtraFS
               forwardPort removePortForward lvSize lvExists
@@ -475,48 +475,16 @@ sub makeIfaceMaps()
 	# open.  The only reason we'll fail to open here is if the device
 	# has gone away after the initial dir listing.
 	#
-	open(FD,"/sys/class/net/$iface/address") 
-	    or next;
-	my $mac = <FD>;
-	close(FD);
-	next if (!defined($mac) || $mac eq '');
-
-	$mac =~ s/://g;
-	chomp($mac);
-	$mac = lc($mac);
+	my $ifinfo = getIfaceInfoNoCache($iface);
+	next
+	    if (!defined($ifinfo));
+	my ($mac,$ip) = ($ifinfo->{'mac'},$ifinfo->{'ip'});
+	$if2info{$iface} = $ifinfo;
 	$if2mac{$iface} = $mac;
 	$mac2if{$mac} = $iface;
-	$if2info{$iface} = { 'mac' => $mac, 'iface' => $iface };
-
-	# also find ip, ugh
-	my $pip = `ip addr show dev $iface | grep 'inet '`;
-	chomp($pip);
-	if ($pip =~ /^\s+inet\s+(\d+\.\d+\.\d+\.\d+)\/(\d+)/) {
-	    my $ip = $1;
-	    $ip2if{$ip} = $iface;
-	    my @ip = split(/\./,$ip);
-	    my $bits = int($2);
-	    my @netmask = (0,0,0,0);
-	    my ($idx,$counter) = (0,8);
-	    for (my $i = $bits; $i > 0; --$i) {
-		--$counter;
-		$netmask[$idx] += 2 ** $counter;
-		if ($counter == 0) {
-		    $counter = 8;
-		    ++$idx;
-		}
-	    }
-	    my @network = ($ip[0] & $netmask[0],$ip[1] & $netmask[1],
-			   $ip[2] & $netmask[2],$ip[3] & $netmask[3]);
-	    $ip2net{$ip} = join('.',@network);
-	    $ip2mask{$ip} = join('.',@netmask);
-	    $ip2maskbits{$ip} = $bits;
-
-	    $if2info{$iface}->{'ip'} = $ip;
-	    $if2info{$iface}->{'network'} = $ip2net{$ip};
-	    $if2info{$iface}->{'mask'} = $ip2mask{$ip};
-	    $if2info{$iface}->{'maskbits'} = $ip2maskbits{$ip};
-	}
+	$ip2net{$ip} = $if2info->{'network'};
+	$ip2mask{$ip} = $if2info->{'mask'};
+	$ip2maskbits{$ip} = $if2info->{'maskbits'};
     }
 
     if ($debug > 1) {
@@ -575,6 +543,54 @@ sub findIface($) {
         if (exists($mac2if{$mac}));
 
     return undef;
+}
+
+sub getIfaceInfoNoCache($) {
+    my ($iface) = @_;
+    my $ret = {};
+
+    open(FD,"/sys/class/net/$iface/address") 
+	or return undef;
+    my $mac = <FD>;
+    close(FD);
+    return undef
+	if (!defined($mac) || $mac eq '');
+
+    $mac =~ s/://g;
+    chomp($mac);
+    $mac = lc($mac);
+    $ret = { 'mac' => $mac, 'iface' => $iface };
+
+    # Find IP info
+    my $pip = `ip addr show dev $iface | grep 'inet '`;
+    chomp($pip);
+    if ($pip =~ /^\s+inet\s+(\d+\.\d+\.\d+\.\d+)\/(\d+)/) {
+	my $ip = $1;
+	$ip2if{$ip} = $iface;
+	my @ip = split(/\./,$ip);
+	my $bits = int($2);
+	my @netmask = (0,0,0,0);
+	my ($idx,$counter) = (0,8);
+	for (my $i = $bits; $i > 0; --$i) {
+	    --$counter;
+	    $netmask[$idx] += 2 ** $counter;
+	    if ($counter == 0) {
+		$counter = 8;
+		++$idx;
+	    }
+	}
+	my @network = ($ip[0] & $netmask[0],$ip[1] & $netmask[1],
+		       $ip[2] & $netmask[2],$ip[3] & $netmask[3]);
+	$ret->{'network'} = join('.',@network);
+	$ret->{'mask'} = join('.',@netmask);
+	$ret->{'maskbits'} = $bits;
+	$ret->{'ip'} = $ip;
+    }
+    else {
+	return undef;
+    }
+
+    return $ret;
 }
 
 #

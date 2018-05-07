@@ -117,7 +117,6 @@ my $SYSCTL = "/sbin/sysctl";
 my $VLANCONFIG = "/sbin/vconfig";
 my $MODPROBE = "/sbin/modprobe";
 my $IPTABLES	= "/sbin/iptables";
-my $IPBIN	= "/sbin/ip";
 my $NETSTAT     = "/bin/netstat";
 my $IMAGEZIP    = "/usr/local/bin/imagezip";
 my $IMAGEUNZIP  = "/usr/local/bin/imageunzip";
@@ -176,6 +175,13 @@ my $USE_DOCKER_LVM = 0;
 #
 my $NFS_MOUNTS_READONLY = 0;
 #
+# Should we use libvnode's network data structure caching/indexing
+# powers.  We do not by default, because we can effectively use quick
+# operations in /sys for everything we need -- no need to index to avoid
+# slow calls to brctl or whatnot.
+#
+my $USE_LIBVNODE_NETCACHE = 0;
+#
 # Should we log packets the firewall rejects?
 #
 my $IPTABLES_PACKET_LOG = 1;
@@ -189,10 +195,6 @@ my $DOCKER_DEFAULT_BRIDGE_CIDR = '192.168.254.1/24';
 # bridges because we need to impose traffic control on the host context
 # half of the veth.
 #
-# There *is* a Docker plugin for openvswitch, but we don't want to use
-# that yet; $BR_USE_OPENVSWITCH is simply for existing code that could
-# enable this feature.
-#
 my $USE_MACVLAN = 0;
 #
 # We support macvlans on the control net, but we don't use them because
@@ -205,12 +207,10 @@ my $USE_MACVLAN = 0;
 # unless someone else can find a way around this.
 #
 my $USE_MACVLAN_CNET = 0;
-my $USE_OPENVSWITCH = 0;
 #
-# This flag controls whether we use OVS for GRE tunnels (i.e. for EGRE),
-# or if we use Linux kernel GRE + routing + veths.
+# We try to use $IP instead of $BRCTL.
 #
-my $TUN_USE_OPENVSWITCH = 0;
+my $USE_BRCTL = 0;
 
 ##
 ## Detected configuration variables.
@@ -654,8 +654,11 @@ sub aptGetEnsureInstalled(@)
     return $rc;
 }
 
-sub refreshNetworkDeviceMaps()
+sub refreshLibVnodeNetCache()
 {
+    return
+	if (!$USE_LIBVNODE_NETCACHE);
+
     makeIfaceMaps();
     if (!$USE_MACVLAN) {
 	makeBridgeMaps();
@@ -690,7 +693,7 @@ sub ensureDeps()
     }
 }
 
-# (Must be called only after refreshNetworkDeviceMaps() is called for
+# (Must be called only after refreshLibVnodeNetCache() is called for
 # the first time in init.)
 sub ensureDockerInstalled()
 {
@@ -714,7 +717,7 @@ sub ensureDockerInstalled()
 	    mysystem2("service docker restart");
 
 	    # Remap, cause Docker creates some ifaces.
-	    refreshNetworkDeviceMaps();
+	    refreshLibVnodeNetCache();
 	}
 
 	#
@@ -768,7 +771,7 @@ sub ensureDockerInstalled()
 	    mysystem2("service docker restart");
 
 	    # Remap, cause Docker creates some ifaces.
-	    refreshNetworkDeviceMaps();
+	    refreshLibVnodeNetCache();
 	}
 
 	#
@@ -907,7 +910,7 @@ sub ensureDockerInstalled()
 	mysystem2("service docker start");
 
 	# Remap, cause Docker creates some ifaces.
-	refreshNetworkDeviceMaps();
+	refreshLibVnodeNetCache();
     }
 
     return 0;
@@ -1028,24 +1031,6 @@ sub removeContainerFromDockerExecSSH($) {
     unlink("$DOCKER_EXEC_SSHD_CONFIGDIR/0.${vnode_id}.match");
 
     return rebuildAndReloadDockerExecSSH();
-}
-
-sub getBridgeInterfaces($)
-{
-    my ($brname,) = @_;
-
-    my @output = `$BRCTL show $brname`;
-    if ($?) {
-	return undef;
-    }
-
-    my @retval = ();
-    foreach my $line (@output) {
-	if ($line =~ /^[^\s]+\s+[^\s]+\s+[^\s]+\s+([^\s])+$/) {
-	    push(@retval,$1);
-	}
-    }
-    return @retval;
 }
 
 sub getDockerNetMemberIds($)
@@ -1249,39 +1234,190 @@ sub setupLVM()
 #
 sub addbr($)
 {
-    my $br  = $_[0];
-    my $cmd = ($USE_OPENVSWITCH ? "$OVSCTL add-br" : "$BRCTL addbr") . " $br";
+    my ($br) = @_;
 
-    system($cmd);
+    if ($USE_BRCTL) {
+	system("$BRCTL addbr $br");
+    }
+    else {
+	system("$IP link add $br type bridge");
+    }
 }
 sub delbr($)
 {
-    my $br  = $_[0];
-    if ($USE_OPENVSWITCH) {
-	mysystem2("$OVSCTL del-br $br");
+    my ($br) = @_;
+
+    if ($USE_BRCTL) {
+	mysystem2("$IP link set $br down");
+	mysystem2("$BRCTL delbr $br");
     }
     else {
-	mysystem2("$IFCONFIG $br down");
-	mysystem2("$BRCTL delbr $br");
+	mysystem2("$IP link del $br");
     }
 }
 sub addbrif($$)
 {
-    my $br  = $_[0];
-    my $if  = $_[1];
-    my $cmd = ($USE_OPENVSWITCH ? "$OVSCTL add-port" : "$BRCTL addif") .
-	" $br $if";
+    my ($br,$if) = @_;
 
-    system($cmd);
+    if ($USE_BRCTL) {
+	system("$BRCTL addif $br $if");
+    }
+    else {
+	system("$IP link set $if master $br");
+    }
 }
 sub delbrif($$)
 {
-    my $br  = $_[0];
-    my $if  = $_[1];
-    my $cmd = ($USE_OPENVSWITCH ? "$OVSCTL del-port" : "$BRCTL delif") .
-	" $br $if";
+    my ($br,$if) = @_;
 
-    system($cmd);
+    if ($USE_BRCTL) {
+	system("$BRCTL delif $br $if");
+    }
+    else {
+	system("$IP link set $if nomaster");
+    }
+}
+
+#
+# Network support.
+#
+
+sub ifaceInfo($) {
+    my ($iface) = @_;
+
+    if ($USE_LIBVNODE_NETCACHE) {
+	return libvnode::getIfaceInfo($iface);
+    }
+    else {
+	return libvnode::getIfaceInfoNoCache($iface);
+    }
+}
+
+sub findIfaceByMAC($) {
+    my ($mac) = @_;
+
+    if ($USE_LIBVNODE_NETCACHE) {
+	return libvnode::findIface($mac);
+    }
+    else {
+	if ($mac !~ /:/) {
+	    $mac = fixupMac($mac);
+	}
+	my $line = `ip -br link | grep $mac`;
+	if (defined($line) && $line =~ /^([^\@\s]+)/) {
+	    return $1;
+	}
+	return undef;
+    }
+}
+
+sub isIfaceInBridge($$) {
+    my ($iface,$bridge) = @_;
+
+    if ($USE_LIBVNODE_NETCACHE) {
+	my $br = libvnode::findBridge($iface);
+	return 1
+	    if (defined($br) && $br eq $bridge);
+	return 0;
+    }
+    else {
+	if (-e "/sys/class/net/$iface/lower_$bridge") {
+	    return 1;
+	}
+	return 0;
+    }
+}
+
+sub getBridgeForIface($) {
+    my ($iface) = @_;
+
+    if ($USE_LIBVNODE_NETCACHE) {
+	return libvnode::findBridge($iface);
+    }
+    else {
+	opendir(DIR,"/sys/class/net/$iface")
+	    or return undef;
+	while (my $dir = readdir(DIR)) {
+	    chomp($dir);
+	    if ($dir =~ /upper_(.+)$/) {
+		return $1;
+	    }
+	}
+	return undef;
+    }
+}
+
+sub getBridgeIfaces($) {
+    my ($brname) = @_;
+
+    if ($USE_LIBVNODE_NETCACHE) {
+	return libvnode::findBridgeIfaces($brname);
+    }
+    else {
+	my @ret = ();
+	opendir(DIR,"/sys/class/net/$brname/")
+	    or return undef;
+	while (my $dir = readdir(DIR)) {
+	    chomp($dir);
+	    if ($dir =~ /lower_(.+)$/) {
+		push(@ret,$1);
+	    }
+	}
+	return @ret;
+    }
+}
+
+sub getMacvlanIfaces($) {
+    my ($brname) = @_;
+
+    if ($USE_LIBVNODE_NETCACHE) {
+	return libvnode::findMacvlanIfaces($brname);
+    }
+    else {
+	my @ret = ();
+	opendir(DIR,"/sys/class/net/$brname/")
+	    or return undef;
+	while (my $dir = readdir(DIR)) {
+	    chomp($dir);
+	    if ($dir =~ /lower_(.+)$/) {
+		push(@ret,$1);
+	    }
+	}
+	return @ret;
+    }
+}
+
+sub getControlNet() {
+    open(FD,"/var/emulab/boot/controlif")
+	or return undef;
+    my $controlif = <FD>;
+    close(FD);
+    chomp($controlif);
+    return undef 
+	if ($controlif eq '');
+    open(FD,"/var/emulab/boot/routerip")
+	or return undef;
+    my $gw = <FD>;
+    close(FD);
+    chomp($gw);
+    return undef 
+	if ($gw eq '');
+    open(FD,"/var/emulab/boot/myip")
+	or return undef;
+    my $ip = <FD>;
+    close(FD);
+    chomp($ip);
+    return undef 
+	if ($ip eq '');
+
+    my $ref = getIfaceInfoNoCache($controlif);
+    return undef
+	if (!defined($ref));
+    return undef
+	if ($ref->{'ip'} ne $ip);
+
+    return ($ref->{'iface'},$ref->{'ip'},$ref->{'mask'},$ref->{'maskbits'},
+	    $ref->{'network'},$ref->{'mac'},$gw);
 }
 
 ##
@@ -1378,7 +1514,7 @@ sub rootPreConfig($;$)
     #
     # Ensure we have the latest bridge/iface state!
     #
-    refreshNetworkDeviceMaps();
+    refreshLibVnodeNetCache();
 
     #
     # Make sure we actually have Docker.
@@ -1417,8 +1553,12 @@ sub rootPreConfig($;$)
     }
 
     my ($cnet_iface,$cnet_ip,$cnet_mask,
-	$cnet_maskbits,$cnet_net,$cnet_mac,$cnet_gw) = findControlNet();
-    my ($alias_ip,$alias_mask,$vmac) = hostControlNet();
+	$cnet_maskbits,$cnet_net,$cnet_mac,$cnet_gw) = getControlNet();
+    if (!defined($cnet_iface) || !defined($cnet_ip)) {
+	print STDERR "ERROR: failed to detect control network interface!\n";
+	return -1;
+    }
+    my ($alias_ip,$alias_mask,$vmac) = hostControlNet($cnet_ip,$cnet_mask);
     my ($VCNET_NET,undef,$VCNET_GW,$VCNET_SLASHMASK) = findVirtControlNet();
     my $nettype = ($USE_MACVLAN_CNET) ? "macvlan" : "bridge";
 
@@ -1478,10 +1618,10 @@ sub rootPreConfig($;$)
             #
 	    print "Creating $DOCKERCNET macvlan on $cnet_iface".
 		" ($alias_ip,$alias_mask)...\n";
-	    mysystem("ip link add link $cnet_iface name $DOCKERCNET".
+	    mysystem("$IP link add link $cnet_iface name $DOCKERCNET".
 		     " address $vmac type macvlan mode bridge");
-	    mysystem("ip addr replace $alias_ip/$alias_mask dev $DOCKERCNET");
-	    mysystem("ip link set up $DOCKERCNET");
+	    mysystem("$IP addr replace $alias_ip/$alias_mask dev $DOCKERCNET");
+	    mysystem("$IP link set up $DOCKERCNET");
 
 	    #my $isroutable = isRoutable($alias_ip);
 	    ## Add a route to reach the vnodes. Do it for the entire
@@ -1509,20 +1649,17 @@ sub rootPreConfig($;$)
             # above.
             #
 	    $cnet_iface = "dummycnet";
-	    mysystem2("ip link add dummycnet type dummy");
+	    mysystem2("$IP link add dummycnet type dummy");
 	    print "Creating $DOCKERCNET macvlan on $cnet_iface".
 		" ($alias_ip,$alias_mask)...\n";
-	    mysystem("ip link add link $cnet_iface".
+	    mysystem("$IP link add link $cnet_iface".
 		     " name $DOCKERCNET address $vmac type macvlan mode bridge");
-	    mysystem("ip addr replace $alias_ip/$alias_mask dev $DOCKERCNET");
-	    mysystem("ip link set up $DOCKERCNET");
+	    mysystem("$IP addr replace $alias_ip/$alias_mask dev $DOCKERCNET");
+	    mysystem("$IP link set up $DOCKERCNET");
 	}
     }
     elsif (!$USE_MACVLAN_CNET
-	   && (!$dcnexists
-	       || ! -e "/sys/class/net/$DOCKERCNET"
-	       || !defined(findBridge($orig_cnet_iface))
-	       || findBridge($orig_cnet_iface) ne $DOCKERCNET)) {
+	   && (!$dcnexists || !isIfaceInBridge($orig_cnet_iface,$DOCKERCNET))) {
 	my $alias_net =
 	    inet_ntoa(inet_aton($alias_ip) & inet_aton($alias_mask));
 
@@ -1573,7 +1710,7 @@ sub rootPreConfig($;$)
 
 	    # First grab the default gateway.
 	    my ($defroute,$defrouteiface);
-	    open(ROUTEOUTPUT,"ip route list |")
+	    open(ROUTEOUTPUT,"$IP route list |")
 		or fatal("unable to get route list via 'ip'!");
 	    while (!eof(ROUTEOUTPUT)) {
 		my $line = <ROUTEOUTPUT>;
@@ -1595,11 +1732,10 @@ sub rootPreConfig($;$)
 	    # it's not in the bridge already.  If it's already in the
 	    # bridge, no need to do any of this.
 	    #
-	    if (!defined(findBridge($orig_cnet_iface))
-		|| findBridge($orig_cnet_iface) ne $DOCKERCNET) {
-		mysystem2("ip link set down $orig_cnet_iface");
-		mysystem2("ip addr del $ipandmaskbits dev $orig_cnet_iface");
-		mysystem2("ip addr flush dev $orig_cnet_iface");
+	    if (!isIfaceInBridge($orig_cnet_iface,$DOCKERCNET)) {
+		mysystem2("$IP link set down $orig_cnet_iface");
+		mysystem2("$IP addr del $ipandmaskbits dev $orig_cnet_iface");
+		mysystem2("$IP addr flush dev $orig_cnet_iface");
 		addbrif($DOCKERCNET,$orig_cnet_iface);
 	    }
 
@@ -1609,7 +1745,7 @@ sub rootPreConfig($;$)
 	    # Docker insists on setting that itself.
 	    #
 	    if (!$dcnexists && -e "/sys/class/net/$DOCKERCNET") {
-		mysystem2("ip addr flush dev $DOCKERCNET");
+		mysystem2("$IP addr flush dev $DOCKERCNET");
 	    }
 
 	    #
@@ -1631,23 +1767,23 @@ sub rootPreConfig($;$)
 	    # Always flush the bridge's Docker-imposed addr immediately,
 	    # whether it existed or we created it.
 	    #
-	    mysystem("ip addr flush dev $DOCKERCNET");
+	    mysystem("$IP addr flush dev $DOCKERCNET");
 
 	    #
 	    # Set the $DOCKERCNET configuration to one that both we and
 	    # Docker are happy with.
 	    #
-	    mysystem2("ip addr add $ipandmaskbits dev $DOCKERCNET");
+	    mysystem2("$IP addr add $ipandmaskbits dev $DOCKERCNET");
 	    if ($?) {
-		mysystem("ip addr replace $ipandmaskbits dev $DOCKERCNET");
+		mysystem("$IP addr replace $ipandmaskbits dev $DOCKERCNET");
 	    }
-	    mysystem("ip link set up $DOCKERCNET");
-	    mysystem("ip link set up $orig_cnet_iface");
+	    mysystem("$IP link set up $DOCKERCNET");
+	    mysystem("$IP link set up $orig_cnet_iface");
 	    if ($defrouteiface eq $cnet_iface
 		|| $defrouteiface eq $orig_cnet_iface) {
-		mysystem("ip route replace default via $defroute");
+		mysystem("$IP route replace default via $defroute");
 	    }
-	    mysystem("ip addr add $alias_ip/$alias_mask dev $DOCKERCNET".
+	    mysystem("$IP addr add $alias_ip/$alias_mask dev $DOCKERCNET".
 		     " label $DOCKERCNET:1");
 
 	    #
@@ -1662,8 +1798,8 @@ sub rootPreConfig($;$)
 	    # If this node is remote, then it gets a bridge without the
 	    # control net.
 	    #
-	    mysystem("ip addr replace $alias_ip/$alias_mask dev $DOCKERCNET");
-	    mysystem("ip link set up $DOCKERCNET");
+	    mysystem("$IP addr replace $alias_ip/$alias_mask dev $DOCKERCNET");
+	    mysystem("$IP link set up $DOCKERCNET");
 	}
     }
 
@@ -1733,13 +1869,12 @@ sub rootPreConfig($;$)
     # exceptions ahead of Docker's default MASQ-all rules.
     #
     if (!$ISREMOTENODE) {
-	my (undef,undef,$ctlmask,undef,$ctlnet,undef,undef) = findControlNet();
 	mysystem("$IPTABLES -t nat -I POSTROUTING".
 		 " -s ${VCNET_NET}/${VCNET_SLASHMASK}".
 		 " -d ${VCNET_NET}/${VCNET_SLASHMASK} -j ACCEPT");
 	mysystem("$IPTABLES -t nat -I POSTROUTING".
 		 " -s ${VCNET_NET}/${VCNET_SLASHMASK}".
-		 " -d ${ctlnet}/${ctlmask} -j ACCEPT");
+		 " -d ${cnet_net}/${cnet_mask} -j ACCEPT");
 	if (!$ISOURDOCKER) {
 	    mysystem("$IPTABLES -t nat -A POSTROUTING".
 		     " -s ${VCNET_NET}/${VCNET_SLASHMASK}".
@@ -1773,12 +1908,7 @@ sub rootPreConfig($;$)
     }
 
     # For tunnels
-    if ($USE_OPENVSWITCH) {
-	mysystem("$MODPROBE openvswitch");
-    }
-    else {
-	mysystem("$MODPROBE ip_gre");
-    }
+    mysystem("$MODPROBE ip_gre");
 
     # For VLANs
     mysystem("$MODPROBE 8021q");
@@ -1787,12 +1917,6 @@ sub rootPreConfig($;$)
     # modprobe.
     mysystem("$MODPROBE sch_netem");
     mysystem("$MODPROBE sch_htb");
-
-    # start up open vswitch stuff.
-    if ($USE_OPENVSWITCH) {
-        # For tunnels
-	mysystem("$OVSSTART --delete-bridges start");
-    }
 
     # For bandwidth contraints.
     mysystem("$MODPROBE ifb");
@@ -2161,7 +2285,7 @@ sub rootPreConfigNetwork($$$$)
     # cleanup code in bad: depends on us having the lock before we call
     # thi
     #
-    refreshNetworkDeviceMaps();
+    refreshLibVnodeNetCache();
 
     my $vmid;
     if ($vnode_id =~ /^[-\w]+\-(\d+)$/) {
@@ -2244,7 +2368,7 @@ sub rootPreConfigNetwork($$$$)
 		mysystem2("$IFCONFIG $vdev up");
 		# XXX
 		#mysystem2("$ETHTOOL -K $vdev tso off gso off");
-		refreshNetworkDeviceMaps();
+		refreshLibVnodeNetCache();
 
 		# XXX
 		# Another thing that seems to screw up, causing the ciscos
@@ -2279,7 +2403,7 @@ sub rootPreConfigNetwork($$$$)
 	    $brs{$brname}{MEMBERS} = 0;
 	}
 	else {
-	    my $iface = findIface($ifc->{PMAC});
+	    my $iface = findIfaceByMAC($ifc->{PMAC});
 	    $physdev = $iface;
 	    $brname  = $prefix . $iface;
 	    $brs{$brname}{ENCAP} = 1;
@@ -2393,7 +2517,7 @@ sub rootPreConfigNetwork($$$$)
 		# might be shared with other containers, so we cannot remove it
 		# unless it is the only one left. 
 		#
-		my $obr = findBridge($physdev);
+		my $obr = getBridgeForIface($physdev);
 		if (defined($obr) && $obr ne $k) {
 		    # Avoid removing the device from the bridge if it
 		    # is in the correct bridge. 
@@ -2407,7 +2531,7 @@ sub rootPreConfigNetwork($$$$)
 		    goto bad
 			if ($?);
 		    # rebuild hashes
-		    makeBridgeMaps();
+		    refreshLibVnodeNetCache();
 		}
 
 		$private->{'physbridgeifaces'}->{$k}->{$physdev} = $physdev;
@@ -2558,7 +2682,7 @@ sub rootPreConfigNetwork($$$$)
     # then remove the bridge.
     if (exists($private->{'physbridges'})) {
 	foreach my $brname (keys(%{ $private->{'physbridges'} })) {
-	    my @ifaces = findBridgeIfaces($brname);
+	    my @ifaces = getBridgeIfaces($brname);
 	    if (@ifaces == 0) {
 		TBDebugTimeStamp("removing unused $brname");
 		mysystem2("$IFCONFIG $brname down");
@@ -2608,7 +2732,7 @@ sub rootPreConfigNetwork($$$$)
     # one else is using them.
     if (exists($private->{'dummys'})) {
 	foreach my $brname (keys(%{ $private->{'dummys'} })) {
-	    my @mvs = findMacvlanIfaces($private->{'dummys'}->{$brname});
+	    my @mvs = getMacvlanIfaces($private->{'dummys'}->{$brname});
 	    if (@mvs == 0) {
 		mysystem2("$IP link del dev $brname");
 		delete($private->{'dummys'}->{$brname})
@@ -2621,8 +2745,8 @@ sub rootPreConfigNetwork($$$$)
     # of any other macvlan devices).
     if (exists($private->{'vlandevs'})) {
 	foreach my $brname (keys(%{ $private->{'vlandevs'} })) {
-	    my $brv = findBridge($private->{'dummys'}->{$brname});
-	    my @mvs = findMacvlanIfaces($private->{'dummys'}->{$brname});
+	    my $brv = getBridgeForIface($private->{'dummys'}->{$brname});
+	    my @mvs = getMacvlanIfaces($private->{'dummys'}->{$brname});
 	    if (!defined($brv) && @mvs == 0) {
 		mysystem2("$IP link del dev $brname");
 		delete($private->{'vlandevs'}->{$brname})
@@ -2633,7 +2757,7 @@ sub rootPreConfigNetwork($$$$)
 
     # This shouldn't matter, but let's be complete; we might've deleted
     # some bridges and interfaces.
-    refreshNetworkDeviceMaps();
+    refreshLibVnodeNetCache();
 
     # Release the IFBs
     ReleaseIFBs($vmid, $private)
@@ -2674,9 +2798,10 @@ sub vnodeCreate($$$$)
     $vninfo->{'vmid'} = $vmid;
 
     my ($host_iface,$host_ip,$host_mask,$host_maskbits,$host_net,
-	$host_mac,$host_gw) = findControlNet();
+	$host_mac,$host_gw) = getControlNet();
 
     if (defined($raref)) {
+	TBDebugTimeStamp("inreload: " . Dumper($raref));
 	$raref = $raref->[0];
 	$inreload = 1;
     }
@@ -3104,10 +3229,9 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
     # Maybe allow routable control network.
     my $isroutable = isRoutable($ip);
 
-    #my ($host_ip,$host_mask,$vmac) = hostControlNet();
     my ($host_iface,$host_ip,$host_mask,$host_maskbits,$host_net,
-	$host_mac,$host_gw) = findControlNet();
-    my ($vip,undef,undef) = hostControlNet();
+	$host_mac,$host_gw) = getControlNet();
+    my ($vip,undef,undef) = hostControlNet($host_ip,$host_mask);
     my ($bossdomain,$boss_ip) = tmccbossinfo();
     if (!$boss_ip) {
 	$boss_ip = `cat $BOOTDIR/bossip`;
@@ -4014,7 +4138,7 @@ sub vnodeDestroy($$$$)
     # then remove the bridge.
     if (exists($private->{'physbridges'})) {
 	foreach my $brname (keys(%{ $private->{'physbridges'} })) {
-	    my @ifaces = findBridgeIfaces($brname);
+	    my @ifaces = getBridgeIfaces($brname);
 	    if (@ifaces == 0) {
 		TBDebugTimeStamp("removing unused $brname");
 		if (-e "/sys/class/net/$brname") {
@@ -4068,7 +4192,7 @@ sub vnodeDestroy($$$$)
     # one else is using them.
     if (exists($private->{'dummys'})) {
 	foreach my $brname (keys(%{ $private->{'dummys'} })) {
-	    my @mvs = findMacvlanIfaces($private->{'dummys'}->{$brname});
+	    my @mvs = getMacvlanIfaces($private->{'dummys'}->{$brname});
 	    if (@mvs == 0) {
 		mysystem2("$IP link del dev $brname");
 		delete($private->{'dummys'}->{$brname})
@@ -4081,8 +4205,8 @@ sub vnodeDestroy($$$$)
     # of any other macvlan devices).
     if (exists($private->{'vlandevs'})) {
 	foreach my $brname (keys(%{ $private->{'vlandevs'} })) {
-	    my $brv = findBridge($private->{'dummys'}->{$brname});
-	    my @mvs = findMacvlanIfaces($private->{'dummys'}->{$brname});
+	    my $brv = getBridgeForIface($private->{'dummys'}->{$brname});
+	    my @mvs = getMacvlanIfaces($private->{'dummys'}->{$brname});
 	    if (!defined($brv) && @mvs == 0) {
 		mysystem2("$IP link del dev $brname");
 		delete($private->{'vlandevs'}->{$brname})
@@ -4093,7 +4217,7 @@ sub vnodeDestroy($$$$)
 
     # This shouldn't matter, but let's be complete; we might've deleted
     # some bridges and interfaces.
-    refreshNetworkDeviceMaps();
+    refreshLibVnodeNetCache();
 
     #
     # We keep the IFBs until complete destruction. We do this cause we do
@@ -5241,7 +5365,7 @@ sub moveNetDeviceToNetNS($$$)
 {
     my ($vnode_id,$private,$dev) = @_;
 
-    mysystem2("ip link $dev set netns $vnode_id");
+    mysystem2("$IP link $dev set netns $vnode_id");
     if (!$?) {
 	if (!exists($private->{"rawnetdevs"})) {
 	    $private->{"rawnetdevs"} = {};
@@ -5263,7 +5387,7 @@ sub moveNetDeviceFromNetNS($$$)
 	     " attempting removal from netns anyway!");
     }
 
-    mysystem2("ip netns exec $vnode_id ip link $dev set netns 1");
+    mysystem2("$IP netns exec $vnode_id ip link $dev set netns 1");
     if (!$?) {
 	warn("device $dev not in $vnode_id netns; removing from".
 	     " our data structures anyway!");
@@ -5728,7 +5852,7 @@ sub CreateRoutingScripts($$)
 	push(@{$downmap{$sip}}, $rcline);
     }
 
-    my $prefix = "ip netns exec $vnode_id ";
+    my $prefix = "$IP netns exec $vnode_id ";
 
     print RC "case \"\$1\" in\n";
     foreach my $arg (keys(%upmap)) {
@@ -6122,7 +6246,7 @@ sub findControlNetVethInfo($$$$;$)
     my $ifidx;
     my $dev;
 
-    open(FD,"ip netns exec $vnode_id ip -br link show |");
+    open(FD,"$IP netns exec $vnode_id ip -br link show |");
     while (!eof(FD)) {
 	my $line = <FD>;
 	chomp($line);
@@ -6133,7 +6257,7 @@ sub findControlNetVethInfo($$$$;$)
     }
     close(FD);
     if (!$ifidx) {
-	open(FD,"ip netns exec $vnode_id ip -br addr show |");
+	open(FD,"$IP netns exec $vnode_id ip -br addr show |");
 	while (!eof(FD)) {
 	    my $line = <FD>;
 	    if ($line =~ /^[^\@]+\@if(\d+).*$vip.*$/) {
@@ -6147,7 +6271,7 @@ sub findControlNetVethInfo($$$$;$)
 	warn("could not find host control net iface ifidx for $vnode_id!");
 	return -1;
     }
-    open(FD,"ip link show |");
+    open(FD,"$IP link show |");
     while (!eof(FD)) {
 	my $line = <FD>;
 	if ($line =~ /^$ifidx: ([^\@]+)\@.*$/) {
@@ -6372,8 +6496,9 @@ sub hostSwapping()
 #
 # Contruct and returns the jail control net IP of the physical host.
 #
-sub hostControlNet()
+sub hostControlNet(;$$)
 {
+    my ($ctrlip,$ctrlmask) = @_;
     #
     # XXX we use a woeful hack to get the virtual control net address,
     # that is unique. I will assume that control network is never
@@ -6381,7 +6506,9 @@ sub hostControlNet()
     # with the lower half of the control network address.
     #
     my (undef,$vmask,$vgw) = findVirtControlNet();
-    my (undef, $ctrlip, $ctrlmask) = findControlNet();
+    if (!defined($ctrlip) || !defined($ctrlip)) {
+	(undef, $ctrlip, $ctrlmask) = getControlNet();
+    }
     my ($a,$b);
 
     if ($vgw =~ /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/) {
@@ -6620,7 +6747,7 @@ sub AllocateIFBs($$$)
 	    }
 	}
 	if (! -e "/sys/class/net/$iname") {
-	    mysystem("ip link add $iname type ifb");
+	    mysystem("$IP link add $iname type ifb");
 	}
 	$MDB{"$iname"} = $vmid;
 	# Record ifb in use
@@ -6656,7 +6783,7 @@ sub ReleaseIFBs($$)
 
     if (exists($private->{'ifbs'})) {
 	for my $iname (keys(%{$private->{'ifbs'}})) {
-	    mysystem("ip link del $iname");	
+	    mysystem("$IP link del $iname");	
 	delete($MDB{$iname});
 	}
     }
