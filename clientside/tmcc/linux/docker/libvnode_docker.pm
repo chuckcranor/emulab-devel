@@ -2735,10 +2735,13 @@ sub rootPreConfigNetwork($$$$)
     # of any other macvlan devices).
     if (exists($private->{'vlandevs'})) {
 	foreach my $brname (keys(%{ $private->{'vlandevs'} })) {
-	    my $brv = getBridgeForIface($private->{'dummys'}->{$brname});
-	    my @mvs = getMacvlanIfaces($private->{'dummys'}->{$brname});
+	    my $viface = $private->{'vlandevs'}->{$brname};
+	    next
+		if (!defined($viface));
+	    my $brv = getBridgeForIface($viface);
+	    my @mvs = getMacvlanIfaces($viface);
 	    if (!defined($brv) && @mvs == 0) {
-		mysystem2("$IP link del dev $brname");
+		mysystem2("$IP link del dev $viface");
 		delete($private->{'vlandevs'}->{$brname})
 		    if ($?);
 	    }
@@ -4213,10 +4216,13 @@ sub vnodeDestroy($$$$)
     # of any other macvlan devices).
     if (exists($private->{'vlandevs'})) {
 	foreach my $brname (keys(%{ $private->{'vlandevs'} })) {
-	    my $brv = getBridgeForIface($private->{'dummys'}->{$brname});
-	    my @mvs = getMacvlanIfaces($private->{'dummys'}->{$brname});
+	    my $viface = $private->{'vlandevs'}->{$brname};
+	    next
+		if (!defined($viface));
+	    my $brv = getBridgeForIface($viface);
+	    my @mvs = getMacvlanIfaces($viface);
 	    if (!defined($brv) && @mvs == 0) {
-		mysystem2("$IP link del dev $brname");
+		mysystem2("$IP link del dev $viface");
 		delete($private->{'vlandevs'}->{$brname})
 		    if ($?);
 	    }
