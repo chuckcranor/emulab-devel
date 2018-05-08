@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2014, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -31,7 +31,7 @@ use POSIX ":sys_wait_h";
 #
 # Prototypes
 #
-sub hackwaitandexit($);
+sub hackwaitandexit($;$);
 
 # Drag in path stuff so we can find emulab stuff.
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
@@ -49,12 +49,14 @@ sub usage()
 	" -i creates a fake virtual node.\n".
 	"\n".
 	"Use -b when starting the virtual node at boot time.\n".
+	"Use -F <timeout> to change the hackwaitandexit timeout;\n".
+	"                 < 1 means no timeout.\n".
 	"Use -r when rebooting the virtual node.\n".
 	"Use -h when halting the virtual node.\n".
 	"Use -k when killing the virtual node (removes filesystems).\n";
     exit(1);
 }
-my $optlist	= "kbdjsVrhptie";
+my $optlist	= "kbdjsVrhptieF:";
 
 # Locals
 my $killit	= 0;
@@ -73,6 +75,7 @@ my $leavejail    = 0;
 my $timestamps  = 0;
 my $jailpid;
 my $cleanupstate = "SHUTDOWN";
+my $hackwaitandexit_timeout = 30;
 
 #
 # Turn off line buffering on output
@@ -171,6 +174,14 @@ if (defined($options{"p"})) {
 }
 if (defined($options{"i"})) {
     $fakevnode = 1;
+}
+if (defined($options{"F"})) {
+    if ($options{"F"} < 1) {
+	$hackwaitandexit_timeout = 0;
+    }
+    else {
+	$hackwaitandexit_timeout = int($options{"F"});
+    }
 }
 if (@ARGV != 1) {
     usage();
@@ -319,7 +330,7 @@ if (!$debug && !$interactive && (my $cpid = TBBackGround($logname))) {
     # setup first. This whole approach is wildly hacky.
     #
     if ($dojail) {
-	hackwaitandexit($cpid);
+	hackwaitandexit($cpid,$hackwaitandexit_timeout);
     }
     exit(0);
 }
@@ -704,7 +715,7 @@ sub rebootvnode() {
 	return -1;
     }
 
-    hackwaitandexit(0);
+    hackwaitandexit(0,$hackwaitandexit_timeout);
     return 0;
 }
 
@@ -941,12 +952,18 @@ sub removeconfdir($)
 # for setup failure from the direct child, so we can tell the caller.
 # Otherwise, need to use the normal wait path (timeout or TBFAILED).
 # 
-sub hackwaitandexit($)
+sub hackwaitandexit($;$)
 {
-    my $cpid  = shift();
+    my ($cpid,$count) = @_;
     my $now   = time();
     my $goofy;
-    my $count = 30;
+    if (!defined($count)) {
+	$count = 30;
+    }
+    my $forever = 0;
+    if ($count < 1) {
+	$forever = 1;
+    }
 
     # The first case is for our own (non-plab) vservers.
     if (-e "/vservers") {
@@ -963,7 +980,7 @@ sub hackwaitandexit($)
 	$goofy = CONFDIR() . "/root/var/run/emulab-watchdog.pid";
     }
 	
-    while ($count--) {
+    while ($forever || $count--) {
 	sleep(1);
 	if (-e $goofy) {
 	    my ($mtime,$ctime) = (stat($goofy))[8,9];
