@@ -798,11 +798,11 @@ sub ensureDockerInstalled()
     while ((time() - $startwaittime) < 900) {
 	my $rc = system("docker info");
 	if (!$rc) {
-	    TBDebugTimeStamp("docker appears to be running\n");
+	    TBDebugTimeStamp("docker appears to be running");
 	    last;
 	}
 	else {
-	    TBDebugTimeStamp("docker is not yet running; waiting...\n");
+	    TBDebugTimeStamp("docker is not yet running; waiting...");
 	    sleep(1);
 	}
     }
