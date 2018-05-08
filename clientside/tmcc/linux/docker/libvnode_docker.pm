@@ -3240,24 +3240,29 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
 	warn("could not find bossip anywhere; aborting!");
 	return -1;
     }
-    my $retries = 30;
+    my $retries = 4;
     my @addrs = ();
+    my $uname = "users";
     while ($retries > 0) {
-	(undef,undef,undef,undef,@addrs) = gethostbyname("users");
+	(undef,undef,undef,undef,@addrs) = gethostbyname($uname);
 	if ($? || @addrs == 0) {
-	    warn("could not resolve users.$bossdomain; retrying!");
-	    sleep(2);
+	    warn("could not resolve $uname; retrying!");
+	    sleep(4);
 	}
 	else {
 	    last;
 	}
+	$uname = "users.$shortdomain";
 	$retries -= 1;
     }
+    my $ops_ip;
     if (@addrs == 0) {
-	warn("could not resolve users.$bossdomain; aborting!");
-	return -1;
+	warn("could not resolve users.$bossdomain; sending name to iptables!");
+	$ops_ip = "users";
     }
-    my $ops_ip = inet_ntoa($addrs[0]);
+    else {
+	$ops_ip = inet_ntoa($addrs[0]);
+    }
     my $local_tmcd_port = $TMCD_PORT + $vmid;
 
     #
