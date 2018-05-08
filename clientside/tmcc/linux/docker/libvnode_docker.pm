@@ -2602,27 +2602,19 @@ sub rootPreConfigNetwork($$$$)
     # to look for IFBs that are already allocated to the
     # container. See the allocate routines, which make use of the tag.
     #
+    my $ifbs;
     if (@node_lds) {
-	my $ifbs = AllocateIFBs($vmid, \@node_lds, $private);
-
+	$ifbs = AllocateIFBs($vmid, \@node_lds, $private);
 	goto bad
 	    if (!(defined($ifbs)));
-
-	foreach my $ldc (@node_lds) {
-	    my $tag = "$vnode_id:" . $ldc->{'LINKNAME'};
-	    my $ifb = pop(@$ifbs);
-	    $private->{'ifbs'}->{$ifb} = $tag;
-	    
-	    # Stash for later.
-	    $ldc->{'IFB'} = $ifb;
-	}
-
-	CreateShapingScripts($vnode_id,$private,\@node_ifs,\@node_lds);
     }
 
-    # Setup our routing stuff.
-    CreateRoutingScripts($vnode_id,$private);
-
+    #
+    # We cannot hold the global lock while we run CreateRoutingScripts.
+    # For a large topo, this may call djikstra, and that can be quite
+    # CPU-consuming.  Also, may as well avoid it on
+    # CreateShapingScripts.
+    #
     TBDebugTimeStamp("  releasing global lock")
 	if ($lockdebug);
     TBScriptUnlock();
@@ -2637,6 +2629,25 @@ sub rootPreConfigNetwork($$$$)
 	TBDebugTimeStamp("rootPreConfigNetwork: touching $VMS/$vnode_id/running");
 	mysystem2("touch $VMS/$vnode_id/running");
     }
+
+    #
+    # Return to handling the allocated IFBs for shaping.
+    #
+    if (@node_lds) {
+	foreach my $ldc (@node_lds) {
+	    my $tag = "$vnode_id:" . $ldc->{'LINKNAME'};
+	    my $ifb = pop(@$ifbs);
+	    $private->{'ifbs'}->{$ifb} = $tag;
+	    
+	    # Stash for later.
+	    $ldc->{'IFB'} = $ifb;
+	}
+
+	CreateShapingScripts($vnode_id,$private,\@node_ifs,\@node_lds);
+    }
+
+    # Setup our routing stuff.
+    CreateRoutingScripts($vnode_id,$private);
 
     return 0;
 
