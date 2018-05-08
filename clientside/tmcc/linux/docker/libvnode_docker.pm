@@ -3237,8 +3237,20 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
 	warn("could not find bossip anywhere; aborting!");
 	return -1;
     }
-    my (undef,undef,undef,undef,@addrs) = gethostbyname("users");
-    if ($? || @addrs == 0) {
+    my $retries = 30;
+    my @addrs = ();
+    while ($retries > 0) {
+	(undef,undef,undef,undef,@addrs) = gethostbyname("users");
+	if ($? || @addrs == 0) {
+	    warn("could not resolve users.$bossdomain; retrying!");
+	    sleep(2);
+	}
+	else {
+	    last;
+	}
+	$retries -= 1;
+    }
+    if (@addrs == 0) {
 	warn("could not resolve users.$bossdomain; aborting!");
 	return -1;
     }
