@@ -75,6 +75,12 @@ if [ -r /etc/centos-release ]; then
     minor=`echo $rel | sed -nre 's/^[0-9]+\.([0-9]+).*$/\1/p'`
 fi
 
+if [ "$dist" = "debian" -a -z "$major" ]; then
+    major="S"
+    minor="S"
+    rel="S"
+fi
+
 if [ -n "$dist" -a -z "$tag" ]; then
     tag="${dist}${major}"
     if [ -n "$minor" ]; then

@@ -4271,6 +4271,7 @@ sub analyzeImage($$)
 
     TBDebugTimeStamp("inspecting image $image...");
     ($code,$json) = getClient()->image_inspect($image);
+
     if ($code) {
 	warn("inspect $image failed -- attempting to continue anyway!");
     }
@@ -4278,6 +4279,9 @@ sub analyzeImage($$)
 	my $jstate;
 	if (ref($json) eq 'ARRAY') {
 	    $jstate = $json->[0];
+	}
+	else {
+	    $jstate = $json;
 	}
 	$iid = $jstate->{'Id'};
 	$jstate = $jstate->{'Config'};
@@ -4829,6 +4833,7 @@ sub emulabizeImage($;$$$$$$$$)
 	if (exists($iattrs{DOCKER_ENV})) {
 	    $dockerenvironmentvars = $iattrs{DOCKER_ENV};
 	    foreach my $elem (@$dockerenvironmentvars) {
+		print $runitfile "export ";
 		print $runitfile $elem;
 		print $runitfile "\n";
 	    }
@@ -4844,33 +4849,56 @@ sub emulabizeImage($;$$$$$$$$)
 
 	my $dockerentrypoint;
 	my $dockercmd;
+	my $dockeruser;
+	my $dockerworkingdir;
+
+	if ($iattrs{DOCKER_WORKINGDIR} ne "") {
+	    $dockerworkingdir = $iattrs{DOCKER_WORKINGDIR};
+	    print $runitfile "cd ";
+	    print $runitfile $dockerworkingdir;
+	    print $runitfile "\n\n";
+	} 
+
+	$dockeruser = $iattrs{DOCKER_USER};
 
 	print $runitfile "if [ ! -f /etc/emulab/docker/dockercmd ]; then\n";
 
+	print $runitfile "exec ";
+
+	# if the user for the container is specified otherwise
+	# need to run it as that user
+	if ($dockeruser ne "") {
+	    print $runitfile "sudo -u ";
+	    print $runitfile $dockeruser;
+	    print $runitfile " bash -c '";
+	}
+
 	if (exists($iattrs{DOCKER_ENTRYPOINT})) {
 	    $dockerentrypoint = $iattrs{DOCKER_ENTRYPOINT};
-	    # check if first arg is /bin/sh
-	    if ($dockerentrypoint->[0] ne "/bin/sh") {
-		print $runitfile "exec ";
-	    }
+
 	    # print whole thing to file
 	    # need to be careful about variables to be expanded
 	    foreach my $elem (@$dockerentrypoint) {
+		print $runitfile "\"";
 		print $runitfile $elem;
+		print $runitfile "\"";
 		print $runitfile " ";
 	    }
 	}
 
 	if (exists($iattrs{DOCKER_CMD})) {
 	    $dockercmd = $iattrs{DOCKER_CMD};
-	    if ($dockercmd->[0] ne "/bin/sh" and !defined($dockerentrypoint)) {
-		print $runitfile "exec ";
-	    }
 
 	    foreach my $elem (@$dockercmd) {
+		print $runitfile "\"";
 		print $runitfile $elem;
+		print $runitfile "\"";
 		print $runitfile " ";
 	    }
+	}
+
+	if ($dockeruser ne "") {
+	    print $runitfile "'";
 	}
 
 	print $runitfile "\n";
@@ -4894,12 +4922,14 @@ sub emulabizeImage($;$$$$$$$$)
 	print $runitfile "exit 0";
 	close $runitfile;
 
+	chmod 755, "$hdir/etc/service/dockerentrypoint/run";
+
 	#
 	# Before we start setting up the new image Dockerfile, run
 	# all the artifact build scripts.
 	#
 	foreach my $ascript (@artifactscripts) {
-	    my %args = ( 'Tty' => JSON::PP::true);
+	    my %args = ( 'Tty' => JSON::PP::true, 'User' => 'root');
 	    $args{'HostConfig'}{'Binds'} = [
 		"$hdir/etc/emulab/CONTEXT:/etc/emulab/CONTEXT:ro",
 		"$adir:/artifacts:rw",
@@ -4991,6 +5021,15 @@ sub emulabizeImage($;$$$$$$$$)
 	# First, we are descended FROM the base image.
 	#
 	print DFD "FROM $image\n\n";
+
+	#
+	# When user is unspecified Docker defaults to root,
+	# however if a user specifies another user we must
+	# set it back to root in order to do our transformations.
+	# However we also must set user back to the Dockerfile's spec 
+	# for entrypoint/cmd ops
+	#
+	print DFD "USER root\n\n";
 
 	#
 	# Then, if this is emulabization core or full, add an
