@@ -4330,7 +4330,9 @@ sub analyzeImage($$)
     my $args = {
 	'HostConfig' => {
 	    'Binds' => [ "/etc/emulab/docker/container-utils:/tmp/docker:ro" ]
-	}
+	},
+	'Entrypoint' => '',
+	'User' => 'root',
     };
     my $tmpname = "analyzer-".int(rand(POSIX::INT_MAX));
     our $buf = '';
@@ -4900,6 +4902,8 @@ sub emulabizeImage($;$$$$$$$$)
 		];
 	    $args{'Image'} = $image;
 	    $args{'Cmd'} = ["/bin/sh","-c","cd \$CONTEXT && $ascript"];
+	    $args{'Entrypoint'} = '';
+	    $args{'User'} = 'root';
 	    my $tmpname = "artifact-".sha1_hex($image . rand(POSIX::INT_MAX));
 	    TBDebugTimeStamp("creating artifact container $tmpname for".
 			     " artifact script $ascript...");
