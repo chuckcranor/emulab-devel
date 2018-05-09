@@ -4694,8 +4694,19 @@ sub emulabizeImage($;$$$$$$$$)
 	#
 	my @copydirs = ();
 	foreach my $td ('common',$dist,$tag,$mintag) {
-	    push(@copydirs,$td)
-		if (-d "$DOCKERFILES/$td");
+	    if (-l "$DOCKERFILES/$td") {
+		push(@copydirs,$td);
+		my $linktarget = readlink("$DOCKERFILES/$td");
+		if ($linktarget =~ /^\//) {
+		    push(@copydirs,"$linktarget");
+		}
+		else {
+		    push(@copydirs,"$linktarget");
+		}
+	    }
+	    elsif (-d "$DOCKERFILES/$td") {
+		push(@copydirs,$td);
+	    }
 	}
 	my @dfiles = ();
 	my @runscripts = ();
