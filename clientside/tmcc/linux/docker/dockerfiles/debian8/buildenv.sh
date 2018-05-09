@@ -17,7 +17,7 @@ apt-get install -y --no-install-suggests --no-install-recommends \
     gcc make libc-dev byacc libtool-bin 'g++' \
     sudo python python-dev libpcap-dev libboost-dev wget patch flex ntp \
     zlib1g-dev
-dpkg-query -l libssl-dev >& /dev/null
+dpkg-query -l libssl-dev
 if [ ! $? -eq 0 ]; then
     # First try to install it.  If there is a problem installing the
     # candidate, try to install the version that matches the installed
@@ -30,7 +30,7 @@ if [ ! $? -eq 0 ]; then
 	    exit 1
 	fi
 	version=`dpkg-query -W libssl\* | sed -e 's/^[^\t ]*[\t ]*\([^\t ]*\)[\t ]*.*/\1/'`
-	apt-get install libssl-dev=$version
+	apt-get install -y --no-install-suggests --no-install-recommends libssl-dev=$version
 	if [ ! $? -eq 0 ]; then
 	    echo "ERROR: failed to install libssl-dev=$version!"
 	    exit 1
