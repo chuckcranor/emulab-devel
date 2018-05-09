@@ -282,7 +282,6 @@ sub container_run($$$$;$$$) {
     }
     $args->{'Image'} = $image;
     $args->{'Cmd'} = $cmd;
-    $args->{'Tty'} = JSON::PP::false;
     my ($code,$content,$resp);
     ($code,$content) = $self->container_create($id,$args);
     if ($code) {
