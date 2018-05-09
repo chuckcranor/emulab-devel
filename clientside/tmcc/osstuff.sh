@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2007-2016 University of Utah and the Flux Group.
+# Copyright (c) 2007-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -100,6 +100,12 @@ Linux)
 	    if [ -n "$trel" ]; then
 		dist="Debian"
 		rel=$trel
+	    else
+		grep PRETTY_NAME /etc/os-release | grep -q sid
+		if [ $? -eq 0 ]; then
+		    rel=S
+		    tag=debianS
+		fi
 	    fi
 	fi
     fi

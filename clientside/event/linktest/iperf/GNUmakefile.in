@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,7 +29,7 @@ SYSTEM         := $(shell $(SRCDIR)/../../../tmcc/osstuff.sh -o)
 IPERFVERSION    = 2.0.2
 ifeq ($(SYSTEM),Linux)
 OSTAG=$(shell $(SRCDIR)/../../../tmcc/osstuff.sh -t)
-ifneq (,$(filter $(OSTAG),alpine debian9))
+ifneq (,$(filter $(OSTAG),alpine debian9 debianS))
 IPERFVERSION    = 2.0.10
 # If 2.0.10, we have to disable 64-bit seq numbers; they mess up the
 # client_hdr size in a backwards-incompat way.
