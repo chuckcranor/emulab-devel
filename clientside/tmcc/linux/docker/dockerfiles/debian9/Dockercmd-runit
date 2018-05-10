@@ -1,3 +1,4 @@
 {
-    "Cmd": [ "/sbin/init-runit.sh" ]
+    "Entrypoint": [ "/sbin/init-runit.sh" ],
+    "Cmd": []
 }
