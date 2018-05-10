@@ -30,6 +30,10 @@
 #     suit our purposes, but not any other kind of sshd).
 #
 
+# Docker attach is sometimes racy so give it observer a chance to attach
+# before printing output
+sleep 4
+
 #
 # Find the distro, release number, etc.
 #

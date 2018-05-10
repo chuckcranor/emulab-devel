@@ -4834,7 +4834,15 @@ sub emulabizeImage($;$$$$$$$$)
 	    $dockerenvironmentvars = $iattrs{DOCKER_ENV};
 	    foreach my $elem (@$dockerenvironmentvars) {
 		print $runitfile "export ";
-		print $runitfile $elem;
+		my $elemname;
+		my $elemvalue;
+		$elemname = substr($elem, 0, index($elem, '='));
+		$elemvalue = substr($elem, index($elem, '=') + 1);
+		print $runitfile $elemname;
+		print $runitfile "=";
+		print $runitfile "\"";
+		print $runitfile $elemvalue;
+		print $runitfile "\"";
 		print $runitfile "\n";
 	    }
 	}
