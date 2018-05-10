@@ -538,7 +538,7 @@ sub Tidy($)
 		  "start, end, uid, notes, admin_notes ) " .
 		  "SELECT pid, nodes, type, start, end, uid, notes, " .
 		  "admin_notes FROM future_reservations WHERE " .
-		  "end < '$stamp'" );
+		  "end < '$stamp' and approved is not null" );
     DBQueryFatal( "DELETE FROM future_reservations WHERE " .
 		  "end < '$stamp'" );
     DBQueryFatal( "DELETE a FROM future_reservation_attributes AS a " .
