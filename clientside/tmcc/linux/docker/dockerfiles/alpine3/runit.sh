@@ -18,6 +18,7 @@ echo "runit should be run here..."
 apk update
 
 apk add --allow-untrusted /tmp/runit*.apk
+apk add --allow-untrusted /tmp/shadow*.apk
 
 ## dpkg -i /tmp/runit_*.deb
 ## apt-get install -y --no-install-suggests --no-install-recommends -f

@@ -52,6 +52,20 @@ cp -p *.apk $DESTDIR/
 # cp -p *.deb $DESTDIR/
 # rm -rf runit *.deb *.dsc
 
+#
+# Also rebuild shadow to support user/group names with capitalized letters.
+#
+cd /tmp/
+wget https://www.emulab.net/downloads/alpine-shadow-src.tar.gz
+tar -xzvf alpine-shadow-src.tar.gz
+chown -R packager shadow
+cd shadow
+sudo -u packager abuild checksum
+sudo -u packager -H abuild -r
+cp -p /home/packager/packages/tmp/x86_64/shadow-4*.apk \
+    /home/packager/packages/tmp/x86_64/shadow-uidmap-4*.apk \
+    $DESTDIR
+
 $DIRNAME/alpine/cleanup.sh
 
 exit 0
