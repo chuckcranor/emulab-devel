@@ -129,12 +129,16 @@ function Do_Create()
             if (! TBvalid_rspec($formfields["profile_rspec"])) {
                 $errors["profile_rspec"] = TBFieldErrorString();	
             }
+            elseif (trim($formfields["profile_rspec"]) == "") {
+                $errors["profile_rspec"] = "no rspec provided";
+            }
             else {
                 $rspec = $formfields["profile_rspec"];
             }
         }
         if (isset($formfields["profile_script"]) &&
-            $formfields["profile_script"] != "") {
+            $formfields["profile_script"] != "" &&
+            trim($formfields["profile_script"]) != "") {
             $script = $formfields["profile_script"];
         }
         if (isset($formfields["portal_converted"]) &&

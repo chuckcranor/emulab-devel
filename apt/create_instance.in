@@ -346,9 +346,20 @@ $version   = $profile->version();
 #
 if (exists($xmlparse->{'attribute'}->{"rspec"})) {
     $rspecstr  = $xmlparse->{'attribute'}->{"rspec"}->{'value'};
+    # Trim()
+    $rspecstr =~ s/^\s+|\s+$//g;
+    if ($rspecstr eq "") {
+	UserError("Not a valid rspec");
+    }
 }
 else {
-    $rspecstr  = $profile->CheckFirewall(!$localuser);
+    $rspecstr = $profile->rspec();
+    # Trim()
+    $rspecstr =~ s/^\s+|\s+$//g;
+    if ($rspecstr eq "") {
+	UserError("Profile does not have a valid rspec");
+    }
+    $rspecstr = $profile->CheckFirewall(!$localuser);
 }
 #
 # Optional rspec and/or script, as for a repo-based profile.
@@ -653,12 +664,10 @@ if ($localuser) {
 					   $emulab_user, $project));
 
     # Hack for Kobus' class, generalize someday.
-    if (0) {
     if ($pid eq "CS4480-2018") {
 	my $termination = str2time("2018-05-02");
 	# convert to hours till then
 	$duration = int(($termination - time()) / 3600);
-    }
     }
 }
 elsif (!$localuser) {
