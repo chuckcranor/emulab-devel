@@ -940,9 +940,16 @@ AC_ARG_WITH(apache-config-dir,
 	APACHE_VERSION="1.3"
 	APACHE_START_COMMAND="/usr/local/etc/rc.d/apache.sh"
     else
-        INSTALL_APACHE_CONFIG="/usr/local/etc/apache22"
-	APACHE_VERSION="22"
-	APACHE_START_COMMAND="/usr/local/etc/rc.d/apache22"
+        foo=`/usr/local/sbin/httpd -V | grep SERVER_CONFIG_FILE | grep 'apache24'`
+	if test "$foo" = ""; then
+	    INSTALL_APACHE_CONFIG="/usr/local/etc/apache22"
+	    APACHE_VERSION="22"
+	    APACHE_START_COMMAND="/usr/local/etc/rc.d/apache22"
+	else
+	    INSTALL_APACHE_CONFIG="/usr/local/etc/apache24"
+	    APACHE_VERSION="24"
+	    APACHE_START_COMMAND="/usr/local/etc/rc.d/apache24"
+	fi
     fi
 ])
 AC_SUBST(INSTALL_APACHE_CONFIG)
