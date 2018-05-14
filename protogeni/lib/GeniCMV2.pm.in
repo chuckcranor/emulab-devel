@@ -2346,6 +2346,10 @@ sub DeleteNodes($)
     my %allnodes = ();
     foreach my $noderef (GeniXML::FindNodes("n:node",
 					    $manifest)->get_nodelist()) {
+	# Ignore nodes on other CMs.
+	next
+	    if (! GeniXML::IsLocalNode($noderef));
+
 	my $id = GeniXML::GetVirtualId($noderef);
 	if (!defined($id)) {
 	    print STDERR "No virtual node for $noderef\n";
