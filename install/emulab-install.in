@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2017 University of Utah and the Flux Group.
+# Copyright (c) 2010-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -86,6 +86,7 @@ BEGIN
 	my $srcdir = "@top_srcdir@";
 	my $objdir = `/bin/pwd`;
 	chomp($objdir);
+	unshift(@INC, "$objdir");
 	unshift(@INC, "$objdir/../db");
 	if ($srcdir =~ /^\//) {
 	    unshift(@INC, "$srcdir/install");
