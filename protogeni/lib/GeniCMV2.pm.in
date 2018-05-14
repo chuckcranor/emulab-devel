@@ -63,7 +63,7 @@ use libtestbed;
 use Data::Dumper;
 use XML::Simple;
 use Date::Parse;
-use POSIX qw(strftime tmpnam);
+use POSIX qw(strftime);
 use POSIX qw(setsid :sys_wait_h);
 use Time::Local;
 use Compress::Zlib;
