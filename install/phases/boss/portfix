@@ -138,8 +138,8 @@ sub Install($$$)
 	if ($PGENISUPPORT) {
 	    Phase "mod_wsgi3", "Looking for mod_wsgi3 and installing", sub {
 		if ($FBSD_MAJOR >= 11) {
-		    DoneIfPackageInstalled("ap22-py27-mod_wsgi");
-		    my $pname = GetPackage("ap22-py27-mod_wsgi", $packagedir);
+		    DoneIfPackageInstalled("ap24-py27-mod_wsgi");
+		    my $pname = GetPackage("ap24-py27-mod_wsgi", $packagedir);
 		    AddPackage($pname, $packagedir);
 		} else {
 		    DoneIfPackageInstalled("ap22-mod_wsgi");
