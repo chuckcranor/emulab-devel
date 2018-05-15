@@ -34,14 +34,22 @@ USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt mysql \
 #
 # Various ports need to agree on what version of apache.
 #
+.if ${EMULAB_PORTVERSION} == "7.1"
+www_apache24_SET=	SUEXEC
+.MAKEFLAGS+=	APACHE_PORT=www/apache24
+.MAKEFLAGS+=	WITH_SUEXEC=yes
+.else
 www_apache22_SET=	SUEXEC
 .MAKEFLAGS+=	APACHE_PORT=www/apache22
 .MAKEFLAGS+=	WITH_SUEXEC=yes
+.endif
 
+.if ${EMULAB_PORTVERSION} != "7.1"
 #
 # Use the base version of openssl
 #
 .MAKEFLAGS+=	WITH_OPENSSL_BASE=yes
+.endif
 
 #
 # This prevents any ports from trying to configure interactively.
@@ -98,7 +106,7 @@ RUN_DEPENDS+=	\
 	rpm:${PORTSDIR}/archivers/rpm4 \
 	rrdtool:${PORTSDIR}/databases/rrdtool \
 	rsync:${PORTSDIR}/net/rsync \
-	swig2.0:${PORTSDIR}/devel/swig20 \
+	swig${SWIG_VER}:${PORTSDIR}/${SWIG_PORT} \
 	sudo:${PORTSDIR}/security/sudo \
 	medusa:${PORTSDIR}/security/medusa \
 	wget:${PORTSDIR}/ftp/wget \
@@ -147,8 +155,8 @@ RUN_DEPENDS+=	\
 
 # apache related ports
 RUN_DEPENDS+=	\
-	${LOCALBASE}/libexec/apache22/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
-	${LOCALBASE}/libexec/apache22/mod_fcgid.so:${PORTSDIR}/www/mod_fcgid
+	${LOCALBASE}/${APACHEMODDIR}/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
+	${LOCALBASE}/${APACHEMODDIR}/mod_fcgid.so:${PORTSDIR}/www/mod_fcgid
 
 # Port versions of current or former "core" utilties
 RUN_DEPENDS+=	\
@@ -180,4 +188,3 @@ vars:
 	@echo "USE_APACHE/USE_APACHE_BUILD/USE_APACHE_RUN=${USE_APACHE}/${USE_APACHE_BUILD}/${USE_APACHE_RUN}"
 	@echo "USE_PHP=${USE_PHP}"
 	@echo "TCL_VER/TK_VER=${TCL_VER}/${TK_VER}"
-

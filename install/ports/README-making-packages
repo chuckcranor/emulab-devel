@@ -97,7 +97,7 @@ with 2015Q3 and I have updated through 2016Q2.
    # for 10.2
    DEFAULT_VERSIONS=perl5=5.20 python=2.7 php=5.6 mysql=5.5 apache=2.2 tcltk=8.6
 
-   # for 10.3
+   # for 10.3 and beyond
    DEFAULT_VERSIONS=perl5=5.24 python=2.7 php=5.6 mysql=5.7 apache=2.2 tcltk=8.6
    DEFAULT_VERSIONS+=ssl=base
 
@@ -436,8 +436,8 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
           DOCS
       - in editors/emacs, "make config" and deselect:
           DBUS
-	  GIF, MAGICK, PNG, SVG, TIFF, XPM,
           GCONF, GSETTINGS, M17N, OTF, SCROLLBARS, XFT, XIM,
+	  GIF, MAGICK, PNG, SVG, TIFF, XPM,
 	  OSS,
 	  GTK2
         and select:
@@ -472,7 +472,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
 
        pkg delete -f ipmitool
        cd /usr/ports/misc/emulab-ipmitool-old
-       make clean all install
+       make clean all install clean
        make package
 
    l. Save packages and update tarball and repo. On boss:

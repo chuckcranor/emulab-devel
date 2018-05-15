@@ -76,10 +76,17 @@ RUN_DEPENDS+=	\
 	rsync:${PORTSDIR}/net/rsync \
 	sudo:${PORTSDIR}/security/sudo \
 	ttcp:${PORTSDIR}/benchmarks/ttcp \
-	vim:${PORTSDIR}/editors/vim-lite \
 	xauth:${PORTSDIR}/x11/xauth \
 	xterm:${PORTSDIR}/x11/xterm \
 	zsh:${PORTSDIR}/shells/zsh
+
+.if ${PORTVERSION} == "7.1"
+RUN_DEPENDS+=	\
+	vim:${PORTSDIR}/editors/vim-console
+.else
+RUN_DEPENDS+=	\
+	vim:${PORTSDIR}/editors/vim-lite
+.endif
 
 RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}subversion>0:${PORTSDIR}/devel/py-subversion

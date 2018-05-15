@@ -30,9 +30,15 @@ USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt mysql \
 #
 # Various ports need to agree on what version of apache.
 #
+.if ${EMULAB_PORTVERSION} == "7.1"
+www_apache24_SET=	SUEXEC
+.MAKEFLAGS+=	APACHE_PORT=www/apache24
+.MAKEFLAGS+=	WITH_SUEXEC=yes
+.else
 www_apache22_SET=	SUEXEC
 .MAKEFLAGS+=	APACHE_PORT=www/apache22
 .MAKEFLAGS+=	WITH_SUEXEC=yes
+.endif
 
 #
 # This prevents any ports from trying to configure interactively.
@@ -101,8 +107,8 @@ RUN_DEPENDS+=	\
 
 # apache related ports
 RUN_DEPENDS+=	\
-	${LOCALBASE}/libexec/apache22/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
-	${LOCALBASE}/libexec/apache22/mod_fastcgi.so:${PORTSDIR}/www/mod_fastcgi
+	${LOCALBASE}/${APACHEMODDIR}/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
+	${LOCALBASE}/${APACHEMODDIR}/mod_fastcgi.so:${PORTSDIR}/www/mod_fastcgi
 
 # PHP packages
 RUN_DEPENDS+= \

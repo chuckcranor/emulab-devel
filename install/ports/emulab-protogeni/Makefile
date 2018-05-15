@@ -22,14 +22,22 @@ WANT_PHP_MOD=	yes
 #
 # Various ports need to agree on what version of apache.
 #
+.if ${EMULAB_PORTVERSION} == "7.1"
+www_apache24_SET=	SUEXEC
+.MAKEFLAGS+=	APACHE_PORT=www/apache24
+.MAKEFLAGS+=	WITH_SUEXEC=yes
+.else
 www_apache22_SET=	SUEXEC
 .MAKEFLAGS+=	APACHE_PORT=www/apache22
 .MAKEFLAGS+=	WITH_SUEXEC=yes
+.endif
 
+.if ${EMULAB_PORTVERSION} != "7.1"
 #
 # Use the base version of openssl
 #
 .MAKEFLAGS+=	WITH_OPENSSL_BASE=yes
+.endif
 
 #
 # This prevents any ports from trying to run interactively - some, like the
@@ -65,8 +73,8 @@ RUN_DEPENDS+=	\
 
 # apache related ports
 RUN_DEPENDS+=	\
-	${LOCALBASE}/libexec/apache22/mod_wsgi.so:${PORTSDIR}/www/mod_wsgi4 \
-	${LOCALBASE}/libexec/apache22/mod_fcgid.so:${PORTSDIR}/www/mod_fcgid \
+	${LOCALBASE}/${APACHEMODDIR}/mod_wsgi.so:${PORTSDIR}/www/mod_wsgi4 \
+	${LOCALBASE}/${APACHEMODDIR}/mod_fcgid.so:${PORTSDIR}/www/mod_fcgid \
 	p5-FCGI>=0.74:${PORTSDIR}/www/p5-FCGI
 
 USE_PERL5=	yes
