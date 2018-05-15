@@ -146,6 +146,7 @@ LoadModule authn_core_module libexec/apache24/mod_authn_core.so
 LoadModule authn_anon_module libexec/apache24/mod_authn_anon.so
 LoadModule authn_dbm_module libexec/apache24/mod_authn_dbm.so
 #LoadModule authn_default_module libexec/apache24/mod_authn_default.so
+LoadModule authz_core_module libexec/apache24/mod_authz_core.so
 LoadModule authz_host_module libexec/apache24/mod_authz_host.so
 LoadModule authz_user_module libexec/apache24/mod_authz_user.so
 LoadModule authz_owner_module libexec/apache24/mod_authz_owner.so
