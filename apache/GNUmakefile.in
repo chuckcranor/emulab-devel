@@ -143,7 +143,13 @@ ifeq ($(SCRIPT_HACK),1)
 	$(INSTALL) -m 755 $(SRCDIR)/apache-emulab /usr/local/etc/rc.d/apache.sh
 endif
 
-ifeq ($(APACHE_VERSION),22)
+ifeq ($(APACHE_VERSION),1.3)
+install: install-dirs install-scripts httpd.conf.fixed
+	$(INSTALL_DATA) httpd.conf.fixed $(INSTALL_APACHE_CONFIG)/httpd.conf
+
+control-install: install-dirs install-scripts httpd.conf-ops.fixed
+	$(INSTALL_DATA) httpd.conf-ops.fixed $(INSTALL_APACHE_CONFIG)/httpd.conf
+else
 install: install-dirs install-scripts httpd.conf pgeni-install
 	$(INSTALL_DATA) httpd.conf $(INSTALL_APACHE_CONFIG)/httpd.conf
 
@@ -156,12 +162,6 @@ ifeq ($(PGENISUPPORT),1)
 endif
 
 utah: httpd.conf.utah httpd.conf-ops.utah
-else
-install: install-dirs install-scripts httpd.conf.fixed
-	$(INSTALL_DATA) httpd.conf.fixed $(INSTALL_APACHE_CONFIG)/httpd.conf
-
-control-install: install-dirs install-scripts httpd.conf-ops.fixed
-	$(INSTALL_DATA) httpd.conf-ops.fixed $(INSTALL_APACHE_CONFIG)/httpd.conf
 endif
 
 install-php-ini: php.ini
