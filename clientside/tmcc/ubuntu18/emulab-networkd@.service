@@ -1,0 +1,9 @@
+[Unit]
+Description=Emulab systemd-networkd on %I
+Before=systemd-networkd.service
+Wants=systemd-networkd.service
+
+[Service]
+DefaultDependencies=no
+Type=simple
+ExecStart=/bin/sh -c 'mkdir -p /run/systemd/network; /bin/echo -ne "[Match]\nName=%I\n[Network]\nDHCP=yes\n[DHCP]\nCriticalConnection=yes\nUseNTP=yes\nUseHostname=yes\nUseDomains=yes\n" > /run/systemd/network/%i.network; found=0; while [ ! $found -eq 1 ]; do if [ -e /run/emulab/cnet ]; then exit 0; fi; /lib/systemd/systemd-networkd-wait-online -i %i --timeout 2; if [ $? -eq 0 ]; then networkctl status %i | grep -qi configured; if [ $? -eq 0 ]; then mkdir -p /run/emulab; echo %i > /run/emulab/cnet; found=1; fi; fi; done; if [ $found -eq 1 ]; then echo "$$ found %i as control net"; controlif=`cat /run/emulab/cnet`; for file in `ls -1 /run/systemd/network/en*.network | grep -v $controlif.network`; do rm -fv $file ; done; systemctl restart systemd-networkd; systemctl restart systemd-networkd-wait-online; fi; exit 0;'

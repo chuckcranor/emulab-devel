@@ -1,0 +1,2 @@
+ACTION!="remove", SUBSYSTEM=="net", KERNEL!="lo", ENV{SYSTEMD_WANTS}+="emulab-networkd@$name.service"
+ACTION="remove", SUBSYSTEM=="net", KERNEL!="lo", RUN+="systemctl stop --no-block emulab-networkd@$name.service"
