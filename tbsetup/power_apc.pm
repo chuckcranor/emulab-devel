@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -54,7 +54,7 @@ sub new($$;$) {
     }
 
     if ($debug) {
-	print "snmpit_apm module initializing... debug level $debug\n";
+	print "snmpit_apc module initializing... debug level $debug\n";
     }
 
     $SNMP::debugging = ($debug - 5) if $debug > 5;
