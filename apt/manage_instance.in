@@ -4191,7 +4191,7 @@ sub fatal($)
 
     if (defined($webtask)) {
 	$webtask->output($mesg);
-	$webtask->code(-1);
+	$webtask->Exited(-1);
     }
     print STDERR "*** $0:\n".
 	         "    $mesg\n";
@@ -4205,7 +4205,7 @@ sub UserError($)
 
     if (defined($webtask)) {
 	$webtask->output($mesg);
-	$webtask->code(1);
+	$webtask->Exited(1);
     }
     print STDERR "*** $0:\n".
 	         "    $mesg\n";
