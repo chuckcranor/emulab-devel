@@ -3365,6 +3365,7 @@ CREATE TABLE `node_attributes` (
   `node_id` varchar(32) NOT NULL default '',
   `attrkey` varchar(32) NOT NULL default '',
   `attrvalue` tinytext NOT NULL,
+  `hidden` tinyint(1) NOT NULL default '0',
   PRIMARY KEY  (`node_id`,`attrkey`),
   KEY `node_id` (`node_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1187,6 +1187,7 @@ class Node
 	$query_result =
 	    DBQueryFatal("select attrkey,attrvalue from node_attributes ".
 			 "where node_id='$node_id' ".
+			 (!ISADMIN() ? "and hidden=0 " : " ").
 			 ($noroot ? "and attrkey!='root_password'" : ""));
 			 
 	if (!$short && mysql_num_rows($query_result)) {
