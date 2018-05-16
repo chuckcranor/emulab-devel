@@ -97,6 +97,7 @@ KeepAliveTimeout 15
 ##
 ## Server-Pool Size Regulation (MPM specific)
 ## 
+LoadModule mpm_prefork_module libexec/apache24/mod_mpm_prefork.so
 
 # prefork MPM
 # StartServers: number of server processes to start
@@ -151,65 +152,58 @@ Listen 80
 # to be loaded here.
 #
 # Example:
-# LoadModule foo_module libexec/apache22/mod_foo.so
+# LoadModule foo_module libexec/apache24/mod_foo.so
 #
-LoadModule auth_basic_module libexec/apache22/mod_auth_basic.so
-LoadModule auth_digest_module libexec/apache22/mod_auth_digest.so
-LoadModule authn_file_module libexec/apache22/mod_authn_file.so
-LoadModule authn_alias_module libexec/apache22/mod_authn_alias.so
-LoadModule authn_anon_module libexec/apache22/mod_authn_anon.so
-LoadModule authn_dbm_module libexec/apache22/mod_authn_dbm.so
-LoadModule authn_default_module libexec/apache22/mod_authn_default.so
-LoadModule authz_host_module libexec/apache22/mod_authz_host.so
-LoadModule authz_user_module libexec/apache22/mod_authz_user.so
-LoadModule authz_owner_module libexec/apache22/mod_authz_owner.so
-LoadModule authz_groupfile_module libexec/apache22/mod_authz_groupfile.so
-LoadModule authz_dbm_module libexec/apache22/mod_authz_dbm.so
-LoadModule authz_default_module libexec/apache22/mod_authz_default.so
-#LoadModule ldap_module libexec/apache22/mod_ldap.so
-#LoadModule authnz_ldap_module libexec/apache22/mod_authnz_ldap.so
-LoadModule include_module libexec/apache22/mod_include.so
-LoadModule log_config_module libexec/apache22/mod_log_config.so
-LoadModule logio_module libexec/apache22/mod_logio.so
-LoadModule env_module libexec/apache22/mod_env.so
-#LoadModule ext_filter_module libexec/apache22/mod_ext_filter.so
-LoadModule mime_magic_module libexec/apache22/mod_mime_magic.so
-LoadModule expires_module libexec/apache22/mod_expires.so
-LoadModule deflate_module libexec/apache22/mod_deflate.so
-LoadModule headers_module libexec/apache22/mod_headers.so
-LoadModule usertrack_module libexec/apache22/mod_usertrack.so
-LoadModule setenvif_module libexec/apache22/mod_setenvif.so
-LoadModule mime_module libexec/apache22/mod_mime.so
-LoadModule dav_module libexec/apache22/mod_dav.so
-LoadModule status_module libexec/apache22/mod_status.so
-LoadModule autoindex_module libexec/apache22/mod_autoindex.so
-LoadModule info_module libexec/apache22/mod_info.so
-LoadModule dav_fs_module libexec/apache22/mod_dav_fs.so
-LoadModule vhost_alias_module libexec/apache22/mod_vhost_alias.so
-LoadModule negotiation_module libexec/apache22/mod_negotiation.so
-LoadModule dir_module libexec/apache22/mod_dir.so
-LoadModule actions_module libexec/apache22/mod_actions.so
-LoadModule speling_module libexec/apache22/mod_speling.so
-LoadModule userdir_module libexec/apache22/mod_userdir.so
-LoadModule alias_module libexec/apache22/mod_alias.so
-LoadModule rewrite_module libexec/apache22/mod_rewrite.so
-#LoadModule proxy_module libexec/apache22/mod_proxy.so
-#LoadModule proxy_balancer_module libexec/apache22/mod_proxy_balancer.so
-#LoadModule proxy_ftp_module libexec/apache22/mod_proxy_ftp.so
-#LoadModule proxy_http_module libexec/apache22/mod_proxy_http.so
-#LoadModule proxy_connect_module libexec/apache22/mod_proxy_connect.so
-LoadModule cache_module libexec/apache22/mod_cache.so
-#LoadModule suexec_module libexec/apache22/mod_suexec.so
-#LoadModule disk_cache_module libexec/apache22/mod_disk_cache.so
-#LoadModule file_cache_module libexec/apache22/mod_file_cache.so
-#LoadModule mem_cache_module libexec/apache22/mod_mem_cache.so
-LoadModule cgi_module libexec/apache22/mod_cgi.so
+LoadModule auth_basic_module libexec/apache24/mod_auth_basic.so
+LoadModule auth_digest_module libexec/apache24/mod_auth_digest.so
+LoadModule authn_file_module libexec/apache24/mod_authn_file.so
+LoadModule authn_anon_module libexec/apache24/mod_authn_anon.so
+LoadModule authn_dbm_module libexec/apache24/mod_authn_dbm.so
+LoadModule authz_core_module libexec/apache24/mod_authz_core.so
+LoadModule authz_host_module libexec/apache24/mod_authz_host.so
+LoadModule authz_user_module libexec/apache24/mod_authz_user.so
+LoadModule authz_owner_module libexec/apache24/mod_authz_owner.so
+LoadModule authz_groupfile_module libexec/apache24/mod_authz_groupfile.so
+LoadModule authz_dbm_module libexec/apache24/mod_authz_dbm.so
+LoadModule include_module libexec/apache24/mod_include.so
+LoadModule log_config_module libexec/apache24/mod_log_config.so
+LoadModule logio_module libexec/apache24/mod_logio.so
+LoadModule env_module libexec/apache24/mod_env.so
+LoadModule mime_magic_module libexec/apache24/mod_mime_magic.so
+LoadModule expires_module libexec/apache24/mod_expires.so
+LoadModule deflate_module libexec/apache24/mod_deflate.so
+LoadModule headers_module libexec/apache24/mod_headers.so
+LoadModule usertrack_module libexec/apache24/mod_usertrack.so
+LoadModule setenvif_module libexec/apache24/mod_setenvif.so
+LoadModule mime_module libexec/apache24/mod_mime.so
+LoadModule dav_module libexec/apache24/mod_dav.so
+LoadModule status_module libexec/apache24/mod_status.so
+LoadModule autoindex_module libexec/apache24/mod_autoindex.so
+LoadModule info_module libexec/apache24/mod_info.so
+LoadModule dav_fs_module libexec/apache24/mod_dav_fs.so
+LoadModule vhost_alias_module libexec/apache24/mod_vhost_alias.so
+LoadModule negotiation_module libexec/apache24/mod_negotiation.so
+LoadModule dir_module libexec/apache24/mod_dir.so
+LoadModule actions_module libexec/apache24/mod_actions.so
+LoadModule speling_module libexec/apache24/mod_speling.so
+LoadModule userdir_module libexec/apache24/mod_userdir.so
+LoadModule alias_module libexec/apache24/mod_alias.so
+LoadModule rewrite_module libexec/apache24/mod_rewrite.so
+LoadModule cache_module libexec/apache24/mod_cache.so
+LoadModule cgi_module libexec/apache24/mod_cgi.so
+# For shmcb below.
+LoadModule socache_shmcb_module libexec/apache24/mod_socache_shmcb.so
+
+#
+# Need this for backwards compat with allow/deny syntax.
+#
+LoadModule access_compat_module libexec/apache24/mod_access_compat.so
 
 #
 # The following modules are not loaded by default:
 #
-#LoadModule cern_meta_module libexec/apache22/mod_cern_meta.so
-#LoadModule asis_module libexec/apache22/mod_asis.so
+#LoadModule cern_meta_module libexec/apache24/mod_cern_meta.so
+#LoadModule asis_module libexec/apache24/mod_asis.so
 
 #
 # Load config files from the config directory "/etc/httpd/conf.d".
@@ -224,7 +218,7 @@ LoadModule cgi_module libexec/apache22/mod_cgi.so
 # PHP is an HTML-embedded scripting language which attempts to make it
 # easy for developers to write dynamically generated webpages.
 #
-LoadModule php5_module libexec/apache22/libphp5.so
+LoadModule php5_module libexec/apache24/libphp5.so
 
 #
 # Cause the PHP interpreter to handle files with a .php extension.
@@ -264,6 +258,8 @@ AddType application/x-httpd-php-source .phps .php3s
 #  when the value of (unsigned)Group is above 60000; 
 #  don't use Group #-1 on these systems!
 #
+LoadModule unixd_module libexec/apache24/mod_unixd.so
+
 User nobody
 Group nobody
 
@@ -381,7 +377,7 @@ DocumentRoot "/usr/local/www/data"
     SetEnv USER "www"
 </Directory>
 <Directory "/usr/local/www/data/twiki/pub">
-    Options FollowSymLinks +Includes
+    Options +FollowSymLinks +Includes
     AllowOverride None
     Allow from all
 </Directory>
@@ -495,18 +491,7 @@ AccessFileName .htaccess
 # TypesConfig describes where the mime.types file (or equivalent) is
 # to be found.
 #
-TypesConfig /usr/local/etc/apache22/mime.types
-
-#
-# DefaultType is the default MIME type the server will use for a document
-# if it cannot otherwise determine one, such as from filename extensions.
-# If your server contains mostly text or HTML documents, "text/plain" is
-# a good value.  If most of your content is binary, such as applications
-# or images, you may want to use "application/octet-stream" instead to
-# keep browsers from trying to display binary files as though they are
-# text.
-#
-DefaultType text/plain
+TypesConfig /usr/local/etc/apache24/mime.types
 
 #
 # The mod_mime_magic module allows the server to use various hints from the
@@ -515,7 +500,7 @@ DefaultType text/plain
 #
 <IfModule mod_mime_magic.c>
 #   MIMEMagicFile /usr/share/magic.mime
-    MIMEMagicFile /usr/local/etc/apache22/magic
+    MIMEMagicFile /usr/local/etc/apache24/magic
 </IfModule>
 
 #
@@ -621,9 +606,9 @@ ServerSignature On
 # We include the /icons/ alias for FancyIndexed directory listings.  If you
 # do not use FancyIndexing, you may comment this out.
 #
-Alias /icons/ "/usr/local/www/apache22/icons/"
+Alias /icons/ "/usr/local/www/apache24/icons/"
 
-<Directory "/usr/local/www/apache22/icons">
+<Directory "/usr/local/www/apache24/icons">
     Options Indexes MultiViews FollowSymLinks
     AllowOverride None
     Order allow,deny
@@ -646,13 +631,13 @@ Alias /icons/ "/usr/local/www/apache22/icons/"
 # The same rules about trailing "/" apply to ScriptAlias directives as to
 # Alias.
 #
-ScriptAlias /cgi-bin/ "/usr/local/www/apache22/cgi-bin/"
+ScriptAlias /cgi-bin/ "/usr/local/www/apache24/cgi-bin/"
 
 #
 # "/var/www/cgi-bin" should be changed to whatever your ScriptAliased
 # CGI directory exists, if you have that configured.
 #
-<Directory "/usr/local/www/apache22/cgi-bin">
+<Directory "/usr/local/www/apache24/cgi-bin">
     AllowOverride None
     Options None
     Order deny,allow
@@ -1036,7 +1021,7 @@ BrowserMatch "^Dreamweaver-WebDAV-SCM1" redirect-carefully
 # consult the online docs. You have been warned.  
 #
 
-LoadModule ssl_module libexec/apache22/mod_ssl.so
+LoadModule ssl_module libexec/apache24/mod_ssl.so
 
 #
 # When we also provide SSL we have to listen to the 
@@ -1073,7 +1058,7 @@ SSLSessionCacheTimeout  300
 #   Semaphore:
 #   Configure the path to the mutual exclusion semaphore the
 #   SSL engine uses internally for inter-process synchronization. 
-SSLMutex default
+Mutex default
 
 #   Pseudo Random Number Generator (PRNG):
 #   Configure one or more sources to seed the PRNG of the 
@@ -1158,7 +1143,7 @@ SSLCipherSuite ALL:!ADH:!EXPORT:!SSLv2:!RC4:!MD5:!AECDH:+HIGH:+MEDIUM:!LOW
 # pass phrase.  Note that a kill -HUP will prompt again.  A new
 # certificate can be generated using the genkey(1) command.
 #SSLCertificateFile /etc/pki/tls/certs/localhost.crt
-SSLCertificateFile /usr/local/etc/apache22/ssl.crt/@USERNODE@.crt
+SSLCertificateFile /usr/local/etc/apache24/ssl.crt/@USERNODE@.crt
 
 #   Server Private Key:
 #   If the key is not combined with the certificate, use this
@@ -1166,7 +1151,7 @@ SSLCertificateFile /usr/local/etc/apache22/ssl.crt/@USERNODE@.crt
 #   you've both a RSA and a DSA private key you can configure
 #   both in parallel (to also allow the use of DSA ciphers, etc.)
 #SSLCertificateKeyFile /etc/pki/tls/private/localhost.key
-SSLCertificateKeyFile /usr/local/etc/apache22/ssl.key/@USERNODE@.key
+SSLCertificateKeyFile /usr/local/etc/apache24/ssl.key/@USERNODE@.key
 
 #   Server Certificate Chain:
 #   Point SSLCertificateChainFile at a file containing the
