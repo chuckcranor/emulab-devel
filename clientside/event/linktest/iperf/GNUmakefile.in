@@ -29,7 +29,7 @@ SYSTEM         := $(shell $(SRCDIR)/../../../tmcc/osstuff.sh -o)
 IPERFVERSION    = 2.0.2
 ifeq ($(SYSTEM),Linux)
 OSTAG=$(shell $(SRCDIR)/../../../tmcc/osstuff.sh -t)
-ifneq (,$(filter $(OSTAG),alpine debian9 debianS))
+ifneq (,$(filter $(OSTAG),alpine debian9 debianS ubuntu18))
 IPERFVERSION    = 2.0.10
 # If 2.0.10, we have to disable 64-bit seq numbers; they mess up the
 # client_hdr size in a backwards-incompat way.

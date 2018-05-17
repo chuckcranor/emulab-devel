@@ -1523,6 +1523,7 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/ubuntu15/GNUmakefile \
  clientside/tmcc/ubuntu16/GNUmakefile \
  clientside/tmcc/ubuntu16-ms/GNUmakefile \
+ clientside/tmcc/ubuntu18/GNUmakefile \
  clientside/tmcc/linux-ms/GNUmakefile \
  clientside/tmcc/archlinux/GNUmakefile \
  clientside/tmcc/alpine/GNUmakefile \
