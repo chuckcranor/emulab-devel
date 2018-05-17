@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2018 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -104,7 +104,10 @@ static struct ctl_table ipod_table[] = {
       .mode = 0600,
       .proc_handler = __PHP proc_dostring,
     },
-    { 0 },
+    { .procname = NULL,
+      .data = NULL,
+      .proc_handler = NULL,
+    },
 };
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,5,0)
@@ -270,7 +273,11 @@ static int __init ipod_init_module(void) {
     /*
      * Register our netfilter hook function.
      */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
+    rc = nf_register_net_hook(&init_net,&ipod_hook_ops);
+#else
     rc = nf_register_hook(&ipod_hook_ops);
+#endif
     if (rc) {
 	printk(KERN_ERR "netfilter registration failed (%d)!\n",rc);
 	unregister_net_sysctl_table(ipod_table_header);
@@ -282,7 +289,11 @@ static int __init ipod_init_module(void) {
 
 static void __exit ipod_cleanup_module(void) {
     printk(KERN_INFO "removing IPOD\n");
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
+    nf_unregister_net_hook(&init_net,&ipod_hook_ops);
+#else
     nf_unregister_hook(&ipod_hook_ops);
+#endif
     unregister_net_sysctl_table(ipod_table_header);
 }
 
