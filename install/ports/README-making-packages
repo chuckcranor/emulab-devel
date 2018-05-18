@@ -97,8 +97,12 @@ with 2015Q3 and I have updated through 2016Q2.
    # for 10.2
    DEFAULT_VERSIONS=perl5=5.20 python=2.7 php=5.6 mysql=5.5 apache=2.2 tcltk=8.6
 
-   # for 10.3 and beyond
+   # for 10.3
    DEFAULT_VERSIONS=perl5=5.24 python=2.7 php=5.6 mysql=5.7 apache=2.2 tcltk=8.6
+   DEFAULT_VERSIONS+=ssl=base
+
+   # for 11.1
+   DEFAULT_VERSIONS=perl5=5.26 python=2.7 php=5.6 mysql=5.7 apache=2.4 tcltk=8.6
    DEFAULT_VERSIONS+=ssl=base
 
 5. Set non-standard options on some ports.
