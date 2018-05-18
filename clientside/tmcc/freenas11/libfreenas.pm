@@ -120,7 +120,7 @@ my $BS_UUID_TYPE_IQN     = "iqn";
 #
 # Global variables
 #
-my $debug  = 1;
+my $debug  = 0;
 my $auth;
 my $server;
 
