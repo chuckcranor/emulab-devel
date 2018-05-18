@@ -3016,8 +3016,21 @@ sub vnodeCreate($$$$)
     my $dockerenvdir = "$mntdir/etc.emulabdocker";
     mkdir($dockerenvdir);
     if (exists($attributes->{'DOCKER_ENV'})) {
+	my @environmentvars = split / /, $attributes->{'DOCKER_ENV'};
 	open(FD, ">$dockerenvdir/dockerenv");
-	print FD $attributes->{'DOCKER_ENV'};
+	foreach my $elem (@environmentvars) {
+	    print FD "export ";
+	    my $elemname;
+	    my $elemvalue;
+	    $elemname = substr($elem, 0, index($elem, '='));
+	    $elemvalue = substr($elem, index($elem, '=') + 1);
+	    print FD $elemname;
+	    print FD "=";
+	    print FD "\"";
+	    print FD $elemvalue;
+	    print FD "\"";
+	    print FD "\n";
+	}
 	close(FD);
 	push(@{$args{"HostConfig"}{"Binds"}}, "$dockerenvdir/dockerenv:/etc/emulab/docker/dockerenv:ro");
     }
