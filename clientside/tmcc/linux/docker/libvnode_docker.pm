@@ -4027,19 +4027,12 @@ sub vnodeUnmount($$$$)
 # Remove the transient state, but not the disk.  Basically, remove
 # anything that happened in vnodeBoot and vnodeBootHook.
 #
+# NB: this function does not currently lock, since it doesn't do
+# anything serious.  Be careful!
+#
 sub vnodeTearDown($$$$)
 {
     my ($vnode_id, $vmid, $vnconfig, $private) = @_;
-
-    # Lots of shared resources 
-    TBDebugTimeStamp("vnodeTearDown: grabbing global lock $GLOBAL_CONF_LOCK")
-	if ($lockdebug);
-    if (TBScriptLock($GLOBAL_CONF_LOCK, 0, 1200) != TBSCRIPTLOCK_OKAY()) {
-	print STDERR "Could not get the global lock after a long time!\n";
-	return -1;
-    }
-    TBDebugTimeStamp("  got global lock")
-	if ($lockdebug);
 
     KillProxies($vnode_id,$vmid);
     RemovePostBootIptablesRules($vnode_id,$vmid,$vnconfig,$private);
@@ -4049,10 +4042,6 @@ sub vnodeTearDown($$$$)
     #
     unbindNetNS($vnode_id,$private);
 
-  badbad:
-    TBDebugTimeStamp("  releasing global lock")
-	if ($lockdebug);
-    TBScriptUnlock();
     return 0;
 }
 
@@ -4070,6 +4059,20 @@ sub vnodeDestroy($$$$)
     if ($code) {
 	print STDERR "container_delete $vnode_id failed: $content ($code)\n";
     }
+
+    #
+    # NB: only lock after we do vnodeTearDown and container_delete.  We
+    # cannot have the global lock while destroying the vnode in Docker;
+    # that could take longer.
+    #
+    TBDebugTimeStamp("vnodeDestroy: grabbing global lock $GLOBAL_CONF_LOCK")
+	if ($lockdebug);
+    if (TBScriptLock($GLOBAL_CONF_LOCK, 0, 1200) != TBSCRIPTLOCK_OKAY()) {
+	print STDERR "Could not get the global lock after a long time!\n";
+	return -1;
+    }
+    TBDebugTimeStamp("  got global lock")
+	if ($lockdebug);
 
     #
     # Remove mounts.
@@ -4270,6 +4273,10 @@ sub vnodeDestroy($$$$)
     #
     ReleaseIFBs($vmid, $private)
 	if (exists($private->{'ifbs'}));
+
+    TBDebugTimeStamp("  releasing global lock")
+	if ($lockdebug);
+    TBScriptUnlock();
 
     return 0;
 }
