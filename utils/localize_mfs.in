@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2017 University of Utah and the Flux Group.
+# Copyright (c) 2010-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -401,8 +401,12 @@ sub LocalizeBSD()
     # Boss certificate. Need emulab.pem for TPM. 
     ExecQuiet("$CP -p $ETCDIR/emulab.pem $ETCDIR/client.pem $mpoint/etc/emulab")
 	== 0 or goto bad;
+    ExecQuiet("$CHOWN root:wheel $mpoint/etc/emulab/*.pem")
+	== 0 or goto bad;
     # All MFSs and images get the same ssh host keys.
     ExecQuiet("$CP -p $IMAGEKEYS_DIR/* $mpoint/etc/ssh")
+	== 0 or goto bad;
+    ExecQuiet("$CHOWN root:wheel $mpoint/etc/ssh/ssh_host*")
 	== 0 or goto bad;
     # Copy boss timezone into the MFS.
     ExecQuiet("$CP -p $ZONEINFO/$OURTIMEZONE $mpoint/etc/localtime")
@@ -575,10 +579,12 @@ sub LocalizeLinux($)
     # Boss certificate. Need emulab.pem for TPM. 
     ExecQuiet("$CP -p $ETCDIR/emulab.pem $ETCDIR/client.pem etc/emulab")
 	== 0 or goto bad;
-    ExecQuiet("$CHOWN root:wheel $ETCDIR/emulab.pem $ETCDIR/client.pem")
+    ExecQuiet("$CHOWN root:wheel etc/emulab/*.pem")
 	== 0 or goto bad;
     # All MFSs and images get the same ssh host keys.
     ExecQuiet("$CP -p $IMAGEKEYS_DIR/* etc/ssh")
+	== 0 or goto bad;
+    ExecQuiet("$CHOWN root:wheel etc/ssh/ssh_host*")
 	== 0 or goto bad;
     # Copy boss timezone into the MFS.
     ExecQuiet("$CP -p $ZONEINFO/$OURTIMEZONE etc/localtime")
