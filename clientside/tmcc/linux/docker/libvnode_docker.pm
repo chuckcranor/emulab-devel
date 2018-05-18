@@ -3389,12 +3389,14 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
 	my $ssh_style = $attributes->{DOCKER_SSH_STYLE};
 	my $exec_shell = $attributes->{DOCKER_EXEC_SHELL};
 
-	if (defined($exec_shell) && $exec_shell =~ /^([\/\w\d\-_]+)$/) {
-	    $exec_shell = $1;
-	}
-	else {
-	    warn("malformed shell: $exec_shell ; defaulting to /bin/sh");
-	    $exec_shell = '/bin/sh';
+	if (defined($exec_shell)) {
+	    if ($exec_shell =~ /^([\/\w\d\-_]+)$/) {
+		$exec_shell = $1;
+	    }
+	    else {
+		warn("malformed shell: $exec_shell ; defaulting to /bin/sh");
+		$exec_shell = '/bin/sh';
+	    }
 	}
 	
 	if (($emulabization ne DOCKER_EMULABIZE_NONE()
@@ -3414,6 +3416,11 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
 	    $private->{'ssh_style'} = 'direct';
 	}
 	else {
+	    if (!defined($exec_shell)) {
+		TBDebugTimeStamp("unspecified exec_shell: defaulting to /bin/sh");
+		$exec_shell = '/bin/sh';
+	    }
+
 	    # Setup our docker exec via ssh.
 	    addContainerToDockerExecSSH(
 		$vnode_id,$vnconfig->{config}->{SSHDPORT},$exec_shell);
