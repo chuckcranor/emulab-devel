@@ -144,7 +144,7 @@ systemd-install: dir-install
 	$(INSTALL) -m 644 $(SRCDIR)/emulab-networkd@.service \
 		$(DESTDIR)/lib/systemd/system/emulab-networkd@.service
 	@if [ -z "$(DESTDIR)" ]; then \
-	    systemctl daemon-reload; \
+	    systemctl daemon-reload || /bin/true; \
 	fi
 
 script-install:	dir-install $(SCRIPTS)

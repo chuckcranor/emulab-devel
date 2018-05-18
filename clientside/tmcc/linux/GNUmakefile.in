@@ -278,7 +278,7 @@ sysetc-install-systemd: systemd-dir-install
 	# Kick the init process to read our newly-installed unit files
 	# (i.e., so an immediate tbprepare will work...)
 	-@if [ -z "$(DESTDIR)" ]; then \
-	    systemctl daemon-reload; \
+	    systemctl daemon-reload || /bin/true; \
 	fi
 
 sysetc-remove-systemd:
