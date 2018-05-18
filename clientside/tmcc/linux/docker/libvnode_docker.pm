@@ -453,7 +453,7 @@ sub unbindNetNS($$);
 sub setupImage($$$$$$$$$$);
 sub pullImage($$$$;$);
 sub emulabizeImage($;$$$$$$$$);
-sub analyzeImage($$);
+sub analyzeImage($$;$);
 sub AllocateIFBs($$$);
 sub ReleaseIFBs($$);
 sub CreateShapingScripts($$$$;$);
@@ -4279,13 +4279,16 @@ sub vnodeDestroy($$$$)
 # Analyze an existing Docker image to extra image metadata,
 # distro/version, and so on.
 #
-sub analyzeImage($$)
+sub analyzeImage($$;$)
 {
-    my ($image,$rethash) = @_;
+    my ($image,$rethash,$force) = @_;
     my $output;
     my @outlines;
     my ($code,$json,$resp,$retval);
     my $iid;
+    if (!defined($force)) {
+	$force = 0;
+    }
 
     TBDebugTimeStamp("analyzing image $image...");
 
@@ -4340,7 +4343,7 @@ sub analyzeImage($$)
 		if ($lockdebug);
 	    $needunlock = 1;
 	}
-	if (-f "/vms/contexts/analyze-$iid") {
+	if (-f "/vms/contexts/analyze-$iid" && !$force) {
 	    TBDebugTimeStamp("not running analysis script for image $image;".
 		" already in /vms/contexts/analyze-$iid\n");
 	    open(FD,"/vms/contexts/analyze-$iid");
@@ -4522,10 +4525,11 @@ sub emulabizeImage($;$$$$$$$$)
     }
 
     #
-    # Analyze the image to see what we'll need to do it, if anything.
+    # Analyze the image to see what we'll need to do it, if anything.  Note
+    # that if we have a new base image, we force the analysis.
     #
     my %iattrs = ();
-    $rc = analyzeImage($image,\%iattrs);
+    $rc = analyzeImage($image,\%iattrs,$havenewbase);
     if ($rc) {
 	warn("analysis of image $image failed; continuing as best we can!");
     }
