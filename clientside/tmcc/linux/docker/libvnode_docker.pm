@@ -4967,7 +4967,7 @@ sub emulabizeImage($;$$$$$$$$)
 	    }
 	}
 
-	print $runitfile '"$(cat /var/emulab/docker/dockercmd)"';
+	print $runitfile '"$(cat /etc/emulab/docker/dockercmd)"';
 	print $runitfile "\n";
 	print $runitfile "fi\n";
 	print $runitfile "\n\n";
