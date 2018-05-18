@@ -380,6 +380,13 @@ sub doboot()
 	$emulabconfig{"CONFIG_NFSRACY"} = 0;
     }
 
+    #
+    # Use the 10.x based MFSes for newer installs
+    #
+    if ($FBSD_VERSION >= 10.3) {
+	$emulabconfig{"MFSVERSION"} = "10-64";
+    }
+
     # Determine if a XEN VM.
     if (system("sysctl -n kern.vm_guest >/dev/null 2>&1") == 0) {
 	my $vm_guest = `sysctl -n kern.vm_guest`;
