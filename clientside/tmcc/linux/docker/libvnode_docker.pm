@@ -2883,6 +2883,9 @@ sub vnodeCreate($$$$)
 	fatal("Failed to setup $imagename for $vnode_id; aborting!");
     }
     $private->{'emulabization'} = $newization;
+    if (!exists($vnconfig->{'attributes'}->{DOCKER_EMULABIZATION})) {
+	$vnconfig->{'attributes'}->{DOCKER_EMULABIZATION} = $newization;
+    }
 
     if ($inreload) {
 	libutil::setState("RELOADDONE");
@@ -4511,10 +4514,6 @@ sub emulabizeImage($;$$$$$$$$)
     # image, then make it!
     #
 
-    if (!defined($emulabization)) {
-	$emulabization = DOCKER_EMULABIZE_DEFAULT();
-    }
-
     #
     # If we're supposed to pull a new image, do it.
     #
@@ -4543,6 +4542,20 @@ sub emulabizeImage($;$$$$$$$$)
     my $curzation = $iattrs{'EMULABIZATION'};
     if (!defined($curzation) || $curzation eq '') {
 	$curzation = DOCKER_EMULABIZE_NONE();
+    }
+
+    #
+    # If the emulabization level was not commanded, and if the base
+    # image was emulabized, we will just use it.  If not, we will use
+    # our default (DOCKER_EMULABIZE_DEFAULT).
+    #
+    if (!defined($emulabization)) {
+	if ($curzation eq DOCKER_EMULABIZE_NONE()) {
+	    $emulabization = DOCKER_EMULABIZE_DEFAULT();
+	}
+	else {
+	    $emulabization = $curzation;
+	}
     }
 
     #
@@ -4598,13 +4611,13 @@ sub emulabizeImage($;$$$$$$$$)
     }
     else {
 	# Nothing to do; just use existing base image.
-	$emulabization = DOCKER_EMULABIZE_NONE();
+	#$emulabization = DOCKER_EMULABIZE_NONE();
     }
 
     if ($newzation eq DOCKER_EMULABIZE_NONE()) {
 	if ($debug) {
 	    print STDERR "DEBUG: image $image will not be emulabized".
-		" ($emulabization, $newzation)\n";
+		" ($emulabization, new=$newzation, current=$curzation)\n";
 	}
 	if (defined($newimageref)) {
 	    $$newimageref = $image;
@@ -5215,11 +5228,7 @@ sub setupImage($$$$$$$$$$)
     #
     my $emulabization;
     my $update = 0;
-    if (!exists($vnconfig->{'attributes'}->{DOCKER_EMULABIZATION})) {
-	$emulabization = $vnconfig->{'attributes'}->{DOCKER_EMULABIZATION} =
-	    DOCKER_EMULABIZE_DEFAULT();
-    }
-    else {
+    if (exists($vnconfig->{'attributes'}->{DOCKER_EMULABIZATION})) {
 	$emulabization = $vnconfig->{'attributes'}->{DOCKER_EMULABIZATION};
 	if ($emulabization ne DOCKER_EMULABIZE_FULL()
 	    && $emulabization ne DOCKER_EMULABIZE_BUILDENV()
@@ -5231,12 +5240,11 @@ sub setupImage($$$$$$$$$$)
 		 " $vnode_id/$image; aborting!");
 	    return -1;
 	}
+	if ($emulabization eq '') {
+	    $emulabization = DOCKER_EMULABIZE_NONE;
+	}
+	$vnconfig->{'attributes'}->{DOCKER_EMULABIZATION} = $emulabization;
     }
-    # Save this off for later reference.
-    if ($emulabization eq '') {
-	$emulabization = DOCKER_EMULABIZE_NONE;
-    }
-    $vnconfig->{'attributes'}->{DOCKER_EMULABIZATION} = $emulabization;
     if (exists($vnconfig->{'attributes'}->{DOCKER_EMULABIZATION_UPDATE})) {
 	$update = $vnconfig->{'attributes'}->{DOCKER_EMULABIZATION_UPDATE};
     }
@@ -5262,6 +5270,10 @@ sub setupImage($$$$$$$$$$)
 
     my $newimage;
     my $iattrs;
+    if (!defined($newzationref)) {
+	my $tmp;
+	$newzationref = \$tmp;
+    }
     $rc = emulabizeImage($image,\$newimage,$emulabization,$newzationref,$update,
 			 $pullpolicy,$username,$password,\$iattrs);
     if ($rc) {
@@ -5272,6 +5284,13 @@ sub setupImage($$$$$$$$$$)
     #print "DEBUG: setupImage ".$iattrs->{'DIST'}.",".$iattrs->{'TAG'}.",".$iattrs->{'MINTAG'}."\n";
     my ($dist,$tag,$mintag) =
 	($iattrs->{'DIST'},$iattrs->{'TAG'},$iattrs->{'MINTAG'});
+
+    #
+    # Save off the emulabization level we're going to use, if it was undef.
+    #
+    if (!defined($emulabization)) {
+	$emulabization = $$newzationref;
+    }
 
     #
     # If we're not emulabizing, we don't mess with the cmd or
