@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -113,6 +113,14 @@ function Do_CreateSecret()
 	return;
     }
     $certificate = $ajax_args["certificate"];
+
+    #
+    # Watch for an expired or invalid certificate. 
+    #
+    if (VerifyLocalUser(null, $certificate)) {
+        SPITAJAX_ERROR(1, "Cannot verify your certificate");
+        return;
+    }
 
     if (!isset($ajax_args["r1_encrypted"])) {
 	SPITAJAX_ERROR(1, "Missing encrypted random string");
@@ -473,13 +481,14 @@ function UpdateCredentials($user, $cert, $cred, &$error)
 function VerifyLocalUser($user, $cert)
 {
     $certfile = tempnam("/tmp", "cert");
+    $args = ($user ? "" : "-e");
 
     $fp = fopen($certfile, "w");
     fwrite($fp, $cert);
     fclose($fp);
     chmod($certfile, 0666);
     
-    $retval = SUEXEC("nobody", "nobody", "webverifycert $certfile",
+    $retval = SUEXEC("nobody", "nobody", "webverifycert $args $certfile",
 		     SUEXEC_ACTION_CONTINUE);
     unlink($certfile);
     if ($retval)

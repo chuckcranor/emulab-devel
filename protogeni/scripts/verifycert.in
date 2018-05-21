@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2015 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -37,10 +37,11 @@ use Data::Dumper;
 #
 sub usage()
 {
-    print STDERR "Usage: $0 <cert file>\n";
+    print STDERR "Usage: $0 [-e] <cert file>\n";
     exit(1);
 }
-my $optlist  = "";
+my $optlist   = "e";
+my $chainonly = 0;
 
 # Configure ...
 my $TB		   = "@prefix@";
@@ -66,6 +67,9 @@ my %options = ();
 if (! getopts($optlist, \%options)) {
     usage();
 }
+if (defined($options{"e"})) {
+    $chainonly = 1;
+}
 usage()
     if (@ARGV != 1);
 my $certfile = $ARGV[0];
@@ -77,6 +81,8 @@ if (!defined($certificate)) {
 if ($certificate->VerifySSLChain()) {
     fatal("Could not verify certificate");
 }
+exit(0)
+    if ($chainonly);
 #
 # We now know the the root cert, make sure its us.
 #
