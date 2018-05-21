@@ -225,6 +225,15 @@ sub GenCredentials($$;$$)
 
 	    $gensacert = 1;
 	}
+	# Another case to watch for; the certificate chain is bad cause
+	# the signer (say, the Geni Portal) is expired.
+	if ($certificate->VerifySSLChain()) {
+	    print STDERR "certificate for $geniuser has a bad chain\n";
+	    goto bad
+		if (!$allowexpired);
+	    
+	    $gensacert = 1;
+	}
 	if ($gensacert) {
 	    # Be careful not to return this.
 	    $speaksfor = undef;
