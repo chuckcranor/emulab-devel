@@ -1474,6 +1474,9 @@ sub ReservationPrediction($)
 	$freecounts->{$type} = Reservation->FreeCount($type, \@projlist);
 	$forecast->{$type}   = [ Reservation->Forecast($type, \@projlist) ];
     }
+    goto nopids
+	if (!@projlist);
+    
     foreach my $type (Reservation->ReservableTypes())  {
 	my $type = $type->type();
 	
@@ -1521,6 +1524,7 @@ sub ReservationPrediction($)
 	}
 	push(@{$upcoming->{$epid}}, $ref)
     }
+  nopids:
     my $blob = {
 	"freecounts"   => $freecounts,
 	"forecast"     => $forecast,
