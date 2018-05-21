@@ -493,6 +493,13 @@ $(function ()
 	    $('#myprofile_content')
 		.html(template({"fields"  : json.value,
 				"isadmin" : 0}));
+	    // Format dates with moment before display.
+	    $('#myprofile_content .format-date').each(function() {
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "user-dashboard", "AccountDetails",
