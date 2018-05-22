@@ -1345,8 +1345,14 @@ sub ExitWithError($)
 	    $webtask->Exited($code);
 	}
 	print STDERR "*** $0:\n".
-	             "    $mesg\n";
-	exit(1);
+	    "    $mesg\n";
+	
+	# Hmm, the apt_daemon cares about the response code, which is
+	# fine except that some response codes are too big. Damn.
+	if ($code > 255) {
+	    $code = 1;
+	}
+	exit($code);
     }
     fatal($mesg);
 }
