@@ -118,7 +118,8 @@ function Do_CreateSecret()
     # Watch for an expired or invalid certificate. 
     #
     if (VerifyLocalUser(null, $certificate)) {
-        SPITAJAX_ERROR(1, "Cannot verify your certificate");
+        SPITAJAX_ERROR(1, "Cannot verify your certificate, please regenerate ".
+			  "your certificate at your home portal.");
         return;
     }
 
