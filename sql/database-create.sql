@@ -4631,7 +4631,9 @@ CREATE TABLE `reservation_history` (
   `uid` varchar(8) NOT NULL DEFAULT '',
   `notes` mediumtext,
   `admin_notes` mediumtext,
-  KEY `start` (`start`)
+  `uuid` varchar(40) NOT NULL default '',
+  KEY `start` (`start`),
+  KEY `uuid` (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
