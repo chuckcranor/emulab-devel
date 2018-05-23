@@ -25,6 +25,7 @@ use strict;
 use English;
 use Getopt::Long qw(:config no_ignore_case);
 use POSIX qw(strftime);
+use Date::Parse;
 
 #
 # Load the Testbed support stuff.
