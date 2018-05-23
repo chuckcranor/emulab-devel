@@ -4626,6 +4626,7 @@ CREATE TABLE `reservation_history` (
   `pid` varchar(48) NOT NULL DEFAULT '',
   `nodes` smallint(5) NOT NULL DEFAULT '0',
   `type` varchar(30) NOT NULL DEFAULT '',
+  `created` datetime DEFAULT NULL,
   `start` datetime DEFAULT NULL,
   `end` datetime DEFAULT NULL,
   `uid` varchar(8) NOT NULL DEFAULT '',

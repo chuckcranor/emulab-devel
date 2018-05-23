@@ -534,10 +534,10 @@ sub Tidy($)
 		  "reservation_history WRITE, " .
 		  "future_reservation_attributes AS a WRITE, " .
 		  "future_reservations AS r READ" );
-    DBQueryFatal( "INSERT INTO reservation_history( pid, nodes, type, " .
-		  "start, end, uid, notes, admin_notes ) " .
-		  "SELECT pid, nodes, type, start, end, uid, notes, " .
-		  "admin_notes FROM future_reservations WHERE " .
+    DBQueryFatal( "INSERT INTO reservation_history( uuid, pid, nodes, type, " .
+		  "created, start, end, uid, notes, admin_notes ) " .
+		  "SELECT uuid, pid, nodes, type, created, start, end, uid, " .
+		  "notes, admin_notes FROM future_reservations WHERE " .
 		  "end < '$stamp' and approved is not null" );
     DBQueryFatal( "DELETE FROM future_reservations WHERE " .
 		  "end < '$stamp'" );
