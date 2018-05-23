@@ -156,4 +156,9 @@ fi
 
 echo "`date`: ${iface}: done!" >>$LOGFILE 2>&1
 
+#
+# Tell other scripts waiting on us that we are done.
+#
+touch /run/cnet-done
+
 exit 0
