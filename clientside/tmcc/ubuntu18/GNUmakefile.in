@@ -70,8 +70,8 @@ dir-install:
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/sudoers.d
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system
-	#$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/network-online.target.wants
-	#$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/networking.service.wants
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/systemd-networkd.service.requires
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/systemd-networkd.socket.requires
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/multi-user.target.wants
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/udev
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/udev/rules.d
@@ -139,10 +139,18 @@ systemd-install: dir-install
 	#	ln -sf ../ntp.service \
 	#		$(SYSETCDIR)/systemd/system/multi-user.target.wants/ntp.service ; \
 	#fi
-	# Kick the init process to read our newly-installed unit files
-	# (i.e., so an immediate tbprepare will work...)
+	# NB: this *has* to go into /lib/systemd/system, not /etc -- it will
+	# not work if in /etc.
 	$(INSTALL) -m 644 $(SRCDIR)/emulab-networkd@.service \
 		$(DESTDIR)/lib/systemd/system/emulab-networkd@.service
+	$(INSTALL) -m 644 $(SRCDIR)/emulab-udev-settle.service \
+		$(SYSETCDIR)/systemd/system/emulab-udev-settle.service
+	ln -sf ../emulab-udev-settle.service \
+		$(SYSETCDIR)/systemd/system/systemd-networkd.service.requires/emulab-udev-settle.service
+	ln -sf ../emulab-udev-settle.service \
+		$(SYSETCDIR)/systemd/system/systemd-networkd.socket.requires/emulab-udev-settle.service
+	# Kick the init process to read our newly-installed unit files
+	# (i.e., so an immediate tbprepare will work...)
 	@if [ -z "$(DESTDIR)" ]; then \
 	    systemctl daemon-reload || /bin/true; \
 	fi

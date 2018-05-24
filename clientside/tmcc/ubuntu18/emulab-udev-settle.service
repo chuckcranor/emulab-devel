@@ -1,0 +1,17 @@
+[Unit]
+Description=Force udev to settle before systemd-networkd starts
+DefaultDependencies=no
+After=local-fs.target
+Before=systemd-networkd.service
+Before=systemd-networkd.socket
+
+[Install]
+RequiredBy=systemd-networkd.service
+RequiredBy=systemd-networkd.socket
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'echo "Waiting for udev to settle..." ; while true; do udevadm settle && stat -t /run/systemd/network/*.network && break || (echo "Waiting for udev to settle..." ; sleep 2); done'
+ExecStop=
+RemainAfterExit=false
+TimeoutStartSec=2min
