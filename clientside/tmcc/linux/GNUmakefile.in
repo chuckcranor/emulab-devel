@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,6 +46,7 @@ all:	supfile $(SCRIPTS)
 include $(TESTBED_SRCDIR)/GNUmakerules
 
 SYSETCDIR	?= $(DESTDIR)/etc
+SYSLIBDIR	?= $(DESTDIR)/usr/lib
 ETCDIR		?= $(DESTDIR)$(CLIENT_ETCDIR)
 BINDIR		?= $(DESTDIR)$(CLIENT_BINDIR)
 VARDIR		?= $(DESTDIR)$(CLIENT_VARDIR)
@@ -69,6 +70,9 @@ XENVERS	= 4.5
 endif
 ifneq ($(wildcard /usr/lib/xen-4.6),)
 XENVERS	= 4.6
+endif
+ifneq ($(wildcard /usr/lib/xen-4.9),)
+XENVERS	= 4.9
 endif
 
 #
@@ -151,6 +155,7 @@ simple-install:	common-install script-install bin-install
 
 dir-install:
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/network
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/sysconfig
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/sysconfig/network-scripts
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(RCDIR)
@@ -170,6 +175,7 @@ dir-install:
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(VARDIR)/logs
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(VARDIR)/sup
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(VARDIR)/boot
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(LBINDIR)
 	-rm -rf $(DESTDIR)/etc/testbed
 	ln -s emulab $(DESTDIR)/etc/testbed
 	-rm -rf $(DESTDIR)/usr/local/etc/testbed
@@ -180,6 +186,19 @@ systemd-dir-install: dir-install
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/multi-user.target.wants
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system-generators
+
+xen-dir-install: dir-install
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/xen/scripts
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/sysctl.d
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/logrotate.d
+	@if [ "$(XENVERS)" = "4.4" ]; then \
+		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/init.d ; \
+	fi
+	@if [ "$(XENVERS)" = "4.9" ]; then \
+		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/network-online.target.wants ; \
+		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/testbed.service.d ; \
+	fi
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSLIBDIR)/xen-$(XENVERS)/lib/python/grub
 
 common-install:	dir-install
 	(cd ../common; $(MAKE) DESTDIR=$(DESTDIR) local-install)
@@ -394,8 +413,8 @@ xen-upstart-install:
 		rm /etc/init/plymouth-upstart-bridge.override; \
 	fi
 
-# NOTE: Custom /etc/xen/xen not needed on Xen 4.6.
-xen-install:	dir-install xen-udev-install xen-upstart-install
+# NOTE: Custom /etc/xen/xen not needed on Xen 4.6+.
+xen-install:	xen-dir-install xen-udev-install xen-upstart-install
 	$(INSTALL) -m 755 $(SRCDIR)/../common/vnodesetup $(BINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/../common/mkvnode.pl $(BINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/../common/bootvnodes $(BINDIR)/
@@ -405,49 +424,38 @@ xen-install:	dir-install xen-udev-install xen-upstart-install
 	$(INSTALL) -m 755 $(SRCDIR)/xen/libvnode_xen.pm $(BINDIR)/
 	echo "xen" > $(ETCDIR)/genvmtype
 	$(INSTALL) -m 755 $(SRCDIR)/xen/xenbridge-setup $(BINDIR)/
-	if [ -e "$(DESTDIR)/lib/systemd/system/emulab-networkd@.service" ]; then \
-		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system ; \
-		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/network-online.target.wants ; \
+	@if [ "$(XENVERS)" = "4.9" ]; then \
 		$(INSTALL) -m 644 $(SRCDIR)/xen/emulab-xenbridge-setup.service $(SYSETCDIR)/systemd/system ; \
 		ln -sf ../emulab-xenbridge-setup.service \
 			$(SYSETCDIR)/systemd/system/network-online.target.wants/emulab-xenbridge-setup.service ; \
 	fi
 	# Tweak the testbed.service unit deps to require LVM/network/Xen.
 	if [ -e "$(DESTDIR)/etc/systemd/system/testbed.service" ]; then \
-		$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/testbed.service.d ; \
 		$(INSTALL) -m 644 $(SRCDIR)/xen/testbed.service-local.conf $(SYSETCDIR)/systemd/system/testbed.service.d/local.conf ; \
 	fi
 	$(INSTALL) -m 755 $(SRCDIR)/xen/restorevm.pl $(BINDIR)/restorevm.pl
 	$(INSTALL) -m 755 $(SRCDIR)/xen/capturevm.pl $(BINDIR)/capturevm.pl
-	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/xen
 	$(INSTALL) -m 755 $(SRCDIR)/xen/xend-config.sxp $(SYSETCDIR)/xen/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/xl.conf $(SYSETCDIR)/xen/
-	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/sysctl.d
 	$(INSTALL) -m 755 $(SRCDIR)/xen/30-emulab.conf $(SYSETCDIR)/sysctl.d/
-	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/logrotate.d
 	$(INSTALL) -m 755 $(SRCDIR)/xen/rsyslog $(SYSETCDIR)/logrotate.d/
 	@if [ "$(XENVERS)" = "4.4" ]; then \
-		$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/init.d ; \
 		$(INSTALL) -m 755 $(SRCDIR)/xen/xen $(SYSETCDIR)/init.d/; \
 	fi
-	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/network
 	$(INSTALL) -m 755 $(SRCDIR)/xen/interfaces $(SYSETCDIR)/network/
-	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/xen/scripts
 	$(INSTALL) -m 755 $(SRCDIR)/xen/emulab-cnet.pl $(SYSETCDIR)/xen/scripts/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/emulab-enet.pl $(SYSETCDIR)/xen/scripts/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/vif-route-emulab $(SYSETCDIR)/xen/scripts/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/emulab-tun.pl $(SYSETCDIR)/xen/scripts/
-	$(INSTALL) -m 755 -o root -g root -d $(LBINDIR)
 	$(INSTALL) -m 755 $(SRCDIR)/xen/create-xen-image $(LBINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/../../os/create-versioned-image $(LBINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/../../os/create-image $(LBINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/mkimagecache $(BINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/gc-xen-images $(BINDIR)/
-	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(BINDIR)/grub
 	$(INSTALL) -m 755 $(SRCDIR)/xen/pygrub $(BINDIR)/
-	ln -sf xen-$(XENVERS) /usr/lib/xen-default
+	ln -sf xen-$(XENVERS) $(SYSLIBDIR)/xen-default
 	$(INSTALL) -m 755 $(SRCDIR)/xen/GrubConf.py \
-		/usr/lib/xen-default/lib/python/grub/
+		$(SYSLIBDIR)/xen-default/lib/python/grub/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/topd $(BINDIR)/
 	@if [ -x "/usr/bin/update-rc.d" -a -d "$(SYSETCDIR)/init.d" ]; then \
 	    $(INSTALL) -m 755 $(SRCDIR)/xen/topd-init $(SYSETCDIR)/init.d/topd; \
