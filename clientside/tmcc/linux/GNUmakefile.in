@@ -412,6 +412,11 @@ xen-install:	dir-install xen-udev-install xen-upstart-install
 		ln -sf ../emulab-xenbridge-setup.service \
 			$(SYSETCDIR)/systemd/system/network-online.target.wants/emulab-xenbridge-setup.service ; \
 	fi
+	# Tweak the testbed.service unit deps to require LVM/network/Xen.
+	if [ -e "$(DESTDIR)/etc/systemd/system/testbed.service" ]; then \
+		$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/testbed.service.d ; \
+		$(INSTALL) -m 644 $(SRCDIR)/xen/testbed.service-local.conf $(SYSETCDIR)/systemd/system/testbed.service.d/local.conf ; \
+	fi
 	$(INSTALL) -m 755 $(SRCDIR)/xen/restorevm.pl $(BINDIR)/restorevm.pl
 	$(INSTALL) -m 755 $(SRCDIR)/xen/capturevm.pl $(BINDIR)/capturevm.pl
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/xen
