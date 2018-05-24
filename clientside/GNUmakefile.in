@@ -114,6 +114,13 @@ client-tarball: tarball-check
 	echo "Creating tarball..."
 	tar czf emulab-client.tar.gz -C $(TARBALLDESTDIR) .
 
+xen-client-tarball: tarball-check
+	echo "Building and installing client-side in $(TARBALLDESTDIR)..."
+	DESTDIR=$(TARBALLDESTDIR) $(MAKE) client-install
+	DESTDIR=$(TARBALLDESTDIR) $(MAKE) -C tmcc/linux xen-install
+	echo "Creating tarball..."
+	tar czf emulab-client.tar.gz -C $(TARBALLDESTDIR) .
+
 client-mkdirs:
 	-mkdir -p $(DESTDIR)$(CLIENT_BINDIR)
 	-mkdir -p $(DESTDIR)$(CLIENT_MANDIR)
