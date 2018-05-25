@@ -482,9 +482,9 @@ sub makeIfaceMaps()
 	$if2info{$iface} = $ifinfo;
 	$if2mac{$iface} = $mac;
 	$mac2if{$mac} = $iface;
-	$ip2net{$ip} = $if2info->{'network'};
-	$ip2mask{$ip} = $if2info->{'mask'};
-	$ip2maskbits{$ip} = $if2info->{'maskbits'};
+	$ip2net{$ip} = $if2info{$iface}->{'network'};
+	$ip2mask{$ip} = $if2info{$iface}->{'mask'};
+	$ip2maskbits{$ip} = $if2info{$iface}->{'maskbits'};
     }
 
     if ($debug > 1) {
@@ -922,7 +922,8 @@ sub lvSize($)
 sub restartDHCP()
 {
     my $dhcpd_service = 'dhcpd';
-    if (-f '/etc/init/isc-dhcp-server.conf') {
+    if (-f '/etc/init/isc-dhcp-server.conf' ||
+	-f '/lib/systemd/system/isc-dhcp-server.service') {
         $dhcpd_service = 'isc-dhcp-server';
     }
 

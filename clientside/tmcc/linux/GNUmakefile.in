@@ -156,7 +156,6 @@ simple-install:	common-install script-install bin-install
 dir-install:
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/network
-	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/sysconfig
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/sysconfig/network-scripts
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(RCDIR)
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(RCDIR)/init.d
@@ -188,6 +187,9 @@ systemd-dir-install: dir-install
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system-generators
 
 xen-dir-install: dir-install
+	@if [ "$(XENVERS)" = "4.9" ]; then \
+		rm -rf $(SYSETCDIR)/rc.d $(SYSETCDIR)/sysconfig; \
+	fi
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/xen/scripts
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/sysctl.d
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/logrotate.d
@@ -438,11 +440,17 @@ xen-install:	xen-dir-install xen-udev-install xen-upstart-install
 	$(INSTALL) -m 755 $(SRCDIR)/xen/xend-config.sxp $(SYSETCDIR)/xen/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/xl.conf $(SYSETCDIR)/xen/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/30-emulab.conf $(SYSETCDIR)/sysctl.d/
-	$(INSTALL) -m 755 $(SRCDIR)/xen/rsyslog $(SYSETCDIR)/logrotate.d/
+	@if [ -x /sbin/reload ]; then \
+		$(INSTALL) -m 755 $(SRCDIR)/xen/rsyslog $(SYSETCDIR)/logrotate.d/; \
+	else \
+		$(INSTALL) -m 755 $(SRCDIR)/xen/rsyslog.systemd $(SYSETCDIR)/logrotate.d/; \
+	fi
 	@if [ "$(XENVERS)" = "4.4" ]; then \
 		$(INSTALL) -m 755 $(SRCDIR)/xen/xen $(SYSETCDIR)/init.d/; \
 	fi
-	$(INSTALL) -m 755 $(SRCDIR)/xen/interfaces $(SYSETCDIR)/network/
+	@if [ "$(XENVERS)" != "4.9" ]; then \
+		$(INSTALL) -m 755 $(SRCDIR)/xen/interfaces $(SYSETCDIR)/network/; \
+	fi
 	$(INSTALL) -m 755 $(SRCDIR)/xen/emulab-cnet.pl $(SYSETCDIR)/xen/scripts/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/emulab-enet.pl $(SYSETCDIR)/xen/scripts/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/vif-route-emulab $(SYSETCDIR)/xen/scripts/
