@@ -30,7 +30,7 @@ while [ ! $found -eq 1 ]; do
     # means we have to check *which* interface came up; this is how we
     # determine if it was our interface or not.
     #
-    /lib/systemd/systemd-networkd-wait-online -i "$iface" --timeout 2
+    /lib/systemd/systemd-networkd-wait-online -i "$iface" --timeout 2 > /dev/null 2>&1
     if [ $? -eq 0 ]; then
 	networkctl status "$iface" | grep -qi configured
 	if [ $? -eq 0 ]; then
