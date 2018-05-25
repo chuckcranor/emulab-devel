@@ -198,6 +198,8 @@ xen-dir-install: dir-install
 	fi
 	@if [ "$(XENVERS)" = "4.9" ]; then \
 		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/network-online.target.wants ; \
+	fi
+	@if [ -e "$(DESTDIR)/etc/systemd/system/testbed.service" ]; then \
 		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/testbed.service.d ; \
 	fi
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSLIBDIR)/xen-$(XENVERS)/lib/python/grub
