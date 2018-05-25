@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1482,6 +1482,11 @@ dolinux() {
 	    # GRUB_CMDLINE_LINUX="console=ttySN,S"
 	    # GRUB_TERMINAL=serial
 	    # GRUB_SERIAL_COMMAND="serial --speed=S --unit=N"
+	    #
+	    # XXX Need to put in Xen lines:
+	    #
+	    # GRUB_CMDLINE_XEN="gnttab_max_nr_frames=64 loglvl=all guest_loglvl=all com2=115200,8n1 console=com2 dom0_mem=4096M"
+	    # GRUB_CMDLINE_LINUX_XEN_REPLACE="console=hvc0 earlyprintk=xen net.ifnames=0"
 	    #
 	    gdef="/mnt/etc/default/grub"
 	    if [ -e "$gdef" ]; then
