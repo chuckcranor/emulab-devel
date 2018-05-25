@@ -482,9 +482,13 @@ sub makeIfaceMaps()
 	$if2info{$iface} = $ifinfo;
 	$if2mac{$iface} = $mac;
 	$mac2if{$mac} = $iface;
-	$ip2net{$ip} = $if2info{$iface}->{'network'};
-	$ip2mask{$ip} = $if2info{$iface}->{'mask'};
-	$ip2maskbits{$ip} = $if2info{$iface}->{'maskbits'};
+	# If the 'ip' key isn't set, none of this stuff will be there;
+	# for interfaces that have no IP.
+	if (defined($ip)) {
+	    $ip2net{$ip} = $ifinfo->{'network'};
+	    $ip2mask{$ip} = $ifinfo->{'mask'};
+	    $ip2maskbits{$ip} = $ifinfo->{'maskbits'};
+	}
     }
 
     if ($debug > 1) {
@@ -585,9 +589,6 @@ sub getIfaceInfoNoCache($) {
 	$ret->{'mask'} = join('.',@netmask);
 	$ret->{'maskbits'} = $bits;
 	$ret->{'ip'} = $ip;
-    }
-    else {
-	return undef;
     }
 
     return $ret;
