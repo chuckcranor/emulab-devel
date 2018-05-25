@@ -443,7 +443,7 @@ xen-install:	xen-dir-install xen-udev-install xen-upstart-install
 	@if [ -x /sbin/reload ]; then \
 		$(INSTALL) -m 755 $(SRCDIR)/xen/rsyslog $(SYSETCDIR)/logrotate.d/; \
 	else \
-		$(INSTALL) -m 755 $(SRCDIR)/xen/rsyslog.systemd $(SYSETCDIR)/logrotate.d/; \
+		$(INSTALL) -m 755 $(SRCDIR)/xen/rsyslog.systemd $(SYSETCDIR)/logrotate.d/rsyslog; \
 	fi
 	@if [ "$(XENVERS)" = "4.4" ]; then \
 		$(INSTALL) -m 755 $(SRCDIR)/xen/xen $(SYSETCDIR)/init.d/; \
