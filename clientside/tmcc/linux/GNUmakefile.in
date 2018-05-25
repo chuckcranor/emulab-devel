@@ -181,14 +181,14 @@ dir-install:
 	ln -s emulab $(DESTDIR)/usr/local/etc/testbed
 
 systemd-dir-install: dir-install
-	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd
-	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/multi-user.target.wants
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system-generators
 
 xen-dir-install: dir-install
 	@if [ "$(XENVERS)" = "4.9" ]; then \
 		rm -rf $(SYSETCDIR)/rc.d $(SYSETCDIR)/sysconfig; \
+		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/multi-user.target.wants; \
+		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system-generators; \
 	fi
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/xen/scripts
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/sysctl.d
@@ -198,9 +198,6 @@ xen-dir-install: dir-install
 	fi
 	@if [ "$(XENVERS)" = "4.9" ]; then \
 		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/network-online.target.wants ; \
-	fi
-	@if [ -e "$(DESTDIR)/etc/systemd/system/testbed.service" ]; then \
-		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/testbed.service.d ; \
 	fi
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSLIBDIR)/xen-$(XENVERS)/lib/python/grub
 
@@ -235,19 +232,19 @@ sysetc-install:	dir-install ifcfgs sysetc-install-$(INITTYPE)
 	$(INSTALL) -m 644 $(SRCDIR)/ifcfg-eth99 $(SYSETCDIR)/sysconfig/network-scripts
 	$(INSTALL) -m 644 ifcfg-eth[0-9]* $(SYSETCDIR)/sysconfig/network-scripts
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/cron.pend
-	if [ -e $(SYSETCDIR)/cron.daily/slocate.cron ]; then \
+	@if [ -e $(SYSETCDIR)/cron.daily/slocate.cron ]; then \
 		mv -f $(SYSETCDIR)/cron.daily/slocate.cron \
 				$(SYSETCDIR)/cron.pend; \
 	fi
-	if [ -e $(SYSETCDIR)/cron.daily/makewhatis.cron ]; then \
+	@if [ -e $(SYSETCDIR)/cron.daily/makewhatis.cron ]; then \
 		mv -f $(SYSETCDIR)/cron.daily/makewhatis.cron \
 				$(SYSETCDIR)/cron.pend; \
 	fi
 	$(INSTALL) -m 755 $(SRCDIR)/rc.local $(RCDIR)/rc.local
-	if [ "$(RCDIR)" != "$(SYSETCDIR)" ]; then \
+	@if [ "$(RCDIR)" != "$(SYSETCDIR)" ]; then \
 	    ln -sf $(RRCDIR)/rc.local $(SYSETCDIR)/rc.local; \
         fi
-	if [ -e $(SYSETCDIR)/sysctl.conf ]; then \
+	@if [ -e $(SYSETCDIR)/sysctl.conf ]; then \
 	    if grep -q 'START added by Emulab' $(SYSETCDIR)/sysctl.conf; then \
 		sed -i -e '/START added by Emulab/,/END added by Emulab/d' $(SYSETCDIR)/sysctl.conf; \
 	    fi; \
@@ -434,7 +431,8 @@ xen-install:	xen-dir-install xen-udev-install xen-upstart-install
 			$(SYSETCDIR)/systemd/system/network-online.target.wants/emulab-xenbridge-setup.service ; \
 	fi
 	# Tweak the testbed.service unit deps to require LVM/network/Xen.
-	if [ -e "$(DESTDIR)/etc/systemd/system/testbed.service" ]; then \
+	@if [ -e "$(SYSETCDIR)/systemd/system/testbed.service" ]; then \
+		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/testbed.service.d ; \
 		$(INSTALL) -m 644 $(SRCDIR)/xen/testbed.service-local.conf $(SYSETCDIR)/systemd/system/testbed.service.d/local.conf ; \
 	fi
 	$(INSTALL) -m 755 $(SRCDIR)/xen/restorevm.pl $(BINDIR)/restorevm.pl
@@ -443,9 +441,11 @@ xen-install:	xen-dir-install xen-udev-install xen-upstart-install
 	$(INSTALL) -m 755 $(SRCDIR)/xen/xl.conf $(SYSETCDIR)/xen/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/30-emulab.conf $(SYSETCDIR)/sysctl.d/
 	@if [ -x /sbin/reload ]; then \
-		$(INSTALL) -m 755 $(SRCDIR)/xen/rsyslog $(SYSETCDIR)/logrotate.d/; \
+		$(INSTALL) -m 644 $(SRCDIR)/xen/rsyslog $(SYSETCDIR)/logrotate.d/; \
+	elif [ -x /usr/lib/rsyslog/rsyslog-rotate ]; then \
+		$(INSTALL) -m 644 $(SRCDIR)/xen/rsyslog.systemd $(SYSETCDIR)/logrotate.d/rsyslog; \
 	else \
-		$(INSTALL) -m 755 $(SRCDIR)/xen/rsyslog.systemd $(SYSETCDIR)/logrotate.d/rsyslog; \
+		$(INSTALL) -m 644 $(SRCDIR)/xen/rsyslog.sysV $(SYSETCDIR)/logrotate.d/rsyslog; \
 	fi
 	@if [ "$(XENVERS)" = "4.4" ]; then \
 		$(INSTALL) -m 755 $(SRCDIR)/xen/xen $(SYSETCDIR)/init.d/; \
