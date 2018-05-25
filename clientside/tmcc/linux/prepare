@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -285,6 +285,17 @@ while ($dirent = readdir(LOG)) {
     }
 }
 closedir(LOG);
+
+#
+# Clear out systemd journals.
+#
+if (-d "/var/log/journal") {
+    print "Cleaning systemd journal files...\n";
+    system("journalctl --vacuum-time=1s");
+    # Vacuum does not kill off the active journals, so truncate them.
+    # They might reappear.
+    system("truncate -s 0 /var/log/journal/*/*.journal");
+}
 
 my $XLOGDIR = "$LOGDIR/xen";
 if (-d $XLOGDIR) {
