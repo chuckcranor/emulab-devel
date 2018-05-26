@@ -4624,13 +4624,16 @@ CREATE TABLE `reposition_status` (
 DROP TABLE IF EXISTS `reservation_history`;
 CREATE TABLE `reservation_history` (
   `pid` varchar(48) NOT NULL DEFAULT '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
   `nodes` smallint(5) NOT NULL DEFAULT '0',
   `type` varchar(30) NOT NULL DEFAULT '',
   `created` datetime DEFAULT NULL,
   `deleted` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
   `start` datetime DEFAULT NULL,
   `end` datetime DEFAULT NULL,
   `uid` varchar(8) NOT NULL DEFAULT '',
+  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
   `notes` mediumtext,
   `admin_notes` mediumtext,
   `uuid` varchar(40) NOT NULL default '',
