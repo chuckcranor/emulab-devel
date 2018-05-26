@@ -60,6 +60,7 @@ my $silent  = 0;
 my $TB		= "@prefix@";
 my $TBOPS	= "@TBOPSEMAIL@";
 my $TBLOGS	= "@TBLOGSEMAIL@";
+my $MAINSITE    = @TBMAINSITE@;
 my $TBAUDIT	= "@TBAUDITEMAIL@";
 my $CONTROL	= "@USERNODE@";
 my $BOSSNODE	= "@BOSSNODE@";
@@ -295,6 +296,7 @@ my $status      = $target_user->status();
 my $webonly     = $target_user->webonly();
 my $usr_shell   = $target_user->shell();
 my $usr_admin   = $target_user->admin();
+my $usr_uid     = $target_user->uid();
 my $wpswd       = $target_user->w_pswd();
 my $wikionly    = $target_user->wikionly();
 my $isnonlocal  = $target_user->IsNonLocal();
@@ -901,9 +903,21 @@ sub UpdateUser(;$)
 	# Admin users get a local shell.
 	if ($usr_admin) {
 	    $locshellarg = "-s " . $shellpaths{"tcsh"};
+	    if ($MAINSITE) {
+		$locshellarg .= " -d /home/$usr_uid";
+		if (! -e "/home/$usr_uid") {
+		    $locshellarg .= " -m";
+		}
+	    }
 	}
 	else {
-	    $locshellarg = "-s $PBAG"
+	    $locshellarg = "-s $PBAG";
+	    if ($MAINSITE) {
+		my $homedir = (getpwnam($usr_uid))[7];
+		if ($homedir eq "/home/$usr_uid") {
+		    $locshellarg .= " -d $HOMEDIR/$usr_uid";
+		}
+	    }
 	}
 	if (!defined($usr_shell) ||
 	    !exists($shellpaths{$usr_shell})) {
