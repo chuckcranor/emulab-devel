@@ -257,6 +257,20 @@ B. Updating the base FreeBSD system
 
      sudo rm -rf /Oetc
 
+   LATE BREAKING NEWS: we have noticed that the changes to the password
+   file (adding user _ypldap and changing "games" homedir) don't seem
+   to be reflected, like the .db files didn't get properly recreated.
+   (If "echo ~games" shows "/usr/games" instead of "/"). Remake the DB
+   files to be certain:
+
+     sudo pwd_mkdb -p /etc/master.passwd
+
+   If you don't get this sorted out now, it may cause problems when you
+   add users to the testbed later. In particular, when adding user "foo"
+   it might spit out messages:
+
+     pw: user 'foo' disappeared during update
+
 4. The mothership may need some additional local hacks to some standard
    utilities, in particular "mountd" and "pw". Both should have a patch
    in the Emulab source tree patches subdir.
