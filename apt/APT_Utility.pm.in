@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2016 University of Utah and the Flux Group.
+# Copyright (c) 2007-2016, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,11 +42,14 @@ use libtestbed;
 use APT_Instance;
 use Project;
 use Group;
+use GeniHRN;
+use GeniUser;
 
 # Configure variables
 my $TB		  = "@prefix@";
 my $MAINSITE      = @TBMAINSITE@;
 my $TBOPS         = "@TBOPSEMAIL@";
+my $OURDOMAIN     = "@OURDOMAIN@";
 
 #
 # Find all of the instances a user has (should have) an account on, and
@@ -85,4 +88,41 @@ sub UpdateInstancesByUser($)
 	$instance->Update({"needupdate" => 1});
     }
     return 0;
+}
+
+#
+# Map project urn to local project. Since these URNs are coming from
+# remote clusters, it might not actually refer to a local 
+#
+sub MapProjectURN($)
+{
+    my ($urn) = @_;
+    my $hrn   = GeniHRN->new($urn);
+    if (!defined($hrn)) {
+	print STDERR "MapProjectURN: Could not parse $urn\n";
+	return undef;
+    }
+    if ($hrn->domain() eq $OURDOMAIN && defined($hrn->project())) {
+	my $project = Project->Lookup($hrn->project());
+	return $project
+	    if (defined($project));
+    }
+    return undef;
+}
+#
+# Same as above, but for users.
+#
+sub MapUserURN($)
+{
+    my ($urn) = @_;
+    my $hrn   = GeniHRN->new($urn);
+    if (!defined($hrn)) {
+	print STDERR "MapUserURN: Could not parse $urn\n";
+	return undef;
+    }
+    my $geniuser = GeniUser->Lookup($urn, 1);
+    return $geniuser
+	if (defined($geniuser) && $geniuser->IsLocal());
+
+    return undef;
 }
