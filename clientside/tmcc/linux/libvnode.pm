@@ -33,10 +33,11 @@ use Exporter;
               downloadImage getKernelVersion createExtraFS
               forwardPort removePortForward lvSize lvExists
               DoIPtables DoIPtablesNoFail
-              restartDHCP computeStripeSize
+              restartDHCP reconfigDHCP computeStripeSize
             );
 
 use Data::Dumper;
+BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
 use libutil;
 use libgenvnode;
 use libsetup;
@@ -48,6 +49,7 @@ use libtestbed;
 my $PCNET_IP_FILE   = "/var/emulab/boot/myip";
 my $PCNET_MASK_FILE = "/var/emulab/boot/mynetmask";
 my $PCNET_GW_FILE   = "/var/emulab/boot/routerip";
+my $VIFROUTING      = ((-e "$ETCDIR/xenvifrouting") ? 1 : 0);
 
 # Other local constants
 my $IPTABLES   = "/sbin/iptables";
@@ -565,6 +567,13 @@ sub getIfaceInfoNoCache($) {
     $mac = lc($mac);
     $ret = { 'mac' => $mac, 'iface' => $iface };
 
+    # We do not care about any of the stuff below for our bridges, and
+    # on a shared node this was taking 60 seconds every time we called
+    # makeIfaceMaps(), which we do a lot, plus we now call it from
+    # emulab-cnet when containers are booting or shutting down.
+    return $ret
+	if ($iface =~ /^br\d+$/);
+
     # Find IP info
     my $pip = `ip addr show dev $iface | grep 'inet '`;
     chomp($pip);
@@ -920,12 +929,61 @@ sub lvSize($)
     return $lv_size;
 }
 
+#
+# Reset the list of interfaces that DHCPD should listen on.
+#
+sub reconfigDHCP()
+{
+    my @vifs = "";
+    my $defaults = '/etc/default/isc-dhcp-server';
+
+    if ($VIFROUTING) {
+	#
+	# We want to set the list of vifs that dhcpd listens on, since if
+	# there are too many VMs coming and going, it can take a long time
+	# for dhcpd to process all the virtual interfaces that exist
+	# (like ifbs, veths, bridges, etc) that it does not care about
+	# cause they are down or otherwise. So figure out the vif list
+	# and write that into the /etc/defaults.
+	#
+	my $devdir = '/sys/class/net';
+	if (!opendir(SD,$devdir)) {
+	    print STDERR "Could not find $devdir!\n";
+	    return -1;
+	}
+	@vifs = grep { /^vif.*/ && -f "$devdir/$_/address" } readdir(SD);
+	closedir(SD);
+    }
+
+    #
+    # Also need the control network bridge.
+    #
+    makeIfaceMaps();
+    my ($cnet_iface) = findControlNet();
+    my @ifaces = "$cnet_iface @vifs";
+
+    if (! -e $defaults) {
+	mysystem2("echo 'INTERFACES=\"@ifaces\"' > $defaults");
+    }
+    else {
+	mysystem2("/bin/sed -i.bak -e ".
+		 " 's,^INTERFACES=.*\$,INTERFACES=\"@ifaces\",i' $defaults");
+    }
+    return -1
+	if ($?);
+
+    return 0;
+}
+
 sub restartDHCP()
 {
     my $dhcpd_service = 'dhcpd';
     if (-f '/etc/init/isc-dhcp-server.conf' ||
 	-f '/lib/systemd/system/isc-dhcp-server.service') {
         $dhcpd_service = 'isc-dhcp-server';
+    }
+    if (reconfigDHCP()) {
+	return;
     }
 
     # make sure dhcpd is running
