@@ -36,7 +36,7 @@ use vars qw(@ISA @EXPORT);
 @ISA = "Exporter";
 @EXPORT = qw(Parse ParseFile GetXmlVersion IsVersion0 FindNodes FindNodesNS
 FindFirst FindFirstNS FindElement FindAttr GetNodeByVirtualId GetLinkByVirtualId
-IsLanNode IsLocalNode IsTunnel GetExpires GetBandwidth GetIp GetVnodeId
+IsLanNode IsLocalNode IsTunnel GetExpires GetLinkWideProperties GetIp GetVnodeId
 GetNodeId GetVirtualId GetInterfaceId GetInterfaceNodeId GetSliverId
 GetManagerId GetColocate GetSubnodeOf GetStartupCommand GetTarball
 GetVirtualizationType SetVirtualizationSubtype GetVirtualizationSubtype
@@ -434,19 +434,35 @@ sub SetExpires($$)
     }
 }
 
-sub GetBandwidth($)
+#
+# An optimization for when you just want symmetrical properties for the
+# entire link/lan. Saves a lot of XML on a big topology.
+#
+sub GetLinkWideProperties($)
 {
     my ($link) = @_;
-    my $result = undef;
+
     if (IsVersion0($link)) {
-	$result = GeniXML::GetText("bandwidth", $link);
-    } else {
-	my $prop = FindFirst("n:property", $link);
-	if (defined($prop)) {
-	    $result = GeniXML::GetText("capacity", $prop);
-	}
+	my $bandwidth = GeniXML::GetText("bandwidth", $link);
+	return undef
+	    if (!defined($bandwidth));
+
+	return {"bandwidth" => $bandwidth};
     }
-    return $result;
+    
+    my $ref = GeniXML::FindNodesNS("n:properties", $link, $EMULAB_NS)->pop();
+    return undef
+	if (!defined($ref));
+
+    my $bandwidth = GeniXML::GetText("capacity", $ref);
+    my $latency   = GeniXML::GetText("latency", $ref);
+    my $lossrate  = GeniXML::GetText("packet_loss", $ref);
+    return undef
+	if (!(defined($bandwidth) || defined($latency) || defined($lossrate)));
+
+    return {"bandwidth" => $bandwidth,
+	    "latency"   => $latency,
+	    "lossrate"  => $lossrate};
 }
 
 sub GetLinkProperties($)

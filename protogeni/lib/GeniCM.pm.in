@@ -2562,17 +2562,26 @@ sub GetTicketAuxAux($)
 	    }
 	}
 	#
+	# Link wide properties. Saves a lot of XML when all the user
+	# wants is to set symmetrical properties for the entire lan.
+	#
+	my $linkwide_properties = GeniXML::GetLinkWideProperties($linkref);
+	
+	#
 	# On a really big lan, we do not want to search the properties
 	# over and over.
 	#
 	my %properties = ();
-	my @properties = GeniXML::GetLinkProperties($linkref);
-	foreach my $property (@properties) {
+	foreach my $property (GeniXML::GetLinkProperties($linkref)) {
 	    my $source = GetText("source_id", $property);
 	    my $dest   = GetText("dest_id", $property);
-	    $properties{"$source:$dest"} = $property;
+	    if (!(defined($source) && defined($dest) ||
+		  $source eq "" || $dest eq "")) {
+		GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+			     "$lanname: Missing source or dest in property");
+	    }
+	    $properties{"$source:$dest"} = $property;	    
 	}
-
 	my $edgecount = 0;
 
 	foreach my $ref (@interfaces) {
@@ -2759,11 +2768,32 @@ sub GetTicketAuxAux($)
 	    my $restbw    = undef;
 	    my $uselinkdelay = $forcedelay;
 
-	    # Let user override.
-	    my $user_bandwidth = GeniXML::GetBandwidth($linkref);
-	    if (defined($user_bandwidth)) {
-		$bandwidth  = $user_bandwidth;
-		$rbandwidth = $user_bandwidth;
+	    # Let linkwide property override defaults above.
+	    if (defined($linkwide_properties)) {
+		if (defined($linkwide_properties->{"bandwidth"})) {
+		    $bandwidth  = $linkwide_properties->{"bandwidth"};
+		    $rbandwidth = $bandwidth;
+		    $uselinkdelay = 1
+			if (!$nobwshaping);
+		}
+		if (defined($linkwide_properties->{"latency"})) {
+		    $latency = $linkwide_properties->{"latency"};
+		    if (@interfaces == 2) {
+			$latency = $latency / 2.0
+		    }
+		    $rlatency = $latency;
+		    # Latency, we have to use a link delay.
+		    $uselinkdelay = 1;
+		}
+		if (defined($linkwide_properties->{"lossrate"})) {
+		    $lossrate  = $linkwide_properties->{"lossrate"};
+		    if (@interfaces == 2) {
+			$lossrate = 1.0 - sqrt(1.0 - $lossrate);
+		    }
+		    $rlossrate = $lossrate;
+		    # Lossrate, we have to use a link delay.
+		    $uselinkdelay = 1;
+		}
 	    }
 
 	    # Look for a link to a bridge.
@@ -2821,7 +2851,7 @@ sub GetTicketAuxAux($)
 		}
 		$bridge_vname = $bblob->{'name'};
 	    }
-	    elsif (@properties) {
+	    elsif (keys(%properties)) {
 		$uselinkdelay = 1
 		    if (!$nobwshaping);
 		
@@ -2831,7 +2861,7 @@ sub GetTicketAuxAux($)
 		# let do them independently below.
 		#
 		if (@interfaces == 2) {
-		    foreach my $property (@properties) {
+		    foreach my $property (values(%properties)) {
 			#
 			# Need to make sure we get the correct direction.
 			#
