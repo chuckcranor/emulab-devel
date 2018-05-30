@@ -4339,7 +4339,15 @@ sub modDHCP($$$$$)
     }
 
     if ($doHUP) {
-        restartDHCP();
+	#
+	# When using XENVIFROUTING, no point in restarting for a new VM;
+	# the new vif does not exist yet. Instead, we do the restart in
+	# emulab-cnet which is called after the vif (container) is created.
+	# Ditto when removing, this is done in emulab-cnet.
+	#
+	if (!$VIFROUTING) {
+	    restartDHCP();
+	}
     }
 
     TBDebugTimeStamp("  releasing DHCP lock")
