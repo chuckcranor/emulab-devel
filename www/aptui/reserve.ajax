@@ -621,7 +621,6 @@ function Do_ListReservations()
     global $this_user;
     global $ajax_args;
     global $TB_PROJECT_CREATEEXPT, $suexec_output;
-    $anonarg = "";
 
     if (!isset($ajax_args["cluster"])) {
 	SPITAJAX_ERROR(-1, "Missing cluster");
@@ -636,9 +635,6 @@ function Do_ListReservations()
         SPITAJAX_ERROR(-1, "No such cluster");
         return;
     }
-    if (isset($ajax_args["anonymous"]) && !ISADMIN()) {
-        $anonarg = "-A";
-    }
     $this_uid = $this_user->uid();
     $urn = $aggregate->urn();
     $webtask = WebTask::CreateAnonymous();
@@ -646,7 +642,7 @@ function Do_ListReservations()
 
     $retval = SUEXEC($this_uid, "nobody",
                      "webmanage_reservations -a '$urn' ".
-                     "   -t $webtask_id list $anonarg",
+                     "   -t $webtask_id list",
                      SUEXEC_ACTION_IGNORE);
     if ($retval) {
         $webtask->Refresh();
