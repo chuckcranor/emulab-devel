@@ -5155,6 +5155,24 @@ sub HasPhysNodes($)
     return $query_result->num_rows;
 }
 
+sub TypesInUse($)
+{
+    my ($self) = @_;
+    my $idx = $self->idx();
+
+    my $query_result =
+	DBQueryFatal("SELECT DISTINCT(n.type) FROM " .
+		     "reserved AS r, nodes AS n WHERE " .
+		     "r.node_id=n.node_id AND " .
+		     "r.exptidx='$idx'");
+
+    my @types = ();
+    while( my($type) = $query_result->fetchrow_array() ) {
+	push( @types, $type );
+    }
+    return @types;
+}
+
 sub HasVirtInterfaces($)
 {
     my ($self) = @_;
