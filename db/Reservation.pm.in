@@ -40,6 +40,7 @@ use Project;
 use User;
 use Experiment;
 use NodeType;
+use POSIX qw(strftime);
 use overload ('""' => 'Stringify');
 
 # Configure variables
@@ -242,7 +243,10 @@ sub uuid($)        { return $_[0]->{"UUID"}; }
 sub Stringify($)
 {
     my ($self) = @_;
-    
+
+    my $idx = $self->idx();
+    $idx = "xxx" if (!defined($idx));
+    my $uid = $self->uid();
     my $pid = $self->pid();
     $pid = "(free)" if( !defined( $pid ) );
     
@@ -251,11 +255,13 @@ sub Stringify($)
     }
     my $nodes = $self->nodes();
     my $type = $self->type();
-    my $start = defined( $self->start() ) ? localtime( $self->start() ) :
-	"epoch";
-    my $end = defined( $self->end() ) ? localtime( $self->end() ) : "forever";
-
-    return "[Reservation: $pid, ${nodes}x${type}, ${start}-${end}]";
+    my $start = (defined( $self->start() ) ?
+		 POSIX::strftime("%m/%d/20%y %H:%M:%S",
+				 localtime($self->start())) : "epoch");
+    my $end = (defined( $self->end() ) ?
+		 POSIX::strftime("%m/%d/20%y %H:%M:%S",
+				 localtime($self->end())) : "forever");
+    return "[Reservation:$idx $pid/$uid, ${nodes}x${type}, ${start}-${end}]";
 }
 
 sub SetStart($$)
