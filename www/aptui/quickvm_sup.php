@@ -460,7 +460,7 @@ echo " <li class='divider'></li>
                             All Profiles</a></li>
                                  <li><a href='list-reservations.php'>
                             All Reservations</a></li>
- 		                 <li><a href='list-datasets.php?all=1'>
+ 		                 <li><a href='list-datasets.php'>
                             All Datasets</a></li>
                                  <li><a href='images.php?all=1'>
                             All Images</a></li>
