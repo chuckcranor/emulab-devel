@@ -3242,11 +3242,13 @@ $(function ()
     function LoadMaxExtension()
     {
 	var maxcallback = function(json) {
+	    console.info("LoadMaxExtension: ", json);
+	    
 	    if (json.code) {
 		console.info("Failed to get max extension: " + json.value);
 		return;		    
 	    }
-	    var maxdate = new Date(json.value);
+	    var maxdate = new Date(json.value.maxextension);
 	    //console.info("Max extension date:", maxdate);
 		    
 	    /*

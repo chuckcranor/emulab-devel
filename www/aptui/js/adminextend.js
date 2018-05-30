@@ -594,10 +594,10 @@ $(function ()
 		return;
 	    }
 	    // Save for checking the extension input field.
-	    maxextension = moment(json.value);
+	    maxextension = moment(json.value.maxextension);
 	    
-	    $('#max-extension').html(moment(json.value)
-				     .format("MMM D, YYYY h:mm A"));
+	    $('#max-extension')
+		.html(maxextension.format("MMM D, YYYY h:mm A"));
 	    
 	    /*
 	     * Look to see if the number of hours requested is going to be
@@ -606,7 +606,7 @@ $(function ()
 	     */
 	    if (window.HOURS) {
 		var exp = new Date(expires);
-		var max = new Date(json.value);
+		var max = new Date(json.value.maxextension);
 		exp.setTime(exp.getTime() + window.HOURS * 3600 * 1000);
 	    
 		if (exp.getTime() > max.getTime()) {

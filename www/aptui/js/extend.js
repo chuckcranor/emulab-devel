@@ -556,8 +556,8 @@ window.ShowExtendModal = (function()
 				     (window.APT_OPTIONS.MAXEXTEND*3600*1000));
 		}
 		else {
-		    later = new Date(json.value);
-		    maxextend_date = json.value;
+		    later = new Date(json.value.maxextension);
+		    maxextend_date = json.value.maxextension;
 		}
 		console.info("Max extension date:", later);
 		

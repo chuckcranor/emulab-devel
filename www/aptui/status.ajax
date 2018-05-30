@@ -1739,7 +1739,8 @@ function Do_MaxExtension()
         $webtask->Delete();
         return;
     }
-    $blob = $webtask->TaskValue("MaxExtension");
+    $blob = array("maxextension" => $webtask->TaskValue("MaxExtension"),
+                  "reservations" => $webtask->TaskValue("Reservations"));
     $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
 }
