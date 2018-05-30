@@ -144,6 +144,7 @@ sub WriteCredentials();
 sub StartMonitor();
 sub StartMonitorInternal(;$);
 sub DoImageTrackerStuff($$$$$$$);
+sub DoDestroy();
 sub DenyExtensionInternal($);
 sub ExtendInternal($$$$$);
 sub CallMethodOnAggregates($$$@);
@@ -221,6 +222,9 @@ elsif ($action eq "consoleurl") {
 }
 elsif ($action eq "terminate") {
     DoTerminate()
+}
+elsif ($action eq "destroy") {
+    DoDestroy()
 }
 elsif ($action eq "schedterminate") {
     DoSchedTerminate()
@@ -1386,6 +1390,40 @@ sub DoTerminate()
     $instance->MarkCanceled();
     $slice->UnLock();
     exit($exitcode);
+}
+
+#
+# Destroy. Do not use this!
+#
+sub DoDestroy()
+{
+    my $expired = $RECORDHISTORY_TERMINATED;
+
+    if (@ARGV) {
+	my $arg = shift(@ARGV);
+	if ($arg eq "-e") {
+	    $expired = $RECORDHISTORY_EXPIRED;
+	}
+	else {
+	    usage();
+	}
+    }
+    
+    my $slice = $instance->GetGeniSlice();
+    if (!defined($slice)) {
+	#
+	# No slice (typically) means we never got far enough to the
+	# get the sliver created on the backend cluster.
+	#
+	goto killit;
+    }
+    $instance->SetStatus("terminated");
+    $slice->Delete();
+    $instance->RecordHistory($expired);
+
+  killit:
+    $instance->Delete();
+    exit(0);
 }
 
 #
