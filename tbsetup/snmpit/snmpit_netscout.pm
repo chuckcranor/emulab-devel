@@ -47,7 +47,7 @@ use Port;
 my $CLI_UNNAMED_PATTERN = "[Uu]nnamed";
 my $CLI_UNNAMED_NAME = "unnamed";
 my $CLI_NOCONNECTION = "A00";
-my $CLI_TIMEOUT = 10000;
+my $CLI_TIMEOUT = 180;
 
 # commands to show something
 my $CLI_SHOW_CONNECTIONS = "show connections raw\r";
@@ -420,6 +420,19 @@ sub pairConnected($$$$)
     return 0;
 }
 
+#
+# Utility function to acl all of the port alarms.
+#
+sub AckPortAlarms($)
+{
+    my ($self) = @_;
+    my $cmd = "ack port alarm all";
+
+    $self->debug("snmpit_netscout:AckPortAlarms: $cmd\n");
+
+    return $self->doCLICmd($cmd);
+}
+
 # 
 # Connect ports functions:
 #
@@ -692,6 +705,7 @@ sub setPortVlan($$@) {
 	$self->unlock();
 	return 1;
     }
+    $self->AckPortAlarms();
 
     $self->unlock();
     return 0;
