@@ -51,6 +51,7 @@ use GeniCM;
 use GeniHRN;
 use GeniUtil;
 use Reservation;
+use ResUtil;
 use libadminctrl;
 use GeniCredential;
 use GeniStd;
@@ -692,11 +693,101 @@ sub SliceMaxExtension($)
     
     if (Reservation->MaxSliceExtension($slice, \$max, \$reserror, 3600)) {
 	Reservation->FlushAll();
-	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, $reserror);
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $reserror);
     }
     Reservation->FlushAll();
-    $max = TBDateStringGMT($max);
-    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $max);
+    my $blob = {"maxextension" => TBDateStringGMT($max)};
+
+    my $project = Project->Lookup($experiment->pid());
+    if (!defined($project)) {
+	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
+				    "Cannot find project for experiment");
+    }
+
+    #
+    # See if we can locate an approved/active reservation that is
+    # "associated" with this experiment. Note that this is somewhat
+    # ambiguous since reservations are by project/nodetype, not for
+    # specific users. And there can be multiple reservations per
+    # project, by multiple users. 
+    #
+    my %reslist   = ();
+    my $pidlist   = [$experiment->pid()];
+    my @typelist  = $experiment->TypesInUse();
+    my @curres    = Reservation->CurrentReservations($pidlist, 1);
+    my %current   = ();
+    
+    if (@curres) {
+	foreach my $ref (@curres) {
+	    if (grep {$_ eq $ref->{'nodetype'}} @typelist) {
+		my $type = $ref->{'nodetype'};
+		
+		#
+		# We have active reservation(s) for this pid/type. We
+		# want to return into about those reservations to the
+		# caller.
+		#
+		my @projres =
+		    Reservation->ProjectReservations($experiment->pid(), undef,
+						     $type, 1);
+
+		if (!exists($current{$type})) {
+		    $current{$type} = $project->TypeInUseCount($type);
+		}
+		foreach my $res (@projres) {
+		    my $uid  = $res->uid();
+
+		    # we know these are active reservations.
+		    my $using = $current{$type};
+		    if ($using >= $res->nodes()) {
+			$using = $res->nodes();
+			$current{$type} -= $using;
+		    }
+
+		    my @timeline = ();
+		    if ($res->approved() && $res->start() < time()) {
+			@timeline = ResUtil::CreateTimeline($project, $res);
+			# We do not want to send back more then we need.
+			if (@timeline) {
+			    @timeline = map {
+				{"t"         => $_->{'t'},
+				 "allocated" => $_->{'allocated'} || {},
+				 "reserved"  => $_->{'reserved'} || {},
+		                } } @timeline;
+			}
+		    }
+		    my $user = User->Lookup($uid);
+		    if (!defined($user)) {
+			print STDERR "maxextension: No such user $uid\n";
+			next;
+		    }
+		    my $blob = {};
+		    $blob->{"uuid"}        = $res->uuid();
+		    $blob->{"project"}     = $project->nonlocalurn();
+		    $blob->{"user"}        = $user->nonlocalurn();
+		    $blob->{"nodes"}       = $res->nodes();
+		    $blob->{"using"}       = $using;
+		    $blob->{"type"}        = $res->type();
+		    $blob->{"created"}     = TBDateStringGMT($res->created());
+		    $blob->{"start"}       = TBDateStringGMT($res->start());
+		    $blob->{"end"}         = TBDateStringGMT($res->end());
+		    $blob->{"notes"}       = $res->notes() || "";
+		    $blob->{"approved"}    = "";
+		    if (defined($res->approved())) {
+			$blob->{"approved"} =
+			    TBDateStringGMT($res->approved());
+		    }
+		    if (defined($res->cancel())) {
+			$blob->{"cancel"} = TBDateStringGMT($res->cancel());
+		    }
+		    $blob->{"history"}    = \@timeline;
+		    $reslist{$res->uuid()} = $blob;
+		}
+	    }
+	}
+    }
+    $blob->{'reservations'} = \%reslist;
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
 #
@@ -1049,7 +1140,8 @@ sub Reservations($)
 			    "   UNIX_TIMESTAMP(cancel) as cancel ".
 			    "  from future_reservations ".
 			    "where pid='$pid' ".
-			    (defined($target) ? "and $target" : ""));
+			    (defined($target) ? "and $target " : "").
+			    "order BY start");
 	}
 	else {
 	    my $uid = $geniuser->uid();
@@ -1060,7 +1152,8 @@ sub Reservations($)
 			    "   UNIX_TIMESTAMP(cancel) as cancel ".
 			    "  from future_reservations ".
 			    "where uid='$uid' ".
-			    (defined($target) ? "and $target" : ""));
+			    (defined($target) ? "and $target " : "").
+			    "order BY start");
 	}
     }
     return GeniResponse->Create(GENIRESPONSE_ERROR)
@@ -1073,7 +1166,8 @@ sub Reservations($)
     # how many are actually reserved now.
     my %current = ();
     # Project usage numbers;
-    my %history = ();
+    my %projusage = ();
+    my %projects  = ();
 
     while (my $row = $query_result->fetchrow_hashref()) {
 	my $blob = {};
@@ -1090,6 +1184,8 @@ sub Reservations($)
 	    next;
 	}
 	my $projurn = $project->nonlocalurn();
+	# Remember for usage numbers below.
+	$projects{$projurn} = $project;
 	
 	my $user = User->Lookup($uid);
 	if (!defined($user)) {
@@ -1106,10 +1202,36 @@ sub Reservations($)
 		$current{"$pid:$type"} -= $using;
 	    }
 	}
+	my $pstart;
+	my @timeline = ();
+	my $reservation = Reservation->Lookup($idx);
+	next
+	    if (!defined($reservation));
+	
+	if ($reservation->approved() && $reservation->start() < time()) {
+	    @timeline = ResUtil::CreateTimeline($project, $reservation);
+	    # We do not want to send back more then we need.
+	    if (@timeline) {
+		@timeline = map { {"t"         => $_->{'t'},
+				   "allocated" => $_->{'allocated'} || {},
+				   "reserved"  => $_->{'reserved'} || {},
+		                } } @timeline;
+	    }
+	    #print STDERR Dumper(@timeline);
+	    # We want experiment history back to the beginning of the res.
+	    $pstart = $reservation->start() - (3600 * 24);
+	}
+	else {
+	    $pstart = time() - (3600 * 24 * 4);
+	}
+	# We want proj usage starting at earliest reservation start.
+	if (!exists($projusage{$projurn}) || $pstart < $projusage{$projurn}) {
+	    $projusage{$projurn} = $pstart;
+	}
 	
 	$blob->{"idx"}         = $idx;
 	$blob->{"uuid"}        = $uuid;
-	$blob->{"project"}     = $projurn,
+	$blob->{"project"}     = $projurn;
 	$blob->{"user"}        = $user->nonlocalurn();
 	$blob->{"nodes"}       = $row->{'nodes'};
 	$blob->{"type"}        = $type;
@@ -1118,19 +1240,26 @@ sub Reservations($)
 	$blob->{"start"}       = TBDateStringGMT($row->{'start'});
 	$blob->{"end"}         = TBDateStringGMT($row->{'end'});
 	$blob->{"notes"}       = $row->{'notes'} || "";
-	$blob->{"approved"}    = $row->{'approved'} || "";
+	$blob->{"approved"}    = "";
+	if (defined($row->{'approved'})) {
+	    $blob->{"approved"} = TBDateStringGMT($row->{'approved'});
+	}
 	if (defined($row->{'cancel'})) {
 	    $blob->{"cancel"} = TBDateStringGMT($row->{'cancel'});
 	}
+	$blob->{"history"}     = \@timeline;
 	$results{"$idx"}       = $blob;
-
-	if (!exists($history{$projurn})) {
-	    $history{$projurn} = $project->Usage(time() - (3600 * 48), time());
-	}
     }
+    # Now get the project usage history back to start of earliest reservation.
+    foreach my $projurn (keys(%projusage)) {
+	my $project = $projects{$projurn};
+	my $pstart  = $projusage{$projurn};
+
+	$projusage{$projurn} = $project->Usage($pstart, time());
+    }    
     my $blob = {"api_version"  => $API_VERSION,
 		"reservations" => \%results,
-		"history"      => \%history,
+		"history"      => \%projusage,
     };
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
@@ -1521,6 +1650,80 @@ sub ReservationPrediction($)
 	"reservations" => $outstanding,
 	"upcoming"     => $upcoming,
 	"current"      => $current,
+    };
+    #print STDERR Dumper($blob);
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+}
+
+#
+# Get the reservation history for a user or project. For each current
+# and and historical reservation, get the timeline of usage for that
+# reservation.
+#
+sub ReservationHistory($)
+{
+    my ($argref) = @_;
+    my @history  = ();
+
+    my $hasperm = CheckPermission(1);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    return GeniResponse->MalformedArgsResponse("Missing user URN")
+	if (!exists($argref->{'user_urn'}));
+    return GeniResponse->MalformedArgsResponse("Invalid user URN")
+	if (!GeniHRN::IsValid($argref->{'user_urn'}));
+	
+    # User should already exist; the caller used CreateUser() above first.
+    my $geniuser = GeniUser->Lookup($argref->{'user_urn'}, 1);
+    return GeniResponse->MalformedArgsResponse("No such user")
+	if (!defined($geniuser));
+
+    #
+    # Collect historical reservations.
+    #
+    my @reservations =
+	Reservation->HistoricalReservations(undef,
+					    $geniuser->emulab_user(), undef);
+
+    foreach my $res (@reservations) {
+	my $pid = $res->pid();
+	my $pid_idx = $res->pid_idx();
+	my $project = Project->Lookup($pid_idx);
+	if (!defined($project)) {
+	    print STDERR "Reservations: No such project $pid\n";
+	    next;
+	}
+	my $projurn = $project->nonlocalurn();
+	
+	my @timeline = ResUtil::CreateTimeline($project, $res);
+	# We do not want to send back more then we need.
+	if (@timeline) {
+	    @timeline = map { {"t"         => $_->{'t'},
+			       "allocated" => $_->{'allocated'} || {},
+			       "reserved"  => $_->{'reserved'} || {},
+		} } @timeline;
+	}
+
+	my $blob = {};
+	$blob->{"idx"}         = "";
+	$blob->{"uuid"}        = $res->uuid() || "";
+	$blob->{"project"}     = $projurn;
+	$blob->{"user"}        = $geniuser->emulab_user()->nonlocalurn();
+	$blob->{"nodes"}       = $res->nodes();
+	$blob->{"type"}        = $res->type();
+	$blob->{"created"}     = TBDateStringGMT($res->created());
+	$blob->{"canceled"}    = TBDateStringGMT($res->canceled());
+	$blob->{"deleted"}     = TBDateStringGMT($res->deleted());
+	$blob->{"start"}       = TBDateStringGMT($res->start());
+	$blob->{"end"}         = TBDateStringGMT($res->end());
+	$blob->{"notes"}       = $res->notes() || "";
+	$blob->{"approved"}    = TBDateStringGMT($res->approved());
+	$blob->{"history"}     = \@timeline;
+	push(@history, $blob);
+    }
+    my $blob = {
+	"history" => \@history,
     };
     #print STDERR Dumper($blob);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);

@@ -104,6 +104,7 @@ use Project;
 use APT_Profile;
 use APT_Instance;
 use APT_Geni;
+use APT_Utility;
 use GeniXML;
 use GeniHRN;
 use Genixmlrpc;
@@ -1993,10 +1994,18 @@ sub DoMaxExtension()
 	goto bad;
     }
     if ($debug) {
-	print "Max extension: " . TBDateStringLocal($result)  . "\n";
+	print "Max extension: " .
+	    TBDateStringLocal($result->{'maxextension'})  . "\n";
+	if (exists($result->{'reservations'})) {
+	    if (keys(%{$result->{'reservations'}})) {
+		print Dumper($result->{'reservations'});
+	    }
+	}
     }
     if (defined($webtask)) {
-	$webtask->MaxExtension(TBDateStringGMT($result));
+	$webtask->MaxExtension(TBDateStringGMT($result->{'maxextension'}));
+	$webtask->Reservations($result->{'reservations'})
+	    if (exists($result->{'reservations'}));
 	$webtask->Exited(0);
     }
     exit(0);
@@ -2016,6 +2025,7 @@ sub DoMaxExtensionInternal($$)
     my $maxinfo;
     my $errmsg;
     my $newmax;
+    my $blob = {"maxextension" => undef, "reservations" => {}};
     my @aggregates = ();
 
     foreach my $aggregate ($instance->AggregateList()) {
@@ -2039,15 +2049,17 @@ sub DoMaxExtensionInternal($$)
     # Process the max extension from each aggregate
     foreach my $aggregate (@aggregates) {
 	my $response = shift(@{$responses});
+	my $aptagg   = $aggregate->GetAptAggregate();
 	my $result   = $response->value();
 	my $code     = $response->code();
+	my $reslist  = {};
+	my $max;
 
 	if ($code) {
 	    if ($code == GENIRESPONSE_REFUSED) {
 		# We want the user to see REFUSED.
 		$errmsg = "No extension possible at ".
-		    $aggregate->GetAptAggregate()->name() . ": " .
-		    $response->error();
+		    $aptagg->name() . ": " . $response->error();
 		$errcode = $code;
 	    }
 	    else {
@@ -2056,8 +2068,15 @@ sub DoMaxExtensionInternal($$)
 	    }
 	    goto bad;
 	}
-	my $max = str2time($result);
-
+	if (ref($result)) {
+	    $max     = $result->{'maxextension'};
+	    $reslist = $result->{'reservations'};
+	}
+	else {
+	    $max = $result;
+	}
+	$max = str2time($max);
+	
 	if ($debug) {
 	    print "$aggregate: $result, $max\n";
 	}
@@ -2065,8 +2084,49 @@ sub DoMaxExtensionInternal($$)
 	    if (!defined($newmax));
 	$newmax = $max
 	    if ($max < $newmax);
+
+	# Map project/user to local users (if appropriate).
+	foreach my $res (values(%{$reslist})) {
+	    if (exists($res->{'project'}) && $res->{'project'} && 
+		GeniHRN::IsValid($res->{'project'})) {
+		my $project = APT_Utility::MapProjectURN($res->{'project'});
+		if (defined($project)) {
+		    $res->{'pid'} = $project->pid();
+		    $res->{'pid_idx'} = $project->pid_idx();
+		}
+	    }
+	    if (exists($res->{'user'}) && $res->{'user'} && 
+		GeniHRN::IsValid($res->{'user'})) {
+		my $geniuser = APT_Utility::MapUserURN($res->{'user'});
+		if (defined($geniuser)) {
+		    $res->{'uid'} = $geniuser->uid();
+		    $res->{'uid_idx'} = $geniuser->uid_idx();
+		}
+	    }
+	    #
+	    # Add these for the web interface since we are already messing
+	    # with the results.
+	    #
+	    $res->{'cluster'} = $aptagg->urn();
+	    $res->{'cluster_id'} = $aptagg->nickname();
+	    
+	    # Backwards compat
+	    if (!exists($res->{'nodes'})) {
+		$res->{'nodes'} = $res->{'count'};
+	    }
+	    if ($res->{'approved'} eq "") {
+		# Maps to JSON NULL.
+		$res->{'approved'} = undef;
+	    }
+	    if (!exists($res->{'cancel'}) || $res->{'cancel'} eq "") {
+		# Maps to JSON NULL.
+		$res->{'cancel'} = undef;
+	    }
+	}
+	$blob->{'reservations'}->{$aptagg->urn()} = $reslist;
     }
-    $$prval = $newmax;
+    $blob->{'maxextension'} = $newmax;
+    $$prval = $blob;
     return 0;
     
   bad:

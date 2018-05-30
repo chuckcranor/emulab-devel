@@ -28,6 +28,7 @@ use XML::Simple;
 use Data::Dumper;
 use CGI;
 use POSIX ":sys_wait_h";
+use POSIX qw(:signal_h);
 use Date::Parse;
 
 #
@@ -39,6 +40,8 @@ sub usage()
     print("Usage: manage_reservations [-a <urn>] delete pid uuid\n");
     print("Usage: manage_reservations [-a <urn>] approve -p portal uuid\n");
     print("Usage: manage_reservations [-a <urn>] prediction\n");
+    print("Usage: manage_reservations [-a <urn>] cancel\n");
+    print("Usage: manage_reservations [-a <urn>] history [user]\n");
     exit(-1);
 }
 my $optlist     = "dt:a:";
@@ -86,6 +89,7 @@ use WebTask;
 use APT_Geni;
 use APT_Aggregate;
 use APT_Instance;
+use APT_Utility;
 use GeniResponse;
 use GeniUser;
 
@@ -99,6 +103,7 @@ sub DoDelete();
 sub DoApprove();
 sub DoPrediction();
 sub DoCancel();
+sub DoHistory();
 sub readfile($);
 sub AddAnnouncement($$$$$$$);
 sub DeleteAnnouncement($);
@@ -182,6 +187,9 @@ elsif ($action eq "approve") {
 }
 elsif ($action eq "prediction") {
     DoPrediction();
+}
+elsif ($action eq "history") {
+    DoHistory();
 }
 elsif ($action eq "cancel") {
     DoCancel();
@@ -419,7 +427,7 @@ sub DoList()
 	if (!$this_user->IsAdmin() && !$this_user->SameUser($user)) {
 	    fatal("No permission to access reservation list for $user")
 	}
-	$geniuser = $this_user->CreateFromLocal($user);
+	$geniuser = GeniUser->CreateFromLocal($user);
     }
     if (defined($options{"p"})) {
 	$project = Project->Lookup($options{"p"});
@@ -503,6 +511,33 @@ sub DoList()
 	}
 
 	#
+	# Add these for the web interface since we are already messing
+	# with the results.
+	#
+	$details->{'cluster_id'}  = $aggregate->nickname();
+	$details->{'cluster_urn'} = $aggregate->urn();
+
+	# Backwards compat
+	if (!exists($details->{'nodes'})) {
+	    $details->{'nodes'} = $details->{'count'};
+	}
+
+	#
+	# Hmm, undef/null is a pain with XMLRPC.
+	#
+	if ($details->{'approved'} eq "") {
+	    # Maps to JSON NULL.
+	    $details->{'approved'} = undef;
+	}
+	if ($details->{'cancel'} eq "") {
+	    # Maps to JSON NULL.
+	    $details->{'cancel'} = undef;
+	}
+	if (!exists($details->{'uuid'}) || $details->{'uuid'} eq "") {
+	    $details->{'uuid'} = NewUUID();
+	}
+
+	#
 	# If we have the history, then go through and map the
 	# experiments to local experiments so we can link to them in
 	# the web interface.
@@ -513,7 +548,10 @@ sub DoList()
 		    
 		# Local experiment on the remote cluster.
 		next
-		    if (!(exists($ref->{'urn'}) && exists($ref->{'slice_uuid'})));
+		    if (!(exists($ref->{'urn'}) &&
+			  exists($ref->{'slice_uuid'}) &&
+			  $ref->{'slice_uuid'} ne "" && $ref->{'urn'} ne ""));
+			  
 		# Already processed.
 		next
 		    if (exists($ref->{'instance_uuid'}));
@@ -973,12 +1011,21 @@ sub DoPrediction()
 	my $auth  = $ref->{'authority'};
 	my $agg   = $ref->{'aggregate'};
 	my $wtask = $ref->{'webtask'};
+	my $response;
 
-	$wtask->Refresh();
-	my $response = $wtask->response();
+	if ($code == SIGTERM) {
+	    # Need to think about proper handling of this.
+	    $response = GeniResponse->Create(GENIRESPONSE_NETWORK_ERROR,
+					     GENIRESPONSE_NETWORK_ERROR_TIMEDOUT,
+					     "Timed out talking to server");
+	}
+	else {
+	    $wtask->Refresh();
+	    $response = $wtask->response();
+	}
 	# No longer a blessed object (see above).
 	$response = GeniResponse->Bless($response);
-
+	    
 	if ($code) {
 	    #
 	    # If this failed, lets not return a fatal error since
@@ -1010,6 +1057,120 @@ sub DoPrediction()
     foreach my $temptask (@webtasks) {
 	$temptask->Delete();
     }
+    fatal($errmsg);
+}
+
+#
+# Get the history for a specific user.
+#
+sub DoHistory()
+{
+    my $optlist = "";
+    my $portal;
+    my $errmsg;
+    my $blob       = {};
+    my ($user, $geniuser);
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (@ARGV > 1);
+
+    # Argument is a target user.
+    if (@ARGV) {
+	$user = User->Lookup($ARGV[0]);
+	if (!defined($user)) {
+	    fatal("No such user");
+	}
+	if (!$this_user->IsAdmin() && !$this_user->SameUser($user)) {
+	    fatal("No permission to access reservation history for $user")
+	}
+	$geniuser = GeniUser->CreateFromLocal($user);
+    }
+    else {
+	$geniuser = GeniUser->CreateFromLocal($this_user);	
+    }
+    
+    if ($aggregate->CheckStatus(\$errmsg, 1)) {
+	UserError($errmsg);
+    }
+
+    # PortalRPC will use the root context in this case, which is
+    # essentially saying the caller is an admin. But thats okay
+    # for this call, it is just informational.
+    my $response =
+	APT_Geni::PortalRPC($authority, undef,
+			    "ReservationHistory",
+			    {"user_urn" => $geniuser->urn()->asString()});
+    
+    if (GeniResponse::IsError($response)) {
+	ExitWithError($response);
+    }
+    
+    #
+    # Munge the return value like we do above, converting user/proj
+    # URNs to local names. One minor difference is that we know the
+    # results are only for local users and projects, but lets be
+    # consistent. 
+    #
+    my @reslist = @{ $response->value()->{'history'} };
+
+    foreach my $res (@reslist) {
+	my $userhrn  = GeniHRN->new($res->{'user'});
+	if ($userhrn->domain() eq $OURDOMAIN &&
+	    $userhrn->id eq $geniuser->uid()) {
+	    $res->{'uid'}     = $geniuser->uid();
+	    $res->{'uid_idx'} = $geniuser->idx();
+	}
+	my $project = APT_Utility::MapProjectURN($res->{'project'});
+	if (defined($project)) {
+	    $res->{'pid'}     = $project->pid();
+	    $res->{'pid_idx'} = $project->pid_idx();
+	}
+	else {
+	    my $projhrn = GeniHRN->new($res->{'project'});
+	    $res->{'pid'} = $projhrn->id();
+	}
+
+	#
+	# Add these for the web interface since we are already messing
+	# with the results.
+	#
+	$res->{'cluster_id'}  = $aggregate->nickname();
+	$res->{'cluster_urn'} = $aggregate->urn();
+
+	# Backwards compat
+	if (!exists($res->{'nodes'})) {
+	    $res->{'nodes'} = $res->{'count'};
+	}
+	#
+	# Hmm, undef/null is a pain with XMLRPC.
+	#
+	if (!exists($res->{'approved'}) ||
+	    $res->{'approved'} eq "") {
+	    $res->{'approved'} = undef;
+	}
+	if (!exists($res->{'cancel'}) ||
+	    $res->{'cancel'} eq "") {
+	    $res->{'cancel'} = undef;
+	}
+	if (!exists($res->{'uuid'}) ||
+	    $res->{'uuid'} eq "") {
+	    $res->{'uuid'} = NewUUID();
+	}
+    }
+  done:
+    if (defined($webtask)) {
+	$webtask->value({"reservations" => \@reslist});
+	$webtask->Exited(0);
+    }
+    else {
+	print Dumper(@reslist);
+    }
+    exit(0);
+  bad:
     fatal($errmsg);
 }
 
