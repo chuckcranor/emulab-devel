@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -181,17 +181,19 @@ sub Online()
     mysystem2("ifconfig $vif txqueuelen 256");
 
     if ($VIFROUTING) {
+	my $lockref;
+	
 	#
 	# When using routing instead of bridging, we have to restart
 	# dhcp *after* the vif has been created so that dhcpd will
 	# start listening on it. 
 	#
-	if (TBScriptLock("dhcpd", 0, 900) != TBSCRIPTLOCK_OKAY()) {
+	if (TBScriptLock("dhcpd", 0, 900, \$lockref) != TBSCRIPTLOCK_OKAY()) {
 	    print STDERR "Could not get the dhcpd lock after a long time!\n";
 	    return -1;
 	}
 	restartDHCP();
-	TBScriptUnlock();
+	TBScriptUnlock($lockref);
 
 	#
 	# And this clears the arp caches.
@@ -448,9 +450,21 @@ sub Online()
 
 sub Offline()
 {
-    my @rules;
+    my @rules = ();
 
-    @rules = ();
+    if ($VIFROUTING) {
+	my $lockref;
+	#
+	# When using routing instead of bridging, we have to clean
+	# up the dhcp defaults file for the list of interfaces. 
+	#
+	if (TBScriptLock("dhcpd", 0, 900, \$lockref) != TBSCRIPTLOCK_OKAY()) {
+	    print STDERR "Could not get the dhcpd lock after a long time!\n";
+	    return -1;
+	}
+	reconfigDHCP();
+	TBScriptUnlock($lockref);
+    }
 
     # dhcp
     push(@rules,
@@ -584,7 +598,6 @@ sub Offline()
     if (DoIPtablesNoFail(@rules) != 0) {
 	print STDERR "WARNING: could not remove iptables rules\n";
     }
-
     return 0;
 }
 
