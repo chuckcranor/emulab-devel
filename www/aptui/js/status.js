@@ -427,7 +427,7 @@ $(function ()
 
 	if (instanceStatus != lastStatus) {
             APT_OPTIONS.updatePage({ 'instance-status': instanceStatus });
-	    console.info(json);
+	    console.info("New Status: ", json);
 	
 	    status_html = status;
 
