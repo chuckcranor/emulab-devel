@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-  var templates = APT_OPTIONS.fetchTemplateList(['adminextend', 'waitwait-modal', 'oops-modal', 'admin-history', 'admin-firstrow', 'admin-secondrow', 'admin-utilization', 'admin-summary']);
+    var templates = APT_OPTIONS.fetchTemplateList(['adminextend', 'waitwait-modal', 'oops-modal', 'admin-history', 'admin-firstrow', 'admin-secondrow', 'admin-utilization', 'admin-summary', "reservation-list"]);
     var mainString = templates['adminextend'];
     var waitwaitString = templates['waitwait-modal'];
     var oopsString = templates['oops-modal'];
@@ -16,6 +16,7 @@ $(function ()
     var firstrowTemplate   = null;
     var secondrowTemplate  = null;
     var extensionsTemplate = null;
+    var listTemplate       = null;
     var maxextension       = null;
     var GENIRESPONSE_REFUSED = 7;
 
@@ -30,6 +31,7 @@ $(function ()
 	firstrowTemplate = _.template(firstrowString);
 	secondrowTemplate = _.template(secondrowString);
 	extensionsTemplate = _.template(historyString);
+	listTemplate = _.template(templates["reservation-list"]);
 
 	LoadFirstRow();
 	// Need to serialize this stuff cause of locking in the backend.
@@ -564,6 +566,7 @@ $(function ()
 		$('#max-extension-warning').addClass("hidden");
 		$('#max-extension-warning .max-extension-date').html("");
 	    });
+	    console.info("DoMaxExtension: ", json);
 	    
 	    if (json.code) {
 		console.info("Failed to get max extension", json);
@@ -593,6 +596,80 @@ $(function ()
 		}
 		return;
 	    }
+	    if (Object.keys(json.value.reservations).length) {
+		// Convert to just a single list of reservations.
+		var reservations = {};
+		_.each(json.value.reservations, function(reslist, urn) {
+		    _.each(reslist, function(details, uuid) {
+			reservations[uuid] = details;
+		    });
+		});
+		if (Object.keys(reservations).length) {
+		    console.info("reservations", reservations);
+		    var html = listTemplate({
+			"reservations" : reservations,
+			"showcontrols" : false,
+			"showproject"  : false,
+			"showactivity" : false,
+			"showuser"     : true,
+			"showusing"    : true,
+			"showstatus"   : true,
+			"name"         : "extend",
+			"isadmin"      : true,
+			"error"        : null,
+		    });
+		    $('#reservations-row .panel-body').html(html);
+
+		    // Show the proper status now, we might change it later.
+		    _.each(reservations, function(value, uuid) {
+			var id = '#reservations-row ' +
+			    ' tr[data-uuid="' + uuid + '"] ';
+
+			if (value.cancel) {
+			    $(id + " .status-column .status-canceled")
+				.removeClass("hidden");
+			}
+			else if (value.approved) {
+			    $(id + " .status-column .status-approved")
+				.removeClass("hidden");
+			}
+			else {
+			    $(id + " .status-column .status-pending")
+				.removeClass("hidden");
+			}
+			if (value.approved &&
+			    _.has(value, 'history') && value.history.length) {
+			    $(id + " .resgraph-button").removeClass("invisible");
+
+			    // Bind usage history graph.
+			    $(id + ' .resgraph-button').click(function() {
+				DrawHistoryGraph(value);
+				return false;
+			    });
+			}
+		    });
+
+		    $('#reservations-row .tablesorter')
+			.tablesorter({
+			    theme : 'green',
+			    // initialize zebra
+			    widgets: ["zebra"],
+			});
+		    $('#reservations-row .format-date').each(function() {
+			var date = $.trim($(this).html());
+			if (date != "") {
+			    $(this).html(moment(date)
+					 .format("MMM D, YYYY h:mm A"));
+			}
+		    });
+		    // This activates the popover subsystem.
+		    $('#reservations-row [data-toggle="popover"]').popover({
+			placement: 'auto',
+			container: 'body',
+		    });
+		    $('#reservations-row').removeClass("hidden");
+		}
+	    }	
 	    // Save for checking the extension input field.
 	    maxextension = moment(json.value.maxextension);
 	    
@@ -765,6 +842,30 @@ $(function ()
 	sup.ShowModal('#metrics-modal');
     }
 
+    // Draw the history bar graph.
+    function DrawHistoryGraph(details)
+    {
+	// Setup a handler to draw the large version graph in the modal.
+	$('#resusage-graph-modal').on('shown.bs.modal', function() {
+	    window.DrawResHistoryGraph({"details"    : details,
+					"graphid"    : '#resusage-graph-modal',
+					"xaxislabel" : true});
+	});
+	
+	// Make sure nothing left behind before we show it.
+	$('#resusage-graph-modal svg').html("");
+	// Gack, this stuff gets left behind.
+	d3.selectAll('.nvtooltip').remove();
+
+	// Say something informative in the panel header.
+	$('#resusage-graph-modal .resusage-graph-details')
+	    .html("(" + details.nodes + " " + details.type + " nodes)");
+	
+	sup.ShowModal('#resusage-graph-modal', function () {
+	    // Need to unbind the hook above.
+	    $('#resusage-graph-modal').off('shown.bs.modal');
+	});
+    }
     // Helper.
     function decodejson(id) {
 	return JSON.parse(_.unescape($(id)[0].textContent));

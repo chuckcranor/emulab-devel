@@ -108,6 +108,10 @@ $(function ()
 		if (json.code) {
 		    console.log("Could not get reservation data for " +
 				details.name + ": " + json.value);
+		    $('#' + details.nickname + ' .resgraph-error')
+			.html(json.value);
+		    $('#' + details.nickname + ' .resgraph-error')
+			.removeClass("hidden");
 		    return;
 		}
 		// Just POWDER

@@ -3,12 +3,14 @@ $(function ()
     'use strict';
 
     var template_list   = ["reserve-request", "reserve-faq",
-			   "reservation-graph", "oops-modal", "waitwait-modal"];
+			   "reservation-graph", "oops-modal", "waitwait-modal",
+			   "resusage-graph"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
     var oopsString      = templates["oops-modal"];
     var waitwaitString  = templates["waitwait-modal"];
     var mainTemplate    = _.template(templates["reserve-request"]);
     var graphTemplate   = _.template(templates["reservation-graph"]);
+    var usageTemplate   = _.template(templates["resusage-graph"]);
     var fields       = null;
     var projlist     = null;
     var amlist       = null;
@@ -707,8 +709,8 @@ $(function ()
 	    var details = json.value;
 	    $('#reserve-request-form [name=uuid]').val(details.uuid);
 	    $('#reserve-request-form [name=pid]').val(details.pid);
-	    $('#reserve-request-form [name=count]').val(details.count);
-	    $('#reserve-request-form [name=cluster]').val(details.cluster);
+	    $('#reserve-request-form [name=count]').val(details.nodes);
+	    $('#reserve-request-form [name=cluster]').val(details.cluster_urn);
 	    $('#reserve-request-form [name=cluster_id]').val(details.cluster_id);
 	    $('#reserve-request-form [name=type]').val(details.type);
 	    $('#reserve-request-form [name=reason]').val(details.notes);
@@ -748,14 +750,14 @@ $(function ()
 		$('#unapproved-warning').removeClass("hidden");
 	    }
 	    // Local user gets a link.
-	    if (_.has(details, 'creator_idx')) {
+	    if (_.has(details, 'uid_idx')) {
 		$('#reserve-requestor').html(
 		    "<a target=_blank href='user-dashboard.php?user=" +
-			details.creator_idx + "'>" +
-			details.creator_uid + "</a>");
+			details.uid_idx + "'>" +
+			details.uid + "</a>");
 	    }
 	    else {
-		$('#reserve-requestor').html(details.creator_uid);
+		$('#reserve-requestor').html(details.uid);
 	    }
 	    
 	    /*
@@ -776,6 +778,9 @@ $(function ()
 
 	    // Now we can load the graph since we know the project.
 	    LoadReservations(details.pid);
+
+	    // Add append history graph under the reservation graph.
+	    DrawHistoryGraph(details);
 	};
 	sup.ShowWaitWait();
 	var xmlthing = sup.CallServerMethod(null, "reserve",
@@ -873,6 +878,37 @@ $(function ()
 	    $('#reserve-submit-button').attr("disabled", "disabled");
 	}
 	buttonstate = which;
+    }
+
+    // Draw the history bar graph.
+    function DrawHistoryGraph(details)
+    {
+	if (!_.has(details, 'history') || !details.history.length) {
+	    return;
+	}
+	var graphid = "history-graph";
+	var html = usageTemplate({"graphid"        : graphid,
+				  "showfullscreen" : true});
+	
+	$('#reservation-lists').append(html);
+	window.DrawResHistoryGraph({"details"  : details,
+				    "graphid"  : '#' + graphid});
+
+	// Setup a handler to draw the large version graph in the modal.
+	$('#resusage-modal').on('shown.bs.modal', function() {
+	    window.DrawResHistoryGraph({"details"    : details,
+					"graphid"    : '#resusage-modal',
+					"xaxislabel" : true});
+	});
+	// When modal shows, we draw.
+	$('#' + graphid + ' .resusage-fullscreen').click(function (event) {
+	    // Make sure nothing left behind.
+	    $('#resusage-modal svg').html("");
+	    sup.ShowModal('#resusage-modal', function () {
+		// Need to unbind the hook above.
+		$('#resusage-modal').off('shown.bs.modal');
+	    });
+	});
     }
     $(document).ready(initialize);
 });

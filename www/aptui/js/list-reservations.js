@@ -2,11 +2,14 @@ $(function ()
 {
     'use strict';
 
-    var template_list   = ["reservation-list", "resusage-list",
-			   "oops-modal", "confirm-modal", "waitwait-modal"];
+    var template_list   = ["list-reservations", "reservation-list",
+			   "confirm-modal", "resusage-list", "resusage-graph",
+			   "oops-modal", "waitwait-modal"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
+    var mainTemplate    = _.template(templates["list-reservations"]);
     var listTemplate    = _.template(templates["reservation-list"]);
     var usageTemplate   = _.template(templates["resusage-list"]);
+    var graphTemplate   = _.template(templates["resusage-graph"]);
     var confirmString   = templates["confirm-modal"];
     var oopsString      = templates["oops-modal"];
     var waitwaitString  = templates["waitwait-modal"];
@@ -17,10 +20,11 @@ $(function ()
 	window.APT_OPTIONS.initialize(sup);
 	amlist  = decodejson('#amlist-json');
 
+	$('#main-body').html(mainTemplate({"amlist" : amlist}));
 	$('#oops_div').html(oopsString);	
 	$('#waitwait_div').html(waitwaitString);
 	$('#confirm_div').html(confirmString);
-
+	
 	LoadData();
     }
 
@@ -47,40 +51,36 @@ $(function ()
 		if (json.code) {
 		    console.log("Could not get reservation data for " +
 				name + ": " + json.value);
-		    error = json.value;
+		    $('#' + name + " .res-error").html(json.value);
+		    $('#' + name + " .res-error").removeClass("hidden");
+		    $('#' + name).removeClass("hidden");
+		    return;
 		}
-		else {
-		    reservations = json.value.reservations;
-		    rescount += reservations.length;
+		reservations = json.value.reservations;
+		rescount += reservations.length;
 		
-		    if (reservations.length == 0) {
-			if (amcount == 0 && rescount == 0) {
-			    // No reservations at all, show the message.
-			    $('#noreservations').removeClass("hidden");
-			}
-			return;
+		if (reservations.length == 0) {
+		    if (amcount == 0 && rescount == 0) {
+			// No reservations at all, show the message.
+			$('#noreservations').removeClass("hidden");
 		    }
+		    return;
 		}
 
 		// Generate the main template.
 		var html = listTemplate({
 		    "reservations" : reservations,
-		    "showidx"      : true,
+		    "showcontrols" : true,
 		    "showproject"  : true,
+		    "showactivity" : true,
 		    "showuser"     : true,
 		    "showusing"    : true,
-		    "anonymous"    : false,
+		    "showstatus"   : true,
 		    "name"         : name,
 		    "isadmin"      : window.ISADMIN,
 		    "error"        : error,
 		});
-		html =
-		    "<div class='row' id='" + name + "'>" +
-		    " <div class='col-xs-12 col-xs-offset-0'>" + html +
-		    " </div>" +
-		    "</div>";
-
-		$('#main-body').prepend(html);
+		$('#' + name + " .panel-body").html(html);
 
 		// On error, no need for the rest of this.
 		if (error)
@@ -89,21 +89,21 @@ $(function ()
 		// Show the proper status now, we might change it later.
 		_.each(reservations, function(value, uuid) {
 		    var id = '#' + name +
-			' tr[data-uuid="' + uuid + '"] .status-column';
+			' tr[data-uuid="' + uuid + '"] ';
 
 		    if (value.cancel) {
-			$(id + " .status-canceled").removeClass("hidden");
+			$(id + " .status-column .status-canceled")
+			    .removeClass("hidden");
 		    }
 		    else if (value.approved) {
-			$(id + " .status-approved").removeClass("hidden");
+			$(id + " .status-column .status-approved")
+			    .removeClass("hidden");
 		    }
 		    else {
-			$(id + " .status-pending").removeClass("hidden");
+			$(id + " .status-column .status-pending")
+			    .removeClass("hidden");
 
 			if (window.ISADMIN) {
-			    id = '#' + name +
-				' tr[data-uuid="' + uuid + '"] ';
-			    
 			    // Bind a deny handler,
 			    $(id + ' .deny-button').click(function() {
 				DenyReservation($(this).closest('tr'));
@@ -117,6 +117,16 @@ $(function ()
 			    });
 			    $(id + ' .approve-button').removeClass("invisible");
 			}
+		    }
+		    if (value.approved &&
+			_.has(value, 'history') && value.history.length) {
+			$(id + " .resgraph-button").removeClass("invisible");
+
+			// Bind usage history graph.
+			$(id + ' .resgraph-button').click(function() {
+			    DrawHistoryGraph(value);
+			    return false;
+			});
 		    }
 		});
 
@@ -203,7 +213,8 @@ $(function ()
 			    event.preventDefault();
 			    sup.ShowModal('#' + "resusage-modal-" + uuid);
 			});
-			$(this).find(".resusage-button").removeClass("hidden");
+			$(this).find(".resusage-button")
+			    .removeClass("invisible");
 
 			// Format dates in the modal with moment before display.
 			$('#resusage-modal-' + uuid + ' .format-date').each(function() {
@@ -224,6 +235,7 @@ $(function ()
 		    placement: 'auto',
 		    container: 'body',
 		});
+		$('#' + name).removeClass("hidden");
 	    }
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
 						"ListReservations",
@@ -241,7 +253,7 @@ $(function ()
 	var pid  = $(row).attr('data-pid');
 	var cluster = $(row).attr('data-cluster');
 	var table   = $(row).closest("table");
-	
+
 	// Callback for the delete request.
 	var callback = function (json) {
 	    sup.HideModal('#waitwait-modal');
@@ -368,7 +380,7 @@ $(function ()
 	// This is what we are deleting.
 	var uuid    = $(row).attr('data-uuid');
 	var pid     = $(row).attr('data-pid');
-	var uid_idx = $(row).attr('data-creator_idx');
+	var uid_idx = $(row).attr('data-uid_idx');
 	var cluster = $(row).attr('data-cluster');
 	var table   = $(row).closest("table");
 	var warning = (which == "warn" ? 1 : 0);
@@ -471,7 +483,31 @@ $(function ()
 	})
 	sup.ShowModal("#cancel-cancel-modal");
     }
-    
+
+    // Draw the history bar graph.
+    function DrawHistoryGraph(details)
+    {
+	// Setup a handler to draw the large version graph in the modal.
+	$('#resusage-graph-modal').on('shown.bs.modal', function() {
+	    window.DrawResHistoryGraph({"details"    : details,
+					"graphid"    : '#resusage-graph-modal',
+					"xaxislabel" : true});
+	});
+	
+	// Make sure nothing left behind before we show it.
+	$('#resusage-graph-modal svg').html("");
+	// Gack, this stuff gets left behind.
+	d3.selectAll('.nvtooltip').remove();
+
+	$('#resusage-graph-modal .resusage-graph-details')
+	    .html("(" + details.nodes + " " + details.type + " nodes)");
+	
+	sup.ShowModal('#resusage-graph-modal', function () {
+	    // Need to unbind the hook above.
+	    $('#resusage-graph-modal').off('shown.bs.modal');
+	});
+
+    }
     // Helper.
     function decodejson(id) {
 	return JSON.parse(_.unescape($(id)[0].textContent));

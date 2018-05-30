@@ -396,4 +396,88 @@ window.ShowResGraph = (function ()
     };
 }
 )();
+window.DrawResHistoryGraph = (function ()
+{
+    return function(args)
+    {
+	var details = args.details;
+	var history = details.history;
+	var graphid = args.graphid;
+	var xlabel  = false;
+	var uvalues = [];
+	var pvalues = [];
+
+	if (_.has(args, "xaxislabel")) {
+	    xlabel = args.xaxislabel;
+	}
+
+	for (var i = 0; i < history.length; i++) {
+	    var record    = history[i];
+	    var stamp     = parseInt(record.t) * 1000;
+	    var reserved  = record.reserved;
+	    var allocated = record.allocated;
+
+	    // If this is before or after the reservation, reserved will
+	    // be empty. Skip it.
+	    if (Array.isArray(reserved)) {
+		continue;
+	    }
+	    var pcount = allocated[details.pid][details.type];
+	    // Watch for nothing allocated by the user at this time stamp
+	    var ucount = 0;
+	    if (_.has(allocated, details.uid)) {
+		ucount = allocated[details.uid][details.type];
+	    }
+	    uvalues.push({"x" : stamp, "y" : parseInt(ucount)});
+	    pvalues.push({"x" : stamp, "y" : parseInt(pcount)});
+	}
+	var data = [{"key" : "User", "values" : uvalues},
+		    {"key" : "Project", "values" : pvalues}];
+	//console.info("usage datums", data);
+
+	nv.addGraph(function() {
+	    var chart = nv.models.multiBarChart()
+		.reduceXTicks(true)   // Do not show every tick.
+		.rotateLabels(0)      // Angle to rotate x-axis labels.
+		.showControls(false)
+		.useInteractiveGuideline(true)
+	        .duration(100)
+		.groupSpacing(0.1);   // Distance between each group of bars.
+
+	    // Matches margins in resgraphs.js
+	    chart.margin({"left":25,"right":15,"top":20,"bottom":40});
+
+	    chart.xAxis.tickFormat(function(d) {
+		return d3.time.format('%m/%d')(new Date(d))
+            });	    
+	    
+	    chart.yAxis
+		.tickFormat(d3.format(',d'));
+
+	    if (xlabel) {
+		var start = moment(details.start);
+		var end   = moment(details.end);
+
+		chart.xAxis.axisLabel(start.format('lll') + " ... " +
+				      end.format('lll'));
+	    }
+
+            // set up the tooltip to display full dates
+            var tsFormat = d3.time.format('%b %-d, %I:%M%p');
+            var tooltip = chart.interactiveLayer.tooltip;
+            tooltip.headerFormatter(function (d) {
+		return tsFormat(new Date(d));
+	    });
+
+	    d3.select(graphid + ' svg')
+		.datum(data)
+		.call(chart);
+	    
+	    nv.utils.windowResize(chart.update);
+
+	    return chart;
+	});
+    }
+}
+)();
 });

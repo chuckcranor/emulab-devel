@@ -26,7 +26,7 @@ include("defs.php3");
 include("webtask.php");
 chdir("apt");
 include("quickvm_sup.php");
-$page_title = "List Reservations";
+$page_title = "Reservation History";
 
 #
 # Get current user.
@@ -39,8 +39,23 @@ $isadmin   = (ISADMIN() ? 1 : 0);
 #
 # Verify page arguments. Cluster is a domain that we turn into a URN.
 #
-$optargs = OptionalPageArguments("cluster", PAGEARG_STRING);
+$optargs = OptionalPageArguments("cluster",     PAGEARG_STRING,
+                                 "target_user", PAGEARG_USER);
 
+if (! isset($target_user)) {
+    $target_user = $this_user;
+}
+$target_uid = $target_user->uid();
+
+#
+# Verify that this uid is a member of one of the projects that the
+# target_uid is in. Must have proper permission in that group too. 
+#
+if (!$isadmin && !ISFOREIGN_ADMIN() &&
+    !$target_user->AccessCheck($this_user, $TB_USERINFO_READINFO)) {
+    SPITUSERERROR("You do not have permission to view this information!");
+    return;
+}
 SPITHEADER(1);
 
 $amlist = array();
@@ -83,16 +98,16 @@ echo "<div id='main-body'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "   window.ISADMIN  = $isadmin;\n";
+echo "   window.UID      = '$target_uid';\n";
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
 AddLibrary("js/resgraphs.js");
-AddTemplateList(array("list-reservations", "reservation-list",
-                      "confirm-modal", "resusage-list", "resusage-graph",
-                      "oops-modal", "waitwait-modal"));
-SPITREQUIRE("js/list-reservations.js",
+AddTemplateList(array("reservation-history", "reservation-list",
+                      "resusage-graph", "oops-modal", "waitwait-modal"));
+SPITREQUIRE("js/reservation-history.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
             "<script src='js/lib/nv.d3.js'></script>\n".
             "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".

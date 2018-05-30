@@ -67,6 +67,7 @@
 	  <input id="end" name="end" type="hidden">
 	  <% if (editing) { %>
 	    <input id="uuid" name="uuid" type="hidden">
+	    <!-- This is a URN -->
 	    <input id="cluster" name="cluster" type="hidden">
 	  <% } %>
 	  <div class='row'>
@@ -123,6 +124,7 @@
 	      </div>
 	      <div class="form-group">
 		<% if (editing) { %>
+		  <!-- This is a Nickname -->
 		  <input name="cluster_id" readonly
 			 id="cluster_id"
 			 value="<%- formfields.cluster_id %>"

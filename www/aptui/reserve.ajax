@@ -663,43 +663,8 @@ function Do_ListReservations()
     $rlist   = array();
     
     foreach ($resinfo["reservations"] as $details) {
-        $blob = array();
         $uuid = $details['uuid'];
-        $blob["uuid"] = $uuid;
-        #
-        # Prune out stuff in anonymous mode since the backend is going
-        # ask for all of the reservations with the -A option.
-        #
-        if (!isset($ajax_args["anonymous"])) {
-            $blob["pid"]         = $details['pid'];
-            $blob["pid_idx"]     = $details['pid_idx'];
-            $blob["creator_uid"] = $details['uid'];
-            $blob["creator_idx"] = $details['uid_idx'];
-            if (isset($details["using"])) {
-                $blob["using"]   = $details['using'];
-            }
-        }
-        if (isset($details['approved']) && $details['approved'] != "") {
-            $blob["approved"] = $details["approved"];
-        }
-        else {
-            $blob["approved"] = null;
-        }
-        if (isset($details['cancel']) && $details['cancel'] != "") {
-            $blob["cancel"] = $details["cancel"];
-        }
-        else {
-            $blob["cancel"] = null;
-        }
-        $blob["project"]     = $details['project'];
-        $blob["count"]       = $details['nodes'];
-        $blob["type"]        = $details['type'];
-        $blob["created"]     = $details['created'];
-        $blob["start"]       = $details['start'];
-        $blob["end"]         = $details['end'];
-        $blob["notes"]       = $details['notes'];
-        $blob["cluster"]     = $aggregate->nickname();
-        $rlist[$uuid] = $blob;
+        $rlist[$uuid] = $details;
     }
     $resinfo["reservations"] = $rlist;
     $webtask->Delete();
@@ -761,33 +726,14 @@ function Do_GetReservation()
 	return;
     }
     $webtask->Refresh();
+    error_log(print_r($webtask->TaskData(), true));
     $resinfo = $webtask->TaskValue("value");
     $value   = $resinfo["reservations"];
     $details = current($value);
-    $blob = array();
-    $uuid = $details['uuid'];
-    $blob["uuid"]        = $uuid;
-    $blob["pid"]         = $details['pid'];
-    $blob["uuid"]        = $details['uuid'];
-    $blob["pid_idx"]     = $details['pid_idx'];
-    $blob["creator_uid"] = $details['uid'];
-    $blob["creator_idx"] = $details['uid_idx'];
-    $blob["count"]       = $details['nodes'];
-    $blob["type"]        = $details['type'];
-    $blob["start"]       = $details['start'];
-    $blob["end"]         = $details['end'];
-    $blob["notes"]       = $details['notes'];
-    $blob["cluster"]     = $aggregate->urn();
-    if (isset($details['approved']) && $details['approved'] != "") {
-        $blob["approved"] = $details["approved"];
-    }
-    else {
-        $blob["approved"] = null;
-    }
-    # For display.
-    $blob["cluster_id"]  = $ajax_args["cluster"];
+
+    SPITAJAX_RESPONSE($details);
+    # Do this after we spit out the answer.
     $webtask->Delete();
-    SPITAJAX_RESPONSE($blob);
 }
 
 #
@@ -860,6 +806,85 @@ function Do_ReservationInfo()
     }
     $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
+}
+
+#
+# List reservation history at a cluster (for a user).
+#
+function Do_ReservationHistory()
+{
+    global $this_user;
+    global $ajax_args;
+    global $TB_PROJECT_CREATEEXPT, $suexec_output;
+
+    if (!isset($ajax_args["cluster"])) {
+	SPITAJAX_ERROR(-1, "Missing cluster");
+	return;
+    }
+    if (!preg_match("/^[-\w]+$/", $ajax_args["cluster"])) {
+        SPITAJAX_ERROR(-1, "Invalid cluster name");
+        return;
+    }
+    $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
+    if (!$aggregate) {
+        SPITAJAX_ERROR(-1, "No such cluster");
+        return;
+    }
+    if (!isset($ajax_args["uid"])) {
+	SPITAJAX_ERROR(-1, "Missing target uid");
+	return -1;
+    }
+    $uid = $ajax_args["uid"];
+    
+    if (!TBvalid_uid($uid)) {
+	SPITAJAX_ERROR(-1, "Invalid target uid");
+        return -1;
+    }
+    $target_user = User::Lookup($uid);
+    if (!$target_user) {
+        sleep(2);
+	SPITAJAX_ERROR(-1, "Unknown target uid");
+        return -1;
+    }
+    if (!ISADMIN() && !ISFOREIGN_ADMIN() &&
+        !$target_user->AccessCheck($this_user, $TB_USERINFO_READINFO)) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    $this_uid = $this_user->uid();
+    $urn = $aggregate->urn();
+    $webtask = WebTask::CreateAnonymous();
+    $webtask_id = $webtask->task_id();
+
+    $retval = SUEXEC($this_uid, "nobody",
+                     "webmanage_reservations -a '$urn' ".
+                     "   -t $webtask_id history $uid",
+                     SUEXEC_ACTION_IGNORE);
+    if ($retval) {
+        $webtask->Refresh();
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error retrieving reservations");
+        }
+        else {
+            SPITAJAX_ERROR($retval,
+                           "Could not get reservation history: ".
+                           $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    $webtask->Refresh();
+    $resinfo = $webtask->TaskValue("value");
+    $rlist   = array();
+    
+    foreach ($resinfo["reservations"] as $details) {
+        $uuid = $details['uuid'];
+        $rlist[$uuid] = $details;
+    }
+    $resinfo["reservations"] = $rlist;
+    $webtask->Delete();
+    SPITAJAX_RESPONSE($resinfo);
 }
 
 # Local Variables:

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -162,7 +162,8 @@ REQUIRE_MOMENT();
 REQUIRE_APTFORMS();
 AddLibrary("js/resgraphs.js");
 AddTemplateList(array("reserve-request", "reserve-faq", "reservation-graph",
-                      "oops-modal", "waitwait-modal", "confirm-modal"));
+                      "oops-modal", "waitwait-modal", "confirm-modal",
+                      "resusage-graph"));
 SPITREQUIRE("js/reserve.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
             "<script src='js/lib/nv.d3.js'></script>\n".

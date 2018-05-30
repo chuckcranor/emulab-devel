@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -118,7 +118,7 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_IDLEGRAPHS();
-
+AddLibrary("js/resgraphs.js");
 SPITREQUIRE("js/adminextend.js",
             "<script src='js/lib/d3.v3.js'></script>".
             "<script src='js/lib/nv.d3.js'></script>".
@@ -145,6 +145,6 @@ if (count($extensions)) {
     echo "</script>\n";
 }
 
-AddTemplateList(array("adminextend", "oops-modal", "waitwait-modal", "admin-history", "admin-firstrow", "admin-secondrow", "admin-utilization", "admin-summary"));
+AddTemplateList(array("adminextend", "oops-modal", "waitwait-modal", "admin-history", "admin-firstrow", "admin-secondrow", "admin-utilization", "admin-summary", "reservation-list"));
 SPITFOOTER();
 ?>

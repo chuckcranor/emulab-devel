@@ -368,7 +368,9 @@ $routing = array("geni-login" =>
                                                  "RequestInfo" =>
                                                      "Do_RequestInfo",
                                                  "ReservationInfo" =>
-                                                     "Do_ReservationInfo")),
+                                                     "Do_ReservationInfo",
+                                                 "ReservationHistory" =>
+                                                     "Do_ReservationHistory")),
 		 "images" =>
 			array("file"    => "images.ajax",
 			      "guest"   => false,
