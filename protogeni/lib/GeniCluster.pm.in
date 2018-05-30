@@ -1097,18 +1097,7 @@ sub Reservations($)
 	    next;
 	}
 	if (!exists($current{"$pid:$type"})) {
-	    $current{"$pid:$type"} = 0;
-	    
-	    my $result =
-		DBQueryWarn("select count(n.type) from reserved as r ".
-			    "left join nodes as n on n.node_id=r.node_id ".
-			    "where pid='$pid' and type='$type' ".
-			    "group by type");
-	    if ($result && $result->numrows) {
-		my ($count) = $result->fetchrow_array();
-		
-		$current{"$pid:$type"} = $count;
-	    }
+	    $current{"$pid:$type"} = $project->TypeInUseCount($type);
 	}
 	if (time() > $row->{'start'}) {
 	    $using = $current{"$pid:$type"};

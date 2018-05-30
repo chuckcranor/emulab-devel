@@ -1076,5 +1076,25 @@ sub Usage($$$)
     return \@summary;
 }
 
+#
+# Return count of how many nodes of a type in use.
+#
+sub TypeInUseCount($$)
+{
+    my ($self, $type) = @_;
+    my $pid = $self->pid();
+
+    my $result =
+	DBQueryWarn("select count(n.type) from reserved as r ".
+		    "left join nodes as n on n.node_id=r.node_id ".
+		    "where pid='$pid' and type='$type' ".
+		    "group by type");
+    return 0
+	if (!defined($result) || !$result->numrows);
+
+    my ($count) = $result->fetchrow_array();
+    return $count;
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;
