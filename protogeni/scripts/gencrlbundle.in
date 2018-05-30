@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2013 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -171,18 +171,11 @@ if ($?) {
     system("/bin/mv /tmp/crlbundle.$$ $BUNDLE") == 0
 	or fatal("Could not copy to $BUNDLE!");
 
-    system("$APACHE_START stop") == 0
-	or fatal("Could not stop apache!");
+    system("$APACHE_START graceful") == 0
+	or fatal("Could not gracefully restart apache!");
 
-    # Something whacky is going on; httpd refuses to die!
-    sleep(2);
-    system("killall httpd");
-    
     system("/bin/cp $BUNDLE $WWWBUNDLE") == 0
 	or fatal("Could not copy to $WWWBUNDLE!");
-
-    system("$APACHE_START start") == 0
-	or fatal("Could not start apache!");
 }
 # Apache spits out stuff. No errors at this point, nothing to report.
 AuditEnd()
