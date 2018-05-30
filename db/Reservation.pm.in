@@ -1251,7 +1251,7 @@ sub HistoricalReservations($$$;$) {
     }
     my $query_result =
 	DBQueryFatal("select *,UNIX_TIMESTAMP(start) AS s, " .
-		     "       UNIX_TIMESTAMP(end), AS e ".
+		     "       UNIX_TIMESTAMP(end) AS e, ".
 		     "       UNIX_TIMESTAMP(created) AS c, " .
 		     "       UNIX_TIMESTAMP(canceled) AS d, " .
 		     "       UNIX_TIMESTAMP(deleted) AS k " .
@@ -1283,6 +1283,7 @@ sub HistoricalReservations($$$;$) {
     }
     return @answer;
 }
+sub deleted($)     { return $_[0]->{"DELETED"}; }
 
 sub ExptTypes($) {
     my ($exptidx) = @_;

@@ -1713,7 +1713,7 @@ sub ReservationHistory($)
 	$blob->{"nodes"}       = $res->nodes();
 	$blob->{"type"}        = $res->type();
 	$blob->{"created"}     = TBDateStringGMT($res->created());
-	$blob->{"canceled"}    = TBDateStringGMT($res->canceled());
+	$blob->{"canceled"}    = TBDateStringGMT($res->cancel());
 	$blob->{"deleted"}     = TBDateStringGMT($res->deleted());
 	$blob->{"start"}       = TBDateStringGMT($res->start());
 	$blob->{"end"}         = TBDateStringGMT($res->end());
