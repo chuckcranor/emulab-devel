@@ -401,7 +401,21 @@ function DatasetList($which, $target)
         $created      = $row["created"];
         $expires      = $row["expires"];
         $cluster      = $row["nickname"];
+        $size         = $row["size"] ? $row["size"] : 0;
+        $state        = $row["state"];
+        # Convert to GB.
+        $size         = sprintf('%0.2f', $size * 0.00104858);
 
+        #
+        # The state is a bit of a problem, since local leases do not have
+        # an "allocating" state. For a remote dataset, we get set to busy.
+        # Need to unify this. But the main point is that we want to tell
+        # the user that the dataset is busy allocation.
+        #
+        if ($state == "busy" ||
+            ($state == "unapproved" && $row["locked"])) {
+            $state = "allocating";
+        }
         $blob = array();
         $blob["uuid"]         = $uuid;
         $blob["name"]         = $name;
@@ -416,6 +430,8 @@ function DatasetList($which, $target)
         $blob["expires"]      = ($type != "imdataset" ? $expires : "");
         $blob["aggregate_urn"]= $aggregate_urn;
         $blob["cluster"]      = $cluster;
+        $blob["size"]         = $size;
+        $blob["state"]        = $state;
 
         $results[$uuid] = $blob;
     }

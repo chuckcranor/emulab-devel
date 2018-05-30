@@ -853,7 +853,7 @@ function Do_GetInfo()
     else {
         $blob["state"] = $dataset->state();
     }
-    $blob["size"] = $dataset->size() ? $dataset->size() : "0";
+    $blob["size"] = $dataset->size() ? $dataset->size() : 0;
 
     # A local lease via Classic interface (embedded).
     if ($islease) {
