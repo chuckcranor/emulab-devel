@@ -278,7 +278,7 @@ sub CheckStatus($$;$)
     my ($self, $perrmsg, $portalrpc) = @_;
     require APT_Geni;
 
-    if (0 || $self->disabled()) {
+    if ($self->disabled()) {
 	$$perrmsg = "The " . $self->name() . " cluster ".
 	    "is currently offline, please try again later.";
 	return 1;
