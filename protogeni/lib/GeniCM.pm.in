@@ -2575,8 +2575,8 @@ sub GetTicketAuxAux($)
 	foreach my $property (GeniXML::GetLinkProperties($linkref)) {
 	    my $source = GetText("source_id", $property);
 	    my $dest   = GetText("dest_id", $property);
-	    if (!(defined($source) && defined($dest) ||
-		  $source eq "" || $dest eq "")) {
+	    if (!defined($source) || !defined($dest) ||
+		$source eq "" || $dest eq "") {
 		GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 			     "$lanname: Missing source or dest in property");
 	    }
