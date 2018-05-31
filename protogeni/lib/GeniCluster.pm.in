@@ -764,7 +764,9 @@ sub SliceMaxExtension($)
 		    my $blob = {};
 		    $blob->{"uuid"}        = $res->uuid();
 		    $blob->{"project"}     = $project->nonlocalurn();
+		    $blob->{"pid"}         = $project->pid();
 		    $blob->{"user"}        = $user->nonlocalurn();
+		    $blob->{"uid"}         = $user->uid();
 		    $blob->{"nodes"}       = $res->nodes();
 		    $blob->{"using"}       = $using;
 		    $blob->{"type"}        = $res->type();
@@ -1232,7 +1234,9 @@ sub Reservations($)
 	$blob->{"idx"}         = $idx;
 	$blob->{"uuid"}        = $uuid;
 	$blob->{"project"}     = $projurn;
+	$blob->{"pid"}         = $pid;
 	$blob->{"user"}        = $user->nonlocalurn();
+	$blob->{"uid"}         = $user->uid();
 	$blob->{"nodes"}       = $row->{'nodes'};
 	$blob->{"type"}        = $type;
 	$blob->{"using"}       = $using;
@@ -1709,7 +1713,9 @@ sub ReservationHistory($)
 	$blob->{"idx"}         = "";
 	$blob->{"uuid"}        = $res->uuid() || "";
 	$blob->{"project"}     = $projurn;
+	$blob->{"pid"}         = $pid;
 	$blob->{"user"}        = $geniuser->emulab_user()->nonlocalurn();
+	$blob->{"uid"}         = $geniuser->emulab_user()->uid();
 	$blob->{"nodes"}       = $res->nodes();
 	$blob->{"type"}        = $res->type();
 	$blob->{"created"}     = TBDateStringGMT($res->created());

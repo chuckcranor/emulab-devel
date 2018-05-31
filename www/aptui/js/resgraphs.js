@@ -422,11 +422,11 @@ window.DrawResHistoryGraph = (function ()
 	    if (Array.isArray(reserved)) {
 		continue;
 	    }
-	    var pcount = allocated[details.pid][details.type];
+	    var pcount = allocated[details.remote_pid][details.type];
 	    // Watch for nothing allocated by the user at this time stamp
 	    var ucount = 0;
-	    if (_.has(allocated, details.uid)) {
-		ucount = allocated[details.uid][details.type];
+	    if (_.has(allocated, details.remote_uid)) {
+		ucount = allocated[details.remote_uid][details.type];
 	    }
 	    uvalues.push({"x" : stamp, "y" : parseInt(ucount)});
 	    pvalues.push({"x" : stamp, "y" : parseInt(pcount)});

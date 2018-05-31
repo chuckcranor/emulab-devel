@@ -2087,22 +2087,25 @@ sub DoMaxExtensionInternal($$)
 
 	# Map project/user to local users (if appropriate).
 	foreach my $res (values(%{$reslist})) {
-	    if (exists($res->{'project'}) && $res->{'project'} && 
-		GeniHRN::IsValid($res->{'project'})) {
-		my $project = APT_Utility::MapProjectURN($res->{'project'});
-		if (defined($project)) {
-		    $res->{'pid'} = $project->pid();
-		    $res->{'pid_idx'} = $project->pid_idx();
-		}
+	    my $project = APT_Utility::MapProjectURN($res->{'project'});
+	    if (defined($project)) {
+		$res->{'remote_pid'} = $res->{'pid'};
+		$res->{'pid'}        = $project->pid();
+		$res->{'pid_idx'}    = $project->pid_idx();
 	    }
-	    if (exists($res->{'user'}) && $res->{'user'} && 
-		GeniHRN::IsValid($res->{'user'})) {
-		my $geniuser = APT_Utility::MapUserURN($res->{'user'});
-		if (defined($geniuser)) {
-		    $res->{'uid'} = $geniuser->uid();
-		    $res->{'uid_idx'} = $geniuser->uid_idx();
-		}
+	    else {
+		$res->{'remote_pid'} = $res->{'pid'};
 	    }
+	    my $geniuser = APT_Utility::MapUserURN($res->{'user'});
+	    if (defined($geniuser)) {
+		$res->{'remote_uid'} = $res->{'uid'};
+		$res->{'uid'}        = $geniuser->uid();
+		$res->{'uid_idx'}    = $geniuser->uid_idx();
+	    }
+	    else {
+		$res->{'remote_uid'} = $res->{'uid'};
+	    }
+		
 	    #
 	    # Add these for the web interface since we are already messing
 	    # with the results.

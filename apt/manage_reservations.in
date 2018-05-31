@@ -489,25 +489,24 @@ sub DoList()
     #
     foreach my $details (values(%$list)) {
 	my $userhrn  = GeniHRN->new($details->{'user'});
-	my $geniuser = GeniUser->Lookup($details->{'user'}, 1);
-	if (defined($geniuser) && $geniuser->IsLocal()) {
-	    #print Dumper($geniuser);
-	    $details->{'uid'}     = $geniuser->uid();
-	    $details->{'uid_idx'} = $geniuser->idx();
+	my $geniuser = MapUserURN($userhrn);
+	if (defined($geniuser)) {
+	    $details->{'remote_uid'} = $details->{'uid'};
+	    $details->{'uid'}        = $geniuser->uid();
+	    $details->{'uid_idx'}    = $geniuser->idx();
 	}
 	else {
-	    $details->{'uid'}     = $userhrn->id();
+	    $details->{'remote_uid'} = $details->{'uid'};
 	}
 	my $projhrn = GeniHRN->new($details->{'project'});
-	if ($projhrn->domain() eq $OURDOMAIN && defined($projhrn->project())) {
-	    my $project = Project->Lookup($projhrn->project());
-	    if (defined(($project))) {
-		$details->{'pid'}     = $project->pid();
-		$details->{'pid_idx'} = $project->pid_idx();
-	    }
+	my $project = APT_Utility::MapProjectURN($projhrn);
+	if (defined($project)) {
+	    $details->{'remote_pid'} = $details->{'pid'};
+	    $details->{'pid'}        = $project->pid();
+	    $details->{'pid_idx'}    = $project->pid_idx();
 	}
 	else {
-	    $details->{'pid'} = $projhrn->id();
+	    $details->{'remote_pid'} = $details->{'pid'};
 	}
 
 	#
@@ -1121,17 +1120,18 @@ sub DoHistory()
 	my $userhrn  = GeniHRN->new($res->{'user'});
 	if ($userhrn->domain() eq $OURDOMAIN &&
 	    $userhrn->id eq $geniuser->uid()) {
-	    $res->{'uid'}     = $geniuser->uid();
-	    $res->{'uid_idx'} = $geniuser->idx();
+	    $res->{'remote_uid'} = $res->{'uid'};
+	    $res->{'uid'}        = $geniuser->uid();
+	    $res->{'uid_idx'}    = $geniuser->idx();
 	}
 	my $project = APT_Utility::MapProjectURN($res->{'project'});
 	if (defined($project)) {
-	    $res->{'pid'}     = $project->pid();
-	    $res->{'pid_idx'} = $project->pid_idx();
+	    $res->{'remote_pid'} = $res->{'pid'};
+	    $res->{'pid'}        = $project->pid();
+	    $res->{'pid_idx'}    = $project->pid_idx();
 	}
 	else {
-	    my $projhrn = GeniHRN->new($res->{'project'});
-	    $res->{'pid'} = $projhrn->id();
+	    $res->{'remote_pid'} = $res->{'pid'};
 	}
 
 	#
