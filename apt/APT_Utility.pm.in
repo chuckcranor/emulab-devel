@@ -34,7 +34,7 @@ use Exporter;
 use vars qw(@ISA @EXPORT);
 
 @ISA    = "Exporter";
-@EXPORT = qw ( );
+@EXPORT = qw (MapUserURN MapProjectURN);
 
 # Must come after package declaration!
 use emdb;
