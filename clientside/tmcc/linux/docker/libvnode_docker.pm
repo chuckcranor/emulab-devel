@@ -81,6 +81,7 @@ use File::Temp qw(tempdir);
 use POSIX;
 use JSON::PP;
 use Digest::SHA qw(sha1_hex);
+use LWP::Simple;
 
 # Pull in libvnode
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
@@ -450,9 +451,9 @@ sub bindNetNS($$);
 sub moveNetDeviceToNetNS($$$);
 sub moveNetDeviceFromNetNS($$$);
 sub unbindNetNS($$);
-sub setupImage($$$$$$$$$$);
+sub setupImage($$$$$$$$$$$);
 sub pullImage($$$$;$);
-sub emulabizeImage($;$$$$$$$$);
+sub emulabizeImage($;$$$$$$$$$);
 sub analyzeImage($$;$);
 sub AllocateIFBs($$$);
 sub ReleaseIFBs($$);
@@ -2793,6 +2794,24 @@ sub vnodeCreate($$$$)
     my ($host_iface,$host_ip,$host_mask,$host_maskbits,$host_net,
 	$host_mac,$host_gw) = getControlNet();
 
+    my ($pid,$eid,$vname) = check_nickname();
+    #
+    # Need the domain, but no conistent way to do it. Ask tmcc for the
+    # boss node and parse out the domain. 
+    #
+    my ($DOMAINNAME,$BOSSIP) = tmccbossinfo();
+    fatal("vnodeCreate: Could not get bossname from tmcc!")
+	if (!defined($DOMAINNAME));
+    if ($DOMAINNAME =~ /^[-\w]+\.(.*)$/) {
+	$DOMAINNAME = $1;
+    }
+    else {
+        fatal("vnodeCreate: Could not parse domain name from bossinfo!");
+    }
+    my $longdomain = "${eid}.${pid}.${DOMAINNAME}";
+    my $shortdomain = `cat /var/emulab/boot/mydomain`;
+    chomp($shortdomain);
+
     if (defined($raref)) {
 	TBDebugTimeStamp("inreload: " . Dumper($raref));
 	$raref = $raref->[0];
@@ -2804,6 +2823,7 @@ sub vnodeCreate($$$$)
     # necessary.
     #
     my ($user,$pass);
+    my $dockerfile;
     if ((!$imagename || $imagename =~ /^emulab-ops-emulab-ops-DOCKER-EXT/)
 	&& exists($attributes->{'DOCKER_EXTIMAGE'})) {
 	$imagename = $attributes->{'DOCKER_EXTIMAGE'};
@@ -2813,6 +2833,24 @@ sub vnodeCreate($$$$)
 	if (exists($attributes->{'DOCKER_EXTPASS'})) {
 	    $pass = $attributes->{'DOCKER_EXTPASS'};
 	}
+    }
+    elsif ((!$imagename || $imagename =~ /^emulab-ops-emulab-ops-DOCKER-EXT/)
+	   && exists($attributes->{'DOCKER_DOCKERFILE'})) {
+	my @evkeyresults = ();
+	if (libtmcc::tmcc(libtmcc::TMCCCMD_EVENTKEY,undef,\@evkeyresults) < 0
+	    || @evkeyresults < 1) {
+	    fatal("Could not get keyhash from server!");
+	}
+	my $eventkey;
+	if ($evkeyresults[0] =~ /EVENTKEY KEY='?([\w\d]+)'?/) {
+	    $eventkey = $1;
+	}
+	else {
+	    fatal("could not extract eventkey from $evkeyresults[0]!");
+	}
+	my $urlhash = sha1_hex($dockerfile);
+	$dockerfile = $attributes->{'DOCKER_DOCKERFILE'};
+	$imagename = lc("$pid-$eid-$eventkey:$urlhash");
     }
     elsif ($inreload) {
 	# For local reloads, username is physical host shortname;
@@ -2877,6 +2915,7 @@ sub vnodeCreate($$$$)
 
     my ($newimagename,$newcreateargs,$newcmd,$newization);
     $rc = setupImage($vnode_id,$vnconfig,$private,$imagename,$user,$pass,
+		     $dockerfile,
 		     \$newimagename,\$newcreateargs,\$newcmd,\$newization);
     if ($rc) {
 	libutil::setState("RELOADFAILED");
@@ -3101,24 +3140,6 @@ sub vnodeCreate($$$$)
 	    $cval = $cval >> 1;
 	}
     }
-    #
-    # Need the domain, but no conistent way to do it. Ask tmcc for the
-    # boss node and parse out the domain. 
-    #
-    my ($DOMAINNAME,$BOSSIP) = tmccbossinfo();
-    die("Could not get bossname from tmcc!")
-	if (!defined($DOMAINNAME));
-    if ($DOMAINNAME =~ /^[-\w]+\.(.*)$/) {
-	$DOMAINNAME = $1;
-    }
-    else {
-        $err = "Could not parse domain name!";
-	goto bad;
-    }
-    my ($pid, $eid, $vname) = check_nickname();
-    my $longdomain = "${eid}.${pid}.${DOMAINNAME}";
-    my $shortdomain = `cat /var/emulab/boot/mydomain`;
-    chomp($shortdomain);
 
     my %cnetconfig = (
 	"IPAMConfig" => { "IPv4Address" => $ctrlip},
@@ -4407,6 +4428,103 @@ sub analyzeImage($$;$)
     return 0;
 }
 
+sub buildImageFromDockerfile($$)
+{
+    my ($image,$dockerfile) = @_;
+
+    #
+    # We have to lock here, to avoid races.
+    #
+    my $imagelockname = ImageLockName($image);
+    TBDebugTimeStamp("grabbing image lock $imagelockname writeable")
+	if ($lockdebug);
+    if (TBScriptLock($imagelockname,
+		     TBSCRIPTLOCK_INTERRUPTIBLE(),
+		     $MAXIMAGEWAIT) != TBSCRIPTLOCK_OKAY()) {
+	fatal("Could not get $imagelockname lock for $image!");
+    }
+    TBDebugTimeStamp("  got image lock $imagelockname for $image")
+	if ($lockdebug);
+
+    TBDebugTimeStamp("inspecting image $image (dockerfile $dockerfile)...");
+    my ($code,$content) = getClient()->image_inspect($image);
+    if (!$code) {
+	TBScriptUnlock();
+	TBDebugTimeStamp("not rebuilding existing $image for $dockerfile");
+	return 0;
+    }
+
+    TBDebugTimeStamp("$image does not exist; building!");
+    my $cdir = "$CONTEXTDIR/$image";
+    mkdir($cdir);
+
+    if (!LWP::Simple::getstore($dockerfile,"$cdir/Dockerfile")) {
+	TBScriptUnlock();
+	warn("failed to download dockerfile $dockerfile to build $image");
+	return -1;
+    }
+
+    # We could just send the bytes to the daemon (tar -C $cdir -c . |),
+    # but we want to store the file on disk for provenance.
+    my $tarfile = "$cdir-context-" . time() . ".tar";
+    mysystem2("tar -cf $tarfile -C $cdir .");
+    if ($?) {
+	warn("failed to build tar archive of context dir $cdir; aborting!\n");
+	TBScriptUnlock();
+	return -1;
+    }
+    TBDebugTimeStamp("building new image $image");
+    my $buf = '';
+    open(our $fd,">$cdir-build.log");
+    our $bytes = 0;
+    sub bdf_json_log_printer {
+	my ($data,$foo,$resp) = @_;
+	if ($resp->header("content-type") eq 'application/json') {
+	    eval {
+		$data = decode_json($data);
+	    };
+	    if ($@) {
+		warn("build log_printer: $! $@ ($data)\n");
+	    }
+	}
+	print $data;
+	print $fd $data;
+	$bytes += length($data);
+    }
+    ($code,$content) = getClient()->image_build_from_tar_file(
+	$tarfile,$image,undef,undef,\&bdf_json_log_printer);
+    close($fd);
+    if ($code) {
+	warn("failed to build $image from $dockerfile: $content ($code)!");
+	TBScriptUnlock();
+	return -1;
+    }
+    if ($bytes == 0) {
+	open(FD,">$cdir-build.log");
+	if (defined($content) && ref($content) eq 'ARRAY'
+	    && defined($content->[0]) && ref($content->[0]) eq 'HASH'
+	    && defined($content->[0]->{'stream'})) {
+	    foreach my $bit (@$content) {
+		next
+		    if (!defined($bit->{'stream'}));
+		print FD $bit->{'stream'};
+	    }
+	}
+	elsif (defined(ref($content)) && ref($content) ne '') {
+	    print FD Dumper($content);
+	}
+	else {
+	    print FD $content;
+	}
+	close(FD);
+    }
+
+    TBDebugTimeStamp("finished building new image $image from $dockerfile");
+
+    TBScriptUnlock();
+    return 0;
+}
+
 sub pullImage($$$$;$)
 {
     my ($image,$user,$pass,$policy,$newref) = @_;
@@ -4504,10 +4622,10 @@ sub pullImage($$$$;$)
     return $code;
 }
 
-sub emulabizeImage($;$$$$$$$$)
+sub emulabizeImage($;$$$$$$$$$)
 {
     my ($image,$newimageref,$emulabization,$newzationref,$update,
-	$pullpolicy,$username,$password,$iattrsref) = @_;
+	$pullpolicy,$username,$password,$dockerfile,$iattrsref) = @_;
     my $rc;
     my ($code,$content);
 
@@ -4521,13 +4639,24 @@ sub emulabizeImage($;$$$$$$$$)
     # image, then make it!
     #
 
-    #
-    # If we're supposed to pull a new image, do it.
-    #
     my $havenewbase = 0;
-    if (pullImage($image,$username,$password,$pullpolicy,\$havenewbase)) {
-	warn("failed to pull base Docker image $image");
-	return -1;
+    if (!defined($dockerfile)) {
+	#
+	# If we're supposed to pull a new image, do it.
+	#
+	if (pullImage($image,$username,$password,$pullpolicy,\$havenewbase)) {
+	    warn("failed to pull base Docker image $image");
+	    return -1;
+	}
+    }
+    else {
+	#
+	# Otherwise, check for existence of base image, else, build it.
+	#
+	if (buildImageFromDockerfile($image,$dockerfile)) {
+	    warn("failed to build $image from $dockerfile");
+	    return -1;
+	}
     }
 
     #
@@ -5219,9 +5348,9 @@ sub emulabizeImage($;$$$$$$$$)
     return -1;
 }
 
-sub setupImage($$$$$$$$$$)
+sub setupImage($$$$$$$$$$$)
 {
-    my ($vnode_id,$vnconfig,$private,$image,$username,$password,
+    my ($vnode_id,$vnconfig,$private,$image,$username,$password,$dockerfile,
 	$newimageref,$newcreateargsref,$newcmdref,$newzationref) = @_;
     my $rc;
     my $cwd;
@@ -5282,7 +5411,7 @@ sub setupImage($$$$$$$$$$)
 	$newzationref = \$tmp;
     }
     $rc = emulabizeImage($image,\$newimage,$emulabization,$newzationref,$update,
-			 $pullpolicy,$username,$password,\$iattrs);
+			 $pullpolicy,$username,$password,$dockerfile,\$iattrs);
     if ($rc) {
 	warn("failed to emulabize image $image; aborting!\n");
 	return $rc;
