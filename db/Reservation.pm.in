@@ -553,7 +553,7 @@ sub Tidy($)
     DBQueryFatal( "INSERT INTO reservation_history( uuid, pid, pid_idx, ".
 		  "nodes, type, deleted, canceled, " .
 		  "created, start, end, uid, uid_idx, notes, admin_notes ) " .
-		  "SELECT uuid, pid, pid_idx, nodes, type, deleted, ".
+		  "SELECT uuid, pid, pid_idx, nodes, type, null, ".
 		  "cancel, created, start, end, uid, uid_idx, " .
 		  "notes, admin_notes FROM future_reservations WHERE " .
 		  "end < '$stamp' and approved is not null" );
