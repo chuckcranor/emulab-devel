@@ -1005,6 +1005,7 @@ sub Usage($$$)
 
     my $query_result =
 	DBQueryWarn("(select e.eid,s.rsrcidx,s.nonlocal_id,s.slice_uuid, ".
+		    "       s.nonlocal_user_id, ".
 		    "       UNIX_TIMESTAMP(s.swapin_last),0,".
 		    "       e.swapper_idx,n.type,count(n.type) ".
 		    " from experiments as e ".
@@ -1015,11 +1016,13 @@ sub Usage($$$)
 		    "where e.pid_idx='$pid_idx' and e.state='active' ".
 		    "      and UNIX_TIMESTAMP(s.swapin_last) < $end ".
 		    "group by e.eid,s.rsrcidx,s.nonlocal_id,s.slice_uuid, ".
+		    "         s.nonlocal_user_id, ".
 		    "         UNIX_TIMESTAMP(s.swapin_last), ".
 		    "         e.swapper_idx,n.type ".
 		    "order by s.swapin_last desc) ".
 		    "union ".
 		    "(select s.eid,r.idx,s.nonlocal_id,s.slice_uuid, ".
+		    "       s.nonlocal_user_id, ".
 		    "       r.swapin_time,r.swapout_time, ".
 		    "       h.uid_idx,n.type,count(n.type) ".
 		    "  from experiment_resources as r ".
@@ -1040,6 +1043,7 @@ sub Usage($$$)
 		    "     (r.swapout_time > $start and ".
 		    "      r.swapout_time < $end)) ".
 		    "group by s.eid,r.idx,s.nonlocal_id,s.slice_uuid, ".
+		    "         s.nonlocal_user_id, ".
 		    "         r.swapin_time,r.swapout_time, ".
 		    "         h.uid_idx,n.type ".
 		    "order by r.swapin_time desc) "
@@ -1051,7 +1055,7 @@ sub Usage($$$)
     my @summary = ();
     my $lastin  = 0;
 
-    while (my ($eid,$idx,$urn,$slice_uuid,
+    while (my ($eid,$idx,$urn,$slice_uuid,$user_urn,
 	       $swapin_time,$swapout_time,$swapper_idx,$type,$count) =
 	   $query_result->fetchrow_array()) {
 	# In the emulab-ops project, we nalloc nodes to experiments that
@@ -1062,8 +1066,24 @@ sub Usage($$$)
 	next
 	    if ($count == 0 || !defined($type));
 
-	my ($swapper_urn, $swapper_uid);
-	my $user = User->Lookup($swapper_idx);
+	my ($swapper_urn, $swapper_uid, $user);
+	#
+	# A slice created by a local user uses the real local user identity,
+	# but for a nonlocal user we have to find nonlocal identity.
+	#
+	if (defined($slice_uuid)) {
+	    require GeniHRN;
+	    my $hrn = GeniHRN->new($user_urn);
+	    if ($hrn->domain() eq $OURDOMAIN) {
+		$user = User->Lookup($hrn->id());
+	    }
+	    else {
+		$user = User->LookupNonLocal($user_urn);
+	    }
+	}
+	else {
+	    $user = User->Lookup($swapper_idx);
+	}
 	if (defined($user)) {
 	    $swapper_urn = $user->nonlocalurn()->asString();
 	    $swapper_uid = $user->uid();
