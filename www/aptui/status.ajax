@@ -215,8 +215,13 @@ function Do_TerminateInstance()
 {
     global $instance, $creator, $this_user, $ajax_args;
 
-    if (StatusSetupAjax(1)) {
+    # Check for read permission, and then check for Terminate permission.
+    if (StatusSetupAjax(0)) {
 	return;
+    }
+    if (!$instance->CanTerminate($this_user)) {
+        SPITAJAX_ERROR(1, "Not enough permission to terminate");
+        return;
     }
     $uuid = $instance->uuid();
 

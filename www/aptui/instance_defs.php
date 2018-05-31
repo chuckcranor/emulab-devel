@@ -508,6 +508,21 @@ class Instance
 	}
         return 0;
     }
+    function CanTerminate($user) {
+	global $TBDB_TRUST_GROUPROOT;
+
+	if ($this->creator_idx() == $user->uid_idx()) {
+	    return 1;
+	}
+	# Otherwise a project membership test.
+	$project = Project::Lookup($this->pid_idx());
+	if (!$project) {
+	    return 0;
+	}
+        $uid = $user->uid();
+        $pid = $project->pid();
+        return TBMinTrust(TBGrpTrust($uid, $pid, $pid), $TBDB_TRUST_GROUPROOT);
+    }
     function CanDoSSH($user) {
 	if ($this->creator_idx() == $user->uid_idx()) {
 	    return 1;

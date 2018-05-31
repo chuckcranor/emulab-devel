@@ -273,7 +273,10 @@ $(function ()
 						   lockdown_override});
 	    xmlthing.done(callback);
 	});
-
+	// Disable terminate button if not allowed.
+	if (!window.APT_OPTIONS.canterminate) {
+	    DisableButton("terminate");
+	}
 	// lockout change event handler.
 	$('#lockout_checkbox').change(function() {
 	    DoLockout($(this).is(":checked"));
@@ -639,9 +642,9 @@ $(function ()
 	if (button == "terminate") {
 	    button = "#terminate_button";
 	    // When admin lockdown is set, we never enable this button.
-	    if (admin_lockdown) {
+	    if (admin_lockdown || !window.APT_OPTIONS.canterminate) {
 		enable = 0;
-	    }	    
+	    }
 	}
 	else if (button == "extend")
 	    button = "#extend_button";

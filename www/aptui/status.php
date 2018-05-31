@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -140,6 +140,9 @@ if ($profile = Profile::Lookup($instance->profile_id(),
     $canclone       = ((isset($this_user) &&
                         $profile->CanClone($this_user)) ||
 		       ISADMIN() ? 1 : 0);
+    $canterminate   = ((isset($this_user) &&
+                        $instance->CanTerminate($this_user)) ||
+		       ISADMIN() ? 1 : 0);
     $public_url     = ($instance->public_url() ?
 		       "'" . $instance->public_url() . "'" : "null");
     $isscript       = ($profile->script() && $profile->script() != "" ? 1 : 0);
@@ -150,6 +153,7 @@ else {
     $profile_public = "false";
     $cansnap        = 0;
     $canclone       = 0;
+    $canterminate   = 0;
     $public_url     = "null";
     $isscript      = 0;
 
@@ -253,6 +257,7 @@ echo "  window.APT_OPTIONS.isfadmin = $isfadmin;\n";
 echo "  window.APT_OPTIONS.isstud = $isstud;\n";
 echo "  window.APT_OPTIONS.cansnap = $cansnap;\n";
 echo "  window.APT_OPTIONS.canclone = $canclone;\n";
+echo "  window.APT_OPTIONS.canterminate = $canterminate;\n";
 echo "  window.APT_OPTIONS.wholedisk = $wholedisk;\n";
 echo "  window.APT_OPTIONS.snapping = $snapping;\n";
 echo "  window.APT_OPTIONS.hidelinktest = false;\n";
