@@ -41,7 +41,7 @@ $(function ()
 		var error = null;
 		var reservations = null;
 		
-		console.log("LoadData", json);
+		console.log("LoadData", name, json);
 		
 		// Kill the spinner.
 		amcount--;
