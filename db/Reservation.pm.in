@@ -216,6 +216,8 @@ sub Lookup($$;$$$$)
     $self->{'APPROVED'}    = $record->{'a'};
     $self->{'APPROVER'}    = $record->{'approver'};
     $self->{'UUID'}        = $record->{'uuid'};
+    # For compat with history entries.
+    $self->{'DELETED'}     = undef;
 	
     bless($self, $class);
     
@@ -239,6 +241,8 @@ sub admin_notes($) { return $_[0]->{"ADMIN_NOTES"}; }
 sub approved($)    { return $_[0]->{"APPROVED"}; }
 sub approver($)    { return $_[0]->{"APPROVER"}; }
 sub uuid($)        { return $_[0]->{"UUID"}; }
+# For compat with history entries.
+sub deleted($)     { return $_[0]->{"DELETED"}; }
 
 sub Stringify($)
 {
@@ -1283,7 +1287,6 @@ sub HistoricalReservations($$$;$) {
     }
     return @answer;
 }
-sub deleted($)     { return $_[0]->{"DELETED"}; }
 
 sub ExptTypes($) {
     my ($exptidx) = @_;

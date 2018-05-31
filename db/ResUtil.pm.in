@@ -99,7 +99,17 @@ sub CreateTimeline($@)
     # We want to bound the end of the search to the latest end if we
     # have only historial reservations.
     #
-    my @tmp = sort {$a->end() <=> $b->end()} @reservations;
+    # We have to watch for reservations that are deleted before they
+    # expire; that is the actual end time for the reservation.
+    #
+    my $sortfunc = sub {
+	my $a  = $_[0];
+	my $b  = $_[1];
+	my $s1 = (defined($a->deleted()) ? $a->deleted() : $a->end());
+	my $s2 = (defined($b->deleted()) ? $b->deleted() : $b->end());
+	return $s1 <=> $s2;
+    };
+    my @tmp = sort $sortfunc @reservations;
     my $latest = $tmp[-1];
     if ($debug) {
 	print "The latest reservation end is " .

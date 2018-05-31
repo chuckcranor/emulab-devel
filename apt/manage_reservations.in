@@ -1156,6 +1156,10 @@ sub DoHistory()
 	    $res->{'cancel'} eq "") {
 	    $res->{'cancel'} = undef;
 	}
+	if (!exists($res->{'deleted'}) ||
+	    $res->{'deleted'} eq "") {
+	    $res->{'deleted'} = undef;
+	}
 	if (!exists($res->{'uuid'}) ||
 	    $res->{'uuid'} eq "") {
 	    $res->{'uuid'} = NewUUID();
