@@ -406,12 +406,46 @@ window.DrawResHistoryGraph = (function ()
 	var xlabel  = false;
 	var uvalues = [];
 	var pvalues = [];
+	var backup  =false;
+	var i = 0;
 
 	if (_.has(args, "xaxislabel")) {
 	    xlabel = args.xaxislabel;
 	}
 
-	for (var i = 0; i < history.length; i++) {
+	// Need start of the reservation to narrow what we show,
+	// since the timeline is going to include stamps before the
+	// start of the reservation cause of experiments that span
+	// the reservation start time.
+	var start  = new Date(details.start).getTime();
+	console.info("draw start", start);
+
+	// Scan past any initial timeline entries that are before the
+	// start of the reservation.
+	for (i = 0; i < history.length; i++) {
+	    var record    = history[i];
+	    var stamp     = parseInt(record.t) * 1000;
+
+	    if (stamp > start) {
+		if (i == 0) {
+		    // If this is the first record, then the reservation
+		    // started with zero nodes allocated. Add a zero entry.
+		    uvalues.push({"x" : stamp, "y" : 0});
+		    pvalues.push({"x" : stamp, "y" : 0});
+		    console.info("added zero entry at ", stamp);
+		}
+		else {
+		    // We skipped some entries. Flag that we want to
+		    // add the previous entry at beginning of the res.
+		    backup = true;
+		    i--;
+		    console.info("added backup entry at ", stamp, i);
+		}
+		break;
+	    }
+	}
+
+	for (; i < history.length; i++) {
 	    var record    = history[i];
 	    var stamp     = parseInt(record.t) * 1000;
 	    var reserved  = record.reserved;
@@ -422,11 +456,16 @@ window.DrawResHistoryGraph = (function ()
 	    if (Array.isArray(reserved)) {
 		continue;
 	    }
+	    
 	    var pcount = allocated[details.remote_pid][details.type];
 	    // Watch for nothing allocated by the user at this time stamp
 	    var ucount = 0;
 	    if (_.has(allocated, details.remote_uid)) {
 		ucount = allocated[details.remote_uid][details.type];
+	    }
+	    if (backup) {
+		stamp  = start;
+		backup = false;
 	    }
 	    uvalues.push({"x" : stamp, "y" : parseInt(ucount)});
 	    pvalues.push({"x" : stamp, "y" : parseInt(pcount)});

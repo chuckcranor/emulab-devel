@@ -87,7 +87,18 @@ sub CollectReservations($$$)
 sub CreateTimeline($@)
 {
     my ($project, @reservations) = @_;
-	
+
+    #
+    # Remember all the types we care about; when computing the counts
+    # do not bother with nodes that are not in the set of types reserved.
+    #
+    my %typesinuse = ();
+    
+    foreach my $res (@reservations) {
+	my $type  = $res->type();	
+	$typesinuse{$type} = $type;
+    }
+    
     # We want the earliest/latest reservation for getting project usage();
     my $earliest  = $reservations[0];
     if ($debug) {
@@ -111,31 +122,43 @@ sub CreateTimeline($@)
     };
     my @tmp = sort $sortfunc @reservations;
     my $latest = $tmp[-1];
+    my $end = (defined($latest->deleted()) ?
+	       $latest->deleted() : $latest->end());
+    $end = time() if ($end > time());
+
     if ($debug) {
 	print "The latest reservation end is " .
-	    POSIX::strftime("%m/%d/20%y %H:%M:%S",
-			    localtime($latest->end())) . " \n";
+	    POSIX::strftime("%m/%d/20%y %H:%M:%S", localtime($end)) . " \n";
     }
-    my $end = $latest->end();
-    $end = time() if ($end > time());
     
     # Get the usage since the beginning of the earliest reservation.
-    my $usage = $project->Usage($earliest->start() - (3600 * 24), $end);
+    my $usage = $project->Usage($earliest->start(), $end);
     if ($debug) {
 	print "There are " . scalar(@$usage) . " usage records\n";
-	if ($debug > 1 && scalar(@$usage)) {
-	    print Dumper(@$usage);
+    }
+
+    @tmp = ();
+    foreach my $ref (@$usage) {
+	foreach my $type (keys(%{$ref->{'types'}})) {
+	    if (exists($typesinuse{$type})) {
+		push(@tmp, $ref);
+		last;
+	    }
 	}
     }
-    if (!scalar(@$usage)) {
-	print STDERR "There are no usage records to process\n"
+    if (!scalar(@tmp)) {
+	print STDERR "There are no usage records left to process\n"
 	    if ($debug);
 	return ();
     }
+    if ($debug > 1) {
+	print Dumper(@tmp);
+    }
+    
     # Form a timeline of changes in allocation.
     my @timeline = ();
 
-    foreach my $ref (@$usage) {
+    foreach my $ref (@tmp) {
 	push(@timeline, 
 	     {"t" => $ref->{'start'}, "details" => $ref, "op" => "alloc"});
 
@@ -146,12 +169,6 @@ sub CreateTimeline($@)
     }
     # And sort the new list.
     @timeline = sort {$a->{'t'} <=> $b->{'t'}} @timeline;
-
-    #
-    # Remember all the types we care about; when computing the counts
-    # do not bother with nodes that are not in the set of types reserved.
-    #
-    my %typesinuse = ();
 
     #
     # Correlate the reservations with the sorted list using the start/end
@@ -171,8 +188,26 @@ sub CreateTimeline($@)
 	    my $resStart = $res->start();
 	    my $resEnd   = $res->end();
 
-	    push(@reslist, $res)
-		if ($stamp >= $resStart && $stamp <= $resEnd);
+	    if ($stamp >= $resStart && $stamp <= $resEnd) {
+		push(@reslist, $res);
+		next;
+	    }
+	    #
+	    # But what if this usage record is for an experiment that started
+	    # prior to the beginning of the reservation, and one of two cases
+	    # is true: 1) The experiment is still running. 2) The end of the
+	    # experiment is during the reservation.
+	    #
+	    # In both these cases the reservation is overlaps with the
+	    # experiment.
+	    #
+	    if ($ref->{'op'} eq "alloc" && $stamp <= $resStart &&
+		($ref->{'details'}->{'end'} eq "" ||
+		 ($ref->{'details'}->{'end'} >= $resStart &&
+		  $ref->{'details'}->{'end'} <= $resEnd))) {
+		push(@reslist, $res);
+		print "$res is active for $stamp\n";
+	    }
 	}
 	next
 	    if (!@reslist);
@@ -208,23 +243,6 @@ sub CreateTimeline($@)
 	}
 	$ref->{'reserved'} = $reserved;
     }
-    #
-    # Kill off timeline entries that do not include the types we care
-    # about (types that are reserved at some point during the timeline).
-    # This reduces entries the number of entries that do not show an
-    # interesting change (ie: same as previous entry).
-    #
-    @tmp = ();
-    foreach my $ref (@timeline) {
-	foreach my $type (keys(%{$ref->{'details'}->{'types'}})) {
-	    if (exists($typesinuse{$type})) {
-		push(@tmp, $ref);
-		last;
-	    }
-	}
-    }
-    @timeline = @tmp;
-
     # Hmm, this happens.
     return ()
 	if (!@timeline);
@@ -233,6 +251,9 @@ sub CreateTimeline($@)
     # Now compute the node counts for each entry in the timeline.
     #
     my @counts = ComputeCounts($project, \%typesinuse, @timeline);
+
+    return @counts
+	if (1);
 
     #
     # We want to add additional entrys for the start of each reservation.

@@ -1226,6 +1226,48 @@ sub ProjectReservations($$$;$$) {
 }
 
 #
+# Fake up an object for a historical reservation entry.
+#
+sub LookupHistorical($$) {
+    my ($class, $uuid) = @_;
+
+    my $query_result =
+	DBQueryWarn("select *,UNIX_TIMESTAMP(start) AS s, " .
+		     "       UNIX_TIMESTAMP(end) AS e, ".
+		     "       UNIX_TIMESTAMP(created) AS c, " .
+		     "       UNIX_TIMESTAMP(canceled) AS d, " .
+		     "       UNIX_TIMESTAMP(deleted) AS k " .
+		     "  from reservation_history ".
+		     "where uuid='$uuid'");
+
+    return undef
+	if (!defined($query_result) || !$query_result->numrows);
+
+    my $record = $query_result->fetchrow_hashref();
+    my $self               = {};
+    $self->{'PID'}         = $record->{'pid'};
+    $self->{'PID_IDX'}     = $record->{'pid_idx'};
+    $self->{'EID'}         = undef;
+    $self->{'START'}       = $record->{'s'};
+    $self->{'END'}         = $record->{'e'};
+    $self->{'CREATED'}     = $record->{'c'};
+    $self->{'DELETED'}     = $record->{'k'};
+    $self->{'CANCEL'}      = $record->{'d'};
+    $self->{'TYPE'}        = $record->{'type'};
+    $self->{'NODES'}       = $record->{'nodes'};
+    $self->{'UID'}         = $record->{'uid'};
+    $self->{'UID_IDX'}     = $record->{'uid_idx'};
+    $self->{'NOTES'}       = $record->{'notes'};
+    $self->{'ADMIN_NOTES'} = $record->{'admin_notes'};
+    $self->{'APPROVED'}    = undef;
+    $self->{'APPROVER'}    = undef;
+    $self->{'UUID'}        = $record->{'uuid'};
+    bless($self, $class);
+
+    return $self;
+}
+
+#
 # Return a list of historical project reservations. Optional type.
 # Type can be a single type or a list reference of types.
 #
@@ -1254,36 +1296,17 @@ sub HistoricalReservations($$$;$) {
 	push(@clauses, "pid='$pid'");
     }
     my $query_result =
-	DBQueryFatal("select *,UNIX_TIMESTAMP(start) AS s, " .
-		     "       UNIX_TIMESTAMP(end) AS e, ".
-		     "       UNIX_TIMESTAMP(created) AS c, " .
-		     "       UNIX_TIMESTAMP(canceled) AS d, " .
-		     "       UNIX_TIMESTAMP(deleted) AS k " .
-		     "  from reservation_history ".
-		     "where " . join(" AND ", @clauses) . " " .
-		     "order by start asc");
+	DBQueryWarn("select uuid from reservation_history ".
+		    "where " . join(" AND ", @clauses) . " " .
+		    "order by start asc");
 
-    while (my $record = $query_result->fetchrow_hashref()) {
-	my $self               = {};
-	$self->{'PID'}         = $record->{'pid'};
-	$self->{'PID_IDX'}     = $record->{'pid_idx'};
-	$self->{'EID'}         = undef;
-	$self->{'START'}       = $record->{'s'};
-	$self->{'END'}         = $record->{'e'};
-	$self->{'CREATED'}     = $record->{'c'};
-	$self->{'DELETED'}     = $record->{'k'};
-	$self->{'CANCEL'}      = $record->{'d'};
-	$self->{'TYPE'}        = $record->{'type'};
-	$self->{'NODES'}       = $record->{'nodes'};
-	$self->{'UID'}         = $record->{'uid'};
-	$self->{'UID_IDX'}     = $record->{'uid_idx'};
-	$self->{'NOTES'}       = $record->{'notes'};
-	$self->{'ADMIN_NOTES'} = $record->{'admin_notes'};
-	$self->{'APPROVED'}    = undef;
-	$self->{'APPROVER'}    = undef;
-	$self->{'UUID'}        = $record->{'uuid'};
-	bless($self, $class);
-	push(@answer, $self);
+    return ()
+	if (!defined($query_result) || !$query_result->numrows);
+
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $record = Reservation->LookupHistorical($uuid);
+	push(@answer, $record)
+	    if (defined($record));
     }
     return @answer;
 }

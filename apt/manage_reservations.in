@@ -524,16 +524,11 @@ sub DoList()
 	#
 	# Hmm, undef/null is a pain with XMLRPC.
 	#
-	if ($details->{'approved'} eq "") {
-	    # Maps to JSON NULL.
-	    $details->{'approved'} = undef;
-	}
-	if ($details->{'cancel'} eq "") {
-	    # Maps to JSON NULL.
-	    $details->{'cancel'} = undef;
-	}
-	if (!exists($details->{'uuid'}) || $details->{'uuid'} eq "") {
-	    $details->{'uuid'} = NewUUID();
+	foreach my $key ("approved", "cancel", "deleted") {
+	    if (!exists($details->{$key}) || $details->{$key} eq "") {
+		$details->{$key} = undef;
+
+	    }
 	}
 
 	#
@@ -1148,13 +1143,11 @@ sub DoHistory()
 	#
 	# Hmm, undef/null is a pain with XMLRPC.
 	#
-	if (!exists($res->{'approved'}) ||
-	    $res->{'approved'} eq "") {
-	    $res->{'approved'} = undef;
-	}
-	if (!exists($res->{'cancel'}) ||
-	    $res->{'cancel'} eq "") {
-	    $res->{'cancel'} = undef;
+	foreach my $key ("approved", "cancel", "deleted") {
+	    if (!exists($res->{$key}) || $res->{$key} eq "") {
+		$res->{$key} = undef;
+
+	    }
 	}
 	if (!exists($res->{'deleted'}) ||
 	    $res->{'deleted'} eq "") {
