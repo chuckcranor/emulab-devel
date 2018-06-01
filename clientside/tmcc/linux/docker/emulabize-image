@@ -38,7 +38,7 @@ sub usage()
     exit(1);
 }
 my $optlist = "hfd:e:P:u:p:D";
-my $debug = 1;
+my $debug = 0;
 my $emulabization;
 my $pullpolicy;
 my $update = 0;

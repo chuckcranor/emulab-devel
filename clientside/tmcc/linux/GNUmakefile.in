@@ -516,7 +516,10 @@ docker-install:	dir-install
 		$(BINDIR)/run/rcmanifest.d
 	$(INSTALL) -m 755 $(SRCDIR)/docker/create-docker-image $(LBINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/docker/emulabize-image $(LBINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/docker/analyze-image $(LBINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/docker/analyze-image-with-busybox $(LBINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/vnodectl $(BINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/docker/cleanup-docker-vnodes.sh $(BINDIR)/
 	# Note that we install this, but do not enable it.  It is dynamically
 	# started and stopped as needed by libvnode_docker.pm .
 	$(INSTALL) -m 644 -o root -g $(DIRGROUP) \

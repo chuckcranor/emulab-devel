@@ -4306,6 +4306,55 @@ sub vnodeDestroy($$$$)
 ## Utility and helper functions.
 ##
 
+sub analyzeImageWithBusyboxCommand($$$@)
+{
+    my ($image,$configref,$outputref,@bargv) = @_;
+
+    TBDebugTimeStamp("running static busybox (".join('',@bargv).")".
+		     " for image $image...");
+    my $args = {
+	'HostConfig' => {
+	    'Binds' => [ "/bin/busybox:/tmp/busybox:ro" ]
+	},
+	'Entrypoint' => '',
+    };
+    my @argv = ('/tmp/busybox',@bargv);
+    if (defined($configref)) {
+	require Hash::Merge;
+	$args = Hash::Merge::merge($args,$configref);
+	if ($debug) {
+	    print STDERR "DEBUG: merged args = ".Dumper($args)."\n";
+	}
+    }
+    my $tmpname = "busybox-analyzer-".int(rand(POSIX::INT_MAX));
+    our $buf = '';
+    my ($code,$json,$resp,$retval) = getClient->container_run(
+	$tmpname,$image,\@argv,1,$args,sub { $buf .= $_[0]; });
+    if ($code) {
+	warn("failed to run busybox analysis container $tmpname for $image");
+	return $code;
+    }
+    # Santize the output.  For whatever reason(s), under heavy load, it
+    # comes with non-printable chars occasionally, and with CRLF.  Odd.
+    $buf =~ s/[\000-\011\014\015-\037\176-\255]//g;
+
+    TBDebugTimeStamp("busybox analyze output:\n$buf");
+    open(FD,">/vms/contexts/$tmpname.log");
+    print FD $buf;
+    close(FD);
+
+    if (defined($outputref)) {
+	if (ref($$outputref) eq 'ARRAY') {
+	    $$outputref = split("\n",$buf);
+	}
+	else {
+	    $$outputref = $buf;
+	}
+    }
+
+    return 0;
+}
+
 #
 # Analyze an existing Docker image to extra image metadata,
 # distro/version, and so on.
