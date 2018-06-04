@@ -347,7 +347,7 @@ sub GetHoldingProject($$;$)
 {
     my ($urn, $creator, $noexports) = @_;
     my ($project, $group);
-    my $lock_urn;
+    my $lock_str;
     $noexports = 0 if (!defined($noexports));
 
     require Project;
@@ -439,7 +439,9 @@ sub GetHoldingProject($$;$)
 		    "Cannot form a valid local project name from $project_urn");
 	    }
 	}
-	$lock_urn = DBQuoteSpecial($project_urn);
+	# Shorten the lock string; mysql has an oddly short limit on this.
+	my $lock_hrn = GeniHRN->new($project_urn);
+	$lock_str = "HoldProj:" . $lock_hrn->project();
 
 	#
 	# See if the project exists. 
@@ -447,7 +449,7 @@ sub GetHoldingProject($$;$)
 	# We need to lock for concurrent attempt to create this user.
 	# Lets use a DB process lock, named by the URN.
 	#
-	my $lock_result = DBQueryWarn("select GET_LOCK($lock_urn, 300)");
+	my $lock_result = DBQueryWarn("select GET_LOCK($lock_str, 300)");
 	if (!$lock_result ||
 	    !$lock_result->numrows) {
 	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
@@ -475,7 +477,7 @@ sub GetHoldingProject($$;$)
 		    }
 		}
 		if (!defined($project_id)) {
-		    DBQueryWarn("select RELEASE_LOCK($lock_urn)");
+		    DBQueryWarn("select RELEASE_LOCK($lock_str)");
 		    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 		     "Could not create a unique project name for $project_urn");
 		}
@@ -486,7 +488,7 @@ sub GetHoldingProject($$;$)
 	    #
 	    my ($fh, $filename) = tempfile(UNLINK => 0);
 	    if (!defined($fh)) {
-		DBQueryWarn("select RELEASE_LOCK($lock_urn)");
+		DBQueryWarn("select RELEASE_LOCK($lock_str)");
 		print STDERR "Could not create temp file for $project_id\n";
 		return GeniResponse->Create(GENIRESPONSE_ERROR);
 	    }
@@ -509,7 +511,7 @@ sub GetHoldingProject($$;$)
 	    print $fh "</project>\n";
 	    close($fh);
 	    if (! chmod(0755, $filename)) {
-		DBQueryWarn("select RELEASE_LOCK($lock_urn)");
+		DBQueryWarn("select RELEASE_LOCK($lock_str)");
 		print STDERR "Could not chmod $filename\n";
 		return GeniResponse->Create(GENIRESPONSE_ERROR);
 	    }
@@ -520,7 +522,7 @@ sub GetHoldingProject($$;$)
 	    my $output = GeniUtil::ExecQuiet("$WAP $NEWPROJECT -l $filename");
 	    if ($?) {
 		GeniUtil::FlipToGeniUser();
-		DBQueryWarn("select RELEASE_LOCK($lock_urn)");
+		DBQueryWarn("select RELEASE_LOCK($lock_str)");
 		print STDERR $output;
 		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 			    "Internal error creating project description");
@@ -531,14 +533,14 @@ sub GetHoldingProject($$;$)
 	    my $ecode  = $?;
 	    GeniUtil::FlipToGeniUser();
 	    if ($ecode) {
-		DBQueryWarn("select RELEASE_LOCK($lock_urn)");
+		DBQueryWarn("select RELEASE_LOCK($lock_str)");
 		print STDERR $output;
 		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 					    "Internal error creating project");
 	    }
 	    $project = Project->LookupNonLocal($project_urn);
 	    if (!defined($project)) {
-		DBQueryWarn("select RELEASE_LOCK($lock_urn)");
+		DBQueryWarn("select RELEASE_LOCK($lock_str)");
 		print STDERR "Cannot lookup new project for $project_id\n";
 		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 			    "Internal error locating project after creation");
@@ -551,7 +553,7 @@ sub GetHoldingProject($$;$)
 	#
 	if (defined($group_id)) {
 	    if (!Group->ValidGID($group_id)) {
-		DBQueryWarn("select RELEASE_LOCK($lock_urn)");
+		DBQueryWarn("select RELEASE_LOCK($lock_str)");
 		return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 				    "Invalid  local group name $group_id");
 	    }
@@ -566,7 +568,7 @@ sub GetHoldingProject($$;$)
 		#
 		my ($fh, $filename) = tempfile(UNLINK => 0);
 		if (!defined($fh)) {
-		    DBQueryWarn("select RELEASE_LOCK($lock_urn)");
+		    DBQueryWarn("select RELEASE_LOCK($lock_str)");
 		    print STDERR "Could not create temp file for $group_id\n";
 		    return GeniResponse->Create(GENIRESPONSE_ERROR);
 		}
@@ -587,7 +589,7 @@ sub GetHoldingProject($$;$)
 		close($fh);
 		my $output = GeniUtil::ExecQuiet("$NEWGROUP $filename");
 		if ($?) {
-		    DBQueryWarn("select RELEASE_LOCK($lock_urn)");
+		    DBQueryWarn("select RELEASE_LOCK($lock_str)");
 		    print STDERR $output;
 		    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 					    "Internal error creating group");
@@ -596,7 +598,7 @@ sub GetHoldingProject($$;$)
 
 		$group = $project->LookupGroup($group_id);
 		if (!defined($group)) {
-		    DBQueryWarn("select RELEASE_LOCK($lock_urn)");
+		    DBQueryWarn("select RELEASE_LOCK($lock_str)");
 		    print STDERR "Cannot lookup new group for $group_id\n";
 		    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 			"Internal error locating group after creation");
@@ -617,7 +619,7 @@ sub GetHoldingProject($$;$)
 	if (!defined($project->LookupUser($creator->emulab_user()))) {
 	    system("$MODGROUPS -a $pid:$pid:$trust $uid");
 	    if ($?) {
-		DBQueryWarn("select RELEASE_LOCK($lock_urn)");
+		DBQueryWarn("select RELEASE_LOCK($lock_str)");
 		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 			"Internal error adding new user to local project");
 	    }
@@ -626,14 +628,14 @@ sub GetHoldingProject($$;$)
 	    !defined($group->LookupUser($creator->emulab_user()))) {
 	    system("$MODGROUPS -a $pid:$gid:$trust $uid");
 	    if ($?) {
-		DBQueryWarn("select RELEASE_LOCK($lock_urn)");
+		DBQueryWarn("select RELEASE_LOCK($lock_str)");
 		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 			"Internal error adding new user to local group");
 	    }
 	}
 	$ENV{'EMULAB_REAL_USER'} = $creator->emulab_user()->uid_idx();
     }
-    DBQueryWarn("select RELEASE_LOCK($lock_urn)");
+    DBQueryWarn("select RELEASE_LOCK($lock_str)");
   done:
     if (!$noexports) {
 	if (defined($creator) && $creator->IsLocal()) {
