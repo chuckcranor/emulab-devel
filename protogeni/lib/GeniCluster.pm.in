@@ -1678,9 +1678,9 @@ sub ReservationHistory($)
     return GeniResponse->MalformedArgsResponse("Invalid user URN")
 	if (!GeniHRN::IsValid($argref->{'user_urn'}));
 	
-    # User should already exist; the caller used CreateUser() above first.
+    # User may not exist, which is okay.
     my $geniuser = GeniUser->Lookup($argref->{'user_urn'}, 1);
-    return GeniResponse->MalformedArgsResponse("No such user")
+    goto nohistory
 	if (!defined($geniuser));
 
     #
@@ -1728,6 +1728,7 @@ sub ReservationHistory($)
 	$blob->{"history"}     = \@timeline;
 	push(@history, $blob);
     }
+  nohistory:
     my $blob = {
 	"history" => \@history,
     };
