@@ -206,7 +206,7 @@ sub CreateTimeline($@)
 		 ($ref->{'details'}->{'end'} >= $resStart &&
 		  $ref->{'details'}->{'end'} <= $resEnd))) {
 		push(@reslist, $res);
-		print "$res is active for $stamp\n";
+		print "$res is active for $stamp\n" if ($debug);
 	    }
 	}
 	next

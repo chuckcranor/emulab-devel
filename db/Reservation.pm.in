@@ -1245,6 +1245,7 @@ sub LookupHistorical($$) {
 
     my $record = $query_result->fetchrow_hashref();
     my $self               = {};
+    $self->{'IDX'}         = undef;
     $self->{'PID'}         = $record->{'pid'};
     $self->{'PID_IDX'}     = $record->{'pid_idx'};
     $self->{'EID'}         = undef;
