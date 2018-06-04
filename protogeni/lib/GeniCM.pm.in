@@ -7938,14 +7938,15 @@ sub KillMonitor($)
 	#
 	# Wait for the monitor to go away, but should not take long.
 	#
-	my $count = 6;
+	my $count = 10;
 	while ($count > 0) {
-	    sleep(5);
+	    sleep(10);
 	    # Go to the DB.
 	    my $monitor_pid = $slice->GetMonitorPid();
 	    last
 		if (! $monitor_pid);
 	    $count--;
+	    print STDERR "Waiting for monitor to die ...\n";
 	}
 	if ($slice->GetMonitorPid()) {
 	    print STDERR "Monitor process $pid would not die!\n";

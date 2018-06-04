@@ -1297,18 +1297,25 @@ sub ActionStart($$;$)
     $sliver = undef;
 
     #
+    # os_setup requires the expstate to be set appropriately, which we
+    # generally do not do on the geni path.
+    #
+    $experiment->SetState(EXPTSTATE_ACTIVATING());
+
+    #
     # So we are going to fork and let os_setup proceed.
     #
     my $childpid = main::WrapperFork();
     if ($childpid) {
+	#
+	# This indicates that while not locked, we are still busy.
+	# KillMonitor operates using the cancel flag, so we should
+	# be fine. 
+	#
+	$slice->SetMonitorPid($childpid);
+	print STDERR "Monitor PID $childpid\n";
 	return 0;
     }
-    #
-    # os_setup requires the expstate to be set appropriately, which we
-    # generally do not do on the geni path. 
-    #
-    $experiment->SetState(EXPTSTATE_ACTIVATING());
-
     #
     # We want to let snmpit run in parallel with os_setup, like the
     # classic path does. 
@@ -1379,7 +1386,6 @@ sub ActionStart($$;$)
 	$rval = system("$OSSETUP $pid $eid @nodes");
 	print STDERR "os_setup exited with status $rval\n";
     }
-    $experiment->SetState($expstate);
 
     #
     # See what nodes succeeded or failed. We want to hold off setting
@@ -1544,6 +1550,8 @@ sub ActionStart($$;$)
     # ready or failed state until we are fully done here.
     $self->SetStatus("mixed");
     $self->ComputeState();
+    $experiment->SetState($expstate);
+    $slice->ClearMonitorPid();
     return 0;
 
   bad:
@@ -1562,6 +1570,8 @@ sub ActionStart($$;$)
 	$self->SetStatus("mixed");
 	$self->ComputeState();
     }
+    $experiment->SetState($expstate);
+    $slice->ClearMonitorPid();
     return -1;
 }
 
