@@ -1438,10 +1438,12 @@ sub LoadVirtNodes($)
 	    $attrs->{$attr->attrkey()} = $attr->attrvalue();
 
 	    if ($attr->attrkey() eq "XEN_MEMSIZE" ||
+		$attr->attrkey() eq "DOCKER_MEMSIZE" ||
 		$attr->attrkey() eq "MEMORYSIZE") {
 		$vnode->_desires()->{"?+ram"} = $attr->attrvalue();
 	    }
-	    elsif ($attr->attrkey() eq "XEN_CORES") {
+	    elsif ($attr->attrkey() eq "XEN_CORES" ||
+		   $attr->attrkey() eq "DOCKER_CORES") {
 		# Overridden below for shared nodes.
 		$self->experiment()->SetVirtNodeAttribute($vname,
 							  "VM_VCPUS",
@@ -1471,6 +1473,13 @@ sub LoadVirtNodes($)
 		$minmem = 256;
 		$maxmem = 1024 * 16;
 	    }	    
+	    elsif (defined($vnode->_parent_osinfo())
+		   && ($vnode->_parent_osinfo()->FeatureSupported("docker-host"))) {
+		# || $vnode->_parent_osinfo()->osname() =~ /dock/i)) {
+		$defmem = 64;
+		$minmem = 32;
+		$maxmem = 1024 * 16;
+	    }
 	    if (!exists($vnode->_desires()->{"?+ram"})) {
 		$self->printdb("Setting VM memsize to $defmem for $vname\n");
 		$vnode->_desires()->{"?+ram"} = $defmem;

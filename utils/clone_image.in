@@ -509,6 +509,9 @@ if (defined($base_image)) {
     $xmlfields{"loadpart"}        = $base_image->loadpart();
     $xmlfields{"noexport"}        = $base_image->noexport();
     $xmlfields{"noclone"}         = $base_image->noclone();
+    if ($base_image->format() ne 'ndz') {
+	$xmlfields{"format"} = $base_image->format();
+    }
 
     # Short form uses wholedisk instead. Should fix this. 
     if ($base_image->loadpart() == 0 && $base_image->loadlength() == 4) {

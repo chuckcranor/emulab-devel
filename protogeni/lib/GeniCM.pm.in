@@ -1175,6 +1175,7 @@ sub GetTicketAuxAux($)
 	my $isbridge    = 0;
 	my $isfirewall  = 0;
 	my $xensettings;
+	my $dockersettings;
 	my $fwsettings;
 	
 	# Always populate iface2node mapping, even if we let the node
@@ -1410,6 +1411,50 @@ sub GetTicketAuxAux($)
 			    $fwsettings = GeniXML::GetFirewallSettings($ref);
 			}
 		    }
+		    elsif ($virtualization_subtype eq "emulab-docker") {
+			# Allow caller to set the image to use, but also
+			# trick to set the parent. 
+			if (defined($osinfo)) {
+			    if (! $osinfo->IsSubOS()) {
+				$parent_osname = $osname;
+				$osname = "DOCKER-EXT";
+			    }
+			}
+			elsif (!defined($osname)) {
+			    # Allow for Docker image url via node attribute.
+			    $osname = "DOCKER-EXT";
+			}
+			# If not set, we will pick up the default_image below.
+			#
+			# Look for the knobs
+			#
+			if (GeniXML::HasDockerSettings($ref)) {
+			    $dockersettings = GeniXML::GetDockerSettings($ref);
+			}
+			# If they want an external image (or we
+			# defaulted to one), but one isn't set, set a
+			# good default.
+			if ($osname eq 'DOCKER-EXT') {
+			    if (!defined($dockersettings)) {
+				$dockersettings = {};
+			    }
+			    if (!exists($dockersettings->{'extimage'})
+				&& !exists($dockersettings->{'dockerfile'})) {
+				$dockersettings->{'extimage'} = "ubuntu:16.04";
+			    }
+			}
+			my $ptype = GeniXML::DockerPtype($ref);
+			$pctype = $ptype
+			    if (defined($ptype));
+			$virtexperiment->encap_style("vlan");
+
+			#
+			# Per-vnode firewall options.
+			#
+			if (GeniXML::HasFirewallSettings($ref)) {
+			    $fwsettings = GeniXML::GetFirewallSettings($ref);
+			}
+		    }
 		    elsif ($virtualization_subtype eq "emulab-spp") {
 			$osname = "SPPVM-FAKE";
 			$pctype = "sppvm";
@@ -1632,7 +1677,8 @@ sub GetTicketAuxAux($)
 	#
 	if (defined($instantiate_on)) {
 	    if (defined($virtualization_subtype) &&
-		$virtualization_subtype eq "emulab-xen") {
+		($virtualization_subtype eq "emulab-xen" ||
+		 $virtualization_subtype eq "emulab-docker")) {
 
 		if (!exists($allnodes{$instantiate_on})) {
 		    $response =
@@ -1644,7 +1690,7 @@ sub GetTicketAuxAux($)
 	    else {
 		$response =
 		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-			     "Only Xen nodes can use 'instantiate_on'");
+			     "Only Xen or Docker nodes can use 'instantiate_on'");
 		goto bad;
 	    }
 	}
@@ -2080,6 +2126,111 @@ sub GetTicketAuxAux($)
 						 "limited to 100GB extra disk");
 			goto bad;
 		    }
+		}
+		else {
+		    next;
+		}
+		$virtexperiment->NewTableRow("virt_node_attributes",
+					     {"vname"     => $node_nickname,
+					      "attrkey"   => $attrkey,
+					      "attrvalue" => $attrvalue });
+	    }
+	}
+	if (defined($dockersettings)) {
+	    foreach my $setting (keys(%$dockersettings)) {
+		my $attrvalue = $dockersettings->{$setting};
+		my $attrkey;
+		my $isshared  = (!defined($exclusive) || !$exclusive ? 1 : 0);
+
+		if ($setting eq "ram") {
+		    if ($attrvalue !~ /^\d*$/) {
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_BADARGS, undef,
+			    "Bad Docker ram value; integers only");
+			goto bad;
+		    }
+		    if ($isshared && 0 && $attrvalue > 1024) {
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_BADARGS, undef,
+			    "Bad Docker shared node ram value;".
+			    " limited to 1024 MB");
+			goto bad;
+		    }
+		    $attrkey = "DOCKER_MEMSIZE";
+		}
+		elsif ($setting eq "cores") {
+		    if ($attrvalue !~ /^\d*$/) {
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_BADARGS, undef,
+			    "Bad Docker cores value; integers only");
+			goto bad;
+		    }
+		    if ($attrvalue <= 0) {
+			# ignore silly user.
+			next;
+		    }
+		    $attrkey = "DOCKER_CORES";
+		    if ($isshared && $attrvalue > 4) {
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_BADARGS, undef,
+			    "Bad Docker shared node cores value; ".
+			    "limited to 1-4 cores");
+			goto bad;
+		    }
+		}
+		elsif ($setting eq "extimage") {
+		    $attrkey = "DOCKER_EXTIMAGE";
+		}
+		elsif ($setting eq "extusername") {
+		    $attrkey = "DOCKER_EXTUSER";
+		}
+		elsif ($setting eq "extpassword") {
+		    $attrkey = "DOCKER_EXTPASS";
+		}
+		elsif ($setting eq "dockerfile") {
+		    $attrkey = "DOCKER_DOCKERFILE";
+		}
+		elsif ($setting eq "tbaugmentation") {
+		    if ($attrvalue ne 'full' && $attrvalue ne 'buildenv'
+			&& $attrvalue ne 'core' && $attrvalue ne 'basic'
+			&& $attrvalue ne 'none') {
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_BADARGS, undef,
+			    "Bad Docker tbaugmentation value; must be full,".
+			    " buildenv, core, basic, or none");
+			goto bad;
+		    }
+		    $attrkey = "DOCKER_EMULABIZATION";
+		}
+		elsif ($setting eq "tbaugmentation_update") {
+		    $attrkey = "DOCKER_EMULABIZATION_UPDATE";
+		}
+		elsif ($setting eq "ssh_style") {
+		    if ($attrvalue ne 'direct' && $attrvalue ne 'exec') {
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_BADARGS, undef,
+			    "Bad Docker ssh_style value; must be direct or exec");
+			goto bad;
+		    }
+		    $attrkey = "DOCKER_SSH_STYLE";
+		}
+		elsif ($setting eq "exec_shell") {
+		    if ($attrvalue !~ /^[\/\w\d_\-]+$/) {
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_BADARGS, undef,
+			    "Bad Docker exec_shell value; can only have".
+			    " alphanumeric chars, _, -, or /");
+			goto bad;
+		    }
+		    $attrkey = "DOCKER_EXEC_SHELL";
+		}
+		elsif ($setting eq "cmd") {
+		    $attrkey = "DOCKER_CMD";
+		    #$attrvalue = DBQuoteSpecial($attrvalue);
+		}
+		elsif ($setting eq "env") {
+		    $attrkey = "DOCKER_ENV";
+		    #$attrvalue = DBQuoteSpecial($attrvalue);
 		}
 		else {
 		    next;
@@ -3455,7 +3606,7 @@ sub GetTicketAuxAux($)
 	my $exclusive = (defined($node->sharing_mode()) ? "0" : "1");
 
 	#
-	# Watch for dedicated XEN vhost nodes. We add those to the manifest
+	# Watch for dedicated XEN/Docker vhost nodes. We add those to the manifest
 	# later, and as real sliver objects when the ticket is redeemed.
 	#
 	if ($node->isvirtnode() && $exclusive && !defined($instantiate_on)) {
@@ -4656,6 +4807,11 @@ sub SliverWorkAux($)
 	    if (defined($physhost)) {
 		my ($osinfo) = $physhost->RunningOsImage();
 		if (defined($osinfo) && $osinfo->FeatureSupported("xen-host")){
+		    $node->NoNFSMounts();
+		}
+		if (defined($osinfo)
+		    && ($osinfo->FeatureSupported("docker-host"))) {
+		    #|| $osinfo->osname() =~ /dock/i)) {
 		    $node->NoNFSMounts();
 		}
 	    }

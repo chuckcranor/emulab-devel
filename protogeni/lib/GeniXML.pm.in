@@ -1048,6 +1048,19 @@ sub HasXenSettings($)
     return 0;
 }
 
+sub HasDockerSettings($)
+{
+    my ($node) = @_;
+
+    my $type = FindFirst("n:sliver_type", $node);
+    if (defined($type)) {
+	my $settings = FindNodesNS("n:docker", $type, $EMULAB_NS)->pop();
+	return 1
+	    if (defined($settings));
+    }
+    return 0;
+}
+
 sub UseTypeDefaultImage($)
 {
     my ($node) = @_;
@@ -1068,6 +1081,22 @@ sub XenPtype($)
     my $type = FindFirst("n:sliver_type", $node);
     if (defined($type)) {
 	my $ptype = FindNodesNS("n:xen_ptype", $type, $EMULAB_NS)->pop();
+	if (defined($ptype)) {
+	    my $name = GetText("name", $ptype);
+	    return $name
+		if (defined($name) && $name ne "");
+	}
+    }
+    return undef;
+}
+
+sub DockerPtype($)
+{
+    my ($node) = @_;
+
+    my $type = FindFirst("n:sliver_type", $node);
+    if (defined($type)) {
+	my $ptype = FindNodesNS("n:docker_ptype", $type, $EMULAB_NS)->pop();
 	if (defined($ptype)) {
 	    my $name = GetText("name", $ptype);
 	    return $name
@@ -1173,6 +1202,53 @@ sub GetXenSettings($)
 	if (defined($tmp));
     $tmp = GetText("disk", $settings);
     $result->{"disk"} = $tmp
+	if (defined($tmp));
+
+    return $result;
+}
+
+sub GetDockerSettings($)
+{
+    my ($node) = @_;
+    my $result = {};
+
+    my $type = FindFirst("n:sliver_type", $node);
+    return undef
+	if (!defined($type));
+    
+    my $settings = FindNodesNS("n:docker", $type, $EMULAB_NS)->pop();
+    return undef
+	if (!defined($settings));
+    
+    my $tmp = GetText("cores", $settings);
+    $result->{"cores"} = $tmp
+	if (defined($tmp));
+    $tmp = GetText("ram", $settings);
+    $result->{"ram"} = $tmp
+	if (defined($tmp));
+    $tmp = GetText("extimage", $settings);
+    $result->{"extimage"} = $tmp
+	if (defined($tmp));
+    $tmp = GetText("dockerfile", $settings);
+    $result->{"dockerfile"} = $tmp
+	if (defined($tmp));
+    $tmp = GetText("tbaugmentation", $settings);
+    $result->{"tbaugmentation"} = $tmp
+	if (defined($tmp));
+    $tmp = GetText("tbaugmentation_update", $settings);
+    $result->{"tbaugmentation_update"} = $tmp
+	if (defined($tmp));
+    $tmp = GetText("ssh_style", $settings);
+    $result->{"ssh_style"} = $tmp
+	if (defined($tmp));
+    $tmp = GetText("exec_shell", $settings);
+    $result->{"exec_shell"} = $tmp
+	if (defined($tmp));
+    $tmp = GetText("cmd", $settings);
+    $result->{"cmd"} = $tmp
+	if (defined($tmp));
+    $tmp = GetText("env", $settings);
+    $result->{"env"} = $tmp
 	if (defined($tmp));
 
     return $result;

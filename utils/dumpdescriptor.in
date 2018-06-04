@@ -150,6 +150,7 @@ sub DumpImage($)
     my @imagelist = ();
 
     $xmlfields{"imagename"}    = $image->imagename();
+    $xmlfields{"format"}       = $image->format();
     if (!$export) {
 	$xmlfields{"pid"}      = $image->pid();
 	$xmlfields{"gid"}      = $image->gid();

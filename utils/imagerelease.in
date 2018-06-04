@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2014-2017 University of Utah and the Flux Group.
+# Copyright (c) 2014-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -124,9 +124,35 @@ if (!defined($image)) {
 if (!defined($image)) {
     fatal("No such image!");
 }
+
+#
+# See if this is a Docker image; use libimageops if so.
+#
+if ($image->format() eq 'docker') {
+    use libimageops;
+
+    libimageops::setDebug(1)
+	if ($debug);
+    my %args = ('impotent' => $impotent,'quiet' => $quiet,
+		'force' => $force,'markready' => $markready);
+
+    my $iops = libimageops::Factory("image" => $image);
+    my ($rc,$msg) = $iops->Release($image,\%args);
+    if ($rc) {
+	print STDERR "Error: $msg\n";
+	exit(1);
+    }
+    else {
+	exit(0);
+    }
+}
+
 if ($image->released() && !$force) {
     fatal("Image is already released! ".
 	  "Maybe you need to provide imageid:version");
+}
+if ($UID && !$user->IsAdmin()) {
+    fatal("Only admins can release an image.");
 }
 if ($force && $markready) {
     if ($impotent) {
@@ -141,9 +167,6 @@ if ($force && $markready) {
 }
 if (!$image->ready()) {
     fatal("Image is not ready yet!");
-}
-if ($UID && !$user->IsAdmin()) {
-    fatal("Only admins can release an image.");
 }
 
 #

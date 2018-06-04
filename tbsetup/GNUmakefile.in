@@ -118,7 +118,9 @@ LIB_STUFF       = libtbsetup.pm exitonwarn.pm libtestbed.pm \
 		  libvtop_stable.pm libvtop_test.pm \
                   libosload_dell_s3048.pm libosload_dell_s4048.pm \
                   libosload_mlnx_sn2410.pm libosload_dell.pm \
-                  libosload_hp5406.pm
+                  libosload_hp5406.pm \
+		  libimageops.pm libimageops_ndz.pm libimageops_docker.pm \
+		  libimageops_ec2.pm
 
 
 # These scripts installed setuid, with sudo. 

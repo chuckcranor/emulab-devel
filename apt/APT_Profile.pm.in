@@ -860,8 +860,9 @@ sub CheckFirewall($$)
 	# and closed.
 	#
 	my $style = "closed";
-	if (defined($virtualization_type) &&
-	    $virtualization_type eq "emulab-xen" && !@routable_control_ip) {
+	if (defined($virtualization_type) && !@routable_control_ip &&
+	    ($virtualization_type eq "emulab-xen"
+	     || $virtualization_type eq "emulab-docker")) {
 	    $style = "basic";
 	}
 	

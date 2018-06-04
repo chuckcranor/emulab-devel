@@ -34,6 +34,7 @@ sub usage()
 {
     print("Usage: delete_image [[-f | -F] -p | -r] <imagename>\n".
 	  "Options:\n".
+	  "       -d     Enable debug messages\n".
 	  "       -p     Purge the disk image file(s)\n".
 	  "       -r     Rename the disk image file(s) instead (default)\n".
 	  "       -n     Impotent mode, show what would be done.\n".
@@ -138,6 +139,36 @@ usage()
     if (! ($purge || $rename));
 
 my $imageid = shift(@ARGV);
+my $image = OSImage->Lookup($imageid);
+if (!defined($image)) {
+    fatal("Image does not exist in the DB!");
+}
+
+#
+# See if we should use libimageops instead.  Eventually it will be
+# a feature as well as a few special cases; but certain node types may
+# require it (i.e. Docker).
+#
+my $usenew = 0;
+if ($image->format() eq 'docker') {
+    $usenew = 1;
+}
+if ($usenew) {
+    use libimageops;
+
+    libimageops::setDebug(1)
+	if (1 || $debug);
+    my %args = ( 'purge' => $purge,'rename' => $rename,
+		 'impotent' => $impotent,'versonly' => $versonly,
+		 'force' => $force,'force_global' => $FORCE );
+
+    my $iops = libimageops::Factory("image" => $image);
+    my ($rc,$msg) = $iops->DeleteImage($image,\%args);
+    if ($rc) {
+	print STDERR "Error: $msg\n";
+    }
+    exit($rc);
+}
 
 #
 # Map invoking user to object. 
@@ -145,10 +176,6 @@ my $imageid = shift(@ARGV);
 my $this_user = User->ThisUser();
 if (! defined($this_user)) {
     fatal("You ($UID) do not exist!");
-}
-my $image = OSImage->Lookup($imageid);
-if (!defined($image)) {
-    fatal("Image does not exist in the DB!");
 }
 if (!$image->AccessCheck($this_user, TB_IMAGEID_DESTROY())) {
     fatal("You do not have permission to delete this image!");

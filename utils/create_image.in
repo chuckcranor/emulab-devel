@@ -344,6 +344,17 @@ if (defined($options{"A"})) {
 if (defined($options{"F"})) {
     $nodelta = 1;
 }
+if (defined($options{"p"})) {
+    $imagepid = $options{"p"};
+
+    if ($imagepid =~ /^([-\w\.]+)$/) {
+	$imagepid = $1;
+    }
+    else {
+	die("*** $0:\n".
+	    "    Bad data in $imagepid.\n");
+    }
+}
 if (@ARGV != 2) {
     usage();
 }
@@ -358,16 +369,71 @@ my $target     = $ARGV[1];
 #
 $EUID = $UID;
 
-if (defined($options{"p"})) {
-    $imagepid = $options{"p"};
-	
-    if ($imagepid =~ /^([-\w\.]+)$/) {
-	$imagepid = $1;
+#
+# See if we should use libimageops instead.  Note that
+# libimageops::CreateImage handles all the permissions checks, etc, so
+# no problem cutting to it straight after arg processing.
+#
+my $usenew = 0;
+my $newtarget;
+if ($target =~ /^([-\w]+)$/) {
+    $target = $1;
+
+    $newtarget = Node->Lookup($target);
+    if (defined($newtarget) && $newtarget->isvirtnode()) {
+	#
+	# Need to know this is a docker-host.
+	#
+	my $pnode   = Node->Lookup($newtarget->phys_nodeid());
+	my $osimage = OSImage->Lookup($pnode->def_boot_osid());
+	if (defined($osimage) && $osimage->FeatureSupported("docker-host")) {
+	    $usenew = 1;
+	}
     }
-    else {
-	die("*** $0:\n".
-	    "    Bad data in $imagepid.\n");
+}
+if ($usenew) {
+    my $iops = libimageops::Factory("image" => $imagename, "node" => $newtarget,
+				    "imagepid" => $imagepid);
+    if (!defined($iops)) {
+	print STDERR "*** $0:\n$@\n";
+	exit(-1);
     }
+
+    # Set up the argv:
+    my %args = (
+	'debug' => 1,
+	'waitmode' => $waitmode,
+	'usessh' => $usessh,
+	'usenfs' => $usenfs,
+	'usefup' => $usefup,
+	'noemail' => $noemail,
+	'delta' => $delta,
+	'nodelta' => $nodelta,
+	'nomfs' => $nomfs,
+	'quiet' => $quiet,
+	'signature' => $signature,
+	'deltapct' => $deltapct,
+	'update_prepare' => $update_prepare,
+	'imagepid' => $imagepid,
+	'bsname' => $bsname,
+	'origin_uuid' => $origin_uuid,
+	'webtask' => $webtask,
+	);
+    if ($debug) {
+	use Data::Dumper;
+	print STDERR "create_image libimageops::CreateImage args: " .
+	    Dumper(%args) . "\n";
+    }
+
+    #
+    # Create the image.  Library does all the work.
+    #
+    my ($rc,$err) = $iops->CreateImage($imagename,$target,\%args);
+    if ($rc) {
+	print STDERR "*** $0:\n$err\n";
+	exit($rc);
+    }
+    exit(0);
 }
 
 #

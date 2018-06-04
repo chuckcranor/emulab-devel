@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2017 University of Utah and the Flux Group.
+# Copyright (c) 2007-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -638,7 +638,7 @@ sub Create($$$$$$$$)
     }
     # Pass-through optional slots, otherwise the DB default is used.
     foreach my $key ("path", "shared", "global", "ezid", "mbr_version",
-		     "metadata_url", "imagefile_url", "released",
+		     "format", "metadata_url", "imagefile_url", "released",
 		     "isdataset", "lba_size", "lba_low", "lba_high",
 		     "origin_uuid", "origin_urn", "origin_name") {
 	if (exists($argref->{$key})) {
@@ -1796,6 +1796,31 @@ sub GetDiskOffset($)
 }
 
 #
+# Return created time for image as a UNIX timestamp via the passed ref.
+# Return 0 on success, non-zero otherwise.
+#
+sub GetCreate($$)
+{
+    my ($self,$stampp) = @_;
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    my $imageid     = $self->imageid();
+    my $version     = $self->version();
+
+    my $result =
+	DBQueryWarn("select UNIX_TIMESTAMP(created) from image_versions ".
+		    "where imageid='$imageid' and version='$version'");
+    if ($result && $result->numrows) {
+	my ($stamp) = $result->fetchrow_array();
+	$$stampp = $stamp;
+	return 0;
+    }
+}
+
+#
 # Return updated time for image as a UNIX timestamp via the passed ref.
 # Return 0 on success, non-zero otherwise.
 #
@@ -2714,6 +2739,46 @@ sub SetImageMetadataURL($$)
     return 0;
 }
 
+sub SetImageFileURL($$)
+{
+    my ($self, $url) = @_;
+    $url = DBQuoteSpecial($url);
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    my $imageid = $self->imageid();
+    my $version = $self->version();
+
+    DBQueryWarn("update image_versions set imagefile_url=$url ".
+		"where imageid='$imageid' and version='$version'")
+	or return -1;
+	    
+    $self->{'IMAGE'}->{'image_metadata_url'} = $url;
+    return 0;
+}
+
+sub SetFormat($$)
+{
+    my ($self, $format) = @_;
+
+    return -1
+	if ($self->Update({'format' => $format}));
+
+    return 0;
+}
+
+sub SetPath($$)
+{
+    my ($self, $path) = @_;
+
+    return -1
+	if ($self->Update({'path' => $path}));
+
+    return 0;
+}
+
 sub LocalURL($)
 {
     my ($self) = @_;
@@ -2856,7 +2921,8 @@ sub IsDirPath($)
 	return 0;
     }
     return 1
-	if ($self->path() =~ /\/$/);
+	if ($self->path() =~ /\/$/
+	    && (!defined($self->format()) || $self->format() ne 'docker'));
     return 0;
 }
 sub FullImagePath($)
@@ -2958,7 +3024,9 @@ sub IsSystemImage($)
     my ($self) = @_;
 
     # Yuck.
-    return ($self->path() =~ /^\/usr\/testbed\// ? 1 : 0);
+    return ($self->path() =~ /^\/usr\/testbed\// ? 1 : 0
+	    || ($self->format() eq 'docker' && $self->global()
+		&& $self->path() =~ /emulab-ops\/emulab-ops/));
 }
 #
 # When images are stored in sub directories.

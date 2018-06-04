@@ -303,7 +303,12 @@ sub PostImageInfo($)
 		$arch = "aarch64";
 	    }
 	    if ($type eq "pcvm") {
-		my $virtualization = "emulab-xen";
+		if ($image->format() eq "docker") {
+		    $virtualization = "emulab-docker";
+		}
+		else {
+		    $virtualization = "emulab-xen";
+		}
 	    }
 	}
     }

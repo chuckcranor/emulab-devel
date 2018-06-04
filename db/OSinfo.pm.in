@@ -61,6 +61,7 @@ my %FEATURES	= ( "ping"	 => 1,
 		    "linktest"	 => 1,
 		    "linkdelays" => 0,
 		    "xen-host"   => 0,
+		    "docker-host"=> 0,
 		    "suboses"    => 0 );
 
 # Valid OS names. Mirrored in the web interface. The value is a user-okay flag.

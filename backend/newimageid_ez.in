@@ -210,6 +210,7 @@ my %xmlfields =
      "global",		=> ["global",		$SLOT_OPTIONAL,    0],
      "noexport",	=> ["noexport",		$SLOT_OPTIONAL,    0],
      "mbr_version",	=> ["mbr_version",	$SLOT_OPTIONAL],
+     "format",		=> ["format",		$SLOT_OPTIONAL],
      "metadata_url",	=> ["metadata_url",	$SLOT_ADMINONLY],
      "imagefile_url",	=> ["imagefile_url",	$SLOT_ADMINONLY],
      "origin_uuid",	=> ["origin_uuid",	$SLOT_ADMINONLY],

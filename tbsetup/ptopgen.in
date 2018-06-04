@@ -123,6 +123,7 @@ $opstate = <<'OPSTATE';
   <sliver_type name="raw-pc" />
   <sliver_type name="emulab-openvz" />
   <sliver_type name="emulab-xen" />
+  <sliver_type name="emulab-docker" />
 
   <state name="geni_notready">
     <action name="geni_start" next="geni_configuring">
@@ -889,6 +890,7 @@ our %node_latitudes;
 our %node_longitudes;
 
 our $openvzid;
+our $dockerid;
 
 $result = DBQueryFatal($osidquery1);
 processOs($result);
@@ -908,6 +910,9 @@ sub processOs
 	       $imagepid,$aliasname,$aliasid) = $result->fetchrow()) {
 	if ($osname eq "OPENVZ-STD") {
 	    $openvzid = $osid;
+	}
+	if ($osname eq "DOCKVH-STD") {
+	    $dockerid = $osid;
 	}
 	if ($typemap{$type}) {
 	    my $default = $typemap{$type}->{'OSID'};
@@ -1024,6 +1029,9 @@ $result = DBQueryFatal("select o.osid,v.nextosid from os_info as o ".
 while (my ($osid,$nextosid) = $result->fetchrow()) {
     if (defined($openvzid) && $osid == $openvzid) {
 	$openvzid = $nextosid;
+    }
+    if (defined($dockerid) && $osid == $dockerid) {
+	$dockerid = $nextosid;
     }
     #
     # Check to see if they were allowed to use the real OSID
@@ -1504,6 +1512,8 @@ foreach $node (@nodenames) {
 		    push(@sliver_types, "emulab-openvz");
 		} elsif ($features[$i] eq 'xen-host') {
 		    push(@sliver_types, "emulab-xen");
+		} elsif ($features[$i] eq 'docker-host') {
+		    push(@sliver_types, "emulab-docker");
 		}
 	    }
 	}
@@ -1567,6 +1577,7 @@ foreach $node (@nodenames) {
 	    {
 		push(@sliver_types, "emulab-openvz");
 		push(@sliver_types, "emulab-xen");
+		push(@sliver_types, "emulab-docker");
 	    }
 	}
 	push(@types, $auxinfo);
@@ -2947,6 +2958,10 @@ sub print_node_types
 		}
 	    } elsif ($sliverTypes[$i] eq "emulab-xen") {
 		print_raw_osids("pcvm");
+	    } elsif ($sliverTypes[$i] eq "emulab-docker") {
+		if (defined($dockerid)) {
+		    print_osids($osid_subosids{$dockerid}, undef);
+		}
 	    }
 	    print "  </sliver_type>\n";
 	}

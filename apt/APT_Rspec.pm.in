@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2017 University of Utah and the Flux Group.
+# Copyright (c) 2007-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -831,6 +831,8 @@ sub new($$$$$)
 	"jacks_site"		=> undef,
 	"xen_settings"		=> undef,
 	"xen_ptype"		=> undef,
+	"docker_settings"	=> undef,
+	"docker_ptype"		=> undef,
 	"instantiate_on"	=> undef,
 	"services"		=> [],
 	"statements"		=> [],
@@ -1101,6 +1103,18 @@ sub addNode($$$)
 		    $node->{"xen_settings"} = $settings;
 		    last SWITCH;
 		};
+		# Docker settings
+		/^docker$/i && do {
+		    my $settings = GeniXML::GetDockerSettings($ref->parentNode);
+		    fatal("Failed to get docker settings")
+			if (!defined($settings));
+		    $node->{"docker_settings"} = $settings;
+		    last SWITCH;
+		};
+		/^docker_ptype$/i && do {
+		    $node->{"docker_ptype"} = GetTextOrFail("name", $child);
+		    last SWITCH;
+		};
 		/^(sliver_type_shaping|firewall_config)$/i && do {
 		    # We handled this above. 
 		    last SWITCH;
@@ -1291,7 +1305,7 @@ sub Compare($$)
 		last SWITCH;
 	    };
 	    (/^(component_id|component_manager_id|disk_image)$/i ||
-	     /^(hardware_type|jacks_site|xen_ptype|instantiate_on)$/i ||
+	     /^(hardware_type|jacks_site|xen_ptype|docker_ptype|instantiate_on)$/i ||
 	     /^(adb_target|failure_action)$/i ||
 	     /^(isexptfirewall|firewall_style)$/i ||
 	     /^(use_type_default_image|routable_control_ip)$/i) && do {
@@ -1304,7 +1318,7 @@ sub Compare($$)
 		# Handled up above in CompareNodes.
 		last SWITCH;
 	    };
-	    /^(xen_settings|desires|pipes|blockstores|attributes)$/i && do {
+	    /^(xen_settings|docker_settings|desires|pipes|blockstores|attributes)$/i && do {
 		return 1
 		    if (APT_Rspec::CompareHashes("Node: $client_id: $key",
 						 $val1, $val2));

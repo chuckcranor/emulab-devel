@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2017 University of Utah and the Flux Group.
+# Copyright (c) 2007-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -666,6 +666,17 @@ sub Chunks($)
 # Return updated time for image as a UNIX timestamp via the passed ref.
 # Return 0 on success, non-zero otherwise.
 #
+sub GetCreate($$)
+{
+    my ($self,$stampp) = @_;
+
+    return $self->image()->GetCreate($stampp);
+}
+
+#
+# Return updated time for image as a UNIX timestamp via the passed ref.
+# Return 0 on success, non-zero otherwise.
+#
 sub GetUpdate($$)
 {
     my ($self,$stampp) = @_;
@@ -1050,6 +1061,20 @@ sub SetImageMetadataURL($$)
     my ($self, $url) = @_;
 
     return $self->image()->SetImageMetadataURL($url);
+}
+
+sub SetFormat($$)
+{
+    my ($self, $format) = @_;
+
+    return $self->image()->SetFormat($format);
+}
+
+sub SetPath($$)
+{
+    my ($self, $path) = @_;
+
+    return $self->image()->SetPath($path);
 }
 
 sub LocalURL($)

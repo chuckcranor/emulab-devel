@@ -456,29 +456,54 @@ if ($update && $newhash ne $image->hash()) {
 # get a new copy.
 #
 if ($getimage) {
-    # Run as root to access /proj
-    $EUID = $UID = 0;
-    if (! -e $image->FullImageFile() || $newhash ne $image->hash() || $force) {
-	# Make sure the path directory exists.
-	if ($image->CreateImageDir()) {
-	    $image->Unlock();
-	    exit(1);
-	}
-	$EUID = $UID = $SAVEUID;
+    my $downloaded = 0;
+    my $versname = $image->versname();
 
-	if (DownLoadImage($image, $newhash, $user, $group)) {
+    if ($image->format() eq 'docker') {
+	use libimageops;
+
+	libimageops::setDebug($debug);
+	my %args = (
+	    'origin_path' => $xmlparse->{'attribute'}->{'path'}->{'value'},
+	    'downloaded_ref' => \$downloaded,'force' => $force,
+	    'newhash' => $newhash,'locked' => 1 );
+	my $iops = libimageops::Factory("image" => $image);
+	my ($rc,$msg) = $iops->ImportImageContent($image,\%args);
+	if ($rc) {
+	    print STDERR "Error: $msg\n";
 	    $image->Unlock();
 	    exit(1);
 	}
-	# Update DB info. 
-	my $versname = $image->versname();
+    }
+    else {
 	# Run as root to access /proj
 	$EUID = $UID = 0;
-	if (system("$IMAGEVALIDATE -u $versname")) {
-	    # XXX should this be fatal?
-	    print STDERR "Could not update DB info for $image\n";
+	if (! -e $image->FullImageFile() || $newhash ne $image->hash() || $force) {
+	    # Make sure the path directory exists.
+	    if ($image->CreateImageDir()) {
+		$image->Unlock();
+		exit(1);
+	    }
+	    $EUID = $UID = $SAVEUID;
+
+	    if (DownLoadImage($image, $newhash, $user, $group)) {
+		$image->Unlock();
+		exit(1);
+	    }
+	    # Update DB info. 
+	    # Run as root to access /proj
+	    $EUID = $UID = 0;
+	    if (system("$IMAGEVALIDATE -u $versname")) {
+		# XXX should this be fatal?
+		print STDERR "Could not update DB info for $image\n";
+	    }
+	    $EUID = $UID = $SAVEUID;
+
+	    $downloaded = 1;
 	}
-	$EUID = $UID = $SAVEUID;
+    }
+
+    if ($downloaded) {
 	$image->MarkReady();
 	$image->Release();
 	# Its more important to know when we brought the new version in.

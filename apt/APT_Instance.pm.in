@@ -811,7 +811,8 @@ sub ComputeNodeCounts($)
 
 	    if (defined($virtualization_type) &&
 		($virtualization_type eq "emulab-xen" ||
-		 $virtualization_type eq "emulab-blockstore")) {
+		 $virtualization_type eq "emulab-blockstore" ||
+		 $virtualization_type eq "emulab-docker")) {
 		$vcount++;
 		next;
 	    }

@@ -495,6 +495,10 @@ sub osload($$$) {
 	%nodeflags = %{$args->{'nodeflags'}};
     }
 
+    if (defined($args->{'debug'})) {
+	$self->debug($args->{'debug'});
+    }
+
     $self->{FLAGS} = \%flags;
 
     #
@@ -1951,10 +1955,42 @@ sub AddNode($$$$)
     return 0;
 }
 
+sub _CheckImage($$$)
+{
+    my ($self,$nodeobject,$imageid,$image) = @_;
+    my $node_id = $nodeobject->node_id();
+
+    $self->dprint(1,"_CheckImage($node_id): using $image");
+
+    #
+    # We can have both a full image and/or a delta image. We
+    # always prefer the full image if we have it.
+    #
+    if (! ($image->HaveFullImage() || $image->HaveDeltaImage())) {
+	#
+	# This should be an error, but until we run imagevalidate
+	# over all images, we want to do it here.
+	#
+	if ($self->GetImageSize($image, $nodeobject)) {
+	    tberror "$nodeobject: no full or delta image file!";
+	    return -1;
+	}
+    }
+    if (! ($image->size() || $image->deltasize())) {
+	tberror "$image: no size info!";
+	return -1;
+    }
+
+    $self->dprint(2,"_CheckImage($node_id): imageinfo for $imageid:\n");
+
+    return 0;
+}
+
 sub _CheckImages($$)
 {
     my ($self,$nodeobject) = @_;
     my $node_id = $nodeobject->node_id();
+    my $rc = 0;
 
     $self->dprint(0,"_CheckImages($node_id)");
 
@@ -1974,27 +2010,7 @@ sub _CheckImages($$)
 	my $imageid = $imageids[$i];
 	my $image = $images[$i];
 
-	$self->dprint(1,"_CheckImages($node_id): using $image");
-
-	#
-	# We can have both a full image and/or a delta image. We
-	# always prefer the full image if we have it.
-	#
-	if (! ($image->HaveFullImage() || $image->HaveDeltaImage())) {
-	    #
-	    # This should be an error, but until we run imagevalidate
-	    # over all images, we want to do it here.
-	    #
-	    if ($self->GetImageSize($image, $nodeobject)) {
-		tberror "$nodeobject: no full or delta image file!";
-		return -1;
-	    }
-	}
-	if (! ($image->size() || $image->deltasize())) {
-	    tberror "$image: no size info!";
-	    return -1;
-	}
-	$self->dprint(2,"_CheckImages($node_id): imageinfo for $imageid:\n");
+	$rc += $self->_CheckImage($nodeobject,$imageid,$image);
     }
 
     return 0;
@@ -2671,6 +2687,89 @@ sub _LoadDefaultImages($$)
 #    return 0;
 #}
 
+sub _CheckImageDocker($$$$)
+{
+    my ($self,$nodeobject,$imageid,$image) = @_;
+    my $node_id = $nodeobject->node_id();
+
+    $self->dprint(1,"_CheckImage($node_id): using $image");
+
+    #
+    # Three cases: the image is external (we know nothing); the image is
+    # in our local Docker repo (we know things); the image is in our
+    # federation.
+    #
+    # In the first case, we ask our local docker jail to find out how
+    # large the image is (all layers).
+    #
+
+    $self->dprint(2,"_CheckImageDocker($node_id): imageinfo for $imageid:\n");
+
+    return 0;
+}
+
+sub _CheckImage($$$$)
+{
+    my ($self,$nodeobject,$imageid,$image) = @_;
+    my $node_id = $nodeobject->node_id();
+
+    if ($image->format() eq "docker") {
+	return $self->_CheckImageDocker($nodeobject,$imageid,$image);
+    }
+    else {
+	return $self->SUPER::_CheckImage($nodeobject,$imageid,$image);
+    }
+}
+
+sub SetupReloadDocker($$$)
+{
+    my ($self,$nodeobject,$image) = @_;
+    my $node_id = $nodeobject->node_id();
+    my $osimage;
+
+    $self->dprint(0,"SetupReloadDocker($node_id): setting up reload");
+
+    my $prepare = $self->nodeflag($nodeobject,'prepare');
+    my $zerofree = 0;
+
+    #
+    # Put it in the current_reloads table so that nodes can find out which
+    # OS to load. See tmcd. 
+    #
+    my $query_result = 
+	DBQueryWarn("delete from current_reloads where node_id = '$node_id'");
+    return -1
+	if (!$query_result);
+
+    my $imageid = $image->imageid();
+    my $version = $image->version();
+
+    $query_result = 
+	DBQueryWarn("insert into current_reloads ".
+		    "(node_id, idx, image_id, imageid_version,".
+		    " mustwipe, prepare) values ".
+		    "('$node_id', 0, '$imageid', '$version',".
+		    " $zerofree, $prepare)");
+    return -1
+	if (!$query_result);
+
+    my $osid = TBNodeDiskloadOSID($node_id);
+    $osimage = OSImage->Lookup($osid);
+
+    #
+    # We used to invoke os_select here and it checks for MODIFYINFO permission
+    # on the node. Since we have already checked for LOADIMAGE permission,
+    # which requires the same user privilege, we do not need to check further.
+    #
+    if (!defined($osimage)
+	|| $nodeobject->OSSelect($osimage,"next_boot_osid",$self->debug())) {
+	tberror "$self: os_select $osid failed!";
+	return -1;
+    }
+
+    return 0;
+}
+
 sub SetupReload($$)
 {
     my ($self,$nodeobject) = @_;
@@ -2678,14 +2777,55 @@ sub SetupReload($$)
 
     $self->dprint(0,"SetupReload($node_id): setting up reload");
 
-    if ($self->SUPER::SetupReload($nodeobject)) {
+    my @images = @{$self->GetImages($nodeobject)};
+    my $isdocker = 0;
+    my $isother = 0;
+    for my $image (@images) {
+	if ($image->format() eq 'docker') {
+	    ++$isdocker;
+	}
+	else {
+	    ++$isother;
+	}
+    }
+    if ($isdocker && $isother) {
+	tberror "$self: cannot mix Docker and non-Docker images on $node_id!";
 	return -1;
+    }
+    elsif ($isdocker > 1) {
+	tberror "$self: cannot load more than one Docker image on $node_id!";
+	return -1;
+    }
+    elsif ($isdocker) {
+	if ($self->SetupReloadDocker($nodeobject,$images[0])) {
+	    return -1;
+	}
+    }
+    else {
+	if ($self->SUPER::SetupReload($nodeobject)) {
+	    return -1;
+	}
     }
 
     # Need to kick virtnodes so stated picks up the next_op_mode from os_select
     TBSetNodeEventState($node_id,TBDB_NODESTATE_SHUTDOWN);
 
     return 0;
+}
+
+sub ComputeMaxLoadWaitTimeDocker($$$)
+{
+    my ($self,$nodeobject,$image) = @_;
+    my $maxwait = 0;
+
+    my @images = @{$self->GetImages($nodeobject)};
+    foreach my $image (@images) {
+	# XXX: just give it a half hour for now, until we can estimate
+	# the layer size, etc.
+	$maxwait += 1800;
+    }
+
+    return $maxwait;
 }
 
 #
@@ -2695,7 +2835,32 @@ sub ComputeMaxLoadWaitTime($$)
 {
     my ($self,$nodeobject) = @_;
 
-    my $maxwait = $self->SUPER::ComputeMaxLoadWaitTime($nodeobject);
+    my $maxwait = 0;
+
+    my @images = @{$self->GetImages($nodeobject)};
+    foreach my $image (@images) {
+	if ($image->format() eq 'docker') {
+	    $maxwait += $self->ComputeMaxLoadWaitTimeDocker($nodeobject,$image);
+	    next;
+	}
+
+	my $imageid = $image->imageid();
+	my $isfull     = $image->HaveFullImage();
+	my $imagesize  = ($isfull ? $image->size() : $image->deltasize());
+	#
+	# Compute a maxwait time based on the image size plus a constant
+	# factor for the reboot cycle.  This is used later in
+	# WaitTillReloadDone().  Arguably, this should be part of the
+	# image DB state, so we store it in the imageinfo array too.
+	#
+	my $chunks = $imagesize >> 20;# size may be > 2^31, shift is unsigned
+
+	# XXX aren't we multi-counting reboots??
+	# ok, moved constant factor out.
+	$maxwait += int(($chunks / 100.0) * 65);
+    }
+
+    $maxwait += $TBLOADWAIT;
 
     #
     # If it's a virtnode, we need to add a bunch of time based
