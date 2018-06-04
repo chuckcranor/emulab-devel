@@ -28,7 +28,7 @@ use XML::Simple;
 use Data::Dumper;
 use CGI;
 use POSIX ":sys_wait_h";
-use POSIX qw(:signal_h);
+use POSIX qw(:signal_h ceil);
 use Date::Parse;
 
 #
@@ -516,6 +516,10 @@ sub DoList()
 	$details->{'cluster_id'}  = $aggregate->nickname();
 	$details->{'cluster_urn'} = $aggregate->urn();
 
+	# We need numbers.
+	$details->{'nodes'} = int($details->{'nodes'});
+	$details->{'using'} = int($details->{'using'});
+
 	# Backwards compat
 	if (!exists($details->{'nodes'})) {
 	    $details->{'nodes'} = $details->{'count'};
@@ -530,6 +534,12 @@ sub DoList()
 
 	    }
 	}
+
+	#
+	# Lets calculate a utilization numbers, this will update the
+	# res hash. Flag says not an active reservation.
+	#
+	APT_Utility::ReservationUtilization($details, 1);
 
 	#
 	# If we have the history, then go through and map the
@@ -1136,6 +1146,10 @@ sub DoHistory()
 	$res->{'cluster_id'}  = $aggregate->nickname();
 	$res->{'cluster_urn'} = $aggregate->urn();
 
+	# We need numbers.
+	$res->{'nodes'} = int($res->{'nodes'});
+	$res->{'using'} = int($res->{'using'});
+
 	# Backwards compat
 	if (!exists($res->{'nodes'})) {
 	    $res->{'nodes'} = $res->{'count'};
@@ -1149,14 +1163,11 @@ sub DoHistory()
 
 	    }
 	}
-	if (!exists($res->{'deleted'}) ||
-	    $res->{'deleted'} eq "") {
-	    $res->{'deleted'} = undef;
-	}
-	if (!exists($res->{'uuid'}) ||
-	    $res->{'uuid'} eq "") {
-	    $res->{'uuid'} = NewUUID();
-	}
+	#
+	# Lets calculate a utilization numbers, this will update the
+	# res hash. Flag says not an active reservation.
+	#
+	APT_Utility::ReservationUtilization($res, 0);
     }
   done:
     if (defined($webtask)) {

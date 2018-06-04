@@ -2112,19 +2112,24 @@ sub DoMaxExtensionInternal($$)
 	    #
 	    $res->{'cluster'} = $aptagg->urn();
 	    $res->{'cluster_id'} = $aptagg->nickname();
-	    
-	    # Backwards compat
-	    if (!exists($res->{'nodes'})) {
-		$res->{'nodes'} = $res->{'count'};
+
+	    # We need numbers.
+	    $res->{'nodes'} = int($res->{'nodes'});
+	    $res->{'using'} = int($res->{'using'});
+
+	    #
+	    # Hmm, undef/null is a pain with XMLRPC.
+	    #
+	    foreach my $key ("approved", "cancel", "deleted") {
+		if (!exists($res->{$key}) || $res->{$key} eq "") {
+		    $res->{$key} = undef;
+		}
 	    }
-	    if ($res->{'approved'} eq "") {
-		# Maps to JSON NULL.
-		$res->{'approved'} = undef;
-	    }
-	    if (!exists($res->{'cancel'}) || $res->{'cancel'} eq "") {
-		# Maps to JSON NULL.
-		$res->{'cancel'} = undef;
-	    }
+	    #
+	    # Lets calculate a utilization numbers, this will update the
+	    # res hash. Flag says not an active reservation.
+	    #
+	    APT_Utility::ReservationUtilization($res, 0);
 	}
 	$blob->{'reservations'}->{$aptagg->urn()} = $reslist;
     }
