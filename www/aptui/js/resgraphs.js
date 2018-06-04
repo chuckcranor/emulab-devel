@@ -444,6 +444,13 @@ window.DrawResHistoryGraph = (function ()
 		break;
 	    }
 	}
+	if (i == history.length) {
+	    // All the entries are before the start, we need to do the
+	    // backup entry as above.
+	    backup = true;
+	    i--;
+	    console.info("added initial backup entry at ", stamp, i);
+	}
 
 	for (; i < history.length; i++) {
 	    var record    = history[i];
