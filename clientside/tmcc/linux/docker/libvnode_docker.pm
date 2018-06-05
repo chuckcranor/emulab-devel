@@ -4344,11 +4344,11 @@ sub analyzeImageWithBusyboxCommand($$$@)
     close(FD);
 
     if (defined($outputref)) {
-	if (ref($$outputref) eq 'ARRAY') {
-	    $$outputref = split("\n",$buf);
+	if (ref($outputref) eq 'ARRAY') {
+	    @$outputref = split("\n",$buf);
 	}
 	else {
-	    $$outputref = $buf;
+	    $outputref = $buf;
 	}
     }
 
@@ -5050,8 +5050,47 @@ sub emulabizeImage($;$$$$$$$$$)
 	print $runitfile "\n";
 	print $runitfile "# This is an automatically generated runit file based on the docker image's entrypoint and cmd\n\n";
 
+	my $dockeruser;
 	my $dockerenvironmentvars;
 
+	$dockeruser = $iattrs{DOCKER_USER};
+
+	# we need to make sure user, home, and path are properly
+	# initialized so anything happening inside the startup command 
+	# doesn't unexpectedly fail
+	if ($dockeruser ne "") {
+	    print $runitfile "export USER=";
+	    print $runitfile $dockeruser;
+	    print $runitfile "\n";
+	    print $runitfile "export ";
+	    my @retlines;
+	    my $rc = analyzeImageWithBusyboxCommand($image,{},\@retlines,"env");
+	    for my $line (@retlines) {
+		if (substr($line, 0, index($line, '=')) eq "HOME") {
+		    print $runitfile $line;
+		}
+	    }
+	    print $runitfile "\n";
+	}
+	else {
+	    print $runitfile "export USER=root\n";
+	    print $runitfile "export HOME=/root\n";
+	}
+
+	print $runitfile "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+	print $runitfile ':$PATH';
+	print $runitfile "\n";
+
+	my ($pid,$eid,$vname) = check_nickname();
+	my ($DOMAINNAME,undef) = tmccbossinfo();
+	my $longdomain = "${eid}.${pid}.${DOMAINNAME}";
+	my $hostname = "$vname.$longdomain";
+
+	print $runitfile "export HOSTNAME=";
+	print $runitfile $hostname;
+	print $runitfile "\n\n\n";
+
+	# let's add in all the environment variables in the Dockerfile
 	if (exists($iattrs{DOCKER_ENV})) {
 	    $dockerenvironmentvars = $iattrs{DOCKER_ENV};
 	    foreach my $elem (@$dockerenvironmentvars) {
@@ -5079,7 +5118,6 @@ sub emulabizeImage($;$$$$$$$$$)
 
 	my $dockerentrypoint;
 	my $dockercmd;
-	my $dockeruser;
 	my $dockerworkingdir;
 
 	if ($iattrs{DOCKER_WORKINGDIR} ne "") {
@@ -5087,15 +5125,13 @@ sub emulabizeImage($;$$$$$$$$$)
 	    print $runitfile "cd ";
 	    print $runitfile $dockerworkingdir;
 	    print $runitfile "\n\n";
-	} 
-
-	$dockeruser = $iattrs{DOCKER_USER};
+	}
 
 	print $runitfile "if [ ! -f /etc/emulab/docker/dockercmd ]; then\n";
 
 	print $runitfile "exec ";
 
-	# if the user for the container is specified otherwise
+	# if the user for the container is specified
 	# need to run it as that user
 	if ($dockeruser ne "") {
 	    print $runitfile "sudo -u ";
