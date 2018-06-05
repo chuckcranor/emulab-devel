@@ -980,6 +980,7 @@ sub NewType($$)
     # Note that type might be a class, and so Lookup() returns nothing.
     #
     my $typeinfo = NodeType->Lookup($type);
+    my $packname = "libossetup_${type}";
 
     # Switches are special.
     if (defined($typeinfo) && $typeinfo->isswitch()) {
@@ -988,22 +989,20 @@ sub NewType($$)
 	    print STDERR "$self libossetup_switch load failed: " . $@;
 	    return undef;
 	}
-	# Dashes in type names are bad in this code.
-	$type =~ s/\-/\_/g;
-    }
-    elsif ($type eq "pcfedphys" || $type eq "pcfed") {
-	$type = "protogeni";
+	$packname = "libossetup_${type}";
+	# Dashes in package names are bad.
+	$packname =~ s/\-/\_/g;
     }
     elsif (defined($typeinfo) && $typeinfo->issubnode()) {
 	$type = "subnode";
+	$packname = "libossetup_subnode";
     }
 
-    my $packname = "libossetup_${type}";
     my $newtype  = eval { $packname->New($self); };
     # Not loaded?
     if ($@) {
 	#print STDERR "module load failed: " . $@ . "\n";
-	eval "require libossetup_${type}";
+	eval "require $packname";
 	if ($@) {
 	    if ($@ !~ /Can't locate libossetup_/) {
 		print STDERR "$self NewType($type): module load failed: " . $@;
