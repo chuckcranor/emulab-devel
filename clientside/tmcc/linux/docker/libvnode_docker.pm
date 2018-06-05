@@ -5146,7 +5146,7 @@ sub emulabizeImage($;$$$$$$$$$)
 	    # need to be careful about variables to be expanded
 	    foreach my $elem (@$dockerentrypoint) {
 		print $runitfile "\"";
-		$elem =~ s/\"/\\\"/g;
+		$elem =~ s/([^\\])(\\\\)*"/\1\2\\\"/g;
 		print $runitfile $elem;
 		print $runitfile "\"";
 		print $runitfile " ";
@@ -5158,7 +5158,7 @@ sub emulabizeImage($;$$$$$$$$$)
 
 	    foreach my $elem (@$dockercmd) {
 		print $runitfile "\"";
-		$elem =~ s/\"/\\\"/g;
+		$elem =~ s/([^\\])(\\\\)*"/\1\2\\\"/g;
 		print $runitfile $elem;
 		print $runitfile "\"";
 		print $runitfile " ";
