@@ -442,7 +442,8 @@ sub GetHoldingProject($$;$)
 	# Shorten the lock string; mysql has an oddly short limit on this.
 	my $lock_hrn = GeniHRN->new($project_urn);
 	$lock_str = "HoldProj:" . $lock_hrn->project();
-
+	$lock_str = DBQuoteSpecial($lock_str);
+	
 	#
 	# See if the project exists. 
 	#
