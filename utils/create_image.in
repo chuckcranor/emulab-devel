@@ -392,6 +392,8 @@ if ($target =~ /^([-\w]+)$/) {
     }
 }
 if ($usenew) {
+    use libimageops;
+
     my $iops = libimageops::Factory("image" => $imagename, "node" => $newtarget,
 				    "imagepid" => $imagepid);
     if (!defined($iops)) {
