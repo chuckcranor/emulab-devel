@@ -346,6 +346,11 @@ my $newhash = $xmlparse->{'attribute'}->{"hash"}->{'value'};
 if ($newhash =~/^(.*)$/) {
     $newhash = $1;
 }
+# Save off the origin path.
+my $origin_path;
+if (exists($xmlparse->{'attribute'}->{"path"})) {
+    $origin_path = $xmlparse->{'attribute'}->{"path"}->{"value"};
+}
 
 #
 # See if we already have an image in the DB for this URL.
@@ -464,7 +469,7 @@ if ($getimage) {
 
 	libimageops::setDebug($debug);
 	my %args = (
-	    'origin_path' => $xmlparse->{'attribute'}->{'path'}->{'value'},
+	    'origin_path' => $origin_path,
 	    'downloaded_ref' => \$downloaded,'force' => $force,
 	    'newhash' => $newhash,'locked' => 1 );
 	my $iops = libimageops::Factory("image" => $image);
