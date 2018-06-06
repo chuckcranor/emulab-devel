@@ -80,6 +80,9 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{"n"})) {
     $noenable = 1;
 }
+if (defined($options{"f"})) {
+    $force = 1;
+}
 usage()
     if (@ARGV != 1);
 usage()
