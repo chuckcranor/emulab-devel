@@ -309,7 +309,7 @@ sub Reload($$)
     # online. Should be very quick, although there will some delay before
     # DHCP finishes and we can ssh over.
     #
-    $seconds = 180;
+    $seconds = 240;
     $self->dprint(0,"Reload($node_id): waiting $seconds seconds for ping");
     # Need time for node to actually reboot;
     sleep(30);
