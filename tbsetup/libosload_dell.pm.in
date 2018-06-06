@@ -42,6 +42,7 @@ use libosload_switch;
 use base qw(libosload_switch);
 use libdb;
 use libEmulab;
+use Lan;
 use emutil;
 use EmulabConstants;
 use libtblog_simple;
@@ -186,9 +187,67 @@ sub generateConfig($$)
 		  "privilege 15 role sysadmin"));
 	}
     }
+    my @config = @userlines;
 
-    my @config =
-	(@userlines,
+    if (defined($experiment)) {
+	#
+	# Find all the ports that are in use on this switch. We want to enable
+	# those ports and put them into vlan 1. This will give the user a basic
+	# single broadcast domain as a starting point. We will turn on STP to
+	# avoid loops created by the user (cause that is gonna happen!).
+	#
+	my @vlanports = ();
+	my @portlines = ();
+	my @vlans;
+	if (VLan->ExperimentVLans($experiment, \@vlans) != 0) {
+	    print STDERR "Could not get list of all vlans for $experiment\n";
+	    return -1;
+	}
+	foreach my $vlan (@vlans) {
+	    my @members;
+	    
+	    next
+		if ($vlan->type() ne "wire");
+
+	    if ($vlan->MemberList(\@members)) {
+		print STDERR "Could not get member list of members for $vlan\n";
+		return -1;
+	    }
+	    foreach my $member (@members) {
+		my ($membnode_id, $membiface);
+		if ($member->GetNodeIface(\$membnode_id, \$membiface)) {
+		    print STDERR "Could not get node/iface for $member\n";
+		    return -1;
+		}
+		next
+		    if ($membnode_id->node_id() ne $node_id);
+
+		my $interface = Interface->LookupByIface($nodeobject,
+							 $membiface);
+		if (!defined($interface)) {
+		    print STDERR "Could not lookup interface for $member\n";
+		    return -1;
+		}
+		my $card  = $interface->card();
+		my $port  = $interface->port();
+
+		push(@portlines,
+		     "interface te $card/$port",
+		     "  switchport",
+		     "  spanning-tree rstp loopguard",
+		     "  no shutdown",
+		     "  exit");
+	    }
+	}
+	if (@portlines) {
+	    push(@config,
+		 "protocol spanning-tree rstp",
+		 "  no disable",
+		 "  exit",
+		 @portlines);
+	}
+    }
+    push(@config, 
 	 "exit",
 	 "write memory",
 	);
@@ -400,7 +459,7 @@ sub DeviceReconfigure($$)
 	 "ip ssh rsa-authentication username $uid ".
 	 " authorized-keys flash://$basename",
 	 "write memory");
-    
+
     if ($self->writeConfig($nodeobject, @config)) {
 	print STDERR "Could not send ssh keys to $node_id\n";
 	return -1;
