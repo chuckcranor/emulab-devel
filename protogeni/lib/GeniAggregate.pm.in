@@ -1388,6 +1388,27 @@ sub ActionStart($$;$)
     }
 
     #
+    # Check for cancelation. We skip all the logging and email.
+    #
+    if ($experiment->Canceled()) {
+	print STDERR "ActionStart canceled; terminating early!\n";
+
+	# Mark all thee nodes as canceled (which really means failure).
+	foreach my $node (values(%nodes)) {
+	    $node->_sliver()->SetStatus("canceled")
+		if (defined($node->_sliver()));
+	}
+	# Reset before return; do not want it left.
+	$slice->LockTables();
+	# Do this first so others know we are reacting to the cancel.
+	$slice->ClearMonitorPid();
+	$experiment->SetCancelFlag(0);
+	$slice->UnLockTables();
+	$msg = "canceled; terminating early";
+	goto bad;
+    }
+
+    #
     # See what nodes succeeded or failed. We want to hold off setting
     # the new state on the slivers until the end so that we do not flip
     # aggregate status to ready before we actually finish up in here. 
