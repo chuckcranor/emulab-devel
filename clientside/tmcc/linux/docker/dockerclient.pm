@@ -802,8 +802,8 @@ $METHODS{'network_create_bridge'} = {
 		 'gateway' => "The new network's gateway IP address",
 		 'brname' => "The existing bridge name that should be used to build the new network atop" }
 };
-sub network_create_bridge($$$$;$) {
-    my ($self,$name,$cidr,$gateway,$brname) = @_;
+sub network_create_bridge($$$$;$$) {
+    my ($self,$name,$cidr,$gateway,$brname,$arghashref) = @_;
 
     my $headers = HTTP::Headers->new();
     $headers->header("Content-Type" => "application/json");
@@ -815,6 +815,17 @@ sub network_create_bridge($$$$;$) {
     };
     if (defined($brname)) {
 	$data->{"Options"} = { "com.docker.network.bridge.name" => $brname };
+    }
+    if (defined($arghashref) && ref($arghashref) eq 'HASH') {
+	require Hash::Merge;
+	if ($self->debug()) {
+	    print STDERR "DEBUG: pre-merge args = ".Dumper($data)."\n";
+	    print STDERR "DEBUG: pre-merge arghashref = ".Dumper($arghashref)."\n";
+	}
+	$data = Hash::Merge::merge($data,$arghashref);
+	if ($self->debug()) {
+	    print STDERR "DEBUG: merged args = ".Dumper($data)."\n";
+	}
     }
     return $self->_post("/networks/create",$headers,encode_json($data));
 }
@@ -828,8 +839,8 @@ $METHODS{'network_create_macvlan'} = {
 		 'gateway' => "The new network's gateway IP address",
 		 'basedev' => "The existing macvlan device name that should be used to build the new network atop" }
 };
-sub network_create_macvlan($$$$;$) {
-    my ($self,$name,$cidr,$gateway,$basedev) = @_;
+sub network_create_macvlan($$$$;$$) {
+    my ($self,$name,$cidr,$gateway,$basedev,$arghashref) = @_;
 
     my $headers = HTTP::Headers->new();
     $headers->header("Content-Type" => "application/json");
@@ -841,6 +852,17 @@ sub network_create_macvlan($$$$;$) {
     };
     if (defined($basedev)) {
 	$data->{"Options"} = { "parent" => $basedev };
+    }
+    if (defined($arghashref) && ref($arghashref) eq 'HASH') {
+	require Hash::Merge;
+	if ($self->debug()) {
+	    print STDERR "DEBUG: pre-merge args = ".Dumper($data)."\n";
+	    print STDERR "DEBUG: pre-merge arghashref = ".Dumper($arghashref)."\n";
+	}
+	$data = Hash::Merge::merge($data,$arghashref);
+	if ($self->debug()) {
+	    print STDERR "DEBUG: merged args = ".Dumper($data)."\n";
+	}
     }
     return $self->_post("/networks/create",$headers,encode_json($data));
 }

@@ -724,8 +724,10 @@ sub ensureDockerInstalled()
 	#
 	# Check which docker this is.
 	#
-	if (-e "/usr/share/docker.io/EMULAB.md") {
+	my $rc = system('grep -q PrivatePoolId `which dockerd`');
+	if ($rc == 0) {
 	    $ISOURDOCKER = 1;
+	    TBDebugTimeStamp("init: ISOURDOCKER=1");
 	}
     }
     else {
@@ -778,8 +780,10 @@ sub ensureDockerInstalled()
 	#
 	# Check which docker this is.
 	#
-	if (-e "/usr/share/docker-ce/EMULAB.md") {
+	my $rc = system('grep -q PrivatePoolId `which dockerd`');
+	if ($rc == 0) {
 	    $ISOURDOCKER = 1;
+	    TBDebugTimeStamp("init: ISOURDOCKER=1");
 	}
     }
 
@@ -1428,8 +1432,10 @@ sub init($)
     #
     # Check which docker this is.
     #
-    if (-e "/usr/share/docker.io/EMULAB.md") {
+    my $rc = system('grep -q PrivatePoolId `which dockerd`');
+    if ($rc == 0) {
 	$ISOURDOCKER = 1;
+	TBDebugTimeStamp("init: ISOURDOCKER=1");
     }
 
     return 0;
@@ -2523,9 +2529,17 @@ sub rootPreConfigNetwork($$$$)
 	    TBDebugTimeStamp("checking existence of docker network $k");
 	    ($code,$content,$resp) = getClient()->network_inspect($k);
 	    if ($code) {
+		my $ourdocker_extra_args = undef;
+		if ($ISOURDOCKER) {
+		    $ourdocker_extra_args = {
+			"Options" => { "com.docker.network.bridge.layer2_mode"
+					   => "true" },
+			"IPAM" => { "Options" => { "PrivatePoolId" => $k } },
+		    };
+		}
 		TBDebugTimeStamp("creating docker network $k");
 		($code,$content,$resp) = getClient()->network_create_bridge(
-		    $k,$cidr,$gw,$k);
+		    $k,$cidr,$gw,$k,$ourdocker_extra_args);
 		goto bad
 		    if ($code);
 	    }
