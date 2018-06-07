@@ -5799,8 +5799,16 @@ sub genhostspairlist($$)
     # First see if we have a topo file; we can generate our own hosts
     # file if we do, saving a lot of load on tmcd in big experiments.
     #
+    # NB: for a dedicated host, genhostslistfromtopo is really reading
+    # /var/emulab/boot/topomap, not the VM's copy of that!  Thus we
+    # always take the second (slow) path for the SHAREDHOST case,
+    # because in that case the hosts's topomap is irrelevant.  None of
+    # this is desireable, but it's what we've got for now.  Plus, shared
+    # container experiments are not going to be large, so this is only
+    # minor overhead.
+    #
     my $mapfile = "$VMS/$vnode_id/hostmap";
-    if (genhostslistfromtopo($mapfile,\@tmccresults) < 0 &&
+    if ((SHAREDHOST() || genhostslistfromtopo($mapfile,\@tmccresults) < 0) &&
 	tmcc(TMCCCMD_HOSTS,undef,\@tmccresults) < 0) {
 	warn("Could not get hosts file from server!");
 	@$rptr = ();
