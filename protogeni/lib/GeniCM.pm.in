@@ -1694,6 +1694,31 @@ sub GetTicketAuxAux($)
 		goto bad;
 	    }
 	}
+	if (!defined($osname) && defined($pctype)) {
+	    my $nodetype = NodeType->Lookup($pctype);
+	    if (defined($nodetype) && $nodetype->isblackbox()) {
+		my $default_osid = $nodetype->default_osid();
+		if (!defined($default_osid)) {
+		    print STDERR "Blackbox node type $pctype but no ".
+			"default_osid defined for it.\n";
+		}
+		else {
+		    my $default_osinfo = OSImage->Lookup($default_osid);
+		    if (!defined($default_osinfo)) {
+			print STDERR "Blackbox node type $pctype but cannot ".
+			    "lookup default_osid defined for it.\n";
+		    }
+		    else {
+			$osname = $default_osinfo->osname()
+		    }
+		}
+		if (!defined($osname)) {
+		    $response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+						     "Blackbox OS error");
+		    goto bad;
+		}
+	    }
+	}
 	#
 	# If no osname, check for protogeni default osname
 	#
@@ -3078,7 +3103,8 @@ sub GetTicketAuxAux($)
 		$rlatency   = 0.0;
 		$lossrate   = 0.0;
 		$rlossrate  = 0.0;
-		$nobwshaping= 1;
+		$nobwshaping  = 1;
+		$uselinkdelay = 0;
 	    }
 	    
 	    my $virtlan =
