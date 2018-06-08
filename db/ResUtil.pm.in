@@ -29,7 +29,8 @@ package ResUtil;
 use Exporter;
 
 @ISA = "Exporter";
-@EXPORT = qw (CollectReservations CreateTimeline ComputeCounts);
+@EXPORT = qw (CollectReservations CreateTimeline ComputeCounts
+              ReservationUtilization);
 
 # After package decl.
 use strict;
@@ -41,6 +42,7 @@ use POSIX qw(strftime);
 # Emulab
 use Reservation;
 use Project;
+use emutil;
 
 # Debugging.
 my $debug = 0;
@@ -392,6 +394,92 @@ sub ComputeCounts($$@)
 	}
     }
     return @bypid;
+}
+
+#
+# Given a reservation details hash, calculate a utilization number
+# from the history array.
+#
+sub ReservationUtilization($@)
+{
+    my ($res, @records) = @_;
+    my $count      = $res->nodes();
+    my $active     = defined($res->idx()) ? 1 : 0;
+    my $resstart   = $res->start();
+    my $resend     = ($active ? time() :
+		      (defined($res->deleted()) ?
+		       $res->deleted() : $res->end()));
+    my $reshours   = (($resend - $resstart) / 3600) * $count;
+    my $usedhours  = 0;
+    my $inuse      = 0;
+    my $laststamp  = $resstart;
+    my $type       = $res->type();
+    my $uid        = $res->uid();
+    my @tmp        = @records;
+
+    # Init for caller.
+    $res->data('reshours', $reshours);
+    $res->data('usedhours', undef);
+    $res->data('utilization', undef);
+
+    #
+    # Scan past timeline entries that are *before* the start of the
+    # reservation; these are experiments that were running when the
+    # reservation started, and provide the number of nodes allocated
+    # at the time the reservation starts.
+    #
+    while (@tmp) {
+	my $ref       = $tmp[0];
+	my $stamp     = $ref->{'t'};
+	my $allocated = $ref->{'allocated'};
+	$ref->{'tt'}  = TBDateStringGMT($ref->{'t'});
+
+	last
+	    if ($stamp >= $resstart);
+	    
+	# Watch for nothing allocated by the user at this time stamp
+	my $using = 0;
+	if (exists($allocated->{$uid})) {
+	    $using = $allocated->{$uid}->{$type};
+	}
+	$inuse = $using;
+	$inuse = $count if ($inuse > $count);
+	shift(@tmp);
+    }
+    foreach my $ref (@tmp) {
+	my $stamp     = $ref->{'t'};
+	my $reserved  = $ref->{'reserved'};
+	my $allocated = $ref->{'allocated'};
+	$ref->{'tt'}  = TBDateStringGMT($ref->{'t'});
+
+	# If this stamp is after the reservation, we can stop. The
+	# last entry will be the current number of nodes used till
+	# the end of the reservation. This entry is typically for the
+	# end of an experiment start before the end of the reservation.
+	last
+	    if ($stamp > $resend);
+
+	# Watch for nothing allocated by the user at this time stamp
+	my $using = 0;
+	if (exists($allocated->{$uid})) {
+	    $using = $allocated->{$uid}->{$type};
+	}
+	$usedhours += (($stamp - $laststamp) / 3600) * $inuse;
+	$laststamp  = $stamp;
+	$inuse      = $using;
+	$inuse      = $count if ($inuse > $count);
+    }
+    # And then a final entry for usage until the end of the reservation.
+    if ($laststamp) {
+	$usedhours += (($resend - $laststamp) / 3600) * $inuse;
+    }
+    $res->data('reshours', $reshours);
+    $res->data('usedhours', $usedhours);
+    my $utilization = POSIX::ceil(($usedhours/$reshours) * 100.0);
+    $utilization = 100 if ($utilization > 100);
+    $res->data('utilization', $utilization);
+
+    return 0;
 }
 
 1;

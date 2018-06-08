@@ -218,6 +218,8 @@ sub Lookup($$;$$$$)
     $self->{'UUID'}        = $record->{'uuid'};
     # For compat with history entries.
     $self->{'DELETED'}     = undef;
+    # Local temp datastore
+    $self->{'DATA'}        = {};
 	
     bless($self, $class);
     
@@ -243,6 +245,19 @@ sub approver($)    { return $_[0]->{"APPROVER"}; }
 sub uuid($)        { return $_[0]->{"UUID"}; }
 # For compat with history entries.
 sub deleted($)     { return $_[0]->{"DELETED"}; }
+# Get/Set some temporary extra data.
+sub data($$;$)
+{
+    my ($self, $key, $val) = @_;
+
+    if (defined($val)) {
+	return $self->{'DATA'}->{$key} = $val;
+    }
+    if (exists($self->{'DATA'}->{$key})) {
+	return $self->{'DATA'}->{$key};
+    }
+    return undef;
+}
 
 sub Stringify($)
 {
@@ -1264,6 +1279,8 @@ sub LookupHistorical($$) {
     $self->{'APPROVER'}    = undef;
     $self->{'UUID'}        = $record->{'uuid'};
     bless($self, $class);
+    # Local temp datastore
+    $self->{'DATA'}        = {};
 
     return $self;
 }
