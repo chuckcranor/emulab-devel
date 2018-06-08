@@ -17,12 +17,24 @@
 	<th>Type</th>
 	<th>Count</th>
 	<% if (showusing) { %>	  
-	  <th class="sorter-false">Using</td>
+	  <th class="sorter-false">Using</th>
 	<% } %>
 	<th>Util</th>
 	<th>Created</th>
 	<th>Starts</th>
-	<th>Ends</th>
+	<th>Ends
+	  <% if (!showusing) { %>
+	    <span class='glyphicon glyphicon-question-sign'
+		  style='margin-bottom: 4px;'
+		  data-toggle='tooltip'
+		  data-container="body"
+		  data-trigger="hover"
+		  title='End dates in orange mean the user deleted the
+			 reservation before it expired. Red indicates the
+			 reservation was canceled by an administrator.'>
+	    </span>
+	  <% } %>
+	</th>
 	<% if (showstatus) { %><th>Status</th><% } %>
 	<th class="sorter-false">Notes</th>
       </tr>
