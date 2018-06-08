@@ -1579,8 +1579,9 @@ sub setVlansOnTrunk($$$$) {
 
     # Yuck.  Have to process each vlan in turn, and deal with the "empty list"
     # problem.  More details in the comments below.
-    my @setcmds = ();
+    my @setcmds;
     foreach my $vlnum (@vlan_numbers) {
+	@setcmds = ();
 	# Only attempt removal if the vlan is actually in the allowed list.
 	if ($value == 0 && exists($pstate->{$poifindex}{ALLOWED}{$vlnum})) { 
 	    # If removing the last entry, then add the default
