@@ -406,19 +406,25 @@ window.DrawResHistoryGraph = (function ()
 	var xlabel  = false;
 	var uvalues = [];
 	var pvalues = [];
-	var backup  =false;
+	var backup  = false;
+	var zero    = false;
+	var minY    = 99999;
+	var maxY    = 0;
+	var now     = new Date().getTime();
+	
 	var i = 0;
 
 	if (_.has(args, "xaxislabel")) {
 	    xlabel = args.xaxislabel;
 	}
 
-	// Need start of the reservation to narrow what we show,
+	// Need start/end of the reservation to narrow what we show,
 	// since the timeline is going to include stamps before the
 	// start of the reservation cause of experiments that span
-	// the reservation start time.
+	// the reservation start time. But no stamps after the end.
 	var start  = new Date(details.start).getTime();
-	console.info("draw start", start);
+	var end    = new Date(details.end).getTime();
+	console.info("draw start/end", start, end, details.uuid);
 
 	// Scan past any initial timeline entries that are before the
 	// start of the reservation.
@@ -426,12 +432,16 @@ window.DrawResHistoryGraph = (function ()
 	    var record    = history[i];
 	    var stamp     = parseInt(record.t) * 1000;
 
+	    console.info("record", stamp, record);
+
 	    if (stamp > start) {
 		if (i == 0) {
 		    // If this is the first record, then the reservation
 		    // started with zero nodes allocated. Add a zero entry.
-		    uvalues.push({"x" : stamp, "y" : 0});
-		    pvalues.push({"x" : stamp, "y" : 0});
+		    uvalues.push({"x" : start, "y" : 0});
+		    pvalues.push({"x" : start, "y" : 0});
+		    minY = 0;
+		    zero = true;
 		    console.info("added zero entry at ", stamp);
 		}
 		else {
@@ -439,7 +449,7 @@ window.DrawResHistoryGraph = (function ()
 		    // add the previous entry at beginning of the res.
 		    backup = true;
 		    i--;
-		    console.info("added backup entry at ", stamp, i);
+		    console.info("added backup entry at ", start, stamp, i);
 		}
 		break;
 	    }
@@ -464,41 +474,116 @@ window.DrawResHistoryGraph = (function ()
 		continue;
 	    }
 	    
-	    var pcount = allocated[details.remote_pid][details.type];
+	    var pcount = parseInt(allocated[details.remote_pid][details.type]);
 	    // Watch for nothing allocated by the user at this time stamp
 	    var ucount = 0;
 	    if (_.has(allocated, details.remote_uid)) {
-		ucount = allocated[details.remote_uid][details.type];
+		ucount = parseInt(allocated[details.remote_uid][details.type]);
 	    }
-	    if (backup) {
+	    if (zero) {
+		// No slopes, just rectangles please.
+		uvalues.push({"x" : stamp - 100, "y" : 0});
+		pvalues.push({"x" : stamp - 100, "y" : 0});
+		zero = false;
+	    }
+	    else if (backup) {
 		stamp  = start;
 		backup = false;
 	    }
-	    uvalues.push({"x" : stamp, "y" : parseInt(ucount)});
-	    pvalues.push({"x" : stamp, "y" : parseInt(pcount)});
+	    if (i > 0) {
+		var prev = history[i - 1];
+
+		if (_.has(prev, "pcount")) {
+		    var prevstamp = record.realstamp + (24 * 3600 * 1000);
+		    
+		    while (prevstamp < stamp - 10000) {
+			uvalues.push({"x" : prevstamp, "y" : prev.ucount});
+			pvalues.push({"x" : prevstamp, "y" : prev.pcount});
+			prevstamp += 24 * 3600 * 1000;
+		    }
+		    // No slopes, just rectangles please.
+		    uvalues.push({"x" : stamp - 100, "y" : prev.ucount});
+		    pvalues.push({"x" : stamp - 100, "y" : prev.pcount});
+		}
+	    }
+	    uvalues.push({"x" : stamp, "y" : ucount});
+	    pvalues.push({"x" : stamp, "y" : pcount});
+	    record["pcount"] = pcount;
+	    record["ucount"] = ucount;
+	    record["realstamp"] = stamp;
+
+	    /*
+	     * Keep track of min/max for altering the Y range below.
+	     * Makes the graphs a little easier to read. 
+	     */
+	    var max = (pcount >= ucount ? pcount : ucount);
+	    var min = (pcount <= ucount ? pcount : ucount);
+	    if (max > maxY) {
+		maxY = max;
+	    }
+	    if (min < minY) {
+		minY = min;
+	    }
 	}
-	var data = [{"key" : "User", "values" : uvalues},
-		    {"key" : "Project", "values" : pvalues}];
-	//console.info("usage datums", data);
+	// Always want the reservation node count to be the maxY
+	// so it is obvious when the user is not using all the nodes.
+	if (maxY < details.nodes) {
+	    maxY = details.nodes; 
+	}
+	// We need a point at end so that the X scale is correct. This
+	// depends on whether its a current reservation or a historical
+	// reservation.
+	if (details.deleted) {
+	    end = new Date(details.deleted).getTime();
+	}
+	else if (now < end) {
+	    end = now;
+	}
+	uvalues.push({"x" : end,
+		      "y" : uvalues[uvalues.length - 1].y});
+	pvalues.push({"x" : end,
+		      "y" : pvalues[pvalues.length - 1].y});
+
+	
+	var minX = uvalues[0].x;
+	var maxX = uvalues[uvalues.length - 1].x;
+	var data = [{"key" : "Project", "values" : pvalues, "color" : "green"},
+		    {"key" : "User", "values" : uvalues, "color" : "blue"}
+		   ];
+	console.info("usage datums", data);
 
 	nv.addGraph(function() {
-	    var chart = nv.models.multiBarChart()
-		.reduceXTicks(true)   // Do not show every tick.
-		.rotateLabels(0)      // Angle to rotate x-axis labels.
-		.showControls(false)
+	    var chart = window.nv.models.lineWithFocusChart()
 		.useInteractiveGuideline(true)
-	        .duration(100)
-		.groupSpacing(0.1);   // Distance between each group of bars.
+		.forceY([minY > 0 ? minY - 1 : 0, maxY + 1]);
 
-	    // Matches margins in resgraphs.js
 	    chart.margin({"left":25,"right":15,"top":20,"bottom":40});
 
 	    chart.xAxis.tickFormat(function(d) {
 		return d3.time.format('%m/%d')(new Date(d))
             });	    
+	    chart.x2Axis.tickFormat(function(d) {
+		return d3.time.format('%m/%d')(new Date(d))
+	    });
 	    
 	    chart.yAxis
 		.tickFormat(d3.format(',d'));
+
+	    // This draws a dashed line to mark the number of nodes reserved.
+	    chart.dispatch.on('renderEnd', function(){
+		console.log('render complete');
+		var line = d3.select(graphid + ' svg')
+		    .append('line')
+		    .attr({
+			x1: chart.margin().left + chart.xAxis.scale()(minX),
+			y1: 30 + chart.yAxis.scale()(details.nodes),
+			x2: chart.margin().left + chart.xAxis.scale()(maxX),
+			y2: 30 + chart.yAxis.scale()(details.nodes)
+		    })
+		    .style('stroke-dasharray', '5,5')
+		    .style('stroke-width', '2px')
+		    .style("stroke", "#000");
+	    });
 
 	    if (xlabel) {
 		var start = moment(details.start);
