@@ -110,7 +110,11 @@ while( my ($idx, $pid, $count, $type, $end, $email) =
 	      "If you do not intend to use these resources, please\n" .
 	      "cancel this reservation as soon as possible, since\n" .
 	      "the nodes are now unavailable to other users for\n" .
-	      "the duration of your reservation.\n" .
+	      "the duration of your reservation.\n".
+	      "\n".
+	      "Failure to use your reservation within six hours will result\n".
+	      "in cancellation of the reservation so that the nodes are\n".
+	      "available to other users.\n".
 	      "\n" .
 	      "Please note that we make no guarantees about the\n" .
 	      "availability or suitability of these nodes for your\n" .
@@ -139,6 +143,9 @@ while( my ($idx, $pid, $count, $type, $start, $end, $email) =
        $query_result->fetchrow_array() ) {
     print STDERR "Reservation $idx for project $pid, $count x $type from " .
 	"$start-$end <$email>\n" if( $debug );
+
+    $start = TBDateStringUTC($start);
+    $end   = TBDateStringUTC($end);
     
     next if( $impotent );
     SENDMAIL( $email, "Upcoming $SITE reservation",
@@ -151,6 +158,10 @@ while( my ($idx, $pid, $count, $type, $start, $end, $email) =
 	      "cancel this reservation as soon as possible, since\n" .
 	      "the nodes will be unavailable to other users for\n" .
 	      "the duration of your reservation.\n" .
+	      "\n" .
+	      "Failure to use your reservation within six hours will result\n".
+	      "in cancellation of the reservation so that the nodes are\n".
+	      "available to other users.\n".
 	      "\n" .
 	      "Please note that we make no guarantees about the\n" .
 	      "availability or suitability of these nodes for your\n" .
@@ -190,6 +201,9 @@ while( my ($idx, $pid, $count, $type, $start, $end, $email, $cancel) =
 
     $res->Cancel();
     
+    $start = TBDateStringUTC($start);
+    $end   = TBDateStringUTC($end);
+
     SENDMAIL( $email, "$SITE reservation",
 	      "Your reservation for $count $type nodes in project $pid,\n" .
 	      "starting at $start and ending at $end,\n".
