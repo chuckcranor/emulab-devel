@@ -464,14 +464,17 @@ if ($cancel || $abortcancel) {
 	exit( 1 );
     }
 
-    $res->SetCancel(($abortcancel ? undef : $cancel));
-
     while (1) {
 	if (!defined(Reservation->BeginTransaction(Reservation->GetVersion()))) {
 	    sleep(1);
 	    next;
 	}
-	$res->Book($res->idx());
+	if ($abortcancel) {
+	    $res->ClearCancel();
+	}
+	else {
+	    $res->MarkCancel($cancel);
+	}
 	Reservation->EndTransaction();
 	last;
     }

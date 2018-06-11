@@ -2233,6 +2233,7 @@ CREATE TABLE `future_reservations` (
   `approver` varchar(8) DEFAULT NULL,
   `notified` datetime DEFAULT NULL,
   `notified_unused` datetime DEFAULT NULL,
+  `override_unused` tinyint(1) NOT NULL default '0',
   `uuid` varchar(40) NOT NULL default '',
   PRIMARY KEY (`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;

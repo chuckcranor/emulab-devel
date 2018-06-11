@@ -216,6 +216,9 @@ sub Lookup($$;$$$$)
     $self->{'APPROVED'}    = $record->{'a'};
     $self->{'APPROVER'}    = $record->{'approver'};
     $self->{'UUID'}        = $record->{'uuid'};
+    $self->{'NOTIFIED'}    = $record->{'notified'};
+    $self->{'NOTIFIED_UNUSED'} = $record->{'notified_unused'};
+    $self->{'OVERRIDE_UNUSED'} = $record->{'override_unused'};
     # For compat with history entries.
     $self->{'DELETED'}     = undef;
     # Local temp datastore
@@ -243,6 +246,9 @@ sub admin_notes($) { return $_[0]->{"ADMIN_NOTES"}; }
 sub approved($)    { return $_[0]->{"APPROVED"}; }
 sub approver($)    { return $_[0]->{"APPROVER"}; }
 sub uuid($)        { return $_[0]->{"UUID"}; }
+sub notified($)    { return $_[0]->{"NOTIFIED"}; }
+sub notified_unused($) { return $_[0]->{"NOTIFIED_UNUSED"}; }
+sub override_unused($) { return $_[0]->{"OVERRIDE_UNUSED"}; }
 # For compat with history entries.
 sub deleted($)     { return $_[0]->{"DELETED"}; }
 # Get/Set some temporary extra data.
@@ -316,13 +322,6 @@ sub SetAdminNotes($$)
     my ($self, $notes) = @_;
 
     $self->{'ADMIN_NOTES'} = $notes;
-}
-
-sub SetCancel($$)
-{
-    my ($self, $cancel) = @_;
-
-    $self->{'CANCEL'} = $cancel;
 }
 
 # Mark the reservation as approved.  This DOES NOT update the database
@@ -433,7 +432,6 @@ sub Book($;$)
     my $admin_notes = DBQuoteSpecial( $self->admin_notes() );
     my $approved = $self->approved();
     my $approver = $self->approver();
-    my $cancel = $self->cancel();
 
     my $base_query = "SET pid='$pid', " .
 		     "pid_idx='$pid_idx', " .
@@ -449,8 +447,6 @@ sub Book($;$)
 		       ", admin_notes=$admin_notes" : "" ) .
 		     ( defined( $approved ) ?
 		       ", approved=FROM_UNIXTIME($approved)" : "" ) .
-		     ( defined( $cancel ) ?
-		       ", cancel=FROM_UNIXTIME($cancel)" : ", cancel=null" ) .
 		     ( defined( $approver ) ? ", approver='$approver'" : "" );
 
     my $query_result =
@@ -1278,6 +1274,9 @@ sub LookupHistorical($$) {
     $self->{'APPROVED'}    = undef;
     $self->{'APPROVER'}    = undef;
     $self->{'UUID'}        = $record->{'uuid'};
+    $self->{'NOTIFIED'}    = undef;
+    $self->{'NOTIFIED_UNUSED'} = undef;
+    $self->{'OVERRIDE_UNUSED'} = 0;
     bless($self, $class);
     # Local temp datastore
     $self->{'DATA'}        = {};
@@ -1859,6 +1858,66 @@ sub ReservableTypes($)
     }
     return @result;
 }
+
+#
+# Mark the reservation for cancellation because it has not been used.
+# We also mark the notified_unused flag so that we do not interefere
+# with command line cancellation (and cancel cancellation).
+#
+# We are wrapped in a transaction by the caller. 
+#
+sub MarkUnused($$)
+{
+    my ($self, $when) = @_;
+    my $idx = $self->idx();
+
+    if ($when) {
+	DBQueryWarn("update future_reservations set ".
+		    "  cancel=FROM_UNIXTIME($when), notified_unused=now() ".
+		    "where idx='$idx'")
+	    or return -1;
+    }
+    else {
+	DBQueryWarn("update future_reservations set ".
+		    "  cancel=null, notified_unused=null ".
+		    "where idx='$idx'")
+	    or return -1;
+    }
+    $self->{'CANCEL'} = $when;
+    $self->{'NOTIFIED_UNUSED'} = $when;
+    return 0
+}
+sub ClearUnused($) { Reservation::MarkUnused($_[0], undef); }
+
+#
+# Similiar operation for cancel, although in this case we also clear
+# notified_unused flag so that the unused reservation checking code
+# does not interfere with a command line cancel/abortcancel.
+#
+sub MarkCancel($$)
+{
+    my ($self, $when) = @_;
+    my $idx = $self->idx();
+
+    if ($when) {
+	DBQueryWarn("update future_reservations set ".
+		    "  cancel=FROM_UNIXTIME($when), ".
+		    "    notified_unused=null, override_unused=1 ".
+		    "where idx='$idx'")
+	    or return -1;
+    }
+    else {
+	DBQueryWarn("update future_reservations set ".
+		    "  cancel=null, notified_unused=null, override_unused=1 ".
+		    "where idx='$idx'")
+	    or return -1;
+    }
+    $self->{'CANCEL'} = $when;
+    $self->{'NOTIFIED_UNUSED'} = undef;
+    $self->{'OVERRIDE_UNUSED'} = 1;
+    return 0;
+}
+sub ClearCancel($) { Reservation::MarkCancel($_[0], undef); }
 
 # _Always_ make sure that this 1 is at the end of the file...
 1;
