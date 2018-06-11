@@ -2257,13 +2257,13 @@ sub UpdateSliverStatusAll($$)
 # Helper functions for below.
 sub ContextError()
 {
-    return GeniResponse->Create(GENIRESPONSE_ERROR(), undef,
-				"Could not generate context for RPC");
+    return GeniResponse->new(GENIRESPONSE_ERROR(), -1,
+			     "Could not generate context for RPC");
 }
 sub CredentialError()
 {
-    return GeniResponse->Create(GENIRESPONSE_ERROR(), undef,
-				"Could not generate credentials for RPC");
+    return GeniResponse->new(GENIRESPONSE_ERROR(), -1,
+			     "Could not generate credentials for RPC");
 }
 
 #
