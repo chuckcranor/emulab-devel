@@ -932,24 +932,32 @@ sub TBSetNodeLogEntry($$$$)
 #
 # Set event state for a node.
 #
-# usage: TBSetNodeEventState(char *node, char *state)
+# usage: TBSetNodeEventState(char *node, char *state; int fatal)
 #        Returns 1 if okay.
 #        Returns 0 if failed.
 #
-sub TBSetNodeEventState($$)
+sub TBSetNodeEventState($$;$)
 {
-    my ($node, $state) = @_;
+    my ($node, $state, $fatal) = @_;
 
     #
     # If using the event system, we send out an event for the state daemon to
     # pick up. Otherwise, we just set the state in the database ourselves
     #
     require event;
-    
-    return event::EventSendFatal(objtype   => TBDB_TBEVENT_NODESTATE,
-				 objname   => $node,
-				 eventtype => $state,
-				 host      => $BOSSNODE);
+
+    if (!defined($fatal) || $fatal) {
+	return event::EventSendFatal(objtype   => TBDB_TBEVENT_NODESTATE,
+				     objname   => $node,
+				     eventtype => $state,
+				     host      => $BOSSNODE);
+    }
+    else {
+	return event::EventSendWarn(objtype   => TBDB_TBEVENT_NODESTATE,
+				    objname   => $node,
+				    eventtype => $state,
+				    host      => $BOSSNODE);
+    }
 }
 
 #

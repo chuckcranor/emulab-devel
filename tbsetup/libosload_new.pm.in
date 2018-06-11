@@ -2807,8 +2807,21 @@ sub SetupReload($$)
 	}
     }
 
+    #
     # Need to kick virtnodes so stated picks up the next_op_mode from os_select
-    TBSetNodeEventState($node_id,TBDB_NODESTATE_SHUTDOWN);
+    #
+    # We attempt to re-send failed event sends; failures can be a problem here
+    # in multi-thousand vnode experiments.  Definitely a bit of a hack, but
+    # the sending rate is highest here.
+    #
+    my $chances = 8;
+    while ($chances > 0
+	   && !TBSetNodeEventState($node_id,TBDB_NODESTATE_SHUTDOWN,0)) {
+	tbwarn("$self SetupReload: TBSetNodeEventState failed; waiting and".
+	       " retrying.");
+	sleep(4);
+	$chances -= 1;
+    }
 
     return 0;
 }
