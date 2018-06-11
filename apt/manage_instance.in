@@ -4301,6 +4301,11 @@ sub fatal($)
     }
     print STDERR "*** $0:\n".
 	         "    $mesg\n";
+
+    # Helpful.
+    if (defined($instance)) {
+	print STDERR "\n\n" . $instance->webURL() . "\n";
+    }
     # Exit with negative status so web interface treats it as system error.
     exit(-1);
 }
