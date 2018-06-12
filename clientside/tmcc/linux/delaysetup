@@ -187,7 +187,7 @@ sub LinkDelaySetup()
 	open(DEL, ">" . TMLINKDELAY)
 	    or die("Could not open " . TMLINKDELAY . ": $!");
 
-	system("modinfo ifb 2>&1 >/dev/null");
+	system("modinfo ifb >/dev/null 2>&1");
 	if ($? == 0) {
 	    print "Will use ifb kernel module for duplex endnodeshaping\n";
 	    $useifb = 1;
@@ -201,7 +201,7 @@ sub LinkDelaySetup()
 	    $useifb = 0;
 	}
 
-	system("modinfo sch_netem 2>&1 >/dev/null");
+	system("modinfo sch_netem >/dev/null 2>&1");
 	if ($? == 0) {
 	    print "Using sch_netem kernel module for delay/plr\n";
 	    $usenetem = 1;
@@ -214,12 +214,12 @@ sub LinkDelaySetup()
 	    $usenetem = 0;
 	    print DEL "modprobe sch_plr\n";
 	    print DEL "modprobe sch_delay\n";
-	    system("modinfo sch_plr 2>&1 >/dev/null");
+	    system("modinfo sch_plr >/dev/null 2>&1");
 	    if ($?) {
 		print "WARNING: sch_plr module does not exist;"
 		    . " shaping may fail!\n";
 	    }
-	    system("modinfo sch_delay 2>&1 >/dev/null");
+	    system("modinfo sch_delay >/dev/null 2>&1");
 	    if ($?) {
 		print "WARNING: sch_delay module does not exist;"
 		    . " shaping may fail!\n";
@@ -379,8 +379,8 @@ sub LinkDelaySetup()
 
 		print DEL "ifconfig $iface txqueuelen $queue\n"
 		    if ($queue);
-		print DEL "$TC qdisc del dev $iface root\n";
-		print DEL "$TC qdisc del dev $iface ingress\n";
+		print DEL "$TC qdisc del dev $iface root >/dev/null 2>&1\n";
+		print DEL "$TC qdisc del dev $iface ingress >/dev/null 2>&1\n";
 
 		#
 		# We cannot use HTB at all if bandw is 0 (i.e., no bandwidth
