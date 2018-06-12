@@ -54,7 +54,7 @@ my $impotent  = 0;
 my $remove    = 0;
 my $info      = 0;
 my $force     = 0;
-my $type      = "other";
+my $type      = "Unused";
 my $cable;
 my $cablelen;
 my ($node_id1,$iface_id1,$card1,$port1,$node_id2,$iface_id2,$card2,$port2);
