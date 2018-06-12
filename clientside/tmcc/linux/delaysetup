@@ -386,6 +386,10 @@ sub LinkDelaySetup()
 		# We cannot use HTB at all if bandw is 0 (i.e., no bandwidth
 		# shaping should be performed).
 		#
+		my $dropfrag = "";
+		if ($plr > 0) {
+		    $dropfrag = "drop $plr";
+		}
 		if ($bandw != 0) {
 		    print DEL "$TC qdisc add dev $iface handle ". $pipeno .
 			" root htb default 1\n";
@@ -394,12 +398,12 @@ sub LinkDelaySetup()
 			" htb rate ${bandw} ceil ${bandw}\n";
 		    print DEL "$TC qdisc add dev $iface handle ".
 			($pipeno+10) . " parent " . $pipeno . ":1 " .
-			"netem drop $plr delay ${delay}us\n";
+			"netem $dropfrag delay ${delay}us\n";
 		}
 		else {
 		    print DEL "$TC qdisc add dev $iface handle ".
 			$pipeno . " root " .
-			"netem drop $plr delay ${delay}us\n";
+			"netem $dropfrag delay ${delay}us\n";
 		}
 	    }
 	    else {
@@ -438,6 +442,10 @@ sub LinkDelaySetup()
 		    # We cannot use HTB at all if bandw is 0 (i.e., no bandwidth
 		    # shaping should be performed).
 		    #
+		    my $dropfrag = "";
+		    if ($rplr > 0) {
+			$dropfrag = "drop $rplr";
+		    }
 		    if ($rbandw != 0) {
 			print DEL "$TC qdisc add dev $idev root handle 2: ".
 			    "htb default 1\n";
@@ -445,12 +453,12 @@ sub LinkDelaySetup()
 			    "htb rate ${rbandw} ceil ${rbandw}\n";
 			# Do not use a colon: in the handle. It BREAKS!
 			print DEL "$TC qdisc add dev $idev handle 3 parent 2:1 ".
-			    "netem drop $rplr delay ${rdelay}us\n";
+			    "netem $dropfrag delay ${rdelay}us\n";
 		    }
 		    else {
 			# Do not use a colon: in the handle. It BREAKS!
 			print DEL "$TC qdisc add dev $idev handle 3 root ".
-			    "netem drop $rplr delay ${rdelay}us\n";
+			    "netem $dropfrag delay ${rdelay}us\n";
 		    }
 		}
 		else {
