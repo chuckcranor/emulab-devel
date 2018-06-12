@@ -219,7 +219,7 @@ function Do_TerminateInstance()
     if (StatusSetupAjax(0)) {
 	return;
     }
-    if (!$instance->CanTerminate($this_user)) {
+    if (!(ISADMIN() || $instance->CanTerminate($this_user))) {
         SPITAJAX_ERROR(1, "Not enough permission to terminate");
         return;
     }
