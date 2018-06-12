@@ -205,6 +205,7 @@ sub LinkDelaySetup()
 	if ($? == 0) {
 	    print "Using sch_netem kernel module for delay/plr\n";
 	    $usenetem = 1;
+	    $checkreplace = 0;
 	    print DEL "modprobe sch_netem\n";
 	}
 	else {
@@ -502,14 +503,16 @@ sub LinkDelaySetup()
 	# node.
 	system("touch " . ISDELAYNODEPATH());
 
-	#
-	# Now do kernel configuration. All of the above work is wasted,
-	# but such is life.
-	#
-	if (!$gotjails) {
-	    $kernel = $KERNELLDELAY;
+	if (!$usenetem) {
+	    #
+	    # Now do kernel configuration. All of the above work is wasted,
+	    # but such is life.
+	    #
+	    if (!$gotjails) {
+		$kernel = $KERNELLDELAY;
+	    }
+	    $checkreplace = 1;
 	}
-	$checkreplace = 1;
     }
     if ($checkreplace) {
 	checkkernel($kernel);
