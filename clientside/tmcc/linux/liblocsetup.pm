@@ -901,7 +901,7 @@ sub os_ifconfig_veth($$$$$;$$$$%)
 
     #
     # VLANs
-    #   insmod 8021q (once only)
+    #   modprobe 8021q (once only)
     #   vconfig set_name_type VLAN_PLUS_VID_NO_PAD (once only)
     #
     #	ifconfig eth0 up (should be done before we are ever called)
@@ -925,7 +925,7 @@ sub os_ifconfig_veth($$$$$;$$$$%)
 
 	# one time stuff
 	if (!exists($cookie->{"vlan"})) {
-	    $uplines  = "/sbin/insmod 8021q >/dev/null 2>&1\n    ";
+	    $uplines  = "/sbin/modprobe 8021q >/dev/null 2>&1\n    ";
 	    $uplines .= "$VLANCONFIG set_name_type VLAN_PLUS_VID_NO_PAD\n    "
 		if (!$useip);
 	    $cookie->{"vlan"} = 1;
