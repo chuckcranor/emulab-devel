@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2013-2017 University of Utah and the Flux Group.
+# Copyright (c) 2013-2018 University of Utah and the Flux Group.
 # Copyright (c) 2006-2014 Universiteit Gent/iMinds, Belgium.
 # Copyright (c) 2004-2006 Regents, University of California.
 # 
@@ -377,6 +377,16 @@ sub readifIndex($) {
 	    my $type = $1;
 	    my $module = $2;
 	    my $port = defined($4) ? $4 : $3;
+	    #
+	    # XXX one-off hack for 40Gb ports on S5048 switch.
+	    # The ports are 100Gb but must be "broken out" to a single
+	    # 40Gb port. FortyGig ports show up as <module>/<port>/1.
+	    #
+	    if ($self->{TYPE} eq "force10-s5048" && $type eq "fortyGigE" &&
+		defined($4) && $4 == 1) {
+		$port = "$3.1";
+		$self->debug("$id: found fortyGigE port $port, modport $module.$port\n",2);
+	    }
 	    # Handle nybble-based encoding. I've only seen this on
 	    # Z9100 switches so far.  The port numbering scheme on the
 	    # z9100 is also one-based, but that doesn't work well when
@@ -1987,6 +1997,9 @@ sub getChannelIfIndex($@) {
 		    my $subport = defined($melts[2]) ? (int($melts[2]) - 1) : 0;
 		    my $port = ($melts[1] - 1)*4 + $subport;
 		    $membmodport = "$mod.$port";
+		} elsif ($self->{TYPE} eq "force10-s5048" &&
+			 defined($melts[2]) && $melts[2] == 1) {
+		    $membmodport = $melts[0] . "." . $melts[1];
 		} else {
 		    $membmodport = join(".", @melts);
 		}
@@ -2003,7 +2016,7 @@ sub getChannelIfIndex($@) {
 
     # If we don't yet have a portchannel index, and a single port was
     # passed in, just return the ifindex for that port (single wire trunks).
-    if (!$ifindex && scalar(@modports) == 1) {
+    if (!defined($ifindex) && scalar(@modports) == 1) {
 	$self->debug("$id: no portchannel found, single port passed in: $modports[0]\n");
 	if (exists($self->{IFINDEX}{$modports[0]})) {
 	    $ifindex = $self->{IFINDEX}{$modports[0]};
