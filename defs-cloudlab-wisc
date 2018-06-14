@@ -601,18 +601,7 @@ AMD_ROOT=/.amd_mnt/ops.wisc.cloudlab.us
 # 2015-04-04
 # bpkroth
 ZFS_NOEXPORT=1
-# But that also adds an assumption that we've included Utah's incremental
-# mountd update patches to FreeBSD, which we haven't.  So, add another flag to
-# skip that.
-# 2015-04-08
-# bpkroth
-# RT #543192
-# NOTE: This option has since been taken upstream and renamed to
-# INCREMENTAL_MOUNTD, which defaults to 0, since really only Utah has that hack
-# right now.
-# 2015-04-10
-# bpkroth
-WITHOUT_INCREMENTAL_MOUNTD_UPDATES=1
+INCREMENTAL_MOUNTD=1
 
 # Enable idle stats collection (RRD files)
 SDCOLLECTD_DOSTATS=1
