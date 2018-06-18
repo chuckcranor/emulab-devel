@@ -172,6 +172,9 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     if ($embedded) {
 	goto embed;
     }
+    if ($ignore1) {
+        return;
+    }
 
     #
     # This is the stuff to the right of the logo.
@@ -584,8 +587,10 @@ function GET_ANNOUNCEMENTS($user, $update = true)
 $PAGEFOOTER_FUNCTION = function($ignored = NULL) {
     global $PORTAL_HELPFORUM, $PORTAL_NSFNUMBER, $embedded, $PORTAL_TEMPLATES;
 
-    echo "</div>
-      </div>\n";
+    echo "</div>";
+    if (!$ignored) {
+        echo "</div>\n";
+    }
     if (!$embedded) {
         if ($PORTAL_NSFNUMBER) {
             SpitNSFModal();

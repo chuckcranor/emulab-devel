@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -87,5 +87,64 @@ if ($query_result) {
     $row = mysql_fetch_array($query_result);
     $blob["profiles"] = $row[0];
 }
+
+#
+# For the Emulab Portal frontpage, we return inuse/free counts for
+# the allocatable node types, mostly so we have something interesting
+# to show.
+#
+$typeinfo  = array();
+$prunelist = Instance::NodeTypePruneList();
+
+#
+# Get total number of nodes.
+#
+$query_result =
+   DBQueryFatal("select n.type,count(*) as count from nodes as n ".
+                "left join node_types as nt on n.type=nt.type ".
+                "left join node_type_attributes as attr on ".
+                "     attr.type=n.type and ".
+                "     attr.attrkey='noshowfreenodes' ".
+                "where (role='testnode') and class='pc' and ".
+                "      attr.attrvalue is null ".
+                "group BY n.type");
+
+while ($row = mysql_fetch_array($query_result)) {
+    $type  = $row["type"];
+    $count = $row["count"];
+
+    if (!array_key_exists($type, $prunelist)) {
+        $typeinfo[$type] = array("total" => $count, "free" => 0);
+    }
+}
+
+# Get free totals by type.
+$query_result =
+   DBQueryFatal("select n.type,count(*) as count from nodes as n ".
+                "left join node_types as nt on n.type=nt.type ".
+                "left join reserved as r on r.node_id=n.node_id ".
+                "left join node_type_attributes as attr on ".
+                "     attr.type=n.type and ".
+                "     attr.attrkey='noshowfreenodes' ".
+                "where (role='testnode') and class='pc' and ".
+                "      r.pid is null and ".
+                "      attr.attrvalue is null and ".
+                "      (n.reserved_pid is null) AND ".
+                "      (n.eventstate='" . TBDB_NODESTATE_ISUP . "' or ".
+                "       n.eventstate='" . TBDB_NODESTATE_POWEROFF . "' or ".
+                "       n.eventstate='" . TBDB_NODESTATE_ALWAYSUP . "' or ".
+                "       n.eventstate='" . TBDB_NODESTATE_PXEWAIT . "') ".
+                "group BY n.type");
+
+while ($row = mysql_fetch_array($query_result)) {
+    $type  = $row["type"];
+    $count = $row["count"];
+
+    if (!array_key_exists($type, $prunelist)) {
+        $typeinfo[$type]["free"] = $count;
+    }
+}
+
+$blob["typeinfo"] = $typeinfo;
 
 echo json_encode($blob);
