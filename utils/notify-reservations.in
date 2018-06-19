@@ -299,7 +299,7 @@ while (my ($idx, $hours) = $query_result->fetchrow_array()) {
 	      "\n".
 	      "If you use your reservation before then, we will rescind\n".
 	      "the cancellation.\n",
-	      $TBOPS);
+	      $TBOPS, "Bcc: $TBOPS");
     }
     elsif ($res->notified_unused()) {
 	#
