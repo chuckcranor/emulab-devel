@@ -1,6 +1,6 @@
-diff -Nurb include/Settings.hpp include/Settings.hpp
---- include/Settings.hpp	2017-08-08 21:54:14.000000000 -0600
-+++ include/Settings.hpp	2018-02-08 11:11:05.297576181 -0700
+diff -Nurb iperf-2.0.10.orig/include/Settings.hpp iperf-2.0.10/include/Settings.hpp
+--- iperf-2.0.10.orig/include/Settings.hpp	2017-08-08 21:54:14.000000000 -0600
++++ iperf-2.0.10/include/Settings.hpp	2018-02-08 11:11:05.297576181 -0700
 @@ -139,6 +139,7 @@
      int mBufLen;                    // -l
      int mMSS;                       // -M
@@ -35,9 +35,9 @@ diff -Nurb include/Settings.hpp include/Settings.hpp
  #endif
  } client_hdr_v1;
  
-diff -Nurb src/Client.cpp src/Client.cpp
---- src/Client.cpp	2017-08-08 21:54:14.000000000 -0600
-+++ src/Client.cpp	2018-02-08 12:07:00.907572372 -0700
+diff -Nurb iperf-2.0.10.orig/src/Client.cpp iperf-2.0.10/src/Client.cpp
+--- iperf-2.0.10.orig/src/Client.cpp	2017-08-08 21:54:14.000000000 -0600
++++ iperf-2.0.10/src/Client.cpp	2018-02-08 12:07:00.907572372 -0700
 @@ -573,9 +573,11 @@
          if (isUDP(mSettings)) {
              // store datagram ID into buffer
@@ -101,9 +101,9 @@ diff -Nurb src/Client.cpp src/Client.cpp
 +    fprintf( stderr, warn_no_ack, mSettings->mSock, count, timo );
  }
  // end write_UDP_FIN
-diff -Nurb src/Locale.c src/Locale.c
---- src/Locale.c	2017-08-11 12:41:20.000000000 -0600
-+++ src/Locale.c	2018-02-08 11:11:05.297576181 -0700
+diff -Nurb iperf-2.0.10.orig/src/Locale.c iperf-2.0.10/src/Locale.c
+--- iperf-2.0.10.orig/src/Locale.c	2017-08-11 12:41:20.000000000 -0600
++++ iperf-2.0.10/src/Locale.c	2018-02-08 11:11:05.297576181 -0700
 @@ -373,7 +373,7 @@
  "WARNING: Path MTU Discovery may not be enabled.\n";
  
@@ -113,9 +113,9 @@ diff -Nurb src/Locale.c src/Locale.c
  
  const char warn_ack_failed[]=
  "[%3d] WARNING: ack of last datagram failed after %d tries.\n";
-diff -Nurb src/Server.cpp src/Server.cpp
---- src/Server.cpp	2017-08-08 21:54:14.000000000 -0600
-+++ src/Server.cpp	2018-02-08 10:59:38.116942057 -0700
+diff -Nurb iperf-2.0.10.orig/src/Server.cpp iperf-2.0.10/src/Server.cpp
+--- iperf-2.0.10.orig/src/Server.cpp	2017-08-08 21:54:14.000000000 -0600
++++ iperf-2.0.10/src/Server.cpp	2018-02-08 10:59:38.116942057 -0700
 @@ -313,9 +313,12 @@
  
              if (!reportstruct->emptyreport) {
@@ -130,9 +130,9 @@ diff -Nurb src/Server.cpp src/Server.cpp
  		    reportstruct->packetID = ntohl(mBuf_UDP->id);
  		}
                  reportstruct->sentTime.tv_sec = ntohl( mBuf_UDP->tv_sec  );
-diff -Nurb src/Settings.cpp src/Settings.cpp
---- src/Settings.cpp	2017-08-11 11:55:44.000000000 -0600
-+++ src/Settings.cpp	2018-02-08 12:11:03.680668904 -0700
+diff -Nurb iperf-2.0.10.orig/src/Settings.cpp iperf-2.0.10/src/Settings.cpp
+--- iperf-2.0.10.orig/src/Settings.cpp	2017-08-11 11:55:44.000000000 -0600
++++ iperf-2.0.10/src/Settings.cpp	2018-02-08 12:11:03.680668904 -0700
 @@ -114,6 +114,7 @@
  {"realtime",         no_argument, NULL, 'z'},
  
@@ -222,9 +222,9 @@ diff -Nurb src/Settings.cpp src/Settings.cpp
  	if ( client->mMode == kTest_DualTest ) {
  	    flags |= RUN_NOW;
  	}
-diff -Nurb src/main.cpp src/main.cpp
---- src/main.cpp	2017-08-08 21:54:14.000000000 -0600
-+++ src/main.cpp	2018-02-08 11:11:05.298576198 -0700
+diff -Nurb iperf-2.0.10.orig/src/main.cpp iperf-2.0.10/src/main.cpp
+--- iperf-2.0.10.orig/src/main.cpp	2017-08-08 21:54:14.000000000 -0600
++++ iperf-2.0.10/src/main.cpp	2018-02-08 11:11:05.298576198 -0700
 @@ -166,6 +166,11 @@
      // read settings from command-line parameters
      Settings_ParseCommandLine( argc, argv, ext_gSettings );
@@ -237,9 +237,9 @@ diff -Nurb src/main.cpp src/main.cpp
      // Check for either having specified client or server
      if ( ext_gSettings->mThreadMode == kMode_Client
           || ext_gSettings->mThreadMode == kMode_Listener ) {
-diff -Nurb src/stdio.c src/stdio.c
---- src/stdio.c	2017-08-08 21:54:14.000000000 -0600
-+++ src/stdio.c	2018-02-08 11:11:05.298576198 -0700
+diff -Nurb iperf-2.0.10.orig/src/stdio.c iperf-2.0.10/src/stdio.c
+--- iperf-2.0.10.orig/src/stdio.c	2017-08-08 21:54:14.000000000 -0600
++++ iperf-2.0.10/src/stdio.c	2018-02-08 11:11:05.298576198 -0700
 @@ -255,8 +255,6 @@
   * ------------------------------------------------------------------- */
  

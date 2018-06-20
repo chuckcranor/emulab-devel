@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2004-2012 University of Utah and the Flux Group.
+# Copyright (c) 2004-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -78,7 +78,7 @@ if [ ! -d $dir/iperf-$version/src ]; then
         srcdir="../$srcdir"
 	;;
     esac
-    cd iperf-$version && patch -p0 < $srcdir/iperf-${version}.patch || {
+    cd iperf-$version && patch -p1 < $srcdir/iperf-${version}.patch || {
         echo "ERROR: iperf-fetch.sh: patch failed"
 	exit 1
     }
