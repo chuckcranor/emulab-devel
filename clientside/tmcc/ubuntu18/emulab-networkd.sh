@@ -21,7 +21,8 @@ found=0
 while [ ! $found -eq 1 ]; do
     # If the control net iface was found, and it's not us, exit.
     if [ -e /run/cnet ]; then
-	echo "`date`: ${iface}: control net is not us" >>$LOGFILE 2>&1
+	echo "`date`: ${iface}: control net is not us, removing ${iface}.network" >>$LOGFILE 2>&1
+	rm -f /run/systemd/network/${iface}.network
 	exit 0
     fi
     #
