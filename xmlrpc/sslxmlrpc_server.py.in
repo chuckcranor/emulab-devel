@@ -1,6 +1,6 @@
 #!/usr/local/bin/python
 #
-# Copyright (c) 2005-2017 University of Utah and the Flux Group.
+# Copyright (c) 2005-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -268,6 +268,9 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
         ctx.set_verify(SSL.verify_peer | SSL.verify_fail_if_no_peer_cert, 16)
         ctx.set_allow_unknown_ca(0)
         #ctx.set_info_callback()
+
+        # Oh, so glad this is built into TCPServer.
+        self.allow_reuse_address = True
         
         dargs = (self,)
         if sys.version_info[0] >= 2 and sys.version_info[1] >= 5:
