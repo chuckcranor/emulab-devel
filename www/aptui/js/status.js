@@ -1708,7 +1708,7 @@ $(function ()
 			var name = $(dimage).attr("name");
 			if (name) {
 			    var hrn = sup.ParseURN(name);
-			    if (hrn.type == "image") {
+			    if (hrn && hrn.type == "image") {
 				var id = hrn.project + "/" + hrn.image;
 				if (hrn.version != null) {
 				    id = id + ":" + hrn.version;
