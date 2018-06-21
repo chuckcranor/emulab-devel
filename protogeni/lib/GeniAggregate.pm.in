@@ -100,6 +100,7 @@ my $TARFILES_SETUP = "$TB/bin/tarfiles_setup";
 my $ELAB_SETUP     = "$TB/sbin/elabinelab";
 my $TBADB          = "$TB/bin/tbadb";
 my $PUSHROOTKEY	   = "$TB/sbin/pushrootkey";
+my $TEVC	   = "$TB/bin/tevc";
 
 # Cache of instances to avoid regenerating them.
 my %aggregates     = ();
@@ -1535,9 +1536,9 @@ sub ActionStart($$;$)
     }
     elsif (($flags & $ACTION_FLAGS_NOEVENTSTART) == 0 && !@failed) {
 	#
-	# Start the event scheduler. Note that the experiment is already
-	# in the ACTIVE state, so the scheduler is going to fire off the
-	# timeline automatically. 
+	# Start the event scheduler. Note that the experiment is not
+	# in the ACTIVE state, so the scheduler will not send the start
+	# event. We do that explicitly.
 	#
 	system("$EVENTSYS start $pid,$eid");
 	if ($?) {
@@ -1551,6 +1552,8 @@ sub ActionStart($$;$)
 		goto bad;
 	    }
 	}
+	print STDERR "Starting event time\n";
+	system("$TEVC -e $pid/$eid now __ns_sequence start");
     }
     if (0) {
 	# Testing.
