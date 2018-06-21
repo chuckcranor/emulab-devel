@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014, 2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,6 +59,7 @@ $query1_result =
                  "   i.uuid,i.profile_version,i.created,'' as destroyed, ".
 		 "   i.creator,p.uuid as profile_uuid,u.email,".
                  "   GROUP_CONCAT(ia.public_url) as public_urls, ".
+                 "   GROUP_CONCAT(aa.abbreviation) as clusters, ".
                  "   i.slice_uuid,f.exitmessage,f.exitcode ".
 		 "  from apt_instances as i ".
                  "left join apt_instance_failures as f ".
@@ -69,6 +70,7 @@ $query1_result =
 		 "     p.profileid=i.profile_id and ".
 		 "     p.version=i.profile_version ".
 		 "left join geni.geni_users as u on u.uuid=i.creator_uuid ".
+                 "left join apt_aggregates as aa on aa.urn=ia.aggregate_urn ".
 		 "where i.profile_id='$profileid' ".
 		 "group by i.uuid order by i.created desc");
 
@@ -77,6 +79,7 @@ $query2_result =
                  "    h.uuid,h.profile_version,h.created,h.destroyed, ".
 		 "    h.creator,p.uuid as profile_uuid,u.email, ".
                  "    GROUP_CONCAT(ia.public_url) as public_urls, ".
+                 "    GROUP_CONCAT(aa.abbreviation) as clusters, ".
                  "    h.slice_uuid,f.exitmessage,f.exitcode ".
 		 "  from apt_instance_history as h ".
                  "left join apt_instance_failures as f ".
@@ -87,6 +90,7 @@ $query2_result =
 		 "     p.profileid=h.profile_id and ".
 		 "     p.version=h.profile_version ".
 		 "left join geni.geni_users as u on u.uuid=h.creator_uuid ".
+                 "left join apt_aggregates as aa on aa.urn=ia.aggregate_urn ".
 		 "where h.profile_id='$profileid' ".
 		 "group by h.uuid order by h.created desc");
 
@@ -111,6 +115,7 @@ foreach (array($query1_result, $query2_result) as $query_result) {
         $exitcode   = $row["exitcode"];
         $public_urls= $row["public_urls"];
         $slice_uuid= $row["slice_uuid"];
+        $clusters  = $row["clusters"];
 	# If a guest user, use email instead.
 	if (isset($email)) {
 	    $creator = $email;
@@ -135,6 +140,7 @@ foreach (array($query1_result, $query2_result) as $query_result) {
 	$instance["creator"]     = $creator;
 	$instance["created"]     = $created;
 	$instance["destroyed"]   = $destroyed;
+	$instance["clusters"]    = ($clusters ? $clusters : "n/a");
         if (ISADMIN()) {
             $instance["public_urls"]  = $public_urls;
         }

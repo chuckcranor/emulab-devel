@@ -10,6 +10,7 @@
 	  <th>Creator</th>
 	  <th>Created</th>
 	  <th>Destroyed</th>
+	  <th>Clusters</th>
 	  <th>Error</th>
 	  <% if (window.ISADMIN) { %>
 	    <th>Logs</th>
@@ -29,8 +30,9 @@
 	    <td><a href='status.php?uuid=<%- instance.uuid %>' target="_blank">
 	      <span class="glyphicon glyphicon-eye-open"></span></a></td>
 	  <% } else { %>
-	    <td><%- instance.destroyed %></td>
+	      <td><%- instance.destroyed %></td>
 	  <% } %>
+	  <td><%- instance.clusters %></td>
 	  <td class="text-danger">
 	    <% if (_.has(instance, "iserror")) { %>
 	      <% if (_.has(instance, "error_message")) { %>
