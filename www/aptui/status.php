@@ -196,6 +196,7 @@ $paniced         = $instance->paniced();
 $pid             = $instance->pid();
 $gid             = $instance->gid();
 $extensions      = ExtensionInfo::LookupForInstance($instance);
+$slivers         = InstanceSliver::LookupForInstance($instance);
 $isstud          = (isset($this_user) && $this_user->stud() ? 1 : 0);
 $wholedisk       = FeatureEnabled("WholeDiskImage", $creator, $instance->Group());
 
@@ -325,6 +326,21 @@ echo "<link rel='stylesheet'
 # For progress bubbles in the imaging modal.
 echo "<link rel='stylesheet' href='css/progress.css'>\n";
 echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
+
+#
+# Build up a blob of aggregates info used by this experiment.
+#
+$blob = array();
+foreach ($slivers as $sliver) {
+    $aggregate_urn = $sliver->aggregate_urn();
+    $aggregate     = Aggregate::Lookup($aggregate_urn);
+    $weburl        = $aggregate->weburl();
+
+    $blob[$aggregate_urn] = array("weburl" => $weburl);
+}
+echo "<script type='text/plain' id='amlist-json'>\n";
+echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
+echo "</script>\n";
 
 #
 # Build up a blob of stuff to json encode. This should be moved to

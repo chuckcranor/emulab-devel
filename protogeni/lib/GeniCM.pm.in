@@ -7731,6 +7731,7 @@ sub UpdateManifest($)
 	print STDERR "No manifest for $slice/$aggregate\n";
 	return -1;
     }
+    my $changed   = 0;
     my @vlanlist  = ();
     my %vlanpaths = ();
     if ($experiment->PortLanList(\@vlanlist) == 0) {
@@ -7772,7 +7773,31 @@ sub UpdateManifest($)
 	    $el = GeniXML::AddElement("switchpath",
 				      $linkref, $GeniXML::EMULAB_NS);
 	    $el->appendText($vlanpaths{$vname});
+	    $changed++;
 	}
+    }
+    #
+    # Update the disk image, adding it to the emulab vnode extension.
+    #
+    foreach my $noderef (GeniXML::FindNodes("n:node",
+					    $rspec)->get_nodelist()){
+	my $vnoderef = GeniXML::FindNodesNS("n:vnode", $noderef,
+					    $GeniXML::EMULAB_NS)->pop();
+	next
+	    if (! defined($vnoderef));
+	my $node_id = GeniXML::GetText("name", $vnoderef);
+	next
+	    if (!defined($node_id));
+	my $node = Node->Lookup($node_id);
+	next
+	    if (!defined($node));
+	my $osimage = $node->RunningOsImage();
+	next
+	    if (!defined($osimage));
+	GeniXML::SetText("disk_image", $vnoderef, $osimage->versname());
+	$changed++;
+    }
+    if ($changed) {
 	return $aggregate->UpdateManifest($rspec);
     }
     return 0;

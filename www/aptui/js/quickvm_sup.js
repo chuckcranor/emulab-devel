@@ -14,11 +14,15 @@ function ParseURN(urn)
 	       "id"     : matches[3]};
     
     if (hrn.type == "image") {
-	parser  = /^(.*)(::|\/\/)(.*)$/;
+	parser  = /^([^\/\:]+)(::|:|\/\/)([^\:]+):?(\d+)?$/;
 	matches = parser.exec(hrn.id);
 	if (matches) {
 	    hrn["project"] = matches[1];
 	    hrn["image"]   = matches[3];
+	    hrn["version"] = null;
+	    if (matches.length > 4) {
+		hrn["version"] = matches[4];
+	    }
 	}
     }
     return hrn;

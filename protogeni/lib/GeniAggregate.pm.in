@@ -1292,7 +1292,6 @@ sub ActionStart($$;$)
 		goto bad;
 	    }
 	    DebugTimeStamp("syncportvlans done");
-	    GeniCM::UpdateManifest($slice);
 	}
     }
     $sliver = undef;
@@ -1386,6 +1385,8 @@ sub ActionStart($$;$)
 	print STDERR "Calling os_setup @nodes\n";
 	$rval = system("$OSSETUP $pid $eid @nodes");
 	print STDERR "os_setup exited with status $rval\n";
+	# Update to get the disk images into the manifest.
+	GeniCM::UpdateManifest($slice);
     }
 
     #

@@ -39,11 +39,11 @@ $(function ()
     var user_lockdown     = 0;
     var lockdown_code     = "";
     var consolenodes      = {};
-    var diskimages        = {};
     var showlinktest      = false;
     var hidelinktest      = false;
     var extension_blob    = null;
     var projlist          = null;
+    var amlist            = null;
     var changingtopo      = false;
     var EMULAB_OPS        = "emulab-ops";
     var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
@@ -87,12 +87,13 @@ $(function ()
 
 	if ($('#extension-blob-json').length) {
 	    extension_blob = decodejson('#extension-blob-json');
-	    console.info(extension_blob);
+	    // console.info(extension_blob);
 	}
 	if ($('#projects-json').length) {
 	    projlist = decodejson('#projects-json');
-	    console.info(projlist);
+	    // console.info(projlist);
 	}
+	amlist = decodejson('#amlist-json');
 
 	// Generate the templates.
 	var template_args = {
@@ -1557,6 +1558,7 @@ $(function ()
 	" <td name='client_id'>n/a</td>" +
 	" <td name='node_id'>n/a</td>" +
 	" <td name='type'>n/a</td>" +
+	" <td name='image'>n/a</td>" +
 	" <td name='sshurl'>n/a</td>" +
 	" <td align=left><input name='select' type=checkbox>" +
 	" <td name='menu' align=center> " +
@@ -1660,10 +1662,22 @@ $(function ()
 		clone.attr('id', 'listview-row-' + node);
 		// Set the client_id in the first column.
 		clone.find(" [name=client_id]").html(node);
-		// And the node_id/type
+		// And the node_id/type. This is an emulab extension.
 		if (vnode.length) {
-		    clone.find(" [name=node_id]")
-			.html($(vnode).attr("name"));
+		    var node_id = $(vnode).attr("name");
+
+		    // Admins get a link to the shownode page.
+		    if (isadmin) {
+			var weburl = amlist[aggregate_urn].weburl +
+			    "/shownode.php3?node_id=" + node_id;
+			var html   = "<a href='" + weburl + "' target=_blank>" +
+			    node_id + "</a>";
+			    
+			clone.find(" [name=node_id]").html(html);
+		    }
+		    else {
+			clone.find(" [name=node_id]").html(node_id);
+		    }
 		    clone.find(" [name=type]")
 			.html($(vnode).attr("hardware_type"));
 		    clientid2nodeid[node] = $(vnode).attr("name");
@@ -1679,6 +1693,30 @@ $(function ()
 		if (stype.length &&
 		    $(stype).attr("name") === "firewall") {
 		    isfw = 1;
+		}
+		/*
+		 * Find the disk image (if any) for the node and display
+		 * in the listview.
+		 */
+		if (vnode.length && $(vnode).attr("disk_image")) {
+		    clone.find(" [name=image]")
+			.html($(vnode).attr("disk_image"));
+		}
+		else if (stype.length) {
+		    var dimage  = $(stype).find("disk_image");
+		    if (dimage.length) {
+			var name = $(dimage).attr("name");
+			if (name) {
+			    var hrn = sup.ParseURN(name);
+			    if (hrn.type == "image") {
+				var id = hrn.project + "/" + hrn.image;
+				if (hrn.version != null) {
+				    id = id + ":" + hrn.version;
+				}
+				clone.find(" [name=image]").html(id);
+			    }
+			}
+		    }
 		}
 
 		if (login.length && dossh) {
@@ -1753,19 +1791,6 @@ $(function ()
 		else {
 		    clone.find(' [name=delete]')
 			.parent().addClass('disabled');		    
-		}
-
-		/*
-		 * Find the disk image (if any) for the node and store it.
-		 */
-		if (stype.length) {
-		    var dimage  = $(stype).find("disk_image");
-		    if (dimage.length) {
-			var name = $(dimage).attr("name");
-			if (name) {
-			    diskimages[node] = name;
-			}
-		    }
 		}
 
 		// Insert into the table, we will attach the handlers below.
