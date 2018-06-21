@@ -4255,6 +4255,7 @@ sub ListImages($)
 		    "url"     => $image_url,
 		    "created" => emutil::TBDateStringGMT($image->created()),
 		    "updated" => emutil::TBDateStringGMT($image->updated()),
+		    "format"  => $image->format(),
 	};
 	
 	#
