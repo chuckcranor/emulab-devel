@@ -38,6 +38,7 @@ $(function ()
 	    var callback = function(json) {
 		var error = null;
 		var images = null;
+		var showformat = false;
 
 		console.info(name, json);
 
@@ -63,6 +64,17 @@ $(function ()
 		    // Save for later
 		    imagelist[name] = images;
 		}
+		// We show the format only if there is more then one
+		// format type.
+		var formats = {};
+		_.each(images, function(value, index) {
+		    _.each(value.versions, function(image, index) {
+			formats[image.format] = 1;
+		    });
+		});
+		if (Object.keys(formats).length > 1) {
+		    showformat = true;
+		}
 		// Generate the main template.
 		var html = listTemplate({
 		    "images"       : images,
@@ -70,6 +82,7 @@ $(function ()
 		    "showuser"     : false,
 		    "name"         : name,
 		    "error"        : error,
+		    "showformat"   : showformat,
 		});
 		html =
 		    "<div class='row' id='" + name + "'>" +
@@ -380,8 +393,15 @@ $(function ()
 	    if (json.value.length == 0) {
 		return;
 	    }
+	    // We show the format only if there is more then one format type.
+	    var formats = {};
+	    _.each(json.value, function(value, index) {
+		formats[value.format] = 1;
+	    });
+		   
 	    var html = classicTemplate({
 		"images"       : json.value,
+		"showformat"   : Object.keys(formats).length > 1,
 	    });
 	    $('#classic-images-div').html(html);
 	    // Format dates with moment before display.
@@ -430,10 +450,6 @@ $(function ()
 			filter_columnFilters : false,
 			// Search as typing
 			filter_liveSearch : true,
-		    },
-		    headers: {
-			3: {sorter: false},
-			4: {sorter: false},
 		    },
 		});
 	    $.tablesorter.filter.bindSearch(table, $('#classic-images-search'));

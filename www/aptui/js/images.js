@@ -4,6 +4,8 @@ $(function ()
 
     var templates = APT_OPTIONS.fetchTemplateList(['images']);
     var mainTemplate = _.template(templates['images']);
+    var filterindex = 7;
+    var showformat = false;
 
     function initialize()
     {
@@ -13,12 +15,23 @@ $(function ()
 	var images = JSON.parse(_.unescape($('#images-json')[0].textContent));
 	console.info("images", images);
 
+	// We show the format only if there is more then one format type.
+	var formats = {};
+	_.each(images, function(value, index) {
+	    formats[value.format] = 1;
+	});
+	if (Object.keys(formats).length > 1) {
+	    showformat = true;
+	    filterindex++;
+	}
+
 	// Generate the main template.
 	var html = mainTemplate({
 	    "images"  : images,
 	    "all"     : window.ISADMIN && window.ALL,
 	    "isadmin" : window.ISADMIN,
 	    "manual"  : window.MANUAL,
+	    "showformat" : showformat,
 	});
 	$('#main-body').html(html);
 
@@ -80,10 +93,6 @@ $(function ()
 		    // Search as typing
 		    filter_liveSearch : true,
 		},
-		headers: {
-		    4: {sorter: false},
-		    5: {sorter: false},
-		},
 	    });
 	
 	/*
@@ -100,7 +109,7 @@ $(function ()
 	    search_timeout =
 		window.setTimeout(function() {
 		    var filters = $.tablesorter.getFilters($('#images-table'));
-		    filters[7] = userInput;
+		    filters[filterindex] = userInput;
 		    console.info("Search", filters);
 		    $.tablesorter.setFilters($('#images-table'), filters, true);
 		}, 500);
@@ -114,8 +123,8 @@ $(function ()
 	var filters = $.tablesorter.getFilters($('#images-table'));
 	// The "any" filter needs a value or everything disappears.
 	// If there is a term in the search box, it will have a value.
-	if (filters[7] === undefined) {
-	    filters[7] = "";
+	if (filters[filterindex] === undefined) {
+	    filters[filterindex] = "";
 	}
 	if ($('#my-images').is(":checked")) {
 	    tmp.push("creator");
@@ -136,11 +145,11 @@ $(function ()
 	}
 	if (tmp.length) {
 	    // regex search, plain | does not work.
-	    filters[6] = "/" + tmp.join("|") + "/";
+	    filters[filterindex - 1] = "/" + tmp.join("|") + "/";
 	}
 	else {
 	    // Hmm, an empty string will get everything.
-	    filters[6] = "WHY";
+	    filters[filterindex - 1] = "WHY";
 	}
 	console.info("SetFilters", filters);
 	$.tablesorter.setFilters($('#images-table'), filters, true);

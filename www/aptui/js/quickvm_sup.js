@@ -1,6 +1,29 @@
 $(function () {
 window.sup = (function () {
 
+function ParseURN(urn) 
+{
+    var parser  = /^urn:publicid:idn\+([^\+]*)\+([^\+]*)\+(.*)$/i;
+    var matches = parser.exec(urn);
+
+    if (!matches) {
+	return null;
+    }
+    var hrn = {"domain" : matches[1],
+	       "type"   : matches[2],
+	       "id"     : matches[3]};
+    
+    if (hrn.type == "image") {
+	parser  = /^(.*)(::|\/\/)(.*)$/;
+	matches = parser.exec(hrn.id);
+	if (matches) {
+	    hrn["project"] = matches[1];
+	    hrn["image"]   = matches[3];
+	}
+    }
+    return hrn;
+}
+
 function ShowModal(which, hidefunction) 
 {
     var callback = function() {
@@ -338,6 +361,7 @@ function VerifySpeaksfor(speaksfor, signature)
 
 // Exports from this module for use elsewhere
 return {
+    ParseURN: ParseURN,
     ShowModal: ShowModal,
     HideModal: HideModal,
     ShowWaitWait: ShowWaitWait,

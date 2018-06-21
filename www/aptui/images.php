@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -177,6 +177,7 @@ if ($ISCLOUD) {
         $blob["creator"]     = $creator;
         $blob["creator_idx"] = $creator_idx;
         $blob["project_urn"] = $row["project_urn"];
+        $blob["format"]      = $row["format"];
         $blob["urn"]         = $row["urn"];
         if (isset($url)) {
             $blob["url"] = $url;
@@ -243,6 +244,7 @@ else {
         $blob["global"]      = $row["global"];
         $blob["creator"]     = $row["creator"];
         $blob["creator_idx"] = $row["creator_idx"];
+        $blob["format"]      = $row["format"];
         $blob["urn"]         = $urn;
 	$blob["url"]         = $TBBASE . "/" .
                              CreateURL("showimageid",

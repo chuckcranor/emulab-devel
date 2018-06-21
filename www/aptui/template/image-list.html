@@ -65,6 +65,9 @@
 	  <tr>
 	    <th class="col-md-5">Image URN</th>
 	    <th class="col-md-2">Created</th>
+	    <% if (showformat) { %>
+	      <th>Format</th>
+	    <% } %>
 	    <th>File Size</th>
 	  </tr>
 	</thead>
@@ -84,6 +87,9 @@
 		  <% } %>
 	      </td>
 	      <td class="format-date"><%- image.versions[0].created %></td>
+	      <% if (showformat) { %>
+		<td><%- image.versions[0].format %></td>
+	      <% } %>
 	      <td class="image-filesize"></td>
 	    </tr>
 	    <% _.each(image.versions, function(version, versionindex) { %>
@@ -102,6 +108,9 @@
 		  <% } %>
 		</td>
 		<td class="format-date"><%- version.created %></td>
+		<% if (showformat) { %>
+		  <td><%- version.format %></td>
+		<% } %>
 		<td class="version-filesize"><%- version.filesize %></td>
 	      </tr>
 	    <% }); %>
@@ -146,6 +155,9 @@
 	    <th class="col-md-5">Image URN</th>
 	    <th class="col-md-2">Created</th>
 	    <th>File Size</th>
+	    <% if (showformat) { %>
+	      <th>Format</th>
+	    <% } %>
 	    <th class="sorter-false">Profile</th>
 	  </tr>
 	</thead>
@@ -167,6 +179,9 @@
 		<%- image.urn %>
 	      </td>
 	      <td class="format-date"><%- image.versions[0].created %></td>
+	      <% if (showformat) { %>
+		<td><%- image.versions[0].format %></td>
+	      <% } %>
 	      <td class="image-filesize"></td>
 	      <td></td>
 	    </tr>
@@ -185,6 +200,9 @@
 			  style='color: red; margin-left: 3px;'></span></a>
 		</td>
 		<td class="format-date"><%- version.created %></td>
+		<% if (showformat) { %>
+		  <td><%- version.format %></td>
+		<% } %>
 		<td class="version-filesize"><%- version.filesize %></td>
 		<td class="delete-profile"
 		    data-uuid="<%- version.using[0].uuid %>">
@@ -235,6 +253,9 @@
 	  <tr>
 	    <th class="col-md-5">Image URN</th>
 	    <th class="col-md-2">Created</th>
+	    <% if (showformat) { %>
+	      <th>Format</th>
+	    <% } %>
 	    <th>File Size</th>
 	  </tr>
 	</thead>
@@ -255,6 +276,9 @@
 		<%- image.urn %>
 	      </td>
 	      <td class="format-date"><%- image.versions[0].created %></td>
+	      <% if (showformat) { %>
+		<td><%- image.versions[0].format %></td>
+	      <% } %>
 	      <td class="image-filesize"></td>
 	    </tr>
 	    <% _.each(image.versions, function(version, versionindex) { %>
@@ -269,6 +293,9 @@
 		    Profiles</a>
 		</td>
 		<td class="format-date"><%- version.created %></td>
+		<% if (showformat) { %>
+		  <td><%- version.format %></td>
+		<% } %>
 		<td class="version-filesize"><%- version.filesize %></td>
 	      </tr>
 	      <tr class="hidden tablesorter-childRow-versions
