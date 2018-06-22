@@ -641,7 +641,7 @@ function Do_ConsoleURL()
     $blob = array();
     $blob["url"] = $taskdata["url"];
     if (isset($taskdata["password"]) &&
-        TBMinTrust($trust, $TBDB_TRUST_LOCALROOT)) {
+        (ISADMIN() || TBMinTrust($trust, $TBDB_TRUST_LOCALROOT))) {
         $blob["password"] = $taskdata["password"];
     }
     if (isset($taskdata["logurl"])) {
