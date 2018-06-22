@@ -32,36 +32,74 @@ include("quickvm_sup.php");
 header("Access-Control-Allow-Origin: *");
 
 #
+# We use the server to determine which portal.
+#
+$portal = $PORTAL_GENESIS;
+$servername = $APTHOST;
+# Include classic numbers.
+if ($portal == "emulab") {
+    $portalclause = "(p.portal='$portal' or p.portal is null)";
+}
+else {
+    $portalclause = "(p.portal='$portal')";
+}    
+
+#
 # For the Cloudlab front page, to display some current stats.
 #
-$blob = array();
+$blob = array("active_experiments" => 0,
+              "total_experiments"  => 0,
+              "projects"  => 0,
+              "distinct_users"  => 0);
 
 #
 # Number of active experiments.
 #
 $query_result =
-    DBQueryFatal("select count(uuid) from apt_instances");
+    DBQueryFatal("select count(uuid) from apt_instances " .
+                 "where servername='$servername'");
 if ($query_result) {
     $row = mysql_fetch_array($query_result);
     $blob["active_experiments"] = $row[0];
+}
+# Add classic to emulab portal numbers,
+if ($portal == "emulab") {
+    $query_result =
+        DBQueryFatal("select count(*) from experiments ".
+                     "where geniflags=0 && state='active'");
+}
+if ($query_result) {
+    $row = mysql_fetch_array($query_result);
+    $blob["active_experiments"] += $row[0];
 }
 
 #
 # Number of experiments ever
 #
 $query_result =
-    DBQueryFatal("select count(uuid) from apt_instance_history where servername='www.cloudlab.us'");
+    DBQueryFatal("select count(*) from apt_instance_history ".
+                 "where servername='$servername'");
 if ($query_result) {
     $row = mysql_fetch_array($query_result);
     $blob["total_experiments"] = $row[0];
+}
+# Add classic to emulab portal numbers,
+if ($portal == "emulab") {
+    $query_result =
+        DBQueryFatal("select count(*) from experiment_stats ".
+                     "where geniflags is null");
+}
+if ($query_result) {
+    $row = mysql_fetch_array($query_result);
+    $blob["total_experiments"] += $row[0];
 }
 
 #
 # Number Cloudlab projects.
 #
 $query_result =
-    DBQueryFatal("select count(pid) from projects ".
-                 "where approved=1 and portal='cloudlab'");
+    DBQueryFatal("select count(pid) from projects as p ".
+                 "where p.approved=1 and $portalclause");
 if ($query_result) {
     $row = mysql_fetch_array($query_result);
     $blob["projects"] = $row[0];
@@ -70,19 +108,36 @@ if ($query_result) {
 #
 # Number of users who have ever created an experiment.
 #
-$query_result =
-    DBQueryFatal("(select distinct creator from apt_instance_history) ".
-                 "union ".
-                 "(select distinct creator from apt_instances)");
+if ($portal == "emulab") {
+    $query_result =
+        DBQueryFatal("select count(distinct creator_idx) ".
+                     "  from experiment_stats as s ".
+                     "left join projects as p on p.pid_idx=s.pid_idx ".
+                     "where geniflags is null or $portalclause");
+}
+else {
+    $query_result =
+        DBQueryFatal("select count(*) from ".
+                 " ((select distinct a.creator from apt_instance_history as a ".
+                 "   left join projects as p on p.pid_idx=a.pid_idx ".
+                 "   where $portalclause) ".
+                 "  union ".
+                 "  (select distinct a.creator from apt_instances as a ".
+                 "   left join projects as p on p.pid_idx=a.pid_idx ".
+                 "   where $portalclause)) as c");
+}
 if ($query_result) {
-    $blob["distinct_users"] = mysql_num_rows($query_result);
+    $row = mysql_fetch_array($query_result);
+    $blob["distinct_users"] = $row[0];
 }
 
 #
 # Number of profiles (both public and private)
 #
 $query_result =
-    DBQueryFatal("select count(uuid) from apt_profiles");
+    DBQueryFatal("select count(profileid) from apt_profiles as a ".
+                 "left join projects as p on p.pid_idx=a.pid_idx ".
+                 "where $portalclause");
 if ($query_result) {
     $row = mysql_fetch_array($query_result);
     $blob["profiles"] = $row[0];
