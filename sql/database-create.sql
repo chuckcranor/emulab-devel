@@ -339,7 +339,10 @@ CREATE TABLE `apt_instance_history` (
   `params` mediumtext,
   `manifest` mediumtext,
   PRIMARY KEY (`uuid`),
-  KEY `profile_id` (`profile_id`)
+  KEY `profile_id` (`profile_id`),
+  KEY `creator` (`creator`),
+  KEY `creator_idx` (`creator_idx`),
+  KEY `pid_idx` (`pid_idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
