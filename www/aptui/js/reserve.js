@@ -552,6 +552,7 @@ $(function ()
 	if (starttime == null) {
 	    return;
 	}
+	// enddata can be null if we fit on the last timeline entry.
 	console.info("FindFit: ", startdata, enddata);
 
 	var start = moment(starttime * 1000);
@@ -569,8 +570,9 @@ $(function ()
 	if (start.hour() < IDEAL_STARTHOUR) {
 	    var tmp = moment(start);
 	    tmp.hour(IDEAL_STARTHOUR);
-	    
-	    if (tmp.unix() + ((3600 * 24 * days)) < enddata.t) {
+
+	    // If no enddata then we can definitely shift it.
+	    if (!enddata || tmp.unix() + ((3600 * 24 * days)) < enddata.t) {
 		console.info("Shifting to later start time");
 		start = tmp;
 	    }
