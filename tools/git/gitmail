@@ -1161,8 +1161,9 @@ sub send_mail($$$@) {
                #    'Bcc:' lines
                my $mailfrom_str = "";
                if ($mailfrom) {
-                   $mailfrom_str = "-f$mailfrom";
+                   $mailfrom_str = "-f'$mailfrom'";
                }
+               print  "| $SENDMAIL -odb -oem $mailfrom_str -t\n";
                open(MAIL, "| $SENDMAIL -odb -oem $mailfrom_str -t");
         }
 
