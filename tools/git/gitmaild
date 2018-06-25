@@ -264,6 +264,11 @@ sub run_gitmail($$) {
     # This enables us to put in a link to diffs as well
     $options{'gitlaburl'} = $repoinfo->{web_url};
 
+    # If debugging, pass along to gitmail
+    if ($debug) {
+        $options{'debug'} = 1;
+    }
+
     # Turn all of this into a string to pass on the command line
     my $optionstr = format_options(%options);
     if ($verbose) {
@@ -315,8 +320,8 @@ sub run_gitmail($$) {
 sub call_gitlab_api($) {
     my ($call) = @_;
 
-    # Hardcode API v3 for now
-    my $url = $BASEURL . "api/v3" . $call . "?private_token=" . $TOKEN;
+    # Hardcode API v4 for now
+    my $url = $BASEURL . "api/v4" . $call . "?private_token=" . $TOKEN;
 
     print "Calling '$url'\n";
 
