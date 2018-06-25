@@ -1039,6 +1039,7 @@ sub GetTicketAuxAux($)
     my %lannodes = ();
     my %allnodes = ();
     my %bsnames  = ();
+    my %prognames= ();
     # Extra nodes (like XEN vhosts).
     my %internal_nodemap  = ();
     # For stitching, keep track of external nodes and links.
@@ -1823,10 +1824,24 @@ sub GetTicketAuxAux($)
 		$nodeblob->{"rootkey_private"} = -1; # means did not specify.
 	    }
 	}
-	
-	# Program agents.
+
+	#
+	# Program agents. We have to watch for duplicate names, the event
+	# system assumes each one is uniquely named.
+	#
 	if (my @progagents = GeniXML::GetProgramAgents($ref)) {
 	    foreach my $agent (@progagents) {
+		my $vname = $agent->{"name"};
+		if (!defined($vname)) {
+		    return GeniResponse->MalformedArgsResponse(
+			"No name for program agent");
+		}
+		if (exists($prognames{$vname})) {
+		    return GeniResponse->MalformedArgsResponse(
+			"Emulab program agent names must be unique: $vname");
+		}
+		$prognames{$vname} = $vname;
+		
 		$response = AddProgramAgent($virtexperiment,
 					    $node_nickname, $agent);
 		goto bad
