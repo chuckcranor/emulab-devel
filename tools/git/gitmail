@@ -1163,7 +1163,6 @@ sub send_mail($$$@) {
                if ($mailfrom) {
                    $mailfrom_str = "-f'$mailfrom'";
                }
-               print  "| $SENDMAIL -odb -oem $mailfrom_str -t\n";
                open(MAIL, "| $SENDMAIL -odb -oem $mailfrom_str -t");
         }
 
