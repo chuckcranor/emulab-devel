@@ -43,6 +43,7 @@ use vars qw(@ISA @EXPORT);
 use emdb;
 use emutil;
 use WebTask;
+use EmulabConstants;
 use libtestbed;
 use libEmulab;
 use GeniResponse;
@@ -410,9 +411,14 @@ sub SliceUtilizationData($)
 				"No experiment for $slice")
 	if (!defined($experiment));
 
+    # Watch for busy experiment.
+    if ($slice->locked() || $experiment->state() ne EXPTSTATE_ACTIVE()) {
+	return GeniResponse->Create(GENIRESPONSE_BUSY);
+    }
+
     my @nodes = $experiment->NodeList(0, 1);
     return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				"No nodes is $slice")
+				"No nodes in $slice")
 	if (!@nodes);
 
     #
@@ -509,6 +515,10 @@ sub SliceIdleData($)
 				"No experiment for $slice")
 	if (!defined($experiment));
 
+    # Watch for busy experiment.
+    if ($slice->locked() || $experiment->state() ne EXPTSTATE_ACTIVE()) {
+	return GeniResponse->Create(GENIRESPONSE_BUSY);
+    }
     my $pid  = $experiment->pid();
     my $eid  = $experiment->eid();
     my $swapped = str2time($experiment->swapin_last());
@@ -535,16 +545,17 @@ sub SliceIdleData($)
 	$output .= $_;
     }
     if (! close(IDLE)) {
+	my $errmsg = ($! ?
+		      "Pipe error running $IDLESTATS: $!" :
+		      "$IDLESTATS exited with $?") . "\n" . $output;
+	
 	if (-s $debugfile) {
 	    print STDERR "$command\n";
 	    my $stuff = `/bin/cat $debugfile`;
 	    print STDERR $stuff;
 	}
 	unlink($debugfile);
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    ($! ? "Pipe error running idlestats: $!" :
-				     "idlestats exited with $?") .
-				    "\n" . $output);
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $errmsg);
     }
     if (-s $debugfile) {
 	print STDERR "$command\n";
