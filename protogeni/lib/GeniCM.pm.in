@@ -7792,8 +7792,9 @@ sub UpdateManifest($)
 	next
 	    if (!defined($node));
 	my $osimage = $node->RunningOsImage();
+	# Skip generic images for now.
 	next
-	    if (!defined($osimage));
+	    if (!(defined($osimage) && $osimage->isImage()));
 	GeniXML::SetText("disk_image", $vnoderef, $osimage->versname());
 	$changed++;
     }
