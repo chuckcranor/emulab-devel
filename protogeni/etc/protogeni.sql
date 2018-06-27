@@ -77,6 +77,8 @@ CREATE TABLE `geni_slices` (
   `async_mode` tinyint(1) NOT NULL default '0',
   `async_code` int(11) default '0',
   `async_output` mediumtext,
+  `portal_tag` varchar(64) default NULL,
+  `portal_url` tinytext,
   PRIMARY KEY  (`idx`),
   UNIQUE KEY `hrn` (`hrn`),
   UNIQUE KEY `uuid` (`uuid`)
