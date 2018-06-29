@@ -750,8 +750,12 @@ convpubkey(struct pubkeydata *k)
 	BN_bin2bn(k->modulus, k->keylength, mod);
 	BN_bin2bn(k->exponent, k->expsize, exp);
 	/* set up the RSA public key structure */
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L)
+	RSA_set0_key(rsa,mod,exp,NULL);
+#else
 	rsa->n = mod;
 	rsa->e = exp;
+#endif
 	return rsa;
 }
 
