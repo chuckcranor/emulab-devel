@@ -96,6 +96,9 @@ endif
 ifeq ($(MDSUBDIR),redhat9)
 MDSUBDIR  = linux9
 endif
+ifeq ($(MDSUBDIR),MoonshotUbuntu18)
+MDSUBDIR  = ubuntu18-ms
+endif
 ifeq ($(MDSUBDIR),MoonshotUbuntu16)
 MDSUBDIR  = ubuntu16-ms
 endif

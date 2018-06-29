@@ -305,6 +305,7 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/ubuntu16/GNUmakefile \
 	  tmcc/ubuntu16-ms/GNUmakefile \
 	  tmcc/ubuntu18/GNUmakefile \
+	  tmcc/ubuntu18-ms/GNUmakefile \
 	  tmcc/linux-ms/GNUmakefile \
 	  tmcc/archlinux/GNUmakefile \
 	  tmcc/alpine/GNUmakefile \
