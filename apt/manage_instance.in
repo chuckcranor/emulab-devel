@@ -2015,6 +2015,9 @@ sub DoMaxExtension()
 	$webtask->output($errmsg) if (defined($errmsg));
 	$webtask->Exited($errcode);
     }
+    if ($errcode < 0) {
+	print STDERR "\n\n" . $instance->webURL() . "\n";
+    }
     exit($errcode);
 }
 

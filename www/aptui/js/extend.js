@@ -476,7 +476,7 @@ window.ShowExtendModal = (function()
 						    "status",
 						    "RequestExtension",
 						    {"uuid"   : uuid,
-						     "howlong": actual});
+						     "howlong": hours});
 		xmlthing.done(requestcallback);
 	    });
 	    sup.ShowModal('#restricted_extend_modal');

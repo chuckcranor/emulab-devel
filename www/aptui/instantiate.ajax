@@ -172,13 +172,13 @@ function Do_GetImageList()
     if ($this_user && $this_user->webonly()) {
         # Only public images
 	$publicImages = ImagesWhere("where v.visibility='public' and i.project_urn not like '%$systemProject+authority+sa'", $dblink);
-	$systemImages = ImagesWhere("where i.project_urn like '%$systemProject+authority+sa'", $dblink);
+	$systemImages = ImagesWhere("where i.project_urn like '%$systemProject+authority+sa' and v.deprecated is NULL", $dblink);
     } else if ($this_user) {
 	$user_urn = addslashes($this_user->urn());
 	# Public images that weren't created by the user
 	$publicImages = ImagesWhere("where v.visibility='public' and i.project_urn not like '%$systemProject+authority+sa' and v.creator_urn != '$user_urn'", $dblink);
 	# System images that weren't created by the user
-	$systemImages = ImagesWhere("where v.visibility='public' and i.project_urn like '%$systemProject+authority+sa' and v.creator_urn != '$user_urn'", $dblink);
+	$systemImages = ImagesWhere("where v.visibility='public' and i.project_urn like '%$systemProject+authority+sa' and v.creator_urn != '$user_urn' and v.deprecated is NULL", $dblink);
         # All images for user
 	$myImages = ImagesWhere("where v.creator_urn='$user_urn'", $dblink);
     }
