@@ -946,6 +946,24 @@ class InstanceHistory
         $row = mysql_fetch_array($query_result);
         return InstanceHistory::Lookup($row[0]);
     }
+    #
+    # Permission check; does user have permission to view instance.
+    #
+    function CanView($user) {
+	if ($this->creator_idx() == $user->uid_idx()) {
+	    return 1;
+	}
+	# Otherwise a project membership test.
+	$project = Project::Lookup($this->pid_idx());
+	if (!$project) {
+	    return 0;
+	}
+	$isapproved = 0;
+	if ($project->IsMember($user, $isapproved) && $isapproved) {
+	    return 1;
+	}
+	return 0;
+    }
 }
 
 class InstanceSliver
