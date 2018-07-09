@@ -87,7 +87,13 @@ my $runonce = 0;
 my $TB		= "@prefix@";
 my $TBOPS	= "@TBOPSEMAIL@";
 my $TBLOG	= "@TBLOGFACIL@";
+my $TBBASE      = "@TBBASE@";
+my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 my $LOGFILE     = "$TB/log/cnetwatch.log";
+
+# For Geni slices: do this early so that we talk to the right DB.
+use vars qw($GENI_DBNAME);
+$GENI_DBNAME = "geni-cm";
 
 #
 # E-mail config
@@ -98,12 +104,6 @@ my $MAILTO	= $TBOPS;
 my $MAIL_IV	= (10 * 60);
 # Do not send more than this many total messages (0 == no limit)
 my $MAIL_MAX	= 1000;
-
-# XXX testing
-if (0) {
-    $MAIL_IV = 60;
-    $MAIL_MAX = 10;
-}
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin';
@@ -146,6 +146,11 @@ $ENV{'WITH_TB_ADMIN_PRIVS'} = 1;
 use lib "@prefix@/lib";
 use libdb;
 use libtestbed;
+use Experiment;
+if ($PGENISUPPORT) {
+    require GeniSlice;
+    require GeniHRN;
+}
 
 #
 # Read sitevars to establish defaults:
@@ -229,6 +234,15 @@ if (TBGetSiteVar($svar, \$tmp)) {
 	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
     }
 
+}
+
+# XXX testing
+if (0) {
+    $interval = 30;
+    $alertinterval = (2 * $interval);
+    $MAIL_IV = 30;
+    $MAIL_MAX = 10;
+    $MAX_PPS = 10;
 }
 
 #
@@ -513,6 +527,11 @@ sub reportevents($)
 		      ", bits/sec=$bps (send=$sbps, recv=$rbps)".
 		      " over $sec seconds");
 		if ($sendmail) {
+		    my $exp = $pcs{$node}{'exp'};
+		    my $expname = $pcs{$node}{'expname'};
+		    my $url = $pcs{$node}{'url'};
+		    my $portalurl = $pcs{$node}{'portalurl'};
+		    
 		    if (@mailbody == 0) {
 			my $pth = $bth = "no limit on";
 			if ($MAX_PPS) {
@@ -539,8 +558,13 @@ sub reportevents($)
 						localtime($ref->{'start'}));
 		    push(@mailbody,
 			 sprintf("%20s %30s %8d %8d %s for %d sec",
-				 $node, $pcs{$node}{'exp'}, $pps,
+				 $node, $expname, $pps,
 				 int($bps/1000000), $stamp, $secs));
+		    push(@mailbody, sprintf("%30s %s", "", $url))
+			if (defined($url));
+		    push(@mailbody, sprintf("%30s %s", "", $portalurl))
+			if (defined($portalurl));
+
 		    push(@maildetails,
 			 sprintf("%20s %8d/%-8d %8d/%-8d %d sec",
 				 $node, $spps, $rpps,
@@ -631,11 +655,11 @@ sub report($)
         "Node", "Experiment", "Tot Pkts", "Unicast", "Multicast", "Tot Bytes";
     foreach my $node (@list) {
 	my $name = $pcs{$node}{'name'};
-	my $exp = $pcs{$node}{'exp'};
+	my $expname = $pcs{$node}{'expname'};
 	my $tot = $ref->{$node}{'totals'};
 
 	printf RL "%20s %30s %12d %12d %12d %14d\n",
-	    $name, $exp, $tot->[3], $tot->[1], $tot->[2], $tot->[0];
+	    $name, $expname, $tot->[3], $tot->[1], $tot->[2], $tot->[0];
     }
 }
 
@@ -703,11 +727,24 @@ sub getnodeinfo($)
 	    next;
 	}
 
-	my $exp;
+	my ($exp,$expname,$url,$portalurl);
 	if (defined($row{'pid'})) {
-	    $exp = $row{'pid'} . "/" . $row{'eid'};
-	} else {
-	    $exp = "<NONE>";
+	    $exp = Experiment->Lookup($row{'pid'}, $row{'eid'});
+	}
+	if (defined($exp)) {
+	    $expname = $exp->pideid();
+	    if ($exp->geniflags) {
+		my $slice = GeniSlice->LookupByExperiment($exp);
+		if (defined($slice)) {
+		    $portalurl = $slice->GetPortalURL();
+		}
+	    }
+	    my $pid = $exp->pid();
+	    my $eid = $exp->eid();
+	    $url = "$TBBASE/showexp.php3?pid=$pid&eid=$eid";
+	}
+	else {
+	    $expname = "<NONE>";
 	}
 	# portstats now accepts node:iface, and spits out in that format (-i).
 	#
@@ -715,6 +752,9 @@ sub getnodeinfo($)
 
 	push(@{$switches{$switch}}, $cnet);
 	$newpcs{$cnet}{'exp'} = $exp;
+	$newpcs{$cnet}{'expname'} = $expname;
+	$newpcs{$cnet}{'url'} = $url;
+	$newpcs{$cnet}{'portalurl'} = $portalurl;
 	$newpcs{$cnet}{'state'} = $row{'eventstate'};
 	$newpcs{$cnet}{'name'} = $pc;
 
