@@ -553,6 +553,27 @@ $(function ()
 	});
 
 	/*
+	 * Cancel Edit button.
+	 */
+	$('#cancel_edit_button').click(function (e) {
+	    e.preventDefault();
+
+	    /*
+	     * Bind a handler for the confirm button,
+	     */
+	    $('#confirm_cancel_edit').click(function (event) {
+		event.preventDefault();
+		modified = false;
+		window.location.reload();
+	    })
+	    sup.ShowModal('#confirm_cancel_edit_modal',
+			  // Delete handler no matter how it hides.
+			  function () {
+			      $('#confirm_cancel_edit').off("click");
+			  });
+	});
+
+	/*
 	 * If the description/instructions textarea are edited, copy
 	 * the text back into the rspec since that is what actually
 	 * gets submitted; the rspec is authoritative.
@@ -660,6 +681,7 @@ $(function ()
 	    EnableButtons();
 	    modified = false;
 	    DisableButton("profile_submit_button");
+	    DisableButton("cancel_edit_button");
 	    if (window.UPDATED) {
 		initNotifyUpdate();
 	    }
@@ -764,6 +786,7 @@ $(function ()
 	if (!initialized) {
 	    modified = false;
 	    DisableButton("profile_submit_button");
+	    DisableButton("cancel_edit_button");
 	}
 	initialized = true;
     }
@@ -773,6 +796,7 @@ $(function ()
 	    modified = true;
 	    DisableButtons();
 	    EnableButton("profile_submit_button");
+	    EnableButton("cancel_edit_button");
 	}
     }
 
@@ -1155,6 +1179,7 @@ $(function ()
 			     else {
 				 EnableButtons();
 				 DisableButton("profile_submit_button");
+				 DisableButton("cancel_edit_button");
 			     }
 			 },
 	                 true);
@@ -1176,6 +1201,7 @@ $(function ()
 	EnableButton("profile_delete_button");
 	EnableButton("profile_instantiate_button");
 	EnableButton("profile_submit_button");
+	EnableButton("cancel_edit_button");
 	EnableButton("profile_copy_button");
 	EnableButton("profile_publish_button");
     }
@@ -1184,6 +1210,7 @@ $(function ()
 	DisableButton("profile_delete_button");
 	DisableButton("profile_instantiate_button");
 	DisableButton("profile_submit_button");
+	DisableButton("cancel_edit_button");
 	DisableButton("profile_copy_button");
 	DisableButton("profile_publish_button");
     }
