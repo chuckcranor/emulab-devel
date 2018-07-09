@@ -53,11 +53,12 @@ $isfadmin = 0;
 #
 # Verify page arguments.
 #
-$reqargs = OptionalPageArguments("uuid",      PAGEARG_STRING,
+$reqargs = OptionalPageArguments("uuid",      PAGEARG_UUID,
+                                 "slice_uuid",PAGEARG_UUID,
                                  "maxextend", PAGEARG_INTEGER,
 				 "oneonly",   PAGEARG_BOOLEAN);
 
-if (!isset($uuid)) {
+if (! (isset($uuid) || isset($slice_uuid))) {
     SPITHEADER(1);
     echo "<div class='align-center'>
             <p class='lead text-center'>
@@ -72,7 +73,12 @@ if (!isset($uuid)) {
 #
 # See if the instance exists. If not, redirect back to the create page
 #
-$instance = Instance::Lookup($uuid);
+if (isset($uuid)) {
+    $instance = Instance::Lookup($uuid);
+}
+else {
+    $instance = Instance::LookupBySlice($slice_uuid);
+}
 if (!$instance) {
     SPITHEADER(1);
     echo "<div class='align-center'>
