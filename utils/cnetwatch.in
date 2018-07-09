@@ -155,6 +155,9 @@ if ($PGENISUPPORT) {
 #
 # Read sitevars to establish defaults:
 #
+# cnetwatch/enable
+#   Zero means don't run cnetwatch (exit immediately).
+#   
 # cnetwatch/check_interval
 #   Interval at which to collect info.
 #   Zero means don't run cnetwatch (exit immediately).
@@ -180,6 +183,13 @@ if ($PGENISUPPORT) {
 #   Zero means no limit to the emails.
 #
 my $tmp;
+my $svar = "cnetwatch/enable";
+if (TBGetSiteVar($svar, \$tmp)) {
+    if ($tmp == 0) {
+	print STDERR "WARNING: cnetwatch disabled by sitevar\n";
+	exit(0);
+    }
+}
 my $svar = "cnetwatch/check_interval";
 if (TBGetSiteVar($svar, \$tmp)) {
     if ($tmp == 0 || $tmp >= 10) {
@@ -327,9 +337,16 @@ if (!TBAdmin()) {
 }
 
 # Go to ground.
-if (!$debug) {
+if (! ($debug || $runonce)) {
+    if (CheckDaemonRunning("cnetwatch")) {
+	fatal("Not starting another cnetwatch, use debug/runonce mode!");
+    }
+    # Go to ground.
     if (TBBackGround($LOGFILE)) {
 	exit(0);
+    }
+    if (MarkDaemonRunning("cnetwatch")) {
+	fatal("Could not mark daemon as running!");
     }
 }
 
@@ -343,8 +360,7 @@ if ($reportlog) {
     } elsif (open(RL, ">>$reportlog")) {
 	RL->autoflush(1);
     } else {
-	print STDERR "Could not open report log '$reportlog'\n";
-	exit(1);
+	fatal("Could not open report log '$reportlog'");
     }
 }
 

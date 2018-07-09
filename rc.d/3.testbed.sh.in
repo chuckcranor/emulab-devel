@@ -147,6 +147,11 @@ case "$1" in
 			@prefix@/sbin/aptevent_daemon
 		fi
 
+		if [ -x @prefix@/sbin/cnetwatch ]; then
+			echo -n " cnetwatch"
+			@prefix@/sbin/cnetwatch
+		fi
+
 		if [ -x @prefix@/sbin/apt_checkup ]; then
 			echo -n " apt_checkup"
 			@prefix@/sbin/apt_checkup
@@ -281,6 +286,9 @@ case "$1" in
 		fi
 		if [ -r /var/run/aptevent_daemon.pid ]; then
 			kill `cat /var/run/aptevent_daemon.pid`
+		fi
+		if [ -r /var/run/cnetwatch.pid ]; then
+			kill `cat /var/run/cnetwatch.pid`
 		fi
 		if [ -r /var/run/apt_checkup.pid ]; then
 			kill `cat /var/run/apt_checkup.pid`
