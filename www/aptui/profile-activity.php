@@ -120,18 +120,6 @@ foreach (array($query1_result, $query2_result) as $query_result) {
 	if (isset($email)) {
 	    $creator = $email;
 	}
-        #
-        # If the slice is gone, the public url needs to be replaced.
-        #
-        $tmp = array();
-        foreach (preg_split("/,/", $public_urls) as $url) {
-            if ($destroyed != "" && preg_match("/publicid=\w*/", $url)) {
-                $url = "https://" . parse_url($url, PHP_URL_HOST) .
-                     "/showslicelogs.php?slice_uuid=" . $slice_uuid;
-            }
-            $tmp[] = $url;
-        }
-        $public_urls = implode(",", $tmp);
 	$instance = array();
         $instance["active"]      = intval($active);
 	$instance["uuid"]        = $uuid;
@@ -141,9 +129,6 @@ foreach (array($query1_result, $query2_result) as $query_result) {
 	$instance["created"]     = $created;
 	$instance["destroyed"]   = $destroyed;
 	$instance["clusters"]    = ($clusters ? $clusters : "n/a");
-        if (ISADMIN()) {
-            $instance["public_urls"]  = $public_urls;
-        }
         if (isset($exitcode)) {
             $instance["iserror"]       = 1;
 

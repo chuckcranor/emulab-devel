@@ -418,7 +418,11 @@ $routing = array("geni-login" =>
 						    "Do_GetHealthStatus",
 						 "GetWirelessStatus" =>
 						    "Do_GetWirelessStatus")),
-
+		 "memlane" =>
+			array("file"    => "memlane.ajax",
+			      "guest"   => false,
+			      "methods" => array("HistoryRecord" =>
+						    "Do_HistoryRecord")),
 );
 
 #

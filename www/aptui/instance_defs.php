@@ -821,6 +821,133 @@ class Instance
     }
 }
 
+class InstanceHistory
+{
+    var	$record;
+    var $slivers;
+    
+    #
+    # Constructor by lookup on unique index.
+    #
+    function InstanceHistory($uuid) {
+	$safe_uuid = addslashes($uuid);
+
+	$query_result =
+	    DBQueryWarn("select h.*,f.exitmessage,f.exitcode ".
+                        "  from apt_instance_history as h ".
+                        "left join apt_instance_failures as f ".
+                        "     on f.uuid=h.uuid ".
+			"where h.uuid='$safe_uuid'");
+
+	if (!$query_result || !mysql_num_rows($query_result)) {
+	    $this->record = null;
+	    return;
+	}
+	$this->record  = mysql_fetch_array($query_result);
+
+        #
+        # Get the list of aggregate records. Early records do not have one.
+        #
+	$query_result =
+	    DBQueryWarn("select * from apt_instance_aggregate_history ".
+			"where uuid='$uuid'");
+	if (!$query_result) {
+	    $this->record = null;
+	    return;
+	}
+        if (!mysql_num_rows($query_result)) {
+            $this->slivers = array(
+                array("uuid" => $this->record["uuid"],
+                      "name" => $this->record["name"],
+                      "aggregate_urn" => $this->record["aggregate_urn"],
+                      "status" => $this->record["status"],
+                      "public_url" => $this->record["public_url"],
+                      "manifest" => $this->record["manifest"],
+                ));
+        }
+        else {
+            $this->slivers = array();
+
+            while ($row = mysql_fetch_array($query_result)) {
+                $this->slivers[] = $row;
+            }
+        }
+    }
+    # accessors
+    function slivers()      { return $this->slivers; }
+    function field($name) {
+	return (is_null($this->record) ? -1 : $this->record[$name]);
+    }
+    function uuid()	    { return $this->field('uuid'); }
+    function name()	    { return $this->field('name'); }
+    function profile_id()   { return $this->field('profile_id'); }
+    function profile_version() { return $this->field('profile_version'); }
+    function slice_uuid()   { return $this->field('slice_uuid'); }
+    function creator()	    { return $this->field('creator'); }
+    function creator_idx()  { return $this->field('creator_idx'); }
+    function creator_uuid() { return $this->field('creator_uuid'); }
+    function pid()	    { return $this->field('pid'); }
+    function pid_idx()	    { return $this->field('pid_idx'); }
+    function gid()	    { return $this->field('gid'); }
+    function gid_idx()	    { return $this->field('gid_idx'); }
+    function aggregate_urn(){ return $this->field('aggregate_urn'); }
+    function public_url()   { return $this->field('public_url'); }
+    function logfileid()    { return $this->field('logfileid'); }
+    function created()	    { return $this->field('created'); }
+    function destroyed()    { return $this->field('destroyed'); }
+    function expired()      { return $this->field('expired'); }
+    function extension_count()   { return $this->field('extension_count'); }
+    function extension_days()    { return $this->field('extension_days'); }
+    function extension_hours()   { return $this->field('extension_hours'); }
+    function physnode_count()    { return $this->field('physnode_count'); }
+    function virtnode_count()    { return $this->field('virtnode_count'); }
+    function servername()   { return $this->field('servername'); }
+    function repourl()	    { return $this->field('repourl'); }
+    function reporef()	    { return $this->field('reporef'); }
+    function repohash()	    { return $this->field('repohash'); }
+    function rspec()	    { return $this->field('rspec'); }
+    function script()	    { return $this->field('script'); }
+    function params()	    { return $this->field('params'); }
+    function manifest()	    { return $this->field('manifest'); }
+    function IsAPT() {
+	return preg_match('/aptlab/', $this->servername());
+    }
+    function IsCloud() {
+	return preg_match('/cloudlab/', $this->servername());
+    }
+    function IsPNet() {
+	return preg_match('/phantomnet/', $this->servername());
+    }
+    # Hmm, how does one cause an error in a php constructor?
+    function IsValid() {
+	return !is_null($this->record);
+    }
+    # Lookup up an instance by uuid
+    function Lookup($uuid) {
+	$foo = new InstanceHistory($uuid);
+
+	if ($foo->IsValid()) {
+            # Insert into cache.
+	    return $foo;
+	}	
+	return null;
+    }
+    function LookupBySlice($slice_uuid)
+    {
+	$safe_uuid = addslashes($slice_uuid);
+
+	$query_result =
+	    DBQueryWarn("select uuid from apt_instance_history ".
+			"where slice_uuid='$safe_uuid'");
+
+	if (!$query_result || !mysql_num_rows($query_result)) {
+            return null;
+	}
+        $row = mysql_fetch_array($query_result);
+        return InstanceHistory::Lookup($row[0]);
+    }
+}
+
 class InstanceSliver
 {
     var	$sliver;
