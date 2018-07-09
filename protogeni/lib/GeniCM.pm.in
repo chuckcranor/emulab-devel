@@ -1022,6 +1022,17 @@ sub GetTicketAuxAux($)
 	    $virtexperiment->nfsmounts("emulabdefault");
 	}
     }
+    # Record this info for local email about these slices.
+    my ($portal_tag,$portal_url) = GeniXML::GetPortal($rspec);
+    if (defined($portal_tag) && $portal_tag ne "" &&
+	$portal_tag =~ /^([-\w]+)$/) {
+	$slice->SetPortalTag($portal_tag);
+    }
+    if (defined($portal_url) && $portal_url ne "" &&
+	TBcheck_dbslot($portal_url, "default", "tinytext",
+		       TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	$slice->SetPortalURL($portal_url);
+    }
 
     #
     # An rspec is a structure that requests specific nodes. If those

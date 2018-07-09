@@ -332,6 +332,8 @@ sub description($)      { return field($_[0], "description"); }
 sub async_mode($)       { return field($_[0], "async_mode"); }
 sub async_code($)       { return field($_[0], "async_code"); }
 sub async_output($)     { return field($_[0], "async_output"); }
+sub portal_tag($)       { return field($_[0], "portal_tag"); }
+sub portal_url($)       { return field($_[0], "portal_url"); }
 sub cert($)		{ return $_[0]->{'CERT'}->cert(); }
 sub GetCertificate($)   { return $_[0]->{'CERT'}; }
 sub LOCKED($)           { return $_[0]->{'LOCKED'}; }
@@ -1566,6 +1568,78 @@ sub AddGenericCert($$$)
 	$query .= ",privkey=" . DBQuoteSpecial($key);
     }
     return DBQueryWarn($query);
+}
+
+sub SetPortalTag($$)
+{
+    my ($self, $tag) = @_;
+    my $uuid = $self->uuid();
+    my $safe_tag = DBQuoteSpecial($tag);
+
+    return -1
+	if (!DBQueryWarn("update geni_slices set portal_tag=$safe_tag " .
+			 "where uuid='$uuid'"));
+
+    $self->{'SLICE'}->{'portal_tag'} = $tag;
+    return 0;
+}
+sub SetPortalURL($$)
+{
+    my ($self, $url) = @_;
+    my $uuid = $self->uuid();
+    my $safe_url = DBQuoteSpecial($url);
+
+    return -1
+	if (!DBQueryWarn("update geni_slices set portal_url=$safe_url " .
+			 "where uuid='$uuid'"));
+
+    $self->{'SLICE'}->{'portal_url'} = $url;
+    return 0;
+}
+
+# Turn the URN into an experiment ID at the Portal.
+sub portal_eid($)
+{
+    my ($self) = @_;
+    my $urn = $self->urn();
+
+    return undef
+	if (!defined($self->portal_tag()));
+
+    my $eid = $urn->id();
+    $eid = $urn->project() . "/" . $eid if (defined($urn->project()));
+
+    return $eid;
+}
+
+#
+# Generate a Portal URL.
+#
+sub GetPortalURL($)
+{
+    my ($self) = @_;
+    my $portal_url;
+
+    return $self->portal_url()
+	if (defined($self->portal_url()));
+
+    my $speaker = $self->speaksfor_urn();
+    return undef
+	if (!defined($speaker));
+
+    return undef
+	if (! ($speaker->domain() eq $OURDOMAIN ||
+	       $speaker->domain() eq "emulab.net"));
+    
+    if ($speaker->domain() eq $OURDOMAIN) {
+        $portal_url = "$TBBASE/portal/";
+    }
+    else {
+        $portal_url = "https://www.emulab.net/portal/";
+    }
+    $portal_url .= "status.php?uuid=" . $self->uuid();
+
+    return $portal_url;
 }
 
 ##########################################################################

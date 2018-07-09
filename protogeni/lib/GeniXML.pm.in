@@ -1131,15 +1131,28 @@ sub FromEmulabPortal($)
     }
     return 0;
 }
-sub SetPortal($$)
+sub GetPortal($)
 {
-    my ($rspec, $portal) = @_;
+    my ($rspec) = @_;
+    
+    my $element = FindNodesNS("n:portal", $rspec, $EMULAB_NS)->pop();
+    if (!defined($element)) {
+	return undef;
+    }
+    my $tag = GetText("name", $element);
+    my $url = GetText("url", $element);
+    return ($tag, $url);
+}
+sub SetPortal($$$)
+{
+    my ($rspec, $portal, $url) = @_;
     
     my $element = FindNodesNS("n:portal", $rspec, $EMULAB_NS)->pop();
     if (!defined($element)) {
 	$element = AddElement("portal", $rspec, $EMULAB_NS);	
     }
     SetText("name", $element, $portal);
+    SetText("url", $element, $url);
     return 0;
 }
 sub ClearPortal($)

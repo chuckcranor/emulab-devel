@@ -825,20 +825,6 @@ $tmp = APT_Profile::EncryptBlocks(\$rspecstr, $alt_certificate, \$errmsg);
 if ($tmp) {
     ($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
 }
-#
-# Tell the CM to do normal NFS mounts if this is the "Emulab" portal
-# making the request. The CM is of course free to ignore this.
-#
-# XXX Need to handle this differently if we use the stitcher.
-#
-if ($portal ne "emulab") {
-    if (APT_Profile::ClearPortalTag(\$rspecstr, $errmsg)) {
-        fatal($errmsg);
-    }
-}
-elsif (APT_Profile::AddPortalTag(\$rspecstr, $portal, $errmsg)) {
-    fatal($errmsg);
-}
 
 #
 # Generate credentials we need.
@@ -895,6 +881,22 @@ if (!defined($instance)) {
 if ($instance->ApplyExtensionPolicies()) {
     $instance->Delete();
     fatal("Error applying policies");
+}
+
+#
+# Tell the CM the portal information, which is used by Emulab based
+# CMs to send email links.
+#
+# Special: This also tells the CM to do normal NFS mounts if this is
+# the "Emulab" portal making the request.
+#
+# XXX The local instance will not have these tags, but no big deal.
+# XXX Need to handle this differently if we use the stitcher?
+#
+if (APT_Profile::AddPortalTag(\$rspecstr,
+			      $portal, $instance->webURL(), \$errmsg)) {
+    $instance->Delete();
+    fatal($errmsg);
 }
 
 #
