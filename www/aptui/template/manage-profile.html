@@ -200,6 +200,14 @@
               col-sm-9
               col-xs-12'>
     <div class='panel panel-default'>
+      <div class='panel-heading'>
+        <h3 class='panel-title text-center'>
+	  <% if (canmodify) { %>
+	    Modify
+	  <% } %>
+	  Profile <%- formfields.profile_pid %>/<%- formfields.profile_name %>
+	</h3>
+      </div>
  <% } else { %>
   <div class='col-sm-10 col-sm-offset-1
               col-xs-12'>
