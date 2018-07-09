@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -442,7 +442,7 @@ class Image
     function lba_low()		{ return $this->field("lba_low"); }
     function lba_high()		{ return $this->field("lba_high"); }
     function lba_size()		{ return $this->field("lba_size"); }
-    function nodeetypes()	{ return $this->field("nodetypes"); }
+    function nodetypes()	{ return $this->field("nodetypes"); }
 
     # Return the DB data.
     function DBData()		{ return $this->image; }
