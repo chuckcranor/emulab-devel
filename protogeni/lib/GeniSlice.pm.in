@@ -1637,8 +1637,7 @@ sub GetPortalURL($)
     else {
         $portal_url = "https://www.emulab.net/portal/";
     }
-    $portal_url .= "status.php?uuid=" . $self->uuid();
-
+    $portal_url .= "status.php?slice_uuid=" . $self->uuid();
     return $portal_url;
 }
 
