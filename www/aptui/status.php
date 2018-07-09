@@ -93,6 +93,36 @@ if (!$instance) {
     PAGEREPLACE("landing.php");
     return;
 }
+
+#
+# When coming her via the slice_uuid, we want to flip over to the
+# correct portal. Hacky.
+#
+error_log($instance->servername());
+error_log($_SERVER['SERVER_NAME']);
+if ($TBMAINSITE && isset($slice_uuid) &&
+    $instance->servername() != $_SERVER['SERVER_NAME']) {
+    if ($instance->servername() == "www.aptlab.net") {
+        $url = "https://www.aptlab.net";
+    }
+    elseif ($instance->servername() == "www.cloudlab.us") {
+        $url = "https://www.cloudlab.us";
+    }
+    elseif ($instance->servername() == "www.phantomnet.org") {
+        $url = "https://www.phantomnet.org";
+    }
+    elseif ($instance->servername() == "www.powderwireless.net") {
+        $url = "https://www.powderwireless.net";
+    }
+    error_log($url);
+    if (isset($url)) {
+        $url = $url . str_replace("/portal/", "/", $_SERVER['REQUEST_URI']);
+	header("Location: $url");
+        return;
+    }
+}
+
+$uuid = $instance->uuid();
 $creator = GeniUser::Lookup("sa", $instance->creator_uuid());
 if (! $creator) {
     $creator = User::LookupByUUID($instance->creator_uuid());

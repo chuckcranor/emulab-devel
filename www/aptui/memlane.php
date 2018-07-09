@@ -90,6 +90,26 @@ if (! (ISADMIN() || ISFOREIGN_ADMIN() || $record->CanView($this_user))) {
     PAGEERROR("You do not have permission to look at this experiment!");
 }
 
+if ($TBMAINSITE && $record->servername() != $_SERVER['SERVER_NAME']) {
+    if ($record->servername() == "www.aptlab.net") {
+        $url = "https://www.aptlab.net";
+    }
+    elseif ($record->servername() == "www.cloudlab.us") {
+        $url = "https://www.cloudlab.us";
+    }
+    elseif ($record->servername() == "www.phantomnet.org") {
+        $url = "https://www.phantomnet.org";
+    }
+    elseif ($record->servername() == "www.powderwireless.net") {
+        $url = "https://www.powderwireless.net";
+    }
+    if (isset($url)) {
+        $url = $url . str_replace("/portal/", "/", $_SERVER['REQUEST_URI']);
+	header("Location: $url");
+        return;
+    }
+}
+
 SPITHEADER(1);
 
 
