@@ -3901,11 +3901,14 @@ sub DeleteImage($)
 				    "No project for image");
     }
 
-    if (! ((defined($creator_urn) && $creator_urn eq $user->urn()) ||
-	   GeniHRN::SameDomain($project->nonlocal_id(), $authority->urn()))) {
+    if (! ((defined($creator_urn) &&
+	    ($creator_urn eq $user->urn() ||
+	     $creator_urn eq $ENV{'REALGENIURN'})) ||
+	   GeniHRN::SameDomain($project->nonlocalurn(), $authority->urn()))) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 		    "Not enough permission to delete image; wrong SA or user");
     }
+
     #
     # If not the creator, then require override to prevent
     # accidental removal of images not belonging to current user.
