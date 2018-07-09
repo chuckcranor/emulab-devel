@@ -221,6 +221,7 @@ if (1) {
             echo " <td>$destroyed</td>";
             echo " <td>$portal_url</td>";
             echo "</tr>";
+	    echo "<tr></tr>\n";
 
 	    $myindex = $idx;
 	}
