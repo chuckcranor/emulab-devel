@@ -393,6 +393,17 @@ sub Stringify($)
 # the stats stats record, but was not being updated
 sub elabinelab($) { return $_[0]->elab_in_elab(); }
 
+# Convenience function.
+sub pideid($)
+{
+    my ($self) = @_;
+    
+    my $pid   = $self->pid();
+    my $eid   = $self->eid();
+
+    return "$pid/$eid";
+}
+
 #
 # For canceled, goto to the DB. See AUTOLOAD above.
 #
