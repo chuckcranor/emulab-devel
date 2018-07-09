@@ -5259,12 +5259,14 @@ sub SliverWorkAux($)
 	    my $macAddress = undef;
 	    $macAddress = $interface->mac()
 		if (defined($interface));
-	    my $ipAddress;
+	    my ($ipAddress,$ipMask);
 	    if (defined($vinterface)) {
 		$ipAddress = $vinterface->IP();
+		$ipMask    = $vinterface->mask();
 	    }
 	    elsif (defined($interface)) {
 		$ipAddress = $interface->IP();
+		$ipMask    = $interface->mask();
 	    }
 	    # Manifest goes back to the user.
 	    if (GeniXML::IsVersion0($ifaceref)) {
@@ -5289,6 +5291,9 @@ sub SliverWorkAux($)
 		    }
 		    GeniXML::SetText("address", $child, $ipAddress);
 		    GeniXML::SetText("type", $child, "ipv4");
+		    if (defined($ipMask)) {
+			GeniXML::SetText("netmask", $child, $ipMask);
+		    }
 		}
 		GeniXML::SetText($sliverName, $ifaceref,
 				 $sliver->sliver_urn());
