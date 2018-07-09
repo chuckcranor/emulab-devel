@@ -124,6 +124,8 @@ sub fatal($);
 $| = 1; 
 
 my $portstats	= "$TB/bin/portstats";
+my $wap         = "$TB/sbin/withadminprivs";
+my $sudo        = "/usr/local/bin/sudo";
 my @nodes       = ();
 my %switches	= ();
 my %pcs		= ();
@@ -144,6 +146,7 @@ $ENV{'WITH_TB_ADMIN_PRIVS'} = 1;
 
 # Load the Testbed support stuff.
 use lib "@prefix@/lib";
+use EmulabConstants;
 use libdb;
 use libtestbed;
 use Experiment;
@@ -190,7 +193,7 @@ if (TBGetSiteVar($svar, \$tmp)) {
 	exit(0);
     }
 }
-my $svar = "cnetwatch/check_interval";
+$svar = "cnetwatch/check_interval";
 if (TBGetSiteVar($svar, \$tmp)) {
     if ($tmp == 0 || $tmp >= 10) {
 	$interval = $tmp;
@@ -324,16 +327,6 @@ if ($MAIL_IV == 0) {
     }
 } elsif ($MAIL_IV < $alertinterval) {
     $MAIL_IV = $alertinterval;
-}
-
-#
-# Check user id.
-#
-if ($UID == 0) {
-    fatal("Do not run as root or portstats will fail!");
-}
-if (!TBAdmin()) {
-    fatal("Must run as an admin user or portstats will fail!");
 }
 
 # Go to ground.
@@ -824,7 +817,8 @@ sub gather($)
 	my $slist = join(' ', @{$switches{$switch}});
 	print STDERR "$switch: invoking '$portstats -i -H -r -l -c -p $slist':\n"
 	    if ($debug > 1);
-	if (!open(PS, "$portstats -i -H -r -l -c -p $slist 2>&1 |")) {
+	if (!open(PS, "$sudo -u ". PROTOUSER() . " $wap ".
+		  "$portstats -i -H -r -l -c -p $slist 2>&1 |")) {
 	    print STDERR "*** $switch: portstats failed on open, ignored\n";
 	    next;
 	}
