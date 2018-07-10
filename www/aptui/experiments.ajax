@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -190,7 +190,8 @@ function Do_ExperimentErrors()
         $clause = "where UNIX_TIMESTAMP(f.created) <= $stamp";
     }
     $query_result =
-        DBQueryFatal("select f.name,exitcode,f.created,f.public_url,f.uuid,".
+        DBQueryFatal("select f.name,exitcode,f.created,f.public_url,".
+	             "  IF(i.uuid,i.uuid,f.uuid) as uuid, ".
                      "  IF(i.uuid,1,0) as active,f.exitmessage, ".
                      "  p.uuid as profile_uuid,p.name as profile_name, ".
                      "  IF(i.uuid,i.aggregate_urn,h.aggregate_urn) ".
@@ -211,8 +212,8 @@ function Do_ExperimentErrors()
         $exitcode   = $row["exitcode"];
         $url        = $row["public_url"];
         $logfileid  = $row["logfileid"];
-        $active     = $row["active"] ? 1 : 0;
         $uuid       = $row["uuid"];
+        $active     = $row["active"] ? 1 : 0;
         $created    = DateStringGMT($row["created"]);
         $creator    = $row["creator"];
         $message    = $row["exitmessage"];
@@ -221,7 +222,7 @@ function Do_ExperimentErrors()
         $profile_uuid = $row["profile_uuid"];
         $profile_name = $row["profile_name"];
         $aggregate_urn= $row["aggregate_urn"];
-        $cluster      = "N/A";
+        $cluster      = null;
 
         if ($exitcode >= 0 && $exitcode <= count($geni_response_codes)) {
             $reason = $geni_response_codes[$exitcode];
