@@ -98,8 +98,6 @@ if (!$instance) {
 # When coming her via the slice_uuid, we want to flip over to the
 # correct portal. Hacky.
 #
-error_log($instance->servername());
-error_log($_SERVER['SERVER_NAME']);
 if ($TBMAINSITE && isset($slice_uuid) &&
     $instance->servername() != $_SERVER['SERVER_NAME']) {
     if ($instance->servername() == "www.aptlab.net") {
@@ -114,7 +112,6 @@ if ($TBMAINSITE && isset($slice_uuid) &&
     elseif ($instance->servername() == "www.powderwireless.net") {
         $url = "https://www.powderwireless.net";
     }
-    error_log($url);
     if (isset($url)) {
         $url = $url . str_replace("/portal/", "/", $_SERVER['REQUEST_URI']);
 	header("Location: $url");
