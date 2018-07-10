@@ -45,9 +45,7 @@ $(function ()
 	if (json.value.exitcode) {
 	    ShowError(json.value);
 	}
-	else {
-	    ShowTopo(json.value);
-	}
+	ShowTopo(json.value);
     }
 
     var listview_row = 
@@ -170,7 +168,9 @@ $(function ()
 	$("#showtopo_container").removeClass("invisible");
 	$('#quicktabs_ul a[href="#topology"]').tab('show');
 	ShowRspec(record.rspec);
-	ShowViewer('#showtopo_statuspage', manifests);
+	if (manifests.length) {
+	    ShowViewer('#showtopo_statuspage', manifests);
+	}
 	if (logfiles.length) {
 	    ShowLogfiles(logfiles);
 	}
