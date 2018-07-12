@@ -443,6 +443,18 @@ sub SetProvenance($$)
     return 0;
 }
 
+sub SetDescription($$)
+{
+    my ($self, $description) = @_;
+    my $args = {"description" => $description};
+
+    return -1
+	if ($self->image()->Update($args) ||
+	    $self->osinfo()->Update($args));
+
+    return 0;
+}
+
 #
 # Highest number version, rather then what is deemed most recent by the
 # images table.

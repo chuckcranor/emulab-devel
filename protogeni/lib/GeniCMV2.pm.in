@@ -3348,6 +3348,7 @@ sub CreateImage($)
     my $update_prepare = 0;
     my ($bsname,$blockstore);
     my $copyback_uuid;
+    my $description;
     my $response;
 
     require EmulabConstants;
@@ -3385,6 +3386,14 @@ sub CreateImage($)
 	return GeniResponse->MalformedArgsResponse("Improper copyback argument")
 	    if ($copyback_uuid !~ /^[-\w\.\+]*$/);
     }
+    # Optional description.
+    if (exists($argref->{'description'})) {
+	$description = $argref->{'description'};
+	return GeniResponse->MalformedArgsResponse("Improper description")
+	    if (!TBcheck_dbslot($description, "images", "description",
+				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR));
+    }
+    
     my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
     return $credential
 	if (GeniResponse::IsResponse($credential));
@@ -3625,6 +3634,13 @@ sub CreateImage($)
 			    (defined($speaksfor) ?
 			     $speaksfor->target_urn() : $ENV{'GENIURN'})});
     }
+    #
+    # Optional descriptive text. 
+    #
+    if (defined($description)) {
+	$image->SetDescription($description);
+    }
+    
     #
     # Form an image URN so the user knows how to request the new image.
     #
@@ -4259,6 +4275,7 @@ sub ListImages($)
 		    "created" => emutil::TBDateStringGMT($image->created()),
 		    "updated" => emutil::TBDateStringGMT($image->updated()),
 		    "format"  => $image->format(),
+		    "description" => $image->description(),
 	};
 	
 	#
