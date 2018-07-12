@@ -156,7 +156,9 @@ $(function ()
 	_.each(slivers, function(sliver) {
 	    var manifest = sliver.manifest;
 	    var aggregate_urn = sliver.aggregate_urn;
-	    manifests.push(manifest);
+	    if (manifest) {
+		manifests.push(manifest);
+	    }
 	    if (sliver.public_url) {
 		logfiles.push({"urn" : sliver.aggregate_urn,
 			       "url" : sliver.public_url});
