@@ -1,0 +1,216 @@
+.cbp_tmtimeline {
+	margin: 0px 0 0 0;
+	padding: 0;
+	list-style: none;
+	position: relative;
+} 
+
+/* The line */
+.cbp_tmtimeline:before {
+	content: '';
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: @tl-width;
+	background: @tl-color;
+	left: @tl-left-size;
+	margin-left: (0 - (@tl-icon-gutter / 2) - (@tl-trianglesize / 2) - (@tl-width / 2));
+}
+
+/* The date/time */
+.cbp_tmtimeline > li .cbp_tmtime {
+	display: block;
+	width: @tl-left-size;
+	padding-right: @tl-icon-gutter;
+	position: absolute;
+}
+
+.cbp_tmtimeline > li .cbp_tmtime span {
+	display: block;
+	text-align: right;
+}
+
+.cbp_tmtimeline > li .cbp_tmtime span:last-child {
+	font-size: @tl-timesize;
+	color: @tl-timecolor-dark;
+	font-weight: @headings-font-weight;
+	position: relative;
+	top: 5px;
+}
+
+/* Right content */
+.cbp_tmtimeline > li {
+    .cbp_tmlabel, .panel {
+	margin: 0 0 -10px @tl-left-size;
+	position: relative;
+	top: -@tl-icon-size;
+    }
+}
+
+.cbp_tmtimeline > li .cbp_tmlabel {
+	background: @tl-labelcolor-dark;
+	color: @tl-label-fg;
+	padding: @padding-large-vertical @padding-large-horizontal;
+	font-size: @font-size-base;
+	line-height: @line-height-base;
+	border-radius: @border-radius-large;
+	top: -@tl-icon-size;
+}
+
+
+/* Use "solid" colors for panels in the timeline */
+.cbp_tmtimeline > li .panel-success {
+        border-color: @brand-success;
+        background: @brand-success-light;
+        
+        .panel-heading {
+            background: @brand-success;
+            color: #fff;
+        }
+}
+
+.cbp_tmtimeline > li .panel-info {
+        border-color: @brand-info;
+        background: @brand-info-light;
+        
+        .panel-heading {
+            background: @brand-info;
+            color: #fff;
+        }
+}
+
+.cbp_tmtimeline > li:nth-child(odd) .cbp_tmlabel {
+	background: @tl-labelcolor-light;
+}
+
+.cbp_tmtimeline > li .cbp_tmlabel h3 { 
+	margin-top: 0px;
+	padding: 0 0 @padding-large-vertical 0;
+	border-bottom: 1px solid rgba(255,255,255,0.4);
+	font-size: @font-size-h4;
+}
+
+.cbp_tmtimeline > li .cbp_tmlabel p { 
+        margin-bottom: 0px;
+}
+
+/* The triangle */
+.cbp_tmtimeline > li {
+    .cbp_tmlabel:after, .panel:after {
+	right: 100%;
+	border: solid transparent;
+	content: " ";
+	height: 0;
+	width: 0;
+	position: absolute;
+	pointer-events: none;
+	border-right-color: @tl-labelcolor-dark;
+	border-width: @tl-trianglesize;
+	top: @tl-trianglesize;
+    }
+}
+
+.cbp_tmtimeline > li .panel-primary:after {
+    border-right-color: @brand-primary;
+}
+
+.cbp_tmtimeline > li .panel-success:after {
+    border-right-color: @brand-success;
+}
+.cbp_tmtimeline > li .panel-info:after {
+    border-right-color: @brand-info;
+}
+
+
+.cbp_tmtimeline > li:nth-child(odd) .cbp_tmlabel:after {
+	border-right-color: @tl-labelcolor-light;
+}
+
+/* The icons */
+.cbp_tmtimeline > li .cbp_tmicon {
+	width: @tl-icon-size;
+	height: @tl-icon-size;
+	font-size: @tl-icon-fontsize;
+	line-height: @tl-icon-size;
+	color: @tl-icon-color;
+	border-radius: 50%;
+	box-shadow: 0 0 0 @tl-icon-border-width @tl-icon-border;
+
+	text-align: center;
+	left: @tl-left-size;
+	top: 0;
+	margin: 0 0 0 (0 - (@tl-icon-gutter / 2) - (@tl-trianglesize / 2) - (@tl-icon-size / 2));
+}
+
+.cbp_tmicon_dark {
+    background: @tl-icon-background;
+}
+
+.cbp_tmicon_primary {
+    background: @brand-primary;
+}
+
+.cbp_tmicon_success {
+    background: @brand-success;
+}
+
+@media screen and (max-width: @screen-sm) {
+	.cbp_tmtimeline:before {
+		display: none;
+	}
+
+	.cbp_tmtimeline > li {
+	    .cbp_tmtime {
+		width: 100%;
+		position: relative;
+		padding: 0 0 20px 0;
+            }
+	    .panel {
+		width: 100%;
+		position: relative;
+            }
+	}
+
+	.cbp_tmtimeline > li .cbp_tmtime span {
+		text-align: left;
+	}
+
+	.cbp_tmtimeline > li {
+	    .cbp_tmlabel, .panel {
+		margin: 0 0 30px 0;
+                top: 0px;
+            }
+            .cb_tmlabel {
+                padding: 1em;
+            }
+	}
+
+	.cbp_tmtimeline > li {
+	    .panel:after, .cbp_tmlabel:after {
+		right: auto;
+		left: 20px;
+		border-right-color: transparent;
+		top: -20px;
+            }
+
+            .cbp_tmlabel:after {
+		border-bottom-color: @tl-labelcolor-dark;
+            }
+	}
+
+	.cbp_tmtimeline > li:nth-child(odd) {
+	    .panel:after, .cbp_tmlabel:after {
+		border-right-color: transparent;
+            }
+            .cbp_tmlabel:after {
+		border-bottom-color: @tl-labelcolor-light;
+            }
+	}
+
+	.cbp_tmtimeline > li .cbp_tmicon {
+		position: relative;
+		float: right;
+		left: auto;
+		margin: -55px 5px 0 0px;
+	}	
+}

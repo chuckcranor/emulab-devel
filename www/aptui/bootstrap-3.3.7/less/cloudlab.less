@@ -1,0 +1,118 @@
+/* Required to use scrollspy */
+body {
+    position: relative;
+}
+
+img.header-logo {
+    padding-bottom: @padding-large-vertical;
+}
+
+/* Tweak the location to fit horizontally in the navbar, rather than being
+ * aligned with the text */
+img.navbar-flask {
+    position: relative;
+
+    // Counteract the padding on the enclosing brand div
+    //top: (@cl-logo-offset - @navbar-padding-vertical);
+
+    max-height: @cl-logo-size;
+    margin-top: 0px;
+    padding: 0px;
+
+    border: @cl-border-width solid @navbar-inverse-bg;
+}
+
+/* For the special progress bar in the status part of the front page */
+.frontpage-status .progress {
+    height: @cl-progress-oversize;
+    font-size: (@cl-progress-oversize / 2);
+}
+
+.frontpage-status .progress-bar {
+    line-height: @cl-progress-oversize;
+    font-size: (@cl-progress-oversize / 2);
+}
+
+/* Move down content because we have a fixed navbar that is 50px tall */
+body {
+      padding-top: @navbar-height;
+      padding-bottom: @padding-large-vertical;
+      font-weight: @cl-global-font-weight;
+}
+
+/* Nice trick to make anchors work with the fixed header: the 60px is big enough
+ * for both the navbar and the spill-over from the flask logo */
+a.anchor{
+    display: block;
+    position: relative;
+    top: (-(@navbar-height + @cl-logo-overhang));
+    visibility: hidden;
+}
+
+/* Make the body of the tab look like it actually goes with the header */
+.tab-content {
+    border-bottom: 1px solid @nav-tabs-border-color;
+    border-left: 1px solid @nav-tabs-border-color;
+    border-right: 1px solid @nav-tabs-border-color;
+    background: @nav-tabs-active-link-hover-bg;
+    padding: (2 * @padding-large-vertical) @padding-large-horizontal;
+    color: @navbar-inverse-color;
+    a {
+        color: @navbar-inverse-link-color;
+        &:hover {
+            color: @navbar-inverse-link-hover-color;
+        }
+        &:active, &:focus {
+            color: @navbar-inverse-link-active-color;
+        }
+    }
+}
+.nav-tabs > li.active > a {
+    color: @navbar-inverse-link-color;
+    &:hover {
+        color: @navbar-inverse-link-hover-color;
+    }
+    &:active, &:focus {
+        color: @navbar-inverse-link-active-color;
+    }
+}
+
+/* Basic style for photo headers */
+.photo-header {
+    background-size: 100%;
+    background-position: 0px;
+}
+
+
+/* Drop-shadow titles for the pages with photo headers */
+.jumbotron .text-dropshadow {
+    color: #fff;
+    text-shadow: 3px 3px #000;
+}
+
+/* Scrunch up the news box a bit more */
+#news-panel {
+    div.panel-body, div.panel-heading {
+        padding: @padding-small-vertical @padding-small-horizontal;
+    }
+}
+
+/* Stuff for rows where the columns should be equal heights */
+.row-eh {
+}
+
+.col-eh {
+}
+
+.list-compact {
+    padding-left: @padding-large-horizontal;
+}
+
+.panel-body-four {
+    height: 12em;
+}
+
+.jumbotron .jumbo-text{
+    font-size: (@font-size-large);
+    padding-bottom: @padding-large-vertical;
+}
