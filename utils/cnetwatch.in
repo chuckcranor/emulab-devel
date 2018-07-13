@@ -161,6 +161,10 @@ if ($PGENISUPPORT) {
 # cnetwatch/enable
 #   Zero means don't run cnetwatch (exit immediately).
 #   
+# cnetwatch/reportlog
+#   If set, a file in which to log the port counts for all nodes (-l).
+#   Unset means do not log.
+#
 # cnetwatch/check_interval
 #   Interval at which to collect info.
 #   Zero means don't run cnetwatch (exit immediately).
@@ -191,6 +195,14 @@ if (TBGetSiteVar($svar, \$tmp)) {
     if ($tmp == 0) {
 	print STDERR "WARNING: cnetwatch disabled by sitevar\n";
 	exit(0);
+    }
+}
+$svar = "cnetwatch/reportlog";
+if (TBGetSiteVar($svar, \$tmp) && $tmp ne "") {
+    if ($tmp =~ /^([-\w\.\/\+]*[-\w\.\+])$/) {
+	$reportlog = $1;
+    } else {
+	print STDERR "WARNING: invalid path: '$tmp', ignored.\n";	
     }
 }
 $svar = "cnetwatch/check_interval";

@@ -181,6 +181,7 @@ INSERT INTO sitevariables VALUES ('general/cnet_firewalls','0','0','When set, co
 INSERT INTO sitevariables VALUES ('general/export_active',NULL,'0','Stop exporting shared user and project directories when they have been inactive for this number of days or longer (0==do not inactivate).',0);
 INSERT INTO sitevariables VALUES ('general/root_keypair',NULL,'-1','Default distribution of per-experiment root keypairs (-1==disable root keypair mechanism, 0==do not distribute to any nodes, 1==distribute to all nodes).',0);
 INSERT INTO sitevariables VALUES ('cnetwatch/enable',NULL,'0','Enable control network watcher; only works on clusters that support portstats on the control switches.',0);
+INSERT INTO `sitevariables` VALUES ('cnetwatch/reportlog',NULL,'','Full path of logfile for periodic port counts of all nodes.',0);
 INSERT INTO sitevariables VALUES ('cnetwatch/check_interval',NULL,'600','Interval in seconds at which to collect info (should be at least 10 seconds, 0 means do not run cnetwatch)',0);
 INSERT INTO sitevariables VALUES ('cnetwatch/alert_interval',NULL,'600','Interval in seconds over which to calculate packet/bit rates and to log alerts (should be an integer multiple of check_interval)',0);
 INSERT INTO sitevariables VALUES ('cnetwatch/pps_threshold',NULL,'50000','Packet rate in packets/sec in excess of which to log an alert (0 means do not generate packet rate alerts)',0);
