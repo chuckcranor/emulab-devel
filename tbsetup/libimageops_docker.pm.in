@@ -124,22 +124,10 @@ sub GetLocalRegistryPathForImage($$;$$$) {
     #
     # Find the local cluster's registry, if any.
     #
-    if ($OURDOMAIN eq 'utah.cloudlab.us') {
-	$registry = "ops.utah.cloudlab.us:5080";
-    }
-    elsif ($OURDOMAIN eq 'emulab.net') {
-	$registry = "ops.emulab.net:5080";
-    }
-    else {
-	$msg = "Site $OURDOMAIN does not have a local registry;".
-	    " cannot capture image $image!";
+    if (!TBGetSiteVar("docker/registry",\$registry) || $registry eq "") {
+	$msg = "no local registry specified in sitevar general/docker_registry";
 	goto out;
     }
-    #if (TBGetSiteVar("docker/registry",\$registry)
-    #	|| $registry eq "") {
-    #	$msg = "no local registry specified in sitevar general/docker_registry";
-    #   goto out;
-    #}
 
     #
     # Docker registry does not accept uppercase characters in repo names.
