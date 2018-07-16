@@ -1456,6 +1456,7 @@ sub ActionStart($$;$)
 	my $email  = $creator->email();
 	my $count  = scalar(@failed);
 	my $urn    = $slice->urn();
+	my $purl   = $slice->GetPortalURL();
 	my $logs   = "";
 
 	foreach my $node (@failed) {
@@ -1470,7 +1471,8 @@ sub ActionStart($$;$)
 		 "Nodes:\n".
 		 "  " . join(" ", @failed) . "\n".
 		 "in $urn failed.\n\n" .
-		 "$logs\n\n",
+		 ($logs ne "" ? "$logs\n\n" : "") .
+		 (defined($purl) ? "$purl\n" : ""),
 		 $TBOPS, "Cc: $TBOPS");
     }
     #
@@ -3006,6 +3008,7 @@ sub WaitForNodes($$$$@)
 	my $email  = $creator->email();
 	my $count  = scalar(@failed);
 	my $urn    = $slice->urn();
+	my $purl   = $slice->GetPortalURL();
 	my $logs   = "";
 
 	foreach my $node (@failed) {
@@ -3020,7 +3023,8 @@ sub WaitForNodes($$$$@)
 		 "Nodes:\n".
 		 "  " . join(" ", @failed) . "\n".
 		 "in $urn failed.\n\n" .
-		 "$logs\n\n",
+		 ($logs ne "" ? "$logs\n\n" : "") .
+		 (defined($purl) ? "$purl\n" : ""),
 		 $TBOPS, "Cc: $TBOPS");
 
 	# Tell caller.
