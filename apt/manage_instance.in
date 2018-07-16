@@ -299,6 +299,7 @@ sub DoSnapshot()
     my $old_status     = $instance->status();
     my $node_id;
     my $imagename;
+    my $description;
     my $cloneprofile;
     my $update_profile;
     my $copyback_uuid;
@@ -312,7 +313,7 @@ sub DoSnapshot()
     my $usetracker = 0;
     my $operation = "image-only"; # Default to just snapshot.
 
-    my $optlist = "n:i:u:Uc:O:Sse";
+    my $optlist = "n:i:u:Uc:O:SseD:";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
@@ -334,6 +335,9 @@ sub DoSnapshot()
     }
     if (defined($options{"U"})) {
 	$update_prepare = 1;
+    }
+    if (defined($options{"D"})) {
+	$description = ReadFile($options{"D"});
     }
     if (defined($options{"s"})) {
 	$nosnapshot = 1;
@@ -604,12 +608,14 @@ sub DoSnapshot()
     my $response =
 	$aggregate->CreateImage($sliver_urn, $imagename,
 				$update_prepare, $copyback_uuid,
-				undef, $nosnapshot, $mustnotexist, $wholedisk);
+				undef, $nosnapshot, $mustnotexist, $wholedisk,
+				$description);
     if ($response->code() != GENIRESPONSE_SUCCESS) {
 	$errcode = $response->code();
 	($exitcode,$errmsg) = ResponseErrorMessage($aggregate, $response);
 	# Important to tell web user about these.
 	if ($response->code() == GENIRESPONSE_NOSPACE ||
+	    $response->code() == GENIRESPONSE_FORBIDDEN || 
 	    $response->code() == GENIRESPONSE_ALREADYEXISTS) {
 	    $exitcode = 1;
 	}
@@ -933,7 +939,7 @@ sub DoSnapshot()
     $slice->UnLock()
 	if ($needunlock);
 
-    exit($errcode);
+    exit($exitcode);
 }
 
 sub DoImageTrackerStuff($$$$$$$)

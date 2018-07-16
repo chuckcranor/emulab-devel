@@ -659,6 +659,7 @@ function Do_Snapshot()
 {
     global $this_user, $instance, $suexec_output;
     global $ajax_args;
+    $errors = array();
 
     if (StatusSetupAjax(0)) {
 	return;
@@ -669,6 +670,8 @@ function Do_Snapshot()
     }
     $this_idx = $this_user->uid_idx();
     $uuid = $ajax_args["uuid"];
+    $checkonly = (isset($ajax_args["checkonly"]) &&
+                  $ajax_args["checkonly"] == 1 ? 1 : 0);
 
     #
     # As per Rob, if an experiment is locked down, then only the creator,
@@ -678,7 +681,7 @@ function Do_Snapshot()
         if ($this_idx != $instance->creator_idx() && !ISADMIN() &&
             !$instance->Project()->IsLeader($this_user)) {
             SPITAJAX_ERROR(1, "Not enough permission, ".
-                           "experiment is locked down. Maybe Clone instead?");
+                           "experiment is locked down.");
             return;
         }
     }
@@ -711,17 +714,18 @@ function Do_Snapshot()
     }
     if ($operation == "update-profile" &&
         ($this_idx != $profile->creator_idx() && !ISADMIN())) {
-	SPITAJAX_ERROR(1, "Not your profile to change. Clone first!");
+	SPITAJAX_ERROR(1, "Not your profile to change. Make a copy first!");
 	return;
     }
     $optargs = "";
     if (isset($ajax_args["node_id"]) && $ajax_args["node_id"] != "") {
         $node_id = $ajax_args["node_id"];
         if (!TBvalid_vnode_id($node_id)) {
-            SPITAJAX_ERROR(1, "Bad node id");
-            return;
+            $errors["node_id"] = "Invalid node id";
         }
-        $optargs .= " -n $node_id ";
+        else {
+            $optargs .= " -n $node_id ";
+        }
     } 
     if (isset($ajax_args["update_prepare"]) &&
         $ajax_args["update_prepare"]) {
@@ -735,10 +739,40 @@ function Do_Snapshot()
     }
     if (isset($ajax_args["imagename"]) && $ajax_args["imagename"] != "") {
         if (!TBvalid_imagename($ajax_args["imagename"])) {
-            SPITAJAX_ERROR(1, "Not a valid imagename, alphanumeric only");
-            return;
+            $errors["imagename"] = "Invalid imagename, alphanumeric only";
         }
-        $optargs .= " -i " . escapeshellarg($ajax_args["imagename"]);
+        else {
+            $optargs .= " -i " . escapeshellarg($ajax_args["imagename"]);
+        }
+    }
+    if (isset($ajax_args["description"]) && $ajax_args["description"] != "") {
+        $desc = $ajax_args["description"];
+        
+        if (!TBvalid_fulltext($desc)) {
+            $errors["description"] = "Illegal characters";
+        } 
+        elseif (strlen($desc) > 225) { 
+            $errors["description"] = "Too long, must be < 225 chars";
+        }
+        elseif (strlen($desc) < 10) {
+            $errors["description"] = "Too short, must be >= 10 chars";
+        }
+        elseif (!$checkonly) {
+            $filename = tempnam("/tmp", "description");
+            $fp = fopen($filename, "w");
+            fwrite($fp, $desc);
+            fclose($fp);
+            chmod($filename, 0666);        
+            $optargs .= " -D $filename";
+        }
+    }
+    if (count($errors)) {
+        SPITAJAX_ERROR(2, $errors);
+        return;
+    }
+    if ($checkonly) {
+        SPITAJAX_RESPONSE("Success");
+        return;
     }
     $optargs .= " -O $operation ";
 
@@ -751,7 +785,9 @@ function Do_Snapshot()
                      "  snapshot $uuid $optargs",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
-
+    if (isset($filename)) {
+        unlink($filename);
+    }
     if ($retval != 0) {
         if (!$webtask->exited() || $retval < 0) {
             SUEXECERROR(SUEXEC_ACTION_CONTINUE);

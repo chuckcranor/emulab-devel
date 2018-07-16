@@ -48,6 +48,7 @@ $(function ()
     var EMULAB_OPS        = "emulab-ops";
     var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
     var GENIRESPONSE_REFUSED = 7;
+    var GENIRESPONSE_ALREADYEXISTS = 17;
     var GENIRESPONSE_INSUFFICIENT_NODES = 26;
     var MAXJACKSNODES = 200;
 
@@ -159,7 +160,7 @@ $(function ()
 	// This activates the popover subsystem.
 	$('[data-toggle="popover"]').popover({
 	    trigger: 'hover',
-	    placement: 'top',
+	    placement: 'auto',
 	});
 	$('[data-toggle="tooltip"]').tooltip({
 	    placement: 'top',
@@ -2168,28 +2169,11 @@ $(function ()
 		$('#snapshot_modal .choose-node').removeClass("hidden");
 	    }
 
-	    // Project list for copy/new profile.
-	    if (projlist && projlist.length) {
-		var html = "";
-
-		_.each(projlist, function(name) {
-		    html = html +
-			"<option value='" + name + "'>" + name + "</option>";
-		});
-		$('#snapshot_modal .choose-project-div select').append(html);
-		if (projlist.length == 1) {
-		    // No need to show it, just select the project for later.
-		    $('#snapshot_modal .choose-project-div select')
-			.val(projlist[0]);
-		}
-	    }
-
 	    $('#snapshot_modal input[type=radio]').on('change', function() {
 		switch($(this).val()) {
 		case 'update-profile':
 		    $('#snapshot-name-div').addClass("hidden");
 		    $('#snapshot-wholedisk-div').addClass("hidden");
-		    $('#snapshot_modal .choose-project-div').addClass("hidden");
 		    break;
 		case 'copy-profile':
 		case 'new-profile':
@@ -2199,10 +2183,6 @@ $(function ()
 		    if (wholedisk) {
 			$('#snapshot-wholedisk-div').removeClass("hidden");
 		    }
-		    if (0 && projlist.length > 1) {
-			$('#snapshot_modal .choose-project-div')
-			    .removeClass("hidden");
-		    }
 		    break;
 		case 'image-only':
 		    $('#snapshot-name-div .new-profile').addClass("hidden");
@@ -2211,7 +2191,6 @@ $(function ()
 		    if (wholedisk) {
 			$('#snapshot-wholedisk-div').removeClass("hidden");
 		    }
-		    $('#snapshot_modal .choose-project-div').addClass("hidden");
 		    break;
 		}
 	    });
@@ -2278,11 +2257,8 @@ $(function ()
 	    alert("Experiment is not ready yet, snapshot not allowed");
 	    return;
 	}
-	// Clear previous errors'
-	$('#snapshot_modal .choose-node-error').addClass("hidden");
-	$('#snapshot_modal .name-error').addClass("hidden");
-	$('#snapshot_modal .inuse-error').addClass("hidden");
-	$('#snapshot_modal .project-error').addClass("hidden");
+	// Clear previous errors
+	$('#snapshot_modal .snapshot-error').addClass("hidden");
 	
 	// Default to unchecked any time we show the modal.
 	//$('#snapshot_update_prepare').prop("checked", false);
@@ -2315,15 +2291,20 @@ $(function ()
     function DoSnapshotNodeAux()
     {
 	var node_id;
-	sup.ShowModal('#snapshot_modal');
 
 	// Handler for the Snapshot confirm button.
 	$('button#snapshot_confirm').bind("click.snapshot", function (event) {
 	    event.preventDefault();
+	    
+	    // Clear previous errors
+	    $('#snapshot_modal .snapshot-error').addClass("hidden");
+	    
 	    // Make sure node is selected (one node, it is forced selection).
 	    node_id = $('#snapshot_modal .choose-node select ' +
 			'option:selected').val();
 	    if (node_id === undefined || node_id === '') {
+		$('#snapshot_modal .choose-node-error')
+		    .text("Please choose a node");
 		$('#snapshot_modal .choose-node-error').removeClass("hidden");
 		return;
 	    }
@@ -2331,13 +2312,6 @@ $(function ()
 
 	    // What does the user want to do?
 	    var operation = $('#snapshot_modal input[type=radio]:checked').val();
-	    if (operation == 'copy-profile-no' ||
-		operation == 'new-profile-no') {
-		var action = operation == 'copy-profile' ? "clone" : "create";
-		window.location.replace('manage_profile.php?action=' + action +
-					'&snapuuid=' + uuid +
-					'&snapnode_id=' + node_id);
-	    }
 	    var args = {"uuid" : uuid,
 			"node_id" : node_id,
 			"operation" : operation,
@@ -2346,6 +2320,8 @@ $(function ()
 	    if (operation == 'image-only') {
 		var name = $('#snapshot-name-div .image-only input').val();
 		if (name == "") {
+		    $('#snapshot-name-div .name-error')
+			.text("Please provide an image name");
 		    $('#snapshot-name-div .name-error').removeClass("hidden");
 		    return;
 		}
@@ -2355,6 +2331,8 @@ $(function ()
 		     operation == "new-profile") {
 		var name = $('#snapshot-name-div .new-profile input').val();
 		if (name == "") {
+		    $('#snapshot-name-div .name-error')
+			.text("Please provide a profile name");
 		    $('#snapshot-name-div .name-error').removeClass("hidden");
 		    return;
 		}
@@ -2369,7 +2347,9 @@ $(function ()
 		 operation == "new-profile" || operation == "image-only")) {
 		args["wholedisk"] = 1;
 	    }
-	    $('button#snapshot_confirm').unbind("click.snapshot");
+	    args["description"] = 
+		$.trim($('#snapshot-description-div textarea').val());
+
 	    if (operation == "copy-profile" || operation == "new-profile") {
 		NewProfile(args);
 	    }
@@ -2386,22 +2366,20 @@ $(function ()
 	    $('#snapshot-help-button').popover('destroy');
 	    $('#clone-help-popover-div').popover('destroy');
 	});
+
+	sup.ShowModal('#snapshot_modal');
     }
     
     function StartSnapshot(args)
     {
-	sup.HideModal('#snapshot_modal');
-	sup.ShowWaitWait("Starting image capture, " +
-			 "this can take a minute. Patience please.");
-
 	var callback = function(json) {
-	    sup.HideWaitWait();
 	    console.log("StartSnapshot");
 	    console.log(json);
-	    
-	    if (json.code) {
-		if (json.code == 17 && _.has(args, "wholedisk")) {
-		    sup.SpitOops("oops",
+	    sup.HideWaitWait(function () {
+		if (json.code) {
+		    if (json.code == GENIRESPONSE_ALREADYEXISTS &&
+			_.has(args, "wholedisk")) {
+			sup.SpitOops("oops",
 				 "There is already an image with the " +
 				 "the name you requested. When using the " +
 				 "<em>wholedisk</em> option, you must create " +
@@ -2409,16 +2387,95 @@ $(function ()
 				 "If you really want to use this name, " +
 				 "please <a href='list-images.php'>" +
 				 "delete the existing image first</a>.");
+			return;
+		    }
+		    sup.SpitOops("oops", json.value);
 		    return;
 		}
-		sup.SpitOops("oops", json.value);
-		return;
-	    }
-	    ShowProgressModal();
-	}
-	var xmlthing =
-	    sup.CallServerMethod(ajaxurl, "status", "SnapShot", args);
-	xmlthing.done(callback);
+		ShowProgressModal();
+	    });
+	};
+	CheckSnapshotArgs(args, function() {
+	    sup.HideModal('#snapshot_modal', function () {
+		sup.ShowWaitWait("Starting image capture, " +
+				 "this can take a minute. " +
+				 "Patience please.");
+
+		sup.CallServerMethod(ajaxurl, "status",
+				     "SnapShot", args, callback);
+	    });
+	});
+    }
+
+    /*
+     * First do an initial check on the arguments.
+     */
+    function CheckSnapshotArgs(args, continuation)
+    {
+	args["checkonly"] = 1;
+	sup.CallServerMethod(ajaxurl, "status", "SnapShot", args,
+	     function (json) {
+		 console.info("CheckSnapshotArgs");
+		 console.info(json);
+		 if (json.code) {
+		     if (json.code != 2) {
+			 $('#snapshot_modal .general-error')
+			     .text(json.value)
+			 $('#snapshot_modal .general-error')
+			     .removeClass("hidden");
+			 return;
+		     }
+		     if (_.has(json.value, "imagename")) {
+			 $('#snapshot_modal .name-error')
+			     .html(json.value.imagename);
+			 $('#snapshot_modal .name-error')
+			     .removeClass("hidden");
+		     }
+		     if (_.has(json.value, "description")) {
+			 $('#snapshot_modal .description-error')
+			     .html(json.value.description);
+			 $('#snapshot_modal .description-error')
+			     .removeClass("hidden");
+		     }
+		     if (_.has(json.value, "node_id")) {
+			 $('#snapshot_modal .choose-node-error')
+			     .html(json.value.node_id);
+			 $('#snapshot_modal .choose-node-error')
+			     .removeClass("hidden");
+		     }		     
+		     return;
+		 }
+		 args["checkonly"] = 0;
+		 continuation(args);
+	     });
+    }
+
+    function CheckCreateProfileArgs(args, continuation)
+    {
+	args["checkonly"] = 1;
+	sup.CallServerMethod(ajaxurl, "manage_profile", "Create", args,
+	     function (json) {
+		 console.info("CheckCreateProfileArgs");
+		 console.info(json);
+		 if (json.code) {
+		     if (json.code != 2) {
+			 $('#snapshot_modal .general-error')
+			     .text(json.value)
+			 $('#snapshot_modal .general-error')
+			     .removeClass("hidden");
+			 return;
+		     }
+		     if (_.has(json.value, "profile_name")) {
+			 $('#snapshot_modal .name-error')
+			     .html(json.value.profile_name);
+			 $('#snapshot_modal .name-error')
+			     .removeClass("hidden");
+		     }
+		     return;
+		 }
+		 args["checkonly"] = 0;
+		 continuation(args);
+	     });
     }
 
     /*
@@ -2435,7 +2492,6 @@ $(function ()
 			    "snapnode_id"  : args.node_id,
 			    "update_prepare" : args["update_prepare"],
 			   },
-	    "checkonly"  : 1,
 	};
 	if (args["operation"] == "copy-profile") {
 	    createArgs["formfields"]["copy-profile"] =
@@ -2467,7 +2523,7 @@ $(function ()
 	    
 	    if (json.code) {
 		sup.HideWaitWait(function() {
-		    if (json.code == 17) {
+		    if (json.code == GENIRESPONSE_ALREADYEXISTS) {
 			sup.SpitOops("oops",
 				     "There is already an image with the " +
 				     "same name as your profile; using this " +
@@ -2482,7 +2538,6 @@ $(function ()
 		});
 		return;
 	    }
-	    createArgs.checkonly = 0;
 	    var xmlthing =
 		sup.CallServerMethod(ajaxurl, "manage_profile",
 				     "Create", createArgs);
@@ -2490,45 +2545,25 @@ $(function ()
 	}
 
 	/*
-	 * Callback after asking if the profile name is free and valid.
+	 * Check args for image/profile before doing anything.
 	 */
-	var checkprofile_callback = function(json) {
-	    console.log("check profile", json);
-	    
-	    if (json.code) {
-		if (typeof(json.value) === 'object') {
-		    if (_.has(json.value, "profile_name")) {
-			$('#snapshot_modal .inuse-error')
-			    .html(json.value.profile_name);
-			$('#snapshot_modal .inuse-error')
-			    .removeClass("hidden");
-			return;
-		    }
-		    sup.SpitOops("oops", JSON.stringify(json.value));
-		    return;
-		}
-		sup.SpitOops("oops", "Error creating new profile, please " +
-			     "see the javascript console");
-		return;
-	    }
-	    /*
-	     * Now create the descriptor but do not image yet. 
-	     */
-	    args["nosnapshot"] = 1;
-	    args["imagename"]  = args["profilename"];
-	    sup.HideModal('#snapshot_modal', function () {
-		sup.ShowWaitWait("Please wait while we create your profile " +
-				 "and start the imaging process. " +
-				 "Patience please!");
-		var xmlthing =
-		    sup.CallServerMethod(ajaxurl, "status", "SnapShot", args);
-		xmlthing.done(checkimage_callback);
+	CheckSnapshotArgs(args, function() {
+	    CheckCreateProfileArgs(createArgs, function () {
+		/*
+		 * Now create the descriptor but do not image yet. 
+		 */
+		args["nosnapshot"] = 1;
+		args["imagename"]  = args["profilename"];
+		sup.HideModal('#snapshot_modal', function () {
+		    sup.ShowWaitWait("Please wait while we create your " +
+				     "profile and start the imaging process. " +
+				     "Patience please!");
+		    var xmlthing =
+			sup.CallServerMethod(null, "status", "SnapShot", args);
+		    xmlthing.done(checkimage_callback);
+		});
 	    });
-	}
-	var xmlthing =
-	    sup.CallServerMethod(ajaxurl, "manage_profile",
-				 "Create", createArgs);
-	xmlthing.done(checkprofile_callback);
+	});
     }
 
     //

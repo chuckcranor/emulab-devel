@@ -19,6 +19,7 @@ $(function ()
     {
 	window.APT_OPTIONS.initialize(sup);
 	amlist = decodejson('#amlist-json');
+	window.IMLIST = imagelist;
 
 	$('#oops_div').html(oopsString);	
 	$('#waitwait_div').html(waitwaitString);
@@ -297,22 +298,33 @@ $(function ()
 	 * should be deleted along with the image. Pass that along,
 	 * the backend is going to check anyway.
 	 */
-	if ($(row).find("td.delete-profile").length) {
-	    var uuid = $(row).find("td.delete-profile").attr('data-uuid');
-	    args["profile-delete"] = uuid;
-	}
-
-	/*
-	 * The confirm modal is a template in case we need to warn
-	 * about profiles that will be deleted. Need to find that
-	 * list in the saved data structure.
-	 */
 	var profiles = null;
 	if ($(row).find("td.delete-profile").length) {
+	    var uuid = $(row).find("td.delete-profile").attr('data-uuid');
+	    args["profile-delete"]  = uuid;
+	    args["profile-delete-versions"] = [];
+		
+
+	    /*
+	     * The confirm modal is a template in case we need to warn
+	     * about profiles that will be deleted. Need to find that
+	     * list in the saved data structure.
+	     */
 	    _.each(imagelist[cluster], function(image, index) {
 		_.each(image.versions, function(version, index) {
 		    if (version.urn == urn) {
 			profiles = version.using;
+			/*
+			 * Add the version list to the args.
+			 */
+			_.each(profiles, function(profile, i) { 
+			    _.each(profile.versions, function(version, j) {
+				args["profile-delete-versions"]
+				    .push(version.version);
+			    });
+			});
+			// Just one profile can be deleted.
+			return;
 		    }
 		});
 	    });
@@ -364,6 +376,7 @@ $(function ()
 	$('#confirm-delete-image-modal #confirm-delete-image')
 	    .click(function () {
 		sup.HideModal('#confirm-delete-image-modal');
+
 		sup.ShowWaitWait('It takes a moment to delete an image; ' +
 				 'patience please');
 

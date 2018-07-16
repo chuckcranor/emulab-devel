@@ -164,7 +164,7 @@ function Do_Create()
             (!$project->IsMember($this_user, $isapproved) || !$isapproved)) {
         $errors["profile_pid"] = "Illegal project";
     }
-    elseif ($action == "create" && 
+    elseif (($action == "create" || $action == "clone") && 
             Profile::LookupByName($project, $formfields{"profile_name"})) {
         $errors["profile_name"] = "Already in use";
     }

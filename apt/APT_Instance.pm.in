@@ -2776,10 +2776,11 @@ sub ConsoleURL($$)
 #
 # Create an Image,
 #
-sub CreateImage($$$$;$$$$$)
+sub CreateImage($$$$;$$$$$$)
 {
     my ($self, $sliver_urn, $imagename, $update_prepare,
-	$copyback_uuid, $bsname, $nosnapshot, $mustnotexist, $wholedisk) = @_;
+	$copyback_uuid, $bsname, $nosnapshot,
+	$mustnotexist, $wholedisk, $description) = @_;
     my $authority = $self->GetGeniAuthority();
     my $geniuser  = $self->instance()->GetGeniUser();
     my $slice     = $self->instance()->GetGeniSlice();
@@ -2818,6 +2819,8 @@ sub CreateImage($$$$;$$$$$)
 	if ($mustnotexist);
     $args->{'wholedisk'} = 1
 	if ($wholedisk);
+    $args->{'description'} = $description
+	if (defined($description));
 
     my $cmurl = $authority->url();
     $cmurl = devurl($cmurl) if ($usemydevtree);

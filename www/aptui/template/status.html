@@ -697,48 +697,37 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
 		  <option value=''>Please Select a Node</option>
 		</select>
 	      </span>
-	      <div class="text-danger hidden choose-node-error">
-		Please select a node!
-	      </div>
+	      <div class="text-danger hidden
+			  snapshot-error choose-node-error"></div>
 	    </center>
 	    <div style="text-align: center;">
-	      <br>
 	      <div id='snapshot_update_prepare_div'
-		   style="display: inline-block; width: 80%;">
+		   style="display: inline-block; width: 80%; margin-top: 10px;">
 		<b>Did you add any accounts or groups to your node?</b>
-		<br>
-		<center>
-		  <input type=checkbox
-			 id='snapshot_update_prepare' value=yes>
-		</center>
-		<div style="text-align: left;">
-		  Check this box if you installed any software that added new
-		  users or groups. If you are not sure, ask us first since
-		  checking this box needlessly can have negative side effects.
-		</div>
-	      </div>
-	      <div id='snapshot-wholedisk-div' class="hidden"
-		   style="display: inline-block; width: 80%;">
-		<br>
-		<b>Whole disk image?</b>
-		<br>
-		<center>
-		  <input type=checkbox
-			 id='snapshot-wholedisk' value=yes>
-		</center>
-		<div style="text-align: left;">
-		  Check this box if you need to capture more then just the primary
-		  partition of your disk. For example, you created a file system on
-		  parition two, and want to include that in your new disk image. 
-		  <b><em>Do not check this box if you do not need to do this or 
-		    do not know what this means!</em></b>
-		</div>
+		<input type=checkbox
+		       id='snapshot_update_prepare' value=yes>
+		<a href='#' class='btn btn-xs'
+		   data-toggle='popover'
+		   data-html='true'
+		   data-delay='{"hide":500}'
+		   data-content="Check this box if you installed any software
+				 that added new
+				 users or groups. For example, if you installed
+				 <tt>mysql</tt>, a new <tt>mysqld</tt> user was
+				 added, and you want to make sure that this
+				 user account is retained in the new image.
+				 If you are not sure, please
+				 <em><b>ask us first</b></em> since
+				 checking this box needlessly can have
+				 negative side effects.">
+		  <span class='glyphicon glyphicon-question-sign'
+			style='margin-bottom: 4px;'></span>
+		</a>
 	      </div>
 	    </div>
 	  </div>
 	  <div class="fhide step2" data-step="2">
-	    <br>
-	    <div style="text-align: center;">
+	    <div style="text-align: center; margin-top: 10px;">
 	      <div id="snapshot-radio-title">
 		<b>What would you like to do with this image?</b>
 		<br>
@@ -772,7 +761,7 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
 		  <label>
 		    <input type="radio" name="whattodo"
 			   id="new-profile" value="new-profile">
-		    Create a brand new (empty) profile.
+		    Create a brand new (empty) profile, using the new image.
 		    <a href='#' class='btn btn-xs clone-help-button'>
 		      <span class='glyphicon glyphicon-question-sign'
 			    style='margin-bottom: 4px;'></span>
@@ -786,6 +775,19 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
 		    Just create a disk image, I will decide what to do with it
 		    later.
 		  </label>
+		</div>
+		<div id='snapshot-description-div'>
+		  <center>
+		    <b>Please briefly describe your image:</b>
+		    <br>
+		  </center>
+		  <textarea style="width: 100%;"
+			    placeholder="Optional, but very handy when looking at a list of all your images"
+			    rows=2 type='textarea'></textarea>		
+		  <div class="text-danger hidden
+			      snapshot-error description-error"
+		       style="text-align: center;">
+		  </div>
 		</div>
 	      </div>
 	    </div>
@@ -802,26 +804,34 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
 		<input class="profile-name"
 		       placeholder="alphanumeric please" type="text">
 	      </center>
-	      <div class="text-danger hidden name-error"
+	      <div class="text-danger hidden snapshot-error name-error"
 		   style="text-align: center;">
-		Please provide a name!
 	      </div>
-	      <div class="text-danger hidden inuse-error"
+	      <div class="text-danger hidden snapshot-error inuse-error"
 		   style="text-align: center;">
-		Name Error!
 	      </div>
 	    </div>
-	    <div class='choose-project-div hidden'>
-	      <center>
-		<b>Please tell us what project to use for your new profile</b>
-		<br>
-		<select>
-		  <option value=''>Please Select a Project</option>
-		</select>
-	      </center>
-	      <div class="text-danger hidden project-error"
-		   style="text-align: center;">
-		Please select a project!
+	    <div style="text-align: center;">
+	      <div id='snapshot-wholedisk-div' class="hidden"
+		   style="display: inline-block; width: 80%; margin-top: 10px;">
+		<b>Create a whole disk image?</b>
+		<input type=checkbox
+		       id='snapshot-wholedisk' value=yes>
+		<a href='#' class='btn btn-xs'
+		   data-toggle='popover'
+		   data-html='true'
+		   data-delay='{"hide":500}'
+		   data-content="Check this box if you need to capture more
+				 then just the primary partition of your disk.
+				 For example, you created a file system on
+				 parition two, and want to include that in
+				 your new disk image. 
+				 <b><em>Do not check this box if you do not
+				 need to do this or 
+				 do not know what this means!</em></b>">
+		  <span class='glyphicon glyphicon-question-sign'
+			style='margin-bottom: 4px;'></span>
+		</a>
 	      </div>
 	    </div>
 	  </div>
@@ -833,6 +843,9 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
 	    for this is so that dependencies on specific user home directories
 	    do not become embedded in your images.
 	  </p>
+	  <div class="text-danger hidden snapshot-error general-error"
+	       style="white-space: pre-wrap;
+		      padding: 0px 50px 0px 50px;"></div>
 	</div>
 	<div class="pull-right" style="margin-bottom: 10px;">
           <button style='margin-right: 10px;'

@@ -156,6 +156,18 @@ function Do_DeleteImage()
             return;
         }
         $pdarg = "-d " . escapeshellarg($ajax_args["profile-delete"]);
+
+        if (!isset($ajax_args["profile-delete-versions"])) {
+            SPITAJAX_ERROR(-1, "Missing profile version list for deletion");
+            return;
+        }
+        foreach ($ajax_args["profile-delete-versions"] as $vers) {
+            if (!preg_match("/^\d+$/", $vers)) {
+                SPITAJAX_ERROR(1, "Illegal characters in version number");
+                return;
+            }
+        }
+        $pdarg .= " -v " . implode(",", $ajax_args["profile-delete-versions"]);
     }
     
     $uid = $target_user->uid();
@@ -167,6 +179,7 @@ function Do_DeleteImage()
                      "webmanage_images -t $webtask_id ".
                      "  delete -a '$aggurn' $pdarg $image_urn",
                      SUEXEC_ACTION_IGNORE);
+
     if ($retval) {
         $webtask->Refresh();
         if (!$webtask->exited() || $retval < 0) {

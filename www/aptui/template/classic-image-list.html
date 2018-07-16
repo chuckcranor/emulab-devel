@@ -22,7 +22,7 @@
      padding: 2px;
  }
 </style>
-<div class='col-lg-10 col-lg-offset-1
+<div class='col-lg-12 col-lg-offset-0
 	    col-md-12 col-md-offset-0
 	    col-sm-12 col-sm-offset-0
 	    col-xs-12 col-xs-offset-0'>
@@ -45,10 +45,10 @@
 	      <th>Name</th>
 	      <th>Project</th>
 	      <th>Created</th>
+	      <th class="sorter-false">Description</th>
 	      <% if (showformat) { %>
 		<th>Format</th>
 	      <% } %>
-	      <th class="sorter-false">Description</th>
 	      <th class="sorter-false">URN</th>
 	    </tr>
 	  </thead>
@@ -60,10 +60,10 @@
 		<td><a href='show-project.php?pid=<%- value.pid_idx %>'>
 		  <%= value.pid %></a></td>
 		<td class="format-date"><%- value.created %></td>
+		<td><%- value.description %></td>
 		<% if (showformat) { %>
 		  <td><%- value.format %></td>
 		<% } %>
-		<td><%- value.description %></td>
 		<td align="center">
 		  <a href="#" 
 		     data-toggle='popover'
