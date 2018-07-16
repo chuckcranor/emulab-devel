@@ -8159,7 +8159,7 @@ sub KillMonitor($)
 	
     print STDERR "Monitor in progress: process id $pid ...\n";
 
-    if ($experiment->canceled()) {
+    if ($experiment->Canceled()) {
 	print STDERR "Cancel flag already set for $experiment\n";
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Unable to stop monitor");

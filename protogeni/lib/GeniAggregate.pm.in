@@ -2777,7 +2777,7 @@ sub WaitForNodes($$$$@)
     #
     my $waittime  = 0;
     my $minutes   = 0;
-    my $canceled  = $experiment->canceled();
+    my $canceled  = $experiment->Canceled();
 
     #
     # Wait for the nodes to finish booting, as recorded in database.
@@ -2786,7 +2786,7 @@ sub WaitForNodes($$$$@)
 	#
 	# Check for cancelation. We quit the monitor.
 	#
-	$canceled = $experiment->canceled();
+	$canceled = $experiment->Canceled();
 	if ($canceled) {
 	    print STDERR "WaitForNodes canceled; terminating early!\n";
 	    #
@@ -3030,7 +3030,7 @@ sub WaitForNodes($$$$@)
     $slice->LockTables();
     # Do this first. See cancel in DeleteSlice().
     $slice->ClearMonitorPid();
-    if ($experiment->canceled()) {
+    if ($experiment->Canceled()) {
 	$experiment->SetCancelFlag(0);
     }
     $slice->UnLockTables();

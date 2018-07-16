@@ -916,7 +916,7 @@ sub DeleteSlice($)
     # is not affected.
     #
     GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid()) {
+    if ($slice->GetMonitorPid()) {
 	if (!$cancel) {
 	    $slice->UnLock();
 	    return GeniResponse->MonitorResponse()
@@ -956,11 +956,12 @@ sub DeleteSlice($)
     # If we were canceled, we wait for the monitor to stop, instead of
     #
     if ($canceled) {
-	while ($slice->monitor_pid()) {
+	while ($slice->GetMonitorPid()) {
 	    sleep(10);
 	    GeniCM::CheckMonitor($slice);
 	    print STDERR "Checking to see if monitor has stopped ...\n";
 	}
+
     }
     my $retval = GeniCM::CleanupDeadSlice($slice, 1);
     if ($retval) {
