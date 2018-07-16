@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2009-2011 University of Utah and the Flux Group.
+# Copyright (c) 2009-2011, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,7 +37,7 @@ my $TBDOCBASE   = "@TBDOCBASE@";
 my $MAINSITE    = @TBMAINSITE@;
 
 $debug   = 0;
-$verbose = 1;
+$verbose = 0;
 
 use emdb;
 
