@@ -169,10 +169,16 @@ $(function ()
 
 	$("#showtopo_container").removeClass("invisible");
 	$('#quicktabs_ul a[href="#topology"]').tab('show');
-	ShowRspec(record.rspec);
 	if (manifests.length) {
+	    $('#quicktabs_ul li').removeClass('hidden');
+	    $('#quicktabs_content .tab-pane').removeClass('hidden');
+	    $('#quicktabs_ul a[href="#topology"]').tab('show');
 	    ShowViewer('#showtopo_statuspage', manifests);
 	}
+	else {
+	    $('#quicktabs_ul a[href="#rspec"]').tab('show');
+	}
+	ShowRspec(record.rspec);
 	if (logfiles.length) {
 	    ShowLogfiles(logfiles);
 	}
