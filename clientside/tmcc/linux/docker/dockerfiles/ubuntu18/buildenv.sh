@@ -17,9 +17,7 @@ apt-get install -y --no-install-suggests --no-install-recommends \
     gcc make libc-dev byacc libtool-bin libssl-dev 'g++' zlib1g-dev \
     sudo python python-dev libpcap-dev libboost-dev wget patch flex ntp
 
-NEEDPATCH=1
-
-if [ $NEEDPATCH -eq 1 -o -z "$EMULABSRC" ]; then
+if [ -z "$EMULABSRC" ]; then
     echo "WARNING: missing or unusable EMULABSRC environment variable pointer to src; cloning!"
     export EMULABSRC=/tmp/emulab-devel
     cd /tmp
@@ -55,13 +53,6 @@ fi
 
 echo /usr/local/lib > /etc/ld.so.conf.d/pubsub.conf
 ldconfig
-
-if [ $NEEDPATCH -eq 1 ]; then
-    cd $EMULABSRC
-    wget https://www.emulab.net/downloads/openssl-1.1.0.patch
-    [ ! $? -eq 0 ] && exit 1
-    patch -p1 < openssl-1.1.0.patch
-fi
 
 mkdir -p /tmp/emulab.obj
 cd /tmp/emulab.obj
