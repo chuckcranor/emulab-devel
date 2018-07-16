@@ -83,7 +83,7 @@ if test x"$PYTHON" = x""; then
     AC_MSG_ERROR([python not detected])
 fi
 
-PYTHON_VERSION=`${PYTHON} -V 2>&1 | cut -d ' ' -f 2 | cut -d '.' -f 1,2`
+PYTHON_VERSION=`${PYTHON} -V 2>&1 | cut -d ' ' -f 2 | cut -d '.' -f 1,2 | head -1`
 PYTHON_PATH=`dirname ${PYTHON}`
 if test ! -d "$PYTHON_PATH/include"; then
     PYTHON_PATH=`dirname ${PYTHON_PATH}`
