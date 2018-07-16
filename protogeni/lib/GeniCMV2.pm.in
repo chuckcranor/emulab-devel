@@ -3486,8 +3486,8 @@ sub CreateImage($)
     # that they are operating in withadminprivs context. Need a credential
     # to provide that, maybe later.
     #
-    if (OSImage->LookupByName($imagename) &&
-	!($user->IsLocal() && $user->emulab_user()->admin())) {
+    if ($experiment->pid() ne EmulabConstants::TBOPSPID() &&
+	OSImage->LookupByName($imagename)) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 				    "Not allowed to shadow system images; ".
 				    "use a different name for your image");
