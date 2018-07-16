@@ -36,7 +36,7 @@ use POSIX qw(ceil);
 use vars qw(@ISA @EXPORT);
 
 @ISA    = "Exporter";
-@EXPORT = qw (MapUserURN MapProjectURN);
+@EXPORT = qw (MapUserURN MapProjectURN ReadFile);
 
 # Must come after package declaration!
 use emdb;
@@ -128,6 +128,18 @@ sub MapUserURN($)
 	if (defined($geniuser) && $geniuser->IsLocal());
 
     return undef;
+}
+
+#
+# Convenience 
+#
+sub ReadFile($) {
+    local $/ = undef;
+    my ($filename) = @_;
+    open(FILE, $filename) or fatal("Could not open $filename: $!");
+    my $contents = <FILE>;
+    close(FILE);
+    return $contents;
 }
 
 #
