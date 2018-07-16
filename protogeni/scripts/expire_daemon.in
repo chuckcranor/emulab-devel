@@ -399,13 +399,29 @@ sub WarnSlices()
 	    $warned{$idx} = time();
 	}
 	if (! $impotent) {
-	    SENDMAIL($emailaddr, "Sliver expiring at $OURDOMAIN",
-		     "Sliver $sliver_urn\n".
-		     "from slice $urn,\n".
-		     "is going to expire in approximately $diff $unit.\n\n".
-		     "Please renew it".
-		     " or let it expire if you are not using it anymore.\n",
-		     "Geni Operations <$TBOPS>");
+	    my $subject;
+	    my $message;
+	    if (!defined($slice->portal_tag())) {
+		$subject = "Sliver expiring at $OURDOMAIN";
+		$message = "Sliver $sliver_urn\n".
+		    "from slice $urn,\n".
+		    "is going to expire in approximately $diff $unit.\n\n".
+		    "Please renew it".
+		    " or let it expire if you are not using it anymore.\n";
+	    }
+	    else {
+		my $tag = ucfirst($slice->portal_tag());
+		my $url = $slice->portal_url();
+		my $eid = $slice->portal_eid();
+		$subject = "$tag portal experiment is expiring";
+		$message = "Your $tag portal experiment $eid at $OURDOMAIN".
+		    (defined($url) ?
+		     ":\n\n" . "   $url" . "\n\n" : "\n") .
+		    "is going to expire in approximately $diff $unit.\n\n".
+		    "Please extend it".
+		    " or let it expire if you are not using it anymore.\n";
+	    }
+	    SENDMAIL($emailaddr, $subject, $message, "$TBOPS");
 	}
 	$slice->UnLock();
       skip:
@@ -1205,16 +1221,32 @@ sub CheckIdle()
 		    print STDERR "** Slice can no longer be renewed!\n";
 
 		    if (!$impotent) {
-			SENDMAIL($emailaddr,
-			     "Sliver $sliver_urn may not be renewed",
-			     "Sliver $sliver_urn\n".
-			     "from slice $urn,\n".
-			     "has been mostly idle for too long,\n".
-			     "and is using $nodes physical nodes.\n\n".
-			     "$stats\n".
-			     "You will not be allowed to renew this sliver!\n",
-			     "Geni Operations <$TBOPS>", "CC: $TBAUTOMAIL");
+			my $subject;
+			my $message;
+			if (defined($slice->portal_tag())) {
+			    my $tag = ucfirst($slice->portal_tag());
+			    my $url = $slice->portal_url();
+			    my $eid = $slice->portal_eid();
+			    $subject = "$tag portal experiment ".
+				"may not be extended";
+			    $message = "Your $tag portal experiment $eid at ".
+				"$OURDOMAIN".
+				(defined($url) ?
+				 ":\n\n" . "   $url" . "\n\n" : "\n");
+			}
+			else {
+			    $subject = "Sliver $sliver_urn may not be renewed";
+			    $message = "Sliver $sliver_urn\n".
+				"from slice $urn,\n";
+			}
+			$message .= 
+			    "has been mostly idle for too long,\n".
+			    "and is using $nodes physical nodes.\n\n".
+			    "$stats\n".
+			    "You will not be allowed to extend it!\n";
 		
+			SENDMAIL($emailaddr, $subject, $message,
+				 $TBOPS, "CC: $TBAUTOMAIL");
 			$slice->SetRenewLimit(0);
 		    }
 		}
@@ -1232,20 +1264,49 @@ sub CheckIdle()
 		    print STDERR "   Sending mail to $geniuser about ".
 			"idle sliver $aggregate\n";
 
-		    SENDMAIL($emailaddr, "Sliver $sliver_urn is mostly idle",
-			"Sliver $sliver_urn\n".
-			"from slice $urn,\n".
-			"has been mostly idle for an unusual length of time,\n".
-			"and is using $nodes physical nodes.\n\n".
-			"$stats\n".
-			($idlecheck_norenew ?
-			 ($norenew ?
-			  "You may no longer renew this sliver, and it might ".
-			  "be terminated " :
-			  "You will not be allowed to renew this sliver ") :
-			 "This sliver might be terminated ") .
-			"if it stays idle.\n",
-			"Geni Operations <$TBOPS>", "CC: $TBAUTOMAIL");
+		    my $subject;
+		    my $message;
+		    if (defined($slice->portal_tag())) {
+			my $tag = ucfirst($slice->portal_tag());
+			my $url = $slice->portal_url();
+			my $eid = $slice->portal_eid();
+			$subject = "$tag portal experiment ".
+			    "is mostly idle";
+			$message = "Your $tag portal experiment $eid at ".
+			    "$OURDOMAIN".
+			    (defined($url) ?
+			     ":\n\n" . "   $url" . "\n\n" : "\n") .
+			    "has been mostly idle for an unusual length ".
+			    "of time,\n".
+			    "and is using $nodes physical nodes.\n\n".
+			    "$stats\n".
+			    ($idlecheck_norenew ?
+			     ($norenew ?
+			      "You may no longer extend this experiment, and ".
+			      "it might be terminated " :
+			      "You will not be allowed to extend this ".
+			      "experiment ") :
+			     "This experiment might be terminated ") .
+			    "if it stays idle.\n",
+		    }
+		    else {
+			$subject = "Sliver $sliver_urn is mostly idle";
+			$message = "Sliver $sliver_urn\n".
+			    "from slice $urn,\n".
+			    "has been mostly idle for an unusual length ".
+			    "of time,\n".
+			    "and is using $nodes physical nodes.\n\n".
+			    "$stats\n".
+			    ($idlecheck_norenew ?
+			     ($norenew ?
+			      "You may no longer renew this sliver, and it ".
+			      "might be terminated " :
+			      "You will not be allowed to renew this sliver ") :
+			     "This sliver might be terminated ") .
+			    "if it stays idle.\n",
+		    }
+		    SENDMAIL($emailaddr, $subject, $message,
+			     $TBOPS, "CC: $TBAUTOMAIL");
 
 		    emdb::DBQueryWarn("update experiments set ".
 				      "   swap_requests=swap_requests+1, ".
@@ -1408,6 +1469,10 @@ sub NotifyPortal()
 #
 # Deal with image tracker stuff. 
 #
+# Lets not send repeat email for these failures, one is enough.
+#
+my %image_notifications = ();
+
 sub HandleImageTracking()
 {
     if (!GetSiteVar("protogeni/use_imagetracker")) {
@@ -1476,12 +1541,18 @@ sub HandleImageTracking()
 	my $status = $?;
 	$image->Unlock();
 	if ($?) {
-	    print $output;
-	    SENDMAIL($TBOPS,
-		     "Could not trigger an image update for $imageid",
-		     $output,
-		     $TBOPS);
+	    print STDERR "Could not trigger an image update for $imageid:\n";
+	    print STDERR $output;
+	    if (!exists($image_notifications{$image->versid()})) {
+		SENDMAIL($TBOPS,
+			 "Could not trigger an image update for $imageid",
+			 $output, $TBOPS);
+
+		$image_notifications{$image->versid()} = 1;
+	    }
+	    next;
 	}
+	delete($image_notifications{$image->versid()});
     }
 
     #
@@ -1508,28 +1579,140 @@ sub HandleImageTracking()
 	}
 	my $output = emutil::ExecQuiet("$IMPORTER -d -g -r -c $imageid");
 	if ($?) {
-	    print $output;
-	    SENDMAIL($TBOPS,
-		     "Could not import image update for $imageid",
-		     $output,
-		     $TBOPS);
+	    print STDERR "Could not import image update for $imageid\n";
+	    print STDERR $output;
+	    if (!exists($image_notifications{$image->versid()})) {
+		SENDMAIL($TBOPS,
+			 "Could not import image update for $imageid",
+			 $output,
+			 $TBOPS);
+		$image_notifications{$image->versid()} = 1;
+	    }
+	    next;
 	}
+	delete($image_notifications{$image->versid()});
     }
     my $opt = ($impotent ? "-n" : "");
 
     # Trigger a posting to the IMS for any new images.
     my $output = emutil::ExecQuiet("$POSTIMAGEDATA -v $opt all");
-    print $output;
-    if ($? && $? >> 8 == 256) {
-	SENDMAIL($TBOPS,
-		 "Could not post image data to the IMS",
-		 $output,
-		 $TBOPS);
+    if ($?) {
+	print STDERR "Could not post image data to the IMS:\n";
+	print STDERR $output;
     }
+    print $output;
+}
+
+#
+# Watch for stuff that has been failing for more then a few minutes,
+# and send email periodically.
+#
+sub HandleImageFailures()
+{
+    if (!GetSiteVar("protogeni/use_imagetracker")) {
+	return;
+    }
+
+    #
+    # Look for images deletions that have not been accepted.
+    #
+    my $query_result =
+	DBQueryWarn("select * from image_deletions ".
+		    "where ".
+		    "order by deleted asc");
+    return
+	if (!$query_result);
+    while (my $row = $query_result->fetchrow_hashref()) {
+	my $urn  = $row->{'urn'};
+	my $uuid = $row->{'image_uuid'};
+
+	if ($impotent) {
+	    print "Would trigger image delete for $urn\n";
+	    next;
+	}
+
+	my $output = emutil::ExecQuiet("$DELETEIMAGEDATA '$urn' $uuid");
+	if ($?) {
+	    print STDERR
+		"Could not delete image data at the IMS for $urn/$uuid:\n";
+	    print STDERR $output;
+	    next;
+	}
+	DBQueryWarn("delete from image_deletions ".
+		    "where urn='$urn' and image_uuid='$uuid'");
+    }
+    
+    #
+    # Look for images notifications; these are new local snapshots that need
+    # to be copied back to their origin, so we have to tell the origin of that
+    # image.
+    #
+    $query_result =
+	DBQueryWarn("select * from image_notifications");
+    return
+	if (!$query_result);
+    while (my $row = $query_result->fetchrow_hashref()) {
+	my $imageid = $row->{'imageid'};
+	my $image   = Image->Lookup($imageid);
+	if (!defined($image)) {
+	    print STDERR "$imageid no longer exists. Skipping notification.\n";
+	    next;
+	}
+	if ($impotent) {
+	    print "Would trigger update for $image\n";
+	    next;
+	}
+	
+	#
+	# Lets avoid needless errors cause the image is locked, take the
+	# lock here and call it with the nolock option.
+	#
+	if ($image->Lock()) {
+	    print STDERR "$image is locked, skipping\n";
+	    next;
+	}
+	my $output = emutil::ExecQuiet("$TRIGGERUPDATE -l $imageid");
+	my $status = $?;
+	$image->Unlock();
+	if ($?) {
+	    print STDERR "Could not trigger an image update for $imageid:\n";
+	    print STDERR $output;
+	}
+    }
+
+    #
+    # Look for images that need to be copied back (cause we were notified
+    # in the loop above). These are images that need to be imported from
+    # the cluster where the snapshot was made.
+    #
+    $query_result =
+	DBQueryWarn("select * from image_updates");
+    return
+	if (!$query_result);
+    
+    while (my $row = $query_result->fetchrow_hashref()) {
+	my $imageid = $row->{'imageid'};
+	my $image   = Image->Lookup($imageid);
+	
+	if (!defined($image)) {
+	    print STDERR "$imageid no longer exists. Skipping update ...\n";
+	    next;
+	}
+	if ($impotent) {
+	    print "Would import new version of $image\n";
+	    next;
+	}
+	my $output = emutil::ExecQuiet("$IMPORTER -d -g -r -c $imageid");
+	if ($?) {
+	    print STDERR "Could not import image update for $imageid\n";
+	    print STDERR $output;
+	}
+    }
+
 }
 
 if ($oneshot) {
-    HandleImageTracking();
+    WarnSlices();
     exit(0);
 }
 
