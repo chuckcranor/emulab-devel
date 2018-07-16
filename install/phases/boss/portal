@@ -69,6 +69,9 @@ sub Install($$$)
 	    ExecQuietFatal("chown nobody:nobody /var/run/fcgidsock");
 	    ExecQuietFatal("chmod 770 /var/run/fcgidsock");
 	};
+	Phase "emulabkey", "Fixing perms on $TBROOT/etc/emulab.key", sub {
+	    ExecQuietFatal("chmod 644 $TBROOT/etc/emulab.key");
+	};
 	Phase "rc.conf", "Adding fcgid to apache flags", sub {
 	    PhaseSkip("already added") unless `grep -q PGENI_FCGID $RCCONF`;
 	    my $flags = "-DSSL -DPGENI -DPGENI_FCGID";
