@@ -754,9 +754,63 @@ sub check_initrd
 	return undef if (! -f $initrd);
 
 	mkdir $initrd_dir;
-	`$GZIP -dc < "$initrd" > "$decompressed_initrd" 2> /dev/null`;
+
+	# Check to see if there's an uncompressed early cpio archive
+	# prepended to the main gzip'd cpio hunk.  We have to parse the cpio
+	# headers to find the correct next place to read, unfortunately.
+	#
+	# Assume that we won't find anything; in that case we will
+	# decompress $initrd below.
+	my $initrd_filename = $initrd;
+	my $rc;
+	my $buffer;
+	my $offset = 0;
+	open INITRD, $initrd or die "Couldn't open $initrd: $!\n";
+	while ($rc = read INITRD, $buffer, 6) {
+		# Basically, read any uncompressed newc-format CPIO
+		# headers that we can.  If we find any, the compressed
+		# CPIO blob follows the final uncompressed header.
+		if ($buffer eq '070701' || $buffer eq '070702') {
+			my $tbuf;
+			$rc = read(INITRD,$tbuf,110-6);
+			if ($rc != (110-6)) {
+				die "Malformed early uncompressed initramfs!\n";
+			}
+			$buffer .= $tbuf;
+			my $namesize = hex(substr($buffer,94,8));
+			my $filesize = hex(substr($buffer,54,8));
+			$offset += 110;
+			$offset = (($offset + $namesize + 3) & ~3);
+			$offset = (($offset + $filesize + 3) & ~3);
+			seek(INITRD,$offset,0);
+		}
+		elsif ($offset > 0 && ord(substr($buffer,0,1)) == 0) {
+			$offset += 4;
+			seek(INITRD,$offset,0);
+			next;
+		}
+		else {
+			last;
+		}
+	}
+	if ($offset > 0) {
+		my $inner_initrd = "/tmp/initrd.inner.$$";
+		seek(INITRD,$offset,0);
+		open(INNERINITRD,">$inner_initrd")
+			or die "Con't open $inner_initrd: $!\n";
+		while ($rc = read(INITRD,$buffer,4096)) {
+			print INNERINITRD $buffer;
+		}
+		close(INNERINITRD);
+		# If we extracted an inner blob, change the filename we
+		# will attempt to decompress.
+		$initrd_filename = $inner_initrd;
+	}
+	close(INITRD);
+
+	`$GZIP -dc < "$initrd_filename" > "$decompressed_initrd" 2> /dev/null`;
 	if ($? >> 8) {
-		`$CP "$initrd" "$decompressed_initrd"`;
+		`$CP "$initrd_filename" "$decompressed_initrd"`;
 		if ($? & 0xff) {
 			return undef;
 		}
