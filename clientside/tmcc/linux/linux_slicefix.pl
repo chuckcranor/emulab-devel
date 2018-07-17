@@ -719,6 +719,12 @@ sub check_kernel
 		return undef;
 	}
 
+	#
+	# XXX if gzip sees trailing garbage it exits non-zero causing a SIGPIPE in the
+	# while loop and making perl terminate.
+	# New Linux kernel compressions seem to cause this (on Ubuntu 18 at least).
+	#
+	$SIG{'PIPE'} = 'IGNORE';
 	open GZIP, "|$GZIP -dc > $kernel_file 2> /dev/null";
 	print GZIP $buffer;
 	while (read KERNEL, $buffer, 4096) {
