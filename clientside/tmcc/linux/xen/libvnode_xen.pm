@@ -185,11 +185,13 @@ my $CAPTUREOPTS	= "-i -C -L -T 10 -R 2000";
 
 #
 # Create a thin pool with the name $POOL_NAME using not more
-# than $POOL_FRAC of any disk.
+# than $POOL_FRAC of any disk. Note that for shared nodes, we use a
+# larger fraction of space since they will host more VMs and more images.
+
 # 
 my $usethin = 1;
 my $POOL_NAME = "disk-pool";
-my $POOL_FRAC = 0.75;
+my $POOL_FRAC = SHAREDHOST() ? 0.60 : 0.30;
 
 #
 # If set to one, we will destroy a golden disk when no vnode disks
@@ -744,6 +746,7 @@ sub rootPreConfig($;$)
     # See if our LVM volume group for VMs exists and create it if not.
     #
     my $vg = `vgs | grep $VGNAME`;
+    my $blockdevstr = "";
     if ($vg !~ /^\s+${VGNAME}\s/) {
 	print "Creating volume group...\n"
 	    if ($debug);
@@ -868,7 +871,7 @@ sub rootPreConfig($;$)
 	    return -1;
 	}
 		    
-	my $blockdevstr = join(' ', sort @blockdevs);
+	$blockdevstr = join(' ', sort @blockdevs);
 
 	#
 	# If we are doing a reliable LVM setup, setup an mdadm RAID10
@@ -904,17 +907,20 @@ sub rootPreConfig($;$)
 	    print STDERR "WARNING: physical disk space below the desired ".
 		" minimum value ($size < $XEN_MIN_VGSIZE), expect trouble.\n";
 	}
-
-	#
-	# Create an image pool for golden images.
-	# If this fails, we just don't use thin volumes!
-	#
-	if ($usethin && createThinPool($blockdevstr)) {
-	    print STDERR "WARNING: could not create a thin pool, ".
-		"disabling golden image support\n";
-	    $usethin = 0;
-	}
+    } else {
+	$blockdevstr = join(" ", listPVs($VGNAME));
     }
+
+    #
+    # Create an image pool for golden images if it is desired and doesn't
+    # already exist. If this fails, we just don't use thin volumes!
+    #
+    if ($usethin && !findThinPool() && createThinPool($blockdevstr)) {
+	print STDERR "WARNING: could not create a thin pool, ".
+	    "disabling golden image support\n";
+	$usethin = 0;
+    }
+
     $STRIPE_COUNT = computeStripeSize($VGNAME);
     
     #
@@ -1409,12 +1415,15 @@ sub vnodeCreate($$$$)
 	else {
 	    #
 	    # Cannot use/create a golden image if there is a user-specified
-	    # extra filesystem.
+	    # extra filesystem or we are creating a large second partition.
 	    #
 	    my $extrafs = 
 		(exists($attributes->{'XEN_EXTRAFS'}) ?
 		 $attributes->{'XEN_EXTRAFS'} : undef);
-	    if ($extrafs) {
+	    my $s2size =
+		(exists($attributes->{'XEN_SLICE2IMAGE'}) ?
+		 $XEN_LDSIZE_3 : $XEN_EMPTYSIZE;
+	    if ($extrafs || $s2size != $XEN_EMPTYSIZE) {
 		$dothinlv = 0;
 	    }
 
@@ -1449,7 +1458,7 @@ sub vnodeCreate($$$$)
 	    # Either way, we need to unpack the images to create a disk.
 	    #
 	    if (CreatePrimaryDisk($lvname, $imagemetadata,
-				  $vnode_id, $extrafs, $dothinlv)) {
+				  $vnode_id, $extrafs, $s2size, $dothinlv)) {
 		releaseGoldenLock($glock)
 		    if ($glock);
 		TBScriptUnlock();
@@ -3205,11 +3214,12 @@ sub findRoot()
 #
 # Create primary disk.
 #
-sub CreatePrimaryDisk($$$$;$)
+sub CreatePrimaryDisk($$$$;$$)
 {
-    my ($lvname, $imagemetadata, $target, $extrafs, $dothinlv) = @_;
+    my ($lvname, $imagemetadata, $target, $extrafs, $s2size, $dothinlv) = @_;
 
     # XXX when called externally by mkimagecache
+    $s2size = $XEN_EMPTYSIZE if (!defined($s2size));
     $dothinlv = 0 if (!defined($dothinlv));
 
     #
@@ -3264,7 +3274,7 @@ sub CreatePrimaryDisk($$$$;$)
     # Add room for "empty" slice, swap partition and for extra disk.
     #
     if ($loadslice != 0) {
-	$lv_size += $XEN_EMPTYSIZE;
+	$lv_size += $s2size;
 	$lv_size += $XEN_SWAPSIZE;
 	if (defined($extrafs)) {
 	    # In GB, so convert to K
@@ -3360,7 +3370,7 @@ sub CreatePrimaryDisk($$$$;$)
 	if ($mbrvers == 3) {
 	    $slice1_start = 2048;
 	    $slice1_size  = $XEN_LDSIZE_3 * 2;
-	    $slice2_size  = $XEN_EMPTYSIZE * 2;
+	    $slice2_size  = $s2size * 2;
 	    if ($imagemetadata->{'PARTOS'} =~ /freebsd/i) {
 		$slice1_type  = "0xA5";
 	    } else {
@@ -5070,6 +5080,24 @@ sub parseXenDiskInfo($$)
 # who knows where--all of which made me nervous.
 #
 
+sub listPVs()
+{
+    my ($vgname) = @_;
+
+    my $command  = "vgdisplay -v $vgname 2>/dev/null";
+    my @devices = ();
+    
+    if (open(PFD, "$command |")) {
+	while (my $line = <PFD>) {
+	    if ($line =~ /^\s*PV Name\s+(\/dev\/\S+)\s*$/) {
+		push @devices, $1;
+	    }
+	}
+	close(PFD);
+    }
+    return @devices;
+}
+
 #
 # Create a thin pool that uses most of the VG space.
 #
@@ -5134,6 +5162,20 @@ sub createThinPool($)
     return 0;
 }
 
+#
+# XXX note we cannot use lvmFindVolume here as it searches for
+# a link in /dev/xen-vg. That link does not exist for the thin pool.
+#
+sub findThinPool()
+{
+    my ($lvm)  = @_;
+    my $exists = `lvs --noheadings -o name $VGNAME/$POOL_NAME >/dev/null 2>&1`;
+    return 0
+	if ($?);
+
+    return 1;
+}
+
 sub doingThinLVM()
 {
     # globally disabled
@@ -5142,7 +5184,7 @@ sub doingThinLVM()
     }
 
     # see if pool exists
-    if (!lvmFindVolume($POOL_NAME)) {
+    if (!findThinPool()) {
 	print STDERR "WARNING: no thin pool found, ".
 	    "disabling golden image support\n";
 	$usethin = 0;
