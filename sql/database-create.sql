@@ -123,6 +123,7 @@ CREATE TABLE `apt_aggregates` (
   `disabled` tinyint(1) NOT NULL default '0',
   `noupdate` tinyint(1) NOT NULL default '0',
   `nomonitor` tinyint(1) NOT NULL default '0',
+  `deferrable` tinyint(1) NOT NULL default '0',
   `updated` datetime NOT NULL default '0000-00-00 00:00:00',
   `weburl` tinytext,
   `has_datasets` tinyint(1) NOT NULL default '0',

@@ -2760,6 +2760,7 @@ $(function ()
 		readyCallback: function (input, output) {
 		    jacksInput = input;
 		    jacksOutput = output;
+		    window.jacksInput = input;
 
 		    jacksOutput.on('modified-topology', function (object) {
 			_.each(object.nodes, function (node) {
