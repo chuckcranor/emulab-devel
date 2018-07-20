@@ -3457,6 +3457,10 @@ sub OSSelect($$$$)
 	return -1;
     }
 
+    if (defined($osimage) && $osimage->isImage()) {
+	$osimage->GetProject()->BumpActivity();
+    }
+
     if ($debug) {
 	print STDERR "Current opmode for $nodeid is $curmode.\n";
 	if (defined($osimage)) {
