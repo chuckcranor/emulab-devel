@@ -1422,7 +1422,7 @@ sub vnodeCreate($$$$)
 		 $attributes->{'XEN_EXTRAFS'} : undef);
 	    my $s2size =
 		(exists($attributes->{'XEN_SLICE2IMAGE'}) ?
-		 $XEN_LDSIZE_3 : $XEN_EMPTYSIZE;
+		 $XEN_LDSIZE_3 : $XEN_EMPTYSIZE);
 	    if ($extrafs || $s2size != $XEN_EMPTYSIZE) {
 		$dothinlv = 0;
 	    }
