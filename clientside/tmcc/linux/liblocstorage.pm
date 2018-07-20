@@ -60,7 +60,9 @@ BEGIN
     }
 
     $VGNAME = "emulab";
-    if (INXENVM() && -r "$VARDIR/boot/vmname") {
+    if (GENVNODEHOST() && !SHAREDHOST()) {
+	$VGNAME = "xen-vg";
+    } elsif (INXENVM() && -r "$VARDIR/boot/vmname") {
 	my $vname = `cat $VARDIR/boot/vmname`;
 	chomp $vname;
 	if ($vname =~ /^([-\w]+)$/) {
