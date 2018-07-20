@@ -926,6 +926,11 @@ sub fix_console
 	return;
     }
 
+    # XXX BSDism
+    if ($console eq "vid") {
+	$console = "vga";
+    }
+
     print STDERR "Setting console device to $console\n";
 
     # parse off speed if present

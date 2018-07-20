@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -179,7 +179,7 @@ sio)
 vga)
     CONSOLE=vid
     ;;
-sio1|sio2|sio3|sio4|null|unknown)
+sio1|sio2|sio3|sio4|vid|null|unknown)
     ;;
 *)
     echo "WARNING: unknown console type \"$CONSOLE\", assuming \"sio1\""
