@@ -93,13 +93,20 @@ fi
 # /run/systemd/netif/leases/<ifindex> file has what we need.
 #
 mkdir -p $BOOTDIR
+mkdir -p /run/emulab
 ifindex=`cat /sys/class/net/$iface/ifindex`
 if [ -e /run/systemd/netif/leases/$ifindex ]; then
     echo "`date`: ${iface}: writing cnet metadata in $BOOTDIR" >>$LOGFILE 2>&1
-    . /run/systemd/netif/leases/$ifindex
+    sed -re 's/^([^=]*)=(.*\s+.*)/\1="\2"/' /run/systemd/netif/leases/$ifindex \
+	> /run/emulab/control-netif-lease
+    . /run/emulab/control-netif-lease
 elif [ -e /run/systemd/netif/leases/* ]; then
     echo "`date`: ${iface}: unexpected leases file with mismatched ifindex; attempting to use anyway to write cnet metadata in $BOOTDIR" >>$LOGFILE 2>&1
-    . /run/systemd/netif/leases/*
+    for f in /run/systemd/netif/leases/* ; do
+	sed -re 's/^([^=]*)=(.*\s+.*)/\1="\2"/' $f \
+	    >> /run/emulab/control-netif-lease
+    done
+    . /run/emulab/control-netif-lease
 else
     echo "`date`: ${iface}: no leases file in /run/systemd/netif/leases; cannot write cnet metadata in $BOOTDIR; failing!" >>$LOGFILE 2>&1
     exit 1
