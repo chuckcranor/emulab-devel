@@ -145,13 +145,15 @@ fi
 #
 if [ -L /etc/resolv.conf \
      -a ! -f `readlink -f /etc/resolv.conf` \
-     -f /run/systemd/resolve/resolv.conf ]; then
+     -a -f /run/systemd/resolve/resolv.conf ]; then
     echo "`date`: fixing /etc/resolv.conf to point to /run/systemd/resolve/resolv.conf" >>$LOGFILE 2>&1
     ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
 elif [ ! -L /etc/resolv.conf ]; then
     echo "`date`: updating static /etc/resolv.conf; should be symlink!" >>$LOGFILE 2>&1
     rm -f /etc/resolv.conf
-    echo nameserver $DNS > /etc/resolv.conf
+    for ns in $DNS ; do
+	echo nameserver $ns >> /etc/resolv.conf
+    done
     echo search $DOMAINNAME >> /etc/resolv.conf
 fi
 
