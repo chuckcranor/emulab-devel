@@ -689,15 +689,6 @@ sub DumpDBGoo()
 	    "    Could not chmod $statedir\n");
 
     #
-    # No place else for this; when ops is a vm on boss, need to generate
-    # a proper IP that is routable on the control network.
-    #
-    my $attributes = $experiment->GetElabInElabAttrs();
-    die("*** $0:\n".
-	"    Could not get elabinelab attributes\n")
-	if (!defined($attributes));
-
-    #
     # These tables are dumped completely.
     #
     my @FULLTABLES = ("node_types", "node_type_attributes", "interface_types",

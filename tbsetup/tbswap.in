@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1115,6 +1115,14 @@ sub doSwapin($) {
     if (defined($perexpstack) && (@expswitches || @curswitches)) {
 	print STDERR "Will configure per-experiment switch stack ($perexpstack) later.\n";
 	$stackarg = "-S $perexpstack --skip-supplied";
+    }
+
+    # Need this early in case elabinelab OPS is a VM on boss on a XEN VM.
+    if ($elabinelab && ($type == REAL || $type == MODIFY)) {
+	if ($experiment->AssignElabInElabOpsIP()) {
+	    tberror "Failed to allocate IP for elabinelab OPSVM\n";
+	    return 1;
+	}
     }
 
     #
