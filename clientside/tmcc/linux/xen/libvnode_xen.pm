@@ -2185,6 +2185,7 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
     my ($vnode_id, $vmid, $vnconfig, $private,
 	$ip,$mask,$mac,$gw, $vname,$longdomain,$shortdomain,$bossip) = @_;
     my $vninfo = $private;
+    my $attributes = $vnconfig->{'attributes'};
 
     if (!exists($vninfo->{'cffile'})) {
 	die("libvnode_xen: vnodePreConfig: no state for $vnode_id!?");
@@ -2210,9 +2211,15 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
     # Create a network config script for the interface
     my $stuff = {'name' => $vnode_id,
 		 'ip' => $ip,
+		 'ipaliases' => "",
 		 'hip' => $gw,
 		 'fqdn', => $longdomain,
 		 'mac' => $fmac};
+    # Look for aliases on the ip. Need to pass these to emulab-cnet
+    # for antispoofing rules.
+    if (exists($attributes->{'XEN_IPALIASES'})) {
+	$stuff->{'ipaliases'} = $attributes->{'XEN_IPALIASES'};
+    }
     createControlNetworkScript($vmid, $vnconfig, $stuff, $cscript);
 
     #
@@ -4400,6 +4407,7 @@ sub createControlNetworkScript($$$$)
     my $host_ip = $data->{'hip'};
     my $name = $data->{'name'};
     my $ip = $data->{'ip'};
+    my $ipaliases = $data->{'ipaliases'};
     my $mac = $data->{'mac'};
     my $elabinelab = (exists($vnconfig->{'config'}->{'ELABINELAB'}) ?
 		      $vnconfig->{'config'}->{'ELABINELAB'} : 0);
@@ -4415,7 +4423,7 @@ sub createControlNetworkScript($$$$)
     print FILE "if [ -e \"$file.debug\" ]; then ".
 	"mv -f $file.debug $file.debug.0; fi\n";
     print FILE "/etc/xen/scripts/emulab-cnet.pl ".
-	"$vmid $host_ip $name $ip $mac $elabinelab \$* >$file.debug 2>&1\n";
+	"$vmid $host_ip $name $ip $mac $elabinelab '$ipaliases' \$* >$file.debug 2>&1\n";
     print FILE "exit \$?\n";
     close(FILE);
     chmod(0555, $file);

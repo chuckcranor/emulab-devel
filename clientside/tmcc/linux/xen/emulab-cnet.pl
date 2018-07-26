@@ -86,6 +86,7 @@ my $vnode_id  = shift(@ARGV);
 my $vnode_ip  = shift(@ARGV);
 my $vnode_mac = shift(@ARGV);
 my $elabinelab= shift(@ARGV);
+my $ipaliases = shift(@ARGV);
 
 # The caller (xmcreate) puts this into the environment.
 my $vif         = $ENV{'vif'};
@@ -258,6 +259,14 @@ sub Online()
 	push(@rules,
 	     "-I FORWARD -m physdev --physdev-is-bridged ".
 	     "--physdev-in $vif -s $vnode_ip -j $OUTGOING_CHAIN");
+	    
+	if ($ipaliases ne "") {
+	    foreach my $alias (split(",", $ipaliases)) {
+		push(@rules,
+		     "-I FORWARD -m physdev --physdev-is-bridged ".
+		     "--physdev-in $vif -s $alias -j $OUTGOING_CHAIN");
+	    }
+	}
 	    
 	push(@rules,
 	     "-I FORWARD -m physdev --physdev-is-bridged ".
@@ -491,6 +500,13 @@ sub Offline()
 	push(@rules,
 	     "-D FORWARD -m physdev --physdev-is-bridged ".
 	     "--physdev-in $vif -s $vnode_ip -j $OUTGOING_CHAIN");
+	if ($ipaliases ne "") {
+	    foreach my $alias (split(",", $ipaliases)) {
+		push(@rules,
+		     "-D FORWARD -m physdev --physdev-is-bridged ".
+		     "--physdev-in $vif -s $alias -j $OUTGOING_CHAIN");
+	    }
+	}
 	push(@rules,
 	     "-D FORWARD -m physdev --physdev-is-bridged ".
 	     "--physdev-out $vif -j $INCOMING_CHAIN");
