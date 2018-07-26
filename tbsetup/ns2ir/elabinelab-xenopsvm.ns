@@ -43,6 +43,8 @@ if {[info exists ::TBCOMPAT::elabinelab_hardware("boss")]} {
         tb-set-hardware $myboss $elabinelab_hardware("boss")
 	if {$elabinelab_hardware("boss") == "d820-vm"} {
 	    $myboss add-desire "d820-explicit" 1.0
+	} elseif {$elabinelab_hardware("boss") == "nuc5300-vm"} {
+	    $myboss add-desire "nuc5300-explicit" 1.0
 	}
     }
 } else {
