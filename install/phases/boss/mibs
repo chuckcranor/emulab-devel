@@ -26,7 +26,7 @@ sub Install($$$)
     Phase "mibs", "Fetching Cisco MIBs", sub {
         # Not needed in an inner elab, and it takes a long time.
 	PhaseSkip("Not needed in ELABINELAB")
-	    if ($ELABINELAB && !$PROTOGENI_GENIRACK);
+	    if ($ELABINELAB && !$CONFIG_TARGETSYS);
 	
 	foreach my $mib (@CISCO_MIBS) {
 	    my $localfile = "$MIBPATH/$mib.txt";
@@ -40,7 +40,7 @@ sub Install($$$)
     Phase "hpmibs", "Fetching HP MIBs", sub {
         # Not needed in an inner elab, and it takes a long time.
 	PhaseSkip("Not needed in ELABINELAB")
-	    if ($ELABINELAB && !$PROTOGENI_GENIRACK);
+	    if ($ELABINELAB && !$CONFIG_TARGETSYS);
 	
 	foreach my $mib (@HP_MIBS) {
 	    my $localfile = "$MIBPATH/$mib.txt";

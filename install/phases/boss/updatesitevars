@@ -9,9 +9,9 @@ sub Install($$$)
 {
     my ($server, $isupdate, $impotent) = @_;
 
-    # Do not run this in a genirack setup; must wait till later.
+    # Do not run this in a targetsys setup; must wait till later.
     return 0
-	if ($PROTOGENI_GENIRACK && !$isupdate);
+	if ($CONFIG_TARGETSYS && !$isupdate);
 
     #
     # Initialize server IP/MAC sitevars (for ARP lockdown).

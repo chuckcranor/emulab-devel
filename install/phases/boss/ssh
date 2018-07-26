@@ -62,8 +62,8 @@ sub Install($$$)
 			      "   StrictHostKeyChecking no",
 			      "   Protocol 2");
 	};
-	# GPO wants password authentication turned off. 
-	if ($PROTOGENI_GENIRACK) {
+	# We should probably turn off password authentication all the time.
+	if ($CONFIG_TARGETSYS) {
 	    Phase "sshdconfig", "Turning off password authentication", sub {
 		DoneIfEdited($SSHD_CONFIG);
 		

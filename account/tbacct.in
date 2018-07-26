@@ -78,7 +78,7 @@ my $THISHOMEBASE= "@THISHOMEBASE@";
 my $PROTOUSER   = 'elabman';
 my $ELABINELAB  = @ELABINELAB@;
 my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
-my $GENIRACK    = @PROTOGENI_GENIRACK@;
+my $CONFIG_TARGETSYS = @CONFIG_TARGETSYS@;
 
 my $SAMBANODE	= "fs";  # DNS makes this do the right thing in E-in-E.
 my $SMBPASSWD	= "/usr/local/bin/smbpasswd";
@@ -472,7 +472,7 @@ sub AddUser()
 	#
 	# Leave the password "starred" on elabinelab; safer.
 	#
-	if (!$ELABINELAB || $GENIRACK) {
+	if (!$ELABINELAB && !$CONFIG_TARGETSYS) {
 	    # shell escape.
 	    $pswd =~ s/\$/\\\$/g;
 	    $pswd =~ s/\*/\\\*/g;
@@ -750,7 +750,7 @@ sub UpdatePassword()
     # Change on ops only if there is a real account there.
     # For ELABINELAB, safer to leave the password "starred".
     #
-    if (!$wikionly && (!$ELABINELAB || $GENIRACK)) {
+    if (!$wikionly && !$ELABINELAB && !$CONFIG_TARGETSYS) {
 	#
 	# Grab from the DB to avoid taint checking sillyness.
 	#

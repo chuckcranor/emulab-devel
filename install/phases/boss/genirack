@@ -282,27 +282,27 @@ sub Install($$$)
 	#
 	# Latitude/Longitude
 	#
-	if (exists($configvars{'GENIRACK_COUNTRY'}) &&
-	    $configvars{'GENIRACK_COUNTRY'} ne "") {
+	if (exists($configvars{'TARGETSYS_COUNTRY'}) &&
+	    $configvars{'TARGETSYS_COUNTRY'} ne "") {
 	    Phase "sitevar2", "Setting country sitevar", sub {
 		SetSiteVar("general/default_country",
-			   $configvars{'GENIRACK_COUNTRY'})
+			   $configvars{'TARTGETSYS_COUNTRY'})
 		    or PhaseFail("failed");
 	    };
 	}
-	if (exists($configvars{'GENIRACK_LATITUDE'}) &&
-	    $configvars{'GENIRACK_LATITUDE'} ne "") {
+	if (exists($configvars{'TARGETSYS_LATITUDE'}) &&
+	    $configvars{'TARGETSYS_LATITUDE'} ne "") {
 	    Phase "sitevar3", "Setting latitude sitevar", sub {
 		SetSiteVar("general/default_latitude",
-			   $configvars{'GENIRACK_LATITUDE'})
+			   $configvars{'TARGETSYS_LATITUDE'})
 		    or PhaseFail("failed");
 	    };
 	}
-	if (exists($configvars{'GENIRACK_LONGITUDE'}) &&
-	    $configvars{'GENIRACK_LONGITUDE'} ne "") {
+	if (exists($configvars{'TARGETSYS_LONGITUDE'}) &&
+	    $configvars{'TARGETSYS_LONGITUDE'} ne "") {
 	    Phase "sitevar4", "Setting longitude sitevar", sub {
 		SetSiteVar("general/default_longitude",
-			   $configvars{'GENIRACK_LONGITUDE'})
+			   $configvars{'TARGETSYS_LONGITUDE'})
 		    or PhaseFail("failed");
 	    };
 	}
@@ -436,8 +436,8 @@ sub Install($$$)
 	    push(@strings,
 		 "network_interfaces=\"\$network_interfaces @ifaces\"");
 	    push(@strings,
-		 "ifconfig_xn0=\"inet ". $configvars{"GENIRACK_BOSSIP"} . 
-		 " netmask " . $configvars{"GENIRACK_NETMASK"} . " -tso\"");
+		 "ifconfig_xn0=\"inet ". $configvars{"TARGETSYS_BOSSIP"} . 
+		 " netmask " . $configvars{"TARGETSYS_NETMASK"} . " -tso\"");
 	    # Jail network.
 	    push(@strings,
 		 "ifconfig_xn0_alias0=\"inet 172.17.254.254 ".
@@ -448,7 +448,7 @@ sub Install($$$)
 		 "netmask 255.255.255.0\"");
 	    # Actual default router.
 	    push(@strings,
-		 "defaultrouter=\"" . $configvars{"GENIRACK_ROUTER"} . "\"");
+		 "defaultrouter=\"" . $configvars{"TARGETSYS_ROUTER"} . "\"");
 	    # Going to lose all static routes below, so add this back.
 	    push(@strings,
 		 "static_routes=\"\$static_routes frisbee\"");

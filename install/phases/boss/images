@@ -32,6 +32,11 @@ my %NEWIMAGES     = (
     "FBSD111-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=560f4743-795d-11e7-ac90-90e2ba22fee4"
 );
 
+if ($FBSD_MAJOR > 10) {
+    $LINUXSTDIMAGE = "UBUNTU16-64-STD";
+    $FBSDSTDIMAGE  = "FBSD111-64-STD";
+}
+
 #
 # Old style mappings, but probably still in use someplace.
 #

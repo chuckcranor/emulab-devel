@@ -219,7 +219,7 @@ my %emulabconfig = (
     #	CONFIG_QUERIER	configure mfrisbeed to act as IGMP querier
     #	CONFIG_OPSVM	configure ops node to be jail on boss (obsolete)
     #	CONFIG_NODBINIT	do not load DB state on boss
-    #	CONFIG_GENIRACK	configure as a GENI rack
+    #	CONFIG_TARGETSYS configure for a target system
     #	CONFIG_ZFS	configure fs node to use ZFS
     #	CONFIG_AUTOFS	configure autofs instead of amd for boss ZFS mounts
     #
@@ -233,7 +233,6 @@ my %emulabconfig = (
     "CONFIG_QUERIER"	=> $NEEDQUERIER,
     "CONFIG_OPSVM"	=> $OPSVM,
     "CONFIG_NODBINIT"   => 0,
-    "CONFIG_GENIRACK"   => 0,
     "CONFIG_TARGETSYS"  => 0,
     "CONFIG_ZFS"	=> 0,
     "CONFIG_AUTOFS"	=> 0,
@@ -1306,7 +1305,7 @@ sub SetupFsNode()
 
   skipsetup:
     return
-	if ($emulabconfig{"CONFIG_GENIRACK"});
+	if ($emulabconfig{"CONFIG_TARGETSYS"});
     
     #
     # Hmm, need to run this at startup though.
@@ -1862,30 +1861,28 @@ sub SetupOpsNode($)
     else {
 	print RC "defaultrouter=\"$bossnode_ip\"\n";
     }
-    if ($emulabconfig{"CONFIG_GENIRACK"} &&
-	exists($emulabconfig{"GENIRACK_OPSIP"}) &&
+    if ($emulabconfig{"CONFIG_TARGETSYS"} &&
+	exists($emulabconfig{"TARGETSYS_OPSIP"}) &&
 	$emulabconfig{"CONFIG_SINGLECNET"}) {
-	my $GENIRACK_NETWORK = $emulabconfig{"GENIRACK_NETWORK"};
-	my $GENIRACK_NETMASK = $emulabconfig{"GENIRACK_NETMASK"};
-	my $GENIRACK_OPSIP   = $emulabconfig{"GENIRACK_OPSIP"};
-	my $GENIRACK_DOMAIN  = $emulabconfig{"GENIRACK_DOMAIN"};
+	my $TARGETSYS_NETWORK = $emulabconfig{"TARGETSYS_NETWORK"};
+	my $TARGETSYS_NETMASK = $emulabconfig{"TARGETSYS_NETMASK"};
+	my $TARGETSYS_OPSIP   = $emulabconfig{"TARGETSYS_OPSIP"};
+	my $TARGETSYS_DOMAIN  = $emulabconfig{"TARGETSYS_DOMAIN"};
 	
 	print RC "ifconfig_${outer_controlif}_alias0=".
-	    "\"inet $GENIRACK_OPSIP netmask $GENIRACK_NETMASK\"\n";
+	    "\"inet $TARGETSYS_OPSIP netmask $TARGETSYS_NETMASK\"\n";
 
-	print RC "static_routes=\"\$static_routes genirack\"\n";
-	print RC "route_genirack=\"-net $GENIRACK_NETWORK ".
-	    " -netmask $GENIRACK_NETMASK -iface $outer_controlif\"\n";
+	print RC "static_routes=\"\$static_routes targetsys\"\n";
+	print RC "route_targetsys=\"-net $TARGETSYS_NETWORK ".
+	    " -netmask $TARGETSYS_NETMASK -iface $outer_controlif\"\n";
 
-	print RC "hostname=\"" . "ops" . "." . $GENIRACK_DOMAIN . "\"\n";
+	print RC "hostname=\"" . "ops" . "." . $TARGETSYS_DOMAIN . "\"\n";
 
 	#
 	# Need to enact these changes now before trying setup Emulab
 	#
 	mysystem("ifconfig $outer_controlif ".
-		 "inet $GENIRACK_OPSIP netmask $GENIRACK_NETMASK add");
-	#mysystem("route add -net $GENIRACK_NETWORK ".
-	#         "-netmask $GENIRACK_NETMASK -iface $outer_controlif");
+		 "inet $TARGETSYS_OPSIP netmask $TARGETSYS_NETMASK add");
     }
     else {
 	print RC "hostname=\"" . $emulabconfig{"OPSNODE"} . "." . $domain . "\"\n";
@@ -1895,9 +1892,9 @@ sub SetupOpsNode($)
     #
     # Localize the timezone for the Geni Racks
     #
-    if ($emulabconfig{"CONFIG_GENIRACK"} &&
-	exists($emulabconfig{"GENIRACK_TIMEZONE"})) {
-	my $zonefile = $emulabconfig{"GENIRACK_TIMEZONE"};
+    if ($emulabconfig{"CONFIG_TARGETSYS"} &&
+	exists($emulabconfig{"TARGETSYS_TIMEZONE"})) {
+	my $zonefile = $emulabconfig{"TARGETSYS_TIMEZONE"};
 	
 	mysystem("cp -fp /usr/share/zoneinfo/$zonefile /etc/localtime");
     }
@@ -2574,29 +2571,27 @@ sub SetupBossNode($)
     print RC "ifconfig_${outer_controlif}=".
 	"\"inet $outer_ip netmask $outer_netmask $tso\"\n";
 
-    if ($emulabconfig{"CONFIG_GENIRACK"} &&
-	exists($emulabconfig{"GENIRACK_BOSSIP"}) &&
+    if ($emulabconfig{"CONFIG_TARGETSYS"} &&
+	exists($emulabconfig{"TARGETSYS_BOSSIP"}) &&
 	$emulabconfig{"CONFIG_SINGLECNET"}) {
-	my $GENIRACK_NETWORK = $emulabconfig{"GENIRACK_NETWORK"};
-	my $GENIRACK_NETMASK = $emulabconfig{"GENIRACK_NETMASK"};
-	my $GENIRACK_BOSSIP  = $emulabconfig{"GENIRACK_BOSSIP"};
-	my $GENIRACK_DOMAIN  = $emulabconfig{"GENIRACK_DOMAIN"};
+	my $TARGETSYS_NETWORK = $emulabconfig{"TARGETSYS_NETWORK"};
+	my $TARGETSYS_NETMASK = $emulabconfig{"TARGETSYS_NETMASK"};
+	my $TARGETSYS_BOSSIP  = $emulabconfig{"TARGETSYS_BOSSIP"};
+	my $TARGETSYS_DOMAIN  = $emulabconfig{"TARGETSYS_DOMAIN"};
 
 	print RC "ifconfig_${outer_controlif}_alias0=".
-	    "\"inet $GENIRACK_BOSSIP netmask $GENIRACK_NETMASK\"\n";
+	    "\"inet $TARGETSYS_BOSSIP netmask $TARGETSYS_NETMASK\"\n";
 
-	print RC "static_routes=\"\$static_routes genirack\"\n";
-	print RC "route_genirack=\"-net $GENIRACK_NETWORK ".
-	    " -netmask $GENIRACK_NETMASK -iface $outer_controlif\"\n";
+	print RC "static_routes=\"\$static_routes targetsys\"\n";
+	print RC "route_targetsys=\"-net $TARGETSYS_NETWORK ".
+	    " -netmask $TARGETSYS_NETMASK -iface $outer_controlif\"\n";
 
-	print RC "hostname=\"" . "boss" . "." . $GENIRACK_DOMAIN . "\"\n";
+	print RC "hostname=\"" . "boss" . "." . $TARGETSYS_DOMAIN . "\"\n";
 	#
 	# Need to enact these changes now before trying setup Emulab
 	#
 	mysystem("ifconfig $outer_controlif ".
-		 "inet $GENIRACK_BOSSIP netmask $GENIRACK_NETMASK add");
-	#mysystem("route add -net $GENIRACK_NETWORK ".
-	#	 "-netmask $GENIRACK_NETMASK -iface $outer_controlif");
+		 "inet $TARGETSYS_BOSSIP netmask $TARGETSYS_NETMASK add");
     }
     else {
 	print RC "hostname=\"" . $emulabconfig{"BOSSNODE"} . "." . $domain . "\"\n";
@@ -2675,11 +2670,11 @@ sub SetupBossNode($)
     close(RC);
 
     #
-    # Localize the timezone for the Geni Racks
+    # Localize the timezone for the target.
     #
-    if ($emulabconfig{"CONFIG_GENIRACK"} &&
-	exists($emulabconfig{"GENIRACK_TIMEZONE"})) {
-	my $zonefile = $emulabconfig{"GENIRACK_TIMEZONE"};
+    if ($emulabconfig{"CONFIG_TARGETSYS"} &&
+	exists($emulabconfig{"TARGETSYS_TIMEZONE"})) {
+	my $zonefile = $emulabconfig{"TARGETSYS_TIMEZONE"};
 	
 	mysystem("cp -fp /usr/share/zoneinfo/$zonefile /etc/localtime");
     }
@@ -2823,7 +2818,7 @@ sub SetupBossNode($)
     # the non-singlenet case, we restrict it to that.
     #
     if (! $emulabconfig{"CONFIG_SINGLECNET"} &&
-	! $emulabconfig{"CONFIG_GENIRACK"}) {
+	! $emulabconfig{"CONFIG_TARGETSYS"}) {
 	mysystem("echo 'ipfw add 10 allow udp from any to 224.0.0.0/4' ".
 		 "   >> /etc/rc.local");
     }
@@ -3313,21 +3308,21 @@ sub CreateDefsFile($)
     #
     # Ug.
     #
-    if ($emulabconfig{"CONFIG_GENIRACK"}) {
-	$bossnode_ip        = $emulabconfig{"GENIRACK_BOSSIP"};
-	$opsnode_ip         = $emulabconfig{"GENIRACK_OPSIP"};
+    if ($emulabconfig{"CONFIG_TARGETSYS"}) {
+	$bossnode_ip        = $emulabconfig{"TARGETSYS_BOSSIP"};
+	$opsnode_ip         = $emulabconfig{"TARGETSYS_OPSIP"};
 	$fsnode_ip          = $opsnode_ip;
 	$control_ip         = $opsnode_ip;
-	$control_netmask    = $emulabconfig{"GENIRACK_NETMASK"};
+	$control_netmask    = $emulabconfig{"TARGETSYS_NETMASK"};
 	$bossnode_hostname  = "boss";
 	$opsnode_hostname   = "ops";
 	$fsnode_hostname    = "ops";
-	$ourdomain	    = $emulabconfig{"GENIRACK_DOMAIN"};
-	$thishomebase       = $emulabconfig{"GENIRACK_HOMEBASE"}
-	    if (defined($emulabconfig{"GENIRACK_HOMEBASE"}));
-	$cookiesuffix       = $emulabconfig{"GENIRACK_HOMEBASE"}
-	    if (defined($emulabconfig{"GENIRACK_HOMEBASE"}));
-	$router_ip          = $emulabconfig{"GENIRACK_ROUTER"};
+	$ourdomain	    = $emulabconfig{"TARGETSYS_DOMAIN"};
+	$thishomebase       = $emulabconfig{"TARGETSYS_HOMEBASE"}
+	    if (defined($emulabconfig{"TARGETSYS_HOMEBASE"}));
+	$cookiesuffix       = $emulabconfig{"TARGETSYS_HOMEBASE"}
+	    if (defined($emulabconfig{"TARGETSYS_HOMEBASE"}));
+	$router_ip          = $emulabconfig{"TARGETSYS_ROUTER"};
     }
     
     my $control_network = inet_ntoa(inet_aton($control_ip) &
@@ -3655,23 +3650,33 @@ sub CreateDefsFile($)
 		print OUTDEFS $_;
 	}
     }
-    if ($emulabconfig{"CONFIG_PROTOGENI"} ||
-	$emulabconfig{"CONFIG_GENIRACK"}) {
-	my $config_genirack  = $emulabconfig{"CONFIG_GENIRACK"};
+    if ($emulabconfig{"CONFIG_TARGETSYS"}) {
+	my $target = $emulabconfig{"TARGETSYS_TARGET"};
+	
+	print OUTDEFS "CONFIG_TARGETSYS=1\n";
+	print OUTDEFS "TARGETSYS_TARGET=\"${target}\"\n";
+
+	if ($target eq "GENIRACK") {
+	    print OUTDEFS "PROTOGENI_GENIRACK=1\n";
+	}
+    }
+    if ($emulabconfig{"CONFIG_PROTOGENI"}) {
 	my $protogeni_domain = lc($thishomebase);
-	if (defined($emulabconfig{"GENIRACK_HOMEBASE"})) {
-	    $protogeni_domain = lc($emulabconfig{"GENIRACK_HOMEBASE"});
+	if (defined($emulabconfig{"TARGETSYS_HOMEBASE"})) {
+	    $protogeni_domain = lc($emulabconfig{"TARGETSYS_HOMEBASE"});
 	}
 	print OUTDEFS "PROTOGENI_SUPPORT=1\n";
-	print OUTDEFS "PROTOGENI_GENIRACK=$config_genirack\n";
 	print OUTDEFS "PROTOGENI_DOMAIN=\"$protogeni_domain\"\n";
 	print OUTDEFS "FANCYBANNER=1\n";
 	print OUTDEFS "ISOLATEADMINS=0\n";
 
-	if ($emulabconfig{"CONFIG_PORTAL"} && !$config_genirack) {
+	if ($emulabconfig{"CONFIG_PORTAL"}) {
 	    print OUTDEFS "PORTAL_ENABLE=1\n";
-	    print OUTDEFS "PROTOGENI_ISCLEARINGHOUSE=1\n";
 	    print OUTDEFS "PROTOGENI_LOCALUSER=1\n";
+	}
+	if (! ($emulabconfig{"CONFIG_TARGETSYS"} eq "GENIRACK" ||
+	       $emulabconfig{"CONFIG_FEDERATED"})) {
+	    print OUTDEFS "PROTOGENI_ISCLEARINGHOUSE=1\n";
 	    print OUTDEFS "PROTOGENI_WEBSITE=${bossnode_hostname}.${ourdomain}\n";
 	}
     }

@@ -130,8 +130,8 @@ sub Install($$$)
 	    closedir(DIR);
 
 	    my @default = "genirack-ops\@flux.utah.edu";
-	    if (exists($configvars{"GENIRACK_TBOPS"})) {
-		@default = split(",", $configvars{"GENIRACK_TBOPS"});
+	    if (exists($configvars{"TARGETSYS_TBOPS"})) {
+		@default = split(",", $configvars{"TARGETSYS_TBOPS"});
 	    }
 	    foreach my $list (@lists) {
 		my @where = @default;
@@ -146,12 +146,12 @@ sub Install($$$)
 	
 		Phase "emaillist", "Changing target for $list", sub {
 		    if ($list eq "testbed-logs" || $list eq "testbed-audit") {
-			@where = split(",", $configvars{"GENIRACK_TBLOGS"})
-			    if (exists($configvars{"GENIRACK_TBLOGS"}));
+			@where = split(",", $configvars{"TARGETSYS_TBLOGS"})
+			    if (exists($configvars{"TARGETSYS_TBLOGS"}));
 		    }
 		    elsif ($list eq "testbed-stated") {
-			@where = split(",", $configvars{"GENIRACK_TBSTATED"})
-			    if (exists($configvars{"GENIRACK_TBSTATED"}));
+			@where = split(",", $configvars{"TARGETSYS_TBSTATED"})
+			    if (exists($configvars{"TARGETSYS_TBSTATED"}));
 		    }
 		    AppendToFileFatal($fname, @where);
 		};
@@ -179,15 +179,15 @@ sub Install($$$)
 	    my @strings = ();
 	    
 	    push(@strings,
-		 "ifconfig_xn0=\"inet ". $configvars{"GENIRACK_OPSIP"} . 
-		 " netmask " . $configvars{"GENIRACK_NETMASK"} . " -tso\"");
+		 "ifconfig_xn0=\"inet ". $configvars{"TARGETSYS_OPSIP"} . 
+		 " netmask " . $configvars{"TARGETSYS_NETMASK"} . " -tso\"");
 	    # Actual default router.
 	    push(@strings,
-		 "defaultrouter=\"" . $configvars{"GENIRACK_ROUTER"} . "\"");
+		 "defaultrouter=\"" . $configvars{"TARGETSYS_ROUTER"} . "\"");
 	    # Going to lose all static routes below, so add this back.
 	    push(@strings,
 		 "syslogd_flags=\"-a " .
-		 $configvars{"GENIRACK_NETWORK"} . "/24\"");
+		 $configvars{"TARGETSYS_NETWORK"} . "/24\"");
 	    # Jail network.
 	    push(@strings,
 		 "ifconfig_xn0_alias0=\"inet 172.17.253.254 ".
