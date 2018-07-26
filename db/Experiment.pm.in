@@ -5818,6 +5818,63 @@ sub SetElabInElabAttr($$$$;$)
 }
 
 #
+# Set the IP for the ops node in an elabinelab, when using a FreeBSD
+# jail for ops (OPSVM). We have to do this early on, when boss is a
+# XEN VM, since we have have to tell the vhost about the OPS IP so that
+# it can adjust the firewall rules. Ick.
+#
+sub AssignElabInElabOpsIP($)
+{
+    my ($self) = @_;
+    my $bossnode;
+    my $ip;
+
+    # Grab the elabinelab attributes for search.
+    my $attributes = $self->GetElabInElabAttrs();
+    return -1
+	if (!defined($attributes) || !keys(%{$attributes}));
+
+    # Only relevant if OPSVM defined.
+    return 0
+	if (!exists($attributes->{'CONFIG_OPSVM'}));
+
+    #
+    # Need to find the boss physical node and see if its a VM.
+    #
+    my @pnodes = $self->NodeList(0, 1);
+    foreach my $pnode (@pnodes) {
+	my $elabrole = $pnode->inner_elab_role();
+	if (defined($elabrole) && $elabrole =~ /^boss/) {
+	    $bossnode = $pnode;
+	    last;
+	}
+    }
+    return -1
+	if (!defined($bossnode));
+
+    #
+    # If we have an address pool for 'opsvm' then allocate the IP
+    # from that. Otherwise a jail IP.
+    #
+    my $ips = $self->LookupAddressPools("opsvm");
+    if (@$ips) {
+	my ($ref) = @{$ips};
+	$ip = $ref->{'ip'};
+	# XEN clientside looks at the *virt* attributes. 
+	$self->SetVirtNodeAttribute($bossnode->vname(), "XEN_IPALIASES", $ip);
+    }
+    else {
+	($ip) = $bossnode->GetJailIP();
+    }
+    print "Setting the IP for OPS jail to $ip\n";
+    $self->SetElabInElabAttr("boss", "OPSIP", $ip);
+    $self->SetElabInElabAttr("ops",  "OPSIP", $ip);
+    $self->SetElabInElabAttr("fs",   "OPSIP", $ip);
+    
+    return 0;
+}
+
+#
 # Check to see if an eid is valid.
 #
 sub ValidEID($$)
