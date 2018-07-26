@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -78,6 +78,7 @@ my $LINUX_FSNODE= @LINUX_FSNODE@;
 my $NFSMAPTOUSER= "@NFSMAPTOUSER@";
 my $WITHZFS     = @WITHZFS@;
 my $ZFS_NOEXPORT= @ZFS_NOEXPORT@;
+my $OPSVM_ENABLE= @OPSVM_ENABLE@;
 my $WITHAMD     = @WITHAMD@;
 my $INC_MOUNTD  = @INCREMENTAL_MOUNTD@;
 my $NOVNODENFS	= @NOVIRTNFSMOUNTS@;
@@ -718,6 +719,13 @@ if (!$TESTMODE) {
       if ($bossdirlist) {
 	  system("/bin/cat $bossmountfile.new");
       }
+  }
+  elsif ($OPSVM_ENABLE) {
+      logit("Invoking exports_setup.proxy on boss ...");
+      system("$PROG < $exportstail") == 0 or
+	  fatal("Failed: $PROG < $exportstail: $?");
+      logit("exports_setup.proxy done");
+      unlink("$exportstail");
   }
   else {
       my $arg = ($incremental ? "-i" : "");
