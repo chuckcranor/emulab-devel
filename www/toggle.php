@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -125,10 +125,6 @@ elseif ($type == "webfreeze") {
     $target_user->SetWebFreeze($value);
 }
 elseif ($type == "adminflag") {
-    # This is active on geni racks only.
-    if (0 && !$GENIRACK) {
-	USERERROR("This toggle is disabled on non-geni racks!", 1);
-    }
     # must be admin
     if (! $isadmin) {
 	USERERROR("You do not have permission to toggle $type!", 1);
