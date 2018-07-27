@@ -84,6 +84,7 @@ class Aggregate
     function abbreviation() { return $this->field('abbreviation'); }
     function weburl()	    { return $this->field('weburl'); }
     function disabled()     { return $this->field('disabled'); }
+    function adminonly()    { return $this->field('adminonly'); }
     function has_datasets() { return $this->field('has_datasets'); }
     function reservations() { return $this->field('reservations'); }
     function isfederate()   { return $this->field('isfederate'); }
@@ -175,6 +176,9 @@ class Aggregate
 		TBERROR("Aggregate::SupportsDatasetsList: ".
 			"Could not load aggregate $urn!", 1);
 	    }
+            if ($aggregate->adminonly() && !(ISADMIN() || STUDLY())) {
+                continue;
+            }
 	    $result[] = $aggregate;
 	}
         return $result;
@@ -200,6 +204,9 @@ class Aggregate
 		TBERROR("Aggregate::SupportsReservations: ".
 			"Could not load aggregate $urn!", 1);
 	    }
+            if ($aggregate->adminonly() && !(ISADMIN() || STUDLY())) {
+                continue;
+            }
 	    $result[] = $aggregate;
 	}
         return $result;
