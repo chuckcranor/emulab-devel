@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -389,7 +389,8 @@ function Do_EditMembership()
         }
         if ($action == "remove") {
             # Check permission to do this. This is really a project test.
-            if (!$target_group->CanDeleteUser($this_user, $target_user)) {
+            if (!ISADMIN() &&
+    	        !$target_group->CanDeleteUser($this_user, $target_user)) {
                 SPITAJAX_ERROR(-1, "Not allowed to remove user: $uid");
                 return -1;
             }
