@@ -42,6 +42,7 @@ use GeniCertificate;
 use GeniCredential;
 use GeniAuthority;
 use GeniResponse;
+use Genixmlrpc;
 
 # Configure variables
 my $TB		  = "@prefix@";
@@ -325,15 +326,27 @@ sub GenCredentials($$;$$)
 sub GetAuthority($)
 {
     my ($urn) = @_;
+    my $context = Genixmlrpc->GetContext();
+
+    if (!defined($context)) {
+	my $tmp = GeniContext();
+	return undef
+	    if (!defined($tmp));
+	Genixmlrpc->SetContext($tmp);
+    }
 
     my $cm_authority = GeniAuthority->Lookup($urn);
     if (!defined($cm_authority)) {
 	$cm_authority = GeniAuthority->CreateFromRegistry("cm", $urn);
 	if (!defined($cm_authority)) {
 	    print STDERR "Could not load CM authority object\n";
+	    Genixmlrpc->SetContext(undef)
+		if (!defined($context));
 	    return undef;
 	}
     }
+    Genixmlrpc->SetContext(undef)
+	if (!defined($context));
     return $cm_authority;
 }
 
