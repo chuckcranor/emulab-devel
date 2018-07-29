@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,6 +47,7 @@ use Carp;
 # Testbed Support libraries
 #
 use libtestbed;
+use Brand;
 
 my $TBOPS	= "@TBOPSEMAIL@";
 my $TBAUDIT	= "@TBAUDITEMAIL@";
@@ -84,6 +85,9 @@ my $fancy       = 0;
 
 # We be forked.
 my $forked      = 0;
+
+# Branding for email. Set via audit info.
+my $brand;
 
 # Extra info used when AUDIT_FANCY is set
 my %AUDIT_INFO;
@@ -157,6 +161,7 @@ sub AuditStart($;$$)
     $savelog    = 0;
     $fancy      = 0;
     $forked     = 0;
+    $brand      = Brand->Create(); # Default Brand.
 
     # Logging instead of "auditing" ...
     if (defined($options)) {
@@ -506,7 +511,7 @@ sub SendAuditMail($)
 	my $FROM     = "$GCOS <${USERNAME}\@${OURDOMAIN}>";
 
 	if (! $logonly) {
-	    SENDMAIL($TBAUDIT, $subject, $body, $FROM, undef, ());
+	    $brand->SendEmail($TBAUDIT, $subject, $body, $FROM, undef, ());
 	}
 
 	# Success and no log ...
@@ -567,7 +572,7 @@ sub SendAuditMail($)
 	}
 
 	# Leave logfile if sendmail fails. 
-	if (SENDMAIL($TO, $subject, $body, $FROM, $HDRS, @FILES)) {
+	if ($brand->SendEmail($TO, $subject, $body, $FROM, $HDRS, @FILES)) {
 	    unlink($logfile)
 		if (defined($logfile) && !$savelog);
 	}
@@ -631,11 +636,14 @@ sub SendFancyMail($)
 	my $what = "Failed: $SCRIPTNAME";
 	$what = $AUDIT_INFO{failure_frag} if defined $AUDIT_INFO{failure_frag};
 	$which = $AUDIT_INFO{which};
+
+	# Ick.
+	local $libtestbed::MAILTAG = $brand->EmailTag();
+    
 	$sendmail_res 
 	    = tblog_email_error($d, $TO, $what,	$which, 
 				$FROM, $extra_cc, "Cc: $TBOPS",
-				$prefix, @FILES); 
-
+				$prefix, @FILES);
     } else {
 
 	my $subject  = "$SCRIPTNAME succeeded";
@@ -649,7 +657,7 @@ sub SendFancyMail($)
 	$HDRS .= "Bcc: $TBLOGS";
 	
 	$sendmail_res 
-	    = SENDMAIL($TO, $subject, $body, $FROM, $HDRS, @FILES);
+	    = $brand->SendEmail($TO, $subject, $body, $FROM, $HDRS, @FILES);
     }
     
     if ($sendmail_res) {
@@ -667,7 +675,8 @@ my %AUDIT_METAINFO =
       failure_frag => 'string', # ie "Bla Failure"
       message      => 'string',
       to           => 'list',   # Send audit mail to these people
-      cc           => 'list');  # Cc audit mail to these people
+      cc           => 'list',   # Cc audit mail to these people
+      brand        => 'brand'); # Brand object for sendmail
 
 #
 # AddAuditInfo($key, $value)
@@ -689,7 +698,7 @@ sub AddAuditInfo ($$) {
     }
 
     if ($AUDIT_METAINFO{$key} eq 'string') {
-	
+
 	$AUDIT_INFO{$key} = $value;
 	return 1;
 
@@ -698,6 +707,8 @@ sub AddAuditInfo ($$) {
 	push @{$AUDIT_INFO{$key}}, $value;
 	return 1;
 
+    } elsif ($AUDIT_METAINFO{$key} eq 'brand') {
+	$brand = $value;
     } else {
 
 	carp "Unknown key, \"$key\" in AddAuditInfo";
