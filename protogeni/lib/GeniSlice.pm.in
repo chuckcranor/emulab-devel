@@ -551,6 +551,14 @@ sub UnLock($)
     $self->{'STITCHLOCKED'} = 0;
     return 0;
 }
+sub TakeLock($)
+{
+    my ($self) = @_;
+    
+    $self->{'LOCKED'} = $$;
+    $self->{'STITCHLOCKED'} = $$;
+    return 0;
+}
 
 #
 # Wait for lock with timeout (in seconds).
