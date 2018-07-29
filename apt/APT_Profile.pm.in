@@ -1357,8 +1357,17 @@ sub SetSites($$$$$$)
 	    return 1;
 	}
 	# if more then one site for a link, must use the stitcher.
-	$$pneedstitcher = 1
-	    if (keys(%linksites) > 1);
+	if (keys(%linksites) > 1) {
+	    $$pneedstitcher = 1;
+
+	    #
+	    # Oh, ugly. The stitcher will not accept the link if its
+	    # link_type is set to "lan", which is what happens when
+	    # use create a LAN() in geni-lib. So reset the link type
+	    # to vlan since that is what the stitcher wants to see.
+	    #
+	    GeniXML::SetLinkType($ref, "vlan");
+	}
     }
     foreach my $ref (GeniXML::FindNodesNS("n:routable_pool", $rspec,
 					$GeniXML::EMULAB_NS)->get_nodelist()) {
