@@ -404,22 +404,16 @@ sub SetLinkType($$)
     return -1
 	if (IsVersion0($link));
 
-    print STDERR "SetLinkType: 1\n";
-
     my @types = FindNodes("n:link_type", $link)->get_nodelist();
     foreach my $type (@types) {
 	$link->removeChild($type);
-	print STDERR "SetLinkType: 2\n";
     }
     return 0
 	if (!defined($newtype));
 
-    print STDERR "SetLinkType: 3\n";
-
     my $type = AddElement("link_type", $link);
     return -1
 	if (!defined($type));
-    print STDERR "SetLinkType: 4\n";
     
     SetText("name", $type, $newtype);
     return 0;
