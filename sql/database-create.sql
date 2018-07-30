@@ -174,6 +174,21 @@ CREATE TABLE `apt_datasets` (
   UNIQUE KEY `uuid` (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
+
+--
+-- Table structure for table `apt_deferred_instances`
+--
+
+DROP TABLE IF EXISTS `apt_deferred_instances`;
+CREATE TABLE `apt_deferred_instances` (
+  `uuid` varchar(40) NOT NULL default '',
+  `name` varchar(16) default NULL,
+  `last_retry` datetime default NULL,
+  `retry_until` datetime default NULL,
+  PRIMARY KEY (`uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+
 --
 -- Table structure for table `apt_extension_group_policies`
 --
@@ -242,6 +257,8 @@ CREATE TABLE `apt_instance_aggregates` (
   `status` varchar(32) default NULL,
   `physnode_count` smallint(5) unsigned NOT NULL default '0',
   `virtnode_count` smallint(5) unsigned NOT NULL default '0',
+  `retry_count` smallint(5) unsigned NOT NULL default '0',
+  `last_retry` datetime default NULL,
   `public_url` tinytext,
   `webtask_id` varchar(128) NOT NULL default '',
   `manifest` mediumtext,
@@ -432,6 +449,7 @@ CREATE TABLE `apt_instances` (
   `monitor_pid` int(11) default '0',
   `needupdate` tinyint(3) NOT NULL default '0',
   `isopenstack` tinyint(1) NOT NULL default '0',
+  `deferrable` tinyint(1) NOT NULL default '0',
   `logfileid` varchar(40) default NULL,
   `cert` mediumtext,
   `privkey` mediumtext,
