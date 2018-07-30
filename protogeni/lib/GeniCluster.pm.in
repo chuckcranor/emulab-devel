@@ -76,6 +76,7 @@ my $SUDO           = "/usr/local/bin/sudo";
 my $SSH            = "/usr/bin/ssh";
 my $WAP            = "$TB/sbin/withadminprivs";
 my $API_VERSION    = 1.0;
+my $CLOUDLAB_FEDERATED = @CLOUDLAB_FEDERATED@;
 
 #
 # Check permission. At the moment, only the Mothership can issue requests
@@ -118,7 +119,8 @@ sub CheckPermission($)
 	       $OURDOMAIN eq "wisc.cloudlab.us" ||
 	       $OURDOMAIN eq "clemson.cloudlab.us" ||
 	       $OURDOMAIN eq "utahddc.geniracks.net" ||
-	       $OURDOMAIN eq "lab.onelab.eu"));
+	       $OURDOMAIN eq "lab.onelab.eu" ||
+	       $CLOUDLAB_FEDERATED));
 
     return 0;
 }

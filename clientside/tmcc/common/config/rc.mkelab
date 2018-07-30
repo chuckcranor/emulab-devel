@@ -3288,7 +3288,7 @@ sub CreateDefsFile($)
     my $opsnode_hostname   = $emulabconfig{"OPSNODE"}; 
     my $fsnode_hostname    = $emulabconfig{"FSNODE"};
     my $ourdomain	   = $domain;
-    my $thishomebase       = "MyEmulab.Net";
+    my $thishomebase       = $eid;
     my $cookiesuffix       = $eid;
     my $router_ip          = ($emulabconfig{"CONFIG_SINGLECNET"} ?
 			      $outer_routerip : $bossnode_ip);
@@ -3674,10 +3674,20 @@ sub CreateDefsFile($)
 	    print OUTDEFS "PORTAL_ENABLE=1\n";
 	    print OUTDEFS "PROTOGENI_LOCALUSER=1\n";
 	}
-	if (! ($emulabconfig{"CONFIG_TARGETSYS"} eq "GENIRACK" ||
-	       $emulabconfig{"CONFIG_FEDERATED"})) {
+	# Stand alone 
+	if (!( $emulabconfig{"CONFIG_TARGETSYS"} eq "GENIRACK" ||
+	       $emulabconfig{"CLOUDLAB_FEDERATED"})) {
 	    print OUTDEFS "PROTOGENI_ISCLEARINGHOUSE=1\n";
-	    print OUTDEFS "PROTOGENI_WEBSITE=${bossnode_hostname}.${ourdomain}\n";
+	    print OUTDEFS "PROTOGENI_WEBSITE=".
+		"${bossnode_hostname}.${ourdomain}\n";
+	}
+	if ($emulabconfig{"CLOUDLAB_FEDERATED"}) {
+	    # Cloudlab Portal is allowed to access via GeniCluster API.
+	    print OUTDEFS "CLOUDLAB_FEDERATED=1\n";
+	    # IG Event Daemon.
+	    print OUTDEFS "CLUSTER_PORTAL=\"boss.emulab.net\"\n";
+	    print OUTDEFS "CLUSTER_PUBSUBD_SSLPORT=16506\n";
+	    print OUTDEFS "CLUSTER_PUBSUBD_ALTPORT=16507\n";
 	}
     }
     if ($emulabconfig{"CONFIG_FIREWALL_BOSS"}) {
