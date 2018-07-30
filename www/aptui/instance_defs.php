@@ -980,10 +980,11 @@ class InstanceSliver
 	    return;
         }
 	$uuid = $instance->uuid();
+        $safe_urn = addslashes($urn);
 
 	$query_result =
 	    DBQueryWarn("select * from apt_instance_aggregates ".
-			"where uuid='$uuid' and aggregate_urn='$urn'");
+			"where uuid='$uuid' and aggregate_urn='$safe_urn'");
 
 	if (!$query_result || !mysql_num_rows($query_result)) {
 	    $this->sliver = null;
