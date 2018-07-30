@@ -449,7 +449,6 @@ CREATE TABLE `apt_instances` (
   `monitor_pid` int(11) default '0',
   `needupdate` tinyint(3) NOT NULL default '0',
   `isopenstack` tinyint(1) NOT NULL default '0',
-  `deferrable` tinyint(1) NOT NULL default '0',
   `logfileid` varchar(40) default NULL,
   `cert` mediumtext,
   `privkey` mediumtext,
