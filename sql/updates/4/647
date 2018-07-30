@@ -23,6 +23,15 @@ sub DoUpdate($$$)
         DBQueryFatal("alter table apt_instance_aggregates add " .
 		     " `last_retry` datetime default NULL after retry_count");
     }
+    if (!DBSlotExists("apt_instance_aggregate_history", "retry_count")) {
+        DBQueryFatal("alter table apt_instance_aggregate_history add " .
+		     " `retry_count` smallint(5) unsigned NOT NULL ".
+		     "   default '0' after virtnode_count");
+    }
+    if (!DBSlotExists("apt_instance_aggregate_history", "last_retry")) {
+        DBQueryFatal("alter table apt_instance_aggregate_history add " .
+		     " `last_retry` datetime default NULL after retry_count");
+    }
     return 0;
 }
 

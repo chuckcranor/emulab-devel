@@ -239,6 +239,8 @@ CREATE TABLE `apt_instance_aggregate_history` (
   `status` varchar(32) default NULL,
   `physnode_count` smallint(5) unsigned NOT NULL default '0',
   `virtnode_count` smallint(5) unsigned NOT NULL default '0',
+  `retry_count` smallint(5) unsigned NOT NULL default '0',
+  `last_retry` datetime default NULL,
   `public_url` tinytext,
   `webtask_id` varchar(128) NOT NULL default '',
   `manifest` mediumtext,
