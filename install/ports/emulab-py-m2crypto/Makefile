@@ -12,10 +12,14 @@ PKGORIGIN=		misc/emulab-py-m2crypto
 .include "../../security/py-m2crypto/Makefile"
 
 # Our extra patch
-.if ${PORTVERSION} == "0.29.0"
+.if ${PORTVERSION} == "0.30.1"
+EXTRA_PATCHES=  $(FILESDIR)/emulab-patch-SSL-Connection-30
+.else
+.if (${PORTVERSION} == "0.29.0" || ${PORTVERSION} == "0.30.1")
 EXTRA_PATCHES=  $(FILESDIR)/emulab-patch-SSL-Connection-29
 .else
 EXTRA_PATCHES=  $(FILESDIR)/emulab-patch-SSL-Connection
+.endif
 .endif
 
 .if ${PORTVERSION} == "0.25.1"
@@ -23,7 +27,7 @@ EXTRA_PATCHES=  $(FILESDIR)/emulab-patch-SSL-Connection
 RUN_DEPENDS+=   ${PYTHON_PKGNAMEPREFIX}typing>0:${PORTSDIR}/devel/py-typing
 .endif
 
-.if (${PORTVERSION} == "0.25.1" || ${PORTVERSION} == "0.26.0" || ${PORTVERSION} == "0.26.4" || ${PORTVERSION} == "0.29.0")
-# Fix bug in 0.25.1 and 0.26
+.if !(${PORTVERSION} == "0.22.3" || ${PORTVERSION} == "0.22.5" || ${PORTVERSION} == "0.24.0")
+# Fix bug in 0.25.1 and above
 EXTRA_PATCHES+= $(FILESDIR)/emulab-patch-httpslib
 .endif
