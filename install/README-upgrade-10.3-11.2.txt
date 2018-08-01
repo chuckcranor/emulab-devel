@@ -1,4 +1,4 @@
-Upgrading Emulab servers from FreeBSD 10.3 to 11.1.
+Upgrading Emulab servers from FreeBSD 10.3 to 11.2.
 
 These are fairly specific, but not always exact instructions for the process.
 They are also oriented toward the CloudLab family of clusters, hence the
@@ -72,13 +72,13 @@ A. Things to do in advance of shutting down Emulab.
    Once you have /etc/freebsd-update.conf squared away, do the "fetch"
    part of the upgrade:
 
-     sudo freebsd-update -r 11.1-RELEASE upgrade
+     sudo freebsd-update -r 11.2-RELEASE upgrade
 
    Since this will ask you to merge a bunch of local changes into various
    files and will want to fire up an editor, you might want to make sure
    you get a *real* editor by doing:
 
-     sudo -E EDITOR=emacs freebsd-update -r 11.1-RELEASE upgrade
+     sudo -E EDITOR=emacs freebsd-update -r 11.2-RELEASE upgrade
 
    instead. Otherwise you will probably wind up with vi.
 
@@ -113,11 +113,11 @@ A. Things to do in advance of shutting down Emulab.
    time because you must build (but not install) the entire world before
    building the kernel. You can again to this on boss and ops simultaneously.
 
-   Clone the FreeBSD 11.1 source repo:
+   Clone the FreeBSD 11.2 source repo:
 
    cd /usr
    sudo mv src Osrc
-   sudo svn checkout -q svn://svn0.us-west.freebsd.org/base/releng/11.1 src
+   sudo svn checkout -q svn://svn0.us-west.freebsd.org/base/releng/11.2 src
    <copy over your custom config file from Osrc/sys/amd64/conf/CUSTOM>
 
    cd src
@@ -285,16 +285,16 @@ B. Updating the base FreeBSD system
 
 C. Updating ports/packages
 
-   Updating the core ports from 10.3 to 11.1 is pretty easy. However, if
+   Updating the core ports from 10.3 to 11.2 is pretty easy. However, if
    you installed extra ports that will require a bit more work.
 
 0. If you forgot to save off your package info back in A4, or it has been
    awhile, then you might want to go back and do that now.
 
-1. Modify your /etc/pkg/Emulab.conf file, replacing "10.3" with "11.1" in
+1. Modify your /etc/pkg/Emulab.conf file, replacing "10.3" with "11.2" in
    the "url" line:
 
-      sudo sed -i .bak -e 's;/10.3/;/11.1/;' /etc/pkg/Emulab.conf
+      sudo sed -i .bak -e 's;/10.3/;/11.2/;' /etc/pkg/Emulab.conf
 
 2. Unlock the pkg tool and install new packages:
 
@@ -372,7 +372,7 @@ E. Update Emulab software
 1. Make sure your Emulab sources are up to date.
 
    You must use the emulab-devel repository at this point as only it has
-   the necessary changes to support FreeBSD 11.1. If you don't already
+   the necessary changes to support FreeBSD 11.2. If you don't already
    have an emulab-devel repo, clone it with:
 
    git clone git://git-public.flux.utah.edu/emulab-devel.git
