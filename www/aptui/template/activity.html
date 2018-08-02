@@ -26,6 +26,7 @@
 	  <th>VMs</th>
 	  <th>Created</th>
 	  <th>Destroyed</th>
+	  <th class='filter-false sorter-false'>View</th>
 	</tr>
 	<tr>
           <th class='filter-false sorter-false'>Totals</th>
@@ -35,6 +36,7 @@
 	      data-math-mask='##0'>0</th>
           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
 	  <th class='filter-false sorter-false' data-math='col-count'>0</th>
+	  <th class='filter-false sorter-false'></th>
 	  <th class='filter-false sorter-false'></th>
 	</tr>
       </thead>
@@ -47,6 +49,7 @@
 	      data-math-mask='##0'>0</th>
           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
 	  <th class='filter-false sorter-false' data-math='col-count'>0</th>
+	  <th class='filter-false sorter-false'></th>
 	  <th class='filter-false sorter-false'></th>
 	</tr>
       </tfoot>
@@ -71,6 +74,10 @@
 	  <td><%- instance[4] %></td>
 	  <td class='format-date'><%- instance[6] %></td>
 	  <td class='format-date'><%- instance[7] %></td>
+	  <td>
+	    <a href='memlane.php?uuid=<%- instance[10] %>' target="_blank">
+	      <span class="glyphicon glyphicon-eye-open"></span></a>
+	  </td>
 	</tr>
 	<% }); %>
       </tbody>

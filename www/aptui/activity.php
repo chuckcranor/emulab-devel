@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -120,6 +120,7 @@ if (mysql_num_rows($query_result) == 0) {
 
 if (1) {
     while ($row = mysql_fetch_array($query_result)) {
+        $uuid      = $row["uuid"];
 	$pname     = $row["profile_name"];
         $iname     = $row["instance_name"];
 	$pproj     = $row["pid"];
@@ -150,7 +151,7 @@ if (1) {
         # Save space with array instead of hash.
 	$instance =
             array($pname, $pproj, $puuid, $pcount, $vcount,
-                  $creator, $created, $destroyed, $phours, $iname);
+                  $creator, $created, $destroyed, $phours, $iname, $uuid);
                           
 	$instances[] = $instance;
     }
