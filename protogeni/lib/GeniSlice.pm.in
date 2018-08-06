@@ -774,6 +774,9 @@ sub Flush($)
 
     $self->GetCertificate()->Flush();
     delete($slices{$self->idx()});
+    delete($slices{$self->urn()});
+    delete($slices{$self->uuid()});
+    delete($slices{$self->hrn()});
 }
 
 #
