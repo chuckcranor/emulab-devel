@@ -6022,14 +6022,14 @@ sub addMounts($$)
 	    else {
 		if (! -e $path) {
 		    if (! os_mkdir($path, "0770")) {
-			warning("Could not make directory $path");
+			warn("Could not make directory $path");
 			next;
 		    }
 		}
 	
 		print STDOUT "  Mounting $remote on $path\n";
 		if (system("$NFSMOUNT $remote $path")) {
-		    warning("Could not $NFSMOUNT $remote on $path");
+		    warn("Could not $NFSMOUNT $remote on $path");
 		    next;
 		}
 		TBDebugTimeStamp("$vnode_id using new $remote")
