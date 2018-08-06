@@ -830,26 +830,49 @@ function Do_ReservationHistory()
         SPITAJAX_ERROR(-1, "No such cluster");
         return;
     }
-    if (!isset($ajax_args["uid"])) {
-	SPITAJAX_ERROR(-1, "Missing target uid");
+    if (! (isset($ajax_args["uid"]) || isset($ajax_args["pid"]))) {
+	SPITAJAX_ERROR(-1, "Missing target argument");
 	return -1;
     }
-    $uid = $ajax_args["uid"];
+    if (isset($ajax_args["uid"])) {
+        $uid = $ajax_args["uid"];
     
-    if (!TBvalid_uid($uid)) {
-	SPITAJAX_ERROR(-1, "Invalid target uid");
-        return -1;
+        if (!TBvalid_uid($uid)) {
+            SPITAJAX_ERROR(-1, "Invalid target uid");
+            return -1;
+        }
+        $target_user = User::Lookup($uid);
+        if (!$target_user) {
+            sleep(2);
+            SPITAJAX_ERROR(-1, "Unknown target uid");
+            return -1;
+        }
+        if (!ISADMIN() && !ISFOREIGN_ADMIN() &&
+            !$target_user->AccessCheck($this_user, $TB_USERINFO_READINFO)) {
+            SPITAJAX_ERROR(-1, "Not enough permission");
+            return -1;
+        }
+        $args = $target_user->uid();
     }
-    $target_user = User::Lookup($uid);
-    if (!$target_user) {
-        sleep(2);
-	SPITAJAX_ERROR(-1, "Unknown target uid");
-        return -1;
-    }
-    if (!ISADMIN() && !ISFOREIGN_ADMIN() &&
-        !$target_user->AccessCheck($this_user, $TB_USERINFO_READINFO)) {
-	SPITAJAX_ERROR(-1, "Not enough permission");
-	return -1;
+    else {
+        $pid = $ajax_args["pid"];
+    
+        if (!TBvalid_pid($pid)) {
+            SPITAJAX_ERROR(-1, "Invalid target pid");
+            return -1;
+        }
+        $target_project = Project::Lookup($pid);
+        if (!$target_project) {
+            sleep(2);
+            SPITAJAX_ERROR(-1, "Unknown target pid");
+            return -1;
+        }
+        if (!ISADMIN() && !ISFOREIGN_ADMIN() &&
+            !$target_project->AccessCheck($this_user, $TB_PROJECT_READINFO)) {
+            SPITAJAX_ERROR(-1, "Not enough permission");
+            return -1;
+        }
+        $args = "-p " . $target_project->pid();
     }
     $this_uid = $this_user->uid();
     $urn = $aggregate->urn();
@@ -858,7 +881,7 @@ function Do_ReservationHistory()
 
     $retval = SUEXEC($this_uid, "nobody",
                      "webmanage_reservations -a '$urn' ".
-                     "   -t $webtask_id history $uid",
+                     "   -t $webtask_id history $args",
                      SUEXEC_ACTION_IGNORE);
     if ($retval) {
         $webtask->Refresh();

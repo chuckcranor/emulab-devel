@@ -63,6 +63,7 @@ use POSIX qw(strftime);
 use Time::Local;
 use File::Temp qw(tempfile tmpnam);
 use Project;
+use User;
 use NodeType;
 use Node;
 
@@ -1681,27 +1682,56 @@ sub ReservationHistory($)
 {
     my ($argref) = @_;
     my @history  = ();
+    my @reservations;
 
     my $hasperm = CheckPermission(1);
     return $hasperm
 	if (GeniResponse::IsError($hasperm));
 
-    return GeniResponse->MalformedArgsResponse("Missing user URN")
-	if (!exists($argref->{'user_urn'}));
-    return GeniResponse->MalformedArgsResponse("Invalid user URN")
-	if (!GeniHRN::IsValid($argref->{'user_urn'}));
-	
-    # User may not exist, which is okay.
-    my $geniuser = GeniUser->Lookup($argref->{'user_urn'}, 1);
-    goto nohistory
-	if (!defined($geniuser));
+    return GeniResponse->MalformedArgsResponse("Missing target URN")
+	if (! (exists($argref->{'user_urn'}) ||
+	       exists($argref->{'project_urn'})));
 
-    #
-    # Collect historical reservations.
-    #
-    my @reservations =
-	Reservation->HistoricalReservations(undef,
-					    $geniuser->emulab_user(), undef);
+    if (exists($argref->{'user_urn'})) {
+	return GeniResponse->MalformedArgsResponse("Invalid user URN")
+	    if (!GeniHRN::IsValid($argref->{'user_urn'}));
+
+	# User may not exist, which is okay.
+	my $geniuser = GeniUser->Lookup($argref->{'user_urn'}, 1);
+	goto nohistory
+	    if (!defined($geniuser));
+
+	# Collect historical reservations.
+	@reservations =
+	    Reservation->HistoricalReservations(undef,
+						$geniuser->emulab_user(),
+						undef);
+    }
+    else {
+	my $project;
+	
+	return GeniResponse->MalformedArgsResponse("Invalid project URN")
+	    if (!GeniHRN::IsValid($argref->{'project_urn'}));
+
+	my $hrn = GeniHRN->new($argref->{'project_urn'});
+	if ($hrn->domain() eq $OURDOMAIN) {
+	    $project = Project->Lookup($hrn->id());
+	}
+	else {
+	    #
+	    # We got a project URN but we need to lookup using the SA urn.
+	    #
+	    my $purn = GeniHRN::Generate($hrn->authority(), "authority", "sa");
+	    $project = Project->LookupNonLocal($purn);
+	}
+	# Project may not exist, which is okay.
+	goto nohistory
+	    if (!defined($project));
+
+	# Collect historical reservations.
+	@reservations =
+	    Reservation->HistoricalReservations($project, undef, undef);
+    }
 
     foreach my $res (@reservations) {
 	my $pid = $res->pid();
@@ -1712,6 +1742,9 @@ sub ReservationHistory($)
 	    next;
 	}
 	my $projurn = $project->nonlocalurn();
+
+	# Need the user for each res.
+	my $user = User->Lookup($res->uid_idx());
 	
 	my @timeline = ResUtil::CreateTimeline($project, $res);
 	# We do not want to send back more then we need.
@@ -1727,8 +1760,8 @@ sub ReservationHistory($)
 	$blob->{"uuid"}        = $res->uuid() || "";
 	$blob->{"project"}     = $projurn;
 	$blob->{"pid"}         = $pid;
-	$blob->{"user"}        = $geniuser->emulab_user()->nonlocalurn();
-	$blob->{"uid"}         = $geniuser->emulab_user()->uid();
+	$blob->{"user"}        = $user->nonlocalurn();
+	$blob->{"uid"}         = $user->uid();
 	$blob->{"nodes"}       = $res->nodes();
 	$blob->{"type"}        = $res->type();
 	$blob->{"created"}     = TBDateStringGMT($res->created());

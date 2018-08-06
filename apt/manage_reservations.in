@@ -1069,32 +1069,54 @@ sub DoPrediction()
 #
 sub DoHistory()
 {
-    my $optlist = "";
-    my $portal;
+    my $optlist = "p";
+    my $isproj  = 0;
     my $errmsg;
-    my $blob       = {};
-    my ($user, $geniuser);
+    my $blob    = {};
+    my $args    = {};
+    my ($user, $geniuser, $project);
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
+    }
+    if (defined($options{"p"})) {
+	$isproj++;
     }
     usage()
 	if (@ARGV > 1);
 
     # Argument is a target user.
     if (@ARGV) {
-	$user = User->Lookup($ARGV[0]);
-	if (!defined($user)) {
-	    fatal("No such user");
+	if ($isproj) {
+	    $project = Project->Lookup($ARGV[0]);
+	    if (!defined($project)) {
+		fatal("No such project");
+	    }
+	    if (!$this_user->IsAdmin() &&
+		!$project->AccessCheck($this_user, TB_PROJECT_READINFO())) {
+		fatal("No permission to access project reservation history")
+	    }
 	}
-	if (!$this_user->IsAdmin() && !$this_user->SameUser($user)) {
-	    fatal("No permission to access reservation history for $user")
+	else {
+	    $user = User->Lookup($ARGV[0]);
+	    if (!defined($user)) {
+		fatal("No such user");
+	    }
+	    if (!$this_user->IsAdmin() && !$this_user->SameUser($user)) {
+		fatal("No permission to access reservation history for $user")
+	    }
+	    $geniuser = GeniUser->CreateFromLocal($user);
 	}
-	$geniuser = GeniUser->CreateFromLocal($user);
     }
     else {
 	$geniuser = GeniUser->CreateFromLocal($this_user);	
+    }
+    if ($isproj) { 
+	$args = {"project_urn" => $project->urn()->asString()};
+   }
+    else {
+	$args = {"user_urn" => $geniuser->urn()->asString()};
     }
     
     if ($aggregate->CheckStatus(\$errmsg, 1)) {
@@ -1104,14 +1126,16 @@ sub DoHistory()
     # PortalRPC will use the root context in this case, which is
     # essentially saying the caller is an admin. But thats okay
     # for this call, it is just informational.
+
     my $response =
 	APT_Geni::PortalRPC($authority, undef,
-			    "ReservationHistory",
-			    {"user_urn" => $geniuser->urn()->asString()});
+			    "ReservationHistory", $args);
     
     if (GeniResponse::IsError($response)) {
 	ExitWithError($response);
     }
+
+    print Dumper($response);
     
     #
     # Munge the return value like we do above, converting user/proj
@@ -1123,8 +1147,9 @@ sub DoHistory()
 
     foreach my $res (@reslist) {
 	my $userhrn  = GeniHRN->new($res->{'user'});
+	my $geniuser = MapUserURN($userhrn);
 	if ($userhrn->domain() eq $OURDOMAIN &&
-	    $userhrn->id eq $geniuser->uid()) {
+	    ($isproj || $userhrn->id eq $geniuser->uid())) {
 	    $res->{'remote_uid'} = $res->{'uid'};
 	    $res->{'uid'}        = $geniuser->uid();
 	    $res->{'uid_idx'}    = $geniuser->idx();
@@ -1148,7 +1173,6 @@ sub DoHistory()
 
 	# We need numbers.
 	$res->{'nodes'} = int($res->{'nodes'});
-	$res->{'using'} = int($res->{'using'});
 
 	# Backwards compat
 	if (!exists($res->{'nodes'})) {

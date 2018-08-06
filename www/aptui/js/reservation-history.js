@@ -70,7 +70,7 @@ $(function ()
 		    "showcontrols" : false,
 		    "showproject"  : true,
 		    "showactivity" : false,
-		    "showuser"     : false,
+		    "showuser"     : (window.UID !== undefined ? false : true),
 		    "showusing"    : false,
 		    "showstatus"   : false,
 		    "name"         : name,
@@ -124,10 +124,16 @@ $(function ()
 		});
 		$('#' + name).removeClass("hidden");
 	    }
+	    var args = {"cluster" : name};
+	    if (window.UID !== undefined) {
+		args["uid"] = window.UID;
+	    }
+	    else {
+		args["pid"] = window.PID;
+	    }
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
-						"ReservationHistory",
-						{"cluster" : name,
-						 "uid"     : window.UID});
+						"ReservationHistory", args);
+
 	    xmlthing.done(callback);
 	});
     }

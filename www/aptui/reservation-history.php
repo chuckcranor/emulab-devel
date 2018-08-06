@@ -40,21 +40,29 @@ $isadmin   = (ISADMIN() ? 1 : 0);
 # Verify page arguments. Cluster is a domain that we turn into a URN.
 #
 $optargs = OptionalPageArguments("cluster",     PAGEARG_STRING,
-                                 "target_user", PAGEARG_USER);
+                                 "target_user", PAGEARG_USER,
+                                 "target_project", PAGEARG_PROJECT);
 
-if (! isset($target_user)) {
-    $target_user = $this_user;
+if (isset($target_project)) {
+    $target_pid = $target_project->pid();
+
+    if (!$isadmin && !ISFOREIGN_ADMIN() &&
+        !$target_project->AccessCheck($this_user, $TB_PROJECT_READINFO)) {
+        SPITUSERERROR("You do not have permission to view this information!");
+        return;
+    }
 }
-$target_uid = $target_user->uid();
+else {
+    if (! isset($target_user)) {
+        $target_user = $this_user;
+    }
+    $target_uid = $target_user->uid();
 
-#
-# Verify that this uid is a member of one of the projects that the
-# target_uid is in. Must have proper permission in that group too. 
-#
-if (!$isadmin && !ISFOREIGN_ADMIN() &&
-    !$target_user->AccessCheck($this_user, $TB_USERINFO_READINFO)) {
-    SPITUSERERROR("You do not have permission to view this information!");
-    return;
+    if (!$isadmin && !ISFOREIGN_ADMIN() &&
+        !$target_user->AccessCheck($this_user, $TB_USERINFO_READINFO)) {
+        SPITUSERERROR("You do not have permission to view this information!");
+        return;
+    }
 }
 SPITHEADER(1);
 
@@ -98,7 +106,12 @@ echo "<div id='main-body'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "   window.ISADMIN  = $isadmin;\n";
-echo "   window.UID      = '$target_uid';\n";
+if (isset($target_project)) {
+    echo "   window.PID      = '$target_pid';\n";
+}
+else {
+    echo "   window.UID      = '$target_uid';\n";
+}
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
