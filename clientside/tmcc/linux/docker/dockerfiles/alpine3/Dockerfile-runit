@@ -1,1 +1,1 @@
-COPY artifacts/runit/*.apk /tmp/
+COPY artifacts/runit/ /

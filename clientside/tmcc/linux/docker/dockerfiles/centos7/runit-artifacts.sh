@@ -23,7 +23,10 @@ else
 fi
 cd runit
 ./redhat/build.sh
-cp -p ~/rpmbuild/RPMS/*/*.rpm $DESTDIR/
+mkdir -p $DESTDIR/tmp
+chmod root:root $DESTDIR/tmp
+chmod 1777 $DESTDIR/tmp
+cp -p ~/rpmbuild/RPMS/*/*.rpm $DESTDIR/tmp
 cd /tmp
 rm -rf runit ~/rpmbuild
 

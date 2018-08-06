@@ -212,6 +212,11 @@ my $USE_MACVLAN_CNET = 0;
 # We try to use $IP instead of $BRCTL.
 #
 my $USE_BRCTL = 0;
+#
+# Attempt to replace simple COPY instructions from Dockerfile- fragments
+# in image augmentation/emulabization with a single COPY.
+#
+my $COPY_OPTIMIZE = 1;
 
 ##
 ## Detected configuration variables.
@@ -5302,7 +5307,7 @@ sub emulabizeImage($;$$$$$$$$$)
 	#
 	# First, we are descended FROM the base image.
 	#
-	print DFD "FROM $image\n\n";
+	print DFD "FROM $image\n";
 
 	#
 	# When user is unspecified Docker defaults to root,
@@ -5311,7 +5316,7 @@ sub emulabizeImage($;$$$$$$$$$)
 	# However we also must set user back to the Dockerfile's spec 
 	# for entrypoint/cmd ops
 	#
-	print DFD "USER root\n\n";
+	print DFD "USER root\n";
 
 	#
 	# Then, if this is emulabization core or full, add an
@@ -5320,12 +5325,13 @@ sub emulabizeImage($;$$$$$$$$$)
 	#
 	if ($emulabization eq DOCKER_EMULABIZE_CORE()
 	    || $emulabization eq DOCKER_EMULABIZE_FULL()) {
-	    print DFD "ONBUILD RUN /usr/local/etc/emulab/prepare -M\n\n";
+	    print DFD "ONBUILD RUN /usr/local/etc/emulab/prepare -M\n";
 	}
 
 	#
 	# Second, copy in all the Dockerfile fragments.
 	#
+	my @copies = ();
 	$cwd = getcwd();
 	chdir($DOCKERFILES);
 	foreach my $f (@dfiles) {
@@ -5333,14 +5339,47 @@ sub emulabizeImage($;$$$$$$$$$)
 		or fatal("could not open $f to copy into $dockerfile");
 	    my @lines = <FD>;
 	    close(FD);
-	    print DFD join("",@lines)."\n\n";
+	    my @tlines = ();
+	    foreach my $dfline (@lines) {
+		chomp($dfline);
+		if ($dfline =~ /^\s*COPY\s+([^\s]+)\s+(.+)$/) {
+		    push(@copies,[$1,$2]);
+		}
+		else {
+		    push(@tlines,$dfline);
+		}
+	    }
+	    if (@tlines > 0) {
+		print DFD join("\n",@tlines)."\n";
+	    }
 	}
 	chdir($cwd);
 
 	#
 	# Next create COPY and RUN commands.
 	#
-	print DFD "COPY fs/ /\n";
+	if ($COPY_OPTIMIZE) {
+	    $cwd = getcwd();
+	    chdir($cdir);
+	    mkdir("combined-fs");
+	    foreach my $sdref (@copies) {
+		my ($src,$dst) = ($sdref->[0],$sdref->[1]);
+		if ($dst =~ /^[^\/]/) {
+		    $dst = "combined-fs/$dst";
+		}
+		else {
+		    $dst = "combined-fs$dst";
+		}
+		mysystem("rsync -a $src $dst");
+	    }
+	    mysystem("rsync -a fs/ combined-fs/");
+	    chdir($cwd);
+
+	    print DFD "COPY combined-fs/ /\n";
+	}
+	else {
+	    print DFD "COPY fs/ /\n";
+	}
 	my $runcmd = "";
 	foreach my $ruc (@runscripts) {
 	    my $dn = dirname($ruc);
@@ -5371,7 +5410,7 @@ sub emulabizeImage($;$$$$$$$$$)
 	    || $curzation eq '' || $curzation eq DOCKER_EMULABIZE_NONE()) {
 	    $runcmd .= " && cp -pv /etc/passwd /etc/group /etc/shadow /etc/gshadow /etc/emulab";
 	}
-	print DFD "RUN /bin/sh -c '$runcmd'\n\n";
+	print DFD "RUN /bin/sh -c '$runcmd'\n";
 	close(DFD);
 
 	# We could just send the bytes to the daemon (tar -C $cdir -c . |),
