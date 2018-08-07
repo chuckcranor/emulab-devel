@@ -2424,15 +2424,16 @@ sub rootPreConfigNetwork($$$$)
 	#
 	if (exists($ifc->{IPMASK}) && exists($ifc->{IPADDR})) {
 	    # Figure out the subnet for this network:
-	    my $bcast = inet_aton($ifc->{IPMASK});
+	    my $ipaddr = inet_aton($ifc->{IPADDR});
+	    my $netmask = inet_aton($ifc->{IPMASK});
 	    my $maskbits = 0;
-	    my $cval = unpack("N",$bcast);
-	    for (my $i = 0; $i < 32; ++$i) {
-		last if (($cval & 1) == 0);
+	    my $cval = unpack("N",$netmask);
+	    for (my $i = 31; $i >= 0; ++$i) {
+		last if (($cval & 0x80000000) == 0);
 		++$maskbits;
-		$cval = $cval >> 1;
+		$cval = $cval << 1;
 	    }
-	    $brs{$brname}{CIDR} = $ifc->{IPMASK} . "/$maskbits";
+	    $brs{$brname}{CIDR} = inet_ntoa($ipaddr & $netmask) . "/$maskbits";
 
 	    #
 	    # NB XXX: Use the final address in the subnet as the
@@ -2445,7 +2446,8 @@ sub rootPreConfigNetwork($$$$)
 	    # single experiment case, but I'm not sure how to check for
 	    # a shared LAN.  Anyway, we'll just document this too...
 	    #
-	    $brs{$brname}{GW} = inet_ntoa(pack("N",unpack("N",$bcast) - 1));
+	    $brs{$brname}{GW} =
+		inet_ntoa(pack("N",unpack("N",$ipaddr | ~$netmask) - 1));
 	}
 	else {
 	    warn("Fatal: all Docker network interfaces *must* have an".
