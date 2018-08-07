@@ -321,8 +321,15 @@ sub Create($$$)
 	$$perrmsg = "Instance name already in use!";
 	return undef;
     }
-
-    my $query = "insert into apt_instances set created=now(),uuid='$uuid', ".
+    my $sets = "created=now(),uuid='$uuid'";
+    if (exists($argref->{"start_at"}) && defined($argref->{"start_at"})) {
+	$sets .= ", start_at=FROM_UNIXTIME(" . $argref->{"start_at"} . ")";
+	delete($argref->{"start_at"});
+    }
+    else {
+	$sets .= ", started=created";
+    }
+    my $query = "insert into apt_instances set ${sets}, ".
 	join(",", map("$_=" .
 		      DBQuoteSpecial($argref->{$_}), keys(%{$argref})));
 
@@ -661,7 +668,7 @@ sub RecordHistory($$)
 		"       creator,creator_idx,creator_uuid,pid,pid_idx, ".
 		"       gid,gid_idx, ".
 		"       aggregate_urn,public_url,logfileid, ".
-		"       created,now(),$expired, ".
+		"       created,start_at,started,stop_at,now(),$expired, ".
 		"       extension_count,extension_days,extension_hours, ".
 		"       physnode_count,virtnode_count, ".
 		"       servername,repourl,reponame,reporef,repohash, ".
@@ -682,8 +689,8 @@ sub RecordError($$$)
 		"select uuid,name,profile_id,profile_version,slice_uuid, ".
 		"       creator,creator_idx,creator_uuid,pid,pid_idx, ".
 		"       gid,gid_idx, ".
-		"       created,'$exitcode',$safe_message,public_url, ".
-		"       logfileid ".
+		"       created,start_at,started,stop_at,'$exitcode', ".
+		"       $safe_message,public_url,logfileid ".
 		" from apt_instances where uuid='$uuid'")
 	or return -1;
 
