@@ -86,31 +86,32 @@ if (isset($min) || isset($max)) {
         $whereclause = "where ";
     }
     if (isset($min)) {
-        $whereclause .= "UNIX_TIMESTAMP(h.created) > $min ";
+        $whereclause .= "UNIX_TIMESTAMP(h.started) > $min ";
         if (isset($max)) {
             $whereclause .= "and ";
         }
     }
     if (isset($max)) {
-        $whereclause .= "UNIX_TIMESTAMP(h.created) < $max ";
+        $whereclause .= "UNIX_TIMESTAMP(h.started) < $max ";
     }
 }
 
 $query_result =
-    DBQueryFatal("select h.uuid,h.profile_version,h.created,h.destroyed, ".
+    DBQueryFatal("select h.uuid,h.profile_version,h.created, ".
+                 "    h.started,h.destroyed, ".
 		 "    h.creator,p.uuid as profile_uuid,h.pid,u.email, ".
                  "    h.physnode_count,h.virtnode_count,".
                  "    h.name as instance_name,p.name as profile_name, ".
                  "    truncate(h.physnode_count * ".
                  "      ((UNIX_TIMESTAMP(h.destroyed) - ".
-                 "        UNIX_TIMESTAMP(h.created)) / 3600.0),2) as phours ".
+                 "        UNIX_TIMESTAMP(h.started)) / 3600.0),2) as phours ".
 		 "  from apt_instance_history as h ".
 		 "left join apt_profile_versions as p on ".
 		 "     p.profileid=h.profile_id and ".
 		 "     p.version=h.profile_version ".
 		 "left join geni.geni_users as u on u.uuid=h.creator_uuid ".
                  $whereclause . " " .
-		 "order by h.created desc");
+		 "order by h.started desc");
 
 if (mysql_num_rows($query_result) == 0) {
     $message = "<b>Oops, there is no activity to show you.</b><br>";
@@ -126,6 +127,7 @@ if (1) {
 	$pproj     = $row["pid"];
 	$puuid     = $row["profile_uuid"];
 	$created   = DateStringGMT($row["created"]);
+	$started   = DateStringGMT($row["started"]);
 	$destroyed = DateStringGMT($row["destroyed"]);
 	$creator   = $row["creator"];
 	$email     = $row["email"];
@@ -151,7 +153,8 @@ if (1) {
         # Save space with array instead of hash.
 	$instance =
             array($pname, $pproj, $puuid, $pcount, $vcount,
-                  $creator, $created, $destroyed, $phours, $iname, $uuid);
+                  $creator, $started, $destroyed, $phours, $iname,
+                  $uuid, $created);
                           
 	$instances[] = $instance;
     }

@@ -1,0 +1,1285 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use XML::Simple;
+use File::Temp qw(tempfile :mktemp tmpnam :POSIX);
+use Date::Parse;
+use Data::Dumper;
+use Cwd qw(realpath);
+
+#
+# Create a quick VM.
+# 
+sub usage()
+{
+    print "Usage: create_slivers [-S] [-i] uuid\n";
+    exit(1);
+}
+my $optlist         = "dSLif";
+my $debug           = 0;
+my $verbose         = 1;
+my $foreground      = 0;
+my $usestitcher     = 0;
+my $ignorefailures  = 0;
+my $usetracker      = 0;
+my $takelock        = 0; # Use when called from create_instance.
+my $errmsg;
+my $sshkeys;
+my @aggregate_list  = ();
+my $sendemail       = 0;
+
+#
+# Configure variables
+#
+my $TB		     = "@prefix@";
+my $TBOPS            = "@TBOPSEMAIL@";
+my $MAINSITE         = @TBMAINSITE@;
+my $OURDOMAIN	     = "@OURDOMAIN@";
+my $ANNOUNCE         = "$TB/sbin/announce";
+my $MYURN	     = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+my $SACERT	     = "$TB/etc/genisa.pem";
+my $MANAGEINSTANCE   = "$TB/bin/manage_instance";
+my $STITCHER         = "$TB/gcf/src/stitcher.py";
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Load the Testbed support stuff.
+#
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use EmulabConstants;
+use libtestbed;
+use libaudit;
+use APT_Profile;
+use APT_Instance;
+use APT_Geni;
+use APT_Dataset;
+use APT_Aggregate;
+use Experiment;
+use User;
+use emutil;
+use libEmulab;
+use GeniDB;
+use GeniCertificate;
+use GeniCredential;
+use GeniSlice;
+use GeniAuthority;
+use GeniHRN;
+use Genixmlrpc;
+use GeniResponse;
+use GeniXML;
+use WebTask;
+use Logfile;
+use EmulabFeatures;
+
+# Connect to the SA DB.
+DBConnect(GENISA_DBNAME());
+
+# Protos
+sub fatal($);
+sub CreateSlivers();
+sub RunStitcher();
+sub CallMethodOnAggregate($$$);
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug++;
+}
+if (defined($options{"i"})) {
+    $ignorefailures++;
+}
+if (defined($options{"f"})) {
+    $foreground++;
+}
+if (defined($options{"S"})) {
+    $usestitcher++;
+}
+if (defined($options{"L"})) {
+    $takelock++;
+}
+if (@ARGV < 1) {
+    usage();
+}
+my $instance = APT_Instance->Lookup($ARGV[0]);
+if (!defined($instance)) {
+    fatal("No such instance");
+}
+my $genislice = $instance->GetGeniSlice();
+if (!defined($genislice)) {
+    fatal("Could not get genislice for $instance\n");
+}
+if ($takelock) {
+    $genislice->TakeLock();
+}
+else {
+    if ($genislice->Lock()) {
+	print STDERR "Could not get the lock\n";
+	exit(1);
+    }
+}
+
+#
+# Anything to do? See create_instance; Note that we skip anything
+# that is already being worked on.
+#
+foreach my $agg ($instance->AggregateList()) {
+    next
+	if (! ($agg->status() eq "created" || $agg->status() eq "deferred"));
+
+    # Coming from create_instance.
+    if ($agg->status() eq "created") {
+	push(@aggregate_list, $agg);
+	next;
+    }
+    #
+    # See if the aggregate is back online, lets not go to a ton of
+    # trouble if the aggregate is still dead.
+    #
+    if ($agg->GetAptAggregate()->CheckStatus(\$errmsg)) {
+	print STDERR "$errmsg\n";
+	next;
+    }
+    push(@aggregate_list, $agg);
+    # We send email when all deferred aggregates are started.
+    $sendemail = 1;
+}
+if (!@aggregate_list) {
+    print "No uncreated aggregates to process.\n";
+    $genislice->UnLock();
+    exit(0);
+}
+
+my $geniuser = $instance->GetGeniUser();
+if (!defined($geniuser)) {
+    fatal("Could not get geniuser for $instance\n");
+}
+my $emulab_user = $geniuser->emulab_user();
+my $slice_urn   = $genislice->urn();
+my $uuid        = $instance->uuid();
+my $project     = $instance->GetProject();
+my $rspecstr    = $instance->rspec();
+my $webtask     = $instance->webtask();
+my $webtask_id  = $webtask->task_id();
+$webtask->AutoStore(1);
+
+#
+# Load the SA cert to act as caller context.
+#
+my $sa_certificate = GeniCertificate->LoadFromFile($SACERT);
+if (!defined($sa_certificate)) {
+    fatal("Could not load certificate from $SACERT\n");
+}
+my $sa_authority = GeniAuthority->Lookup($sa_certificate->urn());
+if (!defined($sa_authority)) {
+    fatal("Could not load SA authority object");
+}
+
+#
+# We use the normal XMLRPC route, so need a context.
+#
+my $context = Genixmlrpc->Context($sa_certificate);
+if (!defined($context)) {
+    fatal("Could not create context to talk to CM");
+}
+Genixmlrpc->SetContext($context);
+
+#
+# Generate credentials we need.
+#
+my ($slice_credential, $speaksfor_credential) =
+    APT_Geni::GenCredentials($genislice, $geniuser, undef, 0);
+if (! (defined($speaksfor_credential) &&
+       defined($slice_credential))) {
+    fatal("Could not generate credentials");
+}
+
+#
+# Generate the extra credentials that tells the backend this experiment
+# can access the datasets.
+#
+my @dataset_credentials = ();
+my $retval = $instance->CreateDatasetCreds(\$errmsg, \@dataset_credentials);
+if ($retval) {
+    fatal("Could not generate dataset credentials");
+}
+
+#
+# Tell the CM the portal information, which is used by Emulab based
+# CMs to send email links.
+#
+# Special: This also tells the CM to do normal NFS mounts if this is
+# the "Emulab" portal making the request.
+#
+# XXX The local instance will not have these tags, but no big deal.
+# XXX Need to handle this differently if we use the stitcher?
+#
+if (APT_Profile::AddPortalTag(\$rspecstr,
+			      $instance->Brand()->brand(),
+			      $instance->webURL(),
+			      \$errmsg)) {
+    fatal($errmsg);
+}
+
+#
+# Check to see if we need to use the stitcher, but command line argument
+# overrides.
+#
+if (!$usestitcher) {
+    $usestitcher = APT_Profile::NeedStitcher($rspecstr, \$errmsg);
+    if ($usestitcher < 0) {
+	fatal("Could not determine if profile needs the stitcher: $errmsg");
+    }
+}
+
+#
+# Get the set of keys (accounts) that need to be sent along. We build
+# them in CM format, but convert to AM format later if needed.
+#
+if ($instance->GetSSHKeys(\$sshkeys) < 0 || !@{$sshkeys}) {
+    fatal("Error constructing ssh key list");
+}
+
+# Use of the Image Tracker is a Portal directive at the moment.
+$usetracker = 1
+    if (GetSiteVar("protogeni/use_imagetracker") &&	
+	EmulabFeatures->FeatureEnabled("APT_UseImageTracker",
+				       $emulab_user, $project));
+
+#
+# Exit and let caller poll for status.
+#
+if (!($debug || $foreground)) {
+    my $child = fork();
+    if ($child) {
+	exit(0);
+    }
+    AuditStart(0, undef, LIBAUDIT_LOGTBLOGS()|LIBAUDIT_LOGONLY());
+    AddAuditInfo("cc", $project->LogsEmailAddress());
+    AddAuditInfo("brand", $project->Brand());
+}
+    
+# Bind the process id.
+$webtask->SetProcessID($PID);
+
+if ($usestitcher) {
+    my $rval = RunStitcher();
+    if ($rval) {
+	$genislice->UnLock();
+	$instance->SetStatus("failed");
+	$instance->RecordError($rval,
+			       (defined($webtask->output()) ?
+				$webtask->output() : ""));
+	$webtask->Exited($rval);
+	exit($rval);
+    }
+}
+else {
+    my $rval = CreateSlivers();
+    #
+    # We do not want email for most mapping errors, so look at the
+    # return code to see if we want to kill the log (user will see the
+    # error in the web ui). 
+    #
+    if ($rval) {
+	$genislice->UnLock();
+	my $exitcode = -1;
+	
+	$instance->RecordError($rval,
+			       (defined($webtask->output()) ?
+				$webtask->output() : ""));
+	if ($rval == GENIRESPONSE_BADARGS ||
+	    $rval == GENIRESPONSE_INSUFFICIENT_NODES ||
+	    $rval == GENIRESPONSE_INSUFFICIENT_MEMORY ||
+	    $rval == GENIRESPONSE_INSUFFICIENT_BANDWIDTH ||
+	    $rval == GENIRESPONSE_NOSPACE ||
+	    $rval == GENIRESPONSE_NO_CONNECT ||
+	    $rval == GENIRESPONSE_MAPPING_IMPOSSIBLE ||
+	    $rval == GENIRESPONSE_NO_MAPPING) {
+	    $exitcode = 1;
+	}
+	$webtask->Exited($rval);
+	exit($exitcode);
+    }
+}
+
+#
+# Because of deferred aggregates, might need to prune the list
+# since we do not want to wait for the deferred ones.
+#
+my @tmp = ();
+foreach my $aggobj (@aggregate_list) {
+    push(@tmp, $aggobj)
+	if ($aggobj->status() ne "deferred");
+
+}
+if (!@tmp) {
+    print STDERR "No progress made, ".
+	"all pending aggregates deferred till later\n";
+    $genislice->UnLock();
+    exit(0);
+}
+@aggregate_list = @tmp;
+
+#
+# If all the aggregates are resolved, then we can resolve the instance.
+#
+if (!$instance->DeferredAggregateList()) {
+    $instance->ResolveDefer();
+}
+
+#
+# Cause of early return, we have to Check to see if all aggregates provisioned.
+# This will update status and node counts.
+#
+$instance->CheckProvisioned();
+
+#
+# Now wait for the sliver to be ready, which means polling.
+#
+# Shorten default timeout.
+#
+Genixmlrpc->SetTimeout(60);
+
+#
+# Okay, fire off the waits for each aggregate
+#
+my @return_codes = ();
+if (ParRun({"maxwaittime" => 99999,
+	    "maxchildren" => scalar(@aggregate_list)},
+	   \@return_codes,
+	   \&APT_Instance::Aggregate::WaitForSliver, @aggregate_list)) {
+    #
+    # The parent caught a signal. Leave things intact so that we can
+    # kill things cleanly later.
+    #
+    $genislice->UnLock();
+    print STDERR "Internal error in WaitForSlivers\n";
+    $webtask->output("Internal error in WaitForSlivers");
+    $instance->SetStatus("failed");
+    $webtask->Exited(1);
+    exit(-1);
+}
+
+#
+# If we were canceled, then none of the stuff below matters, we
+# are going to do a terminate.
+#
+if ($instance->IsCanceled()) {
+    $genislice->UnLock();
+
+    #
+    # If someone gets the lock, this will fail. But the apt daemon will
+    # see the canceled flag too and fire off a termination. 
+    #
+    system("$MANAGEINSTANCE -t $webtask_id terminate $uuid");
+    exit(0);
+}
+
+# Count up nodes running a startup service.
+my $startuprunning = 0;
+
+#
+# Check the exit codes; any failure is a total failure (for now).
+#
+my $hosed  = 0;
+my $failed = 0;
+foreach my $aggobj (@aggregate_list) {
+    my $code = shift(@return_codes);
+    my $cluster = $aggobj->GetAptAggregate()->name();
+
+    # Updated in a forked child, must refresh. 
+    $aggobj->Refresh();
+    print $aggobj->aggregate_urn() . "\n";
+    if ($code) {
+	$failed++;
+	my $exitcode = $aggobj->webtask()->exitcode();
+	my $output   = $aggobj->webtask()->output();
+	#
+	# Some of the errors should go the user, others to tbops.
+	#
+	if (! (($exitcode >= GENIRESPONSE_SETUPFAILURE() &&
+		$exitcode <= GENIRESPONSE_SETUPFAILURE_MAXERROR()) ||
+	       $exitcode == GENIRESPONSE_TIMEDOUT())) {
+	    $hosed++;
+	    $output = "Internal error creating experiment on the ".
+		"$cluster cluster";
+	}
+	$webtask->output($output);
+	$webtask->Exited($exitcode);
+
+	# Promote the log up to the instance so that so its easy to find.
+	$instance->SetPublicURL($aggobj->public_url())
+	    if (defined($aggobj->public_url()));
+    }
+    else {
+	my $sliverstatus = $aggobj->SliverStatus();
+
+	print Dumper($sliverstatus);
+
+	foreach my $status (values(%{ $sliverstatus })) {
+	    # Startup command is still running.
+	    $startuprunning++
+		if (exists($status->{"sliver_data"}->{'execute_state'}) &&
+		    $status->{"sliver_data"}->{'execute_state'} ne "exited");
+	}
+    }
+    if (defined($aggobj->public_url())) {
+	print $aggobj->public_url() . "\n";
+    }
+    print "\n" . $aggobj->manifest() . "\n\n";
+    print "------------------------------------------------------------\n\n";
+}
+$genislice->UnLock();
+
+if ($failed) {
+    if ($ignorefailures) {
+        $instance->SetStatus("ready");
+    }
+    else {
+        $instance->SetStatus("failed");
+    }
+    # Webtask exit status set above.
+    $instance->RecordError($webtask->exitcode(),
+			   (defined($webtask->output()) ?
+			    $webtask->output() : ""));
+}
+else {
+    $instance->SetStatus("ready");
+
+    if ($sendemail) {
+	my $brand = $instance->Brand();
+	my $pid   = $project->pid();
+	my $eid   = $instance->name();
+	my $user  = $instance->GetGeniUser();
+	my $email = $user->email();
+	my ($subject, $message);
+
+	my $headers =
+	    "CC: " . $brand->OpsEmailAddress() . "\n" .
+	    "BCC: " . $brand->LogsEmailAddress();
+	
+	if ($instance->start_at()) {
+	    my $start_at = TBDateStringUTC($instance->start_at());
+	    
+	    $subject = "Scheduled experiment $pid/$eid is now running";
+	    $message = "Experiment $pid/$eid, which was scheduled to\n".
+		"start at $start_at, is now running.";
+	    if ($instance->DeferredAggregateList()) {
+		$message .= "\n" .
+		    "But some resources are still unreachable, we will send\n".
+		    "email when those resources become available.";
+	    }
+	}
+	else {
+	    $subject = "Deferred experiment $pid/$eid is now fully running";
+	    $message = "Experiment $pid/$eid, which had offline resources\n".
+		"when started, is now fully running.";
+	}
+	$message .= "\n\n" . $instance->webURL() . "\n\n";
+	
+	$instance->Brand()->SendEmail($email, $subject, $message,
+				      $brand->OpsEmailAddress(), $headers);
+    }
+
+    #
+    # If there are still execute services running, lets keep polling
+    # using the monitor.
+    #
+    if ($startuprunning) {
+	print "$MANAGEINSTANCE -t $webtask_id monitor $uuid -w\n";
+	
+	system("$MANAGEINSTANCE -t $webtask_id monitor $uuid -w")
+    }
+    else {
+	$webtask->Exited(0);
+    }
+}
+exit($hosed);
+
+#
+# Create a sliver at a single aggregate. This is called from parrun
+# so it needs to return success or failure, we lookup the results
+# in the DB.
+#
+sub CreateSliver($)
+{
+    my ($ref) = @_;
+    my $aggobj = $ref;
+    $aggobj->Refresh();
+    my $webtask   = $aggobj->webtask();
+    my $authority = $aggobj->GetGeniAuthority();
+    my $status    = $aggobj->status();
+    my $cmurl     = $authority->url();
+    my $urn       = $authority->urn();
+    my $manifest;
+    $webtask->Refresh();
+
+    # Mark that it is doing something.
+    $aggobj->SetStatus("provisioning");
+
+    # Debugging
+    $cmurl = APT_Instance::devurl($cmurl);
+
+    Genixmlrpc->SetTimeout(900);
+
+    #
+    # This creates the sliver and starts it. We have to watch for the
+    # server being too busy.
+    #
+    my $tries = 1;
+    my $response;
+    my $earlyreturn = 0;
+    my $async = 0;
+    my $errmsg;
+
+    while (1) {
+	$response =
+	    Genixmlrpc::CallMethod($cmurl, undef,
+				   "CreateSliver",
+				   { "slice_urn"   => $slice_urn,
+				     "rspec"       => $rspecstr,
+				     "keys"        => $sshkeys,
+				     "credentials" =>
+					 [$slice_credential->asString(),
+					  $speaksfor_credential->asString(),
+					  @dataset_credentials
+					 ],
+				     "certificate" => $instance->cert(),
+				     "key"         => $instance->privkey(),
+				     "usetracker"  => $usetracker,
+				     "asyncmode"   => 1,
+				   });
+
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    if ($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
+		($response->code() == GENIRESPONSE_NETWORK_ERROR &&
+		 $response->value() == GENIRESPONSE_NETWORK_ERROR_NOCONNECT)) {
+		if ($tries) {
+		    print STDERR "Server for $urn reports too busy or not ".
+			"reachable; waiting a while ...\n";
+		    sleep(int(rand(20)) + 10);
+		    $tries--;
+		    next;
+		}
+	    }
+	    elsif ($response->code() == GENIRESPONSE_NETWORK_ERROR &&
+		   $response->value() == GENIRESPONSE_NETWORK_ERROR_TIMEDOUT) {
+		#
+		# If the slice actually exists, then lets not fail
+		# yet, but instead see if we can sync back up during
+		# WaitForSlivers().
+		#
+		Genixmlrpc->SetTimeout(15);
+		my $tmp = $aggobj->SliceResolve();
+		print STDERR "SliceStatus: " . $tmp->code() . "\n";
+		    
+		if ($tmp->code() == GENIRESPONSE_RPCERROR ||
+		    $tmp->code() == GENIRESPONSE_SEARCHFAILED) {
+		    #
+		    # Okay, we can bail. 
+		    #
+		    print STDERR "Read timeout, bailing\n";
+		}
+		else {
+		    #
+		    # Accept that we do not have a manifest, but the CM
+		    # is reachable and the slice exists.
+		    #
+		    $earlyreturn = 1;
+		    last;
+		}
+	    }
+	    elsif ($response->code() == GENIRESPONSE_INPROGRESS()) {
+		$async = 1;
+		#print STDERR Dumper($response);
+		last;
+	    }
+	    print STDERR "CreateSliver failed on $urn: " .
+		$response->error() . "\n";
+	    
+	    $webtask->output($response->error());
+	    $webtask->Exited($response->code());
+	    $aggobj->SetStatus("failed");
+	    
+	    if (defined($response->logurl())) {
+		$aggobj->SetPublicURL($response->logurl());
+	    }
+	    return -1;
+	}
+	last;
+    }
+    # This will get overwritten later.
+    if (defined($response->logurl())) {
+	$aggobj->SetPublicURL($response->logurl());
+    }
+
+    #
+    # Watch for async return. We will keep looping waiting for an error
+    # or completion.
+    #
+    if ($async || $earlyreturn) {
+	if ($earlyreturn) {
+	    print STDERR "Server returned early for read timeout\n";
+	}
+	else {
+	    print STDERR "Server returned early for async mode\n";
+	}
+	Genixmlrpc->SetTimeout(30);
+
+	my $code;
+	my $errmsg;
+	#
+	# Loop waiting for a manifest or the slice to disappear or for an
+	# async error indicator. Hard to say how long we should wait ...
+	#
+	my $seconds  = 7200;
+	my $interval = 15;
+	while ($seconds > 0) {
+	    sleep($interval);
+	    $seconds -= $interval;
+	    
+	    my $tmp = $aggobj->SliceResolve();
+	    $code = $tmp->code();
+
+	    print STDERR "Resolve returned $code\n";
+	    #print STDERR Dumper($tmp);
+
+	    # Just keep going, we will get there eventually.
+	    # Lets say RPC errors will clear up at some point, even though
+	    # they are more drastic. 
+	    if ($code == GENIRESPONSE_SERVER_UNAVAILABLE ||
+		$code == GENIRESPONSE_NETWORK_ERROR ||
+		$code == GENIRESPONSE_RPCERROR) {
+		next;
+	    }
+	    # Slice is gone. Unusual.	    
+	    if ($code == GENIRESPONSE_SEARCHFAILED()) {
+		$code = GENIRESPONSE_ERROR;
+		$errmsg = "Experiment no longer exists";
+		last;
+	    }
+	    # Other errors are unusual.
+	    if ($code != GENIRESPONSE_SUCCESS) {
+		$errmsg = $tmp->error();
+		last;
+	    }
+	    my $blob = $tmp->value();
+	    if (ref($blob) ne "HASH") {
+		$code = GENIRESPONSE_ERROR;
+		$errmsg = "Unexpected return value from resolve";
+		last;
+	    }
+	    if (exists($blob->{'manifest'})) {
+		# We have forward motion, so keep going.
+		print STDERR "We got a manifest from resolve\n";
+		$manifest = $blob->{'manifest'};
+		last;
+	    }
+	    if (exists($blob->{'async_code'})) {
+		# We are getting back async error status.
+		$code   = $blob->{'async_code'};
+		$errmsg = $blob->{'async_output'};
+		last;
+	    }
+	}
+	if ($seconds < 0) {
+	    # XXX Need better handling for timeout.
+	    $code = GENIRESPONSE_TIMEDOUT;
+	    $errmsg = "Experiment setup timed out";
+	}
+	if ($code != GENIRESPONSE_SUCCESS) {
+	    print STDERR "Resolve loop failure: $code, $errmsg\n";
+	    $webtask->Exited($code);
+	    $webtask->output($errmsg);
+	    $aggobj->SetStatus("failed");
+	    return -1;
+	}
+    }
+    else {
+	my $code = 0;
+	my $errmsg;
+	
+	if (ref($response->value()) ne "ARRAY") {
+	    $code = GENIRESPONSE_ERROR;
+	    $errmsg = "Unexpected return value";
+	}
+	else {
+	    $manifest = $response->value()->[1];
+	    if (!defined($manifest)) {
+		$code = GENIRESPONSE_ERROR;
+		$errmsg = "No manifest returned";
+	    }
+	}
+	if ($code) {
+	    print STDERR "CreateSliver $urn: $errmsg\n";
+	    $webtask->Exited($code);
+	    $webtask->output($errmsg);
+	    $aggobj->SetStatus("failed");
+	    return -1;
+	}
+    }
+    $aggobj->SetStatus("provisioned");
+    $aggobj->SetManifest($manifest);
+    return 0;
+}
+
+sub CreateSlivers()
+{
+    my ($perrmsg) = @_;
+    my @return_codes = ();
+
+    #
+    # If this is a scheduled experiment, we want to update the start
+    # time for the web interface.
+    #
+    if ($instance->status() eq "deferred") {
+	$instance->Start();
+    }
+    $instance->SetStatus("provisioning");
+
+    #
+    # Use parrun here even for a single aggregate; then we can kill
+    # the child if something goes wrong, and the parent will do the
+    # correct cleanup.
+    #
+    if (ParRun({"maxwaittime" => 99999,
+		"maxchildren" => scalar(@aggregate_list)},
+	       \@return_codes, \&CreateSliver, @aggregate_list)) {
+	#
+	# The parent caught a signal. Leave things intact so that we can
+	# kill things cleanly later.
+	#
+	$instance->SetStatus("failed");
+	return -1;
+    }
+    #
+    # Check the exit codes; any failure is a total failure (for now).
+    # 
+    # Remember any aggregates that need to be deferred till later.
+    #
+    my @deferred = ();
+    
+    foreach my $aggobj (@aggregate_list) {
+	my $cluster    = $aggobj->GetAptAggregate()->name();
+	my $deferrable = $aggobj->GetAptAggregate()->deferrable();
+	
+	#
+	# Have to refresh the sliver objects since they were updated in a fork.
+	# Need the manifests for the call to ComputeNodeCounts below.
+	#
+	$aggobj->Refresh();
+	my $code = shift(@return_codes);
+	if ($code) {
+	    # Promote the log up to the instance so that so its easy to find.
+	    $instance->SetPublicURL($aggobj->public_url())
+		if (defined($aggobj->public_url()));
+
+	    my $output   = $aggobj->webtask()->output();
+	    my $exitcode = $aggobj->webtask()->exitcode();
+
+	    if ($exitcode == GENIRESPONSE_SERVER_UNAVAILABLE && $deferrable) {
+		print STDERR "$cluster is offline; deferring till later\n";
+		push(@deferred, $aggobj);
+		next;
+	    }
+
+	    #
+	    # We do not want to show some errors to users, we are going to
+	    # end up sending email to tbops.
+	    #
+	    if ($exitcode == GENIRESPONSE_RPCERROR() ||
+		$exitcode == GENIRESPONSE_SERVERERROR()) {
+		$output = "Internal error creating experiment on the ".
+		    "$cluster cluster";
+	    }
+	    $webtask->output($output);
+	    
+	    # This will be the createsliver exit code if we got one, or -1.
+	    $code = $exitcode;
+	    
+	    # Do this last so that the web interface does not see failed
+	    # before the reason is in the webtask.
+	    $instance->SetStatus("failed");
+	    return $code;
+	}
+    }
+    #
+    # No errors, but we have deferred aggregates. Need to schedule these
+    # for later retry.
+    #
+    if (@deferred) {
+	foreach my $aggobj (@deferred) {
+	    $aggobj->Defer();
+	}
+	$instance->Defer();
+    }
+    return 0;
+}
+
+#
+# Run the stitcher to allocate resources. We use this whenever we have
+# links that cross aggregates
+#
+sub RunStitcher()
+{
+    my $tmpdir        = mktemp("/tmp/stitcher.XXXXXX");
+    my $slicecredfile = "$tmpdir/slicecred.xml";
+    my $speaksforfile = "$tmpdir/speaksforcred.xml";
+    my $al2scredfile  = "$tmpdir/al2scred.xml";
+    my $rspecfile     = "$tmpdir/rspec.xml";
+    my $stdoutfile    = "$tmpdir/stitcher.stdout";
+    my $stderrfile    = "$tmpdir/stitcher.stderr";
+    # Who we are speaking for.
+    my $speaksfor_urn = $slice_credential->owner_urn();
+    my $failed        = 0;
+    my $errcode       = GENIRESPONSE_STITCHER_ERROR();
+
+    #
+    # Mark the aggregates as doing something, we never retry these
+    # on any stitcher failure.
+    #
+    foreach my $agg (@aggregate_list) {
+	$agg->SetStatus("provisioning");
+    }
+
+    #
+    # The AM API uses a different ssh key structure.
+    #
+    my $users = [];
+    foreach my $user (@{$sshkeys}) {
+	my @tmp = map { $_->{'key'} } @{$user->{'keys'}};
+	
+	push(@{$users},
+	     {"urn"   => $user->{'urn'},
+	      "privs" => $user->{'privs'},
+	      "keys"  => [ @tmp ] });
+    }
+
+    #
+    # Hey, I think stitcher/omni has as many options as snmpit. Wow!
+    #
+    my $command = "$STITCHER --fileDir $tmpdir --cred $speaksforfile ".
+	"--slicecredfile $slicecredfile --usercredfile $slicecredfile ".
+	($speaksfor_credential->type() eq "speaksfor" ?
+	 "--al2scredfile $al2scredfile " : "") .
+	"--debug ".
+	# We do not want these two files defaulting to user home dir.
+	"--GetVersionCacheName=$tmpdir/get_version_cache.json ".
+	"--AggNickCacheName=$tmpdir/agg_nick_cache ".
+	"--scsURL http://scs.scs.scs.emulab.net:8081/geni/xmlrpc  ".
+	"--speaksfor $speaksfor_urn -V3 allocate $slice_urn $rspecfile";
+
+    return -1
+	if (! mkdir("$tmpdir", 0755));
+
+    print "Using $tmpdir for stitcher\n"
+	if ($debug || $verbose);
+    print "Stitcher command: $command\n"
+	if ($debug || $verbose);
+
+    goto bad
+	if ($instance->WriteCredentials($tmpdir));
+
+    goto bad
+	if (system("/bin/cp -fp /usr/testbed/etc/stitcher/omni_config $tmpdir"));
+    goto bad
+	if (system("/bin/cp -fp /usr/testbed/etc/stitcher/agg_nick_cache ".
+		   "$tmpdir/agg_nick_cache"));
+
+    if (!open(XML, ">$rspecfile")) {
+	print STDERR "Could not open $rspecfile: $!\n";
+	goto bad;
+    }
+    print XML $rspecstr;
+    close(XML);
+
+    #
+    # Use a log file for the stitcher output, so we can spew it.
+    # The file in the tmp dir has to exist.
+    #
+    system("/bin/cp /dev/null $stdoutfile");
+    my $logfile = Logfile->Create($project->GetProjectGroup(), $stdoutfile);
+    if (!defined($logfile)) {
+	print STDERR "Could not create logfile\n";
+    }
+    else {
+	$logfile->Open();
+	$logfile->SetPublic(1);
+	$instance->SetLogFile($logfile);
+    }
+
+    #
+    # Okay, run the stitcher. Only to allocate, we will do the provisions
+    # so that we can pass the ssh keys more easily.
+    #
+    $instance->SetStatus("stitching");
+    system("cd $tmpdir; $command > $stdoutfile 2> $stderrfile");
+    if ($?) {
+	$errcode = $? >> 8;
+	$errcode = GENIRESPONSE_STITCHER_ERROR() if ($errcode == 1);
+	
+	if (-s $stderrfile) {
+	    my $stuff = `cat $stderrfile`;
+
+	    #
+	    # Try to find some useful output.
+	    #
+	    my $morestuff;
+	    
+	    if (open(SLOG, $stdoutfile)) {
+		while (<SLOG>) {
+		    if ($_ =~ /^Allocation of slivers in .* failed:/) {
+			$morestuff = $_;
+
+			if ($_ =~ /protogeni AM code: (\d*):/) {
+			    $errcode = $1;
+			}
+		    }
+		    elsif (defined($morestuff)) {
+			if ($_ =~ /^Allocate slivers in slice .* failed/) {
+			    last;
+			}
+			$morestuff .= $_;
+		    }
+		}
+		close(SLOG);
+		$stuff .= "\n\n" . $morestuff
+		    if (defined($morestuff));
+	    }
+	    $webtask->output($stuff);
+	    print $morestuff . "\n\n" if (defined($morestuff));
+	    system("/bin/cat $stderrfile");
+	}
+	else {
+	    $webtask->output("Stitcher failed!");
+	}
+	#
+	# Even if we fail, want to pick up whatever aggregates the stitcher
+	# decided to use, so that we can ensure all slivers get cleaned up
+	# at termination.
+	# 
+	$failed = 1;
+    }
+    if (defined($logfile)) {
+	$logfile->Close();
+	$logfile->Store();
+    }
+    
+    #
+    # The stitcher puts the list of aggregates into a file, read that so
+    # we can add any new ones to the instance. Just read the directory and
+    # find it. 
+    #
+    my @agglist = ();
+    my $agglistfile;
+    my $al2smanifest;
+    opendir(DIR, $tmpdir);
+    my @files  = readdir(DIR);
+    closedir(DIR);
+
+    foreach my $file (@files) {
+	if ($file =~ /amlist.txt$/) {
+	    $agglistfile = "$tmpdir/$file";
+	}
+	elsif ($file =~ /manifest-rspec-al2s/) {
+	    $al2smanifest = "$tmpdir/$file";
+	}
+    }
+    #
+    # The stitcher will not create this file if it passes straight through
+    # to omni, as it will do if no cross aggregate links.
+    #
+    if (defined($agglistfile)) {
+	if (!open(TXT, $agglistfile)) {
+	    print STDERR "Could not open $agglistfile: $!\n";
+	    goto bad;
+	}
+	while (<TXT>) {
+	    next
+		if ($_ =~ /^#/);
+	    if ($_ =~ /^([^,]*),(.*)$/) {
+		push(@agglist, $2);
+	    }
+	}
+	if (!@agglist) {
+	    print STDERR "Stitcher did not contact any aggregates!\n";
+	    goto bad;
+	}
+	close(TXT);
+    }
+    foreach my $urn (@agglist) {
+	next
+	    if (exists($instance->AggregateHash()->{$urn}));
+	
+	my $authority = GeniAuthority->Lookup($urn);
+	if (!defined($authority)) {
+	    $authority = GeniAuthority->CreateFromRegistry("CM", $urn);
+	    if (!defined($authority)) {
+		print STDERR "Could not lookup authority: $urn\n";
+		goto bad;
+	    }
+	}
+	my $aggobj = $instance->AddAggregate($urn);
+	push(@aggregate_list, $aggobj);
+	# Mark that it is doing something.
+	$aggobj->SetStatus("provisioning");
+    }
+    goto bad
+	if ($failed);
+
+    #
+    # Pass this function to ParRun; Provision slivers and request manifests.
+    #
+    my $coderef = sub {
+	my ($ref) = @_;
+	my $aggobj = $ref;
+	$aggobj->Refresh();
+	my $webtask   = $aggobj->webtask();
+	my $authority = $aggobj->GetGeniAuthority();
+	my $urn       = $authority->urn();
+	my $errmsg    = "Provision failed on $urn";
+	$webtask->Refresh();
+
+	#
+	# AL2S was done with a createsliver, so we know its ready.
+	# The thing we lack is a manifest, and I cannot seem to get
+	# get ListResources to work there, so just read the file. 
+	#
+	if ($aggobj->isAL2S()) {
+	    if (!defined($al2smanifest) || ! -e $al2smanifest) {
+		print STDERR "No manifest for AL2S\n";
+		$aggobj->SetStatus("failed");
+		$webtask->output("No manifest for AL2S");
+		$webtask->Exited(GENIRESPONSE_ERROR);
+		return -1;
+	    }
+	    my $manifest_string = "";
+	    if (! open(MAN, $al2smanifest)) {
+		print STDERR "Could not open $al2smanifest\n";
+		$aggobj->SetStatus("failed");
+		$webtask->output("Could not open manifest file");
+		$webtask->Exited(GENIRESPONSE_ERROR);
+		return -1;
+	    }
+	    while (<MAN>) {
+		$manifest_string .= $_;
+	    }
+	    close(MAN);
+	    $aggobj->SetManifest($manifest_string);
+	    $aggobj->SetStatus("provisioned");
+	    print STDERR $manifest_string . "\n";
+	    return 0;
+	}
+	print "Provisioning at $urn\n";
+	my $response =
+	    CallMethodOnAggregate($aggobj,
+				  sub {
+				      return $aggobj->Provision($users,
+					  $instance->cert(),
+					  $instance->privkey());
+				  }, 10);
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    $aggobj->SetStatus("failed");
+	    $webtask->output("Provision failed on $urn: ".$response->error());
+	    $webtask->Exited($response->code());
+	    print STDERR "Provision failed on $urn: ".$response->error()."\n";
+	    return -1;
+	}
+	$aggobj->SetStatus("provisioned");
+	print "Requesting manifest from $urn\n";
+	$response = CallMethodOnAggregate($aggobj, "SliceResolve", 10);
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    $aggobj->SetStatus("failed");
+	    $webtask->output("Could not Resolve at $urn: ".$response->error());
+	    $webtask->Exited($response->code());
+	    print STDERR "Could not Resolve at $urn: ".$response->error()."\n";
+	    return -1;
+	}
+	# Web interface wants this as soon as possible.
+	$aggobj->SetManifest($response->value()->{'manifest'});
+	# This will get overwritten later during the wait.
+	$aggobj->SetPublicURL($response->value()->{'public_url'})
+	    if (exists($response->value()->{'public_url'}));
+
+	print "Forcing correct slice expiration\n";
+	$response =
+	    CallMethodOnAggregate($aggobj,
+		  sub {
+		      return $aggobj->Extend($genislice->ExpirationGMT(),
+					     $emulab_user);
+		  }, 10);
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    $aggobj->SetStatus("failed");
+	    $webtask->output("Renew failed on $urn: ". $response->error());
+	    $webtask->Exited($response->code());
+	    print STDERR "Renew failed on $urn: ". $response->error() . "\n";
+	    return -1;
+	}
+	print "Calling SliverStart at $urn\n";
+	$response = 
+	    CallMethodOnAggregate($aggobj,
+				  sub {
+				      return $aggobj->SliverAction("start");
+				  }, 10);
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    $aggobj->SetStatus("failed");
+	    $webtask->output("Start failed on $urn: ". $response->error());
+	    $webtask->Exited($response->code());
+	    print STDERR "Start failed on $urn: ". $response->error() . "\n";
+	    return -1;
+	}
+	return 0;
+    };
+    
+    my @return_codes = ();
+    if (ParRun({"maxwaittime" => 99999,
+		"maxchildren" => scalar(@aggregate_list)},
+	       \@return_codes, $coderef, @aggregate_list)) {
+	#
+	# The parent caught a signal. Leave things intact so that we can
+	# kill things cleanly later.
+	#
+	goto bad;
+    }
+    #
+    # Check the exit codes; any failure is a total failure (for now).
+    #
+    foreach my $aggobj (@aggregate_list) {
+	#
+	# Have to refresh the sliver objects since they were updated in a fork.
+	#
+	$aggobj->Refresh();
+	my $code = shift(@return_codes);
+	if ($code) {
+	    $webtask->output($aggobj->webtask()->output())
+		if (defined($aggobj->webtask()->output()));
+	    goto bad;
+	}
+    }
+#    system("/bin/rm -rf $tmpdir")
+#	if (!$debug && defined($tmpdir) && -e $tmpdir);
+    return 0;
+
+  bad:
+    #
+    # Dump the stitcher output. Ick.
+    #
+    if (defined($tmpdir) && -e "$tmpdir/stitcher.log") {
+	print "------------- Stitcher Log ---------------\n";
+	system("/bin/cat $tmpdir/stitcher.log");
+	print "-----------------------------------------\n";
+    }
+#    system("/bin/rm -rf $tmpdir")
+#	if (!$debug && defined($tmpdir) && -e $tmpdir);
+    return $errcode;
+}
+
+sub fatal($)
+{
+    my ($mesg) = @_;
+
+    $genislice->UnLock()
+	if (defined($genislice));
+    
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(-1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    # Exit with negative status so web interface treats it as system error.
+    exit(-1);
+}
+
+#
+# Call an aggregate method with retry,
+#
+sub CallMethodOnAggregate($$$)
+{
+    my ($aggregate, $method, $retries) = @_;
+    my $response;
+
+    while ($retries) {
+	#
+	# This can be a coderef for more complicated invocations.
+	#
+	if (ref($method) eq "CODE") {
+	    $response = &$method($aggregate);
+	}
+	else {
+	    $response = $aggregate->$method();
+	}
+	if (!defined($response)) {
+	    # We want to know about this, something is very wrong.
+	    $response =
+		GeniResponse->new(GENIRESPONSE_ERROR, -1,
+			  "Internal error calling method on $aggregate");
+	    last;
+	}
+	print Dumper($response);
+	last
+	    if ($response->code() == GENIRESPONSE_SUCCESS);
+	    
+	# We can keep trying for these, but not an RPC error.
+	last
+	    if (! ($response->code() == GENIRESPONSE_BUSY ||
+		   $response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
+		   ($response->code() == GENIRESPONSE_NETWORK_ERROR &&
+		    $response->value() ==
+		    GENIRESPONSE_NETWORK_ERROR_NOCONNECT)));
+	#
+	# Wait for a while and try again. 
+	#
+	$retries--;
+	if ($retries) {
+	    sleep(10);
+	}
+    }
+    return $response;
+}

@@ -6,14 +6,12 @@ window.ShowExtendModal = (function()
     {
 	'use strict';
 
-        var templates = APT_OPTIONS.fetchTemplateList(['user-extend-modal', 'guest-extend-modal']);
-        var userExtendString = templates['user-extend-modal'];
-        var guestExtendString = templates['guest-extend-modal'];
+        var templates = APT_OPTIONS.fetchTemplateList(['user-extend-modal']);
+        var userExtendString  = templates['user-extend-modal'];
       
         var modalname  = '#extend_modal';
 	var divname    = '#extend_div';
 	var slidername = "#extend_slider";
-	var isguest    = 0;
 	var uuid       = 0;
 	var callback   = null;
 	var maxextend  = null;
@@ -23,6 +21,7 @@ window.ShowExtendModal = (function()
 	var maxextend_date  = null;
 	var physnode_count  = 0;
 	var physnode_hours  = 0;
+	var expires         = null;
 
 	function Initialize()
 	{
@@ -59,7 +58,7 @@ window.ShowExtendModal = (function()
 			.val(Math.round(physnode_count * howlong));
 		});
 	    }
-	    
+
 	    /*
 	     * Countdown for text box.
 	     */
@@ -499,18 +498,17 @@ window.ShowExtendModal = (function()
 		$(button).attr("disabled", "disabled");
 	    }
 	}
-	return function(thisuuid, func, studly, guest, info, pcount, phours)
+	return function(thisuuid, func, studly, guest, expinfo)
 	{
-	    isguest  = guest;
 	    uuid     = thisuuid;
 	    callback = func;
-	    extension_info = info;
-	    physnode_count = pcount;
-	    physnode_hours = phours;
+	    expires  = expinfo.expires;
+	    extension_info = expinfo.extension_info;
+	    physnode_count = expinfo.physnode_count;
+	    physnode_hours = expinfo.physnode_hours;
 
-	    $('#extend_div').html(isguest ?
-				  guestExtendString : userExtendString);
-
+	    $(divname).append(userExtendString);
+	    
 	    // Fill in the mailto links.
 	    var mailto  = "mailto:" + window.SUPPORT;
 	    var support = window.APTTILE + " support";
@@ -542,7 +540,8 @@ window.ShowExtendModal = (function()
 		sup.HideModal('#waitwait-modal');
 		if (json.code) {
 		    console.info("Failed to get max extension: ", json);
-		    sup.SpitOops("oops", json.value);
+		    $('#error-extend-modal .modal-body').text(json.value);
+		    sup.ShowModal("#error-extend-modal");
 		    return;		    
 		}
 		/*
@@ -564,7 +563,7 @@ window.ShowExtendModal = (function()
 		/*
 		 * See if the difference is less then a day.
 		 */
-		var now   = new Date(window.APT_OPTIONS.sliceExpires);
+		var now   = new Date(expires);
 		var diff  = (later.getTime() - now.getTime()) / (1000 * 3600.0);
 		var hours = Math.floor(diff);
 		console.info("MaxExtension", now, later, diff, hours);

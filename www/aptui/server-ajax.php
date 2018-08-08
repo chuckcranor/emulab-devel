@@ -196,6 +196,8 @@ $routing = array("geni-login" =>
 						     "Do_OpenstackStats",
 						 "MaxExtension" =>
 						     "Do_MaxExtension",
+						 "GetRspec" =>
+						     "Do_GetRspec",
 						 "IgnoreFailure" =>
 						     "Do_IgnoreFailure",
 						 "dismissExtensionDenied" =>

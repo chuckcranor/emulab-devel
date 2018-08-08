@@ -33,8 +33,12 @@
 		<td class="format-date"><%- expinfo.expires %></td>
 	      </tr>
 	      <tr>
-		<td></td>
-		<td></td>
+		<td>Started:</td>
+		<% if (expinfo.started) { %>
+		  <td class="format-date"><%- expinfo.started %></td>
+		<% } else { %>
+		  <td><span class="text-warning">Not Started</span></td>
+		<% } %>
 		<td>Max Ext:</td>
 		<td id="max-extension">
 		  <div class="progress" style="height: 16px;">

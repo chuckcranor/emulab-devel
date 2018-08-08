@@ -71,9 +71,12 @@ use overload ('""' => 'Stringify');
 my $TB		  = "@prefix@";
 my $TBOPS         = "@TBOPSEMAIL@";
 my $TBAUDIT       = "@TBAUDITEMAIL@";
+my $OURDOMAIN     = "@OURDOMAIN@";
 my $GENEXTENDCRED = "$TB/sbin/protogeni/genextendcred";
+my $MANAGEDATASET = "$TB/bin/manage_dataset";
 my $GENIUSER      = "geniuser";
 my $MAINSITE      = @TBMAINSITE@;
+my $PROTOGENI_LOCALUSER= @PROTOGENI_LOCALUSER@;
 
 # Cache of instances to avoid regenerating them.
 my %instances  = ();
@@ -81,7 +84,7 @@ BEGIN { use emutil; emutil::AddCache(\%instances); }
 my $debug      = 0;
 
 # Debugging
-my $usemydevtree  = 0;
+my $usemydevtree  = ($MAINSITE ? 0 : 0);
 sub devurl($)
 {
     my ($cmurl) = @_;
@@ -190,6 +193,18 @@ sub isPNet($)	{ return $_[0]->Brand()->isPNet() ? 1 : 0; }
 sub isPowder($)	{ return $_[0]->Brand()->isPowder() ? 1 : 0; }
 sub AggregateList($) { return values(%{ $_[0]->{'AGGREGATES'} }); }
 sub AggregateHash($) { return $_[0]->{'AGGREGATES'}; }
+
+sub Start($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+
+    DBQueryWarn("update apt_instances set started=now() ".
+		"where uuid='$uuid'")
+	or return -1;
+
+    return Refresh($self);
+}
 
 #
 # Grab the webtask. Backwards compat mode, see if there is one associated
@@ -427,8 +442,12 @@ sub Delete($)
 	$agg->Delete() == 0
 	    or return -1;
     }
+    DBQueryWarn("delete from apt_deferred_instances where uuid='$uuid'") or
+	return -1;
+
     # We do not "own" the webtask until create_sliver exits successfully.
     $self->webtask()->Delete() if (defined($self->{'WEBTASK'}));
+    
     DBQueryWarn("delete from apt_instances where uuid='$uuid'") or
 	return -1;
 
@@ -485,6 +504,31 @@ sub SetStatus($$)
     return 0;
     
 }
+
+sub ActiveAggregateList($)
+{
+    my ($self) = @_;
+    my @result = ();
+
+    foreach my $agg ($self->AggregateList()) {
+	push(@result, $agg)
+	    if ($agg->status() ne "terminated" &&
+		$agg->status() ne "deferred");
+    }
+    return @result;
+}
+sub DeferredAggregateList($)
+{
+    my ($self) = @_;
+    my @result = ();
+
+    foreach my $agg ($self->AggregateList()) {
+	push(@result, $agg)
+	    if ($agg->status() eq "deferred");
+    }
+    return @result;
+}
+
 sub SetPublicURL($$)
 {
     my ($self,$url) = @_;
@@ -795,6 +839,9 @@ sub ComputeNodeCounts($)
 	return -1;
     }
     foreach my $sliver (@slivers) {
+	next
+	    if ($sliver->status() eq "deferred");
+	
 	my $manifest = GeniXML::Parse($sliver->manifest());
 	if (! defined($manifest)) {
 	    print STDERR "Could not parse manifest for $sliver\n";
@@ -1382,6 +1429,10 @@ sub CheckProvisioned($)
     foreach my $agg ($self->AggregateList()) {
 	$agg->Refresh();
 
+	# Skip deferred for now, not sure how to handle this.
+	next
+	    if ($agg->status() eq "deferred");
+
 	$provisioned = 0
 	    if (!defined($agg->manifest()));
     }
@@ -1393,6 +1444,179 @@ sub CheckProvisioned($)
     }
   done:
     DBQueryWarn("unlock tables");
+    return 0;
+}
+
+#
+# Create credentials required by this instance, to access its datasets.
+#
+sub CreateDatasetCreds($$$)
+{
+    my ($self, $pmsg, $pref) = @_;
+    my $rspecstr = $self->rspec();
+    my $project  = $self->GetProject();
+    my $geniuser = $self->GetGeniUser();
+    my @credentials = ();
+    
+    my $rspec = GeniXML::Parse($rspecstr);
+    if (! defined($rspec)) {
+	print STDERR "CreateDatasetCreds: Could not parse rspec\n";
+	return -1;
+    }
+
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $manager_urn = GetManagerId($ref);
+	
+	foreach my $blockref (GeniXML::FindNodesNS("n:blockstore", $ref,
+				   $GeniXML::EMULAB_NS)->get_nodelist()) {
+	    my $dataset_id = GeniXML::GetText("persistent", $blockref);
+	    if (!defined($dataset_id)) {
+		# persistent is deprecated.
+		$dataset_id = GeniXML::GetText("dataset", $blockref);
+	    }
+
+	    #
+	    # We only care about datasets here, we let the backend
+	    # do the error checking on ephemeral blockstores.
+	    #
+	    next
+		if (!defined($dataset_id));
+
+	    my $class = GeniXML::GetText("class", $blockref);
+	    if (!defined($class)) {
+		$class = "remote";
+	    }
+	    # Image backed referenced by URL. No checking since the
+	    # image has to be global anyway. Needs more thought.
+	    next
+		if ($class eq "local" && $dataset_id =~ /^(http|https):/);
+
+	    my $dataset_urn = GeniHRN->new($dataset_id);
+	    my $dataset = APT_Dataset->LookupByRemoteURN($dataset_urn);
+	    if (!defined($dataset)) {
+		if ($dataset_urn->domain() eq $OURDOMAIN) {
+		    #
+		    # Local image backed dataset or lease.
+		    #
+		    my ($image,$lease);
+		    my $pid = $dataset_urn->project();
+		    my $id  = $dataset_urn->id();
+
+		    if ($dataset_urn->type() eq "imdataset") {
+			$image = Image->Lookup($pid, $id);
+			if ($image && !$image->isdataset()) {
+			    $$pmsg = "$dataset_urn is an image not a dataset ";
+			    return 1;
+			}
+			#
+			# Do a partial permission check here to catch
+			# errors early.  The CM will do its own check
+			# of course.
+			#
+			if (!$image->global() &&
+			    $PROTOGENI_LOCALUSER && $geniuser->IsLocal() &&
+			    !$image->AccessCheck($geniuser->emulab_user(),
+						   TB_IMAGEID_ACCESS())) {
+			    $$pmsg = "No permission to use $dataset_urn";
+			    return 1;
+			}
+		    }
+		    else {
+			$lease = Lease->Lookup($pid, $id);
+		    }
+		    # We cannot generate a credential for "legacy" datasets.
+		    # So if it is not global, it cannot be transferred. Maybe
+		    # this is okay, we will find out. We could generate a
+		    # credential if we needed to.
+		    next
+			if ($image || $lease);
+		}
+		$$pmsg = "Dataset '$dataset_urn' does not exist";
+		return 1;
+	    }
+	    #
+	    # We do not need a credential for leases, only real users
+	    # can use those, and so standard emulab permission checks
+	    # are applied at the CM.
+	    #
+	    next
+		if ($dataset->type() ne "imdataset");
+
+	    #
+	    # For image backed datasets, we need to send along a credential
+	    # that allows the remote CM to securely download the dataset if
+	    # it does not already have it. To do that we need to send it a
+	    # credential from the CM where the dataset lives. We do that by
+	    # requesting a credential, and delegating it to the target CM.
+	    #
+	    my $pid = $dataset->pid();
+	    my $id  = $dataset->dataset_id();
+	    my $cmd = "$MANAGEDATASET getcredential -a $manager_urn $pid/$id";
+	    my $output = emutil::ExecQuiet($cmd);
+	    if ($?) {
+		$$pmsg = "Could not generate credential for $dataset_urn";
+		if (($? >> 8) > 0) {
+		    if ($output ne "") {
+			$$pmsg = "$dataset_urn" . ": " . $output;
+		    }
+		    return 1;
+		}
+		return -1;
+	    }
+	    push(@credentials, $output);
+	}
+    }
+    @$pref = @credentials;
+    return 0;
+}
+
+#
+# Defer aggregate setup until missing aggregates come online.
+# Optional start time indicates we are deferring the entire experiment
+# till a later time.
+#
+sub Defer($$)
+{
+    my ($self, $start) = @_;
+    my $uuid   = $self->uuid();
+    my $name   = $self->name();
+
+    my $query_result =
+	DBQueryWarn("select uuid from apt_deferred_instances ".
+		    "where uuid='$uuid'");
+    return -1
+	if (!defined($query_result));
+
+    if ($query_result->numrows) {
+	DBQueryWarn("update apt_deferred_instances set ".
+		    "  last_retry=now() ".
+		    "where uuid='$uuid'")
+	    or return -1;
+    }
+    else {
+	DBQueryWarn("replace into apt_deferred_instances set ".
+		    " uuid='$uuid', name='$name'" .
+		    (defined($start) ?
+		     ", start_at=FROM_UNIXTIME($start)" : ""))
+	    or return -1;
+	
+	if (defined($start)) {
+	    DBQueryWarn("update apt_instance_aggregates set status='deferred' ".
+			"where uuid='$uuid'")
+		or return -1;
+	}
+    }
+    return 0;
+}
+sub ResolveDefer($)
+{
+    my ($self) = @_;
+    my $uuid   = $self->uuid();
+
+    DBQueryWarn("delete from apt_deferred_instances ".
+		"where uuid='$uuid'")
+	or return -1;
+
     return 0;
 }
 
@@ -1543,7 +1767,6 @@ use vars qw($AUTOLOAD);
 use overload ('""' => 'Stringify');
 sub devurl($) { return APT_Instance::devurl($_[0]); }
 
-my $OURDOMAIN = "@OURDOMAIN@";
 my $MYURN     = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
 
 #
@@ -1853,6 +2076,23 @@ sub Update($$)
     return -1
 	if (! DBQueryWarn($query));
 
+    return Refresh($self);
+}
+
+#
+# Mark as deferred.
+#
+sub Defer($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set status='deferred', ".
+		"  last_retry=now(),retry_count=retry_count+1 ".
+		"where uuid='$uuid' and aggregate_urn='$urn'")
+	or return -1;
+    
     return Refresh($self);
 }
 

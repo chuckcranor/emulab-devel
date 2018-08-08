@@ -154,7 +154,9 @@ sub KillInstances()
 		    "where (a.canceled!=0 or ".
 		    "       (a.status='failed' and ".
 		    "        (UNIX_TIMESTAMP(now()) - ".
-		    "         UNIX_TIMESTAMP(a.created) > 7200))) and ".
+		    "         UNIX_TIMESTAMP(IF(a.started is null, ".
+		    "                           a.created, a.started)) ".
+		    "           > 7200))) and ".
 		    # Not locked or corresponding slice does not exist.
 		    "      (s.locked is null or s.idx is null)");
     return

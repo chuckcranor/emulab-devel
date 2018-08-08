@@ -461,6 +461,11 @@ function Do_CheckForm()
             SPITAJAX_RESPONSE(0);
         }
     }
+    if ($ajax_args["step"] == 3) {
+        if (CheckStep3() == 0) {
+            SPITAJAX_RESPONSE(0);
+        }
+    }
 }
 
 #
@@ -646,7 +651,6 @@ function CheckStep2()
     global $ajax_args;
     global $ISAPT, $ISPNET, $ISCLOUD, $ISEMULAB, $ISPOWDER;
     global $TB_PROJECT_CREATEEXPT;
-    global $maxduration;
 
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(-1, "Missing formfields");
@@ -760,12 +764,72 @@ function CheckStep2()
                 $errors["name"] = "Already in use by another experiment";
             }
         }
+    }
+    if (count($errors)) {
+	SPITAJAX_ERROR(2, $errors);
+	return -1;
+    }
+    return 0;
+}
+function CheckStep3()
+{
+    global $this_user;
+    global $ajax_args;
+    global $ISAPT, $ISPNET, $ISCLOUD, $ISEMULAB, $ISPOWDER;
+    global $maxduration;
+    $start = null;
 
+    if (!isset($ajax_args["formfields"])) {
+	SPITAJAX_ERROR(-1, "Missing formfields");
+	return -1;
+    }
+    $formfields = $ajax_args["formfields"];
+    session_start();
+
+    #
+    # Verify scheduled start time if not start immediately.
+    #
+    if (! (isset($formfields["start-immediately"]) &&
+           $formfields["start-immediately"] == "checked")) {
+        if (!isset($formfields["start"]) || $formfields["start"] == "") {
+            $errors["error"] = "Missing UTC start time";
+        }
+        else {
+            $start_ascii = $formfields["start"];
+            $start = strtotime($formfields["start"]);
+            if (!$start) {
+                $errors["start"] = "Cannot parse UTC start time";
+            }
+            elseif ($start < time()) {
+                $errors["start_day"] = "Start is in the past";
+            }
+        }
+    }
+    if (isset($formfields["end"]) && $formfields["end"] != "") {
+        $end_ascii = $formfields["end"];
+        $end = strtotime($formfields["end"]);
+        if (!$end) {
+            $errors["end"] = "Cannot parse UTC end time";
+        }
+        elseif ($end < time()) {
+            $errors["end_day"] = "End is in the past";
+        }
+        elseif ($start && $end <= $start) {
+            $errors["end_day"] = "End is before the start";
+        }
+        elseif (($start && $end < $start + 3600) ||
+                $end < time() + 3600) {
+            $errors["end_day"] = "Too short, must be > 1 hour";
+        }
+    }
+    else {
         if (!isset($formfields["duration"]) || $formfields["duration"] == "") {
             $errors["duration"] = "Must set an experiment duration";
         }
-        elseif (!ctype_digit($formfields["duration"]) || (((int)$formfields["duration"]) <= 0 || ((int)$formfields["duration"]) > $maxduration)) {
-            $errors["duration"] = "Must be an integer between 1 and ".$maxduration;
+        elseif (!ctype_digit($formfields["duration"]) ||
+                (((int)$formfields["duration"]) <= 0 ||
+                 ((int)$formfields["duration"]) > $maxduration)) {
+            $errors["duration"] = "Must be between 1 and $maxduration hours";
         }
     }
     if (count($errors)) {
@@ -899,6 +963,9 @@ function Do_Submit()
     if (CheckStep2()) {
         return;
     }
+    if (CheckStep3()) {
+        return;
+    }
     $formfields = $ajax_args["formfields"];
     $amlist     = Instance::DefaultAggregateList();
     $am_array   = array();
@@ -1003,12 +1070,18 @@ function Do_Submit()
     $options = "";
 
     if ($aggregate_urn != "") {
-        $options = " -a '$aggregate_urn'";
+        $options = " -a '$aggregate_urn' ";
     }
     elseif (count($sitemap)) {
         while (list($siteid, $urn) = each($sitemap)) {
             $options .= "--site 'site:${siteid}=${urn}' ";
         }
+    }
+    # Scheduled start time if not starting immediately.
+    if (! (isset($formfields["start-immediately"]) &&
+           $formfields["start-immediately"] == "checked")) {
+        $start = strtotime($formfields["start"]);
+        $options .= " --start $start ";
     }
     if (isset($_SESSION["privkey"])) {
         $keyname = tempnam("/tmp", "genilibkey");

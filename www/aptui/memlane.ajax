@@ -60,6 +60,8 @@ function Do_HistoryRecord()
     # Need to add a few things.
     #
     $blob["created"]   = DateStringGMT($blob["created"]);
+    $blob["started"]   = DateStringGMT($blob["started"]);
+    $blob["start_at"]  = DateStringGMT($blob["start_at"]);
     $blob["destroyed"] = DateStringGMT($blob["destroyed"]);
     $blob["profile_uuid"] = null;
     $blob["profile_name"] = null;

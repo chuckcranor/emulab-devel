@@ -13,6 +13,7 @@ $(function ()
     var approvalString = templates['approval-modal'];
     var linktestString = templates['linktest-modal'];
 
+    var expinfo     = null;
     var nodecount   = 0;
     var ajaxurl     = null;
     var uuid        = null;
@@ -24,26 +25,25 @@ $(function ()
     var wholedisk   = 0;
     var isscript    = 0;
     var dossh       = 1;
-    var profile_uuid= null;
     var jacksIDs    = {};
+    var jacksSites  = {};
     var publicURLs  = null;
+    var extension_blob    = null;
+    var manifests         = {};
     var status_collapsed  = false;
     var status_message    = "";
     var statusTemplate    = _.template(statusString);
     var terminateTemplate = _.template(terminateString);
     var instanceStatus    = "";
     var lastStatus        = "";
-    var paniced           = 0;
-    var lockout           = 0;
-    var admin_lockdown    = 0;
-    var user_lockdown     = 0;
     var lockdown_code     = "";
     var consolenodes      = {};
     var showlinktest      = false;
     var hidelinktest      = false;
-    var extension_blob    = null;
     var projlist          = null;
     var amlist            = null;
+    var aggcount          = 0;
+    var jacksInstance     = null;
     var changingtopo      = false;
     var EMULAB_OPS        = "emulab-ops";
     var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
@@ -63,71 +63,63 @@ $(function ()
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
-	ajaxurl = window.APT_OPTIONS.AJAXURL;
-	uuid    = window.APT_OPTIONS.uuid;
-	oneonly = window.APT_OPTIONS.oneonly;
-	isadmin = window.APT_OPTIONS.isadmin;
-	isfadmin= window.APT_OPTIONS.isfadmin;
-	isstud  = window.APT_OPTIONS.isstud;
-	isguest = (window.APT_OPTIONS.registered ? false : true);
-	wholedisk = window.APT_OPTIONS.wholedisk;
-	dossh   = window.APT_OPTIONS.dossh;
-	isscript = window.APT_OPTIONS.isscript;
-	profile_uuid = window.APT_OPTIONS.profileUUID;
-	paniced      = window.APT_OPTIONS.paniced;
-	lockout      = window.APT_OPTIONS.lockout;
-	user_lockdown= window.APT_OPTIONS.user_lockdown;
-	lockdown_code= uuid.substr(2, 5);
-	admin_lockdown = window.APT_OPTIONS.admin_lockdown;
-	instanceStatus = window.APT_OPTIONS.instanceStatus;
-	hidelinktest   = window.APT_OPTIONS.hidelinktest;
-	var errorURL = window.HELPFORUM;
+	ajaxurl       = window.APT_OPTIONS.AJAXURL;
+	uuid          = window.APT_OPTIONS.uuid;
+	oneonly       = window.APT_OPTIONS.oneonly;
+	isadmin       = window.APT_OPTIONS.isadmin;
+	isfadmin      = window.APT_OPTIONS.isfadmin;
+	isstud        = window.APT_OPTIONS.isstud;
+	isguest       = (window.APT_OPTIONS.registered ? false : true);
+	wholedisk     = window.APT_OPTIONS.wholedisk;
+	dossh         = window.APT_OPTIONS.dossh;
+	isscript      = window.APT_OPTIONS.isscript;
+	hidelinktest  = window.APT_OPTIONS.hidelinktest;
+	lockdown_code = uuid.substr(2, 5);
 
 	// Standard option
 	marked.setOptions({"sanitize" : true});
 
-	if ($('#extension-blob-json').length) {
-	    extension_blob = decodejson('#extension-blob-json');
-	    // console.info(extension_blob);
-	}
 	if ($('#projects-json').length) {
 	    projlist = decodejson('#projects-json');
 	    // console.info(projlist);
 	}
 	amlist = decodejson('#amlist-json');
 
+	/*
+	 * Need to grab the experiment info so we can draw the page.
+	 */
+	sup.CallServerMethod(null, "status", "ExpInfo",
+			     {"uuid" : uuid},
+			     function(json) {
+				 console.info("expinfo", json);
+				 if (json.code) {
+				     console.info("Could not get experiment "+
+						  "info: " + json.value);
+				     return;
+				 }
+				 expinfo = json.value;
+				 GeneratePageBody();
+			     });
+    }
+
+    function GeneratePageBody()
+    {
+	instanceStatus  = expinfo.status;
+	extension_blob  = expinfo.extension_info;
+	
 	// Generate the templates.
 	var template_args = {
 	    uuid:		uuid,
-	    name:		window.APT_OPTIONS.name,
-	    profileName:	window.APT_OPTIONS.profileName,
-	    profileUUID:	window.APT_OPTIONS.profileUUID,
-	    sliceURN:		window.APT_OPTIONS.sliceURN,
-	    sliceExpires:	window.APT_OPTIONS.sliceExpires,
-	    sliceExpiresText:	window.APT_OPTIONS.sliceExpiresText,
-	    sliceCreated:	window.APT_OPTIONS.sliceCreated,
-	    creatorUid:		window.APT_OPTIONS.creatorUid,
-	    creatorEmail:	window.APT_OPTIONS.creatorEmail,
+	    expinfo:            expinfo,
 	    registered:		window.APT_OPTIONS.registered,
 	    isadmin:            window.APT_OPTIONS.isadmin,
 	    isfadmin:           window.APT_OPTIONS.isfadmin,
 	    isstud:             window.APT_OPTIONS.isstud,
 	    extensions:         extension_blob.extensions,
-	    errorURL:           errorURL,
-	    paniced:            paniced,
-	    project:            window.APT_OPTIONS.project,
-	    group:              window.APT_OPTIONS.group,
-	    lockout:            lockout,
-	    admin_lockdown:     admin_lockdown,
-	    user_lockdown:      user_lockdown,
+	    errorURL:           window.HELPFORUM,
 	    lockdown_code:      lockdown_code,
 	    // The status panel starts out collapsed.
 	    status_panel_show:  (instanceStatus == "ready" ? false : true),
-	    repourl:		window.APT_OPTIONS.repourl,
-	    reporef:		window.APT_OPTIONS.reporef,
-	    repohash:		window.APT_OPTIONS.repohash,
-	    hasnotes:          	window.APT_OPTIONS.hasnotes,
-	    extension_reason:   extension_blob.extension_reason,
 	};
 	var status_html   = statusTemplate(template_args);
 	$('#status-body').html(status_html);
@@ -140,7 +132,7 @@ $(function ()
 	$('#linktest_div').html(linktestString);
 	
 	// Not allowed to copy repobased profiles.
-	if (window.APT_OPTIONS.repourl !== undefined) {
+	if (expinfo.repourl) {
 	    $('#copy_button').addClass("hidden");
 	}
 
@@ -187,8 +179,8 @@ $(function ()
 	$('button#register-account').click(function (event) {
 	    event.preventDefault();
 	    sup.HideModal('#register_modal');
-	    var uid   = window.APT_OPTIONS.creatorUid;
-	    var email = window.APT_OPTIONS.creatorEmail;
+	    var uid   = expinfo.creator;
+	    var email = expinfo.creator_email;
 	    var url   = "signup.php?uid=" + uid + "&email=" + email + "";
 	    var win   = window.open(url, '_blank');
 	    win.focus();
@@ -202,7 +194,7 @@ $(function ()
 		sup.ShowModal("#extend_history_modal");
 		return;
 	    }
-	    if (lockout && !isadmin) {
+	    if (expinfo.lockout && !isadmin) {
 		if (extension_blob.extension_disabled_reason != "") {
 		    $("#extensions-disabled-reason .reason")
 			.text(extension_blob.extension_disabled_reason);
@@ -215,10 +207,8 @@ $(function ()
 		window.location.replace("adminextend.php?uuid=" + uuid);
 		return;
 	    }
-            ShowExtendModal(uuid, RequestExtensionCallback, isstud, isguest,
-			    extension_blob,
-                            window.APT_OPTIONS.physnode_count,
-                            window.APT_OPTIONS.physnode_hours);
+            ShowExtendModal(uuid,
+			    RequestExtensionCallback, isstud, isguest, expinfo);
 	});
 	
 	// Handler for the refresh button
@@ -246,19 +236,16 @@ $(function ()
 	    event.preventDefault();
 	    sup.HideModal('#terminate_modal');
 
-	    if (user_lockdown) {
+	    if (expinfo.user_lockdown) {
 		if (lockdown_code != $('#terminate_lockdown_code').val()) {
 		    sup.SpitOops("oops", "Refusing to terminate; wrong code");
 		    return;
 		}
 		lockdown_override =  $('#terminate_lockdown_code').val();
 	    }
-	    DisableButtons();
-
 	    var callback = function(json) {
 		sup.HideModal("#waitwait-modal");
 		if (json.code) {
-		    EnableButtons();
 		    sup.SpitOops("oops", json.value);
 		    return;
 		}
@@ -275,25 +262,40 @@ $(function ()
 						   lockdown_override});
 	    xmlthing.done(callback);
 	});
-	// Disable terminate button if not allowed.
-	if (!window.APT_OPTIONS.canterminate) {
-	    DisableButton("terminate");
+	// Handler for select/deselect all rows in the list view.
+	$('#select-all').change(function () {
+	    if ($(this).prop("checked")) {
+		$('#listview_table [name=select]')
+		    .prop("checked", true);
+	    }
+	    else {
+		$('#listview_table [name=select]')
+		    .prop("checked", false);
+	    }
+	});
+	// Handler for the action menu next to the select-all checkbox:
+	// Foreign admins do not get a menu, but easier to just hide it.
+	if (isfadmin) {
+	    $('#listview-action-menu').addClass("invisible");
 	}
-	// lockout change event handler.
-	$('#lockout_checkbox').change(function() {
-	    DoLockout($(this).is(":checked"));
-	});	
-	// lockdown change event handler.
-	$('#user_lockdown_checkbox').change(function() {
-	    DoLockdown("user", $(this).is(":checked"));
-	});	
-	$('#admin_lockdown_checkbox').change(function() {
-	    DoLockdown("admin", $(this).is(":checked"));
-	});	
-	// Quarantine change event handler.
-	$('#quarantine_checkbox').change(function() {
-	    DoQuarantine($(this).is(":checked"));
-	});	
+	else {
+	    $('#listview-action-menu li a')
+		.click(function (e) {
+		    window.APT_OPTIONS.gaButtonEvent(e);
+		    var checked = [];
+
+		    // Get the list of checked nodes.
+		    $('#listview_table [name=select]').each(function() {
+			if ($(this).prop("checked")) {
+			    checked.push($(this).attr("id"));
+			}
+		    });
+		    if (checked.length) {
+			ActionHandler($(e.target).attr("name"), checked);
+		    }
+		});
+	}
+	SetupSnapshotModal();
 
 	/*
 	 * Attach an event handler to the profile status collapse.
@@ -331,17 +333,23 @@ $(function ()
         addTutorialNotifyTab('listview');
         addTutorialNotifyTab('manifest');
         addTutorialNotifyTab('Idlegraphs');
-	StartCountdownClock(window.APT_OPTIONS.sliceExpires);
+	StartCountdownClock(expinfo.expires);
+	if (instanceStatus != "deferred") {
+	    $('.exp-running').removeClass("hidden");
+	}
 	StartStatusWatch();
 	if (window.APT_OPTIONS.oneonly) {
 	    sup.ShowModal('#oneonly-modal');
 	}
-	if (window.APT_OPTIONS.thisUid == window.APT_OPTIONS.creatorUid &&
-	    window.APT_OPTIONS.extension_denied) {
+	if (window.APT_OPTIONS.thisUid == expinfo.creator &&
+	    expinfo.extension_info.extension_denied) {
 	    ShowExtensionDeniedModal();
 	}
 	else if (window.APT_OPTIONS.snapping) {
 	    ShowProgressModal();
+	}
+	else if (instanceStatus == "deferred") {
+	    ShowRspec();
 	}
     }
 
@@ -388,12 +396,16 @@ $(function ()
 		      "continue getting page updates");
 	    }
 	    else {
-		StatusWatchCallBack(json);
-		if (instanceStatus == 'terminated') {
-		    clearInterval(statusID);
-		}
+		StatusWatchCallBack(json, function () {
+		    if (instanceStatus == 'terminated') {
+			clearInterval(statusID);
+		    }
+		    else {
+			// Okay to do again next timeout.
+			statusBusy = 0;
+		    }
+		});
 	    }
-	    statusBusy = 0;
 	}
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status",
@@ -405,12 +417,11 @@ $(function ()
 	});
 	xmlthing.done(callback);
     }
-    // Flag for StatusWatchCallBack()
-    var seenmanifests = false;
 
     // Call back for above.
-    function StatusWatchCallBack(json)
+    function StatusWatchCallBack(json, donefunc)
     {
+	//console.info("StatusWatchCallBack: ", json);
 	if (json.code) {
 	    // GENIRESPONSE_SEARCHFAILED
 	    if (json.code == 12) {
@@ -425,28 +436,19 @@ $(function ()
 	}
 	var status_html = "";
 
-	// This can show up at any time cause of async/early return.
-	if (_.has(json.value, "sliverurls")) {
-	    ShowSliverInfo(json.value.sliverurls);
+	// The urls can show up at any time cause of async/early return.
+	if (_.has(json.value, "sliverstatus")) {
+	    ShowSliverURLs(json.value.sliverstatus);
 	}
-
 	if (instanceStatus != lastStatus) {
             APT_OPTIONS.updatePage({ 'instance-status': instanceStatus });
 	    console.info("New Status: ", json);
 	
-	    status_html = status;
+	    status_html = json.value.status;
 
 	    var bgtype = "panel-info";
 	    status_message = "Please wait while we get your experiment ready";
 
-	    //
-	    // As soon as we have a manifest, show the topology.
-	    // 
-	    if (instanceStatus != "provisioning" &&
-		json.value.havemanifests && !seenmanifests) {
-		seenmanifests = true;
-		ShowTopo(false);
-	    }
 	    // Ditto the logfile.
 	    if (_.has(json.value, "logfile_url")) {
 		ShowLogfile(json.value.logfile_url);
@@ -454,11 +456,15 @@ $(function ()
 	    if (instanceStatus == 'stitching') {
 		status_html = "stitching";
 	    }
+	    else if (instanceStatus == 'deferred') {
+		status_html = "scheduled";
+		status_message = "Your experiment is scheduled to start later";
+	    }
 	    else if (instanceStatus == 'provisioning') {
 		status_html = "provisioning";
-		DisableButtons();
 		ProgressBarUpdate();
-		if (seenmanifests) {
+		if (lastStatus == "ready") {
+		    // We went back to provisioning, the topo is changing.
 		    changingtopo = true;
 		}
 	    }
@@ -468,15 +474,8 @@ $(function ()
 		if (json.value.canceled) {
 		    status_html += " (but canceled)";
 		}
-		else {
-		    // So the user can cancel. 
-		    EnableButton("terminate");
-		}
-		// If we were in the process of changing the topology,
-		// then need to update from the new manifests.
-		if (changingtopo) {
-		    ShowTopo(true);
-		    changingtopo = false;
+		else if (aggregatesDeferred(json.value)) {
+		    status_html += " (but some aggregates deferred)";
 		}
 	    }
 	    else if (instanceStatus == 'ready') {
@@ -489,17 +488,15 @@ $(function ()
 		}		
 		else {
 		    status_html = "<font color=green>ready</font>";
+		    if (aggregatesDeferred(json.value)) {
+			status_html += " (but some aggregates deferred)";
+		    }
 		}
 		if (lastStatus == "failed") {
 		    $('#error_panel').addClass("hidden");
 		    $('#ignore-failure').addClass("hidden");
 		}
 		ProgressBarUpdate();
-		EnableButtons();
-		// We should be looking at the node status instead.
-		if (lastStatus != "imaging") {
-		    AutoStartSSH();
-		}
 		ShowIdleDataTab();
 		if (json.value.haveopenstackstats) {
 		    ShowOpenstackTab();
@@ -527,40 +524,29 @@ $(function ()
 		
 		status_html = "<font color=red>failed</font>";
 		ProgressBarUpdate();
-		DisableButtons();
-		EnableButton("terminate");
-		EnableButton("refresh");
-		EnableButton("reloadtopo");
 	    }
 	    else if (instanceStatus == 'imaging') {
 		bgtype = "panel-warning";
 		status_message = "Your experiment is busy while we  " +
 		    "copy your disk";
 		status_html = "<font color=red>imaging</font>";
-		DisableButtons();
 	    }
 	    else if (instanceStatus == 'linktest') {
 		bgtype = "panel-warning";
 		status_message = "Your experiment is busy while we  " +
 		    "run linktest";
 		status_html = "<font color=red>linktest</font>";
-		DisableButtons();
 	    }
 	    else if (instanceStatus == 'imaging-failed') {
 		bgtype = "panel-danger";
 		status_message = "Your disk image request failed!";
 		status_html = "<font color=red>imaging-failed</font>";
-		DisableButtons();
-		EnableButton("terminate");
-		EnableButton("refresh");
-		EnableButton("reloadtopo");
 	    }
 	    else if (instanceStatus == 'terminating' ||
 		     instanceStatus == 'terminated') {
 		status_html = "<font color=red>" + instanceStatus + "</font>";
 		bgtype = "panel-danger";
 		status_message = "Your experiment has been terminated!";
-		DisableButtons();
 		StartCountdownClock.stop = 1;
 		if (lastStatus == "failed") {
 		    $('#ignore-failure').addClass("hidden");
@@ -570,7 +556,6 @@ $(function ()
 		status_html = "<font color=red>" + instanceStatus + "</font>";
 		bgtype = "panel-warning";
 		status_message = "The server is temporarily unavailable!";
-		DisableButtons();
 	    }
 	    if (!status_collapsed) {
 		$("#status_message").html(status_message);
@@ -580,6 +565,12 @@ $(function ()
 			     'panel-warning panel-default panel-info')
 		.addClass(bgtype);
 	    $("#quickvm_status").html(status_html);
+	    UpdateButtons(instanceStatus);
+
+	    // See if a transition from scheduled to started
+	    if (lastStatus == "deferred" && instanceStatus != "deferred") {
+		ExperimentStarted();
+	    }
 	}
 	else if (lastStatus == "ready" && instanceStatus == "ready") {
 	    if (servicesExecuting(json.value)) {
@@ -588,48 +579,84 @@ $(function ()
 	    }		
 	    else {
 		status_html = "<font color=green>ready</font>";
+		if (aggregatesDeferred(json.value)) {
+		    status_html += " (but some aggregates deferred)";
+		}
 	    }
 	    $("#quickvm_status").html(status_html);
-
-	    // This will happen when the user clicks the Reload Topology
-	    // button, ww want to redraw with the new manifests.
-	    if (changingtopo) {
-		ShowTopo(true);
-		changingtopo = false;
-	    }
-	}
-		 
-	//
-	// Look for a sliverstatus blob.
-	//
-	if (json.value.havemanifests && _.has(json.value, "sliverstatus")) {
-	    UpdateSliverStatus(json.value.sliverstatus);
 	}
 	lastStatus = instanceStatus;
+
+	// Add manifests as we get them or on topo change.
+	if (instanceStatus != "deferred" &&
+	    _.has(json.value, "sliverstatus")) {
+	    // This has a status object for all aggregates.
+	    aggcount = Object.keys(json.value.sliverstatus).length;
+	    // This will not do anything unless it needs to.
+	    ShowTopo(json.value.sliverstatus, function () {
+		// Do this after updates for manifest, which is async.
+		UpdateSliverStatus(json.value.sliverstatus);
+		// Async activity is now done, we can tell the caller.
+		// Be nice to use a promise, but have not figured them out yet
+		donefunc();
+	    });
+	}
+	else {
+	    // Async activity is now done, we can tell the caller.
+	    // Be nice to use a promise, but have not figured them out yet
+	    donefunc();
+	}
     }
 
-    //
-    // Enable/Disable buttons. 
-    //
-    function EnableButtons()
+    /*
+     * Set the button enable/disable according to current status.
+     */
+    function UpdateButtons(status)
     {
-	EnableButton("terminate");
-	EnableButton("refresh");
-	EnableButton("reloadtopo");
-	EnableButton("extend");
-	EnableButton("clone");
-	EnableButton("snapshot");
-	ToggleLinktestButtons(instanceStatus);	
-    }
-    function DisableButtons()
-    {
-	DisableButton("terminate");
-	DisableButton("refresh");
-	DisableButton("reloadtopo");
-	DisableButton("extend");
-	DisableButton("clone");
-	DisableButton("snapshot");
-	ToggleLinktestButtons(instanceStatus);	
+	var terminate;
+	var refresh;
+	var reloadtopo;
+	var extend;
+	var snapshot;
+
+	switch (status)
+	{
+	    case 'provisioning':
+	    case 'imaging':
+	    case 'linktest':
+	    case 'terminating':
+	    case 'terminated':
+	    case 'unknown':
+	        terminate = refresh = reloadtopo = extend = snapshot = 0;
+  	        break;
+
+	    case 'provisioned':
+	    case 'deferred':
+	        refresh = reloadtopo = extend = snapshot = 0;
+  	        terminate = 1;
+  	        break;
+	    
+	    case 'ready':
+	        terminate = refresh = reloadtopo = extend = snapshot = 1;
+  	        break;
+
+	    case 'failed':
+	    case 'imaging-failed':
+	        refresh = reloadtopo = terminate = 1;
+	        extend = snapshot = 0;
+  	        break;
+	}
+
+	// When admin lockdown is set, we never enable this button.
+	if (expinfo.admin_lockdown || !window.APT_OPTIONS.canterminate) {
+	    terminate = 0;
+	}
+	ButtonState('terminate', terminate);
+	ButtonState('refresh', refresh);
+	ButtonState('reloadtopo', reloadtopo);
+	ButtonState('extend', extend);
+	ButtonState('snapshot', snapshot);
+	ToggleLinktestButtons(status);
     }
     function EnableButton(button)
     {
@@ -644,7 +671,7 @@ $(function ()
 	if (button == "terminate") {
 	    button = "#terminate_button";
 	    // When admin lockdown is set, we never enable this button.
-	    if (admin_lockdown || !window.APT_OPTIONS.canterminate) {
+	    if (expinfo.admin_lockdown || !window.APT_OPTIONS.canterminate) {
 		enable = 0;
 	    }
 	}
@@ -654,8 +681,6 @@ $(function ()
 	    button = "#refresh_button";
 	else if (button == "reloadtopo")
 	    button = "#reload-topology-button";
-	else if (button == "clone" && nodecount == 1)
-	    button = "#clone_button";
 	else if (button == "snapshot")
 	    button = "#snapshot_button";
 	else if (button == "start-linktest")
@@ -745,10 +770,6 @@ $(function ()
 		statusbg   = "panel-warning";
 		statustext = "Your experiment is going to expire soon!";
 	    }
-	    else {
-		newcolor = "";
-		statusbg = "";
-	    }
 	    if (newcolor != color) {
 		$("#quickvm_countdown")
 		    .removeClass("text-warning text-danger")
@@ -815,120 +836,6 @@ $(function ()
     }
 
     //
-    // Request lockout set/clear.
-    //
-    function DoLockout(enable)
-    {
-	enable = (enable ? 1 : 0);
-	
-	var callback = function(json) {
-	    if (json.code) {
-		alert("Failed to change lockout: " + json.value);
-		// Flip the checkbox back.
-		$('#lockout_checkbox').prop("checked", false);
-		return;
-	    }
-	    lockout = enable;
-	}
-	var xmlthing = sup.CallServerMethod(ajaxurl, "status", "Lockout",
-					     {"uuid" : uuid,
-					      "lockout" : enable});
-	xmlthing.done(callback);
-    }
-
-    //
-    // Request lockdown set/clear.
-    //
-    function DoLockdown(which, lockdown, force)
-    {
-	var action = (lockdown ? "set" : "clear");
-	// Optional arg.
-	if (force === undefined) {
-	    force = 0;
-	}
-	
-	var callback = function(json) {
-	    if (json.code) {
-		sup.HideModal("#waitwait-modal", function () {
-		    if (lockdown) {
-			// Flip the checkbox back.
-			$('#' + which + '_lockdown_checkbox')
-			    .prop("checked", false);
-		    }
-		    else {
-			// Flip the checkbox back.
-			$('#' + which + '_lockdown_checkbox')
-			    .prop("checked", true);
-		    }
-		    if (json.code != GENIRESPONSE_REFUSED) {
-			sup.SpitOops("oops",
-				     "Lockdown failed: " + json.value);
-			return;
-		    }
-		    // Refused.
-		    $('#force-lockdown').click(function (event) {
-			sup.HideModal('#lockdown-refused', function() {
-			    // Flip the checkbox again
-			    $('#' + which + '_lockdown_checkbox')
-				.prop("checked", true);
-			    // Again with force.
-			    DoLockdown(which, lockdown, 1);
-			});
-		    });
-		    $('#lockdown-refused pre').text(json.value);
-		    sup.ShowModal('#lockdown-refused', function () {
-			$('#force-lockdown').off("click");
-		    });
-		});
-		return;
-	    }
-	    sup.HideModal("#waitwait-modal");
-	    if (which == "user") {
-		user_lockdown = lockdown;
-	    }
-	    else if (which == "admin") {
-		admin_lockdown = lockdown;
-		if (lockdown) {
-		    DisableButton("terminate");
-		}
-		else {
-		    EnableButton("terminate");
-		}
-	    }
-	}
-	sup.ShowModal("#waitwait-modal");
-	var xmlthing = sup.CallServerMethod(ajaxurl, "status", "Lockdown",
-					    {"uuid"   : uuid,
-					     "which"  : which,
-					     "action" : action,
-					     "force"  : force});
-	xmlthing.done(callback);
-    }
-
-    //
-    // Request panic mode set/clear.
-    //
-    function DoQuarantine(mode)
-    {
-	mode = (mode ? 1 : 0);
-	
-	var callback = function(json) {
-	    sup.HideModal('#waitwait-modal');
-	    if (json.code) {
-		sup.SpitOops("oops",
-			     "Failed to change Quarantine mode: " + json.value);
-		return;
-	    }
-	    paniced = mode;
-	}
-	sup.ShowModal('#waitwait-modal');
-	var xmlthing = sup.CallServerMethod(ajaxurl, "status", "Quarantine",
-					     {"uuid" : uuid,
-					      "quarantine" : mode});
-	xmlthing.done(callback);
-    }
-
-    //
     // Request a refresh from the backend cluster, to see if the sliverstatus
     // has changed. 
     //
@@ -961,8 +868,6 @@ $(function ()
     {
 	var callback = function(json) {
 	    //console.info(json);
-	    EnableButtons();
-	    
 	    if (json.code) {
 		statusHold = 0;
 		sup.HideModal('#waitwait-modal');
@@ -976,7 +881,6 @@ $(function ()
 	    sup.HideModal('#waitwait-modal');
 	}
 	statusHold = 1;
-	DisableButtons();
 	sup.ShowModal('#waitwait-modal');
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status",
@@ -996,16 +900,32 @@ $(function ()
     svgimg.setAttributeNS(null, 'visibility', 'visible');
 
     // Helper for above and called from the status callback.
-    function UpdateSliverStatus(oblob)
+    function UpdateSliverStatus(statusblob)
     {
 	if (nodecount > MAXJACKSNODES) {
 	    return;
 	}
-	$.each(oblob , function(urn, iblob) {
-	    $.each(iblob , function(node_id, details) {
+	$.each(statusblob , function(urn, iblob) {
+	    // Will not have node details until manifest is ready.
+	    if (!_.has(iblob, "details")) {
+		if (iblob.status == "deferred") {
+		    deferAggregate(urn);
+		}
+		return;
+	    }
+	    if (iblob.offline) {
+		OfflineAggregate(urn);
+		return;
+	    }
+	    $.each(iblob.details, function(node_id, details) {
+		var jacksID = jacksIDs[node_id];
+		// No manifest yet for this node.
+		if (jacksID === undefined) {
+		    return;
+		}
 		if (details.status == "ready") {
 		    // Greenish.
-		    $('#' + jacksIDs[node_id] + ' .node .nodebox')
+		    $('#' + jacksID + ' .node .nodebox')
 			.css("fill", "#91E388");
 		    $('#listview-row-' + node_id + ' td[name="node_id"], ' +
 		      '#listview-row-' + node_id + ' td[name="client_id"]')
@@ -1013,7 +933,7 @@ $(function ()
 		}
 		else if (details.status == "failed") {
 		    // Bootstrap bg-danger color
-		    $('#' + jacksIDs[node_id] + ' .node .nodebox')
+		    $('#' + jacksID + ' .node .nodebox')
 			.css("fill", "#f2dede");
 		    $('#listview-row-' + node_id + ' td[name="node_id"], ' +
 		      '#listview-row-' + node_id + ' td[name="client_id"]')
@@ -1021,7 +941,7 @@ $(function ()
 		}
 		else {
 		    // Bootstrap bg-warning color
-		    $('#' + jacksIDs[node_id] + ' .node .nodebox')
+		    $('#' + jacksID + ' .node .nodebox')
 			.css("fill", "#fcf8e3");
 		    $('#listview-row-' + node_id + ' td[name="node_id"], ' +
 		      '#listview-row-' + node_id + ' td[name="client_id"]')
@@ -1076,24 +996,24 @@ $(function ()
 		    html += "<tr><td class='border-none'>Startup Service:</td>" +
 			"<td class='border-none'>" + tag + "</td></tr>";
 		    
-		    $('#' + jacksIDs[node_id] + ' .node .node-status')
+		    $('#' + jacksID + ' .node .node-status')
 		        .css("visibility", "visible");
 
-		    if (!$('#' + jacksIDs[node_id] +
+		    if (!$('#' + jacksID +
 			   ' .node .node-status-icon').length) {
-			$('#' + jacksIDs[node_id] + ' .node .node-status')
+			$('#' + jacksID + ' .node .node-status')
 		            .append(svgimg.cloneNode());
 		    }
-		    $('#' + jacksIDs[node_id] + ' .node .node-status-icon')
+		    $('#' + jacksID + ' .node .node-status-icon')
 			.attr("href", "fonts/" + icon);
 		    
-		    if ($('#' + jacksIDs[node_id] + ' .node .node-status-icon')
+		    if ($('#' + jacksID + ' .node .node-status-icon')
 			.data("bs.tooltip")) {
-			$('#' + jacksIDs[node_id] + ' .node .node-status-icon')
+			$('#' + jacksID + ' .node .node-status-icon')
 			    .data("bs.tooltip").options.title = tag;
 		    }
 		    else {
-			$('#' + jacksIDs[node_id] + ' .node .node-status-icon')
+			$('#' + jacksID + ' .node .node-status-icon')
 			    .tooltip({"title"     : tag,
 				      "trigger"   : "hover",
 				      "html"      : true,
@@ -1103,29 +1023,74 @@ $(function ()
 		    }
 		}
 		html += "</tbody></table>";
+		UpdateNodePopover(jacksID, html);
 
-		if ($('#' + jacksIDs[node_id]).data("bs.popover")) {
-		    $('#' + jacksIDs[node_id])
-			.data("bs.popover").options.content = html;
-
-		    var isVisible = $('#' + jacksIDs[node_id]).
-			data('bs.popover').tip().hasClass('in');
-		    if (isVisible) {
-			$('#' + jacksIDs[node_id])
-			    .data('bs.popover').tip()
-			    .find('.popover-content').html(html);
-		    }
-		}
-		else {
-		    $('#' + jacksIDs[node_id])
-			.popover({"content"   : html,
-				  "trigger"   : "hover",
-				  "html"      : true,
-				  "container" : "body",
-				  "placement" : "auto",
-				 });
-		}
 	    });
+	});
+    }
+
+    // Update the popover the node icon box
+    function UpdateNodePopover(jacksID, html)
+    {
+	if ($('#' + jacksID).data("bs.popover")) {
+	    $('#' + jacksID).data("bs.popover").options.content = html;
+
+	    var isVisible = $('#' + jacksID)
+		.data('bs.popover').tip().hasClass('in');
+	    
+	    if (isVisible) {
+		$('#' + jacksID)
+		    .data('bs.popover').tip()
+		    .find('.popover-content').html(html);
+	    }
+	}
+	else {
+	    $('#' + jacksID)
+		.popover({"content"   : html,
+			  "trigger"   : "hover",
+			  "html"      : true,
+			  "container" : "body",
+			  "placement" : "auto",
+			 });
+	}
+    }
+
+    function deferAggregate(urn)
+    {
+	if (!_.has(jacksSites, urn)) {
+	    // Manifest not processed yet.
+	    return;
+	}
+	$.each(jacksSites[urn], function(node_id, jacksID) {
+	    //console.info("deferAggregate: ", urn, node_id, jacksID);
+	    $('#' + jacksID + ' .node .nodebox')
+		.css("fill", "blue");
+
+	    var html =
+		"This node is currently unavailable and cannot be added " +
+		"to your experiment. We will continue trying to contact " +
+		"this node.";
+
+	    UpdateNodePopover(jacksID, html);
+	});
+    }
+
+    function OfflineAggregate(urn)
+    {
+	if (!_.has(jacksSites, urn)) {
+	    // Manifest not processed yet.
+	    return;
+	}
+	$.each(jacksSites[urn], function(node_id, jacksID) {
+	    //console.info("deferAggregate: ", urn, node_id, jacksID);
+	    $('#' + jacksID + ' .node .nodebox')
+		.css("fill", "#fcf8e3");
+
+	    var html =
+		"This node is currently unreachable, operations on this " +
+		"node will fail until it becomes reachable again.";
+
+	    UpdateNodePopover(jacksID, html);
 	});
     }
 
@@ -1159,6 +1124,22 @@ $(function ()
 		    if (_.has(status, "execute_state")) {
 			return 1;
 		    }
+		}
+	    }
+	}
+	return 0;
+    }
+    //
+    // Check the status blob to see if any aggregates are in the
+    // the deferred state.
+    //
+    function aggregatesDeferred(blob)
+    {
+	if (_.has(blob, "sliverstatus")) {
+	    for (var urn in blob.sliverstatus) {
+		var status = blob.sliverstatus[urn].status;
+		if (status == "deferred") {
+		    return 1;
 		}
 	    }
 	}
@@ -1212,7 +1193,7 @@ $(function ()
     }
 	
     //
-    // Request a node reboot from the backend cluster.
+    // Request a node deletion from the backend cluster.
     //
     function DoDeleteNodes(nodeList)
     {
@@ -1544,16 +1525,6 @@ $(function ()
 	}
     }
 
-    // For autostarting ssh on single node experiments.
-    var startOneSSH = null;
-
-    function AutoStartSSH()
-    {
-	if (startOneSSH) {
-	    startOneSSH();
-	}
-    }
-
     var listview_row = 
 	"<tr id='listview-row'>" +
 	" <td name='client_id'>n/a</td>" +
@@ -1583,10 +1554,10 @@ $(function ()
     // Show the topology inside the topo container. Called from the status
     // watchdog and the resize wachdog. Replaces the current topo drawing.
     //    
-    function ShowTopo(isupdate)
+    function ShowTopo(statusblob, donefunc)
     {
-	//console.info("ShowTopo", isupdate);
-	
+	//console.info("ShowTopo", changingtopo, statusblob);
+
 	//
 	// Maybe this should come from rspec? Anyway, we might have
 	// multiple manifests, but only need to do this once, on any
@@ -1635,15 +1606,18 @@ $(function ()
 	    // Find all of the nodes, and put them into the list tab.
 	    // Clear current table.
 	    $(xml).find("node, emulab\\:vhost").each(function() {
+		var node   = $(this).attr("client_id");
+		
 		// Only nodes that match the aggregate being processed,
 		// since we send the same rspec to every aggregate.
 		var manager_urn = $(this).attr("component_manager_id");
 		if (!manager_urn.length || manager_urn != aggregate_urn) {
 		    return;
 		}
+		//console.info("ProcessNodes", node, manager_urn);
+		
 		var tag    = $(this).prop("tagName");
 		var isvhost= (tag == "emulab:vhost" ? 1 : 0);
-		var node   = $(this).attr("client_id");
 		TimeStamp("Processing node " + node);
 		var stype  = $(this).find("sliver_type");
 		var login  = $(this).find("login");
@@ -1779,7 +1753,8 @@ $(function ()
 		    clone.find(' [name=console]')
 			.parent().addClass('disabled');		    
 		}
-		if (!isvhost && !isfw) {
+		// Not allowed to delete vhost/firewall or last node at site.
+		if (! (isvhost || isfw || rawcount == 1)) {
 		    //
 		    // Delete button handler
 		    //
@@ -1800,163 +1775,176 @@ $(function ()
 		/*
 		 * Make a copy of the master context menu and init.
 		 */
-		if (rawcount <= MAXJACKSNODES) {
-		    var clone = $("#context-menu").clone();
+		var clone = $("#context-menu").clone();
 
-		    // Change the ID of the clone so its unique.
-		    clone.attr('id', "context-menu-" + node);
+		// Change the ID of the clone so its unique.
+		clone.attr('id', "context-menu-" + node);
 	    
-		    // Insert into the context-menus div.
-		    $('#context-menus').append(clone);
+		// Insert into the context-menus div.
+		$('#context-menus').append(clone);
 
-		    // If no console, then grey out the options.
-		    if (!_.has(consolenodes, node)) {
-			$(clone).find("li[id=console]").addClass("disabled");
-			$(clone).find("li[id=consolelog]").addClass("disabled");
-		    }
-		    // If a vhost, then grey out options.
-		    if (isvhost || isfw) {
-			$(clone).find("li[id=delete]").addClass("disabled");
-		    }
-		    contextMenus[node] = clone;
+		// If no console, then grey out the options.
+		if (!_.has(consolenodes, node)) {
+		    $(clone).find("li[id=console]").addClass("disabled");
+		    $(clone).find("li[id=consolelog]").addClass("disabled");
 		}
+		// If a vhost/firewall, then grey out options. Or if there
+		// is just one node at this site.
+		if (isvhost || isfw || rawcount == 1) {
+		    $(clone).find("li[id=delete]").addClass("disabled");
+		}
+		contextMenus[node] = clone;
 		nodecount++;
 	    });
 	}
-	
-	var callback = function(json) {
-	    //console.info(json);
 
-	    // Process all the manifests to create the list view.
-	    // Clear the list view table before adding nodes. Not needed?
-            $('#listview_table > tbody').html("");
+	/*
+	 * After reloading the topology or deleting a node, just rebuild
+	 * everything. 
+	 */
+	if (changingtopo) {
+	    // Clear the list view table before adding nodes again.
+	    $('#listview_table > tbody').html("");
+	    // Reload all manifests.
+	    manifests = {};
+	    // Need to redo the lists.
+	    clientid2nodeid = {};
+	}
+	/*
+	 * If we have all the manifests then nothing to do.
+	 */
+	if (Object.keys(statusblob).length == Object.keys(manifests).length) {
+	    donefunc();
+	    return;
+	}
 
-	    // Save off some templatizing data as we process each manifest.
-	    var uridata = {};
+	// Save off some templatizing data as we process each manifest.
+	// Do not need to do this stuff on a topo change.
+	var uridata = {};
 	    
-	    // Save off the last manifest xml blob so we quick process the
-	    // possibly templatized instructions quickly, without reparsing the
-	    // manifest again needlessly.
-	    var xml = null;
+	// Save off the last manifest xml blob so we quick process the
+	// possibly templatized instructions quickly, without reparsing the
+	// manifest again needlessly.
+	var xml = null;
+
+	/*
+	 * This is the continuation we run after we have all the
+	 * manifests that are currently available.
+	 */
+	var gotallmanifests = function() {
+	    //console.info("gotallmanifests");
+	    
+	    // Did we get any new manifests?
+	    if (!xml) {
+		// Signal GetStatus() looper that we are done, 
+		donefunc();
+		return;
+	    }
+	    // Do not show secrets if viewing using foreign admin creds
+	    if (!isfadmin) {
+		// This will update the instructions.
+		FindEncryptionBlocks(xml);
+	    }
+	    // Update the snapshot modal with new nodes.
+	    UpdateSnapshotModal();
+
+	    // Signal GetStatus() looper that we are done, 
+	    donefunc();
+	};
+
+	/*
+	 * Process one manifest at a time, then finish with above function.
+	 */
+	var gotonemanifest = function(aggregate_urn, manifest) {
+	    //console.info("gotonemanifest", aggregate_urn);
 
 	    TimeStamp("Proccessing manifest");
-	    _.each(json.value, function(manifest, aggregate_urn) {
-		var xmlDoc = $.parseXML(manifest);
-		xml = $(xmlDoc);
 
-		MakeUriData(xml,uridata);
-		ProcessNodes(aggregate_urn, xml);
-	    });
+	    var xmlDoc = $.parseXML(manifest);
+	    xml = $(xmlDoc);
+	    MakeUriData(xml,uridata);
+	    ProcessNodes(aggregate_urn, xml);
 	    TimeStamp("Done proccessing manifest");
 
+	    UpdateInstructions(xml, uridata);
+
+	    /*
+	     * Wait until we have first manifest before initializing this,
+	     * else the user sees a blank palette.
+	     */
 	    $("#showtopo_container").removeClass("invisible");
-	    if (nodecount <= MAXJACKSNODES) {
-		// Pass all the manifests to the viewer.
+	    $('#quicktabs_ul a[href="#topology"]')
+		.parent().removeClass("hidden");
+	    $('#quicktabs_ul a[href="#manifest"]')
+		.parent().removeClass("hidden");
+	    $('#quicktabs_ul a[href="#listview"]')
+		.parent().removeClass("hidden");
+	    $('#quicktabs_content #topology').removeClass("hidden");
+	    $('#quicktabs_content #manifest').removeClass("hidden");
+	    $('#quicktabs_content #listview').removeClass("hidden");
+	    
+	    if (!jacksInstance) {
 		$('#quicktabs_ul a[href="#topology"]').tab('show');
-		ShowViewer('#showtopo_statuspage', json.value);
+		ShowViewer('#showtopo_statuspage',
+			   Object.keys(statusblob).length > 1, manifest);
+	    }
+	    else if (changingtopo) {
+		// When we get first new manifest, clear the viewer palette.
+		ClearViewer(manifest);
+		changingtopo = false;
 	    }
 	    else {
-		$('#quicktabs_ul a[href="#listview"]').tab('show');
+		AddToViewer(manifest);
 	    }
 
-	    // Handler for select/deselect all rows in the list view.
-	    if (!isupdate) {
-		$('#select-all').change(function () {
-		    if ($(this).prop("checked")) {
-			$('#listview_table [name=select]')
-			    .prop("checked", true);
-		    }
-		    else {
-			$('#listview_table [name=select]')
-			    .prop("checked", false);
-		    }
-		});
-	    }
-	    
-	    //
-	    // Handler for the action menu next to the select mention above.
-	    // Foreign admins do not get a menu, but easier to just hide it.
-	    //
-	    if (isfadmin) {
-		$('#listview-action-menu').addClass("invisible");
-	    }
-	    else {
-		$('#listview-action-menu li a')
-		    .click(function (e) {
-			window.APT_OPTIONS.gaButtonEvent(e);
-			var checked = [];
+	    /*
+	     * No point in showing linktest if no links at any site.
+	     * For the moment, we do not count links if they span sites
+	     * since linktest does not work across stitched links.
+	     *
+	     * We reset showlinktest cause we get called again after
+	     * a topo change or reload.
+	     */
+	    showlinktest = false;
+	    $(xml).find("link").each(function() {
+		var managers = $(this).find("component_manager");
+		if (managers.length == 1)
+		    showlinktest = true;
+	    });
+	    SetupLinktest(instanceStatus);
 
-			// Get the list of checked nodes.
-			$('#listview_table [name=select]').each(function() {
-			    if ($(this).prop("checked")) {
-				checked.push($(this).attr("id"));
-			    }
-			});
-			if (checked.length) {
-			    ActionHandler($(e.target).attr("name"), checked);
-			}
-		    });
-	    }
-
-	    TimeStamp("Instructions and LinkTest");
-	    if (xml != null) {
-		UpdateInstructions(xml,uridata);
-		// Do not show secrets if viewing using foreign admin creds
-		if (!isfadmin) {
-		    FindEncryptionBlocks(xml);
-		}
-
-		/*
-		 * No point in showing linktest if no links at any site.
-		 * For the moment, we do not count links if they span sites
-		 * since linktest does not work across stitched links.
-		 *
-		 * We reset showlinktest cause we get called again after
-		 * a deletenode.
-		 */
-		showlinktest = false;
-		$(xml).find("link").each(function() {
-		    var managers = $(this).find("component_manager");
-		    if (managers.length == 1)
-			showlinktest = true;
-		});
-		SetupLinktest(instanceStatus);
-	    }
-	    TimeStamp("Instructions and LinkTest done");
-
-	    // Setup the snapshot modal.
-	    SetupSnapshotModal();
-
-	    if (nodecount == 1) {
-		// Not allowed to delete the last node.
-		var nodename = Object.keys(hostportList)[0];
-		$('#listview-row-' + nodename + ' [name=delete]')
-		    .parent().addClass('disabled');
-		$(contextMenus[nodename])
-		    .find("li[id=delete]").addClass("disabled");
-	    }
-
-	    // Bind a function to start up ssh for one node topologies.
-	    if (nodecount == 1 && !oneonly && dossh) {
-		startOneSSH = function () {
-		    var nodename = Object.keys(hostportList)[0];
-		    var hostport = hostportList[nodename];
-		    NewSSHTab(hostport, nodename);
-		};
-	    }
-	    
-	    // There is enough asynchrony that we have to watch for the
-	    // case that we went ready before we got this done, and so the
-	    // buttons won't be correct.
-	    if (lastStatus == "ready") {
-		EnableButtons();
-	    }
+	    // Mark that we have this manifest;
+	    manifests[aggregate_urn] = manifest;
 	}
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "status",
-					    "GetInstanceManifest",
-					    {"uuid" : uuid});
-	xmlthing.done(callback);
+	var p = $.when();
+	Object.keys(statusblob)
+	    .forEach(function(urn) {
+		if (_.has(manifests, urn) ||
+		    statusblob[urn] == null ||
+		    !statusblob[urn].havemanifest) {
+		    p = p.then(function () { return 0; });
+		}
+		else {
+		    p = p.then(function() {
+			return sup.CallServerMethod(null, "status",
+						    "GetInstanceManifest",
+						    {"uuid" : uuid,
+						     "aggregate_urn" : urn},
+			     function (json) {
+				 if (json.code) {
+				     console.info("GetInstanceManifest:" +
+						  json.value);
+				     donefunc();
+				     return -1;
+				 }
+				 gotonemanifest(urn, json.value);
+				 return 0;
+			     });
+		    });
+		}
+	    });
+	
+	p = p.then(function () { gotallmanifests(); });
     }
 
     //
@@ -1964,6 +1952,8 @@ $(function ()
     //
     function ShowManifest(manifest)
     {
+	//console.info("ShowManifest");
+	
 	var mode   = "text/xml";
 
 	$("#manifest_textarea").css("height", "300");
@@ -1982,6 +1972,44 @@ $(function ()
 	$('#show_manifest_tab').on('shown.bs.tab', function (e) {
 	    myCodeMirror.refresh();
 	});
+    }
+
+    //
+    // Show the rspec in the tab, using codemirror.
+    //
+    function ShowRspec()
+    {
+	var mode   = "text/xml";
+
+	$("#rspec_textarea").css("height", "300");
+	$('#rspec_textarea .CodeMirror').remove();
+
+	var callback = function (json) {
+	    //console.info(json);
+	    if (json.code) {
+		console.info("Could not get rspec: " + json.value);
+		return;
+	    }
+	    var myCodeMirror = CodeMirror(function(elt) {
+		$('#rspec_textarea').prepend(elt);
+	    }, {
+		value: json.value,
+		lineNumbers: false,
+		smartIndent: true,
+		mode: mode,
+		readOnly: true,
+	    });
+
+	    $('#show_rspec_tab').on('shown.bs.tab', function (e) {
+		myCodeMirror.refresh();
+	    });
+	    $("#showtopo_container").removeClass("invisible");
+	    $('#quicktabs_ul a[href="#rspec"]').parent().removeClass("hidden");
+	    $('#quicktabs_content #rspec').removeClass("hidden");
+	    $('#quicktabs_ul a[href="#rspec"]').tab('show');
+	};
+	sup.CallServerMethod(null, "status", "GetRspec",
+			     {"uuid"     : uuid}, callback);
     }
 
     function MakeUriData(xml,uridata)
@@ -2066,12 +2094,6 @@ $(function ()
 			 },
 			 function(failed)
 			 {
-			     if (failed) {
-				 EnableButtons();
-			     }
-			     else {
-				 EnableButtons();
-			     }
 			 },
 	                 false);
     }
@@ -2080,6 +2102,16 @@ $(function ()
     {
 	var snapshot_help_timer;
 	var clone_help_timer;
+
+	/*
+	 * We now show the single imaging button all the time. The workflow
+	 * we present later depends on canclone/cansnap. But not allowed
+	 * to clone a repo based profile.
+	 */
+	if (! ((window.APT_OPTIONS.canclone && !expinfo.repurl) ||
+	       window.APT_OPTIONS.cansnap)) {
+	    return;
+	}
 
 	$("button#snapshot_button").click(function(event) {
 	    $('button#snapshot_button').popover('hide');
@@ -2132,120 +2164,130 @@ $(function ()
 		target.popover('destroy');
 	    });
 	});
-	
+
+	$('#snapshot_modal input[type=radio]').on('change', function() {
+	    switch($(this).val()) {
+	    case 'update-profile':
+		$('#snapshot-name-div').addClass("hidden");
+		$('#snapshot-wholedisk-div').addClass("hidden");
+		break;
+	    case 'copy-profile':
+	    case 'new-profile':
+		$('#snapshot-name-div .new-profile').removeClass("hidden");
+		$('#snapshot-name-div .image-only').addClass("hidden");
+		$('#snapshot-name-div').removeClass("hidden");
+		if (wholedisk) {
+		    $('#snapshot-wholedisk-div').removeClass("hidden");
+		}
+		break;
+	    case 'image-only':
+		$('#snapshot-name-div .new-profile').addClass("hidden");
+		$('#snapshot-name-div .image-only').removeClass("hidden");
+		$('#snapshot-name-div').removeClass("hidden");
+		if (wholedisk) {
+		    $('#snapshot-wholedisk-div').removeClass("hidden");
+		}
+		break;
+	    }
+	});
+
+	/*
+	 * Not allowed to clone/snap repo based profiles, which means
+	 * no choice at all, so hide everything except what name to
+	 * use for the image. 
+	 */
+	if (expinfo.repourl) {
+	    $('#update-profile').closest(".radio").addClass("hidden");
+	    $('#copy-profile').closest(".radio").addClass("hidden");
+	    $('#new-profile').closest(".radio").addClass("hidden");
+	    $('#image-only').prop("checked", true);
+	    $('#image-only').trigger("change");
+	    $('#image-only').closest(".radio").addClass("hidden");
+	    $('#snapshot-radio-title').addClass("hidden");
+	}
+	else if (!window.APT_OPTIONS.cansnap) {
+	    $('#update-profile').closest(".radio").remove();
+	    $('#copy-profile').prop("checked", true);
+	    $('#copy-profile').trigger("change");
+	}
+    }
+
+    /*
+     * Update the list of nodes in the modal as manifests come in.
+     */
+    function UpdateSnapshotModal() {
 	/*
 	 * We now show the single imaging button all the time. The workflow
 	 * we present later depends on canclone/cansnap. But not allowed
 	 * to clone a repo based profile.
 	 */
-	if ((window.APT_OPTIONS.canclone &&
-	     window.APT_OPTIONS.repourl === undefined) ||
-	    window.APT_OPTIONS.cansnap) {
-	    $("#snapshot_button").removeClass("hidden");
+	if (! ((window.APT_OPTIONS.canclone && !expinfo.repourl) ||
+	       window.APT_OPTIONS.cansnap)) {
+	    return;
+	}
+	$("#snapshot_button").removeClass("hidden");
 
-	    /*
-	     * Create an options list for the dropdown.
-	     */
-	    var html = "";
+	/*
+	 * Create an options list for the dropdown. We are going to replace
+	 * the existing contents, so add the first option.
+	 */
+	var html = "<option value=''>Please Select a Node</option>";
 		    
-	    _.each(clientid2nodeid, function (node_id, client_id) {
-		html = html +
-		    "<option value='" + client_id + "'>" +
-		    client_id + " (" + node_id + ")" +
-		    "</option>";
-	    });
-	    $('#snapshot_modal .choose-node select').append(html);
+	_.each(clientid2nodeid, function (node_id, client_id) {
+	    html = html +
+		"<option value='" + client_id + "'>" +
+		client_id + " (" + node_id + ")" +
+		"</option>";
+	});
+	$('#snapshot_modal .choose-node select').html(html);
 
-	    if (nodecount == 1) {
-		// One node, stick that into the first sentence.
-		var nodename = Object.keys(hostportList)[0];
-		$('#snapshot_modal .one-node .node_id')
-		    .html(nodename + " (" + clientid2nodeid[nodename] + ")");
-		$('#snapshot_modal .one-node.text-info').removeClass("hidden");
-		// And select it in the options for later, but stays hidden.
-		$('#snapshot_modal .choose-node select').val(nodename);
-	    }
-	    else {
-		$('#snapshot_modal .choose-node').removeClass("hidden");
-	    }
+	if (Object.keys(clientid2nodeid).length == 1) {
+	    // One node, stick that into the first sentence.
+	    var nodename = Object.keys(hostportList)[0];
+	    $('#snapshot_modal .one-node .node_id')
+		.html(nodename + " (" + clientid2nodeid[nodename] + ")");
+	    $('#snapshot_modal .choose-node').addClass("hidden");
+	    $('#snapshot_modal .one-node.text-info').removeClass("hidden");
+	    // And select it in the options for later, but stays hidden.
+	    $('#snapshot_modal .choose-node select').val(nodename);
+	}
+	else {
+	    $('#snapshot_modal .one-node.text-info').addClass("hidden");
+	    $('#snapshot_modal .choose-node').removeClass("hidden");
+	}
 
-	    $('#snapshot_modal input[type=radio]').on('change', function() {
-		switch($(this).val()) {
-		case 'update-profile':
-		    $('#snapshot-name-div').addClass("hidden");
-		    $('#snapshot-wholedisk-div').addClass("hidden");
-		    break;
-		case 'copy-profile':
-		case 'new-profile':
-		    $('#snapshot-name-div .new-profile').removeClass("hidden");
-		    $('#snapshot-name-div .image-only').addClass("hidden");
-		    $('#snapshot-name-div').removeClass("hidden");
-		    if (wholedisk) {
-			$('#snapshot-wholedisk-div').removeClass("hidden");
-		    }
-		    break;
-		case 'image-only':
-		    $('#snapshot-name-div .new-profile').addClass("hidden");
-		    $('#snapshot-name-div .image-only').removeClass("hidden");
-		    $('#snapshot-name-div').removeClass("hidden");
-		    if (wholedisk) {
-			$('#snapshot-wholedisk-div').removeClass("hidden");
-		    }
-		    break;
-		}
-	    });
-
+	/*
+	 * If the user decides to create an image only, then lets try
+	 * to guide them to reasonable choice for the name to use. 
+	 */
+	if (Object.keys(clientid2nodeid).length == 1) {
 	    /*
-	     * Not allowed to clone/snap repo based profiles, which means
-	     * no choice at all, so hide everything except what name to
-	     * use for the image. 
+	     * If allowed to snapshot, then use the current profile name.
+	     * Otherwise might as well let them choose the name.
 	     */
-	    if (window.APT_OPTIONS.repourl !== undefined) {
-		$('#update-profile').closest(".radio").addClass("hidden");
-		$('#copy-profile').closest(".radio").addClass("hidden");
-		$('#new-profile').closest(".radio").addClass("hidden");
-		$('#image-only').prop("checked", true);
-		$('#image-only').trigger("change");
-		$('#image-only').closest(".radio").addClass("hidden");
-		$('#snapshot-radio-title').addClass("hidden");
+	    if (window.APT_OPTIONS.cansnap) {
+		$('#snapshot-name-div .image-only input')
+		    .val(expinfo.profile_name);
+		$('#snapshot-name-div .snapshot-name-warning')
+		    .removeClass("hidden");
 	    }
-	    else if (!window.APT_OPTIONS.cansnap) {
-		$('#update-profile').closest(".radio").remove();
-		$('#copy-profile').prop("checked", true);
-		$('#copy-profile').trigger("change");
-	    }
-
+	    $('#snapshot_modal .choose-node select').off("change");
+	}
+	else {
 	    /*
-	     * If the user decides to create an image only, then lets try
-	     * to guide them to reasonable choice for the name to use. 
+	     * Lets append the name of the choosen node to the profile name.
 	     */
-	    if (nodecount == 1) {
-		/*
-		 * If allowed to snapshot, then use the current profile name.
-		 * Otherwise might as well let them choose the name.
-		 */
-		if (window.APT_OPTIONS.cansnap) {
-		    $('#snapshot-name-div .image-only input')
-			.val(window.APT_OPTIONS.profileName);
+	    $('#snapshot_modal .choose-node select').off("change");
+	    $('#snapshot_modal .choose-node select')
+		.on("change", function (event) {
+		    var node = $(this).val();
+		    var name = expinfo.profile_name_ + "." + node;
+		    $('#snapshot-name-div .image-only input').val(name);
 		    $('#snapshot-name-div .snapshot-name-warning')
 			.removeClass("hidden");
-		}
-	    }
-	    else {
-		/*
-		 * Lets append the name of the choosen node to the profile name.
-		 */
-		$('#snapshot_modal .choose-node select')
-		    .on("change", function (event) {
-			var node = $(this).val();
-			var name = window.APT_OPTIONS.profileName + "." + node;
-			$('#snapshot-name-div .image-only input').val(name);
-			$('#snapshot-name-div .snapshot-name-warning')
-			    .removeClass("hidden");
-		    });
-	    }
+		});
 	}
-    }	
+    }
 
     /*
      * New version of disk image creation.
@@ -2268,7 +2310,7 @@ $(function ()
 	// Watch for the case that we would create a new version of a
 	// system image.  Warn the user of this.
 	//
-	if (window.APT_OPTIONS.project == EMULAB_OPS) {
+	if (expinfo.project == EMULAB_OPS) {
 	    $('#cancel-update-systemimage').click(function() {
 		sup.HideModal('#confirm-update-systemimage-modal');
 	    });
@@ -2485,17 +2527,17 @@ $(function ()
     {
 	var createArgs = {
 	    "formfields" : {"action"       : "clone",
-			    "profile_pid"  : window.APT_OPTIONS.project,
+			    "profile_pid"  : expinfo.project,
 			    "profile_name" : args["profilename"],
 			    "profile_who"  : "public",
-			    "snapuuid"     : window.APT_OPTIONS.uuid,
+			    "snapuuid"     : expinfo.uuid,
 			    "snapnode_id"  : args.node_id,
 			    "update_prepare" : args["update_prepare"],
 			   },
 	};
 	if (args["operation"] == "copy-profile") {
 	    createArgs["formfields"]["copy-profile"] =
-		window.APT_OPTIONS.profileUUID;
+		expinfo.profile_uuid;
 	}
 	/*
 	 * Callback after creating new profile with snapshot operation.
@@ -2737,17 +2779,18 @@ $(function ()
 	xmlthing.done(callback);
     }
 
-    var jacksInstance;
     var jacksInput;
     var jacksOutput;
     var jacksRspecs;
 
-    function ShowViewer(divname, manifest_object)
+    function ShowViewer(divname, multisite, manifest)
     {
-	var manifests       = _.values(manifest_object);
-	var first_manifest  = _.first(manifests);
-	var rest            = _.rest(manifests);
-	var multisite       = rest.length ? true : false;
+	var aggregates = [];
+	
+	_.each(amlist, function(details, aggregate_urn) {
+	    aggregates.push({"id" : aggregate_urn,
+			     "name" : details.name});
+	});
 	
 	if (! jacksInstance)
 	{
@@ -2765,65 +2808,28 @@ $(function ()
 		    jacksOutput.on('modified-topology', function (object) {
 			_.each(object.nodes, function (node) {
 			    jacksIDs[node.client_id] = node.id;
+			    if (!_.has(jacksSites, node.aggregate_id)) {
+				jacksSites[node.aggregate_id] = {};
+			    }
+			    jacksSites[node.aggregate_id][node.client_id] =
+				node.id;
 			});
-			//console.log("jacksIDs", object, jacksIDs);
+			//console.log("jacksIDs", object, jacksIDs, jacksSites);
 			ShowManifest(object.rspec);
 		    });
-		
-		    jacksInput.trigger('change-topology',
-				       [{ rspec: first_manifest }]);
 
-		    if (rest.length) {
-			_.each(rest, function(manifest) {
-			    jacksInput.trigger('add-topology',
-					       [{ rspec: manifest }]);
-			});
-		    }
+		    jacksInput.trigger('change-topology',
+				       [{ rspec: manifest }]);
 
 		    jacksOutput.on('click-event', function (jacksevent) {
 			if (jacksevent.type === 'node' ||
 			    jacksevent.type === 'host') {
-			    console.log(jacksevent);
+			    //console.log(jacksevent);
 			    ContextMenuShow(jacksevent);
 			}
 		    });
 		},
-	        canvasOptions: {
-	    "aggregates": [
-	      {
-		"id": "urn:publicid:IDN+utah.cloudlab.us+authority+cm",
-		"name": "Cloudlab Utah"
-	      },
-	      {
-		"id": "urn:publicid:IDN+wisc.cloudlab.us+authority+cm",
-		"name": "Cloudlab Wisconsin"
-	      },
-	      {
-		"id": "urn:publicid:IDN+clemson.cloudlab.us+authority+cm",
-		"name": "Cloudlab Clemson"
-	      },
-	      {
-		"id": "urn:publicid:IDN+utahddc.geniracks.net+authority+cm",
-		"name": "IG UtahDDC"
-	      },
-	      {
-		"id": "urn:publicid:IDN+apt.emulab.net+authority+cm",
-		"name": "APT Utah"
-	      },
-	      {
-		"id": "urn:publicid:IDN+emulab.net+authority+cm",
-		"name": "Emulab"
-	      },
-	      {
-		"id": "urn:publicid:IDN+wall2.ilabt.iminds.be+authority+cm",
-		"name": "iMinds Virt Wall 2"
-	      },
-	      {
-		"id": "urn:publicid:IDN+uky.emulab.net+authority+cm",
-		"name": "UKY Emulab"
-	      }
-	    ]
-		},
+	        canvasOptions: { "aggregates" : aggregates },
 		show: {
 		    rspec: false,
 		    tour: false,
@@ -2833,27 +2839,37 @@ $(function ()
 		}
             });
 	}
-	else if (jacksInput)
-	{
+    }
+    // Clear the Jacks view to get ready for topo change.
+    function ClearViewer(manifest)
+    {
+	if (jacksInput) {
 	    jacksInput.trigger('change-topology',
-			       [{ rspec: first_manifest }]);
-
-	    if (rest.length) {
-		_.each(rest, function(manifest) {
-		    jacksInput.trigger('add-topology',
-				       [{ rspec: manifest }]);
-		});
-	    }
+			       [{ rspec: manifest }]);
+	    // Jacks Bug.
+	    jacksInput.trigger('add-topology', 
+			       [{ rspec: manifest }]);
+	}
+    }
+    // Add manifest to viewer.
+    function AddToViewer(manifest)
+    {
+	if (jacksInput) {
+	    jacksInput.trigger('add-topology', 
+			       [{ rspec: manifest }]);
 	}
     }
 
-    function ShowSliverInfo(urls)
+    /*
+     * Show links to the logs.
+     */
+    function ShowSliverURLs(statusblob)
     {
 	if (!publicURLs) {
 	    $('#sliverinfo_dropdown').change(function (event) {
 		var selected =
 		    $('#sliverinfo_dropdown select option:selected').val();
-		console.info(selected);
+		//console.info(selected);
 
 		// Find the URL
 		_.each(publicURLs, function(obj) {
@@ -2866,6 +2882,14 @@ $(function ()
 		});
 	    });
 	}
+	// Extract the urls from the status blob.
+	var urls = [];
+	_.each(statusblob, function(blob, aggregate_urn) {
+	    if (_.has(blob, "url")) {
+		urls.push({"url"  : blob.url,
+			   "name" : amlist[aggregate_urn].abbreviation});
+	    }
+	});
 	if (urls.length == 0) {
 	    return;
 	}
@@ -3196,6 +3220,9 @@ $(function ()
 	    $("#extension-denied-modal-reason")
 		.text(extension_blob.extension_denied_reason);
 	}
+	else {
+	    $("#extension-denied-modal-reason").addClass("hidden");
+	}
 	$('#extension-denied-modal-dismiss').click(function () {
 	    sup.HideModal("#extension-denied-modal");
 	    var callback = function(json) {
@@ -3305,6 +3332,9 @@ $(function ()
      */
     function LoadMaxExtension()
     {
+	if (instanceStatus != "ready") {
+	    return;
+	}
 	var maxcallback = function(json) {
 	    console.info("LoadMaxExtension: ", json);
 	    
@@ -3379,6 +3409,30 @@ $(function ()
 		xmlthing.done(callback);
 	    }, 1000);
 	});
+    }
+
+    /*
+     * Transition from scheduled to started. Need to request new expinfo.
+     */
+    function ExperimentStarted()
+    {
+	console.info("ExperimentStarted");
+	
+	sup.CallServerMethod(null, "status", "ExpInfo",
+			     {"uuid" : uuid},
+	     function(json) {
+		 console.info("expinfo", json);
+		 if (json.code) {
+		     console.info("Could not get experiment "+
+				  "info: " + json.value);
+		     return;
+		 }
+		 expinfo = json.value;
+		 $('#exp-started-date')
+		     .html(moment(expinfo.started).format("lll"));
+		 $('.exp-scheduled').addClass("hidden");
+		 $('.exp-running').removeClass("hidden");
+	     });
     }
 
     // Helper.

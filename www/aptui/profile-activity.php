@@ -56,7 +56,7 @@ $instances = array();
 #
 $query1_result =
     DBQueryFatal("select 1 as active, ".
-                 "   i.uuid,i.profile_version,i.created,'' as destroyed, ".
+                 "   i.uuid,i.profile_version,i.started,'' as destroyed, ".
 		 "   i.creator,p.uuid as profile_uuid,u.email,".
                  "   GROUP_CONCAT(ia.public_url) as public_urls, ".
                  "   GROUP_CONCAT(aa.abbreviation) as clusters, ".
@@ -72,11 +72,11 @@ $query1_result =
 		 "left join geni.geni_users as u on u.uuid=i.creator_uuid ".
                  "left join apt_aggregates as aa on aa.urn=ia.aggregate_urn ".
 		 "where i.profile_id='$profileid' ".
-		 "group by i.uuid order by i.created desc");
+		 "group by i.uuid order by i.started desc");
 
 $query2_result =
     DBQueryFatal("select 0 as active, ".
-                 "    h.uuid,h.profile_version,h.created,h.destroyed, ".
+                 "    h.uuid,h.profile_version,h.started,h.destroyed, ".
 		 "    h.creator,p.uuid as profile_uuid,u.email, ".
                  "    GROUP_CONCAT(ia.public_url) as public_urls, ".
                  "    GROUP_CONCAT(aa.abbreviation) as clusters, ".
@@ -92,7 +92,7 @@ $query2_result =
 		 "left join geni.geni_users as u on u.uuid=h.creator_uuid ".
                  "left join apt_aggregates as aa on aa.urn=ia.aggregate_urn ".
 		 "where h.profile_id='$profileid' ".
-		 "group by h.uuid order by h.created desc");
+		 "group by h.uuid order by h.started desc");
 
 if (mysql_num_rows($query1_result) == 0 &&
     mysql_num_rows($query2_result) == 0) {
@@ -107,7 +107,7 @@ foreach (array($query1_result, $query2_result) as $query_result) {
 	$uuid      = $row["uuid"];
 	$puuid     = $row["profile_uuid"];
 	$pversion  = $row["profile_version"];
-	$created   = $row["created"];
+	$created   = $row["started"];
 	$destroyed = $row["destroyed"];
 	$creator   = $row["creator"];
 	$email     = $row["email"];

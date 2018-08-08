@@ -101,27 +101,31 @@ function Do_GetInstanceStatus()
     $blob["status"] = $instance->status();
     $blob["canceled"] = $instance->canceled() ? 1 : 0;
     $blob["sliverstatus"] = array();
-    $blob["sliverurls"]   = array();
 
     if ($instance->logfileid()) {
         $blob["logfile_url"] =
             "$APTBASE/spewlogfile.php?logfile=" . $instance->logfileid();
     }
     
-    #
-    # If we have all of our manifests, the client can request them
-    # and show the topology.
-    #
-    $havemanifests = $instance->slivers() ? 1 : 0;
     # Openstack experiment?
     $haveopenstack = $instance->isopenstack() ? 1 : 0;
 
     foreach ($instance->slivers() as $sliver) {
+        $sliverblob = array("status"  => $sliver->status(),
+                            "offline" => false);
+        #
+        # See if the aggregate is offline.
+        #
+        $aggregate = Aggregate::Lookup($sliver->aggregate_urn());
+        if ($aggregate && $aggregate->status() == "down") {
+            $sliverblob["offline"] = true;
+        }
         if (!$sliver->manifest()) {
-            $havemanifests = 0;
+            $sliverblob["havemanifest"] = 0;
         }
         else {
-            $statusblob  = array();
+            $sliverblob["havemanifest"] = 1;
+            $statusblob = array();
 
             foreach ($sliver->StatusArray() as $status) {
                 if (isset($status["sliver_data"])) {
@@ -129,14 +133,13 @@ function Do_GetInstanceStatus()
                         = $status["sliver_details"];
                 }
             }
-            $blob["sliverstatus"][$sliver->aggregate_urn()] = $statusblob;
+            $sliverblob["details"] = $statusblob;
         }
         if ($sliver->public_url()) {
-            $blob["sliverurls"][] = array("name" => $sliver->aggregate_name(),
-                                          "url"  => $sliver->public_url());
+            $sliverblob["url"] = $sliver->public_url();
         }
+        $blob["sliverstatus"][$sliver->aggregate_urn()] = $sliverblob;
     }
-    $blob["havemanifests"] = $havemanifests;
     $blob["haveopenstackstats"] = $haveopenstack;
 
     # Reflect errors back to the user.
@@ -298,20 +301,34 @@ function Do_TerminateInstance()
 #
 function Do_GetInstanceManifest()
 {
-    global $instance, $creator;
+    global $instance, $creator, $ajax_args;
 
     if (StatusSetupAjax(0)) {
 	return;
     }
-
-    $blob = array();
-
-    foreach ($instance->slivers() as $sliver) {
-        if ($sliver->manifest()) {
-            $blob[$sliver->aggregate_urn()] = $sliver->manifest();
+    if (isset($ajax_args["aggregate_urn"])) {
+        $urn = $ajax_args["aggregate_urn"];
+        if (!Instance::ValidURN($urn)) {
+            SPITAJAX_ERROR(-1, "Illegal characters in aggregate urn");
+            return;
         }
+        $sliver = InstanceSliver::Lookup($instance, $urn);
+        if (!$sliver) {
+            SPITAJAX_ERROR(-1, "No sliver for aggregate urn");
+            return;
+        }
+        SPITAJAX_RESPONSE($sliver->manifest());
     }
-    SPITAJAX_RESPONSE($blob);
+    else {
+        $blob = array();
+
+        foreach ($instance->slivers() as $sliver) {
+            if ($sliver->manifest()) {
+                $blob[$sliver->aggregate_urn()] = $sliver->manifest();
+            }
+        }
+        SPITAJAX_RESPONSE($blob);
+    }
 }
 
 #
@@ -1568,9 +1585,19 @@ function Do_ExpInfo()
     $blob = array();
     $blob["expires"]      = DateStringGMT($slice->expires());
     $blob["created"]      = DateStringGMT($instance->created());
+    $blob["start_at"]     = DateStringGMT($instance->start_at());
+    $blob["stop_at"]      = DateStringGMT($instance->stop_at());
+    $blob["started"]      = DateStringGMT($instance->started());
     $blob["creator"]      = $creator->uid();
+    $blob["creator_email"]= $creator->email();
     $blob["project"]      = $instance->pid();
+    $blob["group"]        = $instance->gid();
     $blob["name"]         = $instance->name();
+    $blob["uuid"]         = $instance->uuid();
+    $blob["status"]       = $instance->status();
+    $blob["repourl"]      = $instance->repourl();
+    $blob["reporef"]      = $instance->reporef();
+    $blob["repohash"]     = $instance->repohash();
     if (isset($profile)) {
         $blob["profile_name"] = $profile->name();
         $blob["profile_uuid"] = $profile->uuid();
@@ -1579,6 +1606,11 @@ function Do_ExpInfo()
         $blob["profile_name"] = "unknown";
         $blob["profile_uuid"] = null;
     }
+    $blob["physnode_count"]  = intval($instance->physnode_count());
+    $blob["virtnode_count"]  = intval($instance->virtnode_count());
+    $blob["physnode_hours"]  = 
+            ($instance->physnode_count() *
+             ((time() - strtotime($instance->started())) / 3600));
     $blob["user_lockdown"]   = $instance->user_lockdown() ? true : false;
     $blob["admin_lockdown"]  = $instance->admin_lockdown() ? true : false;
     $blob["paniced"]         = $instance->paniced() ? true : false;
@@ -1589,6 +1621,33 @@ function Do_ExpInfo()
     else {
         $blob["admin_notes"] = "";
     }
+    #
+    # Extension stuff
+    #
+    $eblob = array();
+
+    $eblob["extension_denied"] =
+        ($instance->extension_denied() ? true : false);
+    $eblob["extension_reason"] =
+        ($instance->extension_reason() ?
+         $instance->extension_reason() : "");
+    $eblob["extension_denied_reason"] =
+        ($instance->extension_denied_reason() ?
+         $instance->extension_denied_reason() : "");
+    $eblob["extension_disabled_reason"] =
+        ($instance->extension_disabled_reason() ?
+         $instance->extension_disabled_reason() : "");
+
+    $extensions      = ExtensionInfo::LookupForInstance($instance);
+    if (count($extensions)) {
+        $foo = array();
+        foreach ($extensions as $extension) {
+            $foo[$extension->idx()] = $extension->info;
+        }
+        $eblob["extensions"] = $foo;
+    }
+    $blob["extension_info"] = $eblob;
+    
     SPITAJAX_RESPONSE($blob);
 }
 
@@ -1784,6 +1843,16 @@ function Do_MaxExtension()
                   "reservations" => $webtask->TaskValue("Reservations"));
     $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
+}
+
+function Do_GetRspec()
+{
+    global $instance;
+
+    if (StatusSetupAjax(0)) {
+	return;
+    }
+    SPITAJAX_RESPONSE($instance->rspec());
 }
 
 # Fetch overall cluster aggregate health status.

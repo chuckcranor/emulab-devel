@@ -146,7 +146,7 @@ function ExperimentList($which, $target)
                      "  UNIX_TIMESTAMP(s.expires)) as expired, ".
                      "  truncate(a.physnode_count * ".
                      "   ((UNIX_TIMESTAMP(now()) - ".
-                     "     UNIX_TIMESTAMP(a.created)) / 3600.0),2) as phours, ".
+                     "     UNIX_TIMESTAMP(a.started)) / 3600.0),2) as phours, ".
                      " IFNULL(aggs.count,0) as aggrows, ".
                      " agg.aggregate_urn as aggrow_urn".
                      "  from apt_instances as a ".
@@ -170,6 +170,7 @@ function ExperimentList($which, $target)
         $status       = $row["status"];
         $canceled     = $row["canceled"];
         $created      = DateStringGMT($row["created"]);
+        $started      = DateStringGMT($row["started"]);
         $expires      = DateStringGMT($row["expires"]);
         $creator_idx  = $row["creator_idx"];
         $profile_name = "$profile_id:$version";
@@ -234,6 +235,7 @@ function ExperimentList($which, $target)
         $blob["phours"]   = $phours;
         $blob["vcount"]   = $vcount;
         $blob["created"]  = $created;
+        $blob["started"]  = $started;
         $blob["expires"]  = $expires;
         $blob["lockdown"] = $lockdown;
         $results["$pid:$name"] = $blob;

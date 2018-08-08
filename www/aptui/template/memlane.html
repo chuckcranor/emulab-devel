@@ -62,9 +62,19 @@
 	      <% } %>
 	    </tr>
 	  <% } %>
+	  <% if (record.start_at) { %>
+	    <tr>
+	      <td class='border-none'>Created:</td>
+	      <td class='border-none format-date'><%- record.created %></td>
+	    </tr>
+	    <tr>
+	      <td class='border-none'>Scheduled:</td>
+	      <td class='border-none format-date'><%- record.start_at %></td>
+	    </tr>
+	  <% } %>
 	  <tr>
-	    <td class='border-none'>Created:</td>
-	    <td class='border-none format-date'><%- record.created %></td>
+	    <td class='border-none'>Started:</td>
+	    <td class='border-none format-date'><%- record.started %></td>
 	  </tr>
 	  <tr>
 	    <td class='border-none'>Destroyed:</td>

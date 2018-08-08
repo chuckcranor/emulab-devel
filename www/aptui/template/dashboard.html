@@ -131,7 +131,7 @@
 		  <%- value.profile_name %></a></td>
 		<td><%- value.cluster %></td>
 		<td><%- value.physnode_count %></td>
-		<td class="format-date"><%- value.created %></td>
+		<td class="format-date"><%- value.started %></td>
 	      </tr>
 	    <% }); %>
 	  </tbody>
@@ -262,7 +262,7 @@
 		  <%- value.creator %></a></td>
 		<td><a href="show-project.php?pid=<%- value.pid %>">
 		  <%- value.pid %></a></td>
-		<td class="format-date-withday"><%- value.created %></td>
+		<td class="format-date-withday"><%- value.started %></td>
 		<td class="format-date-withday"><%- value.expires %></td>
 	      </tr>
 	    <% }); %>
@@ -305,7 +305,7 @@
 	    <% } %>
 	    <td><a href="user-dashboard.php?user=<%- value.creator %>">
 	      <%- value.creator %></a></td>
-	    <td class="format-date"><%- value.created %></td>
+	    <td class="format-date"><%- value.started %></td>
 	    <td><a href="show-profile.php?uuid=<%- value.profile_uuid %>">
 	      <%- value.profile_name %></a></td>
 	    <td><%- value.cluster %></td>
@@ -367,7 +367,7 @@
 		  <%- value.profile_name %></a></td>
 		<td><%- value.cluster %></td>
 		<td><%- value.physnode_count %></td>
-		<td class="format-date-month"><%- value.created %></td>
+		<td class="format-date-month"><%- value.started %></td>
 		<td class="format-date-relative"><%- value.expires %></td>
 	      </tr>
 	    <% }); %>

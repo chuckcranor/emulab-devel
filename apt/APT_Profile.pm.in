@@ -1412,6 +1412,40 @@ sub SetSites($$$$$$)
 }
 
 #
+# Does the rspec reference more then one manager in any of the links.
+# If so, we need the stitcher.
+#
+sub NeedStitcher($$)
+{
+    my ($rspecstr, $perrmsg) = @_;
+
+    my $rspec = GeniXML::Parse($rspecstr);
+    if (! defined($rspec)) {
+	$$perrmsg = "Could not parse rspec\n";
+	return -1;
+    }
+    my %linksites = ();
+    
+    foreach my $ref (GeniXML::FindNodes("n:link", $rspec)->get_nodelist()) {
+	my $client_id   = GetVirtualId($ref);
+	my $manager_urn = GetManagerId($ref);
+
+	if (!exists($linksites{$client_id})) {
+	    $linksites{$client_id} = {};
+	}
+	next
+	    if (!defined($manager_urn));
+
+	$linksites{$client_id}->{$manager_urn} = 1;
+    }
+    foreach my $ref (values(%linksites)) {
+	return 1
+	    if (keys(%{$ref}) > 1);
+    }
+    return 0;
+}
+
+#
 # Set the repository for the rspec. This is a top level element. At
 # some point we can think about per-node repos.
 #

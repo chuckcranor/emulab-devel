@@ -330,6 +330,10 @@ window.ShowIdleGraphs = (function ()
 	function GetManifests()
 	{
 	    var callback = function(json) {
+		if (json.code) {
+		    console.info("GetManifests error:", json);
+		    return;
+		}
 		_.each(json.value, function(manifest, aggregate_urn) {
 		    var xmlDoc = $.parseXML(manifest);
 		    var xml = $(xmlDoc);

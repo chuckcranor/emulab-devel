@@ -110,6 +110,9 @@ class Instance
     function creator_idx()  { return $this->field('creator_idx'); }
     function creator_uuid() { return $this->field('creator_uuid'); }
     function created()	    { return $this->field('created'); }
+    function started()	    { return $this->field('started'); }
+    function start_at()     { return $this->field('start_at'); }
+    function stop_at()      { return $this->field('stop_at'); }
     function profile_id()   { return $this->field('profile_id'); }
     function profile_version() { return $this->field('profile_version'); }
     function status()	    { return $this->field('status'); }
@@ -146,6 +149,7 @@ class Instance
     function repourl()	    { return $this->field('repourl'); }
     function reporef()	    { return $this->field('reporef'); }
     function repohash()	    { return $this->field('repohash'); }
+    function rspec()	    { return $this->field('rspec'); }
     function admin_notes()  { return $this->field('admin_notes'); }
     function isopenstack()  { return $this->field('isopenstack'); }
     function openstack_utilization() {
@@ -160,6 +164,7 @@ class Instance
     function IsPNet() {
 	return preg_match('/phantomnet/', $this->servername());
     }
+
     # Grab the webtask. Backwards compat mode, see if there is one associated
     # with the object, use that. Otherwise create a new one.
     function WebTask() {
@@ -564,7 +569,7 @@ class Instance
                 DBQueryFatal("select sum(physnode_count), ".
                          " truncate(sum(physnode_count * ".
                          "  ((UNIX_TIMESTAMP(now()) - ".
-                         "    UNIX_TIMESTAMP(created)) / 3600.0)),2) as phours ".
+                         "    UNIX_TIMESTAMP(started)) / 3600.0)),2) as phours".
                          "  from apt_instances ".
                          "where creator_idx='$user_idx' and physnode_count>0");
         }
@@ -575,7 +580,7 @@ class Instance
                 DBQueryFatal("select sum(physnode_count), ".
                          " truncate(sum(physnode_count * ".
                          "  ((UNIX_TIMESTAMP(now()) - ".
-                         "    UNIX_TIMESTAMP(created)) / 3600.0)),2) as phours ".
+                         "    UNIX_TIMESTAMP(started)) / 3600.0)),2) as phours".
                          "  from apt_instances ".
                          "where pid_idx='$pid_idx' and physnode_count>0");
         }
@@ -608,13 +613,14 @@ class Instance
         # This gets existing experiments back one week.
         #
         $query_result =
-            DBQueryFatal("select physnode_count,UNIX_TIMESTAMP(created) ".
+            DBQueryFatal("select physnode_count, ".
+                         "    UNIX_TIMESTAMP(started) as started ".
                          "  from apt_instances ".
                          "where $clause and physnode_count>0");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $pnodes   = $row[0];
-            $created  = $row[1];
+            $pnodes   = $row["physnode_count"];
+            $created  = $row["started"];
 
             if ($created < $weekago)
                 $diff = (3600 * 24 * 7);
@@ -629,16 +635,17 @@ class Instance
         # This gets experiments terminated in the last week.
         #
         $query_result =
-            DBQueryFatal("select physnode_count,UNIX_TIMESTAMP(created), ".
-                         "       UNIX_TIMESTAMP(destroyed) ".
+            DBQueryFatal("select physnode_count,".
+                         "       UNIX_TIMESTAMP(started) as started, ".
+                         "       UNIX_TIMESTAMP(destroyed) as destroyed ".
                          "  from apt_instance_history ".
                          "where $clause and physnode_count>0 and " .
                          "      destroyed>DATE_SUB(curdate(), INTERVAL 1 WEEK)");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $pnodes    = $row[0];
-            $created   = $row[1];
-            $destroyed = $row[2];
+            $pnodes    = $row["physnode_count"];
+            $created   = $row["started"];
+            $destroyed = $row["destroyed"];
 
             if ($created < $weekago)
                 $diff = $destroyed - $weekago;
@@ -676,13 +683,14 @@ class Instance
         # This gets existing experiments back one week.
         #
         $query_result =
-            DBQueryFatal("select physnode_count,UNIX_TIMESTAMP(created) ".
+            DBQueryFatal("select physnode_count,".
+                         "    UNIX_TIMESTAMP(started) as started ".
                          "  from apt_instances ".
                          "where $clause and physnode_count>0");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $pnodes   = $row[0];
-            $created  = $row[1];
+            $pnodes   = $row["physnode_count"];
+            $created  = $row["started"];
 
             if ($created < $monthago)
                 $diff = (3600 * 24 * 28);
@@ -697,16 +705,17 @@ class Instance
         # This gets experiments terminated in the last week.
         #
         $query_result =
-            DBQueryFatal("select physnode_count,UNIX_TIMESTAMP(created), ".
-                         "       UNIX_TIMESTAMP(destroyed) ".
+            DBQueryFatal("select physnode_count,".
+                         "       UNIX_TIMESTAMP(started) as started, ".
+                         "       UNIX_TIMESTAMP(destroyed) as destroyed ".
                          "  from apt_instance_history ".
                          "where $clause and physnode_count>0 and " .
                          "      destroyed>DATE_SUB(curdate(), INTERVAL 1 MONTH)");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $pnodes    = $row[0];
-            $created   = $row[1];
-            $destroyed = $row[2];
+            $pnodes    = $row["physnode_count"];
+            $created   = $row["started"];
+            $destroyed = $row["destroyed"];
 
             if ($created < $monthago)
                 $diff = $destroyed - $monthago;
@@ -741,18 +750,18 @@ class Instance
         $query_result =
             DBQueryFatal("select $which,SUM(physnode_count) as physnode_count,".
                          "   SUM(phours) as phours from ".
-                         " ((select $which,physnode_count,created,NULL, ".
+                         " ((select $which,physnode_count,started,NULL, ".
                          "   physnode_count * (TIMESTAMPDIFF(HOUR, ".
-                         "    IF(created > DATE_SUB(now(), INTERVAL $days DAY), ".
-                         "       created, DATE_SUB(now(), INTERVAL $days DAY)), now())) ".
+                         "    IF(started > DATE_SUB(now(),INTERVAL $days DAY),".
+                         "       started, DATE_SUB(now(), INTERVAL $days DAY)), now())) ".
                          "    as phours ".
                          "   from apt_instances ".
                          "   where physnode_count>0) ".
                          "  union ".
-                         "  (select $which,physnode_count,created,destroyed, ".
+                         "  (select $which,physnode_count,started,destroyed, ".
                          "   physnode_count * (TIMESTAMPDIFF(HOUR, ".
-                         "    IF(created > DATE_SUB(now(), INTERVAL $days DAY), ".
-                         "       created, DATE_SUB(now(), INTERVAL $days DAY)), destroyed)) ".
+                         "    IF(started > DATE_SUB(now(),INTERVAL $days DAY),".
+                         "       started, DATE_SUB(now(), INTERVAL $days DAY)), destroyed)) ".
                          "    as phours ".
                          "   from apt_instance_history ".
                          "   where physnode_count>0 and ".
@@ -894,6 +903,9 @@ class InstanceHistory
     function public_url()   { return $this->field('public_url'); }
     function logfileid()    { return $this->field('logfileid'); }
     function created()	    { return $this->field('created'); }
+    function start_at()     { return $this->field('start_at'); }
+    function stop_at()      { return $this->field('stop_at'); }
+    function started()      { return $this->field('started'); }
     function destroyed()    { return $this->field('destroyed'); }
     function expired()      { return $this->field('expired'); }
     function extension_count()   { return $this->field('extension_count'); }
@@ -1328,31 +1340,31 @@ function UserUsageInfo($user) {
     $results     = array();
 
     $query_result =
-        DBQueryFatal("select profile_id,count(profile_id), ".
-                     "       max(UNIX_TIMESTAMP(created)) ".
+        DBQueryFatal("select profile_id,count(profile_id) as count, ".
+                     "       max(UNIX_TIMESTAMP(started)) as lastused ".
                      "  from apt_instances ".
                      " where creator_idx='$user_idx' ".
                      " group by profile_id");
 
     while ($row = mysql_fetch_array($query_result)) {
-        $profile_id = $row[0];
-        $count      = $row[1];
-        $lastused   = $row[2];
+        $profile_id = $row["profile_id"];
+        $count      = $row["count"];
+        $lastused   = $row["lastused"];
 
         $results[$profile_id] = array("count"    => $count,
                                       "lastused" => $lastused);
     }
     $query_result =
-        DBQueryFatal("select profile_id,count(profile_id), ".
-                     "       max(UNIX_TIMESTAMP(created)) ".
+        DBQueryFatal("select profile_id,count(profile_id) as count, ".
+                     "       max(UNIX_TIMESTAMP(started)) as lastused ".
                      "  from apt_instance_history ".
                      " where creator_idx='$user_idx' ".
                      " group by profile_id");
 
     while ($row = mysql_fetch_array($query_result)) {
-        $profile_id = $row[0];
-        $count      = $row[1];
-        $lastused   = $row[2];
+        $profile_id = $row["profile_id"];
+        $count      = $row["count"];
+        $lastused   = $row["lastused"];
 
         if (!array_key_exists($profile_id, $results)) {
             $results[$profile_id] = array("count"    => $count,

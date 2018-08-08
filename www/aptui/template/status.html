@@ -66,7 +66,7 @@ pre {
 	  </tr>
 	  <tr>
 	    <td class='border-none'>Name:</td>
-	    <td class='border-none'><%- name %></td>
+	    <td class='border-none'><%- expinfo.name %></td>
 	  </tr>
 	  <tr>
 	    <td class='border-none'>State:</td>
@@ -81,20 +81,21 @@ pre {
 		    data-toggle='modal'>Ignore this failure?</a>)</span>
 	    </td>
 	  </tr>
-	  <% if (profileUUID && profileUUID != "") { %>
+	  <% if (expinfo.profile_uuid) { %>
 	    <tr>
 	      <td class='border-none'>Profile:</td>
 	      <td class='border-none'>
-		<a target=_blank href='show-profile.php?uuid=<%- profileUUID %>'>
-		  <%- profileName %></a></td>
+		<a target=_blank
+		   href='show-profile.php?uuid=<%- expinfo.profile_uuid %>'>
+		  <%- expinfo.profile_name %></a></td>
 	    </tr>
 	  <% } %>
-	  <% if (reporef !== undefined) { %>
+	  <% if (expinfo.reporef) { %>
 	    <tr>
 	      <td class='border-none'>RefSpec:</td>
 	      <td class='border-none'>
-		<span><%= reporef %></span>
-		(<%= repohash %>)
+		<span><%= expinfo.reporef %></span>
+		(<%= expinfo.repohash %>)
 	      </td>
 	    </tr>
 	  <% } %>
@@ -103,43 +104,54 @@ pre {
 	      <td class='border-none'>Creator:</td>
 	      <td class='border-none'>
 		<% if (registered) { %>
-		  <a href="user-dashboard.php?user=<%- creatorUid %>">
-		    <%- creatorUid %></a>
+		  <a href="user-dashboard.php?user=<%- expinfo.creator %>">
+		    <%- expinfo.creator %></a>
 		<% } else { %>
-	          <a href="mailto:<%- creatorEmail %>"><%- creatorEmail %></a>
+	          <a href="mailto:<%- expinfo.creator_email %>"><%- expinfo.creator_email %></a>
 	        <% } %>
 	      </td>
 	    </tr>
-	    <% if (project) { %>
+	    <% if (expinfo.project) { %>
 	      <tr>
-		<% if (project == group) { %>
+		<% if (expinfo.project == expinfo.group) { %>
 		  <td class='border-none'>Project:</td>
 		  <td class='border-none'>
-		    <a href="show-project.php?pid=<%- project %>">
-		      <%- project %></a></td>
+		    <a href="show-project.php?pid=<%- expinfo.project %>">
+		      <%- expinfo.project %></a></td>
 		<% } else { %>
 		    <td class='border-none'>Group:</td>
 		    <td class='border-none'>
-		      <a href="show-group.php?pid=<%- project %>&gid=<%- group %>">
-			<%- project %>:<%- group %></a></td>
+		      <a href="show-group.php?pid=<%- expinfo.project %>&gid=<%- expinfo.group %>">
+			<%- expinfo.project %>:<%- expinfo.group %></a></td>
 		<% } %>
 	      </tr>
 	    <% } %>
 	  <% } %>
-	  <tr>
-	    <td class='border-none'>Created:</td>
-	    <td class='border-none format-date'><%- sliceCreated %></td>
+	  <% if (expinfo.status == "deferred") { %>
+	    <tr class="exp-scheduled">
+	      <td class='border-none'>Created:</td>
+	      <td class='border-none format-date'><%- expinfo.created %></td>
+	    </tr>
+	    <tr class="exp-scheduled">
+	      <td class='border-none'>Scheduled:</td>
+	      <td class='border-none format-date'><%- expinfo.start_at %></td>
+	    </tr>
+	  <% } %>
+	  <tr <% if (expinfo.status == "deferred") { %>
+                   class="exp-running hidden" <% } %>>
+	    <td class='border-none'>Started:</td>
+	    <td class='border-none format-date'
+		id="exp-started-date"><% if (expinfo.status != "deferred") { %><%- expinfo.started %><% } %></td>
 	  </tr>
 	  <tr>
 	    <td class='border-none'>Expires:</td>
 	    <td class='border-none'>
 	      <span id='instance_expiration'>
-		<span id='quickvm_expires' class='format-date'>
-		  <%- sliceExpires %></span>
+		<span id='quickvm_expires' class='format-date'><%- expinfo.expires %></span>
 		(<span id='quickvm_countdown'></span>)
 	      </span>
 	    </td>
-	  </tr>
+	  </tr">
 	  <tr id="maximum-extension" class="hidden">
 	    <td class='border-none'>Extendable:</td>
 	    <td class='border-none'>
@@ -203,9 +215,9 @@ pre {
 		      data-content="Create a disk image from one of your nodes.
 				    Click for more info."> 
 		Create Disk Image</button>
-	      <% if (profileUUID && profileUUID != "") { %>
+	      <% if (expinfo.profile_uuid) { %>
 		<a class='btn btn-xs btn-primary'
-		   href='manage_profile.php?action=copy&uuid=<%= profileUUID %>'
+		   href='manage_profile.php?action=copy&uuid=<%= expinfo.profile_uuid %>'
 		   id='copy_button' type=button
 		   data-toggle='popover'
 	           data-delay='{"hide":1000, "show":500}'
@@ -219,7 +231,7 @@ pre {
 		  Copy</a>
 	      <% } %>
 	    <% } %>
-	    <button class='btn btn-xs btn-success' disabled
+	    <button class='btn btn-xs btn-success exp-running hidden' disabled
 		    id='extend_button' type=button>
               <% if (isfadmin) { %>Extension History<% } else { %>Extend<% } %>
 	    </button>
@@ -232,7 +244,8 @@ pre {
 	  </div>
 	  <% if (isadmin) { %>
 	    <div class='clearfix'></div>	  
-	    <div>
+	    <div <% if (expinfo.status == "deferred") { %>
+                   class="exp-running hidden" <% } %>>
 	      <div class='pull-left'
 		   data-toggle='popover'
 		   data-delay='{"hide":500, "show":500}'
@@ -240,14 +253,16 @@ pre {
 				 this experiment. No free time is granted to
 				 user at all."> 
 		<label class="checkbox-inline" style='margin-right: 10px;'>
-		  <input type="checkbox" id="lockout_checkbox" readonly
-			 <% if (lockout) { %>checked<% } %> >Lockout</label>
+		  <input type="checkbox" id="lockout_checkbox" disabled
+			 <% if (expinfo.lockout) { %>checked<% } %> >Lockout</label>
 	      </div>
 	    </div>
-	    <div class='pull-left'
-		 data-toggle='popover'
-		 data-delay='{"hide":500, "show":500}'
-		 data-content="When checked, the experiment 
+	    <div <% if (expinfo.status == "deferred") { %>
+                   class="exp-running hidden" <% } %>>
+	      <div class='pull-left'
+		   data-toggle='popover'
+		   data-delay='{"hide":500, "show":500}'
+		   data-content="When checked, the experiment 
 			       cannot be terminated by the user unless the
 			       user verifies 
 			       the lockdown code when clicking the Terminate
@@ -256,40 +271,51 @@ pre {
 			       is extended for more then two weeks.
 			       Use the admin lockdown flag to fully prevent
 			       termination."> 
-	      <label class="checkbox-inline" style='margin-right: 10px;'>
-		<input type="checkbox" id="user_lockdown_checkbox" readonly
-		       <% if (user_lockdown) { %>checked<% } %> >
-		User Lockdown</label>
+		<label class="checkbox-inline" style='margin-right: 10px;'>
+		  <input type="checkbox" id="user_lockdown_checkbox" disabled
+			 <% if (expinfo.user_lockdown) { %>checked<% } %> >
+		  User Lockdown</label>
+	      </div>
 	    </div>
-	    <div class='pull-left'
-		 data-toggle='popover'
-		 data-delay='{"hide":500, "show":500}'
-		 data-content="When checked, the experiment 
+	    <div <% if (expinfo.status == "deferred") { %>
+                   class="exp-running hidden" <% } %>>
+	      <div class='pull-left'
+		   data-toggle='popover'
+		   data-delay='{"hide":500, "show":500}'
+		   data-content="When checked, the experiment 
 			       cannot be terminated by the user. Only an
 			       admin can do it.">
-	      <label class="checkbox-inline" style='margin-right: 10px;'>
-		<input type="checkbox" id="admin_lockdown_checkbox" readonly
-		       <% if (admin_lockdown) { %>checked<% } %> >
-		Admin Lockdown</label>
+		<label class="checkbox-inline" style='margin-right: 10px;'>
+		  <input type="checkbox" id="admin_lockdown_checkbox" disabled
+			 <% if (expinfo.admin_lockdown) { %>checked<% } %> >
+		  Admin Lockdown</label>
+	      </div>
 	    </div>
-	    <div class='pull-left'
-		 data-toggle='popover'
-		 data-delay='{"hide":500, "show":500}'
-		 data-content="When checked, the experiment is put into
-			       Quarantine (emulab panic) mode.">
-	      <label class="checkbox-inline" style='margin-right: 10px;'>
-		<input type="checkbox" id="quarantine_checkbox" readonly
-		       <% if (paniced) { %>checked<% } %> >
-		<span <% if (paniced) { %>class="text-danger"<% } %> >
-		  Quarantined</span></label>
+	    <div <% if (expinfo.status == "deferred") { %>
+                   class="exp-running hidden" <% } %>>
+	      <div class='pull-left'
+		   data-toggle='popover'
+		   data-delay='{"hide":500, "show":500}'
+		   data-content="When checked, the experiment is put into
+				 Quarantine (emulab panic) mode.">
+		<label class="checkbox-inline" style='margin-right: 10px;'>
+		  <input type="checkbox" id="quarantine_checkbox" disabled
+			 <% if (expinfo.paniced) { %>checked<% } %> >
+		  <span <% if (expinfo.paniced) { %>class="text-danger"<% } %> >
+		    Quarantined</span></label>
+	      </div>
 	    </div>
-	    <div class='pull-left
-			<% if (!hasnotes) { %>hidden<% } %>'
-		 data-toggle='popover'
-		 data-delay='{"hide":500, "show":500}'
-		 data-content="This experiment has admin notes">
-	      <a target="_blank"
-		 href='adminextend.php?uuid=<%= uuid %>'>Admin Notes</a>
+	    <div <% if (expinfo.status == "deferred") { %>
+                   class="exp-running hidden" <% } %>>
+	      <div class='pull-left'>
+		<span <% if (expinfo.admin_notes == "") { %>hidden<% } %>'
+		    data-toggle='popover'
+                    data-delay='{"hide":500, "show":500}'
+		    data-content="This experiment has admin notes">
+		  <a target="_blank"
+		     href='adminextend.php?uuid=<%= uuid %>'>Admin Notes</a>
+		</span>
+	      </div>
 	    </div>
 	  <% } %>
 	</div>
@@ -341,7 +367,8 @@ pre {
 	error? Join the
         <a href='<%= errorURL %>'>users group</a> and ask a question. Be
         sure to include the error message in your question, and the name
-	of your profile and experiment: '<%= profileName %>/<%= name %>'.
+	of your profile and experiment:
+	'<%= expinfo.profile_name %>/<%= expinfo.name %>'.
       </div>
     </div>
   </div>
@@ -382,13 +409,19 @@ pre {
       <div class='panel-body'>
 	<div id='quicktabs_div'>
 	  <ul id='quicktabs_ul' class='nav nav-tabs'>
-	    <li class='active'>
-              <a href='#topology' data-toggle='tab'>Topology View</a>
+	    <li class='hidden'>
+              <a href='#topology' id='show_topology_tab'
+		 data-toggle='tab'>Topology View</a>
             </li>
-	    <li>
-              <a href='#listview' data-toggle='tab'>List View</a>
+	    <li class='hidden'>
+              <a href='#listview' id='show_listview_tab'
+		 data-toggle='tab'>List View</a>
             </li>
-	    <li>
+	    <li class='hidden'>
+              <a href='#rspec' id='show_rspec_tab'
+		 data-toggle='tab'>Rspec</a>
+            </li>
+	    <li class='hidden'>
               <a href='#manifest' id='show_manifest_tab'
 		 data-toggle='tab'>Manifest</a>
             </li>
@@ -396,8 +429,8 @@ pre {
               <a href='#Idlegraphs' id='show_idlegraphs_tab'
 		 data-toggle='tab'>Graphs
 		<button class='close hidden'
-style="margin-top:0px;"
-type='button' id="graphs-refresh-button">
+			style="margin-top:0px;"
+			type='button' id="graphs-refresh-button">
 		  <span class='glyphicon glyphicon-repeat'></span></button>
 	      </a>
             </li>
@@ -405,23 +438,23 @@ type='button' id="graphs-refresh-button">
               <a href='#Openstack' id='show_openstack_tab'
 		 data-toggle='tab'>Openstack Data
 		<button class='close hidden'
-style="margin-top:0px;"
-type='button' id="openstack-refresh-button">
+			style="margin-top:0px;"
+			type='button' id="openstack-refresh-button">
 		  <span class='glyphicon glyphicon-repeat'></span></button>
 	      </a>
             </li>
 	  </ul>
 	  <div id='quicktabs_content' class='tab-content'>
-            <div class='tab-pane active' id='topology'>
+            <div class='tab-pane hidden' id='topology'>
 	      <div id='showtopo_statuspage' class='jacks'></div>
               <small>Click on a node for more options. 
                 Click and drag to move things around.</small>
 	      <% if (registered) { %>
 		<button class='btn btn-xs btn-success pull-right' disabled
-id='refresh_button' type=button
-data-toggle='popover'
-data-delay='{"hide":1000, "show":500}'
-data-content='Ask cluster for updated node status'>
+			id='refresh_button' type=button
+			data-toggle='popover'
+			data-delay='{"hide":1000, "show":500}'
+			data-content='Ask cluster for updated node status'>
 		  Refresh Status</button>
 		<span>
 		  <button class='btn btn-xs btn-success pull-right hidden'
@@ -448,7 +481,7 @@ data-content='Ask cluster for updated node status'>
 		<% } %>
 	      <% } %>
 	    </div>
-            <div class='tab-pane' id='listview'>
+            <div class='tab-pane hidden' id='listview'>
 	      <div id='showtopo_listview'>
 		<table class='table table-striped table-hover table-condensed'
                        id='listview_table'>
@@ -485,8 +518,11 @@ data-content='Ask cluster for updated node status'>
 		</table>
               </div>
             </div>
-	    <div class='tab-pane' id='manifest'>
+	    <div class='tab-pane hidden' id='manifest'>
               <div id='manifest_textarea' style='width: 100%;'></div>
+	    </div>
+	    <div class='tab-pane hidden' id='rspec'>
+              <div id='rspec_textarea' style='width: 100%;'></div>
 	    </div>
 	    <div class='tab-pane hidden' id='Idlegraphs'>
 	      <div class="hidden" id="nodata">
@@ -516,7 +552,8 @@ data-content='Ask cluster for updated node status'>
 		    <div class='col-xs-12 col-xs-offset-0'
 			 style="padding:0px;">
 		      <div id="loadavg-chart"
-class='fixedsize-panel with-3d-shadow with-transitions'>
+			   class='fixedsize-panel
+				  with-3d-shadow with-transitions'>
 			<svg></svg>
 		      </div>
 		    </div>
@@ -1280,7 +1317,7 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
 	  </div>
 	  <p>
 	    Please contact the
-	    <a href="mailto:<%- window.SUPPORT %>?subject=Experiment%20<%- project %>/<%- name %>"
+	    <a href="mailto:<%- window.SUPPORT %>?subject=Experiment%20<%- expinfo.project %>/<%- expinfo.name %>"
 	       target="_blank">
 	      support staff</a> for more information.
 	  </p>
@@ -1308,7 +1345,7 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
 	  </div>
 	  <p>
 	    Please contact the
-	    <a href="mailto:<%- window.SUPPORT %>?subject=Experiment%20<%- project %>/<%- name %>"
+	    <a href="mailto:<%- window.SUPPORT %>?subject=Experiment%20<%- expinfo.project %>/<%- expinfo.name %>"
 	       target="_blank">
 	      support staff</a> for more information.
 	  </p>

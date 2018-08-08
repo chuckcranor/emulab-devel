@@ -508,20 +508,20 @@ class Profile
         # This is last used.
         #
         $query_result =
-            DBQueryFatal("select max(UNIX_TIMESTAMP(created)) ".
+            DBQueryFatal("select max(UNIX_TIMESTAMP(started)) as started ".
                          "  from apt_instances ".
                          "where profile_id='$profile_id' ".
                          $userclause);
         $row = mysql_fetch_row($query_result);
-        if (!$row[0]) {
+        if (!$row["started"]) {
             $query_result =
-                DBQueryFatal("select max(UNIX_TIMESTAMP(created)) ".
+                DBQueryFatal("select max(UNIX_TIMESTAMP(started)) as started ".
                              "  from apt_instance_history ".
                              "where profile_id='$profile_id' ".
                              $userclause);
             $row = mysql_fetch_row($query_result);
         }
-        if (!$row[0]) {
+        if (!$row["started"]) {
             return array(0, 0);
         }
         $lastused = $row[0];

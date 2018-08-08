@@ -341,6 +341,7 @@ function SPITFORM($formfields, $newuser, $errors)
     }
     SPITHEADER(1);
 
+    echo "<link rel='stylesheet' href='css/jquery-ui.min.css'>\n";
     echo "<link rel='stylesheet' href='css/picker.css'>\n";
     echo "<link rel='stylesheet' href='css/nv.d3.css'>\n";
 
@@ -425,6 +426,7 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "<script src='js/lib/d3.v3.js'></script>\n";
     echo "<script src='js/lib/nv.d3.js'></script>\n";
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+    echo "<script src='js/lib/jquery-ui.js'></script>\n";
     echo "<script src='https://www.emulab.net/protogeni/jacksmod/stable/jacksmod.js'></script>";
     echo "<script src='https://www.emulab.net/protogeni/jacksmod/stable/imagepicker.js'></script>";
     

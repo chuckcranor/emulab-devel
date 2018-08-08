@@ -125,6 +125,9 @@ function Do_ChangePassword()
             elseif (VERIFYPASSWD($target_uid, $formfields["oldpassword"]) != 0){
                 $errors["oldpassword"] = "Incorrect Password";
             }
+            elseif ($formfields["oldpassword"] == $formfields["password1"]) {
+                $errors["password1"] = "New password same as old password";
+            }
         }
     }
     if (!isset($formfields["password1"]) || $formfields["password1"] == "") {

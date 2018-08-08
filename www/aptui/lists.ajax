@@ -108,7 +108,7 @@ function Do_SearchProjects()
 	return -1;
     }
     $text = $ajax_args["text"];
-    if (!preg_match("/^\w*$/", $text)) {
+    if (!preg_match("/^[\w\-]+$/", $text)) {
 	SPITAJAX_ERROR(-1, "Illegal text to search for");
 	return -1;
     }

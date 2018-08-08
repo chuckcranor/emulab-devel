@@ -1283,6 +1283,14 @@ sub DoTerminate()
     $instance->SetStatus("terminating");
 
     #
+    # If deferred, then no reason to save this in the history, it
+    # was never started.
+    #
+    if ($old_status eq "deferred") {
+	goto killit;
+    }
+
+    #
     # Exit and let caller poll for status.
     #
     if (!$debug) {
@@ -1306,10 +1314,12 @@ sub DoTerminate()
     }
 
     # Skip terminated aggregates, since we retry later on failure.
+    # Also skip deferred aggregates, these were never setup.
     my @agglist;
     foreach my $agg ($instance->AggregateList()) {
 	push(@agglist, $agg)
-	    if ($agg->status() ne "terminated");
+	    if ($agg->status() ne "terminated" &&
+		$agg->status() ne "deferred");
     }
     my $response;
 
@@ -1451,7 +1461,7 @@ sub DoExtend()
 			     $instance->AggregateList());
     my $pcount        = $instance->physnode_count();
     my $expires_time  = str2time($slice->expires());
-    my $created_time  = str2time($instance->created());
+    my $created_time  = str2time($instance->started());
     my $extensions    = $instance->Brand()->ExtensionsEmailAddress();
     my $granted       = 0;
     my $needapproval  = 0;
@@ -1554,7 +1564,7 @@ sub DoExtend()
 					  localtime(str2time($slice->expires())+
 						    ($howlong * 3600)));
 	my $created     = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z",
-				  localtime(str2time($instance->created())));
+				  localtime(str2time($instance->started())));
 	$instance->Brand()->SendEmail($extensions,
 		"Experiment Extension Request: $name",
 		"A request to extend this experiment was made but requires\n".
@@ -1772,7 +1782,7 @@ sub DoExtend()
     my $expires = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z",
 				  localtime(str2time($slice->expires())));
     my $created = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z",
-				  localtime(str2time($instance->created())));
+				  localtime(str2time($instance->started())));
     my $now     = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z", localtime());
     my $before  = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z",
 				  localtime($expires_time));
@@ -2033,9 +2043,22 @@ sub DoMaxExtensionInternal($$)
     my $slice = $instance->GetGeniSlice();
     my $maxinfo;
     my $errmsg;
+    my $errcode;
     my $newmax;
     my $blob = {"maxextension" => undef, "reservations" => {}};
     my @aggregates = ();
+
+    #
+    # For now, if there are any deferred aggregates (offline), then
+    # there is no point in asking any of them, we cannot determine
+    # a max extension, have to wait till later.
+    #
+    if ($instance->DeferredAggregateList()) {
+	$errcode = GENIRESPONSE_SERVER_UNAVAILABLE();
+	$errmsg  = "Cannot determine max extension because some ".
+	    "aggregates are deferred";
+	goto bad;
+    }
 
     foreach my $aggregate ($instance->AggregateList()) {
 	next
@@ -2048,8 +2071,8 @@ sub DoMaxExtensionInternal($$)
     #
     my $responses;
 
-    my $errcode = CallMethodOnAggregates("MaxExtension", 0, \$responses,
-					 @aggregates);
+    $errcode = CallMethodOnAggregates("MaxExtension", 0, \$responses,
+				      @aggregates);
     if ($errcode) {
 	$errmsg = $responses;
 	goto bad;
@@ -2193,7 +2216,7 @@ sub DoDenyOrMoreInfo($)
     my $expires   = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z",
 				    localtime(str2time($slice->expires())));
     my $created   = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z",
-				    localtime(str2time($instance->created())));
+				    localtime(str2time($instance->started())));
     my $now       = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z", localtime());
     my $url       = $instance->webURL();
     my $pcount    = $instance->physnode_count();
@@ -2296,7 +2319,7 @@ sub DoRefresh()
     my $response;
 
     $errcode = CallMethodOnAggregates("SliceStatus", 0, \$response,
-				      $instance->AggregateList());
+				      $instance->ActiveAggregateList());
     if ($errcode) {
 	$errmsg = $response;
 	goto bad;
@@ -2309,7 +2332,7 @@ sub DoRefresh()
     # user or admin intervention. We do not go in the other direction.
     #
     my @responses = @{$response};
-    foreach my $agg ($instance->AggregateList()) {
+    foreach my $agg ($instance->ActiveAggregateList()) {
 	my $response = shift(@responses);
 	
 	if ($response->code() != GENIRESPONSE_SUCCESS) {
@@ -2335,7 +2358,7 @@ sub DoRefresh()
     goto bad
 	if ($errcode);
 
-    if ($readycount == scalar($instance->AggregateList())) {
+    if ($readycount == scalar($instance->ActiveAggregateList())) {
 	if ($instance->status() eq "failed") {
 	    $instance->SetStatus("ready");
 	}
@@ -2537,8 +2560,8 @@ sub DoManifests()
     };
     
     # Invoke on all clusters
-    $errcode = CallMethodOnAggregates($coderef, 2, \$response,
-				      $instance->AggregateList());
+    $errcode = CallMethodOnAggregates($coderef, 0, \$response,
+				      $instance->ActiveAggregateList());
     if ($errcode) {
 	$errmsg = $response;
 	goto bad;
@@ -2547,7 +2570,7 @@ sub DoManifests()
     #
     # Look at all the responses.
     #
-    foreach my $agg ($instance->AggregateList()) {
+    foreach my $agg ($instance->ActiveAggregateList()) {
 	my $response = shift(@{$response});
 	my $code = $response->code();
 
@@ -2880,7 +2903,12 @@ sub StartMonitorInternal(;$)
     #
     # We poll only those aggregates that are not ready yet.
     #
-    my @aggregates = $instance->AggregateList();
+    my @aggregates = ();
+    # Skip deferred aggregates for now.
+    foreach my $ref ($instance->AggregateList()) {
+	push(@aggregates, $ref)
+	    if ($ref->status ne "deferred");
+    }
 
     while ($seconds > 0 && @aggregates) {
 	my $response;
@@ -3461,20 +3489,25 @@ sub DoUpdateKeys()
 	$exitcode = 1;
 	$errmsg   = "Experiment is busy, cannot lock it. Try again later.";
     }
+    if (! $instance->ActiveAggregateList()) {
+	print STDERR "No active aggregates to update keys on\n";
+	$slice->UnLock();
+	exit(0);
+    }
 
     #
     # Only clusters with nodes.
     #
     my @aggregates = ();
 
-    if ($instance->AggregateList() > 1) {
-	foreach my $agg ($instance->AggregateList()) {
+    if ($instance->ActiveAggregateList() > 1) {
+	foreach my $agg ($instance->ActiveAggregateList()) {
 	    push(@aggregates, $agg)
 		if ($agg->physnode_count() || $agg->virtnode_count());	    
 	}
     }
     else {
-	@aggregates = $instance->AggregateList();
+	@aggregates = $instance->ActiveAggregateList();
     }
 
     #
@@ -4120,7 +4153,7 @@ sub DoSchedTerminate()
 			     $instance->AggregateList());
     my $pcount        = $instance->physnode_count();
     my $expires_time  = str2time($slice->expires());
-    my $created_time  = str2time($instance->created());
+    my $created_time  = str2time($instance->started());
     my $extensions    = $instance->Brand()->ExtensionsEmailAddress();
     
     usage()
@@ -4221,7 +4254,7 @@ sub DoSchedTerminate()
     my $expires = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z",
 				  localtime(str2time($slice->expires())));
     my $created = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z",
-				  localtime(str2time($instance->created())));
+				  localtime(str2time($instance->started())));
     my $message = "The site administrator has scheduled this experiment\n".
 	($days ? "to terminate in $days days." : "for immediate termination!");
     my $subject = "Experiment Termination Warning: $name";

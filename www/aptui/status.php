@@ -160,12 +160,8 @@ $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
 
 $instance_status = $instance->status();
 $creator_uid     = $creator->uid();
-$creator_email   = $creator->email();
 if ($profile = Profile::Lookup($instance->profile_id(),
 			       $instance->profile_version())) {
-    $profile_name   = $profile->name();
-    $profile_uuid   = $profile->uuid();
-    $profile_public = ($profile->ispublic() ? "true" : "false");
     $cansnap        = ((isset($this_user) &&
 			$this_user->idx() == $creator->idx() &&
 			$this_user->idx() == $profile->creator_idx()) ||
@@ -176,62 +172,22 @@ if ($profile = Profile::Lookup($instance->profile_id(),
     $canterminate   = ((isset($this_user) &&
                         $instance->CanTerminate($this_user)) ||
 		       ISADMIN() ? 1 : 0);
-    $public_url     = ($instance->public_url() ?
-		       "'" . $instance->public_url() . "'" : "null");
     $isscript       = ($profile->script() && $profile->script() != "" ? 1 : 0);
 }
 else {
-    $profile_name   = "";
-    $profile_uuid   = "";
-    $profile_public = "false";
     $cansnap        = 0;
     $canclone       = 0;
     $canterminate   = 0;
-    $public_url     = "null";
-    $isscript      = 0;
+    $isscript       = 0;
 
-}
-if ($slice) {
-    $slice_urn       = $slice->urn();
-    $instance_name   = $instance->name();
-    # Until old instances are gone.
-    if (!$instance_name) {
-        list ($a,$b,$instance_name) = Instance::ParseURN($slice_urn);
-    }
-    $slice_expires   = DateStringGMT($slice->expires());
-    $slice_expires_text = gmdate("m-d\TH:i\Z", strtotime($slice->expires()));
-    $slice_created   = DateStringGMT($instance->created());
-}
-else {
-    $slice_urn = "";
-    $slice_expires = "";
-    $slice_expires_text = ""; 
-    $slice_created  = "";
-    $instance_name  = "";
 }
 $registered      = (isset($this_user) ? "true" : "false");
 $snapping        = 0;
 $oneonly         = (isset($oneonly) && $oneonly ? 1 : 0);
 $isadmin         = (ISADMIN() ? 1 : 0);
-$user_lockdown   = ($instance->user_lockdown() ? 1 : 0);
-$admin_lockdown  = ($instance->admin_lockdown() ? 1 : 0);
-$extension_reason= ($instance->extension_reason() ?
-                    CleanString($instance->extension_reason()) : "");
-$extension_denied_reason= ($instance->extension_denied_reason() ?
-                    CleanString($instance->extension_denied_reason()) : "");
-$extension_denied= $instance->extension_denied();
-$freenodes_url   = Aggregate::Lookup($instance->aggregate_urn())->FreeNodesURL();
-$extension_disabled = $instance->extension_disabled();
-$extension_disabled_reason = ($instance->extension_disabled_reason() ?
-                    CleanString($instance->extension_disabled_reason()) : "");
-$isopenstack     = $instance->isopenstack();
-$paniced         = $instance->paniced();
-$pid             = $instance->pid();
-$gid             = $instance->gid();
-$extensions      = ExtensionInfo::LookupForInstance($instance);
 $slivers         = InstanceSliver::LookupForInstance($instance);
 $isstud          = (isset($this_user) && $this_user->stud() ? 1 : 0);
-$wholedisk       = FeatureEnabled("WholeDiskImage", $creator, $instance->Group());
+$wholedisk       = FeatureEnabled("WholeDiskImage",$creator,$instance->Group());
 
 #
 # We give ssh to the creator (real user or guest user).
@@ -268,17 +224,6 @@ echo "<div id='status-body'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "  window.APT_OPTIONS.uuid = '" . $uuid . "';\n";
-echo "  window.APT_OPTIONS.name = '" . $instance_name . "';\n";
-echo "  window.APT_OPTIONS.instanceStatus = '" . $instance_status . "';\n";
-echo "  window.APT_OPTIONS.profileName = '" . $profile_name . "';\n";
-echo "  window.APT_OPTIONS.profileUUID = '" . $profile_uuid . "';\n";
-echo "  window.APT_OPTIONS.profilePublic = " . $profile_public . ";\n";
-echo "  window.APT_OPTIONS.sliceURN = '" . $slice_urn . "';\n";
-echo "  window.APT_OPTIONS.sliceExpires = '" . $slice_expires . "';\n";
-echo "  window.APT_OPTIONS.sliceExpiresText = '" . $slice_expires_text . "';\n";
-echo "  window.APT_OPTIONS.sliceCreated = '" . $slice_created . "';\n";
-echo "  window.APT_OPTIONS.creatorUid = '" . $creator_uid . "';\n";
-echo "  window.APT_OPTIONS.creatorEmail = '" . $creator_email . "';\n";
 if (isset($this_user)) {
     echo "  window.APT_OPTIONS.thisUid = '" . $this_user->uid() . "';\n";
 }
@@ -298,26 +243,7 @@ echo "  window.APT_OPTIONS.hidelinktest = false;\n";
 echo "  window.APT_OPTIONS.oneonly = $oneonly;\n";
 echo "  window.APT_OPTIONS.dossh = $dossh;\n";
 echo "  window.APT_OPTIONS.isscript = $isscript;\n";
-echo "  window.APT_OPTIONS.publicURL = $public_url;\n";
-echo "  window.APT_OPTIONS.user_lockdown = $user_lockdown;\n";
-echo "  window.APT_OPTIONS.admin_lockdown = $admin_lockdown;\n";
-echo "  window.APT_OPTIONS.lockout = $extension_disabled;\n";
-echo "  window.APT_OPTIONS.isopenstack = $isopenstack;\n";
-echo "  window.APT_OPTIONS.paniced = $paniced;\n";
-echo "  window.APT_OPTIONS.project = '$pid';\n";
-echo "  window.APT_OPTIONS.group = '$gid';\n";
-echo "  window.APT_OPTIONS.extension_requested = " .
-    $instance->extension_requested() . ";\n";
-echo "  window.APT_OPTIONS.extension_denied = $extension_denied;\n";
 echo "  window.APT_OPTIONS.AJAXURL = 'server-ajax.php';\n";
-echo "  window.APT_OPTIONS.physnode_count = " .
-    $instance->physnode_count() . ";\n";
-echo "  window.APT_OPTIONS.virtnode_count = " .
-    $instance->virtnode_count() . ";\n";
-echo "  window.APT_OPTIONS.physnode_hours = " .
-    sprintf("%.2f;\n", $instance->physnode_count() *
-            ((time() - strtotime($instance->created())) / 3600));
-echo "  window.APT_OPTIONS.freenodesurl = '$freenodes_url';\n";
 if (isset($maxextend) && $maxextend != "") {
     # Assumed to be hours.
     echo "  window.APT_OPTIONS.MAXEXTEND = $maxextend;\n";
@@ -325,16 +251,7 @@ if (isset($maxextend) && $maxextend != "") {
 else {
     echo "  window.APT_OPTIONS.MAXEXTEND = null;\n";
 }
-echo "  window.APT_OPTIONS.hasnotes = " .
-    ($instance->admin_notes() && $instance->admin_notes() != "" ? 1 : 0) . ";\n";
-if ($instance->repourl()) {
-    echo "  window.APT_OPTIONS.repourl = '" . $instance->repourl() . "';\n";
-    if ($instance->reporef()) {
-        echo "  window.APT_OPTIONS.reporef = '" . $instance->reporef() . "';\n";
-        echo "  window.APT_OPTIONS.repohash = '" .
-                substr($instance->repohash(),0,8) . "';\n";
-    }
-}
+
 echo "</script>\n";
 echo "<script src='js/lib/d3.v3.js'></script>\n";
 echo "<script src='js/lib/nv.d3.js'></script>\n";
@@ -369,29 +286,11 @@ foreach ($slivers as $sliver) {
     $aggregate     = Aggregate::Lookup($aggregate_urn);
     $weburl        = $aggregate->weburl();
 
-    $blob[$aggregate_urn] = array("weburl" => $weburl);
+    $blob[$aggregate_urn] = array("weburl" => $weburl,
+                                  "name"   => $aggregate->name(),
+                                  "abbreviation" => $aggregate->abbreviation());
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
-echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
-echo "</script>\n";
-
-#
-# Build up a blob of stuff to json encode. This should be moved to
-# an ajax method on the instance ...
-#
-$blob = array();
-
-$blob["extension_reason"] = $extension_reason;
-$blob["extension_denied_reason"] = $extension_denied_reason;
-$blob["extension_disabled_reason"] = $extension_disabled_reason;
-if (count($extensions)) {
-    $foo = array();
-    foreach ($extensions as $extension) {
-        $foo[$extension->idx()] = $extension->info;
-    }
-    $blob["extensions"] = $foo;
-}
-echo "<script type='text/plain' id='extension-blob-json'>\n";
 echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
 echo "</script>\n";
 

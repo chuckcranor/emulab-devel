@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -57,15 +57,15 @@ function Do_GetStats()
         $query_result =
             DBQueryFatal("select ".
                  "(select count(uuid) from apt_instances ".
-                 " where created > DATE_SUB(now(),interval $age second)),".
+                 " where started > DATE_SUB(now(),interval $age second)),".
                  "(select count(uuid) from apt_instance_history ".
-                 " where created > DATE_SUB(now(),interval $age second))");
+                 " where started > DATE_SUB(now(),interval $age second))");
         $row = mysql_fetch_array($query_result);
         $started[$key] = $row[0] + $row[1];
 
         $query_result =
             DBQueryFatal("select count(uuid) from apt_instance_failures ".
-                    " where created > DATE_SUB(now(),interval $age second)");
+                    " where started > DATE_SUB(now(),interval $age second)");
         $row = mysql_fetch_array($query_result);
         $errors[$key] = $row[0] + $row[1];
 
@@ -76,7 +76,7 @@ function Do_GetStats()
         $query_result =
             DBQueryFatal("select exitcode,count(exitcode) as count ".
                          "  from apt_instance_failures ".
-                         "where created>DATE_SUB(now(),interval $age second)".
+                         "where started>DATE_SUB(now(),interval $age second)".
                          "group by exitcode");
         while ($row = mysql_fetch_array($query_result)) {
             $exitcode = $row[0];
@@ -105,19 +105,19 @@ function Do_GetStats()
 
     $query_result =
         DBQueryFatal("select i.name,i.uuid,i.creator,i.creator_idx,".
-                     "  i.physnode_count,i.created,i.aggregate_urn, ".
+                     "  i.physnode_count,i.started,i.aggregate_urn, ".
                      "  p.uuid as profile_uuid,p.name as profile_name ".
                      "from apt_instances as i ".
                      "left join apt_profiles as p on ".
                      "     p.profileid=i.profile_id ".
-                     "order by created desc limit 5");
+                     "order by started desc limit 5");
     while ($row = mysql_fetch_array($query_result)) {
         $name        = $row["name"];
         $uuid        = $row["uuid"];
         $creator     = $row["creator"];
         $creator_idx = $row["creator_idx"];
         $pcount      = $row["physnode_count"];
-        $created     = DateStringGMT($row["created"]);
+        $created     = DateStringGMT($row["started"]);
         $profile_uuid = $row["profile_uuid"];
         $profile_name = $row["profile_name"];
         $aggregate_urn= $row["aggregate_urn"];
@@ -208,7 +208,7 @@ function Do_GetStats()
     $error_details = array();
 
     $query_result =
-        DBQueryFatal("select f.name,exitcode,f.created,f.public_url,f.uuid,".
+        DBQueryFatal("select f.name,exitcode,f.started,f.public_url,f.uuid,".
                      "  IF(i.uuid,1,0) as active,f.exitmessage, ".
                      "  p.uuid as profile_uuid,p.name as profile_name, ".
                      "  IF(i.uuid,i.aggregate_urn,h.aggregate_urn) ".
@@ -221,7 +221,7 @@ function Do_GetStats()
                      "     h.uuid=f.uuid ".
                      "left join apt_profiles as p on ".
                      "     p.profileid=f.profile_id ".
-                     "order by f.created desc limit 10");
+                     "order by f.started desc limit 10");
 
     while ($row = mysql_fetch_array($query_result)) {
         $name       = $row["name"];
@@ -230,7 +230,7 @@ function Do_GetStats()
         $logfileid  = $row["logfileid"];
         $active     = $row["active"] ? 1 : 0;
         $uuid       = $row["uuid"];
-        $created    = DateStringGMT($row["created"]);
+        $created    = DateStringGMT($row["started"]);
         $creator    = $row["creator"];
         $message    = $row["exitmessage"];
         $reason     = $exitcode;
@@ -311,7 +311,7 @@ function Do_GetStats()
         $uuid       = $row["uuid"];
         $pid        = $row["pid"];
         $expires    = DateStringGMT($row["expires"]);
-        $created    = DateStringGMT($row["created"]);
+        $created    = DateStringGMT($row["started"]);
         $creator    = $row["creator"];
 
         $extension_details[$uuid] = array("name"     => $name,
@@ -330,7 +330,7 @@ function Do_GetStats()
 
     $query_result =
         DBQueryFatal("select i.name,i.uuid,i.creator,i.creator_idx,".
-                     "  i.physnode_count,i.created,i.aggregate_urn,s.expires, ".
+                     "  i.physnode_count,i.started,i.aggregate_urn,s.expires, ".
                      "  p.uuid as profile_uuid,p.name as profile_name ".
                      "from apt_instances as i ".
                      "left join apt_profiles as p on ".
@@ -338,14 +338,14 @@ function Do_GetStats()
                      "left join geni.geni_slices as s on ".
                      "     s.uuid=i.slice_uuid ".
                      "where i.admin_lockdown!=0 ".
-                     "order by created desc");
+                     "order by i.started desc");
     while ($row = mysql_fetch_array($query_result)) {
         $name        = $row["name"];
         $uuid        = $row["uuid"];
         $creator     = $row["creator"];
         $creator_idx = $row["creator_idx"];
         $pcount      = $row["physnode_count"];
-        $created     = DateStringGMT($row["created"]);
+        $created     = DateStringGMT($row["started"]);
         $expires     = DateStringGMT($row["expires"]);
         $profile_uuid = $row["profile_uuid"];
         $profile_name = $row["profile_name"];

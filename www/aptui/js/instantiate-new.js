@@ -77,7 +77,6 @@ $(function ()
 		amValueToKey[amlist[key].name] = key;
 	    });
 	    amstatus = decodejson('#amstatus-json');
-	    console.info(amstatus);
 	}
 	if ($('#projects-json').length) {
 	    projlist = decodejson('#projects-json');
@@ -192,12 +191,52 @@ $(function ()
 		return StepChanged(this, event, currentIndex, priorIndex);
 	    },
 	    onFinishing: function(event, currentIndex) {
-		return Instantiate(this, event);
+		_.defer(function () {
+		    CheckStep3(function (success) {
+			if (success) {
+			    Instantiate(event);
+			}
+			else {
+			    $('#stepsContainer-t-3').parent().addClass('error');
+			}
+		    });
+		});
+		// Avoid Error indicator until form validation completes.
+		return true;
 	    },
 	});
-
-	// This activates the popover subsystem. 
-	$('[data-toggle="popover"]').popover({
+	
+	// Insert datepicker on schedule tab,
+	$("#start_day").datepicker({
+	    minDate: 0,		/* earliest date is today */
+	    disabled: true,
+	    showButtonPanel: true,
+	    onSelect: function (dateString, dateobject) {
+		DateChange("#start_day");
+	    }
+	});
+	$("#end_day").datepicker({
+	    minDate: 0,		/* earliest date is today */
+	    showButtonPanel: true,
+	    onSelect: function (dateString, dateobject) {
+		DateChange("#end_day");
+	    }
+	});
+	// The start immediately checkbox controls the start date/time
+	// enable/disable state.
+	$('#start-immediately').change(function (event) {
+	    if ($('#start-immediately').is(":checked")) {
+		$("#start_day").datepicker("hide");
+		$("#start_day").datepicker("option", "disabled", true);
+		$("#start_hour").prop("disabled", true);
+	    }
+	    else {
+		$("#start_day").datepicker("option", "disabled", false);
+		$("#start_day").datepicker("show");
+		$("#start_hour").prop("disabled", false);
+	    }
+	});
+	$('#start-hour-help, #end-hour-help').popover({
 	    trigger: 'hover',
 	    placement: 'auto',
 	    container: 'body',
@@ -494,6 +533,7 @@ $(function ()
     
     // Step is changing
     function StepChanging(step, event, currentIndex, newIndex) {
+	//console.info("StepChanging: ", step, currentIndex, newIndex);
 	if (currentIndex == 0 && newIndex == 1) {
 	    // Check step 0 form values. Any errors, we stop here.
 	    if (!registered && !doingformcheck) {
@@ -570,6 +610,27 @@ $(function ()
 		return false;
 	    }
 	}
+	else if (currentIndex == 2 && newIndex == 3) {
+	    // Check step 2 form values. Any errors, we stop here.
+	    if (!doingformcheck) {
+		doingformcheck = 1;
+		CheckStep2(function (success) {
+		    if (success) {
+			$('#stepsContainer-t-2').parent().removeClass('error');
+			$('#stepsContainer').steps('next');
+		    }
+		    else {
+			$('#stepsContainer-t-2').parent().addClass('error');
+		    }
+		    // Here to avoid recursion.
+		    doingformcheck = 0;
+		});
+		// Prevent step from advancing until check is finished.
+		return false;
+	    } 
+	}
+	// Switch Jacks back to the little window when leaving
+	// the Finalize step.
 	if (currentIndex == 2) {
 	    SwitchJacks('small');
 	}
@@ -581,6 +642,7 @@ $(function ()
 
     // Step is done changing.
     function StepChanged(step, event, currentIndex, priorIndex) {
+	//console.info("StepChanged: ", step, currentIndex, priorIndex);
         APT_OPTIONS.updatePage({ 'instantiate-step': currentIndex });
 	var cIndex = currentIndex;
         if (currentIndex == 1) {
@@ -641,7 +703,7 @@ $(function ()
 	    // Chrome was having an issue where Jacks was not responding to
 	    // the height change. Had to also add to Jacks root.
 	    $('#inline_jacks').css('height',
-			       $('#finalize_container').outerHeight() - 15);
+				   $('#finalize_container').outerHeight() - 15);
 	}
 	if (currentIndex < priorIndex) {
 	    // Disable going forward by clicking on the labels
@@ -723,6 +785,104 @@ $(function ()
 	    }
 	});
     }
+    /*
+     * Check the form values on step 2 (Finalize) of the wizard.
+     */
+    function CheckStep2(step_callback)
+    {
+	if (!AllClustersSelected()) {
+	    ShowFormErrors({"error" :
+			    "Please make your cluster selections!"});
+	    step_callback(false);
+	    return;
+	}
+	SubmitForm(1, 2, function (json) {
+	    if (json.code == 0) {
+		step_callback(true);
+		return;
+	    }
+	    // Internal error.
+	    if (json.code < 0) {
+		step_callback(false);
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    // Form error
+	    if (json.code == 2) {
+		// Regenerate page with errors.
+		ShowFormErrors(json.value);
+		step_callback(false);
+		return;
+	    }
+	});
+    }
+    /*
+     * Check the form values on step 3 (Schedule) of the wizard.
+     */
+    function CheckStep3(step_callback)
+    {
+	ClearFormErrors();
+
+	/*
+	 * Initial validation on the start/end time.
+	 * Also convert to UTC for submit (to capture local timezone).
+	 */
+	if (! $('#start-immediately').is(":checked")) {
+	    var start_day  = $('#step3-form [name=start_day]').val();
+	    var start_hour = $('#step3-form [name=start_hour]').val();
+	    if (start_day && !start_hour) {
+		ShowFormErrors({"start_hour" : "Missing hour"});
+		step_callback(false);
+		return;
+	    }
+	    else if (!start_day && start_hour) {
+		ShowFormErrors({"start_day" : "Missing day"});
+		step_callback(false);
+		return;
+	    }
+	    else if (start_day && start_hour) {
+		var start = moment(start_day, "MM/DD/YYYY");
+		start.hour(start_hour);
+		$('#step3-form [name=start]').val(start.format());
+	    }
+	}
+	var end_day  = $('#step3-form [name=end_day]').val();
+	var end_hour = $('#step3-form [name=end_hour]').val();
+	if (end_day && !end_hour) {
+	    ShowFormErrors({"end_hour" : "Missing hour"});
+	    step_callback(false);
+	    return;
+	}
+	else if (!end_day && end_hour) {
+	    ShowFormErrors({"end_day" : "Missing day"});
+	    step_callback(false);
+	    return;
+	}
+	else if (end_day && end_hour) {
+	    var end = moment(end_day, "MM/DD/YYYY");
+	    end.hour(end_hour);
+	    $('#step3-form [name=end]').val(end.format());
+	}
+	SubmitForm(1, 3, function (json) {
+	    if (json.code == 0) {
+		step_callback(true);
+		return;
+	    }
+	    // Internal error.
+	    if (json.code < 0) {
+		step_callback(false);
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    // Form error
+	    if (json.code == 2) {
+		// Regenerate page with errors.
+		ShowFormErrors(json.value);
+		step_callback(false);
+		return;
+	    }
+	});
+    }
 
     /*
      * Run the genilib script.
@@ -755,7 +915,7 @@ $(function ()
     var Instantiate = function () {
         var submitted = false;
 
-        return function (dom, event)
+        return function (event)
         {
 	    if (webonly != 0) {
 	        event.preventDefault();
@@ -771,24 +931,17 @@ $(function ()
 	    // Prevent double click.
 	    if (submitted === true) {
 	        // Previously submitted - don't submit again
-	        console.info("Ignoring double submit");
 	        event.preventDefault();
+	        console.info("Ignoring double submit");
 	        return false;
 	    } else {
-	        // See if all cluster selections have been made. Seems
-	        // to be a common problem.
-	        if (!AllClustersSelected()) {
-		    alert("Please make all your cluster selections!");
-		    event.preventDefault();
-		    return false;
-	        }
 	        // Mark it so that the next submit can be ignored
 	        submitted = true;
 	    }
 
             // Submit with checkonly first, then for real
-	    SubmitForm(1, 2, function (json) {
-	        console.info(json);
+	    SubmitForm(1, 3, function (json) {
+	        //console.info(json);
 	        // Internal error.
 	        if (json.code < 0) {
 		    sup.SpitOops("oops", json.value);
@@ -1688,7 +1841,7 @@ $(function ()
 	    count++;
 
 	    if (manager && manager.length) {
-		var parser = /^urn:publicid:idn\+([\w#!:.]*)\+/i;
+		var parser = /^urn:publicid:idn\+([\w#!:.\-]*)\+/i;
 		var matches = parser.exec(manager);
 		if (! matches) {
 		    console.error("Could not parse urn: " + manager);
@@ -2240,5 +2393,46 @@ $(function ()
 	console.info("ClusterSelected: " + cluster);
     }
 
+    /*
+     * When the date selected is today, need to disable the hours
+     * before the current hour. Also set the initial hour to a
+     * reasonable hour, like 7am since that is a good start work time
+     * for most people. Basically, try to avoid unused reservations
+     * between midnight and 7am, unless people specifically want that
+     * time.
+     */
+    function DateChange(which)
+    {
+	var date = $("#step3-form " + which).datepicker("getDate");
+	var now = new Date();
+	var selecter;
+
+	if (which == "#start_day") {
+	    selecter = "#step3-form #start_hour";
+	}
+	else {
+	    selecter = "#step3-form #end_hour";
+	}
+	if (moment(date).isSame(Date.now(), "day")) {
+	    for (var i = 0; i <= now.getHours(); i++) {
+
+		/*
+		 * Before we disable the option, see if it is selected.
+		 * If so, we want make the user re-select the hour.
+		 */
+		if ($(selecter + " option:selected").val() == i) {
+		    $(selecter).val("");
+		}
+		$(selecter + " option[value='" + i + "']")
+		    .attr("disabled", "disabled");
+	    }
+	}
+	else {
+	    for (var i = 0; i <= now.getHours(); i++) {
+		$(selecter + " option[value='" + i + "']")
+		    .removeAttr("disabled");
+	    }
+	}
+    }
     $(document).ready(initialize);
 });

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,10 +42,10 @@ function Do_GetDurationInfo()
     $query_result =
         DBQueryFatal("select count(*) as count, ".
                      "  ceil((UNIX_TIMESTAMP(destroyed) - ".
-                     "    UNIX_TIMESTAMP(created)) / (3600)) as duration ".
+                     "    UNIX_TIMESTAMP(started)) / (3600)) as duration ".
                      "from apt_instance_history ".
                      "where ceil((UNIX_TIMESTAMP(destroyed) - ".
-                     "    UNIX_TIMESTAMP(created)) / (3600)) <= 36 " .
+                     "    UNIX_TIMESTAMP(started)) / (3600)) <= 36 " .
                      "group by duration order by duration desc");
     while ($row = mysql_fetch_array($query_result)) {
         $count     = $row["count"];
@@ -55,12 +55,12 @@ function Do_GetDurationInfo()
     }
     $query_result =
         DBQueryFatal("select avg(ceil((UNIX_TIMESTAMP(destroyed) - ".
-                     "    UNIX_TIMESTAMP(created)) / (3600))), ".
+                     "    UNIX_TIMESTAMP(started)) / (3600))), ".
                      "  std(ceil((UNIX_TIMESTAMP(destroyed) - ".
-                     "    UNIX_TIMESTAMP(created)) / (3600))) ".
+                     "    UNIX_TIMESTAMP(started)) / (3600))) ".
                      "from apt_instance_history ".
                      "where ceil((UNIX_TIMESTAMP(destroyed) - ".
-                     "    UNIX_TIMESTAMP(created)) / (3600)) <= 36");
+                     "    UNIX_TIMESTAMP(started)) / (3600)) <= 36");
     $row = mysql_fetch_array($query_result);
     $average = $row[0];
     $stddev  = $row[1];
@@ -74,10 +74,10 @@ function Do_GetDurationInfo()
     $query_result =
         DBQueryFatal("select count(*) as count, ".
                      "  ceil((UNIX_TIMESTAMP(destroyed) - ".
-                     "    UNIX_TIMESTAMP(created)) / (3600 * 24)) as duration ".
+                     "    UNIX_TIMESTAMP(started)) / (3600 * 24)) as duration ".
                      "from apt_instance_history ".
                      "where ceil((UNIX_TIMESTAMP(destroyed) - ".
-                     "    UNIX_TIMESTAMP(created)) / (3600 * 24)) <= 30 " .
+                     "    UNIX_TIMESTAMP(started)) / (3600 * 24)) <= 30 " .
                      "group by duration order by duration asc");
     # Throw away day one.
     $row = mysql_fetch_array($query_result);
@@ -89,12 +89,12 @@ function Do_GetDurationInfo()
     }
     $query_result =
         DBQueryFatal("select avg(ceil((UNIX_TIMESTAMP(destroyed) - ".
-                     "    UNIX_TIMESTAMP(created)) / (3600 * 24))), ".
+                     "    UNIX_TIMESTAMP(started)) / (3600 * 24))), ".
                      "  std(ceil((UNIX_TIMESTAMP(destroyed) - ".
-                     "    UNIX_TIMESTAMP(created)) / (3600 * 24))) ".
+                     "    UNIX_TIMESTAMP(started)) / (3600 * 24))) ".
                      "from apt_instance_history ".
                      "where ceil((UNIX_TIMESTAMP(destroyed) - ".
-                     "    UNIX_TIMESTAMP(created)) / (3600 * 24)) <= 30");
+                     "    UNIX_TIMESTAMP(started)) / (3600 * 24)) <= 30");
     $row = mysql_fetch_array($query_result);
     $average = $row[0];
     $stddev  = $row[1];

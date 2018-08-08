@@ -12,6 +12,7 @@ $(function ()
     var utilizationString = templates['admin-utilization'];
     var summaryString = templates['admin-summary'];
 
+    var expinfo            = null;
     var extensions         = null;
     var firstrowTemplate   = null;
     var secondrowTemplate  = null;
@@ -33,20 +34,27 @@ $(function ()
 	extensionsTemplate = _.template(historyString);
 	listTemplate = _.template(templates["reservation-list"]);
 
-	LoadFirstRow();
-	// Need to serialize this stuff cause of locking in the backend.
-	LoadUtilization(function () {
-	    LoadIdleData(function () {
-		LoadOpenStack();
-	    });
+	ReloadFirstRow(function () {
+	    if (expinfo.started) {
+		$('#extension-controls').removeClass("hidden");
+		
+		// Need to serialize this stuff cause of locking in the backend.
+		LoadUtilization(function () {
+		    LoadIdleData(function () {
+			LoadOpenStack();
+		    });
+		});
+	    }
 	});
 
 	// Second row is the user/project usage summarys. We make two calls
 	// and use jquery "when" to wait for both to finish before running
 	// the template.
-	var xmlthing1 = sup.CallServerMethod(null, "user-dashboard", "UsageSummary",
+	var xmlthing1 = sup.CallServerMethod(null, "user-dashboard",
+					     "UsageSummary",
 					     {"uid"    : window.CREATOR});
-	var xmlthing2 = sup.CallServerMethod(null, "show-project", "UsageSummary",
+	var xmlthing2 = sup.CallServerMethod(null, "show-project",
+					     "UsageSummary",
 					     {"pid"    : window.PID});
 	$.when(xmlthing1, xmlthing2).done(function(result1, result2) {
 	    var html = secondrowTemplate({"uid"     : window.CREATOR,
@@ -236,7 +244,7 @@ $(function ()
 	    if (window.HOURS) {
 		window.HOURS = window.HOURS - howlong;
 	    }
-	    LoadFirstRow();
+	    ReloadFirstRow();
 	    // Make it harder to repeat action unintentionally. 
 	    if (action == "extend" || action == "terminate") {
 		$('#howlong').val("0");
@@ -254,64 +262,82 @@ $(function ()
     }
 
     // First Row is the experiment summary info.
-    function LoadFirstRow(continuation) {
-	sup.CallServerMethod(null, "status", "ExpInfo", {"uuid" : window.UUID},
+    function LoadFirstRow() {
+	var html = firstrowTemplate(
+	    {"expinfo" : expinfo,
+	     "uuid"    : window.UUID,
+	     "uid"     : window.CREATOR,
+	     "pid"     : window.PID}
+	);
+	$("#firstrow").html(html);
+	$('.format-date').each(function() {
+	    var date = $.trim($(this).html());
+	    if (date != "") {
+		$(this).html(moment(date)
+			     .format("MMM D, YYYY h:mm A"));
+	    }
+	});
+	if (!expinfo.started) {
+	    // Disable the flags. 
+	    $('#lockout-checkbox, #user-lockdown-checkbox, ' +
+	      '#admin-lockdown-checkbox, #quarantine-checkbox')
+		.attr("disabled", "disabled");
+	}
+	else {
+	    // lockout change event handler.
+	    $('#lockout-checkbox').change(function() {
+		DoLockout($(this).is(":checked"));
+	    });	
+	    // lockdown change event handler.
+	    $('#user-lockdown-checkbox')
+		.change(function() {
+		    DoLockdown("user",
+			       $(this).is(":checked"));
+		});
+	    $('#admin-lockdown-checkbox')
+		.change(function() {
+		    DoLockdown("admin",
+			       $(this).is(":checked"));
+		});
+	    $('#quarantine-checkbox')
+		.change(function() {
+		    DoQuarantine($(this).is(":checked"));
+		});
+	}
+	// This activates the popover subsystem.
+	$('[data-toggle="popover"]').popover({
+	    trigger: 'hover',
+	    placement: 'auto',
+	});
+	// No termination.
+	if (expinfo.admin_lockdown) {
+	    $('#terminate-button')
+		.attr("disabled", "disabled");
+	}
+	// Update the Max Extension
+	DoMaxExtension(expinfo.expires);
+	SetupAdminNotes();
+    }
+    
+    function ReloadFirstRow(continuation)
+    {
+	sup.CallServerMethod(null, "status", "ExpInfo",
+			     {"uuid" : window.UUID},
 			     function (json) {
 				 console.info(json);
 				 if (json.code == 0) {
-				     var html = firstrowTemplate(
-					 {"expinfo" : json.value,
-					  "uuid"    : window.UUID,
-					  "uid"     : window.CREATOR,
-					  "pid"     : window.PID}
-				     );
-				     $("#firstrow").html(html);
-				     $('.format-date').each(function() {
-					 var date = $.trim($(this).html());
-					 if (date != "") {
-					     $(this).html(moment(date)
-							 .format("MMM D, YYYY h:mm A"));
-					 }
-				     });
-				     // lockout change event handler.
-				     $('#lockout-checkbox').change(function() {
-					 DoLockout($(this).is(":checked"));
-				     });	
-				     // lockdown change event handler.
-				     $('#user-lockdown-checkbox')
-					 .change(function() {
-					     DoLockdown("user",
-							$(this).is(":checked"));
-				     });
-				     $('#admin-lockdown-checkbox')
-					 .change(function() {
-					     DoLockdown("admin",
-							$(this).is(":checked"));
-					 });
-				     $('#quarantine-checkbox')
-					 .change(function() {
-					     DoQuarantine($(this).is(":checked"));
-					 });
-				     // This activates the popover subsystem.
-				     $('[data-toggle="popover"]').popover({
-					 trigger: 'hover',
-					 placement: 'auto',
-				     });
-				     // No termination.
-				     if (json.value.admin_lockdown) {
-					 $('#terminate-button')
-					     .attr("disabled", "disabled");
-				     }
-				     // Update the Max Extension
-				     DoMaxExtension(json.value.expires,
-						    continuation);
-				     SetupAdminNotes();
+				     expinfo = json.value;
+				     LoadFirstRow();
+				     continuation();
 				 }
 			     });
     }
 
     function LoadUtilization(continuation) {
 	console.info("LoadUtilization", continuation);
+	if (!expinfo.started) {
+	    return;
+	}
 	var utilizationTemplate = _.template(utilizationString);
 	var summaryTemplate = _.template(summaryString);
 	
@@ -531,6 +557,12 @@ $(function ()
     function DoMaxExtension(expires, continuation)
     {
 	console.info("DoMaxExtension", expires, continuation);
+
+	if (! expinfo.started) {
+	    $('#max-extension').html("<span class='text-warning'>" +
+				     "Not Started Yet</span>");	    
+	    return;
+	}
 	
 	// Warn if changing days violates max extension.
 	var callback = function(json) {

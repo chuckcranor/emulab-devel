@@ -59,7 +59,7 @@ function Do_ExperimentList()
                      "  UNIX_TIMESTAMP(s.expires)) as expired, ".
                      "  truncate(a.physnode_count * ".
                      "   ((UNIX_TIMESTAMP(now()) - ".
-                     "     UNIX_TIMESTAMP(a.created)) / 3600.0),2) as phours, ".
+                     "     UNIX_TIMESTAMP(a.started)) / 3600.0),2) as phours, ".
                      " IFNULL(aggs.count,0) as aggrows, ".
                      " agg.aggregate_urn as aggrow_urn ".
                      "  from apt_instances as a ".
@@ -81,7 +81,7 @@ function Do_ExperimentList()
         $name         = $row["name"];
         $status       = $row["status"];
         $canceled     = $row["canceled"];
-        $created      = DateStringGMT($row["created"]);
+        $created      = DateStringGMT($row["started"]);
         $expires      = DateStringGMT($row["expires"]);
         $creator_idx  = $row["creator_idx"];
         $profile_name = "$profile_id:$version";
@@ -187,10 +187,10 @@ function Do_ExperimentErrors()
     }
     if (isset($ajax_args["stamp"]) && TBvalid_integer($ajax_args["stamp"])) {
         $stamp = $ajax_args["stamp"];
-        $clause = "where UNIX_TIMESTAMP(f.created) <= $stamp";
+        $clause = "where UNIX_TIMESTAMP(f.started) <= $stamp";
     }
     $query_result =
-        DBQueryFatal("select f.name,exitcode,f.created,f.public_url,".
+        DBQueryFatal("select f.name,exitcode,f.started,f.public_url,".
 	             "  IF(i.uuid,i.uuid,f.uuid) as uuid, ".
                      "  IF(i.uuid,1,0) as active,f.exitmessage, ".
                      "  p.uuid as profile_uuid,p.name as profile_name, ".
@@ -205,7 +205,7 @@ function Do_ExperimentErrors()
                      "left join apt_profiles as p on ".
                      "     p.profileid=f.profile_id ".
                      $clause . " " .
-                     "order by f.created desc limit 25");
+                     "order by f.started desc limit 25");
 
     while ($row = mysql_fetch_array($query_result)) {
         $name       = $row["name"];
@@ -214,7 +214,7 @@ function Do_ExperimentErrors()
         $logfileid  = $row["logfileid"];
         $uuid       = $row["uuid"];
         $active     = $row["active"] ? 1 : 0;
-        $created    = DateStringGMT($row["created"]);
+        $created    = DateStringGMT($row["started"]);
         $creator    = $row["creator"];
         $message    = $row["exitmessage"];
         $reason     = $exitcode;

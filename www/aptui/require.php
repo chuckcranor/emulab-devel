@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -117,7 +117,7 @@ function REQUIRE_EXTEND()
 {
   REQUIRE_UNDERSCORE();
   REQUIRE_SUP();
-  AddTemplateList(array("user-extend-modal", "guest-extend-modal"));
+  AddTemplateList(array("user-extend-modal"));
   AddLibrary("js/extend.js");
 }
 

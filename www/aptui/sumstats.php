@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -61,9 +61,9 @@ function ShowByCreator()
     $whereclause = "";
 
     if (isset($min)) {
-        $whereclause = "where UNIX_TIMESTAMP(created) > $min ";
+        $whereclause = "where UNIX_TIMESTAMP(started) > $min ";
         if (isset($max)) {
-            $whereclause .= "and UNIX_TIMESTAMP(created) < $max ";
+            $whereclause .= "and UNIX_TIMESTAMP(started) < $max ";
         }
     }
     
@@ -72,7 +72,7 @@ function ShowByCreator()
                      "   sum(physnode_count) as pcount, ".
                      "   truncate(sum(physnode_count * ".
                      "     ((UNIX_TIMESTAMP(destroyed) - ".
-                     "       UNIX_TIMESTAMP(created)) / 3600.0)),2) as phours ".
+                     "       UNIX_TIMESTAMP(started)) / 3600.0)),2) as phours ".
                      " from apt_instance_history ".
                        $whereclause .
                      " group by creator,aggregate_urn) ".
@@ -81,7 +81,7 @@ function ShowByCreator()
                      "   sum(physnode_count) as pcount, ".
                      "   truncate(sum(physnode_count * ".
                      "     ((UNIX_TIMESTAMP(now()) - ".
-                     "       UNIX_TIMESTAMP(created)) / 3600.0)),2) as phours ".
+                     "       UNIX_TIMESTAMP(started)) / 3600.0)),2) as phours ".
                      " from apt_instances ".
                        $whereclause .
                      " group by creator,aggregate_urn)");
@@ -272,9 +272,9 @@ function ShowByProject()
     $whereclause = "";
 
     if (isset($min)) {
-        $whereclause = "where UNIX_TIMESTAMP(created) > $min ";
+        $whereclause = "where UNIX_TIMESTAMP(started) > $min ";
         if (isset($max)) {        
-            $whereclause .= " and UNIX_TIMESTAMP(created) < $max ";
+            $whereclause .= " and UNIX_TIMESTAMP(started) < $max ";
         }
     }
     
@@ -283,7 +283,7 @@ function ShowByProject()
                      "   sum(physnode_count) as pcount, ".
                      "   truncate(sum(physnode_count * ".
                      "     ((UNIX_TIMESTAMP(destroyed) - ".
-                     "       UNIX_TIMESTAMP(created)) / 3600.0)),2) as phours ".
+                     "       UNIX_TIMESTAMP(started)) / 3600.0)),2) as phours ".
                      " from apt_instance_history ".
                        $whereclause .
                      " group by pid,aggregate_urn) ".
@@ -292,7 +292,7 @@ function ShowByProject()
                      "   sum(physnode_count) as pcount, ".
                      "   truncate(sum(physnode_count * ".
                      "     ((UNIX_TIMESTAMP(now()) - ".
-                     "       UNIX_TIMESTAMP(created)) / 3600.0)),2) as phours ".
+                     "       UNIX_TIMESTAMP(started)) / 3600.0)),2) as phours ".
                      " from apt_instances ".
                        $whereclause .
                      " group by pid,aggregate_urn)");
