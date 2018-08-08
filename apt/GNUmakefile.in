@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,9 +33,10 @@ SUBDIRS		=
 BIN_SCRIPTS	= manage_profile manage_instance manage_dataset \
                   create_instance rungenilib ns2rspec nsgenilib.py \
                   rspec2genilib ns2genilib manage_reservations manage_gitrepo \
-                  manage_images rtecheck checkprofile manage_extensions
+                  manage_images rtecheck checkprofile manage_extensions \
+		  create_slivers
 SBIN_SCRIPTS	= apt_daemon aptevent_daemon portal_xmlrpc apt_checkup \
-		  portal_monitor
+		  portal_monitor apt_scheduler
 LIB_SCRIPTS     = APT_Profile.pm APT_Instance.pm APT_Dataset.pm APT_Geni.pm \
 		  APT_Aggregate.pm APT_Utility.pm APT_Rspec.pm
 WEB_BIN_SCRIPTS = webmanage_profile webmanage_instance webmanage_dataset \
