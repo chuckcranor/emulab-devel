@@ -47,6 +47,8 @@ my $GW_IP	= "@CONTROL_ROUTER_IP@";
 my $BOSS_IP	= "@BOSSNODE_IP@";
 my $OPS_IP	= "@USERNODE_IP@";
 my $FS_IP	= "@FSNODE_IP@";
+# Are we a VM on boss?
+$OPSVM_ENABLE	= @OPSVM_ENABLE@;
 
 #
 # Untaint the path
@@ -111,7 +113,7 @@ AddServer("ops", $ip, $mac) == 0
 #
 # fs
 #
-if ($OPS_IP ne $FS_IP) {
+if ($OPS_IP ne $FS_IP && !$OPSVM_ENABLE) {
     $ip   = $FS_IP;
     $mac  = GetSiteVar("node/fs_mac");
     fatal("No MAC for fs")
