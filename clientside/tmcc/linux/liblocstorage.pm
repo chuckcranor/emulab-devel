@@ -58,9 +58,14 @@ BEGIN
 	$VARDIR  = "/etc/rc.d/testbed";
 	$BOOTDIR = "/etc/rc.d/testbed";
     }
+    my $genvmtype = `cat $ETCDIR/genvmtype`;
+    chomp($genvmtype);
 
     $VGNAME = "emulab";
-    if (GENVNODEHOST() && !SHAREDHOST()) {
+    
+    if (GENVNODEHOST() && GENVNODETYPE() eq 'docker') {
+	$VGNAME = "docker";
+    } elsif (GENVNODEHOST() && !SHAREDHOST()) {
 	$VGNAME = "xen-vg";
     } elsif (INXENVM() && -r "$VARDIR/boot/vmname") {
 	my $vname = `cat $VARDIR/boot/vmname`;
@@ -69,6 +74,14 @@ BEGIN
 	    $VGNAME = "emulab-$1";
 	}
     }
+}
+
+sub ISFORDOCKERVM() {
+    if (defined(libsetup_getvnodeid())
+	&& GENVNODEHOST() && GENVNODETYPE() eq 'docker') {
+	return 1;
+    }
+    return 0;
 }
 
 my $MOUNT	= "/bin/mount";
@@ -88,6 +101,8 @@ my $GDISK	= "/sbin/gdisk";
 my $PPROBE	= "/sbin/partprobe";
 my $FRISBEE     = "/usr/local/bin/frisbee";
 my $HDPARM	= "/sbin/hdparm";
+
+my $FSTAB	= "/etc/fstab";
 
 #
 #
@@ -534,8 +549,8 @@ sub get_diskinfo()
     close(FD);
 
     # XXX watch out for mounted disks/partitions (DOS type may be 0)
-    if (!open(FD, "/etc/fstab")) {
-	warn("*** get_diskinfo: could not get mount info from /etc/fstab\n");
+    if (!open(FD, "$FSTAB")) {
+	warn("*** get_diskinfo: could not get mount info from $FSTAB\n");
 	return undef;
     }
     while (<FD>) {
@@ -779,6 +794,20 @@ sub os_init_storage($)
 
     my %so = ();
 
+    #
+    # If we are running on the outside of a Docker container, but on its
+    # behalf, we want to do some things differently.
+    #
+    if (ISFORDOCKERVM()) {
+	$FSTAB = CONFDIR()."/fstab-storage";
+	$MOUNT .= " --fstab $FSTAB";
+	#$UMOUNT .= " --fstab $FSTAB";
+	if (! -e $FSTAB) {
+	    open(FD,">$FSTAB");
+	    close(FD);
+	}
+    }
+
     foreach my $href (@{$lref}) {
 	if ($href->{'CMD'} eq "ELEMENT") {
 	    $gotelement++;
@@ -953,6 +982,31 @@ sub os_check_storage($$)
     return -1;
 }
 
+sub _docker_get_ext_trans_mountpoint($)
+{
+    my ($mpoint,) = @_;
+
+    my $confdir = CONFDIR();
+    my $tmpoint = `readlink -f $confdir/mountpoints`;
+    chomp($tmpoint);
+    if ($mpoint =~ /^$tmpoint/) {
+	return $mpoint;
+    }
+    else {
+	$mpoint = $tmpoint.$mpoint;
+    }
+    if (! -e $mpoint) {
+	my @dirs = split(/\//,$mpoint);
+	my $tpath = CONFDIR()."/mountpoints";
+	foreach my $dir (@dirs) {
+	    $tpath .= "/$dir";
+	    mkdir($tpath);
+	}
+    }
+
+    return $mpoint;
+}
+
 sub os_check_storage_element($$)
 {
     my ($so,$href) = @_;
@@ -1032,8 +1086,16 @@ sub os_check_storage_element($$)
 	# do for local blockstores. Thus, if the blockstore device is not
 	# mounted, we do it here.
 	#
+	# NB: also, for the Docker case where we setup blockstore access
+	# outside the container, we make alternative $FSTAB entries!
+	#
 	my $mpoint = $href->{'MOUNTPOINT'};
 	if ($mpoint) {
+	    if (ISFORDOCKERVM()) {
+		$mpoint = $href->{'MOUNTPOINT'} =
+		    _docker_get_ext_trans_mountpoint($mpoint);
+	    }
+
 	    my $mdev = $href->{'LVDEV'};
 	    my $mopt = "";
 
@@ -1140,7 +1202,7 @@ sub os_check_storage_slice($$)
     #    see if there is a logical volume with appropriate name
     #  else if BSID==ANY:
     #    see if there is a logical volume with appropriate name
-    #  if there is a mountpoint, see if it exists in /etc/fstab
+    #  if there is a mountpoint, see if it exists in $FSTAB
     #
     if ($href->{'CLASS'} eq "local") {
 	my $lv = $href->{'VOLNAME'};
@@ -1231,10 +1293,15 @@ sub os_check_storage_slice($$)
 	#
 	my $mpoint = $href->{'MOUNTPOINT'};
 	if ($mpoint) {
+	    if (ISFORDOCKERVM()) {
+		$mpoint = $href->{'MOUNTPOINT'} =
+		    _docker_get_ext_trans_mountpoint($mpoint);
+	    }
+
 	    my $line = `$MOUNT | grep '^/dev/$rdev on '`;
 	    if (!$line) {
 		#
-		# See if the mount exists in /etc/fstab.
+		# See if the mount exists in $FSTAB.
 		#
 		# XXX Right now if it does not, it might be because we
 		# removed it prior to creating an image. So we make some
@@ -1245,7 +1312,7 @@ sub os_check_storage_slice($$)
 		# and not only the fstab line but the mountpoint might be
 		# missing. We attempt to repair this case as well.
 		#
-		$line = `grep '^/dev/$dev\[\[:space:\]\]' /etc/fstab`;
+		$line = `grep '^/dev/$dev\[\[:space:\]\]' $FSTAB`;
 		if (!$line) {
 		    warn("  $lv: mount of /dev/$dev missing from fstab; sanity checking and re-adding...\n");
 		    my $fstype = get_fstype($href, "/dev/$dev");
@@ -1269,8 +1336,8 @@ sub os_check_storage_slice($$)
 			return -1;
 		    }
 
-		    if (!open(FD, ">>/etc/fstab")) {
-			warn("*** $lv: could not add mount to /etc/fstab\n");
+		    if (!open(FD, ">>$FSTAB")) {
+			warn("*** $lv: could not add mount to $FSTAB\n");
 			return -1;
 		    }
 		    print FD "# /dev/$dev added by $BINDIR/rc/rc.storage\n";
@@ -1445,20 +1512,25 @@ sub os_create_storage($$)
 	# Mount the filesystem
 	#
 	my $mpoint = $href->{'MOUNTPOINT'};
+	if (defined($mpoint) && ISFORDOCKERVM()) {
+	    $mpoint = $href->{'MOUNTPOINT'} =
+		_docker_get_ext_trans_mountpoint($mpoint);
+	}
+
 	if (! -d "$mpoint" && mysystem("$MKDIR -p $mpoint $redir")) {
 	    warn("*** $lv: could not create mountpoint '$mpoint'$logmsg\n");
 	    return 0;
 	}
 
 	#
-	# XXX because mounts in /etc/fstab happen before iSCSI and possibly
+	# XXX because mounts in $FSTAB happen before iSCSI and possibly
 	# even the network are setup, we don't put our mounts there as we
 	# do for local blockstores. Instead, the check_storage call will
 	# take care of these mounts.
 	#
 	if (!($href->{'CLASS'} eq "SAN" && $href->{'PROTO'} eq "iSCSI")) {
-	    if (!open(FD, ">>/etc/fstab")) {
-		warn("*** $lv: could not add mount to /etc/fstab\n");
+	    if (!open(FD, ">>$FSTAB")) {
+		warn("*** $lv: could not add mount to $FSTAB\n");
 		return 0;
 	    }
 	    print FD "# $mdev added by $BINDIR/rc/rc.storage\n";
@@ -1565,7 +1637,7 @@ sub os_create_storage_slice($$$)
     #	  create an LVM PV/VG from all available space (part 4 on sysvol,
     #	  extra hard drives), create LV with appropriate name from VG.
     #  if there is a mountpoint:
-    #     create a filesystem on device, mount it, add to /etc/fstab
+    #     create a filesystem on device, mount it, add to $FSTAB
     #
     if ($href->{'CLASS'} eq "local") {
 	my $lv = $href->{'VOLNAME'};
@@ -1809,6 +1881,10 @@ sub os_remove_storage_element($$$)
 	#
 	if (exists($href->{'MOUNTPOINT'})) {
 	    my $mpoint = $href->{'MOUNTPOINT'};
+	    if (ISFORDOCKERVM()) {
+		$mpoint = $href->{'MOUNTPOINT'} =
+		    _docker_get_ext_trans_mountpoint($mpoint);
+	    }
 
 	    if (mysystem("$UMOUNT $mpoint")) {
 		warn("*** $bsid: could not unmount $mpoint\n");
@@ -1909,6 +1985,10 @@ sub os_remove_storage_slice($$$)
 	#
 	if (exists($href->{'MOUNTPOINT'})) {
 	    my $mpoint = $href->{'MOUNTPOINT'};
+	    if (ISFORDOCKERVM()) {
+		$mpoint = $href->{'MOUNTPOINT'} =
+		    _docker_get_ext_trans_mountpoint($mpoint);
+	    }
 
 	    if (mysystem("$UMOUNT $mpoint")) {
 		warn("*** $lv: could not unmount $mpoint\n");
@@ -1922,8 +2002,8 @@ sub os_remove_storage_slice($$$)
 	    if ($teardown) {
 		my $tdev = "/dev/$dev";
 		$tdev =~ s/\//\\\//g;
-		if (mysystem("sed -E -i -e '/^(# )?$tdev/d' /etc/fstab")) {
-		    warn("*** $lv: could not remove mount from /etc/fstab\n");
+		if (mysystem("sed -E -i -e '/^(# )?$tdev/d' $FSTAB")) {
+		    warn("*** $lv: could not remove mount from $FSTAB\n");
 		}
 	    }
 	}

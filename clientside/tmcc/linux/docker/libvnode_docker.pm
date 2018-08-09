@@ -2291,6 +2291,29 @@ sub rootPreConfigNetwork($$$$)
     my @node_lds = @{ $vnconfig->{'ldconfig'} };
 
     #
+    # See if we have we have blockstore links.  We do not add them as
+    # virtual docker networks; instead we handle the iscsi stuff outside
+    # the container.  We just bind mount into the container stuff from
+    # the root context.  We have to do this because parts of the iscsi
+    # layer in the kernel are not network-namespace-aware, so we cannot
+    # run the iscsi userspace tools in the network namespace, and do the
+    # mount ourselves.  This way, we also reuse almost all the
+    # rc.storage*/liblocstorage code, too.
+    #
+    my %blockstoreIPs = ();
+    if (exists($vnconfig->{'storageconfig'})
+	&& defined($vnconfig->{"storageconfig"})) {
+	foreach my $bsref (@{$vnconfig->{'storageconfig'}}) {
+	    if (exists($bsref->{"HOSTIP"})) {
+		$blockstoreIPs{$bsref->{"HOSTIP"}} =
+		    inet_aton($bsref->{"HOSTIP"});
+	    }
+	}
+	TBDebugTimeStamp("blockstoreIPs: ".Dumper(%blockstoreIPs)."\n")
+	    if ($debug > 1);
+    }
+
+    #
     # If we're using veths, figure out what bridges we need to make:
     # we need a bridge for each physical iface that is a multiplex pipe,
     # and one for each VTAG given PMAC=none (i.e., host containing both sides
@@ -2311,6 +2334,24 @@ sub rootPreConfigNetwork($$$$)
 
 	print "$vnode_id interface " . Dumper($ifc) . "\n"
 	    if ($debug > 1);
+
+	my $isblockstorelink = 0;
+	if (keys(%blockstoreIPs) > 0
+	    && exists($ifc->{IPMASK}) && exists($ifc->{IPADDR})) {
+	    my ($nip,$nmask) =
+		(inet_aton($ifc->{IPADDR}),inet_aton($ifc->{IPMASK}));
+	    foreach my $k (keys(%blockstoreIPs)) {
+		if (($nip & $nmask) eq ($blockstoreIPs{$k} & $nmask)) {
+		    $isblockstorelink = 1;
+		    last;
+		}
+	    }
+	}
+	if ($isblockstorelink) {
+	    print "$vnode_id interface $ifc->{IPMASK} is a blockstore link;".
+		" we will not create a virtual network for it.\n"
+		if ($debug > 1);
+	}
 
 	#
 	# In the era of shared nodes, we cannot name the bridges
@@ -2408,6 +2449,11 @@ sub rootPreConfigNetwork($$$$)
 	$ifc->{'BRIDGE'} = $brname
 	    if (defined($brname));
 
+	if ($isblockstorelink) {
+	    $brs{$brname}{ISBLOCKSTORELINK} = 1;
+	    $ifc->{ISBLOCKSTORELINK} = 1;
+	}
+
 	#
 	# Docker networks require a subnet (and a gateway; i.e.
 	# https://github.com/docker/libnetwork/issues/1447#issuecomment-247368397).
@@ -2465,6 +2511,10 @@ sub rootPreConfigNetwork($$$$)
     foreach my $k (keys(%brs)) {
 	my $cidr = $brs{$k}{CIDR};
 	my $gw = $brs{$k}{GW};
+	my $isblockstorelink = 0;
+	if (exists($brs{$k}{ISBLOCKSTORELINK})) {
+	    $isblockstorelink = $brs{$k}{ISBLOCKSTORELINK};
+	}
 
 	if (!$USE_MACVLAN) {
 	    #
@@ -2531,26 +2581,40 @@ sub rootPreConfigNetwork($$$$)
 	    }
 
 	    #
-	    # Now that the bridge exists, make the Docker network atop it.
+	    # If this is a blockstore link, we just IP the bridge we
+	    # just created; we do not expose this as a Docker virtual
+	    # network.  This way, we can reuse all the existing network
+	    # teardown code.
 	    #
-	    TBDebugTimeStamp("checking existence of docker network $k");
-	    ($code,$content,$resp) = getClient()->network_inspect($k);
-	    if ($code) {
-		my $ourdocker_extra_args = undef;
-		if ($ISOURDOCKER) {
-		    $ourdocker_extra_args = {
-			"Options" => { "com.docker.network.bridge.layer2_mode"
-					   => "true" },
-			"IPAM" => { "Options" => { "PrivatePoolId" => $k } },
-		    };
-		}
-		TBDebugTimeStamp("creating docker network $k");
-		($code,$content,$resp) = getClient()->network_create_bridge(
-		    $k,$cidr,$gw,$k,$ourdocker_extra_args);
-		goto bad
-		    if ($code);
+	    if ($isblockstorelink) {
+		my ($bsa,$bsm) =
+		    ($brs{$k}{IFC}->{IPADDR},$brs{$k}{IFC}->{IPMASK});
+		mysystem2("$IP addr replace $bsa/$bsm dev $k");
+		mysystem2("$IP link set $k up");
 	    }
-	    $private->{'dockernets'}->{$k} = $k;
+	    else {
+		#
+		# Now that the bridge exists, make the Docker network atop it.
+		#
+		TBDebugTimeStamp("checking existence of docker network $k");
+		($code,$content,$resp) = getClient()->network_inspect($k);
+		if ($code) {
+		    my $ourdocker_extra_args = undef;
+		    if ($ISOURDOCKER) {
+			$ourdocker_extra_args = {
+			    "Options" => { "com.docker.network.bridge.layer2_mode"
+					       => "true" },
+				"IPAM" => { "Options" => { "PrivatePoolId" => $k } },
+			};
+		    }
+		    TBDebugTimeStamp("creating docker network $k");
+		    ($code,$content,$resp) = getClient()->network_create_bridge(
+			$k,$cidr,$gw,$k,$ourdocker_extra_args);
+		    goto bad
+			if ($code);
+		}
+		$private->{'dockernets'}->{$k} = $k;
+	    }
 	}
 	else {
 	    my $basedev;
@@ -2574,21 +2638,29 @@ sub rootPreConfigNetwork($$$$)
 		$private->{'dummys'}->{$k} = $basedev;
 	    }
 
-	    #
-	    # Make the docker network if necessary.
-	    #
-	    TBDebugTimeStamp("checking existence of docker network $k");
-	    ($code,$content,$resp) = getClient()->network_inspect($k);
-	    if ($code) {
-		# Now that the dummy device exists, make the Docker
-		# network atop it.
-		TBDebugTimeStamp("creating docker network $k");
-		($code,$content,$resp) = getClient()->network_create_macvlan(
-		    $k,$cidr,$gw,$basedev);
-		goto bad
-		    if ($code);
+	    if ($isblockstorelink) {
+		my ($bsa,$bsm) =
+		    ($brs{$k}{IFC}->{IPADDR},$brs{$k}{IFC}->{IPMASK});
+		mysystem2("$IP addr replace $bsa/$bsm dev $k");
+		mysystem2("$IP link set $k up");
 	    }
-	    $private->{'dockernets'}->{$k} = $k;
+	    else {
+		#
+		# Make the docker network if necessary.
+		#
+		TBDebugTimeStamp("checking existence of docker network $k");
+		($code,$content,$resp) = getClient()->network_inspect($k);
+		if ($code) {
+		    # Now that the dummy device exists, make the Docker
+		    # network atop it.
+		    TBDebugTimeStamp("creating docker network $k");
+		    ($code,$content,$resp) = getClient()->network_create_macvlan(
+			$k,$cidr,$gw,$basedev);
+		    goto bad
+			if ($code);
+		}
+		$private->{'dockernets'}->{$k} = $k;
+	    }
 	}
     }
 
@@ -2783,6 +2855,31 @@ sub rootPreConfigNetwork($$$$)
     return -1;
 }
 
+sub _docker_get_ext_trans_mountpoint($)
+{
+    my ($mpoint,) = @_;
+
+    my $confdir = CONFDIR();
+    my $tmpoint = `readlink -f $confdir/mountpoints`;
+    chomp($tmpoint);
+    if ($mpoint =~ /^$tmpoint/) {
+	return $mpoint;
+    }
+    else {
+	$mpoint = $tmpoint.$mpoint;
+    }
+    if (! -e $mpoint) {
+	my @dirs = split(/\//,$mpoint);
+	my $tpath = CONFDIR()."/mountpoints";
+	foreach my $dir (@dirs) {
+	    $tpath .= "/$dir";
+	    mkdir($tpath);
+	}
+    }
+
+    return $mpoint;
+}
+
 #
 # Create the basic context for the VM and give it a unique ID for identifying
 # "internal" state.  If $raref is set, then we are in a RELOAD state machine
@@ -2968,6 +3065,30 @@ sub vnodeCreate($$$$)
     addMounts($vnode_id,\%mounts);
 
     #
+    # Handle blockstores/datasets.
+    #
+    my %blockstoreMounts = ();
+    if (exists($vnconfig->{"storageconfig"})
+	&& defined($vnconfig->{"storageconfig"})) {
+	foreach my $bsref (@{$vnconfig->{'storageconfig'}}) {
+	    if (exists($bsref->{"MOUNTPOINT"})) {
+		my $src = _docker_get_ext_trans_mountpoint($bsref->{"MOUNTPOINT"});
+		$blockstoreMounts{$src} = $bsref->{"MOUNTPOINT"};
+	    }
+	}
+	TBDebugTimeStamp("blockstoreMounts: ".Dumper(%blockstoreMounts)."\n")
+	    if ($debug > 1);
+	TBDebugTimeStamp("starting rc.storage")
+	    if ($debug > 1);
+	if (mysystem2("/usr/local/etc/emulab/rc/rc.storage -j $vnode_id boot")) {
+	    fatal("Failed to setup storage in rc.storage; aborting!");
+	}
+	TBDebugTimeStamp("rc.storage finished successfully")
+	    if ($debug > 1);
+	$private->{'blockstores'} = scalar(keys(%blockstoreMounts));
+    }
+
+    #
     # Start building the 'docker create' args.  
     # (NB: see note below about why we have to put the container on the
     # network right away!)
@@ -2994,6 +3115,16 @@ sub vnodeCreate($$$$)
 	if ($NFS_MOUNTS_READONLY) {
 	    $bind .= ":ro";
 	}
+	push(@{$args{"HostConfig"}{"Binds"}},$bind);
+    }
+
+    #
+    # Add blockstore mounts.
+    #
+    $args{"HostConfig"}{"Binds"} = [];
+    foreach my $src (keys(%blockstoreMounts)) {
+	my $dst = $blockstoreMounts{$src};
+	my $bind = "${src}:${dst}";
 	push(@{$args{"HostConfig"}{"Binds"}},$bind);
     }
 
@@ -3545,6 +3676,12 @@ sub vnodePreConfigExpNetwork($$$$)
 	TBDebugTimeStamp("vnodePreConfigExpNetwork: $vnode_id interface ".
 			 Dumper($ifc))
 	    if ($debug > 1);
+
+	if (exists($ifc->{ISBLOCKSTORELINK}) && $ifc->{ISBLOCKSTORELINK}) {
+	    TBDebugTimeStamp("vnodePreConfigExpNetwork: $vnode_id skipping blockstore interface!")
+		if ($debug > 1);
+	    next;
+	}
 
 	my $br       = $ifc->{"BRIDGE"};
 	my $physdev  = $ifc->{"PHYSDEV"};
@@ -4115,6 +4252,16 @@ sub vnodeDestroy($$$$)
     }
     TBDebugTimeStamp("  got global lock")
 	if ($lockdebug);
+
+    if (exists($private->{'blockstores'})) {
+	TBDebugTimeStamp("starting rc.storage")
+	    if ($debug > 1);
+	if (mysystem2("/usr/local/etc/emulab/rc/rc.storage -j $vnode_id fullreset")) {
+	    fatal("Failed to remove storage in rc.storage; aborting!");
+	}
+	TBDebugTimeStamp("rc.storage finished successfully")
+	    if ($debug > 1);
+    }
 
     #
     # Remove mounts.

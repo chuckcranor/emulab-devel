@@ -3887,6 +3887,8 @@ sub getstorageconfig($;$) {
 	'VOLSIZE' => '\d+',
 	'DATASET' => '[-\w\/\.:]+',
 	'SERVER'  => '[-\w\.]+',
+	'HOSTIP'  => '|(\d+\.\d+\.\d+\.\d+)',
+	'HOSTMASK'=> '|(\d+\.\d+\.\d+\.\d+)',
     );
     my @ops = ();
 

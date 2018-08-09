@@ -4829,7 +4829,8 @@ COMMAND_PROTOTYPE(dostorageconfig)
 	}
 	mysql_free_result(res);
 
-	res = mydb_query("select rb.bsidx, r.vname, rb.vname, rb.size "
+	res = mydb_query("select rb.bsidx, r.vname, rb.vname, rb.size, vl.ip, "
+			 " vl.mask "
 			 "from reserved_blockstores as rb "
 			 " left join reserved as r "
 			 "  on r.node_id = rb.vnode_id and "
@@ -4839,7 +4840,7 @@ COMMAND_PROTOTYPE(dostorageconfig)
 			 "     r.exptidx = vl.exptidx "
 			 "where vl.vname in (%s) "
 			 " and vl.pid='%s' and vl.eid='%s'",
-			 4, buf, reqp->pid, reqp->eid);
+			 6, buf, reqp->pid, reqp->eid);
 
 	if (!res) {
 		error("STORAGECONFIG: %s: DB Error getting connected "
@@ -4858,8 +4859,9 @@ COMMAND_PROTOTYPE(dostorageconfig)
 		volsize = atoi(row[3]);
 	       
 		OUTPUT(buf, sizeof(buf), 
-		       "CMD=ELEMENT IDX=%d HOSTID=%s VOLNAME=%s VOLSIZE=%d", 
-		       cmdidx++, hostid, vname, volsize);
+		       "CMD=ELEMENT IDX=%d HOSTID=%s VOLNAME=%s VOLSIZE=%d"
+		       " HOSTIP=%s HOSTMASK=%s",
+		       cmdidx++, hostid, vname, volsize, row[4], row[5]);
 		sendstoreconf(sock, tcp, reqp, buf, vname, 1, NULL);
 	}
 	mysql_free_result(res);

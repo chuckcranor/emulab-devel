@@ -38,6 +38,7 @@ my $dolocal = 1;
 my $doremote = 1;
 my $typestr = "";
 my $bsapidfile = "/var/run/bsagent.pid";
+my $vnodeid;
 
 # Turn off line buffering on output
 $| = 1;
@@ -53,11 +54,11 @@ if ($EUID != 0) {
 
 #
 # Load the OS independent support library. It will load the OS dependent
-# library and initialize itself. 
+# library and initialize itself.
+# (NB: liblocstorage must be imported after argument processing.)
 # 
 use libsetup;
 use liblocsetup;
-use liblocstorage;
 use libtmcc;
 use librc;
 
@@ -85,8 +86,9 @@ if (! getopts($optlist, \%options)) {
     usage();
 }
 if (defined($options{'j'})) {
-    my $vnodeid = $options{'j'};
+    $vnodeid = $options{'j'};
     libsetup_setvnodeid($vnodeid);
+    $OLDCONFIG .= ".$vnodeid";
 }
 if (defined($options{'L'})) {
     $dolocal = 1;
@@ -102,6 +104,12 @@ if (defined($options{'R'})) {
 if (@ARGV) {
     $action = $ARGV[0];
 }
+
+#
+# NB: finally import liblocstorage, now that we have processed args (and
+# thus might have called libsetup_setvnodeid()!
+#
+use liblocstorage;
 
 # Execute the action.
 SWITCH: for ($action) {
@@ -618,7 +626,7 @@ sub process($$$$)
 
     if ($href->{'CMD'} eq "ELEMENT") {
 	# look up the host name and convert to IP
-	if (exists($href->{'HOSTID'})) {
+	if (!exists($href->{'HOSTIP'}) && exists($href->{'HOSTID'})) {
 	    my $hostip = gethostbyname($href->{'HOSTID'});
 	    if (!defined($hostip)) {
 		warn("*** Cannot resolve hostname '" . $href->{'HOSTID'} . "'\n");
