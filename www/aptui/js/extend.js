@@ -442,7 +442,7 @@ window.ShowExtendModal = (function()
 		var xmlthing = sup.CallServerMethod(null, "status",
 						    "RequestExtension", args);
 		xmlthing.done(function(json) {
-		    console.info(json.value);
+		    console.info("RequestExtension:", json);
 		    sup.HideModal("#waitwait-modal", function () {
 			callback(json);
 		    });
@@ -507,7 +507,7 @@ window.ShowExtendModal = (function()
 	    physnode_count = expinfo.physnode_count;
 	    physnode_hours = expinfo.physnode_hours;
 
-	    $(divname).append(userExtendString);
+	    $(divname).html(userExtendString);
 	    
 	    // Fill in the mailto links.
 	    var mailto  = "mailto:" + window.SUPPORT;
