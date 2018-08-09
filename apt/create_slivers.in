@@ -292,14 +292,14 @@ $usetracker = 1
 				       $emulab_user, $project));
 
 #
-# Exit and let caller poll for status.
+# Exit and let caller poll for status. We use the libaudit daemonize option.
 #
 if (!($debug || $foreground)) {
-    my $child = fork();
-    if ($child) {
+    if (AuditStart(1, undef,
+		   LIBAUDIT_LOGTBLOGS()|LIBAUDIT_LOGONLY()|LIBAUDIT_NOCHILD())){
+	# Parent exits
 	exit(0);
     }
-    AuditStart(0, undef, LIBAUDIT_LOGTBLOGS()|LIBAUDIT_LOGONLY());
     AddAuditInfo("cc", $project->LogsEmailAddress());
     AddAuditInfo("brand", $project->Brand());
 }
@@ -341,8 +341,12 @@ else {
 	    $rval == GENIRESPONSE_NO_CONNECT ||
 	    $rval == GENIRESPONSE_MAPPING_IMPOSSIBLE ||
 	    $rval == GENIRESPONSE_NO_MAPPING) {
+	    AuditAbort()
+		if (!($debug || $foreground));
 	    $exitcode = 1;
 	}
+	# Stop trying to instantiate.
+	$instance->ResolveDefer();
 	$webtask->Exited($rval);
 	exit($exitcode);
     }

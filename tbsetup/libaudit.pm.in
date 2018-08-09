@@ -33,7 +33,7 @@ use Exporter;
 	 LogStart LogEnd LogAbort AuditDisconnect AuditPrefork
 	 LIBAUDIT_NODAEMON LIBAUDIT_DAEMON LIBAUDIT_LOGONLY
 	 LIBAUDIT_NODELETE LIBAUDIT_FANCY LIBAUDIT_LOGTBOPS LIBAUDIT_LOGTBLOGS
-	 LIBAUDIT_DEBUG
+	 LIBAUDIT_DEBUG LIBAUDIT_NOCHILD
        );
 
 # After package decl.
@@ -86,6 +86,9 @@ my $fancy       = 0;
 # We be forked.
 my $forked      = 0;
 
+# Do not send email from children, just the parent.
+my $nochild     = 0;
+
 # Branding for email. Set via audit info.
 my $brand;
 
@@ -133,6 +136,7 @@ sub LIBAUDIT_FANCY      { 0x08; } # Only use if libdb and libtblog are
 sub LIBAUDIT_LOGTBOPS	{ 0x10; }
 sub LIBAUDIT_LOGTBLOGS	{ 0x20; }
 sub LIBAUDIT_DEBUG	{ 0x40; }
+sub LIBAUDIT_NOCHILD	{ 0x80; }
 
 #
 # Start an audit (or log) of a script. First arg is a flag indicating if
@@ -150,7 +154,7 @@ sub AuditStart($;$$)
     # should now what they do!
     #
     if (defined($ENV{'TBAUDITON'})) {
-	return;
+	return 0;
     }
 
     # Reset to default for rentry in log running script.
@@ -167,6 +171,9 @@ sub AuditStart($;$$)
     if (defined($options)) {
 	if ($options & LIBAUDIT_NODELETE()) {
 	    $savelog = 1;
+	}
+	if ($options & LIBAUDIT_NOCHILD()) {
+	    $nochild = 1;
 	}
 	if ($options & LIBAUDIT_DEBUG()) {
 	    $debugfile = "/var/tmp/auditdebug.$$";
@@ -199,7 +206,7 @@ sub AuditStart($;$$)
     if (!$daemon && isatty(STDIN)) {
 	$auditing = 1;
 	$ENV{'TBAUDITON'} = "$SCRIPTNAME:$USERNAME";
-	return;
+	return 0;
     }
     # Clear this in case left behind, as for long running process.
     unlink($PREFORKFILE)
@@ -722,7 +729,7 @@ sub AddAuditInfo ($$) {
 # 
 END {
     return
-	if ($forked && $PID != $SAVEPID);
+	if (($forked || $nochild) && $PID != $SAVEPID);
     
     # Save, since shell commands will alter it.
     my $exitstatus = $?;
