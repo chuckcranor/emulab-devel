@@ -371,7 +371,8 @@ CREATE TABLE `apt_instance_history` (
   KEY `profile_id` (`profile_id`),
   KEY `creator` (`creator`),
   KEY `creator_idx` (`creator_idx`),
-  KEY `pid_idx` (`pid_idx`)
+  KEY `pid_idx` (`pid_idx`),
+  KEY `servername` (`uuid`,`servername`(32))
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
