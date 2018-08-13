@@ -1623,5 +1623,7 @@ sub CanDelete($$)
 	if ($user->IsAdmin());
     return 1
 	if ($user->uid_idx() == $profile->creator_idx());
+    return 1
+	if ($user->SameUser($project->GetLeader()));
     return 0;
 }

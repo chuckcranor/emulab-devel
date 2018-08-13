@@ -472,8 +472,16 @@ class Profile
 	return $this->CanInstantiate($user);
     }
     function CanEdit($user) {
-        if ($this->creator_idx() == $user->uid_idx() || ISADMIN())
+        if ($this->creator_idx() == $user->uid_idx() || ISADMIN()) {
+            return 1;
+        }
+	$project = Project::Lookup($this->pid_idx());
+	if (!$project) {
+	    return 0;
+	}
+        if ($user->uid_idx() == $project->GetLeader()->uid_idx()) {
 	    return 1;
+        }
         return 0;
     }
     function CanDelete($user) {
@@ -489,7 +497,8 @@ class Profile
         if ($project->isAPT()) {
             return 0;
         }
-        if ($this->creator_idx() == $user->uid_idx() || ISADMIN()) {
+        if ($this->creator_idx() == $user->uid_idx() || ISADMIN() ||
+            $user->uid_idx() == $project->GetLeader()->uid_idx()) {
 	    return 1;
         }
         return 0;

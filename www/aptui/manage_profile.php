@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -268,7 +268,7 @@ if (isset($action) && ($action == "edit" || $action == "copy")) {
 	    SPITUSERERROR("Profile has been deleted!");
 	}
 	if ($action == "edit") {
-	    if ($this_idx != $profile->creator_idx() && !ISADMIN()) {
+            if (!$profile->CanEdit($this_user)) {
 		SPITUSERERROR("Not enough permission!");
 	    }
 	}
