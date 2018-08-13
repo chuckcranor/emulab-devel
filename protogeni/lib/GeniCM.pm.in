@@ -3113,9 +3113,19 @@ sub GetTicketAuxAux($)
 		}
 	    }
 	    if ($isshared) {
-		# Clear all this on "shared" vlans. Maybe later.
-		$bandwidth  = 0;
-		$rbandwidth = 0;
+		# Using this method to allow the user to specify a bandwidth.
+		# What it is basically going to do, is force the mapper to
+		# assign an interface that has the desired bandwidth. 
+		if (defined($linkwide_properties) && 
+		    defined($linkwide_properties->{"bandwidth"})) {
+		    $bandwidth  = $linkwide_properties->{"bandwidth"};
+		    $rbandwidth = $bandwidth;
+		}
+		else {
+		    # Clear all this on "shared" vlans. 
+		    $bandwidth  = 0;
+		    $rbandwidth = 0;
+		}
 		$latency    = 0.0;
 		$rlatency   = 0.0;
 		$lossrate   = 0.0;

@@ -3342,19 +3342,25 @@ sub GenVirtLans($)
 		$others->{'emulated'}   = 1;
 		# assign seems to require this, but it seems wrong.
 		$others->{'trivial_ok'} = 1;
+		# This is probably not correct for all situations. 
 		$bw = 1000;
 	    }
 	    foreach my $member (@members) {
 		my $virtnode   = $member->virt_node();
 		my $vnodevname = $virtnode->vname();
 		my $plink      = "portlan/$vname/$member";
+		my (undef,$bw0)= @{$member->_delayinfo()};
+		my $wiretype   = $vlan->_wiretype();
 
+		if ($bw0 != 0) {
+		    $wiretype = $self->GetWiretype($wiretype, $bw0);
+		}
 		$self->createLink($vname, $plink,
 				  [$virtnode->_cmurn()],
 				  {'virtual_node_id' => $vnodevname,
 				   'virtual_interface_id' =>"$member" },
 				  {'virtual_node_id' => $lannode },
-				  $bw, $vlan->_wiretype(), $others);
+				  $bw, $wiretype, $others);
 	    }
 	}
 	elsif (@members == 2) {
