@@ -426,8 +426,13 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
       rm -rf /var/db/ports/*
       rm -rf /usr/obj/ports/usr/ports/*
 
-   f. Make sure the package tool is installed. To avoid occasional issues
-      with certs, I have found the easiest thing to do is:
+   f. Make sure the package tool is installed. Sometimes you can just:
+
+      pkg info
+
+      and it will reinstall the pkg tool. However, sometimes you will
+      run up against certificate issues, the it won't reinstall it.
+      In that case, I have found the easiest thing to do is:
 
       pushd /share/freebsd/10.3/packages-64
       pkg add pkg-*
@@ -440,7 +445,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
           DOCS
       - in editors/emacs, "make config" and deselect:
           DBUS
-          GCONF, GSETTINGS, M17N, OTF, SCROLLBARS, XFT, XIM,
+          GCONF, GSETTINGS, LCMS2, M17N, OTF, SCROLLBARS, XFT, XIM,
 	  GIF, MAGICK, PNG, SVG, TIFF, XPM,
 	  OSS,
 	  GTK2
@@ -448,6 +453,8 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
 	  XAW
       - in graphics/cairo, "make config" and deselect OPENGL.
       - in www/apache22, "make config" and select: SUEXEC, PROXY, PROXY_HTTP
+        or
+      - in www/apache24, "make config" and select: SUEXEC (proxing should be enabled already)
 
    h. Build em all:
 
@@ -498,6 +505,24 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
 
       sudo mv packages-64 packages-64.bak
       sudo mv packages packages-64
+
+   m. Random useful commands to run on the package files.
+
+      For comparing with older package sets, it is sometimes useful to
+      trim off the version number, etc. if you want to see the difference
+      in which ports are installed in each, regardless of version. To
+      make a list of package name only:
+
+        cd packages
+        echo *.txz | xargs -n 1 -J % pkg query -F % '%n' | sort > /tmp/list
+
+      To see what other packages "foo" needs:
+
+        pkg info -F foo.txz -d
+
+      To see what other packages need "foo":
+
+        pkg info -F foo.txz -r
 
 11. Client node packages.
 
