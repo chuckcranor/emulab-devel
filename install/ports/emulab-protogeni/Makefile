@@ -22,7 +22,7 @@ WANT_PHP_MOD=	yes
 #
 # Various ports need to agree on what version of apache.
 #
-.if ${EMULAB_PORTVERSION} == "7.1"
+.if (${EMULAB_PORTVERSION} == "7.1" || ${EMULAB_PORTVERSION} == "7.2")
 www_apache24_SET=	SUEXEC
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
 .MAKEFLAGS+=	WITH_SUEXEC=yes
@@ -32,7 +32,7 @@ www_apache22_SET=	SUEXEC
 .MAKEFLAGS+=	WITH_SUEXEC=yes
 .endif
 
-.if ${EMULAB_PORTVERSION} != "7.1"
+.if (${EMULAB_PORTVERSION} != "7.1" && ${EMULAB_PORTVERSION} != "7.2")
 #
 # Use the base version of openssl
 #

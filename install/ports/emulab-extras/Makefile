@@ -80,7 +80,7 @@ RUN_DEPENDS+=	\
 	xterm:${PORTSDIR}/x11/xterm \
 	zsh:${PORTSDIR}/shells/zsh
 
-.if ${PORTVERSION} == "7.1"
+.if (${PORTVERSION} == "7.1" || ${PORTVERSION} == "7.2")
 RUN_DEPENDS+=	\
 	vim:${PORTSDIR}/editors/vim-console
 .else
