@@ -5422,6 +5422,7 @@ CREATE TABLE `users` (
   `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `require_aup` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `ga_userid` varchar(32) default NULL,
+  `portal_interface_warned` tinyint(1) NOT NULL default '0',
   PRIMARY KEY  (`uid_idx`),
   KEY `unix_uid` (`unix_uid`),
   KEY `status` (`status`),
