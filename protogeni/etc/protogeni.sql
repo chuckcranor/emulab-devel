@@ -342,7 +342,8 @@ CREATE TABLE `manifest_history` (
   `manifest` mediumtext,
   PRIMARY KEY  (`idx`),
   INDEX `aggregate_urn` (`aggregate_urn`(255)),
-  KEY `created` (`created`)
+  KEY `created` (`created`),
+  KEY `aggregate_uuid` (`aggregate_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 DROP TABLE IF EXISTS `ticket_history`;
