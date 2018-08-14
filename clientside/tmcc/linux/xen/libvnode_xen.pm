@@ -1906,7 +1906,8 @@ sub vnodePreConfig($$$$$){
 		$vninfo->{'elabinelab'} = 1;
 	    }
 	    print STDERR "vnodePreConfig: $vnode_id root already localized\n";
-	    goto done;
+	    mysystem("umount $dev");
+	    goto done2;
 	}
 
 	# needs to be customized, remount RW
@@ -2163,6 +2164,7 @@ sub vnodePreConfig($$$$$){
 	mysystem2("$FSCKUFS -yf $dev");
     }
 
+  done2:
     # XXX let vnodesetup exit early
     if ($vsrelease eq "early" && $retval == 0) {
 	TBDebugTimeStamp("vnodePreConfig: touching $VMS/$vnode_id/running");
