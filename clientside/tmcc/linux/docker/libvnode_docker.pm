@@ -2966,8 +2966,8 @@ sub vnodeCreate($$$$)
 	else {
 	    fatal("could not extract eventkey from $evkeyresults[0]!");
 	}
-	my $urlhash = sha1_hex($dockerfile);
 	$dockerfile = $attributes->{'DOCKER_DOCKERFILE'};
+	my $urlhash = sha1_hex($dockerfile);
 	$imagename = lc("$pid-$eid-$eventkey:$urlhash");
     }
     elsif ($inreload) {
