@@ -24,7 +24,7 @@ fi
 cd runit
 ./redhat/build.sh
 mkdir -p $DESTDIR/tmp
-chmod root:root $DESTDIR/tmp
+chown root:root $DESTDIR/tmp
 chmod 1777 $DESTDIR/tmp
 cp -p ~/rpmbuild/RPMS/*/*.rpm $DESTDIR/tmp
 cd /tmp

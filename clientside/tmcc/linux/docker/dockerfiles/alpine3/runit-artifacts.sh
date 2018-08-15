@@ -47,7 +47,7 @@ sudo -u packager sh $DIRNAME/alpine3/runit-packager.sh
 
 cd /tmp/runit/x86_64
 mkdir -p $DESTDIR/tmp
-chmod root:root $DESTDIR/tmp
+chown root:root $DESTDIR/tmp
 chmod 1777 $DESTDIR/tmp
 cp -p *.apk $DESTDIR/tmp
 

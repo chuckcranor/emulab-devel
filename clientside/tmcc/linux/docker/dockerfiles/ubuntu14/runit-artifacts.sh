@@ -44,7 +44,7 @@ tar -xzf runit-2.1.2.tar.gz --strip-components=1
 dpkg-buildpackage -uc -us
 cd ..
 mkdir -p $DESTDIR/tmp
-chmod root:root $DESTDIR/tmp
+chown root:root $DESTDIR/tmp
 chmod 1777 $DESTDIR/tmp
 cp -p *.deb $DESTDIR/tmp
 rm -rf runit *.deb *.dsc
