@@ -854,7 +854,8 @@ sub ensureDockerInstalled()
     }
 
     # Check to ensure we're doing the right thing w.r.t. iptables:
-    my $iptval = ($ISOURDOCKER) ? JSON::PP::true : JSON::PP::false;
+    my $have_ipt_docker_user = (mysystem("$IPTABLES -L | grep DOCKER-USER") == 0);
+    my $iptval = ($have_ipt_docker_user) ? JSON::PP::true : JSON::PP::false;
     my $ichanged = 0;
     if (!defined($json) || !exists($json->{"iptables"})
 	|| $json->{'iptables'} != $iptval) {
@@ -881,7 +882,7 @@ sub ensureDockerInstalled()
 
 	mysystem2("service docker stop");
 
-	if ($ichanged && !$ISOURDOCKER) {
+	if ($ichanged && !$have_ipt_docker_user) {
 	    #
 	    # Make sure all the Docker stuff is undone, if this is not
 	    # our Docker.
@@ -892,8 +893,12 @@ sub ensureDockerInstalled()
 	    mysystem("$IPTABLES -F FORWARD");
 	    mysystem("$IPTABLES -F DOCKER");
 	    mysystem2("$IPTABLES -X DOCKER");
-	    mysystem("$IPTABLES -F DOCKER-ISOLATION");
+	    mysystem2("$IPTABLES -F DOCKER-ISOLATION");
 	    mysystem2("$IPTABLES -X DOCKER-ISOLATION");
+	    mysystem2("$IPTABLES -F DOCKER-ISOLATION-STAGE-1");
+	    mysystem2("$IPTABLES -X DOCKER-ISOLATION-STAGE-1");
+	    mysystem2("$IPTABLES -F DOCKER-ISOLATION-STAGE-2");
+	    mysystem2("$IPTABLES -X DOCKER-ISOLATION-STAGE-2");
 	}
 
 	mysystem2("service docker start");
@@ -1828,12 +1833,15 @@ sub rootPreConfig($;$)
     # Mesh our iptables setup with docker's.  This is nontrivial because
     # Docker does one nasty thing: it continually forces its -j
     # DOCKER-ISOLATION rule into the top of the FORWARD chain on
-    # significant operations (like creating a container).  This has been
-    # much discussed but not fixed, so we have two strategies.  First,
-    # we have a patched version of Docker that does not do this crazy
-    # crap; second, if that is not available, we disable its use of
-    # iptables and do all the stuff Docker would normally do that we
-    # actually need (a subset of what Docker normally does).
+    # significant operations (like creating a container).  This has
+    # since been fixed in more recent versions (there is a DOCKER-USER
+    # chain at the top of the forward chain that we hook into), so we
+    # have two strategies.  First, if DOCKER-USER exists, we hook it;
+    # second, if that is not available, we disable its use of iptables
+    # and do all the stuff Docker would normally do that we actually
+    # need (a subset of what Docker normally does).  However, in this
+    # latter case, iptables won't behave as expected for regular
+    # containers.  Nothing we can do about that.
     #
     # We use the same basic strategy in either case: what we want to do
     # is flow all packets on the control net bridge through our
@@ -1843,7 +1851,20 @@ sub rootPreConfig($;$)
     mysystem2("$IPTABLES -N EMULAB-ISOLATION");
     mysystem("$IPTABLES -F EMULAB-ISOLATION");
     mysystem("$IPTABLES -A EMULAB-ISOLATION -j RETURN");
-    mysystem("$IPTABLES -I FORWARD -j EMULAB-ISOLATION");
+    if (mysystem("$IPTABLES -L | grep DOCKER-USER") == 0) {
+	mysystem("$IPTABLES -F DOCKER-USER");
+	mysystem("$IPTABLES -A DOCKER-USER -j EMULAB-ISOLATION");
+	#
+	# In more recent versions of Docker, by default, bridge networks
+	# are not allowed to leave the host (i.e. via masquerading).
+	# So, fix that.
+	#
+	mysystem("$IPTABLES -A DOCKER-USER -o docker0 -j ACCEPT");
+	mysystem("$IPTABLES -A DOCKER-USER -o _dockercnet -j ACCEPT");
+    }
+    else {
+	mysystem("$IPTABLES -I FORWARD -j EMULAB-ISOLATION");
+    }
 
     #
     # Also, Docker handles MASQUERADING for us by default.  We don't
