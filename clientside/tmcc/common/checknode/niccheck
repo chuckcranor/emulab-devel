@@ -60,7 +60,7 @@ case $os in
 esac
 
 # Ignore virtual devices that won't be in the DB
-badboys="^(ifb|xenbr|vlan)"
+badboys="(ifb|xenbr|vlan|AMPR)"
 
 unset -v d ; declare -a d=($(ifconfig -a | grep $delimiter | grep -Ev $badboys))
 declare -i cnt=0;
