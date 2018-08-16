@@ -73,7 +73,7 @@ use Data::Dumper;
 use XML::Simple;
 use XML::LibXML;
 use Date::Parse;
-use POSIX qw(strftime ceil);
+use POSIX qw(strftime ceil :sys_wait_h);
 use Time::Local;
 use Compress::Zlib;
 use File::Temp qw(tempfile tmpnam);
@@ -127,6 +127,7 @@ my $IMAGE_SETUP    = "$TB/sbin/image_setup";
 my $IMAGE_IMPORT   = "$TB/sbin/image_import";
 my $SHAREVLAN      = "$TB/sbin/sharevlan";
 my $RFLINKS	   = "$TB/bin/rflinks";
+my $DOCKERCLI      = "/usr/local/bin/docker-registry-cli";
 my $FWNAME	   = "fw";
 my $API_VERSION    = 1;
 my $PROTOGENI_LOCALUSER   = @PROTOGENI_LOCALUSER@;
@@ -1060,6 +1061,9 @@ sub GetTicketAuxAux($)
     my %external_lanrefs  = ();
     my $routable_ip_count = 0;
     my $sync_server = ($isupdate ? $slice_experiment->sync_server() : undef);
+    # Recall any Docker image/Dockerfile URLs we've already checked.
+    my %checked_docker_extimages = ();
+    my %checked_dockerfile_urls  = ();
 
     # Always do this to avoid buildup.
     $slice_experiment->ClearBackupState();
@@ -2188,6 +2192,7 @@ sub GetTicketAuxAux($)
 	    }
 	}
 	if (defined($dockersettings)) {
+	    my ($d_extimage,$d_extserver,$d_extuser,$d_extpass,$d_dockerfile);
 	    foreach my $setting (keys(%$dockersettings)) {
 		my $attrvalue = $dockersettings->{$setting};
 		my $attrkey;
@@ -2231,15 +2236,23 @@ sub GetTicketAuxAux($)
 		}
 		elsif ($setting eq "extimage") {
 		    $attrkey = "DOCKER_EXTIMAGE";
+		    $d_extimage = $attrvalue;
+		}
+		elsif ($setting eq "extserver") {
+		    $attrkey = "DOCKER_EXTSERVER";
+		    $d_extserver = $attrvalue;
 		}
 		elsif ($setting eq "extusername") {
 		    $attrkey = "DOCKER_EXTUSER";
+		    $d_extuser = $attrvalue;
 		}
 		elsif ($setting eq "extpassword") {
 		    $attrkey = "DOCKER_EXTPASS";
+		    $d_extpass = $attrvalue;
 		}
 		elsif ($setting eq "dockerfile") {
 		    $attrkey = "DOCKER_DOCKERFILE";
+		    $d_dockerfile = $attrvalue;
 		}
 		elsif ($setting eq "tbaugmentation") {
 		    if ($attrvalue ne 'full' && $attrvalue ne 'buildenv'
@@ -2290,6 +2303,150 @@ sub GetTicketAuxAux($)
 					     {"vname"     => $node_nickname,
 					      "attrkey"   => $attrkey,
 					      "attrvalue" => $attrvalue });
+	    }
+
+	    #
+	    # Do some docker-specific error checking.  First the image
+	    # if specified, then the Dockerfile if specified.
+	    #
+	    if (defined($d_extimage)
+		&& !exists($checked_docker_extimages{$d_extimage})) {
+		my @cmd = ($DOCKERCLI,'--no-cache','--skip-docker-config-auth');
+		push(@cmd,'-s');
+		if (defined($d_extserver)) {
+		    push(@cmd,$d_extserver);
+		}
+		else {
+		    $d_extserver = 'registry.hub.docker.com';
+		    push(@cmd,$d_extserver);
+		}
+		if (defined($d_extuser)) {
+		    push(@cmd,'-u');
+		    push(@cmd,$d_extuser);
+		    if (defined($d_extpass)) {
+			push(@cmd,'-p');
+			push(@cmd,$d_extpass);
+		    }
+		}
+		else {
+		    push(@cmd,'-u');
+		    push(@cmd,'');
+		}
+		push(@cmd,"check_image");
+		my ($repo,$tag);
+		my @rbits = split(':',$d_extimage);
+		if (@rbits == 1) {
+		    $repo = $d_extimage;
+		    $tag = 'latest';
+		}
+		else {
+		    $repo = join(",",@rbits[0..(@rbits-2)]);
+		    $tag = $rbits[@rbits-1];
+		}
+		# If we end up pulling from the docker hub, we need to
+		# prefix the repo with 'library/', because that is how
+		# they do things!
+		if (($d_extserver eq 'registry-1.docker.io'
+		     || $d_extserver eq 'registry.hub.docker.com')
+		    && $repo !~ /^library\//) {
+		    $repo = 'library/' . $repo;
+		}
+		push(@cmd,'-r');
+		push(@cmd,$repo);
+		push(@cmd,'-t');
+		push(@cmd,$tag);
+
+		DebugTimeStamp("running '".join(' ',@cmd)."' to validate".
+			       " external docker image $d_extimage");
+		print STDERR "DEBUG: running '".join(' ',@cmd)."' to validate".
+			       " external docker image $d_extimage\n";
+
+		# Ok, finally run @cmd via fork/exec, so that we don't
+		# have to escape any args, and so that we can enforce a
+		# timeout.
+		my $dpid = fork();
+		if (!defined($dpid)) {
+		    $response = GeniResponse->Create(
+			GENIRESPONSE_ERROR, undef,
+			"Unable to validate Docker externalimage; try again later");
+		    goto bad;
+		}
+		elsif (!$dpid) {
+		    exec(@cmd)
+			or die("Error running '".join(" ",@cmd)."'!");
+		}
+		else {
+		    my $wait = 30;
+		    my $status;
+		    while ($wait > 0) {
+			my $kid = waitpid($dpid,WNOHANG);
+			if ($kid == -1) {
+			    print STDERR "*** Error waiting for $DOCKERCLI".
+				" pid $dpid: $!";
+			    last;
+			}
+			elsif ($kid == $dpid) {
+			    $status = $? >> 8;
+			    last;
+			}
+			sleep(1);
+		    }
+		    if (!defined($status)) {
+			kill(9,$dpid);
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_ERROR, undef,
+			    "Unable to validate external Docker image: timeout");
+			goto bad;
+		    }
+		    elsif ($status != 0) {
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_ERROR, undef,
+			    "Docker external image validation failed: $status");
+			goto bad;
+		    }
+
+		    # Ok, success: mark this URL as safe.  Note if it
+		    # required auth and they fail to specify auth for
+		    # each node, this will cause them problems in the
+		    # clientside; but that is their problem.  We can't
+		    # do better.
+		    $checked_docker_extimages{$d_extimage} = 1;
+		    DebugTimeStamp("validated external docker image $d_extimage");
+		}
+	    }
+	    if (defined($d_dockerfile)
+		&& !exists($checked_dockerfile_urls{$d_dockerfile})) {
+		use LWP::UserAgent;
+		my $ua = LWP::UserAgent->new;
+		my $req = HTTP::Request->new(GET => $d_dockerfile);
+		my $resp = $ua->request($req);
+		if (!$resp->is_success) {
+		    $response = GeniResponse->Create(
+			GENIRESPONSE_ERROR, undef,
+			"Dockerfile GET failed: ".
+			$resp->message." (".$resp->code.")");
+		    goto bad;
+		}
+		my @lines = split('\r\n',$resp->decoded_content);
+		if (@lines == 1) {
+		    @lines = split('\n',$resp->decoded_content);
+		}
+		my $foundit = 0;
+		for my $line (@lines) {
+		    if ($line =~ /^\s*FROM/) {
+			$foundit = 1;
+		    }
+		}
+		if (!$foundit) {
+		    $response = GeniResponse->Create(
+			GENIRESPONSE_ERROR, undef,
+			"Dockerfile $d_dockerfile does not contain a FROM".
+			" instruction");
+		    goto bad;
+		}
+
+		# Ok, passes our basic sanity check:
+		$checked_dockerfile_urls{$d_dockerfile} = 1;
 	    }
 	}
 	if (defined($fwsettings)) {

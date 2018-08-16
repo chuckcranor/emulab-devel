@@ -1264,6 +1264,15 @@ sub GetDockerSettings($)
     $tmp = GetText("extimage", $settings);
     $result->{"extimage"} = $tmp
 	if (defined($tmp));
+    $tmp = GetText("extserver", $settings);
+    $result->{"extserver"} = $tmp
+	if (defined($tmp));
+    $tmp = GetText("extuser", $settings);
+    $result->{"extuser"} = $tmp
+	if (defined($tmp));
+    $tmp = GetText("extpassword", $settings);
+    $result->{"extpassword"} = $tmp
+	if (defined($tmp));
     $tmp = GetText("dockerfile", $settings);
     $result->{"dockerfile"} = $tmp
 	if (defined($tmp));
