@@ -3142,7 +3142,6 @@ sub vnodeCreate($$$$)
     #
     # Add blockstore mounts.
     #
-    $args{"HostConfig"}{"Binds"} = [];
     foreach my $src (keys(%blockstoreMounts)) {
 	my $dst = $blockstoreMounts{$src};
 	my $bind = "${src}:${dst}";
