@@ -12759,7 +12759,7 @@ COMMAND_PROTOTYPE(dohwinfo)
 	 */
 	res = mydb_query("select mac,iface from interfaces where "
 			 " mac not like '000000%%' and "
-			 " role!='mngmnt' and guid is NULL and "
+			 " role!='mngmnt' and "
 			 " node_id='%s' order by iface",
 			 2, reqp->nodeid);
 	if (!res) {
