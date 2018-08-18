@@ -37,7 +37,7 @@ sub usage()
     print("              'vga', 'sio', 'sio2', 'sio3', 'sio4', 'null'\n");
     print("              NOTE: not needed with newer MFS setups\n");
     print("  -F version  Set kernel version used in a FreeBSD MFS:\n");
-    print("              One of: '8', '9', or '10'\n");
+    print("              One of: '8', '9', '10', or '11'\n");
     print("              Only applies to FreeBSD MFSes (duh!)\n");
     exit(-1);
 }
@@ -125,7 +125,7 @@ if (defined($options{"c"})) {
 }
 if (defined($options{"F"})) {
     $FBSDKERNEL = $options{"F"};
-    if ($FBSDKERNEL !~ /^(8|9|10)$/) {
+    if ($FBSDKERNEL !~ /^(8|9|10|11)$/) {
 	fatal("Invalid FreeBSD kernel version '$FBSDKERNEL'");
     }
 }

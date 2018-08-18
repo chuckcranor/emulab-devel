@@ -678,8 +678,8 @@ sub doboot()
 	$emulabconfig{EXTRA_PKG}    = "emulab-extras-6.3";
 	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-10.3-packages${suf}.tar.gz";
 	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-6.3";
-    } elsif ($FBSD_VERSION >= 11.0) {
-	my $suf = ($FBSD_ARCH eq "amd64") ? "-64" : "";
+    } elsif ($FBSD_VERSION <= 11.1) {
+	my $suf = "-64";
 	$emulabconfig{FS_PKG_DIR} = "/share/freebsd/11.1/packages${suf}";
 	$emulabconfig{OPS_PKG_DIR}  = $emulabconfig{FS_PKG_DIR};
 	$emulabconfig{BOSS_PKG_DIR} = $emulabconfig{FS_PKG_DIR};
@@ -690,6 +690,18 @@ sub doboot()
 	$emulabconfig{EXTRA_PKG}    = "emulab-extras-7.1";
 	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-11.1-packages${suf}.tar.gz";
 	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-7.1";
+    } elsif ($FBSD_VERSION >= 11.2) {
+	my $suf = "-64";
+	$emulabconfig{FS_PKG_DIR} = "/share/freebsd/11.2/packages${suf}";
+	$emulabconfig{OPS_PKG_DIR}  = $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{BOSS_PKG_DIR} = $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{EXTRA_PKG_DIR}= $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{FS_PKG}       = "emulab-fs-7.2";
+	$emulabconfig{OPS_PKG}      = "emulab-ops-7.2";
+	$emulabconfig{BOSS_PKG}     = "emulab-boss-7.2";
+	$emulabconfig{EXTRA_PKG}    = "emulab-extras-7.2";
+	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-11.2-packages${suf}.tar.gz";
+	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-7.2";
     }
     #
     # If there is a package tarball, prefer that and grab it now.

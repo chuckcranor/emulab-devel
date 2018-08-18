@@ -85,6 +85,19 @@ sub Install($$$)
 	# Its the generic stuff; must localize.
 	#
 	my $fv = $MFSVERSION;
+
+	#
+	# XXX hack, hack. Right now there is no FreeBSD 11 MFS,
+	# just a FreeBSD 11 kernel to use with FreeBSD 10 MFS.
+	#
+	if ($fv eq "11-64") {
+	    $fv = "10-64";
+	    if (-x "$TFTP_DIR/freebsd/boot/kernel11" ||
+		-x "$TFTP_DIR/freebsd10-64/boot/kernel11") {
+		$kernelvers = 11;
+	    }
+	}
+
 	if (! -e "$TFTP_DIR/freebsd${fv}") {
 	    if ($fv eq "10-64") {
 		$fv = "8-64";
