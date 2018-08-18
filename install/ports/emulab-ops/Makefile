@@ -108,6 +108,7 @@ RUN_DEPENDS+=	\
 # apache related ports
 RUN_DEPENDS+=	\
 	${LOCALBASE}/${APACHEMODDIR}/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
+	${LOCALBASE}/${APACHEMODDIR}/libphp5.so:${PORTSDIR}/www/mod_php$(PHP_VER) \
 	${LOCALBASE}/${APACHEMODDIR}/mod_fastcgi.so:${PORTSDIR}/www/mod_fastcgi
 
 # PHP packages
@@ -130,7 +131,7 @@ RUN_DEPENDS+=	\
 	${LOCALBASE}/libdata/pkgconfig/x11.pc:${PORTSDIR}/x11/xorg-libraries
 
 USE_PERL5=	yes
-USES=		python:2.7
+USES=		perl5 python:2.7 php
 
 NO_BUILD=	yes
 

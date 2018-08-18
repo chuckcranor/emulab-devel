@@ -156,6 +156,7 @@ RUN_DEPENDS+=	\
 # apache related ports
 RUN_DEPENDS+=	\
 	${LOCALBASE}/${APACHEMODDIR}/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
+	${LOCALBASE}/${APACHEMODDIR}/libphp5.so:${PORTSDIR}/www/mod_php$(PHP_VER) \
 	${LOCALBASE}/${APACHEMODDIR}/mod_fcgid.so:${PORTSDIR}/www/mod_fcgid
 
 # Port versions of current or former "core" utilties
@@ -168,7 +169,7 @@ RUN_DEPENDS+=	\
 	man2html:${PORTSDIR}/textproc/man2html
 
 USE_PERL5=	yes
-USES=		python:2.7
+USES=		perl5 python:2.7 php
 
 NO_BUILD=	yes
 

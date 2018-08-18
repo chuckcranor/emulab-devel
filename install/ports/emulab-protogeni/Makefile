@@ -78,7 +78,7 @@ RUN_DEPENDS+=	\
 	p5-FCGI>=0.74:${PORTSDIR}/www/p5-FCGI
 
 USE_PERL5=	yes
-USES=		python:2.7
+USES=		perl5 python:2.7 php
 
 NO_BUILD=	yes
 
