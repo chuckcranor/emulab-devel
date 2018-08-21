@@ -139,7 +139,7 @@ tbresult=${tbinfo[@]}
 #	    failed="$failed TB missing nic "
 #	    failed="$failed TB extra nic "
 
-if [[ "$ifresult" || "$tbresult" ]] ; then
+if [[ ! "$ifresult" && ! "$tbresult" ]] ; then
     if [[ $ifresult ]] ; then
 	failed="${failed}: NotIn TB $ifresult"
     fi
