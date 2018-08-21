@@ -30,6 +30,7 @@ fi
        # the bash syntax ${var-1} means: use var if set else use nothing  
 [[ -z "${NOSM-}" ]] && declare NOSM="echo" #do nothing command
 [[ -z "${host-}" ]] && declare host       #emulab hostname
+[[ -z "${nodetype-}" ]] && declare nodetype       #emulab nodetype
 [[ -z "${failed-}" ]] && declare failed=""  #major falure to be commicated to user
 [[ -z "${os-}" ]] && declare os=""      #[Linux|FreeBSD] for now
 [[ -z "${osrel-}" ]] && declare osrel="" #release major number
@@ -165,6 +166,20 @@ readtmcinfo() {
 	rmtmp="y" # remove tmp file
 	source=/tmp/.$$tmcchwinv
 	$($BINDIR/tmcc hwinfo > $source)
+	
+	#special case because tmcc retuns us a extra nic
+	if [[ ${nodetype} == "r320" && ${os} == "FreeBSD" ]] ; then
+            oldd=$PWD
+            cd /tmp
+            head -8 $source > /tmp/.$$tmcc_head
+            echo "NETINFO UNITS=3" >> /tmp/.$$tmcc_head
+            head -10 $source | tail -1 >> /tmp/.$$tmcc_head
+            tail -2 $source >> /tmp/.$$tmcc_head
+            cat /tmp/.$$tmcc_head > $source
+            rm /tmp/.$$tmcc_head
+            cd $oldd
+	fi
+	
     else
 	rmtmp=""
     fi
@@ -611,6 +626,7 @@ inithostname() {
     osrel=`uname -r | sed 's/^\([0-9][0-9]*\)\..*/\1/'`
     if [ -e "$BINDIR/tmcc" ] ; then
 	host=$($BINDIR/tmcc nodeid)
+        nodetype=$($BINDIR/tmcc nodetype)
     else
 	echo "WARN no $BINDIR/tmcc command for nodeid"
 	# maybe its just time to give up
