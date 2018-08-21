@@ -67,14 +67,14 @@ postprocessing()
         # note what kernel we are running
 	printf "# KERNEL %s\n" "$(uname -svrm)" >> /tmp/nodecheck.log.tb.new
 	# add which mode we running as
-	printf "# ismfs=%s %s\n" "$mfsmode" "$(getfromtb TESTINFO)" >> /tmp/nodecheck.log.tb.new
+	printf "# ismfs=%s %s nodetype %s \n" "$mfsmode" "$(getfromtb TESTINFO)" "$nodetype"  >> /tmp/nodecheck.log.tb.new
 
     # print the full listng of found inventory
 	{ printhwinv
 } > /tmp/nodecheck.log.inv
 	printf "# KERNEL %s\n" "$(uname -svrm)" >> /tmp/nodecheck.log.inv
 	# add which mode we running as
-	printf "# ismfs=%s %s\n"  "$mfsmode" "$(getfromtb TESTINFO)" >> /tmp/nodecheck.log.inv
+	printf "# ismfs=%s %s nodetype %s \n"  "$mfsmode" "$(getfromtb TESTINFO)" "$nodetype" >> /tmp/nodecheck.log.inv
 
     # make sure projdir is available
         if [ ! -d ${projdir} ] ; then
