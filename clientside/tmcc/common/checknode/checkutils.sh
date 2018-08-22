@@ -788,7 +788,6 @@ getdrivenames() {
 	    do
 		[[ ! -L /dev/ad${i} ]] &&  [[ -c /dev/ad${i} ]] && drivelist+="/dev/ad${i} "
 		[[ -c /dev/ada${i} ]] && drivelist+="/dev/ada${i} "
-		[[ -c /dev/ad${i} ]] && drivelist+="/dev/ad${i} " 
 		[[ -c /dev/da${i} ]] && drivelist+="/dev/da${i} " 
 		[[ -c /dev/ar${i} ]] && drivelist+="/dev/ar${i} " 
 		[[ -c /dev/aacd${i} ]] && drivelist+="/dev/aacd${i} " 
