@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1327,7 +1327,10 @@ $PAGEHEADER_FUNCTION = function($title, $view = NULL, $extra_headers = NULL,
 	}
 	if ($login_user) {
         # And start the contentbody.
-	    echo "<div id='fullcontentbody'>";
+	    echo "<div id='fullcontentbody'>\n";
+            echo "<center style='margin: 5px;'>";
+            echo "<span class='blink_me'><a target=_blank href='https://gitlab.flux.utah.edu/emulab/emulab-devel/wikis/faq/Using%20the%20Testbed/Emulab%20Classic'>NEW WEB INTERFACE</a> coming on Sept 4th!</span>";
+            echo "</center>\n";
 	}
     }
     echo "<!-- begin content -->";

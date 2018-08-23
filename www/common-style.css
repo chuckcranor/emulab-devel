@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2007 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2007, 2018 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -42,3 +42,13 @@ div.question p {
 	text-indent: 0em; }
 div.answer {
 	margin-bottom: 2em; }
+
+.blink_me {
+  animation: blinker 2s linear infinite;
+}
+
+@keyframes blinker {
+  50% {
+    opacity: 0;
+  }
+}
