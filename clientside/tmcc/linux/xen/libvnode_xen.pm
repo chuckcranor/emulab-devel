@@ -609,6 +609,10 @@ sub rootPreConfig($;$)
     
     print "Configuring root vnode context\n";
 
+    $usethin = 0
+	if (exists($hostattributes->{'XEN_LVMNOTHINPOOL'}) &&
+	    (lc($hostattributes->{'XEN_LVMNOTHINPOOL'}) eq "yes"));
+
     #
     # For compatibility with existing (physical host) Emulab images,
     # the physical host provides DHCP info for the vnodes. We manage
@@ -2350,6 +2354,18 @@ sub vnodePreConfigExpNetwork($$$$)
     my $ifconfigs  = $vnconfig->{'ifconfig'};
     my $ldconfigs  = $vnconfig->{'ldconfig'};
     my $tunconfigs = $vnconfig->{'tunconfig'};
+    my $attributes = $vnconfig->{'attributes'};
+    my $noantispoof= 0;
+
+    $noantispoof = 1
+	if (exists($attributes->{'XEN_NOANTISPOOFING'}) &&
+	    (lc($attributes->{'XEN_NOANTISPOOFING'}) eq "yes"));
+
+    # Strictly for debugging.
+    if ($noantispoof) {
+	mysystem("$IPTABLES -P FORWARD ACCEPT");
+    }
+
     my $ifbs;
 
     # Keep track of links (and implicitly, bridges) that need to be created
@@ -2365,7 +2381,7 @@ sub vnodePreConfigExpNetwork($$$$)
     my $vifstr = "vif = [$viftype " .
 	"mac=" . $vninfo->{'cnet'}->{'mac'} . ", " .
 	# This tells vif-bridge to use antispoofing iptable rules.
-	"ip=" . $vninfo->{'cnet'}->{'ip'} . ", " .
+	(!$noantispoof ? "ip=" . $vninfo->{'cnet'}->{'ip'} . ", " : "") .
         "bridge=" . $vninfo->{'cnet'}->{'bridge'} . ", " .
 	# For vif-route.
         "gatewaydev=" . $vninfo->{'cnet'}->{'bridge'} . ", " .
@@ -2706,6 +2722,7 @@ sub vnodeBoot($$$$)
 {
     my ($vnode_id, $vmid, $vnconfig, $private) = @_;
     my $vninfo = $private;
+    my $attributes = $vnconfig->{'attributes'};
     my $ip = $vninfo->{'dhcp'}->{'ip'};
 
     if (!exists($vninfo->{'cffile'})) {
@@ -2737,6 +2754,18 @@ sub vnodeBoot($$$$)
     if ($rpid == 0) {
 	print STDERR "vnodeBoot: WARNING: capture was not running, starting\n";
 	captureStart($vnode_id);
+    }
+
+    if (exists($attributes->{'XEN_STARTUPSCRIPT'})) {
+	my $script = $attributes->{'XEN_STARTUPSCRIPT'};
+	if (! -x $script) {
+	    print STDERR "vnodeBoot: ERROR, $script does not exist\n";
+	}
+	mysystem2("$script $vnode_id");
+	if ($?) {
+	    print STDERR "vnodeBoot: ERROR, $script failed\n";
+	    return -1;
+	}
     }
 
     # notify stated that we are about to boot. We need this transition for
