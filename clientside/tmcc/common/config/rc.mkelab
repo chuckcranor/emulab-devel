@@ -71,6 +71,7 @@ use libsetup;
 use liblocsetup;
 use libtmcc;
 use librc;
+use libutil qw(isRoutable);
 
 #
 # Not all clients support this.
@@ -2075,11 +2076,15 @@ sub SetupBossNode($)
 	    #
 	    my $fsdev = FindExtraFSConfig($TBDIR);
 	    if ($fsdev) {
-		mysystem("$BINDIR/mkextrafs.pl -s 0 -r $fsdev -f -2 $TBDIR");
-		$qslice = "/dev/$fsdev" . "s1f";
+		my $opt = (FindExtraFSConfig($FSDIR) ? "" : "-2");
+		mysystem("$BINDIR/mkextrafs.pl -s 0 -r $fsdev -f $opt $TBDIR");
+		if ($opt ne "") {
+		    $qslice = "/dev/$fsdev" . "s1f";
+		}
 	    }
 	    else {
-		mysystem("$BINDIR/mkextrafs.pl -f -2 $TBDIR");
+		my $opt = (FindExtraFSConfig($FSDIR) ? "" : "-2");
+		mysystem("$BINDIR/mkextrafs.pl -f $opt $TBDIR");
 		my $disk = `mount | grep '0s4e on $TBDIR'`;
 		if ($disk =~ /(\/dev\/\S+)s4e on/) {
 		    $qslice = "$1" . "s4f";		
@@ -2087,18 +2092,27 @@ sub SetupBossNode($)
 	    }
 
 	    #
-	    # XXX mkextrafs does not create the second filesystem, it only
-	    # creates the BSD partition.  So we need to determine the
-	    # name of the disk device in use, and create a filesystem
-	    # on that 'f' partition.
+	    # Look for /q fsdev. 
 	    #
-	    if (defined($qslice)) {
+	    RecreateDir($FSDIR, 1);
+	    $fsdev = FindExtraFSConfig($FSDIR);
+	    if (defined($fsdev)) {
+		mysystem("$BINDIR/mkextrafs.pl -s 0 -r $fsdev -f $FSDIR");
+	    }
+	    elsif (defined($qslice)) {
+		#
+		# XXX mkextrafs does not create the second filesystem, it only
+		# creates the BSD partition.  So we need to determine the
+		# name of the disk device in use, and create a filesystem
+		# on that 'f' partition.
+		#
 		mysystem("newfs $qslice");
-		mysystem("mkdir $FSMOUNTDIR");
-		mysystem("mount $qslice $FSMOUNTDIR");
-		mysystem("echo \"$qslice $FSMOUNTDIR ufs rw 0 2\" >> /etc/fstab");
-	    } else {
-		SetupFatal("Could not parse mount info to find extra partition");
+		mysystem("mount $qslice $FSDIR");
+		mysystem("echo \"$qslice $FSDIR ufs rw 0 2\" >> /etc/fstab");
+	    }
+	    else {
+		SetupFatal("Could not parse mount info to find ".
+			   "extra partition for /q");
 	    }
 	}
 	else {
@@ -2192,6 +2206,8 @@ sub SetupBossNode($)
     RecreateDir("$stuffdir", 1);
     mysystem("cp -fp $expdir/dbstate.tar.gz  $stuffdir");
     mysystem("cp -fp $expdir/outer_db_schema $stuffdir");
+    mysystem("cp -fp $expdir/users.tar.gz $stuffdir")
+	if (-e "$expdir/users.tar.gz");
 
     if (!$emulabconfig{"CONFIG_NOSETUP"}) {
 	print "Check for db schema mismatch before we go any further\n";
@@ -2591,19 +2607,32 @@ sub SetupBossNode($)
 	my $TARGETSYS_BOSSIP  = $emulabconfig{"TARGETSYS_BOSSIP"};
 	my $TARGETSYS_DOMAIN  = $emulabconfig{"TARGETSYS_DOMAIN"};
 
-	print RC "ifconfig_${outer_controlif}_alias0=".
-	    "\"inet $TARGETSYS_BOSSIP netmask $TARGETSYS_NETMASK\"\n";
+	my $ip1  = inet_aton($TARGETSYS_BOSSIP);
+	my $ip2  = inet_aton($outer_ip);
+	my $mask = inet_aton($outer_netmask);
 
-	print RC "static_routes=\"\$static_routes targetsys\"\n";
-	print RC "route_targetsys=\"-net $TARGETSYS_NETWORK ".
-	    " -netmask $TARGETSYS_NETMASK -iface $outer_controlif\"\n";
+	#
+	# For testing, the target might be inside the outer emulab.
+	#
+	if (inet_ntoa($ip1 & $mask) eq inet_ntoa($ip2 & $mask)) {
+	    print RC "ifconfig_${outer_controlif}_alias0=".
+		"\"inet $TARGETSYS_BOSSIP netmask 255.255.255.255\"\n";
+	    # Need to enact this change now before trying setup Emulab
+	    mysystem("ifconfig $outer_controlif ".
+		     "inet $TARGETSYS_BOSSIP netmask 255.255.255.255 add");
+	}
+	else {
+	    print RC "ifconfig_${outer_controlif}_alias0=".
+		"\"inet $TARGETSYS_BOSSIP netmask $TARGETSYS_NETMASK\"\n";
 
+	    print RC "static_routes=\"\$static_routes targetsys\"\n";
+	    print RC "route_targetsys=\"-net $TARGETSYS_NETWORK ".
+		" -netmask $TARGETSYS_NETMASK -iface $outer_controlif\"\n";
+	    # Need to enact this change now before trying setup Emulab
+	    mysystem("ifconfig $outer_controlif ".
+		     "inet $TARGETSYS_BOSSIP netmask $TARGETSYS_NETMASK add");
+	}
 	print RC "hostname=\"" . "boss" . "." . $TARGETSYS_DOMAIN . "\"\n";
-	#
-	# Need to enact these changes now before trying setup Emulab
-	#
-	mysystem("ifconfig $outer_controlif ".
-		 "inet $TARGETSYS_BOSSIP netmask $TARGETSYS_NETMASK add");
     }
     else {
 	print RC "hostname=\"" . $emulabconfig{"BOSSNODE"} . "." . $domain . "\"\n";
@@ -2924,6 +2953,8 @@ sub CreateOpsJail($)
     # Need to extend rc.conf so the jail starts at boot time.
     my $opsnode = $emulabconfig{"OPSNODE"} . "." . $domain;
     my $opsip   = $emulabconfig{"OPSIP"};
+    my $bossip  = $emulabconfig{"BOSSIP"};
+    my $startpf = 0;
 
     print "Updating /etc/rc.conf\n";
     open(RC, ">>/etc/rc.conf") or
@@ -2933,12 +2964,50 @@ sub CreateOpsJail($)
     print RC "jail_enable=\"YES\"\n";
     print RC "jail_list=\"ops\"\n";
     print RC "jail_ops_flags=\"\"\n";
-    print RC "jail_ops_hostname=\"$opsnode\"\n";
-    print RC "jail_ops_ip=\"$opsip\"\n";
     print RC "jail_ops_rootdir=\"/ops\"\n";
     print RC "jail_ops_interface=\"$outer_controlif\"\n";
     print RC "jail_procfs_enable=\"YES\"\n";
     print RC "jail_devfs_enable=\"YES\"\n";
+    if ($emulabconfig{"CONFIG_TARGETSYS"} &&
+	exists($emulabconfig{"TARGETSYS_OPSIP"}) &&
+	$emulabconfig{"CONFIG_SINGLECNET"}) {
+	my $TARGETSYS_OPSIP   = $emulabconfig{"TARGETSYS_OPSIP"};
+	my $TARGETSYS_DOMAIN  = $emulabconfig{"TARGETSYS_DOMAIN"};
+	my $NETMASK           = 32;
+	if (!isRoutable($TARGETSYS_OPSIP)) {
+	    $NETMASK = $emulabconfig{"TARGETSYS_NETMASK"};
+	}
+	print RC "jail_ops_ip=\"${TARGETSYS_OPSIP}/$NETMASK\"\n";
+	print RC "jail_ops_hostname=\"" . "ops" . "." .
+	    $TARGETSYS_DOMAIN . "\"\n";
+	print RC "jail_ops_socket_unixiproute_only=\"NO\"\n";	
+	
+	if (!isRoutable($TARGETSYS_OPSIP)) {
+	    print RC "pf_enable=\"YES\"\n";
+	    print RC "pf_rules=\"/etc/pf.nat\"\n";
+	    
+	    open(PF, ">>/etc/pf.nat") or
+		SetupFatal("Could not open /etc/pf.nat for writing: $!");
+
+	    #
+	    # NOTE: This has to use BOSSIP initially, since otherwise
+	    # the NAT will not work. When converting for deployment,
+	    # one of the steps is to fix this.
+	    #
+	    print PF "# Packet normalization\n";
+	    print PF "scrub in all\n";
+	    print PF "\n";
+	    print PF "# Allow outbound connections from within the jails\n";
+	    print PF "nat on $outer_controlif from $TARGETSYS_OPSIP ".
+		"to any -> $bossip\n";
+	    close(PF);
+	    $startpf = 1;
+	}
+    }
+    else {
+	print RC "jail_ops_ip=\"${opsip}/32\"\n";
+	print RC "jail_ops_hostname=\"$opsnode\"\n";
+    }
     close(RC);
 
     # fstab inside the jail has to be empty.
@@ -2983,7 +3052,7 @@ sub CreateOpsJail($)
     print RC "hostname=\"$opsnode\"\n";
     print RC "sendmail_enable=\"NO\"\n";
     print RC "sshd_enable=\"YES\"\n";
-    print RC "nfs_client_enable=\"YES\"\n";
+    print RC "nfs_client_enable=\"NO\"\n";
     print RC "nfs_client_flags=\"-n 8\"\n";
     print RC "rpcbind_enable=\"NO\"\n";
     print RC "mountd_enable=\"NO\"\n";
@@ -2991,6 +3060,11 @@ sub CreateOpsJail($)
     print RC "ntpd_enable=\"NO\"\n";
     print RC "background_fsck=\"NO\"\n";
     close(RC);
+
+    if ($startpf) {
+	print "Starting up pf/nat for the ops jail\n";
+	mysystem("service pf start");
+    }
 
     #
     # Start the jail, and then enter it to run SetupOpsJail().
@@ -3187,10 +3261,6 @@ sub SetupOpsJail()
     print RC "sendmail_enable=\"YES\"\n";
     print RC "linux_enable=\"YES\"\n";
     print RC "accounting_enable=\"YES\"\n";
-    print RC "nfs_client_enable=\"YES\"\n";
-    print RC "smbd_enable=\"YES\"\n"
-	if ($emulabconfig{"CONFIG_WINDOWS"});
-
     print RC "syslogd_flags=\"-a $control_network\"\n";
     close(RC);
 
@@ -3208,6 +3278,22 @@ sub SetupOpsJail()
 
     goto skipsetup
 	if ($emulabconfig{"CONFIG_NOSETUP"});
+
+    #
+    # Write the config variables out. genirack install phase needs it.
+    #
+    open(CF, "> $TBDIR/configvars.txt")
+	or SetupFatal("Could not create $TBDIR/configvars.txt");
+    foreach my $opt (keys %emulabconfig) {
+	my $val = $emulabconfig{$opt};
+
+	# Do not write anything that looks like a password
+	next
+	    if ($opt =~ /password/i);
+	
+	print CF "$opt='$val'\n";
+    }
+    close(CF);
 
     #
     # Configure an object tree. 
@@ -3330,12 +3416,12 @@ sub CreateDefsFile($)
     if ($emulabconfig{"CONFIG_TARGETSYS"}) {
 	$bossnode_ip        = $emulabconfig{"TARGETSYS_BOSSIP"};
 	$opsnode_ip         = $emulabconfig{"TARGETSYS_OPSIP"};
-	$fsnode_ip          = $opsnode_ip;
-	$control_ip         = $opsnode_ip;
+	$fsnode_ip          = ($opsvm ? $bossnode_ip : $opsnode_ip);
+	$control_ip         = ($opsvm ? $bossnode_ip : $opsnode_ip);
 	$control_netmask    = $emulabconfig{"TARGETSYS_NETMASK"};
 	$bossnode_hostname  = "boss";
 	$opsnode_hostname   = "ops";
-	$fsnode_hostname    = "ops";
+	$fsnode_hostname    = ($opsvm ? "boss" : "ops");
 	$ourdomain	    = $emulabconfig{"TARGETSYS_DOMAIN"};
 	$thishomebase       = $emulabconfig{"TARGETSYS_HOMEBASE"}
 	    if (defined($emulabconfig{"TARGETSYS_HOMEBASE"}));
