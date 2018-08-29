@@ -301,6 +301,10 @@ $(function ()
 
 	$('#edit_topo_modal_button').click(function (event) {
 	    event.preventDefault();
+	    // Do this now instead of on page load, since user might switch
+	    // between geni-lib and rspec, and that changes whether the
+	    // editor is read-only or writable.
+	    CreateJacksEditor();
 	    editor.show($('#profile_rspec_textarea').val(),
 			function (newrspec) {
 			    // Only for a new profile or profile converted
@@ -649,7 +653,6 @@ $(function ()
 	if (gotrspec) {
 	    ExtractFromRspec();
 	}
-	CreateJacksEditor();
 	UpdateButtons();
 	
 	//
