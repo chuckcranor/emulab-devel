@@ -157,11 +157,6 @@ case "$1" in
 			@prefix@/sbin/cnetwatch
 		fi
 
-		if [ -x @prefix@/sbin/apt_checkup ]; then
-			echo -n " apt_checkup"
-			@prefix@/sbin/apt_checkup
-		fi
-		
 		if [ -x @prefix@/sbin/portal_monitor ]; then
 			echo -n " portal_monitor"
 			@prefix@/sbin/portal_monitor
