@@ -46,6 +46,9 @@ sub Install($$$)
 		if (!$newmysql);
 	    DoneIfDoesntExist($MYSQL_CNF);
 	    AppendToFileFatal($MYSQL_CNF,
+		        "[mysql]",
+			"prompt                     = [\\d]>\\_",
+			"",      
 			"[mysqld]",
 			"innodb_buffer_pool_size    = 128M",
 			"innodb_data_file_path      = ibdata1:16M:autoextend",
