@@ -24,8 +24,10 @@
 #
 # This file is intended to be included into another NS file. It is not
 # a stand alone file.
-# 
-set myboss [$ns node]
+#
+set vhost [$ns node]
+set boss  [$ns node]
+set myboss $boss
 
 tb-set-node-inner-elab-role $myboss boss+fs+router
 tb-set-elabinelab-attribute CONFIG_OPSVM 1
@@ -49,6 +51,18 @@ if {[info exists ::TBCOMPAT::elabinelab_hardware("boss")]} {
     }
 } else {
     tb-set-hardware $myboss $srvtype
+}
+tb-fix-node $boss $vhost
+
+if {[info exists ::TBCOMPAT::elabinelab_hardware("xenhost")]} {
+    namespace eval TBCOMPAT {
+        tb-set-hardware $vhost $elabinelab_hardware("xenhost")
+    }
+}
+if {[info exists ::TBCOMPAT::elabinelab_fixnodes("xenhost")]} {
+    namespace eval TBCOMPAT {
+        tb-fix-node $vhost $elabinelab_fixnodes("xenhost")
+    }
 }
 
 if {[info exists ::TBCOMPAT::elabinelab_fixnodes("boss")]} {
@@ -132,14 +146,21 @@ if {[info exists ::TBCOMPAT::elabinelab_nodeos("xenhost")]} {
 	set xenos $elabinelab_nodeos("xenhost")
     }
 }
+tb-set-node-os $vhost $xenos
 
+set bossos FBSD111-64-STD
 if {[info exists ::TBCOMPAT::elabinelab_nodeos("boss")]} {
     namespace eval TBCOMPAT {
-        tb-set-node-os $myboss $elabinelab_nodeos("boss") $xenos
+	set bossos $elabinelab_nodeos("boss")
+        tb-set-node-os $myboss $bossos $xenos
     }
 } else {
-    tb-set-node-os $myboss FBSD111-64-STD $xenos
+    tb-set-node-os $myboss $bossos $xenos
 }
+# Tell XEN setup the image we want to load in slice 2 for the OPS jail. 
+$myboss add-attribute XEN_SLICE2IMAGE "emulab-ops/$bossos"
+# Need to make sure that rc.mkelab sees this too. It does the actual load.
+tb-set-elabinelab-role-attribute "boss" OPSVM_IMAGE "emulab-ops/$bossos"
 
 #
 # Special stuff to set the IP and mask for the xen nodes. Temporary
@@ -167,12 +188,14 @@ if { $bossfw != {} } {
 
 #
 # We need to tell the XEN host to bump the size of partition four. In GB
+# Skip if the user has defined extra disks. 
 #
-$myboss add-attribute XEN_EXTRAFS 50
-# Tell XEN setup the image we want to load in slice 2 for the OPS jail. 
-$myboss add-attribute XEN_SLICE2IMAGE emulab-ops/FBSD111-64-STD
-# Need to make sure that rc.mkelab sees this too. It does the actual load.
-tb-set-elabinelab-role-attribute "boss" OPSVM_IMAGE emulab-ops/FBSD111-64-STD
+set bossdisks [tb-get-elabinelab-role-attribute "boss" "XEN_EXTRADISKS"]
+if { $bossdisks == {} } {
+   $myboss add-attribute XEN_EXTRAFS 50
+} else {
+   $myboss add-attribute XEN_EXTRADISKS $bossdisks
+}
 
 #
 # CPUs.
@@ -196,3 +219,28 @@ if { $bossmem != {} } {
     $myboss add-attribute XEN_MEMSIZE 1000
 }
 
+#
+# Debugging support; this turns off antispoofing for the VMs, but only
+# for emulab-ops experiments when requested.
+#
+set spoof [tb-get-elabinelab-role-attribute "boss" "XEN_NOANTISPOOFING"]
+if { $spoof != {} &&
+     (${::GLOBALS::pid} == "emulab-ops" || ${::GLOBALS::pid} == "testbed") } {
+    $myboss add-attribute "XEN_NOANTISPOOFING" $spoof
+    $vhost add-attribute "XEN_NOANTISPOOFING" $spoof
+}
+set script [tb-get-elabinelab-role-attribute "boss" "XEN_STARTUPSCRIPT"]
+if { $script != {} &&
+     (${::GLOBALS::pid} == "emulab-ops" || ${::GLOBALS::pid} == "testbed") } {
+    $myboss add-attribute "XEN_STARTUPSCRIPT" $script
+}
+set thinpool [tb-get-elabinelab-role-attribute "boss" "XEN_LVMNOTHINPOOL"]
+if { $thinpool != {} &&
+     (${::GLOBALS::pid} == "emulab-ops" || ${::GLOBALS::pid} == "testbed") } {
+    $vhost add-attribute "XEN_LVMNOTHINPOOL" $thinpool
+}
+set devices [tb-get-elabinelab-role-attribute "boss" "XEN_USBDEVICES"]
+if { $devices != {} &&
+     (${::GLOBALS::pid} == "emulab-ops" || ${::GLOBALS::pid} == "testbed") } {
+    $myboss add-attribute "XEN_USBDEVICES" $devices
+}
