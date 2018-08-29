@@ -68,8 +68,22 @@ sub Install($$$)
 		PhaseSkip("Already done");
 	    }
 	    ExecQuietFatal("$SUDO -u $PROTOUSER $WAP ".
-			   "  $ADDPUBKEY -f -u $PROTOUSER $PROTOUSER_KEY");
+			   "  $ADDPUBKEY -f -u $PROTOUSER $PROTOUSER_DSAKEY");
 	};
+	Phase "RSAKey", "Adding  RSA key to $PROTOUSER account", sub {
+	    my ($exitval, @rows) =
+		ExecQuiet("echo 'select * from user_pubkeys ".
+			  " where uid=\"$PROTOUSER\"' | $MYSQL -s $DBNAME");
+	    if ($exitval) {
+		PhaseFail("Error running query");
+	    }
+	    if (scalar(@rows) > 1) {
+		PhaseSkip("Already done");
+	    }
+	    ExecQuietFatal("$SUDO -u $PROTOUSER $WAP ".
+			   "  $ADDPUBKEY -f -u $PROTOUSER $PROTOUSER_RSAKEY");
+	};
+	
 	Phase "DSAKey2", "Adding Extra DSA key to $PROTOUSER account", sub {
 	    PhaseSkip("No key found")
 		if (! -e $EXTRADSA_KEY);
