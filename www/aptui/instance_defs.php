@@ -826,6 +826,8 @@ class Instance
             $skiptypes["enodeb"]   = true;
             $skiptypes["nuc6260"]  = true;
             $skiptypes["nuc8650"]  = true;
+            $skiptypes["nuc7100"]  = true;
+            $skiptypes["iris030"]  = true;
         }
         return $skiptypes;
     }
