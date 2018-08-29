@@ -1,11 +1,7 @@
 #
-# TODO:
+# This is the generic part of target system setup. There should be
+# targetsys dependent setup file as well.
 #
-# Bake in the routable ip space if possible
-# Add partial reverse zone stuff. See the NOTES file.
-#
-# Add /usr/testbed/bin and sbin to elabman path.
-# Kill OUTERBOSS_NODENAME and OUTERBOSS_SSLCERTNAME from defs
 
 use strict;
 use libinstall;
@@ -19,18 +15,13 @@ use NodeType;
 use OSImage;
 use Node;
 use EmulabFeatures;
+use EmulabConstants;
 
 my $TARGETSYS_DIR= lc($TARGETSYS_TARGET);
-my $NODETYPEXML  = "$TOP_SRCDIR/install/$TARGETSYS_DIR/nodetype.xml";
-my $SWITCHSQL    = "$TOP_SRCDIR/install/$TARGETSYS_DIR/tbdb.sql";
 my $CONFIGVARS   = "$PREFIX/configvars.txt";
-my $RACKVARS     = "$PREFIX/etc/targetsys/variables.txt";
-my $RACKIPS      = "$PREFIX/etc/targetsys/ips.txt";
-my $RACKILO      = "$PREFIX/etc/targetsys/ilo.xml";
-my $RACKWIRES    = "$PREFIX/etc/targetsys/wiring.xml";
-my $ILOPASSWORD  = "$PREFIX/etc/ilo.pswd";
+my $TARGETSYSVARS= "$PREFIX/etc/targetsys/variables.txt";
 my $ELABPASSWORD = "$PREFIX/etc/elabman.pswd";
-my $HPPASSWORD   = "$PREFIX/etc/switch.pswd";
+my $SWITCHPSWD   = "$PREFIX/etc/switch.pswd";
 my $PORTSRC      = "http://www.emulab.net/downloads/FreeBSD-".
     "${FBSD_MAJOR}.${FBSD_MINOR}" . "-ports.tar.gz";
 my $ZZZ		 = "/usr/local/etc/rc.d/zzz-inelab.sh";
@@ -41,19 +32,6 @@ my $CHPASS	 = "/usr/bin/chpass";
 my $SSHTB	 = "$PREFIX/bin/sshtb";
 my $DELETENODE	 = "$PREFIX/sbin/deletenode";
 my $ELABMANDIR   = "/users/elabman";
-
-my %INTERFACES = (
-    "xn1"   => "inet 10.1.1.1 netmask 255.255.255.0",
-    "xn2"   => "inet 10.2.1.1 netmask 255.255.255.0",
-    "xn3"   => "inet 10.3.1.1 netmask 255.255.255.0",
-    # Direct connect to FOAM VM on the same node.
-    "xn4"   => "inet 10.4.1.1 netmask 255.255.255.0",
-);
-
-my %HOSTNAMES = (
-    "procurve1"       => "10.1.1.253",
-    "procurve2"       => "10.3.1.253",
-);
 
 sub Install($$$)
 {
@@ -89,12 +67,12 @@ sub Install($$$)
 	    close(CN);
 	};
 
-	Phase "rackconfig", "Reading in targetsys config variables", sub {
+	Phase "targetconfig", "Reading in targetsys config variables", sub {
 	    PhaseFail("No config file")
-		if (! -e $RACKVARS);
+		if (! -e $TARGETSYSVARS);
 	    
-	    open(CN, $RACKVARS)
-		 or PhaseFail("Could not open $RACKVARS: $!");
+	    open(CN, $TARGETSYSVARS)
+		 or PhaseFail("Could not open $TARGETSYSVARS: $!");
 	    while (<CN>) {
 		if ($_ =~ /^([-\w]*)\s*=\s*(.*)$/) {
 		    my $key = $1;
@@ -138,12 +116,12 @@ sub Install($$$)
 	#
 	# This is the password for the switches.
 	#
-	if (exists($configvars{'GENIRACK_SWITCH_PASSWORD'}) &&
-	    $configvars{'GENIRACK_SWITCH_PASSWORD'} ne "" &&
-	    ! -e $HPPASSWORD) {
-	    CreateFileFatal($HPPASSWORD,
-			    $configvars{'GENIRACK_SWITCH_PASSWORD'});
-	    ExecQuietFatal("$CHMOD 400 $HPPASSWORD");
+	if (exists($configvars{'SWITCH_PASSWORD'}) &&
+	    $configvars{'SWITCH_PASSWORD'} ne "" &&
+	    ! -e $SWITCHPSWD) {
+	    CreateFileFatal($SWITCHPSWD,
+			    $configvars{'SWITCH_PASSWORD'});
+	    ExecQuietFatal("$CHMOD 400 $SWITCHPSWD");
 	}
 
 	#
@@ -182,22 +160,11 @@ sub Install($$$)
 	}
 
 	#
-	# Create an ssh config file for root, to ssh to the switches.
-	# Need to also put root public key here tftp can get it.
+	# Need to put root public key so tftp can get it.
 	#
-	my $SSHCONFIG = "/root/.ssh/config";
 	my $SSHPUBKEY = "/root/.ssh/id_rsa.pub";
 	my $COPYPUBKEY= "$TFTP_DIR/id_rsa.pub";
 	
-	Phase "sshconfig", "Creating $SSHCONFIG", sub {
-	    DoneIfExists($SSHCONFIG);
-	    CreateFileFatal($SSHCONFIG,
-			    "Host procurve1 procurve2", 
-			    "User manager",
-			    "IdentitiesOnly yes",
-			    "IdentityFile /root/.ssh/id_rsa");
-	    ExecQuietFatal("$CHMOD 644 $SSHCONFIG");
-	};
 	Phase "sshpubkey", "Copying $SSHPUBKEY to $TFTP_DIR", sub {
 	    DoneIfExists($COPYPUBKEY);
 	    ExecQuietFatal("/bin/cp -p $SSHPUBKEY $COPYPUBKEY");
@@ -363,144 +330,6 @@ sub Install($$$)
 	};
 
 	#
-	# Add /etc/hosts entries for the switches. 
-	#
-	Phase "etchosts", "Adding hosts entries for switches", sub {
-	    my @strings = ();
-	    
-	    foreach my $switch (keys(%HOSTNAMES)) {
-		my $ip = $HOSTNAMES{$switch};
-		push(@strings, "$ip\t$switch");
-	    }
-	    DoneIfEdited($HOSTS);
-	    AppendToFileFatal($HOSTS, @strings);
-	};
-
-	#
-	# Also need to do:
-	#
-	# * Comment out all the natd stuff.
-	# * Comment out all static route lines except frisbee.
-	# * Comment out firewall stuff.
-	# * Comment out xn0 alias.
-	# * Set the xn0 config to the real config.
-	# * Set the defaultrouter to the real one. 
-	
-	Phase "rcconf", "Updating rcconf for actual boot", sub {
-	    my @strings = ();
-	    my @ifaces  = ();
-
-	    # /etc/rc.conf entries for the switches.
-	    foreach my $iface (keys(%INTERFACES)) {
-		my $line = $INTERFACES{$iface};
-		push(@strings, "ifconfig_${iface}=\"$line\"");
-		push(@ifaces, $iface);
-	    }
-	    push(@strings,
-		 "network_interfaces=\"\$network_interfaces @ifaces\"");
-	    push(@strings,
-		 "ifconfig_xn0=\"inet ". $configvars{"TARGETSYS_BOSSIP"} . 
-		 " netmask " . $configvars{"TARGETSYS_NETMASK"} . " -tso\"");
-	    # Jail network.
-	    push(@strings,
-		 "ifconfig_xn0_alias0=\"inet 172.17.254.254 ".
-		 "netmask 255.240.0.0\"");
-	    # ilo network. The control node takes .253
-	    push(@strings,
-		 "ifconfig_xn0_alias1=\"inet 10.249.249.254 ".
-		 "netmask 255.255.255.0\"");
-	    # Actual default router.
-	    push(@strings,
-		 "defaultrouter=\"" . $configvars{"TARGETSYS_ROUTER"} . "\"");
-	    # Going to lose all static routes below, so add this back.
-	    push(@strings,
-		 "static_routes=\"\$static_routes frisbee\"");
-
-	    #
-	    # Okay, we want to comment out a bunch of stuff.
-	    #
-	    my @patterns = (qr(^natd),
-			    qr(^firewall),
-			    qr(^defaultrouter),
-			    qr(^static_routes),
-			    qr(^route_targetsys),
-			    qr(^route_outerboss),
-			    qr(^route_vnodes),
-			    qr(^ifconfig_xn0),
-			    qr(^ifconfig_xn0_alias0),
-	    );
-	    DoneIfEdited($RCCONF);
-	    UpdateFileFatal($RCCONF, \@patterns, @strings);
-	};
-
-	#
-	# Add in the switch stuff which is all hard coded sql.
-	#
-	Phase "sql", "Adding switch goo to the database", sub {
-	    ExecQuietFatal("$MYSQL $DBNAME < $SWITCHSQL");
-	};
-
-	#
-	# Extra install
-	# 
-	Phase "extra", "Installing extra scripts", sub {
-	    ExecQuietFatal("cd $TOP_OBJDIR/install/$TARGETSYS_DIR; ".
-			   "$GMAKE install");
-	};
-
-	#
-	# Add the nodes to the DB.
-	#
-	my $ILOIP = $configvars{"GENIRACK_ILOIP"};
-
-	Phase "nodes", "Adding nodes to the DB", sub {
-	    PhaseSkip("No ILO definitions file")
-		if (! -e $RACKILO);
-	    
-	    my $query_result =
-		DBQueryWarn("select node_id from nodes where node_id='pc1'");
-	    PhaseFail("DB error")
-		if (!$query_result);
-	    PhaseSkip("already added")
-		if ($query_result->numrows);
-
-	    # Allow for rack specific wiring file.
-	    my $wiring = $RACKWIRES;
-
-	    ExecQuietFatal("cd $TOP_OBJDIR/install/$TARGETSYS_DIR; ".
-			   "  $SUDO -u $PROTOUSER $WAP ".
-			   "  perl mknewconfig -i $ILOIP ".
-			   "       /tmp/output $RACKIPS $RACKILO $wiring");
-
-	    PhaseFail("initilo.sh not generated")
-		if (! -e "/tmp/output/initilo.sh");
-	    ExecQuietFatal("/bin/cp -p /tmp/output/initilo.sh $PREFIX/etc");
-	};
-
-	Phase "outlets", "Adding outlets to the DB", sub {
-	    my $query_result =
-		DBQueryWarn("select node_id from nodes where role='testnode'");
-	    PhaseFail("DB error")
-		if (!$query_result);
-
-	    while (my ($node_id) = $query_result->fetchrow_array()) {
-		Phase "$node_id", "Adding outlet for $node_id", sub {
-		    my $outlet_result =
-			DBQueryWarn("select * from outlets ".
-				    "where node_id='$node_id'");
-		
-		    PhaseFail("DB error")
-			if (!$outlet_result);
-		    PhaseSkip("already added")
-			if ($outlet_result->numrows);
-
-		    ExecQuietFatal("cd $TOP_OBJDIR/install/$TARGETSYS_DIR; ".
-				   "  $SUDO perl initilo.pl -o $node_id");
-		};
-	    }
-	};
-
-	#
 	# Add this feature so we get the right libvtop.
 	#
 	my $LIBVTOP_FEATURE     = "LibVtopTest";
@@ -525,8 +354,8 @@ sub Install($$$)
 	#
 	# Update the DB with the switch community string.
 	#
-	if (exists($configvars{'GENIRACK_COMMUNITY'})) {
-	    my $safe_password = DBQuoteSpecial($configvars{'GENIRACK_COMMUNITY'});
+	if (exists($configvars{'SWITCH_COMMUNITY'})) {
+	    my $safe_password = DBQuoteSpecial($configvars{'SWITCH_COMMUNITY'});
 	    DBQueryWarn("update switch_stack_types set ".
 			"snmp_community=$safe_password")
 		or PhaseFail("Could not set snmp community strings");
@@ -551,15 +380,6 @@ sub Install($$$)
 	    ExecQuietFatal("$DHCPD_MAKECONF -i");
 	};
 
-	#
-	# This adds the nightly download of new images from Utah.
-	#
-	Phase "crontab", "Editing $CRONTAB", sub {
-	    DoneIfEdited($CRONTAB);
-	    AppendToFileFatal($CRONTAB,
-		      "0  \t6\t*\t*\t*\troot\t$PREFIX/sbin/getimages");
-	};
-
 	foreach my $osid (@EXPORTEDOSIDS) {
 	    Phase "$osid", "Enabling protogeni export for $osid", sub {
 		my $osimage = OSImage->LookupByName($osid);
@@ -569,47 +389,6 @@ sub Install($$$)
 		    or PhaseFail("DB query failed");
 	    };
 	}
-
-	#
-	# Create a local named forward fragment file with some extra stuff.
-	#
-	my $reversedots;
-	my $forwarddots;
-	my @forward_strings = ();
-	my @reverse_strings = ();
-	my %local_dns = ("GENIRACK_FOAMIP"    => "foam",
-			 "GENIRACK_FLOWIP"    => "flowvisor",
-			 "GENIRACK_CONTROLIP" => "control",
-			 "GENIRACK_ILOIP"     => "control-ilo");
-
-	foreach my $name (keys(%local_dns)) {
-	    next
-		if (!exists($configvars{$name}));
-
-	    my $hostname = $local_dns{$name};
-	    my $ip = $configvars{$name};
-	    my ($a,$b,$c,$num) = split(/\./, $ip);
-	    $forwarddots = "${a}.${b}.${c}";
-	    $reversedots = "${c}.${b}.${a}";
-	    
-	    push(@forward_strings, "$hostname\tIN\tA\t$ip");
-	    push(@reverse_strings, "$num\tIN\tPTR\t${hostname}.${OURDOMAIN}.");
-	}
-	my $FORWARDFRAGMENT1 = "$NAMED_DIR/${OURDOMAIN}.internal.db.local";
-	my $FORWARDFRAGMENT2 = "$NAMED_DIR/${OURDOMAIN}.db.local";
-	my $REVERSEFRAGMENT  = "$NAMED_DIR/reverse/${forwarddots}.db.local";
-	Phase "forward1", "Creating $FORWARDFRAGMENT1", sub {
-	    DoneIfExists($FORWARDFRAGMENT1);
-	    CreateFileFatal($FORWARDFRAGMENT1, @forward_strings);
-	};
-	Phase "forward2", "Creating $FORWARDFRAGMENT2", sub {
-	    DoneIfExists($FORWARDFRAGMENT2);
-	    CreateFileFatal($FORWARDFRAGMENT2, @forward_strings);
-	};
-	Phase "reverse", "Creating $REVERSEFRAGMENT", sub {
-	    DoneIfExists($REVERSEFRAGMENT);
-	    CreateFileFatal($REVERSEFRAGMENT, @reverse_strings);
-	};
 
 	#
 	# 
@@ -655,7 +434,7 @@ sub Install($$$)
 	    };
 	};
 
-	PhaseSucceed("Rack Setup Done");
+	PhaseSucceed("Targetsys Setup Done");
     };
     return 0;
 }

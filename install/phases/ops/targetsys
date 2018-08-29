@@ -168,42 +168,6 @@ sub Install($$$)
 	    ExecQuietFatal("cd /usr; ln -sf testbed/ports .");
 	};
 	
-	Phase "rcconf", "Updating rcconf for actual boot", sub {
-	    my @strings = ();
-	    
-	    push(@strings,
-		 "ifconfig_xn0=\"inet ". $configvars{"TARGETSYS_OPSIP"} . 
-		 " netmask " . $configvars{"TARGETSYS_NETMASK"} . " -tso\"");
-	    # Actual default router.
-	    push(@strings,
-		 "defaultrouter=\"" . $configvars{"TARGETSYS_ROUTER"} . "\"");
-	    # Going to lose all static routes below, so add this back.
-	    push(@strings,
-		 "syslogd_flags=\"-a " .
-		 $configvars{"TARGETSYS_NETWORK"} . "/24\"");
-	    # Jail network.
-	    push(@strings,
-		 "ifconfig_xn0_alias0=\"inet 172.17.253.254 ".
-		 "netmask 255.240.0.0\"");
-	    
-	    #
-	    # Okay, we want to comment out a bunch of stuff.
-	    #
-	    my @patterns = (qr(^natd),
-			    qr(^firewall),
-			    qr(^defaultrouter),
-			    qr(^static_routes),
-			    qr(^route_genirack),
-			    qr(^route_outerboss),
-			    qr(^route_vnodes),
-			    qr(^ifconfig_xn0),
-			    qr(^ifconfig_xn0_alias0),
-			    qr(^syslogd_flags),
-	    );
-	    DoneIfEdited($RCCONF);
-	    UpdateFileFatal($RCCONF, \@patterns, @strings);
-	};
-
 	#
 	# Add named forwarders to resolv.conf to avoid failures
 	# during boot. 
