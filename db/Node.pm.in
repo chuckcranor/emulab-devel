@@ -3833,24 +3833,14 @@ sub GetJailIP($;$)
 	}
     }
 
-    my $node_id = $self->node_id();
-    my $query_result =
-	DBQueryWarn( "SELECT IP, mask FROM virt_node_public_addr WHERE " .
-		     "node_id='$node_id'" );
-
-    if( $query_result && $query_result->numrows ) {
-	# we've assigned a public address to this one
-	return $query_result->fetchrow_array();
-    } else {
-	my $nodenumlimit = $ISUTAH ? 200 : 254;
-	my $pnet = $IPBASE2;
-	my $pnode2 = int($ipbase);
-	while ($pnode2 > $nodenumlimit) {
-	    $pnet++;
-	    $pnode2 -= $nodenumlimit;
-	}
-	return ("${IPBASE1}.${pnet}.${pnode2}.${num}", $JAILIPMASK);
+    my $nodenumlimit = $ISUTAH ? 200 : 254;
+    my $pnet = $IPBASE2;
+    my $pnode2 = int($ipbase);
+    while ($pnode2 > $nodenumlimit) {
+	$pnet++;
+	$pnode2 -= $nodenumlimit;
     }
+    return ("${IPBASE1}.${pnet}.${pnode2}.${num}", $JAILIPMASK);
 }
 
 #
