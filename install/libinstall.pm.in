@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2017 University of Utah and the Flux Group.
+# Copyright (c) 2003-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1024,7 +1024,7 @@ sub UpdateFileFatal($$@)
     }
     close(FH);
     PhaseSkip("No changes made")
-	if ($old eq $new);
+	if (@patterns && $old eq $new);
 
     # Stash old copy.
     BackUpFileFatal($filename);
