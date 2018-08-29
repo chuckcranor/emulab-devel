@@ -59,7 +59,7 @@ SBIN_SCRIPTS	= vlandiff vlansync withadminprivs export_tables cvsupd.pl \
 		  addrfdevice addrfpath reserve announce createimagealias \
 		  predict test-reserve notify-reservations \
 		  deprecate_image pushrootkey addinterface addwire cnetwatch \
-		  addswitch addtypetoimages resutil addstack
+		  addswitch addtypetoimages resutil addstack addnode
 
 WEB_SBIN_SCRIPTS= webnewnode webdeletenode webspewconlog webarchive_list \
                   webspewimage webdumpdescriptor webemulabfeature \
