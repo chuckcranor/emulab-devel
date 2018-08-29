@@ -1748,10 +1748,20 @@ okay:
 	addConfig($vninfo, "apic=1", 2);
 	addConfig($vninfo, "acpi=1", 2);
 	addConfig($vninfo, "pae=1", 2);
-	    # XXX wont start without vnc=1
+	# XXX wont start without vnc=1
 	addConfig($vninfo, "vnc=1", 2);
 	addConfig($vninfo, "sdl=0", 2);
 	addConfig($vninfo, "stdvga=0", 2);
+	#
+	# Not sure how to do this for PVM.
+	#
+	if (exists($attributes->{'XEN_USBDEVICES'})) {
+	    my $devices = $attributes->{'XEN_USBDEVICES'};
+	    addConfig($vninfo, "usb=1", 2);
+	    addConfig($vninfo, "usbdevices = [".
+		      join(",", map {"'" . $_ . "'"} split(",", $devices)) .
+		      "]", 2);
+	}
     } else {
 	if ($os eq "FreeBSD") {
 	    addConfig($vninfo, "extra = 'boot_verbose=1" .
