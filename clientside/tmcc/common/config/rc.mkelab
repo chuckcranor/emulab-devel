@@ -2781,6 +2781,13 @@ sub SetupBossNode($)
     # Make sure it is world readable; N.B. an error is not fatal
     system("chmod 644 $RPCCERT");
 
+    if (exists($emulabconfig{"CONFIG_ADMINUSERS"}) &&
+	$emulabconfig{"CONFIG_ADMINUSERS"}) {
+	mysystem("sudo -u elabman /usr/testbed/sbin/withadminprivs ".
+		 "     /usr/testbed/sbin/elabinelab_adminusers");
+	goto skipsetup;
+    }
+
     goto skipsetup
 	if ($emulabconfig{"CONFIG_NODBINIT"});
 

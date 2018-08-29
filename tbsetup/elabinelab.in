@@ -86,6 +86,7 @@ my $makeconf    = "$TB/sbin/dhcpd_makeconf";
 my $nodewait    = "$TB/sbin/node_statewait";
 my $snmpit      = "$TB/bin/snmpit";
 my $osselect	= "$TB/bin/os_select";
+my $dumpuser    = "$TB/sbin/dumpuser";
 
 # Protos
 sub TearDownEmulab();
@@ -207,6 +208,7 @@ my $elabinelab           = $experiment->elabinelab();
 my $elabinelab_eid       = $experiment->elabinelab_eid();
 my $elabinelab_nosetup   = $experiment->elabinelab_nosetup();
 my $elabinelab_singlenet = $experiment->elabinelab_singlenet();
+my $elabinelab_attributes= $experiment->GetElabInElabAttrs();
 
 exit(0)
     if (!$elabinelab);
@@ -687,6 +689,37 @@ sub DumpDBGoo()
     chmod(0777, $statedir) or
 	die("*** $0:\n".
 	    "    Could not chmod $statedir\n");
+
+    if (exists($elabinelab_attributes->{'CONFIG_ADMINUSERS'}) &&
+	$elabinelab_attributes->{'CONFIG_ADMINUSERS'}) {
+
+	# XXX Yes, bad. But we have a bunch of users with admin bit set
+	# that should not.
+	my @adminusers = ("stoller", "mike", "duerig", "ricci", "kwebb",
+			  "johnsond", "gary", "amaricq");
+
+	if (! $this_user->IsAdmin()) {
+	    die("*** $0:\n".
+		"    Must be an admin user to use CONFIG_ADMINUSERS\n");
+	}
+	foreach my $uid (@adminusers) {
+	    system("$dumpuser $uid > $statedir/$uid.xml");
+	}
+
+	#
+	# Tar up the directory and send it over to ops.
+	#
+	$UID = 0;
+	system("tar cf - -C $statedir . | ".
+	       "   gzip | $SSH -F /dev/null -host $CONTROL ".
+	       "   '(cat > $expdir/users.tar.gz)'");
+	if ($?) {
+	    die("*** $0:\n".
+		"    Could not create users.tar.gz\n");
+	}
+	$UID = $SAVEUID;
+	return 0;
+    }
 
     #
     # These tables are dumped completely.
