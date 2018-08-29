@@ -13,26 +13,35 @@ sub Install($$$)
     return 0
 	if ($isupdate);
 
-    my @adds = (qq|rpcbind_enable="YES"|,
-		qq|rpc_lockd_enable="YES"|,
-		qq|rpc_lockd_flags="-p 4045"|,
-		qq|rpc_statd_enable="YES"|,
-		qq|rpc_statd_flags="-p 4046"|,
-		qq|mountd_enable="YES"|,
-		qq|nfs_server_enable="YES"|,
-		qq|nfs_server_flags="-u -t -n 16"|,
-		qq|syslogd_flags=""|);
+    my @adds = ();
 
-    # Do not hardwire the mountd port in elabinelab, no firewall issues.
-    my $mountd_port = "";
-    if (!$ELABINELAB) {
-	$mountd_port = "-p 900";
+    if ($OPSVM_ENABLE) {
+	@adds = (@adds,
+		 qq|nfs_client_enable="NO"|);
     }
-    # No more NFS races as of 9.2!
-    if ($FBSD_MAJOR > 9 || ($FBSD_MAJOR == 9 && $FBSD_MINOR > 1)) {
-	push(@adds, qq|mountd_flags="-r $mountd_port -S"|);
-    } else {
-	push(@adds, qq|mountd_flags="-r $mountd_port"|);
+    else {
+	@adds = (@adds,
+		 qq|rpcbind_enable="YES"|,
+		 qq|rpc_lockd_enable="YES"|,
+		 qq|rpc_lockd_flags="-p 4045"|,
+		 qq|rpc_statd_enable="YES"|,
+		 qq|rpc_statd_flags="-p 4046"|,
+		 qq|mountd_enable="YES"|,
+		 qq|nfs_server_enable="YES"|,
+		 qq|nfs_server_flags="-u -t -n 16"|);
+
+
+	# Do not hardwire the mountd port in elabinelab, no firewall issues.
+	my $mountd_port = "";
+	if (!$ELABINELAB) {
+	    $mountd_port = "-p 900";
+	}
+	# No more NFS races as of 9.2!
+	if ($FBSD_MAJOR > 9 || ($FBSD_MAJOR == 9 && $FBSD_MINOR > 1)) {
+	    push(@adds, qq|mountd_flags="-r $mountd_port -S"|);
+	} else {
+	    push(@adds, qq|mountd_flags="-r $mountd_port"|);
+	}
     }
 
     if (ISFS($server)) {
@@ -53,33 +62,37 @@ sub Install($$$)
 	}
     }
 
-    if ($server eq $OPS_SERVERNAME) {
+    if (!$OPSVM_ENABLE && $server eq $OPS_SERVERNAME) {
 	my $apache = ("$APACHE_VERSION" eq "22" ? "apache22" :
 		      "$APACHE_VERSION" eq "24" ? "apache24" : "");
 
 	@adds = (@adds,
-		 qq|sendmail_enable="YES"|,
 		 (("$APACHE_VERSION" eq "22" ||
 		   "$APACHE_VERSION" eq "24") ?
 		  ("${apache}_enable=\"YES\"",
 		   "${apache}_flags=\"-DSSL\"") :
 		  (qq|apache_enable="YES"|,
-		   qq|apache_flags="-DSSL"|)),
-		 ($CVSSUPPORT ? qq|cvsd_enable="YES"| : ()),
+		   qq|apache_flags="-DSSL"|)));
+    }
+    if ($server eq $OPS_SERVERNAME) {
+	@adds = (@adds,
+		 qq|sendmail_enable="YES"|,
 		 qq|pubsubd_flags="-T 10"|);
     }
 
-    # Turn on NTP.
-    if ($FBSD_MAJOR < 6) {
-	push(@adds, qq|xntpd_enable="YES"|);
-    } else {
-	push(@adds, qq|ntpd_enable="YES"|);
-    }
+    if (!$OPSVM_ENABLE) {
+	# Turn on NTP.
+	if ($FBSD_MAJOR < 6) {
+	    push(@adds, qq|xntpd_enable="YES"|);
+	} else {
+	    push(@adds, qq|ntpd_enable="YES"|);
+	}
 
-    # Turn on firewall.
-    if ($FIREWALL_OPS) {
-	push(@adds, qq|firewall_enable="YES"|);
-	push(@adds, qq|firewall_type="/etc/ops.ipfw"|);
+	# Turn on firewall.
+	if ($FIREWALL_OPS) {
+	    push(@adds, qq|firewall_enable="YES"|);
+	    push(@adds, qq|firewall_type="/etc/ops.ipfw"|);
+	}
     }
 
     Phase "rc.conf", "Adding testbed content to rc.conf", sub {
