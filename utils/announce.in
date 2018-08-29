@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2016-2017 University of Utah and the Flux Group.
+# Copyright (c) 2016-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -51,9 +51,10 @@ sub usage()
     print STDERR "   -i   Info about a particular announcement.\n";
     print STDERR "   -c   Compatibility mode. When adding in compatibility mode, the sitevar is changed, thus setting the legacy Emulab announcement. When removing in compatibility mode, the sitevar is cleared.\n";
     print STDERR "   -U   In add mode, specify a specific target user.\n";
+    print STDERR "   -P   In add mode, add portal announcement for user\n";
     exit(-1);
 }
-my $optlist  = "haA:cp:s:b:u:m:lr:R:i:U:t:I:S:E:w:";
+my $optlist  = "haA:cp:s:b:u:m:lr:R:i:U:t:I:S:E:w:P";
 my $add_mode = 0;
 my $update_mode = 0;
 my $update_target;
@@ -77,6 +78,7 @@ my $display_end = undef;
 my $priority = undef;
 my $list_type = "active";
 my $compatibility = 0;
+my $canned = 0;
 
 my $query_result;
 
@@ -99,6 +101,10 @@ use libtestbed;
 use libdb;
 use User;
 
+my $CANNED = "Looking for the old Emulab interface? ".
+    "See this <a target=_blank href='https://gitlab.flux.utah.edu/emulab/".
+    "emulab-devel/wikis/faq/Using%20the%20Testbed/Emulab%20Classic'>".
+    "FAQ entry</a>.";
 #
 # Turn off line buffering on output
 #
@@ -199,7 +205,9 @@ if (defined($options{"I"})) {
 	fatal("Could not parse -I option.");
     }
 }
-
+if (defined($options{"P"})) {
+    $canned = 1;
+}
 if (defined($options{"c"})) {
     $compatibility = 1;
 }
@@ -224,7 +232,15 @@ if ($add_mode + $update_mode + $list_mode +
 }
 
 if ($add_mode || $update_mode) {
-    $text = join(' ', @ARGV);
+    if ($canned) {
+	$text = $CANNED;
+    }
+    elsif (!@ARGV) {
+	usage();
+    }
+    else {
+	$text = join(' ', @ARGV);
+    }
 }
 
 if (! $list_mode && ! $add_mode && ! $update_mode &&
