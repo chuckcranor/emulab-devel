@@ -95,14 +95,20 @@ class User
 	    return $foo;
 	}
 	# Insert into cache.
-	$user_cache["$uid_idx"] =& $foo;
+	$user_cache["$uid_idx"]  =& $foo;
+	$user_cache[$foo->uid()] =& $foo;
 	return $foo;
     }
 
     # Backwards compatable lookup by uid. Will eventually flush this.
     function LookupByUid($uid) {
+	global $user_cache;
 	$safe_uid = addslashes($uid);
 	$status_archived = TBDB_USERSTATUS_ARCHIVED;
+
+        # Look in cache first
+	if (array_key_exists("$uid", $user_cache))
+	    return $user_cache["$uid"];
 
 	$query_result =
 	    DBQueryWarn("select uid_idx from users ".
@@ -710,6 +716,9 @@ class User
 
 	if (array_key_exists("$uid_idx", $user_cache))
 	    unset($user_cache["$uid_idx"]);
+	
+	if (array_key_exists($this->uid(), $user_cache))
+	    unset($user_cache[$this->uid()]);
 	
 	return 0;
     }

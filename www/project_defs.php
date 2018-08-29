@@ -84,7 +84,12 @@ class Project
     # Backwards compatable lookup by pid. Will eventually flush this.
     function LookupByPid($pid) {
 	$safe_pid = addslashes($pid);
+	global $project_cache;
 
+        # Look in cache first
+	if (array_key_exists($pid, $project_cache))
+	    return $project_cache[$pid];
+	
 	$query_result =
 	    DBQueryWarn("select pid_idx from projects where pid='$safe_pid'");
 
@@ -96,8 +101,11 @@ class Project
 
 	$foo = new Project($idx); 
 
-	if ($foo->IsValid())
+	if ($foo->IsValid()) {
+            # Insert into cache.
+            $project_cache[$pid] = $foo;
 	    return $foo;
+        }
 	
 	return null;
     }
