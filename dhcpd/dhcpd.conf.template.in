@@ -101,6 +101,9 @@ shared-network emulab {
 	}
  }
 
+ # /usr/testbed/etc/dhcpd.conf.frag.one
+ %%fragment=one
+
  %%management
 
  #
