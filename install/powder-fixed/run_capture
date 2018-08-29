@@ -1,0 +1,6 @@
+#!/bin/sh
+#
+# This should be auto-generated, but isn't yet.
+#
+/usr/testbed/sbin/capture -T 15 -r -s 9600 powduino cuaU0 >/dev/null 2>&1 &
+exit 0

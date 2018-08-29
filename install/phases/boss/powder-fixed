@@ -1,0 +1,342 @@
+#
+# This is the powder-fixed specific parts of target system setup
+#
+use strict;
+use English;
+use libinstall;
+use installvars;
+use libtestbed;
+use EmulabConstants;
+use emutil;
+use libEmulab;
+use emdb;
+use NodeType;
+use Node;
+use Interface;
+use Image;
+
+my $CONFIGVARS   = "$PREFIX/configvars.txt";
+my $TARGETSYSVARS= "$PREFIX/etc/targetsys/variables.txt";
+my $NODEFILE     = "$PREFIX/etc/targetsys/nodes.txt";
+my $ADDNODETYPE  = "$PREFIX/bin/editnodetype";
+my $ADDNODE      = "$PREFIX/sbin/addnode";
+my $ADDINTERFACE = "$PREFIX/sbin/addinterface";
+my $TARGETSYS_DIR= lc($TARGETSYS_TARGET);
+
+my $RUNCAPTURE   = "$TOP_SRCDIR/install/$TARGETSYS_DIR/run_capture";
+my $SQLSTUFF     = "$TOP_SRCDIR/install/$TARGETSYS_DIR/tbdb.sql";
+my %TYPEFILES    = ("nuc8650" =>
+		        "$TOP_SRCDIR/install/$TARGETSYS_DIR/nuc8650.xml",
+		    "iris030" =>
+		        "$TOP_SRCDIR/install/$TARGETSYS_DIR/iris030.xml");
+
+sub Install($$$)
+{
+    my ($server, $isupdate, $impotent) = @_;
+    my %configvars = ();
+
+    # Replace if this script does an update for ip/domain.
+    return 0
+	if ($isupdate);
+
+    SET_TESTBED_VERSION($TARGETSYS_TARGET);
+
+    Phase "fixednode", "Doing additional fixed node tasks", sub {
+	PhaseSkip("Not a target system")
+	    if (!$CONFIG_TARGETSYS);
+
+	Phase "config", "Reading in Emulab config variables", sub {
+	    PhaseFail("No config file")
+		if (! -e $CONFIGVARS);
+	    
+	    open(CN, $CONFIGVARS)
+		 or PhaseFail("Could not open $CONFIGVARS: $!");
+	    while (<CN>) {
+		if ($_ =~ /^([-\w]*)\s*=\s*(.*)$/) {
+		    my $key = $1;
+		    my $val = $2;
+		    if ($val =~ /^'(.*)'$/) {
+			$val = $1;
+		    }
+		    $configvars{$key} = "$val";
+		}
+	    }
+	    close(CN);
+	};
+
+	Phase "targetconfig", "Reading in targetsys config variables", sub {
+	    PhaseFail("No config file")
+		if (! -e $TARGETSYSVARS);
+	    
+	    open(CN, $TARGETSYSVARS)
+		 or PhaseFail("Could not open $TARGETSYSVARS: $!");
+	    while (<CN>) {
+		if ($_ =~ /^([-\w]*)\s*=\s*(.*)$/) {
+		    my $key = $1;
+		    my $val = $2;
+		    if ($val =~ /^'(.*)'$/) {
+			$val = $1;
+		    }
+		    $configvars{$key} = "$val";
+		}
+	    }
+	    close(CN);
+	};
+
+	if (0) {
+	Phase "unifi5", "Installing unifi5 package", sub {
+	    DoneIfPackageInstalled("unifi", 0);
+	    # Oh, this is clever.
+	    $ENV{"ASSUME_ALWAYS_YES"} = "true";
+	    ExecQuietFatal("pkg install unifi5");
+	};
+
+	Phase "fstab", "Adding extras to $FSTAB", sub {
+	    DoneIfEdited($FSTAB);
+	    AppendToFileFatal($FSTAB,
+			      "proc\t\t/proc\tprocfs\trw\t0\t0",
+			      "fdesc\t\t/dev/fd\tfdescfs\trw\t0\t0");
+	};
+
+	#
+	# Add /etc/hosts entries for the switches. 
+	#
+	Phase "etchosts", "Adding hosts entries for switches", sub {
+	    my @strings = ();
+	    
+	    foreach my $switch (keys(%HOSTNAMES)) {
+		my $ip = $HOSTNAMES{$switch};
+		push(@strings, "$ip\t$switch");
+	    }
+	    DoneIfEdited($HOSTS);
+	    AppendToFileFatal($HOSTS, @strings);
+	};
+	}
+
+	#
+	# Add in the extra stuff which is all hard coded sql.
+	#
+	Phase "sql", "Adding addtional stuff to the database", sub {
+	    PhaseSkip("No addtional SQL")
+		if (! -e $SQLSTUFF);
+	    
+	    ExecQuietFatal("$MYSQL $DBNAME < $SQLSTUFF");
+	};
+
+	#
+	# Extra install
+	# 
+	Phase "extra", "Installing extra scripts", sub {
+	    ExecQuietFatal("cd $TOP_OBJDIR/install/$TARGETSYS_DIR; ".
+			   "$GMAKE install");
+	};
+
+	#
+	# Add the node types to the DB.
+	#
+	foreach my $type (keys(%TYPEFILES)) {
+	    my $file = $TYPEFILES{$type};
+
+	    Phase $type, "Adding node type $type to the database", sub {
+		PhaseSkip("already added")
+		    if (NodeType->Lookup($type));
+	    
+		ExecQuietFatal("$SUDO -u $PROTOUSER $WAP ".
+			       "$ADDNODETYPE $file");
+	    };
+	}
+	#
+	# Need to go back and update all the images to the correct
+	# architecture, since that was ignored when the images were
+	# imported (cause no types defined that had an architecture).
+	#
+	Phase "images", "Setting architecture on all images", sub {
+	    my @images = Image->ListAll(undef, TBOPSPID());
+	    foreach my $imagename (@images) {
+		Phase $imagename, $imagename, sub {
+		    my $image = Image->Lookup($imagename);
+		    PhaseFail("lookup failure")
+			if (!defined($image));
+		    
+		    PhaseSucceed("$imagename Done");
+		};
+	    }
+	    PhaseSucceed("Images Done");
+	};
+	
+	#
+	# Add the nodes to the DB.
+	#
+	Phase "nodes", "Adding nodes to the database", sub {
+	    PhaseFail("No node file")
+		if (! -e $NODEFILE);
+	    
+	    open(NODE, $NODEFILE)
+		or PhaseFail("Could not open $NODEFILE: $!");
+	    
+	    while (<NODE>) {
+		if ($_ =~ /^([-\w]+)\s*([-\w]+)\s*([-\w]+)\s*([\.\d]+)$/) {
+		    my $nodeid = $1;
+		    my $type   = $2;
+		    my $MAC    = $3;
+		    my $IP     = $4;
+
+		    Phase $nodeid, "Adding $nodeid", sub {
+			PhaseSkip("already done")
+			    if (Node->Lookup($nodeid));
+			ExecQuietFatal("$SUDO -u $PROTOUSER $WAP ".
+				       "  $ADDNODE -t $type $nodeid");
+		    }; 
+		    Phase "$nodeid interface", "Adding $nodeid interface", sub {
+			my $node = Node->Lookup($nodeid);
+			PhaseFail("lookup failure")
+			    if (!defined($node));
+			PhaseSkip("already done")
+			    if (Interface->LookupControl($node));
+			ExecQuietFatal("$SUDO -u $PROTOUSER $WAP ".
+				       "  $ADDINTERFACE -b 1Gb -I $IP ".
+				       "     -M 255.255.255.248 -e ctrl ".
+				       "     -m $MAC $nodeid eth0");
+		    }; 
+		}
+	    }
+	    close(CN);
+	    Phase "named", "Restarting named", sub {
+		ExecQuietFatal($NAMED_SETUP);
+	    };
+	    Phase "dhcpd", "Restarting dhcpd", sub {
+		ExecQuietFatal("$DHCPD_MAKECONF -r -i");
+	    };
+	    PhaseSucceed("Nodes Done");
+	};
+	# We need tiplines and tipserver entries.
+	Phase "tip", "Adding tiplines and tipservers to DB", sub {
+	    DBQueryWarn("replace into tipservers ".
+			" values ('$BOSSNODE')") or
+		PhaseFail("inserting tipserver");
+
+	    DBQueryWarn("replace into `tiplines` set ".
+			" tipname='powduino',node_id='powduino',".
+			" server='$BOSSNODE',disabled=0") or 
+		PhaseFail("inserting tipline");
+	};
+	Phase "capture", "Installing capture startup file", sub {
+	    ExecQuietFatal("$GMAKE -C $TOP_OBJDIR/rc.d tipserv-install");
+	};
+	Phase "run_capture", "Installing capture run file", sub {
+	    DoneIfExists("$PREFIX/sbin/run_capture");
+	    ExecQuietFatal("/bin/cp -f $RUNCAPTURE $PREFIX/sbin");
+	};
+	Phase "tiplogs", "Creating tiplogs directory", sub {
+	    DoneIfExists("$PREFIX/log/tiplogs");
+	    mkdir "$PREFIX/log/tiplogs", 0755 or
+		PhaseFail("Unable to create tiplogs: $!");
+	};
+
+	#
+	# Fix NAT rule for ops jail.
+	#
+	my $NATCONF = "/etc/pf.nat";
+	
+	Phase "nat", "Updating NAT configuration", sub {
+	    my $bossip = $configvars{"TARGETSYS_BOSSIP"};
+	    my $opsip  = $configvars{"TARGETSYS_OPSIP"};
+	    
+	    Phase "delete", "Deleting old configuration", sub {
+		DeleteFileFatal($NATCONF);
+	    };
+	    Phase "create", "Creating new configuration", sub {
+		CreateFileFatal($NATCONF,
+				"# Packet normalization",
+				"scrub in all",
+				"",
+				"# Allow outbound connections from the jail",
+				"nat on xn0 from $opsip to any -> $bossip");
+	    };
+	    Phase "restart", "Restarting NAT", sub {
+		ExecQuietFatal("service pf restart");
+	    };
+	    PhaseSucceed("NAT Done");
+	};
+
+	#
+	# Munge /etc/rc.conf for real boot.
+	#
+	Phase "rcconf", "Updating rcconf for actual boot", sub {
+	    my @strings   = ();
+	    my @ifaces    = ();
+	    my @patterns  = ();
+	    my $outerctrl;
+
+	    my ($status,@output) =
+		ExecQuiet("egrep '^ifconfig_xn0=' $RCCONF");
+	    PhaseFail("egrep failed")
+		if ($status);
+	    if ($output[0] =~ /^ifconfig_xn0=(.*)$/) {
+		$outerctrl = $1;
+	    }
+	    else {
+		PhaseFail("Bad ifconfig_xn0 in $RCCONF");
+	    }
+
+	    # unifi.
+	    #push(@strings, 'unifi_enable="YES"');
+
+	    push(@strings,
+		 "ifconfig_xn0=\"inet ". $configvars{"TARGETSYS_BOSSIP"} . 
+		 " netmask " . $configvars{"TARGETSYS_NETMASK"} . " -tso\"");
+	    # Jail network.
+	    push(@strings,
+		 "ifconfig_xn0_alias0=\"inet 172.17.254.254 ".
+		 "netmask 255.240.0.0\"");
+	    # Jail network.
+	    push(@strings,
+		 "ifconfig_xn0_alias1=\"inet 10.10.10.2 ".
+		 "netmask 255.255.255.248\"");
+	    # Actual default router.
+	    push(@strings,
+		 "defaultrouter=\"" . $configvars{"TARGETSYS_ROUTER"} . "\"");
+	    # Going to lose all static routes below, so add this back.
+	    push(@strings,
+		 "static_routes=\"\$static_routes frisbee vnodes\"");
+
+	    #
+	    # This stuff is for development inside the Mothership.
+	    #
+	    # Outer Emulab control network.
+	    push(@strings,
+		 "ifconfig_xn0_alias2=$outerctrl");
+	    # Route to outer boss and outer control networks
+	    push(@strings,
+		 "route_outeremulab=\"-net 155.98.36.0 ".
+		 "-netmask 255.255.252.0 155.98.36.1\"");
+	    push(@strings,
+		 "route_outerboss=\"155.98.32.70 155.98.36.1\"");
+	    push(@strings,
+		 "static_routes=\"\$static_routes outerboss outerboss\"");
+	    
+
+	    #
+	    # Okay, we want to comment out a bunch of stuff.
+	    #
+	    @patterns = (qr(^natd),
+			 qr(^firewall),
+			 qr(^defaultrouter),
+			 qr(^static_routes),
+			 qr(^route_targetsys),
+			 qr(^route_outerboss),
+			 qr(^route_vnodes),
+			 qr(^ifconfig_xn0),
+			 qr(^ifconfig_xn0_alias),
+	    );
+	    DoneIfEdited($RCCONF);
+	    UpdateFileFatal($RCCONF, \@patterns, @strings);
+	};
+	PhaseSucceed("Powder Fixed Setup Done");
+    };
+    return 0;
+}
+
+# Local Variables:
+# mode:perl
+# End:

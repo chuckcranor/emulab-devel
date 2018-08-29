@@ -1,0 +1,67 @@
+#
+# Additional stuff for setting up a powder fixed node.
+#
+use strict;
+use libinstall;
+use installvars;
+
+my $CONFIGVARS   = "$PREFIX/configvars.txt";
+
+sub Install($$$)
+{
+    my ($server, $isupdate, $impotent) = @_;
+    my %configvars = ();
+
+    # Replace if this script does an update for ip/domain.
+    return 0
+	if ($isupdate);
+
+    SET_TESTBED_VERSION($TARGETSYS_TARGET);
+
+    Phase "targetsys", "Doing additional target system tasks", sub {
+	PhaseSkip("Not a target system")
+	    if (!$CONFIG_TARGETSYS);
+
+	Phase "config", "Reading in Emulab config variables", sub {
+	    PhaseFail("No config file")
+		if (! -e $CONFIGVARS);
+	    
+	    open(CN, $CONFIGVARS)
+		 or PhaseFail("Could not open $CONFIGVARS: $!");
+	    while (<CN>) {
+		if ($_ =~ /^([-\w]*)\s*=\s*(.*)$/) {
+		    my $key = $1;
+		    my $val = $2;
+		    if ($val =~ /^'(.*)'$/) {
+			$val = $1;
+		    }
+		    $configvars{$key} = "$val";
+		}
+	    }
+	    close(CN);
+	};
+
+	Phase "rcconf", "Updating rcconf for actual boot", sub {
+	    my @strings = ();
+	    
+	    push(@strings,
+		 "syslogd_flags=\"-a " .
+		 $configvars{"TARGETSYS_NETWORK"} . "/24\"");
+	    
+	    #
+	    # Okay, we want to comment out a bunch of stuff.
+	    #
+	    my @patterns = (qr(^syslogd_flags),
+	    );
+	    DoneIfEdited($RCCONF);
+	    UpdateFileFatal($RCCONF, \@patterns, @strings);
+	};
+
+	PhaseSucceed("Powder Fixed Setup Done");
+    };
+    return 0;
+}
+
+# Local Variables:
+# mode:perl
+# End:
