@@ -28,6 +28,7 @@ my %STDIMAGES     = (
 );
 
 my %NEWIMAGES     = (
+    "UBUNTU18-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=24543775-7e30-11e8-b228-90e2ba22fee4",
     "UBUNTU16-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=7683ca8e-5e37-11e6-ac8a-90e2ba22fee4",
     "FBSD111-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=560f4743-795d-11e7-ac90-90e2ba22fee4"
 );
