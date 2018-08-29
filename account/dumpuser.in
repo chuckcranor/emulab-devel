@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2013 University of Utah and the Flux Group.
+# Copyright (c) 2010-2013, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -128,7 +128,7 @@ sub DumpUser($)
 	"URL"		=> {"tag"       => "URL",
 			    "optional"	=> 1 },
 	"addr"		=> {"tag"       => "address",
-			    "optional"	=> 0 },
+			    "optional"	=> 1 },
 	"addr2"		=> {"tag"       => "address2",
 			   "optional"	=> 1 },
 	"city"		=> {"tag"       => "city",
@@ -136,13 +136,13 @@ sub DumpUser($)
 	"state"		=> {"tag"       => "state",
 			   "optional"	=> 0 },
 	"zip"		=> {"tag"       => "zip",
-			   "optional"	=> 0 },
+			   "optional"	=> 1 },
 	"country"	=> {"tag"       => "country",
 			   "optional"	=> 0 },
 	"phone"		=> {"tag"       => "phone",
-			    "optional"	=> 0 },
+			    "optional"	=> 1 },
 	"title"		=> {"tag"       => "title",
-			    "optional"	=> 0 },
+			    "optional"	=> 1 },
 	"affil"		=> {"tag"       => "affiliation",
 			    "optional"	=> 0 },
 	"shell"		=> {"tag"       => "shell",

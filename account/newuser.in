@@ -36,12 +36,15 @@ sub usage()
     print("Usage: newuser [-s] -t <type> <xmlfile>\n");
     exit(-1);
 }
-my $optlist = "dt:nsp";
+my $optlist = "dt:nsprP";
 my $debug   = 0;
 my $impotent= 0;
 my $type    = "";
 my $silent  = 0;
+my $relaxed = 0;
+my $dopass  = 0;
 my $portal;
+my $passhash;
 my @keyfiles = ();
 
 #
@@ -117,6 +120,12 @@ if (defined($options{"s"})) {
 if (defined($options{"t"})) {
     $type = $options{"t"};
 }
+if (defined($options{"r"})) {
+    $relaxed = 1;
+}
+if (defined($options{"P"})) {
+    $dopass = 1;
+}
 if (@ARGV != 1) {
     usage();
 }
@@ -176,6 +185,13 @@ my %optional = ("uid"		=> "uid",
 		"pubkey"        => undef,
 		"pubkeys"       => undef);
 
+my %relaxed_fields = ("affiliation_abbreviation" => 1,
+		      "phone"    => 1,
+		      "title"    => 1,
+		      "address"  => 1,
+		      "zip"      => 1,
+		      "wikiname" => 1);
+
 #
 # These are required for most users, but are optional for wiki-only users
 # 
@@ -219,28 +235,29 @@ if (exists($xmlparse->{'attribute'}->{"portal"})) {
     if (!defined($brand)) {
 	fatal("Bad portal: $portal");
     }
-    # Remove these, we do not require them on the APT path.
-    delete($required{"affiliation_abbreviation"});
-    delete($required{"phone"});
-    delete($required{"title"});
-    delete($required{"address"});
-    delete($required{"zip"});
-    delete($required{"wikiname"});
+    $relaxed = 1;
 }
 
 #
 # Make sure all the required arguments were provided.
 #
 foreach my $key (keys(%required)) {
+    next
+	if ($relaxed && exists($relaxed_fields{$key}));
     
     fatal("Missing required attribute '$key'")
 	if (! exists($xmlparse->{'attribute'}->{"$key"}));
 }
 #
-# Always delete this. Used by the portal code but we ignore it.
+# Used by the portal code but we ignore it unless explicitly told
+# not to.
 #
-delete($xmlparse->{'attribute'}->{"passhash"})
-    if (exists($xmlparse->{'attribute'}->{"passhash"}));
+if (exists($xmlparse->{'attribute'}->{"passhash"})) {
+    if ($dopass) {
+	$passhash = $xmlparse->{'attribute'}->{"passhash"}->{'value'};
+    }
+    delete($xmlparse->{'attribute'}->{"passhash"});
+}
 
 #
 # We build up an array of arguments to pass to User->Create() as we check
@@ -463,6 +480,9 @@ if (!defined($newuser)) {
 }
 if (defined($portal)) {
     $newuser->SetStatus(USERSTATUS_UNAPPROVED());
+}
+if (defined($passhash)) {
+    $newuser->SetPassword($passhash);
 }
 my $key       = $newuser->verify_key();
 my $usr_uid   = $newuser->uid();
