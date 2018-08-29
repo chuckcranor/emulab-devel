@@ -1579,6 +1579,8 @@ sub ActionStart($$;$)
     $self->ComputeState();
     $experiment->SetState($expstate);
     $slice->ClearMonitorPid();
+    # in case we were canceled by DeleteSlice()
+    $experiment->SetCancelFlag(0);
     return 0;
 
   bad:
@@ -1599,6 +1601,8 @@ sub ActionStart($$;$)
     }
     $experiment->SetState($expstate);
     $slice->ClearMonitorPid();
+    # in case we were canceled by DeleteSlice()
+    $experiment->SetCancelFlag(0);
     return -1;
 }
 

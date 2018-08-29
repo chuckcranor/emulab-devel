@@ -904,6 +904,7 @@ sub DeleteSlice($)
     if ($slice->Lock() != 0) {
 	return GeniResponse->BusyResponse();
     }
+    my $slice_experiment = $slice->GetExperiment();
 
     #
     # If a monitor process is running, then the slice is busy.
@@ -928,7 +929,6 @@ sub DeleteSlice($)
 	# rebooting timed out nodes, and quit earlier. The caller will not
 	# have to retry as long. 
 	#
-	my $slice_experiment = $slice->GetExperiment();
 	if (defined($slice_experiment)) {
 	    $slice_experiment->SetCancelFlag(1);
 	}
@@ -953,7 +953,8 @@ sub DeleteSlice($)
 	}
     }
     #
-    # If we were canceled, we wait for the monitor to stop, instead of
+    # If we were canceled, we wait for the monitor to stop before
+    # we can kill it.
     #
     if ($canceled) {
 	while ($slice->GetMonitorPid()) {
@@ -961,7 +962,11 @@ sub DeleteSlice($)
 	    GeniCM::CheckMonitor($slice);
 	    print STDERR "Checking to see if monitor has stopped ...\n";
 	}
-
+	#
+	# The monitor has stopped and we have the lock. Clear the
+	# cancel flag so we can actually terminate (checked in endexp).
+	#
+	$slice_experiment->SetCancelFlag(1);
     }
     my $retval = GeniCM::CleanupDeadSlice($slice, 1);
     if ($retval) {
