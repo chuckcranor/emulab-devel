@@ -64,10 +64,17 @@ $BOSS_PORT = "emulab-boss-1.8";
 $OPS_PORT  = "emulab-ops-1.4"; 
 $FS_PORT   = "emulab-fs-1.4";
 if ($FBSD_MAJOR > 4) {
-    if ($FBSD_MAJOR > 10) {
-	$BOSS_PORT = "emulab-boss-7.1";
-	$OPS_PORT = "emulab-ops-7.1";
-	$FS_PORT = "emulab-fs-7.1";
+    if ($FBSD_MAJOR == 11) {
+	if ($FBSD_MINOR <= 1) {
+	    $BOSS_PORT = "emulab-boss-7.1";
+	    $OPS_PORT = "emulab-ops-7.1";
+	    $FS_PORT = "emulab-fs-7.1";
+	}
+        else {
+	    $BOSS_PORT = "emulab-boss-7.2";
+	    $OPS_PORT = "emulab-ops-7.2";
+	    $FS_PORT = "emulab-fs-7.2";
+	}
     } elsif ($FBSD_MAJOR == 10 && $FBSD_MINOR > 2) {
 	$BOSS_PORT = "emulab-boss-6.3";
 	$OPS_PORT = "emulab-ops-6.3";
@@ -380,7 +387,8 @@ $GENTOPOFILE		= "$PREFIX/libexec/gentopofile";
 $UPDATESITEVARS		= "$PREFIX/sbin/update_sitevars";
 $IMAGEIMPORT            = "$PREFIX/sbin/image_import";
 
-$PROTOUSER_KEY		= "$main::TOP_SRCDIR/install/elabman_dsa.pub";
+$PROTOUSER_DSAKEY	= "$main::TOP_SRCDIR/install/elabman_dsa.pub";
+$PROTOUSER_RSAKEY	= "$main::TOP_SRCDIR/install/elabman_rsa.pub";
 $ROOT_PRIVKEY		= "/root/.ssh/id_rsa";
 $ROOT_PUBKEY		= "$ROOT_PRIVKEY.pub";
 $ROOT_AUTHKEY		= "/root/.ssh/authorized_keys";
