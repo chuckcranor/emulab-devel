@@ -117,6 +117,7 @@ $(function ()
 		// Just POWDER
 		var radiotypes = {"nuc5300"   : true,
 				  "nuc6260"   : true,
+				  "iris030"   : true,
 				  "enodeb"    : true,
 				  "sdr"       : true};
 
