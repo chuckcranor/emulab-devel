@@ -25,7 +25,7 @@ sub Install($$$)
 	    # Looking for "-network a.b.c.d -mask a.b.c"
 	    [qr{share\s+\-netmask\s+[\d\.]+\s+\-mask\s+[\d\.]+\s},
 	     '"share\t-network' .
-	     "${a}.${b}.${c} -mask " . $CONTROL_NETMASK . ' "'],
+	     "${a}.${b}.${c}.${d} -mask " . $CONTROL_NETMASK . ' "'],
 	    );
 	Phase "exports", "Updating $EXPORTS_HEAD", sub {
 	    QueryReplaceFileFatal($EXPORTS_HEAD, \@replacements);
@@ -101,7 +101,7 @@ sub Install($$$)
 		    my ($a,$b,$c,$d) =
 			($CONTROL_NETWORK =~ /^(\d*)\.(\d*)\.(\d*)\.(\d*)/);
 		    push(@exports_lines,
-			 "$realdir\t-network ${a}.${b}.${c} ".
+			 "$realdir\t-network ${a}.${b}.${c}.${d} ".
 			 "-mask $CONTROL_NETMASK -maproot=root -ro -alldirs");
 		    if ($PROTOGENI_GENIRACK) {
 			push(@exports_lines,
