@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -149,8 +149,16 @@ if (! isset($create)) {
     $errors   = array();
 
     # Default to start
-    $defaults["startorjoin"] = "start";
-    $joinproject = 0;
+    if (!isset($joinproject)) {
+        $joinproject = 0;
+        $defaults["startorjoin"] = "start";
+    }
+    elseif ($joinproject) {
+        $defaults["startorjoin"] = "join";
+    }
+    else {
+        $defaults["startorjoin"] = "start";
+    }
 
     if ($this_user && $promoting) {
         $defaults["uid"]         = $this_user->uid();
