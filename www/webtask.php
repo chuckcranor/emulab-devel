@@ -155,6 +155,15 @@ class WebTask {
     function exited()		{ return $this->field("exited"); }
     function task_data()	{ return $this->field("task_data"); }
 
+    function TaskDataObject() {
+	if ($this->task_data()) {
+	    return json_decode($this->task_data(), false);
+	}
+	else {
+	    return new stdClass();
+	}
+    }
+
     #
     # Return the task data as a real object intead of JSON
     #
