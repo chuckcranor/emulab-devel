@@ -43,43 +43,46 @@ sub Install($$$)
 	    # exports line as the other filesystems because of the RO
 	    # mount below (trust me).
 	    #
-	    my %filesystems;
-	    my @dirs = ();
-	    if (ISOPSNODE($server)) {
-		# Ops always exports these to boss.
-		@dirs = ('/var', $PREFIX);
-	    }
-	    if (ISFS($server)) {
-		# The fileserver exports these too.
-		# But only /share if ZFS.
-		if ($WITHZFS) {
-		    @dirs = (@dirs, $SHAREROOT);
-		} else {
-		    @dirs = (@dirs, @MOUNTPOINTS);
-		}
-	    }
-	    foreach my $dir (@dirs) {
-		if ($dir ne $SHAREROOT) {
-		    my $dir = realpath($dir);
-		    chomp($dir);
-		    my $dev = (stat($dir))[0];
-		    push @{$filesystems{$dev}}, $dir;
-		}
-	    }
+	    my @exports_lines = ();
 
-	    #
-	    # Use that knowledge to create lines for /etc/exports.head
-	    #
-	    my @exports_lines;
-	    foreach my $key (keys %filesystems) {
-		push @exports_lines,
-		join(" ",@{$filesystems{$key}}) .
-		    "\t$BOSSNODE -maproot=root";
-		# if not the ops node, must export to that node as well
-		if (!ISOPSNODE($server)) {
+	    if (!$OPSVM_ENABLE) {
+		my %filesystems;
+		my @dirs = ();
+		if (ISOPSNODE($server)) {
+		    # Ops always exports these to boss.
+		    @dirs = ('/var', $PREFIX);
+		}
+		if (ISFS($server)) {
+		    # The fileserver exports these too.
+		    # But only /share if ZFS.
+		    if ($WITHZFS) {
+			@dirs = (@dirs, $SHAREROOT);
+		    } else {
+			@dirs = (@dirs, @MOUNTPOINTS);
+		    }
+		}
+		foreach my $dir (@dirs) {
+		    if ($dir ne $SHAREROOT) {
+			my $dir = realpath($dir);
+			chomp($dir);
+			my $dev = (stat($dir))[0];
+			push @{$filesystems{$dev}}, $dir;
+		    }
+		}
+
+		#
+		# Use that knowledge to create lines for /etc/exports.head
+		#
+		foreach my $key (keys %filesystems) {
 		    push @exports_lines,
-		    join(" ",@{$filesystems{$key}}) .
-			"\t$USERNODE -maproot=root";
+			join(" ",@{$filesystems{$key}}) .
+			"\t$BOSSNODE -maproot=root";
+		    # if not the ops node, must export to that node as well
+		    if (!ISOPSNODE($server)) {
+			push @exports_lines,
+			    join(" ",@{$filesystems{$key}}) .
+			    "\t$USERNODE -maproot=root";
+		    }
 		}
 	    }
 
@@ -93,7 +96,7 @@ sub Install($$$)
 		push(@exports_lines,
 		     "$realdir\t$BOSSNODE -maproot=root");
 		# if not the ops node, must export to that node as well
-		if (!ISOPSNODE($server)) {
+		if (!ISOPSNODE($server) && !$OPSVM_ENABLE) {
 		    push(@exports_lines,
 			 "$realdir\t$USERNODE -maproot=root");
 		}
@@ -111,24 +114,6 @@ sub Install($$$)
 		}
 	    }
 	    
-	    #
-	    # Add localhost mount to proj/cvsrepos.
-	    #
-	    if ($CVSSUPPORT) {
-		my $pdir;
-		my $dfout = `df $PROJROOT | fgrep '/dev'`;
-		if ($?) {
-		    PhaseFail("'df $PROJROOT' failed!");
-		}
-		if ($dfout =~ /\s+([\/\w]*)$/) {
-		    $pdir = $1;
-		}
-		else {
-		    PhaseFail("Could not determine where $PROJROOT is mounted!");
-		}
-		push(@exports_lines, "$pdir\tlocalhost -alldirs");
-	    }
-
 	    #
 	    # Put them in exports.head, and copy that to /etc/exports
 	    #
