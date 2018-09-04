@@ -39,10 +39,12 @@ sub usage()
     print "Usage: portal_xmlrpc [-d] [-a urn] method [PARAM=VALUE ...]\n";
     exit(1);
 }
-my $optlist   = "da:";
+my $optlist   = "da:t:";
 my $debug     = 0;
 my $errmsg;
 my $aggurn;
+my $webtask_id;
+my $webtask;
 
 #
 # Configure variables
@@ -71,6 +73,7 @@ $| = 1;
 
 # Now we can load the libraries after setting the proper DB.
 use lib '@prefix@/lib';
+use WebTask;
 use GeniHRN;
 use Genixmlrpc;
 use GeniResponse;
@@ -84,6 +87,15 @@ if (! getopts($optlist, \%options)) {
 }
 if (defined($options{"d"})) {
     $debug = 1;
+}
+if (defined($options{"t"})) {
+    $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not lookup webtask $webtask_id");
+    }
+    # Convenient.
+    $webtask->AutoStore(1);
 }
 if (defined($options{"a"})) {
     $aggurn = $options{"a"};
@@ -113,6 +125,10 @@ if (!defined($authority)) {
 }
 # Check online and reachable. Additional arg says to test Portal RPC.
 if ($aggregate->CheckStatus(\$errmsg, 1)) {
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited(1);
+    }
     print STDERR $errmsg . "\n";
     exit(1);
 }
@@ -141,17 +157,34 @@ my $starttime = [gettimeofday()];
 my $response  = APT_Geni::PortalRPC($authority, undef, $method, @args);
 my $elapsed   = tv_interval($starttime);
 
+print STDERR Dumper($response);
+
 if ($response->code() != GENIRESPONSE_SUCCESS) {
     print STDERR $response->error() . "\n";
+    if (defined($webtask)) {
+	$webtask->output($response->error());
+	$webtask->Exited($response->code())
+    }
     exit($response->code());
 }
-print encode_json($response->value());
+if (defined($webtask)) {
+    $webtask->results($response->value());
+    $webtask->Exited(0);
+    $webtask->Dump();
+}
+else {
+    print encode_json($response->value());
+}
 exit(0);
 
 sub fatal($)
 {
     my ($msg) = @_;
 
+    if (defined($webtask)) {
+	$webtask->output($msg);
+	$webtask->Exited(-1);
+    }
     print STDERR "*** $0:\n".
 	         "    $msg\n";
     # exit value important.
