@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2014, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -61,11 +61,13 @@ if ($this_user && !$FirstInitState) {
     $proj_head_uid = $this_user->uid();
     $returning = 1;
 }
-else {
-    #
-    # No uid, so must be new.
-    #
+elseif ($FirstInitState) {
+    # Initial setup of new site.
     $returning = 0;
+}
+else {
+    header("Location: portal/signup.php");
+    
 }
 unset($addpubkeyargs);
 

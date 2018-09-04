@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2014, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -69,10 +69,7 @@ if ($this_user) {
     $returning = 1;
 }
 else {
-    #
-    # No uid, so must be new.
-    #
-    $returning = 0;
+    header("Location: portal/signup.php?joinproject=1");
 }
 
 if ($old_forwikionly == True) {

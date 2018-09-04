@@ -34,17 +34,21 @@ include_once("profile_defs.php");
 #
 RedirectSecure();
 $this_user = CheckLogin($check_status);
-if (!$ISAPT) {
-    if (! ($CHECKLOGIN_STATUS & CHECKLOGIN_LOGGEDIN)) {
-	header("Location: login.php");
-	return;
-    }
-}
 
 #
 # Verify page arguments.
 #
-$optargs = OptionalPageArguments("from",    PAGEARG_STRING);
+$optargs = OptionalPageArguments("login", PAGEARG_BOOLEAN);
+
+if (! ($CHECKLOGIN_STATUS & CHECKLOGIN_LOGGEDIN)) {
+    if ($ISEMULAB && !$login) {
+        header("Location: frontpage.php");
+    }
+    else {
+        header("Location: login.php");
+    }
+    return;
+}
 
 #
 # Redirect logged in user.

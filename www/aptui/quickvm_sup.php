@@ -78,14 +78,14 @@ $PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
     die("");
 };
 
-$PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
-				 $ignore2 = NULL, $ignore3 = NULL)
+$PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
+				 $inline = false, $ignore3 = NULL)
 {
     global $PORTAL_MANUAL, $PORTAL_HELPFORUM;
     global $TBMAINSITE, $APTTITLE, $FAVICON, $APTLOGO, $APTSTYLE, $ISAPT;
     global $GOOGLEUA, $ISCLOUD, $TBBASE;
     global $ISPNET, $ISPOWDER, $ISEMULAB;
-    global $login_user, $login_status, $SUPPORT;
+    global $login_user, $login_status, $SUPPORT, $FIRSTUSER;
     global $disable_accounts, $page_title, $drewheader, $embedded;
     $cleanmode = (isset($_COOKIE['cleanmode']) &&
                   $_COOKIE['cleanmode'] == 1 ? 1 : 0);
@@ -126,17 +126,30 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
               type='image/vnd.microsoft.icon'>
         <link rel='stylesheet' href='css/bootstrap.css'>
         <link rel='stylesheet' href='css/quickvm.css'>
-        <link rel='stylesheet' href='css/$APTSTYLE'>";
+        <link rel='stylesheet' href='css/$APTSTYLE'>\n";
     if ($ISPOWDER) {
         echo "<link href='https://www.powderwireless.net/powder/fonts/raleway/style.css' rel='stylesheet'>";
+    }
+    if ($TBMAINSITE) {
+        if ($ISEMULAB) {
+            # This might still be used by google. 
+            echo "<meta name='description' ".
+                "content='emulab - network emulation testbed home'>\n";
+        }
     }
     echo "<script src='js/lib/jquery.min.js'></script>\n";
     echo "<script>APT_CACHE_TOKEN='" . Instance::CacheToken() . "';</script>";
     echo "<script src='js/common.js?nocache=asdfasdf'></script>
         <link rel='stylesheet' href='css/jquery-steps.css'>
         <script src='$TBBASE/emulab_sup.js'></script>
-      </head>
-    <body style='display: none;'>\n";
+      </head>\n";
+
+    if ($inline) {
+        echo "<body>\n";
+    }
+    else {
+        echo "<body style='display: none;'>\n";
+    }
 
     echo "<script type='text/javascript'>\n";
     echo "    window.ISEMULAB = " . ($ISEMULAB ? "1" : "0") . ";\n";
@@ -172,7 +185,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     if ($embedded) {
 	goto embed;
     }
-    if ($ignore1) {
+    if ($nomenu) {
         return;
     }
 
@@ -243,6 +256,18 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
         !($login_status & CHECKLOGIN_WEBONLY)) {
         # Always create empty div for announcements, for ajax update.
         echo "<div id='portal-announcement-div'>\n";
+        #
+        # When a classic user hits the Portal interface for the first time,
+        # enter a announcement for the user to make sure they know what is
+        # going on and how to return to the Classic interface. I put a canned
+        # announcement in the announce script. 
+        #
+        if (!$login_user->portal() && !$login_user->portal_interface_warned()) {
+            SUEXEC($FIRSTUSER, "nobody",
+                   "webannounce -a -U $login_uid -p emulab -m 10 -P",
+                   SUEXEC_ACTION_CONTINUE);            
+            $login_user->SetPortalWarned();
+        }
         $announcements = GET_ANNOUNCEMENTS($login_user);
         for ($i = 0; $i < count($announcements); $i++) {
             echo $announcements[$i];
@@ -363,7 +388,7 @@ function SPITHEADER($thinheader = 0,
 function SPITNAV($hiddenxs, $navbar_status, $navbar_right, $login_uid)
 {
     global $PORTAL_MANUAL, $APTLOGO, $login_status, $login_user, $TBMAINSITE;
-    global $THISHOMEBASE, $ISEMULAB, $ISPNET, $ISPOWDER;
+    global $THISHOMEBASE, $ISEMULAB, $ISPNET, $ISPOWDER, $TBBASE;
     $hiddenxs = "";
 echo "
 
@@ -411,8 +436,12 @@ echo " <li class='divider'></li>
         <li><a href='list-reservations.php'>
             My Reservations</a></li>
         <li><a href='activity.php?user=$login_uid&min=$then'>
-                            My History</a></li>
-";
+                            My History</a></li>";
+# Classic users, using the Portal, get a link back to it. SAD!
+if (!$login_user->portal()) {
+    echo " <li class='divider'></li>";
+    echo " <li><a href='$TBBASE/classic.php'>Emulab Classic</a></li>";
+}
       echo "
     </ul>
     </li>

@@ -35,20 +35,46 @@ RedirectSecure();
 $check_status = 0;
 $this_user    = CheckLogin($check_status);
 
-SPITHEADER(1, 1);
+SPITHEADER(1, true, true);
+SPITREQUIRE("");
 
-echo "<script type='text/javascript'>\n";
-echo "</script>\n";
+$matter    = file_get_contents("frontpage.html");
+$stats     = json_decode(file_get_contents("$APTBASE/stats-ajax.php"), true);
+$whoarewe  = ($TBMAINSITE ? "" : $THISHOMEBASE);
+$counts    = "<tr><th>Type</th><th>Free</th><th>% Inuse</th></tr>";
 
-# Place to hang the toplevel template.
-echo "<div id='main-body'></div>\n";
+foreach ($stats["typeinfo"] as $type => $totals) {
+    $total   = $totals["total"];
+    $free    = $totals["free"];
+    $pctfull = round(100.0 * ($total - $free) / $total);
+    if ($TBMAINSITE) {
+        $type = "<a href='https://gitlab.flux.utah.edu/emulab/emulab-devel/wikis/Utah%20Cluster#${type}s' target=_blank>$type</a>";
+    }
+    $counts .=
+            "<tr>
+              <td>$type</td>
+              <td><small> 
+	        <span class='badge badge-light'>$free</span></small></td>
+	          <td style='width: 8em'>
+	            <div class='progress' style='margin-bottom: 0px'>
+	              <div class='progress-bar' style='width: ${pctfull}%;'
+                           role='progressbar'>${pctfull}% inuse</div>
+    	            </div>
+	          </td>
+             </tr>\n";
+}
 
-REQUIRE_UNDERSCORE();
-REQUIRE_SUP();
-REQUIRE_MOMENT();
-SPITREQUIRE("js/frontpage.js");
+$vars = array(
+    '{$active}'       => $stats["active_experiments"],
+    '{$projects}'     => $stats["projects"],
+    '{$users}'        => $stats["distinct_users"],
+    '{$profiles}'     => $stats["profiles"],
+    '{$experiments}'  => $stats["total_experiments"],
+    '{$nodecounts}'   => $counts,
+    '{$whoarewe}'     => $whoarewe,
+);
+echo strtr($matter, $vars);
 
-AddTemplateList(array("frontpage", "frontpage-facility", "frontpage-status", 
-                      "oops-modal", "waitwait-modal"));
 SPITFOOTER(1);
+
 ?>

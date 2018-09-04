@@ -370,6 +370,8 @@ class User
     function weblogin_last()	{ return $this->stats("weblogin_last"); }
     function portal()	     { return $this->field("portal"); }
     function ga_userid()     { return $this->field("ga_userid"); }
+    function portal_interface_warned() {
+        return $this->field("portal_interface_warned"); }
     function isAPT()	     { return ($this->portal() &&
                                        $this->portal() == "aptlab" ? 1 : 0); }
     function isCloud()	     { return ($this->portal() &&
@@ -1243,6 +1245,15 @@ class User
 		     "   widearearoot='$onoff' ".
 		     "where uid_idx='$idx'");
 	$this->user["stud"] = $onoff;
+	return 0;
+    }
+    function SetPortalWarned() {
+	$idx   = $this->uid_idx();
+
+	DBQueryFatal("update users set ".
+		     "   portal_interface_warned='1' ".
+		     "where uid_idx='$idx'");
+	$this->user["portal_interface_warned"] = 1;
 	return 0;
     }
     function UpdateWebLoginFail() {
