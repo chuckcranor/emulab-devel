@@ -88,6 +88,7 @@ class Aggregate
     function has_datasets() { return $this->field('has_datasets'); }
     function reservations() { return $this->field('reservations'); }
     function isfederate()   { return $this->field('isfederate'); }
+    function nomonitor()    { return $this->field('nomonitor'); }
     function portals()      { return $this->field('portals'); }
 
     # accessors for the status info.
@@ -236,6 +237,26 @@ class Aggregate
             if ($adminonly && !(ISADMIN() || STUDLY() || $PORTAL_HEALTH)) {
                 continue;
             }
+	    if (! ($aggregate = Aggregate::Lookup($urn))) {
+		TBERROR("Aggregate::SupportsReservations: ".
+			"Could not load aggregate $urn!", 1);
+	    }
+	    $am_array[$urn] = $aggregate;
+        }
+        return $am_array;
+    }
+
+    #
+    # All aggregates
+    #
+    function AllAggregatesList() {
+        $am_array = array();
+
+        $query_result =
+             DBQueryFatal("select urn from apt_aggregates");
+        
+	while ($row = mysql_fetch_array($query_result)) {
+            $urn       = $row["urn"];
 	    if (! ($aggregate = Aggregate::Lookup($urn))) {
 		TBERROR("Aggregate::SupportsReservations: ".
 			"Could not load aggregate $urn!", 1);

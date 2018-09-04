@@ -809,7 +809,7 @@ class Instance
     # Return a list of types not to show user.
     #
     function NodeTypePruneList() {
-        global $ISEMULAB, $ISCLOUD, $ISAPT, $ISPNET, $ISPOWDER;
+        global $ISEMULAB, $ISCLOUD, $ISAPT, $ISPNET, $ISPOWDER, $TBMAINSITE;
         
         $skiptypes = array("dboxvm"    => true,
                            "d430k"     => true,
@@ -820,7 +820,7 @@ class Instance
                            "d2100"     => true,
                            "pc2400w"   => true);
                    
-        if ($ISEMULAB || $ISCLOUD || $ISAPT) {
+        if (($ISEMULAB || $ISCLOUD || $ISAPT) && $TBMAINSITE) {
             $skiptypes["sdr"]      = true;
             $skiptypes["nuc5300"]  = true;
             $skiptypes["enodeb"]   = true;

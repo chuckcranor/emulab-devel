@@ -478,7 +478,7 @@ if (!$login_user->portal()) {
 	           echo "     </a></li>\n";
 	       }
                echo "  <li><a href='dashboard.php'>DashBoard</a></li>";
-               echo "  <li><a href='cluster-status.php'>Cluster Status</a></li>";
+               echo "  <li><a href='aggregate-status.php'>Cluster Status</a></li>";
                $then = time() - (14 * 3600 * 24);
                echo "  <li><a href='activity.php?min=$then'>
                             History Data</a></li>

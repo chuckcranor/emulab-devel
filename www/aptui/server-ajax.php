@@ -425,6 +425,11 @@ $routing = array("geni-login" =>
 			      "guest"   => false,
 			      "methods" => array("HistoryRecord" =>
 						    "Do_HistoryRecord")),
+		 "aggregate-status" =>
+			array("file"    => "aggregate-status.ajax",
+			      "guest"   => false,
+			      "methods" => array("AggregateStatus" =>
+						    "Do_AggregateStatus")),
 );
 
 #
