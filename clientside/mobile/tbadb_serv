@@ -618,6 +618,12 @@ sub rpc_activate_forwarding($$) {
 	if ($node_id !~ /^([-\w]+)$/);
     $node_id = $1;
 
+    # Make sure device is available first (wait for a bit if necessary).
+    if (!$self->wait_for_boot($node_id)) {
+	warn "$node_id is not available!\n";
+	goto BADFWD;
+    }
+
     # Setup forwarding from the ADB daemon on the unit to the
     # destionation port, and report back to caller!
     warn "activating ADB forwarding on node $node_id\n";
@@ -1065,7 +1071,7 @@ sub wait_for_boot($$) {
     my $stime = time();
     while (!_get_imsi($node_id)) {
 	if (time() - $stime > $ANDROID_BOOT_TMO) {
-	    warn "Timed out waiting for $node_id to boot!\n";
+	    warn "Timed out waiting for $node_id to become responsive!\n";
 	    return 0;
 	}
 	sleep 5;
