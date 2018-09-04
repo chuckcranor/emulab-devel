@@ -190,6 +190,15 @@ $isstud          = (isset($this_user) && $this_user->stud() ? 1 : 0);
 $wholedisk       = FeatureEnabled("WholeDiskImage",$creator,$instance->Group());
 
 #
+# Temp hack, maybe generalize. These people should not be creaing
+# new images.
+#
+if ($instance->pid() == "cord-testdrive" && !ISADMIN()) {
+    $cansnap = 0;
+}
+$cansnap = 0;
+
+#
 # We give ssh to the creator (real user or guest user).
 #
 $dossh =
