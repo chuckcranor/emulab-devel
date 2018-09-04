@@ -157,8 +157,6 @@ my $starttime = [gettimeofday()];
 my $response  = APT_Geni::PortalRPC($authority, undef, $method, @args);
 my $elapsed   = tv_interval($starttime);
 
-print STDERR Dumper($response);
-
 if ($response->code() != GENIRESPONSE_SUCCESS) {
     print STDERR $response->error() . "\n";
     if (defined($webtask)) {
@@ -170,7 +168,6 @@ if ($response->code() != GENIRESPONSE_SUCCESS) {
 if (defined($webtask)) {
     $webtask->results($response->value());
     $webtask->Exited(0);
-    $webtask->Dump();
 }
 else {
     print encode_json($response->value());
