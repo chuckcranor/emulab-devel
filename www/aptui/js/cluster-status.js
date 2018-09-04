@@ -40,6 +40,11 @@ $(function ()
 		console.log(json);
 		if (json.code) {
 		    console.log("Could not get cluster data: " + json.value);
+		    $('#cluster-status-' + name + ' .cluster-status-error')
+			.html(json.value)
+			.removeClass("hidden");
+		    $('#cluster-status-' + name + ' .resgraph-spinner')
+			.addClass("hidden");
 		    return;
 		}
 		var inuse = json.value.inuse;
@@ -50,9 +55,18 @@ $(function ()
 		    if (_.has(value, "type")) {
 			type = value.type;
 		    }
-		    html = html + "<tr>" +
-			"<td>" + value.node_id + "</td>" +
-			"<td>" + type + "</td>";
+		    html = html + "<tr><td>";
+		    if (isadmin) {
+			var url = json.value.url +
+			    "/shownode.php3?node_id=" + value.node_id;
+			html +=
+			    "<a href='" + url + "' target=_blank>" +
+			    value.node_id + "</a></td>";
+		    }
+		    else {
+			html += value.node_id + "</td>";
+		    }
+		    html += "<td>" + type + "</td>";
 
 		    if (isadmin) {
 			var expires = "";
@@ -118,6 +132,8 @@ $(function ()
 
 		// We reference the totals table in InitTable();
 		InitTable(name);
+		$('#cluster-status-' + name + ' .resgraph-spinner')
+		    .addClass("hidden");
 	    }
 	    var xmlthing = sup.CallServerMethod(null, "cluster-status",
 						"GetStatus",
@@ -132,6 +148,9 @@ $(function ()
 		console.log(json);
 		if (json.code) {
 		    console.log("Could not get prereserve data: " + json.value);
+		    return;
+		}
+		if (json.value == null) {
 		    return;
 		}
 		var expando_class  = "expando-" + name;

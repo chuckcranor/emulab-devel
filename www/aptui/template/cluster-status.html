@@ -51,7 +51,7 @@
   </div>
 <% } %>
 <% _.each(amlist, function(urn, name) { %>
-  <div class='row'>
+  <div class='row' id='cluster-status-<%- name %>'>>
     <div
 	<% if (isadmin) { %>
            class='col-sm-3'
@@ -67,6 +67,10 @@
 	    <!-- Template goes here -->	    
 	  </div>
 	</div>
+      </div>
+      <div class='resgraph-spinner'>
+	<center>
+	  <img src='images/spinner.gif' /></center>
       </div>
     </div>
     <div
@@ -90,7 +94,6 @@
 	  <div class="row">
 	    <div class='col-sm-6'>	      
 	      <input class='form-control search'
-
 		     type='search' data-column='all'
 		     id='inuse-search-<%- name %>'
 		     placeholder='Search <%- name %>'>
@@ -122,6 +125,9 @@
 	      <tbody id='<%- name %>-tbody'>
 	      </tbody>
 	    </table>
+	    <center style="margin-top: 10px;"
+		 class='cluster-status-error
+			align-center text-danger hidden'></center>
 	  </div>
 	</div>
       </div>

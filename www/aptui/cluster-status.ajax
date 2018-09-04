@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,9 +22,11 @@
 # }}}
 #
 chdir("..");
+include_once("webtask.php");
 include_once("geni_defs.php");
 chdir("apt");
 include_once("instance_defs.php");
+include_once("aggregate_defs.php");
 
 #
 # Server side of getting dashboard stats.
@@ -34,6 +36,7 @@ function Do_GetStatus()
     global $ajax_args, $this_user, $geni_response_codes, $urn_mapping;
     global $TBSUEXEC_PATH, $TBBASE, $TB_PROJECT_CREATEEXPT, $OURDOMAIN;
     global $TB_PROJECT_READINFO, $DEFAULT_AGGREGATE_URN;
+    global $TBADMINGROUP;
     $isadmin = 0;
     $autoextend_maxage  = TBGetSiteVar("aptui/autoextend_maxage");
 
@@ -49,27 +52,41 @@ function Do_GetStatus()
         SPITAJAX_ERROR(1, "Not a valid cluster URN");
         return;
     }
+    $aggregate = Aggregate::Lookup($cluster);
+    if (!$aggregate) {
+        SPITAJAX_ERROR(1, "No such cluster");
+        return;
+    }
+    if ($aggregate->adminonly() && !$isadmin) {
+        SPITAJAX_ERROR(1, "No permission to view cluster");
+        return;
+    }
     $isus = ($cluster == $DEFAULT_AGGREGATE_URN ? 1 : 0);
     $cluster = escapeshellarg($cluster);
-    $fp = popen("$TBSUEXEC_PATH elabman tbadmin ".
-                "webportal_xmlrpc -a $cluster InUse", "r");
-    $string = "";
-    while (!feof($fp)) {
-        $string .= fgets($fp, 1024);
-    }
-    pclose($fp);
-    $results = json_decode($string);
-    
-    if (gettype($results) == "object") {
-        $inuse = $results->details;
-        if (property_exists($results, "typeinfo")) {
-            $typeinfo = $results->typeinfo;
+    $webtask = WebTask::CreateAnonymous();
+    $webtask_id = $webtask->task_id();
+
+    $retval = SUEXEC("elabman", $TBADMINGROUP,
+                     "webportal_xmlrpc -t $webtask_id -a $cluster InUse",
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error getting info from cluster");
         }
+        else {
+            SPITAJAX_ERROR(1, "Unable to get info at ".
+                           "time: ". $webtask->output());
+        }
+        $webtask->Delete();
+        return;
     }
-    else {
-        # Backwards compat?
-        $inuse = $results;
-    }
+    $results = $webtask->TaskDataObject()->results;
+    $inuse = $results->details;
+    $typeinfo = $results->typeinfo;
+    $webtask->Delete();
 
     #
     # Grab local project list for mere users, so we can use it to determine
@@ -272,13 +289,14 @@ function Do_GetStatus()
     $blob = array();
     $blob["totals"] = $typecounts;
     $blob["inuse"]  = $nodeinfo;
+    $blob["url"]    = $aggregate->weburl();
     SPITAJAX_RESPONSE($blob);
 }
 
 function Do_GetPreReservations()
 {
     global $ajax_args, $geni_response_codes, $urn_mapping, $TBBASE;
-    global $TBSUEXEC_PATH;
+    global $TBSUEXEC_PATH, $TBADMINGROUP;
 
     if (! (ISADMIN() || ISFOREIGN_ADMIN())) {
         SPITAJAX_ERROR(1, "Not enough permission");
@@ -291,17 +309,29 @@ function Do_GetPreReservations()
         $cluster = $ajax_args["cluster"] . ".cm";
     }
     $inuse = array();
-    $fp = popen("$TBSUEXEC_PATH elabman tbadmin ".
-                "webportal_xmlrpc -a $cluster PreReservations", "r");
-    $string = "";
-    while (!feof($fp)) {
-        $string .= fgets($fp, 1024);
+    $webtask = WebTask::CreateAnonymous();
+    $webtask_id = $webtask->task_id();
+
+    $retval = SUEXEC("elabman", $TBADMINGROUP,
+                     "webportal_xmlrpc -t $webtask_id ".
+                     "  -a $cluster PreReservations",
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error getting info from cluster");
+        }
+        else {
+            SPITAJAX_ERROR(1, "Unable to get info at ".
+                           "time: ". $webtask->output());
+        }
+        $webtask->Delete();
+        return;
     }
-    pclose($fp);
-    $inuse = json_decode($string);
-    if (gettype($inuse) == "object") {
-        $inuse = $inuse->details;
-    }
+    $results = $webtask->TaskDataObject()->results;
+    $inuse = $results->details;
 
     SPITAJAX_RESPONSE($inuse);
 }
