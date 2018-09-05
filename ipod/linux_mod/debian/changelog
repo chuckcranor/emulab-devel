@@ -1,0 +1,5 @@
+emulab-ipod-dkms (3.0.0-0) unstable; urgency=medium
+
+  * Initial release of Emulab IPOD kernel module DKMS support.
+
+ -- David M. Johnson <johnsond@flux.utah.edu>  Wed, 5 Sep 2018 13:42:44 -0600

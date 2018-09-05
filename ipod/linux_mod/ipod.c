@@ -39,6 +39,10 @@
 #include <linux/version.h>
 #include <linux/limits.h>
 
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Flux Research Group");
+MODULE_VERSION("3.0.0");
+
 #define IPOD_ICMP_TYPE 6
 #define IPOD_ICMP_CODE 6
 
@@ -299,4 +303,3 @@ static void __exit ipod_cleanup_module(void) {
 
 module_init(ipod_init_module);
 module_exit(ipod_cleanup_module);
-MODULE_LICENSE("GPL");
