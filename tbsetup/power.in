@@ -859,6 +859,18 @@ sub dostatus(@) {
 		}
 		print "$ctrl Node $outlet: $state\n";
 	    }
+	} elsif ($ctrls{$ctrl} eq 'powduino') {
+	    if (powduinostatus($ctrl,\%status)) {
+		print "Could not get status for $ctrl.\n";
+		$errors++;
+		next;
+	    }
+	    for my $pin (0..3) {
+		my $ostr = "pin$pin";
+		print "$ctrl Pin $pin: ", $status{$ostr}, "\n"
+		    if (defined($status{$ostr}));
+	    }
+	    print "\n";
 	} elsif (!$doall) {
 	    warn "Cannot get status for $ctrl (type " .
 		$ctrls{$ctrl} . ") yet\n";

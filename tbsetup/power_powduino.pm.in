@@ -28,7 +28,7 @@ package power_powduino;
 
 use Exporter;
 @ISA = ("Exporter");
-@EXPORT = qw( powduinoctrl );
+@EXPORT = qw( powduinoctrl powduinostatus );
 
 use Socket;
 use IO::Handle;
@@ -57,6 +57,34 @@ my %CMDS =
   ("cycle"  => "power cycle",
    "on"     => "power on",
    "off"    => "power off");
+
+sub powduinostatus {
+    my ($controller, $statusp) = @_;
+
+    my($TIP, $i, $insync);
+
+    #
+    # Form the connection to the controller via a "tip" line to the
+    # capture process. Once we have that, we can just talk to the
+    # controller directly.
+    #
+    if (!($TIP = tipconnect($controller))) {
+	print STDERR "*** Could not form TIP connection to $controller\n";
+	return 1;
+    }
+
+    #
+    # Send the command.  Try again a few times if there is a retryable error.
+    #
+    my $status;
+    for my $try (1..$ntries) {
+	$status = syncandsend($controller, $TIP, "status", $statusp);
+	last
+	    if $status >= 0;
+    }
+    close($TIP);
+    return $status ? 1 : 0;
+}
 
 # Main routine.
 # usage: powduinoctrl(cmd, controller, outlet)
@@ -145,8 +173,8 @@ sub powduinoctrl {
 # Returns 0 if successful, -1 if the caller should try again,
 # 1 on an unexpected error.
 #
-sub syncandsend($$$) {
-    my ($controller,$TIP,$cmd) = @_;
+sub syncandsend($$$;$) {
+    my ($controller,$TIP,$cmd,$statusp) = @_;
 
     #
     # Send a newline to get the command prompt, and then wait
@@ -177,7 +205,7 @@ sub syncandsend($$$) {
 	}
 	if ($line =~ /$PROMPT/) {
 	    if ($debug) {
-		print "Matched prompt 'PROMPT'!\n";
+		print "Matched prompt '$PROMPT'!\n";
 	    }
 	    $insync = 1;
 	    last;
@@ -201,9 +229,11 @@ sub syncandsend($$$) {
 
     #
     # Read and parse all the output until the next prompt to ensure that
-    # there was no read error.  
+    # there was no read error.  We also collect status here if desired.
     #
+    my %status = ();
     my $gotcmd = 0;
+    my $gotstatus = 0;
     print "Reading output following command\n"
 	if ($debug);
     while (my $line = rpc_readline($TIP)) {
@@ -223,9 +253,20 @@ sub syncandsend($$$) {
 	#
 	# Got the following prompt, all done.
 	#
-	if ($gotcmd && $line =~ /$PROMPT/) {
+	if (($gotcmd || $gotstatus) && $line =~ /$PROMPT/) {
 	    last;
 	}
+	if ($statusp) {
+	    if ($line =~ /^Pin\s+(\d+)\s+(on|off)/) {
+		$status{"pin$1"} = $2;
+		$gotstatus = 1;
+		print "status 'pin$1' = ", $status{"pin$1"}, "\n" if ($debug);
+	    }
+	}
+    }
+
+    if ($statusp) {
+	%$statusp = %status;
     }
     return 0;
 }
