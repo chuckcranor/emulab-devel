@@ -966,7 +966,7 @@ sub DeleteSlice($)
 	# The monitor has stopped and we have the lock. Clear the
 	# cancel flag so we can actually terminate (checked in endexp).
 	#
-	$slice_experiment->SetCancelFlag(1);
+	$slice_experiment->SetCancelFlag(0);
     }
     my $retval = GeniCM::CleanupDeadSlice($slice, 1);
     if ($retval) {
