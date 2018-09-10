@@ -424,7 +424,7 @@ E. Update Emulab software
 
 3. Re-enable the testbed on boss.
 
-   sudo /usr/local/etc/rc.d/apache22 start
+   sudo /usr/local/etc/rc.d/apache24 start
    sudo /usr/local/etc/rc.d/2.dhcpd.sh start
    sudo /usr/testbed/sbin/testbed-control boot
 
