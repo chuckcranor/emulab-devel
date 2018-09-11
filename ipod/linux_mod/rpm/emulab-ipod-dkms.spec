@@ -14,10 +14,9 @@ Emulab IPOD ping-of-death DKMS kernel module
 %install
 rm -rf %{buildroot}
 mkdir -p %{buildroot}/usr/src/%{module}-%{version}/
-echo %{getenv:IPODSRCDIR}
-cp %{getenv:IPODSRCDIR}/Makefile %{buildroot}/usr/src/%{module}-%{version}
-cp %{getenv:IPODSRCDIR}/ipod.c %{buildroot}/usr/src/%{module}-%{version}
-cp %{getenv:IPODSRCDIR}/rpm/emulab-ipod-dkms.conf %{buildroot}/usr/src/%{module}-%{version}/dkms.conf
+cp %{_sourcedir}/Makefile %{buildroot}/usr/src/%{module}-%{version}
+cp %{_sourcedir}/ipod.c %{buildroot}/usr/src/%{module}-%{version}
+cp %{_sourcedir}/emulab-ipod-dkms.conf %{buildroot}/usr/src/%{module}-%{version}/dkms.conf
 
 %clean
 rm -rf %{buildroot}
