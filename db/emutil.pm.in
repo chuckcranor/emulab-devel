@@ -43,6 +43,7 @@ use English;
 use Carp;
 use Date::Parse;
 use Time::Local;
+use Data::Dumper;
 
 # Configure variables.
 my $TB          = "@prefix@";
@@ -668,6 +669,7 @@ sub SpanningTree($)
     my ($edges)  = @_;
     my %vertices = ();
     my %edges    = ();
+    my $maxloops = 1000;
 
     #
     # Get the unique set of vertices. Also form a hash of edges we can mark.
@@ -691,7 +693,8 @@ sub SpanningTree($)
     #
     # Loop according to Prims algorithm.
     #
-    while (1) {
+    while ($maxloops) {
+	$maxloops--;
 	#
 	# Get the set of marked vertices;
 	#
@@ -729,6 +732,9 @@ sub SpanningTree($)
       loop:
 	#print Dumper(\%edges);
 	#sleep(1);
+    }
+    if ($maxloops <= 0) {
+	print STDERR "*** SpanningTree: aborting infinite loop!\n";
     }
     #
     # Return a new set of *marked* edges.
