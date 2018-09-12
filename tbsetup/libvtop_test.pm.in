@@ -1478,7 +1478,7 @@ sub LoadVirtNodes($)
 		&& $vnode->_parent_osinfo()->FeatureSupported("xen-host")) {
 		$defmem = 1024;
 		$minmem = 256;
-		$maxmem = 1024 * 16;
+		$maxmem = 1024 * 64;
 	    }	    
 	    if (!exists($vnode->_desires()->{"?+ram"})) {
 		$self->printdb("Setting VM memsize to $defmem for $vname\n");
