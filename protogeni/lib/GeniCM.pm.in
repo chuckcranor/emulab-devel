@@ -2160,11 +2160,11 @@ sub GetTicketAuxAux($)
 			# ignore silly user.
 			next;
 		    }
-		    if ($isshared && $attrvalue > 4) {
+		    if ($isshared && $attrvalue > 12) {
 			$response =
 			    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 						 "Bad XEN setting; ".
-						 "limited to 1-4 cores");
+						 "limited to 1-12 cores");
 			goto bad;
 		    }
 		}
@@ -3389,6 +3389,7 @@ sub GetTicketAuxAux($)
 	goto bad;
     }
 
+    if (0) {
     # Do IP assignment.
     DebugTimeStamp("Starting ipassign");
     my $poutput = GeniUtil::ExecQuiet("$IPASSIGN $pid $eid");
@@ -3399,6 +3400,7 @@ sub GetTicketAuxAux($)
 	goto bad;
     }
     DebugTimeStamp("Finished ipassign");
+    }
 
     # Allocate any public address pools.
     my $tmp = $slice_experiment->AllocatePublicAddrPools();
