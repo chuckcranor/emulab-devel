@@ -404,7 +404,7 @@ function Do_RequestExtension()
 	goto bad;
     }
     $wanted = $ajax_args["howlong"];
-    if (preg_match("/^\d+$/", $wanted)) {
+    if (is_numeric($wanted)) {
         if ($wanted < 1) {
             SPITAJAX_ERROR(1, "Hours must be an integer greater then 1");
             goto bad;
