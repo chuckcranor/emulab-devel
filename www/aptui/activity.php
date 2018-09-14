@@ -33,6 +33,7 @@ $page_title = "My Profiles";
 #
 $optargs = OptionalPageArguments("target_user",    PAGEARG_USER,
 				 "target_project", PAGEARG_PROJECT,
+                                 "portalonly",     PAGEARG_BOOLEAN,
                                  "min",            PAGEARG_INTEGER,
                                  "max",            PAGEARG_INTEGER);
 #
@@ -74,6 +75,15 @@ elseif (isset($target_project)) {
     $target_idx   = $target_project->pid_idx();
     $whereclause = "where h.pid_idx='$target_idx'";
 }
+if (isset($portalonly) && $portalonly) {
+    if ($whereclause != "") {
+        $whereclause = "$whereclause and ";
+    }
+    else {
+        $whereclause = "where ";
+    }
+    $whereclause .= "servername='$APTHOST' ";
+}
 # Lets default to last three months if neither min or max provided
 if (! (isset($min) || isset($max))) {
     $min = time() - (90 * 3600 * 24);
@@ -95,23 +105,37 @@ if (isset($min) || isset($max)) {
         $whereclause .= "UNIX_TIMESTAMP(h.started) < $max ";
     }
 }
-
+$portals = array();
+if ($TBMAINSITE) {
+    $portals["www.aptlab.net"]         = "APT";
+    $portals["www.cloudlab.us"]        = "Cloud";
+    $portals["www.emulab.net"]         = "Emulab";
+    $portals["www.phantomnet.org"]     = "Phantom";
+    $portals["www.powderwireless.net"] = "Powder";
+}
+else {
+    $portals[$APTHOST] = "Emulab";
+}
 $query_result =
     DBQueryFatal("select h.uuid,h.profile_version,h.created, ".
-                 "    h.started,h.destroyed, ".
+                 "    h.started,h.destroyed,h.servername, ".
 		 "    h.creator,p.uuid as profile_uuid,h.pid,u.email, ".
                  "    h.physnode_count,h.virtnode_count,".
                  "    h.name as instance_name,p.name as profile_name, ".
                  "    truncate(h.physnode_count * ".
                  "      ((UNIX_TIMESTAMP(h.destroyed) - ".
-                 "        UNIX_TIMESTAMP(h.started)) / 3600.0),2) as phours ".
+                 "        UNIX_TIMESTAMP(h.started)) / 3600.0),2) as phours, ".
+                 "    GROUP_CONCAT(aa.abbreviation) as clusters ".
 		 "  from apt_instance_history as h ".
+                 "left join apt_instance_aggregate_history as ia ".
+                 "     on ia.uuid=h.uuid ".
+                 "left join apt_aggregates as aa on aa.urn=ia.aggregate_urn ".
 		 "left join apt_profile_versions as p on ".
 		 "     p.profileid=h.profile_id and ".
 		 "     p.version=h.profile_version ".
 		 "left join geni.geni_users as u on u.uuid=h.creator_uuid ".
                  $whereclause . " " .
-		 "order by h.started desc");
+		 "group by h.uuid order by h.started desc");
 
 if (mysql_num_rows($query_result) == 0) {
     $message = "<b>Oops, there is no activity to show you.</b><br>";
@@ -134,6 +158,8 @@ if (1) {
         $pcount    = $row["physnode_count"];
         $vcount    = $row["virtnode_count"];
         $phours    = $row["phours"];
+        $portal    = $portals[$row["servername"]];
+        $clusters  = $row["clusters"];
         # Backwards compat.
         if (!isset($pproj)) {
             $pproj = "";
@@ -154,7 +180,7 @@ if (1) {
 	$instance =
             array($pname, $pproj, $puuid, $pcount, $vcount,
                   $creator, $started, $destroyed, $phours, $iname,
-                  $uuid, $created);
+                  $uuid, $created, $portal, $clusters);
                           
 	$instances[] = $instance;
     }
@@ -185,6 +211,9 @@ elseif (isset($target_project)) {
 }
 else {
     echo "    window.ARG = null;\n";
+}
+if (isset($portalonly) && $portalonly) {
+    echo "    window.PORTALONLY = true;\n";
 }
 echo "</script>\n";
 echo "<script type='text/plain' id='instances-json'>\n";

@@ -45,6 +45,9 @@ $(function () {
 		url = url + window.ARG + "&";
 	    }
 	    url = url + "min=" + min + "&max=" + max;
+	    if (window.PORTALONLY) {
+		url += "&portalonly=1";
+	    }
 	    window.location.replace(url);
 	});
 

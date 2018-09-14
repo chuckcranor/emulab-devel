@@ -21,6 +21,8 @@
 	  <th>Profile</th>
 	  <th>Pid</th>
 	  <th>Creator</th>
+	  <th>Portal</th>
+	  <th>Clusters</th>
 	  <th>PCs</th>
 	  <th>PHours</th>
 	  <th>VMs</th>
@@ -30,7 +32,7 @@
 	</tr>
 	<tr>
           <th class='filter-false sorter-false'>Totals</th>
-	  <th class='filter-false sorter-false' colspan=3></th>
+	  <th class='filter-false sorter-false' colspan=5></th>
           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
           <th class='filter-false sorter-false' data-math='col-sum'
 	      data-math-mask='##0'>0</th>
@@ -43,7 +45,7 @@
       <tfoot>
 	<tr>
           <th class='filter-false sorter-false'>Totals</th>
-	  <th class='filter-false sorter-false' colspan=3></th>
+	  <th class='filter-false sorter-false' colspan=5></th>
           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
           <th class='filter-false sorter-false' data-math='col-sum'
 	      data-math-mask='##0'>0</th>
@@ -69,6 +71,8 @@
 	    <a href='user-dashboard.php?user=<%- instance[5] %>'>
 	      <%- instance[5] %></a>
 	  </td>
+	  <td><%- instance[12] %></td>
+	  <td><%- instance[13] %></td>
 	  <td><%- instance[3] %></td>
 	  <td><%- instance[8] %></td>
 	  <td><%- instance[4] %></td>
