@@ -808,9 +808,14 @@ class Instance
     #
     # Return a list of types not to show user.
     #
-    function NodeTypePruneList() {
+    function NodeTypePruneList($aggregate = null) {
         global $ISEMULAB, $ISCLOUD, $ISAPT, $ISPNET, $ISPOWDER, $TBMAINSITE;
-        
+        global $DEFAULT_AGGREGATE_URN;
+        $aggregate_urn = ($aggregate ? $aggregate->urn() : "");
+
+        #
+        # We never want to show these.
+        #
         $skiptypes = array("dboxvm"    => true,
                            "d430k"     => true,
                            "d530"      => true,
@@ -819,8 +824,15 @@ class Instance
                            "pc2400hp"  => true,
                            "d2100"     => true,
                            "pc2400w"   => true);
-                   
-        if (($ISEMULAB || $ISCLOUD || $ISAPT) && $TBMAINSITE) {
+
+        #
+        # If showing nodes from another cluster, then we show them
+        # all (not sure how long this rule will last). Otherwise,
+        # only the Powder/Phantom portals get to see all these types.
+        #
+        if ($TBMAINSITE && 
+            !($ISPOWDER || $ISPNET) &&
+            $aggregate_urn == $DEFAULT_AGGREGATE_URN) {
             $skiptypes["sdr"]      = true;
             $skiptypes["nuc5300"]  = true;
             $skiptypes["enodeb"]   = true;

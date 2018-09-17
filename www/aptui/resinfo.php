@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -92,10 +92,6 @@ echo "</script>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "   window.ISADMIN  = $isadmin;\n";
-echo "</script>\n";
-
-echo "<script type='text/plain' id='skiptypes-json'>\n";
-echo htmlentities(json_encode(Instance::NodeTypePruneList()));
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

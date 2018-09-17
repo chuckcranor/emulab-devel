@@ -803,6 +803,10 @@ function Do_ReservationInfo()
     # If requesting for a single cluster, return just that.
     if (isset($aggregate)) {
         $blob = $blob[$aggregate->urn()];
+        $blob["prunelist"] = Instance::NodeTypePruneList($aggregate);
+    }
+    else {
+        $blob["prunelist"] = Instance::NodeTypePruneList();
     }
     $webtask->Delete();
     SPITAJAX_RESPONSE($blob);

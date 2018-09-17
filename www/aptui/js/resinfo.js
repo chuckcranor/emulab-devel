@@ -12,7 +12,6 @@ $(function ()
     var totalsTemplate  = _.template(templates["resinfo-totals"]);
     var amlist          = null;
     var isadmin         = false;
-    var skiptypes       = null;
 
     function initialize()
     {
@@ -20,7 +19,6 @@ $(function ()
 
 	isadmin  = window.ISADMIN;
 	amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
-	skiptypes= JSON.parse(_.unescape($('#skiptypes-json')[0].textContent));
 
 	GeneratePageBody();
 
@@ -114,6 +112,7 @@ $(function ()
 			.removeClass("hidden");
 		    return;
 		}
+		var skiptypes  = json.value.prunelist;
 		// Just POWDER
 		var radiotypes = {"nuc5300"   : true,
 				  "nuc6260"   : true,

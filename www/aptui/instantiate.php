@@ -378,10 +378,6 @@ function SPITFORM($formfields, $newuser, $errors)
     }
     SpitAggregateStatus(true);
 
-    echo "<script type='text/plain' id='skiptypes-json'>\n";
-    echo htmlentities(json_encode(Instance::NodeTypePruneList()));
-    echo "</script>\n";
-    
     SpitOopsModal("oops");
     echo "<script type='text/javascript'>\n";
     echo "    window.PROFILE    = '" . $formfields["profile"] . "';\n";

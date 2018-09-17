@@ -14,7 +14,6 @@ $(function ()
     var fields       = null;
     var projlist     = null;
     var amlist       = null;
-    var skiptypes    = null;
     var isadmin      = false;
     var editing      = false;
     var buttonstate  = "check";
@@ -30,7 +29,6 @@ $(function ()
 	fields   = JSON.parse(_.unescape($('#form-json')[0].textContent));
 	projlist = JSON.parse(_.unescape($('#projects-json')[0].textContent));
 	amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
-	skiptypes= JSON.parse(_.unescape($('#skiptypes-json')[0].textContent));
 
 	GeneratePageBody(fields);
 
@@ -392,7 +390,7 @@ $(function ()
 
 		ShowResGraph({"forecast"  : json.value.forecast,
 			      "selector"  : id,
-			      "skiptypes"      : skiptypes,
+			      "skiptypes"      : json.value.prunelist,
 			      "click_callback" : function(when, type) {
 				  if (!editing) {
 				      SetCluster(details.nickname, urn);
