@@ -3791,6 +3791,7 @@ sub DoIdleData()
 	    if ($debug) {
 		print STDERR $json . "\n";
 	    }
+	    # This might be an empty string if no nodes allocated.
 	    $sliver->webtask()->idledata($json);	    
 	    $response->value(0);
 	}
