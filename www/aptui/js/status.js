@@ -3313,7 +3313,7 @@ $(function ()
 	 * This callback is to let us know if there is any actual data.
 	 */
 	var callback = function (gotdata, ignored) {
-	    if (!gotdata) {
+	    if (gotdata <= 0) {
 		$('#Idlegraphs #nodata').removeClass("hidden");
 	    }
 	};

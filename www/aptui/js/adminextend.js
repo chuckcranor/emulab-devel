@@ -765,12 +765,18 @@ $(function ()
 
 	var callback = function (status, json) {
 	    console.info("LoadIdleData callback");
-	    if (status < 0) {
-		// Error, show something that indicates we could not get
-		// the idle data.
-		$('#idledata-error').html("Could not get graph data: " +
-					  json.value);
-		$('#idledata-error').removeClass("hidden");
+	    if (status <= 0) {
+		if (status == 0) {
+		    // No data.
+		    $('#idledata-nodata').removeClass("hidden");
+		}
+		else {
+		    // Error, show something that indicates we could not get
+		    // the idle data.
+		    $('#idledata-error').html("Could not get graph data: " +
+					      json.value);
+		    $('#idledata-error').removeClass("hidden");
+		}
 	    }
 	    if (continuation !== undefined) {
 		continuation();
