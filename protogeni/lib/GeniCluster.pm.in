@@ -522,6 +522,16 @@ sub SliceIdleData($)
     if ($slice->locked() || $experiment->state() ne EXPTSTATE_ACTIVE()) {
 	return GeniResponse->Create(GENIRESPONSE_BUSY);
     }
+    #
+    # This happens; we ask for idlestats when there are no nodes
+    # allocated to the experiment. idlestats views that as an error,
+    # but lets not return a fatal error, lets return something less
+    # drastic.
+    #
+    if (!$experiment->NodeList(1,1)) {
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, "");
+    }
+    
     my $pid  = $experiment->pid();
     my $eid  = $experiment->eid();
     my $swapped = str2time($experiment->swapin_last());
