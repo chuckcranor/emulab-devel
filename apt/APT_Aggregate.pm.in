@@ -43,6 +43,7 @@ use overload ('""' => 'Stringify');
 my $TB		  = "@prefix@";
 my $TBOPS         = "@TBOPSEMAIL@";
 my $OURDOMAIN     = "@OURDOMAIN@";
+my $MYURN	  = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 
 # Protos
 sub STATUS($$;$);
@@ -122,6 +123,13 @@ sub DESTROY {
     my $self = shift;
 
     $self->{'AGGREGATE'} = undef;
+}
+
+sub IsLocalCluster($)
+{
+    my ($self) = @_;
+
+    return ($self->urn() eq $MYURN ? 1 : 0);
 }
 
 #
