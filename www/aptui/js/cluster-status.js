@@ -98,6 +98,13 @@ $(function ()
 				    "' target=_blank>" +
 				    value.instance_name + "</a>";
 			    }
+			    else {
+				var url = json.value.url +
+				    "/showexp.php3?pid=" + value.pid +
+				    "&eid=" + value.eid;
+				eid = "<a href='" + url + "' target=_blank>" +
+				    value.eid + "</a>";
+			    }
 			}
 			html = html +
 			    "<td>" + value.pid + "</td>" +
