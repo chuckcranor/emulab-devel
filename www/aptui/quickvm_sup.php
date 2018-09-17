@@ -389,6 +389,7 @@ function SPITNAV($hiddenxs, $navbar_status, $navbar_right, $login_uid)
 {
     global $PORTAL_MANUAL, $APTLOGO, $login_status, $login_user, $TBMAINSITE;
     global $THISHOMEBASE, $ISEMULAB, $ISPNET, $ISPOWDER, $TBBASE;
+    global $PORTAL_WIKI;
     $hiddenxs = "";
 echo "
 
@@ -511,11 +512,26 @@ if (!$login_user->portal()) {
    echo "</ul>";
    echo "  <ul class='nav navbar-nav navbar-right apt-right'>
     $navbar_status
-    $navbar_right
-    <li class='apt-left'>
-      <a class='btn btn-quickvm-home navbar-btn' href='$PORTAL_MANUAL' target='_blank'>Docs</a>
-    </li>
-";
+    $navbar_right\n";
+
+   if ($PORTAL_WIKI) {
+       echo "<li id='quickvm_actions_menu'
+                 class='dropdown apt-left apt-nav-item'>
+               <a href='#'
+	          class='dropdown-toggle btn btn-quickvm-home navbar-btn'
+	          data-toggle='dropdown'>Docs <b class='caret'></b></a>
+               <ul class='dropdown-menu'>
+                 <li><a href='$PORTAL_MANUAL' target='_blank'>Manual</a></li>
+                 <li><a href='$PORTAL_WIKI' target='_blank'>Wiki</a></li>
+               </ul>
+             </li>\n";
+   }
+   else {
+       echo "<li class='apt-left'>
+                <a class='btn btn-quickvm-home navbar-btn'
+                   href='$PORTAL_MANUAL' target='_blank'>Docs</a>
+             </li>\n";
+   }
 
    if ($login_user) {
    echo "

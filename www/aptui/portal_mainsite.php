@@ -54,6 +54,7 @@ if ($_SERVER["SERVER_NAME"] == "www.aptlab.net") {
         $APTBASE .= "/" . $matches[1];
     }
     $PORTAL_MANUAL         = "http://docs.aptlab.net";
+    $PORTAL_WIKI           = null;
     $PORTAL_HELPFORUM      = "apt-users";
     $PORTAL_PASSWORD_HELP  = "Aptlab.net or Emulab.net Username";
     $PORTAL_NSFNUMBER      = "1338155";
@@ -86,6 +87,7 @@ elseif ($_SERVER["SERVER_NAME"] == "www.cloudlab.us") {
 	$APTBASE .= "/" . $matches[1];
     }
     $PORTAL_MANUAL       = "http://docs.cloudlab.us";
+    $PORTAL_WIKI         = null;
     $PORTAL_HELPFORUM    = "cloudlab-users";
     $PORTAL_PASSWORD_HELP= "CloudLab.us or Emulab.net Username";
     $PORTAL_NSFNUMBER    = "1419199";
@@ -117,6 +119,7 @@ elseif ($ISALTDOMAIN && $_SERVER["SERVER_NAME"] == "www.phantomnet.org") {
 	$APTBASE .= "/" . $matches[1];
     }
     $PORTAL_MANUAL         = "http://docs.phantomnet.org";
+    $PORTAL_WIKI           = "https://wiki.phantomnet.org/wiki/phantomnet";
     $PORTAL_HELPFORUM      = "phantomnet-users";
     $PORTAL_PASSWORD_HELP  = "PhantomNet.org or Emulab.net Username";
     $PORTAL_NSFNUMBER      = "1305384";
@@ -149,6 +152,7 @@ elseif ($_SERVER["SERVER_NAME"] == "www.powderwireless.net") {
 	$APTBASE .= "/" . $matches[1];
     }
     $PORTAL_MANUAL         = "http://docs.powderwireless.net";
+    $PORTAL_WIKI           = null;
     $PORTAL_HELPFORUM      = "powder-users";
     $PORTAL_PASSWORD_HELP  = "powderwireless.net or emulab.net Username";
     $PORTAL_NSFNUMBER      = false;

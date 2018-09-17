@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,6 +50,7 @@ $WITHPUBLISHING = 0;
 # Other Portal globals. 
 #
 $PORTAL_MANUAL          = "http://docs.emulab.net";
+$PORTAL_WIKI            = "https://gitlab.flux.utah.edu/emulab/emulab-devel/wikis/home";
 $PORTAL_HELPFORUM       = "emulab-users";
 $PORTAL_PASSWORD_HELP   = "Emulab Username or Email";
 $PORTAL_NSFNUMBER       = "1513121";
