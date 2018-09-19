@@ -160,7 +160,16 @@ $(function ()
 		    }
 		    // This is an array of objects.
 		    var array = forecast[type];
+		    // We want the first stime stamp, but there might be
+		    // multiple entries for that time stamp, so scan foward
+		    // to find the last one.
 		    var data  = array[0];
+		    for (var i in array) {
+			var datum = array[i];
+			if (datum.t == data.t) {
+			    data = datum;
+			}
+		    }
 		    var free  = parseInt(data.free) + parseInt(data.held);
 
 		    html +=
