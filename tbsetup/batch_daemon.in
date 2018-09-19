@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -511,8 +511,13 @@ sub startexp($)
     system("$swapexp -b -s in $pid $eid");
     $exit_status = $? >> 8;
     $running     = 1;
-    if ($exit_status) {
+    if ($?) {
 	$running = 0;
+	if ($? >> 8 == 0) {
+	    # Some other error, say signaled. Bad.
+	    print "$swapexp exit with a signal: $exit_status\n";
+	    $exit_status = -1;
+	}
     }
     
     #
