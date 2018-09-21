@@ -717,14 +717,14 @@ sub SliceMaxExtension($)
     
     if (Reservation->MaxSliceExtension($slice, \$max, \$reserror, 3600)) {
 	Reservation->FlushAll();
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $reserror);
+	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, $reserror);
     }
     Reservation->FlushAll();
     my $blob = {"maxextension" => TBDateStringGMT($max)};
 
     my $project = Project->Lookup($experiment->pid());
     if (!defined($project)) {
-	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Cannot find project for experiment");
     }
 
