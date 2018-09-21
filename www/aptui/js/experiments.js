@@ -35,6 +35,7 @@ $(function ()
 	    var html = template({"experiments" : json.value,
 				 "showCreator" : true,
 				 "showProject" : true,
+				 "searchUUID"  : true,
 				});
 	    $('#experiments_content').html(html);
 	    InitTable();
@@ -107,7 +108,7 @@ $(function ()
 	    search_timeout =
 		window.setTimeout(function() {
 		    var filters = $.tablesorter.getFilters(table);
-		    filters[12] = userInput;
+		    filters[13] = userInput;
 		    //console.info("Search", filters);
 		    $.tablesorter.setFilters(table, filters, true);
 		}, 500);
@@ -167,6 +168,19 @@ $(function ()
 	else {
 	    table.find('th:eq(0)').trigger('sort');
 	}
+
+	// Bind search for IP.
+	$('#experiment-search-ip button').click(function (event) {
+	    event.preventDefault();
+	    var ip = $.trim($('#experiment-search-ip input').val());
+	    var rx = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+	    if (rx.test(ip)) {
+		SearchForIP(ip, table);
+	    }
+	    else {
+		alert("Invalid IP address");
+	    }
+	});
     }
 
     function SetFilters(table)
@@ -175,8 +189,8 @@ $(function ()
 	var filters = $.tablesorter.getFilters(table);
 	// The "any" filter needs a value or everything disappears.
 	// If there is a term in the search box, it will have a value.
-	if (filters[12] === undefined) {
-	    filters[12] = "";
+	if (filters[13] === undefined) {
+	    filters[13] = "";
 	}
 	if ($('#radio-buttons [data-id="#extending"]').is(":checked")) {
 	    tmp.push("extending");
@@ -192,14 +206,48 @@ $(function ()
 	}
 	if (tmp.length) {
 	    // regex search, plain | does not work.
-	    filters[11] = "/" + tmp.join("|") + "/";
+	    filters[12] = "/" + tmp.join("|") + "/";
 	}
 	else {
 	    // Hmm, an empty string will get everything.
-	    filters[11] = "";
+	    filters[12] = "";
 	}
 	//console.info("SetFilters", filters);
 	$.tablesorter.setFilters(table, filters, true);
+    }
+
+    /*
+     * Send the IP to the backend for search, and then update the filters
+     * if we get back a match, so the user sees just the experiment.
+     */
+    function SearchForIP(ip, table)
+    {
+	var filters = $.tablesorter.getFilters(table);
+	
+	var callback = function (json) {
+	    console.info(json);
+	    if (json.code) {
+		console.info(json.value);
+		sup.HideWaitWait(function () {
+		    sup.SpitOops("oops", "Could not find an experiment using " +
+				 "this IP address");
+		});
+		return;
+	    }
+	    sup.HideWaitWait();
+	    filters[12] = "";
+	    filters[13] = json.value;
+	    $.tablesorter.setFilters(table, filters, true);
+	}
+	// Clear this, we search for everything.
+	$("#experiments_search").val("");
+	filters[12] = "";
+	filters[13] = "";
+	$.tablesorter.setFilters(table, filters, true);
+	
+	sup.ShowWaitWait();
+	sup.CallServerMethod(null, "experiments", "SearchIP",
+			     {"ip" : ip}, callback);
     }
     
     $(document).ready(initialize);

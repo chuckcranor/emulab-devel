@@ -142,7 +142,8 @@ $(function ()
 		$('#experiments_content')
 		    .html(template({"experiments" : json.value.user_experiments,
 				    "showCreator" : false,
-				    "showProject" : true}));
+				    "showProject" : true,
+				    "searchUUID"  : false}));
 	    }
 	    if (json.value.project_experiments.length != 0) {
 		$('#project_experiments_content')
@@ -151,7 +152,8 @@ $(function ()
 			  template({"experiments" :
 				        json.value.project_experiments,
 				    "showCreator" : true,
-				    "showProject" : true}) +
+				    "showProject" : true,
+				    "searchUUID"  : false}) +
 			  "</div>");
 	    }
 	    // Format dates with moment before display.

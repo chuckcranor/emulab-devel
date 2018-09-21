@@ -47,8 +47,24 @@
 	      title='Expiration dates in blue mean the experiment has a
 		     user lockdown, dates in red are an admin lockdown'></span>
       </center>
-      <input class='form-control search' type='search' data-column='all'
-	     id='experiments_search' placeholder='Search'>
+      <div class="form-group row">
+	<div class="col-xs-6">
+	  <input class='form-control search'
+		 type='search' data-column='all'
+		 id='experiments_search' placeholder='Search'>
+	</div>
+	<div class="col-xs-6">
+	  <div class="input-group" id="experiment-search-ip">
+	    <input class='form-control col-xs-6'
+		   type='search'
+		   placeholder='IP Address'>
+	    <span class="input-group-btn">
+              <button class="btn btn-default"
+		      type="button">Search</button>
+	    </span>
+	  </div>
+	</div>
+      </div>
       <div id="experiments_content"></div>
     </div>
   </div>

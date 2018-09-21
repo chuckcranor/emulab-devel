@@ -1,0 +1,305 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Date::Parse;
+
+#
+# Convert an NS file into rspec using geni-lib and some lxml parsing.
+#
+sub usage()
+{
+    print STDERR "Usage: searchip [-h [-s min] [-e max]] ipv4\n";
+    print STDERR "Options:\n";
+    print STDERR "  -h     - Search historical instances instead of current.\n";
+    print STDERR "  -s     - Start search timestamp for -h option.\n";
+    print STDERR "  -e     - End search timestamp for -h option.\n";
+    exit(-1);
+}
+my $optlist    = "dt:hs:e:";
+my $debug      = 0;
+my $historical = 0;
+my $webtask_id;
+my $webtask;
+my $start;
+my $end;
+
+#
+# Configure variables
+#
+my $TB         = "@prefix@";
+my $TBOPS      = "@TBOPSEMAIL@";
+
+# Protos
+sub fatal($);
+sub SearchCurrent();
+sub SearchManifest($);
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+# Locals
+my $found;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/sbin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use emdb;
+use WebTask;
+use APT_Instance;
+use APT_Aggregate;
+use GeniXML;
+
+#
+# Parse command arguments. Once we return from getopts, all that should
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"h"})) {
+    $historical = 1;
+}
+if (defined($options{"s"})) {
+    $start = $options{"s"};
+    if ($start !~ /^\d+$/) {
+	$start = str2time($start);
+	if (!$start) {
+	    fatal("Invalid start time");
+	}
+    }
+}
+if (defined($options{"e"})) {
+    $end = $options{"e"};
+    if ($end !~ /^\d+$/) {
+	$end = str2time($end);
+	if (!$end) {
+	    fatal("Invalid end time");
+	}
+    }
+}
+if (defined($options{"t"})) {
+    $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not lookup webtask");
+    }
+    $webtask->AutoStore(1);
+}
+usage()
+    if (!@ARGV);
+
+my $IP = shift(@ARGV);
+if ($IP !~ /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/)  {
+    fatal("Invalid IP format");
+}
+
+sub SearchCurrent()
+{
+    my $found;
+    
+    #
+    # Look up all instances and get the manifest.
+    #
+    my $query_result =
+	DBQueryFatal("select uuid from apt_instances");
+    
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $instance = APT_Instance->Lookup($uuid);
+	next
+	    if (!defined($instance));
+
+	foreach my $sliver ($instance->AggregateList()) {
+	    next
+		if (!$sliver->manifest());
+	    my $manifest = GeniXML::Parse($sliver->manifest());
+	    if (! defined($manifest)) {
+		print STDERR "Could not parse manifest for $sliver\n";
+		next;
+	    }
+	    if (SearchManifest($manifest)) {
+		$found = $sliver;
+		last;
+	    }
+	}
+	last
+	    if ($found);
+    }
+    if (!$found) {
+	print "No matching instance for IP\n";
+	if (defined($webtask)) {
+	    $webtask->output("No matching instance for IP");
+	    $webtask->Exited(1);
+	}
+	exit(1);
+    }
+    my $instance      = $found->instance();
+    my $pid           = $instance->pid();
+    my $name          = $instance->name();
+    my $aggregate_urn = $found->aggregate_urn();
+    my $aggregate     = APT_Aggregate->Lookup($aggregate_urn);
+    if (!defined($aggregate)) {
+	fatal("Cannot lookup aggregate object for $aggregate_urn");
+    }
+    my $cluster_name  = $aggregate->name();
+    
+    my $mesg = "Found IP: $pid/$name - $cluster_name";
+    print $mesg . "\n";
+    if (defined($webtask)) {
+	$webtask->instance($instance->uuid);
+	$webtask->aggregate_urn($aggregate_urn);
+	$webtask->output($mesg);
+	$webtask->Exited(0);
+    }
+    exit(0);
+}
+
+sub SearchHistory()
+{
+    my @result = ();
+    my %dups   = ();
+    my $minmax = "";
+
+    if (defined($start)) {
+	$minmax = "(UNIX_TIMESTAMP(h.created) > $start) and ";
+    }
+    if (defined($end)) {
+	$minmax .= "(UNIX_TIMESTAMP(h.destroyed) < $end) and ";
+    }
+    
+    my $query_result =
+	DBQueryFatal("select h.uuid,ah.aggregate_urn,ah.manifest from ".
+		     "  apt_instance_history as h ".
+		     "left join apt_instance_aggregate_history as ah on ".
+		     "  ah.uuid=h.uuid ".
+		     "where $minmax ah.manifest like '%${IP}%'");
+    
+    while (my ($uuid,$aggregate_urn,$manifest) =
+	   $query_result->fetchrow_array()) {
+
+	# Watch for dups.
+	if (exists($dups{$uuid})) {
+	    next;
+	}
+	$dups{$uuid} = 1;
+	
+	my $manifest = GeniXML::Parse($manifest);
+	if (! defined($manifest)) {
+	    print STDERR "Could not parse manifest for $uuid,$aggregate_urn\n";
+	    next;
+	}
+	if (SearchManifest($manifest)) {
+	    my $history_result =
+		DBQueryFatal("select pid,name from apt_instance_history ".
+			     "where uuid='$uuid'");
+	    next
+		if (!$query_result->numrows);
+	    my ($pid,$name) = $query_result->fetchrow_array();
+	    
+	    my $aggregate   = APT_Aggregate->Lookup($aggregate_urn);
+	    if (!defined($aggregate)) {
+		fatal("Cannot lookup aggregate object for $aggregate_urn");
+	    }
+	    my $cluster_name  = $aggregate->name();
+    
+	    my $mesg = "Found IP: $pid/$name - $cluster_name - $uuid";
+	    print $mesg . "\n";
+	    push(@result, $uuid);
+	}
+    }
+    if (defined($webtask)) {
+	$webtask->instancelist(\@result);
+	$webtask->Exited(0);
+    }
+    exit(0);
+}
+
+sub SearchManifest($)
+{
+    my ($manifest) = @_;
+    
+    #
+    # Check the routable pool bindings first
+    #
+    my $pools = GeniXML::GetAddressPools($manifest);
+    foreach my $pool (@{$pools}) {
+	foreach my $ipref (@{$pool->{'list'}}) {
+	    if ($ipref->{'ipv4'} eq $IP) {
+		return 1;
+	    }
+	}
+    }
+    foreach my $node (GeniXML::FindNodes("n:node",
+					 $manifest)->get_nodelist(),
+		      GeniXML::FindNodesNS("n:vhost",
+				   $manifest,
+				   $GeniXML::EMULAB_NS)->get_nodelist()) {
+
+	my $host = FindFirst("n:host", $node);
+	next
+	    if (!defined($host));
+	my $ipv4 = GetText("ipv4", $host);
+	next
+	    if (!defined($ipv4));
+	
+	if ($ipv4 eq $IP) {
+	    return 1;
+	}
+    }
+    return 0;
+}
+if ($historical) {
+    SearchHistory();
+}
+else {
+    SearchCurrent();
+}
+exit(0);
+
+sub fatal($) {
+    my ($mesg) = $_[0];
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(-1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+
+    exit(-1);
+}

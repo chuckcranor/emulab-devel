@@ -398,8 +398,15 @@ $routing = array("geni-login" =>
 			      "guest"   => false,
 			      "methods" => array("ExperimentList" =>
                                                      "Do_ExperimentList",
+                                                 "SearchIP" =>
+                                                     "Do_SearchIP",
                                                  "ExperimentErrors" =>
                                                      "Do_ExperimentErrors")),
+		 "activity" =>
+			array("file"    => "activity.ajax",
+			      "guest"   => false,
+			      "methods" => array("Search" =>
+                                                     "Do_Search")),
 		 "approve-projects" =>
 			array("file"    => "approve-projects.ajax",
 			      "guest"   => false,

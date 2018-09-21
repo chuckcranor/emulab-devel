@@ -24,6 +24,9 @@
 	<th>VMs</th>
 	<th class="sortInitialOrder-desc">Created</th>
 	<th>Expires</th>
+	<% if (searchUUID) { %>
+	  <th class="hidden-column">UUID</th>
+	<% } %>
 	<th class="hidden-column">Filters</th>
       </tr>
     </thead>
@@ -41,7 +44,7 @@
 	    <td><%= value.creator %></td>
 	  <% } %>
 	  <% if (showProject) { %>
-	    <td><%= value.project %></td>
+            <td><%= value.project %></a></td>
 	  <% } %>
 	  <td><%- value.status %></td>
 	  <td><%- value.cluster %></td>
@@ -49,7 +52,7 @@
 	  <td><%- value.phours %></td>
 	  <td><%- value.vcount %></td>
 	  <td class="format-date nowrap">
-	    <%- value.started %></td>
+	    <%- value.created %></td>
 	  <td class="format-date nowrap"
 	      <% if (value.lockdown) { %>
 		<% if (_.has(value, "admin_lockdown") && value.admin_lockdown){ %>
@@ -59,6 +62,9 @@
 		<% } %>
 	      <% } %>
 	  ><%- value.expires %></td>
+	  <% if (searchUUID) { %>
+	    <td class="hidden-column"><%- value.uuid %></td>
+	  <% } %>
 	  <td class="hidden-column">
 	    <% if (_.has(value, "filter")) { %>
 	      <%- value.filter %>
