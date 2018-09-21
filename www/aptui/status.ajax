@@ -277,7 +277,7 @@ function Do_TerminateInstance()
     # that gets returned, that is not also emailed by the script. So just
     # use the ignore option.
     $retval = SUEXEC("nobody", "nobody",
-                     "webmanage_instance -t $webtask_id terminate $uuid",
+                     "webmanage_instance -t $webtask_id -- terminate $uuid",
                      SUEXEC_ACTION_IGNORE);
     if ($retval) {
         $webtask->Refresh();
@@ -1866,6 +1866,73 @@ function Do_GetHealthStatus()
     $PORTAL_HEALTH = 1;
     CalculateAggregateStatus($amlist, $fedlist, $status);
     SPITAJAX_RESPONSE($status);
+}
+
+function Do_DestroyExperiment()
+{
+    global $instance, $creator, $this_user;
+    global $ajax_args;
+    $this_uid = $this_user->uid();
+    $options  = "";
+
+    # Really, only admins can do this.
+    if (StatusSetupAjax(0)) {
+	goto bad;
+    }
+    $uuid = $instance->uuid();
+    $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
+    if (!slice) {
+	SPITAJAX_ERROR(1, "no slice for instance");
+	goto bad;
+    }
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(1, "You do not have permission to do this.");
+	goto bad;
+    }
+    if (isset($ajax_args["reason"]) && $ajax_args["reason"] != "") {
+        $reason = $ajax_args["reason"];
+        
+        if (!TBvalid_fulltext($reason)) {
+	    SPITAJAX_ERROR(1, "Illegal characters in message");
+	    goto bad;
+        }
+        $filename = tempnam("/tmp", "reason");
+        $fp = fopen($filename, "w");
+        fwrite($fp, $reason);
+        fclose($fp);
+        chmod($filename, 0666);        
+        $options = "-f $filename ";
+    }
+    # Freeze user after experiment terminated.
+    if (isset($ajax_args["freeze"]) && $ajax_args["freeze"]) {
+        $options .= "-F";
+    }
+    $webtask = WebTask::CreateAnonymous();
+    $retval = SUEXEC($this_uid, "nobody",
+		     "webmanage_instance -t " . $webtask->task_id() . " -- ".
+                     "  destroy $uuid $options ",
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+    if (isset($filename)) {
+        unlink($filename);
+    }
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error");
+        }
+        else {
+            # Need to pass exitcode through on this one.
+            SPITAJAX_ERROR($webtask->exitcode(), $webtask->output());
+        }
+        $webtask->Delete();
+        return;
+    }
+    $webtask->Delete();
+    SPITAJAX_RESPONSE("Success");
+    return;
+bad:
+    sleep(1);
 }
 
 # Local Variables:

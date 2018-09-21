@@ -1,0 +1,38 @@
+<!-- This is the terminate modal -->
+<div id='destroy-experiment-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class="modal-header">
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<span class="text-center">
+	  <h4>Terminate experiment with cause</h4></span>
+      </div>
+      <div class='modal-body'>
+        <p>
+	  Are you sure you want to terminate this experiment and
+	  optionally freeze the experimentor? Please provide a
+	  reason below.
+	</p>
+	<center>
+	  <div>
+	    <textarea id='destroy-experiment-reason'
+		      class='form-control' rows=5></textarea>
+	  </div>
+	  <input type=checkbox id='freeze-user-checkbox' value=yes>
+	  Freeze User?
+	  <div style="margin-top: 10px;">
+            <button class='btn btn-primary'
+		    style="margin-right: 10px;"
+		    data-dismiss="modal">Cancel</button>
+            <button class='btn btn-danger'
+		    id='destroy-experiment-confirm'
+                    type='submit' name='destroy'>Terminate</button>
+	  </div>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+
+

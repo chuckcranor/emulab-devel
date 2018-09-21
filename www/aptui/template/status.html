@@ -197,6 +197,18 @@ pre {
 	       target='_blank'
                type='button'>Stitcher</a>
 	  </div>
+	  <% if (isadmin) { %>
+	    <div class='pull-left'>
+	      <button class='btn btn-xs btn-danger' disabled
+		      style='margin-left: 10px;'
+		      style='margin-right: 10px;'
+		      id='destroy-experiment-button' type=button
+		      data-toggle='popover'
+		      data-content='Terminate an experiment with cause
+				    and optionally freeze the user account.'>
+ 		Destroy</button>
+	  <% } %>
+	  </div>
 	  <div class='pull-right'>
 	    <% if (registered && !isfadmin) { %>
 	      <span>
@@ -1408,5 +1420,6 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
   <div id='oneonly_div'></div>
   <div id='approval_div'></div>
   <div id='linktest_div'></div>
+  <div id='destroy_div'></div>
 </div>
 

@@ -315,7 +315,10 @@ if (isset($this_user)) {
     echo "</script>\n";
 }
 
-AddTemplateList(array("status", "waitwait-modal", "oops-modal", "register-modal", "terminate-modal", "oneonly-modal", "approval-modal", "linktest-modal"));
+AddTemplateList(array("status", "waitwait-modal", "oops-modal",
+                      "register-modal", "terminate-modal", "oneonly-modal",
+                      "approval-modal", "linktest-modal",
+                      "destroy-experiment"));
 AddTemplateKey("linktest-md", "template/linktest.md");
 SPITFOOTER();
 ?>

@@ -1520,12 +1520,22 @@ sub GetAddressPools($)
 	my $count = GetText("count", $pool);
 	my $type = GetText("type", $pool);
 	my $cmurn = GetText("component_manager_id", $pool);
+	my $list = [];
+
+	my @ips = FindNodesNS("n:ipv4", $pool,
+			      $EMULAB_NS)->get_nodelist();
+	foreach my $ipref (@ips) {
+	    my $ip = GetText("address", $ipref);
+	    my $mask = GetText("mask", $ipref);
+	    push(@{$list}, {"ipv4" => $ip, "mask" => $mask});
+	}
 	push(@{ $result },
 	     {
 		 "client_id" => $client_id,
 		 "count" => $count,
 		 "type" => $type,
-		 "cmurn" => $cmurn
+		 "cmurn" => $cmurn,
+		 "list" => $list,
 	     });
     }
     return $result;

@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['status', 'waitwait-modal', 'oops-modal', 'register-modal', 'terminate-modal', 'oneonly-modal', 'approval-modal', 'linktest-modal', 'linktest-md']);
+    var templates = APT_OPTIONS.fetchTemplateList(['status', 'waitwait-modal', 'oops-modal', 'register-modal', 'terminate-modal', 'oneonly-modal', 'approval-modal', 'linktest-modal', 'linktest-md', "destroy-experiment"]);
 
     var statusString = templates['status'];
     var waitwaitString = templates['waitwait-modal'];
@@ -12,6 +12,7 @@ $(function ()
     var oneonlyString = templates['oneonly-modal'];
     var approvalString = templates['approval-modal'];
     var linktestString = templates['linktest-modal'];
+    var destroyString  = templates['destroy-experiment'];
 
     var expinfo     = null;
     var nodecount   = 0;
@@ -130,6 +131,7 @@ $(function ()
 	$('#oneonly_div').html(oneonlyString);
 	$('#approval_div').html(approvalString);
 	$('#linktest_div').html(linktestString);
+	$('#destroy_div').html(destroyString);
 	
 	// Not allowed to copy repobased profiles.
 	if (expinfo.repourl) {
@@ -262,6 +264,12 @@ $(function ()
 						   lockdown_override});
 	    xmlthing.done(callback);
 	});
+	// Destroy an experiment.
+	$('#destroy-experiment-button').click(function (event) {
+	    event.preventDefault();
+	    DestroyExperiment();
+	});
+	
 	// Handler for select/deselect all rows in the list view.
 	$('#select-all').change(function () {
 	    if ($(this).prop("checked")) {
@@ -618,6 +626,7 @@ $(function ()
 	var reloadtopo;
 	var extend;
 	var snapshot;
+	var destroy;
 
 	switch (status)
 	{
@@ -628,21 +637,23 @@ $(function ()
 	    case 'terminated':
 	    case 'unknown':
 	        terminate = refresh = reloadtopo = extend = snapshot = 0;
+	        destroy = 0;
   	        break;
 
 	    case 'provisioned':
 	    case 'deferred':
-	        refresh = reloadtopo = extend = snapshot = 0;
+	        refresh = reloadtopo = extend = snapshot = destroy = 0;
   	        terminate = 1;
   	        break;
 	    
 	    case 'ready':
 	        terminate = refresh = reloadtopo = extend = snapshot = 1;
+	        destroy = 1;
   	        break;
 
 	    case 'failed':
 	    case 'imaging-failed':
-	        refresh = reloadtopo = terminate = 1;
+	        refresh = reloadtopo = terminate = destroy = 1;
 	        extend = snapshot = 0;
   	        break;
 	}
@@ -656,6 +667,7 @@ $(function ()
 	ButtonState('reloadtopo', reloadtopo);
 	ButtonState('extend', extend);
 	ButtonState('snapshot', snapshot);
+	ButtonState('destroy', destroy);
 	ToggleLinktestButtons(status);
     }
     function EnableButton(button)
@@ -675,6 +687,8 @@ $(function ()
 		enable = 0;
 	    }
 	}
+	else if (button == "destroy")
+	    button = "#destroy-experiment-button";
 	else if (button == "extend")
 	    button = "#extend_button";
 	else if (button == "refresh")
@@ -3433,6 +3447,50 @@ $(function ()
 		 $('.exp-scheduled').addClass("hidden");
 		 $('.exp-running').removeClass("hidden");
 	     });
+    }
+
+    /*
+     * Terminate with cause and optionally freeze user.
+     */
+    function DestroyExperiment()
+    {
+	// Handler for the Snapshot confirm button.
+	$('#destroy-experiment-confirm')
+	    .bind("click.destroy", function (event) {
+		event.preventDefault();
+		var reason = $('#destroy-experiment-reason').val();
+		var freeze = $('#freeze-user-checkbox').is(':checked');
+		var args   = {"uuid" : uuid};
+		if (reason != "") {
+		    args["reason"] = reason;
+		}
+		if (freeze) {
+		    args["freeze"] = true;
+		}
+		sup.HideModal("#destroy-experiment-modal", function () {
+		    sup.ShowWaitWait();
+		    sup.CallServerMethod(null, "status", "Destroy", args,
+			 function(json) {
+			     console.info("destroy", json);
+			     if (json.code) {
+				 sup.HideWaitWait(function () {
+				     sup.SpitOops("oops",
+				      "Could not terminate experiment: " +
+						  json.value);
+				 });
+				 return;
+			     }
+			     sup.HideWaitWait();
+			 });
+		});
+	    });
+	
+	// Handler for hide modal to unbind the click handler.
+	$('#destroy-experiment-modal').on('hidden.bs.modal', function (event) {
+	    $(this).unbind(event);
+	    $('#destroy-experiment-confirm').unbind("click.destroy");
+	});
+	sup.ShowModal("#destroy-experiment-modal");
     }
 
     // Helper.
