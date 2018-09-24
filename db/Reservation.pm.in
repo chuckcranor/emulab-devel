@@ -828,8 +828,15 @@ sub IsFeasible($$;$$$$$)
 	push( @$forecast, \%origin );
     }
 
-    my @events = sort { $a->{'t'} <=> $b->{'t'} } @timeline;
-    
+    my @events = sort {
+	if ($a->{'t'} == $b->{'t'}) {
+	    return $a->{'reserved'} <=> $b->{'reserved'};
+	}
+	else {
+	    return $a->{'t'} <=> $b->{'t'};
+	}
+    } @timeline;
+
     foreach my $event ( @events ) {
 	my $pid = $event->{'pid'};
 
