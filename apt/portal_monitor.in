@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -195,8 +195,9 @@ sub CheckAggregates()
 	# Decide if aggregate should be marked as down. 
 	#
 	my $status;
-	
-	if (!defined($aggregate->last_contact())) {
+
+	# Note that this field is not defined. I think I intended to.
+	if (1 || !defined($aggregate->last_contact())) {
 	    $status = "down";
 	}
 	else {
@@ -460,9 +461,89 @@ sub CheckAggregates()
     return 0;
 }
 
-if ($oneshot) {
-    CheckAggregates();
-    exit(0);
+#
+# Send email about down clusters. We will send this email every time
+# monitor is restarted, but thats okay.
+#
+my %lastmail  = ();
+my $lastdaily = 0;
+
+sub SendEmail()
+{
+    my %downmail  = ();
+    my %upmail    = ();
+    my $dailymail = 0;
+
+    #
+    # We send a summary email once every 24 hours. Maybe do this at a
+    # set tim of day?
+    #
+    if (time() - $lastdaily >= (24 * 3600)) {
+	$dailymail = 1;
+	$lastdaily = time();
+    }
+    my $query_result =
+	DBQueryWarn("select urn from apt_aggregates ".
+		    "where nomonitor=0");
+    return 0
+	if (!$query_result->numrows);
+
+    while (my ($urn) = $query_result->fetchrow_array()) {
+	my $aggregate = APT_Aggregate->Lookup($urn);
+	if (!defined($aggregate)) {
+	    print STDERR "Could not lookup aggregate: $urn\n";
+	    next;
+	}
+	#
+	# No point in doing this for the local cluster. The local admin
+	# probably knows by the time this message turns up.
+	#
+	next
+	    if ($aggregate->IsLocalCluster());
+	
+	if ($aggregate->status() eq "down") {
+	    my $last = str2time($aggregate->last_success());
+	    
+	    #
+	    # At least 10 minutes (which is two checks above).
+	    #
+	    next
+		if (time() - $last < 600);
+
+	    # Only once per day or once per event.
+	    next
+		if (exists($lastmail{$urn}) && !$dailymail);
+
+	    $downmail{$urn} = $aggregate;
+	}
+	elsif ($aggregate->status() eq "up") {
+	    if (exists($lastmail{$urn})) {
+		$upmail{$urn} = $aggregate;
+		delete($lastmail{$urn});
+	    }
+	}
+    }
+    if (keys(%upmail)) {
+	my $subject = "Portal Aggregates are alive";
+	my $body = "${subject}:\n\n";
+
+	foreach my $aggregate (values(%upmail)) {
+	    $body .= $aggregate->name() . ": was offline since ".
+		TBDateStringLocal($aggregate->last_success()) . "\n";
+	}
+	SENDMAIL($TBOPS, $subject, $body, $TBOPS);
+    }
+    if (keys(%downmail)) {
+	my $subject = "Portal Aggregates are " .
+	    ($dailymail ? "still " : "") . "offline";
+	my $body = "${subject}:\n\n";
+
+	foreach my $aggregate (values(%downmail)) {
+	    $body .= $aggregate->name() . ": is offline since ".
+		TBDateStringLocal($aggregate->last_success()) . "\n";
+	}
+	SENDMAIL($TBOPS, $subject, $body, $TBOPS);
+    }
 }
 
 while (1) {
@@ -474,6 +555,7 @@ while (1) {
 	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
 
     CheckAggregates();
+    SendEmail();
 
     exit(0)
 	if ($oneshot);
