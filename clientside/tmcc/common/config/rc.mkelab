@@ -2200,16 +2200,16 @@ sub SetupBossNode($)
     }
     mysystem("ln -s $TBDIR/data/mysql /var/db/mysql");
 
-    print "Copying over initial dbstate from /proj\n";
     my $expdir = "/proj/$pid/exp/$eid";
     my $stuffdir = "$TBDIR/stuff";
     RecreateDir("$stuffdir", 1);
-    mysystem("cp -fp $expdir/dbstate.tar.gz  $stuffdir");
-    mysystem("cp -fp $expdir/outer_db_schema $stuffdir");
     mysystem("cp -fp $expdir/users.tar.gz $stuffdir")
 	if (-e "$expdir/users.tar.gz");
 
-    if (!$emulabconfig{"CONFIG_NOSETUP"}) {
+    if (!$emulabconfig{"CONFIG_NODBINIT"}) {
+    	print "Copying over initial dbstate from /proj\n";
+	mysystem("cp -fp $expdir/dbstate.tar.gz  $stuffdir");
+	mysystem("cp -fp $expdir/outer_db_schema $stuffdir");
 	print "Check for db schema mismatch before we go any further\n";
 	my $testbed_srcdir = "$TBDIR/src/testbed";
 	my $schemadiff     = "$testbed_srcdir/utils/schemadiff";
