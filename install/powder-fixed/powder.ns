@@ -27,7 +27,7 @@ tb-set-elabinelab-attribute NAMED_FORWARDERS "155.98.32.70"
 #tb-set-elabinelab-attribute NAMED_ALSONOTIFY 155.98.32.70
 
 # Turn this on to federate with the MotherShip.
-#tb-set-elabinelab-attribute CONFIG_FEDERATED 1
+tb-set-elabinelab-attribute CLOUDLAB_FEDERATED 1
 
 # Reset to admin email later.
 tb-set-elabinelab-attribute TARGETSYS_TBOPS    "stoller@flux.utah.edu"
