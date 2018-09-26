@@ -4471,7 +4471,7 @@ sub DoDestroy()
 		      "Your experiment has been terminated with cause!",
 		      $message,
 		      $brand->OpsEmailAddress(),
-		      "CC: " . $project->GetLeader()->email(),
+		      "CC: " . $project->GetLeader()->email() . "\n" .
 		      "BCC: " . $brand->OpsEmailAddress());
 		      
     # This will send email if it fails.
