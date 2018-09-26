@@ -1,3 +1,4 @@
+
 #
 # This is the powder-fixed specific parts of target system setup
 #
@@ -241,17 +242,22 @@ sub Install($$$)
 	Phase "nat", "Updating NAT configuration", sub {
 	    my $bossip = $configvars{"TARGETSYS_BOSSIP"};
 	    my $opsip  = $configvars{"TARGETSYS_OPSIP"};
+	    my $mask   = $configvars{"TARGETSYS_NETMASK"};
 	    
 	    Phase "delete", "Deleting old configuration", sub {
 		DeleteFileFatal($NATCONF);
 	    };
 	    Phase "create", "Creating new configuration", sub {
 		CreateFileFatal($NATCONF,
-				"# Packet normalization",
-				"scrub in all",
-				"",
-				"# Allow outbound connections from the jail",
-				"nat on xn0 from $opsip to any -> $bossip");
+			"# Packet normalization",
+			"scrub in all",
+			"",
+			"# Exclude the local networks.",
+			"no nat on xn0 from $opsip to ${opsip}/${mask}",
+			"no nat on xn0 from $opsip to ${bossip}/${mask}",
+			"",
+			"# Allow outbound connections from the jail",
+			"nat on xn0 from $opsip to any -> $bossip");
 	    };
 	    Phase "restart", "Restarting NAT", sub {
 		ExecQuietFatal("service pf restart");
@@ -314,7 +320,9 @@ sub Install($$$)
 		 "route_outerboss=\"155.98.32.70 155.98.36.1\"");
 	    push(@strings,
 		 "static_routes=\"\$static_routes outerboss outerboss\"");
-	    
+	    # Nat config.
+	    push(@strings, 
+		 "pf_enable=\"YES\"", "pf_rules=\"/etc/pf.nat\"");
 
 	    #
 	    # Okay, we want to comment out a bunch of stuff.
