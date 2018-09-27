@@ -311,24 +311,26 @@ sub Install($$$)
 	    # Going to lose all static routes below, so add this back.
 	    push(@strings,
 		 "static_routes=\"\$static_routes frisbee vnodes\"");
+	    # Nat config.
+	    push(@strings, 
+		 "pf_enable=\"YES\"", "pf_rules=\"/etc/pf.nat\"");
 
 	    #
 	    # This stuff is for development inside the Mothership.
 	    #
-	    # Outer Emulab control network.
-	    push(@strings,
+	    if (0) {
+		# Outer Emulab control network.
+		push(@strings,
 		 "ifconfig_xn0_alias2=$outerctrl");
-	    # Route to outer boss and outer control networks
-	    push(@strings,
-		 "route_outeremulab=\"-net 155.98.36.0 ".
-		 "-netmask 255.255.252.0 155.98.36.1\"");
-	    push(@strings,
-		 "route_outerboss=\"155.98.32.70 155.98.36.1\"");
-	    push(@strings,
-		 "static_routes=\"\$static_routes outerboss outerboss\"");
-	    # Nat config.
-	    push(@strings, 
-		 "pf_enable=\"YES\"", "pf_rules=\"/etc/pf.nat\"");
+		# Route to outer boss and outer control networks
+		push(@strings,
+		     "route_outeremulab=\"-net 155.98.36.0 ".
+		     "-netmask 255.255.252.0 155.98.36.1\"");
+		push(@strings,
+		     "route_outerboss=\"155.98.32.70 155.98.36.1\"");
+		push(@strings,
+		     "static_routes=\"\$static_routes outerboss outerboss\"");
+	    }
 
 	    #
 	    # Okay, we want to comment out a bunch of stuff.
