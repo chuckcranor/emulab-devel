@@ -29,7 +29,11 @@ my $SQLSTUFF     = "$TOP_SRCDIR/install/$TARGETSYS_DIR/tbdb.sql";
 my %TYPEFILES    = ("nuc8650" =>
 		        "$TOP_SRCDIR/install/$TARGETSYS_DIR/nuc8650.xml",
 		    "iris030" =>
-		        "$TOP_SRCDIR/install/$TARGETSYS_DIR/iris030.xml");
+		    "$TOP_SRCDIR/install/$TARGETSYS_DIR/iris030.xml");
+
+# Placeholder. 
+my %HOSTNAMES = (
+);
 
 sub Install($$$)
 {
@@ -91,6 +95,7 @@ sub Install($$$)
 	    $ENV{"ASSUME_ALWAYS_YES"} = "true";
 	    ExecQuietFatal("pkg install unifi5");
 	};
+	}
 
 	Phase "fstab", "Adding extras to $FSTAB", sub {
 	    DoneIfEdited($FSTAB);
@@ -102,16 +107,17 @@ sub Install($$$)
 	#
 	# Add /etc/hosts entries for the switches. 
 	#
-	Phase "etchosts", "Adding hosts entries for switches", sub {
-	    my @strings = ();
+	if (keys(%HOSTNAMES)) {
+	    Phase "etchosts", "Adding hosts entries for switches", sub {
+		my @strings = ();
 	    
-	    foreach my $switch (keys(%HOSTNAMES)) {
-		my $ip = $HOSTNAMES{$switch};
-		push(@strings, "$ip\t$switch");
-	    }
-	    DoneIfEdited($HOSTS);
-	    AppendToFileFatal($HOSTS, @strings);
-	};
+		foreach my $switch (keys(%HOSTNAMES)) {
+		    my $ip = $HOSTNAMES{$switch};
+		    push(@strings, "$ip\t$switch");
+		}
+		DoneIfEdited($HOSTS);
+		AppendToFileFatal($HOSTS, @strings);
+	    };
 	}
 
 	#
