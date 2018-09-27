@@ -1600,19 +1600,24 @@ sub LoadVirtNodes($)
 	}
 	my $osimage;
 
-	if (defined($vnode->_parent_osinfo())) {
-	    $osimage = $vnode->_parent_osinfo();
-	}
-	elsif ($self->option("jail_osid")) {
-	    $osimage = OSImage->Lookup($self->option("jail_osid"));
+	if (!defined($fixnode->_osinfo())) {
+	    if (defined($vnode->_parent_osinfo())) {
+		$osimage = $vnode->_parent_osinfo();
+	    }
+	    elsif ($self->option("jail_osid")) {
+		$osimage = OSImage->Lookup($self->option("jail_osid"));
+	    }
+	    else {
+		$osimage = $self->nodejailosinfo($vnode);
+	    }
+	    return -1
+		if (!defined($osimage));
+	
+	    $fixnode->_osinfo($osimage);
 	}
 	else {
-	    $osimage = $self->nodejailosinfo($vnode);
+	    $osimage = $fixnode->_osinfo();
 	}
-	return -1
-	    if (!defined($osimage));
-	
-	$fixnode->_osinfo($osimage);
 	# Convert from the name to the local object.
 	$vnode->_fixedvm($fixnode);
 
