@@ -416,7 +416,7 @@ function Do_InfoOrWarn($warning = false)
         if (isset($ajax_args["message"]) && $ajax_args["message"] != "") {
             $message .= $ajax_args["message"] . "\n";
         }
-        $message .= "$url\n";
+        $message .= "\n\n$url\n";
     }
     else {
         $subject = "Reservation Info Request";
