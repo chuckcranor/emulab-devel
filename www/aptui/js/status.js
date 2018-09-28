@@ -356,7 +356,8 @@ $(function ()
 	else if (window.APT_OPTIONS.snapping) {
 	    ShowProgressModal();
 	}
-	else if (instanceStatus == "deferred") {
+	else if (instanceStatus == "deferred" ||
+		 instanceStatus == "pending") {
 	    ShowRspec();
 	}
     }
@@ -464,8 +465,14 @@ $(function ()
 	    if (instanceStatus == 'stitching') {
 		status_html = "stitching";
 	    }
+	    else if (instanceStatus == 'pending') {
+		status_html = "pending";
+		ProgressBarUpdate();
+		status_message = "Some or all aggregates currently unreachable";
+	    }
 	    else if (instanceStatus == 'deferred') {
 		status_html = "scheduled";
+		ProgressBarUpdate();
 		status_message = "Your experiment is scheduled to start later";
 	    }
 	    else if (instanceStatus == 'provisioning') {
@@ -642,6 +649,7 @@ $(function ()
 
 	    case 'provisioned':
 	    case 'deferred':
+	    case 'pending':
 	        refresh = reloadtopo = extend = snapshot = destroy = 0;
   	        terminate = 1;
   	        break;
@@ -3201,7 +3209,8 @@ $(function ()
 	else if (instanceStatus == "provisioned") {
 	    spinwidth = "66";
 	}
-	else if (instanceStatus == "ready" || instanceStatus == "failed") {
+	else if (instanceStatus == "ready" || instanceStatus == "failed" ||
+		 instanceStatus == "pending" || instanceStatus == "deferred") {
 	    spinwidth = null;
 	}
 	if (spinwidth) {
