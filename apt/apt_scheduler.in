@@ -58,7 +58,7 @@ my $CREATESLIVERS    = "$TB/bin/create_slivers";
 my $LOGFILE          = "$TB/log/apt_scheduler.log";
 my $SUDO	     = "/usr/local/bin/sudo";
 my $PROTOUSER	     = "elabman";
-my $SLEEP_INTERVAL   = 15;
+my $SLEEP_INTERVAL   = 120;
 my $DAILY_INTERVAL   = 24 * 3600;
 
 # un-taint path
