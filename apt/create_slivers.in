@@ -220,6 +220,7 @@ if (!@aggregate_list) {
     #
     if ($instance->status() eq "created") {
 	$instance->SetStatus("pending");
+	$instance->Defer();
     }
     $genislice->UnLock();
     exit(0);
