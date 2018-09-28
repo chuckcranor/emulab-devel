@@ -150,7 +150,9 @@ my $instance = APT_Instance->Lookup($ARGV[0]);
 if (!defined($instance)) {
     fatal("No such instance");
 }
-my $genislice = $instance->GetGeniSlice();
+my $webtask     = $instance->webtask();
+my $webtask_id  = $webtask->task_id();
+my $genislice   = $instance->GetGeniSlice();
 if (!defined($genislice)) {
     fatal("Could not get genislice for $instance\n");
 }
@@ -169,28 +171,56 @@ else {
 # that is already being worked on.
 #
 foreach my $agg ($instance->AggregateList()) {
+    my $aptagg = $agg->GetAptAggregate();
+    
     next
 	if (! ($agg->status() eq "created" || $agg->status() eq "deferred"));
 
-    # Coming from create_instance.
-    if ($agg->status() eq "created") {
-	push(@aggregate_list, $agg);
-	next;
-    }
     #
-    # See if the aggregate is back online, lets not go to a ton of
-    # trouble if the aggregate is still dead.
+    # See if the aggregate is online, lets not go to a ton of trouble
+    # if the aggregate is dead.
     #
-    if ($agg->GetAptAggregate()->CheckStatus(\$errmsg)) {
+    if ($aptagg->CheckStatus(\$errmsg)) {
 	print STDERR "$errmsg\n";
+	#
+	# If the cluster is not deferrable, then its an error and the
+	# instance has failed.
+	#
+	if (!$aptagg->deferrable()) {
+	    $instance->SetStatus("failed");
+
+	    if (defined($webtask)) {
+		$webtask->output($errmsg);
+		$webtask->Exited(1);
+	    }
+	    $instance->RecordError(1, $errmsg);
+	    exit(1);
+	}
+	# Mark as deferred (it might still be "created" if not scheduled).
+	$agg->SetStatus("deferred")
+	    if ($agg->status() eq "created");
 	next;
     }
     push(@aggregate_list, $agg);
-    # We send email when all deferred aggregates are started.
-    $sendemail = 1;
+    #
+    # We send email when all deferred aggregates are started.  Note
+    # that if the status is still "created", we are coming from
+    # create_instance() (not a scheduled experiment), so do not send
+    # email, no need to since the user is looking at the web interface.
+    #
+    $sendemail = 1
+	if ($instance->status() ne "created");
 }
 if (!@aggregate_list) {
     print "No uncreated aggregates to process.\n";
+    #
+    # If not a scheduled experiment, we need to set the instance status
+    # to something that makes sense for the web interface since we were
+    # not able to start anything at all. Later, if we get some started,
+    #
+    if ($instance->status() eq "created") {
+	$instance->SetStatus("pending");
+    }
     $genislice->UnLock();
     exit(0);
 }
@@ -204,8 +234,6 @@ my $slice_urn   = $genislice->urn();
 my $uuid        = $instance->uuid();
 my $project     = $instance->GetProject();
 my $rspecstr    = $instance->rspec();
-my $webtask     = $instance->webtask();
-my $webtask_id  = $webtask->task_id();
 $webtask->AutoStore(1);
 
 #

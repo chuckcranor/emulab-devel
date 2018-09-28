@@ -877,8 +877,7 @@ foreach my $aggregate_urn (@aggregate_urns) {
     # We do not do this if the experiment start is deferred.
     if (!defined($start_at)) {
 	if ($aptaggregate->CheckStatus(\$errmsg)) {
-	    if ($usestitcher || scalar(@aggregate_urns) == 1 ||
-		!$aptaggregate->deferrable()) {
+	    if ($usestitcher || !$aptaggregate->deferrable()) {
 		$slice->Delete();
 		$instance->Delete();
 		UserError($errmsg);
