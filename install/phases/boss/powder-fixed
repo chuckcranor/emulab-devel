@@ -28,6 +28,8 @@ my $RUNCAPTURE   = "$TOP_SRCDIR/install/$TARGETSYS_DIR/run_capture";
 my $SQLSTUFF     = "$TOP_SRCDIR/install/$TARGETSYS_DIR/tbdb.sql";
 my %TYPEFILES    = ("nuc8650" =>
 		        "$TOP_SRCDIR/install/$TARGETSYS_DIR/nuc8650.xml",
+		    "nuc8559" =>
+		        "$TOP_SRCDIR/install/$TARGETSYS_DIR/nuc8650.xml",
 		    "iris030" =>
 		    "$TOP_SRCDIR/install/$TARGETSYS_DIR/iris030.xml");
 
