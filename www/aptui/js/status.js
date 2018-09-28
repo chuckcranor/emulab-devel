@@ -264,10 +264,10 @@ $(function ()
 						   lockdown_override});
 	    xmlthing.done(callback);
 	});
-	// Destroy an experiment.
-	$('#destroy-experiment-button').click(function (event) {
+	// Warn/Kill an experiment.
+	$('#warnkill-experiment-button').click(function (event) {
 	    event.preventDefault();
-	    DestroyExperiment();
+	    WarnExperiment();
 	});
 	
 	// Handler for select/deselect all rows in the list view.
@@ -688,7 +688,7 @@ $(function ()
 	    }
 	}
 	else if (button == "destroy")
-	    button = "#destroy-experiment-button";
+	    button = "#warnkill-experiment-button";
 	else if (button == "extend")
 	    button = "#extend_button";
 	else if (button == "refresh")
@@ -3452,14 +3452,15 @@ $(function ()
     /*
      * Terminate with cause and optionally freeze user.
      */
-    function DestroyExperiment()
+    function WarnExperiment()
     {
 	// Handler for the Snapshot confirm button.
 	$('#destroy-experiment-confirm')
 	    .bind("click.destroy", function (event) {
 		event.preventDefault();
 		var reason = $('#destroy-experiment-reason').val();
-		var freeze = $('#freeze-user-checkbox').is(':checked');
+		var kill   = $('#destroy-terminate-checkbox').is(':checked');
+		var freeze = $('#destroy-freeze-checkbox').is(':checked');
 		var args   = {"uuid" : uuid};
 		if (reason != "") {
 		    args["reason"] = reason;
@@ -3467,15 +3468,18 @@ $(function ()
 		if (freeze) {
 		    args["freeze"] = true;
 		}
+		if (kill) {
+		    args["terminate"] = true;
+		}
 		sup.HideModal("#destroy-experiment-modal", function () {
 		    sup.ShowWaitWait();
-		    sup.CallServerMethod(null, "status", "Destroy", args,
+		    sup.CallServerMethod(null, "status", "Warn", args,
 			 function(json) {
-			     console.info("destroy", json);
+			     console.info("warn/kill", json);
 			     if (json.code) {
 				 sup.HideWaitWait(function () {
 				     sup.SpitOops("oops",
-				      "Could not terminate experiment: " +
+				      "Could not warn/kill experiment: " +
 						  json.value);
 				 });
 				 return;

@@ -61,6 +61,8 @@ sub usage()
     print("Usage: manage_instance idledata instance\n");
     print("Usage: manage_instance openstackstats instance\n");
     print("Usage: manage_instance getmanifests instance\n");
+    print("Usage: manage_instance destroy instance\n");
+    print("Usage: manage_instance warn instance\n");
     print("Usage: manage_instance applyextensionpolicy instance\n");
     exit(-1);
 }
@@ -150,6 +152,7 @@ sub StartMonitor();
 sub StartMonitorInternal(;$);
 sub DoImageTrackerStuff($$$$$$$);
 sub DoDestroy();
+sub DoWarn();
 sub DenyExtensionInternal($);
 sub ExtendInternal($$$$$);
 sub CallMethodOnAggregates($$$@);
@@ -230,6 +233,9 @@ elsif ($action eq "terminate") {
 }
 elsif ($action eq "destroy") {
     DoDestroy()
+}
+elsif ($action eq "warn") {
+    DoWarn()
 }
 elsif ($action eq "schedterminate") {
     DoSchedTerminate()
@@ -4472,6 +4478,226 @@ sub DoDestroy()
 		      $message,
 		      $brand->OpsEmailAddress(),
 		      "CC: " . $project->GetLeader()->email() . "\n" .
+		      "BCC: " . $brand->OpsEmailAddress());
+		      
+    # This will send email if it fails.
+    if ($freeze) {
+	my $creator_uid = $instance->creator();
+	system("$TBACCT -u freeze $creator_uid");
+	if ($?) {
+	    exit($? >> 8);
+	}
+    }
+    exit(0);
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+  done:
+    exit($exitcode);
+}
+
+#
+# Warn the user and the project leader, optionally terminate/freeze.
+#
+sub DoWarn()
+{
+    my $errcode    = 1;
+    my $exitcode   = 1;
+    my $freeze     = 0;
+    my $terminate  = 0;
+    my $errmsg;
+    my $reason;
+    my $logfile;
+    my $brand      = $instance->Brand();
+    my $creator    = $instance->GetGeniUser();
+    my $slice      = $instance->GetGeniSlice();
+    my $name       = $instance->name();
+    my $pid        = $instance->pid();
+    my $project    = $instance->GetProject();
+    my $slice_uuid = $slice->uuid();
+    my $weburl     = $instance->webURL();
+
+    my $optlist = "f:FT";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"F"})) {
+	$freeze = 1;
+    }
+    if (defined($options{"T"})) {
+	$terminate = 1;
+    }
+    if (defined($options{"f"})) {
+	my $filename = $options{"f"};
+	if (! -e $filename) {
+	    fatal("$filename does not exist");
+	}
+	open(MSG, $filename) or
+	    fatal("Could not open $filename");
+	
+	$reason = "";
+	while (<MSG>) {
+	    $reason .= $_;
+	}
+	close(MSG);
+    }
+    if (!$freeze && !$terminate && !$reason) {
+	fatal("Must supply a message!");
+    }
+    if (!$this_user->IsAdmin()) {
+	fatal("Only admins can destroy experiments");
+    }
+    if (defined($reason) &&
+	!TBcheck_dbslot($reason, "default", "fulltext",
+			 TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	$errmsg  = "Illegal characters in your reason";
+	$errcode = 1;
+	goto bad;
+    }
+
+    #
+    # Just a message.
+    #
+    if (!$terminate) {
+	# This will send email if it fails.
+	if ($freeze) {
+	    my $creator_uid = $instance->creator();
+	    system("$TBACCT -u freeze $creator_uid");
+	    if ($?) {
+		fatal("Could not freeze the user. Email not sent");
+	    }
+	}
+	$reason .= "\n\n";
+	if ($freeze) {
+	    $reason .=
+		"Your account has been frozen until this is resolved.\n\n";
+	}
+	$reason .= $weburl . "\n";
+	
+	$brand->SendEmail($creator->email(),
+			  "Your $pid/$name experiment",
+			  $reason,
+			  $brand->OpsEmailAddress(),
+			  "CC: " . $project->GetLeader()->email() . "\n" .
+			  "BCC: " . $brand->OpsEmailAddress());
+
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	exit(0);
+    }
+    if ($instance->admin_lockdown()) {
+	$errmsg  = "Must clear the admin lockdown first.";
+	$errcode = 1;
+	goto bad;
+    }
+    
+    #
+    # Lock the slice in case it is doing something else, like taking
+    # a disk image, since 
+    #
+    if ($slice->Lock()) {
+	$errcode = GENIRESPONSE_BUSY;
+	$errmsg  ="Experiment is busy, cannot lock it. Try again later.";
+	if (defined($webtask)) {
+	    $webtask->output($errmsg);
+	    $webtask->Exited($errcode);
+	}
+	print STDERR "$errmsg\n";
+	exit(1);
+    }
+    
+    # No free time.
+    $instance->Update({"extension_disabled" => 1});
+
+    # Expiration is now.
+    $slice->SetExpiration(time());
+
+    # Now we can clear this.
+    if ($instance->user_lockdown()) {
+	if (DoLockdownInternal("clear", "user", 0, \$errmsg)) {
+	    $slice->UnLock();
+	    $errcode = 1;
+	    goto bad;
+	}
+    }
+
+    # Hurry up the terminate instead of waiting for the daemon to see it.
+    if (!$debug) {
+        $logfile = TBMakeLogname("destroy");
+	
+	if (my $childpid = TBBackGround($logfile)) {
+	    my $status = 0;
+	    #
+	    # Wait a couple of seconds to see if there is going to be an
+	    # immediate error. Then return and let it continue to run. This
+	    # allows the web server to see quick errors. Later errors will
+	    # have to be emailed. 
+	    #
+	    sleep(5);
+	    my $foo = waitpid($childpid, &WNOHANG);
+	    if ($foo) {
+		$status = $? >> 8;
+	    }
+	    exit($status);
+	}
+    }
+    # We pass the lock through.
+    system("$MANAGEINSTANCE " . (defined($webtask) ? "-t $webtask_id " : "").
+	   "  -d -- terminate $uuid -L");
+
+    #
+    # We wait for this to finish since if its the local cluster, we cannot
+    # freeze before termination is complete cause of PROTOGENI_LOCALUSER.
+    # If there is an error terminating (other then busy), we are kinda
+    # screwed.
+    #
+    if ($?) {
+	$slice->UnLock();
+	
+	if ($debug) {
+	    exit ($? >> 8);
+	}
+	if (defined($webtask)) {
+	    $webtask->Refresh();
+	    print STDERR $webtask->output() . "\n";
+	    $exitcode = $webtask->exitcode();
+	}
+	else {
+	    $exitcode = $? >> 8;
+	}
+	SENDMAIL($TBOPS,
+		 "Unable to terminate instance with cause!",
+		 "Pid:    $pid\n".
+		 "Name:   $name\n".
+		 "Slice:  $slice_uuid\n".
+		 "URL:    $weburl\n".
+		 "Reason:\n\n" . (defined($reason) ? $reason : "") . "\n",
+		 $TBOPS, undef, $logfile);
+	unlink($logfile) if (defined($logfile));
+	exit($exitcode);
+    }
+    unlink($logfile) if (defined($logfile));
+
+    my $message = "Your experiment, $pid/$name, has been terminated!\n";
+    if ($freeze) {
+	$message .= "Your account has been frozen until this is resolved.\n";
+    }
+    if (defined($reason)) {
+	$message .= "Reason:\n\n" . $reason . "\n";
+    }
+    else {
+	$message .= "You will be contacted shortly with an explaination.\n";
+    }
+    $brand->SendEmail($creator->email(),
+		      "Your experiment has been terminated with cause!",
+		      $message,
+		      $brand->OpsEmailAddress(),
+		      "CC: " . $project->GetLeader()->email(),
 		      "BCC: " . $brand->OpsEmailAddress());
 		      
     # This will send email if it fails.

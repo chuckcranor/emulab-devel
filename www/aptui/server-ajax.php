@@ -186,8 +186,8 @@ $routing = array("geni-login" =>
                                                      "Do_Lockout",
 						 "Lockdown" =>
                                                      "Do_Lockdown",
-						 "Destroy" =>
-                                                     "Do_DestroyExperiment",
+						 "Warn" =>
+                                                     "Do_WarnExperiment",
 						 "Quarantine" =>
 						     "Do_Quarantine",
 						 "SaveAdminNotes" =>

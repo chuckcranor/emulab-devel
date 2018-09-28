@@ -1868,7 +1868,7 @@ function Do_GetHealthStatus()
     SPITAJAX_RESPONSE($status);
 }
 
-function Do_DestroyExperiment()
+function Do_WarnExperiment()
 {
     global $instance, $creator, $this_user;
     global $ajax_args;
@@ -1903,14 +1903,18 @@ function Do_DestroyExperiment()
         chmod($filename, 0666);        
         $options = "-f $filename ";
     }
-    # Freeze user after experiment terminated.
+    # Terminate experiment
+    if (isset($ajax_args["terminate"]) && $ajax_args["terminate"]) {
+        $options .= "-T ";
+    }
+    # Freeze user
     if (isset($ajax_args["freeze"]) && $ajax_args["freeze"]) {
-        $options .= "-F";
+        $options .= "-F ";
     }
     $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC($this_uid, "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() . " -- ".
-                     "  destroy $uuid $options ",
+                     "  warn $uuid $options ",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
     if (isset($filename)) {
