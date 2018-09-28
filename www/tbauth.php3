@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -85,6 +85,7 @@ define("DOLOGIN_STATUS_ERROR",		-1);
 define("DOLOGIN_STATUS_IPFREEZE",	-2);
 define("DOLOGIN_STATUS_WEBFREEZE",	-3);
 define("DOLOGIN_STATUS_INACTIVE",	-4);
+define("DOLOGIN_STATUS_FROZEN", 	-5);
 
 # So we can redefine this in the APT pages.
 $CHANGEPSWD_PAGE = "moduserinfo.php3";
@@ -972,8 +973,11 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
             $user->SetGaUserid($ga_userid);
         }
         
-        # But inactive users need special handling.
-	if ($user->status() == TBDB_USERSTATUS_INACTIVE) {
+        # But inactive/frozen users need special handling.
+	if ($user->status() == TBDB_USERSTATUS_FROZEN) {
+          return DOLOGIN_STATUS_FROZEN;
+        }
+	elseif ($user->status() == TBDB_USERSTATUS_INACTIVE) {
             if (1) {
                 TBMAIL($user->email(),
                        "Web Login Inactivity Alert: '$uid'",

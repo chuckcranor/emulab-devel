@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -263,7 +263,23 @@ else {
 	SPITHEADER();
 	echo "<h4>
               Your account has been frozen due to earlier login attempt
-              failures. You must contact $TBMAILADDR to have your account
+              failures. You must contact $SUPPORT to have your account
+              restored. <br> <br>
+              Please do not attempt to login again; it will not work!
+              </h4>\n";
+        echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+	SPITNULLREQUIRE();
+	SPITFOOTER();
+	return;
+    }
+    elseif ($dologin_status == DOLOGIN_STATUS_FROZEN) {
+	# Short delay.
+	sleep(1);
+
+	SPITHEADER();
+	echo "<h4>
+              Your account has been frozen!
+              You must contact $SUPPORT to have your account
               restored. <br> <br>
               Please do not attempt to login again; it will not work!
               </h4>\n";
@@ -279,7 +295,7 @@ else {
 	SPITHEADER();
 	echo "<h4>
               Your account has gone <b>inactive</b> since it has been so
-              long since your last login. Please contact $TBMAILADDR 
+              long since your last login. Please contact $SUPPORT
               to have your account restored. <br> <br>
               Please do not attempt to login again; it will not work!
               </h4>\n";
