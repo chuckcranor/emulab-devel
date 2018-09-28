@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -104,6 +104,9 @@ if ($profile->script() && $profile->script() != "") {
 if ($profile->repourl() && $profile->repourl() != "") {
     $defaults["profile_repourl"] = $profile->repourl();
 }
+$latest_profile = Profile::Lookup($profile->profile_uuid());
+$defaults["latest_uuid"] = $latest_profile->uuid();
+$defaults["latest_version"] = $latest_profile->version();
 
 # Place to hang the toplevel template.
 echo "<div id='page-body'></div>\n";

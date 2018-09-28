@@ -28,6 +28,12 @@
 		<% } else { %>
 		  <%- fields.profile_version %>
 		<% } %>
+		<% if (version_uuid != fields.latest_uuid) { %>
+		  (Latest:
+		  <a href='show-profile.php?uuid=<%= fields.latest_uuid %>'>
+		    <%- fields.latest_version %></a>)
+		<% } %>
+		
 	      </td>
 	    </tr>
 	  <% } %>
