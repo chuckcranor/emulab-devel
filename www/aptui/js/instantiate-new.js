@@ -2278,7 +2278,7 @@ $(function ()
 	    break;
 	  }
 	}
-	if (found)
+	if (found || isadmin)
 	{
 	  $(this).prop('disabled', false);
 	  if (allowed.length == 1) {
