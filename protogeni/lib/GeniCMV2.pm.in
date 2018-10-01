@@ -59,6 +59,7 @@ use GeniStd;
 use emutil;
 use libEmulab;
 use English;
+use EmulabConstants;
 use libtestbed;
 use Data::Dumper;
 use XML::Simple;
@@ -905,6 +906,18 @@ sub DeleteSlice($)
 	return GeniResponse->BusyResponse();
     }
     my $slice_experiment = $slice->GetExperiment();
+
+    #
+    # Do not allow a paniced slice to be terminated until the panic
+    # is cleared. 
+    #
+    if ($slice_experiment->state() eq EXPTSTATE_PANICED() ||
+	$slice_experiment->paniced()) {
+	print STDERR "Refusing to terminate a paniced experiment\n";
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
+			    "Refusing to terminate a paniced experiment");
+    }
 
     #
     # If a monitor process is running, then the slice is busy.
