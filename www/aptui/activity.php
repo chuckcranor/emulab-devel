@@ -44,7 +44,7 @@ $this_user = CheckLoginOrRedirect();
 $isadmin   = (ISADMIN() || ISFOREIGN_ADMIN() ? 1 : 0);
 SPITHEADER(1);
 
-if (!(ISADMIN() || ISFOREIGN_ADMIN())) {
+if (!$isadmin) {
     if (isset($target_user)) {
         if (!$target_user->SameUser($this_user)) {
             SPITUSERERROR("Not enough permission to view this page!");
@@ -65,7 +65,7 @@ if (!(ISADMIN() || ISFOREIGN_ADMIN())) {
 # Allow for targeted searches
 #
 if (isset($target_user)) {
-    $target_idx  = $target_user->idx();
+    $target_uid  = $target_user->uid();
 }
 elseif (isset($target_project)) {
     $target_pid   = $target_project->pid_idx();
