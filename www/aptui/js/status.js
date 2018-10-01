@@ -264,11 +264,7 @@ $(function ()
 						   lockdown_override});
 	    xmlthing.done(callback);
 	});
-	// Warn/Kill an experiment.
-	$('#warnkill-experiment-button').click(function (event) {
-	    event.preventDefault();
-	    WarnExperiment();
-	});
+	SetupWarnKill();
 	
 	// Handler for select/deselect all rows in the list view.
 	$('#select-all').change(function () {
@@ -670,6 +666,12 @@ $(function ()
 	if (expinfo.admin_lockdown || !window.APT_OPTIONS.canterminate) {
 	    terminate = 0;
 	}
+	// Or if paniced, most buttons disabled.
+	if (expinfo.paniced) {
+	    terminate = extend = snapshot = destroy = 0;
+	    refresh = reloadtopo = 0;
+	}
+	
 	ButtonState('terminate', terminate);
 	ButtonState('refresh', refresh);
 	ButtonState('reloadtopo', reloadtopo);
@@ -3461,6 +3463,28 @@ $(function ()
     /*
      * Terminate with cause and optionally freeze user.
      */
+    function SetupWarnKill()
+    {
+	$('#warnkill-experiment-button').click(function (event) {
+	    event.preventDefault();
+	    WarnExperiment();
+	});
+
+	// The Terminate/quarantine is a radio that can be unselected.
+	$('#destroy-quarantine-checkbox').change(function () {
+	    if ($('#destroy-quarantine-checkbox').is(':checked')) {
+		// Flip the other checkbox off
+		$('#destroy-terminate-checkbox').prop("checked", false);
+	    }
+	});
+	$('#destroy-terminate-checkbox').change(function () {
+	    if ($('#destroy-terminate-checkbox').is(':checked')) {
+		// Flip the other checkbox off
+		$('#destroy-quarantine-checkbox').prop("checked", false);
+	    }
+	});
+    }
+    
     function WarnExperiment()
     {
 	// Handler for the Snapshot confirm button.
@@ -3469,6 +3493,7 @@ $(function ()
 		event.preventDefault();
 		var reason = $('#destroy-experiment-reason').val();
 		var kill   = $('#destroy-terminate-checkbox').is(':checked');
+		var panic  = $('#destroy-quarantine-checkbox').is(':checked');
 		var freeze = $('#destroy-freeze-checkbox').is(':checked');
 		var args   = {"uuid" : uuid};
 		if (reason != "") {
@@ -3479,6 +3504,9 @@ $(function ()
 		}
 		if (kill) {
 		    args["terminate"] = true;
+		}
+		else if (panic) {
+		    args["quarantine"] = true;
 		}
 		sup.HideModal("#destroy-experiment-modal", function () {
 		    sup.ShowWaitWait();

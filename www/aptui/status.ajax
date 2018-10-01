@@ -1903,9 +1903,12 @@ function Do_WarnExperiment()
         chmod($filename, 0666);        
         $options = "-f $filename ";
     }
-    # Terminate experiment
+    # Terminate or Quarantine experiment
     if (isset($ajax_args["terminate"]) && $ajax_args["terminate"]) {
         $options .= "-T ";
+    }
+    elseif (isset($ajax_args["quarantine"]) && $ajax_args["quarantine"]) {
+        $options .= "-Q ";
     }
     # Freeze user
     if (isset($ajax_args["freeze"]) && $ajax_args["freeze"]) {

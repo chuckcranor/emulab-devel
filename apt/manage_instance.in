@@ -61,7 +61,6 @@ sub usage()
     print("Usage: manage_instance idledata instance\n");
     print("Usage: manage_instance openstackstats instance\n");
     print("Usage: manage_instance getmanifests instance\n");
-    print("Usage: manage_instance destroy instance\n");
     print("Usage: manage_instance warn instance\n");
     print("Usage: manage_instance applyextensionpolicy instance\n");
     exit(-1);
@@ -151,7 +150,6 @@ sub WriteCredentials();
 sub StartMonitor();
 sub StartMonitorInternal(;$);
 sub DoImageTrackerStuff($$$$$$$);
-sub DoDestroy();
 sub DoWarn();
 sub DenyExtensionInternal($);
 sub ExtendInternal($$$$$);
@@ -230,9 +228,6 @@ elsif ($action eq "consoleurl") {
 }
 elsif ($action eq "terminate") {
     DoTerminate()
-}
-elsif ($action eq "destroy") {
-    DoDestroy()
 }
 elsif ($action eq "warn") {
     DoWarn()
@@ -1274,7 +1269,7 @@ sub DoTerminate()
     # Lock the slice in case it is doing something else, like taking
     # a disk image.
     #
-    # When told to take the lock, we take it go.
+    # When told to take the lock, we take it and go.
     #
     if ($takelock) {
 	$slice->TakeLock();
@@ -3160,10 +3155,19 @@ sub DoLockdown()
 sub DoPanic()
 {
     my $errmsg;
-    my $errcode = -1;
+    my $errcode  = -1;
     my $exitcode = -1;
+    my $takelock = 0;
     my $response;
     
+    my $optlist = "L";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"L"})) {
+	$takelock = 1;
+    }
     usage()
 	if (@ARGV != 1);
     
@@ -3175,7 +3179,13 @@ sub DoPanic()
     if (!defined($slice)) {
 	fatal("No slice for instance");
     }
-    if ($slice->Lock()) {
+    #
+    # When told to take the lock, we take it and go.
+    #
+    if ($takelock) {
+	$slice->TakeLock();
+    }
+    elsif ($slice->Lock()) {
 	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
 	$errcode  = GENIRESPONSE_BUSY;
 	$exitcode = 1;
@@ -3224,7 +3234,14 @@ sub DoPanic()
 
 	if ($code != GENIRESPONSE_SUCCESS) {
 	    $errcode = $code;
-	    ($exitcode, $errmsg) = ResponseErrorMessage($agg, $response);
+
+	    if ($code == GENIRESPONSE_REFUSED) {
+		$exitcode = 1;
+		$errmsg   = $response->error();
+	    }
+	    else {
+		($exitcode, $errmsg) = ResponseErrorMessage($agg, $response);
+	    }
 	    next;
 	}
     }
@@ -4327,176 +4344,6 @@ sub DoSchedTerminate()
 #
 sub DoDestroy()
 {
-    my $errcode  = 1;
-    my $exitcode = 1;
-    my $freeze   = 0;
-    my $errmsg;
-    my $reason;
-    my $logfile;
-    my $brand    = $instance->Brand();
-    my $creator  = $instance->GetGeniUser();
-    my $slice    = $instance->GetGeniSlice();
-    my $name     = $instance->name();
-    my $pid      = $instance->pid();
-    my $project  = $instance->GetProject();
-
-    my $optlist = "f:F";
-    my %options = ();
-    if (! getopts($optlist, \%options)) {
-	usage();
-    }
-    if (defined($options{"F"})) {
-	$freeze = 1;
-    }
-    if (defined($options{"f"})) {
-	my $filename = $options{"f"};
-	if (! -e $filename) {
-	    fatal("$filename does not exist");
-	}
-	open(MSG, $filename) or
-	    fatal("Could not open $filename");
-	
-	$reason = "";
-	while (<MSG>) {
-	    $reason .= $_;
-	}
-	close(MSG);
-    }
-    if (!$this_user->IsAdmin()) {
-	fatal("Only admins can destroy experiments");
-    }
-    
-    #
-    # Lock the slice in case it is doing something else, like taking
-    # a disk image.
-    #
-    if ($slice->Lock()) {
-	$errcode = GENIRESPONSE_BUSY;
-	$errmsg  ="Experiment is busy, cannot lock it. Try again later.";
-	if (defined($webtask)) {
-	    $webtask->output($errmsg);
-	    $webtask->Exited($errcode);
-	}
-	print STDERR "$errmsg\n";
-	exit(1);
-    }
-    if (defined($reason) &&
-	!TBcheck_dbslot($reason, "default", "fulltext",
-			 TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
-	$errmsg  = "Illegal characters in your reason";
-	$errcode = 1;
-	goto bad;
-    }
-    if ($instance->admin_lockdown()) {
-	$errmsg  = "Must clear the admin lockdown first.";
-	$errcode = 1;
-	goto bad;
-    }
-    # No free time.
-    $instance->Update({"extension_disabled" => 1});
-
-    # Expiration is now.
-    $slice->SetExpiration(time());
-
-    # Now we can clear this.
-    if ($instance->user_lockdown()) {
-	if (DoLockdownInternal("clear", "user", 0, \$errmsg)) {
-	    $errcode = 1;
-	    goto bad;
-	}
-    }
-
-    # Hurry up the terminate instead of waiting for the daemon to see it.
-    if (!$debug) {
-        $logfile = TBMakeLogname("destroy");
-	
-	if (my $childpid = TBBackGround($logfile)) {
-	    my $status = 0;
-	    #
-	    # Wait a couple of seconds to see if there is going to be an
-	    # immediate error. Then return and let it continue to run. This
-	    # allows the web server to see quick errors. Later errors will
-	    # have to be emailed. 
-	    #
-	    sleep(5);
-	    my $foo = waitpid($childpid, &WNOHANG);
-	    if ($foo) {
-		$status = $? >> 8;
-	    }
-	    exit($status);
-	}
-    }
-    # We pass the lock through.
-    system("$MANAGEINSTANCE " . (defined($webtask) ? "-t $webtask_id " : "").
-	   "  -d -- terminate $uuid -L");
-
-    #
-    # We wait for this to finish since if its the local cluster, we cannot
-    # freeze before termination is complete cause of PROTOGENI_LOCALUSER.
-    # If there is an error terminating (other then busy), we are kinda
-    # screwed.
-    #
-    if ($?) {
-	if ($debug) {
-	    exit ($? >> 8);
-	}
-	if (defined($webtask)) {
-	    $webtask->Refresh();
-	    print STDERR $webtask->output() . "\n";
-	    $exitcode = $webtask->exitcode();
-	}
-	else {
-	    $exitcode = $? >> 8;
-	}
-	my $slice_uuid    = $slice->uuid();
-	my $weburl        = $instance->webURL();
-	SENDMAIL($TBOPS,
-		 "Unable to terminate instance with cause!",
-		 "Pid:    $pid\n".
-		 "Name:   $name\n".
-		 "Slice:  $slice_uuid\n".
-		 "URL:    $weburl\n".
-		 "Reason:\n\n" . (defined($reason) ? $reason : "") . "\n",
-		 $TBOPS, undef, $logfile);
-	unlink($logfile) if (defined($logfile));
-	exit($exitcode);
-    }
-    unlink($logfile) if (defined($logfile));
-
-    my $message = "Your experiment, $pid/$name, has been terminated!\n";
-    if ($freeze) {
-	$message .= "Your account has been frozen until this is resolved.\n";
-    }
-    if (defined($reason)) {
-	$message .= "Reason:\n\n" . $reason . "\n";
-    }
-    else {
-	$message .= "You will be contacted shortly with an explaination.\n";
-    }
-    $brand->SendEmail($creator->email(),
-		      "Your experiment has been terminated with cause!",
-		      $message,
-		      $brand->OpsEmailAddress(),
-		      "CC: " . $project->GetLeader()->email() . "\n" .
-		      "BCC: " . $brand->OpsEmailAddress());
-		      
-    # This will send email if it fails.
-    if ($freeze) {
-	my $creator_uid = $instance->creator();
-	system("$TBACCT -u freeze $creator_uid");
-	if ($?) {
-	    exit($? >> 8);
-	}
-    }
-    exit(0);
-  bad:
-    print STDERR $errmsg . "\n";
-    if (defined($webtask)) {
-	$webtask->output($errmsg);
-	$webtask->Exited($errcode);
-    }
-  done:
-    exit($exitcode);
 }
 
 #
@@ -4508,6 +4355,7 @@ sub DoWarn()
     my $exitcode   = 1;
     my $freeze     = 0;
     my $terminate  = 0;
+    my $panic      = 0;
     my $errmsg;
     my $reason;
     my $logfile;
@@ -4520,7 +4368,7 @@ sub DoWarn()
     my $slice_uuid = $slice->uuid();
     my $weburl     = $instance->webURL();
 
-    my $optlist = "f:FT";
+    my $optlist = "f:FTQ";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
@@ -4530,6 +4378,9 @@ sub DoWarn()
     }
     if (defined($options{"T"})) {
 	$terminate = 1;
+    }
+    elsif (defined($options{"Q"})) {
+	$panic = 1;
     }
     if (defined($options{"f"})) {
 	my $filename = $options{"f"};
@@ -4545,7 +4396,7 @@ sub DoWarn()
 	}
 	close(MSG);
     }
-    if (!$freeze && !$terminate && !$reason) {
+    if (!$freeze && !$terminate && !$panic && !$reason) {
 	fatal("Must supply a message!");
     }
     if (!$this_user->IsAdmin()) {
@@ -4562,7 +4413,7 @@ sub DoWarn()
     #
     # Just a message.
     #
-    if (!$terminate) {
+    if (!($terminate || $panic)) {
 	# This will send email if it fails.
 	if ($freeze) {
 	    my $creator_uid = $instance->creator();
@@ -4646,9 +4497,18 @@ sub DoWarn()
 	    exit($status);
 	}
     }
-    # We pass the lock through.
-    system("$MANAGEINSTANCE " . (defined($webtask) ? "-t $webtask_id " : "").
-	   "  -d -- terminate $uuid -L");
+    if ($panic) {
+	# We pass the lock through.
+	system("$MANAGEINSTANCE " .
+	       (defined($webtask) ? "-t $webtask_id " : "").
+	       "  -d -- panic $uuid -L set");
+    }
+    else {
+	# We pass the lock through.
+	system("$MANAGEINSTANCE " .
+	       (defined($webtask) ? "-t $webtask_id " : "").
+	       "  -d -- terminate $uuid -L");
+    }
 
     #
     # We wait for this to finish since if its the local cluster, we cannot
@@ -4671,7 +4531,9 @@ sub DoWarn()
 	    $exitcode = $? >> 8;
 	}
 	SENDMAIL($TBOPS,
-		 "Unable to terminate instance with cause!",
+		 ($panic ?
+		  "Unable to quarantine instance with cause!" :
+		  "Unable to terminate instance with cause!"),
 		 "Pid:    $pid\n".
 		 "Name:   $name\n".
 		 "Slice:  $slice_uuid\n".
@@ -4683,7 +4545,17 @@ sub DoWarn()
     }
     unlink($logfile) if (defined($logfile));
 
-    my $message = "Your experiment, $pid/$name, has been terminated!\n";
+    my $message;
+    my $subject;
+
+    if ($panic) {
+	$message = "Your experiment, $pid/$name, has been quarantined!\n";
+	$subject = "Your experiment $name has been quarantined!";
+    }
+    else {
+	$message = "Your experiment, $pid/$name, has been terminated!\n";
+	$subject = "Your experiment $name has been terminated with cause!";
+    }
     if ($freeze) {
 	$message .= "Your account has been frozen until this is resolved.\n";
     }
@@ -4693,11 +4565,14 @@ sub DoWarn()
     else {
 	$message .= "You will be contacted shortly with an explaination.\n";
     }
+    if ($panic) {
+	$message .= "\n" . $weburl . "\n";
+    }
     $brand->SendEmail($creator->email(),
-		      "Your experiment has been terminated with cause!",
+		      $subject,
 		      $message,
 		      $brand->OpsEmailAddress(),
-		      "CC: " . $project->GetLeader()->email(),
+		      "CC: " . $project->GetLeader()->email() . "\n" .
 		      "BCC: " . $brand->OpsEmailAddress());
 		      
     # This will send email if it fails.
