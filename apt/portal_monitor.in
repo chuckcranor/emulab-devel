@@ -70,10 +70,8 @@ my $TBOPS            = "@TBOPSEMAIL@";
 my $TBLOGS           = "@TBLOGSEMAIL@";
 my $MAINSITE         = @TBMAINSITE@;
 my $LOGFILE          = "$TB/log/portal_monitor.log";
-my $PROTOUSER	     = "elabman";
-my $SUDO	     = "/usr/local/bin/sudo";
-my $WGET             = "/usr/local/bin/wget";
-my $SLEEP_INTERVAL   = 300;
+my $SLEEP_INTERVAL   = 60;
+my $DOWN_THRESHOLD   = 120;
 my $DAILY_INTERVAL   = 24 * 3600;
 
 # un-taint path
@@ -123,7 +121,7 @@ use GeniCredential;
 use GeniXML;
 use POSIX qw(strftime ceil);
 
-if (!$oneshot) {
+if (! ($oneshot || $impotent)) {
     if (CheckDaemonRunning("portal_monitor")) {
 	fatal("Not starting another portal_monitor daemon!");
     }
@@ -140,6 +138,11 @@ if (!$oneshot) {
 my $context = APT_Geni::GeniContext();
 fatal("Could not load our XMLRPC context")
     if (!defined($context));
+
+#
+# We want this to be a quick test, not a long timeout.
+#
+Genixmlrpc->SetTimeout(10);
 
 #
 # Setup a signal handler for newsyslog.
@@ -172,53 +175,6 @@ sub CheckAggregates()
 	print STDERR "Could not generate credential!\n";
 	return -1;
     }
-    #
-    # AM V3 API.
-    #
-    my @params = ([{"geni_type" => "geni_sfa",
-		    "geni_version" => 3,
-		    "geni_value" => $credential->asString()},
-		  ],
-		  # Options array.
-		  {"geni_compressed"    => 1,
-		   "geni_rspec_version" => {'type'    => 'GENI',
-					    'version' => '3'}}
-	);
-
-    my $markError = sub($$) {
-	my ($aggregate, $error) = @_;
-	my $nickname  = $aggregate->nickname();
-
-	print STDERR "$nickname: $error\n";
-	
-	#
-	# Decide if aggregate should be marked as down. 
-	#
-	my $status;
-
-	# Note that this field is not defined. I think I intended to.
-	if (1 || !defined($aggregate->last_contact())) {
-	    $status = "down";
-	}
-	else {
-	    my $last_attempt = str2time($aggregate->last_attempt());
-	    my $last_contact = str2time($aggregate->last_contact());
-
-	    if ($last_attempt - $last_contact < 600) {
-		$status = "unknown";
-	    }
-	    else {
-		$status = "down";
-	    }
-	}
-	if ($impotent) {
-	    print STDERR "Would mark $aggregate as $status\n";
-	}
-	else {
-	    $aggregate->status($status);
-	    $aggregate->last_error($error);
-	}
-    };
 
     while (my ($urn) = $query_result->fetchrow_array()) {
 	my $aggregate = APT_Aggregate->Lookup($urn);
@@ -229,14 +185,11 @@ sub CheckAggregates()
 	my $nickname  = $aggregate->nickname();
 	my $authority = APT_Geni::GetAuthority($urn);
 	if (!defined($authority)) {
-	    &$markError($aggregate, "Could not lookup authority: $urn");
+	    print STDERR "Could not lookup authority: $urn\n";
 	    next;
 	}
 	my $cmurl = $authority->url();
-	# Convert URL.
-	$cmurl =~ s/\/cm$/\/am/;
 	$cmurl = devurl($cmurl) if ($usemydevtree);
-	$cmurl .= "/3.0";
 
 	if ($debug) {
 	    print "$nickname -> $cmurl\n";
@@ -247,216 +200,54 @@ sub CheckAggregates()
 	$aggregate->last_attempt(time())
 	    if (!$impotent);
 
-	#
-	# Do a quick test to see if we can even get there.
-	#
-	Genixmlrpc->SetTimeout(10);
-	
 	my $response =
 	    Genixmlrpc::CallMethod($cmurl, $context, "GetVersion");
 
 	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    &$markError($aggregate,
-			"GetVersion error: " . $response->output());
+	    my $nickname  = $aggregate->nickname();
+	    my $reason    = $response->output();
+
+	    print STDERR "$nickname: $reason\n";
+	
+	    #
+	    # Decide how to mark the aggregate.
+	    #
+	    my $status;
+
+	    if ($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE()) {
+		$status = "offline";
+	    }
+	    else {
+		$status = "down";
+	    }
+	    if ($impotent) {
+		print STDERR "Would mark $aggregate as $status\n";
+	    }
+	    else {
+		if ($aggregate->status() ne $status) {
+		    $aggregate->status($status);
+		    $aggregate->StatusEvent($status);
+		}
+		$aggregate->last_error($reason);
+	    }
 	    next;
 	}
 	
 	#
-	# This can take some time on a big cluster, which is why we
-	# did the GetVersion above, cause we know that will be fast,
-	# so its a good initial check.
-	#
-	Genixmlrpc->SetTimeout(180);
-	
-	$response =
-	    Genixmlrpc::CallMethod($cmurl, $context, "ListResources", @params);
-
-	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    &$markError($aggregate,
-			"ListResources error: ". $response->output());
-	    next;
-	}
-	if ($debug > 1) {
-	    print $response->value() . "\n";
-	}
-
-	#
-	# Decode and decompress.
-	#
-	my $decoded = eval { decode_base64($response->value()); };
-	if ($@) {
-	    &$markError($aggregate, "Could not base64 decode response");
-	    next;
-	}
-	my $xml = eval { uncompress($decoded); };
-	if ($@) {
-	    &$markError($aggregate, "Could not uncompress response");
-	    next;
-	}
-	if ($debug > 1) {
-	    print $xml . "\n";
-	}
-	my $manifest = GeniXML::Parse($xml);
-	if (!defined($manifest)) {
-	    &$markError($aggregate, "Could not parse manifest");
-	    next;
-	}
-	#
-	# Mark that we could get the advertisement. Also mark it as up.
-	# Not sure about when to mark it down though.
+	# Mark that we could get the status. Also mark it as up.
 	#
 	if ($impotent) {
 	    print "Would mark $aggregate as up\n";
 	}
 	else {
 	    $aggregate->last_success($aggregate->last_attempt());
-	    $aggregate->status("up");
 	    $aggregate->last_error("");
-	}
-
-	#
-	# Get the list of reservable types. Need to be backwards compat
-	# here until all clusters updated with this element. See below.
-	#
-	my $reservable_types;
-
-	if (my $ref = GeniXML::FindNodesNS("n:reservable_types",
-					   $manifest,
-					   $GeniXML::EMULAB_NS)->pop()) {
-	    $reservable_types = {};
-	    
-	    foreach my $t (GeniXML::FindNodesNS("n:type", $ref,
-					$GeniXML::EMULAB_NS)->get_nodelist()) {
-		my $typename = GeniXML::GetText("name", $t);
-		$reservable_types->{$typename} = $typename;
+	    if ($aggregate->status() ne "up") {
+		$aggregate->status("up");
+		$aggregate->StatusEvent("up");
 	    }
 	}
-	
-	my $pcount = 0;
-	my $pavail = 0;
-	my $vcount = 0;
-	my $vfree  = 0;
-	my %type_count = ();
-	my %type_avail = ();
 
-	foreach my $ref (GeniXML::FindNodes("n:node",
-					    $manifest)->get_nodelist()) {
-	    my $node_id     = GeniXML::GetNodeId($ref);
-	    #
-	    # Need to search the sliver types for raw-pc.
-	    #
-	    foreach my $sref (GeniXML::FindNodes("n:sliver_type",
-						 $ref)->get_nodelist()) {
-		my $name = GeniXML::GetText("name", $sref);
-		if (defined($name)) {
-		    if ($name eq "raw-pc") {
-			$pcount++;
-			$pavail++
-			    if (GeniXML::IsAvailable($ref));
-
-			foreach my $htype (FindNodes("n:hardware_type",
-						     $ref)->get_nodelist()) {
-			    my $hname = GeniXML::GetText("name", $htype);
-			    if (defined($reservable_types)) {
-				next
-				    if (!exists($reservable_types->{$hname}));
-			    }
-			    else {
-				# This can be deleted when clusters updated.
-				next
-				    if (!defined($hname) || $hname eq "" || 
-					$hname eq "pcvm" || $hname eq "pc" ||
-					$hname =~ /^delay/ ||
-					# Protect DB.
-					$hname !~ /^[-\w]+$/);
-			    }
-			    my $ntype =
-				GeniXML::FindNodesNS("n:node_type",
-					     $htype,
-					     $GeniXML::EMULAB_NS)->pop();
-			    next
-				if (!$ntype);
-
-			    my $slots = GeniXML::GetText("type_slots", $ntype);
-			    next
-				if (!defined($slots) || $slots !~ /^\d+$/);
-			    next
-				if ($slots > 1);
-
-			    if (!exists($type_count{$hname})) {
-				$type_count{$hname} = 0;
-				$type_avail{$hname} = 0;
-			    }
-			    $type_count{$hname} += 1;
-			    $type_avail{$hname} += 1
-				if (GeniXML::IsAvailable($ref));
-			}
-		    }
-		    elsif ($name eq "emulab-xen") {
-			my $exclusive = GeniXML::GetExclusive($ref);
-
-			#print "$node_id, $exclusive\n";
-
-			# Shared nodes are marked as not exclusive.
-			next
-			    if (!defined($exclusive) || $exclusive);
-
-			# And they are available.
-			next
-			    if (!GeniXML::IsAvailable($ref));
-			    
-			#
-			# We need the pcvm type to find the slots.
-			#
-			foreach my $htype (FindNodes("n:hardware_type",
-						     $ref)->get_nodelist()) {
-			    my $hname = GeniXML::GetText("name", $htype);
-			    next
-				if (!defined($hname) || $hname ne "pcvm");
-			    
-			    my $ntype =
-				GeniXML::FindNodesNS("n:node_type",
-					     $htype,
-					     $GeniXML::EMULAB_NS)->pop();
-			    next
-				if (!$ntype);
-
-			    my $slots = GeniXML::GetText("type_slots", $ntype);
-			    next
-				if (!defined($slots) || $slots !~ /^\d+$/);
-
-			    #
-			    # Yuck, we do not get the total available on
-			    # shared node, only how many still avail. Kludge
-			    # it for now. 
-			    #
-			    $vcount += 50;
-			    $vfree  += $slots;
-			}
-		    }
-		}
-	    }
-	}
-	print "$nickname: pcount:$pcount, pfree:$pavail, ".
-	  "vcount:$vcount vfree:$vfree\n";
-	foreach my $type (keys(%type_count)) {
-	    my $count = $type_count{$type};
-	    my $avail = $type_avail{$type};
-	    if ($debug || $impotent) {
-		print "$type $count:$avail\n";
-	    }
-	    if (!$impotent) {
-		DBQueryWarn("replace into apt_aggregate_nodetypes set ".
-			    " urn='$urn',type='$type',".
-			    " count='$count',free='$avail'");
-	    }
-	}
-	if (!$impotent) {
-	    $aggregate->pcount($pcount);
-	    $aggregate->pfree($pavail);
-	    $aggregate->vcount($vcount);
-	    $aggregate->vfree($vfree);
-	}
     }
     return 0;
 }
@@ -476,7 +267,7 @@ sub SendEmail()
 
     #
     # We send a summary email once every 24 hours. Maybe do this at a
-    # set tim of day?
+    # set time of day?
     #
     if (time() - $lastdaily >= (24 * 3600)) {
 	$dailymail = 1;
@@ -499,16 +290,13 @@ sub SendEmail()
 	# probably knows by the time this message turns up.
 	#
 	next
-	    if ($aggregate->IsLocalCluster());
+	    if ($aggregate->IsLocalCluster() && !$debug);
 	
-	if ($aggregate->status() eq "down") {
+	if ($aggregate->status() ne "up") {
 	    my $last = str2time($aggregate->last_success());
 	    
-	    #
-	    # At least 10 minutes (which is two checks above).
-	    #
 	    next
-		if (time() - $last < 600);
+		if (time() - $last < $DOWN_THRESHOLD);
 
 	    # Only once per day or once per event.
 	    next
@@ -517,7 +305,7 @@ sub SendEmail()
 	    $downmail{$urn} = $aggregate;
 	    $lastmail{$urn} = time();
 	}
-	elsif ($aggregate->status() eq "up") {
+	else {
 	    if (exists($lastmail{$urn})) {
 		$upmail{$urn} = $aggregate;
 		delete($lastmail{$urn});
@@ -529,8 +317,7 @@ sub SendEmail()
 	my $body = "${subject}:\n\n";
 
 	foreach my $aggregate (values(%upmail)) {
-	    $body .= $aggregate->name() . ": was offline since ".
-		TBDateStringLocal($aggregate->last_success()) . "\n";
+	    $body .= $aggregate->name() . ": is now online " . "\n";
 	}
 	SENDMAIL($TBOPS, $subject, $body, $TBOPS);
     }
@@ -540,7 +327,9 @@ sub SendEmail()
 	my $body = "${subject}:\n\n";
 
 	foreach my $aggregate (values(%downmail)) {
-	    $body .= $aggregate->name() . ": is offline since ".
+	    my $status = $aggregate->status();
+	    
+	    $body .= $aggregate->name() . ": is $status since ".
 		TBDateStringLocal($aggregate->last_success()) . "\n";
 	}
 	SENDMAIL($TBOPS, $subject, $body, $TBOPS);
@@ -548,7 +337,7 @@ sub SendEmail()
 }
 
 while (1) {
-    if (NoLogins()) {
+    if (0 && NoLogins()) {
 	sleep(5);
 	next;
     }

@@ -91,13 +91,25 @@ CREATE TABLE `apt_aggregate_nodetypes` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_aggregates_status_events`
+--
+
+DROP TABLE IF EXISTS `apt_aggregate_events`;
+CREATE TABLE `apt_aggregate_events` (
+  `urn` varchar(128) NOT NULL default '',
+  `event` enum('up','down','offline','unknown') NOT NULL default 'unknown',
+  `stamp` datetime NOT NULL default '0000-00-00 00:00:00',
+  PRIMARY KEY  (`urn`,`stamp`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_aggregate_status`
 --
 
 DROP TABLE IF EXISTS `apt_aggregate_status`;
 CREATE TABLE `apt_aggregate_status` (
   `urn` varchar(128) NOT NULL default '',
-  `status` enum('up','down','unknown') NOT NULL default 'unknown',
+  `status` enum('up','down','offline','unknown') NOT NULL default 'unknown',
   `last_success` datetime default NULL,
   `last_attempt` datetime default NULL,
   `pcount` int(11) default '0',

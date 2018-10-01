@@ -208,6 +208,21 @@ sub STATUS($$;$)
 }
 
 #
+# Insert a status (change) event.
+#
+sub StatusEvent($$)
+{
+    my ($self, $event) = @_;
+    my $urn    = $self->urn();
+
+    DBQueryWarn("insert into apt_aggregate_events set ".
+		"  urn='$urn', event='$event', stamp=now()")
+	or return -1;
+
+    return 0;
+}
+
+#
 # Lookup all aggregates for a portal.
 #
 sub LookupForPortal($$)
