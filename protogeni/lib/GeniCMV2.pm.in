@@ -911,8 +911,9 @@ sub DeleteSlice($)
     # Do not allow a paniced slice to be terminated until the panic
     # is cleared. 
     #
-    if ($slice_experiment->state() eq EXPTSTATE_PANICED() ||
-	$slice_experiment->paniced()) {
+    if (defined($slice_experiment) && 
+	($slice_experiment->state() eq EXPTSTATE_PANICED() ||
+	 $slice_experiment->paniced())) {
 	print STDERR "Refusing to terminate a paniced experiment\n";
 	$slice->UnLock();
 	return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
