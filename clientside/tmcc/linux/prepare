@@ -539,6 +539,24 @@ for my $pdir (@PHOOKSDIRS) {
     }
 }
 
+#
+# Get set up to force a regeneration of the system machine-id.  This
+# should be done last; it can make the system unstable; see man
+# dbus-uuidgen.  We only do this if we've got a dbus-uuidgen.  NB:
+# systems are theoretically supposed to regen /etc/machine-id if it's
+# not present, but this doesn't happen on Ubuntu 18, for instance (see
+# also https://bugzilla.redhat.com/show_bug.cgi?id=1379800).
+# Fortunately, if the file is present and empty, it does get
+# regenerated.  So we empty it, and ensure that /var/lib/dbus/machine-id
+# is a symlink to /etc/machine-id.
+#
+if (-e "/etc/machine-id" && -e "/var/lib/dbus/machine-id") {
+    open(FD,">/etc/machine-id");
+    close(FD);
+    system("ln -sf /etc/machine-id /var/lib/dbus/machine-id");
+    print "Forcing regeneration of machine-id on next boot.\n";
+}
+
 # Leave this print statement here; create_image depends on it.
 print "prepare ran successfully!\n";
 exit 0;
