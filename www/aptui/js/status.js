@@ -53,6 +53,10 @@ $(function ()
     var GENIRESPONSE_INSUFFICIENT_NODES = 26;
     var MAXJACKSNODES = 200;
 
+    // CONFIRM Hack. Fix later.
+    var CONFIRMTYPES = [ "c6320", "c8220", "m400", "m510",
+			 "c220g1", "c220g2" ];
+
     function TimeStamp(message)
     {
 	if (0) {
@@ -1664,6 +1668,7 @@ $(function ()
 		// And the node_id/type. This is an emulab extension.
 		if (vnode.length) {
 		    var node_id = $(vnode).attr("name");
+		    var hwtype  = $(vnode).attr("hardware_type");
 
 		    // Admins get a link to the shownode page.
 		    if (isadmin) {
@@ -1677,9 +1682,22 @@ $(function ()
 		    else {
 			clone.find(" [name=node_id]").html(node_id);
 		    }
-		    clone.find(" [name=type]")
-			.html($(vnode).attr("hardware_type"));
+		    clone.find(" [name=type]").html(hwtype);
 		    clientid2nodeid[node] = $(vnode).attr("name");
+
+		    // Append to the CONFIRM button URL.
+		    if (_.contains(CONFIRMTYPES, hwtype)) {
+			var href = $('#confirm-stuff-button').attr("href");
+			if (href == "#") {
+			    href = "https://confirm.fyi/by-node/?nodes=";
+			}
+			else {
+			    href = href + ",";
+			}
+			href = href + node_id + ":" + node;
+			$('#confirm-stuff-button').attr("href", href);
+			$('#confirm-stuff-button').removeClass("hidden");
+		    }
 		}
 		// Convenience.
 		clone.find(" [name=select]").attr("id", node);

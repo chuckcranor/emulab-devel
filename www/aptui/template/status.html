@@ -206,10 +206,19 @@ pre {
 		      data-toggle='popover'
 		      data-content='Warn user or terminate experiment with cause
 				    and optionally freeze the user account.'>
- 		WarnKill</button>
+ 		Warn/Kill</button>
 	    </div>
 	  <% } %>
 	  <div class='pull-right'>
+	    <a href="#" target="_blank"
+	       class='btn btn-xs btn-info hidden' 
+	       style='margin-right: 10px;'
+	       id='confirm-stuff-button' type=button
+	       data-toggle='popover'
+	       data-content='Explore performance results from a set of
+			     low-level benchmarks characterizing the
+			     hardware used in this experiment.'>
+ 	      Performance History</a>
 	    <% if (registered && !isfadmin) { %>
 	      <span>
 		<button class='btn btn-xs btn-success hidden' disabled
