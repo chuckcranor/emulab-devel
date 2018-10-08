@@ -228,8 +228,8 @@ sub SearchHistory()
 		DBQueryFatal("select pid,name from apt_instance_history ".
 			     "where uuid='$uuid'");
 	    next
-		if (!$query_result->numrows);
-	    my ($pid,$name) = $query_result->fetchrow_array();
+		if (!$history_result->numrows);
+	    my ($pid,$name) = $history_result->fetchrow_array();
 	    
 	    my $aggregate   = APT_Aggregate->Lookup($aggregate_urn);
 	    if (!defined($aggregate)) {
