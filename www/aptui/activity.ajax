@@ -60,7 +60,7 @@ function Do_Search()
             }
         }
         elseif (isset($ajax_args["target_project"])) {
-            $target_project = Project::LookupByPid($ajax_args["target_project"]);
+            $target_project = Project::Lookup($ajax_args["target_project"]);
             if (!$target_project) {
                 SPITAJAX_ERROR(1, "No such project");
                 return;
@@ -75,6 +75,20 @@ function Do_Search()
         }
         else {
             $target_user = $this_user;
+        }
+    }
+    elseif (isset($ajax_args["target_project"])) {
+        $target_project = Project::Lookup($ajax_args["target_project"]);
+        if (!$target_project) {
+            SPITAJAX_ERROR(1, "No such project");
+            return;
+        }
+    }  
+    elseif (isset($ajax_args["target_user"])) {
+        $target_user = User::LookupByUid($ajax_args["target_user"]);
+        if (!$target_user) {
+            SPITAJAX_ERROR(1, "No such user");
+            return;
         }
     }
     $whereclause = "";
