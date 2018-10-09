@@ -161,7 +161,9 @@ function Do_GetInstanceStatus()
 	}
         elseif ($webtask->exitcode() == GENIRESPONSE_MAPPING_IMPOSSIBLE) {
             $blob["reason"]  = "Your topology cannot instantiated. ".
-	    "You have most likely asked for hardware that does not exist.\n\n";
+	    "You have most likely asked for hardware that does not exist, ".
+            "such as nodes of a type that are not at the target cluster, ".
+            "or nodes with too many network interfaces.\n\n";
         }
         elseif ($webtask->exitcode() == GENIRESPONSE_NO_MAPPING) {
             $blob["reason"]  = "Your topology could not be mapped to physical ".
