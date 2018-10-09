@@ -1751,9 +1751,15 @@ function Do_IdleData()
             if (!($sliver->physnode_count() || $sliver->virtnode_count())) {
                 continue;
             }
+            $json = $webtask->TaskValue("idledata");
+            # We might not get any data if no nodes at the target cluster.
+            # This happens occasionally. 
+            if (!$json || $json == "") {
+                continue;
+            }
             # Send back the raw json. 
-            $blob[$urn_mapping[$sliver->aggregate_urn()]] =
-                $webtask->TaskValue("idledata");
+            $blob[$urn_mapping[$sliver->aggregate_urn()]] = $json;
+                
         }
     }
     SPITAJAX_RESPONSE($blob);
