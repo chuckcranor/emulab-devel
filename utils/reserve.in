@@ -44,6 +44,7 @@ use Project;
 use Reservation;
 use WebTask;
 use emutil;
+use NodeType;
 use libEmulab;
 
 sub usage()
@@ -548,17 +549,34 @@ if ($clear || $clear_idx) {
 # reservations for the same project, the phase of the moon...
 # who knows.
 #
-my $approval_threshold;
-if (! GetSiteVar("reservations/approval_threshold", \$approval_threshold)) {
-    $approval_threshold = 128;
-}
-if ($approval_threshold == 0 ||
-    ($count * ( $endtime - $starttime ) / 3600 <= $approval_threshold)) {
-    $approve = 1;
-}
-
 # If they said "-p", don't approve no matter what.
-$approve = 0 if( $pending );
+# If an admin said to force approval, that overrides $pending and limits.
+#
+if (!$pending) {
+    my $approval_threshold;
+    if (! GetSiteVar("reservations/approval_threshold", \$approval_threshold)) {
+	$approval_threshold = 128;
+    }
+    if ($approval_threshold == 0 ||
+	($count * ( $endtime - $starttime ) / 3600 <= $approval_threshold)) {
+	$approve = 1;
+    }
+    #
+    # Check for an override attribute on the node type. Here zero really means
+    # zero instead of unlimited. As above, this limit is node hours.
+    #
+    my $nodetype = NodeType->Lookup($type);
+    if (!defined($nodetype)) {
+	fatal("Could not look up node type");
+    }
+    if (defined($nodetype->GetAttribute("reservation_autoapprove_limit"))) {
+	my $limit = $nodetype->GetAttribute("reservation_autoapprove_limit");
+
+	if (($count * ( $endtime - $starttime ) / 3600) > $limit) {
+	    $approve = 0;
+	}
+    }
+}
 
 #
 # Do not allow this as root; we want proper history.
