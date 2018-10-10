@@ -43,22 +43,25 @@ sub usage()
     print STDERR "\nMonitor node load averages and report on abnormally high ";
     print STDERR "CPU loads.\n";
     print STDERR "   -h         This message\n";
-    print STDERR "   -a         Monitor all nodes\n";
     print STDERR "   -I	seconds Interval at which to check\n";
     print STDERR "   -L	loadave Absolute value of load average to used as threshold\n";
     print STDERR "   -P pct     Base load average threshold on this percentage of CPUs busy\n";
+    print STDERR "   -m loadave	With -P, a minimum absolute load average below which we will never complain\n";
+    print STDERR "   -t		With -P, treat logical CPUs (HT) as real CPUs\n";
     print STDERR "              (number of CPUs varies by node type).\n";
     print STDERR "   -M         Send email about alerts in addition to logging via syslog\n";
     print STDERR "   -d         Run in debug (foreground) mode\n";
     print STDERR "   -1         Run the check once and then quit(for debugging gathering)\n";
+    exit(1);
 }
 
-my $optlist = "adhI:L:P:M1";
-my $doall = 0;
+my $optlist = "dhI:L:P:m:tM1";
 my $debug = 0;
 my $interval = $DEF_INTERVAL;
 my $loadave = 0;
 my $loadpct = 0;
+my $loadmin = 0;
+my $dothreads = 0;
 my $sendmail = 0;
 my $runonce = 0;
 
@@ -107,6 +110,7 @@ $| = 1;
 
 my @nodes       = ();
 my %pcs		= ();
+my %ntypes	= ();
 
 my $maillast = 0;
 my $mailsent = 0;
@@ -148,9 +152,6 @@ if (defined($options{'h'})) {
 if (defined($options{'d'})) {
     $debug = 1;
 }
-if (defined($options{"a"})) {
-    $doall = 1;
-}
 if (defined($options{'I'})) {
     if ($options{'I'} =~ /^(\d+)$/) {
 	$interval = $1;
@@ -185,6 +186,17 @@ if (defined($options{'P'})) {
 	usage();
     }
 }
+if (defined($options{'m'})) {
+    if ($options{'m'} =~ /^(\d+(.\d+)?)$/) {
+	$loadmin = $1;
+    } else {
+	print STDERR "Load average must be a real number.\n";
+	usage();
+    }
+}
+if (defined($options{"t"})) {
+    $dothreads = 1;
+}
 if (defined($options{"M"})) {
     $sendmail = 1;
 }
@@ -210,13 +222,12 @@ if ($loadave > 0) {
 	print STDERR "Only specify one of -L and -P\n";
 	usage();
     }
+    if ($loadmin > 0 || $dothreads) {
+	print STDERR "Only specify -m and -t with -P\n";
+	usage();
+    }
 } elsif ($loadpct == 0) {
     $loadave = $DEF_LOADAVE;
-}
-
-if ($loadpct > 0) {
-    print STDERR "Cannot do load percentages yet!\n";
-    exit(1);
 }
 
 # Go to ground.
@@ -239,7 +250,8 @@ openlog("cpuwatch", "pid", $TBLOG);
 
 logit("cpuwatch starting:");
 logit("  check=${interval}s, loadave=" . sprintf("%.2f", $loadave) .
-      ", loadpct=${loadpct}%");
+      ", loadpct=${loadpct}%, loadmin=" . sprintf("%.2f", $loadave) .
+      ", dothreads=$dothreads");
 if ($sendmail) {
     logit("  mailmax=$MAIL_MAX messages");
 }
@@ -279,10 +291,11 @@ sub getnodeinfo($)
     }
 
     $query_result =
-	DBQueryWarn("select r.pid,r.eid,n.node_id,n.eventstate".
-		    " from nodes as n, reserved as r".
-		    " where n.node_id=r.node_id".
-		    "  and n.role='testnode' $nclause".
+	DBQueryWarn("select r.pid,r.eid,n.node_id,n.type,n.eventstate".
+		    " from nodes as n,reserved as r,node_types as t".
+		    " where n.node_id=r.node_id and n.role='testnode'".
+		    "  and n.type=t.type and t.class='pc'".
+		    "  $nclause".
 		    " order by n.node_id");
     if (! $query_result || $query_result->numrows == 0) {
 	print STDERR "Node(s) not found.\n";
@@ -321,6 +334,7 @@ sub getnodeinfo($)
 	$newpcs{$pc}{'url'} = $url;
 	$newpcs{$pc}{'portalurl'} = $portalurl;
 	$newpcs{$pc}{'state'} = $row{'eventstate'};
+	$newpcs{$pc}{'type'} = $row{'type'};
 
 	if (!exists($pcs{$pc})) {
 	    $newpcs{$pc}{'lastcheck'} = time() - (10 * 60);
@@ -332,6 +346,39 @@ sub getnodeinfo($)
 	    $pcs{$pc}{'mark'} = 1;
 	}
 	
+	my $nt = $row{'type'};
+	if ($loadpct &&
+	    (!exists($ntypes{$nt}) || exists($ntypes{$nt}{'noinfo'}))) {
+	    my $q = DBQueryWarn("select attrkey,attrvalue".
+				" from node_type_attributes".
+				" where type='$nt'".
+				"  and attrkey like 'hw_cpu_%'");
+	    my ($cores,$socks,$threads);
+	    while (my %row2 = $q->fetchhash()) {
+		if ($row2{'attrkey'} eq "hw_cpu_cores") {
+		    $cores = $row2{'attrvalue'};
+		} elsif ($row2{'attrkey'} eq "hw_cpu_sockets") {
+		    $socks = $row2{'attrvalue'};
+		} elsif ($row2{'attrkey'} eq "hw_cpu_threads") {
+		    $threads = $row2{'attrvalue'};
+		}
+	    }
+	    if (!defined($cores) || !defined($socks) || !defined($threads)) {
+		if (!exists($ntypes{$nt})) {
+		    logit("$pc: WARNING: no socket/core/thread attributes ".
+			  "for type '$nt'");
+		    $ntypes{$nt}{'noinfo'} = 1;
+		}
+	    } else {
+		delete $ntypes{$nt}{'noinfo'};
+		$ntypes{$nt}{'sockets'} = $socks;
+		$ntypes{$nt}{'cores'} = $cores;
+		$ntypes{$nt}{'threads'} = $threads;
+		print "$nt: sockets=$socks, cores=$cores, threads=$threads\n"
+		    if ($debug);
+	    }
+	}
+
 	print "$pc "
 	    if ($debug && 0);
     }
@@ -416,10 +463,34 @@ sub reportevents($)
 	    $loadiv = 15 * 60;
 	}
 
-	if ($curload >= $loadave) {
+	my $lave;
+	if ($loadave) {
+	    $lave = $loadave;
+	} else {
+	    my $nt = $pcs{$node}{'type'};
+	    my $ncpus;
+
+	    if (exists($ntypes{$nt}) && !exists($ntypes{$nt}{'noinfo'})) {
+		$ncpus = $ntypes{$nt}{'sockets'} * $ntypes{$nt}{'cores'};
+		if ($dothreads) {
+		    $ncpus *= $ntypes{$nt}{'threads'};
+		}
+	    } else {
+		# XXX default to 8 if we have no info
+		$ncpus = 8;
+	    }
+	    $lave = $ncpus * $loadpct / 100.0;
+	    if ($loadmin && $lave < $loadmin) {
+		$lave = $loadmin;
+	    }
+	}
+
+	if ($curload >= $lave) {
 	    my $cload = sprintf "%.2f", $curload;
-	    my $tload = sprintf "%.2f", $loadave;
-	    logit("$node: WARNING: CPU load $cload over last $loadiv seconds");
+	    my $tload = sprintf "%.2f", $lave;
+	    my $mload = sprintf "%.2f", $loadmin;
+	    logit("$node: WARNING: CPU load $cload > $tload ".
+		  "over last $loadiv seconds");
 	    if ($sendmail) {
 		my $exp = $pcs{$node}{'exp'};
 		my $expname = $pcs{$node}{'expname'};
@@ -427,8 +498,11 @@ sub reportevents($)
 		my $portalurl = $pcs{$node}{'portalurl'};
 		    
 		if (@mailbody == 0) {
+		    my $thresh = $loadave ? $tload :
+			$loadmin ? "max($mload, $loadpct% of available CPU)" :
+			"$loadpct% of available CPU";
 		    push(@mailbody,
-			 "Threshold: CPU load above $tload ".
+			 "Threshold: CPU load above $thresh ".
 			 "over $interval seconds\n");
 		    push(@mailbody,
 			 sprintf("%-15s %-30s %-6s %s",
