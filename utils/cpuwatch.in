@@ -49,13 +49,14 @@ sub usage()
     print STDERR "   -m loadave	With -P, a minimum absolute load average below which we will never complain\n";
     print STDERR "   -t		With -P, treat logical CPUs (HT) as real CPUs\n";
     print STDERR "              (number of CPUs varies by node type).\n";
+    print STDERR "   -x	pid,...	Comma separated list of pids or pid/eids whose experiment nodes should be skipped\n";
     print STDERR "   -M         Send email about alerts in addition to logging via syslog\n";
     print STDERR "   -d         Run in debug (foreground) mode\n";
     print STDERR "   -1         Run the check once and then quit(for debugging gathering)\n";
     exit(1);
 }
 
-my $optlist = "dhI:L:P:m:tM1";
+my $optlist = "dhI:L:P:m:tx:M1";
 my $debug = 0;
 my $interval = $DEF_INTERVAL;
 my $loadave = 0;
@@ -64,6 +65,7 @@ my $loadmin = 0;
 my $dothreads = 0;
 my $sendmail = 0;
 my $runonce = 0;
+my %excluded = ();
 
 #
 # Configure variables
@@ -197,6 +199,16 @@ if (defined($options{'m'})) {
 if (defined($options{"t"})) {
     $dothreads = 1;
 }
+if (defined($options{'x'})) {
+    if ($options{'x'} =~ /^[-\w\/]+(,[-\w\/]+)*$/) {
+	foreach my $pid (split(/,/, $options{'x'})) {
+	    $excluded{$pid} = 1;
+	}
+    } else {
+	print STDERR "-x takes a comma-separated list of pids or pid/eids\n";
+	usage();
+    }
+}
 if (defined($options{"M"})) {
     $sendmail = 1;
 }
@@ -308,10 +320,17 @@ sub getnodeinfo($)
     my %newpcs = ();
     while (my %row = $query_result->fetchhash()) {
 	my $pc = $row{'node_id'};
+	my $pid = $row{'pid'};
+	my $pideid = $pid . "/" . $row{'eid'};
 
 	my ($exp,$expname,$url,$portalurl);
-	if (defined($row{'pid'})) {
-	    $exp = Experiment->Lookup($row{'pid'}, $row{'eid'});
+	if (defined($pid)) {
+	    if (exists($excluded{$pid}) || exists($excluded{$pideid})) {
+		print "$pc: in excluded project '$pid' or experiment '$pideid', skipping...\n"
+		    if ($debug);
+		next;
+	    }
+	    $exp = Experiment->Lookup($pid, $row{'eid'});
 	}
 	if (defined($exp)) {
 	    $expname = $exp->pideid();
