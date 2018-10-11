@@ -3321,6 +3321,7 @@ sub BatchAction($$@)
     # We do this so the slivers no longer say "ready" in the status.
     foreach my $sliver (@slivers) {
 	$sliver->SetState("restarting");
+	$sliver->SetStatus("changing");
     }
     
     if ($reload) {
