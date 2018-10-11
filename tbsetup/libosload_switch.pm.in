@@ -564,7 +564,7 @@ sub RunningNOS($$)
 	return 0;
     }
     $self->expectobj($nodeobject)->soft_close();
-    $self->dprint(0, "$self RuningNOS($node_id): running the NOS\n");
+    $self->dprint(0, "$self: RuningNOS($node_id): running the NOS\n");
     return 1;
 }
 
@@ -592,10 +592,115 @@ sub Reboot($$)
     #
     my %reboot_failures = ();
     if (nodereboot(\%reboot_args,\%reboot_failures)) {
-	tberror "$self Reload($node_id): power cycle failed!\n";
+	tberror "$self: Reload($node_id): power cycle failed!\n";
 	return -1;
     }
     return 0;
+}
+
+#
+# Reboot with wait.
+#
+sub RebootWait($$)
+{
+    my ($self, $nodeobject) = @_;
+    my $node_id  = $nodeobject->node_id();
+
+    $self->dprint(0, "$self: RebootWait($node_id)");
+    
+    #
+    # Start with reboot (in the machine dependent module), which
+    # might call reboot above. The we sit wait till we can send
+    # the ISUP for the switch.
+    #
+    if ($self->Reboot($nodeobject)) {
+	print STDERR "$self: RebootWait($node_id): Reboot() failed!\n";
+	return -1;
+    }
+    if ($self->WaitForReboot($nodeobject)) {
+	print STDERR "$self: RebootWait($node_id): WaitForReboot() failed!\n";
+	return -1;
+    }
+    return 0;
+}
+
+#
+# Wait for a re(boot) to finish.
+#
+sub WaitForReboot($$)
+{
+    my ($self, $nodeobject) = @_;
+    my $node_id = $nodeobject->node_id();
+
+    $self->dprint(0, "$self: WaitForReboot($node_id): starting");
+
+    #
+    # We just issued the reboot, so now we wait for ONIE to get
+    # control and send a BOOTING event, which happens right before it
+    # reboots itself (having changed grub to boot the NOS).  Once we
+    # get that event, we can start the real waiting below. 
+    #
+    my $seconds = 300;
+    while ($seconds >= 0) {
+	$nodeobject->Refresh();
+	if ($nodeobject->eventstate() eq TBDB_NODESTATE_BOOTING()) {
+	    last;
+	}
+	$seconds -= 10;
+	sleep(10);
+    }
+    if ($seconds <= 0) {
+	print STDERR
+	    "$self: WaitForReboot($node_id): timed out waiting for BOOTING\n";
+	goto failed;
+    }
+    $seconds = 180;
+    $self->dprint(0, "$self: WaitForReboot($node_id): ".
+		  "waiting $seconds seconds for ping");
+    # Need time for node to actually reboot;
+    sleep(30);
+
+    while ($seconds >= 0) {
+	sleep(15);
+	$seconds -= 15;
+
+	last
+	    if ($self->Pingable($nodeobject));
+    }
+    if ($seconds < 0) {
+	print STDERR
+	    "$self: WaitForReboot($node_id): timed out waiting for ping\n";
+	goto failed;
+    }
+
+    #
+    # Now we wait for sshd to come online. 
+    #
+    $seconds = 180;
+    $self->dprint(0,"$self: WaitForReboot($node_id): ".
+		  "waiting $seconds seconds for sshd");
+    
+    while ($seconds >= 0) {
+	sleep(15);
+	$seconds -= 15;
+
+	system("$NETCAT -z -w 3 $node_id 22 > /dev/null ");
+	if ($? == 0) {
+	    last
+	}
+    }
+    if ($seconds < 0) {
+	print STDERR
+	    "$self: Reconfigure($node_id): timed out waiting for sshd\n";
+	goto failed;
+    }
+    # We have to send this since the switch does not.
+    TBSetNodeEventState($node_id, TBDB_NODESTATE_ISUP());
+    return 0;
+
+  failed:
+    TBSetNodeEventState($node_id, TBDB_NODESTATE_TBFAILED());
+    return -1;
 }
 
 1;
