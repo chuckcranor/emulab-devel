@@ -940,24 +940,10 @@ sub TBSetNodeEventState($$;$)
 {
     my ($node, $state, $fatal) = @_;
 
-    #
-    # If using the event system, we send out an event for the state daemon to
-    # pick up. Otherwise, we just set the state in the database ourselves
-    #
-    require event;
-
-    if (!defined($fatal) || $fatal) {
-	return event::EventSendFatal(objtype   => TBDB_TBEVENT_NODESTATE,
-				     objname   => $node,
-				     eventtype => $state,
-				     host      => $BOSSNODE);
+    if (!ref($node)) {
+	$node = LocalNodeLookup($node);
     }
-    else {
-	return event::EventSendWarn(objtype   => TBDB_TBEVENT_NODESTATE,
-				    objname   => $node,
-				    eventtype => $state,
-				    host      => $BOSSNODE);
-    }
+    return $node->SetEventState($state, $fatal);
 }
 
 #

@@ -2297,11 +2297,13 @@ sub GetBootLog($$)
 }
 
 #
-# Set event state for a node.
+# Set event state for a node. Note that we do not change the DB here,
+# but let stated do that. If stated dies ...
 #
-sub SetEventState($$)
+sub SetEventState($$;$)
 {
-    my ($self, $state) = @_;
+    my ($self, $state, $fatal) = @_;
+    my $rval;
     require event;
 
     # Must be a real reference. 
@@ -2310,17 +2312,19 @@ sub SetEventState($$)
 
     my $node_id = $self->node_id();
 
-    #
-    # If using the event system, we send out an event for the state daemon to
-    # pick up. Otherwise, we just set the state in the database ourselves
-    #
-    return event::EventSendFatal(objtype   => TBDB_TBEVENT_NODESTATE,
-				 objname   => $node_id,
-				 eventtype => $state,
-				 host      => $BOSSNODE);
-
-    return $self->Update({"eventstate"      => $state,
-			  "state_timestamp" => time()});
+    if (!defined($fatal) || $fatal) {
+	$rval = event::EventSendFatal(objtype   => TBDB_TBEVENT_NODESTATE,
+				      objname   => $node_id,
+				      eventtype => $state,
+				      host      => $BOSSNODE);
+    }
+    else {
+	$rval = event::EventSendWarn(objtype   => TBDB_TBEVENT_NODESTATE,
+				     objname   => $node_id,
+				     eventtype => $state,
+				     host      => $BOSSNODE);
+    }
+    return ($rval == 1 ? 0 : -1);
 }
 
 sub ResetStartStatus($)
