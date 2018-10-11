@@ -115,6 +115,7 @@ else {
           $profile_default) = explode(',', $portal_default_profile);
 }
 $profile_array  = array();
+$usageinfo      = UserUsageInfo($this_user);
 
 #
 # if using the super secret URL, make sure the profile exists, and
@@ -154,7 +155,14 @@ if (isset($profile)) {
 	    }
 	}
         $profile = $obj;
-	$profile_array[$profile->uuid()] = $profile->name();
+	$profile_array[$profile->uuid()] =
+            array("name"      => $profile->name(),
+                  "profileid" => $profile->profileid(),
+                  "project"   => $profile->pid(),
+                  "pid"       => $profile->pid(), # JS messes with project.
+                  "creator"   => $profile->creator(),
+                  "usecount"  => $profile->usecount(),
+                  "favorite"  => $profile->isFavorite($this_user));
 	$profilename = $profile->name();
     }
     else {
@@ -180,7 +188,14 @@ if (isset($profile)) {
 	    exit();
 	}
 	$profile = $obj;
-	$profile_array[$profile->uuid()] = $profile->name();
+	$profile_array[$profile->uuid()] = 
+            array("name"      => $profile->name(),
+                  "profileid" => $profile->profileid(),
+                  "project"   => $profile->pid(),
+                  "pid"       => $profile->pid(), # JS messes with project.
+                  "creator"   => $profile->creator(),
+                  "usecount"  => $profile->usecount(),
+                  "favorite"  => $profile->isFavorite($this_user));
 	$profilename = $profile->name();
     }
     if ($profile->isDisabled()) {
@@ -205,14 +220,19 @@ else {
 	$joinclause =
 	    "left join group_membership as g on ".
 	    "     g.uid_idx='$this_idx' and ".
-	    "     g.pid_idx=v.pid_idx and g.pid_idx=g.gid_idx";
+	    "     g.pid_idx=v.pid_idx and g.pid_idx=g.gid_idx ".
+            "left join apt_profile_favorites as f on ".
+            "     f.profileid=p.profileid and f.uid_idx='$this_idx'";
+                    
 	$whereclause =
 	    "p.public=1 or p.shared=1 or v.creator_idx='$this_idx' or ".
 	    "g.uid_idx is not null ";
     }
 
     $query_result =
-	DBQueryFatal("select p.uuid,p.name,p.pid from apt_profiles as p ".
+	DBQueryFatal("select p.uuid,p.name,p.pid,v.creator,p.profileid, ".
+                     "     p.usecount,f.marked ".
+                     "   from apt_profiles as p ".
 		     "left join apt_profile_versions as v on ".
 		     "     v.profileid=p.profileid and ".
 		     "     v.version=p.version ".
@@ -220,7 +240,14 @@ else {
 		     "where locked is null and p.disabled=0 and ".
                      "      v.disabled=0 and ($whereclause) ");
     while ($row = mysql_fetch_array($query_result)) {
-	$profile_array[$row["uuid"]] = $row["name"];
+	$profile_array[$row["uuid"]] =
+            array("name"      => $row["name"],
+                  "profileid" => $row["profileid"],
+                  "project"   => $row["pid"],
+                  "pid"       => $row["pid"],
+                  "creator"   => $row["creator"],
+                  "usecount"  => $row["usecount"],
+                  "favorite"  => $row["marked"] ? 1 : 0);
         if ($row["pid"] == $profile_default_pid &&
             $row["name"] == $profile_default) {
 	    $profile_default = $row["uuid"];
@@ -256,6 +283,13 @@ else {
                 unset($profile_array[$obj->profile_uuid()]);
             }
             $profile_array[$obj->uuid()] = $obj->name();
+                    array("name"      => $obj->name(),
+                          "profileid" => $obj->profileid(),
+                          "project"   => $obj->pid(),
+                          "pid"       => $obj->pid(),
+                          "creator"   => $obj->creator(),
+                          "usecount"  => $obj->usecount(),
+                          "favorite"  => $obj->isFavorite($this_user));
             $profile_default = $obj->uuid();
         }
         else {
@@ -266,53 +300,24 @@ else {
 }
 
 #
-# Rebuild the array with extra info for the profile picker.
+# Update the array with extra info for the profile picker.
 #
-if (isset($this_user)) {
-    $usageinfo = UserUsageInfo($this_user);
-}
-$tmp_array = array();
-while (list ($uuid, $title) = each ($profile_array)) {
-    $tmp = Profile::Lookup($uuid);
-    if ($tmp) {
-        if (1) {
-            # If profile never used, no need to ask if user has used it.
-            if (!$tmp->usecount()) {
-                $count = $lastused = 0;
-            }
-            elseif (isset($this_user)) {
-                $profileid = $tmp->profileid();
-                if (array_key_exists($profileid, $usageinfo)) {
-                    $count    = $usageinfo[$profileid]["count"];
-                    $lastused = $usageinfo[$profileid]["lastused"];
-                }
-                else {
-                    # Use global count instead.
-                    $count    = $tmp->usecount();
-                    $lastused = 0;
-                }
-            }
-            else {
-                # Guest user; just use the global usage count.
-                $count    = $tmp->usecount();
-                $lastused = 0;
-            }
+foreach ($profile_array as $uuid => &$details) {
+    $profileid = $details["profileid"];
+    $usecount  = $details["usecount"];
+    $lastused  = 0;
+    
+    # If profile never used, no need to check if user has used it.
+    if ($usecount) {
+        if (array_key_exists($profileid, $usageinfo)) {
+            $usecount = $usageinfo[$profileid]["count"];
+            $lastused = $usageinfo[$profileid]["lastused"];
         }
-        else {
-            $lastused = time();
-            $count = 0;
-        }
-        $tmp_array[$uuid] =
-            array("name"     => $tmp->name(),
-                  "project"  => $tmp->pid(),
-                  "pid"      => $tmp->pid(), # JS messes with project.
-                  "creator"  => $tmp->creator(),
-                  "favorite" => $tmp->isFavorite($this_user),
-                  "lastused" => $lastused,
-                  "usecount" => $count);
     }
+    $details["usecount"] = $usecount;
+    $details["lastused"] = $lastused;
 }
-$profile_array = $tmp_array;
+reset($profile_array);
 
 function SPITFORM($formfields, $newuser, $errors)
 {
