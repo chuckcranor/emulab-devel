@@ -178,11 +178,6 @@ if (defined($options{'L'})) {
 if (defined($options{'P'})) {
     if ($options{'P'} =~ /^(\d+)$/) {
 	$loadpct = $1;
-	if ($loadpct > 100) {
-	    print STDERR "Load percentage must be less than 100.\n";
-	    usage();
-	    exit(1);
-	}
     } else {
 	print STDERR "Load percentage must be a number.\n";
 	usage();
@@ -262,7 +257,7 @@ openlog("cpuwatch", "pid", $TBLOG);
 
 logit("cpuwatch starting:");
 logit("  check=${interval}s, loadave=" . sprintf("%.2f", $loadave) .
-      ", loadpct=${loadpct}%, loadmin=" . sprintf("%.2f", $loadave) .
+      ", loadpct=${loadpct}%, loadmin=" . sprintf("%.2f", $loadmin) .
       ", dothreads=$dothreads");
 if ($sendmail) {
     logit("  mailmax=$MAIL_MAX messages");
@@ -466,6 +461,14 @@ sub reportevents($)
     foreach my $node (sort keys %pcs) {
 	if (!$ref->{$node}{'valid'} ||
 	    $ref->{$node}{'tstamp'} == $pcs{$node}{'lastcheck'}) {
+	    my $now = time();
+
+	    # no slothd report for an hour, whine
+	    if ($pcs{$node}{'lastcheck'} + (60 * 60) <= $now) {
+		logit("$node: WARNING: no slothd report since ".
+		      POSIX::strftime("20%y-%m-%d %H:%M:%S",
+				      $pcs{$node}{'lastcheck'}));
+	    }
 	    next;
 	}
 	$pcs{$node}{'lastcheck'} = $ref->{$node}{'tstamp'};
