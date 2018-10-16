@@ -298,7 +298,7 @@ sub getnodeinfo($)
     }
 
     $query_result =
-	DBQueryWarn("select r.pid,r.eid,n.node_id,n.type,n.eventstate".
+	DBQueryWarn("select r.pid,r.eid,n.node_id,n.type".
 		    " from nodes as n,reserved as r,node_types as t".
 		    " where n.node_id=r.node_id and n.role='testnode'".
 		    "  and n.type=t.type and t.class='pc'".
@@ -347,7 +347,6 @@ sub getnodeinfo($)
 	$newpcs{$pc}{'expname'} = $expname;
 	$newpcs{$pc}{'url'} = $url;
 	$newpcs{$pc}{'portalurl'} = $portalurl;
-	$newpcs{$pc}{'state'} = $row{'eventstate'};
 	$newpcs{$pc}{'type'} = $row{'type'};
 
 	if (!exists($pcs{$pc})) {
@@ -459,20 +458,24 @@ sub reportevents($)
 
     my $warned = 0;
     foreach my $node (sort keys %pcs) {
-	if (!$ref->{$node}{'valid'} ||
-	    $ref->{$node}{'tstamp'} == $pcs{$node}{'lastcheck'}) {
+	my $lcheck = $pcs{$node}{'lastcheck'};
+	if ($lcheck !~ /\d+/) {
+	    logit("$node: WARNING: bogus lastcheck '$lcheck' ignored");
+	}
+	if (!$ref->{$node}{'valid'} || $ref->{$node}{'tstamp'} == $lcheck) {
 	    my $now = time();
 
 	    # no slothd report for an hour, whine
-	    if ($pcs{$node}{'lastcheck'} + (60 * 60) <= $now) {
+	    if ($lcheck + (60 * 60) <= $now) {
 		logit("$node: WARNING: no slothd report since ".
 		      POSIX::strftime("20%y-%m-%d %H:%M:%S",
-				      $pcs{$node}{'lastcheck'}));
+				      localtime($lcheck)));
 	    }
 	    next;
 	}
-	$pcs{$node}{'lastcheck'} = $ref->{$node}{'tstamp'};
-
+	if ($ref->{$node}{'valid'}) {
+	    $pcs{$node}{'lastcheck'} = $ref->{$node}{'tstamp'};
+	}
 	my ($loadiv, $curload);
 	if ($interval < (5*60)) {
 	    $curload = $ref->{$node}{'lave1'};
