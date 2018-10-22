@@ -5988,7 +5988,7 @@ get_node_loadinfo(tmcdreq_t *reqp, char **serverp, char **disktypep,
 		gettimeofday(&now, NULL);
 		if (now.tv_sec > (time_t)(trimtime + trimiv)) {
 			mydb_update("replace into node_attributes values "
-				    "('%s','bootdisk_lasttrim','%u')",
+				    "('%s','bootdisk_lasttrim','%u',0)",
 				    reqp->nodeid, (unsigned)now.tv_sec);
 			dotrim = 1;
 		}
