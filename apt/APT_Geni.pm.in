@@ -567,11 +567,12 @@ sub PortalRPC($$$@)
 #
 # Ping an aggregate to see if its alive, using getversion.
 #
-sub PingAggregate($$;$)
+sub PingAggregate($$;$$)
 {
-    my ($aggregate, $perrmsg, $portalrpc) = @_;
+    my ($aggregate, $perrmsg, $portalrpc, $timeout) = @_;
     my $authority   = GetAuthority($aggregate->urn());
     my $context     = RootContext();
+    $timeout = 10 if (!defined($timeout));
 
     if (!defined($authority)) {
 	$$perrmsg = "Could not lookup authority for $aggregate!";
@@ -588,7 +589,7 @@ sub PingAggregate($$;$)
     if ($usemydevtree) {
 	$cmurl =~ s/protogeni/protogeni\/stoller/;
     }
-    my $oldto = Genixmlrpc->SetTimeout(10);
+    my $oldto = Genixmlrpc->SetTimeout($timeout);
     my $response = Genixmlrpc::CallMethod($cmurl, $context, "GetVersion");
     Genixmlrpc->SetTimeout($oldto);
 
