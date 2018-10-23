@@ -842,7 +842,7 @@ CustomLog @prefix@/log/apache_ssl_request_log.geni \
 SSLCACertificateFile @prefix@/etc/genica.bundle
 # Another bundle of CRLs.
 SSLCARevocationFile @prefix@/etc/genicrl.bundle
-SSLCARevocationCheck chain
+SSLCARevocationCheck chain no_crl_for_cert_ok
 
 # Reject the unencrypted certs that all users get. 
 <Location />
@@ -1040,7 +1040,7 @@ CustomLog @prefix@/log/apache_ssl_request_log.geni \
 SSLCACertificateFile @prefix@/etc/genica.bundle
 # Another bundle of CRLs.
 SSLCARevocationFile @prefix@/etc/genicrl.bundle
-SSLCARevocationCheck chain
+SSLCARevocationCheck chain no_crl_for_cert_ok
 
 ScriptAlias /protogeni/pubxmlrpc @prefix@/protogeni/pubxmlrpc/pubgeni-wrapper.pl
 
@@ -1210,7 +1210,7 @@ CustomLog @prefix@/log/apache_ssl_request_log.geni \
 SSLCACertificateFile @prefix@/etc/genica.bundle
 # Another bundle of CRLs.
 SSLCARevocationFile @prefix@/etc/genicrl.bundle
-SSLCARevocationCheck chain
+SSLCARevocationCheck chain no_crl_for_cert_ok
 
 WSGIDaemonProcess localstore processes=5 threads=1 python-eggs=/usr/local/ops-monitoring/local/eggs 
 WSGIScriptAlias / /usr/local/ops-monitoring/local/wsgi/localstore.wsgi
