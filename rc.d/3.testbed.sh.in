@@ -8,6 +8,8 @@
 # BEFORE: apache22
 # KEYWORD: shutdown
 
+MAINSITE="@TBMAINSITE@"
+
 case "$1" in
 	start|faststart|quietstart|onestart|forcestart)
 		#
@@ -157,7 +159,7 @@ case "$1" in
 			@prefix@/sbin/cnetwatch
 		fi
 
-		if [ -x @prefix@/sbin/portal_monitor ]; then
+		if [ $MAINSITE == "1" -a -x @prefix@/sbin/portal_monitor ]; then
 			echo -n " portal_monitor"
 			@prefix@/sbin/portal_monitor
 		fi
