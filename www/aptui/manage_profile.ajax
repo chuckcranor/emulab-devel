@@ -980,7 +980,7 @@ function Do_CheckForm($formfields, $paramdefs, &$rval)
 		}
 	    }
 	    else {
-		if (!TBcheck_dbslot($val, "default", "text",
+		if (!TBcheck_dbslot($val, "default", "html_fulltext",
 			TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
 		    $errors[$name] = TBFieldErrorString();
 		}
