@@ -29,7 +29,7 @@ my $SQLSTUFF     = "$TOP_SRCDIR/install/$TARGETSYS_DIR/tbdb.sql";
 my %TYPEFILES    = ("nuc8650" =>
 		        "$TOP_SRCDIR/install/$TARGETSYS_DIR/nuc8650.xml",
 		    "nuc8559" =>
-		        "$TOP_SRCDIR/install/$TARGETSYS_DIR/nuc8650.xml",
+		        "$TOP_SRCDIR/install/$TARGETSYS_DIR/nuc8559.xml",
 		    "iris030" =>
 		    "$TOP_SRCDIR/install/$TARGETSYS_DIR/iris030.xml");
 
@@ -271,6 +271,42 @@ sub Install($$$)
 		ExecQuietFatal("service pf restart");
 	    };
 	    PhaseSucceed("NAT Done");
+	};
+
+	#
+	# Create a local named forward fragment file with some extra stuff.
+	#
+	my $forwarddots;
+	my @forward_strings = ();
+	my @reverse_strings = ();
+	my %local_dns = ("TARGETSYS_ROUTER" => "control");
+
+	foreach my $name (keys(%local_dns)) {
+	    next
+		if (!exists($configvars{$name}));
+
+	    my $hostname = $local_dns{$name};
+	    my $ip = $configvars{$name};
+	    my ($a,$b,$c,$num) = split(/\./, $ip);
+	    $forwarddots = "${a}.${b}.${c}";
+	    
+	    push(@forward_strings, "$hostname\tIN\tA\t$ip");
+	    push(@reverse_strings, "$num\tIN\tPTR\t${hostname}.${OURDOMAIN}.");
+	}
+	my $FORWARDFRAGMENT1 = "$NAMED_DIR/${OURDOMAIN}.internal.db.local";
+	my $FORWARDFRAGMENT2 = "$NAMED_DIR/${OURDOMAIN}.db.local";
+	my $REVERSEFRAGMENT  = "$NAMED_DIR/reverse/${forwarddots}.db.local";
+	Phase "forward1", "Creating $FORWARDFRAGMENT1", sub {
+	    DoneIfExists($FORWARDFRAGMENT1);
+	    CreateFileFatal($FORWARDFRAGMENT1, @forward_strings);
+	};
+	Phase "forward2", "Creating $FORWARDFRAGMENT2", sub {
+	    DoneIfExists($FORWARDFRAGMENT2);
+	    CreateFileFatal($FORWARDFRAGMENT2, @forward_strings);
+	};
+	Phase "reverse", "Creating $REVERSEFRAGMENT", sub {
+	    DoneIfExists($REVERSEFRAGMENT);
+	    CreateFileFatal($REVERSEFRAGMENT, @reverse_strings);
 	};
 
 	#

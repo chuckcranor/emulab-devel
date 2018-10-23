@@ -50,6 +50,7 @@ tb-set-elabinelab-role-attribute boss XEN_CORES 2
 
 # Nucs need the latest.
 tb-set-elabinelab-attribute MFSVERSION "11-64"
+tb-set-elabinelab-attribute MFSCONSOLE vga
 
 # Extra stuff for devel in elabinelab.
 tb-set-elabinelab-role-attribute boss XEN_NOANTISPOOFING yes
