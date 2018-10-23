@@ -209,7 +209,7 @@ function Do_Search()
 
 function SearchForIP($ip, $min, $max)
 {
-    global $this_user, $portals;
+    global $this_user, $portals, $urn_mapping;
     $this_uid = $this_user->uid();
     $results = array();
     
@@ -220,7 +220,7 @@ function SearchForIP($ip, $min, $max)
     $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC($this_uid, "nobody",
 		     "websearchip -t " . $webtask->task_id() .
-                     " -s $min -e $max -h $ip",
+                     " -s $min -e $max -b $ip",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
     
@@ -235,8 +235,65 @@ function SearchForIP($ip, $min, $max)
         $webtask->Delete();
         return;
     }
+    $current   = $webtask->TaskValue("instance");
     $instances = $webtask->TaskValue("instancelist");
     $webtask->Delete();
+
+    if ($current) {
+        #
+        # This is a bit hokey, but it lets us show a current experiment
+        # in the activity list when searching for an IP, which is handy.
+        #
+        $instance = Instance::Lookup($current);
+        error_log("foo: $min, $max, " . strtotime($instance->started()));
+        if ($instance &&
+            (strtotime($instance->started()) > $min &&
+             strtotime($instance->started()) < $max)) {
+            $uuid      = $instance->uuid();
+            $iname     = $instance->name();
+            $pproj     = $instance->pid();
+            $created   = DateStringGMT($instance->created());
+            $started   = DateStringGMT($instance->started());
+            $destroyed = null;
+            $creator   = $instance->creator();
+            $pcount    = $instance->physnode_count();
+            $vcount    = $instance->virtnode_count();
+            $portal    = $portals[$instance->servername()];
+            $phours    = round(pcount *
+                               ((time() -
+                                 strtotime($instance->created())) / 3600.0));
+
+            # Profile Info.
+            $profile = Profile::Lookup($instance->profile_id(),
+                                       $instance->profile_version());
+            if ($profile) {
+                $pname = $profile->name();
+                $puuid = $profile->uuid();
+            }
+            $clusters = array();
+            foreach ($instance->slivers() as $sliver) {
+                $abbreviation = $urn_mapping[$sliver->aggregate_urn()];
+                $clusters[]   = $abbreviation;
+            }
+            $clusters = join(",", $clusters);
+
+            # Backwards compat.
+            if (!isset($pproj)) {
+                $pproj = "";
+            }
+            if (!isset($iname)) {
+                $iname = "&nbsp;";
+            }
+
+            # Save space with array instead of hash.
+            $instance =
+                array($pname, $pproj, $puuid, $pcount, $vcount,
+                      $creator, $started, $destroyed, $phours, $iname,
+                      $uuid, $created, $portal, $clusters);
+                          
+            $results[] = $instance;
+        }
+    }
 
     foreach ($instances as $uuid) {
         $instance = InstanceHistory::Lookup($uuid);
@@ -265,8 +322,8 @@ function SearchForIP($ip, $min, $max)
         }
         $clusters = array();
         foreach ($instance->slivers() as $sliver) {
-            $aggregate  = Aggregate::Lookup($sliver["aggregate_urn"]);
-            $clusters[] = $aggregate->abbreviation();
+            $abbreviation = $urn_mapping[$sliver["aggregate_urn"]];
+            $clusters[]   = $abbreviation;
         }
         $clusters = join(",", $clusters);
 

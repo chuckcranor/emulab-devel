@@ -31,16 +31,18 @@ use Date::Parse;
 #
 sub usage()
 {
-    print STDERR "Usage: searchip [-h [-s min] [-e max]] ipv4\n";
+    print STDERR "Usage: searchip [-h | -b [-s min] [-e max]] ipv4\n";
     print STDERR "Options:\n";
     print STDERR "  -h     - Search historical instances instead of current.\n";
+    print STDERR "  -b     - Search both current and historical instances.\n";
     print STDERR "  -s     - Start search timestamp for -h option.\n";
     print STDERR "  -e     - End search timestamp for -h option.\n";
     exit(-1);
 }
-my $optlist    = "dt:hs:e:";
+my $optlist    = "dt:hs:e:b";
 my $debug      = 0;
 my $historical = 0;
+my $both       = 0;
 my $webtask_id;
 my $webtask;
 my $start;
@@ -94,6 +96,10 @@ if (defined($options{"d"})) {
 }
 if (defined($options{"h"})) {
     $historical = 1;
+}
+if (defined($options{"b"})) {
+    $historical = 1;
+    $both = 1;
 }
 if (defined($options{"s"})) {
     $start = $options{"s"};
@@ -162,11 +168,7 @@ sub SearchCurrent()
     }
     if (!$found) {
 	print "No matching instance for IP\n";
-	if (defined($webtask)) {
-	    $webtask->output("No matching instance for IP");
-	    $webtask->Exited(1);
-	}
-	exit(1);
+	return undef;
     }
     my $instance      = $found->instance();
     my $pid           = $instance->pid();
@@ -180,13 +182,8 @@ sub SearchCurrent()
     
     my $mesg = "Found IP: $pid/$name - $cluster_name";
     print $mesg . "\n";
-    if (defined($webtask)) {
-	$webtask->instance($instance->uuid);
-	$webtask->aggregate_urn($aggregate_urn);
-	$webtask->output($mesg);
-	$webtask->Exited(0);
-    }
-    exit(0);
+
+    return $instance->uuid();
 }
 
 sub SearchHistory()
@@ -283,11 +280,32 @@ sub SearchManifest($)
     }
     return 0;
 }
-if ($historical) {
-    SearchHistory();
+if ($historical || $both) {
+    if ($both) {
+	my $uuid = SearchCurrent();
+	if (defined($webtask)) {
+	    $webtask->instance($uuid);
+	}
+    }
+    my @list = SearchHistory();
+    if (defined($webtask)) {
+	$webtask->instancelist(\@list);
+	$webtask->Exited(0);
+    }
 }
 else {
-    SearchCurrent();
+    my $uuid = SearchCurrent();
+    if (!defined($uuid)) {
+	if (defined($webtask)) {
+	    $webtask->output("No matching instance for IP");
+	    $webtask->Exited(1);
+	}
+	exit(1);	
+    }
+    if (defined($webtask)) {
+	$webtask->instance($uuid);
+	$webtask->Exited(0);
+    }
 }
 exit(0);
 

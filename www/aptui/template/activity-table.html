@@ -64,7 +64,11 @@
 	<td class='format-date'><%- instance[6] %></td>
 	<td class='format-date'><%- instance[7] %></td>
 	<td class="text-center">
-	  <a href='memlane.php?uuid=<%- instance[10] %>' target="_blank">
+	  <% if (instance[7]) { %>
+	    <a href='memlane.php?uuid=<%- instance[10] %>' target="_blank">
+	  <% } else { %>
+	    <a href='status.php?uuid=<%- instance[10] %>' target="_blank">
+	  <% } %>
 	    <span class="align-center-inline
 			 glyphicon glyphicon-eye-open"></span></a>
 	</td>
