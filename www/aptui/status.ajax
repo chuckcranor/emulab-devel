@@ -1900,7 +1900,7 @@ function Do_WarnExperiment()
     if (isset($ajax_args["reason"]) && $ajax_args["reason"] != "") {
         $reason = $ajax_args["reason"];
         
-        if (!TBvalid_fulltext($reason)) {
+        if (!TBvalid_html_fulltext($reason)) {
 	    SPITAJAX_ERROR(1, "Illegal characters in message");
 	    goto bad;
         }

@@ -4403,7 +4403,7 @@ sub DoWarn()
 	fatal("Only admins can destroy experiments");
     }
     if (defined($reason) &&
-	!TBcheck_dbslot($reason, "default", "fulltext",
+	!TBcheck_dbslot($reason, "default", "html_fulltext",
 			 TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
 	$errmsg  = "Illegal characters in your reason";
 	$errcode = 1;
