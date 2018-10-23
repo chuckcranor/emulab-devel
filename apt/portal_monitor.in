@@ -717,7 +717,8 @@ sub GetVersion($)
 	return 0;
     };
     if (ParRun({"maxwaittime" => 600,
-		"maxchildren" => 10}, \@return_codes, $coderef, @agglist)) {
+		"maxchildren" => 10,
+		"nosighup"    => 1}, \@return_codes, $coderef, @agglist)) {
 	print STDERR "ParRun failed";
 	return -1;
     }
