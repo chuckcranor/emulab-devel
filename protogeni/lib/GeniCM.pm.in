@@ -5044,6 +5044,8 @@ sub SliverWorkAux($)
 	    #
 	    $inaggregate = 1;
 	    $sliver = $nodemap{$virtual_id};
+	    # Replace the existing rspec/manifest
+	    $sliver->UpdateRspec($ref);
 	}
 	else {
 	    $sliver = GeniSliver::Node->Create($slice, $owner, $node, $ref);
@@ -5686,7 +5688,8 @@ sub SliverWorkAux($)
 	goto bad;
     }
 
-    my $siteinfo = GeniXML::FindFirst("n:site_info", $manifest);
+    my $siteinfo = GeniXML::FindFirstNS("n:site_info", $manifest,
+					$GeniXML::SITEINFO_NS);
     if (defined($siteinfo)) {
 	# Clean old location.
 	$manifest->removeChild($siteinfo);
@@ -5726,11 +5729,9 @@ sub SliverWorkAux($)
 	print STDERR "GeniUsage->NewAggregate($aggregate) failed\n";
     }
 
-    # This should move someplace else?
+    $aggregate->UpdateManifest($manifest);
+    # Need this below.
     my $manifest_string = GeniXML::Serialize($manifest);
-    DBQueryWarn("replace into geni_manifests set ".
-		"  manifest=". DBQuoteSpecial($manifest_string) . ", " .
-		"  idx=NULL, slice_uuid='$slice_uuid', created=now()");
 
     #
     # Cache the credential for subsequent requests. See GetSliver().
