@@ -177,7 +177,9 @@ if ($profile = Profile::Lookup($instance->profile_id(),
 else {
     $cansnap        = 0;
     $canclone       = 0;
-    $canterminate   = 0;
+    $canterminate   = ((isset($this_user) &&
+                        $instance->CanTerminate($this_user)) ||
+		       ISADMIN() ? 1 : 0);
     $isscript       = 0;
 
 }
