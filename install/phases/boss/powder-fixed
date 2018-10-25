@@ -258,6 +258,10 @@ sub Install($$$)
 	    my $bossip = $configvars{"TARGETSYS_BOSSIP"};
 	    my $opsip  = $configvars{"TARGETSYS_OPSIP"};
 	    my $mask   = $configvars{"TARGETSYS_NETMASK"};
+
+	    # Yuck, pf does not like netmasks like /255.255.255.248
+	    # Has to be /29.
+	    $mask = "29";
 	    
 	    Phase "delete", "Deleting old configuration", sub {
 		DeleteFileFatal($NATCONF);
