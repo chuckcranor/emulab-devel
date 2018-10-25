@@ -2296,6 +2296,21 @@ sub GetTicketAuxAux($)
 		    $attrkey = "DOCKER_ENV";
 		    #$attrvalue = DBQuoteSpecial($attrvalue);
 		}
+		elsif ($setting eq "privileged") {
+		    $attrkey = "DOCKER_PRIVILEGED";
+		    if ($attrvalue eq '1' || $attrvalue =~ /^true$/i) {
+			if ($isshared) {
+			    $response = GeniResponse->Create(
+				GENIRESPONSE_BADARGS, undef,
+				"Shared containers cannot be privileged");
+			    goto bad;
+			}
+			$attrvalue = "1";
+		    }
+		    else {
+			$attrvalue = "0";
+		    }
+		}
 		else {
 		    next;
 		}

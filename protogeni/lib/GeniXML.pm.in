@@ -1294,6 +1294,9 @@ sub GetDockerSettings($)
     $tmp = GetText("env", $settings);
     $result->{"env"} = $tmp
 	if (defined($tmp));
+    $tmp = GetText("privileged", $settings);
+    $result->{"privileged"} = $tmp
+	if (defined($tmp));
 
     return $result;
 }

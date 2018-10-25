@@ -2958,6 +2958,20 @@ sub vnodeCreate($$$$)
     }
 
     #
+    # A quick sanity check to prevent privileged containers on shared
+    # nodes.  The frontend protects us against this, but have to be
+    # sure.
+    #
+    my $privileged = 0;
+    if (exists($attributes->{'DOCKER_PRIVILEGED'})
+	&& $attributes->{'DOCKER_PRIVILEGED'} eq '1') {
+	if (SHAREDHOST()) {
+	    fatal("vnodeCreate: cannot spawn privileged container on shared host!");
+	}
+	$privileged = 1;
+    }
+
+    #
     # Figure out where/what we're pulling, and a username/password if
     # necessary.
     #
@@ -3120,6 +3134,11 @@ sub vnodeCreate($$$$)
     $args{'AttachStdout'} = JSON::PP::true;
     $args{'AttachStderr'} = JSON::PP::true;
     $args{'OpenStdin'} = JSON::PP::true;
+
+    # Handle privileged containers.  NB: we already checked the sharedhost case above.
+    if ($privileged) {
+	$args{"HostConfig"}{"Privileged"} = JSON::PP::true;
+    }
 
     my @hostspairs = ();
     genhostspairlist($vnode_id,\@hostspairs);
