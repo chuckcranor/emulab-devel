@@ -108,8 +108,7 @@ RUN_DEPENDS+=	\
 # apache related ports
 RUN_DEPENDS+=	\
 	${LOCALBASE}/${APACHEMODDIR}/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
-	${LOCALBASE}/${APACHEMODDIR}/libphp5.so:${PORTSDIR}/www/mod_php$(PHP_VER) \
-	${LOCALBASE}/${APACHEMODDIR}/mod_fastcgi.so:${PORTSDIR}/www/mod_fastcgi
+	${LOCALBASE}/${APACHEMODDIR}/libphp5.so:${PORTSDIR}/www/mod_php$(PHP_VER)
 
 # PHP packages
 RUN_DEPENDS+= \
