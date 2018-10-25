@@ -172,6 +172,13 @@ sub Install($$$)
 	    }
 	    PhaseSucceed("Images Done");
 	};
+
+	#
+	# We are a member of the image tracking federation.
+	#
+	Phase "tracker", "Turning on image tracking", sub {
+	    ExecQuietFatal("$PREFIX/sbin/setsitevar ".
+			   "protogeni/use_imagetracker 1");
 	
 	#
 	# Add the nodes to the DB.
