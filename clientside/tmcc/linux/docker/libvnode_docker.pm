@@ -82,6 +82,7 @@ use POSIX;
 use JSON::PP;
 use Digest::SHA qw(sha1_hex);
 use LWP::Simple;
+use MIME::Base64;
 
 # Pull in libvnode
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
@@ -3246,32 +3247,62 @@ sub vnodeCreate($$$$)
     # piping through custom CMD and PATH variables for users of the docker
     # images. Just have to write them to a file and let the runit utility
     # do the rest
-    my $dockerenvdir = "$mntdir/etc.emulabdocker";
-    mkdir($dockerenvdir);
+    my $ddir = "$mntdir/etc.emulab.docker";
+    mkdir($ddir);
     if (exists($attributes->{'DOCKER_ENV'})) {
-	my @environmentvars = split / /, $attributes->{'DOCKER_ENV'};
-	open(FD, ">$dockerenvdir/dockerenv");
-	foreach my $elem (@environmentvars) {
-	    print FD "export ";
-	    my $elemname;
-	    my $elemvalue;
-	    $elemname = substr($elem, 0, index($elem, '='));
-	    $elemvalue = substr($elem, index($elem, '=') + 1);
-	    print FD $elemname;
-	    print FD "=";
-	    print FD "\"";
-	    print FD $elemvalue;
-	    print FD "\"";
-	    print FD "\n";
+	my $envvars = $attributes->{'DOCKER_ENV'};
+	if ($envvars =~ /^base64url:(.+)$/) {
+	    $envvars = MIME::Base64::decode_base64url($1);
 	}
+	open(FD, ">$ddir/dockerenv.runtime");
+	print FD "export $envvars\n";
 	close(FD);
-	push(@{$args{"HostConfig"}{"Binds"}}, "$dockerenvdir/dockerenv:/etc/emulab/docker/dockerenv:ro");
+	push(@{$args{"HostConfig"}{"Binds"}},
+	     "$ddir/dockerenv.runtime:/etc/emulab/docker/dockerenv.runtime:ro");
     }
     if (exists($attributes->{'DOCKER_CMD'})) {
-	open(FD, ">$dockerenvdir/dockercmd");
-	print FD $attributes->{'DOCKER_CMD'};
-	close(FD);
-	push(@{$args{"HostConfig"}{"Binds"}}, "$dockerenvdir/dockercmd:/etc/emulab/docker/dockercmd:ro");
+	my $c = $attributes->{'DOCKER_CMD'};
+	if ($c =~ /^base64url:(.+)$/) {
+	    $c = MIME::Base64::decode_base64url($1);
+	}
+	TBDebugTimeStamp("runtime cmd: $c\n");
+	if ($c =~ /^\[/) {
+	    $c = decode_json($c);
+	    $c = "array:" . join(",",map { unpack("H*",$_) } @{$c});
+	}
+	elsif ($c ne "") {
+	    $c = "string:" . unpack("H*",$c);
+	}
+	if ($c ne "") {
+	    open(FD, ">$ddir/cmd.runtime");
+	    print FD "$c\n";
+	    close(FD);
+	}
+	TBDebugTimeStamp("encoded runtime cmd: $c\n");
+	push(@{$args{"HostConfig"}{"Binds"}},
+	     "$ddir/cmd.runtime:/etc/emulab/docker/cmd.runtime:ro");
+    }
+    if (exists($attributes->{'DOCKER_ENTRYPOINT'})) {
+	my $e = $attributes->{'DOCKER_ENTRYPOINT'};
+	if ($e =~ /^base64url:(.+)$/) {
+	    $e = MIME::Base64::decode_base64url($1);
+	}
+	TBDebugTimeStamp("runtime entrypoint: $e\n");
+	if ($e =~ /^\[/) {
+	    $e = decode_json($e);
+	    $e = "array:" . join(",",map { unpack("H*",$_) } @{$e});
+	}
+	elsif ($e ne "") {
+	    $e = "string:" . unpack("H*",$e);
+	}
+	if ($e ne "") {
+	    open(FD, ">$ddir/entrypoint.runtime");
+	    print FD "$e\n";
+	    close(FD);
+	}
+	TBDebugTimeStamp("encoded runtime entrypoint: $e\n");
+	push(@{$args{"HostConfig"}{"Binds"}},
+	     "$ddir/entrypoint.runtime:/etc/emulab/docker/entrypoint.runtime:ro");
     }
 
     #
@@ -5249,155 +5280,127 @@ sub emulabizeImage($;$$$$$$$$$)
 	    }
 	}
 
-	mkdir("$hdir/etc/service/dockerentrypoint");
+	#
+	# We are overriding the image's default ENTRYPOINT and CMD by
+	# running runit instead.  So we have to emulate them (as best we
+	# can; runit is pid 1, not the entrypointcmd, etc) -- and set
+	# ourselves up for any dynamic changes to entrypoint/cmd per
+	# container at runtime.
+	# See https://docs.docker.com/engine/reference/builder/#understand-how-cmd-and-entrypoint-interact
+	# for a matrix of how ENTRYPOINT and CMD interact.  But here's
+	# what we do.  Each emulabized image contains a runit service
+	# (/etc/service/dockerentrypoint,
+	# see dockerfiles/common/fs/etc/service/dockerentrypoint)
+	# that handles the emulation of those cases.  We feed it by
+	# populating
+	# /etc/emulab/docker/{entrypoint.image.type,entrypoint.image,
+	#   cmd.image.type,cmd.image,user,dockerenv.image} according to
+	# what we find in the image.  Then, those files can be
+	# "overridden" at runtime by
+	# /etc/emulab/docker/{entrypoint.runtime.type,entrypoint.runtime,
+	#   cmd.runtime.type,cmd.runtime}, and added to by
+	# /etc/emulab/docker/dockerenv.runtime .
+	#
 
-	open(my $runitfile, ">", "$hdir/etc/service/dockerentrypoint/run");
-
-	print $runitfile "#!/bin/sh\n";
-	print $runitfile "\n";
-	print $runitfile "# This is an automatically generated runit file based on the docker image's entrypoint and cmd\n\n";
-
-	my $dockeruser;
-	my $dockerenvironmentvars;
-
-	$dockeruser = $iattrs{DOCKER_USER};
-
-	# we need to make sure user, home, and path are properly
-	# initialized so anything happening inside the startup command 
-	# doesn't unexpectedly fail
-	if ($dockeruser ne "") {
-	    print $runitfile "export USER=";
-	    print $runitfile $dockeruser;
-	    print $runitfile "\n";
-	    print $runitfile "export ";
-	    my @retlines;
-	    my $rc = analyzeImageWithBusyboxCommand($image,{},\@retlines,"env");
-	    for my $line (@retlines) {
-		if (substr($line, 0, index($line, '=')) eq "HOME") {
-		    print $runitfile $line;
-		}
-	    }
-	    print $runitfile "\n";
+	# First, set up the user file, and the USER env var.  NB: we
+	# must set this up; normally Docker sets it prior to running
+	# entrypoint/cmd.
+	my @generatedEnvVars = ();
+	my $ddir = "$hdir/etc/emulab/docker";
+	mkdir("$ddir");
+	if (exists($iattrs{DOCKER_USER}) && defined($iattrs{DOCKER_USER})
+	    && $iattrs{DOCKER_USER} ne "") {
+	    open(FD,">$ddir/user");
+	    print FD $iattrs{DOCKER_USER}."\n";
+	    close(FD);
+	    push(@generatedEnvVars,"USER=$iattrs{DOCKER_USER}");
 	}
 	else {
-	    print $runitfile "export USER=root\n";
-	    print $runitfile "export HOME=/root\n";
+	    push(@generatedEnvVars,"USER=root");
 	}
 
-	print $runitfile "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
-	print $runitfile ':$PATH';
-	print $runitfile "\n";
+	# Second, ensure that HOME and PATH are properly initialized for
+	# the same reason as above for USER (so that any startup
+	# commands that depend on these variables don't fail).
+	my @retlines;
+	my $foundit = 0;
+	$rc = analyzeImageWithBusyboxCommand($image,{},\@retlines,"env");
+	for my $line (@retlines) {
+	    chomp($line);
+	    if (substr($line, 0, index($line, '=')) eq "HOME") {
+		push(@generatedEnvVars,$line);
+		$foundit = 1;
+		last;
+	    }
+	}
+	if (!$foundit) {
+	    push(@generatedEnvVars,"HOME=/");
+	}
+	push(@generatedEnvVars,
+	     "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
 
-	my ($pid,$eid,$vname) = check_nickname();
-	my ($DOMAINNAME,undef) = tmccbossinfo();
-	my $longdomain = "${eid}.${pid}.${DOMAINNAME}";
-	my $hostname = "$vname.$longdomain";
-
-	print $runitfile "export HOSTNAME=";
-	print $runitfile $hostname;
-	print $runitfile "\n\n\n";
-
-	# let's add in all the environment variables in the Dockerfile
+	# Dump our generated (and image-builtin) env vars.  Note we
+	# export them all!  This is what we want for the case where we
+	# exec stuff on behalf of the user; and it arguably what any
+	# user would want.
+	open(FD,">$ddir/dockerenv.entrypoint");
+	for my $var (@generatedEnvVars) {
+	    print FD "export $var\n";
+	}
+	close(FD);
 	if (exists($iattrs{DOCKER_ENV})) {
-	    $dockerenvironmentvars = $iattrs{DOCKER_ENV};
-	    foreach my $elem (@$dockerenvironmentvars) {
-		print $runitfile "export ";
-		my $elemname;
-		my $elemvalue;
-		$elemname = substr($elem, 0, index($elem, '='));
-		$elemvalue = substr($elem, index($elem, '=') + 1);
-		print $runitfile $elemname;
-		print $runitfile "=";
-		print $runitfile "\"";
-		print $runitfile $elemvalue;
-		print $runitfile "\"";
-		print $runitfile "\n";
+	    open(FD,">$ddir/dockerenv.image");
+	    foreach my $elem (@{$iattrs{DOCKER_ENV}}) {
+		print FD "export $elem\n";
+	    }
+	    close(FD);
+	}
+
+	# Dump the image's workingdir into another file that the
+	# entrypoint service looks for.
+	if (exists($iattrs{DOCKER_WORKINGDIR})
+	    && $iattrs{DOCKER_WORKINGDIR} ne "") {
+	    open(FD,">$ddir/workingdir");
+	    print FD $iattrs{DOCKER_WORKINGDIR}."\n";
+	    close(FD);
+	}
+
+	# Dump the image's entrypoint (and type of entrypoint).
+	if (exists($iattrs{DOCKER_ENTRYPOINT})
+	    && defined($iattrs{DOCKER_ENTRYPOINT})) {
+	    my $e = $iattrs{DOCKER_ENTRYPOINT};
+	    TBDebugTimeStamp("image entrypoint: ".Dumper($e).".\n");
+	    if (ref($e) eq 'ARRAY') {
+		$e = "array:" . join(",",map { unpack("H*",$_) } @{$e});
+	    }
+	    elsif ($e ne "") {
+		$e = "string:" . unpack("H*",$e);
+	    }
+	    TBDebugTimeStamp("encoded image entrypoint: $e\n");
+	    if ($e ne "") {
+		open(FD,">$ddir/entrypoint.image");
+		print FD "$e\n";
+		close(FD);
 	    }
 	}
 
-	# handle if a user enters in extra environment variables using the 
-	# profile parameters section
-	print $runitfile "if [ -f /etc/emulab/docker/dockerenv ]; then\n";
-	print $runitfile "  . /etc/emulab/docker/dockerenv\n";
-	print $runitfile "fi\n";
-
-	print $runitfile "\n";
-
-	my $dockerentrypoint;
-	my $dockercmd;
-	my $dockerworkingdir;
-
-	if ($iattrs{DOCKER_WORKINGDIR} ne "") {
-	    $dockerworkingdir = $iattrs{DOCKER_WORKINGDIR};
-	    print $runitfile "cd ";
-	    print $runitfile $dockerworkingdir;
-	    print $runitfile "\n\n";
-	}
-
-	print $runitfile "if [ ! -f /etc/emulab/docker/dockercmd ]; then\n";
-
-	print $runitfile "exec ";
-
-	# if the user for the container is specified
-	# need to run it as that user
-	if ($dockeruser ne "") {
-	    print $runitfile "sudo -u ";
-	    print $runitfile $dockeruser;
-	    print $runitfile " bash -c '";
-	}
-
-	if (exists($iattrs{DOCKER_ENTRYPOINT})) {
-	    $dockerentrypoint = $iattrs{DOCKER_ENTRYPOINT};
-
-	    # print whole thing to file
-	    # need to be careful about variables to be expanded
-	    foreach my $elem (@$dockerentrypoint) {
-		print $runitfile "\"";
-		$elem =~ s/([^\\])(\\\\)*"/$1$2\\\"/g;
-		print $runitfile $elem;
-		print $runitfile "\"";
-		print $runitfile " ";
+	# Dump the image's cmd (and type of cmd).
+	if (exists($iattrs{DOCKER_CMD}) && defined($iattrs{DOCKER_CMD})) {
+	    my $c = $iattrs{DOCKER_CMD};
+	    TBDebugTimeStamp("image cmd: ".Dumper($c).".\n");
+	    if (ref($c) eq 'ARRAY') {
+		$c = "array:" . join(",",map { unpack("H*",$_) } @{$c});
+	    }
+	    elsif ($c ne "") {
+		$c = "string:" . unpack("H*",$c);
+	    }
+	    TBDebugTimeStamp("encoded image cmd: $c\n");
+	    if ($c ne "") {
+		open(FD,">$ddir/cmd.image");
+		print FD "$c\n";
+		close(FD);
 	    }
 	}
-
-	if (exists($iattrs{DOCKER_CMD})) {
-	    $dockercmd = $iattrs{DOCKER_CMD};
-
-	    foreach my $elem (@$dockercmd) {
-		print $runitfile "\"";
-		$elem =~ s/([^\\])(\\\\)*"/$1$2\\\"/g;
-		print $runitfile $elem;
-		print $runitfile "\"";
-		print $runitfile " ";
-	    }
-	}
-
-	if ($dockeruser ne "") {
-	    print $runitfile "'";
-	}
-
-	print $runitfile "\n";
-	print $runitfile "else\n";
-	print $runitfile "exec ";
-
-	if (exists($iattrs{DOCKER_ENTRYPOINT})) {
-	    $dockerentrypoint = $iattrs{DOCKER_ENTRYPOINT};
-	    # print whole thing to file
-	    # need to be careful about variables to be expanded
-	    foreach my $elem (@$dockerentrypoint) {
-		print $runitfile $elem;
-		print $runitfile " ";
-	    }
-	}
-
-	print $runitfile '"$(cat /etc/emulab/docker/dockercmd)"';
-	print $runitfile "\n";
-	print $runitfile "fi\n";
-	print $runitfile "\n\n";
-	print $runitfile "exit 0";
-	close $runitfile;
-
-	chmod 755, "$hdir/etc/service/dockerentrypoint/run";
 
 	#
 	# Before we start setting up the new image Dockerfile, run

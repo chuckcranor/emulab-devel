@@ -1288,6 +1288,9 @@ sub GetDockerSettings($)
     $tmp = GetText("exec_shell", $settings);
     $result->{"exec_shell"} = $tmp
 	if (defined($tmp));
+    $tmp = GetText("entrypoint", $settings);
+    $result->{"entrypoint"} = $tmp
+	if (defined($tmp));
     $tmp = GetText("cmd", $settings);
     $result->{"cmd"} = $tmp
 	if (defined($tmp));

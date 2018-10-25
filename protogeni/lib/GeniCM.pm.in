@@ -2288,13 +2288,20 @@ sub GetTicketAuxAux($)
 		    }
 		    $attrkey = "DOCKER_EXEC_SHELL";
 		}
+		elsif ($setting eq "entrypoint") {
+		    $attrkey = "DOCKER_ENTRYPOINT";
+		    $attrvalue = "base64url:" .
+			MIME::Base64::encode_base64url($attrvalue);
+		}
 		elsif ($setting eq "cmd") {
 		    $attrkey = "DOCKER_CMD";
-		    #$attrvalue = DBQuoteSpecial($attrvalue);
+		    $attrvalue = "base64url:" .
+			MIME::Base64::encode_base64url($attrvalue);
 		}
 		elsif ($setting eq "env") {
 		    $attrkey = "DOCKER_ENV";
-		    #$attrvalue = DBQuoteSpecial($attrvalue);
+		    $attrvalue = "base64url:" .
+			MIME::Base64::encode_base64url($attrvalue);
 		}
 		elsif ($setting eq "privileged") {
 		    $attrkey = "DOCKER_PRIVILEGED";
