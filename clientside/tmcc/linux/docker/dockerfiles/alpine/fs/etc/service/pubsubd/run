@@ -13,7 +13,7 @@ if [ -f /etc/init.d/pubsubd ]; then
         sleep 60
     done
 else
-    touch /etc/service/pubsubd/down
+    sv down pubsubd
 fi
 
 exit 0

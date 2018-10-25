@@ -3,7 +3,7 @@
 if [ -f /etc/init.d/pubsubd ]; then
     exec /etc/init.d/pubsubd stop
 else
-    touch /etc/service/pubsubd/down
+    sv down pubsubd
 fi
 
 exit 0

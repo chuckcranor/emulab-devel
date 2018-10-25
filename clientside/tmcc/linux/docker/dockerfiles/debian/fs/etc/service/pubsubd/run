@@ -2,7 +2,7 @@
 
 # Never run if systemd is running; it will do this.
 [ -f /bin/systemctl ] && /bin/systemctl show-environment >/dev/null 2>&1 \
-    && (touch /etc/service/pubsubd/down ; exit 0)
+    && (sv down pubsubd ; exit 0)
 
 if [ -f /etc/init.d/pubsubd ]; then
     /etc/init.d/pubsubd start
@@ -17,7 +17,7 @@ if [ -f /etc/init.d/pubsubd ]; then
         sleep 60
     done
 else
-    touch /etc/service/pubsubd/down
+    sv down pubsubd
 fi
 
 exit 0

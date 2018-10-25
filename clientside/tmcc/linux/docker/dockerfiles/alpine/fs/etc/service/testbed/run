@@ -13,7 +13,7 @@ if [ -f /usr/local/etc/emulab/rc/rc.testbed ]; then
         sleep 60
     done
 else
-    touch /etc/service/testbed/down
+    sv down testbed
 fi
 
 exit 0
