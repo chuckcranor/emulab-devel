@@ -2398,9 +2398,10 @@ sub DeleteNodes($)
 
     #
     # Suck out nodes. Also figure out what nodes have to be removed
-    # from which lans.
+    # from which lans, and which ifaces from which nodes.
     #
-    my %ifacestoremovefromlans = ();
+    my %ifacestoremovefromlans  = ();
+    my %ifacestoremovefromnodes = ();
     
     foreach my $noderef (GeniXML::FindNodes("n:node",
 					    $manifest)->get_nodelist()) {
@@ -2438,9 +2439,29 @@ sub DeleteNodes($)
 	my @ifaces = GeniXML::FindNodes("n:interface_ref",
 					$linkref)->get_nodelist();
 	if (@ifaces <= 1) {
+	    # Need to find this last iface in the node and delete it
+	    # since otherwise the rspec would be malformed.
+	    foreach my $iref (@ifaces) {
+		my $client_id = GeniXML::GetInterfaceId($iref);
+		$ifacestoremovefromnodes{$client_id} = $client_id;
+	    }
 	    $manifest->removeChild($linkref);
 	}
     }
+    # Purge the ifaces from nodes for links left with just one iface.
+    if (keys(%ifacestoremovefromnodes)) {
+	foreach my $noderef (GeniXML::FindNodes("n:node",
+						$manifest)->get_nodelist()) {
+	    foreach my $iref (GeniXML::FindNodes("n:interface",
+						 $noderef)->get_nodelist()) {
+		my $client_id = GeniXML::GetInterfaceId($iref);
+		if (exists($ifacestoremovefromnodes{$client_id})) {
+		    $noderef->removeChild($iref);
+		}
+	    }
+	}
+    }
+    
     my $rspecstr = GeniXML::Serialize($manifest);
     print STDERR "$rspecstr\n";
 
