@@ -716,7 +716,9 @@ sub ModifyProfileInternal($$$)
     # If the rspec/script changed, then make a new version of the profile.
     # Everything else is metadata.
     #
-    if (exists($update_args{"rspec"}) || exists($update_args{"script"})) {
+    if (exists($update_args{"rspec"}) ||
+	exists($update_args{"script"}) ||
+	exists($update_args{"repohash"})) {
 	if ((exists($update_args{"rspec"}) &&
 	     $update_args{"rspec"} ne $profile->rspec()) ||
 	    (exists($update_args{"script"}) &&
