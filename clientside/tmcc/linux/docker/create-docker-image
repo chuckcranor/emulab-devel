@@ -302,7 +302,7 @@ my %layer_size = ();
 if ($debug) {
     print "DEBUG: history: " . Dumper($content) . "\n";
 }
-foreach my $h (@{$content->[0]}) {
+foreach my $h (@{$content}) {
     next
 	if (!exists($h->{"Id"}) || !exists($h->{"Size"}));
     my $size = $h->{"Size"};
