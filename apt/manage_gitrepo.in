@@ -115,6 +115,7 @@ sub GetTagList($);
 sub GetCommitList($$);
 sub GetCommitField($$$);
 sub GetRepoName($);
+sub GetDefaultBranch($);
 sub RemoveRepo($);
 
 # Locals
@@ -532,7 +533,7 @@ sub DoGetSource()
     my $optlist = "n:p:o:";
     my $reponame;
     my $ofile;
-    my $which = "refs/heads/master";
+    my $which;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -543,6 +544,7 @@ sub DoGetSource()
     }
     $which = shift(@ARGV) if (@ARGV);
     $reponame = GetRepoName(\%options);
+    $which = GetDefaultBranch($reponame) if (!defined($which));
 
     # Silly taint check.
     if ($which =~ /^(.*)$/) {
@@ -588,7 +590,7 @@ sub GetRepoSource($;$)
     my $repodir = "$REPODIR/$reponame";
     my $source;
 
-    $refspec = "refs/heads/master"
+    $refspec = GetDefaultBranch($reponame)
 	if (!defined($refspec));
 
     # Lets see if this helps. We know there is a source file, but
@@ -638,7 +640,7 @@ sub GetRepoSource($;$)
 sub DoLog()
 {
     my $optlist = "n:p:";
-    my $which = "refs/heads/master";
+    my $which;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -646,6 +648,7 @@ sub DoLog()
     }
     $which = shift(@ARGV) if (@ARGV);
     my $reponame = GetRepoName(\%options);
+    $which = GetDefaultBranch($reponame) if (!defined($which));
 
     my $log = GetCommitField($reponame, $which, "%B");
     print $log;
@@ -662,7 +665,7 @@ sub DoLog()
 sub DoHash()
 {
     my $optlist = "n:p:";
-    my $which = "refs/heads/master";
+    my $which;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -670,6 +673,7 @@ sub DoHash()
     }
     $which = shift(@ARGV) if (@ARGV);
     my $reponame = GetRepoName(\%options);
+    $which = GetDefaultBranch($reponame) if (!defined($which));
 
     my $hash = GetCommitField($reponame, $which, "%H");
     chomp($hash);
@@ -687,7 +691,7 @@ sub DoHash()
 sub GetCommitField($$$)
 {
     my ($reponame, $refspec, $field) = @_;
-    $refspec = "refs/heads/master"
+    $refspec = GetDefaultBranch($reponame)
 	if (!defined($refspec));
 
     # Silly taint check
@@ -763,6 +767,9 @@ sub GetBranchList($)
     if (! -e "$REPODIR/$reponame") {
 	fatal("Repository does not exist.");
     }
+    # We will mark the default branch.
+    my $default_branch = GetDefaultBranch($reponame);
+
     chdir("$REPODIR/$reponame") or
 	fatal("Could not chdir to $REPODIR/$reponame");
 
@@ -783,9 +790,11 @@ sub GetBranchList($)
 	if ($line =~ /^(\w+)\s+(.*)$/) {
 	    my $name = basename($2);
 	    
-	    my $blob = {"hash"  => $1,
-			"name"  => $name,
-			"ref"   => $2};
+	    my $blob = {"hash"    => $1,
+			"name"    => $name,
+			"ref"     => $2,
+			"default" => ($2 eq $default_branch ? 1 : 0),   
+	    };
 	    # This is the list we return.
 	    push(@{ $branches }, $blob);
 
@@ -1020,6 +1029,9 @@ sub DoCommitInfo()
 	    $which = $1;
 	}
     }
+    else {
+	$which = GetDefaultBranch($reponame);
+    }
     if (! -e "$REPODIR/$reponame") {
 	fatal("Repository does not exist.");
     }
@@ -1045,6 +1057,7 @@ sub DoCommitInfo()
 		"when"      => $when,
 		"log"       => $log,
 		"reponame"  => $reponame,
+		"refspec"   => $which,
 		"size"      => "$size MiB"};
 
     if (defined($webtask)) {
@@ -1162,6 +1175,31 @@ sub GetRepoSize($)
     $mebi = 1
 	if ($mebi == 0);
     return $mebi;
+}
+
+#
+# Get estimated repository size.
+#
+sub GetDefaultBranch($)
+{
+    my ($reponame) = @_;
+    
+    chdir("$REPODIR/$reponame") or
+	fatal("Could not chdir to $REPODIR/$reponame");
+
+    my $branch = `$GIT symbolic-ref --short HEAD`;
+    if ($?) {
+	fatal("Could not get default branch for $reponame");
+    }
+    chomp($branch);
+
+    if ($branch =~ /^([-\w]+)$/) {
+	$branch = $1;
+    }
+    else {
+	fatal("Illegal default branch name: $branch");
+    }
+    return "refs/heads/$branch";
 }
 
 sub fatal($)

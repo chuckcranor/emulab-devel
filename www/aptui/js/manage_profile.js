@@ -26,7 +26,8 @@ $(function ()
     var gotscript    = 0;
     var fromrepo     = 0;
     var repohash     = null;
-    var reporefspec  = "refs/heads/master";
+    var reporefspec  = null;
+    var repobusy     = false;
     var ajaxurl      = "";
     var amlist       = null;
     var modified     = false;
@@ -746,7 +747,16 @@ $(function ()
 	    // A geni-lib script. We are going to pass the script to
 	    // the server to be "run", which returns XML.
 	    //
-	    if (newRspec != $('#profile_script_textarea').val()) {
+	    // Need to normalize the newline characters for this
+	    // comparison to be meaningful, else we think the
+	    // source has changed when it really has not.
+	    //
+	    var newr = $.trim(newRspec);
+	    var oldr = $.trim($('#profile_script_textarea').val());
+	    newr = newr.replace(new RegExp(/\r?\n|\r/g), " ");
+	    oldr = oldr.replace(new RegExp(/\r?\n|\r/g), " ");
+	    
+	    if (oldr != newr) {
 		console.info("geni-lib code has changed");
 		if (portal_converted) {
 		    /*
@@ -1011,8 +1021,15 @@ $(function ()
 	newrspec     = $.trim(newrspec);
 	var oldrspec = $.trim($('#profile_rspec_textarea').val());
 	gotrspec     = 1;
+
+	// Need to normalize the newline characters for this
+	// comparison to be meaningful, else we think the source has
+	// changed when it really has not.
+	//
+	var newr = newrspec.replace(new RegExp(/\r?\n|\r/g), " ");
+	var oldr = oldrspec.replace(new RegExp(/\r?\n|\r/g), " ");
 	
-	if (newrspec == oldrspec) {
+	if (newr == oldr) {
 	    // In case rspec does not change.
 	    UpdateButtons();
 	    return;
@@ -1442,8 +1459,18 @@ $(function ()
      */
     function HandleGitRepoUpdate()
     {
+	//console.info("HandleGitRepoUpdate");
+	
 	var callback = function(blob) {
 	    console.info("HandleGitRepoUpdate", blob);
+	    if (blob) {
+		// Mark as HEAD in the page.
+		repohash = blob.hash;
+	    }
+	    // Now we can let the auto check proceed, it will no
+	    // longer think anything has changed.
+	    repobusy = false;
+	    
 	    if (blob) {
 		/*
 		 * If the source was an rspec, we updated the profile
@@ -1456,8 +1483,6 @@ $(function ()
 		 */
 		if (!pythonRe.test(blob.source)) {
 		    NewRspecHandler(blob.source);
-		    // Mark as HEAD in the page.
-		    repohash = blob.hash;
 		    // Reset the list of tags and branches whenever we
 		    // successfully update our clone.
 		    SetupRepo();
@@ -1469,28 +1494,38 @@ $(function ()
 		 * has done the profile update, so we can finish things up.
 		 */
 		changeRspec(blob.source, function(modified) {
-		    // Mark as HEAD in the page.
-		    repohash = blob.hash;
 		    // Reset the list of tags and branches whenever we
 		    // successfully update our clone.
 		    SetupRepo();
 		});
 	    }
 	};
-	gitrepo.UpdateRepo(version_uuid, callback);
+	/*
+	 * Need to wait if the auto check for the repo change is
+	 * not running. It hurts to run this at the same time that
+	 * is running.
+	 */
+	var checker = function () {
+	    if (!repobusy) {
+		repobusy = true;
+		gitrepo.UpdateRepo(version_uuid, callback);
+		return;
+	    }
+	    setTimeout(function f() { checker() }, 250);
+	};
+	checker();
     }
 
     function SetupRepo()
     {
-	gitrepo.InitRepoPicker(version_uuid,
+	//console.info("SetupRepo");
+
+	gitrepo.InitRepoPicker(version_uuid, reporefspec,
 			       function(which) {
 				   // So we remember what the user selected.
 				   reporefspec = which;
 				   SelectRepoTarget(which);
 			       });
-	// This updates the info panel on the left side, but we want
-	// to stay on the same refspec the user switched to. 
-	gitrepo.GetCommitInfo(version_uuid, reporefspec);
     }
 
     /*
@@ -1499,12 +1534,51 @@ $(function ()
      */
     function SelectRepoTarget(which)
     {
+	//console.info("SelectRepoTarget");
+
 	var callback = function (source, hash) {
 	    if (source) {
 		changeRspec(source);
 	    }
 	};
 	gitrepo.GetRepoSource(version_uuid, which, callback);
+    }
+
+    /*
+     * Timer to ask for the current repository hash value to determine
+     * if it has changed. 
+     */
+    function CheckRepoChange()
+    {
+	//console.info("CheckRepoChange", repobusy);
+	
+	if (repobusy) {
+	    setTimeout(function f() { CheckRepoChange() }, 15000);
+	    return;
+	}
+	repobusy = true;
+	
+	var callback = function(json) {
+	    //console.info("CheckRepoChange", json);
+    
+	    if (json.code == 0 && repohash != json.value) {
+		if (window.confirm("We have detected a change to the " +
+				   "profile repository. Do you want to " +
+				   "reload this page so you are looking at " +
+				   "the latest version?")) {
+		    window.location.reload();
+		}
+		// Do not run the auto check after this, no point.
+		repobusy = false;
+		return;
+	    }
+	    setTimeout(function f() { CheckRepoChange() }, 15000);
+	    repobusy = false;
+	};
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "manage_profile", "GetRepoHash",
+					    {"uuid"   : version_uuid});
+	xmlthing.done(callback);
     }
 
     /*
@@ -1665,36 +1739,6 @@ $(function ()
 			  console.info("unbinding handler");
 			  $('#confirm-force-delete').off("click");
 		      });
-    }
-
-    /*
-     * Timer to ask for the current repository hash value to determine
-     * if it has changed. We tell the user to reload the page. 
-     */
-    function CheckRepoChange()
-    {
-	var callback = function(json) {
-	    //console.info("CheckRepoChange", json);
-    
-	    if (json.code == 0 && repohash != json.value) {
-		repohash = json.value;
-		// Reset the list of tags and branches whenever we
-		// successfully update our clone.
-		SetupRepo();
-		// New source code from the refspec the user is looking at.
-		gitrepo.GetRepoSource(version_uuid, reporefspec,
-				      function (source, hash) {
-					  if (source) {
-					      changeRspec(source);
-					  }
-				      });
-	    }
-	    setTimeout(function f() { CheckRepoChange() }, 10000);
-	};
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "manage_profile", "GetRepoHash",
-					    {"uuid"   : version_uuid});
-	xmlthing.done(callback);
     }
 
     function CreateJacksEditor()

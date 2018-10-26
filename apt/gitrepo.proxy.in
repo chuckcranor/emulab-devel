@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -60,6 +60,8 @@ sub RunCommand($);
 sub Clone();
 sub Delete();
 sub Update();
+sub GetDefaultBranch($);
+sub GetRemoteDefaultBranch($);
 
 #
 # Turn off line buffering on output
@@ -149,9 +151,11 @@ sub Clone()
     #
     chdir("$REPODIR/$reponame") or
 	fatal("Could not chdir to $REPODIR/$reponame");
+
+    my $refspec = GetDefaultBranch($reponame);
     
-    if (system("$GIT cat-file -e refs/heads/master:profile.py") &&
-	system("$GIT cat-file -e refs/heads/master:profile.rspec")) {
+    if (system("$GIT cat-file -e ${refspec}:profile.py") &&
+	system("$GIT cat-file -e ${refspec}:profile.rspec")) {
 	print STDERR "No geni-lib script or rspec in this repository\n";
     }
     return 0;
@@ -188,11 +192,95 @@ sub Update()
     if ($status) {
 	fatal("Not able to update repo");
     }
-    if (system("$GIT cat-file -e refs/heads/master:profile.py") &&
-	system("$GIT cat-file -e refs/heads/master:profile.rspec")) {
+
+    my $current_refspec = GetDefaultBranch($reponame);
+    my $remote_refspec  = GetRemoteDefaultBranch($reponame);
+
+    #
+    # Update local default branch if the remote has switched it.
+    #
+    if ($current_refspec ne $remote_refspec) {
+	system("$GIT symbolic-ref --short HEAD '$remote_refspec'");
+	if ($?) {
+	    fatal("Could not update default branch tp $remote_refspec");
+	}
+	$current_refspec = $remote_refspec;
+    }
+    if (system("$GIT cat-file -e ${current_refspec}:profile.py") &&
+	system("$GIT cat-file -e ${current_refspec}:profile.rspec")) {
 	print STDERR "No geni-lib script or rspec in this repository\n";
     }
     return 0;
+}
+
+#
+# Get default branch (refspec)
+#
+sub GetDefaultBranch($)
+{
+    my ($reponame) = @_;
+    
+    chdir("$REPODIR/$reponame") or
+	fatal("Could not chdir to $REPODIR/$reponame");
+
+    my $branch = `$GIT symbolic-ref --short HEAD`;
+    if ($?) {
+	fatal("Could not get default branch for $reponame");
+    }
+    chomp($branch);
+
+    if ($branch =~ /^([-\w]+)$/) {
+	$branch = $1;
+    }
+    else {
+	fatal("Illegal default branch name: $branch");
+    }
+    return "refs/heads/$branch";
+}
+
+#
+# Ask the remote for the default branch; user can change the default
+# branch at the origin, but we will not know that after the initial
+# clone unless we ask. 
+#
+sub GetRemoteDefaultBranch($)
+{
+    my ($reponame) = @_;
+    my $branch;
+    
+    chdir("$REPODIR/$reponame") or
+	fatal("Could not chdir to $REPODIR/$reponame");
+
+    my $command = "$GIT remote show origin";
+
+    #
+    # This open implicitly forks a child, which goes on to execute the
+    # command. The parent is going to sit in this loop and capture the
+    # output of the child. We do this so that we have better control
+    # over the descriptors.
+    #
+    my $pid = open(PIPE, "-|");
+    if (!defined($pid)) {
+	fatal("popen failed!");
+    }
+    if ($pid) {
+	while (<PIPE>) {
+	    if ($_ =~ /^\s*head branch:\s+([-\w]+)$/i) {
+		$branch = $1;
+	    }
+	}
+	if (!close(PIPE)) {
+	    fatal("$command failed");
+	}
+    }
+    else {
+	open(STDERR, ">&STDOUT");
+	exec($command);
+    }
+    if (!defined($branch)) {
+	fatal("Could not get default branch from remote repo");
+    }
+    return "refs/heads/$branch";
 }
 
 #

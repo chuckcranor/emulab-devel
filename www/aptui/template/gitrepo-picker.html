@@ -16,6 +16,9 @@
 	    <tr>
 	      <td style="padding-bottom: 2px">
 		<strong><%= branch.name %></strong>
+		<% if (branch.default) { %>
+		  <span class="badge badge-primary">default</span>
+		<% } %>
 	      </td>
 	      <td rowspan="2" style="vertical-align:middle">
 		<a href="#"

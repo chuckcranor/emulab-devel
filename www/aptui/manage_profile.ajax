@@ -1413,6 +1413,7 @@ function Do_GetRepoSource()
 {
     global $this_user;
     global $ajax_args;
+    $which = "";
     
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
@@ -1421,7 +1422,9 @@ function Do_GetRepoSource()
 	SPITAJAX_ERROR(1, "Missing branch or tag name");
 	return;
     }
-    $which = escapeshellarg($ajax_args["refspec"]);
+    if ($ajax_args["refspec"] != null) {
+        $which = escapeshellarg($ajax_args["refspec"]);
+    }
     if (!isset($ajax_args["uuid"])) {
 	SPITAJAX_ERROR(1, "Missing profile uuid");
 	return;
@@ -1591,7 +1594,7 @@ function Do_GetCommitInfo()
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
 
-    if (isset($ajax_args["refspec"])) {
+    if (isset($ajax_args["refspec"]) && $ajax_args["refspec"] != null) {
         $which = escapeshellarg($ajax_args["refspec"]);
     }
     if (!isset($ajax_args["uuid"])) {
