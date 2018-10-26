@@ -30,6 +30,11 @@ else
 	ETCDIR=/etc/emulab
 fi
 
+# XXX super-specialized, minimum-impact hack for FreeBSD MFSes...
+if [ "$ETCDIR" = "/etc/testbed" -a -e "/etc/emulab/emulab.pem" ]; then
+    ETCDIR=/etc/emulab
+fi
+
 MNT="/mnt"
 
 case $# in
