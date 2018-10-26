@@ -469,6 +469,7 @@ sub CreateRoutingScripts($$);
 sub RunRoutingScripts($$);
 sub RunWithSignalsBlocked($@);
 sub RunProxies($$);
+sub AreProxiesRunning($$);
 sub KillProxies($$);
 sub InsertPostBootIptablesRules($$$$);
 sub RemovePostBootIptablesRules($$$$);
@@ -3874,6 +3875,10 @@ sub vnodeBootHook($$$$)
 	libutil::setState("TBSETUP");
     }
 
+    if (AreProxiesRunning($vnode_id,$vmid) != 1) {
+	RunProxies($vnode_id,$vmid);
+    }
+
     #
     # Start up our Docker-to-pty script for this container; the capture
     # will attach to it.  We always fire this off here; it cannot
@@ -6815,6 +6820,24 @@ sub RunProxies($$)
 	die("Failed to exec tmcc proxy"); 
     }
 
+    return 0;
+}
+
+# Returns 1 if proxies are running; 0 if not; -1 on error.
+sub AreProxiesRunning($$)
+{
+    my ($vnode_id,$vmid) = @_;
+
+    if (-e "/var/run/tmccproxy-$vnode_id.pid") {
+	open(FD,"/var/run/tmccproxy-$vnode_id.pid")
+	    or return -1;
+	my $pid = <FD>;
+	close(FD);
+	chomp($pid);
+	if (kill(0,$pid) > 0) {
+	    return 1;
+	}
+    }
     return 0;
 }
 
