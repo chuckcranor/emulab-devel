@@ -649,6 +649,17 @@ sub image_inspect($$) {
     return $self->_get("/images/$image/json");
 }
 
+$METHODS{'image_history'} = {
+    'required' => ['image'],
+    'help' => "Return a JSON dump of the given image",
+    'phelp' => { 'id' => "The image name or id" }
+};
+sub image_history($$) {
+    my ($self,$image) = @_;
+
+    return $self->_get("/images/$image/history");
+}
+
 $METHODS{'image_pull'} = {
     'required' => ['image'],
     'optional' => ['user','pass'],
