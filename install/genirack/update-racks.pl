@@ -72,6 +72,8 @@ my %CLOUDCLUSTERS = ("apt"     => [ $APTBOSS, $APTCTRL ],
 		     "wisc"    => [ $WISCCLOUDBOSS, $WISCCLOUDCTRL ],
 		     "clemson" => [ $CLEMCLOUDBOSS, $CLEMCLOUDCTRL ],
 		     "utahddc" => [ $DDCBOSS, $DDCCTRL ],
+		     "stitch"  => [ $STITCHBOSS, $DDCCTRL ],
+#		     "onelab"  => [ "boss.lab.onelab.eu", "" ],
 );
 my %UTAHCLUSTERS =  ("utahig"  => [ $UTAHBOSS, $UTAHCTRL ],
 		     "utahddc" => [ $DDCBOSS, $DDCCTRL ],
@@ -153,8 +155,18 @@ my %G8RACKS = ("max"        => [ "boss.instageni.maxgigapop.net",
 				 "utc.control-nodes.geniracks.net" ],
 	       "vt"         => [ "boss.instageni.arc.vt.edu",
 				 "vt.control-nodes.geniracks.net" ],
-	      "umich"       => [ "boss.instageni.research.umich.edu",
+	       "vcu"        => [ "boss.vcu.instageni.net",
+				 "vcu.control-nodes.geniracks.net" ],
+	       "umich"      => [ "boss.instageni.research.umich.edu",
 				 "umich.control-nodes.geniracks.net" ],
+	       "hawaii"     => [ "boss.instageni.hawaii.edu",
+				 "usignite.control-nodes.geniracks.net" ],
+	       "uvm"        => [ "boss.instageni.uvm.edu",
+				 "uvm.control-nodes.instageni.net" ],
+	      "dallas"     => [ "boss.instageni.utdallas.edu",
+				"utdallas.control-nodes.instageni.net" ],
+	      "lafayette"  => [ "boss.instageni.louisiana.edu",
+				"ullafayette.control-nodes.instageni.net" ],
 );
 
 sub fatal($)
@@ -331,6 +343,7 @@ if ($dofunc && !$install) {
 	my $devel  = "emulab-devel/emulab-devel";
 	my $devobj = "emulab-devel/obj";
 	my $wap    = "/usr/testbed/sbin/withadminprivs";
+	my $sbin   = "/usr/testbed/sbin";
 	my $import = "/usr/testbed/sbin/image_import";
 	
 	print "-> Running function ...\n";
@@ -344,24 +357,17 @@ if ($dofunc && !$install) {
 		(defined($limit) ? "-l $limit" : "");
 	}
 	elsif (0) {
+	    $command = "sudo sed -i.bak -e ".
+	     "'s/genirack-ops\@flux.utah.edu/instageni-ops\@googlegroups.com/' ".
+	     "  /etc/mail/lists/testbed-ops";
+	}
+	elsif (0) {
 	    if (0) {
 		$command = "sudo mkadmin.pl codybum foo/cody.pub";
 	    }
 	    elsif (0) {
 		$command = "/usr/testbed/sbin/wap /usr/testbed/sbin/newuser ".
 		    "-s $devel/stuff/rhyat1.xml";
-	    }
-	    elsif (1) {
-		$command = "cat $devel/stuff/uky.sql | mysql tbdb ";
-
-	    }
-	    elsif (0) {
-		$command = "/usr/testbed/sbin/wap /usr/testbed/sbin/tbacct ".
-		    "-f add codybum; ".
-		    "/usr/testbed/sbin/wap /usr/testbed/sbin/tbacct ".
-		    "-f add rhyat1; ".
-		    "/usr/testbed/sbin/wap /usr/testbed/sbin/tbacct ".
-		    "-f add nasir";
 	    }
 	    else {
 		$command =
@@ -391,18 +397,25 @@ if ($dofunc && !$install) {
 	    $command = "cd $devobj/firewall; gmake insertrules insertvars";
 	}
 	elsif (0) {
-	    $command = "cd $devel/stuff; sudo -E perl osupd.pl";
+	    $command = "cd $devel/stuff; perl arch.pl";
 	}
 	elsif (0) {
-	    $command = "cd $devel/stuff; sudo perl osupdctrl.pl";
+	    $command = "cd $devobj/rc.d; gmake; sudo gmake install";
 	}
 	elsif (0) {
-	    $command = "cd pubsub; sudo gmake client install; ".
+	    #$command = "cd pubsub; gmake clean; ./configure; gmake; ";
+	    $command = 
+		"cd pubsub; sudo gmake install; ".
 		"sudo /usr/local/etc/rc.d/2.pubsubd.sh stop; ".
-		"sudo /usr/local/etc/rc.d/2.pubsubd.sh start";
+		"sudo /usr/local/etc/rc.d/4.igforwarder.sh stop; ".
+		"sleep 1; ".
+		"sudo /usr/local/etc/rc.d/2.pubsubd.sh start; ".
+		"sleep 1; ".
+		"sudo /usr/local/etc/rc.d/4.igforwarder.sh start";
 	}
 	elsif (0) {
-	    $command = "cd pubsub; ./configure; gmake clean; gmake client";
+	    $command = "cd pubsub; ./configure; gmake clean; ".
+		"gmake; sudo gmake install";
 	}
 	elsif (0) {
 	    $command = "cd $devel/stuff; ".
@@ -434,6 +447,11 @@ if ($dofunc && !$install) {
 	}
 	elsif (0) {
 	    $command =
+		"$wap $sbin/emulabfeature create NewOsload 'NewOsload'; ".
+		"$wap $sbin/emulabfeature enable NewOsload";
+	}
+	elsif (0) {
+	    $command =
 		"cd /users/elabman/$devobj/install; ".
 		"  sudo perl emulab-install -b -i ops/shellinabox ops";
 	}
@@ -448,15 +466,38 @@ if ($dofunc && !$install) {
 		"sudo gmake install-head; /usr/testbed/sbin/named_setup";
 	}
 	elsif (0) {
+	    $command = "/usr/testbed/sbin/check-shared-bw -f";
+	}
+	elsif (0) {
+	    $command = "sudo /usr/local/etc/rc.d/apache22 graceful";
+	}
+	elsif (0) {
+	    $command =
+		"cd emulab-devel/obj/db; ".
+		"gmake; sudo gmake install; ".
+		"sudo /usr/local/etc/rc.d/apache22 graceful";
+	}
+	elsif (0) {
 	    $command = "cd emulab-devel/obj/protogeni/lib; ".
+		"gmake; sudo gmake /usr/testbed/lib/GeniCMV2.pm; ".
+		"cd ../../db; ".
+		"gmake; sudo gmake /usr/testbed/lib/OSImage.pm ";
+	}
+	elsif (0) {
+	    $command = "cd emulab-devel/obj/protogeni/lib; ".
+		"gmake; sudo gmake install; ".
+		"sudo /usr/local/etc/rc.d/apache22 graceful geni";
+	}
+	elsif (0) {
+	    $command = "cd emulab-devel/obj/xmlrpc; ".
 		"gmake; sudo gmake install";
 	}
-	elsif (1) {
+	elsif (0) {
 	    $command = "/usr/testbed/sbin/addpubkey -f -u elabman ".
 		"$devel/stuff/nasir-elabman.pub";
 	}
 	elsif (0) {
-	    $command = "cd emulab-devel/obj/node_usage; sudo gmake install";
+	    $command = "cd emulab-devel/obj/assign; gmake";
 	}
 	elsif (0) {
 	    $command = "cd emulab-devel/obj/apache; ".
@@ -473,14 +514,6 @@ if ($dofunc && !$install) {
 	}
 	elsif (0) {
 	    $command = "sudo /usr/testbed/sbin/protogeni/getcacerts ";
-	}
-	elsif (0) {
-	    $command = "/usr/testbed/sbin/wap ".
-	      "/usr/testbed/sbin/delete_image -p -F emulab-ops,CENTOS63-64-STD";
-	}
-	elsif (0) {
-	    $command = "/usr/testbed/sbin/wap ".
-	      "/usr/testbed/sbin/grantimage -a -x emulab-ops,CENTOS66-64-STD";
 	}
 	elsif (0) {
 	    $command = "/usr/testbed/sbin/wap ".
@@ -504,6 +537,10 @@ if ($dofunc && !$install) {
 		"$wap /usr/testbed/bin/editnodetype $devel/stuff/defimage.xml";
 	}	    
 	elsif (0) {
+	    $command = "$wap /usr/testbed/sbin/setsitevar ".
+		"general/root_keypair 1";
+	}	    
+	elsif (0) {
 		$command = "sudo /usr/testbed/sbin/getimages";
 	}	    
 	elsif (0) {
@@ -513,22 +550,77 @@ if ($dofunc && !$install) {
 	}
 	elsif (0) {
 	    $command = 
-		"$wap $import -g -r emulab-ops,UBUNTU14-10-64-OSCP; ".
-		"$wap $import -g -r emulab-ops,UBUNTU14-10-64-OSCN; ".
-		"$wap $import -g -r emulab-ops,UBUNTU14-10-64-OSNM; ".
-		"$wap $import -g -r emulab-ops,UBUNTU15-04-64-OSCP; ".
-		"$wap $import -g -r emulab-ops,UBUNTU15-04-64-OSCN; ".
-		"$wap $import -g -r emulab-ops,UBUNTU15-04-64-OSNM; ".
-		"$wap $import -g -r emulab-ops,UBUNTU15-04-64-STD ";
+		"$wap $import -g -r emulab-ops,CENTOS72-64-STD ";
+	}
+	elsif (0) {
+	    # APT, wisc, clemson, utahddc
+	    $command = 
+		"$wap $import -g -r emulab-ops,UBUNTU14-64-STD; ".
+		"$wap $import -g -r emulab-ops,UBUNTU16-64-STD; ".
+		"$wap $import -g -r emulab-ops,UBUNTU18-64-STD; ".
+		"$wap $import -g -r emulab-ops,CENTOS7-64-STD; ".
+		"$wap $import -g -r emulab-ops,UBUNTU16-64-OSCN-P; ".
+		"$wap $import -g -r emulab-ops,UBUNTU16-64-OSCP-P; ".
+		"$wap $import -g -r emulab-ops,UBUNTU16-64-OSNM-P ";
+	}
+	elsif (0) {
+	    # Just for the OneLab cluster.
+	    $command = 
+		"$wap $import -g -r emulab-ops,UBUNTU18-64-ARM; ";
+		"$wap $import -g -r emulab-ops,UBUNTU16-64-ARM; ";
+		"$wap $import -g -r emulab-ops,UBUNTU14-64-ARM ";
+	}
+	elsif (1) {
+	    # Just for the Utah Moonshot cluster.
+	    $command = 
+		"$wap $import -g -r emulab-ops,UBUNTU18-64-X86; ".
+		"$wap $import -g -r emulab-ops,UBUNTU16-64-X86; ".
+		"$wap $import -g -r emulab-ops,UBUNTU14-64-X86; ".
+		"$wap $import -g -r emulab-ops,CENTOS7-64-STD; ".
+		"$wap $import -g -r emulab-ops,UBUNTU16-64-X86-OSCN-P; ".
+		"$wap $import -g -r emulab-ops,UBUNTU16-64-X86-OSCP-P; ".
+		"$wap $import -g -r emulab-ops,UBUNTU16-64-X86-OSNM-P ";
 	}
 	elsif (0) {
 	    $command = 
-		"/usr/testbed/sbin/withadminprivs /usr/testbed/sbin/image_import -g ".
-		"  'https://www.apt.emulab.net/image_metadata.php\\\\\?uuid=61e7048a-fb33-11e4-8b63-2f7555356a5c'; ".
-		"/usr/testbed/sbin/withadminprivs /usr/testbed/sbin/image_import -g ".
-		"  'https://www.apt.emulab.net/image_metadata.php\\\\\?uuid=91f6150a-fb33-11e4-8b63-2f7555356a5c'; ".
-		"/usr/testbed/sbin/withadminprivs /usr/testbed/sbin/image_import -g ".
-		"  'https://www.apt.emulab.net/image_metadata.php\\\\\?uuid=7de9c920-fb33-11e4-8b63-2f7555356a5c' ";
+		"$wap $import -g -r emulab-ops,UBUNTU16-64-STD; ".
+		"$wap $import -g -r emulab-ops,UBUNTU14-64-STD; ".
+		"$wap $import -g -r emulab-ops,UBUNTU12-64-STD; ".
+		"$wap $import -g -r emulab-ops,CENTOS71-64-STD; ".
+		"$wap $import -g -r emulab-ops,CENTOS72-64-STD; ".
+		"$wap $import -g -r emulab-ops,CENTOS7-64-STD; ".
+		"$wap $import -g -r emulab-ops,XEN46-64-STD; ".
+		"$wap $import -g -r emulab-ops,XEN44-64-STD; ".
+		"$wap $import -g -r emulab-ops,UBUNTU16-64-OSCN; ".
+		"$wap $import -g -r emulab-ops,UBUNTU16-64-OSCP; ".
+		"$wap $import -g -r emulab-ops,UBUNTU16-64-OSNM ";
+	}
+	elsif (0) {
+	    $command = 
+		"$wap $import -g -r emulab-ops,UBUNTU14-10-64-OSCP; ".
+		"$wap $import -g -r emulab-ops,UBUNTU14-10-64-OSCN; ".
+		"$wap $import -g -r emulab-ops,UBUNTU14-10-64-OSNM; ".
+		"$wap $import -g -r emulab-ops,UBUNTU14-10-64-STD; ".
+		"$wap $import -g -r emulab-ops,UBUNTU15-04-64-OSCP; ".
+		"$wap $import -g -r emulab-ops,UBUNTU15-04-64-OSCN; ".
+		"$wap $import -g -r emulab-ops,UBUNTU15-04-64-OSNM; ".
+		"$wap $import -g -r emulab-ops,UBUNTU15-04-64-STD; ".
+		"$wap $import -g -r emulab-ops,UBUNTU15-10-64-OSCN; ".
+		"$wap $import -g -r emulab-ops,UBUNTU15-10-64-OSCP; ".
+		"$wap $import -g -r emulab-ops,UBUNTU15-10-64-OSNM; ".
+		"$wap $import -g -r emulab-ops,UBUNTU15-10-64-STD";
+	}
+	elsif (0) {
+	    # APT, wisc, clemson, utahddc
+	    $command = 
+		"$wap $import -g -r emulab-ops,UBUNTU14-64-STD; ".
+		"$wap $import -g -r emulab-ops,UBUNTU16-64-STD; ".
+		"$wap $import -g -r emulab-ops,CENTOS7-64-STD ";
+	}
+	elsif (0) {
+	    $command = 
+		"$wap $import -g ".
+		"      https://www.emulab.net/image_metadata.php\\\?uuid=2d6bccd7-3011-11e7-ac8f-90e2ba22fee4";
 	}
 	else {
 	    $command = "sudo /usr/testbed/sbin/testbed-control shutdown; ".
@@ -736,6 +828,7 @@ if ($rebuild) {
 	    print STDERR "** $rack: could not rebuild!\n";
 	    return 3;
 	}
+	print "-> $rack: Finished rebuild ...\n";
 	return 0;
     };
 
@@ -838,6 +931,14 @@ if ($install) {
 	    print STDERR "** could not boot!\n";
 	    $SKIP{$rack} = "could not boot";
 	    next;
+	}
+	if (defined($options{"C"})) {
+	    print "-> Gracefully restarting apache ...\n";
+	    if (SSH($rack, "(sudo /usr/local/etc/rc.d/apache22 graceful)")) {
+		print STDERR "** could not restart apache!\n";
+		$SKIP{$rack} = "could not restart apache";
+		next;
+	    }
 	}
     }
 }
