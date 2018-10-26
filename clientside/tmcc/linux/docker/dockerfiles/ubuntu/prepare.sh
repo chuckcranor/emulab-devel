@@ -4,7 +4,7 @@ set -x
 
 export DEBIAN_FRONTEND=noninteractive
 
-export UBUNTU_MIRROR=http://ubuntu.cs.utah.edu/ubuntu
+#export UBUNTU_MIRROR=http://ubuntu.cs.utah.edu/ubuntu
 
 if [ -n "$UBUNTU_MIRROR" -a ! -f /tmp/sources.list.backup ]; then
     cp -p /etc/apt/sources.list /tmp/sources.list.backup
