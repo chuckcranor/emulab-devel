@@ -302,12 +302,23 @@ my %layer_size = ();
 if ($debug) {
     print "DEBUG: history: " . Dumper($content) . "\n";
 }
-foreach my $h (@{$content}) {
-    next
-	if (!exists($h->{"Id"}) || !exists($h->{"Size"}));
-    my $size = $h->{"Size"};
-    if ($h->{"Id"} =~ /^([\w\d]+):([\w\d]+)$/) {
-	$layer_size{$2} = $size;
+# Sometimes history comes as a simple array of hashes; other times, it
+# is a array of one array of hashes.  Go figure...
+my $histref;
+if (defined($content) && ref($content) eq 'ARRAY') {
+    $histref = $content[0];
+    if (ref($histref) eq 'ARRAY') {
+	$histref = $histref->[0];
+    }
+}
+if (defined($histref)) {
+    foreach my $h (@{$histref}) {
+	next
+	    if (!exists($h->{"Id"}) || !exists($h->{"Size"}));
+	my $size = $h->{"Size"};
+	if ($h->{"Id"} =~ /^([\w\d]+):([\w\d]+)$/) {
+	    $layer_size{$2} = $size;
+	}
     }
 }
 if ($debug) {
