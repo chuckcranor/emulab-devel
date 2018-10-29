@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2004, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2004, 2016, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -113,11 +113,7 @@ while (my ($table) = $query_result->fetchrow()) {
     
     print "Checking $table ...\n";
 
-    # virt_routes is too big for this.
-    my $checktype = ($table eq "virt_routes" || $table eq "logfile_metadata" 
-		     ? "medium" : "extended");
-
-    my $check_result = DBQueryWarn("check table $table $checktype");
+    my $check_result = DBQueryWarn("check table $table medium");
     if (! $check_result) {
 	fatal("Error accessing the database.");
     }
