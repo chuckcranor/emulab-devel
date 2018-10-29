@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,6 +32,11 @@ $isadmin   = ISADMIN();
 
 if (! $isadmin) {
     USERERROR("You do not have admin privileges to edit site variables!", 1);
+}
+
+if ($PORTAL_ENABLE || $CLUSTER_PORTAL != "") {
+    header("Location: ${TBBASE}/portal/sitevars.php");
+    return;
 }
 
 #
@@ -263,72 +268,4 @@ SPITFORM($message, $errors);
 PAGEFOOTER();
 return;
 			
-#
-# Edit site variables.  (No class for them at present.)
-function SetSiteVar($name, $args, &$errors) {
-    global $suexec_output, $suexec_output_array;
-
-    #
-    # Generate a temporary file and write in the XML goo.
-    #
-    $xmlname = tempnam("/tmp", "editsitevars");
-    if (! $xmlname) {
-	TBERROR("Could not create temporary filename", 0);
-	$errors[] = "Transient error(1); please try again later.";
-	return null;
-    }
-    if (! ($fp = fopen($xmlname, "w"))) {
-	TBERROR("Could not open temp file $xmlname", 0);
-	$errors[] = "Transient error(2); please try again later.";
-	return null;
-    }
-
-    # Add these. Maybe caller should do this?
-    $args["name"] = $name;
-
-    fwrite($fp, "<sitevar>\n");
-    foreach ($args as $name => $value) {
-	fwrite($fp, "<attribute name=\"$name\">");
-	fwrite($fp, "  <value>" . htmlspecialchars($value) . "</value>");
-	fwrite($fp, "</attribute>\n");
-    }
-    fwrite($fp, "</sitevar>\n");
-    fclose($fp);
-    chmod($xmlname, 0666);
-
-    $retval = SUEXEC("nobody", "nobody", "webeditsitevars $xmlname",
-		     SUEXEC_ACTION_IGNORE);
-
-    if ($retval) {
-	if ($retval < 0) {
-	    $errors[] = "Transient error(3, $retval); please try again later.";
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-	}
-	else {
-	    # unlink($xmlname);
-	    if (count($suexec_output_array)) {
-		for ($i = 0; $i < count($suexec_output_array); $i++) {
-		    $line = $suexec_output_array[$i];
-		    if (preg_match("/^([-\w]+):\s*(.*)$/",
-				   $line, $matches)) {
-			$errors[$matches[1]] = $matches[2];
-		    }
-		    else
-			$errors[] = $line;
-		}
-	    }
-	    else
-		$errors[] = "Transient error(4, $retval); please try again later.";
-	}
-	return null;
-    }
-
-    # There are no return value(s) to parse at the end of the output.
-
-    # Unlink this here, so that the file is left behind in case of error.
-    # We can then create the sitevar by hand from the xmlfile, if desired.
-    unlink($xmlname);
-    return true;
-}
-
 ?>

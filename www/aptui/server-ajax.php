@@ -439,6 +439,15 @@ $routing = array("geni-login" =>
 			      "guest"   => false,
 			      "methods" => array("AggregateStatus" =>
 						    "Do_AggregateStatus")),
+		 "sitevars" =>
+			array("file"    => "sitevars.ajax",
+			      "guest"   => false,
+			      "methods" => array("GetSitevars" =>
+						    "Do_GetSitevars",
+                                                 "SetSitevar" =>
+						    "Do_SetSitevar",
+                                                 "ResetSitevar" =>
+						    "Do_ResetSitevar")),
 );
 
 #

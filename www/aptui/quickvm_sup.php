@@ -503,8 +503,8 @@ if (!$login_user->portal()) {
                             Users/Projects</a></li>
                                  <li><a href='approve-projects.php'>
                             Approve new projects</a></li>
-                                 <li><a href='edit-news.php'>
-                            Add a news item</a></li>";
+                                 <li><a href='sitevars.php'>
+                            Edit Site Variables</a></li>";
                                echo " </ul>
         </li>\n";
     }

@@ -339,6 +339,45 @@ function VerifySpeaksfor(speaksfor, signature)
     $xmlthing.done(callback);
 }
 
+function ConfirmModal(args)
+{
+    var modal = '#' + args.modal;
+    var cancel_function = args.cancel_function;
+    var confirm_function = args.confirm_function;
+    var function_data = args.function_data;
+
+    if (args.prompt) {
+	$(modal + ' .prompt').html(args.prompt);
+    }
+    else {
+	$(modal + ' .prompt').html("Confirm?");
+    }
+
+    $(modal).on('hidden.bs.modal', function (event) {
+	$(this).unbind(event);
+	$(modal + ' .confirm-button').off("click");
+	$(modal + ' .cancel-button').off("click");
+	if (cancel_function !== undefined && cancel_function) {
+	    cancel_function(function_data);
+	}
+    });
+    $(modal + ' .confirm-button').click(function (event) {
+	$(modal).off('hidden.bs.modal');
+	HideModal(modal, function(event) {
+	    $(modal + ' .confirm-button').off("click");
+	    $(modal + ' .cancel-button').off("click");
+	    if (confirm_function !== undefined && confirm_function) {
+		confirm_function(function_data);
+	    }
+	});
+    });
+    $(modal + ' .cancel-button').click(function (event) {
+	// cancel callback called above.
+	HideModal(modal);
+    });
+    ShowModal(modal);
+}
+
   // Input is an image urn.
   // Returns a pretty image name.
   function ImageDisplay(v)
@@ -378,6 +417,7 @@ return {
     StartGeniLogin: StartGeniLogin,
     InitGeniLogin: InitGeniLogin,
     ImageDisplay: ImageDisplay,
+    ConfirmModal: ConfirmModal,
 };
 })();
 });
