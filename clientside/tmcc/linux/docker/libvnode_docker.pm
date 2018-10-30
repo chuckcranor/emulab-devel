@@ -1889,7 +1889,9 @@ sub rootPreConfig($;$)
 	mysystem("$IPTABLES -t nat -I POSTROUTING".
 		 " -s ${VCNET_NET}/${VCNET_SLASHMASK}".
 		 " -d ${cnet_net}/${cnet_mask} -j ACCEPT");
-	if (!$ISOURDOCKER) {
+	# NB: Ok, more recent versions of Docker no longer seem to allow
+	# default outbound masquerading -- so always do it.
+	if (1 || !$ISOURDOCKER) {
 	    mysystem("$IPTABLES -t nat -A POSTROUTING".
 		     " -s ${VCNET_NET}/${VCNET_SLASHMASK}".
 		     " -j MASQUERADE");
@@ -2497,11 +2499,12 @@ sub rootPreConfigNetwork($$$$)
 	    my $netmask = inet_aton($ifc->{IPMASK});
 	    my $maskbits = 0;
 	    my $cval = unpack("N",$netmask);
-	    for (my $i = 31; $i >= 0; ++$i) {
-		last if (($cval & 0x80000000) == 0);
+	    for (my $i = 31; $i >= 0; --$i) {
+		last if (($cval & 0x1) == 0);
 		++$maskbits;
-		$cval = $cval << 1;
+		$cval = $cval >> 1;
 	    }
+	    $maskbits = 32 - $maskbits;
 	    $brs{$brname}{CIDR} = inet_ntoa($ipaddr & $netmask) . "/$maskbits";
 
 	    #
@@ -2516,7 +2519,7 @@ sub rootPreConfigNetwork($$$$)
 	    # a shared LAN.  Anyway, we'll just document this too...
 	    #
 	    $brs{$brname}{GW} =
-		inet_ntoa(pack("N",unpack("N",$ipaddr | ~$netmask) - 1));
+		inet_ntoa(pack("N",unpack("N",$ipaddr | $netmask) - 1));
 	}
 	else {
 	    warn("Fatal: all Docker network interfaces *must* have an".
@@ -2637,6 +2640,14 @@ sub rootPreConfigNetwork($$$$)
 			if ($code);
 		}
 		$private->{'dockernets'}->{$k} = $k;
+		#
+		# Also, if this is our Docker and we have iptables
+		# enabled, we need a default-allow rule for all traffic
+		# within the network -- Docker blocks by default.
+		#
+		if ($ISOURDOCKER) {
+		    DoIPtablesNoFail("-A FORWARD -i $k -o $k -j ACCEPT");
+		}
 	    }
 	}
 	else {
@@ -2779,8 +2790,17 @@ sub rootPreConfigNetwork($$$$)
 	    if (@members == 0) {
 		TBDebugTimeStamp("removing docker network $name");
 		($code,) = getClient()->network_delete($name);
-		delete($private->{'dockernets'}->{$name})
-		    if (!$code);
+		if (!$code) {
+		    delete($private->{'dockernets'}->{$name});
+		    #
+		    # Also, if this is our Docker and we have iptables
+		    # enabled, we need to remove the default-allow rule
+		    # for all traffic within the network.
+		    #
+		    if ($ISOURDOCKER) {
+			DoIPtablesNoFail("-D FORWARD -i $name -o $name -j ACCEPT");
+		    }
+		}
 	    }
 	}
     }
@@ -4434,8 +4454,17 @@ sub vnodeDestroy($$$$)
 	    if (@members == 0) {
 		TBDebugTimeStamp("Deleting empty docker network $name...");
 		($code) = getClient()->network_delete($name);
-		delete($private->{'dockernets'}->{$name})
-		    if (!$code);
+		if (!$code) {
+		    delete($private->{'dockernets'}->{$name});
+		    #
+		    # Also, if this is our Docker and we have iptables
+		    # enabled, we need to remove the default-allow rule
+		    # for all traffic within the network.
+		    #
+		    if ($ISOURDOCKER) {
+			DoIPtablesNoFail("-D FORWARD -i $name -o $name -j ACCEPT");
+		    }
+		}
 	    }
 	}
     }
