@@ -943,7 +943,8 @@ sub TBSetNodeEventState($$;$)
     if (!ref($node)) {
 	$node = LocalNodeLookup($node);
     }
-    return $node->SetEventState($state, $fatal);
+    my $rc = $node->SetEventState($state, $fatal);
+    return (($rc == 0) ? 1 : 0);
 }
 
 #
