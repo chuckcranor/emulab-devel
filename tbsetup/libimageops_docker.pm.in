@@ -528,6 +528,10 @@ sub DeleteImageFiles($$$) {
     #
 
     foreach my $imageversion (@images) {
+	# Skip NULL or '' paths.
+	next
+	    if (!defined($imageversion->path()) || $imageversion->path() eq "");
+
 	# Split the path into server, repo, and tag.
 	my ($server,$repo,$tag);
 	if ($imageversion->path() =~ /^([^\/]+)\/([^:]+):(.*)$/) {
