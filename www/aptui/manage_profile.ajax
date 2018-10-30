@@ -1594,7 +1594,7 @@ function Do_GetCommitInfo()
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
 
-    if (isset($ajax_args["refspec"]) && $ajax_args["refspec"] != null) {
+    if (isset($ajax_args["refspec"]) && $ajax_args["refspec"]) {
         $which = escapeshellarg($ajax_args["refspec"]);
     }
     if (!isset($ajax_args["uuid"])) {

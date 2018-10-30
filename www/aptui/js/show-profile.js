@@ -309,11 +309,10 @@ $(function ()
 
     function SetupRepo()
     {
-	gitrepo.InitRepoPicker(version_uuid,
+	gitrepo.InitRepoPicker(version_uuid, null,
 			       function(which) {
 				   SelectRepoTarget(which);
 			       });
-	gitrepo.GetCommitInfo(version_uuid);
     }
     /*
      * User has clicked on a branch/tag. We need to get that branch/tag
