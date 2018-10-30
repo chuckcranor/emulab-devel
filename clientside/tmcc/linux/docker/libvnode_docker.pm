@@ -3372,7 +3372,13 @@ sub vnodeCreate($$$$)
     #
     my ($ctrlip,$ctrlmask) = ($vnconfig->{config}{CTRLIP},
 			      $vnconfig->{config}{CTRLMASK});
-    my $ctrlmac = ipToMac($ctrlip);
+    my $ctrlmac;
+    if (exists($vnconfig->{'config'}{CTRLMAC})) {
+	$ctrlmac = $vnconfig->{'config'}{CTRLMAC};
+    }
+    else {
+	$ctrlmac = ipToMac($ctrlip);
+    }
     my $ctrlnetwork = inet_ntoa(inet_aton($ctrlip) & inet_aton($ctrlmask));
     my $fmac = fixupMac($ctrlmac);
     my $maskbits = 0;
@@ -3385,10 +3391,15 @@ sub vnodeCreate($$$$)
     }
 
     my %cnetconfig = (
-	"IPAMConfig" => { "IPv4Address" => $ctrlip},
-	"MacAddress" => $fmac
+	"IPAMConfig" => { "IPv4Address" => $ctrlip}
     );
     $args{"NetworkingConfig"}{"EndpointsConfig"}{$DOCKERCNET} = \%cnetconfig;
+    # This NetworkMode goo is apparently necessary to set the MacAddress
+    # of the container's initial network.  Go figure -- it's not
+    # documented this way -- but this is the way the CLI does it and it
+    # works.  Needless to say, nothing else works!
+    $args{"HostConfig"}{"NetworkMode"} = $DOCKERCNET;
+    $args{"MacAddress"} = $fmac;
     $args{"Hostname"} = "$vname.$longdomain";
     #
     # NB XXX: apparently --dns-search *does* work, but not --dns, when
