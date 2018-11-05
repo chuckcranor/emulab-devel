@@ -160,15 +160,17 @@ function Do_GetInstanceStatus()
 	    "Please try again later.\n\n";
 	}
         elseif ($webtask->exitcode() == GENIRESPONSE_MAPPING_IMPOSSIBLE) {
-            $blob["reason"]  = "Your topology cannot instantiated. ".
+            $blob["reason"]  = "Your topology cannot be instantiated. ".
 	    "You have most likely asked for hardware that does not exist, ".
             "such as nodes of a type that are not at the target cluster, ".
-            "or nodes with too many network interfaces.\n\n";
+            "or more network interfaces that exist on any of the nodes ".
+            "at the target cluster. You will need to modify your profile ".
+            "or try a different cluster.\n\n";
         }
         elseif ($webtask->exitcode() == GENIRESPONSE_NO_MAPPING) {
             $blob["reason"]  = "Your topology could not be mapped to physical ".
                 "resources. In addition to any information below, you can ".
-                "click on the 'Sliver' button above, which will provide ".
+                "click on the 'Logs' button above, which will provide ".
                 "lots of info, some of which might be useful in figuring out ".
                 "why it failed.\n\n";
         }
@@ -191,8 +193,8 @@ function Do_GetInstanceStatus()
             #
             $blob["reason"]  = "You are over your disk quota at the target ".
                 "cluster, probably because of too many saved disk images. ".
-                "Please click on the 'Storage->My Disk Images' above and delete ".
-                "images you no longer need.";
+                "Please click on the 'Storage->My Disk Images' above and ".
+                "delete images you no longer need.";
         }
         elseif ($webtask->exitcode() == GENIRESPONSE_STITCHER_ERROR) {
             #

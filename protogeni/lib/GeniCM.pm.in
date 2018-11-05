@@ -3521,6 +3521,7 @@ sub GetTicketAuxAux($)
 	my $inprecheck   = 0;
 	my $insummary    = 0;
 	my $isassignerror= 0;
+	my $impossible   = 0;
 	my $errorcode = GENIRESPONSE_NO_MAPPING;
 	
 	unlink($tmpfile);
@@ -3553,6 +3554,15 @@ sub GetTicketAuxAux($)
 		$insummary    = 0;
 		$errorcode     = GENIRESPONSE_NO_MAPPING;
 	    }
+	    #
+	    # This is the very last thing the mapper will print, so
+	    # need to be looking for it after ASSIGN FAILED
+	    #
+	    if ($line =~ /cannot be instantiated on this testbed/) {
+		$impossible = 1;
+		last;
+	    }
+	    
 	    # Skipping ahead looking for another assign run
 	    next
 		if ($done);
@@ -3568,18 +3578,6 @@ sub GetTicketAuxAux($)
 		    $logstuff .= $l;
 		}
 		$errorcode = GENIRESPONSE_INSUFFICIENT_NODES();
-		last;
-	    }
-	    if ($line =~ /cannot be instantiated on this testbed/) {
-		$logstuff  = $line;
-		# Snarf up next couple of lines.
-		while ($output =~ /^(.*)$/gm) {
-		    my $l = $1 . "\n";
-		    last
-			if ($l =~ /^\s*\*\*\*/);
-		    $logstuff .= $l;
-		}
-		$errorcode = GENIRESPONSE_MAPPING_IMPOSSIBLE();
 		last;
 	    }
 
@@ -3739,6 +3737,32 @@ sub GetTicketAuxAux($)
 	print STDERR "---------------- Mapper Log ------------------\n";
 	print STDERR $output;
 
+	if ($impossible) {
+	    # WARNING: This error string is important, do not change it!!!
+	    my $message =
+		"Your topology cannot be instantiated on this cluster. ".
+		"You have most likely asked for hardware that does not ".
+		"exist, such as nodes of a type that do not exist, or more ".
+		"network interfaces that exist on any of the nodes at this ".
+		"cluster. You will need to modify your experiment or try ".
+		"a different cluster - re-submitting as-is will always ".
+		"result in failure!";
+		
+	    if ($errorstr ne "") {
+		$errorstr .= "\n\n";
+		$errorstr .= "Note that " . lcfirst($message);
+	    }
+	    else {
+		$errorstr = $message;
+	    }
+	    if ($logstuff ne "") {
+		$logstuff .= "\n\n";
+		$logstuff .= "Note that " . lcfirst($message);
+	    }
+	    else {
+		$logstuff = $message;
+	    }
+	}
 	$response =
 	    GeniResponse->Create($errorcode,
 				 "Could not map to resources" .

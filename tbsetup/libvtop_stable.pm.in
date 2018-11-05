@@ -5482,7 +5482,7 @@ sub AllocNodes($)
 	# if the return value of nalloc (number of nodes not allocated) does
 	# not equal the number of nodes we tried to allocate.
 	#
-	return (($tcount == $exitval) ? 2 : 3);
+	return (($tcount == $exitval) ? 10 : 11);
     }
 
     #
