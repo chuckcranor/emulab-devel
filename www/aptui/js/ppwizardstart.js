@@ -714,12 +714,11 @@ $(function () {
 	}
 
 	function StartPP(args) {
-	    uuid = args.uuid;
 	    registered = args.registered;
 	    multisite = args.multisite;
 	    ppdivname = args.ppdivname;
 	    
-	    if (bodyTemplate) {
+	    if (bodyTemplate && uuid == args.uuid) {
 		GenerateModalBody(defaults, null);
 		//sup.ShowModal('#ppmodal');
 		return;
@@ -753,13 +752,14 @@ $(function () {
 		});
 		bodyTemplate = _.template(html);
 		GenerateModalBody(defaults, null);
+		uuid = args.uuid;
 		if (args.rspec) {
 		    RSPEC = args.rspec;
 		    ConfigureDone();
 		    ShowEditor();
 		}
 	    }
-	    var blob = {"uuid" : uuid};
+	    var blob = {"uuid" : args.uuid};
 	    //
 	    // XXX: Look for paramdefs/script in the form and pass that along.
 	    // This is for repo-based profiles.
