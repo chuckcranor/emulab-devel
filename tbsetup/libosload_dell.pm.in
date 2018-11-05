@@ -85,16 +85,11 @@ sub createExpectObject($$)
     return -1
 	if (!defined($admin_pswd));
 
-    if (0 && !exists($INC{'libtblog.pm'})) {
-	close(SOUT);
-	close(SERR);
-	print "Closing SOUT\n";
-    }
-    $self->dprint(0,"$self createExpectObject($node_id):\n");
-
     # Host keys change every reload, do not want to save them.
     my $spawn_cmd = "ssh -o userknownhostsfile=/dev/null ".
 	"-l $admin_user $node_id";
+
+    $self->dprint(0,"$self createExpectObject($node_id): $spawn_cmd\n");
     
     # Create Expect object and initialize it:
     my $exp = new Expect();

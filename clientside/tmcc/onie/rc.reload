@@ -25,6 +25,12 @@
 # The device is always the same in ONIE.
 DISKDEV=/dev/sda
 
+# Special grub env file for our flipping.
+EMULABENV=/mnt/onie-boot/emulabenv
+
+# Marker file for MLNX reload. See below.
+MLNXRELOAD=/mnt/onie-boot/mlnxreload
+
 if [ -r /etc/emulab/paths.sh ]; then
 	. /etc/emulab/paths.sh
 else
@@ -33,8 +39,8 @@ else
 	ETCDIR=/etc/testbed
 fi
 
+PLATFORM=`onie-sysinfo -b`
 TMCC="$BINDIR/tmcc"
-
 BOSSNAME=`$TMCC bossinfo | cut -d ' ' -f 2`
 
 #
@@ -112,9 +118,25 @@ handle_loadinfo()
 
     zap_flash
 
+    # See ./rc.testbed for an explanation.
+    if [ "$PLATFORM" = "mlnx_x86" ]; then
+	/bin/touch $MLNXRELOAD
+	rc=$?
+	if [ $rc -ne 0 ]; then
+	    echo "Failed to create $MLNXRELOAD"
+	    return 1
+	fi
+    fi
+
     write_image $IMAGEPATH || {
 	return 1
     }
+
+    if [ "$PLATFORM" = "mlnx_x86" ]; then
+	# Ah, we loaded an image that does not kexec, so we returned.
+	/bin/rm -f $MLNXRELOAD
+    fi
+    
     echo "Image load complete at `date`"
     return 0
 }

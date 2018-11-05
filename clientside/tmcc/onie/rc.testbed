@@ -28,6 +28,9 @@ DISKDEV=/dev/sda
 # Special grub env file for our flipping.
 EMULABENV=/mnt/onie-boot/emulabenv
 
+# Marker file for MLNX reload. See below.
+MLNXRELOAD=/mnt/onie-boot/mlnxreload
+
 if [ -r /etc/emulab/paths.sh ]; then
 	. /etc/emulab/paths.sh
 else
@@ -36,7 +39,18 @@ else
 	ETCDIR=/etc/testbed
 fi
 
+PLATFORM=`onie-sysinfo -b`
 TMCC="$BINDIR/tmcc"
+
+# Make sure this exists.
+if [ ! -s $EMULABENV ]; then
+    grub-editenv $EMULABENV create
+    rc=$?
+    if [ $rc -ne 0 ]; then
+	echo "Failed to create new grub env"
+	exit 1
+    fi
+fi
 
 #
 # Extract a variable of interest from the VAR=VALUE string and return value.
@@ -127,21 +141,13 @@ boot_nos()
 {
     echo "Setting up to boot the NOS"
 
-    if [ ! -s $EMULABENV ]; then
-	grub-editenv $EMULABENV create
-	rc=$?
-	if [ $rc -ne 0 ]; then
-	    echo "Failed to create new grub env"
-	    return 1
-	fi
-    fi
     grub-editenv $EMULABENV set bootnos=yes
     rc=$?
     if [ $rc -ne 0 ]; then
 	echo "Failed to update grub env with bootnos=yes"
 	return 1
     fi
-    # Tell boss we are booting into reload MFS.
+    # Tell boss we are booting into the NOS.
     $TMCC state BOOTING
     sleep 5
     
@@ -149,6 +155,23 @@ boot_nos()
     /sbin/reboot
     exit 0;
 }
+
+#
+# Special case; we just did a reload on an MLNX switch that did a kexec
+# did the install and then rebooted. So we get here and this file exists
+# (see rc.reload). Remove the file, send the RELOADDONE event and keep
+# going.
+#
+if [ "$PLATFORM" = "mlnx_x86" ]; then
+    if [ -e $MLNXRELOAD ]; then
+	/bin/rm -f $MLNXRELOAD
+
+	echo "sending RELOADDONE"
+	$TMCC state RELOADDONE
+	echo "waiting a bit for server to react"
+	sleep 15
+    fi
+fi
 
 #
 # We might need to wait for something to do, so loop.

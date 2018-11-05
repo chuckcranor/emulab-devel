@@ -36,9 +36,12 @@ my $TESTMODE    = @TESTMODE@;
 
 use libosload_switch;
 use base qw(libosload_switch);
+use libdb;
 use libEmulab;
+use Lan;
 use emutil;
 use EmulabConstants;
+use libtblog_simple;
 
 # Initial switch user/password. We change this as soon as we can.
 my $ADMIN_USER    = "admin";
@@ -46,7 +49,7 @@ my $ADMIN_PSWD    = "admin";
 my $USER_PROMPT   = '[standalone: master] > ';
 my $ADMIN_PROMPT  = "[standalone: master] # ";
 my $CONFIG_PROMPT = "[standalone: master] (config) # ";
-my $CONN_TIMEOUT  = 10;
+my $CONN_TIMEOUT  = 20;
 my $EXPECT_DEBUG_LOG    = "/tmp/osload_switch.log";
 
 sub New($$$)
@@ -62,21 +65,66 @@ sub New($$$)
 #
 # Create an Expect object that spawns the ssh process to the switch.
 #
-sub createExpectObject($$;$)
+sub createExpectObject($$)
 {
-    my ($self, $nodeobject, $initialize) = @_;
+    my ($self, $nodeobject) = @_;
+    my $node_id = $nodeobject->node_id();
+
+    # First try with protouser (the normal state). If that fails, it
+    # is possible the switch is still in its post load state, with a
+    # default password.
+    return 0
+	if ($self->createExpectObjectAux($nodeobject, 0) == 0);
+    sleep(5);
+    return -1
+	if ($self->createExpectObjectAux($nodeobject, 1));
+
+    #
+    # We got in on the default password. Lets change it!
+    #
+    my $cleartext = $self->DefaultPassword();
+    my $salt      = "\$5\$" . substr(emutil::GenHash(), 0, 16) . "\$";
+    my $encrypted = crypt($cleartext, $salt);
+    my $protouser = PROTOUSER();
+
+    my @config = (
+	"username admin password 7 $encrypted",
+	"username monitor password 7 $encrypted",
+	# Need this account for snmpit.
+	"username xmladmin password 7 $encrypted",
+	"username xmluser password 7 $encrypted",
+	"username monitor disable",
+	"username xmluser disable",
+	"username $protouser capability admin",
+	"username $protouser full-name \"\"",
+	"username $protouser password 7 $encrypted",
+	# Need this to allow write
+	"no zero-touch suppress-write",
+	);
+
+    # Install boss' root key into elabman for easier login.
+    my $pubkey;
+    GetSiteVar("node/ssh_pubkey", \$pubkey);
+    if (defined($pubkey) && $pubkey ne '') {
+	push(@config,
+	     "ssh client user $protouser authorized-key sshv2 \"$pubkey\"");
+    }
+
+    if ($self->writeConfig($nodeobject, @config)) {
+	return -1;
+    }
+    return 0;
+}
+
+sub createExpectObjectAux($$$)
+{
+    my ($self, $nodeobject, $initial) = @_;
     my $node_id = $nodeobject->node_id();
     my ($admin_user, $admin_pswd);
     my $prompt = "$node_id $USER_PROMPT";
     my $error = 0;
 
-    #
-    # Initialize mode; the switch is booted with the initial password
-    # and we use the initial user. After the initial config, we use
-    # elabman and the default switch password stored in $TB/etc.
-    # We assume (Hmm) the user will not mess with the elabman user.
-    #
-    if ($initialize) {
+    if ($initial) {
 	$admin_user = $ADMIN_USER;
 	$admin_pswd = $ADMIN_PSWD;
     }
@@ -86,18 +134,11 @@ sub createExpectObject($$;$)
 	return -1
 	    if (!defined($admin_pswd));
     }
-
-    if (0 && !exists($INC{'libtblog.pm'})) {
-	close(SOUT);
-	close(SERR);
-	print "Closing SOUT\n";
-    }
-    $self->dprint(0,"$self createExpectObject($node_id): ".
-		  "$admin_user, $admin_pswd, '$prompt'");
-
     # Host keys change every reload, do not want to save them.
     my $spawn_cmd = "ssh -o userknownhostsfile=/dev/null ".
 	"-l $admin_user $node_id";
+
+    $self->dprint(0,"$self createExpectObject($node_id): $spawn_cmd\n");
     
     # Create Expect object and initialize it:
     my $exp = new Expect();
@@ -105,9 +146,13 @@ sub createExpectObject($$;$)
         # upper layer will check this
         return -1;
     }
-    $exp->log_stdout(1);
-    # Copious debugging.
-    $exp->exp_internal(1);
+    $exp->log_stdout(0);
+    
+    if ($self->debug() > 3) {
+	$exp->log_stdout(1);
+	# Copious debugging.
+	$exp->exp_internal(1);
+    }
 
     if (!$exp->spawn($spawn_cmd)) {
 	warn "$self createExpectObject($node_id): ".
@@ -121,7 +166,7 @@ sub createExpectObject($$;$)
 		  sub { my $e = shift;
 			$e->send("$admin_pswd\n");
 			exp_continue;}],
-		 ["wizard for initial configuration\? " =>
+		 ["wizard for initial configuration" =>
 		  sub { my $e = shift;
 			$e->send("no\n");
 			exp_continue;}],
@@ -149,105 +194,107 @@ sub createExpectObject($$;$)
 	    "Could not connect to switch: $error\n";
 	return -1;
     }
-    $self->expectobj($exp);
+    $self->expectobj($nodeobject, $exp);
     return 0;
 }
 
 #
 # Generate initial switch config for MLNX-OS. 
 #
-sub generateConfig($$;$)
+sub generateConfig($$)
 {
-    my ($self,$nodeobject,$initialize) = @_;
+    my ($self,$nodeobject) = @_;
     my $node_id       = $nodeobject->node_id();
     my $experiment    = $nodeobject->Reservation();
-    my $protouser     = PROTOUSER();
-    my @userlines     = ();
+    my @config        = ();
 
     #
-    # Initialize mode; We are setting the password to the default switch
-    # password in $TB/etc so that it is not sitting on the network with
-    # a well known password.
+    # Once a switch is dragged into an experiment, we are going to add a
+    # user account set to the current node root_password. We leave the
+    # elabman account alone, that is our way back in.
     #
-    # Once a switch is dragged into an experiment, we are going to reconfig
-    # it and change the admin password and add a user account, using
-    # current node root_password. We leave the elabman account alone, that
-    # is our way back in.
-    #
-    # FTOS does not accept modular crypt strings. So just send it the
-    # cleartext password, it will not be visible. I should clarify; I
-    # cannot figure out how to give it an encrypted string. :-)
-    #
-    if ($initialize) {
-	$cleartext = $self->DefaultPassword();
-	return ()
-	    if (!defined($cleartext));
-    }
-    else {
-	$cleartext = $nodeobject->root_password();
-    }
+    my $cleartext = $nodeobject->root_password();
     my $salt      = "\$5\$" . substr(emutil::GenHash(), 0, 16) . "\$";
     my $encrypted = crypt($cleartext, $salt);
 
-    push(@userlines,
-	 "username admin password 7 $encrypted",
-	 "username monitor password 7 $encrypted",
-	 # Need this account for snmpit.
-	 "username xmladmin password 7 $encrypted",
-	 "username xmluser password 7 $encrypted",
-	 "username monitor disable",
-	 "username xmluser disable",
-	);
-
-    if ($initialize) {
-	push(@userlines,
-	     "username $protouser capability admin",
-	     "username $protouser full-name \"\"",
-	     "username $protouser password 7 $encrypted");
-
-	# Install boss' root key into elabman for easier login.
-	my $pubkey;
-	TBGetSiteVar("node/ssh_pubkey", \$pubkey);
-	if (defined($pubkey) && $pubkey ne '') {
-	    push(@userlines,
-		 "ssh client user $protouser authorized-key sshv2 \"$pubkey\"");
-	}
-    }
-
     #
-    # Experiment creator keys go into the admin account. Not going to
-    # create accounts for all users at this time, does not seem necessary.
+    # Experiment creator account. Not going to create accounts for all
+    # users at this time, does not seem necessary.
     #
-    if (!$initialize && defined($experiment)) {
+    if (defined($experiment)) {
 	my $user = $experiment->GetSwapper();
 	if (!defined($user)) {
 	    print STDERR "generateConfig: No swapper defined for $experiment\n";
 	}
 	else {
 	    my $uid  = $user->uid();
-	    push(@userlines,
+	    push(@config,
 		 "username $uid capability admin",
-		 "username $uid full-name \"\"",
 		 "username $uid password 7 $encrypted");
+	}
+
+	if (0) {
+	#
+	# Find all the ports that are in use on this switch. We want to enable
+	# those ports and put them into vlan 1. This will give the user a basic
+	# single broadcast domain as a starting point. We will turn on STP to
+	# avoid loops created by the user (cause that is gonna happen!).
+	#
+	my @vlanports = ();
+	my @portlines = ();
+	my @vlans;
+	if (VLan->ExperimentVLans($experiment, \@vlans) != 0) {
+	    print STDERR "Could not get list of all vlans for $experiment\n";
+	    return -1;
+	}
+	foreach my $vlan (@vlans) {
+	    my @members;
 	    
-	    if ($user->GetSSHKeys(\@keys) || !@keys) {
-		print STDERR "generateConfig: No keys for $user\n";
+	    next
+		if ($vlan->type() ne "wire");
+
+	    if ($vlan->MemberList(\@members)) {
+		print STDERR "Could not get member list of members for $vlan\n";
+		return -1;
 	    }
-	    else {
-		foreach my $key (@keys) {
-		    push(@userlines,
-			 "ssh client user admin authorized-key sshv2 \"$key\"");
+	    foreach my $member (@members) {
+		my ($membnode_id, $membiface);
+		if ($member->GetNodeIface(\$membnode_id, \$membiface)) {
+		    print STDERR "Could not get node/iface for $member\n";
+		    return -1;
 		}
+		next
+		    if ($membnode_id->node_id() ne $node_id);
+
+		my $interface = Interface->LookupByIface($nodeobject,
+							 $membiface);
+		if (!defined($interface)) {
+		    print STDERR "Could not lookup interface for $member\n";
+		    return -1;
+		}
+		my $card  = $interface->card();
+		my $port  = $interface->port();
+
+		push(@portlines,
+		     "interface te $card/$port",
+		     "  switchport",
+		     "  spanning-tree mode rst",
+		     "  spanning-tree guard loop",
+		     "  no shutdown",
+		     "  exit");
 	    }
 	}
+	if (@portlines) {
+	    push(@config,
+		 "spanning-tree mode rst",
+		 "  no disable",
+		 "  exit",
+		 @portlines);
+	}
+	}
     }
-
-    my @config =
-	(@userlines,
-	 "no ipv6 enable",
-	 # These switches always have a vlan 1. Clear IP just in case.
-	 "no interface vlan 1 ip address",
-	 # "write memory local",
+    push(@config, 
+	 "write memory",
 	);
 
     if ($self->debug()) {
@@ -265,7 +312,7 @@ sub writeConfig($$@)
 {
     my ($self, $nodeobject, @config) = @_;
     my $node_id = $nodeobject->node_id();
-    my $exp     = $self->expectobj();
+    my $exp     = $self->expectobj($nodeobject);
 
     $self->dprint(0,"$self writeConfig($node_id): \n");
 
@@ -308,7 +355,126 @@ sub MaxWaitTime($$)
 {    
     my ($self, $nodeobject) = @_;
 
-    return 45 * 60;
+    return 60 * 60;
+}
+
+#
+# Reconfigure.
+#
+sub DeviceReconfigure($$)
+{
+    my ($self, $nodeobject) = @_;
+    my $node_id    = $nodeobject->node_id();
+    my $experiment = $nodeobject->Reservation();
+
+    my @config = $self->generateConfig($nodeobject);	
+    if (!@config) {
+ 	tberror "$self: Reconfigure($node_id): could not generate config!\n";
+ 	return -1;
+    }
+    if ($self->createExpectObject($nodeobject)) {
+	return -1;
+    }
+    if ($self->writeConfig($nodeobject, @config)) {
+	return -1;
+    }
+    if (!defined($experiment)) {
+	$self->expectobj($nodeobject)->soft_close();
+	return 0;
+    }
+    #
+    # Deal with SSH keys.
+    #
+    my $nonlocal = 0;
+    my @keys = ();
+    my $user;
+
+    #
+    # Nonlocal (geni experiments) are a little more trouble, since the
+    # swapper is "geniuser" and the keys are in nonlocal_user_pubkeys.
+    #
+    if ($experiment->geniflags()) {
+	#
+	# Look at the project, if its a nonlocal project then we need
+	# the nonlocal keys. But with PROTOGENI_LOCALUSER, we might
+	# have a local project (and thus a local user).
+	#
+	my $project = $experiment->GetProject();
+	
+	if (!defined($project)) {
+	    print STDERR "generateConfig: No project for $experiment\n";
+	    return 0;
+	}
+	$nonlocal = $project->IsNonLocal();
+	$user = $experiment->GetCreator();
+    }
+    else {
+	$user = $experiment->GetSwapper();
+    }
+    if (!defined($user)) {
+	print STDERR "generateConfig: No swapper defined for $experiment\n";
+	return 0;
+    }
+    my $uid = $user->uid();
+
+    # Now the keys.
+    if ($nonlocal) {
+	#
+	# Grab all the nonlocal users and then find the keys for the
+	# experiment creator.
+	#
+	my $tmp;
+	$experiment->NonLocalUsers(\$tmp);
+	if (defined($tmp)) {
+	    foreach my $ref (@{$tmp}) {
+		if ($ref->{'urn'} eq $user->nonlocal_id()) {
+		    foreach my $key (@{ $ref->{'keys'} }) {
+			push(@keys, $key->{'key'})
+		    }
+		    $uid = $ref->{'login'};
+		    last;
+		}
+	    }
+	}
+    }
+    else {
+	$user->GetSSHKeys(\@keys);
+    }
+
+    #
+    # ssh-rsa keys only, need to have at least one.
+    #
+    my @tmp = ();
+    foreach my $key (@keys) {
+	next
+	    if ($key !~ /^ssh-rsa/);
+	push(@tmp, $key);
+    }
+    @keys = @tmp;
+    if (!@keys) {
+	print STDERR "No ssh keys for $uid\n";
+	return 0;
+    }
+    @config = ();
+
+    #
+    # For geni experiments, we have to create the user since the uid
+    # is different (see above).
+    #
+    if ($nonlocal) {
+	@config = ("username $uid capability admin");
+    }
+    foreach my $key (@keys) {
+	push(@config,
+	     "ssh client user $uid authorized-key sshv2 \"$key\"");
+    }
+    push(@config, "write memory");
+
+    if ($self->writeConfig($nodeobject, @config)) {
+	print STDERR "Could not send ssh keys to $node_id\n";
+	return -1;
+    }
+    return 0;
 }
 
 #
@@ -317,7 +483,7 @@ sub MaxWaitTime($$)
 # for a standard reboot, which will work fine if its runnng ONIE, failing
 # back to a power cycle. 
 #
-sub RebootNOS($$)
+sub Reboot($$)
 {
     my ($self, $nodeobject) = @_;
     my $node_id  = $nodeobject->node_id();
@@ -330,13 +496,13 @@ sub RebootNOS($$)
 	goto reboot;
     }
     # Running something else, we use normal reboot.
-    if (0 && ! $self->RunningNOS($nodeobject)) {
+    if (! $self->RunningNOS($nodeobject)) {
 	goto reboot;
     }
     if ($self->createExpectObject($nodeobject)) {
 	goto reboot;
     }
-    my $exp = $self->expectobj();
+    my $exp = $self->expectobj($nodeobject);
 
     $exp->clear_accum();  # Clean the accumulated output, as a rule.
     $exp->send("\n");     # Get us a prompt.
@@ -369,13 +535,14 @@ sub RebootNOS($$)
 	$self->dprint(0, "$self RebootNOS($node_id): error: '$error'\n");
 	goto reboot;
     }
+    TBSetNodeEventState($node_id, TBDB_NODESTATE_SHUTDOWN);
     return 0;
 
   reboot:
-    if (1) {
+    if (0) {
 	return 0;
     }
-    return $self->Reboot($nodeobject);
+    return $self->SUPER::Reboot($nodeobject);
 }
 
 1;
