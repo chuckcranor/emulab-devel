@@ -552,7 +552,7 @@ if ($clear || $clear_idx) {
 # If they said "-p", don't approve no matter what.
 # If an admin said to force approval, that overrides $pending and limits.
 #
-if (!$pending) {
+if (! ($pending || $approve)) {
     my $approval_threshold;
     if (! GetSiteVar("reservations/approval_threshold", \$approval_threshold)) {
 	$approval_threshold = 128;
