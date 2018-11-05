@@ -507,6 +507,10 @@ sub doboot()
     $NTPSERVER = "ops"
 	if ($emulabconfig{"CONFIG_SINGLECNET"});
 
+    # But allow the NS file to override completely.
+    $NTPSERVER = $emulabconfig{"NTPSERVER"}
+        if (exists($emulabconfig{"NTPSERVER"}));
+
     #
     # Only support ZFS right now on ZFS-savvy ops+fs node.
     #
