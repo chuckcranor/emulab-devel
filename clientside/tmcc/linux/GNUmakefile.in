@@ -525,6 +525,9 @@ docker-install:	dir-install
 	$(INSTALL) -m 644 -o root -g $(DIRGROUP) \
 		$(SRCDIR)/docker/sshd-docker-exec.service \
 		$(SYSETCDIR)/systemd/system
+	# Ensure we have a really long timeout on shutdown
+	mkdir -p $(SYSETCDIR)/systemd/system/testbed.service.d
+	echo "TimeoutStopSec=600" > $(SYSETCDIR)/systemd/system/testbed.service.d/docker.conf
 	echo "docker" > $(ETCDIR)/genvmtype
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(ETCDIR)/docker
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(ETCDIR)/docker/scripts
