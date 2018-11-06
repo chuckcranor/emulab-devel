@@ -2168,16 +2168,18 @@ sub rootPreConfig($;$)
 		TBScriptUnlock();
 		return -1;
 	    }
-	    mkdir("$EXTRAFS/var.lib.docker");
-	    #
-	    # We need this stuff to be sticky across reloads, so move it
-	    # into an lvm. If we lose the lvm, well then we are screwed.
-	    #
-	    my @files = glob("/var/lib/docker/*");
-	    foreach my $file (@files) {
-		my $base = basename($file);
-		mysystem("/bin/mv $file $EXTRAFS/var.lib.docker")
-		    if (! -e "$EXTRAFS/var.lib.docker/$base");
+	    if (! -d "$EXTRAFS/var.lib.docker") {
+		mkdir("$EXTRAFS/var.lib.docker");
+		#
+		# We need this stuff to be sticky across reloads, so move it
+		# into an lvm. If we lose the lvm, well then we are screwed.
+		#
+		my @files = glob("/var/lib/docker/*");
+		foreach my $file (@files) {
+		    my $base = basename($file);
+		    mysystem("/bin/mv $file $EXTRAFS/var.lib.docker")
+			if (! -e "$EXTRAFS/var.lib.docker/$base");
+		}
 	    }
 	    mysystem("/bin/rm -rf /var/lib/docker");
 	    mysystem("/bin/ln -s $EXTRAFS/var.lib.docker /var/lib/docker");
