@@ -2023,35 +2023,41 @@ sub rootPreConfig($;$)
 	    $tmplvname = $1;
 	}
 	if (!libvnode::lvExists($VGNAME,$tmplvname)) {
-	    print "Creating container info FS ...\n";
-	    if (createExtraFS($INFOFS, $VGNAME, "${infosize}G")) {
-		TBScriptUnlock();
-		return -1;
-	    }
+	    print "Creating container info FS $tmplvname ...\n";
+	}
+	else {
+	    print "Mounting container info FS $tmplvname ...\n";
+	}
+	if (createExtraFS($INFOFS, $VGNAME, "${infosize}G")) {
+	    TBScriptUnlock();
+	    return -1;
 	}
 	if ($EXTRAFS =~ /\/(.*)$/) {
 	    $tmplvname = $1;
 	}
+	my $already = 0;
 	if (!libvnode::lvExists($VGNAME,$tmplvname)) {
-	    print "Creating scratch FS ...\n";
-	    my $already = 0;
+	    print "Creating scratch FS $tmplvname ...\n";
 	    if (-d $EXTRAFS) {
 		$already = 1;
 		mysystem("mv $EXTRAFS ${EXTRAFS}.bak");
 	    }
-	    if (createExtraFS($EXTRAFS, $VGNAME, "${extrasize}G")) {
-		TBScriptUnlock();
-		return -1;
+	}
+	else {
+	    print "Mounting scratch FS $tmplvname ...\n";
+	}
+	if (createExtraFS($EXTRAFS, $VGNAME, "${extrasize}G")) {
+	    TBScriptUnlock();
+	    return -1;
+	}
+	if ($already) {
+	    my @files = glob("${EXTRAFS}.bak/*");
+	    foreach my $file (@files) {
+		my $base = basename($file);
+		mysystem("/bin/mv $file $EXTRAFS")
+		    if (! -e "$EXTRAFS/$base");
 	    }
-	    if ($already) {
-		my @files = glob("${EXTRAFS}.bak/*");
-		foreach my $file (@files) {
-		    my $base = basename($file);
-		    mysystem("/bin/mv $file $EXTRAFS")
-			if (! -e "$EXTRAFS/$base");
-		}
-		mysystem("/bin/rm -rf ${EXTRAFS}.bak");
-	    }
+	    mysystem("/bin/rm -rf ${EXTRAFS}.bak");
 	}
 	if ($USE_DOCKER_LVM && !libvnode::lvExists($VGNAME,"thinpool")) {
 	    print "Creating Docker Thin Pool...\n";
