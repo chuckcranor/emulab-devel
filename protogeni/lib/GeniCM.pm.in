@@ -1170,6 +1170,28 @@ sub GetTicketAuxAux($)
 
     DebugTimeStamp("Processing nodes");
 
+    # Prepass to setup a mapping of vhost to vnode.  We use this in the
+    # next pass.
+    my %instantiateOnHosts = ();
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $node_nickname = GeniXML::GetVirtualId($ref);
+	my $instantiate_on= GeniXML::GetInstantiateOn($ref);
+
+	# Skip nodes that don't have an instantiate_on relation.
+	next if (!defined($instantiate_on) || $instantiate_on eq '');
+
+	# Let remote nodes pass through.
+	next if (! GeniXML::IsLocalNode($ref));
+
+	# Lan nodes are fake and do not go into the virt topo.
+	next if (GeniXML::IsLanNode($ref));
+
+	if (!exists($instantiateOnHosts{$instantiate_on})) {
+	    $instantiateOnHosts{$instantiate_on} = [];
+	}
+	push(@{$instantiateOnHosts{$instantiate_on}},$node_nickname);
+    }
+
     foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	my $component_id  = GeniXML::GetNodeId($ref);
 	my $vnode_id      = GeniXML::GetVnodeId($ref);
@@ -1190,6 +1212,7 @@ sub GetTicketAuxAux($)
 	my $node;
 	my $isbridge    = 0;
 	my $isfirewall  = 0;
+	my $isvhost     = 0;
 	my $xensettings;
 	my $dockersettings;
 	my $fwsettings;
@@ -1239,6 +1262,12 @@ sub GetTicketAuxAux($)
 				     "Hostname > 63 characters: $fullhostname");
 	    goto bad;
 	}
+
+	# Check to see if this node is hosting other nodes.
+	if (exists($instantiateOnHosts{$node_nickname})) {
+	    $isvhost = 1;
+	}
+
 	#
 	# Check for disk_image request. Specified as a URN. 
 	#
@@ -1739,7 +1768,7 @@ sub GetTicketAuxAux($)
 	# If no osname, check for protogeni default osname
 	#
 	if (!defined($osname) &&
-	    !GeniXML::UseTypeDefaultImage($ref) && !$isbridge) {
+	    !GeniXML::UseTypeDefaultImage($ref) && !$isbridge && !$isvhost) {
 	    my $protogeni_os = undef;
 	    if (GetSiteVar('protogeni/default_osname', \$protogeni_os)
 		&& $protogeni_os ne ""
@@ -1751,7 +1780,7 @@ sub GetTicketAuxAux($)
 	#
 	# If no osname by this point, try for the default.
 	#
-	if (defined($node) && !defined($osname) && !$isbridge) {
+	if (defined($node) && !defined($osname) && !$isbridge && !$isvhost) {
 	    if (defined($node->default_osid())) {
 		my $default_osinfo = OSImage->Lookup($node->default_osid());
 		$osname = $default_osinfo->osname()
@@ -1759,8 +1788,14 @@ sub GetTicketAuxAux($)
 	    }
 	}
 	# The slot does not like to be NULL.
-	$osname = ""
-	    if (!defined($osname));
+	if (!defined($osname)) {
+	    if ($isvhost) {
+		print STDERR "Not setting default osname for vhost $node_nickname.\n";
+	    }
+	    else {
+		$osname = "";
+	    }
+	}
 
 	# Need some kind of default.
 	$pctype = "pc"
