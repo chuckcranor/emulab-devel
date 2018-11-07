@@ -65,6 +65,7 @@ use libtestbed;
 # Protos
 sub TryQuery();
 sub RestartMysqld();
+sub notify($);
 
 # Daemonize;
 if (!$debug) {
@@ -97,6 +98,17 @@ setsid();
 
 # Loop forever ...
 while (1) {
+    #
+    # We do not want to run this while the database is backing up, since
+    # we might run out of connections and think the mysqld is dead. This
+    # not a great approach, but the proper approach to database backup
+    # needs more work then I have time for today.
+    #
+    if (TBScriptLock("backup", 0, 30 * 60) != TBSCRIPTLOCK_OKAY()) {
+	notify("Could not get the backup lock after a long time!\n");
+	sleep(300);
+	next;
+    }
     if (TryQuery() < 0) {
 	RestartMysqld()
 	    if (!$paused);
@@ -104,7 +116,7 @@ while (1) {
     else {
 	$paused = 0;
     }
-
+    TBScriptUnlock();
     sleep(15);
 }
 
