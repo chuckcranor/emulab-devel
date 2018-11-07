@@ -684,6 +684,7 @@ sub RunAssign($$)
     my ($precheck, $prefix) = @_;
 
     my $typelimitfile = $prefix .".limits";
+    my $imagelistfile = $prefix .".images";
     my $ptopfile = $prefix . ".ptop";
     my $vtopfile = $prefix . ".vtop";
     if ($userspec) {
@@ -811,6 +812,22 @@ sub RunAssign($$)
 	close(TYPELIMIT);
     }
 
+    #
+    # Give ptopgen a clue about images are is use by the vtop file,
+    # to shrink the size of the ptop file (the nodes lines are huge!).
+    #
+    unlink($imagelistfile)
+	if (-e $imagelistfile);
+    
+    if (defined($vtop->allimages())) {
+	open(IM, ">$imagelistfile") or
+	    return -1;
+
+	foreach my $osid (keys(%{$vtop->allimages()})) {
+	    print IM "$osid\n";
+	}
+	close(IM);
+    }
 
     #
     # Snapshot physical resources.
@@ -856,6 +873,8 @@ sub RunAssign($$)
     }
     $ptopargs .= "-l $typelimitfile "
 	if (scalar(keys(%admission_control)));
+    $ptopargs .= "-I $imagelistfile "
+	if (-e $imagelistfile);
 
     chat("ptopargs: '$ptopargs'\n");
     TBDebugTimeStamp("ptopgen started");

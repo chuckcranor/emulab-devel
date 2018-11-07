@@ -139,6 +139,7 @@ sub Create($$$$;$)
 			      "fixed"  => [] };
     $self->{'RSPEC'}      = {};
     $self->{'GENIRSPEC'}  = undef;
+    $self->{'IMAGES'}     = undef;
 
     # For forcing untyped nodes to an architecture.
     $self->{'FORCEARCH'}  = undef;
@@ -202,6 +203,7 @@ sub pnodes($)           { return $_[0]->{'PNODES'}; }
 sub fixednodes($)       { return $_[0]->{'FIXEDNODES'}; }
 sub newreserved($)      { return $_[0]->{'NEWRESERVED'}; }
 sub clearnewreserved($) { $_[0]->{'NEWRESERVED'} = {}; }
+sub allimages($)        { return $_[0]->{'IMAGES'}; }
 sub rspec($)            { return $_[0]->{'RSPEC'}; }
 sub genirspec($)        { return $_[0]->{'GENIRSPEC'}; }
 sub forcedarchitecture($){ return $_[0]->{'FORCEARCH'}; }

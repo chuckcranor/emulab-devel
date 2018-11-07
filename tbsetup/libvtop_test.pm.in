@@ -139,6 +139,7 @@ sub Create($$$$;$)
 			      "fixed"  => [] };
     $self->{'RSPEC'}      = {};
     $self->{'GENIRSPEC'}  = undef;
+    $self->{'IMAGES'}     = {};
 
     # For forcing untyped nodes to an architecture.
     $self->{'FORCEARCH'}  = undef;
@@ -202,6 +203,7 @@ sub pnodes($)           { return $_[0]->{'PNODES'}; }
 sub fixednodes($)       { return $_[0]->{'FIXEDNODES'}; }
 sub newreserved($)      { return $_[0]->{'NEWRESERVED'}; }
 sub clearnewreserved($) { $_[0]->{'NEWRESERVED'} = {}; }
+sub allimages($)        { return $_[0]->{'IMAGES'}; }
 sub rspec($)            { return $_[0]->{'RSPEC'}; }
 sub genirspec($)        { return $_[0]->{'GENIRSPEC'}; }
 sub forcedarchitecture($){ return $_[0]->{'FORCEARCH'}; }
@@ -2506,12 +2508,17 @@ sub GenVirtNodes($)
 		if (!defined($posinfo)) {
 		    my $jailosinfo = $self->nodejailosinfo($vnode);
 		    $desires->{"OS-" . $jailosinfo->osid()} = ['', 1.000000];
-		    
+		    # For ptopgen.
+		    $self->allimages()->{$jailosinfo->osid()} = 1;
 		}
 		else {
-		    $desires->{"OS-" . $posinfo->osid()} = ['', 1.000000];
-		    $desires->{"OS-" . $posinfo->osid() . "-" . $osinfo->osid()} =
-			['', 1.000000];
+		    my $osid  = $osinfo->osid();
+		    my $posid = $posinfo->osid();
+		    $desires->{"OS-" . $posid} = ['', 1.000000];
+		    $desires->{"OS-" . $posid . "-" . $osid} = ['', 1.000000];
+		    # For ptopgen.
+		    $self->allimages()->{$posid} = 1;
+		    $self->allimages()->{$posid . "-" . $osid} = 1;
 		}
 	    }
 	    elsif (!$osinfo->mfs()) {
@@ -2521,11 +2528,17 @@ sub GenVirtNodes($)
 		#
 		if (!defined($posinfo)) {
 		    $desires->{"OS-" . $osinfo->osid()} = ['', 1.000000];
+		    # For ptopgen.
+		    $self->allimages()->{$osinfo->osid()} = 1;
 		}
 		else {
-		    $desires->{"OS-" . $posinfo->osid()} = ['', 1.000000];
-		    $desires->{"OS-" . $posinfo->osid() . "-" . $osinfo->osid()} =
-			['', 1.000000];
+		    my $osid  = $osinfo->osid();
+		    my $posid = $posinfo->osid();
+		    $desires->{"OS-" . $posid} = ['', 1.000000];
+		    $desires->{"OS-" . $posid . "-" . $osid} = ['', 1.000000];
+		    # For ptopgen.
+		    $self->allimages()->{$posid} = 1;
+		    $self->allimages()->{$posid . "-" . $osid} = 1;
 		}
 	    }
 	}
@@ -4377,6 +4390,8 @@ sub CreateVtop($;$)
 	$self->options()->{'delay_desire_type'} = '';
 	$self->options()->{'delay_desire_name'} = "OS-$osid";
 	$self->options()->{'delay_desire_penalty'} = '1';
+	# For ptopgen.
+	$self->allimages()->{$osid} = 1;
     }
     else {
 	$self->options()->{'delay_desire_type'} = '';

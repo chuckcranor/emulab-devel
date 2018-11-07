@@ -86,7 +86,7 @@ sub usage()
         exit(-1);
 }
 
-my $optlist = "s:e:m:vp:rSan:c:uxg:h1:l:zZCbfGR";
+my $optlist = "s:e:m:vp:rSan:c:uxg:h1:l:zZCbfGRI:";
 my $is_advertisement = 0;
 my $mfactor;
 my $virtstuff = 0;
@@ -237,6 +237,8 @@ my %globalcounts  = ();
 my %interfacestate= ();
 my %vinterfaces   = ();
 my %rusagedata    = ();
+my %imagelist     = ();
+my $typelimitfile;
 
 my $DEADPID = NODEDEAD_PID();
 my $DEADEID = NODEDEAD_EID();
@@ -246,7 +248,6 @@ my $exempt_eid;
 my $switchtouse;
 my $experiment;
 
-my $typelimitfile = "";
 
 sub fatal($);
 
@@ -327,6 +328,19 @@ if (defined($options{"x"})) {
 }
 if (defined($options{"l"})) {
     $typelimitfile = $options{"l"};
+}
+if (defined($options{"I"})) {
+    my $filename = $options{"I"};
+    
+    open(IM, "< $filename") or 
+	die("Count not open type limit file $filename\n");
+    my @imlist = <IM>;
+    close(IM);
+
+    foreach $line (@imlist) { 
+	chomp($line);
+	$imagelist{$line} = $line;
+    }
 }
 if (defined($options{"1"})) {
     $component_name = $options{"1"};
@@ -1665,7 +1679,10 @@ foreach $node (@nodenames) {
 	push(@features, "OS-$osid:0.5");
 	# Add any subOSes the shared node osid can support
 	if (defined($osid_subosids{$osid})) {
-	    push (@features, map "OS-$osid-$_:0", @{$osid_subosids{$osid}});
+	    foreach my $o2 (@{$osid_subosids{$osid}}) {
+		push @features, "OS-$osid-$o2:0"
+		    if (exists($imagelist{"${osid}-${o2}"}));
+	    }
 	}
     }
     elsif ($node_type_osids{$type}) {
@@ -1675,9 +1692,11 @@ foreach $node (@nodenames) {
 	#
 	foreach my $o1 (@{$node_type_osids{$type}}) {
 	    if (! exists($node_usb{$node}) || ! exists($osid_avoid_usb{$o1})) {
-		push @features, "OS-$o1:0";
+		push @features, "OS-$o1:0"
+		    if (exists($imagelist{$o1}));
 		foreach my $o2 (@{$osid_subosids{$o1}}) {
-		    push @features, "OS-$o1-$o2:0";
+		    push @features, "OS-$o1-$o2:0"
+			if (exists($imagelist{"${o1}-${o2}"}));
 		}
 	    }
 	}
@@ -2864,7 +2883,7 @@ sub print_osids
 
 sub print_type_limits 
 {
-    if ($typelimitfile ne "") {
+    if ($typelimitfile) {
 	open(TYPELIMIT, "<$typelimitfile") or 
 	    die("Count not open type limit file $typelimitfile\n");
 	my @typelimits = <TYPELIMIT>;
