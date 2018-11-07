@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -344,14 +344,22 @@ while (1) {
     #
     foreach my $aref (@curnodes) {
 	my ($handled, $node, $mustwipe, $rtime, $isremote) = @$aref;
+	my $multiplier = 0;
 
 	if ($handled || $retry_time <= 0) {
 	    next;
 	}
-
+	my $nodeobj = Node->Lookup($node);
+	if (defined($nodeobj) && $nodeobj->isswitch()) {
+	    $multiplier = 2;
+	    $nodeobj->Flush();
+	}
+	elsif ($isremote) {
+	    $multiplier = $widearea_multiplier;
+	}
 	my $interval =
 	    ($retry_time * ($mustwipe + 1) + 
-	    ($isremote * $retry_time * $widearea_multiplier)) * 60;
+	     ($retry_time * $multiplier)) * 60;
 
 	# XXX this is a relative interval
 	my $stime = $retried{$node} ? $retried{$node} : $rtime;
