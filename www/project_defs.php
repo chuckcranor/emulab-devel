@@ -159,6 +159,7 @@ class Project
     function why()           { return $this->field("why"); }
     function control_node()  { return $this->field("control_node"); }
     function approved()      { return $this->field("approved"); }
+    function disabled()      { return $this->field("disabled"); }
     function inactive()      { return $this->field("inactive"); }
     function date_inactive() { return $this->field("date_inactive"); }
     function ispublic()      { return $this->field("public"); }
@@ -710,11 +711,21 @@ class Project
     }
     function SetAllowWorkbench($onoff) {
 	$idx    = $this->pid_idx();
-	$onofff = ($onoff ? 1 : 0);
+	$onoff  = ($onoff ? 1 : 0);
 
 	DBQueryFatal("update projects set allow_workbench='$onoff' ".
 		     "where pid_idx='$idx'");
 
+	return 0;
+    }
+    function SetDisabled($onoff) {
+	$idx    = $this->pid_idx();
+	$onoff  = ($onoff ? 1 : 0);
+
+	DBQueryFatal("update projects set disabled='$onoff' ".
+		     "where pid_idx='$idx'");
+
+	$this->project["disabled"] = $onoff;
 	return 0;
     }
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -207,6 +207,7 @@ function Do_ProjectProfile()
     $results["portal"]      = $target_project->portal();
     $results["created"]     = DateStringGMT($target_project->created());
     $results["approved"]    = $target_project->approved() ? true : false;
+    $results["disabled"]    = $target_project->disabled() ? true : false;
     $results["url"]         = $target_project->URL();
     $results["description"] = $target_project->name();
     $results["why"]         = $target_project->why();
@@ -261,6 +262,47 @@ function Do_UsageSummary()
     );
     
     SPITAJAX_RESPONSE($blob);
+}
+
+#
+# Toggle flags.
+#
+function Do_Toggle()
+{
+    global $this_user, $target_project, $ajax_args;
+    global $TBMAIL_OPS, $TBMAIL_AUDIT, $TBMAIL_WWW;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+        return;
+    }
+    $this_uid    = $this_user->uid();
+    $target_pid  = $target_project->pid();
+    
+    if (!isset($ajax_args["toggle"])) {
+	SPITAJAX_ERROR(-1, "Missing toggle name");
+	return -1;
+    }
+    $toggle = $ajax_args["toggle"];
+
+    if ($toggle == "project_disable") {
+        $target_project->SetDisabled($target_project->disabled() ? 0 : 1);
+        $which = $target_project->disabled() ? "disabled" : "enabled";
+        TBMAIL($TBMAIL_OPS,
+               "Project '$target_pid' has been $which",
+               "$this_uid has $which project $target_pid!\n\n",
+               "From: $TBMAIL_OPS\n".
+               "Bcc: $TBMAIL_AUDIT\n".
+               "Errors-To: $TBMAIL_WWW");
+    }
+    else {
+	SPITAJAX_ERROR(-1, "Unknown toggle name: $toggle");
+        return;
+    }
+    SPITAJAX_RESPONSE(1);
 }
 
 # Local Variables:

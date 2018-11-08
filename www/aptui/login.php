@@ -288,6 +288,23 @@ else {
 	SPITFOOTER();
 	return;
     }
+    elseif ($dologin_status == DOLOGIN_STATUS_PROJDISABLED) {
+	# Short delay.
+	sleep(1);
+
+	SPITHEADER();
+	echo "<h4>
+              One of the projects in which you are a member has been
+              disabled. You are not allowed to log in until this has
+              been resolved. Please contact $SUPPORT if you have any
+              further questions. <br> <br>
+              Please do not attempt to login again; it will not work!
+              </h4>\n";
+        echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+	SPITNULLREQUIRE();
+	SPITFOOTER();
+	return;
+    }
     else if ($dologin_status == DOLOGIN_STATUS_INACTIVE) {
 	# Short delay.
 	sleep(1);

@@ -1,3 +1,8 @@
+<style>
+.toggle {
+  cursor: pointer;
+}
+</style>
 <div>
   <table class='table table-condensed table-bordered' id="admin_table">
     <tr>
@@ -30,6 +35,12 @@
     <tr>
       <td>Approved</td>
       <td><% if (fields.approved) { %>Yes<% } else { %>No<% } %></td>
+    </tr>
+    <tr>
+      <td>Disabled</td>
+      <td><% if (fields.disabled) { %>Yes<% } else { %>No<% } %>
+	(<a class="toggle" data-name="project_disable">Toggle</a>)
+      </td>
     </tr>
     <tr>
       <td colspan="2"><center>Long Description</center></td>

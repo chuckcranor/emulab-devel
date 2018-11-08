@@ -315,6 +315,8 @@ $routing = array("geni-login" =>
                                                       "Do_GroupList",
                                                  "UsageSummary" =>
                                                       "Do_UsageSummary",
+                                                 "Toggle" =>
+                                                     "Do_Toggle",
                                                  "ProjectProfile" =>
                                                       "Do_ProjectProfile")),
 		 "groups" =>

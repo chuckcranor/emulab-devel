@@ -514,6 +514,9 @@ $(function ()
 		    $(this).html(moment($(this).html()).format("ll"));
 		}
 	    });
+	    $('#admin_content .toggle').click(function() {
+		Toggle(this);
+	    });
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "show-project", "ProjectProfile",
@@ -595,6 +598,24 @@ $(function ()
 				 "show-project", "ClassicDatasetList",
 				 {"pid" : window.TARGET_PROJECT});
 	xmlthing.done(callback);
+    }
+    //
+    // Toggle flags.
+    //
+    function Toggle(item) {
+	var name = item.dataset["name"];
+
+	var callback = function(json) {
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    LoadProjectTab();
+	};
+	sup.CallServerMethod(null, "show-project", "Toggle",
+			     {"pid" : window.TARGET_PROJECT,
+			      "toggle" : name},
+			     callback);
     }
 
     $(document).ready(initialize);

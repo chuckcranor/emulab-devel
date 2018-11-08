@@ -4575,6 +4575,7 @@ CREATE TABLE `projects` (
   `unix_gid` smallint(5) unsigned NOT NULL auto_increment,
   `approved` tinyint(4) default '0',
   `hidden` tinyint(1) default '0',
+  `disabled` tinyint(1) default '0',
   `inactive` tinyint(4) default '0',
   `date_inactive` datetime default NULL,
   `public` tinyint(4) NOT NULL default '0',

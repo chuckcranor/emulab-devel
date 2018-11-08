@@ -1430,6 +1430,21 @@ class User
     }
 
     #
+    # Return a list of disabled projects for user, if any.
+    #
+    function DisabledProjects() {
+	$result   = array();
+        $projlist = $this->ProjectMembershipList();
+
+        foreach ($projlist as $project) {
+            if ($project->disabled()) {
+                $result[] = $project;
+            }
+        }
+        return $result;
+    }
+
+    #
     # Return list of unapproved membership in projects. This will not
     # include projects for which the user is the leader, that is a
     # different set.
