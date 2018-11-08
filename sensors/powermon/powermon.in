@@ -63,6 +63,7 @@ sub dostatus(@);
 sub usage() {
     print << "END";
 Usage: $0 [-rw] [-TPC] [ <type> ... ]
+ -c print out temps in Celsius
  -r print out raw values, no syslog-style format
  -w whiner flag, send mail to $TBOPS about errors
  -T turn on temperature (in degrees F) monitoring
@@ -77,7 +78,8 @@ Usage: $0 [-rw] [-TPC] [ <type> ... ]
 END
 }
 
-my $optlist = "rwANTPC";
+my $optlist = "crwANTPC";
+my $docelsius = 0;
 my $doraw = 0;
 my $dotemps = 1;
 my $dopower = 0;
@@ -99,6 +101,9 @@ $| = 1; #Turn off line buffering on output
 my %options = ();
 if (! getopts($optlist, \%options)) {
     usage();
+}
+if (defined($options{"c"})) {
+    $docelsius = 1;
 }
 if (defined($options{"r"})) {
     $doraw = 1;
@@ -260,16 +265,25 @@ sub dostatus(@) {
 	}
 
 	my $msg = "";
+	my $temp;
 	if ($doraw) {
 	    $msg .= $status{current} . " "
 		if ($docurrent && defined($status{current}));
 	    $msg .= $status{power} . " "
 		if ($dopower && defined($status{power}));
 	    if ($dotemps &&
-		defined($status{tempF}) || defined($status{tempC})) {
-		my $temp = $status{tempF};
-		if (!defined($temp)) {
-		    $temp = sprintf "%.2f", $status{tempC} * 9 / 5 + 32;
+		(defined($status{tempF}) || defined($status{tempC}))) {
+		if ($docelsius) {
+		    $temp = $status{tempC};
+		    if (!defined($temp)) {
+			$temp = sprintf "%.2f", ($status{tempF} - 32) * 5 / 9;
+		    }
+		} else {
+		    $temp = $status{tempF};
+		    if (!defined($temp)) {
+			$temp = sprintf "%.2f", $status{tempC} * 9 / 5 + 32;
+		    }
+
 		}
 		$msg .= "$temp ";
 	    }
@@ -280,12 +294,20 @@ sub dostatus(@) {
 	    $msg .= $status{power} . "W, "
 		if ($dopower && defined($status{power}));
 	    if ($dotemps &&
-		defined($status{tempF}) || defined($status{tempC})) {
-		my $temp = $status{tempF};
-		if (!defined($temp)) {
-		    $temp = sprintf "%.2f", $status{tempC} * 9 / 5 + 32;
+		(defined($status{tempF}) || defined($status{tempC}))) {
+		if ($docelsius) {
+		    $temp = $status{tempC};
+		    if (!defined($temp)) {
+			$temp = sprintf "%.2f", ($status{tempF} - 32) * 5 / 9;
+		    }
+		    $msg .= ${temp} . "C";
+		} else {
+		    $temp = $status{tempF};
+		    if (!defined($temp)) {
+			$temp = sprintf "%.2f", $status{tempC} * 9 / 5 + 32;
+		    }
+		    $msg .= ${temp} . "F";
 		}
-		$msg .= ${temp} . "F";
 	    }
 	}
 	logit($msg);
