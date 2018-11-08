@@ -279,8 +279,8 @@ sub DoCreate()
 	    if ($size < 0) {
 		fatal("Could not parse size.");
 	    }
-	    if ($size <= 5) {
-		fatal("Size too small; minimum is 5MiB");
+	    if ($size <= 4.5) {
+		UserError("Size too small; minimum is 5MB");
 	    }
 	}
 	else {
