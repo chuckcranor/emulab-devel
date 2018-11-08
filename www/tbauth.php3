@@ -1164,9 +1164,11 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
             
             # failed, reset the timestamp
             if ($rv) {
-                DBQueryFatal("update user_stats set ".
-                             " last_activity='$lastactivestr' ".
-                             "where uid_idx='$uid_idx'");
+                if ($lastactivestr != '') {                
+                    DBQueryFatal("update user_stats set ".
+                                 " last_activity='$lastactivestr' ".
+                                 "where uid_idx='$uid_idx'");
+                }
                 SUEXECERROR(SUEXEC_ACTION_DIE);
                 return;
             }
