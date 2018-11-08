@@ -28,7 +28,7 @@ package power_powduino;
 
 use Exporter;
 @ISA = ("Exporter");
-@EXPORT = qw( powduinoctrl powduinostatus );
+@EXPORT = qw( powduinoctrl powduinostatus powduinotemp );
 
 use Socket;
 use IO::Handle;
@@ -79,6 +79,34 @@ sub powduinostatus {
     my $status;
     for my $try (1..$ntries) {
 	$status = syncandsend($controller, $TIP, "status", $statusp);
+	last
+	    if $status >= 0;
+    }
+    close($TIP);
+    return $status ? 1 : 0;
+}
+
+sub powduinotemp {
+    my ($controller, $statusp) = @_;
+
+    my($TIP, $i, $insync);
+
+    #
+    # Form the connection to the controller via a "tip" line to the
+    # capture process. Once we have that, we can just talk to the
+    # controller directly.
+    #
+    if (!($TIP = tipconnect($controller))) {
+	print STDERR "*** Could not form TIP connection to $controller\n";
+	return 1;
+    }
+
+    #
+    # Send the command.  Try again a few times if there is a retryable error.
+    #
+    my $status;
+    for my $try (1..$ntries) {
+	$status = syncandsend($controller, $TIP, "temp", $statusp);
 	last
 	    if $status >= 0;
     }
@@ -261,6 +289,10 @@ sub syncandsend($$$;$) {
 		$status{"pin$1"} = $2;
 		$gotstatus = 1;
 		print "status 'pin$1' = ", $status{"pin$1"}, "\n" if ($debug);
+	    } elsif ($line =~ /^(\d+(\.\d+)?)/) {
+		$status{"tempC"} = $1;
+		$gotstatus = 1;
+		print "status 'temp' = ", $status{"tempC"}, "\n" if ($debug);
 	    }
 	}
     }

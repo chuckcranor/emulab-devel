@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2012 University of Utah and the Flux Group.
+# Copyright (c) 2005-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -51,6 +51,7 @@ use power_sgmote;
 use power_mail;
 use power_whol;
 use power_apc;
+use power_powduino;
 use libtestbed;
 use strict;
 use English;
@@ -61,7 +62,8 @@ sub dostatus(@);
 
 sub usage() {
     print << "END";
-Usage: $0 [-w] [-TPC] [ <type> ... ]
+Usage: $0 [-rw] [-TPC] [ <type> ... ]
+ -r print out raw values, no syslog-style format
  -w whiner flag, send mail to $TBOPS about errors
  -T turn on temperature (in degrees F) monitoring
  -P turn on power (watts) consumption monitoring
@@ -75,7 +77,8 @@ Usage: $0 [-w] [-TPC] [ <type> ... ]
 END
 }
 
-my $optlist = "wANTPC";
+my $optlist = "rwANTPC";
+my $doraw = 0;
 my $dotemps = 1;
 my $dopower = 0;
 my $docurrent = 0;
@@ -96,6 +99,9 @@ $| = 1; #Turn off line buffering on output
 my %options = ();
 if (! getopts($optlist, \%options)) {
     usage();
+}
+if (defined($options{"r"})) {
+    $doraw = 1;
 }
 if (defined($options{"w"})) {
     if (open(WHINE, ">$whinefile")) {
@@ -223,6 +229,17 @@ sub dostatus(@) {
 		$errors++;
 		next;
 	    }
+	} elsif ($ctrls{$ctrl} =~ /^powduino/) {
+	    #
+	    # XXX local hack Arduino/relay controller doesn't report
+	    # power/voltage, only temps
+	    #
+	    if (($doall || $dotemps) &&
+		powduinotemp($ctrl,\%status)) {
+		logit("Could not get temp from $ctrl.");
+		$errors++;
+		next;
+	    }
 	} elsif ($ctrls{$ctrl} =~ /^APC/) {
 	    my $device = new snmpit_apc($ctrl, 0);
 	    if (!defined($device) || $device->status(\%status)) {
@@ -242,18 +259,34 @@ sub dostatus(@) {
 	    next;
 	}
 
-	my $msg = "$ctrl: ";
-	$msg .= $status{current} . "A, "
-	    if ($docurrent && defined($status{current}));
-	$msg .= $status{power} . "W, "
-	    if ($dopower && defined($status{power}));
-	if ($dotemps &&
-	    defined($status{tempF}) || defined($status{tempC})) {
-	    my $temp = $status{tempF};
-	    if (!defined($temp)) {
-		$temp = $status{tempC} * 9 / 5 + 32;
+	my $msg = "";
+	if ($doraw) {
+	    $msg .= $status{current} . " "
+		if ($docurrent && defined($status{current}));
+	    $msg .= $status{power} . " "
+		if ($dopower && defined($status{power}));
+	    if ($dotemps &&
+		defined($status{tempF}) || defined($status{tempC})) {
+		my $temp = $status{tempF};
+		if (!defined($temp)) {
+		    $temp = sprintf "%.2f", $status{tempC} * 9 / 5 + 32;
+		}
+		$msg .= "$temp ";
 	    }
-	    $msg .= ${temp} . "F";
+	} else {
+	    $msg .= "$ctrl: ";
+	    $msg .= $status{current} . "A, "
+		if ($docurrent && defined($status{current}));
+	    $msg .= $status{power} . "W, "
+		if ($dopower && defined($status{power}));
+	    if ($dotemps &&
+		defined($status{tempF}) || defined($status{tempC})) {
+		my $temp = $status{tempF};
+		if (!defined($temp)) {
+		    $temp = sprintf "%.2f", $status{tempC} * 9 / 5 + 32;
+		}
+		$msg .= ${temp} . "F";
+	    }
 	}
 	logit($msg);
     }
@@ -264,7 +297,10 @@ sub dostatus(@) {
 sub logit($) {
     my ($msg) = @_;
 
-    print strftime("%b %e %H:%M:%S", localtime)." powermon[$$]: $msg\n";
+    if (!$doraw) {
+	print strftime("%b %e %H:%M:%S", localtime)." powermon[$$]: ";
+    }
+    print "$msg\n";
     if ($whiner && $childpid == 0) {
 	print WHINE $msg, "\n";
     }
