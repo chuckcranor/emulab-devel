@@ -36,8 +36,16 @@ $| = 1; # Turn off line buffering on output
 use SNMP;
 use strict;
 
+#
 # XXX for configurations in which APC unit always returns error
 # even when it works.
+#
+# NOTE: You can probably fix such units by instead making sure the
+# controller uses the 'rPDUOutletControlOutletCommand' OID in power() below.
+# The default 'sPDUOutletCtl' will work on these controllers but will return
+# a '' status. I would guess that everything running "masterSwitch.6" and
+# later should be using the newer OID.
+#
 my $ignore_errors = 0;
 
 sub new($$;$) {
@@ -103,10 +111,10 @@ sub power {
 	if ($type eq "masterSwitchrPDU") {
 	    $oids = $CtlOIDS{"rPDU"};
 	}
-	# XXX the AP8941 power controllers we have need to use this OID
-	# else they return an error on set operations (though the operations
-	# do work!)
-	elsif ($type eq "masterSwitch.6") {
+	# XXX newer APC power controllers we have (AP8941, AP7900B) need to
+	# use this OID else they return an error on set operations (though
+	# the operations do work!)
+	elsif ($type eq "masterSwitch.6" || $type eq "masterSwitch.8") {
 	    $oids = $CtlOIDS{"rPDU"};
 	}
     }
