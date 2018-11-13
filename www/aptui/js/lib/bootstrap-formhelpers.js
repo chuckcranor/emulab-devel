@@ -12649,6 +12649,9 @@ var BFHStatesList = {
     '99' : {'code':'WORCS','name':'Worcestershire'},
     '100' : {'code':'WRX','name':'Wrexham'}
   },
+  'SG':{
+      '1' : {'code':'SG','name':'Singapore'}
+  },
   'US':{
     '1' : {'code':'AL','name':'Alabama'},
     '2' : {'code':'AK','name':'Alaska'},
