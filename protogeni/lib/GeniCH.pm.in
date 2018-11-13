@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1107,24 +1107,28 @@ sub PostHistoryRecord($)
     my $aggregate_urn  = DBQuoteSpecial($record->{'urn'});
     my $aggregate_idx;
 
+    return GeniResponse->Create(GENIRESPONSE_ERROR)
+	if (!DBQueryWarn("lock tables aggregate_history write, ".
+			 "            manifest_history write"));
+
     my $query_result =
 	DBQueryWarn("select * from aggregate_history ".
 		    "where uuid=$aggregate_uuid and urn=$aggregate_urn");
-
-    return GeniResponse->Create(GENIRESPONSE_ERROR)
-	if (!defined($query_result));
+    if (!defined($query_result)) {
+	DBQueryWarn("unlock tables");
+	return GeniResponse->Create(GENIRESPONSE_ERROR);
+    }
 
     if (! $query_result->numrows) {
 	#
 	# Insert new record.
 	#
-	if (1) {
-	    # Every aggregate gets a new unique index.
-	    my $nextidx = TBGetUniqueIndex('next_aggregate_history', 1);
-	    
-	    DBQueryWarn("insert into aggregate_history set idx=$nextidx,  " .
-			join(",", @insert_data))
-		or return GeniResponse->Create(GENIRESPONSE_ERROR);
+	my $nextidx = TBGetUniqueIndex('next_aggregate_history', 1);
+
+	if (!DBQueryWarn("insert into aggregate_history set idx=$nextidx,  " .
+			 join(",", @insert_data))) {
+	    DBQueryWarn("unlock tables");
+	    return GeniResponse->Create(GENIRESPONSE_ERROR);
 	}
     }
     else {
@@ -1154,23 +1158,25 @@ sub PostHistoryRecord($)
 			"where aggregate_uuid=$aggregate_uuid and ".
 			"      aggregate_urn=$aggregate_urn and ".
 			"      created=FROM_UNIXTIME($created)");
-	return GeniResponse->Create(GENIRESPONSE_ERROR)
-	    if (!defined($manifest_result));
+	if (!defined($manifest_result)) {
+	    DBQueryWarn("unlock tables");
+	    return GeniResponse->Create(GENIRESPONSE_ERROR);
+	}
 
 	# Ignore manifest with same date.
 	if (!$manifest_result->numrows) {
 	    my $safe_manifest = DBQuoteSpecial($record->{'manifest'});
-	    if (1) {
-		DBQueryWarn("insert into manifest_history set idx=NULL, " .
-			    " aggregate_uuid=$aggregate_uuid, " .
-			    " aggregate_urn=$aggregate_urn, " .
-			    " created=FROM_UNIXTIME($created), ".
-			    " manifest=$safe_manifest")
-		    or return GeniResponse->Create(GENIRESPONSE_ERROR);
+	    if (!DBQueryWarn("insert into manifest_history set idx=NULL, " .
+			     " aggregate_uuid=$aggregate_uuid, " .
+			     " aggregate_urn=$aggregate_urn, " .
+			     " created=FROM_UNIXTIME($created), ".
+			     " manifest=$safe_manifest")) {
+		DBQueryWarn("unlock tables");
+		return GeniResponse->Create(GENIRESPONSE_ERROR);
 	    }
 	}
     }
-
+    DBQueryWarn("unlock tables");
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
 
