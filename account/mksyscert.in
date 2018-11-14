@@ -298,7 +298,7 @@ if( defined( $oldkeyfile ) ) {
     my $genopts =
 	($encrypted ? " -passout 'pass:${sh_password}' -des3 " : "");
 
-    system("$OPENSSL genrsa $genopts -out syscert_key.pem 1024")
+    system("$OPENSSL genrsa $genopts -out syscert_key.pem 2048")
 	    == 0 or fatal("Could generate new key");
     
     system("$OPENSSL req -text -new -config syscert.cnf ".

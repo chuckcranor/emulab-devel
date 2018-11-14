@@ -401,7 +401,7 @@ sub CreateNewCert() {
 	my $genopts =
 	    ($encrypted ? " -passout 'pass:${sh_password}' -des3 " : "");
 
-	system("$OPENSSL genrsa $genopts -out usercert_key.pem 1024")
+	system("$OPENSSL genrsa $genopts -out usercert_key.pem 2048")
 	    == 0 or fatal("Could generate new key");
     }
     my $reqopts = ($encrypted ? "-passin 'pass:${sh_password}' " : "");

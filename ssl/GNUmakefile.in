@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -159,7 +159,7 @@ emulab_privkey.pem:
 	# Generate a priv key for signing stuff. This one gets a
 	# passphrase.
 	# 
-	openssl genrsa -out emulab_privkey.pem -des3
+	openssl genrsa -out emulab_privkey.pem -des3 2048
 
 emulab_pubkey.pem:	emulab_privkey.pem
 	#
@@ -173,7 +173,7 @@ emulab_pubkey.pem:	emulab_privkey.pem
 # by you and writable. 
 #
 %.key:
-	openssl genrsa -out $@ -rand .rand 1024
+	openssl genrsa -out $@ -rand .rand 2048
 
 # The point of the this is to recover the keys from where they were
 # originally installed. We do this cause people often lose their
