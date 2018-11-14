@@ -2323,7 +2323,7 @@ $(function ()
 	    $('#snapshot_modal .choose-node select')
 		.on("change", function (event) {
 		    var node = $(this).val();
-		    var name = expinfo.profile_name_ + "." + node;
+		    var name = expinfo.profile_name + "." + node;
 		    $('#snapshot-name-div .image-only input').val(name);
 		    $('#snapshot-name-div .snapshot-name-warning')
 			.removeClass("hidden");
