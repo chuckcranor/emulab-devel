@@ -88,6 +88,7 @@ my $CHPASS	      = "/usr/bin/chpass";
 my $CHOWN	      = "/usr/sbin/chown";
 my $CHMOD	      = "/bin/chmod";
 my $MKDIR	      = "/bin/mkdir";
+my $CHFLAGS	      = "/bin/chflags";
 my $NOLOGIN	      = "/sbin/nologin";
 my $MV		      = "/bin/mv";
 my $ZFS		      = "/sbin/zfs";
@@ -95,10 +96,18 @@ my $KEYGEN	      = "/usr/bin/ssh-keygen";
 my $SKEL	      = "/usr/share/skel";
 my $PIDFILE           = "/var/run/mountd.pid";
 my $TSFILE	      = "/var/run/mountd.ts";
+my $USEFLAGS          = 0;
 
 # XXX
 my $NOSUCHUSER  = 67;
 my $USEREXISTS  = 65;
+
+# We use flags to prevent deletion of certain dirs, on FreeBSD 10 or greater.
+if (`uname -r` =~ /^(\d+)\.(\d+)/) {
+    if ($1 >= 10) {
+	$USEFLAGS = 1;
+    }
+}
 
 #
 # Testbed Support libraries
@@ -148,6 +157,8 @@ sub MakeDir($$);
 sub WhackDir($$);
 sub mysystem($);
 sub runBusyLoop($);
+sub SetNoDelete($);
+sub ClearNoDelete($);
 
 #
 # Check args.
@@ -462,7 +473,7 @@ sub AddProject()
     my $unix_uid  = shift(@ARGV);
 
     # Create the project unix group
-    if (mysystem("egrep -q -s '^${unix_name}:' /etc/group")) {
+    if (system("egrep -q -s '^${unix_name}:' /etc/group")) {
 	print "Adding group $unix_name ...\n";
 
 	if (runBusyLoop("$GROUPADD $unix_name -g $unix_gid")) {
@@ -481,6 +492,9 @@ sub AddProject()
     if (! chown($unix_uid, $unix_gid, "$path")) {
 	fatal("Could not chown '$path' to $unix_uid/$unix_gid: $!");
     }
+    if (SetNoDelete($path)) {
+	fatal("Could not set no delete on '$path'!\n");
+    }
 
     # Create required /proj subdirs
     foreach my $dir (@DIRLIST) {
@@ -493,6 +507,9 @@ sub AddProject()
 	}
 	if (! chown($unix_uid, $unix_gid, "$path")) {
 	    fatal("Could not chown '$path' to $unix_uid/$unix_gid: $!");
+	}
+	if (SetNoDelete($path)) {
+	    fatal("Could not set no delete on '$path'!\n");
 	}
     }
 
@@ -507,6 +524,9 @@ sub AddProject()
     if (! chown($unix_uid, $unix_gid, "$path")) {
 	fatal("Could not chown '$path'  to $unix_uid/$unix_gid: $!");
     }
+    if (SetNoDelete($path)) {
+	fatal("Could not set no delete on '$path'!\n");
+    }
 
     # Create a symlink for the default group
     $path = "$GROUPROOT/$name/$name";
@@ -514,6 +534,9 @@ sub AddProject()
 	if (mysystem("ln -s $PROJROOT/$name $path")) {
 	    fatal("Could not symlink $PROJROOT/$name to $path");
 	}
+    }
+    if (SetNoDelete($path)) {
+	fatal("Could not set no delete on '$path'!\n");
     }
 
     # Finally, create /scratch dir if supported
@@ -527,6 +550,9 @@ sub AddProject()
 	}
 	if (! chown($unix_uid, $unix_gid, "$path")) {
 	    fatal("Could not chown '$path'  to $unix_uid/$unix_gid: $!");
+	}
+	if (SetNoDelete($path)) {
+	    fatal("Could not set no delete on '$path'!\n");
 	}
     }
 
@@ -548,7 +574,7 @@ sub AddGroup()
     my $projname  = shift(@ARGV);
 
     # Create the group unix group
-    if (mysystem("egrep -q -s '^${unix_name}:' /etc/group")) {
+    if (system("egrep -q -s '^${unix_name}:' /etc/group")) {
 	print "Adding group $unix_name ...\n";
 
 	if (runBusyLoop("$GROUPADD $unix_name -g $unix_gid")) {
@@ -568,6 +594,9 @@ sub AddGroup()
     if (! chown($unix_uid, $unix_gid, "$path")) {
 	fatal("Could not chown '$path' to $unix_uid/$unix_gid: $!");
     }
+    if (SetNoDelete($path)) {
+	fatal("Could not set no delete on '$path'!\n");
+    }
 
     # Create required /groups/gid subdirs
     foreach my $dir (@GDIRLIST) {
@@ -580,6 +609,9 @@ sub AddGroup()
 	}
 	if (! chown($unix_uid, $unix_gid, "$path")) {
 	    fatal("Could not chown '$path' to $unix_uid/$unix_gid: $!");
+	}
+	if (SetNoDelete($path)) {
+	    fatal("Could not set no delete on '$path'!\n");
 	}
     }
 
@@ -931,6 +963,10 @@ sub WhackDir($$)
     my ($fs,$dir) = @_;
     my $zfsfs = "";
 
+    if (ClearNoDelete("$fs/$dir")) {
+	fatal("Could not clear no delete on '$fs/$dir'!\n");
+    }
+
     if ($WITHZFS) {
 	my $path = "${ZFS_ROOT}${fs}/$dir";
 	$zfsfs = $path
@@ -1097,4 +1133,31 @@ sub fatal($) {
 
     print STDERR "$msg\n";
     exit(-1);
+}
+
+#
+# Use chflags on certain directories to prevent users from deleting things.
+# Just a bandaid on the real problem.
+#
+sub SetNoDelete($)
+{
+    my ($filename) = @_;
+
+    return 0
+	if (!$USEFLAGS);
+
+    system("$CHFLAGS sunlink $filename");
+    return ($? ? -1 : 0);
+}
+sub ClearNoDelete($)
+{
+    my ($filename) = @_;
+    
+    return 0
+	if (!$USEFLAGS);
+
+    # Do a recursive change here since we tend to do deletions on the
+    # top level directories.
+    system("$CHFLAGS -R nosunlink $filename");
+    return ($? ? -1 : 0);
 }
