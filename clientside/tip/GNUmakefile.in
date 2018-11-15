@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,13 +22,13 @@
 #
 SRCDIR		= @srcdir@
 TESTBED_SRCDIR	= @top_srcdir@
-OBJDIR		= ..
-SUBDIR		= tip
+OBJDIR		= @top_builddir@
+SUBDIR		= $(subst $(TESTBED_SRCDIR)/,,$(SRCDIR))
 
 include $(OBJDIR)/Makeconf
 
 all:	tip tiptunnel console.bin console console.boss tippty
-client: tippty
+client: console.bin console
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
@@ -44,7 +44,7 @@ ifneq ($(wildcard /usr/kerberos/bin/krb5-config),)
 endif
 endif
 
-CFLAGS = -g -O2 -DUSESOCKETS -I$(TESTBED_SRCDIR)/clientside/os/capture \
+CFLAGS = -g -O2 -DUSESOCKETS -I$(SRCDIR)/../os/capture \
            -I$(OBJDIR)
 
 OBJS = cmds.o cmdtab.o hunt.o partab.o \
@@ -60,10 +60,10 @@ LIBS=
 tip.old:	$(OBJS)
 	$(CC) $(CFLAGS) $(LDSTATIC) -o tip $(OBJS) $(LIBS)
 
-tip:	$(TESTBED_SRCDIR)/tip/tip.deprecation
-	cp $(TESTBED_SRCDIR)/tip/tip.deprecation tip
+tip:	tip.deprecation
+	cp $< tip
 
-tiptunnel.o: tiptunnel.c $(TESTBED_SRCDIR)/clientside/os/capture/capdecls.h
+tiptunnel.o: tiptunnel.c $(SRCDIR)/../os/capture/capdecls.h
 	$(CC) $(CFLAGS) $(SSLFLAGS) -o tiptunnel.o -c $<
 
 tiptunnel: tiptunnel.o
@@ -71,13 +71,13 @@ tiptunnel: tiptunnel.o
 
 # 'console' is tiptunnel, without SSL, and with localmode on by default.
 
-console.bin.o: tiptunnel.c $(TESTBED_SRCDIR)/clientside/os/capture/capdecls.h
+console.bin.o: tiptunnel.c $(SRCDIR)/../os/capture/capdecls.h
 	$(CC) $(CFLAGS) -DLOCALBYDEFAULT -o console.bin.o -c $<
 
 console.bin: console.bin.o
 	$(CC) $(CFLAGS) -o console.bin console.bin.o
 
-tippty.o: tiptunnel.c $(TESTBED_SRCDIR)/clientside/os/capture/capdecls.h
+tippty.o: tiptunnel.c $(SRCDIR)/../os/capture/capdecls.h
 	$(CC) $(CFLAGS) -DTIPPTY -o $@ -c $<
 
 tippty: tippty.o
@@ -86,7 +86,8 @@ tippty: tippty.o
 $(OBJS): tipconf.h tip.h
 
 client-install: client
-	$(INSTALL_PROGRAM) tippty$(EXE) $(DESTDIR)$(CLIENT_BINDIR)/tippty$(EXE)
+	$(INSTALL_PROGRAM) console.bin $(DESTDIR)/usr/local/bin/console.bin
+	$(INSTALL_PROGRAM) console $(DESTDIR)/usr/local/bin/console
 
 control-install tipserv-install:	all $(INSTALL_BINDIR)/tip $(INSTALL_BINDIR)/tiptunnel $(INSTALL_BINDIR)/console.bin $(INSTALL_BINDIR)/console
 
@@ -99,6 +100,18 @@ install:	all $(INSTALL_BINDIR)/tip \
 	$(INSTALL_PROGRAM) tip $(INSTALL_DIR)/opsdir/bin/tip
 	$(INSTALL_PROGRAM) console $(INSTALL_DIR)/opsdir/bin/console
 	$(INSTALL_PROGRAM) console.bin $(INSTALL_DIR)/opsdir/bin/console.bin
+
+# Tip not installed in these targets.
+subboss: 
+subboss-install: 
+post-install:
+fs-install:
+mfs:
+mfs-install: 
+frisbee-mfs: 
+frisbee-mfs-install:
+newnode-mfs:
+newnode-mfs-install:
 
 clean:
 	rm -f $(OBJS) *.o tip tiptunnel console console.bin tippty

@@ -83,6 +83,10 @@ AC_SUBST(WITH_EMULAB)
 TPM=0
 AC_SUBST(TPM)
 
+# Need this in a couple of places that share with Emulab.
+BOSSNODE="boss"
+AC_SUBST(BOSSNODE)
+
 #
 # Elvin compat option, which we	still need. Always turn on event system.
 #
@@ -326,6 +330,10 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/centos6/GNUmakefile \
 	  tmcc/centos7/GNUmakefile \
 	  tmcc/onie/GNUmakefile \
+	  tip/GNUmakefile \
+	  xmlrpc/GNUmakefile xmlrpc/emulabclient.py \
+	  xmlrpc/sslxmlrpc_client.py \
+	  xmlrpc/script_wrapper.py xmlrpc/libxmlrpc.pm \
 	  os/GNUmakefile os/syncd/GNUmakefile \
 	  os/dijkstra/GNUmakefile os/genhostsfile/GNUmakefile \
 	  os/frisbee.redux/GNUmakefile \

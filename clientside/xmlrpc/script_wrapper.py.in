@@ -38,6 +38,9 @@ import re
 import xmlrpclib
 from emulabclient import *
 
+# When building on the clientside, there are a few minor differences.
+WITH_EMULAB     = @WITH_EMULAB@
+
 ##
 # The package version number
 #
@@ -63,7 +66,10 @@ impotent        = 0
 # meaningless unless you are an Emulab developer; they will be rejected
 # at the server most ungraciously.
 #
-SERVER_PATH     = "@prefix@"
+if WITH_EMULAB:
+    SERVER_PATH = "@prefix@"
+else:
+    SERVER_PATH = "/usr/testbed"
 SERVER_DIR      = "sbin"
 DEVEL_DIR       = "devel"
 develuser       = None

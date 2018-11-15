@@ -1428,10 +1428,10 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	$pelabfiles \
 	$mobilefiles \
 	apache/GNUmakefile apache/php.ini \
-        xmlrpc/GNUmakefile xmlrpc/emulabclient.py xmlrpc/emulabserver.py \
+        xmlrpc/GNUmakefile xmlrpc/emulabserver.py \
 	xmlrpc/sshxmlrpc_client.py xmlrpc/sshxmlrpc_server.py \
-	xmlrpc/sslxmlrpc_client.py xmlrpc/sslxmlrpc_server.py \
-	xmlrpc/webxmlrpc xmlrpc/script_wrapper.py xmlrpc/libxmlrpc.pm \
+	xmlrpc/sslxmlrpc_server.py \
+	xmlrpc/webxmlrpc \
 	xmlrpc/emulab xmlrpc/node xmlrpc/experiment xmlrpc/fs xmlrpc/user \
 	xmlrpc/imageid xmlrpc/osid xmlrpc/server xmlrpc/xmlrpcbag \
 	cdrom/GNUmakefile cdrom/tbbootconfig/GNUmakefile \
@@ -1560,6 +1560,10 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/os/imagezip/hashmap/GNUmakefile \
  clientside/os/imagezip/libndz/GNUmakefile \
  clientside/os/capture/GNUmakefile \
+ clientside/tip/GNUmakefile clientside/tip/console \
+ clientside/xmlrpc/GNUmakefile clientside/xmlrpc/emulabclient.py \
+ clientside/xmlrpc/sslxmlrpc_client.py \
+ clientside/xmlrpc/script_wrapper.py clientside/xmlrpc/libxmlrpc.pm \
  clientside/protogeni/GNUmakefile"
  
 #

@@ -31,12 +31,15 @@ REL	       := $(shell $(SRCDIR)/tmcc/osstuff.sh -r)
 
 include $(OBJDIR)/Makeconf
 
-SUBDIRS         = lib tools os sensors protogeni
+SUBDIRS         = lib tools os sensors protogeni xmlrpc
 ifneq ($(EVENTSYS),0)
 SUBDIRS += event
 endif
 ifeq ($(MOBILESUPPORT),1)
 SUBDIRS += mobile
+endif
+ifneq ($(SYSTEM),CYGWIN_NT-5.1)
+SUBDIRS += tip
 endif
 # tmcc should be last as the freenas* install targets mess with the hierarchy
 SUBDIRS += tmcc

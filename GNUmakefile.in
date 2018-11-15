@@ -52,7 +52,7 @@ ifeq ($(STANDALONE_CLEARINGHOUSE),0)
 SUBDIRS = \
 	clientside/lib \
 	db assign www @optional_subdirs@ clientside ipod security sensors \
-	pxe tbsetup account tmcd utils backend tip ipod vis \
+	pxe tbsetup account tmcd utils backend ipod vis \
 	sensors os xmlrpc autofs install/newnode_sshkeys \
 	tools/svn collab/exp-vis node_usage install
 ifeq ($(ISMAINSITE),1)
@@ -153,14 +153,12 @@ ops-install:
 	@$(MAKE) -C rc.d control-install
 	@$(MAKE) -C tbsetup control-install
 	@$(MAKE) -C security control-install
-	@$(MAKE) -C tip control-install
 	@$(MAKE) -C db control-install
 	@$(MAKE) -C utils control-install
 	@$(MAKE) -C clientside control-install
 ifeq ($(EVENTSYS),1)
 	@$(MAKE) -C event control-install
 endif
-	@$(MAKE) -C xmlrpc control-install
 	@$(MAKE) -C account control-install
 ifeq ($(PELABSUPPORT),1)
 	@$(MAKE) -C pelab control-install
@@ -211,7 +209,7 @@ just-builddirs:
 tipserv-install:
 	-mkdir -p $(INSTALL_TOPDIR)/log/tiplogs
 	-mkdir -p $(INSTALL_TOPDIR)/etc
-	@$(MAKE) -C tip tipserv-install
+	@$(MAKE) -C clientside/tip tipserv-install
 	@$(MAKE) -C clientside/os/capture tipserv-install
 	@$(MAKE) -C tbsetup tipserv-install
 
@@ -222,34 +220,22 @@ client-mkdirs:
 client:
 	@$(MAKE) -C clientside client
 	@$(MAKE) -C os client
-ifneq ($(SYSTEM),CYGWIN_NT-5.1)
-	@$(MAKE) -C tip client
-endif
 
 client-install: client client-mkdirs
 	@$(MAKE) -C clientside client-install
 	@$(MAKE) -C os client-install
-ifneq ($(SYSTEM),CYGWIN_NT-5.1)
-	@$(MAKE) -C tip client-install
-endif
 
 subboss: 
 	@$(MAKE) -C clientside subboss
 	@$(MAKE) -C tbsetup subboss
 	@$(MAKE) -C db subboss
 	@$(MAKE) -C os subboss
-ifneq ($(SYSTEM),CYGWIN_NT-5.1)
-	@$(MAKE) -C tip client
-endif
 	@$(MAKE) -C utils subboss
 
 subboss-install: subboss
 	@$(MAKE) -C clientside subboss-install
 	@$(MAKE) -C tbsetup subboss-install
 	@$(MAKE) -C os subboss-install
-ifneq ($(SYSTEM),CYGWIN_NT-5.1)
-	@$(MAKE) -C tip client-install
-endif
 	@$(MAKE) -C utils subboss-install
 	@$(MAKE) -C db subboss-install
 	@$(MAKE) -C rc.d subboss-install

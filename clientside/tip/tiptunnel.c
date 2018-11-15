@@ -778,6 +778,9 @@ acceptor:
 
 
 #ifdef WITHSSL
+#ifndef TBROOT
+#define TBROOT "/usr/testbed/etc/"
+#endif
 
 #define DEFAULT_CERTFILE TBROOT"/etc/capture.pem"
 
