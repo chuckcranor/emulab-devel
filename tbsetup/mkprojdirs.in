@@ -38,9 +38,11 @@ sub usage()
     print STDERR "Options:\n";
     print STDERR "  -a    - Create (re-create) all subgroups for pid(s)\n";
     print STDERR "  -A    - Create (re-create) all projects\n";
+    print STDERR "  -v    - With -A option, report progress\n";
     exit(-1);
 }
-my $optlist    = "aA";
+my $optlist    = "aAv";
+my $verbose    = 0;
 my $allpids    = 0;
 my $allgroups  = 0;
 my @projects   = ();
@@ -108,6 +110,9 @@ my %options = ();
 if (! getopts($optlist, \%options)) {
     usage();
 }
+if (defined($options{"v"})) {
+    $verbose = 1;
+}
 if (defined($options{"a"})) {
     $allgroups = 1;
 }
@@ -152,6 +157,12 @@ foreach my $project (@projects) {
 	if ($project->GroupList(\@groups)) {
 	    fatal("Could not get group list for project");
 	}
+	# GroupList() does not include project group.
+	my $group = $project->GetProjectGroup();
+	if (!defined($group)) {
+	    fatal("Could not lookup default group for project!")
+	}
+	unshift(@groups, $group);
     }
     elsif (@ARGV > 1) {
 	my $group = $project->LookupGroup($ARGV[1]);
@@ -167,7 +178,7 @@ foreach my $project (@projects) {
 	}
 	push(@groups, $group);
     }
-    if ($allpids) {
+    if ($allpids && $verbose) {
 	print "$pid\n";
     }
     #
@@ -178,14 +189,15 @@ foreach my $project (@projects) {
 	my $unix_gid   = $group->unix_gid();
 	my $unix_name  = $group->unix_name();
 
-	if ($allpids) {
+	if ($allpids && $verbose) {
 	    print "  $gid\n";
 	}
 
 	# Need proj/group leader for ownership.
 	my $leader = $group->GetLeader();
 	if (!defined($leader)) {
-	    fatal("Could not determine group leader for $group");
+	    print STDERR "Could not get group leader for $group, skipping\n";
+	    next;
 	}
 	my $unix_uid = $leader->unix_uid();
 
@@ -197,7 +209,13 @@ foreach my $project (@projects) {
 	    $cmdstr = "addgroup $gid $unix_name $unix_gid $unix_uid $pid";
 	}
 	if (system("$SSH -host $CONTROL $ACCOUNTPROXY $cmdstr")) {
-	    fatal("Failed on $CONTROL: '$ACCOUNTPROXY $cmdstr'");
+	    my $message = "Failed on $CONTROL: '$ACCOUNTPROXY $cmdstr'";
+	    if (!$allpids) {
+		fatal($message);
+	    }
+	    else {
+		print STDERR $message . "\n";
+	    }
 	}
     }
 }
