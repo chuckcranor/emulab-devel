@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2009 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -212,6 +212,14 @@ if ($runcmd ne "") {
 	    "    Could not turn admin mode off for @bad!\n");
     }
 
+    #
+    # Restore the startupcmd from the virt_nodes table since MfsRunCmd()
+    # cleared it. We need to do this after the MfsSelect call above.
+    #
+    foreach my $node (@nodes) {
+	$node->SetStartupCmd();
+    }
+
     if ($reboot) {
 	%args = ();
 	$args{'name'} = $0;
@@ -233,6 +241,16 @@ if (TBAdminMfsSelect(\%args, \@bad, @nodeids)) {
     die("*** $0:\n".
 	"    Could not turn admin mode $onoff for @bad!\n");
 }
+
+#
+# If turning off admin mode, reset the startupcmd.
+#
+if ($onoff eq "off") {
+    foreach my $node (@nodes) {
+	$node->SetStartupCmd();
+    }
+}
+
 if ($reboot) {
     %args = ();
     $args{'name'} = $0;

@@ -1672,6 +1672,15 @@ sub cleanup ()
 	    return 0;
 	}
 
+	#
+	# Restore the startupcmd.
+	# Note that we need to do this after the MfsSelect call above.
+	# XXX we just restore the "default" startup command from virt_nodes
+	#
+	$node->SetStartupCmd();
+	print STDERR "Restored startup cmd from virt_nodes for $node_id\n"
+	    if ($debug);
+
 	%args           = ();
 	$args{'name'}   = $me;
 	$args{'on'}     = 0;

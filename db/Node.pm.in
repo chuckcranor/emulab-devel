@@ -1965,7 +1965,8 @@ sub ClearBootAttributes($)
     my $node_id = (ref($self) ? $self->node_id() : $self);
     my $allocFreeState = TBDB_ALLOCSTATE_FREE_DIRTY();
 
-    DBQueryWarn("update nodes set startupcmd='',rpms='',deltas='', ".
+    DBQueryWarn("update nodes set ".
+		"startupcmd='',startstatus='none',rpms='',deltas='', ".
 		"tarballs='',failureaction='fatal', routertype='none', ".
 		"def_boot_cmd_line='',next_boot_cmd_line='', ".
 		"temp_boot_osid=NULL,next_boot_osid=NULL, ".
@@ -2339,6 +2340,60 @@ sub ResetStartStatus($)
     
     $self->{"DBROW"}->{'startstatus'} = 'none';
     return $self->Update({"startstatus" => 'none'});
+}
+
+#
+# Return the node startupcmd and status fields.
+#
+sub GetStartupCmd($)
+{
+    my ($self) = @_;
+
+    my $oldcmd = $self->startupcmd();
+    my $oldstatus = $self->startstatus();
+
+    return ($oldcmd, $oldstatus);
+}
+
+#
+# Set the node startupcmd field to the given value or the value
+# in the virt_nodes table entry if no value is given.
+#
+sub SetStartupCmd($$$)
+{
+    my ($self, $cmd, $status) = @_;
+    $status = 'none' if (!defined($status));
+    my $node_id = $self->node_id();
+
+    if (!$cmd) {
+	# Get value from virt_nodes
+	my $result =
+	    DBQueryWarn("select v.startupcmd ".
+			" from virt_nodes as v, reserved as r ".
+			" where v.exptidx=r.exptidx and v.vname=r.vname ".
+			"  and r.node_id='$node_id'");
+	if ($result && $result->numrows > 0) {
+	    ($cmd) = $result->fetchrow_array();
+	}
+    }
+    if ($cmd) {
+	$self->Update({'startupcmd' => $cmd, 'startstatus' => $status});
+    }
+}
+
+#
+# Clear the node startupcmd and status fields.
+# Returns the old command and status.
+#
+sub ClearStartupCmd($)
+{
+    my ($self) = @_;
+
+    my $oldcmd = $self->startupcmd();
+    my $oldstatus = $self->startstatus();
+
+    $self->Update({'startupcmd' => '', 'startstatus' => 'none'});
+    return ($oldcmd, $oldstatus);
 }
 
 #
