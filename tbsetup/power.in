@@ -501,7 +501,14 @@ foreach my $power_id (keys %outlets) {
 	if ($op eq "cycle") {
 	    foreach my $nodeid (@nodes) {
 		my $node = $nodes{$nodeid};
-		if ($node->cyclewhenoff()) {
+		#
+		# XXX disallow cycle-when-off when node is in hwdown.
+		# It is likely powered off for a reason.
+		#
+		if ($node->cyclewhenoff() &&
+		    !($node->IsReserved() &&
+		      $node->pid() eq NODEDEAD_PID() &&
+		      $node->eid() eq NODEDEAD_EID())) {
 		    push @forcenodes, $nodeid;
 		} else {
 		    push @unforcenodes, $nodeid;
