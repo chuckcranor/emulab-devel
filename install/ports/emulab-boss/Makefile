@@ -93,7 +93,7 @@ RUN_DEPENDS+=	\
 # apps
 RUN_DEPENDS+=	\
 	anytopnm:${PORTSDIR}/graphics/netpbm \
-	autoconf:${PORTSDIR}/devel/autoconf \
+	autoconf>=2.69:${PORTSDIR}/devel/autoconf \
 	curl:${PORTSDIR}/ftp/curl \
 	git:${PORTSDIR}/devel/git \
 	gmake:${PORTSDIR}/devel/gmake \
