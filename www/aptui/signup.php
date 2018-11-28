@@ -575,7 +575,6 @@ $args["portal"] 	   = $PORTAL_GENESIS;
 foreach ($licenses as $name => $value) {
     $args["license_" . $name] = $value;
 }
-error_log(print_r($args, TRUE));
 
 if (! ($project = Project::NewNewProject($args, $error))) {
     $errors["error"] = $error;
@@ -588,7 +587,6 @@ if (! ($project = Project::NewNewProject($args, $error))) {
     SPITFORM($formfields, 0, $errors);
     return;
 }
-SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 
 #
 # Destroy the session if we had a new user. 
