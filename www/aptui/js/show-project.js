@@ -504,18 +504,28 @@ $(function ()
 	    }
 	    var template = _.template(detailsString);
 
-	    $('#admin_content')
-		.html(template({"fields" : json.value}));
+	    $('#project_content')
+		.html(template({"fields"   : json.value,
+				"isleader" : window.ISLEADER,
+				"isadmin"  : window.ISADMIN}));
 	    
 	    // Format dates with moment before display.
-	    $('#admin_table .format-date').each(function() {
+	    $('#project_table .format-date').each(function() {
 		var date = $.trim($(this).html());
 		if (date != "") {
 		    $(this).html(moment($(this).html()).format("ll"));
 		}
 	    });
-	    $('#admin_content .toggle').click(function() {
+	    $('#project_table [data-toggle="popover"]').popover({
+		trigger: 'hover',
+		placement: 'auto',
+	    });
+	    $('#project_content .toggle').click(function() {
 		Toggle(this);
+	    });
+	    $('#project_content .request-license').click(function(event) {
+		event.preventDefault();
+		RequestLicense(this);
 	    });
 	}
 	var xmlthing = sup.CallServerMethod(null,
@@ -615,6 +625,31 @@ $(function ()
 	sup.CallServerMethod(null, "show-project", "Toggle",
 			     {"pid" : window.TARGET_PROJECT,
 			      "toggle" : name},
+			     callback);
+    }
+
+    /*
+     * Request a license.
+     */
+    function RequestLicense(target) {
+	var license_idx = $(target).data("license_idx");
+	
+	var callback = function(json) {
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    // If this is the leader of the project, zap them to
+	    // the license page. If an admin doing this, stay here.
+	    if (window.ISLEADER) {
+		window.location.replace("licenses.php");
+		return;
+	    }
+	    $(target).closest('td').html("Acceptance pending");
+	};
+	sup.CallServerMethod(null, "licenses", "Request",
+			     {"pid" : window.TARGET_PROJECT,
+			      "idx" : license_idx},
 			     callback);
     }
 

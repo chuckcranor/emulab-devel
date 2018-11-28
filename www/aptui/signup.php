@@ -30,6 +30,8 @@ $page_title = "Signup";
 $debug = 0;
 # Update mode.
 $promoting = 0;
+# Powder licenses
+$license_defs = array();
 
 #
 # Get current user.
@@ -63,6 +65,19 @@ $optargs = OptionalPageArguments("create",       PAGEARG_STRING,
                                  "toomany",      PAGEARG_BOOLEAN,
 				 "formfields",   PAGEARG_ARRAY);
 
+# List of licenses for Powder.
+if ($ISPOWDER) {
+    $query_result = DBQueryFatal("select * from licenses");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $license_defs[$row["license_name"]] =
+            array("license_name" => $row["license_name"],
+                  "form_text"    => $row["form_text"],
+                  "description_type" => $row["description_type"],
+                  "description_text" => $row["description_text"]);
+    }
+}
+
 #
 # Spit the form
 #
@@ -70,7 +85,7 @@ function SPITFORM($formfields, $showverify, $errors)
 {
     global $TBDB_UIDLEN, $TBDB_PIDLEN, $TBDOCBASE, $WWWHOST;
     global $ACCOUNTWARNING, $EMAILWARNING, $this_user, $joinproject, $toomany;
-    global $promoting;
+    global $promoting, $ISPOWDER, $license_defs;
     $button_label = "Create Account";
 
     SPITHEADER(1);
@@ -85,6 +100,9 @@ function SPITFORM($formfields, $showverify, $errors)
     echo "</script>\n";
     echo "<script type='text/plain' id='error-json'>\n";
     echo htmlentities(json_encode($errors));
+    echo "</script>\n";
+    echo "<script type='text/plain' id='licenses-json'>\n";
+    echo htmlentities(json_encode($license_defs));
     echo "</script>\n";
     echo "<script type='text/javascript'>\n";
 
@@ -122,6 +140,7 @@ function SPITFORM($formfields, $showverify, $errors)
 
     REQUIRE_UNDERSCORE();
     REQUIRE_SUP();
+    REQUIRE_MARKED();
     REQUIRE_APTFORMS();
     REQUIRE_FORMHELPERS();
     SPITREQUIRE("js/signup.js");
@@ -160,6 +179,12 @@ if (! isset($create)) {
         $defaults["startorjoin"] = "start";
     }
 
+    if (count($license_defs)) {
+        foreach ($license_defs as $name => $value) {
+            $defaults["license_" . $name] = "no";
+        }
+    }
+
     if ($this_user && $promoting) {
         $defaults["uid"]         = $this_user->uid();
         $defaults["fullname"]    = $this_user->name();
@@ -191,6 +216,9 @@ if (! isset($create)) {
 # Otherwise, must validate and redisplay if errors
 #
 $errors = array();
+
+# Optional licenses;
+$licenses = array();
 
 #
 # Check for start or join right away so we know what we be doing.
@@ -342,6 +370,15 @@ if (!$joinproject) {
     }
     elseif (! TBvalid_why($formfields["proj_why"])) {
 	$errors["proj_why"] = TBFieldErrorString();
+    }
+    if (count($license_defs)) {
+        foreach ($license_defs as $name => $value) {
+            $fname = "license_" . $name;
+
+            if (isset($formfields[$fname]) && $formfields[$fname] == "yes") {
+                $licenses[$name] = "yes";
+            }
+        }
     }
 }
 
@@ -534,16 +571,25 @@ $args["funders"]           = "None";
 $args["whynotpublic"]      = $PORTAL_GENESIS;
 # Flag to the backend.
 $args["portal"] 	   = $PORTAL_GENESIS;
+# Add any requested licenses to the arguments.
+foreach ($licenses as $name => $value) {
+    $args["license_" . $name] = $value;
+}
+error_log(print_r($args, TRUE));
 
 if (! ($project = Project::NewNewProject($args, $error))) {
     $errors["error"] = $error;
     if ($suexec_retval < 0) {
 	TBERROR("Error Creating APT/CloudLab Project\n${error}\n\n" .
 		print_r($args, TRUE), 0);
+
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
     }
     SPITFORM($formfields, 0, $errors);
     return;
 }
+SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+
 #
 # Destroy the session if we had a new user. 
 #

@@ -450,6 +450,17 @@ $routing = array("geni-login" =>
 						    "Do_SetSitevar",
                                                  "ResetSitevar" =>
 						    "Do_ResetSitevar")),
+		 "licenses" =>
+			array("file"    => "licenses.ajax",
+			      "guest"   => false,
+			      "methods" => array("List" =>
+						    "Do_List",
+                                                 "Accept" =>
+                                                     "Do_Accept",
+                                                 "Reject" =>
+                                                     "Do_Reject",
+                                                 "Request" =>
+                                                     "Do_Request")),
 );
 
 #

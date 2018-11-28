@@ -114,6 +114,12 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
         header("Location: portal-aup.php?referrer=$referrer");
         return;
     }
+    if ($login_user && $login_user->ProjectLicenses() &&
+        $page_title != "Licenses" && $page_title != "Logout") {
+        $referrer = urlencode($_SERVER['REQUEST_URI']);
+        header("Location: licenses.php?referrer=$referrer");
+        return;
+    }
 
     header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
     header("Cache-Control: no-cache, must-revalidate");

@@ -20,7 +20,8 @@ $(function () {
 		     * name to the wrapper so we can find it later to
 		     * add the error stuff.
 		     */
-		    var wrapper = $("<div id='form-wrapper-' + key></div>");
+		    var wrapper = $("<div id='form-wrapper-" + key + "'>" +
+				    "</div>");
 
 		    // How do I just move the item into the wrapper?
 		    wrapper.append($(item).clone());

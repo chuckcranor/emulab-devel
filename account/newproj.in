@@ -44,6 +44,7 @@ my $impotent= 0;
 my $silent  = 0;
 my $portal;
 my $resend;
+my %licenses = ();
 
 #
 # Configure variables
@@ -53,6 +54,7 @@ my $TBOPS       = "@TBOPSEMAIL@";
 my $TBAUDIT	= "@TBAUDITEMAIL@";
 my $TBBASE      = "@TBBASE@";
 my $TBWWW       = "@TBWWW@";
+my $LICENSES    = "$TB/sbin/manage_licenses";
 
 #
 # This script is setuid, so please do not run it as root. Hard to track
@@ -233,12 +235,28 @@ if (exists($xmlparse->{'attribute'}->{"portal"})) {
 	fatal("Bad portal: $portal");
     }
 }
+# Licenses. Save for later, but need to delete.
+foreach my $key (keys(%{ $xmlparse->{'attribute'} })) {
+    if ($key =~ /^license_([-\w]+)$/) {
+	my $value = $xmlparse->{'attribute'}->{"$key"}->{'value'};
+	my $name  = $1;
+	
+	if (lc($value) eq "yes") {
+	    system("$LICENSES show $name");
+	    if ($?) {
+		fatal("Invalid license name: $name");
+	    }
+	    $licenses{$name} = $name;
+	    print "requested license $name\n";
+	}
+	delete($xmlparse->{'attribute'}->{"$key"});
+    }
+}
 
 #
 # Make sure all the required arguments were provided.
 #
 foreach my $key (keys(%required)) {
-    
     fatal("Missing required attribute '$key'")
 	if (! exists($xmlparse->{'attribute'}->{"$key"}));
 }
@@ -385,6 +403,18 @@ if (!defined($newproj)) {
     fatal("Could not create new project!");
 }
 my $new_idx = $newproj->pid_idx();
+
+#
+# Add any licenses.
+#
+if (keys(%licenses)) {
+    foreach my $name (keys(%licenses)) {
+	system("$LICENSES require $name $new_pid");
+	if ($?) {
+	    fatal("Invalid license name: $name");
+	}
+    }
+}
 
 #
 # See if we are in an initial Emulab setup. If so, no email sent.

@@ -1058,5 +1058,23 @@ class Project
 	echo "</table>\n";
     }
 
+    #
+    # Return license status for all licenses.
+    #
+    function LicenseStatus() {
+	$pid_idx = $this->pid_idx();
+        $result  = array();
+
+        $query_result =
+            DBQueryFatal("select l.*,pl.pid,pl.accepted from licenses as l ".
+                         "left join project_licenses as pl on ".
+                         "   pl.license_idx=l.license_idx and ".
+                         "   pl.pid_idx='$pid_idx'");
+
+	while ($row = mysql_fetch_array($query_result)) {
+            $result[] = $row;
+        }
+        return $result;
+    }
 }
 ?>

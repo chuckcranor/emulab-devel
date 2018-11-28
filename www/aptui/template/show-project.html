@@ -66,10 +66,10 @@
 		<li role="presentation">
 		  <a href="#usage" role="tab"
 		     data-toggle="tab">Usage</a></li>
+		<li role="presentation">
+		  <a href="#project" role="tab" data-toggle="tab">
+		    Project</a></li>
 		<% if (isadmin) { %>
-		  <li role="presentation">
-		    <a href="#admin" role="tab" data-toggle="tab">
-		      Admin</a></li>
 		  <li role="presentation"
 		      class="dropdown">
 		    <a class="dropdown-toggle" data-toggle="dropdown"
@@ -145,11 +145,9 @@
 		      </table>
 		  </div>
 		</div>
-		<% if (isadmin) { %>
-		  <div role="tabpanel" class="tab-pane" id="admin">
-		    <div id="admin_content"></div>
-		  </div>
-		<% } %>
+		<div role="tabpanel" class="tab-pane" id="project">
+		  <div id="project_content"></div>
+		</div>
 	      </div>
 	    </div>
 	  </div>

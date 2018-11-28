@@ -4,7 +4,7 @@
 }
 </style>
 <div>
-  <table class='table table-condensed table-bordered' id="admin_table">
+  <table class='table table-condensed table-bordered' id="project_table">
     <tr>
       <td>PID</td>
       <td><%- fields.pid %> (<%- fields.pid_idx%>)</td>
@@ -36,12 +36,55 @@
       <td>Approved</td>
       <td><% if (fields.approved) { %>Yes<% } else { %>No<% } %></td>
     </tr>
-    <tr>
-      <td>Disabled</td>
-      <td><% if (fields.disabled) { %>Yes<% } else { %>No<% } %>
-	(<a class="toggle" data-name="project_disable">Toggle</a>)
-      </td>
-    </tr>
+    <% _.each(fields.licenses, function(license) { %>
+      <tr>
+	<td><%- license.name %> license
+	  <% if (license.description_text &&
+	    license.description_text != "") {
+	    var description_html = license.description_text;
+ 	    if (license.description_type == "md") {
+	      description_html = marked(description_html);
+	    }
+	    else if (license.description_type == "text") {
+	      description_html = "<pre>" +
+	      license.description_text + "</pre>";
+	    } %>
+	    <a href='#' class='btn btn-xs'
+	       data-toggle='popover'
+	       data-html='true'
+	       data-delay='{"hide":500}'
+	       data-content="<%- description_html %>">
+	      <span class='glyphicon glyphicon-question-sign'
+		    style='margin-bottom: 4px;'></span>
+	    </a>
+          <% } %>
+	</td>
+	<td>
+	  <% if (license.requested) { %>
+	    <% if (license.accepted) { %>
+	      Accepted (<%- license.accepted %>)
+	    <% } else { %>
+	      Acceptance pending
+	    <% } %>
+	  <% } else { %>
+	    <% if (isadmin || isleader) { %>
+	      <a href='#' class="request-license"
+		 data-license_idx="<%- license.idx %>">Request</a>
+	    <% } else { %>
+	      Not Requested
+	    <% } %>
+	  <% } %>
+	</td>
+      </tr>
+    <% }); %>
+    <% if (isadmin) { %>
+      <tr>
+	<td>Disabled</td>
+	<td><% if (fields.disabled) { %>Yes<% } else { %>No<% } %>
+	  (<a class="toggle" data-name="project_disable">Toggle</a>)
+	</td>
+      </tr>
+    <% } %>
     <tr>
       <td colspan="2"><center>Long Description</center></td>
     </tr>

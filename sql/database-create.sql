@@ -2990,6 +2990,26 @@ CREATE TABLE `lease_permissions` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `licenses`
+--
+
+DROP TABLE IF EXISTS `licenses`;
+CREATE TABLE `licenses` (
+  `license_idx` int(11) NOT NULL auto_increment,
+  `license_name` varchar(48) NOT NULL default '',
+  `license_level` enum('project','user') NOT NULL default 'project',  
+  `created` datetime default NULL,
+  `validfor` int(11) NOT NULL default '0',
+  `form_text` tinytext,
+  `license_text` text,
+  `license_type` enum('md','text','html') NOT NULL default 'md',
+  `description_text` text,
+  `description_type` enum('md','text','html') NOT NULL default 'md',
+  PRIMARY KEY (`license_idx`),
+  UNIQUE KEY `license_name` (`license_name`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `linkdelays`
 --
 
@@ -4480,6 +4500,20 @@ CREATE TABLE `project_leases` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `project_licenses`
+--
+
+DROP TABLE IF EXISTS `project_licenses`;
+CREATE TABLE `project_licenses` (
+  `pid` varchar(48) NOT NULL default '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `license_idx` int(11) NOT NULL default '0',
+  `accepted` datetime default NULL,
+  `expiration` datetime default NULL,
+  PRIMARY KEY (`pid_idx`,`license_idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `project_quotas`
 --
 
@@ -5245,6 +5279,22 @@ CREATE TABLE `user_features` (
   `uid` varchar(8) NOT NULL default '',
   PRIMARY KEY  (`feature`,`uid_idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+
+--
+-- Table structure for table `user_licenses`
+--
+
+DROP TABLE IF EXISTS `user_licenses`;
+CREATE TABLE `user_licenses` (
+  `uid` varchar(48) NOT NULL default '',
+  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `license_idx` int(11) NOT NULL default '0',
+  `accepted` datetime default NULL,
+  `expiration` datetime default NULL,
+  PRIMARY KEY (`uid_idx`,`license_idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
 
 --
 -- Table structure for table `user_policies`

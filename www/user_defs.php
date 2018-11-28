@@ -777,6 +777,38 @@ class User
                      "where uid_idx='$uid_idx'");
     }
 
+    #
+    # Find all the project licenses this user needs to accept (as leader
+    # of a project that is required to accept a license).
+    #
+    function ProjectLicenses() {
+	$uid_idx   = $this->uid_idx();
+        $trust     = TBDB_TRUSTSTRING_PROJROOT;
+
+        $query_result = 
+	    DBQueryFatal("select pl.*,l.* from group_membership as g ".
+                         "left join projects as p on p.pid_idx=g.pid_idx ".
+                         "inner join project_licenses as pl on ".
+                         "      pl.pid_idx=g.pid_idx ".
+                         "left join licenses as l on ".
+                         "     l.license_idx=pl.license_idx ".
+			 "where g.pid_idx=g.gid_idx and ".
+			 "      g.uid_idx='$uid_idx' and ".
+                         "      g.trust='$trust' and ".
+                         "      pl.accepted is null and ".
+                         "      p.approved!=0");
+        
+	if (mysql_num_rows($query_result) == 0) {
+	    return null;
+	}
+        $result = array();
+
+        while ($row = mysql_fetch_array($query_result)) {
+            $result[] = $row;
+        }
+        return $result;
+    }
+
     function Show($html = FALSE) {
 	global $WIKISUPPORT;
 

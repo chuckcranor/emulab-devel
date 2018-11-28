@@ -195,6 +195,7 @@ function Do_GroupList()
 function Do_ProjectProfile()
 {
     global $this_user, $target_project;
+    global $ISPOWDER;
 
     if (CheckPageArgs()) {
         return;
@@ -211,7 +212,21 @@ function Do_ProjectProfile()
     $results["url"]         = $target_project->URL();
     $results["description"] = $target_project->name();
     $results["why"]         = $target_project->why();
+    $results["licenses"]    = array();
 
+    if ($ISPOWDER) {
+        $licenses = $target_project->LicenseStatus();
+        foreach ($licenses as $license) {
+            $blob = array("idx"              => $license["license_idx"],
+                          "name"             => $license["license_name"],
+                          "description_type" => $license["description_type"],
+                          "description_text" => $license["description_text"],
+                          "requested"        => $license["pid"],
+                          "accepted"         => $license["accepted"]);
+
+            $results["licenses"][] = $blob;
+        }
+    }
     SPITAJAX_RESPONSE($results);
 }
 

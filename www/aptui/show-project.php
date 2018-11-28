@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -53,12 +53,14 @@ $emulablink = "$TBBASE/showproject.php3?project=" . $project->pid();
 $canapprove = $project->AccessCheck($this_user, $TB_PROJECT_ADDUSER) ? 1 : 0;
 $canbestow  = $project->AccessCheck($this_user,
                                     $TB_PROJECT_BESTOWGROUPROOT) ? 1 : 0;
+$isleader   = $project->IsLeader($this_user);
 
 echo "<link rel='stylesheet'
             href='css/tablesorter.css'>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "  window.ISADMIN        = $isadmin;\n";
+echo "  window.ISLEADER       = $isleader;\n";
 echo "  window.CANAPPROVE     = $canapprove;\n";
 echo "  window.CANBESTOW      = $canbestow;\n";
 echo "  window.EMULAB_LINK    = '$emulablink';\n";
@@ -70,6 +72,7 @@ echo "<div id='main-body'></div>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
+REQUIRE_MARKED();
 REQUIRE_MOMENT();
 SPITREQUIRE("js/show-project.js",
             "<script src='js/lib/jquery.tablesorter.min.js'></script>".

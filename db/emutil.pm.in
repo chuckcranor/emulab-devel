@@ -1071,5 +1071,20 @@ sub ValidUUID($)
     return 0;
 }
 
+sub ReadFile($)
+{
+    my ($filename) = @_;
+    my $contents   = "";
+    
+    open(L, $filename)
+	or return undef;
+
+    while (<L>) {
+	$contents .= $_;
+    }
+    close(L);
+    return $contents;
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;
