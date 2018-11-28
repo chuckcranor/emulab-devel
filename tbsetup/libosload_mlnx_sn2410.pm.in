@@ -233,7 +233,6 @@ sub generateConfig($$)
 		 "username $uid password 7 $encrypted");
 	}
 
-	if (0) {
 	#
 	# Find all the ports that are in use on this switch. We want to enable
 	# those ports and put them into vlan 1. This will give the user a basic
@@ -276,21 +275,18 @@ sub generateConfig($$)
 		my $port  = $interface->port();
 
 		push(@portlines,
-		     "interface te $card/$port",
-		     "  switchport",
-		     "  spanning-tree mode rst",
-		     "  spanning-tree guard loop",
+		     "interface ethernet $card/$port",
+		     "  shutdown",
+		     "  switchport mode access",
+		     "  speed 10G no-autoneg",
 		     "  no shutdown",
 		     "  exit");
 	    }
 	}
 	if (@portlines) {
 	    push(@config,
-		 "spanning-tree mode rst",
-		 "  no disable",
-		 "  exit",
+		 "no spanning-tree",
 		 @portlines);
-	}
 	}
     }
     push(@config, 
