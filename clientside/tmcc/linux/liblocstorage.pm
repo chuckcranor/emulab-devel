@@ -58,9 +58,12 @@ BEGIN
 	$VARDIR  = "/etc/rc.d/testbed";
 	$BOOTDIR = "/etc/rc.d/testbed";
     }
-    my $genvmtype = `cat $ETCDIR/genvmtype`;
-    chomp($genvmtype);
-
+    my $genvmtype = "";
+    if (-e "$ETCDIR/genvmtype") {
+	$genvmtype = `cat $ETCDIR/genvmtype`;
+	chomp($genvmtype);
+    }
+    
     $VGNAME = "emulab";
     
     if (GENVNODEHOST() && GENVNODETYPE() eq 'docker') {
@@ -89,6 +92,7 @@ my $UMOUNT	= "/bin/umount";
 my $MKDIR	= "/bin/mkdir";
 my $MKFS	= "/sbin/mke2fs";
 my $FSCK	= "/sbin/e2fsck";
+my $DUMPFS	= "/sbin/dumpe2fs";
 my $DOSTYPE	= "$BINDIR/dostype";
 my $ISCSI	= "/sbin/iscsiadm";
 my $ISCSI_ALT	= "/usr/bin/iscsiadm";
@@ -1490,6 +1494,17 @@ sub os_create_storage($$)
 	    if ($failed) {
 		$fstype = "ext4";
 		$fsopts = "-F -q -E lazy_itable_init=1,nodiscard";
+		#
+		# XXX temporary hack for 32-bit only imagezip.
+		# If the dataset size is less than 2TB, we make sure that
+		# the 64bit feature is not set. Otherwise, we cannot take
+		# a snapshot of the dataset (until imagezip is enhanced!)
+		#
+		my $vsize = $href->{'VOLSIZE'};
+		if ($vsize < (2 * 1024 * 1024)) {
+		    warn("  $lv: removing 64-bit feature from FS on $mdev\n");
+		    $fsopts .= " -O ^64bit,^huge_file";
+		}
 		$failed = mysystem("$MKFS -t $fstype $fsopts $mdev $redir");
 	    }
 	    if ($failed) {
@@ -1831,13 +1846,25 @@ sub os_create_storage_slice($$$)
 		}
 	    }
 	    # try a striped LV first
+	    # XXX don't stripe over an excess number of devices
 	    my $pvs = $so->{'LVM_VGDEVS'};
+	    if (defined($pvs) && $pvs > 8) {
+		warn("  $lv: limiting striping to 8 PV devices\n");
+		$pvs = 8;
+	    }
+	    #
+	    # XXX supposedly, using -Zy will wipe (zero) all signatures
+	    # without prompting for confirmation, but that doesn't seem
+	    # to be the case under Ubuntu18. So let's throw in the -y
+	    # option as well!
+	    #
+	    my $wipeopts = "-Zy -y";
 	    if (defined($pvs) && $pvs > 1 &&
-		!mysystem("lvcreate -Zy -i $pvs -n $lv -L ${lvsize}m $VGNAME $redir")) {
+		!mysystem("lvcreate $wipeopts -i $pvs -n $lv -L ${lvsize}m $VGNAME $redir")) {
 		$href->{'LVDEV'} = "/dev/$VGNAME/$lv";
 		return 1;
 	    }
-	    if (mysystem("lvcreate -Zy -n $lv -L ${lvsize}m $VGNAME $redir")) {
+	    if (mysystem("lvcreate $wipeopts -n $lv -L ${lvsize}m $VGNAME $redir")) {
 		warn("*** $lv: could not create LV$logmsg\n");
 		return 0;
 	    }
