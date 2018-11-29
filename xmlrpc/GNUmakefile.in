@@ -46,7 +46,7 @@ install: $(addprefix $(INSTALL_SBINDIR)/, $(SBIN_SCRIPTS)) \
 	$(addprefix $(INSTALL_SBINDIR)/xmlrpc/, $(DEBUG_STUFF)) \
 	$(addprefix $(INSTALL_LIBEXECDIR)/, $(LIBEXEC_STUFF)) \
 	$(addprefix $(INSTALL_WWWDIR)/, $(WWW_STUFF)) \
-	$(addprefix $(INSTALL_LIBDIR)/, $(LIB_STUFF)) \
+	$(addprefix $(INSTALL_LIBDIR)/, $(LIB_STUFF))
 	-rm -f $(INSTALL_SBINDIR)/paperbag
 	ln -s xmlrpcbag $(INSTALL_SBINDIR)/paperbag
 

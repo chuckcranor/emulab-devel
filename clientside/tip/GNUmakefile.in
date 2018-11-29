@@ -101,6 +101,8 @@ install:	all $(INSTALL_BINDIR)/tip \
 	$(INSTALL_PROGRAM) console $(INSTALL_DIR)/opsdir/bin/console
 	$(INSTALL_PROGRAM) console.bin $(INSTALL_DIR)/opsdir/bin/console.bin
 
+boss-install: install
+
 # Tip not installed in these targets.
 subboss: 
 subboss-install: 
