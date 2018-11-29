@@ -274,18 +274,26 @@ sub generateConfig($$)
 		my $card  = $interface->card();
 		my $port  = $interface->port();
 
-		push(@portlines,
-		     "interface ethernet $card/$port",
-		     "  shutdown",
-		     "  switchport mode access",
-		     "  speed 10G no-autoneg",
+		my @pconfig = (
+		    "interface ethernet $card/$port",
+		    "  shutdown",
+		    "  switchport mode access",
+		    "  speed 10G no-autoneg");
+
+		if ($vlan->GetRole() eq "trunk") {
+		    push(@pconfig, 
+			 "  spanning-tree guard loop");
+		}
+		push(@pconfig, 
 		     "  no shutdown",
 		     "  exit");
+		
+		push(@portlines, @pconfig);
 	    }
 	}
 	if (@portlines) {
 	    push(@config,
-		 "no spanning-tree",
+		 "spanning-tree mode rst",
 		 @portlines);
 	}
     }
