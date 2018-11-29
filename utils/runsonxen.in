@@ -28,7 +28,7 @@ use Getopt::Std;
 #
 # Mark an image as running on XEN. 
 #
-my @OTHER_PARENTS  = ("XEN44-64-STD", "XEN46-64-STD");
+my @OTHER_PARENTS  = ("XEN44-64-STD", "XEN46-64-STD", "XEN49-64-STD");
 
 sub usage()
 {
