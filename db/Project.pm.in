@@ -581,6 +581,20 @@ sub GetLeader($)
 }
 
 #
+# Is the user the project leader.
+#
+sub IsLeader($$)
+{
+    my ($self, $user) = @_;
+
+    # Must be a real reference. 
+    return 0
+	if (! (ref($self) && ref($user)));
+
+    return $user->SameUser($self->GetLeader());
+}
+
+#
 # Return project group.
 #
 sub GetProjectGroup($)

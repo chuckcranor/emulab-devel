@@ -85,7 +85,9 @@ function Do_Create()
             $errors["errors"] = "Profile has been deleted!";
             goto bad;
 	}
-        if ($this_idx != $profile->creator_idx() && !ISADMIN()) {
+        if (! ($profile->isCreator($this_user) ||
+               $profile->isLeader($this_user) ||
+               $profile->project_write() || !ISADMIN())) {
             $errors["errors"] = "Not enough permission!";
             goto bad;
 	}
@@ -291,12 +293,26 @@ function Do_Create()
             }
             fwrite($fp, "</value></attribute>\n");
         }
+        
         fwrite($fp, "<attribute name='profile_shared'><value>" .
                ($who == "shared" ? 1 : 0) . "</value></attribute>\n");
         fwrite($fp, "<attribute name='profile_public'><value>" .
                ($who == "public" ? 1 : 0) . "</value></attribute>\n");
+
+        if (isset($formfields["profile_project_write"])) {
+            fwrite($fp, "<attribute name='profile_project_write'><value>");
+            if ($formfields["profile_project_write"] == "checked") {
+                fwrite($fp, "1");
+            }
+            else {
+                fwrite($fp, "0");
+            }
+            fwrite($fp, "</value></attribute>\n");
+        }
+        
         if (ISADMIN()) {
             fwrite($fp, "<attribute name='profile_topdog'><value>");
+
             if (isset($formfields["profile_topdog"]) &&
                 $formfields["profile_topdog"] == "checked") {
                 fwrite($fp, "1");

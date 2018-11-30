@@ -129,6 +129,7 @@ class Profile
     function topdog()	    { return $this->field('topdog'); }
     function disabled()	    { return $this->field('disabled'); }
     function nodelete()	    { return $this->field('nodelete'); }
+    function project_write(){ return $this->field('project_write'); }
     function repourl()	    { return $this->field('repourl'); }
     function reponame()	    { return $this->field('reponame'); }
     function repohash()	    { return $this->field('repohash'); }
@@ -472,7 +473,8 @@ class Profile
 	return $this->CanInstantiate($user);
     }
     function CanEdit($user) {
-        if ($this->creator_idx() == $user->uid_idx() || ISADMIN()) {
+        if ($this->project_write() ||
+            $this->creator_idx() == $user->uid_idx() || ISADMIN()) {
             return 1;
         }
 	$project = Project::Lookup($this->pid_idx());
@@ -499,6 +501,22 @@ class Profile
         }
         if ($this->creator_idx() == $user->uid_idx() || ISADMIN() ||
             $user->uid_idx() == $project->GetLeader()->uid_idx()) {
+	    return 1;
+        }
+        return 0;
+    }
+    function isLeader($user) {
+	$project = Project::Lookup($this->pid_idx());
+	if (!$project) {
+	    return 0;
+	}
+        if ($user->uid_idx() == $project->GetLeader()->uid_idx()) {
+	    return 1;
+        }
+        return 0;
+    }
+    function isCreator($user) {
+        if ($user->uid_idx() == $this->creator_idx()) {
 	    return 1;
         }
         return 0;

@@ -561,14 +561,15 @@
 
 	    <!-- Permission checkboxes. -->
 	    <div class='row'>
-	      <div class='col-sm-9 col-sm-offset-3'>
+	      <div class='col-sm-9 col-sm-offset-3' style="margin-top: 5px">
 		Who can instantiate your profile?
 	      </div>
 	    </div>
 
 	    <div class='row'>
 	      <div class='col-sm-8 col-sm-offset-4'>
-		<div class='format-me' data-key='profile_who'>
+		<div class='format-me' data-key='profile_who'
+		     data-compact='yep'>
 		  <% if (1) { %>
 		    <div class='radio'>
                       <label>
@@ -610,6 +611,37 @@
                 </div>
               </div>
             </div>
+	    <% if (isadmin || iscreator || isleader) { %>
+	      <div class='row'>
+		<div class='col-sm-9 col-sm-offset-3'>
+		  <div class='checkbox format-me'
+		       data-key='profile_project_write'
+		       data-compact='yep'>
+		    <input type="hidden"
+			   name='profile_project_write' value="unchecked">
+                    <label>
+		      <input name='profile_project_write'
+			     <%- formfields.profile_project_write %>
+			     data-key='profile_project_write'
+			     id='profile_project_write' value='checked'
+			     type='checkbox'>Allow members of your project to
+		      modify this profile.
+		      <a href='#' class='btn btn-xs'
+			 data-toggle='popover'
+			 data-content='Normally only you or your project leader
+				       can modify your profile. Setting this
+				       flag allows anyone in your project to
+				       modify this profile, which is helpful
+				       when collaborating with other members
+				       of your project.'>
+			<span style='margin-bottom: 4px;'
+			      class='glyphicon glyphicon-question-sign'></span>
+		      </a>
+		    </label>
+		  </div>
+		</div>
+	      </div>
+	    <% } %>
 
 	    <% if (isadmin) { %>
 	      <div class='row'>

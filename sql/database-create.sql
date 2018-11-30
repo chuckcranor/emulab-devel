@@ -604,6 +604,7 @@ CREATE TABLE `apt_profiles` (
   `no_image_versions` tinyint(1) NOT NULL default '0',
   `disabled` tinyint(1) NOT NULL default '0',
   `nodelete` tinyint(1) NOT NULL default '0',
+  `project_write` tinyint(1) NOT NULL default '0',
   `locked` datetime default NULL,
   `locker_pid` int(11) default '0',
   `lastused` datetime default NULL,

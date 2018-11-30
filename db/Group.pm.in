@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2017 University of Utah and the Flux Group.
+# Copyright (c) 2005-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,6 +32,7 @@ use vars qw(@ISA @EXPORT);
 
 use libdb;
 use libtestbed;
+use EmulabConstants;
 use emutil;
 use User;
 use English;
@@ -1377,6 +1378,7 @@ sub ValidGID($$)
 package Group::MemberShip;
 use libdb;
 use libtestbed;
+use EmulabConstants;
 use English;
 use overload ('""' => 'Stringify');
 use vars qw($TRUSTSTRING_NONE $TRUSTSTRING_USER
@@ -1454,6 +1456,16 @@ sub date_applied($)     { return field($_[0], "date_applied"); }
 sub date_approved($)    { return field($_[0], "date_approved"); }
 sub group($)            { return $_[0]->{'GROUP'}; }
 sub user($ )            { return $_[0]->{'USER'}; }
+
+#
+# Is user trust in the group at least equal to the supplied trust
+#
+sub MinTrust($$)
+{
+    my ($self, $trust) = @_;
+
+    return TBMinTrust(TBTrustConvert($self->trust()), TBTrustConvert($trust));
+}
 
 #
 # Refresh a class instance by reloading from the DB.

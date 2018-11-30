@@ -92,6 +92,7 @@ use libEmulab;
 use libtestbed;
 use User;
 use Project;
+use Group;
 use APT_Profile;
 use APT_Instance;
 use APT_Aggregate;
@@ -174,6 +175,7 @@ my %xmlfields =
      "profile_listed"      => ["listed",	$SLOT_OPTIONAL|$SLOT_UPDATE],
      "profile_public"      => ["public",	$SLOT_OPTIONAL|$SLOT_UPDATE],
      "profile_shared"      => ["shared",	$SLOT_OPTIONAL|$SLOT_UPDATE],
+     "profile_project_write"=>["project_write", $SLOT_OPTIONAL|$SLOT_UPDATE],
      "profile_topdog"      => ["topdog",	$SLOT_OPTIONAL|
 			                          $SLOT_UPDATE|$SLOT_ADMINONLY],
      "profile_disabled"    => ["disabled",	$SLOT_OPTIONAL|
@@ -617,6 +619,10 @@ sub ModifyProfile()
     if (!defined($profile)) {
 	fatal("Could not lookup profile for update $uuid");
     }
+    my $creator = User->Lookup($profile->creator_idx());
+    if (!defined($creator)) {
+	fatal("Could not lookup creator for $profile");
+    }
     
     # This will exit if there are any errors.
     VerifyXML($xmlfile, 1);
@@ -629,8 +635,28 @@ sub ModifyProfile()
     if (!defined($project)) {
 	UserError({"profile_pid" => "No such project exists"});
     }
-    elsif (!$project->AccessCheck($this_user, TB_PROJECT_MAKEIMAGEID())) {
-	UserError({"profile_pid" => "Not enough permission in this project"});
+    #
+    # Project leader can always update profiles in the project. Other
+    # members can update the profile when the project_write bit has been
+    # set.
+    #
+    if (! ($this_user->IsAdmin() ||
+	   $this_user->SameUser($creator) ||
+	   $project->IsLeader($this_user) ||
+	   $profile->project_write())) {
+	UserError({"profile_pid" =>
+		       "Not enough permission to modify profile"});
+    }
+    #
+    # Slightly different test when changing the project_write bit.
+    #
+    if (exists($update_args{"project_write"}) &&
+	$update_args{"project_write"} != $profile->project_write() &&
+	!($this_user->IsAdmin() ||
+	  $this_user->SameUser($creator) ||
+	  $project->IsLeader($this_user))) {
+	UserError({"profile_pid" =>
+		       "Not enough permission change project write flag"});
     }
     if ($profile->Lock()) {
 	UserError("Profile is busy, cannot lock it.");

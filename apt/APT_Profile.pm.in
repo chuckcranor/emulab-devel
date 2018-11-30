@@ -487,6 +487,8 @@ sub Create($$$$$$)
 	if (exists($argref->{'shared'}) && $argref->{'shared'});
     $cquery .= ",topdog=1"
 	if (exists($argref->{'topdog'}) && $argref->{'topdog'});
+    $cquery .= ",project_write=1"
+	if (exists($argref->{'project_write'}) && $argref->{'project_write'});
 
     # Create the main entry:
     if (! DBQueryWarn("insert into apt_profiles set $cquery")) {
@@ -649,7 +651,7 @@ sub UpdateMetaData($$)
     # This is the only metadata we can update.
     #
     my %mods = ();
-    foreach my $key ("listed", "shared", "public", "topdog") {
+    foreach my $key ("listed", "shared", "public", "topdog", "project_write") {
 	if (exists($argref->{$key})) {
 	    $mods{$key} = $argref->{$key};
 	}

@@ -58,7 +58,7 @@ $(function () {
 
 		    // Squeeze vertical space for this field.
 		    if (_.has(item.dataset, "compact")) {
-			margin = 5;
+			margin = 0;
 		    }
 		    // Column size per row,
 		    if (_.has(item.dataset, "colsize")) {
@@ -262,6 +262,7 @@ $(function () {
 	    $.each(fields, function(i, field) {
 		formfields[field.name] = field.value;
 	    });
+	    console.info("Checkform", formfields);
 	    ClearFormErrors(form);
 
 	    var checkonly_callback = function(json) {
@@ -298,6 +299,7 @@ $(function () {
 	    $.each(fields, function(i, field) {
 		formfields[field.name] = field.value;
 	    });
+	    console.info("Submitform", formfields);
 	    var submit_callback = function(json) {
 		console.info("SubmitForm", json);
 		sup.HideWaitWait();

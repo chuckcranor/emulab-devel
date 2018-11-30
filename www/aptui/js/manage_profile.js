@@ -146,6 +146,8 @@ $(function ()
 	    canpublish:		window.CANPUBLISH,
 	    isadmin:		window.ISADMIN,
 	    isstud:		window.ISSTUD,
+	    iscreator:		window.ISCREATOR,
+	    isleader:		window.ISLEADER,
 	    history:		window.HISTORY,
 	    activity:		window.ACTIVITY,
 	    manual:             window.MANUAL,
@@ -602,6 +604,7 @@ $(function ()
 	$('#profile_topdog').change(function() { ProfileModified(); });
 	$('#profile_disabled').change(function() { ProfileModified(); });
 	$('#profile_nodelete').change(function() { ProfileModified(); });
+	$('#profile_project_write').change(function() { ProfileModified(); });
 	
 	/*
 	 * A double click handler that will render the instructions or
