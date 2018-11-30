@@ -4465,8 +4465,10 @@ sub DoWarn()
     # No free time.
     $instance->Update({"extension_disabled" => 1});
 
-    # Expiration is now.
-    $slice->SetExpiration(time());
+    # Expiration is now, if terminating.
+    if ($terminate) {
+	$slice->SetExpiration(time());
+    }
 
     # Now we can clear this.
     if ($instance->user_lockdown()) {
