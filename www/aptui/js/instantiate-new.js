@@ -1933,7 +1933,9 @@ $(function ()
 		"      </select>" +
 		"    </div>" +
 		"<div class='col-sm-4'></div>" +
-		"<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This profile <b>will not work on any clusters</b>. Please check your profile or parameters for errors. If you are sure they are correct, you can report the problem to support@cloudlab.us and make sure to link to the problematic profile.</div>" +
+	    "<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This profile <b>will not work on any clusters</b>. Please check your profile or parameters for errors. If you are sure they are correct, you can report the problem to support@cloudlab.us and make sure to link to the problematic profile.</div>" +
+	    "<div class='col-sm-4 col-sm-offset-1' style='margin-top: 5px; margin-bottom: 5px;'><button class='btn btn-default' type='button' data-toggle='collapse' data-target='#nowhere-breakdown' aria-expanded='false' id='nowhere-breakdown-button'>Cluster Compatibility Report</button></div>" +
+	        "<div class='col-sm-12 collapse' id='nowhere-breakdown'></div>"+
 	        "<div class='col-sm-6 alert alert-warning' id='where-deprecated' style='display: none; margin-top: 5px; margin-bottom: 5px'></div>" +
 	        "<div class='col-sm-2 site-wait'><img src='images/spinner.gif' /></div>" +
 		"  </div>" +
@@ -2281,6 +2283,8 @@ $(function ()
 					 clause, rejected,
 					 breakdown);
       console.log('REJECT BREAKDOWN', breakdown);
+      console.log('POSSIBLES', constraints.possible);
+      console.log('GROUPS', constraints.groups);
       if (0) {
 	console.info("updateSiteConstraints");
 	console.info(domNode);
@@ -2289,6 +2293,7 @@ $(function ()
 	console.info(rejected);
       }
 	
+      updateBreakdown(domNode.find('#nowhere-breakdown'), breakdown);
       if (allowed.length == 0)
       {
 	domNode.find('#where-warning').hide();
@@ -2358,6 +2363,57 @@ $(function ()
       });
     }
 
+    function updateBreakdown(dom, breakdown)
+    {
+      var list = $('<ul class="list-group"></ul>');
+      _.each(breakdown, function (site, key) {
+	var choices = $('<ul style="margin-left: 20px"></ul>');
+	var chosen = {};
+	_.each(site, function (candidate) {
+	  delete candidate.node.aggregates;
+	  var unique = JSON.stringify(candidate.node, undefined, "");
+	  if (chosen[unique] === undefined)
+	  {
+	    chosen[unique] = 1;
+	    var line = $('<li></li>');
+	    var found = 0;
+	    if (candidate.node.hardware !== undefined)
+	    {
+	      line.append('Hardware <b>' +
+			  candidate.node.hardware + '</b>');
+	      ++found;
+	    }
+	    if (candidate.node.types !== undefined)
+	    {
+	      if (found == 1)
+	      {
+		line.append(' with ');
+	      }
+	      line.append('Type <b>' +
+			  candidate.node.types + '</b>');
+	      ++found
+	    }
+	    if (candidate.node.images !== undefined)
+	    {
+	      if (found == 1)
+	      {
+		line.append(' with ');
+	      }
+	      else if (found == 2)
+	      {
+		line.append(' and ');
+	      }
+	      line.append('Image <b>' +
+			  sup.ImageDisplay(candidate.node.images) + '</b>');
+	    }
+	    choices.append(line);
+	  }
+	});
+	list.append($('<li class="list-group-item">Site <b>' + amlist[key] + '</b> can\'t instantiate </li>').append(choices));
+      });
+      dom.html(list);
+    }
+  
     // When the project is changed, look to see if the new project includes
     // multiple subgroups. If only one subgroup, hide the group selector.
     // Otherwise build/show a group selector.

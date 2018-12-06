@@ -427,10 +427,6 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "<script src='js/lib/d3.v3.js'></script>\n";
     echo "<script src='js/lib/nv.d3.js'></script>\n";
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-    echo "<script src='js/lib/jquery-ui.js'></script>\n";
-    echo "<script src='https://www.emulab.net/protogeni/jacksmod/stable/jacksmod.js'></script>";
-    echo "<script src='https://www.emulab.net/protogeni/jacksmod/stable/imagepicker.js'></script>";
-    echo "<script src='https://www.emulab.net/protogeni/jacksmod/stable/thumb.js'></script>";
     
     REQUIRE_UNDERSCORE();
     REQUIRE_SUP();
@@ -442,6 +438,7 @@ function SPITFORM($formfields, $newuser, $errors)
     REQUIRE_FILESTYLE();
     REQUIRE_MARKED();
     REQUIRE_MOMENT();
+    REQUIRE_JACKSMOD();
     REQUIRE_JACKS();
     REQUIRE_JQUERY_STEPS();
     AddLibrary("js/resgraphs.js");
