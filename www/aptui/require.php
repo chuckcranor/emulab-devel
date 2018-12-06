@@ -165,7 +165,7 @@ function REQUIRE_JACKS()
 
 function REQUIRE_JACKSMOD()
 {
-  $root = "https://www.emulab.net/protogeni/app/jacksmod-test/";
+  $root = "https://www.emulab.net/protogeni/app/jacksmod/";
   AddLibrary($root . "jacksmod.js");
   AddLibrary($root . "common/loadbase.js");
   AddLibrary($root . "common/base.js");

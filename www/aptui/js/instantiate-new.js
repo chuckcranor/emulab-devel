@@ -1934,7 +1934,7 @@ $(function ()
 		"    </div>" +
 		"<div class='col-sm-4'></div>" +
 	    "<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This profile <b>will not work on any clusters</b>. Please check your profile or parameters for errors. If you are sure they are correct, you can report the problem to support@cloudlab.us and make sure to link to the problematic profile.</div>" +
-	    "<div class='col-sm-4 col-sm-offset-1' style='margin-top: 5px; margin-bottom: 5px;'><button class='btn btn-default' type='button' data-toggle='collapse' data-target='#nowhere-breakdown' aria-expanded='false' id='nowhere-breakdown-button'>Cluster Compatibility Report</button></div>" +
+	    "<div class='col-sm-4 col-sm-offset-1' style='display: none; margin-top: 5px; margin-bottom: 5px;'><button class='btn btn-default' type='button' data-toggle='collapse' data-target='#nowhere-breakdown' aria-expanded='false' id='nowhere-breakdown-button'>Cluster Compatibility Report</button></div>" +
 	        "<div class='col-sm-12 collapse' id='nowhere-breakdown'></div>"+
 	        "<div class='col-sm-6 alert alert-warning' id='where-deprecated' style='display: none; margin-top: 5px; margin-bottom: 5px'></div>" +
 	        "<div class='col-sm-2 site-wait'><img src='images/spinner.gif' /></div>" +

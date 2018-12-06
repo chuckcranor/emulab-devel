@@ -427,7 +427,8 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "<script src='js/lib/d3.v3.js'></script>\n";
     echo "<script src='js/lib/nv.d3.js'></script>\n";
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-    
+    echo "<script src='js/lib/jquery-ui.js'></script>\n";
+   
     REQUIRE_UNDERSCORE();
     REQUIRE_SUP();
     REQUIRE_PPWIZARDSTART();
