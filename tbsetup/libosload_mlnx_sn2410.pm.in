@@ -75,7 +75,10 @@ sub createExpectObject($$)
     # default password.
     return 0
 	if ($self->createExpectObjectAux($nodeobject, 0) == 0);
-    sleep(5);
+    # Sleep for a while, sometimes sshd locks out the next login,
+    # not really sure what is going on yet.
+    $self->dprint(0,"$self createExpectObject($node_id): sleeping for a bit\n");
+    sleep(20);
     return -1
 	if ($self->createExpectObjectAux($nodeobject, 1));
 
@@ -376,6 +379,10 @@ sub DeviceReconfigure($$)
  	tberror "$self: Reconfigure($node_id): could not generate config!\n";
  	return -1;
     }
+
+    # Sleep for a few seconds to let switch settle down after booting.
+    sleep(10);
+    
     if ($self->createExpectObject($nodeobject)) {
 	return -1;
     }

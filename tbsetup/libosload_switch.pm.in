@@ -221,7 +221,6 @@ sub Reload($$)
 	$self->nodeinfo($nodeobject,'reloadchildpid',$childpid);
 	return 0;
     }
-    # child continues:
 
     #
     # So we are setup to boot the diskload MFS (onie).
@@ -395,6 +394,7 @@ sub Reconfigure($$$)
     my $node_id = $nodeobject->node_id();
     my $reconfig_only = 0;
     my $running_onie  = 0;
+    my $forked        = 0;
     my $retval;
 
     $self->dprint(0, "$self: Reconfigure($node_id): starting, dowait:$dowait");
@@ -425,9 +425,14 @@ sub Reconfigure($$$)
 	$self->dprint(2,"$self: Reconfigure($node_id): ".
 		      "setting state to SHUTDOWN");
 
+	#
 	# Need to do this before we return to ossetup, since it is looking
 	# for a transition to ISUP to know when the Reconfigure is done.
-	TBSetNodeEventState($node_id, TBDB_NODESTATE_SHUTDOWN);
+	#
+	$nodeobject->Refresh();
+	if ($nodeobject->eventstate() eq TBDB_NODESTATE_ISUP()) {
+	    TBSetNodeEventState($node_id, TBDB_NODESTATE_SHUTDOWN);
+	}
 
 	#
 	# Reload can't block, so fork and make a note of ourself!
@@ -438,6 +443,8 @@ sub Reconfigure($$$)
 	    $self->nodeinfo($nodeobject, 'reloadchildpid', $childpid);
 	    return 0;
 	}
+	# child continues; note that we have exit instead of return.
+	$forked = 1;
     }
     #
     # Again, $dowait is our indicator we are called from os_setup.
@@ -518,10 +525,16 @@ sub Reconfigure($$$)
     if (!$dowait) {
 	TBSetNodeEventState($node_id, TBDB_NODESTATE_ISUP());
     }
+    if ($forked) {
+	exit(0);
+    }
     return 0;
 
   failed:
     TBSetNodeEventState($node_id, TBDB_NODESTATE_TBFAILED());
+    if ($forked) {
+	exit(-1);
+    }
     return -1;
 }
 

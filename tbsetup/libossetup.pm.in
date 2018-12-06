@@ -924,7 +924,12 @@ sub WaitForNodes($@)
 	    }
 	    if (grep {$_ eq $state} @waitstates) {
 		print "$node_id has reported state $state\n";
-		$node->_setupstatus($SETUP_OKAY);
+		if ($state eq TBDB_NODESTATE_ISUP()) {
+		    $node->_setupstatus($SETUP_OKAY);
+		}
+		else {
+		    $node->_setupstatus($SETUP_FAILED);
+		}
 		delete($nodes{$node_id});
 		$typehandler->WaitDone($node);
 		next;
@@ -943,7 +948,7 @@ sub WaitForNodes($@)
 		}
 		else {
 		    if ($typehandler->Retry($node) != 0) {
-			$node->_setupstatus($SETUP_OKAY);
+			$node->_setupstatus($SETUP_FAILED);
 			delete($nodes{$node_id});
 			$typehandler->WaitDone($node);
 		    }

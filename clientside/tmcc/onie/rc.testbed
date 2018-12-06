@@ -88,10 +88,6 @@ waitmode()
 {
     echo "Waiting for something to do"
 
-    # This tells stated we are in the PXEKERNEL state machine.
-    $TMCC state PXEBOOTING
-    sleep 1
-
     #
     # We use bootinfoclient. If we get a reboot command do that,
     # otherwise we just return to query bootwhat again.

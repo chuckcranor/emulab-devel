@@ -359,6 +359,9 @@ REPLACE INTO mode_transitions VALUES ('RELOAD-UE','SHUTDOWN','ALWAYSUP','ISUP','
 REPLACE INTO mode_transitions VALUES ('ALWAYSUP','SHUTDOWN','RELOAD','SHUTDOWN','');
 REPLACE INTO mode_transitions VALUES ('RELOAD','SHUTDOWN','ALWAYSUP','SHUTDOWN','');
 REPLACE INTO mode_transitions VALUES ('RELOAD','RELOADDONE','ALWAYSUP','SHUTDOWN','');
+REPLACE INTO mode_transitions VALUES ('ONIE','SHUTDOWN','RELOAD','SHUTDOWN','');
+REPLACE INTO mode_transitions VALUES ('RELOAD','SHUTDOWN','ONIE','SHUTDOWN','');
+REPLACE INTO mode_transitions VALUES ('RELOAD','RELOADDONE','ONIE','SHUTDOWN','');
 
 --
 -- Dumping data for table `priorities`
@@ -448,7 +451,15 @@ REPLACE INTO state_timeouts VALUES ('PXEKERNEL','PXEBOOTING',240,'REBOOT');
 -- Dumping data for table `state_transitions`
 --
 
-
+REPLACE INTO state_transitions VALUES ('ONIE','ISUP','SHUTDOWN','');
+REPLACE INTO state_transitions VALUES ('ONIE','SHUTDOWN','BOOTING','');
+REPLACE INTO state_transitions VALUES ('ONIE','SHUTDOWN','PXEWAIT','');
+REPLACE INTO state_transitions VALUES ('ONIE','BOOTING','ISUP','');
+REPLACE INTO state_transitions VALUES ('ONIE','BOOTING','BOOTING','');
+REPLACE INTO state_transitions VALUES ('ONIE','PXEWAIT','PXEWAIT','bootinfoclient');
+REPLACE INTO state_transitions VALUES ('ONIE','PXEWAIT','PXEWAKEUP','');
+REPLACE INTO state_transitions VALUES ('ONIE','PXEWAKEUP','BOOTING','');
+REPLACE INTO state_transitions VALUES ('ONIE','ISUP','ISUP','');
 REPLACE INTO state_transitions VALUES ('ALWAYSUP','ISUP','SHUTDOWN','Reboot');
 REPLACE INTO state_transitions VALUES ('ALWAYSUP','SHUTDOWN','ISUP','BootDone');
 REPLACE INTO state_transitions VALUES ('PCVM','ISUP','BOOTING','Crash');
