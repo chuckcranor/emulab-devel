@@ -1641,21 +1641,22 @@ sub AccessCheck($$$) {
     if (TBMinTrust($gtrust, PROJMEMBERTRUST_GROUPROOT())) {
 	return 1;
     }
-    # XXX: Need to decide what the right thing to do is here.
-    #elsif (TBMinTrust($gtrust, PROJMEMBERTRUST_LOCALROOT())) {
-    #	$user_access = LEASE_ACCESS_READ();
-    #}
+    elsif (TBMinTrust($gtrust, PROJMEMBERTRUST_LOCALROOT())) {
+    	$user_access = LEASE_ACCESS_READ();
+    }
     elsif (TBMinTrust($gtrust, PROJMEMBERTRUST_USER())) {
 	$user_access = LEASE_ACCESS_READINFO();
     }
 
     my $idx = $self->idx();
     my $qres = DBQueryWarn("select permission_type,permission_idx,allow_modify from lease_permissions where lease_idx=$idx");
+    return 0
+	if (!defined($qres));
 
     # If nothing was returned, just pass back the result based on the
     # special checks above.
     return (TBMinTrust($user_access, $access_type) ? 1 : 0)
-	if !defined($qres);
+	if (!$qres->numrows);
 
     while (my ($perm_type, $perm_idx, $modify) = $qres->fetchrow_array()) {
 	if ($perm_type eq "global") {
