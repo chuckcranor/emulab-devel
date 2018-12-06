@@ -2001,12 +2001,10 @@ sub GetTicketAuxAux($)
 			    my $stat  = "/var/tmp/startup-${count}.status";
 
 			    #
-			    # Support only sh and csh. Maybe perl later.
+			    # Not sure this check makes a lot of sense.
 			    #
 			    if (! (defined($shell) &&
-				   ($shell eq "csh" || $shell eq "sh" ||
-				    $shell eq "/bin/csh" ||
-				    $shell eq "/bin/sh"))) {
+				   $shell =~ /^(\/bin\/)?(csh|sh|bash|tcsh)$/)){
 				$response =
 				    GeniResponse->Create(GENIRESPONSE_BADARGS,
 						 undef,
