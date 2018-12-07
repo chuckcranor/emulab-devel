@@ -123,6 +123,7 @@ my $XMLLINT	   = "/usr/local/bin/xmllint";
 my $ADDAUTHORITY   = "$TB/sbin/protogeni/addauthority";
 my $EMULAB_PEMFILE = "@prefix@/etc/genicm.pem";
 my $TARINSTALL     = "/usr/local/bin/install-tarfile";
+my $TAR            = "/usr/bin/tar";
 my $IMAGE_SETUP    = "$TB/sbin/image_setup";
 my $IMAGE_IMPORT   = "$TB/sbin/image_import";
 my $SHAREVLAN      = "$TB/sbin/sharevlan";
@@ -1937,99 +1938,90 @@ sub GetTicketAuxAux($)
 	       (!defined($osinfo) || $osinfo->isImageAlias() || 
 		$osinfo->op_mode() ne
 		EmulabConstants::TBDB_NODEOPMODE_ALWAYSUP())) {
-	    my $startupCommand = undef;
-	    my $startupCount = 0;
-	    foreach my $service (@services) {
-		if ($service->{'type'} eq "execute") {
-		    if (!defined($service->{'cmd'}) ||
-			$service->{'cmd'} eq "") {
-			$response =
-			    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-			     "Invalid service command: no command provided");
-			goto bad;
-		    }
-		    if ($startupCount == 0) {
-			$startupCommand = $service->{'cmd'};
-		    }
-		    ++$startupCount;
-		}
-	    }
 
-	    if ($startupCount) {
-		if ($startupCount == 1 && length($startupCommand) < 240) {
-		    if (! TBcheck_dbslot($startupCommand,
-					 "virt_nodes", "startupcmd",
-				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
-			$response =
-			    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-				 "Invalid startup command: " .
-						 TBFieldErrorString());
-			goto bad;
-		    }
-		    $nodeblob->{'startupcmd'} = $startupCommand;
-		}
-		else { 
-		    my $count = 0;
-		    my $startfile = $slice_experiment->UserDir() .
-			"/geni_startup." . $node_nickname;
-		    $nodeblob->{'startupcmd'} = $startfile;
+	    my $count     = 0;
+	    my $userdir   = $slice_experiment->UserDir();
+	    my $startname = "geni_startup.${node_nickname}";
+	    my $startfile = "$userdir/$startname";
+	    my $tarfile   = "$userdir/startup_tarfile." . $node_nickname;
 	    
-		    if (!open(STARTUP, ">$startfile")) {
-			$response =
-			    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-						 "Error creating startfile");
-			goto bad;
-		    }
-		    print STARTUP "#!/bin/sh\n\n";
-		    print STARTUP "# Redirect all output to a file\n";
-		    print STARTUP "exec &> /var/tmp/startup.log\n\n";
-
-		    #
-		    # It would be nice to interleave "install" with
-		    # "execute", but Emulab's tarfiles support arranges to
-		    # copy the files locally, and rewrites the names. Need to
-		    # hook into that support somehow, but for now tarfiles are
-		    # all installed as a block above.
-		    #
-		    foreach my $service (@services) {
-			my $type = $service->{'type'};
+	    if (!open(STARTUP, ">$startfile")) {
+		$response =
+		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					 "Error creating startfile");
+		goto bad;
+	    }
+	    print STARTUP "#!/bin/sh\n\n";
+	    print STARTUP "# echo 'See ${node_nickname}:/var/tmp/startup.log ".
+		"for script output info'\n";
+	    print STARTUP "exec > /var/tmp/startup.log 2>&1\n\n";
+	    print STARTUP "# Exit with result of last command\n";
+	    print STARTUP "status=0\n\n";
+	    
+	    #
+	    # It would be nice to interleave "install" with
+	    # "execute", but Emulab's tarfiles support arranges to
+	    # copy the files locally, and rewrites the names. Need to
+	    # hook into that support somehow, but for now tarfiles are
+	    # all installed as a block above.
+	    #
+	    foreach my $service (@services) {
+		my $type = $service->{'type'};
 			
-			if ($type eq "execute") {
-			    my $shell = $service->{'shell'};
-			    my $cmd   = $service->{'cmd'};
-			    my $log   = "/var/tmp/startup-${count}.txt";
-			    my $stat  = "/var/tmp/startup-${count}.status";
+		if ($type eq "execute") {
+		    my $shell = $service->{'shell'};
+		    my $cmd   = $service->{'cmd'};
+		    my $log   = "/var/tmp/startup-${count}.txt";
+		    my $stat  = "/var/tmp/startup-${count}.status";
 
-			    #
-			    # Not sure this check makes a lot of sense.
-			    #
-			    if (! (defined($shell) &&
-				   $shell =~ /^(\/bin\/)?(csh|sh|bash|tcsh)$/)){
-				$response =
-				    GeniResponse->Create(GENIRESPONSE_BADARGS,
+		    #
+		    # Not sure this check makes a lot of sense.
+		    #
+		    if (! (defined($shell) &&
+			   $shell =~ /^(\/bin\/)?(csh|sh|bash|tcsh)$/)) {
+			$response =
+			    GeniResponse->Create(GENIRESPONSE_BADARGS,
 						 undef,
 						 "Invalid shell in execute");
-				goto bad;
-			    }
-			    if (! ($shell =~ /bin/)) {
-				$shell = "/bin/$shell";
-			    }
-			    print STARTUP "echo -n 'Services execution $count at '\n";
-			    print STARTUP "date\n\n";
-			    print STARTUP "$shell -c \"$cmd\" >$log 2>&1\n";
-			    print STARTUP "status=\$?\n";
-			    print STARTUP "echo \"\$status\" > $stat\n";
-			    print STARTUP
-				"echo \"Execution $count exited with status \$status\"\n";
-			    print STARTUP "echo '----------------------------------'\n";
-			    $count++;
-			}
+			goto bad;
 		    }
-		    print STARTUP "exit 0\n";
-		    close(STARTUP);
-		    chmod(0755, $startfile);
+		    if (! ($shell =~ /bin/)) {
+			$shell = "/bin/$shell";
+		    }
+		    print STARTUP "echo -n 'Services execution $count at '\n";
+		    print STARTUP "date\n\n";
+		    print STARTUP "# Redirecting stdin/stdout to $log\n";
+		    print STARTUP "$shell -c \"$cmd\" >$log 2>&1\n";
+		    print STARTUP "status=\$?\n";
+		    print STARTUP "# Writing exit status to $stat\n";
+		    print STARTUP "echo \"\$status\" > $stat\n";
+		    print STARTUP "echo " .
+			"\"Execution $count exited with status \$status\"\n";
+		    print STARTUP "echo '----------------------------------'\n";
+		    $count++;
 		}
 	    }
+	    print STARTUP "exit \$status\n";
+	    close(STARTUP);
+	    chmod(0755, $startfile);
+
+	    #
+	    # We cannot depend on NFS anymore, so package the startfile
+	    # into a little tarball and add to the tarfiles list.
+	    #
+	    system("$TAR cf $tarfile -C $userdir $startname");
+	    if ($?) {
+		$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+		    "Could not create startup tarfile for $node_nickname");
+		goto bad;
+	    }
+	    if (exists($nodeblob->{'tarfiles'})) {
+		$nodeblob->{'tarfiles'} .= ";/var/tmp $tarfile";
+	    }
+	    else {
+		$nodeblob->{'tarfiles'} = "/var/tmp $tarfile";
+	    }
+	    $nodeblob->{'startupcmd'} = "/var/tmp/$startname";
 	}
 
 	my $elabsettings = GeniXML::GetElabInElabSettings($ref);
