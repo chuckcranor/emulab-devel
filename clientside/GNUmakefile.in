@@ -76,6 +76,16 @@ onie-dongle-install: onie-dongle
 	$(MAKE) -C os onie-dongle-install
 	$(MAKE) -C tmcc onie-dongle-install
 
+rack-control:
+	$(MAKE) -C lib rack-control
+	$(MAKE) -C os rack-control
+	$(MAKE) -C tip rack-control
+
+rack-control-install: rack-control
+	$(MAKE) -C lib rack-control-install
+	$(MAKE) -C os rack-control-install
+	$(MAKE) -C tip rack-control-install
+
 destdircheck:
 	@if [ -z "$(DESTDIR)" ]; then \
 	    echo "You must define DESTDIR for this target!"; \

@@ -57,6 +57,11 @@ onie-dongle:
 
 onie-dongle-install: onie-dongle
 
+rack-control:
+	$(MAKE) -C libtb client
+
+rack-control-install: rack-control
+
 # How to recursively descend into subdirectories to make general
 # targets such as `all'.
 %.MAKE:

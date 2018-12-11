@@ -29,6 +29,7 @@ include $(OBJDIR)/Makeconf
 
 all:	tip tiptunnel console.bin console console.boss tippty
 client: console.bin console
+rack-control: console-nossl
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
@@ -77,6 +78,12 @@ console.bin.o: tiptunnel.c $(SRCDIR)/../os/capture/capdecls.h
 console.bin: console.bin.o
 	$(CC) $(CFLAGS) -o console.bin console.bin.o
 
+console-nossl.o: tiptunnel.c $(SRCDIR)/../os/capture/capdecls.h
+	$(CC) $(CFLAGS) -o console-nossl.o -c $<
+
+console-nossl: console-nossl.o
+	$(CC) $(CFLAGS) -o console-nossl console-nossl.o
+
 tippty.o: tiptunnel.c $(SRCDIR)/../os/capture/capdecls.h
 	$(CC) $(CFLAGS) -DTIPPTY -o $@ -c $<
 
@@ -102,6 +109,8 @@ install:	all $(INSTALL_BINDIR)/tip \
 	$(INSTALL_PROGRAM) console.bin $(INSTALL_DIR)/opsdir/bin/console.bin
 
 boss-install: install
+
+rack-control-install:	$(INSTALL_BINDIR)/console-nossl
 
 # Tip not installed in these targets.
 subboss: 
