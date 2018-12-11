@@ -3278,9 +3278,21 @@ sub GetTicketAuxAux($)
 				if (defined(GetText("capacity", $property)));
 			    if (defined(GetText("latency", $property))) {
 				$latency = GetText("latency", $property) / 2.0;
+				if ($latency < 0) {
+				    $response =
+					GeniResponse->BadArgsResponse(
+					 "$lanname: Bad latency: $latency");
+				    goto bad;
+				}
 			    }
 			    if (defined(GetText("packet_loss", $property))) {
 				$lossrate = GetText("packet_loss", $property);
+				if ($lossrate > 1.0 || $lossrate < 0) {
+				    $response =
+					GeniResponse->BadArgsResponse(
+					 "$lanname: Bad lossrate: $lossrate");
+				    goto bad;
+				}
 				$lossrate = 1.0 - sqrt(1.0 - $lossrate);
 			    }
 			}
@@ -3289,9 +3301,22 @@ sub GetTicketAuxAux($)
 				if (defined(GetText("capacity", $property)));
 			    if (defined(GetText("latency", $property))) {
 				$rlatency = GetText("latency", $property) / 2.0;
+				if ($rlatency < 0) {
+				    $response =
+					GeniResponse->BadArgsResponse(
+					 "$lanname: Bad latency: $rlatency");
+				    goto bad;
+				}
+				
 			    }
 			    if (defined(GetText("packet_loss", $property))) {
 				$rlossrate = GetText("packet_loss", $property);
+				if ($rlossrate > 1.0 || $rlossrate < 0) {
+				    $response =
+					GeniResponse->BadArgsResponse(
+					 "$lanname: Bad lossrate: $rlossrate");
+				    goto bad;
+				}
 				$rlossrate = 1.0 - sqrt(1.0 - $rlossrate);
 			    }
 			}
@@ -3308,10 +3333,22 @@ sub GetTicketAuxAux($)
 			if (defined(GetText("latency", $property))) {
 			    $latency  = GetText("latency", $property);
 			    $rlatency = $latency;
+			    if ($latency < 0) {
+				$response =
+				    GeniResponse->BadArgsResponse(
+					"$lanname: Bad latency: $latency");
+				goto bad;
+			    }
 			}
 			if (defined(GetText("packet_loss", $property))) {
 			    $lossrate  = GetText("packet_loss", $property);
 			    $rlossrate = $lossrate;
+			    if ($lossrate > 1.0 || $lossrate < 0) {
+				$response =
+				    GeniResponse->BadArgsResponse(
+					"$lanname: Bad lossrate: $lossrate");
+				goto bad;
+			    }
 			}
 		    }
 		}
