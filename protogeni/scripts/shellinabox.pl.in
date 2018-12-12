@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -61,6 +61,7 @@ my $CERTFILE         = "/usr/local/etc/apache22/ssl.crt/${USERNODE}.crt";
 my $KEYFILE          = "/usr/local/etc/apache22/ssl.key/${USERNODE}.key";
 my $APTDIR           = "/var/apt/users";
 my $CONSOLEBIN       = "$TB/bin/console.bin";
+my $SHELLINABOXD     = "/usr/local/bin/shellinaboxd";
 
 # Testbed libraries.
 use lib '@prefix@/lib';
@@ -260,7 +261,7 @@ $UID = $EUID;
 # Shove this header out so that we can do cross site xmlrpc.
 print "Access-Control-Allow-Origin: *\n";
 
-my $cmd = "shellinaboxd --no-beep " . ($debug ? "-d" : "-v") . " " .
+my $cmd = "$SHELLINABOXD --no-beep " . ($debug ? "-d" : "-v") . " " .
     "--certfile=${CERTFILE} --keyfile=${KEYFILE} ".
     "--cgi=49152-65535 -c $TB/etc -s '/:$uid:$gid:$where:$command'";
 
