@@ -151,6 +151,7 @@ sub StartMonitor();
 sub StartMonitorInternal(;$);
 sub DoImageTrackerStuff($$$$$$$);
 sub DoWarn();
+sub DoDelete();
 sub DenyExtensionInternal($);
 sub ExtendInternal($$$$$);
 sub CallMethodOnAggregates($$$@);
@@ -285,6 +286,9 @@ elsif ($action eq "checkautoapprove") {
 }
 elsif ($action eq "applyextensionpolicy") {
     DoApplyExtensionPolicy()
+}
+elsif ($action eq "delete") {
+    DoDelete()
 }
 else {
     usage();
@@ -443,7 +447,9 @@ sub DoSnapshot()
 		fatal("Could not parse manifest for $agg");
 	    }
 	    foreach my $ref (GeniXML::FindNodes("n:node",
-						$manifest)->get_nodelist()) {
+					$manifest)->get_nodelist(),
+			     GeniXML::FindNodesNS("n:vhost", $manifest,
+					$GeniXML::EMULAB_NS)->get_nodelist()) {
 		$nodecount++;
 		
 		my $client_id   = GeniXML::GetVirtualId($ref);
@@ -1423,22 +1429,29 @@ sub DoTerminate()
 }
 
 #
-# Delete Do not use this!
+# Delete. Do not use this unless you know what you are doing!  It is
+# for killing off instances that got into whacked out state cause of
+# earlier errors or boss crashing, etc.
 #
 sub DoDelete()
 {
     my $expired = $RECORDHISTORY_TERMINATED;
+    my $force   = 0;
 
-    if (@ARGV) {
-	my $arg = shift(@ARGV);
-	if ($arg eq "-e") {
-	    $expired = $RECORDHISTORY_EXPIRED;
-	}
-	else {
-	    usage();
-	}
+    my $optlist = "Fe";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
     }
-    
+    if (defined($options{"F"})) {
+	$force = 1;
+    }
+    if (defined($options{"e"})) {
+	$expired = $RECORDHISTORY_EXPIRED;
+    }
+    if (!$force) {
+	fatal("Refusing to do this, use the -F option if you really mean it");
+    }
     my $slice = $instance->GetGeniSlice();
     if (!defined($slice)) {
 	#
