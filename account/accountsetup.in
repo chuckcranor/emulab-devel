@@ -70,6 +70,7 @@ my $TB		      = "@prefix@";
 my $USERPATH          = "$TB/bin";
 my $WITHZFS	      = @WITHZFS@;
 my $ZFS_NOEXPORT      = @ZFS_NOEXPORT@;
+my $OPSVM_ENABLE      = @OPSVM_ENABLE@;
 my $OURDOMAIN         = "@OURDOMAIN@";
 my $ZFS_ROOT          = "@ZFS_ROOT@";
 my $ZFS_QUOTA_USER    = "@ZFS_QUOTA_USER@";
@@ -103,9 +104,13 @@ my $NOSUCHUSER  = 67;
 my $USEREXISTS  = 65;
 
 # We use flags to prevent deletion of certain dirs, on FreeBSD 10 or greater.
-if (`uname -r` =~ /^(\d+)\.(\d+)/) {
-    if ($1 >= 10) {
-	$USEFLAGS = 1;
+# Note that when OPSVM_ENABLE=1, the file systems are actually back over
+# on boss, so cannot do the chflags here. Hmm.
+if (!$OPSVM_ENABLE) {
+    if (`uname -r` =~ /^(\d+)\.(\d+)/) {
+	if ($1 >= 10) {
+	    $USEFLAGS = 1;
+	}
     }
 }
 
