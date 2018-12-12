@@ -1459,6 +1459,9 @@ $(function ()
     // Map client_id to node_id
     var clientid2nodeid = {};
 
+    // Imageable nodes in its own list.
+    var imageablenodes = {};
+
     // Remember passwords to show user later. 
     var nodePasswords = {};
 
@@ -1583,6 +1586,7 @@ $(function ()
 	"<tr id='listview-row'>" +
 	" <td name='client_id'>n/a</td>" +
 	" <td name='node_id'>n/a</td>" +
+	" <td name='status'>n/a</td>" +
 	" <td name='type'>n/a</td>" +
 	" <td name='image'>n/a</td>" +
 	" <td name='sshurl'>n/a</td>" +
@@ -1681,6 +1685,8 @@ $(function ()
 		var ssh    = "n/a";
 		var cons   = "n/a";
 		var isfw   = 0;
+		var node_id= null;
+		var hwtype = null;
 		var clone  = $(listview_row);
 		// Cause of nodes in the emulab namespace (vhost).
 		if (!login.length) {
@@ -1693,8 +1699,8 @@ $(function ()
 		clone.find(" [name=client_id]").html(node);
 		// And the node_id/type. This is an emulab extension.
 		if (vnode.length) {
-		    var node_id = $(vnode).attr("name");
-		    var hwtype  = $(vnode).attr("hardware_type");
+		    node_id = $(vnode).attr("name");
+		    hwtype  = $(vnode).attr("hardware_type");
 
 		    // Admins get a link to the shownode page.
 		    if (isadmin) {
@@ -1709,7 +1715,7 @@ $(function ()
 			clone.find(" [name=node_id]").html(node_id);
 		    }
 		    clone.find(" [name=type]").html(hwtype);
-		    clientid2nodeid[node] = $(vnode).attr("name");
+		    clientid2nodeid[node] = node_id;
 
 		    // Append to the CONFIRM button URL.
 		    if (_.contains(CONFIRMTYPES, hwtype)) {
@@ -1736,6 +1742,10 @@ $(function ()
 		if (stype.length &&
 		    $(stype).attr("name") === "firewall") {
 		    isfw = 1;
+		}
+		else if (node_id) {
+		    // All other named nodes are imageable
+		    imageablenodes[node] = node_id;
 		}
 		/*
 		 * Find the disk image (if any) for the node and display
@@ -1877,6 +1887,7 @@ $(function ()
 	    manifests = {};
 	    // Need to redo the lists.
 	    clientid2nodeid = {};
+	    imageablenodes  = {};
 	}
 	/*
 	 * If we have all the manifests then nothing to do.
@@ -2301,7 +2312,7 @@ $(function ()
 	 */
 	var html = "<option value=''>Please Select a Node</option>";
 		    
-	_.each(clientid2nodeid, function (node_id, client_id) {
+	_.each(imageablenodes, function (node_id, client_id) {
 	    html = html +
 		"<option value='" + client_id + "'>" +
 		client_id + " (" + node_id + ")" +
@@ -2309,11 +2320,11 @@ $(function ()
 	});
 	$('#snapshot_modal .choose-node select').html(html);
 
-	if (Object.keys(clientid2nodeid).length == 1) {
+	if (Object.keys(imageablenodes).length == 1) {
 	    // One node, stick that into the first sentence.
 	    var nodename = Object.keys(hostportList)[0];
 	    $('#snapshot_modal .one-node .node_id')
-		.html(nodename + " (" + clientid2nodeid[nodename] + ")");
+		.html(nodename + " (" + imageablenodes[nodename] + ")");
 	    $('#snapshot_modal .choose-node').addClass("hidden");
 	    $('#snapshot_modal .one-node.text-info').removeClass("hidden");
 	    // And select it in the options for later, but stays hidden.
@@ -2328,7 +2339,7 @@ $(function ()
 	 * If the user decides to create an image only, then lets try
 	 * to guide them to reasonable choice for the name to use. 
 	 */
-	if (Object.keys(clientid2nodeid).length == 1) {
+	if (Object.keys(imageablenodes).length == 1) {
 	    /*
 	     * If allowed to snapshot, then use the current profile name.
 	     * Otherwise might as well let them choose the name.
