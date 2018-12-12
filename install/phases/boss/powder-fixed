@@ -90,15 +90,17 @@ sub Install($$$)
 	    close(CN);
 	};
 
-	if (0) {
-	Phase "unifi5", "Installing unifi5 package", sub {
-	    DoneIfPackageInstalled("unifi", 0);
+	#
+	# Install and localize the telegraf configuration.
+	#
+	Phase "telegraf", "Installing telegraf package", sub {
+	    DoneIfPackageInstalled("telegraf", 0);
 	    # Oh, this is clever.
 	    $ENV{"ASSUME_ALWAYS_YES"} = "true";
-	    ExecQuietFatal("pkg install unifi5");
+	    ExecQuietFatal("pkg install telegraf");
 	};
-	}
 
+	# These are handy.
 	Phase "fstab", "Adding extras to $FSTAB", sub {
 	    DoneIfEdited($FSTAB);
 	    AppendToFileFatal($FSTAB,
