@@ -951,6 +951,9 @@ $(function ()
 		if (jacksID === undefined) {
 		    return;
 		}
+		$('#listview-row-' + node_id + ' td[name="status"]')
+		    .html(details.status);
+		
 		if (details.status == "ready") {
 		    // Greenish.
 		    $('#' + jacksID + ' .node .nodebox')
@@ -1051,14 +1054,13 @@ $(function ()
 		    }
 		}
 		html += "</tbody></table>";
-		UpdateNodePopover(jacksID, html);
-
+		UpdateNodePopover(node_id, jacksID, html);
 	    });
 	});
     }
 
     // Update the popover the node icon box
-    function UpdateNodePopover(jacksID, html)
+    function UpdateNodePopover(node_id, jacksID, html)
     {
 	if ($('#' + jacksID).data("bs.popover")) {
 	    $('#' + jacksID).data("bs.popover").options.content = html;
@@ -1081,6 +1083,30 @@ $(function ()
 			  "placement" : "auto",
 			 });
 	}
+	// And a popover on the listview page, using the same html.
+	var id = '#listview-row-' + node_id + ' td[name="status"]';
+	
+	if ($(id).data("bs.popover")) {
+	    $(id).data("bs.popover").options.content = html;
+
+	    var isVisible = $(id)
+		.data('bs.popover').tip().hasClass('in');
+	    
+	    if (isVisible) {
+		$(id)
+		    .data('bs.popover').tip()
+		    .find('.popover-content').html(html);
+	    }
+	}
+	else {
+	    $(id).popover({"content"   : html,
+			   "trigger"   : "hover",
+			   "html"      : true,
+			   "container" : "body",
+			   "placement" : "auto",
+			  });
+	    $(id).css('text-decoration', 'underline');
+	}
     }
 
     function deferAggregate(urn)
@@ -1099,7 +1125,7 @@ $(function ()
 		"to your experiment. We will continue trying to contact " +
 		"this node.";
 
-	    UpdateNodePopover(jacksID, html);
+	    UpdateNodePopover(node_id, jacksID, html);
 	});
     }
 
@@ -1118,7 +1144,7 @@ $(function ()
 		"This node is currently unreachable, operations on this " +
 		"node will fail until it becomes reachable again.";
 
-	    UpdateNodePopover(jacksID, html);
+	    UpdateNodePopover(node_id, jacksID, html);
 	});
     }
 
