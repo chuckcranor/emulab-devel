@@ -132,6 +132,7 @@ my $FSPROJROOT    = "@FSDIR_PROJ@";
 my $FSGROUPROOT   = "@FSDIR_GROUPS@";
 my $FSSCRATCHROOT = "@FSDIR_SCRATCH@";
 
+# These are duplicated in db/Project.pm.in ...
 # Project subdir list
 my @DIRLIST  = ("exp", "images", "logs", "deltas", "tarfiles", "rpms",
 		"groups", "tiplogs", "images/sigs", "templates");

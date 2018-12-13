@@ -25,10 +25,10 @@ package Project;
 
 use strict;
 use Exporter;
-use vars qw(@ISA @EXPORT);
+use vars qw(@ISA @EXPORT @PROJDIRECTORIES @GROUPDIRECTORIES);
 
 @ISA    = "Exporter";
-@EXPORT = qw ( );
+@EXPORT = qw ();
 
 use libdb;
 use libtestbed;
@@ -59,6 +59,11 @@ my $ZFS_NOEXPORT= @ZFS_NOEXPORT@;
 my $MAILMANSUPPORT = @MAILMANSUPPORT@;
 my $ADDPROJADMINLIST = "$TB/sbin/addprojadminlist";
 my $EXPORTS_SETUP    = "$TB/sbin/exports_setup";
+
+# These are duplicated in account/accountsetup.in ...
+@PROJDIRECTORIES  = ("exp", "images", "logs", "deltas", "tarfiles", "rpms",
+		     "groups", "tiplogs", "images/sigs", "templates");
+@GROUPDIRECTORIES = ("exp", "images", "logs", "tarfiles", "rpms", "tiplogs");
 
 # Cache of instances to avoid regenerating them.
 my %projects   = ();

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -57,6 +57,7 @@ my $BUGDBSUPPORT= @BUGDBSUPPORT@;
 my $OPSDBSUPPORT= @OPSDBSUPPORT@;
 my $TBBASE      = "@TBBASE@";
 my $TBWWW       = "@TBWWW@";
+my $OPSVM_ENABLE= @OPSVM_ENABLE@;
 my $WITHZFS     = @WITHZFS@;
 my $ZFS_NOEXPORT= @ZFS_NOEXPORT@;
 my $WITHAMD     = @WITHAMD@;
@@ -66,7 +67,6 @@ my $OPSDBCONTROL= "$TB/sbin/opsdb_control";
 my $GROUPADD    = "/usr/sbin/pw groupadd";
 my $ACCOUNTPROXY= "$TB/sbin/accountsetup";
 my $EXPORTSSETUP= "$TB/sbin/exports_setup";
-my @DIRLIST     = ("exp", "images", "logs", "tarfiles", "rpms", "tiplogs");
 my $SAVEUID     = $UID;
 
 # Locals
@@ -96,6 +96,7 @@ use libaudit;
 use libdb;
 use libtestbed;
 use User;
+use Project;
 use Group;
 use emutil;
 
@@ -272,10 +273,15 @@ if ($pid ne $gid) {
     if (! -e $groupdir) {
 	fatal("Could not access directory $groupdir");
     }
-    foreach my $dir (@DIRLIST) {
+    emutil::SetNoDelete("$groupdir")
+	if ($OPSVM_ENABLE);
+
+    foreach my $dir (@Project::GROUPDIRECTORIES) {
 	if (! -e "$groupdir/$dir") {
 	    fatal("Could not access directory $groupdir/$dir");
 	}
+	emutil::SetNoDelete("$groupdir/$dir")
+	    if ($OPSVM_ENABLE);
     }
 
     # Exotic features
@@ -293,6 +299,16 @@ if ($pid ne $gid) {
 		fatal("$OPSDBCONTROL addgroup $pid $gid failed!");
 	}
 	$EUID = 0;
+    }
+}
+elsif ($OPSVM_ENABLE) {
+    emutil::SetNoDelete("$projdir");
+    emutil::SetNoDelete("$GRPROOT/$pid");
+    # Also the symlink.
+    emutil::SetNoDelete("$GRPROOT/$pid/$pid");
+
+    foreach my $dir (@Project::PROJDIRECTORIES) {
+	emutil::SetNoDelete("$projdir/$dir");
     }
 }
 
