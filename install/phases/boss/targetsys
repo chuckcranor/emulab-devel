@@ -279,6 +279,10 @@ sub Install($$$)
 		if (-e "/usr/ports" && -d "/usr/ports");
 	    ExecQuietFatal("cd /usr; ln -sf testbed/ports .");
 	};
+	Phase "tests", "Removing /usr/tests directory", sub {
+	    ExecQuietFatal("/bin/rm -rf /usr/tests")
+		if (-e "/usr/tests" && -d "/usr/tests");
+	};
 
 	# Need to add a symlink. 
 	

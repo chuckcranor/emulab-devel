@@ -151,6 +151,11 @@ sub Install($$$)
 	    }
 	};
 
+	Phase "tests", "Removing /usr/tests directory", sub {
+	    ExecQuietFatal("/bin/rm -rf /usr/tests")
+		if (-e "/usr/tests" && -d "/usr/tests");
+	};
+
 	#
 	# Also grab the port source while close to the server.
 	#
@@ -169,7 +174,7 @@ sub Install($$$)
 	    ExecQuietFatal("cd /usr; ln -sf testbed/ports .");
 	};
 	}
-	
+
 	#
 	# Add named forwarders to resolv.conf to avoid failures
 	# during boot. 

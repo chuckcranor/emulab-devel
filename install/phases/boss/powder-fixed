@@ -70,6 +70,7 @@ sub Install($$$)
 	    }
 	    close(CN);
 	};
+	
 
 	Phase "targetconfig", "Reading in targetsys config variables", sub {
 	    PhaseFail("No config file")
@@ -181,6 +182,7 @@ sub Install($$$)
 	Phase "tracker", "Turning on image tracking", sub {
 	    ExecQuietFatal("$PREFIX/sbin/setsitevar ".
 			   "protogeni/use_imagetracker 1");
+	};
 	
 	#
 	# Add the nodes to the DB.
@@ -320,6 +322,14 @@ sub Install($$$)
 	Phase "reverse", "Creating $REVERSEFRAGMENT", sub {
 	    DoneIfExists($REVERSEFRAGMENT);
 	    CreateFileFatal($REVERSEFRAGMENT, @reverse_strings);
+	};
+	#
+	# The local fragment we just created above is not yet in the
+	# zone file, which means that when boss boots, there is no
+	# record for the local names. Just run named_setup ...
+	#
+	Phase "named_setup", "Running named_setup", sub {
+	    ExecQuietFatal($NAMED_SETUP);
 	};
 
 	#
