@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,38 +33,49 @@ RedirectSecure();
 # Verify page arguments.
 #
 $optargs = OptionalPageArguments("user",      PAGEARG_USER,
-				 "key",       PAGEARG_STRING);
+				 "key",       PAGEARG_STRING,
+                                 "reset",     PAGEARG_STRING);
 
 #
 # We use this page for both resetting a forgotten password, and for
 # a logged in user to change their password. We use the "key" argument
 # to tell us its a reset.
 #
-if (isset($key)) {
+if (isset($key) || isset($reset)) {
     if (!isset($user)) {
 	SPITUSERERROR("Missing user argument");
 	return;
     }
-    # Half the key in the URL.
-    $keyB = $key;
-    # We also need the other half of the key from the browser.
-    $keyA = (isset($_COOKIE[$TBAUTHCOOKIE]) ? $_COOKIE[$TBAUTHCOOKIE] : "");
+    if (isset($reset)) {
+        if ($reset == "" || !preg_match("/^[\w]+$/", $reset)) {
+            SPITUSERERROR("Invalid reset hash in request");
+            return;
+        }
+        # The complete key.
+        $key = $reset;
+    }
+    else {
+        # Half the key in the URL.
+        $keyB = $key;
+        # We also need the other half of the key from the browser.
+        $keyA = (isset($_COOKIE[$TBAUTHCOOKIE]) ? $_COOKIE[$TBAUTHCOOKIE] : "");
 
-    # If the browser part is missing, direct user to answer
-    if ((isset($keyB) && $keyB != "") && (!isset($keyA) || $keyA == "")) {
-	SPITUSERERROR("Oops, not able to proceed!<br>".
-		      "Please read this ".
-		      "<a href='$WIKIDOCURL/kb69'>Knowledge Base Entry</a> ".
-		      "to see what the likely cause is.", 1);
-	return;
+        # If the browser part is missing, direct user to answer
+        if ((isset($keyB) && $keyB != "") && (!isset($keyA) || $keyA == "")) {
+            SPITUSERERROR("Oops, not able to proceed!<br>".
+                          "Please read this ".
+                          "<a href='$WIKIDOCURL/kb69'>Knowledge Base Entry</a>".
+                          "to see what the likely cause is.", 1);
+            return;
+        }
+        if (!isset($keyA) || $keyA == "" || !preg_match("/^[\w]+$/", $keyA) ||
+            !isset($keyB) || $keyB == "" || !preg_match("/^[\w]+$/", $keyB)) {
+            SPITUSERERROR("Invalid keys in request");
+            return;
+        }
+        # The complete key.
+        $key = $keyA . $keyB;
     }
-    if (!isset($keyA) || $keyA == "" || !preg_match("/^[\w]+$/", $keyA) ||
-	!isset($keyB) || $keyB == "" || !preg_match("/^[\w]+$/", $keyB)) {
-	SPITUSERERROR("Invalid keys in request");
-	return;
-    }
-    # The complete key.
-    $key = $keyA . $keyB;
 
     if (!$user->chpasswd_key() || !$user->chpasswd_expires()) {
 	SPITUSERERROR("Why are you here?");

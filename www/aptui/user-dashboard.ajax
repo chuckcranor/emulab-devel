@@ -415,6 +415,56 @@ function Do_FreezeOrThaw()
     SPITAJAX_RESPONSE(1);
 }
 
+#
+# Send a reset password link, no cookie required.
+#
+function Do_SendPasswordReset()
+{
+    global $this_user, $target_user;
+    global $ajax_args, $APTBASE, $APTMAIL, $TBMAIL_WWW, $TBMAIL_AUDIT;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+        return;
+    }
+    if ($target_user->status() != TBDB_USERSTATUS_ACTIVE &&
+        $target_user->status() != TBDB_USERSTATUS_FROZEN) {
+	SPITAJAX_ERROR(-1, "User is not active or frozen!");
+        return;
+    }
+    $target_idx  = $target_user->uid_idx();
+    $target_uid  = $target_user->uid();
+    $target_name = $target_user->name();
+    $target_email= $target_user->email();
+
+    #
+    # Generate a random key and send the user an email message with a URL
+    # that will allow them to change their password. 
+    #
+    $key = GENHASH();
+    $target_user->SetChangePassword($key, "UNIX_TIMESTAMP(now())+(60*10)");
+
+    TBMAIL("$target_name <$target_email>",
+           "Password reset for '$target_uid'",
+           "\n".
+           "Here is your password reset authorization URL. Click on this\n".
+           "link within the next 10 minutes, and you will be allowed to\n".
+           "reset your password.\n".
+           "\n".
+           "    ${APTBASE}/changepswd.php?user=$target_uid&reset=$key\n".
+           "\n".
+           "\n".
+           "Thanks!\n",
+           "From: $APTMAIL\n".
+           "Bcc: $TBMAIL_AUDIT\n".
+           "Errors-To: $TBMAIL_WWW");
+
+    SPITAJAX_RESPONSE(1);
+}
+
 function Do_SendTestMessage()
 {
     global $this_user, $target_user;

@@ -73,6 +73,9 @@ $(function ()
 	$('#sendtestmessage').click(function () {
 	    SendTestMessage();
 	});
+	$('#sendpasswordreset').click(function () {
+	    SendPasswordReset();
+	});
     }
 
     function LoadUsage()
@@ -673,6 +676,22 @@ $(function ()
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "user-dashboard", "SendTestMessage",
+					    {"uid" : window.TARGET_USER});
+	xmlthing.done(callback);
+    }
+
+    function SendPasswordReset()
+    {
+	var callback = function(json) {
+	    if (json.code) {
+		alert("Password reset could not be sent!");
+		return;
+	    }
+	    alert("Password reset has has been sent");
+	}
+	var xmlthing = sup.CallServerMethod(null,
+					    "user-dashboard",
+					    "SendPasswordReset",
 					    {"uid" : window.TARGET_USER});
 	xmlthing.done(callback);
     }

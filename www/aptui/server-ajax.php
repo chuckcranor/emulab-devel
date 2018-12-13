@@ -282,6 +282,8 @@ $routing = array("geni-login" =>
                                                      "Do_FreezeOrThaw",
                                                  "SendTestMessage" =>
                                                      "Do_SendTestMessage",
+                                                 "SendPasswordReset" =>
+                                                     "Do_SendPasswordReset",
                                                  "NagPI" =>
                                                      "Do_NagPI",
                                                  "AccountDetails" =>
