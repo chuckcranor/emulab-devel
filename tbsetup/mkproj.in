@@ -350,7 +350,6 @@ foreach my $dir (@Project::PROJDIRECTORIES) {
     if (! -e "$PROJROOT/$pid/$dir") {
 	fatal("Could not access directory $PROJROOT/$pid/$dir");
     }
-    emutil::SetNoDelete("$PROJROOT/$pid/$dir");
 }
 
 if (! -e "$GRPROOT/$pid") {
