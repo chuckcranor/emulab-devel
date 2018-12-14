@@ -87,9 +87,11 @@ my $SLACKURL         = "$SLACK/T0D79QFGC/B9V105D99/kTE1wzm0binEIsBsQFuCkqfK";
 # at some point.
 #
 my %mothershipnodes = (
-    "emulab.net"          => ["dbox1", "dbox2"],
-    "apt.emulab.net"      => ["dbox2"],
-    "utah.cloudlab.us"    => ["dbox1"],
+    "emulab.net"          => ["dbox1", "dbox2",
+			      "subboss", "subboss2", "subboss3",
+			      "tipserv3", "tipserv4", "tipserv5", "tipserv6"],
+    "apt.emulab.net"      => ["dbox2", "subboss"],
+    "utah.cloudlab.us"    => ["dbox1", "subboss"],
     "wisc.cloudlab.us"    => ["dbox"],
     "clemson.cloudlab.us" => ["dbox"],
 );
