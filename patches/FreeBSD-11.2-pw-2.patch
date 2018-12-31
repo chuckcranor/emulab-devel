@@ -1,7 +1,7 @@
 #
 # Incorporate a Utah change to pw_user to not make so many group file writes.
 #
-# cd /usr/src
+# cd /usr/src/usr.sbin
 # sudo patch -p0 < patchfile
 #
 
