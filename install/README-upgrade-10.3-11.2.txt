@@ -80,7 +80,10 @@ A. Things to do in advance of shutting down Emulab.
 
      sudo -E EDITOR=emacs freebsd-update -r 11.2-RELEASE upgrade
 
-   instead. Otherwise you will probably wind up with vi.
+   instead. Otherwise you will probably wind up with vi. If you forget,
+   you can always temporarily (or permanently!) replace /usr/bin/vi with
+   /usr/local/bin/emacs when it first prompts you to manually handle
+   a merge.
 
    It will crunch for a long time and then probably want you to merge
    some conflicts. Here are a couple to take note of:
@@ -106,6 +109,9 @@ A. Things to do in advance of shutting down Emulab.
    will be adding, deleting, etc. It uses "more" to display them, so you
    can 'q' out of those without dumping out of the update entirely (the
    last one will exit the update, but that is because it is done).
+
+   Do NOT do the install as it suggested at the end. We will get there
+   in step B3 below. There are some other things that might need doing first.
 
 3. (Optional) Upgrade your custom kernel
    If you have a custom kernel config, then you should build and install
@@ -328,8 +334,10 @@ C. Updating ports/packages
    ipmitool install with the "emulab-ipmitool-old-1.8.15_1" package from
    the emulab repository:
 
+     sudo pkg unlock ipmitool
      sudo pkg delete ipmitool
      sudo pkg install -r Emulab emulab-ipmitool-old
+     sudo pkg lock ipmitool
 
    But ONLY do this if you have Moonshot chassis.
 
@@ -424,7 +432,7 @@ E. Update Emulab software
 
 3. Re-enable the testbed on boss.
 
-   sudo /usr/local/etc/rc.d/apache22 start
+   sudo /usr/local/etc/rc.d/apache24 start
    sudo /usr/local/etc/rc.d/2.dhcpd.sh start
    sudo /usr/testbed/sbin/testbed-control boot
 
