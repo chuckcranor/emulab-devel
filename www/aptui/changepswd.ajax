@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -85,6 +85,7 @@ function Do_ChangePassword()
     global $this_user, $target_user;
     global $TBMAINSITE, $ELABINELAB;
     global $ajax_args;
+    $errors = array();
     
     if (CheckPageArgs() < 0) {
         return;
