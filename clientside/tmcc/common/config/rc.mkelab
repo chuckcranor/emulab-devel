@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2018 University of Utah and the Flux Group.
+# Copyright (c) 2004-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -519,7 +519,8 @@ sub doboot()
 	if ($emulabconfig{"ROLE"} eq "fs") {
 	    SetupFatal("Do not support ZFS in standalone FS yet.");
 	}
-	if ($emulabconfig{"ROLE"} eq "ops+fs" &&
+	if (($emulabconfig{"ROLE"} eq "ops+fs" ||
+	     $emulabconfig{"ROLE"} eq "boss+fs") &&
 	    (! -x $ZPOOLCMD || system("kldload -n zfs.ko"))) {
 	    SetupFatal("Image does not support ZFS.");
 	}
@@ -2056,6 +2057,7 @@ sub SetupBossNode($)
     my ($isfs) = @_;
     my $FSDIR = "";
     my $opsvm = $emulabconfig{"CONFIG_OPSVM"};
+    my $usezfs = $emulabconfig{"CONFIG_ZFS"};
     my $shareslice;
 
     my $fromscratch =
@@ -2071,7 +2073,22 @@ sub SetupBossNode($)
     #
     if ($opsvm) {
 	RecreateDir($TBDIR, 1);
-	if ($isfs) {
+	if ($isfs && $usezfs) {
+	    $FSDIR = $FSMOUNTDIR;
+	    my $tbdev = FindExtraFSConfig($TBDIR);
+	    my $fsdev = FindExtraFSConfig($FSDIR);
+
+	    if (! ($tbdev && $fsdev)) {
+		SetupFatal("Must defined EXTRADISKS for $TBDIR and $FSDIR");
+	    }
+	    mysystem("$BINDIR/mkextrafs.pl -s 0 -r $tbdev -f $TBDIR");
+
+	    RecreateDir($FSDIR, 0);
+	    if (system("$ZPOOLCMD create -f -m none $ZFSPOOL /dev/$fsdev")) {
+		SetupFatal("Could not create ZFS zpool on /dev/$fsdev.");
+	    }
+	}
+	elsif ($isfs) {
 	    $FSDIR = $FSMOUNTDIR;
 	    my $qslice;
 	    
@@ -2510,22 +2527,35 @@ sub SetupBossNode($)
     RecreateDir("/groups", 0);
     RecreateDir("/share", 0);
 
-    mysystem("mkdir $FSDIR/users $FSDIR/proj $FSDIR/groups $FSDIR/share");
     if ($isfs) {
-	mysystem("ln -s $FSDIR/users /users");
-	mysystem("ln -s $FSDIR/proj /proj");
-	mysystem("ln -s $FSDIR/groups /groups");
-
-	#
-	# Setup /share. If ops is a VM on boss, we are out of partitions.
-	#
-	if ($opsvm) {
-	    mysystem("ln -s $FSDIR/share /share");
+	if ($usezfs) {
+	    my $zo = "-o setuid=off -o jailed=on ";
+	    my @mpoints = ("users", "proj", "groups", "share");
+	    push(@mpoints, "scratch")
+		if ($emulabconfig{"CONFIG_SCRATCHFS"});
+	    foreach my $m (@mpoints) {
+		mysystem("$ZFSCMD create $zo -u -o mountpoint=/$m $ZFSPOOL/$m");
+	    }
 	}
 	else {
-	    mysystem("mount $shareslice $FSDIR/share");
-	    mysystem("echo \"$shareslice $FSDIR/share ufs rw 0 2\" >> /etc/fstab");
-	    mysystem("ln -s $FSDIR/share /share");
+	    mysystem("mkdir $FSDIR/users $FSDIR/proj ".
+		     "$FSDIR/groups $FSDIR/share");
+	
+	    mysystem("ln -s $FSDIR/users /users");
+	    mysystem("ln -s $FSDIR/proj /proj");
+	    mysystem("ln -s $FSDIR/groups /groups");
+
+	    #
+	    # Setup /share. If ops is a VM on boss, we are out of partitions.
+	    #
+	    if ($opsvm) {
+		mysystem("ln -s $FSDIR/share /share");
+	    }
+	    else {
+		mysystem("mount $shareslice $FSDIR/share");
+		mysystem("echo \"$shareslice $FSDIR/share ufs rw 0 2\" >> /etc/fstab");
+		mysystem("ln -s $FSDIR/share /share");
+	    }
 	}
     }
 
@@ -2535,7 +2565,7 @@ sub SetupBossNode($)
     if ($emulabconfig{"CONFIG_SCRATCHFS"}) {
 	RecreateDir("/scratch", 0);
 	mysystem("mkdir $FSDIR/scratch");
-	if ($isfs) {
+	if ($isfs && !$usezfs) {
 	    mysystem("ln -s $FSDIR/scratch /scratch");
 	}
     }
@@ -2586,9 +2616,7 @@ sub SetupBossNode($)
     } else {
 	print RC "xntpd_enable=\"YES\"\n";
     }
-
     print RC "accounting_enable=\"YES\"\n";
-
     print RC "nfs_client_enable=\"YES\"\n";
 
     #
@@ -2905,6 +2933,7 @@ sub SetupBossNode($)
 sub CreateOpsJail($)
 {
     my ($isfs) = @_;
+    my $usezfs = $emulabconfig{"CONFIG_ZFS"};
 
     #
     # We need to frisbee over the image into slice 2.
@@ -2930,17 +2959,25 @@ sub CreateOpsJail($)
     # These need to be available from inside the jail when the FSNODE
     # is boss and not another physical node.
     if ($isfs) {
-	foreach my $dir ("/users", "/proj", "/share", "/groups") {
-	    mysystem("mkdir $OPSMOUNTDIR/$dir")
-		if (! -e "$OPSMOUNTDIR/$dir");
+	my @dirs = ("/users", "/proj", "/share", "/groups");
+	
+	if ($usezfs) {
+	    foreach my $dir (@dirs) {
+		mysystem("ln -s /ops/$dir /$dir");
+	    }
 	}
-	foreach my $l ("/q/groups\t${OPSMOUNTDIR}/groups\tnullfs\trw\t0\t0",
-		       "/q/users\t${OPSMOUNTDIR}/users\tnullfs\trw\t0\t0",
-		       "/q/proj\t${OPSMOUNTDIR}/proj\tnullfs\trw\t0\t0",
-		       "/share\t${OPSMOUNTDIR}/share\tnullfs\trw\t0\t0") {
-	    mysystem("echo \"${l}\" >> /etc/fstab");
+	else {
+	    foreach my $dir (@dirs) {
+		mysystem("mkdir $OPSMOUNTDIR/$dir")
+		    if (! -e "$OPSMOUNTDIR/$dir");
+
+		my $fstabline =
+		    "$/q/${dir}\t${OPSMOUNTDIR}/${dir}\tnullfs\trw\t0\t0";
+		    
+		mysystem("echo \"${fstabline}\" >> /etc/fstab");
+	    }
+	    mysystem("mount -a -t nullfs");
 	}
-	mysystem("mount -a -t nullfs");
     }
 
     # Need the package dir inside the jail.
@@ -2966,12 +3003,35 @@ sub CreateOpsJail($)
 
     print RC "# Ops Jail\n";
     print RC "jail_enable=\"YES\"\n";
-    print RC "jail_list=\"ops\"\n";
-    print RC "jail_ops_flags=\"\"\n";
-    print RC "jail_ops_rootdir=\"/ops\"\n";
-    print RC "jail_ops_interface=\"$outer_controlif\"\n";
-    print RC "jail_procfs_enable=\"YES\"\n";
-    print RC "jail_devfs_enable=\"YES\"\n";
+
+    open(CONF, ">/etc/jail.conf") or
+	SetupFatal("Could not open /etc/jail.conf for writing: $!");
+    print CONF "ops {\n";
+    print CONF "       path = \"/ops\";\n";
+    print CONF "       interface = \"${outer_controlif}\";\n";
+    print CONF "       allow.mount.procfs = 1;\n";
+    print CONF "       allow.mount.devfs = 1;\n";
+    print CONF "       mount.devfs;\n";
+    print CONF "       mount.procfs;\n";
+    print CONF "       allow.set_hostname = 0;\n";
+    print CONF "       allow.sysvipc = 0;\n";
+    print CONF "       allow.raw_sockets = 1;\n";
+    print CONF "       exec.clean;\n";
+    print CONF "       exec.system_user = \"root\";\n";
+    print CONF "       exec.jail_user = \"root\";\n";
+    print CONF "       exec.start += \"/bin/sh /etc/rc\";\n";
+    print CONF "       exec.stop = \"/bin/sh /etc/rc.shutdown\";\n";
+    print CONF "       exec.consolelog = \"/var/log/jail_ops_console.log\";\n";
+    if ($usezfs) {
+	print CONF "        enforce_statfs = 0;\n";
+	print CONF "        allow.mount = 1;\n";
+	print CONF "        allow.mount.zfs = 1;\n";
+	print CONF "        exec.poststart = \"zfs jail ops emulab/proj;".
+	    "zfs jail ops emulab/users;zfs jail ops emulab/groups;".
+	    "zfs jail ops emulab/share;jexec ops zfs mount -a\";\n";
+	
+	print RC "kld_list=\"zfs.ko\"\n";
+    }
     if ($emulabconfig{"CONFIG_TARGETSYS"} &&
 	exists($emulabconfig{"TARGETSYS_OPSIP"}) &&
 	$emulabconfig{"CONFIG_SINGLECNET"}) {
@@ -2981,10 +3041,9 @@ sub CreateOpsJail($)
 	if (!isRoutable($TARGETSYS_OPSIP)) {
 	    $NETMASK = $emulabconfig{"TARGETSYS_NETMASK"};
 	}
-	print RC "jail_ops_ip=\"${TARGETSYS_OPSIP}/$NETMASK\"\n";
-	print RC "jail_ops_hostname=\"" . "ops" . "." .
-	    $TARGETSYS_DOMAIN . "\"\n";
-	print RC "jail_ops_socket_unixiproute_only=\"NO\"\n";	
+	print CONF "     ip4.addr = \"${TARGETSYS_OPSIP}/$NETMASK\";\n";
+	print CONF "     host.hostname = \"" . "ops" . "." .
+	    $TARGETSYS_DOMAIN . "\";\n";
 	
 	if (!isRoutable($TARGETSYS_OPSIP)) {
 	    print RC "pf_enable=\"YES\"\n";
@@ -3009,10 +3068,29 @@ sub CreateOpsJail($)
 	}
     }
     else {
-	print RC "jail_ops_ip=\"${opsip}/32\"\n";
-	print RC "jail_ops_hostname=\"$opsnode\"\n";
+	print CONF "     ip4.addr=\"${opsip}/32\";\n";
+	print CONF "     host.hostname=\"$opsnode\";\n";
     }
+
+    print CONF "}\n\n";
+    close(CONF);
     close(RC);
+
+    if ($usezfs) {
+	open(SYSCTL, ">>/etc/sysctl.conf") or
+	    SetupFatal("Could not open /etc/sysctl.conf for writing: $!");
+
+	print SYSCTL "security.jail.mount_allowed=1\n";
+	print SYSCTL "security.jail.mount_devfs_allowed=1\n";
+	print SYSCTL "security.jail.mount_zfs_allowed=1\n";
+	print SYSCTL "security.jail.enforce_statfs=0\n";
+	close(SYSCTL);
+
+	system("sysctl security.jail.mount_allowed=1 >/dev/null 2>&1");
+	system("sysctl security.jail.mount_devfs_allowed=1 >/dev/null 2>&1");
+	system("sysctl security.jail.mount_zfs_allowed=1 >/dev/null 2>&1");
+	system("sysctl security.jail.enforce_statfs=0 >/dev/null 2>&1");
+    }
 
     # fstab inside the jail has to be empty.
     mysystem("cp /dev/null $OPSMOUNTDIR/etc/fstab");
@@ -3063,6 +3141,9 @@ sub CreateOpsJail($)
     print RC "nfs_server_enable=\"NO\"\n";
     print RC "ntpd_enable=\"NO\"\n";
     print RC "background_fsck=\"NO\"\n";
+    if ($isfs && $usezfs) {
+	print RC "zfs_enable=\"YES\"\n";
+    }
     close(RC);
 
     if ($startpf) {
@@ -3372,7 +3453,7 @@ sub CreateDefsFile($)
     my $opsvm = $emulabconfig{"CONFIG_OPSVM"};
     my $usezfs = $emulabconfig{"CONFIG_ZFS"};
     my $useautofs = $emulabconfig{"CONFIG_AUTOFS"};
-    my $mntprefix = ($usezfs ? "" : $FSMOUNTDIR);
+    my $mntprefix = ($usezfs ? ($opsvm ? "/ops" :  "") : $FSMOUNTDIR);
     
     print "Creating defs file from stub defs file\n";
     
