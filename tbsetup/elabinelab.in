@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2018 University of Utah and the Flux Group.
+# Copyright (c) 2004-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -691,7 +691,7 @@ sub DumpDBGoo()
 	    "    Could not chmod $statedir\n");
 
     if (exists($elabinelab_attributes->{'CONFIG_ADMINUSERS'}) &&
-	$elabinelab_attributes->{'CONFIG_ADMINUSERS'}) {
+	$elabinelab_attributes->{'CONFIG_ADMINUSERS'} != 0) {
 
 	# XXX Yes, bad. But we have a bunch of users with admin bit set
 	# that should not.
