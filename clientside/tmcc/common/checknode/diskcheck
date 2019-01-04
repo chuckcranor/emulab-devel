@@ -569,7 +569,7 @@ getwcache() {
 		res="enabled"
 	    elif [ "${x/0}" != "$x" ] ; then
 		res="disabled"
-		printf " %s:%s\n"  "Setting WCE" "$sd" >> ${logfile4tb}
+#		printf " %s:%s\n"  "Setting WCE" "$sd" >> ${logfile4tb}
 		/usr/local/etc/emulab/camwce -P on $sd  > /dev/null 2>&1
 	    fi
 	fi
