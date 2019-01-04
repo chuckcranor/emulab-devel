@@ -1052,7 +1052,12 @@ sub get_commits($$$) {
     # two revisions we were given.
     #
     if ($ct eq $CT_UPDATE) {
-	my $revstring = "$oldrev..$newrev";
+	my $revstring;
+	if ($oldrev eq $newrev) {
+	    $revstring = $newrev;
+	} else {
+	    $revstring = "$oldrev..$newrev";
+	}
 
 	debug("running '$GIT rev-list --reverse --date-order '$revstring'");
 	my @revs = `$GIT rev-list --reverse --date-order '$revstring'`;
