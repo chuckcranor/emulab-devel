@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1749,13 +1749,13 @@ sub GetTicketAuxAux($)
 			"default_osid defined for it.\n";
 		}
 		else {
-		    my $default_osinfo = OSImage->Lookup($default_osid);
-		    if (!defined($default_osinfo)) {
+		    $osinfo = OSImage->Lookup($default_osid);
+		    if (!defined($osinfo)) {
 			print STDERR "Blackbox node type $pctype but cannot ".
 			    "lookup default_osid defined for it.\n";
 		    }
 		    else {
-			$osname = $default_osinfo->osname()
+			$osname = $osinfo->osname()
 		    }
 		}
 		if (!defined($osname)) {
@@ -1783,9 +1783,9 @@ sub GetTicketAuxAux($)
 	#
 	if (defined($node) && !defined($osname) && !$isbridge && !$isvhost) {
 	    if (defined($node->default_osid())) {
-		my $default_osinfo = OSImage->Lookup($node->default_osid());
-		$osname = $default_osinfo->osname()
-		    if (defined($default_osinfo));
+		$osinfo = OSImage->Lookup($node->default_osid());
+		$osname = $osinfo->osname()
+		    if (defined($osinfo));
 	    }
 	}
 	# The slot does not like to be NULL.
@@ -2009,19 +2009,29 @@ sub GetTicketAuxAux($)
 	    # We cannot depend on NFS anymore, so package the startfile
 	    # into a little tarball and add to the tarfiles list.
 	    #
-	    system("$TAR cf $tarfile -C $userdir $startname");
-	    if ($?) {
-		$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-		    "Could not create startup tarfile for $node_nickname");
-		goto bad;
-	    }
-	    if (exists($nodeblob->{'tarfiles'})) {
-		$nodeblob->{'tarfiles'} .= ";/var/tmp $tarfile";
+	    # OK, a tainted disk image is not allowed to download tarballs
+	    # at least until the client side is fixed (perhaps to make root
+	    # unpacking an option). So if tainted we have to use NFS.
+	    #
+	    if (defined($osinfo) &&
+		!$osinfo->isImageAlias() && $osinfo->IsTainted()) {
+		$nodeblob->{'startupcmd'} = "$startfile";
 	    }
 	    else {
-		$nodeblob->{'tarfiles'} = "/var/tmp $tarfile";
+		system("$TAR cf $tarfile -C $userdir $startname");
+		if ($?) {
+		    $response = GeniResponse->Create(GENIRESPONSE_ERROR,undef,
+  		      "Could not create startup tarfile for $node_nickname");
+		    goto bad;
+		}
+		if (exists($nodeblob->{'tarfiles'})) {
+		    $nodeblob->{'tarfiles'} .= ";/var/tmp $tarfile";
+		}
+		else {
+		    $nodeblob->{'tarfiles'} = "/var/tmp $tarfile";
+		}
+		$nodeblob->{'startupcmd'} = "/var/tmp/$startname";
 	    }
-	    $nodeblob->{'startupcmd'} = "/var/tmp/$startname";
 	}
 
 	my $elabsettings = GeniXML::GetElabInElabSettings($ref);
