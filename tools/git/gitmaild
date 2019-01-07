@@ -116,7 +116,8 @@ if ($TOKEN eq "") {
 # secure enough to be open to the world
 #
 my $listen_socket = HTTP::Daemon->new(LocalAddr => 'localhost',
-                                      LocalPort => $PORT) || die;
+                                      LocalPort => $PORT,
+                                      ReuseAddr => 1) || die;
 print "gitmaild running at: ", $listen_socket->url, "\n";
 
 # This causes children to be auto-reaped
