@@ -160,6 +160,7 @@ function REQUIRE_IMAGE()
 
 function REQUIRE_JACKS()
 {
+  REQUIRE_JACKSMOD();
   AddLibrary("https://www.emulab.net/protogeni/jacks-utah/js/jacks.js");
 }
 
