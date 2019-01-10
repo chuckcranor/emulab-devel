@@ -68,7 +68,8 @@ namespace eval TBCOMPAT {
     set elabinelab_maxpcs 0
     set elabinelab_hardware("boss") d710-vm
     set elabinelab_hardware("ops") d710-vm
-    set elabinelab_nodeos("boss") FBSD103-64-STD
-    set elabinelab_nodeos("ops") FBSD103-64-STD
+    set elabinelab_nodeos("boss") FBSD112-64-STD
+    set elabinelab_nodeos("ops") FBSD112-64-STD
+    set elabinelab_nodeos("xenhost") XEN49-64-STD
 }
 $ns run
