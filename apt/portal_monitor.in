@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -90,7 +90,7 @@ my %mothershipnodes = (
     "emulab.net"          => ["dbox1", "dbox2",
 			      "subboss", "subboss2", "subboss3",
 			      "tipserv3", "tipserv4", "tipserv5", "tipserv6"],
-    "apt.emulab.net"      => ["dbox2", "subboss"],
+    "apt.emulab.net"      => ["subboss"],
     "utah.cloudlab.us"    => ["dbox1", "subboss"],
     "wisc.cloudlab.us"    => ["dbox"],
     "clemson.cloudlab.us" => ["dbox"],
