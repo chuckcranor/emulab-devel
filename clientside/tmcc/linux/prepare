@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -433,6 +433,12 @@ system("rm -rf $RUNDIR/*.pid $RUNDIR/sudo/* $RUNDIR/pump.sock");
 
 print "Clearing out /tmp ...\n";
 system("rm -rf /tmp/* /tmp/.??*");
+
+my $GITREPO = "/local/repository";
+if (-e $GITREPO) {
+    print "Removing $GITREPO ...\n";
+    system("rm -rf $GITREPO");
+}
 
 print "Cleaning out /local/logs ...\n";
 system("rm -rf /local/logs/* /local/logs/.??*");
