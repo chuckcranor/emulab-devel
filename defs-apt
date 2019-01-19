@@ -157,6 +157,16 @@ ZFS_QUOTA_GROUP="10G"
 WITHAMD=0
 AMD_ROOT=/.amd_mnt/ops
 
+#
+# We have enough filesystems and enough nodes that we need to optimize --mike
+#
+# Note that when you turn on ZFS_NOEXPORT, you need to set the ZFS "sharenfs"
+# attribute to "off" for the root of the users/proj/groups filesystems,
+# otherwise filesystems will be exported twice.
+#
+ZFS_NOEXPORT=1
+INCREMENTAL_MOUNTD=1
+
 # Blockstores
 BS_IQN_PREFIX=iqn.2014-05.net.emulab.apt
 
