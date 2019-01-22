@@ -457,6 +457,9 @@ sub ProcessResults($)
 	    $status{$urn}->{'alive'} = "up";
 	    $status{$urn}->{'stamp'} = undef;
 	}
+	if ($status{$urn}->{'alive'} eq "up") {
+	    $aggregate->last_success(time());
+	}
 	#
 	# Check the nodes associated this aggregate.
 	#
