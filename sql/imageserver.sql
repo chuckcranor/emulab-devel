@@ -62,7 +62,7 @@ CREATE TABLE `image_versions` (
   `lba_high` bigint(20) unsigned NOT NULL default '0',
   `lba_size` int(10) unsigned NOT NULL default '512',
   `mbr_version` varchar(50) NOT NULL default '1',
-  `arch` enum ('i386','x86_64','aarch64') NOT NULL default 'x86_64',
+  `arch` enum ('i386','x86_64','aarch64','ppc64le') NOT NULL default 'x86_64',
   `visibility` enum ('project','public') NOT NULL default 'public',
   `virtualizaton` enum ('raw-pc','emulab-xen','emulab-docker') NOT NULL default 'raw-pc',
   `osfeatures` text default NULL,

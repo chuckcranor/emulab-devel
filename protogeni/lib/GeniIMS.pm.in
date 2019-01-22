@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -344,7 +344,7 @@ sub VerifyBlob($)
     }
     return GeniResponse->MalformedArgsResponse("Illegal arch")
 	if (!$blob->{'isdataset'} &&
-	    $blob->{'arch'} !~ /^(i386|x86_64|aarch64)$/);
+	    $blob->{'arch'} !~ /^(i386|x86_64|aarch64|ppc64le)$/);
     return GeniResponse->MalformedArgsResponse("Illegal virtualization")
 	if (!$blob->{'isdataset'} &&
 	    $blob->{'virtualizaton'} !~ /^(raw-pc|emulab-xen|emulab-docker)$/);
@@ -627,7 +627,7 @@ sub NewImage($)
 	    $types_known_working{$type} = $type;
 	}
 	# Until we have image testing.
-	if ($blob->{'arch'} ne "aarch64") {
+	if ($blob->{'arch'} eq "x86_64") {
 	    foreach my $type (@X86TYPES) {
 		$types_known_working{$type} = $type;
 	    }
@@ -799,6 +799,7 @@ sub GetImageInfo($)
 		    "isdataset"      => $row->{'isdataset'},
 		    "isversioned"    => $row->{'isversioned'},
 		    "issystem"       => $row->{'issystem'},
+		    "visibility"     => $row->{'visibility'},
 		    "project_urn"    => $row->{'project_urn'},
 	};
 	#
