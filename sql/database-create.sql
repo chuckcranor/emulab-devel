@@ -135,6 +135,7 @@ CREATE TABLE `apt_aggregates` (
   `disabled` tinyint(1) NOT NULL default '0',
   `noupdate` tinyint(1) NOT NULL default '0',
   `nomonitor` tinyint(1) NOT NULL default '0',
+  `nolocalimages` tinyint(1) NOT NULL default '0',
   `deferrable` tinyint(1) NOT NULL default '0',
   `updated` datetime NOT NULL default '0000-00-00 00:00:00',
   `weburl` tinytext,
@@ -2580,6 +2581,28 @@ CREATE TABLE `image_history` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `image_incoming_relocations`
+--
+
+DROP TABLE IF EXISTS `image_incoming_relocations`;
+CREATE TABLE `image_incoming_relocations` (
+  `imagename` varchar(30) NOT NULL default '',
+  `uid` varchar(8) NOT NULL DEFAULT '',
+  `uid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0',
+  `pid` varchar(48) NOT NULL default '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `gid` varchar(32) NOT NULL default '',
+  `gid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `remote_urn` varchar(128) default NULL,
+  `metadata_url` int(8) unsigned NOT NULL default '0',
+  `created` varchar(8) default NULL,
+  `locked` datetime default NULL,
+  PRIMARY KEY  (`pid_idx`,`imagename`),
+  UNIQUE KEY `remote_urn`  (`remote_urn`),
+  UNIQUE KEY  `metadata_url` (`metadata_url`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `image_notifications`
 --
 
@@ -2674,7 +2697,7 @@ CREATE TABLE `image_versions` (
   `origin_neednotify` tinyint(1) NOT NULL default '0',
   `origin_needupdate` tinyint(1) NOT NULL default '0',
   `authority_urn` varchar(128) default NULL,
-  `credential_string` text,
+  `credential_string_save` text,
   `logfileid` varchar(40) default NULL,
   `noexport` tinyint(1) NOT NULL default '0',
   `noclone` tinyint(1) NOT NULL default '0',
@@ -2733,6 +2756,8 @@ CREATE TABLE `images` (
   `nodelta` tinyint(1) NOT NULL default '0',
   `noversioning` tinyint(1) NOT NULL default '0',
   `metadata_url` tinytext,
+  `relocate_urn` tinytext,
+  `credential_string` text,
   `locked` datetime default NULL,
   `locker_pid` int(11) default '0',
   PRIMARY KEY  (`imageid`),
