@@ -3865,7 +3865,7 @@ sub CreateDefsFile($)
 	    print OUTDEFS "PROTOGENI_LOCALUSER=1\n";
 	}
 	# Stand alone 
-	if (!( $emulabconfig{"CONFIG_TARGETSYS"} eq "GENIRACK" ||
+	if (!( $emulabconfig{"TARGETSYS_TARGET"} eq "GENIRACK" ||
 	       $emulabconfig{"CLOUDLAB_FEDERATED"})) {
 	    print OUTDEFS "PROTOGENI_ISCLEARINGHOUSE=1\n";
 	    print OUTDEFS "PROTOGENI_WEBSITE=".
