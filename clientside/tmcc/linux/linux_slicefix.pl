@@ -1440,6 +1440,8 @@ sub main
 	my $label = get_label($root);
 	my $bootloader = guess_bootloader($root);
 	my $old_fstab_root = get_fstab_root($imageroot);
+	my $arch = `uname -m`;
+	chomp($arch);
 
 	# HACK: there's no simple way to distinguish grub2 from grub
 	# by the boot sector.
@@ -1447,6 +1449,12 @@ sub main
 	    (-f "$imageroot/boot/grub2/grub.cfg" ||
 	     -f "$imageroot/boot/grub/grub.cfg")) {
 		$bootloader = 'grub2';
+	}
+	# ppc64le systems can boot via OPAL/petitboot kexec, so a
+	# bootloader may not be installed in the partition.
+	elsif (!$bootloader && $arch eq 'ppc64le'
+	       && -f "$imageroot/boot/grub/grub.cfg") {
+	    $bootloader = 'grub2';
 	}
 
 	if ($bootloader eq 'lilo') {
