@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -86,68 +86,253 @@ get_value()
     return 0
 }
 
+get_part_type()
+{
+	local disk=$1
+	local length=0
+
+	if [ -b $disk ]; then
+	    # XXX: doesn't matter, beyond being longer than MBR or GPT,
+	    # which of course it is.
+	    length=65536
+	else
+	    length=`stat -c %s $disk`
+	fi
+
+	#
+	# The type is GPT if
+	# dd if=$disk bs=1 count=8 skip=512 status=none | hexdump -e '16/1 "%02x""\n"'
+	#   == 4546492050415254
+	# AND (dd if=$disk bs=1 count=2 skip=510 status=none | hexdump -e '2/1 "%02x""\n"' != 55aa
+	#        OR dd if=$disk bs=1 count=1 skip=450 status=none | hexdump -e '2/1 "%02x""\n"' == ee)
+	#
+	# So, it is GPT if it has the GPT magic at 512, and if there is
+	# no MBR magic or the MBR's first partition is the GPT
+	# protective header.
+	#
+	# Failing that, if the MBR magic is in place, it's MBR.
+	#
+	# Failing that, if the GPT magic is in place, it's GPT (although
+	# we should never see this).
+	#
+	if [ ""`dd if=$disk bs=1 count=8 skip=512 status=none | hexdump -e '16/1 "%02x""\n"'` = 4546492050415254 \
+	       -a \( ""`dd if=$disk bs=1 count=2 skip=510 status=none | hexdump -e '2/1 "%02x""\n"'` != 55aa \
+	            -o ""`dd if=$disk bs=1 count=1 skip=450 status=none | hexdump -e '2/1 "%02x""\n"'` = ee \) ]; then
+	    echo "GPT"
+	    return 0
+	elif [ ""`dd if=$disk bs=1 count=2 skip=510 status=none | hexdump -e '2/1 "%02x""\n"'` = 55aa ]; then
+	    echo "MBR"
+	    return 0
+	elif [ ""`dd if=$disk bs=1 count=8 skip=512 status=none | hexdump -e '16/1 "%02x""\n"'` = 4546492050415254 ]; then
+	    echo "GPT"
+	    return 0
+	fi
+
+	echo ""
+	return 1
+}
+
+hexstr2dec_le()
+{
+    local hexstr=$1
+
+    ret=0
+    exp=0
+    for hb in `echo $hexstr | sed -e 's/\([0-9a-fA-F][0-9a-fA-F]\)/\1 /g'`; do
+	ret=$(($ret + `printf %u 0x$hb` * 2 ** $exp))
+	exp=$(($exp + 8))
+    done
+    echo $ret
+    return 0
+}
+
+get_part_size()
+{
+	local disk=$1
+	local part=$2
+
+	pttype=`get_part_type $disk`
+	if [ ! $? -eq 0 ]; then
+	    return 1
+	fi
+
+	if [ "$pttype" = "MBR" ]; then
+	    hexsize=`dd if=$disk bs=1 count=4 skip=$((446 + 16 * ($part - 1) +12)) status=none | hexdump -e '4/1 "%02x""\n"'`
+	    size=`hexstr2dec_le $hexsize`
+	else
+	    # Grab the start LBA of the GPT partition entries.  Always
+	    # supposed to be LBA 2 in primary GPT, but may as well look.
+	    tmp=`dd if=$disk bs=1 count=8 skip=$((512 + 72)) status=none | hexdump -e '8/1 "%02x""\n"'`
+	    ptestartsec=`hexstr2dec_le $tmp`
+	    # Grab the partition entry size.
+	    tmp=`dd if=$disk bs=1 count=4 skip=$((512 + 84)) status=none | hexdump -e '4/1 "%02x""\n"'`
+	    ptesize=`hexstr2dec_le $tmp`
+	    tmp=`dd if=$disk bs=1 count=8 skip=$((512 * $ptestartsec + ($part - 1) * $ptesize + 32)) status=none | hexdump -e '8/1 "%02x""\n"'`
+	    firstlba=`hexstr2dec_le $tmp`
+	    tmp=`dd if=$disk bs=1 count=8 skip=$((512 * $ptestartsec + ($part - 1) * $ptesize + 40)) status=none | hexdump -e '8/1 "%02x""\n"'`
+	    lastlba=`hexstr2dec_le $tmp`
+	    size=$(($lastlba - $firstlba + 1))
+	fi
+	echo $size
+	return 0
+}
+
+build_protective_mbr()
+{
+	local dstdisk=$1
+
+	if [ ! -b $dstdisk ]; then
+	    echo "ERROR: $dstdisk not block device, will not create protective MBR header!"
+	    return 255
+	fi
+	dpttype=`get_part_type $dstdisk`
+	if [ ! $? -eq 0 -o ! $dpttype = "GPT" ]; then
+	    echo "ERROR: dstdisk $dstdisk partition table not GPT!"
+	    return 254
+	fi
+	# Protective PTE is (status) 00 (chs addr) 00 00 01
+	# (part type) ee ... but we cheat and use fdisk!
+	/bin/echo -e 'n\np\n1\n\n\nt\nee\na\n1\nw\n' | fdisk $dstdisk
+}
+
+build_secondary_gpt()
+{
+	local srcdisk=$1
+	local dstdisk=$2
+
+	if [ ! -b $dstdisk ]; then
+	    echo "ERROR: $dstdisk not block device, will not create secondary GPT header!"
+	    return 255
+	fi
+
+	#
+	# We copy the primary header (from srcdisk, which might be a
+	# file) into LBA-1 (on dstdisk, which cannot be a file), entries
+	# 1-4 into LBA-33, and entries 5-128 into LBA-32.  Then we go
+	# edit the pointer (on dstdisk) to the secondary in the primary,
+	# and edit the pointer to the primary in the secondary.
+	#
+
+	spttype=`get_part_type $srcdisk`
+	if [ ! $? -eq 0 -o ! $spttype = "GPT" ]; then
+	    echo "ERROR: srcdisk $srcdisk partition table not GPT!"
+	    return 254
+	fi
+	dpttype=`get_part_type $dstdisk`
+	if [ ! $? -eq 0 -o ! $dpttype = "GPT" ]; then
+	    echo "ERROR: dstdisk $dstdisk partition table not GPT!"
+	    return 253
+	fi
+
+	dstdiskdev=`echo $dstdisk | sed -ne 's|/dev/||p'`
+	dsectors=`cat /sys/class/block/${dstdiskdev}/size`
+	#fdisk -l $dstdisk | sed -ne 's/^.*, \([0-9]*\) sectors$/\1/p'`
+	if [ -z "$dsectors" ]; then
+	    echo "ERROR: cannot get total number of sectors for dstdisk $dstdisk!"
+	    return 252
+	fi
+	# Copy the header.
+	dd if=$srcdisk skip=1 bs=512 count=1 status=none | dd of=$dstdisk seek=$(($dsectors - 1)) bs=512 status=none
+	# Copy entries 1-4.
+	dd if=$srcdisk skip=2 bs=512 count=1 status=none | dd of=$dstdisk seek=$(($dsectors - 33)) bs=512 status=none
+	# Copy entries 5-128.
+	dd if=$srcdisk skip=3 bs=512 count=31 status=none | dd of=$dstdisk seek=$(($dsectors - 32)) bs=512 status=none
+
+	return 0;
+}
+
 #
-# Update the MBR of the given disk to the indicated "version."
+# Update the MBR/GPT of the given disk to the indicated "version."
 #
-# XXX this is somewhat of a hack right now.  We recognize two
-# versions of the MBR:
-#	v1 (partition 1 size 6281352)
-#	v2 (partition 1 size 12305790)
-#	v3 (partition 1 size 33554432)
-# Currently we only install a new MBR if the existing one is the
-# wrong size, just in case the user has customized the boot program.
+# Currently we only install a new MBR/GPT if the existing one has the
+# wrong partition table type, or wrong size for partition 1, just in
+# case the user has customized the boot program.  We check to see if the
+# indicated version table is MBR or GPT, then get the size of that
+# partition.  If the on-disk partition is that size, we do nothing.
+#
+# NB: this requires the mbr${new_mbr_ver}.dd file to be present inside
+# /etc/emulab, because we no longer hardcode the per-version known
+# sizes.
 #
 tweakmbr()
 {
 	local disk=$1
 	local new_mbr_ver=$2
 	local always=$3
-	local cur_mbr_ver=''
+	local pttype=''
+	local newpttype=''
+	local size=''
+	local newsize=''
+	local mbrfile=''
 
 	if ! dd if=$disk of=/dev/null bs=512 count=1 2>/dev/null; then
-			echo "WARNING: could not read from $disk, MBR not changed"
-			return 255
-	fi
-
-	size=`echo -e 'u\np\nq' | fdisk $disk 2> /dev/null| \
-		sed -n "s#^${disk}1 *. *[0-9]* *[0-9]* *\([0-9]*\).*\\$#\1#p"`
-	[ -n "$size" ] && size=`expr $size '*' 2`
-
-	case ${size}s in
-		6281352s)
-			cur_mbr_ver=1
-			;;
-		12305790s)
-			cur_mbr_ver=2
-			;;
-		33554432s)
-			cur_mbr_ver=3
-			;;
-		s)
-			echo "Found no MBR on $disk, installing version $new_mbr_ver"
-			;;
-		*)
-			if [ $always -eq 1 ]; then
-			    echo "WARNING: overwriting unknown MBR on $disk with version $new_mbr_ver"
-			else
-			    echo "WARNING: custom MBR on $disk, not changed"
-			    return 0
-			fi
-			;;
-	esac
-
-	if [ "$cur_mbr_ver" = $new_mbr_ver ]; then
-		return 0
-	fi
-
-	if ! [ -r $MBR_PATH/mbr${new_mbr_ver}.dd ]; then
-		echo "WARNING: cannot find MBR version $new_mbr_ver, not installed"
+		echo "WARNING: could not read from $disk, MBR not changed"
 		return 255
 	fi
 
-	echo "Installing MBR version $new_mbr_ver ..."
-	dd if=$MBR_PATH/mbr${new_mbr_ver}.dd of=$disk bs=512 count=1
+	pttype=`get_part_type $disk`
+	if [ $? -eq 0 ]; then
+	    echo "Found $pttype partition table on $disk"
+	    size=`get_part_size $disk 1`
+	    if [ $? -eq 0 ]; then
+		echo "Partition 1 on $disk is size $size sectors"
+	    else
+		echo "Failed to get $disk partition 1 size!"
+		size=
+	    fi
+	else
+	    echo "Unknown partition table on $disk!"
+	fi
 
+	mbrfile=$MBR_PATH/mbr${new_mbr_ver}.dd
+	if ! [ -r $mbrfile ]; then
+		echo "WARNING: cannot find MBR/GPT version $new_mbr_ver ($mbrfile), not installing!"
+		return 255
+	fi
+
+	newpttype=`get_part_type $mbrfile`
+	if [ $? -eq 0 ]; then
+	    echo "Found $newpttype partition table in new version $new_mbr_ver"
+	    newsize=`get_part_size $mbrfile 1`
+	    if [ $? -eq 0 ]; then
+		echo "Partition 1 in $mbrfile is size $newsize sectors"
+	    else
+		echo "Failed to get $mbrfile partition 1 size!"
+		newsize=
+	    fi
+	else
+	    echo "Unknown partition table in $mbrfile!"
+	fi
+
+	if [ -z "$pttype" ]; then
+	    echo "Found no MBR/GPT on $disk, installing version $new_mbr_ver ($newpttype/$newsize)"
+	elif [ -z "$size" ]; then
+	    echo "Found no $pttype partition 1 size on $disk, installing version $new_mbr_ver ($newpttype/$newsize)"
+	# We allow the user to do an in-place conversion from GPT to MBR; probably a good idea.
+	#elif [ ! "$pttype" = "$newpttype" ]; then
+	#    echo "New partition table type $newpttype does not match on-disk type $pttype, installing new version $new_mbr_ver"
+	elif [ -n "$newsize" -a $size -eq $newsize ]; then
+	    echo "On-disk partition 1 size $size and new version $new_mbr_ver match, not installing $newpttype over old $pttype"
+	    return 0
+	# NB: this is the one new case over the old version of these checks.
+	# Better make sure this code recognizes any mbr/gpt files in the MFS!
+	elif [ -z "$newpttype" -o -z "$newsize" ]; then
+	    echo "Unrecognizeable new partition table type $newpttype or size $newsize; installing anyway!"
+	elif [ ! $size -eq $newsize ]; then
+	    if [ $always -eq 1 ]; then
+		echo "WARNING: overwriting (always=1) mismatched $pttype/$size on $disk with new version $new_mbr_ver ($newpttype/$size)!"
+	    else
+		echo "WARNING: custom $pttype/$size on $disk, not always-installing version $new_mbr_ver ($newpttype/$newsize)"
+		return 0
+	    fi
+	# Unreachable.
+	else
+	    echo "Not overwriting $pttype/$size on $disk with $newpttype/$newsize; bug?"
+	    return 254
+	fi
+
+	echo "Installing $newpttype version $new_mbr_ver ..."
+	dd if=$MBR_PATH/mbr${new_mbr_ver}.dd of=$disk
 	# Zero out the partition type bytes for FreeBSD and Linux partitions
 	# so that if the user tries to make a whole-disk image later it will
 	# work without imagezip complaining about filesystem-specific errors
@@ -157,16 +342,24 @@ tweakmbr()
 	# The Linux swap partition is left alone because imagezip currently
 	# blindly includes just the first portion of the swap partition without
 	# checking to ensure it is valid.
-	for i in 0 1; do
+	#
+	# XXX: should probably do for GPT.
+	if [ $newpttype = "MBR" ]; then
+	    for i in 0 1; do
 		dd if=/dev/zero of=$disk bs=1 count=1 seek=$(( $i * 16 + 450 )) > /dev/null 2>&1
-	done
+	    done
+	fi
 
 	# Linux won't re-read the partition table unless told to do so.
 	# hdparm could be used for this, but it may not be installed.
 	# fdisk tells the kernel to re-read the table after writing it
 	# to disk, so we'll just use that.
 	echo "Re-reading partition table ..."
-	echo w | fdisk $disk > /dev/null 2>&1
+	if [ -x /usr/sbin/partprobe ]; then
+	    /usr/sbin/partprobe $disk > /dev/null 2>&1
+	else
+	    echo w | fdisk $disk > /dev/null 2>&1
+	fi
 }
 
 find_disks() {
@@ -432,6 +625,13 @@ handle_loadinfo()
 		    fi
 	fi
 
+	echo "Re-reading partition table after tweakmbr ..."
+	if [ -x /usr/sbin/partprobe ]; then
+	    /usr/sbin/partprobe /dev/$DISK > /dev/null 2>&1
+	else
+	    echo w | fdisk /dev/$DISK > /dev/null 2>&1
+	fi
+
 	# If not zeroing the disk and we are loading a full disk image
 	# we need to ensure that we at least invalidate any old superblocks
 	# that might leak through (most likely in partition 4 which isn't
@@ -460,6 +660,26 @@ handle_loadinfo()
 	fi
 
 	echo "Image load complete at `date`"
+
+	#
+	# But then, if this is a GPT partition table, we need to
+	# restore the secondary GPT and the protective MBR so
+	# that gdisk and fdisk continue to work.
+	#
+	pttype=`get_part_type /dev/$DISK`
+	if [ $? -eq 0 -a "$pttype" = "GPT" ]; then
+	    #build_secondary_gpt /dev/$DISK /dev/$DISK
+	    #build_protective_mbr /dev/$DISK
+	    /bin/echo -e '\n\nr\nd\nv\nw\ny\n' | gdisk /dev/$DISK
+	    echo "Re-reading partition table after GPT fixups ..."
+	    if [ -x /usr/sbin/partprobe ]; then
+		/usr/sbin/partprobe /dev/$DISK > /dev/null 2>&1
+	    else
+		echo w | fdisk /dev/$DISK > /dev/null 2>&1
+	    fi
+	else
+	    echo "WARNING: get_part_type /dev/$DISK failed ($pttype, $?)"
+	fi
 }
 
 #

@@ -490,7 +490,11 @@ dofreebsd() {
 		fsopts=ro
 	elif [ $OS = Linux ]; then
 		echo "Reloading partition table for $disk..."
-		echo w | /sbin/fdisk /dev/$disk > /dev/null 2>&1
+		if [ -x /usr/sbin/partprobe ]; then
+			/usr/sbin/partprobe $disk > /dev/null 2>&1
+		else
+			echo w | /sbin/fdisk /dev/$disk > /dev/null 2>&1
+		fi
 		rootdev=/dev/`$BINDIR/check_disklabel $disk $part`
 		[ "$rootdev" = /dev/ ] && exit 1
 		fstype=ufs
@@ -1071,7 +1075,13 @@ fixone() {
     	ptype=`fdisk -${part} ${disk} | grep sysid | sed 's/^sysid \([0-9][0-9]*\).*/\1/'`
     elif [ $OS = Linux ]; then
     	echo "*** ${disk}${part}:"
-    	ptype=`fdisk -l /dev/$disk | awk /${disk}${part}/'{sub(/\*/,""); print "0x"$5}'`
+	fdisk -l /dev/$disk | grep -qi 'found valid gpt'
+	if [ $? -eq 0 ]; then
+	    # gdisk output converts the gpt partition ID to, e.g., 8300.
+	    ptype=`gdisk -l /dev/$disk | awk "/^ *${part} / {print \\$6}"`
+	else
+    	    ptype=`fdisk -l /dev/$disk | awk /${disk}${part}/'{sub(/\*/,""); print "0x"$5}'`
+	fi
     fi
     ptype=${ptype:-0}
 
@@ -1080,7 +1090,7 @@ fixone() {
 	dofreebsd
 	return $?
 	;;
-    131|0x83)
+    131|0x83|8300)
 	dolinux
 	return $?
 	;;
