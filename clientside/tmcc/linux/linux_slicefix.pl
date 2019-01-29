@@ -9,6 +9,7 @@ my $RM = '/bin/rm';
 my $CP = '/bin/cp';
 my $CPIO = 'cpio';
 my $GZIP = 'gzip';
+my $XZ = 'xz';
 my $MKSWAP = '/sbin/mkswap';
 my $UUIDGEN = 'uuidgen';
 my $LOSETUP = 'losetup';
@@ -20,6 +21,8 @@ use constant GZHDR1 => 0x1f8b0800;
 use constant GZHDR2 => 0x1f8b0808;
 use constant LARGEST_PAGE_SIZE => 0x4000;
 use constant UUID_OFFSET => 1036;
+use constant ELFHDR => 0x7f454c46;
+use constant XZHDRSTART => 0xfd377a58;
 
 #
 # Turn off line buffering on output
@@ -701,15 +704,21 @@ sub check_kernel
 	my $offset = 0;;
 	my $buffer;
 	my $rc;
-	my $kernel_file = "/tmp/kernel.$$";
+	my $kernel_tmpfile;
+	my $kernel_file = $kernel;
 	my $kernel_has_ide = 0;
 	my $version_string;
+	my $compression;
 
 	open KERNEL, $kernel or die "Couldn't open $kernel: $!\n";
 	read KERNEL, $buffer, 4;
 	while ($rc = read KERNEL, $buffer, 1, length($buffer)) {
 		my ($value) = unpack 'N', $buffer;
 		if ($value == GZHDR1 || $value == GZHDR2) {
+			$compression = 'gzip';
+			last;
+		}
+		elsif ($value == ELFHDR) {
 			last;
 		}
 		$buffer = substr $buffer, 1;
@@ -719,19 +728,23 @@ sub check_kernel
 		return undef;
 	}
 
-	#
-	# XXX if gzip sees trailing garbage it exits non-zero causing a SIGPIPE in the
-	# while loop and making perl terminate.
-	# New Linux kernel compressions seem to cause this (on Ubuntu 18 at least).
-	#
-	$SIG{'PIPE'} = 'IGNORE';
-	open GZIP, "|$GZIP -dc > $kernel_file 2> /dev/null";
-	print GZIP $buffer;
-	while (read KERNEL, $buffer, 4096) {
+	if ($compression) {
+		$kernel_tmpfile = "/tmp/kernel.$$";
+		$kernel_file = $kernel_tmpfile;
+		#
+		# XXX if gzip sees trailing garbage it exits non-zero causing a SIGPIPE in the
+		# while loop and making perl terminate.
+		# New Linux kernel compressions seem to cause this (on Ubuntu 18 at least).
+		#
+		$SIG{'PIPE'} = 'IGNORE';
+		open GZIP, "|$GZIP -dc > $kernel_tmpfile 2> /dev/null";
 		print GZIP $buffer;
+		while (read KERNEL, $buffer, 4096) {
+			print GZIP $buffer;
+		}
+		close KERNEL;
+		close GZIP;
 	}
-	close KERNEL;
-	close GZIP;
 
 	open KERNEL, $kernel_file or die "Couldn't open raw kernel: $!\n";
 	while (<KERNEL>) {
@@ -744,7 +757,8 @@ sub check_kernel
 	}
 	close KERNEL;
 
-	unlink "$kernel_file";
+	unlink "$kernel_tmpfile"
+		if (defined($kernel_tmpfile));
 
 	return ($version_string, $kernel_has_ide);
 }
@@ -756,6 +770,8 @@ sub check_initrd
 	my $initrd_dir = "/tmp/initrd.dir.$$";
 	my $handles_label = 0;
 	my $handles_uuid = 0;
+	my $has_early_cpio = 0;
+	my $compression;
 
 	return undef if (! -f $initrd);
 
@@ -811,10 +827,28 @@ sub check_initrd
 		# If we extracted an inner blob, change the filename we
 		# will attempt to decompress.
 		$initrd_filename = $inner_initrd;
+		$has_early_cpio = 1;
 	}
 	close(INITRD);
 
-	`$GZIP -dc < "$initrd_filename" > "$decompressed_initrd" 2> /dev/null`;
+	open INITRD, $initrd_filename or die "Couldn't open $initrd_filename: $!\n";
+	read INITRD, $buffer, 4;
+	my ($value) = unpack 'N', $buffer;
+	if ($value == GZHDR1 || $value == GZHDR2) {
+		$compression = 'gzip';
+	}
+	elsif ($value == XZHDRSTART) {
+		$compression = 'lzma';
+	}
+	close INITRD;
+
+	if (defined($compression) && $compression eq 'lzma') {
+		`$XZ -dc < "$initrd_filename" > "$decompressed_initrd" 2> /dev/null`;
+	}
+	else {
+		# Just bail to gzip no matter what.
+		`$GZIP -dc < "$initrd_filename" > "$decompressed_initrd" 2> /dev/null`;
+	}
 	if ($? >> 8) {
 		`$CP "$initrd_filename" "$decompressed_initrd"`;
 		if ($? & 0xff) {
@@ -851,7 +885,8 @@ sub check_initrd
 	# machinery to extract the real initrd CPIO archive that appears to
 	# be appended to the initial small one. I'm just not that in to it.
 	#
-	if (!$handles_label && !$handles_uuid && -f "$initrd_dir/early_cpio") {
+	if (!$handles_label && !$handles_uuid
+	    && ($has_early_cpio || -f "$initrd_dir/early_cpio")) {
 	    print "Found initrd early_cpio; assuming handles label/UUID\n";
 	    $handles_label = $handles_uuid = 1;
 	}
