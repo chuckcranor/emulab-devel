@@ -895,7 +895,7 @@ sub check_initrd
 	`$RM -rf "$initrd_dir" "$decompressed_initrd"`;
 	
 	my @loopdevs;
-	open LOSETUP, "$LOSETUP|";
+	open LOSETUP, "$LOSETUP -a |";
 	while (<LOSETUP>) {
 		chomp;
 		split /:/;
