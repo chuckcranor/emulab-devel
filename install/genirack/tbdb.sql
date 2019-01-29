@@ -62,4 +62,4 @@ replace into node_type_attributes set
       type='external-switch',attrkey='forwarding_protocols',
       attrvalue='ethernet',attrtype='string';
 
-replace into node_attributes values ('procurve2', 'does_openflow', 'yes');
+replace into node_attributes values ('procurve2', 'does_openflow', 'yes', '0');
