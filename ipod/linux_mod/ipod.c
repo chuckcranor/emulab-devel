@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2018 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2019 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -41,7 +41,25 @@
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Flux Research Group");
-MODULE_VERSION("3.0.0");
+MODULE_VERSION("3.1.0");
+
+#if defined(__aarch64__) || defined(__powerpc64__)
+#define IPOD_QUEUE_RESTART
+#endif
+
+#ifdef IPOD_QUEUE_RESTART
+#include <linux/workqueue.h>
+
+static struct workqueue_struct *restart_queue;
+
+static void restart_work_func(struct work_struct *work)
+{
+        printk(KERN_CRIT "IPOD: restarting (delayed)...\n");
+        emergency_restart();
+}
+
+DECLARE_WORK(restart_work,restart_work_func);
+#endif
 
 #define IPOD_ICMP_TYPE 6
 #define IPOD_ICMP_CODE 6
@@ -245,7 +263,11 @@ static unsigned int ipod_hook_fn(
     if (doit) {
 	sysctl_ipod_enabled = 0;
 	printk(KERN_CRIT "IPOD: reboot forced by %pI4...\n",&iph->saddr);
+#ifdef IPOD_QUEUE_RESTART
+	queue_work(restart_queue,&restart_work);
+#else
 	emergency_restart();
+#endif
 	return NF_DROP;
     }
     else {
@@ -288,11 +310,21 @@ static int __init ipod_init_module(void) {
 	return -1;
     }
 
+#ifdef IPOD_QUEUE_RESTART
+    restart_queue = create_singlethread_workqueue("ipod_restart_queue");
+#endif
+
     return 0;
 }
 
 static void __exit ipod_cleanup_module(void) {
     printk(KERN_INFO "removing IPOD\n");
+
+#ifdef IPOD_QUEUE_RESTART
+    cancel_work_sync(&restart_work);
+    destroy_workqueue(restart_queue);
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
     nf_unregister_net_hook(&init_net,&ipod_hook_ops);
 #else
