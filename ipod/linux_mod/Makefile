@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,11 +21,13 @@
 # }}}
 #
 
+VERSION ?= 3.1.0-0
+
 obj-m += ipod.o
 
+ifeq ($(KERNELRELEASE),)
 KDIR ?= /lib/modules/$(shell uname -r)/build
 PWD := $(shell pwd)
-VERSION ?= 3.0.0-0
 
 all:
 	$(MAKE) -C $(KDIR) M=$(PWD) modules
@@ -35,6 +37,7 @@ install:
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
+endif
 
 emulab-ipod-dkms_$(VERSION)_all.deb: debian/control debian/rules debian/changelog debian/compat debian/emulab-ipod-dkms.dkms
 	dpkg-buildpackage -us -uc
