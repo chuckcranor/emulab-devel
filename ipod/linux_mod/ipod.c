@@ -41,7 +41,7 @@
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Flux Research Group");
-MODULE_VERSION("3.1.0");
+MODULE_VERSION("3.2.0");
 
 #if defined(__aarch64__) || defined(__powerpc64__)
 #define IPOD_QUEUE_RESTART
@@ -300,9 +300,9 @@ static int __init ipod_init_module(void) {
      * Register our netfilter hook function.
      */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
-    rc = nf_register_net_hook(&init_net,&ipod_hook_ops);
+    rc = nf_register_net_hooks(&init_net,&ipod_hook_ops,1);
 #else
-    rc = nf_register_hook(&ipod_hook_ops);
+    rc = nf_register_hooks(&ipod_hook_ops,1);
 #endif
     if (rc) {
 	printk(KERN_ERR "netfilter registration failed (%d)!\n",rc);
@@ -326,9 +326,9 @@ static void __exit ipod_cleanup_module(void) {
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
-    nf_unregister_net_hook(&init_net,&ipod_hook_ops);
+    nf_unregister_net_hooks(&init_net,&ipod_hook_ops,1);
 #else
-    nf_unregister_hook(&ipod_hook_ops);
+    nf_unregister_hooks(&ipod_hook_ops,1);
 #endif
     unregister_net_sysctl_table(ipod_table_header);
 }
