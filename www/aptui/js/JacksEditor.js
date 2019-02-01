@@ -11,7 +11,7 @@ $(function () {
 	    "defaults": [
 		{
 		    "name": "Add VM",
-		    "image": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "image": "urn:publicid:IDN+emulab.net+image+emulab-ops:UBUNTU14-64-STD",
 		    "type": "emulab-xen"
 		}
 	    ],
@@ -39,18 +39,18 @@ $(function () {
 	    "defaults": [
 		{
 		    "name": "Xen VM",
-		    "image": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "image": "urn:publicid:IDN+emulab.net+image+emulab-ops:UBUNTU14-64-STD",
 		    "type": "emulab-xen"
 		},
 		{
 		    "name": "Bare Metal PC",
-		    "image": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "image": "urn:publicid:IDN+emulab.net+image+emulab-ops:UBUNTU14-64-STD",
 		    "type": "raw-pc"
 		}
 	    ],
 	    "images": [
 		{
-		    "id": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "id": "urn:publicid:IDN+emulab.net+image+emulab-ops:UBUNTU14-64-STD",
 		    "name": "Ubuntu 14.04 LTS 64-bit"
 		}
 	    ],
