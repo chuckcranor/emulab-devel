@@ -32,12 +32,12 @@ sub DoUpdate($$$)
 		     " `gid` varchar(32) NOT NULL default '', ".
 		     " `gid_idx` mediumint(8) unsigned NOT NULL default '0', ".
 		     " `remote_urn` varchar(128) default NULL, ".
-		     " `metadata_url` int(8) unsigned NOT NULL default '0', ".
-		     " `created` varchar(8) default NULL, ".
+		     " `metadata_url` tinytext, ".
+		     " `created` datetime default NULL, ".
 		     " `locked` datetime default NULL, ".
 		     " PRIMARY KEY  (`pid_idx`,`imagename`), ".
 		     " UNIQUE KEY `remote_urn`  (`remote_urn`), ".
-		     " UNIQUE KEY `metadata_url` (`metadata_url`) ".
+		     " UNIQUE KEY `metadata_url` (`metadata_url`(128)) ".
 		     ") ENGINE=MyISAM DEFAULT CHARSET=latin1");
     }
     return 0;
