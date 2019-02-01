@@ -71,7 +71,6 @@ sub Install($$$)
 	    close(CN);
 	};
 	
-
 	Phase "targetconfig", "Reading in targetsys config variables", sub {
 	    PhaseFail("No config file")
 		if (! -e $TARGETSYSVARS);
@@ -133,6 +132,16 @@ sub Install($$$)
 		if (! -e $SQLSTUFF);
 	    
 	    ExecQuietFatal("$MYSQL $DBNAME < $SQLSTUFF");
+	};
+
+	#
+	# Mike says 200000000 is good for fixed nodes.
+	#
+	Phase "frisbeerate", "Setting frisbeed max rate", sub {
+	    ExecQuietFatal("$PREFIX/sbin/setsitevar ".
+			   "images/frisbee/maxrate_std 200000000");
+	    ExecQuietFatal("$PREFIX/sbin/setsitevar ".
+			   "images/frisbee/maxrate_usr 200000000");
 	};
 
 	#
