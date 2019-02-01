@@ -1846,9 +1846,6 @@ $(function ()
 	if (nodecount > 3000) {
 	    doconstraints = 0;
 	}
-	else {
-	    doconstraints = 1;
-	}
 	//console.info("CreateAggregateSelectors: ", nodecount, doconstraints);
 
 	/*
