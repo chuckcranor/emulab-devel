@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2018 University of Utah and the Flux Group.
+# Copyright (c) 2007-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -983,7 +983,7 @@ sub NewVersion($$$$)
 		"  parent_imageid=$parent_imageid,".
 		"  parent_version=$parent_version, ".
 		"  origin_neednotify=0,origin_needupdate=0, ".
-		"  origin_uuid=NULL,origin_name=NULL,credential_string=NULL, ".
+		"  origin_uuid=NULL,origin_name=NULL, ".
 		"  hash=null,deltahash=null,size=0,deltasize=0, ".
 		"  updater='$uid',updater_idx='$uid_idx' $updater_urn ".
 		"where imageid='$osid'")
@@ -2817,11 +2817,25 @@ sub GetCredential($)
 sub SetCredential($$)
 {
     my ($self, $credstr) = @_;
+    if (defined($credstr)) {
+	$credstr = DBQuoteSpecial($credstr);
+    }
+    else {
+	$credstr = "NULL";
+    }
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    my $imageid = $self->imageid();
 
     return -1
-	if (! $PGENISUPPORT);
-
-    return $self->Update({"credential_string" => $credstr});
+	if (! DBQueryWarn("update images set credential_string=$credstr " .
+			  "where imageid='$imageid'"));
+	    
+    $self->{'IMAGE'}->{'credential_string'} = $credstr;
+    return 0;
 }
 
 #
