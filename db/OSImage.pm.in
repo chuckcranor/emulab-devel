@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2018 University of Utah and the Flux Group.
+# Copyright (c) 2007-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -63,6 +63,7 @@ my $TBWWW         = "@TBWWW@";
     "i386"    => "i386",
     "x86_64"  => "x86_64",
     "aarch64" => "aarch64",
+    "ppc64le" => "ppc64le",
 );
 
 # Cache of instances to avoid regenerating them.
