@@ -9,6 +9,7 @@ use lib "@prefix@/lib";
 use User;
 
 my $TB = "@prefix@";
+my $ADDINTERFACE = "$TB/sbin/addinterface";
 my $NEWSCRIPT = "$TB/bin/newscript";
 my $controliloip;
 
@@ -215,6 +216,8 @@ foreach my $current (@wires) {
     } elsif ($role eq "mngmnt") {
 	$type = "Management";
     }
+    system("$ADDINTERFACE -b 1Gb $switch '${switch_card}/${switch_port}'");
+    
     my $file = "$outpath/wire.$node_id.$card.$port";
     open(WIRE_FILE, ">$file");
     print WIRE_FILE "<newwire>\n";

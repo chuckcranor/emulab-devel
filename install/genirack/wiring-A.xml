@@ -118,7 +118,7 @@
     <port1>1</port1>
     <node_id2>procurve1</node_id2>
     <card2>1</card2>
-    <port2>6</port2>
+    <port2>5</port2>
   </wire>
   <wire>
     <UXX>U07</UXX>
