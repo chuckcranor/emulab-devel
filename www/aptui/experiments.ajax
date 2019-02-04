@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -222,7 +222,7 @@ function Do_ExperimentErrors()
         $logfileid  = $row["logfileid"];
         $uuid       = $row["uuid"];
         $active     = $row["active"] ? 1 : 0;
-        $created    = DateStringGMT($row["started"]);
+        $started    = DateStringGMT($row["started"]);
         $creator    = $row["creator"];
         $message    = $row["exitmessage"];
         $reason     = $exitcode;
@@ -272,7 +272,7 @@ function Do_ExperimentErrors()
                                 "uuid"     => $uuid,
                                 "exitcode" => $exitcode,
                                 "active"   => $active,
-                                "created"  => $created,
+                                "started"  => $started,
                                 "creator"  => $creator,
                                 "reason"   => $reason,
                                 "message"  => $message,
