@@ -2,7 +2,7 @@
 
 Summary: Emulab IPOD ping-of-death DKMS kernel module
 Name: %{module}
-Version: 3.0.0
+Version: 3.2.0
 License: GPL
 Release: 0
 BuildArch: noarch
@@ -39,5 +39,8 @@ exit 0
 exit 0
 
 %changelog
+* Mon Feb 04 2019 David M. Johnson <johnsond@flux.utah.edu> 3.2.0-0
+- Update Emulab IPOD DKMS kernel module to version 3.2.0.
+
 * Wed Sep 05 2018 David M. Johnson <johnsond@flux.utah.edu> 3.0.0-0
 - Initial release of Emulab IPOD kernel module DKMS support.
