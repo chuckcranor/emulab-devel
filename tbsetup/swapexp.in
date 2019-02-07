@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1369,6 +1369,18 @@ elsif ($inout eq "out") {
 elsif ($inout eq "modify") {
     $experiment->PostSwap($this_user, TBDB_STATS_SWAPMODIFY) == 0 or
 	fatal("PostSwap failed!");
+}
+
+#
+# Reset autoswap to default. Might be inconvenient, but its interfering with
+# reservations. 
+#
+if ($inout eq "out" && !$isadmin && $pid eq TBOPSPID()) {
+    my $autoswapmode = TBGetSiteVar("general/autoswap_mode") ? 1 : 0;
+    my $autoswaptime = 60 * TBGetSiteVar("general/autoswap_threshold");
+
+    $experiment->SetAutoswap($autoswapmode);
+    $experiment->SetAutoswapTimeout($autoswaptime);
 }
 
 # Accounting info. For swapout, must be after its done with.
