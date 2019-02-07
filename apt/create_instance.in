@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -885,7 +885,8 @@ foreach my $aggregate_urn (@aggregate_urns) {
 	}
     }
     if ($aptaggregate->adminonly() &&
-        !(defined($this_user) && $this_user->IsAdmin())) {
+        !(defined($this_user) &&
+	  ($this_user->IsAdmin() || $this_user->stud()))) {
 	$slice->Delete();
 	$instance->Delete();
         UserError("Only administrators may use the $aggregate_name cluster.");

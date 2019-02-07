@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -399,6 +399,8 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "    window.CANCOPY = $cancopy;\n";
     $isadmin = (isset($this_user) && ISADMIN() ? 1 : 0);
     echo "    window.ISADMIN    = $isadmin;\n";
+    $isstud = (isset($this_user) && STUDLY() ? 1 : 0);
+    echo "    window.ISSTUD    = $isstud;\n";
     $multisite = (isset($this_user) && $ISCLOUD ? 1 : 0);
     echo "    window.MULTISITE  = $multisite;\n";
     $doconstraints = $TBMAINSITE;
