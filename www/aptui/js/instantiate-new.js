@@ -561,7 +561,8 @@ $(function ()
 			ppdivname    : "pp-container",
 			registered   : registered,
 			isadmin      : isadmin,
-			callback     : ConfigureDone,
+			config_callback : ConfigureDone,
+			modified_callback : function () { ppchanged = true; },
 			rspec        : null,
 		        multisite    : multisite,
 		        jacksGraphCallback: updateJacksGraph

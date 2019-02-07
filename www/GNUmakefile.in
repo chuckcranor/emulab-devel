@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -163,6 +163,9 @@ APTCSSFILES = $(wildcard $(SRCDIR)/aptui/css/*.css)
 APTFONTS = $(wildcard $(SRCDIR)/aptui/fonts/*)
 APTIMAGES = $(wildcard $(SRCDIR)/aptui/images/*)
 
+APTNEWJSFILES   = $(wildcard $(SRCDIR)/aptui/js/new/*.js)
+APTNEWTEMPLATES = $(wildcard $(SRCDIR)/aptui/template/new/*.html)
+
 # need to make it *.gz; with simply "*", 
 # we end up sucking over "CVS"
 DOWNLOADFILES = $(wildcard $(SRCDIR)/downloads/*.gz)
@@ -228,6 +231,9 @@ ALLAPTCSS = $(notdir $(APTCSSFILES))
 ALLAPTFONTS = $(notdir $(APTFONTS))
 ALLAPTIMAGES = $(notdir $(APTIMAGES))
 
+ALLAPTNEWJS  = $(notdir $(APTNEWJSFILES))
+ALLAPTNEWTEMPLATES = $(notdir $(APTNEWTEMPLATES))
+
 INSTALLFILES = $(addprefix $(INSTALL_SBINDIR)/, htmlinstall) \
 	$(addprefix $(INSTALL_WWWDIR)/, $(ALLFILES)) \
 	$(addprefix $(INSTALL_WWWDIR)/floormap/, $(ALLFLOORMAPS)) \
@@ -276,7 +282,9 @@ apt-install: 	$(addprefix $(INSTALL_WWWDIR)/apt/, $(ALLAPTUI)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/template/, $(ALLAPTTEMPLATES)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/css/, $(ALLAPTCSS)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/fonts/, $(ALLAPTFONTS)) \
-	$(addprefix $(INSTALL_WWWDIR)/apt/images/, $(ALLAPTIMAGES))
+	$(addprefix $(INSTALL_WWWDIR)/apt/images/, $(ALLAPTIMAGES)) \
+	$(addprefix $(INSTALL_WWWDIR)/apt/js/new/, $(ALLAPTNEWJS)) \
+	$(addprefix $(INSTALL_WWWDIR)/apt/template/new/, $(ALLAPTNEWTEMPLATES))
 	cd $(INSTALL_WWWDIR) && \
 		rm -f portal; \
 		ln -s apt portal;

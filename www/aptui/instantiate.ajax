@@ -127,7 +127,8 @@ function Do_GetParameters()
     }
     list ($formfrag, $defaults) = $profile->GenerateFormFragment($paramdefs);
     SPITAJAX_RESPONSE(array("formfrag" => htmlentities($formfrag),
-			    "defaults" => $defaults));
+			    "defaults" => $defaults,
+                            "paramdefs"=> json_decode($paramdefs)));
 }
 
 #

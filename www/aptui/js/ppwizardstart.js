@@ -6,7 +6,10 @@ $(function () {
     {
 	'use strict';
 
-        var templates = APT_OPTIONS.fetchTemplateList(['ppform-wizard', 'ppform-wizard-body', 'choose-am', 'image-picker-modal']);
+        var templates = APT_OPTIONS.fetchTemplateList(['ppform-wizard',
+						       'ppform-wizard-body',
+						       'choose-am',
+						       'image-picker-modal']);
         var ppmodalString = templates['ppform-wizard'];
         var ppbodyString = templates['ppform-wizard-body'];
         var chooserString = templates['choose-am'];
@@ -22,6 +25,7 @@ $(function () {
 	var multisite     = 0;
 	var RSPEC	  = null;
 	var configuredone_callback = null;
+	var modified_callback = null;
         var warningsfatal = 1;
         var imagePicker = null;
 
@@ -727,7 +731,8 @@ $(function () {
 	    // Caller might already have an editor instance.
 	    //editor = new JacksEditor($('#inline_jacks'), true, true,
 		//		     true, true, !multisite);
-	    configuredone_callback = args.callback;
+	    configuredone_callback = args.config_callback;
+	    modified_callback = args.modified_callback;
 	    
 	    /*
 	     * Need to ask for the profile parameter form fragment and
