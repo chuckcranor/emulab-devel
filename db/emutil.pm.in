@@ -1151,5 +1151,20 @@ sub ClearNoDelete($)
     return ($? ? -1 : 0);
 }
 
+sub escapeshellarg($)
+{
+    my ($str)  = @_;
+    my @chars  = split('', $str);
+    my $result = "";
+
+    foreach my $ch (@chars) {
+        if ($ch eq '\'') {
+            $result = $result . "\'\\\'";
+	}
+	$result = $result . "$ch";
+    }
+    return "'$result'";
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;
