@@ -507,6 +507,18 @@ NFSTRACESUPPORT=0
 OPSDBSUPPORT=0
 
 #
+# New Portal code, which requires Protogeni.
+#
+PORTAL_ENABLE=1
+PROTOGENI_SUPPORT=1
+PROTOGENI_GENIRACK=0
+PROTOGENI_DOMAIN="XXX"		# XXX This needs to be localized
+PROTOGENI_LOCALUSER=1
+PROTOGENI_ISCLEARINGHOUSE=1
+PROTOGENI_WEBSITE=$BOSSNODE
+ISOLATEADMINS=0
+
+#
 # You shouldn't have to change anything below this point
 #
 
@@ -525,3 +537,4 @@ IMAGEDIRECTORIES=1
 
 # Fancy new browser in the console support
 BROWSER_CONSOLE_ENABLE=1
+
