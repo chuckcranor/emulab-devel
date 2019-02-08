@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -298,13 +298,20 @@ if( defined( $oldkeyfile ) ) {
     my $genopts =
 	($encrypted ? " -passout 'pass:${sh_password}' -des3 " : "");
 
-    system("$OPENSSL genrsa $genopts -out syscert_key.pem 2048")
-	    == 0 or fatal("Could generate new key");
-    
-    system("$OPENSSL req -text -new -config syscert.cnf ".
-	   ($encrypted ? " -passin 'pass:${sh_password}' " : "") .
-	   " -key syscert_key.pem -out syscert_req.pem $outline") == 0
-	   or fatal("Could not create certificate request");
+    my $output =
+	emutil::ExecQuiet("$OPENSSL genrsa $genopts -out syscert_key.pem 2048");
+    if ($?) {
+	print STDERR $output;
+	fatal("Could generate new key");	
+    }
+    $output =
+	emutil::ExecQuiet("$OPENSSL req -text -new -config syscert.cnf ".
+			  ($encrypted ? " -passin 'pass:${sh_password}' " : "") .
+			  " -key syscert_key.pem -out syscert_req.pem $outline");
+    if ($?) {
+	print STDERR $output;
+	fatal("Could not create certificate request");
+    }
 }
 
 #
