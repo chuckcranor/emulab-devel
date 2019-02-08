@@ -2187,8 +2187,9 @@ $(function ()
 	 * we present later depends on canclone/cansnap. But not allowed
 	 * to clone a repo based profile.
 	 */
-	if (! ((window.APT_OPTIONS.canclone && !expinfo.repurl) ||
-	       window.APT_OPTIONS.cansnap)) {
+	if (! (window.APT_OPTIONS.canclone_profile ||
+	       window.APT_OPTIONS.canupdate_profile ||
+	       window.APT_OPTIONS.cansnapshot)) {
 	    return;
 	}
 
@@ -2196,54 +2197,64 @@ $(function ()
 	    $('button#snapshot_button').popover('hide');
 	    DoSnapshotNode();
 	});
-	
-	$('#snapshot-help-button').click(function (event) {	
-	    event.preventDefault();
-	    clearTimeout(snapshot_help_timer);	    
-	    $('#snapshot-help-button').popover({
-		html:     true,
-		content:  $('#snapshot-help-div').html(),
-		trigger:  'manual',
-		placement:'auto',
-		container:'body',
-	    });
-	    $('#snapshot-help-button').popover('show');
-	    $('.snapshot-popover-close').on('click', function(event) {
-		event.preventDefault();
-		$('#snapshot-help-button').popover('destroy');
-	    });
-	}).mouseenter(function (event) {
-	    snapshot_help_timer = setTimeout(function() {
-		$('#snapshot-help-button').trigger("click");
-	    },1000)
-	}).mouseleave(function(){
-	    clearTimeout(snapshot_help_timer);
-	});
-	
-	$('.clone-help-button').mouseenter(function (event) {
-	    clone_help_timer = setTimeout(function() {
-		$(event.target).trigger("click");
-	    },1000)
-	}).mouseleave(function(){
-	    clearTimeout(clone_help_timer);
-	}).click(function (event) {
-	    event.preventDefault();
-	    clearTimeout(clone_help_timer);
-	    var target = $('#clone-help-popover-div');
-	    target.popover({
-		html:     true,
-		content:  $('#clone-help-div').html(),
-		trigger:  'manual',
-		placement:'auto',
-		container:'body',
-	    });
-	    target.popover('show');
-	    $('.clone-popover-close').on('click', function(event) {
-		event.preventDefault();
-		target.popover('destroy');
-	    });
-	});
 
+	/*
+	 * Various help buttons for snapshot choices.
+	 */
+	var visibleHelp = null;
+	
+	$('.snapshot-help-button').each(function () {
+	    var target  = $(this).find("span");
+	    var which   = target.data("which");
+	    var content = null;
+	    
+	    console.info("foo", this, which, target);
+
+	    switch(which) {
+	    case 'update-profile':
+		content = $('#snapshot-help-div').html();
+		break;
+	    case 'copy-profile':
+		content = $('#clone-help-div').html();
+		break;
+	    case 'image-only':
+		content = $('#imageonly-help-div').html();
+		break;
+	    }
+	    $(target).popover({
+		html:     true,
+		content:  content,
+		trigger:  'manual',
+		placement:'auto',
+		container:'body',
+	    });
+	    
+	    $(this).click(function (event) {
+		event.preventDefault();
+
+		if (visibleHelp) {
+		    var tmp = visibleHelp;
+		    visibleHelp = null;
+		    
+		    tmp.popover('hide');
+		    // Clicked on the same one, hide it and leave.
+		    if (tmp.data("which") == which) {
+			return;
+		    }
+		}
+		$(target).popover('show');
+		visibleHelp = $(target);
+
+		// Bind the close button, sleazy internal stuff.
+		$(target).data('bs.popover').tip()
+		    .find(".close").click(function (event) {
+			$(target).popover('hide');
+			$(this).off("click");
+			visibleHelp = null;
+		    });
+	    });
+	});
+	
 	$('#snapshot_modal input[type=radio]').on('change', function() {
 	    switch($(this).val()) {
 	    case 'update-profile':
@@ -2251,16 +2262,15 @@ $(function ()
 		$('#snapshot-wholedisk-div').addClass("hidden");
 		break;
 	    case 'copy-profile':
-	    case 'new-profile':
-		$('#snapshot-name-div .new-profile').removeClass("hidden");
 		$('#snapshot-name-div .image-only').addClass("hidden");
+		$('#snapshot-name-div .copy-profile').removeClass("hidden");
 		$('#snapshot-name-div').removeClass("hidden");
 		if (wholedisk) {
 		    $('#snapshot-wholedisk-div').removeClass("hidden");
 		}
 		break;
 	    case 'image-only':
-		$('#snapshot-name-div .new-profile').addClass("hidden");
+		$('#snapshot-name-div .copy-profile').addClass("hidden");
 		$('#snapshot-name-div .image-only').removeClass("hidden");
 		$('#snapshot-name-div').removeClass("hidden");
 		if (wholedisk) {
@@ -2271,23 +2281,30 @@ $(function ()
 	});
 
 	/*
-	 * Not allowed to clone/snap repo based profiles, which means
-	 * no choice at all, so hide everything except what name to
-	 * use for the image. 
+	 * Hide choices in the snapshot modal per the flags.
 	 */
-	if (expinfo.repourl) {
-	    $('#update-profile').closest(".radio").addClass("hidden");
-	    $('#copy-profile').closest(".radio").addClass("hidden");
-	    $('#new-profile').closest(".radio").addClass("hidden");
-	    $('#image-only').prop("checked", true);
-	    $('#image-only').trigger("change");
-	    $('#image-only').closest(".radio").addClass("hidden");
-	    $('#snapshot-radio-title').addClass("hidden");
+	if (isscript ||
+	    (!window.APT_OPTIONS.canclone_profile &&
+	     !window.APT_OPTIONS.canupdate_profile)) {
+	    $('#snapshot-name-div .image-only').removeClass("hidden");
+	    $('#snapshot-name-div').removeClass("hidden");
+	    if (wholedisk) {
+		$('#snapshot-wholedisk-div').removeClass("hidden");
+	    }
 	}
-	else if (!window.APT_OPTIONS.cansnap) {
-	    $('#update-profile').closest(".radio").remove();
-	    $('#copy-profile').prop("checked", true);
-	    $('#copy-profile').trigger("change");
+	else {
+	    if (!window.APT_OPTIONS.canclone_profile) {
+		$('#copy-profile-radio').remove();
+	    }
+	    else if (!window.APT_OPTIONS.canupdate_profile) {
+		$('#update-profile-radio').remove();
+	    }
+	    // As per the 'isscript' test above, one of these must be
+	    // available, so make the other the default.
+	    if (!window.APT_OPTIONS.canupdate_profile) {
+		    $('#copy-profile').prop("checked", true);
+		    $('#copy-profile').trigger("change");
+	    }
 	}
     }
 
@@ -2300,8 +2317,9 @@ $(function ()
 	 * we present later depends on canclone/cansnap. But not allowed
 	 * to clone a repo based profile.
 	 */
-	if (! ((window.APT_OPTIONS.canclone && !expinfo.repourl) ||
-	       window.APT_OPTIONS.cansnap)) {
+	if (! (window.APT_OPTIONS.canclone_profile ||
+	       window.APT_OPTIONS.canupdate_profile ||
+	       window.APT_OPTIONS.cansnapshot)) {
 	    return;
 	}
 	$("#snapshot_button").removeClass("hidden");
@@ -2341,11 +2359,11 @@ $(function ()
 	 */
 	if (Object.keys(imageablenodes).length == 1) {
 	    /*
-	     * If allowed to snapshot, then use the current profile name.
+	     * If allowed to update image, then use the current profile name.
 	     * Otherwise might as well let them choose the name.
 	     */
-	    if (window.APT_OPTIONS.cansnap) {
-		$('#snapshot-name-div .image-only input')
+	    if (window.APT_OPTIONS.cansnapshot) {
+		$('#snapshot-name-div input')
 		    .val(expinfo.profile_name);
 		$('#snapshot-name-div .snapshot-name-warning')
 		    .removeClass("hidden");
@@ -2361,7 +2379,7 @@ $(function ()
 		.on("change", function (event) {
 		    var node = $(this).val();
 		    var name = expinfo.profile_name + "." + node;
-		    $('#snapshot-name-div .image-only input').val(name);
+		    $('#snapshot-name-div input').val(name);
 		    $('#snapshot-name-div .snapshot-name-warning')
 			.removeClass("hidden");
 		});
@@ -2395,7 +2413,7 @@ $(function ()
 	    });
 	    $('#confirm-update-systemimage').click(function() {
 		sup.HideModal('#confirm-update-systemimage-modal');
-		$('#snapshot_update_prepare_div').addClass("hidden");
+		$('#snapshot_update_prepare_option').addClass("hidden");
 		DoSnapshotNodeAux();
 	    });
 	    sup.ShowModal('#confirm-update-systemimage-modal',
@@ -2432,14 +2450,17 @@ $(function ()
 	    $('#snapshot_modal .choose-node-error').addClass("hidden");
 
 	    // What does the user want to do?
-	    var operation = $('#snapshot_modal input[type=radio]:checked').val();
+	    var operation =
+		(isscript ? "image-only" :
+		 $('#snapshot_modal input[type=radio]:checked').val());
+	    
 	    var args = {"uuid" : uuid,
 			"node_id" : node_id,
 			"operation" : operation,
 			"update_prepare" : 0};
 	    // Make sure we got an image/profile name.
 	    if (operation == 'image-only') {
-		var name = $('#snapshot-name-div .image-only input').val();
+		var name = $('#snapshot-name-div input').val();
 		if (name == "") {
 		    $('#snapshot-name-div .name-error')
 			.text("Please provide an image name");
@@ -2450,7 +2471,7 @@ $(function ()
 	    }
 	    else if (operation == "copy-profile" ||
 		     operation == "new-profile") {
-		var name = $('#snapshot-name-div .new-profile input').val();
+		var name = $('#snapshot-name-div input').val();
 		if (name == "") {
 		    $('#snapshot-name-div .name-error')
 			.text("Please provide a profile name");
@@ -2483,9 +2504,11 @@ $(function ()
 	$('#snapshot_modal').on('hidden.bs.modal', function (event) {
 	    $(this).unbind(event);
 	    $('button#snapshot_confirm').unbind("click.snapshot");
-	    // Kill any popovers still showing.
-	    $('#snapshot-help-button').popover('destroy');
-	    $('#clone-help-popover-div').popover('destroy');
+	    // Hide any popovers still showing.
+	    $('.snapshot-help-button').each(function () {
+		var target = $(this).find("span");
+		target.popover('hide');
+	    });
 	});
 
 	sup.ShowModal('#snapshot_modal');

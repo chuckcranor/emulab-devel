@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -160,28 +160,34 @@ $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
 
 $instance_status = $instance->status();
 $creator_uid     = $creator->uid();
+$cansnapshot     = ((isset($this_user) &&
+                     $this_user->idx() == $creator->idx()) ||
+                    ISADMIN() ? 1 : 0);
+$canterminate    = ((isset($this_user) &&
+                     $instance->CanTerminate($this_user)) ||
+                    ISADMIN() ? 1 : 0);
+$cancopy_profile   = 0;
+$canclone_profile  = 0;
+$canupdate_profile = 0;
+$isscript          = 0;
+
 if ($profile = Profile::Lookup($instance->profile_id(),
 			       $instance->profile_version())) {
-    $cansnap        = ((isset($this_user) &&
-			$this_user->idx() == $creator->idx() &&
-			$this_user->idx() == $profile->creator_idx()) ||
-		       ISADMIN() ? 1 : 0);
-    $canclone       = ((isset($this_user) &&
-                        $profile->CanClone($this_user)) ||
-		       ISADMIN() ? 1 : 0);
-    $canterminate   = ((isset($this_user) &&
-                        $instance->CanTerminate($this_user)) ||
-		       ISADMIN() ? 1 : 0);
-    $isscript       = ($profile->script() && $profile->script() != "" ? 1 : 0);
-}
-else {
-    $cansnap        = 0;
-    $canclone       = 0;
-    $canterminate   = ((isset($this_user) &&
-                        $instance->CanTerminate($this_user)) ||
-		       ISADMIN() ? 1 : 0);
-    $isscript       = 0;
-
+    #
+    # Not allowed to copy/clone/update a repo based profile. 
+    #
+    if (!$profile->repourl())  {
+        $cancopy_profile   = ((isset($this_user) &&
+                               $profile->CanInstantiate($this_user)) ||
+                              ISADMIN() ? 1 : 0);
+        $canclone_profile  = ((isset($this_user) &&
+                               $profile->CanClone($this_user)) ||
+                              ISADMIN() ? 1 : 0);
+        $canupdate_profile = ((isset($this_user) &&
+                               $this_user->idx() == $profile->creator_idx()) ||
+                              ISADMIN() ? 1 : 0);
+        $isscript   = ($profile->script() && $profile->script() != "" ? 1 : 0);
+    }
 }
 $registered      = (isset($this_user) ? "true" : "false");
 $snapping        = 0;
@@ -245,8 +251,10 @@ echo "  window.APT_OPTIONS.registered = $registered;\n";
 echo "  window.APT_OPTIONS.isadmin = $isadmin;\n";
 echo "  window.APT_OPTIONS.isfadmin = $isfadmin;\n";
 echo "  window.APT_OPTIONS.isstud = $isstud;\n";
-echo "  window.APT_OPTIONS.cansnap = $cansnap;\n";
-echo "  window.APT_OPTIONS.canclone = $canclone;\n";
+echo "  window.APT_OPTIONS.cansnapshot = $cansnapshot;\n";
+echo "  window.APT_OPTIONS.canclone_profile = $canclone_profile;\n";
+echo "  window.APT_OPTIONS.canupdate_profile = $canupdate_profile;\n";
+echo "  window.APT_OPTIONS.cancopy_profile = $cancopy_profile;\n";
 echo "  window.APT_OPTIONS.canterminate = $canterminate;\n";
 echo "  window.APT_OPTIONS.wholedisk = $wholedisk;\n";
 echo "  window.APT_OPTIONS.snapping = $snapping;\n";
@@ -269,6 +277,7 @@ echo "<script src='js/lib/nv.d3.js'></script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/jquery-ui.js'></script>\n";
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
+echo "<script src='js/lib/filesize.min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();

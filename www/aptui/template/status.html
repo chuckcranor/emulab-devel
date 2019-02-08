@@ -236,7 +236,7 @@ pre {
 		      data-content="Create a disk image from one of your nodes.
 				    Click for more info."> 
 		Create Disk Image</button>
-	      <% if (expinfo.profile_uuid) { %>
+	      <% if (window.APT_OPTIONS.cancopy_profile) { %>
 		<a class='btn btn-xs btn-primary'
 		   href='manage_profile.php?action=copy&uuid=<%= expinfo.profile_uuid %>'
 		   id='copy_button' type=button
@@ -244,11 +244,11 @@ pre {
 	           data-delay='{"hide":1000, "show":500}'
 		   data-html='true'
 		   data-content="When you <em>copy</em> a profile,
-				 you are creating a new profile that
-				 uses the same source code and metadata (description,
-				 instructions) as the original profile, but without
-				 creating a new disk image. Instead, the new profile uses
-				 whatever images the original profile uses."> 
+			 you are creating a new profile that
+			 uses the same source code and metadata (description,
+			 instructions) as the original profile, but without
+			 creating a new disk image. Instead, the new profile
+			 uses whatever images the original profile uses."> 
 		  Copy</a>
 	      <% } %>
 	    <% } %>
@@ -759,12 +759,130 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
 	      <div class="text-danger hidden
 			  snapshot-error choose-node-error"></div>
 	    </center>
-	    <div style="text-align: center;">
-	      <div id='snapshot_update_prepare_div'
-		   style="display: inline-block; width: 80%; margin-top: 10px;">
-		<b>Did you add any accounts or groups to your node?</b>
+	  </div>
+	  <% var imageonly = 0;
+	     if (window.APT_OPTIONS.isscript ||
+	         (!window.APT_OPTIONS.canclone_profile &&
+	          !window.APT_OPTIONS.canupdate_profile)) { imageonly = 1; } %>
+	  <div class="fhide step2" data-step="2">
+	    <% if (! imageonly) { %>
+	    <div id="snapshot-radios"
+		 style="text-align: center; margin-top: 10px;">
+	      <div id="snapshot-radio-title">
+		<b>What would you like to do with this image?</b>
+		<br>
+	      </div>
+	      <div id="snapshot-help-popover-div"></div>
+	      <div style="display: inline-block; text-align: left">
+		<div class="radio" id="update-profile-radio">
+		  <label>
+		    <input type="radio" name="whattodo"
+			   id="update-profile" value="update-profile" checked>
+		    Update the current profile to use it.
+		    <a href='#' class='btn btn-xs snapshot-help-button'>
+		      <span class='glyphicon glyphicon-question-sign'
+			    data-which="update-profile"
+			    style='margin-bottom: 4px;'></span>
+		    </a>
+		  </label>
+		</div>
+		<div class="radio" id="copy-profile-radio">
+		  <label>
+		    <input type="radio" name="whattodo"
+			   id="copy-profile" value="copy-profile">
+		    Make a copy of the current profile, updated to use the new
+		    image. 
+		    <a href='#' class='btn btn-xs snapshot-help-button'>
+		      <span class='glyphicon glyphicon-question-sign'
+			    data-which="copy-profile"
+			    style='margin-bottom: 4px;'></span>
+		    </a>
+		  </label>
+		</div>
+		<div class="radio" id="image-only-radio">
+		  <label>
+		    <input type="radio" name="whattodo"
+			   id="image-only" value="image-only">
+		    Just create a disk image, I will decide what to do with it
+		    later.
+		    <a href='#' class='btn btn-xs snapshot-help-button'>
+		      <span class='glyphicon glyphicon-question-sign'
+			    data-which="image-only"
+			    style='margin-bottom: 4px;'></span>
+		    </a>
+		  </label>
+		</div>
+	      </div>
+	    </div>
+	    <% } %>
+	    <div id='snapshot-name-div'
+		 <% if (imageonly) { %>
+		 style="margin-top: 10px;"
+		 <% } %>
+		 class='hidden'>
+	      <center class="image-only hidden">
+		<b>Please tell us what name to use for your new image</b>
+		<% if (imageonly) { %>
+		  <a href='#' class='btn btn-xs snapshot-help-button'>
+		    <span class='glyphicon glyphicon-question-sign'
+			  data-which="image-only"
+			  style='margin-bottom: 4px;'></span>
+		  </a>
+		<% } %>
+	      </center>
+	      <center class="copy-profile hidden">
+		<b>Please tell us what name to use for your new profile</b>
+	      </center>
+	      <center>
+		<input placeholder="alphanumeric please" type="text">
+	      </center>
+	      <div class="text-danger hidden snapshot-error name-error"
+		   style="text-align: center;">
+	      </div>
+	      <div class="text-danger hidden snapshot-error inuse-error"
+		   style="text-align: center;">
+	      </div>
+	    </div>
+	  </div>
+	  <center id='snapshot-description-div'
+		  style="margin-top: 10px;">
+	    <b>Please briefly describe your image:</b>
+	    <br>
+	    <textarea style="width: 85%;"
+		      placeholder="Optional, but very handy when looking at a list of all your images."
+		      rows=2 type='textarea'></textarea>		
+	    <div class="text-danger hidden
+			snapshot-error description-error"
+		 style="text-align: center;">
+	  </center>
+	  <div id="snapshot-options"
+	       style="text-align: center; margin-top: 10px;">
+	    <div style="display: inline-block; text-align: left">
+	      <ul class="list-unstyled">	    
+	      <li id='snapshot-wholedisk-div'
+		  class="hidden">
+		<input type=checkbox
+		       id='snapshot-wholedisk' value=yes>
+		<b>Create a whole disk image?</b>
+		<a href='#' class='btn btn-xs'
+		   data-toggle='popover'
+		   data-html='true'
+		   data-delay='{"hide":500}'
+		   data-content="Check this box if you need to capture more
+				 then just the primary partition of your disk.
+				 For example, you created a file system on
+				 parition two, and want to include that in
+				 your new disk image. 
+				 <b><em>Do not check this box if you do not
+				 need to do this or 
+				 do not know what this means!</em></b>">
+		  <span class='glyphicon glyphicon-question-sign'
+			style='margin-bottom: 4px;'></span>
+		</a></li>
+	      <li id='snapshot_update_prepare_option'>
 		<input type=checkbox
 		       id='snapshot_update_prepare' value=yes>
+		<b>Did you add any accounts or groups to your node?</b>
 		<a href='#' class='btn btn-xs'
 		   data-toggle='popover'
 		   data-html='true'
@@ -782,116 +900,8 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
 		  <span class='glyphicon glyphicon-question-sign'
 			style='margin-bottom: 4px;'></span>
 		</a>
-	      </div>
-	    </div>
-	  </div>
-	  <div class="fhide step2" data-step="2">
-	    <div style="text-align: center; margin-top: 10px;">
-	      <div id="snapshot-radio-title">
-		<b>What would you like to do with this image?</b>
-		<br>
-	      </div>
-	      <div id="clone-help-popover-div"></div>
-	      <div style="display: inline-block; text-align: left">
-		<div class="radio">
-		  <label>
-		    <input type="radio" name="whattodo"
-			   id="update-profile" value="update-profile" checked>
-		    Update the current profile to use it.
-		    <a href='#' class='btn btn-xs' id='snapshot-help-button'>
-		      <span class='glyphicon glyphicon-question-sign'
-			    style='margin-bottom: 4px;'></span>
-		    </a>
-		  </label>
-		</div>
-		<div class="radio">
-		  <label>
-		    <input type="radio" name="whattodo"
-			   id="copy-profile" value="copy-profile">
-		    Make a copy of the current profile, updated to use the new
-		    image. 
-		    <a href='#' class='btn btn-xs clone-help-button'>
-		      <span class='glyphicon glyphicon-question-sign'
-			    style='margin-bottom: 4px;'></span>
-		    </a>
-		  </label>
-		</div>
-		<div class="radio">
-		  <label>
-		    <input type="radio" name="whattodo"
-			   id="new-profile" value="new-profile">
-		    Create a brand new (empty) profile, using the new image.
-		    <a href='#' class='btn btn-xs clone-help-button'>
-		      <span class='glyphicon glyphicon-question-sign'
-			    style='margin-bottom: 4px;'></span>
-		    </a>
-		  </label>
-		</div>
-		<div class="radio">
-		  <label>
-		    <input type="radio" name="whattodo"
-			   id="image-only" value="image-only">
-		    Just create a disk image, I will decide what to do with it
-		    later.
-		  </label>
-		</div>
-		<div id='snapshot-description-div'>
-		  <center>
-		    <b>Please briefly describe your image:</b>
-		    <br>
-		  </center>
-		  <textarea style="width: 100%;"
-			    placeholder="Optional, but very handy when looking at a list of all your images"
-			    rows=2 type='textarea'></textarea>		
-		  <div class="text-danger hidden
-			      snapshot-error description-error"
-		       style="text-align: center;">
-		  </div>
-		</div>
-	      </div>
-	    </div>
-	    <div id='snapshot-name-div' class='hidden'>
-	      <center class="image-only hidden">
-		<b>Please tell us what name to use for your new image</b>
-		<br>
-		<input class="image-name"
-		       placeholder="alphanumeric please" type="text">
-	      </center>
-	      <center class="new-profile hidden">
-		<b>Please tell us what name to use for your new profile</b>
-		<br>
-		<input class="profile-name"
-		       placeholder="alphanumeric please" type="text">
-	      </center>
-	      <div class="text-danger hidden snapshot-error name-error"
-		   style="text-align: center;">
-	      </div>
-	      <div class="text-danger hidden snapshot-error inuse-error"
-		   style="text-align: center;">
-	      </div>
-	    </div>
-	    <div style="text-align: center;">
-	      <div id='snapshot-wholedisk-div' class="hidden"
-		   style="display: inline-block; width: 80%; margin-top: 10px;">
-		<b>Create a whole disk image?</b>
-		<input type=checkbox
-		       id='snapshot-wholedisk' value=yes>
-		<a href='#' class='btn btn-xs'
-		   data-toggle='popover'
-		   data-html='true'
-		   data-delay='{"hide":500}'
-		   data-content="Check this box if you need to capture more
-				 then just the primary partition of your disk.
-				 For example, you created a file system on
-				 parition two, and want to include that in
-				 your new disk image. 
-				 <b><em>Do not check this box if you do not
-				 need to do this or 
-				 do not know what this means!</em></b>">
-		  <span class='glyphicon glyphicon-question-sign'
-			style='margin-bottom: 4px;'></span>
-		</a>
-	      </div>
+	      </li>
+	      </ul>
 	    </div>
 	  </div>
 	  <p style="padding-top: 10px;">
@@ -1241,12 +1251,9 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
 	  You can quickly convert a running experiment into
 	  a <em>new</em> profile, capturing the disk contents of your
 	  node and saving it away for later use by experiments based on
-	  the new profile.
-	</p>
-	<p>
-	  You can also create a new disk image, but start with an empty
-	  (blank profile), and use the new image for the nodes in whatever
-	  topology you create.
+	  the new profile. The new profile is a copy of the current profile,
+	  but with the node you selected to image, updated to boot the
+	  new image.
 	</p>
 	<p>
 	  The node in your experiment will be shutdown, and a disk image
@@ -1275,6 +1282,39 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
 	  <b>primary</b> partition on your node, everything is saved.
 	  The next user to instantiate this profile will use this new
 	  disk image.
+	</p>
+	<p>
+	  After you click to confirm, the node in your experiment will
+	  be shutdown, and a disk image captured. You will be able to
+	  track the progress of the image capture as it proceeds.
+	</p>
+	<p>
+	  When the imaging process is complete, we will update your
+	  profile, changing the node you are imaging, to boot the new
+	  image next time you start an experiment.
+	</p>
+	<p>
+	  <em>The contents of your home directory is <b>NOT</b> saved</em>. You
+	  should install your software and data files in standard locations like
+	  <tt>/usr/local</tt> or <tt>/opt</tt>. The reason for this is so
+	  that dependencies on specific user home directories do not
+	  become embedded in your images.
+	</p>
+      </div>
+    </div>
+  </div>    
+  <div class="hidden" id="imageonly-help-div">
+    <div class="panel panel-info">
+      <div class="panel-body">
+	<button type='button' class='close'>
+          &times;</button>
+	<br>
+	<p>
+	  Create a disk image from the node selected, you can decide
+	  later what profile(s) to use it in. This is a complete disk
+	  copy of the <b>primary</b> partition on your node, everything
+	  is saved. When the imaging process is complete we will tell
+	  you the <em>URN</em> of your new image, to use in your profiles.
 	</p>
 	<p>
 	  After you click to confirm, the node in your experiment will
