@@ -765,5 +765,23 @@ class Profile
 
 	return array($finalForm, $defaults);
     }
+
+    #
+    # Temporary hack to control who gets the new genilib form code.
+    #
+    function UseNewGeniLib()
+    {
+        # Look to see what project the profile is in, since that determines
+        # if the profile is being managed on the new geni-lib path.
+	$project = Project::Lookup($this->pid_idx());
+	if (!$project) {
+	    return 0;
+	}
+        if (FeatureEnabled("NewPParams", null,
+                           $project->DefaultGroup(), null)) {
+            return 1;
+        }
+        return 0;
+    }
 }
 ?>

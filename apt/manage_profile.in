@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -58,6 +58,8 @@ my %modifiers   = ();
 my $rspec;
 my $script;
 my $project;
+# Temporary testing.
+my $usenewgenilib = 0;
 
 #
 # Configure variables
@@ -116,6 +118,7 @@ sub ListImages();
 sub GetScriptParameters($$);
 sub VerifyXML($$);
 sub ModifyProfileInternal($$$);
+sub UseNewGenilib($);
 		      
 # The web interface (and in the future the xmlrpc interface) sets this.
 my $this_user = User->ImpliedUser();
@@ -277,6 +280,8 @@ sub CreateProfile()
     elsif (!$project->AccessCheck($this_user, TB_PROJECT_MAKEIMAGEID())) {
 	UserError({"profile_pid" => "Not enough permission in this project"});
     }
+    $usenewgenilib = UseNewGenilib($project);
+    
     # Check datasets.
     if (defined($rspec)) {
 	my $errmsg = "Bad dataset";
@@ -679,6 +684,7 @@ sub ModifyProfileInternal($$$)
     my ($profile, $project, $pmsg)  = @_;
     my %errors     = ();
     my $fromrepo   = 0;
+    $usenewgenilib = UseNewGenilib($project);
 
     # Check datasets.
     if (defined($rspec)) {
@@ -941,6 +947,7 @@ sub UpdateProfileFromRepo()
 	print STDERR "Profile is busy, cannot lock it.\n";
 	exit(1);
     }
+    $usenewgenilib = UseNewGenilib($project);
     
     #
     # We want to update the profile from its URL, and get back the
@@ -970,8 +977,9 @@ sub UpdateProfileFromRepo()
 	    $profile->Unlock();
 	    fatal("Could not open temporary file for script");
 	}
+	my $opts = ($usenewgenilib ? "-N" : "");
 	print $fh $script;
-	$output = emutil::ExecQuiet("$RUNGENILIB $filename");
+	$output = emutil::ExecQuiet("$RUNGENILIB $opts $filename");
 	if ($?) {
 	    print STDERR $output;
 	    $profile->Unlock();
@@ -1027,9 +1035,10 @@ sub GetScriptParameters($$)
 	$$pref = "Could not open temporary file for script";
 	return -1;
     }
+    my $opts = ($usenewgenilib ? "-N" : "");
     print $fh $script;
 
-    my $output = emutil::ExecQuiet("$RUNGENILIB -p $filename");
+    my $output = emutil::ExecQuiet("$RUNGENILIB $opts -p $filename");
     if ($?) {
 	$$pref = $output;
 	return $? >> 8;
@@ -1653,5 +1662,18 @@ sub CanDelete($$)
 	if ($user->uid_idx() == $profile->creator_idx());
     return 1
 	if ($user->SameUser($project->GetLeader()));
+    return 0;
+}
+
+#
+# Should user get new PP code for testing. Use project membership.
+#
+sub UseNewGenilib($)
+{
+    my ($project) = @_;
+
+    return 1
+	if (EmulabFeatures->FeatureEnabled("NewPParams", undef, $project));
+
     return 0;
 }

@@ -40,6 +40,7 @@ $(function ()
       output: null
     };
     var editor        = null;
+    var ppstart       = window.ppstartOld;
     var loaded_uuid   = null;
     var ppchanged     = false;
     var monitor       = null;
@@ -60,7 +61,6 @@ $(function ()
 	marked.setOptions({"sanitize" : true});
 
 	window.APT_OPTIONS.initialize(sup);
-	window.APT_OPTIONS.initialize(ppstart);
 	registered = window.REGISTERED;
 	webonly    = window.WEBONLY;
 	isadmin    = window.ISADMIN;
@@ -665,18 +665,12 @@ $(function ()
 		    cIndex--;
 		}
 	    }
-	    $('#pp_form input').change(function() {
-		ppchanged = true;
-	    });
-	    $('#pp_form select').change(function() {
-		ppchanged = true;
-	    });
 
 	    // TEMPORARY STOPGAP
 	    // Refer to Issue #71
 	    // https://gitlab.flux.utah.edu/emulab/emulab-devel/issues/71
-	    if ($('#pp_form #hwinfo').length == 0) {
-		$('#pp_form input[data-key=osNodeType]').parent().append(''+
+	    if ($('#pp-form #hwinfo').length == 0) {
+		$('#pp-form input[data-key=osNodeType]').parent().append(''+
 		    '<a href="' + window.MANUAL + '/hardware.html" style="'+
 			'position:absolute;'+
 			'right:21px;'+
@@ -1034,6 +1028,7 @@ $(function ()
 	// form handler pages expect.
 	var fields = $('.step-forms').serializeArray();
 	$.each(fields, function(i, field) {
+	    console.info(field, field.name, field.value);
 	    /*
 	     * The sites array is special since we want that to be
 	     * an array inside of the formfields array, and serialize
@@ -1051,6 +1046,9 @@ $(function ()
 	    formfields["sites"] = sites;
 	}
 	console.info(formfields);
+	if (! checkonly) {
+	    return;
+	}
 	var xmlthing = sup.CallServerMethod(null, "instantiate",
 					    (checkonly ?
 					     "CheckForm" : "Submit"),
@@ -1454,6 +1452,7 @@ $(function ()
 
     function SwitchJacks(which)
     {
+      console.info("SwitchJacks", which);
       if (which == 'small')
       {
 	$('#stepsContainer #finalize_container')
@@ -1653,6 +1652,12 @@ $(function ()
 	    selected_rspec   = profile_blob.rspec;
 	    selected_version = profile_blob.version;
 	    amdefault        = profile_blob.amdefault;
+	    if (profile_blob.newgenilib) {
+		ppstart = window.ppstartNew;		
+	    }
+	    else {
+		ppstart = window.ppstartOld;		
+	    }
 
 	    // Not allowed to copy a repo based profile.
 	    if (profile_blob.fromrepo) {
@@ -2494,7 +2499,7 @@ $(function ()
 
     function ClusterSelected(selected, pickered)
     {
-	console.info("ClusterSelected: ", selected);
+	console.info("ClusterSelected: ", selected, pickered);
 	var cluster = null;
 	window.foo = selected;
 

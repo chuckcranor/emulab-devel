@@ -4,7 +4,7 @@
 //       grey out -/+ and use tooltips to tell people about min/max limits.
 //
 $(function () {
-  window.ppstart = (function()
+  window.ppstartNew = (function()
     {
 	'use strict';
 

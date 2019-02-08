@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -79,6 +79,7 @@ function Do_GetProfile()
                             'repohash'    => ($profile->repourl() ?
                                               substr($profile->repohash(),0,8)
                                               : ""),
+                            'newgenilib'  => $profile->UseNewGeniLib(),
 			    'amdefault'   => $amdefault));
 }
 
@@ -894,6 +895,9 @@ function Do_RunScript()
 
     if (preg_match("/^import/m", $script)) {
         $command = "webrungenilib";
+        if (Profile::UseNewGeniLib($this_user)) {
+            $command .= " -N ";
+        }
     }
     elseif (preg_match("/^source tb_compat/m", $script)) {
         $command = "webns2rspec -a";

@@ -534,7 +534,10 @@ if (!isset($create)) {
     SPITFORM($defaults, false, array());
     echo "<div style='display: none'><div id='jacks-dummy'></div></div>\n";
 
-    AddTemplateList(array("instantiate", "instantiate-new", "aboutapt", "aboutcloudlab", "aboutpnet", "waitwait-modal", "rspectextview-modal", "picker-template","reservation-graph"));
+    AddTemplateList(array("instantiate-new",
+                          "aboutapt", "aboutcloudlab", "aboutpnet",
+                          "waitwait-modal", "rspectextview-modal",
+                          "picker-template","reservation-graph"));
     SPITFOOTER();
     return;
 }

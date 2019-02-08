@@ -739,6 +739,9 @@ function Do_CheckScript()
             
             $command .= " -P $pfname";
         }
+        if ($profile->UseNewGeniLib($this_user)) {
+            $command .= " -N ";
+        }
     }
     elseif (preg_match("/^source tb_compat/m", $ajax_args["script"])) {
         $command = "webns2rspec";
@@ -817,9 +820,6 @@ function Do_BindParameters()
     global $DEFAULT_AGGREGATE;
     global $suexec_output, $suexec_output_array;
 
-    # Allow for new code path.
-    $newparams = isset($ajax_args["newparams"]) && $ajax_args["newparams"];
-
     # Allow for form precheck only. So JS code knows it will be fast. 
     $checkonly = isset($ajax_args["checkonly"]) && $ajax_args["checkonly"];
 
@@ -832,6 +832,9 @@ function Do_BindParameters()
 	SPITAJAX_ERROR(1, "Unknown profile uuid");
 	return;
     }
+    # Allow for new code path.
+    $usenewgenilib = $profile->UseNewGeniLib($this_user);
+    
     # Guest users do not run geni-lib; return the rspec or error.
     if (!isset($this_user)) {
 	if ($profile->rspec() && $profile->rspec() != "") {
@@ -874,7 +877,7 @@ function Do_BindParameters()
     unset($formfields["script"]);
     unset($formfields["paramdefs"]);
 
-    if ($newparams) {
+    if ($usenewgenilib) {
         if (Do_CheckFormNew($formfields, $paramdefs, $rval)) {
             # Special return value for JS code.
             SPITAJAX_ERROR(2, $rval);
@@ -906,7 +909,7 @@ function Do_BindParameters()
     fwrite($fp, $script);
     fclose($fp);
     $fp = fopen($parmfname, "w");
-    if ($newparams) {
+    if ($usenewgenilib) {
         fwrite($fp, json_encode($formfields));
     }
     else {
@@ -923,6 +926,7 @@ function Do_BindParameters()
     #
     $retval = SUEXEC($this_uid, "nobody",
 		     "webrungenilib $warningsfatal -b $parmfname ".
+                     ($usenewgenilib ? " -N " : "") .
                      "  -o $outfname $infname",
 		     SUEXEC_ACTION_CONTINUE);
     

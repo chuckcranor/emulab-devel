@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -231,11 +231,12 @@ function REQUIRE_PPWIZARDSTART()
   REQUIRE_UNDERSCORE();
   REQUIRE_SUP();
   REQUIRE_JACKS_EDITOR();
-  AddTemplate("ppform-wizard");
-  AddTemplate("ppform-wizard-body");
   AddTemplate("choose-am");
   AddTemplate("image-picker-modal");
+  AddTemplate("ppform-wizard");
+  AddTemplate("ppform-wizard-body");
   AddLibrary("js/ppwizardstart.js");
+  AddLibrary("js/new/ppwizardstart.js");
 }
 
 function REQUIRE_SUP()

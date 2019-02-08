@@ -2,7 +2,7 @@
 // Start a Parameterized Profile
 //
 $(function () {
-  window.ppstart = (function()
+  window.ppstartOld = (function()
     {
 	'use strict';
 
@@ -739,6 +739,7 @@ $(function () {
 	     * the initial values.
 	     */
 	    var callback = function(json) {
+		console.info("GetParameters", json);
 		if (json.code) {
 		    sup.SpitOops("oops", json.value);
 		}

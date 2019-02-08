@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,11 +48,12 @@ sub usage()
  
     exit(-1);
 }
-my $optlist    = "do:pP:b:W";
+my $optlist    = "do:pP:b:WN";
 my $debug      = 0;
 my $getparams  = 0;
 my $paramfile;
 my $ofile;
+my $newgenilib = 0;
 my $warningsfatal = 0;
 
 #
@@ -129,6 +130,9 @@ if (defined($options{"P"})) {
 }
 if (defined($options{"W"})) {
     $warningsfatal = 1;
+}
+if (defined($options{"N"})) {
+    $newgenilib = 1;
 }
 if (defined($options{"b"})) {
     $paramfile = $options{"b"};
@@ -214,6 +218,7 @@ if ($MAINSITE) {
 $cmdargs .= " -u " . $this_user->uid();
 $cmdargs .= ($getparams ? " -p " : "");
 $cmdargs .= ($warningsfatal ? " -W " : "");
+$cmdargs .= ($newgenilib ? " -N " : "");
 
 #
 # We want to send over both files via STDIN, so combine them, and pass
