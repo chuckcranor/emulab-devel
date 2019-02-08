@@ -1051,7 +1051,7 @@ ScriptAlias /protogeni/gtw/pubxmlrpc @prefix@/devel/gtw/protogeni/pubxmlrpc/pubg
 	SSLRequireSSL
 	Order deny,allow
 	allow from all
-	SSLOptions +StdEnvVars +LegacyDNStringFormat
+	SSLOptions +StdEnvVars +ExportCertData +LegacyDNStringFormat
 	Options +ExecCGI +FollowSymLinks
 	SetHandler cgi-script
 	SetEnv USER "nobody"

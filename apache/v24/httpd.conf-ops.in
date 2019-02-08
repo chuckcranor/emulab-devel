@@ -368,51 +368,6 @@ DocumentRoot "/usr/local/www/data"
 </Directory>
 
 #
-# Twiki-related entries
-#
-<Directory "/usr/local/www/data/twiki/bin">
-    Options +ExecCGI
-    SetHandler cgi-script
-    Allow from all
-    SetEnv USER "www"
-</Directory>
-<Directory "/usr/local/www/data/twiki/pub">
-    Options +FollowSymLinks +Includes
-    AllowOverride None
-    Allow from all
-</Directory>
-<Directory /usr/local/www/data/twiki/data>
-    Options None
-    AllowOverride None
-    Order deny,allow
-    Deny from all
-</Directory>
-<Directory /usr/local/www/data/twiki/lib>
-    Options None
-    AllowOverride None
-    Order deny,allow
-    Deny from all
-</Directory>
-<Directory /usr/local/www/data/twiki/templates>
-    Options None
-    AllowOverride None
-    Order deny,allow
-    Deny from all
-</Directory>
-
-#
-# CVSWEB
-#
-<Directory /usr/testbed/www/cvsweb>
-    Options +ExecCGI
-    SetHandler cgi-script
-    SetEnv USER "nobody"
-    AllowOverride None
-    Order allow,deny
-    Allow from all
-</Directory>
-
-#
 # UserDir: The name of the directory that is appended onto a user's home
 # directory if a ~user request is received.
 #
