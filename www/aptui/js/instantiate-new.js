@@ -1461,7 +1461,7 @@ $(function ()
 	  .addClass('col-lg-8 col-md-8 col-sm-8');
 	$('#stepsContainer #inline_large_jacks').html('');
 	$('#inline_large_container').addClass('hidden');
-	ppstart.ShowThumbnail(selected_rspec, updateJacksGraph);
+	ppstart.ShowThumbnail(selected_rspec, null);
 			//if (ispprofile) {
 				//ppstart.ChangeJacksRoot($('#stepsContainer-p-2 #inline_jacks'), true);
 			//}

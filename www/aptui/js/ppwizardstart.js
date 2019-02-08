@@ -778,10 +778,7 @@ $(function () {
       var jacksGraphCallback = null;
       function ShowThumbnail(selected_rspec, updateJacksGraph)
       {
-	if (updateJacksGraph)
-	{
-	  jacksGraphCallback = updateJacksGraph;
-	}
+	jacksGraphCallback = updateJacksGraph;
 	var root = $('#stepsContainer-p-2 #inline_jacks');
 	if (! thumbnail)
 	{

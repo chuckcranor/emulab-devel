@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -616,72 +616,7 @@ class Profile
     }
 
     function BestAggregate($rspec = null) {
-	if (!$rspec) {
-	    $rspec = $this->rspec();
-	}
-	$parsed_xml = simplexml_load_string($rspec);
-
-        if (count($parsed_xml->node) == 0) {
-            return null;
-        }
-	foreach ($parsed_xml->node as $node) {
-	    # No XEN VMs on Cloudlab yet.
-	    if ($node->sliver_type &&
-		$node->sliver_type["name"] &&
-		$node->sliver_type["name"] == "emulab-xen") {
-		return "Utah APT";
-	    }
-	    if ($node->hardware_type &&
-		$node->hardware_type["name"]) {
-                if ($node->hardware_type["name"] == "m400") {
-                    return "Utah Cloudlab";
-                }
-                elseif ($node->hardware_type["name"] == "dl360") {
-                    return "Utah DDC";
-                }
-                elseif ($node->hardware_type["name"] == "r320" ||
-                        $node->hardware_type["name"] == "c6220") {
-                    return "Utah APT";
-                }
-	    }
-	    # Check URL
-	    if (! ($node->sliver_type &&
-		   $node->sliver_type->disk_image &&
-		   ($node->sliver_type->disk_image["url"] ||
-		    $node->sliver_type->disk_image["name"]))) {
-		continue;
-	    }
-            
-	    if ($node->sliver_type->disk_image["name"]) {
-		$name = $node->sliver_type->disk_image["name"];
-		if (preg_match("/^http/", $name)) {
-                    $url = $name;
-                }
-                else {
-                    #
-                    # The only image that runs on Cloudlab is UBUNTU14-64-ARM
-                    #
-                    if (preg_match("/ARM/", $name) ||
-		        preg_match("/HPC/", $name) ||
-		        preg_match("/OSCNF/", $name)) {
-                        return "Utah Cloudlab";
-                    }
-                    return "Utah APT";
-                }
-	    }
-            else {
-                $url = $node->sliver_type->disk_image["url"];
-            }
-            if (preg_match("/utah\.cloudlab\.us/", $url)) {
-                return "Utah Cloudlab";
-            }
-            if (preg_match("/emulab\.net/", $url) ||
-                preg_match("/geniracks\.net/", $url) ||
-                preg_match("/instageni/", $url)) {
-                return "Utah APT";
-            }
-	}
-	return null;
+        return null;
     }
 
     function GenerateFormFragment($json_data = null) {
