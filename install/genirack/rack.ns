@@ -20,7 +20,6 @@ tb-set-elabinelab-attribute TARGETSYS_ROUTER  128.82.75.65
 tb-set-elabinelab-attribute TARGETSYS_BOSSIP  128.82.75.68
 tb-set-elabinelab-attribute TARGETSYS_OPSIP   128.82.75.69
 # Geni Rack specific stuff.
-tb-set-elabinelab-attribute GENIRACK_FOAMIP  128.82.75.70
 tb-set-elabinelab-attribute GENIRACK_FLOWIP  128.82.75.71
 tb-set-elabinelab-attribute GENIRACK_ILOIP   128.82.75.66
 tb-set-elabinelab-attribute GENIRACK_CONTROLIP 128.82.75.67
@@ -30,9 +29,9 @@ tb-set-elabinelab-attribute NAMED_FORWARDERS "128.82.254.154,128.82.254.155,155.
 tb-set-elabinelab-attribute NAMED_ALSONOTIFY 155.98.32.70
 #tb-set-elabinelab-attribute ROUTABLE_IPRANGE "128.82.75.96-128.82.75.126"
 
-tb-set-elabinelab-attribute GENIRACK_COUNTRY   "US"
-tb-set-elabinelab-attribute GENIRACK_LATITUDE  "36.88560"
-tb-set-elabinelab-attribute GENIRACK_LONGITUDE "-76.30741"
+tb-set-elabinelab-attribute TARGETSYS_COUNTRY   "US"
+tb-set-elabinelab-attribute TARGETSYS_LATITUDE  "36.88560"
+tb-set-elabinelab-attribute TARGETSYS_LONGITUDE "-76.30741"
 
 # Reset to admin email later.
 tb-set-elabinelab-attribute TARGETSYS_TBOPS    "genirack-ops@flux.utah.edu"

@@ -24,15 +24,15 @@ tb-set-elabinelab-attribute TARGETSYS_OPSIP   10.10.10.3
 
 # Added Utah boss to avoid timeouts during setup.
 tb-set-elabinelab-attribute NAMED_FORWARDERS "155.98.32.70"
-#tb-set-elabinelab-attribute NAMED_ALSONOTIFY 155.98.32.70
+tb-set-elabinelab-attribute NAMED_ALSONOTIFY 155.98.32.70
 
 # Turn this on to federate with the MotherShip.
 tb-set-elabinelab-attribute CLOUDLAB_FEDERATED 1
 
-# Reset to admin email later.
-tb-set-elabinelab-attribute TARGETSYS_TBOPS    "stoller@flux.utah.edu"
-tb-set-elabinelab-attribute TARGETSYS_TBLOGS   "stoller@flux.utah.edu"
-tb-set-elabinelab-attribute TARGETSYS_TBSTATED "stoller@flux.utah.edu"
+# These are ignored.
+tb-set-elabinelab-attribute TARGETSYS_TBOPS    "powder-ops@flux.utah.edu"
+tb-set-elabinelab-attribute TARGETSYS_TBLOGS   "powder-logs@flux.utah.edu"
+tb-set-elabinelab-attribute TARGETSYS_TBSTATED "powder-ops@flux.utah.edu"
 
 # We make this stuff up for the site. 
 tb-set-elabinelab-attribute TARGETSYS_HOMEBASE  POWDERFIXED
@@ -41,6 +41,9 @@ tb-set-elabinelab-attribute SSLCERT_COUNTRY     US
 tb-set-elabinelab-attribute SSLCERT_STATE       "Utah"
 tb-set-elabinelab-attribute SSLCERT_LOCALITY    "Utah Powder Fixed"
 tb-set-elabinelab-attribute SSLCERT_ORGNAME     "Utah Powder Fixed Test"
+
+# Use the Mothership for ntp.
+tb-set-elabinelab-attribute NTPSERVER "ntp1.emulab.net"
 
 # New way of getting a routable control address for initial XEN VMs.
 tb-set-elabinelab-role-attribute boss ROUTABLE_IP "routable"
@@ -59,14 +62,14 @@ tb-set-elabinelab-role-attribute boss XEN_LVMNOTHINPOOL yes
 
 # Remember that /q is on boss not ops (boss is the FS node).
 tb-set-elabinelab-role-attribute "boss" "EXTRADISKS" "ada1:/usr/testbed,ada2:/q"
-tb-set-elabinelab-role-attribute boss XEN_EXTRADISKS "disk1:50G,disk2:50G"
+tb-set-elabinelab-role-attribute boss XEN_EXTRADISKS "disk1:75G,disk2:240G"
 
 namespace eval TBCOMPAT {
     set elabinelab_maxpcs 0
     set elabinelab_hardware("boss") nuc7100-vm
     set elabinelab_nodeos("boss") FBSD112-64-STD
-    set elabinelab_source_tarfile "/proj/testbed/exp/elab-opsvm/emulab-src.tar.gz"
-    set elabinelab_nodeos("xenhost") XEN49-64-POWD
+    #set elabinelab_source_tarfile "/proj/testbed/exp/elab-opsvm/emulab-src.tar.gz"
+    set elabinelab_nodeos("xenhost") XEN49-64-STD
     set elabinelab_hardware("xenhost") nuc7100
     set elabinelab_fixnodes("xenhost") nuc20
 }
