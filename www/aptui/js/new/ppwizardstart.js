@@ -635,6 +635,9 @@ $(function () {
 			details.groupName = groupName = groupId;
 		    }
 		    if (!_.has(formGroups, groupId)) {
+			if (groupName == "Advanced") {
+			    details.hide = true;
+			}
 			var field = {
 			    "isgroup" : true,
 			    "groupId" : groupId,
