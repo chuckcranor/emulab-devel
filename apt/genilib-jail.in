@@ -109,7 +109,7 @@ sub mysystem($);
 #
 my $TBROOT   = "@prefix@";
 my $GENILIB  = "$TBROOT/lib/geni-lib/";
-my $debug    = 1;
+my $debug    = 0;
 
 # Watch for this being defined in the calling environment and use that.
 if (exists($ENV{"PYTHONPATH"})) {
