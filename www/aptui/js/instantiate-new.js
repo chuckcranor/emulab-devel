@@ -1046,9 +1046,6 @@ $(function ()
 	    formfields["sites"] = sites;
 	}
 	console.info(formfields);
-	if (! checkonly) {
-	    return;
-	}
 	var xmlthing = sup.CallServerMethod(null, "instantiate",
 					    (checkonly ?
 					     "CheckForm" : "Submit"),
