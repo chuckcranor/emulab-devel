@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2018 University of Utah and the Flux Group.
+# Copyright (c) 2005-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -417,6 +417,7 @@ sub frequency($;$)     {return GetAttribute($_[0], "frequency", $_[1]); }
 sub bios_waittime($;$) {return GetAttribute($_[0], "bios_waittime", $_[1]); }
 sub control_iface($;$) {return GetAttribute($_[0], "control_interface",$_[1]);}
 sub adminmfs_osid($;$) {return GetAttribute($_[0], "adminmfs_osid",$_[1]);}
+sub reoverymfs_osid($;$) {return GetAttribute($_[0], "recoverymfs_osid",$_[1]);}
 sub rebootable($;$)    {return GetAttribute($_[0], "rebootable",$_[1]);}
 sub power_delay($;$)   {return GetAttribute($_[0], "power_delay",$_[1]);}
 sub shared($;$)        {return GetAttribute($_[0], "shared",$_[1]);}

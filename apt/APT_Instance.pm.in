@@ -3632,5 +3632,42 @@ sub MaxExtension($$)
     return $response;
 }
 
+#
+# Turn on/off recovery mode for a sliver.
+#
+sub Recovery($$$)
+{
+    my ($self, $sliver_urn, $clear) = @_;
+    my $authority = $self->GetGeniAuthority();
+    my $geniuser  = $self->instance()->GetGeniUser();
+    my $slice     = $self->instance()->GetGeniSlice();
+    my $context   = APT_Geni::GeniContext();
+    return ContextError()
+	if (! (defined($geniuser) && defined($authority) &&
+	       defined($slice) && defined($context)));
+
+    my ($slice_credential, $speaksfor_credential) =
+	APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
+    return CredentialError()
+	if (!defined($slice_credential));
+
+    my $credentials = [$slice_credential->asString()];
+    if (defined($speaksfor_credential)) {
+	$credentials = [@$credentials, $speaksfor_credential->asString()];
+    }
+    my $args = {
+	"slice_urn"   => $slice->urn(),
+	"sliver_urn"  => $sliver_urn,
+	"credentials" => $credentials,
+    };
+    if ($clear) {
+	$args->{'clear'} = 1;
+    }
+    my $cmurl = $authority->url();
+    $cmurl = devurl($cmurl) if ($usemydevtree);
+
+    return Genixmlrpc::CallMethod($cmurl, $context, "Recovery", $args);
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,6 +44,7 @@ sub usage()
     print("Usage: manage_instance refresh instance\n");
     print("Usage: manage_instance reboot instance node_id ...\n");
     print("Usage: manage_instance reload instance node_id ...\n");
+    print("Usage: manage_instance recovery instance [-c] node_id\n");
     print("Usage: manage_instance deletenodes instance node_id ...\n");
     print("Usage: manage_instance monitor instance\n");
     print("Usage: manage_instance lockdown instance set|clear user|admin\n");
@@ -132,6 +133,7 @@ sub DoDenyOrMoreInfo($);
 sub DoRefresh();
 sub DoReboot();
 sub DoReload();
+sub DoRecovery();
 sub DoLockdown();
 sub DoPanic();
 sub DoManifests();
@@ -244,6 +246,9 @@ elsif ($action eq "reboot") {
 }
 elsif ($action eq "reload") {
     DoReload()
+}
+elsif ($action eq "recovery") {
+    DoRecovery()
 }
 elsif ($action eq "monitor") {
     StartMonitor()
@@ -2536,6 +2541,90 @@ sub DoRebootOrReload($)
 }
 sub DoReboot() { return DoRebootOrReload("reboot"); }
 sub DoReload() { return DoRebootOrReload("reload"); }
+
+#
+# Recovery mode.
+#
+sub DoRecovery()
+{
+    my ($errmsg, $exitcode, $errcode);
+    my $clear = 0;
+
+    my $optlist = "c";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"c"})) {
+	$clear = 1;
+    }
+    usage()
+	if (!@ARGV);
+    my $node_id = shift(@ARGV);
+
+    #
+    # Sanity check to make sure the node is really in the rspec, since
+    # we need its sliver urn.
+    #
+    my $sliver_urn;
+    my $sliver;
+    foreach my $obj ($instance->AggregateList()) {
+	my $manifest = GeniXML::Parse($obj->manifest());
+	if (! defined($manifest)) {
+	    fatal("Could not parse manifest for $obj");
+	}
+	my @nodes = (GeniXML::FindNodes("n:node", $manifest)->get_nodelist(),
+		     GeniXML::FindNodesNS("n:vhost", $manifest,
+					  $GeniXML::EMULAB_NS)->get_nodelist());
+	foreach my $node (@nodes) {
+	    my $client_id   = GeniXML::GetVirtualId($node);
+	    my $urn         = GeniXML::GetSliverId($node);
+	    my $manager_urn = GetManagerId($node);
+
+	    # No sliver urn or a different aggregate.
+	    next
+
+		if (! (defined($urn) &&
+		       defined($manager_urn) &&
+		       $manager_urn eq $obj->aggregate_urn()));
+
+	    if ($node_id eq $client_id) {
+		$sliver_urn = $urn;
+		$sliver = $obj;
+	    }
+	}
+    }
+    if (!defined($sliver_urn)) {
+	fatal("Could not find node '$node_id' in manifest");
+    }
+    if ($sliver->GetAptAggregate()->CheckStatus(\$errmsg)) {
+	print STDERR "$errmsg\n";
+	if (defined($webtask)) {
+	    $webtask->output($errmsg);
+	    $webtask->Exited(GENIRESPONSE_SERVER_UNAVAILABLE);
+	}
+	exit(1);
+    }
+    my $response = $sliver->Recovery($sliver_urn, $clear);
+    if ($response->code() != GENIRESPONSE_SUCCESS) {
+	$errcode = $response->code();
+	($exitcode,$errmsg) = ResponseErrorMessage($sliver, $response);
+	
+	# Important to tell web user about this
+	if ($response->code() == GENIRESPONSE_FORBIDDEN) {
+	    $exitcode = 1;
+	}
+	goto bad;
+    }
+    exit(0);
+  bad:
+    print STDERR "$errmsg\n";
+    if (defined($errmsg) && defined($webtask)) {
+	$webtask->Exited($errcode);
+	$webtask->output($errmsg);
+    }
+    exit($exitcode);
+}
 
 #
 # 

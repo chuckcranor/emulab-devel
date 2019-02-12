@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -944,20 +944,41 @@ sub AnnotateManifest($)
     # one, expecting it to be available by the time the user might
     # want to use it.
     #
-    if (!$node->IsTainted() &&
-	(($node->TipServer(\$tipserver) == 0 && defined($tipserver)) ||
-	 $node->isvirtnode())) {
-	if (! defined($services)) {
-	    $services = GeniXML::AddElement("services", $rspec);
+    if (!$node->IsTainted()) {
+	if ($node->TipServer(\$tipserver) == 0 && defined($tipserver) ||
+	    $node->isvirtnode()) {
+	    if (! defined($services)) {
+		$services = GeniXML::AddElement("services", $rspec);
+	    }
+	    my $console = GeniXML::FindNodesNS("n:console", $services,
+					       $GeniXML::EMULAB_NS)->pop();
+	    if (defined($console)) {
+		$services->removeChild($console);
+	    }
+	    $console = GeniXML::AddElement("console",
+					   $services, $GeniXML::EMULAB_NS);
+	    GeniXML::SetText("server", $console,
+			     (defined($tipserver) ? $tipserver : $sshdhost));
 	}
-	my $console = GeniXML::FindNodesNS("n:console", $services,
-					   $GeniXML::EMULAB_NS)->pop();
-	if (defined($console)) {
-	    $services->removeChild($console);
+	if ($node->recoverymfs_osid() && !$node->isvirtnode()) {
+	    if (! defined($services)) {
+		$services = GeniXML::AddElement("services", $rspec);
+	    }
+	    my $recovery = GeniXML::FindNodesNS("n:recovery", $services,
+						$GeniXML::EMULAB_NS)->pop();
+	    if (!defined($recovery)) {
+		$recovery = GeniXML::AddElement("recovery",
+						$services, $GeniXML::EMULAB_NS);
+	    }
+	    GeniXML::SetText("available", $recovery, "true");
 	}
-	$console = GeniXML::AddElement("console",$services,$GeniXML::EMULAB_NS);
-	GeniXML::SetText("server", $console,
-			 (defined($tipserver) ? $tipserver : $sshdhost));
+	elsif (defined($services)) {
+	    my $recovery = GeniXML::FindNodesNS("n:recovery", $services,
+						$GeniXML::EMULAB_NS)->pop();
+	    if (defined($recovery)) {
+		$services->removeChild($recovery);
+	    }
+	}
     }
 
     my $adb_port;
@@ -1694,6 +1715,12 @@ sub GenerateStatusBlob($)
     $state = "stopped"
 	if ($state eq "new");
 
+    # See if booted into the admin or recovery MFS (not frisbee).
+    my $recovery = 0;
+    if ($node->temp_boot_osid()) {
+	$recovery = 1;
+    }
+
     #
     # So we have a bunch of timestamps for various bits of state.
     # Not much atomicity, but I think we are okay. Use the most
@@ -1714,6 +1741,7 @@ sub GenerateStatusBlob($)
 	"rawstate"      => $rawstate,
 	"nodestatus"    => $nodestatus,
 	"utc"           => $utc,
+	"recovery"      => $recovery,
     };
 
     #

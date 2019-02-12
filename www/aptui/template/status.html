@@ -1052,9 +1052,28 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
       <li id="shell"><a name="shell">Shell</a></li>
       <li id="console"><a name="console">Console</a></li>
       <li id="consolelog"><a name="consolelog">Console Log</a></li>
-      <li id="reboot"><a name="reboot">Reboot</a></li>
-      <li id="reload"><a name="reload">Reload</a></li>
-      <li id="delete"><a name="delete">Delete Node</a></li>
+      <li id="reboot">
+	<a name="reboot"
+	   data-toggle='tooltip'
+	   title='Reboot node, click to confirm'
+	   data-trigger="hover">Reboot</a></li>
+      <li id="reload">
+	<a name="reload"
+	   data-toggle='tooltip'
+	   title='Reload node, click to confirm'
+	   data-trigger="hover">Reload</a></li>
+      <% if (isadmin) { %>
+      <li id="recovery">
+	<a name="recovery"
+	   data-toggle='tooltip'
+	   title='Boot node into (or out of) recovery mode, click for more info'
+	   data-trigger="hover">Recovery</a></li>
+      <% } %>
+      <li id="delete">
+	<a name="delete"
+	   data-toggle='tooltip'
+	   title='Delete node from experiment, click for more info'
+	   data-trigger="hover">Delete Node</a></li>
     </ul>
   </div>
   <div id="context"></div>
@@ -1097,6 +1116,40 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
 	      Cancel</button>
             <button class='btn btn-danger btn-sm'
 		    id='confirm_reload_button'>
+	      Confirm</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='confirm_recovery_modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+	  <div class="recovery-on hidden">
+	    <center>
+	      <h3>Boot node <b>into</b> <em>recovery</em> mode?</h3>
+	    </center>
+	    When you boot a node into recovery mode, your node is
+	    rebooted into a Linux memory based file system that allows
+	    you to mount and correct configuration errors on your
+	    disk. For example, you changed a configuration file in
+	    /etc, and now your node will not boot. Use recovery mode
+	    to revert the change. Then turn recovery mode off, which will
+	    reboot your node again, from the disk.
+	  </div>
+	  <div class="recovery-off hidden">
+	    <center>
+	      <h3>Boot node out of <em>recovery</em> mode?</h3>
+	    </center>
+	  </div>
+	  <center style="margin-top: 10px;">
+            <button type='button' style='margin-right: 20px;'
+                    class='btn btn-primary btn-sm' 
+                    data-dismiss='modal' aria-hidden='true'>
+	      Cancel</button>
+            <button class='btn btn-danger btn-sm'
+		    id='confirm_recovery_button'>
 	      Confirm</button>
 	  </center>
 	</div>

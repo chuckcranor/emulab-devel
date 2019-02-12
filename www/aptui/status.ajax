@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1950,6 +1950,57 @@ function Do_WarnExperiment()
     return;
 bad:
     sleep(1);
+}
+
+#
+# Put a node into recovery mode
+#
+function Do_Recovery()
+{
+    global $instance, $creator, $this_user;
+    global $ajax_args;
+    $opt = "";
+
+    if (StatusSetupAjax(1)) {
+	return;
+    }
+    if (!isset($ajax_args["node"])) {
+	SPITAJAX_ERROR(1, "Missing node argument");
+	return 1;
+    }
+    $node = $ajax_args["node"];
+    $uuid = $instance->uuid();
+    $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
+    if (!slice) {
+	SPITAJAX_ERROR(1, "no slice for instance");
+	return 1;
+    }
+    if (isset($ajax_args["clear"]) && $ajax_args["clear"]) {
+        $opt = "-c";
+    }
+    $webtask = WebTask::CreateAnonymous();
+    $retval = SUEXEC("nobody", "nobody",
+		     "webmanage_instance -t " . $webtask->task_id() . " ".
+                     "  recovery $uuid $opt " . escapeshellarg($node),
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error setting recovery mode");
+        }
+        else {
+            # JS needs this exitcode.
+            SPITAJAX_ERROR($webtask->exitcode(),
+                           "Could not set recovery mode: ". $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    $webtask->Delete();
+    SPITAJAX_RESPONSE(1);
+    return;
 }
 
 # Local Variables:

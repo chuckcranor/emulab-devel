@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -69,7 +69,7 @@ use vars qw(@ISA @EXPORT);
 	 TBSetExptFirewallVlan TBClearExptFirewallVlan
 	 TBNodeConsoleTail TBExptGetSwapoutAction TBExptGetSwapState
 	 TBNodeSubNodes
-	 TBNodeAdminOSID TBNodeNFSAdmin TBNodeDiskloadOSID
+	 TBNodeAdminOSID TBNodeRecoveryOSID TBNodeNFSAdmin TBNodeDiskloadOSID
 	 TBNodeType TBNodeTypeProcInfo TBNodeTypeBiosWaittime
 	 TBExptPortRange
 	 TBWideareaNodeID TBTipServers
@@ -1523,6 +1523,17 @@ sub TBNodeAdminOSID($)
     my $node = LocalNodeLookup($nodeid);
     if ($node) {
 	return $node->adminmfs_osid();
+    }
+    return 0;
+}
+
+sub TBNodeRecoveryOSID($)
+{
+    my ($nodeid) = @_;
+
+    my $node = LocalNodeLookup($nodeid);
+    if ($node) {
+	return $node->recoverymfs_osid();
     }
     return 0;
 }

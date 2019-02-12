@@ -115,6 +115,7 @@ my $WAP            = "$TB/sbin/withadminprivs";
 my $SHAREVLAN      = "$TB/sbin/sharevlan";
 my $PANIC          = "$TB/sbin/panic";
 my $LINKTEST       = "$TB/sbin/linktest_control";
+my $NODEADMIN      = "$TB/bin/node_admin";
 my $XMLLINT	   = "/usr/local/bin/xmllint";
 my $IMAGEINFO      = "$TB/sbin/imageinfo";
 my $PRERENDER      = "$TB/libexec/vis/prerender";
@@ -5962,6 +5963,88 @@ sub RunLinktest($)
     return GeniResponse->Create(GENIRESPONSE_SUCCESS,
 				{"status"  => "stopped",
 				 "results" => $output}, $output);
+}
+
+#
+# Another Emulab specific function to put a node into "recovery" mode.
+# In other words, a linux MFS so the user can fix what they broke.
+#
+sub Recovery($)
+{
+    my ($argref) = @_;
+    my $slice_urn    = $argref->{'slice_urn'};
+    my $credentials  = $argref->{'credentials'};
+    my $sliver_urn   = $argref->{'sliver_urn'};
+    my $clear        = $argref->{'clear'};
+    
+    if (! (defined($credentials) && 
+	   defined($slice_urn) && defined($sliver_urn))) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
+    return $credential
+	if (GeniResponse::IsResponse($credential));
+
+    my ($slice, $aggregate) = Credential2SliceAggregate($credential);
+    return $slice
+	if (defined($slice) && GeniResponse::IsResponse($slice));
+
+    if (! (defined($slice) && defined($aggregate))) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver does not exist");
+    }
+    my $user = GeniCM::CreateUserFromCertificate($credential);
+    return $user
+	if (GeniResponse::IsResponse($user));
+
+    main::AddLogfileMetaDataFromSlice($slice);
+
+    if ($slice_urn ne $slice->urn()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
+				    "Credential does not match the URN");
+    }
+    my $sliver = GeniSliver->Lookup($sliver_urn);
+    if (!defined($sliver)) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver does not exist");
+    }
+    if ($sliver->slice_uuid() ne $slice->uuid()) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver is not in slice");
+    }
+    my $node_id = $sliver->resource_id();
+    my $node = Node->Lookup($node_id);
+    if (!defined($node)) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "No node for sliver urn");
+    }
+    if ($node->IsTainted()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+				    "node is tainted - recovery mode denied");
+    }
+    if (!defined(GeniCM::FlipToUser($slice, $user))) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "FlipToUser failed");
+    }
+    my $experiment = $slice->GetExperiment();
+    if (!defined($experiment)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No local experiment for slice");
+    }
+    my $output = "";
+
+    if ($clear) {
+	$output = GeniUtil::ExecQuiet("$NODEADMIN -R off $node_id");
+    }
+    else {
+	$output = GeniUtil::ExecQuiet("$NODEADMIN -R on $node_id");
+    }
+    if ($?) {
+	print STDERR $output . "\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Failed to change recovery mode");
+    }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

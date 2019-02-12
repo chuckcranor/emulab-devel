@@ -29,6 +29,7 @@ $(function ()
     var jacksIDs    = {};
     var jacksSites  = {};
     var publicURLs  = null;
+    var inrecovery  = {};
     var extension_blob    = null;
     var manifests         = {};
     var status_collapsed  = false;
@@ -946,18 +947,33 @@ $(function ()
 		return;
 	    }
 	    $.each(iblob.details, function(node_id, details) {
-		var jacksID = jacksIDs[node_id];
+		var jacksID  = jacksIDs[node_id];
 		// No manifest yet for this node.
 		if (jacksID === undefined) {
 		    return;
 		}
-		$('#listview-row-' + node_id + ' td[name="status"]')
-		    .html(details.status);
+		// Is the node in recovery.
+		var recovery = false;
+		if (_.has(details, "recovery") && details.recovery != 0) {
+		    recovery = true;
+		    inrecovery[node_id] = true;
+		}
+		else {
+		    inrecovery[node_id] = false;
+		}
 		
+		$('#listview-row-' + node_id + ' td[name="status"]')
+		    .html(recovery ? "<b>recovery</b>" : details.status);
+
 		if (details.status == "ready") {
 		    // Greenish.
+		    var color = "#91E388";
+		    if (recovery) {
+			// warning
+			color = "#fcf8e3";
+		    }
 		    $('#' + jacksID + ' .node .nodebox')
-			.css("fill", "#91E388");
+			.css("fill", color);
 		    $('#listview-row-' + node_id + ' td[name="node_id"], ' +
 		      '#listview-row-' + node_id + ' td[name="client_id"]')
 			.css("color", "#3c763d;");
@@ -986,10 +1002,11 @@ $(function ()
 		    "<tr><td class='border-none'>ID:</td><td class='border-none'>" +
 		        details.client_id + "</td></tr>" +
 		    "<tr><td class='border-none'>Status:</td><td class='border-none'>" +
-		        details.status + "</td></tr>" +
+   		    (recovery ? "<b>recovery</b>" : details.status) +
+		          "</td></tr>" +
 		    "<tr><td class='border-none'>Raw State:</td>" +
 		        "<td class='border-none'>" +
-		        details.rawstate + "</td></tr>";
+		    details.rawstate + "</td></tr>";
 
 		if (_.has(details, "frisbeestatus")) {
 		    var mb_written = details.frisbeestatus.MB_written;
@@ -1288,6 +1305,57 @@ $(function ()
         $('#error_panel').addClass("hidden");
 	sup.ShowModal('#deletenode_modal');
     }
+
+    /*
+     * Boot node into recovery mode MFS
+     *
+     * In order to show something useful on the confirm modal, we track
+     * what nodes we think are in recovery mode. See UpdateSliverStatus().
+     */
+    function DoRecovery(node)
+    {
+	// Handler for hide modal to unbind the click handler.
+	$('#confirm_recovery_modal').on('hidden.bs.modal', function (event) {
+	    $(this).unbind(event);
+	    $('#confirm_recovery_button').unbind("click.recovery");
+	});
+	
+	// Throw up a confirmation modal, with handler bound to confirm.
+	$('#confirm_recovery_button').bind("click.recovery", function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
+	    sup.HideModal('#confirm_recovery_modal');
+	    var callback = function(json) {
+		sup.HideModal('#waitwait-modal');
+	    
+		if (json.code) {
+		    sup.SpitOops("oops",
+				 "Failed to set recovery mode: " + json.value);
+		    return;
+		}
+	    }
+	    var args = {"uuid"  : uuid,
+			"node"  : node};
+	    // Since we think its in recovery, clear it. 
+	    if (_.has(inrecovery, node) && inrecovery[node]) {
+		args["clear"] = true;
+	    }
+	    console.info(inrecovery, args);
+	    sup.ShowModal('#waitwait-modal');
+	    var xmlthing = sup.CallServerMethod(ajaxurl, "status",
+						"Recovery", args);
+						
+	    xmlthing.done(callback);
+	});
+	if (_.has(inrecovery, node) && inrecovery[node]) {	
+	    $('#confirm_recovery_modal .recovery-off').removeClass("hidden");
+	    $('#confirm_recovery_modal .recovery-on').addClass("hidden");
+	}
+	else {
+	    $('#confirm_recovery_modal .recovery-off').addClass("hidden");
+	    $('#confirm_recovery_modal .recovery-on').removeClass("hidden");
+	}
+	sup.ShowModal('#confirm_recovery_modal');
+    }
 	
     /*
      * Fire up the backend of the ssh tab.
@@ -1503,6 +1571,10 @@ $(function ()
 		window.APT_OPTIONS.gaButtonEvent(e);
 		$('#context').contextmenu('closemenu');
 		$('#context').contextmenu('destroy');
+		// Disabled menu items, but we still want user to see them.
+		if ($(e.target).attr("disabled")) {
+		    return;
+		}
 		ActionHandler($(e.target).attr("name"), [client_id]);
 	    }
 	})
@@ -1579,6 +1651,9 @@ $(function ()
 	}
 	else if (action == "reload") {
 	    DoReload(clientList);
+	}
+	else if (action == "recovery") {
+	    DoRecovery(clientList[0]);
 	}
     }
 
@@ -1680,6 +1755,7 @@ $(function ()
 		var stype  = $(this).find("sliver_type");
 		var login  = $(this).find("login");
 		var coninfo= this.getElementsByTagNameNS(EMULAB_NS, 'console');
+		var recover= this.getElementsByTagNameNS(EMULAB_NS, 'recovery');
 		var vnode  = this.getElementsByTagNameNS(EMULAB_NS, 'vnode');
 		var href   = "n/a";
 		var ssh    = "n/a";
@@ -1691,6 +1767,13 @@ $(function ()
 		// Cause of nodes in the emulab namespace (vhost).
 		if (!login.length) {
 		    login = this.getElementsByTagNameNS(EMULAB_NS, 'login');
+		}
+		var canrecover = 0;
+		if (recover.length) {
+		    var available = $(recover).attr("available");
+		    if (available === "true") {
+			canrecover = 1;
+		    }
 		}
 
 		// Change the ID of the clone so its unique.
@@ -1857,6 +1940,13 @@ $(function ()
 
 		// Change the ID of the clone so its unique.
 		clone.attr('id', "context-menu-" + node);
+
+		// Activate tooltips in the menu.
+		clone.find('[data-toggle="tooltip"]')
+		    .tooltip({"trigger"   : "hover",
+			      "container" : "body",
+			      "placement" : "auto right",
+			     });
 	    
 		// Insert into the context-menus div.
 		$('#context-menus').append(clone);
@@ -1865,11 +1955,23 @@ $(function ()
 		if (!_.has(consolenodes, node)) {
 		    $(clone).find("li[id=console]").addClass("disabled");
 		    $(clone).find("li[id=consolelog]").addClass("disabled");
+		    // For ActionHandler()
+		    $(clone).find("[name=console]").attr("disabled", true);
+		    $(clone).find("[name=consolelog]").attr("disabled", true);
 		}
+		// If no recovery mode, grey out the option.
+		if (!canrecover) {
+		    $(clone).find("li[id=recovery]").addClass("disabled");
+		    // For ActionHandler()
+		    $(clone).find("[name=recovery]").attr("disabled", true);
+		}
+		
 		// If a vhost/firewall, then grey out options. Or if there
 		// is just one node at this site.
 		if (isvhost || isfw || rawcount == 1) {
 		    $(clone).find("li[id=delete]").addClass("disabled");
+		    // For ActionHandler()
+		    $(clone).find("[name=delete]").attr("disabled", true);
 		}
 		contextMenus[node] = clone;
 		nodecount++;

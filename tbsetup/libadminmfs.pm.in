@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2017 University of Utah and the Flux Group.
+# Copyright (c) 2005-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -288,6 +288,8 @@ sub TBAdminMfsBoot($$@)
 #	'on'	   1 to set temp OSID to MFS, 0 to clear
 #	'clearall' 1 to clear one-shot and partition boot OSIDs
 #		   (if 'on' is set), 0 leaves them alone
+#       'recovery' use the recovery MFS instead of Admin (falling back
+#                  to admin if not defined for the node).
 #
 # Returns zero if we successfully set the state for all nodes,
 # and non-zero otherwise.  If the $failed ref is defined, it is an
@@ -309,6 +311,7 @@ sub TBAdminMfsSelect($$@)
     my $me = $args->{'name'};
     my $on = $args->{'on'};
     my $only = $args->{'clearall'};
+    my $recovery = $args->{'recovery'};
     my @good = ();
     my @bad = ();
 
@@ -328,7 +331,16 @@ sub TBAdminMfsSelect($$@)
 	# determine the correct admin OSID for all nodes
 	my %adminosid = ();
 	for my $node (@nodes) {
-	    my $osid = TBNodeAdminOSID($node);
+	    my $osid;
+	    if ($recovery) {
+		$osid = TBNodeRecoveryOSID($node);
+		if (!$osid) {
+		    $osid = TBNodeAdminOSID($node);
+		}
+	    }
+	    else {
+		$osid = TBNodeAdminOSID($node);
+	    }
 	    push @{$adminosid{$osid}}, $node;
 	}
 

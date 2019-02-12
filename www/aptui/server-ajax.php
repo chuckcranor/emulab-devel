@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -176,6 +176,8 @@ $routing = array("geni-login" =>
                                                      "Do_Reboot",
 						 "Reload" =>
                                                      "Do_Reload",
+						 "Recovery" =>
+                                                     "Do_Recovery",
 						 "Refresh" =>
 						     "Do_Refresh",
 						 "ReloadTopology" =>

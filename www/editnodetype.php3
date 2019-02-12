@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -104,6 +104,8 @@ $initial_switch_attributes = array(
 
 $initial_attributes = array(
     array("attrkey" => "adminmfs_osid", "attrvalue" => $freebsd_mfs->osid(),
+	  "attrtype" => "integer"),
+    array("attrkey" => "recoverymfs_osid", "attrvalue" => $freebsd_mfs->osid(),
 	  "attrtype" => "integer"),
     array("attrkey" => "bios_waittime", "attrvalue" => "60",
 	  "attrtype" => "integer"),
@@ -405,7 +407,7 @@ function SPITFORM($node_type, $formfields, $attributes, $deletes, $errors)
 	    WRITEOSIDMENU($key, "attributes[$key]", $osid_result, $val,
 			  "deletes[$key]", $deletes[$key]);
 	}
-	elseif ($key == "adminmfs_osid" ||
+	elseif ($key == "adminmfs_osid" || $key == "recoverymfs_osid" ||
 		$key == "diskloadmfs_osid") {
 	    WRITEOSIDMENU($key, "attributes[$key]", $mfsosid_result, $val,
 			  "deletes[$key]", $deletes[$key]);
