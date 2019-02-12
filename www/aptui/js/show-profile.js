@@ -365,7 +365,8 @@ $(function ()
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "manage_profile",
 					    "CheckScript",
-					    {"script"   : script});
+					    {"script"   : script,
+					     "profile_uuid" : profile_uuid});
 	xmlthing.done(callback);
     }
     

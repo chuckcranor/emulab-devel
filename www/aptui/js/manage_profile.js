@@ -1399,6 +1399,9 @@ $(function ()
 	    // Pass along uuid as a flag to update repo.
 	    args["repoupdate"] = version_uuid;
 	}
+	if (profile_uuid) {
+	    args["profile_uuid"] = profile_uuid;
+	}
 	WaitWait("We are converting your geni-lib script to XML");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "manage_profile",

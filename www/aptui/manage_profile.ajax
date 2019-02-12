@@ -739,8 +739,12 @@ function Do_CheckScript()
             
             $command .= " -P $pfname";
         }
-        if ($profile->UseNewGeniLib($this_user)) {
-            $command .= " -N ";
+        if (isset($ajax_args["profile_uuid"])) {
+            $profile = Profile::Lookup($ajax_args["profile_uuid"]);
+            
+            if ($profile && $profile->UseNewGeniLib($this_user)) {
+                $command .= " -N ";
+            }
         }
     }
     elseif (preg_match("/^source tb_compat/m", $ajax_args["script"])) {

@@ -1741,7 +1741,7 @@ $(function ()
 		    json.value.repohash = hash;
 
 		    if (pythonRe.test(source)) {
-			ConvertScript(source, function(rspec, paramdefs) {
+			ConvertScript(source, profile, function(rspec, paramdefs){
 			    // Need to pass these along at submit.
 			    $('#rspec_textarea').val(rspec);
 			    $('#script_textarea').val(source);
@@ -1780,7 +1780,7 @@ $(function ()
     // We use this on repo-based profiles, where we have to get the
     // source code from the repo, and convert to an rspec. 
     //
-    function ConvertScript(script, continuation)
+    function ConvertScript(script, profile_uuid, continuation)
     {
 	var callback = function(json) {
 	    sup.HideWaitWait();
@@ -1801,8 +1801,9 @@ $(function ()
 	var xmlthing = sup.CallServerMethod(null,
 					    "manage_profile",
 					    "CheckScript",
-					    {"script"     : script,
-					     "getparams"  : true});
+					    {"script"       : script,
+					     "profile_uuid" : profile_uuid,
+					     "getparams"    : true});
 	xmlthing.done(callback);
     }
 
