@@ -932,7 +932,7 @@ function Do_BindParameters()
 		     "webrungenilib $warningsfatal -b $parmfname ".
                      ($usenewgenilib ? " -N " : "") .
                      "  -o $outfname $infname",
-		     SUEXEC_ACTION_CONTINUE);
+		     SUEXEC_ACTION_IGNORE);
     
     if ($retval != 0) {
 	if ($retval < 0) {
