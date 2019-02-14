@@ -141,6 +141,7 @@ CREATE TABLE `apt_aggregates` (
   `weburl` tinytext,
   `has_datasets` tinyint(1) NOT NULL default '0',
   `reservations` tinyint(1) NOT NULL default '0',
+  `panicpoweroff` tinyint(1) NOT NULL default '0',
   `portals` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `jsondata` text,
   PRIMARY KEY  (`urn`)
