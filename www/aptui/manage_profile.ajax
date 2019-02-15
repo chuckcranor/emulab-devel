@@ -746,6 +746,17 @@ function Do_CheckScript()
                 $command .= " -N ";
             }
         }
+        elseif (isset($ajax_args["pid"]) && $ajax_args["pid"] != "") {
+            $project = Project::LookupByPid($ajax_args["pid"]);
+            if (!$project) {
+                SPITAJAX_ERROR(1, "No such project");
+                return;
+            }
+            if (FeatureEnabled("NewPParams", null,
+                               $project->DefaultGroup(), null)) {
+                $command .= " -N ";
+            }
+        }
     }
     elseif (preg_match("/^source tb_compat/m", $ajax_args["script"])) {
         $command = "webns2rspec";
