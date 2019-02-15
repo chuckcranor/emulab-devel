@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2018 University of Utah and the Flux Group.
+# Copyright (c) 2013-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -769,12 +769,38 @@ sub set_iname($$)
     print FD "InitiatorName=$iname\n";
     close(FD);
 
-    # restart iscsid
-    if (mysystem("service open-iscsi restart $redir")) {
-	warn("*** storage: could not restart iscsid!\n");
-	return 0;
+    #
+    # XXX iscsid might already be running with the wrong initiator name.
+    # So, we need to logout of all sessions:
+    #   iscsiadm -m node -U all
+    # restart services:
+    #   systemctl restart iscsid open-iscsi
+    # and login again:
+    #   iscsiadm -m node -L all
+    #
+    # XXX we only do this for Ubuntu 16 and beyond where we know that iscsid
+    # is enabled by default. Conveniently, we can use the existence of systemctl
+    # as an indicator. Basically, we don't care about Ubuntu 14 and before
+    # except to not break it.
+    #
+    if (-x "/bin/systemctl") {
+	my $nsess = `$ISCSI -m session 2>/dev/null | grep -c ^`;
+	chomp($nsess);
+	if ($nsess != 0 && mysystem("$ISCSI -m node -U all $redir")) {
+	    warn("*** storage: could not logout of iscsi sessions!\n");
+	}
+	if (mysystem("/bin/systemctl restart iscsid open-iscsi $redir")) {
+	    warn("*** storage: could not restart iscsi daemons!\n");
+	}
+	if ($nsess != 0 && mysystem("$ISCSI -m node -L all $redir")) {
+	    warn("*** storage: could not login to iscsi sessions!\n");
+	}
+    } else {
+	# restart iscsid
+	if (mysystem("service open-iscsi restart $redir")) {
+	    warn("*** storage: could not restart iscsid!\n");
+	}
     }
-
     return 1;
 }
 
