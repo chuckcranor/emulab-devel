@@ -651,7 +651,7 @@ $(function () {
 			    "fields"     : {},
 			    "formfield"  : field,
 			};
-			formFields.push(field);		    
+			formFields.push(field);
 		    }
 		}
 		else if (details.type == "struct") {
@@ -660,6 +660,7 @@ $(function () {
 		    details["values"]  = {};
 		    details["visible"] = {};
 		    details["hashelp"] = false;
+		    var visible        = details.hide ? false : true
 
 		    /*
 		     * Regarding initial values. When non multivalue, 
@@ -680,7 +681,8 @@ $(function () {
 			    _.each(details.defaultValue, function (defvals) {
 				var dict = initStructInitialValues(details,
 								   defvals);
-				details.values["C-" + i] = dict;
+				details.values["C-" + i]  = dict;
+				details.visible["C-" + i] = visible
 				i++;
 			    });
 			}
@@ -688,13 +690,15 @@ $(function () {
 			// then need to add more initial values.
 			while (i < details.min) {
 			    var dict = initStructInitialValues(details);
-			    details.values["C-" + i] = dict;
+			    details.values["C-" + i]  = dict;
+			    details.visible["C-" + i] = visible
 			    i++;
 			}
 		    }
 		    else {
 			var dict = initStructInitialValues(details);
-			details.values[0] = dict;
+			details.values[0]  = dict;
+			details.visible[0] = visible
 		    }
 		    
 		    // See if any fields have long help.
