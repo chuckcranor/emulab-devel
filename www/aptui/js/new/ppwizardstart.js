@@ -265,6 +265,7 @@ $(function () {
 	var inputTemplateString =
 	    "<input data-fieldid='<%- fieldid %>' " +
 	    "       data-fieldname='<%- fieldname %>' " +
+	    "       placeholder='<%- placeholder %>' " +
 	    "       name='<%- name %>' " +
 	    " <% if (multivalue) { %> "+
 	    "       style='display: inline-block; width: 75%' " +
@@ -474,6 +475,9 @@ $(function () {
 	}
 	function GenerateInput(name, fieldIndex, details, value)
 	{
+	    var placeholder = details.inputFieldHint ?
+		details.inputFieldHint : ""
+		
 	    var html = inputTemplate({
 		"fieldid"    : fieldIndex,
 		"fieldname"  : details.name,
@@ -481,6 +485,7 @@ $(function () {
 		"prompt"     : details.description,
 		"value"      : value,
 		"multivalue" : details.multiValue,
+		"placeholder": placeholder,
 	    });
 	    if (details.multiValue) {
 		html += mvalueTemplate();
@@ -963,8 +968,10 @@ $(function () {
 			outerdiv.addClass('has-changes');
 		    }
 		    outerdiv.addClass('has-error');
+		    // This used to have display:inline, but that did
+		    // work with multivalue fields.
 		    innerdiv.append('<label class="control-label" ' +
-				    'style="display: inline;" ' +
+				    'style="padding-top: 2px;" ' +
 				    'for="inputError">Error: ' +
 				    errorMsg + '</label>');
 		}
