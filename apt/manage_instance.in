@@ -3259,16 +3259,21 @@ sub DoPanic()
     my $errmsg;
     my $errcode  = -1;
     my $exitcode = -1;
-    my $takelock = 0;
     my $response;
     
-    my $optlist = "L";
+    my $optlist = "Lp";
+    my $takelock = 0;
+    my $poweroff = 0;
+    
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
     }
     if (defined($options{"L"})) {
 	$takelock = 1;
+    }
+    if (defined($options{"p"})) {
+	$poweroff = 1;
     }
     usage()
 	if (@ARGV != 1);
@@ -3293,6 +3298,13 @@ sub DoPanic()
 	$exitcode = 1;
 	goto bad;
     }
+    # Check the panic flag after locking, in case someone beat us to it.
+    $instance->Refresh();
+    if ($instance->paniced()) {
+	print "Already in a panic mode!\n";
+	$slice->UnLock();
+	exit(0);
+    }
 
     #
     # No panic at stitching aggregates, so look to see if we cross any.
@@ -3316,7 +3328,7 @@ sub DoPanic()
     my $coderef = sub {
 	my ($sliver) = @_;
 
-	return $sliver->Panic(($setclr eq "clear" ? 1 : 0));
+	return $sliver->Panic(($setclr eq "clear" ? 1 : 0), $poweroff);
     };
 
     # Invoke on all clusters
@@ -4458,6 +4470,7 @@ sub DoWarn()
     my $freeze     = 0;
     my $terminate  = 0;
     my $panic      = 0;
+    my $poweroff   = 0;
     my $errmsg;
     my $reason;
     my $logfile;
@@ -4470,7 +4483,7 @@ sub DoWarn()
     my $slice_uuid = $slice->uuid();
     my $weburl     = $instance->webURL();
 
-    my $optlist = "f:FTQ";
+    my $optlist = "f:FTQP";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
@@ -4483,6 +4496,9 @@ sub DoWarn()
     }
     elsif (defined($options{"Q"})) {
 	$panic = 1;
+	if (defined($options{"P"})) {
+	    $poweroff = 1;
+	}
     }
     if (defined($options{"f"})) {
 	my $filename = $options{"f"};
@@ -4605,7 +4621,7 @@ sub DoWarn()
 	# We pass the lock through.
 	system("$MANAGEINSTANCE " .
 	       (defined($webtask) ? "-t $webtask_id " : "").
-	       "  -d -- panic $uuid -L set");
+	       "  -d -- panic $uuid -L " . ($poweroff ? "-p " : "") . "set");
     }
     else {
 	# We pass the lock through.
@@ -4886,7 +4902,7 @@ sub CallMethodOnAggregates($$$@)
 				      "$sliver");
 		last;
 	    }
-	    print Dumper($response);
+	    #print Dumper($response);
 	    
 	    # We can keep trying for these, but not an RPC error.
 	    last

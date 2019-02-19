@@ -402,6 +402,32 @@ pre {
     </div>
   </div>
 </div>
+<!-- Confirm Quarantine -->
+<div id='confirm-quarantine-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<center>
+	  <div class="q-on hidden">
+	    <h3>Confirm to Quarantine</h3>
+	    <div>
+	      Power Off Nodes? <input type="checkbox"
+				      id="quarantine-poweroff-checkbox">
+	    </div>
+	  </div>
+	  <div class="q-off hidden">
+	    <h3>Confirm to release from Quarantine</h3>
+	  </div>
+          <button class='btn btn-danger btn-sm'
+		  style="margin-top: 10px;"
+		  id='confirm-quarantine'>Confirm</button>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
 <!-- Finished -->
 <div id='success-modal' class='modal fade'>
   <div class='modal-dialog'>

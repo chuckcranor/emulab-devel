@@ -450,6 +450,19 @@ $(function ()
 	if (_.has(json.value, "sliverstatus")) {
 	    ShowSliverURLs(json.value.sliverstatus);
 	}
+	if (0) {
+	    console.info("GetStatus", instanceStatus,
+			 expinfo.paniced, json.value.paniced);
+	}
+	// Watch for experiment going into or out of panic mode.
+	if (expinfo.paniced && !json.value.paniced) {
+	    // Left panic mode.
+	    expinfo.paniced = 0;
+	}
+	if (expinfo.paniced || json.value.paniced) {
+	    expinfo.paniced = 1;
+	    instanceStatus = "quarantined";
+	}
 	if (instanceStatus != lastStatus) {
             APT_OPTIONS.updatePage({ 'instance-status': instanceStatus });
 	    console.info("New Status: ", json);
@@ -539,6 +552,12 @@ $(function ()
 		}
 		
 		status_html = "<font color=red>failed</font>";
+		ProgressBarUpdate();
+	    }
+	    else if (instanceStatus == 'quarantined') {
+		bgtype = "panel-warning";
+		status_message = "Your experiment has been quarantined";
+		status_html = "<font color=red>quarantined</font>";
 		ProgressBarUpdate();
 	    }
 	    else if (instanceStatus == 'imaging') {
@@ -952,9 +971,10 @@ $(function ()
 		if (jacksID === undefined) {
 		    return;
 		}
-		// Is the node in recovery.
+		// Is the node in recovery. Panic mode does not count.
 		var recovery = false;
-		if (_.has(details, "recovery") && details.recovery != 0) {
+		if (!expinfo.paniced &&
+		    _.has(details, "recovery") && details.recovery != 0) {
 		    recovery = true;
 		    inrecovery[node_id] = true;
 		}
@@ -3392,6 +3412,7 @@ $(function ()
 	    spinwidth = "66";
 	}
 	else if (instanceStatus == "ready" || instanceStatus == "failed" ||
+		 instanceStatus == "quarantined" ||
 		 instanceStatus == "pending" || instanceStatus == "deferred") {
 	    spinwidth = null;
 	}
@@ -3675,6 +3696,7 @@ $(function ()
 		var kill   = $('#destroy-terminate-checkbox').is(':checked');
 		var panic  = $('#destroy-quarantine-checkbox').is(':checked');
 		var freeze = $('#destroy-freeze-checkbox').is(':checked');
+		var poweroff = $('#destroy-poweroff-checkbox').is(':checked');
 		var args   = {"uuid" : uuid};
 		if (reason != "") {
 		    args["reason"] = reason;
@@ -3687,6 +3709,9 @@ $(function ()
 		}
 		else if (panic) {
 		    args["quarantine"] = true;
+		    if (poweroff) {
+			args["poweroff"] = true;
+		    }
 		}
 		sup.HideModal("#destroy-experiment-modal", function () {
 		    sup.ShowWaitWait();

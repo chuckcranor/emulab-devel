@@ -269,8 +269,8 @@ pre {
                    class="exp-running hidden" <% } %>>
 	      <div class='pull-left'
 		   data-toggle='popover'
-		   data-delay='{"hide":500, "show":500}'
-		   data-content="When checked, only administrator can extend
+		   data-delay='{"hide":100, "show":500}'
+		   data-content="When checked, only administrators can extend
 				 this experiment. No free time is granted to
 				 user at all."> 
 		<label class="checkbox-inline" style='margin-right: 10px;'>
@@ -282,7 +282,7 @@ pre {
                    class="exp-running hidden" <% } %>>
 	      <div class='pull-left'
 		   data-toggle='popover'
-		   data-delay='{"hide":500, "show":500}'
+		   data-delay='{"hide":100, "show":500}'
 		   data-content="When checked, the experiment 
 			       cannot be terminated by the user unless the
 			       user verifies 
@@ -302,7 +302,7 @@ pre {
                    class="exp-running hidden" <% } %>>
 	      <div class='pull-left'
 		   data-toggle='popover'
-		   data-delay='{"hide":500, "show":500}'
+		   data-delay='{"hide":100, "show":500}'
 		   data-content="When checked, the experiment 
 			       cannot be terminated by the user. Only an
 			       admin can do it.">
@@ -310,20 +310,6 @@ pre {
 		  <input type="checkbox" id="admin_lockdown_checkbox" disabled
 			 <% if (expinfo.admin_lockdown) { %>checked<% } %> >
 		  Admin Lockdown</label>
-	      </div>
-	    </div>
-	    <div <% if (expinfo.status == "deferred") { %>
-                   class="exp-running hidden" <% } %>>
-	      <div class='pull-left'
-		   data-toggle='popover'
-		   data-delay='{"hide":500, "show":500}'
-		   data-content="When checked, the experiment is put into
-				 Quarantine (emulab panic) mode.">
-		<label class="checkbox-inline" style='margin-right: 10px;'>
-		  <input type="checkbox" id="quarantine_checkbox" disabled
-			 <% if (expinfo.paniced) { %>checked<% } %> >
-		  <span <% if (expinfo.paniced) { %>class="text-danger"<% } %> >
-		    Quarantined</span></label>
 	      </div>
 	    </div>
 	    <div <% if (expinfo.status == "deferred") { %>

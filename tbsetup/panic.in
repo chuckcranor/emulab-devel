@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,6 +37,7 @@ sub usage()
 	  "switches and arguments:\n".
 	  "-l level - Level 1; reboot nodes into the admin MFS\n".
 	  "         - Level 2; disable the control network\n".
+          "         - Level 3; power off all nodes\n".
 	  "-r       - Reset panic state (admin people only)\n".
 	  "-c       - Clear panic state but do not do anything else\n".
 	  "-w       - From web interface, create a log file.\n".
@@ -52,6 +53,7 @@ my $dolog   = 0;
 
 sub fatal($);
 sub DoIt();
+sub PowerMode();
 
 #
 # Exit codes are important; they tell the web page what has happened so
@@ -83,6 +85,7 @@ sub ExitWithStatus($$)
 my $TB     = "@prefix@";
 my $TBOPS  = "@TBOPSEMAIL@";
 my $snmpit = "$TB/bin/snmpit";
+my $POWER  = "$TB/bin/power";
 
 #
 # Testbed Support libraries
@@ -131,9 +134,9 @@ if (defined($options{"w"})) {
     $dolog = 1;
 }
 if (defined($options{"l"})) {
-    $level = 1;
+    $level = $options{"l"};
     usage()
-	if ($level < 1 || $level > 2);
+	if ($level < 1 || $level > 3);
 }
 
 my $this_user = User->ThisUser();
@@ -212,8 +215,15 @@ $experiment->Lock(($reset || $clear ?
 if ($clear) {
     $experiment->SetPanicBit(0);
     $experiment->Unlock();
-    print "Panic state has been cleared, but nodes are still in the MFS\n";
+    print "Panic state has been cleared, but nothing else has been done\n";
     exit(0);
+}
+
+#
+# Deal with level 3.
+#
+if ($experiment->paniced() == 3 || $level == 3) {
+    exit(PowerMode());
 }
 
 # Force level 2 for firewalled experiments.
@@ -276,7 +286,7 @@ sub fatal($)
     my($mesg) = $_[0];
     
     #
-    # Send a message to the testbed list. Append the logfile.
+    # Send a message to the testbed list.
     #
     SENDMAIL("$user_name <$user_email>",
 	     "Quarantine Failure for Experiment $pid/$eid",
@@ -290,4 +300,54 @@ sub fatal($)
 
     die("*** $0:\n".
 	"    $mesg\n");
+}
+
+#
+# Power mode.
+#
+sub PowerMode()
+{
+    my @failures = ();
+    
+    # Need a list of nodes, going to call power individually.
+    my @nodes = $experiment->NodeList(1, 0);
+    if (!@nodes) {
+	$experiment->Unlock();
+	fatal("Could not get node list for experiment");
+    }
+    foreach my $node_id (@nodes) {
+	# Tell power to send an event.
+	system("$POWER " . ($reset ? "on" : "off") . " $node_id");
+	if ($?) {
+	    push(@failures, $node_id);
+	}
+    }
+    # Change the mode even if we failed on some nodes, will need to deal
+    # with it by hand.
+    if ($reset) {
+	$experiment->SetPanicBit(0);
+    }
+    else {
+	$experiment->SetPanicBit($level);
+    }
+    if (@failures) {
+	$experiment->Unlock();
+	fatal("Could not power ". ($reset ? "on" : "off") .
+	      " some nodes: @failures");
+    }
+    $experiment->Unlock();
+    print "Panic Button has been ". ($reset ? "cleared" : "pressed") . "\n";
+
+    #
+    # Send email notification to user *and* to tbops.
+    #
+    SENDMAIL("$user_name <$user_email>",
+	     "Quarantine notification for Experiment $pid/$eid",
+	     "Experiment $pid/$eid has been ".
+	     ($reset ? "released from quarantine" : "quarantined") . "\n",
+	     "$user_name <$user_email>",
+	     "Cc:  $swapper_name <$swapper_email>\n".
+	     "Bcc: $TBOPS");
+
+    return 0;
 }

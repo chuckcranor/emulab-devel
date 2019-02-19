@@ -5724,6 +5724,7 @@ sub Panic($)
     my ($argref) = @_;
     my $slice_urn    = $argref->{'slice_urn'};
     my $clear        = $argref->{'clear'};
+    my $poweroff     = $argref->{'poweroff'};
     my $credentials  = $argref->{'credentials'};
     
     if (! (defined($credentials) && defined($slice_urn))) {
@@ -5773,7 +5774,8 @@ sub Panic($)
     }
     my $pid = $experiment->pid();
     my $eid = $experiment->eid();
-    my $command = "$WAP $PANIC -l 1 " . ($clear ? "-r " : "") . "$pid $eid";
+    my $command = "$WAP $PANIC -l " . ($poweroff ? "3" : "1") . " " .
+	($clear ? "-r " : "") . "$pid $eid";
     #
     # The backend script sends a bunch of stuff to stdout, so capture it.
     # We want to do this in the background cause it is going to take a long
@@ -5782,20 +5784,6 @@ sub Panic($)
     #
     my $mypid = main::WrapperFork();
     if ($mypid) {
-	sleep(3);
-	my $kid = waitpid($mypid, &WNOHANG);
-	if ($kid == $mypid) {
-	    my $stat = $?;
-	    if ($stat & 127) {
-		# died with a signal, return the signal
-		$stat = $stat & 127;
-	    } else {
-		# else return the exit code
-		$stat = $stat >> 8;
-	    }
-	    $slice->UnLock();
-	    return GeniResponse->Create(GENIRESPONSE_ERROR);
-	}
 	# We want to unlock it so we can get status, so we set the shutdown
 	# flag since that will prevent any other changes from happening.
 	if (!$clear) {
@@ -5804,10 +5792,10 @@ sub Panic($)
 	$slice->UnLock();
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
     }
+    sleep(1);
     GeniUtil::FlipToElabMan();
-    my $output = GeniUtil::ExecQuiet($command);
-    # Not a typical op, so always print debugging info;
-    print STDERR $output;
+    print STDERR "Running '$command'\n";
+    system($command);
     if ($?) {
 	return -1;
     }

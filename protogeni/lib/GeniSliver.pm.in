@@ -1566,6 +1566,7 @@ sub ComputeStatus($;$)
 	$status = "failed";
     }
     elsif ($eventstate eq TBDB_NODESTATE_SHUTDOWN() ||
+	   $eventstate eq TBDB_NODESTATE_POWEROFF() ||
 	   $eventstate eq TBDB_NODESTATE_PXEWAIT()) {
 	$status = "notready";
     }

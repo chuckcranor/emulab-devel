@@ -100,6 +100,7 @@ function Do_GetInstanceStatus()
     $blob = array();
     $blob["status"] = $instance->status();
     $blob["canceled"] = $instance->canceled() ? 1 : 0;
+    $blob["paniced"] = $instance->paniced() ? 1 : 0;
     $blob["sliverstatus"] = array();
 
     if ($instance->logfileid()) {
@@ -225,6 +226,11 @@ function Do_TerminateInstance()
     # Check for read permission, and then check for Terminate permission.
     if (StatusSetupAjax(0)) {
 	return;
+    }
+    if ($instance->paniced() && !ISADMIN()) {
+        SPITAJAX_ERROR(1, "This experiment has been quarantined and ".
+                       "must be terminated my an administrator.");
+        return;
     }
     if (!(ISADMIN() || $instance->CanTerminate($this_user))) {
         SPITAJAX_ERROR(1, "Not enough permission to terminate");
@@ -689,11 +695,17 @@ function Do_Snapshot()
 	SPITAJAX_ERROR(1, "Only registered users can snapshot nodes");
 	return;
     }
+    if ($instance->paniced()) {
+        SPITAJAX_ERROR(1, "This experiment has been quarantined.");
+        return;
+    }
+    
     $this_idx = $this_user->uid_idx();
     $uuid = $ajax_args["uuid"];
     $checkonly = (isset($ajax_args["checkonly"]) &&
                   $ajax_args["checkonly"] == 1 ? 1 : 0);
-
+    $pid = $instance->pid();    
+    
     #
     # As per Rob, if an experiment is locked down, then only the creator,
     # project leader, or an admininstrator.
@@ -991,6 +1003,12 @@ function Do_RebootOrReload($which)
 	SPITAJAX_ERROR(1, "Only registered users can reboot/reload nodes");
 	return;
     }
+    if ($instance->paniced() && !ISADMIN()) {
+        SPITAJAX_ERROR(1, "This experiment has been quarantined, only ".
+                       "an admininstrator can reboot/reload.");
+        return;
+    }
+    
     $this_idx = $this_user->uid_idx();
     $uuid = $ajax_args["uuid"];
 
@@ -1072,6 +1090,10 @@ function Do_DeleteNodes()
     if (!isset($this_user)) {
 	SPITAJAX_ERROR(1, "Only registered users can delete nodes");
 	return;
+    }
+    if ($instance->paniced()) {
+        SPITAJAX_ERROR(1, "This experiment has been quarantined.");
+        return;
     }
     $this_idx = $this_user->uid_idx();
     $uuid = $ajax_args["uuid"];
@@ -1405,16 +1427,19 @@ function Do_Quarantine()
     }
     $which = ($ajax_args["quarantine"] ? "set" : "clear");
     $uuid = $ajax_args["uuid"];
+    $opt = "";
+    if (isset($ajax_args["poweroff"]) && $ajax_args["poweroff"]) {
+        $opt = "-p";
+    }
     $instance = Instance::Lookup($uuid);
     if (!$instance) {
 	SPITAJAX_ERROR(1, "Unknown instance uuid");
 	return;
     }
-
     $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC($this_user->uid(), "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() . 
-                     "  panic $uuid $which",
+                     "  panic $uuid $opt $which",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
 
@@ -1439,6 +1464,10 @@ function Do_Linktest()
 
     if (StatusSetupAjax(0)) {
 	return;
+    }
+    if ($instance->paniced()) {
+        SPITAJAX_ERROR(1, "This experiment has been quarantined.");
+        return;
     }
     if (!isset($ajax_args["action"])) {
 	SPITAJAX_ERROR(1, "Missing action");
@@ -1919,6 +1948,9 @@ function Do_WarnExperiment()
     }
     elseif (isset($ajax_args["quarantine"]) && $ajax_args["quarantine"]) {
         $options .= "-Q ";
+        if (isset($ajax_args["poweroff"]) && $ajax_args["poweroff"]) {
+            $options .= "-P ";
+        }
     }
     # Freeze user
     if (isset($ajax_args["freeze"]) && $ajax_args["freeze"]) {
@@ -1963,6 +1995,10 @@ function Do_Recovery()
 
     if (StatusSetupAjax(1)) {
 	return;
+    }
+    if ($instance->paniced()) {
+        SPITAJAX_ERROR(1, "This experiment has been quarantined.");
+        return;
     }
     if (!isset($ajax_args["node"])) {
 	SPITAJAX_ERROR(1, "Missing node argument");

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2018 University of Utah and the Flux Group.
+# Copyright (c) 2007-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -773,6 +773,17 @@ sub GetGroup($)
     require Group;
     
     return Group->Lookup($self->gid_idx());
+}
+
+#
+# Map an instance to the local experiment (when its running locally)
+#
+sub LocalExperiment($)
+{
+    my ($self) = @_;
+    require Experiment;
+    
+    return Experiment->Lookup($self->slice_uuid());
 }
 
 #
@@ -3145,9 +3156,9 @@ sub Lockdown($$$)
 #
 # Panic
 #
-sub Panic($$)
+sub Panic($$$)
 {
-    my ($self, $clear) = @_;
+    my ($self, $clear, $poweroff) = @_;
     my $authority = $self->GetGeniAuthority();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
@@ -3165,6 +3176,8 @@ sub Panic($$)
     };
     $args->{"clear"} = 1
 	if ($clear);
+    $args->{"poweroff"} = 1
+	if ($poweroff);
     my $cmurl = $authority->url();
     $cmurl = devurl($cmurl) if ($usemydevtree);
 

@@ -522,7 +522,7 @@ $(function ()
     function DoQuarantine(mode)
     {
 	mode = (mode ? 1 : 0);
-	
+
 	var callback = function(json) {
 	    if (json.code) {
 		sup.HideModal('#waitwait-modal', function () {
@@ -544,11 +544,49 @@ $(function ()
 	    }
 	    sup.HideModal('#waitwait-modal');
 	}
-	sup.ShowModal('#waitwait-modal');
-	var xmlthing = sup.CallServerMethod(null, "status", "Quarantine",
-					     {"uuid" : window.UUID,
-					      "quarantine" : mode});
-	xmlthing.done(callback);
+	// Handler for hide modal, this is the cancel operation.
+	$('#confirm-quarantine-modal').on('hidden.bs.modal', function (event) {
+	    $(this).unbind(event);
+	    $('#confirm-quarantine').unbind("click.quarantine");
+	    if (mode) {
+		// Flip the checkbox back.
+		$('#quarantine-checkbox')
+		    .prop("checked", false);
+	    }
+	    else {
+		// Flip the checkbox back.
+		$('#quarantine-checkbox')
+		    .prop("checked", true);
+	    }
+	});
+	// Handler for the confirm button,
+	$('#confirm-quarantine').bind("click.quarantine", function (event) {
+	    // Unbind the handlers.
+	    $('#confirm-quarantine').unbind("click.quarantine");
+	    $('#confirm-quarantine-modal').off('hidden.bs.modal');
+	    
+	    sup.HideModal('#confirm-quarantine-modal', function () {
+		var args = {"uuid" : window.UUID,
+			    "quarantine" : mode};
+		if (mode &&
+		    $('#quarantine-poweroff-checkbox').is(":checked")) {
+		    args["poweroff"] = 1;
+		}
+		sup.ShowModal('#waitwait-modal');
+		var xmlthing = sup.CallServerMethod(null, "status",
+						    "Quarantine", args);
+		xmlthing.done(callback);
+	    });
+	});
+	if (mode) {
+	    $('#confirm-quarantine-modal .q-on').removeClass("hidden");
+	    $('#confirm-quarantine-modal .q-off').addClass("hidden");
+	}
+	else {
+	    $('#confirm-quarantine-modal .q-on').addClass("hidden");
+	    $('#confirm-quarantine-modal .q-off').removeClass("hidden");
+	}
+	sup.ShowModal('#confirm-quarantine-modal');
     }
 
     //
