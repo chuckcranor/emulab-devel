@@ -850,6 +850,7 @@ function Do_RunScript()
     global $this_user;
     global $ajax_args;
     global $suexec_output, $suexec_output_array;
+    $newgenilib = 0;
 
     $script = "";
     if (isset($ajax_args["script"])) {
@@ -882,20 +883,22 @@ function Do_RunScript()
 	        SPITAJAX_RESPONSE($profile->rspec());
 	    } else {
 	        SPITAJAX_ERROR(1, "No rspec for guest user");
-	    }
+            }
         }
         $this_idx = $this_user->uid_idx();
         $this_uid = $this_user->uid();
-    
         if (! ($profile->CanInstantiate($this_user) || ISADMIN())) {
 	    SPITAJAX_ERROR(1, "Not enough permission to instantiate profile");
 	    return;
+        }
+        if ($profile->UseNewGeniLib()) {
+            $newgenilib = 1;
         }
     }
 
     if (preg_match("/^import/m", $script)) {
         $command = "webrungenilib";
-        if (Profile::UseNewGeniLib($this_user)) {
+        if ($newgenilib) {
             $command .= " -N ";
         }
     }
