@@ -611,6 +611,7 @@ CREATE TABLE `apt_profiles` (
   `locker_pid` int(11) default '0',
   `lastused` datetime default NULL,
   `usecount` int(11) default '0',
+  `examples_portals` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,  
   PRIMARY KEY (`profileid`),
   UNIQUE KEY `pidname` (`pid_idx`,`name`,`version`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
