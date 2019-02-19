@@ -3300,10 +3300,19 @@ sub DoPanic()
     }
     # Check the panic flag after locking, in case someone beat us to it.
     $instance->Refresh();
-    if ($instance->paniced()) {
-	print "Already in a panic mode!\n";
-	$slice->UnLock();
-	exit(0);
+    if ($setclr eq "set") {
+	if ($instance->paniced()) {
+	    print "Already in a panic!\n";
+	    $slice->UnLock();
+	    exit(0);
+	}
+    }
+    else {
+	if (!$instance->paniced()) {
+	    print "No longer in a panic!\n";
+	    $slice->UnLock();
+	    exit(0);
+	}
     }
 
     #
@@ -3669,7 +3678,7 @@ sub DoUpdateKeys()
     };
 
     # Invoke on all clusters
-    $errcode = CallMethodOnAggregates($coderef, 10, \$response, @aggregates);
+    $errcode = CallMethodOnAggregates($coderef, 1, \$response, @aggregates);
     if ($errcode) {
 	$errmsg = $response;
 	goto bad;
@@ -3765,7 +3774,7 @@ sub DoUtilization()
     }
 
     # Invoke on all clusters
-    $errcode = CallMethodOnAggregates("Utilization", 2,
+    $errcode = CallMethodOnAggregates("Utilization", 1,
 				      \$response, @aggregates);
     if ($errcode) {
 	$errmsg = $response;
@@ -3781,7 +3790,13 @@ sub DoUtilization()
 
 	if ($code != GENIRESPONSE_SUCCESS) {
 	    $errcode = $code;
-	    ($exitcode, $errmsg) = ResponseErrorMessage($agg, $response);
+	    if ($code == GENIRESPONSE_REFUSED) {
+		$exitcode = 1;
+		$errmsg   = $response->error();
+	    }
+	    else {
+		($exitcode, $errmsg) = ResponseErrorMessage($agg, $response);
+	    }
 	    next;
 	}
 	my $blob = $response->value();
@@ -3963,7 +3978,13 @@ sub DoIdleData()
 
 	if ($code != GENIRESPONSE_SUCCESS) {
 	    $errcode = $code;
-	    ($exitcode, $errmsg) = ResponseErrorMessage($agg, $response);
+	    if ($code == GENIRESPONSE_REFUSED) {
+		$exitcode = 1;
+		$errmsg   = $response->error();
+	    }
+	    else {
+		($exitcode, $errmsg) = ResponseErrorMessage($agg, $response);
+	    }
 	    next;
 	}
     }

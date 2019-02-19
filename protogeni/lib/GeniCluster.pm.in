@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -413,6 +413,9 @@ sub SliceUtilizationData($)
     return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				"No experiment for $slice")
 	if (!defined($experiment));
+    return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
+				"Experiment has been quarantined")
+	if ($experiment->state() eq EXPTSTATE_PANICED());
 
     # Watch for busy experiment.
     if ($slice->locked() || $experiment->state() ne EXPTSTATE_ACTIVE()) {
@@ -517,6 +520,9 @@ sub SliceIdleData($)
     return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				"No experiment for $slice")
 	if (!defined($experiment));
+    return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
+				"Experiment has been quarantined")
+	if ($experiment->state() eq EXPTSTATE_PANICED());
 
     # Watch for busy experiment.
     if ($slice->locked() || $experiment->state() ne EXPTSTATE_ACTIVE()) {
