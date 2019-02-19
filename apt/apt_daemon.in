@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -63,6 +63,7 @@ my $SUDO	     = "/usr/local/bin/sudo";
 my $WGET             = "/usr/local/bin/wget";
 my $SLEEP_INTERVAL   = 300;
 my $DAILY_INTERVAL   = 24 * 3600;
+my $HOURLY_INTERVAL  = 3600;
 my $OPENSTACK_INTERVAL = 600;
 
 # un-taint path
@@ -571,16 +572,19 @@ sub GatherOpenstackUtilization()
 }
 
 #
-# Kill off stale datasets (that were deleted at the cluster). They are
-# gone, no point in keeping them around.
+# Refresh/Kill datasets. Once a day we check all datasets. Hourly we
+# check only expired datasets.
 #
-sub KillStaleDatasets()
+sub RefreshDatasets($)
 {
+    my ($doall) = @_;
+    
     my $query_result =
 	DBQueryWarn("select uuid,expires from apt_datasets as d ".
-		    "where (type='stdataset' or type='ltdataset') and ".
-		    "      (UNIX_TIMESTAMP(now()) > ".
-		    "       UNIX_TIMESTAMP(expires))");
+		    "where (type='stdataset' or type='ltdataset') ".
+		    ($doall ? "" :
+		     " and (UNIX_TIMESTAMP(now()) > ".
+		     "      UNIX_TIMESTAMP(expires))"));
     return
 	if (!$query_result);
 
@@ -590,11 +594,18 @@ sub KillStaleDatasets()
 	    print STDERR "No such dataset $uuid\n";
 	    next;
 	}
-	my $pid = $dataset->pid();
-	my $id  = $dataset->dataset_id();
-	my $agg = $dataset->aggregate_urn();
-	print STDERR "Dataset $pid/$id at $agg expired at $expires. ".
-	    "Asking for new info ...\n";
+	my $pid   = $dataset->pid();
+	my $id    = $dataset->dataset_id();
+	my $agg   = $dataset->aggregate_urn();
+	my $state = $dataset->state();
+
+	if ($dataset->IsExpired()) {
+	    print STDERR "Dataset $pid/$id at $agg expired at $expires.\n";
+	}
+	if ($impotent) {
+	    print STDERR "Would try to refresh $dataset (state:$state)\n";
+	    next;
+	}
 
 	#
 	# Try to refresh the dataset. We might get back a new expiration,
@@ -608,12 +619,19 @@ sub KillStaleDatasets()
 	#
 	if (!$?) {
 	    $dataset->Refresh();
-	    if ($dataset->IsExpired()) {
-		# Still expired, not sure what to do here. 
-		print STDERR "Dataset is still expired after refresh?\n";
+	    if (!$doall) {
+		if ($dataset->IsExpired()) {
+		    # Still expired, not sure what to do here. 
+		    print STDERR "Dataset is still expired after refresh?\n";
+		}
+		else {
+		    print STDERR "Dataset expires at ".
+			$dataset->expires() . "\n";
+		}
 	    }
-	    else {
-		print STDERR "Dataset is no longer expired after refresh.\n";
+	    if ($state ne $dataset->state()) {
+		print STDERR "State changed from $state to ".
+		    $dataset->state() . "\n";
 	    }
 	    next;
 	}
@@ -638,32 +656,25 @@ sub KillStaleDatasets()
 }
 
 if ($oneshot) {
-    KillInstances();
-    KillStaleDatasets();
+    RefreshDatasets(0);
     exit(0);
 }
+# Wait a bit before making a bunch of noise.
+sleep($SLEEP_INTERVAL);
 
 my $reportcounter    = 0;
-my $openstackcounter = 0;
-
-# Do this once at startup
-if (! NoLogins()) {
-    ReportLockdownExpired();
-}
+my $lastdaily        = 0;
+my $lasthourly       = 0;
 
 while (1) {
     if (NoLogins()) {
 	sleep(5);
 	next;
     }
-    $reportcounter += $SLEEP_INTERVAL;
-    $openstackcounter += $SLEEP_INTERVAL;
-
     print "Running at ".
 	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
 
     KillInstances();
-    KillStaleDatasets();
     FixFailedImaging();
     ExpireInstances();
     if ($MAINSITE) {
@@ -671,13 +682,19 @@ while (1) {
     }
     PushUpdates();
 
-    if ($reportcounter >= $DAILY_INTERVAL) {
+    if (time() - $lastdaily > $DAILY_INTERVAL) {
 	ReportLockdownExpired();
-	$reportcounter = 0;
+	RefreshDatasets(1);
+	$lastdaily = time();
+    }
+    if (time() - $lasthourly > $HOURLY_INTERVAL) {
+	RefreshDatasets(0);
+	$lasthourly = time();
     }
     exit(0)
 	if ($oneshot);
-    
+
+    print "Waiting for $SLEEP_INTERVAL seconds ...\n";
     sleep($SLEEP_INTERVAL);
 }
 exit(0);
