@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -520,24 +520,21 @@ if (!$login_user->portal()) {
     $navbar_status
     $navbar_right\n";
 
-   if ($PORTAL_WIKI) {
-       echo "<li id='quickvm_actions_menu'
+   echo "<li id='quickvm_actions_menu'
                  class='dropdown apt-left apt-nav-item'>
                <a href='#'
 	          class='dropdown-toggle btn btn-quickvm-home navbar-btn'
 	          data-toggle='dropdown'>Docs <b class='caret'></b></a>
                <ul class='dropdown-menu'>
-                 <li><a href='$PORTAL_MANUAL' target='_blank'>Manual</a></li>
-                 <li><a href='$PORTAL_WIKI' target='_blank'>Wiki</a></li>
-               </ul>
-             </li>\n";
+                 <li><a href='$PORTAL_MANUAL' target='_blank'>Manual</a></li>";
+   if ($PORTAL_WIKI) {
+       echo "    <li><a href='$PORTAL_WIKI' target='_blank'>Wiki</a></li>";
    }
-   else {
-       echo "<li class='apt-left'>
-                <a class='btn btn-quickvm-home navbar-btn'
-                   href='$PORTAL_MANUAL' target='_blank'>Docs</a>
-             </li>\n";
-   }
+   echo "        <li><a href='example-profiles.php'
+                                 target='_blank'>Example Profiles</a></li>";
+   echo "      </ul>
+         </li>\n";
+
 
    if ($login_user) {
    echo "
