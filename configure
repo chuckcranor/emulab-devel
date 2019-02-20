@@ -5281,8 +5281,6 @@ fi
 # for backward compatibility (nobody used to care what they were called)
 if test x"$PROTOGENI_NICKNAME" = x"unknown"; then
     case $OURDOMAIN in
-    *utah.geniracks.net) PROTOGENI_NICKNAME="utah-ig";;
-    *utahddc.geniracks.net) PROTOGENI_NICKNAME="utahddc-ig";;
     *gpolab.bbn.com) PROTOGENI_NICKNAME="gpo-ig";;
     *northwestern.edu) PROTOGENI_NICKNAME="northwestern-ig";;
     *lan.sdn.uky.edu) PROTOGENI_NICKNAME="uky-ig";;
@@ -5292,7 +5290,6 @@ if test x"$PROTOGENI_NICKNAME" = x"unknown"; then
     *clemson.edu) PROTOGENI_NICKNAME="clemson-ig";;
     *ku.gpeni.net) PROTOGENI_NICKNAME="kansas-ig";;
     *nyu.edu) PROTOGENI_NICKNAME="nyu-ig";;
-    *uidaho.edu) PROTOGENI_NICKNAME="idaho-ig";;
     *maxgigapop.net) PROTOGENI_NICKNAME="max-ig";;
     *nysernet.org) PROTOGENI_NICKNAME="nysernet-ig";;
     *sox.net) PROTOGENI_NICKNAME="sox-ig";;
@@ -5302,7 +5299,6 @@ if test x"$PROTOGENI_NICKNAME" = x"unknown"; then
     *rutgers.edu) PROTOGENI_NICKNAME="rutgers-ig";;
     *stanford.edu) PROTOGENI_NICKNAME="stanford-ig";;
     *it.cornell.edu) PROTOGENI_NICKNAME="cornell-ig";;
-    *lsu.edu) PROTOGENI_NICKNAME="lsu-ig";;
     *case.edu) PROTOGENI_NICKNAME="cwru-ig";;
     *iu.edu) PROTOGENI_NICKNAME="moxi-ig";;
     *uchicago.edu) PROTOGENI_NICKNAME="uchicago-ig";;
@@ -5314,9 +5310,19 @@ if test x"$PROTOGENI_NICKNAME" = x"unknown"; then
     *washington.edu) PROTOGENI_NICKNAME="uwashington-ig";;
     *rnet.missouri.edu) PROTOGENI_NICKNAME="missouri-ig";;
     *pks2.sdn.uky.edu) PROTOGENI_NICKNAME="ukypks2-ig";;
+    *mcv.sdn.uky.edu) PROTOGENI_NICKNAME="ukymcv-ig";;
+    *hawaii.edu) PROTOGENI_NICKNAME="hawaii-ig";;
     *colorado.edu) PROTOGENI_NICKNAME="colorado-ig";;
     *cenic.net) PROTOGENI_NICKNAME="cenic-ig";;
     *vt.edu) PROTOGENI_NICKNAME="vt-ig";;
+    *vcu.instageni.net) PROTOGENI_NICKNAME="vcu-ig";;
+    *utc.edu) PROTOGENI_NICKNAME="utc-ig";;
+    *research.umich.edu) PROTOGENI_NICKNAME="umich-ig";;
+    *ucsd.edu) PROTOGENI_NICKNAME="ucsd-ig";;
+    *uvm.edu) PROTOGENI_NICKNAME="uvm-ig";;
+    *utdallas.edu) PROTOGENI_NICKNAME="utdallas-ig";;
+    *odu.edu) PROTOGENI_NICKNAME="odu-ig";;
+    *louisiana.edu) PROTOGENI_NICKNAME="ullafayette-ig";;
     *stitch.geniracks.net) PROTOGENI_NICKNAME="utah-stitch";;
     esac
 fi
