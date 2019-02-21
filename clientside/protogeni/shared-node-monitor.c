@@ -91,7 +91,7 @@ static void num_vms_allocated( char *buf ) {
     FILE *f;
     int n;
     
-    f = popen( "sudo xl vm-list | wc -l", "r" );
+    f = popen( "sudo xl vm-list|grep -v Domain-0 | wc -l", "r" );
     fscanf( f, "%d", &n );
     pclose( f );
 
