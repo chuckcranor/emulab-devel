@@ -1681,6 +1681,7 @@ sub KillMonitor($)
 {
     my ($slice) = @_;
     my $pid = $slice->monitor_pid();
+    require libtestbed;
 
     return 0
 	if (!$pid);
@@ -1735,7 +1736,7 @@ sub KillMonitor($)
 	}
 	if ($slice->GetMonitorPid()) {
 	    print STDERR "Monitor process $pid would not die!\n";
-	    SENDMAIL($TBOPS, "Monitor for slice would not die!",
+	    libtestbed::SENDMAIL($TBOPS, "Monitor for slice would not die!",
 		     "Monitor would not die: $slice\n\n" .
 		     "$TBBASE/showslice.php?slice_idx=" . $slice->idx() .
 		     "&showtype=cm",
