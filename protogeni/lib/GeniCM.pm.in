@@ -8418,19 +8418,8 @@ sub ReserveLocalVlanTag($$$)
 sub CheckMonitor($)
 {
     my ($slice) = @_;
-    my $pid = $slice->monitor_pid();
 
-    #
-    # See if the process still exists.
-    #
-    if (kill(0, $pid) == 0) {
-	if ($!{ESRCH}) {
-	    print STDERR "Monitor process $pid no longer exists.\n";
-	    $slice->ClearMonitorPid();
-	    return 0;
-	}
-    }
-    return 0;
+    return $slice->CheckMonitor();
 }
 
 #
@@ -8439,76 +8428,8 @@ sub CheckMonitor($)
 sub KillMonitor($)
 {
     my ($slice) = @_;
-    my $pid = $slice->monitor_pid();
 
-    return 0
-	if (!$pid);
-
-    my $experiment = $slice->GetExperiment();
-    if (!defined($experiment)) {
-	print STDERR "No experiment for $slice\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "No slice experiment");
-    }
-    #
-    # See if the process still exists.
-    #
-    if (kill(0, $pid) == 0) {
-	if ($!{ESRCH}) {
-	    print STDERR "Monitor process $pid no longer exists.\n";
-	    $experiment->SetCancelFlag(0);
-	    $slice->ClearMonitorPid();
-	    return 0;
-	}
-	# What does getting here mean?
-    }
-	
-    print STDERR "Monitor in progress: process id $pid ...\n";
-
-    if ($experiment->Canceled()) {
-	print STDERR "Cancel flag already set for $experiment\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "Unable to stop monitor");
-    }
-    #
-    # Okay, before we commit to waiting for something that might
-    # not happen, or erroneously setting the cancel flag, lets lock
-    # the tables and check again, to avoid race in start/restart.
-    #
-    $slice->LockTables();
-    if ($slice->GetMonitorPid()) { 
-	$experiment->SetCancelFlag(1);
-	$slice->UnLockTables();
-
-	#
-	# Wait for the monitor to go away, but should not take long.
-	#
-	my $count = 10;
-	while ($count > 0) {
-	    sleep(10);
-	    # Go to the DB.
-	    my $monitor_pid = $slice->GetMonitorPid();
-	    last
-		if (! $monitor_pid);
-	    $count--;
-	    print STDERR "Waiting for monitor to die ...\n";
-	}
-	if ($slice->GetMonitorPid()) {
-	    print STDERR "Monitor process $pid would not die!\n";
-	    SENDMAIL($TBOPS, "Monitor for slice would not die!",
-		     "Monitor would not die: $slice\n\n" .
-		     "$TBBASE/showslice.php?slice_idx=" . $slice->idx() .
-		     "&showtype=cm",
-		     $TBOPS);
-	    print STDERR "Could not shutdown $slice!\n";
-	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-					"Monitor would not die");
-	}
-    }
-    else {
-	$slice->UnLockTables();
-    }
-    return 0;
+    return $slice->KillMonitor();
 }
 
 #
