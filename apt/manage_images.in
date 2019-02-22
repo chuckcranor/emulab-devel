@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,8 +33,10 @@ use JSON;
 #
 sub usage()
 {
-    print STDERR "Usage: manage_images [options --] list ...\n";
-    print STDERR "Usage: manage_images [options --] delete <urn> ...\n";
+    print STDERR "Usage: manage_images [options] list ...\n";
+    print STDERR "Usage: manage_images [options] delete <urn> ...\n";
+    print STDERR "Usage: manage_images [options] getcredential <urn>\n";
+    print STDERR "Usage: manage_images [options] relocate ...\n";
     exit(-1);
 }
 my $optlist     = "dt:";
@@ -49,7 +51,9 @@ my $TB		  = "@prefix@";
 my $TBOPS         = "@TBOPSEMAIL@";
 my $OURDOMAIN     = "@OURDOMAIN@";
 my $MYURN         = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+my $CMCERT	  = "$TB/etc/genicm.pem";
 my $MANAGEPROFILE = "$TB/bin/manage_profile";
+my $IMPORTER      = "$TB/sbin/image_import";
 my $MAINSITE      = @TBMAINSITE@;
 
 # For development.
@@ -77,6 +81,9 @@ use Project;
 use User;
 use WebTask;
 use GeniResponse;
+use GeniCertificate;
+use GeniCredential;
+use GeniImage;
 use GeniXML;
 use GeniUser;
 use APT_Geni;
@@ -88,6 +95,8 @@ sub fatal($);
 sub UserError($);
 sub DoListImages();
 sub DoDeleteImage();
+sub DoGetCredential();
+sub DoRelocate();
 sub ExitWithError($);
 
 #
@@ -127,6 +136,12 @@ if ($action eq "list") {
 }
 elsif ($action eq "delete") {
     exit(DoDeleteImage());
+}
+elsif ($action eq "getcredential") {
+    exit(DoGetCredential());
+}
+elsif ($action eq "relocate") {
+    exit(DoRelocate());
 }
 else {
     usage();
@@ -585,6 +600,226 @@ sub DoDeleteImage()
     if (defined($webtask)) {
 	$webtask->Exited(0);
     }
+    exit(0);
+}
+
+sub GetCredentialInternal($$$)
+{
+    my ($image_urn, $context, $perror) = @_;
+
+    # Convert the image urn into the authority URN.
+    my $hrn      = GeniHRN->new($image_urn);
+    my $authurn  = GeniHRN::Generate($hrn->domain(), "authority", "cm");
+    my $manager  = APT_Geni::GetAuthority($authurn);
+    if (!defined($manager)) {
+	$$perror = "Could not lookup authority $authurn";
+	return undef;
+    }
+    my $args = {"image_urn" => $image_urn};
+    my $response = APT_Geni::PortalRPC($manager, $context,
+				       "GetImageCredential", $args);
+    if (GeniResponse::IsError($response)) {
+	return $response;
+    }
+    my $credential = GeniCredential->CreateFromSigned($response->value());
+    if (!defined($credential)) {
+	$$perror = "Could not parse new credential";
+	return undef;
+    }
+    return $credential;
+}
+
+#
+# Request an image credential via the Portal fast path.
+#
+sub DoGetCredential()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_images getcredential [-a urn] ".
+	    "<image_urn>\n";
+	print STDERR "Options:\n";
+	print STDERR "  -a urn    - URN of the remote cluster (cm)\n";
+	print STDERR " image_urn  - URN of the image at the remote cluster\n";
+	exit(-1);
+    };
+    my $optlist = "a:";
+    my $authority;
+    my $errmsg;
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	&$usage();
+    }
+    if (defined($options{"a"})) {
+	my $urn = $options{"a"};
+	$authority = APT_Geni::GetAuthority($urn);
+	if (!defined($authority)) {
+	    fatal("Could not lookup authority $urn");
+	}
+    }
+    &$usage()
+	if (!@ARGV);
+    my $image_urn = shift(@ARGV);
+    if (!GeniHRN::IsValid($image_urn)) {
+	fatal("Not a valid urn");
+    }
+    # Convert the image urn into the authority URN.
+    my $hrn = GeniHRN->new($image_urn);
+    if (!$hrn->IsImage()) {
+	fatal("Not an image urn");
+    }
+    my $context  = APT_Geni::GeniContext();
+    my $credential = GetCredentialInternal($image_urn, $context, \$errmsg);
+    if (!defined($credential)) {
+	fatal($errmsg);
+    }
+    if (GeniResponse::IsError($credential)) {
+	ExitWithError($credential);
+    }
+    if (defined($authority)) {
+	my $delegated = $credential->Delegate($authority);
+	$delegated->Sign($context);
+	$credential = $delegated;
+    }
+    print $credential->asString();
+    exit(0);
+}
+
+#
+# Relocate an image back to this cluster. 
+#
+sub DoRelocate()
+{
+    $debug = 1;
+    
+    my $usage = sub {
+	print STDERR "Usage: manage_images relocate [-s] [-u user] -p pid ".
+	    "-i imagename <image_urn> <url>\n";
+	print STDERR "       manage_images relocate -p pid -i imagename\n";
+	print STDERR "Use the -s option to *also* schedule.\n";
+	print STDERR "Use the -S option to *only* schedule.\n";
+	print STDERR "Use the second form to start a scheduled relocation\n";
+	exit(-1);
+    };
+    my $optlist  = "p:i:u:sS";
+    my $schedule = 0;
+    my $project;
+    my $group;
+    my $pid;
+    my $user;
+    my $image_urn;
+    my $image_url;
+    my $imagename;
+    my $errmsg;
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	&$usage();
+    }
+    if (defined($options{"s"}) || defined($options{"S"})) {
+	$schedule = 1;
+    }
+    if (defined($options{"p"})) {
+	$pid = $options{"p"};
+	$project = Project->Lookup($pid);
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+	$group = $project->GetProjectGroup();
+    }
+    if (defined($options{"u"})) {
+	$user = User->Lookup($options{"u"});
+	if (!defined($user)) {
+	    fatal("No such user");
+	}
+    }
+    else {
+	$user = $this_user;
+    }
+    if (defined($options{"i"})) {
+	$imagename = $options{"i"};
+	if (!TBcheck_dbslot($imagename, "images", "imagename",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+	    fatal("Not a valid imagename");
+	}
+    }
+    &$usage()
+	if (!(defined($pid) && defined($imagename)));
+
+    if (@ARGV == 2) {
+	$image_urn = shift(@ARGV);
+	if (!GeniHRN::IsValid($image_urn)) {
+	    fatal("Not a valid urn");
+	}
+        $image_url = shift(@ARGV);
+    }
+    else {
+	my $blob;
+	my $val = GeniImage::ImageRelocationPending($imagename, $group, \$blob);
+	if (!$val || !defined($blob)) {
+	    fatal("Could not lookup scheduled relocation");
+	}
+	print Dumper($blob);
+	$image_urn = $blob->{'remote_urn'};
+	$image_url = $blob->{'metadata_url'};
+	$user = User->Lookup($blob->{'uid_idx'});
+	if (!defined($user)) {
+	    fatal("Not a valid user: " . $blob->{'uid'});
+	}
+    }
+    # Convert the image urn into the authority URN.
+    my $hrn = GeniHRN->new($image_urn);
+    if (!$hrn->IsImage()) {
+	fatal("Not an image urn");
+    }
+
+    if ($schedule) {
+	if (GeniImage::ImageRelocationSchedule($imagename, $user, $group,
+					       $image_urn, $image_url)) {
+	    fatal("Could not schedule incoming relocation for $image_urn");
+	}
+	if (exists($options{"S"})) {
+	    exit(0);
+	}
+    }
+    #
+    # The context for image import is the CM.
+    #
+    my $cmcert = GeniCertificate->LoadFromFile($CMCERT);
+    if (!defined($cmcert)) {
+	fatal("Could not load certificate from $CMCERT\n");
+    }
+    my $context = Genixmlrpc->Context($cmcert);
+    if (!defined($context)) {
+	fatal("Could not create RPC context");
+    }
+    my $credential = GetCredentialInternal($image_urn, $context, \$errmsg);
+    if (!defined($credential)) {
+	fatal("Could not generate credential: $errmsg");
+    }
+    if (GeniResponse::IsError($credential)) {
+	ExitWithError($credential);
+    }
+    # This will autodelete
+    my $credfile = $credential->WriteToFile();
+    if (!defined($credfile)) {
+	fatal("Could not write credential to file");
+    }
+    if (GeniImage::ImageRelocationLock($imagename, $group)) {
+	print STDERR "Could not lock image relocation record\n";
+	exit(1);
+    }
+    my $cmd = "$IMPORTER ";
+    $cmd .= "-d " if ($debug);
+    $cmd .= "-R -C $credfile -p $pid -u " . $user->uid() . " " ;
+    $cmd .= "-i '$imagename' '$image_url'";
+    if ($debug) {
+	print "Running '$cmd'\n";
+    }
+    system($cmd);
+    if ($?) {
+	GeniImage::ImageRelocationUnlock($imagename, $group);
+	fatal("Could not relocate image");
+    }
+    GeniImage::ImageRelocationFinished($imagename, $group);
     exit(0);
 }
 

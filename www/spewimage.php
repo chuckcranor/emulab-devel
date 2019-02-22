@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2003-2016 University of Utah and the Flux Group.
+# Copyright (c) 2003-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -92,11 +92,10 @@ $unix_gid   = $group->unix_gid();
 $project    = $image->Project();
 $unix_pid   = $project->unix_gid();
 
-#
-# Datasets are special, they cannot be downloaded on this path
-# unless they are global.
-#
-if ($image->isdataset() && !$image->isglobal()) {
+if ($image->noexport()) {
+    SPITERROR(403, "This image is marked as export restricted");
+}
+if (!$image->isglobal()) {
     SPITERROR(403, "No permission to access image");
 }
 

@@ -1308,111 +1308,38 @@ sub GetTicketAuxAux($)
 		$osname = $url;
 	    }
 	    elsif (defined($dname)) {
-		if (! GeniHRN::IsValid($dname)) {
+		my $hrn = GeniHRN->new($dname);
+		if (! (defined($hrn) && $hrn->IsImage() &&
+		       defined($hrn->ospid()) && defined($hrn->osname()))) {
 		    $response =
 			GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 					 "Malformed image URN: $dname");
 		    goto bad;
 		}
-		my ($auth,$type,$id) = GeniHRN::Parse($dname);
-		my ($ospid,$os,undef,$vers) =
-		    ($id =~ m{([^/]+)//([^/]+)(//(\d+))?});		
-		if ($type ne "image" || !defined($ospid) || !defined($os)){
-		    $response =
-			GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-					 "Malformed image URN: $dname");
+		my $image = GeniImage::MapToLocalImage($dname, $realuser, $pid,
+						       $use_imagetracker,
+						       @{$credentials});
+		if (GeniResponse::IsError($image)) {
+		    #
+		    # Map SEARCHFAILED to BADARGS on this path.
+		    #
+		    $response = $image;
+		    if ($response->{'code'} == GENIRESPONSE_SEARCHFAILED) {
+			$response->{'code'} = GENIRESPONSE_BADARGS;
+			$response->{'output'} = "Could not lookup ".
+			    "image at the image server: $dname";
+		    }
 		    goto bad;
 		}
-		# See if we have any version of this image.
-		$osinfo = OSImage->Lookup($ospid, $os);
-		#
-		# If we do and the request was for a specific version of
-		# the image and this image was imported, then the version
-		# number probably refers to the version at the origin. We
-		# want to use the hash to resolve it instead, down in
-		# MapToLocalImage.
-		# 
-		if (defined($osinfo) && defined($vers)) {
-		    if ($osinfo->IsLocal()) {
-			$osinfo = OSImage->Lookup($ospid, $os, $vers);
-			if (!defined($osinfo)) {
-			    $response =
-				GeniResponse->Create(GENIRESPONSE_BADARGS,
-						     undef,
-						     "Unknown image URN: ".
-						     "$dname");
-			    goto bad;
-			}
-		    }
-		    else {
-			$osinfo = undef;
-		    }
-		}
-		if (!defined($osinfo)) {
-		    if ($use_imagetracker) {
-			my $image = GeniImage::MapToLocalImage($dname, $pid);
-			if (GeniResponse::IsError($image)) {
-			    #
-			    # Map SEARCHFAILED to BADARGS on this path.
-			    #
-			    $response = $image;
-			    if ($response->{'code'} ==
-				GENIRESPONSE_SEARCHFAILED) {
-				$response->{'code'} = GENIRESPONSE_BADARGS;
-				$response->{'output'} = "Could not lookup ".
-				    "image at the image server: $dname";
-			    }
-			    goto bad;
-			}
-			if ($image->IsLocal() || $image->IsSystemImage()) {
-			    # No need for image_setup to look at it.
-			    # System images are never auto imported.
-			    $osname = $image->versname();
-			}
-			else {
-			    $osname = $image->metadata_url();
-			}
-		    }
-		    else {
-			$response =
-			    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-						 "Unknown image URN: $dname");
-			goto bad;
-		    }
+		if ($image->IsLocal() || $image->IsSystemImage()) {
+		    # No need for image_setup to look at it.
+		    # System images are never auto imported.
+		    $osname = $image->versname();
 		}
 		else {
-		    #
-		    # The OS must be in the current project, or it must
-		    # be global.
-		    #
-		    if (! ($osinfo->global() ||
-			   $osinfo->pid() eq $slice_experiment->pid())) {
-			if ($PROTOGENI_LOCALUSER && $user->IsLocal()) {
-			    my $image = OSImage->Lookup($ospid,$os,$vers);
-			    if (!defined($image)) {
-				$response =
-				    GeniResponse->Create(GENIRESPONSE_BADARGS,
-							 undef,
-							 "No image: $dname");
-				goto bad;
-			    }
-			    goto noperm
-				if (!$image->AccessCheck($user->emulab_user(),
-							 TB_IMAGEID_READINFO));
-			}
-			else {
-			  noperm:
-			    $response =
-				GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-				 "Insufficient permission to use $dname");
-			    goto bad;			
-			}
-		    }
-		    #
-		    # This is only going to be used in raw mode. 
-		    #
-		    $osname  = "$ospid/$os";
-		    $osname .= ":${vers}" if (defined($vers));
+		    # Need to make sure image setup runs on this image
+		    # to get the image file. 
+		    $osname = $image->metadata_url();
 		}
 	    }
 	}
@@ -8821,6 +8748,8 @@ sub HandleBlockstore($$$$$$$@)
 			goto bad;
 		    }
 		}
+		# When using a URL, the dataset has to be global. Might
+		# revisit this at some point.
 	    }
 	    elsif (GeniHRN::IsValid($dataset_id)) {
 		$dataset_urn = GeniHRN->new($dataset_id);
@@ -8844,26 +8773,11 @@ sub HandleBlockstore($$$$$$$@)
 		    $message = "Not supporting dataset versions yet";
 		    goto bad;
 		}
-		#
-		# If the ID includes a project, strip it. We no longer
-		# put the project there, but old URNs might have it.
-		#
-		my ($ignore,$id) = split("//", $dataset_urn->id());
-		$id = $ignore if (!defined($id));
-
-		#
-		# Use the project from the URN for lookup, to make sure we
-		# get locally resident datasets regardless of the current
-		# slice project.  If it is not local we will import and
-		# grant permission to the the argument pid (the slice
-		# experiment project).
-		#
-		$image = Image->Lookup($dataset_urn->project(), $id);
-		if (!defined($image) && $use_imagetracker) {
-		    $image = GeniImage::MapToLocalDataset($dataset_urn,
-							  $experiment,
-							  @credentials);
-		}
+		$image = GeniImage::MapToLocalDataset($dataset_urn,
+						      $geniuser,
+						      $experiment,
+						      $use_imagetracker,
+						      @credentials);
 		if (!defined($image)) {
 		    $message = "Unknown dataset: $dataset_id";
 		    goto bad;
@@ -8879,46 +8793,6 @@ sub HandleBlockstore($$$$$$$@)
 	    if (!$image->isdataset()) {
 		$message = "Not a dataset: $dataset_id";
 		goto bad;
-	    }
-	    if ($PROTOGENI_LOCALUSER) {
-		#
-		# We use the Emulab permission system.
-		#
-		if (!$image->AccessCheck($geniuser->emulab_user(),
-					 TB_IMAGEID_READINFO())) {
-		    $message = "Not enough permission to use $dataset_id";
-		    goto bad;
-		}
-	    }
-	    #
-	    # The image must be in the current project, or it must
-	    # be global (okay, shared).
-	    #
-	    elsif (! ($image->global() ||
-		      $image->pid() eq $experiment->pid())) {
-		#
-		# Or we have a credential (in the urn case).
-		#
-		my $okay = 0;
-
-		if (defined($dataset_urn)) {
-		    foreach my $credential (@credentials) {
-			next
-			    if (!$credential->HasActualPrivilege("blockstores"));
-
-			if ($credential->target_urn()->domain() eq
-			    $dataset_urn->domain() &&
-			    $credential->target_urn() eq $dataset_urn) {
-			    $okay = 1;
-			    last;
-			}
-		    }
-		}
-		if (!$okay) {
-		    # If we get here, its not allowed.
-		    $message = "No permission to use dataset $dataset_id";
-		    goto bad;
-		}
 	    }
 	    push(@attributes, ["dataset", $image->versname(), 0]);
 	    $btype = "imdataset";

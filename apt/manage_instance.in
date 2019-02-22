@@ -79,9 +79,13 @@ my $geniuser;
 #
 my $TB		   = "@prefix@";
 my $TBOPS          = "@TBOPSEMAIL@";
+my $OURDOMAIN      = "@OURDOMAIN@";
+my $MYURN          = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $PROTOUSER      = "elabman";
 my $SUDO           = "/usr/local/bin/sudo";
 my $MANAGEINSTANCE = "$TB/bin/manage_instance";
+my $MANAGEIMAGES   = "$TB/bin/manage_images";
+my $IMPORTER       = "$TB/sbin/image_import";
 my $WAP            = "$TB/sbin/wap";
 my $TBACCT         = "$TB/sbin/tbacct";
 
@@ -151,13 +155,14 @@ sub DoApplyExtensionPolicy();
 sub WriteCredentials();
 sub StartMonitor();
 sub StartMonitorInternal(;$);
-sub DoImageTrackerStuff($$$$$$$);
+sub DoImageTrackerStuff($$$$$$$$);
 sub DoWarn();
 sub DoDelete();
 sub DenyExtensionInternal($);
 sub ExtendInternal($$$$$);
 sub CallMethodOnAggregates($$$@);
 sub ResponseErrorMessage($$);
+sub RelocateImage($$$$);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -325,6 +330,7 @@ sub DoSnapshot()
     my $update_prepare = 0;
     my $doversions = 0;
     my $usetracker = 0;
+    my $relocate   = 0;
     my $operation = "image-only"; # Default to just snapshot.
 
     my $optlist = "n:i:u:Uc:O:SseD:";
@@ -523,7 +529,7 @@ sub DoSnapshot()
 	    my $rval = DoImageTrackerStuff($aggregate, $node, $project,
 					   $imagename,
 					   \$copyback_uuid, \$copyback_urn,
-					   \$errmsg);
+					   \$relocate, \$errmsg);
 	    if ($rval) {
 		if ($rval < 0) {
 		    fatal($errmsg);
@@ -535,9 +541,12 @@ sub DoSnapshot()
 		}
 	    }
 	}
+	elsif ($aggregate->GetAptAggregate()->nolocalimages()) {
+	    $relocate = 1;
+	}
     }
     if (0) {
-	fatal("$copyback_uuid, $copyback_urn\n");
+	fatal("$copyback_uuid, $copyback_urn, $relocate\n");
     }
 
     #
@@ -616,6 +625,18 @@ sub DoSnapshot()
 
     # Shorten default timeout
     Genixmlrpc->SetTimeout(60);
+
+    if ($relocate) {
+	#
+	# When relocating an image back here, the URN we get back from
+	# the cluster is not the URN the user is going to use. We need
+	# to form a local URN to use after the copy back. 
+	#
+	# XXX Need to check if we can use the URN earlier in the process.
+	#
+	$copyback_urn = GeniHRN::GenerateImage($OURDOMAIN, $project->pid(),
+					       $imagename, undef);
+    }
     
     #
     # This returns pretty fast, and then the imaging takes place in
@@ -623,9 +644,10 @@ sub DoSnapshot()
     #
     my $response =
 	$aggregate->CreateImage($sliver_urn, $imagename,
-				$update_prepare, $copyback_uuid,
+ 				$update_prepare, $copyback_uuid,
 				undef, $nosnapshot, $mustnotexist, $wholedisk,
-				$description);
+				$description,
+				$relocate ? $copyback_urn : undef);
     if ($response->code() != GENIRESPONSE_SUCCESS) {
 	$errcode = $response->code();
 	($exitcode,$errmsg) = ResponseErrorMessage($aggregate, $response);
@@ -643,10 +665,11 @@ sub DoSnapshot()
     }
     my ($image_urn, $image_url,
 	$version_urn, $version_url) = @{ $response->value() };
-    #
-    # For version zero, kill the version number.
-    #
-    if (!defined($version_urn) || $version_urn =~ /:0$/) {
+
+    if ((!defined($version_urn) || $version_urn =~ /:0$/) && !$relocate) {
+	#
+	# For version zero, kill the version number.
+	#
 	$version_urn = $image_urn;
 	$version_url = $image_url
     }
@@ -687,8 +710,8 @@ sub DoSnapshot()
 
 	# We tell the web interface that the image has to be copied
 	# back,
-	if (defined($copyback_uuid)) {
-	    $swebtask->copyback_uuid($copyback_uuid);
+	if (defined($copyback_urn)) {
+	    $swebtask->copyback_urn($copyback_urn);
 	}
     }
     print "$version_urn,$version_url,$image_name\n";
@@ -776,7 +799,7 @@ sub DoSnapshot()
 	    # its origin, hold of ready till later. We will wait for
 	    # the copyback to finish, see below.
 	    #
-	    if ($imageblob->{'status'} eq "ready" && defined($copyback_uuid)) {
+	    if ($imageblob->{'status'} eq "ready" && defined($copyback_urn)){
 		$blobcopy{'status'} = "copying";
 	    }
 	    # This is also being updated by the event system.
@@ -862,11 +885,23 @@ sub DoSnapshot()
     }
     $instance->SetStatus("ready");
     $aggregate->SetStatus("ready");
-    
+
+    if ($relocate) {
+	my $pid = $project->pid();
+
+	if (RelocateImage($pid, $imagename, $version_urn, $version_url) != 0) {
+	    $errmsg  = "Failed to copy image back to the Portal";
+	    $errcode = 1;
+	    goto bad;
+	}
+	elsif (defined($swebtask)) {
+	    $swebtask->image_status("ready");
+	}
+    }
     #
-    # If there is a copyback_uuid, we want to wait for that to finish.
+    # If there is a copyback_urn, we want to wait for that to finish.
     #
-    if (defined($copyback_uuid)) {
+    elsif (defined($copyback_urn)) {
 	#
 	# We know the copyback is done when the IMS has the info.
 	#
@@ -958,19 +993,31 @@ sub DoSnapshot()
     exit($exitcode);
 }
 
-sub DoImageTrackerStuff($$$$$$$)
+sub DoImageTrackerStuff($$$$$$$$)
 {
-    my ($aggregate, $node, $project, $newname, $puuid, $purn, $perrmsg) = @_;
+    my ($aggregate, $node, $project, $newname,
+	$puuid, $purn, $prelocate, $perrmsg) = @_;
     my $node_id = GeniXML::GetVirtualId($node);
+    my $needrelocate = $aggregate->GetAptAggregate()->nolocalimages() ? 1 : 0;
     my $errmsg;
 
+    print "DoImageTrackerStuff: $needrelocate\n";
+
+    #
+    # if the target aggregate is us, then obviously no relocate needed.
+    #
+    $needrelocate = 0
+	if ($aggregate->aggregate_urn() eq $MYURN);
+    
     #
     # If we do not have a diskinfo section, we will use the URN we get back
     # from the cluster (it is a snapshot of the default image).
     #
     my $diskinfo = GeniXML::GetDiskImage($node);
-    return 0
-	if (!defined($diskinfo));
+    if (!defined($diskinfo)) {
+	$$prelocate = $needrelocate;
+	return 0;
+    }
 
     #
     # This one needs more thought, it might be a URL.
@@ -978,8 +1025,10 @@ sub DoImageTrackerStuff($$$$$$$)
     my $image_token = GeniXML::GetText("name", $diskinfo);
     if (!defined($image_token)) {
 	$image_token = GeniXML::GetText("url", $diskinfo);
-	return 0
-	    if (!defined($image_token));
+	if (!defined($image_token)) {
+	    $$prelocate = $needrelocate;
+	    return 0;
+	}
     }
     if (GeniHRN::IsValid($image_token)) {
 	my ($auth,$ospid) = GeniHRN::ParseImage($image_token);
@@ -992,6 +1041,8 @@ sub DoImageTrackerStuff($$$$$$$)
     Genixmlrpc->SetContext(APT_Geni::GeniContext());
     my $blob = GeniImage::GetImageData($image_token, \$errmsg);
     Genixmlrpc->SetContext(undef);
+
+    print Dumper($blob);
     
     if (!defined($blob)) {
 	if (GeniHRN::IsValid($image_token)) {
@@ -1014,6 +1065,13 @@ sub DoImageTrackerStuff($$$$$$$)
 		$blob = GeniImage::GetImageData($urn, \$errmsg);
 		Genixmlrpc->SetContext(undef);
 	    }
+	    # Temp fix.
+	    if (!defined($blob)) {
+		if (lc($hrn->domain()) eq "apt.emulab.net" &&
+		    lc($hrn->domain()) eq lc($aggregate->domain())) {
+		    return 0;
+		}
+	    }
 	}
 	if (!defined($blob)) {
 	    $$perrmsg = "Could not get info from the image server for ".
@@ -1023,13 +1081,15 @@ sub DoImageTrackerStuff($$$$$$$)
     }
     #
     # System Image? We use the URN we get back from CreateImage().
-    # The cluster will be the origin for the new image.
+    # Image aliases are always system images.
+    # The cluster will be the origin for the new image unless it
+    # needs to be relocated back home.
     #
-    return 0
-	if (exists($blob->{'issystem'}) && $blob->{'issystem'});
-    # Image aliases are also considered system images.
-    return 0
-	if (exists($blob->{'isimagealias'}) && $blob->{'isimagealias'});
+    if ((exists($blob->{'issystem'}) && $blob->{'issystem'}) ||
+	(exists($blob->{'isimagealias'}) && $blob->{'isimagealias'})) {
+	$$prelocate = $needrelocate;
+	return 0;
+    }
 
     my $image_urn     = $blob->{'urn'};
     my $copyback_uuid = $blob->{'version_uuid'};
@@ -1056,6 +1116,7 @@ sub DoImageTrackerStuff($$$$$$$)
     #
     if (lc($projhrn->subauth()) ne lc($project->pid())) {
 	# We use the URN we get back from CreateSliver().
+	$$prelocate = $needrelocate;
 	return 0;
     }
 
@@ -1065,6 +1126,7 @@ sub DoImageTrackerStuff($$$$$$$)
     # We can use the URN the cluster returns.
     #
     if (lc($hrn->domain()) eq lc($aggregate->domain())) {
+	$$prelocate = $needrelocate;
 	return 0;
     }
 
@@ -1076,6 +1138,7 @@ sub DoImageTrackerStuff($$$$$$$)
     # start a new image and we use the URN it returns.
     #
     if ($newname ne $hrn->osname()) {
+	$$prelocate = $needrelocate;
 	return 0;
     }
 
@@ -3398,6 +3461,11 @@ sub DoPanic()
 	my $code = $response->code();
 
 	if ($code != GENIRESPONSE_SUCCESS) {
+	    if ($code == GENIRESPONSE_SEARCHFAILED) {
+		# Skip this one, but do not reset the errcode in case
+		# this is a multi aggregate instance.
+		next;
+	    }
 	    $errcode = $code;
 
 	    ($exitcode, $errmsg) = ResponseErrorMessage($agg, $response);
@@ -4774,6 +4842,27 @@ sub DoWarn()
     exit($exitcode);
 }
 
+#
+# Relocate an image back here.
+#
+sub RelocateImage($$$$)
+{
+    my ($pid, $imagename, $urn, $url) = @_;
+    my $this_uid = $this_user->uid();
+
+    my $cmd = "$MANAGEIMAGES relocate ";
+    $cmd .= "-d " if ($debug);
+    $cmd .= "-s -p $pid -i '$imagename' '$urn' '$url'";
+    if ($debug) {
+	print "Running '$cmd'\n";
+    }
+    my $output = emutil::ExecQuiet($cmd);
+    if ($?) {
+	print $output;
+	return -1;
+    }
+    return 0;
+}
 
 #
 # Apply extension policies.

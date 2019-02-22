@@ -58,6 +58,8 @@ my $GROUPROOT     = "@GROUPSROOT_DIR@";
 
 # Cache of instances to avoid regenerating them.
 my %images    = ();
+BEGIN { use emutil;
+	emutil::AddCache(\%images); }
 my $debug      = 0;
 
 # Concat id/vers.
@@ -607,16 +609,15 @@ sub Refresh($)
 # Create a new os_info. This installs the new record in the DB,
 # and returns an instance. There is some bookkeeping along the way.
 #
-sub Create($$$$$$$$)
+sub Create($$$$$$$$$)
 {
-    my ($class, $project, $group, $creator,
+    my ($class, $project, $group, $creator, $isadmin,
 	$imagename, $imageid, $argref, $usrerr_ref) = @_;
     require OSinfo;
 
     return undef
 	if (ref($class) || !ref($project));
 
-    my $isadmin = $creator->IsAdmin();
     my $isdataset = (exists($argref->{"isdataset"}) ?
 		     $argref->{"isdataset"} : 0);
     my $architecture = $argref->{'architecture'}
@@ -1322,10 +1323,16 @@ sub Update($;$)
 
     my $imageid = $self->imageid();
     my $version = $self->version();
+    my @sets    = ();
 
-    my $query = 
-	join(",", map("$_=" . DBQuoteSpecial($argref->{$_}), keys(%{$argref})));
+    foreach my $key (keys(%{$argref})) {
+	my $val = $argref->{$key};
 
+	# Treat NULL special.
+	push (@sets, "${key}=" . (!defined($val) || $val eq "NULL" ?
+				  "NULL" : DBQuoteSpecial($val)));
+    }
+    my $query = join(",", @sets);
     $query .= " where imageid='$imageid'";
     $query .= " and version='$version'" if (!$allvers);
 
@@ -2284,6 +2291,7 @@ sub LookupAccess($$$$)
     if (!$query_result->numrows) {
 	$$paccess    = 0;
 	$$pwriteable = 0 if (defined($pwriteable));
+	return 0;
     }
     my ($writeable) = $query_result->fetchrow_array();
     $$paccess    = 1;
@@ -2759,6 +2767,54 @@ sub SetImageFileURL($$)
     return 0;
 }
 
+sub SetImageRelocateURN($$)
+{
+    my ($self, $urn) = @_;
+    if (defined($urn)) {
+	$urn = DBQuoteSpecial($urn);
+    }
+    else {
+	$urn = "NULL";
+    }
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    my $imageid = $self->imageid();
+
+    return -1
+	if (! DBQueryWarn("update images set relocate_urn=$urn " .
+			  "where imageid='$imageid'"));
+	    
+    $self->{'IMAGE'}->{'relocate_urn'} = $urn;
+    return 0;
+}
+
+sub SetCredential($$)
+{
+    my ($self, $credstr) = @_;
+    if (defined($credstr)) {
+	$credstr = DBQuoteSpecial($credstr);
+    }
+    else {
+	$credstr = "NULL";
+    }
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    my $imageid = $self->imageid();
+
+    return -1
+	if (! DBQueryWarn("update images set credential_string=$credstr " .
+			  "where imageid='$imageid'"));
+	    
+    $self->{'IMAGE'}->{'credential_string'} = $credstr;
+    return 0;
+}
+
 sub SetFormat($$)
 {
     my ($self, $format) = @_;
@@ -2813,29 +2869,6 @@ sub GetCredential($)
 
     require GeniCredential;
     return GeniCredential->CreateFromSigned($self->credential_string());
-}
-sub SetCredential($$)
-{
-    my ($self, $credstr) = @_;
-    if (defined($credstr)) {
-	$credstr = DBQuoteSpecial($credstr);
-    }
-    else {
-	$credstr = "NULL";
-    }
-
-    # Must be a real reference. 
-    return -1
-	if (! ref($self));
-
-    my $imageid = $self->imageid();
-
-    return -1
-	if (! DBQueryWarn("update images set credential_string=$credstr " .
-			  "where imageid='$imageid'"));
-	    
-    $self->{'IMAGE'}->{'credential_string'} = $credstr;
-    return 0;
 }
 
 #
@@ -3137,6 +3170,41 @@ sub SaveDir($)
 
     return $savedir;
 }
+
+#
+# Convert an imported image to a local image.
+#
+sub ConvertToLocal($)
+{
+    my ($self) = @_;
+    
+    my $args = {
+	"imagefile_url"  => undef,
+	"metadata_url"   => undef,
+	"origin_name"    => undef,
+	"origin_uuid"    => undef,
+	"origin_urn"     => undef,
+    };
+    return $self->Update($args);
+}
+
+#
+# Convert a local image to an imported image.
+#
+sub ConvertToImported($$)
+{
+    my ($self, $metadata) = @_;
+    
+    my $args = {
+	"imagefile_url"  => $metadata->{"imagefile_url"},
+	"metadata_url"   => $metadata->{"metadata_url"},
+	"origin_name"    => $metadata->{"origin_name"},
+	"origin_uuid"    => $metadata->{"origin_uuid"},
+	"origin_urn"     => $metadata->{"origin_urn"},
+    };
+    return $self->Update($args);
+}
+
 
 # _Always_ make sure that this 1 is at the end of the file...
 1;

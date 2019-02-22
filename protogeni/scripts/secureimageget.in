@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017, 2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -34,8 +34,15 @@ use Date::Parse;
 use Data::Dumper;
 
 #
-# Upload image data to the image server.
-# 
+# Use a Geni XMLrpc call to download an image. This is a specially
+# crafted RPC on the server side; instead of returning an XML response,
+# it just starts streams the data out, we have to capture it and
+# write to a file.
+#
+# The credential is for the image (or dataset) at the remote cluster.
+# We have to tell the remote cluster what version we want. We use the
+# origin_name in the image descriptor to generate one.
+#
 sub usage()
 {
     print "Usage: secureimageget [-n] [-d] [-u user] ".
@@ -44,14 +51,15 @@ sub usage()
 }
 my $optlist  = "ndvc:u:o:D";
 my $impotent = 0;
-my $debug    = 0;
+my $debug    = 1;
 my $verbose  = 0;
-my $devtree  = 0;
+my $devtree  = 1;
 my $credfile;
 my $outfile;
 my $outfp;
 my $user;
 my $credential;
+my $image_urn;
 
 #
 # Configure variables
@@ -133,6 +141,13 @@ my $image = OSImage->Lookup($ARGV[0]);
 fatal("No such image")
     if (!defined($image));
 
+#
+# This is supposed to be set, bail if not.
+#
+if (!defined($image->origin_name()) || $image->origin_name() eq "") {
+    fatal("No origin name in the descriptor");
+}
+
 if (defined($user)) {
     my $local_user = User->Lookup($user);
     fatal("No such user")
@@ -190,12 +205,42 @@ my $cmurl = $authority->url();
 $cmurl =~ s/protogeni/protogeni\/stoller/ if ($devtree);
 
 #
+# Convert this to image urn at the target. Version is important for OS
+# images, also need to generate a dataset URN if appropriate.
+#
+if ($image->origin_name() =~ /^([^\/]+)\/([^:]+):(\d+)$/) {
+    my $pid  = $1;
+    my $name = $2;
+    my $vers = $3;
+    
+    if ($image->isdataset()) {
+	$image_urn = GeniHRN::GenerateDataset($authority->urn()->domain(),
+					      "imdataset", $pid, $name, $vers);
+    }
+    else {
+	$image_urn = GeniHRN::GenerateImage($authority->urn()->domain(),
+					    $pid, $name, $vers);
+    }
+}
+else {
+    fatal("Invalid origin_name in image");
+}
+
+if ($debug) {
+    print "$image_urn, $cmurl\n";
+}
+
+#
 # Suck over some bits.
 #
 my $response =
     Genixmlrpc::CallMethodStream($cmurl, undef, $outfp, "SecureImageDownload",
-				 {"credentials" => [$credential->asString()]});
+				 {"credentials" => [$credential->asString()],
+				  "image_urn"   => $image_urn});
 if (!defined($response) || $response->code()) {
+    if ($debug && defined($response)) {
+	print Dumper $response . "\n";
+    }
     my $msg = "SecureImageDownload failed for image " . $image->versname() . " :";
     
     if (!defined($response)) {

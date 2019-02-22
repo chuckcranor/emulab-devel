@@ -34,7 +34,7 @@
 	    <img id='imaging-spinner' src='images/spinner.gif' />
 	  </center>
 	  <div id='imaging_modal_done_div' class='hidden'>
-	    Your new image name (or url) is below. If your profile is a
+	    Your new image URN (or url) is below. If your profile is a
 	    geni-lib python script, you will need to edit your profile to
 	    change any nodes that should use this new image.
 	    <br>
@@ -42,6 +42,14 @@
 	    <center>
 	      <b><span id='imaging-modal-imagename'></span></b>
 	    </center>
+	    <br>
+	  </div>
+	  <div id='imaging_modal_failed_div' class='hidden'>
+	    Oops, there was an error creating your image!
+	    <br>
+	    <br>
+	    <b><span class="text-danger"
+		     id='imaging-modal-failure'></span></b>
 	    <br>
 	  </div>
 	  <center>

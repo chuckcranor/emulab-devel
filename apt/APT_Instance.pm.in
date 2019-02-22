@@ -63,6 +63,7 @@ use GeniCredential;
 use GeniUser;
 use GeniHRN;
 use GeniXML;
+use GeniImage;
 use WebTask;
 use Logfile;
 use overload ('""' => 'Stringify');
@@ -74,6 +75,7 @@ my $TBAUDIT       = "@TBAUDITEMAIL@";
 my $OURDOMAIN     = "@OURDOMAIN@";
 my $GENEXTENDCRED = "$TB/sbin/protogeni/genextendcred";
 my $MANAGEDATASET = "$TB/bin/manage_dataset";
+my $MANAGEIMAGES  = "$TB/bin/manage_images";
 my $GENIUSER      = "geniuser";
 my $MAINSITE      = @TBMAINSITE@;
 my $PROTOGENI_LOCALUSER= @PROTOGENI_LOCALUSER@;
@@ -1498,15 +1500,15 @@ sub CreateDatasetCreds($$$)
 	    my $dataset_urn = GeniHRN->new($dataset_id);
 	    my $dataset = APT_Dataset->LookupByRemoteURN($dataset_urn);
 	    if (!defined($dataset)) {
-		if ($dataset_urn->domain() eq $OURDOMAIN) {
+		if ($dataset_urn->IsOurDomain()) {
 		    #
 		    # Local image backed dataset or lease.
 		    #
 		    my ($image,$lease);
-		    my $pid = $dataset_urn->project();
-		    my $id  = $dataset_urn->id();
+		    my $pid = $dataset_urn->dsetpid();
+		    my $id  = $dataset_urn->dsetname();
 
-		    if ($dataset_urn->type() eq "imdataset") {
+		    if ($dataset_urn->IsIMDataset()) {
 			$image = Image->Lookup($pid, $id);
 			if ($image && !$image->isdataset()) {
 			    $$pmsg = "$dataset_urn is an image not a dataset ";
@@ -1520,7 +1522,7 @@ sub CreateDatasetCreds($$$)
 			if (!$image->global() &&
 			    $PROTOGENI_LOCALUSER && $geniuser->IsLocal() &&
 			    !$image->AccessCheck($geniuser->emulab_user(),
-						   TB_IMAGEID_ACCESS())) {
+						   TB_IMAGEID_READINFO())) {
 			    $$pmsg = "No permission to use $dataset_urn";
 			    return 1;
 			}
@@ -1544,7 +1546,7 @@ sub CreateDatasetCreds($$$)
 	    # are applied at the CM.
 	    #
 	    next
-		if ($dataset->type() ne "imdataset");
+		if (!$dataset->IsIMDataset());
 
 	    #
 	    # For image backed datasets, we need to send along a credential
@@ -1574,6 +1576,205 @@ sub CreateDatasetCreds($$$)
 	}
     }
     $$pref = \%credentials;
+    return 0;
+}
+
+#
+# Create credentials required by this instance, to access restricted images.
+# Access means import and/or use the image.
+#
+sub CreateImageCreds($$$;$)
+{
+    my ($self, $pmsg, $pref) = @_;
+    my $rspecstr = $self->rspec();
+    my $project  = $self->GetProject();
+    my $geniuser = $self->GetGeniUser();
+    my %imagecache  = ();
+    my %credentials = ();
+    
+    my $rspec = GeniXML::Parse($rspecstr);
+    if (! defined($rspec)) {
+	print STDERR "CreateDatasetCreds: Could not parse rspec\n";
+	return -1;
+    }
+
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $manager_urn = GeniHRN->new(GetManagerId($ref));
+	my $diskref     = GeniXML::GetDiskImage($ref);
+	my $credstr;
+
+	if (! (defined($manager_urn) && $manager_urn->IsCM())) {
+	    $$pmsg = "$manager_urn is not a valid CM URN";
+	    return 1;
+	}
+
+	# Using the default (system) image. 
+	next
+	    if (!defined($diskref));
+
+	my $image_url = GeniXML::GetText("url", $diskref);
+	my $image_urn = GeniXML::GetText("name", $diskref);
+	next
+	    if (!defined($image_urn));
+	
+	$image_urn = GeniHRN->new($image_urn);
+	if (! (defined($image_urn) && $image_urn->IsImage())) {
+	    $$pmsg = "$image_urn is not a valid URN";
+	    return 1;
+	}
+
+	# System images are global (well, it would be rare if not).
+	next
+	    if ($image_urn->ospid() eq TBOPSPID());
+
+	#
+	# If the image is local, then local permissions apply to the
+	# user. Implicit assumption: PROTOGENI_LOCALUSER=1. We do the
+	# check here to catch permission errors early. 
+	#
+	# If the manager is the local aggregate, then no credential
+	# is needed, the CM is going to do a local permission check too.
+	#
+	if ($image_urn->IsOurDomain()) {
+	    my $image = Image->Lookup($image_urn->ospid(), $image_urn->osname());
+	    if (!defined($image)) {
+		$$pmsg = "Could not lookup local image $image_urn";
+		return 1;
+	    }
+	    if (! ($image->global() ||
+		   $image->AccessCheck($geniuser->emulab_user(),
+				       TB_IMAGEID_READINFO()))) {
+		$$pmsg = "No permission to use $image_urn";
+		return 1;
+	    }
+	    #
+	    # If the image is restricted, the experiment has to be created
+	    # in the same project as the image, or in a project that has
+	    # been granted permission to use the image.
+	    #
+	    if (!$image->global() && $image->pid() ne $project->pid()) {
+		my $allowed = 0;
+		if ($image->LookupAccess($project->GetProjectGroup(),
+					 \$allowed) != 0) {
+		    $$pmsg = "Could not lookup access for $image";
+		    return -1;
+		}
+		if (!$allowed) {
+		    $$pmsg = "Not allowed to use restricted image $image_urn ".
+			"in project " . $project->pid();
+		    return 1;
+		}
+	    }
+	    # No cred needed for local image at local CM.
+	    next
+		if ($manager_urn->IsOurDomain());
+	}
+
+	#
+	# Basically, only the Mothership will get this far, every other
+	# site is going to be talking to the local portal only, not
+	# a remote cluster. No IMS either.
+	#
+	next
+	    if (exists($credentials{$image_urn}));
+
+	#
+	# Generate a credential that allows the user to use a local
+	# image at a remote cluster (if it was the local cluster,
+	# that case was handled above). We know this is allowed as
+	# per the access check above.
+	#
+	if ($image_urn->IsOurDomain()) {
+	    #
+	    # We can generate the credential inline.
+	    #
+	    my $image = Image->Lookup($image_urn->ospid(),$image_urn->osname());
+	    if (!defined($image)) {
+		$$pmsg = "Could not lookup local image $image_urn";
+		return 1;
+	    }
+	    my $authority = APT_Geni::GetAuthority($manager_urn);
+	    if (!defined($authority)) {
+		$$pmsg = "Could not look up authority $manager_urn";
+		return -1;
+	    }
+	    my $credential = GeniImage::CreateImageCredential($image,
+							      $authority);
+	    if (!defined($credential)) {
+		$$pmsg = "Could not create credential for $image_urn";
+		return -1;
+	    }
+	    $credentials{$image_urn} = $credential->asString();
+	    next;
+	}
+	    
+	#
+	# Temporary, need to talk IMS directly instead of issuing an RPC
+	# for every image.
+	#
+	my $blob;
+	if (exists($imagecache{$image_urn})) {
+	    $blob = $imagecache{$image_urn};
+	}
+	else {
+	    $blob = GeniImage::GetImageData($image_urn, $pmsg);
+	    if (!defined($blob)) {
+		print STDERR $pmsg . "\n";
+		next;
+	    }
+	    $imagecache{$image_urn} = $blob;
+	}
+	# IMS says the image is public (global) so no credential needed.
+	next
+	    if ($blob->{"visibility"} eq "public");
+
+	#
+	# The IMS tells us the project urn of the image. 99% of the time,
+	# that is for a project here (where the IMS is). The other 1% the
+	# image was created by some other SA (say, ch.geni.net), and we
+	# cannot do anything with those. Just throw an error, I doubt a
+	# Portal user would be using one of those (and global=0), revisit
+	# later if it happens.
+	#
+	my $project_urn = GeniHRN->new($blob->{'project_urn'});
+	if ($project_urn->domain() ne $OURDOMAIN) {
+	    $$pmsg = "Cannot create a credential for ".
+		"external image: $image_urn";
+	    return 1;
+	}
+
+	#
+	# Since we are ignoring images created by other domains, and
+	# since the image server is not giving us permission info, we
+	# basically have to say that the experiment and the image have
+	# to be in the same local project.
+	#
+	if ($project_urn->project() ne $project->pid()) {
+	    $$pmsg = "No permission to use $image_urn in project ".
+		$project->pid();
+	    return 1;
+	}
+	
+	#
+	# Get a credential from the remote cluster via the admin path.
+	#
+	my $cmd = "$MANAGEIMAGES getcredential -a $manager_urn $image_urn";
+	my $output = emutil::ExecQuiet($cmd);
+	if ($?) {
+	    $$pmsg = "Could not generate credential for $image_urn";
+	    if (($? >> 8) > 0) {
+		if ($output ne "") {
+		    $$pmsg = "$image_urn" . ": " . $output;
+		}
+		return 1;
+	    }
+	    print STDERR "$cmd\n";
+	    print STDERR $output . "\n";
+	    return -1;
+	}
+	$credentials{$image_urn} = $output;
+    }
+    @$pref = values(%credentials);
     return 0;
 }
 
@@ -3030,11 +3231,11 @@ sub ConsoleURL($$)
 #
 # Create an Image,
 #
-sub CreateImage($$$$;$$$$$$)
+sub CreateImage($$$$;$$$$$$$)
 {
     my ($self, $sliver_urn, $imagename, $update_prepare,
 	$copyback_uuid, $bsname, $nosnapshot,
-	$mustnotexist, $wholedisk, $description) = @_;
+	$mustnotexist, $wholedisk, $description, $relocate) = @_;
     my $authority = $self->GetGeniAuthority();
     my $geniuser  = $self->instance()->GetGeniUser();
     my $slice     = $self->instance()->GetGeniSlice();
@@ -3057,7 +3258,6 @@ sub CreateImage($$$$;$$$$$$)
 	"slice_urn"   => $slice->urn(),
 	"imagename"   => $imagename,
 	"sliver_urn"  => $sliver_urn,
-	"global"      => 1,
 	"credentials" => [$slice_credential->asString(),
 			  $speaksfor_credential->asString()],
     };
@@ -3075,6 +3275,8 @@ sub CreateImage($$$$;$$$$$$)
 	if ($wholedisk);
     $args->{'description'} = $description
 	if (defined($description));
+    $args->{'relocate_urn'} = $relocate
+	if (defined($relocate));
 
     my $cmurl = $authority->url();
     $cmurl = devurl($cmurl) if ($usemydevtree);

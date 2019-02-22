@@ -3478,6 +3478,8 @@ sub CreateImage($)
     my ($bsname,$blockstore);
     my $copyback_uuid;
     my $description;
+    my $relocate_urn;
+    my $relocate_timeout = 0;
     my $response;
 
     require EmulabConstants;
@@ -3485,6 +3487,7 @@ sub CreateImage($)
     require OSImage;
     require WebTask;
     require GeniEvent;
+    require GeniImage;
     
     if (! (defined($credentials) && defined($imagename) &&
 	   defined($slice_urn) && defined($sliver_urn))) {
@@ -3520,7 +3523,17 @@ sub CreateImage($)
 	$description = $argref->{'description'};
 	return GeniResponse->MalformedArgsResponse("Improper description")
 	    if (!TBcheck_dbslot($description, "images", "description",
-				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR));
+			       TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR));
+    }
+    # Optional relocate directive.
+    if (exists($argref->{'relocate_urn'})) {
+	$relocate_urn = $argref->{'relocate_urn'};
+	return GeniResponse->MalformedArgsResponse("Improper relocate argument")
+	    if (!GeniHRN::IsValid($relocate_urn));
+    }
+    if ($relocate_urn && $copyback_uuid) {
+	return GeniResponse->MalformedArgsResponse("Not allowed to say both".
+						   "copyback and relocate");
     }
     
     my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
@@ -3646,6 +3659,12 @@ sub CreateImage($)
 	    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 					"This image is not a dataset");
 	}
+	if (defined($image->relocate_urn())) {
+	    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+					"This image is waiting to be ".
+					"relocated back to ".
+					$image->relocate_urn());
+	}
     }
     elsif (defined($bsname)) {
 	#
@@ -3730,10 +3749,6 @@ sub CreateImage($)
     if (exists($argref->{'global'})) {
 	$opt .= " -g " . ($argref->{'global'} ? "1" : "0");
     }
-    else {
-	# Force shared (within project). 
-	$opt .= " -r 1";
-    }
     print STDERR "CM: '$CLONEIMAGE $opt -s $imagename $node_id'\n";
     
     my $output =
@@ -3758,6 +3773,18 @@ sub CreateImage($)
 	$image->Update({"creator_urn" =>
 			    (defined($speaksfor) ?
 			     $speaksfor->target_urn() : $ENV{'GENIURN'})});
+
+	# This will only happen on initial snapshot.
+	if (defined($relocate_urn)) {
+	    $image->SetImageRelocateURN($relocate_urn) == 0 or
+		print STDERR "Could not set relocate_urn to $relocate_urn\n";
+	}
+	# Since this is a new image, be sure to set the shared flag
+	# if we did not get a global directive above, and the image
+	# is not global by inheritance. 
+	if ($image->global()) {
+	    $image->Update({"shared" => 1});
+	}
     }
     else {
 	# Cause of image versioning.
@@ -3945,19 +3972,58 @@ sub CreateImage($)
 	sleep(30);
 	# $webtask->Delete();
     }
-    
     if ($user->email()) {
 	libtestbed::SENDMAIL($user->email(),
 			     ($image->isdataset() ?
 			      "Finished taking snapshot of dataset" :
 			      "Finished cloning image"),
-			     "Image URN: $image_urn\n".
-			     "Image URL: $image_url\n".
+			     (! (defined($copyback_uuid) ||
+				 defined($relocate_urn)) ?
+			      "Image URN: $image_urn\n".
+			      "Image URL: $image_url\n" :
+			      "We have finished ".
+			      ($image->isdataset() ?
+			       "taking a snapshot of your dataset." :
+			       "cloning your image.") . "\n" .
+			      "Your image is now being transfered, you will ".
+			      "receive another message\n".
+			      "when that is complete.\n") .
 			     "\n".
 			     "-----------------------------------------\n".
 			     "$output\n",
 			     $user->email(),
 			     "Bcc: $TBLOGS");
+    }
+    if ($relocate_urn) {
+	#
+	# We are waiting for the Mothership to pick up the image.
+	#
+	# If the relocation does not happen in a reasonable amount of
+	# time, we can give up cause the expire daemon is also looking
+	# for this and will take care of it. 
+	#
+	if ($image->WaitLock(90)) {
+	    print STDERR "Could not get image lock for relocation wait\n";
+	}
+	else {
+	    my $waitfor = 900;
+	    
+	    print STDERR "Waiting for relocation: $relocate_urn\n";
+	    while ($waitfor >= 0) {
+		if (GeniImage::ConvertToImported($image, $relocate_urn) == 0) {
+		    $image->SchedIMSDeletion(1);
+		    $image->SetImageRelocateURN(undef);
+		    print STDERR "Relocation complete\n";
+		    last;
+		}
+		sleep(15);
+		$waitfor -= 15;
+	    }
+	    if ($waitfor < 0) {
+		print STDERR "Giving up on relocation, for now\n";
+	    }
+	    $image->Unlock();
+	}
     }
     return 0;
   bad:
@@ -4307,7 +4373,7 @@ sub TriggerImageUpdate($)
 	
 	$update_fields = ", updater='$updater',updater_idx='$updater_idx'";
     }
-    # We need the credential for secure download (datasets).
+    # We need the credential for secure download.
     if (exists($blob->{"credential"})) {
 	$update_fields .= ", credential_string=" .
 	    DBQuoteSpecial($blob->{"credential"});
@@ -5193,6 +5259,7 @@ sub DeleteDataset($)
     return $credential
 	if (GeniResponse::IsResponse($credential));
 
+    # This does the permission to access check.
     my $dataset = Credential2Dataset($dataset_urn, $credential);
     return $dataset
 	if (GeniResponse::IsResponse($dataset));
@@ -5250,6 +5317,7 @@ sub ModifyDataset($)
     return $credential
 	if (GeniResponse::IsResponse($credential));
 
+    # This does the permission to access check.
     my $dataset = Credential2Dataset($dataset_urn, $credential);
     return $dataset
 	if (GeniResponse::IsResponse($dataset));
@@ -5346,6 +5414,7 @@ sub DescribeDataset($)
     return $credential
 	if (GeniResponse::IsResponse($credential));
 
+    # This does the permission to access check.
     my $dataset = Credential2Dataset($dataset_urn, $credential);
     return $dataset
 	if (GeniResponse::IsResponse($dataset));
@@ -5420,8 +5489,11 @@ sub ApproveDataset($)
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
     }
     $dataset_urn = GeniHRN->new($dataset_urn);
-    if ($dataset_urn->type() !~ /^(lt|st)dataset$/) {
-	return GeniResponse->MalformedArgsResponse("Bad dataset type");
+    if (!$dataset_urn->IsDataset()) {
+	return GeniResponse->MalformedArgsResponse("Not a dataset URN");
+    }
+    if ($dataset_urn->IsIMDataset()) {
+	return GeniResponse->MalformedArgsResponse("Not a lt/st dataset URN");
     }
     my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
     return $credential
@@ -5475,8 +5547,8 @@ sub GetDatasetCredential($)
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
     }
     $dataset_urn = GeniHRN->new($dataset_urn);
-    if ($dataset_urn->type() !~ /^(im|lt|st)?dataset$/) {
-	return GeniResponse->MalformedArgsResponse("Bad dataset type");
+    if (!$dataset_urn->IsDataset()) {
+	return GeniResponse->MalformedArgsResponse("Not a dataset URN");
     }
     my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
     return $credential
@@ -5517,14 +5589,14 @@ sub Credential2Dataset($$)
 	       $dataset_urn->authority() eq
 	       $credential->target_urn()->authority() ||
 	       # Locally issued credential with GetDatasetCredential().
-	       $credential->target_urn()->domain() eq $OURDOMAIN));
+	       $credential->target_urn()->IsOurDomain()));
     
     return GeniResponse->MalformedArgsResponse("No project specified")
 	if (!defined($dataset_urn->project()));
 
     # Locally issued credential, use the urn in the credential.
-    if ($credential->target_urn()->domain() eq $OURDOMAIN &&
-	$credential->target_urn()->type() =~ /^(im|lt|st)?dataset$/) {
+    if ($credential->target_urn()->IsOurDomain() &&
+	$credential->target_urn()->IsDataset()) {
 	$dataset_urn = $credential->target_urn();
     }
 
@@ -5628,6 +5700,7 @@ sub SecureImageDownload($)
 {
     my ($argref)  = @_;
     my $credentials = $argref->{'credentials'};
+    my $image_urn   = $argref->{'image_urn'};
 
     if (! (defined($credentials))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
@@ -5636,34 +5709,55 @@ sub SecureImageDownload($)
     return $credential
 	if (GeniResponse::IsResponse($credential));
 
-    my $image_urn = $credential->target_urn();
-    return GeniResponse->MalformedArgsResponse("Improper image type")
-	if ($image_urn->type() ne "imdataset");
-    return GeniResponse->MalformedArgsResponse("No project in URN")
-	if (!defined($image_urn->project()));
-
-    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
+    # Backwards compat until all clusters updated.
+    if (!defined($image_urn)) {
+	$image_urn = $credential->target_urn();	
+    }
+    else {
+	$image_urn = GeniHRN->new($image_urn);
+	if (!defined($image_urn)) {
+	    return GeniResponse->MalformedArgsResponse("Invalid image urn");
+	}
+    }
+    return GeniResponse->MalformedArgsResponse("Improper type in URN")
+	if (! ($image_urn->IsDataset() || $image_urn->IsImage()));
+    
+    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef, "fooey")
 	if ($credential->target_urn()->domain() ne $OURDOMAIN);
 
-    #
-    # Use the UUID for lookup, since that will reference the correct
-    # image version. Not sure how we want to do versions yet.
-    #
-    my $image = Image->Lookup($credential->target_uuid());   
+    my ($pid,$name,$vers);
+
+    if ($image_urn->IsDataset()) {
+	$pid  = $image_urn->dsetpid();
+	$name = $image_urn->dsetname();
+	$vers = $image_urn->dsetvers();	
+	return GeniResponse->MalformedArgsResponse("Credential does not ".
+						   "match URN")
+	    if (! ($pid eq $credential->target_urn()->dsetpid() &&
+		   $name eq $credential->target_urn()->dsetname()));
+    }
+    else {
+	$pid  = $image_urn->ospid();
+	$name = $image_urn->osname();
+	$vers = $image_urn->osvers();
+	return GeniResponse->MalformedArgsResponse("Credential does not ".
+						   "match URN")
+	    if (! ($pid eq $credential->target_urn()->ospid() &&
+		   $name eq $credential->target_urn()->osname()));
+    }
+    my $image = Image->Lookup($pid, $name, $vers);
     return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
 	if (!defined($image));
-    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
-	if ($image->urn() ne $credential->target_urn());
     my $group = $image->GetGroup();
     return GeniResponse->Create(GENIRESPONSE_ERROR)
 	if (!defined($group));
 
     # Better make sure we have project mounted.
     $group->GetProject()->UpdateExports();
+    my $file = $image->FullImageFile();
 
     # Need to set our groups so we can read the file.
     GeniUtil::FlipToUser("root", $group->pid(), $group->unix_gid());
-    my $file = $image->FullImageFile();
     
     if (! -r $file) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
@@ -5677,6 +5771,8 @@ sub SecureImageDownload($)
     open(FD, "< $file") or
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Could not open file for reading");
+    # Flip back now that we have it opened.
+    GeniUtil::FlipToGeniUser();
 
     # This sets STDOUT back to apache.
     main::AbortLogging();

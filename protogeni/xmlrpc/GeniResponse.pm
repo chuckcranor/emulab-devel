@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -374,9 +374,9 @@ sub MonitorResponse($)
 			undef, "start/restart in progress; try again later");
 }
 
-sub BadArgsResponse(;$)
+sub BadArgsResponse($;$)
 {
-    my ($msg) = @_;
+    my (undef,$msg) = @_;
 
     $msg = "Bad arguments to method"
 	if (!defined($msg));
@@ -384,9 +384,9 @@ sub BadArgsResponse(;$)
     return GeniResponse->Create(GENIRESPONSE_BADARGS, undef, $msg);
 }
 
-sub SearchFailedResponse(;$)
+sub SearchFailedResponse($;$)
 {
-    my ($msg) = @_;
+    my (undef,$msg) = @_;
 
     $msg = "Search Failure"
 	if (!defined($msg));

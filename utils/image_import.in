@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2018 University of Utah and the Flux Group.
+# Copyright (c) 2010-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,7 +50,7 @@ sub usage()
     print(" -c      - With -r update ndz file using the updates table\n");
     exit(-1);
 }
-my $optlist = "dvu:p:gi:IrscR";
+my $optlist = "dvu:p:gi:I:rfscRC:";
 my $debug   = 0;
 my $verify  = 0;
 my $getimage= 0;
@@ -58,12 +58,14 @@ my $update  = 0;
 my $dosig   = 0;
 my $force   = 0;
 my $copyback= 0;
+my $relocate= 0;
 my $user;
 my $group;
 my $image;
 my $imagename;
+my $imagedir;
 my $copyback_urn;
-my $copyback_credential;
+my $import_credential;
 
 #
 # Configure variables
@@ -96,7 +98,7 @@ my $doprovenance  = 0;
 # version of the software we are so it gives something we can handle.
 # Be sure to update this if you change the version in dumpdescriptor.
 #
-my $METADATA_CLIENTVERSION = 3;
+my $METADATA_CLIENTVERSION = 4;
 
 #
 # Untaint the path
@@ -171,19 +173,28 @@ if (defined($options{"s"})) {
 if (defined($options{"i"})) {
     $imagename = $options{i};
 }
+if (defined($options{"I"})) {
+    $imagedir = $options{"I"};
+    if (! -d $imagedir) {
+	fatal("The -I option must be an image directory directory");
+    }
+}
 if (defined($options{"r"})) {
     $update   = 1;
     if (defined($options{"c"})) {
 	$copyback = 1;
     }
-}
-if (defined($options{"R"})) {
-    $update = 1;
-    $force  = 1;
-    if (defined($options{"c"})) {
-	$copyback = 1;
+    if (defined($options{"f"})) {
+	$force = 1;
     }
 }
+if (defined($options{"R"})) {
+    fatal("Not allowed to use -r when -R")
+	if ($update);
+    $relocate = 1;
+    $getimage = 1;
+}
+
 if (defined($options{"u"})) {
     $user = User->Lookup($options{"u"});
     fatal("User does not exist")
@@ -204,6 +215,20 @@ else {
     $group = Group->Lookup(TBOPSPID(), TBOPSPID());
     fatal("Error getting project group for " . TBOPSPID())
 	if (!defined($group));
+}
+if (defined($options{"C"})) {
+    if (!$PGENISUPPORT) {
+	fatal("Credentials are not supported when ProtoGeni is not defined");
+    }
+    if (! -e $options{"C"}) {
+	fatal("Cannot read credential file");
+    }
+    require GeniCredential;
+
+    $import_credential = GeniCredential->LoadFromFile($options{"C"});
+    if (!defined($import_credential)) {
+	fatal("Import credential is not valid");
+    }
 }
 
 if (!defined($user)) {
@@ -255,9 +280,9 @@ if ($update) {
 	if ($row->{'credential_string'} ne "") {
 	    require GeniCredential;
 	    
-	    $copyback_credential =
+	    $import_credential =
 		GeniCredential->CreateFromSigned($row->{'credential_string'});
-	    if (!defined($copyback_credential)) {
+	    if (!defined($import_credential)) {
 		print STDERR "Image credential is not valid\n";
 		$image->Unlock();
 		exit(-1);
@@ -325,6 +350,12 @@ else {
     if (!$user->IsAdmin() &&
 	!$group->AccessCheck($user, TB_PROJECT_MAKEIMAGEID())) {
 	fatal("$user does not have permission in $group");
+    }
+    # If we got a -u argument and not runnng as that user, flip.
+    if (!$user->SameUser(User->ThisUser())) {
+	$EUID = 0;
+	$UID  = $SAVEUID = $user->unix_uid();
+	$EUID = $UID;
     }
 }
 
@@ -515,7 +546,7 @@ if ($getimage) {
 	if ($update) {
 	    $image->MarkUpdate($user);
 	}
-	if ($copyback) {
+	if ($copyback || $relocate) {
 	    # Tell image owner that it has been updated.
 	    my $name = $image->pid() . "/" . $image->imagename();
 	    my $project = $image->GetProject();
@@ -543,8 +574,10 @@ if ($getimage) {
 		if (!defined($TO));
 	    $image->GetProject()->SendEmail($TO,
 		    "Image imported: $versname",
-		    "Image $name has been sucessfully imported from\n".
-		    $image->imagefile_url(),
+		    "Image $name has been sucessfully copied back from\n".
+		    $image->imagefile_url() . "\n".
+		    "\n".
+		    "Image URN: " . $image->urn() . "\n",
 		    $FROM, $CC);
 	}
     }
@@ -573,6 +606,14 @@ elsif ($update && $dosig) {
 }
 else {
     print "Not downloading image ... add -g option\n";
+}
+if ($relocate) {
+    # Make the image believe we are its Mama. 
+    $image->ConvertToLocal() == 0 or
+	fatal("Could not convert to a local image!");
+    # Tell the IMS about this new image. If this fails, the daemon
+    # will take care of it. 
+    system("$POSTIMAGEINFO -d " . $image->imageid());
 }
 if ($update || $getimage) {
     $image->Unlock();
@@ -686,7 +727,8 @@ sub CreateImage($$$$$)
     #
     $xmlparse->{'attribute'}->{"imagefile_url"}->{'value'} =
 	uri_escape($xmlparse->{'attribute'}->{"imagefile_url"}->{'value'});
-    $xmlparse->{'attribute'}->{"metadata_url"}->{'value'} = uri_escape($url);
+    $xmlparse->{'attribute'}->{"metadata_url"}->{'value'} =
+	uri_escape($url);
 
     my $newxml = "";
     foreach my $key (keys(%{ $xmlparse->{'attribute'} })) {
@@ -737,7 +779,46 @@ sub DownLoadImage($$$$)
     my ($image, $newhash, $user, $group) = @_;
     my $localfile = $image->FullImageFile() . ".new";
 
-    if (FetchImageFile($image, "", $localfile)) {
+    #
+    # Short circuit the fetch if we got the image dir on the command line.
+    # The idea is that the image directory we get is exactly where we need
+    # to be, so just make sure the files exist and the hash matches. This
+    # is overly simplistic but avoids moving files around for no reason.
+    #
+    if (defined($imagedir)) {
+	if (! -e $image->FullImageFile()) {
+	    print STDERR $image->FullImageFile() . " does not exist in ".
+		"-I $imagedir\n";
+	    return -1;
+	}
+	if (! -e $image->FullImageSHA1File()) {
+	    print STDERR $image->FullImageSHA1File() . " does not exist in ".
+		"-I $imagedir\n";
+	    return -1;
+	}
+	# Sanity check the hash ... just in case.
+	if (my $filehash = emutil::ReadFile($image->FullImageSHA1File())) {
+	    chomp($filehash);
+	    if ($filehash =~ /^SHA1.*= (\w*)$/) {
+		$filehash = $1;
+	    }
+	    else {
+		print STDERR "Could not parse the sha1 hash: '$filehash'\n";
+		return -1;
+	    }
+	    if ($filehash ne $newhash) {
+		print STDERR "sha1 hash of new file did not match\n";
+		return -1;
+	    }
+	}
+	else {
+	    print STDERR "Could not read sha1 hash from ".
+		$image->FullImageSHA1File() . "\n";
+	    return -1;
+	}
+	return 0;
+    }
+    elsif (FetchImageFile($image, "", $localfile)) {
 	return -1;
     }
 
@@ -802,7 +883,12 @@ sub DownLoadImage($$$$)
     # fail, which is okay since Mike says we can generate a new one,
     # it just takes a while to do.
     #
-    FetchSigFile($image);
+    # No signature files on the secure path. We can support it if we need
+    # to, but deltas are not in our future at this point.
+    #
+    FetchSigFile($image)
+	if (! (defined($import_credential) || $image->HasCredential()));
+
     return 0;
 }
 
@@ -818,14 +904,14 @@ sub FetchImageFile($$$)
 
     #
     # If we have a credential, we use the secure image download path,
-    # which at the moment only runs on boss. And only for datasets.
+    # which at the moment only runs on boss. 
     #
-    if (defined($copyback_credential) || $image->HasCredential()) {
+    if (defined($import_credential) || $image->HasCredential()) {
 	my $credarg = "";
 	
-	if ($copyback_credential) {
+	if ($import_credential) {
 	    # This will auto delete.
-	    my $credfile = $copyback_credential->WriteToFile();
+	    my $credfile = $import_credential->WriteToFile();
 	    $credarg = "-c " . $credfile;
 	}
 	# We need to operate as the user since we are not calling
@@ -835,6 +921,9 @@ sub FetchImageFile($$$)
 	my $cmdargs = "$SECUREIMAGEGET $credarg -o $localfile ".
 	    $image->versname();
 
+	if ($debug) {
+	    print "Running '$cmdargs'\n";
+	}
 	system($cmdargs);
 	return -1
 	    if ($?);
@@ -860,6 +949,7 @@ sub FetchImageFile($$$)
 	    print STDERR "Unexpected results from 'id -G $user': $glist\n";
 	    return -1;
 	}
+	$cmdargs .= " -d " if ($debug);
 	$cmdargs .= " -g '$glist' \"$safe_url\" $localfile";
 
 	print "Downloading $url ...\n";

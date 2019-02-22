@@ -1833,5 +1833,60 @@ sub Credential2UserProject($)
     return ($geniuser, $group->GetProject());
 }
 
+#
+# Since we have partially overlapping administrative domains, and no
+# support for separating them, we put this here so that the Portal
+# can ask the Cloudlab clusters for an image credential, but no one
+# else can (say, the geni racks). So this allows the Portal to ask
+# for a credential to access a locally resident image, and then delegate
+# that to whatever cluster needs to import it.
+#
+sub GetImageCredential($)
+{
+    my ($argref)   = @_;
+    my $image_urn  = $argref->{'image_urn'};
+
+    my $hasperm = CheckPermission(0);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    require OSImage;
+    require GeniImage;
+
+    if (! (defined($image_urn))) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    return GeniResponse->MalformedArgsResponse("Not an valid URN")
+	if (!GeniHRN::IsValid($image_urn));
+    
+    $image_urn = GeniHRN->new($image_urn);
+    return GeniResponse->MalformedArgsResponse("Not an image URN")
+	if (!$image_urn->IsImage());
+
+    my $image = OSImage->Lookup($image_urn->ospid(), $image_urn->osname());
+    return GeniResponse->SearchFailedResponse("No such image")
+	if (!defined($image));
+    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+				"This image may not be exported")
+	if ($image->noexport());
+
+    my $caller_urn = GeniHRN->new($ENV{'GENIURN'});
+    my $authority  = GeniAuthority->CreateFromRegistry($caller_urn->id(),
+						       $ENV{'GENIURN'});
+    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				"Could not lookup caller authority: " .
+				$ENV{"GENIURN"})
+	if (!defined($authority));
+    
+    my $image_credential =
+	GeniImage::CreateImageCredential($image, $authority->GetCertificate());
+    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				"Could not generate image credential")
+	if (!defined($image_credential));
+
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS,
+				$image_credential->asString());
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;

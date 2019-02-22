@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -226,6 +226,8 @@ sub CallMethodInternal($$$$@)
     }
 
     # Callback to write the data, when streaming to a file.
+    my $dots = 0;
+    
     my $callback = sub {
 	my ($data) = @_;
 	if ($data =~ /^\<\?xml/) {
@@ -236,7 +238,11 @@ sub CallMethodInternal($$$$@)
 	if (!defined($retval)) {
 	    die("Error writing data to output stream");
 	}
-	print ".";
+	$dots += $retval;
+	if ($dots > (1024 * 1024 * 10)) {
+	    print ".";
+	    $dots = 0;
+	}
     };
 
     my $FBSD_MAJOR = 4;
@@ -429,6 +435,7 @@ sub CallMethodInternal($$$$@)
     }
     # Streamed the data okay, we are done.
     if (defined($fp) && !defined($xmlgoo)) {
+	print "\n";
 	return GeniResponse->new(GENIRESPONSE_SUCCESS);
     }
 

@@ -67,7 +67,6 @@ my $TBWWW         = "@TBWWW@";
 );
 
 # Cache of instances to avoid regenerating them.
-my %images    = ();
 my $debug      = 0;
 
 #
@@ -1069,6 +1068,13 @@ sub SetNoVersioning($$)
     return $self->image()->SetNoVersioning($value);
 }
 
+sub SetImageRelocateURN($$)
+{
+    my ($self, $url) = @_;
+
+    return $self->image()->SetImageRelocateURN($url);
+}
+
 sub SetImageMetadataURL($$)
 {
     my ($self, $url) = @_;
@@ -1477,6 +1483,16 @@ sub InheritTaintStates($$)
     my ($self, $osinfo) = @_;
 
     return $self->osinfo()->InheritTaintStates($osinfo);
+}
+
+sub ConvertToLocal($)
+{
+    return $_[0]->image()->ConvertToLocal();
+}
+
+sub ConvertToImported($$)
+{
+    return $_[0]->image()->ConvertToImported($_[1]);
 }
 
 #############################################################################

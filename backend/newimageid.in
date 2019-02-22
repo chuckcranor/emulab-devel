@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -639,8 +639,8 @@ exit(0)
 delete($newimageid_args{"imagename"});
 
 my $usrerr;
-my $new_image = Image->Create($project, $group, $this_user, $imagename, 0,
-			      \%newimageid_args, \$usrerr);
+my $new_image = Image->Create($project, $group, $this_user, $isadmin,
+			      $imagename, 0, \%newimageid_args, \$usrerr);
 UserError($usrerr)
     if (defined($usrerr));
 fatal("Could not create new Image!")

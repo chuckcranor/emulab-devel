@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2017 University of Utah and the Flux Group.
+# Copyright (c) 2010-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -263,7 +263,7 @@ sub DumpImage($)
 	    # Send along the history so that the caller can get all
 	    # the versions, which is important for delta based images.
 	    #
-	    if ($clientvers > 3) {
+	    if ($clientvers > 4) {
 		#
 		# Send the non-version metadata url so that the other side
 		# can have it for when an experiment wants whatever the
@@ -280,7 +280,7 @@ sub DumpImage($)
 		    if (defined($image->deltahash()) &&
 			$image->deltahash() ne "");
 
-		if ($clientvers > 4) {
+		if ($clientvers > 5) {
 		    $xmlfields{'size'} = $image->size()
 			if ($image->size());
 		    $xmlfields{'deltasize'} = $image->deltasize()
@@ -380,6 +380,12 @@ sub DumpImage($)
 	    }
 	    $xmlfields{"def_parentosid"} =
 		$nextosinfo->pid() . "," . $nextosinfo->osname();
+	}
+	# Send along the taint states.
+	if ($clientvers > 3) {
+	    if ($osinfo->IsTainted()) {
+		$xmlfields{"taint_states"} = $osinfo->taint_states();
+	    }
 	}
     }
     if ($dotypes) {

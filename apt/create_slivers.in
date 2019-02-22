@@ -275,7 +275,13 @@ if (! (defined($speaksfor_credential) &&
 my $dataset_credentials = {};
 my $retval = $instance->CreateDatasetCreds(\$errmsg, \$dataset_credentials);
 if ($retval) {
-    fatal("Could not generate dataset credentials");
+    fatal("Could not generate dataset credentials: $errmsg");
+}
+# Ditto images that are not global (also checks user permission).
+my @image_credentials = ();
+$retval = $instance->CreateImageCreds(\$errmsg, \@image_credentials);
+if ($retval) {
+    fatal("Could not generate image credentials: $errmsg");
 }
 
 #
@@ -635,6 +641,7 @@ sub CreateSliver($)
 					 [$slice_credential->asString(),
 					  $speaksfor_credential->asString(),
 					  @dsetcreds
+					  @image_credentials
 					 ],
 				     "certificate" => $instance->cert(),
 				     "key"         => $instance->privkey(),
@@ -1272,6 +1279,8 @@ sub fatal($)
 
     $genislice->UnLock()
 	if (defined($genislice));
+    $instance->SetStatus("failed")
+	if (defined($instance));
     
     if (defined($webtask)) {
 	$webtask->output($mesg);
