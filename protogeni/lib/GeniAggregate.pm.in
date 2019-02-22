@@ -333,6 +333,9 @@ sub GetCertificate($)
 # An alias so that slivers look like aggregates.
 sub resource_type($)	{ return field($_[0], "type"); }
 
+# Busy if status is working (start/restart/stop/reload/reboot).
+sub Working($)          { return $_[0]->status eq "working" ? 1 : 0; }
+
 # A place to stash a temporary rspec.
 sub rspec($;$)
 {
@@ -3058,6 +3061,8 @@ sub Stop($$;$)
     # Clear last error.
     $self->ClearBootFailure();
     $self->SetErrorLog("");    
+    # Set new status so ComputeState() knows what is going on.
+    $self->SetStatus("working");
 
     my $experiment = Experiment->Lookup($self->slice_uuid());
     if (!defined($experiment)) {
@@ -3180,10 +3185,18 @@ sub Stop($$;$)
 	$msg .= "Failed to stop the event system";
 	goto bad;
     }
+    # Flip back to mixed to allow ComputeState to do its thing. 
+    $self->SetStatus("mixed");
+    $self->ComputeState();
     return 0;
 
   bad:
     $self->SetBootFailure();
+    if ($self->status() eq "working") {
+	# Flip back to mixed to allow ComputeState to do its thing. 
+	$self->SetStatus("mixed");
+	$self->ComputeState();
+    }
     if (defined($msg)) {
 	$self->SetErrorLog($msg);
 	print STDERR "$msg\n";
