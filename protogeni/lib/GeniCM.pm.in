@@ -8429,7 +8429,7 @@ sub KillMonitor($)
 {
     my ($slice) = @_;
 
-    return $slice->KillMonitor();
+    return $slice->CancelMonitor();
 }
 
 #

@@ -1659,7 +1659,7 @@ sub GetPortalURL($)
 sub CheckMonitor($)
 {
     my ($slice) = @_;
-    my $pid = $slice->monitor_pid();
+    my $pid = $slice->GetMonitorPid();
 
     #
     # See if the process still exists.
@@ -1675,12 +1675,12 @@ sub CheckMonitor($)
 }
 
 #
-# Kill the monitor process.
+# Cancel the slice monitor process.
 #
-sub KillMonitor($)
+sub CancelMonitor($)
 {
     my ($slice) = @_;
-    my $pid = $slice->monitor_pid();
+    my $pid = $slice->GetMonitorPid();
     require libtestbed;
 
     return 0
@@ -1698,6 +1698,7 @@ sub KillMonitor($)
     if (kill(0, $pid) == 0) {
 	if ($!{ESRCH}) {
 	    print STDERR "Monitor process $pid no longer exists.\n";
+	    $experiment->SetCancelFlag(0);
 	    $slice->ClearMonitorPid();
 	    return 0;
 	}
@@ -1741,7 +1742,6 @@ sub KillMonitor($)
 		     "$TBBASE/showslice.php?slice_idx=" . $slice->idx() .
 		     "&showtype=cm",
 		     $TBOPS);
-	    print STDERR "Could not shutdown $slice!\n";
 	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 					"Monitor would not die");
 	}
