@@ -108,12 +108,6 @@ sub doboot()
 	fatal("Error sending MFSSETUP to Emulab Control!");
     }
 
-    if (-x "$RCDIR/rc.ipod") {
-	print("Setting up Ping of Death\n");
-	system("$RCDIR/rc.ipod");
-	# This is allowed to fail; ipod might not be supported.
-    }
-
     # XXX enable the NFS client-side EACCES hack
     if (-x "$RCDIR/rc.nfshack") {
 	print("Enabling client-side NFS EACCES hack\n");
@@ -124,6 +118,12 @@ sub doboot()
     # Now we get into the real work.
     print("Checking Testbed reservation status\n");
     my ($pid, $eid, $vname) = bootsetup();
+
+    if (-x "$RCDIR/rc.ipod") {
+	print("Setting up Ping of Death\n");
+	system("$RCDIR/rc.ipod");
+	# This is allowed to fail; ipod might not be supported.
+    }
 
     #
     # This stuff is run regardless of reservation status.
