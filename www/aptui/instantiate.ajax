@@ -851,6 +851,15 @@ function Do_RunScript()
     global $ajax_args;
     global $suexec_output, $suexec_output_array;
     $newgenilib = 0;
+    $profile = null;
+
+    if (isset($ajax_args["uuid"])) {
+        $profile = Profile::Lookup($ajax_args["uuid"]);
+        if (!$profile) {
+	    SPITAJAX_ERROR(1, "Unknown profile uuid");
+	    return;
+        }
+    }
 
     $script = "";
     if (isset($ajax_args["script"])) {
@@ -864,11 +873,6 @@ function Do_RunScript()
     } else {
         if (!isset($ajax_args["uuid"])) {
 	    SPITAJAX_ERROR(1, "Missing profile uuid");
-	    return;
-        }
-        $profile = Profile::Lookup($ajax_args["uuid"]);
-        if (!$profile) {
-	    SPITAJAX_ERROR(1, "Unknown profile uuid");
 	    return;
         }
         if (!$profile->script()) {
@@ -891,9 +895,10 @@ function Do_RunScript()
 	    SPITAJAX_ERROR(1, "Not enough permission to instantiate profile");
 	    return;
         }
-        if ($profile->UseNewGeniLib()) {
-            $newgenilib = 1;
-        }
+    }
+    # Temporary
+    if ($profile && $profile->UseNewGeniLib()) {
+        $newgenilib = 1;
     }
 
     if (preg_match("/^import/m", $script)) {

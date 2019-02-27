@@ -1637,7 +1637,7 @@ $(function ()
         {
 	    readonly = false;
         }
-        window.SHOW_GENILIB_EDITOR(source, closeEditor, readonly);
+        window.SHOW_GENILIB_EDITOR(source, closeEditor, readonly, profile_uuid);
     }
 
     function closeEditor(source)

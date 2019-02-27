@@ -304,7 +304,7 @@ $(function ()
 
     function openEditor(source)
     {
-        window.SHOW_GENILIB_EDITOR(source, null, true);
+        window.SHOW_GENILIB_EDITOR(source, null, true, profile_uuid);
     }
 
     function SetupRepo()
