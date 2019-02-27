@@ -53,6 +53,7 @@ use GeniHRN;
 use libtestbed;
 use Project;
 use Lease;
+use Image;
 use English;
 use Data::Dumper;
 use File::Basename;
