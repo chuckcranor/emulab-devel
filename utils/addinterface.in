@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2018 University of Utah and the Flux Group.
+# Copyright (c) 2003-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -294,7 +294,8 @@ sub ShowInterface(@)
     my $interface = Interface->LookupByIface($nodeid, $iface);
     fatal("No such interface")
 	if (!defined($interface));
-    print "Iface1:\n";
+    print "Iface1:\n"
+	if ($interface->wiredup());
     $interface->Dump();
     print "\n";
 
