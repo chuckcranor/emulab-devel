@@ -578,6 +578,8 @@ sub TBPxelinuxConfig($;$)
 		# XXX how we identify the frisbee MFS
 		if ($path =~ /frisbee/) {
 		    $action = "mfsboot";
+		} elsif ($path =~ /recovery/) {
+		    $action = "recovery";
 		} else {
 		    $action = "nfsboot";
 		}
