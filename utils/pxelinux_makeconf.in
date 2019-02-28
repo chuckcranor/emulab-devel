@@ -192,7 +192,14 @@ sub donode($$)
     # Need to create a new version.
     # XXX racy. Maybe we should do "install -C"?
     #
+    my $nodetype = $node->type();
     my $tmpfile = "$configdir/$nodeid.$PID";
+    if (-e "${template}.$nodeid") {
+	$template = "${template}.$nodeid";
+    }
+    elsif (-e "${template}.$nodetype") {
+	$template = "${template}.$nodetype";
+    }
     if (open(IFD, "<$template") && open(OFD, ">$tmpfile")) {
 	while (<IFD>) {
 	    s/%default%/$action/;
