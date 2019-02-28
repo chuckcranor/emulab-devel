@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -275,7 +275,6 @@ sub fatal($)
 {
     my ($msg) = @_;
 
-    SENDMAIL($TBOPS, "spewimage:$imageid", $msg);
     die("*** $0:\n".
 	"    $msg\n");
 }
