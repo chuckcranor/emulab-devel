@@ -384,6 +384,24 @@ sub Delete($)
     return 0;
 }
 
+#
+# Class method to get the slice urn from a slice uuid, without all the
+# the other cruft.
+#
+sub UUID2URN($$)
+{
+    my ($class, $uuid) = @_;
+
+    my $query_result =
+	DBQueryWarn("select urn from geni_certificates where uuid='$uuid'");
+    return undef
+	if (!defined($query_result) || !$query_result->numrows);
+
+    my ($urn) = $query_result->fetchrow_array();
+
+    return GeniHRN->new($urn);
+}
+
 # The slicename is the last token in the hrn.
 sub slicename($)
 {

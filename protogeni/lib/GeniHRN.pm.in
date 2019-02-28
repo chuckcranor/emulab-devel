@@ -364,7 +364,7 @@ sub new($$)
     $self->{'id'}         = $id;
     $self->{'authority'}  = $authority;
     my ($domain,$subauth) = split(":", $authority, 2);
-    $self->{'domain'}     = $domain;
+    $self->{'domain'}     = lc($domain);
     $self->{'subauth'}    = $subauth;
     if (defined($subauth)) {
 	($project,$group) = split(":", $subauth, 2);
@@ -396,6 +396,8 @@ sub IsRoot($)		{ return ($_[0]->IsAuthority() &&
 				  $_[0]->id() =~ /^root$/i ? 1 : 0); }
 sub IsUser($)		{ return $_[0]->type() =~ /^user$/i ? 1 : 0; }
 sub IsNode($)		{ return $_[0]->type() =~ /^node$/i ? 1 : 0; }
+sub IsProject($)	{ return $_[0]->type() =~ /^project$/i ? 1 : 0; }
+sub IsOurDomain($)	{ return $_[0]->domain() eq lc("@OURDOMAIN@") ? 1 : 0; }
 
 #
 # Image accessors. If we use any of these we want to parse the urn

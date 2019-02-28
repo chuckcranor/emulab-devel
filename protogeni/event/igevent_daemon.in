@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -76,6 +76,7 @@ sub fatal($);
 
 # Locals
 my $portalhandle;
+my $genievent;
 	  
 #
 # Turn off line buffering on output
@@ -218,7 +219,7 @@ if ($CLUSTER_PORTAL ne "") {
     #
     # Tell the GeniEvent code to use this handle.
     #
-    GeniEvent->Create($portalhandle);
+    $genievent = GeniEvent->Create($portalhandle);
 }
 
 #
@@ -351,11 +352,11 @@ sub HandleNotification($$)
     my $sliver = GeniSliver->Lookup($node->genisliver_idx());
     goto done
 	if (!$sliver);
+    my $slice_urn = GeniSlice->UUID2URN($sliver->slice_uuid());
+    goto done
+	if (!$slice_urn);
 
     if ($testing || $debug) {
-	my $slice = $sliver->GetSlice();
-	my $slice_urn = $slice->urn();
-	$slice->Flush();
 	if ($testing && $slice_urn !~ /purpnurp/) {
 	    #print "Ignoring $slice_urn\n";
 	    goto done;
@@ -363,6 +364,29 @@ sub HandleNotification($$)
     }
     if ($verbose) {
 	print "$node_id:$objtype " . ($event ? $event : "") . "\n";
+	print "  $slice_urn\n";
+    }
+
+    #
+    # If we belong to a cluster (Portal) then we need to figure out where
+    # GeniEvent should send the event. If standalone, GeniEvent will send
+    # everything to the local pubsubd (where aptevent_daemon will pick them
+    # up).
+    #
+    if ($CLUSTER_PORTAL ne "") {
+	if ($slice_urn->IsOurDomain()) {
+	    # This slice is local, so events go to the local pubsubd
+	    # (picked up by aptevent_daemon).
+	    $genievent->SetHandle($localhandle);
+	}
+	else {
+	    # This slice belongs to another SA, maybe the Portal, so
+	    # events go to the Portal. Note that being from another
+	    # domain does not guarantee it is from the Portal, it
+	    # might be from anyone in the federation, but sending to
+	    # the Portal is harmless, it will throw the events away.
+	    $genievent->SetHandle($portalhandle);
+	}
     }
     
     #
@@ -387,6 +411,9 @@ sub HandleNotification($$)
 	    if ($sliver->ComputeStatus(\$newstatus) == 0 &&
 		$oldstatus eq $newstatus) {
 		$sliver->SendStatusEvent();
+	    }
+	    if ($verbose) {
+		print "Status for $node_id $oldstatus -> $newstatus\n";
 	    }
 	}
     }
