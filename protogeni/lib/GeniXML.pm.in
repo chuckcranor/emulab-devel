@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2018 University of Utah and the Flux Group.
+# Copyright (c) 2010-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -718,6 +718,20 @@ sub GetServices($)
 	    }
 	    push(@result, $item);
 	}
+    }
+    return @result;
+}
+sub GetExecuteServices($)
+{
+    my ($node)   = @_;
+    my @result   = ();
+    my @services = GetServices($node);
+    return ()
+	if (!@services);
+    
+    foreach my $service (@services) {
+	push(@result, $service)
+	    if ($service->{'type'} eq "execute");
     }
     return @result;
 }

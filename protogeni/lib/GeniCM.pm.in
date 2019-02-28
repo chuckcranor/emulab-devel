@@ -1934,7 +1934,7 @@ sub GetTicketAuxAux($)
 		$nodeblob->{'startupcmd'} = $startupcmd;
 	    }
 	}
-	elsif ((my @services = GeniXML::GetServices($ref)) &&
+	elsif ((my @services = GeniXML::GetExecuteServices($ref)) &&
 	       (!defined($osinfo) || $osinfo->isImageAlias() || 
 		$osinfo->op_mode() ne
 		EmulabConstants::TBDB_NODEOPMODE_ALWAYSUP())) {
@@ -1945,6 +1945,24 @@ sub GetTicketAuxAux($)
 	    my $startfile = "$userdir/$startname";
 	    my $tarfile   = "$userdir/startup_tarfile." . $node_nickname;
 	    
+	    # Sanity check
+	    foreach my $service (@services) {
+		my $type = $service->{'type'};
+			
+		if ($type eq "execute") {
+		    my $shell = $service->{'shell'};
+		    my $cmd   = $service->{'cmd'};
+
+		    if (! (defined($shell) && defined($cmd))) {
+			$response =
+			    GeniResponse->Create(GENIRESPONSE_BADARGS,
+						 undef,
+						 "Invalid execute service");
+			goto bad;
+		    }
+		}
+	    }
+
 	    if (!open(STARTUP, ">$startfile")) {
 		$response =
 		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
