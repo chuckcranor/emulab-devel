@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -472,7 +472,7 @@ if (! isset($create)) {
         # the js code to show the status of the clone.
         #
         $webtask = $profile->webtask();
-        if ($webtask->TaskValue("cloning")) {
+        if ($webtask && $webtask->TaskValue("cloning")) {
             $notifyclone = 1;
         }
     }

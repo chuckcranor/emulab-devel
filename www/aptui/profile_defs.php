@@ -163,7 +163,10 @@ class Profile
     # with the object, use that. Otherwise create a new one.
     function WebTask() {
         if ($this->webtask_id()) {
-            return WebTask::Lookup($this->webtask_id());
+            $webtask = WebTask::Lookup($this->webtask_id());
+            if ($webtask) {
+                return $webtask;
+            }
         }
         $webtask = WebTask::LookupByObject($this->uuid());
         if (!$webtask) {
