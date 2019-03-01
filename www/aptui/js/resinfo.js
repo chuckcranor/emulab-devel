@@ -48,14 +48,16 @@ $(function ()
 	    
 	    $('#' + details.nickname + " .counts-panel")
 		.html(totalsTemplate({"details"      : details,
-				      "urn"          : urn}));
+				      "urn"          : urn,
+				      "title"        :
+				      (!window.ISPOWDER ?
+				       details.nickname : "Powder")}));
 
 	    if (window.ISPOWDER) {
 		$('#' + details.nickname + " .resgraph-panel-radios")
 		    .html(graphTemplate({"details"        : details,
 					 "graphid"        : graphid + "-radios",
-					 "title"          :
-					       details.nickname + " Radio",
+					 "title"          : "Powder Radio",
 					 "urn"            : urn,
 					 "showhelp"       : true,
 					 "showfullscreen" : false}));
@@ -64,8 +66,8 @@ $(function ()
 		.html(graphTemplate({"details"        : details,
 				     "graphid"        : graphid + "-servers",
 				     "title"          :
-				     (!window.ISPOWDER ? details.nickname :
-				      details.nickname + " Server"),
+				     (!window.ISPOWDER ?
+				      details.nickname : "Powder Server"),
 				     "urn"            : urn,
 				     "showhelp"       : true,
 				     "showfullscreen" : false}));
