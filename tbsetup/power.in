@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -53,6 +53,7 @@ use power_whol;
 use power_ilo;
 use power_icebox;
 use power_apc;
+use power_raritan;
 use power_racktivity;
 use power_ue;
 use power_powduino;
@@ -436,6 +437,19 @@ foreach my $power_id (keys %outlets) {
 		$errors++;
 	    }
 	}
+    } elsif ($type eq "Raritan") {
+	my $device = new power_raritan($IP,$verbose);
+	if (!defined $device) {
+	    warn "Unable to contact controller for $nodestr. Skipping...\n";
+	    next;
+	} else {
+	    print "Calling device->power($op,@outlets)\n"
+		if $verbose > 1;
+	    if ($device->power($op,@outlets)) {
+		print "Control of $nodestr failed.\n";
+		$errors++;
+	    }
+	}
     } elsif ($type eq "RACKTIVITY") {
         my $device = new power_racktivity($IP,$verbose);
         if (!defined $device) {
@@ -784,6 +798,29 @@ sub dostatus(@) {
 	    }
 	} elsif ($ctrls{$ctrl} eq "APC") {
 	    my $device = new snmpit_apc($IPs{$ctrl}, $verbose);
+	    if (!defined $device) {
+		warn "Unable to contact controller $ctrl.\n";
+		$errors++;
+		next;
+	    } else {
+		print "Calling device->status()\n"
+		    if $verbose > 1;
+		if ($device->status(\%status)) {
+		    print "Could not get status for $ctrl.\n";
+		    $errors++;
+		    next;
+		}
+	    }
+	    print "$ctrl Current: ", $status{current}, " Amps\n"
+		if defined($status{current});
+	    for my $outlet (1..24) {
+		my $ostr = "outlet$outlet";
+		print "$ctrl Outlet $outlet: ", $status{$ostr}, "\n"
+		    if (defined($status{$ostr}));
+	    }
+	    print "\n";
+	} elsif ($ctrls{$ctrl} eq "Raritan") {
+	    my $device = new power_raritan($IPs{$ctrl}, $verbose);
 	    if (!defined $device) {
 		warn "Unable to contact controller $ctrl.\n";
 		$errors++;
