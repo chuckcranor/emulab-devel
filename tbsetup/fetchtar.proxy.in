@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2015 University of Utah and the Flux Group.
+# Copyright (c) 2003-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,7 +38,8 @@ sub usage()
  
     exit(-1);
 }
-my $optlist = "qu:g:h";
+my $optlist = "qu:g:hd";
+my $debug   = 0;
 my $quiet   = 0;
 my $hashit  = 0;
 my $user;
@@ -88,6 +89,9 @@ if ($UID != 0) {
 my %options = ();
 if (! getopts($optlist, \%options)) {
     usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
 }
 if (defined($options{"q"})) {
     $quiet = 1;
@@ -191,10 +195,17 @@ if (! $pid) {
     
     # Give parent a chance to react.
     sleep(1);
+
+    my $cmd = "nice -15 $WGET --no-check-certificate ".
+	"--timeout=30 --waitretry=30 --retry-connrefused ".
+	"-q -O $localfile -i -";
+
+    if ($debug) {
+	print "running '$cmd'\n";
+	print "url is '$URL'\n";
+    }
     
-    open(GET, "| nice -15 $WGET --no-check-certificate ".
-	 "--timeout=30 --waitretry=30 --retry-connrefused ".
-	 "-q -O $localfile -i -")
+    open(GET, "| $cmd")
 	or die("Cannot start $WGET\n");
     print GET "$URL\n";
     if (!close(GET)) {
