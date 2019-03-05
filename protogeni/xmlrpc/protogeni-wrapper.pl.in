@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -610,6 +610,7 @@ if ($method eq "CreateSliver"    ||
     $method eq "Provision"       ||
     $method eq "Allocate"        ||
     $method eq "Update"          ||
+    $method eq "Panic"           ||
     $method eq "AddNodes"        ||
     $method eq "DeleteNodes"     ||
     $method eq "DeleteSlice") {
