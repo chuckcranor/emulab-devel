@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2018 University of Utah and the Flux Group.
+# Copyright (c) 2005-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -95,6 +95,10 @@ AUTOLOAD {
     # canceled is a special case.
     if ($name eq "canceled") {
 	return Canceled($self);
+    }
+    # Ditto paniced
+    elsif ($name eq "paniced") {
+	return Paniced($self);
     }
     # A DB row proxy method call.
     elsif (exists($self->{'EXPT'}->{$name})) {
@@ -424,6 +428,23 @@ sub Canceled($)
     $self->{'EXPT'}->{'canceled'} = $canceled;
     return $canceled;
 }
+# Ditto the panic flag.
+sub Paniced($)
+{
+    my ($self) = @_;
+    my $idx = $self->idx();
+
+    my $query_result =
+	DBQueryWarn("select paniced from experiments where idx='$idx'");
+
+    if (! $query_result ||
+	$query_result->numrows == 0) {
+	return 0;
+    }
+    my ($paniced) = $query_result->fetchrow_array();
+    $self->{'EXPT'}->{'paniced'} = $paniced;
+    return $paniced;
+}
 
 1;
 @SELFLOADER_DATA@
@@ -503,6 +524,34 @@ sub UserExperimentList($$$)
 
 	if (!defined($experiment)) {
 	    print STDERR "Experiment::UserExperimentList: ".
+		"No object for $idx!\n";
+	    return -1;
+	}
+	push(@result, $experiment);
+    }
+    @$plist = @result;
+    return 0;
+}
+
+#
+# All experiments, Class method.
+#
+sub AllExperimentList($$)
+{
+    my ($class, $plist) = @_;
+    my @result  = ();
+    
+    my $query_result =
+	DBQueryWarn("select idx from experiments ".
+		    "where state!='" . EXPTSTATE_SWAPPED() . "'");
+    return -1
+	if (! $query_result);
+
+    while (my ($idx) = $query_result->fetchrow_array()) {
+	my $experiment = Experiment->Lookup($idx);
+
+	if (!defined($experiment)) {
+	    print STDERR "Experiment::AllExperimentList: ".
 		"No object for $idx!\n";
 	    return -1;
 	}
