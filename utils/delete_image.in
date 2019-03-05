@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,13 +37,14 @@ sub usage()
 	  "       -d     Enable debug messages\n".
 	  "       -p     Purge the disk image file(s)\n".
 	  "       -r     Rename the disk image file(s) instead (default)\n".
+	  "       -R     Do not rename the disk image file(s)\n".
 	  "       -n     Impotent mode, show what would be done.\n".
 	  "       -f     Force deletion of system image\n".
 	  "       -V     Delete only the version\n".
 	  "       -F     Force deletion of global system image\n");
     exit(-1);
 }
-my $optlist     = "dFprnfV";
+my $optlist     = "dFprRnfV";
 my $debug       = 0;
 my $purge       = 0;
 my $rename      = 1;
@@ -135,8 +136,6 @@ if (defined($options{"f"})) {
 }
 usage()
     if (@ARGV != 1);
-usage()
-    if (! ($purge || $rename));
 
 my $imageid = shift(@ARGV);
 my $image = OSImage->Lookup($imageid);
@@ -453,6 +452,7 @@ if (!$versonly) {
 	$image->SchedIMSDeletion(1) == 0
 	    or fatal("Could not schedule IMS deletion");
     }
+    # XXX Mark updater so we know who deleted the image.
     if ($image->Delete() != 0) {
 	fatal("Could not delete image!");
     }
@@ -466,6 +466,7 @@ else {
 	$image->SchedIMSDeletion(0) == 0
 	    or fatal("Could not schedule IMS deletion");
     }
+    # XXX Mark updater so we know who deleted the image.
     if ($image->DeleteVersion() != 0) {
 	fatal("Could not delete image version!");
     }
