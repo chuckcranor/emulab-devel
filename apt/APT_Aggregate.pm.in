@@ -322,5 +322,32 @@ sub CheckStatus($$;$)
     return 0;
 }
 
+#
+# Perform some updates ...
+#
+sub Update($$)
+{
+    my ($self, $argref) = @_;
+
+    my $urn  = $self->urn();
+    my @sets = ();
+
+    foreach my $key (keys(%{$argref})) {
+	my $val = $argref->{$key};
+
+	# Treat NULL special.
+	push (@sets, "${key}=" . ($val eq "NULL" ?
+				  "NULL" : DBQuoteSpecial($val)));
+    }
+
+    my $query = "update apt_aggregates set " . join(",", @sets) .
+	" where urn='$urn'";
+
+    return -1
+	if (! DBQueryWarn($query));
+
+    return Refresh($self);
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;
