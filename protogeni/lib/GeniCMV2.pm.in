@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -85,6 +85,7 @@ my $PGENIDOMAIN    = "@PROTOGENI_DOMAIN@";
 my $ELABINELAB     = "@ELABINELAB@";
 my $TBBASE         = "@TBBASE@";
 my $TBDOCBASE      = "@TBDOCBASE@";
+my $CLUSTER_PORTAL = "@CLUSTER_PORTAL@";
 my $CREATEEXPT     = "$TB/bin/batchexp";
 my $ENDEXPT        = "$TB/bin/endexp";
 my $NALLOC	   = "$TB/bin/nalloc";
@@ -758,23 +759,19 @@ sub DeleteSliver($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
-
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
     if ($slice->Lock() != 0) {
 	return GeniResponse->BusyResponse();
     }
-    # If a monitor process is running, we are "busy".
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid()) {
-	$slice->UnLock();
-	return GeniResponse->MonitorResponse();
-    }
-    
-    # If any slivers are imaging, then we are busy as well.
-    if ($aggregate->CheckSliverStates("imaging")) {
+    if ($aggregate->Busy() ||
+	$aggregate->Imaging()) {
 	$slice->UnLock();
 	return GeniResponse->BusyResponse();
     }
-    
     main::AddLogfileMetaData("sliver_urn", $sliver_urn);
     main::AddLogfileMetaDataFromSlice($slice);
     
@@ -864,7 +861,6 @@ sub DeleteSlice($)
     my $impotent     = $argref->{'impotent'} || 0;
     my $cancel       = 0;
     my $blocking     = 0;
-    my $canceled     = 0;
 
     if (! (defined($credentials) && defined($slice_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
@@ -903,14 +899,23 @@ sub DeleteSlice($)
 	return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
 				    "Slice is locked down");
     }
-    if ($slice->Lock() != 0) {
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+		    "Slice is already marked for termination, be patient");
+    }
+    if ($slice->WaitForLock(5) != 0) {
 	return GeniResponse->BusyResponse();
     }
+    if (!defined($aggregate)) {
+	# Easy. Force blocking off and cleanup.
+	$blocking = 0;
+	goto cleanit;
+    }
     my $slice_experiment = $slice->GetExperiment();
-
+    
     #
     # Do not allow a paniced slice to be terminated until the panic
-    # is cleared. 
+    # is cleared.
     #
     if (defined($slice_experiment) && 
 	($slice_experiment->state() eq EXPTSTATE_PANICED() ||
@@ -922,37 +927,31 @@ sub DeleteSlice($)
     }
 
     #
-    # If a monitor process is running, then the slice is busy.
-    # This might mean that the user will not be able to delete
-    # the slice for a long time, but we are having problems with
-    # users canceling slices before they finish setting up, and
-    # the XEN client side is not handling this very well. Note that
-    # the cleanupslice script calls GeniCM::CleanupDeadSlice()
-    # directly, which *does* kill the monitor, so admin cleanup
-    # is not affected.
+    # If the aggregate is busy, then we are in the midst of a long running
+    # operation (start/restart/reload/reboot). In general we need to wait
+    # for that to finish before we can actually do the delete. This might
+    # mean that the user will not be able to delete the slice for a long
+    # time, but we are having problems with users canceling slices before
+    # they finish setting up, and the XEN client side is not handling this
+    # very well. Note that the cleanupslice script calls
+    # GeniCM::CleanupDeadSlice() directly, which *does* kill the monitor,
+    # so admin cleanup is not affected.
     #
-    GeniCM::CheckMonitor($slice);
-    if ($slice->GetMonitorPid()) {
+    # If additional cancel option is provided, we mark the slice for
+    # termination after it is not busy anymore. We also set the cancel flag
+    # which will stop experiment setup early (well, a little early).  We
+    # have the slice locked, so we can hang out waiting, but we mark the
+    # slice in case we timeout (or just plain die) here, the daemon can
+    # pick it up the baton later. 
+    #
+    if ($aggregate->Busy()) {
 	if (!$cancel) {
 	    $slice->UnLock();
-	    return GeniResponse->MonitorResponse()
+	    return GeniResponse->BusyResponse();
 	}
-	    
-	#
-	# But what we can do is set the cancel flag, which the monitor is
-	# checking each time through the loop. This will cause it to stop
-	# rebooting timed out nodes, and quit earlier. The caller will not
-	# have to retry as long. 
-	#
-	if (defined($slice_experiment)) {
-	    $slice_experiment->SetCancelFlag(1);
-	}
-	print STDERR "Canceling the monitor (" . $slice->monitor_pid() . ")\n";
-	$canceled = 1;
     }
     # If any slivers are imaging, then we are busy as well.
-    elsif (defined($aggregate) &&
-	$aggregate->CheckSliverStates("imaging")) {
+    elsif ($aggregate->Imaging()) {
 	$slice->UnLock();
 	return GeniResponse->BusyResponse();
     }
@@ -967,34 +966,76 @@ sub DeleteSlice($)
 	    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 	}
     }
+
     #
-    # If we were canceled, we wait for the monitor to stop before
-    # we can kill it.
+    # OK, we want to wait for the aggregate to stop being Busy, so that
+    # we can proceed with the termination. We will set the flag in the
+    # slice record in case we die here, so that the daemon can pick it up
+    # later and finish.
     #
-    if ($canceled) {
-	while ($slice->GetMonitorPid()) {
-	    sleep(10);
-	    GeniCM::CheckMonitor($slice);
-	    print STDERR "Checking to see if monitor has stopped ...\n";
+    # We also set the slice experiment cancelation flag, which will stop
+    # a new experiment setup early.
+    #
+    if ($aggregate->Busy()) {
+	my $slice_uuid = $slice->uuid();
+	print STDERR "aggregate is busy, marking for cancelation\n";
+	$slice->MarkForTermination();
+	$slice_experiment->SetCancelFlag(1);
+
+	if (0) {
+	    $slice->UnLock();
+	    return 0
+		if (!$blocking);
+	    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 	}
+
 	#
-	# The monitor has stopped and we have the lock. Clear the
-	# cancel flag so we can actually terminate (checked in endexp).
+	# Now we wait. Release the lock in case we die, the daemon
+	# will be watching as well, but it will not do anything unless
+	# it gets the lock and the aggregate is no longer busy. We are
+	# doing the same thing here. Of course, need to watch for the
+	# slice disappearing (if the daemon beats us to it).
 	#
+	$slice->UnLock();
+	$slice->Flush();
+	while (1) {
+	    sleep(10);
+	    $slice = GeniSlice->Lookup($slice_uuid);
+	    if (!defined($slice)) {
+		print STDERR "Slice is gone, quiting ...\n";
+		goto done;
+	    }
+	    # If it is locked, go around again, maybe the daemon has it.
+	    next
+		if ($slice->Lock());
+
+	    $aggregate->Flush();
+	    $aggregate = GeniAggregate->SliceAggregate($slice);
+	    # This would be unusual, so call it quits.
+	    if (!defined($aggregate)) {
+		print STDERR "No aggregate for slice, giving up\n";
+		$slice->UnLock();
+		goto done;
+	    }
+	    last
+		if (!$aggregate->Busy());
+	    
+	    $slice->UnLock();
+	    $slice->Flush();
+	}
+	# Make sure the cancel flag is cleared (checked in endexp).
 	$slice_experiment->SetCancelFlag(0);
     }
+  cleanit:
     my $retval = GeniCM::CleanupDeadSlice($slice, 1);
     if ($retval) {
-        #wvdemeer: Something went wrong deleting the slice.
-        #          But we have a taken a lock above.
-        #          So we need to unlock, or retry becomes impossible and the slice stays locked forever.
-        #          If all is successfull, unlock is apparently not needed, I assume this is because the lock is deleted along with the slice.
+	# Must unlock so we can try again.
         $slice->UnLock();
-
 	return -1
 	    if (!$blocking);
 	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
+  done:
     return 0
 	if (!$blocking);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);
@@ -1170,20 +1211,22 @@ sub SliverAction($$$$$$)
 					"Credential does not match the URN");
 	}
     }
-    if ($slice->Lock() != 0) {
-	return GeniResponse->BusyResponse();
-    }
-    # If a monitor process is running, we are "busy".
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid()) {
-	$slice->UnLock();
-	return GeniResponse->MonitorResponse();
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
     }
     # Shutdown slices get nothing.
     if ($slice->shutdown()) {
-	$slice->UnLock();
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 				    "Slice has been shutdown");
+    }
+    if ($slice->Lock() != 0) {
+	return GeniResponse->BusyResponse();
+    }
+    if ($aggregate->Busy() ||
+	$aggregate->Imaging()) {
+	$slice->UnLock();
+	return GeniResponse->BusyResponse();
     }
     if ($aggregate->ComputeState()) {
 	$slice->UnLock();
@@ -1286,7 +1329,12 @@ sub SliverAction($$$$$$)
 	    if ($mypid) {
 		return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 	    }
-	    # Remember our pid in case callee wrapper forks again.
+	    #
+	    # The callee might also do a wrapper fork, so remember our PID
+	    # to make sure we unlock properly in only the parent side of the
+	    # fork. That child would run with the slice unlocked, Might not
+	    # be a safe thing to do needs more thought. 
+	    #
 	    $isasync = $PID;
 	}
 	$response = &$PerformAction($aggregate, $action);
@@ -1346,7 +1394,12 @@ sub SliverAction($$$$$$)
 	    goto bad
 		if (GeniResponse::IsResponse($response));
 
-	    # Callee did not fork again, we can unlock.
+	    #
+	    # The callee might also do a wrapper fork, so remember our PID
+	    # to make sure we unlock properly in only the parent side of the
+	    # fork. That child would run with the slice unlocked, Might not
+	    # be a safe thing to do needs more thought. 
+	    #
 	    if ($isasync == $PID) {
 		$slice->UnLock();
 	    }
@@ -1357,8 +1410,8 @@ sub SliverAction($$$$$$)
 		goto bad
 		    if (GeniResponse::IsResponse($response));
 	    }
+	    $slice->UnLock();
 	}
-	$slice->UnLock();
 	return ($isasync ? GENIRESPONSE_SUCCESS :
 		GeniResponse->Create(GENIRESPONSE_SUCCESS));
     }
@@ -1412,6 +1465,8 @@ sub SliverStatus($)
     if ($slice->Lock() != 0) {
 	return GeniResponse->BusyResponse();
     }
+    my $slice_experiment = $slice->GetExperiment();
+    
     if ($aggregate->ComputeState()) {
 	print STDERR "SliverStatus: Could not compute state for $aggregate\n";
 	$slice->UnLock();
@@ -1425,8 +1480,7 @@ sub SliverStatus($)
     # If the status is "working" convert to "changing" for the caller, this
     # is an internal status for the newer start/restart code.
     #
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid() || $status eq "working") {
+    if ($aggregate->Busy()) {
 	$status = "changing";
     }
 
@@ -1447,6 +1501,8 @@ sub SliverStatus($)
 		"details" => {},
 		"boot_failure" => $aggregate->boot_failure(),
 		"error"   => $aggregate->ErrorLog() || "",
+		"shutdown"=> $slice->isshutdown(),
+		"paniced" => $slice_experiment->paniced(),
 	       };
     $blob->{'public_url'} =
 	"$TBBASE/showslicepub.php?publicid=" .	$slice->publicid()
@@ -1533,6 +1589,12 @@ sub Shutdown($)
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
     }
     main::AddLogfileMetaDataFromSlice($slice);
+
+    # No point in shutting down a slice marked for termination.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
     
     #
     # Do not worry about locking when setting the shutdown time.
@@ -1653,11 +1715,13 @@ sub GetTicket($)
 	    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 					"Credential does not match the URN");
 	}
-
-	# If a monitor process is running, we are "busy".
-	GeniCM::CheckMonitor($slice);
-	if ($slice->monitor_pid()) {
-	    return GeniResponse->MonitorResponse();
+	# Terminated slices get nothing.
+	if ($slice->termination_pending()) {
+	    return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+					"Slice is marked for termination");
+	}
+	if (defined($aggregate) && $aggregate->Busy()) {
+	    return GeniResponse->BusyResponse();
 	}
 	
 	#
@@ -1781,18 +1845,16 @@ sub UpdateTicket($)
 				    "Slice does not exist here");
     }
     main::AddLogfileMetaDataFromSlice($slice);
-	
-    # If a monitor process is running, we are "busy".
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid()) {
-	return GeniResponse->MonitorResponse();
-    }
 
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
     if ($slice->IsExpired()) {
 	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
 				    "Slice has expired");
     }
-    
     #
     # UpdateTicket applies only to slices that are not active. Must
     # use UpdateSliver() for an active sliver.
@@ -1889,12 +1951,11 @@ sub UpdateSliver($)
     }
     main::AddLogfileMetaDataFromSlice($slice);
 
-    # If a monitor process is running, we are "busy".
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid()) {
-	return GeniResponse->MonitorResponse();
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
     }
-
     # Must be an aggregate (top level sliver).
     if (ref($aggregate) ne "GeniAggregate") {
 	return GeniResponse->MalformedArgsResponse("Must supply aggregate");
@@ -1903,6 +1964,14 @@ sub UpdateSliver($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
+    if ($aggregate->Busy()) {
+	return GeniResponse->BusyResponse();
+    }
+    if ($slice->IsExpired()) {
+	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
+				    "Slice has expired");
+    }
+
     #
     # It is an error if there is an outstanding ticket. That ticket
     # must be released first.
@@ -1911,11 +1980,6 @@ sub UpdateSliver($)
     if (defined($ticket)) {
 	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
 				    "Must release unredeemed ticket first");
-    }
-
-    if ($slice->IsExpired()) {
-	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
-				    "Slice has expired");
     }
 
     #
@@ -1998,6 +2062,14 @@ sub AddNodes($)
 				"Could not get manifest for slice")
 	if (!defined($manifest));
 
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
+    if ($aggregate->Busy()) {
+	return GeniResponse->BusyResponse();
+    }
     #
     # Make sure no duplicates.
     #
@@ -2356,6 +2428,14 @@ sub DeleteNodes($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
+    if ($aggregate->Busy()) {
+	return GeniResponse->BusyResponse();
+    }
     my $manifest = $aggregate->GetManifest(0);
     return GeniResponse->Create(GENIRESPONSE_ERROR(), undef,
 				"Could not get manifest for slice")
@@ -2614,11 +2694,13 @@ sub RedeemTicket($)
 				    "No slice here");
     }
     main::AddLogfileMetaDataFromSlice($slice);
-    
-    # If a monitor process is running, we are "busy".
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid()) {
-	return GeniResponse->MonitorResponse();
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
+    if ($aggregate->Busy()) {
+	return GeniResponse->BusyResponse();
     }
 
     my $open_ticket = GeniTicket->SliceTicket($slice);
@@ -2694,6 +2776,11 @@ sub BindToSlice($)
     if (!defined($creator)) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR(), undef,
 				    "Could not lookup slice creator");
+    }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
     }
     if ($slice->Lock() != 0) {
 	return GeniResponse->BusyResponse();
@@ -3454,16 +3541,20 @@ sub CreateImage($)
     }
     main::AddLogfileMetaDataFromSlice($slice);
 
-    # If a monitor process is running, we are "busy".
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid()) {
-	return GeniResponse->MonitorResponse();
-    }
-    
     if ($slice_urn ne $slice->urn()) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
+    if ($aggregate->Busy() ||
+	$aggregate->Imaging()) {
+	return GeniResponse->BusyResponse();
+    }
+    
     my $sliver = GeniSliver->Lookup($sliver_urn);
     if (!defined($sliver)) {
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
@@ -4502,17 +4593,21 @@ sub ShareLanAux($$)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
+    if ($aggregate->Busy() ||
+	$aggregate->Imaging()) {
+	return GeniResponse->BusyResponse();
+    }
+
     #
-    # Lock the slice; we do not the user to mess with things.
+    # Lock the slice; we do not let the user to mess with things.
     #
     if ($slice->Lock() != 0) {
 	return GeniResponse->BusyResponse();
-    }
-    # If a monitor process is running, we are "busy".
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid()) {
-	$slice->UnLock();
-	return GeniResponse->MonitorResponse();
     }
     my $experiment = $slice->GetExperiment();
     if (!defined($experiment)) {
@@ -4669,6 +4764,11 @@ sub ConsoleURL($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
     my $sliver = GeniSliver->Lookup($sliver_urn);
     if (!defined($sliver)) {
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
@@ -4753,6 +4853,11 @@ sub ConsoleInfo($)
     if ($slice_urn ne $slice->urn()) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
+    }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
     }
     if ($user->urn() ne $slice->creator_urn()) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
@@ -5666,6 +5771,11 @@ sub Lockdown($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "No local experiment for slice");
     }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
 
     #
     # Only the SA for the slice can do this.
@@ -5726,6 +5836,7 @@ sub Panic($)
     my $clear        = $argref->{'clear'};
     my $poweroff     = $argref->{'poweroff'};
     my $credentials  = $argref->{'credentials'};
+    my $forked       = 0;
     
     if (! (defined($credentials) && defined($slice_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
@@ -5753,6 +5864,7 @@ sub Panic($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
+    
     #
     # Only the SA for the slice can do this.
     #
@@ -5762,7 +5874,7 @@ sub Panic($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 			    "Not enough permission to turn on/off panic mode");
     }
-    if ($slice->Lock() != 0) {
+    if ($slice->WaitForLock(5) != 0) {
 	return GeniResponse->BusyResponse();
     }
     main::AddLogfileMetaDataFromSlice($slice);
@@ -5772,37 +5884,97 @@ sub Panic($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "No local experiment for slice");
     }
+
+    #
+    # Watch for the caller being out of sync with reality.
+    #
+    if ($clear && !$experiment->Paniced()) {
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS);	
+    }
+    elsif (!$clear && $experiment->Paniced()) {
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+    }
+    # This would make no sense.
+    if ($clear && $aggregate->Busy()) {
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Inconsistent busy state for clear");
+    }
+
+    #
+    # OK, we want to wait for the aggregate to stop being Busy, so that
+    # we can proceed with the panic.
+    #
+    # We also set the slice experiment cancelation flag, which will stop
+    # a new experiment (or reload/reboot/restart) early.
+    #
+    if ($aggregate->Busy() && !$clear) {
+	my $slice_uuid = $slice->uuid();
+	print STDERR "aggregate is busy, marking for cancelation\n";
+	$experiment->SetCancelFlag(1);
+
+	# Do not do this, the caller needs to wait, since this is a
+	# very unusual activity, we want the caller to know for sure
+	# if it works or fails.
+	if (0) {
+	#
+	# At this point, we can just return to the caller, tell it we are
+	# working on it.
+	#
+	my $mypid = main::WrapperFork();
+	if ($mypid) {
+	    return GeniResponse->Create(GENIRESPONSE_INPROGRESS);
+	}
+	# No need to fork again.
+	$forked = 1;
+	}
+
+	#
+	# Now we wait. 
+	#
+	$slice->Flush();
+	while (1) {
+	    sleep(10);
+	    $slice = GeniSlice->Lookup($slice_uuid);
+	    if (!defined($slice)) {
+		print STDERR "Slice is gone, quiting ...\n";
+		goto done;
+	    }
+	    $aggregate->Flush();
+	    $aggregate = GeniAggregate->SliceAggregate($slice);
+	    # This would be unusual, so call it quits.
+	    if (!defined($aggregate)) {
+		print STDERR "No aggregate for slice, giving up\n";
+		$slice->UnLock();
+		return GeniResponse->Create(GENIRESPONSE_ERROR);
+	    }
+	    last
+		if (!$aggregate->Busy());
+	    
+	    $slice->Flush();
+	}
+	# Make sure the cancel flag is cleared.
+	$experiment->SetCancelFlag(0);
+    }
     my $pid = $experiment->pid();
     my $eid = $experiment->eid();
     my $command = "$WAP $PANIC -l " . ($poweroff ? "3" : "1") . " " .
 	($clear ? "-r " : "") . "$pid $eid";
-    #
-    # The backend script sends a bunch of stuff to stdout, so capture it.
-    # We want to do this in the background cause it is going to take a long
-    # time, so fork and start the backend script, but wait a few seconds for
-    # early errors.
-    #
-    my $mypid = main::WrapperFork();
-    if ($mypid) {
-	# We want to unlock it so we can get status, so we set the shutdown
-	# flag since that will prevent any other changes from happening.
-	if (!$clear) {
-	    $slice->SetShutdown(undef, 1);
-	}
-	$slice->UnLock();
-	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
-    }
-    sleep(1);
+
     GeniUtil::FlipToElabMan();
     print STDERR "Running '$command'\n";
     system($command);
     if ($?) {
-	return -1;
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
     if ($clear) {
 	$slice->ClearShutdown();
     }
-    return 0;
+    $slice->UnLock();
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
 
 #
@@ -5853,6 +6025,11 @@ sub RunLinktest($)
     if ($slice_urn ne $slice->urn()) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
+    }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
     }
     if (!defined(GeniCM::FlipToUser($slice, $user))) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
@@ -5990,6 +6167,11 @@ sub Recovery($)
     if ($slice_urn ne $slice->urn()) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
+    }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
     }
     my $sliver = GeniSliver->Lookup($sliver_urn);
     if (!defined($sliver)) {

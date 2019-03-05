@@ -551,6 +551,51 @@ sub ExpireSlices()
 }
 
 #
+# Terminate slices that are pending, see GeniCMV2::DeleteSlice().
+#
+sub TerminateSlices()
+{
+    my $query_result =
+	GeniDB::DBQueryWarn("select idx from geni_slices ".
+			    "where termination_pending is not null and ".
+			    "      shutdown is null and isshutdown=0");
+
+    while (my ($idx) = $query_result->fetchrow_array()) {
+	my $slice = GeniSlice->Lookup($idx);
+	my $aggregate;
+
+	if (!defined($slice)) {
+	    # Slice is gone, lets not worry.
+	    next;
+	}
+	if ($slice->Lock() != 0) {
+	    print STDERR "Could not lock slice $slice.\n";
+	    goto skip;
+	}
+	$aggregate = GeniAggregate->SliceAggregate($slice);
+	# This would be unusual, so call it quits.
+	if (!defined($aggregate)) {
+	    print STDERR "No aggregate for slice, skipping\n";
+	    $slice->UnLock();
+	    goto skip;
+	}
+	if (!$aggregate->Busy()) {
+	    if (GeniCM::CleanupDeadSlice($slice, 1) != 0) {
+		print STDERR "Could not terminate $slice\n";
+		SENDMAIL($TBOPS, "Could not terminate slice",
+			 "Could not terminate slice $slice");
+	    }
+	}
+	$slice->UnLock();
+      skip:
+	$slice->Flush()
+	    if (defined($slice));
+	$aggregate->Flush()
+	    if (defined($aggregate));
+    }
+}
+
+#
 # Look for slices that need to be shutdown
 #
 sub ShutdownSlices()
@@ -1756,6 +1801,7 @@ while (1) {
     ExpireTickets();
     WarnSlices();
     ExpireSlices();
+    TerminateSlices();
 
     #
     # Run the idle check periodically. 

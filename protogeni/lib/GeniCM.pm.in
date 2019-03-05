@@ -6066,6 +6066,12 @@ sub RenewSliverAux($$$$)
 	$message = "Slice has been shutdown";
 	goto bad;
     }
+    # Ditto termination pending.
+    if ($slice->termination_pending()) {
+	$message = "Slice is marked for termination";
+	goto bad;
+    }
+    
     #
     # We do not save renew logs, so add a metadata tag with the
     # expiration so we can see what the user actually tried to do.

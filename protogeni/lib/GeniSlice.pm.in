@@ -336,6 +336,7 @@ sub async_code($)       { return field($_[0], "async_code"); }
 sub async_output($)     { return field($_[0], "async_output"); }
 sub portal_tag($)       { return field($_[0], "portal_tag"); }
 sub portal_url($)       { return field($_[0], "portal_url"); }
+sub termination_pending($) { return field($_[0], "termination_pending"); }
 sub cert($)		{ return $_[0]->{'CERT'}->cert(); }
 sub GetCertificate($)   { return $_[0]->{'CERT'}; }
 sub LOCKED($)           { return $_[0]->{'LOCKED'}; }
@@ -1216,6 +1217,21 @@ sub SetIdleIgnore($$)
     else {
 	return $experiment->SetIdleSwapFlags(1, 0);
     }
+}
+
+#
+# Mark slice for termination.
+#
+sub MarkForTermination($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+
+    DBQueryWarn("update geni_slices set termination_pending=now() ".
+		"where uuid='$uuid'")
+	or return -1;
+    
+    return 0;
 }
 
 #
