@@ -1240,6 +1240,17 @@ sub GetTicketAuxAux($)
 	}
 
 	#
+	# Catch this early.
+	#
+	if (! TBcheck_dbslot($node_nickname, "virt_nodes", "vname",
+			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    $response =
+		GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+			     "Invalid client id for node: $node_nickname");
+	    goto bad;
+	}
+	
+	#
 	#
 	# Lan nodes are fake and do not go into the virt topo. Need
 	# to remember them though, for when we do the links below.
