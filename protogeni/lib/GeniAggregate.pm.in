@@ -334,7 +334,10 @@ sub GetCertificate($)
 sub resource_type($)	{ return field($_[0], "type"); }
 
 # Busy if status is working (start/restart/stop/reload/reboot).
-sub Working($)          { return $_[0]->status eq "working" ? 1 : 0; }
+sub Busy($)             { return $_[0]->status eq "working" ? 1 : 0; }
+
+# Are any slivers imaging.
+sub Imaging($)          { return $_[0]->CheckSliverStates("imaging") ? 1 : 0; }
 
 # A place to stash a temporary rspec.
 sub rspec($;$)
@@ -3821,12 +3824,16 @@ sub CancelUpdateAccounts($)
 sub GenerateStatusBlob($)
 {
     my ($self) = @_;
+    my $slice = $self->GetSlice();
+    my $slice_experiment = $slice->GetExperiment();
 
     my $sliver_urn    = $self->sliver_urn();
     my $resource_id   = $self->resource_id();
     my $state         = $self->state();
     my $status        = $self->status();
     my $nickname      = $self->nickname() || "";
+    my $shutdown      = $slice->isshutdown();
+    my $paniced       = $slice_experiment->paniced();
 
     # New is the same as stopped. Separate state is handy.
     $state = "stopped"
@@ -3839,6 +3846,8 @@ sub GenerateStatusBlob($)
 	"status"        => $status,
 	"error"         => "",
 	"utc"           => time(),
+	"shutdown"      => $shutdown,
+	"paniced"       => $paniced,
     };
     return $blob;
 }
