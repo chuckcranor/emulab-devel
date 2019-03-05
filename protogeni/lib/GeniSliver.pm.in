@@ -1718,9 +1718,10 @@ sub GenerateStatusBlob($)
     $state = "stopped"
 	if ($state eq "new");
 
-    # See if booted into the admin or recovery MFS (not frisbee).
+    # See if booted into the recovery MFS (not admin or frisbee).
     my $recovery = 0;
-    if ($node->temp_boot_osid()) {
+    if ($node->recoverymfs_osid() && $node->temp_boot_osid() &&
+	$node->recoverymfs_osid() == $node->temp_boot_osid()) {
 	$recovery = 1;
     }
 
