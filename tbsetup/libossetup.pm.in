@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,13 +28,13 @@ use Exporter;
 use vars qw(@EXPORT $AUTOLOAD
 	    $NOSTATE $RELOAD $RECONFIG $REBOOT
 	    $RELOAD_FAILED $RECONFIG_FAILED $REBOOT_FAILED $SETUP_FAILED
-	    $SETUP_OKAY);
+	    $SETUP_OKAY $SETUP_CANCELED);
 use base qw( Exporter );
 
 @EXPORT = qw(&die_noretry
 	     $NOSTATE $RELOAD $RECONFIG $REBOOT
 	     $RELOAD_FAILED $RECONFIG_FAILED $REBOOT_FAILED $SETUP_FAILED
-	     $SETUP_OKAY);
+	     $SETUP_OKAY $SETUP_CANCELED);
 
 use libdb;
 use libtestbed;
@@ -69,6 +69,7 @@ $RELOAD_FAILED   = 0x01;
 $RECONFIG_FAILED = 0x02;
 $REBOOT_FAILED   = 0x04;
 $SETUP_FAILED    = 0x08;
+$SETUP_CANCELED  = 0x10;
 
 #
 # Used to die with a -1 return code, to indicate to caller (tbswap)
@@ -683,9 +684,9 @@ sub LightUpNodes($@)
 	    ($self->loadobj())->debug($self->debug());
 
 	    # add a few more things for feature checks down the line:
-	    $reload_args{user} = $self->user();
-	    $reload_args{group} = $self->group();
-	    $reload_args{experiment} = $self->experiment();
+	    $reload_args{'user'} = $self->user();
+	    $reload_args{'group'} = $self->group();
+	    $reload_args{'experiment'} = $self->experiment();
 
 	    $pid = ($self->loadobj())->osload(\%reload_args, $reload_failures);
 	    $coderef = sub {
@@ -881,6 +882,17 @@ sub WaitForNodes($@)
 	    my $typehandler = $node->_typehandler();
 	    my $state;
 	    my $state_timestamp;
+
+	    #
+	    # Terminate the remaining nodes early ...
+	    #
+	    if ($canceled) {
+		print STDERR "$node_id: not waiting cause of cancellation.\n";
+		$node->_setupstatus($SETUP_CANCELED);
+		delete($nodes{$node_id});
+		$typehandler->WaitDone($node);
+		next;
+	    }
 
 	    #
 	    # Call typehandler specific wait function; 
@@ -1476,8 +1488,7 @@ sub WaitDone($@)
 			tbnotice("could not force into PXEWAIT; failing\n");
 			goto bad;
 		    }
-		    # clear the reload info
-		    $node->ClearCurrentReload();
+
 		    # and partitions
 		    $node->ClearPartitions();
 
@@ -1502,6 +1513,10 @@ sub WaitDone($@)
 		tbnotice("Continuing with experiment setup anyway ...\n");
 		next;
 	    }
+	}
+	elsif ($setupstatus == $libossetup::SETUP_CANCELED) {
+	    # Skip the stuff below, not needed.
+	    next;
 	}
 
       bad:

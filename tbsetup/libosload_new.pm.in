@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -107,6 +107,8 @@ sub New($$$;@)
     $self->{'FAILCOUNT'}  = 0;
     $self->{'TYPECACHE'}  = {};
     $self->{'TYPEOBJECTS'} = {};
+    $self->{'USER'}        = undef;
+    $self->{'EXPT'}        = undef;
 
     foreach my $node (@nodelist) {
 	$self->{'NODES'}->{$node->node_id()} = $node;
@@ -498,6 +500,12 @@ sub osload($$$) {
     if (defined($args->{'debug'})) {
 	$self->debug($args->{'debug'});
     }
+    if (defined($args->{'user'})) {
+	$self->{"USER"} = $args->{'user'};
+    }
+    if (defined($args->{'experiment'})) {
+	$self->{"EXPT"} = $args->{'experiment'};
+    }
 
     $self->{FLAGS} = \%flags;
 
@@ -859,7 +867,7 @@ sub osload($$$) {
 	}
 	if (exists($eventnodes->{$node_id})) {
 	    my $et = time();
-	    if ($self->debug()) {
+	    if ($self->debug() > 1) {
 		print STDERR "$self: eventhandler: $node_id => $event @ $et\n"
 	    }
 	    $eventnodes->{$node_id} = $et;
@@ -944,9 +952,17 @@ sub osload($$$) {
 	    my $node = shift(@failednodes);
 	    my $nodeobject = $self->node($node);
 	    my $typeobject = $self->typeobject($nodeobject);
+	    my $retries    = $self->nodeinfo($nodeobject,'retries');
 
-	    my $retries = $self->nodeinfo($nodeobject,'retries');
-	    if ($retries) {
+	    #
+	    # If we have been canceled, do not worry about retry.
+	    #
+	    if (defined($self->experiment()) &&
+		$self->experiment()->canceled()) {
+		$result->{$node} = -1;
+		$typeobject->ReloadDone($nodeobject);
+	    }
+	    elsif ($retries) {
 		tbnotice "$self ($node): Trying again ...";
 
 		# Possible race with reboot?
@@ -1227,6 +1243,13 @@ sub WaitTillReloadDone($$$$$@)
 		}
 
 		#
+		# Watch for experiment cancelation in direct mode.
+		#
+		my $canceled = ($typewaitstatus &&
+				defined($self->experiment()) &&
+				$self->experiment()->canceled());
+
+		#
 		# Another form of being stuck is no frisbee events for
 		# too long. But only if we are getting frisbee events
 		# and only if we are still in the RELOADING state.
@@ -1251,10 +1274,28 @@ sub WaitTillReloadDone($$$$$@)
 		    $eventstate eq TBDB_NODESTATE_TBFAILED() ||
 		    $eventstate eq TBDB_NODESTATE_PXEFAILED() ||
 		    $eventstate eq TBDB_NODESTATE_RELOADFAILED() ||
-		    $isstuck) {
+		    $isstuck || $canceled) {
+		    my $msg;
 
+		    if ($canceled) {
+			#
+			# In direct mode, watch for experiment cancellation
+			# and terminate early. 
+			#
+			# We do not clear the reloads or partitions, in
+			# case this is a panic situation. We hope that when
+			# (if) the node comes out of panic, we might pick
+			# up where things left off. If not a panic situation,
+			# the reload daemon will clear the partitions and
+			# reload. 
+			#
+			$msg = "$self: $node has been stopped because of ".
+			    "experiment cancellation.";
+			goto nodefailed;
+		    }
+		    
 		    my $t = (int ($waittime / 60));
-		    my $msg = "$self: $node appears wedged; ".
+		    $msg = "$self: $node appears wedged; ".
 			"it has been $t minutes since it was rebooted.\n";
 
 		    if ($eventstate eq TBDB_NODESTATE_TBFAILED() ||
@@ -1299,8 +1340,9 @@ sub WaitTillReloadDone($$$$$@)
 			}
 			$msg .= "$self: $node did not finish reloading.";
 		    }
+		  nodefailed:
 		    tbnotice($msg);
-		    TBNodeConsoleTail($node, *STDERR);
+		    TBNodeConsoleTail($node, *STDERR) if (!$canceled);
 
 		    $count--;
 		    $done{$node} = $waitmode;
