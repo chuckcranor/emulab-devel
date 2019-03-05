@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2015 University of Utah and the Flux Group.
+# Copyright (c) 2008-2015, 2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -69,6 +69,7 @@ use GeniSlice;
 use GeniRegistry;
 use GeniUtil;
 use GeniCM;
+use GeniCMV2;
 use Genixmlrpc;
 use GeniCertificate;
 use GeniCredential;
