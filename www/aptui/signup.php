@@ -382,6 +382,20 @@ if (!$joinproject) {
     }
 }
 
+#
+# Before respitting form, check for the keyfile, and pass along the
+# contents in formfields (as hidden variable) so we do not lose it.
+#
+if (!$this_user) {
+    if (isset($_FILES['keyfile']) &&
+	$_FILES['keyfile']['name'] != "" &&
+	$_FILES['keyfile']['name'] != "none") {
+
+	$localfile = $_FILES['keyfile']['tmp_name'];
+	$formfields["pubkey"] = CleanString(file_get_contents($localfile));
+    }
+}
+
 # Present these errors before we call out to do anything else.
 if (count($errors)) {
     SPITFORM($formfields, 0, $errors);
@@ -475,18 +489,9 @@ if (!$this_user) {
     $args["portal"]	   = $PORTAL_GENESIS;
 
     #
-    # Backend verifies pubkey and returns error. We first look for a 
-    # file and then fall back to an inline field. See SPITFORM().
+    # Backend verifies pubkey and returns error. 
     #
-    if (isset($_FILES['keyfile']) &&
-	$_FILES['keyfile']['name'] != "" &&
-	$_FILES['keyfile']['name'] != "none") {
-
-	$localfile = $_FILES['keyfile']['tmp_name'];
-	$args["pubkey"] = file_get_contents($localfile);
-	$formfields["pubkey"] = $args["pubkey"];
-    }
-    elseif (isset($formfields["pubkey"]) && $formfields["pubkey"] != "") {
+    if (isset($formfields["pubkey"]) && $formfields["pubkey"] != "") {
 	$args["pubkey"] = $formfields["pubkey"];
     }
 
