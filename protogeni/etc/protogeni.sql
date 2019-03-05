@@ -56,6 +56,7 @@ CREATE TABLE `geni_slices` (
   `created` datetime default NULL,
   `expires` datetime default NULL,
   `shutdown` datetime default NULL,
+  `termination_pending` datetime default NULL,
   `locked` datetime default NULL,
   `stitch_locked` datetime default NULL,
   `hosed` tinyint(1) NOT NULL default '0',
