@@ -42,6 +42,7 @@ use GeniCredential;
 use GeniCertificate;
 use GeniUser;
 use GeniHRN;
+use GeniResponse;
 use English;
 use libEmulab;
 use emutil;
