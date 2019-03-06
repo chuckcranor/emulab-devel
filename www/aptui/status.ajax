@@ -813,7 +813,7 @@ function Do_Snapshot()
     # Call out to the backend.
     #
     $webtask = WebTask::CreateAnonymous();
-    $retval = SUEXEC($this_user->uid(), "nobody",
+    $retval = SUEXEC($this_user->uid(), $pid,
 		     "webmanage_instance -t " . $webtask->task_id() . " " .
                      "  snapshot $uuid $optargs",
 		     SUEXEC_ACTION_IGNORE);
@@ -877,8 +877,8 @@ function Do_SnapshotStatus()
     else {
 	$blob["image_size"] = 0;
     }
-    if (isset($taskdata["copyback_uuid"])) {
-        $blob["copyback_uuid"] = $taskdata["copyback_uuid"];
+    if (isset($taskdata["copyback_urn"])) {
+        $blob["copyback_urn"] = $taskdata["copyback_urn"];
     }
     $blob["image_status"] = $taskdata["image_status"];
     
@@ -899,9 +899,12 @@ function Do_SnapshotStatus()
         }
     }
     if ($webtask->exited()) {
-	# Success, but not sure what to report. Come back to this later.
 	$blob["exited"]   = $webtask->exited();
 	$blob["exitcode"] = $webtask->exitcode();
+        # We want to say something in the web UI if imaging throws an error.
+        if ($webtask->exitcode()) {
+            $blob["errmsg"] = $webtask->output();
+        }
         if (isset($taskdata["image_name"])) {
             $blob["image_name"] = $taskdata["image_name"];
         }
