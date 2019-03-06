@@ -908,7 +908,7 @@ sub DeleteSlice($)
     }
     if (!defined($aggregate)) {
 	# Easy. Force blocking off and cleanup.
-	$blocking = 0;
+	$blocking = 1;
 	goto cleanit;
     }
     my $slice_experiment = $slice->GetExperiment();
