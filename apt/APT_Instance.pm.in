@@ -1460,7 +1460,7 @@ sub CreateDatasetCreds($$$)
     my $rspecstr = $self->rspec();
     my $project  = $self->GetProject();
     my $geniuser = $self->GetGeniUser();
-    my @credentials = ();
+    my %credentials = ();
     
     my $rspec = GeniXML::Parse($rspecstr);
     if (! defined($rspec)) {
@@ -1567,10 +1567,13 @@ sub CreateDatasetCreds($$$)
 		}
 		return -1;
 	    }
-	    push(@credentials, $output);
+	    if (!exists($credentials{$manager_urn})) {
+		$credentials{$manager_urn} = [];
+	    }
+	    push(@{$credentials{$manager_urn}}, $output);
 	}
     }
-    @$pref = @credentials;
+    $$pref = \%credentials;
     return 0;
 }
 

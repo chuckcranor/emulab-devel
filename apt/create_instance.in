@@ -855,8 +855,8 @@ if ($instance->ApplyExtensionPolicies()) {
 
 # Generate the extra credentials that tells the backend this experiment
 # can access the datasets.
-my @dataset_credentials = ();
-$retval = $instance->CreateDatasetCreds(\$errmsg, \@dataset_credentials);
+my $dataset_credentials = {};
+$retval = $instance->CreateDatasetCreds(\$errmsg, \$dataset_credentials);
 if ($retval) {
     $instance->Delete();
     ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
