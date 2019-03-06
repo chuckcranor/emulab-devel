@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2010 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -161,7 +161,9 @@ my %xmlfields =
      "shared",		=> ["shared",		$SLOT_ADMINONLY,   0],
      "mustclean",	=> ["mustclean",	$SLOT_ADMINONLY,   1],
      "nextosid",	=> ["nextosid",		$SLOT_ADMINONLY],
-     "reboot_waittime",	=> ["reboot_waittime",	$SLOT_ADMINONLY]);
+     "reboot_waittime",	=> ["reboot_waittime",	$SLOT_ADMINONLY]
+     "def_parentosid",	=> ["def_parentosid",	$SLOT_OPTIONAL],
+    );
 
 #
 # Must wrap the parser in eval since it exits on error.
@@ -280,7 +282,8 @@ foreach $key (keys(%{ $xmlparse->{'attribute'} })) {
     #
     # Special case nextosid so it can be in pid,osname format. 
     #
-    if ($dbslot eq "nextosid" && $value =~ /^.+,.+$/) {
+    if (($dbslot eq "nextosid" || $dbslot eq "def_parentosid")
+	&& $value =~ /^.+,.+$/) {
 	my ($pid,$osname) = ($value =~ /^(.*),(.*)$/);
 	
 	# Now check that the value is legal.
@@ -338,6 +341,16 @@ if (exists($newosid_args{"nextosid"})) {
     }
     # Might be in pid,osname format.
     $newosid_args{"nextosid"} = $nextos->osid();
+}
+# Ditto def_parentosid
+if (exists($newosid_args{"def_parentosid"})) {
+    my $nextos = OSinfo->Lookup($newosid_args{"def_parentosid"});
+
+    if (!defined($nextos)) {
+	UserError("def_parentosid: Does not exist");
+    }
+    # Might be in pid,osname format.
+    $newosid_args{"def_parentosid"} = $nextos->osid();
 }
 
 # Mere users have to supply a version, but admin people do not.

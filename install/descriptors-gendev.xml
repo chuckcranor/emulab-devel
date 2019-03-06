@@ -99,4 +99,7 @@
   <attribute name="nextosid">
     <value>emulab-ops,GENERICDEV</value>
   </attribute>
+  <attribute name="def_parentosid">
+    <value>emulab-ops,GENERICDEV</value>
+  </attribute>
 </osid>
