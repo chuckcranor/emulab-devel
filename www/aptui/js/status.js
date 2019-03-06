@@ -270,7 +270,7 @@ $(function ()
 	    xmlthing.done(callback);
 	});
 	SetupWarnKill();
-	
+
 	// Handler for select/deselect all rows in the list view.
 	$('#select-all').change(function () {
 	    if ($(this).prop("checked")) {
@@ -595,6 +595,18 @@ $(function ()
 	    if (!status_collapsed) {
 		$("#status_message").html(status_message);
 	    }
+	    if (instanceStatus == "quarantined") {
+		$('#explain-quarantine').removeClass("hidden");
+		$('#warnkill-experiment-button').addClass("hidden");
+		$('#release-quarantine-button').removeClass("hidden");
+		$('#quarantine_checkbox').prop("checked", true);
+	    }
+	    else {
+		$('#explain-quarantine').addClass("hidden");
+		$('#release-quarantine-button').addClass("hidden");
+		$('#warnkill-experiment-button').removeClass("hidden");
+		$('#quarantine_checkbox').prop("checked", false);
+	    }
 	    $("#status_panel")
 		.removeClass('panel-success panel-danger ' +
 			     'panel-warning panel-default panel-info')
@@ -654,6 +666,7 @@ $(function ()
 	var extend;
 	var snapshot;
 	var destroy;
+	var release = 0;
 
 	switch (status)
 	{
@@ -679,6 +692,12 @@ $(function ()
 	        destroy = 1;
   	        break;
 
+	    case 'quarantined':
+	        terminate = refresh = reloadtopo = extend = snapshot = 0;
+	        destroy = 0;
+	        release = 1;
+  	        break;
+
 	    case 'failed':
 	    case 'imaging-failed':
 	        refresh = reloadtopo = terminate = destroy = 1;
@@ -690,18 +709,13 @@ $(function ()
 	if (expinfo.admin_lockdown || !window.APT_OPTIONS.canterminate) {
 	    terminate = 0;
 	}
-	// Or if paniced, most buttons disabled.
-	if (expinfo.paniced) {
-	    terminate = extend = snapshot = destroy = 0;
-	    refresh = reloadtopo = 0;
-	}
-	
 	ButtonState('terminate', terminate);
 	ButtonState('refresh', refresh);
 	ButtonState('reloadtopo', reloadtopo);
 	ButtonState('extend', extend);
 	ButtonState('snapshot', snapshot);
 	ButtonState('destroy', destroy);
+	ButtonState('release', release);
 	ToggleLinktestButtons(status);
     }
     function EnableButton(button)
@@ -723,6 +737,8 @@ $(function ()
 	}
 	else if (button == "destroy")
 	    button = "#warnkill-experiment-button";
+	else if (button == "release")
+	    button = "#release-quarantine-button";
 	else if (button == "extend")
 	    button = "#extend_button";
 	else if (button == "refresh")
@@ -3666,9 +3682,23 @@ $(function ()
      */
     function SetupWarnKill()
     {
+	if (expinfo.paniced) {
+	    $('#warnkill-experiment-button').addClass("hidden");
+	    $('#release-quarantine-button').removeClass("hidden");
+	}
+	else {
+	    $('#warnkill-experiment-button').removeClass("hidden");
+	    $('#release-quarantine-button').addClass("hidden");
+	}
 	$('#warnkill-experiment-button').click(function (event) {
 	    event.preventDefault();
 	    WarnExperiment();
+	});
+	$('#release-quarantine-button').click(function () {
+	    sup.ShowModal('#disable-quarantine-modal');
+	});
+	$('#confirm-disable-quarantine').click(function () {
+	    DisableQuarantine();
 	});
 
 	// The Terminate/quarantine is a radio that can be unselected.
@@ -3714,19 +3744,26 @@ $(function ()
 		    }
 		}
 		sup.HideModal("#destroy-experiment-modal", function () {
-		    sup.ShowWaitWait();
+		    sup.ShowWaitWait("Patience please!");
 		    sup.CallServerMethod(null, "status", "Warn", args,
 			 function(json) {
 			     console.info("warn/kill", json);
 			     if (json.code) {
 				 sup.HideWaitWait(function () {
-				     sup.SpitOops("oops",
-				      "Could not warn/kill experiment: " +
-						  json.value);
+				     if (json.code) {
+					 sup.SpitOops("oops",
+					    "Could not warn/kill experiment: " +
+						      json.value);
+				     }
 				 });
 				 return;
 			     }
-			     sup.HideWaitWait();
+			     sup.HideWaitWait(function () {
+				 if (panic) {
+				     sup.ShowModal(
+					 '#quarantine-inprogress-modal');
+				 }
+			     });
 			 });
 		});
 	    });
@@ -3737,6 +3774,36 @@ $(function ()
 	    $('#destroy-experiment-confirm').unbind("click.destroy");
 	});
 	sup.ShowModal("#destroy-experiment-modal");
+    }
+
+    /*
+     * Release from quarantine.
+     */
+    function DisableQuarantine()
+    {
+	var args = {"uuid"       : uuid,
+		    "quarantine" : "clear"};
+
+	sup.HideModal('#disable-quarantine-modal', function () {
+	    sup.ShowWaitWait("Patience please!");
+	    sup.CallServerMethod(null, "status", "Quarantine", args,
+		 function(json) {
+		     console.info("DisableQuarantine", json);
+		     if (json.code) {
+			 sup.HideWaitWait(function () {
+			     if (json.code) {
+				 sup.SpitOops("oops",
+				      "Could not disable quarantine: " + 
+					      json.value);
+			     }
+			 });
+			 return;
+		     }
+		     sup.HideWaitWait(function () {
+			 sup.ShowModal('#quarantine-inprogress-modal');
+		     });
+		 });
+	});
     }
 
     // Helper.

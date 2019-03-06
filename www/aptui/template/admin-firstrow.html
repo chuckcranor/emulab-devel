@@ -120,13 +120,15 @@
 	      <tr>
 		<td>
 		  <span data-toggle='popover'
-			data-delay='{"hide":500, "show":500}'
-			data-content="When checked, the experiment is put into
-				      Quarantine (emulab panic) mode.">
+			data-delay='{"show":500}'
+			data-content="When checked, the experiment is in
+				      Quarantine (emulab panic) mode. Switch
+				      to the show experiment page
+				      to toggle on/off.">
 		    Quarantine:</span>
 		</td>
 		<td>
-		  <input type="checkbox" id="quarantine-checkbox"
+		  <input type="checkbox" id="quarantine-checkbox" disabled
 			 <% if (expinfo.paniced) { %>checked<% } %> >
 		</td>
 	      </tr>

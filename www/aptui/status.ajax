@@ -1425,7 +1425,11 @@ function Do_Quarantine()
 	SPITAJAX_ERROR(1, "Missing quarantine value");
 	return;
     }
-    $which = ($ajax_args["quarantine"] ? "set" : "clear");
+    $which = $ajax_args["quarantine"];
+    if ($which != "set" && $which != "clear") {
+	SPITAJAX_ERROR(1, "Invalid quarantine value");
+	return;
+    }
     $uuid = $ajax_args["uuid"];
     $opt = "";
     if (isset($ajax_args["poweroff"]) && $ajax_args["poweroff"]) {
@@ -1449,7 +1453,7 @@ function Do_Quarantine()
             SPITAJAX_ERROR(-1, "Internal error changing quarantine");
         }
         else {
-            SPITAJAX_ERROR(1, $webtask->output());
+            SPITAJAX_ERROR(-1, $webtask->output());
         }
         $webtask->Delete();
 	return;

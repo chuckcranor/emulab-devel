@@ -76,9 +76,14 @@ pre {
               </span>
 	      <span class="hidden" id="ignore-failure"
 		    style='margin-left: 10px;'>
-		(<a id='ignore-failure-button'
+		(<a id='ignore-failure-button' href="#"
 		    data-target='#ignore-failure-modal'
-		    data-toggle='modal'>Ignore this failure?</a>)</span>
+		    data-toggle='modal'>Ignore this failure</a>?)</span>
+	      <span class="hidden" id="explain-quarantine"
+		    style='margin-left: 10px;'>
+		(<a id='explain-quarantine-button' href="#"
+		    data-target='#explain-quarantine-modal'
+		    data-toggle='modal'>What does this mean</a>?)</span>
 	    </td>
 	  </tr>
 	  <% if (expinfo.profile_uuid) { %>
@@ -199,14 +204,23 @@ pre {
 	  </div>
 	  <% if (isadmin) { %>
 	    <div class='pull-left'>
-	      <button class='btn btn-xs btn-danger' disabled
+	      <button class='btn btn-xs btn-danger' disabled hidden
 		      style='margin-left: 10px;'
 		      style='margin-right: 10px;'
 		      id='warnkill-experiment-button' type=button
+		      data-delay='{"show":750}'
 		      data-toggle='popover'
-		      data-content='Warn user or terminate experiment with cause
+		      data-content='Warn user or terminate/quarantine
+				    experiment with cause
 				    and optionally freeze the user account.'>
  		Warn/Kill</button>
+	      <button class='btn btn-xs btn-danger' disabled hidden
+		      style='margin-left: 10px;'
+		      style='margin-right: 10px;'
+		      id='release-quarantine-button' type=button
+		      data-toggle='popover'
+		      data-content='Release experiment from quarantine.'>
+ 		Release</button>
 	    </div>
 	  <% } %>
 	  <div class='pull-right'>
@@ -214,6 +228,7 @@ pre {
 	       class='btn btn-xs btn-info hidden' 
 	       style='margin-right: 10px;'
 	       id='confirm-stuff-button' type=button
+	       data-delay='{"show":250}'
 	       data-toggle='popover'
 	       data-content='Explore performance results from a set of
 			     low-level benchmarks characterizing the
@@ -224,6 +239,7 @@ pre {
 		<button class='btn btn-xs btn-success hidden' disabled
 			style='margin-right: 10px;'
 			id='linktest-stop-button' type=button
+                        data-delay='{"show":750}'
 			data-toggle='popover'
 			data-content='Stop a running or wedged linktest'>
  		  Stop Linktest</button>
@@ -231,7 +247,7 @@ pre {
 	      <button class='btn btn-xs btn-primary hidden' disabled
 		      id='snapshot_button' type=button
 		      data-toggle='popover'
-	              data-delay='{"hide":1000, "show":500}'
+	              data-delay='{"show":750}'
 		      data-html='true'
 		      data-content="Create a disk image from one of your nodes.
 				    Click for more info."> 
@@ -241,7 +257,7 @@ pre {
 		   href='manage_profile.php?action=copy&uuid=<%= expinfo.profile_uuid %>'
 		   id='copy_button' type=button
 		   data-toggle='popover'
-	           data-delay='{"hide":1000, "show":500}'
+	           data-delay='{"show":750}'
 		   data-html='true'
 		   data-content="When you <em>copy</em> a profile,
 			 you are creating a new profile that
@@ -268,8 +284,8 @@ pre {
 	    <div <% if (expinfo.status == "deferred") { %>
                    class="exp-running hidden" <% } %>>
 	      <div class='pull-left'
+		   data-delay='{"show":750}'
 		   data-toggle='popover'
-		   data-delay='{"hide":100, "show":500}'
 		   data-content="When checked, only administrators can extend
 				 this experiment. No free time is granted to
 				 user at all."> 
@@ -281,8 +297,8 @@ pre {
 	    <div <% if (expinfo.status == "deferred") { %>
                    class="exp-running hidden" <% } %>>
 	      <div class='pull-left'
+		   data-delay='{"show":750}'
 		   data-toggle='popover'
-		   data-delay='{"hide":100, "show":500}'
 		   data-content="When checked, the experiment 
 			       cannot be terminated by the user unless the
 			       user verifies 
@@ -301,8 +317,8 @@ pre {
 	    <div <% if (expinfo.status == "deferred") { %>
                    class="exp-running hidden" <% } %>>
 	      <div class='pull-left'
+		   data-delay='{"show":750}'
 		   data-toggle='popover'
-		   data-delay='{"hide":100, "show":500}'
 		   data-content="When checked, the experiment 
 			       cannot be terminated by the user. Only an
 			       admin can do it.">
@@ -312,12 +328,28 @@ pre {
 		  Admin Lockdown</label>
 	      </div>
 	    </div>
+	    <% if (0) { %>
+	    <div <% if (expinfo.status == "deferred") { %>
+                   class="exp-running hidden" <% } %>>
+	      <div class='pull-left'
+		   data-delay='{"show":750}'
+		   data-toggle='popover'
+		   data-content="When checked, the experiment is in
+				 Quarantine (emulab panic) mode.">
+		<label class="checkbox-inline" style='margin-right: 10px;'>
+		  <input type="checkbox" id="quarantine_checkbox" disabled
+			 <% if (expinfo.paniced) { %>checked<% } %>
+		  <span <% if (expinfo.paniced) { %>class="text-danger"<% } %> >
+		    Quarantined</span></label>
+	      </div>
+	    </div>
+	    <% } %>
 	    <div <% if (expinfo.status == "deferred") { %>
                    class="exp-running hidden" <% } %>>
 	      <div class='pull-left'>
 		<span <% if (expinfo.admin_notes == "") { %>hidden<% } %>'
+		    data-delay='{"show":750}'
 		    data-toggle='popover'
-                    data-delay='{"hide":500, "show":500}'
 		    data-content="This experiment has admin notes">
 		  <a target="_blank"
 		     href='adminextend.php?uuid=<%= uuid %>'>Admin Notes</a>
@@ -1454,6 +1486,46 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
       </div>
     </div>
   </div>
+  <!-- Explain quarantine mode -->
+  <div id='explain-quarantine-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+          <button type='button' class="close"
+                  data-dismiss='modal' aria-hidden='true'>&times;</button>
+	  <p>
+	  Your experiment has been quarantined by an administrator.
+	  Typically, this action would be taken because your experiment was
+	  doing something that is prohibited. Your nodes have either
+	  been powered off, or they were rebooted into a safe mode so
+	  that you can log in and investigate. For more info, please contact
+	  <%= window.APTMAILTO %>.
+	  </p>
+	</div>
+      </div>
+    </div>
+  </div>
+  <!-- Confirm disable Quarantine -->
+  <div id='disable-quarantine-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+          <button type='button' class='close' data-dismiss='modal'
+                  aria-hidden='true'>&times;</button>
+	  <center>
+	    <h3>Confirm to release from Quarantine</h3>
+	    <div style="margin-top: 10px;">
+              <button style='margin-right: 10px;'
+                      class='btn btn-primary btn-sm' 
+                      data-dismiss='modal' aria-hidden='true'>Cancel</button>
+              <button class='btn btn-danger btn-sm'
+		      id='confirm-disable-quarantine'>Confirm</button>
+	    </div>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
   <!-- Ignore failures modal-->
   <div id='ignore-failure-modal' class='modal fade'>
     <div class='modal-dialog'>
@@ -1511,4 +1583,7 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
   <div id='linktest_div'></div>
   <div id='destroy_div'></div>
 </div>
+
+
+
 

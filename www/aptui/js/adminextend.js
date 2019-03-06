@@ -521,7 +521,7 @@ $(function ()
     //
     function DoQuarantine(mode)
     {
-	mode = (mode ? 1 : 0);
+	mode = (mode ? "set" : "clear");
 
 	var callback = function(json) {
 	    if (json.code) {
