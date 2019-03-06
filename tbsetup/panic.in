@@ -188,13 +188,18 @@ $experiment->LockTables() == 0
 # Called from user (via web interface).
 #
 if ($reset || $clear) {
-    ExitWithStatus(1, "Experiment $pid/$eid is not paniced!\n")
-	if ($experiment->state() ne EXPTSTATE_PANICED &&
-	    $experiment->paniced());
-
+    if (! ($experiment->state() eq EXPTSTATE_PANICED &&
+	   $experiment->paniced())) {
+	print STDERR "Not in panic mode\n";
+	exit(0);
+    }
     $level = $experiment->paniced();
 }
 else {
+    if ($experiment->state() eq EXPTSTATE_PANICED && $experiment->paniced()) {
+	print STDERR "Already in panic mode\n";
+	exit(0);
+    }
     ExitWithStatus(1, "Experiment $pid/$eid is not active!\n")
 	if (! ($experiment->state() eq EXPTSTATE_ACTIVE ||
 	       $experiment->state() eq EXPTSTATE_ACTIVATING ||
