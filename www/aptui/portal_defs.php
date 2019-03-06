@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,8 +28,9 @@ $APTHOST	= "$WWWHOST";
 # causes confusion in geni-login.ajax. 
 $COOKDIEDOMAIN  = "$WWWHOST";
 $APTBASE	= "$TBBASE/portal";
-$APTMAIL        = $TBMAIL_OPS;
 $SUPPORT        = $TBMAILADDR_OPS;
+$APTMAIL        = $TBMAIL_OPS;
+$APTMAILTO      = "<a href='mailto:$SUPPORT'>Testbed Operations</a>";
 $APTTITLE       = "Emulab";
 $FAVICON        = "../favicon.ico";
 $APTLOGO        = "emulab-logo.svg";

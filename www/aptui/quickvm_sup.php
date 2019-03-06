@@ -52,6 +52,7 @@ if (isset($_SERVER['SERVER_NAME'])) {
 $PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
     global $drewheader, $ISCLOUD, $ISPNET, $ISEMULAB, $ISAPT, $ISPOWDER;
     global $spatrequired, $TBMAINSITE, $PORTAL_HELPFORUM;
+    global $APTMAIL, $APTMAILTO;
 
     if (! $drewheader) {
 	SPITHEADER();
@@ -67,6 +68,8 @@ $PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
     echo "    window.ISPOWDER  = " . ($ISPOWDER ? "1" : "0") . ";\n";
     echo "    window.ISAPT     = " . ($ISAPT    ? "1" : "0") . ";\n";
     echo "    window.MAINSITE  = " . ($TBMAINSITE ? "1" : "0") . ";\n";
+    echo "    window.APTMAIL   = \"$APTMAIL\"\n";
+    echo "    window.APTMAILTO = \"$APTMAILTO\"\n";
     echo "    window.HELPFORUM = " .
         "'https://groups.google.com/d/forum/${PORTAL_HELPFORUM}';\n";
     echo "</script>\n";
@@ -81,7 +84,7 @@ $PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
 $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
 				 $inline = false, $ignore3 = NULL)
 {
-    global $PORTAL_MANUAL, $PORTAL_HELPFORUM;
+    global $PORTAL_MANUAL, $PORTAL_HELPFORUM, $APTMAIL, $APTMAILTO;
     global $TBMAINSITE, $APTTITLE, $FAVICON, $APTLOGO, $APTSTYLE, $ISAPT;
     global $GOOGLEUA, $ISCLOUD, $TBBASE;
     global $ISPNET, $ISPOWDER, $ISEMULAB;
@@ -170,6 +173,8 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     echo "    window.EMBEDDED = $embedded;\n";
     echo "    window.SUPPORT  = '$SUPPORT';\n";
     echo "    window.APTTILE  = '$APTTITLE';\n";
+    echo "    window.APTMAIL   = \"$APTMAIL\"\n";
+    echo "    window.APTMAILTO = \"$APTMAILTO\"\n";
     echo "</script>\n";
     
     if ($TBMAINSITE && !$embedded && file_exists("../google-analytics.php")) {
