@@ -40,7 +40,7 @@ SBIN_STUFF	= cleanupslice gencabundle cleanupticket aptssh-setup \
 		  sliveraction openvpn-setup
 
 PSBIN_STUFF	= register_resources expire_daemon gencrl postcrl \
-		  addauthority getcacerts \
+		  addauthority getcacerts ims_daemon \
 		  gencrlbundle shutdownslice remauthority listusage \
 		  update reregister listhistory \
 		  register_sliver sa_daemon genadmincredential \
@@ -52,7 +52,7 @@ PSBIN_STUFF	= register_resources expire_daemon gencrl postcrl \
 		  mondbd parsecert creategeniuser webcreategeniuser \
 		  updategeniuser webupdategeniuser verifycert webverifycert \
 		  postimagedata getimagedata triggerimageupdate \
-		  deleteimagedata secureimageget
+		  deleteimagedata secureimageget genimagecredential
 
 ifeq ($(ISCLEARINGHOUSE),1)
 PSBIN_STUFF     += ch_daemon
