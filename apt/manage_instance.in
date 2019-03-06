@@ -3260,10 +3260,12 @@ sub DoPanic()
     my $errcode  = -1;
     my $exitcode = -1;
     my $response;
+    my $logfile;
     
-    my $optlist = "Lp";
-    my $takelock = 0;
-    my $poweroff = 0;
+    my $optlist     = "Lpf";
+    my $takelock    = 0;
+    my $poweroff    = 0;
+    my $foreground  = 0;
     
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -3274,6 +3276,9 @@ sub DoPanic()
     }
     if (defined($options{"p"})) {
 	$poweroff = 1;
+    }
+    if (defined($options{"f"})) {
+	$foreground = 1;
     }
     usage()
 	if (@ARGV != 1);
@@ -3302,7 +3307,11 @@ sub DoPanic()
     $instance->Refresh();
     if ($setclr eq "set") {
 	if ($instance->paniced()) {
-	    print "Already in a panic!\n";
+	    print "Already in a panic!\n";	
+	    if (defined($webtask)) {
+		$webtask->output("Already in a panic");
+		$webtask->Exited(0);
+	    }
 	    $slice->UnLock();
 	    exit(0);
 	}
@@ -3310,6 +3319,10 @@ sub DoPanic()
     else {
 	if (!$instance->paniced()) {
 	    print "No longer in a panic!\n";
+	    if (defined($webtask)) {
+		$webtask->output("No longer in a panic");
+		$webtask->Exited(0);
+	    }
 	    $slice->UnLock();
 	    exit(0);
 	}
@@ -3332,6 +3345,35 @@ sub DoPanic()
     }
 
     #
+    # Exit and let caller poll for status.
+    #
+    if (!$foreground) {
+        $logfile = TBMakeLogname("panic");
+	
+	if (my $childpid = TBBackGround($logfile)) {
+	    #
+	    # Wait a couple of seconds to see if there is going to be an
+	    # immediate error. Then return and let it continue to run. This
+	    # allows the web server to see quick errors. Later errors will
+	    # have to be emailed. 
+	    #
+	    sleep(15);
+	    my $foo = waitpid($childpid, &WNOHANG);
+	    if ($foo) {
+		my $status = $? >> 8;
+		if ($status) {
+		    print "There was a problem changing panic mode ...\n";
+		    system("/bin/cat $logfile");
+		}
+		exit($status);
+	    }
+	    # Child still running.
+	    print "Proceeding in the background ...\n";
+	    exit(0);
+	}
+    }
+
+    #
     # Helper callback to send the proper arguments.
     #
     my $coderef = sub {
@@ -3341,7 +3383,7 @@ sub DoPanic()
     };
 
     # Invoke on all clusters
-    $errcode = CallMethodOnAggregates($coderef, 1, \$response, @aggregates);
+    $errcode = CallMethodOnAggregates($coderef, 0, \$response, @aggregates);
     if ($errcode) {
 	$errmsg   = $response;
 	$exitcode = -1;
@@ -3358,14 +3400,7 @@ sub DoPanic()
 	if ($code != GENIRESPONSE_SUCCESS) {
 	    $errcode = $code;
 
-	    if ($code == GENIRESPONSE_REFUSED) {
-		$exitcode = 1;
-		$errmsg   = $response->error();
-	    }
-	    else {
-		($exitcode, $errmsg) = ResponseErrorMessage($agg, $response);
-	    }
-	    next;
+	    ($exitcode, $errmsg) = ResponseErrorMessage($agg, $response);
 	}
     }
     goto bad
@@ -3381,6 +3416,8 @@ sub DoPanic()
 	goto bad;
     }
     $slice->UnLock();
+    unlink($logfile)
+	if (defined($logfile) && !$debug);
     exit(0);
 
   bad:
@@ -3390,6 +3427,8 @@ sub DoPanic()
 	$webtask->output($errmsg);
 	$webtask->Exited($errcode);
     }
+    unlink($logfile)
+	if (defined($logfile) && !$debug);
     exit($exitcode);
 }
 
@@ -4630,7 +4669,7 @@ sub DoWarn()
 	    # allows the web server to see quick errors. Later errors will
 	    # have to be emailed. 
 	    #
-	    sleep(5);
+	    sleep(10);
 	    my $foo = waitpid($childpid, &WNOHANG);
 	    if ($foo) {
 		$status = $? >> 8;
@@ -4642,7 +4681,7 @@ sub DoWarn()
 	# We pass the lock through.
 	system("$MANAGEINSTANCE " .
 	       (defined($webtask) ? "-t $webtask_id " : "").
-	       "  -d -- panic $uuid -L " . ($poweroff ? "-p " : "") . "set");
+	       "  -- panic $uuid -f -L " . ($poweroff ? "-p " : "") . "set");
     }
     else {
 	# We pass the lock through.
