@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2016-2018 University of Utah and the Flux Group.
+# Copyright (c) 2016-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -51,7 +51,8 @@ sub usage()
     print STDERR "   -i   Info about a particular announcement.\n";
     print STDERR "   -c   Compatibility mode. When adding in compatibility mode, the sitevar is changed, thus setting the legacy Emulab announcement. When removing in compatibility mode, the sitevar is cleared.\n";
     print STDERR "   -U   In add mode, specify a specific target user.\n";
-    print STDERR "   -P   In add mode, add portal announcement for user\n";
+    print STDERR "   -P   In add mode, add 'canned' portal info announcement ".
+	"for user\n";
     exit(-1);
 }
 my $optlist  = "haA:cp:s:b:u:m:lr:R:i:U:t:I:S:E:w:P";
