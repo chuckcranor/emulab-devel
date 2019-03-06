@@ -1,6 +1,6 @@
 # -*- tcl -*-
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -189,7 +189,7 @@ namespace eval TBCOMPAT {
     set elabinelab_attributes {}
     variable EINEROLE  {^(all|boss|ops|fs|router|node)$}
     variable EINEKEY   {^([-\w\.]+)$}
-    variable EINEVALUE {^([-\w\.\+\,\s\/:\@]+)$}
+    variable EINEVALUE {^([-\w\.\+\,\s\/:\@]*)$}
     variable EINEORDER {^\d+$}
 
     # Address Pool.
