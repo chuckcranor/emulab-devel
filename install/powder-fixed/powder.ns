@@ -12,6 +12,8 @@ tb-set-elabinelab-attribute CONFIG_NODBINIT 1
 tb-set-elabinelab-attribute CONFIG_ADMINUSERS 1
 tb-set-elabinelab-attribute CONFIG_NOSETUP 0
 tb-set-elabinelab-attribute CONFIG_PORTAL 1 
+tb-set-elabinelab-attribute CONFIG_ZFS 1
+tb-set-elabinelab-attribute AMD_ROOT ""
 
 tb-set-elabinelab-attribute CONFIG_TARGETSYS  1
 tb-set-elabinelab-attribute TARGETSYS_TARGET  POWDER-FIXED
@@ -53,7 +55,7 @@ tb-set-elabinelab-role-attribute boss XEN_CORES 2
 
 # Nucs need the latest.
 tb-set-elabinelab-attribute MFSVERSION "11-64"
-tb-set-elabinelab-attribute MFSCONSOLE vga
+tb-set-elabinelab-attribute MFSCONSOLE sio
 
 # Extra stuff for devel in elabinelab.
 tb-set-elabinelab-role-attribute boss XEN_NOANTISPOOFING yes

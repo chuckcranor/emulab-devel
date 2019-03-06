@@ -3832,6 +3832,14 @@ sub CreateDefsFile($)
 		    print OUTDEFS "ZFS_ROOT=\"$ZFSPOOL\"\n";
 		    last SWITCH;
 		};
+		/^AMD_ROOT$/ && do {
+		    # If not provided, we get the value from configure.
+		    if (exists($emulabconfig{"AMD_ROOT"})) {
+			my $amdroot = $emulabconfig{"AMD_ROOT"};
+			print OUTDEFS "AMD_ROOT=\"$amdroot\"\n";
+		    }
+		    last SWITCH;
+		};
 
 		print OUTDEFS $line;
 	    }
