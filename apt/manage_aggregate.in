@@ -1,0 +1,342 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use XML::Simple;
+use Data::Dumper;
+use CGI;
+use POSIX ":sys_wait_h";
+use POSIX qw(:signal_h ceil);
+use Date::Parse;
+
+#
+# Futz around with aggregate settings.
+#
+sub usage()
+{
+    print STDERR "Usage: manage_aggregate list\n";
+    print STDERR "       manage_aggregate show [-a <agg>] ... \n";
+    print STDERR "       manage_aggregate chflag [-a <agg>] <flag> yes|no\n";
+    print STDERR "       manage_aggregate ping [-a <agg>]\n";
+    print STDERR "       manage_aggregate portals [-a <agg>] add <portal> \n";
+    print STDERR "       manage_aggregate portals [-a <agg>] rem <portal> \n";
+    print STDERR "Options:\n";
+    print STDERR "  -a agg   - URN, nickname or domain of aggregate\n";
+    exit(-1);
+}
+my $optlist     = "d";
+my $debug       = 0;
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $OURDOMAIN	= "@OURDOMAIN@";
+my $MYURN	= "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/usr/bin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Load the Testbed support stuff.
+#
+use lib "@prefix@/lib";
+use EmulabConstants;
+use emdb;
+use emutil;
+use Brand;
+use libtestbed;
+use APT_Geni;
+use APT_Aggregate;
+use APT_Utility;
+
+# Protos
+sub fatal($);
+sub DoList();
+sub DoShow();
+sub DoFlags();
+sub DoPing();
+sub LookupAggregate($);
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug++;
+}
+if (@ARGV < 1) {
+    usage();
+}
+my $action = shift(@ARGV);
+
+#
+# Default to local cluster, unless overridden in the action.
+#
+my $aggregate = LookupAggregate($MYURN);
+if (!defined($aggregate)) {
+    fatal("Could not lookup local aggregate: $MYURN");
+}
+
+my $this_user = User->ThisUser();
+if (! defined($this_user)) {
+    fatal("You ($UID) do not exist!");
+}
+
+if ($action eq "show") {
+    DoShow();
+}
+elsif ($action eq "list") {
+    DoList();
+}
+elsif ($action eq "chflag") {
+    DoFlags();
+}
+elsif ($action eq "ping") {
+    DoPing();
+}
+else {
+    usage();
+}
+exit(0);
+
+#
+# Brief aggregate list.
+#
+sub DoList()
+{
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (@ARGV);
+
+    my $query_result =
+	DBQueryFatal("select urn from apt_aggregates");
+
+    exit(0)
+	if (!$query_result->numrows);
+
+    printf("%-20s %-12s %s\n", "Name", "Nickname", "Abbrev");
+    printf("---------------------------------------------\n");
+
+    while (my ($urn) = $query_result->fetchrow_array()) {
+	my $aggregate = APT_Aggregate->Lookup($urn);
+	next
+	    if (!defined($aggregate));
+
+	printf("%-20s %-12s %s\n",
+	       $aggregate->name(), $aggregate->nickname(),
+	       $aggregate->abbreviation());
+    }
+    return 0;
+}
+
+#
+# Show aggregate details.
+#
+sub DoShow()
+{
+    my $optlist = "a:";
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (@ARGV);
+
+    if (defined($options{"a"})) {
+	$aggregate = LookupAggregate($options{"a"});
+	fatal("No such aggregate")
+	    if (!defined($aggregate));
+    }
+    print "Name:          " . $aggregate->name() . "\n";
+    print "NickName:      " . $aggregate->nickname() . "\n";
+    print "Abbrev:        " . $aggregate->abbreviation() . "\n"; 
+    print "URN:           " . $aggregate->urn() . "\n";
+    print "URL:           " . $aggregate->weburl() . "\n";
+    print "Disabled:      " . ($aggregate->disabled() ? "Yes" : "No") . "\n";
+    print "Admin:         " . ($aggregate->adminonly() ? "Yes" : "No") . "\n";
+    print "Federate:      " . ($aggregate->isfederate() ? "Yes" : "No") . "\n";
+    print "NoUpdate:      " . ($aggregate->noupdate() ? "Yes" : "No") . "\n";
+    print "NoMonitor:     " . ($aggregate->nomonitor() ? "Yes" : "No") . "\n";
+    print "Deferrable:    " . ($aggregate->deferrable() ? "Yes" : "No") . "\n";
+    print "Datasets:      " . ($aggregate->has_datasets() ? "Yes" : "No") ."\n";
+    print "Reservations:  " . ($aggregate->reservations() ? "Yes" : "No") ."\n";
+    print "LocalImages:   " . ($aggregate->nolocalimages() ? "No" : "Yes")."\n";
+    print "PanicPowerOff: " . ($aggregate->panicpoweroff() ? "No" : "Yes")."\n";
+    print "Portals:       " . $aggregate->portals() . "\n";
+    print "Status:        " . $aggregate->status() . "\n";
+    return 0;
+}
+
+#
+# Change flags
+#
+sub DoFlags()
+{
+    my $optlist = "a:";
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (@ARGV != 2 || $ARGV[1] !~ /^(yes|no)$/);
+
+    if (defined($options{"a"})) {
+	$aggregate = LookupAggregate($options{"a"});
+	fatal("No such aggregate")
+	    if (!defined($aggregate));
+    }
+    my $flag  = $ARGV[0];
+    my $onoff = $ARGV[1] eq "yes" ? 1 : 0;
+
+    SWITCH: for ($flag) {
+	/^disabled$/ && do {
+	    $aggregate->Update({"disabled" => $onoff}) == 0
+		or fatal("Could not update flag");
+	    last;
+	};
+	/^(admin|adminonly)$/ && do {
+	    $aggregate->Update({"adminonly" => $onoff}) == 0
+		or fatal("Could not update flag");
+	    last;
+	};
+	/^federate$/ && do {
+	    $aggregate->Update({"isfederate" => $onoff}) == 0
+		or fatal("Could not update flag");
+	    last;
+	};
+	/^noupdate$/ && do {
+	    $aggregate->Update({"noupdate" => $onoff}) == 0
+		or fatal("Could not update flag");
+	    last;
+	};
+	/^nomonitor$/ && do {
+	    $aggregate->Update({"nomonitor" => $onoff}) == 0
+		or fatal("Could not update flag");
+	    last;
+	};
+	/^deferrable$/ && do {
+	    $aggregate->Update({"deferrable" => $onoff}) == 0
+		or fatal("Could not update flag");
+	    last;
+	};
+	/^datasets$/ && do {
+	    $aggregate->Update({"has_datasets" => $onoff}) == 0
+		or fatal("Could not update flafg");
+	    last;
+	};
+	/^reservations$/ && do {
+	    $aggregate->Update({"reservations" => $onoff}) == 0
+		or fatal("Could not update flag");
+	    last;
+	};
+	/^localimages$/ && do {
+	    $aggregate->Update({"nolocalimages" => $onoff ? 0 : 1}) == 0
+		or fatal("Could not update flag");
+	    last;
+	};
+	/^panicpoweroff$/ && do {
+	    $aggregate->Update({"panicpoweroff" => $onoff}) == 0
+		or fatal("Could not update flag");
+	    last;
+	};
+	fatal("Unknown flag");
+    }
+    return 0;
+}
+
+#
+# Ping an aggregate to see if its alive.
+#
+sub DoPing()
+{
+    my $optlist = "a:";
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (@ARGV);
+
+    if (defined($options{"a"})) {
+	$aggregate = LookupAggregate($options{"a"});
+	fatal("No such aggregate")
+	    if (!defined($aggregate));
+    }
+    my $error;
+    if ($aggregate->CheckStatus(\$error, 1)) {
+	print STDERR $error . "\n";
+	exit(1);
+    }
+}
+
+exit(0);
+
+sub fatal($)
+{
+    my ($mesg) = @_;
+
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    exit(-1);
+}
+
+sub LookupAggregate($)
+{
+    my ($token) = @_;
+
+    my $aggregate = APT_Aggregate->Lookup($token);
+    return $aggregate
+	if (defined($aggregate));
+
+    $aggregate = APT_Aggregate->LookupByNickname($token);
+    return $aggregate
+	if (defined($aggregate));
+
+    $aggregate = APT_Aggregate->LookupByDomain($token);
+    return $aggregate
+	if (defined($aggregate));
+
+    return undef;
+}
