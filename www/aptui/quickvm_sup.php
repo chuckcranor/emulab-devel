@@ -99,6 +99,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     }
     $height = ($thinheader ? 150 : 250);
     $drewheader = 1;
+    $nonav = 0;
 
     #
     # Figure out who is logged in, if anyone.
@@ -122,6 +123,14 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
         $referrer = urlencode($_SERVER['REQUEST_URI']);
         header("Location: licenses.php?referrer=$referrer");
         return;
+    }
+    if ($login_user && $login_uid == "powdstop") {
+        $cleanmode = 1;
+        $nonav = 1;
+        if ($page_title != "Logout" &&
+            $page_title != "Powder Shutdown") {
+            header("Location: powder-shutdown.php");
+        }
     }
 
     header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
@@ -260,7 +269,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     # and turn them on inside the action menu.
     $hiddenxs = ($showmenus ? "hidden-xs" : "");
 
-    SPITNAV($hiddenxs, $navbar_status, $navbar_right, $login_uid);
+    SPITNAV($hiddenxs, $nonav, $navbar_status, $navbar_right, $login_uid);
 
     # Put announcements, if any, right below the header.
     if (!$cleanmode && $login_user && $login_user->IsActive() &&
@@ -396,7 +405,7 @@ function SPITHEADER($thinheader = 0,
     $PAGEHEADER_FUNCTION($thinheader, $ignore1, $ignore2, $ignore3);
 }
 
-function SPITNAV($hiddenxs, $navbar_status, $navbar_right, $login_uid)
+function SPITNAV($hiddenxs, $nonav, $navbar_status, $navbar_right, $login_uid)
 {
     global $PORTAL_MANUAL, $APTLOGO, $login_status, $login_user, $TBMAINSITE;
     global $THISHOMEBASE, $ISEMULAB, $ISPNET, $ISPOWDER, $TBBASE;
@@ -423,7 +432,7 @@ echo "  <ul class='nav navbar-nav navbar-left apt-left'>";
       echo "<li class='local-name apt-left apt-nav-item'>" . $THISHOMEBASE . "</li>";
     }
 
-   if ($login_user && !($login_status & CHECKLOGIN_WEBONLY)) {
+   if ($login_user && !$nonav && !($login_status & CHECKLOGIN_WEBONLY)) {
 
     if ($login_user->IsActive()) {
       $then = time() - (90 * 3600 * 24);
@@ -549,7 +558,7 @@ if (!$login_user->portal()) {
 	 data-toggle='dropdown'>
 	$login_uid <b class='caret'></b></a>
       <ul class='dropdown-menu'>\n";
-       if (! ($login_status & CHECKLOGIN_WEBONLY)) {
+       if (!$nonav && !($login_status & CHECKLOGIN_WEBONLY)) {
            echo "
 	        <li><a href='myaccount.php'>Manage Account</a></li>
    	        <li><a href='signup.php'>Start/Join Project</a></li>

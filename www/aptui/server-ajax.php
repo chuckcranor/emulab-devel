@@ -465,6 +465,13 @@ $routing = array("geni-login" =>
                                                      "Do_Reject",
                                                  "Request" =>
                                                      "Do_Request")),
+		 "powder-shutdown" =>
+			array("file"    => "powder-shutdown.ajax",
+			      "guest"   => false,
+			      "methods" => array("Shutdown" =>
+                                                     "Do_StartShutdown",
+                                                 "Status" =>
+                                                     "Do_ShutdownStatus")),
 );
 
 #
