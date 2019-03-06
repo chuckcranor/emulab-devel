@@ -32,15 +32,17 @@ use Date::Parse;
 #
 sub usage()
 {
-    print STDERR "Usage: powder-panic [-d] [-n]\n";
+    print STDERR "Usage: powder-panic [-d] [-b] [-n]\n";
     print STDERR "Options:\n";
     print STDERR " -d  - Turn on debugging\n";
+    print STDERR " -b  - Batch mode, do not ask for confirmation\n";
     print STDERR " -n  - Dry run mode, just show what would be done\n";
     exit(-1);
 }
-my $optlist     = "dnt:";
+my $optlist     = "dnt:b";
 my $debug       = 0;
 my $impotent    = 0;
+my $batch       = 0;
 my $logfile;
 my $webtask_id;
 my $webtask;
@@ -104,6 +106,9 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{"d"})) {
     $debug++;
 }
+if (defined($options{"b"})) {
+    $batch++;
+}
 if (defined($options{"n"})) {
     $impotent++;
 }
@@ -114,6 +119,19 @@ if (defined($options{"t"})) {
 	fatal("Could not lookup/create webtask");
     }
     $webtask->AutoStore(1);
+}
+usage()
+    if (@ARGV);
+
+if (!$batch) {
+    print "Are you sure you want to power off all Powder experiments? " .
+	"[yes/no] ";
+
+    my $response = <STDIN>;
+    if ($response !~ /^yes$/i) {
+	print "Aborting ...\n";
+	exit(1);
+    }
 }
 
 #
