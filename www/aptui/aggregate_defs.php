@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -89,6 +89,7 @@ class Aggregate
     function reservations() { return $this->field('reservations'); }
     function isfederate()   { return $this->field('isfederate'); }
     function nomonitor()    { return $this->field('nomonitor'); }
+    function nolocalimages(){ return $this->field('nolocalimages'); }
     function portals()      { return $this->field('portals'); }
 
     # accessors for the status info.

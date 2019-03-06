@@ -39,6 +39,7 @@ $(function ()
 	" <tr><td>R</td><td>Reservations</td></tr>" +
 	" <tr><td>d</td><td>Datasets</td></tr>" +
 	" <tr><td>M</td><td>Monitored</td></tr>" +
+	" <tr><td>I</td><td>No Local Images</td></tr>" +
 	"</table>";
 
     function RenderPage(status)
@@ -46,11 +47,12 @@ $(function ()
 	_.each(status, function(value, key) {
 	    // Generate a "flags" string.
 	    var flags = "";
-	    flags += (value.disabled     ? "D" : "-");
-	    flags += (value.adminonly    ? "A" : "-");
-	    flags += (value.reservations ? "R" : "-");
-	    flags += (value.datasets     ? "d" : "-");
-	    flags += (value.monitor      ? "M" : "-");
+	    flags += (value.disabled      ? "D" : "-");
+	    flags += (value.adminonly     ? "A" : "-");
+	    flags += (value.reservations  ? "R" : "-");
+	    flags += (value.datasets      ? "d" : "-");
+	    flags += (value.monitor       ? "M" : "-");
+	    flags += (value.nolocalimages ? "I" : "-");
 	    value.flags = flags;
 
 	    // Ratio
