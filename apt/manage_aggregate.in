@@ -87,6 +87,7 @@ sub DoList();
 sub DoShow();
 sub DoFlags();
 sub DoPing();
+sub DoPortals();
 sub LookupAggregate($);
 
 #
@@ -129,6 +130,9 @@ elsif ($action eq "chflag") {
 }
 elsif ($action eq "ping") {
     DoPing();
+}
+elsif ($action eq "portals") {
+    DoPortals();
 }
 else {
     usage();
@@ -309,6 +313,55 @@ sub DoPing()
 	print STDERR $error . "\n";
 	exit(1);
     }
+}
+
+#
+# Change portals list for an aggregate.
+#
+sub DoPortals()
+{
+    my $optlist = "a:";
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"a"})) {
+	$aggregate = LookupAggregate($options{"a"});
+	fatal("No such aggregate")
+	    if (!defined($aggregate));
+    }
+    usage()
+	if (@ARGV != 2);
+    
+    my $action = $ARGV[0];
+    my $portal = $ARGV[1];
+
+    fatal("Must be one of 'add' or 'rem'")
+	if ($action ne "add" && $action ne "rem");
+
+    fatal("Not a valid portal")
+	if ($portal !~ /^(emulab|aptlab|cloudlab|phantomnet|powder)$/);
+
+    my @portals = split(",", $aggregate->portals());
+
+    if ($action eq "add") {
+	push(@portals, $portal)
+	    if (! grep {$_ eq $portal} @portals);
+    }
+    else {
+	if (grep {$_ eq $portal} @portals) {
+	    my @tmp = ();
+	    foreach my $p (@portals) {
+		push(@tmp, $p) if ($p ne $portal);
+	    }
+	    @portals = @tmp;
+	}
+    }
+    $aggregate->Update({"portals" => join(",", @portals)}) == 0
+	or fatal("Could not update portals");
+
+    print "Portals set to: ". join(",", @portals) . "\n";
 }
 
 exit(0);
