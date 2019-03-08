@@ -33,7 +33,8 @@ $(function () {
 	var formGroups     = {};
 
 	var groupTemplateString =
-	    '<div class="row group-row" data-fieldid="<%- fieldid %>"> '+
+	    '<div class="row group-row" data-fieldid="<%- fieldid %>" ' +
+	    '     style="margin-bottom: 5px;">' +
 	    ' <div class="col-xs-offset-0">' +
 	    '  <div class="panel" ' +
 	    '       style="border-width: 0px; border: none;' +
@@ -613,6 +614,10 @@ $(function () {
 	function InitializeForm(paramdefs)
 	{
 	    console.info("InitializeForm", paramdefs);
+
+	    // User can select a different profile.
+	    formFields    = [];
+	    formGroups    = {};
 	    
 	    /*
 	     * First pass, associate form elements with their groups.
