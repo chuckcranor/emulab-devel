@@ -51,23 +51,31 @@ $(function ()
 				      "urn"          : urn,
 				      "title"        :
 				      (!window.ISPOWDER ?
-				       details.nickname : "Powder")}));
+				       details.nickname : details.nickname)}));
 
 	    if (window.ISPOWDER) {
-		$('#' + details.nickname + " .resgraph-panel-radios")
-		    .html(graphTemplate({"details"        : details,
+		if (details.nickname == "Emulab") {
+  		    $('#' + details.nickname + " .resgraph-panel-radios")
+		       .html(graphTemplate({"details"        : details,
 					 "graphid"        : graphid + "-radios",
 					 "title"          : "Powder Radio",
 					 "urn"            : urn,
 					 "showhelp"       : true,
 					 "showfullscreen" : false}));
+		}
+		else {
+		    $('#' + details.nickname + " .resgraph-panel-servers")
+			.removeClass("col-sm-5")
+			.addClass("col-sm-10");
+		}
 	    }
 	    $('#' + details.nickname + " .resgraph-panel-servers")
 		.html(graphTemplate({"details"        : details,
 				     "graphid"        : graphid + "-servers",
 				     "title"          :
 				     (!window.ISPOWDER ?
-				      details.nickname : "Powder Server"),
+				      details.nickname :
+				      details.nickname + " Server"),
 				     "urn"            : urn,
 				     "showhelp"       : true,
 				     "showfullscreen" : false}));
