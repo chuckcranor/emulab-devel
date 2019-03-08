@@ -8,6 +8,7 @@ use libinstall;
 use installvars;
 use libtestbed;
 use EmulabConstants;
+use EmulabFeatures;
 use emutil;
 use libEmulab;
 use emdb;
@@ -143,6 +144,33 @@ sub Install($$$)
 	    ExecQuietFatal("$PREFIX/sbin/setsitevar ".
 			   "images/frisbee/maxrate_usr 200000000");
 	};
+
+	#
+	# Enable these features.
+	#
+	my %features = (
+	    "GeniOsSetup" => "Use libossetup for StartSliver",
+	    "NewOsload"   => "New version of osload library",
+	    );
+
+	foreach my $name (keys(%features)) {
+	    my $description = $features{$name};
+    
+	    my $feature = EmulabFeatures->Lookup($name);
+	    Phase "feature", "Adding $name feature", sub {
+		PhaseSkip("already exists")
+		    if (defined($feature));
+		$feature = EmulabFeatures->Create($name, $description);
+		PhaseFail("Failed to create feature")
+		    if (!defined($feature));
+	    };
+	    Phase "feature", "Enabling $name feature", sub {
+		$feature->SetGlobalEnable(1) == 0
+		    or PhaseFail("Could not enable feature");
+		$feature->SetGlobalDisable(0) == 0
+		    or PhaseFail("Could not clear disable flag on feature");
+	    };
+	}
 
 	#
 	# Extra install
