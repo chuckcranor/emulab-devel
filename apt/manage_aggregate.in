@@ -205,7 +205,7 @@ sub DoShow()
     print "Datasets:      " . ($aggregate->has_datasets() ? "Yes" : "No") ."\n";
     print "Reservations:  " . ($aggregate->reservations() ? "Yes" : "No") ."\n";
     print "LocalImages:   " . ($aggregate->nolocalimages() ? "No" : "Yes")."\n";
-    print "PanicPowerOff: " . ($aggregate->panicpoweroff() ? "No" : "Yes")."\n";
+    print "PanicPowerOff: " . ($aggregate->panicpoweroff() ? "Yes" : "No")."\n";
     print "Portals:       " . $aggregate->portals() . "\n";
     print "Status:        " . $aggregate->status() . "\n";
     return 0;
