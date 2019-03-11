@@ -143,6 +143,7 @@ CREATE TABLE `apt_aggregates` (
   `reservations` tinyint(1) NOT NULL default '0',
   `panicpoweroff` tinyint(1) NOT NULL default '0',
   `portals` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
+  `canuse_feature` varchar(64) default NULL,
   `jsondata` text,
   PRIMARY KEY  (`urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
