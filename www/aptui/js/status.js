@@ -1,3 +1,4 @@
+
 $(function ()
 {
     'use strict';
@@ -52,7 +53,7 @@ $(function ()
     var GENIRESPONSE_REFUSED = 7;
     var GENIRESPONSE_ALREADYEXISTS = 17;
     var GENIRESPONSE_INSUFFICIENT_NODES = 26;
-    var MAXJACKSNODES = 200;
+    var MAXJACKSNODES = 75;
 
     // CONFIRM Hack. Fix later.
     var CONFIRMTYPES = [ "c6320", "c8220", "m400", "m510",
@@ -1517,8 +1518,8 @@ $(function ()
 		$(this).parent().parent().remove();
 		// Remove the content div.
 		$("#" + tabname).remove();
-		// Activate the "profile" tab.
-		$('#quicktabs_ul a[href="#topology"]').tab('show');
+		// Activate the first visible tab.
+		$('#quicktabs_ul a:visible:first').tab('show');
 	    });
 
 	    // The content div.
@@ -2090,28 +2091,35 @@ $(function ()
 	     * else the user sees a blank palette.
 	     */
 	    $("#showtopo_container").removeClass("invisible");
-	    $('#quicktabs_ul a[href="#topology"]')
-		.parent().removeClass("hidden");
 	    $('#quicktabs_ul a[href="#manifest"]')
 		.parent().removeClass("hidden");
 	    $('#quicktabs_ul a[href="#listview"]')
 		.parent().removeClass("hidden");
-	    $('#quicktabs_content #topology').removeClass("hidden");
 	    $('#quicktabs_content #manifest').removeClass("hidden");
 	    $('#quicktabs_content #listview').removeClass("hidden");
-	    
-	    if (!jacksInstance) {
-		$('#quicktabs_ul a[href="#topology"]').tab('show');
-		ShowViewer('#showtopo_statuspage',
-			   Object.keys(statusblob).length > 1, manifest);
-	    }
-	    else if (changingtopo) {
-		// When we get first new manifest, clear the viewer palette.
-		ClearViewer(manifest);
-		changingtopo = false;
+
+	    if (Object.keys(statusblob).length > 1 ||
+		nodecount < MAXJACKSNODES) {
+		if (!jacksInstance) {
+		    $('#quicktabs_ul a[href="#topology"]')
+			.parent().removeClass("hidden");
+		    $('#quicktabs_content #topology').removeClass("hidden");
+		    $('#quicktabs_ul a[href="#topology"]').tab('show');
+		    ShowViewer('#showtopo_statuspage',
+			       Object.keys(statusblob).length > 1, manifest);
+		}
+		else if (changingtopo) {
+		    // When we get first new manifest, clear the viewer palette.
+		    ClearViewer(manifest);
+		    changingtopo = false;
+		}
+		else {
+		    AddToViewer(manifest);
+		}
 	    }
 	    else {
-		AddToViewer(manifest);
+		$('#quicktabs_ul a[href="#listview"]').tab('show');
+		ShowManifest(manifest);
 	    }
 
 	    /*
@@ -3224,8 +3232,8 @@ $(function ()
 		$(this).parent().parent().remove();
 		// Remove the content div.
 		$("#" + tabname).remove();
-		// Activate the "profile" tab.
-		$('#quicktabs_ul a[href="#topology"]').tab('show');
+		// Activate the first visible tab
+		$('#quicktabs_ul a:visible:first').tab('show');
 	    });
 
 	    // The content div.
