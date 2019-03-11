@@ -586,6 +586,9 @@ sub TerminateSlices()
 			 "Could not terminate slice $slice");
 	    }
 	}
+	else {
+	    print STDERR "TerminateSlices: $slice is busy\n";
+	}
 	$slice->UnLock();
       skip:
 	$slice->Flush()
