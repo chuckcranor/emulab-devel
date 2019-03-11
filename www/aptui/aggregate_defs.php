@@ -248,7 +248,7 @@ class Aggregate
                             # Must be approved in the project.
                             $project->IsMember($user, $approved) && $approved &&
                             FeatureEnabled($feature, null, $group, null)) {
-                            $approved = 1;
+                            $allowed = 1;
                             break;
                         }
                     }
@@ -328,8 +328,9 @@ class Aggregate
                             # Must be approved in the project.
                             $project->IsMember($user, $approved) && $approved &&
                             FeatureEnabled($feature, null, $group, null)) {
-                            $approved = 1;
+                            $allowed = 1;
                             break;
+
                         }
                     }
                 }

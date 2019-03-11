@@ -36,6 +36,7 @@ use vars qw(@ISA @EXPORT $AUTOLOAD);
 # Must come after package declaration!
 use emdb;
 use emutil;
+use EmulabFeatures;
 use GeniHRN;
 use overload ('""' => 'Stringify');
 
@@ -347,6 +348,38 @@ sub Update($$)
 	if (! DBQueryWarn($query));
 
     return Refresh($self);
+}
+
+#
+# Permission check to see if user/project is allowed to use the aggregate.
+#
+sub CanInstantiate($$$$)
+{
+    my ($self, $portal, $user, $project) = @_;
+
+    # Admins always allowed to use.
+    return 1
+	if ($user->IsAdmin());
+
+    # Admin only cluster
+    return 0
+	if ($self->adminonly() && !($user->IsAdmin() || $user->stud()));
+
+    if (defined($self->canuse_feature())) {
+	my $feature = $portal . "-" . $self->canuse_feature();
+
+	return 1
+	    if (EmulabFeatures->FeatureEnabled($feature, $user));
+
+	my $membership = $project->LookupUser($user);
+	return 0
+	    if (! (defined($membership) && $membership->IsApproved()));
+
+	return 1
+	    if ($project->approved() && !$project->disabled() &&
+		EmulabFeatures->FeatureEnabled($feature, undef, $project));
+    }
+    return 0;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

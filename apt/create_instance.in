@@ -884,12 +884,10 @@ foreach my $aggregate_urn (@aggregate_urns) {
 	    }
 	}
     }
-    if ($aptaggregate->adminonly() &&
-        !(defined($this_user) &&
-	  ($this_user->IsAdmin() || $this_user->stud()))) {
+    if (! $aptaggregate->CanInstantiate($portal, $this_user, $project)) {
 	$slice->Delete();
 	$instance->Delete();
-        UserError("Only administrators may use the $aggregate_name cluster.");
+        UserError("Not allowed to use the $aggregate_name cluster.");
     }
     my $authority = GeniAuthority->Lookup($aggregate_urn);
     if (!defined($authority)) {

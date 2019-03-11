@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2018 University of Utah and the Flux Group.
+# Copyright (c) 2005-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1455,8 +1455,9 @@ sub trust($)            { return field($_[0], "trust"); }
 sub date_applied($)     { return field($_[0], "date_applied"); }
 sub date_approved($)    { return field($_[0], "date_approved"); }
 sub group($)            { return $_[0]->{'GROUP'}; }
-sub user($ )            { return $_[0]->{'USER'}; }
-
+sub user($)             { return $_[0]->{'USER'}; }
+sub IsApproved($)       { return $_[0]->trust() eq $TRUSTSTRING_NONE ? 0 : 1; }
+    
 #
 # Is user trust in the group at least equal to the supplied trust
 #
