@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -107,7 +107,7 @@ elseif (isset($debug) && $debug) {
     $ams = array(Aggregate::ThisAggregate());
 }
 else {
-    $ams = Aggregate::SupportsReservations();
+    $ams = Aggregate::SupportsReservations($this_user);
 }
 if (!count($ams)) {
     SPITUSERERROR("No clusters support reservations.");

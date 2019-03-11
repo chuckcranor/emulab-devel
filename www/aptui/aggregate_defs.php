@@ -79,18 +79,18 @@ class Aggregate
 	return (is_null($this->aggregate) ? -1 : $this->aggregate[$name]);
     }
     function name()	    { return $this->field('name'); }
-    function urn()	    { return $this->field('urn'); }
     function nickname()	    { return $this->field('nickname'); }
+    function urn()	    { return $this->field('urn'); }
     function abbreviation() { return $this->field('abbreviation'); }
     function weburl()	    { return $this->field('weburl'); }
     function disabled()     { return $this->field('disabled'); }
     function adminonly()    { return $this->field('adminonly'); }
     function has_datasets() { return $this->field('has_datasets'); }
     function reservations() { return $this->field('reservations'); }
-    function isfederate()   { return $this->field('isfederate'); }
     function nomonitor()    { return $this->field('nomonitor'); }
     function nolocalimages(){ return $this->field('nolocalimages'); }
     function portals()      { return $this->field('portals'); }
+    function canuse_feature(){ return $this->field('canuse_feature'); }
 
     # accessors for the status info.
     function sfield($name) {
@@ -108,6 +108,18 @@ class Aggregate
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
 	return !is_null($this->aggregate);
+    }
+
+    # Powder Portal, Emulab is not a "federate", all others are.
+    function isfederate() {
+        global $PORTAL_GENESIS;
+        if ($PORTAL_GENESIS == "powder") {
+            if ($this->nickname() == "Emulab") {
+                return 0;
+            }
+            return 1;
+        }
+        return $this->field('isfederate');
     }
 
     # Lookup up by urn,
@@ -189,31 +201,79 @@ class Aggregate
     #
     # Return a list of aggregates supporting reservations,
     #
-    function SupportsReservations() {
-	$result  = array();
+    function SupportsReservations($user = null) {
+	$ordered   = array();
+        $unordered = array();
         global $PORTAL_GENESIS;
 
         $query_result =
             DBQueryFatal("select urn from apt_aggregates ".
                          "where disabled=0 and reservations=1 and ".
                          "      FIND_IN_SET('$PORTAL_GENESIS', portals) ".
-                         ($PORTAL_GENESIS == "powder" ?
-                          "order by nickname" :
-                          "order by isfederate,name"));
+                         ($PORTAL_GENESIS != "powder" ?
+                          "order by isfederate,name" : "order by nickname"));
         
 	while ($row = mysql_fetch_array($query_result)) {
 	    $urn = $row["urn"];
+            $allowed = 1;
 
 	    if (! ($aggregate = Aggregate::Lookup($urn))) {
 		TBERROR("Aggregate::SupportsReservations: ".
 			"Could not load aggregate $urn!", 1);
 	    }
-            if ($aggregate->adminonly() && !(ISADMIN() || STUDLY())) {
-                continue;
+            # Admins always see everything.
+            if (ISADMIN()) {
+                $allowed = 1;
             }
-	    $result[] = $aggregate;
+            elseif ($aggregate->adminonly() && !(ISADMIN() || STUDLY())) {
+                $allowed = 0;
+            }
+            elseif ($user && $aggregate->canuse_feature()) {
+                $allowed = 0;
+                $feature = $PORTAL_GENESIS . "-" . $aggregate->canuse_feature();
+
+                # Does the user have the feature?
+                if (FeatureEnabled($feature, $user, null, null)) {
+                    $allowed = 1;
+                }
+                else {
+                    # If not, see if in a project that has it enabled.
+                    $projects = $user->ProjectMembershipList();
+                    foreach ($projects as $project) {
+                        $approved = 0;
+                        $group    = $project->DefaultGroup();
+                        
+                        if ($project->approved() &&
+                            !$project->disabled() &&
+                            # Must be approved in the project.
+                            $project->IsMember($user, $approved) && $approved &&
+                            FeatureEnabled($feature, null, $group, null)) {
+                            $approved = 1;
+                            break;
+                        }
+                    }
+                }
+            }
+            if ($allowed) {
+                $ordered[] = $aggregate;
+                $unordered[$aggregate->nickname()] = $aggregate;
+            }
 	}
-        return $result;
+        #
+        # Ick, Powder ordering. Need a better way to deal with this.
+        #
+        if ($PORTAL_GENESIS == "powder") {
+            $ordered = array();
+            $ordered[] = $unordered["Emulab"];
+            $ordered[] = $unordered["Utah"];
+            foreach ($unordered as $aggregate) {
+                if ($aggregate->nickname() != "Emulab" &&
+                    $aggregate->nickname() != "Utah") {
+                    $ordered[] = $aggregate;
+                }
+            }
+        }
+        return $ordered;
     }
 
     #
@@ -226,24 +286,54 @@ class Aggregate
 	{
 	  $genesis = "cloudlab";
 	}
-        $am_array = array();
+	$am_array = array();
 
         $query_result =
-            DBQueryFatal("select urn,name,adminonly from apt_aggregates ".
+            DBQueryFatal("select urn from apt_aggregates ".
                          "where disabled=0 and ".
                          "      FIND_IN_SET('$genesis', portals)");
         
 	while ($row = mysql_fetch_array($query_result)) {
             $urn       = $row["urn"];
-            $adminonly = $row["adminonly"];
+            $allowed   = 1;
 
-            if ($adminonly && !(ISADMIN() || STUDLY() || $PORTAL_HEALTH)) {
-                continue;
-            }
 	    if (! ($aggregate = Aggregate::Lookup($urn))) {
-		TBERROR("Aggregate::SupportsReservations: ".
+		TBERROR("Aggregate::DefaultAggregateList: ".
 			"Could not load aggregate $urn!", 1);
 	    }
+            # Admins always see everything.
+            if (ISADMIN()) {
+                $allowed = 1;
+            }
+            elseif ($aggregate->adminonly() && !(ISADMIN() || STUDLY())) {
+                $allowed = 0;
+            }
+            elseif ($user && $aggregate->canuse_feature()) {
+                $allowed = 0;
+                $feature = $PORTAL_GENESIS . "-" . $aggregate->canuse_feature();
+
+                # Does the user have the feature?
+                if (FeatureEnabled($feature, $user, null, null)) {
+                    $allowed = 1;
+                }
+                else {
+                    # If not, see if in a project that has it enabled.
+                    $projects = $user->ProjectMembershipList();
+                    foreach ($projects as $project) {
+                        $approved = 0;
+                        $group    = $project->DefaultGroup();
+                        
+                        if ($project->approved() &&
+                            !$project->disabled() &&
+                            # Must be approved in the project.
+                            $project->IsMember($user, $approved) && $approved &&
+                            FeatureEnabled($feature, null, $group, null)) {
+                            $approved = 1;
+                            break;
+                        }
+                    }
+                }
+            }
 	    $am_array[$urn] = $aggregate;
         }
         return $am_array;

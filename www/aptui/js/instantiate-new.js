@@ -2348,7 +2348,7 @@ $(function ()
 	    break;
 	  }
 	}
-	if (found || isadmin || window.ISSTUD)
+	if (found || isadmin || window.ISSTUD || window.ISPOWDER)
 	{
 	  $(this).prop('disabled', false);
 	  if (allowed.length == 1) {

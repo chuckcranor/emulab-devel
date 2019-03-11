@@ -419,7 +419,7 @@ function SPITFORM($formfields, $newuser, $errors)
     }
     # Do we show an aggregate selector?
     if (isset($this_user) && !$this_user->webonly()
-        && !$ISAPT && !$ISPNET && !$ISPOWDER) {
+        && !$ISAPT && !$ISPNET) {
         echo "    window.CLUSTERSELECT = true;\n";
     }
     else {
