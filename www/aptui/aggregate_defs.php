@@ -279,7 +279,7 @@ class Aggregate
     #
     # Return the list of allowed aggregates based on the portal in use.
     #
-    function DefaultAggregateList() {
+    function DefaultAggregateList($user = null) {
         global $PORTAL_GENESIS, $PORTAL_HEALTH;
 	$genesis = $PORTAL_GENESIS;
 	if ($PORTAL_HEALTH)
@@ -334,7 +334,9 @@ class Aggregate
                     }
                 }
             }
-	    $am_array[$urn] = $aggregate;
+            if ($allowed) {
+                $am_array[$urn] = $aggregate;
+            }
         }
         return $am_array;
     }

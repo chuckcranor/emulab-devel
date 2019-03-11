@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -429,8 +429,8 @@ class Instance
     #
     # Return aggregate based on the current user.
     #
-    function DefaultAggregateList() {
-        return Aggregate::DefaultAggregateList();
+    function DefaultAggregateList($user = null) {
+        return Aggregate::DefaultAggregateList($user);
     }
 
     # helper
@@ -1220,9 +1220,9 @@ class ExtensionInfo
 
 # $amlist, $fedlist, and $status are all output arrays
 function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
-                                  $extended = false) {
+                                  $extended = false, $user = null) {
     global $TBMAINSITE, $DEFAULT_AGGREGATE_URN, $CHECKLOGIN_USER;
-    $am_array = Instance::DefaultAggregateList();
+    $am_array = Instance::DefaultAggregateList($user);
 
     #
     # If not the Cloudlab Portal then we get local status only.
@@ -1331,11 +1331,11 @@ function CalculateWirelessStatus(&$result) {
     $result["controlled"] = $controlled1 + $controlled2;
 }
     
-function SpitAggregateStatus($extended = false) {
+function SpitAggregateStatus($extended = false, $user = null) {
     $amlist     = array();
     $fedlist    = array();
     $status     = array();
-    CalculateAggregateStatus($amlist, $fedlist, $status, $extended);
+    CalculateAggregateStatus($amlist, $fedlist, $status, $extended, $user);
     echo "<script type='text/plain' id='amlist-json'>\n";
     echo htmlentities(json_encode($amlist));
     echo "</script>\n";

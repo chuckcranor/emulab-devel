@@ -381,7 +381,7 @@ function SPITFORM($formfields, $newuser, $errors)
         echo htmlentities(json_encode($projlist));
         echo "</script>\n";
     }
-    SpitAggregateStatus(true);
+    SpitAggregateStatus(true, $this_user);
 
     SpitOopsModal("oops");
     echo "<script type='text/javascript'>\n";
