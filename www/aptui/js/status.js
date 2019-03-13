@@ -53,7 +53,7 @@ $(function ()
     var GENIRESPONSE_REFUSED = 7;
     var GENIRESPONSE_ALREADYEXISTS = 17;
     var GENIRESPONSE_INSUFFICIENT_NODES = 26;
-    var MAXJACKSNODES = 75;
+    var MAXJACKSNODES = 300;
 
     // CONFIRM Hack. Fix later.
     var CONFIRMTYPES = [ "c6320", "c8220", "m400", "m510",
