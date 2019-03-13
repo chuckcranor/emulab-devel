@@ -109,6 +109,11 @@ case "$1" in
 			@prefix@/sbin/protogeni/ch_daemon
 		fi
 
+		if [ -x @prefix@/sbin/protogeni/ims_daemon ]; then
+			echo -n " ims_daemon"
+			@prefix@/sbin/protogeni/ims_daemon
+		fi
+
 		if [ -x @prefix@/sbin/protogeni/igevent_daemon ]; then
 			echo -n " igevent_daemon"
 			@prefix@/sbin/protogeni/igevent_daemon
@@ -263,6 +268,9 @@ case "$1" in
 		fi
 		if [ -r /var/run/ch_daemon.pid ]; then
 			kill `cat /var/run/ch_daemon.pid`
+		fi
+		if [ -r /var/run/ims_daemon.pid ]; then
+			kill `cat /var/run/ims_daemon.pid`
 		fi
 		if [ -r /var/run/igevent_daemon.pid ]; then
 			kill `cat /var/run/igevent_daemon.pid`
