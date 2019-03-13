@@ -74,7 +74,7 @@ my $GRANTIMAGE     = "$TB/sbin/grantimage";
 my $WGET	   = "/usr/local/bin/wget";
 my $DD             = "/bin/dd";
 
-if (1) {
+if (0) {
     $IMSURL = "https://www.emulab.net:12369/protogeni/stoller/xmlrpc/ims";
 }
 
