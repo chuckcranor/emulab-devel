@@ -197,7 +197,9 @@ if (! $pid) {
     sleep(1);
 
     my $cmd = "nice -15 $WGET --no-check-certificate ".
-	"--timeout=30 --waitretry=30 --retry-connrefused ".
+	"--dns-timeout=30 --connect-timeout=60 --read-timeout=600 ".
+	"--retry-connrefused --waitretry=30 ".
+	"--show-progress --progress=dot:giga ".
 	"-q -O $localfile -i -";
 
     if ($debug) {

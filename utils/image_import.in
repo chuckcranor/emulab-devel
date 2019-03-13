@@ -985,7 +985,9 @@ sub FetchImageFile($$$)
 	print "Downloading $url ...\n";
 	
 	if (! open(GET, "| nice -15 $WGET --no-check-certificate ".
-		   "--timeout=30 --waitretry=30 --retry-connrefused ".
+		   "--dns-timeout=30 --connect-timeout=60 --read-timeout=600 ".
+		   "--retry-connrefused --waitretry=30 ".
+		   "--show-progress --progress=dot:giga ".
 		   "-q -O $localfile -i -")) {
 	    print STDERR "Cannot start $WGET\n";
 	    return -1;
@@ -1023,7 +1025,10 @@ sub FetchMetadata($)
 	$url .= "&clientversion=" . $METADATA_CLIENTVERSION;
 	my $safe_url = User::escapeshellarg($url);
 	my $opts = ($debug ? "" : "-q");
-	my $cmd  = "$WGET $opts --no-check-certificate -O - $safe_url ";
+	my $cmd  = "$WGET $opts --no-check-certificate ".
+	    "--dns-timeout=30 --connect-timeout=60 --read-timeout=600 ".
+	    "--retry-connrefused --waitretry=30 ".
+	    "-O - $safe_url ";
 	$cmd .= "| $DD 2>/dev/null bs=1 count=5k ";
 
 	if ($debug) {
