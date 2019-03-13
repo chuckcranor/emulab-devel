@@ -405,6 +405,10 @@ if (!@tmp) {
 if (!$instance->DeferredAggregateList()) {
     $instance->ResolveDefer();
 }
+else {
+    # This updates the record so we know when last retry was.
+    $instance->Defer();
+}
 
 #
 # Cause of early return, we have to Check to see if all aggregates provisioned.
