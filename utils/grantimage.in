@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2017 University of Utah and the Flux Group.
+# Copyright (c) 2003-2017, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -281,8 +281,9 @@ else {
     }
 }
 
-if ($PGENISUPPORT &&
-    GetSiteVar("protogeni/use_imagetracker")) {
+if ($PGENISUPPORT && 
+    GetSiteVar("protogeni/use_imagetracker") &&
+    $image->ims_reported()) {
     my $imageid = $image->imageid();
     print "Posting image $imageid to the image server ...\n";
     system("$POSTIMAGEDATA $imageid");
