@@ -82,7 +82,7 @@ if (0) {
 my $IMS_credential;
 
 # Debugging
-my $usemydevtree  = 1;
+my $usemydevtree  = 0;
 
 # Export.
 sub IMSURL()
@@ -308,7 +308,7 @@ sub MapToLocalImage($$$$@)
 	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
 					"No url for $urn at the image server");
 	}
-	$url =~ s/\/image/\/dev\/stoller\/image/;
+	$url =~ s/\/image/\/dev\/stoller\/image/ if ($usemydevtree);
     }
 
     # The image might be version specific.
@@ -642,7 +642,7 @@ sub MapToLocalDataset($$$$@)
 	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
 					"No url for $urn at the image server");
 	}
-	$url =~ s/\/image/\/dev\/stoller\/image/;
+	$url =~ s/\/image/\/dev\/stoller\/image/ if ($usemydevtree);
     }
 
     #
