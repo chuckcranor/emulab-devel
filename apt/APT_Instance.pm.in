@@ -1548,6 +1548,14 @@ sub CreateDatasetCreds($$$)
 	    next
 		if (!$dataset->IsIMDataset());
 
+	    next
+		if (exists($credentials{$manager_urn}) &&
+		    exists($credentials{$manager_urn}->{$dataset_urn}));
+
+	    if (!exists($credentials{$manager_urn})) {
+		$credentials{$manager_urn} = {};
+	    }
+
 	    #
 	    # For image backed datasets, we need to send along a credential
 	    # that allows the remote CM to securely download the dataset if
@@ -1569,11 +1577,15 @@ sub CreateDatasetCreds($$$)
 		}
 		return -1;
 	    }
-	    if (!exists($credentials{$manager_urn})) {
-		$credentials{$manager_urn} = [];
-	    }
-	    push(@{$credentials{$manager_urn}}, $output);
+	    $credentials{$manager_urn}->{$dataset_urn} = $output;
 	}
+    }
+    #
+    # Convert to hash of lists instead of hash of hashes.
+    #
+    foreach my $urn (keys(%credentials)) {
+	my %creds = %{$credentials{$urn}};
+	$credentials{$urn} = [ values(%creds) ];
     }
     $$pref = \%credentials;
     return 0;
@@ -1676,7 +1688,12 @@ sub CreateImageCreds($$$;$)
 	# a remote cluster. No IMS either.
 	#
 	next
-	    if (exists($credentials{$image_urn}));
+	    if (exists($credentials{$manager_urn}) &&
+		exists($credentials{$manager_urn}->{$image_urn}));
+
+	if (!exists($credentials{$manager_urn})) {
+	    $credentials{$manager_urn} = {};
+	}
 
 	#
 	# Generate a credential that allows the user to use a local
@@ -1704,7 +1721,7 @@ sub CreateImageCreds($$$;$)
 		$$pmsg = "Could not create credential for $image_urn";
 		return -1;
 	    }
-	    $credentials{$image_urn} = $credential->asString();
+	    $credentials{$manager_urn}->{$image_urn} = $credential->asString();
 	    next;
 	}
 	    
@@ -1772,9 +1789,16 @@ sub CreateImageCreds($$$;$)
 	    print STDERR $output . "\n";
 	    return -1;
 	}
-	$credentials{$image_urn} = $output;
+	$credentials{$manager_urn}->{$image_urn} = $output;	
     }
-    @$pref = values(%credentials);
+    #
+    # Convert to hash of lists instead of hash of hashes.
+    #
+    foreach my $urn (keys(%credentials)) {
+	my %creds = %{$credentials{$urn}};
+	$credentials{$urn} = [ values(%creds) ];
+    }
+    $$pref = \%credentials;
     return 0;
 }
 

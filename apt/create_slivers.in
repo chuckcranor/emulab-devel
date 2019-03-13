@@ -278,8 +278,8 @@ if ($retval) {
     fatal("Could not generate dataset credentials: $errmsg");
 }
 # Ditto images that are not global (also checks user permission).
-my @image_credentials = ();
-$retval = $instance->CreateImageCreds(\$errmsg, \@image_credentials);
+my $image_credentials = {};
+$retval = $instance->CreateImageCreds(\$errmsg, \$image_credentials);
 if ($retval) {
     fatal("Could not generate image credentials: $errmsg");
 }
@@ -601,6 +601,7 @@ sub CreateSliver($)
     my $cmurl     = $authority->url();
     my $urn       = $authority->urn();
     my @dsetcreds = ();
+    my @imcreds   = ();
     my $manifest;
     $webtask->Refresh();
 
@@ -618,6 +619,9 @@ sub CreateSliver($)
     #
     if (exists($dataset_credentials->{$authority->urn()})) {
 	@dsetcreds = @{$dataset_credentials->{$authority->urn()}};
+    }
+    if (exists($image_credentials->{$authority->urn()})) {
+	@imcreds = @{$image_credentials->{$authority->urn()}};
     }
 
     #
@@ -640,8 +644,8 @@ sub CreateSliver($)
 				     "credentials" =>
 					 [$slice_credential->asString(),
 					  $speaksfor_credential->asString(),
-					  @dsetcreds
-					  @image_credentials
+					  @dsetcreds,
+					  @imcreds,
 					 ],
 				     "certificate" => $instance->cert(),
 				     "key"         => $instance->privkey(),
