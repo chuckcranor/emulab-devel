@@ -1546,7 +1546,7 @@ sub CreateDatasetCreds($$$)
 	    # are applied at the CM.
 	    #
 	    next
-		if (!$dataset->IsIMDataset());
+		if (!$dataset_urn->IsIMDataset());
 
 	    next
 		if (exists($credentials{$manager_urn}) &&
