@@ -226,7 +226,9 @@ sub CallMethodInternal($$$$@)
     }
 
     # Callback to write the data, when streaming to a file.
-    my $dots = 0;
+    my $dots  = 0;
+    my $col   = 0;
+    my $total = 0;
     
     my $callback = sub {
 	my ($data) = @_;
@@ -238,9 +240,14 @@ sub CallMethodInternal($$$$@)
 	if (!defined($retval)) {
 	    die("Error writing data to output stream");
 	}
-	$dots += $retval;
-	if ($dots > (1024 * 1024 * 10)) {
+	$total += $retval;
+	$dots  += $retval;
+	if ($dots > (1024 * 1024)) {
 	    print ".";
+	    if ($col++ >= 50) {
+		printf(" %d MB\n", int($total / (1024 * 1024)));
+		$col = 0;
+	    }
 	    $dots = 0;
 	}
     };
@@ -435,7 +442,9 @@ sub CallMethodInternal($$$$@)
     }
     # Streamed the data okay, we are done.
     if (defined($fp) && !defined($xmlgoo)) {
-	print "\n";
+	if ($total) {
+	    printf(" %d MB\n", int($total / (1024 * 1024)));
+	}
 	return GeniResponse->new(GENIRESPONSE_SUCCESS);
     }
 
