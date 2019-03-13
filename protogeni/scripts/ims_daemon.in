@@ -50,21 +50,21 @@ my $oneshot   = 0;
 #
 # Configure variables
 #
-my $TB		  = "@prefix@";
-my $TBOPS         = "@TBOPSEMAIL@";
-my $TBLOGS        = "@TBLOGSEMAIL@";
-my $PGENIDOMAIN   = "@PROTOGENI_DOMAIN@";
-my $OURDOMAIN     = "@OURDOMAIN@";
-my $PGENISUPPORT  = @PROTOGENI_SUPPORT@;
-my $CLUSTER_PORTAL= "@CLUSTER_PORTAL@";
-my $LOGFILE       = "$TB/log/ims_daemon.log";
-my $EMULAB_PEMFILE= "$TB/etc/genicm.pem";
-my $TRIGGERUPDATE = "$TB/sbin/protogeni/triggerimageupdate";
-my $POSTIMAGEDATA = "$TB/sbin/protogeni/postimagedata";
-my $DELETEIMAGEDATA = "$TB/sbin/protogeni/deleteimagedata";
-my $IMPORTER      = "$TB/sbin/image_import";
-my $MANAGEIMAGES  = "$TB/bin/manage_images";
-my $SLEEP_INTERVAL= 60;
+my $TB		       = "@prefix@";
+my $TBOPS              = "@TBOPSEMAIL@";
+my $OURDOMAIN          = "@OURDOMAIN@";
+my $MAINSITE           = @TBMAINSITE@;
+my $PGENISUPPORT       = @PROTOGENI_SUPPORT@;
+my $LOGFILE            = "$TB/log/ims_daemon.log";
+my $EMULAB_PEMFILE     = "$TB/etc/genicm.pem";
+my $TRIGGERUPDATE      = "$TB/sbin/protogeni/triggerimageupdate";
+my $POSTIMAGEDATA      = "$TB/sbin/protogeni/postimagedata";
+my $DELETEIMAGEDATA    = "$TB/sbin/protogeni/deleteimagedata";
+my $IMPORTER           = "$TB/sbin/image_import";
+my $MANAGEIMAGES       = "$TB/bin/manage_images";
+my $SLEEP_INTERVAL     = 60;
+my $DAILY_INTERVAL     = 24 * 3600;
+my $lastdaily          = 0;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -72,7 +72,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 # Protos
 sub fatal($);
-	  
+
 #
 # Turn off line buffering on output
 #
@@ -88,10 +88,6 @@ if ($UID != 0) {
 if (! $PGENISUPPORT) {
     exit(0);
 }
-# Ditto for the image tracker 
-if (!GetSiteVar("protogeni/use_imagetracker")) {
-    exit(0);
-}	
 
 #
 # Check args early so we get the right DB.
@@ -110,20 +106,10 @@ if (defined($options{"n"})) {
     $impotent = 1;
 }
 
-# Do this early so that we talk to the right DB.
-use vars qw($GENI_DBNAME);
-$GENI_DBNAME = "geni-cm";
-
 # Load the Testbed support stuff.
 use lib "@prefix@/lib";
 use emdb;
-require GeniDB;
-require GeniUtil;
-require GeniCM;
-require GeniCertificate;
-require GeniCredential;
-require Genixmlrpc;
-require GeniImage;
+use GeniImage;
 use GeniResponse;
 use libtestbed;
 use emutil;
@@ -131,6 +117,11 @@ use libEmulab;
 use Logfile;
 use Project;
 use OSImage;
+
+# Ditto for the image tracker 
+if (!GetSiteVar("protogeni/use_imagetracker")) {
+    exit(0);
+}	
 
 #
 # So we know who/what we are acting as.
@@ -177,7 +168,7 @@ GeniUtil::FlipToGeniUser();
 #
 # Avoid duplicate email.
 #
-my %email_notifications = ();
+my %email_history = ();
 
 sub NotifyOnce($$$)
 {
@@ -186,13 +177,23 @@ sub NotifyOnce($$$)
     return
 	if (exists($email_history{$token}));
     
-    SENDMAIL($TBOPS, $subject, $body);
+    SENDMAIL($TBOPS, $subject, $body, $TBOPS);
     $email_history{$token} = $token;
+}
+sub NotifyClear($)
+{
+    my ($token) = @_;
+
+    delete($email_history{$token});
+}
+sub NotifyClearAll()
+{
+    %email_history = ();
 }
 
 #
 # Handle image "relocations" from remote clusters back to the local
-# cluster. Note that CM loops for a while, but eventually gives, so
+# cluster. Note that CM loops for a while, but eventually gives up, so
 # we will catch them here if that relocation is taking too long.
 #
 sub HandleOutgoingRelocations()
@@ -240,7 +241,7 @@ sub HandleIncomingRelocations()
     return
 	if (!$query_result);
     
-    while (my ($row) = $query_result->fetchrow_hashref()) {
+    while (my $row = $query_result->fetchrow_hashref()) {
 	my $pid    = $row->{'pid'};
 	my $name   = $row->{'imagename'};
 	my $urn    = $row->{'remote_urn'};
@@ -255,15 +256,16 @@ sub HandleIncomingRelocations()
 	    print "Would trigger incoming relocation for $pid,$name\n";
 	    next;
 	}
-	my $output = emutil::ExecQuiet("$MANAGEIMAGES -p $pid -i $name");
+	my $output = emutil::ExecQuiet("$MANAGEIMAGES relocate ".
+				       "  -p $pid -i $name");
 	if ($?) {
 	    print $output;
-	    SENDMAIL($TBOPS,
-		     "Could not relocate image $pid,$name from $urn",
-		     $output,
-		     $TBOPS);
+	    NotifyOnce("${pid}:${name}",
+		       "Could not relocate image $pid,$name from $urn",
+		       $output);
 	    next;
 	}
+	NotifyClear("${pid}:${name}");
     }
 }
 
@@ -288,14 +290,14 @@ sub HandleImageDeletions()
 	my $output = emutil::ExecQuiet("$DELETEIMAGEDATA '$urn' $uuid");
 	if ($?) {
 	    print $output;
-	    SENDMAIL($TBOPS,
-		     "Could not delete image data at the IMS for $urn/$uuid",
-		     $output,
-		     $TBOPS);
+	    NotifyOnce($uuid,
+		       "Could not delete image data at the IMS for $urn/$uuid",
+		       $output);
 	    next;
 	}
 	DBQueryWarn("delete from image_deletions ".
 		    "where urn='$urn' and image_uuid='$uuid'");
+	NotifyClear($uuid);
     }
 }
   
@@ -336,16 +338,12 @@ sub HandleImageNotifications()
 	if ($?) {
 	    print STDERR "Could not trigger an image update for $imageid:\n";
 	    print STDERR $output;
-	    if (!exists($image_notifications{$image->versid()})) {
-		SENDMAIL($TBOPS,
-			 "Could not trigger an image update for $imageid",
-			 $output, $TBOPS);
-
-		$image_notifications{$image->versid()} = 1;
-	    }
+	    NotifyOnce($image->versid(),
+		       "Could not trigger an image update for $imageid",
+		       $output);
 	    next;
 	}
-	delete($image_notifications{$image->versid()});
+	NotifyClear($image->versid());
     }
 }
 
@@ -369,6 +367,11 @@ sub HandleImageCopybacks()
 	    print STDERR "$imageid no longer exists. Skipping update ...\n";
 	    next;
 	}
+	# Debugging in devel tree
+	if (0 && $MAINSITE && $image->isdataset()) {
+	    print "Skipping copyback of dataset $image\n";
+	    next;
+	}
 	if ($impotent) {
 	    print "Would import new version of $image\n";
 	    next;
@@ -377,17 +380,16 @@ sub HandleImageCopybacks()
 	if ($?) {
 	    print STDERR "Could not import image update for $imageid\n";
 	    print STDERR $output;
-	    if (!exists($image_notifications{$image->versid()})) {
-		SENDMAIL($TBOPS,
-			 "Could not import image update for $imageid",
-			 $output,
-			 $TBOPS);
-		$image_notifications{$image->versid()} = 1;
-	    }
+	    NotifyOnce($image->versid(),
+		       "Could not import image update for $imageid",
+		       $output);
 	    next;
 	}
-	delete($image_notifications{$image->versid()});
+	NotifyClear($image->versid());
     }
+    return
+	if ($MAINSITE);
+    
     my $opt = ($impotent ? "-n" : "");
 
     # Trigger a posting to the IMS for any new images.
@@ -416,8 +418,7 @@ while (1) {
     HandleOutgoingRelocations();
     HandleImageDeletions();
     HandleImageNotifications();
-    HandleImageCopybacks();    
-	
+    HandleImageCopybacks();
     exit(0)
 	if ($oneshot);
 
@@ -425,6 +426,11 @@ while (1) {
     emutil::FlushCaches();
     GeniUtil::FlushCaches();
 
+    # Clear the email once a day so we get new messages.
+    if (time() - $lastdaily > $DAILY_INTERVAL) {
+	NotifyClearAll();
+	$lastdaily = time();
+    }
   loop:
     print "Sleeping for $SLEEP_INTERVAL seconds ...\n";
     sleep($SLEEP_INTERVAL);
