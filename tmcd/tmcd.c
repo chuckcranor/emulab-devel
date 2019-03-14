@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2018 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2019 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -424,6 +424,7 @@ COMMAND_PROTOTYPE(dogenistatus);
 COMMAND_PROTOTYPE(dogenicommands);
 COMMAND_PROTOTYPE(dogeniall);
 COMMAND_PROTOTYPE(dogeniparam);
+COMMAND_PROTOTYPE(dogenirpccert);
 COMMAND_PROTOTYPE(dogeniinvalid);
 #endif
 
@@ -566,6 +567,7 @@ struct command {
 	{ "geni_commands", FULLCONFIG_NONE, 0, dogenicommands },
 	{ "geni_all",     FULLCONFIG_NONE, 0, dogeniall },
 	{ "geni_param",   FULLCONFIG_NONE, 0, dogeniparam },
+	{ "geni_rpccert",   FULLCONFIG_NONE, 0, dogenirpccert },
 	/* A rather ugly hack to avoid making error handling a special case.
 	   THIS MUST BE THE LAST ENTRY IN THE ARRAY! */
 	{ "geni_invalid", FULLCONFIG_NONE, 0, dogeniinvalid }
@@ -13452,6 +13454,44 @@ static char *getgenistatus( tmcdreq_t *reqp ) {
 	return strdup( buf );
 }
 
+static char *getgenirpccert(tmcdreq_t *reqp)
+{
+    
+	MYSQL_RES	*res;
+	MYSQL_ROW	row;
+	char		buf[MAXTMCDPACKET];
+	buf[0] = (char) NULL;
+
+	if (!reqp->geniflags) {
+		return NULL;
+	}
+
+	res = mydb_query("select cert,privkey from user_sslcerts "
+			 "where uid='%s' and encrypted=0 and "
+			 "      DN like '%%sslxmlrpc%%'",
+			 2, reqp->creator);
+
+	if (!res || !mysql_num_rows(res)) {
+		error("getgenirpccert: %s: "
+		      "DB error getting certificate for %s!\n",
+		      reqp->nodeid, reqp->creator);
+		return NULL;
+	}
+	row = mysql_fetch_row(res);
+	strcpy(buf, "-----BEGIN RSA PRIVATE KEY-----\n");
+	strcat(buf, row[1]);
+	strcat(buf, "-----END RSA PRIVATE KEY-----\n");
+	strcat(buf, "-----BEGIN CERTIFICATE-----\n");
+	strcat(buf, row[0]);
+	strcat(buf, "-----END CERTIFICATE-----\n");
+	mysql_free_result(res);
+	
+	if (1 || verbose)
+		info("%s: getgenicert %s", reqp->nodeid, reqp->creator);
+
+	return strdup(buf);
+}
+
 #define MAKEGENICOMMAND( cmd ) \
         COMMAND_PROTOTYPE( dogeni ## cmd ) { \
 		return dogeni( sock, reqp, tcp, getgeni ## cmd ); \
@@ -13471,6 +13511,7 @@ MAKEGENICOMMAND(version)
 MAKEGENICOMMAND(getversion)
 MAKEGENICOMMAND(sliverstatus)
 MAKEGENICOMMAND(status)
+MAKEGENICOMMAND(rpccert)
 
 struct genicommand {
     char *tag;
@@ -13504,6 +13545,7 @@ struct genicommand {
     { "version", getgeniversion, 1, NULL },
     { "certificate", getgenicert, 1, NULL },
     { "key", getgenikey, 1, NULL },
+    { "rpccert", getgenirpccert, 1, NULL },
 };
 
 COMMAND_PROTOTYPE(dogenicommands)
