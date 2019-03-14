@@ -1628,6 +1628,9 @@ sub CreateImageCreds($$$;$)
 	my $image_urn = GeniXML::GetText("name", $diskref);
 	next
 	    if (!defined($image_urn));
+	# Yep, people put the URL in the URN spot. We should throw an error.
+	next
+	    if ($image_urn =~ /^(http|https):/);
 	
 	$image_urn = GeniHRN->new($image_urn);
 	if (! (defined($image_urn) && $image_urn->IsImage())) {
@@ -1766,7 +1769,9 @@ sub CreateImageCreds($$$;$)
 	# basically have to say that the experiment and the image have
 	# to be in the same local project.
 	#
-	if ($project_urn->project() ne $project->pid()) {
+	# XXX Need to come back to this ...
+	#
+	if (lc($project_urn->project()) ne lc($project->pid())) {
 	    $$pmsg = "No permission to use $image_urn in project ".
 		$project->pid();
 	    return 1;
