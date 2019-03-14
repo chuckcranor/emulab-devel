@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 #
-# Copyright (c) 2004-2018 University of Utah and the Flux Group.
+# Copyright (c) 2004-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,6 +26,7 @@ import sys
 import getopt
 import os, os.path
 import xmlrpclib
+import ssl
 
 TBROOT = "@prefix@"
 TBPATH = os.path.join(TBROOT, "lib")
@@ -35,9 +36,6 @@ if TBPATH not in sys.path:
     pass
 
 from emulabclient import *
-
-from M2Crypto.m2xmlrpclib import SSL_Transport
-from M2Crypto import SSL
 
 # When building on the clientside, there are a few minor differences.
 WITH_EMULAB     = @WITH_EMULAB@
@@ -67,6 +65,10 @@ else:
 # Where to find the default certificate in the users home dir.
 default_cert    = "/.ssl/emulab.pem"
 certificate     = None;
+ca_certificate  = None
+
+# Whether to verify the server, or not.
+verify          = False
 
 # Debugging output.
 debug           = 0
@@ -80,7 +82,7 @@ rawmode         = 0
 def usage():
     print "Make a request to the Emulab XML-RPC (SSL-based) server."
     print ("Usage: " + sys.argv[0] 
-                     + " [-hV] [-s server] [-m module] "
+                     + " [-hV] [-s server] [-m module] [--verify] [--cacert cacertfile]"
                      + "<method> [param=value ...]")
     print
     print "Options:"
@@ -89,7 +91,9 @@ def usage():
     print "  -s, --server\t\t  Set the server hostname"
     print "  -p, --port\t\t  Set the server port"
     print "  -c, --cert\t\t  Set the certificate to use"
+    print "      --cacert\t\t  Set the CA certificate to use for server verification"
     print "  -m, --module\t\t  Set the RPC module (defaults to experiment)"
+    print "      --verify\t\t  Force SSL verification; defaults to disabled"
     print
     print "Required arguments:"
     print "  method\t\t  The method to execute on the server"
@@ -187,7 +191,7 @@ try:
     opts, req_args =  getopt.getopt(sys.argv[1:],
                       "dhVc:s:m:p:r",
                       [ "help", "version", "rawmode", "server=", "module=",
-                        "cert=", "port=", "path="])
+                        "cert=", "port=", "path=", "cacert=", "verify"])
     # ... act on them appropriately, and
     for opt, val in opts:
         if opt in ("-h", "--help"):
@@ -225,32 +229,18 @@ try:
         elif opt in ("-r", "--rawmode"):
 	    rawmode = 1
             pass
+        elif opt in ("--verify"):
+            verify = True
+            pass
+        elif opt in ("--cacert"):
+            ca_certificate = val
+            pass
         pass
     pass
 except getopt.error, e:
     print e.args[0]
     usage()
     sys.exit(2)
-    pass
-
-class MySSL_Transport(SSL_Transport):
-    def parse_response(self, file):
-        # compatibility interface
-        return self._parse_response(file, None)
-
-    def _parse_response(self, file, sock):
-        stuff = ""
-        
-        while 1:
-            if sock:
-                response = sock.recv(1024)
-            else:
-                response = file.read(1024)
-            if not response:
-                break
-            stuff += response
-        return stuff
-        pass
     pass
 
 class MyServerProxy(xmlrpclib.ServerProxy):
@@ -286,10 +276,24 @@ if not os.access(certificate, os.R_OK):
     sys.exit(-1);
     pass
     
-ctx = SSL.Context('sslv23')
-ctx.load_cert(certificate, certificate)
-ctx.set_verify(SSL.verify_none, 16)
-ctx.set_allow_unknown_ca(0)
+ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+ctx.load_cert_chain(certificate)
+if not verify:
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+else:
+    if ca_certificate == None:
+        for p in [ path + "/etc/emulab.pem", "/etc/emulab/emulab.pem" ]:
+            if os.access(p,os.R_OK):
+                ca_certificate = p
+                break
+    if ca_certificate is not None and not os.access(ca_certificate, os.R_OK):
+        print "CA Certificate cannot be accessed: " + ca_certificate
+        sys.exit(-1);
+        pass
+    ctx.load_verify_locations(cafile=ca_certificate)
+    ctx.verify_mode = ssl.CERT_REQUIRED
+    pass
 
 # This is parsed by the Proxy object.
 URI = "https://" + xmlrpc_server + ":" + str(xmlrpc_port) + path
@@ -299,7 +303,7 @@ if debug:
 
 if rawmode:
     # Get a handle on the server,
-    server = MyServerProxy(URI, MySSL_Transport(ctx));
+    server = MyServerProxy(URI, context=ctx)
 
     stuff = ""
     while (True):
@@ -324,12 +328,12 @@ if rawmode:
     sys.exit(0);
 elif len(req_args):
     # Get a handle on the server,
-    server = xmlrpclib.ServerProxy(URI, SSL_Transport(ctx));
+    server = xmlrpclib.ServerProxy(URI, context=ctx)
     # Method and args are on the command line.
     sys.exit(do_method(server, req_args))
 else:
     # Get a handle on the server,
-    server = xmlrpclib.ServerProxy(URI, SSL_Transport(ctx));
+    server = xmlrpclib.ServerProxy(URI, context=ctx)
     # Prompt the user for input.
     try:
         while True:
