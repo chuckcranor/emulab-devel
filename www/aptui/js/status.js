@@ -466,7 +466,7 @@ $(function ()
 	}
 	if (instanceStatus != lastStatus) {
             APT_OPTIONS.updatePage({ 'instance-status': instanceStatus });
-	    console.info("New Status: ", json);
+	    //console.info("New Status: ", json);
 	
 	    status_html = json.value.status;
 
@@ -964,6 +964,9 @@ $(function ()
     svgimg.setAttributeNS(null,'y','-23');
     svgimg.setAttributeNS(null, 'visibility', 'visible');
 
+    // Store old status blob details for comparison to current.
+    var oldStatusDetails = {};
+
     // Helper for above and called from the status callback.
     function UpdateSliverStatus(statusblob)
     {
@@ -988,6 +991,28 @@ $(function ()
 		if (jacksID === undefined) {
 		    return;
 		}
+		/*
+		 * Use cached details to see if anything has changed, to
+		 * avoid regenerating the html and updating the popovers.
+		 * On a small experiment this does not matter, but with a
+		 * couple 100 nodes, we burn a lot of CPU doing this.
+		 *
+		 * Put the jacksID into the details for the
+		 * comparison.  The JackID appears to change at some
+		 * point, so by putting it into the details we stash,
+		 * we can make it part of the comparison.
+		 */
+		details["jacksID"] = jacksID;
+		
+		if (_.has(oldStatusDetails, node_id)) {
+		    if (_.isEqual(details, oldStatusDetails[node_id])) {
+			//console.info(node_id + " has not changed");
+			return;
+		    }
+		}
+		//console.info(node_id + " has changed", details, jacksID);
+		oldStatusDetails[node_id] = details;
+		
 		// Is the node in recovery. Panic mode does not count.
 		var recovery = false;
 		if (!expinfo.paniced &&
@@ -1116,6 +1141,8 @@ $(function ()
     // Update the popover the node icon box
     function UpdateNodePopover(node_id, jacksID, html)
     {
+	//console.info("UpdateNodePopover", node_id, jacksID, html);
+	
 	if ($('#' + jacksID).data("bs.popover")) {
 	    $('#' + jacksID).data("bs.popover").options.content = html;
 
