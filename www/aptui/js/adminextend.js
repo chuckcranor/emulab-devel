@@ -34,18 +34,13 @@ $(function ()
 	extensionsTemplate = _.template(historyString);
 	listTemplate = _.template(templates["reservation-list"]);
 
-	ReloadFirstRow(function () {
-	    if (expinfo.started) {
-		$('#extension-controls').removeClass("hidden");
-		
-		// Need to serialize this stuff cause of locking in the backend.
-		LoadUtilization(function () {
-		    LoadIdleData(function () {
-			LoadOpenStack();
-		    });
-		});
-	    }
-	});
+	ReloadFirstRow();
+	if (window.STARTED) {
+	    $('#extension-controls').removeClass("hidden");
+	    LoadIdleData();
+	    LoadUtilization();
+	    LoadOpenStack();
+	}
 
 	// Second row is the user/project usage summarys. We make two calls
 	// and use jquery "when" to wait for both to finish before running
@@ -277,7 +272,7 @@ $(function ()
 			     .format("MMM D, YYYY h:mm A"));
 	    }
 	});
-	if (!expinfo.started) {
+	if (!window.STARTED) {
 	    // Disable the flags. 
 	    $('#lockout-checkbox, #user-lockdown-checkbox, ' +
 	      '#admin-lockdown-checkbox, #quarantine-checkbox')
@@ -319,7 +314,7 @@ $(function ()
 	SetupAdminNotes();
     }
     
-    function ReloadFirstRow(continuation)
+    function ReloadFirstRow()
     {
 	sup.CallServerMethod(null, "status", "ExpInfo",
 			     {"uuid" : window.UUID},
@@ -328,14 +323,12 @@ $(function ()
 				 if (json.code == 0) {
 				     expinfo = json.value;
 				     LoadFirstRow();
-				     continuation();
 				 }
 			     });
     }
 
-    function LoadUtilization(continuation) {
-	console.info("LoadUtilization", continuation);
-	if (!expinfo.started) {
+    function LoadUtilization() {
+	if (!window.STARTED) {
 	    return;
 	}
 	var utilizationTemplate = _.template(utilizationString);
@@ -343,10 +336,6 @@ $(function ()
 	
 	var callback = function(json) {
 	    console.info("LoadUtilization", json);
-	    // Fire off the next part.
-	    if (continuation !== undefined) {
-		continuation();
-	    }
 	    if (json.code) {
 		console.info("Could not load utilization");
 		$("#thirdrow .thirdrow-error .well")
@@ -592,11 +581,11 @@ $(function ()
     //
     // Get Max Extension and update the table.
     //
-    function DoMaxExtension(expires, continuation)
+    function DoMaxExtension(expires)
     {
-	console.info("DoMaxExtension", expires, continuation);
+	console.info("DoMaxExtension", expires);
 
-	if (! expinfo.started) {
+	if (! window.STARTED) {
 	    $('#max-extension').html("<span class='text-warning'>" +
 				     "Not Started Yet</span>");	    
 	    return;
@@ -604,9 +593,6 @@ $(function ()
 	
 	// Warn if changing days violates max extension.
 	var callback = function(json) {
-	    if (continuation !== undefined) {
-		continuation();
-	    }
 	    $("#howlong").on("keyup", function (event) {
 		if (!maxextension) {
 		    $('#max-extension-nomax').removeClass("hidden");
@@ -797,12 +783,9 @@ $(function ()
     //
     // Slothd graphs.
     //
-    function LoadIdleData(continuation)
+    function LoadIdleData()
     {
-	console.info("LoadIdleData", continuation);
-
 	var callback = function (status, json) {
-	    console.info("LoadIdleData callback");
 	    if (status <= 0) {
 		if (status == 0) {
 		    // No data.
@@ -815,9 +798,6 @@ $(function ()
 					      json.value);
 		    $('#idledata-error').removeClass("hidden");
 		}
-	    }
-	    if (continuation !== undefined) {
-		continuation();
 	    }
 	};
 	ShowIdleGraphs({"uuid"     : window.UUID,
@@ -833,8 +813,6 @@ $(function ()
     //
     function LoadOpenStack()
     {
-	console.info("LoadIdleData");
-
 	var callback = function(json) {
 	    if (json.code) {
 		return;

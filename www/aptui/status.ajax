@@ -1727,19 +1727,17 @@ function Do_Utilization()
         $webtask->Delete();
         return;
     }
-    $webtask->Delete();
+    $results = $webtask->TaskValue("results");
     $blob = array();
     # Look at per sliver.
     foreach ($instance->slivers() as $sliver) {
-        if ($sliver->webtask_id() &&
-            $webtask = WebTask::Lookup($sliver->webtask_id())) {
-            if (!($sliver->physnode_count() || $sliver->virtnode_count())) {
-                continue;
-            }
-            $blob[$urn_mapping[$sliver->aggregate_urn()]] =
-                $webtask->TaskValue("results");
+        if (!($sliver->physnode_count() || $sliver->virtnode_count())) {
+            continue;
         }
+        $blob[$urn_mapping[$sliver->aggregate_urn()]] = 
+            $results[$sliver->aggregate_urn()];
     }
+    $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
 }
 
@@ -1760,11 +1758,20 @@ function Do_IdleData()
 	SPITAJAX_ERROR(1, "no slice for instance");
 	return 1;
     }
+
+    #
+    # This can be a lot of data, so lets not go through the DB
+    # (via the webtask). Pass a temp file name to the backend.
+    #
+    $filename = tempnam("/tmp", "idledata");
+    $fp = fopen($filename, "w+");
+    chmod($filename, 0666);        
+    
     $webtask = WebTask::CreateAnonymous();
     # XXX Need to do this as elabman cause of emulab.key. Pondering.
     $retval = SUEXEC("elabman", $TBADMINGROUP,
 		     "webmanage_instance -t " . $webtask->task_id() . " -- ".
-                     "  idledata $uuid",
+                     "  idledata $uuid -o $filename",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
 
@@ -1779,27 +1786,35 @@ function Do_IdleData()
         $webtask->Delete();
         return;
     }
-    
     $webtask->Delete();
     $blob = array();
-    # Look at per sliver.
-    foreach ($instance->slivers() as $sliver) {
-        if ($sliver->webtask_id() &&
-            $webtask = WebTask::Lookup($sliver->webtask_id())) {
-            if (!($sliver->physnode_count() || $sliver->virtnode_count())) {
-                continue;
+
+    while (($urn = fgets($fp, 0x1000)) !== false) {
+        $json = "";
+        
+        #
+        # First line is an aggregate urn. Now suck up the next very
+        # big line until the newline.
+        #
+        while (($buffer = fgets($fp, 0x4000)) !== false) {
+            $json = $json . $buffer;
+
+            if ($buffer[strlen($buffer)-1] == "\n") {
+                break;
             }
-            $json = $webtask->TaskValue("idledata");
-            # We might not get any data if no nodes at the target cluster.
-            # This happens occasionally. 
-            if (!$json || $json == "") {
-                continue;
-            }
-            # Send back the raw json. 
-            $blob[$urn_mapping[$sliver->aggregate_urn()]] = $json;
-                
         }
+        $urn  = rtrim($urn);
+        $json = rtrim($json);
+
+        # This happens occasionally. 
+        if ($json == "") {
+            continue;
+        }
+        # Send back the raw json. 
+        $blob[$urn_mapping[$urn]] = $json;
     }
+    fclose($fp);
+    #unlink($filename);
     SPITAJAX_RESPONSE($blob);
 }
 

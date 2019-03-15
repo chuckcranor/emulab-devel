@@ -29,6 +29,7 @@ use Data::Dumper;
 use CGI;
 use POSIX ":sys_wait_h";
 use POSIX qw(setsid strftime ceil floor);
+use File::Temp qw(tempfile tmpnam);
 use Date::Parse;
 use JSON;
 
@@ -3830,16 +3831,11 @@ sub DoUtilization()
     my $exitcode = -1;
     my $response;
     my @aggregates = ();
+    my $results = {};
 
     my $slice = $instance->GetGeniSlice();
     if (!defined($slice)) {
 	fatal("No slice for instance!");
-    }
-    if ($slice->WaitForLock(10)) {
-	$errcode  = GENIRESPONSE_BUSY;
-	$exitcode = 1;
-	$errmsg   = "Experiment is busy, cannot lock it. Try again later.";
-	goto bad;
     }
     
     #
@@ -3918,12 +3914,12 @@ sub DoUtilization()
 	if ($debug) {
 	    print Dumper($blob);
 	}
-	$agg->webtask()->results($blob);
+	$results->{$agg->aggregate_urn()} = $blob;
     }
     goto bad
 	if ($errcode);
 
-    $slice->UnLock();
+    $webtask->results($results);
     exit(0);
   bad:
     print STDERR $errmsg . "\n";
@@ -3931,7 +3927,6 @@ sub DoUtilization()
 	$webtask->output($errmsg);
 	$webtask->Exited($errcode);
     }
-    $slice->UnLock();
     exit($exitcode);
 }
 
@@ -4029,17 +4024,27 @@ sub DoIdleData()
     my $exitcode = -1;
     my $response;
     my @aggregates = ();
+    my %tempfiles = ();
+
+    my $optlist     = "o:";
+    my $filename;
+    my $outfp;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"o"})) {
+	$filename = $options{"o"}
+    }
+    usage()
+	if (@ARGV);
     
     my $slice = $instance->GetGeniSlice();
     if (!defined($slice)) {
 	fatal("No slice for instance!");
     }
-    if ($slice->WaitForLock(10)) {
-	$errcode  = GENIRESPONSE_BUSY;
-	$exitcode = 1;
-	$errmsg   ="Experiment is busy, cannot lock it. Try again later.";
-	goto bad;
-    }
+    
     #
     # Cull out any aggregates with no nodes.
     #
@@ -4049,9 +4054,41 @@ sub DoIdleData()
     }
 
     #
-    # Helper callback; if we get back the idledata lets set it here (in
-    # the child) and avoid the copy through the temp webtask/database.
-    # Clear the response structure to prevent that.
+    # Open the output file for writing.
+    #
+    if (defined($filename)) {
+	if (!open(FOUT, "> $filename")) {
+	    fatal("Could not open $filename for writing: $!");
+	}
+	$outfp = *FOUT;
+    }
+    else {
+	$outfp = *STDOUT;
+    }
+
+    #
+    # If more then one aggregate, we pass the data back from the
+    # parrun children via temp files, rather then go through the DB
+    # via a webtask (the data can be very big). With one aggregate we
+    # do not fork, so we can put the data directly into the webtask
+    # that comes in on the command line.
+    #
+    if (@aggregates > 0) {
+	foreach my $aggregate (@aggregates) {
+	    my ($fp, $filename) = tempfile("/tmp/idledata.XXXXX", UNLINK => 1);
+	    if (!defined($fp)) {
+		fatal("Could not create temporary file for idle data");
+	    }
+	    $tempfiles{$aggregate->aggregate_urn()} = [$fp, $filename];
+	}
+    }
+
+    #
+    # Helper callback; if we get back the idledata write it to the
+    # temporary file for the parent to pick up. 
+    #
+    # Clear the response structure to prevent the data from going to
+    # database.
     #
     my $coderef = sub {
 	my ($sliver) = @_;
@@ -4062,8 +4099,11 @@ sub DoIdleData()
 	    if ($debug) {
 		print STDERR $json . "\n";
 	    }
-	    # This might be an empty string if no nodes allocated.
-	    $sliver->webtask()->idledata($json);	    
+	    if (@aggregates > 0) {
+		my ($fp) = @{ $tempfiles{$sliver->aggregate_urn()} };
+		print $fp $json . "\n";
+		close($fp);
+	    }
 	    $response->value(0);
 	}
 	return $response;
@@ -4092,13 +4132,28 @@ sub DoIdleData()
 	    else {
 		($exitcode, $errmsg) = ResponseErrorMessage($agg, $response);
 	    }
-	    next;
+	    # Give up now.
+	    last;
+	}
+	print $outfp "" .  $agg->aggregate_urn() . "\n";
+	if (@aggregates > 0) {
+	    my (undef, $filename) = @{ $tempfiles{$agg->aggregate_urn()} };
+	    if (open(TEMP, $filename)) {
+		while (<TEMP>) {
+		    print $outfp $_;
+		}
+		close(TEMP);
+	    }
+	    else {
+		$exitcode = -1;
+		$errcode  = -1;
+		$errmsg   = "Could not open temporary file to read idle data"; 
+	    }
 	}
     }
     goto bad
 	if ($errcode);
 
-    $slice->UnLock();
     exit(0);
   bad:
     print STDERR $errmsg . "\n";
@@ -4106,7 +4161,6 @@ sub DoIdleData()
 	$webtask->output($errmsg);
 	$webtask->Exited($errcode);
     }
-    $slice->UnLock();
     exit($exitcode);
 }
 
@@ -4984,10 +5038,15 @@ sub CallMethodOnAggregates($$$@)
 
     #
     # Create anonymous webtasks to return the value. Note that for the
-    # single aggregate case (no parrun) we still create a webtask, but
-    # do not set the AutoStore flag, which prevents the value from
-    # actually going to the db. Which makes the interface a little
-    # bit more consistent regardless of the number of aggregates.
+    # single aggregate case (no parrun) we still create a webtask,
+    # which which makes the interface a little bit more consistent
+    # regardless of the number of aggregates. Also note that we do
+    # not set AutoStore, in case the callee messes with it, we flush it
+    # by hand below.
+    #
+    # NOTE: This also means we are independent of other calls that
+    # are using anonymous webtasks instead of the instance webtask.
+    # or per-aggregate webtask. No locking required.
     #
     my @webtasks = ();
     foreach my $agg (@aggregates) {
@@ -4996,8 +5055,6 @@ sub CallMethodOnAggregates($$$@)
 	    print STDERR "Could not create an anonymous webtask!\n";
 	    return -1;
 	}
-	$webtask->AutoStore(1)
-	    if (@aggregates > 1);
 	push(@webtasks, $webtask);
     }
 
@@ -5070,6 +5127,7 @@ sub CallMethodOnAggregates($$$@)
 	}
 	# Need unblessed ref to store into webtask.
 	$webtask->response($response->Unbless());
+	$webtask->Store();
 	return ($response->code() == GENIRESPONSE_SUCCESS ? 0 : -1);
     };
     my @return_codes  = ();
@@ -5105,8 +5163,6 @@ sub CallMethodOnAggregates($$$@)
     foreach my $agg (@aggregates) {
 	my $webtask = shift(@webtasks);
 
-	print "$agg\n";
-	
 	# No need to refresh if we did not use ParRun above.
 	$webtask->Refresh() if (@aggregates > 1);
 	push(@return_values, GeniResponse->Bless($webtask->response()));

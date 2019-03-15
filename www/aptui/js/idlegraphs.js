@@ -384,6 +384,7 @@ window.ShowIdleGraphs = (function ()
 		    }
 		    return;
 		}
+		//console.info("rpc", json);
 		_.each(json.value, function(data, name) {
 		    // No data, skip
 		    if (data == "") {
@@ -391,7 +392,7 @@ window.ShowIdleGraphs = (function ()
 		    }
 		    rawData[name] = JSON.parse(data);
 		});
-		console.info("raw", rawData);
+		//console.info("raw", rawData);
 		
 		// No data, tell caller and done.
 		if (Object.keys(rawData).length == 0) {
