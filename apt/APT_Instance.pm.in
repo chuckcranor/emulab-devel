@@ -1471,7 +1471,7 @@ sub CreateDatasetCreds($$$)
     }
 
     foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
-	my $manager_urn = GetManagerId($ref);
+	my $manager_urn = GeniHRN->new(GetManagerId($ref));
 	
 	foreach my $blockref (GeniXML::FindNodesNS("n:blockstore", $ref,
 				   $GeniXML::EMULAB_NS)->get_nodelist()) {
@@ -1548,10 +1548,20 @@ sub CreateDatasetCreds($$$)
 	    next
 		if (!$dataset_urn->IsIMDataset());
 
+	    #
+	    # No need for a credential if the dataset is local and the
+	    # node is local; normal permissions apply.
+	    #
+	    next
+		if ($manager_urn->IsOurDomain() &&
+		    $dataset_urn->IsOurDomain());
+
+	    # Generate per manager credential lists.
 	    next
 		if (exists($credentials{$manager_urn}) &&
 		    exists($credentials{$manager_urn}->{$dataset_urn}));
 
+	    # Generate each credential once.
 	    if (!exists($credentials{$manager_urn})) {
 		$credentials{$manager_urn} = {};
 	    }
