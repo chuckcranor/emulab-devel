@@ -116,6 +116,7 @@ DBConnect(GENISA_DBNAME());
 
 # Protos
 sub fatal($);
+sub MyExit($$);
 sub CreateSlivers();
 sub RunStitcher();
 sub CallMethodOnAggregate($$$);
@@ -275,13 +276,19 @@ if (! (defined($speaksfor_credential) &&
 my $dataset_credentials = {};
 my $retval = $instance->CreateDatasetCreds(\$errmsg, \$dataset_credentials);
 if ($retval) {
-    fatal("Could not generate dataset credentials: $errmsg");
+    # Map user error to BADARGS,
+    $retval = GENIRESPONSE_BADARGS()
+	if ($retval == 1);
+    MyExit($retval, "Could not generate dataset credentials: $errmsg");
 }
 # Ditto images that are not global (also checks user permission).
 my $image_credentials = {};
 $retval = $instance->CreateImageCreds(\$errmsg, \$image_credentials);
 if ($retval) {
-    fatal("Could not generate image credentials: $errmsg");
+    # Map user error to BADARGS,
+    $retval = GENIRESPONSE_BADARGS()
+	if ($retval == 1);
+    MyExit($retval, "Could not generate image credentials: $errmsg");
 }
 
 #
@@ -1277,9 +1284,9 @@ sub RunStitcher()
     return $errcode;
 }
 
-sub fatal($)
+sub MyExit($$)
 {
-    my ($mesg) = @_;
+    my ($code, $mesg) = @_;
 
     $genislice->UnLock()
 	if (defined($genislice));
@@ -1288,12 +1295,18 @@ sub fatal($)
     
     if (defined($webtask)) {
 	$webtask->output($mesg);
-	$webtask->Exited(-1);
+	$webtask->Exited($code);
     }
     print STDERR "*** $0:\n".
 	         "    $mesg\n";
-    # Exit with negative status so web interface treats it as system error.
-    exit(-1);
+    exit($code);
+}
+
+sub fatal($)
+{
+    my ($mesg) = @_;
+
+    MyExit(-1, $mesg);
 }
 
 #
