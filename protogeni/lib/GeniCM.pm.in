@@ -2359,9 +2359,12 @@ sub GetTicketAuxAux($)
 		# If we end up pulling from the docker hub, we need to
 		# prefix the repo with 'library/', because that is how
 		# they do things!
+		# However, do exclude any image with a path separator;
+		# this may be a user or private repo.
 		if (($d_extserver eq 'registry-1.docker.io'
 		     || $d_extserver eq 'registry.hub.docker.com')
-		    && $repo !~ /^library\//) {
+		    && $repo !~ /^library\//
+		    && $repo !~ /\//) {
 		    $repo = 'library/' . $repo;
 		}
 		push(@cmd,'-r');
