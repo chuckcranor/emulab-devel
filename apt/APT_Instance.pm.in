@@ -1641,12 +1641,12 @@ sub CreateImageCreds($$$;$)
 	# Yep, people put the URL in the URN spot. We should throw an error.
 	next
 	    if ($image_urn =~ /^(http|https):/);
-	
-	$image_urn = GeniHRN->new($image_urn);
-	if (! (defined($image_urn) && $image_urn->IsImage())) {
+
+	if (!GeniHRN::IsValid($image_urn)) {
 	    $$pmsg = "$image_urn is not a valid URN";
 	    return 1;
 	}
+	$image_urn = GeniHRN->new($image_urn);
 
 	# System images are global (well, it would be rare if not).
 	next
