@@ -60,7 +60,7 @@ function Do_StartShutdown()
     }
     $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC($this_user->uid(), "nobody",
-		     "webpowder_shutdown -t " . $webtask->task_id() . " -d -n",
+		     "webpowder_shutdown -t " . $webtask->task_id() . " -b -d -n",
 		     SUEXEC_ACTION_CONTINUE);
     $webtask->Refresh();
 
