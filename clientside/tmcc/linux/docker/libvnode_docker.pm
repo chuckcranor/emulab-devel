@@ -1,6 +1,6 @@
 #!/usr/bin/perl -T
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1024,7 +1024,7 @@ sub removeContainerFromDockerExecSSH($) {
     my ($vnode_id,) = @_;
 
     unlink("$DOCKER_EXEC_SSHD_CONFIGDIR/0.${vnode_id}.port");
-    unlink("$DOCKER_EXEC_SSHD_CONFIGDIR/0.${vnode_id}.match");
+    unlink("$DOCKER_EXEC_SSHD_CONFIGDIR/1.${vnode_id}.match");
 
     return rebuildAndReloadDockerExecSSH();
 }
