@@ -5,4 +5,4 @@ set -x
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get install -y --no-install-suggests --no-install-recommends \
-    iproute2 brctl vlan less
+    iproute2 bridge-utils vlan less
