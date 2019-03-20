@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -162,12 +162,6 @@ if (defined($options{"b"})) {
     else {
 	fatal("Bad data in $bsname.");
     }
-}
-if (defined($options{"g"})) {
-    $global = $options{"g"};
-}
-elsif (defined($options{"r"})) {
-    $shared = $options{"r"};
 }
 usage()
     if (@ARGV != 2);
@@ -432,6 +426,33 @@ DoNew:
 #
 if (!$base_image->ezid()) {
     fatal("Cannot clone a non-ez image");
+}
+
+#
+# Figure out the global/shared bits for below.
+#
+if (defined($options{"g"})) {
+    $global = $options{"g"};
+}
+elsif (defined($options{"r"})) {
+    $shared = $options{"r"};
+}
+elsif ($experiment->pid() eq $base_image->pid()) {
+    # Not crossing projects, so inherit from the base image.
+    if ($base_image->global()) {
+	$global = 1;
+    }
+    elsif ($base_image->shared()) {
+	$shared = 1;
+    }
+}
+elsif ($base_image->IsSystemImage()) {
+    # On the Geni Path, everything starts out global so it can be exported.
+    # Note that if we import an non-global image into a project, we will
+    # inherit that when cloning, via the clause above.
+    if ($experiment->geniflags()) {
+	$global = 1;
+    }
 }
 
 #
