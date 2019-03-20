@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,7 +27,7 @@ SUBDIR		= install/powder-fixed
 
 include $(OBJDIR)/Makeconf
 
-TARGETS		= dhcpd.conf.frag.one
+TARGETS		= dhcpd.conf.frag.one telegraf.conf
 
 #
 # Force dependencies on the scripts so that they will be rerun through

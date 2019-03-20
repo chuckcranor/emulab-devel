@@ -33,6 +33,8 @@ my %TYPEFILES    = ("nuc8650" =>
 		        "$TOP_SRCDIR/install/$TARGETSYS_DIR/nuc8559.xml",
 		    "iris030" =>
 		    "$TOP_SRCDIR/install/$TARGETSYS_DIR/iris030.xml");
+my $TELEGRAFCONF = "/usr/local/etc/telegraf.conf";
+my $TELEGRAFPSWD = "$PREFIX/etc/targetsys/telegraf.pswd";
 
 # Placeholder. 
 my %HOSTNAMES = (
@@ -94,11 +96,33 @@ sub Install($$$)
 	#
 	# Install and localize the telegraf configuration.
 	#
-	Phase "telegraf", "Installing telegraf package", sub {
-	    DoneIfPackageInstalled("telegraf", 0);
-	    # Oh, this is clever.
-	    $ENV{"ASSUME_ALWAYS_YES"} = "true";
-	    ExecQuietFatal("pkg install telegraf");
+	Phase "telegraf", "Setting up telegraf", sub {
+	    Phase "package", "Installing telegraf package", sub {
+		DoneIfPackageInstalled("telegraf", 0);
+		# Oh, this is clever.
+		$ENV{"ASSUME_ALWAYS_YES"} = "true";
+		ExecQuietFatal("pkg install telegraf");
+	    };
+	    my $config = "$TOP_OBJDIR/install/$TARGETSYS_DIR/telegraf.conf";
+	    my $password;
+
+	    Phase "password", "Picking up telegraf password", sub {
+		PhaseFail("Password file does not exist")
+		    if (! -e $TELEGRAFPSWD);
+
+		$password = `/bin/cat $TELEGRAFPSWD`;
+		PhaseFail("Cannot read password from file")
+		    if ($?);
+		
+		chomp($password);
+	    };
+	    
+	    Phase "conf", "Generating telegraf config file", sub {
+		DoneIfExists($TELEGRAFCONF);
+		ExecQuietFatal(" cat $config - | sed ".
+			       "   -e 's/__powderpassword__/$password/' ".
+			       "   > $TELEGRAFCONF");
+	    };
 	};
 
 	# These are handy.
@@ -389,8 +413,9 @@ sub Install($$$)
 		PhaseFail("Bad ifconfig_xn0 in $RCCONF");
 	    }
 
-	    # unifi.
-	    #push(@strings, 'unifi_enable="YES"');
+	    # Telegraf
+	    push(@strings, 'telegraf_enable="YES"');
+	    push(@strings, 'telegraf_user="root"');
 
 	    push(@strings,
 		 "ifconfig_xn0=\"inet ". $configvars{"TARGETSYS_BOSSIP"} . 
