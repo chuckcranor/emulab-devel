@@ -324,8 +324,6 @@ sub MapToLocalImage($$$$@)
     }
 
     # The image might be version specific.
-    my $ospid  = $hrn->ospid();
-    my $osname = $hrn->osname();
     my $osvers = $hrn->osvers();
     if (defined($osvers) && $osvers !~ /^\d+$/) {
 	return GeniResponse->BadArgsResponse("Bad version number in $urn");
