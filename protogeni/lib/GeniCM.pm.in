@@ -1331,7 +1331,10 @@ sub GetTicketAuxAux($)
 		    }
 		    goto bad;
 		}
-		if ($image->IsLocal() || $image->IsSystemImage()) {
+		if (!$image->isImage()) {
+		    $osname = $image->pid() . "/" . $image->osname();
+		}
+		elsif ($image->IsLocal() || $image->IsSystemImage()) {
 		    # No need for image_setup to look at it.
 		    # System images are never auto imported.
 		    $osname = $image->versname();

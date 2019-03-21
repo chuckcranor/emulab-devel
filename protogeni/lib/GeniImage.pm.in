@@ -287,9 +287,21 @@ my %localblobcache = ();
 sub MapToLocalImage($$$$@)
 {
     my ($urn, $geniuser, $pid, $use_imagetracker, @credentials) = @_;
-    my $hrn = GeniHRN->new($urn);
+    my $hrn    = GeniHRN->new($urn);
+    my $ospid  = $hrn->ospid();
+    my $osname = $hrn->osname();
     my ($blob, $url);
 
+    #
+    # Short circuit special images (generic,mfs,etc). Permission checks
+    # will be handled later. 
+    #
+    if ($ospid eq TBOPSPID()) {
+	my $image = OSImage->Lookup($ospid, $osname);
+	return $image
+	    if (defined($image) && !$image->isImage());
+    }
+    
     if ($use_imagetracker) {
 	if (exists($localblobcache{$urn})) {
 	    $blob = $localblobcache{$urn};
