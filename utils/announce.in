@@ -39,7 +39,7 @@ sub usage()
     print STDERR "       announce -h\n";
     print STDERR "   -h   This message\n";
     print STDERR "   -a   Create a new announcement with the given announcement text.\n";
-    print STDERR "   -p   Set the portal to be the one given. Should be one of 'cloudlab', 'emulab', 'aptlab', 'phantomnet'.\n";
+    print STDERR "   -p   Set the portal to be the one given. Should be one of 'cloudlab', 'emulab', 'aptlab', 'phantomnet', 'powder'.\n";
     print STDERR "   -s   Set the style of the overall announcement box. Should normally be one of bootstraps alert-* classes. Defaults to 'alert-info'.\n";
     print STDERR "        Common styles: 'alert-success' -> green, 'alert-info' -> blue, 'alert-warning' -> yellow, 'alert-danger' -> red\n\n";
     print STDERR "   -b   If there is an action associated with this announcement, this is the text which goes into the action button. Can include HTML. If it is unset, there is no action button.\n";
@@ -220,8 +220,9 @@ if ($add_mode)
 	usage();
     }
     elsif ($portal ne "cloudlab" && $portal ne "emulab" &&
-	$portal ne "aptlab" && $portal ne "phantomnet") {
-	print STDERR "Portal $portal is invalid. Must be cloudlab, emulab, aptlab, or phantomnet.\n\n";
+	   $portal ne "aptlab" && $portal ne "phantomnet" &&
+	   $portal ne "powder") {
+	print STDERR "Portal $portal is invalid. Must be cloudlab, emulab, aptlab, phantomnet, or powder.\n\n";
 	usage();
     }
 }
