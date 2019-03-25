@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -391,6 +391,11 @@ foreach my $name (keys %portMap) {
 	    $device = new snmpit_mellanox($name);
 	    last;
 	};
+	/dellrest/ && do {
+	    require snmpit_dellrest;
+	    $device = new snmpit_dellrest($name);
+ 	    last;
+	};
 	/force10/ && do {
 	    require snmpit_force10;
 	    $device = new snmpit_force10($name);
@@ -407,6 +412,11 @@ foreach my $name (keys %portMap) {
 	goto skip;
         
     }
+    if (!$device) {
+	warn "ERROR: could not create object for switch type '$type', skipping some ports\n";
+	goto skip;
+    }
+
     my @results = $device->getFields(\@ports,\@oids);
 
     foreach my $result (@results) {

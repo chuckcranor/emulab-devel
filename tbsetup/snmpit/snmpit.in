@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -1596,8 +1596,8 @@ sub doListPorts($) {
     #
     our ($port,$enabled,$up,$speed,$duplex);
     print << "END";
-Port      Enabled Up   Speed      Duplex
---------------------------------------------
+Port              Enabled Up   Speed      Duplex
+------------------------------------------------
 END
 # make port field much longer because we use the 'triple' format of port string
     format portlist =
@@ -1859,12 +1859,12 @@ sub doGetStats($) {
     # See perlform(1) for help with formats
     #
     print << "END";
-          In         InUnicast  InNUnicast In         In         Unknown    Out        OutUnicast OutNUcast  Out       Out         OutQueue
-Port      Octets     Packets    Packets    Discards   Errors     Protocol   Octets     Packets    Packets    Discards  Errors      Length
----------------------------------------------------------------------------------------------------------------------------------------------
+                                 In         InUnicast  InNUnicast In         In         Unknown    Out        OutUnicast OutNUcast  Out       Out         OutQueue
+Port                             Octets     Packets    Packets    Discards   Errors     Protocol   Octets     Packets    Packets    Discards  Errors      Length
+-------------------------------------------------------------------------------------------------------------------------------------------------
 END
     format stats =
-@<<<<<<<< @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> 
+@<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> @>>>>>>>>> 
 $port,    $inoctets, $inunicast,$innunicast,$indiscards,$inerr,  $inunk,    $outoctets,$outunicast,$outnunicast,$outdiscards,$outerr,$outq
 .
     $FORMAT_NAME = 'stats';
