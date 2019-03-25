@@ -161,7 +161,7 @@ my %xmlfields =
      "shared",		=> ["shared",		$SLOT_ADMINONLY,   0],
      "mustclean",	=> ["mustclean",	$SLOT_ADMINONLY,   1],
      "nextosid",	=> ["nextosid",		$SLOT_ADMINONLY],
-     "reboot_waittime",	=> ["reboot_waittime",	$SLOT_ADMINONLY]
+     "reboot_waittime",	=> ["reboot_waittime",	$SLOT_ADMINONLY],
      "def_parentosid",	=> ["def_parentosid",	$SLOT_OPTIONAL],
     );
 
