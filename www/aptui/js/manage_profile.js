@@ -1449,12 +1449,17 @@ $(function ()
 		changeRspec(json.value.script);
 	    });
 	}
+	var args = {"repourl" : repourl};
+	// If there is profile name, pass that through so we can look
+	// for a script or rspec with the same name (instead of profile.py).
+	if ($.trim($('#profile_name').val()) != "") {
+	    args["profile_name"] = $.trim($('#profile_name').val());
+	}
 	WaitWait("We are attempting to clone your repository. " +
 		 "Patience please.");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "manage_profile",
-					    "GetRepository",
-					    {repourl : repourl});
+					    "GetRepository", args);
 					    
 	xmlthing.done(callback);
     }
@@ -1524,7 +1529,7 @@ $(function ()
 
     function SetupRepo()
     {
-	//console.info("SetupRepo");
+	console.info("SetupRepo");
 
 	gitrepo.InitRepoPicker(version_uuid, reporefspec,
 			       function(which) {

@@ -299,7 +299,8 @@ sub CreateProfile()
 	my $repohash;
 
 	my $output =
-	    emutil::ExecQuiet("$MANAGEGITREPO clone -n $reponame '$repourl'");
+	    emutil::ExecQuiet("$MANAGEGITREPO clone -n $reponame ".
+			      "  -S " . $new_args{"name"} . " '$repourl'");
 	if ($?) {
 	    UserError($output);
 	}

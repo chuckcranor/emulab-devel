@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -108,13 +108,14 @@ sub DoCommitList();
 sub DoCommitInfo();
 sub DoGetSource();
 sub DoGetRepoSize();
-sub GetRepoSource($;$);
+sub GetRepoSource($;$$);
 sub GetRepoSize($);
 sub GetBranchList($);
 sub GetTagList($);
 sub GetCommitList($$);
 sub GetCommitField($$$);
 sub GetRepoName($);
+sub GetProfile($);
 sub GetDefaultBranch($);
 sub RemoveRepo($);
 
@@ -266,11 +267,12 @@ sub DoCheckRemote()
 #
 sub DoClone()
 {
-    my $optlist = "o:rn:u";
+    my $optlist = "o:rn:uS:";
     my $ofile;
     my $remove;
     my $reponame;
     my $update;
+    my $sourcename;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -289,6 +291,13 @@ sub DoClone()
     }
     if (defined($options{"r"})) {
 	$remove = 1;
+    }
+    if (defined($options{"S"})) {
+	$sourcename = $options{"S"};
+	# Silly taint check.
+	if ($sourcename =~ /^(.*)$/) {
+	    $sourcename = $1;
+	}
     }
     if (defined($options{"u"})) {
 	$update = 1;
@@ -344,7 +353,7 @@ sub DoClone()
     #
     # Now get the geni-lib script or rspec, write it to the file or stdout.
     #
-    my $source = GetRepoSource($reponame);
+    my $source = GetRepoSource($reponame, undef, $sourcename);
     if (!defined($source)) {
 	RemoveRepo($reponame);
 	UserError("Could not find profile.py or profile.rspec in repository");
@@ -405,6 +414,7 @@ sub DoUpdate()
     my $ofile;
     my $reponame;
     my $repourl;
+    my $sourcename;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -437,6 +447,7 @@ sub DoUpdate()
 	}
 	$reponame = $profile->reponame();
 	$repourl  = $profile->repourl();
+	$sourcename = $profile->name();
     }
     else {
 	usage();
@@ -484,9 +495,9 @@ sub DoUpdate()
     #
     # Now get the geni-lib script or rspec write it to the file or stdout.
     #
-    my $source = GetRepoSource($reponame);
+    my $source = GetRepoSource($reponame, undef, $sourcename);
     if (!defined($source)) {
-	UserError("Could not find profile.py or profile.rspec in repository");
+	UserError("Could not find profile source in repository");
     }
 
     #
@@ -534,6 +545,7 @@ sub DoGetSource()
     my $reponame;
     my $ofile;
     my $which;
+    my $profile;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -543,6 +555,7 @@ sub DoGetSource()
 	$ofile = $options{"o"};	
     }
     $which = shift(@ARGV) if (@ARGV);
+    $profile = GetProfile(\%options);
     $reponame = GetRepoName(\%options);
     $which = GetDefaultBranch($reponame) if (!defined($which));
 
@@ -550,7 +563,8 @@ sub DoGetSource()
     if ($which =~ /^(.*)$/) {
 	$which = $1;
     }
-    my $source = GetRepoSource($reponame, $which);
+    my $source = GetRepoSource($reponame, $which,
+			       defined($profile) ? $profile->name() : undef);
     if (!defined($source)) {
 	UserError("Could not find profile.py or profile.rspec in repository");
     }
@@ -584,11 +598,17 @@ sub DoGetSource()
 #
 # Grab a file from the bare repo.
 #
-sub GetRepoSource($;$)
+sub GetRepoSource($;$$)
 {
-    my ($reponame, $refspec) = @_;
+    my ($reponame, $refspec, $name) = @_;
     my $repodir = "$REPODIR/$reponame";
     my $source;
+
+    # List of places to find the source.
+    my @locations = ("profiles/profile", "profile");
+    if (defined($name)) {
+	unshift(@locations, "profiles/$name", "$name");
+    }
 
     $refspec = GetDefaultBranch($reponame)
 	if (!defined($refspec));
@@ -601,15 +621,19 @@ sub GetRepoSource($;$)
     chdir("$repodir") or
 	fatal("Could not chdir to $repodir: $!");
 
-    if (system("$GIT cat-file -e ".
-	       "$refspec:profile.py >/dev/null 2>&1") == 0) {
-	$source = "profile.py";
+    foreach my $maybe (@locations) {
+	if (system("$GIT cat-file -e ".
+		   "$refspec:${maybe}.py >/dev/null 2>&1") == 0) {
+	    $source = "${maybe}.py";
+	}
+	elsif (system("$GIT cat-file -e ".
+		      "  $refspec:${maybe}.rspec >/dev/null 2>&1") == 0) {
+	    $source = "${maybe}.rspec";
+	}
+	last
+	    if ($source);
     }
-    elsif (system("$GIT cat-file -e ".
-		  "  $refspec:profile.rspec >/dev/null 2>&1") == 0) {
-	$source = "profile.rspec";
-    }
-    else {
+    if (!$source) {
 	print STDERR "$repodir, $refspec\n";
 	print STDERR `/usr/bin/id`;
 	print STDERR `/bin/ls -la`;
@@ -1103,6 +1127,27 @@ sub GetRepoName($)
 	usage();
     }
     return $reponame;
+}
+
+#
+# Dig the profile out of the options list.
+#
+sub GetProfile($)
+{
+    my ($options) = @_;
+    my %options   = %{ $options };
+    
+    if (defined($options{"p"})) {
+	my $profile = APT_Profile->Lookup($options{"p"});
+	if (!defined($profile)) {
+	    fatal("No such profile");
+	}
+	if (!defined($profile->reponame())) {
+	    fatal("No such repository associated with profile");
+	}
+	return $profile;
+    }
+    return undef;
 }
 
 #

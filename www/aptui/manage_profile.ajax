@@ -1379,6 +1379,7 @@ function Do_GetRepository()
 {
     global $this_user;
     global $ajax_args;
+    $nameopt = "";
     
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
@@ -1393,6 +1394,17 @@ function Do_GetRepository()
 	return;
     }
     $repourl = escapeshellarg($repourl);
+
+    # Pass though profile name to use instead of profile.py.
+    if (isset($ajax_args["profile_name"])) {
+        if (!TBcheck_dbslot($ajax_args["profile_name"],
+                            "apt_profiles", "name",
+                            TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+            SPITAJAX_ERROR(2, "Invalid profile name: " . TBFieldErrorString());
+            return;
+        }
+        $nameopt = "-S " . escapeshellarg($ajax_args["profile_name"]);
+    }
 
     $webtask = WebTask::CreateAnonymous();
     if (!$webtask) {
@@ -1409,15 +1421,15 @@ function Do_GetRepository()
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
     if ($retval != 0) {
-        if ($retval < 0) {
-            $error = $webtask->TaskValue("output");
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error checking repository");
         }
         else {
             $error = $webtask->TaskValue("output");
+            SPITAJAX_ERROR(1, $error);
         }
         $webtask->Delete();
-	SPITAJAX_ERROR(1, $error);
 	return;
     }
     $webtask->Reset();
@@ -1426,20 +1438,20 @@ function Do_GetRepository()
     
     $retval = SUEXEC($this_uid, "tbadmin",
 		     "webmanage_gitrepo -t " . $webtask->task_id() . " " .
-                     "  clone -o $outfname -r $repourl",
+                     "  clone $nameopt -o $outfname -r $repourl",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
     if ($retval != 0) {
-        if ($retval < 0) {
-            $error = $webtask->TaskValue("output");
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error checking repository");
         }
         else {
             $error = $webtask->TaskValue("output");
+            SPITAJAX_ERROR(1, $error);
         }
         $webtask->Delete();
         unlink($outfname);
-	SPITAJAX_ERROR(1, $error);
 	return;
     }
     $blob = array("script"  => file_get_contents($outfname),
