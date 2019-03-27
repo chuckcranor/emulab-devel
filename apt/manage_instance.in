@@ -3326,9 +3326,10 @@ sub DoPanic()
     my $response;
     my $logfile;
     
-    my $optlist     = "Lpf";
+    my $optlist     = "LpfR";
     my $takelock    = 0;
     my $poweroff    = 0;
+    my $radiosonly  = 0;
     my $foreground  = 0;
     
     my %options = ();
@@ -3340,6 +3341,9 @@ sub DoPanic()
     }
     if (defined($options{"p"})) {
 	$poweroff = 1;
+	if (defined($options{"R"})) {
+	    $radiosonly = 1;
+	}
     }
     if (defined($options{"f"})) {
 	$foreground = 1;
@@ -3443,7 +3447,8 @@ sub DoPanic()
     my $coderef = sub {
 	my ($sliver) = @_;
 
-	return $sliver->Panic(($setclr eq "clear" ? 1 : 0), $poweroff);
+	return $sliver->Panic(($setclr eq "clear" ? 1 : 0),
+			      $poweroff, $radiosonly);
     };
 
     # Invoke on all clusters

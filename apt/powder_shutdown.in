@@ -186,15 +186,17 @@ while (my ($uuid) = $query_result->fetchrow_array()) {
 		next;
 	    }
 	    my @nodelist = $experiment->NodeList(0);
-	    my $bad = 0;
+	    my $killme = 0;
 	    foreach my $node (@nodelist) {
-		my $nodetype = $node->NodeTypeInfo();
-		if ($nodetype && $nodetype->GetAttribute("panicpoweroff")) {
-		    $bad = 0;
+		my $val = undef;
+
+		if ($node->NodeAttribute("panicpoweroff", \$val) == 0 &&
+		    defined($val) && $val) {
+		    $killme = 1;
 		    last;
 		}
 	    }
-	    if ($bad) {
+	    if ($killme) {
 		push(@killme, $instance);
 		last;
 	    }
@@ -248,7 +250,7 @@ while (@killme) {
 	    next;
 	}
 	print "Setting quarantine mode (with power off) on $instance\n";
-	system("$MANAGEINSTANCE panic $uuid -f -p set");
+	system("$MANAGEINSTANCE panic $uuid -f -p -R set");
 	if ($?) {
 	    print "Will try again later\n";
 	    push(@killme, $instance);

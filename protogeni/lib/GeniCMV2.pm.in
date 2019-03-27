@@ -79,6 +79,7 @@ my $TBOPS          = "@TBOPSEMAIL@";
 my $TBLOGS         = "@TBLOGSEMAIL@";
 my $TBAPPROVAL     = "@TBAPPROVALEMAIL@";
 my $TBAUDIT   	   = "@TBAUDITEMAIL@";
+my $MAINSITE       = @TBMAINSITE@;
 my $BOSSNODE       = "@BOSSNODE@";
 my $OURDOMAIN      = "@OURDOMAIN@";
 my $PGENIDOMAIN    = "@PROTOGENI_DOMAIN@";
@@ -5931,6 +5932,7 @@ sub Panic($)
     my $slice_urn    = $argref->{'slice_urn'};
     my $clear        = $argref->{'clear'};
     my $poweroff     = $argref->{'poweroff'};
+    my $radiosonly   = $argref->{'radiosonly'};
     my $credentials  = $argref->{'credentials'};
     my $forked       = 0;
     
@@ -6057,6 +6059,7 @@ sub Panic($)
     my $pid = $experiment->pid();
     my $eid = $experiment->eid();
     my $command = "$WAP $PANIC -l " . ($poweroff ? "3" : "1") . " " .
+	($MAINSITE && $radiosonly ? "-R" : "") . " " .
 	($clear ? "-r " : "") . "$pid $eid";
 
     GeniUtil::FlipToElabMan();

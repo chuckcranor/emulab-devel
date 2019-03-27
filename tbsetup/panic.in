@@ -38,6 +38,7 @@ sub usage()
 	  "-l level - Level 1; reboot nodes into the admin MFS\n".
 	  "         - Level 2; disable the control network\n".
           "         - Level 3; power off all nodes\n".
+	  "-R       - With level 3, power off only the radio equipment\n".
 	  "-r       - Reset panic state (admin people only)\n".
 	  "-c       - Clear panic state but do not do anything else\n".
 	  "-w       - From web interface, create a log file.\n".
@@ -45,11 +46,12 @@ sub usage()
 	  "<eid>    - The experiment name (id)\n");
     exit(-1);
 }
-my $optlist = "rl:wc";
+my $optlist = "rl:wcR";
 my $reset   = 0;
 my $clear   = 0;
 my $level   = 1;
 my $dolog   = 0;
+my $radiosonly = 0;
 
 sub fatal($);
 sub DoIt();
@@ -132,6 +134,9 @@ if (defined($options{"r"})) {
 }
 if (defined($options{"w"})) {
     $dolog = 1;
+}
+if (defined($options{"R"})) {
+    $radiosonly = 1;
 }
 if (defined($options{"l"})) {
     $level = $options{"l"};
@@ -315,13 +320,25 @@ sub PowerMode()
     my @failures = ();
     
     # Need a list of nodes, going to call power individually.
-    my @nodes = $experiment->NodeList(1, 0);
+    my @nodes = $experiment->NodeList(0, 0);
     if (!@nodes) {
 	$experiment->Unlock();
 	fatal("Could not get node list for experiment");
     }
-    foreach my $node_id (@nodes) {
-	# Tell power to send an event.
+    foreach my $node (@nodes) {
+	my $node_id = $node->node_id();
+	
+	#
+	# If radiosonly, then look for special node attribute.
+	# Skip all other nodes. (Powder Panic Button).
+	#
+	if ($radiosonly) {
+	    my $val = undef;
+
+	    next
+		if (! ($node->NodeAttribute("panicpoweroff", \$val) == 0 &&
+		       defined($val) && $val));
+	}
 	system("$POWER " . ($reset ? "on" : "off") . " $node_id");
 	if ($?) {
 	    push(@failures, $node_id);

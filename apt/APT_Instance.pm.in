@@ -3402,9 +3402,9 @@ sub Lockdown($$$)
 #
 # Panic
 #
-sub Panic($$$)
+sub Panic($$$$)
 {
-    my ($self, $clear, $poweroff) = @_;
+    my ($self, $clear, $poweroff, $radiosonly) = @_;
     my $authority = $self->GetGeniAuthority();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
