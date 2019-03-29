@@ -103,7 +103,7 @@ sub createExpectObject($)
     my $self = shift;
     my $id = "$self->{NAME}::createExpectObject()";
     my $error = 0;
-    my $spawn_cmd = "ssh -l $self->{USERNAME} $self->{NAME}";
+    my $spawn_cmd = "ssh -o UserKnownHostsFile=/dev/null -l $self->{USERNAME} $self->{NAME}";
     # Create Expect object and initialize it:
     my $exp = new Expect();
     if (!$exp) {
