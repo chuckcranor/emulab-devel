@@ -19,14 +19,6 @@
 	  <input size=5 readonly value='<%- lockdown_code %>'>
 	  <input size=5 id='terminate_lockdown_code'>
 	</center>
-	<% if (extension_info.extension_reason != "") { %>
-	<br>
-	<div class='text-center'>Most recent extension request reason</div>
-	<div style='border: solid #000 1px;'>
-	  <div style='padding-left: 2px; padding-right: 2px;'>
-	    <%- extension_info.extension_reason %></div>
-	</div>
-	<% } %>
 	<% } %>
 	<br>
         <button class='btn btn-primary align-center' id='terminate'
