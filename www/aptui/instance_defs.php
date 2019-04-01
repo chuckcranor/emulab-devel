@@ -841,6 +841,7 @@ class Instance
             $skiptypes["nuc8559"]  = true;
             $skiptypes["nuc7100"]  = true;
             $skiptypes["iris030"]  = true;
+            $skiptypes["faros_sfp"]  = true;
         }
         return $skiptypes;
     }
