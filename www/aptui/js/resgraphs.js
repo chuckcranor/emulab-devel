@@ -92,10 +92,21 @@ window.ShowResGraph = (function ()
 		    /*
 		     * Oh, turns out two consecutive timestamps can have
 		     * the same free/held values. Cull those out too.
+		     * We want the first one, eating up the subsequent
+		     * timestamps with the same values.
 		     */
 		    if (data.free == nextdata.free &&
 			data.held == nextdata.held) {
-			//console.info("toss2", type, data, nextdata);
+			//console.info("toss2", type, data);
+			temp.push(data);
+			for (i = i + 1; i < array.length - 1; i++) {
+			    nextdata = array[i];
+			    if (! (data.free == nextdata.free &&
+				   data.held == nextdata.held)) {
+				break;
+			    }
+			    //console.info("toss2-B", nextdata);
+			}
 			continue;
 		    }
 		    /*
