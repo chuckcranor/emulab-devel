@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -902,8 +902,13 @@ sub DoPrediction()
 	my @list = APT_Aggregate->LookupForPortal($portal);
 	foreach my $agg (@list) {
 	    if ($agg->disabled()) {
-		print STDERR "The " . $aggregate->name() . " cluster ".
-		    "is currently offline, please try again later.";
+		print STDERR "The " . $agg->name() . " cluster ".
+		    "is currently disabled, please try again later.\n";
+		next;
+	    }
+	    if (!$agg->IsUp()) {
+		print STDERR "The " . $agg->name() . " cluster ".
+		    "is currently offline, please try again later.\n";
 		next;
 	    }
 	    my $authority = APT_Geni::GetAuthority($agg->urn());
