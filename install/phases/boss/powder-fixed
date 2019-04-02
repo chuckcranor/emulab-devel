@@ -94,6 +94,14 @@ sub Install($$$)
 	};
 
 	#
+	# Extra install
+	# 
+	Phase "extra", "Installing extra scripts", sub {
+	    ExecQuietFatal("cd $TOP_OBJDIR/install/$TARGETSYS_DIR; ".
+			   "$GMAKE; $GMAKE install");
+	};
+
+	#
 	# Install and localize the telegraf configuration.
 	#
 	Phase "telegraf", "Setting up telegraf", sub {
@@ -118,7 +126,6 @@ sub Install($$$)
 	    };
 	    
 	    Phase "conf", "Generating telegraf config file", sub {
-		DoneIfExists($TELEGRAFCONF);
 		ExecQuietFatal(" cat $config | sed ".
 			       "   -e 's/__powderpassword__/$password/' ".
 			       "   > $TELEGRAFCONF");
@@ -195,14 +202,6 @@ sub Install($$$)
 		    or PhaseFail("Could not clear disable flag on feature");
 	    };
 	}
-
-	#
-	# Extra install
-	# 
-	Phase "extra", "Installing extra scripts", sub {
-	    ExecQuietFatal("cd $TOP_OBJDIR/install/$TARGETSYS_DIR; ".
-			   "$GMAKE install");
-	};
 
 	#
 	# Add the node types to the DB.
