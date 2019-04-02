@@ -119,7 +119,7 @@ sub Install($$$)
 	    
 	    Phase "conf", "Generating telegraf config file", sub {
 		DoneIfExists($TELEGRAFCONF);
-		ExecQuietFatal(" cat $config - | sed ".
+		ExecQuietFatal(" cat $config | sed ".
 			       "   -e 's/__powderpassword__/$password/' ".
 			       "   > $TELEGRAFCONF");
 	    };
