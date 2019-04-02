@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (c) 2017, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2017-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -306,12 +306,14 @@ if ($debug) {
 # is a array of one array of hashes.  Go figure...
 my $histref;
 if (defined($content) && ref($content) eq 'ARRAY') {
-    $histref = $content[0];
-    if (ref($histref) eq 'ARRAY') {
-	$histref = $histref->[0];
+    if (ref($content->[0]) eq 'ARRAY') {
+	$histref = $content->[0];
+    }
+    else {
+	$histref = $content;
     }
 }
-if (defined($histref)) {
+if (defined($histref) && ref($histref) eq 'ARRAY') {
     foreach my $h (@{$histref}) {
 	next
 	    if (!exists($h->{"Id"}) || !exists($h->{"Size"}));
