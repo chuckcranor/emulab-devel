@@ -1754,7 +1754,7 @@ $(function ()
 
     function CreateJacksEditor()
     {
-        var isViewer = gotscript && !portal_converted;
+        var isViewer = window.ISPOWDER || (gotscript && !portal_converted);
 	if (editor) {
 	    $('#editmodal_div').empty();
 	}
@@ -1784,7 +1784,12 @@ $(function ()
 		     fromrepo, gotscript, gotrspec, portal_converted);
 
 	if (! (gotscript || gotrspec)) {
-	    $('#edit_topo_modal_button').html('Create Topology');
+	    if (window.ISPOWDER) {
+		$('#edit_topo_modal_button').addClass('hidden');
+	    }
+	    else {
+		$('#edit_topo_modal_button').html('Create Topology');
+	    }
 	    $('#show_source_modal_button').html('Edit Code');
 	}
 	else {
@@ -1806,7 +1811,8 @@ $(function ()
 		// Hide the git-repo button.
 		$('#git-repo-button-div').addClass("hidden");
 	    }
-	    if (canedittopo) {
+	    $('#edit_topo_modal_button').removeClass('hidden');
+	    if (canedittopo && !window.ISPOWDER) {
 		$('#edit_topo_modal_button').html('Edit Topology');
 	    }
 	    else {
