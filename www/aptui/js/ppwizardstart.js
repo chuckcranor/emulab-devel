@@ -61,6 +61,11 @@ $(function () {
 		HandleSubmit();
 	    });
 
+	    // Tell caller when user changes anything.
+	    $('#pp_form input, #pp_form select').change(function(event) {
+		modified_callback();
+	    });
+
 	    //
 	    // Handle the toggle-all help panels link.  Bootstrap
 	    // doesn't give us a simple way to collapse multiple panels
