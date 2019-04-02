@@ -542,6 +542,16 @@ sub ProcessResults($)
 
 		    # Mark that we have sent email
 		    $status{$urn}->{'status'}->{'status'} = "dead";
+
+		    if ($aggregate->status() eq "up") {
+			if ($impotent) {
+			    print STDERR "Would mark $nickname as offline\n";
+			}
+			else {
+			    $aggregate->status("offline");
+			    $aggregate->StatusEvent("offline");
+			}
+		    }
 		}
 		elsif ($dailymail &&
 		       $status{$urn}->{'status'}->{'status'} eq "dead") {
@@ -561,6 +571,15 @@ sub ProcessResults($)
 		}
 		$status{$urn}->{'status'}->{'status'} = "up";
 		$status{$urn}->{'status'}->{'stamp'}  = undef;
+		if ($aggregate->status() eq "offline") {
+		    if ($impotent) {
+			print STDERR "Would mark $nickname as up\n";
+		    }
+		    else {
+			$aggregate->status("up");
+			$aggregate->StatusEvent("up");
+		    }
+		}
 	    }
 	}
     }
@@ -823,7 +842,7 @@ sub NotifySlack($)
     my ($message) = @_;
 
     return
-	if (0 && $debug);
+	if ($impotent);
 
     if (open(PIPE, "| $CURL -s -X POST -H ".
 	     "'Content-type: application/json' --data \@- $SLACKURL")){
