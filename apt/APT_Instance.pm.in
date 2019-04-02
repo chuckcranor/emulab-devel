@@ -3427,6 +3427,8 @@ sub Panic($$$$)
 	if ($clear);
     $args->{"poweroff"} = 1
 	if ($poweroff);
+    $args->{"radiosonly"} = 1
+	if ($radiosonly);
     my $cmurl = $authority->url();
     $cmurl = devurl($cmurl) if ($usemydevtree);
 
