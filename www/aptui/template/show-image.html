@@ -8,6 +8,15 @@
     padding-top: 2px;
     padding-bottom: 2px;
 }
+@media (min-width: 768px) {
+    .dl-horizontal dt {
+	width: 80px;
+    }
+    .dl-horizontal dd {
+	margin-left: 100px;
+    }
+ }
+ 
 </style>
 <div class='col-lg-10 col-lg-offset-1
             col-md-10 col-md-offset-1
@@ -187,17 +196,17 @@
 	    <a href='#' class='btn btn-xs'
 	       data-toggle='popover'
 	       data-html='true'
-	       data-content='<dl class=horizontal>
-			     <dt>Shared</dt>
-			     <dd>Images that are marked shared can be used by all
-			     subgroups of the project the image belongs to. When not
-			     shared, the image is accessible only by experiments
-   			     created in the same subgroup as the image.</dd>
-			     <dt>Global</dt>
-			     <dd>Images that are marked global can be used by any
-			     user in any project or subgroup. Global implies shared
-			     so if you mark an image as global, we will uncheck
-			     shared.</dd></dl>'>
+	       data-content='<dl class=dl-horizontal>
+		     <dt>Shared</dt>
+		     <dd>Images that are marked shared can be used by all
+		     subgroups of the project the image belongs to. When not
+		     shared, the image is accessible only by experiments
+		     created in the same subgroup as the image.</dd>
+		     <dt>Global</dt>
+		     <dd>Images that are marked global can be used by any
+		     user in any project or subgroup. Global implies shared
+		     so if you mark an image as global, we will uncheck
+		     shared.</dd></dl>'>
 	      <span class='glyphicon glyphicon-question-sign'
 		    style='margin-bottom: 4px;'></span>
 	    </a>
@@ -250,7 +259,7 @@
 	    </td>
 	  </tr>
 	<% } %>
-	<% if (! fields.isdataset) { %>
+	<% if (isadmin && !fields.isdataset) { %>
 	  <tr>
 	    <td>Partition/Length</td>
 	    <td><%- fields.loadpart %>/<%- fields.loadlength %></td>
@@ -285,14 +294,21 @@
 	      <% } %>
 	    </td>
 	  </tr>
+	<% } %>
 	  <tr>
 	    <td class="editable adminonly"
 		data-fieldname="osfeatures" data-fieldtype="text">
-	      Features</td>
+	      Features
+	      <a href='#' class='btn btn-xs' id="osfeatures-help"
+		 data-toggle='popover'
+		 data-html='true'>
+		<span class='glyphicon glyphicon-question-sign'
+		      style='margin-bottom: 4px;'></span>
+	      </a>
+	    </td>
 	    <td><span class="original"
 		><%- fields.os_features.join(",") %></span></td>
 	  </tr>
-	<% } %>
 	<% if (fields.hash) { %>
 	  <tr>
 	    <td>SHA1 Hash</td>
@@ -403,3 +419,38 @@
     </div>
   </div>
 </div>
+<div class="hidden" id="osfeatures-help-contents">
+  <p>
+    Features that an image advertises to the infrastructure. These
+    features are used by the control framework to dictate what
+    operations it can perform on a node running the image, either for
+    its own needs or on behalf of a user.
+  </p>
+  <dl class=dl-horizontal>
+    <dt></dt>
+    <dd></dd>
+    <dt>ping</dt>
+    <dd>OS kernel will respond to ICMP pings</dd>
+    <dt>ssh</dt>
+    <dd>OS runs an sshd supporting public key authentication</dd>
+    <dt>ipod</dt>
+    <dd>OS kernel supports the Emulab-specific ICMP "ping of death"</dd>
+    <dt>isup</dt>
+    <dd>Contains Emulab control scripts that report the "ISUP" state</dd>
+    <dt>mlinks</dt>
+    <dd>Contains scripts to configure "multiplexed links"</dd>
+    <dt>linktest</dt>
+    <dd>Contains scripts to perform connectivity/routing/loss/BW tests on
+      configured</dd>
+    <dt>linkdelays</dt>
+    <dd>Contains scripts to configure on-node traffic shaping</dd>
+    <dt>vlans</dt>
+    <dd>OS can support multiplexed links using VLAN devices</dd>
+    <dt>loc-bstore</dt>
+    <dd>Supports configuration of local disk blockstores</dd>
+    <dt>rem-bstore</dt>
+    <dd>Supports configuration of remote iSCSI-based blockstores</dd>
+  </dl>
+</div>
+  
+

@@ -158,7 +158,15 @@
 	      <div class="form-group">
 		<div class="format-me"
 		     data-key="wholedisk"
-		     data-label="Whole Disk">
+		     data-label="Whole Disk"
+		     data-help="Check this box if you need to capture more
+			   then just the primary partition of your disk.
+			   For example, you created a file system on
+			   parition two, and want to include that in
+			   your new disk image. 
+			   <b><em>Do not check this box if you do not
+			   need to do this or 
+			   do not know what this means!</em></b>">
 		  <label class="checkbox-inline"> 
 		    <input type="checkbox" 
 			   <% if (formfields.wholedisk) { %>

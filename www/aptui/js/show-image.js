@@ -169,6 +169,9 @@ $(function ()
 		});
 	}
 
+	// Copy the osfeatures help string into the popover before init.
+	$('#osfeatures-help')
+	    .data("content", $('#osfeatures-help-contents').html());
 	// This activates the popover subsystem.
 	$('[data-toggle="popover"]').popover({
 	    trigger: 'hover',
