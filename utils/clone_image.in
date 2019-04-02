@@ -59,7 +59,7 @@ sub usage()
 	  "       -w      Wait for image to be created\n");
     exit(-1);
 }
-my $optlist     = "densg:wFr:b:UB:";
+my $optlist     = "densg:wFr:b:UB:t:";
 my $debug       = 0;
 my $wholedisk   = 0;
 my $impotent    = 0;
@@ -74,6 +74,8 @@ my $origin_uuid;
 my $bsname;
 my $base_image;
 my $image;
+my $webtask_id;
+my $webtask;
 
 #
 # Configure variables
@@ -109,6 +111,7 @@ use Project;
 use OSImage;
 use Image;   # For datasets
 use Node;
+use WebTask;
 use EmulabFeatures;
 
 # Protos
@@ -162,6 +165,14 @@ if (defined($options{"b"})) {
     else {
 	fatal("Bad data in $bsname.");
     }
+}
+if (defined($options{"t"})) {
+    $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("No such webtask");
+    }
+    $webtask->AutoStore(1);
 }
 usage()
     if (@ARGV != 2);
@@ -393,9 +404,13 @@ if (defined($image)) {
     if ($nosnapshot) {
 	print "Not taking a snapshot, as directed\n"
 	    if ($debug);
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
 	exit(0);
     }
     my $opts = "-p $pid ";
+    $opts   .= "-t $webtask_id " if (defined($webtask));
     $opts   .= "-w " if ($waitmode);
     $opts   .= "-F " if ($nodelta);
     $opts   .= "-U " if ($update_prepare);
@@ -675,6 +690,9 @@ if ($debug) {
 if ($nosnapshot) {
     print "Not taking a snapshot, as directed\n"
 	if ($debug);
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
     exit(0);
 }
 
@@ -685,6 +703,7 @@ if ($nosnapshot) {
 $nodelta = 1;
 
 my $opts = "-p $pid ";
+$opts   .= "-t $webtask_id " if (defined($webtask));
 $opts   .= "-w " if ($waitmode);
 $opts   .= "-F " if ($nodelta);
 $opts   .= "-U " if ($update_prepare);
@@ -702,6 +721,17 @@ sub fatal($)
 {
     my ($mesg) = @_;
 
+    if (defined($webtask)) {
+	#
+	# If we threw an error in create_image, we do not want to
+	# overwrite that image.
+	#
+	$webtask->Refresh();
+	if (!$webtask->HasExited()) {
+	    $webtask->output($mesg);
+	    $webtask->Exited(1);
+	}
+    }
     die("*** $0:\n".
 	"    $mesg\n");
 }

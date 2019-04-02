@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1731,6 +1731,7 @@ sub fatal($)
 	$webtask->Refresh();
 	$webtask->status("failed");
 	$webtask->imagesize(0);
+	$webtask->output($mesg);
 	$webtask->Exited(1);
     }
     $image->Unlock()

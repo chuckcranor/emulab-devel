@@ -4472,6 +4472,7 @@ sub ListImages($)
 
 	my $blob = {"urn"     => $image_urn . ":" . $image->version(),
 		    "url"     => $image_url,
+		    "uuid"    => $image->uuid(),
 		    "created" => emutil::TBDateStringGMT($image->created()),
 		    "updated" => emutil::TBDateStringGMT($image->updated()),
 		    "format"  => $image->format(),

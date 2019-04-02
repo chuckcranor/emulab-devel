@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -614,8 +614,6 @@ function SPITFORM($formfields, $errors)
                   <li> View a <a href='showimageid_list.php3' target='_blank'>list
                       of OSIDs</a> that are available for you to use in your NS
                       file.</li>
-		 <li> Create your own <a href='newimageid_ez.php3'>
-		      custom disk images</a>.</li>
 	      </ul>\n";
     }
 }

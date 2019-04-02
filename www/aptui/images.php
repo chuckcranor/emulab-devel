@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -151,7 +151,7 @@ if ($ISCLOUD) {
         #
         list ($imagedomain,$type,$id) = Instance::ParseURN($row["urn"]);
         if ($imagedomain == $domain) {
-            $url = "$TBBASE/showimageid.php3?imageid=" . $row["image_uuid"];
+            $url = "$APTBASE/show-image.php?imageid=" . $row["image_uuid"];
         }
         else {
             if (array_key_exists($imagedomain, $aggregates)) {
@@ -179,7 +179,7 @@ if ($ISCLOUD) {
         $blob["project_urn"] = $row["project_urn"];
         $blob["format"]      = $row["format"];
         $blob["urn"]         = $row["urn"];
-        if (isset($url)) {
+        if (ISADMIN() && isset($url)) {
             $blob["url"] = $url;
         }
         $tmp[] = $blob;
@@ -246,9 +246,7 @@ else {
         $blob["creator_idx"] = $row["creator_idx"];
         $blob["format"]      = $row["format"];
         $blob["urn"]         = $urn;
-	$blob["url"]         = $TBBASE . "/" .
-                             CreateURL("showimageid",
-                                       URLARG_IMAGEID, $imageid);
+	$blob["url"]         = "show-image.php?imageid=$imageid";
         $tmp[] = $blob;
     }
 }
@@ -298,10 +296,6 @@ foreach ($tmp as $blob) {
     $blob["filter"] = implode(",", $filters);
     $images[] = $blob;
 }
-echo "<script type='text/plain' id='images-json'>\n";
-echo htmlentities(json_encode($images)) . "\n";
-echo "</script>\n";
-
 echo "<script type='text/javascript'>\n";
 $isadmin = (isset($this_user) && ISADMIN() ? 1 : 0);
 echo "    window.ISADMIN    = $isadmin;\n";
@@ -310,6 +304,10 @@ echo "</script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
+
+echo "<script type='text/plain' id='images-json'>\n";
+echo htmlentities(json_encode($images)) . "\n";
+echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();

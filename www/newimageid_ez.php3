@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2015, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -53,7 +53,8 @@ $optargs = OptionalPageArguments("submit",       PAGEARG_STRING,
 				 "node",	 PAGEARG_NODE,
 				 "baseimage",    PAGEARG_IMAGE,
 				 "baseosinfo",   PAGEARG_OSINFO,
-				 "formfields",   PAGEARG_ARRAY);
+				 "formfields",   PAGEARG_ARRAY,
+                                 "classic",      PAGEARG_BOOLEAN);
 
 # Flag to import an EC2 image.
 if (!isset($ec2)) {
@@ -93,6 +94,22 @@ if (isset($baseosinfo) && $baseosinfo->def_parentosid()) {
 	TBERROR("Could not lookup osinfo object for parent " .
 		$baseosinfo->def_parentosid(), 1);
     }
+}
+
+#
+# In general, there is no reason for a mere user to do anything but
+# clone or snapshot an existing image. 
+#
+if ($TBMAINSITE && isset($baseimage) && !$classic && !$ec2) {
+    $imageid = $baseimage->imageid();
+    $version = $baseimage->version();
+    
+    $url = "apt/clone-image.php?imageid=$imageid&version=$version";
+    if (isset($node)) {
+        $url .= "&node=" . $node->node_id();
+    }
+    header("Location: $url");
+    return;
 }
 
 #
@@ -308,7 +325,7 @@ function SPITFORM($formfields, $errors)
                  <em>(Fields marked with * are required)</em>
              </td>
           </tr>
-          <form action='newimageid_ez.php3' enctype=\"multipart/form-data\"
+          <form action='newimageid_ez.php3' enctype='multipart/form-data'
               method=post name=idform>\n";
 
     # Carry along stuff ...
@@ -318,6 +335,9 @@ function SPITFORM($formfields, $errors)
     }
     if ($ec2) {
 	echo "<input type=hidden name=ec2 value=true>";
+    }
+    if ($classic) {
+	echo "<input type=hidden name=classic value=true>";
     }
     if (isset($baseimage)) {
         $id = $baseimage->imageid();
@@ -1397,6 +1417,9 @@ if (!isset($confirmed) && 0 != strcmp($confirmationWarning,"")) {
     echo "<input type=submit name=canceled  value=Back>\n";
     if ($ec2) {
 	echo "<input type=hidden name=ec2 value=true>";
+    }
+    if ($classic) {
+	echo "<input type=hidden name=classic value=true>";
     }
     if (isset($baseimage)) {
         $id = $baseimage->imageid();

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -562,9 +562,7 @@ function ClassicImageList($target)
         $blob["creator_idx"] = $row["creator_idx"];
         $blob["format"]      = $row["format"];
         $blob["urn"]         = $urn;
-	$blob["url"]         = $TBBASE . "/" .
-                             CreateURL("showimageid",
-                                       URLARG_IMAGEID, $imageid);
+	$blob["url"]         = "show-image.php?imageid=$imageid";
         $results[] = $blob;
     }
     return $results;

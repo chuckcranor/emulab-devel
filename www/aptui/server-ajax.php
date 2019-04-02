@@ -390,6 +390,27 @@ $routing = array("geni-login" =>
                                                      "Do_DeleteImage",
                                                  "ClassicImages" =>
                                                      "Do_ClassicImageList")),
+		 "image" =>
+			array("file"    => "image.ajax",
+			      "guest"   => false,
+			      "methods" => array("GetInfo" =>
+                                                     "Do_GetInfo",
+                                                 "SaveAdminNotes" =>
+                                                     "Do_SaveAdminNotes",
+                                                 "Delete" =>
+                                                     "Do_Delete",
+                                                 "SetSharing" =>
+                                                     "Do_SetSharing",
+                                                 "SetTypes" =>
+                                                     "Do_SetTypes",
+                                                 "Clone" =>
+                                                     "Do_Clone",
+                                                 "Snapshot" =>
+                                                     "Do_Snapshot",
+                                                 "SnapshotStatus" =>
+                                                     "Do_SnapshotStatus",
+                                                 "Modify" =>
+                                                     "Do_Modify")),
 		 "news" =>
 			array("file"    => "news.ajax",
 			      "guest"   => false,

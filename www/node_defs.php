@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -62,6 +62,9 @@ class Node
     function Lookup($node_id) {
 	global $node_cache;
 
+        if (!TBvalid_node_id($node_id)) {
+	    return null;
+        }
         # Look in cache first
 	if (array_key_exists("$node_id", $node_cache))
 	    return $node_cache["$node_id"];

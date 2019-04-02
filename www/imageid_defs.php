@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -308,6 +308,41 @@ class Image
     }
 
     #
+    # Set Shared/Global. Caller did the error checking.
+    #
+    function SetSharedGlobal($shared, $global) {
+	$imageid  = $this->imageid();
+	$version  = $this->version();
+        $shared   = ($shared ? 1 : 0);
+	$global   = ($global ? 1 : 0);
+
+        if (!DBQueryWarn("update image_versions set ".
+                         "  global='$global',shared='$shared' ".
+                         "where imageid='$imageid' and version='$version'")) {
+            return -1;
+        }
+	if ($this->ezid()) {
+            if (!DBQueryWarn("update os_info_versions set shared='$shared' ".
+                             "where osid='$imageid' and vers='$version'")) {
+                return -1;
+            }
+	}
+	return 0;
+    }
+
+    #
+    # Clear the web task.
+    #
+    function ClearWebtask() {
+	$imageid  = $this->imageid();
+
+	DBQueryWarn("update images set webtask_id=NULL ".
+		     "where imageid='$imageid'");
+
+	return 0;
+    }
+
+    #
     # Class function to edit an image descriptor.
     #
     function EditImageid($image, $args, &$errors) {
@@ -443,6 +478,7 @@ class Image
     function lba_high()		{ return $this->field("lba_high"); }
     function lba_size()		{ return $this->field("lba_size"); }
     function nodetypes()	{ return $this->field("nodetypes"); }
+    function webtask_id()	{ return $this->field("webtask_id"); }
 
     # Return the DB data.
     function DBData()		{ return $this->image; }
@@ -588,6 +624,24 @@ class Image
 	    TBERROR("Could not lookup group $gid_idx!", 1);
 	}
 	return $this->group;
+    }
+
+    #
+    # Last used stamp.
+    #
+    function LastUsed() {
+	$imageid = $this->imageid();
+        
+	$usage_result =
+	    DBQueryFatal("select FROM_UNIXTIME(stamp) as lastused ".
+			 "  from image_history ".
+			 "where action='os_setup' and imageid='$imageid' ".
+			 "order by stamp desc limit 1");
+	if (!mysql_num_rows($usage_result)) {
+            return null;
+        }
+        $urow = mysql_fetch_array($usage_result);
+        return $urow['lastused'];
     }
 
     function Show($showperms = 0) {

@@ -128,7 +128,14 @@
 		  data-imageindex="<%- imageindex %>">
 		<td>
 		  <span style="padding-left: 15px">
-		    <%- image.imagename %>:<%- version.version %></span>
+		    <% if (window.ISEMULAB) { %>
+		      <a href="show-image.php?imageid=<%- version.uuid %>"
+			 target="_blank">
+			<%- image.imagename %>:<%- version.version %></a>
+		    <% } else { %>
+			<%- image.imagename %>:<%- version.version %>
+		    <% } %>
+		  </span>
 		  <% if (version.candelete) { %>
 		    <a href="" class="delete-button pull-right">
 		      <span class='glyphicon glyphicon-remove'
@@ -265,7 +272,14 @@
 		  data-imageindex="<%- imageindex %>">
 		<td>
 		  <span style="padding-left: 15px">
-		    <%- image.imagename %>:<%- version.version %></span>
+		    <% if (window.ISEMULAB) { %>
+		      <a href="show-image.php?imageid=<%- version.uuid %>"
+			 target="_blank">
+			<%- image.imagename %>:<%- version.version %></a>
+		    <% } else { %>
+		      <%- image.imagename %>:<%- version.version %>
+		    <% } %>
+		  </span>
 		  <a href="" class="delete-button pull-right">
 		    <span class='glyphicon glyphicon-remove'
 			  style='color: red; margin-left: 3px;'></span></a>
@@ -402,7 +416,14 @@
 		  data-urn="<%- version.urn %>">
 		<td>
 		  <span style="padding-left: 15px">
-		    <%- image.imagename %>:<%- version.version %></span>
+		    <% if (window.ISEMULAB) { %>
+		      <a href="show-image.php?imageid=<%- version.uuid %>"
+			 target="_blank">
+			<%- image.imagename %>:<%- version.version %></a>
+		    <% } else { %>
+		      <%- Image.imagename %>:<%- version.version %>
+		    <% } %>
+		  </span>
 		  <a href="" class="toggle-version pull-right">
 		    <span class="glyphicon glyphicon-chevron-left"></span>
 		    Profiles</a>

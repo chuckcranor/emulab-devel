@@ -98,6 +98,7 @@ $(function () {
 			if (_.has(item.dataset, "help")) {
 			    label_text = label_text +
 				"<a href='#' class='btn btn-xs' " +
+				" style='padding-right: 0px;' " +
 				" data-toggle='popover' " +
 				" data-html='true' " +
 				" data-delay='{\"hide\":1000}' " +
