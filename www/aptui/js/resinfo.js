@@ -128,6 +128,8 @@ $(function ()
 				  "nuc6260"   : true,
 				  "iris030"   : true,
 				  "enodeb"    : true,
+				  "x310"      : true,
+				  "n310"      : true,
 				  "sdr"       : true};
 
 		if (window.ISPOWDER) {

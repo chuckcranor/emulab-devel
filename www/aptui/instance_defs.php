@@ -823,6 +823,7 @@ class Instance
                            "pc2830qx2" => true,
                            "pc2400hp"  => true,
                            "d2100"     => true,
+                           "faros_sfp" => true,
                            "pc2400w"   => true);
 
         #
@@ -841,7 +842,10 @@ class Instance
             $skiptypes["nuc8559"]  = true;
             $skiptypes["nuc7100"]  = true;
             $skiptypes["iris030"]  = true;
-            $skiptypes["faros_sfp"]  = true;
+            $skiptypes["d840"]     = true;
+            $skiptypes["d740"]     = true;
+            $skiptypes["x310"]     = true;
+            $skiptypes["n310"]     = true;
         }
         return $skiptypes;
     }
