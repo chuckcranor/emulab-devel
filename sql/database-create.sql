@@ -129,7 +129,7 @@ CREATE TABLE `apt_aggregates` (
   `urn` varchar(128) NOT NULL default '',
   `name` varchar(32) NOT NULL default '',
   `nickname` varchar(32) NOT NULL default '',
-  `abbreviation` varchar(16) NOT NULL default '',
+  `abbreviation` varchar(32) NOT NULL default '',
   `adminonly` tinyint(1) NOT NULL default '0',
   `isfederate` tinyint(1) NOT NULL default '0',
   `disabled` tinyint(1) NOT NULL default '0',
