@@ -655,7 +655,7 @@ if ($localuser) {
     $gid = $group->gid();
 
     # Hack for Kobus' class, generalize someday.
-    if (1 && $pid eq "CS4480-2019") {
+    if (0 && $pid eq "CS4480-2019") {
 	my $termination = str2time("2019-03-28");
 	# convert to hours till then
 	$duration = int(($termination - time()) / 3600);
