@@ -37,7 +37,8 @@ all: $(TARGETS)
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
-install: $(INSTALL_ETCDIR)/dhcpd.conf.frag.one
+install: $(INSTALL_ETCDIR)/dhcpd.conf.frag.one \
+	 $(INSTALL_SBINDIR)/run_capture
 
 clean: 
 	rm -f $(TARGETS)
