@@ -20,7 +20,7 @@ stty -f /dev/cuaU0.lock hupcl ixon ixoff ixany crtscts
 #stty -g -f /dev/cuaU0
 #echo "About to start capture"
 
-/usr/testbed/sbin/capture -T 15 -r -s 9600 powduino cuaU0 >/dev/null 2>&1 &
+/usr/testbed/sbin/capture -y 2 -T 15 -r -s 9600 powduino cuaU0 >/dev/null 2>&1 &
 
 ## XXX debugging
 #echo "Capture started, cuaU0:"
