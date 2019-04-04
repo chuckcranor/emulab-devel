@@ -293,13 +293,22 @@ sub MapToLocalImage($$$$@)
     my ($blob, $url);
 
     #
-    # Short circuit special images (generic,mfs,etc). Permission checks
-    # will be handled later. 
+    # Short circuit some local cases. Permission checks will be handled later. 
     #
     if ($ospid eq TBOPSPID()) {
 	my $image = OSImage->Lookup($ospid, $osname);
-	return $image
-	    if (defined($image) && !$image->isImage());
+	if (defined($image)) {
+	    # Generic, MFS, etc.
+	    return $image
+		if (!$image->isImage());
+	    
+	    # Return the image if its global. If not global and needed a
+	    # credential, we want to fall through. But that will break on
+	    # the case that the domain in the image URN is wrong and using
+	    # the image tracker. Will deal with that later.
+	    return $image
+		if ($image->global());
+	}
     }
     
     if ($use_imagetracker) {
