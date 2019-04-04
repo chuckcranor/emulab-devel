@@ -304,10 +304,8 @@ $(function ()
 	 * is changed.
 	 */
 	$('#profile_pid').change(function (event) {
-	    //console.log('profile-pid change');
 	    UpdateGroupSelector();
 	    UpdateImageConstraints();
-	    ShowClusterReservations();
 	    return true;
 	});
 	$('#profile_copy_button').click(function (event) {
@@ -1110,7 +1108,7 @@ $(function ()
 		return;
 	    }
 	    $(this).addClass("pickered");
-	    
+
 	    var resourceTypes = ["PC"];
 	    // Have to do look this up based off of the site name since that's 
 	    // the only hook Jacks is giving.
@@ -1128,6 +1126,7 @@ $(function ()
 	    // Decide what classes each option element should have
 	    var pickerTarget = '#'+which+' .select_where';
 	    var attributes = {}
+	    var selected = null;
 
 	    $(pickerTarget).find('option').each(function() {
 		var attrs = {}
@@ -1135,7 +1134,7 @@ $(function ()
 
 		// Hide "Please Select" option
 		if (siteName == "") {
-		    attrs['class'] = 'hidden enabled';
+		    attrs['class'] = 'enabled';
 		}
 		else if ($(this).prop('disabled')) {
 		    attrs['class'] = 'disabled';
@@ -1146,6 +1145,10 @@ $(function ()
 		}
 		else {
 		    attrs['class'] = 'enabled';
+		    if ($(this).attr('selected')) {
+			// Do not not lose selection if its enabled.
+			selected = siteName;
+		    }
 		}
 
 		if (_.contains(window.FEDERATEDLIST, $(this).attr('value'))) {
@@ -1197,10 +1200,22 @@ $(function ()
 	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.federated').sort(SortClusterStatus).insertAfter($('#'+which+' .cluster_picker_status .dropdown-menu .federatedDivider'));
 
 	    var pickerStatus = $('#'+which+' .cluster_picker_status .dropdown-menu .enabled a');
+
+	    // If only two enabled choices, one of which is always the
+	    // "Please Select" option, then force that cluster.
 	    if (pickerStatus.length == 2) {
 		pickerStatus[1].click();
 	    }
+	    else if (selected) {
+		// User already selected an enabled cluster, we want to keep it.
+		pickerStatus.filter(function () {
+		    if ($(this).attr("value") == selected) {
+			$(this).click();
+		    }
+		});
+	    }
 	    else {
+		// Back to Please Select.
 		pickerStatus[0].click();
 	    }
 	});	  
@@ -1397,8 +1412,8 @@ $(function ()
 	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.federated').sort(SortClusterStatus).insertAfter($('#'+which+' .cluster_picker_status .dropdown-menu .federatedDivider'));
 
 	    var pickerStatus = $('#'+which+' .cluster_picker_status .dropdown-menu .enabled a');
-	    if (click) {
-		console.info("pickerStatus", pickerStatus);
+	    if (0 && click) {
+		// Do not do this anymore, its annoying.
 		pickerStatus[1].click();
 	    }
 	    else {
@@ -1449,7 +1464,7 @@ $(function ()
 
     function SwitchJacks(which)
     {
-      console.info("SwitchJacks", which);
+      //console.info("SwitchJacks", which);
       if (which == 'small')
       {
 	$('#stepsContainer #finalize_container')
@@ -1676,16 +1691,6 @@ $(function ()
 		UpdateGroupSelector();
 	    }
 	    CreateAggregateSelectors(selected_rspec);
-    
-	    // Set the default aggregate.
-	    if ($('#profile_where').length) {
-		// Deselect current option.
-		$('#profile_where option').prop("selected", false);
-		// Find and select new option.
-		$('#profile_where option')
-		    .filter('[value="'+ amdefault + '"]')
-		    .prop('selected', true);            
-	    }
 	};
 	GetProfile($(selectedElement).attr('value'), continuation);
     }
@@ -1853,7 +1858,7 @@ $(function ()
 	else {
 	    doconstraints = window.DOCONSTRAINTS;
 	}
-	//console.info("CreateAggregateSelectors: ", nodecount, doconstraints);
+	console.info("CreateAggregateSelectors: ", nodecount, doconstraints);
 
 	/*
 	 * Find the sites. Might not be any if not a multisite topology
@@ -1901,17 +1906,26 @@ $(function ()
 	siteIdToSiteNum = {};
 	var sitenum = 0;
 
-	// Create the dropdown selection lists. If only one, then force
-	// that one to be selected.
-	var options = "";
-	_.each(amlist, function(details, key) {
-	    var name = details.name;
-	    options = options + "<option value='" + name + "'";
-	    if (amlist.count == 1) {
-		options = options + " selected";
-	    }
-	    options = options + ">" + name + "</option>";
-	});
+	/*
+	 * Create the dropdown selection lists. When only one choice, we
+	 * force that choice. But if a slection has already been made, then
+	 * we want to keep that as the selected cluster, its annoying to
+	 * have it changed, since we call this multiple times (after
+	 * constraints change, when the reservation info come in).
+	 */
+	var createDropdowns = function (selected) {
+	    var options = "";
+	    
+	    _.each(amlist, function(details, key) {
+		var name = details.name;
+		options = options + "<option value='" + name + "'";
+		if (amlist.count == 1 || name == selected) {
+		    options = options + " selected";
+		}
+		options = options + ">" + name + "</option>";
+	    });
+	    return options;
+	};
 
 	// If multisite is disabled for the user, or no sites or 1 site.
 	if (!multisite || Object.keys(sites).length <= 1) {
@@ -1922,6 +1936,18 @@ $(function ()
 	    else {
 		siteid = _.values(sites)[0]
 	    }
+	    /*
+	     * Since we call this multiple times (after constraints change,
+	     * when the reservation info come in), lets not change the
+	     * selection if the user has already made one. 
+	     */
+	    var selected;
+	    if ($('#finalize_options .cluster-group').length) {
+		selected = $('#finalize_options .cluster-group ' +
+			     'select option:selected').text();
+	    }
+	    var options = createDropdowns(selected);
+	    
 	    html = 
 		"<div id='nosite_selector' " +
 		"     class='form-horizontal experiment_option'>" +
@@ -1930,7 +1956,7 @@ $(function ()
 		"           style='text-align: right;'>Cluster:</a>" +
 		"    </label> " +
 		"    <div class='col-sm-6 site-selector'>" +
-		"      <select name='where' id='profile_where' " +
+		"      <select id='site"+sitenum+"_selector' name='where' " +
 		"              class='form-control select_where'>" +
 		"        <option value=''>Please Select</option>" +
 		options +
@@ -1948,6 +1974,18 @@ $(function ()
 	else {
 	    _.each(sites, function(siteid) {
 		siteIdToSiteNum[siteid] = sitenum;
+		var selectID = 'site' + sitenum + '_selector';
+
+		/*
+		 * Since we call this multiple times (after constraints change,
+		 * when the reservation info come in), lets not change the
+		 * selection if the user has already made one. 
+		 */
+		var selected;
+		if ($('#' + selectID).length) {
+		    selected = $('#' + selectID + ' option:selected').text();
+		}
+		var options = createDropdowns(selected);
 
 		html = html +
 		    "<div id='site"+sitenum+"cluster' " +
@@ -1958,7 +1996,8 @@ $(function ()
 		    "          Site " + siteid  + " Cluster:</a>" +
 		    "    </label> " +
 		    "    <div class='col-sm-6 site-selector'>" +
-		    "      <select id='site"+sitenum+"_selector' name=\"sites[" + siteid + "]\"" +
+		    "      <select id='" + selectID + "' " +
+		    "              name=\"sites[" + siteid + "]\"" +
 		    "              class='form-control select_where'>" +
 		    "        <option value=''>Please Select</option>" +
 		    options +
@@ -2090,6 +2129,7 @@ $(function ()
 	    constraints.addPossibles({ images: foundImages });
 	    allowWithSites(json.value[0].images, json.value[0].constraints);
 	    CreateAggregateSelectors(selected_rspec);
+	    ShowClusterReservations();
 	    $('#stepsContainer .actions a[href="#finish"]')
 		.removeAttr('disabled');
 	};
@@ -2209,7 +2249,7 @@ $(function ()
 	}
       }.bind(this));
       onFoundImages(images);
-      console.log('updateJacksGraph');
+      //console.log('updateJacksGraph');
       updateWhere();
     }
 
@@ -2246,8 +2286,8 @@ $(function ()
     }
 
     function finishUpdateWhere(allNodes, nodesBySite)
-  {
-    console.log('finishUpdateWhere');
+    {
+        //console.log('finishUpdateWhere');
 	if (!multisite || Object.keys(sites).length <= 1) {
 	    updateSiteConstraints(allNodes,
 				  $('#cluster_selector .cluster-group'));
@@ -2286,15 +2326,15 @@ $(function ()
       allowed = constraints.getValidList(bound, subclause,
 					 clause, rejected,
 					 breakdown);
-      console.log('REJECT BREAKDOWN', breakdown);
-      console.log('POSSIBLES', constraints.possible);
-      console.log('GROUPS', constraints.groups);
       if (0) {
+        console.info('REJECT BREAKDOWN', breakdown);
+        console.info('POSSIBLES', constraints.possible);
+        console.info('GROUPS', constraints.groups);
 	console.info("updateSiteConstraints");
-	console.info(domNode);
-	console.info(bound);
-	console.info(allowed);
-	console.info(rejected);
+	console.info("domNode:", domNode);
+	console.info("bound:", bound);
+	console.info("allowed", allowed);
+	console.info("rejected", rejected);
       }
 	
       updateBreakdown(domNode.find('#nowhere-breakdown'), breakdown);
@@ -2413,7 +2453,8 @@ $(function ()
 	    choices.append(line);
 	  }
 	});
-	list.append($('<li class="list-group-item">Site <b>' + amlist[key] + '</b> can\'t instantiate </li>').append(choices));
+	list.append($('<li class="list-group-item">Site <b>' + amlist[key] + 
+		      '</b> cannot instantiate </li>').append(choices));
       });
       dom.html(list);
     }
@@ -2491,15 +2532,13 @@ $(function ()
 	    }
 	    id = info.pid + "," + info.name;
 	}
-	console.info("picker event", action, id, value);
+	//console.info("picker event", action, id, value);
 	ga('send', 'event', 'picker', action, id, value);
     }
 
     function ClusterSelected(selected, pickered)
     {
-	console.info("ClusterSelected: ", selected, pickered);
 	var cluster = null;
-	window.foo = selected;
 
 	/*
 	 * Dig out which cluster has been selected. Depending on whether
@@ -2511,7 +2550,7 @@ $(function ()
 	else {
 	    cluster = $(selected.target).find(":selected").val()
 	}
-	console.info("ClusterSelected: " + cluster);
+	//console.info("ClusterSelected: " + cluster);
     }
 
     /*
