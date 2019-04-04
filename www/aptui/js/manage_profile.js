@@ -1394,6 +1394,7 @@ $(function ()
 	var args = {
 	    "script"   : script,
 	    "pid"      : $('#profile_pid').val(),
+	    "editokay" : true,
 	};
 	if (repoupdate_callback !== undefined) {
 	    // Pass along uuid as a flag to update repo.

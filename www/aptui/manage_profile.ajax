@@ -812,7 +812,14 @@ function Do_CheckScript()
                 $blob["paramdefs"] = $paramdefs;
             }
         }
+        #
+        # We use this routine from the manage/instantiate/show pages,
+        # but we do not want to update the master unless it the profile
+        # creator and it is the manage profile page.
+        #
         if (!isset($profile) ||
+            !isset($ajax_args["editokay"]) || 
+            $this_idx != $profile->creator_idx() ||
             UpdateMaster($profile, $ajax_args["script"], $blob["rspec"]) == 0) {
             SPITAJAX_RESPONSE($blob);
         }
