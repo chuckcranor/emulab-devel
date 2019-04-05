@@ -828,7 +828,7 @@ $(function () {
 		set.data("has-changes", hasChanges);
 	    }
 	    if (hasError) {
-		set.addClass("has-errors");
+		set.addClass("has-error");
 	    }
 	    return set;
 	}
@@ -1439,6 +1439,7 @@ $(function () {
 	    var fields       = group.fields;
 	    var name         = groupId + "-" + fieldIndex;
 	    var hasError     = false;
+	    var hasWarning   = false;
 	    var hasChanges   = 0;
 
 	    var html = groupTemplate({
@@ -1463,8 +1464,11 @@ $(function () {
 					details.values[details.name],
 					bindings, null);
 		}
-		if (set.hasClass("has-errors")) {
+		if (set.hasClass("has-error")) {
 		    hasError = 1;
+		}
+		if (set.hasClass("has-warning")) {
+		    hasWarning = 1;
 		}
 		// Count up number of changes for the caller.
 		if (set.hasClass("has-changes")) {
@@ -1496,7 +1500,7 @@ $(function () {
 	     * screen to look funny when the group is opened right after
 	     * being drawn closed.
 	     */
-	    if (hasError || field.visible) {
+	    if (hasError || hasWarning || field.visible) {
 		$(groupdiv).find(".pp-param-group-subpanel-collapse")
 		    .addClass("in");
 		$(groupdiv).find(".subpanel-collapse-chevron .glyphicon")
@@ -1588,7 +1592,7 @@ $(function () {
 			    }
 			    message += text;
 			}
-			structdiv.addClass('has-errors');
+			structdiv.addClass('has-error');
 
 			var html = 
 			    '<div class="panel panel-danger ' +
@@ -1614,7 +1618,7 @@ $(function () {
 			    }
 			    message += text;
 			}
-			structdiv.addClass('has-warnings');
+			structdiv.addClass('has-warning');
 
 			var html = 
 			    '<div class="panel panel-warning ' +
@@ -1763,7 +1767,7 @@ $(function () {
 			}
 			message += text;
 		    }
-		    groupdiv.addClass('has-errors');
+		    groupdiv.addClass('has-error');
 
 		    var html = 
 			'<div class="panel panel-danger ' +
@@ -1789,7 +1793,7 @@ $(function () {
 			}
 			message += text;
 		    }
-		    groupdiv.addClass('has-warnings');
+		    groupdiv.addClass('has-warning');
 
 		    var html = 
 			'<div class="panel panel-warning ' +
@@ -1848,7 +1852,7 @@ $(function () {
 						  binding, copyIndex);
 
 		    // Look for a reason to start the panel out uncollapsed.
-		    if (div.hasClass("has-errors")) {
+		    if (div.hasClass("has-error")) {
 			hasError = 1;
 		    }
 		    // Count up number of changes for the caller.
@@ -1979,7 +1983,7 @@ $(function () {
 		$(groupdiv).data("has-changes", hasChanges);
 	    }
 	    if (hasError) {
-		$(groupdiv).addClass("has-errors");
+		$(groupdiv).addClass("has-error");
 	    }
 	    // Init the tooltips
 	    groupdiv.find('[data-toggle="tooltip"]').tooltip();
