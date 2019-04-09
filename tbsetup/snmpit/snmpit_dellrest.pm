@@ -160,7 +160,8 @@ sub DESTROY($)
     my $gihits = $self->{CACHEGETINFO};
     my $ocalls = $self->{CALLOTHER};
 
-    print "$id: RESTCONF calls: $gicalls getinfo ($gihits cached), $ocalls other.\n";
+    print "$id: RESTCONF calls: $gicalls getinfo ($gihits cached), $ocalls other.\n"
+	if ($self->{DEBUG});
 }
 
 #
@@ -1942,8 +1943,10 @@ sub enablePortTrunking2($$$$) {
 	}
 	# Update cached info
 	delete $self->{TRUNK}{$iface}->{"avlan"};
-	$self->removeCacheVlanPort($avlan, $iface, "untagged");
-	undef $avlan;
+	if (defined($avlan)) {
+	    $self->removeCacheVlanPort($avlan, $iface, "untagged");
+	    undef $avlan;
+	}
 
 	if ($native_vlan != 1) {
 	    @uplist = ();
