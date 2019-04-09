@@ -34,6 +34,9 @@ SYSTEM         := $(shell uname -s)
 
 include $(OBJDIR)/Makeconf
 
+LOCALBOSS_BIN_STUFF = powerlocal 
+LOCALBOSS_LIB_STUFF = libtestbed.pm power_apc.pm power_raritan.pm
+
 SUBBOSS_SBIN_SCRIPTS = reportboot reportboot_daemon
 SUBDIRS		= checkpass ns2ir nseparse checkup template_cvsroot \
 		  snmpit
@@ -160,6 +163,8 @@ COMPILED_TARGETS    =
 # 
 all:	$(TARGETS) $(addprefix compiled/, $(COMPILED_TARGETS))
 
+localboss: $(LOCALBOSS_BIN_STUFF) $(LOCALBOSS_LIB_STUFF)
+
 subboss: $(SUBBOSS_SBIN_SCRIPTS)
 
 $(SUBBOSS_SBIN_SCRIPTS):
@@ -211,6 +216,9 @@ endif
 
 boss-install: all script-install subdir-install
 	@echo "Don't forget to do a post-install as root"
+
+localboss-install: $(addprefix $(INSTALL_BINDIR)/, $(LOCALBOSS_BIN_STUFF)) \
+	$(addprefix $(INSTALL_LIBDIR)/, $(LOCALBOSS_LIB_STUFF))
 
 subboss-install: $(addprefix $(INSTALL_SBINDIR)/, $(SUBBOSS_SBIN_SCRIPTS))
 	ln -sf $(INSTALL_SBINDIR)/reportboot \
