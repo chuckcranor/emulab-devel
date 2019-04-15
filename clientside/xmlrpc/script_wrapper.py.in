@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 #
-# Copyright (c) 2004-2018 University of Utah and the Flux Group.
+# Copyright (c) 2004-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,6 +35,7 @@ import getopt
 import os
 import re
 
+import ssl
 import xmlrpclib
 from emulabclient import *
 
@@ -91,6 +92,8 @@ HOME = pw.pw_dir
 
 CERTIFICATE = os.path.join(HOME, ".ssl", "emulab.pem")
 certificate = CERTIFICATE
+ca_certificate = None
+verify = False
 
 API = {
     "node_admin"        : { "func" : "adminmode",
@@ -205,6 +208,8 @@ def wrapperoptions():
     print "    --port      Set the server port"
     print "    --login     Set the login id (defaults to $USER)"
     print "    --cert      Specify the path to your testbed SSL certificate"
+    print "    --cacert    The path to the CA certificate to use for server verification"
+    print "    --verify    Enable SSL verification; defaults to disabled"
     print "    --debug     Turn on semi-useful debugging"
     return
 
@@ -223,19 +228,22 @@ def do_method(module, method, params):
                          certificate)
         sys.exit(2)
         pass
-    
-    from M2Crypto.m2xmlrpclib import SSL_Transport
-    from M2Crypto import SSL
-    
+
     URI = "https://" + xmlrpc_server + ":" + str(xmlrpc_port) + SERVER_PATH
-    
-    ctx = SSL.Context("sslv23")
-    ctx.load_cert(certificate, certificate)
-    ctx.set_verify(SSL.verify_none, 16)
-    ctx.set_allow_unknown_ca(0)
+
+    ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+    ctx.load_cert_chain(certificate)
+    if not verify:
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+    else:
+        if ca_certificate != None:
+            ctx.load_verify_locations(cafile=ca_certificate)
+        ctx.verify_mode = ssl.CERT_REQUIRED
+        pass
     
     # Get a handle on the server,
-    server = xmlrpclib.ServerProxy(URI, SSL_Transport(ctx), verbose=debug)
+    server = xmlrpclib.ServerProxy(URI, context=ctx, verbose=debug)
         
     # Get a pointer to the function we want to invoke.
     meth      = getattr(server, module + "." + method)
@@ -3058,7 +3066,8 @@ try:
     # Parse the options,
     opts, req_args =  getopt.getopt(wrapper_argv[0:], "",
                       [ "help", "server=", "port=", "login=", "cert=", "admin", "devel",
-                        "develuser=", "impotent", "debug"])
+                        "develuser=", "impotent", "debug",
+                        "cacert=", "verify" ])
     # ... act on them appropriately, and
     for opt, val in opts:
         if opt in ("-h", "--help"):
@@ -3076,6 +3085,12 @@ try:
             pass
         elif opt == "--cert":
 	    certificate = val
+            pass
+        elif opt == "--cacert":
+            ca_certificate = val
+            pass
+        elif opt == "--verify":
+            verify = True
             pass
         elif opt == "--debug":
 	    debug = 1
@@ -3098,6 +3113,19 @@ except getopt.error, e:
     print e.args[0]
     usage()
     sys.exit(2)
+    pass
+
+# Check some default locations for the Emulab CA certificate, if user
+# requested verification but did not specify a CA cert.
+if verify:
+    if ca_certificate == None:
+        for p in [ SERVER_PATH + "/etc/emulab.pem", "/etc/emulab/emulab.pem" ]:
+            if os.access(p,os.R_OK):
+                ca_certificate = p
+                break
+    if ca_certificate is not None and not os.access(ca_certificate, os.R_OK):
+        print "CA Certificate cannot be accessed: " + ca_certificate
+        sys.exit(-1);
     pass
 
 if admin:
