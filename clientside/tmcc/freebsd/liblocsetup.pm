@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -102,7 +102,7 @@ my $GROUPDEL	= "/usr/sbin/pw groupdel";
 my $CHPASS	= "/usr/bin/chpass -p";
 my $MKDB	= "/usr/sbin/pwd_mkdb -p";
 my $IFCONFIGBIN = "/sbin/ifconfig";
-my $IFCONFIG    = "$IFCONFIGBIN %s inet %s netmask %s %s %s";
+my $IFCONFIG    = "$IFCONFIGBIN %s inet %s netmask %s %s %s %s";
 my $IFALIAS     = "$IFCONFIGBIN %s alias %s netmask %s";
 my $IFC_1000MBS = "media 1000baseTX";
 my $IFC_100MBS  = "media 100baseTX";
@@ -111,6 +111,8 @@ my $IFC_AUTO	= "";
 my $IFC_FDUPLEX = "mediaopt full-duplex";
 my $IFC_HDUPLEX = "mediaopt half-duplex";
 my $IFC_ADUPLEX = "";
+my $IFC_1500MTU = "mtu 1500";
+my $IFC_9000MTU = "mtu 9000";
 my $MKDIR	= "/bin/mkdir";
 my $GATED	= "/usr/local/sbin/gated";
 my $ROUTE	= "/sbin/route";
@@ -154,12 +156,13 @@ sub os_account_cleanup($)
 # Generate and return an ifconfig line that is approriate for putting
 # into a shell script (invoked at bootup).
 #
-sub os_ifconfig_line($$$$$$$$;$$%)
+sub os_ifconfig_line($$$$$$$$;$$$%)
 {
     my ($iface, $inet, $mask, $speed, $duplex, $aliases, $iface_type, $lan,
-	$settings, $rtabid, $cookie) = @_;
+	$mtu, $settings, $rtabid, $cookie) = @_;
     my $media    = "";
     my $mediaopt = "";
+    my $mtuopt = "";
     my ($uplines, $downlines);
 
     #
@@ -220,12 +223,24 @@ sub os_ifconfig_line($$$$$$$$;$$%)
 		$mediaopt = $IFC_FDUPLEX;
 	    }
 	}
+
+	#
+	# XXX only recognize 1500 and 9000 for MTUs.
+	# Anything else results in the default (no explicit setting).
+	#
+	if (defined($mtu)) {
+	    if ($mtu eq "1500") {
+		$mtuopt = $IFC_1500MTU;
+	    } elsif ($mtu eq "9000") {
+		$mtuopt = $IFC_9000MTU;
+	    }
+	}
     }
 
     $uplines = "";
 
     if ($inet eq "") {
-	$uplines .= "$IFCONFIGBIN $iface up $media $mediaopt";
+	$uplines .= "$IFCONFIGBIN $iface up $media $mediaopt $mtuopt";
     }
     else {
 	#
@@ -238,7 +253,7 @@ sub os_ifconfig_line($$$$$$$$;$$%)
 
 	# Config the interface.
 	$uplines  .= sprintf($IFCONFIG, $iface, $inet, $mask,
-			     $media, $mediaopt);
+			     $media, $mediaopt, $mtuopt);
 	# An interface underlying virtual interfaces does not go down.
 	$downlines = "$IFCONFIGBIN $iface down"
 	    if (defined($lan) && $lan ne "");

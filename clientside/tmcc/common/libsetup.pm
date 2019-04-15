@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -85,7 +85,7 @@ use librc;
 # IMPORTANT NOTE: if you change the version here, you must also change it
 # in clientside/lib/tmcd/tmcd.h!
 #
-sub TMCD_VERSION()	{ 42; };
+sub TMCD_VERSION()	{ 44; };
 libtmcc::configtmcc("version", TMCD_VERSION());
 
 # Control tmcc timeout.
@@ -1363,11 +1363,11 @@ sub getifconfig($;$)
 
     my $ethpat  = q(INTERFACE IFACETYPE=(\w*) INET=([0-9.]*) MASK=([0-9.]*) );
     $ethpat    .= q(MAC=(\w*) SPEED=(\w*) DUPLEX=(\w*) );
-    $ethpat    .= q(IFACE=(\w*) RTABID=(\d*) LAN=([-\w\(\)]*));
+    $ethpat    .= q(IFACE=(\w*) RTABID=(\d*) LAN=([-\w\(\)]*) MTU=(\d*));
 
     my $vethpat = q(INTERFACE IFACETYPE=(\w*) INET=([0-9.]*) MASK=([0-9.]*) );
     $vethpat   .= q(ID=(\d*) VMAC=(\w*) PMAC=(\w*) RTABID=(\d*) );
-    $vethpat   .= q(ENCAPSULATE=(\d*) LAN=([-\w\(\)]*) VTAG=(\d*));
+    $vethpat   .= q(ENCAPSULATE=(\d*) LAN=([-\w\(\)]*) VTAG=(\d*) MTU=(\d*));
 
     my $setpat  = q(INTERFACE_SETTING MAC=(\w*) );
     $setpat    .= q(KEY='([-\w\.\:]*)' VAL='([-\w\.\:]*)');
@@ -1403,6 +1403,7 @@ sub getifconfig($;$)
 	    my $iface    = $7;
 	    my $rtabid   = $8;
 	    my $lan      = $9;
+	    my $mtu	 = $10;
 
             #
             # XXX GNU Radio hack
@@ -1438,6 +1439,7 @@ sub getifconfig($;$)
 	    $ifconfig->{"VIFACE"}   = $iface;
 	    $ifconfig->{"RTABID"}   = $rtabid;
 	    $ifconfig->{"LAN"}      = $lan;
+	    $ifconfig->{"MTU"}      = $mtu;
 	    $ifconfig->{"SETTINGS"} = {};
 	    push(@ifacelist, $ifconfig);
 	    $ifacehash{$mac}        = $ifconfig;
@@ -1454,6 +1456,7 @@ sub getifconfig($;$)
 	    my $encap    = $8;
 	    my $lan      = $9;
 	    my $vtag	 = $10;
+	    my $mtu	 = $11;
 
 	    #
 	    # Inside a jail, the vmac is really the pmac. That is, when the
@@ -1511,6 +1514,7 @@ sub getifconfig($;$)
 	    $ifconfig->{"ENCAP"}    = $encap;
 	    $ifconfig->{"LAN"}      = $lan;
 	    $ifconfig->{"VTAG"}     = $vtag;
+	    $ifconfig->{"MTU"}      = $mtu;
 
 	    # determine the OS-specific virtual device name
 	    $ifconfig->{"VIFACE"}   = os_viface_name($ifconfig);
@@ -1570,6 +1574,7 @@ sub getifconfig($;$)
 		$pif->{"IFACE"} = $ifconfig->{"IFACE"};
 		$pif->{"RTABID"} = $ifconfig->{"RTABID"};
 		$pif->{"LAN"} = $ifconfig->{"LAN"};
+		$pif->{"MTU"} = $ifconfig->{"MTU"};
 		$pif->{"FROMVMAC"} = $ifconfig->{"VMAC"};
 		print STDERR "NOTE: remapping ", $ifconfig->{"VIFACE"},
 		" to ", $ifconfig->{"IFACE"}, "\n";

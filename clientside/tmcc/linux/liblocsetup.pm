@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -115,7 +115,7 @@ my $GROUPADD	= "/usr/sbin/groupadd";
 my $GROUPDEL	= "/usr/sbin/groupdel";
 my $IPBIN       = "/sbin/ip";
 my $IFCONFIGBIN = "/sbin/ifconfig";
-my $IFCONFIG    = "$IFCONFIGBIN %s inet %s netmask %s";
+my $IFCONFIG    = "$IFCONFIGBIN %s inet %s netmask %s %s";
 my $VLANCONFIG  = "/sbin/vconfig";
 # XXX 10000 is probably not right, but we don't use mii-tool here
 my $IFC_10000MBS = "10000baseTx";
@@ -125,6 +125,8 @@ my $IFC_10MBS   = "10baseT";
 my $IFC_FDUPLEX = "FD";
 my $IFC_HDUPLEX = "HD";
 my $IFC_AUTO    = "$IFC_1000MBS,$IFC_100MBS,$IFC_10MBS";
+my $IFC_1500MTU = "mtu 1500";
+my $IFC_9000MTU = "mtu 9000";
 my @LOCKFILES   = ("/etc/group.lock", "/etc/gshadow.lock");
 my $MKDIR	= "/bin/mkdir";
 my $GATED	= "/usr/sbin/gated";
@@ -409,11 +411,11 @@ sub os_account_cleanup($)
 # Generate and return an ifconfig line that is approriate for putting
 # into a shell script (invoked at bootup).
 #
-sub os_ifconfig_line($$$$$$$$;$$$)
+sub os_ifconfig_line($$$$$$$$;$$$%)
 {
     my ($iface, $inet, $mask, $speed, $duplex, $aliases, $iface_type, $lan,
-	$settings, $rtabid, $cookie) = @_;
-    my ($miirest, $miisleep, $miisetspd, $media);
+	$mtu, $settings, $rtabid, $cookie) = @_;
+    my ($miirest, $miisleep, $miisetspd, $media, $mtuopt);
     my ($uplines, $downlines);
 
     #
@@ -650,6 +652,7 @@ sub os_ifconfig_line($$$$$$$$;$$$)
     # mean anything.  We need this for virtnodes whose networks must be
     # config'd from inside the container, vm, whatever.
     #
+    $mtuopt = "";
     if ($iface_type ne 'veth') {
         #
         # Need to check units on the speed. Just in case.
@@ -772,13 +775,25 @@ sub os_ifconfig_line($$$$$$$$;$$$)
 	} else {
 	    $uplines = "/sbin/mii-tool --force=$media $iface\n    ";
 	}
+
+	#
+	# XXX only recognize 1500 and 9000 for MTUs.
+	# Anything else results in the default (no explicit setting).
+	#
+	if (defined($mtu)) {
+	    if ($mtu eq "1500") {
+		$mtuopt = $IFC_1500MTU;
+	    } elsif ($mtu eq "9000") {
+		$mtuopt = $IFC_9000MTU;
+	    }
+	}
     }
 
     if ($inet eq "") {
-	$uplines .= "$IFCONFIGBIN $iface up";
+	$uplines .= "$IFCONFIGBIN $iface up $mtuopt";
     }
     else {
-	$uplines  .= sprintf($IFCONFIG, $iface, $inet, $mask);
+	$uplines  .= sprintf($IFCONFIG, $iface, $inet, $mask, $mtuopt);
 	$downlines = "$IFCONFIGBIN $iface down";
     }
 

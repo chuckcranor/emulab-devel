@@ -2126,6 +2126,7 @@ COMMAND_PROTOTYPE(doifconfig)
 			char *speed  = "100";
 			char *unit   = "Mbps";
 			char *duplex = "full";
+			char *mtu    = "";
 			char *bufp   = buf;
 			char *mask;
 
@@ -2148,6 +2149,13 @@ COMMAND_PROTOTYPE(doifconfig)
 				speed = row[3];
 			if (row[4] && row[4][0])
 				duplex = row[4];
+
+			/*
+			 * XXX MTU should come out of DB.
+			 *   "9000" if using jumbo frames,
+			 *   "1500" if not,
+			 *   "" if not specified in DB (use client default)
+			 */
 
 			/*
 			 * We now use the MAC to determine the interface, but
@@ -2221,6 +2229,10 @@ COMMAND_PROTOTYPE(doifconfig)
 				bufp += OUTPUT(bufp, ebufp - bufp,
 					       " LAN=%s", lan);
 			}
+			if (vers >= 44) {
+				bufp += OUTPUT(bufp, ebufp - bufp,
+					       " MTU=%s", mtu);
+			}
 
 			OUTPUT(bufp, ebufp - bufp, "\n");
 			client_writeback(sock, buf, strlen(buf), tcp);
@@ -2244,9 +2256,12 @@ COMMAND_PROTOTYPE(doifconfig)
 			 " where attrkey like 'shared_lan_%%' and "
 			 " node_id='%s'", 2, reqp->nodeid);
 	if (res) {
-		char _ip[16], _mask[16], _mac[18], _speed[8];
+		char _ip[16], _mask[16], _mac[18], _speed[8], _mtu[6];
 		char *bufp = buf;
 		int got = 0;
+
+		/* XXX optional */
+		strcpy(_mtu, "");
 
 		nrows = (int)mysql_num_rows(res);
 		while (nrows > 0) {
@@ -2270,6 +2285,9 @@ COMMAND_PROTOTYPE(doifconfig)
 				strncpy(_speed, row[1], sizeof(_speed)-1);
 				_speed[sizeof(_speed)-1] = '\0';
 				got++;
+			} else if (strcmp(row[0], "shared_lan_mtu") == 0) {
+				strncpy(_mtu, row[1], sizeof(_mtu)-1);
+				_mtu[sizeof(_mtu)-1] = '\0';
 			}
 		}
 		if (got == 4) {
@@ -2277,8 +2295,13 @@ COMMAND_PROTOTYPE(doifconfig)
 				       "INTERFACE IFACETYPE=ixgbe "
 				       "INET=%s MASK=%s MAC=%s "
 				       "SPEED=%sMbps DUPLEX=full "
-				       "IFACE= RTABID=0 LAN=shared_lan_0\n",
+				       "IFACE= RTABID=0 LAN=shared_lan_0",
 				       _ip, _mask, _mac, _speed);
+			if (vers >= 44) {
+				bufp += OUTPUT(bufp, ebufp - bufp,
+					       " MTU=%s", _mtu);
+			}
+			OUTPUT(bufp, ebufp - bufp, "\n");
 			client_writeback(sock, buf, strlen(buf), tcp);
 			if (verbose)
 				info("%s: IFCONFIG: %s", reqp->nodeid, buf);
@@ -2338,6 +2361,7 @@ COMMAND_PROTOTYPE(doifconfig)
 	 */
 	if (vers >= 18 && !reqp->isvnode) {
 		char *aliasstr;
+		char *mtu = "";
 
 		res = mydb_query("select i.interface_type,i.mac, "
 				 "       i.current_speed,i.duplex "
@@ -2369,10 +2393,22 @@ COMMAND_PROTOTYPE(doifconfig)
 				       "INTERFACE IFACETYPE=%s "
 				       "INET= MASK= MAC=%s "
 				       "SPEED=%sMbps DUPLEX=%s "
-				       "%sIFACE= RTABID= LAN=\n",
+				       "%sIFACE= RTABID= LAN=",
 				       row[0], row[1], row[2], row[3],
 				       aliasstr);
 
+			/*
+			 * XXX MTU should come out of DB.
+			 *   "9000" if using jumbo frames,
+			 *   "1500" if not,
+			 *   "" if not specified in DB (use client default)
+			 */
+			if (vers >= 44) {
+				bufp += OUTPUT(bufp, ebufp - bufp,
+					       " MTU=%s", mtu);
+			}
+
+			OUTPUT(bufp, ebufp - bufp, "\n");
 			client_writeback(sock, buf, strlen(buf), tcp);
 			if (verbose)
 				info("%s: IFCONFIG: %s", reqp->nodeid, buf);
@@ -2426,6 +2462,7 @@ COMMAND_PROTOTYPE(doifconfig)
 	while (nrows) {
 		char *bufp   = buf;
 		char *ifacetype;
+		char *mtu = "";
 		int isveth, doencap;
 
 		row = mysql_fetch_row(res);
@@ -2449,9 +2486,21 @@ COMMAND_PROTOTYPE(doifconfig)
 				       "INTERFACE IFACETYPE=any "
 				       "INET=%s MASK=%s MAC=%s "
 				       "SPEED=100Mbps DUPLEX=full "
-				       "IFACE= RTABID= LAN=%s\n",
+				       "IFACE= RTABID= LAN=%s",
 				       row[1], row[4], row[2], row[7]);
 
+			/*
+			 * XXX MTU should come out of DB.
+			 *   "9000" if using jumbo frames,
+			 *   "1500" if not,
+			 *   "" if not specified in DB (use client default)
+			 */
+			if (vers >= 44) {
+				bufp += OUTPUT(bufp, ebufp - bufp,
+					       " MTU=%s", mtu);
+			}
+
+			OUTPUT(bufp, ebufp - bufp, "\n");
 			client_writeback(sock, buf, strlen(buf), tcp);
 			if (verbose)
 				info("%s: IFCONFIG: %s", reqp->nodeid, buf);
@@ -2543,6 +2592,17 @@ COMMAND_PROTOTYPE(doifconfig)
 			}
 
 			bufp += OUTPUT(bufp, ebufp - bufp, " VTAG=%s", tag);
+
+			/*
+			 * XXX MTU should come out of DB.
+			 *   "9000" if using jumbo frames,
+			 *   "1500" if not,
+			 *   "" if not specified in DB (use client default)
+			 */
+			if (vers >= 44) {
+				bufp += OUTPUT(bufp, ebufp - bufp,
+					       " MTU=%s", mtu);
+			}
 		}
 		OUTPUT(bufp, ebufp - bufp, "\n");
 		client_writeback(sock, buf, strlen(buf), tcp);
@@ -2571,6 +2631,7 @@ COMMAND_PROTOTYPE(doifconfig)
 		while (nrows) {
 			char *bufp = buf;
 			char *ip = "", *ipmask = "", *mac = "", *lan = "";
+			char *mtu = "";
 			
 			row = mysql_fetch_row(res);
 			nrows--;
@@ -2605,15 +2666,24 @@ COMMAND_PROTOTYPE(doifconfig)
 				else if (!strcmp(row2[0], "tunnel_lan")) {
 					lan = row2[1];
 				}
+				else if (!strcmp(row2[0], "tunnel_mtu")) {
+					mtu = row2[1];
+				}
 			}
 			bufp = buf;
 			bufp += OUTPUT(bufp, ebufp - bufp,
 				       "INTERFACE IFACETYPE=gre "
 				       "INET=%s MASK=%s MAC=%s "
 				       "SPEED=100Mbps DUPLEX=full "
-				       "IFACE= RTABID= LAN=%s\n",
+				       "IFACE= RTABID= LAN=%s",
 				       ip, ipmask, mac, lan);
 
+			if (vers >= 44) {
+				bufp += OUTPUT(bufp, ebufp - bufp,
+					       " MTU=%s", mtu);
+			}
+
+			OUTPUT(bufp, ebufp - bufp, "\n");
 			client_writeback(sock, buf, strlen(buf), tcp);
 			if (verbose)
 				info("%s: IFCONFIG: %s", reqp->nodeid, buf);
@@ -2651,17 +2721,26 @@ COMMAND_PROTOTYPE(doifconfig)
 		
 		nrows = (int)mysql_num_rows(res);
 		while (nrows > 0) {
+			char *bufp = buf;
+
 			nrows--;
 			row = mysql_fetch_row(res);
 			if (!row || !row[0] || !row[1] || !row[2] ||
 			    !row[3] || !row[4])
 				continue;
-			OUTPUT(buf, sizeof(buf),
-			       "INTERFACE IFACETYPE=alias "
-			       "INET=%s MASK=%s ID=%s VMAC=%s PMAC=none "
-			       "RTABID= ENCAPSULATE=0 LAN=%s VTAG=\n",
-			       row[0], CHECKMASK(row[1]), row[2], row[3], 
-			       row[4]);
+			bufp += OUTPUT(bufp, ebufp - bufp,
+				       "INTERFACE IFACETYPE=alias "
+				       "INET=%s MASK=%s ID=%s VMAC=%s PMAC=none "
+				       "RTABID= ENCAPSULATE=0 LAN=%s VTAG=",
+				       row[0], CHECKMASK(row[1]), row[2],
+				       row[3], row[4]);
+
+			/* XXX expected */
+			if (vers >= 44) {
+				bufp += OUTPUT(bufp, ebufp - bufp, " MTU=");
+			}
+
+			OUTPUT(bufp, ebufp - bufp, "\n");
 			client_writeback(sock, buf, strlen(buf), tcp);
 			if (verbose)
 				info("%s: IFCONFIG: %s", reqp->nodeid, buf);

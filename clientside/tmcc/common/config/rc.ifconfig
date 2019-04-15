@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2010, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2004-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -214,6 +214,7 @@ sub doboot()
 	    my $iface    = $ifconfig->{IFACE};
 	    my $settings = $ifconfig->{SETTINGS};
 	    my $lan      = $ifconfig->{LAN};
+	    my $mtu      = $ifconfig->{MTU};
 	    my $ifrtabid = undef;
 
 	    #
@@ -244,7 +245,7 @@ sub doboot()
 	    my ($upline, $downline) =
 		&os_ifconfig_line($iface, $inet, $mask,
 				 $speed, $duplex, $aliases,
-				 $type, $lan, $settings,
+				 $type, $lan, $mtu, $settings,
 				 $ifrtabid, \%oscookie);
 		    
 	    if (defined($upline) && $upline) {
@@ -286,12 +287,13 @@ sub doboot()
 	    my $iface    = $ifconfig->{IFACE};
 	    my $settings = $ifconfig->{SETTINGS};
 	    my $lan      = $ifconfig->{LAN};
+	    my $mtu      = $ifconfig->{MTU};
 	    my $ifrtabid = undef;
 
 	    my ($upline, $downline) =
 		&os_ifconfig_line($iface, $inet, $mask,
 				 $speed, $duplex, $aliases,
-				 $type, $lan, $settings,
+				 $type, $lan, $mtu, $settings,
 				 $ifrtabid, \%oscookie);
 		    
 	    if (defined($upline) && $upline) {
