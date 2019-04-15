@@ -243,6 +243,35 @@ except getopt.error, e:
     sys.exit(2)
     pass
 
+class RawTransport(xmlrpclib.SafeTransport):
+    def parse_response(self, response):
+        # This code taken from xmlrpclib Transport.parse_response, and
+        # modified to remove the response processing.
+
+        # Check for new http response object, else it is a file object
+        if hasattr(response,'getheader'):
+            if response.getheader("Content-Encoding", "") == "gzip":
+                stream = xmlrpclib.GzipDecodedResponse(response)
+            else:
+                stream = response
+        else:
+            stream = response
+
+        ret = ''
+        while 1:
+            data = stream.read(1024)
+            ret += data
+            if not data:
+                break
+            if self.verbose:
+                print "body:", repr(data)
+
+        if stream is not response:
+            stream.close()
+
+        return ret
+    pass
+
 class MyServerProxy(xmlrpclib.ServerProxy):
     def raw_request(self, xmlgoo):
 
@@ -255,8 +284,9 @@ class MyServerProxy(xmlrpclib.ServerProxy):
         transport = self.__dict__["_ServerProxy__transport"]
         host      = self.__dict__["_ServerProxy__host"]
         handler   = self.__dict__["_ServerProxy__handler"]
+        verbose   = self.__dict__["_ServerProxy__verbose"]
         
-        response = transport.request(host, handler, xmlgoo)
+        response = transport.request(host, handler, xmlgoo, verbose)
 
         if len(response) == 1:
             response = response[0]
@@ -303,7 +333,7 @@ if debug:
 
 if rawmode:
     # Get a handle on the server,
-    server = MyServerProxy(URI, context=ctx)
+    server = MyServerProxy(URI, transport=RawTransport(context=ctx), context=ctx)
 
     stuff = ""
     while (True):
