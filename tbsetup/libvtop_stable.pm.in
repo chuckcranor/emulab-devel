@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2018 University of Utah and the Flux Group.
+# Copyright (c) 2005-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -10310,9 +10310,21 @@ sub GetWiretype($$$)
 	# 1 Gbit
 	$wiretype = "ethernet-1000000";
     }
-    else {
+    elsif ($bandwidth <= 10000000) {
 	# 10 Gbit
 	$wiretype = "ethernet-10000000";
+    }
+    elsif ($bandwidth <= 25000000) {
+	# 25 Gbit
+	$wiretype = "ethernet-25000000";
+    }
+    elsif ($bandwidth <= 40000000) {
+	# 40 Gbit
+	$wiretype = "ethernet-40000000";
+    }
+    else {
+	# 100 Gbit
+	$wiretype = "ethernet-100000000";
     }
     return $wiretype;
 }
