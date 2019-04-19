@@ -31,13 +31,20 @@ while [ ! $found -eq 1 ]; do
     # means we have to check *which* interface came up; this is how we
     # determine if it was our interface or not.
     #
-    /lib/systemd/systemd-networkd-wait-online -i "$iface" --timeout 2 > /dev/null 2>&1
+    /lib/systemd/systemd-networkd-wait-online --ignore=lo -q -i "$iface" --timeout 20 > /dev/null 2>&1
+    #networkctl status | grep -qi 'state: *routable'
     if [ $? -eq 0 ]; then
 	networkctl status "$iface" | grep -qi configured
 	if [ $? -eq 0 ]; then
 	    echo "`date`: ${iface}: control net is us" >>$LOGFILE 2>&1
 	    mkdir -p /run/emulab
 	    echo "$iface" > /run/cnet
+	    #
+	    # We only add the CriticalConnection bit once we have the cnet
+	    # iface detected, because newer systemd-networkd whines a lot
+	    # when the other searched-but-not-found interfaces are taken down.
+	    #
+	    echo "CriticalConnection=yes" >> /run/systemd/network/${iface}.network
 	    found=1
 	fi
     fi

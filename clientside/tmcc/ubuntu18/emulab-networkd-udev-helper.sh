@@ -18,6 +18,9 @@ fi
 # We have specific code in emulab-networkd.sh that is run from
 # emulab-networkd-online@.service that checks to see if this file was
 # used or not; we only handle the iface there if this file got used.
+# NB: CriticalConnection=yes is added later by emulab-networkd.sh to
+# the config file for the control net iface before systemd-networkd
+# is restarted; thus, it does not appear below.
 #
 mkdir -p /run/systemd/network
 cat <<EOF > /run/systemd/network/${iface}.network
@@ -29,8 +32,6 @@ Description=Emulab control net search on $iface
 DHCP=yes
 
 [DHCP]
-CriticalConnection=yes
-PreferredLifetime=forever
 UseNTP=yes
 UseHostname=yes
 UseDomains=yes
