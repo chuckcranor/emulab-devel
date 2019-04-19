@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1042,7 +1042,7 @@ if (! $DBlinkid) {
     USERERROR("Temporary resource error; ".
 	      "please try again in a few minutes", 1);
 }
-if (!mysql_select_db($TBDBNAME)) {
+if (!mysql_select_db($TBDBNAME, $DBlinkid)) {
     TBERROR("Could not select DB after connecting!", 1);
 }
 $DBlinkids = array();

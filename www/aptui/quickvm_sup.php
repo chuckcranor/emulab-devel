@@ -588,7 +588,7 @@ function GET_ANNOUNCEMENTS($user, $update = true)
 
   # Add an apt_announcement_info entry for any announcements which don't have one
   $query_result = DBQueryWarn('select a.idx from apt_announcements as a left join apt_announcement_info as i on a.idx=i.aid and ((a.uid_idx is NULL and i.uid_idx="'.$uid_idx.'") or (a.uid_idx is not NULL and a.uid_idx=i.uid_idx)) where a.portal="'.$PORTAL_GENESIS.'" and a.retired=0 and i.uid_idx is NULL and (a.uid_idx is NULL or a.uid_idx="'.$uid_idx.'")');
-  while ($row = mysql_fetch_array($query_result, MYSQL_NUM)) {
+  while ($row = mysql_fetch_row($query_result)) {
       DBQueryWarn('insert into apt_announcement_info set aid="'.$row[0].'", uid_idx="'.$uid_idx.'",seen_count=0');
   }
 
