@@ -24,6 +24,10 @@
 # Database Constants
 #
 require("dbcheck.php3");
+if (explode('.', PHP_VERSION)[0] > 5) {
+    # We need the mysql -> mysqli stubs for 7.x
+    require_once("mysql.php");
+}
 
 $TBDBNAME       = "@TBDBNAME@";
 $TBOPSPID	= "emulab-ops";

@@ -125,3 +125,5 @@ function mysql_real_escape_string($stuff, $linkid = NULL)
     
     return mysqli_real_escape_string($linkid, $stuff);
 }
+
+?>
