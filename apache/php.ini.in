@@ -32,3 +32,8 @@ error_log		=       "@prefix@/log/php-errors.log"
 ; How stupid is this?
 ;
 date.timezone		=	@OURTIMEZONE@
+
+;
+; This is needed now to avoid SSL verify errors when talking to ourself.
+[openssl]
+openssl.cafile          =       @prefix@/etc/emulab.pem
