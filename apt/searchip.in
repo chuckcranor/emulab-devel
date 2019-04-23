@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,8 +56,8 @@ my $TBOPS      = "@TBOPSEMAIL@";
 
 # Protos
 sub fatal($);
-sub SearchCurrent();
-sub SearchManifest($);
+sub SearchCurrent($);
+sub SearchManifest($$);
 
 #
 # Turn off line buffering on output
@@ -130,13 +130,9 @@ if (defined($options{"t"})) {
 usage()
     if (!@ARGV);
 
-my $IP = shift(@ARGV);
-if ($IP !~ /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/)  {
-    fatal("Invalid IP format");
-}
-
-sub SearchCurrent()
+sub SearchCurrent($)
 {
+    my ($ip) = @_;
     my $found;
     
     #
@@ -158,7 +154,7 @@ sub SearchCurrent()
 		print STDERR "Could not parse manifest for $sliver\n";
 		next;
 	    }
-	    if (SearchManifest($manifest)) {
+	    if (SearchManifest($manifest, $ip)) {
 		$found = $sliver;
 		last;
 	    }
@@ -186,8 +182,9 @@ sub SearchCurrent()
     return $instance->uuid();
 }
 
-sub SearchHistory()
+sub SearchHistory($)
 {
+    my ($ip)   = @_;
     my @result = ();
     my %dups   = ();
     my $minmax = "";
@@ -204,7 +201,7 @@ sub SearchHistory()
 		     "  apt_instance_history as h ".
 		     "left join apt_instance_aggregate_history as ah on ".
 		     "  ah.uuid=h.uuid ".
-		     "where $minmax ah.manifest like '%${IP}%'");
+		     "where $minmax ah.manifest like '%${ip}%'");
     
     while (my ($uuid,$aggregate_urn,$manifest) =
 	   $query_result->fetchrow_array()) {
@@ -220,7 +217,7 @@ sub SearchHistory()
 	    print STDERR "Could not parse manifest for $uuid,$aggregate_urn\n";
 	    next;
 	}
-	if (SearchManifest($manifest)) {
+	if (SearchManifest($manifest, $ip)) {
 	    my $history_result =
 		DBQueryFatal("select pid,name from apt_instance_history ".
 			     "where uuid='$uuid'");
@@ -246,9 +243,9 @@ sub SearchHistory()
     exit(0);
 }
 
-sub SearchManifest($)
+sub SearchManifest($$)
 {
-    my ($manifest) = @_;
+    my ($manifest, $ip) = @_;
     
     #
     # Check the routable pool bindings first
@@ -256,7 +253,7 @@ sub SearchManifest($)
     my $pools = GeniXML::GetAddressPools($manifest);
     foreach my $pool (@{$pools}) {
 	foreach my $ipref (@{$pool->{'list'}}) {
-	    if ($ipref->{'ipv4'} eq $IP) {
+	    if ($ipref->{'ipv4'} eq $ip) {
 		return 1;
 	    }
 	}
@@ -274,37 +271,50 @@ sub SearchManifest($)
 	next
 	    if (!defined($ipv4));
 	
-	if ($ipv4 eq $IP) {
+	if ($ipv4 eq $ip) {
 	    return 1;
 	}
     }
     return 0;
 }
 if ($historical || $both) {
-    if ($both) {
-	my $uuid = SearchCurrent();
+    if (@ARGV == 1) {
+	if ($both) {
+	    my $uuid = SearchCurrent($ARGV[0]);
+	    if (defined($webtask)) {
+		$webtask->instance($uuid);
+	    }
+	}
+	my @list = SearchHistory($ARGV[0]);
 	if (defined($webtask)) {
-	    $webtask->instance($uuid);
+	    $webtask->instancelist(\@list);
+	    $webtask->Exited(0);
 	}
     }
-    my @list = SearchHistory();
-    if (defined($webtask)) {
-	$webtask->instancelist(\@list);
-	$webtask->Exited(0);
+    else {
+	fatal("Cannot search history for multiple IPs");
     }
 }
 else {
-    my $uuid = SearchCurrent();
-    if (!defined($uuid)) {
-	if (defined($webtask)) {
-	    $webtask->output("No matching instance for IP");
-	    $webtask->Exited(1);
+    if (@ARGV == 1) {
+	my $uuid = SearchCurrent($ARGV[0]);
+	if (!defined($uuid)) {
+	    if (defined($webtask)) {
+		$webtask->output("No matching instance for IP");
+		$webtask->Exited(1);
+	    }
+	    exit(1);	
 	}
-	exit(1);	
+	if (defined($webtask)) {
+	    $webtask->instance($uuid);
+	    $webtask->Exited(0);
+	}
     }
-    if (defined($webtask)) {
-	$webtask->instance($uuid);
-	$webtask->Exited(0);
+    else {
+	# Command line only please.
+	foreach my $ip (@ARGV) {
+	    SearchCurrent($ip);
+	}
     }
 }
 exit(0);
