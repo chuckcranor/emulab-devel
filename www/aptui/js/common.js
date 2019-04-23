@@ -154,16 +154,26 @@ APT_OPTIONS.CallServerMethod = function (url, route, method, args, callback)
     url = 'https://' + window.location.host + '/apt/server-ajax.php';
     url = 'server-ajax.php';
 
+    var networkError = {
+	"code"  : -1,
+	"value" : "Server error, possible network failure. Try again later.",
+    };
+
     if (args == null) {
         args = {"noargs" : "noargs"};
     }
-    return $.ajax({
+    var jqxhr = $.ajax({
         // the URL for the request
         url: url,
         success: function (json) {
 	    window.APT_OPTIONS.gaAjaxEvent(route, method, json.code);
 	    if (callback !== undefined) {
 		callback(json);
+	    }
+	},
+	error: function (jqXHR, textStatus, errorThrown) {
+	    if (callback !== undefined) {
+		callback(networkError);
 	    }
 	},
  
@@ -180,6 +190,16 @@ APT_OPTIONS.CallServerMethod = function (url, route, method, args, callback)
         // the type of data we expect back
         dataType : "json",
     });
+    var defer = $.Deferred();
+    
+    jqxhr.done(function (data) {
+	defer.resolve(data);
+    });
+    jqxhr.fail(function (jqXHR, textStatus, errorThrown) {
+	networkError["jqXHR"] = jqXHR;
+	defer.resolve(networkError);
+    });
+    return defer;
 };
 
 window.APT_OPTIONS.announceDismiss = function (aid) {
