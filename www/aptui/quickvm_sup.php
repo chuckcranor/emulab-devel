@@ -517,6 +517,8 @@ if (!$login_user->portal()) {
                             All Datasets</a></li>
                                  <li><a href='images.php?all=1'>
                             All Images</a></li>
+                                 <li><a href='list-vlans.php'>
+                            All Vlans</a></li>
                                  <li><a href='instance-errors.php'>
                             Experiment Errors</a></li>
                                  <li><a href='lists.php'>

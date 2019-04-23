@@ -1,0 +1,157 @@
+<?php
+#
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+chdir("..");
+include_once("webtask.php");
+include_once("experiment_defs.php");
+include_once("node_defs.php");
+chdir("apt");
+
+function Do_List()
+{
+    global $this_user, $ajax_args;
+    $clause = "";
+    $result = array();
+
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(1, "Not enough permission");
+        return;
+    }
+    if ($ajax_args && isset($ajax_args["uuid"])) {
+        $uuid = $ajax_args["uuid"];
+        if (!IsValidUUID($uuid)) {
+            SPITAJAX_ERROR(-1, "Invalid experiment UUID");
+            return -1;
+        }
+        $experiment = Experiment::LookupByUUID($uuid);
+        if (!$experiment) {
+            SPITAJAX_ERROR(-1, "No such experiment");
+            return -1;
+        }
+        $idx = $experiment->idx();
+        $clause = "where exptidx='$idx'";
+    }
+    $query_result =
+        DBQueryFatal("select * from vlans $clause order by pid,eid");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $result[] = $row;
+    }
+    SPITAJAX_RESPONSE($result);
+}
+
+function Do_GetInfo()
+{
+    global $this_user, $ajax_args;
+    $result = array();
+
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(1, "Not enough permission");
+        return;
+    }
+    if (!isset($ajax_args["vlan_id"])) {
+	SPITAJAX_ERROR(-1, "Missing vlan ID");
+	return -1;
+    }
+    $vlan_id = $ajax_args["vlan_id"];
+    if (!TBvalid_integer($vlan_id)) {
+	SPITAJAX_ERROR(-1, "Invalid vlan ID");
+	return -1;
+    }
+    $query_result =
+        DBQueryFatal("select * from vlans where id='$vlan_id'");
+    
+    if (!mysql_num_rows($query_result)) {
+	SPITAJAX_ERROR(-1, "No such vlan ID");
+	return -1;
+    }
+    $row = mysql_fetch_array($query_result);
+
+    if (isset($row["members"]) && $row["members"] != "") {
+        $members = array();
+        
+        foreach (preg_split("/\s/", $row["members"]) as $member) {
+            list ($node_id,$iface) = preg_split('/:/', $member);
+
+            $node = Node::Lookup($node_id);
+            if ($node) {
+                $members[] = $node->GetInterfaceInfo($iface);
+            }
+        }
+        $row["members"] = $members;
+    }
+    else {
+        $row["members"] = null;
+    }
+
+    #
+    # Virtual interfaces on this vlan.
+    #
+    $query_result =
+        DBQueryFatal("select * from vinterfaces where vlanid='$vlan_id'");
+    
+    if (mysql_num_rows($query_result)) {
+        $vinterfaces = array();
+        
+        while ($vrow = mysql_fetch_array($query_result)) {
+            $vinterfaces[] = $vrow;
+        }
+        $row["vinterfaces"] = $vinterfaces;
+    }
+    else {
+        $row["vinterfaces"] = null;
+    }
+
+    #
+    # Map switch path to wires.
+    #
+    if ($row["switchpath"]) {
+        $wires = array();
+        
+        foreach (preg_split("/\s/", $row["switchpath"]) as $path) {
+            list ($node_id1,$node_id2) = preg_split('/:/', $path);
+
+            $query_result =
+                DBQueryFatal("select * from wires ".
+                             "where type='Trunk' and ".
+                             "      ((node_id1='$node_id1' and ".
+                             "        node_id2='$node_id2') or ".
+                             "       (node_id1='$node_id2' and ".
+                             "        node_id2='$node_id1'))");
+
+            while ($wrow = mysql_fetch_array($query_result)) {
+                $wires[] = $wrow;
+            }
+        }
+        $row["wires"] = $wires;
+    }
+    else {
+        $row["wires"] = null;
+    }
+    SPITAJAX_RESPONSE($row);
+}
+
+# Local Variables:
+# mode:php
+# End:
+?>

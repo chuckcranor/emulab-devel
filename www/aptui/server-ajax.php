@@ -411,6 +411,20 @@ $routing = array("geni-login" =>
                                                      "Do_SnapshotStatus",
                                                  "Modify" =>
                                                      "Do_Modify")),
+		 "node" =>
+			array("file"    => "node.ajax",
+			      "guest"   => false,
+			      "methods" => array("GetInfo" =>
+                                                     "Do_GetInfo",
+                                                 "Modify" =>
+                                                     "Do_Modify")),
+		 "vlan" =>
+			array("file"    => "vlan.ajax",
+			      "guest"   => false,
+			      "methods" => array("GetInfo" =>
+                                                     "Do_GetInfo",
+                                                 "List" =>
+                                                     "Do_List")),
 		 "news" =>
 			array("file"    => "news.ajax",
 			      "guest"   => false,
