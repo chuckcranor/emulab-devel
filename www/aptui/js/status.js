@@ -591,7 +591,8 @@ $(function ()
 	    else if (instanceStatus == "unknown") {
 		status_html = "<font color=red>" + instanceStatus + "</font>";
 		bgtype = "panel-warning";
-		status_message = "The server is temporarily unavailable!";
+		status_message = "The server is temporarily unavailable. " +
+		    "Please check back later.";
 	    }
 	    if (!status_collapsed) {
 		$("#status_message").html(status_message);
@@ -1657,9 +1658,12 @@ $(function ()
 	//
 	// Do not show in the terminating or terminated state.
 	//
-	if (lastStatus == "terminated" || lastStatus == "terminating" ||
-	    lastStatus == "unknown") {
+	if (lastStatus == "terminated" || lastStatus == "terminating") {
 	    alert("Your experiment is no longer active.");
+	    return;
+	}
+	if (lastStatus == "unknown") {
+	    alert("Server is temporarily unavailable. Try again later.");
 	    return;
 	}
 
