@@ -290,7 +290,13 @@ sub MapToLocalImage($$$$@)
     my $hrn    = GeniHRN->new($urn);
     my $ospid  = $hrn->ospid();
     my $osname = $hrn->osname();
+    my $osvers = $hrn->osvers();
     my ($blob, $url);
+
+    # The image might be version specific.
+    if (defined($osvers) && $osvers !~ /^\d+$/) {
+	return GeniResponse->BadArgsResponse("Bad version number in $urn");
+    }
 
     #
     # Short circuit some local cases. Permission checks will be handled later. 
@@ -330,12 +336,6 @@ sub MapToLocalImage($$$$@)
 					"No url for $urn at the image server");
 	}
 	$url =~ s/\/image/\/dev\/stoller\/image/ if ($usemydevtree);
-    }
-
-    # The image might be version specific.
-    my $osvers = $hrn->osvers();
-    if (defined($osvers) && $osvers !~ /^\d+$/) {
-	return GeniResponse->BadArgsResponse("Bad version number in $urn");
     }
 
     #
