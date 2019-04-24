@@ -32,9 +32,7 @@ import sys
 import getopt
 import os, os.path
 import xmlrpclib
-
-from M2Crypto.m2xmlrpclib import SSL_Transport
-from M2Crypto import SSL
+import ssl
 
 ##
 # The package version number
@@ -142,10 +140,10 @@ if not os.access(certificate, os.R_OK):
     sys.exit(-1);
     pass
     
-ctx = SSL.Context('sslv23')
-ctx.load_cert(certificate, certificate)
-ctx.set_verify(SSL.verify_none, 16)
-ctx.set_allow_unknown_ca(1)
+ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+ctx.load_cert_chain(certificate)
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
 
 # This is parsed by the Proxy object.
 URI = "https://" + xmlrpc_server + ":443" + path
@@ -154,7 +152,7 @@ if debug:
     pass
 
 # Get a handle on the server,
-server = xmlrpclib.ServerProxy(URI, SSL_Transport(ctx));
+server = xmlrpclib.ServerProxy(URI, context=ctx)
 # Invoke method and print response.
 methodname = req_args[0]
 meth = getattr(server, methodname)
