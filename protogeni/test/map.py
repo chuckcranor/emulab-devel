@@ -37,7 +37,6 @@ import os
 import re
 import xmlrpclib
 import zlib
-from M2Crypto import X509
 
 def Usage():
     print "usage: " + sys.argv[ 0 ] + " [option...] <advertisement> <request>"

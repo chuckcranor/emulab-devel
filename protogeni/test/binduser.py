@@ -37,7 +37,6 @@ import os
 import time
 import re
 import xmlrpclib
-from M2Crypto import X509
 
 ACCEPTSLICENAME=1
 dokeys   = 1
