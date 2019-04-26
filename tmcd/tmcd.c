@@ -1330,22 +1330,25 @@ handle_request(int sock, struct sockaddr_in *client, char *rdata, int rdatalen, 
 	 */
 	if ((err = iptonodeid(client->sin_addr, reqp, privkey))) {
 		if (privkey) {
-			error("No such node with wanode_key [%s]\n", privkey);
+			error("No such node with wanode_key [%s] at %s\n",
+			      privkey, inet_ntoa(client->sin_addr));
 		}
 		else if (reqp->external_key[0]) {
 			if (reqp->isvnode)
-				error("No such vnode %s with key %s\n",
-				      reqp->vnodeid, reqp->external_key);
+				error("No such vnode %s with key %s at %s\n",
+				      reqp->vnodeid, reqp->external_key,
+				      inet_ntoa(client->sin_addr));
 			else
-				error("No such node with key %s\n",
-				      reqp->external_key);
+				error("No such node with key %s at %s\n",
+				      reqp->external_key,
+				      inet_ntoa(client->sin_addr));
 		}
 		else if (reqp->isvnode) {
-			error("No such vnode %s associated with %s\n",
+			error("No such vnode %s at %s\n",
 			      reqp->vnodeid, inet_ntoa(client->sin_addr));
 		}
 		else {
-			error("No such node: %s\n",
+			error("No such node at %s\n",
 			      inet_ntoa(client->sin_addr));
 		}
 		goto skipit;
