@@ -117,6 +117,7 @@ sub issimnode($)      { return field($_[0], 'issimnode'); }
 sub isgeninode($)     { return field($_[0], 'isgeninode'); }
 sub isfednode($)      { return field($_[0], 'isfednode'); }
 sub isswitch($)       { return field($_[0], 'isswitch'); }
+sub attributes($)     { return $_[0]->{'ATTRS'}; }
 
 #
 # Force a reload of the data.

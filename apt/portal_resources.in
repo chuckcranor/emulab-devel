@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -279,7 +279,27 @@ sub CheckAggregates()
 	    foreach my $t (GeniXML::FindNodesNS("n:type", $ref,
 					$GeniXML::EMULAB_NS)->get_nodelist()) {
 		my $typename = GeniXML::GetText("name", $t);
-		$reservable_types->{$typename} = $typename;
+
+		if ($typename !~ /^[-\w]+$/) {
+		    print STDERR "Bad type name at $nickname: $typename\n";
+		    next;
+		}
+		$reservable_types->{$typename} = {};
+		#
+		# Look for attributes that need to be stored.
+		#
+		foreach my $a (GeniXML::FindNodesNS("n:attribute", $t,
+					$GeniXML::EMULAB_NS)->get_nodelist()) {
+		    my $attrkey = GeniXML::GetText("name", $a);
+		    my $attrval = GeniXML::GetText("value", $a);
+
+		    if ($attrkey !~ /^[-\w]+$/) {
+			print STDERR "Bad type attrkey name at $nickname: ".
+			    "$typename,$attrkey\n";
+			next;
+		    }
+		    $reservable_types->{$typename}->{$attrkey} = $attrval;
+		}
 	    }
 	}
 	
@@ -400,6 +420,15 @@ sub CheckAggregates()
 		DBQueryWarn("replace into apt_aggregate_nodetypes set ".
 			    " urn='$urn',type='$type',".
 			    " count='$count',free='$avail'");
+
+		foreach my $attrkey (keys(%{$reservable_types->{$type}})) {
+		    my $attrval = $reservable_types->{$type}->{$attrkey};
+		    my $safeval = DBQuoteSpecial($attrval);
+
+		    DBQueryWarn("replace into apt_aggregate_nodetype_attributes ".
+				" set urn='$urn',type='$type',".
+				" attrkey='$attrkey',attrvalue=$safeval");
+		}
 	    }
 	}
 	if (!$impotent) {

@@ -2611,10 +2611,26 @@ sub print_header {
 	    # Reservable types for reservation system.
 	    #
 	    my @reservable = Reservation->ReservableTypes();
-	    print "<emulab:reservable_types>";
+	    print "<emulab:reservable_types>\n";
 	    foreach my $type (@reservable) {
-		my $typename = $type->type();
-		print "<emulab:type name='$typename' />";
+		my $typename   = $type->type();
+		$type->LoadAttributes();
+		my %attributes = %{$type->attributes()};
+
+		print "<emulab:type name='$typename'>\n";
+		print "<emulab:attribute name='architecture' ".
+		         "value='" . $type->architecture() . "'/>\n"
+		    if ($type->architecture());
+		print "<emulab:attribute name='disksize' ".
+		         "value='" . $type->disksize() . "'/>\n"
+		    if ($type->disksize());
+		foreach my $key (keys(%attributes)) {
+		    my $val = $attributes{$key}->{"value"};
+		    if ($key =~ /^hw_/) {
+			print "<emulab:attribute name='$key' value='$val'/>\n";
+		    }
+		}
+		print "</emulab:type>\n";
 	    }
 	    print "</emulab:reservable_types>\n";
 	}

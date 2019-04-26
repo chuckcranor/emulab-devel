@@ -91,6 +91,19 @@ CREATE TABLE `apt_aggregate_nodetypes` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_aggregate_nodetype_attributes`
+--
+
+DROP TABLE IF EXISTS `apt_aggregate_nodetype_attributes`;
+CREATE TABLE `apt_aggregate_nodetype_attributes` (
+  `urn` varchar(128) NOT NULL default '',
+  `type` varchar(30) NOT NULL default '',
+  `attrkey` varchar(32) NOT NULL default '',
+  `attrvalue` tinytext NOT NULL,
+  PRIMARY KEY  (`urn`,`type`,`attrkey`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_aggregates_status_events`
 --
 
