@@ -8120,8 +8120,11 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 		reqp->experiment_keys |= TB_ROOTKEYS_PRIVATE;
 	if (row[44] && atoi(row[44]) > 0)
 		reqp->experiment_keys |= TB_ROOTKEYS_PUBLIC;
+/* XXX ignore this everywhere except Emulab for now */
+#ifdef  TBMAINSITE
 	if (row[45] && atoi(row[45]) > 0)
 		reqp->usejumboframes = 1;
+#endif
 
 	/* If a vnode, copy into the nodeid. Eventually split this properly */
 	strcpy(reqp->pnodeid, reqp->nodeid);
