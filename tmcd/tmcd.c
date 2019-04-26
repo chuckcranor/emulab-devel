@@ -266,6 +266,7 @@ typedef struct {
         int		genisliver_idx;
         int		geniflags;
 	int		isnonlocal_pid;
+	int		usejumboframes;
 	unsigned short  taintstates;
 	unsigned short  experiment_keys;
 	char            nfsmounts[TBDB_FLEN_TINYTEXT];
@@ -2115,6 +2116,9 @@ COMMAND_PROTOTYPE(doifconfig)
 		return 1;
 	}
 
+	/*
+	 * Handle physical interfaces with IP addresses
+	 */
 	nrows = (int)mysql_num_rows(res);
 	while (nrows) {
 		row = mysql_fetch_row(res);
@@ -2151,11 +2155,12 @@ COMMAND_PROTOTYPE(doifconfig)
 				duplex = row[4];
 
 			/*
-			 * XXX MTU should come out of DB.
+			 * MTU:
 			 *   "9000" if using jumbo frames,
-			 *   "1500" if not,
-			 *   "" if not specified in DB (use client default)
+			 *   "" otherwise (use client default)
 			 */
+			if (reqp->usejumboframes && atoi(speed) >= 10000)
+				mtu = "9000";
 
 			/*
 			 * We now use the MAC to determine the interface, but
@@ -2398,11 +2403,13 @@ COMMAND_PROTOTYPE(doifconfig)
 				       aliasstr);
 
 			/*
-			 * XXX MTU should come out of DB.
+			 * XXX MTU:
 			 *   "9000" if using jumbo frames,
-			 *   "1500" if not,
-			 *   "" if not specified in DB (use client default)
+			 *   "" if not (use client default)
 			 */
+			if (reqp->usejumboframes && atoi(row[2]))
+				mtu = "9000";
+
 			if (vers >= 44) {
 				bufp += OUTPUT(bufp, ebufp - bufp,
 					       " MTU=%s", mtu);
@@ -2462,7 +2469,6 @@ COMMAND_PROTOTYPE(doifconfig)
 	while (nrows) {
 		char *bufp   = buf;
 		char *ifacetype;
-		char *mtu = "";
 		int isveth, doencap;
 
 		row = mysql_fetch_row(res);
@@ -2490,14 +2496,13 @@ COMMAND_PROTOTYPE(doifconfig)
 				       row[1], row[4], row[2], row[7]);
 
 			/*
-			 * XXX MTU should come out of DB.
-			 *   "9000" if using jumbo frames,
-			 *   "1500" if not,
-			 *   "" if not specified in DB (use client default)
+			 * XXX MTU?
+			 * Since we set SPEED=100Mbps, we don't set the MTU
+			 * (to be consistent with only setting MTU=9000 when
+			 * the speed is 10Gbps or more).
 			 */
 			if (vers >= 44) {
-				bufp += OUTPUT(bufp, ebufp - bufp,
-					       " MTU=%s", mtu);
+				bufp += OUTPUT(bufp, ebufp - bufp, "MTU=");
 			}
 
 			OUTPUT(bufp, ebufp - bufp, "\n");
@@ -2594,14 +2599,12 @@ COMMAND_PROTOTYPE(doifconfig)
 			bufp += OUTPUT(bufp, ebufp - bufp, " VTAG=%s", tag);
 
 			/*
-			 * XXX MTU should come out of DB.
-			 *   "9000" if using jumbo frames,
-			 *   "1500" if not,
-			 *   "" if not specified in DB (use client default)
+			 * XXX MTU?
+			 *   Maybe should be explicitly set the same as
+			 *   the physical IF, but for now we just don't set.
 			 */
 			if (vers >= 44) {
-				bufp += OUTPUT(bufp, ebufp - bufp,
-					       " MTU=%s", mtu);
+				bufp += OUTPUT(bufp, ebufp - bufp, " MTU=");
 			}
 		}
 		OUTPUT(bufp, ebufp - bufp, "\n");
@@ -7774,7 +7777,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " r.erole, n.taint_states, "
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
 				 " p.nonlocal_id,NULL, "
-				 " r.rootkey_private,r.rootkey_public "
+				 " r.rootkey_private,r.rootkey_public, "
+				 " e.usejumboframes "
 				 "FROM nodes AS n "
 				 "LEFT JOIN reserved AS r ON "
 				 "  r.node_id=n.node_id "
@@ -7805,7 +7809,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "     (SELECT node_id FROM widearea_nodeinfo "
 				 "      WHERE privkey='%s') "
 				 "  AND notmcdinfo_types.attrvalue IS NULL",
-				 45, nodekey);
+				 46, nodekey);
 	}
 	else if (reqp->isvnode) {
 		char	clause[BUFSIZ];
@@ -7845,7 +7849,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " r.erole, nv.taint_states, "
 				 " nv.nfsmounts,e.nfsmounts AS enfsmounts, "
 				 " p.nonlocal_id,va.attrvalue, "
-				 " r.rootkey_private,r.rootkey_public "
+				 " r.rootkey_private,r.rootkey_public, "
+				 " e.usejumboframes "
 				 "from nodes as nv "
 				 "left join nodes as np on "
 				 " np.node_id=nv.phys_nodeid "
@@ -7872,7 +7877,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " va.vname=r.vname and "
 				 " va.attrkey='routable_control_ip' "
 				 "where nv.node_id='%s' and (%s)",
-				 45, reqp->vnodeid, clause);
+				 46, reqp->vnodeid, clause);
 	}
 	else {
 		char	clause[BUFSIZ];
@@ -7905,7 +7910,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " r.erole, n.taint_states, "
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
 				 " p.nonlocal_id,NULL, "
-				 " r.rootkey_private,r.rootkey_public "
+				 " r.rootkey_private,r.rootkey_public, "
+				 " e.usejumboframes "
 				 "from interfaces as i "
 				 "left join nodes as n on n.node_id=i.node_id "
 				 "left join reserved as r on "
@@ -7935,7 +7941,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "  on n.type=dedicated_wa_types.type "
 				 "where (%s) "
 				 "  and notmcdinfo_types.attrvalue is NULL",
-				 45, clause);
+				 46, clause);
 	}
 
 	if (!res) {
@@ -8114,6 +8120,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 		reqp->experiment_keys |= TB_ROOTKEYS_PRIVATE;
 	if (row[44] && atoi(row[44]) > 0)
 		reqp->experiment_keys |= TB_ROOTKEYS_PUBLIC;
+	if (row[45] && atoi(row[45]) > 0)
+		reqp->usejumboframes = 1;
 
 	/* If a vnode, copy into the nodeid. Eventually split this properly */
 	strcpy(reqp->pnodeid, reqp->nodeid);
