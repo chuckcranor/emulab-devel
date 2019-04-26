@@ -372,6 +372,20 @@ class Aggregate
         }
         return $aggregate;
     }
+
+    #
+    # List of types available at this aggregate. For now we just want
+    # the type names.
+    #
+    function TypeList()
+    {
+        $result = array();
+
+        foreach ($this->typeinfo as $type => $info) {
+            $result[$type] = $type;
+        }
+        return $result;
+    }
 }
 
 #

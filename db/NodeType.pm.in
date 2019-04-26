@@ -447,6 +447,9 @@ sub isfakenode($;$) {
 sub isblackbox($;$) {
     return GetAttribute($_[0], "blackbox", $_[1]);
 }
+sub required_license($;$) {
+    return GetAttribute($_[0], "required_license", $_[1]);
+}
 sub control_interface($;$) { return control_iface($_[0], $_[1]); }
 
 #

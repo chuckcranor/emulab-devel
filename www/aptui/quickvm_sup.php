@@ -118,7 +118,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
         header("Location: portal-aup.php?referrer=$referrer");
         return;
     }
-    if ($login_user && $login_user->ProjectLicenses() &&
+    if ($login_user && $login_user->Licenses() &&
         $page_title != "Licenses" && $page_title != "Logout") {
         $referrer = urlencode($_SERVER['REQUEST_URI']);
         header("Location: licenses.php?referrer=$referrer");

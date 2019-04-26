@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -64,10 +64,16 @@ $optargs = OptionalPageArguments("create",       PAGEARG_STRING,
 				 "joinproject",  PAGEARG_BOOLEAN,
                                  "toomany",      PAGEARG_BOOLEAN,
 				 "formfields",   PAGEARG_ARRAY);
-
-# List of licenses for Powder.
+#
+# List of licenses for Powder that we display for new projects.
+# The PI is telling us that they will need these restricted resources,
+# but they do not have to accept the licenses till later, after they
+# have been approved.
+#
 if ($ISPOWDER) {
-    $query_result = DBQueryFatal("select * from licenses");
+    $query_result = DBQueryFatal("select * from licenses ".
+                                 "where license_level='project' and ".
+                                 "      license_target='signup'");
 
     while ($row = mysql_fetch_array($query_result)) {
         $license_defs[$row["license_name"]] =

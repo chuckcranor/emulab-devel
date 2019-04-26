@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -807,6 +807,39 @@ class User
             $result[] = $row;
         }
         return $result;
+    }
+
+    #
+    # Find all the project licenses this user needs to accept.
+    #
+    function Licenses() {
+	$uid_idx = $this->uid_idx();
+
+        # Not until user is approved
+        if (!$this->IsActive()) {
+            return null;
+        }
+        # First any project based Licenses.
+        $licenses = $this->ProjectLicenses();
+
+        # Then per user based licenses.
+        $query_result = 
+	    DBQueryFatal("select ul.*,l.* from user_licenses as ul ".
+                         "left join licenses as l on ".
+                         "     l.license_idx=ul.license_idx ".
+			 "where ul.uid_idx='$uid_idx' and ".
+                         "      ul.accepted is null");
+        
+	if (mysql_num_rows($query_result) == 0) {
+	    return $licenses;
+	}
+        if (!$licenses) {
+            $licenses = array();
+        }
+        while ($row = mysql_fetch_array($query_result)) {
+            $licenses[] = $row;
+        }
+        return $licenses;
     }
 
     function Show($html = FALSE) {

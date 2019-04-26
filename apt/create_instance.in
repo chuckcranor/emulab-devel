@@ -696,6 +696,27 @@ if (defined($profile->repourl())) {
 }
 
 #
+# Check for nodes/types/aggregates that require a License. 
+#
+my $licenses;
+
+$tmp = APT_Profile::CheckLicenses($rspecstr, $geniuser->emulab_user(), $project,
+				  \$licenses, \$errmsg);
+if ($tmp) {
+    if ($tmp < 0) {
+	fatal("Could not determine license requirements: $errmsg");
+    }
+    # Special handling.
+    if ($licenses) {
+	if (defined($webtask)) {
+	    $webtask->required_licenses($licenses);
+	}
+	UserError("Licenses are required");
+    }
+    UserError($errmsg);
+}
+
+#
 # Now we know where to send to logs.
 #
 if (!$debug) {

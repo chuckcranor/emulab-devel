@@ -442,8 +442,7 @@ function Do_GetImageInfo()
 }
 
 #
-# Allow for checking at each step, although at the moment we
-# do notreally do this.
+# Allow for checking at each step.
 #
 function Do_CheckForm()
 {
@@ -1124,10 +1123,17 @@ function Do_Submit()
         Instance::Instantiate($uuid, $this_user, $options, $args, $webtask);
 
     if (!$instance) {
-        # Create error is handled differently.
-	SPITAJAX_ERROR(3, $webtask->output());
         if (isset($keyname)) {
             unlink($keyname);
+        }
+        # Create error is handled differently.
+        $licenses = $webtask->TaskValue("required_licenses");
+        if ($licenses) {
+            SPITAJAX_ERROR(3, $licenses);
+            $_SESSION["licenses"] = $licenses;
+        }
+        else {
+            SPITAJAX_ERROR(1, $webtask->output());
         }
         $webtask->Delete();
         return;
@@ -1161,6 +1167,53 @@ function Do_Submit()
     session_destroy();
     SPITAJAX_RESPONSE($blob);
     return;
+}
+
+#
+# Send license email. 
+#
+function Do_RequestLicenses()
+{
+    global $this_user;
+    global $ajax_args;
+    session_start();
+
+    $email       = $this_user->email();
+    $name        = $this_user->name();
+    $uid         = $this_user->uid();
+    $adminemail  = $this_user->adminEmail();
+    $licenses    = json_decode(json_encode($_SESSION["licenses"]), true);
+    $body        = "";
+
+    foreach ($licenses as $idx => $details) {
+        $lname  = $details["license_name"];
+        $type   = $details["type"];
+        $target = $details["target"];
+        
+        $body .= "License ${lname}: ";
+        if ($type == "node") {
+            $body .= "Node $target";
+        }
+        elseif ($type == "type") {
+            $body .= "Node type $target";
+        }
+        elseif ($type == "aggregate") {
+            $body .= "Location $target";
+        }
+        $body .= "\n\n";
+    }
+
+    TBMAIL($adminemail, 
+           "$name ($uid) is requesting access to restricted resources",
+           "$name ($uid) is requesting access to restricted resources:\n\n".
+           $body .
+           "Operations staff will contact you if more information is needed.\n".
+           "You will receive email when permission to use these resources\n".
+           "has been granted.\n",
+           "From: $adminemail\n".
+           "CC: $name <$email>");
+
+    SPITAJAX_RESPONSE(1);
 }
 
 #

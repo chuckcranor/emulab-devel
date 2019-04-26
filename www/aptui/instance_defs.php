@@ -1239,7 +1239,8 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
         if ($extended) {
             $amlist[$urn] = array("urn"      => $urn,
                                   "name"     => $am,
-                                  "nickname" => $aggregate->nickname());
+                                  "nickname" => $aggregate->nickname(),
+                                  "typelist" => $aggregate->TypeList());
         }
         else {
             $amlist[$urn] = $am;
@@ -1262,7 +1263,8 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
         if ($extended) {
             $amlist[$urn] = array("urn"      => $urn,
                                   "name"     => $am,
-                                  "nickname" => $aggregate->nickname());
+                                  "nickname" => $aggregate->nickname(),
+                                  "typelist" => $aggregate->TypeList());
         }
         else {
             $amlist[$urn] = $am;

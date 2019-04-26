@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,7 +33,7 @@ use Date::Parse;
 sub usage()
 {
     print STDERR "Usage: manage_licenses add [-h] ...\n";
-    print STDERR "Usage: manage_licenses modify [-h] ...\n";
+    print STDERR "       manage_licenses modify [-h] ...\n";
     print STDERR "       manage_licenses delete ...\n";
     print STDERR "       manage_licenses require ...\n";
     print STDERR "       manage_licenses norequire ...\n";
@@ -153,14 +153,18 @@ exit(0);
 #
 sub AddLicense()
 {
-    my $optlist = "hu";
-    my ($license_type, $description_type);
+    my $optlist = "hus:";
+    my $license_level  = "project";
+    my $license_target = "usage";
+    my ($license_type, $description_type, $prompt);
 
     my $usage = sub {
-	print STDERR "Usage: add <name> [-u] <form prompt> <license.[md,txt,html]> ";
+	print STDERR "Usage: add [-u] [-s <form prompt>] <name> <license.[md,txt,html]> ";
 	print STDERR " [description.[md,txt,html]]\n";
 	print STDERR " -u          - Users must agree; default ".
 	    "is project leader only\n";
+	print STDERR " -s prompt   - Create a signup license instead of ".
+	    "a usage license\n";
 	print STDERR " form prompt - Query for the form ".
 	    "('Do you need MathLab')\n";
 	print STDERR " name        - A descriptive token\n";
@@ -178,25 +182,26 @@ sub AddLicense()
 	&$usage();
     }
     if (defined($options{"u"})) {
-	fatal("The -u option is not implemented yet");
+	$license_level = "user";
+    }
+    if (defined($options{"s"})) {
+	$license_target = "signup";
+	$prompt = $options{"s"};
     }
     &$usage()
-	if (@ARGV < 3);
+	if (@ARGV < 2);
 
     my $token  = shift(@ARGV);
-    my $prompt = shift(@ARGV);
     my $lfile  = shift(@ARGV);
     my $dfile  = shift(@ARGV) if (@ARGV);
 
     if ($token !~ /^\w+$/) {
 	fatal("Invalid characters in name, alphanumeric only please");
     }
-    if (! TBcheck_dbslot($prompt, "default",
-			 "tinytext", TBDB_CHECKDBSLOT_ERROR)) {
-	fatal("Invalid prompt: " . TBFieldErrorString());
-    }
     if ($lfile =~ /\.((md|txt|html))$/) {
 	$license_type = $1;
+	$license_type = "text"
+	    if ($license_type eq "txt");
     }
     else {
 	fatal("License file extension must be one of .md, .txt, or .html");
@@ -207,6 +212,8 @@ sub AddLicense()
     if (defined($dfile)) {
 	if ($dfile =~ /\.((md|txt|html))$/) {
 	    $description_type = $1;
+	    $description_type = "text"
+		if ($description_type eq "txt");
 	}
 	else {
 	    fatal("Description file extension must be one of ".
@@ -225,8 +232,13 @@ sub AddLicense()
 	    or fatal("Could not open $dfile: $!");
 	$safe_description= DBQuoteSpecial($description);
     }
-    $safe_prompt = DBQuoteSpecial($prompt);
-
+    if ($license_target eq "signup") {
+	if (! TBcheck_dbslot($prompt, "default",
+			     "tinytext", TBDB_CHECKDBSLOT_ERROR)) {
+	    fatal("Invalid prompt: " . TBFieldErrorString());
+	}
+	$safe_prompt = DBQuoteSpecial($prompt);
+    }
     my $query_result =
 	DBQueryFatal("select license_idx from licenses ".
 		     "where license_name='$token'");
@@ -237,8 +249,11 @@ sub AddLicense()
 
     $query_result =
 	DBQueryFatal("insert into licenses set created=now(), ".
+		     "  license_level='$license_level', ".
+		     "  license_target='$license_target', ".
 		     "  license_name='$token', license_text=$safe_license, ".
-		     "  license_type='$license_type',form_text=$safe_prompt " .
+		     "  license_type='$license_type' " .
+		     (defined($prompt) ? ", form_text=$safe_prompt" : "").
 		     (defined($dfile) ?
 		      ", description_text=$safe_description, ".
 		      "  description_type='$description_type'" : ""));
@@ -274,17 +289,19 @@ sub ListLicenses()
 	DBQueryFatal("select * from licenses order by license_idx");
 
     if ($query_result->numrows) {
-	printf("%-5s %-12s %s\n", "Index", "Name", "Level");
-	printf("------------------------\n");
+	printf("%-5s %-12s %-10s %s\n", "Index", "Name", "Level", "Target");
+	printf("-----------------------------------\n");
 	
 	while (my $row = $query_result->fetchrow_hashref()) {
 	    my $license_idx   = $row->{'license_idx'};
 	    my $license_name  = $row->{'license_name'};
 	    my $license_level = $row->{'license_level'};
+	    my $license_target= $row->{'license_target'};
 	    my $license_text  = $row->{'license_text'};
 
-	    printf("%-5d %-12s %-10s %s\n", $license_idx, $license_name,
-		   $license_level, substr($license_text, 0, 50));
+	    printf("%-5d %-12s %-10s %-10s %s\n", $license_idx, $license_name,
+		   $license_level, $license_target,
+		   substr($license_text, 0, 40));
 	}
     }
     exit(0);
@@ -325,8 +342,10 @@ sub ShowLicense()
     print "IDX:        " . $row->{'license_idx'} . "\n";
     print "Name:       " . $row->{'license_name'} . "\n";
     print "Level:      " . $row->{'license_level'} . "\n";
+    print "Target:     " . $row->{'license_target'} . "\n";
     print "Created:    " . $row->{'created'} . "\n";
-    print "Prompt:     " . $row->{'form_text'} . "\n";
+    print "Prompt:     " . $row->{'form_text'} . "\n"
+	if ($row->{'license_target'} eq "signup");
     if ($row->{'description_text'}) {
 	print "Description:\n";
 	print " Text Type: " . $row->{'description_type'} . "\n";
@@ -443,7 +462,28 @@ sub RequireLicense($)
 	}
     }
     else {
-	fatal("User level licenses are not supported yet")
+	my $user = User->Lookup($token);
+	if (!defined($user)) {
+	    fatal("No such user");
+	}
+	my $uid     = $user->uid();
+	my $uid_idx = $user->uid_idx();
+	if ($op eq "norequire") {
+	    DBQueryFatal("delete from user_licenses ".
+			 "where license_idx='$license_idx' and ".
+			 "      uid_idx='$uid_idx'");
+	}
+	elsif ($op eq "accept") {
+	    DBQueryFatal("update user_licenses set accepted=now() ".
+			 "where license_idx='$license_idx' and ".
+			 "      uid_idx='$uid_idx'");
+	}
+	else {
+	    DBQueryFatal("insert into user_licenses set ".
+			 "  license_idx='$license_idx', uid='$uid', ".
+			 "  uid_idx='$uid_idx'");
+	}
+
     }
     if (defined($webtask)) {
 	$webtask->Exited(0);
@@ -534,7 +574,33 @@ sub OutstandingLicenses($)
 	}
     }
     elsif (defined($options{"u"})) {
-	fatal("The -u option is not implemented yet");
+	my $user = User->Lookup($token);
+	if (!defined($user)) {
+	    fatal("No such user");
+	}
+	my $uid     = $user->uid();
+	my $uid_idx = $user->uid_idx();
+
+        my $query_result = 
+	    DBQueryFatal("select ul.* from user_licenses as ul ".
+			 "where ul.uid_idx='$uid_idx' and ".
+			 ($op eq "accepted" ?
+			  " ul.accepted is not null" : " ul.accepted is null"));
+			  
+	if ($query_result->numrows) {
+	    printf("%-5s %s\n", "Index", "Name");
+	    printf("------------------------\n");
+	
+	    while (my $row = $query_result->fetchrow_hashref()) {
+		my $license_idx  = $row->{'license_idx'};
+		my $lrow = LookupLicense($license_idx);
+		my $license_name = $lrow->{'license_name'};
+		my $license_text = $lrow->{'license_text'};
+
+		printf("%-5d %-12s %s\n", $license_idx, $license_name,
+		       substr($license_text, 0, 60));
+	    }
+	}
     }
     exit(0);
 }

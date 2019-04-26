@@ -69,7 +69,8 @@ $(function ()
 		html = license.description_text;
 	    }
 	    else if (license.description_type == "text") {
-		html = "<pre>" + license.description_text + "</pre>";
+		html = "<textarea style='width: 100%;' rows=8>" +
+		    license.description_text + "</textarea>";
 	    }
 	    $('#description-panel .license')
 		.html(html)
@@ -84,7 +85,8 @@ $(function ()
 	    html = license.license_text;
 	}
 	else if (license.license_type == "text") {
-	    html = "<pre>" + license.license_text + "</pre>";
+	    html = "<textarea style='width: 100%;' rows=20>" +
+		license.license_text + "</textarea>";
 	}
 	$('#license-panel .panel-body .license-text').html(html);
     }

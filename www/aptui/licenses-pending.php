@@ -25,31 +25,34 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
-$page_title = "Licenses";
+$page_title = "Licenses Pending";
 
 #
 # Get current user.
 #
 RedirectSecure();
 $this_user = CheckLoginOrRedirect();
-$optargs = OptionalPageArguments("referrer", PAGEARG_STRING);
 
 SPITHEADER(1);
 
-echo "<div id='main-body'></div>\n";
-
-echo "<script type='text/javascript'>\n";
-if ($referrer) {
-    $referrer = CleanString($referrer);
-    echo "    window.REFERRER = '$referrer';\n";
-}
-echo "</script>\n";
+echo "<div id='main-body'
+           class='col-lg-10 col-lg-offset-1
+	          col-md-10 col-md-offset-1
+	          col-sm-12 col-sm-offset-0
+	          col-xs-12 col-xs-offset-0'>
+       <br>
+       <p class=lead>
+	Your request has been submitted. Please check your email for
+	confirmation. You will receive additional email from Portal
+	Operations when you can proceed. <b>There is no need to repeat
+	this request.</b>
+       </p>
+     </div>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_MARKED();
 REQUIRE_SUP();
-AddTemplateList(array("licenses", "oops-modal", "waitwait-modal"));
-SPITREQUIRE("js/licenses.js");
+SPITREQUIRE("js/main.js");
 
 SPITFOOTER();
 ?>

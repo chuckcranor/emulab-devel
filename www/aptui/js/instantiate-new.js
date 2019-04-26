@@ -950,17 +950,20 @@ $(function ()
 		    return;
 	        }
 	        $("#waitwait-modal").modal('show');
-	        SubmitForm(0, 2, function(json) {
-		    $("#waitwait-modal").modal('hide');
+	        SubmitForm(0, 3, function(json) {
 		    if (json.code) {
 		        console.info(json);
-		        if (json.code == 2) {
-		            ShowFormErrors(json.value);
+		        if (json.code == 3) {
 		            submitted = false;
+			    sup.HideWaitWait(function () {
+				HandleLicenseRequirements(json.value);
+			    })
 			    return;
 		        }
-		        sup.SpitOops("oops", json.value);
 		        submitted = false;
+			sup.HideWaitWait(function () {			
+		            sup.SpitOops("oops", json.value);
+			});
 			return;
 		    }
 		    /*
@@ -2593,6 +2596,49 @@ $(function ()
 		    .removeAttr("disabled");
 	    }
 	}
+    }
+
+    /*
+     * Handle License requirements.
+     */
+    function HandleLicenseRequirements(licenses)
+    {
+	var html = "";
+
+	_.each(licenses, function (details) {
+	    var dt = null;
+
+	    if (details.type == "node") {
+		dt = "Node " + details.target;
+	    }
+	    else if (details.type == "type") {
+		dt = "Node Type " + details.target;
+	    }
+	    else if (details.type == "aggregate") {
+		dt = "Resource " + details.target;
+	    }
+	    html = html +
+		"<dt>" + dt + "</dt>" +
+		"<dd><pre>" + details.description_text + "</pre></dd>";
+	});
+	$('#request-licenses-modal dl').html(html);
+	
+	$('#request-license-button').click(function (event) {
+	    sup.HideModal('#request-licenses-modal');
+	    sup.CallServerMethod(null, "instantiate", "RequestLicenses", null,
+				 function (json) {
+				     if (json.code) {
+					 alert("Could not request resource " +
+					       "access: " + json.value);
+					 return;
+				     }
+				     window.location
+					 .replace("licenses-pending.php");
+				 });
+	});
+	sup.ShowModal('#request-licenses-modal', function () {
+	    $('#request-license-button').off("click");
+	});
     }
     $(document).ready(initialize);
 });

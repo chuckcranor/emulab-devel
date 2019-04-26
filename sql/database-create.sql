@@ -144,6 +144,7 @@ CREATE TABLE `apt_aggregates` (
   `panicpoweroff` tinyint(1) NOT NULL default '0',
   `portals` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `canuse_feature` varchar(64) default NULL,
+  `required_license int(11) default NULL,
   `jsondata` text,
   PRIMARY KEY  (`urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -3027,6 +3028,7 @@ CREATE TABLE `licenses` (
   `license_idx` int(11) NOT NULL auto_increment,
   `license_name` varchar(48) NOT NULL default '',
   `license_level` enum('project','user') NOT NULL default 'project',  
+  `license_target` enum('signup','usage') NOT NULL default 'signup',  
   `created` datetime default NULL,
   `validfor` int(11) NOT NULL default '0',
   `form_text` tinytext,

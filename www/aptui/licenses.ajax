@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,7 +30,7 @@ function Do_List()
     global $this_user;
     global $ajax_args;
     $result = array();
-    $licenses = $this_user->ProjectLicenses();
+    $licenses = $this_user->Licenses();
 
     foreach ($licenses as $license) {
         $blob = array("idx"              => $license["license_idx"],
@@ -48,7 +48,7 @@ function Do_Accept()
 {
     global $this_user;
     global $ajax_args;
-    $licenses = $this_user->ProjectLicenses();
+    $licenses = $this_user->Licenses();
     $license  = null;
 
     if (!isset($ajax_args["idx"]) || $ajax_args["idx"] == "") {
@@ -71,15 +71,20 @@ function Do_Accept()
 	SPITAJAX_ERROR(1, "Not a license that needs to be accepted.");
 	return 1;
     }
-    $target = $license["pid"];
-    $project = Project::Lookup($target);
-    if (!$project) {
-	SPITAJAX_ERROR(1, "No such project");
-	return 1;
+    if ($license["license_level"] == "project") {
+        $target = $license["pid"];
+        $project = Project::Lookup($target);
+        if (!$project) {
+            SPITAJAX_ERROR(1, "No such project");
+            return 1;
+        }
+        if (!$project->IsLeader($this_user)) {
+            SPITAJAX_ERROR(1, "Not allowed to accept/reject this license");
+            return 1;
+        }
     }
-    if (!$project->IsLeader($this_user)) {
-	SPITAJAX_ERROR(1, "Not allowed to accept/reject this license");
-	return 1;
+    else {
+        $target = $license["uid"];
     }
     $this_uid = $this_user->uid();
     $webtask  = WebTask::CreateAnonymous();
@@ -109,7 +114,7 @@ function Do_Reject()
 {
     global $this_user;
     global $ajax_args;
-    $licenses = $this_user->ProjectLicenses();
+    $licenses = $this_user->Licenses();
     $license  = null;
 
     if (!isset($ajax_args["idx"]) || $ajax_args["idx"] == "") {
@@ -132,15 +137,20 @@ function Do_Reject()
 	SPITAJAX_ERROR(1, "Not a license that needs to be rejected");
 	return 1;
     }
-    $target = $license["pid"];
-    $project = Project::Lookup($target);
-    if (!$project) {
-	SPITAJAX_ERROR(1, "No such project");
-	return 1;
+    if ($license["license_level"] == "project") {
+        $target = $license["pid"];
+        $project = Project::Lookup($target);
+        if (!$project) {
+            SPITAJAX_ERROR(1, "No such project");
+            return 1;
+        }
+        if (!$project->IsLeader($this_user)) {
+            SPITAJAX_ERROR(1, "Not allowed to accept/reject this license");
+            return 1;
+        }
     }
-    if (!$project->IsLeader($this_user)) {
-	SPITAJAX_ERROR(1, "Not allowed to accept/reject this license");
-	return 1;
+    else {
+        $target = $license["uid"];
     }
     $this_uid = $this_user->uid();
     $webtask  = WebTask::CreateAnonymous();
