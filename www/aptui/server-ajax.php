@@ -427,6 +427,11 @@ $routing = array("geni-login" =>
                                                      "Do_GetInfo",
                                                  "List" =>
                                                      "Do_List")),
+		 "wires" =>
+			array("file"    => "wires.ajax",
+			      "guest"   => false,
+			      "methods" => array("List" =>
+                                                     "Do_List")),
 		 "news" =>
 			array("file"    => "news.ajax",
 			      "guest"   => false,
