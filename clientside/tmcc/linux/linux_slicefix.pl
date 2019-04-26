@@ -1079,7 +1079,11 @@ sub fix_grub_defaults
     # append our info
     push @buffer, "$esig\n";
     push @buffer, "# DO NOT ADD ANYTHING AFTER THIS POINT AS IT WILL GET REMOVED.\n";
-    if ($sunit < 0) {
+    if ($sunit < 0 && $console =~ /^hvc/) {
+	push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0 console=$console\"\n";
+	push @buffer, "GRUB_TERMINAL=console\n";
+	push @buffer, "GRUB_SERIAL_COMMAND=\"\"\n";
+    } elsif ($sunit < 0) {
 	push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0\"\n";
 	push @buffer, "GRUB_TERMINAL=console\n";
 	push @buffer, "GRUB_SERIAL_COMMAND=\"\"\n";
@@ -1164,6 +1168,17 @@ sub fix_grub_console
 		    # change tty0 to appropriate serial device
 		    s#console=tty0#console=ttyS$sunit,$sspeed#;
 		}
+		#
+		# Virtual consoles (e.g. hvcX on POWER).  Not true
+		# serial consoles, so must be handled specially.
+		# Image grub.cfg must have console=tty0, or
+		# console=$console, for this to work.
+		#
+		if ($console =~ /^hvc/) {
+		    if (! /console=$console/) {
+			s#console=tty0#console=tty0 console=$console#;
+		    }
+		}
 		push @buffer, $_;
 		next;
 	    }
@@ -1215,7 +1230,6 @@ sub fix_grub_console
 		push @buffer, $_;
 		next;
 	    }
-
 	    #
 	    # Otherwise, just copy
 	    #
