@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2018 University of Utah and the Flux Group.
+# Copyright (c) 2013-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -621,6 +621,11 @@ sub get_diskinfo($)
 
 	    # assume 2k sector size means a CD drive
 	    if ($vals[0] == 0 && $vals[1] eq "DISK" && $vals[4] == 2048) {
+		next;
+	    }
+
+	    # skip LABEL devices
+	    if ($vals[1] eq "LABEL") {
 		next;
 	    }
 
