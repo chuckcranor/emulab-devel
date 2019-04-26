@@ -1,7 +1,7 @@
 #!/usr/local/bin/otclsh
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -279,6 +279,9 @@ namespace eval GLOBALS {
 
     # Use phys naming
     variable use_physnaming 0
+
+    # Use jumbo frames on 10Gb+ links
+    variable usejumboframes 0
 
     # Modelnet support. Number of physical core and edge nodes that user
     # wants thrown at the problem.

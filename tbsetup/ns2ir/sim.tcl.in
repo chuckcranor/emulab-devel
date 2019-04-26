@@ -1,6 +1,6 @@
 # -*- tcl -*-
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -518,6 +518,7 @@ Simulator instproc run {} {
     var_import ::GLOBALS::jail_osname
     var_import ::GLOBALS::delay_osname
     var_import ::GLOBALS::delay_capacity
+    var_import ::GLOBALS::usejumboframes
     var_import ::TBCOMPAT::objtypes
     var_import ::TBCOMPAT::eventtypes
     var_import ::TBCOMPAT::triggertypes
@@ -746,8 +747,8 @@ Simulator instproc run {} {
 	$path updatedb "sql"
     }
 
-    set fields [list "mem_usage" "cpu_usage" "forcelinkdelays" "uselinkdelays" "usewatunnels" "uselatestwadata" "wa_delay_solverweight" "wa_bw_solverweight" "wa_plr_solverweight" "encap_style" "allowfixnode"]
-    set values [list $mem_usage $cpu_usage $forcelinkdelays $uselinkdelays $usewatunnels $uselatestwadata $wa_delay_solverweight $wa_bw_solverweight $wa_plr_solverweight $vlink_encapsulate $fix_current_resources]
+    set fields [list "mem_usage" "cpu_usage" "forcelinkdelays" "uselinkdelays" "usewatunnels" "uselatestwadata" "wa_delay_solverweight" "wa_bw_solverweight" "wa_plr_solverweight" "encap_style" "allowfixnode" "usejumboframes"]
+    set values [list $mem_usage $cpu_usage $forcelinkdelays $uselinkdelays $usewatunnels $uselatestwadata $wa_delay_solverweight $wa_bw_solverweight $wa_plr_solverweight $vlink_encapsulate $fix_current_resources $usejumboframes]
 
     if { $multiplex_factor != {} } {
 	lappend fields "multiplex_factor"

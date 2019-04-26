@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2009-2018 University of Utah and the Flux Group.
+# Copyright (c) 2009-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -141,7 +141,8 @@ my $debug	      = 0;
 		      "dpdb"			=> 1,
 		      "nonfsmounts"		=> 1,
 		      "nfsmounts"		=> 1,
-		      "skipvlans"		=> 1);
+		      "skipvlans"		=> 1,
+		      "usejumboframes"		=> 1);
 
 #
 # Grab the virtual topo for an experiment.
