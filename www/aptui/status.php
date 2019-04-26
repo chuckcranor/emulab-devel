@@ -186,8 +186,8 @@ if ($profile = Profile::Lookup($instance->profile_id(),
         $canupdate_profile = ((isset($this_user) &&
                                $this_user->idx() == $profile->creator_idx()) ||
                               ISADMIN() ? 1 : 0);
-        $isscript   = ($profile->script() && $profile->script() != "" ? 1 : 0);
     }
+    $isscript = ($profile->script() && $profile->script() != "" ? 1 : 0);
 }
 $registered      = (isset($this_user) ? "true" : "false");
 $snapping        = 0;
