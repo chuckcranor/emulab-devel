@@ -90,6 +90,7 @@ sub LookupRow($$$)
     $self->{"DBROW"} = $row;
     $self->{"CLASS"} = ($type eq $row->{"class"} ? $type : undef);
     $self->{"ATTRS"} = undef;
+    $self->{"FETRS"} = undef;
     $self->{"ISAUX"} = 0;
 
     bless($self, $class);
@@ -118,6 +119,7 @@ sub isgeninode($)     { return field($_[0], 'isgeninode'); }
 sub isfednode($)      { return field($_[0], 'isfednode'); }
 sub isswitch($)       { return field($_[0], 'isswitch'); }
 sub attributes($)     { return $_[0]->{'ATTRS'}; }
+sub features($)       { return $_[0]->{'FETRS'}; }
 
 #
 # Force a reload of the data.
@@ -245,6 +247,7 @@ sub LookupAuxType($$)
     $newtype->{"TYPE"}  = $auxtype;
     $newtype->{"DBROW"} = $typeinfo->{"DBROW"};
     $newtype->{"ATTRS"} = $typeinfo->{"ATTRS"};
+    $newtype->{"FETRS"} = $typeinfo->{"FETRS"};
     $newtype->{"ISAUX"} = 1;
     $newtype->{"BASE"}  = $typeinfo;
     bless($newtype, $class);
@@ -479,6 +482,48 @@ sub SetAttribute($$$;$)
     $self->{"ATTRS"}->{$attrkey} = $attrvalue;
     return 0;
 }
+
+#
+# Load features if not already loaded.
+#
+sub LoadFeatures($)
+{
+    my ($self) = @_;
+
+    return 0
+	if (defined($self->{"FETRS"}));
+
+    #
+    # Get the attribute array.
+    #
+    my $type = $self->type();
+    
+    my $query_result =
+	DBQueryWarn("select feature,weight from node_type_features ".
+		    "where type='$type'");
+
+    $self->{"FETRS"} = {};
+    while (my ($key,$val) = $query_result->fetchrow_array()) {
+	$self->{"FETRS"}->{$key} = $val;
+    }
+    return 0;
+}
+#
+# Look for a feature
+#
+sub GetFeature($$)
+{
+    my ($self, $key) = @_;
+    
+    $self->LoadFeatures() == 0
+	or return undef;
+
+    if (!exists($self->{"FETRS"}->{$key})) {
+	return undef;
+    }
+    return $self->{"FETRS"}->{$key};
+}
+sub disksize_any($)	{ return $_[0]->GetFeature("?+disk_any"); }
 
 #
 # Free/Inuse count for a type.

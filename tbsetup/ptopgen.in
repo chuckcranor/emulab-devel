@@ -2621,9 +2621,18 @@ sub print_header {
 		print "<emulab:attribute name='architecture' ".
 		         "value='" . $type->architecture() . "'/>\n"
 		    if ($type->architecture());
+
+		my $disksize = $type->disksize_any();
+		if (!$disksize) {
+		    $disksize = $type->disksize();
+		}
+		else {
+		    # Convert Mebi to GB. Approximate is fine.
+		    $disksize = int($disksize / 953.674);
+		}
 		print "<emulab:attribute name='disksize' ".
-		         "value='" . $type->disksize() . "'/>\n"
-		    if ($type->disksize());
+		         "value='" . $disksize . "'/>\n"
+		    if ($disksize);
 		foreach my $key (keys(%attributes)) {
 		    my $val = $attributes{$key}->{"value"};
 		    if ($key =~ /^hw_/) {
