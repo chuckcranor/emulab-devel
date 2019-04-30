@@ -313,7 +313,7 @@ sub MapToLocalImage($$$$@)
 	    # the case that the domain in the image URN is wrong and using
 	    # the image tracker. Will deal with that later.
 	    return $image
-		if ($image->global());
+		if (0 && $image->global());
 	}
     }
     
