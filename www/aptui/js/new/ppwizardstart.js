@@ -3,6 +3,8 @@
 // TODO: visual grouping of group/structures and lists.
 //       grey out -/+ and use tooltips to tell people about min/max limits.
 //
+// https://bootsnipp.com/snippets/kM4Q
+//
 $(function () {
   window.ppstartNew = (function()
     {
@@ -25,12 +27,18 @@ $(function () {
 	var modified_callback = null;
         var warningsfatal = 1;
         var imagePicker   = null;
+	var amlist        = null;
+	var prunetypes    = null;
 	var debug         = true;
 
 	// List of form elements (fields,groups), in order of appearance.
 	var formFields    = [];
 	// Map groupId to info about the group, which includes fields in group.
 	var formGroups     = {};
+
+	function isNumeric(n) {
+	    return !isNaN(parseFloat(n)) && isFinite(n);
+	}
 
 	var groupTemplateString =
 	    '<div class="row group-row" data-fieldid="<%- fieldid %>" ' +
@@ -300,6 +308,26 @@ $(function () {
 	    " <% }) %> " +
 	    "</select>";
 
+	var nodeTypeTemplateString = 
+	    "<div> " +
+	    "  <div class='dropdown'> " +
+	    "   <button class='btn btn-default dropdown-toggle' " +
+	    "           style='min-width: 150px; text-align: left' " +
+	    "           type=button data-toggle=dropdown> " +
+	    "    <span class='type-selected'>Any</span> "+
+	    "      <span class=right-caret></span></button>" +
+	    "   <ul class='dropdown-menu right-menu scrollable-menu'>" +
+	    "    <li><a href='#' class='clear-select'><b>Clear Selection</b></a></li> " +
+	    "   </ul>"+
+	    " </div>"+
+	    " <input class='format-me' " +
+	    "        data-fieldid='<%- fieldid %>' " +
+	    "        data-fieldname='<%- fieldname %>' " +
+	    "        data-label='<%- prompt %>' " +
+	    "        name='<%- name %>' type='hidden' " +
+	    "        value='<%- value %>'>" +
+	    "</div>";
+
 	var imageSelectString = 
 	    "<div>" +
 	    " <div class='input-group'> " +
@@ -406,6 +434,7 @@ $(function () {
 	var selectTemplate       = _.template(selectTemplateString);
 	var mvalueTemplate       = _.template(multivalueControlString);
 	var imageTemplate        = _.template(imageSelectString);
+	var nodeTypeTemplate     = _.template(nodeTypeTemplateString);
 
 	/*
 	 * Generate various type fragments.
@@ -470,6 +499,19 @@ $(function () {
 		"prompt"     : details.description,
 		"value"      : value,
 		"display"    : display,
+		"multivalue" : details.multiValue,
+	    });
+	    return html;
+	}
+	function GenerateNodeType(name, fieldIndex, details, value)
+	{
+	    var html = nodeTypeTemplate({
+		"fieldid"    : fieldIndex,
+		"fieldname"  : details.name,
+		"name"       : name,
+		"prompt"     : details.description,
+		"value"      : value,
+		"amlist"     : amlist,
 		"multivalue" : details.multiValue,
 	    });
 	    return html;
@@ -904,6 +946,9 @@ $(function () {
 	    else if (type == "boolean") {
 		html = GenerateBoolean(name, fieldIndex, details, value);
 	    }
+	    else if (type == "nodetype") {
+		html = GenerateNodeType(name, fieldIndex, details, value);
+	    }
 	    else if (details.legalValues) {
 		html = GenerateSelect(name, fieldIndex, details, value);
 	    }
@@ -1009,6 +1054,231 @@ $(function () {
 
 	    if (type == "image") {
 		initImagePicker(outerdiv);
+	    }
+	    else if (type == "nodetype") {
+		var html = "";
+		var constraints = details.inputConstraints;
+		var re = new RegExp('(\>\=|\<\=|\!\=|\=|\>|\<)(.+)');
+
+		var constraint_mapping = {
+		    "cores"   : "hw_cpu_cores",
+		    "sockets" : "hw_cpu_sockets",
+		    "speed"   : "hw_cpu_speed",
+		    "threads" : "hw_cpu_threads",
+		    "mem"     : "hw_mem_size",
+		    "disk"    : "disksize",
+		    "arch"    : "architecture",
+		};
+
+		var checkConstraints = function (typeinfo) {
+		    // Assume x86_64 architecture.
+		    if (!_.has(typeinfo, "architecture")) {
+			typeinfo["architecture"] = "x86_64";
+		    }
+		    var entries = Object.entries(constraints);
+		    console.info("checkConstraint:", typeinfo);
+		    
+		    for (var [constraint, wanted] of entries) {
+			console.info("checkConstraint:", constraint, wanted);
+			if (!_.has(constraint_mapping, constraint)) {
+			    console.info("Unknown constraint: " + constraint);
+			    continue;
+			}
+			var mapping = constraint_mapping[constraint];
+			if (!_.has(typeinfo, mapping)) {
+			    console.info("No typeinfo: " + constraint);
+			    return 0;
+			}
+			var value = typeinfo[mapping];
+			if (mapping == "hw_mem_size") {
+			    value = parseFloat(value) / 1024;
+			}
+			if (isNumeric(value) == isNumeric(wanted) ||
+			    !isNumeric(value)) {
+			    if (value != wanted) {
+				console.info("Failed: ", typeinfo[mapping]);
+				return 0;
+			    }
+			    continue;
+			}
+			// Typeinfo value is known to be numeric at this point.
+			// And "wanted" is not numeric, but might have an
+			// operator in the front. Lets find out.
+			var results = wanted.match(re);
+			console.info("re", results);
+			if (!results) {
+			    console.info("not an operator");
+			    return 0;
+			}
+			var op  = results[1];
+			wanted  = parseFloat(results[2]);
+			var res = false;
+			if (op == "=") {
+			    res = (wanted == value);
+			}
+			else if (op == "!") {
+			    res = (wanted != value);
+			}
+			else if (op == ">") {
+			    res = (value > wanted);
+			}
+			else if (op == "<") {
+			    res = (value < wanted);
+			}
+			else if (op == ">=") {
+			    res = (value >= wanted);
+			}
+			else if (op == "<=") {
+			    res = (value <= wanted);
+			}
+			if (!res) {
+			    console.info("Test failed: ",
+					 constraint, op, value, wanted);
+			    return 0;
+			}
+		    }
+		    return 1;
+		};
+		
+		/*
+		 * Create the menu/submenus for each aggregate and list of
+		 * types.  For each type, see if we have attribute info, and
+		 * create a popover for it.
+		 *
+		 * TODO: Add filtering.
+		 */
+		_.each(amlist, function(aggregate, idx) {
+		    var count  = 0;
+		    var agghtml = 
+			"<li class='dropdown-submenu'> " +
+			"  <a href='#' class='dropdown-toggle' " +
+			"     data-toggle='dropdown'>" + aggregate.name + "</a>"+
+			"    <ul class='dropdown-menu scrollable-submenu'>";
+		    
+		    _.each(aggregate.typelist, function(typeinfo, type) {
+			if (_.has(prunetypes, type)) {
+			    return;
+			}
+
+			var typehtml =
+			    "  <li style='position: relative;'>" +
+			    " <a href='#' name='" + type + "' " +
+			    "         class='type-select'>" + type + "</a>";
+
+			if (typeinfo) {
+			    /*
+			     * Filtering check. The constraint list is treated
+			     * as an "and" for the purposes of filtering.
+			     */
+			    if (constraints) {
+				if (!checkConstraints(typeinfo)) {
+				    return;
+				}
+			    }
+			    var pophtml =
+				"<table class='table table-condensed'><tbody> ";
+
+			    _.each(typeinfo, function(val, key) {
+				key = key.replace(/^hw_/, "");
+				//console.info(val, key);
+				
+				pophtml +=
+				    "<tr><td>" + key +
+				    "</td><td>" + val + "</td></tr>";
+			    });
+			    pophtml += "</tbody></table>";
+			    
+			    typehtml +=
+				"<span class='icon-info-right glyphicon " +
+ 				"  glyphicon-info-sign' " +
+				"  data-toggle='popover' data-html=true " +
+				"  data-content=\"" + pophtml + "\"></span>";
+			}
+			else if (constraints) {
+			    // If we have constraints but no typeinfo, we treat
+			    // that as a hard failure (we filtere it out).
+			    return;
+			}
+			count++;
+			typehtml += "</li>";
+			agghtml  += typehtml;
+		    });
+		    agghtml += "</ul></li>";
+		    if (count) {
+			html += agghtml;
+		    }
+		});
+		$(outerdiv).find("ul").append(html);
+
+		// Initialize the value (hidden field, button).
+		if (value) {
+		    $(outerdiv).find("button .type-selected").html(value);
+		    $(outerdiv).find("input").val(value);
+		}
+
+		// Need to use a click handler cause of popover problems
+		// with the submenus.
+		$(outerdiv).find(".glyphicon-info-sign").popover({
+		    trigger: 'manual',
+		    placement: 'auto',
+		    container: 'body',
+		});
+		$(outerdiv).find(".glyphicon-info-sign").click(
+		    function (event) {
+			event.preventDefault();
+			event.stopPropagation();
+			$(this).popover('toggle');
+		    });
+
+		// Move the main menu to halfway up/down.
+		$(outerdiv).find(".dropdown")
+		    .on("shown.bs.dropdown", function (event) {
+			var height = $(this).find(".right-menu").height();
+			//console.info("height", height);
+			$(this).find(".right-menu").css("top", 0 - (height / 2));
+		    });
+
+		// Make sure popovers are gone when the main menu is gone.
+		$(outerdiv).find(".dropdown")
+		    .on("hide.bs.dropdown", function (event) {
+			$(outerdiv).find(".glyphicon-info-sign").popover("hide");
+		    });
+
+		// Make sure popovers are gone when a submenu is gone. We do not
+		// get the dropdown events for these, so hook into hover.
+		$(outerdiv).find(".dropdown-submenu>.dropdown-menu")
+		    .hover(
+			function(event) {
+			},
+			function(event) {
+			    $(this).find(".glyphicon-info-sign").popover("hide");
+			});
+		
+		/*
+		 * When a selection is made, change the button text to the type
+		 * and set the actual input (which is a hidden input).
+		 */
+		$(outerdiv).find(".type-select").click(function (event) {
+		    event.preventDefault();
+		    //console.info($(this).attr("name"));
+		    $(outerdiv).find("button .type-selected")
+			.html($(this).attr("name"));
+		    $(outerdiv).find("input").val($(this).attr("name"))
+		    // Make sure the popover is gone too.
+		    $(outerdiv).find(".glyphicon-info-sign").popover("hide");
+		    
+		});
+		/*
+		 * Since this is not a "select" we need a way to let the
+		 * user clear the selection
+		 */
+		$(outerdiv).find(".clear-select").click(function (event) {
+		    event.preventDefault();
+		    //console.info($(this).html());
+		    $(outerdiv).find("button .type-selected")
+			.html("Any");
+		    $(outerdiv).find("input").val("");
+		});
 	    }
 
 	    // Helper function;
@@ -2794,6 +3064,8 @@ $(function () {
 	    registered = args.registered;
 	    multisite = args.multisite;
 	    ppdivname = args.ppdivname;
+	    amlist    = args.amlist;
+	    prunetypes= args.prunetypes;
 	    
 	    if (formFields.length && uuid == args.uuid) {
 		GenerateForm(null);

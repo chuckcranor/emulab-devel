@@ -383,6 +383,11 @@ function SPITFORM($formfields, $newuser, $errors)
     }
     SpitAggregateStatus(true, $this_user);
 
+    $prunelist = Instance::NodeTypePruneList(null, true);
+    echo "<script type='text/plain' id='prunelist-json'>\n";
+    echo htmlentities(json_encode($prunelist));
+    echo "</script>\n";
+
     SpitOopsModal("oops");
     echo "<script type='text/javascript'>\n";
     echo "    window.PROFILE    = '" . $formfields["profile"] . "';\n";

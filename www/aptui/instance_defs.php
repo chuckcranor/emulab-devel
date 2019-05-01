@@ -808,7 +808,7 @@ class Instance
     #
     # Return a list of types not to show user.
     #
-    function NodeTypePruneList($aggregate = null) {
+    function NodeTypePruneList($aggregate = null, $all = false) {
         global $ISEMULAB, $ISCLOUD, $ISAPT, $ISPNET, $ISPOWDER, $TBMAINSITE;
         global $DEFAULT_AGGREGATE_URN;
         $aggregate_urn = ($aggregate ? $aggregate->urn() : "");
@@ -833,7 +833,7 @@ class Instance
         #
         if ($TBMAINSITE && 
             !($ISPOWDER || $ISPNET) &&
-            $aggregate_urn == $DEFAULT_AGGREGATE_URN) {
+            ($all || $aggregate_urn == $DEFAULT_AGGREGATE_URN)) {
             $skiptypes["sdr"]      = true;
             $skiptypes["nuc5300"]  = true;
             $skiptypes["enodeb"]   = true;
@@ -1237,10 +1237,16 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
         $urn = $aggregate->urn();
         $am  = $aggregate->name();
         if ($extended) {
+            $typelist = array();
+            $types = $aggregate->TypeList();
+
+            foreach ($types as $type => $ignore) {
+                $typelist[$type] = $aggregate->TypeAttributes($type);
+            }
             $amlist[$urn] = array("urn"      => $urn,
                                   "name"     => $am,
                                   "nickname" => $aggregate->nickname(),
-                                  "typelist" => $aggregate->TypeList());
+                                  "typelist" => $typelist);
         }
         else {
             $amlist[$urn] = $am;
@@ -1261,10 +1267,16 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
         $urn = $aggregate->urn();
         $am  = $aggregate->name();
         if ($extended) {
+            $typelist = array();
+            $types = $aggregate->TypeList();
+
+            foreach ($types as $type => $ignore) {
+                $typelist[$type] = $aggregate->TypeAttributes($type);
+            }
             $amlist[$urn] = array("urn"      => $urn,
                                   "name"     => $am,
                                   "nickname" => $aggregate->nickname(),
-                                  "typelist" => $aggregate->TypeList());
+                                  "typelist" => $typelist);
         }
         else {
             $amlist[$urn] = $am;

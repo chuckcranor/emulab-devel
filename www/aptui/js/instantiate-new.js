@@ -45,6 +45,7 @@ $(function ()
     var ppchanged     = false;
     var monitor       = null;
     var types         = null;
+    var prunetypes    = null;
     var hardware      = null;
     var resinfo       = null;
     var currentStep   = 0;
@@ -77,12 +78,15 @@ $(function ()
 		amValueToKey[amlist[key].name] = key;
 	    });
 	    amstatus = decodejson('#amstatus-json');
+	    console.info(amlist);
 	}
 	if ($('#projects-json').length) {
 	    projlist = decodejson('#projects-json');
 	}
 	profilelist = decodejson('#profiles-json');
 	var profileToArray = _.pairs(profilelist);
+	prunetypes = decodejson('#prunelist-json');
+	console.info(prunetypes);
 
 	/*
 	 * Sort the entire list by recently used if a registered user,
@@ -563,6 +567,8 @@ $(function ()
 			modified_callback : function () { ppchanged = true; },
 			rspec        : null,
 		        multisite    : multisite,
+			amlist       : amlist,
+			prunetypes   : prunetypes,
 		        jacksGraphCallback: updateJacksGraph
 		    });
 		    loaded_uuid = selected_uuid;

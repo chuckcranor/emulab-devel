@@ -386,6 +386,28 @@ class Aggregate
         }
         return $result;
     }
+
+    #
+    # Array of type attributes for the specified type.
+    #
+    function TypeAttributes($type)
+    {
+        $result = array();
+        $urn    = $this->urn();
+
+        $query_result =
+            DBQueryFatal("select attrkey,attrvalue from ".
+                         "  apt_aggregate_nodetype_attributes ".
+                         "where type='$type' and urn='$urn'");
+
+        if (!mysql_num_rows($query_result)) {
+            return null;
+        }
+        while ($row = mysql_fetch_array($query_result)) {
+            $result[$row["attrkey"]] = $row["attrvalue"];
+        }
+        return $result;
+    }
 }
 
 #
