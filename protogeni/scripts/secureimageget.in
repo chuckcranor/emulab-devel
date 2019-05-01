@@ -53,7 +53,7 @@ my $optlist  = "ndvc:u:o:D";
 my $impotent = 0;
 my $debug    = 1;
 my $verbose  = 0;
-my $devtree  = 1;
+my $devtree  = 0;
 my $credfile;
 my $outfile;
 my $outfp;
