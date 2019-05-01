@@ -304,6 +304,14 @@ sub MapToLocalImage($$$$@)
     if ($ospid eq TBOPSPID()) {
 	my $image = OSImage->Lookup($ospid, $osname);
 	if (defined($image)) {
+	    if ($image->isImageAlias()) {
+		return $image
+		    if (!defined($osvers));
+
+		# Makes no sense to specify an version number on an alias.
+		return GeniResponse->BadArgsResponse(
+		    "Not allowed to use version numbers on $urn");
+	    }
 	    # Generic, MFS, etc.
 	    return $image
 		if (!$image->isImage());
@@ -425,7 +433,7 @@ sub MapToLocalImage($$$$@)
 	# If we have it and its local, then we are good unless the user
 	# wants a specific version that does not exist. 
 	#
-	if ($image->IsLocal()) {
+	if (!$image->isImageAlias() && $image->IsLocal()) {
 	    return &$setPerms($image)
 		if (!defined($osvers));
 
