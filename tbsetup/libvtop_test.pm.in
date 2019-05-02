@@ -6291,6 +6291,10 @@ sub InterpLinks($)
 	$protovlan->SetEncapStyle("default");
 	# Total hack ... see snmpit.
 	$protovlan->SetAttribute("trunk_mode", "dual");
+
+	# Well, if there are no experimental interfaces, we want to kill
+	# the protovlan so that it does not confused snmpit.
+	my $iface_counter = 0;
 	
 	foreach my $pnode (@sharedpnodes) {
 	    my $pnodename = $pnode->node_id();
@@ -6365,7 +6369,12 @@ sub InterpLinks($)
 			or return -1 if (!($self->impotent() ||
 					   $self->alloconly()));
 		}
+		$iface_counter++;
 	    }
+	}
+	if (!$iface_counter) {
+	    $self->printdb("No interfaces in shared vlan, killing protovlan\n");
+	    $protovlan->Destroy();
 	}
     }
 
