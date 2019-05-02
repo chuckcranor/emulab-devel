@@ -39,6 +39,14 @@ $(function () {
 	function isNumeric(n) {
 	    return !isNaN(parseFloat(n)) && isFinite(n);
 	}
+	function escapeHtml(unsafe) {
+	    return unsafe
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#039;");
+	}
 
 	var groupTemplateString =
 	    '<div class="row group-row" data-fieldid="<%- fieldid %>" ' +
@@ -974,6 +982,7 @@ $(function () {
 		if (structIndex) {
 		    help_panel_id = help_panel_id + "-" + structIndex;
 		}
+		longhelp = escapeHtml(longhelp);
 		
 		label_text = label_text +
 		    "<span class='pp-param-popover' " +
@@ -1066,7 +1075,11 @@ $(function () {
 		    "speed"   : "hw_cpu_speed",
 		    "threads" : "hw_cpu_threads",
 		    "mem"     : "hw_mem_size",
+		    "memory"  : "hw_mem_size",
+		    "memsize" : "hw_mem_size",
+		    "mem_size": "hw_mem_size",
 		    "disk"    : "disksize",
+		    "disksize": "disksize",
 		    "arch"    : "architecture",
 		};
 
@@ -1090,7 +1103,7 @@ $(function () {
 			    return 0;
 			}
 			var value = typeinfo[mapping];
-			if (mapping == "hw_mem_size") {
+			if (0 && amapping == "hw_mem_size") {
 			    value = parseFloat(value) / 1024;
 			}
 			if (isNumeric(value) == isNumeric(wanted) ||
@@ -1187,6 +1200,7 @@ $(function () {
 				    "</td><td>" + val + "</td></tr>";
 			    });
 			    pophtml += "</tbody></table>";
+			    pophtml = escapeHtml(pophtml);
 			    
 			    typehtml +=
 				"<span class='icon-info-right glyphicon " +
