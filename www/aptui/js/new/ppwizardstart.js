@@ -322,10 +322,15 @@ $(function () {
 	    "   <button class='btn btn-default dropdown-toggle' " +
 	    "           style='min-width: 150px; text-align: left' " +
 	    "           type=button data-toggle=dropdown> " +
-	    "    <span class='type-selected'>Any</span> "+
+	    "    <span class='type-selected'>" +
+	    "      <% if (constraints) { %>Please Select" +
+	    "         <% } else { %>Any<% } %></span> "+
 	    "      <span class=right-caret></span></button>" +
 	    "   <ul class='dropdown-menu right-menu scrollable-menu'>" +
-	    "    <li><a href='#' class='clear-select'><b>Clear Selection</b></a></li> " +
+	    "   <% if (!constraints) { %> " +
+	    "    <li><a href='#' class='clear-select'>" +
+	    "       <b>Clear Selection</b></a></li> " +
+	    "   <% } %> " +
 	    "   </ul>"+
 	    " </div>"+
 	    " <input class='format-me' " +
@@ -520,6 +525,7 @@ $(function () {
 		"prompt"     : details.description,
 		"value"      : value,
 		"amlist"     : amlist,
+		"constraints": details.inputConstraints,
 		"multivalue" : details.multiValue,
 	    });
 	    return html;
@@ -1284,15 +1290,16 @@ $(function () {
 		});
 		/*
 		 * Since this is not a "select" we need a way to let the
-		 * user clear the selection
+		 * user clear the selection, but not when constrained.
 		 */
-		$(outerdiv).find(".clear-select").click(function (event) {
-		    event.preventDefault();
-		    //console.info($(this).html());
-		    $(outerdiv).find("button .type-selected")
-			.html("Any");
-		    $(outerdiv).find("input").val("");
-		});
+		if (!constraints) {
+		    $(outerdiv).find(".clear-select").click(function (event) {
+			event.preventDefault();
+			//console.info($(this).html());
+			$(outerdiv).find("button .type-selected").html("Any");
+			$(outerdiv).find("input").val("");
+		    });
+		}
 	    }
 
 	    // Helper function;
