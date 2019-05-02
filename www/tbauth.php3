@@ -905,6 +905,8 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 	    $ipfrozen = $iprow['frozen'];
 
 	    if ($ipfrozen) {
+                #TBMAIL('stoller', "Login Debug", "Disabled IP $token $IP");
+                
 		DBQueryFatal("update login_failures set ".
 			     "       failcount=failcount+1, ".
 			     "       failstamp='$now' ".
