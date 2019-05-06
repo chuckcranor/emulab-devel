@@ -2884,10 +2884,22 @@ DROP TABLE IF EXISTS `interfaces_rf_limit`;
 CREATE TABLE `interfaces_rf_limit` (
   `node_id` varchar(32) NOT NULL DEFAULT '',
   `iface` text NOT NULL,
-  `freq_low` bigint(12) NOT NULL DEFAULT '0',
-  `freq_high` bigint(12) NOT NULL DEFAULT '0',
+  `freq_low` float NOT NULL DEFAULT '0',
+  `freq_high` float NOT NULL DEFAULT '0',
   `power` float NOT NULL DEFAULT '0',
   PRIMARY KEY (`node_id`,`iface`(128),`freq_low`,`freq_high`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `node_rf_reports`
+--
+
+DROP TABLE IF EXISTS `node_rf_reports`;
+CREATE TABLE `node_rf_reports` (
+  `node_id` varchar(32) NOT NULL DEFAULT '',
+  `tstamp` datetime NOT NULL default '0000-00-00 00:00:00',
+  `report` text NOT NULL,
+  PRIMARY KEY (`node_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
