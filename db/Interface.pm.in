@@ -1024,6 +1024,33 @@ sub TypeCapability($$$)
     return 0;
 }
 
+#
+# Add an RF limit to an interface.
+#
+sub AddRFLimit($$$$)
+{
+    my ($self, $f_low, $f_high, $power) = @_;
+
+    my $nodeif = $self->node_id();
+    my $iface = $self->iface();
+    
+    # force numeric
+    $f_low += 0;
+    $f_high += 0;
+    $power += 0;
+    
+    return -1
+	if( $f_low <= 0 || $f_high <= f_low );
+    
+    if( !DBQueryWarn( "INSERT INTO interfaces_rf_limit SET node_id='$node_id', " .
+		      "iface='$iface', freq_low='$f_low', freq_high='$f_high', " .
+		      "power='$power'" ) ) {
+	return -1;
+    }
+    
+    return 0;
+}
+
 ##############################################################################
 package Interface::VInterface;
 use libdb;

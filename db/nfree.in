@@ -551,6 +551,10 @@ foreach my $node (@freed_nodes) {
     DBQueryWarn("delete from interface_settings where node_id='$node_id'")
 	or $error++;
 
+    # Clean the interfaces_rf_limit table for this node
+    DBQueryWarn( "DELETE FROM interfaces_rf_limit WHERE node_id='$node_id'" )
+	or $error++;
+    
     # If it's a robot, we need to reset its physical location.
     my $result =
 	DBQueryFatal("select building,floor,loc_x,loc_y,orientation ".

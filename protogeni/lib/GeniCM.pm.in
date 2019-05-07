@@ -3123,6 +3123,12 @@ sub GetTicketAuxAux($)
 
 		$ip = GeniXML::GetIp($ref, $nodemap{$node_nickname}->{'rspec'});
 		$mask = GeniXML::GetMask($ref, $nodemap{$node_nickname}->{'rspec'});
+		$spectrum = GeniXML::GetSpectrum( $ref, $iface_ref );
+		goto bad unless( defined( $spectrum ) );
+		foreach my $req( @$spectrum ) {
+		    # FIXME apply policy constraints to requested spectrum...
+		    # these are not defined yet
+		}
 	    }
 
 	    # XXX
@@ -5512,6 +5518,12 @@ sub SliverWorkAux($)
 			"$iface_name in $linkname";
 		    goto bad;
 		}
+	    }
+	    my $spectrum = GeniXML::GetSpectrum( $ifaceref, $ifaceref );
+	    goto bad unless( defined( $spectrum ) );
+	    foreach my $req (@$spectrum) {
+		my ($f_low, $f_high, $power) = $req;
+		$interface->AddRFLimit( $f_low, $f_high, $power );
 	    }
 	    # Initial update of the manifest.
 	    $ifaceref = $sliver->AnnotateManifest($ifaceref);

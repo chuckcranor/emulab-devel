@@ -544,6 +544,41 @@ sub GetIp($$)
     return $result;
 }
 
+# Returns undef if input is invalid (e.g., negative or overlapping
+# frequencies).
+# Returns empty list if no spectrum requested.
+# Otherwise, returns list of (f_low, f_high, power) tuples.
+sub GetSpectrum($$)
+{
+    my ($ifaceref, $node) = @_;
+    my @requests = ();
+    my $id = GetInterfaceId( $ifaceref );
+    my @ifaces = FindNodes( "n:interface", $node )->get_nodelist();
+    foreach my $iface (@ifaces) {
+	my $testid = GetInterfaceId( $iface );
+	if( defined( $id ) && defined( $testid ) && $testid eq $id ) {
+	    my @ranges = FindNodes( "n:spectrum", $iface );
+
+	    foreach my $r (@ranges) {
+		$f_low = GetText( "f-low", $r );
+		$f_high = GetText( "f-high", $r );
+		$power = GetText( "power", $r );
+
+		return undef if( $f_low >= $f_high );
+		return undef if( $f_low <= 0 );
+		foreach $existing (@requests) {
+		    ($old_low, $old_high, $old_power) = @$existing;
+		    $f_low > $old_high or $f_high < $old_low or return undef;
+		}
+
+		push $requests, [ $f_low, $f_high, $power ];
+	    }
+	}
+    }
+
+    return \@requests;
+}
+
 # Returns the vnode id in the emulab extension or failing that the component_id
 sub GetVnodeId($)
 {
