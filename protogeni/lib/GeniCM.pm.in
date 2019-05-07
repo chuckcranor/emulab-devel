@@ -2832,6 +2832,22 @@ sub GetTicketAuxAux($)
 	    $isshared = 1;
 	    $encap    = "vlan";
 	}
+	elsif (my $shared_vlan = GeniXML::CreateSharedLan($linkref)) {
+	    if ($shared_vlan !~ /^[-\w]*$/) {
+		$response =
+		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				 "Invalid shared lan name: $shared_vlan");
+		goto bad;
+	    }
+	    my $lanref = Lan->LookupSharedVLanByToken($shared_vlan);
+	    if (defined($lanref)) {
+		$response =
+		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				 "Shared lan already exists: $shared_vlan");
+		goto bad;
+	    }
+	    $encap    = "vlan";
+	}
 	#
 	# Allow user to specify vlan encap, which might override that we
 	# just set it above. Experts only please.
@@ -5578,6 +5594,37 @@ sub SliverWorkAux($)
 		$sliver->SetAggregate($linkaggregate) != 0) {
 		$message = "Could not add link sliver $sliver to $aggregate";
 		goto bad;
+	    }
+	}
+	if (my $sharename = GeniXML::CreateSharedLan($linkref)) {
+	    my $vlan = VLan->Lookup($experiment, $linkname);
+	    if (!defined($vlan)) {
+		print STDERR "*** Could lookup vlan $linkname for sharing\n";
+	    }
+	    else {
+		#
+		# This operation has to be done as an admin person.
+		# Use force option to override not ACTIVE experiment.
+		#
+		GeniUtil::FlipToElabMan();
+		my $output = GeniUtil::ExecQuiet("$WAP ".
+						 " $SHAREVLAN -o -f $pid,$eid ".
+						 "   $linkname $sharename");
+		my $ecode  = $?;
+		FlipToUser($slice, $owner);
+		if ($ecode) {
+		    print STDERR "Failed to share vlan:\n";
+		    print STDERR $output;
+		}
+		else {
+		    libtestbed::SENDMAIL($TBOPS, "$linkname has been shared",
+					 "$linkname has been shared.\n\n". 
+					 "Slice: $slice\n".
+					 "Experiment: $experiment\n",
+					 $TBOPS);
+		    print STDERR "$linkname has been shared using name: ".
+			"$sharename\n";
+		}
 	    }
 	}
       manifest:

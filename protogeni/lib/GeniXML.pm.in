@@ -1604,6 +1604,28 @@ sub GetSharedLanName($)
     return undef;
 }
 
+sub CreateSharedLan($)
+{
+    my ($linkref) = @_;
+
+    return undef
+	if (IsVersion0($linkref));
+    
+    my $ref = FindNodesNS("n:create_shared_vlan",
+			  $linkref, $SHAREDVLAN_NS)->pop();
+    if (!defined($ref)) {
+	$ref = FindNodesNS("n:link_shared_vlan", $linkref,
+			   $SHAREDVLAN_PG_NS)->pop();
+    }
+    if (defined($ref)) {
+	my $name = GetText("name", $ref);
+	if (defined($name) and $name ne "") {
+	    return $name;
+	}
+    }
+    return undef;
+}
+
 # Takes an attribute/element name, *NOT AN XPATH* and a node and sets
 # the text of that node to a particular value. If the node is an
 # attribute, the value is set. If it is an element with just a text
