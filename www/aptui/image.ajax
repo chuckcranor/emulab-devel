@@ -651,11 +651,22 @@ function Do_Clone()
     # the status for the imaging modal.
     #
     if (isset($node)) {
+        $experiment = $node->Reservation();
+        if (!$experiment) {
+            SPITAJAX_ERROR(-1, "not currently reserved to an experiment");
+            return;
+        }
+        $node_pid = $experiment->pid();
+        $unix_gid = $experiment->UnixGID();
+        $unix_groups = $project->unix_gid() . "," . $unix_gid;
+        if ($project->pid() != $node_pid) {
+            $unix_groups = "$unix_groups,$node_pid";
+        }
         $webtask = WebTask::CreateAnonymous();
         $webtask->SetTaskValue("node_id", $node->node_id());
         $webtask->Store();
         
-        $retval = SUEXEC($this_uid, $group->pid(),
+        $retval = SUEXEC($this_uid, $unix_groups,
                          "webclone_image -t " . $webtask->task_id() .
                          " " . escapeshellarg($formfields["imagename"]) .
                          " " . $node->node_id(),
@@ -808,6 +819,18 @@ function Do_Snapshot()
             return;
          }
     }
+    $experiment = $node->Reservation();
+    if (!$experiment) {
+        SPITAJAX_ERROR(-1, "not currently reserved to an experiment");
+        return;
+    }
+    $node_pid = $experiment->pid();
+    $unix_gid = $experiment->UnixGID();
+    $project  = $experiment->Project();
+    $unix_groups = $project->unix_gid() . "," . $unix_gid;
+    if ($project->pid() != $node_pid) {
+	$unix_groups = "$unix_groups,$node_pid";
+    }
 
     #
     # We pass a webtask through, so that Do_SnapshotStatus() above can pick up
@@ -817,7 +840,7 @@ function Do_Snapshot()
     $webtask->SetTaskValue("node_id", $node->node_id());
     $webtask->Store();
         
-    $retval = SUEXEC($this_uid, $group->pid(),
+    $retval = SUEXEC($this_uid, $unix_groups,
                      "webclone_image -t " . $webtask->task_id() .
                      " " . escapeshellarg($baseimage->imagename()) .
                      " " . escapeshellarg($node->node_id()),
