@@ -3764,7 +3764,7 @@ sub GenVirtLans($)
 		}
 	    }
 	}
-	elsif ($#members != 0) {
+	elsif (@members != 0) {
 	    my $desires = {};
 	    $self->exptstats()->{"lans"} += 1;
 	    my $lannode = ($vlan->_geninodes() ? "lan-$vname" : "lan/$vname");
