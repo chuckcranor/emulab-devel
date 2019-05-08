@@ -183,7 +183,7 @@ $console["keylen"]   = $keylen;
 $console["keydata"]  = $keydata;
 $console["certhash"] = $certhash;
 
-$console_auth = $node->ConsoleAuthObject($user, $console);
+$console_auth = $node->ConsoleAuthObject($uid, $console);
 
 if (!isset($key)) {
     PAGEHEADER("$node_id Console");

@@ -1579,10 +1579,9 @@ class Node
     # is passed to the web server on ops. This is used to grant
     # permission to the user to invoke tip to the console. 
     #
-    function ConsoleAuthObject($user, $console)
+    function ConsoleAuthObject($uid, $console)
     {
         global $USERNODE;
-        $uid = $user->uid();
         $node_id = $this->node_id();
 	
         $file = "/usr/testbed/etc/sshauth.key";

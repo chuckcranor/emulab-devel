@@ -98,7 +98,7 @@ $console["portnum"]  = $portnum;
 $console["keylen"]   = $keylen;
 $console["keydata"]  = $keydata;
 $console["certhash"] = $certhash;
-$console_auth = $node->ConsoleAuthObject($this_user, $console);
+$console_auth = $node->ConsoleAuthObject($this_user->uid(), $console);
 
 echo "<center>
        <div id='console-div' ".
