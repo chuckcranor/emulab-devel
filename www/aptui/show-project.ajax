@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -133,15 +133,20 @@ function Do_ClassicDatasetList()
 function Do_MemberList()
 {
     global $this_user, $target_project;
-    global $newTrustMap;
+    global $newTrustMap, $TB_PROJECT_ADDUSER;
 
     if (CheckPageArgs()) {
         return;
     }
     $target_idx  = $target_project->pid_idx();
     $target_pid  = $target_project->pid();
+    $target_group= $target_project->DefaultGroup();
     $results     = array();
     $members     = $target_project->MemberList();
+    # Canapprove is a proxy for group_root or better.
+    $statsokay   = (ISADMIN() ||
+                    $target_project->AccessCheck($this_user,
+                                                 $TB_PROJECT_ADDUSER));
 
     foreach ($members as $user) {
         $membership = $target_project->MemberShipInfo($user);
@@ -159,6 +164,14 @@ function Do_MemberList()
             (ISADMIN() ||
              $target_project->CanDeleteUser($this_user, $user) ? 1 : 0);
 
+        if ($statsokay) {
+            list($pcount, $phours) = Instance::MonthsUsage($user,
+                                                           $target_group);
+            if ($phours) {
+                $blob["usage"] = array("pcount" => $pcount,
+                                       "phours" => intval($phours));
+            }
+        }
         $results[$user->uid()] = $blob;
     }
     SPITAJAX_RESPONSE($results);

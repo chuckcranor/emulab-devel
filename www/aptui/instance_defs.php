@@ -664,7 +664,7 @@ class Instance
     #
     # Usage over the last months Just phours, cause pcount is not very useful.
     #
-    function MonthsUsage($target) {
+    function MonthsUsage($target, $group = null) {
         $monthago = time() - (3600 * 24 * 28);
         $pcount   = 0;
         $phours   = 0;
@@ -673,6 +673,14 @@ class Instance
         if (get_class($target) == "User") {
             $user_idx = $target->idx();
             $clause = "creator_idx='$user_idx'";
+            #
+            # Optional group target for user.
+            #
+            if ($group) {
+                $pid = $group->pid();
+                $gid = $group->gid();
+                $clause .= " and pid='$pid' and gid='$gid' ";
+            }
         }
         else {
             $pid_idx = $target->pid_idx();
