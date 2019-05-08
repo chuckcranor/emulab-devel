@@ -4575,5 +4575,50 @@ sub NeedsAdminMFS($)
     return 0;
 }
 
+#
+# Spectrum stuff.
+#
+sub AddSpectrum($$$)
+{
+    my ($self, $spectrum, $iface) = @_;
+    my $node_id = $self->node_id();
+    my @ifaces = ();
+    require EmulabConstants;
+
+    if (defined($iface)) {
+	@ifaces = ($iface);
+    }
+    else {
+	if (Interface->LookupAll($self, \@ifaces)) {
+	    return -1;
+	}
+    }
+    foreach $iface (@ifaces) {
+	my $iface_id = $iface->iface();
+
+	next
+	    if ($iface->role() != EmulabConstants::TBDB_IFACEROLE_EXPERIMENT());
+
+	# Check to see if this is an OTA interface.
+	my $ota;
+	next
+	    if (! ($iface->TypeCapability("overtheair", \$ota) == 0 && $ota));
+
+	foreach my $request (@{$spectrum}) {
+	    my $frequency_low  = DBQuoteSpecial($request->{"frequency_low"});
+	    my $frequency_high = DBQuoteSpecial($request->{"frequency_high"});
+	    my $power          = DBQuoteSpecial($request->{"power"});
+
+	    return -1
+		if (!DBQueryWarn("insert into interfaces_rf_limit set ".
+				 "  node_id='$node_id', iface='$iface_id', ".
+				 "  freq_low=$frequency_low, ".
+				 "  freq_high=$frequency_high, ".
+				 "  power=$power"));
+	}
+    }
+    return 0;
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;

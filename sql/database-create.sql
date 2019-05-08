@@ -2898,8 +2898,9 @@ DROP TABLE IF EXISTS `node_rf_reports`;
 CREATE TABLE `node_rf_reports` (
   `node_id` varchar(32) NOT NULL DEFAULT '',
   `tstamp` datetime NOT NULL default '0000-00-00 00:00:00',
+  `which` enum('system','user') default 'user',
   `report` text NOT NULL,
-  PRIMARY KEY (`node_id`)
+  PRIMARY KEY (`node_id`,`which`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --

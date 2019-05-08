@@ -1944,5 +1944,20 @@ sub GetRepositories($)
     return $result;
 }
 
+sub GetSpectrum($)
+{
+    my ($ref)  = @_;
+    my @result = ();
+
+    foreach my $element (FindNodesNS("n:spectrum", $ref,
+				     $EMULAB_NS)->get_nodelist()) {
+	push(@result, {
+	    "frequency_low"  => GetText("frequency_low", $element),
+	    "frequency_high" => GetText("frequency_high", $element),
+	    "power"          => GetText("power", $element)});
+    }
+    return \@result;
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;

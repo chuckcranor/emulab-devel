@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -549,6 +549,12 @@ foreach my $node (@freed_nodes) {
 
     # Clean the interface_settings table for this node.
     DBQueryWarn("delete from interface_settings where node_id='$node_id'")
+	or $error++;
+
+    # Clean the RF limit/reporting tables.
+    DBQueryWarn("delete from interfaces_rf_limit where node_id='$node_id'")
+	or $error++;
+    DBQueryWarn("delete from node_rf_reports where node_id='$node_id'")
 	or $error++;
 
     # If it's a robot, we need to reset its physical location.

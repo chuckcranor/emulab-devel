@@ -937,6 +937,19 @@ sub GetTicketAuxAux($)
     }
 
     #
+    # Check global spectrum request
+    #
+    my $spectrum = GeniXML::GetSpectrum($rspec);
+    if (@$spectrum) {
+	print STDERR "Global spectrum:\n";
+	print STDERR Dumper($spectrum);
+	
+	my $response = CheckSpectrum($spectrum);
+	return $response
+	    if (GeniResponse::IsError($response));
+    }
+
+    #
     # Add global vtypes.
     #
     my $vtypes_result =
@@ -1217,6 +1230,19 @@ sub GetTicketAuxAux($)
 	my $xensettings;
 	my $dockersettings;
 	my $fwsettings;
+
+	#
+	# Check spectrum request
+	#
+	my $spectrum = GeniXML::GetSpectrum($ref);
+	if (@$spectrum) {
+	    print STDERR "Node $node_nickname spectrum:\n";
+	    print STDERR Dumper($spectrum);
+	
+	    my $response = CheckSpectrum($spectrum);
+	    goto bad
+		if (GeniResponse::IsError($response));
+	}
 	
 	# Always populate iface2node mapping, even if we let the node
 	# pass through.
@@ -1231,6 +1257,27 @@ sub GetTicketAuxAux($)
 		goto bad;
 	    }
 	    $iface2node{$virtual_id} = $node_nickname;
+
+	    #
+	    # Check spectrum request
+	    #
+	    my $spectrum = GeniXML::GetSpectrum($linkref);
+	    if (@$spectrum) {
+		my $component_id = GeniXML::GetNodeId($linkref);
+		if (!defined($component_id)) {
+		    $response =
+			GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				"Must supply component_id (interface) for ".
+				"spectrum on $virtual_id");
+		    goto bad;
+		}
+		print STDERR "Interface $virtual_id:$component_id spectrum:\n";
+		print STDERR Dumper($spectrum);
+
+		my $response = CheckSpectrum($spectrum);
+		goto bad
+		    if (GeniResponse::IsError($response));
+	    }
 	}
 
 	# Let remote nodes pass through.
@@ -2786,7 +2833,9 @@ sub GetTicketAuxAux($)
 	#
 	# Look for shared and tagging attributes for the link.
 	#
-	if (my $shared_vlan = GeniXML::GetSharedLanName($linkref)) {
+	my $shared_vlan;
+	
+	if ($shared_vlan = GeniXML::GetSharedLanName($linkref)) {
 	    if ($shared_vlan !~ /^[-\w]*$/) {
 		$response =
 		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
@@ -2832,7 +2881,7 @@ sub GetTicketAuxAux($)
 	    $isshared = 1;
 	    $encap    = "vlan";
 	}
-	elsif (my $shared_vlan = GeniXML::CreateSharedLan($linkref)) {
+	elsif ($shared_vlan = GeniXML::CreateSharedLan($linkref)) {
 	    if ($shared_vlan !~ /^[-\w]*$/) {
 		$response =
 		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
@@ -4729,8 +4778,10 @@ sub SliverWorkAux($)
 	}
     }
 
-    my %phys2nickname = ();
+    # global spectrum for below.
+    my $global_spectrum = GeniXML::GetSpectrum($rspec);
 
+    my %phys2nickname = ();
     #
     # Make sure all nodes requested are allocated. 
     #
@@ -5159,6 +5210,49 @@ sub SliverWorkAux($)
 	    }
 	}
 
+	#
+	# Per-Interface Spectrum
+	#
+	foreach my $ifaceref (GeniXML::FindNodes("n:interface",
+						 $ref)->get_nodelist()) {
+	    my $spectrum = GeniXML::GetSpectrum($ifaceref);
+
+	    if (@$spectrum) {
+		my $component_id = GeniXML::GetNodeId($ifaceref);
+		my $interface = Interface->LookupByIface($node, $component_id);
+		if (!defined($interface) ) {
+		    $message = "Undefined interface $component_id for ".
+			"spectrum on $virtual_id";
+		    goto bad;
+		}
+		if ($node->AddSpectrum($spectrum, $interface)) {
+		    $message = "Could not add interface spectrum to ".
+			"$virtual_id:$component_id";
+		    goto bad;
+		}
+	    }
+	}
+
+	#
+	# Per-node spectrum.
+	#
+	my $spectrum = GeniXML::GetSpectrum($ref);
+	if (@$spectrum) {
+	    if ($node->AddSpectrum($spectrum)) {
+		$message = "Could not add spectrum to $virtual_id";
+		goto bad;
+	    }
+	}
+	#
+	# And the global spectrum
+	#
+	if (@$global_spectrum) {
+	    if ($node->AddSpectrum($global_spectrum)) {
+		$message = "Could not add global spectrum to $virtual_id";
+		goto bad;
+	    }
+	}
+
 	my $node_manifest = $sliver->AnnotateManifest();
 	if (! defined($node_manifest)) {
 	    $message = "Could not annotate sliver for $virtual_id";
@@ -5529,6 +5623,7 @@ sub SliverWorkAux($)
 		    goto bad;
 		}
 	    }
+
 	    # Initial update of the manifest.
 	    $ifaceref = $sliver->AnnotateManifest($ifaceref);
 	    my $outref;
@@ -9251,6 +9346,61 @@ sub CheckForDeprecatedImages($$)
     foreach my $image (values(%needwarning)) {
 	print STDERR "*** WARNING: " . $image->DeprecatedMessage() . "\n";
 	$image->SendDeprecatedMail($user);
+    }
+    return 0;
+}
+
+#
+# Do some sanity checking on spectrum list.
+#
+# Initial limits to apply to all requests, eventually these will come from
+# the database. Express these as a set of ranges with associated max power,
+# which for now is the same for all frequencies. In MHZ and dBm.
+#
+my @TXlimits = (
+    # freq_low,freq_high,power
+    [902, 928, 15],
+    [2400, 2500, 15],
+    [5725, 5875, 15],
+    );
+
+sub CheckSpectrum($)
+{
+    my ($spectrum) = @_;
+
+    foreach my $request (@{$spectrum}) {
+	my $frequency_low  = $request->{"frequency_low"};
+	my $frequency_high = $request->{"frequency_high"};
+	my $power          = $request->{"power"};
+
+	if (!defined($frequency_high) ||
+	    !defined($frequency_low) ||
+	    !defined($power) ||
+	    $frequency_high !~ /^[\d\.]+$/ ||
+	    $frequency_low  !~ /^[\d\.]+$/ ||
+	    $power !~ /^[-\d\.]+$/ ||
+	    $frequency_low > $frequency_high ||
+	    $frequency_low < 0) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+					"Invalid spectrum request");
+	}
+	# Check for out of range,power.
+	my $allowed = 0;
+	foreach my $ref (@TXlimits) {
+	    my ($low,$high,$pmax) = @{$ref};
+
+	    if ($frequency_low >= $low &&
+		$frequency_high <= $high &&
+		$power <= $pmax) {
+		$allowed = 1;
+		last;
+	    }
+	}
+	if (!$allowed) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+			"Spectrum range request is out of permitted range: ".
+			"$frequency_low,$frequency_high,$power");
+	}
     }
     return 0;
 }

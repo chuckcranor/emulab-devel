@@ -1,0 +1,554 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Data::Dumper;
+use Date::Parse;
+use IO::Socket::INET;
+use POSIX qw(strftime);
+use POSIX ":sys_wait_h";
+
+#
+# Take input from the RF monitor running on the control nucs, compare
+# against DB table, and shutdown nodes as needed.
+#
+sub usage()
+{
+    print "Usage: rfmonitor_daemon [-d] [-n] [-p port]\n";
+    exit(1);
+}
+my $optlist   = "dnp:";
+my $debug     = 0;
+my $impotent  = 0;
+my $PORT      = 12237;
+
+#
+# Configure variables
+#
+my $TB		     = "@prefix@";
+my $TBOPS            = "@TBOPSEMAIL@";
+my $MAINSITE         = @TBMAINSITE@;
+my $LOGFILE          = "$TB/log/rfmonitor_daemon.log";
+my $POWER            = "$TB/bin/power";
+my $FORMAT           = "portid,timestamp,frequency,power";
+my $MAILDELAY        = 10;
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Protos
+sub fatal($);
+sub notify($);
+sub NodeNotify($$$);
+sub ShouldNotify($$);
+sub NodeNotified($$$);
+sub HandleChild($);
+sub LoadNodeData($);
+sub HandleViolations($$);
+#
+# Turn off line buffering on output
+#
+$| = 1; 
+
+if ($UID != 0 && !$impotent) {
+    fatal("Must be root to run this script\n");
+}
+
+#
+# 
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"p"})) {
+    $PORT = $options{"p"};
+}
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use emdb;
+use EmulabConstants;
+use libtestbed;
+use emutil;
+use libEmulab;
+use Experiment;
+
+if (! $impotent) {
+    if (CheckDaemonRunning("rfmonitor_daemon")) {
+	fatal("Not starting another rfmonitor_daemon daemon!");
+    }
+    # Go to ground.
+    if (! $debug) {
+	if (TBBackGround($LOGFILE)) {
+	    exit(0);
+	}
+    }
+    if (MarkDaemonRunning("rfmonitor_daemon")) {
+	fatal("Could not mark rfmonitor_daemon as running!");
+    }
+}
+
+#
+# Bind a socket for incoming connections, we expect a new connection for
+# each report.
+#
+my $ServerSocket =
+    new IO::Socket::INET(LocalHost => '0.0.0.0',
+			 LocalPort => $PORT,
+			 Proto     => 'tcp',
+			 Listen    => 10,
+			 Reuse     => 1);
+if (!$ServerSocket) {
+    fatal("Could not create socket on port $PORT");
+}
+
+#
+# We fork off each connection, but we want to ignore reports from clients
+# we are already working on.
+#
+my %children = ();
+
+#
+# Now we loop waiting for connections from the RF monitor.
+#
+while (1) {
+    my $client_socket = $ServerSocket->accept();
+ 
+    # get information about a newly connected client
+    my $client_address = $client_socket->peerhost();
+    my $client_port = $client_socket->peerport();
+    print "Connection from $client_address:$client_port at " .
+	POSIX::strftime("%m/%d %H:%M:%S", localtime()) . "\n";
+
+    #
+    # See if we are still working on a report from this client. Just drop
+    # this report.
+    #
+    if (exists($children{$client_address})) {
+	my $pid = $children{$client_address};
+
+	# We need to reap before we can test it.
+	waitpid($pid, &WNOHANG);	
+	    
+	if (kill(0, $pid)) {
+	    print "Still working on $client_address, pid is $pid\n";
+	    close($client_socket);
+	    next;
+	}
+	delete($children{$client_address});
+    }
+    
+    #
+    # Fork off before reading the data in case it blocks.
+    #
+    my $child = fork();
+    while (!defined($child)) {
+	print STDERR "Could not fork, waiting a bit\n";
+	sleep(5);
+	$child = fork();
+    }
+    if ($child) {
+	$children{$client_address} = $child;
+	close($client_socket);
+	next;
+    }
+    HandleChild($client_socket);
+}
+exit(0);
+
+#
+# Read the data from the monitor and process.
+#
+sub HandleChild($)
+{
+    my ($socket)   = @_;
+    my $address    = $socket->peerhost();
+    my $port       = $socket->peerport();
+    my @lines      = ();
+    my %rflimits   = ();
+    my %violaters  = ();
+
+    while (my $line = <$socket>) {
+	push(@lines, $line);
+	print $line
+	    if ($debug);
+    }
+    # Close the connection, we do not tell the other side anything.
+    $socket->close();
+
+    if (@lines <= 1) {
+	print STDERR "Only one line from $address:$port. Ignoring.\n";
+	exit(0);
+    }
+    
+    #
+    # The first line is a header, to make sure we agree on the format.
+    #
+    my $header = shift(@lines);
+    chomp($header);
+    if ($header ne $FORMAT) {
+	print STDERR "Improper format from $address:$port. Ignoring.\n";
+	exit(1);
+    }
+    
+    while (@lines) {
+	my $line = pop(@lines);
+	chomp($line);
+
+	next
+	    if ($line =~ /^$/);
+
+	my ($portid,$timestamp,$frequency,$power) = split(",", $line);
+	if (!(defined($portid) && defined($frequency) &&
+	      defined($power) && defined($timestamp))) {
+	    print STDERR "Missing data: '$line'\n";
+	    next;
+	}
+	#
+	# The portid is node:iface.
+	#
+	my ($nodeid,$iface) = split(":", $portid);
+	if (!(defined($nodeid) && defined($iface))) {
+	    print STDERR "Improper portid from $address:$port: $portid.\n";
+	    next;
+	}
+	if (! TBcheck_dbslot($nodeid, "nodes", "node_id",
+			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    print STDERR "Improper nodeid from $address:$port: $nodeid\n";
+	    next;
+	}
+	my $node = Node->Lookup($nodeid);
+	if (!$node) {
+	    print STDERR "No such node $nodeid\n";
+	    next;
+	}
+	my $measurement = {
+	    "node_id"    => $nodeid,
+	    "iface"      => $iface,
+	    "frequency"  => $frequency,
+	    "power"      => $power,
+	    "timestamp"  => $timestamp,
+	};
+	
+	#
+	# Check for a report that comes in after we have powered off the
+	# node. We can ignore that unless it comes in after some threshold
+	# which would imply an error someplace. Note that telling power
+	# to turn off a node that is already off, is fine, but lets avoid
+	# a bunch of email noise.
+	#
+	if ($node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
+	    my $stamp = $node->state_timestamp();
+	    if (time() - $stamp < 180) {
+		print "$nodeid was just powered off, ignoring this report.\n";
+		next;
+	    }
+	    my $mesg =
+		"$nodeid is supposed to be powered off but is still ".
+		"transmitting on $iface.\n" .
+		"Frequency:" . $frequency . "MHZ, ".
+		"Power:" . $power . "dBm";
+	    print "$mesg\n";
+	    NodeNotify($nodeid, "system", $mesg);
+	    next;
+	}
+	
+	#
+	# If we have not loaded the node data, then grab it from the DB
+	# and stash locally. We will get back all the interfaces for the
+	# node in a hash.
+	#
+	if (!exists($rflimits{$nodeid})) {
+	    my $limits = LoadNodeData($nodeid);
+	    if (!defined($limits)) {
+		# DB Error, we do not know anything. Hmm.
+		next;
+	    }
+	    $rflimits{$nodeid} = $limits;
+	}
+	#
+	# If no RF limit for the interface, its a violation.
+	#
+	if (!exists($rflimits{$nodeid}->{$iface})) {
+	    if (!exists($violaters{$nodeid})) {
+		$violaters{$nodeid} = {};
+	    }
+	    $violaters{$nodeid}->{$iface} = $measurement;
+	    next;
+	}
+	#
+	# There can be multiple allowed frequency ranges for an interface.
+	# The measurement must be within range for at least one of them.
+	#
+	my $inrange = 0;
+
+	foreach my $limit (@{$rflimits{$nodeid}->{$iface}}) {
+	    if ($measurement->{"frequency"} >= $limit->{"freq_low"} &&
+		$measurement->{"frequency"} <= $limit->{"freq_high"} &&
+		$measurement->{"power"} <= $limit->{"power"}) {
+		$inrange = 1;
+		last;
+	    }
+	}
+	if (!$inrange) {
+	    if (!exists($violaters{$nodeid})) {
+		$violaters{$nodeid} = {};
+	    }
+	    $violaters{$nodeid}->{$iface} = $measurement;
+	}
+    }
+    if (keys(%violaters)) {
+	HandleViolations(\%violaters, \%rflimits);
+    }
+    print "Finished with $address:$port at " .
+	POSIX::strftime("%m/%d %H:%M:%S", localtime()) . "\n";
+    exit(0);
+}
+
+#
+# Load data for a node from the rf limits table. 
+#
+sub LoadNodeData($)
+{
+    my ($nodeid) = @_;
+    my %ifaces   = ();
+
+    my $query_result =
+	DBQueryWarn("select * from interfaces_rf_limit ".
+		    "where node_id='$nodeid'");
+    return undef
+	if (!$query_result);
+
+    if (!$query_result->numrows) {
+	print STDERR "No interface limit info for $nodeid\n";
+	return {};
+    }
+    #
+    # There can be multiple rows for an interface. 
+    #
+    while (my $row = $query_result->fetchrow_hashref()) {
+	my $iface = $row->{'iface'};
+	if (!exists($ifaces{$iface})) {
+	    $ifaces{$iface} = [];
+	}
+	push(@{$ifaces{$iface}}, $row);
+    }
+    return \%ifaces;
+}
+
+#
+# List of nodes, and interfaces that are in violation. We want to generate
+# an informative email message and turn off the nodes.
+#
+sub HandleViolations($$)
+{
+    my ($violations, $rflimits) = @_;
+
+    #
+    # Simple, send a message per node.
+    #
+    foreach my $nodeid (keys(%{$violations})) {
+	my ($TO, $CC, $subject, $body);
+
+	my $node = Node->Lookup($nodeid);
+	if (!$node) {
+	    print STDERR "No such node $nodeid\n";
+	    next;
+	}
+	if ($node->IsReserved()) {
+	    my $experiment = $node->Reservation();
+	    my $project    = $experiment->GetProject();
+	    my $swapper    = $experiment->GetSwapper();
+	    my $user_name  = $swapper->name();
+	    my $user_email = $swapper->email();
+	    my $leader     = $project->GetLeader();
+	    my $pname	   = $leader->name();
+	    my $pemail	   = $leader->email();
+
+	    if ($debug) {
+		$pname  = $user_name;
+		$pemail = $user_email;
+	    }
+
+	    $TO = "$user_name <$user_email>";
+	    $CC = "$pname <$pemail>, $TBOPS";
+	}
+	else {
+	    $TO = $TBOPS;
+	}
+	$subject = "Transmit frequency/power violations on $nodeid";
+	$body    = "The following interfaces are in violation on $nodeid:\n\n";
+
+	foreach my $iface (keys(%{$violations->{$nodeid}})) {
+	    my $measurement = $violations->{$nodeid}->{$iface};
+	    my $stamp = POSIX::strftime("%m/%d %H:%M:%S %Z",
+					localtime($measurement->{"timestamp"}));
+
+	    if (!exists($rflimits->{$nodeid}->{$iface})) {
+		$body .= "$iface: NO LIMITS DEFINED\n";
+	    }
+	    else {
+		$body .= "$iface:\n";
+		
+		my @limits     = @{$rflimits->{$nodeid}->{$iface}};
+		foreach my $limit (@limits) {
+		    my $freq_low   = $limit->{"freq_low"};
+		    my $freq_high  = $limit->{"freq_high"};
+		    my $power      = $limit->{"power"};
+
+		    $body .=
+			"  Limits: Min Freq:$freq_low MHZ, ".
+			"Max Freq:$freq_high MHZ, Max Power:$power dBm\n";
+		}
+	    }
+	    $body .=
+		"  Measured at $stamp: ".
+		"Frequency: " . $measurement->{"frequency"} . " MHZ, ".
+		"Power: " . $measurement->{"power"} . " dBm\n";
+	}
+	$body .= "\n" . "This node will be immediately powered off!\n";
+	if ($debug || $impotent) {
+	    print $subject . "\n";
+	    print $body;
+	}
+	if (ShouldNotify($nodeid, "user")) {
+	    my $headers = undef;
+	    if (defined($CC)) {
+		$headers = "CC: $CC";
+	    }
+	    libtestbed::SENDMAIL($TO, $subject, $body, $TBOPS, $headers);
+	    NodeNotified($nodeid, "user", $body);
+	}
+	if (!$impotent) {
+	    #
+	    # We are allowed to run the power command as root.
+	    #
+	    my $output = emutil::ExecQuiet("$POWER off $nodeid");
+	    if ($?) {
+		NodeNotify($nodeid, "system",
+			   "Failed to power of $nodeid!\n\n". $output);
+	    }
+	}
+    }
+}
+
+#
+# Is it time to send another Notification for a node.
+#
+sub ShouldNotify($$)
+{
+    my ($nodeid,$which) = @_;
+    my $lastreport = 0;
+
+    my $query_result =
+	DBQueryWarn("select UNIX_TIMESTAMP(tstamp) from node_rf_reports ".
+		    "where node_id='$nodeid' and which='$which'");
+    return undef
+	if (!$query_result);
+
+    if ($query_result->numrows) {
+	($lastreport) = $query_result->fetchrow_array();
+    }
+    if (time() - $lastreport < $MAILDELAY) {
+	# No new email
+	return 0;
+    }
+    return 1;
+}
+
+sub NodeNotified($$$)
+{
+    my ($nodeid, $which, $mesg) = @_;
+
+    DBQueryWarn("replace into node_rf_reports set which='$which', ".
+		"  node_id='$nodeid',tstamp=now(), ".
+		"  report=" . DBQuoteSpecial($mesg));
+}
+
+#
+# Send a report about a node, we use the DB to prevent email blizzards,
+# since we are sending the email in a child process, and if power off,
+# fails, we do not want to generate an email every couple of minutes.
+# And I expect that power off will occasionally fail.
+#
+sub NodeNotify($$$)
+{
+    my ($nodeid, $which, $mesg) = @_;
+
+    if (!ShouldNotify($nodeid, $which)) {
+	return;
+    }
+    SENDMAIL($TBOPS,
+	     "RF Daemon Critical Notification",
+	     $mesg,
+	     $TBOPS);
+
+    NodeNotified($nodeid, $which, $mesg);
+}
+
+sub fatal($)
+{
+    my ($msg) = @_;
+
+    if (! ($debug || $impotent)) {
+	#
+	# Send a message to the testbed list. 
+	#
+	SENDMAIL($TBOPS,
+		 "rfmonitor_daemon died",
+		 $msg,
+		 $TBOPS);
+    }
+    MarkDaemonStopped("rfmonitor_daemon")
+	if (! $impotent);
+
+    die("*** $0:\n".
+	"    $msg\n");
+}
+sub notify($)
+{
+    my ($mesg) = @_;
+    
+    SENDMAIL($TBOPS,
+	     "RF Daemon Critical Notification",
+	     $mesg,
+	     $TBOPS);
+}
+
+

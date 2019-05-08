@@ -3759,6 +3759,12 @@ sub RemovePhysicalState($;$)
 		    "where ($clause) and ".
 		    "       role='" . TBDB_IFACEROLE_EXPERIMENT() . "' ")
 	    or $errors++;
+
+	# RF interfaces (also cleaned in nfree).
+	DBQueryWarn("DELETE FROM interfaces_rf_limit WHERE $clause")
+	    or $errors++;
+	DBQueryWarn("delete from node_rf_reports where $clause")
+	    or $errors++;
     }
     
     foreach my $table (keys(%physicalTables)) {

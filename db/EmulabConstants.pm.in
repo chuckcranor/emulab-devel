@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -693,6 +693,7 @@ sub TBDB_PHYSICAL_NODE_TABLES() {
 	'interfaces'		=> [ 'node_id' ],
 	'interface_settings'	=> [ 'node_id' ],
 	'interface_state'	=> [ 'node_id' ],
+	'interfaces_rf_limit'	=> [ 'node_id' ],
 	'last_reservation'	=> [ 'node_id' ],
 	'linkdelays'		=> [ 'node_id' ],
 	'location_info'		=> [ 'node_id' ],
@@ -705,6 +706,7 @@ sub TBDB_PHYSICAL_NODE_TABLES() {
 	'node_idlestats'	=> [ 'node_id' ],
 	'node_status'   	=> [ 'node_id' ],
 	'node_rusage'		=> [ 'node_id' ],
+	'node_rf_reports'       => [ 'node_id' ],
 	'nodeipportnum'		=> [ 'node_id' ],
 	'nodes'			=> [ 'node_id', 'phys_nodeid' ],
 	'nodeuidlastlogin'	=> [ 'node_id' ],
