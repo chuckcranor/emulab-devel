@@ -3783,7 +3783,7 @@ sub CreateImage($)
 	# Since this is a new image, be sure to set the shared flag
 	# if we did not get a global directive above, and the image
 	# is not global by inheritance. 
-	if ($image->global()) {
+	if (!$image->global()) {
 	    $image->Update({"shared" => 1});
 	}
     }
