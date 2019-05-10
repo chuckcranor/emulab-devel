@@ -41,7 +41,7 @@ $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
 # Need these below
 $node_id = $node->node_id();
 
-if ($TBMAINSITE && !$classic) {
+if (!$classic) {
     header("Location: apt/show-node.php?node_id=$node_id");
     return;
 }

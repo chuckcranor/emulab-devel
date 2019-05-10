@@ -39,7 +39,7 @@ $optargs = OptionalPageArguments("searchfor", PAGEARG_STRING,
 				 "searchby",  PAGEARG_STRING,
                                  "classic",   PAGEARG_BOOLEAN);
 
-if ($TBMAINSITE && !$classic) {
+if (!$classic) {
     header("Location: apt/images.php");
     return;
 }
