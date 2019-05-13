@@ -5061,6 +5061,16 @@ sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, char *vname,
 			return 1;
 		}
 
+		/*
+		 * XXX FreeNAS does not like '_' in its IQNs,
+		 * so change them to '-'.
+		 */
+		if (strchr(iqn, '_') != NULL) {
+			char *cp = iqn;
+			while ((cp = strchr(cp, '_')) != NULL)
+				*cp++ = '-';
+		}
+
 		bufp = buf;
 		bufp += OUTPUT(bufp, ebufp-bufp,
 			       "%s CLASS=%s PROTO=%s UUID=%s UUID_TYPE=iqn",
