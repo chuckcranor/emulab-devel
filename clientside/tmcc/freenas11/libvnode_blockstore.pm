@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2018 University of Utah and the Flux Group.
+# Copyright (c) 2013-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -788,132 +788,181 @@ sub exportSlice($$$$) {
     #      iscsi_target_extent_type=='Disk' and
     #      iscsi_target_extent_disk=='zvol/...'
     #
-    # XXX currently iname will never exist since we don't share mappings.
+
     #
-    if (!exists($priv->{'iname'})) {
-	#
-	# Create iSCSI extent.
-	#
-	my $msg = "create extent API call failed";
-	my $res = freenasRequest($FREENAS_API_RESOURCE_IST_EXTENT,
-				 "POST", undef,
-				 {"iscsi_target_extent_name" => $iqn,
-				  "iscsi_target_extent_serial" => genSerial(),
-				  "iscsi_target_extent_type" => "Disk",
-				  "iscsi_target_extent_disk" => "zvol/$pool/$volume",
-				  "iscsi_target_extent_ro" => $isro},
-				 undef, \$msg);
-	if (!$res) {
-	    warn("*** ERROR: blockstore_exportSlice: $volname: ".
-		 "Failed to create iSCSI extent: $msg");
-	    return -1;
-	}
-
-	# save the index for making a target association
-	my $eindex = $res->{'id'};
-
-	# Create iSCSI auth group
-	my $tag = getNextAuthITag();
-	if ($tag !~ /^(\d+)$/) {
-	    warn("*** ERROR: blockstore_exportSlice: $volname: ".
-		 "bad tag returned from getNextAuthITag: $tag");
-	    return -1;
-	}
-	$tag = $1; # untaint.
-
-	#
-	# Create an authorized initiator.
-        #
-	$msg = "create authorized initiator API call failed";
-	$res = freenasRequest($FREENAS_API_RESOURCE_IST_AUTHI,
-			      "POST", undef,
-			      {"iscsi_target_initiator_initiators" => "ALL",
-			       "iscsi_target_initiator_comment" => $tag_ident,
-			       "iscsi_target_initiator_auth_network" => "$network/$cmask",
-			       "iscsi_target_initiator_tag" => $tag},
-	    		      undef, \$msg);
-	if (!$res) {
-	    warn("*** ERROR: blockstore_exportSlice: $volname: ".
-		 "Failed to create iSCSI auth group: $msg");
-	    return -1;
-	}
-
-	#
-	# XXX sanity check. It isn't clear that we can set the tag above,
-	# so see what tag is returned.
-	#
-	if (!exists($res->{'iscsi_target_initiator_tag'})) {
-	    warn("*** WARNING: authorizedinitiator did not return tag");
-	} elsif ($res->{'iscsi_target_initiator_tag'} ne $tag) {
-	    my $ntag = $res->{'iscsi_target_initiator_tag'};
-	    warn("*** WARNING: authorizedinitiator returned tag ($ntag) not as requested ($tag)");
-	    $tag = $ntag;
-	}
-
-	#
-	# Create iSCSI target.
-	#
-	# XXX ugh, this used to all be done with iscsi/target, but now
-	# they have broken it into two pieces: create the target, create
-	# a target group.
-	#
-	$msg = "create target API call failed";
-	$res = freenasRequest($FREENAS_API_RESOURCE_IST_TARGET,
-			      "POST", undef,
-			      {"iscsi_target_name" => $iqn},
-	    		      undef, \$msg);
-	if (!$res) {
-	    warn("*** ERROR: blockstore_exportSlice: $volname: ".
-		 "Failed to create iSCSI target: $msg");
-	    return -1;
-	}
-	if (!exists($res->{'id'})) {
-	    warn("*** ERROR: blockstore_exportSlice: $volname: ".
-		 "No index for iSCSI target we just created!?");
-	    return -1;
-	}
-	my $tindex = $res->{'id'};
-
-	# XXX we need the authinit index, not tag
-	my $aindex = findAuthIId($tag);
-
-	$msg = "create target group API call failed";
-	$res = freenasRequest($FREENAS_API_RESOURCE_IST_TGTGROUP,
-			      "POST", undef,
-			      {"iscsi_target" => $tindex,
-			       "iscsi_target_initiatorgroup" => $aindex,
-			       "iscsi_target_portalgroup" => $ISCSI_GLOBAL_PORTAL,
-			       "iscsi_target_authgroup" => undef,
-			       "iscsi_target_authtype" => "None"},
-	    		      undef, \$msg);
-	if (!$res) {
-	    warn("*** ERROR: blockstore_exportSlice: $volname: ".
-		 "Failed to create iSCSI targetgroup: $msg");
-	    return -1;
-	}
-
-	# Bind iSCSI target to slice (extent)
-	$msg = "associate API call failed";
-	$res = freenasRequest($FREENAS_API_RESOURCE_IST_ASSOC,
-			      "POST", undef,
-			      {"iscsi_target" => $tindex,
-			       "iscsi_extent" => $eindex},
-			      undef, \$msg);
-	if (!$res) {
-	    warn("*** ERROR: blockstore_exportSlice: $volname: ".
-		 "Failed to associate iSCSI target with extent: $msg");
-	    return -1;
-	}
-    }
-    # The iSCSI target/extent setup is already in place.
-    # XXX this should never happen anymore.
-    else {
+    # XXX currently iname will never exist since we don't share mappings
+    # anymore.
+    #
+    if (exists($priv->{'iname'})) {
 	warn("*** ERROR: unexpected arrival in shared dataset code!");
 	return -1;
     }
 
+    #
+    # Create iSCSI extent.
+    #
+    my $msg = "create extent API call failed";
+    my $res = freenasRequest($FREENAS_API_RESOURCE_IST_EXTENT,
+			     "POST", undef,
+			     {"iscsi_target_extent_name" => $iqn,
+			      "iscsi_target_extent_serial" => genSerial(),
+			      "iscsi_target_extent_type" => "Disk",
+			      "iscsi_target_extent_disk" => "zvol/$pool/$volume",
+			      "iscsi_target_extent_ro" => $isro},
+			     undef, \$msg);
+    if (!$res) {
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
+	     "Failed to create iSCSI extent: $msg");
+	return -1;
+    }
+
+    #
+    # XXX we have been relying on our caller to clean up everything via
+    # unexportSlice. However, unexportSlice relies on there being a valid
+    # association to determine the target group, target, and extent to
+    # destroy. If we fail (or don't reach) the step that creates the
+    # association, those pieces will get left behind.
+    #
+    # So we remember indicies so that we can clean up after ourselves.
+    #
+    my ($eindex, $aindex, $tindex, $tgindex);
+
+    # save the index for making a target association
+    $eindex = $res->{'id'};
+
+    # Create iSCSI auth group
+    my $tag = getNextAuthITag();
+    if ($tag !~ /^(\d+)$/) {
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
+	     "bad tag returned from getNextAuthITag: $tag");
+	goto fail;
+    }
+    $tag = $1; # untaint.
+
+    #
+    # Create an authorized initiator.
+    #
+    $msg = "create authorized initiator API call failed";
+    $res = freenasRequest($FREENAS_API_RESOURCE_IST_AUTHI,
+			  "POST", undef,
+			  {"iscsi_target_initiator_initiators" => "ALL",
+			   "iscsi_target_initiator_comment" => $tag_ident,
+			   "iscsi_target_initiator_auth_network" => "$network/$cmask",
+			   "iscsi_target_initiator_tag" => $tag},
+			  undef, \$msg);
+    if (!$res) {
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
+	     "Failed to create iSCSI auth group: $msg");
+	goto fail;
+    }
+
+    #
+    # XXX sanity check. It isn't clear that we can set the tag above,
+    # so see what tag is returned.
+    #
+    if (!exists($res->{'iscsi_target_initiator_tag'})) {
+	warn("*** WARNING: authorizedinitiator did not return tag");
+    } elsif ($res->{'iscsi_target_initiator_tag'} ne $tag) {
+	my $ntag = $res->{'iscsi_target_initiator_tag'};
+	warn("*** WARNING: authorizedinitiator returned tag ($ntag) not as requested ($tag)");
+	$tag = $ntag;
+    }
+
+    # XXX we need the authinit index, not tag
+    $aindex = findAuthIId($tag);
+
+    #
+    # Create iSCSI target.
+    #
+    # XXX ugh, this used to all be done with iscsi/target, but now
+    # they have broken it into two pieces: create the target, create
+    # a target group.
+    #
+    $msg = "create target API call failed";
+    $res = freenasRequest($FREENAS_API_RESOURCE_IST_TARGET,
+			  "POST", undef,
+			  {"iscsi_target_name" => $iqn},
+			  undef, \$msg);
+    if (!$res) {
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
+	     "Failed to create iSCSI target: $msg");
+	goto fail;
+    }
+    if (!exists($res->{'id'})) {
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
+	     "No index for iSCSI target we just created!?");
+	goto fail;
+    }
+    $tindex = $res->{'id'};
+
+    $msg = "create target group API call failed";
+    $res = freenasRequest($FREENAS_API_RESOURCE_IST_TGTGROUP,
+			  "POST", undef,
+			  {"iscsi_target" => $tindex,
+			   "iscsi_target_initiatorgroup" => $aindex,
+			   "iscsi_target_portalgroup" => $ISCSI_GLOBAL_PORTAL,
+			   "iscsi_target_authgroup" => undef,
+			   "iscsi_target_authtype" => "None"},
+			  undef, \$msg);
+    if (!$res) {
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
+	     "Failed to create iSCSI targetgroup: $msg");
+	goto fail;
+    }
+    $tgindex = $res->{'id'};
+
+    # Bind iSCSI target to slice (extent)
+    $msg = "associate API call failed";
+    $res = freenasRequest($FREENAS_API_RESOURCE_IST_ASSOC,
+			  "POST", undef,
+			  {"iscsi_target" => $tindex,
+			   "iscsi_extent" => $eindex},
+			  undef, \$msg);
+    if (!$res) {
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
+	     "Failed to associate iSCSI target with extent: $msg");
+	goto fail;
+    }
+
     # All setup and exported!
     return 0;
+
+  fail:
+    $msg = "";
+
+    # Remove target group.
+    if ($tgindex &&
+	!freenasRequest("$FREENAS_API_RESOURCE_IST_TGTGROUP/$tgindex",
+			"DELETE", undef, undef, undef, \$msg)) {
+	warn("*** WARNING: blockstore_exportSlice: cleanup $volname: ".
+	     "Failed to remove iSCSI target group $tgindex:\n$msg");
+    }
+
+    # Remove iSCSI target.
+    if ($tindex &&
+	!freenasRequest("$FREENAS_API_RESOURCE_IST_TARGET/$tindex",
+			"DELETE", undef, undef, undef, \$msg)) {
+	warn("*** WARNING: blockstore_exportSlice: cleanup $volname: ".
+	     "Failed to remove iSCSI target $tindex:\n$msg");
+    }
+
+    # Remove iSCSI auth group
+    if ($aindex &&
+	!freenasRequest("$FREENAS_API_RESOURCE_IST_AUTHI/$aindex",
+			"DELETE", undef, undef, undef, \$msg)) {
+	warn("*** WARNING: blockstore_exportSlice: cleanup $volname: ".
+	     "Failed to remove iSCSI auth group $aindex:\n$msg");
+    }
+
+    # Remove iSCSI extent.
+    if ($eindex &&
+	!freenasRequest("$FREENAS_API_RESOURCE_IST_EXTENT/$eindex",
+			"DELETE", undef, undef, undef, \$msg)) {
+	warn("*** WARNING: blockstore_exportSlice: cleanup $volname: ".
+	     "Failed to remove iSCSI extent $eindex:\n$msg");
+    }
+
+    return -1;
 }
 
 # Helper function.
@@ -1316,43 +1365,43 @@ sub unexportSlice($$$$) {
 
 	# Remove association
 	$msg = "assoc for $iqn not found\n";
-	if (!$associd ||
+	if ($associd &&
 	    !freenasRequest("$FREENAS_API_RESOURCE_IST_ASSOC/$associd",
 			    "DELETE", undef, undef, undef, \$msg)) {
 	    warn("*** WARNING: blockstore_unexportSlice: $volname: ".
-		 "Failed to disassociate iSCSI target from extent:\n$msg");
+		 "Failed to disassociate iSCSI target $associd from extent:\n$msg");
 	}
 
 	# Remove target group.
-	if (!$tgroupid ||
+	if ($tgroupid &&
 	    !freenasRequest("$FREENAS_API_RESOURCE_IST_TGTGROUP/$tgroupid",
 			    "DELETE", undef, undef, undef, \$msg)) {
 	    warn("*** WARNING: blockstore_unexportSlice: $volname: ".
-		 "Failed to remove iSCSI target group:\n$msg");
+		 "Failed to remove iSCSI target group $tgroupid:\n$msg");
 	}
 
 	# Remove iSCSI target.
-	if (!$targetid ||
+	if ($targetid &&
 	    !freenasRequest("$FREENAS_API_RESOURCE_IST_TARGET/$targetid",
 			    "DELETE", undef, undef, undef, \$msg)) {
 	    warn("*** WARNING: blockstore_unexportSlice: $volname: ".
-		 "Failed to remove iSCSI target:\n$msg");
+		 "Failed to remove iSCSI target $targetid:\n$msg");
 	}
 
 	# Remove iSCSI auth group
-	if (!$authidx ||
+	if ($authidx &&
 	    !freenasRequest("$FREENAS_API_RESOURCE_IST_AUTHI/$authidx",
 			    "DELETE", undef, undef, undef, \$msg)) {
 	    warn("*** WARNING: blockstore_unexportSlice: $volname: ".
-		 "Failed to remove iSCSI auth group:\n$msg");
+		 "Failed to remove iSCSI auth group $authidx:\n$msg");
 	}
 
 	# Remove iSCSI extent.
-	if (!$extentid ||
+	if ($extentid &&
 	    !freenasRequest("$FREENAS_API_RESOURCE_IST_EXTENT/$extentid",
 			    "DELETE", undef, undef, undef, \$msg)) {
 	    warn("*** WARNING: blockstore_unexportSlice: $volname: ".
-		 "Failed to remove iSCSI extent:\n$msg");
+		 "Failed to remove iSCSI extent $extentid:\n$msg");
 	}
     }
     # This export is still referenced.
