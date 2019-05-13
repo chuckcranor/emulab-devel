@@ -4099,7 +4099,7 @@ COMMAND_PROTOTYPE(dohosts)
 		/*
 		 * Only care about this nodes vlans.
 		 */
-		if (strcmp(host->nodeid, reqp->nodeid) == 0 && host->vlan) {
+		if (strcmp(host->nodeid, reqp->nodeid) == 0) {
 			struct hostentry *tmphost = hosts;
 
 			while (tmphost) {
