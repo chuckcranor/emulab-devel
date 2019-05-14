@@ -157,7 +157,7 @@ CREATE TABLE `apt_aggregates` (
   `panicpoweroff` tinyint(1) NOT NULL default '0',
   `portals` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `canuse_feature` varchar(64) default NULL,
-  `required_license int(11) default NULL,
+  `required_license` int(11) default NULL,
   `jsondata` text,
   PRIMARY KEY  (`urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
