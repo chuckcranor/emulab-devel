@@ -7714,6 +7714,9 @@ sub CleanupDeadSlice($;$)
     my $experiment = $slice->GetExperiment();
 
     if (defined($experiment)) {
+	# Make sure the cancel flag is cleared.
+	$experiment->SetCancelFlag(0);
+
 	#
 	# Do not allow a paniced slice to be terminated until the panic
 	# is cleared. 
