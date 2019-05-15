@@ -503,6 +503,7 @@ CREATE TABLE `apt_instances` (
   `rspec` mediumtext,
   `script` mediumtext,
   `params` mediumtext,
+  `paramdefs` mediumtext,
   `manifest` mediumtext,
   `openstack_utilization` mediumtext,
   PRIMARY KEY (`uuid`)
