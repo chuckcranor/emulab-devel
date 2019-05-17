@@ -471,7 +471,7 @@ function Do_Clone()
 {
     global $this_user, $ajax_args;
     global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
-    global $TB_PROJECT_MAKEIMAGEID, $TB_NODEACCESS_LOADIMAGE; $suexec_output;
+    global $TB_PROJECT_MAKEIMAGEID, $TB_NODEACCESS_LOADIMAGE, $suexec_output;
     global $TB_IMAGEID_MODIFYINFO, $TB_IMAGEID_READINFO;
 
     $this_idx   = $this_user->uid_idx();
@@ -622,10 +622,12 @@ function Do_Clone()
     }
     $args["noexport"]        = $baseimage->noexport();
     $args["mbr_version"]     = $baseimage->mbr_version();
-    $args["reboot_waittime"] = $baseinfo->reboot_waittime();
     $args["osfeatures"]      = $baseinfo->osfeatures();
     if ($baseimage->architecture()) {
         $args["architecture"] = $baseimage->architecture();
+    }
+    if ($baseinfo->reboot_waittime() && $baseinfo->reboot_waittime() != "") {
+        $args["reboot_waittime"] = $baseinfo->reboot_waittime();
     }
     # Send the type array anyway.
     foreach ($baseimage->Types() as $type) {
