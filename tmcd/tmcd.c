@@ -2505,7 +2505,7 @@ COMMAND_PROTOTYPE(doifconfig)
 			 * the speed is 10Gbps or more).
 			 */
 			if (vers >= 44) {
-				bufp += OUTPUT(bufp, ebufp - bufp, "MTU=");
+				bufp += OUTPUT(bufp, ebufp - bufp, " MTU=");
 			}
 
 			OUTPUT(bufp, ebufp - bufp, "\n");
