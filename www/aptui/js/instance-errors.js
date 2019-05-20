@@ -83,9 +83,8 @@ $(function ()
 	    }
 	});
 	// Remember the last date in the range.
-	var keys = Object.keys(errors);
-	var uuid = keys[keys.length - 1];
-	earliest = moment(errors[uuid].created).valueOf() / 1000;
+	var last = errors[errors.length - 1];
+	earliest = moment(last.started).valueOf() / 1000;
 
 	// Enable previous button after page 0.
 	if (page > 0) {

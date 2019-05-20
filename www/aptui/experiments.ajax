@@ -213,7 +213,7 @@ function Do_ExperimentErrors()
                      "left join apt_profiles as p on ".
                      "     p.profileid=f.profile_id ".
                      $clause . " " .
-                     "order by f.started desc limit 25");
+                     "order by f.started desc limit 100");
 
     while ($row = mysql_fetch_array($query_result)) {
         $name       = $row["name"];
@@ -268,18 +268,18 @@ function Do_ExperimentErrors()
                 $url = null;
             }
         }
-        $results[$uuid] = array("name"     => $name,
-                                "uuid"     => $uuid,
-                                "exitcode" => $exitcode,
-                                "active"   => $active,
-                                "started"  => $started,
-                                "creator"  => $creator,
-                                "reason"   => $reason,
-                                "message"  => $message,
-                                "url"      => $url,
-                                "cluster"  => $cluster,
-                                "profile_uuid" => $profile_uuid,
-                                "profile_name" => $profile_name);
+        $results[] = array("name"     => $name,
+                           "uuid"     => $uuid,
+                           "exitcode" => $exitcode,
+                           "active"   => $active,
+                           "started"  => $started,
+                           "creator"  => $creator,
+                           "reason"   => $reason,
+                           "message"  => $message,
+                           "url"      => $url,
+                           "cluster"  => $cluster,
+                           "profile_uuid" => $profile_uuid,
+                           "profile_name" => $profile_name);
     }
     SPITAJAX_RESPONSE($results);    
 }
