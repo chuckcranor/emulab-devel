@@ -1530,14 +1530,19 @@ sub CheckLicenses($$$$$)
 	    my $hardtype      = undef;
 	    my $component_id  = GeniXML::GetNodeId($ref);
 	    if ($component_id && $component_id ne "*") {
-		print STDERR "CheckLicenses: $client_id, $component_id\n";
+		my $node_id = $component_id;
 		
-		my $hrn = GeniHRN->new($component_id);
-		if (! ($hrn && $hrn->IsNode())) {
-		    $$perrmsg = "Not a valid component ID: $component_id";
-		    return 1;
+		print STDERR "CheckLicenses: $client_id, $component_id\n";
+
+		if (GeniHRN::IsValid($component_id)) {
+		    my $hrn = GeniHRN->new($component_id);
+		    if (! ($hrn && $hrn->IsNode())) {
+			$$perrmsg = "Not a valid component ID: $component_id";
+			return 1;
+		    }
+		    $node_id = $hrn->id();
 		}
-		my $node = Node->Lookup($hrn->id());
+		my $node = Node->Lookup($node_id);
 		if ($node) {
 		    my $idx;
 
@@ -1557,7 +1562,7 @@ sub CheckLicenses($$$$$)
 			    if (!exists($licenses{"$idx"})) {
 				$licenses{"$idx"} = {
 				    "type"    => "node",
-				    "target"  => $hrn->id(),
+				    "target"  => $node_id,
 				    "license" => $idx,
 				};
 			    }
