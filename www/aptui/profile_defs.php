@@ -476,8 +476,7 @@ class Profile
 	return $this->CanInstantiate($user);
     }
     function CanEdit($user) {
-        if ($this->project_write() ||
-            $this->creator_idx() == $user->uid_idx() || ISADMIN()) {
+        if ($this->creator_idx() == $user->uid_idx() || ISADMIN()) {
             return 1;
         }
 	$project = Project::Lookup($this->pid_idx());
@@ -486,6 +485,12 @@ class Profile
 	}
         if ($user->uid_idx() == $project->GetLeader()->uid_idx()) {
 	    return 1;
+        }
+        if ($this->project_write()) {
+            $approved = 0;
+            if ($project->IsMember($user, $approved) && $approved) {
+                return 1;
+            }
         }
         return 0;
     }
