@@ -186,7 +186,7 @@ $EUID = $UID;
 # JSON block.
 #
 if ($getparams && !$paramfile &&
-    system("egrep -q -s 'defineParameter' $file")) {
+    system("egrep -q -s '^[^#]*defineParameter' $file")) {
     # No parameters, return empty block.
     if (defined($ofile)) {
 	system("echo '' > $ofile");
