@@ -85,9 +85,7 @@ function Do_Create()
             $errors["errors"] = "Profile has been deleted!";
             goto bad;
 	}
-        if (! ($profile->isCreator($this_user) ||
-               $profile->isLeader($this_user) ||
-               $profile->project_write() || !ISADMIN())) {
+        if (! $profile->CanEdit($this_user)) {
             $errors["errors"] = "Not enough permission!";
             goto bad;
 	}
@@ -1535,6 +1533,8 @@ function Do_UpdateRepository()
         }
     }
     elseif ($profile->script() == $blob["source"]) {
+        # The repo changed for some other reason, we want to record
+        # the repo hash/branch in the profile metadata.
         if (UpdateMaster($profile, null, null)) {
             return;
         }
