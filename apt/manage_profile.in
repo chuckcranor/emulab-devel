@@ -727,9 +727,11 @@ sub ModifyProfileInternal($$$)
 	my $retval = GetScriptParameters($script, \$output);
 	if ($retval) {
 	    if ($retval < 0) {
-		fatal("Could not get paramdefs: $output!");
+		$$pmsg = $output;
+		return -1;
 	    }
-	    UserError($output);
+	    $$pmsg = $output;
+	    return 1;
 	}
 	# No versioning so need to clear existing paramdefs.
 	$update_args{"paramdefs"} = ($output ne "" ? $output : undef);
