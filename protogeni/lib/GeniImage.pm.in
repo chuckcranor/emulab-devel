@@ -308,20 +308,53 @@ sub MapToLocalImage($$$$@)
 		return $image
 		    if (!defined($osvers));
 
-		# Makes no sense to specify an version number on an alias.
+		# Makes no sense to specify a version number on an alias.
 		return GeniResponse->BadArgsResponse(
 		    "Not allowed to use version numbers on $urn");
 	    }
 	    # Generic, MFS, etc.
 	    return $image
 		if (!$image->isImage());
-	    
-	    # Return the image if its global. If not global and needed a
-	    # credential, we want to fall through. But that will break on
-	    # the case that the domain in the image URN is wrong and using
-	    # the image tracker. Will deal with that later.
-	    return $image
-		if (0 && $image->global());
+
+	    if ($image->global()) {
+		#
+		# If user wants latest version, we are good.
+		#
+		return $image
+		    if (!defined($osvers));
+
+		#
+		# If the image is local, then looking up the specific image
+		# version is all we need to do.
+		#
+		if ($image->IsLocal()) {
+		    $image = OSImage->Lookup($ospid, $osname, $osvers);
+		    if (!defined($image)) {
+			return GeniResponse->BadArgsResponse(
+			    "No such version number: $urn");
+		    }
+		    return $image;
+		}
+		#
+		# The only thing that makes sense is to use versions numbers
+		# relative to the home image, since the local versions numbers
+		# are not in sync. If we are using the image tracker, then
+		# we can get the hash and do a search using the hash (see
+		# below). If not using the image tracker, then throw an error.
+		#
+		if (!$use_imagetracker) {
+		    return GeniResponse->BadArgsResponse(
+			"Improper use of version number on ".
+			"imported system image: $urn");
+		}
+		# Fall through to below.
+	    }
+	    #
+	    # Not a global image so need a credential, we want to fall
+	    # through. But that will break on the case that the domain in
+	    # the image URN is wrong and using the image tracker. Will deal
+	    # with that later.
+	    #
 	}
     }
     
@@ -444,6 +477,9 @@ sub MapToLocalImage($$$$@)
 	    return GeniResponse->BadArgsResponse("No version $osvers exists ".
 						 "for $urn");
 	}
+	if (!defined($osvers)) {
+	    return &$setPerms($image);
+	}
 	#
 	# If the user wants a specific version of an imported image we already
 	# have locally, that version number almost certainly refers to the
@@ -454,7 +490,10 @@ sub MapToLocalImage($$$$@)
 	# hope that the local history has a version with the same hash as what
 	# the image server tells us.
 	#
-	if (defined($osvers)) {
+	# If not using the image server, we cannot do this search, since we
+	# do not have a hash to compare.
+	#
+	if (defined($blob)) {
 	    my @allversions = ();
 	    #
 	    # This might be an image alias, and on this path it is okay to
@@ -486,7 +525,6 @@ sub MapToLocalImage($$$$@)
 		}
 	    }
 	}
-	return &$setPerms($image);
     }
 
     #
@@ -501,7 +539,7 @@ sub MapToLocalImage($$$$@)
     # the hash that is stored at the image server. 
     #
     $image = OSImage->Lookup($pid,$osname);
-    if (defined($image)) {
+    if (defined($image) && defined($blob)) {
 	#
 	# So, we might not have all the versions of the image, and in fact
 	# we might be out of sync with the origin (might change with delta
