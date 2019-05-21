@@ -836,6 +836,10 @@ sub dostatus(@) {
 	    }
 	    print "$ctrl Current: ", $status{current}, " Amps\n"
 		if defined($status{current});
+	    print "$ctrl Power: ", $status{power}, " Watts\n"
+		if defined($status{power});
+	    print "$ctrl Energy: ", $status{energy}, " KW hours\n"
+		if defined($status{energy});
 	    for my $outlet (1..24) {
 		my $ostr = "outlet$outlet";
 		print "$ctrl Outlet $outlet: ", $status{$ostr}, "\n"

@@ -127,6 +127,9 @@ sub status {
 
     my $noutletsOID = ".1.3.6.1.4.1.13742.6.3.2.2.1.4.1";
     my $StatOID = ".1.3.6.1.4.1.13742.6.4.1.2.1.3.1";
+    my $CurrentOID = ".1.3.6.1.4.1.13742.6.5.2.3.1.4.1.1.1";
+    my $PowerOID = ".1.3.6.1.4.1.13742.6.5.2.3.1.4.1.1.5";
+    my $EnergyOID = ".1.3.6.1.4.1.13742.6.5.2.3.1.4.1.1.8";
 
     print STDERR "**** Getting status for ports\n" if ($self->{DEBUG} > 1);
     my $noutlets = $self->{SESS}->get($noutletsOID);
@@ -149,13 +152,34 @@ sub status {
     }
     print("Status is '", join(' ', @vals), "'\n") if $self->{DEBUG};
     
+    my $o = 1;
+    foreach my $ostat (@vals) {
+	my $outlet = "outlet$o";
+	$status{$outlet} = $ostat;
+	$o++;
+    }
+
+    print STDERR "**** Getting current/power/enerty for PDU\n"
+	if ($self->{DEBUG} > 1);
+    @OIDs = ([$CurrentOID], [$PowerOID], [$EnergyOID]);
+    $vars = new SNMP::VarList(@OIDs);
+    @vals = $self->{SESS}->get($vars);
+    if ($vals[0] && $vals[0] =~ /^(\d+)$/) {
+	my $val = sprintf("%.1f", $1 / 10);
+	print STDERR "current: $val\n" if ($self->{DEBUG} > 2);
+	$status{current} = $val;
+    }
+    if ($vals[1] && $vals[1] =~ /^(\d+)$/) {
+	my $val = $1;
+	print STDERR "power: $val\n" if ($self->{DEBUG} > 2);
+	$status{power} = $val;
+    }
+    if ($vals[2] && $vals[2] =~ /^(\d+)$/) {
+	my $val = sprintf("%.3f", $1 / 1000);
+	print STDERR "active energy: $val\n" if ($self->{DEBUG} > 2);
+	$status{energy} = $val;
+    }
     if ($statusp) {
-	my $o = 1;
-	foreach my $ostat (@vals) {
-	    my $outlet = "outlet$o";
-	    $status{$outlet} = $ostat;
-	    $o++;
-	}
 	%$statusp = %status;
     }
 
