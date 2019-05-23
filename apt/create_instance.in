@@ -34,6 +34,7 @@ use XML::Simple;
 use File::Temp qw(tempfile :mktemp tmpnam :POSIX);
 use Date::Parse;
 use Data::Dumper;
+use JSON;
 use Cwd qw(realpath);
 
 #
@@ -272,7 +273,8 @@ foreach my $key ("username", "email", "profile", "portal") {
 #
 my ($value, $user_urn, $user_uid, $user_hrn, $user_email, $project, $pid,
     $gid, $group, $sshkey, $profile, $profileid, $version, $rspecstr, $errmsg,
-    $userslice_id, $portal, $script, $reporef, $repohash, $duration);
+    $userslice_id, $portal, $script, $paramdefs, $bindings,
+    $reporef, $repohash, $duration);
 
 # This is used internally to determine which portal was used.
 $portal = $xmlparse->{'attribute'}->{"portal"}->{'value'};
@@ -373,6 +375,14 @@ if ($profile->repourl()) {
 	    fatal("Missing refspec for repository");
 	}
     }
+    if (exists($xmlparse->{'attribute'}->{"paramdefs"})) {
+	$paramdefs = $xmlparse->{'attribute'}->{"paramdefs"}->{'value'};	
+
+	if (! TBcheck_dbslot($paramdefs, "default", "html_fulltext",
+			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    fatal("Illegal paramdefs for repo-based profile");
+	}
+    }
     if (exists($xmlparse->{'attribute'}->{"reporef"})) {
 	if (!exists($xmlparse->{'attribute'}->{"repohash"})) {
 	    fatal("Missing hash for repository");
@@ -393,6 +403,28 @@ if ($profile->repourl()) {
 	# Otherwise we are instantiating whatever the profile itself references.
 	$reporef  = "refs/heads/master";
 	$repohash = $profile->repohash();
+	$paramdefs= $profile->paramdefs();
+    }
+}
+
+#
+# We want to stash simplified bindings in the DB whie the instance is
+# active, for display purposes.
+#
+if (defined($paramdefs)) {
+    if (APT_Profile::GetBindings($rspecstr, \$bindings, \$errmsg)) {
+	fatal($errmsg);
+    }
+}
+elsif ($profile->paramdefs() && $profile->paramdefs() ne "") {
+    if (APT_Profile::GetBindings($rspecstr, \$bindings, \$errmsg)) {
+	fatal($errmsg);
+    }
+}
+if (defined($bindings)) {
+    $bindings = eval { encode_json($bindings); };
+    if ($@) {
+	fatal("Could not json encode bindings");
     }
 }
 
@@ -848,6 +880,9 @@ my $blob = {'uuid'         => $quickvm_uuid,
 	    'cert'         => $alt_certificate->cert(),
 	    'privkey'      => $alt_certificate->PrivKeyDelimited(),
 };
+if (defined($bindings)) {
+    $blob->{"params"} = $bindings;
+}
 if ($profile->repourl()) {
     if (defined($script)) {
 	$blob->{"script"}  = $script;
@@ -855,6 +890,7 @@ if ($profile->repourl()) {
     $blob->{"repourl"}   = $profile->repourl();
     $blob->{"reporef"}   = $reporef;
     $blob->{"repohash"}  = $repohash;
+    $blob->{"paramdefs"} = $paramdefs if (defined($paramdefs));
 }
 if (defined($project)) {
     $blob->{"pid"}     = $project->pid();

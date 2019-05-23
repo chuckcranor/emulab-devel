@@ -91,6 +91,7 @@ function Do_GetParameters()
     global $this_user;
     global $ajax_args;
     global $suexec_output, $suexec_output_array;
+    $parameter_sets = null;
 
     if (!isset($ajax_args["uuid"])) {
 	SPITAJAX_ERROR(1, "Missing profile uuid");
@@ -127,9 +128,148 @@ function Do_GetParameters()
         $paramdefs = $profile->paramdefs();
     }
     list ($formfrag, $defaults) = $profile->GenerateFormFragment($paramdefs);
-    SPITAJAX_RESPONSE(array("formfrag" => htmlentities($formfrag),
-			    "defaults" => $defaults,
-                            "paramdefs"=> json_decode($paramdefs)));
+    $blob = array("formfrag"    => htmlentities($formfrag),
+                  "defaults"    => $defaults,
+                  "hasactivity" => $profile->HasActivity($this_user),
+                  "paramdefs"   => json_decode($paramdefs),
+                  "paramsets"   => $profile->ParameterSets($this_user));
+    
+    #
+    # If we get a rerun uuid, we need to get the bindings for that instance
+    #
+    if (isset($ajax_args["rerun_instance"])) {
+        if (!IsValidUUID($ajax_args["rerun_instance"])) {
+            SPITAJAX_ERROR(1, "Rerun instance UUID is not a valid UUID");
+            return;
+        }
+        $rerun_uuid   = $ajax_args["rerun_instance"];
+        $profile_uuid = $profile->uuid();
+        $webtask      = WebTask::CreateAnonymous();
+        $webtask_id   = $webtask->task_id();
+
+        $retval = SUEXEC($this_user->uid(), "nobody",
+                         "webmanage_profile -t $webtask_id -- ".
+                         "  bindings $profile_uuid $rerun_uuid ",
+                         SUEXEC_ACTION_CONTINUE);
+        $webtask->Refresh();
+        
+        if ($retval) {
+            if (!$webtask->exited() || $retval < 0) {
+                SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
+            }
+            else {
+                SPITAJAX_ERROR(1, $webtask->output());
+            }
+            $webtask->Delete();
+            return;
+        }
+        $blob["rerun_bindings"] = $webtask->TaskValue("bindings");
+        $webtask->Delete();
+    }
+    elseif (isset($ajax_args["rerun_paramset"])) {
+        if (!IsValidUUID($ajax_args["rerun_paramset"])) {
+            SPITAJAX_ERROR(1, "Rerun paramset UUID is not a valid UUID");
+            return;
+        }
+        $rerun_uuid   = $ajax_args["rerun_paramset"];
+        $query_result = DBQueryFatal("select * from apt_parameter_sets ".
+                                     "where uuid='$rerun_uuid'");
+
+        if (!mysql_num_rows($query_result)) {
+            SPITAJAX_ERROR(1, "No such parameter set");
+            return;
+        }
+        $row = mysql_fetch_array($query_result);
+        if ($row["uid_idx"] != $this_user->uid_idx() && !ISADMIN()) {
+            SPITAJAX_ERROR(1, "Not enough permission to use parameter set");
+            return;
+        }
+        $blob["rerun_bindings"] = json_decode($row["bindings"]);        
+    }
+    SPITAJAX_RESPONSE($blob);
+}
+
+#
+# Return bindings for the last run of this profile.
+#
+function Do_GetPreviousBindings()
+{
+    global $this_user;
+    global $ajax_args;
+
+    if (!isset($ajax_args["uuid"])) {
+	SPITAJAX_ERROR(1, "Missing profile uuid");
+	return;
+    }
+    $profile = Profile::Lookup($ajax_args["uuid"]);
+    if (!$profile) {
+	SPITAJAX_ERROR(1, "Unknown profile uuid");
+	return;
+    }
+    if (!isset($this_user)) {
+	if (!$profile->ispublic()) {
+	    SPITAJAX_ERROR(1, "Not enough permission to instantiate profile");
+	    return;
+	}	    
+    }
+    elseif (! ($profile->CanInstantiate($this_user) || ISADMIN())) {
+	SPITAJAX_ERROR(1, "Not enough permission to instantiate profile");
+	return;
+    }
+
+    #
+    # Look for any running instances, use the latest if there are any.
+    #
+    $profileid = $profile->profileid();
+    $this_idx  = $this_user->uid_idx();
+    
+    $query_result =
+        DBQueryWarn("select uuid from apt_instances ".
+                    "where profile_id='$profileid' and ".
+                    "      creator_idx='$this_idx' ".
+                    "order by created desc limit 1");
+    if ($query_result && mysql_num_rows($query_result)) {
+        $row = mysql_fetch_array($query_result);
+        $rerun_uuid = $row["uuid"];
+    }
+    else {
+        $query_result =
+            DBQueryWarn("select uuid from apt_instance_history ".
+                        "where profile_id='$profileid' and ".
+                        "      creator_idx='$this_idx' ".
+                        "order by created desc limit 1");
+        if ($query_result && mysql_num_rows($query_result)) {
+            $row = mysql_fetch_array($query_result);
+            $rerun_uuid = $row["uuid"];
+        }
+        else {
+            SPITAJAX_ERROR(1, "No previous bindings");
+            return;
+        }
+    }
+    $profile_uuid = $profile->uuid();
+    $webtask      = WebTask::CreateAnonymous();
+    $webtask_id   = $webtask->task_id();
+
+    $retval = SUEXEC($this_user->uid(), "nobody",
+                     "webmanage_profile -t $webtask_id -- ".
+                     "  bindings $profile_uuid $rerun_uuid ",
+                     SUEXEC_ACTION_CONTINUE);
+    $webtask->Refresh();
+        
+    if ($retval) {
+        if (!$webtask->exited() || $retval < 0) {
+            SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
+        }
+        else {
+            SPITAJAX_ERROR(1, $webtask->output());
+        }
+        $webtask->Delete();
+        return;
+    }
+    $blob = $webtask->TaskValue("bindings");
+    $webtask->Delete();
+    SPITAJAX_RESPONSE($blob);
 }
 
 #
@@ -1027,6 +1167,9 @@ function Do_Submit()
         }
         if (isset($formfields["repohash"]) && $formfields["repohash"] != "") {
             $args["repohash"] = $formfields["repohash"];
+        }
+        if (isset($formfields["paramdefs"]) && $formfields["paramdefs"] != "") {
+            $args["paramdefs"] = $formfields["paramdefs"];
         }
     }
 

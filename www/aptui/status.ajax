@@ -1635,9 +1635,21 @@ function Do_ExpInfo()
     $blob["name"]         = $instance->name();
     $blob["uuid"]         = $instance->uuid();
     $blob["status"]       = $instance->status();
+    $blob["params"]       = ($instance->params() ?
+                             json_decode($instance->params()) : null);
     $blob["repourl"]      = $instance->repourl();
     $blob["reporef"]      = $instance->reporef();
     $blob["repohash"]     = $instance->repohash();
+    # If we have params (bindings), then we want to provide the paramdefs too.
+    if ($instance->paramdefs()) {
+        $blob["paramdefs"] = json_decode($instance->paramdefs());
+    }
+    elseif (isset($profile) && $profile->paramdefs()) {
+        $blob["paramdefs"] = json_decode($profile->paramdefs());
+    }
+    else {
+        $blob["paramdefs"] = null;
+    }
     if (isset($profile)) {
         $blob["profile_name"] = $profile->name();
         $blob["profile_uuid"] = $profile->uuid();

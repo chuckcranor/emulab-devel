@@ -280,7 +280,6 @@ echo "<script src='js/lib/codemirror-min.js'></script>\n";
 echo "<script src='js/lib/filesize.min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
-REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_MARKED();
 REQUIRE_URITEMPLATE();
@@ -289,6 +288,9 @@ REQUIRE_EXTEND();
 REQUIRE_IDLEGRAPHS();
 REQUIRE_OPENSTACKGRAPHS();
 REQUIRE_CONTEXTMENU();
+REQUIRE_SUP();
+AddLibrary("js/bindings.js");
+AddLibrary("js/paramsets.js");
 SPITREQUIRE("js/status.js");
 
 echo "<link rel='stylesheet'
@@ -329,7 +331,8 @@ if (isset($this_user)) {
 AddTemplateList(array("status", "waitwait-modal", "oops-modal",
                       "register-modal", "terminate-modal", "oneonly-modal",
                       "approval-modal", "linktest-modal",
-                      "destroy-experiment"));
+                      "destroy-experiment", "save-paramset-modal"));
+
 AddTemplateKey("linktest-md", "template/linktest.md");
 SPITFOOTER();
 ?>

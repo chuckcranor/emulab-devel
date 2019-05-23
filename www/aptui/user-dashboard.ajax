@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -550,6 +550,59 @@ function Do_AcceptAUP()
     $this_user->AcceptAUP($PORTAL_GENESIS);
 
     SPITAJAX_RESPONSE("accepted");
+}
+
+#
+# Return a list of all paramsets for user.
+#
+function Do_ListParameterSets()
+{
+    global $this_user, $target_user;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $uid_idx = $target_user->uid_idx();
+    #
+    # Watch for version specific parameter set, switch the profile_uuid
+    # to that version. Note that repo based profiles are always version
+    # zero, we have to add another argument to the url instead.
+    #
+    $query_result =
+        DBQueryFatal("select s.*,v.uuid as version_uuid, ".
+                     "    p.name as profile_name,p.uuid as profile_uuid, ".
+                     "    v.version as profile_version ".
+                     " from apt_parameter_sets as s ".
+                     "left join apt_profiles as p on ".
+                     "     p.profileid=s.profileid ".
+                     "left join apt_profile_versions as v on ".
+                     "      v.uuid=s.version_uuid ".
+                     "where s.uid_idx='$uid_idx' ".
+                     "order by s.profileid,s.name,s.created");
+
+    if (! mysql_num_rows($query_result)) {
+        SPITAJAX_RESPONSE(null);
+        return;
+    }
+    $results = array();
+    while ($row = mysql_fetch_array($query_result)) {
+        $blob = array(
+            "uuid"              => $row["uuid"],
+            "name"              => $row["name"],
+            "description"       => $row["description"],
+            "created"           => DateStringGMT($row["created"]),
+            "bindings"          => json_decode($row["bindings"]),
+            "profile_uuid"      => $row["profile_uuid"],
+            "version_uuid"      => $row["version_uuid"],
+            "profile_name"      => $row["profile_name"],
+            "profile_version"   => $row["profile_version"],
+            "reporef"           => $row["reporef"],
+            "repohash"          => $row["repohash"],
+        );
+        $results[] = $blob;
+    }
+    SPITAJAX_RESPONSE($results);
+    return;
 }
 
 # Local Variables:

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -114,7 +114,16 @@ SPITHEADER(1);
 
 
 # Place to hang the toplevel template.
-echo "<div id='page-body'></div>\n";
+echo "<div id='page-body'>
+        <center>
+          <h4>
+	  Please wait while we retrieve the data for this instance.
+          </h4>
+	  <br>
+	  <br>
+	  <img src='images/spinner.gif' />
+	</center>
+        </div>\n";
 
 #
 # Build up a blob of aggregates info used by this experiment.
@@ -147,13 +156,16 @@ REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_MARKED();
 REQUIRE_URITEMPLATE();
+AddLibrary("js/bindings.js");
+AddLibrary("js/paramsets.js");
 SPITREQUIRE("js/memlane.js");
 
 echo "<link rel='stylesheet'
             href='css/jquery-ui-1.10.4.custom.min.css'>\n";
 echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
 
-AddTemplateList(array("memlane", "waitwait-modal", "oops-modal"));
+AddTemplateList(array("memlane", "waitwait-modal", "oops-modal",
+                      "save-paramset-modal"));
 
 SPITFOOTER();
 ?>

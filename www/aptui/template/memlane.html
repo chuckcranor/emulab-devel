@@ -10,6 +10,9 @@
  .table-condensed > tfoot > tr > td {
      padding: 3px;
  }
+ tr.group-header td {
+     background: #eee;
+ } 
 </style>
 <div class="row">
   <div class='col-lg-8  col-lg-offset-2
@@ -83,6 +86,25 @@
 	    </td>
 	  </tr>
 	</table>
+	<% if (record.profile_uuid) { %>
+	  <div class='pull-right'>
+	    <a href="" class='btn btn-info btn-xs pull-right'
+	      style='margin-right: 10px;'
+		    id='rerun_button'
+		    target='_blank'
+		    type='button'>Run Again</a>
+	    <button class='btn btn-info btn-xs pull-right hidden'
+		    style='margin-right: 10px;'
+		    id='save_paramset_button'
+		    data-toggle='popover'
+		    data-delay='{"hide":100, "show":300}'
+		    data-content='Save the parameters used to create this
+				  experiment, so you can quickly apply them
+				  when starting a new experiment using this
+				  profile. Click for more information.'
+		    type='button'>Save Parameters</button>
+	  </div>
+	<% } %>
 	<div class='pull-left'>
 	  <a class='btn btn-info btn-xs pull-left hidden'
              style='margin-right: 10px;'
@@ -154,6 +176,10 @@
               <a href='#manifest' id='show_manifest_tab'
 		 data-toggle='tab'>Manifest</a>
             </li>
+	    <li class='hidden'>
+              <a href='#bindings' id='show_bindings_tab'
+		 data-toggle='tab'>Bindings</a>
+            </li>
 	  </ul>
 	  <div id='quicktabs_content' class='tab-content'>
             <div class='tab-pane hidden' id='topology'>
@@ -182,6 +208,20 @@
 	    <div class='tab-pane hidden' id='manifest'>
               <div id='manifest_textarea' style='width: 100%;'></div>
 	    </div>
+            <div class='tab-pane hidden' id='bindings'>
+	      <table class='table table-condensed'
+                     id='bindings_table'>
+                <thead>
+                  <tr>
+                    <th>Parameter</th>
+                    <th>Default</th>
+                    <th>Actual</th>
+                  </tr>
+                </thead>
+                <tbody>
+                </tbody>
+	      </table>
+            </div>
 	  </div>
 	</div>
       </div>
@@ -191,4 +231,5 @@
 <div class='row'>
   <div id='waitwait_div'></div>
   <div id='oops_div'></div>
+  <div id='save_paramset_div'></div>
 </div>

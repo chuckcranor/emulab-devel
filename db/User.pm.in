@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2017 University of Utah and the Flux Group.
+# Copyright (c) 2005-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -716,6 +716,8 @@ sub Delete($)
     DBQueryWarn("delete from user_stats where uid_idx='$uid_idx'")
 	or return -1;
     DBQueryWarn("delete from apt_profile_favorites where uid_idx='$uid_idx'")
+	or return -1;
+    DBQueryWarn("delete from apt_parameter_sets where uid_idx='$uid_idx'")
 	or return -1;
     DBQueryWarn("delete from users where uid_idx='$uid_idx'")
 	or return -1;

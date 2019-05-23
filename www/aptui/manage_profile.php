@@ -99,7 +99,7 @@ function SPITFORM($formfields, $errors)
 	$history      = ($profile->HasHistory() ? 1 : 0);
 	$canmodify    = ($profile->CanModify() ? 1 : 0);
 	$canpublish   = ($profile->CanPublish() ? 1 : 0);
-	$activity     = ($profile->HasActivity() ? 1 : 0);
+	$activity     = ($profile->HasActivity($this_user) ? 1 : 0);
 	$ispp         = ($profile->isParameterized() ? 1 : 0);
         $disabled     = ($profile->isDisabled() ? 1 : 0);
         $isleader     = ($profile->isLeader($this_user) ? 1 : 0);

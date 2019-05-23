@@ -92,7 +92,9 @@ $routing = array("geni-login" =>
 						     "Do_Instantiate",
 						 "GetParameters" =>
                                                      "Do_GetParameters",
-						     "GetImageList" =>
+						 "GetPreviousBindings" =>
+                                                     "Do_GetPreviousBindings",
+                                                 "GetImageList" =>
 						     "Do_GetImageList",
 						 "GetImageInfo" =>
 						     "Do_GetImageInfo",
@@ -292,6 +294,8 @@ $routing = array("geni-login" =>
                                                      "Do_NagPI",
                                                  "AccountDetails" =>
                                                      "Do_AccountDetails",
+                                                 "ListParameterSets" =>
+                                                     "Do_ListParameterSets",
                                                  "AcceptAUP" =>
                                                      "Do_AcceptAUP")),
 		 "nag" =>
@@ -507,7 +511,14 @@ $routing = array("geni-login" =>
                                                      "Do_Reject",
                                                  "Request" =>
                                                      "Do_Request")),
-		 "powder-shutdown" =>
+		 "paramsets" =>
+			array("file"    => "paramsets.ajax",
+			      "guest"   => false,
+			      "methods" => array("Create" =>
+                                                     "Do_Create",
+                                                 "Delete" =>
+                                                     "Do_Delete")),
+                 "powder-shutdown" =>
 			array("file"    => "powder-shutdown.ajax",
 			      "guest"   => false,
 			      "methods" => array("Shutdown" =>

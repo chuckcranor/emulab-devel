@@ -58,6 +58,9 @@
 		  <a href="#datasets" role="tab" data-toggle="tab">
 		    Datasets</a></li>
 		<li role="presentation">
+		  <a href="#paramsets" role="tab" data-toggle="tab">
+		    Parameter Sets</a></li>
+		<li role="presentation">
 		  <a href="#membership" role="tab" data-toggle="tab">
 		    Membership</a></li>
 		<li role="presentation">
@@ -154,6 +157,29 @@
 		    <div id="classic_datasets_content_div"></div>
 		  </div>
 		</div>
+		<div role="tabpanel" class="tab-pane" id="paramsets">
+		  <div id="paramsets_content">
+	      	    <div class="hidden" id="paramsets_noparamsets">
+		      <br>
+		      <p>
+			You do not have any parameter sets.
+		      </p>
+		      <p>
+		      You can create a
+		      <em>parameter set</em> from the activity listing for
+		      any <em>parameterized</em> profile you have
+		      instantiated in the past, or from the status page for
+		      any of your currently running experiments.
+		      Just click on the
+		      "Save Parameters" button and provide a name
+		      and description. The next time you instantiate
+		      that profile, there will be an option to apply the saved
+		      parameters. You can save multiple parameters sets for
+		      a profile, just give them unique names.
+		      </p>
+		    </div>
+		  </div>
+		</div>
 		<div role="tabpanel" class="tab-pane" id="membership">
 		  <div id="membership_content"></div>
 		</div>
@@ -219,6 +245,25 @@
 		  id='cancel-freezethaw'>Cancel</button>
           <button class='btn btn-danger btn-sm'
 		  id='confirm-freezethaw'>Confirm</button>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='delete-paramset-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-header'>
+        <center><h4 class="prompt">Confirm to delete parameter set</h4></center>
+      </div>
+      <div class='modal-body'>
+	<center>
+          <button class='btn btn-primary btn-sm'
+		  data-dismiss='modal'
+		  style="margin-right: 10px;"
+		  id='cancel-delete-paramset'>Cancel</button>
+          <button class='btn btn-danger btn-sm'
+		  id='confirm-delete-paramset'>Confirm</button>
 	</center>
       </div>
     </div>

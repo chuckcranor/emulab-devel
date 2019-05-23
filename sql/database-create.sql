@@ -526,6 +526,27 @@ CREATE TABLE `apt_news` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_parameter_sets`
+--
+
+DROP TABLE IF EXISTS `apt_parameter_sets`;
+CREATE TABLE `apt_parameter_sets` (
+  `uuid` varchar(40) NOT NULL,
+  `uid` varchar(8) NOT NULL default '',
+  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `created` datetime default NULL,
+  `name` varchar(64) NOT NULL default '',
+  `description` text,
+  `profileid` int(10) unsigned NOT NULL default '0',
+  `version_uuid` varchar(40) default NULL,
+  `reporef` varchar(128) default NULL,
+  `repohash` varchar(64) default NULL,
+  `bindings` mediumtext,    
+  PRIMARY KEY (`uuid`),
+  UNIQUE KEY (`uid_idx`,`profileid`,`name`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_profile_favorites`
 --
 

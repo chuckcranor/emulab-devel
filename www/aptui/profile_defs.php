@@ -412,12 +412,17 @@ class Profile
     #
     # Has a profile been instantiated?
     #
-    function HasActivity() {
+    function HasActivity($user) {
 	$profileid = $this->profileid();
+        $clause    = "";
+
+        if (!ISADMIN()) {
+            $clause = "and creator_idx='" . $user->uid_idx() . "'";
+        }
 
 	$query_result =
-	    DBQueryWarn("select count(h.uuid) from apt_instance_history as h ".
-			"where h.profile_id='$profileid'");
+	    DBQueryWarn("select count(uuid) from apt_instance_history ".
+			"where profile_id='$profileid' $clause");
 
 	if (!$query_result) {
 	    return 0;
@@ -430,7 +435,7 @@ class Profile
 	}
 	$query_result =
 	    DBQueryWarn("select count(uuid) from apt_instances ".
-			"where profile_id='$profileid'");
+			"where profile_id='$profileid' $clause");
 
 	if (!$query_result) {
 	    return 0;
@@ -442,6 +447,39 @@ class Profile
 	    }
 	}
 	return 0;
+    }
+
+    #
+    # Return parameter set info for user.
+    #
+    function ParameterSets($user) {
+	$profileid = $this->profileid();
+        $uid_idx   = $user->uid_idx();
+
+	$query_result =
+	    DBQueryWarn("select * from apt_parameter_sets  ".
+			"where profileid='$profileid' and ".
+                        "      uid_idx='$uid_idx' ".
+                        "order by name");
+	if (!$query_result || !mysql_num_rows($query_result)) {
+	    return null;
+	}
+        $result = array();
+        
+	while ($row = mysql_fetch_array($query_result)) {
+            $blob = array(
+                "uuid"          => $row["uuid"],
+                "name"          => $row["name"],
+                "description"   => $row["description"],
+                "created"       => DateStringGMT($row["created"]),
+                "bindings"      => json_decode($row["bindings"]),
+                "version_uuid"  => $row["version_uuid"],
+                "reporef"       => $row["reporef"],
+                "repohash"      => $row["repohash"],
+            );
+            $result[] = $blob;
+        }
+        return $result;
     }
 
     #

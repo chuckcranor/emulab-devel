@@ -73,6 +73,7 @@ $(function ()
 	    version_uuid:	version_uuid,
 	    profile_uuid:	profile_uuid,
 	    history:		window.HISTORY,
+	    activity:		window.ACTIVITY,
 	    isadmin:		window.ISADMIN,
 	    canedit:            window.CANEDIT,
 	    disabled:           window.DISABLED,

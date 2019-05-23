@@ -152,6 +152,8 @@ class Instance
     function rspec()	    { return $this->field('rspec'); }
     function admin_notes()  { return $this->field('admin_notes'); }
     function isopenstack()  { return $this->field('isopenstack'); }
+    function params()       { return $this->field('params'); }
+    function paramdefs()    { return $this->field('paramdefs'); }
     function openstack_utilization() {
         return $this->field('openstack_utilization');
     }

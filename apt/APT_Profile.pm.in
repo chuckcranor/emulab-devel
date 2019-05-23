@@ -711,6 +711,9 @@ sub Delete($$)
     DBQueryWarn("delete from apt_profile_favorites ".
 		"where profileid='$profileid'")
 	or goto bad;
+    DBQueryWarn("delete from apt_parameter_sets ".
+		"where profileid='$profileid'")
+	or goto bad;
     DBQueryWarn("delete from apt_profile_images ".
 		"where profileid='$profileid'")
 	or goto bad;
@@ -2106,6 +2109,98 @@ sub Convert2Genilib($)
 			  "where profileid='$profileid' and ".
 			  "      version='$version'"));
     $self->{'DBROW'}->{'script'} = $output;
+    return 0;
+}
+
+#
+# Convert data_set in rspec to simplified bindings array.
+#
+sub GetBindings($$$)
+{
+    my ($rspec, $pbindings, $perrmsg) = @_;
+
+    if (!ref($rspec)) {
+	$rspec = GeniXML::Parse($rspec);
+	if (! defined($rspec)) {
+	    $$perrmsg = "GetBindings: Could not parse rspec";
+	    return -1;
+	}
+    }
+    my $dataset = GeniXML::FindNodesNS("n:data_set", $rspec,
+				       $GeniXML::PROFILE_PARAMETERS_NS)->pop();
+    if (! defined($dataset)) {
+	$$perrmsg = "No parameter bindings in the rspec";
+	return -1;
+    }
+    # Mistaken data_set in some history entries, so need to process a bit
+    # differently
+    if (!$dataset->hasChildNodes()) {
+	$dataset = $rspec;
+    }
+
+    #
+    # Convert XML goo to multilevel array of bindings.
+    #
+    my $bindings = {};
+    my $processSet;
+
+    #
+    # Process each item in the dataset. 
+    #
+    $processSet = sub {
+	my ($ref, $bindings) = @_;
+	my $which = $ref->nodeName();
+
+	if ($which eq "data_list") {
+	    my $name  = GeniXML::GetText("name", $ref);
+	    my @list  = ();
+
+	    foreach my $child ($ref->childNodes()) {
+		my $nodeName = $child->nodeName();
+
+		if ($nodeName eq "data_member_item") {
+		    my $value = $child->findvalue('.');
+		    push(@list, $value);
+		}
+		elsif ($nodeName eq "data_struct") {
+		    my $b = {};
+		    &$processSet($child, $b);
+		    push(@list, $b);
+		}
+	    }
+	    # Not sure why the name is in dotted notation. Kill it.
+	    my @tokens = split(/[.]/, $name);
+	    if (@tokens > 1) {
+		$name = pop(@tokens);
+	    }
+	    $bindings->{$name} = \@list;
+	}
+	elsif ($which eq "data_struct") {
+	    foreach my $child ($ref->childNodes()) {
+		my $nodeName = $child->nodeName();
+		&$processSet($child, $bindings);
+	    }
+	}
+	elsif ($which eq "data_item" ||
+	       $which eq "data_member_item") {
+	    my $name  = GeniXML::GetText("name", $ref);
+	    my $value = $ref->findvalue('.');
+
+	    # Not sure why the name is in dotted notation. Kill it.
+	    my @tokens = split(/[.]/, $name);
+	    if (@tokens > 1) {
+		$name = pop(@tokens);
+	    }
+	    $bindings->{$name} = $value;
+	}
+    };
+    foreach my $ref ($dataset->childNodes()) {
+	next
+	    if ($ref->nodeName() !~ /^data/ || $ref->nodeName eq "data_set");
+
+	&$processSet($ref, $bindings);
+    }
+    $$pbindings = $bindings;
     return 0;
 }
 

@@ -17,7 +17,7 @@ $(function () {
 	var debug         = 0;
 	var editor        = null;
 	var editorLarge   = null;
-	var defaults      = null;
+	var paramdefs     = null;
 	var ppdivname     = null;
 	var uuid          = "";
 	var registered    = true;
@@ -30,6 +30,8 @@ $(function () {
 	var amlist        = null;
 	var prunetypes    = null;
 	var debug         = true;
+	var rerun_bindings= null;
+	var rerun_warnings= null;
 
 	// List of form elements (fields,groups), in order of appearance.
 	var formFields    = [];
@@ -472,6 +474,16 @@ $(function () {
 	}
 	function GenerateBoolean(name, fieldIndex, details, value)
 	{
+	    // Watch for the strings "true" and "false". (json encoding in perl)
+	    if (typeof value === "string") {
+		value = value.toLowerCase();
+		if (value == "true") {
+		    value = true;
+		}
+		else {
+		    value = false;
+		}
+	    }
 	    var html = booleanTemplate({
 		"fieldid"    : fieldIndex,
 		"fieldname"  : details.name,
@@ -627,11 +639,37 @@ $(function () {
 	    return dict;
 	}
 
-	// A standard (or group) multivalue field.
+	// A standard (or group) field.
 	function initFieldInitialValues(details)
 	{
 	    var i = 0;
 	    var m = 0;
+
+	    // Easy if not multivalue.
+	    if (! details.multiValue) {
+		var name = details.name;
+
+		if (rerun_bindings && _.has(rerun_bindings, name)) {
+		    if (Array.isArray(rerun_bindings[name])) {
+			var warning = {
+			    "message" : "The parameter set binding for " +
+				name + " refers to a multivalue field, " +
+				"but in the current profile it is a single " +
+				"value field. Using the default instead."};
+			
+			console.info(warning);
+			details.ppwarnings[name] = warning;
+			details.values[name] = details.defaultValue;
+		    }
+		    else {
+			details.values[name] = rerun_bindings[name];
+		    }
+		}
+		else {
+		    details.values[name] = details.defaultValue;
+		}
+		return;
+	    }
 
 	    // Not sure I like this.
 	    if (details.defaultValue) {
@@ -653,7 +691,12 @@ $(function () {
 		if (i) {
 		    tname = tname + "-" + i;
 		}
-		if (details.defaultValue &&
+		if (rerun_bindings &&
+		    _.has(rerun_bindings, details.name) &&
+		    rerun_bindings[details.name].length > i) {
+		    details.values[tname] = rerun_bindings[details.name][i];
+		}
+		else if (details.defaultValue &&
 		    details.defaultValue.length > i) {
 		    details.values[tname] = details.defaultValue[i];
 		}
@@ -722,11 +765,13 @@ $(function () {
 		}
 		else if (details.type == "struct") {
 		    // Convenience to match above.
-		    details["isgroup"] = false;
-		    details["values"]  = {};
-		    details["visible"] = {};
-		    details["hashelp"] = false;
-		    var visible        = details.hide ? false : true
+		    details["isgroup"]     = false;
+		    details["values"]      = {};
+		    // Only for applying parameter sets
+		    details["ppwarnings"]  = {};
+		    details["visible"]     = {};
+		    details["hashelp"]     = false;
+		    var visible            = details.hide ? false : true
 
 		    /*
 		     * Regarding initial values. When non multivalue, 
@@ -742,11 +787,19 @@ $(function () {
 		     */
 		    if (details.multiValue) {
 			var i = 0;
-		    
-			if (details.defaultValue) {
-			    _.each(details.defaultValue, function (defvals) {
+			var initvals = null;
+
+			if (rerun_bindings &&
+			    _.has(rerun_bindings, details.name)) {
+			    initvals = rerun_bindings[details.name];
+			}
+			else if (details.defaultValue) {
+			    initvals = details.defaultValue;
+			}
+			if (initvals) {
+			    _.each(initvals, function (initvals) {
 				var dict = initStructInitialValues(details,
-								   defvals);
+								   initvals);
 				details.values["C-" + i]  = dict;
 				details.visible["C-" + i] = visible
 				i++;
@@ -762,7 +815,16 @@ $(function () {
 			}
 		    }
 		    else {
-			var dict = initStructInitialValues(details);
+			var dict;
+			
+			if (rerun_bindings &&
+			    _.has(rerun_bindings, details.name)) {
+			    dict = initStructInitialValues(details,
+						   rerun_bindings[details.name]);
+			}
+			else {
+			    dict = initStructInitialValues(details);
+			}
 			details.values[0]  = dict;
 			details.visible[0] = visible
 		    }
@@ -782,16 +844,14 @@ $(function () {
 		}
 		if (groupId) {
 		    // Convenience to match above.
-		    details["isgroup"] = false;
-		    details["values"]  = {};
+		    details["isgroup"]    = false;
+		    details["values"]     = {};
+		    // Only for applying parameter sets
+		    details["ppwarnings"] = {};
 
-		    // Setup the initial fields if multivalue;
-		    if (details.multiValue) {
-			initFieldInitialValues(details);
-		    }
-		    else {
-			details.values[name] = details.defaultValue;
-		    }
+		    // Setup the initial fields value.
+		    initFieldInitialValues(details);
+
 		    // Add to list of fields in the group.
 		    formGroups[groupId].fields[name] = details;
 		    
@@ -802,17 +862,14 @@ $(function () {
 		}
 		else if (details.type != "struct") {
 		    // Convenience to match above.
-		    details["isgroup"] = false;
-		    details["values"]  = {};
-		    details["hashelp"] = false;
+		    details["isgroup"]    = false;
+		    details["values"]     = {};
+		    details["hashelp"]    = false;
+		    // Only for applying parameter sets
+		    details["ppwarnings"] = {};
 
-		    // Setup the initial fields if multivalue;
-		    if (details.multiValue) {
-			initFieldInitialValues(details);
-		    }
-		    else {
-			details.values[name] = details.defaultValue;
-		    }
+		    // Setup the initial field values
+		    initFieldInitialValues(details);
 
 		    // Mark the group as having a long help.
 		    if (details.longDescription) {
@@ -952,6 +1009,45 @@ $(function () {
 		    }
 		}
 	    }
+	    /*
+	     * Look for oddities caused by applying saved parameter sets.
+	     */
+	    if (rerun_bindings) {
+		if (_.has(details.ppwarnings, name)) {
+		    var warning = details.ppwarnings[name];
+
+		    paramWarnings.push(warning.message);
+		    rerun_warnings.push(warning);
+		}
+		// A value that is not in the option set.
+		else if (details.legalValues) {
+		    var okay = false;
+		    
+		    for (var i = 0; i < details.legalValues.length; ++i) {
+			var option = details.legalValues[i];
+		       
+			if (Array.isArray(option)) {
+			    if (value == option[0]) {
+				okay = true;
+				break;
+			    }
+			}
+			else if (value == option) {
+			    okay = true;
+			    break;
+			}
+		    }
+		    if (!okay) {
+			var message = 
+			    "The value in the parameter set " +
+			    "is not a valid option. Using the "+
+			    "default value instead.";
+
+			paramWarnings.push(message);
+			rerun_warnings.push({"message" : message});
+		    }
+		}
+	    }
 
 	    if (value == null) {
 		// Special case; a multivalue field with no values.
@@ -1014,63 +1110,8 @@ $(function () {
 	    label_text = label_text + "</label>";
 	    outerdiv.append(label_text);
 	    innerdiv.html(item);
-	    
-	    // Handle errors and warnings and changed values.
-	    if (paramErrors.length || paramWarnings.length) {
-		if (paramErrors.length) {
-		    var errorMsg = "";
 
-		    for (var i = 0; i < paramErrors.length; ++i) {
-			var message = paramErrors[i];
-
-			if (errorMsg)
-			    errorMsg += "<br>";
-
-			errorMsg += message
-		    }
-		    if (fixedValue) {
-			errorMsg += "<br>" + fixedValue;
-			outerdiv.addClass('has-changes');
-		    }
-		    outerdiv.addClass('has-error');
-		    // This used to have display:inline, but that did
-		    // work with multivalue fields.
-		    innerdiv.append('<label class="control-label" ' +
-				    'style="padding-top: 2px;" ' +
-				    'for="inputError">Error: ' +
-				    errorMsg + '</label>');
-		}
-		else if (paramWarnings.length) {
-		    var errorMsg = "";
-
-		    for (var i = 0; i < paramWarnings.length; ++i) {
-			var message = paramWarnings[i];
-
-			if (errorMsg)
-			    errorMsg += "<br>";
-
-			errorMsg += message
-		    }
-		    if (fixedValue) {
-			errorMsg += "<br>" + fixedValue;
-			outerdiv.addClass('has-changes');
-		    }
-		    outerdiv.addClass('has-warning');
-		    innerdiv.append('<label class="control-label" ' +
-				    'style="display: inline;" ' +
-				    'for="inputWarning">Warning: ' +
-				    errorMsg + '</label>');
-		}
-	    }
-	    if (help_panel) {
-		innerdiv.append(help_panel);
-	    }
-	    outerdiv.append(innerdiv);
-
-	    if (type == "image") {
-		initImagePicker(outerdiv);
-	    }
-	    else if (type == "nodetype") {
+	    if (type == "nodetype") {
 		var html = "";
 		var constraints = details.inputConstraints;
 		var re = new RegExp('(\>\=|\<\=|\!\=|\=|\>|\<)(.+)');
@@ -1158,6 +1199,8 @@ $(function () {
 		    }
 		    return 1;
 		};
+		// Lets make sure the value provided is in the list.
+		var validoption = false;
 		
 		/*
 		 * Create the menu/submenus for each aggregate and list of
@@ -1222,28 +1265,51 @@ $(function () {
 			count++;
 			typehtml += "</li>";
 			agghtml  += typehtml;
+			if (value && type == value) {
+			    validoption = true;
+			}
 		    });
 		    agghtml += "</ul></li>";
 		    if (count) {
 			html += agghtml;
 		    }
 		});
-		$(outerdiv).find("ul").append(html);
+		$(innerdiv).find("ul").append(html);
+
+		// Print a warning if the value is not in the list.
+		if (value && !validoption) {
+		    var message;
+
+		    if (rerun_bindings) {
+			message =
+			    "The node type in the parameter set " +
+			    "is not in the list of types. Using the "+
+			    "default node type instead.";
+		    }
+		    else {
+			message =
+			    "The default node type is not in the set of " +
+			    "types.";
+		    }
+		    paramWarnings.push(message);
+		    rerun_warnings.push({"message" : message});
+		    value = undefined;
+		}
 
 		// Initialize the value (hidden field, button).
 		if (value) {
-		    $(outerdiv).find("button .type-selected").html(value);
-		    $(outerdiv).find("input").val(value);
+		    $(innerdiv).find("button .type-selected").html(value);
+		    $(innerdiv).find("input").val(value);
 		}
 
 		// Need to use a click handler cause of popover problems
 		// with the submenus.
-		$(outerdiv).find(".glyphicon-info-sign").popover({
+		$(innerdiv).find(".glyphicon-info-sign").popover({
 		    trigger: 'manual',
 		    placement: 'auto',
 		    container: 'body',
 		});
-		$(outerdiv).find(".glyphicon-info-sign").click(
+		$(innerdiv).find(".glyphicon-info-sign").click(
 		    function (event) {
 			event.preventDefault();
 			event.stopPropagation();
@@ -1251,7 +1317,7 @@ $(function () {
 		    });
 
 		// Move the main menu to halfway up/down.
-		$(outerdiv).find(".dropdown")
+		$(innerdiv).find(".dropdown")
 		    .on("shown.bs.dropdown", function (event) {
 			var height = $(this).find(".right-menu").height();
 			//console.info("height", height);
@@ -1259,14 +1325,14 @@ $(function () {
 		    });
 
 		// Make sure popovers are gone when the main menu is gone.
-		$(outerdiv).find(".dropdown")
+		$(innerdiv).find(".dropdown")
 		    .on("hide.bs.dropdown", function (event) {
-			$(outerdiv).find(".glyphicon-info-sign").popover("hide");
+			$(innerdiv).find(".glyphicon-info-sign").popover("hide");
 		    });
 
 		// Make sure popovers are gone when a submenu is gone. We do not
 		// get the dropdown events for these, so hook into hover.
-		$(outerdiv).find(".dropdown-submenu>.dropdown-menu")
+		$(innerdiv).find(".dropdown-submenu>.dropdown-menu")
 		    .hover(
 			function(event) {
 			},
@@ -1278,14 +1344,14 @@ $(function () {
 		 * When a selection is made, change the button text to the type
 		 * and set the actual input (which is a hidden input).
 		 */
-		$(outerdiv).find(".type-select").click(function (event) {
+		$(innerdiv).find(".type-select").click(function (event) {
 		    event.preventDefault();
 		    //console.info($(this).attr("name"));
-		    $(outerdiv).find("button .type-selected")
+		    $(innerdiv).find("button .type-selected")
 			.html($(this).attr("name"));
-		    $(outerdiv).find("input").val($(this).attr("name"))
+		    $(innerdiv).find("input").val($(this).attr("name"))
 		    // Make sure the popover is gone too.
-		    $(outerdiv).find(".glyphicon-info-sign").popover("hide");
+		    $(innerdiv).find(".glyphicon-info-sign").popover("hide");
 		    
 		});
 		/*
@@ -1293,15 +1359,71 @@ $(function () {
 		 * user clear the selection, but not when constrained.
 		 */
 		if (!constraints) {
-		    $(outerdiv).find(".clear-select").click(function (event) {
+		    $(innerdiv).find(".clear-select").click(function (event) {
 			event.preventDefault();
 			//console.info($(this).html());
-			$(outerdiv).find("button .type-selected").html("Any");
-			$(outerdiv).find("input").val("");
+			$(innerdiv).find("button .type-selected").html("Any");
+			$(innerdiv).find("input").val("");
 		    });
 		}
 	    }
 
+	    // Handle errors and warnings and changed values.
+	    if (paramErrors.length || paramWarnings.length) {
+		if (paramErrors.length) {
+		    var errorMsg = "";
+
+		    for (var i = 0; i < paramErrors.length; ++i) {
+			var message = paramErrors[i];
+
+			if (errorMsg)
+			    errorMsg += "<br>";
+
+			errorMsg += message
+		    }
+		    if (fixedValue) {
+			errorMsg += "<br>" + fixedValue;
+			outerdiv.addClass('has-changes');
+		    }
+		    outerdiv.addClass('has-error');
+		    // This used to have display:inline, but that did
+		    // work with multivalue fields.
+		    innerdiv.append('<label class="control-label" ' +
+				    'style="padding-top: 2px;" ' +
+				    'for="inputError">Error: ' +
+				    errorMsg + '</label>');
+		}
+		else if (paramWarnings.length) {
+		    var errorMsg = "";
+
+		    for (var i = 0; i < paramWarnings.length; ++i) {
+			var message = paramWarnings[i];
+
+			if (errorMsg)
+			    errorMsg += "<br>";
+
+			errorMsg += message
+		    }
+		    if (fixedValue) {
+			errorMsg += "<br>" + fixedValue;
+			outerdiv.addClass('has-changes');
+		    }
+		    outerdiv.addClass('has-warning');
+		    innerdiv.append('<label class="control-label" ' +
+				    'style="display: inline;" ' +
+				    'for="inputWarning">Warning: ' +
+				    errorMsg + '</label>');
+		}
+	    }
+	    if (help_panel) {
+		innerdiv.append(help_panel);
+	    }
+	    outerdiv.append(innerdiv);
+
+	    if (type == "image") {
+		initImagePicker(outerdiv);
+	    }
+	    
 	    // Helper function;
 	    var nameList = function () {
 		if (formFields[fieldIndex].type == "struct") {
@@ -2547,6 +2669,16 @@ $(function () {
 	    var numParameterErrors = 0;
 	    var numParameterWarnings = 0;
 	    var fixedValuesChanges = 0;
+
+	    /*
+	     * Empty. Create one for parameter set warnings. We do this
+	     * only on the first generation of the form, once submitted
+	     * we do not want to show these warnings. See below, we clear
+	     * the bindings and warnings in the submit function.
+	     */
+	    if (rerun_bindings) {
+		rerun_warnings = new Array();
+	    }
 	    
 	    // Compute the general warning and error message text now.
 	    if (bindings &&
@@ -2639,16 +2771,19 @@ $(function () {
 	    });
 
 	    // Show warnings, errors, changes, etc.
-	    // Show primary error and warning notifications, and changes!
-	    if (fixedValuesChanges > 0) {
+	    var addMessage = function (style, message) {
 		var ht =
 		    '<div class="row">' +
-		    '<div class="col-sm-12">' +
-		    '<div id="pp-param-changes-panel" ' +
-		    '     class="panel panel-success" ' +
-		    '     style="margin-bottom: 10px;">' +
-		    '<div class="panel-heading">' +
-		    fixedValuesChanges + ' item ';
+		    ' <div class="col-sm-12">' +
+		    '  <div class="panel panel-' + style +'" ' +
+		    '       style="margin-bottom: 10px;">' +
+		    '   <div class="panel-heading">' + message +
+		    '</div></div></div></div>';
+		root.prepend(ht);
+	    };
+
+	    if (fixedValuesChanges > 0) {
+		var ht = "" + fixedValuesChanges + ' item ';
 		if (fixedValuesChanges > 1)
 		    ht += 'values have';
 		else
@@ -2658,65 +2793,83 @@ $(function () {
 		    ' in response to these bad parameter values, because' +
 		    " this profile's geni-lib script suggested they would" +
 		    ' help.  Please check them.';
-		ht += '</div></div></div></div>';
-		root.prepend(ht);
+		addMessage("success", ht);
 	    }
 	    if (numParameterWarnings > 0) {
 		var ht = "";
 
 		if (numParameterWarnings > 1) {
-		    if (ht != "")
-			ht += '<br>';
-		    ht += '<b>There were ' + numParameterWarnings +
+		    ht = '<b>There were ' + numParameterWarnings +
 			' ParameterWarnings</b>.  Please check the warning' +
 			' messages near each affected parameter; you will' +
 			' <b>not</b> be notified about subsequent warnings.';
 		}
 		else if (numParameterWarnings > 0) {
-		    if (ht != "")
-			ht += '<br>';
-		    ht += '<b>There was 1 ParameterWarning</b>.  Please check' +
-			' the warning message near the affected parameter; you' +
-			' will <b>not</b> be notified about subsequent warnings.';
+		    ht = '<b>There was 1 ParameterWarning</b>.  Please check' +
+			' the warning message near the affected parameter; ' +
+			' you will <b>not</b> be notified about subsequent ' +
+			' warnings.';
 		}
-
-		ht = '<div class="row">' +
-		    '<div class="col-sm-12">' +
-		    '<div id="pp-param-warning-panel" ' +
-		    '     class="panel panel-warning" ' +
-		    '     style="margin-bottom: 10px;">' +
-		    '<div class="panel-heading">' +
-		    ht + '</div></div></div></div>';
-		root.prepend(ht);
+		addMessage("warning", ht);
 	    }
 	    if (numParameterErrors > 0) {
 		var ht = "";
 
 		if (numParameterErrors > 1) {
-		    if (ht != "")
-			ht += '<br>';
 		    ht += '<b>There were ' + numParameterErrors +
 			' ParameterErrors</b>.  Please check the error' +
 			' messages near each affected parameter and fix the' +
 			' errors.';
 		}
 		else if (numParameterErrors > 0) {
-		    if (ht != "")
-			ht += '<br>';
 		    ht += '<b>There was 1 ParameterError</b>.  Please check' +
 			' the error message near the affected parameter and' +
 			' fix it.';
 		}
-
-		ht = '<div class="row">' +
-		    '<div class="col-sm-12">' +
-		    '<div id="pp-param-error-panel" '+
-		    '     class="panel panel-danger"' +
-		    '     style="margin-bottom: 10px;">' +
-		    '<div class="panel-heading"> ' +
-		    ht + '</div></div></div></div>';
-		root.prepend(ht);
+		addMessage("error", ht);
 	    }
+	    if (rerun_bindings) {
+		/*
+		 * When applying a parameter set, watch for any parms in the
+		 * set that are not in this (version of) the profile. We want
+		 * to warn users about that. We do not warn about parameters
+		 * in the profile that are *not* in the rerun set, since there
+		 * will always be valid defaults for those.
+		 */
+		_.each(rerun_bindings, function (val, name) {
+		    var messages = [];
+		    
+		    // Bindings reference a param not in the paramdefs
+		    if (!_.has(paramdefs, name)) {
+			console.info("binding not in params", name, val);
+
+			messages.push("The parameter set has a binding for '" +
+				      name + "' but that is not a parameter " +
+				      "in the profile.");
+		    }
+		    if (messages.length) {
+			addMessage("warning", messages.join("<br>"));
+		    }
+		});
+
+		if (_.size(rerun_warnings)) {
+		    var len = _.size(rerun_warnings);
+		    var ht  = "";
+
+		    if (len > 1) {
+			ht += '<b>There were ' + len + 
+			    ' Parameter Set warnings</b>. ' +
+			    'Please check the warnings below.';
+		    }
+		    else {
+			ht += '<b>There was 1 Parameter Set warning</b>. ' +
+			    'Please check the warning ' +
+			    'message near the affected parameter.';
+		    }
+		    addMessage("warning", ht);
+		}
+	    }
+	    
 	    imagePicker = new jacksmod.ImagePicker();
 	    $('#image-picker-body').html(imagePickerString);
 	    $('#imagepicker-modal .modal-body > div').append(imagePicker.el);
@@ -2776,12 +2929,104 @@ $(function () {
 		}
 	    });
 	}
+
+	/*
+	 * Initialize the parameter buttons.
+	 */
+	function InitializePPButtons()
+	{
+	    // The whole group is hidden cause the template is shared with
+	    // the old wizard.
+	    $('#ppform-buttons').removeClass("hidden");	    
+
+	    $('#ppform-buttons .btn, #ppform-buttons .p-choose')
+		.popover({
+		    trigger: 'hover',
+		    delay: { "show": 300, "hide": 100 },
+		    placement: 'auto',
+		    container: 'body',
+		});
+
+	    // Only the "defaults" button starts out visible and active
+	    $('#ppform-buttons .p-defaults')
+		.click(function (event) {
+		    event.preventDefault();
+		    // Need to kill the rerun bindings when user picks defaults.
+		    rerun_bindings = null;
+		    InitializeForm(paramdefs);
+		    GenerateForm(null);
+		});
+
+	    // We can bind this function, the button will be hidden as needed.
+	    $('#ppform-buttons .p-last')
+		.click(function (event) {
+		    event.preventDefault();
+		    var callback = function(json) {
+			console.info("GetPreviousBindings", json);
+			if (json.code) {
+			    sup.SpitOops("oops", json.value);
+			    return;
+			}
+			rerun_bindings = json.value;
+			InitializeForm(paramdefs);
+			GenerateForm(null);		    
+		    };
+		    var xmlthing = sup.CallServerMethod(null, "instantiate",
+							"GetPreviousBindings",
+							{"uuid" : uuid});
+		    xmlthing.done(callback);
+		});
+	}
+
+	/*
+	 * Setup the parameter buttons for this specific profile.
+	 */
+	function SetupPPButtons(hasactivity, paramsets)
+	{
+	    // If the use has previous active on this profile, we can
+	    // show the last and activity buttons.
+	    if (hasactivity) {
+		// History button opens up new window.
+		$('#ppform-buttons .p-history')
+		    .attr("href", "profile-activity.php?uuid=" + uuid)
+		    .removeClass("hidden");
+
+		$('#ppform-buttons .p-last')
+		    .removeClass("hidden");
+	    }
+	    // Create dropdown menu for the paramsets.
+	    if (paramsets) {
+		_.each(paramsets, function(set, index) {
+		    var item = $("<li>" +
+				 " <a href='#'>" + set.name  + "</a>" +
+				 "</li>");
+		    // Add a popover to show the description.
+		    $(item).popover({
+			html:     false,
+			content:  set.description,
+			trigger:  'hover',
+			placement:'auto',
+			container:'body',
+		    });
+		    // Handler to regenerate the form.
+		    $(item).find("a").click(function (event) {
+			event.preventDefault();
+			rerun_bindings = set.bindings;
+			InitializeForm(paramdefs);
+			GenerateForm(null);		    
+		    });
+		    $('#ppform-buttons .p-choose ul').append(item);
+
+		});
+		$('#ppform-buttons .p-choose').removeClass("hidden");
+	    }
+	}
 	    
         function HandleSubmit(callback, jacksGraphCallback)
 	{
 	    // Submit with check only at first, since this will return
 	    // very fast, so no need to throw up a waitwait.
-	  SubmitForm(1, callback, jacksGraphCallback);
+	    SubmitForm(1, callback, jacksGraphCallback);
 	}
 
 	//
@@ -3035,7 +3280,8 @@ $(function () {
 	    if (0) {
 		return;
 	    }
-
+	    // On first submit we kill the rerun bindings and warnings.
+	    rerun_bindings = rerun_warnings = null;
 	    // This clears any errors before new submit.
 	    // Yep, total redraw of the form, but so what.
 	    GenerateForm(null);
@@ -3082,19 +3328,16 @@ $(function () {
 	}
 
 	function StartPP(args) {
-	    registered = args.registered;
-	    multisite = args.multisite;
-	    ppdivname = args.ppdivname;
-	    amlist    = args.amlist;
-	    prunetypes= args.prunetypes;
+	    registered     = args.registered;
+	    multisite      = args.multisite;
+	    ppdivname      = args.ppdivname;
+	    amlist         = args.amlist;
+	    prunetypes     = args.prunetypes;
 	    
 	    if (formFields.length && uuid == args.uuid) {
 		GenerateForm(null);
 		return;
 	    }
-	    // Caller might already have an editor instance.
-	    //editor = new JacksEditor($('#inline_jacks'), true, true,
-		//		     true, true, !multisite);
 	    configuredone_callback = args.config_callback;
 	    modified_callback = args.modified_callback;
 	    
@@ -3107,13 +3350,22 @@ $(function () {
 		if (json.code) {
 		    sup.SpitOops("oops", json.value);
 		}
-		defaults = json.value.defaults;
+		uuid = args.uuid;
+		paramdefs = json.value.paramdefs;
+
 		// Insert into the provided container.
 		$('#' + ppdivname).html(ppmodalString);
-
-		InitializeForm(json.value.paramdefs);
+		// Init the parameter buttons.
+		InitializePPButtons();
+		// Setup the parameter buttons for this profile.
+		SetupPPButtons(json.value.hasactivity, json.value.paramsets);
+		
+		if (args.rerun_instance !== undefined ||
+		    args.rerun_paramset !== undefined) {
+		    rerun_bindings = json.value.rerun_bindings;
+		}
+		InitializeForm(paramdefs);
 		GenerateForm(null);
-		uuid = args.uuid;
 
 		if (args.rspec) {
 		    RSPEC = args.rspec;
@@ -3123,6 +3375,12 @@ $(function () {
 		}
 	    }
 	    var blob = {"uuid" : args.uuid};
+	    if (args.rerun_instance !== undefined) {
+		blob["rerun_instance"] = args.rerun_instance;
+	    }
+	    else if (args.rerun_paramset !== undefined) {
+		blob["rerun_paramset"] = args.rerun_paramset;
+	    }
 	    //
 	    // XXX: Look for paramdefs/script in the form and pass that along.
 	    // This is for repo-based profiles.

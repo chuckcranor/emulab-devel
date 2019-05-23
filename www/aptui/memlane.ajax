@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,6 +70,38 @@ function Do_HistoryRecord()
                                    $blob["profile_version"])) {
         $blob["profile_name"] = $profile->name() . ":" . $profile->version();
         $blob["profile_uuid"] = $profile->uuid();
+
+        $paramdefs = null;
+        if ($profile->repourl() && $record->repourl()) {
+            $blob["reporef"]  = $record->reporef();
+            $blob["repohash"] = $record->repohash();
+            # See if a parameterized profile. 
+            GetRepoParamdefs($profile, $record, $paramdefs);
+        }
+        if ($profile->isParameterized() || $paramdefs) {
+            $profile_uuid = $profile->uuid();
+            $webtask      = WebTask::CreateAnonymous();
+            $webtask_id   = $webtask->task_id();
+
+            $retval = SUEXEC($this_user->uid(), "nobody",
+                             "webmanage_profile -t $webtask_id -- ".
+                             "  bindings $profile_uuid $uuid ",
+                             SUEXEC_ACTION_CONTINUE);
+            $webtask->Refresh();
+        
+            if (!$retval) {
+                $blob["bindings"] = $webtask->TaskValue("bindings");
+                if ($paramdefs) {
+                    # We got them above.
+                    $blob["paramdefs"] = $paramdefs;
+                }
+                else {
+                    # From the profile.
+                    $blob["paramdefs"] = json_decode($profile->paramdefs());
+                }
+            }
+            $webtask->Delete();
+        }
     }
     # Need to munge the urls since these slices are history.
     foreach ($blob["slivers"] as &$sliver) {
@@ -81,6 +113,70 @@ function Do_HistoryRecord()
         }
     }
     SPITAJAX_RESPONSE($blob);
+}
+
+function GetRepoParamdefs($profile, $record, &$paramdefs)
+{
+    global $this_user;
+    
+    $this_idx = $this_user->uid_idx();
+    $this_uid = $this_user->uid();
+
+    $paramsname = tempnam("/tmp", "genilibparams");
+    chmod($paramsname, 0666);
+    $scriptname = tempnam("/tmp", "genilibscript");
+    chmod($scriptname, 0666);
+
+    if ($record->script()) {
+        $fp = fopen($scriptname, "w");
+        fwrite($fp, $record->script());
+        fclose($fp);
+    }
+    else {
+        $repohash = escapeshellarg($record->repohash());
+        $retval = SUEXEC($this_uid, "tbadmin",
+                         "webmanage_gitrepo " .
+                         "  getsource -o $scriptname -p " . $profile->uuid() .
+                         "  $repohash",
+                         SUEXEC_ACTION_IGNORE);
+        if ($retval != 0) {
+            if ($retval < 0) {
+                SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            }
+            unlink($paramsname);
+            unlink($scriptname);
+            return -1;
+        }
+        # We do not actually care about the script. We just pass it to the
+        # next step.
+    }
+    $opts = "";
+    if ($profile->UseNewGeniLib($this_user)) {
+        $opts .= " -N ";
+    }    
+    $retval = SUEXEC($this_uid, "nobody",
+		     "webrungenilib $opts -P ".
+                     "   $paramsname -o /dev/null $scriptname", 
+		     SUEXEC_ACTION_IGNORE);
+    
+    if ($retval != 0) {
+        if ($retval < 0) {
+	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        }
+        unlink($scriptname);
+        unlink($paramsname);
+	return -1;
+    }
+    $contents = file_get_contents($paramsname);
+    if ($contents != "") {
+        $paramdefs = json_decode($contents);
+    }
+    else {
+        $paramdefs = null;
+    }
+    unlink($scriptname);
+    unlink($paramsname);
+    return 0;
 }
 
 # Local Variables:

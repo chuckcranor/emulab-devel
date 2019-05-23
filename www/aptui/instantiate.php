@@ -61,13 +61,16 @@ $optargs = OptionalPageArguments("create",        PAGEARG_STRING,
 				 "default",       PAGEARG_STRING,
 				 "from",          PAGEARG_STRING,
 				 "refspec",       PAGEARG_STRING,
+                                 "rerun_instance",PAGEARG_UUID,
+                                 "rerun_paramset",PAGEARG_UUID,
 				 "formfields",    PAGEARG_ARRAY);
 
 # Need to make non-hardcoded
 $maxduration = 16;
 
 $skipfirststep = 0;
-if (isset($from) && ($from == "manage-profile" || $from == "show-profile")) {
+if (isset($rerun_instance) || isset($rerun_paramset) ||
+    (isset($from) && ($from == "manage-profile" || $from == "show-profile"))) {
     $skipfirststep = 1;
 }
 
@@ -324,7 +327,7 @@ function SPITFORM($formfields, $newuser, $errors)
     global $TBBASE, $APTMAIL, $ISAPT, $ISCLOUD, $ISPNET, $PORTAL_NAME;
     global $profile_array, $this_user, $profilename, $profile;
     global $projlist, $skipfirststep, $maxduration, $TBMAINSITE;
-    global $refspec, $ISPOWDER;
+    global $refspec, $ISPOWDER, $rerun_instance, $rerun_paramset;
     
     $showabout  = ($ISAPT && !$this_user ? 1 : 0);
     $registered = (isset($this_user) ? "true" : "false");
@@ -430,6 +433,12 @@ function SPITFORM($formfields, $newuser, $errors)
     else {
         echo "    window.CLUSTERSELECT = false;\n";
     }
+    if (isset($rerun_instance)) {
+        echo "    window.RERUN_INSTANCE = '$rerun_instance';\n";
+    }
+    if (isset($rerun_paramset)) {
+        echo "    window.RERUN_PARAMSET = '$rerun_paramset';\n";
+    }
     echo "</script>\n";
     echo "<script src='js/lib/d3.v3.js'></script>\n";
     echo "<script src='js/lib/nv.d3.js'></script>\n";
@@ -451,6 +460,7 @@ function SPITFORM($formfields, $newuser, $errors)
     REQUIRE_JQUERY_STEPS();
     AddLibrary("js/resgraphs.js");
     AddLibrary("js/gitrepo.js");
+    AddLibrary("js/paramsets.js");
     SPITREQUIRE("js/instantiate-new.js");
 }
 

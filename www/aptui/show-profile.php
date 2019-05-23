@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -82,6 +82,7 @@ $profile_uuid = $profile->profile_uuid();
 $version_uuid = $profile->uuid();
 $ispp         = ($profile->isParameterized() ? 1 : 0);
 $history      = ($profile->HasHistory() ? 1 : 0);
+$activity     = ($profile->HasActivity($this_user) ? 1 : 0);
 $canedit      = ($profile->CanEdit($this_user) ? 1 : 0);
 $disabled     = ($profile->isDisabled() ? 1 : 0);
 
@@ -162,6 +163,7 @@ echo "    window.ISADMIN      = $isadmin;\n";
 echo "    window.CANEDIT      = $canedit;\n";
 echo "    window.DISABLED     = $disabled;\n";
 echo "    window.HISTORY      = $history;\n";
+echo "    window.ACTIVITY     = $activity;\n";
 echo "    window.ISPPPROFILE  = $ispp;\n";
 echo "    window.WITHPUBLISHING = $WITHPUBLISHING;\n";
 echo "    window.EDITOR_READONLY = true;\n";

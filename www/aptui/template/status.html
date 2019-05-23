@@ -267,6 +267,16 @@ pre {
 			 uses whatever images the original profile uses."> 
 		  Copy</a>
 	      <% } %>
+	      <button class='btn btn-primary btn-xs hidden'
+		      style='margin-right: 10px;'
+		      id='save_paramset_button'
+		      data-toggle='popover'
+		      data-delay='{"hide":100, "show":300}'
+		      data-content='Save the parameters used to create this
+				    experiment, so you can quickly apply them
+				    when starting a new experiment using this
+				    profile. Click for more information.'
+		      type='button'>Save Parameters</button>
 	    <% } %>
 	    <button class='btn btn-xs btn-success exp-running hidden' disabled
 		    id='extend_button' type=button>
@@ -481,6 +491,10 @@ pre {
 			type='button' id="openstack-refresh-button">
 		  <span class='glyphicon glyphicon-repeat'></span></button>
 	      </a>
+            </li>
+	    <li class="hidden" id="show_bindings_li">
+              <a href='#bindings' id='show_bindings_tab'
+		 data-toggle='tab'>Bindings</a>
             </li>
 	  </ul>
 	  <div id='quicktabs_content' class='tab-content'>
@@ -745,6 +759,20 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
 		  </div>
 		</div>
 	      </div>
+	    </div>
+	    <div class='tab-pane hidden' id='bindings'>
+	      <table class='table table-striped table-hover table-condensed'
+                     id='bindings_table'>
+                <thead>
+                  <tr>
+                    <th>Parameter</th>
+                    <th>Default</th>
+                    <th>Actual</th>
+                  </tr>
+                </thead>
+                <tbody>
+                </tbody>
+	      </table>
 	    </div>
 	  </div>
 	</div>
@@ -1582,6 +1610,7 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
   <div id='approval_div'></div>
   <div id='linktest_div'></div>
   <div id='destroy_div'></div>
+  <div id='save_paramset_div'></div>
 </div>
 
 

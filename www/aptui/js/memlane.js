@@ -8,6 +8,7 @@ $(function ()
     var mainTemplate = _.template(templates['memlane']);
     var EMULAB_NS    = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
     var amlist       = null;
+    var record       = null;
     
     function initialize()
     {
@@ -30,9 +31,11 @@ $(function ()
 	    sup.SpitOops("oops", json.value);
 	    return;
 	}
+	record = json.value;
 	$('#page-body').html(mainTemplate({
 	    "record" : json.value,
 	}));
+	
 	// Format dates with moment before display.
 	$('.format-date').each(function() {
 	    var date = $.trim($(this).html());
@@ -40,12 +43,56 @@ $(function ()
 		$(this).html(moment($(this).html()).format("lll"));
 	    }
 	});
+	// Run Again button.
+	if (record.profile_uuid) {
+	    var url = "instantiate.php?profile=" + record.profile_uuid +
+		"&rerun_instance=" + window.uuid;
+	    // Pull the same branch.
+	    if (_.has(record, "repohash") && record.repohash) {
+		url += "&refspec=" + record.repohash;
+	    }
+	    $('#rerun_button').attr("href", url);
+	    
+	    if (_.has(record, "bindings")) {
+		$('#save_paramset_button')
+		    .removeClass("hidden")
+		    .popover({trigger:  'hover',
+			      placement:'auto',
+			      container:'body'})
+		    .click(function (event) {
+			paramsets.InitSaveParameterSet('#save_paramset_div',
+						       record.profile_uuid,
+						       window.uuid);
+		    });
+		
+	    }
+	}
 	$('#waitwait_div').html(templates['waitwait-model']);
 	$('#oops_div').html(templates['oops-model']);
 	if (json.value.exitcode) {
 	    ShowError(json.value);
 	}
 	ShowTopo(json.value);
+	GenerateBindings(json.value);
+
+        // Javascript to enable link to tab
+	// Must do this after ShowTopo, since it changes to that tab.
+        var hash = document.location.hash;
+        if (hash) {
+            $('.nav-tabs a[href='+hash+']').tab('show');
+        }
+        // Change hash for page-reload
+        $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
+            window.location.hash = e.target.hash;
+        });
+	// Set the correct tab when a user uses their back/forward button
+        $(window).on('hashchange', function (e) {
+	    var hash = window.location.hash;
+	    if (hash == "") {
+		hash = "#rspec";
+	    }
+	    $('.nav-tabs a[href='+hash+']').tab('show');
+	});
     }
 
     var listview_row = 
@@ -385,6 +432,25 @@ $(function ()
 
 	$('#error_panel_text').text(record.exitmessage);
 	$('#error_panel').removeClass("hidden");
+    }
+
+    //
+    // Generate a bindings table.
+    //    
+    function GenerateBindings(record)
+    {
+	if (!_.has(record, "bindings")) {
+	    $('#quicktabs_content #bindings').addClass("hidden");
+	    $('#show_bindings_tab').addClass("hidden");
+	    return;
+	}
+	var bindings  = record.bindings;
+	var paramdefs = record.paramdefs;
+	var html = GetBindingsTable(paramdefs, bindings);
+	
+	$('#bindings_table tbody').html(html);
+	$('#quicktabs_content #bindings').removeClass("hidden");
+	$('#show_bindings_tab').removeClass("hidden");
     }
 
     // Helper.

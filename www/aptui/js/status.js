@@ -362,6 +362,7 @@ $(function ()
 		 instanceStatus == "pending") {
 	    ShowRspec();
 	}
+	ShowBindings();
     }
 
   function addTutorialNotifyTab(id)
@@ -2266,6 +2267,38 @@ $(function ()
 	};
 	sup.CallServerMethod(null, "status", "GetRspec",
 			     {"uuid"     : uuid}, callback);
+    }
+
+    //
+    // Show the parameter bindings in the tab.
+    //
+    function ShowBindings()
+    {
+	// Only parameterized profiles of course.
+	if (! expinfo.paramdefs) {
+	    return;
+	}
+	// Enable the Save Params button.
+	if (expinfo.profile_uuid != "unknown") {
+	    $('#save_paramset_button')
+		.removeClass("hidden")
+		.popover({trigger:  'hover',
+			  placement:'auto',
+			  container:'body'})
+		.click(function (event) {
+		    paramsets.InitSaveParameterSet('#save_paramset_div',
+						   expinfo.profile_uuid,
+						   uuid);
+		});
+	}
+	if (expinfo.params) {
+	    var bindings  = expinfo.params;
+	    var paramdefs = expinfo.paramdefs;
+	    var html = GetBindingsTable(paramdefs, bindings);
+	    $('#bindings_table tbody').html(html);
+	    $('#quicktabs_ul a[href="#bindings"]').parent().removeClass("hidden");
+	    $('#quicktabs_content #bindings').removeClass("hidden");
+	}
     }
 
     function MakeUriData(xml,uridata)

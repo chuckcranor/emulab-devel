@@ -29,8 +29,9 @@ use File::Temp qw(tempfile :mktemp :POSIX);
 use Data::Dumper;
 use CGI;
 use POSIX ":sys_wait_h";
-use POSIX qw(setsid);
+use POSIX qw(setsid strftime);
 use Carp qw(cluck);
+use JSON;
 
 #
 # Back-end script to manage APT profiles.
@@ -44,6 +45,11 @@ sub usage()
     print("Usage: manage_profile delete -a <profile>\n");
     print("Usage: manage_profile undelete pid,name:version\n");
     print("Usage: manage_profile listimages <profile>\n");
+    print("Usage: manage_profile bindings <profile> <instance>\n");
+    print("Usage: manage_profile paramset ".
+	  "[-u user] [-m description] [-b] add <name> <profile> <instance>\n");
+    print("Usage: manage_profile paramset ".
+	  "[-u user] delete <name> <profile>\n");
     exit(-1);
 }
 my $optlist     = "dvt:m";
@@ -119,6 +125,8 @@ sub GetScriptParameters($$);
 sub VerifyXML($$);
 sub ModifyProfileInternal($$$);
 sub UseNewGenilib($);
+sub Bindings();
+sub ParamSet();
 		      
 # The web interface (and in the future the xmlrpc interface) sets this.
 my $this_user = User->ImpliedUser();
@@ -218,6 +226,12 @@ elsif ($action eq "listimages") {
 }
 elsif ($action eq "create") {
     exit(CreateProfile());
+}
+elsif ($action eq "bindings") {
+    exit(Bindings());
+}
+elsif ($action eq "paramset") {
+    exit(ParamSet());
 }
 else {
     usage();
@@ -1111,6 +1125,33 @@ sub UserError($)
     exit(1);
 }
 
+#
+# Not sure what I was thinking above, XML was dumb.
+#
+sub UserErrorSane($)
+{
+    my ($ref) = @_;
+    my $errors = {};
+
+    if (ref($ref) eq "SCALAR") {
+	$errors->{"error"} = $$ref;
+    }
+    else {
+	$errors = $ref;
+    }
+    if (defined($webtask_id)) {
+	$webtask->Exited(1);
+	$webtask->errors($errors);
+    }
+    else {
+	foreach my $key (keys(%$errors)) {
+	    print "$key: " . $errors->{$key} . "\n";
+	}
+    }
+    # Exit with positive status so web interface treats it as user error.
+    exit(1);
+}
+
 sub escapeshellarg($)
 {
     my ($str) = @_;
@@ -1678,5 +1719,191 @@ sub UseNewGenilib($)
     return 1
 	if (EmulabFeatures->FeatureEnabled("NewPParams", undef, $project));
 
+    return 0;
+}
+
+#
+# Get the bindings used in an instance (which might be in the history table)
+# and return them as a json array.
+#
+sub Bindings()
+{
+    my $optlist    = "";
+    my $bindings;
+    my $errmsg;
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (@ARGV != 2);
+
+    my $profile = APT_Profile->Lookup($ARGV[0]);
+    if (!defined($profile)) {
+	fatal("No such profile exists: " . $ARGV[0]);
+    }
+    my $instance = APT_Instance->Lookup($ARGV[1]);
+    if (!$instance) {
+	$instance = APT_Instance::History->Lookup($ARGV[1]);
+	if (!$instance) {
+	    fatal("No such instance");
+	}
+    }
+    #print $instance->rspec() . "\n";
+    my $rspec = GeniXML::Parse($instance->rspec());
+    if (! defined($rspec)) {
+	fatal("Could not parse rspec");
+    }
+    if (APT_Profile::GetBindings($rspec, \$bindings, \$errmsg)) {
+	fatal($errmsg);
+    }
+    if (defined($webtask)) {
+	$webtask->bindings($bindings);
+	$webtask->Exited(0);
+    }
+    else {
+	print Dumper($bindings);
+    }
+    return 0;
+}
+    
+#
+# Deal with parameter sets.
+#
+sub ParamSet()
+{
+    my $optlist    = "u:m:b";
+    my $bound      = 0;
+    my $user;
+    my $description;
+    my $bindings;
+    my $errmsg;
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"u"})) {
+	$user = User->Lookup($options{"u"});
+	if (!defined($user)) {
+	    fatal("No such user");
+	}
+    }
+    else {
+	$user = $this_user;
+    }
+    my $uid     = $user->uid();
+    my $uid_idx = $user->uid_idx();
+    
+    usage()
+	if (@ARGV < 3);
+    
+    my $op = shift(@ARGV);
+    if (! ($op eq "add" || $op eq "delete")) {
+	fatal("Improper action");
+    }
+    my $name = shift(@ARGV);
+    if ($name !~ /^[-\w]+$/ || length($name) >= 32) {
+	UserErrorSane({"name" => "Alphanumeric no greater then 32 characters"});
+    }
+    my $safe_name = DBQuoteSpecial($name);
+    
+    my $profile = APT_Profile->Lookup(shift(@ARGV));
+    if (!defined($profile)) {
+	fatal("No such profile");
+    }
+    my $profileid = $profile->profileid();
+    
+    if ($op eq "delete") {
+	my $query_result =
+	    DBQueryWarn("select uuid from apt_parameter_sets ".
+			"where uid_idx='$uid_idx' and ".
+			"      profileid='$profileid' and name=$safe_name");
+	fatal("Database error")
+	    if (!defined($query_result));
+	if (!$query_result->numrows) {
+	    fatal("No such parameter set");
+	}
+	if (!DBQueryWarn("delete from apt_parameter_sets ".
+			 "where uid_idx='$uid_idx' and ".
+			 "      profileid='$profileid' and name=$safe_name")) {
+	    fatal("DB error deleting parameter set");
+	}
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	return 0;
+    }
+    usage()
+	if (@ARGV != 1);
+
+    if (defined($options{"m"})) {
+	$description = $options{"m"};
+	if (! TBcheck_dbslot($description, "default", "tinytext",
+			     TBDB_CHECKDBSLOT_ERROR)) {
+	    UserErrorSane({"description" => TBFieldErrorString()});
+	}
+    }
+    else {
+	$description = "Created on " .
+	    POSIX::strftime("20%y-%m-%d %H:%M:%S %Z", localtime(time()));
+    }
+    if (defined($options{"b"})) {
+	$bound = 1;
+    }
+    # Ensure name is unique.
+    my $query_result =
+	DBQueryWarn("select uuid from apt_parameter_sets ".
+		    "where uid_idx='$uid_idx' and ".
+		    "      profileid='$profileid' and name=$safe_name");
+    fatal("Database error")
+	if (!defined($query_result));
+    if ($query_result->numrows) {
+	UserErrorSane({"name" => "Already in use"});
+    }
+    
+    my $instance = APT_Instance->Lookup($ARGV[0]);
+    if (!$instance) {
+	$instance = APT_Instance::History->Lookup($ARGV[0]);
+	if (!$instance) {
+	    fatal("No such instance");
+	}
+    }
+    my $rspec = GeniXML::Parse($instance->rspec());
+    if (! defined($rspec)) {
+	fatal("Could not parse rspec");
+    }
+    if (APT_Profile::GetBindings($rspec, \$bindings, \$errmsg)) {
+	fatal($errmsg);
+    }
+    print Dumper($bindings);
+    $bindings = eval { encode_json($bindings); };
+    if ($@) {
+	fatal("Could not json encode the bindings\n");
+    }
+    my $safe_bindings = DBQuoteSpecial($bindings);
+    my $safe_descrip  = DBQuoteSpecial($description);
+
+    my $query =
+	"insert into apt_parameter_sets set created=now(), ".
+	" uuid=uuid(),uid='$uid',uid_idx='$uid_idx', ".
+	" profileid='$profileid',bindings=$safe_bindings, ".
+	" name=$safe_name,description=$safe_descrip";
+
+    if ($bound) {
+	$query .= ",version_uuid=" . DBQuoteSpecial($profile->uuid());
+	if ($profile->repourl()) {
+	    $query .= ",reporef=" . DBQuoteSpecial($instance->reporef());
+	    $query .= ",repohash=" . DBQuoteSpecial($instance->repohash());
+	}
+    }
+    $query_result = DBQueryWarn($query);
+    if (!$query_result) {
+	fatal("Could not insert bindings into DB");
+    }
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
     return 0;
 }

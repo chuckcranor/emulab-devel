@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,6 +38,7 @@ $reqargs = RequiredPageArguments("uuid",  PAGEARG_STRING);
 #
 RedirectSecure();
 $this_user = CheckLoginOrRedirect();
+$this_idx  = $this_user->uid_idx();
 
 SPITHEADER(1);
 
@@ -45,7 +46,7 @@ $profile = Profile::Lookup($uuid);
 if (!$profile) {
     SPITUSERERROR("No such profile!");
 }
-else if ($this_user->uid_idx() != $profile->creator_idx() && !ISADMIN()) {
+else if (! ($profile->CanView($this_user) || ISADMIN())) {
     SPITUSERERROR("Not enough permission!");
 }
 $profileid = $profile->profileid();
@@ -72,6 +73,7 @@ $query1_result =
 		 "left join geni.geni_users as u on u.uuid=i.creator_uuid ".
                  "left join apt_aggregates as aa on aa.urn=ia.aggregate_urn ".
 		 "where i.profile_id='$profileid' ".
+                 (!ISADMIN() ? "and i.creator_idx='$this_idx' " : "") .
 		 "group by i.uuid order by i.started desc");
 
 $query2_result =
@@ -92,6 +94,7 @@ $query2_result =
 		 "left join geni.geni_users as u on u.uuid=h.creator_uuid ".
                  "left join apt_aggregates as aa on aa.urn=ia.aggregate_urn ".
 		 "where h.profile_id='$profileid' ".
+                 (!ISADMIN() ? "and h.creator_idx='$this_idx' " : "") .
 		 "group by h.uuid order by h.started desc");
 
 if (mysql_num_rows($query1_result) == 0 &&
@@ -152,7 +155,7 @@ echo "<div id='activity-body'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "    window.AJAXURL  = 'server-ajax.php';\n";
-echo "    window.ISADMIN  = " . ISADMIN() . ";\n";
+echo "    window.ISADMIN  = " . (ISADMIN() ? "true" : "false") . ";\n";
 echo "</script>\n";
 echo "<script type='text/plain' id='instances-json'>\n";
 echo json_encode($instances,

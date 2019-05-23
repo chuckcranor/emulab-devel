@@ -438,9 +438,6 @@ $(function ()
 	ChangeProfileSelection(startProfile);
 	_.delay(function () {
 	    $('.dropdown-toggle').dropdown();
-	    if (window.SKIPFIRSTSTEP) {
-		$('#stepsContainer').steps('next');
-	    }
 	}, 500);
 
 	// Set up the click function for expanding and collapsing profile groups
@@ -569,6 +566,8 @@ $(function ()
 		        multisite    : multisite,
 			amlist       : amlist,
 			prunetypes   : prunetypes,
+			rerun_instance : window.RERUN_INSTANCE,
+			rerun_paramset : window.RERUN_PARAMSET,
 		        jacksGraphCallback: updateJacksGraph
 		    });
 		    loaded_uuid = selected_uuid;
@@ -1700,6 +1699,14 @@ $(function ()
 		UpdateGroupSelector();
 	    }
 	    CreateAggregateSelectors(selected_rspec);
+
+	    /*
+	     * First time, if skipfirststep is set, do it and clear.
+	     */
+	    if (window.SKIPFIRSTSTEP) {
+		$('#stepsContainer').steps('next');
+		window.SKIPFIRSTSTEP = false;
+	    }
 	};
 	GetProfile($(selectedElement).attr('value'), continuation);
     }

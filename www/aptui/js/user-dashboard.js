@@ -2,7 +2,10 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['user-dashboard', 'experiment-list', 'profile-list', 'project-list', 'dataset-list', 'user-profile', 'oops-modal', 'waitwait-modal', 'classic-explist','conversion-help-modal']);
+    var templates = APT_OPTIONS.fetchTemplateList(['user-dashboard',
+	   'experiment-list', 'profile-list', 'project-list', 'dataset-list', 
+	   'user-profile', 'oops-modal', 'waitwait-modal', 'classic-explist',
+	   'conversion-help-modal','paramsets-list']);
     var mainString = templates['user-dashboard'];
     var experimentString = templates['experiment-list'];
     var profileListString = templates['profile-list'];
@@ -65,6 +68,7 @@ $(function ()
 	LoadProjectsTab();
 	LoadProfileTab();
 	LoadDatasetTab();
+	LoadParameterSetsTab();
 	LoadClassicDatasets();
 
 	/*
@@ -254,7 +258,7 @@ $(function ()
 	    });
 	    // This activates the tooltip subsystem.
 	    $('[data-toggle="tooltip"]').tooltip({
-		delay: {"hide" : 500, "show" : 500},
+		delay: {"hide" : 100, "show" : 300},
 		placement: 'auto',
 	    });
 	    // Display the topo.
@@ -322,7 +326,7 @@ $(function ()
 	    });
 	    // This activates the tooltip subsystem.
 	    $('[data-toggle="tooltip"]').tooltip({
-		delay: {"hide" : 500, "show" : 500},
+		delay: {"hide" : 100, "show" : 300},
 		placement: 'auto',
 	    });
 	    // Display the topo.
@@ -548,6 +552,66 @@ $(function ()
 	var xmlthing =
 	    sup.CallServerMethod(null,
 				 "user-dashboard", "DatasetList",
+				 {"uid" : window.TARGET_USER});
+	xmlthing.done(callback);
+    }
+
+    function LoadParameterSetsTab()
+    {
+	var paramsets_table;
+	
+	var callback = function(json) {
+	    console.info("paramsets", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (! json.value) {
+		$('#paramsets_noparamsets').removeClass("hidden");
+		return;
+	    }
+	    var template = _.template(templates["paramsets-list"]);
+
+	    $('#paramsets_content')
+		.html(template({"paramsets"   : json.value}));
+
+	    // Bind the delete button.
+	    $('#paramsets_content #delete-paramset-button')
+		.click(function (event) {
+		    event.preventDefault();
+		    var row = $(this).closest("tr");
+		    var paramset_uuid = $(row).attr("data-uuid");
+
+		    paramsets.InitDeleteParameterSet(window.TARGET_USER,
+						     paramset_uuid,
+			     function () {
+				 $(row).remove();
+				 paramsets_table.trigger('update');
+			     });
+		});
+	    
+	    // Format dates with moment before display.
+	    $('#paramsets_content table .format-date').each(function(){
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
+	    // This activates the tooltip subsystem.
+	    $('#paramsets_content [data-toggle="tooltip"]').tooltip({
+		delay: {"hide" : 100, "show" : 300},
+		placement: 'auto',
+	    });
+	    
+	    paramsets_table = $('#paramsets_content .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+		});
+	}
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "user-dashboard", "ListParameterSets",
 				 {"uid" : window.TARGET_USER});
 	xmlthing.done(callback);
     }
