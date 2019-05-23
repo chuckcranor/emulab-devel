@@ -115,6 +115,11 @@ window.GetBindingsTable = (function ()
 		    html += doMultiItem(details, bindings[name]);
 		}
 		else {
+		    // Old paramdefs did not have name in the details.
+		    // Old paramdefs have nothing but "item"
+		    if (!_.has(details, "name")) {
+			details["name"] = name;
+		    }
 		    html += doItem(details, undefined, bindings[name]);
 		}
 	    });
