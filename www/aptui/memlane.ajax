@@ -102,6 +102,7 @@ function Do_HistoryRecord()
             }
             $webtask->Delete();
         }
+        $blob["cansave_parameters"] = $profile->UseNewGeniLib() ? 1 : 0;
     }
     # Need to munge the urls since these slices are history.
     foreach ($blob["slivers"] as &$sliver) {

@@ -2279,7 +2279,8 @@ $(function ()
 	    return;
 	}
 	// Enable the Save Params button.
-	if (expinfo.profile_uuid != "unknown") {
+	if (expinfo.profile_uuid != "unknown" &&
+	    window.APT_OPTIONS.cansave_parameters) {
 	    $('#save_paramset_button')
 		.removeClass("hidden")
 		.popover({trigger:  'hover',

@@ -53,7 +53,7 @@ $(function ()
 	    }
 	    $('#rerun_button').attr("href", url);
 	    
-	    if (_.has(record, "bindings")) {
+	    if (_.has(record, "bindings") && record.cansave_parameters) {
 		$('#save_paramset_button')
 		    .removeClass("hidden")
 		    .popover({trigger:  'hover',
