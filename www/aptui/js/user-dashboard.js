@@ -573,6 +573,9 @@ $(function ()
 	    }
 	    var template = _.template(templates["paramsets-list"]);
 
+	    // Temporary until new geni-lib/ppwizard rolled out
+	    $('.paramsets-hidden').removeClass("hidden");
+	    
 	    $('#paramsets_content')
 		.html(template({"paramsets"   : json.value}));
 
