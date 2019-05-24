@@ -649,6 +649,8 @@ $(function () {
 	    if (! details.multiValue) {
 		var name = details.name;
 
+		console.info("foo", name, details);
+
 		if (rerun_bindings && _.has(rerun_bindings, name)) {
 		    if (Array.isArray(rerun_bindings[name])) {
 			var warning = {
@@ -732,6 +734,14 @@ $(function () {
 		    details["groupName"] = "Advanced";
 		    details["hide"]      = true;
 		}
+		// More backwards compat, make sure these are defined.
+		if (!_.has(details, "multiValue")) {
+		    details.multiValue = false;
+		}
+		if (!_.has(details, "name")) {
+		    details.name = name;
+		}
+		
 		if (_.has(details, "groupId") && details.groupId) {
 		    groupId       = details.groupId;
 		    if (_.has(details, "groupName")) {
