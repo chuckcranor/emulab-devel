@@ -591,10 +591,16 @@ else {
 }
 if ($isadmin) {
     #
+    # Ignore path if global image in emulab-ops
+    #
+    if ($global && $ipid eq TBOPSPID()) {
+	$newimageid_args{"path"} = $spath;
+    }
+    #
     # Admins can provide a path, but this is probably a bad idea too.
     # Ignore it unless /usr/testbed/images.
     #
-    if (exists($newimageid_args{"path"}) &&
+    elsif (exists($newimageid_args{"path"}) &&
 	$newimageid_args{"path"} =~ /^\/usr\/testbed\/images/) {
 	$newimageid_args{"path"} = $spath;
     }
