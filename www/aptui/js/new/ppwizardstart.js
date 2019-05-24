@@ -1339,6 +1339,25 @@ $(function () {
 		    .on("hide.bs.dropdown", function (event) {
 			$(innerdiv).find(".glyphicon-info-sign").popover("hide");
 		    });
+		
+		$(innerdiv).find(".dropdown-submenu")
+		    .hover(
+			function(event) {
+			    var menu = $(event.target)
+				.parent().find(".dropdown-menu");
+		    
+			    $(menu).css("display", "inline-block");
+			    var height = $(menu).height();
+			    if (height > 26) {
+				height = 0 - (height / 2);
+				$(menu).css("bottom", height + "px");
+			    }
+			},
+			function(event) {
+			    var menu = $(event.target)
+				.parent().find(".dropdown-menu");
+			    $(menu).css("display", "none");
+			});
 
 		// Make sure popovers are gone when a submenu is gone. We do not
 		// get the dropdown events for these, so hook into hover.

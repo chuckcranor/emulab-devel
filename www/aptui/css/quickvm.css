@@ -599,13 +599,9 @@ blockquote #selected_profile_description {
     position: relative;
 }
 
-.dropdown-submenu:hover>.dropdown-menu {
-     display: inline-block;
-}
-
 .dropdown-submenu>.dropdown-menu {
-    bottom: 0% !important;
-    top :auto !important;    
+    bottom: 0%;
+    top : auto !important;    
     left: 100%;
     margin-top: -6px;
     margin-left: -1px;
