@@ -1479,9 +1479,6 @@ $(function ()
 		// Mark as HEAD in the page.
 		repohash = blob.hash;
 	    }
-	    // Now we can let the auto check proceed, it will no
-	    // longer think anything has changed.
-	    repobusy = false;
 	    
 	    if (blob) {
 		/*
@@ -1516,9 +1513,15 @@ $(function ()
 	 * Need to wait if the auto check for the repo change is
 	 * not running. It hurts to run this at the same time that
 	 * is running.
+	 *
+	 * We are never going to set repobusy=false after this, so
+	 * CheckRepoChange() will never run again once the user has
+	 * used the update button. Not worth the trouble to get the
+	 * synchronization correct.
 	 */
 	var checker = function () {
 	    if (!repobusy) {
+		// See comment above ...
 		repobusy = true;
 		gitrepo.UpdateRepo(version_uuid, callback);
 		return;
