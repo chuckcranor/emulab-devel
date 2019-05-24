@@ -543,7 +543,7 @@ CREATE TABLE `apt_parameter_sets` (
   `repohash` varchar(64) default NULL,
   `bindings` mediumtext,    
   PRIMARY KEY (`uuid`),
-  UNIQUE KEY (`uid_idx`,`profileid`,`name`)
+  UNIQUE KEY `uid_idx` (`uid_idx`,`profileid`,`name`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
