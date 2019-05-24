@@ -59,6 +59,7 @@ SBIN_SCRIPTS	= vlandiff vlansync withadminprivs export_tables cvsupd.pl \
 		  addrfdevice addrfpath reserve announce createimagealias \
 		  predict test-reserve notify-reservations \
 		  deprecate_image pushrootkey addinterface addwire cnetwatch \
+		  powerlog \
 		  addswitch addtypetoimages resutil addstack addnode
 
 WEB_SBIN_SCRIPTS= webnewnode webdeletenode webspewconlog webarchive_list \
@@ -91,7 +92,7 @@ SETUID_SUEXEC_SCRIPTS  = xlogin
 # 
 all:	$(BIN_SCRIPTS) $(SBIN_SCRIPTS) $(LIBEXEC_SCRIPTS) $(CTRLSBIN_SCRIPTS) \
 	$(SBSBIN_SCRIPTS) $(SETUID_BIN_SCRIPTS) $(SETUID_SBIN_SCRIPTS) \
-	$(SUBDIRS) firstuser setbuildinfo cnetwatch
+	$(SUBDIRS) firstuser setbuildinfo
 
 subboss: $(SBSBIN_SCRIPTS)
 
