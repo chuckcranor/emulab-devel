@@ -452,8 +452,9 @@ if (defined($options{"g"})) {
 elsif (defined($options{"r"})) {
     $shared = $options{"r"};
 }
-elsif ($experiment->pid() eq $base_image->pid()) {
+elsif ($experiment->pid() eq $base_image->pid() || $experiment->geniflags()) {
     # Not crossing projects, so inherit from the base image.
+    # Or if on the geni path.
     if ($base_image->global()) {
 	$global = 1;
     }
