@@ -295,6 +295,10 @@ sysetc-install-systemd: systemd-dir-install
 		$(SYSETCDIR)/systemd/system/multi-user.target.wants/testbed.service
 	ln -sf ../emulab-fstab-fixup.service \
 		$(SYSETCDIR)/systemd/system/multi-user.target.wants/emulab-fstab-fixup.service
+	# Install our pubsubd.restart helper
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) \
+		$(SRCDIR)/pubsubd.restart-systemd \
+		$(BINDIR)/pubsubd.restart
 	# Kick the init process to read our newly-installed unit files
 	# (i.e., so an immediate tbprepare will work...)
 	-@if [ -z "$(DESTDIR)" ]; then \
