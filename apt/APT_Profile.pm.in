@@ -684,7 +684,7 @@ sub Delete($$)
     
     DBQueryWarn("lock tables apt_profiles write, apt_profile_versions write, ".
 		"     web_tasks write, apt_profile_favorites write, ".
-		"     apt_profile_images write")
+		"     apt_profile_images write, apt_parameter_sets write")
 	or return -1;
 
     if ($purge) {
