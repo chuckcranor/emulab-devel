@@ -108,7 +108,7 @@ elseif ($ISPNET) {
           $profile_default) = explode(',', $portal_default_profile);
 }
 elseif ($ISPOWDER) {
-    $portal_default_profile = "PhantomNet,OAI-Real-Hardware";
+    $portal_default_profile = "PowderProfiles,srsLTE-SIM";
     list ($profile_default_pid,
           $profile_default) = explode(',', $portal_default_profile);
 }
