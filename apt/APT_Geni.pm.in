@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2018 University of Utah and the Flux Group.
+# Copyright (c) 2007-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -583,12 +583,13 @@ sub PingAggregate($$;$$)
 	return -1;
     }
     my $cmurl = $authority->url();
-    if (defined($portalrpc)) {
+    if (defined($portalrpc) && $portalrpc) {
 	$cmurl =~ s/\/cm$/\/cluster/;
     }
     if ($usemydevtree) {
 	$cmurl =~ s/protogeni/protogeni\/stoller/;
     }
+
     my $oldto = Genixmlrpc->SetTimeout($timeout);
     my $response = Genixmlrpc::CallMethod($cmurl, $context, "GetVersion");
     Genixmlrpc->SetTimeout($oldto);
