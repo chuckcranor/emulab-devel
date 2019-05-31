@@ -96,6 +96,12 @@ AC_CHECK_HEADERS([Python.h],
 AC_SUBST(PYTHON_INCLUDE)
 # END Python detection.
 
+# Find perl for gettimezone invocation below
+AC_PATH_PROGS(PERL, perl perl5)
+if test x"$PERL" = x""; then
+    AC_MSG_ERROR([perl not detected])
+fi
+
 AC_CHECK_TOOL(CC,gcc)
 AC_CHECK_TOOL(CXX,g++)
 AC_CHECK_TOOL(AR,ar)
@@ -1263,11 +1269,12 @@ fi
 #
 if test -e "$srcdir/utils/gettimezone.pl"; then
     echo -n "Checking to see what timezone we are ... ";
-    ZONE=`$srcdir/utils/gettimezone.pl`
+    ZONE=`$PERL $srcdir/utils/gettimezone.pl`
     if test $? -ne 0; then
         AC_MSG_WARN([Cannot find gettimezone script; defaulting to $OURTIMEZONE]);
+    else
+        OURTIMEZONE=$ZONE
     fi
-    OURTIMEZONE=$ZONE
     echo "$OURTIMEZONE"
 else
     AC_MSG_WARN([Cannot find gettimezone script; defaulting to $OURTIMEZONE]);
@@ -1396,7 +1403,6 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	tbsetup/panic tbsetup/tbrsync tbsetup/nfstrace \
 	tbsetup/checkup/GNUmakefile tbsetup/checkup/checkup_daemon \
 	tbsetup/libtblog.pm tbsetup/template_cvsroot/GNUmakefile \
-	tip/GNUmakefile tip/console \
 	tmcd/GNUmakefile tmcd/tmcd.restart \
 	utils/GNUmakefile utils/vlandiff utils/vlansync utils/delay_config \
 	utils/sshtb utils/create_image utils/node_admin \
