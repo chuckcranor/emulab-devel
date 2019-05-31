@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -496,9 +496,11 @@ my $usr_email = $newuser->email();
 my $firstinitstate;
 if (TBGetSiteVar("general/firstinit/state", \$firstinitstate)) {
     #
-    # The first user gets admin status and some extra groups, etc.
+    # These initial users gets admin status and some extra groups, etc.
     #
-    if ($firstinitstate eq "createproject") {
+    if ($firstinitstate eq "createproject" &&
+	($new_uid eq EmulabConstants::PROTOUSER() ||
+	 $new_uid eq EmulabConstants::CKUPUSER())) {
 	DBQueryFatal("update users set ".
 		     " admin=1,status='". $User::USERSTATUS_UNAPPROVED . "' " .
 		     "where uid_idx='$usr_idx'");
