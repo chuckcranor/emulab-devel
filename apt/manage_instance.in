@@ -1350,6 +1350,13 @@ sub DoTerminate()
 	$slice->TakeLock();
     }
     elsif ($slice->Lock()) {
+	sleep(1);
+	
+	if ($instance->canceled()) {
+	    print "Instance is already marked as canceled\n";
+	    exit(0);
+	}
+	
 	#
 	# A special case is if the slice is provisioning. This means the
 	# user is giving up on it, and we want to tell the aggregate to
@@ -1357,13 +1364,16 @@ sub DoTerminate()
 	# to be able to deal with that.
 	#
 	if ($instance->status() ne "provisioned") {
-	    fatal("Slice is busy, cannot lock it");
+	    $errmsg = "Experiment is busy and not provisioned. This is unusual.";
+	    if (defined($webtask)) {
+		$webtask->output($errmsg);
+		$webtask->Exited(GENIRESPONSE_BUSY);
+	    }
+	    print STDERR "$errmsg\n";
+	    exit(GENIRESPONSE_BUSY);
 	}
-	if (!$instance->canceled()) {
-	    print "Marking instance canceled\n";
-	    $instance->MarkCanceled();
-	}
-	sleep(1);
+	print "Marking instance canceled\n";
+	$instance->MarkCanceled();
 	# We have an obvious race here since we do not have the lock.
 	exit(0);
     }
