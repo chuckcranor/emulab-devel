@@ -166,6 +166,7 @@ else {
 	exit(1);
     }
 }
+$webtask->AutoStore(1);
 
 #
 # Anything to do? See create_instance; Note that we skip anything
@@ -190,11 +191,10 @@ foreach my $agg ($instance->AggregateList()) {
 	if (!$aptagg->deferrable()) {
 	    $instance->SetStatus("failed");
 
-	    if (defined($webtask)) {
-		$webtask->output($errmsg);
-		$webtask->Exited(1);
-	    }
-	    $instance->RecordError(1, $errmsg);
+	    $webtask->output($errmsg);
+	    $webtask->Exited(GENIRESPONSE_SERVER_UNAVAILABLE);
+	    $instance->RecordError(GENIRESPONSE_SERVER_UNAVAILABLE, $errmsg);
+	    $genislice->UnLock();
 	    exit(1);
 	}
 	# Mark as deferred (it might still be "created" if not scheduled).
@@ -236,7 +236,6 @@ my $slice_urn   = $genislice->urn();
 my $uuid        = $instance->uuid();
 my $project     = $instance->GetProject();
 my $rspecstr    = $instance->rspec();
-$webtask->AutoStore(1);
 
 #
 # Load the SA cert to act as caller context.
