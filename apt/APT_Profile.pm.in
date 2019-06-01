@@ -88,6 +88,14 @@ sub versname($)
     return $self->name() . ":" . $self->version();
 }
 
+# Concat pid,name/vers.
+sub pidversname($)
+{
+    my ($self) = @_;
+
+    return $self->pid() . "," . $self->name() . ":" . $self->version();
+}
+
 sub BlessRow($$)
 {
     my ($class, $row) = @_;
@@ -1501,7 +1509,7 @@ sub CheckLicenses($$$$$)
 	my $manager_urn = GetManagerId($ref);
 	my $aptagg      = APT_Aggregate->Lookup($manager_urn);
 
-	print STDERR "CheckLicenses: $client_id, $manager_urn\n";
+	#print STDERR "CheckLicenses: $client_id, $manager_urn\n";
 	#
 	# Check for aggregate restriction,
 	#
@@ -1535,7 +1543,7 @@ sub CheckLicenses($$$$$)
 	    if ($component_id && $component_id ne "*") {
 		my $node_id = $component_id;
 		
-		print STDERR "CheckLicenses: $client_id, $component_id\n";
+		#print STDERR "CheckLicenses: $client_id, $component_id\n";
 
 		if (GeniHRN::IsValid($component_id)) {
 		    my $hrn = GeniHRN->new($component_id);
@@ -1585,7 +1593,7 @@ sub CheckLicenses($$$$$)
 		}
 	    }
 	    if ($hardtype) {
-		print STDERR "CheckLicenses: $client_id, $hardtype\n";
+		#print STDERR "CheckLicenses: $client_id, $hardtype\n";
 		
 		my $nodetype = NodeType->Lookup($hardtype);
 		if (! $nodetype) {
