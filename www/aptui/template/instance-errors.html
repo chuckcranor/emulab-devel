@@ -37,13 +37,17 @@
 		<% } else { %>
 		  <td>N/A</td>
 		<% } %>
-		<% if (value.message && value.message != "") { %>
+		<% if (value.message && value.message != "") {
+		  var message = "<code style='white-space: pre-wrap'>" +
+		          value.message + "</code>";
+		%>
 		  <td><span style="text-decoration: underline;"
 			    data-toggle='popover'
 			    data-delay='{"hide":100, "show":500}'
 			    data-html='true'
 			    data-uuid="<%- value.uuid %>"
-			    data-content=""><%- value.reason %></span></td>
+			    data-content="<%- message %>">
+		    <%- value.reason %></span></td>
 		<% } else { %>
 		  <td><%- value.reason %></td>
 		<% } %>

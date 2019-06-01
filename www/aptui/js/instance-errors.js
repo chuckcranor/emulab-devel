@@ -64,12 +64,6 @@ $(function ()
 	    trigger: 'hover',
 	    placement: 'auto',
 	    html: true,
-	    content: function () {
-		var uuid = $(this).data("uuid");
-		var html = "<code style='white-space: pre-wrap'>" +
-		    errors[uuid].message + "</code>";
-		return html;
-	    }
 	});
 	$('#next-page').click(function (event) {
 	    event.preventDefault();
