@@ -2115,9 +2115,9 @@ sub Convert2Genilib($)
 #
 # Convert data_set in rspec to simplified bindings array.
 #
-sub GetBindings($$$)
+sub GetBindings($$$;$)
 {
-    my ($rspec, $pbindings, $perrmsg) = @_;
+    my ($rspec, $pbindings, $perrmsg, $asparamdefs) = @_;
 
     if (!ref($rspec)) {
 	$rspec = GeniXML::Parse($rspec);
@@ -2138,6 +2138,19 @@ sub GetBindings($$$)
 	$dataset = $rspec;
     }
 
+    # This is silly.
+    my $getName = sub {
+	my ($ref) = @_;
+	my $name = GeniXML::GetText("name", $ref);
+	
+	# Not sure why the name is in dotted notation. Kill it.
+	my @tokens = split(/[.]/, $name);
+	if (@tokens > 1) {
+	    $name = pop(@tokens);
+	}
+	return $name;
+    };
+
     #
     # Convert XML goo to multilevel array of bindings.
     #
@@ -2148,60 +2161,108 @@ sub GetBindings($$$)
     # Process each item in the dataset. 
     #
     $processSet = sub {
-	my ($ref, $bindings) = @_;
+	my ($ref) = @_;
 	my $which = $ref->nodeName();
 
 	if ($which eq "data_list") {
-	    my $name  = GeniXML::GetText("name", $ref);
 	    my @list  = ();
 
 	    foreach my $child ($ref->childNodes()) {
-		my $nodeName = $child->nodeName();
-
-		if ($nodeName eq "data_member_item") {
-		    my $value = $child->findvalue('.');
-		    push(@list, $value);
-		}
-		elsif ($nodeName eq "data_struct") {
-		    my $b = {};
-		    &$processSet($child, $b);
-		    push(@list, $b);
-		}
+		next
+		    if ($child->nodeName() !~ /^data/);
+		
+		push(@list, &$processSet($child));
 	    }
-	    # Not sure why the name is in dotted notation. Kill it.
-	    my @tokens = split(/[.]/, $name);
-	    if (@tokens > 1) {
-		$name = pop(@tokens);
+	    if ($asparamdefs) {
+		return {"value" => \@list};
 	    }
-	    $bindings->{$name} = \@list;
+	    return \@list;
 	}
 	elsif ($which eq "data_struct") {
+	    my $b = {};
+	    
 	    foreach my $child ($ref->childNodes()) {
-		my $nodeName = $child->nodeName();
-		&$processSet($child, $bindings);
+		next
+		    if ($child->nodeName() !~ /^data/);
+
+		my $childname = &$getName($child);
+		$b->{$childname} = &$processSet($child);
 	    }
+	    if ($asparamdefs) {
+		return {"value" => $b};
+	    }
+	    return $b;
 	}
 	elsif ($which eq "data_item" ||
 	       $which eq "data_member_item") {
-	    my $name  = GeniXML::GetText("name", $ref);
 	    my $value = $ref->findvalue('.');
 
-	    # Not sure why the name is in dotted notation. Kill it.
-	    my @tokens = split(/[.]/, $name);
-	    if (@tokens > 1) {
-		$name = pop(@tokens);
+	    if ($asparamdefs) {
+		$value = {"value" => $value};
 	    }
-	    $bindings->{$name} = $value;
+	    return $value;
 	}
     };
     foreach my $ref ($dataset->childNodes()) {
 	next
 	    if ($ref->nodeName() !~ /^data/ || $ref->nodeName eq "data_set");
+	
+	my $name  = &$getName($ref);
+	my $value = &$processSet($ref);
 
-	&$processSet($ref, $bindings);
+	print "$name\n";
+	print Dumper($value);
+	
+	#
+	# This was a bad decision, need to fix. Top level struct.
+	#
+	if (!$asparamdefs && $ref->nodeName() eq "struct") {
+	    foreach my $key (keys(%{$value})) {
+		$bindings->{$key} = $value->{$key};
+	    }
+	}
+	else {
+	    $bindings->{$name} = $value;
+	}
     }
     $$pbindings = $bindings;
     return 0;
+}
+
+sub BindingsToParams($)
+{
+    my ($bindings) = @_;
+    my $paramdefs = {};
+    my $convert;
+
+    $convert = sub {
+	my ($val) = @_;
+	
+	if (!ref($val)) {
+	    return {"value" => $val};
+	}
+	if (ref($val) eq "ARRAY") {
+	    my @list = ();
+
+	    foreach my $v (@{$val}) {
+		push(@list, &$convert($v));
+	    }
+	    return {"value" => \@list};
+	}
+	my $b = {};
+
+	foreach my $k (keys(%{$val})) {
+	    $b->{$k} = &$convert($val->{$k});
+	}
+	return $b;
+    };
+
+    foreach my $key (keys(%{$bindings})) {
+	my $val = $bindings->{$key};
+
+	$paramdefs->{$key} = &$convert($val);
+    }
+    return $paramdefs;
 }
 
 ###################################################################

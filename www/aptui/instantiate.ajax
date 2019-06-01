@@ -149,7 +149,7 @@ function Do_GetParameters()
 
         $retval = SUEXEC($this_user->uid(), "nobody",
                          "webmanage_profile -t $webtask_id -- ".
-                         "  bindings $profile_uuid $rerun_uuid ",
+                         "  bindings $rerun_uuid ",
                          SUEXEC_ACTION_CONTINUE);
         $webtask->Refresh();
         
@@ -253,7 +253,7 @@ function Do_GetPreviousBindings()
 
     $retval = SUEXEC($this_user->uid(), "nobody",
                      "webmanage_profile -t $webtask_id -- ".
-                     "  bindings $profile_uuid $rerun_uuid ",
+                     "  bindings $rerun_uuid ",
                      SUEXEC_ACTION_CONTINUE);
     $webtask->Refresh();
         

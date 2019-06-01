@@ -45,7 +45,7 @@ sub usage()
     print("Usage: manage_profile delete -a <profile>\n");
     print("Usage: manage_profile undelete pid,name:version\n");
     print("Usage: manage_profile listimages <profile>\n");
-    print("Usage: manage_profile bindings <profile> <instance>\n");
+    print("Usage: manage_profile bindings <instance>\n");
     print("Usage: manage_profile paramset ".
 	  "[-u user] [-m description] [-b] add <name> <profile> <instance>\n");
     print("Usage: manage_profile paramset ".
@@ -1749,7 +1749,8 @@ sub UseNewGenilib($)
 #
 sub Bindings()
 {
-    my $optlist    = "";
+    my $optlist    = "p";
+    my $asparamdefs= 0;
     my $bindings;
     my $errmsg;
 
@@ -1757,16 +1758,15 @@ sub Bindings()
     if (! getopts($optlist, \%options)) {
 	usage();
     }
-    usage()
-	if (@ARGV != 2);
-
-    my $profile = APT_Profile->Lookup($ARGV[0]);
-    if (!defined($profile)) {
-	fatal("No such profile exists: " . $ARGV[0]);
+    if (defined($options{"p"})) {
+	$asparamdefs = 1;
     }
-    my $instance = APT_Instance->Lookup($ARGV[1]);
+    usage()
+	if (@ARGV != 1);
+
+    my $instance = APT_Instance->Lookup($ARGV[0]);
     if (!$instance) {
-	$instance = APT_Instance::History->Lookup($ARGV[1]);
+	$instance = APT_Instance::History->Lookup($ARGV[0]);
 	if (!$instance) {
 	    fatal("No such instance");
 	}
@@ -1776,7 +1776,7 @@ sub Bindings()
     if (! defined($rspec)) {
 	fatal("Could not parse rspec");
     }
-    if (APT_Profile::GetBindings($rspec, \$bindings, \$errmsg)) {
+    if (APT_Profile::GetBindings($rspec, \$bindings, \$errmsg, $asparamdefs)) {
 	fatal($errmsg);
     }
     if (defined($webtask)) {
@@ -1794,8 +1794,9 @@ sub Bindings()
 #
 sub ParamSet()
 {
-    my $optlist    = "u:m:b";
+    my $optlist    = "u:m:bp";
     my $bound      = 0;
+    my $asparamdefs= 0;
     my $user;
     my $description;
     my $bindings;
@@ -1895,7 +1896,7 @@ sub ParamSet()
     if (! defined($rspec)) {
 	fatal("Could not parse rspec");
     }
-    if (APT_Profile::GetBindings($rspec, \$bindings, \$errmsg)) {
+    if (APT_Profile::GetBindings($rspec, \$bindings, \$errmsg, 0)) {
 	fatal($errmsg);
     }
     print Dumper($bindings);

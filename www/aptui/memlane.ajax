@@ -85,7 +85,7 @@ function Do_HistoryRecord()
 
             $retval = SUEXEC($this_user->uid(), "nobody",
                              "webmanage_profile -t $webtask_id -- ".
-                             "  bindings $profile_uuid $uuid ",
+                             "  bindings $uuid ",
                              SUEXEC_ACTION_CONTINUE);
             $webtask->Refresh();
         
