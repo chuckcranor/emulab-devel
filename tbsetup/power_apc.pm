@@ -111,6 +111,11 @@ sub power {
 	if ($type eq "masterSwitchrPDU") {
 	    $oids = $CtlOIDS{"rPDU"};
 	}
+	# XXX wonky APC power controllers at the fort (AP7941) return
+	# either masterSwitch.5 or masterSwitch.5.1.3.4.5
+	elsif ($type =~ /^masterSwitch.5/) {
+	    $oids = $CtlOIDS{"rPDU"};
+	}
 	# XXX newer APC power controllers we have (AP8941, AP7900B) need to
 	# use this OID else they return an error on set operations (though
 	# the operations do work!)
@@ -119,7 +124,8 @@ sub power {
 	}
     }
 
-#   "sPDUOutletCtl" is ".1.3.6.1.4.1.318.1.1.4.4.2.1.3";
+#   "rPDUOutletControl" is ".1.3.6.1.4.1.318.1.1.12.3.3";
+#   "sPDUOutletCtl"     is ".1.3.6.1.4.1.318.1.1.4.4.2.1.3";
     if    ($op eq "on")  { $op = @$oids[1]; }
     elsif ($op eq "off") { $op = @$oids[2]; }
     elsif ($op =~ /cyc/) { $op = @$oids[3]; }
@@ -142,6 +148,7 @@ sub status {
     my $statusp = shift;
     my %status;
 
+# status for AP7941: .1.3.6.1.4.1.318.1.1.12.3.5
     my $StatOID = ".1.3.6.1.4.1.318.1.1.4.2.2";
     my $Status = 0;
 
