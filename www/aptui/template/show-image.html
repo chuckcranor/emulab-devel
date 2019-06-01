@@ -314,17 +314,36 @@
 	    <td>SHA1 Hash</td>
 	    <td><%- fields.hash %></td>
 	  </tr>
+	  <% } %>
+	<% if (_.has(fields, "metadata_url")) { %>
+	  <tr>
+            <td>Image UUID</td>
+            <td><%- fields.image_uuid %></td>
+	  </tr>
+	  <tr>
+            <td>Version UUID</td>
+            <td><%- fields.uuid %></td>
+	  </tr>
+	  <tr>
+            <td>Metadata URL</td>
+	    <td><a href="<%= fields.metadata_url %>">https://...</a></td>
+	  </tr>
+	  <tr>
+            <td>Imagefile URL</td>
+	    <td><a href="<%= fields.imagefile_url %>">https://...</a></td>
+	  </tr>
+	<% } else { %>
+	  <tr>
+            <td>Image UUID (URL)</td>
+            <td><%- fields.image_uuid %>
+	      (<a href="<%= fields.image_file_url %>">https://...</a>)</td>
+	  </tr>
+	  <tr>
+            <td>Version UUID (URL)</td>
+            <td><%- fields.uuid %>
+	      (<a href="<%= fields.version_file_url %>">https://...</a>)</td>
+	  </tr>
 	<% } %>
-	<tr>
-          <td>Image UUID (URL)</td>
-          <td><%- fields.image_uuid %>
-	    (<a href="<%= fields.image_file_url %>">https://...</a>)</td>
-	</tr>
-	<tr>
-          <td>Version UUID (URL)</td>
-          <td><%- fields.uuid %>
-	    (<a href="<%= fields.version_file_url %>">https://...</a>)</td>
-	</tr>
 	<tr>
 	  <td>ID</td>
 	  <td><%- fields.imageid %></td>

@@ -26,6 +26,7 @@ include_once("webtask.php");
 include_once("imageid_defs.php");
 include_once("osiddefs.php3");
 include_once("node_defs.php");
+include_once("instance_defs.php");
 chdir("apt");
 
 #
@@ -89,15 +90,31 @@ function Do_GetInfo()
     $pid        = $image->pid();
     $gid        = $image->gid();
     $name       = $image->imagename();
-    if ($image->isdataset()) {
-	$domain .= ":${pid}";
-        if ($pid != $gid) {
-            $domain .= ":${gid}";
+    $urn        = null;
+    
+    if ($image->metadata_url()) {
+        if ($image->origin_urn() && $image->origin_name()) {
+            list ($auth,$type,$id) = Instance::ParseURN($image->origin_urn());
+            $urn = "urn:publicid:IDN+${auth}+";
+            if ($image->isdataset()) {
+                $urn .= "imdataset+" . $image->origin_name();
+            }
+            else {
+                $urn .= "image+" . $image->origin_name();
+            }
         }
-        $urn = "urn:publicid:IDN+${domain}+imdataset+${name}";
     }
     else {
-        $urn = "urn:publicid:IDN+${domain}+image+${pid}//${name}";
+        if ($image->isdataset()) {
+            $domain .= ":${pid}";
+            if ($pid != $gid) {
+                $domain .= ":${gid}";
+            }
+            $urn = "urn:publicid:IDN+${domain}+imdataset+${name}";
+        }
+        else {
+            $urn = "urn:publicid:IDN+${domain}+image+${pid}//${name}";
+        }
     }
 
     $blob = array();
@@ -128,8 +145,17 @@ function Do_GetInfo()
     if ($embedded) {
         $blob["version_url"] .= "&embedded=1";
     }
-    $blob["version_file_url"] = "$TBBASE/image_metadata.php?uuid=$uuid";
-    $blob["image_file_url"]   = "$TBBASE/image_metadata.php?uuid=$image_uuid";
+    #
+    # An imported image has a metadata_url and an imagefile_url.
+    #
+    if ($image->metadata_url()) {
+        $blob["metadata_url"]  = $image->metadata_url();
+        $blob["imagefile_url"] = $image->imagefile_url();
+    }
+    else {
+        $blob["version_url"]   = "$TBBASE/image_metadata.php?uuid=$uuid";
+        $blob["image_url"]     = "$TBBASE/image_metadata.php?uuid=$image_uuid";
+    }
 
     if (!$image->isdataset()) {
         if ($image->architecture()) {

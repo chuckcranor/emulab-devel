@@ -465,6 +465,9 @@ class Image
     function hash()		{ return $this->field("hash"); }
     function metadata_url()	{ return $this->field("metadata_url"); }
     function imagefile_url()	{ return $this->field("imagefile_url"); }
+    function origin_uuid()	{ return $this->field("origin_uuid"); }
+    function origin_name()	{ return $this->field("origin_name"); }
+    function origin_urn()	{ return $this->field("origin_urn"); }
     function logfileid()	{ return $this->field("logfileid"); }
     function noexport()		{ return $this->field("noexport"); }
     function ready()		{ return $this->field("ready"); }
