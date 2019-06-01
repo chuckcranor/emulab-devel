@@ -423,7 +423,11 @@ $routing = array("geni-login" =>
 			      "methods" => array("GetInfo" =>
                                                      "Do_GetInfo",
                                                  "Modify" =>
-                                                     "Do_Modify")),
+                                                     "Do_Modify",
+                                                 "GetLog" =>
+                                                     "Do_GetLog",
+                                                 "SaveLogEntry" =>
+                                                     "Do_SaveLogEntry")),
 		 "vlan" =>
 			array("file"    => "vlan.ajax",
 			      "guest"   => false,

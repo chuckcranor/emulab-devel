@@ -269,6 +269,96 @@ function GetExpInfo($node)
     return $blob;
 }
 
+#
+# Get the log entries for a node.
+#
+function Do_GetLog()
+{
+    global $this_user, $ajax_args;
+
+    if (! (ISADMIN() || OPSGUY())) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    if (!isset($ajax_args["node_id"])) {
+	SPITAJAX_ERROR(-1, "Missing node ID");
+	return -1;
+    }
+    $node_id = $ajax_args["node_id"];
+    if (!TBvalid_node_id($node_id)) {
+	SPITAJAX_ERROR(-1, "Invalid node ID");
+	return -1;
+    }
+    $node = Node::Lookup($node_id);
+    if (!$node) {
+	SPITAJAX_ERROR(-1, "No such node");
+	return -1;
+    }
+    $results = array();
+
+    $query_result =
+        DBQueryFatal("select * from nodelog where node_id='$node_id'".
+                     "order by reported");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $blob = array(
+            "log_id"       => $row["log_id"],
+	    "reporter"     => $row["reporting_uid"],
+	    "reported"     => DateStringGMT($row["reported"]),
+	    "entry"        => $row["entry"],
+        );
+        $results[] = $blob;
+    }
+    SPITAJAX_RESPONSE($results);
+}
+
+#
+# Save log entry for a node.
+#
+function Do_SaveLogEntry()
+{
+    global $this_user, $ajax_args, $TBADMINGROUP;
+
+    if (! (ISADMIN() || OPSGUY())) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    if (!isset($ajax_args["node_id"])) {
+	SPITAJAX_ERROR(-1, "Missing node ID");
+	return -1;
+    }
+    $node_id = $ajax_args["node_id"];
+    if (!TBvalid_node_id($node_id)) {
+	SPITAJAX_ERROR(-1, "Invalid node ID");
+	return -1;
+    }
+    $node = Node::Lookup($node_id);
+    if (!$node) {
+	SPITAJAX_ERROR(-1, "No such node");
+	return -1;
+    }
+    if (!isset($ajax_args["log_entry"])) {
+	SPITAJAX_ERROR(-1, "Missing log entry text");
+	return -1;
+    }
+    $log_entry = $ajax_args["log_entry"];
+    # Anything allowed, but not too long.
+    if (! TBvalid_description($log_entry)) {
+	SPITAJAX_ERROR(-1, "Invalid log entry: " . TBFieldErrorString());
+	return -1;
+    }
+    $log_entry = escapeshellarg($log_entry);
+
+    $retval = SUEXEC($this_user->uid(), $TBADMINGROUP,
+                     "webnodelog -m $log_entry $node_id",
+                     SUEXEC_ACTION_CONTINUE);
+    if ($retval) {
+	SPITAJAX_ERROR(-1, "Internal error saving new entry");
+        return;
+    }
+    SPITAJAX_RESPONSE(true);
+}
+
 # Local Variables:
 # mode:php
 # End:

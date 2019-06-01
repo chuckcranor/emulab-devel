@@ -77,6 +77,14 @@
 	     title="Console log tail"
              type='button'>Console Log</a>
 	<% } %>
+ 	<% if (isadmin && window.ISEMULAB) { %>
+	  <a href="show-nodelog.php?node=<%= fields.node_id %>"
+	     class='btn btn-primary btn-xs pull-right'
+             style='margin-right: 10px; margin-top: -4px;'
+	     data-toggle='tooltip'
+	     title="Node message log"
+             type='button'>Admin Log</a>
+	<% } %>
         <h3 class='panel-title'>Node <%- fields.node_id %></h3>
       </div>
       <div class='panel-body'>

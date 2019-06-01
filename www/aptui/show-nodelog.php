@@ -21,54 +21,51 @@
 # 
 # }}}
 #
+chdir("..");
 include("defs.php3");
 include("node_defs.php");
+chdir("apt");
+include("quickvm_sup.php");
+# Must be after quickvm_sup.php since it changes the auth domain.
+$page_title = "Show Node Log";
 
 #
-# Only known and logged in users can do this.
+# Get current user.
 #
-$this_user = CheckLoginOrDie();
-$uid       = $this_user->uid();
-$isadmin   = ISADMIN();
+RedirectSecure();
+$this_user = CheckLoginOrRedirect();
+$this_idx  = $this_user->uid_idx();
+$isadmin   = (ISADMIN() ? "true" : "false");
 
 #
 # Verify page arguments.
 #
-$reqargs = RequiredPageArguments("node", PAGEARG_NODE);
-$optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
+$reqargs = RequiredPageArguments("node",  PAGEARG_NODE);
+
+if (!$node) {
+    SPITUSERERROR("No such node!");
+}
 $node_id = $node->node_id();
 
-if (!$classic) {
-    header("Location: apt/show-nodelog.php?node_id=$node_id");
-    return;
-}
-
-#
-# Standard Testbed Header
-#
-PAGEHEADER("Node Log");
-
-#
-# Perm check.
-#
 if (! ($isadmin || OPSGUY())) {
-    USERERROR("You do not have permission to view node logs!", 1);
+    SPITUSERERROR("Not enough permission!");
 }
 
-$node->ShowLog();
+SPITHEADER(1);
 
-#
-# New Entry option.
-#
-$url =CreateURL("newnodelog_form", $node);
+# Place to hang the toplevel template.
+echo "<div id='main-body'></div>\n";
 
-echo "<p><center>
-           Do you want to enter a log entry?
-           <A href='$url'>Yes</a>
-         </center>\n";
+echo "<script type='text/javascript'>\n";
+echo "    window.NODE_ID        = '$node_id';\n";
+echo "    window.ISADMIN        = $isadmin;\n";
+echo "</script>\n";
 
-#
-# Standard Testbed Footer
-# 
-PAGEFOOTER();
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+SPITREQUIRE("js/show-nodelog.js");
+AddTemplateList(array("show-nodelog", "oops-modal", "waitwait-modal"));
+SPITFOOTER();
+
 ?>
