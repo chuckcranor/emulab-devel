@@ -4306,7 +4306,7 @@ sub SetupNetworkAgents($)
 	    $agentname = "${vlanname}-${vnode}";
 	}
 
-	DBQueryFatal("insert into virt_agents ".
+	DBQueryFatal("replace into virt_agents ".
 		     " (exptidx, pid, eid, vname, vnode, objecttype) ".
 		     " select '$idx', '$pid', '$eid', ".
 		     "   '$agentname', '*', ".
