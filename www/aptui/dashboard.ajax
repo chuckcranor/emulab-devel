@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -131,7 +131,7 @@ function Do_GetStats()
                                "creator_idx" => $creator_idx,
                                "creator" => $creator,
                                "physnode_count" => $pcount,
-                               "created" => $created,
+                               "started" => $created,
                                "cluster"  => $cluster,
                                "profile_uuid" => $profile_uuid,
                                "profile_name" => $profile_name);
@@ -190,6 +190,7 @@ function Do_GetStats()
         DBQueryFatal("select p.uuid,p.name,count(h.profile_id) as count ".
                      "   from apt_instance_history as h ".
                      "left join apt_profiles as p on p.profileid=h.profile_id ".
+                     "where p.uuid is not null ".
                      "group by profile_id order by count desc limit 10");
     while ($row = mysql_fetch_array($query_result)) {
         $name       = $row["name"];
@@ -280,7 +281,7 @@ function Do_GetStats()
                                       "uuid"     => $uuid,
                                       "exitcode" => $exitcode,
                                       "active"   => $active,
-                                      "created"  => $created,
+                                      "started"  => $created,
                                       "creator"  => $creator,
                                       "reason"   => $reason,
                                       "message"  => $message,
@@ -318,7 +319,7 @@ function Do_GetStats()
                                           "uuid"     => $uuid,
                                           "pid"      => $pid,
                                           "creator"  => $creator,
-                                          "created"  => $created,
+                                          "started"  => $created,
                                           "expires"  => $expires);
     }
     $dashboard["extension_requests"] = $extension_details;
@@ -360,7 +361,7 @@ function Do_GetStats()
                                "creator_idx" => $creator_idx,
                                "creator" => $creator,
                                "physnode_count" => $pcount,
-                               "created" => $created,
+                               "started" => $created,
                                "expires" => $expires,
                                "cluster"  => $cluster,
                                "profile_uuid" => $profile_uuid,
