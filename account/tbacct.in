@@ -40,14 +40,19 @@ use Getopt::Std;
 # and forces the target user into that state. Eventually, this should
 # be the default mode of operation (independent of web interface).
 #
+# Use -e with passwd to apply the default password expire interval to
+# the new password, otherwise the password is expired immediately to
+# force a change.
+#
 sub usage()
 {
-    print("Usage: tbacct [-f] [-b] [-u] [-v] ".
+    print("Usage: tbacct [-e] [-f] [-b] [-u] [-v] ".
 	  "<add|del|mod|passwd|wpasswd|email|freeze|thaw|verify|revoke|dots|deactivate|reactivate> ".
 	  "<user> [args]\n");
     exit(-1);
 }
-my $optlist = "fbuvs";
+my $optlist = "efbuvs";
+my $expok   = 0;
 my $force   = 0;
 my $batch   = 0;
 my $update  = 0;
@@ -200,6 +205,9 @@ if (scalar(@ARGV) == 3 && $ARGV[0] eq "passwd") {
 %options = ();
 if (! getopts($optlist, \%options)) {
     usage();
+}
+if (defined($options{"e"})) {
+    $expok = 1;
 }
 if (defined($options{"f"})) {
     $force = 1;
@@ -701,13 +709,13 @@ sub UpdatePassword()
     }
 
     #
-    # Insert into database. When changing password for someone else,
-    # always set the expiration to right now so that the target user
-    # is "forced" to change it. 
+    # Insert into database.  When changing password for someone else
+    # and "-e" (expok) isn't set, then set the expiration to right
+    # now so that the target user is "forced" to change it.
     #
     my $expires;
     
-    if (! $target_user->SameUser($this_user)) {
+    if (!$expok && ! $target_user->SameUser($this_user)) {
 	$expires = "now()";
     }
     elsif ($EXPIRE_PASSWORDS) {
