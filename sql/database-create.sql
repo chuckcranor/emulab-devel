@@ -352,6 +352,7 @@ CREATE TABLE `apt_instance_failures` (
   `exitmessage` mediumtext,
   `public_url` tinytext,
   `logfileid` varchar(40) default NULL,
+  `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   PRIMARY KEY (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -388,6 +389,7 @@ CREATE TABLE `apt_instance_history` (
   `physnode_count` smallint(5) unsigned NOT NULL default '0',
   `virtnode_count` smallint(5) unsigned NOT NULL default '0',
   `servername` tinytext,
+  `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `repourl` tinytext,
   `reponame` varchar(40) default NULL,
   `reporef` varchar(128) default NULL,
@@ -490,6 +492,7 @@ CREATE TABLE `apt_instances` (
   `physnode_count` smallint(5) unsigned NOT NULL default '0',
   `virtnode_count` smallint(5) unsigned NOT NULL default '0',
   `servername` tinytext,
+  `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `monitor_pid` int(11) default '0',
   `needupdate` tinyint(3) NOT NULL default '0',
   `isopenstack` tinyint(1) NOT NULL default '0',

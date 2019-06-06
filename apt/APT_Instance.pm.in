@@ -710,7 +710,7 @@ sub RecordHistory($$)
 		"       created,start_at,started,stop_at,now(),$expired, ".
 		"       extension_count,extension_days,extension_hours, ".
 		"       physnode_count,virtnode_count, ".
-		"       servername,repourl,reponame,reporef,repohash, ".
+		"       servername,portal,repourl,reponame,reporef,repohash, ".
 		"       rspec,script,params,manifest ".
 		" from apt_instances where uuid='$uuid'")
 	or return -1;
@@ -729,7 +729,7 @@ sub RecordError($$$)
 		"       creator,creator_idx,creator_uuid,pid,pid_idx, ".
 		"       gid,gid_idx, ".
 		"       created,start_at,started,stop_at,'$exitcode', ".
-		"       $safe_message,public_url,logfileid ".
+		"       $safe_message,public_url,logfileid,portal ".
 		" from apt_instances where uuid='$uuid'")
 	or return -1;
 
