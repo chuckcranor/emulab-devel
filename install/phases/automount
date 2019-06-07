@@ -19,6 +19,21 @@ sub Install($$$)
 	    PhaseSkip("Unneeded");
 	}
 
+	#
+	# Create the mountpoints so that AMD/autofs don't fail.
+	# Actually, this doesn't seem to matter for AMD, but will
+	# blow autofs startup out of the water.
+	#
+	Phase "mountpoints", "Creating mountpoints", sub {
+	    foreach my $dir ("/groups", "/proj", "/users") {
+		Phase $dir, $dir, sub {
+		    DoneIfExists($dir);
+		    mkdir $dir, 0777 or
+			PhaseFail("Unable to create $dir : $!");
+		};
+	    }
+	};
+
 	if ($WITHAMD) {
 	    my @lines = ();
 	    Phase "amd", "Enabling AMD", sub {
