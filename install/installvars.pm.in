@@ -233,6 +233,7 @@ $CVSSUPPORT		= @CVSSUPPORT@;
 $BUGDBSUPPORT		= @BUGDBSUPPORT@;
 $WIKISUPPORT		= @WIKISUPPORT@;
 $NOSHAREDFS		= @NOSHAREDFS@;
+$DISABLE_EXPORTS_SETUP  = @DISABLE_EXPORTS_SETUP@;
 # Are we a VM on boss?
 $OPSVM_ENABLE		= @OPSVM_ENABLE@;
 # mrouted no longer needed; replaced by IGMP querier in mfrisbeed
