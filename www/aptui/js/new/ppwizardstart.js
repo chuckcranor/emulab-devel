@@ -2795,7 +2795,7 @@ $(function () {
 	    $('#ppmodal-body').find('[data-toggle="tooltip"]').tooltip();
 
 	    // Tell caller when user changes anything.
-	    $('#pp-form input, #pp-form select').change(function() {
+	    $('#pp-form-body input, #pp-form-body select').change(function() {
 		modified_callback();
 	    });
 
@@ -3150,7 +3150,7 @@ $(function () {
 	     * that are declared as multivalue are returned as a list
 	     * of objects. Otherwise, just a plain formfields array.
 	     */
-	    $('#pp-form').find(".format-me").each(function () {
+	    $('#pp-form-body').find(".format-me").each(function () {
 		var fieldId   = $(this).data("fieldid");
 		var fieldname = $(this).data("fieldname");
 		var name      = $(this).attr("name");
