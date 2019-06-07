@@ -482,7 +482,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
 
        pkg delete -f ipmitool
        cd /usr/ports/misc/emulab-ipmitool-old
-       make clean all install package clean
+       env BATCH=1 make clean all install package clean
 
    l. Save packages and update tarball and repo. On boss:
 

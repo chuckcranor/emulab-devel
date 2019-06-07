@@ -7,7 +7,7 @@
 PORTSDIR=${PORTSDIR:-/usr/ports}
 PORTSUBDIR=misc
 SRCDIR=`dirname $0`
-PORTS="abac emulab-boss emulab-extras emulab-fs emulab-genilib emulab-ops emulab-protogeni emulab-pubsub emulab-py-m2crypto emulab-tftp-hpa emulab-tipserv emulab-ipmitool-old libtelnet otcl xerces-c2 p5-IO-EventMux p5-IO-EventMux-Socket-MsgHdr p5-Privileges-Drop p5-RPC-Async"
+PORTS="abac emulab-boss emulab-extras emulab-fs emulab-genilib emulab-ops emulab-protogeni emulab-pubsub emulab-tftp-hpa emulab-tipserv emulab-ipmitool-old libtelnet otcl xerces-c2 p5-IO-EventMux p5-IO-EventMux-Socket-MsgHdr p5-Privileges-Drop p5-RPC-Async"
 
 echo "Copying ports ..."
 for PORT in $PORTS
