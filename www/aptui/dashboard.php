@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,6 +48,17 @@ echo "<div id='page-body'></div>\n";
 echo "<script type='text/javascript'>\n";
 echo "    window.ISADMIN    = $isadmin;\n";
 echo "    window.ISFADMIN   = $isfadmin;\n";
+echo "</script>\n";
+
+$am_list  = Aggregate::DefaultAggregateList();
+$am_array = array();
+
+while (list($index, $aggregate) = each($am_list)) {
+    $nick = $aggregate->nickname();
+    $am_array[$nick] = $nick;
+}
+echo "<script type='text/plain' id='amlist-json'>\n";
+echo htmlentities(json_encode($am_array));
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

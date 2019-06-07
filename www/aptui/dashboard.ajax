@@ -40,6 +40,8 @@ $scales  = array("Day"   => (24 * 3600),
 function Do_GetStats()
 {
     global $scales, $geni_response_codes, $urn_mapping, $TBBASE;
+    global $PORTAL_GENESIS, $ISEMULAB;
+    $pclause = " ";
 
     if (! (ISADMIN() || ISFOREIGN_ADMIN())) {
         SPITAJAX_ERROR(1, "Not enough permission");
@@ -52,20 +54,24 @@ function Do_GetStats()
     $breakdown["timedout"] = array();
     $breakdown["mapping"]  = array();
     $breakdown["other"]    = array();
+    $pclause  = "portal='$PORTAL_GENESIS' and ";
 
     foreach ($scales as $key => $age) {
         $query_result =
             DBQueryFatal("select ".
                  "(select count(uuid) from apt_instances ".
-                 " where started > DATE_SUB(now(),interval $age second)),".
+                 " where $pclause ".
+                 "       started > DATE_SUB(now(),interval $age second)),".
                  "(select count(uuid) from apt_instance_history ".
-                 " where started > DATE_SUB(now(),interval $age second))");
+                 " where $pclause ".
+                 "       started > DATE_SUB(now(),interval $age second))");
         $row = mysql_fetch_array($query_result);
         $started[$key] = $row[0] + $row[1];
 
         $query_result =
             DBQueryFatal("select count(uuid) from apt_instance_failures ".
-                    " where started > DATE_SUB(now(),interval $age second)");
+                    " where $pclause ".
+                    "       started > DATE_SUB(now(),interval $age second)");
         $row = mysql_fetch_array($query_result);
         $errors[$key] = $row[0] + $row[1];
 
@@ -76,7 +82,8 @@ function Do_GetStats()
         $query_result =
             DBQueryFatal("select exitcode,count(exitcode) as count ".
                          "  from apt_instance_failures ".
-                         "where started>DATE_SUB(now(),interval $age second)".
+                         "where $pclause ".
+                         "      started>DATE_SUB(now(),interval $age second)".
                          "group by exitcode");
         while ($row = mysql_fetch_array($query_result)) {
             $exitcode = $row[0];
@@ -101,7 +108,8 @@ function Do_GetStats()
     #
     # What are most recent swapins
     #
-    $latest = array();
+    $pclause = "where portal='$PORTAL_GENESIS' ";
+    $latest  = array();
 
     $query_result =
         DBQueryFatal("select i.name,i.uuid,i.creator,i.creator_idx,".
@@ -110,6 +118,7 @@ function Do_GetStats()
                      "from apt_instances as i ".
                      "left join apt_profiles as p on ".
                      "     p.profileid=i.profile_id ".
+                     $pclause .
                      "order by started desc limit 5");
     while ($row = mysql_fetch_array($query_result)) {
         $name        = $row["name"];
@@ -206,6 +215,7 @@ function Do_GetStats()
     #
     # Detailed info on the 10 most recent errors.
     #
+    $pclause = "where f.portal='$PORTAL_GENESIS' ";
     $error_details = array();
 
     $query_result =
@@ -222,6 +232,7 @@ function Do_GetStats()
                      "     h.uuid=f.uuid ".
                      "left join apt_profiles as p on ".
                      "     p.profileid=f.profile_id ".
+                     $pclause .
                      "order by f.started desc limit 10");
 
     while ($row = mysql_fetch_array($query_result)) {

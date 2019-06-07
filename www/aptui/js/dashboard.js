@@ -5,10 +5,14 @@ $(function ()
     var dashboardTemplate = _.template(templates['dashboard']);
     var clusterFiles      = ["cloudlab-nofed.json", "cloudlab-fedonly.json"];
     var clusterStats      = {};
+    var amlist            = null;
     
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
+
+	amlist = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
+	console.info(amlist);
 
 	DashboardLoop();
 	setInterval(DashboardLoop,30000);
@@ -140,6 +144,9 @@ $(function ()
 	for (var index = 0; index < clusterFiles.length; index++) {
 	    var jqxhr = $.getJSON(clusterFiles[index], function(blob) {
 		$.each(blob.children, function(idx, site) {
+		    if (!_.has(amlist, site.name)) {
+			return;
+		    }
 		    var stats = {"total" : 0,
 				 "inuse" : 0,
 				 "ratio" : 0,
