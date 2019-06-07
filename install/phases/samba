@@ -16,6 +16,9 @@ sub Install($$$)
 	if (!$WINSUPPORT) {
 	    PhaseSkip("Windows support not enabled");
 	}
+	if ($FBSD_MAJOR > 10) {
+	    PhaseSkip("Samba no longer supported");
+	}
 	Phase "smb.conf", "Installing smb.conf[.head]", sub {
 	    DoneIfIdentical("$TOP_OBJDIR/install/smb.conf.head", $SMBCONF_HEAD)
 		if (-e $SMBCONF_HEAD);

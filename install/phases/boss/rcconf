@@ -50,7 +50,10 @@ sub Install($$$)
 	    push(@strings, qq|nfs_server_flags="-u -t -n 16"|);
 
 	    if ($WINSUPPORT) {
-		if ($FBSD_MAJOR > 8 || ($FBSD_MAJOR == 8 && $FBSD_MINOR > 2)) {
+		if ($FBSD_MAJOR > 10) {
+		    ;
+		} elsif ($FBSD_MAJOR > 8 ||
+			 ($FBSD_MAJOR == 8 && $FBSD_MINOR > 2)) {
 		    push(@strings, qq|samba_enable="YES"|);
 		    push(@strings, qq|nmbd_enable="NO"|);
 		} else {

@@ -46,7 +46,10 @@ sub Install($$$)
 
     if (ISFS($server)) {
 	if ($WINSUPPORT) {
-	    if ($FBSD_MAJOR > 8 || ($FBSD_MAJOR == 8 && $FBSD_MINOR > 2)) {
+	    if ($FBSD_MAJOR > 10) {
+		;
+	    } elsif ($FBSD_MAJOR > 8 ||
+		     ($FBSD_MAJOR == 8 && $FBSD_MINOR > 2)) {
 		push(@adds, qq|samba_enable="YES"|);
 		push(@adds, qq|nmbd_enable="NO"|);
 	    } else {
