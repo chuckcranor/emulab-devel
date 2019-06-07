@@ -85,6 +85,10 @@ my $NOVNODENFS	= @NOVIRTNFSMOUNTS@;
 my $TBLOG	= "@TBLOGFACIL@";
 my $NFSMFSROOT	= "@NFSMFS_ROOT@";
 
+# XXX for the moment we still allow Windows support without Samba,
+# but Windows support means Samba support in this script.
+$WINSUPPORT = 0;
+
 # XXX for TESTMODE: output to stdout
 my $TOSTDOUT	= 0;
 if ($TOSTDOUT) {
