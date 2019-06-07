@@ -42,7 +42,7 @@ $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
 $node_id = $node->node_id();
 
 if (!$classic) {
-    header("Location: apt/show-node.php?node_id=$node_id");
+    header("Location: portal/show-node.php?node_id=$node_id");
     return;
 }
 

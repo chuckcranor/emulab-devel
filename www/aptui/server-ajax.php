@@ -427,7 +427,9 @@ $routing = array("geni-login" =>
                                                  "GetLog" =>
                                                      "Do_GetLog",
                                                  "SaveLogEntry" =>
-                                                     "Do_SaveLogEntry")),
+                                                     "Do_SaveLogEntry",
+                                                 "GetHistory" =>
+                                                     "Do_GetHistory")),
 		 "vlan" =>
 			array("file"    => "vlan.ajax",
 			      "guest"   => false,

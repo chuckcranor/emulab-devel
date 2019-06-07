@@ -359,6 +359,125 @@ function Do_SaveLogEntry()
     SPITAJAX_RESPONSE(true);
 }
 
+#
+# Get the log entries for a node.
+#
+function Do_GetHistory()
+{
+    global $this_user, $ajax_args;
+    $node_id = null;
+
+    if (! (ISADMIN() || OPSGUY())) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    $node_id   = null;
+    $record    = null;
+    $count     = 500;
+    $showall   = 1;
+    $reverse   = 1;
+    $date      = null;
+    $IP        = null;
+    $mac       = null;
+    $node_opt  = "";
+    $asdata    = true;
+
+    if (isset($ajax_args["TARGET"])) {
+        if (TBvalid_IP($ajax_args["TARGET"])) {
+            $IP = $ajax_args["TARGET"];
+        }
+        elseif (TBvalid_node_id($ajax_args["TARGET"])) {
+            $node_id = $ajax_args["TARGET"];
+        }
+        else {
+            SPITAJAX_ERROR(-1, "Not a valid node ID or IP");
+            return -1;
+        }
+    }
+
+    if (isset($ajax_args["reverse"])) {
+        $reverse = ($ajax_args["reverse"] ? 1 : 0);
+    }
+    if (isset($ajax_args["alloconly"])) {
+        $showall = ($ajax_args["alloconly"] ? 0 : 1);
+    }
+
+    #
+    # Look to see if we are moving forwards or backwards after initial
+    # page load.
+    #
+    if (isset($ajax_args["min"]) && isset($ajax_args["max"]) &&
+        isset($ajax_args["direction"])) {
+        if ($ajax_args["direction"] == "next") {
+            if ($reverse) {
+                if (!TBvalid_integer($ajax_args["min"])) {
+                    SPITAJAX_ERROR(-1, "Not a valid integer");
+                    return;
+                }
+                $record = intval($ajax_args["min"]);
+            }
+            else {
+                if (!TBvalid_integer($ajax_args["max"])) {
+                    SPITAJAX_ERROR(-1, "Not a valid integer");
+                    return;
+                }
+                $record = intval($ajax_args["max"]);
+            }
+        }
+    }
+    elseif (isset($ajax_args["startdate"])) {
+        $date = $ajax_args["startdate"];
+        if (!TBvalid_integer($ajax_args["startdate"])) {
+            SPITAJAX_ERROR(-1, "Not a valid unix time");
+            return;
+        }
+        if (is_numeric($date)) {
+            $date = intval($date);
+        }
+    }
+    # Check if also searching for node or IP.
+    
+
+    $results = ShowNodeHistory($node_id, $record, $count, $showall, $reverse,
+                               $date, $IP, $mac, $node_opt, $asdata);
+
+    #
+    # Post process to add a few things for nicer display
+    #
+    foreach ($results["entries"] as &$info) {
+        #
+        # Let see if a portal experiment so we can link directly to it
+        # instead of classic experiment page. 
+        #
+        if ($info["pid"] && array_key_exists("slice_uuid", $info)) {
+            #
+            # See if a current or historical apt instance
+            #
+            $instance = Instance::LookupBySlice($info["slice_uuid"]);
+            if ($instance) {
+                $info["isportal"]      = true;
+                $info["isrunning"]     = true;
+                $info["instance_uuid"] = $instance->uuid();
+            }
+            else {
+                $uuid = InstanceHistory::SliceToUUID($info["slice_uuid"]);
+                if ($uuid) {
+                    $info["isportal"]      = true;
+                    $info["isrunning"]     = false;
+                    $info["instance_uuid"] = $uuid;
+                }
+                else {
+                    $info["isportal"] = false;
+                }
+            }
+        }
+        else {
+            $info["isportal"]  = false;
+        }
+    }
+    SPITAJAX_RESPONSE($results);
+}
+
 # Local Variables:
 # mode:php
 # End:

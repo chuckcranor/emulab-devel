@@ -1834,9 +1834,10 @@ class Node
 function ShowNodeHistory($node_id = null, $record = null,
 			 $count = 200, $showall = 0, $reverse = 0,
 			 $date = null, $IP = null, $mac = null,
-			 $node_opt = "") {
+			 $node_opt = "", $asdata = false) {
     global $TBSUEXEC_PATH;
     global $PROTOGENI;
+    $shownodeid = $node_id ? false : true;
     $atime = 0;
     $ftime = 0;
     $rtime = 0;
@@ -1851,7 +1852,9 @@ function ShowNodeHistory($node_id = null, $record = null,
 	$opt .= " -r";
     }
     if ($date) {
-	$date = date("Y-m-d H:i:s", strtotime($date));
+        if (! is_int($date)) {
+            $date = date("Y-m-d H:i:s", strtotime($date));
+        }
 	$opt .= " -d " . escapeshellarg($date);
     }
     elseif ($record) {
@@ -1872,7 +1875,6 @@ function ShowNodeHistory($node_id = null, $record = null,
     }
     else {
 	$opt .= " -A";
-	$node_id = "";
 	$nodestr = "<th>Node</th>";
 	#
 	# When supplying a date, we want a summary of all nodes at that
@@ -1884,38 +1886,48 @@ function ShowNodeHistory($node_id = null, $record = null,
     }
     if ($fp = popen("$TBSUEXEC_PATH nobody nobody ".
 		    "  webnode_history $opt $arg", "r")) {
-	if (!$showall) {
-	    $str = "Allocation";
-	} else {
-	    $str = "";
-	}
-	if ($node_id == "") {
-	    echo "<center><b>
+        if (!$asdata) {
+            if (!$showall) {
+                $str = "Allocation";
+            } else {
+                $str = "";
+            }
+            if (!$node_id) {
+                echo "<center><b>
                   $str History for All Nodes.
                   </b></center>\n";
-	} else {
-	    $node_url = CreateURL("shownode", URLARG_NODEID, $node_id);
-	    echo "<center><b>
+            } else {
+                $node_url = CreateURL("shownode", URLARG_NODEID, $node_id);
+                echo "<center><b>
                   $str History for Node <a href='$node_url'>$node_id</a>.
                   </b></center>\n";
-	}
+            }
+        }
 
 	# Keep track of history record bounds, for paging through.
 	$max_history_id = 0;
 	$min_history_id = 1000000000;
 
 	# Build up table contents
-	ob_start();
+        if ($asdata) {
+            $data_results = array();
+        }
+        else {
+            ob_start();
+        }
 
 	$line = fgets($fp);
 	while (!feof($fp)) {
+            if ($asdata) {
+                $blob = array();                
+            }
 	    #
 	    # Formats:
 	    # nodeid REC tstamp duration uid pid eid
 	    # nodeid SUM alloctime freetime reloadtime downtime
 	    #
 	    $results = preg_split("/[\s]+/", $line, 9, PREG_SPLIT_NO_EMPTY);
-	    $nodeid = $results[0];
+	    $node_id = $results[0];
 	    $type = $results[1];
 	    if ($type == "SUM") {
 		# Save summary info for later
@@ -1924,23 +1936,22 @@ function ShowNodeHistory($node_id = null, $record = null,
 		$rtime = $results[4];
 		$dtime = $results[5];
 	    } elseif ($type == "REC") {
-		$stamp = $results[2];
+		$stamp = intval($results[2]);
 		$datestr = date("Y-m-d H:i:s", $stamp);
-		$duration = $results[3];
+		$duration = $tmp = $results[3];
 		$durstr = "";
-		if ($duration >= (24*60*60)) {
-		    $durstr = sprintf("%dd", $duration / (24*60*60));
-		    $duration %= (24*60*60);
+		if ($tmp >= (24*60*60)) {
+		    $durstr = sprintf("%dd", $tmp / (24*60*60));
+		    $tmp %= (24*60*60);
 		}
-		if ($duration >= (60*60)) {
-		    $durstr = sprintf("%s%dh", $durstr, $duration / (60*60));
-		    $duration %= (60*60);
+		if ($tmp >= (60*60)) {
+		    $durstr = sprintf("%s%dh", $durstr, $tmp / (60*60));
+		    $tmp %= (60*60);
 		}
-		if ($duration >= 60) {
-		    $durstr = sprintf("%s%dm", $durstr, $duration / 60);
-		    $duration %= 60;
+		if ($tmp >= 60) {
+		    $durstr = sprintf("%s%dm", $durstr, $tmp / 60);
+		    $tmp %= 60;
 		}
-		$durstr = sprintf("%s%ds", $durstr, $duration);
 		$uid = $results[4];
 		$pid = $results[5];
 		$thisid = intval($results[8]);
@@ -1950,77 +1961,118 @@ function ShowNodeHistory($node_id = null, $record = null,
 		if ($thisid < $min_history_id) {
 		    $min_history_id = $thisid;
 		}
+                if ($asdata) {
+                    $blob["history_id"] = $thisid;
+                    $blob["node_id"]    = $node_id;
+                }
 		$slice = "--";
 		$expurl = null;
-		if ($pid == "FREE") {
-		    $pid = "--";
-		    $eid = "--";
-		    $uid = "--";
+		if ($pid == "<FREE>") {
+                    if ($asdata) {
+                        $blob["pid"] = null;
+                        $blob["eid"] = null;
+                        $blob["uid"] = null;
+                    }
+                    else {
+                        $pid = "--";
+                        $eid = "--";
+                        $uid = "--";
+                    }
 		} else {
 		    $eid = $results[6];
 		    if ($results[7]) {
 			$experiment = Experiment::Lookup($results[7]);
 			$experiment_stats = ExperimentStats::Lookup($results[7]);
-			if ($experiment_stats &&
-			    $experiment_stats->slice_uuid()) {
-			    $url = CreateURL("genihistory",
-					     "slice_uuid",
-					     $experiment_stats->slice_uuid());
-			    $slice = "<a href='$url'>" .
-				"<img src=\"greenball.gif\" border=0></a>";
-			}
-			if ($experiment) {
-			    $expurl = CreateURL("showexp",
+                        if ($asdata) {
+                            $blob["pid"]     = $pid;
+                            $blob["pid_idx"] = $experiment_stats->pid_idx();
+                            $blob["eid"]     = $eid;
+                            $blob["eid_idx"] = $results[7];
+                            $blob["uid"]     = $uid;
+                            if ($experiment_stats->slice_uuid()) {
+                                $blob["slice_uuid"] =
+                                    $experiment_stats->slice_uuid();
+                            }
+                            $blob["isrunning"] = ($experiment ? true : false);
+                        }
+                        else {
+                            if ($experiment_stats &&
+                                $experiment_stats->slice_uuid()) {
+                                $url = CreateURL("genihistory",
+                                                 "slice_uuid",
+                                                 $experiment_stats->slice_uuid());
+                                $slice = "<a href='$url'>" .
+                                    "<img src=\"greenball.gif\" border=0></a>";
+                            }
+                            if ($experiment) {
+                                $expurl = CreateURL("showexp",
 						URLARG_EID, $experiment->idx());
-			}
-			else {
-			    $expurl = CreateURL("showexpstats",
-						"record",
-						$experiment_stats->exptidx());
-			}
-		    }
+                            }
+                            else {
+                                $expurl = CreateURL("showexpstats",
+                                                    "record",
+                                                    $experiment_stats->exptidx());
+                            }
+                        }
+                    }
 		}
-		
-		if ($node_id == "") {
-		    $nodeurl = CreateURL("shownodehistory",
-					 URLARG_NODEID, $nodeid);
-		    echo "<tr>
+                if ($asdata) {
+                    $blob["allocated"] = gmdate("Y-m-d\TH:i:s\Z", $stamp);
+                    $blob["released"]  = gmdate("Y-m-d\TH:i:s\Z",
+                                                $stamp + intval($duration));
+                    $blob["duration"]  = intval($duration);
+                    $blob["duration_string"] = $durstr;
+                }
+                else {
+                    if ($shownodeid) {
+                        $nodeurl = CreateURL("shownodehistory",
+                                             URLARG_NODEID, $nodeid);
+                        echo "<tr>
                           <td><a href='$nodeurl'>$nodeid</a></td>
                           <td>$pid</td>";
-		    if ($expurl) {
-			echo "<td><a href='$expurl'>$eid</a></td>";
-		    }
-		    else {
-			echo "<td>$eid</td>";
-		    }
-		    if ($PROTOGENI) {
-			echo "<td>$slice</td>";
-		    }
-                    echo "<td>$uid</td>
+                        if ($expurl) {
+                            echo "<td><a href='$expurl'>$eid</a></td>";
+                        }
+                        else {
+                            echo "<td>$eid</td>";
+                        }
+                        if ($PROTOGENI) {
+                            echo "<td>$slice</td>";
+                        }
+                        echo "<td>$uid</td>
                           <td>$datestr</td>
                           <td>$durstr</td>
                           </tr>\n";
-		} else {
-		    echo "<tr>
+                    } else {
+                        echo "<tr>
                           <td>$pid</td>";
-		    if ($expurl) {
-			echo "<td><a href='$expurl'>$eid</a></td>";
-		    }
-		    else {
-			echo "<td>$eid</td>";
-		    }
-		    if ($PROTOGENI) {
-			echo "<td>$slice</td>";
-		    }
-                    echo "<td>$uid</td>
+                        if ($expurl) {
+                            echo "<td><a href='$expurl'>$eid</a></td>";
+                        }
+                        else {
+                            echo "<td>$eid</td>";
+                        }
+                        if ($PROTOGENI) {
+                            echo "<td>$slice</td>";
+                        }
+                        echo "<td>$uid</td>
                           <td>$datestr</td>
                           <td>$durstr</td>
                           </tr>\n";
-		}
+                    }
+                }
+                if ($asdata) {
+                    $data_results[] = $blob;
+                }
 	    }
 	    $line = fgets($fp, 1024);
 	}
 	pclose($fp);
+        if ($asdata) {
+            return array("min"     => $min_history_id,
+                         "max"     => $max_history_id,
+                         "entries" => $data_results);
+        }
 	$table_html = ob_get_contents();
 	ob_end_clean();
 	
@@ -2053,7 +2105,7 @@ function ShowNodeHistory($node_id = null, $record = null,
 	if ($ttime) {
 	    echo "<br>
                   <center><b>
-                  Usage Summary for Node $node_id.
+                  Usage Summary
                   </b></center><br>\n";
 
 	    echo "<table border=1 align=center>\n";

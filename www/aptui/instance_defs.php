@@ -157,6 +157,8 @@ class Instance
     function openstack_utilization() {
         return $this->field('openstack_utilization');
     }
+    # Convenience
+    function isActive()     { return 1; }
     function IsAPT() {
 	return preg_match('/aptlab/', $this->servername());
     }
@@ -952,6 +954,8 @@ class InstanceHistory
     function script()	    { return $this->field('script'); }
     function params()	    { return $this->field('params'); }
     function manifest()	    { return $this->field('manifest'); }
+    # Convenience
+    function isActive()     { return 0; }
     function IsAPT() {
 	return preg_match('/aptlab/', $this->servername());
     }
@@ -988,6 +992,20 @@ class InstanceHistory
 	}
         $row = mysql_fetch_array($query_result);
         return InstanceHistory::Lookup($row[0]);
+    }
+    function SliceToUUID($slice_uuid)
+    {
+	$safe_uuid = addslashes($slice_uuid);
+
+	$query_result =
+	    DBQueryWarn("select uuid from apt_instance_history ".
+			"where slice_uuid='$safe_uuid'");
+
+	if (!$query_result || !mysql_num_rows($query_result)) {
+            return null;
+	}
+        $row = mysql_fetch_array($query_result);
+        return $row[0];
     }
     #
     # Permission check; does user have permission to view instance.
