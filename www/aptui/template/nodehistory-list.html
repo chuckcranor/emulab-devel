@@ -1,16 +1,16 @@
 <table id="history-table"
-       class='table table-condensed table-bordered table-striped'>
+       class='tablesorter'>
   <thead>
     <% if (shownodeid) { %>
       <th>Node ID</th>
     <% } %>
     <th>PID</th>
     <th>EID</th>
-    <th><img src="images/slice.png"></th>
+    <th class="sorter-false"><img src="images/slice.png"></th>
     <th>User</th>
     <th>Allocated</th>
     <th>Released</th>
-    <th>Duration</th>
+    <th class="sorter-false">Duration</th>
   </thead>
   <tbody>
     <% _.each(history, function (entry) { %>

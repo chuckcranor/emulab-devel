@@ -54,6 +54,9 @@ echo "<div class=row>
         <div id='main-body'></div>
       </div>\n";
 
+echo "<link rel='stylesheet'
+            href='css/tablesorter.css'>\n";
+
 echo "<script type='text/javascript'>\n";
 if (isset($node_id)) {
     echo "    window.TARGET       = '$node_id';\n";
@@ -67,7 +70,12 @@ echo "</script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
-SPITREQUIRE("js/show-nodehistory.js");
+SPITREQUIRE("js/show-nodehistory.js",
+            "<script src='js/lib/jquery.tablesorter.min.js'></script>".
+            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
+            "<script src='js/lib/sugar.min.js'></script>".
+            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+
 AddTemplateList(array("show-nodehistory", "nodehistory-list",
                       "oops-modal", "waitwait-modal"));
 SPITFOOTER();

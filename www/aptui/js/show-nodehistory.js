@@ -102,7 +102,7 @@ $(function ()
 	$('#nodehistory-table-div').removeClass("hidden");
 	$('#nodehistory-table-div').html(html);
 	$('#main-body .control-buttons').removeClass("hidden");
-	
+
 	// Format dates with moment before display.
 	$('.format-date').each(function() {
 	    var date = $.trim($(this).html());
@@ -116,6 +116,11 @@ $(function ()
 	    placement: 'auto',
 	    html: true,
 	});
+
+	$('#history-table')
+	    .tablesorter({
+		theme : 'green',
+	    });
     }
 
     // Change mode (checkboxes).
