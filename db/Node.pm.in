@@ -1877,6 +1877,16 @@ sub cyclewhenoff($;$) {
     return NodeTypeInfo($self)->cyclewhenoff($stuff);
 }
 
+sub rebootable($;$) {
+    my ($self,$stuff) = @_;
+    my $val = undef;
+
+    if (NodeAttribute($self, "rebootable", \$val) == 0 && defined($val)) {
+	return $val;
+    }
+    return NodeTypeInfo($self)->rebootable($stuff);
+}
+
 sub root_password($) {
     my ($self) = @_;
     my $val = undef;
@@ -1900,9 +1910,6 @@ sub imageable($;$) {
 }
 sub control_iface($;$) {
     return NodeTypeInfo($_[0])->control_iface($_[1]);
-}
-sub rebootable($;$) {
-    return NodeTypeInfo($_[0])->rebootable($_[1]);
 }
 sub isfakenode($;$) {
     return NodeTypeInfo($_[0])->isfakenode($_[1]);
