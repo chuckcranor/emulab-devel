@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2018 University of Utah and the Flux Group.
+# Copyright (c) 2005-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -82,6 +82,17 @@ sub isPNet($)           { return $_[0]->brand() eq "phantomnet" ? 1 : 0; }
 sub isPowder($)         { return $_[0]->brand() eq "powder" ? 1 : 0; }
 sub isEmulab($)         { return $_[0]->brand() eq "emulab" ? 1 : 0; }
 sub isClassic($)        { return $_[0]->brand() eq "classic" ? 1 : 0; }
+
+sub Server($)
+{
+    my ($self) = @_;
+
+    return ($self->isAPT() ? "www.aptlab.net" :
+	    $self->isCloud() ? "www.cloudlab.us" :
+	    $self->isPNet() ? "www.phantomnet.org" :
+	    $self->isPowder() ? "www.powderwireless.net" :
+	    $self->isEmulab() ?	"@WWWHOST@" : "@WWWHOST@");
+}
 
 sub wwwBase($)
 {

@@ -179,7 +179,13 @@ API = {
     "extenddataset"     : { "func" : "extenddataset",
                             "help" : "Extend the lease on a persistent dataset" },
     "showdataset"       : { "func" : "showdataset",
-                            "help" : "Show persistent datasets" }
+                            "help" : "Show persistent datasets" },
+    "startExperiment"   : { "func" : "startExperiment",
+                            "help" : "Start a Portal experiment" },
+    "terminateExperiment" : { "func" : "terminateExperiment",
+                              "help" : "Terminate a Portal experiment" },
+    "experimentStatus"  : { "func" : "experimentStatus",
+                            "help" : "Get status for a Portal experiment" },
 };
 
 #
@@ -2963,6 +2969,172 @@ class showdataset:
         print "Show all (-a) datasets or those associated with a particular";
         print "project (-p), user (-u), or those listed.";
         print "Only one of -a, -p, -u or an explicit list should be specified.";
+        wrapperoptions();
+        return
+    pass
+
+#
+# start a portal experiment
+#
+class startExperiment:
+    def __init__(self, argv=None):
+        self.argv = argv;
+        return
+
+    def apply(self):
+        try:
+            opts, req_args = getopt.getopt(self.argv, "a:p:",
+                                           [ "help", "name=", "duration=",
+                                             "project=", "site=", "start=",
+                                             "stop=", "paramset=", "refspec="]);
+            pass
+        except getopt.error, e:
+            print e.args[0]
+            self.usage();
+            return -1;
+        
+        params = {};
+        for opt, val in opts:
+            if opt in ("-h", "--help"):
+                self.usage()
+                return 0
+            elif opt == "-a":
+                params["aggregate"] = val
+                pass
+            elif opt == "--name":
+                params["name"] = val;
+                pass
+            elif opt == "--duration":
+                params["duration"] = val;
+                pass
+            if opt in ("-p", "--project"):
+                params["proj"] = val;
+                pass
+            elif opt == "--start":
+                params["start"] = val;
+                pass
+            elif opt == "--stop":
+                params["stop"] = val;
+                pass
+            elif opt == "--paramset":
+                params["paramset"] = val;
+                pass
+            elif opt == "--refspec":
+                params["refspec"] = val;
+                pass
+            elif opt == "--site":
+                params["site"] = val;
+                pass
+            pass
+
+        # Do this after so --help is seen.
+        if len(req_args) != 1:
+            self.usage();
+            return -1;
+
+        params["profile"] = req_args[0]
+        rval,response = do_method("portal", "startExperiment", params)
+        return rval
+
+    def usage(self):
+        print "Usage: startExperiment <optons> ",
+        "[--site 'site:1=aggregate ...'] <profile>"
+        print "where:"
+        print " -d           - Turn on debugging (run in foreground)"
+        print " -w           - Wait mode (wait for experiment to start)"
+        print " -a urn       - Override default aggregate URN"
+        print " --project    - pid[,gid]: project[,group] for new experiment"
+        print " --project    - pid[,gid]: project[,group] for new experiment"
+        print " --name       - Optional pithy name for experiment"
+        print " --duration   - Number of hours for initial expiration"
+        print " --start      - Schedule experiment to start at (unix) time"
+        print " --stop       - Schedule experiment to stop at (unix) time"
+        print " --paramset   - uid,name of a parameter set to apply"
+        print " --refspec    - refspec[:hash] of a repo based profile to use"
+        print " --site       - Bind sites used in the profile"
+        print "profile       - Either UUID or pid,name"
+        wrapperoptions();
+        return
+    pass
+
+#
+# Terminate a portal experiment
+#
+class terminateExperiment:
+    def __init__(self, argv=None):
+        self.argv = argv;
+        return
+
+    def apply(self):
+        try:
+            opts, req_args = getopt.getopt(self.argv, "h", [ "help"]);
+            pass
+        except getopt.error, e:
+            print e.args[0]
+            self.usage();
+            return -1;
+        
+        params = {};
+        for opt, val in opts:
+            if opt in ("-h", "--help"):
+                self.usage()
+                return 0
+            pass
+
+        # Do this after so --help is seen.
+        if len(req_args) != 1:
+            self.usage();
+            return -1;
+
+        params["experiment"] = req_args[0]
+        rval,response = do_method("portal", "terminateExperiment", params)
+        return rval
+
+    def usage(self):
+        print "Usage: terminateExperiment <optons> <experiment>"
+        print "where:"
+        print "experiment     - Either UUID or pid,name"
+        wrapperoptions();
+        return
+    pass
+
+#
+# Get status for a portal experiment
+#
+class experimentStatus:
+    def __init__(self, argv=None):
+        self.argv = argv;
+        return
+
+    def apply(self):
+        try:
+            opts, req_args = getopt.getopt(self.argv, "h", [ "help"]);
+            pass
+        except getopt.error, e:
+            print e.args[0]
+            self.usage();
+            return -1;
+        
+        params = {};
+        for opt, val in opts:
+            if opt in ("-h", "--help"):
+                self.usage()
+                return 0
+            pass
+
+        # Do this after so --help is seen.
+        if len(req_args) != 1:
+            self.usage();
+            return -1;
+
+        params["experiment"] = req_args[0]
+        rval,response = do_method("portal", "experimentStatus", params)
+        return rval
+
+    def usage(self):
+        print "Usage: terminateExperiment <optons> <experiment>"
+        print "where:"
+        print "experiment     - Either UUID or pid,name"
         wrapperoptions();
         return
     pass

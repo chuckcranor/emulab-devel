@@ -45,9 +45,10 @@ sub usage()
     print "Usage: quickvm [-u uuid] [--site site:1=aggregate ...] <xmlfile>\n";
     exit(1);
 }
-my @optlist = ('d', 'v', 'u=s', 'a=s', 'S', 'k=s', 'i', 't=s');
+my @optlist = ('d', 'v', 'f', 'u=s', 'a=s', 'S', 'k=s', 'i', 't=s');
 my $debug   = 0;
 my $verbose = 1;
+my $foreground     = 0;
 my $ignorefailures = 0;
 my $xmlfile;
 my $webtask;
@@ -155,6 +156,9 @@ if (defined($options{"k"})) {
 }
 if (defined($options{"d"})) {
     $debug = 1;
+}
+if (defined($options{"f"})) {
+    $foreground = 1;
 }
 if (defined($options{"i"})) {
     $ignorefailures = 1;
@@ -743,7 +747,7 @@ if ($tmp) {
 	if (defined($webtask)) {
 	    $webtask->required_licenses($licenses);
 	}
-	UserError("Licenses are required");
+	UserError("Licenses are required before you can start this experiment");
     }
     UserError($errmsg);
 }
@@ -1006,7 +1010,7 @@ if (defined($start_at)) {
 # Hand off to create slivers script. We have to fork/system cause
 # of libaudit logging.
 #
-if (!$debug) {
+if (! ($debug || $foreground)) {
     libaudit::AuditPrefork();
     my $child = fork();
     if ($child) {
@@ -1029,7 +1033,7 @@ if ($?) {
     #
     if (!$usestitcher && $code > 0) {
 	AuditAbort()
-	    if (!$debug);
+	    if (! ($debug || $foreground));
     }
     exit($code);
 }

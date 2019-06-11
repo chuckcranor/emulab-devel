@@ -64,6 +64,7 @@ sub usage()
     print("Usage: manage_instance openstackstats instance\n");
     print("Usage: manage_instance getmanifests instance\n");
     print("Usage: manage_instance warn instance\n");
+    print("Usage: manage_instance status instance\n");
     print("Usage: manage_instance applyextensionpolicy instance\n");
     exit(-1);
 }
@@ -159,6 +160,7 @@ sub StartMonitorInternal(;$);
 sub DoImageTrackerStuff($$$$$$$$);
 sub DoWarn();
 sub DoDelete();
+sub DoStatus();
 sub DenyExtensionInternal($);
 sub ExtendInternal($$$$$);
 sub CallMethodOnAggregates($$$@);
@@ -300,6 +302,9 @@ elsif ($action eq "applyextensionpolicy") {
 }
 elsif ($action eq "delete") {
     DoDelete()
+}
+elsif ($action eq "status") {
+    DoStatus()
 }
 else {
     usage();
@@ -4945,6 +4950,17 @@ sub DoApplyExtensionPolicy()
     my $disabled = ($instance->extension_disabled() ? "disabled" : "enabled");
 
     print "Extensions are now $disabled\n";
+}
+
+#
+# Display instance status.
+#
+sub DoStatus()
+{
+    my $status = $instance->status();
+
+    print "Status: $status\n";
+    return 0;
 }
 
 #
