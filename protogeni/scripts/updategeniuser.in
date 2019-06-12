@@ -302,6 +302,12 @@ sub UpdateSSHKeys()
 	@params = ("KEY", @params);
 	$isportal = 1;
     }
+    elsif ($auth =~ /auth\.noc\.onelab\.eu/) {
+	$url = "https://auth.noc.onelab.eu:8008/ma/2";
+	$method = "lookup";
+	@params = ("KEY", @params);
+	$isportal = 1;
+    }
     else {
 	$url = $certificate->url();
 	$url =~ s/sa$/geni-ma/;
@@ -472,11 +478,17 @@ sub ProjectMembership()
 	$url .= "/1";
 	@params = ($user_urn, @params);
     }
+    elsif ($auth =~ /auth\.noc\.onelab\.eu/) {
+	$url = "https://auth.noc.onelab.eu:8008/sa/2";
+	@params = ($user_urn, @params);
+    }
     else {
 	$url = $certificate->url();
 	$url =~ s/sa$/geni-sa/;
 	@params = ($user_urn, @params);
     }
+    my @projects = ();
+
     my $response =
 	Genixmlrpc::CallMethod($url, $context, $method, @params);
     if (!defined($response)) {
@@ -489,7 +501,6 @@ sub ProjectMembership()
     if (! ref($response->value())) {
 	fatal("No project list returned in response");
     }
-    my @projects = ();
 
     print Dumper($response->value())
 	if ($debug);
@@ -580,6 +591,14 @@ sub UpdatePersonalData()
 			       'MEMBER_LASTNAME'];
 	@params = ("MEMBER", $param1, $param2);
     }
+    elsif ($auth =~ /auth\.noc\.onelab\.eu/) {
+	$url = "https://auth.noc.onelab.eu:8008/ma/2";
+	$method = "lookup";
+	$param2->{'filter'} = ['MEMBER_FIRSTNAME',
+			       '_GENI_MEMBER_DISPLAYNAME',
+			       'MEMBER_LASTNAME'];
+	@params = ("MEMBER", $param1, $param2);
+    }
     else {
 	$url = $certificate->url();
 	$url =~ s/sa$/geni-ma/;
@@ -592,7 +611,7 @@ sub UpdatePersonalData()
 	fatal("Internal error getting self credential");
     }
     if ($response->code() != GENIRESPONSE_SUCCESS) {
-	fatal("Could not get member info: " . $response->code() . ": " .
+	fatal("Could not get member info ".$user_urn." : " . $response->code() . ": " .
 	      $response->output());
     }
     print Dumper($response)
