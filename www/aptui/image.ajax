@@ -94,7 +94,7 @@ function Do_GetInfo()
     
     if ($image->metadata_url()) {
         if ($image->origin_urn() && $image->origin_name()) {
-            list ($auth,$type,$id) = Instance::ParseURN($image->origin_urn());
+            list ($auth,$type,$ignore) = Instance::ParseURN($image->origin_urn());
             $urn = "urn:publicid:IDN+${auth}+";
             if ($image->isdataset()) {
                 $urn .= "imdataset+" . $image->origin_name();
