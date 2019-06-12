@@ -53,6 +53,7 @@ use EmulabFeatures;
 my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
 my $NODEREBOOT  = "$TB/bin/node_reboot";
+my $POWER       = "$TB/bin/power";
 my $VNODESETUP  = "$TB/sbin/vnode_setup";
 my $ELABINELAB  = "$TB/sbin/elabinelab";
 my $TBADB       = "$TB/bin/tbadb";
@@ -2354,6 +2355,80 @@ sub LightUpNodes($@) {
     }
 
     return $self->SUPER::LightUpNodes(@nodelist);
+}
+
+#####################################################################
+#
+# sdr
+#
+package libossetup_sdr;
+use base qw(libossetup_handler);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
+#
+# A constructor for an object to handle all nodes of this type.
+#
+sub New($$) {
+    my ($class, $parent) = @_;
+
+    my $self = $class->SUPER::New("sdr", $parent);
+    bless($self, $class);
+    return $self;
+}
+
+sub AddNode($$)
+{
+    my ($self, $node) = @_;
+
+    return $self->SUPER::AddNode($node);
+}
+
+#
+# Kirk says we always want to power cycle the SDRs when entering an experiment.
+# We pass -e option to power so it does not change the eventstate.
+#
+sub LightUpNodes($@)
+{
+    my ($self, @nodelist)  = @_;
+    my $parent     = $self->parent();
+    my @nodeids    = ();
+
+    foreach my $node (@nodelist) {
+	push(@nodeids, $node->node_id())
+	    if ($node->allocstate() ne TBDB_ALLOCSTATE_RES_READY());
+    }
+    tbnotice("Power cycling SDR nodes: @nodeids\n");
+    system("$POWER -e cycle @nodeids");
+    my $exitval = $?;
+
+    if ($exitval) {
+	# This is very unusual.
+	$parent->noretry(1);
+	return -1;
+    }
+    #
+    # If the eventstate somewhow managed to get out of ISUP, send it.
+    #
+    foreach my $node (@nodelist) {
+	next
+	    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_READY());
+	
+	if (!$node->IsUp()) {
+	    if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
+		$parent->noretry(1);
+		return -1;
+	    }
+	}
+    }
+    return 0;
+    
 }
 
 # This needs to be the last thing in the file.

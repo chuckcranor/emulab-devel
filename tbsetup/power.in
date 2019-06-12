@@ -226,6 +226,9 @@ if ($ELABINELAB) {
     }
     if ($sendevent) {
 	foreach my $node (values(%nodes)) {
+	    next
+		if ($node->isblackbox());
+	    
 	    my $oldstate = $node->eventstate();
 	    my $newstate;
 
