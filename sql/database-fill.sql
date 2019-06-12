@@ -1323,8 +1323,8 @@ REPLACE INTO table_regex VALUES ('emulab_sites','os_version','text','redirect','
 REPLACE INTO table_regex VALUES ('emulab_sites','perl_version','text','redirect','default:tinytext',0,0,NULL);
 REPLACE INTO table_regex VALUES ('emulab_sites','tbops','text','redirect','users:usr_email',0,0,NULL);
 
-REPLACE INTO table_regex VALUES ('default','fulltext','text','regex','^[\\040-\\073\\075\\077-\\176\\012\\015\\011]*$',0,20000,NULL);
-REPLACE INTO table_regex VALUES ('default','html_fulltext','text','regex','^[\\040-\\176\\012\\015\\011]*$',0,20000,NULL);
+REPLACE INTO table_regex VALUES ('default','fulltext','text','regex','^[\\040-\\073\\075\\077-\\176\\012\\015\\011]*$',0,100000,NULL);
+REPLACE INTO table_regex VALUES ('default','html_fulltext','text','regex','^[\\040-\\176\\012\\015\\011]*$',0,100000,NULL);
 
 REPLACE INTO table_regex VALUES ('default','tinytext','text','regex','^[\\040-\\073\\075\\077-\\176]*$',0,256,NULL);
 REPLACE INTO table_regex VALUES ('default','html_tinytext','text','regex','^[\\040-\\176]*$',0,256,NULL);
