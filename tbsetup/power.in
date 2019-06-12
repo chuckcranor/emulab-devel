@@ -51,6 +51,7 @@ use power_sgmote;
 use power_mail;
 use power_whol;
 use power_ilo;
+use power_ibmbc;
 use power_icebox;
 use power_apc;
 use power_raritan;
@@ -403,6 +404,19 @@ foreach my $power_id (keys %outlets) {
     my $errors = 0;
     if ($type eq "IPMI") {
         my $device = new power_ipmi($type,$power_id,$verbose);
+	if (!defined $device) {
+	    warn "Unable to contact controller for $nodestr. Skipping...\n";
+	    next;
+	} else {
+	    print "Calling device->power($op,@outlets)\n" if $verbose > 1;
+	    if ($device->power($op,@outlets)) {
+		print "Control of $nodestr failed.\n";
+		$errors++;
+	    }
+	}
+    }
+    elsif ($type eq "ibmbc") {
+	my $device = new power_ibmbc($IP,$verbose);
 	if (!defined $device) {
 	    warn "Unable to contact controller for $nodestr. Skipping...\n";
 	    next;
@@ -778,7 +792,28 @@ sub dostatus(@) {
     for my $ctrl (@nwanted) {
 	my %status;
 
-	if ($ctrls{$ctrl} eq 'icebox') {
+	if ($ctrls{$ctrl} eq 'ibmbc') {
+	    my $device = new power_ibmbc($IPs{$ctrl}, $verbose);
+	    if (!defined $device) {
+		warn "Unable to contact controller $ctrl.\n";
+		$errors++;
+		next;
+	    } else {
+		print "Calling device->status()\n"
+		    if $verbose > 1;
+		if ($device->status(\%status)) {
+		    print "Could not get status for $ctrl.\n";
+		    $errors++;
+		    next;
+		}
+		for my $outlet (1..14) {
+		    my $ostr = "outlet$outlet";
+		    print "$ctrl Outlet $outlet: ", $status{$ostr}, "\n"
+			if (defined($status{$ostr}));
+		}
+		print "\n";
+	    }
+	} elsif ($ctrls{$ctrl} eq 'icebox') {
   	    my $device = new power_icebox($IPs{$ctrl}, $verbose);
 	    if (!defined $device) {
 		warn "Unable to contact controller $ctrl.\n";
