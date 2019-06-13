@@ -2431,5 +2431,16 @@ sub LightUpNodes($@)
     
 }
 
+package libossetup_x310;
+use base qw(libossetup_sdr);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
 # This needs to be the last thing in the file.
 1;
