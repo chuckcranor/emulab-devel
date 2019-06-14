@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2012, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,7 +33,14 @@ $isadmin   = ISADMIN();
 #
 # Verify page arguments
 #
-$optargs = OptionalPageArguments("showtype",   PAGEARG_STRING);
+$optargs = OptionalPageArguments("showtype",   PAGEARG_STRING,
+                                 "classic",    PAGEARG_BOOLEAN);
+
+if ($isadmin && !$classic) {
+    $url = "portal/lists.php#projects";
+    header("Location: $url");
+    return;
+}
 
 #
 # Standard Testbed Header
