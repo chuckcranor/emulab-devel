@@ -215,9 +215,9 @@ sub new($$;$$$)
     return $self;
 }
 
-sub Create($$;$$)
+sub Create($$;$$$)
 {
-    my ($class, $code, $value, $output) = @_;
+    my ($class, $code, $value, $output, $logurl) = @_;
 
     if (!defined($output)) {
 	$output = "";
@@ -232,6 +232,8 @@ sub Create($$;$$)
     my $self = {"code"   => $code,
 		"value"  => $value,
 		"output" => $output};
+    $self->{"logurl"} = $logurl
+	if (defined($logurl));
 
     $current_response = $self;
     return $self;
@@ -249,7 +251,8 @@ sub Bless($$)
 sub Unbless($)
 {
     my ($ref) = @_;
-    return GeniResponse->Create($ref->code(), $ref->value(), $ref->output());
+    return GeniResponse->Create($ref->code(), $ref->value(),
+				$ref->output(), $ref->logurl());
 }
 
 # accessors
