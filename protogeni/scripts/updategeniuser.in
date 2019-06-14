@@ -302,8 +302,8 @@ sub UpdateSSHKeys()
 	@params = ("KEY", @params);
 	$isportal = 1;
     }
-    elsif ($auth =~ /auth\.noc\.onelab\.eu/) {
-	$url = "https://auth.noc.onelab.eu:8008/ma/2";
+    elsif ($auth =~ /auth\.onelab\.eu/) {
+	$url = "https://auth.onelab.eu:8008/ma/2";
 	$method = "lookup";
 	@params = ("KEY", @params);
 	$isportal = 1;
@@ -478,8 +478,8 @@ sub ProjectMembership()
 	$url .= "/1";
 	@params = ($user_urn, @params);
     }
-    elsif ($auth =~ /auth\.noc\.onelab\.eu/) {
-	$url = "https://auth.noc.onelab.eu:8008/sa/2";
+    elsif ($auth =~ /auth\.onelab\.eu/) {
+	$url = "https://auth.onelab.eu:8008/sa/2";
 	@params = ($user_urn, @params);
     }
     else {
@@ -591,8 +591,8 @@ sub UpdatePersonalData()
 			       'MEMBER_LASTNAME'];
 	@params = ("MEMBER", $param1, $param2);
     }
-    elsif ($auth =~ /auth\.noc\.onelab\.eu/) {
-	$url = "https://auth.noc.onelab.eu:8008/ma/2";
+    elsif ($auth =~ /auth\.onelab\.eu/) {
+	$url = "https://auth.onelab.eu:8008/ma/2";
 	$method = "lookup";
 	$param2->{'filter'} = ['MEMBER_FIRSTNAME',
 			       '_GENI_MEMBER_DISPLAYNAME',
