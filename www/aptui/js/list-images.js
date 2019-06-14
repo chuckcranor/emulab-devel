@@ -13,8 +13,9 @@ $(function ()
     var waitwaitString  = templates["waitwait-modal"];
     var amlist = null;
     // Results for each AM so we can get it later. 
-    var imagelist       = {}; 
-    
+    var imagelist       = {};
+
+    // Popover for the URN link
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
@@ -26,6 +27,30 @@ $(function ()
 
 	LoadData();
 	LoadClassic();
+    }
+
+    /*
+     * Add urn copy-to-clipboard popovers.
+     */
+    var urnPopoverContent = function (urn) {
+	var string =
+	    "<div style='width 100%'> "+
+	    "  <input readonly type=text " +
+	    "       style='display:inline; width: 93%; padding: 2px;' " +
+	    "       class='form-control input-sm' "+
+	    "       value='" + urn + "'>" +
+	    "  <a href='#' class='btn urn-copy-button' " +
+	    "     style='padding: 0px'>" +
+	    "    <span class='glyphicon glyphicon-copy'></span></a></div>";
+	return string;
+    };
+    function addUrnPopovers(id)
+    {
+	sup.addPopoverClip('#' + id + ' .urn-button',
+			   function (target) {
+			       var urn = $(target).data("urn");
+			       return urnPopoverContent(urn);
+			   });
     }
 
     /*
@@ -105,6 +130,9 @@ $(function ()
 		    }
 		});
 
+		// Set up the urn link popovers to the table.
+		addUrnPopovers(name);
+		
 		var TableInit = function(tablename) {
 		    $('#' + name + ' #' + tablename).removeClass("hidden");
 		    
@@ -424,29 +452,7 @@ $(function ()
 		    $(this).html(moment($(this).html()).format("ll"));
 		}
 	    });
-	    // This activates the popover subsystem.
-	    $('#classic-images-table [data-toggle="popover"]').popover({
-		placement: 'auto',
-	    });
-	    // Prevent shooting to the top of the page on clicking the popover.
-	    $('#classic-images-table [data-toggle="popover"]')
-		.click(function (event) {
-		    event.preventDefault();
-		});
-	    // This is to make the URN popover go away on click outside.
-	    $('body').on('click', function (e) {
-		$('[data-toggle="popover"]')
-		    .each(function () {
-			//the 'is' for buttons that trigger popups
-			//the 'has' for icons within a button that
-			//triggers a popup
-			if (!$(this).is(e.target) &&
-			    $(this).has(e.target).length === 0 &&
-			    $('.popover').has(e.target).length === 0) {
-			    $(this).popover('hide');
-			}
-		    });
-	    });
+	    addUrnPopovers("classic-images-table");
 	    $('#classic-images-div').removeClass("hidden");
 
 	    var table = $('#classic-images-table')

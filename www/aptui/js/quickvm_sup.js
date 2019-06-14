@@ -221,6 +221,69 @@ function SpitOops(id, msg)
     ShowModal(modal_name);
 }
 
+function addPopoverClip (id, contentfunction)
+{
+    $(id).click(function(event) {
+	event.preventDefault();
+	var button = this;
+
+	// If clicking on the button when the popover is
+	// showing, hide it and return.
+	if ($(button).data("bs.popover") !== undefined) {
+	    $(button).popover('destroy');
+	    return;
+	}
+	var urn = $(button).data("urn");
+
+	$(button).popover({
+	    html:     true,
+	    content:  contentfunction(this),
+	    trigger:  'manual',
+	    placement:'auto',
+	    container:'body',
+	});
+	if (0) {
+	// If the user clicks somewhere else, kill this popover.
+	var hide = function (event) {
+	    console.info("hide");
+	    $(button).popover('destroy');
+	    $('body').off("click", hide);
+	};
+	// Cannot bind it till the popover is shown.
+	$(button).on("shown.bs.popover", function() {
+	    $('body').on("click", hide);
+	});
+	}
+	$(button).popover('show');
+
+	// Timeout to hide the popover. I tried the body click event
+	// above but it did not work consistently. Will revisit if
+	// I hear enough whining.
+	var mytimout = setTimeout(function f() {
+	    $(button).popover('destroy');
+	}, 5000);
+	$(button).on("hide.bs.popover", function() {
+	    clearTimeout(mytimout);
+	});
+
+	// DOM of the popover content.
+	var content = $(button).data("bs.popover").tip();
+
+	// Bind the copy-to-clipboard button.
+	$(content).find("a").click(function (e) {
+	    e.preventDefault();
+	    $(content).find("input").select();
+	    document.execCommand("copy");
+	    $(button).popover('destroy');
+	});
+	// If user clicks in the input, kill the popover.
+	$(content).find("input").click(function (e) {
+	    e.preventDefault();
+	    $(button).popover('destroy');
+	});
+    });
+}
+
 function GeniAuthenticate(cert, r1, success, failure)
 {
     var callback = function(json) {
@@ -418,6 +481,7 @@ return {
     InitGeniLogin: InitGeniLogin,
     ImageDisplay: ImageDisplay,
     ConfirmModal: ConfirmModal,
+    addPopoverClip: addPopoverClip,
 };
 })();
 });

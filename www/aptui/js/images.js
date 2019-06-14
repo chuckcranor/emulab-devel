@@ -7,6 +7,30 @@ $(function ()
     var filterindex = 7;
     var showformat = false;
 
+    /*
+     * Add urn copy-to-clipboard popovers.
+     */
+    var urnPopoverContent = function (urn) {
+	var string =
+	    "<div style='width 100%'> "+
+	    "  <input readonly type=text " +
+	    "       style='display:inline; width: 93%; padding: 2px;' " +
+	    "       class='form-control input-sm' "+
+	    "       value='" + urn + "'>" +
+	    "  <a href='#' class='btn urn-copy-button' " +
+	    "     style='padding: 0px'>" +
+	    "    <span class='glyphicon glyphicon-copy'></span></a></div>";
+	return string;
+    };
+    function addUrnPopovers(id)
+    {
+	sup.addPopoverClip('#' + id + ' .urn-button',
+			   function (target) {
+			       var urn = $(target).data("urn");
+			       return urnPopoverContent(urn);
+			   });
+    }
+
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
@@ -51,22 +75,10 @@ $(function ()
 	    delay: {"hide" : 500, "show" : 150},
 	    placement: 'auto',
 	});
-	// Prevent shooting to the top of the page on clicking the popover.
-	$('#images-table [data-toggle="popover"]')
-	    .click(function (event) {
-		event.preventDefault();
-	    });
-	$('body').on('click', function (e) {
-	    $('[data-toggle="popover"]').each(function () {
-		//the 'is' for buttons that trigger popups
-		//the 'has' for icons within a button that triggers a popup
-		if (!$(this).is(e.target) &&
-		    $(this).has(e.target).length === 0 &&
-		    $('.popover').has(e.target).length === 0) {
-		    $(this).popover('hide');
-		}
-	    });
-	});
+
+	// Set up the urn link popovers to the table.
+	addUrnPopovers("images-table");
+	
 	// Bind handlers for the checkboxes.
 	$('#my-images, #project-images, #public-images, ' +
 	  '#admin-images, #system-images')

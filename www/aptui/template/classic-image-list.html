@@ -65,15 +65,7 @@
 		  <td><%- value.format %></td>
 		<% } %>
 		<td align="center">
-		  <a href="#" 
-		     data-toggle='popover'
-		     data-html='true'
-		     data-trigger='click'
-		     data-title="URN for your geni-lib script or RSpec"
-		     data-content="<input type=text readonly=readonly
-				   class=form-control
-				   onClick='this.select();'
-				   value='<%- value.urn %>'>">
+		  <a href="#" data-urn="<%- value.urn %>" class="urn-button">
 		    <span class="glyphicon glyphicon-link"></span>
 		  </a>
 		</td>
