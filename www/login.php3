@@ -131,6 +131,7 @@ function SPITFORM($uid, $key, $referrer, $error, $adminmode, $simple, $view)
 {
     global $TBDB_UIDLEN, $TBBASE;
     global $isgenitool;
+    global $UI_EXTERNAL_ACCOUNTS;
     
     PAGEHEADER("Login",$view);
 
@@ -209,9 +210,11 @@ function SPITFORM($uid, $key, $referrer, $error, $adminmode, $simple, $view)
     echo "</form>
           </table>\n";
 
-    echo "<center><h2>
-          <a href='password.php3'>Forgot your password?</a>
-          </h2></center>\n";
+    if ($UI_EXTERNAL_ACCOUNTS == 0) {
+	echo "<center><h2>
+	    <a href='password.php3'>Forgot your password?</a>
+	    </h2></center>\n";
+    }
 }
 
 #

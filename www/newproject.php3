@@ -30,7 +30,11 @@ include("defs.php3");
 #
 # Get current user.
 #
-$this_user = CheckLogin($check_status);
+if ($UI_EXTERNAL_ACCOUNTS) {
+    $this_user = CheckLoginOrDie();    # force login, newuser is disabled
+} else {
+    $this_user = CheckLogin($check_status);
+}
 
 #
 # Verify page arguments.

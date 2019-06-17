@@ -35,6 +35,13 @@ RedirectSecure();
 $optargs = OptionalPageArguments("user",      PAGEARG_USER,
 				 "key",       PAGEARG_STRING,
                                  "reset",     PAGEARG_STRING);
+#
+# see if UI change password is disabled (e.g. passwords externally managed)
+#
+if ($UI_EXTERNAL_ACCOUNTS) {
+    SPITUSERERROR("Password change disabled on this system");
+    return;
+}
 
 #
 # We use this page for both resetting a forgotten password, and for

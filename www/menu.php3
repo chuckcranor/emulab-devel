@@ -752,6 +752,7 @@ function WRITESIDEBAR() {
     global $THISHOMEBASE;
     global $currentusage, $FANCYBANNER, $ELABINELAB, $PLABSUPPORT;
     global $WIKIDOCURL, $FORUMURL;
+    global $UI_EXTERNAL_ACCOUNTS;
     $firstinitstate = TBGetFirstInitState();
 
     list($newsBase, $newsDate, $newNews) = GETNEWSINFO();
@@ -813,7 +814,7 @@ function WRITESIDEBAR() {
     }
 
     $lbox_content = "";
-    if (!$firstinitstate) {
+    if (!$firstinitstate && $UI_EXTERNAL_ACCOUNTS == 0) {
 	$lbox_content .= 
 	    "<a href=\"$TBBASE/reqaccount.php3\">".
 	    "<img alt=\"Request Account\" border=0 ".

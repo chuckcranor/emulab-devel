@@ -34,6 +34,14 @@ if ($CHECKLOGIN_STATUS & CHECKLOGIN_LOGGEDIN) {
 }
 
 #
+# see if UI change password is disabled (e.g. passwords externally managed)
+#
+if ($UI_EXTERNAL_ACCOUNTS) {
+    SPITUSERERROR("Password change disabled on this system");
+    return;
+}
+
+#
 # Verify page arguments.
 #
 $optargs = OptionalPageArguments("reset",         PAGEARG_STRING,
