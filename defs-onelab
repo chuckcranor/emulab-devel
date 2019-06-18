@@ -22,7 +22,7 @@
 #
 
 # The name of this installation
-THISHOMEBASE=Couldlab.Onelab.Eu
+THISHOMEBASE=Onelab.Eu
 
 #
 # Various domain and host names
@@ -410,6 +410,9 @@ NOSTACKMIB=0
 # Image versioning and deltas.
 IMAGEPROVENANCE=1
 IMAGEDELTAS=0
+
+# Image directories
+IMAGEDIRECTORIES=1
 
 # ZFS -- added by hibler 12/17/15
 WITHZFS=1
