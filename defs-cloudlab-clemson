@@ -151,6 +151,9 @@ ZFS_QUOTA_GROUP="10G"
 WITHAMD=1
 AMD_ROOT=/.amd_mnt/ops
 
+# XXX need to turn on ZFS_NOEXPORT too, but that would require a reboot
+INCREMENTAL_MOUNTD=1
+
 # Blockstores
 BS_IQN_PREFIX=iqn.2015-03.us.cloudlab.clemson
 
