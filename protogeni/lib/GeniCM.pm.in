@@ -2929,6 +2929,13 @@ sub GetTicketAuxAux($)
 	if (GeniXML::HasNoBandwidthShapingSetting($linkref)) {
 	    $nobwshaping = 1;
 	}
+	if (GeniXML::HasJumboFramesSetting($linkref)) {
+	    $virtexperiment->NewTableRow("virt_lan_settings",
+					 {"vname"       => $lanname,
+					  "capkey"      => "jumboframes",
+					  "capval"      => 1});
+	}
+	
 	# Ditto for new direct link option.
 	my $nointerswitch = GeniXML::NoInterSwitch($linkref);
 
