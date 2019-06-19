@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -341,7 +341,7 @@ function Do_Deny()
         # This works cause we still have the project object in memory.
         SendProjAdminMail
             ($project, "ADMIN", "$headname '$headuid' <$headuid_email>",
-             "Project application '$pid' has been denied!",
+             "Project application '$pid' has been denied.",
              "This message is to notify you that your project application\n".
              "for $pid has been denied.\n".
              ($message == "" ? "" :
