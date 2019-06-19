@@ -268,10 +268,10 @@ sub os_ifconfig_line($$$$$$$$;$$$%)
 #	'vlan'	802.1q tagged vlan devices
 #	'alias'	IP aliases on physical interfaces
 #
-sub os_ifconfig_veth($$$$$;$$$$$)
+sub os_ifconfig_veth($$$$$;$$$$$$)
 {
     my ($iface, $inet, $mask, $id, $vmac,
-	$rtabid, $encap, $vtag, $itype, $cookie) = @_;
+	$rtabid, $encap, $vtag, $itype, $mtu, $cookie) = @_;
     my ($uplines, $downlines);
 
     #
@@ -313,11 +313,23 @@ sub os_ifconfig_veth($$$$$;$$$$$)
 	    warn("No vtag in veth config\n");
 	    return "";
 	}
+	#
+	# XXX only recognize 1500 and 9000 for MTUs.
+	# Anything else results in the default (no explicit setting).
+	#
+	my $mtuopt = "";
+	if (defined($mtu)) {
+	    if ($mtu eq "1500") {
+		$mtuopt = $IFC_1500MTU;
+	    } elsif ($mtu eq "9000") {
+		$mtuopt = $IFC_9000MTU;
+	    }
+	}
 	if ($vmac =~ /^(\w{2})(\w{2})(\w{2})(\w{2})(\w{2})(\w{2})$/) {
 	    $vmac = "$1:$2:$3:$4:$5:$6";
 	}
 	$uplines = "$IFCONFIGBIN vlan${id} create link $vmac " .
-		   "vlan $vtag vlandev $iface\n    ";
+		   "vlan $vtag vlandev $iface $mtuopt\n    ";
 
 	# XXX we have to explicitly put the physical interface into
 	# promiscuous mode when the virtual device has a different MAC

@@ -190,6 +190,7 @@ INSERT INTO sitevariables VALUES ('cnetwatch/mail_interval',NULL,'600','Interval
 INSERT INTO sitevariables VALUES ('cnetwatch/mail_max',NULL,'1000','Maximum number of alert emails to send; after this alerts are only logged (0 means no limit to the emails)',0);
 INSERT INTO sitevariables VALUES ('reservations/approval_threshold',NULL,'128','Maximum number of node hours for automatic approval of reservation requests (0 means no limit).',0);
 INSERT INTO sitevariables VALUES ('docker/registry',NULL,'','The URL of the Docker registry where this Emulab stores its custom Docker images; the empty string signifies that users cannot create custom Docker images',0);
+INSERT INTO sitevariables VALUES ('general/allowjumboframes',NULL,'0','Set non-zero to allow experiments to specify jumbo frames on links/lans. NOTE: the experimental network fabric switches must have jumbo frames enabled!',0);
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

@@ -1881,15 +1881,8 @@ proc tbx-log {msg} {
 # experiment switches involved all have jumbo frames enabled.
 #
 proc tb-use-jumbo-frames {onoff} {
-    var_import ::GLOBALS::usejumboframes
-
-    if {$onoff != 0 && $onoff != 1} {
-	perror "\[tb-use-jumbo-frames] $onoff must be 0/1"
-	return
-    }
-
-    set usejumboframes $onoff
-
+    perror "\[tb-use-jumbo-frames] no longer supported, ignoring."
+    return
 }
 
 ##

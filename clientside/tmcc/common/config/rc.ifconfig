@@ -325,6 +325,7 @@ sub doboot()
 	    my $ifrtabid = undef;
 	    my $encap    = $ifconfig->{ENCAP};
 	    my $vtag	 = $ifconfig->{VTAG};
+	    my $mtu      = $ifconfig->{MTU};
 
 	    # For IP aliases - late bind to the interface since it may
 	    # have only just been created by a prior invocation of
@@ -365,7 +366,8 @@ sub doboot()
 
 	    my ($upline, $downline) =
 		os_ifconfig_veth($iface, $inet, $mask, $id, $vmac,
-				 $ifrtabid, $encap, $vtag, $itype, \%oscookie);
+				 $ifrtabid, $encap, $vtag, $itype, $mtu,
+				 \%oscookie);
 		    
 	    if (defined($upline) && $upline) {
 		$upcmds   .= "$upline\n    ";

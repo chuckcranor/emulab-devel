@@ -585,7 +585,7 @@ sub os_ifconfig_line($$$$$$$$;$$$%)
         $uplines   = $wlccmd . "\n";
 	$uplines  .= $privcmd . "\n";
 	$uplines  .= $iwcmd . "\n";
-	$uplines  .= sprintf($IFCONFIG, $athiface, $inet, $mask) . "\n";
+	$uplines  .= sprintf($IFCONFIG, $athiface, $inet, $mask, "") . "\n";
 	$downlines  = "$IFCONFIGBIN $athiface down\n";
 	$downlines .= "$WLANCONFIG $athiface destroy\n";
 	$downlines .= "$IFCONFIGBIN $iface down\n";
@@ -642,7 +642,7 @@ sub os_ifconfig_line($$$$$$$$;$$$%)
         $uplines = $tuncmd . " > /dev/null 2>&1 &\n";
         $uplines .= "sleep 5\n";
         $uplines .= "$IFCONFIGBIN $iface hw ether $mac\n";
-        $uplines .= sprintf($IFCONFIG, $iface, $inet, $mask) . "\n";
+        $uplines .= sprintf($IFCONFIG, $iface, $inet, $mask, "") . "\n";
         $downlines = "$IFCONFIGBIN $iface down";
         return ($uplines, $downlines);
     }
@@ -807,10 +807,10 @@ sub os_ifconfig_line($$$$$$$$;$$$%)
 #	'vlan'	802.1q tagged vlan devices
 #	'alias'	IP aliases on physical interfaces
 #
-sub os_ifconfig_veth($$$$$;$$$$%)
+sub os_ifconfig_veth($$$$$;$$$$$%)
 {
     my ($iface, $inet, $mask, $id, $vmac,
-	$rtabid, $encap, $vtag, $itype, $cookie) = @_;
+	$rtabid, $encap, $vtag, $itype, $mtu, $cookie) = @_;
     my ($uplines, $downlines);
 
     if ($itype !~ /^(alias|vlan|veth)$/) {
@@ -854,7 +854,7 @@ sub os_ifconfig_veth($$$$$;$$$$%)
 		$uplines .= "$IFCONFIGBIN $iface up";
 	    }
 	    else {
-		$uplines  .= sprintf($IFCONFIG, $iface, $inet, $mask);
+		$uplines  .= sprintf($IFCONFIG, $iface, $inet, $mask, "");
 		$downlines = "$IFCONFIGBIN $iface down";
 	    }
 
@@ -932,6 +932,19 @@ sub os_ifconfig_veth($$$$$;$$$$%)
 	    return "";
 	}
 
+	#
+	# XXX only recognize 1500 and 9000 for MTUs.
+	# Anything else results in the default (no explicit setting).
+	#
+	my $mtuopt = "";
+	if (defined($mtu)) {
+	    if ($mtu eq "1500") {
+		$mtuopt = $IFC_1500MTU;
+	    } elsif ($mtu eq "9000") {
+		$mtuopt = $IFC_9000MTU;
+	    }
+	}
+
 	# XXX starting with CentOS7, vconfig is no longer
 	my $useip = 0;
 	if (! -x $VLANCONFIG) {
@@ -953,7 +966,7 @@ sub os_ifconfig_veth($$$$$;$$$$%)
 	} else {
 	    $uplines   .= "$VLANCONFIG add $iface $vtag\n    ";
 	}
-	$uplines   .= sprintf($IFCONFIG, $vdev, $inet, $mask);
+	$uplines   .= sprintf($IFCONFIG, $vdev, $inet, $mask, $mtuopt);
 	# configure the MAC address.
 	$uplines   .= "\n    $IFCONFIGBIN $vdev hw ether $vmac"
 	    if ($vmac);

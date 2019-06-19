@@ -280,9 +280,6 @@ namespace eval GLOBALS {
     # Use phys naming
     variable use_physnaming 0
 
-    # Use jumbo frames on 10Gb+ links
-    variable usejumboframes 0
-
     # Modelnet support. Number of physical core and edge nodes that user
     # wants thrown at the problem.
     variable modelnet_cores 0

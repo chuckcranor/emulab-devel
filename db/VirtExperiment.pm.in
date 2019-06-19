@@ -141,8 +141,7 @@ my $debug	      = 0;
 		      "dpdb"			=> 1,
 		      "nonfsmounts"		=> 1,
 		      "nfsmounts"		=> 1,
-		      "skipvlans"		=> 1,
-		      "usejumboframes"		=> 1);
+		      "skipvlans"		=> 1);
 
 #
 # Grab the virtual topo for an experiment.

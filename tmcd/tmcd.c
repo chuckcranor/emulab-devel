@@ -266,7 +266,6 @@ typedef struct {
         int		genisliver_idx;
         int		geniflags;
 	int		isnonlocal_pid;
-	int		usejumboframes;
 	unsigned short  taintstates;
 	unsigned short  experiment_keys;
 	char            nfsmounts[TBDB_FLEN_TINYTEXT];
@@ -2081,6 +2080,26 @@ COMMAND_PROTOTYPE(doifconfig)
 	int		nrows;
 	int		num_interfaces=0;
 	int		cookedgeninode = (reqp->geniflags & 0x2);
+	int		allowjumboframes = 0;
+
+	/*
+	 * Figure out if jumbo frames are a possibility at this site.
+	 * XXX we only do this if the client is new enough to set jumbos.
+	 */
+	if (vers >= 44) {
+		res = mydb_query("select value,defaultvalue "
+				 "from sitevariables "
+				 "where name='general/allowjumboframes'", 2);
+		if (res && (int)mysql_num_rows(res) > 0) {
+			row = mysql_fetch_row(res);
+			if (row[0] && row[0][0])
+				allowjumboframes = (atoi(row[0]) > 0 ? 1 : 0);
+			else if (row[1] && row[1][0])
+				allowjumboframes = (atoi(row[1]) > 0 ? 1 : 0);
+		}
+		if (res)
+			mysql_free_result(res);
+	}
 
 	if (cookedgeninode)
 		goto skipphys;
@@ -2098,13 +2117,16 @@ COMMAND_PROTOTYPE(doifconfig)
 	 */
 	res = mydb_query("select 0,i.IP,i.MAC,i.current_speed,"
 			 "       i.duplex,i.IPaliases,i.iface,i.role,i.mask,"
-			 "       i.rtabid,i.interface_type,vl.vname "
+			 "       i.rtabid,i.interface_type,vl.vname,vs.capval "
 			 "  from interfaces as i "
 			 "left join virt_lans as vl on "
 			 "  vl.pid='%s' and vl.eid='%s' and "
 			 "  vl.vnode='%s' and vl.ip=i.IP "
+			 "left join virt_lan_settings as vs on "
+			 "  vs.exptidx=vl.exptidx and vs.vname=vl.vname "
+			 "    and vs.capkey='jumboframes' "
 			 "where i.node_id='%s' and %s",
-			 12, reqp->pid, reqp->eid, reqp->nickname,
+			 13, reqp->pid, reqp->eid, reqp->nickname,
 			 reqp->issubnode ? reqp->nodeid : reqp->pnodeid,
 			 clause);
 
@@ -2162,7 +2184,7 @@ COMMAND_PROTOTYPE(doifconfig)
 			 *   "9000" if using jumbo frames,
 			 *   "" otherwise (use client default)
 			 */
-			if (reqp->usejumboframes && atoi(speed) >= 10000)
+			if (allowjumboframes && atoi(speed) >= 10000)
 				mtu = "9000";
 
 			/*
@@ -2369,17 +2391,16 @@ COMMAND_PROTOTYPE(doifconfig)
 	 */
 	if (vers >= 18 && !reqp->isvnode) {
 		char *aliasstr;
-		char *mtu = "";
 
 		res = mydb_query("select i.interface_type,i.mac, "
-				 "       i.current_speed,i.duplex "
+				 "       i.current_speed,i.duplex,i.iface "
 				 "  from interfaces as i "
 				 "where i.current_speed!='0' and "
 				 "      i.current_speed!='' and "
 				 "      i.role!='ctrl' and "
 				 "      (i.IP='' or i.IP is null) and "
 				 "      i.role='expt' and i.node_id='%s'",
-				 4, reqp->pnodeid);
+				 5, reqp->pnodeid);
 		if (!res) {
 			error("%s: IFCONFIG: "
 			     "DB Error getting active physical interfaces!\n",
@@ -2394,8 +2415,59 @@ COMMAND_PROTOTYPE(doifconfig)
 
 		nrows = (int)mysql_num_rows(res);
 		while (nrows) {
+			char *mtu = "";
 			char *bufp   = buf;
+
 			row = mysql_fetch_row(res);
+
+			/*
+			 * XXX we have to figure out if any vinterfaces
+			 * associated with this interface require jumbo
+			 * frames and set jumbo frames on the physical
+			 * interface if so. This could no doubt be combined
+			 * with the above query, but my head would explode
+			 * if I tried that.
+			 *
+			 * XXX since this is such a skank query, we only
+			 * do it if absolutely positively necessary:
+			 * if we support using jumbo frames and
+			 * if the interface speed is at least 10Gbps.
+			 */
+			if (vers >= 44 && allowjumboframes &&
+			    atoi(row[2]) >= 10000) {
+				MYSQL_RES *res2;
+				MYSQL_ROW row2;
+				res2 = mydb_query("select max(vls.capval) "
+						  "from vinterfaces as v "
+						  "left join interfaces as i "
+						  " on i.node_id=v.node_id "
+						  "  and i.iface=v.iface "
+						  "left join virt_lan_lans as vll "
+						  " on vll.idx=v.virtlanidx "
+						  "  and vll.exptidx=v.exptidx "
+						  "left join lan_attributes as la2 "
+						  " on la2.lanid=v.vlanid "
+						  "  and la2.attrkey='stack' "
+						  "left join virt_lan_settings as vls "
+						  " on vls.exptidx=vll.exptidx "
+						  "  and vls.vname=vll.vname "
+						  "  and vls.capkey='jumboframes' "
+						  "where v.exptidx='%d' "
+						  " and v.node_id='%s' "
+						  " and v.iface='%s' "
+						  " and (la2.attrvalue='Experimental' "
+						  "  or la2.attrvalue is null) "
+						  "and v.vnode_id is NULL",
+						  1, reqp->exptidx,
+						  reqp->nodeid, row[4]);
+				if (res2 && (int)mysql_num_rows(res2) > 0) {
+					row2 = mysql_fetch_row(res2);
+					if (row2[0] && atoi(row2[0]) > 0)
+						mtu = "9000";
+				}
+				if (res2)
+					mysql_free_result(res2);
+			}
 
 			bufp += OUTPUT(bufp, ebufp - bufp,
 				       "INTERFACE IFACETYPE=%s "
@@ -2407,12 +2479,9 @@ COMMAND_PROTOTYPE(doifconfig)
 
 			/*
 			 * XXX MTU:
-			 *   "9000" if using jumbo frames,
+			 *   "9000" if allowing jumbo frames,
 			 *   "" if not (use client default)
 			 */
-			if (reqp->usejumboframes && atoi(row[2]))
-				mtu = "9000";
-
 			if (vers >= 44) {
 				bufp += OUTPUT(bufp, ebufp - bufp,
 					       " MTU=%s", mtu);
@@ -2444,7 +2513,7 @@ COMMAND_PROTOTYPE(doifconfig)
 	 */
 	res = mydb_query("select v.unit,v.IP,v.mac,i.mac,v.mask,v.rtabid, "
 			 "       v.type,vll.vname,v.virtlanidx,vlans.tag, "
-			 "       l.lanid,rvt.tag "
+			 "       l.lanid,rvt.tag,i.current_speed,vls.capval "
 			 "  from vinterfaces as v "
 			 "left join interfaces as i on "
 			 "  i.node_id=v.node_id and i.iface=v.iface "
@@ -2458,11 +2527,14 @@ COMMAND_PROTOTYPE(doifconfig)
 			 "  rvt.lanid=v.vlanid "
 			 "left join lan_attributes as la2 on "
 			 "  la2.lanid=v.vlanid and la2.attrkey='stack' "
+			 "left join virt_lan_settings as vls on "
+			 "  vls.exptidx=vll.exptidx and vls.vname=vll.vname "
+			 "      and vls.capkey='jumboframes' "
 			 "where v.exptidx='%d' and v.node_id='%s' and "
 			 "      (la2.attrvalue='Experimental' or "
 			 "       la2.attrvalue is null) "
 			 "      and %s",
-			 12, reqp->exptidx, reqp->pnodeid, buf);
+			 14, reqp->exptidx, reqp->pnodeid, buf);
 	if (!res) {
 		error("%s: IFCONFIG: DB Error getting veth interfaces!\n",
 		      reqp->nodeid);
@@ -2472,7 +2544,7 @@ COMMAND_PROTOTYPE(doifconfig)
 	while (nrows) {
 		char *bufp   = buf;
 		char *ifacetype;
-		int isveth, doencap;
+		int isveth, doencap, isloop;
 
 		row = mysql_fetch_row(res);
 		nrows--;
@@ -2486,29 +2558,47 @@ COMMAND_PROTOTYPE(doifconfig)
 		if (strcmp(row[6], "alias") == 0)
 			continue;
 
+		isloop = (strcmp(row[6], "vlan") == 0 && !row[3]) ? 1 : 0;
+
 		/*
 		 * When the proxy is asking for the container, we give it info
 		 * for a plain interface, since that is all it sees.
 		 */
 		if (reqp->isvnode && reqp->asvnode) {
+			char *speed = "100Mbps";
+			char *mtuopt = "";
+
+			/*
+			 * XXX MTU setting.
+			 *
+			 * On a node-local interface (isloop != 0) we won't
+			 * have an associated physical inteface and thus no
+			 * current_speed setting. So here we just use the
+			 * specified jumboframes capability to decide if the
+			 * MTU should be set to 9000.
+			 *
+			 * If we are going to be setting MTU=9000, then we
+			 * also explicitly set the speed to 10000Mbps just
+			 * so the user doesn't get weirded-out by a 100Mbps
+			 * link with jumbo frames.
+			 */
+			if (vers >= 44) {
+				if (allowjumboframes &&
+				    isloop && row[13] && atoi(row[13]) > 0) {
+					mtuopt = " MTU=9000";
+					speed = "10000Mbps";
+				} else {
+					mtuopt = " MTU=";
+				}
+			}
 			bufp += OUTPUT(bufp, ebufp - bufp,
 				       "INTERFACE IFACETYPE=any "
 				       "INET=%s MASK=%s MAC=%s "
-				       "SPEED=100Mbps DUPLEX=full "
-				       "IFACE= RTABID= LAN=%s",
-				       row[1], row[4], row[2], row[7]);
+				       "SPEED=%s DUPLEX=full "
+				       "IFACE= RTABID= LAN=%s%s\n",
+				       row[1], row[4], row[2], speed,
+				       row[7], mtuopt);
 
-			/*
-			 * XXX MTU?
-			 * Since we set SPEED=100Mbps, we don't set the MTU
-			 * (to be consistent with only setting MTU=9000 when
-			 * the speed is 10Gbps or more).
-			 */
-			if (vers >= 44) {
-				bufp += OUTPUT(bufp, ebufp - bufp, " MTU=");
-			}
-
-			OUTPUT(bufp, ebufp - bufp, "\n");
 			client_writeback(sock, buf, strlen(buf), tcp);
 			if (verbose)
 				info("%s: IFCONFIG: %s", reqp->nodeid, buf);
@@ -2516,7 +2606,7 @@ COMMAND_PROTOTYPE(doifconfig)
 			continue;
 		}
 
-		if (strcmp(row[6], "vlan") == 0 && !row[3]) {
+		if (isloop) {
 			/*
 			 * A vlan that ended up trivial since all the
 			 * members are on the same node. Convert to a
@@ -2602,12 +2692,28 @@ COMMAND_PROTOTYPE(doifconfig)
 			bufp += OUTPUT(bufp, ebufp - bufp, " VTAG=%s", tag);
 
 			/*
-			 * XXX MTU?
-			 *   Maybe should be explicitly set the same as
-			 *   the physical IF, but for now we just don't set.
+			 * MTU: see if jumboframes capability is set, but
+			 * then only set if physical interface is >= 10Gbps.
+			 *
+			 * XXX ugh. for VLAN devices on a physical node
+			 * (!reqp->isvnode), we cannot just return the
+			 * default "MTU=" if we want a non-jumbo (1500 byte)
+			 * MTU. This is because we may have set the parent
+			 * physical interface to an MTU of 9000, in which
+			 * case "the default" will now be 9000 and not 1500!
+			 * So always explicitly set the MTU for VLAN devices.
 			 */
 			if (vers >= 44) {
-				bufp += OUTPUT(bufp, ebufp - bufp, " MTU=");
+				char *mtu = "";
+				if (allowjumboframes) {
+					if (row[13] && atoi(row[13]) > 0 &&
+					    row[12] && atoi(row[12]) >= 10000)
+						mtu = "9000";
+					else if (!reqp->isvnode)
+						mtu = "1500";
+				}
+				bufp += OUTPUT(bufp, ebufp - bufp, " MTU=%s",
+					       mtu);
 			}
 		}
 		OUTPUT(bufp, ebufp - bufp, "\n");
@@ -7790,8 +7896,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " r.erole, n.taint_states, "
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
 				 " p.nonlocal_id,NULL, "
-				 " r.rootkey_private,r.rootkey_public, "
-				 " e.usejumboframes "
+				 " r.rootkey_private,r.rootkey_public "
 				 "FROM nodes AS n "
 				 "LEFT JOIN reserved AS r ON "
 				 "  r.node_id=n.node_id "
@@ -7822,7 +7927,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "     (SELECT node_id FROM widearea_nodeinfo "
 				 "      WHERE privkey='%s') "
 				 "  AND notmcdinfo_types.attrvalue IS NULL",
-				 46, nodekey);
+				 45, nodekey);
 	}
 	else if (reqp->isvnode) {
 		char	clause[BUFSIZ];
@@ -7862,8 +7967,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " r.erole, nv.taint_states, "
 				 " nv.nfsmounts,e.nfsmounts AS enfsmounts, "
 				 " p.nonlocal_id,va.attrvalue, "
-				 " r.rootkey_private,r.rootkey_public, "
-				 " e.usejumboframes "
+				 " r.rootkey_private,r.rootkey_public "
 				 "from nodes as nv "
 				 "left join nodes as np on "
 				 " np.node_id=nv.phys_nodeid "
@@ -7890,7 +7994,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " va.vname=r.vname and "
 				 " va.attrkey='routable_control_ip' "
 				 "where nv.node_id='%s' and (%s)",
-				 46, reqp->vnodeid, clause);
+				 45, reqp->vnodeid, clause);
 	}
 	else {
 		char	clause[BUFSIZ];
@@ -7923,8 +8027,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " r.erole, n.taint_states, "
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
 				 " p.nonlocal_id,NULL, "
-				 " r.rootkey_private,r.rootkey_public, "
-				 " e.usejumboframes "
+				 " r.rootkey_private,r.rootkey_public "
 				 "from interfaces as i "
 				 "left join nodes as n on n.node_id=i.node_id "
 				 "left join reserved as r on "
@@ -7954,7 +8057,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "  on n.type=dedicated_wa_types.type "
 				 "where (%s) "
 				 "  and notmcdinfo_types.attrvalue is NULL",
-				 46, clause);
+				 45, clause);
 	}
 
 	if (!res) {
@@ -8133,11 +8236,6 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 		reqp->experiment_keys |= TB_ROOTKEYS_PRIVATE;
 	if (row[44] && atoi(row[44]) > 0)
 		reqp->experiment_keys |= TB_ROOTKEYS_PUBLIC;
-/* XXX ignore this everywhere except Emulab for now */
-#ifdef  TBMAINSITE
-	if (row[45] && atoi(row[45]) > 0)
-		reqp->usejumboframes = 1;
-#endif
 
 	/* If a vnode, copy into the nodeid. Eventually split this properly */
 	strcpy(reqp->pnodeid, reqp->nodeid);
