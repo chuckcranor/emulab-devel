@@ -223,17 +223,17 @@ sub os_ifconfig_line($$$$$$$$;$$$%)
 		$mediaopt = $IFC_FDUPLEX;
 	    }
 	}
+    }
 
-	#
-	# XXX only recognize 1500 and 9000 for MTUs.
-	# Anything else results in the default (no explicit setting).
-	#
-	if (defined($mtu)) {
-	    if ($mtu eq "1500") {
-		$mtuopt = $IFC_1500MTU;
-	    } elsif ($mtu eq "9000") {
-		$mtuopt = $IFC_9000MTU;
-	    }
+    #
+    # XXX only recognize 1500 and 9000 for MTUs.
+    # Anything else results in the default (no explicit setting).
+    #
+    if (defined($mtu)) {
+	if ($mtu eq "1500") {
+	    $mtuopt = $IFC_1500MTU;
+	} elsif ($mtu eq "9000") {
+	    $mtuopt = $IFC_9000MTU;
 	}
     }
 
