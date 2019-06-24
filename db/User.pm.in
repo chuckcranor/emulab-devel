@@ -556,24 +556,25 @@ sub Create($$$$)
     }
 	
     #
-    # The array of inserts is assumed to be safe already. Generate
-    # a list of actual insert clauses to be joined below.
+    # Get me an unused unix id.
     #
-    my @insert_data = (!defined($argref) ? () :
-		       map("$_=" . DBQuoteSpecial($argref->{$_}),
-			   keys(%{$argref})));
+    my $min_uid = $MIN_UNIX_UID;
+    my $unix_uid = $argref->{'unix_uid'};
 
     #
-    # Get me an unused unix id. 
+    # allow user to request a unix id
     #
-    my $unix_uid;
+    if (defined($unix_uid)) {
+        $unix_uid = int($unix_uid);                    # clean to be safe
+        delete($$argref{'unix_uid'});                  # handled specially
+        return(undef) if ($unix_uid < $MIN_UNIX_UID);  # out of range?
+        return(undef) if (getpwuid($unix_uid));        # already in use?
+    }
 
     #
     # Start here, and keep going if the one picked from the DB just
     # happens to be in use (in the passwd file). Actually happens!
     #
-    my $min_uid = $MIN_UNIX_UID;
-    
     while (! defined($unix_uid)) {
 	#
 	# Nice query, eh? Basically, find unused numbers by looking at
@@ -618,6 +619,14 @@ sub Create($$$$)
 
     # Google Analytics user id.
     my $ga_userid = substr(TBGenSecretKey(), 0, 32);
+
+    #
+    # The array of inserts is assumed to be safe already. Generate
+    # a list of actual insert clauses to be joined below.
+    #
+    my @insert_data = (!defined($argref) ? () :
+		       map("$_=" . DBQuoteSpecial($argref->{$_}),
+			   keys(%{$argref})));
 
     if (! $nouuid) {
 	# And a UUID (universally unique identifier).
