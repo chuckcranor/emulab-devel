@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2016, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2007-2016, 2018, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,6 +42,7 @@ use vars qw(@ISA @EXPORT);
 use emdb;
 use libtestbed;
 use APT_Instance;
+use APT_Aggregate;
 use Project;
 use Group;
 use GeniHRN;
@@ -226,3 +227,24 @@ sub ReservationUtilization($$)
     return 0;
 }
 
+#
+# Look using all the various lookup ways.
+#
+sub LookupAggregate($)
+{
+    my ($token) = @_;
+
+    my $aggregate = APT_Aggregate->Lookup($token);
+    return $aggregate
+	if (defined($aggregate));
+
+    $aggregate = APT_Aggregate->LookupByNickname($token);
+    return $aggregate
+	if (defined($aggregate));
+
+    $aggregate = APT_Aggregate->LookupByDomain($token);
+    return $aggregate
+	if (defined($aggregate));
+
+    return undef;
+}

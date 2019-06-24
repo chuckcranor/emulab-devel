@@ -88,7 +88,6 @@ sub DoShow();
 sub DoFlags();
 sub DoPing();
 sub DoPortals();
-sub LookupAggregate($);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -109,7 +108,7 @@ my $action = shift(@ARGV);
 #
 # Default to local cluster, unless overridden in the action.
 #
-my $aggregate = LookupAggregate($MYURN);
+my $aggregate = APT_Utility::LookupAggregate($MYURN);
 if (!defined($aggregate)) {
     fatal("Could not lookup local aggregate: $MYURN");
 }
@@ -187,7 +186,7 @@ sub DoShow()
 	if (@ARGV);
 
     if (defined($options{"a"})) {
-	$aggregate = LookupAggregate($options{"a"});
+	$aggregate = APT_Utility::LookupAggregate($options{"a"});
 	fatal("No such aggregate")
 	    if (!defined($aggregate));
     }
@@ -226,7 +225,7 @@ sub DoFlags()
 	if (@ARGV != 2 || $ARGV[1] !~ /^(yes|no)$/);
 
     if (defined($options{"a"})) {
-	$aggregate = LookupAggregate($options{"a"});
+	$aggregate = APT_Utility::LookupAggregate($options{"a"});
 	fatal("No such aggregate")
 	    if (!defined($aggregate));
     }
@@ -304,7 +303,7 @@ sub DoPing()
 	if (@ARGV);
 
     if (defined($options{"a"})) {
-	$aggregate = LookupAggregate($options{"a"});
+	$aggregate = APT_Utility::LookupAggregate($options{"a"});
 	fatal("No such aggregate")
 	    if (!defined($aggregate));
     }
@@ -327,7 +326,7 @@ sub DoPortals()
 	usage();
     }
     if (defined($options{"a"})) {
-	$aggregate = LookupAggregate($options{"a"});
+	$aggregate = APT_Utility::LookupAggregate($options{"a"});
 	fatal("No such aggregate")
 	    if (!defined($aggregate));
     }
