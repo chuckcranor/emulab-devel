@@ -2122,6 +2122,32 @@ sub Unlock($)
     return 0;
 }
 
+#
+# Steal the lock
+#
+sub TakeLock($)
+{
+    my ($self) = @_;
+
+    return -1
+	if (!DBQueryWarn("lock tables images write"));
+
+    my $imageid = $self->imageid();
+
+    my $query_result =
+	DBQueryWarn("update images set locker_pid=$PID " .
+		    "where imageid='$imageid' and locked is not null");
+
+    if (! $query_result ||
+	$query_result->numrows == 0) {
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    DBQueryWarn("unlock tables");
+    $self->{'IMAGE'}->{'locker_pid'} = $PID;
+    return 0;
+}
+
 sub GotLock($)
 {
     my ($self) = @_;

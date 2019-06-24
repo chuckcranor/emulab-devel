@@ -818,6 +818,13 @@ sub GotLock($)
     return $self->image()->GotLock();
 }
 
+sub TakeLock($)
+{
+    my ($self) = @_;
+
+    return $self->image()->TakeLock();
+}
+
 #
 # Wait to get lock.
 #
