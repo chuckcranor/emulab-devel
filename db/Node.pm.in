@@ -1409,6 +1409,12 @@ sub InitKeyDist($;$$)
 	goto done;
     }
     
+    # XXX beware the blackbox nodes
+    if ($self->isblackbox()) {
+	$priv = $pub = 0;
+	goto done;
+    }
+
     my $node_id = $self->node_id();
 
     # Get user-supplied values from virt_nodes
