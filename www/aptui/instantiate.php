@@ -327,7 +327,7 @@ function SPITFORM($formfields, $newuser, $errors)
     global $TBBASE, $APTMAIL, $ISAPT, $ISCLOUD, $ISPNET, $PORTAL_NAME;
     global $profile_array, $this_user, $profilename, $profile;
     global $projlist, $skipfirststep, $maxduration, $TBMAINSITE;
-    global $refspec, $ISPOWDER, $rerun_instance, $rerun_paramset;
+    global $refspec, $ISPOWDER, $ISEMULAB, $rerun_instance, $rerun_paramset;
     
     $showabout  = ($ISAPT && !$this_user ? 1 : 0);
     $registered = (isset($this_user) ? "true" : "false");
@@ -427,7 +427,7 @@ function SPITFORM($formfields, $newuser, $errors)
     }
     # Do we show an aggregate selector?
     if (isset($this_user) && !$this_user->webonly()
-        && !$ISAPT && !$ISPNET) {
+        && !$ISAPT && !$ISPNET && !$ISEMULAB) {
         echo "    window.CLUSTERSELECT = true;\n";
     }
     else {
