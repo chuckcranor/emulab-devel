@@ -42,13 +42,13 @@ pre {
 	  <a data-toggle="collapse" id="profile_status_toggle"
 	     href="#profile_status_collapse">
 	    <span id='status_message'></span>
-	    <span class="glyphicon glyphicon-chevron-right pull-right"></span>
+	    <span class="glyphicon glyphicon-chevron-right pull-left"
+	          style="margin-right: 5px;"></span>
 	  </a>
 	</h5>
       </div>
-      <div id="profile_status_collapse"
-	   class="panel-collapse collapse
-		  <% if (status_panel_show) { %>in<% } %>">
+      <div id="profile_status_collapse" data-chevron="profile_status_toggle"
+	   class="panel-collapse collapse">
 	<div class='panel-body'>
 	  <table class='table table-condensed nospaceafter border-none'>
 	  <!-- The spinner will start out invisible -->
@@ -435,12 +435,16 @@ pre {
     <div class="panel panel-info">
       <div class="panel-heading">
 	<h5>
-	  <a data-toggle="collapse" href="#instructions">Profile Instructions
-	    <span class="glyphicon glyphicon-chevron-right pull-right"></span>
+	  <a data-toggle="collapse" id="profile_instructions_toggle"
+	     href="#profile_instructions_collapse">Profile Instructions
+	    <span class="glyphicon glyphicon-chevron-right pull-left"
+	          style="margin-right: 5px;"></span>
 	  </a>
 	</h5>
       </div>
-      <div id="instructions" class="panel-collapse collapse">
+      <div id="profile_instructions_collapse"
+	   data-chevron="profile_instructions_toggle"
+	   class="panel-collapse collapse">
 	<div class="panel-body">
 	  <div id="instructions_text"></div>
 	</div>

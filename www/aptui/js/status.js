@@ -325,8 +325,26 @@ $(function ()
 	    // Reset to status message.
 	    $('#status_message').html(status_message);
 	});
+	// Chevron toggle handlers
+	$('#profile_status_collapse, #profile_instructions_collapse')
+	    .on('show.bs.collapse', function (event) {
+		var id = $(this).data("chevron");
+		$('#' + id + ' .glyphicon')
+		    .removeClass("glyphicon-chevron-right")
+		    .addClass("glyphicon-chevron-down");
+	    })
+	    .on('hide.bs.collapse', function (event) {
+		var id = $(this).data("chevron");
+		$('#' + id + ' .glyphicon')
+		    .removeClass("glyphicon-chevron-down")
+		    .addClass("glyphicon-chevron-right");
+
+	    });
 	if (instanceStatus == "ready") {
  	    $('#profile_status_collapse').trigger('hide.bs.collapse');
+	}
+	else {
+ 	    $('#profile_status_collapse').trigger('show.bs.collapse');
 	}
 
         $('#instructions').on('hide.bs.collapse', function () {
