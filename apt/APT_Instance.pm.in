@@ -498,6 +498,16 @@ sub SetStatus($$)
     
 }
 
+sub SetAggregateStatus($$)
+{
+    my ($self, $status) = @_;
+
+    foreach my $agg ($self->AggregateList()) {
+	$agg->SetStatus($status);
+    }
+    return 0;
+}
+
 sub ActiveAggregateList($)
 {
     my ($self) = @_;
