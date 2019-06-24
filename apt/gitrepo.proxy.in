@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,7 +34,7 @@ use POSIX qw(:signal_h);
 sub usage()
 {
     print STDOUT
-	"Usage: gitrepo.proxy -n reponame clone url\n".
+	"Usage: gitrepo.proxy -n reponame clone [-c] url\n".
 	"Usage: gitrepo.proxy -n reponame update\n".
 	"Usage: gitrepo.proxy -n reponame delete\n";
  
@@ -127,8 +127,17 @@ exit(-1);
 #
 sub Clone()
 {
+    my $checkout = 0;
+    
     usage()
 	if (!@ARGV);
+    
+    if ($ARGV[0] eq "-c") {
+	$checkout = 1;
+	shift(@ARGV);
+	usage()
+	    if (!@ARGV);
+    }
     my $repourl = shift(@ARGV);
     
     if (-e "$REPODIR/$reponame") {
@@ -137,7 +146,7 @@ sub Clone()
     chdir($REPODIR) or
 	fatal("Could not chdir to $REPODIR");
 
-    my $status = RunCommand("$GIT clone --bare ".
+    my $status = RunCommand("$GIT clone " . ($checkout ? "" : "--bare ") .
 			    "   $repourl $reponame");
     if ($status) {
 	fatal("Not able to clone repo from $repourl");
@@ -152,11 +161,38 @@ sub Clone()
     chdir("$REPODIR/$reponame") or
 	fatal("Could not chdir to $REPODIR/$reponame");
 
-    my $refspec = GetDefaultBranch($reponame);
+    #
+    # If we did a checkout, look for submodules that need to be initialized
+    #
+    if ($checkout) {
+	if (-e ".gitmodules") {
+	    if (system("$GIT submodule init") ||
+		system("$GIT submodule update")) {
+		fatal("Could not initialize submodules");
+	    }
+	}
+	# Need to force getting all the remote branches.
+	# -p prunes deleted branches. But tags are not pruned.
+	if (system("$GIT fetch -u -f -p -t origin '+refs/*:refs/*'")) {
+	    fatal("Could not fetch remote branches");
+	}
+	if (-e "profile.py") {
+	    system("/bin/cat profile.py");
+	}
+	elsif (-e "profile.rspec") {
+	    system("/bin/cat profile.rspec");
+	}
+	else {
+	    print STDERR "No geni-lib script or rspec in this repository\n";
+	}
+    }
+    else {
+	my $refspec = GetDefaultBranch($reponame);
     
-    if (system("$GIT cat-file -e ${refspec}:profile.py") &&
-	system("$GIT cat-file -e ${refspec}:profile.rspec")) {
-	print STDERR "No geni-lib script or rspec in this repository\n";
+	if (system("$GIT cat-file -e ${refspec}:profile.py") &&
+	    system("$GIT cat-file -e ${refspec}:profile.rspec")) {
+	    print STDERR "No geni-lib script or rspec in this repository\n";
+	}
     }
     return 0;
 }
@@ -187,12 +223,31 @@ sub Update()
     chdir("$REPODIR/$reponame") or
 	fatal("Could not chdir to $REPODIR/$reponame");
 
+    #
+    # When not using a bare repo, we have to force the fetch to update
+    # the current banch.
+    #
+    my $fopt = (-e ".git" ? "-u -f" : "");
+
     # -p prunes deleted branches. But tags are not pruned. 
-    my $status = RunCommand("$GIT fetch -p -t origin '+refs/*:refs/*'");
+    my $status = RunCommand("$GIT fetch $fopt -p -t origin '+refs/*:refs/*'");
     if ($status) {
 	fatal("Not able to update repo");
     }
 
+    #
+    # Local checkout, must merge. This is done when we have submodules.
+    #
+    if (-e ".git") {
+	my $status = RunCommand("$GIT merge");
+	if ($status) {
+	    fatal("Not able to fetch repo");
+	}
+	$status = RunCommand("$GIT submodule update");
+	if ($status) {
+	    fatal("Not able to update submodules");
+	}
+    }
     my $current_refspec = GetDefaultBranch($reponame);
     my $remote_refspec  = GetRemoteDefaultBranch($reponame);
 
@@ -206,9 +261,22 @@ sub Update()
 	}
 	$current_refspec = $remote_refspec;
     }
-    if (system("$GIT cat-file -e ${current_refspec}:profile.py") &&
-	system("$GIT cat-file -e ${current_refspec}:profile.rspec")) {
-	print STDERR "No geni-lib script or rspec in this repository\n";
+    if (-e ".git") {
+	if (-e "profile.py") {
+	    system("/bin/cat profile.py");
+	}
+	elsif (-e "profile.rspec") {
+	    system("/bin/cat profile.rspec");
+	}
+	else {
+	    print STDERR "No geni-lib script or rspec in this repository\n";
+	}
+    }
+    else {
+	if (system("$GIT cat-file -e ${current_refspec}:profile.py") &&
+	    system("$GIT cat-file -e ${current_refspec}:profile.rspec")) {
+	    print STDERR "No geni-lib script or rspec in this repository\n";
+	}
     }
     return 0;
 }

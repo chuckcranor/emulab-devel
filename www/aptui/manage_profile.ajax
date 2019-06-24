@@ -700,88 +700,64 @@ function Do_PublishProfile()
 }
 
 #
-# Run a geni-lib script, returning the XML.
+# Helper function to run a geni-lib (or NS) script.
 #
-function Do_CheckScript()
+function CheckScript($profile, $script, $project, 
+                     $warningsfatal, $usenewgenilib,
+                     $refspec, $getparams, $reponame, &$blob)
 {
     global $this_user;
     global $ajax_args;
-    
+
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
 
-    if (isset($ajax_args["repoupdate"])) {
-        $profile = Profile::Lookup($ajax_args["repoupdate"]);
-        if (!$profile) {
-            SPITAJAX_ERROR(1, "Unknown profile uuid");
-            return;
-        }
-        if ($this_idx != $profile->creator_idx() && !ISADMIN()) {
-            SPITAJAX_ERROR(1, "Not enough permission");
-            return;
-        }
-    }
-    if (!isset($ajax_args["script"])) {
-	SPITAJAX_ERROR(1, "Missing script");
-	return;
-    }
-    if (preg_match("/^import/m", $ajax_args["script"])) {
+    if (preg_match("/^import/m", $script)) {
         $command = "webrungenilib";
-
-        if (isset($ajax_args["warningsfatal"]) && $ajax_args["warningsfatal"]) {
+        if ($warningsfatal) {
             $command .= " -W";
         }
-        if (isset($ajax_args["getparams"]) && $ajax_args["getparams"]) {
+        if ($usenewgenilib) {
+            $command .= " -N";
+        }
+        if ($getparams) {
             $pfname = tempnam("/tmp", "genilibparams");
             chmod($pfname, 0666);
             
             $command .= " -P $pfname";
         }
-        if (isset($ajax_args["profile_uuid"])) {
-            $profile = Profile::Lookup($ajax_args["profile_uuid"]);
-            
-            if ($profile && $profile->UseNewGeniLib($this_user)) {
-                $command .= " -N ";
+        if ($profile) {
+            if ($profile->repourl()) {
+                # Repo argument to rungenilib;
+                $command .= " -r " . $profile->reponame();
+                if ($refspec)
+                    $command .= " -h " . escapeshellarg($refspec);
             }
         }
-        elseif (isset($ajax_args["pid"]) && $ajax_args["pid"] != "") {
-            $project = Project::LookupByPid($ajax_args["pid"]);
-            if (!$project) {
-                SPITAJAX_ERROR(1, "No such project");
-                return;
-            }
-            if (FeatureEnabled("NewPParams", null,
-                               $project->DefaultGroup(), null)) {
-                $command .= " -N ";
-            }
+        elseif ($reponame) {
+            # Repo argument to rungenilib, when creating new profile.
+            $command .= " -r " . $reponame;
         }
     }
-    elseif (preg_match("/^source tb_compat/m", $ajax_args["script"])) {
+    elseif (preg_match("/^source tb_compat/m", $script)) {
         $command = "webns2rspec";
         #
         # We want to parse in the context of the project, so we can do
         # project based checks. 
         #
-        if (isset($ajax_args["pid"]) && $ajax_args["pid"] != "") {
-            if (! TBvalid_pid($ajax_args["pid"])) {
-                SPITAJAX_ERROR(1, "Bad project name");
-                return;
-            }
-            $command .= " -p " . $ajax_args["pid"];
+        if ($project) {
+            $command .= " -p " . $project->pid();
         }
         else {
             $command .= " -a ";
         }
     }
-    else {
-	SPITAJAX_ERROR(1, "Unknown script type");
-	return;
-    }
+
     $infname  = tempnam("/tmp", "genilibin");
     $outfname = tempnam("/tmp", "genilibout");
 
     $fp = fopen($infname, "w");
-    fwrite($fp, $ajax_args["script"]);
+    fwrite($fp, $script);
     fclose($fp);
     chmod($infname, 0666);
     chmod($outfname, 0666);
@@ -801,32 +777,132 @@ function Do_CheckScript()
 	    $errors = file_get_contents($outfname);
 	    SPITAJAX_ERROR(1, $errors);
 	}
+        unlink($infname);
+        unlink($outfname);
+        if ($getparams) {
+            unlink($pfname);
+        }
+        return -1;
     }
-    else {
-        $blob = array("rspec"  => file_get_contents($outfname));
-        if (isset($pfname)) {
-            $paramdefs = file_get_contents($pfname);
-            if ($paramdefs != "") {
-                $blob["paramdefs"] = $paramdefs;
-            }
+    $blob = array("rspec" => file_get_contents($outfname));
+    if ($getparams) {
+        $paramdefs = file_get_contents($pfname);
+        if ($paramdefs != "") {
+            $blob["paramdefs"] = $paramdefs;
         }
-        #
-        # We use this routine from the manage/instantiate/show pages,
-        # but we do not want to update the master unless it the profile
-        # creator and it is the manage profile page.
-        #
-        if (!isset($profile) ||
-            !isset($ajax_args["editokay"]) || 
-            $this_idx != $profile->creator_idx() ||
-            UpdateMaster($profile, $ajax_args["script"], $blob["rspec"]) == 0) {
-            SPITAJAX_RESPONSE($blob);
-        }
+        unlink($pfname);
     }
     unlink($infname);
     unlink($outfname);
-    if (isset($pfname)) {
-        unlink($pfname);
+    return 0;
+}
+                     
+
+#
+# Run a geni-lib script, returning the XML.
+#
+function Do_CheckScript()
+{
+    global $this_user;
+    global $ajax_args;
+
+    $pid           = null;
+    $profile       = null;
+    $warningsfatal = false;
+    $usenewgenilib = false;
+    $refspec       = null;
+    $getparams     = false;
+    $blob          = null;
+    $project       = null;
+    $updaterepo    = false;
+
+    if (isset($ajax_args["profile_uuid"])) {
+        $profile = Profile::Lookup($ajax_args["profile_uuid"]);
+        if (!$profile) {
+            SPITAJAX_ERROR(1, "Unknown profile uuid");
+            return;
+        }
     }
+    if (!isset($ajax_args["script"])) {
+	SPITAJAX_ERROR(1, "Missing script");
+	return;
+    }
+    $script = $ajax_args["script"];
+
+    // XXX We might get this when creating a new profile. 
+    if (isset($ajax_args["pid"]) && $ajax_args["pid"] != "") {
+        $project = Project::LookupByPid($ajax_args["pid"]);
+        if (!$project) {
+            SPITAJAX_ERROR(1, "No such project");
+            return;
+        }
+    }
+    
+    if (preg_match("/^import/m", $script)) {
+        if (isset($ajax_args["warningsfatal"]) && $ajax_args["warningsfatal"]){
+            $warningsfatal = true;
+        }
+        if (isset($ajax_args["getparams"]) && $ajax_args["getparams"]) {
+            $getparams = true;
+        }
+        if ($profile) {
+            // This is temporary
+            $usenewgenilib = $profile->UseNewGeniLib($this_user);
+
+            if ($profile->repourl()) {
+                if (isset($ajax_args["refspec"])) {
+                    if (!preg_match('/^[-\w\/]+$/', $ajax_args["refspec"])) {
+                        SPITAJAX_ERROR(1, "Invalid refspec");
+                        return;
+                    }
+                    $refspec = $ajax_args["refspec"];
+                }
+                // Check if user allowed to update the repo.
+                if (isset($ajax_args["updaterepo"])) {
+                    if ($this_idx != $profile->creator_idx() && !ISADMIN()) {
+                        SPITAJAX_ERROR(1, "Not enough permission to ".
+                                       "update repo");
+                        return;
+                    }
+                    $updaterepo = true;
+                }
+            }
+        }
+        elseif ($project) {
+            // This is temporary
+            if (FeatureEnabled("NewPParams", null,
+                               $project->DefaultGroup(), null)) {
+                $usenewgenilib = true;
+            }
+        }
+    }
+    elseif (! preg_match("/^source tb_compat/m", $script)) {
+	SPITAJAX_ERROR(1, "Unknown script type");
+	return;
+    }
+    #
+    # And run the script.
+    #
+    if (CheckScript($profile, $script, $pid, 
+                    $warningsfatal, $usenewgenilib,
+                    $refspec, $getparams, null, $blob) != 0) {
+        # Error already spit.
+        return;
+    }
+    if (!$updaterepo) {
+        SPITAJAX_RESPONSE($blob);
+        return;
+    }
+    #
+    # We use this routine from the manage/instantiate/show pages,
+    # but we do not want to update the master unless it the profile
+    # creator and it is the manage profile page.
+    #
+    if (UpdateMaster($profile, $script, $blob["rspec"]) == 0) {
+        SPITAJAX_RESPONSE($blob);
+        return;
+    }
+    # Error already spit by UpdateMaster().
 }
 
 #
@@ -839,6 +915,7 @@ function Do_BindParameters()
     global $ajax_args;
     global $DEFAULT_AGGREGATE;
     global $suexec_output, $suexec_output_array;
+    $runopts = "";
 
     # Allow for form precheck only. So JS code knows it will be fast. 
     $checkonly = isset($ajax_args["checkonly"]) && $ajax_args["checkonly"];
@@ -889,6 +966,16 @@ function Do_BindParameters()
         isset($formfields["paramdefs"]) && $formfields["paramdefs"] != "") {
         $script    = $formfields["script"];
         $paramdefs = $formfields["paramdefs"];
+
+        # Repo argument to rungenilib;
+        $runopts .= " -r " . $profile->reponame();
+        if (isset($ajax_args["refspec"])) {
+            if (!preg_match('/^[-\w\/]+$/', $ajax_args["refspec"])) {
+                SPITAJAX_ERROR(1, "Invalid refspec");
+                return;
+            }
+            $runopts .= " -h " . escapeshellarg($ajax_args["refspec"]);
+        }
     }
     else {
         $script    = $profile->script();
@@ -945,7 +1032,7 @@ function Do_BindParameters()
     # Invoke the backend.
     #
     $retval = SUEXEC($this_uid, "nobody",
-		     "webrungenilib $warningsfatal -b $parmfname ".
+		     "webrungenilib $warningsfatal -b $parmfname $runopts ".
                      ($usenewgenilib ? " -N " : "") .
                      "  -o $outfname $infname",
 		     SUEXEC_ACTION_IGNORE);
@@ -1384,7 +1471,12 @@ function Do_GetRepository()
 {
     global $this_user;
     global $ajax_args;
-    $nameopt = "";
+    $project  = null;
+    $nameopt  = "";
+    $checkout = (ISADMIN() ? "-c" : "");
+
+    // Use the session to save the reponame for running the script later.
+    session_start();
     
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
@@ -1399,6 +1491,15 @@ function Do_GetRepository()
 	return;
     }
     $repourl = escapeshellarg($repourl);
+
+    // XXX We might get this when creating a new profile. 
+    if (isset($ajax_args["pid"]) && $ajax_args["pid"] != "") {
+        $project = Project::LookupByPid($ajax_args["pid"]);
+        if (!$project) {
+            SPITAJAX_ERROR(1, "No such project");
+            return;
+        }
+    }
 
     # Pass though profile name to use instead of profile.py.
     if (isset($ajax_args["profile_name"])) {
@@ -1443,7 +1544,7 @@ function Do_GetRepository()
     
     $retval = SUEXEC($this_uid, "tbadmin",
 		     "webmanage_gitrepo -t " . $webtask->task_id() . " " .
-                     "  clone $nameopt -o $outfname -r $repourl",
+                     "  clone $nameopt $checkout -o $outfname $repourl",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
     if ($retval != 0) {
@@ -1459,12 +1560,43 @@ function Do_GetRepository()
         unlink($outfname);
 	return;
     }
-    $blob = array("script"  => file_get_contents($outfname),
-                  "log"     => $webtask->TaskValue("log"),
-                  "hash"    => $webtask->TaskValue("hash"));
-    $webtask->Delete();
+    $reponame      = $webtask->TaskValue("name");
+    $log           = $webtask->TaskValue("log");
+    $hash          = $webtask->TaskValue("hash");
+    $webtask->delete();
+    $script        = file_get_contents($outfname);
     unlink($outfname);
-    SPITAJAX_RESPONSE($blob);
+    $warningsfatal = true;
+    $usenewgenilib = null;
+    $refspec       = null;
+    $getparams     = false;
+    $blob          = null;
+    if ($project) {
+        // This is temporary
+        if (FeatureEnabled("NewPParams", null,
+                           $project->DefaultGroup(), null)) {
+            $usenewgenilib = true;
+        }
+    }
+    if (CheckScript(null, $script, $project, 
+                    $warningsfatal, $usenewgenilib,
+                    $refspec, $getparams, $reponame, $blob)) {
+        # Try not to leave repos behind, user might abort. 
+        SUEXEC($this_uid, "tbadmin",
+               "webmanage_gitrepo remove -n $reponame",
+               SUEXEC_ACTION_CONTINUE);
+        # Error already spit.
+        return;
+    }
+    # Try not to leave repos behind, user might abort. 
+    SUEXEC($this_uid, "tbadmin",
+           "webmanage_gitrepo remove -n $reponame",
+           SUEXEC_ACTION_CONTINUE);
+    $result = array("script"  => $script,
+                    "rspec"   => $blob["rspec"],
+                    "log"     => $log,
+                    "hash"    => $hash);
+    SPITAJAX_RESPONSE($result);
 }
 
 #

@@ -700,17 +700,23 @@ $(function () {
 	    }
 	    console.info("formfields", formfields);
 
+	    var args = {"formfields" : formfields,
+			"uuid"       : uuid,
+			"checkonly"  : checkonly,
+			"warningsfatal": warningsfatal,
+		       };
+	    // Another repo based profile thing.
+	    if (window.REFSPEC !== undefined) {
+		args["refspec"] = window.REFSPEC;
+	    }
+
 	    // Not in checkform mode, this will take time.
 	    if (!checkonly) {
 		sup.ShowModal("#waitwait-modal");
 	    }
 	    var xmlthing =
 		sup.CallServerMethod(null, "manage_profile",
-				     "BindParameters",
-				     {"formfields" : formfields,
-				      "uuid"       : uuid,
-				      "checkonly"  : checkonly,
-				      "warningsfatal": warningsfatal});
+				     "BindParameters", args);
 	    xmlthing.done(callback);
 	}
 

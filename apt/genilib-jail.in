@@ -83,7 +83,7 @@ sub usage()
  
     exit(-1);
 }
-my $optlist = "du:p:o:n:CRB:N";
+my $optlist = "du:p:o:n:CRB:Nr:h:";
 my $basename = "py-cage";
 my $jailname = "py-cage-$$";
 my $user = "nobody";
@@ -92,6 +92,8 @@ my $gid;
 my $pfile;
 my $ofile;
 my $ifile;
+my $repo;
+my $reporef;
 my $limits = 1;
 my $haverctl = 0;
 
@@ -109,6 +111,8 @@ sub mysystem($);
 #
 my $TBROOT   = "@prefix@";
 my $GENILIB  = "$TBROOT/lib/geni-lib/";
+my $REPODIR  = "/repos";
+my $GIT      = "/usr/local/bin/git";
 my $debug    = 0;
 
 # Watch for this being defined in the calling environment and use that.
@@ -228,6 +232,31 @@ if (defined($options{"B"})) {
 	usage();
     }
     $basename = $base;
+}
+if (defined($options{"r"})) {
+    $repo = $options{"r"};
+    # Must taint check
+    if ($repo =~ /^([-\w]+)$/) {
+	$repo = $1;
+    }
+    else {
+	print STDERR "Bad data in argument: $repo\n";
+	usage();
+    }
+    if (! -e "$REPODIR/$repo") {
+	print STDERR "No such repo '$repo'\n";
+	usage();
+    }
+    if (defined($options{"h"})) {
+	$reporef = $options{"h"};
+	# Must taint check
+	if ($reporef =~ /^([-\w\/]+)$/) {
+	    $reporef = $1;
+	}
+	else {
+	    die("Bad data in argument: $reporef");
+	}
+    }
 }
 
 #
@@ -386,6 +415,32 @@ if ($action != 1) {
 	mysystem("chown -R $uid:$gid $jailrootdir$tempdir")) {
 	print STDERR "Could not populate jail\n";
 	exit(-1);
+    }
+    if (defined($repo)) {
+	if (mysystem("$GIT clone -q $REPODIR/$repo ".
+		     "  ${jailrootdir}${tempdir}/repository")) {
+	    print STDERR "Could not clone repo in the jail\n";
+	    exit(-1);
+	}
+	# The root of the repository for module imports.
+	$ENV{"PYTHONPATH"} = "/${tempdir}/repository:" . $ENV{"PYTHONPATH"};
+	
+	if (defined($reporef)) {
+	    if ($reporef =~ m"^(refs/|)heads/(.+)") {
+		my $branchname = $2;
+
+		mysystem("cd ${jailrootdir}${tempdir}/repository; ".
+			 "$GIT checkout -q $branchname");
+	    }
+	    else {
+		mysystem("cd ${jailrootdir}${tempdir}/repository; ".
+			 "$GIT checkout -q $reporef");
+	    }
+	    if ($?) {
+		print STDERR "Could not clone repo in the jail\n";
+		exit(-1);
+	    }
+	}
     }
 
     #

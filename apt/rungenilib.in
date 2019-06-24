@@ -45,14 +45,18 @@ sub usage()
     print STDERR "  -P file  - Generate and write parameter block to file\n";
     print STDERR "  -b file  - Run script using the parameter defs in file\n";
     print STDERR "  -W       - Python warnings are fatal.\n";
+    print STDERR "  -r repo  - Map repo into jail.\n";
+    print STDERR "  -h hash  - With -r, set the checkout hash.\n";
  
     exit(-1);
 }
-my $optlist    = "do:pP:b:WN";
+my $optlist    = "do:pP:b:WNr:h:";
 my $debug      = 0;
 my $getparams  = 0;
 my $paramfile;
 my $ofile;
+my $repo;
+my $reporef;
 my $newgenilib = 0;
 my $warningsfatal = 0;
 
@@ -64,6 +68,7 @@ my $TBOPS    = "@TBOPSEMAIL@";
 my $CONTROL  = "@USERNODE@";
 my $MAINSITE = @TBMAINSITE@;
 my $TAR      = "/usr/bin/tar";
+my $REPODIR  = "/repos";
 
 # Locals
 my $SAVEUID  = $UID;
@@ -147,6 +152,29 @@ if (defined($options{"b"})) {
 if (defined($options{"o"})) {
     $ofile = $options{"o"};
 }
+if (defined($options{"r"})) {
+    $repo = $options{"r"};
+    # Must taint check
+    if ($repo =~ /^([-\w]+)$/) {
+	$repo = $1;
+    }
+    else {
+	die("Bad data in argument: $repo");
+    }
+    if (! -e "$REPODIR/$repo") {
+	die("No such repo $repo\n");
+    }
+    if (defined($options{"h"})) {
+	$reporef = $options{"h"};
+	# Must taint check
+	if ($reporef =~ /^([-\w\/]+)$/) {
+	    $reporef = $1;
+	}
+	else {
+	    die("Bad data in argument: $reporef");
+	}
+    }
+}
 if (@ARGV != 1) {
     usage();
 }
@@ -219,6 +247,8 @@ $cmdargs .= " -u " . $this_user->uid();
 $cmdargs .= ($getparams ? " -p " : "");
 $cmdargs .= ($warningsfatal ? " -W " : "");
 $cmdargs .= ($newgenilib ? " -N " : "");
+$cmdargs .= (defined($repo) ? " -r $repo " : "");
+$cmdargs .= (defined($reporef) ? " -h $reporef " : "");
 
 #
 # We want to send over both files via STDIN, so combine them, and pass
@@ -260,6 +290,9 @@ while (<ERR>) {
     $errs .= $_;
 }
 close(ERR);
+if ($debug) {
+    print STDERR $errs;
+}
 my $exit_status = $?;
 
 if ($exit_status) {

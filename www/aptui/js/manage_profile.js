@@ -229,7 +229,7 @@ $(function ()
 	    "       style='display:inline; width: 93%; padding: 2px;' " +
 	    "       class='form-control input-sm' "+
 	    "       value='" + fields.profile_repopushurl + "'>" +
-	    "  <a href='#' class='btn btn-xs' id='push-url-copy' " +
+	    "  <a href='#' class='btn' id='push-url-copy' " +
 	    "     style='padding: 0px'>" +
 	    "    <span class='glyphicon glyphicon-copy'></span></a></div>";
 	
@@ -1394,14 +1394,20 @@ $(function ()
 	var args = {
 	    "script"   : script,
 	    "pid"      : $('#profile_pid').val(),
-	    "editokay" : true,
 	};
-	if (repoupdate_callback !== undefined) {
-	    // Pass along uuid as a flag to update repo.
-	    args["repoupdate"] = version_uuid;
-	}
 	if (profile_uuid) {
 	    args["profile_uuid"] = profile_uuid;
+	}
+	if (fromrepo) {
+	    if (repoupdate_callback !== undefined) {
+		// Pass along flag to update repo (if allowed).
+		args["updaterepo"] = true;
+	    }
+	    else {
+		// Pass along refspec for running genilib
+		// Will be null on initial profile creation.
+		args["refspec"] = reporefspec;
+	    }
 	}
 	WaitWait("We are converting your geni-lib script to XML");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
@@ -1446,11 +1452,20 @@ $(function ()
 	    $('#sourcefile-button-div').addClass("hidden");
 	    // Add the url to the form.
 	    $('#quickvm_create_profile_form #repourl').val(repourl);
-	    sup.HideWaitWait(function() {
-		changeRspec(json.value.script);
-	    });
+	    // Save for later.
+	    $('#profile_script_textarea').val(json.value.script);
+	    // Kill the rspec so that we always use the new one.
+	    $('#profile_rspec_textarea').val("");
+	    NewRspecHandler(json.value.rspec);
+	    ProfileModified();
+	    // Show the XML source button.
+	    $('#show_xml_modal_button').removeClass("hidden");
+	    sup.HideWaitWait();
 	}
-	var args = {"repourl" : repourl};
+	var args = {"repourl" : repourl,
+		    // XXX Temporary for usenewgenilib check. 
+		    "pid"     : $('#profile_pid').val()};
+
 	// If there is profile name, pass that through so we can look
 	// for a script or rspec with the same name (instead of profile.py).
 	if ($.trim($('#profile_name').val()) != "") {
@@ -1471,7 +1486,7 @@ $(function ()
      */
     function HandleGitRepoUpdate()
     {
-	//console.info("HandleGitRepoUpdate");
+	console.info("HandleGitRepoUpdate");
 	
 	var callback = function(blob) {
 	    console.info("HandleGitRepoUpdate", blob);
@@ -1549,7 +1564,7 @@ $(function ()
      */
     function SelectRepoTarget(which)
     {
-	//console.info("SelectRepoTarget");
+	console.info("SelectRepoTarget");
 
 	var callback = function (source, hash) {
 	    if (source) {

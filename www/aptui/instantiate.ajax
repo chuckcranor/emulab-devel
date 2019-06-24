@@ -1045,6 +1045,17 @@ function Do_RunScript()
         if ($newgenilib) {
             $command .= " -N ";
         }
+        if ($profile && $profile->repourl()) {
+            $command .= " -r " . $profile->reponame();
+
+            if (isset($ajax_args["refspec"])) {
+                if (!preg_match('/^[-\w\/]+$/', $ajax_args["refspec"])) {
+                    SPITAJAX_ERROR(1, "Invalid refspec");
+                    return;
+                }
+                $command .= " -h " . escapeshellarg($ajax_args["refspec"]);
+            }
+        }
     }
     elseif (preg_match("/^source tb_compat/m", $script)) {
         $command = "webns2rspec -a";

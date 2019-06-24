@@ -328,7 +328,7 @@ $(function ()
 	    // But if its a script, we have to convert it first.
 	    if (pythonRe.test(source)) {
 		$('#profile_script_textarea').val(source);
-		ConvertScript(source);
+		ConvertScript(source, which);
 	    }
 	    else {
 		$('#profile_rspec_textarea').val(source);
@@ -341,7 +341,7 @@ $(function ()
     //
     // Pass a geni-lib script to the server to run (convert to XML).
     //
-    function ConvertScript(script)
+    function ConvertScript(script, refspec)
     {
 	// Save for later.
 	$('#profile_script_textarea').val(script);
@@ -367,6 +367,7 @@ $(function ()
 					    "manage_profile",
 					    "CheckScript",
 					    {"script"   : script,
+					     "refspec"  : refspec,
 					     "profile_uuid" : profile_uuid});
 	xmlthing.done(callback);
     }

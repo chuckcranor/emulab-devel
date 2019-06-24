@@ -905,10 +905,14 @@ $(function ()
 		return;
 	    }
 	};
+	var args = {"uuid" : uuid};
+	// Another repo based profile thing.
+	if (window.REFSPEC !== undefined) {
+	    args["refspec"] = window.REFSPEC;
+	}
 	$("#waitwait-modal").modal('show');
 	var xmlthing = sup.CallServerMethod(null, "instantiate",
-					    "RunScript",
-					    {"uuid" : uuid});
+					    "RunScript", args);
 	xmlthing.done(callback);
     };
 
@@ -1717,11 +1721,11 @@ $(function ()
 		alert("Could not get profile: " + json.value);
 		return;
 	    }
-	    //console.info(json);
+	    console.info("GetProfile:", json);
 	    
 	    var xmlDoc = $.parseXML(json.value.rspec);
 	    var xml    = $(xmlDoc);
-	    console.log(json);
+
 	    /*
 	     * We now use the desciption from inside the rspec, unless there
 	     * is none, in which case look to see if the we got one in the
@@ -1751,18 +1755,19 @@ $(function ()
 	 */
 	if (fromrepo && window.REFSPEC !== undefined) {
 	    var which = window.REFSPEC;
-	    
+
 	    $xmlthing.done(function(json) {
 		gitrepo.GetRepoSource(profile, which, function(source, hash) {
 		    var pythonRe = /^import/m;
-		    
+
 		    $('#repohash').val(hash);
 		    $('#reporef').val(which);
 		    // Pass along.
 		    json.value.repohash = hash;
 
 		    if (pythonRe.test(source)) {
-			ConvertScript(source, profile, function(rspec, paramdefs){
+			ConvertScript(source, profile, which,
+				      function(rspec, paramdefs) {
 			    // Need to pass these along at submit.
 			    $('#rspec_textarea').val(rspec);
 			    $('#script_textarea').val(source);
@@ -1801,7 +1806,7 @@ $(function ()
     // We use this on repo-based profiles, where we have to get the
     // source code from the repo, and convert to an rspec. 
     //
-    function ConvertScript(script, profile_uuid, continuation)
+    function ConvertScript(script, profile_uuid, refspec, continuation)
     {
 	var callback = function(json) {
 	    sup.HideWaitWait();
@@ -1824,6 +1829,7 @@ $(function ()
 					    "CheckScript",
 					    {"script"       : script,
 					     "profile_uuid" : profile_uuid,
+					     "refspec"      : refspec,
 					     "getparams"    : true});
 	xmlthing.done(callback);
     }
