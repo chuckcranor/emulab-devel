@@ -143,6 +143,9 @@ my %options = ();
 if (! GetOptions(\%options, @optlist)) {
     usage();
 }
+if (defined($options{"d"})) {
+    $debug = 1;
+}
 usage()
     if (@ARGV != 1 || !defined($pid));
 
@@ -164,6 +167,9 @@ if (!defined($project)) {
 }
 if (!defined($portal)) {
     $portal = $project->Brand()->brand();
+    if ($portal eq "classic") {
+	$portal = "emulab";
+    }
 }
 # This was a dumb mistake, I need to convert from servername to portal.
 $ENV{"SERVER_NAME"} = $project->Brand()->Server();
@@ -367,7 +373,7 @@ if (defined($stop_at)) {
 }
 @args = (@args, $xmlfile);
 
-if ($debug) {
+if (0 && $debug) {
     print "@args\n";
     system("/bin/cat $xmlfile");
 }
@@ -377,7 +383,7 @@ if ($debug) {
 # attached to a tty. In general, this script is going to get called in
 # a disconnected state.
 #
-if (isatty(\*STDOUT)) {
+if (isatty(\*STDOUT) && !$debug) {
     $logfile = TBMakeLogname("start-experiment");
 
     if (my $childpid = TBBackGround($logfile)) {
