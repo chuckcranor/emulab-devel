@@ -207,6 +207,12 @@ sub STATUS($$;$)
     $self->{'STATUS'}->{$name} = $newval;
     return $self->{'STATUS'}->{$name};
 }
+sub IsUp($)
+{
+    my ($self) = @_;
+
+    return $self->status() eq "up" ? 1 : 0;
+}
 
 #
 # Insert a status (change) event.
@@ -315,8 +321,14 @@ sub CheckStatus($$;$)
 		$self->name() . " cluster: " . $perrmsg;
 	}
 	else {
-	    $$perrmsg = "The " . $self->name() . " cluster ".
-		"is currently unreachable, please try again later.";
+	    my $message = "The " . $self->name() . " cluster ".
+		"is currently unavailable";
+	    if ($$perrmsg ne "") {
+		$message .= ": " . $$perrmsg;
+	    }
+	    $message .= ". ";
+	    $message .= "Please try again later.";
+	    $$perrmsg = $message;
 	}
 	return 1;
     }
