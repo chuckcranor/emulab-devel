@@ -42,6 +42,8 @@ sub usage()
     print STDERR "       manage_aggregate ping [-a <agg>]\n";
     print STDERR "       manage_aggregate portals [-a <agg>] add <portal> \n";
     print STDERR "       manage_aggregate portals [-a <agg>] rem <portal> \n";
+    print STDERR "       manage_aggregate feature [-a <agg>] set <feature> \n";
+    print STDERR "       manage_aggregate feature [-a <agg>] clear \n";
     print STDERR "Options:\n";
     print STDERR "  -a agg   - URN, nickname or domain of aggregate\n";
     exit(-1);
@@ -88,6 +90,7 @@ sub DoShow();
 sub DoFlags();
 sub DoPing();
 sub DoPortals();
+sub DoFeature();
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -132,6 +135,9 @@ elsif ($action eq "ping") {
 }
 elsif ($action eq "portals") {
     DoPortals();
+}
+elsif ($action eq "feature") {
+    DoFeature();
 }
 else {
     usage();
@@ -206,6 +212,7 @@ sub DoShow()
     print "LocalImages:   " . ($aggregate->nolocalimages() ? "No" : "Yes")."\n";
     print "PanicPowerOff: " . ($aggregate->panicpoweroff() ? "Yes" : "No")."\n";
     print "Portals:       " . $aggregate->portals() . "\n";
+    print "Use Feature:   " . ($aggregate->canuse_feature() || "") . "\n";
     print "Status:        " . $aggregate->status() . "\n";
     return 0;
 }
@@ -363,6 +370,44 @@ sub DoPortals()
     print "Portals set to: ". join(",", @portals) . "\n";
 }
 
+#
+# Set or clear the canuse feature
+#
+sub DoFeature()
+{
+    my $optlist = "a:";
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"a"})) {
+	$aggregate = APT_Utility::LookupAggregate($options{"a"});
+	fatal("No such aggregate")
+	    if (!defined($aggregate));
+    }
+    usage()
+	if (@ARGV < 1 || @ARGV > 2);
+    
+    my $action = shift(@ARGV);
+
+    fatal("Must be one of 'set' or 'clear'")
+	if ($action ne "set" && $action ne "clear");
+
+    if ($action eq "clear") {
+	$aggregate->Update({"canuse_feature" => "NULL"}) == 0
+	    or fatal("Could not clear feature");
+    }
+    else {
+	usage()
+	    if (!@ARGV);
+	my $feature = shift(@ARGV);
+	
+	$aggregate->Update({"canuse_feature" => $feature}) == 0
+	    or fatal("Could not set feature");
+    }
+}
+
 exit(0);
 
 sub fatal($)
@@ -374,21 +419,3 @@ sub fatal($)
     exit(-1);
 }
 
-sub LookupAggregate($)
-{
-    my ($token) = @_;
-
-    my $aggregate = APT_Aggregate->Lookup($token);
-    return $aggregate
-	if (defined($aggregate));
-
-    $aggregate = APT_Aggregate->LookupByNickname($token);
-    return $aggregate
-	if (defined($aggregate));
-
-    $aggregate = APT_Aggregate->LookupByDomain($token);
-    return $aggregate
-	if (defined($aggregate));
-
-    return undef;
-}
