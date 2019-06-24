@@ -678,7 +678,8 @@ sub Create($$$$)
     }
     else {
 	push(@insert_data, "status='$USERSTATUS_NEWUSER'");
-	push(@insert_data, "pswd_expires=date_add(now(), interval 1 year)");
+	push(@insert_data, "pswd_expires=date_add(now(), interval 1 year)")
+	    if ($EXPIRE_PASSWORDS);
     }
 
     # Insert into DB.
