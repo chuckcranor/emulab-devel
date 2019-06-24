@@ -31,6 +31,15 @@ $optargs = OptionalPageArguments("simple", PAGEARG_BOOLEAN,
 				 "email",  PAGEARG_STRING,
 				 "phone",  PAGEARG_STRING);
 
+#
+# see if UI change password is disabled (e.g. passwords externally managed)
+#
+if ($UI_EXTERNAL_ACCOUNTS) {
+    PAGEHEADER("Forgot Your Password?", $view);
+    USERERROR("Password change disabled on this system", 1);
+    return;
+}
+
 # Display a simpler version of this page.
 if (!isset($simple)) {
     $simple = 0;

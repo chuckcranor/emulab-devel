@@ -37,7 +37,11 @@ $license_defs = array();
 # Get current user.
 #
 RedirectSecure();
-$this_user = CheckLogin($check_status);
+if ($UI_EXTERNAL_ACCOUNTS) {
+    $this_user = CheckLoginOrDie();    # force login, newuser is disabled
+} else {
+    $this_user = CheckLogin($check_status);
+}
 if (isset($this_user)) {
     # Allow unapproved users to join multiple groups ...
     CheckLoginOrDie(CHECKLOGIN_UNAPPROVED|CHECKLOGIN_NONLOCAL);

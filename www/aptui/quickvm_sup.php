@@ -90,6 +90,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     global $ISPNET, $ISPOWDER, $ISEMULAB;
     global $login_user, $login_status, $SUPPORT, $FIRSTUSER;
     global $disable_accounts, $page_title, $drewheader, $embedded;
+    global $UI_EXTERNAL_ACCOUNTS;
     $cleanmode = (isset($_COOKIE['cleanmode']) &&
                   $_COOKIE['cleanmode'] == 1 ? 1 : 0);
     $showmenus = 0;
@@ -249,11 +250,13 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
 	}
 	if (!NOLOGINS()) {
 	    if (!$login_user) {
-                $navbar_right .=
-                    "<li id='signupitem' class='apt-left'>" .
-                    "  <a class='btn btn-success navbar-btn apt-navbar-btn'
-                                id='signupbutton'
-                                href='signup.php'>Sign Up</a></li>\n";
+		if ($UI_EXTERNAL_ACCOUNTS == 0) {
+                    $navbar_right .=
+                        "<li id='signupitem' class='apt-left'>" .
+                        "  <a class='btn btn-success navbar-btn apt-navbar-btn'
+                                    id='signupbutton'
+                                    href='signup.php'>Sign Up</a></li>\n";
+		}
 		if ($page_title != "Login") {
                     $navbar_right .=
                         "<li id='loginitem' class='apt-left'>" .
@@ -410,6 +413,7 @@ function SPITNAV($hiddenxs, $nonav, $navbar_status, $navbar_right, $login_uid)
     global $PORTAL_MANUAL, $APTLOGO, $login_status, $login_user, $TBMAINSITE;
     global $THISHOMEBASE, $ISEMULAB, $ISPNET, $ISPOWDER, $TBBASE;
     global $PORTAL_WIKI;
+    global $UI_EXTERNAL_ACCOUNTS;
     $hiddenxs = "";
 echo "
 
@@ -563,8 +567,10 @@ if (!$login_user->portal()) {
        if (!$nonav && !($login_status & CHECKLOGIN_WEBONLY)) {
            echo "
 	        <li><a href='myaccount.php'>Manage Account</a></li>
-   	        <li><a href='signup.php'>Start/Join Project</a></li>
-	        <li><a href='changepswd.php'>Change Password</a></li>";
+		<li><a href='signup.php'>Start/Join Project</a></li>";
+           if ($UI_EXTERNAL_ACCOUNTS == 0) {
+	        echo "<li><a href='changepswd.php'>Change Password</a></li>";
+           }
                if ($login_user->isActive()) {
                    echo "
                  <li><a href='getcreds.php'>Download Credentials</a></li>

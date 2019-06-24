@@ -96,6 +96,7 @@ function SPITFORM($uid, $referrer, $error)
     global $TBDB_UIDLEN, $TBBASE, $refer;
     global $ISAPT, $ISCLOUD, $ISPNET, $ISPOWDER;
     global $adminmode, $cleanmode;
+    global $UI_EXTERNAL_ACCOUNTS;
 
     header("Last-Modified: " . gmdate("D, d M Y H:i:s") . " GMT");
     header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
@@ -194,10 +195,17 @@ function SPITFORM($uid, $referrer, $error)
              </div>
 	     <div class='form-group'>
 <!--	       <div class="col-sm-12"> -->
+<?php
+             if ($UI_EXTERNAL_ACCOUNTS == 0) {
+?>
                  <a class='pull-right'
 		    type='button' href='forgotpswd.php'
                     style='margin-right: 10px;'>
                     Forgot Password?</a>
+<?php
+             }
+?>
+
 <!--	       </div> -->
 	     </div>
 <?php

@@ -38,7 +38,17 @@ $this_user    = CheckLogin($check_status);
 SPITHEADER(1, true, true);
 SPITREQUIRE("");
 
-$matter    = file_get_contents("frontpage.html");
+#
+# Allow for a site specific front page
+#
+$sitefile = "frontpage-" . strtolower($THISHOMEBASE) . ".html";
+
+# allow local frontpage customizations
+if (file_exists($sitefile)) {
+    $matter    = file_get_contents($sitefile);
+} else {
+    $matter    = file_get_contents("frontpage.html");
+}
 $stats     = json_decode(file_get_contents("$APTBASE/stats-ajax.php"), true);
 $whoarewe  = ($TBMAINSITE ? "" : $THISHOMEBASE);
 $counts    = "<tr><th>Type</th><th>Free</th><th>% Inuse</th></tr>";
