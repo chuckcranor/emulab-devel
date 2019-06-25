@@ -417,7 +417,7 @@ sub Create($$$$)
 	    print STDERR "*** No virtnode_capacity for $type! Using zero.\n";
 	    $virtnode_capacity = 0;
 	}
-	if ($isremote || $typeinfo->isfakenode()) {
+	if ($isremote || $typeinfo->isfakenode() || $typeinfo->isblackbox()) {
 	    $osid   = "NULL";
 	    $opmode = "";
 
