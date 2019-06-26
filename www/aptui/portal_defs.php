@@ -31,7 +31,7 @@ $APTBASE	= "$TBBASE/portal";
 $SUPPORT        = $TBMAILADDR_OPS;
 $APTMAIL        = $TBMAIL_OPS;
 $APTMAILTO      = "<a href='mailto:$SUPPORT'>Testbed Operations</a>";
-$APTTITLE       = "Emulab";
+$APTTITLE       = "$THISHOMEBASE";
 $FAVICON        = "../favicon.ico";
 $APTLOGO        = "emulab-logo.svg";
 $APTSTYLE       = "emulab.css";

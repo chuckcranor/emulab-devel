@@ -799,7 +799,8 @@ function WRITESIDEBAR() {
 		      "$TBDOCBASE/docwrapper.php3?docname=sponsors.html");
     }
     else {
-	NavMenuButton("Projects on Emulab", "$TBDOCBASE/projectlist.php3");
+	NavMenuButton("Projects on $THISHOMEBASE",
+                      "$TBDOCBASE/projectlist.php3");
     }
     if ($TBMAINSITE && !$ISALTDOMAIN) {
 	NavMenuButton("<font color=red>In Memoriam</font>",

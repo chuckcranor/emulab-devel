@@ -95,7 +95,7 @@ $query_result =
 
 if (mysql_num_rows($query_result)) {
     echo "<tr><th colspan=2>
-              Other projects registered on Emulab.Net:</h4>
+              Other projects registered on $THISHOMEBASE:</h4>
               </th>
           </tr>\n";
     GENPLIST($query_result);
