@@ -117,7 +117,8 @@ LIB_STUFF       = libtbsetup.pm exitonwarn.pm libtestbed.pm \
 		  power_ilo.pm libvtop.pm libptop.pm \
 		  libossetup.pm \
 		  power_ipmi.pm libosload_new.pm libosload_switch.pm \
-		  libosload_ue.pm libossetup_switch.pm power_icebox.pm \
+		  libosload_ue.pm libossetup_switch.pm power_ibmbc.pm \
+		  power_icebox.pm \
 		  libvtop_stable.pm libvtop_test.pm \
                   libosload_dell_s3048.pm libosload_dell_s4048.pm \
                   libosload_mlnx_sn2410.pm libosload_dell.pm \
