@@ -1336,6 +1336,14 @@ sub DoTerminate()
     if (defined($options{"L"})) {
 	$takelock = 1;
     }
+
+    #
+    # Admins can terminate a paniced experiment, we will pass along an
+    # admin credential to tell the CM its okay.
+    #
+    if ($instance->paniced() && !$this_user->IsAdmin()) {
+	fatal("Only administrators can terminate a paniced experiment")
+    }
     
     my $slice = $instance->GetGeniSlice();
     if (!defined($slice)) {
@@ -1426,7 +1434,16 @@ sub DoTerminate()
     }
     my $response;
 
-    $errcode = CallMethodOnAggregates("Terminate", 10, \$response, @agglist);
+    #
+    # Helper callback to send the proper arguments.
+    #
+    my $coderef = sub {
+	my ($sliver) = @_;
+
+	# Flag that we want to clear the panic, so send an auth credential.
+	return $sliver->Terminate($instance->paniced() ? 1 : undef);
+    };
+    $errcode = CallMethodOnAggregates($coderef, 10, \$response, @agglist);
 				      
     if ($errcode) {
 	$exitcode = -1;

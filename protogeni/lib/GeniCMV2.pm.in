@@ -909,7 +909,7 @@ sub DeleteSlice($)
     }
     if (!defined($aggregate)) {
 	# Easy. Force blocking off and cleanup.
-	$blocking = 1;
+	$blocking = 0;
 	goto cleanit;
     }
     my $slice_experiment = $slice->GetExperiment();
@@ -921,10 +921,41 @@ sub DeleteSlice($)
     if (defined($slice_experiment) && 
 	($slice_experiment->state() eq EXPTSTATE_PANICED() ||
 	 $slice_experiment->paniced())) {
-	print STDERR "Refusing to terminate a paniced experiment\n";
-	$slice->UnLock();
-	return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
-			    "Refusing to terminate a paniced experiment");
+	#
+	# We are going to let the slice's SA clear the panic so it
+	# can terminate. We know that it is in level 1 or 3, so we
+	# can just clear it without rebooting, the nodes are going to
+	# go into reloading anyway.
+	#
+	my $caller = GeniHRN->new($credential->owner_urn());
+	if (! ($caller->IsSA() && 
+	       $caller->domain() eq $slice->urn()->domain())) {
+	    print STDERR "Refusing to terminate a paniced experiment\n";
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
+				"Refusing to terminate a paniced experiment");
+	}
+	if (! ($slice_experiment->paniced() == 1 ||
+	       $slice_experiment->paniced() == 3)) {
+	    return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
+				"Paniced experiment is not at correct level");
+	}
+	#
+	# This operation has to be done as an admin person. 
+	#
+	my $pid = $slice_experiment->pid();
+	my $eid = $slice_experiment->eid();
+	my $command = "$WAP $PANIC -c $pid $eid";
+	print STDERR "Clearing panic before termination\n";
+	GeniUtil::FlipToElabMan();
+	system($command);
+	if ($?) {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				"Could not clear panic before termination");
+	}
+	$slice->ClearShutdown();
+	GeniUtil::FlipToGeniUser();	
     }
 
     #

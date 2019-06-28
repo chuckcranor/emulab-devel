@@ -702,6 +702,7 @@ $(function ()
   	        break;
 
 	    case 'provisioned':
+	    case 'scheduled':
 	    case 'deferred':
 	    case 'pending':
 	        refresh = reloadtopo = extend = snapshot = destroy = 0;
@@ -714,9 +715,12 @@ $(function ()
   	        break;
 
 	    case 'quarantined':
-	        terminate = refresh = reloadtopo = extend = snapshot = 0;
-	        destroy = 0;
+	        refresh = reloadtopo = extend = snapshot = destroy = 0;
 	        release = 1;
+	        // We let admins terminate/refresh a quarantined experiment.
+	        if (isadmin) {
+		    terminate = refresh = 1;
+		}
   	        break;
 
 	    case 'failed':

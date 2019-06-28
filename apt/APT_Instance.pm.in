@@ -2925,9 +2925,9 @@ sub CredentialError()
 #
 # Ask aggregate to terminate a sliver.
 #
-sub Terminate($)
+sub Terminate($;$)
 {
-    my ($self) = @_;
+    my ($self, $withprivs) = @_;
     my $method;
     my @params;
     my $authority = $self->GetGeniAuthority();
@@ -2956,14 +2956,24 @@ sub Terminate($)
     }
     else {
 	my $credentials;
-	my ($slice_credential, $speaksfor_credential) =
-	    APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
-	return CredentialError()
-	    if (!defined($slice_credential));
 
-	$credentials = [$slice_credential->asString()];
-	if (defined($speaksfor_credential)) {
-	    $credentials = [@$credentials, $speaksfor_credential->asString()];
+	if ($withprivs) {
+	    my $slice_credential = APT_Geni::GenAuthCredential($slice);
+	    return CredentialError()
+		if (!defined($slice_credential));
+	    $credentials = [$slice_credential->asString()];
+	}
+	else {
+	    my ($slice_credential, $speaksfor_credential) =
+		APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
+	    return CredentialError()
+		if (!defined($slice_credential));
+
+	    $credentials = [$slice_credential->asString()];
+	    if (defined($speaksfor_credential)) {
+		$credentials = [@$credentials,
+				$speaksfor_credential->asString()];
+	    }
 	}
 	$method = "DeleteSliver";
 	@params = ($slice->urn(), $credentials,

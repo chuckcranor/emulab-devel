@@ -8089,6 +8089,12 @@ sub FlipToUser($$)
 	$project = $experiment->GetProject();
 	$group   = $experiment->GetGroup();
 	$creator = $experiment->GetCreator();
+	#
+	# If creator is frozen we need to use the project leader instead.
+	#
+	if ($creator->frozen()) {
+	    $creator = $project->GetLeader();
+	}
     }
     elsif (ref($object) eq "OSImage" || ref($object) eq "Image") {
 	$image   = $object;
