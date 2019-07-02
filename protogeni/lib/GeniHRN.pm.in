@@ -408,6 +408,7 @@ sub IsUser($)		{ return $_[0]->type() =~ /^user$/i ? 1 : 0; }
 sub IsNode($)		{ return $_[0]->type() =~ /^node$/i ? 1 : 0; }
 sub IsProject($)	{ return $_[0]->type() =~ /^project$/i ? 1 : 0; }
 sub IsOurDomain($)	{ return $_[0]->domain() eq lc("@OURDOMAIN@") ? 1 : 0; }
+sub IsMotherShip($)     { return $_[0]->domain() eq lc("emulab.net") ? 1 : 0; }
 
 #
 # Image accessors. If we use any of these we want to parse the urn
