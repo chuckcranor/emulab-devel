@@ -37,6 +37,7 @@ sub usage() {
 	  "  -u    - Generate lists for a user; add -m for new email address\n".
 	  "  -p    - Generate lists for a project (includes subgroups)\n".
 	  "  -P    - Generate lists for all projects (includes subgroups)\n".
+	  "  -T    - Generate powder-announce\n".
 	  "  -t    - Generate activity lists\n".
 	  "  -c    - Generate just the current users list\n".
 	  "  -a    - Generate all email lists; careful ...\n");
@@ -49,14 +50,16 @@ sub RecentProjects();
 sub RecentProjectLeaders();
 sub ProjectLeaders();
 sub ProjectLists($$);
+sub PortalLists();
 sub genelist($$$$);
 
-my $optlist = "anu:p:tdmfcP";
+my $optlist = "anu:p:tdmfcPT";
 my $debug   = 0;
 my $all     = 0;
 my $update  = 0;
 my $activity= 0;
 my $projects= 0;
+my $portals = 0;
 my $current = 0;
 my $impotent= 0;
 my $force   = 0;
@@ -76,6 +79,7 @@ my $MAILMANSUPPORT= @MAILMANSUPPORT@;
 my $PROJECTMAILLISTS = @PROJECTMAILLISTS@;
 my $MMPROG	= "$TB/sbin/setmmlistmembers";
 my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
+my $MAINSITE    = @TBMAINSITE@;
 
 # Note no -n option. We redirect stdin from the new exports file below.
 my $SSH		= "$TB/bin/sshtb -l root -host $USERS";
@@ -96,6 +100,7 @@ use libdb;
 use libtestbed;
 use libtblog;
 use User;
+use Brand;
 
 #
 # We don't want to run this script unless its the real version.
@@ -147,6 +152,9 @@ if (defined($options{"P"})) {
 }
 if (defined($options{"t"})) {
     $activity = 1;
+}
+if (defined($options{"T"})) {
+    $portals = 1;
 }
 if (defined($options{"n"})) {
     $impotent = 1;
@@ -262,6 +270,9 @@ if ($MAILMANSUPPORT) {
 else {
     $admin_address = $TBOPS;
 }
+
+PortalLists()
+    if ($all || $portals || $update);
 
 ActiveUsers()
     if ($all || $activity || $update || $current);
@@ -497,6 +508,29 @@ sub ProjectLists($$)
 		     ($ELABINELAB ? 0 : 1));
 	}
     }
+}
+
+sub PortalLists()
+{
+    return
+	if (!$MAINSITE);
+
+    # Just the Powder portal.
+    print "Getting powder portal users\n" if $debug;
+
+    my $query_result =
+	DBQueryFatal("SELECT distinct u.usr_email ".
+		     ($MAILMANSUPPORT ?
+		      ", u.uid ,u.usr_name, u.mailman_password " : "") .
+		     " from group_membership as p ".
+		     "left join users as u on u.uid_idx=p.uid_idx ".
+		     "left join projects on projects.pid=p.pid ".
+		     "where p.gid=p.pid and ".
+		     " p.trust!='none' and u.status='active' and ".
+		     " (projects.portal='powder' or u.portal='powder') ".
+		     "order by u.usr_email");
+
+    genelist($query_result, "$TBOPS", "powder-announce", 0);
 }
 
 #
