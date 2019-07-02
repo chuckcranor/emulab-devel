@@ -1603,6 +1603,23 @@ sub GetCreator($)
     return $user;
 }
 
+sub GetUpdater($)
+{
+    my ($self) = @_;
+    require User;
+
+    return undef
+	if (!$self->updater_idx());
+
+    my $user = User->Lookup($self->updater_idx());
+    
+    if (! defined($user)) {
+	print("*** WARNING: Could not lookup user object for $self!\n");
+	return undef;
+    }
+    return $user;
+}
+
 #
 # Check permissions. Note that root may ask permission, which comes in
 # as an undef user.
@@ -2516,6 +2533,34 @@ sub ListForURN($$)
 		    "where creator_urn='$urn' and deleted is null and ".
 		    "      isdataset=0 ".
 		    "order by pid,imagename,version");
+
+    while (my ($imageid,$version) = $query_result->fetchrow_array()) {
+	# Want latest version.
+	my $image = Image->Lookup($imageid, $version);
+	next
+	    if (!defined($image));
+
+	push(@result, $image);
+    }
+
+    return @result;
+}
+
+#
+# List of images for a Group
+#
+sub ListForGroup($$)
+{
+    my ($class, $group) = @_;
+    my @result = ();
+    my $pid_idx = $group->pid_idx();
+    my $gid_idx = $group->gid_idx();
+
+    my $query_result =
+	DBQueryWarn("select imageid,version from image_versions ".
+		    "where pid_idx='$pid_idx' and gid_idx='$gid_idx' and ".
+		    "      deleted is null and isdataset=0 ".
+		    "order by imagename,version");
 
     while (my ($imageid,$version) = $query_result->fetchrow_array()) {
 	# Want latest version.

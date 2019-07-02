@@ -608,6 +608,12 @@ sub GetCreator($)
 
     return $self->image()->GetCreator();
 }
+sub GetUpdater($)
+{
+    my ($self) = @_;
+
+    return $self->image()->GetUpdater();
+}
 
 #
 # Load the group object for an image
@@ -919,6 +925,29 @@ sub ListForURN($$)
 	if (!defined($tmp)) {
 	    print STDERR "Could not lookup image $imageid,$version\n";
 	    return -1;
+	}
+	push(@result, $tmp);
+    }
+    return @result;
+}
+
+#
+# List of images in a project/group
+#
+sub ListForGroup($$)
+{
+    my ($class, $group) = @_;
+    my @result  = ();
+
+    my @images = Image->ListForGroup($group);
+    
+    foreach my $image (@images) {
+	my $imageid = $image->imageid();
+	my $version = $image->version();
+	my $tmp = OSImage->Lookup($imageid, $version);
+	if (!defined($tmp)) {
+	    print STDERR "Could not lookup image $imageid,$version\n";
+	    next;
 	}
 	push(@result, $tmp);
     }
