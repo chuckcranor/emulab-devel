@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -372,6 +372,11 @@ function TBvalid_IP($token) {
 }
 function TBvalid_node_type($token) {
     return TBcheck_dbslot($token, "virt_nodes", "type",
+			  TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR);
+}
+# Not a real check, just a cursory check for illegal chars.
+function TBvalid_URN($token) {
+    return TBcheck_dbslot($token, "projects", "nonlocal_id",
 			  TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR);
 }
 ?>
