@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2013, 2017 University of Utah and the Flux Group.
+# Copyright (c) 2007-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -466,13 +466,31 @@ sub SetMetadata($$$)
     DBQueryWarn("delete from logfile_metadata where logidx='$logidx'")
 	if ($purge);
 
-    foreach my $ref (@{$argref}) {
-	my ($key,$val) = @{$ref};
+    my $coderef = sub {
+	my ($key,$val) = @_;
+
 	$key = DBQuoteSpecial($key);
 	$val = DBQuoteSpecial($val);
 	return -1
 	    if (! DBQueryWarn("replace into logfile_metadata set ".
 			      "  logidx='$logidx',metakey=$key,metaval=$val"));
+	return 0;
+    };
+
+    #
+    # Silly choice a long time ago.
+    #
+    if (ref($argref) eq "ARRAY") {
+	foreach my $ref (@{$argref}) {
+	    return -1
+		if (&$coderef(@{$ref}));
+	}
+    }
+    else {
+	foreach my $key (keys(%{$argref})) {
+	    return -1
+		if (&$coderef($key, $argref->{$key}));
+	}
     }
     return 0;
 }
