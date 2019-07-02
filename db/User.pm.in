@@ -1887,6 +1887,8 @@ sub GList($$)
 	print STDERR "*** Unexpected results from 'id -G $user_uid': $glist\n";
 	return undef;
     }
+    return $glist
+	if (!defined($default));
 
     #
     # Remove current group from glist, then add gid twice at the front
@@ -1971,6 +1973,35 @@ sub FlipTo($$)
     $ENV{'LOGNAME'} = $self->uid();
 
     return 0;
+}
+
+#
+# Execute a command as user and then return to original. 
+#
+sub ExecuteAs($$;$)
+{
+    my ($self, $command, $default_gid) = @_;
+
+    my $current_uid  = $UID;
+    my $current_euid = $EUID;
+    my $current_gid  = $GID;
+    my $current_egid = $EGID;
+    my $USER         = $ENV{'USER'};
+    my $LOGNAME      = $ENV{'LOGNAME'};
+
+    $self->FlipTo($default_gid);
+    my $output = emutil::ExecQuiet($command);
+    my $status = $?;
+
+    $EUID   = 0;
+    $GID    = $current_gid;
+    $EGID   = $current_egid;
+    $UID    = $current_uid;
+    $EUID   = $current_euid;
+    $ENV{'USER'}    = $USER;
+    $ENV{'LOGNAME'} = $LOGNAME;
+
+    return ($status, $output);
 }
 
 #
