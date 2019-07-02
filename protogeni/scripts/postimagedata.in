@@ -551,7 +551,8 @@ sub PostImageAlias($)
     my $errmsg;
     my $count = 3;
     while ($count) {
-	my $msg = "PostImageInfo failed for image " . $image->versname() . " :";
+	my $msg = "PostImageInfo failed for alias " .
+	    $image->imagename() . " :";
 	my $args ={"credential" => $credential->asString(),
 		   "imageinfo"  => $blob};
 
