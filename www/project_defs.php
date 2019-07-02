@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -514,6 +514,17 @@ class Project
     function IsLeader($user) {
         $leader = $this->GetLeader();
         if ($user->SameUser($leader)) {
+            return 1;
+        }
+        return 0;
+    }
+    function IsManager($user) {
+        global $TBDB_TRUST_GROUPROOT;
+        
+	$pid = $this->pid();
+	$uid = $user->uid();
+
+        if (TBMinTrust(TBGrpTrust($uid, $pid, $pid), $TBDB_TRUST_GROUPROOT)) {
             return 1;
         }
         return 0;

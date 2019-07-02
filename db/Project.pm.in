@@ -600,6 +600,28 @@ sub IsLeader($$)
     return $user->SameUser($self->GetLeader());
 }
 
+sub IsManager($$)
+{
+    my ($self, $user) = @_;
+
+    # Must be a real reference. 
+    return 0
+	if (! (ref($self) && ref($user)));
+
+    return TBMinTrust($self->Trust($user), PROJMEMBERTRUST_GROUPROOT());
+}
+
+sub IsMember($$)
+{
+    my ($self, $user) = @_;
+
+    # Must be a real reference. 
+    return 0
+	if (! (ref($self) && ref($user)));
+
+    return TBMinTrust($self->Trust($user), PROJMEMBERTRUST_USER());
+}
+
 #
 # Return project group.
 #
