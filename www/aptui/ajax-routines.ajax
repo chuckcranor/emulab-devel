@@ -77,15 +77,17 @@ function ClassicExperimentList($which, $target, $state = "active")
         $eid          = $experiment->eid();
         $swapped      = DateStringGMT($stats->swapin_last());
         $created      = DateStringGMT($experiment->created());
-        $pcount       = $experiment->PCCount();
-        $phours       = sprintf("%.2f",(($pcount * $experiment->SwapSeconds()) /
-                                        3600.0));
+        $cluster      = "Emulab";
         
         $blob             = array();
         $blob["idx"]      = $idx;
         $blob["pid"]      = "<a href='show-project.php?project=$pid'>$pid</a>";
         $blob["eid"]      = "<a href='$url'>$eid</a>";
         $blob["uuid"]     = $experiment->uuid();
+        $blob["created"]      = $created;
+        $blob["swapped"]      = $swapped;
+        $blob["state"]        = $experiment->state();
+        $blob["description"]  = $experiment->description();
 
         if (ISADMIN() || $which == "project") {
             $blob["creator"] =
@@ -95,16 +97,17 @@ function ClassicExperimentList($which, $target, $state = "active")
         else {
             $blob["creator"] = $creator_uid;
         }
-        $cluster = "Emulab";
 
-        $blob["cluster"]      = "Emulab";
-        $blob["pcount"]       = $pcount;
-        $blob["phours"]       = $phours;
-        $blob["vcount"]       = $resources->vnodes();
-        $blob["swapped"]      = $swapped;
-        $blob["created"]      = $created;
-        $blob["state"]        = $experiment->state();
-        $blob["description"]  = $experiment->description();
+        if ($experiment->state() == "active") {
+            $pcount       = $experiment->PCCount();
+            $phours       = sprintf("%.2f",(($pcount *
+                                             $experiment->SwapSeconds()) /
+                                            3600.0));
+            $blob["cluster"]      = "Emulab";
+            $blob["pcount"]       = $pcount;
+            $blob["phours"]       = $phours;
+            $blob["vcount"]       = $resources->vnodes();
+        }
         $results["$pid:$eid"] = $blob;
     }
     return $results;
@@ -262,11 +265,17 @@ function ProfileList($which, $target)
         $whereclause = "where v.pid_idx='$target_idx'";
     }
     $query_result =
-        DBQueryFatal("select p.*,v.*,DATE(v.created) as created ".
-                     "   from apt_profiles as p ".
+        DBQueryFatal("select p.*,v.*,DATE(v.created) as created, ".
+                     "   DATE(h.started) as last_use ".
+                     " from apt_profiles as p ".
                      "left join apt_profile_versions as v on ".
-                     "     v.profileid=p.profileid and ".
-                     "     v.version=p.version ".
+                     "   v.profileid=p.profileid and ".
+                     "   v.version=p.version ".
+                     "left join apt_instance_history as h on h.uuid = ".
+                     "  (select h2.uuid from apt_instance_history as h2 ".
+                     "   where h2.profile_id=v.profileid ".
+                     "   order by h2.created desc ".
+                     "   limit 1) ".
                      "$whereclause");
 
     return ProfileListAux($query_result);
@@ -283,13 +292,19 @@ function ProjectProfileList($target_user)
     $creator_idx = $target_user->uid_idx();
 
     $query_result =
-        DBQueryFatal("select p.*,v.*,DATE(v.created) as created ".
-                     "   from apt_profiles as p ".
+        DBQueryFatal("select p.*,v.*,DATE(v.created) as created, ".
+                     "   DATE(h.started) as last_use ".
+                     " from apt_profiles as p ".
                      "left join apt_profile_versions as v on ".
                      "     v.profileid=p.profileid and ".
                      "     v.version=p.version ".
                      "left join group_membership as g on ".
                      "     g.pid_idx=p.pid_idx and g.gid_idx=p.gid_idx ".
+                     "left join apt_instance_history as h on h.uuid = ".
+                     "  (select h2.uuid from apt_instance_history as h2 ".
+                     "   where h2.profile_id=v.profileid ".
+                     "   order by h2.created desc ".
+                     "   limit 1) ".
                      "where g.uid_idx='$creator_idx' ".
                      "order by p.pid");
 
@@ -313,6 +328,7 @@ function ProfileListAux($query_result)
         $pid     = $row["pid"];
         $desc    = $row["description"];
         $created = DateStringGMT($row["created"]);
+        $last_use= DateStringGMT($row["last_use"]);
         $public  = $row["public"];
         $listed  = $row["listed"];
         $creator = $row["creator"];
@@ -338,6 +354,7 @@ function ProfileListAux($query_result)
         $blob["created"]      = $created;
         $blob["project"]      = $pid;
         $blob["creator"]      = $creator;
+        $blob["last_use"]     = $last_use;
 
         if (ISADMIN() ||
             ($which == "user" && $creator == $target->uid()) ||

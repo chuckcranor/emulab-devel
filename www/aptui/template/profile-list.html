@@ -5,7 +5,6 @@
     <thead>
       <tr>
 	<th>Name</th>
-	<th class="sorter-false">&nbsp</th>
 	<% if (showCreator) { %>
 	  <th>Creator</th>
 	<% } %>
@@ -14,29 +13,31 @@
 	<% } %>
 	<th>Description</th>
 	<th>Created</th>
-	<th>Listed</th>
+	<th>Last&nbsp;Use</th>
 	<th>Privacy</th>
       </tr>
     </thead>
     <tbody>
       <% _.each(profiles, function(value, name) { %>
 	<tr>
-	  <td><%= value.link %></td>
-	  <td style='white-space: nowrap;'>
-            <a href="instantiate.php?profile=<%- value.profile_uuid %>"
-	      <span class='glyphicon glyphicon-play'
-		    data-toggle='tooltip'
-		    data-container="body"
-		    data-trigger="hover"
-		    title='Instantiate this profile'></span>
-	    </a>
-	    <a class='showtopo_modal_button'
+	  <td style='white-space: nowrap;'><%= value.link %>
+	    <a class='showtopo_modal_button pull-right'
+	       style="margin-left: 5px;"
                data-profile=<%= value.profile_uuid %>>	    
 	      <span class='glyphicon glyphicon-modal-window'
 		    data-toggle='tooltip'
 		    data-container="body"
 		    data-trigger="hover"
 		    title='Show topology'></span>
+	    </a>
+            <a href="instantiate.php?profile=<%- value.profile_uuid %>"
+	       style="margin-left: 5px;"
+	       class="pull-right">
+	      <span class='glyphicon glyphicon-play'
+		    data-toggle='tooltip'
+		    data-container="body"
+		    data-trigger="hover"
+		    title='Instantiate this profile'></span>
 	    </a>
 	  </td>
 	  <% if (showCreator) { %>
@@ -48,7 +49,8 @@
 	  <td><%- value.description %></td>
 	  <td class="format-date" style='white-space: nowrap;'>
 	    <%- value.created %></td>
-	  <td><%- value.listed %></td>
+	  <td class="format-date" style='white-space: nowrap;'>
+	    <%- value.last_use %></td>
 	  <td><%- value.privacy %></td>
 	</tr>
       <% }); %>
