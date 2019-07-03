@@ -901,6 +901,10 @@ sub CreateSlivers()
 		$output = "Internal error creating experiment on the ".
 		    "$cluster cluster";
 	    }
+	    elsif (scalar($instance->AggregateList()) > 1) {
+		$output = "Error creating experiment on the $cluster cluster:".
+		    "\n\n" . $output;
+	    }
 	    $webtask->output($output);
 	    
 	    # This will be the createsliver exit code if we got one, or -1.
