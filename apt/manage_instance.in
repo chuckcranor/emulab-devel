@@ -5105,6 +5105,7 @@ sub CallMethodOnAggregates($$$@)
 		GeniResponse->Create(GENIRESPONSE_SERVER_UNAVAILABLE,
 				     undef, "Testing mode");
 	    $webtask->response($response);
+	    $webtask->Store();
 	    return -1;
 	}
 
@@ -5119,6 +5120,7 @@ sub CallMethodOnAggregates($$$@)
 		GeniResponse->Create(GENIRESPONSE_SERVER_UNAVAILABLE,
 				     undef, $errmsg);
 	    $webtask->response($response);
+	    $webtask->Store();
 	    return -1;
 	}
 	while ($retries) {
