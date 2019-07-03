@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -152,7 +152,7 @@ if ($user = User::Lookup($username)) {
     if ($user->weblogin_frozen()) {
 	$errors["username"] = "This account is frozen";
     }
-    elseif ($user->email() != $email) {
+    elseif (strtolower($user->email()) != strtolower($email)) {
 	$errors["email"] = "Wrong email address for user";
     }
 }
