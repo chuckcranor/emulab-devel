@@ -177,6 +177,10 @@ sub SpewImage()
     open(FD, "< $file")
 	or fatal("Could not open $file!\n");
 
+    if ($foffset) {
+	sysseek(FD, $foffset, 0);
+    }
+
     #
     # Deal with NFS read failures
     #
