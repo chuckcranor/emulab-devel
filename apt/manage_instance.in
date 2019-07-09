@@ -1377,7 +1377,8 @@ sub DoTerminate()
 	# to be able to deal with that.
 	#
 	if ($instance->status() ne "provisioned") {
-	    $errmsg = "Experiment is busy and not provisioned. This is unusual.";
+	    $errmsg = "Experiment is busy, unable to lock it";
+
 	    if (defined($webtask)) {
 		$webtask->output($errmsg);
 		$webtask->Exited(GENIRESPONSE_BUSY);

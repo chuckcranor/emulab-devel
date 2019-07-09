@@ -980,6 +980,8 @@ function Do_BindParameters()
     else {
         $script    = $profile->script();
         $paramdefs = $profile->paramdefs();
+        # Repo argument to rungenilib;
+        $runopts  .= " -r " . $profile->reponame();
     }
     unset($formfields["script"]);
     unset($formfields["paramdefs"]);
