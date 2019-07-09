@@ -981,7 +981,16 @@ function Do_BindParameters()
         $script    = $profile->script();
         $paramdefs = $profile->paramdefs();
         # Repo argument to rungenilib;
-        $runopts  .= " -r " . $profile->reponame();
+        if ($profile->repourl()) {
+            $runopts  .= " -r " . $profile->reponame();
+            if (isset($ajax_args["refspec"])) {
+                if (!preg_match('/^[-\w\/]+$/', $ajax_args["refspec"])) {
+                    SPITAJAX_ERROR(1, "Invalid refspec");
+                    return;
+                }
+                $runopts .= " -h " . escapeshellarg($ajax_args["refspec"]);
+            }
+        }
     }
     unset($formfields["script"]);
     unset($formfields["paramdefs"]);
