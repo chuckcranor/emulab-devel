@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -161,7 +161,7 @@ foreach my $image (@imagelist) {
 	    fatal("Could not set deprecation info for image");
     }
 
-    if ($usetracker && $image->ims_reported()) {
+    if ($usetracker && $image->IsLocal() && $image->ims_reported()) {
 	if ($impotent) {
 	    print "Would update $versname at the image server\n";
 	}
