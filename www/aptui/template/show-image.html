@@ -349,6 +349,19 @@
 	  <td><%- fields.imageid %></td>
 	</tr>
 	<% if (isadmin) { %>
+	  <% if (fields.deprecated) { %>
+	    <tr>
+	      <td>Deprecated</td>
+	      <td>
+		<span class="format-date"><%- fields.deprecated %></span>
+		<% if (fields.deprecated_iserror) { %>
+		  (With error)
+		<% } else { %>
+		  (With warning)
+		<% } %>
+	      </td>
+	    </tr>
+	  <% } %>
 	  <tr class="adminnotes">
 	    <td>
 	      <a class='btn btn-danger btn-xs pull-right hidden'

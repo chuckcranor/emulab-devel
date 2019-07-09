@@ -482,6 +482,9 @@ class Image
     function lba_size()		{ return $this->field("lba_size"); }
     function nodetypes()	{ return $this->field("nodetypes"); }
     function webtask_id()	{ return $this->field("webtask_id"); }
+    function deprecated()	{ return $this->field("deprecated"); }
+    function deprecated_iserror(){ return $this->field("deprecated_iserror"); }
+    function deprecated_message(){ return $this->field("deprecated_message"); }
 
     # Return the DB data.
     function DBData()		{ return $this->image; }
