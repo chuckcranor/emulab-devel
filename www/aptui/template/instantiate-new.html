@@ -452,8 +452,16 @@
 			<label id='reservation_text' class='alert-warning col-sm-10 col-sm-offset-1'>Project <span class="reservation_project"></span> has a reservation on this cluster beginning <span class='reservation_start'>start</span>.</label> 
 		      </div>
 		    </div>
+		  <% } else { %>
+		    <div id="nocluster-selector">
+	              <div class='col-sm-6 col-sm-offset-4
+				  alert alert-warning hidden'
+			   id='where-deprecated'
+			   style='margin-top: 5px; margin-bottom: 5px'></div>
+		    </div>
 		  <% } %>
 		  <% if (1) { %>
+		    <div style="clear: both">
 		    <h5>
 		      <a href="#advanced_options_dropdown" data-toggle="collapse">
 			<span class="glyphicon glyphicon-plus-sign pull-left" 
@@ -461,6 +469,7 @@
 			<span style="font-weight: bold; margin-left: 12px">Advanced Options</span>
 		      </a>
 		    </h5>
+		    </div>
 		    <div id="advanced_options_dropdown"
 			 class="panel-collapse collapse">
 		      <% if (0) { %>
