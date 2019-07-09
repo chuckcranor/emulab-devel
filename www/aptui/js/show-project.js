@@ -25,6 +25,7 @@ $(function ()
 	    emulablink     : window.EMULAB_LINK,
 	    isadmin        : window.ISADMIN,
 	    target_project : window.TARGET_PROJECT,
+	    showmore       : window.ISLEADER || window.ISMANAGER ? 1 : 0,
 	});
 	$('#main-body').html(html);
 	$('#waitwait_div').html(waitString);

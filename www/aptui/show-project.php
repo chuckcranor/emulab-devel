@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -54,6 +54,7 @@ $canapprove = $project->AccessCheck($this_user, $TB_PROJECT_ADDUSER) ? 1 : 0;
 $canbestow  = $project->AccessCheck($this_user,
                                     $TB_PROJECT_BESTOWGROUPROOT) ? 1 : 0;
 $isleader   = $project->IsLeader($this_user);
+$ismanager  = $project->IsManager($this_user);
 
 echo "<link rel='stylesheet'
             href='css/tablesorter.css'>\n";
@@ -61,6 +62,7 @@ echo "<link rel='stylesheet'
 echo "<script type='text/javascript'>\n";
 echo "  window.ISADMIN        = $isadmin;\n";
 echo "  window.ISLEADER       = $isleader;\n";
+echo "  window.ISMANAGER      = $ismanager;\n";
 echo "  window.CANAPPROVE     = $canapprove;\n";
 echo "  window.CANBESTOW      = $canbestow;\n";
 echo "  window.EMULAB_LINK    = '$emulablink';\n";

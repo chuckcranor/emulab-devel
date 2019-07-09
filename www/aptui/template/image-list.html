@@ -38,7 +38,12 @@
       <% } else { %>
       <table class='tablesorter hidden' id='images-table-no-profiles'>
 	<caption>
-	  <center>Images not used by any of your profiles
+	  <center>
+	    <% if (showuser && !showproject) { %>
+	      Project images not used by any profiles
+	    <% } else { %>
+	      Images not used by any of your profiles
+	    <% } %>
 	    <a href='#' class='btn btn-xs'
 	       data-toggle='popover'
 	       data-html='true'
@@ -64,7 +69,12 @@
 	<thead>
 	  <tr>
 	    <th class="col-md-2">Image</th>
-	    <th class="col-md-2">Project</th>
+	    <% if (showproject) { %>
+	      <th class="col-md-2">Project</th>
+	    <% } %>
+	    <% if (showuser) { %>
+	      <th class="col-md-2">User</th>
+	    <% } %>
 	    <th class="col-md-2">Created</th>
 	    <th class="col-md-3 sorter-false">Description</th>
 	    <% if (showformat) { %>
@@ -89,15 +99,29 @@
 			    style='color: red; margin-left: 3px;'></span></a>
 		  <% } %>
 	      </td>
-	      <% if (_.has(image, "pid_idx")) { %>
-		<td>
-		  <a target="_blank"
-		     href=show-project.php?pid=<%- image.pid_idx %>>
-		    <%- image.pid %>
-		  </a>
-		</td>
-	      <% } else { %>
-		<td><%- image.pid %></td>
+	      <% if (showproject) { %>
+		<% if (_.has(image, "pid_idx")) { %>
+		  <td>
+		    <a target="_blank"
+		       href=show-project.php?pid=<%- image.pid_idx %>>
+		      <%- image.pid %>
+		    </a>
+		  </td>
+		<% } else { %>
+		  <td><%- image.pid %></td>
+		<% } %>
+	      <% } %>
+	      <% if (showuser) { %>
+		<% if (_.has(image, "creator_idx")) { %>
+		  <td>
+		    <a target="_blank"
+		       href=show-user.php?user=<%- image.creator_idx %>>
+		      <%- image.creator_uid %>
+		    </a>
+		  </td>
+		<% } else { %>
+		  <td><%- image.creator_uid %></td>
+		<% } %>
 	      <% } %>
 	      <td class="format-date"><%- image.versions[0].created %></td>
 	      <td><%- image.versions[0].description %></td>
@@ -134,7 +158,25 @@
 			    style='color: red; margin-left: 3px;'></span></a>
 		  <% } %>
 		</td>
-		<td><%- image.pid %></td>
+		<% if (showproject) { %>
+		  <td><%- image.pid %></td>
+		<% } %>
+		<% if (showuser) { %>
+		  <% if (_.has(version, "updater_uid")) { %>
+		    <% if (_.has(version, "updater_idx")) { %>
+		      <td>
+			<a target="_blank"
+			   href=show-user.php?user=<%- version.updater_idx %>>
+			  <%- version.updater_uid %>
+			</a>
+		      </td>
+		    <% } else { %>
+		      <td><%- version.updater_uid %></td>
+		    <% } %>
+		  <% } else { %>
+		    <td><%- image.creator_uid %></td>
+		  <% } %>
+		<% } %>
 		<td class="format-date"><%- version.created %></td>
 		<td><%- version.description %></td>
 		<% if (showformat) { %>
@@ -153,7 +195,12 @@
       </table>
       <table class='tablesorter hidden' id='images-table-one-profile'>
 	<caption>
-	  <center>Images used by only a single profile
+	  <center>
+	    <% if (showuser && !showproject) { %>
+	      Project Images used by only a single profile
+	    <% } else { %>
+	      Images used by only a single profile
+	    <% } %>
 	    <a href='#' class='btn btn-xs'
 	       data-toggle='popover'
 	       data-html='true'
@@ -187,7 +234,12 @@
 	<thead>
 	  <tr>
 	    <th class="col-md-2">Image</th>
-	    <th class="col-md-2">Project</th>
+	    <% if (showproject) { %>
+	      <th class="col-md-2">Project</th>
+	    <% } %>
+	    <% if (showuser) { %>
+	      <th class="col-md-2">User</th>
+	    <% } %>
 	    <th class="col-md-2">Created</th>
 	    <th class="col-md-3 sorter-false">Description</th>
 	    <% if (showformat) { %>
@@ -215,15 +267,29 @@
 		  <span class="glyphicon glyphicon-chevron-right"></span></a>
 		<%- image.imagename %>
 	      </td>
-	      <% if (_.has(image, "pid_idx")) { %>
-		<td>
-		  <a target="_blank"
-		     href=show-project.php?pid=<%- image.pid_idx %>>
-		    <%- image.pid %>
-		  </a>
-		</td>
-	      <% } else { %>
-		<td><%- image.pid %></td>
+	      <% if (showproject) { %>
+		<% if (_.has(image, "pid_idx")) { %>
+		  <td>
+		    <a target="_blank"
+		       href=show-project.php?pid=<%- image.pid_idx %>>
+		      <%- image.pid %>
+		    </a>
+		  </td>
+		<% } else { %>
+		  <td><%- image.pid %></td>
+		<% } %>
+	      <% } %>
+	      <% if (showuser) { %>
+		<% if (_.has(image, "creator_idx")) { %>
+		  <td>
+		    <a target="_blank"
+		       href=show-user.php?user=<%- image.creator_idx %>>
+		      <%- image.creator_uid %>
+		    </a>
+		  </td>
+		<% } else { %>
+		  <td><%- image.creator_uid %></td>
+		<% } %>
 	      <% } %>
 	      <td class="format-date"><%- image.versions[0].created %></td>
 	      <td><%- image.versions[0].description %></td>
@@ -260,7 +326,25 @@
 		    <span class='glyphicon glyphicon-remove'
 			  style='color: red; margin-left: 3px;'></span></a>
 		</td>
-		<td><%- image.pid %></td>
+		<% if (showproject) { %>
+		  <td><%- image.pid %></td>
+		<% } %>
+		<% if (showuser) { %>
+		  <% if (_.has(version, "updater_uid")) { %>
+		    <% if (_.has(version, "updater_idx")) { %>
+		      <td>
+			<a target="_blank"
+			   href=show-user.php?user=<%- version.updater_idx %>>
+			  <%- version.updater_uid %>
+			</a>
+		      </td>
+		    <% } else { %>
+		      <td><%- version.updater_uid %></td>
+		    <% } %>
+		  <% } else { %>
+		    <td><%- image.creator_uid %></td>
+		  <% } %>
+		<% } %>
 		<td class="format-date"><%- version.created %></td>
 		<td><%- version.description %></td>
 		<% if (showformat) { %>
@@ -304,7 +388,12 @@
       </table>
       <table class='tablesorter hidden' id='images-table-multi-profile'>
 	<caption>
-	  <center>Images used by more then one profile
+	  <center>
+	    <% if (showuser && !showproject) { %>
+	      Project images used by more then one profiles
+	    <% } else { %>
+	      Images used by more then one profile
+	    <% } %>
 	    <a href='#' class='btn btn-xs'
 	       data-toggle='popover'
 	       data-html='true'
@@ -321,7 +410,12 @@
 	<thead>
 	  <tr>
 	    <th class="col-md-2">Image</th>
-	    <th class="col-md-2">Project</th>
+	    <% if (showproject) { %>
+	      <th class="col-md-2">Project</th>
+	    <% } %>
+	    <% if (showuser) { %>
+	      <th class="col-md-2">User</th>
+	    <% } %>
 	    <th class="col-md-2">Created</th>
 	    <th class="col-md-3 sorter-false">Description</th>
 	    <% if (showformat) { %>
@@ -347,15 +441,29 @@
 		  <span class="glyphicon glyphicon-chevron-right"></span></a>
 		<%- image.imagename %>
 	      </td>
-	      <% if (_.has(image, "pid_idx")) { %>
-		<td>
-		  <a target="_blank"
-		     href=show-project.php?pid=<%- image.pid_idx %>>
-		    <%- image.pid %>
-		  </a>
-		</td>
-	      <% } else { %>
-		<td><%- image.pid %></td>
+	      <% if (showproject) { %>
+		<% if (_.has(image, "pid_idx")) { %>
+		  <td>
+		    <a target="_blank"
+		       href=show-project.php?pid=<%- image.pid_idx %>>
+		      <%- image.pid %>
+		    </a>
+		  </td>
+		<% } else { %>
+		  <td><%- image.pid %></td>
+		<% } %>
+	      <% } %>
+	      <% if (showuser) { %>
+		<% if (_.has(image, "creator_idx")) { %>
+		  <td>
+		    <a target="_blank"
+		       href=show-user.php?user=<%- image.creator_idx %>>
+		      <%- image.creator_uid %>
+		    </a>
+		  </td>
+		<% } else { %>
+		  <td><%- image.creator_uid %></td>
+		<% } %>
 	      <% } %>
 	      <td class="format-date"><%- image.versions[0].created %></td>
 	      <td><%- image.versions[0].description %></td>
@@ -388,6 +496,25 @@
 		    <span class="glyphicon glyphicon-chevron-left"></span>
 		    Profiles</a>
 		</td>
+		<% if (showproject) { %>
+		  <td><%- image.pid %></td>
+		<% } %>
+		<% if (showuser) { %>
+		  <% if (_.has(version, "updater_uid")) { %>
+		    <% if (_.has(version, "updater_idx")) { %>
+		      <td>
+			<a target="_blank"
+			   href=show-user.php?user=<%- version.updater_idx %>>
+			  <%- version.updater_uid %>
+			</a>
+		      </td>
+		    <% } else { %>
+		      <td><%- version.updater_uid %></td>
+		    <% } %>
+		  <% } else { %>
+		    <td><%- image.creator_uid %></td>
+		  <% } %>
+		<% } %>
 		<td class="format-date"><%- version.created %></td>
 		<td><%- version.description %></td>
 		<% if (showformat) { %>

@@ -104,8 +104,8 @@ $(function ()
 		// Generate the main template.
 		var html = listTemplate({
 		    "images"       : images,
-		    "showproject"  : false,
-		    "showuser"     : false,
+		    "showproject"  : window.TARGET_PROJECT === undefined,
+		    "showuser"     : window.TARGET_PROJECT !== undefined,
 		    "name"         : name,
 		    "error"        : error,
 		    "showformat"   : showformat,
@@ -247,10 +247,16 @@ $(function ()
 		});
 		
 	    }
+	    var args = {"cluster" : name};
+	    if (window.TARGET_PROJECT !== undefined) {
+		args["pid"] = window.TARGET_PROJECT;
+	    }
+	    else {
+		args["uid"] = window.TARGET_USER;
+	    }
 	    var xmlthing = sup.CallServerMethod(null, "images",
-						"ListImages",
-						{"cluster" : name,
-						 "uid" : window.TARGET_USER});
+						"ListImages", args);
+
 	    xmlthing.done(callback);
 	});
     }
@@ -318,8 +324,8 @@ $(function ()
 	    }
 	    table.trigger('update');
 	};
-	var args = {"urn" : urn,
-		    "uid" : window.TARGET_USER,
+	var args = {"urn"     : urn,
+		    "pid"     : imagelist[cluster][index]["pid"],
 		    "cluster" : cluster};
 	/*
 	 * Look to see if this is a row with a profile in it, which

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,14 +38,22 @@ $this_uid  = $this_user->uid();
 #
 # Verify page arguments. Cluster is a domain that we turn into a URN.
 #
-$optargs = OptionalPageArguments("cluster",      PAGEARG_STRING,
-                                 "target_user",  PAGEARG_USER);
+$optargs = OptionalPageArguments("cluster",        PAGEARG_STRING,
+                                 "target_user",    PAGEARG_USER,
+                                 "target_project", PAGEARG_PROJECT);
 
 SPITHEADER(1);
 
 if (isset($target_user)) {
     if (!$target_user->SameUser($this_user) &&
         !(ISADMIN() || ISFOREIGN_ADMIN())) {
+        SPITUSERERROR("Not enough permission to view this page!");
+    }
+}
+if (isset($target_project)) {
+    if (! ($target_project->IsLeader($this_user) ||
+           $target_project->IsManager($this_user) ||
+           ISADMIN() || ISFOREIGN_ADMIN())) {
         SPITUSERERROR("Not enough permission to view this page!");
     }
 }
@@ -102,7 +110,12 @@ echo "<div id='oops_div'></div>
       <div id='confirm_div'></div>\n";
 
 echo "<script type='text/javascript'>\n";
-echo "  window.TARGET_USER = '" . $target_user->uid() . "';\n";
+if ($target_project) {
+    echo "  window.TARGET_PROJECT = '" . $target_project->pid() . "';\n";
+}
+else {
+    echo "  window.TARGET_USER = '" . $target_user->uid() . "';\n";
+}
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

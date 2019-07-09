@@ -39,10 +39,11 @@ sub usage()
     print STDERR "Usage: manage_images [options] relocate ...\n";
     exit(-1);
 }
-my $optlist     = "dt:";
+my $optlist     = "dt:u:";
 my $debug       = 0;
 my $webtask_id;
 my $webtask;
+my $target_user;
 
 #
 # Configure variables
@@ -84,11 +85,14 @@ use GeniResponse;
 use GeniCertificate;
 use GeniCredential;
 use GeniImage;
+use Genixmlrpc;
 use GeniXML;
 use GeniUser;
 use APT_Geni;
 use APT_Profile;
 use APT_Aggregate;
+use APT_Instance;
+use APT_Utility;
 
 # Protos
 sub fatal($);
@@ -125,11 +129,19 @@ if (@ARGV < 1) {
 my $action = shift(@ARGV);
 
 # Need a real user.
-my $this_user = User->ThisUser();
-if (! defined($this_user)) {
-    fatal("You ($UID) do not exist!");
+if (defined($options{"u"})) {
+    $target_user = User->Lookup($options{"u"});
+    if (! defined($target_user)) {
+	fatal("No such user!");
+    }
 }
-my $geniuser = GeniUser->CreateFromLocal($this_user);
+else {
+    $target_user = User->ThisUser();
+    if (! defined($target_user)) {
+	fatal("You ($UID) do not exist!");
+    }
+}
+my $geniuser = GeniUser->CreateFromLocal($target_user);
 
 if ($action eq "list") {
     exit(DoListImages());
@@ -154,12 +166,12 @@ exit(1);
 sub DoListImages()
 {
     my $usage = sub {
-	print STDERR "Usage: manage_images list [-a am_urn]\n";
+	print STDERR "Usage: manage_images list [-a am_urn] [-p pid]\n";
 	exit(-1);
     };
-    my $optlist = "a:p";
+    my $optlist = "a:p:";
     my $aggregate_urn = $MYURN;
-    my $withprofiles  = 0;
+    my $project;
     my $errmsg;
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -169,7 +181,14 @@ sub DoListImages()
 	$aggregate_urn = $options{"a"};
     }
     if (defined($options{"p"})) {
-	$withprofiles = 1;
+	$project = Project->Lookup($options{"p"});
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+	if (! ($project->IsLeader($target_user) ||
+	       $project->IsManager($target_user))) {
+	    UserError("Not enough permissions to list images in project");
+	}
     }
     my $context = APT_Geni::GeniContext();
     if (!defined($context)) {
@@ -195,23 +214,32 @@ sub DoListImages()
     if ($usemydevtree) {
 	$cmurl =~ s/protogeni/protogeni\/stoller/;
     }
-    my ($credential, $speaksfor) = APT_Geni::GenUserCredential($geniuser);
+    my $args = {};
+    my ($credential, $speaksfor);
+    
+    if (defined($project)) {
+	($credential, $speaksfor) = APT_Geni::GenProjectCredential($project,
+								   $geniuser);
+	$args->{"project_urn"} = $project->urn();
+    }
+    else {
+	($credential, $speaksfor) = APT_Geni::GenUserCredential($geniuser);
+    }
     fatal("Could not generate credentials for user")
 	if (!defined($credential));
-
     my $credentials = [$credential->asString()];
     if (defined($speaksfor)) {
 	$credentials = [@$credentials, $speaksfor->asString()];
     }
-    my $args = {
-	"credentials" => $credentials,
-    };
+    $args->{"credentials"} = $credentials;
+    
     my $response = Genixmlrpc::CallMethod($cmurl, undef, "ListImages", $args);
 
     if ($response->code() != GENIRESPONSE_SUCCESS) {
 	print STDERR $response->error() . "\n";
 	ExitWithError($response);
     }
+    
     #
     # We get back a flat list, which can include mulitple versions of
     # each image. Lets reorganize into multilevel hash structure
@@ -247,6 +275,29 @@ sub DoListImages()
 	# Try and set a local project, but use remote pid otherwise.
 	$image->{'pid'} = $ospid;
 
+	# Convert creator and updater when getting list for project.
+	if (defined($project)) {
+	    my $hrn      = GeniHRN->new($image->{'creator_urn'});
+	    my $geniuser = MapUserURN($hrn);
+	    if (defined($geniuser)) {
+		$image->{'creator_uid'}  = $geniuser->uid();
+		$image->{'creator_idx'}  = $geniuser->idx();
+	    }
+	    else {
+		$image->{'creator_uid'} = $hrn->id();
+	    }
+	    if (exists($image->{'updater_urn'})) {
+		$hrn      = GeniHRN->new($image->{'updater_urn'});
+		$geniuser = MapUserURN($hrn);
+		if (defined($geniuser)) {
+		    $image->{'updater_uid'} = $geniuser->uid();
+		    $image->{'updater_idx'} = $geniuser->idx();
+		}
+		else {
+		    $image->{'updater_uid'} = $hrn->id();
+		}
+	    }
+	}
 	if (!exists($ilist{$urn})) {
 	    $ilist{$urn} = [];
 	}
@@ -275,6 +326,7 @@ sub DoListImages()
 	#
 	if (exists($image0->{'project_urn'})) {
 	    my $projhrn = GeniHRN->new($image0->{'project_urn'});
+	    
 	    if ($projhrn->domain() eq $OURDOMAIN) {
 		my $project;
 		
@@ -290,12 +342,18 @@ sub DoListImages()
 		    $ref->{'pid_idx'} = $project->pid_idx();
 		}
 	    }
+	    $ref->{"project_urn"} = $image0->{'project_urn'};
 	}
 	else {
 	    # Remote pid, set above
 	    $ref->{'pid'} = $image0->{'pid'};
 	}
-	$ref->{'imagename'} = $image0->{'imagename'};
+	if (defined($project)) {
+	    $ref->{'creator_uid'} = $image0->{'creator_uid'};
+	    $ref->{'creator_idx'} = $image0->{'creator_idx'}
+	        if (exists($image0->{'creator_idx'}));
+	}
+	$ref->{'imagename'}   = $image0->{'imagename'};
 	
 	#
 	# Find profiles using the named image
@@ -424,20 +482,31 @@ sub DoListImages()
 sub DoDeleteImage()
 {
     my $usage = sub {
-	print STDERR "Usage: manage_images delete [-a am_urn] <image_urn>\n";
+	print STDERR "Usage: manage_images delete [-a am_urn] ".
+	    "[-d profile -v versions] <image_urn>\n";
 	exit(-1);
     };
-    my $optlist = "a:d:v:n";
+    my $optlist = "a:d:v:np:";
     my $aggregate_urn = $MYURN;
     my $impotent      = 0;
     my $profile;
     my $errmsg;
+    my $project;
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	&$usage();
     }
     if (defined($options{"a"})) {
 	$aggregate_urn = $options{"a"};
+    }
+    if (defined($options{"p"})) {
+	$project = Project->Lookup($options{"p"});
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+	if (! ($target_user->IsAdmin() || $project->IsMember($target_user))) {
+	    fatal("Not enough permission in project");
+	}
     }
     if (defined($options{"n"})) {
 	$impotent = 1;
@@ -560,18 +629,29 @@ sub DoDeleteImage()
     if ($usemydevtree) {
 	$cmurl =~ s/protogeni/protogeni\/stoller/;
     }
-    my ($credential, $speaksfor) = APT_Geni::GenUserCredential($geniuser);
+    my $args = {
+	"image_urn"   => $image_urn,
+    };
+    my ($credential, $speaksfor);
+    
+    if ($target_user->IsAdmin() ||
+	(defined($project) &&
+	 ($project->IsLeader($target_user) ||
+	  $project->IsManager($target_user)))) {
+	($credential, $speaksfor) = APT_Geni::GenProjectCredential($project,
+								   $geniuser);
+    }
+    else {
+	($credential, $speaksfor) = APT_Geni::GenUserCredential($geniuser);
+    }
     fatal("Could not generate credentials for user")
 	if (!defined($credential));
-
     my $credentials = [$credential->asString()];
     if (defined($speaksfor)) {
 	$credentials = [@$credentials, $speaksfor->asString()];
     }
-    my $args = {
-	"image_urn"   => $image_urn,
-	"credentials" => $credentials,
-    };
+    $args->{"credentials"} = $credentials;
+
     if ($impotent) {
 	$args->{"impotent"} = 1;
     }
@@ -732,7 +812,7 @@ sub DoRelocate()
 	}
     }
     else {
-	$user = $this_user;
+	$user = $target_user;
     }
     if (defined($options{"i"})) {
 	$imagename = $options{"i"};
