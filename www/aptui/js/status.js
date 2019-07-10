@@ -344,6 +344,7 @@ $(function ()
  	    $('#profile_status_collapse').trigger('hide.bs.collapse');
 	}
 	else {
+	    $('#profile_status_collapse').collapse("show");
  	    $('#profile_status_collapse').trigger('show.bs.collapse');
 	}
 
