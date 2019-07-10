@@ -165,3 +165,7 @@ NODE_USAGE_SUPPORT=1
 # Enable idle stats collection (RRD files)
 SDCOLLECTD_DOSTATS=1
 SDCOLLECTD_USE_RRDTOOL=1
+
+# Enable the reportboot_daemon (rather then using BOOTINFO_EVENTS=0)
+REPORTBOOT_ENABLED=1
+REPORTBOOT_FLAGS="-C"
