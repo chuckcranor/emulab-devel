@@ -177,15 +177,16 @@ case "$1" in
 		# Could trigger experiment creation, so make sure everything
 		# else is setup first; i.e., run this last!
 		#
-		if [ @BOOTINFO_EVENTS@ -eq 0 -a -x @prefix@/sbin/reportboot_daemon  ]; then
+		if [ \( @BOOTINFO_EVENTS@ -eq 0 -o @REPORTBOOT_ENABLED@ -eq 1 \)\
+			-a -x @prefix@/sbin/reportboot_daemon ]; then
 			echo -n " reportboot daemon "
 			if [ -x @prefix@/sbin/daemon_wrapper ]; then
 			    @prefix@/sbin/daemon_wrapper -i 30 \
 			          -l @prefix@/log/reportboot.log \
 			          -p /var/run/reportboot_daemon.pid \
-				  @prefix@/sbin/reportboot_daemon -f
+				  @prefix@/sbin/reportboot_daemon -f @REPORTBOOT_FLAGS@
 			else
-				@prefix@/sbin/reportboot_daemon
+				@prefix@/sbin/reportboot_daemon @REPORTBOOT_FLAGS@
 			fi
 		fi
 
