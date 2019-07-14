@@ -3001,7 +3001,7 @@ sub DeprecatedMessage($;$)
 	    ". " . "Please choose a different image!";
     }
     else {
-	$result = "Image $name is deprecated and no longer available to use".
+	$result = "Image $name is deprecated and should no longer be used".
 	    (defined($message) && $message ne "" ? ": ${message}" : "") .
 	    ". " . "You can continue to use this image for now but you should ".
 	    "choose a different one before this image is deleted!";
