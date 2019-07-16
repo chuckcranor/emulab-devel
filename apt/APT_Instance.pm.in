@@ -1682,6 +1682,9 @@ sub CreateImageCreds($$$;$)
 		$$pmsg = "No permission to use $image_urn";
 		return 1;
 	    }
+	    next
+		if ($image->global());
+		    
 	    #
 	    # If the image is restricted, the experiment has to be created
 	    # in the same project as the image, or in a project that has
