@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2016 University of Utah and the Flux Group.
+# Copyright (c) 2016, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,6 +27,7 @@ package tbadb_serv;
 use strict;
 use English;
 use DB_File;
+use Socket;
 use IO::Socket::INET;
 use File::Temp;
 use POSIX qw(strftime);
@@ -36,7 +37,6 @@ use base qw(Net::Server::Fork);
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
 
 use libtestbed;
-use libtmcc qw(tmccbossinfo);
 use libjsonrpc;
 use tbadb_rpc;
 
@@ -224,11 +224,25 @@ sub post_configure_hook($) {
     my $self = shift;
     my $prop = $self->{'server'};
 
-    # Get IP for boss server and add it to the allowed list.
-    my (undef, $bossip) = tmccbossinfo();
-    die "tbadb_serv: Could not get IP address for boss server!\n"
-	if (!$bossip || $bossip !~ /^(\d+\.\d+\.\d+\.\d+)$/);
-    push @{$prop->{'cidr_allow'}}, "${1}/32";
+    if (!-e "/etc/emulab/client.pem") {
+	my $hostname = `/bin/hostname`;
+	chomp $hostname;
+	$hostname =~ s/control/boss/;
+
+	my $packed_ip = gethostbyname($hostname);
+	my $ip_address = inet_ntoa($packed_ip);
+	$self->log(1,"$ip_address");	
+	push @{$prop->{'cidr_allow'}}, "${ip_address}/32";
+    }
+    else {
+	require libtmcc;
+
+	# Get IP for boss server and add it to the allowed list.
+	my (undef, $bossip) = tmccbossinfo();
+	die "tbadb_serv: Could not get IP address for boss server!\n"
+	    if (!$bossip || $bossip !~ /^(\d+\.\d+\.\d+\.\d+)$/);
+	push @{$prop->{'cidr_allow'}}, "${1}/32";
+    }
 
     # Setup a warn "signal" handler to redirect "warn" for now.
     $SIG{__WARN__} = sub {
@@ -1526,7 +1540,7 @@ sub check_adb($) {
     }
     if (!$srvfound) {
 	warn "adding ipt block rule for adb server.\n";
-	if(system("$IPTABLES -A INPUT ! -s localhost -p tcp -m tcp --dport 5037 -j DROP") != 0) {
+	if(system("$IPTABLES -A INPUT ! -s 127.0.0.1 -p tcp -m tcp --dport 5037 -j DROP") != 0) {
 	    warn "failed to add ipt rule to block traffic to adb server!\n";
 	    goto BADCHK;
 	}
