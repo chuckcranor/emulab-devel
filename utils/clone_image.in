@@ -269,6 +269,14 @@ if (defined($image)) {
     }
 
     #
+    # Do not allow a deprecated image to be snapshot, even if its
+    # deprecated with warning only.
+    #
+    if ($image->deprecated() && !$this_user->IsAdmin()) { 
+	fatal("Not allowed to clone/snapshot a deprecated image!");
+    }
+
+    #
     # Only project members or an admin can snapshot a noclone image.
     #
     if ($image->noclone() &&
@@ -469,6 +477,14 @@ elsif ($base_image->IsSystemImage()) {
     if ($experiment->geniflags()) {
 	$global = 1;
     }
+}
+
+#
+# Do not allow cloning a deprecated image, even if its deprecated with
+# warning only.
+#
+if ($base_image->deprecated() && !$this_user->IsAdmin()) { 
+    fatal("Not allowed to clone/snapshot a deprecated image!");
 }
 
 #
