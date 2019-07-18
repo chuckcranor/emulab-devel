@@ -40,7 +40,7 @@ sub usage()
  
     exit(-1);
 }
-my $optlist   = "dn:";
+my $optlist  = "dn:";
 my $debug    = 0;
 my $reponame;
 
@@ -217,45 +217,55 @@ sub Delete()
 #
 sub Update()
 {
+    my $command;
+    
     if (! -e "$REPODIR/$reponame") {
 	fatal("Repository does not exist.");
     }
     chdir("$REPODIR/$reponame") or
 	fatal("Could not chdir to $REPODIR/$reponame");
 
-    #
-    # When not using a bare repo, we have to force the fetch to update
-    # the current banch.
-    #
-    my $fopt = (-e ".git" ? "-u -f" : "");
-
-    # -p prunes deleted branches. But tags are not pruned. 
-    my $status = RunCommand("$GIT fetch $fopt -p -t origin '+refs/*:refs/*'");
+    if (-e ".git") {
+	$command = "$GIT fetch -q";
+    }
+    else {
+	$command = "$GIT fetch -q -u -f -t origin '+refs/*:refs/*'";
+    }
+    my $status = RunCommand($command);
     if ($status) {
 	fatal("Not able to update repo");
-    }
-
-    #
-    # Local checkout, must merge. This is done when we have submodules.
-    #
-    if (-e ".git") {
-	my $status = RunCommand("$GIT merge");
-	if ($status) {
-	    fatal("Not able to fetch repo");
-	}
-	$status = RunCommand("$GIT submodule update");
-	if ($status) {
-	    fatal("Not able to update submodules");
-	}
     }
     my $current_refspec = GetDefaultBranch($reponame);
     my $remote_refspec  = GetRemoteDefaultBranch($reponame);
 
     #
+    # Local checkout.
+    #
+    if (-e ".git") {
+	$command = "$GIT merge -q origin/$current_refspec";
+	my $status = RunCommand($command);
+	if ($status) {
+	    fatal("Not able to merge current branch");
+	}
+	if (-e ".gitmodules") {
+	    $status = RunCommand("$GIT submodule update");
+	    if ($status) {
+		fatal("Not able to update submodules");
+	    }
+	}
+    }
+
+    #
     # Update local default branch if the remote has switched it.
     #
     if ($current_refspec ne $remote_refspec) {
-	system("$GIT symbolic-ref --short HEAD '$remote_refspec'");
+	if (-e ".git") {
+	    $command = "$GIT checkout -q $remote_refspec";
+	}
+	else {
+	    $command = "$GIT symbolic-ref --short HEAD '$remote_refspec'";
+	}
+	system($command);
 	if ($?) {
 	    fatal("Could not update default branch tp $remote_refspec");
 	}
@@ -303,7 +313,7 @@ sub GetDefaultBranch($)
     else {
 	fatal("Illegal default branch name: $branch");
     }
-    return "refs/heads/$branch";
+    return (-e ".git" ? $branch : "refs/heads/$branch");
 }
 
 #
@@ -348,7 +358,7 @@ sub GetRemoteDefaultBranch($)
     if (!defined($branch)) {
 	fatal("Could not get default branch from remote repo");
     }
-    return "refs/heads/$branch";
+    return (-e ".git" ? $branch : "refs/heads/$branch");
 }
 
 #
@@ -357,6 +367,9 @@ sub GetRemoteDefaultBranch($)
 sub RunCommand($)
 {
     my ($cmd) = @_;
+    if ($debug) {
+	print STDERR "$cmd\n";
+    }
     
     #
     # Fork a child process to run git in.

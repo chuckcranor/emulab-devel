@@ -1680,7 +1680,7 @@ sub SetRepo($$$$$$)
 	"cd repository && " .
 	"git config --add core.sharedRepository group && ".
 	"git checkout $repohash ";
-    if ($reporef =~ m"^(refs/|)heads/(.+)") {
+    if (defined($reporef) && $reporef =~ m"^(refs/|)heads/(.+)") {
 	my $branchname = $2;
 	$command .= "&& git branch -ft $branchname origin/$branchname" .
 	    "&& git checkout -B $branchname HEAD ";

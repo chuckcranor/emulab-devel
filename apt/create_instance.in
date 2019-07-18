@@ -405,7 +405,7 @@ if ($profile->repourl()) {
     }
     else {
 	# Otherwise we are instantiating whatever the profile itself references.
-	$reporef  = "refs/heads/master";
+	#$reporef  = "refs/heads/master";
 	$repohash = $profile->repohash();
 	$paramdefs= $profile->paramdefs();
     }
@@ -893,7 +893,7 @@ if ($profile->repourl()) {
 	$blob->{"script"}  = $script;
     }
     $blob->{"repourl"}   = $profile->repourl();
-    $blob->{"reporef"}   = $reporef;
+    $blob->{"reporef"}   = $reporef ? $reporef : "";
     $blob->{"repohash"}  = $repohash;
     $blob->{"paramdefs"} = $paramdefs if (defined($paramdefs));
 }

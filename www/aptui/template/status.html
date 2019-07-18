@@ -103,6 +103,13 @@ pre {
 		(<%= expinfo.repohash %>)
 	      </td>
 	    </tr>
+	  <% } else if (expinfo.repohash) { %>
+	    <tr>
+	      <td class='border-none'>RepoHash:</td>
+	      <td class='border-none'>
+		<%= expinfo.repohash %>
+	      </td>
+	    </tr>
 	  <% } %>
 	  <% if (isadmin) { %>
 	    <tr>
