@@ -258,12 +258,16 @@ sub DumpImage($)
 		    $xmlfields{'architecture'} = "x86_64";
 		}
 	    }
+	    if ($clientvers > 4) {
+		$xmlfields{'size'} = $image->size()
+		    if ($image->size());
+	    }
 	    
 	    #
 	    # Send along the history so that the caller can get all
 	    # the versions, which is important for delta based images.
 	    #
-	    if ($clientvers > 4) {
+	    if ($clientvers > 5) {
 		#
 		# Send the non-version metadata url so that the other side
 		# can have it for when an experiment wants whatever the
@@ -280,7 +284,7 @@ sub DumpImage($)
 		    if (defined($image->deltahash()) &&
 			$image->deltahash() ne "");
 
-		if ($clientvers > 5) {
+		if ($clientvers > 6) {
 		    $xmlfields{'size'} = $image->size()
 			if ($image->size());
 		    $xmlfields{'deltasize'} = $image->deltasize()

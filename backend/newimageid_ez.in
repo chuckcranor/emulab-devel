@@ -233,6 +233,7 @@ my %xmlfields =
      "hash",		=> ["hash",		$SLOT_ADMINONLY],
      "deltahash",	=> ["deltahash",	$SLOT_ADMINONLY],
      "nextosid",	=> ["nextosid",		$SLOT_ADMINONLY],
+     "size",		=> ["size",		$SLOT_ADMINONLY],
      "def_parentosid",	=> ["def_parentosid",	$SLOT_OPTIONAL],
      "isdataset",	=> ["isdataset",	$SLOT_OPTIONAL],
      "lba_low",    	=> ["lba_low",		$SLOT_OPTIONAL],
