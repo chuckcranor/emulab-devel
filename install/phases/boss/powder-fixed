@@ -32,7 +32,9 @@ my %TYPEFILES    = ("nuc8650" =>
 		    "nuc8559" =>
 		        "$TOP_SRCDIR/install/$TARGETSYS_DIR/nuc8559.xml",
 		    "iris030" =>
-		    "$TOP_SRCDIR/install/$TARGETSYS_DIR/iris030.xml");
+		    "$TOP_SRCDIR/install/$TARGETSYS_DIR/iris030.xml",
+		    "nexus5" =>
+		    "$TOP_SRCDIR/install/$TARGETSYS_DIR/nexus5.xml");
 my $TELEGRAFCONF = "/usr/local/etc/telegraf.conf";
 my $TELEGRAFPSWD = "$PREFIX/etc/targetsys/telegraf.pswd";
 
