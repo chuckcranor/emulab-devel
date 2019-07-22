@@ -31,8 +31,8 @@ sub DoUpdate($$$)
 	    "  UNIQUE KEY `url` (`metadata_url`) ".
 	    ") ENGINE=MyISAM DEFAULT CHARSET=latin1");
     }
-    if (DBSlotExists("apt_aggregates", "prestageimages")) {
-	DBQueryFatal("update table apt_aggregates add ".
+    if (!DBSlotExists("apt_aggregates", "prestageimages")) {
+	DBQueryFatal("alter table apt_aggregates add ".
 		     "  `prestageimages` tinyint(1) NOT NULL default '0' ".
 		     "     after nolocalimages");
     }
