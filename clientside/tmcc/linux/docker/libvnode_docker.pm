@@ -227,6 +227,13 @@ my $COPY_OPTIMIZE = 1;
 # Is this our customized version of Docker?
 #
 my $ISOURDOCKER = 0;
+
+#
+# Is this our customized version with support for multiple networks
+# (ipv4 subnets) on a single bridged network?
+#
+my $ISMULTINETWORK = 0;
+
 #
 # Some commands/subsystems have evolved in incompatible ways over time,
 # these vars keep track of such things.
@@ -350,6 +357,13 @@ my $JAILCTRLNETMASK = "255.240.0.0";
 # control net has a lexical name at the beginning of everything.
 #
 my $DOCKERCNET = "_dockercnet";
+#
+# Docker does not allow you to map multiple networks to a single bridge.
+# However, if $ISMULTINETWORK is true later on, we are running our
+# custom version which does.  In that case, we *can* support public
+# control net addresses for containers; without it, we cannot.
+#
+my $DOCKERCNETPUB = "_dockercnetpub";
 
 #
 # Some of the core dirs for Emulabization existing Docker images.
@@ -791,6 +805,13 @@ sub ensureDockerInstalled()
 	if ($rc == 0) {
 	    $ISOURDOCKER = 1;
 	    TBDebugTimeStamp("init: ISOURDOCKER=1");
+	}
+    }
+    if ($ISOURDOCKER) {
+	my $rc = system('grep -q MultiNetwork `which dockerd`');
+	if ($rc == 0) {
+	    $ISMULTINETWORK = 1;
+	    TBDebugTimeStamp("init: ISMULTINETWORK=1");
 	}
     }
 
@@ -1448,6 +1469,12 @@ sub init($)
     if ($rc == 0) {
 	$ISOURDOCKER = 1;
 	TBDebugTimeStamp("init: ISOURDOCKER=1");
+
+	$rc = system('grep -q MultiNetwork `which dockerd`');
+	if ($rc == 0) {
+	    $ISMULTINETWORK = 1;
+	    TBDebugTimeStamp("init: ISMULTINETWORK=1");
+	}
     }
 
     return 0;
@@ -1810,7 +1837,7 @@ sub rootPreConfig($;$)
 	    # Next, we create a docker macvlan network to front for the
 	    # virt control net.
 	    #
-	    TBDebugTimeStamp("creating macvlan docker network $DOCKERCNET");
+	    TBDebugTimeStamp("creating macvlan Docker network $DOCKERCNET");
 	    ($code,$content) = getClient()->network_create_macvlan(
 		$DOCKERCNET,"${VCNET_NET}/${VCNET_SLASHMASK}",$alias_ip,
 		$cnet_iface);
@@ -1820,13 +1847,30 @@ sub rootPreConfig($;$)
 	    }
 	}
 	else {
-	    TBDebugTimeStamp("creating bridged docker network $DOCKERCNET");
+	    my $argref = undef;
+	    if ($ISMULTINETWORK) {
+		$argref = {
+		    "com.docker.network.bridge.multi_network" => "True"
+		};
+	    }
+	    TBDebugTimeStamp("creating bridged Docker network $DOCKERCNET");
 	    ($code,$content) = getClient()->network_create_bridge(
 		$DOCKERCNET,"${VCNET_NET}/${VCNET_SLASHMASK}",$alias_ip,
-		$DOCKERCNET);
+		$DOCKERCNET,$argref);
 	    if ($code) {
 		fatal("failed to create bridged Docker $DOCKERCNET control net:".
 		      " $content");
+	    }
+	    if ($ISMULTINETWORK) {
+		TBDebugTimeStamp("creating bridged public Docker network".
+				 $DOCKERCNETPUB);
+		($code,$content) = getClient()->network_create_bridge(
+		    $DOCKERCNETPUB,"$cnet_net/$cnet_maskbits",$cnet_ip,
+		    $DOCKERCNET,$argref);
+		if ($code) {
+		    fatal("failed to create public bridged Docker network".
+			  "$DOCKERCNET control net: $content");
+		}
 	    }
 	}
     }
@@ -3401,12 +3445,16 @@ sub vnodeCreate($$$$)
     my %cnetconfig = (
 	"IPAMConfig" => { "IPv4Address" => $ctrlip}
     );
-    $args{"NetworkingConfig"}{"EndpointsConfig"}{$DOCKERCNET} = \%cnetconfig;
+    my $dcn = $DOCKERCNET;
+    if ($ISMULTINETWORK && ($ctrlnetwork eq $host_net)) {
+	$dcn = $DOCKERCNETPUB;
+    }
+    $args{"NetworkingConfig"}{"EndpointsConfig"}{$dcn} = \%cnetconfig;
     # This NetworkMode goo is apparently necessary to set the MacAddress
     # of the container's initial network.  Go figure -- it's not
     # documented this way -- but this is the way the CLI does it and it
     # works.  Needless to say, nothing else works!
-    $args{"HostConfig"}{"NetworkMode"} = $DOCKERCNET;
+    $args{"HostConfig"}{"NetworkMode"} = $dcn;
     $args{"MacAddress"} = $fmac;
     $args{"Hostname"} = "$vname.$longdomain";
     #
@@ -3837,7 +3885,7 @@ sub vnodePreConfigExpNetwork($$$$)
 	my ($code,$content,$resp) = getClient()->network_connect_container(
 	    $ifc->{BRIDGE},$vnode_id,$ip,$maskbits,$fmac);
 	if ($code) {
-	    fatal("Could not connect $vnode_id to $DOCKERCNET".
+	    fatal("Could not connect $vnode_id to $ifc->{BRIDGE}".
 		  " ($code,$content); aborting!");
 	}
     }
