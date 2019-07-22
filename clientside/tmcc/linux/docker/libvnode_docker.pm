@@ -2508,7 +2508,7 @@ sub rootPreConfigNetwork($$$$)
 	    my $maskbits = 0;
 	    my $cval = unpack("N",$netmask);
 	    for (my $i = 31; $i >= 0; --$i) {
-		last if (($cval & 0x1) == 0);
+		last if (($cval & 0x1) == 1);
 		++$maskbits;
 		$cval = $cval >> 1;
 	    }
@@ -2527,7 +2527,7 @@ sub rootPreConfigNetwork($$$$)
 	    # a shared LAN.  Anyway, we'll just document this too...
 	    #
 	    $brs{$brname}{GW} =
-		inet_ntoa(pack("N",unpack("N",$ipaddr | $netmask) - 1));
+		inet_ntoa(pack("N",unpack("N",$ipaddr | ~$netmask) - 1));
 	}
 	else {
 	    warn("Fatal: all Docker network interfaces *must* have an".
