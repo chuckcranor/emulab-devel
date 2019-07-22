@@ -40,6 +40,7 @@ $(function ()
 	" <tr><td>d</td><td>Datasets</td></tr>" +
 	" <tr><td>M</td><td>Monitored</td></tr>" +
 	" <tr><td>I</td><td>No Local Images</td></tr>" +
+	" <tr><td>P</td><td>Prestage Images</td></tr>" +
 	"</table>";
 
     function RenderPage(status)
@@ -53,6 +54,7 @@ $(function ()
 	    flags += (value.datasets      ? "d" : "-");
 	    flags += (value.monitor       ? "M" : "-");
 	    flags += (value.nolocalimages ? "I" : "-");
+	    flags += (value.prestageimages ? "P" : "-");
 	    value.flags = flags;
 
 	    // Ratio

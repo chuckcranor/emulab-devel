@@ -196,24 +196,25 @@ sub DoShow()
 	fatal("No such aggregate")
 	    if (!defined($aggregate));
     }
-    print "Name:          " . $aggregate->name() . "\n";
-    print "NickName:      " . $aggregate->nickname() . "\n";
-    print "Abbrev:        " . $aggregate->abbreviation() . "\n"; 
-    print "URN:           " . $aggregate->urn() . "\n";
-    print "URL:           " . $aggregate->weburl() . "\n";
-    print "Disabled:      " . ($aggregate->disabled() ? "Yes" : "No") . "\n";
-    print "Admin:         " . ($aggregate->adminonly() ? "Yes" : "No") . "\n";
-    print "Federate:      " . ($aggregate->isfederate() ? "Yes" : "No") . "\n";
-    print "NoUpdate:      " . ($aggregate->noupdate() ? "Yes" : "No") . "\n";
-    print "NoMonitor:     " . ($aggregate->nomonitor() ? "Yes" : "No") . "\n";
-    print "Deferrable:    " . ($aggregate->deferrable() ? "Yes" : "No") . "\n";
-    print "Datasets:      " . ($aggregate->has_datasets() ? "Yes" : "No") ."\n";
-    print "Reservations:  " . ($aggregate->reservations() ? "Yes" : "No") ."\n";
-    print "LocalImages:   " . ($aggregate->nolocalimages() ? "No" : "Yes")."\n";
-    print "PanicPowerOff: " . ($aggregate->panicpoweroff() ? "Yes" : "No")."\n";
-    print "Portals:       " . $aggregate->portals() . "\n";
-    print "Use Feature:   " . ($aggregate->canuse_feature() || "") . "\n";
-    print "Status:        " . $aggregate->status() . "\n";
+    print "Name:            " . $aggregate->name() . "\n";
+    print "NickName:        " . $aggregate->nickname() . "\n";
+    print "Abbrev:          " . $aggregate->abbreviation() . "\n"; 
+    print "URN:             " . $aggregate->urn() . "\n";
+    print "URL:             " . $aggregate->weburl() . "\n";
+    print "Disabled:        " . ($aggregate->disabled() ? "Yes" : "No") . "\n";
+    print "Admin:           " . ($aggregate->adminonly() ? "Yes" : "No") . "\n";
+    print "Federate:        " . ($aggregate->isfederate() ? "Yes" : "No") . "\n";
+    print "NoUpdate:        " . ($aggregate->noupdate() ? "Yes" : "No") . "\n";
+    print "NoMonitor:       " . ($aggregate->nomonitor() ? "Yes" : "No") . "\n";
+    print "Deferrable:      " . ($aggregate->deferrable() ? "Yes" : "No") . "\n";
+    print "Datasets:        " . ($aggregate->has_datasets() ? "Yes" : "No") ."\n";
+    print "Reservations:    " . ($aggregate->reservations() ? "Yes" : "No") ."\n";
+    print "LocalImages:     " . ($aggregate->nolocalimages() ? "No" : "Yes")."\n";
+    print "PrestageImages:  " . ($aggregate->prestageimages() ? "Yes":"No")."\n";
+    print "PanicPowerOff:   " . ($aggregate->panicpoweroff() ? "Yes" : "No")."\n";
+    print "Portals:         " . $aggregate->portals() . "\n";
+    print "Use Feature:     " . ($aggregate->canuse_feature() || "") . "\n";
+    print "Status:          " . $aggregate->status() . "\n";
     return 0;
 }
 
@@ -282,6 +283,11 @@ sub DoFlags()
 	};
 	/^localimages$/ && do {
 	    $aggregate->Update({"nolocalimages" => $onoff ? 0 : 1}) == 0
+		or fatal("Could not update flag");
+	    last;
+	};
+	/^prestageimages$/ && do {
+	    $aggregate->Update({"prestageimages" => $onoff ? 1 : 0}) == 0
 		or fatal("Could not update flag");
 	    last;
 	};
