@@ -149,6 +149,7 @@ CREATE TABLE `apt_aggregates` (
   `noupdate` tinyint(1) NOT NULL default '0',
   `nomonitor` tinyint(1) NOT NULL default '0',
   `nolocalimages` tinyint(1) NOT NULL default '0',
+  `prestageimages` tinyint(1) NOT NULL default '0',
   `deferrable` tinyint(1) NOT NULL default '0',
   `updated` datetime NOT NULL default '0000-00-00 00:00:00',
   `weburl` tinytext,
@@ -2778,6 +2779,36 @@ CREATE TABLE `image_updates` (
   `url` varchar(255) NOT NULL default '',
   `credential_string` text,
   PRIMARY KEY  (`imageid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `image_pending_imports`
+--
+
+DROP TABLE IF EXISTS `image_pending_imports`;
+CREATE TABLE `image_pending_imports` (
+  `idx` int(10) unsigned NOT NULL auto_increment,
+  `imagename` varchar(30) NOT NULL default '',
+  `imageid` int(8) unsigned default NULL,
+  `imageuuid` varchar(40) default NULL,
+  `uid` varchar(8) default NULL,
+  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `uid_urn` varchar(128) default NULL,
+  `pid` varchar(48) default NULL,
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `gid` varchar(32) default NULL,
+  `gid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `created` datetime default NULL,
+  `type` enum('import','copyback','relocation') default NULL,
+  `locked` datetime default NULL,
+  `locker_pid` int(11) default '0',
+  `failed` datetime default NULL,
+  `failure_message` text,
+  `remote_urn` varchar(128) default NULL,
+  `metadata_url` varchar(256) default '',
+  `credential_string` text,
+  PRIMARY KEY  (`idx`),
+  UNIQUE KEY `url` (`metadata_url`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
