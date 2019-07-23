@@ -235,6 +235,11 @@ my $ISOURDOCKER = 0;
 my $ISMULTINETWORK = 0;
 
 #
+# Does this docker support the DOCKER-USER iptables chain?
+#
+my $HASDOCKERUSERCHAIN = 0;
+
+#
 # Some commands/subsystems have evolved in incompatible ways over time,
 # these vars keep track of such things.
 #
@@ -813,6 +818,11 @@ sub ensureDockerInstalled()
 	    $ISMULTINETWORK = 1;
 	    TBDebugTimeStamp("init: ISMULTINETWORK=1");
 	}
+	$rc = system('grep -q DOCKER-USER `which dockerd`');
+	if ($rc == 0) {
+	    $HASDOCKERUSERCHAIN = 1;
+	    TBDebugTimeStamp("init: HASDOCKERUSERCHAIN=1");
+	}
     }
 
     #
@@ -877,8 +887,7 @@ sub ensureDockerInstalled()
     }
 
     # Check to ensure we're doing the right thing w.r.t. iptables:
-    my $have_ipt_docker_user = (mysystem("$IPTABLES -L | grep DOCKER-USER") == 0);
-    my $iptval = ($have_ipt_docker_user) ? JSON::PP::true : JSON::PP::false;
+    my $iptval = ($HASDOCKERUSERCHAIN) ? JSON::PP::true : JSON::PP::false;
     my $ichanged = 0;
     if (!defined($json) || !exists($json->{"iptables"})
 	|| $json->{'iptables'} != $iptval) {
@@ -905,7 +914,7 @@ sub ensureDockerInstalled()
 
 	mysystem2("service docker stop");
 
-	if ($ichanged && !$have_ipt_docker_user) {
+	if ($ichanged && !$HASDOCKERUSERCHAIN) {
 	    #
 	    # Make sure all the Docker stuff is undone, if this is not
 	    # our Docker.
@@ -1475,6 +1484,11 @@ sub init($)
 	    $ISMULTINETWORK = 1;
 	    TBDebugTimeStamp("init: ISMULTINETWORK=1");
 	}
+	$rc = system('grep -q DOCKER-USER `which dockerd`');
+	if ($rc == 0) {
+	    $HASDOCKERUSERCHAIN = 1;
+	    TBDebugTimeStamp("init: HASDOCKERUSERCHAIN=1");
+	}
     }
 
     return 0;
@@ -1897,9 +1911,17 @@ sub rootPreConfig($;$)
     mysystem2("$IPTABLES -N EMULAB-ISOLATION");
     mysystem("$IPTABLES -F EMULAB-ISOLATION");
     mysystem("$IPTABLES -A EMULAB-ISOLATION -j RETURN");
-    if (mysystem("$IPTABLES -L | grep DOCKER-USER") == 0) {
+    if ($HASDOCKERUSERCHAIN) {
+	if (mysystem2("$IPTABLES -L DOCKER-USER") == 1) {
+	    #
+	    # There seems to be bugs where DOCKER-USER does not exist
+	    # sometimes.  So make it exist, and set up the jump rules.
+	    #
+	    mysystem("$IPTABLES -N DOCKER-USER");
+	    mysystem("$IPTABLES -A FORWARD -j DOCKER-USER");
+	}
 	mysystem("$IPTABLES -F DOCKER-USER");
-	mysystem("$IPTABLES -A DOCKER-USER -j EMULAB-ISOLATION");
+	mysystem("$IPTABLES -I DOCKER-USER -j EMULAB-ISOLATION");
 	#
 	# In more recent versions of Docker, by default, bridge networks
 	# are not allowed to leave the host (i.e. via masquerading).
@@ -1907,6 +1929,7 @@ sub rootPreConfig($;$)
 	#
 	mysystem("$IPTABLES -A DOCKER-USER -o docker0 -j ACCEPT");
 	mysystem("$IPTABLES -A DOCKER-USER -o _dockercnet -j ACCEPT");
+	mysystem("$IPTABLES -A DOCKER-USER -j RETURN");
     }
     else {
 	mysystem("$IPTABLES -I FORWARD -j EMULAB-ISOLATION");
