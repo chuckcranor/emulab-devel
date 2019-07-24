@@ -458,6 +458,8 @@ function SPITFORM($formfields, $newuser, $errors)
     REQUIRE_JACKSMOD();
     REQUIRE_JACKS();
     REQUIRE_JQUERY_STEPS();
+    # For the new ppwizardstart and Powder
+    AddLibrary("js/powder-types.js");
     AddLibrary("js/resgraphs.js");
     AddLibrary("js/gitrepo.js");
     AddLibrary("js/paramsets.js");

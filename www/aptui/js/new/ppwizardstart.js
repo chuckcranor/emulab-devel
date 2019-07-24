@@ -497,13 +497,16 @@ $(function () {
 	    }
 	    return html;
 	}
-	function GenerateSelect(name, fieldIndex, details, value)
+	function GenerateSelect(name, fieldIndex, details, value, legalValues)
 	{
+	    if (legalValues === undefined) {
+		legalValues = details.legalValues;
+	    }
 	    var html = selectTemplate({
 		"fieldid"    : fieldIndex,
 		"fieldname"  : details.name,
 		"name"       : name,
-		"options"    : details.legalValues,
+		"options"    : legalValues,
 		"prompt"     : details.description,
 		"value"      : value,
 		"multivalue" : details.multiValue,
@@ -1068,6 +1071,14 @@ $(function () {
 	    }
 	    else if (type == "nodetype") {
 		html = GenerateNodeType(name, fieldIndex, details, value);
+	    }
+	    else if (type == "fixedendpoint") {
+		html = GenerateSelect(name, fieldIndex, details, value,
+				     window.powderTypes.fixedEndpoints);
+	    }
+	    else if (type == "basestation") {
+		html = GenerateSelect(name, fieldIndex, details, value,
+				      window.powderTypes.baseStations);
 	    }
 	    else if (details.legalValues) {
 		html = GenerateSelect(name, fieldIndex, details, value);

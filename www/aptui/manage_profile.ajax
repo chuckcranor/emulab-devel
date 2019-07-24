@@ -1108,7 +1108,8 @@ function CheckBindingType($value, $type, &$error)
         }
     }
     elseif ($type == "string" || $type == "image" || $type == "aggregate" ||
-            $type == "nodetype") {
+            $type == "nodetype" ||
+            $type == "fixedendpoint" || $type == "basestation") {
         if (!TBcheck_dbslot($value, "default", "html_fulltext",
                             TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
             $error = "Invalid value: " . TBFieldErrorString();
