@@ -1612,10 +1612,29 @@ sub os_create_storage_element($$$)
 	#
 	# Perform one time iSCSI operations
 	#
-	if (mysystem("$ISCSI -m node -T $uuid -p $hostip -o new $redir") ||
-	    mysystem("$ISCSI -m node -T $uuid -p $hostip -o update -n node.startup -v manual $redir") ||
-	    mysystem("$ISCSI -m node -T $uuid -p $hostip -l $redir")) {
-	    warn("*** Could not perform first-time initialization of block store $bsid (uuid=$uuid)$logmsg\n");
+	if (mysystem("$ISCSI -m node -T $uuid -p $hostip -o new $redir")) {
+	    warn("*** $bsid: first-time init failed; Could not create DB record.\n");
+	    return 0;
+	}
+	if (mysystem("$ISCSI -m node -T $uuid -p $hostip -o update -n node.startup -v manual $redir")) {
+	    warn("*** $bsid: first-time init failed; Could not update DB record.\n");
+	    return 0;
+	}
+	    
+	#
+	# XXX It may take some time for the server to respond, so retry the
+	# initial operation for awhile.
+	#
+	my $rv = 0;
+	for (my $tries = 0; $tries < 3; $tries++) {
+	    $rv = mysystem("$ISCSI -m node -T $uuid -p $hostip -l $redir");
+	    # exit code 8 indicates timeout
+	    last
+		if ($rv != 0x800);
+	    warn("*** $bsid: could not connect to portal $hostip, retrying...\n");
+	}
+	if ($rv) {
+	    warn("*** $bsid: first-time init failed; Could not login session.\n");
 	    return 0;
 	}
 
