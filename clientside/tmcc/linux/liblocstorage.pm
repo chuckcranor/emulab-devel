@@ -1626,7 +1626,7 @@ sub os_create_storage_element($$$)
 	# initial operation for awhile.
 	#
 	my $rv = 0;
-	for (my $tries = 0; $tries < 3; $tries++) {
+	for (my $tries = 0; $tries < 5; $tries++) {
 	    $rv = mysystem("$ISCSI -m node -T $uuid -p $hostip -l $redir");
 	    # exit code 8 indicates timeout
 	    last
