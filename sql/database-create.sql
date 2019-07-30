@@ -4679,6 +4679,11 @@ CREATE TABLE `project_reservations` (
   `end` datetime default NULL,
   `active` tinyint(1) NOT NULL default '0',
   `terminal` tinyint(1) NOT NULL default '0',
+  `approved` datetime DEFAULT NULL,
+  `approver` varchar(8) DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
+  `uuid` varchar(40) NOT NULL default '',
+  `notes` mediumtext,
   PRIMARY KEY (`pid_idx`,`name`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -90,6 +90,7 @@ REQUIRE_SUP();
 REQUIRE_MOMENT();
 AddLibrary("js/resgraphs.js");
 AddTemplateList(array("list-reservations", "reservation-list",
+                      "prereservation-list",
                       "confirm-modal", "resusage-list", "resusage-graph",
                       "oops-modal", "waitwait-modal"));
 SPITREQUIRE("js/list-reservations.js",

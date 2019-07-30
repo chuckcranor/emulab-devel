@@ -26,6 +26,9 @@
  .tablesorter-green th.sorter-false .tablesorter-header-inner {
      padding-left: 4px;
  }
+ .reservation-panel, .prereservation-panel {
+     margin-bottom: 1px;
+ }
 </style>
 <div>
   <div id='spinner'>
@@ -36,9 +39,9 @@
     <a href='reserve.php'>create</a> one?
   </div>
   <% _.each(amlist, function(urn, name) { %>
-    <div class="row hidden" id="<%- name %>">
+    <div class="row hidden" id="<%- name %>" style="margin-bottom: 20px;">
       <div class='col-sm-12 col-sm-offset-0'>
-	<div class='panel panel-default'>
+	<div class='panel panel-default reservation-panel hidden'>
 	  <div class="panel-heading panel-heading-list">
 	    <h5>
 	      <center><%- name %> Reservations</center>
@@ -47,6 +50,14 @@
 	  <div class='panel-body panel-body-dashboard'>
 	    <div class="text-center text-danger hidden res-error"></div>
 	  </div>
+	</div>
+	<div class='panel panel-default prereservation-panel hidden'>
+	  <div class="panel-heading panel-heading-list">
+	    <h5>
+	      <center><%- name %> Pre-Reservations</center>
+	    </h5>
+	  </div>
+	  <div class='panel-body panel-body-dashboard'></div>
 	</div>
       </div>
     </div>

@@ -4018,7 +4018,8 @@ sub CheckPreReserve($$$)
 		    "left join project_reservations on ".
 		    "     project_reservations.pid=nodes.reserved_pid and ".
 		    "     project_reservations.name=nodes.reservation_name ".
-		    "where nodes.node_id='$node_id'");
+		    "where nodes.node_id='$node_id' and ".
+		    "      project_reservations.approved is not null");
 
     # numrows would be zero if the node was suddenly deleted.
     goto done
@@ -4053,8 +4054,9 @@ sub CheckPreReserve($$$)
     # Find only active unfilled reservations.
     $query_result =
 	DBQueryWarn("select pid,count,name from project_reservations ".
-		    "where active=1 and terminal=0 and count>0 and ".
-		    "       (types is null or ".
+		    "where approved is not null and ".
+		    "      active=1 and terminal=0 and count>0 and ".
+		    "      (types is null or ".
 		    "        FIND_IN_SET('$type', types)) ".
 		    "order by priority desc, created asc ");
 

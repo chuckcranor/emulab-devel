@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -244,6 +244,15 @@ function Do_Delete()
     global $ajax_args;
     global $TB_PROJECT_CREATEEXPT, $suexec_output;
 
+    if (!isset($ajax_args["type"])) {
+	SPITAJAX_ERROR(-1, "Missing reservation type");
+	return -1;
+    }
+    $type = $ajax_args["type"];
+    if ($type != "reservation" && $type != "prereservation") {
+	SPITAJAX_ERROR(-1, "Invalid reservation type");
+	return -1;
+    }
     if (!isset($ajax_args["uuid"])) {
 	SPITAJAX_ERROR(-1, "Missing uuid");
 	return -1;
@@ -284,7 +293,7 @@ function Do_Delete()
     #
     # Admins can add an optional cause when denying a reservation.
     #
-    $opt = "";
+    $opt = " -t $type ";
     if (ISADMIN()) {
         if (isset($ajax_args["reason"])) {
             $reason  = $ajax_args["reason"];
@@ -299,7 +308,7 @@ function Do_Delete()
             fwrite($fp, $reason);
             fclose($fp);
             chmod($reasonfile, 0666);
-            $opt = "-N $reasonfile";
+            $opt .= "-N $reasonfile";
         }
     }
     $webtask  = WebTask::CreateAnonymous();
@@ -311,6 +320,7 @@ function Do_Delete()
                      "webmanage_reservations -a '$urn' ".
                      "-t " . $webtask->task_id() . " delete $opt $pid $uuid",
                      SUEXEC_ACTION_IGNORE);
+
     if (isset($reasonfile)) {
         unlink($reasonfile);
     }
@@ -341,6 +351,15 @@ function Do_InfoOrWarn($warning = false)
     global $TB_PROJECT_CREATEEXPT, $suexec_output, $APTBASE, $APTMAIL;
     $cancel = 0;
 
+    if (!isset($ajax_args["type"])) {
+	SPITAJAX_ERROR(-1, "Missing reservation type");
+	return -1;
+    }
+    $type = $ajax_args["type"];
+    if ($type != "reservation" && $type != "prereservation") {
+	SPITAJAX_ERROR(-1, "Invalid reservation type");
+	return -1;
+    }
     if (!isset($ajax_args["uuid"])) {
 	SPITAJAX_ERROR(-1, "Missing uuid");
 	return -1;
@@ -428,7 +447,7 @@ function Do_InfoOrWarn($warning = false)
     # we do not want spit out an email message each time we retry.
     #
     if ($cancel) {
-        if (Do_CancelAux($uuid, $aggregate, 0, time() + (3600 * 24))) {
+        if (Do_CancelAux($type, $uuid, $aggregate, 0, time() + (3600 * 24))) {
             return;
         }
     }
@@ -457,6 +476,15 @@ function Do_Approve()
     global $ajax_args;
     global $TB_PROJECT_CREATEEXPT, $suexec_output, $PORTAL_GENESIS;
 
+    if (!isset($ajax_args["type"])) {
+	SPITAJAX_ERROR(-1, "Missing reservation type");
+	return -1;
+    }
+    $type = $ajax_args["type"];
+    if ($type != "reservation" && $type != "prereservation") {
+	SPITAJAX_ERROR(-1, "Invalid reservation type");
+	return -1;
+    }
     if (!isset($ajax_args["uuid"])) {
 	SPITAJAX_ERROR(-1, "Missing uuid");
 	return -1;
@@ -483,7 +511,7 @@ function Do_Approve()
 	SPITAJAX_ERROR(-1, "Only administrators can approve reservations");
 	return;
     }
-    $opt = "";
+    $opt = "-t $type ";
     if (isset($ajax_args["message"])) {
         $message  = $ajax_args["message"];
 
@@ -497,7 +525,7 @@ function Do_Approve()
         fwrite($fp, $message);
         fclose($fp);
         chmod($messagefile, 0666);
-        $opt = "-F $messagefile";
+        $opt .= "-F $messagefile";
     }
     $webtask  = WebTask::CreateAnonymous();
     $this_uid = $this_user->uid();
@@ -542,6 +570,15 @@ function Do_Cancel()
 	SPITAJAX_ERROR(-1, "Only administrators can cancel reservations");
 	return;
     }
+    if (!isset($ajax_args["type"])) {
+	SPITAJAX_ERROR(-1, "Missing reservation type");
+	return -1;
+    }
+    $type = $ajax_args["type"];
+    if ($type != "reservation" && $type != "prereservation") {
+	SPITAJAX_ERROR(-1, "Invalid reservation type");
+	return -1;
+    }
     if (!isset($ajax_args["uuid"])) {
 	SPITAJAX_ERROR(-1, "Missing uuid");
 	return -1;
@@ -568,13 +605,13 @@ function Do_Cancel()
         SPITAJAX_ERROR(-1, "No such cluster");
         return;
     }
-    if (Do_CancelAux($uuid, $aggregate, 1, null)) {
+    if (Do_CancelAux($type, $uuid, $aggregate, 1, null)) {
         return;
     }
     SPITAJAX_RESPONSE(0);
 }
 
-function Do_CancelAux($uuid, $aggregate, $clear, $when)
+function Do_CancelAux($type, $uuid, $aggregate, $clear, $when)
 {
     global $this_user;
     global $TB_PROJECT_CREATEEXPT, $suexec_output, $PORTAL_GENESIS;
@@ -592,7 +629,7 @@ function Do_CancelAux($uuid, $aggregate, $clear, $when)
     $retval = SUEXEC($this_uid, "nobody",
                      "webmanage_reservations -a '$urn' ".
                      "-t " . $webtask->task_id() .
-                     "   cancel -p $PORTAL_GENESIS $opts $uuid",
+                     "   cancel -p $PORTAL_GENESIS -t $type $opts $uuid",
                      SUEXEC_ACTION_IGNORE);
 
     if ($retval) {

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2016-2018 University of Utah and the Flux Group.
+# Copyright (c) 2016-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -620,7 +620,8 @@ sub LookupAll($$;$$)
 				"n.node_id=nr.node_id LEFT OUTER JOIN " .
 				"project_reservations AS pr ON " .
 				"n.reserved_pid=pr.pid AND " .
-				"n.reservation_name=pr.name " .
+				"n.reservation_name=pr.name AND " .
+	                        "pr.approved is not null ".
 				"LEFT OUTER JOIN" .
 				"`geni-cm`.geni_slices AS s ON " .
 				"e.eid_uuid=s.uuid " .
@@ -647,7 +648,8 @@ sub LookupAll($$;$$)
 				"LEFT OUTER JOIN " .
 				"project_reservations AS pr ON " .
 				"n.reserved_pid=pr.pid AND " .
-				"n.reservation_name=pr.name " .
+				"n.reservation_name=pr.name AND " .
+	                        "pr.approved is not null ".
 				"WHERE n.type='$type' " .
 				"GROUP BY e.pid, e.eid, n.reserved_pid, " .
 				"nr.pid, UNIX_TIMESTAMP( pr.end )";

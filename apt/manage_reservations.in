@@ -479,6 +479,7 @@ sub DoList()
     if (GeniResponse::IsError($response)) {
 	ExitWithError($response);
     }
+    
     my $list = $response->value()->{'reservations'};
     my $history = $response->value()->{'history'}
         if (exists($response->value()->{'history'}));
@@ -573,6 +574,79 @@ sub DoList()
 	}
     }
     #
+    # Look for prereservation list and do the user/project mapping like above.
+    #
+    if (!exists($response->value()->{'prereservations'})) {
+	$response->value()->{'prereservations'} = {};
+    }
+    my $prelist = $response->value()->{'prereservations'};
+
+    foreach my $details (values(%$prelist)) {
+	my $userhrn  = GeniHRN->new($details->{'creator_urn'});
+	my $geniuser = MapUserURN($userhrn);
+	if (defined($geniuser)) {
+	    $details->{'remote_uid'} = $details->{'creator'};
+	    $details->{'uid'}        = $geniuser->uid();
+	    $details->{'uid_idx'}    = $geniuser->idx();
+	}
+	else {
+	    $details->{'remote_uid'} = $details->{'creator'};
+	}
+	my $projhrn = GeniHRN->new($details->{'project_urn'});
+	my $project = APT_Utility::MapProjectURN($projhrn);
+	if (defined($project)) {
+	    $details->{'remote_pid'} = $details->{'pid'};
+	    $details->{'pid'}        = $project->pid();
+	    $details->{'pid_idx'}    = $project->pid_idx();
+	}
+	else {
+	    $details->{'remote_pid'} = $details->{'pid'};
+	}
+
+	# We need numbers.
+	$details->{'count'}    = int($details->{'count'});
+	$details->{'active'}   = int($details->{'active'});
+	$details->{'terminal'} = int($details->{'terminal'});
+
+	# The count is the number still not prereserved (node table).
+	# Add the length of the prereserved list to get the total count
+	# for the prereserve.
+	# 
+	# We want three numbers;
+	#   size: Total size of prereserve. Note that node specific prereserves
+	#         have a zero count.
+	# preres: Number of nodes that have been prereserved.
+	#  using: Number of nodes actually reserved to project.
+	#
+	$details->{'size'} = $details->{'count'} +
+	    scalar(@{$details->{'prereserved'}});
+	$details->{'preres'} = scalar(@{$details->{'prereserved'}});
+	$details->{'using'}  = 0;
+	foreach my $ref (@{$details->{'prereserved'}}) {
+	    if ($ref->{'state'} eq "allocated") {
+		$details->{'using'} += 1;
+	    }
+	}
+
+	#
+	# Add these for the web interface since we are already messing
+	# with the results.
+	#
+	$details->{'cluster_id'}  = $aggregate->nickname();
+	$details->{'cluster_urn'} = $aggregate->urn();
+
+	#
+	# Hmm, undef/null is a pain with XMLRPC.
+	#
+	foreach my $key ("approved", "start", "end", "canceled") {
+	    if (!exists($details->{$key}) || $details->{$key} eq "") {
+		$details->{$key} = undef;
+
+	    }
+	}
+    }    
+    
+    #
     # Strip out unwanted results if we asked as an admin for a specific
     # user or project.
     #
@@ -604,6 +678,27 @@ sub DoList()
 	    $tmp->{$key} = $details;
 	}
 	$response->value()->{'reservations'} = $tmp;
+
+	$tmp = {};
+	foreach my $key (keys(%$prelist)) {
+	    my $details = $list->{$key};
+	    my $projhrn = $details->{'project'};
+
+	    if (defined($project)) {
+		if (!defined($details->{'pid_idx'}) ||
+		    $details->{'pid_idx'} != $project->pid_idx()) {
+		    next
+		}
+	    }
+	    else {
+		if (!defined($details->{'uid_idx'}) ||
+		    $details->{'uid_idx'} != $user->uid_idx()) {
+		    next
+		}
+	    }
+	    $tmp->{$key} = $details;
+	}
+	$response->value()->{'prereservations'} = $tmp;
     }
     if (defined($webtask)) {
 	$webtask->value($response->value());
@@ -625,9 +720,10 @@ sub DoDelete()
     #
     # We allow for admins to pass a reason (deny with cause).
     #
-    my $optlist = "N:";
+    my $optlist = "N:t:";
     my $reason;
     my $errmsg;
+    my $type = "reservation";
     
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -636,6 +732,12 @@ sub DoDelete()
     if (defined($options{"N"})) {
 	$reason = readfile($options{"N"});
 	chomp($reason);
+    }
+    if (defined($options{"t"})) {
+	$type = $options{"t"};
+	if ($type ne "reservation" && $type ne "prereservation") {
+	    fatal("Invalid type for -t option");
+	}
     }
     usage()
 	if (@ARGV != 2);
@@ -652,9 +754,10 @@ sub DoDelete()
     
     if (!$this_user->IsAdmin() &&
 	!$project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT())) {
-	fatal("No permission to access reservation list for $project")
+	fatal("No permission to delete reservations for $project")
     }
-    my $blob = { "uuid" => $uuid,
+    my $blob = { "uuid"    => $uuid,
+		 "type"    => $type,
 		 "project" => $project->urn()->asString()
     };
     if ($this_user->IsAdmin() && defined($reason) && $reason ne "") {
@@ -669,8 +772,10 @@ sub DoDelete()
     if (GeniResponse::IsError($response)) {
 	ExitWithError($response);
     }
-    UpdateReservationRequest($aggregate, $uuid, $RESERVATION_RECORD_DELETE);
-    DeleteAnnouncement($uuid);
+    if ($type eq "reservation") {
+	UpdateReservationRequest($aggregate, $uuid, $RESERVATION_RECORD_DELETE);
+	DeleteAnnouncement($uuid);
+    }
     if (defined($webtask)) {
 	$webtask->Exited(0);
     }
@@ -685,10 +790,11 @@ sub DoDelete()
 #
 sub DoApprove()
 {
-    my $optlist = "p:F:";
+    my $optlist = "p:F:t:";
     my $portal;
     my $errmsg;
     my $message;
+    my $type = "reservation";
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -700,6 +806,12 @@ sub DoApprove()
     if (defined($options{"F"})) {
 	$message = readfile($options{"F"});
 	chomp($message);
+    }
+    if (defined($options{"t"})) {
+	$type = $options{"t"};
+	if ($type ne "reservation" && $type ne "prereservation") {
+	    fatal("Invalid type for -t option");
+	}
     }
     usage()
 	if (@ARGV != 1 || !defined($portal));
@@ -720,7 +832,7 @@ sub DoApprove()
     if ($aggregate->CheckStatus(\$errmsg, 1)) {
 	UserError($errmsg);
     }
-    my $blob = {"uuid" => $uuid};
+    my $blob = {"uuid" => $uuid, "type" => $type};
     if (defined($message) && $message ne "") {
 	$blob->{'message'} = $message;
     }
@@ -731,17 +843,21 @@ sub DoApprove()
     if (GeniResponse::IsError($response)) {
 	ExitWithError($response);
     }
-    UpdateReservationRequest($aggregate, $uuid, $RESERVATION_RECORD_APPROVE);
-    
-    #
-    # Schedule an announcement for the user.
-    #
-    $blob = $response->value();
-    if (exists($blob->{'user'})) {
-	my $geniuser = GeniUser->Lookup($blob->{'user'}, 1);
-	if (defined($geniuser) && $geniuser->IsLocal()) {
-	    AddAnnouncement($portal, $brand, $uuid, $geniuser->emulab_user(),
-			    $blob->{'nodes'}, $blob->{'type'}, $blob->{'start'});
+    if ($type eq "reservation") {
+	UpdateReservationRequest($aggregate, $uuid,
+				 $RESERVATION_RECORD_APPROVE);
+	#
+	# Schedule an announcement for the user.
+	#
+	$blob = $response->value();
+	if (exists($blob->{'user'})) {
+	    my $geniuser = GeniUser->Lookup($blob->{'user'}, 1);
+	    if (defined($geniuser) && $geniuser->IsLocal()) {
+		AddAnnouncement($portal, $brand, $uuid,
+				$geniuser->emulab_user(),
+				$blob->{'nodes'}, $blob->{'type'},
+				$blob->{'start'});
+	    }
 	}
     }
     if (defined($webtask)) {
@@ -758,12 +874,13 @@ sub DoApprove()
 #
 sub DoCancel()
 {
-    my $optlist = "p:ce:N:";
+    my $optlist = "p:ce:N:t:";
     my $clear   = 0;
     my $when;
     my $portal;
     my $reason;
     my $errmsg;
+    my $type = "reservation";
 
     if (!$this_user->IsAdmin()) {
 	fatal("No permission to schedule reservation cancellation")
@@ -772,6 +889,12 @@ sub DoCancel()
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
+    }
+    if (defined($options{"t"})) {
+	$type = $options{"t"};
+	if ($type ne "reservation" && $type ne "prereservation") {
+	    fatal("Invalid type for -t option");
+	}
     }
     if (defined($options{"N"})) {
 	$reason = readfile($options{"N"});
@@ -807,7 +930,7 @@ sub DoCancel()
     if (!defined($brand)) {
 	fatal("Bad branding");
     }
-    my $args = {"uuid" => $uuid};
+    my $args = {"uuid" => $uuid, "type" => $type};
     if ($clear) {
 	$args->{"clear"} = 1;
     }
@@ -833,15 +956,17 @@ sub DoCancel()
     else {
 	print Dumper($response);
     }
-    if ($clear) {
-	UpdateReservationRequest($aggregate, $uuid,
-				 $RESERVATION_RECORD_UNCANCEL);
-	RestoreAnnouncement($uuid);
-    }
-    else {
-	RetireAnnouncement($uuid);
-	UpdateReservationRequest($aggregate, $uuid,
-				 $RESERVATION_RECORD_CANCEL);
+    if ($type eq "reservation") {
+	if ($clear) {
+	    UpdateReservationRequest($aggregate, $uuid,
+				     $RESERVATION_RECORD_UNCANCEL);
+	    RestoreAnnouncement($uuid);
+	}
+	else {
+	    RetireAnnouncement($uuid);
+	    UpdateReservationRequest($aggregate, $uuid,
+				     $RESERVATION_RECORD_CANCEL);
+	}
     }
     exit(0);
 }
@@ -1253,6 +1378,7 @@ sub ExitWithError($)
     #
     if ($code == GENIRESPONSE_REFUSED ||
 	$code == GENIRESPONSE_SEARCHFAILED ||
+	$code == GENIRESPONSE_FORBIDDEN ||
 	$code == GENIRESPONSE_SERVER_UNAVAILABLE ||
 	$code == GENIRESPONSE_NETWORK_ERROR ||
 	$code == GENIRESPONSE_BUSY) {

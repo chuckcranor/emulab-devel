@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2016 University of Utah and the Flux Group.
+# Copyright (c) 2003-2016, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -52,6 +52,7 @@ my $TBOPS        = "@TBOPSEMAIL@";
 #
 use lib "@prefix@/lib";
 use emdb;
+use User;
 use libtestbed;
 use emutil;
 
@@ -87,7 +88,7 @@ usage()
 #
 my $query_result =
     DBQueryFatal("select * from project_reservations ".
-		 "where end is not null and ".
+		 "where approved is not null and end is not null and ".
 		 "      UNIX_TIMESTAMP(now()) > UNIX_TIMESTAMP(end)");
 
 while (my $row = $query_result->fetchrow_hashref()) {
@@ -98,7 +99,7 @@ while (my $row = $query_result->fetchrow_hashref()) {
 	print "Terminating pre-reserve $pid,$resname\n";
     }
     if (!$impotent) {
-	my $output = emutil::ExecQuiet("$PRERESERVE -c -r -n $resname $pid");
+	my $output = emutil::ExecQuiet("$PRERESERVE -r -n $resname $pid");
 	if ($?) {
 	    print STDERR
 		"Error terminating pre reservation $pid,$resname!\n";
@@ -122,8 +123,9 @@ while (my $row = $query_result->fetchrow_hashref()) {
 #
 $query_result =
     DBQueryFatal("select * from project_reservations ".
-		 "where active=0 and terminal=0 and start is not null and ".
-		 "       UNIX_TIMESTAMP(now()) >= UNIX_TIMESTAMP(start) ".
+		 "where approved is not null and ".
+		 "      active=0 and terminal=0 and start is not null and ".
+		 "      UNIX_TIMESTAMP(now()) >= UNIX_TIMESTAMP(start) ".
 		 "order by priority desc, created asc");
 
 while (my $row = $query_result->fetchrow_hashref()) {
@@ -141,6 +143,36 @@ while (my $row = $query_result->fetchrow_hashref()) {
 	    SENDMAIL($TBOPS, "Error activating pre reservation $pid,$resname",
 		     "The pre reservation request $pid,$resname ".
 		     "could not be activated!\n\n" . $output . "\n", $TBOPS);
+	}
+    }
+}
+
+#
+# Handle cancellations. 
+#
+$query_result =
+    DBQueryFatal("select * from project_reservations ".
+		 "where approved is not null and terminal=0 and ".
+		 "      canceled is not null and canceled < NOW()");
+
+while (my $row = $query_result->fetchrow_hashref()) {
+    my $pid     = $row->{'pid'};
+    my $resname = $row->{'name'};
+
+    if ($debug) {
+	print "Terminating canceled pre-reserve $pid,$resname\n";
+    }
+    if (!$impotent) {
+	my $output = emutil::ExecQuiet("$PRERESERVE -r -n $resname $pid");
+	if ($?) {
+	    print STDERR
+		"Error terminating canceled reservation $pid,$resname!\n";
+	    
+	    SENDMAIL($TBOPS,
+		     "Error terminating canceled reservation $pid,$resname",
+		     "The pre reservation request $pid,$resname ".
+		     "could not be terminated!\n\n" . $output . "\n", $TBOPS);
+	    next;
 	}
     }
 }
