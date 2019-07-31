@@ -258,7 +258,8 @@ foreach my $node (@nodes) {
 foreach my $type ( keys( %types ) ) {
     my $reservations = Reservation->LookupAll( $type );
     if( !Reservation->IsFeasible( $reservations, \$errormsg ) ) {
-	print "Existing admission control violation for type $type: $errormsg\n";
+	print "*** Existing admission control violation for ".
+	    "type $type: $errormsg\n";
 	print "Omitting $type admission control verification.\n";
 	$unavail_types{ $type } = 1;
     }
@@ -284,7 +285,7 @@ foreach my $type ( keys( %types ) ) {
     push( @$reservations, $res );
     
     if( !Reservation->IsFeasible( $reservations, \$errormsg ) ) {
-	print "Admission control violation for type $type: $errormsg\n";
+	print "*** Admission control violation for type $type: $errormsg\n";
 
 	if( $debug ) {
 	    foreach my $res (@$reservations) {
