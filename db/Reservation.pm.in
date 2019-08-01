@@ -1347,17 +1347,17 @@ sub HistoricalReservations($$$;$) {
 
 sub ExptTypes($) {
     my ($exptidx) = @_;
-    
+
     my $query_result =
-	DBQueryFatal("(SELECT DISTINCT( n.type ) FROM reserved as r " .
-		     " left join nodes as n on ".
-		     "    r.node_id=n.node_id AND n.reservable=0 ".
-		     " where r.exptidx='$exptidx') ".
+	DBQueryFatal("(SELECT DISTINCT( n.type ) FROM " .
+		     " reserved AS r, nodes AS n WHERE " .
+		     " r.node_id=n.node_id AND n.reservable=0 AND " .
+		     " r.exptidx='$exptidx') ".
 		     "union ".
-		     "(SELECT n.node_id FROM reserved as r " .
-		     " left join nodes as n on ".
-		     "    r.node_id=n.node_id AND n.reservable=1 ".
-		     " where r.exptidx='$exptidx') ");
+		     "(SELECT n.node_id FROM " .
+		     " reserved AS r, nodes AS n WHERE " .
+		     " r.node_id=n.node_id AND n.reservable=1 AND " .
+		     " r.exptidx='$exptidx')");
 
     my @types;
     while( my($type) = $query_result->fetchrow_array() ) {
