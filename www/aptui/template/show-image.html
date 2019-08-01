@@ -259,6 +259,35 @@
 	    </td>
 	  </tr>
 	<% } %>
+	<% if (_.has(fields, "previous_image_url") ||
+   	       _.has(fields, "next_image_url")) { %>
+	  <tr>
+	    <td>
+	      <% if (_.has(fields, "previous_image_url") &&
+		_.has(fields, "next_image_url")) { %>
+		Prev/Next Versions
+	      <% } else if (_.has(fields, "previous_image_url")) { %>
+		Previous Version
+	      <% } else { %>
+		Next Version
+	      <% } %>
+	    </td>
+	    <td>
+	      <% if (_.has(fields, "previous_image_url")) { %>
+		<a href="<%= fields.previous_image_url %>">
+		  <%- fields.name + ":" + fields.previous_image_vers %></a>
+	      <% } %>
+	      <% if (_.has(fields, "previous_image_url") &&
+		     _.has(fields, "next_image_url")) { %>
+		/
+	      <% } %>
+	      <% if (_.has(fields, "next_image_url")) { %>
+		<a href="<%= fields.next_image_url %>">
+		  <%- fields.name + ":" + fields.next_image_vers %></a>
+	      <% } %>
+	    </td>
+	  </tr>
+	<% } %>
 	<% if (isadmin && !fields.isdataset) { %>
 	  <tr>
 	    <td>Partition/Length</td>

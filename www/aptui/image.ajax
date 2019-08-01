@@ -205,6 +205,11 @@ function Do_GetInfo()
         else {
 	    $blob["wholedisk"]  = false;
         }
+        $blob["deprecated"] = $image->deprecated();
+        if ($image->deprecated()) {
+            $blob["deprecated_iserror"] = $image->deprecated_iserror();
+            $blob["deprecated_message"] = $image->deprecated_message();
+        }
     }
 
     if ($image->parent_imageid()) {
@@ -230,8 +235,25 @@ function Do_GetInfo()
         (is_null($image->parent_imageid()) ||
          ($image->parent_imageid() &&
           $image->parent_imageid() != $image->imageid()))) {
-        $blob["previous_image_vers"] = $image->version() - 1;
+        $pvers = $image->version() - 1;
+        $purl  = "show-image.php?imageid=${id}&version=${pvers}";
+        if ($embedded) {
+            $purl .= "&embedded=1";
+        }
+        $blob["previous_image_vers"] = $pvers;
+        $blob["previous_image_url"]  = $purl;
     }
+    $next = $image->LookupNextVersion();
+    if ($next) {
+        $nvers = $next->version();
+        $nurl  = "show-image.php?imageid=${id}&version=${nvers}";
+        if ($embedded) {
+            $nurl .= "&embedded=1";
+        }
+        $blob["next_image_vers"] = $nvers;
+        $blob["next_image_url"]  = $nurl;
+    }
+    
     # Look for an unreleased version of this image.
     $unreleased = $image->LookupUnreleased();
     if ($unreleased && $unreleased->version() != $image->version()) {

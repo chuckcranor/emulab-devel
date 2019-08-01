@@ -132,6 +132,28 @@ class Image
 	return Image::Lookup($imageid, $row["version"]);
     }
 
+    # Lookup next higher version of the image.
+    function LookupNextVersion() {
+	global $DOPROVENANCE;
+	if (!$DOPROVENANCE) {
+	    return $this;
+	}
+	$imageid = $this->imageid();
+        $version = $this->version();
+	
+	$query_result =
+	    DBQueryFatal("select version from image_versions ".
+			 "where imageid='$imageid' and version>$version and ".
+                         "      deleted is null ".
+			 "order by version asc limit 1");
+
+	if (mysql_num_rows($query_result) == 0) {
+	    return null;
+	}
+	$row = mysql_fetch_array($query_result);
+	return Image::Lookup($imageid, $row["version"]);
+    }
+
     function LookupByUUID($uuid, $version = NULL) {
 	$safe_uuid = addslashes($uuid);
 
