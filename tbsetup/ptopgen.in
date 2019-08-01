@@ -238,6 +238,7 @@ my %interfacestate= ();
 my %vinterfaces   = ();
 my %rusagedata    = ();
 my %imagelist     = ();
+my %reserved_nodes= ();
 my $typelimitfile;
 
 my $DEADPID = NODEDEAD_PID();
@@ -687,6 +688,30 @@ if( defined( $pid ) ) {
 		  "unreserved_type:0.5" ) unless
 		( grep( { $_->{ 'nodetype' } eq $type->type() }
 			@reservations ) );
+	}
+    }
+    #
+    # We want to prune out nodes that are currently reserved to another
+    # project but not yet allocated. This is imprecise, since a reservation
+    # for a node might start very soon, but in that case admission control
+    # in nalloc will catch it (via the experiment termination time). It would
+    # not be unreasonably hard to make a similar check here, but lets see
+    # if that is needed.
+    #
+    my @reservable_nodes   = Reservation->ReservableNodes();
+    my @activereservations = Reservation->CurrentReservations(undef, 1);
+
+    foreach my $node (@reservable_nodes) {
+	my $node_id = $node->node_id();
+	foreach my $res (@activereservations) {
+	    if ($res->{'nodetype'} eq $node_id && $res->{'pid'} ne $pid) {
+		#
+		# Node is currently reserved to another project. Mark it
+		# to be pruned out below.
+		#
+		$reserved_nodes{$node_id} = $node;
+		last;
+	    }
 	}
     }
 }
@@ -1296,7 +1321,13 @@ while (($node,$type,$physnode,$class,$issubnode,$def_boot_osid,$reserved,
 	next
 	    if (! grep {$_ eq $pid} @allowed);	
     }
-
+    if (defined($pid) && exists($reserved_nodes{$node})) {
+	#
+	# We determined above that this node is currently reserved to
+	# another project but not currently allocated to that project.
+	#
+	next;
+    }
     $nodes{$node} = $type
 	if (!defined($pid) ||
 	    ($permissions{$type} && $permissions{$class}));
@@ -2642,6 +2673,18 @@ sub print_header {
 		print "</emulab:type>\n";
 	    }
 	    print "</emulab:reservable_types>\n";
+	    #
+	    # Reservable nodes for reservation system.
+	    #
+	    @reservable = Reservation->ReservableNodes();
+	    print "<emulab:reservable_nodes>\n";
+	    foreach my $node (@reservable) {
+		my $node_id = $node->node_id();
+		my $type    = $node->type();
+		my $urn     = GeniHRN::Generate($OURDOMAIN, "node", $node_id);
+		print "<emulab:node component_id='$urn' type='$type'/>\n";
+	    }
+	    print "</emulab:reservable_nodes>\n";
 	}
     }
 }

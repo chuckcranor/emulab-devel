@@ -409,6 +409,28 @@ class Aggregate
         }
         return $result;
     }
+
+    #
+    # Reservable nodes.
+    #
+    function ReservableNodes()
+    {
+        $result = array();
+        $urn    = $this->urn();
+
+        $query_result =
+            DBQueryFatal("select node_id,type from ".
+                         "  apt_aggregate_reservable_nodes ".
+                         "where urn='$urn'");
+
+        if (!mysql_num_rows($query_result)) {
+            return null;
+        }
+        while ($row = mysql_fetch_array($query_result)) {
+            $result[$row["node_id"]] = $row["type"];
+        }
+        return $result;
+    }
 }
 
 #

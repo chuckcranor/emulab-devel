@@ -998,9 +998,12 @@ sub Reserve($)
 	return GeniResponse->MalformedArgsResponse("Invalid type")
 	    if ($type !~ /^[-\w]+$/);
 
-	my $nodetype = NodeType->Lookup($type);
-	return GeniResponse->SearchFailedResponse("No such node type")
-	    if (!defined($type));
+	#
+	# Type can now be a specific node instead of a type.
+	#
+	if (! (NodeType->Lookup($type) || Node->Lookup($type))) {
+	    return GeniResponse->SearchFailedResponse("No such node/type");
+	}
     }
     else {
 	my $okay = 0;
@@ -1781,10 +1784,20 @@ sub ReservationPrediction($)
 	$freecounts->{$type} = Reservation->FreeCount($type, \@projlist);
 	$forecast->{$type}   = [ Reservation->Forecast($type, \@projlist) ];
     }
+    my @nodes = Reservation->ReservableNodes();
+    foreach my $node (@nodes) {
+	my $node_id = $node->node_id();
+	
+	$freecounts->{$node_id} =
+	    Reservation->FreeCount($node_id, \@projlist);
+	$forecast->{$node_id}   =
+	    [ Reservation->Forecast($node_id, \@projlist) ];
+    }
+    
     goto nopids
 	if (!@projlist);
     
-    foreach my $type (Reservation->ReservableTypes())  {
+    foreach my $type (@types)  {
 	my $type = $type->type();
 	
 	foreach my $pid (@projlist) {
@@ -1801,7 +1814,7 @@ sub ReservationPrediction($)
     foreach my $pid (@projlist) {
 	my $hrn  = $projlist{$pid};
 	my $epid = $hrn->project();
-	foreach my $type (Reservation->ReservableTypes())  {
+	foreach my $type (@types)  {
 	    my $type = $type->type();
 	    my $stamp = Reservation->OutstandingReservation([$pid],[$type]);
 	    next

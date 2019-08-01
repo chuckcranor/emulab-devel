@@ -114,15 +114,6 @@
 	        <% } %>
 	      <% } %>
 	      <div class="form-group">
-		<input name="count"
-		       value="<%- formfields.count %>"
-		       class="form-control format-me"
-		       data-key="count"
-		       data-label="Number of Nodes"
-		       data-colsize="2"
-		       type="text">
-	      </div>
-	      <div class="form-group">
 		<% if (editing) { %>
 		  <!-- This is a Nickname -->
 		  <input name="cluster_id" readonly
@@ -158,19 +149,29 @@
 			 id="type"
 			 class='form-control format-me'
 			 data-key="type"
-			 data-label="Hardware Type"
+			 data-label="Hardware"
 			 data-colsize="4">
 		<% } else { %>
 		  <select name="type"
 			  id="type"
 			  class='form-control format-me'
 			  data-key="type"
-			  data-label="Hardware Type"
+			  data-label="Hardware"
 			  placeholder='Please Select'
 			  data-colsize="4">
 		    <option value=''>Please Select</option>
 		  </select>
 		<% } %>
+	      </div>
+	      <div class="form-group">
+		<input name="count"
+		       id="count"
+		       value="<%- formfields.count %>"
+		       class="form-control format-me"
+		       data-key="count"
+		       data-label="Number of Nodes"
+		       data-colsize="2"
+		       type="text">
 	      </div>
 	      <% if (1) { %>
 		<div class="form-group">

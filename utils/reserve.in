@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2016-2018 University of Utah and the Flux Group.
+# Copyright (c) 2016-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,6 +44,7 @@ use Project;
 use Reservation;
 use WebTask;
 use emutil;
+use Node;
 use NodeType;
 use libEmulab;
 
@@ -566,14 +567,20 @@ if (! ($pending || $approve)) {
     # zero instead of unlimited. As above, this limit is node hours.
     #
     my $nodetype = NodeType->Lookup($type);
-    if (!defined($nodetype)) {
-	fatal("Could not look up node type");
-    }
-    if (defined($nodetype->GetAttribute("reservation_autoapprove_limit"))) {
-	my $limit = $nodetype->GetAttribute("reservation_autoapprove_limit");
+    if (defined($nodetype)) {
+	if (defined($nodetype->GetAttribute("reservation_autoapprove_limit"))) {
+	    my $limit = $nodetype->GetAttribute("reservation_autoapprove_limit");
 
-	if (($count * ( $endtime - $starttime ) / 3600) > $limit) {
-	    $approve = 0;
+	    if (($count * ( $endtime - $starttime ) / 3600) > $limit) {
+		$approve = 0;
+	    }
+	}
+    }
+    else {
+	# Lets see if type is really a node ID.
+	my $node = Node->Lookup($type);
+	if (!defined($node)) {
+	    fatal("Could not look up node type");
 	}
     }
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,6 +24,7 @@
 use strict;
 use English;
 use Getopt::Std;
+use Data::Dumper;
 
 #
 # nalloc - allocate nodes to an experiment. Takes a pid, and eid, and
@@ -183,6 +184,7 @@ while( my($node_id) = $query_result->fetchrow_array() ) {
     push( @trivial_nodes, $node_id );
 }
 
+my %reservable_nodes = map {$_->node_id() => $_} Reservation->ReservableNodes();
 my $endtime = Reservation->ExpectedEnd( $experiment );
 
 # Argh, MySQL locking rules are horrendous!  These locks are required by
@@ -251,6 +253,7 @@ if ($debug) {
 
 my %types = ();
 my %unavail_types = ();
+my %unavail_nodes = ();
 foreach my $node (@nodes) {
     $types{ $node->type() } = 1
 	unless( grep( $_ eq $node->node_id(), @trivial_nodes ) );
@@ -265,16 +268,54 @@ foreach my $type ( keys( %types ) ) {
     }
 }
 
+#
+# Look to see if trying to reserve a node that is marked "reservable".
+# Need to do admission control on the node ID instead of the type of
+# the node.
+#
+foreach my $node (@nodes) {
+    my $node_id = $node->node_id();
+    
+    next
+	if (!exists($reservable_nodes{$node_id}));
+
+    next
+	if ($unavail_types{$node->type()});
+
+    my $reservations = Reservation->LookupAll($node_id);
+    my $res = Reservation->CreateImmediate($pid, $eid,
+					   $this_user->uid(),
+					   $endtime, $node_id, 1);
+    push(@$reservations, $res);
+    
+    if (!Reservation->IsFeasible($reservations, \$errormsg)) {
+	print "*** Admission control violation for node $node_id: $errormsg\n";
+
+	if ($force) {
+	    print "Forcing allocation anyway...\n";
+	    print STDERR "WARNING: SCHEDULED RESERVATIONS ARE NOW INFEASIBLE!\n";
+	    # FIXME notify admins about violation
+	}
+	$unavail_nodes{$node_id} = 1;
+    }
+}
+
 foreach my $type ( keys( %types ) ) {
     next if( $unavail_types{ $type } );
     
     my $reservations = Reservation->LookupAll( $type );
     my $count = 0;
     foreach my $node (@nodes) {
+	#
+	# Skip reservable nodes we checked above, since checking by type
+	# can fail.
+	#
+	next
+	    if (exists($reservable_nodes{$node->node_id()}));
+	    
 	$count++ if( $node->type() eq $type &&
 		     !grep( $_ eq $node->node_id(), @trivial_nodes ) );
     }
-    
     my $res = Reservation->CreateImmediate( $pid, $eid,
 					    $this_user->uid(),
 					    $endtime, $type, $count );
@@ -306,7 +347,8 @@ if( $admission_ctrl && !$force ) {
     my @goodnodes = ();
 
     foreach my $node (@nodes) {
-	if( !exists( $unavail_types{ $node->type() } ) ) {
+	if( !exists( $unavail_types{ $node->type() } ) &&
+	    !exists( $unavail_nodes{ $node->node_id() } ) ) {
 	    push( @goodnodes, $node );
 	} else {
 	    # FIXME if some but not all nodes of a given type are

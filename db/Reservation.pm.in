@@ -39,6 +39,7 @@ use EmulabConstants;
 use Project;
 use User;
 use Experiment;
+use Node;
 use NodeType;
 use POSIX qw(strftime);
 use overload ('""' => 'Stringify');
@@ -625,7 +626,9 @@ sub LookupAll($$;$$)
 				"LEFT OUTER JOIN" .
 				"`geni-cm`.geni_slices AS s ON " .
 				"e.eid_uuid=s.uuid " .
-				"WHERE n.type='$type' GROUP BY " .
+				"WHERE (n.reservable=0 and n.type='$type') or ".
+				"      (n.reservable=1 and n.node_id='$type') ".
+				"GROUP BY " .
 				"e.pid, e.eid, n.reserved_pid, nr.pid, " .
 				"UNIX_TIMESTAMP( pr.end )" :
 				"SELECT COUNT(*), e.pid, e.eid, " .
@@ -650,7 +653,8 @@ sub LookupAll($$;$$)
 				"n.reserved_pid=pr.pid AND " .
 				"n.reservation_name=pr.name AND " .
 	                        "pr.approved is not null ".
-				"WHERE n.type='$type' " .
+				"WHERE (n.reservable=0 and n.type='$type') or ".
+				"      (n.reservable=1 and n.node_id='$type') ".
 				"GROUP BY e.pid, e.eid, n.reserved_pid, " .
 				"nr.pid, UNIX_TIMESTAMP( pr.end )";
     my $query_result = DBQueryWarn( $query );
@@ -1145,11 +1149,15 @@ sub CurrentReservations($;$$) {
 
     my $query_result = DBQueryFatal(
 	"SELECT r.pid, r.type, SUM( r.nodes ), " .
-	    "(SELECT COUNT(*) FROM reserved AS res, nodes AS n WHERE " .
-	    "res.pid=r.pid AND res.node_id=n.node_id AND n.type=r.type)," .
+	    "(SELECT COUNT(*) FROM reserved AS res, nodes AS n ".
+            "WHERE res.pid=r.pid AND res.node_id=n.node_id AND ".
+	    "      ((n.reservable=0 and n.type=r.type) or ".
+	    "       (n.reservable=1 and n.node_id=r.type))), ".
 	    "(SELECT COUNT(*) FROM nodes AS n LEFT OUTER JOIN reserved " .
-	    "AS res ON n.node_id=res.node_id WHERE n.type=r.type AND " .
-	    "res.pid IS NULL)," .
+	    "AS res ON n.node_id=res.node_id ".
+	    "WHERE ((n.reservable=0 and n.type=r.type) or ".
+	    "       (n.reservable=1 and n.node_id=r.type)) and ".
+	    "      res.pid IS NULL)," .
 	    "(SELECT COUNT(*) FROM nodes AS n, reserved AS res " .
 	    "WHERE n.node_id=res.node_id AND res.pid='emulab-ops' AND " .
 	    "res.eid IN ('reloading', 'reloadpending')) " .
@@ -1340,10 +1348,16 @@ sub HistoricalReservations($$$;$) {
 sub ExptTypes($) {
     my ($exptidx) = @_;
     
-    my $query_result = DBQueryFatal( "SELECT DISTINCT( n.type ) FROM " .
-				     "reserved AS r, nodes AS n WHERE " .
-				     "r.node_id=n.node_id AND " .
-				     "r.exptidx='$exptidx'" );
+    my $query_result =
+	DBQueryFatal("(SELECT DISTINCT( n.type ) FROM reserved as r " .
+		     " left join nodes as n on ".
+		     "    r.node_id=n.node_id AND n.reservable=0 ".
+		     " where r.exptidx='$exptidx') ".
+		     "union ".
+		     "(SELECT n.node_id FROM reserved as r " .
+		     " left join nodes as n on ".
+		     "    r.node_id=n.node_id AND n.reservable=1 ".
+		     " where r.exptidx='$exptidx') ");
 
     my @types;
     while( my($type) = $query_result->fetchrow_array() ) {
@@ -1854,7 +1868,8 @@ sub ReservableTypes($)
 	my $query_result =
 	    DBQueryWarn("select count(node_id) from nodes ".
 			"where type='$typename' and ".
-			"    role='" . $Node::NODEROLE_TESTNODE . "'");
+			"      role='" . $Node::NODEROLE_TESTNODE . "' and ".
+			"      reservable=0");
 	return ()
 	    if (!$query_result);
 	next
@@ -1864,6 +1879,31 @@ sub ReservableTypes($)
 	next
 	    if (!$count);
 	push(@result, $type);
+    }
+    return @result;
+}
+
+#
+# Reservable nodes for reservation system. Class Method.
+#
+sub ReservableNodes($)
+{
+    my ($class)  = @_;
+    my @result   = ();
+	
+    #
+    # Skip if no physical testnodes of this type.
+    #
+    my $query_result =
+	DBQueryWarn("select node_id from nodes ".
+		    "where reservable=1");
+    return ()
+	if (!$query_result || !$query_result->numrows);
+
+    while (my ($node_id) = $query_result->fetchrow_array()) {
+	my $node = Node->Lookup($node_id);
+	push(@result, $node)
+	    if (defined($node));
     }
     return @result;
 }

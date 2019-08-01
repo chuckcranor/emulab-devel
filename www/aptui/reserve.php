@@ -117,11 +117,23 @@ $amlist  = array();
 while (list($index, $aggregate) = each($ams)) {
     $urn = $aggregate->urn();
     $am  = $aggregate->name();
+    $reservable_nodes = $aggregate->ReservableNodes();
+    $typeinfo = $aggregate->typeinfo;
+
+    # Subtract out reservable nodes from the type count, do not want
+    # to confuse users. 
+    if ($reservable_nodes) {
+        foreach ($reservable_nodes as $node_id => $type) {
+            $count = $typeinfo[$type]["count"];
+            $typeinfo[$type]["count"] = $count - 1;
+        }
+    }
 
     $amlist[$urn] = array("urn"      => $urn,
                           "name"     => $am,
                           "nickname" => $aggregate->nickname(),
-                          "typeinfo" => $aggregate->typeinfo);
+                          "typeinfo" => $typeinfo,
+                          "reservable_nodes" => $reservable_nodes);
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
 echo htmlentities(json_encode($amlist));

@@ -136,6 +136,10 @@ $(function ()
 		    return;
 		});
 	});
+	// Handler for hardware type selector,
+	$('#reserve-request-form #type').change(function (event) {
+	    HandleTypeChange();
+	});
 	// Handle submit button.
 	$('#reserve-submit-button').click(function (event) {
 	    event.preventDefault();
@@ -466,6 +470,7 @@ $(function ()
 		}
 		temp.push(data);
 	    }
+	    temp.push(array[array.length - 1]);
 	    forecast[type] = temp;
 	}
 	//console.info("forecast", cluster, forecast);
@@ -835,6 +840,7 @@ $(function ()
 	 */
 	var options  = "";
 	var typelist = amlist[selected_cluster].typeinfo;
+	var nodelist = amlist[selected_cluster].reservable_nodes;
 	var nickname = amlist[selected_cluster].nickname;
 	var id       = "resgraph-" + nickname;
 
@@ -845,6 +851,11 @@ $(function ()
 		"<option value='" + type + "' >" +
 		type + " (" + count + " nodes)</option>";
 	});
+	_.each(nodelist, function(details, node_id) {
+	    options = options +
+		"<option value='" + node_id + "' >" + node_id + "</option>";
+	});
+	
 	$("#reserve-request-form #type")	
 	    .html("<option value=''>Please Select</option>" + options);
 
@@ -853,6 +864,33 @@ $(function ()
 		$('#reservation-lists').prepend($('#' + id));
 		$('#' + id).fadeIn("fast");
 	    });
+	}
+    }
+
+    function HandleTypeChange()
+    {
+	var selected_cluster =
+	    $("#reserve-request-form #cluster option:selected").val();
+	var selected_type =
+	    $("#reserve-request-form #type option:selected").val();
+
+	console.info(selected_cluster, selected_type);
+	if (selected_cluster == "") {
+	    return;
+	}
+	if (selected_type == "") {
+	    return;
+	}
+	var nodelist = amlist[selected_cluster].reservable_nodes;
+	console.info(nodelist);
+
+	if (_.has(nodelist, selected_type)) {
+	    $("#reserve-request-form #count").val("1");
+	    $("#reserve-request-form #count").prop("readonly", true);	    
+	}
+	else {
+	    $("#reserve-request-form #count").val("");
+	    $("#reserve-request-form #count").prop("readonly", false);
 	}
     }
 

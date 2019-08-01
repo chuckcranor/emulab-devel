@@ -794,6 +794,25 @@ sub RunAssign($$)
 		# Unretriable error
 		return -1;
 	    }
+	    next;
+	}
+	#
+	# The type can also be a node id now, so look to see if the topology
+	# has specified a node_id that admission control says it cannot have.
+	#
+	if ($reservation_bounds->{$type} == 0 && keys(%{$vtop->fixednodes()})) {
+	    my @fixed = values(%{$vtop->fixednodes()});
+	    if (grep {$_ eq $type} @fixed) {
+		tberror({type => 'primary', cause => 'temp',
+			 severity => SEV_ERROR,
+			 error => ['admission_control_failure']},
+		"*** Resource reservation violation: ".
+		"Node $type requested, but is not ".
+		"available because of existing resource reservations ".
+		"to other projects.\n");
+		# Unretriable error
+		return -1;
+	    }
 	}
     }
     

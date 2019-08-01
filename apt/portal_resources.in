@@ -118,6 +118,7 @@ use Genixmlrpc;
 use GeniResponse;
 use GeniCredential;
 use GeniXML;
+use GeniHRN;
 use POSIX qw(strftime ceil);
 
 if (! ($oneshot || $impotent)) {
@@ -302,6 +303,38 @@ sub CheckAggregates()
 		}
 	    }
 	}
+
+	#
+	# And the list of reservable nodes.
+	#
+	my $reservable_nodes;
+
+	if (my $ref = GeniXML::FindNodesNS("n:reservable_nodes",
+					   $manifest,
+					   $GeniXML::EMULAB_NS)->pop()) {
+	    $reservable_nodes = {};
+	    
+	    foreach my $t (GeniXML::FindNodesNS("n:node", $ref,
+					$GeniXML::EMULAB_NS)->get_nodelist()) {
+		my $urn = GeniXML::GetNodeId($t);
+		my $hrn = GeniHRN->new($urn);
+		if (! (defined($hrn) && $hrn->IsNode())) {
+		    print STDERR "$hrn is not a node\n";
+		    next;
+		}
+		my $node_id = $hrn->id();
+		if ($node_id !~ /^[-\w]+$/) {
+		    print STDERR "Bad node_id name at $nickname: $node_id\n";
+		    next;
+		}
+		my $type = GeniXML::GetText("type", $t);
+		if (! (defined($type) && $type =~ /^[-\w]+$/)) {
+		    print STDERR "Bad or missing type at $nickname: $node_id\n";
+		    next;
+		}
+		$reservable_nodes->{$node_id} = $type;
+	    }
+	}
 	
 	my $pcount = 0;
 	my $pavail = 0;
@@ -313,6 +346,7 @@ sub CheckAggregates()
 	foreach my $ref (GeniXML::FindNodes("n:node",
 					    $manifest)->get_nodelist()) {
 	    my $node_id     = GeniXML::GetNodeId($ref);
+	    
 	    #
 	    # Need to search the sliver types for raw-pc.
 	    #
@@ -330,7 +364,7 @@ sub CheckAggregates()
 			    my $hname = GeniXML::GetText("name", $htype);
 			    if (defined($reservable_types)) {
 				next
-				    if (!exists($reservable_types->{$hname}));
+				    if (!exists($reservable_types->{$hname}))
 			    }
 			    else {
 				# This can be deleted when clusters updated.
@@ -408,6 +442,65 @@ sub CheckAggregates()
 		}
 	    }
 	}
+	#
+	# Kill stale info when type no longer reservable.
+	#
+	if (defined($reservable_types)) {
+	    my $query_result =
+		DBQueryWarn("select type from apt_aggregate_nodetypes ".
+			    "where urn='$urn'");
+	    if ($query_result) {
+		while (my ($type) = $query_result->fetchrow_array()) {
+		    next
+			if (exists($reservable_types->{$type}));
+
+		    if ($impotent || $debug) {
+			print "$type no longer reservable\n";
+			next
+			    if ($impotent);
+		    }
+		    DBQueryWarn("delete from ".
+				"  apt_aggregate_nodetype_attributes ".
+				"where urn='$urn' and type='$type'");
+		    DBQueryWarn("delete from apt_aggregate_nodetypes ".
+				"where urn='$urn' and type='$type'");
+		}
+	    }
+	}
+	#
+	# Ditto the reservable nodes. Kill stale ones, add new ones.
+	#
+	if (defined($reservable_nodes)) {
+	    my $query_result =
+		DBQueryWarn("select node_id from apt_aggregate_reservable_nodes ".
+			    "where urn='$urn'");
+	    if ($query_result) {
+		while (my ($node_id) = $query_result->fetchrow_array()) {
+		    next
+			if (exists($reservable_nodes->{$node_id}));
+
+		    if ($impotent || $debug) {
+			print "$node_id no longer reservable\n";
+			next
+			    if ($impotent);
+		    }
+		    DBQueryWarn("delete from apt_aggregate_reservable_nodes ".
+				"where urn='$urn' and node_id='$node_id'");
+		}
+	    }
+	    foreach my $node_id (keys(%{$reservable_nodes})) {
+		my $type = $reservable_nodes->{$node_id};
+		if ($impotent || $debug) {
+		    print "$node_id ($type) is reservable\n";
+		    next
+			if ($impotent);
+		}
+		DBQueryWarn("replace into apt_aggregate_reservable_nodes ".
+			    " set updated=now(),".
+			    "  urn='$urn',node_id='$node_id',type='$type'");
+	    }
+	}
+	
 	print "$nickname: pcount:$pcount, pfree:$pavail, ".
 	  "vcount:$vcount vfree:$vfree\n";
 	foreach my $type (keys(%type_count)) {
@@ -418,7 +511,7 @@ sub CheckAggregates()
 	    }
 	    if (!$impotent) {
 		DBQueryWarn("replace into apt_aggregate_nodetypes set ".
-			    " urn='$urn',type='$type',".
+			    " urn='$urn',type='$type',updated=now(), ".
 			    " count='$count',free='$avail'");
 
 		foreach my $attrkey (keys(%{$reservable_types->{$type}})) {
