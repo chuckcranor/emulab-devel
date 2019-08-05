@@ -806,6 +806,8 @@ function Do_CheckScript()
     global $this_user;
     global $ajax_args;
 
+    $this_idx      = $this_user->uid_idx();
+    $this_uid      = $this_user->uid();
     $pid           = null;
     $profile       = null;
     $warningsfatal = false;
