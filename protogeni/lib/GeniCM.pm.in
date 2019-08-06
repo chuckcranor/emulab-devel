@@ -1386,6 +1386,13 @@ sub GetTicketAuxAux($)
 		    # System images are never auto imported.
 		    $osname = $image->versname();
 		}
+		elsif ($use_imagetracker) {
+		    # When using the image tracker, we always get an
+		    # image descriptor (or error). The descriptor might
+		    # be new (notready) in which case we will download
+		    # it later.
+		    $osname = $image->versname();
+		}
 		else {
 		    # Need to make sure image setup runs on this image
 		    # to get the image file. 

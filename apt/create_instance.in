@@ -67,6 +67,7 @@ my $sitemap;
 my $usetracker = 0;
 my $maxduration = 16; # Hours. Need to make this a site variable.
 my @aggregate_urns = ();
+my @prestage = ();
 
 # Protos
 sub fatal($);
@@ -91,6 +92,7 @@ my $CREATESLIVERS = "$TB/bin/create_slivers";
 my $UPDATEGENIUSER= "$TB/sbin/protogeni/updategeniuser";
 my $OPENSSL       = "/usr/bin/openssl";
 my $MANAGEGITREPO = "$TB/bin/manage_gitrepo";
+my $MANAGEINSTANCE= "$TB/bin/manage_instance";
 my $DEFAULT_URN   = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
 my $GUEST_URN     = "urn:publicid:IDN+apt.emulab.net+authority+cm";
 my $PROTOGENI_LOCALUSER= @PROTOGENI_LOCALUSER@;
@@ -876,7 +878,7 @@ my $blob = {'uuid'         => $quickvm_uuid,
 	    'creator'      => $geniuser->uid(),
 	    'creator_idx'  => $geniuser->idx(),
 	    'creator_uuid' => $geniuser->uuid(),
-	    'status'       => ($start_at ? "deferred" : "created"),
+	    'status'       => "created",
 	    'start_at'     => $start_at,
 	    'stop_at'      => $stop_at,
 	    'servername'   => $SERVER_NAME,
@@ -955,6 +957,13 @@ foreach my $aggregate_urn (@aggregate_urns) {
     }
     $aggobj->_authority($authority);
     push(@aggregate_list, $aggobj);
+
+    #
+    # Mark for prestaging images if needed.
+    #
+    if ($aptaggregate->prestageimages()) {
+	push(@prestage, $aggobj);
+    }
 }
 
 # Must create a webtask if we did not get one on the command line.
@@ -998,17 +1007,31 @@ print STDERR "\n";
 print STDERR "$rspecstr\n";
 
 #
-# If start is deferred, then mark it and exit immediately.
+# Check to see if any of the aggregates need a prestage check, if so
+# set the status to "prestage" to flag create_slivers to do that first.
+# We will catch the start_at deferment later after we are done with
+# precheck/prestage.
 #
-if (defined($start_at)) {
+if (@prestage) {
+    foreach my $agg (@prestage) {
+	$agg->SetStatus("prestage");
+    }
+    $instance->SetStatus("prestage");
+    $instance->Defer();
+}
+elsif (defined($start_at)) {
+    #
+    # If scheduled, then mark it and exit immediately.
+    #
+    $instance->SetAggregateStatus("deferred");
+    $instance->SetStatus("scheduled");
     $instance->Defer($start_at);
     $slice->UnLock();
     exit(0);
 }
 
 #
-# Hand off to create slivers script. We have to fork/system cause
-# of libaudit logging.
+# Hand off to create slivers script, parent exits. We pass the lock along.
 #
 if (! ($debug || $foreground)) {
     libaudit::AuditPrefork();
@@ -1020,6 +1043,7 @@ if (! ($debug || $foreground)) {
     # All of the logging magic happens in here.
     libaudit::AuditFork();
 }
+
 system("$CREATESLIVERS -L -f " .
        ($debug ? "-d " : "") . ($usestitcher ? "-S " : "") . $quickvm_uuid);
 if ($?) {

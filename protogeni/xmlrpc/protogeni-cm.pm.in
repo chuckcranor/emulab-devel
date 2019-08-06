@@ -124,6 +124,7 @@ elsif ($GENI_VERSION eq "2.0") {
 	"Panic"             => \&GeniCMV2::Panic,
 	"RunLinktest"       => \&GeniCMV2::RunLinktest,
 	"Recovery"          => \&GeniCMV2::Recovery,
+	"PrestageImages"    => \&GeniCMV2::PrestageImages,
     };
 }
 

@@ -151,6 +151,7 @@ my $instance = APT_Instance->Lookup($ARGV[0]);
 if (!defined($instance)) {
     fatal("No such instance");
 }
+my $uuid        = $instance->uuid();
 my $webtask     = $instance->webtask();
 my $webtask_id  = $webtask->task_id();
 my $genislice   = $instance->GetGeniSlice();
@@ -169,6 +170,190 @@ else {
 $webtask->AutoStore(1);
 
 #
+# In prestage mode, we want to initiate the prestage on any images
+# that need to get pulled over. Since some of the clusters might not
+# be available for the initial prestage, we use the agg status to
+# determine which ones need to be initiated. We keep trying (via
+# defer) until all aggregates have been contacted.
+#
+while ($instance->status() eq "prestage" && !$instance->IsCanceled()) {
+    my $temp_webtask = WebTask->CreateAnonymous();
+    my $temp_taskid  = $temp_webtask->task_id();
+
+    system("$MANAGEINSTANCE -t $temp_taskid prestageimages $uuid prestage");
+    $temp_webtask->Refresh();
+    $instance->Refresh();
+
+    if ($? || !$temp_webtask->HasExited()) {
+	my $exitval = $? >> 8;
+
+	if ($exitval < 0 || !$temp_webtask->HasExited()) {
+	    $errmsg = "Internal error staging images";
+
+	    $webtask->output($errmsg);
+	    $webtask->Exited(GENIRESPONSE_ERROR);
+	    $instance->RecordError(GENIRESPONSE_ERROR, $errmsg);
+	    $instance->SetStatus("failed");
+	    $instance->ResolveDefer();
+	    $temp_webtask->Delete();
+	    $genislice->UnLock();
+	    exit(-1);
+	}
+	#
+	# Ignore most errors, we are going to try again later. But some
+	# really are bad and result in instance failure.
+	#
+	if ($temp_webtask->exitcode() == GENIRESPONSE_ERROR() ||
+	    $temp_webtask->exitcode() == GENIRESPONSE_SEARCHFAILED() ||
+	    $temp_webtask->exitcode() == GENIRESPONSE_BADARGS() ||
+	    $temp_webtask->exitcode() == GENIRESPONSE_RPCERROR() ||
+	    $temp_webtask->exitcode() == GENIRESPONSE_FORBIDDEN()) {
+	    $errmsg = $temp_webtask->output();
+	    
+	    $webtask->output($errmsg);
+	    $webtask->Exited($temp_webtask->exitcode());
+	    $instance->RecordError($temp_webtask->exitcode(), $errmsg);
+	    $instance->SetStatus("failed");
+	    $instance->ResolveDefer();
+	    $temp_webtask->Delete();
+	    $genislice->UnLock();
+	    exit(1);
+	}
+    }
+    my $results = $temp_webtask->value();
+    my $done = 1;
+    $temp_webtask->Delete();
+
+    print Dumper($results);
+    #
+    # Store prestaging info in the instance webtask so we can display 
+    # information about prestage progress in the web UI.
+    #
+    if (!defined($webtask->prestageStatus())) {
+	$webtask->prestageStatus($results);
+    }
+    else {
+	#
+	# Merge in results. This is to avoid things going missing after
+	# an aggregate has finished, the web UI is doing a very simple
+	# dumnp of the info, and the merge would happen there if not here.
+	#
+	my $current = $webtask->prestageStatus();
+	foreach my $aggurn (keys(%{$results})) {
+	    if (!exists($current->{$aggurn})) {
+		$current->{$aggurn} = $results->{$aggurn};
+		next;
+	    }
+	    my $images = $results->{$aggurn}->{"images"};
+	    foreach my $imgurn (keys(%{$images})) {
+		if (!exists($current->{$aggurn}->{"images"}->{$imgurn})) {
+		    $current->{$aggurn}->{"images"}->{$imgurn} =
+			$images->{$imgurn};
+		    next;
+		}
+		my $curimg = $current->{$aggurn}->{"images"}->{$imgurn};
+		my $newstatus   = $images->{$imgurn}->{"status"};
+		my $newprogress = $images->{$imgurn}->{"progress"};
+		
+		$curimg->{"status"} = $newstatus;
+		# Do not overwrite a non-zero progress with a zero.
+		if ($newprogress) {
+		    $curimg->{"progress"} = $newprogress;
+		}
+		# Hmm, if ready we might not get the final size. Force it
+		# for the web UI.
+		if ($newstatus eq "ready") {
+		    $curimg->{"progress"} = $curimg->{"size"};
+		}
+	    }
+	}
+	$webtask->prestageStatus($current);
+
+	print Dumper($current);
+    }
+
+    #
+    # Look at the results to see which aggregates are ready, staging,
+    # error.  We keep doing the prestage until all the aggregates report
+    # ready for all images. The we can move on.
+    #
+    foreach my $agg ($instance->AggregateList()) {
+	if ($agg->status() eq "prestage") {
+	    my $result = $results->{$agg->aggregate_urn()}->{"status"};
+	    if ($result eq "ready" || $result eq "notready") {
+		# We did the prestage call at this aggregete successfully.
+		if ($result eq "ready") {
+		    $agg->SetStatus("staged");
+		}
+		else {
+		    $agg->SetStatus("staging");
+		    $done = 0;
+		}
+	    }
+	    else {
+		$done = 0;
+	    }
+	}
+	elsif ($agg->status() eq "staging") {
+	    my $result = $results->{$agg->aggregate_urn()}->{"status"};
+	    if ($result eq "ready") {
+		$agg->SetStatus("staged");
+	    }
+	    else {
+		$done = 0;
+	    }
+	}
+    }
+
+    last
+	if ($instance->IsCanceled());
+
+    #
+    # Need to keep trying on some clusters.
+    #
+    if (!$done) {
+	print "Still need to prestage at some aggregates.\n";
+	sleep(10);
+	next;
+    }
+
+    #
+    # No longer staging images, we can proceed unless scheduled
+    #
+    if (defined($instance->start_at())) {
+	my $start_at = str2time($instance->start_at());
+	if ($start_at > time()) {
+	    $instance->SetAggregateStatus("deferred");
+	    $instance->SetStatus("scheduled");
+	    # Clear the old defer since we are changing the type of deferment.
+	    $instance->ResolveDefer();
+	    $instance->Defer($instance->start_at());
+	    $genislice->UnLock();
+	    exit(0);
+	}
+    }
+    $instance->ResolveDefer();
+    $instance->SetStatus("staged");
+    $instance->SetAggregateStatus("staged");
+}
+
+#
+# If we were canceled, stop now and terminate.
+#
+if ($instance->IsCanceled()) {
+    $instance->ResolveDefer();
+    $genislice->UnLock();
+    print "Cancelation flag set, aborting and terminating ...\n";
+
+    #
+    # If someone gets the lock, this will fail. But the apt daemon will
+    # see the canceled flag too and fire off a termination. 
+    #
+    system("$MANAGEINSTANCE -t $webtask_id terminate $uuid");
+    exit(0);
+}
+
+#
 # Anything to do? See create_instance; Note that we skip anything
 # that is already being worked on.
 #
@@ -176,7 +361,9 @@ foreach my $agg ($instance->AggregateList()) {
     my $aptagg = $agg->GetAptAggregate();
     
     next
-	if (! ($agg->status() eq "created" || $agg->status() eq "deferred"));
+	if (! ($agg->status() eq "created" ||
+	       $agg->status() eq "staged" ||
+	       $agg->status() eq "deferred"));
 
     #
     # See if the aggregate is online, lets not go to a ton of trouble
@@ -197,9 +384,8 @@ foreach my $agg ($instance->AggregateList()) {
 	    $genislice->UnLock();
 	    exit(1);
 	}
-	# Mark as deferred (it might still be "created" if not scheduled).
-	$agg->SetStatus("deferred")
-	    if ($agg->status() eq "created");
+	# Mark as deferred since we have to wait on it.
+	$agg->SetStatus("deferred");
 	next;
     }
     push(@aggregate_list, $agg);
@@ -210,19 +396,21 @@ foreach my $agg ($instance->AggregateList()) {
     # email, no need to since the user is looking at the web interface.
     #
     $sendemail = 1
-	if ($instance->status() ne "created");
+	if (! ($instance->status() eq "created" ||
+	       $instance->status() eq "staged"));
 }
 if (!@aggregate_list) {
     print "No uncreated aggregates to process.\n";
+
     #
-    # If not a scheduled experiment, we need to set the instance status
-    # to something that makes sense for the web interface since we were
-    # not able to start anything at all. Later, if we get some started,
+    # If no aggregates have been created, lets set the instance status
+    # to something that makes sense for the web interface.
     #
-    if ($instance->status() eq "created") {
+    if (scalar($instance->AggregateList()) ==
+	scalar($instance->DeferredAggregateList())) {
 	$instance->SetStatus("pending");
-	$instance->Defer();
     }
+    $instance->Defer();
     $genislice->UnLock();
     exit(0);
 }
@@ -233,7 +421,6 @@ if (!defined($geniuser)) {
 }
 my $emulab_user = $geniuser->emulab_user();
 my $slice_urn   = $genislice->urn();
-my $uuid        = $instance->uuid();
 my $project     = $instance->GetProject();
 my $rspecstr    = $instance->rspec();
 
@@ -461,6 +648,7 @@ if (ParRun({"maxwaittime" => 99999,
 #
 if ($instance->IsCanceled()) {
     $genislice->UnLock();
+    print "Cancelation flag set, aborting and terminating ...\n";
 
     #
     # If someone gets the lock, this will fail. But the apt daemon will
@@ -838,10 +1026,10 @@ sub CreateSlivers()
     my @return_codes = ();
 
     #
-    # If this is a scheduled experiment, we want to update the start
-    # time for the web interface.
+    # If starting the experiment (it might have been deferred), then
+    # initialize the start time.
     #
-    if ($instance->status() eq "deferred") {
+    if (!defined($instance->started())) {
 	$instance->Start();
     }
     $instance->SetStatus("provisioning");
@@ -918,7 +1106,7 @@ sub CreateSlivers()
     }
     #
     # No errors, but we have deferred aggregates. Need to schedule these
-    # for later retry.
+    # for later retry. 
     #
     if (@deferred) {
 	foreach my $aggobj (@deferred) {

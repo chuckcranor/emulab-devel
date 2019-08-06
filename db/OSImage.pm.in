@@ -1531,6 +1531,11 @@ sub ConvertToImported($$)
     return $_[0]->image()->ConvertToImported($_[1]);
 }
 
+sub ImportImageFileSize($)
+{
+    return $_[0]->image()->ImportImageFileSize();
+}
+
 #############################################################################
 #
 # Image Aliases are groups of images that work on different architectures.

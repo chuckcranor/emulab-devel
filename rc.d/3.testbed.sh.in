@@ -154,6 +154,11 @@ case "$1" in
 			@prefix@/sbin/aptevent_daemon
 		fi
 
+		if [ -x @prefix@/sbin/aptimage_daemon ]; then
+			echo -n " aptimage_daemon"
+			@prefix@/sbin/aptimage_daemon
+		fi
+
 		if [ -x @prefix@/sbin/apt_scheduler ]; then
 			echo -n " apt_scheduler"
 			@prefix@/sbin/apt_scheduler
@@ -305,6 +310,9 @@ case "$1" in
 		fi
 		if [ -r /var/run/aptevent_daemon.pid ]; then
 			kill `cat /var/run/aptevent_daemon.pid`
+		fi
+		if [ -r /var/run/aptimage_daemon.pid ]; then
+			kill `cat /var/run/aptimage_daemon.pid`
 		fi
 		if [ -r /var/run/cnetwatch.pid ]; then
 			kill `cat /var/run/cnetwatch.pid`

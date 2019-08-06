@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -58,7 +58,7 @@ my $CREATESLIVERS    = "$TB/bin/create_slivers";
 my $LOGFILE          = "$TB/log/apt_scheduler.log";
 my $SUDO	     = "/usr/local/bin/sudo";
 my $PROTOUSER	     = "elabman";
-my $SLEEP_INTERVAL   = 120;
+my $SLEEP_INTERVAL   = 60;
 my $DAILY_INTERVAL   = 24 * 3600;
 
 # un-taint path
@@ -144,8 +144,10 @@ while (1) {
 	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
 
     my $query_result =
-	DBQueryWarn("select uuid from apt_deferred_instances ".
-		    "where start_at is null or now() >= start_at");
+	DBQueryWarn("select d.uuid from apt_deferred_instances as d ".
+		    "left join apt_instances as i on i.uuid=d.uuid ".
+		    "where (d.start_at is null or now() >= d.start_at or ".
+		    "       i.status='prestage' or i.status='staging'");
     
     if ($query_result && $query_result->numrows) {
 	while (my ($uuid) = $query_result->fetchrow_array()) {
@@ -173,8 +175,8 @@ while (1) {
 		$code = -1
 		    if ($code == 255);
 		
+		print STDERR $output;
 		if ($code < 0) {
-		    print STDERR $output;
 		    
 		    if (!exists($emailedErrors{$uuid}) ||
 			time() - $emailedErrors{$uuid} > (3 * 3600)) {

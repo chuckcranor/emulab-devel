@@ -3,7 +3,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['status', 'waitwait-modal', 'oops-modal', 'register-modal', 'terminate-modal', 'oneonly-modal', 'approval-modal', 'linktest-modal', 'linktest-md', "destroy-experiment"]);
+    var templates = APT_OPTIONS.fetchTemplateList(['status', 'waitwait-modal', 'oops-modal', 'register-modal', 'terminate-modal', 'oneonly-modal', 'approval-modal', 'linktest-modal', 'linktest-md', "destroy-experiment", "prestage-table"]);
 
     var statusString = templates['status'];
     var waitwaitString = templates['waitwait-modal'];
@@ -37,6 +37,7 @@ $(function ()
     var status_message    = "";
     var statusTemplate    = _.template(statusString);
     var terminateTemplate = _.template(terminateString);
+    var prestageTemplate  = _.template(templates['prestage-table']);
     var instanceStatus    = "";
     var lastStatus        = "";
     var lockdown_code     = "";
@@ -125,8 +126,6 @@ $(function ()
 	    extensions:         extension_blob.extensions,
 	    errorURL:           window.HELPFORUM,
 	    lockdown_code:      lockdown_code,
-	    // The status panel starts out collapsed.
-	    status_panel_show:  (instanceStatus == "ready" ? false : true),
 	};
 	var status_html   = statusTemplate(template_args);
 	$('#status-body').html(status_html);
@@ -142,6 +141,9 @@ $(function ()
 	// Not allowed to copy repobased profiles.
 	if (expinfo.repourl) {
 	    $('#copy_button').addClass("hidden");
+	}
+	if (expinfo.started) {
+	    $('.exp-running').removeClass("hidden");
 	}
 
 	// Format dates with moment before display.
@@ -341,13 +343,14 @@ $(function ()
 
 	    });
 	if (instanceStatus == "ready") {
+	    $('#profile_status_collapse').collapse("hide");
  	    $('#profile_status_collapse').trigger('hide.bs.collapse');
 	}
 	else {
 	    $('#profile_status_collapse').collapse("show");
  	    $('#profile_status_collapse').trigger('show.bs.collapse');
 	}
-
+	
         $('#instructions').on('hide.bs.collapse', function () {
 	    APT_OPTIONS.updatePage({ 'status_instructions': 'hidden' });
 	});
@@ -358,14 +361,12 @@ $(function ()
 	    window.APT_OPTIONS.gaTabEvent("show",
 					  $(event.target).attr('href'));
 	});
+	
         addTutorialNotifyTab('profile');
         addTutorialNotifyTab('listview');
         addTutorialNotifyTab('manifest');
         addTutorialNotifyTab('Idlegraphs');
 	StartCountdownClock(expinfo.expires);
-	if (instanceStatus != "deferred") {
-	    $('.exp-running').removeClass("hidden");
-	}
 	StartStatusWatch();
 	if (window.APT_OPTIONS.oneonly) {
 	    sup.ShowModal('#oneonly-modal');
@@ -377,12 +378,11 @@ $(function ()
 	else if (window.APT_OPTIONS.snapping) {
 	    ShowProgressModal();
 	}
-	else if (instanceStatus == "deferred" ||
-		 instanceStatus == "pending") {
+	else if (!expinfo.started) {
 	    ShowRspec();
 	}
 	ShowBindings();
-    }
+     }
 
   function addTutorialNotifyTab(id)
   {
@@ -475,6 +475,10 @@ $(function ()
 	    console.info("GetStatus", instanceStatus,
 			 expinfo.paniced, json.value.paniced);
 	}
+	// See if a transition from scheduled to started
+	if (!expinfo.started && json.value.started) {
+	    ExperimentStarted();
+	}
 	// Watch for experiment going into or out of panic mode.
 	if (expinfo.paniced && !json.value.paniced) {
 	    // Left panic mode.
@@ -505,10 +509,21 @@ $(function ()
 		ProgressBarUpdate();
 		status_message = "Some or all aggregates currently unreachable";
 	    }
-	    else if (instanceStatus == 'deferred') {
+	    else if (instanceStatus == 'scheduled') {
 		status_html = "scheduled";
 		ProgressBarUpdate();
 		status_message = "Your experiment is scheduled to start later";
+	    }
+	    else if (instanceStatus == 'prestage' ||
+		     instanceStatus == 'staging') {
+		status_html = "staging";
+		ProgressBarUpdate();
+		status_message = "Copying images to target clusters before " +
+		    "starting experiment";
+		// Show this once when we first get prestage.
+		if (instanceStatus == "prestage") {
+		    sup.ShowModal('#prestage-info-modal');
+		}
 	    }
 	    else if (instanceStatus == 'provisioning') {
 		status_html = "provisioning";
@@ -635,11 +650,6 @@ $(function ()
 		.addClass(bgtype);
 	    $("#quickvm_status").html(status_html);
 	    UpdateButtons(instanceStatus);
-
-	    // See if a transition from scheduled to started
-	    if (lastStatus == "deferred" && instanceStatus != "deferred") {
-		ExperimentStarted();
-	    }
 	}
 	else if (lastStatus == "ready" && instanceStatus == "ready") {
 	    if (servicesExecuting(json.value)) {
@@ -655,10 +665,26 @@ $(function ()
 	    $("#quickvm_status").html(status_html);
 	}
 	lastStatus = instanceStatus;
+	/*
+	 * We get a prestageStatus array from the server when we need
+	 * to show that progress. Otherwise hide it.
+	 */
+	if (_.has(json.value, "prestageStatus")) {
+	    ShowPrestageInfo(json.value.prestageStatus);
+	    if ($('#prestage-info-modal').is(':visible')) {
+		sup.HideModal('#prestage-info-modal');
+	    }
+	}
+	else {
+	    HidePrestageInfo();
+	    if (instanceStatus != "prestage" &&
+		$('#prestage-info-modal').is(':visible')) {
+		sup.HideModal('#prestage-info-modal');
+	    }
+	}
 
 	// Add manifests as we get them or on topo change.
-	if (instanceStatus != "deferred" &&
-	    _.has(json.value, "sliverstatus")) {
+	if (expinfo.started && _.has(json.value, "sliverstatus")) {
 	    // This has a status object for all aggregates.
 	    aggcount = Object.keys(json.value.sliverstatus).length;
 	    // This will not do anything unless it needs to.
@@ -702,6 +728,9 @@ $(function ()
 	        destroy = 0;
   	        break;
 
+	    case 'staging':
+	    case 'prestage':
+	    case 'staged':
 	    case 'provisioned':
 	    case 'scheduled':
 	    case 'deferred':
@@ -3525,11 +3554,13 @@ $(function ()
 	}
 	else if (instanceStatus == "ready" || instanceStatus == "failed" ||
 		 instanceStatus == "quarantined" ||
-		 instanceStatus == "pending" || instanceStatus == "deferred") {
+		 instanceStatus == "pending" ||
+		 instanceStatus == "scheduled") {
 	    spinwidth = null;
 	}
 	if (spinwidth) {
 	    $('#profile_status_collapse').collapse("show");
+ 	    $('#profile_status_collapse').trigger('show.bs.collapse');
 	    $('#status_progress_outerdiv').removeClass("hidden");
 	    $("#status_progress_bar").width(spinwidth + "%");	
 	    $("#status_progress_div").addClass("progress-striped");
@@ -3766,10 +3797,11 @@ $(function ()
 		     return;
 		 }
 		 expinfo = json.value;
-		 $('#exp-started-date')
-		     .html(moment(expinfo.started).format("lll"));
-		 $('.exp-scheduled').addClass("hidden");
-		 $('.exp-running').removeClass("hidden");
+		 if (expinfo.started) {
+		     $('#exp-started-date')
+			 .html(moment(expinfo.started).format("lll"));
+		     $('.exp-running').removeClass("hidden");
+		 }
 	     });
     }
 
@@ -3900,6 +3932,25 @@ $(function ()
 		     });
 		 });
 	});
+    }
+
+    /*
+     * Show/Hide the prestaging panel.
+     */
+    function ShowPrestageInfo(status)
+    {
+	var html = prestageTemplate({
+	    "status" : status,
+	    "amlist" : amlist,
+	});
+	
+	$('#prestage-panel .panel-body').html(html);
+	$('#prestage-panel').removeClass("hidden");
+    }
+    function HidePrestageInfo()
+    {
+	$('#prestage-panel .panel-body').html("");
+	$('#prestage-panel').addClass("hidden");
     }
 
     // Helper.

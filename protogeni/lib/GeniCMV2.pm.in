@@ -725,6 +725,268 @@ sub CreateSliver($)
 }
 
 #
+# Prestage Images needed by a slice.
+#
+sub PrestageImages($)
+{
+    my ($argref) = @_;
+    my $slice_urn    = $argref->{'slice_urn'};
+    my $credentials  = $argref->{'credentials'};
+    my $imagelist    = $argref->{'imagelist'};
+    my $operation    = $argref->{'operation'};
+    my $mypid        = $PID;
+    my $response;
+    my $retval;
+    require Experiment;
+    require libtestbed;
+    require WebTask;
+    require Image;
+
+    # For now, I am not worrying about the slice_urn argument.
+    if (! (defined($credentials) && defined($operation) &&
+	   defined($slice_urn) && defined($imagelist))) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    if (! GeniHRN::IsValid($slice_urn)) {
+	return GeniResponse->MalformedArgsResponse("Bad characters in URN");
+    }
+    if (ref($imagelist) ne "ARRAY") {
+	return GeniResponse->MalformedArgsResponse("Imagelist is not an array");
+    }
+    my ($credential,$speaksfor,@morecreds) =
+	GeniStd::CheckCredentials($credentials);
+    return $credential
+	if (GeniResponse::IsResponse($credential));
+
+    main::AddLogfileMetaData("slice_urn", $slice_urn);
+
+    my $user = GeniCM::CreateUserFromCertificate($credential);
+    if (GeniResponse::IsResponse($user)) {
+	print STDERR "Could not create geni user for $credential\n";
+	return $user;
+    }
+
+    my %map      = ();
+    my %prestage = ();
+    my $blob = {
+	"status" => {},
+    };
+
+    # Get the project and group.
+    my $group = GeniUtil::GetHoldingProject($slice_urn, $user);
+    if (GeniResponse::IsResponse($group)) {
+	$response = $group;
+	goto bad;
+    }
+
+    #
+    # Go through image list and do the same MapToLocalImage() that we
+    # do when actually starting an experiment. 
+    #
+    foreach my $urn (@{ $imagelist }) {
+	my $image;
+	
+	my $hrn = GeniHRN->new($urn);
+	if (!defined($hrn)) {
+	    $response =
+		GeniResponse->MalformedArgsResponse("Not a valid URN: $urn");
+	    goto bad;
+	}
+	if ($hrn->IsImage()) {
+	    if (! (defined($hrn->ospid()) && defined($hrn->osname()))) {
+		$response =
+		    GeniResponse->MalformedArgsResponse(
+			"Malformed image URN: $urn");
+		goto bad;
+	    }
+	    $image = GeniImage::MapToLocalImage($urn, undef,
+						$group->pid(),
+						# Assumes image tracking.
+						1, @morecreds);
+	    if (GeniResponse::IsError($image)) {
+		$response = $image;
+		goto bad;
+	    }
+	}
+	elsif ($hrn->IsIMDataset()) {
+	    $response =
+		GeniResponse->MalformedArgsResponse("Do not know how to ".
+						    "prestage : $urn");
+	    goto bad;
+	}
+	else {
+	    $response =
+		GeniResponse->MalformedArgsResponse("Do not know how to ".
+						    "prestage : $urn");
+	    goto bad;
+	}
+	my $status = {
+	    "status"   => "ready"
+	};
+	if ($image->isImage()) {
+	    $status->{"versname"} = $image->versname();
+	    $status->{"urn"} = $urn;
+	    # What the user is waiting for. 
+	    $status->{"size"} = $image->size() ? int($image->size() / 1024) : 0;
+	}
+	
+	#
+	# If any of these are true, then we do not have to worry about
+	# prestaging
+	#
+	if (! ($image->isImageAlias() || !$image->isImage() ||
+	       $image->IsLocal() || $image->IsSystemImage())) {
+	    if (! $image->ready()) {
+		$status->{"status"} = "notready";
+		# Start the image prestaging if requested.
+		$prestage{$urn} = $image
+		    if ($operation eq "prestage");
+		# Lets try to figure out the current size of the import file.
+		$status->{"progress"} = $image->ImportImageFileSize();
+	    }
+	    else {
+		$status->{"progress"} = $status->{"size"};
+	    }
+	}
+	$blob->{"status"}->{$urn} = $status;
+    }
+    print STDERR Dumper($blob);
+
+    #
+    # We want to fire off imports for the images we need to get, but
+    # we do this in the background and have the caller poll for status.
+    # Only one at a time, since the reason we do prestage is because
+    # we have poor connectivity to this aggregate.
+    #
+    if ($operation eq "prestage" && keys(%prestage)) {
+	my @todo = keys(%prestage);
+	while (@todo) {
+	    my $urn   = shift(@todo);
+	    my $image = $prestage{$urn};
+
+	    if ($image->Lock()) {
+		print STDERR "$image is currently locked. Waiting ...\n";
+
+		if ($image->WaitLock(30)) {
+		    print STDERR "Still locked, moving on to another.\n";
+		    push(@todo, $urn);
+		    next;
+		}
+	    }
+	    print STDERR "Got the lock on $image.\n";
+
+	    #
+	    # Make sure image is still not ready, maybe someone else
+	    # got in and was working on it.
+	    #
+	    $image->Refresh();
+	    if ($image->ready()) {
+		print STDERR "$image is ready after locking. Moving on\n";
+		$image->Unlock();
+		next;
+	    }
+
+	    #
+	    # Enter a pending entry so the daemon can pick things up.
+	    # In general, we prestage cause connectivity and/or bandwidth
+	    # is very limited, so serializing is probably the better
+	    # approach. Revisit later if needed. Note that we can receive
+	    # multiple prestage requests for the same image, say from two
+	    # different experiments wanting to start. Both are going to
+	    # have to wait on the same pending entry to finish up.
+	    #
+	    my $pending = Image::PendingImport->Lookup($image->imageid());
+	    if (defined($pending)) {
+		# Already working on it elsewhere.
+		print STDERR "Pending already exists, moving on.\n";
+		$image->Unlock();
+		next;
+	    }
+	    $pending = Image::PendingImport->Lookup($image->metadata_url());
+	    if (defined($pending)) {
+
+	    }
+	    $pending = Image::PendingImport->Create({
+		"uid"          => $image->creator(),
+		"uid_idx"      => $image->creator_idx(),
+		"pid"          => $image->pid(),
+		"pid_idx"      => $image->pid_idx(),
+		"type"         => "import",
+		"imagename"    => $image->imagename(),
+		"imageid"      => $image->imageid(),
+		"metadata_url" => $image->metadata_url(),
+	    });
+	    if (!defined($pending)) {
+		print STDERR "Could not pending import object\n";
+		$image->Unlock();
+		$response =
+		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				 "Could not create pending import object");
+		goto bad;
+	    }
+	    $image->Unlock();
+	    $map{$urn} = $pending;
+	}
+	if (keys(%map)) {
+	    # debugging
+	    if (0) {
+		print STDERR "Not importing images yet\n";
+	    }
+	    else {
+		#
+		# Fire off the imports in the background. Hopefully
+		# these work first time and the daemon will not have
+		# to ever deal with them.
+		#
+		$mypid = main::WrapperFork();
+		if ($mypid) {
+		    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+		}
+		my @todo = keys(%map);
+		while (@todo) {
+		    my $urn     = shift(@todo);
+		    my $pending = $map{$urn};
+		    my $image   = $prestage{$urn};
+
+		    #
+		    # Use a webtask, we want better reporting from the importer
+		    # so we can report back. Network issues need to be treated
+		    # as a retryable error. 
+		    #
+		    my $webtask = WebTask->CreateAnonymous();
+		    if (!defined($webtask)) {
+			print STDERR "Could not create web task.\n";
+			next;
+		    }
+		    my $command = "$IMPORTER -d -t ". $webtask->task_id() .
+			" -g -P " . $pending->idx();
+
+		    print STDERR "Running: '$command'\n";
+		    GeniUtil::ExecuteAsGeniUser("$command");
+		    $webtask->Refresh();
+		    if ($?) {
+			my $code = $? >> 8;
+			if (!$webtask->HasExited() || $webtask->code() < 0) {
+			    $pending->Failed($webtask->HasExited() ?
+					     $webtask->output() :
+					     "Internal error importing image");
+			}
+		    }
+		    $webtask->Delete();
+		}
+		return 0;
+	    }
+	}
+    }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+
+  bad:
+    return -1
+      if ($mypid != $PID);
+    return $response;
+}
+
+#
 # Delete a Sliver.
 #
 sub DeleteSliver($)
@@ -4330,6 +4592,7 @@ sub TriggerImageUpdate($)
     my $blob         = $argref->{'info'};
     my $credentials  = $argref->{'credentials'};
     require OSImage;
+    require Image;
     require emdb;
 
     if (! (defined($credentials) && defined($blob))) {
@@ -4389,19 +4652,12 @@ sub TriggerImageUpdate($)
 				    "image is locked");
     }
     #
-    # If we already have a conflicting entry in the updates table,
+    # If we already have a conflicting entry in the pending imports table,
     # that is bad.
     #
-    my $query_result =
-	emdb::DBQueryWarn("select url from image_updates ".
-			  "where imageid='$imageid'");
-    if (!defined($query_result)) {
-	$localimage->Unlock();
-	return GeniResponse->Create(GENIRESPONSE_ERROR);
-    }
-    if ($query_result->numrows) {
-	my ($url) = $query_result->fetchrow_array();
-	if ($url eq $blob->{'metadata_url'}) {
+    my $pending = Image::PendingImport->Lookup($blob->{'metadata_url'});
+    if (defined($pending)) {
+	if ($pending->imageid() == $imageid) {
 	    $localimage->Unlock();
 	    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 	}
@@ -4409,34 +4665,50 @@ sub TriggerImageUpdate($)
 	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
 				    "Conflicting image update is pending");
     }
-    my $safe_url = DBQuoteSpecial($blob->{'metadata_url'});
-    my $safe_urn = DBQuoteSpecial($blob->{'updater_urn'});
-    my $update_fields = "";
-
+    my $args = {
+	"uid_urn"      => $blob->{'updater_urn'},
+	"pid"          => $localimage->pid(),
+	"pid_idx"      => $localimage->pid_idx(),
+	"gid"          => $localimage->gid(),
+	"gid_idx"      => $localimage->gid_idx(),
+	"type"         => "copyback",
+	"imagename"    => $localimage->imagename(),
+	"imageid"      => $localimage->imageid(),
+	"remote_urn"   => $blob->{'remote_urn'},
+	"metadata_url" => $blob->{'metadata_url'},
+    };
     #
     # We might know the updater or we might not. If we do that is nice,
     # cause then we can set the updater fields in the new image version
     # accordingly. If not a local user record, then at least we can set
     # updater URN, but do the actual import update in the context of the
-    # image creator (image_import decides this). 
+    # image creator (image_import decides this).
+    #
+    # Ick, setgroups skips nonlocal users, so local use does not have
+    # permission to do this on ops, so have to fall back to the creator.
     #
     my $update_user = GeniUser->Lookup($blob->{'updater_urn'}, 1);
-    if (defined($update_user)) {
-	my $updater = $update_user->uid();
-	my $updater_idx = $update_user->idx();
-	
-	$update_fields = ", updater='$updater',updater_idx='$updater_idx'";
+    if (defined($update_user)
+	&& $update_user->IsLocal() && $update_user->emulab_user()->IsLocal()) {
+	$args->{"uid"}     = $update_user->uid();
+	$args->{"uid_idx"} = $update_user->uid_idx();
+    }
+    else {
+	$args->{"uid"}     = $localimage->creator();
+	$args->{"uid_idx"} = $localimage->creator_idx();
     }
     # We need the credential for secure download.
     if (exists($blob->{"credential"})) {
-	$update_fields .= ", credential_string=" .
-	    DBQuoteSpecial($blob->{"credential"});
+	$args->{"credential_string"} = $blob->{"credential"};
     }
-    emdb::DBQueryWarn("insert into image_updates set ".
-		      "  imageid='$imageid',url=$safe_url, ".
-		      "  updater_urn=$safe_urn,updated=now() $update_fields");
+    $pending = Image::PendingImport->Create($args);
+    if (!defined($pending)) {
+	$localimage->Unlock();
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Internal error creating pending import")
+    }
     $localimage->Unlock();
-
+    
     #
     # At this point, we can just return to the caller. It is now up to
     # us to pull the new image in, and if we fail we send email and hope
@@ -4444,11 +4716,11 @@ sub TriggerImageUpdate($)
     #
     my $mypid = main::WrapperFork();
     if ($mypid) {
-	return GeniResponse->Create(GENIRESPONSE_SUCCESS)
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
     }
 
     # Try to import right away, if it fails the daemon will catch it later.
-    system("$IMPORTER -d -g -r -c $imageid");
+    system("$IMPORTER -d -g -P " . $pending->idx());
     return 0;
 }
 

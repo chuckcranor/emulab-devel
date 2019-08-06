@@ -139,31 +139,33 @@ pre {
 	      </tr>
 	    <% } %>
 	  <% } %>
-	  <% if (expinfo.status == "deferred") { %>
-	    <tr class="exp-scheduled">
+	  <% if (!expinfo.started) { %>
+	    <tr class="exp-created">
 	      <td class='border-none'>Created:</td>
 	      <td class='border-none format-date'><%- expinfo.created %></td>
 	    </tr>
+	  <% } %>
+	  <% if (expinfo.start_at) { %>
 	    <tr class="exp-scheduled">
 	      <td class='border-none'>Scheduled:</td>
 	      <td class='border-none format-date'><%- expinfo.start_at %></td>
 	    </tr>
 	  <% } %>
-	  <tr <% if (expinfo.status == "deferred") { %>
-                   class="exp-running hidden" <% } %>>
+	  <tr class="exp-running hidden">
 	    <td class='border-none'>Started:</td>
 	    <td class='border-none format-date'
-		id="exp-started-date"><% if (expinfo.status != "deferred") { %><%- expinfo.started %><% } %></td>
+		id="exp-started-date"><%- expinfo.started || "" %></td>
 	  </tr>
 	  <tr>
 	    <td class='border-none'>Expires:</td>
 	    <td class='border-none'>
 	      <span id='instance_expiration'>
-		<span id='quickvm_expires' class='format-date'><%- expinfo.expires %></span>
+		<span id='quickvm_expires' class='format-date'>
+		  <%- expinfo.expires %></span>
 		(<span id='quickvm_countdown'></span>)
 	      </span>
 	    </td>
-	  </tr">
+	  </tr>
 	  <tr id="maximum-extension" class="hidden">
 	    <td class='border-none'>Extendable:</td>
 	    <td class='border-none'>
@@ -298,8 +300,7 @@ pre {
 	  </div>
 	  <% if (isadmin) { %>
 	    <div class='clearfix'></div>	  
-	    <div <% if (expinfo.status == "deferred") { %>
-                   class="exp-running hidden" <% } %>>
+	    <div class="exp-running hidden">
 	      <div class='pull-left'
 		   data-delay='{"show":750}'
 		   data-toggle='popover'
@@ -311,8 +312,7 @@ pre {
 			 <% if (expinfo.lockout) { %>checked<% } %> >Lockout</label>
 	      </div>
 	    </div>
-	    <div <% if (expinfo.status == "deferred") { %>
-                   class="exp-running hidden" <% } %>>
+	    <div class="exp-running hidden">
 	      <div class='pull-left'
 		   data-delay='{"show":750}'
 		   data-toggle='popover'
@@ -331,8 +331,7 @@ pre {
 		  User Lockdown</label>
 	      </div>
 	    </div>
-	    <div <% if (expinfo.status == "deferred") { %>
-                   class="exp-running hidden" <% } %>>
+	    <div class="exp-running hidden">
 	      <div class='pull-left'
 		   data-delay='{"show":750}'
 		   data-toggle='popover'
@@ -345,29 +344,15 @@ pre {
 		  Admin Lockdown</label>
 	      </div>
 	    </div>
-	    <% if (0) { %>
-	    <div <% if (expinfo.status == "deferred") { %>
-                   class="exp-running hidden" <% } %>>
-	      <div class='pull-left'
-		   data-delay='{"show":750}'
-		   data-toggle='popover'
-		   data-content="When checked, the experiment is in
-				 Quarantine (emulab panic) mode.">
-		<label class="checkbox-inline" style='margin-right: 10px;'>
-		  <input type="checkbox" id="quarantine_checkbox" disabled
-			 <% if (expinfo.paniced) { %>checked<% } %>
-		  <span <% if (expinfo.paniced) { %>class="text-danger"<% } %> >
-		    Quarantined</span></label>
-	      </div>
-	    </div>
-	    <% } %>
-	    <div <% if (expinfo.status == "deferred") { %>
-                   class="exp-running hidden" <% } %>>
+	    <div class="exp-running hidden">
 	      <div class='pull-left'>
-		<span <% if (expinfo.admin_notes == "") { %>hidden<% } %>'
-		    data-delay='{"show":750}'
-		    data-toggle='popover'
-		    data-content="This experiment has admin notes">
+		<span data-toggle='popover'
+		      data-delay='{"show":750}'
+		      <% if (expinfo.admin_notes == "") { %>
+		        data-content="Add admin notes to this experiment"
+		      <% } else { %>
+		        data-content="This experiment has admin notes"
+		      <% } %>>
 		  <a target="_blank"
 		     href='adminextend.php?uuid=<%= uuid %>'>Admin Notes</a>
 		</span>
@@ -429,6 +414,21 @@ pre {
     </div>
   </div>
 </div>
+</div>
+<!-- Add a div for the prestaging info -->
+<div class='row hidden' id='prestage-panel'>
+  <div class='col-lg-8  col-lg-offset-2
+	      col-md-8  col-md-offset-2
+	      col-sm-10 col-sm-offset-1
+	      col-xs-12 col-xs-offset-0'>
+    <div class="panel panel-info">
+      <div class="panel-heading">
+	<h5>Prestage Progress</h5>
+      </div>
+      <div class="panel-body">
+      </div>
+    </div>
+  </div>
 </div>
 <!-- Add a div for the instructions if there are instructions. The cliet
      will actually fill in the div though, since it is markdown and that
@@ -572,6 +572,8 @@ pre {
 			    </li>
 			    <li><a href='#' name='reload'>Reload Selected</a>
 			    </li>
+			    <li><a href='#' name='delete'>Delete Selected</a>
+			    </li>
 			  </ul>
 			</div>
 		      </th>
@@ -617,7 +619,7 @@ pre {
 		    <div class='col-xs-12 col-xs-offset-0'
 			 style="padding:0px;">
 		      <div id="loadavg-chart"
-			   class='fixedsize-panel
+			   class='fixedsize-panel idlegraph-div
 				  with-3d-shadow with-transitions'>
 			<svg></svg>
 		      </div>
@@ -662,7 +664,8 @@ pre {
 		    <div class='col-xs-12 col-xs-offset-0'
 			 style="padding:0px;">
 		      <div id="ctrl-traffic-chart"
-class='fixedsize-panel with-3d-shadow with-transitions'>
+			   class='fixedsize-panel idlegraph-div
+				  with-3d-shadow with-transitions'>
 			<svg></svg>
 		      </div>
 		    </div>
@@ -704,7 +707,8 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
 		    <div class='col-xs-12 col-xs-offset-0'
 			 style="padding:0px;">
 		      <div id="expt-traffic-chart"
-class='fixedsize-panel with-3d-shadow with-transitions'>
+			   class='fixedsize-panel idlegraph-div
+				  with-3d-shadow with-transitions'>
 			<svg></svg>
 		      </div>
 		    </div>
@@ -1561,6 +1565,33 @@ class='fixedsize-panel with-3d-shadow with-transitions'>
 		      id='confirm-disable-quarantine'>Confirm</button>
 	    </div>
 	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <!-- Prestaging info -->
+  <div id='prestage-info-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <button type='button' class='close' data-dismiss='modal'
+                  aria-hidden='true'>&times;</button>
+	  <center>
+	    <h4>Prestaging Images Used By Your Profile</h4>
+	  </center>
+	</div>
+	<div class='modal-body' style="font-size: larger;">
+	  <div>
+	    Some of the images used by your profile <em>may</em> need to be
+	    transferred to your resources; we are checking to see if that is
+	    necessary. This will take a minute or two, <b>please be patient!</b>
+	  </div>
+	  <div style="margin-top: 10px;">
+	    If any images do need to be transferred, your experiment will be
+	    delayed until those images have been successfully copied over.
+	    This might take a while, <b>please be patient!</b>
+	  </div>
+	  </font>
 	</div>
       </div>
     </div>

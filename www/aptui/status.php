@@ -336,7 +336,8 @@ if (isset($this_user)) {
 AddTemplateList(array("status", "waitwait-modal", "oops-modal",
                       "register-modal", "terminate-modal", "oneonly-modal",
                       "approval-modal", "linktest-modal",
-                      "destroy-experiment", "save-paramset-modal"));
+                      "destroy-experiment", "save-paramset-modal",
+                      "prestage-table"));
 
 AddTemplateKey("linktest-md", "template/linktest.md");
 SPITFOOTER();

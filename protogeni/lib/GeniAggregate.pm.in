@@ -95,6 +95,7 @@ my $EXPORTS_SETUP  = "$TB/sbin/exports_setup";
 my $GENTOPOFILE    = "$TB/libexec/gentopofile";
 my $GENELISTS      = "$TB/sbin/genelists";
 my $IMAGE_SETUP    = "$TB/sbin/image_setup";
+my $IMPORTER       = "$TB/sbin/image_import";
 my $ARPLOCKDOWN    = "$TB/sbin/arplockdown";
 my $TARFILES_SETUP = "$TB/bin/tarfiles_setup";
 my $ELAB_SETUP     = "$TB/sbin/elabinelab";
@@ -1124,6 +1125,7 @@ sub ActionStart($$;$)
     my %nodes    = ();
     my @restarts = ();
     my @failed   = ();
+    my %imports  = ();
     my $sliver;
     my $output;
 
@@ -1199,9 +1201,37 @@ sub ActionStart($$;$)
 		$pnode->_bootlog(undef);
 	    }
 	}
+	#
+	# See if we have to download the image (import).
+	#
+	my $image = OSImage->Lookup($node->def_boot_osid(),
+				    $node->def_boot_osid_vers());
+	if (!defined($image)) {
+	    print STDERR "No image can be found for $node\n";
+	    next;
+	}
+	if ($image->isImage() && !$image->IsLocal() && !$image->ready()) {
+	    $imports{$image->imageid()} = $image;
+	}
     }
     # See "bad" label below.
     $sliver = undef;
+
+    #
+    # Fire off image imports for any images that are not ready. This
+    # happens when we are using the image tracker. On the normal Geni
+    # path, images will be specified by URL, and we get those in 
+    # image_setup below.
+    #
+    foreach my $image (values(%imports)) {
+	my $imageid = $image->imageid();
+	
+	GeniUtil::ExecuteAsGeniUser("$IMPORTER -d -G -p GeniSlices $imageid");
+	if ($?) {
+	    $msg = "Could not import " . $image->versname();
+	    goto bad;
+	}
+    }
 
     #
     # Download the images. If this fails, we have wasted our time,

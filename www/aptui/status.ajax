@@ -101,6 +101,7 @@ function Do_GetInstanceStatus()
     $blob["status"] = $instance->status();
     $blob["canceled"] = $instance->canceled() ? 1 : 0;
     $blob["paniced"] = $instance->paniced() ? 1 : 0;
+    $blob["started"] = DateStringGMT($instance->started());
     $blob["sliverstatus"] = array();
 
     if ($instance->logfileid()) {
@@ -143,8 +144,18 @@ function Do_GetInstanceStatus()
     }
     $blob["haveopenstackstats"] = $haveopenstack;
 
-    # Reflect errors back to the user.
+    # Prestaging status to display
     $webtask = $instance->WebTask();
+    if ($webtask &&
+        ($instance->status() == "prestage" ||
+         $instance->status() == "staging" ||
+         $instance->status() == "staged")) {
+        $pstatus = $webtask->TaskValue("prestageStatus");
+        if ($pstatus) {
+            $blob["prestageStatus"] = $pstatus;
+        }
+    }
+    # Reflect errors back to the user.
     if ($webtask && $webtask->exited()) {
         $blob["code"] = $webtask->exitcode();
         

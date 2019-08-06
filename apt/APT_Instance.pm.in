@@ -334,9 +334,6 @@ sub Create($$$)
 	$sets .= ", start_at=FROM_UNIXTIME(" . $argref->{"start_at"} . ")";
 	delete($argref->{"start_at"});
     }
-    else {
-	$sets .= ", started=created";
-    }
     my $query = "insert into apt_instances set ${sets}, ".
 	join(",", map("$_=" .
 		      DBQuoteSpecial($argref->{$_}), keys(%{$argref})));
@@ -1612,6 +1609,55 @@ sub CreateDatasetCreds($$$)
 }
 
 #
+# Get a list of all images used by the instance, for each aggregate.
+#
+sub GetImageList($$;$)
+{
+    my ($self, $pmsg, $pref) = @_;
+    my $rspecstr  = $self->rspec();
+    my %imagelist = ();
+
+    my $rspec = GeniXML::Parse($rspecstr);
+    if (! defined($rspec)) {
+	print STDERR "CreateDatasetCreds: Could not parse rspec\n";
+	return -1;
+    }
+
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $manager_urn = GeniHRN->new(GetManagerId($ref));
+	my $diskref     = GeniXML::GetDiskImage($ref);
+
+	if (! (defined($manager_urn) && $manager_urn->IsCM())) {
+	    $$pmsg = "$manager_urn is not a valid CM URN";
+	    return 1;
+	}
+
+	# Using the default (system) image. 
+	next
+	    if (!defined($diskref));
+
+	my $image_url = GeniXML::GetText("url", $diskref);
+	my $image_urn = GeniXML::GetText("name", $diskref);
+	next
+	    if (!defined($image_urn));
+	# Yep, people put the URL in the URN spot. We should throw an error.
+	next
+	    if ($image_urn =~ /^(http|https):/);
+
+	if (!GeniHRN::IsValid($image_urn)) {
+	    $$pmsg = "$image_urn is not a valid URN";
+	    return 1;
+	}
+	if (!exists($imagelist{$manager_urn})) {
+	    $imagelist{$manager_urn} = [];
+	}
+	push(@{ $imagelist{$manager_urn} }, $image_urn);
+    }
+    $$pref = \%imagelist;
+    return 0;
+}
+
+#
 # Create credentials required by this instance, to access restricted images.
 # Access means import and/or use the image.
 #
@@ -1841,6 +1887,12 @@ sub Defer($$)
     my $uuid   = $self->uuid();
     my $name   = $self->name();
 
+    if (defined($start)) {
+	if ($start !~ /^\d+$/) {
+	    $start = str2time($start);
+	}
+    }
+
     my $query_result =
 	DBQueryWarn("select uuid from apt_deferred_instances ".
 		    "where uuid='$uuid'");
@@ -1859,12 +1911,6 @@ sub Defer($$)
 		    (defined($start) ?
 		     ", start_at=FROM_UNIXTIME($start)" : ""))
 	    or return -1;
-	
-	if (defined($start)) {
-	    DBQueryWarn("update apt_instance_aggregates set status='deferred' ".
-			"where uuid='$uuid'")
-		or return -1;
-	}
     }
     return 0;
 }
@@ -4107,6 +4153,45 @@ sub Recovery($$$)
 
     return Genixmlrpc::CallMethod($cmurl, $context, "Recovery", $args);
 }
+
+#
+# Handle prestaging images at aggregates. 
+#
+sub PrestageImages($$$@)
+{
+    my ($self, $operation, $imagelist, $credlist) = @_;
+    my $authority = $self->GetGeniAuthority();
+    my $geniuser  = $self->instance()->GetGeniUser();
+    my $slice     = $self->instance()->GetGeniSlice();
+    my $context   = APT_Geni::GeniContext();
+    return ContextError()
+	if (! (defined($geniuser) && defined($authority) &&
+	       defined($slice) && defined($context)));
+
+    my ($slice_credential, $speaksfor_credential) =
+	APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
+    return CredentialError()
+	if (!defined($slice_credential));
+
+    my $credentials = [$slice_credential->asString()];
+    if (defined($speaksfor_credential)) {
+	$credentials = [@$credentials, $speaksfor_credential->asString()];
+    }
+    foreach my $cred (@$credlist) {
+	push(@$credentials, $cred->asString());
+    }
+    my $args = {
+	"slice_urn"   => $slice->urn(),
+	"credentials" => $credentials,
+	"imagelist"   => $imagelist,
+	"operation"   => $operation,
+    };
+    my $cmurl = $authority->url();
+    $cmurl = devurl($cmurl) if ($usemydevtree);
+
+    return Genixmlrpc::CallMethod($cmurl, $context, "PrestageImages", $args);
+}
+
 
 # _Always_ make sure that this 1 is at the end of the file...
 1;

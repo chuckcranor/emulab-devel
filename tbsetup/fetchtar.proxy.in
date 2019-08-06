@@ -38,10 +38,11 @@ sub usage()
  
     exit(-1);
 }
-my $optlist = "qu:g:hd";
+my $optlist = "qu:g:hdc";
 my $debug   = 0;
 my $quiet   = 0;
 my $hashit  = 0;
+my $continue= 0;
 my $user;
 my $grouplist;
 
@@ -92,6 +93,9 @@ if (! getopts($optlist, \%options)) {
 }
 if (defined($options{"d"})) {
     $debug = 1;
+}
+if (defined($options{"c"})) {
+    $continue = 1;
 }
 if (defined($options{"q"})) {
     $quiet = 1;
@@ -196,10 +200,18 @@ if (! $pid) {
     # Give parent a chance to react.
     sleep(1);
 
+    my $retry_options = "--retry-connrefused --waitretry=5 ";
+    if (0) {
+	$retry_options .=
+	    "--tries 3 --timeout=5 --limit-rate=3000k";
+    }
+    else {
+	$retry_options .=
+	    "--dns-timeout=30 --connect-timeout=60 --read-timeout=600 ";
+    }
     my $cmd = "nice -15 $WGET --no-check-certificate ".
-	"--dns-timeout=30 --connect-timeout=60 --read-timeout=600 ".
-	"--retry-connrefused --waitretry=30 ".
-	"--show-progress --progress=dot:giga ".
+	($continue ? "-c " : "") .
+	"$retry_options --show-progress --progress=dot:giga ".
 	"-q -O $localfile -i -";
 
     if ($debug) {

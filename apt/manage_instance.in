@@ -161,6 +161,7 @@ sub DoImageTrackerStuff($$$$$$$$);
 sub DoWarn();
 sub DoDelete();
 sub DoStatus();
+sub DoPrestageImages();
 sub DenyExtensionInternal($);
 sub ExtendInternal($$$$$);
 sub CallMethodOnAggregates($$$@);
@@ -305,6 +306,9 @@ elsif ($action eq "delete") {
 }
 elsif ($action eq "status") {
     DoStatus()
+}
+elsif ($action eq "prestageimages") {
+    DoPrestageImages()
 }
 else {
     usage();
@@ -889,9 +893,6 @@ sub DoSnapshot()
 	    }
 	}
     }
-    $instance->SetStatus("ready");
-    $aggregate->SetStatus("ready");
-
     if ($relocate) {
 	my $pid = $project->pid();
 
@@ -942,6 +943,9 @@ sub DoSnapshot()
 	    $swebtask->image_status("ready");
 	}
     }
+    $instance->SetStatus("ready");
+    $aggregate->SetStatus("ready");
+
     $swebtask->Exited(0);
     $webtask->Exited(0)
 	if (defined($webtask));
@@ -1371,12 +1375,15 @@ sub DoTerminate()
 	}
 	
 	#
-	# A special case is if the slice is provisioning. This means the
-	# user is giving up on it, and we want to tell the aggregate to
-	# kill it. Not all aggregates are going to allow this, so need
-	# to be able to deal with that.
+	# A couple of special states where the user can interrupt an
+	# experiment that is setting up. This means the user is giving
+	# up on it, and we want to tell the aggregate to kill it. Not
+	# all aggregates are going to allow this, so need to be able
+	# to deal with that.
 	#
-	if ($instance->status() ne "provisioned") {
+	if (! ($instance->status() eq "provisioned" ||
+	       $instance->status() eq "prestage" ||
+	       $instance->status() eq "staged")) {
 	    $errmsg = "Experiment is busy, unable to lock it";
 
 	    if (defined($webtask)) {
@@ -1426,12 +1433,10 @@ sub DoTerminate()
     }
 
     # Skip terminated aggregates, since we retry later on failure.
-    # Also skip deferred aggregates, these were never setup.
     my @agglist;
     foreach my $agg ($instance->AggregateList()) {
 	push(@agglist, $agg)
-	    if ($agg->status() ne "terminated" &&
-		$agg->status() ne "deferred");
+	    if ($agg->status() ne "terminated");
     }
     my $response;
 
@@ -3859,6 +3864,239 @@ sub DoUpdateKeys()
 }
 
 #
+# There are several operations we need to perform.
+#
+# 1. Precheck to see if any images need to be prestaged. This does not
+#    require image credentials, we are just checking to see if they exist
+#    at the aggregate (no importing needed). We would run this this first
+#    to see if we need to bother with prestaging when creating the
+#    instance.
+#
+# 2. Initiate a prestage. This does require image credentials. The return
+#    value says what images if any are being imported (not ready).  When
+#    the instance is newly "created" and there are images to be prestaged,
+#    we defer the instance until later. 
+#
+# 3. Check prestage status. This does not require image credentials, and
+#    mostly the same as the precheck above, but using the image names we
+#    got back from the previous step. 
+# 
+sub DoPrestageImages()
+{
+    my $errmsg;
+    my $errcode = 1;
+    my $exitcode = -1;
+    my $response;
+    my $imagelist;
+    my $optlist     = "";
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (@ARGV != 1);
+    my $op = shift(@ARGV);
+
+    if (! ($op eq "prestage" || $op eq "status")) {
+	fatal("Bad operation, must be prestage or status");
+    }
+    if ($instance->GetImageList(\$errmsg, \$imagelist)) {
+	print STDERR "Could not get imagelist: $errmsg\n";
+	exit(-1);
+    }
+
+    #
+    # The results is a hash, one per aggregate, with a status for the
+    # entire aggregate (all images ready, or not ready). Also a hash,
+    # one per image, with the status for that image and the current download
+    # size. This will hopefully be helpful enough to tell the user something
+    # in the web UI about what is going on.
+    #
+    my %results = ();
+
+    my $addStatus = sub {
+	my ($aggregate, $image, $status, $progress, $size) = @_;
+	my $aggregate_urn = $aggregate->aggregate_urn();
+
+	if (!exists($results{$aggregate_urn})) {
+	    $results{$aggregate_urn} = {
+		"status"   => "ready",
+		"images"   => {},
+	    };
+	}
+	return
+	    if (!defined($status));
+
+	# Status for aggregate.
+	if (!defined($image)) {
+	    $results{$aggregate_urn}->{"status"} = $status;
+	    return;
+	}
+	$results{$aggregate_urn}->{"images"}->{$image} = {"status" => $status};
+
+	if (defined($size)) {
+	    $results{$aggregate_urn}->{"images"}->{$image}->{"size"} = $size;
+	}
+	if (defined($progress)) {
+	    $results{$aggregate_urn}->
+	        {"images"}->{$image}->{"progress"} = $progress;
+	}
+	if ($status ne "ready") {
+	    $results{$aggregate_urn}->{"status"} = "notready";
+	}
+    };
+
+    #
+    # Only clusters that are using images,
+    #
+    my @aggregates   = ();
+    my %aggregateops = ();
+
+    foreach my $agg ($instance->AggregateList()) {
+	# No images, mark aggregate ready.
+	if (!exists($imagelist->{$agg->aggregate_urn()})) {
+	    &$addStatus($agg, undef, "ready");
+	    next;
+	}
+	if ($op eq "prestage") {
+	    #
+	    # When doing a prestage, issue a prestage command if we have
+	    # not done that. Otherwise issue a status call so the web UI
+	    # gets updated.
+	    #
+	    next
+		if (! ($agg->status() eq "prestage" ||
+		       $agg->status() eq "staging"));
+		
+	    if ($agg->status() eq "prestage") {
+		$aggregateops{$agg->aggregate_urn()} = "prestage";
+	    }
+	    else {
+		$aggregateops{$agg->aggregate_urn()} = "status";
+	    }
+	}
+	elsif ($op eq "status") {
+	    #
+	    # When doing a status, only those aggs that are now staging.
+	    #
+	    next
+		if ($agg->status() ne "staging");
+
+	    $aggregateops{$agg->aggregate_urn()} = "status";
+	}
+	push(@aggregates, $agg);
+    }
+    if (!@aggregates) {
+	print "No images to prestage or precheck\n";
+	goto done;
+    }
+
+    #
+    # Helper callback to send the proper arguments.
+    #
+    my $coderef = sub {
+	my ($sliver) = @_;
+	my $urn = $sliver->aggregate_urn();
+	my $op  = $aggregateops{$urn};
+
+	return $sliver->PrestageImages($op, $imagelist->{$urn});
+    };
+
+    # Invoke on all clusters
+    $errcode = CallMethodOnAggregates($coderef, 1, \$response, @aggregates);
+    if ($errcode) {
+	$errmsg = $response;
+	goto bad;
+    }
+
+    #
+    # Look at all the responses.
+    #
+    foreach my $agg (@aggregates) {
+	my $response = shift(@{$response});
+	my $code = $response->code();
+
+	if ($code != GENIRESPONSE_SUCCESS) {
+	    $errcode = $code;
+	    ($exitcode, $errmsg) = ResponseErrorMessage($agg, $response);
+	    #
+	    # Mark as nonfatal, let the caller decide.
+	    #
+	    $exitcode = 1;
+	    &$addStatus($agg, undef, "error");
+	    next;
+	}
+	if (! (defined($response->value()) &&
+	       ref($response->value()) eq "HASH" &&
+	       exists($response->value()->{"status"}) &&
+	       ref($response->value()->{"status"}) eq "HASH")) {
+	    print Dumper($response->value());
+	    &$addStatus($agg, undef, "error");
+	    $errmsg   = "Malformed response from $agg";
+	    $exitcode = -1;
+	    $errcode  = GENIRESPONSE_ERROR();
+	    last;
+	}
+	# For debugging, lets set this early.
+	if (defined($response->logurl()) && $op eq "prestage" &&
+	    !defined($agg->public_url())) {
+	    $agg->SetPublicURL($response->logurl());
+	}
+	&$addStatus($agg);
+	
+	my $blob = $response->value()->{"status"};
+	foreach my $urn (keys(%{$blob})) {
+	    my $info = $blob->{$urn};
+	    if (!exists($info->{"status"})) {
+		&$addStatus($agg, $urn, "error");
+		print Dumper($info);
+		$errmsg   = "Malformed response from $agg for $urn";
+		$exitcode = -1;
+		$errcode  = GENIRESPONSE_ERROR();
+		last;
+	    }
+	    if ($info->{"status"} ne "ready") {
+		&$addStatus($agg, $urn, "notready",
+			    $info->{"progress"}, $info->{"size"});
+		print "Image $urn at $agg is still not ready. ";
+		if (exists($info->{"progress"})) {
+		    print $info->{"progress"} . "KB have been imported.";
+		}
+		print "\n";
+	    }
+	    else {
+		&$addStatus($agg, $urn, "ready",
+			    $info->{"progress"}, $info->{"size"});
+		print "Image $urn at $agg is ready\n";
+	    }
+	}
+    }
+    goto bad
+	if ($errcode);
+
+    if ($debug) {
+	print Dumper(\%results);
+    }
+
+  done:
+    if (defined($webtask)) {
+	$webtask->value(\%results);
+	$webtask->Exited(0);
+    }
+    exit(0);
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	# Let the caller decide what to do.
+	$webtask->value(\%results);
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit($exitcode);
+}
+
+#
 # Get utilization info from the the clusters.
 # 
 sub DoUtilization()
@@ -5060,7 +5298,7 @@ sub ResponseErrorMessage($$)
     elsif ($code == GENIRESPONSE_RPCERROR ||
 	   $code == GENIRESPONSE_SERVERERROR) {
 	$errmsg = "Internal server error at the " .
-	    $aggregate->AptAggregateName() . " cluster";
+	    $aggregate->AptAggregateName() . " cluster: " . $response->error();
 	$exitcode = -1;
     }
     else {

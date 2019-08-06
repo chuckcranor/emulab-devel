@@ -37,12 +37,13 @@ sub usage()
     print("Usage: newimageid [-v] [-a] [-s] [-t target] <xmlfile>\n");
     exit(-1);
 }
-my $optlist = "dvfast:u:";
+my $optlist = "dvfast:u:L:";
 my $debug   = 0;
 my $force   = 0;
 my $verify  = 0;	# Check data and return status only.
 my $allpc   = 0;        # insert mappings for all pc types.
 my $skipadmin = 0;      # Skip SLOT_ADMINONLY checks.
+my $lockpid;
 my $target;
 my $this_user;
 my $target_user;
@@ -112,6 +113,12 @@ if (defined($options{"v"})) {
 }
 if (defined($options{"s"})) {
     $skipadmin = 1;
+}
+if (defined($options{"L"})) {
+    $lockpid = $options{"L"};
+    if ($lockpid !~ /^\d+$/) {
+	fatal("Not a process id (integer) for -L argument");
+    }
 }
 if (defined($options{"a"})) {
     $allpc = 1;
@@ -844,7 +851,8 @@ if (!$isdataset) {
     $newimageid_args{"makedefault"} = 1
 	if ($node_types_selected);
 }
-my $new_image = Image->Create($project, $group, $target_user, $isadmin,
+my $new_image = Image->Create($project, $group, $target_user,
+			      $isadmin, $lockpid,
 			      $imagename, $osid, \%newimageid_args, \$usrerr);
 UserError($usrerr)
     if (defined($usrerr));

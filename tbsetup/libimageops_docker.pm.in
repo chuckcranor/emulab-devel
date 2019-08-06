@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1165,7 +1165,7 @@ sub ImportImageContent($$;$) {
     }
 
     my $doit = 0;
-    if ((defined($newhash) && $newhash ne $image->hash()) || $force) {
+    if (! -e $image->FullImageFile() || !$image->ready() || $force) {
 	$doit = 1;
     }
     else {

@@ -411,6 +411,28 @@ sub MapToLocalImage($$$$@)
 	my $permerror = GeniResponse->BadArgsResponse(
 	    "Not allowed to use restricted image $urn");
 
+	#
+	# If no geniuser then doing a prestage, do not need to set permissions
+	# just mkaing sure the image exists or is being imported.
+	#
+	return $image
+	    if (!defined($geniuser));
+
+	#
+	# Check for existence of the image file, in case the user or us
+	# deleted it and we have to download it again. Note that if the
+	# image is gone at the source cluster, the user is screwed. Need
+	# to do this as root of course.
+	#
+	if ($image->isImage() && !$image->IsLocal() && $image->ready()) {
+	    my $SAVEUID = $UID;
+	    $UID = 0;
+	    if (! -e $image->FullImageFile()) {
+		$image->ClearReady();
+	    }
+	    $UID = $SAVEUID;
+	}
+	
 	return $image
 	    if ($image->global());
 
@@ -1236,130 +1258,6 @@ sub ConvertToImported($$)
     if ($image->ConvertToImported($metadata)) {
 	return -1;
     }
-    return 0;
-}
-
-#
-# Schedule an image relocation in the database.
-#
-sub ImageRelocationSchedule($$$$$)
-{
-    my ($imagename, $user, $group, $remote_urn, $metadata_url) = @_;
-    my $pid     = $group->pid();
-    my $pid_idx = $group->pid_idx();
-    my $gid     = $group->gid();
-    my $gid_idx = $group->gid_idx();
-    my $uid     = $user->uid();
-    my $uid_idx = $user->uid_idx();
-    my $safe_imagename = DBQuoteSpecial($imagename);
-    my $safe_urn       = DBQuoteSpecial($remote_urn);
-    my $safe_url       = DBQuoteSpecial($metadata_url);
-
-    emdb::DBQueryWarn("lock tables image_incoming_relocations write")
-	or return -1;
-
-    my $query_result =
-	emdb::DBQueryWarn("select pid,imagename ".
-			  "  from image_incoming_relocations ".
-			  "where pid='$pid' and imagename=$safe_imagename");
-    if (!defined($query_result)) {
-	emdb::DBQueryWarn("unlock tables");
-	return -1;
-    }
-    if ($query_result->numrows) {
-	print STDERR "Already have a relocation scheduled for ".
-	    "$pid,$imagename\n";
-	emdb::DBQueryWarn("unlock tables");
-	return -1;
-    }
-    if (!emdb::DBQueryWarn("insert into image_incoming_relocations set ".
-			   "  pid='$pid',pid_idx='$pid_idx', ".
-			   "  gid='$gid',gid_idx='$gid_idx', ".
-			   "  uid='$uid',uid_idx='$uid_idx', ".
-			   "  imagename=$safe_imagename, ".
-			   "  metadata_url=$safe_url, ".
-			   "  remote_urn=$safe_urn,created=now()")) {
-	emdb::DBQueryWarn("unlock tables");
-	return -1;
-    }
-    emdb::DBQueryWarn("unlock tables");
-    return 0;
-}
-
-sub ImageRelocationPending($$;$)
-{
-    my ($imagename, $group, $pref) = @_;
-    my $pid_idx   = $group->pid_idx();
-    my $safe_name = DBQuoteSpecial($imagename);
-    
-    emdb::DBQueryWarn("lock tables image_incoming_relocations read")
-	or return -1;
-
-    my $query_result =
-	emdb::DBQueryWarn("select * from image_incoming_relocations ".
-			  "where pid_idx='$pid_idx' and imagename=$safe_name");
-
-    if (!defined($query_result)) {
-	emdb::DBQueryWarn("unlock tables");
-	return -1;
-    }
-    if ($query_result->numrows) {
-	emdb::DBQueryWarn("unlock tables");
-	$$pref = $query_result->fetchrow_hashref()
-	    if (defined($pref));
-	return 1;
-    }
-    emdb::DBQueryWarn("unlock tables");
-    return 0;
-}
-
-sub ImageRelocationLock($$)
-{
-    my ($imagename, $group) = @_;
-    my $pid_idx   = $group->pid_idx();
-    my $safe_name = DBQuoteSpecial($imagename);
-    
-    emdb::DBQueryWarn("lock tables image_incoming_relocations write")
-	or return -1;
-
-    my $query_result =
-	emdb::DBQueryWarn("update image_incoming_relocations set locked=now() ".
-			  "where imagename=$safe_name and ".
-			  "      pid_idx='$pid_idx' and ".
-			  "      locked is null");
-
-    if (! $query_result ||
-	$query_result->numrows == 0) {
-	emsb::DBQueryWarn("unlock tables");
-	return -1;
-    }
-    emdb::DBQueryWarn("unlock tables");
-    return 0;
-}
-
-sub ImageRelocationUnlock($$)
-{
-    my ($imagename, $group) = @_;
-    my $pid_idx   = $group->pid_idx();
-    my $safe_name = DBQuoteSpecial($imagename);
-
-    emdb::DBQueryWarn("update image_incoming_relocations set locked=null ".
-		      "where imagename=$safe_name and pid_idx='$pid_idx'")
-	or return -1;
-
-    return 0;
-}
-
-sub ImageRelocationFinished($$)
-{
-    my ($imagename, $group) = @_;
-    my $pid_idx   = $group->pid_idx();
-    my $safe_name = DBQuoteSpecial($imagename);
-
-    emdb::DBQueryWarn("delete from image_incoming_relocations ".
-		      "where imagename=$safe_name and pid_idx='$pid_idx'")
-	or return -1;
-
     return 0;
 }
 

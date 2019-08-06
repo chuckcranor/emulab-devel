@@ -46,26 +46,31 @@ sub usage()
     print(" -i name - Use name for imagename.\n".
 	  "           Defaults to name in the desciptor\n");
     print(" -r      - Refresh (update ndz file) imported image.\n");
-    print(" -s      - With -r just update the sig file\n");
     print(" -c      - With -r update ndz file using the updates table\n");
     exit(-1);
 }
-my $optlist = "dvu:p:gi:I:rfscRC:";
+my $optlist = "dvu:p:gi:I:rfcRC:Lt:P:G";
 my $debug   = 0;
 my $verify  = 0;
 my $getimage= 0;
 my $update  = 0;
-my $dosig   = 0;
 my $force   = 0;
 my $copyback= 0;
 my $relocate= 0;
+my $takelock= 0;
+my $resume  = 0;
+my $noupdate= 0;
+my $pending;
 my $user;
 my $group;
 my $image;
 my $imagename;
 my $imagedir;
 my $copyback_urn;
+my $copyback_url;
 my $import_credential;
+my $xmlparse;
+my $webtask;
 
 #
 # Configure variables
@@ -91,6 +96,7 @@ my $SECUREIMAGEGET= "$TB/sbin/protogeni/secureimageget";
 my $WITHPROVENANCE= @IMAGEPROVENANCE@;
 my $DOIMAGEDIRS   = @IMAGEDIRECTORIES@;
 my $PGENISUPPORT  = @PROTOGENI_SUPPORT@;
+my $OPSVM_ENABLE  = @OPSVM_ENABLE@;
 my $doprovenance  = 0;
 
 #
@@ -98,7 +104,7 @@ my $doprovenance  = 0;
 # version of the software we are so it gives something we can handle.
 # Be sure to update this if you change the version in dumpdescriptor.
 #
-my $METADATA_CLIENTVERSION = 4;
+my $METADATA_CLIENTVERSION = 5;
 
 #
 # Untaint the path
@@ -132,12 +138,16 @@ use User;
 use Project;
 use Group;
 use OSImage;
+use WebTask;
+# This conveniently defines exit codes we want to use. 
+use GeniResponse;
 
 # Locals;
 my $url;
 
 # Protos
 sub fatal($);
+sub myExit($;$);
 sub FetchMetadata($);
 sub CreateImage($$$$$);
 sub DownLoadImage($$$$);
@@ -167,11 +177,12 @@ if (defined($options{"v"})) {
 if (defined($options{"g"})) {
     $getimage = 1;
 }
-if (defined($options{"s"})) {
-    $dosig = 1;
+if (defined($options{"G"})) {
+    $getimage = 1;
+    $noupdate = 1;
 }
-if (defined($options{"i"})) {
-    $imagename = $options{i};
+if (defined($options{"L"})) {
+    $takelock = 1;
 }
 if (defined($options{"I"})) {
     $imagedir = $options{"I"};
@@ -179,13 +190,63 @@ if (defined($options{"I"})) {
 	fatal("The -I option must be an image directory directory");
     }
 }
+#
+# Pending import descriptor, we get everything we need from the descriptor.
+# Update the options array and then process normally.
+#
+if (defined($options{"P"})) {
+    $pending = Image::PendingImport->Lookup($options{"P"});
+    if (!defined($pending)) {
+	fatal("Could not lookup pending descriptor");
+    }
+    $options{"u"} = $pending->uid_idx();
+    if (defined($pending->gid())) {
+	$options{"p"} = $pending->gid_idx();
+    }
+    else {
+	$options{"p"} = $pending->pid_idx();
+    }
+    if (defined($pending->imageid())) {
+	$ARGV[0] = $pending->imageid();
+	$resume  = 1;
+    }
+    else {
+	$ARGV[0]      = $pending->metadata_url();
+	$options{"i"} = $pending->imagename();
+    }
+    if ($pending->type() eq "relocation") {
+	$relocate = 1;
+	$getimage = 1;
+    }
+    elsif ($pending->type() eq "copyback") {
+	$copyback     = 1;
+	$copyback_urn = $pending->uid_urn();
+	$copyback_url = $pending->metadata_url();
+	$getimage     = 1;
+	$update       = 1;
+    }
+    if (defined($pending->credential_string()) &&
+	$pending->credential_string() ne "") {
+	require GeniCredential;
+	
+	$import_credential =
+	    GeniCredential->LoadFromString($pending->credential_string());
+	if (!defined($import_credential)) {
+	    fatal("Import credential is not valid");
+	}
+    }
+}
+
+if (defined($options{"i"})) {
+    $imagename = $options{i};
+}
+if (defined($options{"f"})) {
+    $force = 1;
+}
 if (defined($options{"r"})) {
     $update   = 1;
     if (defined($options{"c"})) {
 	$copyback = 1;
-    }
-    if (defined($options{"f"})) {
-	$force = 1;
     }
 }
 if (defined($options{"R"})) {
@@ -230,7 +291,16 @@ if (defined($options{"C"})) {
 	fatal("Import credential is not valid");
     }
 }
+if (defined($options{"t"})) {
+    my $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not lookup webtask $webtask_id");
+    }
+    $webtask->AutoStore(1);
+}
 
+# No -u argument, import as the current user.
 if (!defined($user)) {
     $user = User->ThisUser();
     if (! defined($user)) {
@@ -238,192 +308,30 @@ if (!defined($user)) {
     }
 }
 
-if ($update) {
-    usage()
-	if (!@ARGV);
+#
+# Get the image lock. We have a couple of different cases.
+#
+sub getLock($)
+{
+    my ($self) = @_;
 
-    $image = OSImage->Lookup(shift(@ARGV));
-    if (!defined($image)) {
-	fatal("Image descriptor does not exist");
+    if ($takelock) {
+	print "Taking the lock for $image as directed\n";
+	if ($image->TakeLock()) {
+	    fatal("Could not take the image lock");
+	}
     }
-    if ($copyback) {
-	my ($updater_uid,$updater_idx);
-	
+    elsif ($image->Lock()) {
+	if ($copyback || $pending) {
+	    # The daemon will try again later.
+	    myExit(GENIRESPONSE_BUSY(),
+		   "$image is currently locked. Please try again later");
+	}
 	#
-	# We have to look in the updates table, but we want to do this
-	# locked so that no one else can mess with it. So lock up here,
-	# and skip locking below. See fatal(), we will unlock there if
-	# things go bad.
+	# We need to get the lock since someone else could already
+	# be downloading it. Even worse, someone might be taking a local
+	# snapshot, although at the moment we do not support that.
 	#
-	if ($image->Lock()) {
-	    print "$image is currently locked. Please try again later\n";
-	    exit(0);
-	}
-	my $imageid = $image->imageid();
-	my $query_result =
-	    DBQueryWarn("select * from image_updates ".
-			"where imageid='$imageid'");
-	if (!$query_result) {
-	    $image->Unlock();
-	    exit(-1);
-	}
-	if (!$query_result->numrows) {
-	    print "No update in table. Nothing to do.\n";
-	    $image->Unlock();
-	    exit(0);
-	}
-	my $row = $query_result->fetchrow_hashref();
-	$url          = $row->{'url'};
-	$updater_uid  = $row->{'updater'};
-	$updater_idx  = $row->{'updater_idx'};
-	$copyback_urn = $row->{'updater_urn'};
-	if ($row->{'credential_string'} ne "") {
-	    require GeniCredential;
-	    
-	    $import_credential =
-		GeniCredential->CreateFromSigned($row->{'credential_string'});
-	    if (!defined($import_credential)) {
-		print STDERR "Image credential is not valid\n";
-		$image->Unlock();
-		exit(-1);
-	    }
-	}
-
-	#
-	# Also want the user doing the import to be the user who actually
-	# did the update on the remote cluster, if we happen to have that
-	# record. If not, we have to do it as the creator (someone in the
-	# project the image belongs to). 
-	#
-	$user = undef;
-	if (defined($updater_uid)) {
-	    $user = User->Lookup($updater_idx);
-	    # Ick, setgroups skips nonlocal users, so user does not have
-	    # permission to do this on ops. Needs thought.
-	    if ($user->IsNonLocal()) {
-		$user = undef;
-	    }
-	}
-	if (!defined($user)) {
-	    $user = User->Lookup($image->creator_idx());
-	}
-	if (!defined($user)) {
-	    print STDERR "No current user to import image as.\n";
-	    $image->Unlock();
-	    exit(-1);
-	}
-	$EUID = 0;
-	$UID  = $SAVEUID = $user->unix_uid();
-	$EUID = $UID;
-    }
-    else {
-	if (!defined($image->metadata_url())) {
-	    fatal("Not an imported image");
-	}
-	$url = $image->metadata_url();
-    }
-
-    # If the user is not an admin, must have perm on the image.
-    if (!$user->IsAdmin() &&
-	!$image->AccessCheck($user, TB_IMAGEID_CREATE())) {
-	fatal("$user does not have permission $image");
-    }
-    # Need this below.
-    if ($WITHPROVENANCE && !$image->noversioning()) {
-	$doprovenance =
-	    EmulabFeatures->FeatureEnabled("ImageProvenance",
-					   undef, $image->GetGroup());
-    }
-}
-else {
-    usage()
-	if (! (@ARGV && defined($group)));
-
-    $url = $ARGV[0];
-    # We know this is valid, but must taint check anyway for shell command.
-    if ($url =~/^(.*)$/) {
-	$url = $1;
-    }
-
-    # If the user is not an admin, must be a member or have perm in
-    # the group.
-    if (!$user->IsAdmin() &&
-	!$group->AccessCheck($user, TB_PROJECT_MAKEIMAGEID())) {
-	fatal("$user does not have permission in $group");
-    }
-    # If we got a -u argument and not runnng as that user, flip.
-    if (!$user->SameUser(User->ThisUser())) {
-	$EUID = 0;
-	$UID  = $SAVEUID = $user->unix_uid();
-	$EUID = $UID;
-    }
-}
-
-my $xmlparse = FetchMetadata($url);
-
-#
-# Sanity checks; it must have a hash and a url inside. We let
-# newimageid do the rest of the checks though.
-#
-if (! exists($xmlparse->{'attribute'}->{"hash"}) ||
-    ! ($xmlparse->{'attribute'}->{"hash"}->{'value'} =~ /^\w{10,}$/)) {
-    fatal("Invalid hash in metadata");
-}
-if (! exists($xmlparse->{'attribute'}->{"imagefile_url"})) {
-    fatal("Invalid imagefile url in metadata");
-}
-my $newhash = $xmlparse->{'attribute'}->{"hash"}->{'value'};
-# Silly taint check.
-if ($newhash =~/^(.*)$/) {
-    $newhash = $1;
-}
-# Save off the origin path.
-my $origin_path;
-if (exists($xmlparse->{'attribute'}->{"path"})) {
-    $origin_path = $xmlparse->{'attribute'}->{"path"}->{"value"};
-}
-
-#
-# See if we already have an image in the DB for this URL.
-# If not, we have to create it.
-#
-# Need to watch for two experiments causing this image to
-# get created at the same time. It would be pretty silly,
-# but users are users ... 
-#
-if (!$update) {
-    # New mysal 5.7 limit of 64 chars on locks. Use the uuid.
-    my $lockname;
-    if (length($url) < 64) {
-	$lockname = $1;
-    }
-    elsif ($url =~ /uuid=([-\w]+)$/) {
-	$lockname = $1;
-    }
-    else {
-	fatal("Bad URL, cannot find the uuid in it");
-    }
-    my $query_result = DBQueryWarn("select GET_LOCK('$lockname', 120)");
-    if (!$query_result ||
-	!$query_result->numrows) {
-	fatal("Could not get the SQL lock for a long time!");
-    }
-    $image = OSImage->LookupByURL($url);
-    if (!defined($image)) {
-	$image = CreateImage($url, $xmlparse, $user, $group, $imagename);
-    }
-    DBQueryWarn("select RELEASE_LOCK('$lockname')");
-}
-exit(0)
-    if ($verify);
-
-if ($update || $getimage) {
-    #
-    # We need to get the lock since someone else could already
-    # be downloading it. Even worse, someone might be taking a local
-    # snapshot, although at the moment we do not support that.
-    #
-    if (!$copyback && $image->Lock()) {
 	print "$image is currently locked. Waiting ...\n";
 
 	my $maxwait = 600;
@@ -436,10 +344,131 @@ if ($update || $getimage) {
 	}
     }
 }
+
+#
+# We are either importing for the first time or updating an existing image.
+# In either case, we optionally get the image file (-g) after we create
+# (or update) the image descriptor. 
+#
+if ($update || $resume || ($getimage && $noupdate)) {
+    usage()
+	if (!@ARGV);
+
+    $image = OSImage->Lookup(shift(@ARGV));
+    if (!defined($image)) {
+	fatal("Image descriptor does not exist");
+    }
+}
+else {
+    usage()
+	if (! (@ARGV && defined($group)));
+
+    $url = $ARGV[0];
+    # We know this is valid, but must taint check anyway for shell command.
+    if ($url =~/^(.*)$/) {
+	$url = $1;
+    }
+    # It is possible that it is already created.
+    $image = OSImage->LookupByURL($url);
+}
+
+#
+# If we have the image, check perms and lock it now. 
+#
+if (defined($image)) {
+    # Does not return if failure.
+    getLock($image);
+    
+    #
+    # This copy back stuff is messy.
+    #
+    if ($copyback) {
+	$url = $copyback_url;
+    }
+    else {
+	if (!defined($image->metadata_url())) {
+	    fatal("Not an imported image");
+	}
+	$url = $image->metadata_url();
+    }
+    # If we got a -u argument and not runnng as that user, flip.
+    if (!$user->SameUser(User->ThisUser())) {
+	$EUID = 0;
+	$UID  = $SAVEUID = $user->unix_uid();
+	$EUID = $UID;
+    }
+    
+    # If the user is not an admin, must have perm on the image.
+    if (!$user->IsAdmin() &&
+	!$image->AccessCheck($user, TB_IMAGEID_CREATE())) {
+	fatal("$user does not have permission $image");
+    }
+    # Need this below.
+    if ($WITHPROVENANCE && !$image->noversioning()) {
+	$doprovenance =
+	    EmulabFeatures->FeatureEnabled("ImageProvenance",
+					   undef, $image->GetGroup());
+    }
+    # Grab the metdata. This will not return if it fails. 
+    $xmlparse = FetchMetadata($url);
+}
+else {
+    #
+    # Permission check; if the user is not an admin, must be a member
+    # or have perm in the group.
+    #
+    if (!$user->IsAdmin() &&
+	!$group->AccessCheck($user, TB_PROJECT_MAKEIMAGEID())) {
+	fatal("$user does not have permission in $group");
+    }
+    # If we got a -u argument and not running as that user, flip.
+    if (!$user->SameUser(User->ThisUser())) {
+	$EUID = 0;
+	$UID  = $SAVEUID = $user->unix_uid();
+	$EUID = $UID;
+    }
+    #
+    # Need to watch for two experiments causing this image to
+    # get created at the same time. Just use an mysql process
+    # lock, but note that as of mysqld 5.7, the max length of
+    # the string is 64 chars, so use the uuid from the url.
+    #
+    my $lockname;
+    if ($url =~ /uuid=([-\w]+)$/) {
+	$lockname = $1;
+    }
+    else {
+	fatal("Bad URL, cannot find the uuid in it");
+    }
+    # Grab the metdata. This will not return if it fails. 
+    $xmlparse = FetchMetadata($url); ;
+    
+    my $query_result = DBQueryWarn("select GET_LOCK('$lockname', 120)");
+    if (!$query_result ||
+	!$query_result->numrows) {
+	fatal("Could not get the SQL lock for a long time!");
+    }
+    # Second check after process lock.
+    $image = OSImage->LookupByURL($url);
+    if (defined($image)) {
+	# Does not return;
+	getLock($image);
+    }
+    else {
+	# The image comes back locked.
+	$image = CreateImage($url, $xmlparse, $user, $group, $imagename);
+    }
+    DBQueryWarn("select RELEASE_LOCK('$lockname')");
+    if ($verify) {
+	myExit(0);
+    }
+}
+
 #
 # If updating, see if we need a new version of the image descriptor.
 #
-if ($update && $newhash ne $image->hash()) {
+if ($update &&
+    $image->hash() ne $xmlparse->{'attribute'}->{"hash"}->{'value'}) {
     if ($doprovenance) {
 	#
 	# This will include unreleased images (in image_versions, but
@@ -447,7 +476,6 @@ if ($update && $newhash ne $image->hash()) {
 	#
 	$image = $image->LookupMostRecent();
 	if (!defined($image)) {
-	    $image->Unlock();
 	    fatal("Cannot lookup most recent version of $image");
 	}
 	# Reuse if not ready/released. Do not change this test,
@@ -455,7 +483,6 @@ if ($update && $newhash ne $image->hash()) {
 	if ($image->ready() && $image->released()) {
 	    my $clone = $image->NewVersion($user, undef, undef);
 	    if (!defined($clone)) {
-		$image->Unlock();
 		fatal("Could not clone image descriptor $image");
 	    }
 	    $image = $clone;
@@ -472,8 +499,14 @@ if ($update && $newhash ne $image->hash()) {
 	    $image->ClearReady();
 	}
     }
-    # Update these in the descriptor.
-    my @slots = ("imagefile_url", "origin_name");
+    # The image is no longer ready until we get the new version downloaded.
+    # Besides, we are going to change the descriptor too, including the
+    # hash.
+    $image->ClearReady();
+    
+    # Update these in (the new version of) the descriptor in case we
+    # do not get the image file till later.
+    my @slots = ("imagefile_url", "origin_name", "hash");
     foreach my $key (@slots) {
 	next
 	    if (!exists($xmlparse->{'attribute'}->{$key}));
@@ -481,7 +514,6 @@ if ($update && $newhash ne $image->hash()) {
 	my $value = $xmlparse->{'attribute'}->{$key}->{'value'};
 	if (! TBcheck_dbslot($value, "images",
 			     $key, TBDB_CHECKDBSLOT_ERROR)) {
-	    $image->Unlock();
 	    fatal("Illegal value for $key: " . TBFieldErrorString());
 	}
 	$image->Update({$key => $value});
@@ -495,9 +527,30 @@ if ($getimage) {
     my $downloaded = 0;
     my $versname = $image->versname();
 
+    # Need to taint check this for the shell.
+    my $newhash = $xmlparse->{'attribute'}->{"hash"}->{'value'};
+    if ($newhash =~/^(\w*)$/) {
+	$newhash = $1;
+    }
+    else {
+	fatal("Invalid hash in XML data: $newhash");
+    }
+    #
+    # Yuck, if continuing an import, the hash had better not change since
+    # the descriptor was updated, which might have been a while ago. Lets
+    # throw an error for now.
+    #
+    if ($resume && $newhash ne $image->hash()) {
+	fatal("Image hash has changed while in resume mode");
+    }
+    
     if ($image->format() eq 'docker') {
 	use libimageops;
 
+	my $origin_path;
+	if (exists($xmlparse->{'attribute'}->{"path"})) {
+	    $origin_path = $xmlparse->{'attribute'}->{"path"}->{"value"};
+	}    
 	libimageops::setDebug($debug);
 	my %args = (
 	    'origin_path' => $origin_path,
@@ -514,7 +567,7 @@ if ($getimage) {
     else {
 	# Run as root to access /proj
 	$EUID = $UID = 0;
-	if (! -e $image->FullImageFile() || $newhash ne $image->hash() || $force) {
+	if (! -e $image->FullImageFile() || !$image->ready() || $force) {
 	    # Make sure the path directory exists.
 	    if ($image->CreateImageDir()) {
 		$image->Unlock();
@@ -522,10 +575,26 @@ if ($getimage) {
 	    }
 	    $EUID = $UID = $SAVEUID;
 
-	    if (DownLoadImage($image, $newhash, $user, $group)) {
-		$image->Unlock();
-		exit(1);
+	    my $status = DownLoadImage($image, $newhash, $user, $group);
+	    if ($status) {
+		if ($status < 0) {
+		    fatal("Error downloading image");
+		}
+		#
+		# In resume mode, we accept network errors as nonfatal,
+		# we will retry later. We might have downloaded part of the
+		# file, we will pick up where we left off. Exit with a
+		# positive error code for the caller.
+		#
+		if ($status == 4) {
+		    myExit(GENIRESPONSE_NETWORK_ERROR(),
+			   "Will resume download later");
+		}
+		# All other wget errors are fatal.
+		fatal("wget reported non-zero status $status, giving up");
 	    }
+	    $downloaded = 1;
+	    
 	    # Update DB info. 
 	    # Run as root to access /proj
 	    $EUID = $UID = 0;
@@ -533,10 +602,8 @@ if ($getimage) {
 		# XXX should this be fatal?
 		print STDERR "Could not update DB info for $image\n";
 	    }
-	    $EUID = $UID = $SAVEUID;
-
-	    $downloaded = 1;
 	}
+	$EUID = $UID = $SAVEUID;
     }
 
     if ($downloaded) {
@@ -574,50 +641,47 @@ if ($getimage) {
 		if (!defined($TO));
 	    $image->GetProject()->SendEmail($TO,
 		    "Image imported: $versname",
-		    "Image $name has been sucessfully copied back from\n".
+		    "Image $name has been sucessfully ".
+	             ($relocate ?
+		      "relocated from" :
+		      "copied back from") . "\n" .
 		    $image->imagefile_url() . "\n".
 		    "\n".
 		    "Image URN: " . $image->urn() . "\n",
 		    $FROM, $CC);
 	}
+	if ($copyback) {
+	    my $imageid = $image->imageid();
+
+	    # Clear this to make the image gets posted.
+	    $image->ClearIMSReported();
+
+	    # Mark the updater.
+	    $image->Update({'updater_urn' => $copyback_urn})
+		if (defined($copyback_urn));
+
+	    # Tell the IMS about this new image. If this fails, the daemon
+	    # will take care of it. 
+	    system("$POSTIMAGEINFO -d $imageid");
+	}
+	elsif ($relocate) {
+	    # Make the image believe we are its Mama. 
+	    $image->ConvertToLocal() == 0 or
+		fatal("Could not convert to a local image!");
+	    # Tell the IMS about this new image. If this fails, the daemon
+	    # will take care of it. 
+	    system("$POSTIMAGEINFO -d " . $image->imageid());
+	}
+	if (defined($pending)) {
+	    # Done with the entry, kill it.
+	    $pending->Delete();
+	}
     }
-    $EUID = $UID = $SAVEUID;
-    if ($copyback) {
-	# Delete entry from the updates table while we are still locked.
-	my $imageid = $image->imageid();
-	DBQueryWarn("delete from image_updates ".
-		    "where imageid='$imageid'");
-
-	# Clear this to make the image gets posted.
-	$image->ClearIMSReported();
-
-	# Mark the updater.
-	$image->Update({'updater_urn' => $copyback_urn})
-	    if (defined($copyback_urn));
-
-	# Tell the IMS about this new image. If this fails, the daemon
-	# will take care of it. 
-	system("$POSTIMAGEINFO -d $imageid");
-    }
-}
-elsif ($update && $dosig) {
-    FetchSigFile($image) == 0
-	or exit(1);
 }
 else {
     print "Not downloading image ... add -g option\n";
 }
-if ($relocate) {
-    # Make the image believe we are its Mama. 
-    $image->ConvertToLocal() == 0 or
-	fatal("Could not convert to a local image!");
-    # Tell the IMS about this new image. If this fails, the daemon
-    # will take care of it. 
-    system("$POSTIMAGEINFO -d " . $image->imageid());
-}
-if ($update || $getimage) {
-    $image->Unlock();
-}
+$image->Unlock();
 exit(0);
 
 #
@@ -750,8 +814,9 @@ sub CreateImage($$$$$)
     }
     return undef
 	if ($verify);
-    
-    open(NEW, "| $NEWIMAGE_EZ $alltypes -f -s -")
+
+    # -L $$ says to create the descriptor already locked by this process.
+    open(NEW, "| $NEWIMAGE_EZ $alltypes -L $$ -f -s -")
 	or fatal("Cannot start $NEWIMAGE_EZ");
     print NEW $newxml;
     if (!close(NEW)) {
@@ -818,8 +883,12 @@ sub DownLoadImage($$$$)
 	}
 	return 0;
     }
-    elsif (FetchImageFile($image, "", $localfile)) {
-	return -1;
+    elsif (my $status = FetchImageFile($image, "", $localfile)) {
+	# Something unexpected;
+	return -1
+	    if ($status < 0);
+	# Let caller decide.
+	return $status;
     }
 
     #
@@ -886,8 +955,8 @@ sub DownLoadImage($$$$)
     # No signature files on the secure path. We can support it if we need
     # to, but deltas are not in our future at this point.
     #
-    FetchSigFile($image)
-	if (! (defined($import_credential) || $image->HasCredential()));
+    #FetchSigFile($image)
+    #    if (! (defined($import_credential) || $image->HasCredential()));
 
     return 0;
 }
@@ -939,7 +1008,10 @@ sub FetchImageFile($$$)
     # But no reason to do this if an admin, which is important
     # when the image is going into /usr/testbed/images.
     #
-    elsif (!$user->IsAdmin()) {
+    # Ditto OPSVM_ENABLE=1, ops is a jail on boss, so no real benefit to
+    # doing it in the jail.
+    #
+    elsif (!$user->IsAdmin() && !$OPSVM_ENABLE) {
 	my $cmdargs = "$TB/bin/fetchtar.proxy -h -u $user_uid";
 	my $glist = `/usr/bin/id -G $user_uid`;
 	if ($glist =~ /^([\d ]*)$/) {
@@ -950,6 +1022,7 @@ sub FetchImageFile($$$)
 	    return -1;
 	}
 	$cmdargs .= " -d " if ($debug);
+	$cmdargs .= " -c " if ($resume);
 	$cmdargs .= " -g '$glist' \"$safe_url\" $localfile";
 
 	print "Downloading $url ...\n";
@@ -967,7 +1040,7 @@ sub FetchImageFile($$$)
 	    }
 	    return -1;
 	}
-	$UID = $SAVEUID;
+	$EUID = $UID = $SAVEUID;
     }
     elsif ($url =~ /^file:\/\/(.*)/) {
 	system("/bin/cp -fp '$1' $localfile");
@@ -983,19 +1056,46 @@ sub FetchImageFile($$$)
     }
     else {
 	print "Downloading $url ...\n";
+
+	my $retry_options = "--retry-connrefused ";
+	if (0) {
+	    $retry_options .=
+		"--tries 3 --timeout=5 --waitretry=30 --limit-rate=3000k ";
+	}
+	else {
+	    $retry_options .=
+		"--waitretry=30 " .
+		"--dns-timeout=30 --connect-timeout=60 --read-timeout=600 ";
+	}
+	if ($resume) {
+	    $retry_options .= " -c ";
+	}
+	my $cmdargs = "$WGET --no-check-certificate ".
+	    "$retry_options --show-progress --progress=dot:giga ".
+	    "-q -O $localfile -i -";
 	
-	if (! open(GET, "| nice -15 $WGET --no-check-certificate ".
-		   "--dns-timeout=30 --connect-timeout=60 --read-timeout=600 ".
-		   "--retry-connrefused --waitretry=30 ".
-		   "--show-progress --progress=dot:giga ".
-		   "-q -O $localfile -i -")) {
+	if ($debug) {
+	    print "$cmdargs\n";
+	}
+	#
+	# If we get here as a mere user, must flip since we are not calling
+	# over to ops. See above (OPSVM_ENABLE).
+	#
+	if (!$user->IsAdmin()) {
+	    $user->FlipTo($image->GetProject()->unix_gid());
+	}
+	if (! open(GET, "| nice -15 $cmdargs")) {
 	    print STDERR "Cannot start $WGET\n";
 	    return -1;
 	}
 	print GET "$url\n";
-	return -1
-	    if (!close(GET));
-
+	if (!close(GET)) {
+	    # Something unexpected.
+	    return -1
+		if ($!);
+	    # Caller decides if fatal.
+	    return $? >> 8;
+	}
 	system("$SHA1 $localfile > ${localfile}.sha1");
 	if ($?) {
 	    print STDERR "Could not generate sha1 hash of $localfile\n";
@@ -1060,6 +1160,17 @@ sub FetchMetadata($)
     }
 
     #
+    # Sanity checks; it must have a hash and a url inside. We let
+    # newimageid do the rest of the checks though.
+    #
+    if (! exists($xmlparse->{'attribute'}->{"hash"}) ||
+	! ($xmlparse->{'attribute'}->{"hash"}->{'value'} =~ /^\w{10,}$/)) {
+	fatal("Invalid hash in metadata");
+    }
+    if (! exists($xmlparse->{'attribute'}->{"imagefile_url"})) {
+	fatal("Invalid imagefile url in metadata");
+    }
+    #
     # We are going to let newimageid do the real checking.
     #
     return $xmlparse;
@@ -1092,8 +1203,28 @@ sub fatal($)
     $image->Unlock()
 	if (defined($image) && $image->GotLock());
 
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(-1);
+    }
     print STDERR "*** $0:\n".
 	         "    $mesg\n";
     exit(-1);
+}
+
+# So we can set the webtask exit code and output.
+sub myExit($;$)
+{
+    my ($code, $mesg) = @_;
+
+    $image->Unlock()
+	if (defined($image) && $image->GotLock());
+
+    if (defined($webtask)) {
+	$webtask->output(defined($mesg) ? $mesg : "");
+	$webtask->Exited($code);
+    }
+    print STDERR "$mesg\n" if (defined($mesg));
+    exit($code);
 }
 

@@ -606,6 +606,7 @@ if ($method eq "CreateSliver"    ||
     $method eq "CreateImage"     ||
     $method eq "CreateDataset"   ||
     $method eq "DeleteDataset"   ||
+    $method eq "DeleteImage"     ||
     $method eq "PerformOperationalAction"    ||
     $method eq "Provision"       ||
     $method eq "Allocate"        ||
@@ -613,7 +614,8 @@ if ($method eq "CreateSliver"    ||
     $method eq "Panic"           ||
     $method eq "AddNodes"        ||
     $method eq "DeleteNodes"     ||
-    $method eq "DeleteSlice") {
+    $method eq "DeleteSlice"     ||
+    $method eq "PrestageImages") {
     $debug = 2;
     $nostorelogs = 0;
 }

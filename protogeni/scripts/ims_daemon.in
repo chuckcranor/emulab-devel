@@ -58,10 +58,7 @@ my $PGENISUPPORT       = @PROTOGENI_SUPPORT@;
 my $LOGFILE            = "$TB/log/ims_daemon.log";
 my $EMULAB_PEMFILE     = "$TB/etc/genicm.pem";
 my $TRIGGERUPDATE      = "$TB/sbin/protogeni/triggerimageupdate";
-my $POSTIMAGEDATA      = "$TB/sbin/protogeni/postimagedata";
 my $DELETEIMAGEDATA    = "$TB/sbin/protogeni/deleteimagedata";
-my $IMPORTER           = "$TB/sbin/image_import";
-my $MANAGEIMAGES       = "$TB/bin/manage_images";
 my $SLEEP_INTERVAL     = 60;
 my $DAILY_INTERVAL     = 24 * 3600;
 my $lastdaily          = 0;
@@ -117,6 +114,7 @@ use libEmulab;
 use Logfile;
 use Project;
 use OSImage;
+use User;
 
 # Ditto for the image tracker 
 if (!GetSiteVar("protogeni/use_imagetracker")) {
@@ -189,84 +187,6 @@ sub NotifyClear($)
 sub NotifyClearAll()
 {
     %email_history = ();
-}
-
-#
-# Handle image "relocations" from remote clusters back to the local
-# cluster. Note that CM loops for a while, but eventually gives up, so
-# we will catch them here if that relocation is taking too long.
-#
-sub HandleOutgoingRelocations()
-{
-    my $query_result =
-	DBQueryWarn("select imageid from images ".
-		    "where relocate_urn is not null");
-    return
-	if (!$query_result);
-    
-    while (my ($imageid) = $query_result->fetchrow_array()) {
-	my $image   = OSImage->Lookup($imageid);
-	if (!defined($image)) {
-	    print STDERR "$imageid no longer exists. Skipping relocation\n";
-	    next;
-	}
-	if ($impotent) {
-	    print "Would trigger relocation for $image\n";
-	    next;
-	}
-	print "Outgoing relocation pending for $image\n";
-	
-	if ($image->Lock()) {
-	    print STDERR "$image is locked, skipping relocation check\n";
-	    next;
-	}
-	if (GeniImage::ConvertToImported($image, $image->relocate_urn()) == 0){
-	    $image->SchedIMSDeletion(1);
-	    $image->SetImageRelocateURN(undef);
-	    print "Relocation complete\n";
-	}
-	$image->Unlock();
-    }
-}
-
-#
-# Look for images that need to be relocated back to this cluster. The
-# above routine is for the other side, where images are being relocated
-# *from*.
-#
-sub HandleIncomingRelocations()
-{
-    my $query_result =
-	DBQueryWarn("select * from image_incoming_relocations");
-    return
-	if (!$query_result);
-    
-    while (my $row = $query_result->fetchrow_hashref()) {
-	my $pid    = $row->{'pid'};
-	my $name   = $row->{'imagename'};
-	my $urn    = $row->{'remote_urn'};
-	my $locked = $row->{'locked'};
-
-	print "Incoming relocation pending for $pid,$name from $urn\n";
-	if (defined($locked)) {
-	    print "Relocation record locked since $locked, skipping ...\n";
-	    next;
-	}
-	if ($impotent) {
-	    print "Would trigger incoming relocation for $pid,$name\n";
-	    next;
-	}
-	my $output = emutil::ExecQuiet("$MANAGEIMAGES relocate ".
-				       "  -p $pid -i $name");
-	if ($?) {
-	    print $output;
-	    NotifyOnce("${pid}:${name}",
-		       "Could not relocate image $pid,$name from $urn",
-		       $output);
-	    next;
-	}
-	NotifyClear("${pid}:${name}");
-    }
 }
 
 #
@@ -347,60 +267,6 @@ sub HandleImageNotifications()
     }
 }
 
-#
-# Look for images that need to be copied back (cause we were notified
-# up above). These are images that need to be imported from the
-# cluster where the snapshot was made.
-#
-sub HandleImageCopybacks()
-{
-    my $query_result =
-	DBQueryWarn("select * from image_updates");
-    return
-	if (!$query_result);
-    
-    while (my $row = $query_result->fetchrow_hashref()) {
-	my $imageid = $row->{'imageid'};
-	my $image   = OSImage->Lookup($imageid);
-	
-	if (!defined($image)) {
-	    print STDERR "$imageid no longer exists. Skipping update ...\n";
-	    next;
-	}
-	# Debugging in devel tree
-	if (0 && $MAINSITE && $image->isdataset()) {
-	    print "Skipping copyback of dataset $image\n";
-	    next;
-	}
-	if ($impotent) {
-	    print "Would import new version of $image\n";
-	    next;
-	}
-	my $output = emutil::ExecQuiet("$IMPORTER -d -g -r -c $imageid");
-	if ($?) {
-	    print STDERR "Could not import image update for $imageid\n";
-	    print STDERR $output;
-	    NotifyOnce($image->versid(),
-		       "Could not import image update for $imageid",
-		       $output);
-	    next;
-	}
-	NotifyClear($image->versid());
-    }
-    return
-	if ($MAINSITE);
-    
-    my $opt = ($impotent ? "-n" : "");
-
-    # Trigger a posting to the IMS for any new images.
-    my $output = emutil::ExecQuiet("$POSTIMAGEDATA -v $opt all");
-    if ($?) {
-	print STDERR "Could not post image data to the IMS:\n";
-	print STDERR $output;
-    }
-    print $output;
-}
-
 # Do this once at startup
 if (! $debug) {
     sleep(5);
@@ -414,11 +280,8 @@ while (1) {
     print "Running at ".
 	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
 
-    HandleIncomingRelocations();
-    HandleOutgoingRelocations();
     HandleImageDeletions();
     HandleImageNotifications();
-    HandleImageCopybacks();
     exit(0)
 	if ($oneshot);
 
