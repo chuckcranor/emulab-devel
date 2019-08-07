@@ -828,6 +828,7 @@ sub SliceMaxExtension($)
     # project, by multiple users. 
     #
     my %reslist   = ();
+    my %nodelist  = map { $_ => $_ } $experiment->NodeList(1, 0);
     my $pidlist   = [$experiment->pid()];
     my @typelist  = $experiment->TypesInUse();
     my @curres    = Reservation->CurrentReservations($pidlist, 1);
@@ -835,7 +836,8 @@ sub SliceMaxExtension($)
     
     if (@curres) {
 	foreach my $ref (@curres) {
-	    if (grep {$_ eq $ref->{'nodetype'}} @typelist) {
+	    if (grep {$_ eq $ref->{'nodetype'}} @typelist ||
+		exists($nodelist{$ref->{'nodetype'}})) {
 		my $type = $ref->{'nodetype'};
 		
 		#
@@ -848,7 +850,13 @@ sub SliceMaxExtension($)
 						     $type, 1);
 
 		if (!exists($current{$type})) {
-		    $current{$type} = $project->TypeInUseCount($type);
+		    if (exists($nodelist{$ref->{'nodetype'}})) {
+			# A singleton node reservation, in use.
+			$current{$type} = 1;
+		    }
+		    else {
+			$current{$type} = $project->TypeInUseCount($type);
+		    }
 		}
 		foreach my $res (@projres) {
 		    my $uid  = $res->uid();
