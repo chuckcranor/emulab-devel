@@ -3583,8 +3583,29 @@ sub UnProvision($;$)
 	    next;
 	}
     }
+    # Process virtnodes on shared nodes first, as a group.
+    if (@shared) {
+	my $experiment = Experiment->Lookup($self->slice_uuid());
+	if (!defined($experiment)) {
+	    print STDERR "Could not map $self to its experiment\n";
+	    return 0;
+	}
+	my $pid = $experiment->pid();
+	my $eid = $experiment->eid();
+	my @ids = map { $_->resource_id() } @shared;
+
+	system("$VNODESETUP -j -q -m -k $pid $eid @ids");
+	if ($?) {
+	    print STDERR "$VNODESETUP -k failed on @ids\n";
+	    return -1;
+	}
+	# Mark as stopped to avoid duplicate work later.
+	foreach my $sliver (@shared) {
+	    $sliver->SetStatus("stopped");
+	}
+    }
     #
-    # Process the virtnodes first. If we are going to unprovision the
+    # Process the rest of the virtnodes. If we are going to unprovision the
     # physical node, then do not bother since they will all get zapped.
     #
     foreach my $pnode_id (keys(%vnodes)) {
@@ -3608,34 +3629,6 @@ sub UnProvision($;$)
 	    print STDERR "Could not unprovision $sliver in $self\n";
 	    $sliver->SetStatus("broken");
 	    next;
-	}
-    }
-    # Now do the shared nodes in a group.
-    if (@shared) {
-	my $experiment = Experiment->Lookup($self->slice_uuid());
-	if (!defined($experiment)) {
-	    print STDERR "Could not map $self to its experiment\n";
-	    return 0;
-	}
-	my $pid = $experiment->pid();
-	my $eid = $experiment->eid();
-	my @ids = map { $_->resource_id() } @shared;
-
-	system("$VNODESETUP -j -q -m -k $pid $eid @ids");
-	if ($?) {
-	    print STDERR "$VNODESETUP -k failed on @ids\n";
-	}
-	# Mark as stopped to avoid duplicate work later.
-	foreach my $sliver (@shared) {
-	    $sliver->SetStatus("stopped");
-	    #
-	    # Now we can unprovision, which will be much faster now.
-	    #
-	    if ($sliver->UnProvision($nophysfree) != 0) {
-		print STDERR "Could not unprovision $sliver in $self\n";
-		$sliver->SetStatus("broken");
-		next;
-	    }
 	}
     }
     return 0;
