@@ -1049,7 +1049,7 @@ sub Usage($$$)
 	DBQueryWarn("(select e.eid,s.rsrcidx,s.nonlocal_id,s.slice_uuid, ".
 		    "       s.nonlocal_user_id, ".
 		    "       UNIX_TIMESTAMP(s.swapin_last),0,".
-		    "       e.swapper_idx,n.type,count(n.type) ".
+		    "       e.swapper_idx,n.type,r.node_id ".
 		    " from experiments as e ".
 		    "left join experiment_stats as s on ".
 		    "     s.exptidx=e.idx  ".
@@ -1057,16 +1057,12 @@ sub Usage($$$)
 		    "left join nodes as n on n.node_id=r.node_id ".
 		    "where e.pid_idx='$pid_idx' and e.state='active' ".
 		    "      and UNIX_TIMESTAMP(s.swapin_last) < $end ".
-		    "group by e.eid,s.rsrcidx,s.nonlocal_id,s.slice_uuid, ".
-		    "         s.nonlocal_user_id, ".
-		    "         UNIX_TIMESTAMP(s.swapin_last), ".
-		    "         e.swapper_idx,n.type ".
 		    "order by s.swapin_last desc) ".
 		    "union ".
 		    "(select s.eid,r.idx,s.nonlocal_id,s.slice_uuid, ".
 		    "       s.nonlocal_user_id, ".
 		    "       r.swapin_time,r.swapout_time, ".
-		    "       h.uid_idx,n.type,count(n.type) ".
+		    "       h.uid_idx,n.type,h.node_id ".
 		    "  from experiment_resources as r ".
 		    "left join experiment_stats as s on ".
 		    "     s.exptidx=r.exptidx  ".
@@ -1084,10 +1080,6 @@ sub Usage($$$)
 		    "      r.swapin_time <= $end) or ".
 		    "     (r.swapout_time > $start and ".
 		    "      r.swapout_time < $end)) ".
-		    "group by s.eid,r.idx,s.nonlocal_id,s.slice_uuid, ".
-		    "         s.nonlocal_user_id, ".
-		    "         r.swapin_time,r.swapout_time, ".
-		    "         h.uid_idx,n.type ".
 		    "order by r.swapin_time desc) "
 	);
 
@@ -1098,7 +1090,7 @@ sub Usage($$$)
     my $lastin  = 0;
 
     while (my ($eid,$idx,$urn,$slice_uuid,$user_urn,
-	       $swapin_time,$swapout_time,$swapper_idx,$type,$count) =
+	       $swapin_time,$swapout_time,$swapper_idx,$type,$node_id) =
 	   $query_result->fetchrow_array()) {
 	# In the emulab-ops project, we nalloc nodes to experiments that
 	# have never been swapped in (like hwdown).
@@ -1106,7 +1098,7 @@ sub Usage($$$)
 	    if (!defined($swapin_time));
 	# No phys nodes.
 	next
-	    if ($count == 0 || !defined($type));
+	    if (!defined($type) || !defined($node_id));
 
 	my ($swapper_urn, $swapper_uid, $user);
 	#
@@ -1140,12 +1132,17 @@ sub Usage($$$)
 			       "end"    => $swapout_time || "",
 			       "user_uid" => $swapper_uid,
 			       "user_urn" => $swapper_urn,
-			       "types"  => {$type => {"count"  => $count}}});
+			       "types"  => {$type => {"count"  => 1}},
+			       "nodes"  => {$node_id => 1}});
 	    $lastin = $swapin_time;
 	    next;
 	}
 	my $blob = $summary[0];
-	$blob->{"types"}->{$type} = {"count" => $count};
+	if (!exists($blob->{"types"}->{$type})) {
+	    $blob->{"types"}->{$type} = {"count" => 0};
+	}
+	$blob->{"types"}->{$type}->{"count"} += 1;
+	$blob->{"nodes"}->{$node_id} = 1;
     }
     return \@summary;
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -141,6 +141,11 @@ sub CreateTimeline($@)
 
     @tmp = ();
     foreach my $ref (@$usage) {
+	foreach my $type (keys(%typesinuse)) {
+	    if (exists($ref->{'nodes'}->{$type})) {
+	        $ref->{'types'}->{$type} = {"count" => 1};
+	    }
+	}
 	foreach my $type (keys(%{$ref->{'types'}})) {
 	    if (exists($typesinuse{$type})) {
 		push(@tmp, $ref);
