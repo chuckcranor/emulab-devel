@@ -363,7 +363,8 @@ elsif (! -s $ofile)  {
 else {
     if ($getparams) {
 	if (! -e $pfile) {
-	    if (system("egrep -q -s '^[^#]*defineParameter' $ifile")) {
+	    if (system("egrep -q -s '^[^#]*defineParameter' $ifile") &&
+		system("egrep -q -s '^[^#]*defineStructParameter' $ifile")) {
 		# No parameters
 		system("touch $pfile");
 	    }
