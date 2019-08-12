@@ -688,6 +688,7 @@ $(function ()
 						    "Approve",
 						    {"cluster" : window.CLUSTER,
 						     "uuid"    : window.UUID,
+						     "type"    : "reservation",
 						     "message" : message});
 		xmlthing.done(callback);
 	    });
@@ -819,6 +820,7 @@ $(function ()
 						    {"cluster" : window.CLUSTER,
 						     "uuid"    : window.UUID,
 						     "pid"     : window.PID,
+						     "type"    : "reservation",
 						     "reason"  : reason});
 		xmlthing.done(callback);
 	    });

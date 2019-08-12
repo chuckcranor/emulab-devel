@@ -147,7 +147,7 @@ while (1) {
 	DBQueryWarn("select d.uuid from apt_deferred_instances as d ".
 		    "left join apt_instances as i on i.uuid=d.uuid ".
 		    "where (d.start_at is null or now() >= d.start_at or ".
-		    "       i.status='prestage' or i.status='staging'");
+		    "       i.status='prestage' or i.status='staging')");
     
     if ($query_result && $query_result->numrows) {
 	while (my ($uuid) = $query_result->fetchrow_array()) {
