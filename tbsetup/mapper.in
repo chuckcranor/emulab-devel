@@ -563,9 +563,9 @@ sub AssignLoop()
 	}
 	# Hack for Kirk.
 	if (!($impotent || $regression) &&
-	    ($pid eq "oai2019" || $project->IsNonLocal())) {
+	    ($pid eq "sigcomm2019" || $project->IsNonLocal())) {
 	    while (1) {
-		if (libEmulab::EmulabCountLock("mapperlock", 3) == 0) {
+		if (libEmulab::EmulabCountLock("mapperlock", 4) == 0) {
 		    $seriallock = 1;
 		    last;
 		}
