@@ -393,9 +393,8 @@ if (defined($image)) {
     }
     # If we got a -u argument and not runnng as that user, flip.
     if (!$user->SameUser(User->ThisUser())) {
-	$EUID = 0;
-	$UID  = $SAVEUID = $user->unix_uid();
-	$EUID = $UID;
+	$user->FlipTo($image->GetGroup());
+	$SAVEUID = $user->unix_uid();
     }
     
     # If the user is not an admin, must have perm on the image.
@@ -423,9 +422,8 @@ else {
     }
     # If we got a -u argument and not running as that user, flip.
     if (!$user->SameUser(User->ThisUser())) {
-	$EUID = 0;
-	$UID  = $SAVEUID = $user->unix_uid();
-	$EUID = $UID;
+	$user->FlipTo($image->GetGroup());
+	$SAVEUID = $user->unix_uid();
     }
     #
     # Need to watch for two experiments causing this image to
@@ -682,7 +680,7 @@ else {
     print "Not downloading image ... add -g option\n";
 }
 $image->Unlock();
-exit(0);
+myExit(0);
 
 #
 # Create a new image descriptor. We have to munge the XML file a bit
