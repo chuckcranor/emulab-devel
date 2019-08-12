@@ -109,6 +109,7 @@ sub mysystem($);
 #
 # Configure variables
 #
+my $MAINSITE = @TBMAINSITE@;
 my $TBROOT   = "@prefix@";
 my $GENILIB  = "$TBROOT/lib/geni-lib/";
 my $REPODIR  = "/repos";
@@ -381,12 +382,22 @@ my $jailrootdir = "$JAILROOT/$jailtag";
 # This way we don't have to copy in the geni-lib files and they
 # will always be up-to-date. Also make dev trees work.
 #
-# Note that we avoid gratuitous mountd HUP'ing by invoking mount_nullfs
-# directly instead of using mount. Alas, the jail command still does a
-# couple of "mount" commands, so we are still HUP happy.
+# Note that the system mount command wants to HUP mountd when it successfully
+# mounts ANY filesystem, whether exported or not. To avoid this on the
+# mothership, we mount ALL jail filesystems ourselves with the locally added
+# "-N" option which prevents mount from trying to send HUPs.
 #
-if (mysystem("mount_nullfs -o ro $GENILIB $jailrootdir$GENILIB_MNT")) {
-    print STDERR "Could not mount $GENILIB in $jailtag\n";
+my $mo = ($MAINSITE ? "-N" : "");
+if (mysystem("mount -t nullfs $mo -o ro $GENILIB $jailrootdir$GENILIB_MNT")) {
+    print STDERR "Could not mount $GENILIB in jail $jailtag\n";
+    exit(-1);
+}
+if (mysystem("mount -t devfs -o ruleset=4 $mo devfs $jailrootdir/dev")) {
+    print STDERR "Could not mount /dev in jail $jailtag\n";
+    exit(-1);
+}
+if (mysystem("mount -t fdescfs $mo null $jailrootdir/dev/fd")) {
+    print STDERR "Could not mount /dev/fd in jail $jailtag\n";
     exit(-1);
 }
 
@@ -582,7 +593,8 @@ sub start_jail($$)
     $args .= "allow.chflags=0 allow.mount=0 allow.mount.devfs=0 ";
     $args .= "allow.mount.nullfs=0 allow.mount.procfs=0 allow.mount.tmpfs=0 ";
     $args .= "allow.mount.zfs=0 allow.quotas=0 allow.socket_af=0 ";
-    $args .= "mount.devfs=1 mount.fdescfs=1 ";
+    # XXX we mount these manually
+    $args .= "mount.devfs=0 mount.fdescfs=0 ";
 
     # no networking
     $args .= "ip4=disable ip6=disable ";
@@ -668,7 +680,8 @@ sub run_jail($$$$)
     $args .= "allow.chflags=0 allow.mount=0 allow.mount.devfs=0 ";
     $args .= "allow.mount.nullfs=0 allow.mount.procfs=0 allow.mount.tmpfs=0 ";
     $args .= "allow.mount.zfs=0 allow.quotas=0 allow.socket_af=0 ";
-    $args .= "mount.devfs=1 mount.fdescfs=1 ";
+    # XXX we mount these manually
+    $args .= "mount.devfs=0 mount.fdescfs=0 ";
 
     # no networking
     $args .= "ip4=disable ip6=disable ";
