@@ -53,6 +53,29 @@ $(function ()
     var mainTemplate  = _.template(instantiateString);
     var graphTemplate = _.template(templates["reservation-graph"]);
 
+    function enableStepsMotion()
+    {
+	$('#stepsContainer').steps("enableMotion");
+	// For Selenium.
+	$('#stepsContainer').prepend("<div class='hidden' " +
+				     " id='steps-enabled'></div>");	
+    }
+    function disableStepsMotion()
+    {
+	$('#stepsContainer').steps("disableMotion");
+	// For Selenium
+	$('#stepsContainer').find("#steps-enabled").remove();
+    }
+    function setStepsMotion(enable)
+    {
+	if (enable) {
+	    enableStepsMotion();
+	}
+	else {
+	    disableStepsMotion();
+	}
+    }
+
     function initialize()
     {
     // Get context for constraints
@@ -209,6 +232,7 @@ $(function ()
 		return true;
 	    },
 	});
+	setStepsMotion(false);
 	
 	// Insert datepicker on schedule tab,
 	$("#start_day").datepicker({
@@ -529,10 +553,12 @@ $(function ()
 
     var doingformcheck = 0;
     var doingrunscript = 0;
-    
+
     // Step is changing
     function StepChanging(step, event, currentIndex, newIndex) {
 	//console.info("StepChanging: ", step, currentIndex, newIndex);
+	//console.info(new Date());
+	
 	if (currentIndex == 0 && newIndex == 1) {
 	    // Check step 0 form values. Any errors, we stop here.
 	    if (!registered && !doingformcheck) {
@@ -568,7 +594,8 @@ $(function ()
 			prunetypes   : prunetypes,
 			rerun_instance : window.RERUN_INSTANCE,
 			rerun_paramset : window.RERUN_PARAMSET,
-		        jacksGraphCallback: updateJacksGraph
+		        jacksGraphCallback: updateJacksGraph,
+			setStepsMotion : setStepsMotion,
 		    });
 		    loaded_uuid = selected_uuid;
 		    ppchanged = true; 
@@ -603,6 +630,11 @@ $(function ()
 			ppchanged = false;
 			$('#stepsContainer-t-1').parent().removeClass('error');
 			$('#stepsContainer').steps('next');
+			// This is for testing with Selenium.
+			if (! $('#pp-wizard-done').length) {
+			    $('#pp-container').append("<div class='hidden' " +
+						  " id='pp-wizard-done'></div>");
+			}
 		    }
 		    else {
 			$('#stepsContainer-t-1').parent().addClass('error');
@@ -648,6 +680,8 @@ $(function ()
     // Step is done changing.
     function StepChanged(step, event, currentIndex, priorIndex) {
 	//console.info("StepChanged: ", step, currentIndex, priorIndex);
+	//console.info(new Date());
+	
         APT_OPTIONS.updatePage({ 'instantiate-step': currentIndex });
 	var cIndex = currentIndex;
         if (currentIndex == 1) {
@@ -1657,6 +1691,8 @@ $(function ()
 	}
 	console.info("ChangeProfileSelection: " +
 		     $(selectedElement).attr('value'));
+
+	setStepsMotion(false);
 	
 	var profile_name = $(selectedElement).attr('name');
 	var profile_value = $(selectedElement).attr('value');
@@ -1693,6 +1729,7 @@ $(function ()
 	    else {
 		$('#profile_copy_button').removeClass("hidden");
 	    }
+	    setStepsMotion(true);
 
 	    /*
 	     * Change the project; if the user's project list includes

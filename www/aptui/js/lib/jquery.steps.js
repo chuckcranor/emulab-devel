@@ -19,8 +19,10 @@ $.fn.extend({
     _enableAria: function (enable)
     {
         return (enable == null || enable) ? 
-            this.removeClass("disabled")._aria("disabled", "false") : 
-            this.addClass("disabled")._aria("disabled", "true");
+            this.removeAttr("disabled")
+   	       .removeClass("disabled")._aria("disabled", "false") : 
+            this.attr("disabled", "disabled")
+	       .addClass("disabled")._aria("disabled", "true");
     },
 
     _showAria: function (show)
@@ -517,7 +519,7 @@ function goToStep(wizard, options, state, index)
     }
     else
     {
-        wizard.find(".steps li").eq(oldIndex).addClass("error");
+        wizard.find(".steps li").eq(oldIndex).addClass("__error__");
     }
 
     return true;
@@ -1472,6 +1474,26 @@ $.fn.steps.setStep = function (index, step)
 $.fn.steps.skip = function (count)
 {
     throw new Error("Not yet implemented!");
+};
+
+$.fn.steps.disableMotion = function ()
+{
+    var wizard = this;
+    var eventNamespace = getEventNamespace(wizard);
+
+    wizard.find(".actions a")
+	.unbind("click" + eventNamespace, paginationClickHandler);
+    wizard.find(".actions a[href='#next']").parent()._enableAria(false);
+};
+
+$.fn.steps.enableMotion = function ()
+{
+    var wizard = this;
+    var eventNamespace = getEventNamespace(wizard);
+
+    wizard.find(".actions a")
+	.bind("click" + eventNamespace, paginationClickHandler);
+    wizard.find(".actions a[href='#next']").parent()._enableAria();
 };
 
 /**

@@ -32,6 +32,7 @@ $(function () {
 	var debug         = true;
 	var rerun_bindings= null;
 	var rerun_warnings= null;
+	var setStepsMotion= null;
 
 	// List of form elements (fields,groups), in order of appearance.
 	var formFields    = [];
@@ -3380,6 +3381,7 @@ $(function () {
 	    }
 	    configuredone_callback = args.config_callback;
 	    modified_callback = args.modified_callback;
+	    setStepsMotion = args.setStepsMotion;
 	    
 	    /*
 	     * Need to ask for the profile parameter form fragment and
@@ -3406,6 +3408,7 @@ $(function () {
 		}
 		InitializeForm(paramdefs);
 		GenerateForm(null);
+		setStepsMotion(true);
 
 		if (args.rspec) {
 		    RSPEC = args.rspec;
@@ -3414,6 +3417,7 @@ $(function () {
 		    ShowThumbnail(RSPEC, args.jacksGraphCallback);
 		}
 	    }
+	    setStepsMotion(false);
 	    var blob = {"uuid" : args.uuid};
 	    if (args.rerun_instance !== undefined) {
 		blob["rerun_instance"] = args.rerun_instance;

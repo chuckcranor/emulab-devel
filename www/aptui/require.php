@@ -200,7 +200,7 @@ function REQUIRE_JACKS_EDITOR()
 
 function REQUIRE_JQUERY_STEPS()
 {
-  AddLibrary("js/lib/jquery.steps.min.js");
+  AddLibrary("js/lib/jquery.steps.js");
 }
 
 function REQUIRE_LIQUIDFILLGAUGE()
