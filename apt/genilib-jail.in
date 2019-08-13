@@ -170,9 +170,11 @@ END {
 		msg("Destroying jail FS");
 
 		# XXX make sure special FSes get unmounted 
-		mysystem("umount $JAILROOT/$jailtag/dev/fd >/dev/null 2>&1");
-		mysystem("umount $JAILROOT/$jailtag/dev >/dev/null 2>&1");
-		mysystem("umount $JAILROOT/$jailtag$GENILIB_MNT >/dev/null 2>&1");
+		# XXX note that we avoid flushing, any result we needed
+		# has already been copied out.
+		mysystem("umount -n $JAILROOT/$jailtag/dev/fd >/dev/null 2>&1");
+		mysystem("umount -n $JAILROOT/$jailtag/dev >/dev/null 2>&1");
+		mysystem("umount -n $JAILROOT/$jailtag$GENILIB_MNT >/dev/null 2>&1");
 
 		if (mysystem("zfs destroy -f $ZFSBASE/$jailtag")) {
 		    print STDERR
@@ -643,8 +645,8 @@ sub limit_jail($$)
 	push @rules, "jail:$name:maxproc:deny=100/jail";
 	push @rules, "jail:$name:nthr:log=200/jail";
 	push @rules, "jail:$name:nthr:deny=200/jail";
-	push @rules, "jail:$name:openfiles:log=200/jail";
-	push @rules, "jail:$name:openfiles:deny=200/jail";
+	push @rules, "jail:$name:openfiles:log=500/jail";
+	push @rules, "jail:$name:openfiles:deny=500/jail";
 	push @rules, "jail:$name:vmemoryuse:log=1g/jail";
 	push @rules, "jail:$name:vmemoryuse:deny=1g/jail";
     }
