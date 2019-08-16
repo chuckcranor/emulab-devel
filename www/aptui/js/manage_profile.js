@@ -24,6 +24,7 @@ $(function ()
     var snapping     = 0;
     var gotrspec     = 0;
     var gotscript    = 0;
+    var goodscript   = 0;
     var fromrepo     = 0;
     var repohash     = null;
     var reporefspec  = null;
@@ -90,6 +91,7 @@ $(function ()
 	// Ditto a script.
 	if (_.has(fields, "profile_script") && fields["profile_script"] != "") {
 	    gotscript = 1;
+	    goodscript = 1;
 	    if (_.has(fields, "portal_converted") &&
 		fields["portal_converted"] == "yes") {
 		portal_converted = 1;
@@ -759,7 +761,7 @@ $(function ()
 	    newr = newr.replace(new RegExp(/\r?\n|\r/g), " ");
 	    oldr = oldr.replace(new RegExp(/\r?\n|\r/g), " ");
 	    
-	    if (oldr != newr) {
+	    if (oldr != newr || goodscript == 0) {
 		console.info("geni-lib code has changed");
 		if (portal_converted) {
 		    /*
@@ -768,7 +770,8 @@ $(function ()
 		     */
 		    rteCheckScript(newRspec);
 		}
-		else {
+	        else {
+		    gotscript = 1;
 		    checkScript(newRspec, repoupdate_callback);
 		}
 	    }
@@ -1368,7 +1371,7 @@ $(function ()
 		return;
 	    }
 	    if (json.value.rspec != "") {
-		gotscript = 1;
+		goodscript = 1;
 		// Kill the rspec so that we always use the new one.
 		$('#profile_rspec_textarea').val("");
 		NewRspecHandler(json.value.rspec);
@@ -1382,6 +1385,8 @@ $(function ()
 		}
 		// Show the XML source button.
 		$('#show_xml_modal_button').removeClass("hidden");
+	    } else {
+	      goodscript = 0;
 	    }
 	}
 	/*
@@ -1656,8 +1661,8 @@ $(function ()
         var readonly = true;
         if ((window.CANMODIFY !== 0 ||
 	     window.ACTION === 'create') &&
-	    fromrepo === 0 &&
-	    gotscript === 1)
+	     fromrepo === 0 &&
+	     gotscript == 1)
         {
 	    readonly = false;
         }
