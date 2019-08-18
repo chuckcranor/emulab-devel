@@ -33,7 +33,21 @@
     <tbody>
       <% _.each(experiments, function(value, name) { %>
 	<tr>
-	  <td><%= value.name %></td>
+	  <td style='white-space: nowrap;'><%= value.name %>
+	    <% if (showterminate !== undefined && showterminate
+	           && value.status == "ready") { %>
+	      <a href="#" class="terminate-button"
+		 data-uuid="<%- value.uuid %>">
+		<span class='glyphicon glyphicon-remove pull-right'
+		      style='color: red; margin-left: 5px;
+			     margin-bottom: 4px;'
+		      data-toggle='tooltip'
+		      data-container="body"
+		      data-trigger="hover"
+		      title='Terminate Experiment'></span>
+	      </a>
+            <% } %>
+	  </td>
 	  <% if (value.profile_uuid) { %>
 	    <td><a href='show-profile.php?uuid=<%- value.profile_uuid %>'>
               <%- value.profile_name %></a></td>

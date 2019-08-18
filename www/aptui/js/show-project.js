@@ -121,11 +121,15 @@ $(function ()
 	    }
 	    var template = _.template(experimentString);
 
+	    // Project leaders and admins get a terminate button.
+	    var showterm = (window.ISLEADER || window.ISADMIN ? true : false);
+
 	    $('#experiments_content')
 		.html(template({"experiments" : json.value,
 				"showCreator" : true,
 				"showProject" : false,
-				"searchUUID"  : false}));
+				"searchUUID"  : false,
+				"showterminate" : showterm}));
 	    
 	    // Format dates with moment before display.
 	    $('#experiments_table .format-date').each(function() {
@@ -138,11 +142,52 @@ $(function ()
 		.tablesorter({
 		    theme : 'green',
 		});
+
+	    // Terminate an experiment.
+	    $('#experiments_content .terminate-button').click(function (event) {
+		event.preventDefault();
+		TerminateExperiment(this);
+	    });
+	    
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "show-project", "ExperimentList",
 					    {"pid" : window.TARGET_PROJECT});
 	xmlthing.done(callback);
+    }
+
+    // Terminate an experiment
+    function TerminateExperiment(target)
+    {
+	console.info($(target), $(target).data("uuid"));
+	var uuid = $(target).data("uuid");
+
+	var callback = function(json) {
+	    sup.HideModal("#waitwait-modal");
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    // Reload the experiments tab. Easier.
+	    LoadExperimentTab();
+	};
+	// Bind the confirm button in the modal. 
+	$('#terminate-modal #terminate-confirm').click(function () {
+	    sup.HideModal('#terminate-modal');
+	    sup.ShowModal('#waitwait-modal');
+
+	    var xmlthing = sup.CallServerMethod(null, "status",
+						"TerminateInstance",
+						{"uuid" : uuid});
+	    xmlthing.done(callback);
+	});
+	// Handler so we know the user closed the modal. We need to
+	// clear the confirm button handler.
+	$('#terminate-modal').on('hidden.bs.modal', function (e) {
+	    $('#terminate-modal #terminate-confirm').unbind("click");
+	    $('#terminate-modal').off('hidden.bs.modal');
+	});
+	sup.ShowModal("#terminate-modal");
     }
 
     function LoadClassicExperiments()

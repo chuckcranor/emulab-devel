@@ -131,8 +131,8 @@ function ExperimentList($which, $target)
     elseif ($which == "membership") {
         $target_uuid = $target->uuid();
         $target_idx  = $target->idx();
-        $whereclause = "where a.creator_uuid='$target_uuid' or ".
-                       "      g.uid_idx is not null ";
+        $whereclause = "where (a.creator_uuid='$target_uuid' or ".
+                       "       g.uid_idx is not null) and a.pid!='sigcomm2019' ";
         $extraclause = "left join group_membership as g on ".
                        "     g.uid_idx='$target_idx' and  ".
                        "     g.pid_idx=a.pid_idx ";
@@ -241,6 +241,7 @@ function ExperimentList($which, $target)
         $blob["started"]  = $started;
         $blob["expires"]  = $expires;
         $blob["lockdown"] = $lockdown;
+        $blob["uuid"]     = $uuid;
         $results["$pid:$name"] = $blob;
     }
     return $results;
