@@ -72,7 +72,9 @@ $(function ()
 		.html(template({"experiments" : json.value,
 				"showCreator" : true,
 				"showProject" : false,
-				"searchUUID"  : false}));
+				"searchUUID"  : false,
+				"showterminate" : false,
+			       }));
 	    
 	    // Format dates with moment before display.
 	    $('#experiments_table .format-date').each(function() {

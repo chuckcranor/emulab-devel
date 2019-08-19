@@ -36,6 +36,7 @@ $(function ()
 				 "showCreator" : true,
 				 "showProject" : true,
 				 "searchUUID"  : true,
+				 "showterminate"  : false,
 				});
 	    $('#experiments_content').html(html);
 	    InitTable();
