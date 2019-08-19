@@ -198,10 +198,11 @@ sub HandleImport($)
     print STDERR "Running for $pending: '$command'\n";
     my $output = GeniUtil::ExecuteQuietAsGeniUser($command);
     GeniUtil::ExecuteAsGeniUser("$command");
+    my $status = $?;
     $webtask->Refresh();
     print $output;
-    if ($?) {
-	my $code = $? >> 8;
+    if ($status) {
+	my $code = $status >> 8;
 	if (!$webtask->HasExited() || $webtask->exitcode() < 0) {
 	    $pending->Failed($webtask->HasExited() ?
 			     $webtask->output() :
@@ -250,10 +251,11 @@ sub HandleRelocation($)
     print STDERR "Running for $pending: '$command'\n";
     my $output = GeniUtil::ExecuteQuietAsGeniUser($command);
     GeniUtil::ExecuteAsGeniUser("$command");
+    my $status = $?;
     $webtask->Refresh();
     print $output;
-    if ($?) {
-	my $code = $? >> 8;
+    if ($status) {
+	my $code = $status >> 8;
 	if (!$webtask->HasExited() || $webtask->code() < 0) {
 	    $pending->Failed($webtask->HasExited() ?
 			     $webtask->output() :
@@ -302,10 +304,11 @@ sub HandleCopyback($)
     print STDERR "Running for $pending: '$command'\n";
     my $output = GeniUtil::ExecuteQuietAsGeniUser($command);
     GeniUtil::ExecuteAsGeniUser("$command");
+    my $status = $?;
     $webtask->Refresh();
     print $output;
-    if ($?) {
-	my $code = $? >> 8;
+    if ($status) {
+	my $code = $status >> 8;
 	if (!$webtask->HasExited() || $webtask->code() < 0) {
 	    $pending->Failed($webtask->HasExited() ?
 			     $webtask->output() :
