@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004, 2005, 2006 University of Utah and the Flux Group.
+# Copyright (c) 2004-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -69,9 +69,6 @@ sub notify($);
 
 # Daemonize;
 if (!$debug) {
-    system("mv -f $LOGFILE ${LOGFILE}.old")
-	if (-e $LOGFILE);
-    
     if (TBBackGround($LOGFILE)) {
 	sleep(1);
 	exit(0);
