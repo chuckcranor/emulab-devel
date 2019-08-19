@@ -257,12 +257,18 @@ window.APT_OPTIONS.endPage = function () {
 }
 
 window.APT_OPTIONS.updatePage = function (data) {
-  window.APT_OPTIONS.postTutorial({ url: window.location.href, update: data });
+    if (0) {
+	window.APT_OPTIONS.postTutorial({ url: window.location.href,
+					  update: data });
+    }
 }
 
 window.APT_OPTIONS.postTutorial = function (data) {
   //console.log('PostTutorial: ', data);
-  //console.log('parent: ', window.parent.location.hostname, window.parent.location.port, window.parent.location.protocol);
+    //console.log('parent: ', window.parent.location.hostname, window.parent.location.port, window.parent.location.protocol);
+  if (1) {
+      return;
+  }
   window.parent.postMessage(data, 'http://tutorial.cloudlab.us:5000');
   try {
     if (window.parent) {
