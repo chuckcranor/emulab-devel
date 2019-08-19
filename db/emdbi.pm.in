@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2014 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -393,10 +393,10 @@ my @DB = ();
 
 use vars qw($DBQUERY_MAXTRIES $DBCONN_MAXTRIES $DBErrorString $DBCONN_USEDBI
 	    $DBCONN_EXITONERR $DBQUERY_RECONNECT $DBQUERY_DEBUG);
-$DBQUERY_MAXTRIES  = 1;
+$DBQUERY_MAXTRIES  = 5;
 $DBQUERY_RECONNECT = 1;
 $DBCONN_USEDBI     = $USEDBI;
-$DBCONN_MAXTRIES   = 5;
+$DBCONN_MAXTRIES   = 10;
 $DBCONN_EXITONERR  = 1;
 $DBQUERY_DEBUG     = 0;
 $DBErrorString     = "";
@@ -477,7 +477,7 @@ sub TBDBConnect($$)
 	$maxtries--;
 	if ($maxtries) {
 	    print STDERR "Cannot connect to DB; trying again in 5 seconds!\n";
-	    sleep(5);
+	    sleep(10);
 	}
     }
     if (!defined($DB[$dbnum])) {
@@ -610,8 +610,8 @@ sub DBQueryN($$)
 		"  Error: " . $db->errstr . " ($err)";
 	}
 	if (defined($result) ||
-	    ($db->err != 2006) && ($db->err != 1053) && ($db->err != 2013) &&
-	    ($db->err != 1046)) {
+	    ($db->err != 2006 && $db->err != 1053 && $db->err != 2013 &&
+	     $db->err != 1046 && $db->err != 1317)) {
 	    last;
 	}
 
@@ -634,8 +634,11 @@ sub DBQueryN($$)
 	}
 
 	$maxtries--;
-	DBWarn("mysqld went away in process $PID. $maxtries tries left", 0);
-	sleep(1);
+	DBWarn("mysqld went away in process $PID. $maxtries tries left", 1);
+	sleep(10);
+    }
+    if (!$maxtries) {
+	DBWarn("mysqld went away in process $PID. No tries left", 0);
     }
     return $result;
 }
