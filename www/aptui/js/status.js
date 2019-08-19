@@ -49,6 +49,7 @@ $(function ()
     var aggcount          = 0;
     var jacksInstance     = null;
     var changingtopo      = false;
+    var slowdown          = false;
     var EMULAB_OPS        = "emulab-ops";
     var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
     var GENIRESPONSE_REFUSED = 7;
@@ -114,6 +115,11 @@ $(function ()
     {
 	instanceStatus  = expinfo.status;
 	extension_blob  = expinfo.extension_info;
+
+	// For tutorials
+	if (expinfo.project == "sigcomm2019") {
+	    slowdown = true;
+	}
 	
 	// Generate the templates.
 	var template_args = {
@@ -155,9 +161,11 @@ $(function ()
 	});
 	ProgressBarUpdate();
 
-	// Periodic check for max allowed extension
-	LoadMaxExtension();
-	setInterval(LoadMaxExtension, 3600 * 1000);
+	if (!slowdown) {
+	    // Periodic check for max allowed extension
+	    LoadMaxExtension();
+	    setInterval(LoadMaxExtension, 3600 * 1000);
+	}
 
 	// This activates the popover subsystem.
 	$('[data-toggle="popover"]').popover({
@@ -409,7 +417,7 @@ $(function ()
     function StartStatusWatch()
     {
 	GetStatus();
-	statusID = setInterval(GetStatus, 4000);
+	statusID = setInterval(GetStatus, (slowdown ? 20000 : 5000));
     }
     
     function GetStatus()
