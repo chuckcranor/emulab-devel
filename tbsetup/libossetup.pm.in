@@ -1870,10 +1870,10 @@ sub Volunteers($)
 	    #
 	    # The wait times are totally bogus! Need a better way to do this.
 	    #
-	    $node->_maxwait($reboot_time + (120 * $pnode->_vnodecount()));
+	    $node->_maxwait($reboot_time + (300 * $pnode->_vnodecount()));
 
 	    # Add some time if the node is getting a reload. Also bogus.
-	    $node->_maxwait($node->_maxwait() + 500)
+	    $node->_maxwait($node->_maxwait() + 1000)
 		if ($node->_reloaded());
 	}
 	$node->_setupstatus($libossetup::SETUP_OKAY);
