@@ -254,7 +254,7 @@ sub DoCreate()
 	# nolocalimages. Maybe add "relocation" later, but for now just
 	# throw a user error.
 	#
-	if ($aggregate->nolocalimages()) {
+	if ($aggregate->GetAptAggregate()->nolocalimages()) {
 	    UserError("Not allowed to create a new dataset on this cluster");
 	}
     }
