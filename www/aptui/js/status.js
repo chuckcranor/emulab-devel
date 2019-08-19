@@ -465,7 +465,7 @@ $(function ()
 	else {
 	    instanceStatus = json.value.status;
 	}
-	var status_html = "";
+	var status_html   = "";
 
 	// The urls can show up at any time cause of async/early return.
 	if (_.has(json.value, "sliverstatus")) {
@@ -649,6 +649,7 @@ $(function ()
 			     'panel-warning panel-default panel-info')
 		.addClass(bgtype);
 	    $("#quickvm_status").html(status_html);
+	    $("#quickvm_status_hidden").html(instanceStatus);
 	    UpdateButtons(instanceStatus);
 	}
 	else if (lastStatus == "ready" && instanceStatus == "ready") {
@@ -662,7 +663,10 @@ $(function ()
 		    status_html += " (but some aggregates deferred)";
 		}
 	    }
-	    $("#quickvm_status").html(status_html);
+	    if ($("#quickvm_status").html() != status_html) {
+		$("#quickvm_status").html(status_html);
+		$("#quickvm_status_hidden").html(instanceStatus);
+	    }
 	}
 	lastStatus = instanceStatus;
 	/*

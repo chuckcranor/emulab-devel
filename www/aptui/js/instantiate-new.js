@@ -633,7 +633,7 @@ $(function ()
 			// This is for testing with Selenium.
 			if (! $('#pp-wizard-done').length) {
 			    $('#pp-container').append("<div class='hidden' " +
-						  " id='pp-wizard-done'></div>");
+					  " id='pp-wizard-done'></div>");
 			}
 		    }
 		    else {

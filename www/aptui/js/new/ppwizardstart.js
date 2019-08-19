@@ -3416,6 +3416,10 @@ $(function () {
 		    //ShowEditor();
 		    ShowThumbnail(RSPEC, args.jacksGraphCallback);
 		}
+		if (! $('#pp-wizard-ready').length) {
+		    $('#' + ppdivname).append("<div class='hidden' " +
+					      " id='pp-wizard-ready'></div>");
+		}
 	    }
 	    setStepsMotion(false);
 	    var blob = {"uuid" : args.uuid};
