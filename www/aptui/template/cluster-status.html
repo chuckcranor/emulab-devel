@@ -51,7 +51,7 @@
   </div>
 <% } %>
 <% _.each(amlist, function(urn, name) { %>
-  <div class='row' id='cluster-status-<%- name %>'>>
+  <div class='row' id='cluster-status-<%- name %>'>
     <div
 	<% if (isadmin) { %>
            class='col-sm-3'
@@ -82,12 +82,11 @@
       <div class='panel panel-default'>
 	<div class="panel-heading" id='inuse-click-<%- name %>'>
 	  <h5>
-	    <center><%- name %> Nodes
-	      <a href="#inuse-panel-<%- name %>"">
-		<span id="inuse-collapse-button-<%- name %>"
-		    class="glyphicon glyphicon-chevron-right pull-right"></span>
-	      </a>
-	    </center>
+	    <a href="#inuse-panel-<%- name %>">
+	      <span id="inuse-collapse-button-<%- name %>"
+		    class="glyphicon glyphicon-chevron-right pull-left"></span>
+	    </a>
+	    <center><%- name %> Nodes</center>
 	  </h5>
 	</div>
 	<div class='panel-body panel-body-dashboard'>

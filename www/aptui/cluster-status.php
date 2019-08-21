@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -63,7 +63,7 @@ SPITHEADER(1);
 if (isset($aggregate)) {
     $aggregates = array($aggregate->nickname() => $aggregate->urn());
 }
-elseif ($TBMAINSITE && $ISCLOUD) {
+elseif ($ISCLOUD) {
     $aggregates =
         array("Emulab"    => "urn:publicid:IDN+emulab.net+authority+cm",
               "APT"       => "urn:publicid:IDN+apt.emulab.net+authority+cm",
@@ -71,6 +71,13 @@ elseif ($TBMAINSITE && $ISCLOUD) {
               "Clemson"   => "urn:publicid:IDN+clemson.cloudlab.us+authority+cm",
               "Utah"      => "urn:publicid:IDN+utah.cloudlab.us+authority+cm",
               "OneLab"    => "urn:publicid:IDN+lab.onelab.eu+authority+cm");
+}
+elseif ($ISPOWDER) {
+    $tmp = Aggregate::DefaultAggregateList($this_user);
+    $aggregates = array();
+    foreach ($tmp as $urn => $aggregate) {
+        $aggregates[$aggregate->nickname()] = $urn;
+    }
 }
 else {
     $aggregate  = Aggregate::Lookup($DEFAULT_AGGREGATE_URN);
