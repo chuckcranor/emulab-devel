@@ -104,6 +104,7 @@ use libfreenas;
 # Constants
 #
 my $GLOBAL_CONF_LOCK     = "blkconf";
+my $VLAN_LOCK		 = "vlanconf";
 my $ZPOOL_LOW_WATERMARK  = 2 * 2**10; # 2GiB, expressed in MiB
 my $FREENAS_MNT_PREFIX   = "/mnt";
 my $ISCSI_GLOBAL_PORTAL  = 1;
@@ -131,6 +132,7 @@ my $BS_UUID_TYPE_IQN     = "iqn";
 my %vnstates = ();
 my $_gFirstOnLAN = 0;
 my $debug  = 0;
+my $vlanlockref;
 
 #
 # Local Functions
@@ -138,6 +140,8 @@ my $debug  = 0;
 sub getSliceList();
 sub restartIstgt();
 sub getIfConfig($);
+sub lockVlan();
+sub unlockVlan();
 sub getVlan($);
 sub getNextAuthITag();
 sub genSerial();
@@ -172,6 +176,7 @@ sub setDebug($)
 {
     $debug = shift;
     libvnode::setDebug($debug);
+    freenasSetDebug($debug);
     print "libvnode_blockstore: debug=$debug\n"
 	if ($debug);
 }
@@ -233,14 +238,16 @@ sub rootPreConfigNetwork($$$$)
     my @node_ifs = @{ $vnconfig->{'ifconfig'} };
     my @node_lds = @{ $vnconfig->{'ldconfig'} };
 
-    if (TBScriptLock($GLOBAL_CONF_LOCK, 0, 900) != TBSCRIPTLOCK_OKAY()) {
-	print STDERR "Could not get the blknet lock after a long time!\n";
-	return -1;
+    if (0) {
+	if (freenasLock() != 0) {
+	    return -1;
+	}
+
+	# XXX: Nothing to do?
+
+	freenasUnlock();
     }
 
-    # XXX: Nothing to do?
-
-    TBScriptUnlock();
     return 0;
 }
 
@@ -281,7 +288,6 @@ sub vnodeCreate($$$$)
 {
     my ($vnode_id, undef, $vnconfig, $private) = @_;
     my $vninfo = $private;
-    my $bsconf = $vnconfig->{'storageconfig'};
     my $cleanup = 0;
 
     # Create vmid from the vnode's name.
@@ -296,9 +302,8 @@ sub vnodeCreate($$$$)
     $private->{'vndir'} = VNODE_PATH($vnode_id);
 
     # Grab the global lock to prevent concurrency.
-    if (TBScriptLock($GLOBAL_CONF_LOCK, 0, 900) != TBSCRIPTLOCK_OKAY()) {
-	fatal("blockstore_vnodeCreate: ".
-	      "Could not get the blkalloc lock after a long time!");
+    if (freenasLock() != 0) {
+	fatal("blockstore_vnodeCreate: timed out");
     }
 
     # Create blockstore slice
@@ -309,7 +314,7 @@ sub vnodeCreate($$$$)
     }
 
     # Rain or shine, the creation attempt is done, so unlock.
-    TBScriptUnlock();
+    freenasUnlock();
 
     # Try to cleanup if something failed above.  Existing callers
     # appear to assume that if vnodeCreate() fails, then they don't
@@ -432,10 +437,14 @@ sub vnodeDestroy($$$$){
     unlink(CONFDIR() . "/running");
     $vnstates{$vnode_id} = VNODE_STATUS_UNKNOWN();
 
+    #
     # Grab the global lock to prevent concurrency.
-    if (TBScriptLock($GLOBAL_CONF_LOCK, 0, 900) != TBSCRIPTLOCK_OKAY()) {
-	fatal("blockstore_vnodeDestroy: ".
-	      "Could not get the blkalloc lock after a long time!");
+    # Note that we are particularly persistent when it comes to getting
+    # the lock as a failure here will leave all the iSCSI related state
+    # behind and we will have to remove it manually.
+    #
+    if (freenasLock(1500) != 0) {
+	fatal("blockstore_vnodeDestroy: timed out");
     }
 
     # Run through blockstore removal commands (reversed creation list).
@@ -443,6 +452,8 @@ sub vnodeDestroy($$$$){
     foreach my $sconf (@revconfigs) {
 	my $cmd = $sconf->{'CMD'};
 	if (exists($teardown_cmds{$cmd})) {
+	    TBDebugTimeStampWithDate("teardown $cmd: starting")
+		if ($debug > 1);
 	    if ($teardown_cmds{$cmd}->($vnode_id, $sconf, 
 				       $vnconfig, $private) != 0) {
 		warn("*** ERROR: blockstore_vnodeDestroy: ".
@@ -452,25 +463,36 @@ sub vnodeDestroy($$$$){
 		# since subsequent commands here may also fail (and
 		# perhaps cause worse fallout).
 		$failed = 1;
+		TBDebugTimeStampWithDate("teardown $cmd: FAILED")
+		    if ($debug > 1);
 		last;
+	    } else {
+		TBDebugTimeStampWithDate("teardown $cmd: finished")
+		    if ($debug > 1);
 	    }
 	} else {
 	    # Escape hatch for unknown command.
-	    TBScriptUnlock();
+	    freenasUnlock();
 	    fatal("blockstore_vnodeDestroy: ".
 		  "Don't know how to execute: $cmd");
 	}
     }
 
+    freenasUnlock();
+
     # Lastly, remove the vlan inteface.  That we only have one interface
     # and that it has the correct params was established at creation time.
+    TBDebugTimeStampWithDate("teardown removeVlan: starting")
+	if ($debug > 1);
     if (removeVlanInterface($vnode_id, $vnconfig) != 0) {
-	TBScriptUnlock();
+	TBDebugTimeStampWithDate("teardown removeVlan: failed")
+	    if ($debug > 1);
 	fatal("blockstore_vnodeDestroy: ".
 	      "Could not remove the vlan interface!");
     }
+    TBDebugTimeStampWithDate("teardown removeVlan: finished")
+	if ($debug > 1);
 
-    TBScriptUnlock();
     die() if $failed;      # If the command loop above failed, die now.
     return 0;
 }
@@ -521,11 +543,18 @@ sub runBlockstoreCmds($$$) {
     foreach my $sconf (@$sconfigs) {
 	my $cmd = $sconf->{'CMD'};
 	if (exists($setup_cmds{$cmd})) {
+	    TBDebugTimeStampWithDate("setup $cmd: starting")
+		if ($debug > 1);
 	    if ($setup_cmds{$cmd}->($vnode_id, $sconf, 
 				    $vnconfig, $private) != 0) {
+		TBDebugTimeStampWithDate("setup $cmd: FAILED")
+		    if ($debug > 1);
 		warn("*** ERROR: blockstore_runBlockstoreCmds: ".
 		     "Failed to execute setup command: $cmd");
 		return -1;
+	    } else {
+		TBDebugTimeStampWithDate("setup $cmd: finished")
+		    if ($debug > 1);
 	    }
 	} else {
 	    warn("*** ERROR: blockstore_runBlockstoreCmds: ".
@@ -868,8 +897,15 @@ sub exportSlice($$$$) {
 	$tag = $ntag;
     }
 
-    # XXX we need the authinit index, not tag
-    $aindex = findAuthIId($tag);
+    #
+    # We need the authinit index, not tag. It should be returned by the call.
+    #
+    if (exists($res->{'id'})) {
+	$aindex = $res->{'id'};
+    } else {
+	warn("*** WARNING: authorizedinitiator did not return ID, looking up");
+	$aindex = findAuthIId($tag);
+    }
 
     #
     # Create iSCSI target.
@@ -1062,6 +1098,38 @@ sub getIfConfig($) {
     return $ifc;
 }
 
+#
+# We use a different lock for the Vlan operations.
+# N.B. right now we don't ever take this lock inside another lock,
+# but we keep a separate ref just in case.
+#
+sub lockVlan()
+{
+    my $timo = 900;	# XXX same as blkconf lock
+
+    TBDebugTimeStampWithDate("lockVlan: getting lock")
+	if ($debug > 1);
+
+    my $locked = TBScriptLock($VLAN_LOCK, 0, $timo, \$vlanlockref);
+    if ($locked != TBSCRIPTLOCK_OKAY()) {
+	TBDebugTimeStampWithDate("lockVlan: could not get lock after $timo seconds!")
+	    if ($debug > 1);
+	return -1;
+    }
+
+    TBDebugTimeStampWithDate("lockVlan: got lock")
+	if ($debug > 1);
+
+    return 0;
+}
+
+sub unlockVlan()
+{
+    TBDebugTimeStampWithDate("unlockVlan: releasing lock")
+	if ($debug > 1);
+    TBScriptUnlock($vlanlockref);
+}
+
 # Helper function - search output of FreeNAS vlan CLI command for the
 # presence of the vlan name passed in.  Return what is found.
 sub getVlan($) {
@@ -1133,6 +1201,29 @@ sub addressExists($) {
 #
 # Make a vlan interface for this node (tagged, vlan).
 #
+# XXX This is trickier than one might think. For one, multiple blockstores
+# may be attached to the same LAN, so we need to be sure to only create the
+# device once. Well then, we just need to ignore the device if it already
+# exists. But no, the second problem is that during experiment termination,
+# VLAN tags are marked as free as soon as snmpit has removed them from the
+# switch fabric. However, freeing of nodes, including blockstore vnodes,
+# does not happen til after that. Thus we could have a new experiment
+# blockstore vnode come along using the same VLAN tag as a terminated
+# experiment vnode. The new vnode then might see the VLAN device as already
+# existing if it reaches here before the old vnode has been terminated.
+# If it were to just ignore the vlan device assuming everything was okay,
+# then it would ultimately wind up without its device once the old vnode
+# terminated.
+#
+# What we do here if the VLAN device already exists, is to make sure it
+# belongs to the correct project, experiment, and LAN. Project and experiment
+# are encoded in the iSCSI IQN and the LAN name is passed in explicitly.
+# When we create a VLAN device we set its description to "<lan>:<pid>:<eid>"
+# so that we can compare any new attempt to create the VLAN with the "owner"
+# of any existing device. Hopefully, the description field is long enough!
+# Empirically, the limit is somewhere between 512 and 1024 characters, which
+# should be more than enough given the current pid/eid/lan maxs of 48/32/32.
+#
 sub createVlanInterface($$) {
     my ($vnode_id, $vnconfig) = @_;
 
@@ -1172,28 +1263,92 @@ sub createVlanInterface($$) {
     }
     $vtag = $1;
 
-    # see if vlan already exists.  do sanity checks to make sure this
-    # is the correct vlan for this interface, and then create it.
+    #
+    # Figure out the pid/eid/vname of the blockstore we are setting up.
+    #
+    my ($pid,$eid);
+    foreach my $sconf (@{$vnconfig->{'storageconfig'}}) {
+	if ($sconf->{'CMD'} eq "EXPORT" &&
+	    exists($sconf->{'UUID_TYPE'}) && $sconf->{'UUID_TYPE'} eq "iqn" &&
+	    exists($sconf->{'UUID'})) {
+	    (undef,$pid,$eid) = split(':', $sconf->{'UUID'});
+	    last;
+	}
+    }
+    if (!$pid || !$eid) {
+	warn("*** ERROR: cannot determine pid/eid for experiment");
+	return -1;
+    }
+
+    #
+    # See if vlan already exists. If so, do sanity checks to make sure this
+    # is the correct vlan for this interface (see comment above), if not,
+    # wait a while and try again. We wait up to 10 minutes at which point we
+    # will be bumping up against higher-level timeouts. After some
+    # optimizations to the blockstore vnode termination path, 10 minutes
+    # should be long enough to tear down around 60 blockstores.
+    #
+    my $retried = 0;
+
+  again:
+    if (lockVlan() != 0) {
+	return -1;
+    }
+
     my $vlan = getVlan($vtag);
     if ($vlan) {
-	my $vlabel = $vlan->{'description'};
-	# This is not a fool-proof consistency check, but the odds of
-	# having an existing vlan with the same LAN name and vlan tag
-	# as one in a different experiment are vanishingly small.
-	if ($vlabel ne $lname) {
-	    warn("*** ERROR: blockstore_createVlanInterface: ".
-		 "Mismatched vlan: $lname != $vlabel");
+	my @vlabel = split(':', $vlan->{'description'});
+	my $mismatch = 0;
+
+	#
+	# XXX backward compat
+	# We used to just use the vlan name as the description
+	#
+	if (@vlabel == 1) {
+	    if ($vlabel[0] ne $lname) {
+		$mismatch = 1;
+	    }
+	} elsif (@vlabel == 3) {
+	    if ($vlabel[0] ne $lname ||
+		$vlabel[1] ne $pid || $vlabel[2] ne $eid) {
+		$mismatch = 1;
+	    }
+
+	} else {
+	    warn("*** Malformed vlan label for existing vlan$vtag device");
+	    unlockVlan();
 	    return -1;
+	}
+	if ($mismatch) {
+	    if ($retried == 20) {
+		unlockVlan();
+		warn("*** ERROR: blockstore_createVlanInterface: ".
+		     "Experiment mismatch for vlan$vtag, ".
+		     "something is really wrong!");
+		return -1;
+	    }
+	    $retried++;
+	    unlockVlan();
+	    warn("*** WARN: blockstore_createVlanInterface: ".
+		 "Experiment mismatch for vlan$vtag, ".
+		 "old instance may be terminating; waiting 30 seconds ...");
+	    sleep(30);
+	    goto again;
 	}
     }
     # vlan does not exist.
     else {
+	my $desc = "$lname:$pid:$eid";
+
+	#
 	# Create the vlan entry directly.  FreeNAS 9 nukes network
 	# interface addresses/aliases it doesn't know about, so we can't
 	# use its API directly. :-(  See also the comment
 	# in setupIPAliases().
+	#
 	if (system("$IFCONFIG $viface create vlan $vtag".
-		   " vlandev $piface description $lname") != 0) {
+		   " vlandev $piface description $desc") != 0) {
+	    unlockVlan();
 	    warn("*** ERROR: blockstore_createVlanInterface: ". 
 		 "failure while creating vlan interface: $!");
 	    return -1;
@@ -1201,6 +1356,7 @@ sub createVlanInterface($$) {
     }
 
     # All done.
+    unlockVlan();
     return 0;
 }
 
@@ -1210,7 +1366,7 @@ sub setupIPAlias($;$) {
 
     my $ifc    = getIfConfig($vnconfig);
     if (!defined($ifc)) {
-	warn("*** ERROR: blockstore_createVlanInterface: ".
+	warn("*** ERROR: blockstore_setupIPAlias: ".
 	     "No valid interface record found!");
 	return -1;
     }
@@ -1222,17 +1378,22 @@ sub setupIPAlias($;$) {
     my $viface = $VLAN_IFACE_PREFIX . $vtag;
 
     if ($ip !~ /^([\.\d]+)$/) {
-	warn("*** ERROR: blockstore_createVlanInterface: ". 
+	warn("*** ERROR: blockstore_setupIPAlias: ". 
 	     "bad data in IP address!");
 	return -1;
     }
     $ip = $1;
 
     if ($qmask !~ /^([\.\d]+)$/) {
-	warn("*** ERROR: blockstore_createVlanInterface: ". 
+	warn("*** ERROR: blockstore_setupIPAlias: ". 
 	     "bad characters in subnet!");
 	return -1;
     }
+
+    if (lockVlan() != 0) {
+	return -1;
+    }
+    
     # If this is the first blockstore on the lan, then use the real netmask,
     # otherwise this is yet another alias on the same interface, so use the
     # all 1's mask.
@@ -1240,7 +1401,7 @@ sub setupIPAlias($;$) {
 
     if ($teardown) {
 	if (system("$IFCONFIG $viface -alias $ip") != 0) {
-	    warn("*** ERROR: blockstore_createVlanInterface: ".
+	    warn("*** ERROR: blockstore_setupIPAlias: ".
 		 "ifconfig failed while setting IP alias parameters: $?");
 	}
     } else {
@@ -1251,11 +1412,12 @@ sub setupIPAlias($;$) {
 	# removed from an interface.  It then re-configs everything from
 	# it's DB. This is very disruptive to say the least!
 	if (system("$IFCONFIG $viface alias $ip netmask $qmask") != 0) {
-	    warn("*** ERROR: blockstore_createVlanInterface: ".
+	    warn("*** ERROR: blockstore_setupIPAlias: ".
 		 "ifconfig failed while clearing IP alias parameters: $?");
 	}
     }
 
+    unlockVlan();
     return 0;
 }
 
@@ -1279,8 +1441,13 @@ sub removeVlanInterface($$) {
     my $vtag   = $ifc->{'VTAG'};
     my $viface = $VLAN_IFACE_PREFIX . $vtag;
 
+    if (lockVlan() != 0) {
+	return -1;
+    }
+
     # Does the vlan interface exist?  Nothing to do if it doesn't!
     if (!getVlan($vtag)) {
+	unlockVlan();
 	warn("*** WARNING: blockstore_removeVlanInterface: ".
 	     "Vlan entry for $vtag does not exist...");
 	return 0;
@@ -1293,6 +1460,7 @@ sub removeVlanInterface($$) {
 	}
     }
 
+    unlockVlan();
     return 0;
 }
 
@@ -1457,8 +1625,16 @@ sub deallocSlice($$$$) {
 		}
 		return freenasVolumeDeclone($pool, $vnode_id, 0);
 	    }
-	    warn("*** WARNING: blockstore_deallocSlice: $volname: ".
-		 "Found stale clone volume '$pool/$vnode_id'");
+	    if (defined($cloneof)) {
+		warn("*** WARNING: blockstore_deallocSlice: $volname: ".
+		     "Found stale clone volume '$pool/$vnode_id', ".
+		     "clone of '$cloneof'");
+	    } else {
+		warn("*** WARNING: blockstore_deallocSlice: $volname: ".
+		     "volume '$pool/$vnode_id' not a clone!");
+	    }
+	    my $state = Dumper($volumes);
+	    warn("*** Volume state (bsid=$bsid):\n$state");
 	}
 
 	if (exists($volumes->{$bsid})) {

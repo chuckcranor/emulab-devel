@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2018 University of Utah and the Flux Group.
+# Copyright (c) 2013-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,12 +37,38 @@
 # So right now we use the API for all listing functions (get volumes,
 # get extents, etc.) and for snapshots/clones and destroying "datasets".
 #
+# TODO:
+#
+# Even after optimization (caching API results), API calls still represent
+# the majority of time used for creation of blockstore vnodes. A measurement
+# of the setup of an experiment with 50 clone blockstores shows that
+# 450 API calls (down from 600) are made accounting for 457 of the 466 total
+# seconds of runtime (down from 511 of 528) required to set them all up.
+#
+# For vnode destruction, it is the same deal. After caching and eliminating
+# a gratuitous API call, it is still 650 calls and 428 seconds (vs. 796 calls
+# and 486 seconds before).
+#
+# Further optimizations:
+#
+# - In freenasAssocList, try only getting the info for the extent, target
+#   and targetgroup needed rather than getting the info for all and picking
+#   through it. I suspect this won't make much of a difference as it is the
+#   API calls that are expensive, not the amount of data requested/returned.
+#   This call takes a significant amount of the total time required for a
+#   vnode teardown.
+#
+# - Is there some way to do a persistent connection? I am not sure whether
+#   that is something the API would allow. Note that the latest FreeNAS
+#   supports a websockets API.
+#
 
 package libfreenas;
 use Exporter;
 @ISA    = "Exporter";
 @EXPORT =
     qw( 
+        freenasSetDebug
 	freenasPoolList freenasVolumeList freenasSliceList
 	freenasAuthInitList freenasExtentList freenasTargetList
 	freenasTargetGroupList freenasAssocList
@@ -68,6 +94,7 @@ use Socket;
 use File::Basename;
 use File::Path;
 use File::Copy;
+use List::Util qw(first);
 
 # Pull in libvnode and other Emulab stuff
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
@@ -123,6 +150,14 @@ my $BS_UUID_TYPE_IQN     = "iqn";
 my $debug  = 0;
 my $auth;
 my $server;
+my $islocked = 0;
+
+my $VC_INVALID   = 0;
+my $VC_BASEINFO	 = 1;
+my $VC_SNAPINFO  = 2;
+my $VC_INAMEINFO = 4;
+my $volcachevalid = $VC_INVALID;
+my $volcache;
 
 sub freenasPoolList();
 sub freenasVolumeList($;$);
@@ -153,7 +188,7 @@ sub calcSliceSizes($);
 #
 $| = 1;
 
-sub setDebug($)
+sub freenasSetDebug($)
 {
     $debug = shift;
     print "libfreenas: debug=$debug\n"
@@ -169,26 +204,29 @@ sub freenasLock(;$)
     $timo = 900
 	if (!defined($timo));	# XXX same as libvnode_blockstore
 
-    print STDERR time() . ": Grabbing blockstore lock\n"
-	if ($debug);
+    TBDebugTimeStampWithDate("freenasLock: getting lock")
+	if ($debug > 1);
 
     my $locked = TBScriptLock($GLOBAL_CONF_LOCK, 0, $timo);
     if ($locked != TBSCRIPTLOCK_OKAY()) {
-	print STDERR time() .
-	    ": Could not get blockstore lock after $timo seconds!\n";
+	TBDebugTimeStampWithDate("freenasLock: could not get lock after $timo seconds!")
+	    if ($debug > 1);
 	return -1;
     }
 
-    print STDERR time() . ": Got blockstore lock\n"
-	if ($debug);
+    TBDebugTimeStampWithDate("freenasLock: got lock")
+	if ($debug > 1);
 
+    $islocked = 1;
     return 0;
 }
 
 sub freenasUnlock()
 {
-    print STDERR time() . ": Releasing blockstore lock\n"
-	if ($debug);
+    TBDebugTimeStampWithDate("freenasUnlock: releasing lock")
+	if ($debug > 1);
+    $islocked = 0;
+    $volcachevalid = $VC_INVALID;
     TBScriptUnlock();
 }
 
@@ -270,20 +308,31 @@ sub freenasRequest($;$$$$$)
 	}
     }
 
-    my $url = "http://$server/api/v1.0/$resource/$paramstr";
-    print STDERR "freenasRequest: URL: $url\nCONTENT: $datastr\n"
-	if ($debug);
+    # XXX conservative: anything but a GET invalidates any cache we have
+    if ($method ne "GET") {
+	$volcachevalid = $VC_INVALID;
+    }
 
+    my $http = HTTP::Tiny->new("timeout" => 30);
+
+    my $url = "http://$server/api/v1.0/$resource/$paramstr";
     my %headers = (
 	"Content-Type"  => "application/json",
 	"Authorization" => "Basic " . MIME::Base64::encode_base64($auth, "")
     );
-    my $http = HTTP::Tiny->new("timeout" => 30);
     my %options = ("headers" => \%headers, "content" => $datastr); 
 
+    TBDebugTimeStampWithDate("freenasRequest: $resource ($method): calling")
+	if ($debug > 1);
+    print STDERR "freenasRequest: URL: $url\nCONTENT: $datastr\n"
+	if ($debug > 2);
+
     my $res = $http->request($method, $url, \%options);
+
+    TBDebugTimeStampWithDate("freenasRequest: call returned")
+	if ($debug > 1);
     print STDERR "freenasRequest: RESPONSE: ", Dumper($res), "\n"
-	if ($debug);
+	if ($debug > 2);
 
     $exstat = $status{$method}
 	if (!defined($exstat));
@@ -368,6 +417,19 @@ sub freenasVolumeList($;$)
     $inameinfo = 0 if (!defined($inameinfo));
     $snapinfo  = 0 if (!defined($snapinfo));
 
+    #
+    # See if we can use our simple cache to avoid API calls.
+    #
+    if ($islocked && $volcachevalid &&
+	(!$inameinfo || ($volcachevalid & $VC_INAMEINFO) != 0) &&
+	(!$snapinfo || ($volcachevalid & $VC_SNAPINFO) != 0)) {
+	print STDERR "freenasVolumeList: returning cached info\n"
+	    if ($debug > 1);
+	return $volcache;
+    }
+    $volcachevalid = $VC_INVALID;
+    $volcache = undef;
+
     # Assorted hack maps
     my %inames = ();	# volume-name -> slice-name
     my %snaps = ();	# volume-name -> (snapshot1 snapshot2 ...)
@@ -411,15 +473,28 @@ sub freenasVolumeList($;$)
 	    }
 	}
 
-	# have to use "zfs get" to get clone info
-	if (open(ZFS, "$ZFS_CMD get -o name,value -Hp clones @snames |")) {
+	#
+	# Have to use "zfs get" to get clone info.
+	#
+	# XXX freakin' awesome. We cannot just use "zfs get" to get the
+	# comma-seperated "clones" list for each snapshot because get
+	# will only return 1024 chars worth of property value. That is only
+	# around 50 clones given our naming scheme. While we won't usually
+	# have that many active clones of a dataset, it will blow things up
+	# if we do! So we do a recursive get of the "origin" property
+	# for all volumes. For a filesystem advertised to handle bazillions
+	# of gonzo-uber-byte files, this is a pretty tightwad limit...
+	#
+	if (open(ZFS, "$ZFS_CMD get -o name,value -Hpr -t volume origin |")) {
 	    while (my $line = <ZFS>) {
 		chomp $line;
-		my ($name, $val) = split(/\s+/, $line);
-		if ($name =~ /\/([^\/]+)$/) {
+		my ($vname, $val) = split(/\s+/, $line);
+		next
+		    if ($val eq "-");
+		if ($val =~ /\/([^\/]+)$/) {
 		    my $sname = $1;
-		    foreach my $clone (split(',', $val)) {
-			$clones{$clone} = $sname;
+		    if (first { $_ eq $val } @snames) {
+			$clones{$vname} = $sname;
 		    }
 		}
 	    }
@@ -497,6 +572,16 @@ sub freenasVolumeList($;$)
 	}
     }
 
+    #
+    # Cache the API info if possible
+    #
+    if ($islocked) {
+	$volcache = $vollist;
+	$volcachevalid = $VC_BASEINFO;
+	$volcachevalid |= $VC_INAMEINFO if ($inameinfo);
+	$volcachevalid |= $VC_SNAPINFO if ($snapinfo);
+    }
+    
     return $vollist;
 }
 
