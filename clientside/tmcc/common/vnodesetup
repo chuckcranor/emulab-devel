@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2014, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -757,19 +757,21 @@ sub cleanup()
 	
 	#
 	# The jail process sometimes refuses to die. Keep trying.
-	# We send the signal again cause I have seen cases where it
-	# is ignored, for no reason that I can find. We need to
+	# We send the signal again periodically cause I have seen cases
+	# where it is ignored, for no reason that I can find. We need to
 	# eventually stop, but not sure how to deal with this.
 	#
-	while (defined($jailpid)) {
-	    sleep(15);
+	for (my $retries = 0; defined($jailpid); $retries++) {
+	    sleep(5);
 	    my $kidpid = waitpid($jailpid, &WNOHANG);
 	    if ($kidpid == $jailpid) {
 		undef($jailpid);
 		last;
 	    }
-	    print STDERR "$jailpid would not die; signalling again.\n";
-	    kill($sigtosend, $jailpid);
+	    if ((++$retries % 3) == 0) {
+		print STDERR "$jailpid would not die; signalling again.\n";
+		kill($sigtosend, $jailpid);
+	    }
 	}
 
 	#
@@ -790,6 +792,7 @@ sub cleanup()
 
     if (! $leavejail) {
 	removeconfdir(CONFDIR());
+	TBDebugTimeStamp("vnodesetup vnode destroyed");
     }
     system("rm -f $pidfile");
 }
