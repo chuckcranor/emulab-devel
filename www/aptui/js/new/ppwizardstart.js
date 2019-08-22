@@ -1393,7 +1393,7 @@ $(function () {
 		    $(innerdiv).find("input").val($(this).attr("name"))
 		    // Make sure the popover is gone too.
 		    $(innerdiv).find(".glyphicon-info-sign").popover("hide");
-		    
+		    modified_callback();
 		});
 		/*
 		 * Since this is not a "select" we need a way to let the
