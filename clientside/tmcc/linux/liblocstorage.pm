@@ -109,6 +109,18 @@ my $HDPARM	= "/sbin/hdparm";
 my $FSTAB	= "/etc/fstab";
 
 #
+# Time to wait for a session to start.
+#
+# XXX it might take a long time for the target (blockstore server)
+# to export our blockstore if a lot of blockstores are being
+# setup at the same time. So we hang out for a long time.
+#
+# Note that the Linux iscsiadm default timeout is 2 minutes so this
+# value should be a multiple of 120 seconds.
+#
+my $SESSION_TIMEOUT = (12 * 60);
+
+#
 #
 # To find the block stores exported from a target portal:
 #
@@ -1622,11 +1634,16 @@ sub os_create_storage_element($$$)
 	}
 	    
 	#
-	# XXX It may take some time for the server to respond, so retry the
-	# initial operation for awhile.
+	# XXX It may take some time for the server to respond on a first
+	# boot as it may be setting up many blockstores. So we retry the
+	# initial operation for awhile. The default iscsiadm timeout for
+	# connecting is 120 seconds, which we will retry 10 times for a
+	# total of 20 minutes. Note that the swapin node boot timeout will
+	# probably trigger before that, but rebooting the node will be
+	# okay here.
 	#
 	my $rv = 0;
-	for (my $tries = 0; $tries < 5; $tries++) {
+	for (my $tries = 0; $tries < int($SESSION_TIMEOUT/120); $tries++) {
 	    $rv = mysystem("$ISCSI -m node -T $uuid -p $hostip -l $redir");
 	    # exit code 8 indicates timeout
 	    last

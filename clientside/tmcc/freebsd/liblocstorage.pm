@@ -101,6 +101,15 @@ my $ZVOLBS	= "64K";
 my $VINUMSS	= "81920";
 
 #
+# Time to wait for a session to start.
+#
+# XXX it might take a long time for the target (blockstore server)
+# to export our blockstore if a lot of blockstores are being
+# setup at the same time. So we hang out for a long time.
+#
+my $SESSION_TIMEOUT = (12 * 60);
+
+#
 # To find the block stores exported from a target portal:
 #
 #   iscontrol -d -t <storage-host>
@@ -321,12 +330,19 @@ sub uuid_to_session($$$)
     my ($so, $uuid, $retries) = @_;
 
 again:
+    my $target = "";
     if ($so->{'USE_ISCSID'}) {
 	my @lines = `$ISCSI -Lv 2>&1`;
 	my ($sess, $gotuuid);
 	foreach (@lines) {
 	    if (/^Session ID:\s+(\d+)/) {
 		$sess = $1;
+		next;
+	    }
+	    if (/^Target portal:\s+(\S+)/) {
+		if (defined($sess)) {
+		    $target = " $1";
+		}
 		next;
 	    }
 	    if (/^Target name:\s+(\S+)/) {
@@ -356,8 +372,8 @@ again:
     }
     if ($retries > 0) {
 	$retries--;
-	sleep(1);
-	#warn("    retrying session lookup...\n");
+	sleep(5);
+	warn("     could not connect to portal$target, retrying ...\n");
 	goto again;
     }
 
@@ -1291,7 +1307,7 @@ sub os_check_storage_element($$)
 		warn("*** $bsid: could not create iSCSI session\n");
 		return -1;
 	    }
-	    $session = uuid_to_session($so, $uuid, 5);
+	    $session = uuid_to_session($so, $uuid, int($SESSION_TIMEOUT/5));
 	    if (!defined($session)) {
 		warn("*** $bsid: iSCSI session not created\n");
 		return -1;
@@ -1795,7 +1811,7 @@ EOF
 	#
 	# Find the session ID and device name.
 	#
-	my $session = uuid_to_session($so, $uuid, 5);
+	my $session = uuid_to_session($so, $uuid, int($SESSION_TIMEOUT/5));
 	if (!defined($session)) {
 	    warn("*** $bsid: could not find iSCSI session\n");
 	    return 0;
@@ -2301,9 +2317,17 @@ sub os_remove_storage_element($$$)
 		    unlink("$ISCSICNF", "$ISCSICNF.new");
 		    if (!mysystem("grep -q '^# iscsid_enable added by.*rc.storage' /etc/rc.conf")) {
 			if (mysystem("sed -i -e '/^# iscsid_enable added by.*rc.storage/,+1d' /etc/rc.conf")) {
-			    warn("*** $lv: could not remove iscsid_enable from /etc/rc.conf\n");
+			    warn("*** $bsid: could not remove iscsid_enable from /etc/rc.conf\n");
 			}
 		    }
+
+		    # kill the iscsi daemon
+		    if ($so->{'USE_ISCSID'}) {
+			if (mysystem("/etc/rc.d/iscsid onestop $redir")) {
+			    warn("*** $bsid: could not kill iscsid\n");
+			}
+		    }
+
 		    # XXX we should kldunload the iscsi module, but it hangs
 		}
 	    }
