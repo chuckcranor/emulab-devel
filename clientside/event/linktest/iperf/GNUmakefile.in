@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -49,6 +49,9 @@ SYSTEM         := $(patsubst CYGWIN%,CYGWIN,$(shell uname -s))
 
 ISBROKEN = 0
 ifeq ($(host_cpu),arm)
+ISBROKEN = 1
+endif
+ifeq ($(OSTAG),freebsd13)
 ISBROKEN = 1
 endif
 
@@ -104,7 +107,7 @@ client-install: $(ITARGETS)
 # We could probably do this on all OSes, but I don't want to test all OSes...
 #
 config.status:
-ifneq (,$(filter $(OSTAG),freebsd11 freebsd12))
+ifneq (,$(filter $(OSTAG),freebsd11 freebsd12 freebsd12))
 	cd iperf-$(IPERFVERSION) && autoconf
 endif
 	MAKE=$(MAKE) iperf-$(IPERFVERSION)/configure $(CONFIG_ARGS)
