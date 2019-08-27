@@ -379,7 +379,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
        PC
        PL
 
-10. Updating the Emulab package repo (11.2 specific).
+10. Updating the Emulab package repo (11.3 specific).
 
    [ This is a condensed version of the steps above. ]
    
@@ -394,28 +394,28 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
    couple of mysterious updates of things that didn't change, but I
    can live with that...
 
-   a. Make sure the ports tree in /share/freebsd/11.2/ports on ops
+   a. Make sure the ports tree in /share/freebsd/11.3/ports on ops
       is up to date. [ Note that there is not actually an svn repo branch
       called "quarterly" so you have to make sure you are tracking the
       current quarter. ]
 
-      cd /share/freebsd/11.2/ports
+      cd /share/freebsd/11.3/ports
       sudo svn update
 
    b. Make sure the Emulab ports are up to date.
 
-      cd /share/freebsd/11.2/ports/misc
+      cd /share/freebsd/11.3/ports/misc
       diff -r ~mike/testbed-clean/install/ports .
       <update anything that is out of sync>
 
-   c. Swapin a FreeBSD 11.2 node (experiment emulab-ops/freebsd112-64). This will
+   c. Swapin a FreeBSD 11.3 node (experiment emulab-ops/freebsd112-64). This will
       give you a d430 which is the best thing to use.
 
    d. Mount the ports and source trees.
 
       cd /usr
-      sudo mount -o ro fs:/share/freebsd/11.2/ports /usr/ports
-      sudo mount -o ro fs:/share/freebsd/11.2/src /usr/src
+      sudo mount -o ro fs:/share/freebsd/11.3/ports /usr/ports
+      sudo mount -o ro fs:/share/freebsd/11.3/src /usr/src
       
    e. Cleanse the port environment:
 
@@ -434,7 +434,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
       run up against certificate issues, the it won't reinstall it.
       In that case, I have found the easiest thing to do is:
 
-      pushd /share/freebsd/11.2/packages-64
+      pushd /share/freebsd/11.3/packages-64
       pkg add pkg-*
       pkg add ca_root*
       popd
@@ -452,8 +452,8 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
         and select:
 	  XAW
       - in graphics/cairo, "make config" and deselect OPENGL.
-      - in www/apache24, "make config" and select: SUEXEC
-        (PROXY should be enabled already)
+      - in www/apache24, "make config" and select SUEXEC.
+      - in x11-toolkits/pango, "make config" and deselect DOCS.
 
    h. Build em all:
 
@@ -466,7 +466,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
        end
 
    i. Check for vulnerabilities. If any are revealed, you can either try
-      to update /share/freebsd/11.2/ports with a newer version of the port
+      to update /share/freebsd/11.3/ports with a newer version of the port
       (e.g., from /share/freebsd/current/ports) or just live with the
       vulnerability for now.
 
@@ -486,20 +486,20 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
 
    l. Save packages and update tarball and repo. On boss:
 
-      cd /share/freebsd/11.2
+      cd /share/freebsd/11.3
       mkdir packages
       scp pcXXX:/usr/obj/ports/packages/All/\* packages/
       sudo chown -R root:wheel packages
 
       set www=/usr/testbed/www
-      set tball="FreeBSD-11.2-packages-64-`date +%Y%m%d`.tar.gz"
+      set tball="FreeBSD-11.3-packages-64-`date +%Y%m%d`.tar.gz"
 
       sudo tar czf $tball packages
       sudo cp $tball $www/downloads/
-      sudo ln -sf $tball $www/downloads/FreeBSD-11.2-packages-64.tar.gz
-      sudo mv $www/FreeBSD/11.2/{packages,Opackages}
-      sudo cp -rp packages $www/FreeBSD/11.2/
-      sudo pkg repo $www/FreeBSD/11.2/packages
+      sudo ln -sf $tball $www/downloads/FreeBSD-11.3-packages-64.tar.gz
+      sudo mv $www/FreeBSD/11.3/{packages,Opackages}
+      sudo cp -rp packages $www/FreeBSD/11.3/
+      sudo pkg repo $www/FreeBSD/11.3/packages
 
       sudo mv packages-64 packages-64.bak
       sudo mv packages packages-64

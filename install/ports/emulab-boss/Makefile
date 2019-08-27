@@ -178,7 +178,7 @@ RUN_DEPENDS+=	\
 RUN_DEPENDS+=	\
 	man2html:${PORTSDIR}/textproc/man2html
 
-USE_PERL5=	yes
+#USE_PERL5=	yes
 USES=		perl5 python:2.7 php
 
 NO_BUILD=	yes

@@ -77,7 +77,7 @@ RUN_DEPENDS+=	\
 	${LOCALBASE}/${APACHEMODDIR}/mod_fcgid.so:${PORTSDIR}/www/mod_fcgid \
 	p5-FCGI>=0.74:${PORTSDIR}/www/p5-FCGI
 
-USE_PERL5=	yes
+#USE_PERL5=	yes
 USES=		perl5 python:2.7 php
 
 NO_BUILD=	yes
