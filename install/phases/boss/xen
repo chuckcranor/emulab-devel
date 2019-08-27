@@ -11,7 +11,7 @@ use EmulabConstants;
 
 my $DESCRIPTORS   = "$TOP_SRCDIR/install/descriptors-xen.xml";
 # See the images phase file if you change this.
-my $XENIMAGE      = "XEN46-64-STD";
+my $XENIMAGE      = "XEN49-64-STD";
 
 sub Install($$$)
 {
@@ -24,8 +24,13 @@ sub Install($$$)
     #
     # These are the images that are known to run as XEN guests.
     #
-    my @images = ("UBUNTU14-64-STD", "UBUNTU16-64-STD", "CENTOS7-64-STD",
-		  "FBSD103-64-STD", "FBSD111-64-STD");
+    my @images = ("UBUNTU16-64-STD", "UBUNTU18-64-STD", "CENTOS7-64-STD",
+		  "FBSD103-64-STD", "FBSD113-64-STD", "FBSD120-64-STD");
+
+    if ($FBSD_MAJOR <= 10) {
+	$XENIMAGE = "XEN46-64-STD";
+	push(@images, "UBUNTU14-64-STD");
+    }
 
     Phase "xen", "Adding XEN Support", sub {
 	Phase "sitevar", "Setting default_xen_parentosid sitevar", sub {
