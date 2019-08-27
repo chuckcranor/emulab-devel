@@ -139,8 +139,14 @@ use Project;
 use Group;
 use OSImage;
 use WebTask;
-# This conveniently defines exit codes we want to use. 
-use GeniResponse;
+
+# These mirror GeniResponse.pm when protogeni not defined.
+my ($RESPONSE_BUSY, $RESPONSE_NETWORK_ERROR) = (14, 35);
+if ($PGENISUPPORT) {
+    require GeniResponse;
+    $RESPONSE_BUSY = GeniResponse::GENIRESPONSE_BUSY();
+    $RESPONSE_NETWORK_ERROR = GeniResponse::GENIRESPONSE_NETWORK_ERROR();
+}
 
 # Locals;
 my $url;
@@ -324,7 +330,7 @@ sub getLock($)
     elsif ($image->Lock()) {
 	if ($copyback || $pending) {
 	    # The daemon will try again later.
-	    myExit(GENIRESPONSE_BUSY(),
+	    myExit($RESPONSE_BUSY,
 		   "$image is currently locked. Please try again later");
 	}
 	#
@@ -585,7 +591,7 @@ if ($getimage) {
 		# positive error code for the caller.
 		#
 		if ($status == 4) {
-		    myExit(GENIRESPONSE_NETWORK_ERROR(),
+		    myExit($RESPONSE_NETWORK_ERROR,
 			   "Will resume download later");
 		}
 		# All other wget errors are fatal.
