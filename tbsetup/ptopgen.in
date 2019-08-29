@@ -106,6 +106,15 @@ my $randomize = 0;
 my $usecontrol= 0;
 my $printFastLinks = 1;
 
+#
+# Extra room (MB of RAM) left when packing in vnodes to a physical host.
+# Covers unforeseen RAM overheads of domUs. We had this at 1GB, but still
+# hit some failures.
+#
+# XXX could/should be a sitevar.
+#
+my $XEN_SLOP = 1536;
+
 my $OURDOMAIN = "@OURDOMAIN@";
 my $MAINSITE  = @TBMAINSITE@;
 my $cmuuid = TBGetSiteVar('protogeni/cm_uuid');
@@ -1151,7 +1160,7 @@ if ($virtstuff) {
 	#
 	# We need a fair amount of pad, even when dom0mem is set (below).
 	#
-	$node_ramusage{$pnode} = 1024
+	$node_ramusage{$pnode} = $XEN_SLOP
 	    if (!exists($node_ramusage{$pnode}));
 	
 	$node_ramusage{$pnode} += $memory;
@@ -1170,7 +1179,7 @@ if ($virtstuff) {
 			   "where na.attrkey is not null");
     while (my ($pnode,$ram) = $result->fetchrow_array) {
 	# Allow for padding, do not really want to go to zero.
-	$node_ramusage{$pnode} = 1024
+	$node_ramusage{$pnode} = $XEN_SLOP
 	    if (!exists($node_ramusage{$pnode}));
 
 	# Ug, units.
