@@ -2184,7 +2184,8 @@ COMMAND_PROTOTYPE(doifconfig)
 			 *   "9000" if using jumbo frames,
 			 *   "" otherwise (use client default)
 			 */
-			if (allowjumboframes && atoi(speed) >= 10000)
+			if (allowjumboframes && atoi(speed) >= 10000 &&
+			    row[12] && atoi(row[12]) > 0)
 				mtu = "9000";
 
 			/*
