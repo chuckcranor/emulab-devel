@@ -72,6 +72,7 @@ $(function ()
 	    fields:		fields,
 	    isadmin:		window.ISADMIN,
 	    canedit:            window.CANEDIT,
+	    canreboot:          window.CANREBOOT,
 	    console:            window.CONSOLE,
 	    browserconsole:     window.BROWSERCONSOLE,
 	    "YesNo":            function (val) { return (val ? "Yes" : "No"); },
@@ -106,6 +107,12 @@ $(function ()
 	    $th.css('transform', 'translateY('+ this.scrollTop +'px)');
 	});
 
+	// Bind the reboot button
+	$('#reboot-button').click(function (event) {
+	    event.preventDefault()
+	    RebootNode();
+	});
+
         // Javascript to enable link to tab
         if (document.location.hash) {
             var hash = document.location.hash;
@@ -127,9 +134,36 @@ $(function ()
 		}, 500, 'linear');
 	    }
         }
-	
-	
     }
 
+    function RebootNode()
+    {
+	// Handler for hide modal to unbind the click handler.
+	$('#confirm-reboot-modal').on('hidden.bs.modal', function (event) {
+	    $(this).unbind(event);
+	    $('#confirm-reboot-button').unbind("click.reboot");
+	});
+	
+	// Throw up a confirmation modal, with handler bound to confirm.
+	$('#confirm-reboot-button').bind("click.reboot", function (event) {
+	    sup.HideModal('#confirm-reboot-modal');
+	    var callback = function(json) {
+		sup.HideModal('#waitwait-modal');
+	    
+		if (json.code) {
+		    sup.SpitOops("oops",
+				 "Failed to reboot node: " + json.value);
+		    return;
+		}
+		window.location.reload();
+	    }
+	    sup.ShowModal('#waitwait-modal');
+	    var xmlthing = sup.CallServerMethod(null, "node", "Reboot",
+						{"node_id"  : window.NODE_ID});
+	    xmlthing.done(callback);
+	});
+	sup.ShowModal('#confirm-reboot-modal');
+    }
+    
     $(document).ready(initialize);
 });

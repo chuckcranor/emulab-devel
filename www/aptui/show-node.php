@@ -56,6 +56,9 @@ $console =
 $canedit =
     ($isadmin ||
      $node->AccessCheck($this_user, $TB_NODEACCESS_MODIFYINFO) ? true : false);
+$canreboot =
+    ($isadmin ||
+     $node->AccessCheck($this_user, $TB_NODEACCESS_REBOOT) ? true : false);
 
 SPITHEADER(1);
 
@@ -69,6 +72,7 @@ echo "<script type='text/javascript'>\n";
 echo "    window.NODE_ID        = '$node_id';\n";
 echo "    window.ISADMIN        = $isadmin;\n";
 echo "    window.CANEDIT        = $canedit;\n";
+echo "    window.CANREBOOT      = $canreboot;\n";
 echo "    window.CONSOLEALLOWED = $console;\n";
 echo "    window.BROWSERCONSOLE = $BROWSER_CONSOLE_ENABLE;\n";
 echo "</script>\n";

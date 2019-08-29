@@ -424,6 +424,8 @@ $routing = array("geni-login" =>
                                                      "Do_GetInfo",
                                                  "Modify" =>
                                                      "Do_Modify",
+                                                 "Reboot" =>
+                                                     "Do_Reboot",
                                                  "GetLog" =>
                                                      "Do_GetLog",
                                                  "SaveLogEntry" =>

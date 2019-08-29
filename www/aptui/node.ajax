@@ -478,6 +478,37 @@ function Do_GetHistory()
     SPITAJAX_RESPONSE($results);
 }
 
+#
+# Reboot node.
+#
+function Do_Reboot()
+{
+    global $this_user, $ajax_args, $node;
+    global $TB_NODEACCESS_REBOOT;
+    global $suexec_output, $suexec_output_array;
+
+    if (CheckPageArgs(0)) {
+        return;
+    }
+    if (! (ISADMIN() ||
+           $node->AccessCheck($this_user, $TB_NODEACCESS_REBOOT))) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+    }
+    $node_id = $node->node_id();
+    
+    $retval = SUEXEC($this_user->uid(), "nobody",
+                     "webnode_reboot $node_id",
+                     SUEXEC_ACTION_IGNORE);
+    if ($retval) {
+        if ($retval < 1) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        }
+        SPITAJAX_ERROR(1, $suexec_output);
+        return;
+    }
+    SPITAJAX_RESPONSE(true);
+}
+
 # Local Variables:
 # mode:php
 # End:
