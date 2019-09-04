@@ -366,21 +366,32 @@ my $pgrp = getpgrp(0);
 sub handler ($) {
     my ($signame) = @_;
     
+    #
+    # Disable all future signals til we get things sorted out.
+    # We used to do the print/TBDebug.. first thing, but that opens up
+    # a huge opportunity for races, so now we immediately block all
+    # signals til we get things sorted out.
+    #
+    $SIG{USR1} = 'IGNORE';
+    $SIG{USR2} = 'IGNORE';
+    $SIG{TERM} = 'IGNORE';
+    $SIG{INT}  = 'IGNORE';
+    $SIG{HUP}  = 'IGNORE';
+
     print STDERR "vnodesetup ($PID) caught a SIG${signame}!\n";
     TBDebugTimeStampWithDate("vnodesetup shutting down ...");
 
-    $SIG{USR1} = 'IGNORE';
-    $SIG{USR2} = 'IGNORE';
-
     if ($signame eq 'USR2') {
+	# XXX should these be enabled during a reboot?
+	# This is the way it has always been, so don't mess with it...
+	$SIG{TERM} = \&handler;
+	$SIG{INT}  = \&handler;
+	$SIG{HUP}  = \&handler;
 	reboot();
 	$SIG{USR1} = \&handler;
 	$SIG{USR2} = \&handler;
 	return;
     }
-    $SIG{TERM} = 'IGNORE';
-    $SIG{INT}  = 'IGNORE';
-    $SIG{HUP}  = 'IGNORE';
     
     #
     # If we catch a TERM, we want to leave the jail around since TERM
@@ -742,11 +753,11 @@ sub cleanup()
 	if ($leavejail) {
 	    # Leave disk intact, kill all other transient state.
 	    # Halting or physical node rebooting.
-	    $sigtosend = 'USR1';
+	    $sigtosend = 'HUP';
 	}
 	else {
 	    # All trace removed.
-	    $sigtosend = 'HUP';
+	    $sigtosend = 'USR1';
 	}
 	kill($sigtosend, $jailpid);
 	sleep(5);
