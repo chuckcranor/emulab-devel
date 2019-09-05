@@ -289,6 +289,7 @@ CREATE TABLE `apt_instance_aggregate_history` (
   `last_retry` datetime default NULL,
   `public_url` tinytext,
   `webtask_id` varchar(128) NOT NULL default '',
+  `extension_needpush` datetime default NULL,
   `manifest` mediumtext,
   PRIMARY KEY (`uuid`,`aggregate_urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -310,6 +311,7 @@ CREATE TABLE `apt_instance_aggregates` (
   `last_retry` datetime default NULL,
   `public_url` tinytext,
   `webtask_id` varchar(128) NOT NULL default '',
+  `extension_needpush` datetime default NULL,
   `manifest` mediumtext,
   PRIMARY KEY (`uuid`,`aggregate_urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
