@@ -386,10 +386,10 @@ $(function ()
 	else if (window.APT_OPTIONS.snapping) {
 	    ShowProgressModal();
 	}
-	else if (!expinfo.started) {
+	else if (!expinfo.started && expinfo.start_at) {
 	    ShowRspec();
+	    ShowBindings();
 	}
-	ShowBindings();
      }
 
   function addTutorialNotifyTab(id)
@@ -2293,6 +2293,7 @@ $(function ()
 	$('#show_manifest_tab').on('shown.bs.tab', function (e) {
 	    myCodeMirror.refresh();
 	});
+	ShowBindings();
     }
 
     //
@@ -2342,9 +2343,10 @@ $(function ()
 	if (! expinfo.paramdefs) {
 	    return;
 	}
-	// Enable the Save Params button.
+	// Enable the Save Params button. 
 	if (expinfo.profile_uuid != "unknown" &&
-	    window.APT_OPTIONS.cansave_parameters) {
+	    window.APT_OPTIONS.cansave_parameters &&
+	    $('#save_paramset_button').hasClass("hidden")) {
 	    $('#save_paramset_button')
 		.removeClass("hidden")
 		.popover({trigger:  'hover',
@@ -2356,12 +2358,14 @@ $(function ()
 						   uuid);
 		});
 	}
-	if (expinfo.params) {
+	if (expinfo.params &&
+	    $('#quicktabs_content #bindings').hasClass("hidden")) {
 	    var bindings  = expinfo.params;
 	    var paramdefs = expinfo.paramdefs;
 	    var html = GetBindingsTable(paramdefs, bindings);
 	    $('#bindings_table tbody').html(html);
-	    $('#quicktabs_ul a[href="#bindings"]').parent().removeClass("hidden");
+	    $('#quicktabs_ul a[href="#bindings"]')
+		.parent().removeClass("hidden");
 	    $('#quicktabs_content #bindings').removeClass("hidden");
 	}
     }
