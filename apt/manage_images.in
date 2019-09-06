@@ -190,7 +190,8 @@ sub DoListImages()
 	if (!defined($project)) {
 	    fatal("No such project");
 	}
-	if (! ($project->IsLeader($target_user) ||
+	if (! ($target_user->IsAdmin() ||
+	       $project->IsLeader($target_user) ||
 	       $project->IsManager($target_user))) {
 	    UserError("Not enough permissions to list images in project");
 	}

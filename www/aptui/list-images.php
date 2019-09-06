@@ -50,7 +50,7 @@ if (isset($target_user)) {
         SPITUSERERROR("Not enough permission to view this page!");
     }
 }
-if (isset($target_project)) {
+elseif (isset($target_project)) {
     if (! ($target_project->IsLeader($this_user) ||
            $target_project->IsManager($this_user) ||
            ISADMIN() || ISFOREIGN_ADMIN())) {

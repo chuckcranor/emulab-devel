@@ -4794,15 +4794,22 @@ sub ListImages($)
 	
 	if ($hrn->IsOurDomain()) {
 	    $project = Project->Lookup($hrn->id());
+	    if (!defined($project)) {
+		return GeniResponse->SearchFailedResponse(
+		    "No local project for $project_urn");
+	    }
 	}
 	else  {
 	    my $temp = GeniHRN::Generate($hrn->authority(), "authority", "sa");
 	    
 	    $project = Project->LookupNonLocal($temp);
-	}
-	if (!defined($project)) {
-	    return GeniResponse->SearchFailedResponse(
-		"No local project for $project_urn");
+	    #
+	    # No project means we have never seen anything that would cause
+	    # the local shadow to be created. Treat that as no images found.
+	    #
+	    if (!defined($project)) {
+		return GeniResponse->Create(GENIRESPONSE_SUCCESS, []);
+	    }
 	}
 	@images = OSImage->ListForGroup($project->GetProjectGroup());
 	if (!@images) {
