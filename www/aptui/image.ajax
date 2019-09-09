@@ -169,7 +169,7 @@ function Do_GetInfo()
         $blob["op_mode"]          = $osinfo->op_mode();
         $blob["os"]               = $osinfo->OS();
         $blob["os_version"]       = $osinfo->version();
-        $blob["os_features"]      = split(",", $osinfo->osfeatures());
+        $blob["os_features"]      = preg_split("/,/", $osinfo->osfeatures());
         $blob["xen_capable"]      = 0;
         if ($osinfo->def_parentosid()) {
 	    $n_image = Image::Lookup($osinfo->def_parentosid());
