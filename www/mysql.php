@@ -25,21 +25,36 @@
 #
 
 #
-# mysql_* API last connection ID
-# XXX It appears that the only time we make calls with an implicit linkid
-# is when we are accessing the initial open of tbdb (see dbdefs.php).
-# So we set this linkid that first time we open a DB, just like dbdefs.php.
+# New interface returns an object instead of a linkid. Ick.
 #
-$_mysql_linkid = 0;
+$_mysqli_links   = array();
+$_mysqli_nextid  = 0;
 
-function mysql_connect($host, $user, $pswd = "none", $newlink = FALSE, $flags = 0)
+function _mysqli_addlink($link)
 {
-    global $_mysql_linkid;
+    global $_mysqli_nextid, $_mysqli_links;
+    $linkid = $_mysqli_nextid;
+    $_mysqli_nextid++;
+    
+    $_mysqli_links[$linkid] = $link;
+    return $linkid;
 
-    $linkid = mysqli_connect($host, $user, $pswd);
-    if ($_mysql_linkid == 0) {
-        $_mysql_linkid = $linkid;
+}
+function _mysqli_link($linkid)
+{
+    global $_mysqli_links;
+
+    return $_mysqli_links[$linkid];
+}
+
+function mysql_connect($host, $user, $pswd = "none",
+                       $newlink = FALSE, $flags = 0)
+{
+    $link = mysqli_connect($host, $user, $pswd);
+    if (!$link) {
+        return false;
     }
+    $linkid = _mysqli_addlink($link);
     return $linkid;
 }
 
@@ -48,16 +63,14 @@ function mysql_select_db($dbname, $linkid = NULL)
     if (is_null($linkid)) {
 	TBERROR("mysql_select_db: must specify linkid!", 1);
     }
-
-    return mysqli_select_db($linkid, $dbname);
+    $link = _mysqli_link($linkid);
+    return mysqli_select_db($link, $dbname);
 }
 
 function mysql_query($query, $linkid = NULL)
 {
-    global $_mysql_linkid;
-
-    $linkid = is_null($linkid) ? $_mysql_linkid : $linkid;
-    return mysqli_query($linkid, $query);
+    $link = is_null($linkid) ? _mysqli_link(0) : _mysqli_link($linkid);
+    return mysqli_query($link, $query);
 }
 
 function mysql_num_rows($result)
@@ -82,20 +95,17 @@ function mysql_fetch_row($result)
 
 function mysql_escape_string($stuff)
 {
-    global $_mysql_linkid;
+    $link = _mysqli_link(0);
 
-    $linkid = $_mysql_linkid;
     # XXX is this really the same? There is some doubt:
     # https://www.php.net/manual/en/function.mysqli-escape-string.php
-    return mysqli_escape_string($linkid, $stuff);
+    return mysqli_escape_string($link, $stuff);
 }
 
 function mysql_insert_id($linkid = NULL)
 {
-    global $_mysql_linkid;
-
-    $linkid = is_null($linkid) ? $_mysql_linkid : $linkid;
-    return mysqli_insert_id($linkid);
+    $link = is_null($linkid) ? _mysqli_link(0) : _mysqli_link($linkid);
+    return mysqli_insert_id($link);
 }
 
 function mysql_data_seek($result, $rownum)
@@ -105,7 +115,14 @@ function mysql_data_seek($result, $rownum)
 
 function mysql_error($linkid)
 {
-    return mysqli_error($linkid);
+    $link = is_null($linkid) ? _mysqli_link(0) : _mysqli_link($linkid);
+    return mysqli_error($link);
+}
+
+function mysql_errno($linkid)
+{
+    $link = is_null($linkid) ? _mysqli_link(0) : _mysqli_link($linkid);
+    return mysqli_errno($link);
 }
 
 function mysql_affected_rows($linkid = NULL)
@@ -113,8 +130,9 @@ function mysql_affected_rows($linkid = NULL)
     if (is_null($linkid)) {
 	TBERROR("mysql_affected_rows: must specify linkid!", 1);
     }
+    $link = _mysqli_link($linkid);
     
-    return mysqli_affected_rows($linkid);
+    return mysqli_affected_rows($link);
 }
 
 function mysql_real_escape_string($stuff, $linkid = NULL)
@@ -122,8 +140,9 @@ function mysql_real_escape_string($stuff, $linkid = NULL)
     if (is_null($linkid)) {
 	TBERROR("mysql_real_escape_string: must specify linkid!", 1);
     }
+    $link = _mysqli_link($linkid);
     
-    return mysqli_real_escape_string($linkid, $stuff);
+    return mysqli_real_escape_string($link, $stuff);
 }
 
 ?>

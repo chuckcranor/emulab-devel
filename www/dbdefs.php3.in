@@ -1063,20 +1063,23 @@ function DBConnect($dbname)
 	return $DBlinkids[$dbname];
     }
 
-    $linkid = mysql_connect("localhost", basename($_SERVER["SCRIPT_NAME"]), "none", 1);
-    if ($linkid) {
-	if (!mysql_select_db($dbname, $linkid)) {
-	    return null;
-	}
+    $linkid = mysql_connect("localhost",
+                            basename($_SERVER["SCRIPT_NAME"]), "none", 1);
+    if ($linkid === FALSE) {
+        return null;
+    }
+    if (!mysql_select_db($dbname, $linkid)) {
+        return null;
     }
     $DBlinkids[$dbname] = $linkid;
     return $linkid;
 }
 
 #
-# Record last DB error string.
+# Record last DB error string and errno.
 #
 $DBErrorString = "";
+$DBErrorNumber = 0;
 
 #
 # This mirrors the routine in the PERL code. The point is to avoid
