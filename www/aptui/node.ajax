@@ -78,6 +78,9 @@ function Do_GetInfo()
     }
     if ($node->def_boot_osid()) {
         $def_boot_image = $node->def_boot_image();
+        if (!$def_boot_image) {
+            $def_boot_osinfo = $node->def_boot_osinfo();
+        }
     }
     $type_url = "$TBBASE/shownodetype.php3?node_type=" . $node->type();
    
@@ -111,12 +114,22 @@ function Do_GetInfo()
             $blob["def_boot_cmd_line"] = $node->def_boot_cmd_line();
         }
     }
+    elseif (isset($def_boot_osinfo)) {
+        $osid   = $def_boot_osinfo->osid();
+        # We need an OsInfo portal page I guess.
+        $url = "$TBBASE/showosinfo.php3?osid=${osid}";
+        
+        $blob["def_boot_image_uuid"] = $def_boot_osinfo->uuid();
+        $blob["def_boot_image_name"] = $def_boot_osinfo->osname();
+        $blob["def_boot_image_vers"] = $def_boot_osinfo->vers();
+        $blob["def_boot_image_url"]  = $url;
+    }
     if ($node->next_boot_osid()) {
         $osid   = $node->next_boot_osid();
         $vers   = $node->next_boot_osid_vers();
         $osinfo = OSInfo::Lookup($osid, $vers);
         if ($osinfo) {
-            $url = "$TBBASE/showosinfo.php?osid=${osid}&version=${vers}";
+            $url = "$TBBASE/showosinfo.php3?osid=${osid}&version=${vers}";
 
             $blob["next_boot_osinfo_uuid"] = $osinfo->uuid();
             $blob["next_boot_osinfo_name"] = $osinfo->osname();
@@ -133,7 +146,7 @@ function Do_GetInfo()
         $vers   = $node->temp_boot_osid_vers();
         $osinfo = OSInfo::Lookup($osid, $vers);
         if ($osinfo) {
-            $url = "$TBBASE/showosinfo.php?osid=${osid}&version=${vers}";
+            $url = "$TBBASE/showosinfo.php3?osid=${osid}&version=${vers}";
 
             $blob["temp_boot_osinfo_uuid"] = $osinfo->uuid();
             $blob["temp_boot_osinfo_name"] = $osinfo->osname();
