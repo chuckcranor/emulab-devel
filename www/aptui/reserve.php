@@ -55,6 +55,8 @@ if ($edit) {
         SPITUSERERROR("Missing arguments for edit mode");
         exit();
     }
+}
+if (isset($cluster)) {
     $aggregate = Aggregate::LookupByNickname($cluster);
     if (!$aggregate) {
         SPITUSERERROR("No such cluster: $cluster");
@@ -100,7 +102,7 @@ echo htmlentities(json_encode($plist));
 echo "</script>\n";
 
 # List of clusters.
-if ($edit) {
+if ($edit || isset($aggregate)) {
     $ams = array($aggregate);
 }
 elseif (isset($debug) && $debug) {
