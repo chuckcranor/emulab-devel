@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,7 +29,7 @@ use base qw(libimageops_ndz);
 use libdb;
 use libtestbed;
 use libimageops;
-use libtblog;
+use libtblog_simple;
 use Node;
 use English;
 use Data::Dumper;

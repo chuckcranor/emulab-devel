@@ -28,7 +28,7 @@ use base qw(libimageops_base);
 
 use libdb;
 use libtestbed;
-use libtblog;
+use libtblog_simple;
 use User;
 use Node;
 use English;

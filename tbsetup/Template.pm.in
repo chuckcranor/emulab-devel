@@ -35,7 +35,7 @@ use vars qw(@ISA @EXPORT);
 # Must come after package declaration!
 use libdb;
 use libtestbed;
-use libtblog;
+use libtblog_simple;
 use libArchive;
 use Archive;
 use Project;
@@ -2072,7 +2072,7 @@ sub GetProject($)
 package Template::Instance;
 use libdb;
 use libtestbed;
-use libtblog;
+use libtblog_simple;
 use English;
 use libArchive;
 use overload ('""' => 'Stringify');
@@ -3866,7 +3866,7 @@ sub ArchiveReplace($$$)
 package Template::Instance::Run;
 use libdb;
 use libtestbed;
-use libtblog;
+use libtblog_simple;
 use English;
 use overload ('""' => 'Stringify');
 

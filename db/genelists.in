@@ -98,7 +98,7 @@ use lib "@prefix@/lib";
 use emdbi;
 use libdb;
 use libtestbed;
-use libtblog;
+use libtblog_simple;
 use User;
 use Brand;
 
