@@ -136,7 +136,7 @@ $(function ()
 	    $('#experiments_table .format-date').each(function() {
 		var date = $.trim($(this).html());
 		if (date != "") {
-		    $(this).html(moment($(this).html()).format("ll"));
+		    $(this).html(moment($(this).html()).format("lll"));
 		}
 	    });
 	    var table = $('#experiments_table')
