@@ -73,7 +73,15 @@ case "$1" in
 
 		if [ -x @prefix@/sbin/sslxmlrpc_server.py ]; then
 			echo -n " sslxmlrpc_server"
-			@prefix@/sbin/sslxmlrpc_server.py 2>/dev/null
+			if [ -x @prefix@/sbin/daemon_wrapper ]; then
+			    @prefix@/sbin/daemon_wrapper -i 30 \
+			          -l @prefix@/log/sslxmlrpc_server.log \
+			          -p /var/run/sslxmlrpc_server.pid \
+			          @prefix@/sbin/sslxmlrpc_server.py -f
+
+			else
+			        @prefix@/sbin/sslxmlrpc_server.py 2>/dev/null
+			fi
 		fi
 
 		# mfrisbeed started with its own script

@@ -48,6 +48,9 @@ from libdb        import *
 # When debugging, runs in foreground printing to stdout instead of syslog
 debug           = 0
 
+# For daemon wrapper, run in foreground mode.
+foreground      = 0
+
 # The port to listen on. We should get this from configure.
 PORT            = 3069
 
@@ -618,8 +621,8 @@ class MyServer(SocketServer.ForkingTCPServer, SimpleXMLRPCDispatcher):
 try:
     # Parse the options,
     opts, req_args =  getopt.getopt(sys.argv[1:],
-                      "dhs:p:c:",
-                      [ "debug", "help", "server=", "port=",
+                      "dhs:p:c:f",
+                      [ "debug", "foreground", "help", "server=", "port=",
                         "cert=", "cacert=" ])
     # ... act on them appropriately, and
     for opt, val in opts:
@@ -642,6 +645,9 @@ try:
             pass
         elif opt in ("-d", "--debug"):
             debug = 1
+            pass
+        elif opt in ("-f", "--foreground"):
+            foreground = 1
             pass
         elif opt in ("-c", "--cert"):
             server_cert = val
@@ -668,27 +674,30 @@ if not debug:
                    getattr(syslog, "LOG_" + string.upper(LOGFACIL)))
     syslog.syslog(syslog.LOG_INFO, "SSL XMLRPC server starting up");
 
-    #
-    # Daemonize. We redirect our output into a log file cause I have no
-    # idea what is going to use plain print. 
-    #
-    try:
-        fp = open("@prefix@/log/sslxmlrpc_server.log", "a");
-        sys.stdout = fp
-        sys.stderr = fp
-        sys.stdin.close();
+    # We use foreground mode from daemon_wrapper.
+    if not foreground:
+        #
+        # We redirect our output into a log file cause I have no
+        # idea what is going to use plain print. 
+        #
+        try:
+            fp = open("@prefix@/log/sslxmlrpc_server.log", "a");
+            sys.stdout = fp
+            sys.stderr = fp
+            sys.stdin.close();
+            pass
+        except:
+            print "Could not open log file for append"
+            sys.exit(1);
+            pass
+        
+        pid = os.fork()
+        if pid:
+            os.system("echo " + str(pid) + " > /var/run/sslxmlrpc_server.pid")
+            sys.exit(0)
+            pass
+        os.setsid();
         pass
-    except:
-        print "Could not open log file for append"
-        sys.exit(1);
-        pass
-
-    pid = os.fork()
-    if pid:
-        os.system("echo " + str(pid) + " > /var/run/sslxmlrpc_server.pid")
-        sys.exit(0)
-        pass
-    os.setsid();
 else:
     print "SSL XMLRPC server starting up"
 
