@@ -1034,21 +1034,6 @@ function NullDate($date)
 #
 $maxtries = 3;
 $DBlinkid = 0;
-while ($maxtries) {
-    $DBlinkid = mysql_connect("localhost", basename($_SERVER["SCRIPT_NAME"]));
-    if ($DBlinkid) {
-	break;
-    }
-    $maxtries--;
-    sleep(1);
-}
-if (! $DBlinkid) {
-    USERERROR("Temporary resource error; ".
-	      "please try again in a few minutes", 1);
-}
-if (!mysql_select_db($TBDBNAME, $DBlinkid)) {
-    TBERROR("Could not select DB after connecting!", 1);
-}
 $DBlinkids = array();
 $DBlinkids[$TBDBNAME] = $DBlinkid;
 
@@ -1101,7 +1086,7 @@ $DBErrorNumber = 0;
 function DBQuery($query, $linkid = NULL)
 {
     global	$TBDBNAME;
-    global	$DBErrorString;
+    global	$DBErrorString, $DBErrorNumber;
     global      $DBlinkid;
 
     $linkid = is_null($linkid) ? $DBlinkid : $linkid;
@@ -1125,6 +1110,7 @@ function DBQuery($query, $linkid = NULL)
 	$DBErrorString =
 	    "  Query: $query\n".
 	    "  Error: " . mysql_error($linkid);
+        $DBErrorNumber = mysql_errno($linkid);
     }
     return $result;
 }
@@ -1166,12 +1152,16 @@ function DBQueryWarn($query, $linkid = NULL)
 #
 function DBWarn($message)
 {
-    global	$DBErrorString;
-    
-    $text = "$message - In " . $_SERVER["PHP_SELF"] . "\n" .
-  	    "$DBErrorString\n";
+    global	$DBErrorString, $DBErrorNumber;
 
-    TBERROR($text, 0);
+    if ($DBErrorNumber != 2006 && $DBErrorNumber != 1053 &&
+        $DBErrorNumber != 2013 && $DBErrorNumber != 1046 &&
+        $DBErrorNumber != 1317) {
+        DBError(false, true);
+    }
+    else {
+        DBError(false, false);
+    }
 }
 
 #
@@ -1181,12 +1171,63 @@ function DBWarn($message)
 #
 function DBFatal($message)
 {
-    global	$DBErrorString;
+    global	$DBErrorString, $DBErrorNumber;
 
-    $text = "$message - In " . $_SERVER["PHP_SELF"] . "\n" .
+    if ($DBErrorNumber != 2006 && $DBErrorNumber != 1053 &&
+        $DBErrorNumber != 2013 && $DBErrorNumber != 1046 &&
+        $DBErrorNumber != 1317) {
+        DBError(true, true);
+    }
+    else {
+        DBError(true, false);
+    }
+}
+
+#
+# DB errors needs to be handled specially. If the problem is the server,
+# then no point in trying to continue since we will just end up back here.
+#
+function DBError($fatal, $serverdead)
+{
+    global	$DBErrorString, $DBErrorNumber;
+    global      $session_interactive, $session_errorhandler;
+    global      $TBMAIL_OPS, $TBMAILADDR, $TBMAILADDR_OPS;
+    $script = urldecode($_SERVER['REQUEST_URI']);
+    
+    if (!$serverdead) {
+        $text = "$message - In " . $_SERVER["PHP_SELF"] . "\n" .
   	    "$DBErrorString\n";
 
-    TBERROR($text, 1);
+        # We want email notification of a query error. 
+        TBMAIL($TBMAIL_OPS,
+               "WEB DB ERROR REPORT",
+               "\n".
+               "In $script\n\n".
+               "$text",
+               "From: $TBMAIL_OPS");
+    }
+    if (!$session_interactive) {
+	if ($session_errorhandler) {
+	    $session_errorhandler("Database server error", $fatal);
+        }
+        else {
+            # Makes no sense not to have an error handler.
+            echo "<font size=+1><br>
+                   Database server error;
+                     please try again in a few minutes
+         	  </font>
+                  <br><br>\n";
+        }
+        if ($fatal || $serverdead) {
+            exit(-1);
+        }
+        return;
+    }
+    if ($fatal || $serverdead) {
+        echo "<font size=+1><br>Database server error; " .
+            "please try again in a few minutes</font><br><br>\n";
+        exit(1);
+    }
 }
 
 #
@@ -1212,6 +1253,21 @@ function DBQuoteSpecial($stuff, $linkid = NULL)
     $linkid = is_null($linkid) ? $DBlinkid : $linkid;
 
     return mysql_real_escape_string($stuff, $linkid);
+}
+
+while ($maxtries) {
+    $DBlinkid = mysql_connect("localhost", basename($_SERVER["SCRIPT_NAME"]));
+    if ($DBlinkid !== FALSE) {
+	break;
+    }
+    $maxtries--;
+    sleep(1);
+}
+if ($DBlinkid === FALSE) {
+    DBError(true, true);
+}
+if (!mysql_select_db($TBDBNAME, $DBlinkid)) {
+    TBERROR("Could not select DB after connecting!", 1);
 }
 
 ?>
