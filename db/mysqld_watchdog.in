@@ -114,7 +114,7 @@ while (1) {
 	$paused = 0;
     }
     TBScriptUnlock();
-    sleep(15);
+    sleep(60);
 }
 
 #
@@ -137,7 +137,7 @@ sub TryQuery()
 	# Parent waits for child to complete query.
 	#
 	local $SIG{ALRM} = sub { kill("USR1", $childpid); };
-	alarm 30;
+	alarm 60;
 	waitpid($childpid, 0);
 	alarm 0;
 
@@ -170,7 +170,8 @@ sub TryQuery()
 	# Query DB and exit. 
 	#
 	$libdb::DBQUERY_MAXTRIES = 3;
-	$libdb::DBCONN_MAXTRIES  = 2;
+	$libdb::DBCONN_MAXTRIES  = 5;
+	$libdb::DBQUERY_DEBUG    = 1;
 
 	# Must always do this in the child.
 	exit(1)
@@ -209,7 +210,7 @@ sub RestartMysqld()
     #
     # Wait for a little while.
     #
-    sleep(15);
+    sleep(20);
 
     #
     # See if its still running. If mysqld was behaving normally, then a
@@ -254,7 +255,7 @@ sub RestartMysqld()
     # Wait for a little while, and then try another query. 
     #
   retry:
-    sleep(15);
+    sleep(30);
 
     print "Trying another query ...\n";
 
