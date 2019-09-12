@@ -38,6 +38,7 @@ use emdb;
 use emutil;
 use EmulabFeatures;
 use GeniHRN;
+use APT_Geni;
 use overload ('""' => 'Stringify');
 
 # Configure variables
@@ -70,6 +71,7 @@ sub Lookup($$)
 
     my $self             = {};
     $self->{'AGGREGATE'} = $query_result->fetchrow_hashref();
+    $self->{'AUTHORITY'} = undef;
 
     #
     # Look to see if there is a status row. Create it if it does not exist.
@@ -131,6 +133,20 @@ sub IsLocalCluster($)
     my ($self) = @_;
 
     return ($self->urn() eq $MYURN ? 1 : 0);
+}
+
+sub GetGeniAuthority($)
+{
+    my ($self) = @_;
+
+    return $self->{"AUTHORITY"} if (defined($self->{"AUTHORITY"}));
+
+    my $authority = APT_Geni::GetAuthority($self->urn());
+    return $authority
+	if (!defined($authority));
+
+    $self->{"AUTHORITY"} = $authority;
+    return $authority;
 }
 
 #
@@ -244,6 +260,31 @@ sub LookupForPortal($$)
 	DBQueryWarn("select urn from apt_aggregates ".
 		    "where disabled=0 and reservations=1 and ".
 		    "      FIND_IN_SET('$portal', portals)");
+    return ()
+	if (!$query_result);
+    return ()
+	if (!$query_result->numrows);
+
+    while (my ($aggregate_urn) = $query_result->fetchrow_array()) {
+	my $aggregate = Lookup($class, $aggregate_urn);
+	next
+	    if (!defined($aggregate));
+	push(@result, $aggregate);
+    }
+    return @result;
+}
+
+#
+# Lookup all aggregates,
+#
+sub LookupAll($)
+{
+    my ($class) = @_;
+    my @result = ();
+
+    my $query_result =
+	DBQueryWarn("select urn from apt_aggregates ".
+		    "where disabled=0");
     return ()
 	if (!$query_result);
     return ()
