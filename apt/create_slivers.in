@@ -225,34 +225,68 @@ while ($instance->status() eq "prestage" && !$instance->IsCanceled()) {
     my $done = 1;
     $temp_webtask->Delete();
 
+    print "prestageimages results\n";
     print Dumper($results);
+
     #
     # Store prestaging info in the instance webtask so we can display 
-    # information about prestage progress in the web UI.
+    # information about prestage progress in the web UI. But, we do not
+    # want to show an empty table or a table of images that are already
+    # there. So prune out uninteresting results while merging in new
+    # results as we are able to contact the aggregates (some might be
+    # offline).
     #
-    if (!defined($webtask->prestageStatus())) {
-	$webtask->prestageStatus($results);
+    my $current = $webtask->prestageStatus();
+    if (!defined($current)) {
+	$current = {};
     }
-    else {
+    foreach my $aggurn (keys(%{$results})) {
+	my $aggregate = $instance->AggregateHash()->{$aggurn};
+	my $images    = $results->{$aggurn}->{"images"};
+	my $status    = $results->{$aggurn}->{"status"};
+
 	#
-	# Merge in results. This is to avoid things going missing after
-	# an aggregate has finished, the web UI is doing a very simple
-	# dumnp of the info, and the merge would happen there if not here.
+	# This test tells us if the initial prestage call has been made,
+	# or if we are now doing status calls for the aggregate. See below
+	# where we switch to "staging" after the prestage call is made.
 	#
-	my $current = $webtask->prestageStatus();
-	foreach my $aggurn (keys(%{$results})) {
-	    if (!exists($current->{$aggurn})) {
-		$current->{$aggurn} = $results->{$aggurn};
-		next;
-	    }
-	    my $images = $results->{$aggurn}->{"images"};
+	if ($aggregate->status() eq "prestage") {
+	    #
+	    # We only care about images that are not ready, these are
+	    # the ones that go into the table. Skip images that start
+	    # out ready.
+	    #	    
+	    my $curimages = {};
+	
 	    foreach my $imgurn (keys(%{$images})) {
-		if (!exists($current->{$aggurn}->{"images"}->{$imgurn})) {
-		    $current->{$aggurn}->{"images"}->{$imgurn} =
-			$images->{$imgurn};
-		    next;
+		my $status = $images->{$imgurn}->{"status"};
+		if ($status ne "ready") {
+		    $curimages->{$imgurn} = $images->{$imgurn};
 		}
-		my $curimg = $current->{$aggurn}->{"images"}->{$imgurn};
+	    }
+	    if (keys(%{$curimages})) {
+		$current->{$aggurn} = {};
+		$current->{$aggurn}->{"images"} = $curimages;
+		$current->{$aggurn}->{"status"} = $status;
+	    }
+	}
+	else {
+	    #
+	    # Now tracking status for this aggregate.
+	    #
+	    # Skip if the prestage phase check above did not find any
+	    # images to track.
+	    #
+	    next
+		if (!exists($current->{$aggurn}));
+
+	    my $curimages = $current->{$aggurn}->{'images'};
+	    foreach my $imgurn (keys(%{$images})) {
+		# Not tracking this image
+		next
+		    if (!exists($curimages->{$imgurn}));
+		
+		my $curimg      = $curimages->{$imgurn};
 		my $newstatus   = $images->{$imgurn}->{"status"};
 		my $newprogress = $images->{$imgurn}->{"progress"};
 		
@@ -268,8 +302,11 @@ while ($instance->status() eq "prestage" && !$instance->IsCanceled()) {
 		}
 	    }
 	}
+    }
+    # Only store if there is something to show the user.
+    if (keys(%{$current})) {
 	$webtask->prestageStatus($current);
-
+	print "prestageimages distilled for web ui\n";
 	print Dumper($current);
     }
 
