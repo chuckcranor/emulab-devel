@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2012, 2015 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -61,8 +61,6 @@ sub DBTableExists($)	{ return emdbi::DBTableExistsN($dbnum, $_[0]); }
 sub DBSlotExists($$)	{ return emdbi::DBSlotExistsN($dbnum, $_[0], $_[1]); }
 sub DBKeyExists($$)	{ return emdbi::DBKeyExistsN($dbnum, $_[0], $_[1]); }
 sub DBSlotType($$)	{ return emdbi::DBSlotTypeN($dbnum, $_[0], $_[1]); }
-
-$emdbi::DBQUERY_DEBUG = 0;
 
 my $GENI_DBNAME =
     (defined($main::GENI_DBNAME) ? $main::GENI_DBNAME : GENISA_DBNAME());
