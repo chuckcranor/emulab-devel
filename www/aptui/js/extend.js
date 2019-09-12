@@ -438,12 +438,12 @@ window.ShowExtendModal = (function()
 		args["maxextension"] = maxextend_date;
 	    }
 	    sup.HideModal('#extend_modal', function () {
-		sup.ShowModal("#waitwait-modal");
+		sup.ShowWaitWait("This will take a minute; patience please!");
 		var xmlthing = sup.CallServerMethod(null, "status",
 						    "RequestExtension", args);
 		xmlthing.done(function(json) {
 		    console.info("RequestExtension:", json);
-		    sup.HideModal("#waitwait-modal", function () {
+		    sup.HideWaitWait(function () {
 			callback(json);
 		    });
 		    return;
@@ -461,7 +461,7 @@ window.ShowExtendModal = (function()
 
 	    // Throw it back to the caller when done.
 	    var requestcallback = function(json) {
-		sup.HideModal("#waitwait-modal");
+		sup.HideWaitWait();
 		console.info(json.value);
 		callback(json);
 		return;
@@ -469,7 +469,7 @@ window.ShowExtendModal = (function()
 	    // Setup a handler for the confirm button.
 	    $('#restricted_extend_modal #confirm-max').click(function(event) {
 		sup.HideModal('#restricted_extend_modal');
-		sup.ShowModal("#waitwait-modal");
+		sup.ShowWaitWait("This will take a minute; patience please!");
 
 		var xmlthing = sup.CallServerMethod(null,
 						    "status",
