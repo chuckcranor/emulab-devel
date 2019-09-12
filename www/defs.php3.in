@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -306,8 +306,9 @@ function TBERROR ($message, $death, $xmp = 0) {
     global $session_interactive, $session_errorhandler;
     $script = urldecode($_SERVER['REQUEST_URI']);
 
-    CLEARBUSY();
-
+    if (function_exists("CLEARBUSY")) {
+        CLEARBUSY();
+    }
     TBMAIL($TBMAIL_OPS,
          "WEB ERROR REPORT",
          "\n".
