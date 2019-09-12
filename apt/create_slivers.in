@@ -94,6 +94,7 @@ use APT_Instance;
 use APT_Geni;
 use APT_Dataset;
 use APT_Aggregate;
+use APT_Utility;
 use Experiment;
 use User;
 use emutil;
@@ -799,8 +800,28 @@ sub CreateSliver($)
     my $manifest;
     $webtask->Refresh();
 
+    #
+    # Clear any stored max extensions for the aggregate between the
+    # provisioning and provisioned stages. This is a critical section,
+    # we cannot have another experiment use its saved maxextension until
+    # the CreateSliver returns. 
+    #
+    # Critical section start.
+    if (APT_Utility::ExtensionLock()) {
+	print STDERR "Could not get max extension lock\n";
+	$webtask->Exited(GENIRESPONSE_ERROR);
+	$webtask->output("Internal locking error");
+	$aggobj->SetStatus("failed");
+	return -1;
+    }
     # Mark that it is doing something.
     $aggobj->SetStatus("provisioning");
+
+    # Clear max extensions for any instances using this aggregate
+    APT_Instance->ClearAllMaxExtension($aggobj->aggregate_urn());
+    
+    # Critical section end.
+    APT_Utility::ExtensionUnlock();
 
     # Debugging
     $cmurl = APT_Instance::devurl($cmurl);

@@ -327,8 +327,19 @@ if (!defined($request)) {
 if (!defined($MODULE) || !exists($GENI_MODULES{$MODULE})) {
     XMLError(XMLRPC_APPLICATION_ERROR(), "Invalid module specification")
 }
-my $file = $GENI_MODULES{$MODULE};
+#
+# Reject anything that is not the Portal when accessing the CM variants.
+#
+if (@PROTOGENI_PORTALONLY@) {
+    my $hrn = GeniHRN->new($GENIURN);
+    if (! ($hrn->domain() eq "@OURDOMAIN@" ||
+	   $hrn->domain() eq "emulab.net")) {
+	XMLError(GENIRESPONSE_REFUSED(),
+		 "Not accepting connections from anyone we do not know")
+    }
+}
 
+my $file = $GENI_MODULES{$MODULE};
 # This just loads the file.
 my $return = do $file;
 if (!defined($return)) {

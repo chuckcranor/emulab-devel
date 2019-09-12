@@ -161,6 +161,11 @@ case "$1" in
 			@prefix@/sbin/apt_daemon
 		fi
 		
+		if [ -x @prefix@/sbin/aptexpire_daemon ]; then
+			echo -n " aptexpire_daemon"
+			@prefix@/sbin/aptexpire_daemon
+		fi
+		
 		if [ -x @prefix@/sbin/aptevent_daemon ]; then
 			echo -n " aptevent_daemon"
 			@prefix@/sbin/aptevent_daemon
@@ -316,6 +321,9 @@ case "$1" in
 		fi
 		if [ -r /var/run/apt_daemon.pid ]; then
 			kill `cat /var/run/apt_daemon.pid`
+		fi
+		if [ -r /var/run/aptexpire_daemon.pid ]; then
+			kill `cat /var/run/aptexpire_daemon.pid`
 		fi
 		if [ -r /var/run/apt_scheduler.pid ]; then
 			kill `cat /var/run/apt_scheduler.pid`

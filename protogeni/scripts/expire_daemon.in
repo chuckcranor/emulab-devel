@@ -73,6 +73,7 @@ my $DELETEIMAGEDATA = "$TB/sbin/protogeni/deleteimagedata";
 my $IMPORTER      = "$TB/sbin/image_import";
 my $CLEANUPSLICE  = "$TB/sbin/cleanupslice";
 my $CLEANUPTICKET = "$TB/sbin/cleanupticket";
+my $MYSAURN       = "urn:publicid:IDN+@OURDOMAIN@+authority+sa";
 my $SLEEP_INTERVAL= 60;
 
 # un-taint path
@@ -287,6 +288,25 @@ sub WarnSlices()
 
     while (my ($idx,$expires,$stamp,$created) =
 	   $query_result->fetchrow_array()) {
+	my $slice = GeniSlice->Lookup($idx);
+	if (!defined($slice)) {
+	    # Slice is gone, lets not worry.
+	    delete($expires{$idx});
+	    delete($warned{$idx});
+	    next;
+	}
+	#
+	# This stops us from expiring portal based experiments, the
+	# Portal will fire the DeleteSlice() operation when it decides to.
+	# Only some sites get this (Fixed Endpoints, Buses).
+	#
+	if (@PROTOGENI_NOPORTALEXPIRE@ && defined($slice->portal_tag()) &&
+	    defined($slice->speaksfor_urn())) {
+	    if ($slice->speaksfor_urn() eq $MYSAURN ||
+		$slice->speaksfor_urn() eq $GeniUtil::MOTHERSHIP_SAURN) {
+  		goto skip;
+	    }
+	}
 	if (exists($expires{$idx})) {
 	    #
 	    # We use expires to mark first warning, and to indicate that
@@ -316,13 +336,6 @@ sub WarnSlices()
 	#print STDERR "$stamp, $created, $grace, ". time() . "\n";
 
 	if ($stamp > time() + $grace) {
-	    delete($expires{$idx});
-	    delete($warned{$idx});
-	    next;
-	}
-	my $slice = GeniSlice->Lookup($idx);
-	if (!defined($slice)) {
-	    # Slice is gone, lets not worry.
 	    delete($expires{$idx});
 	    delete($warned{$idx});
 	    next;
@@ -452,6 +465,18 @@ sub ExpireSlices()
 	if (!defined($slice)) {
 	    # Slice is gone, lets not worry.
 	    next;
+	}
+	#
+	# This stops us from expiring portal based experiments, the
+	# Portal will fire the DeleteSlice() operation when it decides to.
+	# Only some sites get this (Fixed Endpoints, Buses).
+	#
+	if (@PROTOGENI_NOPORTALEXPIRE@ && defined($slice->portal_tag()) &&
+	    defined($slice->speaksfor_urn())) {
+	    if ($slice->speaksfor_urn() eq $MYSAURN ||
+		$slice->speaksfor_urn() eq $GeniUtil::MOTHERSHIP_SAURN) {
+  		goto skip;
+	    }
 	}
 	if ($slice->Lock() != 0) {
 	    print STDERR "Could not lock slice $slice.\n";

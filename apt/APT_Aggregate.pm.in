@@ -437,5 +437,26 @@ sub CanInstantiate($$$$)
     return 1;
 }
 
+#
+# Is there a pending extension for this aggregate. Return the instance.
+# Note that there is only one pending push per aggregate. 
+#
+sub ExtensionPushPending($)
+{
+    my ($self) = @_;
+    my $urn    = $self->urn();
+    require APT_Instance;
+
+    my $query_result =
+	DBQueryWarn("select uuid from apt_instance_aggregates ".
+		    "where aggregate_urn='$urn' ".
+		    "      and extension_needpush is not null");
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my ($uuid) = $query_result->fetchrow_array();
+    return APT_Instance->Lookup($uuid);
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;

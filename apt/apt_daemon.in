@@ -248,56 +248,6 @@ sub FixFailedImaging()
 }
 
 #
-# Expire instances.
-#
-sub ExpireInstances()
-{
-    my $query_result =
-	DBQueryWarn("select a.uuid,s.expires from apt_instances as a ".
-		    "left join geni.geni_slices as s on s.uuid=a.slice_uuid ".
-		    "where (a.status='ready') and ".
-		    "      a.admin_lockdown=0 and s.lockdown=0 and ".
-		    "      a.paniced=0 and ".
-		    "      (UNIX_TIMESTAMP(now()) > ".
-		    "       UNIX_TIMESTAMP(s.expires))");
-    return
-	if (!$query_result);
-
-    while (my ($uuid,$expires) = $query_result->fetchrow_array()) {
-	my $instance = APT_Instance->Lookup($uuid);
-	if (!defined($instance)) {
-	    print STDERR "No such instance $uuid\n";
-	    next;
-	}
-	print STDERR "$uuid expired at $expires\n";
-
-	#
-	# Try to terminate the instance. We cannot take the lock since
-	# we are going to call manage_instance to do the termination.
-	# So, manage_instance might collide with the sa_daemon which
-	# locks the underlying slice, but if that happens we will just
-	# try again after a short wait. If it still fails, then
-	# something is wrong and we will notify.
-	#
-	if ($impotent) {
-	    print STDERR "Would try to terminate $instance\n";
-	    next;
-	}
-	# Use debug option to keep it from going into the background.
-	my $output = emutil::ExecQuiet("$SUDO -u $PROTOUSER ".
-				       "$MANAGEINSTANCE -d terminate $uuid -e");
-	my $status = $?;
-	print STDERR "$output\n"
-	    if ($output ne "");
-	if ($status) {
-	    #
-	    # Need to send email at some point. 
-	    #
-	}
-    }
-}
-
-#
 # Warn about locked down instances that have expired. 
 #
 sub ReportLockdownExpired()
@@ -676,7 +626,6 @@ while (1) {
 
     KillInstances();
     FixFailedImaging();
-    ExpireInstances();
     if ($MAINSITE) {
 	UpdateAggregateGraphs();
     }

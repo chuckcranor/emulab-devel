@@ -212,6 +212,7 @@ sub DoShow()
     print "LocalImages:     " . ($aggregate->nolocalimages() ? "No" : "Yes")."\n";
     print "PrestageImages:  " . ($aggregate->prestageimages() ? "Yes":"No")."\n";
     print "PanicPowerOff:   " . ($aggregate->panicpoweroff() ? "Yes" : "No")."\n";
+    print "PreCalcMaxExt:   " . ($aggregate->precalcmaxext() ? "Yes" : "No")."\n";
     print "Portals:         " . $aggregate->portals() . "\n";
     print "Use Feature:     " . ($aggregate->canuse_feature() || "") . "\n";
     print "Status:          " . $aggregate->status() . "\n";
@@ -293,6 +294,11 @@ sub DoFlags()
 	};
 	/^panicpoweroff$/ && do {
 	    $aggregate->Update({"panicpoweroff" => $onoff}) == 0
+		or fatal("Could not update flag");
+	    last;
+	};
+	/^precalcmaxext$/ && do {
+	    $aggregate->Update({"precalcmaxext" => $onoff}) == 0
 		or fatal("Could not update flag");
 	    last;
 	};

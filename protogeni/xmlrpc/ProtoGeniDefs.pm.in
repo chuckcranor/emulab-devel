@@ -287,6 +287,7 @@ ProtoGeniDefs::AddModule("cluster",
 		  "ReservationHistory"   => \&GeniCluster::ReservationHistory,
 		  "CancelReservation"    => \&GeniCluster::CancelReservation,
 		  "GetImageCredential"   => \&GeniCluster::GetImageCredential,
+		  "AllSliceMaxExtensions"=> \&GeniCluster::AllSliceMaxExtensions,
 	      }},
 	  });
 

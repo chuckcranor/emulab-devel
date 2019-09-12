@@ -56,6 +56,7 @@ use Brand;
 use APT_Profile;
 use APT_Aggregate;
 use APT_Geni;
+use APT_Utility;
 use Genixmlrpc;
 use GeniResponse;
 use GeniCertificate;
@@ -78,6 +79,7 @@ my $MANAGEDATASET = "$TB/bin/manage_dataset";
 my $MANAGEIMAGES  = "$TB/bin/manage_images";
 my $GENIUSER      = "geniuser";
 my $MAINSITE      = @TBMAINSITE@;
+my $MYURN         = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $PROTOGENI_LOCALUSER= @PROTOGENI_LOCALUSER@;
 
 # Cache of instances to avoid regenerating them.
@@ -284,6 +286,7 @@ sub Refresh($)
 	if (!$query_result || !$query_result->numrows);
 
     $self->{'INSTANCE'} = $query_result->fetchrow_hashref();
+    $self->{'AGGREGATES'} = APT_Instance::Aggregate->LookupForInstance($self);
 
     return 0;
 }
@@ -1926,6 +1929,191 @@ sub ResolveDefer($)
     return 0;
 }
 
+sub SetMaxExtension($$)
+{
+    my ($self, $when) = @_;
+    my $uuid   = $self->uuid();
+
+    if (!defined($when)) {
+	DBQueryWarn("update apt_instances set ".
+		    "  maxextension=null,maxextension_timestamp=null ".
+		    "where uuid='$uuid'")
+	    or return -1;
+    }
+    else {
+	DBQueryWarn("update apt_instances set ".
+		    "   maxextension=FROM_UNIXTIME($when)," .
+		    "   maxextension_timestamp=now() ".
+		    "where uuid='$uuid'")
+	    or return -1;
+    }
+    return 0;
+}
+
+#
+# Does the experiment do/need precalc. If any aggregates are doing precalc,
+# we way the experiment does precalc. HOWEVER; the aggregates that are not
+# marked as doing precalc, MUST BE REACHABLE. It is only the aggreagates
+# marked for precalc that are allowed to be unreachable.
+#
+sub DoesPrecalcMaxExtension($)
+{
+    my ($self)   = @_;
+    my $uuid     = $self->uuid();
+    my $precalc  = 0;
+
+    foreach my $sliver ($self->AggregateList()) {
+	my $aggregate = $sliver->GetAptAggregate();
+
+	if ($aggregate->precalcmaxext()) {
+	    $precalc = 1;
+	    last;
+	}
+    }
+    return 1
+	if ($precalc);
+    
+    return 0;
+}
+
+sub PurgeMaxExtension($)
+{
+    my ($self) = @_;
+    my $uuid       = $self->uuid();
+    my %instances  = ();
+    my %precalcers = ();
+
+    return 0
+	if (!$self->DoesPrecalcMaxExtension());
+
+    # We can just clear this, the recalc script will regen if needed.
+    $self->SetMaxExtension(undef);
+
+    #
+    # If this experiment is using any clusters that are marked for
+    # preccalc, we have to find all the other experiments using them,
+    # and clear the max extension since it is no longer valid. The
+    # daemon will eventually do a new recalc for all experiments that
+    # need it. 
+    #
+    foreach my $sliver ($self->AggregateList()) {
+	my $aggregate = $sliver->GetAptAggregate();
+	if ($aggregate->precalcmaxext()) {
+	    $precalcers{$aggregate->urn()} = $aggregate;
+	}
+    }
+    return 0
+	if (!keys(%precalcers));
+
+    #
+    # Now find all experiments using any of the precalcers.
+    #
+    my $clause = join(" or ", map("aggregate_urn='$_'", keys(%precalcers)));
+		      
+    my $query_result =
+	DBQueryWarn("select distinct uuid from apt_instance_aggregates ".
+		    "where $clause");
+    return -1
+	if (!$query_result);
+    return 0
+	if (!$query_result->numrows);
+
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $instance = APT_Instance->Lookup($uuid);
+	next
+	    if (!defined($instance));
+	$instance->SetMaxExtension(undef);
+    }
+    return 0;
+}
+
+#
+# Given an instance, save the provided max extension if its an instance that
+# is doing precalc.
+#
+sub SaveMaxExtension($$)
+{
+    my ($self, $newmax) = @_;
+
+    return 0
+	if (!$self->DoesPrecalcMaxExtension());
+
+    return $self->SetMaxExtension(undef)
+	if (!defined($newmax));
+
+    #
+    # Okay, we cannot save the max extension if any of the aggregates
+    # are in the process of provisioning a new experiment. This is a
+    # critical section cause of the time it takes to provision an
+    # experiment.
+    #
+    if (APT_Utility::ExtensionLock()) {
+	print STDERR "Could not get max extension lock. Clearing to be safe\n";
+	$self->SetMaxExtension(undef);
+	return 0;
+    }
+    my $safe = 1;
+    foreach my $sliver ($self->AggregateList()) {
+	my $aggregate_urn = $sliver->aggregate_urn();
+	my $query_result =
+	    DBQueryWarn("select uuid from apt_instance_aggregates ".
+			"where aggregate_urn='$aggregate_urn' and ".
+			"      status='provisioning'");
+	if (!$query_result || $query_result->numrows) {
+	    $safe = 0;
+	}
+    }
+    if (!$safe) {
+	print STDERR "Some aggregates are provisioning, clearing to be safe\n";
+	$self->SetMaxExtension(undef);
+    }
+    else {
+	$self->SetMaxExtension($newmax);
+    }
+    # Critical section end.
+    APT_Utility::ExtensionUnlock();
+    return 0;
+}
+
+# Check if any aggregates are marked for an extension push.
+sub ExtensionPushPending($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+
+    my $query_result =
+	DBQueryWarn("select aggregate_urn from apt_instance_aggregates ".
+		    "where uuid='$uuid' and extension_needpush is not null");
+    return -1
+	if (!$query_result);
+
+    return $query_result->numrows;
+}
+
+#
+# This is used to clear the precalculated max extension for all
+# instances using the provided aggregate. Used from manage_reservations.
+#
+sub ClearAllMaxExtension($$)
+{
+    my ($class, $aggregate_urn) = @_;
+    
+    my $query_result =
+	DBQueryWarn("select uuid from apt_instance_aggregates ".
+		    "where aggregate_urn='$aggregate_urn'");
+    return -1
+	if (!$query_result);
+
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $instance = APT_Instance->Lookup($uuid);
+	next
+	    if (!defined($instance));
+
+	$instance->SetMaxExtension(undef);
+    }
+    return 0;
+}
+
 ###################################################################
 package APT_Instance::History;
 use emdb;
@@ -2224,8 +2412,6 @@ use Data::Dumper;
 use vars qw($AUTOLOAD);
 use overload ('""' => 'Stringify');
 sub devurl($) { return APT_Instance::devurl($_[0]); }
-
-my $MYURN     = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
 
 #
 # Lookup and create a class instance to return.
@@ -2650,6 +2836,34 @@ sub AptAggregateName($)
     my ($self) = @_;
 
     return $self->GetAptAggregate()->name();
+}
+
+# Mark for needing an extension pushed out.
+sub MarkExtensionPush($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  extension_needpush=now() ".
+		"where uuid='$uuid' and aggregate_urn='$urn'")
+	or return -1;
+
+    return 0;
+}
+sub ClearExtensionPush($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  extension_needpush=null ".
+		"where uuid='$uuid' and aggregate_urn='$urn'")
+	or return -1;
+
+    return 0;
 }
 
 #

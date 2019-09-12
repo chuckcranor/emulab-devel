@@ -104,6 +104,7 @@ sub DoApprove();
 sub DoPrediction();
 sub DoCancel();
 sub DoHistory();
+sub DoAllMaxExtensions();
 sub readfile($);
 sub AddAnnouncement($$$$$$$);
 sub DeleteAnnouncement($);
@@ -193,6 +194,9 @@ elsif ($action eq "history") {
 }
 elsif ($action eq "cancel") {
     DoCancel();
+}
+elsif ($action eq "allmaxextensions") {
+    DoAllMaxExtensions();
 }
 else {
     usage();
@@ -289,6 +293,15 @@ sub DoReserve()
     if ($aggregate->CheckStatus(\$errmsg, 1)) {
 	UserError($errmsg);
     }
+    #
+    # Any outstanding extensions to push? They have to go out before
+    # it makes any sense to create a new reservation. Note that these
+    # should already have gone out, but lets make sure.
+    #
+    if (my $pusher = $aggregate->ExtensionPushPending()) {
+	UserError("Unable to create a reservation at this time because ".
+		  "there is a pending update that has not pushed out yet");
+    }
     if ($this_user->IsAdmin()) {
 	#
 	# We do not have a very good notion of cross site admin.
@@ -383,6 +396,9 @@ sub DoReserve()
 	# Schedule an announcement for the user.
 	#
 	AddAnnouncement($portal, $brand, $uuid, $this_user, $count, $type, $start);
+    }
+    if ($approved) {
+	APT_Instance->ClearAllMaxExtension($aggregate->urn());
     }
     if (defined($webtask)) {
 	$webtask->approved($approved);
@@ -860,6 +876,8 @@ sub DoApprove()
 	    }
 	}
     }
+    APT_Instance->ClearAllMaxExtension($aggregate->urn());
+    
     if (defined($webtask)) {
 	$webtask->Exited(0);
     }
@@ -1065,6 +1083,19 @@ sub DoPrediction()
 	    print "$aggregate offline\n";
 	    return 1;
 	}
+	#
+	# Any outstanding extensions to push? They need to go out so
+	# that the prediction info is correct.
+	#
+	if (my $pusher = $aggregate->ExtensionPushPending()) {
+	    # Need unblessed ref to store into webtask.
+	    my $response =
+		GeniResponse->Create(GENIRESPONSE_BUSY, undef,
+		     "Updates are still pending, please try again later");
+	    $webtask->response($response);
+	    return 1;
+	}
+	
 	# PortalRPC will use the root context in this case, which is
 	# essentially saying the caller is an admin. But thats okay
 	# for this call, it is just informational.
@@ -1336,6 +1367,36 @@ sub DoHistory()
     fatal($errmsg);
 }
 
+#
+# Ask for the max extension for all slices at the target.
+#
+sub DoAllMaxExtensions()
+{
+    my $optlist = "";
+    my $errmsg;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    # We can check for disabled aggregate now, nothing below matters.
+    if ($aggregate->CheckStatus(\$errmsg, 1)) {
+	UserError($errmsg);
+    }
+    my $response =
+	APT_Geni::PortalRPC($authority, undef, "AllSliceMaxExtensions", {});
+    if (GeniResponse::IsError($response)) {
+	ExitWithError($response);
+    }
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    else {
+	print Dumper($response);
+    }
+    exit(0);
+}
+
 sub fatal($)
 {
     my ($mesg) = @_;
@@ -1592,3 +1653,5 @@ sub UpdateReservationRequest($$$)
 	or return -1;
     return 0;
 }
+
+

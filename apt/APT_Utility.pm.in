@@ -248,3 +248,20 @@ sub LookupAggregate($)
 
     return undef;
 }
+
+#
+# The precalculated max extension lock.
+#
+sub ExtensionLock()
+{
+    my $lock_result = DBQueryWarn("select GET_LOCK('maxextlock', 15)");
+    if (!$lock_result ||
+	!$lock_result->numrows) {
+	return -1;
+    }
+    return 0;
+}
+sub ExtensionUnlock()
+{
+    DBQueryWarn("select RELEASE_LOCK('maxextlock')");
+}

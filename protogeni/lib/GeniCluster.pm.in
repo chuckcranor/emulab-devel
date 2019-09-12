@@ -67,6 +67,7 @@ use Project;
 use User;
 use NodeType;
 use Node;
+require GeniDB;
 
 # Configure variables
 my $TB		   = "@prefix@";
@@ -914,6 +915,73 @@ sub SliceMaxExtension($)
     }
     $blob->{'reservations'} = \%reslist;
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+}
+
+#
+# Get the max extension values for all active slices.
+#
+sub GetMaxExtensions()
+{
+    my %blob = ();
+    my $db   = GeniDB->New(GeniDB::GENICM_DBNAME());
+
+    my $query_result = $db->QueryWarn("select uuid from geni_slices");
+    return GeniResponse->Create(GENIRESPONSE_ERROR, undef, "DB Error")
+	if (! $query_result);
+    return \%blob
+	if (!$query_result->numrows);
+
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $reserror;
+	my $max;
+	my $slice = GeniSlice->Lookup($uuid);
+	if (!defined($slice)) {
+	    print STDERR "Could not look up slice $uuid\n";
+	    next;
+	}
+
+	#
+	# Make sure the experiment exists before calling into the Reservation
+	# library, it does not like it when the slice is really new and not
+	# fully setup yet.
+	#
+	my $experiment = $slice->GetExperiment();
+	if (!defined($experiment)) {
+	    print STDERR "No experiment for slice $slice\n";
+	    next;
+	}
+	if (! $experiment->NodeList(1)) {
+	    $max = TBDateStringGMT(0x7fff0000);
+	}
+	else {
+	    if (Reservation->MaxSliceExtension($slice,
+					       \$max, \$reserror, 3600)) {
+		print STDERR "Could not get max extension for ".
+		    "$slice: $reserror\n";
+		$max = "";
+	    }
+	    else {
+		$max = TBDateStringGMT($max);
+	    }
+	}
+	$blob{$uuid} = $max;
+    }
+    return \%blob;
+    
+}
+sub AllSliceMaxExtensions($)
+{
+    my ($argref)  = @_;
+
+    my $hasperm = CheckPermission(1);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    my $blob = GetMaxExtensions();
+    return $blob
+	if (GeniResponse::IsError($blob));
+
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);    
 }
 
 #

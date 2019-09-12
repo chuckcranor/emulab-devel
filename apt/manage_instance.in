@@ -57,6 +57,7 @@ sub usage()
 	  "[-M] [-m message | -f filename] hours\n");
     print("Usage: manage_instance denyextension instance [-m message] [filename]\n");
     print("Usage: manage_instance maxextension instance\n");
+    print("Usage: manage_instance pushextension instance\n");
     print("Usage: manage_instance moreinfo instance [-m message] [filename]\n");
     print("Usage: manage_instance utilization instance\n");
     print("Usage: manage_instance schedterminate instance [-m message] days [filename]\n");
@@ -162,8 +163,9 @@ sub DoWarn();
 sub DoDelete();
 sub DoStatus();
 sub DoPrestageImages();
+sub DoPushExtension();
 sub DenyExtensionInternal($);
-sub ExtendInternal($$$$$);
+sub ExtendInternal($$$$$$);
 sub CallMethodOnAggregates($$$@);
 sub ResponseErrorMessage($$);
 sub RelocateImage($$$$);
@@ -309,6 +311,9 @@ elsif ($action eq "status") {
 }
 elsif ($action eq "prestageimages") {
     DoPrestageImages()
+}
+elsif ($action eq "pushextension") {
+    DoPushExtension()
 }
 else {
     usage();
@@ -1908,7 +1913,8 @@ sub DoExtend()
     if ($granted) {
 	my $seconds = $granted * 3600;
 	    
-	if ($errcode = ExtendInternal($slice, $seconds, $force, 0, \$errmsg)) {
+	if ($errcode = ExtendInternal($slice,
+				      $seconds, $force, 0, 1, \$errmsg)) {
 	    goto bad;
 	}
     }
@@ -2063,11 +2069,15 @@ sub DoExtend()
     }
     exit($errcode);
 }
-sub ExtendInternal($$$$$)
+sub ExtendInternal($$$$$$)
 {
-    my ($slice, $seconds, $force, $nolockdown, $perrmsg) = @_;
-    my $errcode = -1;
+    my ($slice, $seconds, $force, $nolockdown, $savedokay, $perrmsg) = @_;
+    my $errcode  = -1;
     my $errmsg;
+    my @delayed  = ();
+    my @refused  = ();
+    my @failed   = ();
+    my @busy     = ();
     
     # Save in case of error.
     my $oldexpires = $slice->expires();
@@ -2091,7 +2101,12 @@ sub ExtendInternal($$$$$)
     };
     my $responses;
 
-    $errcode = CallMethodOnAggregates($coderef, 0, \$responses,
+    #
+    # The retries could leave the user hanging on the modal for close
+    # to a minute, but thats much better then bailing too soon cause of
+    # a transient issue.
+    #
+    $errcode = CallMethodOnAggregates($coderef, 2, \$responses,
 				      $instance->AggregateList());
     if ($errcode) {
 	$errmsg = $responses;
@@ -2099,25 +2114,116 @@ sub ExtendInternal($$$$$)
     }
     
     #
-    # Check the responses.
+    # Do not throw an error when its a network error, keep going. If
+    # the only error is a network error, we might be able to use the
+    # saved max extension.
     #
     foreach my $agg ($instance->AggregateList()) {
 	my $response = shift(@{$responses});
-	my $code = $response->code();
+	my $code     = $response->code();
+	my $aptagg   = $agg->GetAptAggregate();
     
 	if ($code) {
 	    if ($code == GENIRESPONSE_REFUSED) {
 		# We want the user to see REFUSED.
 		$errmsg = "Extension refused at ".
-		    $agg->GetAptAggregate()->name() . ": " .
-		    $response->error();
+		    $aptagg->name() . ": " . $response->error();
 		$errcode = 1;
+		push(@refused, $agg);
+	    }
+	    elsif (($code == GENIRESPONSE_NETWORK_ERROR ||
+		    $code == GENIRESPONSE_SERVER_UNAVAILABLE) &&
+		   $aptagg->precalcmaxext()) {
+		#
+		# We must be able to reach aggregates that are not
+		# marked for precalc. But if it is, remember the ones
+		# we cannot reach, for below.
+		#
+		push(@delayed, $agg);
+		if ($debug) {
+		    print "Could not extend at precalc marked aggregate ".
+			$aptagg->nickname() . "\n";
+		}
 	    }
 	    else {
 		($errcode,$errmsg) = ResponseErrorMessage($agg, $response);
+		print STDERR $errmsg . "\n";
+		push(@failed, $agg);
 	    }
+	}
+    }
+    # Success at all aggregates.
+    return 0
+	if (! ($errcode || @delayed));
+    
+    # One aggregate and one error is easy, just tell the user.
+    goto bad
+	if ($errcode && $instance->AggregateList() == 1);
+
+    #
+    # Anything but delayed is harder.
+    #
+    if (@refused || @busy || @failed) {
+	$errmsg = "";
+	
+	#
+	# Maybe send email with details?
+	# Be nice to retry the busy ones, but we do not want the user
+	# to see the spinner for too long.
+	#
+	if (@refused) {
+	    $errmsg .= "The extension was refused at ".
+		join(", ", map($_->GetAptAggregate()->nickname(), @refused)) .
+		". ";
+	}
+	if (@failed) {
+	    $errmsg .= "The extension failed at ".
+		join(", ", map($_->GetAptAggregate()->nickname(), @failed)) .
+		". ";
+	}
+	if (@busy) {
+	    $errmsg .= "The extension could not be made at ".
+		join(", ", map($_->GetAptAggregate()->nickname(), @failed)) .
+		" because they were busy. ";
+	}
+	$errcode = 1;
+	goto bad;
+    }
+    
+    #
+    # If the only error is from delayed aggregates, try to handle that. 
+    #
+    if (@delayed) {
+	goto bad
+	    if (!$savedokay || !defined($instance->maxextension()));
+
+	#
+	# Need to serialize at this point, since another experiment could
+	# be in the same predicament, but only one can use their saved max
+	# extension if they overlap on clusters used by the experiment.
+	#
+	if (APT_Utility::ExtensionLock()) {
+	    print STDERR "Could not get max extension lock\n";
 	    goto bad;
 	}
+	$instance->Refresh();
+	if (!defined($instance->maxextension())) {
+	    APT_Utility::ExtensionUnlock();
+	    goto bad;
+	}
+	# Sanity check.
+	my $maxtime = str2time($instance->maxextension());
+	my $exptime = str2time($new_expires);
+	if ($exptime > $maxtime) {
+	    print STDERR "Saved max extension is greater then new expires!\n";
+	    APT_Utility::ExtensionUnlock();
+	    goto bad;
+	}
+	foreach my $agg (@delayed) {
+	    $agg->MarkExtensionPush();
+	}
+	$instance->PurgeMaxExtension();
+	APT_Utility::ExtensionUnlock();
     }
     return 0;
 
@@ -2135,9 +2241,18 @@ sub DoMaxExtension()
 {
     my $slice = $instance->GetGeniSlice();
     my $result;
+    my $errcode;
     my $errmsg;
 
-    my $errcode = DoMaxExtensionInternal($instance, \$result);
+    if ($instance->ExtensionPushPending()) {
+	$errcode = 1;
+	$errmsg  = "A previous extension is still pending because some ".
+	    "clusters were offline when the previous extension was made, ".
+	    "and those clusters are still unreachable. Please try ".
+	    "again later.";
+	goto bad;
+    }
+    $errcode = DoMaxExtensionInternal($instance, \$result);
     if ($errcode) {
 	$errmsg = $result;
 	goto bad;
@@ -2151,6 +2266,9 @@ sub DoMaxExtension()
 	    }
 	}
     }
+    # For offline aggregate extensions.
+    $instance->SaveMaxExtension($result->{'maxextension'});
+
     if (defined($webtask)) {
 	$webtask->MaxExtension(TBDateStringGMT($result->{'maxextension'}));
 	$webtask->Reservations($result->{'reservations'})
@@ -2159,6 +2277,9 @@ sub DoMaxExtension()
     }
     exit(0);
   bad:
+    # Clear offline aggregate extension value on error.
+    $instance->SaveMaxExtension(undef);
+    
     print STDERR "$errmsg\n" if (defined($errmsg));
     if (defined($webtask)) {
 	$webtask->output($errmsg) if (defined($errmsg));
@@ -2226,24 +2347,44 @@ sub DoMaxExtensionInternal($$)
 		$errmsg = "No extension possible at ".
 		    $aptagg->name() . ": " . $response->error();
 		$errcode = $code;
+		goto bad;
+	    }
+	    elsif (($code == GENIRESPONSE_NETWORK_ERROR ||
+		    $code == GENIRESPONSE_SERVER_UNAVAILABLE) &&
+		   $aptagg->precalcmaxext() &&
+		   defined($instance->maxextension())) {
+		#
+		# If this is an aggregate that allows precalc, and we have
+		# a stored maxextension, then use that for this aggregate.
+		# We must always get back a maxextension from aggregates that
+		# do not allow precalc.
+		#
+		$max = str2time($instance->maxextension());
+		if ($debug) {
+		    print "Using stored maxextension for ".
+			$aptagg->nickname() . ": " .
+			$instance->maxextension() . "\n";
+		}
 	    }
 	    else {
 		($errcode,$errmsg) =
 		    ResponseErrorMessage($aggregate, $response);
+		goto bad;
 	    }
-	    goto bad;
 	}
-	if (ref($result)) {
-	    $max     = $result->{'maxextension'};
-	    $reslist = $result->{'reservations'};
-	}
-	else {
-	    $max = $result;
-	}
-	$max = str2time($max);
-	
-	if ($debug) {
-	    print "$aggregate: $result, $max\n";
+	# See above, might be using stored max extension.
+	if (!defined($max)) {
+	    if (ref($result)) {
+		$max     = $result->{'maxextension'};
+		$reslist = $result->{'reservations'};
+	    }
+	    else {
+		$max = $result;
+	    }
+	    $max = str2time($max);
+	    if ($debug) {
+		print "$aggregate: $result, $max\n";
+	    }
 	}
 	$newmax = $max
 	    if (!defined($newmax));
@@ -2305,6 +2446,104 @@ sub DoMaxExtensionInternal($$)
   bad:
     $$prval = $errmsg;
     return $errcode;
+}
+
+sub PushExtensionInternal()
+{
+    my $errmsg;
+    my $errcode;
+    my @aggregates = ();
+    my $slice = $instance->GetGeniSlice();
+    my $new_expires = $slice->ExpirationGMT();
+    
+    foreach my $aggregate ($instance->AggregateList()) {
+	next
+	    if (!defined($aggregate->extension_needpush()));
+
+	push(@aggregates, $aggregate);
+    }
+    return 0
+	if (!@aggregates);
+
+    print "Trying to push extension: " . TBDateStringLocal($new_expires) , "\n";
+    
+    #
+    # Push the new expiration out.
+    #
+    my $coderef = sub {
+	my ($sliver) = @_;
+
+	return $sliver->Extend($new_expires, $this_user, 0);
+    };
+    my $responses;
+
+    $errcode = CallMethodOnAggregates($coderef, 0, \$responses, @aggregates);
+    if ($errcode) {
+	print STDERR $responses . "\n";
+	return -1;
+    }
+    my $hosed = 0;
+
+    # Lets see which ones we were able to update.
+    foreach my $aggregate (@aggregates) {
+	my $response = shift(@{$responses});
+	my $code     = $response->code();
+	my $aptagg   = $aggregate->GetAptAggregate();
+
+	if ($code) {
+	    if ($code == GENIRESPONSE_NETWORK_ERROR ||
+		$code == GENIRESPONSE_SERVER_UNAVAILABLE) {
+		# Still out of contact, keep going.
+		print STDERR "$aggregate is still unreachable, skipping\n";
+	    }
+	    elsif ($code == GENIRESPONSE_REFUSED) {
+		# We want the caller to know this, its bad.
+		print STDERR "Extension was refused at ".
+		    $aptagg->name() . ": " . $response->error() . "\n";
+		$aggregate->ClearExtensionPush();
+		$hosed++;
+	    }
+	    else {
+		# All other errors mean we are hosed!
+		(undef, $errmsg) = ResponseErrorMessage($aggregate, $response);
+		print STDERR "$errmsg\n";
+		$aggregate->ClearExtensionPush();
+		$hosed++;
+	    }
+	}
+	else {
+	    # Success, clear the push flag.
+	    print "Successfully pushed the extension to " .
+		$aptagg->name() . "\n";
+	    $aggregate->ClearExtensionPush();
+	}
+    }
+    # If any failed fatally, we gotta do something!
+    if ($hosed) {
+	return 1;
+    }
+    return 0;
+}
+
+#
+# Push out delayed extension.
+#
+sub DoPushExtension()
+{
+    my $slice = $instance->GetGeniSlice();
+
+    if ($slice->Lock()) {
+	print STDERR "Experiment is busy, cannot lock it.\n";
+	exit(GENIRESPONSE_BUSY());
+    }
+    $instance->Refresh();
+    if (PushExtensionInternal()) {
+	# If any failed fatally, we gotta do something!
+	$slice->UnLock();
+	exit(-1);
+    }
+    $slice->UnLock();
+    exit(0);
 }
 
 #
@@ -4845,7 +5084,7 @@ sub DoSchedTerminate()
 	else {
 	    $seconds = (time() + ($days * 3600 * 24)) - $expires_time;
 	}
-	if ($errcode = ExtendInternal($slice, $seconds, 1, 1, \$errmsg)) {
+	if ($errcode = ExtendInternal($slice, $seconds, 1, 1, 0, \$errmsg)) {
 	    goto bad;
 	}
     }
@@ -5302,7 +5541,8 @@ sub ResponseErrorMessage($$)
 	$exitcode = -1;
     }
     else {
-	$errmsg = $response->error();
+	$errmsg = "The " . $aggregate->AptAggregateName() . " cluster ".
+	    "reports: " . $response->error();
 	$exitcode = -1;
     }
     return ($exitcode, $errmsg);

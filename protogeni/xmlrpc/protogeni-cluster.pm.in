@@ -61,6 +61,7 @@ $GENI_METHODS = {
     "ReservationHistory"   => \&GeniCluster::ReservationHistory,
     "CancelReservation"    => \&GeniCluster::CancelReservation,
     "GetImageCredential"   => \&GeniCluster::GetImageCredential,
+    "AllSliceMaxExtensions"=> \&GeniCluster::AllSliceMaxExtensions,
 };
 
 1;
