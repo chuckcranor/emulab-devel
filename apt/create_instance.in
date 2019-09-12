@@ -759,6 +759,9 @@ if ($tmp) {
 #
 if (!$debug) {
     AddAuditInfo("cc", $project->LogsEmailAddress());
+    if ($MAINSITE) {
+	AddAuditInfo("cc", "stoller\@flux.utah.edu");
+    }
     AddAuditInfo("brand", $project->Brand());
 }
 
