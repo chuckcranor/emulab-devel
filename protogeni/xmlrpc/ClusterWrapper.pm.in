@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -246,6 +246,15 @@ sub Start($$)
     my $response  = undef;
     
     my $starttime = [gettimeofday()];
+
+    #
+    # Check to see if we can connect to the DB. If not bail right away.
+    #
+    require emdbi;
+    if (!emdbi::DBExists("@TBDBNAME@")) {
+	return XMLError(HTTP_SERVICE_UNAVAILABLE(),
+			"CM temporarily offline; please try again later");
+    }
 
     #
     # Check for NoLogins; return XMLRPC

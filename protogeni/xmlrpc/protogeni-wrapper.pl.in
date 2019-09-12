@@ -61,6 +61,32 @@ BEGIN {
 	};
     }
 }
+#
+# Helper function to send back a properly formated XML error.
+#
+my $logging    = 0;
+my $logforked  = 0;
+my $logfile    = undef;
+
+sub XMLError($$)
+{
+    my ($code, $string) = @_;
+
+    my $decoder = Frontier::RPC2->new();
+    $string     = $decoder->encode_fault($code, $string);
+
+    # Make sure the error goes back to user not into the debug file.
+    if ($logging) {
+	LogEnd(0);
+	if (!$logforked) {
+	    # Use eval to avoid messing up the output stream if any errors.
+	    eval { $logfile->Store(); };
+	}
+    }
+    print "Content-Type: text/xml \n\n";
+    print $string;
+    exit(0);
+}
 
 #
 # Turn off line buffering on output
@@ -90,6 +116,14 @@ BEGIN {
 	    print $string;
 	    exit(0);
 	}
+    }
+    #
+    # Check to see if we can connect to the DB. If not bail right away.
+    #
+    require emdbi;
+    if (!emdbi::DBExists("@TBDBNAME@")) {
+	XMLError(HTTP_SERVICE_UNAVAILABLE(),
+		 "Server temporarily offline; please try again later");
     }
 }
 
@@ -154,39 +188,12 @@ use Group;
 my $debug      = 0;
 my $nostorelogs= 0;
 my $noanything = 0;
-# Flag for XMLERROR.
-my $logging    = 0;
-my $logforked  = 0;
 my $logaborted = 0;
 my $iserror    = 0;
 my $rpcerror   = 0;
-my $logfile    = undef;
 
 # Determined by version.
 my $responder;
-
-#
-# Helper function to return a properly formated XML error.
-#
-sub XMLError($$)
-{
-    my ($code, $string) = @_;
-
-    my $decoder = Frontier::RPC2->new();
-    $string     = $decoder->encode_fault($code, $string);
-
-    # Make sure the error goes back to user not into the debug file.
-    if ($logging) {
-	LogEnd(0);
-	if (!$logforked) {
-	    # Use eval to avoid messing up the output stream if any errors.
-	    eval { $logfile->Store(); };
-	}
-    }
-    print "Content-Type: text/xml \n\n";
-    print $string;
-    exit(0);
-}
 
 #
 # Check for NoLogins; return XMLRPC
