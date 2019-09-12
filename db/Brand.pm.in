@@ -135,7 +135,7 @@ sub LogsEmailAddress($)
     return ($self->isAPT() ? "apt-logs\@aptlab.net" :
 	    $self->isCloud() ? "cloudlab-logs\@cloudlab.us" :
 	    $self->isPNet() ? "phantomnet-logs\@phantomnet.org" :
-	    $self->isPowder() ? "powder-logs\@powderwireless.net" :
+	    $self->isPowder() ? "powder-portal-logs\@powderwireless.net" :
 	    $TBLOGS);
 }
 
