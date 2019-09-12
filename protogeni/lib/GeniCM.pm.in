@@ -6147,7 +6147,7 @@ sub RenewSliverAux($$$$)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "No local slice found");
     }
-    if ($slice->Lock() != 0) {
+    if ($slice->WaitForLock(10) != 0) {
 	return GeniResponse->BusyResponse("slice");
     }
     # Shutdown slices get nothing.
