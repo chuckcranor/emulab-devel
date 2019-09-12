@@ -20,6 +20,10 @@ case "$1" in
 		#
 	        if [ -x @prefix@/sbin/setsitevar ]; then
 		    disabled=`@prefix@/sbin/setsitevar -c general/testbed_shutdown`
+		    if [ $? -ne 0 ]; then
+			echo -n " mysqld not running, skipping testbed startup"
+			exit 0
+		    fi
 		    if [ $disabled -gt 0 ]; then
 			echo -n " testbed disabled"
 			exit 0
