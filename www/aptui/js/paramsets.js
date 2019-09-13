@@ -5,29 +5,51 @@ $(function () {
   window.paramsets = (function()
     {
 	'use strict';
+	var PNS = "http://www.protogeni.net/resources/rspec" +
+	    "/ext/profile-parameters/1";
+
+	/*
+	 * Got this from:
+	 * stackoverflow.com/questions/11892118/jquery-parsexml-and-print
+	 */
+	function xmlToString(xmlData)
+	{ 
+	    var xmlString;
+	    //IE
+	    if (window.ActiveXObject){
+		xmlString = xmlData.xml;
+	    }
+	    // code for Mozilla, Firefox, Opera, etc.
+	    else {
+		var node = xmlData.item(0);
+		xmlString = (new XMLSerializer()).serializeToString(node);
+	    }
+	    return xmlString;
+	}   
 
 	//
 	// Throw up a modal to create and save a parameter set using the
 	// provided profile and instance uuid. 
 	//
-	function InitSaveParameterSet(domid, profile_uuid, instance_uuid)
+	function InitSaveParameterSet(domid, profile_uuid, uuidORrspec)
 	{
-	    console.info("InitSaveParameterSet", domid, profile_uuid,
-			 instance_uuid);
-	    
-            var templates = APT_OPTIONS
+	    console.info("InitSaveParameterSet", domid, profile_uuid);
+
+	    var templates = APT_OPTIONS
 		.fetchTemplateList(['save-paramset-modal']);
 	    $(domid).html(templates['save-paramset-modal']);
 
 	    // Bind the save button.
 	    $('#save-paramset-confirm').click(function (event) {
-		SaveParameterSet(profile_uuid, instance_uuid);
+		SaveParameterSet(profile_uuid, uuidORrspec);
 	    });
-	    sup.ShowModal('#save-paramset-modal');
+	    sup.ShowModal('#save-paramset-modal', function () {
+		$('#save-paramset-confirm').off("click");
+	    });
 	}
 
 	// Save a paramset set.
-	function SaveParameterSet(profile_uuid, instance_uuid)
+	function SaveParameterSet(profile_uuid, uuidORrspec)
 	{
 	    var name  = $.trim($('#paramset-name').val());
 	    var desc  = $.trim($('#paramset-description').val());
@@ -53,11 +75,23 @@ $(function () {
 	    }
 	    var args = {
 		"profile_uuid"  : profile_uuid,
-		"instance_uuid" : instance_uuid,
 		"name"          : name,
 		"description"   : desc,
 		"bound"         : bound,
 	    };
+	    if (sup.IsUUID(uuidORrspec)) {
+		args["instance_uuid"] = uuidORrspec;
+	    }
+	    else {
+		var xmlDoc   = $.parseXML(uuidORrspec);
+		var bindings = xmlDoc.getElementsByTagNameNS(PNS, 'data_set');
+		args["bindings"] = xmlToString(bindings);
+	    }
+	    console.info(args);
+	    if (false) {
+		sup.HideModal('#save-paramset-modal');
+		return;
+	    }
 	    var callback = function (json) {
 		console.info(json);
 		if (json.code) {

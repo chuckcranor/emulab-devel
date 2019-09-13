@@ -1801,13 +1801,14 @@ sub Bindings()
 #
 sub ParamSet()
 {
-    my $optlist    = "u:m:bp";
+    my $optlist    = "u:m:bpB:";
     my $bound      = 0;
     my $asparamdefs= 0;
     my $user;
     my $description;
     my $bindings;
     my $errmsg;
+    my $instance;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -1837,7 +1838,7 @@ sub ParamSet()
 	UserErrorSane({"name" => "Alphanumeric no greater then 32 characters"});
     }
     my $safe_name = DBQuoteSpecial($name);
-    
+
     my $profile = APT_Profile->Lookup(shift(@ARGV));
     if (!defined($profile)) {
 	fatal("No such profile");
@@ -1864,9 +1865,41 @@ sub ParamSet()
 	}
 	return 0;
     }
-    usage()
-	if (@ARGV != 1);
+    #
+    # We either get an instance or a file with an XML fragment.
+    #
+    if (defined($options{"B"})) {
+	fatal("Bindings file cannot be read")
+	    if (! -e $options{"B"});
+	my $xml = emutil::ReadFile($options{"B"});
+	fatal("Invalid bindings XML")
+	    if (!defined($xml) || $xml eq "");
 
+	# I know, silly. But necessary.
+	$xml = "<rspec>$xml</rspec>";
+	if (APT_Profile::GetBindings($xml, \$bindings, \$errmsg, 0)) {
+	    fatal($errmsg);
+	}
+    }
+    else {
+	usage()
+	    if (@ARGV != 1);
+
+	$instance = APT_Instance->Lookup($ARGV[0]);
+	if (!$instance) {
+	    $instance = APT_Instance::History->Lookup($ARGV[0]);
+	    if (!$instance) {
+		fatal("No such instance");
+	    }
+	}
+	my $rspec = GeniXML::Parse($instance->rspec());
+	if (! defined($rspec)) {
+	    fatal("Could not parse rspec");
+	}
+	if (APT_Profile::GetBindings($rspec, \$bindings, \$errmsg, 0)) {
+	    fatal($errmsg);
+	}
+    }
     if (defined($options{"m"})) {
 	$description = $options{"m"};
 	if (! TBcheck_dbslot($description, "default", "tinytext",
@@ -1881,6 +1914,7 @@ sub ParamSet()
     if (defined($options{"b"})) {
 	$bound = 1;
     }
+    
     # Ensure name is unique.
     my $query_result =
 	DBQueryWarn("select uuid from apt_parameter_sets ".
@@ -1892,20 +1926,6 @@ sub ParamSet()
 	UserErrorSane({"name" => "Already in use"});
     }
     
-    my $instance = APT_Instance->Lookup($ARGV[0]);
-    if (!$instance) {
-	$instance = APT_Instance::History->Lookup($ARGV[0]);
-	if (!$instance) {
-	    fatal("No such instance");
-	}
-    }
-    my $rspec = GeniXML::Parse($instance->rspec());
-    if (! defined($rspec)) {
-	fatal("Could not parse rspec");
-    }
-    if (APT_Profile::GetBindings($rspec, \$bindings, \$errmsg, 0)) {
-	fatal($errmsg);
-    }
     print Dumper($bindings);
     $bindings = eval { encode_json($bindings); };
     if ($@) {
@@ -1923,8 +1943,13 @@ sub ParamSet()
     if ($bound) {
 	$query .= ",version_uuid=" . DBQuoteSpecial($profile->uuid());
 	if ($profile->repourl()) {
-	    $query .= ",reporef=" . DBQuoteSpecial($instance->reporef());
-	    $query .= ",repohash=" . DBQuoteSpecial($instance->repohash());
+	    if (defined($instance)) {
+		$query .= ",reporef=" . DBQuoteSpecial($instance->reporef());
+		$query .= ",repohash=" . DBQuoteSpecial($instance->repohash());
+	    }
+	    else {
+		$query .= ",repohash=" . DBQuoteSpecial($profile->repohash());
+	    }
 	}
     }
     $query_result = DBQueryWarn($query);

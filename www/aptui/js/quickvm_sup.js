@@ -28,6 +28,11 @@ function ParseURN(urn)
     return hrn;
 }
 
+function IsUUID(uuid)
+{
+    return /^[\w]{8}-[\w]{4}-[\w]{4}-[\w]{4}-[\w]{12}$/.test(uuid);
+}
+
 function ShowModal(which, hidefunction) 
 {
     var callback = function() {
@@ -468,6 +473,7 @@ function ConfirmModal(args)
 // Exports from this module for use elsewhere
 return {
     ParseURN: ParseURN,
+    IsUUID: IsUUID,
     ShowModal: ShowModal,
     HideModal: HideModal,
     ShowWaitWait: ShowWaitWait,

@@ -34,6 +34,8 @@ function Do_Create()
 {
     global $this_user, $ajax_args;
     $errors = array();
+    $opts = "";
+    $args = "";
     
     if (!isset($ajax_args["profile_uuid"])) {
 	SPITAJAX_ERROR(-1, "Missing profile uuid");
@@ -49,22 +51,26 @@ function Do_Create()
 	SPITAJAX_ERROR(-1, "No such profile");
 	return;
     }
-    if (!isset($ajax_args["instance_uuid"])) {
-	SPITAJAX_ERROR(-1, "Missing instance uuid");
+    if (! (isset($ajax_args["instance_uuid"]) ||
+           isset($ajax_args["bindings"]))) {
+	SPITAJAX_ERROR(-1, "Missing instance uuid or bindings xml");
 	return;
     }
-    $instance_uuid = $ajax_args["instance_uuid"];
-    if (!IsValidUUID($instance_uuid)) {
-	SPITAJAX_ERROR(-1, "Not a valid instanceuuid");
-	return;
-    }
-    $record = Instance::Lookup($instance_uuid);
-    if (!$record) {
-        $record = InstanceHistory::Lookup($instance_uuid);
-        if (!$record) {
-            SPITAJAX_ERROR(-1, "No such record: $uuid");
+    if (isset($ajax_args["instance_uuid"])) {
+        $instance_uuid = $ajax_args["instance_uuid"];
+        if (!IsValidUUID($instance_uuid)) {
+            SPITAJAX_ERROR(-1, "Not a valid instance uuid");
             return;
         }
+        $record = Instance::Lookup($instance_uuid);
+        if (!$record) {
+            $record = InstanceHistory::Lookup($instance_uuid);
+            if (!$record) {
+                SPITAJAX_ERROR(-1, "No such record: $uuid");
+                return;
+            }
+        }
+        $args = $instance_uuid;
     }
     if (!isset($ajax_args["name"])) {
 	SPITAJAX_ERROR(-1, "Missing name");
@@ -93,19 +99,33 @@ function Do_Create()
         SPITAJAX_ERROR(2, $errors);
         return;
     }
+    if (isset($ajax_args["bindings"])) {
+        # This is an XML fragment. Write to a file and let the backend
+        # script decide if its a valid XML document.
+        $bindings = $ajax_args["bindings"];
+
+        $filename = tempnam("/tmp", "bindings");
+        $fp = fopen($filename, "w");
+        fwrite($fp, $bindings);
+        fclose($fp);
+        chmod($filename, 0666);        
+        $opts = "-B $filename";
+    }
     $safe_name = escapeshellarg($name);
     $safe_description = escapeshellarg($description);
 
     $webtask    = WebTask::CreateAnonymous();
     $webtask_id = $webtask->task_id();
     $command    = "webmanage_profile -t $webtask_id paramset ".
-                "-m $safe_description $bound ".
-                "  add $safe_name $profile_uuid $instance_uuid";
+                "-m $safe_description $bound $opts ".
+                "  add $safe_name $profile_uuid $args";
         
     $retval = SUEXEC($this_user->uid(), "nobody",
                      $command, SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
-    
+    if (isset($filename)) {
+        unlink($filename);
+    }
     if ($retval != 0) {
         if (!$webtask->exited() || $retval < 0) {
 	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);

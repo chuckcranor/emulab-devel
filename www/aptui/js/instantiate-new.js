@@ -270,6 +270,22 @@ $(function ()
 	    container: 'body',
 	});
 
+	/*
+	 * The save paramset bindings button. This will be hidden when
+	 * the user selects a non-pp profle.
+	 */
+	$('#save_paramset_button')
+	    .popover({
+		trigger: 'hover',
+		placement: 'auto',
+		container: 'body',
+	    })
+	    .click(function (event) {
+		    paramsets.InitSaveParameterSet('#save_paramset_div',
+						   selected_uuid,
+						   selected_rspec);
+	    });
+
 	// Format the step labels across the top to match the panel widths.
 	$('#stepsContainer .steps').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
 	$('#stepsContainer .actions').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
@@ -1703,8 +1719,8 @@ $(function ()
 	    $('#showtopo_title').html("<h3>" + profile_blob.name + "</h3>");
 	    $('#showtopo_description').html(profile_blob.description);
 	    $('#selected_profile_description').html(profile_blob.description);
-	    $('#finalize_profile_name').text(profile_blob.name);
-	    $('#finalize_profile_version').text(profile_blob.version);
+	    $('#finalize_profile_name')
+		.text(profile_blob.name + ":" + profile_blob.version);
 
 	    ispprofile       = profile_blob.ispprofile;
 	    isscript         = profile_blob.isscript;
@@ -1717,6 +1733,12 @@ $(function ()
 	    }
 	    else {
 		ppstart = window.ppstartOld;		
+	    }
+	    if (ispprofile) {
+		$('#save_paramset_button').removeClass("hidden");
+	    }
+	    else {
+		$('#save_paramset_button').addClass("hidden");
 	    }
 
 	    // Not allowed to copy a repo based profile.

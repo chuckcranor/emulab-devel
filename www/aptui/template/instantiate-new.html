@@ -313,26 +313,27 @@
 	     class='col-lg-8 col-md-8 col-sm-8 col-xs-12'>
 	  <div class='panel panel-default' style="margin-bottom: 5px">
 	    <div class='panel-body'
-		 style="padding-top: 5px; padding-bottom: 0px;">
-	      <table class='table table-condensed nospaceafter border-none'
-		     style="font-size: 14px; font-family: Arial,sans-serif;">
-		<tr>
-		  <td style="padding: 0px; border: 0;">
-		    <span style="font-weight: bolder;">Profile:</span>
-		    <span id='finalize_profile_name'><%= profilename %></span>
-		  </td>
-		  <td style="padding: 0px; border: 0;">
-		    <span style="font-weight: bolder;">Version:</span>
-		    <span id='finalize_profile_version'><%= profilevers %>
-		    </span>
-		  </td>
-		  <td style="padding: 0px; border: 0;">
-		    <button class='btn btn-primary btn-xs'
-			    type='button'
-			    id="show_xml_modal_button">
-		      Source</button></td>
-		</tr>
-	      </table>
+		 style="padding-top: 5px; padding-bottom: 5px;">
+	      <span class="pull-left">
+		<span style="font-weight: bolder;">Profile:</span>
+		<span id='finalize_profile_name'></span>
+	      </span>
+	      <span class="pull-right">
+		<button class='btn btn-primary btn-xs hidden'
+			type='button'
+			id="save_paramset_button"
+			data-toggle='popover'
+			data-delay='{"hide":100, "show":300}'
+			data-content='Save the parameters used to create this
+				      experiment, so you can quickly apply them
+				      when starting a new experiment using this
+				      profile. Click for more information.'>
+		  Save Parameters</button>
+		<button class='btn btn-info btn-xs'
+			type='button'
+			id="show_xml_modal_button">
+		  Source</button>
+	      </span>
 	    </div>
 	  </div>
 	  <% if (!registered) { %>
@@ -1024,3 +1025,4 @@
 <div id='ppmodal_div'></div>
 <div id='instantiate_div'></div>
 <div id='editmodal_div'></div>
+<div id='save_paramset_div'></div>

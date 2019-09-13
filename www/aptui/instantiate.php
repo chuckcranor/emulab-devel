@@ -554,7 +554,8 @@ if (!isset($create)) {
     AddTemplateList(array("instantiate-new",
                           "aboutapt", "aboutcloudlab", "aboutpnet",
                           "waitwait-modal", "rspectextview-modal",
-                          "picker-template","reservation-graph"));
+                          "picker-template","reservation-graph",
+                          "save-paramset-modal"));
     SPITFOOTER();
     return;
 }
