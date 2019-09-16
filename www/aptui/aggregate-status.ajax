@@ -53,6 +53,7 @@ function Do_AggregateStatus()
                   "monitor"      => $aggregate->nomonitor() ? 0 : 1,
                   "nolocalimages"=> $aggregate->nolocalimages() ? 1 : 0,
                   "prestageimages"=> $aggregate->prestageimages() ? 1 : 0,
+                  "precalcmaxext"=> $aggregate->precalcmaxext() ? 1 : 0,
                   "status"       => $aggregate->status(),
                   "last_contact" => $aggregate->last_success(),
                   "last_error"   => $aggregate->last_error(),

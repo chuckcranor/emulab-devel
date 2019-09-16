@@ -90,6 +90,7 @@ class Aggregate
     function nomonitor()    { return $this->field('nomonitor'); }
     function nolocalimages(){ return $this->field('nolocalimages'); }
     function prestageimages(){ return $this->field('prestageimages'); }
+    function precalcmaxext(){ return $this->field('precalcmaxext'); }
     function portals()      { return $this->field('portals'); }
     function canuse_feature(){ return $this->field('canuse_feature'); }
 

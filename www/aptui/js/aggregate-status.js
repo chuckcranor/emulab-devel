@@ -41,6 +41,7 @@ $(function ()
 	" <tr><td>M</td><td>Monitored</td></tr>" +
 	" <tr><td>I</td><td>No Local Images</td></tr>" +
 	" <tr><td>P</td><td>Prestage Images</td></tr>" +
+	" <tr><td>E</td><td>Saved Max Extensions</td></tr>" +
 	"</table>";
 
     function RenderPage(status)
@@ -55,6 +56,7 @@ $(function ()
 	    flags += (value.monitor       ? "M" : "-");
 	    flags += (value.nolocalimages ? "I" : "-");
 	    flags += (value.prestageimages ? "P" : "-");
+	    flags += (value.precalcmaxext ? "E" : "-");
 	    value.flags = flags;
 
 	    // Ratio
