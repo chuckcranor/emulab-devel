@@ -261,7 +261,7 @@ while (1) {
     print "Running at ".
 	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
 
-    #ExpireInstances();
+    ExpireInstances();
     PushExtensions();
     RecalcMaxExtensions();
 
