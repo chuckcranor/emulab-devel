@@ -149,7 +149,7 @@ if ($query_result) {
 # to show.
 #
 $typeinfo  = array();
-$prunelist = Instance::NodeTypePruneList();
+$prunelist = Instance::NodeTypePruneList(null, true);
 
 #
 # Get total number of nodes.

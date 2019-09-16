@@ -836,6 +836,7 @@ class Instance
                            "pc2400hp"  => true,
                            "d2100"     => true,
                            "faros_sfp" => true,
+                           "e200-8d"   => true,
                            "pc2400w"   => true);
 
         #
