@@ -1754,6 +1754,7 @@ sub default_osid($;$) {
     my $val = undef;
 
     if (NodeAttribute($self, "default_osid", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return NodeTypeInfo($self)->default_osid($stuff);
@@ -1764,12 +1765,13 @@ sub adminmfs_osid($;$) {
     my $val = undef;
     require OSImage;
 
-    if (NodeAttribute($self, "adminmfs_osid", \$val) == 0 &&
-	defined($val)) {
+    if (NodeAttribute($self, "adminmfs_osid", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     if (NodeTypeAttribute($self, "adminmfs_osid", \$val) == 0 &&
 	defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return OSImage->Lookup(TBOPSPID(), TB_OSID_FREEBSD_MFS())->osid();
@@ -1782,10 +1784,12 @@ sub recoverymfs_osid($;$) {
 
     if (NodeAttribute($self, "recoverymfs_osid", \$val) == 0 &&
 	defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     if (NodeTypeAttribute($self, "recoverymfs_osid", \$val) == 0 &&
 	defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return undef;
@@ -1798,10 +1802,12 @@ sub diskloadmfs_osid($;$) {
 
     if (NodeAttribute($self, "diskloadmfs_osid", \$val) == 0 &&
 	defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     if (NodeTypeAttribute($self, "diskloadmfs_osid", \$val) == 0 &&
 	defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return OSImage->Lookup(TBOPSPID(), TB_OSID_FRISBEE_MFS())->osid();
@@ -1812,6 +1818,7 @@ sub default_imageid($;$) {
     my $val = undef;
 
     if (NodeAttribute($self, "default_imageid", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return NodeTypeInfo($self)->default_imageid($stuff);
@@ -1849,6 +1856,7 @@ sub disksize($;$) {
     my $val = undef;
 
     if (NodeAttribute($self, "disksize", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return NodeTypeInfo($self)->disksize($stuff);
@@ -1859,6 +1867,7 @@ sub disktype($;$) {
     my $val = undef;
 
     if (NodeAttribute($self, "disktype", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return NodeTypeInfo($self)->disktype($stuff);
@@ -1869,6 +1878,7 @@ sub bootdisk_unit($;$) {
     my $val = undef;
 
     if (NodeAttribute($self, "bootdisk_unit", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return NodeTypeInfo($self)->bootdisk_unit($stuff);
@@ -1879,6 +1889,7 @@ sub cyclewhenoff($;$) {
     my $val = undef;
 
     if (NodeAttribute($self, "cyclewhenoff", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return NodeTypeInfo($self)->cyclewhenoff($stuff);
@@ -1889,6 +1900,7 @@ sub rebootable($;$) {
     my $val = undef;
 
     if (NodeAttribute($self, "rebootable", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return NodeTypeInfo($self)->rebootable($stuff);
