@@ -191,6 +191,11 @@ case "$1" in
 			@prefix@/sbin/portal_monitor
 		fi
 
+		if [ "@POWDER_RFMONITOR@" == "1" -a -x @prefix@/sbin/rfmonitor_daemon ]; then
+			echo -n " rfmonitor_daemon"
+			@prefix@/sbin/rfmonitor_daemon
+		fi
+
 		if [ -x @prefix@/sbin/portal_resources ]; then
 			echo -n " portal_resources"
 			@prefix@/sbin/portal_resources
@@ -342,6 +347,9 @@ case "$1" in
 		fi
 		if [ -r /var/run/portal_monitor.pid ]; then
 			kill `cat /var/run/portal_monitor.pid`
+		fi
+		if [ -r /var/run/rfmonitor_daemon.pid ]; then
+			kill `cat /var/run/rfmonitor_daemon.pid`
 		fi
 		if [ -r /var/run/portal_resources.pid ]; then
 			kill `cat /var/run/portal_resources.pid`

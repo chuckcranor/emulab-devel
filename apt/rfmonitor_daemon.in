@@ -49,6 +49,7 @@ my $optlist   = "dnp:";
 my $debug     = 0;
 my $impotent  = 0;
 my $PORT      = 12237;
+my $HOST      = "@POWDER_RFMONITOR_HOST@";
 
 #
 # Configure variables
@@ -56,6 +57,7 @@ my $PORT      = 12237;
 my $TB		     = "@prefix@";
 my $TBOPS            = "@TBOPSEMAIL@";
 my $MAINSITE         = @TBMAINSITE@;
+my $POWDER_RFMONITOR = @POWDER_RFMONITOR@;
 my $LOGFILE          = "$TB/log/rfmonitor_daemon.log";
 my $POWER            = "$TB/bin/power";
 my $FORMAT           = "portid,timestamp,frequency,power";
