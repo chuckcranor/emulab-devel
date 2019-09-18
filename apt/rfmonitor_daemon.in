@@ -220,16 +220,71 @@ sub HandleChild($)
     my %rflimits   = ();
     my %violaters  = ();
 
+    my $processLine = sub {
+	my ($line) = @_;
+
+	# Blank line.
+	return undef
+	    if ($line =~ /^$/);
+	# Not sure why we are seeing a 0,0,0,0 
+	return undef
+	    if ($line =~ /^0,/);
+
+	my ($portid,$timestamp,$frequency,$power) = split(",", $line);
+	if (!(defined($portid) && defined($frequency) &&
+	      defined($power) && defined($timestamp))) {
+	    print STDERR "Missing data: '$line'\n";
+	    return undef;
+	}
+	if ($timestamp !~ /^[\.\d]+$/ ||
+	    $frequency !~ /^[\.\d]+$/ ||
+	    $power !~ /^[-\.\d]+$/) {
+	    print STDERR "Improper float(s) from $address:$port:\n";
+	    print STDERR "   $line\n";
+	    return undef;
+	}
+
+	#
+	# The portid is node:iface.
+	#
+	my ($nodeid,$iface) = split(":", $portid);
+	if (!(defined($nodeid) && defined($iface))) {
+	    print STDERR "Improper portid from $address:$port:\n";
+	    print STDERR "   $line\n";
+	    return undef;
+	}
+	if ($nodeid !~ /^[-\w]+$/) {
+	    print STDERR "Improper nodeid from $address:$port: $nodeid\n";
+	    return undef;
+	}
+	my $node = Node->Lookup($nodeid);
+	if (!$node) {
+	    print STDERR "No such node $nodeid\n";
+	    next;
+	}
+	return {
+	    "node"       => $node,
+	    "node_id"    => $nodeid,
+	    "iface"      => $iface,
+	    "frequency"  => $frequency,
+	    "power"      => $power,
+	    "timestamp"  => $timestamp,
+	};
+    };
+
     while (my $line = <$socket>) {
+	$line =~ s/\r?\n//;
+	
 	push(@lines, $line);
-	print $line
+	print $line . "\n"
 	    if ($debug);
     }
+    
     # Close the connection, we do not tell the other side anything.
     $socket->close();
 
-    if (@lines <= 1) {
-	print STDERR "Only one line from $address:$port. Ignoring.\n";
+    if (@lines < 10) {
+	print STDERR "Not enough data from $address:$port. Ignoring.\n";
 	exit(0);
     }
     
@@ -242,45 +297,32 @@ sub HandleChild($)
 	print STDERR "Improper format from $address:$port. Ignoring.\n";
 	exit(1);
     }
-    
-    while (@lines) {
-	my $line = pop(@lines);
+
+    for (my $i = 0; $i < scalar(@lines); $i++) {
+	my $line = $lines[$i];
 	chomp($line);
 
+	my $measurement = &$processLine($line);
 	next
-	    if ($line =~ /^$/);
+	    if (!defined($measurement));
+	my $node      = $measurement->{"node"};
+	my $nodeid    = $measurement->{"node_id"};
+	my $iface     = $measurement->{"iface"};
+	my $frequency = $measurement->{"frequency"} + 0.0;
+	my $power     = $measurement->{"power"} + 0.0;
+	my $timestamp = $measurement->{"timestamp"};
 
-	my ($portid,$timestamp,$frequency,$power) = split(",", $line);
-	if (!(defined($portid) && defined($frequency) &&
-	      defined($power) && defined($timestamp))) {
-	    print STDERR "Missing data: '$line'\n";
-	    next;
-	}
 	#
-	# The portid is node:iface.
+	# This is bogus, I was expecting the monitor to only send me
+	# messages for actual transmission, not 1000s of lines. So I
+	# need to prune out anything that looks like noise. How do I
+	# do that? Not really sure, but with some playing around, it
+	# appears that -90 DB might be okay. 
 	#
-	my ($nodeid,$iface) = split(":", $portid);
-	if (!(defined($nodeid) && defined($iface))) {
-	    print STDERR "Improper portid from $address:$port: $portid.\n";
-	    next;
-	}
-	if (! TBcheck_dbslot($nodeid, "nodes", "node_id",
-			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
-	    print STDERR "Improper nodeid from $address:$port: $nodeid\n";
-	    next;
-	}
-	my $node = Node->Lookup($nodeid);
-	if (!$node) {
-	    print STDERR "No such node $nodeid\n";
-	    next;
-	}
-	my $measurement = {
-	    "node_id"    => $nodeid,
-	    "iface"      => $iface,
-	    "frequency"  => $frequency,
-	    "power"      => $power,
-	    "timestamp"  => $timestamp,
-	};
+	next
+	    if ($power < -95);
+
+	print "Above threshold: $nodeid:$iface: $frequency,$power\n";
 	
 	#
 	# Check for a report that comes in after we have powered off the
@@ -463,7 +505,7 @@ sub HandleViolations($$)
 	    print $subject . "\n";
 	    print $body;
 	}
-	if (ShouldNotify($nodeid, "user")) {
+	if (!$impotent && ShouldNotify($nodeid, "user")) {
 	    my $headers = undef;
 	    if (defined($CC)) {
 		$headers = "CC: $CC";
@@ -527,6 +569,11 @@ sub NodeNotify($$$)
 {
     my ($nodeid, $which, $mesg) = @_;
 
+    print "$mesg\n";
+
+    return
+	if ($impotent);
+
     if (!ShouldNotify($nodeid, $which)) {
 	return;
     }
@@ -534,7 +581,7 @@ sub NodeNotify($$$)
 	     "RF Daemon Critical Notification",
 	     $mesg,
 	     $TBOPS);
-
+    
     NodeNotified($nodeid, $which, $mesg);
 }
 
