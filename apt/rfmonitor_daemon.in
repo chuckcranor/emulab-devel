@@ -125,11 +125,25 @@ if (! $impotent) {
 }
 
 #
+# Setup a signal handler for newsyslog.
+#
+sub handler()
+{
+    my $SAVEEUID = $EUID;
+    
+    $EUID = 0;
+    ReOpenLog($LOGFILE);
+    $EUID = $SAVEEUID;
+}
+$SIG{HUP} = \&handler
+    if (! ($debug || $impotent));
+
+#
 # Bind a socket for incoming connections, we expect a new connection for
 # each report.
 #
 my $ServerSocket =
-    new IO::Socket::INET(LocalHost => '0.0.0.0',
+    new IO::Socket::INET(LocalHost => $HOST,
 			 LocalPort => $PORT,
 			 Proto     => 'tcp',
 			 Listen    => 10,
