@@ -29,7 +29,7 @@ UNIFIED         = @UNIFIED_BOSS_AND_OPS@
 PLABSUPPORT     = @PLABSUPPORT@
 ISMAINSITE	= @TBMAINSITE@
 NSVERIFY	= @NSVERIFY@
-PORTAL_ISPRIMARY= @PORTAL_ISPRIMARY@
+PEER_ISPRIMARY  = @PEER_ISPRIMARY@
 SYSTEM         := $(shell uname -s)
 
 include $(OBJDIR)/Makeconf
@@ -75,8 +75,8 @@ SBIN_STUFF	= resetvlans console_setup.proxy sched_reload named_setup \
 ifeq ($(ISMAINSITE),1)
 SBIN_STUFF     += repos_daemon
 endif
-ifeq ($(PORTAL_ISPRIMARY),1)
-SBIN_STUFF     += portal_daemon
+ifeq ($(PEER_ISPRIMARY),1)
+SBIN_STUFF     += peer_daemon
 endif
 
 CTRLSBIN_STUFF  = console_setup.proxy sfskey_update.proxy \

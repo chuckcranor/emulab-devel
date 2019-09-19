@@ -30,7 +30,7 @@ use Getopt::Std;
 #
 sub usage()
 {
-    print "Usage: portal_daemon [-d]\n";
+    print "Usage: peer_daemon [-d]\n";
     exit(1);
 }
 my $optlist   = "dn1";
@@ -44,8 +44,8 @@ my $oneshot   = 0;
 my $TB		  = "@prefix@";
 my $TBOPS         = "@TBOPSEMAIL@";
 my $TBLOGS        = "@TBLOGSEMAIL@";
-my $LOGFILE       = "$TB/log/portal_daemon.log";
-my $PIDFILE       = "/var/run/portal_daemon.pid";
+my $LOGFILE       = "$TB/log/peer_daemon.log";
+my $PIDFILE       = "/var/run/peer_daemon.pid";
 my $SUDO          = "/usr/local/bin/sudo";
 my $PROTOUSER     = "elabman";
 my $WAP           = "$TB/sbin/withadminprivs";
@@ -109,8 +109,8 @@ use User;
 #
 # Only one please.
 #
-if (CheckDaemonRunning("portal_daemon")) {
-    fatal("Not starting another portal daemon!");
+if (CheckDaemonRunning("peer_daemon")) {
+    fatal("Not starting another peer daemon!");
 }
 
 #
@@ -131,10 +131,10 @@ if (! $debug) {
 	exit(0);
     }
 }
-if (MarkDaemonRunning("portal_daemon")) {
+if (MarkDaemonRunning("peer_daemon")) {
     fatal("Could not mark daemon as running!");
 }
-logit("Portal Daemon starting ... pid $$");
+logit("Peer Daemon starting ... pid $$");
 
 if ($elabman->FlipTo($protoproj->unix_gid())) {
     fatal("Could not flipto $elabman");
@@ -403,11 +403,11 @@ sub fatal($)
     # Send a message to the testbed list. 
     #
     SENDMAIL($TBOPS,
-	     "Portal Daemon died",
+	     "Peer Daemon died",
 	     $msg,
 	     $TBOPS);
 
-    MarkDaemonStopped("portal_daemon");
+    MarkDaemonStopped("peer_daemon");
 
     die("*** $0:\n".
 	"    $msg\n");
@@ -426,7 +426,7 @@ sub notify($)
     my ($msg) = @_;
 
     logit("$msg");
-    SENDMAIL($TBOPS, "Portal Daemon Message",
-	     "Portal Daemon Message:\n\n$msg", $TBOPS);
+    SENDMAIL($TBOPS, "Peer Daemon Message",
+	     "Peer Daemon Message:\n\n$msg", $TBOPS);
 }
 

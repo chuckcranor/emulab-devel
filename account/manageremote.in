@@ -197,7 +197,7 @@ if ($cmd ne "addpeer") {
 
 #
 # All operations other then xlogin require locking to avoid a
-# race with the portal_daemon. 
+# race with the peer_daemon. 
 #
 if ($cmd ne "xlogin" && !$fromdaemon) {
     while (TBScriptLock("portal_op", 0, 5) != TBSCRIPTLOCK_OKAY()) {

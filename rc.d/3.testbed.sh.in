@@ -136,9 +136,9 @@ case "$1" in
 			@prefix@/sbin/checknodes_daemon
 		fi
 
-		if [ -x @prefix@/sbin/portal_daemon  ]; then
-			echo -n " portal_daemon"
-			@prefix@/sbin/portal_daemon
+		if [ -x @prefix@/sbin/peer_daemon  ]; then
+			echo -n " peer_daemon"
+			@prefix@/sbin/peer_daemon
 		fi
 
 		if [ -x @prefix@/sbin/poolmonitor ]; then
@@ -312,8 +312,8 @@ case "$1" in
 		if [ -r /var/run/batch_daemon_wrapper.pid ]; then
 			kill `cat /var/run/batch_daemon_wrapper.pid`
 		fi
-		if [ -r /var/run/portal_daemon.pid ]; then
-			kill `cat /var/run/portal_daemon.pid`
+		if [ -r /var/run/peer_daemon.pid ]; then
+			kill `cat /var/run/peer_daemon.pid`
 		fi
 		if [ -r /var/run/poolmonitor.pid ]; then
 			kill `cat /var/run/poolmonitor.pid`
