@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2009-2013 University of Utah and the Flux Group.
+# Copyright (c) 2009-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,8 +50,8 @@ my $SUDO          = "/usr/local/bin/sudo";
 my $PROTOUSER     = "elabman";
 my $WAP           = "$TB/sbin/withadminprivs";
 my $MANAGEREMOTE  = "$TB/sbin/manageremote -p";
-my $PORTAL_ENABLE = @PORTAL_ENABLE@;
-my $PORTAL_PRIMARY= @PORTAL_ISPRIMARY@;
+my $PEER_ENABLE   = @PEER_ENABLE@;
+my $PEER_PRIMARY  = @PEER_ISPRIMARY@;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -70,7 +70,7 @@ $| = 1;
 #
 # Exit if not a portal.
 #
-if (! ($PORTAL_ENABLE && $PORTAL_PRIMARY)) {
+if (! ($PEER_ENABLE && $PEER_PRIMARY)) {
     exit(0);
 }
 

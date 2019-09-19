@@ -138,8 +138,8 @@ use Carp qw(cluck confess);
 my $MAINSITE 	     = @TBMAINSITE@;
 my $TBOPS            = "@TBOPSEMAIL@";
 my $TBLOGS           = "@TBLOGSEMAIL@";
-my $PORTAL_ENABLE    = @PORTAL_ENABLE@;
-my $PORTAL_ISPRIMARY = @PORTAL_ISPRIMARY@;
+my $PEER_ENABLE      = @PEER_ENABLE@;
+my $PEER_ISPRIMARY   = @PEER_ISPRIMARY@;
 my $TBBASE           = "@TBBASE@";
 my $GENIGROUP        = "GeniSlices";
 my $PGERRORS	     = "protogeni-errors\@flux.utah.edu";
@@ -163,7 +163,7 @@ my %GENI_MODULES = ( "cm"        => "@prefix@/lib/protogeni-cm.pm",
 		     "instools"  =>
 		             "@prefix@/lib/instools/protogeni-instools.pm",
 );
-if ($PORTAL_ENABLE && !$PORTAL_ISPRIMARY) {
+if ($PEER_ENABLE && !$PEER_ISPRIMARY) {
     $GENI_MODULES{"emulab"} = "@prefix@/lib/protogeni-emulab.pm";
 }
 

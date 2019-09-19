@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,8 +30,8 @@ $isadmin   = ISADMIN();
 
 PAGEHEADER("Portal Login");
 
-if (! ($PORTAL_ENABLE && $PORTAL_ISPRIMARY)) {
-    USERERROR("Not a Portal", 1);
+if (! ($PEER_ENABLE && $PEER_ISPRIMARY)) {
+    USERERROR("Not a Peer Portal", 1);
 }
 
 #

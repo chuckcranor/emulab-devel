@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2016 University of Utah and the Flux Group.
+# Copyright (c) 2010-2016, 2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -78,8 +78,8 @@ my $TB		  = "@prefix@";
 my $TBOPS         = "@TBOPSEMAIL@";
 my $TBLOGS        = "@TBLOGSEMAIL@";
 my $PGENISUPPORT  = @PROTOGENI_SUPPORT@;
-my $PORTAL_ENABLE = @PORTAL_ENABLE@;
-my $PORTAL_PRIMARY= @PORTAL_ISPRIMARY@;
+my $PEER_ENABLE   = @PEER_ENABLE@;
+my $PEER_PRIMARY  = @PEER_ISPRIMARY@;
 my $OURDOMAIN     = "@OURDOMAIN@";
 my $DUMPUSER	  = "$TB/sbin/dumpuser";
 my $DUMPPROJ	  = "$TB/sbin/dumpproject";
@@ -133,10 +133,10 @@ my $cmd      = shift(@ARGV);
 my $peername = shift(@ARGV);
 my $peerurn;
 
-if (! $PORTAL_ENABLE) {
-    fatal("Portal mode is not enabled");
+if (! $PEER_ENABLE) {
+    fatal("Peer mode is not enabled");
 }
-if (! ($PORTAL_PRIMARY || $cmd eq "addpeer")) {
+if (! ($PEER_PRIMARY || $cmd eq "addpeer")) {
     fatal("You can only run addpeer on this boss");
 }
 

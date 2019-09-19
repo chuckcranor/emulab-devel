@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -158,7 +158,7 @@ if (!$archived && !$target_user->wikionly() &&
 			       CreateURL("showmmlists", $target_user));
 	}
     }
-    if ($PORTAL_ENABLE && $PORTAL_ISPRIMARY) {
+    if ($PEER_ENABLE && $PEER_ISPRIMARY) {
 	$peer_result =
 	    DBQueryFatal("select peer from user_exports ".
 			 "where uid_idx=$target_idx");
@@ -376,7 +376,7 @@ if ($PUBSUPPORT) {
 #
 # Portal support; show exports.
 #
-if ($PORTAL_ENABLE && $PORTAL_ISPRIMARY) {
+if ($PEER_ENABLE && $PEER_ISPRIMARY) {
     $query_result =
 	DBQueryFatal("select * from user_exports where uid_idx='$target_idx'");
     if (mysql_num_rows($query_result)) {

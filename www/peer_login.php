@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,8 +30,8 @@ $reqargs = RequiredPageArguments("user",       PAGEARG_USER,
 				 "key",        PAGEARG_STRING);
 $optargs = OptionalPageArguments("redirected", PAGEARG_BOOLEAN);
 
-if (! $PORTAL_ENABLE) {
-    USERERROR("No Portal", 1);
+if (! $PEER_ENABLE) {
+    USERERROR("No Peer Portal", 1);
 }
 
 #
