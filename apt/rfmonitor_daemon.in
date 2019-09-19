@@ -33,8 +33,10 @@ use Getopt::Std;
 use Data::Dumper;
 use Date::Parse;
 use IO::Socket::INET;
+use File::Temp qw(tempdir);
 use POSIX qw(strftime);
 use POSIX ":sys_wait_h";
+use JSON;
 
 #
 # Take input from the RF monitor running on the control nucs, compare
@@ -45,9 +47,10 @@ sub usage()
     print "Usage: rfmonitor_daemon [-d] [-n] [-p port]\n";
     exit(1);
 }
-my $optlist   = "dnp:";
+my $optlist   = "dnp:m";
 my $debug     = 0;
 my $impotent  = 0;
+my $mailonly  = 0;
 my $PORT      = 12237;
 my $HOST      = "@POWDER_RFMONITOR_HOST@";
 
@@ -61,7 +64,7 @@ my $POWDER_RFMONITOR = @POWDER_RFMONITOR@;
 my $LOGFILE          = "$TB/log/rfmonitor_daemon.log";
 my $POWER            = "$TB/bin/power";
 my $FORMAT           = "portid,timestamp,frequency,power";
-my $MAILDELAY        = 10;
+my $MAILDELAY        = 60;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -95,6 +98,9 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{"d"})) {
     $debug = 1;
 }
+if (defined($options{"m"})) {
+    $mailonly = 1;
+}
 if (defined($options{"n"})) {
     $impotent = 1;
 }
@@ -125,6 +131,11 @@ if (! $impotent) {
 	fatal("Could not mark rfmonitor_daemon as running!");
     }
 }
+
+#
+# Tempdir for storing data between messages. Removed at exit.
+#
+my $TEMPDIR = tempdir("/tmp/rfmonitor.XXXXX", CLEANUP => 1);
 
 #
 # Setup a signal handler for newsyslog.
@@ -219,6 +230,49 @@ sub HandleChild($)
     my @lines      = ();
     my %rflimits   = ();
     my %violaters  = ();
+    my $datafile   = "$TEMPDIR/$address";
+    my $prevdata   = {};
+
+    #
+    # Read in the previous run data.
+    #
+    if (-e $datafile) {
+	if (-s $datafile) {
+	    my $stuff = emutil::ReadFile($datafile);
+	    if (!defined($stuff) || $stuff eq "") {
+		print STDERR "$datafile has no data\n";
+	    }
+	    else {
+		my $tmp  = eval { decode_json($stuff) };
+		if ($@) {
+		    print STDERR "Could not decode json data: $stuff\n";
+		}
+		else {
+		    $prevdata = $tmp;
+		}
+	    }
+	}
+	# Will write a new one at the end.
+	unlink($datafile);
+
+	#
+	# Prune out anything that looks stale.
+	#
+	my $tmp = {};
+
+	foreach my $key (keys(%{$prevdata})) {
+	    my $measurement = $prevdata->{$key};
+	    my $stamp = $measurement->{'timestamp'};
+
+	    next
+		if (time() - $stamp > 60);
+
+	    $tmp->{$key} = $measurement;
+	}
+	$prevdata = $tmp;
+    }
+    print "Previous data:\n";
+    print Dumper($prevdata);
 
     my $processLine = sub {
 	my ($line) = @_;
@@ -257,18 +311,12 @@ sub HandleChild($)
 	    print STDERR "Improper nodeid from $address:$port: $nodeid\n";
 	    return undef;
 	}
-	my $node = Node->Lookup($nodeid);
-	if (!$node) {
-	    print STDERR "No such node $nodeid\n";
-	    next;
-	}
 	return {
-	    "node"       => $node,
 	    "node_id"    => $nodeid,
 	    "iface"      => $iface,
 	    "frequency"  => $frequency,
 	    "power"      => $power,
-	    "timestamp"  => $timestamp,
+	    "timestamp"  => int($timestamp),
 	};
     };
 
@@ -277,7 +325,7 @@ sub HandleChild($)
 	
 	push(@lines, $line);
 	print $line . "\n"
-	    if ($debug);
+	    if ($debug > 1);
     }
     
     # Close the connection, we do not tell the other side anything.
@@ -305,12 +353,18 @@ sub HandleChild($)
 	my $measurement = &$processLine($line);
 	next
 	    if (!defined($measurement));
-	my $node      = $measurement->{"node"};
 	my $nodeid    = $measurement->{"node_id"};
 	my $iface     = $measurement->{"iface"};
 	my $frequency = $measurement->{"frequency"} + 0.0;
 	my $power     = $measurement->{"power"} + 0.0;
 	my $timestamp = $measurement->{"timestamp"};
+	my $key       = "${nodeid}:${iface}:${frequency}";
+	
+	my $node = Node->Lookup($nodeid);
+	if (!$node) {
+	    print STDERR "No such node $nodeid\n";
+	    next;
+	}
 
 	#
 	# This is bogus, I was expecting the monitor to only send me
@@ -331,7 +385,8 @@ sub HandleChild($)
 	# to turn off a node that is already off, is fine, but lets avoid
 	# a bunch of email noise.
 	#
-	if ($node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
+	if (!$impotent &&
+	    $node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
 	    my $stamp = $node->state_timestamp();
 	    if (time() - $stamp < 180) {
 		print "$nodeid was just powered off, ignoring this report.\n";
@@ -360,14 +415,28 @@ sub HandleChild($)
 	    }
 	    $rflimits{$nodeid} = $limits;
 	}
+	my $limits;
+	if (exists($rflimits{$nodeid}->{$iface}) &&
+	    scalar(@{$rflimits{$nodeid}->{$iface}})) {
+	    $limits = $rflimits{$nodeid}->{$iface};
+	}
+
 	#
 	# If no RF limit for the interface, its a violation.
 	#
-	if (!exists($rflimits{$nodeid}->{$iface})) {
-	    if (!exists($violaters{$nodeid})) {
-		$violaters{$nodeid} = {};
+	if (!defined($limits)) {
+	    # Ignore sample first time we see it. 	    
+	    if (exists($prevdata->{$key})) {
+		if (!exists($violaters{$nodeid})) {
+		    $violaters{$nodeid} = {};
+		}
+		if (!exists($violaters{$nodeid}->{$iface})) {
+		    $violaters{$nodeid}->{$iface} = [];
+		}
+		push(@{$violaters{$nodeid}->{$iface}}, $measurement);
 	    }
-	    $violaters{$nodeid}->{$iface} = $measurement;
+	    # Remember for next time
+	    $prevdata->{$key} = $measurement;		    
 	    next;
 	}
 	#
@@ -376,23 +445,50 @@ sub HandleChild($)
 	#
 	my $inrange = 0;
 
-	foreach my $limit (@{$rflimits{$nodeid}->{$iface}}) {
-	    if ($measurement->{"frequency"} >= $limit->{"freq_low"} &&
-		$measurement->{"frequency"} <= $limit->{"freq_high"} &&
-		$measurement->{"power"} <= $limit->{"power"}) {
-		$inrange = 1;
-		last;
+	if (defined($limits)) {
+	    foreach my $limit (@{$limits}) {
+		if ($measurement->{"frequency"} >= $limit->{"freq_low"} &&
+		    $measurement->{"frequency"} <= $limit->{"freq_high"} &&
+		    # Not doing power comparison yet.
+		    (1 || $measurement->{"power"} <= $limit->{"power"})) {
+		    $inrange = 1;
+		    last;
+		}
 	    }
 	}
 	if (!$inrange) {
-	    if (!exists($violaters{$nodeid})) {
-		$violaters{$nodeid} = {};
+	    # Ignore sample first time we see it.
+	    if (exists($prevdata->{$key})) {
+		if (!exists($violaters{$nodeid})) {
+		    $violaters{$nodeid} = {};
+		}
+		if (!exists($violaters{$nodeid}->{$iface})) {
+		    $violaters{$nodeid}->{$iface} = [];
+		}
+		push(@{$violaters{$nodeid}->{$iface}}, $measurement);
 	    }
-	    $violaters{$nodeid}->{$iface} = $measurement;
+	    # Remember for next time
+	    $prevdata->{$key} = $measurement;		    
 	}
     }
     if (keys(%violaters)) {
 	HandleViolations(\%violaters, \%rflimits);
+    }
+    #
+    # Write back the new previous data for next time
+    #
+    print "New previous data:\n";
+    print Dumper($prevdata);
+    my $string = eval { encode_json($prevdata) };
+    if ($@) {
+	print STDERR "Could not encode json data\n";
+    }
+    elsif (open(PREV, ">$datafile")) {
+	print PREV $string;
+	close(PREV);
+    }
+    else {
+	print STDERR "Could not open $datafile for writing: $!\n";
     }
     print "Finished with $address:$port at " .
 	POSIX::strftime("%m/%d %H:%M:%S", localtime()) . "\n";
@@ -453,17 +549,25 @@ sub HandleViolations($$)
 	    my $experiment = $node->Reservation();
 	    my $project    = $experiment->GetProject();
 	    my $swapper    = $experiment->GetSwapper();
+	    my $creator    = $experiment->GetCreator();
 	    my $user_name  = $swapper->name();
 	    my $user_email = $swapper->email();
 	    my $leader     = $project->GetLeader();
 	    my $pname	   = $leader->name();
 	    my $pemail	   = $leader->email();
 
+	    #
+	    # Nonlocal project (on the geni path), its the creator we want.
+	    # (The swapper is always the geniuser).
+	    #
+	    if ($project->IsNonLocal()) {
+		$user_name  = $creator->name();
+		$user_email = $creator->email();
+	    }
 	    if ($debug) {
 		$pname  = $user_name;
 		$pemail = $user_email;
 	    }
-
 	    $TO = "$user_name <$user_email>";
 	    $CC = "$pname <$pemail>, $TBOPS";
 	}
@@ -474,33 +578,36 @@ sub HandleViolations($$)
 	$body    = "The following interfaces are in violation on $nodeid:\n\n";
 
 	foreach my $iface (keys(%{$violations->{$nodeid}})) {
-	    my $measurement = $violations->{$nodeid}->{$iface};
-	    my $stamp = POSIX::strftime("%m/%d %H:%M:%S %Z",
+	    foreach my $measurement (@{$violations->{$nodeid}->{$iface}}) {
+		my $stamp = POSIX::strftime("%m/%d %H:%M:%S %Z",
 					localtime($measurement->{"timestamp"}));
 
-	    if (!exists($rflimits->{$nodeid}->{$iface})) {
-		$body .= "$iface: NO LIMITS DEFINED\n";
-	    }
-	    else {
-		$body .= "$iface:\n";
-		
-		my @limits     = @{$rflimits->{$nodeid}->{$iface}};
-		foreach my $limit (@limits) {
-		    my $freq_low   = $limit->{"freq_low"};
-		    my $freq_high  = $limit->{"freq_high"};
-		    my $power      = $limit->{"power"};
-
-		    $body .=
-			"  Limits: Min Freq:$freq_low MHZ, ".
-			"Max Freq:$freq_high MHZ, Max Power:$power dBm\n";
+		if (!exists($rflimits->{$nodeid}->{$iface})) {
+		    $body .= "$iface: NO LIMITS DEFINED\n";
 		}
+		else {
+		    $body .= "$iface:\n";
+		
+		    my @limits     = @{$rflimits->{$nodeid}->{$iface}};
+		    foreach my $limit (@limits) {
+			my $freq_low   = $limit->{"freq_low"};
+			my $freq_high  = $limit->{"freq_high"};
+			my $power      = $limit->{"power"};
+
+			$body .=
+			    "  Limits: Min Freq:$freq_low MHZ, ".
+			    "Max Freq:$freq_high MHZ, Max Power:$power dBm\n";
+		    }
+		}
+		$body .=
+		    "  Measured at $stamp: ".
+		    "Frequency: " . $measurement->{"frequency"} . " MHZ, ".
+		    "Power: " . $measurement->{"power"} . " dBm\n";
 	    }
-	    $body .=
-		"  Measured at $stamp: ".
-		"Frequency: " . $measurement->{"frequency"} . " MHZ, ".
-		"Power: " . $measurement->{"power"} . " dBm\n";
 	}
-	$body .= "\n" . "This node will be immediately powered off!\n";
+	if (!$mailonly) {
+	    $body .= "\n" . "This node will be immediately powered off!\n";
+	}
 	if ($debug || $impotent) {
 	    print $subject . "\n";
 	    print $body;
@@ -513,7 +620,7 @@ sub HandleViolations($$)
 	    libtestbed::SENDMAIL($TO, $subject, $body, $TBOPS, $headers);
 	    NodeNotified($nodeid, "user", $body);
 	}
-	if (!$impotent) {
+	if (!($impotent || $mailonly)) {
 	    #
 	    # We are allowed to run the power command as root.
 	    #
