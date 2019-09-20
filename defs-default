@@ -110,6 +110,8 @@ PROTOGENI_LOCALUSER=1
 CLUSTER_PORTAL="boss.emulab.net"
 CLUSTER_PUBSUBD_SSLPORT=16506
 CLUSTER_PUBSUBD_ALTPORT=16507
+# Fancy new Portal interface. Requires PROTOGENI_SUPPORT=1
+PORTAL_ENABLE=1
 # Mobile networking support (PhantomNet)
 MOBILESUPPORT=1
 # Do not set these without talking to Utah!

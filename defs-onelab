@@ -504,3 +504,6 @@ BOOTINFO_EVENTS=0
 # Enable idle stats collection (RRD files)
 SDCOLLECTD_DOSTATS=1
 SDCOLLECTD_USE_RRDTOOL=1
+
+# New world order
+PORTAL_ENABLE=1

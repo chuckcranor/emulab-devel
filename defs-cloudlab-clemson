@@ -169,3 +169,6 @@ SDCOLLECTD_USE_RRDTOOL=1
 # Enable the reportboot_daemon (rather then using BOOTINFO_EVENTS=0)
 REPORTBOOT_ENABLED=1
 REPORTBOOT_FLAGS="-C"
+
+# New world order
+PORTAL_ENABLE=1

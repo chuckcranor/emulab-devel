@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,10 +38,14 @@ $this_user = CheckLogin($check_status);
 #
 # Verify page arguments.
 #
-$optargs = OptionalPageArguments("login", PAGEARG_BOOLEAN);
+$optargs = OptionalPageArguments("login",    PAGEARG_BOOLEAN,
+                                 "redirect", PAGEARG_BOOLEAN);
 
 if (! ($CHECKLOGIN_STATUS & CHECKLOGIN_LOGGEDIN)) {
-    if ($ISEMULAB && !$login) {
+    if ($redirect) {
+        header("Location: landing.php");
+    }
+    elseif ($ISEMULAB && !$login) {
         header("Location: frontpage.php");
     }
     else {

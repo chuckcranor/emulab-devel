@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -381,6 +381,6 @@ if (isset($referrer) && $CHECKLOGIN_USER->IsActive()) {
     header("Location: $referrer");
 }
 else {
-    header("Location: $APTBASE/landing.php");
+    header("Location: $APTBASE/landing.php?redirect=yes");
 }
 ?>

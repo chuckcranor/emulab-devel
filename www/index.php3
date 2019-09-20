@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,5 +21,12 @@
 # 
 # }}}
 #
-header("Location: portal/frontpage.php");
+require("defs.php3");
+
+if ($PORTAL_ENABLE && !$CLASSICWEB_OVERRIDE) {
+    header("Location: portal/landing.php");
+    return;
+}
+header("Location: classic.php");
+
 ?>
