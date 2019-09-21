@@ -43,7 +43,8 @@ sub Install($$$)
 		if (!ISFS($server)) {
 		    PhaseSkip("Not FS Node");
 		}
-		if ($FBSD_MAJOR > 10) {
+		if ($FBSD_MAJOR > 10 ||
+		    ($FBSD_MAJOR == 10 && $FBSD_MINOR > 2)) {
 		    PhaseSkip("Samba no longer supported");
 		}
 		DoneIfPackageInstalled("samba");

@@ -16,7 +16,7 @@ sub Install($$$)
 	if (!$WINSUPPORT) {
 	    PhaseSkip("Windows support not enabled");
 	}
-	if ($FBSD_MAJOR > 10) {
+	if ($FBSD_MAJOR > 10 || ($FBSD_MAJOR == 10 && $FBSD_MINOR > 2)) {
 	    PhaseSkip("Samba no longer supported");
 	}
 	Phase "smb.conf", "Installing smb.conf[.head]", sub {
