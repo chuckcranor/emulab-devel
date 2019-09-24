@@ -2950,6 +2950,19 @@ CREATE TABLE `interfaces` (
   KEY `role` (`role`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
+
+--
+-- Table structure for table `node_ip_changes`
+--
+
+DROP TABLE IF EXISTS `node_ip_changes`;
+CREATE TABLE `node_ip_changes` (
+  `node_id` varchar(32) NOT NULL default '',
+  `oldIP` varchar(15) default NULL,
+  `newIP` varchar(15) default NULL,
+  `changed` datetime NOT NULL default '0000-00-00 00:00:00'
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
 --
 -- Table structure for table `interfaces_rf_limit`
 --
