@@ -566,21 +566,26 @@ if (! ($pending || $approve)) {
     # Check for an override attribute on the node type. Here zero really means
     # zero instead of unlimited. As above, this limit is node hours.
     #
+    my $limit;
+    
     my $nodetype = NodeType->Lookup($type);
     if (defined($nodetype)) {
-	if (defined($nodetype->GetAttribute("reservation_autoapprove_limit"))) {
-	    my $limit = $nodetype->GetAttribute("reservation_autoapprove_limit");
-
-	    if (($count * ( $endtime - $starttime ) / 3600) > $limit) {
-		$approve = 0;
-	    }
-	}
+	$limit = $nodetype->GetAttribute("reservation_autoapprove_limit");
     }
     else {
 	# Lets see if type is really a node ID.
 	my $node = Node->Lookup($type);
 	if (!defined($node)) {
 	    fatal("Could not look up node type");
+	}
+	$node->NodeAttribute("reservation_autoapprove_limit", \$limit);
+	if (!defined($limit)) {
+	    $limit = $node->NodeTypeAttribute("reservation_autoapprove_limit");
+	}
+    }
+    if (defined($limit)) {
+	if (($count * ( $endtime - $starttime ) / 3600) > $limit) {
+	    $approve = 0;
 	}
     }
 }
