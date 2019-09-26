@@ -126,8 +126,12 @@ while (list($index, $aggregate) = each($ams)) {
     # to confuse users. 
     if ($reservable_nodes) {
         foreach ($reservable_nodes as $node_id => $type) {
-            $count = $typeinfo[$type]["count"];
-            $typeinfo[$type]["count"] = $count - 1;
+            # There will not be a type extry if its zero (all nodes of
+            # that type are "reservable nodes")
+            if (array_key_exists($type, $typeinfo)) {
+                $count = $typeinfo[$type]["count"];
+                $typeinfo[$type]["count"] = $count - 1;
+            }
         }
     }
 
