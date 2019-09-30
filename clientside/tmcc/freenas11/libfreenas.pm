@@ -75,6 +75,7 @@ use Exporter;
 	freenasVolumeCreate freenasVolumeDestroy freenasFSCreate
 	freenasVolumeSnapshot freenasVolumeClone
 	freenasVolumeDesnapshot freenasVolumeDeclone
+        freenasVolumeCopy
 	freenasParseListing freenasRequest
         freenasLock freenasUnlock
 	$FREENAS_API_RESOURCE_IFACE $FREENAS_API_RESOURCE_IST_EXTENT
@@ -170,6 +171,7 @@ sub freenasVolumeSnapshot($$;$$);
 sub freenasVolumeDesnapshot($$;$$$);
 sub freenasVolumeClone($$$;$$);
 sub freenasVolumeDeclone($$;$);
+sub freenasVolumeCopy($$$;$);
 
 #
 # Local Functions
@@ -929,6 +931,140 @@ sub freenasVolumeClone($$$;$$)
 
     freenasUnlock()
 	if ($dolock);
+    return 0;
+}
+
+#
+# Create a deep copy of a ZFS volume:
+# - Snapshot the source volume
+# - Start a resumeable zsend/zrecv pipeline
+# - Do the copy
+# - Remove the snapshot (in both old and new volumes)
+#
+# zfs snapshot persist-1/lease-546@copy
+# zfs send -R persist-1/lease-546@copy | zfs recv -Fs persist-1/lease-546-new
+# zfs destroy persist-1/lease-546@copy
+# zfs destroy persist-1/lease-546-new@copy
+#
+# If the send or recv are interrupted, the target volume will have a
+# receive_resume_token attribute that can be used to continue the copy:
+#
+# zfs send -t <token> | zfs recv -s persist-1/lease-546-new
+#
+sub freenasVolumeCopy($$$;$)
+{
+    my ($pool, $ovolname, $nvolname, $dolock) = @_;
+
+    # Untaint arguments that are passed to a command execution
+    $pool = untaintHostname($pool);
+    $ovolname = untaintHostname($ovolname);
+    $nvolname = untaintHostname($nvolname);
+    if (!$pool || !$ovolname || !$nvolname) {
+	warn("*** ERROR: freenasVolumeCopy: ".
+	     "Invalid arguments");
+	return -1;
+    }
+    $dolock = 1
+	if (!defined($dolock));
+
+    freenasLock()
+	if ($dolock);
+
+    # Get volume and snapshot info
+    my $vollist = freenasVolumeList(0, 2);
+
+    # The source volume must exist
+    my $vref = $vollist->{$ovolname};
+    if (!$vref || $vref->{'pool'} ne $pool) {
+	warn("*** ERROR: freenasVolumeSnapshot: ".
+	     "Source volume '$ovolname' does not exist in pool '$pool'");
+	freenasUnlock()
+	    if ($dolock);
+	return -1;
+    }
+
+    # The destination volume must NOT exist
+    my $nvref = $vollist->{$nvolname};
+    if ($nvref && $nvref->{'pool'} eq $pool) {
+	warn("*** ERROR: freenasVolumeCopy: ".
+	     "Destination volume '$nvolname' already exists in pool '$pool'");
+	freenasUnlock()
+	    if ($dolock);
+	return -1;
+    }
+
+    # The snapshot must not exist
+    my $sname = "C" . time();
+    my $snapshot = "$ovolname\@$sname";
+    if (exists($vref->{'snapshots'})) {
+	my @snaps = split(',', $vref->{'snapshots'});
+
+	foreach my $sname (@snaps) {
+	    if ($snapshot eq $sname) {
+		warn("*** ERROR: freenasVolumeCopy: ".
+		     "Source snapshot '$snapshot' already exists");
+		freenasUnlock()
+		    if ($dolock);
+		return -1;
+	    }
+	}
+    }
+
+    # Create the snapshot
+    my $res = freenasRequest($FREENAS_API_RESOURCE_SNAPSHOT, "POST", undef,
+			     {"dataset" => "$pool/$ovolname",
+			      "name" => "$sname"});
+    if (!$res) {
+	warn("*** ERROR: freenasVolumeSnapshot: could not create snapshot");
+	freenasUnlock()
+	    if ($dolock);
+	return -1;
+    }
+
+    freenasUnlock()
+	if ($dolock);
+
+    #
+    # Do the send/recv pipeline.
+    # This could take a really, really long time so we leave things unlocked
+    # while we do it.
+    #
+    TBDebugTimeStampWithDate("freenasVolumeCopy: starting send/recv")
+	if ($debug);
+    if (system("$ZFS_CMD send -R $pool/$snapshot | $ZFS_CMD recv -Fs $pool/$nvolname")) {
+	TBDebugTimeStampWithDate("freenasVolumeCopy: send/recv FAILED")
+	    if ($debug);
+	warn("*** ERROR: ".
+	     "'$ZFS_CMD send -R $pool/$snapshot | $ZFS_CMD recv -Fs $pool/$nvolname' ".
+	     "failed, may be able to finish with:\n".
+	     "'$ZFS_CMD send -t <token> | $ZFS_CMD recv -s $nvolname'\n");
+	return -1;
+    }
+    TBDebugTimeStampWithDate("freenasVolumeCopy: finished send/recv")
+	if ($debug);
+
+    freenasLock()
+	if ($dolock);
+
+    # Remove the snapshot in both the original and copy datasets
+    my $msg;
+    my $resource = "$FREENAS_API_RESOURCE_SNAPSHOT/${pool}\%2F${snapshot}";
+    $res = freenasRequest($resource, "DELETE", undef, undef, undef, \$msg);
+    if (!$res) {
+	warn("*** WARNING: freenasVolumeCopy: ".
+	     "delete of $snapshot failed:\n$msg");
+    }
+    $snapshot = "$nvolname\@$sname";
+    $resource = "$FREENAS_API_RESOURCE_SNAPSHOT/${pool}\%2F${snapshot}";
+    $res = freenasRequest($resource, "DELETE", undef, undef, undef, \$msg);
+    if (!$res) {
+	warn("*** WARNING: freenasVolumeCopy: ".
+	     "delete of $snapshot failed:\n$msg");
+    }
+
+    freenasUnlock()
+	if ($dolock);
+
     return 0;
 }
 

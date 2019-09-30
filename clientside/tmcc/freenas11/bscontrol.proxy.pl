@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2018 University of Utah and the Flux Group.
+# Copyright (c) 2013-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,6 +43,8 @@ sub usage()
     print STDERR "            Create a snapshot of <pool>/<vol> with timestamp <tstamp>\n";
     print STDERR "   clone    <pool> <ovol> <nvol> [ <tstamp> ]\n";
     print STDERR "            Create a clone of <pool>/<vol> called <nvol> from the snapshot at <tstamp> (most recent if not specified)\n";
+    print STDERR "   copy     <pool> <ovol> <nvol>\n";
+    print STDERR "            Create a copy of <pool>/<vol> called <nvol>\n";
     print STDERR "   destroy <pool> <vol>\n";
     print STDERR "            Destroy <vol> in <pool>\n";
     print STDERR "   desnapshot <pool> <vol> [ <tstamp> ]\n";
@@ -94,6 +96,7 @@ my %cmds = (
     "targets"    => \&targets,
     "assocs"     => \&assocs,
     "desnapshotall" => \&desnapshotall,
+    "copy"       => \&copy,
 );
 
 #
@@ -495,3 +498,48 @@ sub declone($$$)
 
     return freenasVolumeDeclone($pool, $vol, 1);
 }
+
+#
+# Create a deep copy of a dataset using zend/zrecv.
+#
+sub copy($$$)
+{
+    my ($pool,$ovol,$nvol) = @_;
+
+    if (defined($pool) && $pool =~ /^([-\w]+)$/) {
+	$pool = $1;
+    } else {
+	print STDERR "bscontrol_proxy: bogus pool arg\n";
+	return 1;
+    }
+    if (defined($ovol) && $ovol =~ /^([-\w]+)$/) {
+	$ovol = $1;
+    } else {
+	print STDERR "bscontrol_proxy: bogus origin volume arg\n";
+	return 1;
+    }
+    if (defined($nvol) && $nvol =~ /^([-\w]+)$/) {
+	$nvol = $1;
+    } else {
+	print STDERR "bscontrol_proxy: bogus clone volume arg\n";
+	return 1;
+    }
+
+    return freenasVolumeCopy($pool, $ovol, $nvol, 1);
+}
+
+#
+# Report the progress of a copy.
+#
+# On boss, dataset copy is in progress (or did not complete) if lease
+# "copyfrom" attribute is set. It is still in progress if a webtask
+# exists?
+#
+# From the blockstore server perspecive, a copy is in progress (or did
+# not complete) if the "receive_resume_token" property is set on zfs dataset.
+# It is still in progress if send/recv processes exist. We should write some
+# state to disk (a "pid file") to make this detection easier.
+#
+# The "referenced" attribute tells how much data has been copied, ala:
+#    zfs get -Hp referenced persist-1/lease-200
+#

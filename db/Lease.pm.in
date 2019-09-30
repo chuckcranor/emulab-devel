@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2012-2018 University of Utah and the Flux Group.
+# Copyright (c) 2012-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -652,11 +652,19 @@ sub AllocResources($;$$) {
 	}
 
 	#
+	# If there is a "copyfrom" attribute then we are creating a copy
+	# of an existing blockstore.
+	#
+	my $srcbs = $self->GetAttribute("copyfrom");
+
+	#
 	# XXX hack, hack
 	# XXX this doesn't belong here
 	#
-	if ($fstype) {
-	    print STDERR "NOTE: FS creation could take 5 minutes or longer, ";
+	if ($fstype || $srcbs) {
+	    print STDERR "NOTE: " .
+		($srcbs ? "Dataset copy" : "FS creation") .
+		" could take 5 minutes or longer, ";
 	    if ($interruptable) {
 		print STDERR "please be patient!\n";
 	    } else {
@@ -670,7 +678,10 @@ sub AllocResources($;$$) {
 	# on the storage servers).
 	#
 	my $idx = $self->lease_idx();
-	my $cmd = "$BSCONTROL -l $idx -s $size $fstype create lease-$idx";
+	my $cmd = defined($srcbs) ?
+	    "$BSCONTROL copy $srcbs lease-$idx" :
+	    "$BSCONTROL -l $idx -s $size $fstype create lease-$idx";
+
 	my $rv;
 	if (!$interruptable) {
 	    local $SIG{INT} = "IGNORE";
@@ -702,6 +713,11 @@ sub AllocResources($;$$) {
 	    } else {
 		$self->SetAttribute("last_snapshot", $tstamp, "integer");
 	    }
+	}
+
+	# Clear the "copyfrom" attribute as an indicator we are done
+	if (defined($srcbs)) {
+	    $self->DeleteAttribute("copyfrom");
 	}
     }
 
