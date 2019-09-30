@@ -952,7 +952,8 @@ sub exportSlice($$$$) {
     $res = freenasRequest($FREENAS_API_RESOURCE_IST_ASSOC,
 			  "POST", undef,
 			  {"iscsi_target" => $tindex,
-			   "iscsi_extent" => $eindex},
+			   "iscsi_extent" => $eindex,
+			   "iscsi_lunid" => 0},
 			  undef, \$msg);
     if (!$res) {
 	warn("*** ERROR: blockstore_exportSlice: $volname: ".
