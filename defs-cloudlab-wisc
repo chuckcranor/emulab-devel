@@ -241,7 +241,7 @@ DHCPD_DYNRANGE="128.104.223.200 128.104.223.250"
 # For our MANAGEMENT_NETWORK vlan interface:
 # 2015-02-26
 # bpkroth
-DHCPD_EXTRAIFS="em1"
+DHCPD_EXTRAIFS="xn1"
 
 #
 # Fill in the nameservers for your campus network here - the nameserver on boss
