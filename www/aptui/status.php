@@ -315,6 +315,7 @@ foreach ($slivers as $sliver) {
 
     $blob[$aggregate_urn] = array("weburl" => $weburl,
                                   "name"   => $aggregate->name(),
+                                  "nickname" => $aggregate->nickname(),
                                   "abbreviation" => $aggregate->abbreviation());
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
