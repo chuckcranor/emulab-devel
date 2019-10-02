@@ -317,6 +317,15 @@ sub Install($$$)
 	    mkdir "$PREFIX/log/tiplogs", 0755 or
 		PhaseFail("Unable to create tiplogs: $!");
 	};
+	# The nucs are reservable.
+	Phase "reserve", "Marking nucs reservable", sub {
+	    DBQueryWarn("update nodes set reservable=1 ".
+			"where node_id='nuc1'") or
+		PhaseFail("marking nuc1");
+	    DBQueryWarn("update nodes set reservable=1 ".
+			"where node_id='nuc2'") or
+		PhaseFail("marking nuc1");
+	};
 
 	#
 	# Fix NAT rule for ops jail.
