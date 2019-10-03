@@ -24,9 +24,7 @@
 use English;
 use strict;
 use Getopt::Std;
-use XML::Simple;
 use Data::Dumper;
-use CGI;
 use POSIX ":sys_wait_h";
 use POSIX qw(:signal_h ceil);
 use Date::Parse;
@@ -253,6 +251,7 @@ sub DoReserve()
     }
     usage()
 	if (!defined($project));
+    
     # Need brand for email. No portal argument means emulab brand.
     $brand = Brand->Create($portal);
     if (!defined($brand)) {
@@ -371,6 +370,10 @@ sub DoReserve()
 	$approved = $response->value();
     }
     if ($checkonly) {
+	if (defined($webtask)) {
+	    $webtask->approved($approved);
+	    $webtask->Exited(0);
+	}
 	exit($approved ? 0 : 2);
     }
     #
@@ -401,9 +404,10 @@ sub DoReserve()
 	APT_Instance->ClearAllMaxExtension($aggregate->urn());
     }
     if (defined($webtask)) {
-	$webtask->approved($approved);
 	$webtask->idx($idx) if (defined($idx));
 	$webtask->uuid($uuid) if (defined($uuid));
+	$webtask->approved($approved);
+	$webtask->Exited(0);
     }
     exit($approved ? 0 : 2);
 }
