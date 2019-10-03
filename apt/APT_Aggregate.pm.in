@@ -368,7 +368,9 @@ sub CheckStatus($$;$)
 		$message .= ": " . $$perrmsg;
 	    }
 	    $message .= ". ";
-	    $message .= "Please try again later.";
+	    if ($message !~ /try again later/i) {
+		$message .= "Please try again later.";
+	    }
 	    $$perrmsg = $message;
 	}
 	return 1;
