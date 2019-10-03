@@ -1,0 +1,515 @@
+#!/usr/bin/perl -wT
+#
+# Copyright (c) 2007-2019 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+package APT_Reservation;
+
+use strict;
+use Carp;
+use Exporter;
+use vars qw(@ISA @EXPORT);
+
+@ISA    = "Exporter";
+@EXPORT = qw ( );
+
+# Configure variables
+my $TB		  = "@prefix@";
+my $TBOPS         = "@TBOPSEMAIL@";
+my $OURDOMAIN     = "@OURDOMAIN@";
+my $MYURN         = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+my $MAINSITE      = @TBMAINSITE@;
+
+#
+# Nothing in the main package at the moment.
+#
+
+###################################################################
+package APT_Reservation::Group;
+use emdb;
+use libtestbed;
+use Carp;
+use JSON;
+use English;
+use GeniXML;
+use GeniHRN;
+use Date::Parse;
+use Data::Dumper;
+use vars qw($AUTOLOAD);
+use overload ('""' => 'Stringify');
+
+AUTOLOAD {
+    my $self  = $_[0];
+    my $type  = ref($self) or croak "$self is not an object";
+    my $name  = $AUTOLOAD;
+    $name =~ s/.*://;   # strip fully-qualified portion
+
+    # A DB row proxy method call.
+    if (exists($self->{'DBROW'}->{$name})) {
+	return $self->{'DBROW'}->{$name};
+    }
+    carp("No such slot '$name' field in class $type");
+    return undef;
+}
+sub ReservationList($) { return values(%{ $_[0]->{'RESERVATIONS'} }); }
+sub ReservationHash($) { return $_[0]->{'RESERVATIONS'}; }
+
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'DBROW'} = undef;
+}
+
+#
+# Stringify for output.
+#
+sub Stringify($)
+{
+    my ($self) = @_;
+    
+    my $pid   = $self->pid();
+    my $uuid  = $self->uuid();
+
+    return "[APT_ResGroup $pid,$uuid]";
+}
+
+sub Lookup($$)
+{
+    my ($class, $token) = @_;
+    my $query_result;
+
+    if ($token =~ /^\w+\-\w+\-\w+\-\w+\-\w+$/) {
+	$query_result =
+	    DBQueryWarn("select * from apt_reservation_groups ".
+			"where uuid='$token'");
+    }
+    else {
+	return undef;
+    }
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my $self              = {};
+    $self->{'DBROW'}      = $query_result->fetchrow_hashref();
+    bless($self, $class);
+
+    #
+    # Lookup group reservations
+    #
+    $self->{'RESERVATIONS'} =
+	APT_Reservation::Group::Reservation->LookupForGroup($self);
+    
+    return $self;
+}
+
+#
+# Create a group
+#
+sub Create($$$)
+{
+    my ($class, $argref, $perrmsg) = @_;
+    my $uuid;
+
+    if (exists($argref->{'uuid'})) {
+	$uuid = $argref->{'uuid'};
+	delete($argref->{'uuid'});
+    }
+    else {
+	$uuid = NewUUID();
+    }
+    my $pid_idx = $argref->{'pid_idx'};
+
+    #
+    # The uuid has to be unique, so lock the table for the check/insert.
+    #
+    DBQueryWarn("lock tables apt_reservation_groups write")
+	or return undef;
+
+    my $query_result =
+	DBQueryWarn("select uuid from apt_reservation_groups ".
+		    "where uuid='$uuid'");
+
+    if ($query_result->numrows) {
+	DBQueryWarn("unlock tables");
+	$$perrmsg = "Group uuid $uuid already exists!";
+	return undef;
+    }
+    my $sets = "created=now(),uuid='$uuid',locked=now(),locker_pid='$$'";
+    if (exists($argref->{"start"}) && defined($argref->{"start"})) {
+	$sets .= ", start=FROM_UNIXTIME(" . $argref->{"start"} . ")";
+	delete($argref->{"start"});
+    }
+    if (exists($argref->{"end"}) && defined($argref->{"end"})) {
+	$sets .= ", end=FROM_UNIXTIME(" . $argref->{"end"} . ")";
+	delete($argref->{"end"});
+    }
+    
+    my $query = "insert into apt_reservation_groups set ${sets}, ".
+	join(",", map("$_=" .
+		      DBQuoteSpecial($argref->{$_}), keys(%{$argref})));
+
+    if (! DBQueryWarn($query)) {
+	DBQueryWarn("unlock tables");
+	$$perrmsg = "Error inserting new apt_reservation_groups ".
+	    "record for $uuid!";
+	return undef;
+    }
+    DBQueryWarn("unlock tables");
+    return Lookup($class, $uuid);
+}
+
+sub Delete($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+    
+    DBQueryWarn("delete from apt_reservation_group_reservations ".
+		"where uuid='$uuid'")
+	or return -1;
+    DBQueryWarn("delete from apt_reservation_groups ".
+		"where uuid='$uuid'")
+	or return -1;
+    return 0;
+}
+
+#
+# Lock and Unlock
+#
+sub Lock($)
+{
+    my ($self) = @_;
+    my $uuid   = $self->uuid();
+
+    return -1
+	if (!DBQueryWarn("lock tables apt_reservation_groups write"));
+
+    my $query_result =
+	DBQueryWarn("update apt_reservation_groups set ".
+		    "  locked=now(),locker_pid='$PID' " .
+		    "where uuid='$uuid' and locked is null");
+
+    if (! $query_result ||
+	$query_result->numrows == 0) {
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    DBQueryWarn("unlock tables");
+    $self->{'DBROW'}->{'locked'}     = time();
+    $self->{'DBROW'}->{'locker_pid'} = $PID;
+    return 0;
+}
+
+sub Unlock($)
+{
+    my ($self) = @_;
+    my $uuid  = $self->uuid();
+
+    return -1
+	if (! DBQueryWarn("update apt_reservation_groups set ".
+			  "   locked=null,locker_pid=0 ".
+			  "where uuid='$uuid'"));
+    
+    $self->{'DBROW'}->{'locked'}     = 0;
+    $self->{'DBROW'}->{'locker_pid'} = 0;
+    return 0;
+}
+
+#
+# Add a reservation to a group
+#
+sub AddReservation($$$$$)
+{
+    my ($self, $aggregate_urn, $uuid, $type, $count) = @_;
+
+    my $res = APT_Reservation::Group::Reservation->Create($self,
+							  $aggregate_urn,
+							  $uuid,
+							  $type, $count);
+    return undef
+	if (!defined($res));
+
+    $self->{'RESERVATIONS'}->{$uuid} = $res;
+    return $res
+}
+
+#
+# Grab specific reservation.
+#
+sub Reservation($$)
+{
+    my ($self, $uuid) = @_;
+    my $hash = $self->ReservationHash();
+
+    return undef
+	if (!exists($hash->{$uuid}));
+
+    return $hash->{$uuid};
+}
+
+sub UpdateMeta($$$$)
+{
+    my ($self, $start, $end, $reason) = @_;
+    my $uuid = $self->uuid();
+    
+    DBQueryWarn("update apt_reservation_groups set ".
+		" start=FROM_UNIXTIME($start),end=FROM_UNIXTIME($end), ".
+		" reason=" . DBQuoteSpecial($reason) . " " .
+		"where uuid='$uuid'")
+	or return -1;
+
+    $self->{'DBROW'}->{'start'}  = $start;
+    $self->{'DBROW'}->{'end'}    = $end;
+    $self->{'DBROW'}->{'reason'} = $reason;
+    return 0;
+}
+
+###################################################################
+package APT_Reservation::Group::Reservation;
+use emdb;
+use libtestbed;
+use Carp;
+use JSON;
+use English;
+use GeniXML;
+use GeniHRN;
+use Date::Parse;
+use Data::Dumper;
+use vars qw($AUTOLOAD);
+use overload ('""' => 'Stringify');
+
+sub Lookup($$$$)
+{
+    my ($class, $group, $urn, $type) = @_;
+    my $uuid = $group->uuid();
+
+    my $query_result =
+	DBQueryWarn("select * from apt_reservation_group_reservations ".
+		    "where uuid='$uuid' and aggregate_urn='$urn' and ".
+		    "      type='$type'");
+    return undef
+	if (! (defined($query_result) && $query_result->numrows));
+
+    my $self            = {};
+    $self->{'DBROW'}    = $query_result->fetchrow_hashref();
+    $self->{'GROUP'}    = $group;
+    bless($self, $class);
+
+    # Handy;
+    $self->{'AGGURN'}   = GeniHRN->new($self->aggregate_urn());
+
+    return $self;
+}
+
+
+#
+# Create a group reservation
+#
+sub Create($$$$$$)
+{
+    my ($class, $group, $aggregate_urn, $remote_uuid, $type, $count) = @_;
+    my $group_uuid = $group->uuid();
+
+    DBQueryWarn("insert into apt_reservation_group_reservations set ".
+		"  uuid='$group_uuid', ".
+		"  remote_uuid='$remote_uuid', ".
+		"  aggregate_urn='$aggregate_urn', ".
+		"  type='$type', count='$count'")
+	or return undef;
+
+    return Lookup($class, $group, $aggregate_urn, $type);
+}
+
+AUTOLOAD {
+    my $self  = $_[0];
+    my $type  = ref($self) or croak "$self is not an object";
+    my $name  = $AUTOLOAD;
+    $name =~ s/.*://;   # strip fully-qualified portion
+
+    # A DB row proxy method call.
+    if (exists($self->{'DBROW'}->{$name})) {
+	return $self->{'DBROW'}->{$name};
+    }
+    carp("No such slot '$name' field in class $type");
+    return undef;
+}
+sub group($)	        { return $_[0]->{'GROUP'}; }
+sub domain($)		{ return $_[0]->{'AGGURN'}->domain(); }
+
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'DBROW'} = undef;
+}
+
+#
+# Stringify for output.
+#
+sub Stringify($)
+{
+    my ($self) = @_;
+    
+    my $pid    = $self->group()->pid();
+    my $type   = $self->type();
+    my $count  = $self->count();
+    my $domain = $self->domain();
+
+    return "[APT_ResGroupAgg $pid $domain $type:$count]";
+}
+
+sub Delete($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+    my $type = $self->type();
+    
+    DBQueryWarn("delete from apt_reservation_group_reservations ".
+		"where uuid='$uuid' and aggregate_urn='$urn' and ".
+		"      type='$type'")
+	or return -1;
+
+    my $hash = $self->group()->ReservationHash();
+    delete($hash->{$self->remote_uuid()});
+
+    return 0;
+}
+
+#
+# Lookup all reservations for a group
+#
+sub LookupForGroup($$)
+{
+    my ($class, $group) = @_;
+    my $result = {};
+    my $uuid   = $group->uuid();
+
+    my $query_result =
+	DBQueryWarn("select aggregate_urn,type from ".
+		    "   apt_reservation_group_reservations ".
+		    "where uuid='$uuid'");
+    return ()
+	if (! (defined($query_result) && $query_result->numrows));
+
+    while (my ($aggregate_urn,$type) = $query_result->fetchrow_array()) {
+	my $res = Lookup($class, $group, $aggregate_urn, $type);
+	if (!defined($res)) {
+	    print STDERR "No apt_reservation_group_reservations for ".
+		"$uuid/$aggregate_urn/$type\n";
+	    return ();
+	}
+	$result->{$res->remote_uuid()} = $res;
+    }
+    return $result;
+}
+
+sub UpdateCount($$)
+{
+    my ($self, $count) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+    my $type = $self->type();
+    
+    DBQueryWarn("update apt_reservation_group_reservations ".
+		" set count='$count' ".
+		"where uuid='$uuid' and aggregate_urn='$urn' and ".
+		"      type='$type'")
+	or return -1;
+
+    $self->{'DBROW'}->{'count'} = $count;
+    return 0;
+}
+
+sub Mark($$;$)
+{
+    my ($self, $which, $value) = @_;
+    my $uuid   = $self->uuid();
+    my $urn    = $self->aggregate_urn();
+    my $type   = $self->type();
+    my $clause = "${which}=";
+
+    if (!defined($value)) {
+	$clause .= "NULL";
+    }
+    elsif ($value eq "now") {
+	$clause .= "now()";
+	$value   = time();
+    }
+    else {
+	$clause .= DBQuoteSpecial($value);
+    }
+    DBQueryWarn("update apt_reservation_group_reservations ".
+		" set $clause ".
+		"where uuid='$uuid' and aggregate_urn='$urn' and ".
+		"      type='$type'")
+	or return -1;
+
+    $self->{'DBROW'}->{$which} = $value;
+    return 0;
+}
+
+sub MarkDeleted($;$)
+{
+    my ($self, $value) = @_;
+    if (!defined($value)) {
+	$value = "now";
+    }
+    return $self->Mark("deleted", $value);
+}
+
+sub MarkApproved($;$)
+{
+    my ($self, $value) = @_;
+    if (!defined($value)) {
+	$value = "now";
+    }
+    return $self->Mark("approved", $value);
+}
+
+sub MarkCanceled($;$)
+{
+    my ($self, $value) = @_;
+    if (!defined($value)) {
+	$value = "now";
+    }
+    return $self->Mark("canceled", $value);
+}
+
+sub MarkSubmitted($$)
+{
+    my ($self, $approved) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+    my $type = $self->type();
+    
+    DBQueryWarn("update apt_reservation_group_reservations set ".
+		" submitted=now(), ".
+		($approved ? "approved=now() " : "approved=null ") .
+		"where uuid='$uuid' and aggregate_urn='$urn' and ".
+		"      type='$type'")
+	or return -1;
+
+    $self->{'DBROW'}->{'submitted'} = time();
+    $self->{'DBROW'}->{'approved'}  = ($approved ? time() : undef);
+    return 0;
+}
+
+# _Always_ make sure that this 1 is at the end of the file...
+1;

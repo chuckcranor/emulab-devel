@@ -387,6 +387,35 @@ $routing = array("geni-login" =>
                                                      "Do_ReservationInfo",
                                                  "ReservationHistory" =>
                                                      "Do_ReservationHistory")),
+		 "resgroup" =>
+			array("file"    => "resgroup.ajax",
+			      "guest"   => false,
+			      "methods" => array("Reserve" =>
+                                                     "Do_Reserve",
+                                                 "Validate" =>
+                                                     "Do_Validate",
+                                                 "ListReservations" =>
+                                                     "Do_ListReservations",
+                                                 "GetReservation" =>
+                                                     "Do_GetReservation",
+                                                 "GetReservationGroup" =>
+                                                     "Do_GetReservationGroup",
+                                                 "Approve" =>
+                                                     "Do_Approve",
+                                                 "WarnUser" =>
+                                                     "Do_WarnUser",
+                                                 "Delete" =>
+                                                     "Do_Delete",
+                                                 "Refresh" =>
+                                                     "Do_Refresh",
+                                                 "Cancel" =>
+                                                     "Do_Cancel",
+                                                 "RequestInfo" =>
+                                                     "Do_RequestInfo",
+                                                 "ReservationInfo" =>
+                                                     "Do_ReservationInfo",
+                                                 "ReservationHistory" =>
+                                                     "Do_ReservationHistory")),
 		 "images" =>
 			array("file"    => "images.ajax",
 			      "guest"   => false,

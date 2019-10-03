@@ -1,0 +1,1049 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use Data::Dumper;
+use JSON;
+use POSIX ":sys_wait_h";
+use POSIX qw(:signal_h ceil);
+use Date::Parse;
+
+#
+# Back-end script to manage APT profiles.
+#
+sub usage()
+{
+    print("Usage: manage_resgroup ...\n");
+    exit(-1);
+}
+my $optlist     = "dt:";
+my $debug       = 0;
+my $webtask_id;
+my $webtask;
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $OURDOMAIN	= "@OURDOMAIN@";
+my $RESCOMMAND  = "$TB/bin/manage_reservations";
+my $MYURN	= "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/usr/bin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Load the Testbed support stuff.
+#
+use lib "@prefix@/lib";
+use EmulabConstants;
+use emdb;
+use emutil;
+use Brand;
+use User;
+use Project;
+use EmulabConstants;
+use libEmulab;
+use libtestbed;
+use WebTask;
+use APT_Reservation;
+use APT_Aggregate;
+use APT_Utility;
+use GeniResponse;
+
+# Protos
+sub fatal($);
+sub UserError($);
+sub ExitWithError($);
+sub DoGroupReserve();
+sub DoRefresh();
+sub DoList();
+sub DoDelete();
+sub DoApprove();
+sub DoCancel();
+sub CallMethodOnReservations($$@);
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"t"})) {
+    $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not lookup webtask $webtask_id");
+    }
+    # Convenient.
+    $webtask->AutoStore(1);
+}
+if (defined($options{"d"})) {
+    $debug++;
+}
+if (@ARGV < 1) {
+    usage();
+}
+my $action = shift(@ARGV);
+
+my $this_user = User->ThisUser();
+if (! defined($this_user)) {
+    fatal("You ($UID) do not exist!");
+}
+if ($action eq "reserve") {
+    DoGroupReserve();
+}
+elsif ($action eq "list") {
+    DoList();
+}
+elsif ($action eq "delete") {
+    DoDelete();
+}
+elsif ($action eq "refresh") {
+    DoRefresh();
+}
+elsif ($action eq "approve") {
+    DoApprove();
+}
+elsif ($action eq "cancel") {
+    DoCancel();
+}
+else {
+    usage();
+}
+exit(0);
+
+#
+# Create/Modify a "group" reservation (a set of reservations at different
+# clusters that logically grouped together). 
+#
+sub DoGroupReserve()
+{
+    my $optlist    = "s:e:nN:u:p:";
+    my @argvcopy   = @ARGV[0..$#ARGV-1];
+    my $update     = 0;
+    my $checkonly  = 0;
+    my $exitcode   = 0;
+    my $updateall  = 0;
+    my ($start, $end, $errmsg, $errcode, $reason, $resgroup);
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (@ARGV < 2);
+    my $project = Project->Lookup($ARGV[0]);
+    my $file    = $ARGV[1];
+
+    if (!defined($project)) {
+	fatal("No such project");
+    }
+    if (! -e $file) {
+	fatal("No such file: $file");
+    }
+    if (defined($options{"p"}) && !defined(Brand->Create($options{"p"}))) {
+	fatal("No such portal");
+    }
+    if (defined($options{"s"})) {
+	$start = $options{"s"};
+	if ($start !~ /^\d+$/) {
+	    $start = str2time($start);
+	    if (!$start) {
+		fatal("Start is not a unix timestamp or datetime");
+	    }
+	}
+    }
+    if (defined($options{"e"})) {
+	$end = $options{"e"};
+	if ($end !~ /^\d+$/) {
+	    $end = str2time($end);
+	    if (!$end) {
+		fatal("End is not a unix timestamp or datetime");
+	    }
+	}
+    }
+    if (defined($options{"N"})) {
+	$reason = emutil::ReadFile($options{"N"});
+	chomp($reason);
+
+	if (!TBcheck_dbslot($reason, "default", "fulltext",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    fatal("Invalid characters in reason string");
+	}
+    }
+    if (defined($options{"u"})) {
+	$update = 1;
+	$resgroup = APT_Reservation::Group->Lookup($options{"u"});
+	if (!defined($resgroup)) {
+	    fatal("No such reservation group");
+	}
+    }
+    if (defined($options{"n"})) {
+	$checkonly = 1;
+    }
+    if ($update) {
+	usage()
+	    if (! (defined($end) && defined($start)));
+    }
+    else {
+	usage()
+	    if (! defined($end));
+    }
+    #
+    # The file is a JSON array of cluster reservation info.
+    #
+    my $json = emutil::ReadFile($file);
+    if (!defined($json)) {
+	fatal("Could not read $file");
+    }
+    my $clusters = eval { decode_json($json) };
+    if ($@) {
+	fatal("Could not decode json data: $@\n");
+    }
+    if (ref($clusters) ne "HASH") {
+	fatal("Clusters is not a HASH");
+    }
+    print Dumper($clusters);
+    foreach my $cluster_uuid (keys(%{$clusters})) {
+	my $cluster = $clusters->{$cluster_uuid};
+	my $urn     = $cluster->{"cluster"};
+	my $type    = $cluster->{"type"};
+	my $count   = $cluster->{"count"};
+
+	if (!GeniHRN::IsValid($urn)) {
+	    fatal("Cluster is not a URN: $urn");
+	}
+	if ($type !~ /^[-\w]+$/) {
+	    fatal("Type is not a string: $type");
+	}
+	if ($count !~ /^\d+$/) {
+	    fatal("Count is not an integer: $count");
+	}
+	if (!defined(APT_Aggregate->Lookup($urn))) {
+	    fatal("No such aggregate: $urn");
+	}
+	if (!ValidUUID($cluster_uuid)) {
+	    fatal("Invalid cluster uuid: $cluster_uuid");
+	}
+	if (!ValidUUID($cluster->{"uuid"})) {
+	    fatal("Invalid cluster uuid: " . $cluster->{"uuid"});
+	}
+    }
+    #
+    # Build a list of objects to pass to CallMethodOnReservations().
+    #
+    my @reservations = ();
+
+    #
+    # If this is an update, see if the start/end/reason has changed. If
+    # they are the same, then the only reservations we need to worry
+    # about are new ones, or ones with a different node count.
+    #
+    if ($update) {
+	my $current_start = str2time($resgroup->start());
+	my $current_end   = str2time($resgroup->end());
+
+	if ($current_start != $start) {
+	    print "Start has changed from $current_start to $start\n";
+	    $updateall = 1;
+	}
+	if ($current_end != $end) {
+	    print "End has changed from $current_end to $end\n";
+	    $updateall = 1;
+	}
+	if (defined($reason) && $reason ne $resgroup->reason()) {
+	    print "Reason has changed\n";
+	    $updateall = 1;
+	}
+	foreach my $cluster_uuid (keys(%{$clusters})) {
+	    my $cluster     = $clusters->{$cluster_uuid};
+	    my $count       = $cluster->{"count"};
+	    my $remote_uuid = $cluster->{"uuid"};
+	    my $reservation = $resgroup->Reservation($remote_uuid);
+
+	    if (defined($reservation)) {
+		# We ignore the type/cluster that came in, in case the
+		# client tried to change it. See below.
+		$cluster->{"type"} = $reservation->type();
+		$cluster->{"cluster"} = $reservation->aggregate_urn();
+		
+		if ($updateall || $count != $reservation->count()) {
+		    push(@reservations, $cluster);
+		    # Flag for below, for generating command line.
+		    $cluster->{'update'} = 1;
+		}
+		else {
+		    # Mark as approved, since we did not change it
+		    $cluster->{'approved'} = 1;
+		}
+	    }
+	    else {
+		# A new cluster request.
+		push(@reservations, $cluster);
+	    }
+	}
+    }
+    else {
+	@reservations = values(%{$clusters});
+    }
+
+    #
+    # Called for each reference in the @reservations list, with a webtask
+    # to use when calling manage_reservations.
+    #
+    my $coderef = sub {
+	my ($ref, $webtask) = @_;
+	my $webtask_id   = $webtask->task_id();
+	my $command      = "$RESCOMMAND -t $webtask_id ";
+	my $urn          = $ref->{"cluster"};
+	my $type         = $ref->{"type"};
+	my $count        = $ref->{"count"};
+
+	if ($update) {
+	    my @tmp = ();
+
+	    for (my $i = 0; $i < scalar(@argvcopy); $i++) {
+		if ($argvcopy[$i] eq "-u") {
+		    if (exists($ref->{'update'})) {
+			#
+			# The -u argument in the argvcopy has to be
+			# updated to the remote uuid of this reservation.
+			#
+			$argvcopy[$i + 1] = $ref->{"uuid"};
+		    }
+		    else {
+			# Need to remove the -u option.
+			$i++;
+			next;
+		    }
+		}
+		push(@tmp, $argvcopy[$i])
+	    }
+	    @argvcopy = @tmp;
+	}
+	$command .= "-a $urn reserve -t $type @argvcopy $count";
+	print "Running: $command\n";
+	system($command);
+	if ($?) {
+	    return 1;
+	}
+	return 0;
+    };
+    my $responses;
+
+    #
+    # Okay, now we have to actually lock it.
+    #
+    if ($update && $resgroup->Lock()) {
+	$errmsg  = "Reservation group is busy, please try again later.";
+	$errcode = GENIRESPONSE_BUSY;
+	$exitcode = 1;
+	goto bad;
+    }
+    $errcode = CallMethodOnReservations($coderef, \$responses, @reservations);
+    if ($errcode) {
+	$errmsg   = $responses;
+	$exitcode = -1;
+	$resgroup->Unlock();
+	goto bad;
+    }
+    my $errors   = 0;
+
+    # This is what we return to the web UI. Reservations is just an updated
+    # version of what came in.
+    my $blob = {
+	"reservations" => $clusters,
+	"errors"       => 0,
+    };
+    
+    #
+    # Look at all the responses.
+    #
+    my @responses = @{$responses};
+    foreach my $res (@reservations) {
+	my $webtask = shift(@responses);
+
+	if (!$webtask->HasExited() || $webtask->exitcode() < 0) {
+	    #
+	    # Fatal Error. 
+	    #
+	}
+	#
+	# Exit codes.
+	#  0) Approved
+	#  1) Some other error the user should see (like, refused)
+	#  2) Valid but not approved. 
+	#
+	# In checkonly mode, (0) means reservation fits the schedule
+	# and would be immediately approved. (2) means it would
+	# require approval.
+	#
+	if ($webtask->exitcode() != 0) {
+	    $res->{'errcode'}  = $webtask->exitcode();
+	    $res->{'output'}   = $webtask->output();
+	    $res->{"approved"} = 0;
+	    $errors++;
+	}
+	else {
+	    $res->{"approved"} = $webtask->approved();
+	}
+	# Remote uuid of reservation, needed below for local record.
+	if (! $checkonly) {
+	    $res->{"uuid"} = $webtask->uuid();
+	}
+    }
+    if (!$checkonly) {
+	#
+	# If not doing a checkonly, then we have to record the change(s)
+	# to the reservations in the local tables. 
+	#
+	if ($errors == scalar(@reservations)) {
+	    #
+	    # If all of the new requests failed, there is nothing to
+	    # put in the DB. We will not return a new group uuid to
+	    # the caller. 
+	    #
+	    ;
+	}
+	else {
+	    if ($update) {
+		# One of start/end/reason changed, update resgroup
+		if ($updateall) {
+		    $resgroup->UpdateMeta($start, $end, $reason);
+		}
+	    }
+	    else {
+		#
+		# Create a new reservation group.
+		#
+		my $args = {
+		    "pid"         => $project->pid(),
+		    "pid_idx"     => $project->pid_idx(),
+		    "creator_uid" => $this_user->uid(),
+		    "creator_idx" => $this_user->uid_idx(),
+		    "start"       => $start,
+		    "end"         => $end,
+		    "reason"      => $reason,
+		};
+		$resgroup = APT_Reservation::Group->Create($args);
+		if (!defined($resgroup)) {
+		    fatal("Could not create a new reservation group");
+		}
+	    }
+	    foreach my $res (@reservations) {
+		# Skip ones that failed, the user can decide what to do.
+		next
+		    if (exists($res->{"errcode"}));
+		
+		my $urn   = $res->{"cluster"};
+		my $type  = $res->{"type"};
+		my $count = $res->{"count"};
+		my $ruuid = $res->{"uuid"};
+
+		if ($update) {
+		    my $reservation = $resgroup->Reservation($ruuid);
+		    if ($reservation) {
+			$reservation->UpdateCount($count);
+			$reservation->MarkSubmitted($res->{'approved'});
+			next;
+		    }
+		}
+		my $reservation =
+		    $resgroup->AddReservation($urn, $ruuid, $type, $count);
+		if (!$reservation) {
+		    #
+		    # Need to do something here.
+		    #
+		    fatal("Could not add reservation to group");
+		}
+		$reservation->MarkSubmitted($res->{'approved'});
+	    }
+	    $blob->{'uuid'} = $resgroup->uuid();
+	}
+	$blob->{'errors'} = $errors;
+    }
+    $resgroup->Unlock() if (defined($resgroup));
+    if (defined($webtask)) {
+	$webtask->results($blob);
+	$webtask->Exited($exitcode);
+    }
+    print Dumper($blob);
+    exit($exitcode);
+
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit($exitcode);
+}
+
+sub DoList()
+{
+}
+
+sub DoDelete()
+{
+    #
+    # We allow for admins to pass a reason (deny with cause).
+    #
+    my $optlist   = "N:";
+    my @reservations;
+    my $errmsg;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"N"})) {
+	fatal("Cannot read reason file")
+	    if (! -e $options{"N"});
+    }
+    usage()
+	if (@ARGV < 1);
+    my $uuid = shift(@ARGV);
+    
+    fatal("Invalid uuid")
+	if (!ValidUUID($uuid));
+
+    my $resgroup = APT_Reservation::Group->Lookup($uuid);
+    if (!defined($resgroup)) {
+	fatal("No such reservation group");
+    }
+    my $project = Project->Lookup($resgroup->pid());
+    fatal("Cannot lookup project")
+	if (!defined($project));
+    
+    if (! ($this_user->IsAdmin() ||
+	   $this_user->uid_idx() == $resgroup->creator_idx() ||
+	   $project->Manager())) {
+	fatal("No permission to delete this reservation")
+    }
+    if ($resgroup->Lock()) {
+	UserError("Reservation is locked, please try again later");
+    }
+    #
+    # See if we got specific reservations to delete.
+    #
+    if (@ARGV) {
+	while (@ARGV) {
+	    # Do not want to send these to manage_reservations
+	    my $remote_uuid = shift(@ARGV);
+	    my $reservation = $resgroup->ReservationHash()->{$remote_uuid};
+	    if (!defined($reservation)) {
+		$resgroup->Unlock();
+		fatal("No such reservation uuid in group: $remote_uuid");
+	    }
+	    push(@reservations, $reservation);
+	}
+    }
+    else {
+	@reservations = $resgroup->ReservationList();
+    }
+    my $coderef = sub {
+	my ($reservation, $webtask) = @_;
+	my $webtask_id  = $webtask->task_id();
+	my $urn         = $reservation->aggregate_urn();
+	my $remote_uuid = $reservation->remote_uuid();
+	my $pid         = $project->pid();
+	
+	my $command = "$RESCOMMAND -t $webtask_id -a $urn delete ";
+	if (defined($options{"N"})) {
+	    $command .= "-N " . $options{"N"} . " ";
+	}
+	$command .= "$pid $remote_uuid";
+
+	print "Running: $command\n";
+	system($command);
+	if ($?) {
+	    return 1;
+	}
+	return 0;
+    };
+    my $responses;
+    my $errors   = 0;
+    my $results  = {};
+    
+    my $errcode = CallMethodOnReservations($coderef,
+					   \$responses, @reservations);
+    if ($errcode) {
+	$errmsg = $responses;
+	$resgroup->Unlock();
+	goto bad;
+    }
+
+    #
+    # Look at all the responses.
+    #
+    my @responses = @{$responses};
+    foreach my $res (@reservations) {
+	my $webtask = shift(@responses);
+	my $remote_uuid = $res->remote_uuid();
+	my $blob = {
+	    "uuid"    => $remote_uuid,
+	    "errcode" => 0,
+	};
+	$results->{$remote_uuid} = $blob;
+	
+	#
+	# Not sure yet how to handle this. 
+	#
+	if (!$webtask->HasExited() || $webtask->exitcode()) {
+	    if (!$webtask->HasExited()) {
+		$blob->{'errcode'} = -1;
+		$blob->{'errmesg'} = "Internal error refreshing reservation";
+	    }
+	    elsif ($webtask->exitcode() == GENIRESPONSE_SEARCHFAILED) {
+		# This is easy!
+		$res->Delete();
+		next;
+	    }
+	    else {
+		$blob->{'errcode'} = $webtask->exitcode();
+		$blob->{'errmesg'} = $webtask->output();
+	    }
+	    next;
+	}
+	$res->Delete();
+    }
+    $resgroup->Delete()
+	if (! scalar($resgroup->ReservationList()));
+
+    if (defined($webtask)) {
+	$webtask->results($results);
+	$webtask->Exited($errors);
+    }
+    $resgroup->Unlock();
+    exit($errors);
+    
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit(-1);
+}
+
+sub DoRefresh()
+{
+    my $optlist   = "";
+    my $errmsg;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (@ARGV < 1);
+    my $uuid = shift(@ARGV);
+    
+    fatal("Invalid uuid")
+	if (!ValidUUID($uuid));
+
+    my $resgroup = APT_Reservation::Group->Lookup($uuid);
+    if (!defined($resgroup)) {
+	fatal("No such reservation group");
+    }
+    my $project = Project->Lookup($resgroup->pid());
+    fatal("Cannot lookup project")
+	if (!defined($project));
+    
+    if (! ($this_user->IsAdmin() ||
+	   $this_user->uid_idx() == $resgroup->creator_idx() ||
+	   $project->Manager())) {
+	fatal("No permission to refresh this reservation")
+    }
+    if ($resgroup->Lock()) {
+	UserError("Reservation is locked, please try again later");
+    }
+    my @reservations = $resgroup->ReservationList();
+
+    my $coderef = sub {
+	my ($reservation, $webtask) = @_;
+	my $webtask_id  = $webtask->task_id();
+	my $urn         = $reservation->aggregate_urn();
+	my $remote_uuid = $reservation->remote_uuid();
+	
+	my $command = "$RESCOMMAND -t $webtask_id ".
+	    "-a $urn list -i $remote_uuid";
+
+	print "Running: $command\n";
+	system($command);
+	if ($?) {
+	    return 1;
+	}
+	return 0;
+    };
+    my $responses;
+    my $errors   = 0;
+    my $results  = {};
+    
+    my $errcode = CallMethodOnReservations($coderef,
+					   \$responses, @reservations);
+    if ($errcode) {
+	$errmsg = $responses;
+	$resgroup->Unlock();
+	goto bad;
+    }
+
+    #
+    # Look at all the responses.
+    #
+    my @responses = @{$responses};
+    foreach my $res (@reservations) {
+	my $webtask     = shift(@responses);
+	my $remote_uuid = $res->remote_uuid();
+	my $blob = {
+	    "uuid"    => $remote_uuid,
+	    "errcode" => 0,
+	};
+	$results->{$remote_uuid} = $blob;
+	
+	if (!$webtask->HasExited() || $webtask->exitcode()) {
+	    if (!$webtask->HasExited()) {
+		$blob->{'errcode'} = -1;
+		$blob->{'errmesg'} = "Internal error refreshing reservation";
+	    }
+	    elsif ($webtask->exitcode() == GENIRESPONSE_SEARCHFAILED) {
+		# Not sure what to do here.
+	    }
+	    else {
+		$blob->{'errcode'} = $webtask->exitcode();
+		$blob->{'errmesg'} = $webtask->output();
+	    }
+	    next;
+	}
+	my $hash = $webtask->value();
+	my $details = (values(%{$hash->{'reservations'}}))[0];
+ 	if (defined($details->{'cancel'})) {
+	    my $when = str2time($details->{'cancel'});
+	    if ($when) {
+		$res->MarkCanceled($when);
+	    }
+	}
+ 	if (defined($details->{'approved'}) && !$res->approved()) {
+	    my $when = str2time($details->{'approved'});
+	    if ($when) {
+		$res->MarkApproved($when);
+	    }
+	}
+    }
+    if (defined($webtask)) {
+	if ($errors) {
+	    $webtask->output("Not all cluster reservations could be ".
+			     "refreshed, please try again later");
+	}
+	$webtask->results($results);
+	$webtask->Exited($errors);
+    }
+    $resgroup->Unlock();
+    exit($errors);
+    
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit(-1);
+}
+
+sub DoApprove()
+{
+    #
+    # We allow for admins to pass a reason (deny with cause).
+    #
+    my $optlist      = "p:F:";
+    my @reservations = ();
+    my $errmsg;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"F"})) {
+	fatal("Cannot read reason file")
+	    if (! -e $options{"F"});
+    }
+    if (!defined($options{"p"})) {
+	fatal("Missing the portal (-p) argument");
+    }
+    usage()
+	if (@ARGV < 1);
+    my $uuid = shift(@ARGV);
+    
+    fatal("Invalid uuid")
+	if (!ValidUUID($uuid));
+
+    my $resgroup = APT_Reservation::Group->Lookup($uuid);
+    if (!defined($resgroup)) {
+	fatal("No such reservation group");
+    }
+    if (! $this_user->IsAdmin()) {
+	fatal("No permission to approve this reservation")
+    }
+    if ($resgroup->Lock()) {
+	UserError("Reservation is locked, please try again later");
+    }
+    foreach my $res ($resgroup->ReservationList()) {
+	push(@reservations, $res)
+	    if (!$res->approved());
+    }
+
+    my $coderef = sub {
+	my ($reservation, $webtask) = @_;
+	my $webtask_id  = $webtask->task_id();
+	my $urn         = $reservation->aggregate_urn();
+	my $remote_uuid = $reservation->remote_uuid();
+	
+	my $command = "$RESCOMMAND -t $webtask_id -a $urn approve ";
+	if (defined($options{"F"})) {
+	    $command .= "-F " . $options{"F"} . " ";
+	}
+	$command .= "-p " . $options{"p"} . " ";
+	$command .= "$remote_uuid";
+
+	print "Running: $command\n";
+	system($command);
+	if ($?) {
+	    return 1;
+	}
+	return 0;
+    };
+    my $responses;
+    my $errors   = 0;
+    my $results  = {};
+    
+    my $errcode = CallMethodOnReservations($coderef,
+					   \$responses, @reservations);
+    if ($errcode) {
+	$errmsg = $responses;
+	$resgroup->Unlock();
+	goto bad;
+    }
+
+    #
+    # Look at all the responses.
+    #
+    my @responses = @{$responses};
+    foreach my $res (@reservations) {
+	my $webtask = shift(@responses);
+	my $remote_uuid = $res->remote_uuid();
+	my $blob = {
+	    "uuid"    => $remote_uuid,
+	    "errcode" => 0,
+	};
+	$results->{$remote_uuid} = $blob;
+
+	if (!$webtask->HasExited() || $webtask->exitcode()) {
+	    if (!$webtask->HasExited()) {
+		$blob->{'errcode'} = -1;
+		$blob->{'errmesg'} = "Internal error approving reservation";
+	    }
+	    elsif ($webtask->exitcode() == GENIRESPONSE_SEARCHFAILED) {
+		# Not sure what to do here.
+	    }
+	    else {
+		$blob->{'errcode'} = $webtask->exitcode();
+		$blob->{'errmesg'} = $webtask->output();
+	    }
+	    next;
+	}
+	$res->MarkApproved();
+    }
+    if (defined($webtask)) {
+	if ($errors) {
+	    $webtask->output("Not all cluster reservations could be approved, ".
+			     "Please try again later");
+	}
+	$webtask->results($results);
+	$webtask->Exited($errors);
+    }
+    $resgroup->Unlock();
+    exit($errors);
+    
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit(-1);
+}
+
+sub DoCancel() {}
+
+#
+# Call a method on each reservation in a reservation group.
+#
+sub CallMethodOnReservations($$@)
+{
+    my ($method, $prval, @reservations) = @_;
+
+    #
+    # Create anonymous webtasks to return the value. Note that for the
+    # single aggregate case (no parrun) we still create a webtask,
+    # which which makes the interface a little bit more consistent
+    # regardless of the number of aggregates. Also note that we do
+    # not set AutoStore, in case the callee messes with it, we flush it
+    # by hand below.
+    #
+    my @webtasks = ();
+    foreach my $agg (@reservations) {
+	my $webtask = WebTask->CreateAnonymous();
+	if (!defined($webtask)) {
+	    print STDERR "Could not create an anonymous webtask!\n";
+	    return -1;
+	}
+	push(@webtasks, $webtask);
+    }
+
+    #
+    # And call the method on each group aggregate.
+    #
+    my $coderef = sub {
+	my ($res, $method, $webtask) = @{ $_[0] };
+	my ($errmsg,$errcode);
+
+	#
+	# Method is always a code reference.
+	#
+	my $exitval = &$method($res, $webtask);
+	return $exitval >> 8;
+    };
+    my @return_codes  = ();
+    my @return_values = ();
+    
+    #
+    # Most of the time its just one aggregate, lets not use ParRun.
+    #
+    if (@reservations == 1) {
+	my $reservation = $reservations[0];
+	my $webtask     = $webtasks[0];
+	my $result;
+
+	@return_codes = (&$coderef([$reservation, $method, $webtask]));
+    }
+    else {
+	my @tmp = ();
+	for (my $i = 0; $i < scalar(@reservations); $i++) {
+	    push(@tmp, [$reservations[$i], $method, $webtasks[$i]]);
+	}
+	if (ParRun({"maxwaittime" => 99999,
+		    "maxchildren" => scalar(@reservations)},
+		   \@return_codes, $coderef, @tmp)) {
+	    $$prval = "Internal error calling $method";
+	    map { $_->Delete(); } @webtasks;
+	    return -1;
+	}
+    }
+    
+    #
+    # Generate a list of responses to return to caller.
+    #
+    foreach my $agg (@reservations) {
+	my $webtask = shift(@webtasks);
+
+	$webtask->Refresh();
+	push(@return_values, $webtask);
+    }
+    $$prval = \@return_values;
+    # Yes, we delete the webtasks even though we return the in-memory version.
+    map { $_->Delete(); } @webtasks;
+    return 0;
+}
+
+sub fatal($)
+{
+    my ($mesg) = @_;
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(-1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    # Exit with negative status so web interface treats it as system error.
+    exit(-1);
+}
+
+sub UserError($)
+{
+    my ($mesg) = @_;
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    exit(1);
+}
+
+#
+# These are errors which the user might need to see. Some errors are
+# exceptions though, and those we want to treat as internal errors.
+#
+sub ExitWithError($)
+{
+    my ($response) = @_;
+    my $mesg = $response->error();
+    my $code = $response->code();
+
+    #
+    # In general, these errors are to be expected by the caller.
+    #
+    if ($code == GENIRESPONSE_REFUSED ||
+	$code == GENIRESPONSE_SEARCHFAILED ||
+	$code == GENIRESPONSE_FORBIDDEN ||
+	$code == GENIRESPONSE_SERVER_UNAVAILABLE ||
+	$code == GENIRESPONSE_NETWORK_ERROR ||
+	$code == GENIRESPONSE_BUSY) {
+
+	if (defined($webtask)) {
+	    $webtask->output($mesg);
+	    $webtask->Exited($code);
+	}
+	print STDERR "*** $0:\n".
+	             "    $mesg\n";
+	exit(1);
+    }
+    fatal($mesg);
+}
+
