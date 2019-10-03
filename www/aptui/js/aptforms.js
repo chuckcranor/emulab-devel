@@ -252,12 +252,14 @@ $(function () {
 	/*
 	 * Check a form. We add the errors before we return.
 	 */
-	function CheckForm(form, route, method, callback) {
+	function CheckForm(form, route, method, callback, formfields) {
 	    /*
 	     * Convert form data into formfields array, like all our
 	     * form handler pages expect.
 	     */
-	    var formfields  = {};
+	    if (formfields === undefined) {
+		formfields  = {};
+	    }
 	    
 	    var fields = $(form).serializeArray();
 	    $.each(fields, function(i, field) {
@@ -289,13 +291,14 @@ $(function () {
 	/*
 	 * Submit form.
 	 */
-	function SubmitForm(form, route, method, callback, message) {
+	function SubmitForm(form, route, method, callback, message, formfields){
 	    /*
 	     * Convert form data into formfields array, like all our
 	     * form handler pages expect.
 	     */
-	    var formfields  = {};
-	    
+	    if (formfields === undefined) {
+		formfields  = {};
+	    }
 	    var fields = $(form).serializeArray();
 	    $.each(fields, function(i, field) {
 		formfields[field.name] = field.value;
