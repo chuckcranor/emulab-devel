@@ -341,8 +341,8 @@ window.ShowResGraph = (function ()
 	    var maxTime = d3.max(datums[0].values,
 				 function (d) { return d.x; });
 	    // Adjust the brush to the first day.
-	    if (maxTime - minTime > (3600 * 24 * 7 * 1000)) {
-		maxTime = minTime + (3600 * 24 * 7 * 1000);
+	    if (maxTime - minTime > (3600 * 24 * 14 * 1000)) {
+		maxTime = minTime + (3600 * 24 * 14 * 1000);
 	    }
 	    if (showbrush) {
 		chart.brushExtent([minTime,maxTime]);
