@@ -404,7 +404,7 @@ NODECONSOLE="sio"
 # "82"    Semi-old FreeBSD 8.2, 32-bit; use if you have 32-bit nodes
 # "8-64"  Semi-old FreeBSD 8.2, 64-bit; use if you have ALL 64-bit nodes
 #
-MFSVERSION="8-64"
+MFSVERSION="10-64"
 
 #
 # Set this if you are running:

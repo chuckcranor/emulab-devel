@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2018 University of Utah and the Flux Group.
+# Copyright (c) 2010-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -54,7 +54,13 @@ my $ETCDIR	= "$TB/etc";
 my $ELABINELAB  = @ELABINELAB@;
 my $MFSCONSOLE  = "@NODECONSOLE@";
 my $OURTIMEZONE = "@OURTIMEZONE@";
+my $MFSVERSION  = "@MFSVERSION@";
+
+# Use defs variable to initialize
 my $FBSDKERNEL  = 8;
+if ($MFSVERSION && $MFSVERSION =~ /^(8|9|10|11)[-\d]/) {
+    $FBSDKERNEL = $1;
+}
 
 # Need these below.
 my $FBSD_MAJOR;
