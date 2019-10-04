@@ -3269,7 +3269,7 @@ $(function ()
 	// Extract the urls from the status blob.
 	var urls = [];
 	_.each(statusblob, function(blob, aggregate_urn) {
-	    if (_.has(blob, "url")) {
+	    if (_.has(blob, "url") && _.has(amlist, aggregate_urn)) {
 		urls.push({"url"  : blob.url,
 			   "name" : amlist[aggregate_urn].abbreviation});
 	    }
