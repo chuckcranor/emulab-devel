@@ -1040,8 +1040,6 @@ $(function ()
 	    return;
 	}
 	$.each(statusblob , function(urn, iblob) {
-	    var cluster_id = amlist[urn].nickname;
-	    
 	    // Will not have node details until manifest is ready.
 	    if (!_.has(iblob, "details")) {
 		if (iblob.status == "deferred") {
@@ -1124,6 +1122,7 @@ $(function ()
 		      '#listview-row-' + node_id + ' td[name="client_id"]')
 			.css("color", "");
 		}
+		var cluster_id = amlist[urn].nickname;
 		
 		var html =
 		    "<table class='table table-condensed border-none'><tbody> " +

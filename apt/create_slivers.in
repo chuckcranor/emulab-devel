@@ -587,6 +587,8 @@ if ($usestitcher) {
 	$webtask->Exited($rval);
 	exit($rval);
     }
+    $instance->SetStatus("provisioned");
+    $instance->ComputeNodeCounts();
 }
 else {
     my $rval = CreateSlivers();
@@ -1196,6 +1198,14 @@ sub RunStitcher()
     my $failed        = 0;
     my $errcode       = GENIRESPONSE_STITCHER_ERROR();
 
+    #
+    # If starting the experiment (it might have been deferred), then
+    # initialize the start time.
+    #
+    if (!defined($instance->started())) {
+	$instance->Start();
+    }
+    
     #
     # Mark the aggregates as doing something, we never retry these
     # on any stitcher failure.
