@@ -209,9 +209,10 @@ sub DoReserve()
     #
     # We allow for a user or project argument.
     #
-    my $optlist = "t:s:e:nN:u:p:";
+    my $optlist = "t:s:e:nN:u:p:S";
     my ($start, $end, $type, $reason, $update);
     my $checkonly = 0;
+    my $noemail   = 0;
     my $portal;
     my $brand;
     my %rpcargs = ();
@@ -245,6 +246,9 @@ sub DoReserve()
     }
     if (defined($options{"N"})) {
 	$reason = readfile($options{"N"});
+    }
+    if (defined($options{"S"})) {
+	$noemail = 1;
     }
     if (defined($options{"n"})) {
 	$checkonly = 1;
@@ -384,15 +388,18 @@ sub DoReserve()
     # email lists.
     #
     if (!$approved) {
-	my $this_uid   = $this_user->uid();
-	my $this_email = $this_user->email();
-	my $url        = $brand->wwwBase() . "/list-reservations.php";
+	if (!$noemail) {
+	    my $this_uid   = $this_user->uid();
+	    my $this_email = $this_user->email();
+	    my $url        = $brand->wwwBase() . "/list-reservations.php";
     
-	$brand->SendEmail($brand->ExtensionsEmailAddress(),
-	  "Pending reservation request needs approval",
-	  "A reservation request was made by $this_uid, but it needs approval.".
-	  "\n\n".
-	  "See: $url", $this_email);
+	    $brand->SendEmail($brand->ExtensionsEmailAddress(),
+	      "Pending reservation request needs approval",
+	      "A reservation request was made by $this_uid, but it needs ".
+	      "approval.".
+	      "\n\n".
+	      "See: $url", $this_email);
+	}
     }
     elsif (defined($uuid)) {
 	#

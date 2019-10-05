@@ -87,6 +87,38 @@ class ReservationGroup
 	return null;
     }
 
+    # Lookup for a user.
+    function LookupForUser($user)
+    {
+        $uid_idx = $user->uid_idx();
+        $result = array();
+        
+        $query_result = DBQueryFatal("select uuid from apt_reservation_groups ".
+                                     "where creator_idx='$uid_idx'");
+	while ($row = mysql_fetch_array($query_result)) {
+            $reservation = ReservationGroup::Lookup($row["uuid"]);
+            if ($reservation) {
+                $result[] = $reservation;
+            }
+        }
+        return $result;
+    }
+
+    # Lookup all (admin)
+    function LookupAll()
+    {
+        $result = array();
+        
+        $query_result = DBQueryFatal("select uuid from apt_reservation_groups");
+	while ($row = mysql_fetch_array($query_result)) {
+            $reservation = ReservationGroup::Lookup($row["uuid"]);
+            if ($reservation) {
+                $result[] = $reservation;
+            }
+        }
+        return $result;
+    }
+
     #
     # Convert reservations to a list of aggregates.
     #

@@ -121,6 +121,29 @@ sub Lookup($$)
 }
 
 #
+# Lookup by a member of the group
+#
+sub LookupByMemberReservation($$)
+{
+    my ($class, $remote_uuid) = @_;
+    my $query_result;
+
+    if ($remote_uuid =~ /^\w+\-\w+\-\w+\-\w+\-\w+$/) {
+	$query_result =
+	    DBQueryWarn("select uuid from apt_reservation_group_reservations ".
+			"where remote_uuid='$remote_uuid'");
+    }
+    else {
+	return undef;
+    }
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my ($uuid) = $query_result->fetchrow_array();
+    return Lookup($class, $uuid);
+}
+
+#
 # Create a group
 #
 sub Create($$$)
@@ -152,7 +175,7 @@ sub Create($$$)
 	$$perrmsg = "Group uuid $uuid already exists!";
 	return undef;
     }
-    my $sets = "created=now(),uuid='$uuid',locked=now(),locker_pid='$$'";
+    my $sets = "uuid='$uuid',locked=now(),locker_pid='$$'";
     if (exists($argref->{"start"}) && defined($argref->{"start"})) {
 	$sets .= ", start=FROM_UNIXTIME(" . $argref->{"start"} . ")";
 	delete($argref->{"start"});
@@ -160,6 +183,13 @@ sub Create($$$)
     if (exists($argref->{"end"}) && defined($argref->{"end"})) {
 	$sets .= ", end=FROM_UNIXTIME(" . $argref->{"end"} . ")";
 	delete($argref->{"end"});
+    }
+    if (exists($argref->{"created"}) && defined($argref->{"created"})) {
+	$sets .= ", created=FROM_UNIXTIME(" . $argref->{"created"} . ")";
+	delete($argref->{"created"});
+    }
+    else {
+	$sets .= ",created=now()";
     }
     
     my $query = "insert into apt_reservation_groups set ${sets}, ".
@@ -279,6 +309,21 @@ sub UpdateMeta($$$$)
     $self->{'DBROW'}->{'end'}    = $end;
     $self->{'DBROW'}->{'reason'} = $reason;
     return 0;
+}
+
+#
+# A group needs approval if any of the reservations need approval.
+#
+sub IsApproved($)
+{
+    my ($self) = @_;
+    my $approved = 1;
+
+    foreach my $res ($self->ReservationList()) {
+	$approved = 0
+	    if (!$res->approved());
+    }
+    return $approved;
 }
 
 ###################################################################
@@ -451,6 +496,9 @@ sub Mark($$;$)
     elsif ($value eq "now") {
 	$clause .= "now()";
 	$value   = time();
+    }
+    elsif ($value =~ /^\d*$/) {
+	$clause .= "FROM_UNIXTIME($value)";
     }
     else {
 	$clause .= DBQuoteSpecial($value);

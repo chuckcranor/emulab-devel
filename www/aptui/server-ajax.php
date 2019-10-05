@@ -394,8 +394,8 @@ $routing = array("geni-login" =>
                                                      "Do_Reserve",
                                                  "Validate" =>
                                                      "Do_Validate",
-                                                 "ListReservations" =>
-                                                     "Do_ListReservations",
+                                                 "ListReservationGroups" =>
+                                                     "Do_ListReservationGroups",
                                                  "GetReservation" =>
                                                      "Do_GetReservation",
                                                  "GetReservationGroup" =>

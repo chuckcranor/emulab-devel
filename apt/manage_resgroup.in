@@ -92,6 +92,7 @@ sub DoList();
 sub DoDelete();
 sub DoApprove();
 sub DoCancel();
+sub DoConvertReservationsToGroups();
 sub CallMethodOnReservations($$@);
 
 #
@@ -141,6 +142,9 @@ elsif ($action eq "approve") {
 elsif ($action eq "cancel") {
     DoCancel();
 }
+elsif ($action eq "convert") {
+    DoConvertReservationsToGroups();
+}
 else {
     usage();
 }
@@ -158,7 +162,7 @@ sub DoGroupReserve()
     my $checkonly  = 0;
     my $exitcode   = 0;
     my $updateall  = 0;
-    my ($start, $end, $errmsg, $errcode, $reason, $resgroup);
+    my ($start, $end, $errmsg, $errcode, $reason, $resgroup, $portal, $brand);
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -175,8 +179,14 @@ sub DoGroupReserve()
     if (! -e $file) {
 	fatal("No such file: $file");
     }
-    if (defined($options{"p"}) && !defined(Brand->Create($options{"p"}))) {
-	fatal("No such portal");
+    if (defined($options{"p"})) {
+	$brand = Brand->Create($options{"p"});
+	if (!defined($brand)) {
+	    fatal("No such portal");
+	}
+    }
+    else {
+	$brand = Brand->Create("emulab");
     }
     if (defined($options{"s"})) {
 	$start = $options{"s"};
@@ -355,7 +365,7 @@ sub DoGroupReserve()
 	    }
 	    @argvcopy = @tmp;
 	}
-	$command .= "-a $urn reserve -t $type @argvcopy $count";
+	$command .= "-a $urn reserve -S -t $type @argvcopy $count";
 	print "Running: $command\n";
 	system($command);
 	if ($?) {
@@ -493,6 +503,22 @@ sub DoGroupReserve()
 		$reservation->MarkSubmitted($res->{'approved'});
 	    }
 	    $blob->{'uuid'} = $resgroup->uuid();
+
+	    #
+	    # If any of the reservations need approval, send email.
+	    #
+	    if (!$resgroup->IsApproved()) {
+		my $this_uid   = $this_user->uid();
+		my $this_email = $this_user->email();
+		my $url        = $brand->wwwBase() . "/list-resgroups.php";
+    
+		$brand->SendEmail($brand->ExtensionsEmailAddress(),
+			  "Pending reservation group request needs approval",
+			  "A reservation group request was made by $this_uid, ".
+			  "but it needs approval.".
+			  "\n\n".
+			  "See: $url", $this_email);
+	    }	    
 	}
 	$blob->{'errors'} = $errors;
     }
@@ -908,6 +934,113 @@ sub DoApprove()
 }
 
 sub DoCancel() {}
+
+#
+# Convert all current reservations to resgroups. Do not run this anyplace
+# but the MotherShip!
+#
+sub DoConvertReservationsToGroups()
+{
+    #
+    # Only Admins, must provide -F to make sure.
+    #
+    my $optlist      = "Fp:";
+    my $portal;
+    my @aggregates   = ();
+    my $errmsg;
+    my $errcode      = -1;
+
+    if (!$this_user->IsAdmin()) {
+	fatal("Must be an administrator to run this");
+    }
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (!defined($options{"F"})) {
+	fatal("Are you really sure? Give me the -F option");
+    }
+    if (defined($options{"p"})) {
+	$portal = $options{"p"};
+    }
+    if (defined($portal)) {
+	@aggregates = APT_Aggregate->LookupForPortal($portal);
+    }
+    else {
+	@aggregates = APT_Aggregate->LookupAll();
+    }
+    foreach my $aggregate (@aggregates) {
+	next
+	    if (!$aggregate->reservations());
+	
+	my $urn         = $aggregate->urn();
+	my $webtask     = WebTask->CreateAnonymous();
+	my $webtask_id  = $webtask->task_id();
+	my $command     = "$RESCOMMAND -a $urn -t $webtask_id list";
+
+	print "Running: $command\n";
+	system($command);
+	if ($?) {
+	    $webtask->Delete();
+	    next;
+	}
+	$webtask->Refresh();
+	my @reservations = values(%{$webtask->value()->{'reservations'}});
+	foreach my $reservation (@reservations) {
+	    my $uuid     = $reservation->{'uuid'};
+	    my $resgroup =
+		APT_Reservation::Group->LookupByMemberReservation($uuid);
+	    if ($resgroup) {
+		print "$uuid already in $resgroup\n";
+		next;
+	    }
+	    if (!exists($reservation->{'pid_idx'})) {
+		print "$uuid is not a portal created reservation\n";
+		next;
+	    }
+	    if (!exists($reservation->{'uid_idx'})) {
+		print "$uuid is not a portal created reservation\n";
+		next;
+	    }
+	    print "Creating a resgroup for $uuid\n";
+	    
+	    my $args = {
+		"pid"         => $reservation->{'pid'},
+		"pid_idx"     => $reservation->{'pid_idx'},
+		"creator_uid" => $reservation->{'uid'},
+		"creator_idx" => $reservation->{'uid_idx'},
+		"start"       => str2time($reservation->{'start'}),
+		"end"         => str2time($reservation->{'end'}),
+		"created"     => str2time($reservation->{'created'}),
+		"reason"      => $reservation->{'notes'},
+	    };
+	    $resgroup = APT_Reservation::Group->Create($args);
+	    if (!defined($resgroup)) {
+		fatal("Could not create a new reservation group");
+	    }
+	    my $type   = $reservation->{"type"};
+	    my $count  = $reservation->{"nodes"};
+	    my $newres = $resgroup->AddReservation($urn, $uuid, $type, $count);
+	    if (!$newres) {
+		fatal("Could not add reservation to group");
+	    }
+	    if ($reservation->{'approved'} ne "") {
+		$newres->Mark("submitted", str2time($reservation->{'created'}));
+		$newres->MarkApproved(str2time($reservation->{'approved'}));
+	    }
+	}
+    }
+    exit(0);
+
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit(-1);
+}
 
 #
 # Call a method on each reservation in a reservation group.

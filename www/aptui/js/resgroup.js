@@ -839,6 +839,10 @@ $(function ()
 	    var starttime = null;
 	    var startdata = null;
 	    var enddata   = null;
+	    var type      = cluster.type;
+	    var count     = cluster.count;
+
+	    console.info("findfirst", type, count, lower);
 
 	    var tmp = forecasts[cluster.cluster][cluster.type].slice(0);
 	    while (tmp.length && starttime == null) {
@@ -878,7 +882,7 @@ $(function ()
 	var fit = findfirst(clusters[0], null, null);
 	console.info("firstfit", fit);
 	for (index = 1; index < clusters.length; index++) {
-	    var results = findfirst(clusters[1], fit["starttime"], null);
+	    var results = findfirst(clusters[index], fit["starttime"], null);
 	    console.info("nextfit", results);
 	    if (results["starttime"] > fit["starttime"]) {
 		fit["starttime"] = results["starttime"];

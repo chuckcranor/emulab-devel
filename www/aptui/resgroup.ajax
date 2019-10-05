@@ -87,6 +87,13 @@ function Do_Reserve()
             }
         }
         $project = Project::Lookup($resgroup->pid());
+
+        if (! (ISADMIN() ||
+               $this_idx == $resgroup->creator_idx() ||
+               $project->UserTrust($this_user) >= $TBDB_TRUST_GROUPROOT)) {
+            SPITAJAX_ERROR(-1, "Not enough permission to change reservation");
+            return;
+        }
     }
     elseif (!isset($formfields["pid"]) || $formfields["pid"] == "") {
         $errors["pid"] = "Missing field";
@@ -96,6 +103,11 @@ function Do_Reserve()
     }
     else {
         $project = Project::Lookup($formfields["pid"]);
+
+        if (!ISADMIN() &&
+            !$project->AccessCheck($this_user, $TB_PROJECT_CREATEEXPT)) {
+            $errors["error"] = "Not enough permission in project";
+        }
     }
     if (!$project) {
         $errors["pid"] = "No such project";
@@ -134,10 +146,6 @@ function Do_Reserve()
     }
     if (isset($start) && isset($end) && $end < $start) {
         $errors["end"] = "End is before start";
-    }
-    if (!ISADMIN() &&
-        !$project->AccessCheck($this_user, $TB_PROJECT_CREATEEXPT)) {
-	$errors["error"] = "Not enough permission in project";
     }
     #
     # Clusters is an array of aggregate/type/count ...
@@ -778,61 +786,24 @@ function Do_CancelAux($type, $uuid, $aggregate, $clear, $when)
 }
 
 #
-# List reservations at a cluster (for a user).
+# List reservation groups for a user (or all users if an admin).
 #
-function Do_ListReservations()
+function Do_ListReservationGroups()
 {
     global $this_user;
     global $ajax_args;
-    global $TB_PROJECT_CREATEEXPT, $suexec_output;
+    $reservations = array();
 
-    if (!isset($ajax_args["cluster"])) {
-	SPITAJAX_ERROR(-1, "Missing cluster");
-	return;
+    if (ISADMIN()) {
+        $resgroups = ReservationGroup::LookupAll();
     }
-    if (!preg_match("/^[-\w]+$/", $ajax_args["cluster"])) {
-        SPITAJAX_ERROR(-1, "Invalid cluster name");
-        return;
+    else {
+        $resgroups = ReservationGroup::LookupForUser($this_user);
     }
-    $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
-    if (!$aggregate) {
-        SPITAJAX_ERROR(-1, "No such cluster");
-        return;
+    foreach ($resgroups as $resgroup) {
+        $reservations[$resgroup->uuid()] = ResgroupBlob($resgroup);
     }
-    $this_uid = $this_user->uid();
-    $urn = $aggregate->urn();
-    $webtask = WebTask::CreateAnonymous();
-    $webtask_id = $webtask->task_id();
-
-    $retval = SUEXEC($this_uid, "nobody",
-                     "webmanage_reservations -a '$urn' ".
-                     "   -t $webtask_id list",
-                     SUEXEC_ACTION_IGNORE);
-    if ($retval) {
-        $webtask->Refresh();
-        if (!$webtask->exited() || $retval < 0) {
-            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-            SPITAJAX_ERROR(-1, "Internal error retrieving reservations");
-        }
-        else {
-            SPITAJAX_ERROR($retval,
-                           "Could not get reservation list: ".
-                           $webtask->output());
-        }
-        $webtask->Delete();
-	return;
-    }
-    $webtask->Refresh();
-    $resinfo = $webtask->TaskValue("value");
-    $rlist   = array();
-    
-    foreach ($resinfo["reservations"] as $details) {
-        $uuid = $details['uuid'];
-        $rlist[$uuid] = $details;
-    }
-    $resinfo["reservations"] = $rlist;
-    $webtask->Delete();
-    SPITAJAX_RESPONSE($resinfo);
+    SPITAJAX_RESPONSE($reservations);
 }
 
 #
@@ -842,7 +813,6 @@ function Do_GetReservationGroup()
 {
     global $this_user;
     global $ajax_args;
-    $details = array();
 
     if (!isset($ajax_args["uuid"])) {
 	SPITAJAX_ERROR(-1, "Missing uuid");
@@ -858,10 +828,20 @@ function Do_GetReservationGroup()
         SPITAJAX_ERROR(-1, "No such reservation group");
 	return;
     }
-    $details["uuid"]       = $uuid;
+    SPITAJAX_RESPONSE(ResgroupBlob($resgroup));
+}
+
+function ResgroupBlob($resgroup)
+{
+    $details = array();
+    # Compute a status column based on reservations.
+    $status  = "approved";
+    
+    $details["uuid"]       = $resgroup->uuid();
     $details["pid"]        = $resgroup->pid();
     $details["pid_idx"]    = $resgroup->pid_idx();
     $details["notes"]      = $resgroup->reason();
+    $details["created"]    = DateStringGMT($resgroup->created());
     $details["start"]      = DateStringGMT($resgroup->start());
     $details["end"]        = DateStringGMT($resgroup->end());
     $details["approved"]   = 1;
@@ -880,14 +860,20 @@ function Do_GetReservationGroup()
                       "deleted"     => DateStringGMT($reservation->deleted()));
         $reservations[$reservation->remote_uuid()] = $blob;
 
+        if (! $reservation->approved()) {
+            $status = "pending";
+        }
+        elseif ($reservation->canceled()) {
+            $status = "canceled";
+        }
         # Update approved.
         if (!$reservation->approved()) {
             $details["approved"] = 0;
         }
     }
+    $details["status"] = $status;
     $details["reservations"] = $reservations;
-    
-    SPITAJAX_RESPONSE($details);
+    return $details;
 }
 
 # Local Variables:
