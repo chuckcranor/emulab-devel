@@ -1650,6 +1650,10 @@ sub AccessCheck($$$) {
     $gid = $pid
 	if ($gid eq "");
     my $group = Group->Lookup($pid, $gid);
+    if (!$group) {
+	print STDERR "Could not find group $pid/$gid!\n";
+	return 0;
+    }
 
     # Members of the owning project have some implicit permissions, depending
     # on their project trust.
