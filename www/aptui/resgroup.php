@@ -90,6 +90,7 @@ echo "<div id='main-body'></div>\n";
 
 # Place to hang the modals for now
 echo "<div id='oops_div'></div>
+      <div id='confirm_div'></div>
       <div id='waitwait_div'></div>\n";
 
 #
@@ -187,7 +188,8 @@ REQUIRE_APTFORMS();
 AddLibrary("js/resgraphs.js");
 AddTemplateList(array("resgroup", "reserve-faq", "reservation-graph",
                       "oops-modal", "waitwait-modal", "confirm-modal",
-                      "resusage-graph"));
+                      "resusage-list", "resusage-graph",
+                      "confirm-something", "resusage-graph"));
 SPITREQUIRE("js/resgroup.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
             "<script src='js/lib/nv.d3.js'></script>\n".

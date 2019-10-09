@@ -50,6 +50,14 @@ function Do_Reserve()
     global $PORTAL_GENESIS;
     $validate = 0;
 
+    #
+    # This interface is being phased out, mere users no longer allowed.
+    #
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "No permission to use this interface");
+	return;
+    }
+
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(-1, "Missing formfields");
 	return -1;
@@ -244,6 +252,14 @@ function Do_Delete()
     global $ajax_args;
     global $TB_PROJECT_CREATEEXPT, $suexec_output;
 
+    #
+    # This interface is being phased out, mere users no longer allowed.
+    #
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "No permission to use this interface");
+	return;
+    }
+    
     if (!isset($ajax_args["type"])) {
 	SPITAJAX_ERROR(-1, "Missing reservation type");
 	return -1;
@@ -350,6 +366,14 @@ function Do_InfoOrWarn($warning = false)
     global $ajax_args;
     global $TB_PROJECT_CREATEEXPT, $suexec_output, $APTBASE, $APTMAIL;
     $cancel = 0;
+
+    #
+    # This interface is being phased out, mere users no longer allowed.
+    #
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "No permission to use this interface");
+	return;
+    }
 
     if (!isset($ajax_args["type"])) {
 	SPITAJAX_ERROR(-1, "Missing reservation type");
@@ -588,7 +612,7 @@ function Do_Cancel()
         SPITAJAX_ERROR(-1, "Invalid uuid");
 	return;
     }
-    if (!isset($ajax_args["clear"]) && $ajax_args["clear"] == 1) {
+    if (! (isset($ajax_args["clear"]) && $ajax_args["clear"] == 1)) {
 	SPITAJAX_ERROR(-1, "Only clear supported.");
 	return;
     }
@@ -659,6 +683,14 @@ function Do_ListReservations()
     global $ajax_args;
     global $TB_PROJECT_CREATEEXPT, $suexec_output;
 
+    #
+    # This interface is being phased out, mere users no longer allowed.
+    #
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "No permission to use this interface");
+	return;
+    }
+
     if (!isset($ajax_args["cluster"])) {
 	SPITAJAX_ERROR(-1, "Missing cluster");
 	return;
@@ -716,6 +748,14 @@ function Do_GetReservation()
     global $this_user;
     global $ajax_args;
     global $TB_PROJECT_CREATEEXPT, $suexec_output;
+
+    #
+    # This interface is being phased out, mere users no longer allowed.
+    #
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "No permission to use this interface");
+	return;
+    }
 
     if (!isset($ajax_args["uuid"])) {
 	SPITAJAX_ERROR(-1, "Missing uuid");
@@ -851,6 +891,9 @@ function Do_ReservationInfo()
 
 #
 # List reservation history at a cluster (for a user).
+#
+# XXX This gives a history of the raw reservations, not reservation groups.
+# Might need to deal with this at some point.
 #
 function Do_ReservationHistory()
 {

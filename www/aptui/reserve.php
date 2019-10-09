@@ -28,6 +28,7 @@ chdir("apt");
 include("quickvm_sup.php");
 include_once("instance_defs.php");
 include_once("aggregate_defs.php");
+include_once("resgroup_defs.php");
 $page_title = "Reservations";
 
 #
@@ -55,6 +56,21 @@ if ($edit) {
         SPITUSERERROR("Missing arguments for edit mode");
         exit();
     }
+    #
+    # Check to see if this reservation is part of a reservation group. Mere
+    # users no longer get access to this interface.
+    #
+    $resgroup = ReservationGroup::LookupByMemberReservation($uuid);
+    if ($resgroup) {
+        if (!$isadmin) {
+            header("resgroup.php?edit=1&uuid=" . $resgroup->uuid());
+            exit();
+        }
+    }
+}
+if (!$isadmin) {
+    SPITUSERERROR("No permission to use this interface.");
+    exit();
 }
 if (isset($cluster)) {
     $aggregate = Aggregate::LookupByNickname($cluster);

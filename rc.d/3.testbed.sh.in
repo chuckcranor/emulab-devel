@@ -171,6 +171,11 @@ case "$1" in
 			@prefix@/sbin/aptevent_daemon
 		fi
 
+		if [ -x @prefix@/sbin/aptresgroup_daemon ]; then
+			echo -n " aptresgroup_daemon"
+			@prefix@/sbin/aptresgroup_daemon
+		fi
+
 		if [ -x @prefix@/sbin/aptimage_daemon ]; then
 			echo -n " aptimage_daemon"
 			@prefix@/sbin/aptimage_daemon
@@ -335,6 +340,9 @@ case "$1" in
 		fi
 		if [ -r /var/run/aptevent_daemon.pid ]; then
 			kill `cat /var/run/aptevent_daemon.pid`
+		fi
+		if [ -r /var/run/aptresgroup_daemon.pid ]; then
+			kill `cat /var/run/aptresgroup_daemon.pid`
 		fi
 		if [ -r /var/run/aptimage_daemon.pid ]; then
 			kill `cat /var/run/aptimage_daemon.pid`

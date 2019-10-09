@@ -10,7 +10,7 @@
  }
 </style>
 <div>
-  <table class='tablesorter'>
+  <table class='tablesorter resgroup-list'>
     <thead>
       <tr>
 	<th class="sorter-false">&nbsp</th>
@@ -76,7 +76,7 @@
 		      data-toggle='tooltip'
 		      data-container="body"
 		      data-trigger="hover"
-		      title='Edit reservation details'></span>
+		      title='View/Edit reservation details'></span>
 	      </a>
 	      <% if (isadmin) { %>
 		<% if (value.uid_idx) { %>
@@ -102,6 +102,17 @@
 		  </a>
 		<% } %>
 	      <% } %>
+	    <% } else { %>
+	      <a href="resgroup.php?edit=1&uuid=<%- value.uuid %>"
+		 target="_blank" 
+		 class="edit-button">
+		<span class='glyphicon glyphicon-eye-open text-primary'
+		      style='margin-bottom: 4px; margin-left: 10px;'
+		      data-toggle='tooltip'
+		      data-container="body"
+		      data-trigger="hover"
+		      title='View/Edit reservation details'></span>
+	      </a>
 	    <% } %>
 	  </td>
 	  <% if (showuser) { %>
@@ -178,12 +189,14 @@
 	<tr class="tablesorter-childRow">
 	  <td colspan=12>
 	    <% if (_.size(value.reservations)) { %>
-	      <div style="width: 500px;">
-		<table class='tablesorter'>
+	      <div style="ignore-width: 700px;">
+		<table class='tablesorter resgroup-child'>
 		  <thead>
 		    <th>Cluster</th>
 		    <th>Type</th>
 		    <th>Count</th>
+		    <th>Using</th>
+		    <th>Utilization</th>
 		    <th>Status</th>
 		    <% if (isadmin) { %>
 		      <th class="sorter-false"></th>
@@ -195,6 +208,26 @@
 			  <td><%- info.cluster_id %></td>
 			  <td><%- info.type %></td>
 			  <td><%- info.count %></td>
+			  <td>
+			    <% if (info.active && info.using != null) { %>
+			      <% if (info.using < info.count) { %>
+				<span class="text-danger">
+				  <%- info.using %>
+				</span>
+			      <% } else { %>
+				<%- info.using %>
+			      <% } %>
+			    <% } else { %>
+			      &nbsp;
+			    <% } %>
+			  </td>
+			  <td>
+			    <% if (info.utilization != null) { %>
+			      <%- info.utilization %>%
+			    <% } else { %>
+			      &nbsp;
+			    <% } %>
+			  </td>
 			  <td class="reservation-status-column">
 			    <span class="status-approved hidden">
 			      Approved</span>

@@ -50,6 +50,7 @@ my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
 my $OURDOMAIN	= "@OURDOMAIN@";
 my $RESCOMMAND  = "$TB/bin/manage_reservations";
+my $GROUPCOMMAND= "$TB/bin/manage_resgroup";
 my $MYURN	= "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 
 #
@@ -88,7 +89,6 @@ sub UserError($);
 sub ExitWithError($);
 sub DoGroupReserve();
 sub DoRefresh();
-sub DoList();
 sub DoDelete();
 sub DoApprove();
 sub DoCancel();
@@ -126,9 +126,6 @@ if (! defined($this_user)) {
 }
 if ($action eq "reserve") {
     DoGroupReserve();
-}
-elsif ($action eq "list") {
-    DoList();
 }
 elsif ($action eq "delete") {
     DoDelete();
@@ -539,10 +536,6 @@ sub DoGroupReserve()
     exit($exitcode);
 }
 
-sub DoList()
-{
-}
-
 sub DoDelete()
 {
     #
@@ -577,7 +570,7 @@ sub DoDelete()
     
     if (! ($this_user->IsAdmin() ||
 	   $this_user->uid_idx() == $resgroup->creator_idx() ||
-	   $project->Manager())) {
+	   $project->IsManager())) {
 	fatal("No permission to delete this reservation")
     }
     if ($resgroup->Lock()) {
@@ -712,7 +705,7 @@ sub DoRefresh()
     
     if (! ($this_user->IsAdmin() ||
 	   $this_user->uid_idx() == $resgroup->creator_idx() ||
-	   $project->Manager())) {
+	   $project->IsManager())) {
 	fatal("No permission to refresh this reservation")
     }
     if ($resgroup->Lock()) {
@@ -783,10 +776,36 @@ sub DoRefresh()
 		$res->MarkCanceled($when);
 	    }
 	}
- 	if (defined($details->{'approved'}) && !$res->approved()) {
-	    my $when = str2time($details->{'approved'});
-	    if ($when) {
-		$res->MarkApproved($when);
+	elsif ($res->canceled()) {
+	    $res->ClearCanceled();
+	}
+ 	if (defined($details->{'approved'})) {
+	    if (!$res->approved()) {
+		my $when = str2time($details->{'approved'});
+		if ($when) {
+		    $res->MarkApproved($when);
+		}
+	    }
+	    if (exists($details->{'using'}) && $details->{'using'} =~ /^\d+$/) {
+		$res->Update("using", $details->{'using'});
+	    }
+	    # We set this, not the remote cluster.
+	    if ($details->{'utilization'}) {
+		$res->Update("utilization", $details->{'utilization'});
+	    }
+	    # Store this for generating the graphs.
+	    if (exists($details->{'history'})) {
+		my $blob = {"remote_pid" => $details->{'remote_pid'},
+			    "remote_uid" => $details->{'remote_uid'},
+			    "history"    => $details->{'history'}};
+		
+		my $json = eval { encode_json($blob); };
+		if ($@) {
+		    print STDERR "Could not json encode reservation data\n";
+		}
+		else {
+		    $res->Update("jsondata", $json);
+		}
 	    }
 	}
     }
@@ -933,7 +952,158 @@ sub DoApprove()
     exit(-1);
 }
 
-sub DoCancel() {}
+sub DoCancel()
+{
+    my $optlist = "p:ce:N:";
+    my $clear   = 0;
+    my $when;
+    my $portal;
+    my $reason;
+    my $errmsg;
+    my @reservations = ();
+
+    if (!$this_user->IsAdmin()) {
+	fatal("No permission to schedule reservation cancellation")
+    }    
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"N"})) {
+	fatal("Cannot read reason file")
+	    if (! -e $options{"N"});
+    }
+    if (defined($options{"p"})) {
+	$portal = $options{"p"}
+    }
+    if (defined($options{"c"})) {
+	$clear = 1;
+    }
+    elsif (defined($options{"e"})) {
+	$when = $options{"e"};
+	if ($when !~ /^\d+$/) {
+	    $when = str2time($when);
+	    if (!defined($when)) {
+		fatal("Could not parse -e option.");
+	    }
+	}
+    }
+    else {
+	fatal("Missing the termination (-e) argument");
+    }
+    if (!defined($options{"p"})) {
+	fatal("Missing the portal (-p) argument");
+    }
+    usage()
+	if (@ARGV != 1);
+    my $uuid = shift(@ARGV);
+
+    my $resgroup = APT_Reservation::Group->Lookup($uuid);
+    if (!defined($resgroup)) {
+	fatal("No such reservation group");
+    }
+    if ($resgroup->Lock()) {
+	UserError("Reservation is locked, please try again later");
+    }
+    foreach my $res ($resgroup->ReservationList()) {
+	next
+	    if (!$res->approved());
+	# Already canceled
+	next
+	    if ($res->canceled() && !$clear);
+	# Already uncanceled
+	next
+	    if (!$res->canceled() && $clear);
+	
+	push(@reservations, $res)
+    }
+    my $coderef = sub {
+	my ($reservation, $webtask) = @_;
+	my $webtask_id  = $webtask->task_id();
+	my $urn         = $reservation->aggregate_urn();
+	my $remote_uuid = $reservation->remote_uuid();
+	
+	my $command = "$RESCOMMAND -t $webtask_id -a $urn cancel ";
+	if (defined($options{"N"})) {
+	    $command .= "-F " . $options{"N"} . " ";
+	}
+	$command .= "-p " . $options{"p"} . " ";
+	if ($clear) {
+	    $command .= "-c ";
+	}
+	else {
+	    $command .= "-e $when ";
+	}
+	$command .= "$remote_uuid";
+
+	print "Running: $command\n";
+	system($command);
+	if ($?) {
+	    return 1;
+	}
+	return 0;
+    };
+    my $responses;
+    my $errors   = 0;
+    my $results  = {};
+    
+    my $errcode = CallMethodOnReservations($coderef,
+					   \$responses, @reservations);
+    if ($errcode) {
+	$errmsg = $responses;
+	$resgroup->Unlock();
+	goto bad;
+    }
+
+    #
+    # Look at all the responses.
+    #
+    my @responses = @{$responses};
+    foreach my $res (@reservations) {
+	my $webtask = shift(@responses);
+	my $remote_uuid = $res->remote_uuid();
+	my $blob = {
+	    "uuid"    => $remote_uuid,
+	    "errcode" => 0,
+	};
+	$results->{$remote_uuid} = $blob;
+
+	if (!$webtask->HasExited() || $webtask->exitcode()) {
+	    if (!$webtask->HasExited()) {
+		$blob->{'errcode'} = -1;
+		$blob->{'errmesg'} = "Internal error canceling reservation";
+	    }
+	    elsif ($webtask->exitcode() == GENIRESPONSE_SEARCHFAILED) {
+		# Not sure what to do here.
+	    }
+	    else {
+		$blob->{'errcode'} = $webtask->exitcode();
+		$blob->{'errmesg'} = $webtask->output();
+	    }
+	    next;
+	}
+	$res->MarkCanceled();
+    }
+    if (defined($webtask)) {
+	if ($errors) {
+	    $webtask->output("Not all cluster reservations could be canceled, ".
+			     "Please try again later");
+	}
+	$webtask->results($results);
+	$webtask->Exited($errors);
+    }
+    $resgroup->Unlock();
+    exit($errors);
+    
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit(-1);
+}
 
 #
 # Convert all current reservations to resgroups. Do not run this anyplace
@@ -1029,6 +1199,8 @@ sub DoConvertReservationsToGroups()
 		$newres->Mark("submitted", str2time($reservation->{'created'}));
 		$newres->MarkApproved(str2time($reservation->{'approved'}));
 	    }
+	    $resgroup->Unlock();
+	    system("$GROUPCOMMAND refresh " . $resgroup->uuid());
 	}
     }
     exit(0);

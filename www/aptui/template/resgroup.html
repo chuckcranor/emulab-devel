@@ -42,12 +42,12 @@
  .form-group-sm .control-label {
      padding-top: 0px !important;
  }
- .reservation-error {
+ .reservation-error, .underused-warning {
      padding-top: 0px !important;
      padding-bottom: 0px !important;
  }
 </style>  
-<div class='row'>
+<div class='row main-row'>
   <div class='col-lg-7
               col-md-7'>
     <div class='panel panel-default'>
@@ -304,6 +304,18 @@
 			style="margin-right: 10px"
 			id='reserve-refresh-button'
 			type='submit' name='refresh'>Refresh</button>
+		<button class='btn btn-info btn-sm pull-left hidden' 
+			style="margin-right: 10px"
+			id='reserve-info-button'
+			type='submit' name='info'>Info</button>
+		<button class='btn btn-info btn-sm pull-left hidden' 
+			style="margin-right: 10px"
+			id='reserve-warn-button'
+			type='submit' name='warn'>Warn</button>
+		<button class='btn btn-danger btn-sm pull-left hidden' 
+			style="margin-right: 10px"
+			id='reserve-uncancel-button'
+			type='submit' name='uncancel'>UnCancel</button>
 		<button class='hidden btn btn-primary btn-sm pull-right'
 			style="margin-right: 10px"
 			id='reserve-approve-button'
@@ -330,6 +342,7 @@
 	</div>
       </div>
     </div>
+    <div id="history-graphs"></div>
   </div>
   <div class='col-lg-5
               col-md-5' id="reservation-lists">
@@ -539,6 +552,62 @@
 	  <br>
           <button class='btn btn-danger btn-sm'
 		  id='confirm-approve'>Confirm</a>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='info-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+        <center><h4>Confirm to Send Message</h4>
+	  <span class="hidden nomessage-error text-danger">Give me Text!</span>
+	  <div>
+	    <textarea class='form-control user-message'
+		      rows=5></textarea>
+	  </div>
+	  <br>
+          <button class='btn btn-danger btn-sm confirm-button'>Confirm</button>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='warn-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+        <center><h4>Confirm to Send Warning Message</h4>
+	  Additional text to send with warning (no text is okay):
+	  <div>
+	    <textarea class='form-control user-message'
+		      rows=5></textarea>
+	  </div>
+	  <input type=checkbox id='schedule-cancellation' value=yes>
+	  Cancel reservation in 24 hours?
+	  <div style="margin-top:10px;">
+            <button class='btn btn-danger btn-sm confirm-button'>Confirm</button>
+	  </div>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='uncancel-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+        <center><h4>Confirm to Cancel Cancellation</h4>
+	  <br>
+          <button class='btn btn-danger btn-sm'
+		  id='confirm-uncancel'>Confirm</a>
 	</center>
       </div>
     </div>

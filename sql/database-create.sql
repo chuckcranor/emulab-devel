@@ -677,6 +677,49 @@ CREATE TABLE `apt_profiles` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_reservation_group_reservations`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_group_reservations`;
+CREATE TABLE `apt_reservation_group_reservations` (
+  `uuid` varchar(40) NOT NULL default '',
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `remote_uuid` varchar(40) NOT NULL default '',
+  `type` varchar(30) NOT NULL DEFAULT '',
+  `count` smallint(5) unsigned NOT NULL DEFAULT '0',
+  `using` smallint(5) unsigned default NULL,
+  `utilization` smallint(5) unsigned default NULL,
+  `submitted` datetime DEFAULT NULL,
+  `approved` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
+  `deleted` datetime DEFAULT NULL,
+  `jsondata` text,
+  PRIMARY KEY (`uuid`,`aggregate_urn`,`type`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_reservation_groups`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_groups`;
+CREATE TABLE `apt_reservation_groups` (
+  `uuid` varchar(40) NOT NULL default '',
+  `pid` varchar(48) NOT NULL default '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `creator_uid` varchar(8) NOT NULL default '',
+  `creator_idx` mediumint(8) unsigned NOT NULL default '0',
+  `start` datetime DEFAULT NULL,
+  `end` datetime DEFAULT NULL,
+  `created` datetime DEFAULT NULL,
+  `deleted` datetime DEFAULT NULL,
+  `locked` datetime DEFAULT NULL,
+  `locker_pid` int(11) default '0',
+  `reason` mediumtext,
+  PRIMARY KEY (`uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+
+--
 -- Table structure for table `apt_reservation_history_actions`
 --
 

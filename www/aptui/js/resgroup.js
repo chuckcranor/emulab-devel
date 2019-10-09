@@ -117,7 +117,11 @@ $(function ()
 	'               class="btn btn-xs btn-default delete-reservation ' +
 	'                      hidden" ' +
 	'               style="color: red;">' +
- 	'          <span class="glyphicon glyphicon-remove"></span>' +
+ 	'          <span class="glyphicon glyphicon-remove" ' +
+	'		 data-toggle="tooltip" ' +
+	' 		 data-container="body" ' +
+	'		 data-trigger="hover" ' +
+	'		 title="Delete this cluster reservation"></span>' +
 	'       </button>' +
 	'     </td>' +
 	'     <% if (window.ISADMIN) { %> ' +
@@ -131,6 +135,16 @@ $(function ()
 	'       </td>' +
 	'     <% } %>' +
 	'    </tr>' +
+	'    <tr class="underused-row">' +
+	'      <td colspan=4 class="underused-warning">' +
+	'         <span class="form-group-sm hidden has-warning"> ' +
+	'           <label class="control-label">' +
+	'            The reservation above is using only ' +
+	'             <span class="using-count"><%- using %></span> node(s). ' +
+	'           </label>' +
+	'         </span>' +
+	'      </td>' +
+	'    </tr>'; 
 	'    <tr class="error-row">' +
 	'      <td colspan=4 class="reservation-error">' +
 	'         <span class="form-group-sm hidden has-error"> ' +
@@ -169,8 +183,7 @@ $(function ()
 	$('#waitwait_div').html(waitwaitString);
 
 	/*
-	 * In edit mode, we ask for the reservation details from the
-	 * backend cluster and then update the form.
+	 * In edit mode enable the controls.
 	 */
 	if (editing) {
 	    PopulateReservation();
@@ -182,6 +195,23 @@ $(function ()
 		e.preventDefault();
 		Refresh();
 	    });
+	    if (window.ISADMIN) {
+		// Bind admin button handlers
+		$('#reserve-info-button')
+		    .removeClass("hidden")
+		    .click(function(e) {
+			e.preventDefault();
+			InfoOrWarning("info");
+		    });
+		$('#reserve-warn-button').click(function(e) {
+		    e.preventDefault();
+		    InfoOrWarning("warn");
+		});
+		$('#reserve-uncancel-button').click(function(e) {
+		    e.preventDefault();
+		    Uncancel();
+		});
+	    }
 	}
 	else {
 	    // Give this a slight delay so that the spinners appear.
@@ -524,6 +554,11 @@ $(function ()
 	    if (tbody.hasClass("new-cluster")) {
 		cluster = tbody.find(".cluster-select option:selected").val();
 		type    = tbody.find(".hardware-select option:selected").val();
+
+		// Skip an empty row
+		if (cluster == "" || type == "") {
+		    return;
+		}
 	    }
 	    else {
 		cluster = tbody.find(".cluster-selected").attr("data-urn");
@@ -1071,41 +1106,6 @@ $(function ()
 			    "patience please", {"clusters" : clusters});
     }
 
-    /*
-     * Approve a reservation
-     */
-    function Approve()
-    {
-	var callback = function (json) {
-	    console.info(json);
-	    sup.HideModal('#waitwait-modal');
-	    if (json.code) {
-		sup.SpitOops("oops", json.value);
-		return;
-	    }
-	    RefreshClustersTable(json.value);
-	};
-	// Bind the confirm button in the modal. Do the approval.
-	$('#approve-modal #confirm-approve').click(function () {
-	    sup.HideModal('#approve-modal', function () {
-		var message = $('#approve-modal .user-message').val().trim();
-		sup.ShowModal('#waitwait-modal');
-		var xmlthing = sup.CallServerMethod(null, "resgroup",
-						    "Approve",
-						    {"uuid"    : window.UUID,
-						     "message" : message});
-		xmlthing.done(callback);
-	    });
-	});
-	// Handler so we know the user closed the modal. We need to
-	// clear the confirm button handler.
-	$('#approve-modal').on('hidden.bs.modal', function (e) {
-	    $('#approve-modal #confirm-approve').unbind("click");
-	    $('#approve-modal').off('hidden.bs.modal');
-	})
-	sup.ShowModal("#approve-modal");
-    }
-
     function PopulateReservation()
     {
 	var callback = function(json) {
@@ -1140,7 +1140,10 @@ $(function ()
 		    "cluster_urn" : res.cluster_urn,
 		    "type"        : res.type,
 		    "count"       : res.count,
+		    "using"       : res.using != null ? res.using : "",
 		    "remote_uuid" : res.remote_uuid,
+		    "active"      : details.active,
+		    "approved"    : res.approved,
 		});
 		var row = $(html);
 		// Handler for changing node count.
@@ -1150,6 +1153,10 @@ $(function ()
 		// Handler for delete row.
 		row.find(".delete-reservation").click(function () {
 		    Delete(row);
+		});
+		// This activates the tooltip subsystem.
+		row.find('[data-toggle="tooltip"]').tooltip({
+		    placement: 'auto'
 		});
 		$('#cluster-table').append(row);
 	    });
@@ -1193,17 +1200,36 @@ $(function ()
 		$('#pid').html(details.pid);
 	    }
 	    
-	    /*
-	     * If this is an admin looking at an unapproved reservation,
-	     * show the approve button
-	     */
-	    if (isadmin && !details.approved) {
-		$('#reserve-approve-button').removeClass("hidden");
-		$('#reserve-approve-button').click(function(event) {
-		    event.preventDefault();
-		    Approve();
-		});
+	    if (isadmin) {
+		/*
+		 * If this is an admin looking at an unapproved reservation,
+		 * show the approve button
+		 */
+		if (!details.approved) {
+		    $('#reserve-approve-button').removeClass("hidden");
+		    $('#reserve-approve-button').click(function(event) {
+			event.preventDefault();
+			Approve();
+		    });
+		}
+		var now   = new Date();
+		var start = new Date(details.start);
+
+		if (now.getTime() > start.getTime()) {
+		    // A (partially) approved reservation also needs the
+		    // the warn button, if its start time has passed.
+		    if (details.active ||
+			details.canceled != _.size(details.reservations)) {
+			$('#reserve-warn-button').removeClass("hidden");
+		    }
+		    // A (partially) canceled reservation also needs the
+		    // the uncancel button.
+		    if (details.canceled) {
+			$('#reserve-uncancel-button').removeClass("hidden");
+		    }
+		}
 	    }
+	    
 	    // Need this in Delete().
 	    window.PID = details.pid;
 	    // Now enable delete button
@@ -1213,9 +1239,6 @@ $(function ()
 
 	    // Now we can load the graph since we know the project.
 	    LoadReservations(details.pid);
-
-	    // Add append history graph under the reservation graph.
-	    DrawHistoryGraph(details);
 	};
 	sup.CallServerMethod(null, "resgroup",
 			     "GetReservationGroup",
@@ -1249,6 +1272,11 @@ $(function ()
 	    var tbody = $('#cluster-table tbody[data-uuid="' + uuid + '"]');
 	    var newClass = "";
 
+	    // Update the hidden using count.
+	    if (details.active && res.using != null) {
+		tbody.find(".underused-warning .using-count").val(res.using);
+	    }
+
 	    if (operationResults &&
 		_.has(operationResults, uuid) &&
 		operationResults[uuid].errcode) {
@@ -1258,17 +1286,17 @@ $(function ()
 	    }
 	    else if (!res.approved) {
 		tbody.find(".reservation-error span label")
-		    .html("This reservation has not been approved yet");
+		    .html("The reservation above has not been approved yet");
 		newClass = "has-warning";
 	    }
 	    else if (res.canceled) {
 		tbody.find(".reservation-error span label")
-		    .html("This reservation has been canceled");
+		    .html("This reservation above has been canceled");
 		newClass = "has-error";
 	    }
 	    else if (res.deleted) {
 		tbody.find(".reservation-error span label")
-		    .html("This reservation has been deleted");
+		    .html("This reservation above has been deleted");
 		newClass = "has-error";
 	    }
 	    if (newClass == "") {
@@ -1283,6 +1311,19 @@ $(function ()
 		    .removeClass("hidden");
 		tbody.removeClass("has-warning has-error")
 		    .addClass(newClass);
+	    }
+	    // Watch for underused.
+	    if (details.active && res.approved && res.using < res.count) {
+		tbody.find(".underused-warning span")
+		    .removeClass("hidden");
+		if (newClass == "") {
+		    tbody.removeClass("has-warning has-error")
+			.addClass("has-warning");
+		}
+	    }
+	    else {
+		tbody.find(".underused-warning span")
+		    .addClass("hidden");
 	    }
 	});
 	if (details.approved) {
@@ -1309,6 +1350,8 @@ $(function ()
 	    $('#cluster-table tbody.existing-cluster .add-cluster')
 		.last().removeClass("hidden");
 	}
+	// Add append history graphs under the reservation panel
+	DrawHistoryGraphs(details);
     }
 
     /*
@@ -1403,6 +1446,143 @@ $(function ()
 	sup.ShowModal("#delete-reservation-modal");
     }
 
+    /*
+     * Approve a reservation
+     */
+    function Approve()
+    {
+	var callback = function (json) {
+	    console.info(json);
+	    sup.HideModal('#waitwait-modal');
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    RefreshClustersTable(json.value);
+	};
+	// Bind the confirm button in the modal. Do the approval.
+	$('#approve-modal #confirm-approve').click(function () {
+	    sup.HideModal('#approve-modal', function () {
+		var message = $('#approve-modal .user-message').val().trim();
+		sup.ShowModal('#waitwait-modal');
+		var xmlthing = sup.CallServerMethod(null, "resgroup",
+						    "Approve",
+						    {"uuid"    : window.UUID,
+						     "message" : message});
+		xmlthing.done(callback);
+	    });
+	});
+	// Handler so we know the user closed the modal. We need to
+	// clear the confirm button handler.
+	$('#approve-modal').on('hidden.bs.modal', function (e) {
+	    $('#approve-modal #confirm-approve').unbind("click");
+	    $('#approve-modal').off('hidden.bs.modal');
+	})
+	sup.ShowModal("#approve-modal");
+    }
+
+    /*
+     * Ask for info about reservation (usage, lack of usage, etc).
+     * Optional cancel.
+     */
+    function InfoOrWarning(which) {
+	var warning = (which == "warn" ? 1 : 0);
+	var modal   = (warning ? "#warn-modal" : "#info-modal");
+	var method  = (warning ? "WarnUser" : "RequestInfo");
+	var cancel  = 0;
+
+	var callback = function (json) {
+	    console.log(method, json);
+	    if (json.code) {
+		if (!warning) {
+		    sup.HideWaitWait(function () {
+			sup.SpitOops("oops", json.value);
+		    });
+		}
+		else {
+		    sup.SpitOops("oops", json.value);
+		}
+		return;
+	    }
+	    if (!warning) {
+		sup.HideWaitWait();
+	    }
+	    if (cancel) {
+		RefreshClustersTable(json.value);
+	    }
+	};
+	// Bind the confirm button in the modal. 
+	$(modal + ' .confirm-button').click(function () {
+	    var message = $(modal + ' .user-message').val();
+	    if (!warning && message.trim().length == 0) {
+		$(modal + ' .nomessage-error').removeClass("hidden");
+		return;
+	    }
+	    if (warning && $('#schedule-cancellation').is(":checked")) {
+		cancel = 1;
+	    }
+	    var args = {"uuid"    : window.UUID,
+			"cancel"  : cancel,
+			"message" : message};
+	    console.info("warninfo", args);
+	    
+	    sup.HideModal(modal, function () {
+		if (!warning) {
+		    // This will take a few moments.
+		    sup.ShowWaitWait();
+		}
+		var xmlthing = sup.CallServerMethod(null, "resgroup",
+						    method, args);
+		xmlthing.done(callback);
+	    });
+	});
+	// Handler so we know the user closed the modal. We need to
+	// clear the confirm button handler.
+	$(modal).on('hidden.bs.modal', function (e) {
+	    $(modal + ' .confirm-button').unbind("click");
+	    $(modal).off('hidden.bs.modal');
+	})
+	// Hide error
+	if (!warning) {
+	    $(modal + ' .nomessage-error').addClass("hidden");
+	}
+	sup.ShowModal(modal);
+    }
+
+    /*
+     * Cancel a cancellation.
+     */
+    function Uncancel()
+    {
+	var callback = function (json) {
+	    console.info(json);
+	    sup.HideModal('#waitwait-modal');
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    RefreshClustersTable(json.value);
+	};
+	// Bind the confirm button in the modal. 
+	$('#uncancel-modal #confirm-uncancel').click(function () {
+	    sup.HideModal('#uncancel-modal', function () {
+		sup.ShowModal('#waitwait-modal');
+		var xmlthing = sup.CallServerMethod(null, "resgroup",
+						    "Cancel",
+						    {"uuid"    : window.UUID,
+						     "clear"   : 1});
+		xmlthing.done(callback);
+	    });
+	});
+	// Handler so we know the user closed the modal. We need to
+	// clear the confirm button handler.
+	$('#uncancel-modal').on('hidden.bs.modal', function (e) {
+	    $('#uncancel-modal #confirm-uncancel').unbind("click");
+	    $('#uncancel-modal').off('hidden.bs.modal');
+	})
+	sup.ShowModal("#uncancel-modal");
+    }
+
     function HandleClusterChange(row, selected_cluster)
     {
 	/*
@@ -1439,20 +1619,36 @@ $(function ()
 
     function HandleTypeChange(row)
     {
+	var thisuuid = $(row).attr('data-uuid');
 	var selected_cluster =
 	    $(row).find(".cluster-select option:selected").val();
 	var selected_type =
 	    $(row).find(".hardware-select option:selected").val();
 
-	console.info(selected_cluster, selected_type);
+	console.info(thisuuid, selected_cluster, selected_type);
 	if (selected_cluster == "") {
 	    return;
 	}
 	if (selected_type == "") {
 	    return;
 	}
+	// Do not allow two rows with the same cluster/type.
+	var clusters = Object.values(GetClusterRows());
+	for (var cluster of clusters) {
+	    if (cluster.uuid != thisuuid &&
+		cluster.cluster == selected_cluster &&
+		cluster.type == selected_type) {
+		$(row).find(".hardware-select")
+		    .prop("selectedIndex", 0);
+		alert("Not allowed to have two rows with the " +
+		      "same cluster and type");
+		return;
+	    }
+	}
 	var nodelist = amlist[selected_cluster].reservable_nodes;
-	console.info(nodelist);
+	if (nodelist) {
+	    console.info("nodelist", nodelist);
+	}
 
 	if (nodelist && _.has(nodelist, selected_type)) {
 	    $(row).find(".node-count")
@@ -1492,33 +1688,40 @@ $(function ()
     }
 
     // Draw the history bar graph.
-    function DrawHistoryGraph(details)
+    function DrawHistoryGraphs(details)
     {
-	if (!_.has(details, 'history') || !details.history.length) {
+	$("history-graphs").html("");
+
+	if (!details.active) {
 	    return;
 	}
-	var graphid = "history-graph";
-	var html = usageTemplate({"graphid"        : graphid,
-				  "showfullscreen" : true});
-	
-	$('#reservation-lists').append(html);
-	window.DrawResHistoryGraph({"details"  : details,
-				    "graphid"  : '#' + graphid});
+	_.each(details.reservations, function (res) {
+	    if (!_.has(res, "jsondata") || res.jsondata == null) {
+		return;
+	    }
+	    var uuid     = res.remote_uuid;
+	    var graphid  = "resgraph-" + uuid;
+	    var nickname = res.cluster_id;
+	    var title    = "Reservation Usage for " + nickname + "/" + res.type;
+	    var html     = usageTemplate({"graphid"        : graphid,
+					  "showfullscreen" : false});
+	    $('#history-graphs').append(html);
+	    $('#' + graphid + ' .graph-title').html(title);
 
-	// Setup a handler to draw the large version graph in the modal.
-	$('#resusage-modal').on('shown.bs.modal', function() {
-	    window.DrawResHistoryGraph({"details"    : details,
-					"graphid"    : '#resusage-modal',
-					"xaxislabel" : true});
-	});
-	// When modal shows, we draw.
-	$('#' + graphid + ' .resusage-fullscreen').click(function (event) {
-	    // Make sure nothing left behind.
-	    $('#resusage-modal svg').html("");
-	    sup.ShowModal('#resusage-modal', function () {
-		// Need to unbind the hook above.
-		$('#resusage-modal').off('shown.bs.modal');
-	    });
+	    var json = JSON.parse(res.jsondata);
+	    console.info("DrawHistoryGraphs", json);
+
+	    // Need a little fix up here, resgraphs is expecting various
+	    // things in the res object.
+	    res["remote_pid"] = json.remote_pid;
+	    res["remote_uid"] = json.remote_uid;
+	    res["history"]    = json.history;
+	    res["start"]      = details.start;
+	    res["end"]        = details.end;
+	    res["nodes"]      = res.count;
+	    
+	    window.DrawResHistoryGraph({"details"  : res,
+					"graphid"  : '#' + graphid});
 	});
     }
 

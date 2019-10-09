@@ -120,6 +120,24 @@ class ReservationGroup
     }
 
     #
+    # Lookup group by a member of the group
+    #
+    function LookupByMemberReservation($remote_uuid)
+    {
+        $safe_uuid = addslashes($remote_uuid);
+        
+	$query_result =
+	    DBQueryFatal("select uuid from apt_reservation_group_reservations ".
+                         "where remote_uuid='$safe_uuid'");
+
+	if (!$query_result || !mysql_num_rows($query_result)) {
+	    return null;
+	}
+	$row = mysql_fetch_array($query_result);
+        return ReservationGroup::Lookup($row["uuid"]);
+    }
+
+    #
     # Convert reservations to a list of aggregates.
     #
     function AggregateList()
@@ -184,10 +202,13 @@ class ReservationGroupReservation
     function remote_uuid()  { return $this->field('remote_uuid'); }
     function type()	    { return $this->field('type'); }
     function count()	    { return $this->field('count'); }
+    function using()	    { return $this->field('using'); }
+    function utilization()  { return $this->field('utilization'); }
     function submitted()    { return $this->field('submitted'); }
     function approved()     { return $this->field('approved'); }
     function deleted()	    { return $this->field('deleted'); }
     function canceled()     { return $this->field('canceled'); }
+    function jsondata()     { return $this->field('jsondata'); }
     
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {

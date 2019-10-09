@@ -41,6 +41,10 @@ $isadmin   = (ISADMIN() ? 1 : 0);
 #
 $optargs = OptionalPageArguments("cluster", PAGEARG_STRING);
 
+if (!$isadmin) {
+    header("list-resgroups.php");
+    exit();
+}
 SPITHEADER(1);
 
 $amlist = array();

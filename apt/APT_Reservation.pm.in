@@ -120,6 +120,26 @@ sub Lookup($$)
     return $self;
 }
 
+# Lookup all (admin)
+sub LookupAll($)
+{
+    my ($class) = @_;
+    my @result = ();
+        
+    my $query_result =
+	DBQueryWarn("select uuid from apt_reservation_groups");
+    return ()
+	if (!defined($query_result));
+
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $resgroup = APT_Reservation::Group->Lookup($uuid);
+	if ($resgroup) {
+	    push(@result, $resgroup);
+        }
+    }
+    return @result;
+}
+
 #
 # Lookup by a member of the group
 #
@@ -539,6 +559,11 @@ sub MarkCanceled($;$)
     }
     return $self->Mark("canceled", $value);
 }
+sub ClearCanceled($)
+{
+    my ($self) = @_;
+    return $self->Mark("canceled", undef);
+}
 
 sub MarkSubmitted($$)
 {
@@ -556,6 +581,24 @@ sub MarkSubmitted($$)
 
     $self->{'DBROW'}->{'submitted'} = time();
     $self->{'DBROW'}->{'approved'}  = ($approved ? time() : undef);
+    return 0;
+}
+
+sub Update($$$)
+{
+    my ($self, $which, $what) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+    my $type = $self->type();
+    my $safe = DBQuoteSpecial($what);
+    
+    DBQueryWarn("update apt_reservation_group_reservations set ".
+		" `$which`=$safe ".
+		"where uuid='$uuid' and aggregate_urn='$urn' and ".
+		"      type='$type'")
+	or return -1;
+
+    $self->{'DBROW'}->{$which} = $what;
     return 0;
 }
 
