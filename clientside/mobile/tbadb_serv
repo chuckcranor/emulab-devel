@@ -1138,7 +1138,7 @@ sub add_apn_profile($$) {
     }
 
     # Check for existing APN profile. If found, use that.
-    my $newapn = `$ADB -s $serial shell content query --uri content://telephony/carriers --where "name=\\'phantomnet\\'"`;
+    my $newapn = `$ADB -s $serial shell content query --uri content://telephony/carriers --where "name=\'phantomnet\'"`;
     if ($?) {
 	warn "Failed when checking for existing APN profile on $node_id\n";
 	return 0;
@@ -1162,7 +1162,7 @@ sub add_apn_profile($$) {
 	    warn "Could not insert APN profile\n";
 	    return 0;
 	}
-	$newapn = `$ADB -s $serial shell content query --uri content://telephony/carriers --where "name=\\'phantomnet\\'"`;
+	$newapn = `$ADB -s $serial shell content query --uri content://telephony/carriers --where "name=\'phantomnet\'"`;
 	if ($?) {
 	    warn "Failed when checking for newly created APN profile\n";
 	    return 0;
