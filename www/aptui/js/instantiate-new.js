@@ -2596,9 +2596,9 @@ $(function ()
 	    
 	    ShowClusterReservations();
 	};
-	var $xmlthing =
+	var xmlthing =
 	    sup.CallServerMethod(null, "reserve", "ReservationInfo", null);
-	$xmlthing.done(callback);
+	xmlthing.done(callback);
     }
 
     // Google Analytics.
