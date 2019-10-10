@@ -39,11 +39,12 @@ $isadmin   = (ISADMIN() ? 1 : 0);
 #
 # Verify page arguments. Cluster is a domain that we turn into a URN.
 #
-$optargs = OptionalPageArguments("cluster", PAGEARG_STRING);
+$optargs = OptionalPageArguments("cluster", PAGEARG_STRING,
+                                 "force"  , PAGEARG_BOOLEAN);
 
-if (!$isadmin) {
-    header("list-resgroups.php");
-    exit();
+if (!$isadmin || !$force) {
+    header("Location: list-resgroups.php");
+    return;
 }
 SPITHEADER(1);
 

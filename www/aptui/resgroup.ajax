@@ -227,7 +227,6 @@ function Do_Reserve()
     $this_uid = $this_user->uid();
     $pid      = $project->pid();
     $webtask  = WebTask::CreateAnonymous();
-    $urn      = $aggregate->urn();
 
     #
     # OK, we are going to to run a precheck on the reservation to

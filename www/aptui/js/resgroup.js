@@ -1699,6 +1699,9 @@ $(function ()
 	    if (!_.has(res, "jsondata") || res.jsondata == null) {
 		return;
 	    }
+	    var json = JSON.parse(res.jsondata);
+	    console.info("DrawHistoryGraphs", json);
+	    
 	    var uuid     = res.remote_uuid;
 	    var graphid  = "resgraph-" + uuid;
 	    var nickname = res.cluster_id;
@@ -1708,8 +1711,12 @@ $(function ()
 	    $('#history-graphs').append(html);
 	    $('#' + graphid + ' .graph-title').html(title);
 
-	    var json = JSON.parse(res.jsondata);
-	    console.info("DrawHistoryGraphs", json);
+	    if (!_.size(json.history)) {
+		$('#' + graphid + ' .resgraph')
+		    .html("<span class=text-danger>There is no usage info " +
+			  "for this reservation, are you using it?");
+		return;
+	    }
 
 	    // Need a little fix up here, resgraphs is expecting various
 	    // things in the res object.

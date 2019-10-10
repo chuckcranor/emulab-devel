@@ -63,7 +63,7 @@ if ($edit) {
     $resgroup = ReservationGroup::LookupByMemberReservation($uuid);
     if ($resgroup) {
         if (!$isadmin) {
-            header("resgroup.php?edit=1&uuid=" . $resgroup->uuid());
+            header("Location: resgroup.php?edit=1&uuid=" . $resgroup->uuid());
             exit();
         }
     }
