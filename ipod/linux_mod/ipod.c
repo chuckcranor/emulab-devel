@@ -41,7 +41,7 @@
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Flux Research Group");
-MODULE_VERSION("3.2.0");
+MODULE_VERSION("3.3.0");
 
 #if defined(__aarch64__) || defined(__powerpc64__)
 #define IPOD_QUEUE_RESTART
@@ -81,8 +81,15 @@ char sysctl_ipod_key[32+1] = { "SETMETOSOMETHINGTHIRTYTWOBYTES!!" };
 #define __PHP
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,15,0)
 static u32 __ipod_min = INT_MIN;
 static u32 __ipod_max = INT_MAX;
+#define PROC_DOU32 proc_dointvec_minmax
+#else
+static u32 __ipod_min = 0;
+static u32 __ipod_max = ((u32)~0U);
+#define PROC_DOU32 proc_douintvec_minmax
+#endif
 
 /*
  * Register the simple icmp table in /proc/sys/net/ipv4 .  This way, if
@@ -108,7 +115,7 @@ static struct ctl_table ipod_table[] = {
       .data = &sysctl_ipod_host,
       .maxlen = sizeof(u32),
       .mode = 0644,
-      .proc_handler = __PHP proc_dointvec_minmax,
+      .proc_handler = __PHP PROC_DOU32,
       .extra1 = &__ipod_min,
       .extra2 = &__ipod_max,
     },
@@ -116,7 +123,7 @@ static struct ctl_table ipod_table[] = {
       .data = &sysctl_ipod_mask,
       .maxlen = sizeof(u32),
       .mode = 0644,
-      .proc_handler = __PHP proc_dointvec_minmax,
+      .proc_handler = __PHP PROC_DOU32,
       .extra1 = &__ipod_min,
       .extra2 = &__ipod_max,
     },
