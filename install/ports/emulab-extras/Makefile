@@ -75,7 +75,6 @@ RUN_DEPENDS+=	\
 	lsof:${PORTSDIR}/sysutils/lsof \
 	rsync:${PORTSDIR}/net/rsync \
 	sudo:${PORTSDIR}/security/sudo \
-	ttcp:${PORTSDIR}/benchmarks/ttcp \
 	xauth:${PORTSDIR}/x11/xauth \
 	xterm:${PORTSDIR}/x11/xterm \
 	zsh:${PORTSDIR}/shells/zsh

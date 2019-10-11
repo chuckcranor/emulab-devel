@@ -44,7 +44,7 @@ EMULAB_PORTVERSION=	6.1
 PHP_MAJ=5
 PHP_VER=56
 .if (${EMULAB_PORTVERSION} == "7.3")
-DEFAULT_VERSIONS= perl5=5.28 python=2.7 tcltk=8.6 php=7.2 mysql=5.7 apache=2.4
+DEFAULT_VERSIONS= perl5=5.30 python=2.7 tcltk=8.6 php=7.2 mysql=5.7 apache=2.4
 APACHE_PORT=www/apache24
 APACHEMODDIR=libexec/apache24
 MYSQL_VER=57
