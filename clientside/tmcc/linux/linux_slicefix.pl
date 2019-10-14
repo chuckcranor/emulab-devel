@@ -225,6 +225,19 @@ sub fix_grub_dom0mem
 	return;
 }
 
+sub get_linux_device_components
+{
+	my ($devpath) = @_;
+
+	if ($devpath =~ m#/dev/nvme(\d+)(n\d+)p(\d+)$#) {
+		return ("nvme$1$2","p$3",int($1),int($3));
+	}
+	elsif ($devpath =~ m#/dev/([hs]d)(.)(\d+)$#) {
+		my $disk_num =~ y/[a-h]/[0-7]/;
+		return ("$1$2","$3",int($disk_num),int($3));
+	}
+}
+
 sub fix_swap_partitions
 {
 	my ($imageroot, $root, $old_root) = @_;
@@ -232,8 +245,8 @@ sub fix_swap_partitions
 
 	return undef unless (-x $MKSWAP);
 
-	my ($root_disk) = ($root =~ m#^(/dev/[a-z]+)#);
-	my ($old_root_disk) = ($old_root =~ m#^(/dev/[a-z]+)#);
+	my ($root_disk) = get_linux_device_components($root);
+	my ($old_root_disk) = get_linux_device_components($old_root);
 	my @swap_partitions = find_swap_partitions($root_disk);
 	my ($l, $u) = binary_supports_blkid("$imageroot/sbin/swapon");
 
@@ -429,8 +442,8 @@ sub find_default_grub2_entry
 sub set_grub_root_device
 {
 	my ($imageroot, $grub_config, $root) = @_;
-	my ($root_disk, $root_part) =
-	   ($root =~ m#/dev/(.+)(\d+)#);
+	my ($root_disk, $root_part, $root_disk_num, $root_part_num) =
+	    get_linux_device_components($root);
 	my $grub_disk;
 
 	if (-f $BOOTDIR . "/edd_map") {
@@ -448,20 +461,18 @@ sub set_grub_root_device
 	}
 
 	if (not defined $grub_disk) {
-		$grub_disk = $root;
-		$grub_disk =~ s/^\/dev\/[hs]d(.).*$/$1/;
-		$grub_disk =~ y/[a-h]/[0-7]/;
+		$grub_disk = $root_disk_num;
 		print "Found GRUB root device by guessing\n";
 	}
 
-	printf "GRUB root device is (hd%d,%d)\n", $grub_disk, $root_part - 1;
-	$root_part--;
+	printf "GRUB root device is (hd%d,%d)\n", $grub_disk, $root_part_num - 1;
+	$root_part_num--;
 
 	open FILE, "+<$imageroot/$grub_config" or
 	     die "Couldn't open GRUB config: $!\n";
 	my @buffer;
 	while (<FILE>) {
-		s/^(\s*)root \([^)]*\)/$1root (hd$grub_disk,$root_part)/;
+		s/^(\s*)root \([^)]*\)/$1root (hd$grub_disk,${root_part_num})/;
 		push @buffer, $_;
 	}
 	seek FILE, 0, 0;
@@ -473,8 +484,8 @@ sub set_grub_root_device
 sub set_grub2_root_device
 {
 	my ($imageroot, $grub_config, $root) = @_;
-	my ($root_disk, $root_part) =
-	   ($root =~ m#/dev/(.+)(\d+)#);
+	my ($root_disk, $root_part, $root_disk_num, $root_part_num) =
+	    get_linux_device_components($root);
 	my $grub_disk;
 
 	if (-f $BOOTDIR . "/edd_map") {
@@ -492,13 +503,11 @@ sub set_grub2_root_device
 	}
 
 	if (not defined $grub_disk) {
-		$grub_disk = $root;
-		$grub_disk =~ s/^\/dev\/[hs]d(.).*$/$1/;
-		$grub_disk =~ y/[a-h]/[0-7]/;
+		$grub_disk = $root_disk_num;
 		print "Found GRUB root device by guessing\n";
 	}
 
-	printf "GRUB root device is (hd%d,%d)\n", $grub_disk, $root_part;
+	printf "GRUB root device is (hd%d,%d)\n", $grub_disk, $root_part_num;
 
 	open FILE, "+<$imageroot/$grub_config" or
 	     die "Couldn't open GRUB config: $!\n";
@@ -506,7 +515,7 @@ sub set_grub2_root_device
 	while (<FILE>) {
 		# XXX eat the newline so the RE does not!
 		chomp;
-		s/^(\s*set\s+root\s*=\s*["']?\(?)[^)'"]*(\)?["']?)/$1hd$grub_disk,$root_part$2/;
+		s/^(\s*set\s+root\s*=\s*["']?\(?)[^)'"]*(\)?["']?)/$1hd$grub_disk,${root_part_num}$2/;
 		push @buffer, "$_\n";
 	}
 	seek FILE, 0, 0;

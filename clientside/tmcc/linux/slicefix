@@ -1064,8 +1064,13 @@ lilogetkernel() {
 }
 
 dolinux() {
+	devpath=/dev/$linux_disk$part
+	olddevpath=/dev/$old_linux_disk$part
+	(echo $linux_disk | grep -q ^nvme) && devpath=/dev/${linux_disk}p$part
+	(echo $old_linux_disk | grep -q ^nvme) && olddevpath=/dev/${old_linux_disk}p$part
 
-	$BINDIR/linux_slicefix.pl /dev/$linux_disk$part /dev/$old_linux_disk$part
+	$BINDIR/linux_slicefix.pl $devpath $olddevpath
+
 	return $?
 }
 
@@ -1074,13 +1079,15 @@ fixone() {
     	echo "*** ${disk}s${part}:"
     	ptype=`fdisk -${part} ${disk} | grep sysid | sed 's/^sysid \([0-9][0-9]*\).*/\1/'`
     elif [ $OS = Linux ]; then
-    	echo "*** ${disk}${part}:"
+	fullpath=${disk}${part}
+	(echo ${disk} | grep -q ^nvme) && fullpath=${disk}p${part}
+    	echo "*** ${fullpath}:"
 	fdisk -l /dev/$disk | grep -qi 'found valid gpt'
 	if [ $? -eq 0 ]; then
 	    # gdisk output converts the gpt partition ID to, e.g., 8300.
 	    ptype=`gdisk -l /dev/$disk | awk "/^ *${part} / {print \\$6}"`
 	else
-    	    ptype=`fdisk -l /dev/$disk | awk /${disk}${part}/'{sub(/\*/,""); print "0x"$5}'`
+    	    ptype=`fdisk -l /dev/$disk | awk /${fullpath}/'{sub(/\*/,""); print "0x"$8}'`
 	fi
     fi
     ptype=${ptype:-0}

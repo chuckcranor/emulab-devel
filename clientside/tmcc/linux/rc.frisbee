@@ -365,7 +365,7 @@ tweakmbr()
 find_disks() {
 	local disks
 
-	for d in /sys/block/[sh]d*; do
+	for d in `ls -1d /sys/block/[sh]d* /sys/block/nvme*` ; do
 		disks="$disks ${d##*/}"
 	done
 
