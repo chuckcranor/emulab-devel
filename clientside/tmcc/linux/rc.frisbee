@@ -842,6 +842,13 @@ case $STATUS in
 	    #sgdisk -Z /dev/$d >/dev/null 2>&1
 	    dd if=/dev/zero of=/dev/$d bs=512 count=8192
 	fi
+
+    	echo "Re-reading partition table for /dev/$d after zap ..."
+	if [ -x /usr/sbin/partprobe ]; then
+	    /usr/sbin/partprobe /dev/$d > /dev/null 2>&1
+	else
+	    echo w | fdisk /dev/$d > /dev/null 2>&1
+	fi
     done
 
     #
