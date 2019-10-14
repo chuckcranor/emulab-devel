@@ -105,6 +105,10 @@ with 2015Q3 and I have updated through 2016Q2.
    DEFAULT_VERSIONS=perl5=5.26 python=2.7 php=5.6 mysql=5.7 apache=2.4 tcltk=8.6
    DEFAULT_VERSIONS+=ssl=base
 
+   # for 11.3
+   DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
+   DEFAULT_VERSIONS+=ssl=base
+
 5. Set non-standard options on some ports.
 
     * Perl. For perl 5.20 make sure that THREADS is defined. It should be,
@@ -417,7 +421,12 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
       sudo mount -o ro fs:/share/freebsd/11.3/ports /usr/ports
       sudo mount -o ro fs:/share/freebsd/11.3/src /usr/src
       
-   e. Cleanse the port environment:
+   e. Make sure /etc/make.conf is up to date. It should have:
+
+  DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
+  DEFAULT_VERSIONS+=ssl=base
+
+   f. Cleanse the port environment:
 
       sudo tcsh
       setenv ASSUME_ALWAYS_YES true
@@ -426,7 +435,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
       rm -rf /var/db/ports/*
       rm -rf /usr/obj/ports/usr/ports/*
 
-   f. Make sure the package tool is installed. Sometimes you can just:
+   g. Make sure the package tool is installed. Sometimes you can just:
 
       pkg info
 
@@ -439,23 +448,28 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
       pkg add ca_root*
       popd
 
-   g. Make sure port options are correctly set:
+   h. Make sure port options are correctly set:
 
-      - in devel/boost-all, "make config" and deselect:
+      - make -C devel/boost-all config
+        and deselect:
           DOCS
-      - in editors/emacs, "make config" and deselect:
+      - make -C editors/emacs config
+        and deselect:
           DBUS
           GCONF, GSETTINGS, LCMS2, M17N, OTF, SCROLLBARS, XFT, XIM,
 	  GIF, MAGICK, PNG, SVG, TIFF, XPM,
 	  OSS,
-	  GTK2
+	  GTK3
         and select:
 	  XAW
-      - in graphics/cairo, "make config" and deselect OPENGL.
-      - in www/apache24, "make config" and select SUEXEC.
-      - in x11-toolkits/pango, "make config" and deselect DOCS.
+      - make -C graphics/cairo config
+        and deselect OPENGL.
+      - make -C www/apache24 config
+        and select SUEXEC.
+      - make -C x11-toolkits/pango config
+        and deselect DOCS.
 
-   h. Build em all:
+   i. Build em all:
 
        setenv PACKAGES /usr/obj/ports/packages
        rm -f $PACKAGES/All/*
@@ -465,18 +479,18 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
 	   (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean)
        end
 
-   i. Check for vulnerabilities. If any are revealed, you can either try
+   j. Check for vulnerabilities. If any are revealed, you can either try
       to update /share/freebsd/11.3/ports with a newer version of the port
       (e.g., from /share/freebsd/current/ports) or just live with the
       vulnerability for now.
 
        pkg audit -F
 
-   j. Create the packages:
+   k. Create the packages:
 
        pkg create -a -o $PACKAGES/All/
 
-   k. Create the alternate ipmitool package. The Moonshot chassis require
+   l. Create the alternate ipmitool package. The Moonshot chassis require
       an older ipmitool embodied in the emulab-ipmitool-old port. It conflicts
       with the regular packages so we have to remove that first.
 
@@ -484,7 +498,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
        cd /usr/ports/misc/emulab-ipmitool-old
        env BATCH=1 make clean all install package clean
 
-   l. Save packages and update tarball and repo. On boss:
+   m. Save packages and update tarball and repo. On boss:
 
       cd /share/freebsd/11.3
       mkdir packages
@@ -504,7 +518,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
       sudo mv packages-64 packages-64.bak
       sudo mv packages packages-64
 
-   m. Random useful commands to run on the package files.
+   n. Random useful commands to run on the package files.
 
       For comparing with older package sets, it is sometimes useful to
       trim off the version number, etc. if you want to see the difference
