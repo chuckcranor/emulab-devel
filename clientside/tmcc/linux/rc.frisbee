@@ -667,7 +667,8 @@ handle_loadinfo()
 	# that gdisk and fdisk continue to work.
 	#
 	pttype=`get_part_type /dev/$DISK`
-	if [ $? -eq 0 -a "$pttype" = "GPT" ]; then
+	rc=$?
+	if [ $rc -eq 0 -a "$pttype" = "GPT" ]; then
 	    #build_secondary_gpt /dev/$DISK /dev/$DISK
 	    #build_protective_mbr /dev/$DISK
 	    /bin/echo -e '\n\nr\nd\nv\nw\ny\n' | gdisk /dev/$DISK
@@ -677,7 +678,7 @@ handle_loadinfo()
 	    else
 		echo w | fdisk /dev/$DISK > /dev/null 2>&1
 	    fi
-	else
+	elif [ ! $rc -eq 0 ]; then
 	    echo "WARNING: get_part_type /dev/$DISK failed ($pttype, $?)"
 	fi
 }
