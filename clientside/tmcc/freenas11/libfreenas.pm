@@ -75,7 +75,7 @@ use Exporter;
 	freenasVolumeCreate freenasVolumeDestroy freenasFSCreate
 	freenasVolumeSnapshot freenasVolumeClone
 	freenasVolumeDesnapshot freenasVolumeDeclone
-        freenasVolumeCopy
+        freenasVolumeCopy freenasVolumeCopyStatus
 	freenasParseListing freenasRequest
         freenasLock freenasUnlock
 	$FREENAS_API_RESOURCE_IFACE $FREENAS_API_RESOURCE_IST_EXTENT
@@ -172,6 +172,7 @@ sub freenasVolumeDesnapshot($$;$$$);
 sub freenasVolumeClone($$$;$$);
 sub freenasVolumeDeclone($$;$);
 sub freenasVolumeCopy($$$;$);
+sub freenasVolumeCopyStatus($$);
 
 #
 # Local Functions
@@ -436,7 +437,7 @@ sub freenasVolumeList($;$)
     my %inames = ();	# volume-name -> slice-name
     my %snaps = ();	# volume-name -> (snapshot1 snapshot2 ...)
     my %clones = ();	# clone-volume-name -> snapshot
-    my %zvolsizes = ();	# volume-name -> volsize
+    my %zvolsizes = ();	# volume-name -> (volsize, used, refer)
 
     #
     # Extract blockstores from the freenas volume info and augment
@@ -507,18 +508,26 @@ sub freenasVolumeList($;$)
     }
 
     #
-    # XXX unbelievable: the storage/volume API does not return the volsize
-    # of a zvol! Gotta do it ourselves...
+    # XXX The new-ish /storage/volumes/<pool>/zvols API would get us all
+    # the remaining info we need, including sizes. But...we would have to
+    # call it individually for every pool, and we don't know what all the
+    # storage pools are without still more work.
     #
-    # XXX we could now get this through storage/volume/<pool>/zvols for
-    # each pool, or storage/volume/<pool>/zvols/<volume> for each zvol.
-    # But for now, let's just stick with the ZFS command.
+
     #
-    if (open(ZFS, "$ZFS_CMD get -t volume -o name,value -Hp volsize |")) {
+    # For now we get size info (volsize,used,referenced) via the ZFS tool.
+    # The zvols API would do it, but if we were to start using that, we
+    # should use it to get all the volume info (see the note above)
+    # rather than making two API calls (which are expensive).
+    #
+    # Random note: if volsize is 0, then the volume is being copied.
+    #
+    if (open(ZFS, "$ZFS_CMD get -t volume -o name,property,value -Hp volsize,used,referenced |")) {
 	while (my $line = <ZFS>) {
 	    chomp $line;
-	    my ($name, $val) = split(/\s+/, $line);
-	    $zvolsizes{$name} = $val;
+	    my ($name, $prop, $val) = split(/\s+/, $line);
+	    $zvolsizes{$name} = () if (!exists($zvolsizes{$name}));
+	    $zvolsizes{$name}->{$prop} = $val;
 	}
 	close(ZFS);
     } else {
@@ -540,11 +549,24 @@ sub freenasVolumeList($;$)
 	if ($volname =~ /^([-\w]+)\/([-\w+]+)$/) {
 	    $vol->{'pool'} = $1;
 	    $vol->{'volume'} = $2;
+
+	    # fill in the size info
+	    $vol->{'size'} = $vol->{'used'} = $vol->{'refer'} = 0;
 	    if (exists($zvolsizes{$volname})) {
-		$vol->{'size'} = convertToMebi($zvolsizes{$volname});
+		if (exists($zvolsizes{$volname}->{'volsize'})) {
+		    $vol->{'size'} =
+			int(convertToMebi($zvolsizes{$volname}->{'volsize'}));
+		}
+		if (exists($zvolsizes{$volname}->{'used'})) {
+		    $vol->{'used'} =
+			int(convertToMebi($zvolsizes{$volname}->{'used'}));
+		}
+		if (exists($zvolsizes{$volname}->{'referenced'})) {
+		    $vol->{'refer'} =
+			int(convertToMebi($zvolsizes{$volname}->{'referenced'}));
+		}
 	    } else {
-		$vol->{'size'} = 0;
-		warn("*** WARNING: could not get volume size of $volname");
+		warn("*** WARNING: could not get sizes of $volname");
 	    }
 
 	    if ($inameinfo && exists($inames{$zvol->{'path'}})) {
@@ -1026,20 +1048,40 @@ sub freenasVolumeCopy($$$;$)
 
     #
     # Do the send/recv pipeline.
+    #
     # This could take a really, really long time so we leave things unlocked
     # while we do it.
     #
+    # We leave an "in progress" file in the volatile /var/run directory so
+    # we can tell if a supposedly active copy might have been terminated
+    # by a server reboot or crash of the bscontrol.proxy instance. The
+    # existance of the file detects the former, we write our pid into the
+    # file to detect the latter.
+    #
     TBDebugTimeStampWithDate("freenasVolumeCopy: starting send/recv")
 	if ($debug);
+    my $pfile = "/var/run/$pool-$nvolname.copying";
+    if (open(FD, ">$pfile")) {
+	print FD "$PID\n";
+	close(FD);
+    }
     if (system("$ZFS_CMD send -R $pool/$snapshot | $ZFS_CMD recv -Fs $pool/$nvolname")) {
 	TBDebugTimeStampWithDate("freenasVolumeCopy: send/recv FAILED")
 	    if ($debug);
+	my $msg = "";
+	my $token =
+	    `$ZFS_CMD get -Ho value receive_resume_token $pool/$nvolname`;
+	chomp($token);
+	if ($token ne "-") {
+	    $msg = ", may be able to finish with:\n".
+		"  $ZFS_CMD send -t $token | $ZFS_CMD recv -s $pool/$nvolname";
+	}
 	warn("*** ERROR: ".
-	     "'$ZFS_CMD send -R $pool/$snapshot | $ZFS_CMD recv -Fs $pool/$nvolname' ".
-	     "failed, may be able to finish with:\n".
-	     "'$ZFS_CMD send -t <token> | $ZFS_CMD recv -s $nvolname'\n");
+	     "'$ZFS_CMD send -R $pool/$snapshot | $ZFS_CMD recv -Fs $pool/$nvolname' failed$msg\n");
+	unlink($pfile);
 	return -1;
     }
+    unlink($pfile);
     TBDebugTimeStampWithDate("freenasVolumeCopy: finished send/recv")
 	if ($debug);
 
@@ -1066,6 +1108,107 @@ sub freenasVolumeCopy($$$;$)
 	if ($dolock);
 
     return 0;
+}
+
+#
+# Determine if a volume copy is still running.
+# Returns zero if not, non-zero if so.
+#
+# Note that we should only be called if the volume exists and has the
+# receive_resume_token.
+#
+sub copyRunning($$)
+{
+    my ($pool, $volname) = @_;
+    my $pfile = "/var/run/$pool-$volname.copying";
+
+    # if the pidfile does not exist, we must have rebooted
+    if (! -e $pfile) {
+	return 0;
+    }
+
+    # if we cannot open the file, be conservative and assume still running
+    if (!open(FD, "<$pfile")) {
+	warn("*** WARNING: $pool/$volname copy file exists but unreadable");
+	return 1;
+    }
+
+    my $dapid = <FD>;
+    close(FD);
+    chomp($dapid);
+
+    # ditto if the contents is malformed
+    if ($dapid !~ /^(\d+)$/) {
+	warn("*** WARNING: $pool/$volname copy file does not contain a pid");
+	return 1;
+    }
+
+    $dapid = $1;
+    return kill(0, $dapid);
+}
+
+#
+# From the blockstore server perspecive, a copy is in progress (or did
+# not complete) if the "receive_resume_token" property is set on zfs dataset.
+# It is still in progress if send/recv processes exist. We should write some
+# state to disk (a "pid file") to make this detection easier.
+#
+# The "referenced" attribute tells how much data has been copied, ala:
+#    zfs get -Hp referenced persist-1/lease-200
+#
+# Returns:
+#  * status=INVALID
+#    Volume cannot be found
+#  * status=INPROGRESS, size=<size-in-MiB>
+#    resume_token exists and send/recv pipeline is running
+#  * status=ABORTED, size=<size-in-MiB>
+#    resume_token exists and send/recv pipeline is not running
+#  * status=DONE, size=<size-in-MiB>
+#    None of the above are true (note that the volume might not
+#    even have been involved in a copy)
+#
+sub freenasVolumeCopyStatus($$)
+{
+    my ($pool, $volname) = @_;
+    my $status = "UNKNOWN";
+    my $size = -1;
+
+    # Untaint arguments that are passed to a command execution
+    $pool = untaintHostname($pool);
+    $volname = untaintHostname($volname);
+    if (!$pool || !$volname) {
+	warn("*** ERROR: freenasVolumeCopyStatus: Invalid arguments");
+	return undef;
+    }
+
+    if (open(ZFS, "$ZFS_CMD get -o property,value -Hp referenced,receive_resume_token $pool/$volname 2>&1 |")) {
+	while (my $line = <ZFS>) {
+	    chomp $line;
+	    if ($line =~ /dataset does not exist/) {
+		$status = "INVALID";
+		next;
+	    }
+	    my ($name, $val) = split(/\s+/, $line);
+	    if ($name eq "referenced") {
+		$size = int(convertToMebi($val));
+	    } elsif ($name eq "receive_resume_token") {
+		if ($val eq "-") {
+		    $status = "DONE";
+		} elsif (copyRunning($pool, $volname)) {
+		    $status = "INPROGRESS";
+		} else {
+		    $status = "ABORTED";
+		}
+	    } else {
+		# just ignore unknown lines
+		next;
+	    }
+	}
+	close(ZFS);
+    } else {
+	warn("*** WARNING: could not run 'zfs get' for zvol status info");
+    }
+    return ($status, $size);
 }
 
 sub freenasVolumeDeclone($$;$)
@@ -1125,7 +1268,7 @@ sub volumeDestroy($$$$$) {
     my $vollist = freenasVolumeList(0, 1);
 
     #
-    # Volume must exist
+    # volume must exist
     # XXX let's not consider this an error if it disappears after we
     # have tried once. It probably means that someone else removed it.
     # Maybe we should not consider this an error even on the first try?

@@ -56,6 +56,9 @@ use Getopt::Std;
 #       could do server to server or pool to pool copies, but we don't
 #       right now.
 #
+# bscontrol [ -S server [ -P pool ] ] copystatus bsname
+#	Report on the status of a copy operation.
+#
 # bscontrol snapshot [ -S server [ -P pool ] ] bsname [ tstamp ]
 #	Create a snapshot of the named blockstore with the indicated
 #	timestamp. If timestamp is not provided, it will use the
@@ -85,6 +88,7 @@ sub usage()
     print STDERR "\nAdditional persistent blockstore commands.\n";
     print STDERR "bscontrol [-S server [-P pool]] [-f fstype] -l leaseidx -s size -t type create bsname\n";
     print STDERR "bscontrol [-S server [-P pool]] copy from-bsname to-bsname\n";
+    print STDERR "bscontrol [-S server [-P pool]] copystatus bsname\n";
     print STDERR "bscontrol [-S server -P pool] destroy bsname\n";
     print STDERR "bscontrol [-S server [-P pool]] snapshot bsname [tstamp]\n";
     print STDERR "bscontrol [-S server [-P pool]] desnapshot bsname [tstamp]\n";
@@ -108,6 +112,7 @@ sub bs_avail($$$@);
 sub bs_info($$$@);
 sub bs_create($$$@);
 sub bs_copy($$$@);
+sub bs_copystatus($$$@);
 sub bs_snapshot($$$@);
 sub bs_desnapshot($$$@);
 sub bs_destory($$$@);
@@ -161,6 +166,7 @@ my %cmds = (
    "info"     => \&bs_info,
    "create"   => \&bs_create,
    "copy"     => \&bs_copy,
+   "copystatus" => \&bs_copystatus,
    "snapshot" => \&bs_snapshot,
    "desnapshot" => \&bs_desnapshot,
    "destroy"  => \&bs_destroy,
@@ -953,6 +959,98 @@ sub bs_copy($$$@)
 	}
 	exit(-1);
     }
+
+    return 0;
+}
+
+#
+# On boss, a dataset copy is in progress (or did not complete) if lease
+# "copyfrom" attribute is set. It is still in progress if a webtask
+# exists?
+#
+sub bs_copystatus($$$@)
+{
+    my ($srv,$pool,undef,$name) = @_;
+
+    if (defined($name) && $name =~ /^([-\w]+)$/) {
+	$name = $1;
+    } else {
+	fatal("copystatus: must specify a valid volume name");
+    }
+
+    #
+    # Find the blockstore based on info from the server(s).
+    #
+    my $volattrs;
+    my $volref = getvolumes($srv, $pool);
+    foreach my $vol (sort keys(%{$volref})) {
+	my $attrs = $volref->{$vol};
+	if ($name eq $attrs->{'volume'}) {
+	    if ($volattrs) {
+		fatal("copy: multiple volumes match '$name', specify a server and pool");
+	    }
+	    $volattrs = $attrs;
+	}
+    }
+    if (!$volattrs) {
+	fatal("copy: no such volume '$name'");
+    }
+    if ($srv) {
+	if ($srv ne $volattrs->{'server'}) {
+	    fatal("copy: found server is not the specified server!?");
+	}
+    } else {
+	$srv = $volattrs->{'server'};
+    }
+    if ($pool) {
+	if ($pool ne $volattrs->{'pool'}) {
+	    fatal("copy: found pool is not the specified pool!?");
+	}
+    } else {
+	$pool = $volattrs->{'pool'};
+    }
+
+    #
+    # Figure out the source of the copy and how big it is.
+    # Source is an attribute of our lease (if we are a copy).
+    #
+    my $srcsize = -1;
+    if ($name =~ /lease-(\d+)$/) {
+	my $lease = Lease->Lookup($1);
+	if ($lease) {
+	    my $srcbs = $lease->GetAttribute("copyfrom");
+	    if ($srcbs) {
+		# find the source volume in the volume list
+		foreach my $vol (sort keys(%{$volref})) {
+		    my $attrs = $volref->{$vol};
+		    if ($srcbs eq $attrs->{'volume'} &&
+			$pool eq $attrs->{'pool'} &&
+			$srv eq $attrs->{'server'}) {
+			$srcsize = int($attrs->{'refer'});
+			last;
+		    }
+		}
+	    }
+	}
+    }
+
+    # Call out to the server to get the info
+    my $outref;
+    if (bsserver_cmd($srv, "$PROXYCMD copystatus $pool $name", 1, \$outref)) {
+	print STDERR "*** copystatus: could not get status of '$name' on $srv/$pool:\n";
+	foreach my $str (@$outref) {
+	    print STDERR "  $str\n";
+	}
+	exit(-1);
+    }
+
+    my $str = $outref->[0];
+    if ($srcsize >= 0 && $str =~ /status=(\w+),/) {
+	if ($1 eq "INPROGRESS" || $1 eq "ABORTED") {
+	    $str .= " finalsize=$srcsize";
+	}
+    }
+    print "$str\n";
 
     return 0;
 }

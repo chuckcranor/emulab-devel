@@ -45,6 +45,8 @@ sub usage()
     print STDERR "            Create a clone of <pool>/<vol> called <nvol> from the snapshot at <tstamp> (most recent if not specified)\n";
     print STDERR "   copy     <pool> <ovol> <nvol>\n";
     print STDERR "            Create a copy of <pool>/<vol> called <nvol>\n";
+    print STDERR "   copystatus <pool> <vol>\n";
+    print STDERR "            Print info about the status of a copy\n";
     print STDERR "   destroy <pool> <vol>\n";
     print STDERR "            Destroy <vol> in <pool>\n";
     print STDERR "   desnapshot <pool> <vol> [ <tstamp> ]\n";
@@ -97,6 +99,7 @@ my %cmds = (
     "assocs"     => \&assocs,
     "desnapshotall" => \&desnapshotall,
     "copy"       => \&copy,
+    "copystatus" => \&copystatus,
 );
 
 #
@@ -152,10 +155,12 @@ sub volumes()
 	my $pool = $vref->{$vol}->{'pool'};
 	my $iname = $vref->{$vol}->{'iname'};
 	my $size = int($vref->{$vol}->{'size'});
+	my $used = int($vref->{$vol}->{'used'});
+	my $refer = int($vref->{$vol}->{'refer'});
 	my $snapshots = $vref->{$vol}->{'snapshots'};
 	my $cloneof = $vref->{$vol}->{'cloneof'};
 
-	print "volume=$vol pool=$pool size=$size";
+	print "volume=$vol pool=$pool size=$size used=$used refer=$refer";
 	if ($iname) {
 	    print " iname=$iname";
 	}
@@ -531,15 +536,28 @@ sub copy($$$)
 #
 # Report the progress of a copy.
 #
-# On boss, dataset copy is in progress (or did not complete) if lease
-# "copyfrom" attribute is set. It is still in progress if a webtask
-# exists?
-#
-# From the blockstore server perspecive, a copy is in progress (or did
-# not complete) if the "receive_resume_token" property is set on zfs dataset.
-# It is still in progress if send/recv processes exist. We should write some
-# state to disk (a "pid file") to make this detection easier.
-#
-# The "referenced" attribute tells how much data has been copied, ala:
-#    zfs get -Hp referenced persist-1/lease-200
-#
+sub copystatus($$)
+{
+    my ($pool,$vol) = @_;
+
+    if (defined($pool) && $pool =~ /^([-\w]+)$/) {
+	$pool = $1;
+    } else {
+	print STDERR "bscontrol_proxy: bogus pool arg\n";
+	return 1;
+    }
+    if (defined($vol) && $vol =~ /^([-\w]+)$/) {
+	$vol = $1;
+    } else {
+	print STDERR "bscontrol_proxy: bogus volume arg\n";
+	return 1;
+    }
+
+    my ($status, $size) = freenasVolumeCopyStatus($pool, $vol);
+    if (!defined($status)) {
+	return 1;
+    }
+
+    print "status=$status size=$size\n";
+    return 0;
+}
