@@ -127,3 +127,7 @@ BROWSER_CONSOLE_ENABLE=1
 
 # Do not expire passwords.
 EXPIRE_PASSWORDS=0
+
+# Collect idle statistics by default, and store in RRD files.
+SDCOLLECTD_DOSTATS=1
+SDCOLLECTD_USE_RRDTOOL=1

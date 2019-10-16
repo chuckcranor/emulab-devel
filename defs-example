@@ -538,3 +538,6 @@ IMAGEDIRECTORIES=1
 # Fancy new browser in the console support
 BROWSER_CONSOLE_ENABLE=1
 
+# Collect idle statistics by default, and store in RRD files.
+SDCOLLECTD_DOSTATS=1
+SDCOLLECTD_USE_RRDTOOL=1
