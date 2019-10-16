@@ -396,8 +396,6 @@ $routing = array("geni-login" =>
                                                      "Do_Validate",
                                                  "ListReservationGroups" =>
                                                      "Do_ListReservationGroups",
-                                                 "GetReservation" =>
-                                                     "Do_GetReservation",
                                                  "GetReservationGroup" =>
                                                      "Do_GetReservationGroup",
                                                  "Approve" =>
@@ -408,6 +406,31 @@ $routing = array("geni-login" =>
                                                      "Do_Delete",
                                                  "Refresh" =>
                                                      "Do_Refresh",
+                                                 "Cancel" =>
+                                                     "Do_Cancel",
+                                                 "RequestInfo" =>
+                                                     "Do_RequestInfo",
+                                                 "RangeReservations" =>
+                                                     "Do_RangeReservations",
+                                                 "ReservationHistory" =>
+                                                     "Do_ReservationHistory")),
+		 "rfresgroup" =>
+			array("file"    => "rfresgroup.ajax",
+			      "guest"   => false,
+			      "methods" => array("Reserve" =>
+                                                     "Do_Reserve",
+                                                 "Validate" =>
+                                                     "Do_Validate",
+                                                 "ListReservations" =>
+                                                     "Do_ListReservations",
+                                                 "GetReservation" =>
+                                                     "Do_GetReservation",
+                                                 "Approve" =>
+                                                     "Do_Approve",
+                                                 "WarnUser" =>
+                                                     "Do_WarnUser",
+                                                 "Delete" =>
+                                                     "Do_Delete",
                                                  "Cancel" =>
                                                      "Do_Cancel",
                                                  "RequestInfo" =>

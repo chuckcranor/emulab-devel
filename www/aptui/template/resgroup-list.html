@@ -188,9 +188,9 @@
 	</tr>
 	<tr class="tablesorter-childRow">
 	  <td colspan=12>
-	    <% if (_.size(value.reservations)) { %>
+	    <% if (_.size(value.clusters)) { %>
 	      <div style="ignore-width: 700px;">
-		<table class='tablesorter resgroup-child'>
+		<table class='tablesorter clusters-table resgroup-child'>
 		  <thead>
 		    <th>Cluster</th>
 		    <th>Type</th>
@@ -203,7 +203,7 @@
 		    <% } %>
 		  </thead>
 		  <tbody>
-		    <% _.each(value.reservations, function(info) { %>
+		    <% _.each(value.clusters, function(info) { %>
 		      <tr data-uuid="<%- info.remote_uuid %>">
 			  <td><%- info.cluster_id %></td>
 			  <td><%- info.type %></td>
@@ -249,6 +249,33 @@
 			  <% } %>
 			</tr>
 		      <% }); %>
+		  </tbody>
+		</table>
+	      </div>
+	    <% } %>
+	    <% if (_.size(value.ranges)) { %>
+	      <div style="ignore-width: 700px;">
+		<table class='tablesorter ranges-table resgroup-child'>
+		  <thead>
+		    <th>Low Freq</th>
+		    <th>High Freq</th>
+		    <th>Status</th>
+		  </thead>
+		  <tbody>
+		    <% _.each(value.ranges, function(info) { %>
+		      <tr data-uuid="<%- info.freq_uuid %>">
+			<td><%- info.freq_low %></td>
+			<td><%- info.freq_high %></td>
+			<td class="reservation-status-column">
+			  <span class="status-approved hidden">
+			    Approved</span>
+			  <span class="status-pending hidden text-danger">
+			    Pending</span>
+			  <span class="status-canceled hidden">
+			    <span class="text-danger">Canceled</span></span>
+			</td>
+		      </tr>
+		    <% }); %>
 		  </tbody>
 		</table>
 	      </div>

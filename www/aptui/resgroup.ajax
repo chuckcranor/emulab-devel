@@ -63,7 +63,7 @@ function Do_Reserve()
     #
     # All fields required,
     #
-    $required = array("end", "clusters");
+    $required = array("end");
 
     foreach ($required as $field) {
 	if (!isset($formfields[$field]) || $formfields[$field] == "") {
@@ -150,64 +150,151 @@ function Do_Reserve()
     #
     # Clusters is an array of aggregate/type/count ...
     #
-    $clusters = $formfields["clusters"];
-    if (!is_array($clusters)) {
-        $errors["clusters"] = "Not an array";
-    }
-    $cluster_errors = 0;
     $safe_clusters  = array();
-    foreach ($clusters as $cluster_uuid => &$cluster) {
-        $required = array("cluster", "count", "type", "uuid");
-        $clerrors = array();
+    
+    if (isset($formfields["clusters"])) {    
+        $clusters = $formfields["clusters"];
+        if (!is_array($clusters)) {
+            $errors["clusters"] = "Not an array";
+        }
+        else {
+            $cluster_errors = 0;
+            foreach ($clusters as $cluster_uuid => &$cluster) {
+                $required = array("cluster", "count", "type", "uuid");
+                $clerrors = array();
 
-        foreach ($required as $field) {
-            if (!isset($cluster[$field]) || $cluster[$field] == "") {
-                $clerrors[$field] = "Missing field";
+                foreach ($required as $field) {
+                    if (!isset($cluster[$field]) || $cluster[$field] == "") {
+                        $clerrors[$field] = "Missing field";
+                    }
+                }
+                if (count($clerrors)) {
+                    $cluster["errors"] = $clerrors;
+                    $cluster_errors++;
+                    continue;
+                }
+                $urn    = $cluster["cluster"];
+                $count  = $cluster["count"];
+                $type   = $cluster["type"];
+        
+                if (!TBvalid_node_type($type)) {
+                    $clerrors["type"] = TBFieldErrorString();
+                }
+                if (!Instance::ValidURN($urn)) {
+                    $clerrors["cluster"] = TBFieldErrorString();
+                }
+                $aggregate = Aggregate::Lookup($urn);
+                if (!$aggregate) {
+                    $clerrors["cluster"] = "No such cluster";
+                }
+                if (!TBvalid_integer($count)) {
+                    $clerrors["count"] = TBFieldErrorString();
+                }
+                if (!IsValidUUID($cluster_uuid)) {
+                    $clerrors["uuid"] = "Not a valid uuid: $cluster_uuid";
+                }
+                if (!IsValidUUID($cluster["uuid"])) {
+                    $clerrors["uuid"] = "Not a valid uuid: " . $cluster["uuid"];
+                }
+        
+                if (count($clerrors)) {
+                    $cluster["errors"] = $clerrors;
+                    $cluster_errors++;
+                    continue;
+                }
+                # Create a new version of the array for passing out to backend,
+                $safe_clusters[$cluster_uuid] =
+                    array("cluster" => $urn,
+                          "type"    => $type,
+                          "count"   => $count,
+                          "uuid"    => $cluster["uuid"]);
+            }
+            if ($cluster_errors) {
+                $errors["error"] = "Please fix the cluster errors below";
+                $errors["clusters"] = $clusters;
             }
         }
-        if (count($clerrors)) {
-            $cluster["errors"] = $clerrors;
-            $cluster_errors++;
-            continue;
-        }
-        $urn    = $cluster["cluster"];
-        $count  = $cluster["count"];
-        $type   = $cluster["type"];
-        
-        if (!TBvalid_node_type($type)) {
-            $clerrors["type"] = TBFieldErrorString();
-        }
-        if (!Instance::ValidURN($urn)) {
-            $clerrors["cluster"] = TBFieldErrorString();
-        }
-        $aggregate = Aggregate::Lookup($urn);
-        if (!$aggregate) {
-            $clerrors["cluster"] = "No such cluster";
-        }
-        if (!TBvalid_integer($count)) {
-            $clerrors["count"] = TBFieldErrorString();
-        }
-        if (!IsValidUUID($cluster_uuid)) {
-            $clerrors["uuid"] = "Not a valid uuid: $cluster_uuid";
-        }
-        if (!IsValidUUID($cluster["uuid"])) {
-            $clerrors["uuid"] = "Not a valid uuid: " . $cluster["uuid"];
-        }
-        
-        if (count($clerrors)) {
-            $cluster["errors"] = $clerrors;
-            $cluster_errors++;
-            continue;
-        }
-        # Create a new version of the array for passing out to backend,
-        $safe_clusters[$cluster_uuid] = array("cluster" => $urn,
-                                              "type"    => $type,
-                                              "count"   => $count,
-                                              "uuid"    => $cluster["uuid"]);
     }
-    if ($cluster_errors) {
-        $errors["error"] = "Please fix the cluster errors below";
-        $errors["clusters"] = $clusters;
+
+    #
+    # Ranges is an optional array of lower/upper/power ...
+    #
+    $safe_ranges  = array();
+    
+    if (isset($formfields["ranges"])) {    
+        $ranges = $formfields["ranges"];
+        if (!is_array($ranges)) {
+            $errors["ranges"] = "Not an array";
+        }
+        else {
+            $range_errors = 0;
+            foreach ($ranges as $range_uuid => &$range) {
+                $required = array("freq_low", "freq_high", "uuid");
+                $rerrors  = array();
+
+                foreach ($required as $field) {
+                    if (!isset($range[$field]) || $range[$field] == "") {
+                        $rerrors[$field] = "Missing field";
+                    }
+                }
+                if (count($rerrors)) {
+                    $range["errors"] = $rerrors;
+                    $range_errors++;
+                    continue;
+                }
+                $freq_low  = $range["freq_low"];
+                $freq_high = $range["freq_high"];
+
+                if (!TBvalid_float($freq_low)) {
+                    $rerrors["freq_low"] = TBFieldErrorString();
+                }
+                if (!TBvalid_float($freq_high)) {
+                    $rerrors["freq_high"] = TBFieldErrorString();
+                }
+                if (!count($rerrors)) {
+                    if ($freq_low == $freq_high) {
+                        $rerrors["freq_high"] = "Same as lower frequency";
+                    }
+                    elseif ($freq_high < $freq_low) {
+                        $rerrors["freq_high"] = "Less then lower frequency";
+                    }
+                }
+                if (!IsValidUUID($range_uuid)) {
+                    $rerrors["uuid"] = "Not a valid uuid: $range_uuid";
+                }
+                if (!IsValidUUID($range["uuid"])) {
+                    $rerrors["uuid"] = "Not a valid uuid: " . $range["uuid"];
+                }
+                if (!count($rerrors)) {
+                    #
+                    # Check internal consistency.
+                    #
+                    foreach ($safe_ranges as $unused => $safe_range) {
+                        if (($freq_low < $safe_range["freq_low"] &&
+                             $freq_high < $safe_range["freq_low"]) ||
+                            ($freq_low > $safe_range["freq_high"])) {
+                            continue;
+                        }
+                        $rerrors["freq_low"] = "Overlaps with another range";
+                        break;
+                    }
+                }
+                if (count($rerrors)) {
+                    $range["errors"] = $rerrors;
+                    $range_errors++;
+                    continue;
+                }
+                # Create a new version of the array for passing out to backend,
+                $safe_ranges[$range_uuid] =
+                    array("freq_low"  => $freq_low,
+                          "freq_high" => $freq_high,
+                          "uuid"      => $range["uuid"]);
+            }
+            if ($range_errors) {
+                $errors["error"]  = "Please fix the errors below";
+                $errors["ranges"] = $ranges;
+            }
+        }
     }
     if (count($errors)) {
 	SPITAJAX_ERROR(2, $errors);
@@ -250,14 +337,21 @@ function Do_Reserve()
         $args = "-N $reasonfile $args";
     }
     #
-    # Write out the cluster info to a json file.
+    # Write out the group info to a json file.
     #
-    $clusterfile = tempnam("/tmp", "clusters");
-    $fp = fopen($clusterfile, "w");
-    fwrite($fp, json_encode($safe_clusters));
+    $blob = array();
+    if (count($safe_clusters)) {
+        $blob["clusters"] = $safe_clusters;
+    }
+    if (count($safe_ranges)) {
+        $blob["ranges"] = $safe_ranges;
+    }
+    $resgroupfile = tempnam("/tmp", "resgroup");
+    $fp = fopen($resgroupfile, "w");
+    fwrite($fp, json_encode($blob));
     fclose($fp);
-    chmod($clusterfile, 0666);
-    $args .= " $clusterfile";
+    chmod($resgroupfile, 0666);
+    $args .= " $resgroupfile";
 
     #
     # If doing a validate only, add that flag.
@@ -288,17 +382,17 @@ function Do_Reserve()
         if (isset($reasonfile)) {
             unlink($reasonfile);
         }
-        unlink($clusterfile);
+        unlink($resgroupfile);
         $webtask->Delete();
 	return;
     }
     if (isset($reasonfile)) {
         unlink($reasonfile);
     }
-    unlink($clusterfile);
+    unlink($resgroupfile);
     #
     # The blob returned in the webtask has the approval flag for each of
-    # requests, in a copy of the clusters array we created above.
+    # requests, in a copy of the clusters/ranges array we created above.
     #
     $results = $webtask->TaskValue("results");
     $webtask->Delete();
@@ -475,6 +569,9 @@ function Do_Refresh()
         if (!$webtask->exited() || $retval < 0) {
             SUEXECERROR(SUEXEC_ACTION_CONTINUE);
             SPITAJAX_ERROR(-1, "Internal error refreshing reservation");
+        }
+        else {
+            SPITAJAX_ERROR(1, $webtask->output());
         }
         $webtask->Delete();
 	return;
@@ -809,7 +906,7 @@ function ResgroupBlob($resgroup)
     $details["canceled"]   = 0;
     $details["uid"]        = $resgroup->creator_uid();
     $details["uid_idx"]    = $resgroup->creator_idx();
-    $reservations = array();
+    $clusters = array();
     foreach ($resgroup->reservations() as $reservation) {
         $blob = array("type"        => $reservation->type(),
                       "count"       => intval($reservation->count()),
@@ -836,7 +933,7 @@ function ResgroupBlob($resgroup)
         else {
             $blob["active"] = false;
         }
-        $reservations[$reservation->remote_uuid()] = $blob;
+        $clusters[$reservation->remote_uuid()] = $blob;
 
         if (! $reservation->approved()) {
             $status = "pending";
@@ -852,6 +949,30 @@ function ResgroupBlob($resgroup)
             $details["canceled"] += 1;
         }
     }
+    $ranges = array();
+    foreach ($resgroup->rfreservations() as $reservation) {
+        $blob = array("freq_uuid"   => $reservation->freq_uuid(),
+                      "freq_low"    => $reservation->freq_low(),
+                      "freq_high"   => $reservation->freq_high(),
+                      "submitted"   => DateStringGMT($reservation->submitted()),
+                      "approved"    => DateStringGMT($reservation->approved()));
+        if (time() > strtotime($resgroup->start()) &&
+            $reservation->approved()) {
+            $blob["active"] = true;
+        }
+        else {
+            $blob["active"] = false;
+        }
+        $ranges[$reservation->freq_uuid()] = $blob;
+
+        if (! $reservation->approved()) {
+            $status = "pending";
+        }
+        if (!$reservation->approved()) {
+            $details["approved"] = 0;
+            $details["pending"] += 1;
+        }
+    }
     $details["status"] = $status;
     if (time() > strtotime($resgroup->start()) &&
         ($status == "approved" || $details["pending"] > 0)) {
@@ -860,8 +981,38 @@ function ResgroupBlob($resgroup)
     else {
         $details["active"] = false;
     }
-    $details["reservations"] = $reservations;
+    $details["clusters"] = $clusters;
+    $details["ranges"]   = $ranges;
     return $details;
+}
+
+#
+# Ask for range reservation system info.
+#
+function Do_RangeReservations()
+{
+    global $this_user;
+    global $ajax_args;
+    $info = array();
+    $allgroups = ReservationGroup::LookupAll();
+    foreach ($allgroups as $reservation) {
+        $rf = $reservation->rfreservations();
+        if (!count($rf)) {
+            continue;
+        }
+        $rfarray = array();
+        foreach ($rf as $rfres) {
+            if (!$rfres->approved()) {
+                continue;
+            }
+            $blob = array("freq_low"   => $rfres->freq_low(),
+                          "freq_high"  => $rfres->freq_high(),
+                          "start"      => DateStringGMT($reservation->start()),
+                          "end"        => DateStringGMT($reservation->end()));
+            $info[] = $blob;
+        }
+    }
+    SPITAJAX_RESPONSE($info);
 }
 
 # Local Variables:

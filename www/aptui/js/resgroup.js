@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var template_list   = ["resgroup", "reserve-faq",
+    var template_list   = ["resgroup", "reserve-faq", "range-list",
 			   "reservation-graph", "oops-modal", "waitwait-modal",
 			   "resusage-graph"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
@@ -11,12 +11,14 @@ $(function ()
     var mainTemplate    = _.template(templates["resgroup"]);
     var graphTemplate   = _.template(templates["reservation-graph"]);
     var usageTemplate   = _.template(templates["resusage-graph"]);
+    var rangeTemplate   = _.template(templates["range-list"]);
     var projlist     = null;
     var amlist       = null;
     var isadmin      = false;
     var editing      = false;
     var buttonstate  = "check";
     var forecasts    = {};
+    var allranges    = [];
     var IDEAL_STARTHOUR = 7;	// 7am start time preferred.
 
     var addClusterRowString = 
@@ -66,12 +68,20 @@ $(function ()
 	'        <button type="button" ' +
 	'                class="btn btn-xs btn-default add-cluster hidden" ' +
 	'                style="">' +
- 	'           <span class="glyphicon glyphicon-plus"></span>' +
+ 	'           <span class="glyphicon glyphicon-plus" ' +
+	'		 data-toggle="tooltip" ' +
+	' 		 data-container="body" ' +
+	'		 data-trigger="hover" ' +
+	'		 title="Add a new reservation row"></span>' +
 	'        </button>' +
 	'        <button type="button" ' +
 	'                class="btn btn-xs btn-default delete-cluster hidden"' +
 	'                style="">' +
- 	'           <span class="glyphicon glyphicon-minus"></span>' +
+ 	'           <span class="glyphicon glyphicon-minus" ' +
+	'		 data-toggle="tooltip" ' +
+	' 		 data-container="body" ' +
+	'		 data-trigger="hover" ' +
+	'		 title="Remove this reservation row"></span>' +
 	'        </button>' +
 	'      </td>' +
 	'    </tr>' +
@@ -111,7 +121,11 @@ $(function ()
 	'       <button type="button" ' +
 	'               class="btn btn-xs btn-default add-cluster hidden" ' +
 	'               style="">' +
- 	'          <span class="glyphicon glyphicon-plus"></span>' +
+ 	'          <span class="glyphicon glyphicon-plus" ' +
+	'		 data-toggle="tooltip" ' +
+	' 		 data-container="body" ' +
+	'		 data-trigger="hover" ' +
+	'		 title="Add a new reservation row"></span>' +
 	'       </button>' +
 	'       <button type="button" ' +
 	'               class="btn btn-xs btn-default delete-reservation ' +
@@ -144,7 +158,7 @@ $(function ()
 	'           </label>' +
 	'         </span>' +
 	'      </td>' +
-	'    </tr>'; 
+	'    </tr>' +
 	'    <tr class="error-row">' +
 	'      <td colspan=4 class="reservation-error">' +
 	'         <span class="form-group-sm hidden has-error"> ' +
@@ -156,6 +170,118 @@ $(function ()
     
     var clusterRowTemplate  = _.template(clusterRowString);
 
+    var addFrequencyRowString = 
+	' <tbody data-uuid="<%- freq_uuid %>" class="new-range">' +
+	'    <tr>' +
+	'      <td>' +
+	'       <div> ' +
+	'	  <input placeholder="Lower Frequency"' +
+	'	         value="<%- freq_low %>"' +
+	'	         size="8"' +
+	'	         class="form-control freq-low"' +
+	'	         type="text">' +
+	'         <span class="form-group-sm hidden has-error ' +
+	'                      freq-low-error"> ' +
+	'           <label class="control-label">Error</label>' +
+	'         </span>' +
+	'       </div> '+
+	'      </td>' +
+	'      <td>' +
+	'       <div> ' +
+	'	  <input placeholder="Upper Frequency"' +
+	'	         value="<%- freq_high %>"' +
+	'	         size="8"' +
+	'	         class="form-control freq-high"' +
+	'	         type="text">' +
+	'         <span class="form-group-sm hidden has-error '+
+	'                      freq-high-error"> ' +
+	'           <label class="control-label">Error</label>' +
+	'         </span>' +
+	'       </div> '+
+	'      </td>' +
+	'      <td style="width: 16px; padding-right: 0px;">' +
+	'        <button type="button" ' +
+	'                class="btn btn-xs btn-default add-range hidden" ' +
+	'                style="">' +
+ 	'           <span class="glyphicon glyphicon-plus" ' +
+	'		 data-toggle="tooltip" ' +
+	' 		 data-container="body" ' +
+	'		 data-trigger="hover" ' +
+	'		 title="Add a new reservation row"></span>' +
+	'        </button>' +
+	'        <button type="button" ' +
+	'                class="btn btn-xs btn-default delete-range hidden"' +
+	'                style="">' +
+ 	'           <span class="glyphicon glyphicon-minus" ' +
+	'		 data-toggle="tooltip" ' +
+	' 		 data-container="body" ' +
+	'		 data-trigger="hover" ' +
+	'		 title="Remove this reservation row"></span>' +
+	'        </button>' +
+	'      </td>' +
+	'    </tr>' +
+	'    <tr class="error-row">' +
+	'      <td colspan=4 class="reservation-error">' +
+	'         <span class="form-group-sm hidden has-error"> ' +
+	'           <label class="control-label">Error</label>' +
+	'         </span>' +
+	'      </td>' +
+	'    </tr>' +
+	'   </tbody>'; 
+	
+    var addFrequencyRowTemplate  = _.template(addFrequencyRowString);
+
+    // When editing, use readonly inputs.
+    var frequencyRowString = 
+	' <tbody data-uuid="<%- freq_uuid %>" class="existing-range">' +
+	'    <tr>' +
+	'     <td>' +
+	'      <div>' +
+	'       <input readonly type=text ' +
+	'	       value="<%- freq_low %>"' +
+	'              class="form-control freq-low">' +
+	'      </div>' +
+	'     </td>' +
+	'     <td>' +
+	'      <div>' +
+	'       <input readonly type=text ' +
+	'	       value="<%- freq_high %>"' +
+	'              class="form-control freq-high">' +
+	'      </div>' +
+	'     </td>' +
+	'     <td style="width: 16px; padding-right: 0px;">' +
+	'       <button type="button" ' +
+	'               class="btn btn-xs btn-default add-range hidden" ' +
+	'               style="">' +
+ 	'          <span class="glyphicon glyphicon-plus" ' +
+	'		 data-toggle="tooltip" ' +
+	' 		 data-container="body" ' +
+	'		 data-trigger="hover" ' +
+	'		 title="Add a new reservation row"></span>' +
+	'       </button>' +
+	'       <button type="button" ' +
+	'               class="btn btn-xs btn-default delete-range ' +
+	'                      hidden" ' +
+	'               style="color: red;">' +
+ 	'          <span class="glyphicon glyphicon-remove" ' +
+	'		 data-toggle="tooltip" ' +
+	' 		 data-container="body" ' +
+	'		 data-trigger="hover" ' +
+	'		 title="Delete this frequency reservation"></span>' +
+	'       </button>' +
+	'     </td>' +
+	'    </tr>' +
+	'    <tr class="error-row">' +
+	'      <td colspan=4 class="reservation-error">' +
+	'         <span class="form-group-sm hidden has-error"> ' +
+	'           <label class="control-label">Error</label>' +
+	'         </span>' +
+	'      </td>' +
+	'    </tr>'; 
+	'  </body>'; 
+    
+    var frequencyRowTemplate  = _.template(frequencyRowString);
+
     /*
      * Callback when something changes so that we can toggle the
      * button from Submit to Check.
@@ -164,6 +290,9 @@ $(function ()
     {
 	ToggleSubmit(true, "check");
 	aptforms.MarkFormUnsaved();
+	if (editing) {
+	    $('#reserve-approve-button').attr("disabled", "disabled");
+	}
     }
     
     function initialize()
@@ -187,6 +316,9 @@ $(function ()
 	 */
 	if (editing) {
 	    PopulateReservation();
+	    // Start out with button disabled until a change.
+	    ToggleSubmit(false, "check");
+	    
 	    $('#reserve-delete-button').click(function (e) {
 		e.preventDefault();
 		Delete();
@@ -251,6 +383,7 @@ $(function ()
 	// Add one unassigned row.
 	if (!editing) {
 	    AddClusterRow();
+	    AddRangeRow();
 	}
 	
 	// Graph list(s).
@@ -336,7 +469,6 @@ $(function ()
 	});
 	aptforms.EnableUnsavedWarning('#reserve-request-form',
 				      modified_callback);
-
     }
 
     /*
@@ -370,6 +502,11 @@ $(function ()
 		    HandleTypeChange(row);
 		});
 	});
+	// This activates the tooltip subsystem.
+	row.find('[data-toggle="tooltip"]').tooltip({
+	    placement: 'auto'
+	});
+	
 	$('#cluster-table').append(row);
 	
 	/*
@@ -381,6 +518,7 @@ $(function ()
 	    .removeClass("hidden")
 	    .click(function (event) {
 		AddClusterRow();
+		modified_callback();
 	    });
 	row.find('.delete-cluster')
 	    .removeClass("hidden")
@@ -405,7 +543,79 @@ $(function ()
 	    $('#cluster-table .delete-cluster').show();
 	    $('#cluster-table .add-cluster').not(":last").hide();
 	}
-	modified_callback();
+    }
+
+    /*
+     * Add a new range row.
+     */
+    function AddRangeRow()
+    {
+	var html = addFrequencyRowTemplate({
+	    "freq_low"    : "",
+	    "freq_high"   : "",
+	    "freq_uuid"   : sup.newUUID(),
+	});
+	var row = $(html);
+
+	// This activates the tooltip subsystem.
+	row.find('[data-toggle="tooltip"]').tooltip({
+	    placement: 'auto'
+	});
+	
+	$('#range-table').append(row);
+
+	/*
+	 * Three cases to consider for the delete button
+	 *  1) New reservation, always start with one new range row
+	 *     that cannot be deleted.
+	 *  2) Existing reservation with a range, show add button on
+	 *     last one. All ranges get a delete button.
+	 *  3) Existing reservation with no ranges, treat like case 1.
+	 */
+	var updateButtons = function () {
+	    if (!editing) {
+		if ($('#range-table tbody.new-range').length == 1) {
+		    $('#range-table .new-range .delete-range').hide();
+		}
+		else {
+		    $('#range-table .new-range .delete-range').show();
+		}
+	    }
+	    else if ($('#range-table tbody.existing-range').length) {
+		$('#range-table .new-range .delete-range').show();
+	    }
+	    else if ($('#range-table tbody.new-range').length == 1) {
+		$('#range-table .new-range .delete-range').hide();
+	    }
+	    else {
+		$('#range-table .new-range .delete-range').show();
+	    }
+	    // Last range always gets an add button
+	    $('#range-table .add-range').not(":last").hide();
+	    $('#range-table .add-range').last().show();
+	    return;
+	};
+	
+	/*
+	 * Add/Delete ranges. See above for button handling.
+	 */
+	row.find('.add-range')
+	    .removeClass("hidden")
+	    .click(function (event) {
+		AddRangeRow();
+	    });
+	row.find('.delete-range')
+	    .removeClass("hidden")
+	    .click(function (event) {
+		row.remove();
+		updateButtons();
+		modified_callback();
+	    });
+	row.find('input.freq-low, input.freq-high').change(function () {
+	    modified_callback();
+	});
+	// See above
+	updateButtons();
     }
     
     /*
@@ -494,13 +704,40 @@ $(function ()
 	});
     }
     /*
+     * Generate errors in the ranges table.
+     */
+    function GenerateRangeTableFormErrors(ranges)
+    {
+	console.info("GenerateRangeTableFormErrors", ranges);
+
+	_.each(ranges, function (range, uuid) {
+	    if (!_.has(range, "errors")) {
+		return;
+	    }
+	    var tbody = $('#range-table tbody[data-uuid="' + uuid + '"]');
+
+	    _.each(range.errors, function (error, key) {
+		var classname;
+			    
+		if (key == "freq_low") {
+		    classname = ".freq-low-error";
+		}
+		else if (key == "freq_high") {
+		    classname = ".freq-high-error";
+		}
+		tbody.find(classname + " label")
+		    .html(error);
+		tbody.find(classname)
+		    .removeClass("hidden");
+	    });
+	});
+    }
+    
+    /*
      * These are validation errors (not enough nodes, etc).
      */
-    function GenerateValidationErrors(clusters)
+    function GenerateClusterValidationErrors(clusters)
     {
-	var errors   = 0;
-	var approved = 0;
-
 	_.each(clusters, function (reservation, uuid) {
 	    var tbody = $('#cluster-table tbody[data-uuid="' + uuid + '"]');
 
@@ -513,12 +750,10 @@ $(function ()
 		    .removeClass("hidden");
 		tbody.removeClass("has-warning has-error")
 		    .addClass("has-error");
-		errors++;
 	    }
 	    else if (parseInt(reservation.approved) != 0) {
 		tbody.find(".reservation-error span")
 		    .addClass("hidden");
-		approved++;
 	    }
 	    else {
 		tbody.find(".reservation-error span label")
@@ -531,7 +766,41 @@ $(function ()
 		    .addClass("has-warning");
 	    }
 	});
-	return {"errors" : errors, "approved" : approved};
+    }
+
+    /*
+     * These are validation errors (not enough nodes, etc).
+     */
+    function GenerateRangeValidationErrors(ranges)
+    {
+	_.each(ranges, function (reservation, uuid) {
+	    var tbody = $('#range-table tbody[data-uuid="' + uuid + '"]');
+
+	    if (_.has(reservation, "errcode")) {
+		tbody.find(".reservation-error span label")
+		    .html(reservation.output);
+		tbody.find(".reservation-error span")
+		    .removeClass("has-warning")
+		    .addClass("has-error")
+		    .removeClass("hidden");
+		tbody.removeClass("has-warning has-error")
+		    .addClass("has-error");
+	    }
+	    else if (parseInt(reservation.approved) != 0) {
+		tbody.find(".reservation-error span")
+		    .addClass("hidden");
+	    }
+	    else {
+		tbody.find(".reservation-error span label")
+		    .html("Approval is required");
+		tbody.find(".reservation-error span")
+		    .addClass("has-warning")
+		    .removeClass("has-error")
+		    .removeClass("hidden");
+		tbody.removeClass("has-warning has-error")
+		    .addClass("has-warning");
+	    }
+	});
     }
 
     /*
@@ -572,6 +841,34 @@ $(function ()
 	return clusters;
     }
      
+    /*
+     * Generate list of range rows for passing to the server.
+     */
+    function GetRangeRows()
+    {
+	var ranges = {};
+
+	/*
+	 * Collect the range rows into an array.
+	 */
+	$('#range-table tbody').each(function () {
+	    var tbody   = $(this);
+	    var low     = tbody.find(".freq-low").val();
+	    var high    = tbody.find(".freq-high").val();
+	    var uuid    = tbody.data("uuid");
+	    var type;
+
+	    // Skip an empty row
+	    if (low == "" && high == "") {
+		return;
+	    }
+	    ranges[uuid] = {"freq_low"  : low,
+			    "freq_high" : high,
+			    "uuid"      : uuid};
+	});
+	return ranges;
+    }
+     
     //
     // Check form validity. This does not check whether the reservation
     // is valid.
@@ -581,6 +878,7 @@ $(function ()
 	var start    = null;
 	var end      = null;
 	var clusters = {};
+	var ranges   = {};
 	
 	var checkonly_callback = function(json) {
 	    if (json.code) {
@@ -596,6 +894,9 @@ $(function ()
 		if (_.has(json.value, "clusters")) {
 		    GenerateClusterTableFormErrors(json.value.clusters);
 		}
+		if (_.has(json.value, "ranges")) {
+		    GenerateRangeTableFormErrors(json.value.ranges);
+		}
 		return;
 	    }
 	    // Set the number of days, so that user can then search if
@@ -606,7 +907,7 @@ $(function ()
 		.val(days.toFixed(1));
 	    
 	    // Now check the actual reservation validity.
-	    ValidateReservation(clusters);
+	    ValidateReservation(clusters, ranges);
 	}
 	/*
 	 * Before we submit, set the start/end fields to UTC time.
@@ -645,15 +946,18 @@ $(function ()
 	    end.hour(end_hour);
 	    $('#reserve-request-form [name=end]').val(end.format());
 	}
-	// Collect the cluster rows into an array.
+	// Collect the cluster and range rows into an array.
 	clusters = GetClusterRows();
+	ranges   = GetRangeRows();
 
 	// Clear (hide) previous cluster table errors
-	$('#reserve-request-form .form-group-sm').addClass("hidden");
+	$('#reserve-request-form .form-group-sm').addClass("hidden");	
+	$('#reserve-request-form tbody').removeClass("has-warning has-error");
 	
 	aptforms.CheckForm('#reserve-request-form', "resgroup",
 			   "Validate", checkonly_callback,
-			   {"clusters" : clusters});
+			   {"clusters" : clusters,
+			    "ranges"   : ranges});
     }
 
     // Call back from the graphs to change the dates on a blank form
@@ -677,10 +981,13 @@ $(function ()
 		}
 	    }
 	    $('#reserve-request-form [name=count]').focus();
+	    console.info("graphclick");
 	    aptforms.MarkFormUnsaved();
 	}
     }
+    
     // Set the cluster after clicking on a graph.
+    // XXX Not using this aymore.
     function SetCluster(nickname, urn)
     {
 	//console.info("SetCluster", nickname);
@@ -712,6 +1019,7 @@ $(function ()
 	      '[name=cluster] option[value="' + urn + '"]')
 		.prop("selected", "selected");
 	    HandleClusterChange(urn);
+	    console.info("SetCluster");
 	    aptforms.MarkFormUnsaved();
 	}
     }
@@ -722,8 +1030,10 @@ $(function ()
      */
     function LoadReservations(project)
     {
+	LoadRangeReservations();
+	
 	_.each(amlist, function(details, urn) {
- 	    var callback = function(json) {
+	    var callback = function(json) {
 		console.log("LoadReservations: " + details.nickname, json);
 		var id = "resgraph-" + details.nickname;
 		
@@ -745,7 +1055,8 @@ $(function ()
 			      "skiptypes"      : json.value.prunelist,
 			      "click_callback" : function(when, type) {
 				  if (!editing) {
-				      SetCluster(details.nickname, urn);
+				      // Needs work for res groups.
+				      //SetCluster(details.nickname, urn);
 				  }
 				  GraphClick(when, type);
 			      }});
@@ -762,7 +1073,7 @@ $(function ()
 			$('#resgraph-modal').on('shown.bs.modal', function() {
 			    ShowResGraph({"forecast"  : json.value.forecast,
 					  "selector"  : "resgraph-modal",
-					  "skiptypes"      : skiptypes,
+					  "skiptypes" : json.value.prunelist,
 					  "click_callback" : GraphClick});
 			});
 			sup.ShowModal('#resgraph-modal', function () {
@@ -824,6 +1135,46 @@ $(function ()
 	//console.info("forecast", cluster, forecast);
 	forecasts[cluster] = forecast;
     }
+
+    /*
+     * Load the range reservation info.
+     */
+    function LoadRangeReservations()
+    {
+	var callback = function(json) {
+	    console.log("LoadRangeReservations", json);
+	    if (json.code) {
+		console.info("Could not get range info");
+		return;
+	    }
+	    if (!_.size(json.value)) {
+		return;
+	    }
+	    allranges = json.value;
+	    
+	    var html = rangeTemplate({"ranges" : json.value});
+	    $('#range-list').html(html).removeClass("hidden");
+
+	    // Format dates with moment before display.
+	    $('#range-list .format-date').each(function() {
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment(date).format("lll"));
+		}
+	    });
+	    $('#range-list .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+		    // initialize zebra
+		    widgets: ["zebra"],
+		});
+	};
+
+	var xmlthing = sup.CallServerMethod(null, "resgroup",
+					    "RangeReservations");
+	xmlthing.done(callback);
+    }
+    
     /*
      * Try to find the first fit.
      */
@@ -834,12 +1185,13 @@ $(function ()
 
 	// List of reservation requests.
 	var clusters = _.values(GetClusterRows());
+	var ranges   = _.values(GetRangeRows());
 
 	if (! days) {
 	    alert("Please provide the number of days");
 	    return;
 	}
-	console.info("FindFit: ", days, clusters);
+	console.info("FindFit: ", days, clusters, ranges);
 
 	/*
 	 * Slightly cheesy way to wait for the cluster data to come in.
@@ -880,27 +1232,53 @@ $(function ()
 	    console.info("findfirst", type, count, lower);
 
 	    var tmp = forecasts[cluster.cluster][cluster.type].slice(0);
+	    console.info("tmp", tmp);
 	    while (tmp.length && starttime == null) {
 		var data = tmp.shift();
 
-		if (data.free >= cluster.count &&
-		    (lower == null || data.t >= lower)) {
+		console.info("baz", data);
+		
+		if (data.free >= cluster.count) {
 		    starttime = data.t;
 		    startdata = data;
+		    if (lower) {
+			if (tmp.length) {
+			    var next = tmp[0];
+			    
+			    console.info("foo", lower, data, next);
 
+			    if (next.free >= cluster.count &&
+				lower >= data.t && lower <= next.t) {
+				starttime = lower;
+				console.info("fee", starttime);
+			    }
+			    else if (data.t < lower) {
+				console.info("bar");
+				starttime = null;
+				continue;
+			    }
+			}
+		    }
+		    console.info("boop", data);
+		    
 		    for (var i = 0; i < tmp.length; i++) {
 			var next = tmp[i];
 
+			if (next.free >= cluster.count) {
+			    // The next time stamp still has enough nodes,
+			    // keep checking until no longer true, so we
+			    // have the biggest range possible.
+			    continue;
+			}
+			/*
+			 * Okay, next range no longer has enough nodes, but
+			 * if the current range is long enough, we are good.
+			 */
 			if (starttime + (3600 * 24 * days) + 3600 < next.t) {
 			    // The next time stamp is beyond the days requested,
 			    // so it fits.
 			    enddata = next;
 			    break;
-			}
-			if (next.free >= cluster.count) {
-			    // The next time stamp still has enough nodes,
-			    // keep checking.
-			    continue;
 			}
 			// Otherwise, we no longer fit, need to start over.
 			starttime = null;
@@ -908,23 +1286,110 @@ $(function ()
 		    }
 		}
 	    }
-	    return {"starttime" : starttime,
-		    "startdata" : startdata,
-		    "endtime"   : (enddata ? enddata.t : null),
-		    "enddata"   : enddata,
-		   };
+	    var results =
+		{"starttime" : starttime,
+		 "startdata" : startdata,
+		 "endtime"   : (enddata ? enddata.t : null),
+		 "enddata"   : enddata,
+		};
+	    console.info("findfirst return", results);
+	    return results;
 	};
-	var fit = findfirst(clusters[0], null, null);
-	console.info("firstfit", fit);
-	for (index = 1; index < clusters.length; index++) {
-	    var results = findfirst(clusters[index], fit["starttime"], null);
-	    console.info("nextfit", results);
-	    if (results["starttime"] > fit["starttime"]) {
-		fit["starttime"] = results["starttime"];
+	var lower = null;
+	var fit   = null;
+	var loops = 100;  // Avoid infinite loop.
+	
+	while (!fit && loops) {
+	    loops--;
+	    fit = findfirst(clusters[0], lower, null);
+	    if (!fit.starttime) {
+		break;
 	    }
-	    if (results["endtime"] &&
-		(!fit["endtime"] || results["endtime"] < fit["endtime"])) {
-		fit["endtime"] = results["endtime"];
+	    for (index = 1; index < clusters.length; index++) {
+		var results = findfirst(clusters[index],
+					fit["starttime"], null);
+		if (!results.starttime) {
+		    break;
+		}
+		console.info("fit:" + index,
+			     fit.starttime, fit.endtime,
+			     fit.startdata, fit.enddata);
+		
+		/*
+		 * If the first avail is beyond the current fit, need
+		 * to start over.
+		 */
+		if (fit["endtime"] && results["starttime"] > fit["endtime"]) {
+		    console.info("skip1");
+		    fit   = null;
+		    lower = results["starttime"];
+		    break;
+		}
+		// Narrow to newest fit.
+		if (results["starttime"] > fit["starttime"]) {
+		    fit["starttime"] = results["starttime"];
+		}
+		if (results["endtime"] &&
+		    (!fit["endtime"] || results["endtime"] < fit["endtime"])) {
+		    fit["endtime"] = results["endtime"];
+		}
+		// If too narrow, have to keep going.
+		if (fit["endtime"] &&
+		    (fit["endtime"] - fit["starttime"] < 
+		     (3600 * 24 * days) + 3600)) {
+		    console.info("skip2");
+		    fit   = null;
+		    lower = fit["starttime"];
+		    break;
+		}
+	    }
+	    if (!fit || _.size(ranges) == 0) {
+		continue;
+	    }
+	    /*
+	     * Ok, we have something that works for the clusters, lets look
+	     * at the ranges. This is a bit easier since current ranges
+	     * include both a start and end time. So if the current fit
+	     * above conflicts with a range we want, start over at the end
+	     * of the conflicting range. 
+	     */
+	    for (index = 0; index < ranges.length; index++) {
+		var range     = ranges[index];
+		var freq_low  = parseFloat(range.freq_low);
+		var freq_high = parseFloat(range.freq_high);
+
+		console.info("Range:" + index, freq_low, freq_high);
+
+		for (var r = 0; r < allranges.length; r++) {
+		    var existing = allranges[r];
+		    var lower    = parseFloat(existing.freq_low);
+		    var upper    = parseFloat(existing.freq_high);
+		    var starts   = moment(existing.start).unix();
+		    var ends     = moment(existing.end).unix();
+		    var fitend   = fit.starttime + (3600 * 24 * days) + 3600;
+
+		    console.info("Existing:" + r, lower,upper,starts,ends);
+
+		    // If this range does not overlap in time, keep going
+		    if ((fit.starttime < starts && fitend < starts) ||
+			(fit.starttime > ends)) {
+			continue;
+		    }
+		    // If this range does not overlap in frequency, keep going
+		    if ((freq_low < lower && freq_high < lower) ||
+			(freq_low > upper)) {
+			continue;
+		    }
+		    // Does not fit! Move past the conflicting reservation.
+		    console.info("Range does not fit");
+		    fit   = null;
+		    lower = ends + (3600 * 4);
+		    break;
+		}
+		// No point in continuing, start over.
+		if (!fit) {
+		    break;
+		}
 	    }
 	}
 	// enddata can be null if we fit on the last timeline entry.
@@ -935,7 +1400,7 @@ $(function ()
 		.datepicker('setDate', null);
 	    $("#reserve-request-form #end_day")
 		.datepicker('setDate', null);
-	    alter("Could not find a time that works!");
+	    alert("Could not find a time that works!");
 	    return;
 	}
 	var starttime = fit.starttime;
@@ -982,15 +1447,14 @@ $(function ()
 	// And if we actually changed anything.
 	if (start_day != new_start_day || start_hour != new_start_hour ||
 	    end_day != new_end_day || end_hour != new_end_hour) {
-	    ToggleSubmit(true, "check");
-	    aptforms.MarkFormUnsaved();
+	    modified_callback();
 	}
     }
 
     //
     // Validate the reservation. 
     //
-    function ValidateReservation(clusters)
+    function ValidateReservation(clusters, ranges)
     {
 	var callback = function(json) {
 	    console.info(json);
@@ -1009,6 +1473,9 @@ $(function ()
 		if (_.has(json.value, "clusters")) {
 		    GenerateClusterTableFormErrors(json.value.clusters);
 		}
+		if (_.has(json.value, "ranges")) {
+		    GenerateRangeTableFormErrors(json.value.ranges);
+		}
 		// Make sure we still warn about an unsaved form.
 		aptforms.MarkFormUnsaved();
 		return;
@@ -1019,13 +1486,20 @@ $(function ()
 	     * back, which is an augmented copy of the clusters array
 	     * we sent over.
 	     */
-	    var reservations = json.value.reservations;
-	    console.info("ValidateReservation", reservations);
-	    var results = GenerateValidationErrors(reservations);
-	    console.info("results", results);
-
+	    var results = json.value;
+	    var cluster_results, range_results;
+	    
+	    if (_.has(results, "cluster_results")) {
+		cluster_results = results.cluster_results;
+		GenerateClusterValidationErrors(cluster_results.clusters);
+	    }
+	    if (_.has(results, "range_results")) {
+		range_results = json.value.range_results;
+		GenerateRangeValidationErrors(range_results.ranges);
+	    }
 	    // User needs to fix things up.
-	    if (results.errors) {
+	    if ((cluster_results && cluster_results.errors) ||
+		(range_results && range_results.errors)) {
 		return;
 	    }
 	    
@@ -1033,7 +1507,11 @@ $(function ()
 	    ToggleSubmit(true, "submit");
 	    // Make sure we still warn about an unsaved form.
 	    aptforms.MarkFormUnsaved();
-	    if (results.approved != _.size(reservations)) {
+
+	    if ((cluster_results &&
+		 cluster_results.approved != _.size(clusters)) ||
+		(range_results &&
+		 range_results.approved != _.size(ranges))) {
 		$('#confirm-reservation .needs-approval')
 		    .removeClass("hidden");
 	    }
@@ -1045,11 +1523,14 @@ $(function ()
 	};
 	// Clear (hide) previous cluster table errors
 	$('#reserve-request-form .form-group-sm').addClass("hidden");
+	$('#reserve-request-form tbody').removeClass("has-warning has-error");
 	
 	aptforms.SubmitForm('#reserve-request-form', "resgroup",
 			    "Validate", callback,
 			    "Checking to see if your request can be "+
-			    "accommodated", {"clusters" : clusters});
+			    "accommodated",
+			    {"clusters" : clusters,
+			     "ranges"   : ranges});
     }
 
     /*
@@ -1058,6 +1539,7 @@ $(function ()
     function Reserve()
     {
 	var clusters = {};
+	var ranges   = {};
 	
 	var reserve_callback = function(json) {
 	    console.info(json);
@@ -1065,8 +1547,26 @@ $(function ()
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
-	    var results = GenerateValidationErrors(json.value.reservations);
-	    if (results.errors) {
+	    /*
+	     * Have to look for again for reservation errors from the
+	     * target clusters, which will be reported in the blob we
+	     * get back, which is an augmented copy of the clusters
+	     * array we sent over.
+	     */
+	    var results = json.value;
+	    var cluster_results, range_results;
+	    
+	    if (_.has(results, "cluster_results")) {
+		cluster_results = results.cluster_results;
+		GenerateClusterValidationErrors(cluster_results.clusters);
+	    }
+	    if (_.has(results, "range_results")) {
+		range_results = json.value.range_results;
+		GenerateRangeValidationErrors(range_results.ranges);
+	    }
+	    // User needs to fix things up.
+	    if ((cluster_results && cluster_results.errors) ||
+		(range_results && range_results.errors)) {
 		/*
 		 * Partial success. We want to stay here. But if not
 		 * editing, we need to shift into edit mode. 
@@ -1076,18 +1576,28 @@ $(function ()
 		    window.UUID = json.value.uuid;
 		}
 		/*
-		 * The ones that succeeded have a new UUID, it was replaced
-		 * with the remote uuid of the reservation. Need to change
+		 * The ones that succeeded have a new UUID, Need to change
 		 * the table so that an edit operation after error works
-		 * correctly (maps to the remote_uuid stored in the DB).
+		 * correctly (maps to the uuid stored in the DB).
 		 */
-		_.each(json.value.reservations, function (reservation, uuid) {
-		    var tbody = $('#cluster-table tbody[data-uuid="' +
+		if (cluster_results) {
+		    _.each(cluster_results.clusters, function (res, uuid) {
+			var tbody = $('#cluster-table tbody[data-uuid="' +
 				  uuid + '"]');
-		    if (uuid != reservation.uuid) {
-			tbody.attr("data-uuid", reservation.uuid);
-		    }
-		});
+			if (uuid != res.uuid) {
+			    tbody.attr("data-uuid", res.uuid);
+			}
+		    });
+		}
+		if (range_results) {
+		    _.each(range_results.ranges, function (res, uuid) {
+			var tbody = $('#range-table tbody[data-uuid="' +
+				  uuid + '"]');
+			if (uuid != res.uuid) {
+			    tbody.attr("data-uuid", res.uuid);
+			}
+		    });
+		}
 		return;
 	    }
 	    window.location.replace("resgroup.php?edit=1" +
@@ -1096,14 +1606,18 @@ $(function ()
 	};
 	// Collect the cluster rows into an array.
 	clusters = GetClusterRows();
+	ranges   = GetRangeRows();
 
 	// Clear (hide) previous cluster table errors
 	$('#reserve-request-form .form-group-sm').addClass("hidden");
+	$('#reserve-request-form tbody').removeClass("has-warning has-error");
 
 	aptforms.SubmitForm('#reserve-request-form', "resgroup",
 			    "Reserve", reserve_callback,
 			    "Submitting your reservation request; "+
-			    "patience please", {"clusters" : clusters});
+			    "patience please",
+			    {"clusters" : clusters,
+			     "ranges"   : ranges});
     }
 
     function PopulateReservation()
@@ -1133,8 +1647,8 @@ $(function ()
 	    $('#reserve-request-form [name=days]')
 		.val(days.toFixed(1));
 
-	    // Add cluster/type/count rows as needed.
-	    _.each(details.reservations, function (res) {
+	    // Add cluster rows as needed.
+	    _.each(details.clusters, function (res) {
 		var html = clusterRowTemplate({
 		    "cluster"     : res.cluster_id,
 		    "cluster_urn" : res.cluster_urn,
@@ -1166,6 +1680,38 @@ $(function ()
 		AddClusterRow();
 	    });
 	    $('#cluster-table .add-cluster').last().removeClass("hidden");
+
+	    // Add range rows as needed.
+	    if (_.size(details.ranges)) {
+		_.each(details.ranges, function (res) {
+		    var html = frequencyRowTemplate({
+			"freq_low"    : res.freq_low,
+			"freq_high"   : res.freq_high,
+			"freq_uuid"   : res.freq_uuid,
+			"active"      : details.active,
+			"approved"    : res.approved,
+		    });
+		    var row = $(html);
+		    // Handler for delete row.
+		    row.find(".delete-range").click(function () {
+			Delete(row);
+		    });
+		    // This activates the tooltip subsystem.
+		    row.find('[data-toggle="tooltip"]').tooltip({
+			placement: 'auto'
+		    });
+		    $('#range-table').append(row);
+		});
+		UpdateRangeTable(details);
+		$('#range-table .add-range').click(function (event) {
+		    AddRangeRow();
+		});
+		$('#range-table .add-range').last().removeClass("hidden");
+	    }
+	    else {
+		// Always show an empty range row.
+		AddRangeRow();
+	    }
 
 	    /*
 	     * Need this in case the start date is in the past.
@@ -1206,11 +1752,13 @@ $(function ()
 		 * show the approve button
 		 */
 		if (!details.approved) {
-		    $('#reserve-approve-button').removeClass("hidden");
-		    $('#reserve-approve-button').click(function(event) {
-			event.preventDefault();
-			Approve();
-		    });
+		    $('#reserve-approve-button')
+			.removeClass("hidden")
+			.removeAttr("disabled")
+			.click(function(event) {
+			    event.preventDefault();
+			    Approve();
+			});
 		}
 		var now   = new Date();
 		var start = new Date(details.start);
@@ -1251,7 +1799,7 @@ $(function ()
      */
     function UpdateClustersTable(details, operationResults)
     {
-	var reservations = details.reservations;
+	var reservations = details.clusters;
 	console.info("UpdateClustersTable", details, operationResults);
 
 	/*
@@ -1313,7 +1861,8 @@ $(function ()
 		    .addClass(newClass);
 	    }
 	    // Watch for underused.
-	    if (details.active && res.approved && res.using < res.count) {
+	    if (details.active && res.approved && details.using != null && 
+		res.using < res.count) {
 		tbody.find(".underused-warning span")
 		    .removeClass("hidden");
 		if (newClass == "") {
@@ -1355,12 +1904,82 @@ $(function ()
     }
 
     /*
+     * Update just the range table from current info, say after a refresh.
+     */
+    function UpdateRangeTable(details, operationResults)
+    {
+	var reservations = details.ranges;
+	console.info("UpdateRangeTable", details, operationResults);
+
+	/*
+	 * Look for any reservations that are gone (deleted) from the group
+	 */
+	$('#range-table tbody.existing-range').each(function () {
+	    var tbody = $(this);
+	    var uuid  = tbody.attr('data-uuid');
+
+	    if (!_.has(reservations, uuid)) {
+		console.info("reservation is gone: " + uuid);
+		tbody.remove();
+	    }
+	});
+	
+	_.each(reservations, function (res) {
+	    var uuid  = res.freq_uuid;
+	    var tbody = $('#range-table tbody[data-uuid="' + uuid + '"]');
+	    var newClass = "";
+
+	    if (operationResults &&
+		_.has(operationResults, uuid) &&
+		operationResults[uuid].errcode) {
+		tbody.find(".reservation-error span label")
+		    .html(operationResults[uuid].errmesg);
+		newClass = "has-error";
+	    }
+	    else if (!res.approved) {
+		tbody.find(".reservation-error span label")
+		    .html("The reservation above has not been approved yet");
+		newClass = "has-warning";
+	    }
+	    if (newClass == "") {
+		tbody.find(".reservation-error span")
+		    .addClass("hidden");
+		tbody.removeClass("has-warning has-error");
+	    }
+	    else {
+		tbody.find(".reservation-error span")
+		    .removeClass("has-warning has-error")
+		    .addClass(newClass)
+		    .removeClass("hidden");
+		tbody.removeClass("has-warning has-error")
+		    .addClass(newClass);
+	    }
+	});
+	if (details.approved) {
+	    if (isadmin) {
+		$('#reserve-approve-button').addClass("hidden");
+	    }
+	}
+	// Always display delete button on existing ranges,
+	$('#range-table .existing-range .delete-range').removeClass("hidden");
+
+	// If no new reservations have been added, need to display
+	// add button on last existing reservation.
+	if ($('#range-table tbody.new-range').length == 0) {
+	    $('#range-table tbody.existing-range .add-range')
+		.addClass("hidden");
+	    $('#range-table tbody.existing-range .add-range')
+		.last().removeClass("hidden");
+	}
+    }
+
+    /*
      * Call above function after getting updated reservation details,
      * displaying any errors we need to after an operation.
      */
-    function RefreshClustersTable(operationResults)
+    function RefreshTables(operationResults)
     {
-	console.info("RefreshClustersTable", operationResults);
+	console.info("RefreshTables", operationResults);
 	
 	sup.CallServerMethod(null, "resgroup",
 			     "GetReservationGroup",
@@ -1373,6 +1992,8 @@ $(function ()
 				 }
 				 UpdateClustersTable(json.value,
 						     operationResults);
+				 UpdateRangeTable(json.value,
+						  operationResults);
 			     });
     }
 
@@ -1388,7 +2009,7 @@ $(function ()
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
-	    RefreshClustersTable(json.value);
+	    RefreshTables(json.value);
 	};
 	var args = {"uuid" : window.UUID};
 	sup.ShowWaitWait();
@@ -1416,7 +2037,7 @@ $(function ()
 		window.location.replace(json.value.redirect);
 		return;
 	    }
-	    RefreshClustersTable(json.value);
+	    RefreshTables(json.value);
 	};
 
 	var args = {"uuid" : window.UUID};
@@ -1458,7 +2079,7 @@ $(function ()
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
-	    RefreshClustersTable(json.value);
+	    RefreshTables(json.value);
 	};
 	// Bind the confirm button in the modal. Do the approval.
 	$('#approve-modal #confirm-approve').click(function () {
@@ -1508,7 +2129,7 @@ $(function ()
 		sup.HideWaitWait();
 	    }
 	    if (cancel) {
-		RefreshClustersTable(json.value);
+		RefreshTables(json.value);
 	    }
 	};
 	// Bind the confirm button in the modal. 
@@ -1561,7 +2182,7 @@ $(function ()
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
-	    RefreshClustersTable(json.value);
+	    RefreshTables(json.value);
 	};
 	// Bind the confirm button in the modal. 
 	$('#uncancel-modal #confirm-uncancel').click(function () {
@@ -1674,9 +2295,6 @@ $(function ()
 	    $('#reserve-submit-button').text("Check");
 	    $('#reserve-submit-button').removeClass("btn-success");
 	    $('#reserve-submit-button').addClass("btn-primary");
-	    if (editing) {
-		$('#reserve-approve-button').attr("disabled", "disabled");
-	    }
 	}
 	if (enable) {
 	    $('#reserve-submit-button').removeAttr("disabled");
@@ -1695,7 +2313,7 @@ $(function ()
 	if (!details.active) {
 	    return;
 	}
-	_.each(details.reservations, function (res) {
+	_.each(details.clusters, function (res) {
 	    if (!_.has(res, "jsondata") || res.jsondata == null) {
 		return;
 	    }

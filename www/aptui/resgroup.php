@@ -187,6 +187,7 @@ REQUIRE_MOMENT();
 REQUIRE_APTFORMS();
 AddLibrary("js/resgraphs.js");
 AddTemplateList(array("resgroup", "reserve-faq", "reservation-graph",
+                      "range-list",
                       "oops-modal", "waitwait-modal", "confirm-modal",
                       "resusage-list", "resusage-graph",
                       "confirm-something", "resusage-graph"));

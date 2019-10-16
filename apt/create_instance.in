@@ -755,6 +755,16 @@ if ($tmp) {
 }
 
 #
+# Check frequency ranges.
+#
+if (APT_Profile::CheckSpectrum($rspecstr, $project,
+			       (defined($start_at) ? $start_at : time()),
+			       (defined($start_at) ? $start_at : time()) +
+			       ($duration * 3600), \$errmsg)) {
+    UserError($errmsg);
+}
+
+#
 # Now we know where to send to logs.
 #
 if (!$debug) {

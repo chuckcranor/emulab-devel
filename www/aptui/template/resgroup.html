@@ -149,6 +149,15 @@
 		  </table>
 		</div>
 	      </div>
+	      <div class="form-group">
+		<div class="format-me"
+		     data-label="Frequency Range(s)"
+		     data-colsize="9">
+		  <table class="table table-condensed"
+			 id="range-table">
+		  </table>
+		</div>
+	      </div>
 	      <% if (1) { %>
 		<div class="form-group">
 		  <input name="days"
@@ -344,8 +353,9 @@
     </div>
     <div id="history-graphs"></div>
   </div>
-  <div class='col-lg-5
-              col-md-5' id="reservation-lists">
+  <div class='col-lg-5 col-md-5'>
+    <div id="range-list" class="hidden"></div>
+    <div id="reservation-lists"></div>
   </div>
 </div>
 <!-- Confirm reservation -->

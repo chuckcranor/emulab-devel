@@ -209,10 +209,11 @@ sub DoReserve()
     #
     # We allow for a user or project argument.
     #
-    my $optlist = "t:s:e:nN:u:p:S";
+    my $optlist = "t:s:e:nN:u:p:SP";
     my ($start, $end, $type, $reason, $update);
     my $checkonly = 0;
     my $noemail   = 0;
+    my $noapprove = 0;
     my $portal;
     my $brand;
     my %rpcargs = ();
@@ -253,6 +254,9 @@ sub DoReserve()
     if (defined($options{"n"})) {
 	$checkonly = 1;
     }
+    if (defined($options{"P"})) {
+	$noapprove = 1;
+    }
     usage()
 	if (!defined($project));
     
@@ -291,6 +295,7 @@ sub DoReserve()
     $rpcargs{"check"} = $checkonly;
     $rpcargs{"reason"}= $reason if (defined($reason));
     $rpcargs{"update"}= $update if (defined($update));
+    $rpcargs{"noapprove"}= 1 if ($noapprove);
     
     # We can check for disabled aggregate now, nothing below matters.
     if ($aggregate->CheckStatus(\$errmsg, 1)) {
@@ -817,7 +822,8 @@ sub DoDelete()
 #
 sub DoApprove()
 {
-    my $optlist = "p:F:t:";
+    my $optlist   = "p:F:t:n";
+    my $checkonly = 0;
     my $portal;
     my $errmsg;
     my $message;
@@ -826,6 +832,9 @@ sub DoApprove()
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
+    }
+    if (defined($options{"n"})) {
+	$checkonly = 1;
     }
     if (defined($options{"p"})) {
 	$portal = $options{"p"}
@@ -862,6 +871,10 @@ sub DoApprove()
     my $blob = {"uuid" => $uuid, "type" => $type};
     if (defined($message) && $message ne "") {
 	$blob->{'message'} = $message;
+    }
+    # Check if reservation is still valid, but do not actually approve.
+    if ($checkonly) {
+	$blob->{'checkonly'} = 1;
     }
     # PortalRPC will use the root context in this case, which is
     # essentially saying the caller is an admin.

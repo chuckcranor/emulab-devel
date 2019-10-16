@@ -49,6 +49,7 @@ use WebTask;
 use emdb;
 use APT_Dataset;
 use APT_Aggregate;
+use APT_Reservation;
 use GeniXML;
 use GeniHRN;
 use libtestbed;
@@ -1645,6 +1646,82 @@ sub CheckLicenses($$$$$)
     my @licenses = values(%licenses);
     $$plicenses = \@licenses;
     return scalar(@licenses);
+}
+
+#
+# Check spectrum validity.
+#
+sub CheckSpectrum($$$$$)
+{
+    my ($xml, $project, $start, $end, $pmsg) = @_;
+    
+    my $rspec = GeniXML::Parse($xml);
+    if (! defined($rspec)) {
+	print STDERR "CheckSpectrum: Could not parse rspec\n";
+	return -1;
+    }
+
+    my $check = sub () {
+	my ($spectrum) = @_;
+	
+	foreach my $request (@{$spectrum}) {
+	    my $frequency_low  = $request->{"frequency_low"};
+	    my $frequency_high = $request->{"frequency_high"};
+	    my $power          = $request->{"power"};
+
+	    if (!TBcheck_dbslot($frequency_low, "default", "float",
+				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+		$$pmsg = "Invalid integer or float: $frequency_low";
+		return 1;
+	    }
+	    if (!TBcheck_dbslot($frequency_high, "default", "float",
+				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+		$$pmsg = "Invalid integer or float: $frequency_high";
+		return 1;
+	    }
+	    if (!TBcheck_dbslot($power, "default", "float",
+				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+		$$pmsg = "Invalid integer or float: $power";
+		return 1;
+	    }
+	    if (!APT_Reservation::Group::RFReservation->RangeReserved($project,
+			      $start, $end, $frequency_high, $frequency_low)) {
+		$$pmsg = "Frequency range $frequency_low,$frequency_high ".
+		    "is not reserved by your project for the duration of your ".
+		    "experiment.";
+		return 1;
+	    }
+	}
+	return 0;
+    };
+    
+    # Global spectrum
+    my $global_spectrum = GeniXML::GetSpectrum($rspec);
+    if (@$global_spectrum && &$check($global_spectrum)) {
+	return 1;
+    }
+    
+    # Node spectrum
+    foreach my $ref (GeniXML::FindNodes("n:node",
+					$rspec)->get_nodelist()) {
+	my $spectrum = GeniXML::GetSpectrum($ref);
+	if (@$spectrum && &$check($spectrum)) {
+	    return 1;
+	}
+    }
+    
+    # Iface spectrum
+    foreach my $ref (GeniXML::FindNodes("n:link",
+					$rspec)->get_nodelist()) {
+	foreach my $ifaceref (GeniXML::FindNodes("n:interface",
+						 $ref)->get_nodelist()) {
+	    my $spectrum = GeniXML::GetSpectrum($ifaceref);
+	    if (@$spectrum && &$check($spectrum)) {
+		return 1;
+	    }
+	}
+    }
+    return 0;
 }
 
 #

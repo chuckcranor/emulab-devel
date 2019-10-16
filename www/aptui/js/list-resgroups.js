@@ -82,8 +82,12 @@ $(function ()
 	    var crow    = grow.next();
 
 	    // Disable sorting if only one row.
-	    if (_.size(group.reservations) == 1) {
-		crow.find(".tablesorter thead th")
+	    if (_.size(group.clusters) == 1) {
+		crow.find(".tablesorter.clusters-table thead th")
+		    .addClass("sorter-false");
+	    }
+	    if (_.size(group.ranges) == 1) {
+		crow.find(".tablesorter.ranges-table thead th")
 		    .addClass("sorter-false");
 	    }
 	    crow.find(".tablesorter").tablesorter({
@@ -104,7 +108,7 @@ $(function ()
 		$(groupid + " .group-status-column .status-pending")
 		    .removeClass("hidden");
 	    }
-	    _.each(group.reservations, function(reservation, uuid) {
+	    _.each(group.clusters, function(reservation, uuid) {
 		var resid = 'tr[data-uuid="' + uuid + '"] ';
 		var rrow  = crow.find(resid);
 
@@ -114,6 +118,19 @@ $(function ()
 		}
 		else if (reservation.canceled == "canceled") {
 		    rrow.find(".reservation-status-column .status-canceled")
+			.removeClass("hidden");
+		}
+		else {
+		    rrow.find(".reservation-status-column .status-pending")
+			.removeClass("hidden");
+		}
+	    });
+	    _.each(group.ranges, function(reservation, uuid) {
+		var resid = 'tr[data-uuid="' + uuid + '"] ';
+		var rrow  = crow.find(resid);
+
+		if (reservation.approved) {
+		    rrow.find(".reservation-status-column .status-approved")
 			.removeClass("hidden");
 		}
 		else {

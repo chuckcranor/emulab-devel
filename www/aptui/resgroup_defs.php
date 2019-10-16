@@ -31,6 +31,7 @@ class ReservationGroup
 {
     var	$resgroup;
     var $reservations;
+    var $rfreservations;
     
     #
     # Constructor by lookup by urn
@@ -47,10 +48,14 @@ class ReservationGroup
 	    return;
 	}
 	$this->resgroup     = mysql_fetch_array($query_result);
-        $this->reservations = ReservationGroupReservation::LookupForGroup($this);
+        $this->reservations =
+            ReservationGroupReservation::LookupForGroup($this);
+        $this->rfreservations =
+            ReservationGroupRFReservation::LookupForGroup($this);
     }
     # accessors
-    function reservations() { return $this->reservations; }
+    function reservations()   { return $this->reservations; }
+    function rfreservations() { return $this->rfreservations; }
     function field($name) {
 	return (is_null($this->resgroup) ? -1 : $this->resgroup[$name]);
     }
@@ -165,6 +170,11 @@ class ReservationGroup
                 return $reservation;
             }
         }
+        foreach ($this->rfreservations() as $reservation) {
+            if ($reservation->freq_uuid() == $uuid) {
+                return $reservation;
+            }
+        }
         return null;
     }
 }
@@ -249,6 +259,78 @@ class ReservationGroupReservation
 
     function Aggregate() {
         return Aggregate::Lookup($this->aggregate_urn());
+    }
+}
+class ReservationGroupRFReservation
+{
+    var $reservation;
+    
+    #
+    # Constructor to lookup a single reservation in a group.
+    #
+    function ReservationGroupRFReservation($group, $lower, $upper) {
+	$uuid = $group->uuid();
+        $safe_lower  = addslashes($lower);
+        $safe_upper  = addslashes($upper);
+
+	$query_result =
+	    DBQueryWarn("select * from apt_reservation_group_rf_reservations ".
+			"where uuid='$uuid' and ".
+                        "      freq_low='$safe_lower' and ".
+                        "      freq_high='$safe_upper'");
+
+	if (!$query_result || !mysql_num_rows($query_result)) {
+	    $this->reservation = null;
+	    return;
+	}
+	$this->reservation = mysql_fetch_array($query_result);
+    }
+    # accessors
+    function field($name) {
+	return (is_null($this->reservation) ? -1 : $this->reservation[$name]);
+    }
+    function uuid()	    { return $this->field('uuid'); }
+    function freq_uuid()    { return $this->field('freq_uuid'); }
+    function freq_low()	    { return $this->field('freq_low'); }
+    function freq_high()    { return $this->field('freq_high'); }
+    function submitted()    { return $this->field('submitted'); }
+    function approved()     { return $this->field('approved'); }
+    
+    # Hmm, how does one cause an error in a php constructor?
+    function IsValid() {
+	return !is_null($this->reservation);
+    }
+
+    function Lookup($group, $lower, $upper) {
+	$foo = new ReservationGroupRFReservation($group, $lower, $upper);
+
+	if ($foo->IsValid()) {
+            return $foo;
+        }
+        return null;
+    }
+
+    #
+    # Lookup all reservations for a group
+    #
+    function LookupForGroup($group) {
+        $result = array();
+        $uuid   = $group->uuid();
+
+        $query_result =
+            DBQueryFatal("select freq_low,freq_high ".
+                         "  from apt_reservation_group_rf_reservations ".
+                         "where uuid='$uuid'");
+
+	while ($row = mysql_fetch_array($query_result)) {
+            $res = ReservationGroupRFReservation::Lookup($group,
+                                                         $row['freq_low'],
+                                                         $row['freq_high']);
+            if ($res) {
+                $result[] = $res;
+            }
+        }
+        return $result;
     }
 }
 

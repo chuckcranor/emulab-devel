@@ -69,8 +69,10 @@ AUTOLOAD {
     carp("No such slot '$name' field in class $type");
     return undef;
 }
-sub ReservationList($) { return values(%{ $_[0]->{'RESERVATIONS'} }); }
-sub ReservationHash($) { return $_[0]->{'RESERVATIONS'}; }
+sub ReservationList($)   { return values(%{ $_[0]->{'RESERVATIONS'} }); }
+sub ReservationHash($)   { return $_[0]->{'RESERVATIONS'}; }
+sub RFReservationList($) { return values(%{ $_[0]->{'RFRESERVATIONS'} }); }
+sub RFReservationHash($) { return $_[0]->{'RFRESERVATIONS'}; }
 
 sub DESTROY {
     my $self = shift;
@@ -116,6 +118,8 @@ sub Lookup($$)
     #
     $self->{'RESERVATIONS'} =
 	APT_Reservation::Group::Reservation->LookupForGroup($self);
+    $self->{'RFRESERVATIONS'} =
+	APT_Reservation::Group::RFReservation->LookupForGroup($self);
     
     return $self;
 }
@@ -282,6 +286,22 @@ sub Unlock($)
     return 0;
 }
 
+# Lock/Unlock tables for atomic checking of the schedule and approval.
+sub LockTables($)
+{
+    DBQueryWarn("lock tables apt_reservation_groups write, ".
+		"            apt_reservation_group_reservations write, ".
+		"            apt_reservation_group_rf_reservations write")
+	or return -1;
+    return 0;
+}
+sub UnlockTables($)
+{
+    DBQueryWarn("unlock tables")
+	or return -1;
+    return 0;
+}
+
 #
 # Add a reservation to a group
 #
@@ -297,7 +317,23 @@ sub AddReservation($$$$$)
 	if (!defined($res));
 
     $self->{'RESERVATIONS'}->{$uuid} = $res;
-    return $res
+    return $res;
+}
+
+#
+# Add an RF reservation to a group
+#
+sub AddRFReservation($$$)
+{
+    my ($self, $lower, $upper) = @_;
+
+    my $res = APT_Reservation::Group::RFReservation->Create($self,
+							    $lower, $upper);
+    return undef
+	if (!defined($res));
+
+    $self->{'RFRESERVATIONS'}->{$res->freq_uuid()} = $res;
+    return $res;
 }
 
 #
@@ -306,12 +342,13 @@ sub AddReservation($$$$$)
 sub Reservation($$)
 {
     my ($self, $uuid) = @_;
-    my $hash = $self->ReservationHash();
+    my $hash   = $self->ReservationHash();
+    my $rfhash = $self->RFReservationHash();
 
-    return undef
-	if (!exists($hash->{$uuid}));
+    return $hash->{$uuid} if (exists($hash->{$uuid}));
+    return $rfhash->{$uuid} if (exists($rfhash->{$uuid}));
 
-    return $hash->{$uuid};
+    return undef;
 }
 
 sub UpdateMeta($$$$)
@@ -339,7 +376,7 @@ sub IsApproved($)
     my ($self) = @_;
     my $approved = 1;
 
-    foreach my $res ($self->ReservationList()) {
+    foreach my $res ($self->ReservationList(), $self->RFReservationList()) {
 	$approved = 0
 	    if (!$res->approved());
     }
@@ -417,6 +454,8 @@ AUTOLOAD {
 }
 sub group($)	        { return $_[0]->{'GROUP'}; }
 sub domain($)		{ return $_[0]->{'AGGURN'}->domain(); }
+sub IsCluster($)        { return 1; }
+sub IsRange($)          { return 0; }
 
 sub DESTROY {
     my $self = shift;
@@ -599,6 +638,354 @@ sub Update($$$)
 	or return -1;
 
     $self->{'DBROW'}->{$which} = $what;
+    return 0;
+}
+
+###################################################################
+package APT_Reservation::Group::RFReservation;
+use emdb;
+use EmulabConstants;
+use libtestbed;
+use EmulabFeatures;
+use Carp;
+use JSON;
+use English;
+use GeniXML;
+use GeniHRN;
+use Date::Parse;
+use Data::Dumper;
+use vars qw($AUTOLOAD);
+use overload ('""' => 'Stringify');
+
+sub Lookup($$$$)
+{
+    my ($class, $group, $lower, $upper) = @_;
+    my $uuid = $group->uuid();
+
+    my $query_result =
+	DBQueryWarn("select * from apt_reservation_group_rf_reservations ".
+		    "where uuid='$uuid' and freq_low='$lower' and ".
+		    "      freq_high='$upper'");
+    return undef
+	if (! (defined($query_result) && $query_result->numrows));
+
+    my $self            = {};
+    $self->{'DBROW'}    = $query_result->fetchrow_hashref();
+    $self->{'GROUP'}    = $group;
+    bless($self, $class);
+
+    return $self;
+}
+
+#
+# Create a group reservation
+#
+sub Create($$$$)
+{
+    my ($class, $group, $lower, $upper) = @_;
+    my $group_uuid = $group->uuid();
+    my $freq_uuid  = NewUUID();
+
+    DBQueryWarn("insert into apt_reservation_group_rf_reservations set ".
+		"  uuid='$group_uuid', ".
+		"  freq_uuid='$freq_uuid', ".
+		"  freq_low='$lower', freq_high='$upper'")
+	or return undef;
+
+    return Lookup($class, $group, $lower, $upper);
+}
+
+AUTOLOAD {
+    my $self  = $_[0];
+    my $type  = ref($self) or croak "$self is not an object";
+    my $name  = $AUTOLOAD;
+    $name =~ s/.*://;   # strip fully-qualified portion
+
+    # A DB row proxy method call.
+    if (exists($self->{'DBROW'}->{$name})) {
+	return $self->{'DBROW'}->{$name};
+    }
+    carp("No such slot '$name' field in class $type");
+    return undef;
+}
+sub group($)	        { return $_[0]->{'GROUP'}; }
+sub IsCluster($)        { return 0; }
+sub IsRange($)          { return 1; }
+
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'DBROW'} = undef;
+}
+
+#
+# Stringify for output.
+#
+sub Stringify($)
+{
+    my ($self) = @_;
+    
+    my $pid    = $self->group()->pid();
+    my $lower  = $self->freq_low();
+    my $upper  = $self->freq_high();
+
+    return "[APT_ResGroup $pid $lower:$upper]";
+}
+
+sub Delete($)
+{
+    my ($self) = @_;
+    my $uuid       = $self->uuid();
+    my $freq_uuid  = $self->freq_uuid();
+    
+    DBQueryWarn("delete from apt_reservation_group_rf_reservations ".
+		"where uuid='$uuid' and freq_uuid='$freq_uuid'")
+	or return -1;
+
+    my $hash = $self->group()->RFReservationHash();
+    delete($hash->{$freq_uuid});
+
+    return 0;
+}
+
+#
+# Lookup all RF reservations for a group
+#
+sub LookupForGroup($$)
+{
+    my ($class, $group) = @_;
+    my $result = {};
+    my $uuid   = $group->uuid();
+
+    my $query_result =
+	DBQueryWarn("select freq_low,freq_high from ".
+		    "   apt_reservation_group_rf_reservations ".
+		    "where uuid='$uuid'");
+    return ()
+	if (! (defined($query_result) && $query_result->numrows));
+
+    while (my ($lower,$upper) = $query_result->fetchrow_array()) {
+	my $res = Lookup($class, $group, $lower, $upper);
+	if (!defined($res)) {
+	    print STDERR "No apt_reservation_group_rf_reservations for ".
+		"$uuid/$lower/$upper\n";
+	    return ();
+	}
+	$result->{$res->freq_uuid()} = $res;
+    }
+    return $result;
+}
+
+sub Mark($$;$)
+{
+    my ($self, $which, $value) = @_;
+    my $uuid      = $self->uuid();
+    my $freq_uuid = $self->freq_uuid();
+    my $clause    = "${which}=";
+
+    if (!defined($value)) {
+	$clause .= "NULL";
+    }
+    elsif ($value eq "now") {
+	$clause .= "now()";
+	$value   = time();
+    }
+    elsif ($value =~ /^\d*$/) {
+	$clause .= "FROM_UNIXTIME($value)";
+    }
+    else {
+	$clause .= DBQuoteSpecial($value);
+    }
+    DBQueryWarn("update apt_reservation_group_rf_reservations ".
+		" set $clause ".
+		"where uuid='$uuid' and freq_uuid='$freq_uuid'")
+	or return -1;
+
+    $self->{'DBROW'}->{$which} = $value;
+    return 0;
+}
+
+sub MarkApproved($;$)
+{
+    my ($self, $value) = @_;
+    if (!defined($value)) {
+	$value = "now";
+    }
+    return $self->Mark("approved", $value);
+}
+
+sub MarkSubmitted($$)
+{
+    my ($self, $approved) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+    my $type = $self->type();
+    
+    DBQueryWarn("update apt_reservation_group_reservations set ".
+		" submitted=now(), ".
+		($approved ? "approved=now() " : "approved=null ") .
+		"where uuid='$uuid' and aggregate_urn='$urn' and ".
+		"      type='$type'")
+	or return -1;
+
+    $self->{'DBROW'}->{'submitted'} = time();
+    $self->{'DBROW'}->{'approved'}  = ($approved ? time() : undef);
+    return 0;
+}
+
+sub Update($$$)
+{
+    my ($self, $which, $what) = @_;
+    my $uuid      = $self->uuid();
+    my $freq_uuid = $self->freq_uuid();
+    my $safe      = DBQuoteSpecial($what);
+    
+    DBQueryWarn("update apt_reservation_group_rf_reservations set ".
+		" `$which`=$safe ".
+		"where uuid='$uuid' and freq_uuid='$freq_uuid'")
+	or return -1;
+
+    $self->{'DBROW'}->{$which} = $what;
+    return 0;
+}
+
+#
+# See if a request fits the schedule.
+# 
+# Do not worry about efficiency, I doubt there will ever be enough
+# reservations to matter.
+#
+sub Fits($$$$$)
+{
+    my ($class, $groups, $start, $end, $ref) = @_;
+    my $freq_low  = $ref->{'freq_low'};
+    my $freq_high = $ref->{'freq_high'};
+    my $freq_uuid = $ref->{'uuid'};
+    my @groups    = @{$groups};
+    my $fits      = 1;
+	
+    foreach my $group (@groups) {
+	next
+	    if (! $group->RFReservationList());
+
+	my $res_start = str2time($group->start());
+	my $res_end   = str2time($group->end());
+
+	foreach my $existing ($group->RFReservationList()) {
+	    next
+		if (!$existing->approved());
+
+	    my $res_uuid  = $existing->freq_uuid();
+	    my $res_low   = $existing->freq_low();
+	    my $res_high  = $existing->freq_high();
+
+	    # Skip ourself.
+	    next
+		if ($res_uuid eq $freq_uuid);
+
+	    # If this reservation does not overlap in time, skip it.
+	    if (($start < $res_start && $end < $res_start) ||
+		($start > $res_end)) {
+		next;
+	    }
+	    # If this reservation does not overlap in freq, skip it.
+	    if (($freq_low < $res_low && $freq_high < $res_low) ||
+		($freq_low > $res_high)) {
+		next;
+	    }
+	    # Does not fit!
+	    $fits = 0;
+	    last;
+	}
+	last if (!$fits);
+    }
+    return $fits;
+}
+
+# Gary Wong
+#
+# I think the current policy (very much subject to change) should be
+# approximately that members of projects who have been through manual
+# approval (and in particular signed the appropriate legalese) should
+# be able to reserve and allocate 902-928, 2400-2483.5 and 5725-5875
+# MHz (all ISM).  Operating there isn't strcictly legit but is
+# overwhelmingly unlikely to upset anybody.
+#
+# Additionally, project members who have gone through additional prior
+# arrangement with us should also be able to reserve and allocate
+# 698-763, 1710-1780, 2110-2180, 2390-2400, 2500-2570, 2620-2690,
+# 3300-3600, 3700-4200, and 5650-7125 MHz.
+#
+my $allowedRanges = {
+    "ISM" => [
+	[902,   928],
+	[2400,  2483.5],
+	[5725,  5875],
+    ],
+    "LTE" => [
+	[698,   763],
+	[1710,  1780],
+	[2110,  2180],
+	[2500,  2570],
+	[2620,  2690],
+	[3300,  3600],
+	[3700,  4200],
+	[5650,  7125],
+    ],
+};
+
+sub RangeAllowed($$$)
+{
+    my ($class, $project, $ref) = @_;
+    my $freq_low  = $ref->{'freq_low'};
+    my $freq_high = $ref->{'freq_high'};
+
+    return 1
+	if ($project->pid() eq TBOPSPID());
+
+    #
+    # Find the type of range
+    #
+    my ($type);
+    
+    foreach my $key (keys(%{$allowedRanges})) {
+	foreach my $ref (@{$allowedRanges->{$key}}) {
+	    my ($low, $high) = @{$ref};
+	    if ($freq_low >= $low && $freq_low <= $high &&
+		$freq_high >= $low && $freq_high <= $high) {
+		$type = $key;
+		last;
+	    }
+	}
+    }
+    if ($type) {
+	return 1
+	    if (EmulabFeatures->FeatureEnabled("${type}-allowed",
+					       undef, $project));
+    }
+    return 0;
+}
+
+sub RangeReserved($$$$$$)
+{
+    my ($class, $project, $start, $end, $freq_low, $freq_high) = @_;
+    my $pid_idx = $project->pid_idx();
+
+    my $query_result =
+	DBQueryWarn("select g.uuid from apt_reservation_groups as g ".
+		    "left join apt_reservation_group_rf_reservations as rf on ".
+		    "   rf.uuid=g.uuid ".
+		    "where g.pid_idx='$pid_idx' and ".
+		    "      $start >= UNIX_TIMESTAMP(g.start) and ".
+		    "      $end <= UNIX_TIMESTAMP(g.end) and ".
+		    "      rf.approved is not null and ".
+		    "      $freq_low >= rf.freq_low and ".
+		    "      $freq_low <= rf.freq_high and ".
+		    "      $freq_high >= rf.freq_low and ".
+		    "      $freq_high <= rf.freq_high");
+    return 1
+	if ($query_result && $query_result->numrows);
+
     return 0;
 }
 
