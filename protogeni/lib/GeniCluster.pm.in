@@ -1200,10 +1200,11 @@ sub Reserve($)
     }
     else {
 	#
-	# For now all reservations need approval. Even admins, which is
-	# better for testing.
+	# Allow caller to force auto approval off.
 	#
-	$args = "$args";
+	if (exists($argref->{"noapprove"}) && $argref->{"noapprove"} != 0) {
+	    $args = "-p $args";
+	}
     }
 
     # Write the reason to a tempfile to pass in. This will auto unlink.
@@ -1549,7 +1550,11 @@ sub ApproveReservation($)
     my $command = "$WAP ";
     if ($type eq "reservation") {
 	my $idx = $reservation->idx();
-	$command .= "$TB/sbin/reserve -a -m $idx $args";
+	$command .= "$TB/sbin/reserve -a ";
+	if (exists($argref->{"checkonly"}) && $argref->{"checkonly"} != 0) {
+	    $command .= "-n ";
+	}
+	$command .= "-m $idx $args";
     }
     else {
 	my $pid     = $reservation->pid();
