@@ -42,7 +42,7 @@ $isadmin   = (ISADMIN() ? 1 : 0);
 $optargs = OptionalPageArguments("cluster", PAGEARG_STRING,
                                  "force"  , PAGEARG_BOOLEAN);
 
-if (!$isadmin || !$force) {
+if ($isadmin || $this_user->admin() || $this_user->stud()) {
     header("Location: list-resgroups.php");
     return;
 }

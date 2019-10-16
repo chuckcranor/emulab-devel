@@ -62,14 +62,12 @@ if ($edit) {
     #
     $resgroup = ReservationGroup::LookupByMemberReservation($uuid);
     if ($resgroup) {
-        if (!$isadmin) {
-            header("Location: resgroup.php?edit=1&uuid=" . $resgroup->uuid());
-            exit();
-        }
+        header("Location: resgroup.php?edit=1&uuid=" . $resgroup->uuid());
+        exit();
     }
 }
-if (!$isadmin) {
-    SPITUSERERROR("No permission to use this interface.");
+if ($isadmin || $this_user->admin() || $this_user->stud()) {
+    header("Location: resgroup.php");
     exit();
 }
 if (isset($cluster)) {
