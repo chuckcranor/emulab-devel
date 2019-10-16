@@ -4625,7 +4625,7 @@ sub AddSpectrum($$$)
 	my $iface_id = $iface->iface();
 
 	next
-	    if ($iface->role() != EmulabConstants::TBDB_IFACEROLE_EXPERIMENT());
+	    if ($iface->role() ne EmulabConstants::TBDB_IFACEROLE_EXPERIMENT());
 
 	# Check to see if this is an OTA interface.
 	my $ota;
