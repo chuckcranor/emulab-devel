@@ -283,7 +283,7 @@ window.ShowResGraph = (function ()
 	temp.push(data);
 	
 	array = temp;
-	console.info(array);
+	//console.info(array);
 
 	/*
 	 * Finally, create the series data for NVD3.
@@ -395,13 +395,13 @@ window.ShowResGraph = (function ()
     }
     // Pass in forecast info for a single aggregate.
     return function(args) {
-	console.info("ShowResGraph", args);
+	//console.info("ShowResGraph", args);
 	
 	var datums = ProcessData(args);
 	if (datums == null) {
 	    return;
 	}
-	console.info("datums", datums);
+	console.info("ShowResGraph", args, datums);
 	CreateGraph(datums, args.selector, args.click_callback,
 		    args.showbrush);
     };
