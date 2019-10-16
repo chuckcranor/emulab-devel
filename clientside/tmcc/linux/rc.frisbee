@@ -115,15 +115,16 @@ get_part_type()
 	# Failing that, if the GPT magic is in place, it's GPT (although
 	# we should never see this).
 	#
-	if [ ""`dd if=$disk bs=1 count=8 skip=512 status=none | hexdump -e '16/1 "%02x""\n"'` = 4546492050415254 \
-	       -a \( ""`dd if=$disk bs=1 count=2 skip=510 status=none | hexdump -e '2/1 "%02x""\n"'` != 55aa \
-	            -o ""`dd if=$disk bs=1 count=1 skip=450 status=none | hexdump -e '2/1 "%02x""\n"'` = ee \) ]; then
+	b512=`dd if=$disk bs=1 count=8 skip=512 status=none | hexdump -e '16/1 "%02x""\n"'`
+	b510=`dd if=$disk bs=1 count=2 skip=510 status=none | hexdump -e '2/1 "%02x""\n"'`
+	b450=`dd if=$disk bs=1 count=1 skip=450 status=none | hexdump -e '2/1 "%02x""\n"'`
+	if [ "$b512" = 4546492050415254 -a \( "$b510" != 55aa -o "$b450" = ee \) ]; then
 	    echo "GPT"
 	    return 0
-	elif [ ""`dd if=$disk bs=1 count=2 skip=510 status=none | hexdump -e '2/1 "%02x""\n"'` = 55aa ]; then
+	elif [ "$b510" = 55aa ]; then
 	    echo "MBR"
 	    return 0
-	elif [ ""`dd if=$disk bs=1 count=8 skip=512 status=none | hexdump -e '16/1 "%02x""\n"'` = 4546492050415254 ]; then
+	elif [ "$b512" = 4546492050415254 ]; then
 	    echo "GPT"
 	    return 0
 	fi
