@@ -9381,43 +9381,76 @@ sub CheckForDeprecatedImages($$)
 # the database. Express these as a set of ranges with associated max power,
 # which for now is the same for all frequencies. In MHZ and dBm.
 #
-my @TXlimits = (
-    # freq_low,freq_high,power
-    [902, 928, 15],
-    [2400, 2500, 15],
-    [5725, 5875, 15],
-    );
-
+my $allowedRanges = {
+    "ISM" => [
+	[902,   928],
+	[2400,  2483.5],
+	[5725,  5875],
+    ],
+    "LTE" => [
+	[698,   763],
+	[1710,  1780],
+	[2110,  2180],
+	[2500,  2570],
+	[2620,  2690],
+	[3300,  3600],
+	[3700,  4200],
+	[5650,  7125],
+    ],
+};
 sub CheckSpectrum($)
 {
     my ($spectrum) = @_;
 
+    #
+    # Only the Portal or the local cluster can request spectrum
+    #
+    my $hrn = GeniHRN->new($ENV{"GENIURN"});
+    if (! ($hrn->domain() eq "$OURDOMAIN" ||
+	   $hrn->domain() eq "emulab.net")) {
+	return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				    "Not allowed to request radio spectrum");
+    }
     foreach my $request (@{$spectrum}) {
 	my $frequency_low  = $request->{"frequency_low"};
 	my $frequency_high = $request->{"frequency_high"};
 	my $power          = $request->{"power"};
 
-	if (!defined($frequency_high) ||
-	    !defined($frequency_low) ||
-	    !defined($power) ||
-	    $frequency_high !~ /^[\d\.]+$/ ||
-	    $frequency_low  !~ /^[\d\.]+$/ ||
-	    $power !~ /^[-\d\.]+$/ ||
-	    $frequency_low > $frequency_high ||
+	$frequency_low  = "" if (!defined($frequency_low));
+	$frequency_high = "" if (!defined($frequency_high));
+	$power = ""          if (!defined($power));
+	
+	if (!TBcheck_dbslot($frequency_low, "default", "float",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				"Invalid integer or float: $frequency_low");
+	}
+	if (!TBcheck_dbslot($frequency_high, "default", "float",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				"Invalid integer or float: $frequency_high");
+	}
+	if (!TBcheck_dbslot($power, "default", "float",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				"Invalid integer or float: $power");
+	}
+	if ($frequency_low > $frequency_high ||
 	    $frequency_low < 0) {
 	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-					"Invalid spectrum request");
+				"Invalid spectrum request: " .
+				"$frequency_low,$frequency_high,$power");
 	}
 	# Check for out of range,power.
 	my $allowed = 0;
-	foreach my $ref (@TXlimits) {
-	    my ($low,$high,$pmax) = @{$ref};
-
-	    if ($frequency_low >= $low &&
-		$frequency_high <= $high &&
-		$power <= $pmax) {
-		$allowed = 1;
-		last;
+	foreach my $key (keys(%{$allowedRanges})) {
+	    foreach my $ref (@{$allowedRanges->{$key}}) {
+		my ($low, $high) = @{$ref};
+		if ($frequency_low >= $low && $frequency_low <= $high &&
+		    $frequency_high >= $low && $frequency_high <= $high) {
+		    $allowed = 1;
+		    last;
+		}
 	    }
 	}
 	if (!$allowed) {
