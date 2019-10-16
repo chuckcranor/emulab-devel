@@ -41,6 +41,7 @@ if (NOPROJECTMEMBERSHIP()) {
 }
 $isadmin   = (ISADMIN() ? 1 : 0);
 $isfadmin  = (ISFOREIGN_ADMIN() ? 1 : 0);
+$isstud    = (STUDLY() ? 1 : 0);
 
 #
 # Verify page arguments. Cluster is a domain that we turn into a URN.
@@ -171,7 +172,6 @@ elseif (count($plist) == 1) {
 echo "<script type='text/javascript'>\n";
 if ($edit) {
     echo "   window.EDITING  = true;\n";
-    echo "   window.ISADMIN  = $isadmin;\n";
     echo "   window.UUID     = '$uuid';\n";
     echo "   window.ISGROUP  = true;\n";
 }
@@ -179,6 +179,8 @@ else {
     echo "   window.EDITING  = false;\n";
     echo "   window.PID      = '$default_pid';\n";
 }
+echo "   window.ISADMIN  = $isadmin;\n";
+echo "   window.ISSTUD   = $isstud;\n";
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

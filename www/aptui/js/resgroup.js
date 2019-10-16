@@ -550,6 +550,9 @@ $(function ()
      */
     function AddRangeRow()
     {
+	if (! (window.ISPOWDER && (window.ISADMIN || window.ISSTUD))) {
+	    return;
+	}
 	var html = addFrequencyRowTemplate({
 	    "freq_low"    : "",
 	    "freq_high"   : "",
@@ -1141,6 +1144,10 @@ $(function ()
      */
     function LoadRangeReservations()
     {
+	if (! (window.ISPOWDER && (window.ISADMIN || window.ISSTUD))) {
+	    return;
+	}
+	
 	var callback = function(json) {
 	    console.log("LoadRangeReservations", json);
 	    if (json.code) {

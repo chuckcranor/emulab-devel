@@ -149,15 +149,17 @@
 		  </table>
 		</div>
 	      </div>
-	      <div class="form-group">
-		<div class="format-me"
-		     data-label="Frequency Range(s)"
-		     data-colsize="9">
-		  <table class="table table-condensed"
-			 id="range-table">
-		  </table>
+	      <% if (window.ISPOWDER && (window.ISADMIN || window.ISSTUD)) { %>
+		<div class="form-group">
+		  <div class="format-me"
+		       data-label="Frequency Range(s)"
+		       data-colsize="9">
+		    <table class="table table-condensed"
+			   id="range-table">
+		    </table>
+		  </div>
 		</div>
-	      </div>
+	      <% } %>
 	      <% if (1) { %>
 		<div class="form-group">
 		  <input name="days"
