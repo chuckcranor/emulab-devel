@@ -1167,5 +1167,50 @@ sub TypeInUseCount($$)
     return $count;
 }
 
+#
+# Lookup all experiments and leases for a project.
+#
+sub Experiments($)
+{
+    my ($self) = @_;
+    my $pid_idx = $self->pid_idx();
+    my @result  = ();
+    require Experiment;
+
+    my $query_result =
+	DBQueryWarn("select idx from experiments where pid='$pid_idx'");
+    if (!$query_result) {
+	return undef;
+    }
+    while (my ($idx) = $query_result->fetchrow_array()) {
+	my $experiment = Experiment->Lookup($idx);
+	if ($experiment) {
+	    push(@result, $experiment);
+	}
+    }
+    return \@result;
+}
+
+sub Leases($)
+{
+    my ($self) = @_;
+    my $pid = $self->pid();
+    my @result  = ();
+    require Lease;
+
+    my $query_result =
+	DBQueryWarn("select lease_idx from project_leases where pid='$pid'");
+    if (!$query_result) {
+	return undef;
+    }
+    while (my ($lease_idx) = $query_result->fetchrow_array()) {
+	my $lease = Lease->Lookup($lease_idx);
+	if ($lease) {
+	    push(@result, $lease);
+	}
+    }
+    return \@result;
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;
