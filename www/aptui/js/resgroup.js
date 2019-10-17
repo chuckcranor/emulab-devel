@@ -2364,10 +2364,15 @@ $(function ()
     {
 	var clusters = GetClusterRows();
 	var combinedForecasts = {};
+	console.info("RegenCombinedGraph", clusters);
 
 	_.each(clusters, function (details) {
 	    var urn  = details.cluster;
 	    var type = details.type;
+
+	    if (!_.has(amlist, urn)) {
+		return;
+	    }
 	    var id   = amlist[urn].abbreviation + "/" + type;
 	    
 	    combinedForecasts[id] = forecasts[urn][type];
