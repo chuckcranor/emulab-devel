@@ -142,7 +142,7 @@ $(function ()
 	'       <td style="width: 16px; padding-right: 0px;">' +
 	'         <a type="button" target=_blank ' +
 	'            class="btn btn-xs btn-default" ' +
-	'            href="reserve.php?edit=1&uuid=<%- remote_uuid %>' +
+	'            href="reserve.php?force=1&edit=1&uuid=<%- remote_uuid %>' +
 	'&cluster=<%- cluster %>">' +
  	'          <span class="glyphicon glyphicon-link"></span>' +
 	'         </a>' +
@@ -288,6 +288,7 @@ $(function ()
      */
     function modified_callback()
     {
+	console.info("modified_callback");
 	ToggleSubmit(true, "check");
 	aptforms.MarkFormUnsaved();
 	if (editing) {
@@ -502,6 +503,11 @@ $(function ()
 		    HandleTypeChange(row);
 		});
 	});
+	// Handler for the node count input to catch the change.
+	row.find('.node-count').change(function (event) {
+	    modified_callback();
+	});
+	
 	// This activates the tooltip subsystem.
 	row.find('[data-toggle="tooltip"]').tooltip({
 	    placement: 'auto'
@@ -518,7 +524,6 @@ $(function ()
 	    .removeClass("hidden")
 	    .click(function (event) {
 		AddClusterRow();
-		modified_callback();
 	    });
 	row.find('.delete-cluster')
 	    .removeClass("hidden")
@@ -550,9 +555,6 @@ $(function ()
      */
     function AddRangeRow()
     {
-	if (! (window.ISPOWDER && (window.ISADMIN || window.ISSTUD))) {
-	    return;
-	}
 	var html = addFrequencyRowTemplate({
 	    "freq_low"    : "",
 	    "freq_high"   : "",
@@ -1144,10 +1146,6 @@ $(function ()
      */
     function LoadRangeReservations()
     {
-	if (! (window.ISPOWDER && (window.ISADMIN || window.ISSTUD))) {
-	    return;
-	}
-	
 	var callback = function(json) {
 	    console.log("LoadRangeReservations", json);
 	    if (json.code) {
@@ -2243,6 +2241,7 @@ $(function ()
 		$('#' + id).fadeIn("fast");
 	    });
 	}
+	modified_callback();
     }
 
     function HandleTypeChange(row)
@@ -2289,6 +2288,7 @@ $(function ()
 		.prop("readonly", false);
 	}
 	RegenCombinedGraph();
+	modified_callback();
     }
 
     // Toggle the button between check and submit.
