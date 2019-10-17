@@ -147,6 +147,29 @@ function Do_Reserve()
     if (isset($start) && isset($end) && $end < $start) {
         $errors["end"] = "End is before start";
     }
+    if (count($errors)) {
+	SPITAJAX_ERROR(2, $errors);
+	return;
+    }
+    # If any part of the reservation is approved, not allowed to expand.
+    if ($resgroup && $resgroup->PartiallyApproved()) {
+        $current_start = strtotime($resgroup->start());
+        $current_end   = strtotime($resgroup->end());
+
+        if (!isset($start)) {
+            $errors["start"] = "Missing start time";
+        }
+        elseif ($start < $current_start) {
+            $errors["start"] = "Not allowed to move start earlier";
+        }
+        if ($end > $current_end) {
+            $errors["end"] = "Not allowed to move end later";
+        }
+        if (count($errors)) {
+            SPITAJAX_ERROR(2, $errors);
+            return;
+        }
+    }
     #
     # Clusters is an array of aggregate/type/count ...
     #

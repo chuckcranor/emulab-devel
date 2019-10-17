@@ -505,7 +505,7 @@ $(function ()
 	});
 	// Handler for the node count input to catch the change.
 	row.find('.node-count').change(function (event) {
-	    modified_callback();
+	    HandleCountChange(row);
 	});
 	
 	// This activates the tooltip subsystem.
@@ -1190,15 +1190,88 @@ $(function ()
      */
     function FindFit()
     {
-	var days   = $('#reserve-request-form [name=days]').val();
+	var days  = $('#reserve-request-form [name=days]').val();
 	var index = 0;
+	var bail  = 0;
 
 	// List of reservation requests.
 	var clusters = _.values(GetClusterRows());
 	var ranges   = _.values(GetRangeRows());
 
+	if (!_.size(clusters)) {
+	    alert("Need at least one complete cluster definition");
+	    return;
+	}
 	if (! days) {
 	    alert("Please provide the number of days");
+	    return;
+	}
+	// Remove old sanity check errors.
+	$('#reserve-request-form .form-group-sm').addClass("hidden");
+
+	// Clear old search result.
+	$("#reserve-request-form #start_day")
+	    .datepicker('setDate', null);
+	$("#reserve-request-form #end_day")
+	    .datepicker('setDate', null);
+	
+	// Sanity check.
+	for (var i = 0; i < clusters.length; i++) {
+	    var count = clusters[i].count;
+	    var urn   = clusters[i].cluster;
+	    var error;
+
+	    if (count == "") {
+		error = "Missing count";
+	    }
+	    else if (! (isNumber(count) && count > 0)) {
+		error = "Invalid count"
+	    }
+	    if (error) {
+		var uuid  = clusters[i].uuid;
+		var tbody = $('#cluster-table tbody[data-uuid="' + uuid + '"]');
+		
+		tbody.find(".count-error label")
+		    .html(error);
+		tbody.find(".count-error")
+		    .removeClass("hidden");
+		bail = 1;
+	    }
+	}
+	for (var i = 0; i < ranges.length; i++) {
+	    var low   = ranges[i].freq_low;
+	    var high  = ranges[i].freq_high;
+	    var error;
+	    var classname;
+
+	    if (low == "") {
+		error = "Missing frequency";
+		classname = ".freq-low-error";
+	    }
+	    else if (! (isNumber(low) && low > 0)) {
+		error = "Invalid frequency"
+		classname = ".freq-low-error";
+	    }
+	    else if (high == "") {
+		error = "Missing frequency";
+		classname = ".freq-high-error";
+	    }
+	    else if (! (isNumber(high) && high > 0)) {
+		error = "Invalid frequency"
+		classname = ".freq-high-error";
+	    }
+	    if (error) {
+		var uuid  = ranges[i].uuid;
+		var tbody = $('#range-table tbody[data-uuid="' + uuid + '"]');
+		
+		tbody.find(classname + " label")
+		    .html(error);
+		tbody.find(classname)
+		    .removeClass("hidden");
+		bail = 1;
+	    }
+	}
+	if (bail) {
 	    return;
 	}
 	console.info("FindFit: ", days, clusters, ranges);
@@ -1677,7 +1750,7 @@ $(function ()
 		var row = $(html);
 		// Handler for changing node count.
 		row.find(".node-count").change(function () {
-		    modified_callback();
+		    HandleCountChange(row);
 		});
 		// Handler for delete row.
 		row.find(".delete-reservation").click(function () {
@@ -2303,6 +2376,31 @@ $(function ()
 	modified_callback();
     }
 
+    function HandleCountChange(row)
+    {
+	var thisuuid = $(row).attr('data-uuid');
+	var count    = $(row).find(".node-count").val();
+	var cluster  = $(row).find(".cluster-select option:selected").val();
+	var type     =$(row).find(".hardware-select option:selected").val();
+
+	console.info("HandleCountChange", thisuuid, cluster, type, count);
+	if (cluster == "" || type == "" || count == "" || !isNumber(count)) {
+	    return;
+	}
+	modified_callback();
+	if (_.has(amlist[cluster].typeinfo, type)) {
+	    var max = amlist[cluster].typeinfo[type].count;
+	    if (max) {
+		max = parseInt(max);
+		if (count > max) {
+		    alert("There are only " + max + " node(s) of this type");
+		    $(row).find(".node-count").val("")
+		    return;
+		}
+	    }
+	}
+    }
+
     // Toggle the button between check and submit.
     function ToggleSubmit(enable, which) {
 	if (which == "submit") {
@@ -2398,6 +2496,14 @@ $(function ()
 		      "selector"  : "combined-resgraph",
 		      "skiptypes" : {},
 		     });
+    }
+
+    function isNumber(value) {
+	if (isNaN(value)) {
+	    return false;
+	}
+	var x = parseFloat(value);
+	return isNaN(x) ? false : true;
     }
     $(document).ready(initialize);
 });
