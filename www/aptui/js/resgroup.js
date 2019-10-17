@@ -528,6 +528,8 @@ $(function ()
 	row.find('.delete-cluster')
 	    .removeClass("hidden")
 	    .click(function (event) {
+		// Kill tooltips since they get left behind if visible.
+		row.find('[data-toggle="tooltip"]').tooltip('destroy');
 		row.remove();
 		if ($('#cluster-table tbody').length == 1) {
 		    $('#cluster-table .delete-cluster').hide();
@@ -539,6 +541,7 @@ $(function ()
 		    $('#cluster-table .add-cluster').not(":last").hide();
 		}
 		modified_callback();
+		
 	    });
 	
 	if ($('#cluster-table tbody').length == 1) {
@@ -612,6 +615,8 @@ $(function ()
 	row.find('.delete-range')
 	    .removeClass("hidden")
 	    .click(function (event) {
+		// Kill tooltips since they get left behind if visible.
+		row.find('[data-toggle="tooltip"]').tooltip('destroy');
 		row.remove();
 		updateButtons();
 		modified_callback();
@@ -1262,6 +1267,11 @@ $(function ()
 				starttime = null;
 				continue;
 			    }
+			}
+			else {
+			    // Last one, has enough nodes, just move past
+			    // lower bound and be done.
+			    starttime = lower;
 			}
 		    }
 		    console.info("boop", data);
@@ -1925,6 +1935,8 @@ $(function ()
 
 	    if (!_.has(reservations, uuid)) {
 		console.info("reservation is gone: " + uuid);
+		// Kill tooltips since they get left behind if visible.
+		tbody.find('[data-toggle="tooltip"]').tooltip('destroy');
 		tbody.remove();
 	    }
 	});
