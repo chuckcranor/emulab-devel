@@ -690,6 +690,7 @@ CREATE TABLE `apt_reservation_groups` (
   `start` datetime DEFAULT NULL,
   `end` datetime DEFAULT NULL,
   `created` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
   `deleted` datetime DEFAULT NULL,
   `locked` datetime DEFAULT NULL,
   `locker_pid` int(11) default '0',
@@ -712,8 +713,12 @@ CREATE TABLE `apt_reservation_group_reservations` (
   `utilization` smallint(5) unsigned default NULL,
   `submitted` datetime DEFAULT NULL,
   `approved` datetime DEFAULT NULL,
+  `approved_pushed` datetime DEFAULT NULL,
   `canceled` datetime DEFAULT NULL,
+  `canceled_pushed` datetime DEFAULT NULL,
+  `cancel_canceled` datetime DEFAULT NULL,
   `deleted` datetime DEFAULT NULL,
+  `deleted_pushed` datetime DEFAULT NULL,
   `jsondata` text,
   PRIMARY KEY (`uuid`,`aggregate_urn`,`type`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -730,7 +735,67 @@ CREATE TABLE `apt_reservation_group_rf_reservations` (
   `freq_high` float NOT NULL DEFAULT '0',
   `submitted` datetime DEFAULT NULL,
   `approved` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
   PRIMARY KEY (`uuid`,`freq_uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_reservation_group_history`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_group_history`;
+CREATE TABLE `apt_reservation_group_history` (
+  `uuid` varchar(40) NOT NULL default '',
+  `pid` varchar(48) NOT NULL default '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `creator_uid` varchar(8) NOT NULL default '',
+  `creator_idx` mediumint(8) unsigned NOT NULL default '0',
+  `start` datetime DEFAULT NULL,
+  `end` datetime DEFAULT NULL,
+  `created` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
+  `deleted` datetime DEFAULT NULL,
+  `reason` mediumtext,
+  PRIMARY KEY (`uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_reservation_group_reservation_history`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_group_reservation_history`;
+CREATE TABLE `apt_reservation_group_reservation_history (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `uuid` varchar(40) NOT NULL default '',
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `remote_uuid` varchar(40) NOT NULL default '',
+  `type` varchar(30) NOT NULL DEFAULT '',
+  `count` smallint(5) unsigned NOT NULL DEFAULT '0',
+  `submitted` datetime DEFAULT NULL,
+  `approved` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
+  `deleted` datetime DEFAULT NULL,
+  PRIMARY KEY (`idx`),
+  KEY `agguuid` (`uuid`,`aggregate_urn`,`type`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_reservation_group_rf_reservation_history`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_group_rf_reservation_history`;
+CREATE TABLE `apt_reservation_group_rf_reservation_history` (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `uuid` varchar(40) NOT NULL default '',
+  `freq_uuid` varchar(40) NOT NULL default '',
+  `freq_low` float NOT NULL DEFAULT '0',
+  `freq_high` float NOT NULL DEFAULT '0',
+  `submitted` datetime DEFAULT NULL,
+  `approved` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
+  `deleted` datetime DEFAULT NULL,
+  PRIMARY KEY (`idx`),
+  KEY `uuids` (`uuid`,`freq_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
