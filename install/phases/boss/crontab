@@ -24,7 +24,8 @@ sub Install($$$)
 		      "*/5\t*\t*\t*\t*\troot\t$PREFIX/sbin/node_status",
 		      "*/5\t*\t*\t*\t*\troot\t$PREFIX/sbin/prereserve_check",
 		      "*/5\t*\t*\t*\t*\troot\t$PREFIX/sbin/idlemail",
-		      "\@weekly\t\t\t\t\troot\t$PREFIX/sbin/sitecheckin_client"
+		      "\@weekly\t\t\t\t\troot\t$PREFIX/sbin/sitecheckin_client",
+		      "*/5\t*\t*\t*\t*\troot\t$PREFIX/sbin/notify-reservations"
 		);
 	};
     };
