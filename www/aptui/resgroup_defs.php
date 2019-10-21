@@ -177,6 +177,22 @@ class ReservationGroup
         }
         return null;
     }
+
+    # Are any of the reservation approved
+    function PartiallyApproved()
+    {
+        foreach ($this->reservations() as $reservation) {
+            if ($reservation->approved()) {
+                return 1;
+            }
+        }
+        foreach ($this->rfreservations() as $reservation) {
+            if ($reservation->approved()) {
+                return 1;
+            }
+        }
+        return 0;
+    }
 }
 
 class ReservationGroupReservation
