@@ -308,6 +308,10 @@ function TBERROR ($message, $death, $xmp = 0) {
     global $session_interactive, $session_errorhandler;
     $script = urldecode($_SERVER['REQUEST_URI']);
 
+    # print backtrace
+    $e = new Exception();
+    $trace = $e->getTraceAsString();
+
     if (function_exists("CLEARBUSY")) {
         CLEARBUSY();
     }
@@ -316,6 +320,7 @@ function TBERROR ($message, $death, $xmp = 0) {
          "\n".
 	 "In $script\n\n".
          "$message\n\n".
+         "$trace\n\n".
          "Thanks,\n".
          "Testbed WWW\n",
          "From: $TBMAIL_OPS\n".
