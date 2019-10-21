@@ -235,6 +235,10 @@ class ReservationGroupReservation
     function deleted()	    { return $this->field('deleted'); }
     function canceled()     { return $this->field('canceled'); }
     function jsondata()     { return $this->field('jsondata'); }
+    function approved_pushed()     { return $this->field('approved_pushed'); }
+    function canceled_pushed()     { return $this->field('canceled_pushed'); }
+    function cancel_canceled()     { return $this->field('cancel_canceled'); }
+    function deleted_pushed()      { return $this->field('deleted_pushed'); }
     
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
@@ -311,6 +315,7 @@ class ReservationGroupRFReservation
     function freq_high()    { return $this->field('freq_high'); }
     function submitted()    { return $this->field('submitted'); }
     function approved()     { return $this->field('approved'); }
+    function canceled()     { return $this->field('canceled'); }
     
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {

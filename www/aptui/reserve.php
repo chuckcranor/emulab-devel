@@ -49,7 +49,8 @@ $optargs = OptionalPageArguments("edit",     PAGEARG_BOOLEAN,
                                  "debug",    PAGEARG_BOOLEAN,
                                  "cluster",  PAGEARG_STRING,
                                  "project",  PAGEARG_PROJECT,
-                                 "uuid",     PAGEARG_UUID);
+                                 "uuid",     PAGEARG_UUID,
+                                 "force",    PAGEARG_BOOLEAN);
 
 if ($edit) {
     if (! (isset($cluster) && isset($uuid))) {
@@ -60,13 +61,15 @@ if ($edit) {
     # Check to see if this reservation is part of a reservation group. Mere
     # users no longer get access to this interface.
     #
-    $resgroup = ReservationGroup::LookupByMemberReservation($uuid);
-    if ($resgroup) {
-        header("Location: resgroup.php?edit=1&uuid=" . $resgroup->uuid());
-        exit();
+    if (!$force) {
+        $resgroup = ReservationGroup::LookupByMemberReservation($uuid);
+        if ($resgroup) {
+            header("Location: resgroup.php?edit=1&uuid=" . $resgroup->uuid());
+            exit();
+        }
     }
 }
-if ($isadmin || $this_user->admin() || $this_user->stud()) {
+if (!$force && ($isadmin || $this_user->admin() || $this_user->stud())) {
     header("Location: resgroup.php");
     exit();
 }

@@ -1925,14 +1925,32 @@ $(function ()
 		    .html("The reservation above has not been approved yet");
 		newClass = "has-warning";
 	    }
-	    else if (res.canceled) {
+	    else if (!res.approved_pushed) {
 		tbody.find(".reservation-error span label")
-		    .html("This reservation above has been canceled");
+		    .html("The reservation above is approved but the cluster " +
+			  "is not reachable");
+		newClass = "has-warning";
+	    }
+	    else if (res.canceled) {
+		var when = moment(res.canceled).format("lll");
+		tbody.find(".reservation-error span label")
+  		   .html("The reservation above is scheduled to be canceled " +
+		         "at " + when +
+			 (!res.canceled_pushed ?
+			  " but the cluster is not reachable" : ""));
+		newClass = "has-error";
+	    }
+	    else if (res.cancel_canceled) {
+		tbody.find(".reservation-error span label")
+		    .html("The reservation above has been un-canceled" +
+			  " but the cluster is not reachable");
 		newClass = "has-error";
 	    }
 	    else if (res.deleted) {
 		tbody.find(".reservation-error span label")
-		    .html("This reservation above has been deleted");
+		    .html("The reservation above has been deleted" +
+			  (!res.deleted_pushed ?
+			   " but the cluster is not reachable" : ""));
 		newClass = "has-error";
 	    }
 	    if (newClass == "") {
@@ -2030,6 +2048,13 @@ $(function ()
 		tbody.find(".reservation-error span label")
 		    .html("The reservation above has not been approved yet");
 		newClass = "has-warning";
+	    }
+	    else if (res.canceled) {
+		var when = moment(res.canceled).format("lll");
+		tbody.find(".reservation-error span label")
+  		   .html("The reservation above is scheduled to be canceled " +
+		         "at " + when);
+		newClass = "has-error";
 	    }
 	    if (newClass == "") {
 		tbody.find(".reservation-error span")

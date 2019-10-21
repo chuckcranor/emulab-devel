@@ -319,6 +319,21 @@ sub DoGroupReserve()
 	my $current_start = str2time($resgroup->start());
 	my $current_end   = str2time($resgroup->end());
 
+	#
+	# If a reservation is (partially) approved, not allowed to
+	# expand. So the start can move later but not earlier, and
+	# the end can move earlier.
+	#
+	if ($resgroup->PartiallyApproved()) {
+	    if ($start < $current_start) {
+		fatal("Not allowed to move start time earlier on an ".
+		      "approved reservation");
+	    }
+	    if ($end > $current_end) {
+		fatal("Not allowed to move end time later on an ".
+		      "approved reservation");
+	    }
+	}
 	if ($current_start != $start) {
 	    print "Start has changed from $current_start to $start\n";
 	    $updateall = 1;
@@ -670,7 +685,7 @@ sub DoGroupReserve()
 	    #
 	    # If any of the reservations need approval, send email.
 	    #
-	    if (!$resgroup->IsApproved()) {
+	    if ($resgroup->NeedsApproval()) {
 		my $this_uid   = $this_user->uid();
 		my $this_email = $this_user->email();
 		my $url        = $brand->wwwBase() . "/list-resgroups.php";
@@ -704,7 +719,9 @@ sub DoGroupReserve()
 sub DoDelete()
 {
     #
-    # We allow for admins to pass a reason (deny with cause).
+    # We allow for admins to pass a reason. The -e option says that this
+    # is an expiration, initiated by the daemon when it sees a reservation
+    # group is done. 
     #
     my $optlist   = "N:";
     my @cluster_reservations = ();
@@ -764,10 +781,43 @@ sub DoDelete()
 		push(@range_reservations, $reservation);
 	    }
 	}
+	#
+	# Mark the reservations as deleted in case the clusters are offline.
+	#
+	# If the group is expired, no need to set this, we will keep
+	# trying until it is gone. We mark it as deleted *only* when
+	# we are deleting it before expiration, so that the history
+	# entry reflects what actually happened. 
+	#
+	if (!$resgroup->Expired()) {
+	    foreach my $res (@cluster_reservations, @range_reservations) {
+		if ($res->IsCluster()) {
+		    # To avoid updating deleted timestamp.
+		    if (!$res->deleted()) {
+			$res->MarkDeleted();
+			$res->ClearDeletedPushed();
+		    }
+		}
+		else {
+		    # This is immediately deleted below.
+		    $res->MarkDeleted();
+		}
+	    }
+	}
     }
     else {
 	@cluster_reservations = $resgroup->ReservationList();
 	@range_reservations   = $resgroup->RFReservationList();
+
+	#
+	# Deleting entire reservation. If doing this before expired, mark
+	# it. If after expiration, or if already set, leave it alone. The
+	# daemon will continue to delete expired reservations until they
+	# are gone.
+	#
+	if (!$resgroup->Expired() && !$resgroup->deleted()) {
+	    $resgroup->MarkDeleted();
+	}
     }
     if (@range_reservations) {
 	foreach my $res (@range_reservations) {
@@ -946,7 +996,19 @@ sub DoRefresh()
 		$blob->{'errmesg'} = "Internal error refreshing reservation";
 	    }
 	    elsif ($webtask->exitcode() == GENIRESPONSE_SEARCHFAILED) {
-		# Not sure what to do here.
+		print "$res has been deleted at the target cluster\n";
+		#
+		# If the reservation is expired/canceled, then we do
+		# not mark it as deleted, just clean it up.
+		#
+		if (! ($resgroup->Expired() || $resgroup->canceled())) {
+		    $res->MarkDeleted();
+		    # Flag so we do not try to push it out again.
+		    $res->MarkDeletedPushed();
+		}
+		else {
+		    $res->Delete();
+		}
 	    }
 	    else {
 		$blob->{'errcode'} = $webtask->exitcode();
@@ -959,17 +1021,47 @@ sub DoRefresh()
  	if (defined($details->{'cancel'})) {
 	    my $when = str2time($details->{'cancel'});
 	    if ($when) {
-		$res->MarkCanceled($when);
+		#
+		# If locally we are trying to uncancel, then do not remark
+		# the reservation as canceled again.
+		#
+		if (!$res->cancel_canceled()) {
+		    if (!$res->canceled()) {
+			print "$res has been canceled at the target cluster\n";
+			$res->MarkCanceled($when);
+			# Flag so we do not try to push it out again.
+			$res->MarkCanceledPushed();
+		    }
+		    elsif (!$res->canceled_pushed()) {
+			print "$res cancel has been pushed out\n";
+			# Flag so we do not try to push it out again.
+			$res->MarkCanceledPushed();
+		    }
+		}
+		else {
+		    print "$res is still canceled at target cluster, still ".
+			"need to push out uncancel\n";
+		}
 	    }
 	}
-	elsif ($res->canceled()) {
-	    $res->ClearCanceled();
+	elsif ($res->canceled() || $res->cancel_canceled()) {
+	    if ($res->cancel_canceled()) {
+		print "$res has been uncanceled at the target cluster\n";
+		$res->ClearCanceled();
+		$res->ClearCancelCanceled();
+	    }
+	    else {
+		print "$res is no longer canceled at the target cluster\n";
+		$res->ClearCanceled();
+	    }
 	}
  	if (defined($details->{'approved'})) {
 	    if (!$res->approved()) {
 		my $when = str2time($details->{'approved'});
 		if ($when) {
 		    $res->MarkApproved($when);
+		    # Do not want to push this out of course.
+		    $res->MarkApprovedPushed();
 		}
 	    }
 	    if (exists($details->{'using'}) && $details->{'using'} =~ /^\d+$/) {
@@ -995,6 +1087,10 @@ sub DoRefresh()
 	    }
 	}
     }
+    $resgroup->Delete()
+	if (! (scalar($resgroup->ReservationList()) ||
+	       scalar($resgroup->RFReservationList())));
+
     if (defined($webtask)) {
 	if ($errors) {
 	    $webtask->output("Not all cluster reservations could be ".
@@ -1020,12 +1116,13 @@ sub DoApprove()
     #
     # We allow for admins to pass a reason (deny with cause).
     #
-    my $optlist      = "p:F:n";
+    my $optlist      = "F:nD";
     my @cluster_reservations = ();
     my @range_reservations   = ();
     my $errmsg;
     my $results   = {};
     my $checkonly = 0;
+    my $nopush    = 0;  # debugging flag only.
 
     if (! $this_user->IsAdmin()) {
 	fatal("No permission to approve this reservation")
@@ -1041,8 +1138,8 @@ sub DoApprove()
     if (defined($options{"n"})) {
 	$checkonly = 1;
     }
-    if (!defined($options{"p"})) {
-	fatal("Missing the portal (-p) argument");
+    if (defined($options{"D"})) {
+	$nopush = 1;
     }
     usage()
 	if (@ARGV < 1);
@@ -1055,6 +1152,10 @@ sub DoApprove()
     if (!defined($resgroup)) {
 	fatal("No such reservation group");
     }
+    my $project = $resgroup->GetProject();
+    if (!defined($project)) {
+	fatal("Could not get project for reservation");
+    }
     if ($resgroup->Lock()) {
 	UserError("Reservation is locked, please try again later");
     }
@@ -1063,7 +1164,7 @@ sub DoApprove()
     
     foreach my $res ($resgroup->ReservationList()) {
 	push(@cluster_reservations, $res)
-	    if (!$res->approved());
+	    if (!$res->approved() || !$res->approved_pushed());
     }
     foreach my $res ($resgroup->RFReservationList()) {
 	push(@range_reservations, $res)
@@ -1118,7 +1219,7 @@ sub DoApprove()
 	elsif (defined($options{"F"})) {
 	    $command .= "-F " . $options{"F"} . " ";
 	}
-	$command .= "-p " . $options{"p"} . " ";
+	$command .= "-p " . $project->Brand()->brand() . " ";
 	$command .= "$remote_uuid";
 
 	print "Running: $command\n";
@@ -1153,7 +1254,21 @@ sub DoApprove()
 		    $errors++;
 		}
 		elsif ($webtask->exitcode() == GENIRESPONSE_SEARCHFAILED) {
-		    # Not sure what to do here.
+		    print "$res has been deleted at the target cluster\n";
+		    #
+		    # If the reservation is expired, then we do not mark it
+		    # as deleted, just clean it up.
+		    #
+		    if (!$resgroup->Expired()) {
+			$res->MarkDeleted();
+			# Flag so we do not try to push it out again.
+			$res->MarkDeletedPushed();
+			# Clear cancel flag
+			$res->ClearCanceled();
+		    }
+		    else {
+			$res->Delete();
+		    }
 		}
 		else {
 		    $blob->{'errcode'} = $webtask->exitcode();
@@ -1162,7 +1277,7 @@ sub DoApprove()
 		}
 		next;
 	    }
-	    $res->MarkApproved() if (!$checkonlyflag);
+	    $res->MarkApprovedPushed() if (!$checkonlyflag);
 	}
 	return $errors;
     };
@@ -1196,22 +1311,32 @@ sub DoApprove()
     # happen very often.
     #
     if (@cluster_reservations) {
-	my $responses;
-	my $errcode = CallMethodOnReservations($coderef, \$responses,
-					       @cluster_reservations);
-	if ($errcode) {
-	    $errmsg = $responses;
-	    $resgroup->Unlock();
-	    goto bad;
+	#
+	# Mark them as approved in case we cannot get to the cluster,
+	# will push it out later from the daemon.
+	#
+	foreach my $res (@cluster_reservations) {
+	    $res->MarkApproved();
 	}
-	# We will skip range approval if any failures here.
-	if (&$checkResponses($responses)) {
-	    goto done;
+	# nopush is a debugging flag only.
+	if (!$nopush) {
+	    my $responses;
+	    my $errcode = CallMethodOnReservations($coderef, \$responses,
+						   @cluster_reservations);
+	    if ($errcode) {
+		$errmsg = $responses;
+		$resgroup->Unlock();
+		goto bad;
+	    }
+	    # We will skip range approval if any failures here.
+	    if (&$checkResponses($responses)) {
+		goto done;
+	    }
 	}
     }
     if (@range_reservations) {
 	if (APT_Reservation::Group->LockTables()) {
-
+	    fatal("Could not lock tables");
 	}
 	my @allgroups = APT_Reservation::Group->LookupAll();
     
@@ -1256,12 +1381,19 @@ sub DoApprove()
     exit(-1);
 }
 
+#
+# At the moment, we do not support canceling an individual reservation in
+# a group. Just the entire group. Ditto for uncancel, the entire group
+# gets uncanceled. Note though, that we *do* record if an individual
+# reservation is canceled at the cluster (cause it is unused).
+#
 sub DoCancel()
 {
-    my $optlist = "p:ce:N:";
+    my $optlist = "p:ce:N:PD";
     my $clear   = 0;
+    my $purge   = 0;
+    my $nopush  = 0;  # debugging flag only.
     my $when;
-    my $portal;
     my $reason;
     my $errmsg;
     my @reservations = ();
@@ -1278,10 +1410,13 @@ sub DoCancel()
 	fatal("Cannot read reason file")
 	    if (! -e $options{"N"});
     }
-    if (defined($options{"p"})) {
-	$portal = $options{"p"}
+    if (defined($options{"D"})) {
+	$nopush = 1;
     }
-    if (defined($options{"c"})) {
+    if (defined($options{"P"})) {
+	$purge = 1;
+    }
+    elsif (defined($options{"c"})) {
 	$clear = 1;
     }
     elsif (defined($options{"e"})) {
@@ -1292,12 +1427,6 @@ sub DoCancel()
 		fatal("Could not parse -e option.");
 	    }
 	}
-    }
-    else {
-	fatal("Missing the termination (-e) argument");
-    }
-    if (!defined($options{"p"})) {
-	fatal("Missing the portal (-p) argument");
     }
     usage()
 	if (@ARGV != 1);
@@ -1310,34 +1439,102 @@ sub DoCancel()
     if ($resgroup->Lock()) {
 	UserError("Reservation is locked, please try again later");
     }
+    #
+    # No cancel if the group is deleted, that will happen eventually,
+    # and cancel will not make it go any faster. 
+    #
+    if ($resgroup->deleted()) {
+	$resgroup->Unlock();
+	UserError("Not allowed to (un)cancel a deleted reservation group");
+    }
+    if ($resgroup->Expired()) {
+	$resgroup->Unlock();
+	UserError("Not allowed to (un)cancel an expired reservation group");
+    }
+    #
+    # Mark/Clear the group, and then do all the reservations in the group.
+    # At some point we might support individual cancellation.
+    #
+    if ($clear) {
+	$resgroup->ClearCanceled();
+    }
+    elsif (!$purge) {
+	if (!$resgroup->canceled()) {
+	    if (!defined($when)) {
+		fatal("Missing the termination (-e) argument");
+	    }
+	    $resgroup->MarkCanceled($when);
+	}
+    }
+    
     foreach my $res ($resgroup->ReservationList()) {
+	# No point in (un)canceling an unapproved or deleted reservation.
+	next
+	    if (!$res->approved() || $res->deleted());
+
+	if ($clear) {
+	    if ($res->canceled()) {
+		$res->ClearCanceled();
+		# We will clear this when we sucessfully push it out.
+		$res->MarkCancelCanceled();
+	    }
+	    elsif (!$res->cancel_canceled()) {
+		# No need to push anything out
+		next;
+	    }
+	    push(@reservations, $res);
+	}
+	else {
+	    if (!$res->canceled()) {
+		$res->MarkCanceled($when);
+		$res->ClearCanceledPushed();
+	    }
+	    elsif ($res->canceled_pushed()) {
+		# No need to push anything out
+		next;
+	    }
+	    push(@reservations, $res);
+	}
+    }
+    #
+    # Range reservations are simple of course, we just mark them as
+    # canceled (or unmark them). The daemon will fire us off again when
+    # its time to actually remove the reservation (after whetever the
+    # warning delay is).
+    #
+    foreach my $res ($resgroup->RFReservationList()) {
+	# No point in (un)canceling an unapproved reservation.
 	next
 	    if (!$res->approved());
-	# Already canceled
-	next
-	    if ($res->canceled() && !$clear);
-	# Already uncanceled
-	next
-	    if (!$res->canceled() && $clear);
-	
-	push(@reservations, $res)
+
+	if ($clear) {
+	    if ($res->canceled()) {
+		$res->ClearCanceled();
+	    }
+	}
+	elsif ($purge) {
+	    $res->Delete();
+	}
+	elsif (!$res->canceled()) {
+	    $res->MarkCanceled($when);
+	}
     }
     my $coderef = sub {
 	my ($reservation, $webtask) = @_;
 	my $webtask_id  = $webtask->task_id();
 	my $urn         = $reservation->aggregate_urn();
 	my $remote_uuid = $reservation->remote_uuid();
+	my $stamp       = $reservation->canceled();
 	
 	my $command = "$RESCOMMAND -t $webtask_id -a $urn cancel ";
 	if (defined($options{"N"})) {
 	    $command .= "-F " . $options{"N"} . " ";
 	}
-	$command .= "-p " . $options{"p"} . " ";
 	if ($clear) {
 	    $command .= "-c ";
 	}
 	else {
-	    $command .= "-e $when ";
+	    $command .= "-e '$stamp' ";
 	}
 	$command .= "$remote_uuid";
 
@@ -1351,7 +1548,11 @@ sub DoCancel()
     my $responses;
     my $errors   = 0;
     my $results  = {};
-    
+
+    # nopush is a debugging flag only.
+    goto done
+	if ($nopush);
+
     my $errcode = CallMethodOnReservations($coderef,
 					   \$responses, @reservations);
     if ($errcode) {
@@ -1379,7 +1580,17 @@ sub DoCancel()
 		$blob->{'errmesg'} = "Internal error canceling reservation";
 	    }
 	    elsif ($webtask->exitcode() == GENIRESPONSE_SEARCHFAILED) {
-		# Not sure what to do here.
+		print "$res has been deleted at the target cluster\n";
+
+		if ($res->canceled()) {
+		    # Just delete it; we are here cause we tried to cancel it.
+		    $res->Delete();
+		}
+		else {
+		    # We had tried to uncancel it, but did not get there
+		    # in time. I'm just gonna delete it.
+		    $res->Delete();
+		}
 	    }
 	    else {
 		$blob->{'errcode'} = $webtask->exitcode();
@@ -1387,13 +1598,18 @@ sub DoCancel()
 	    }
 	    next;
 	}
-	$res->MarkCanceled();
-    }
-    if (defined($webtask)) {
-	if ($errors) {
-	    $webtask->output("Not all cluster reservations could be canceled, ".
-			     "Please try again later");
+	if ($clear) {
+	    $res->ClearCancelCanceled();
 	}
+	else {
+	    $res->MarkCanceledPushed();
+	}
+    }
+    $resgroup->Delete()
+	if (! (scalar($resgroup->ReservationList()) ||
+	       scalar($resgroup->RFReservationList())));
+  done:
+    if (defined($webtask)) {
 	$webtask->results($results);
 	$webtask->Exited($errors);
     }
@@ -1499,8 +1715,8 @@ sub DoConvertReservationsToGroups()
 	    if (!$newres) {
 		fatal("Could not add reservation to group");
 	    }
+	    $newres->Mark("submitted", str2time($reservation->{'created'}));
 	    if ($reservation->{'approved'} ne "") {
-		$newres->Mark("submitted", str2time($reservation->{'created'}));
 		$newres->MarkApproved(str2time($reservation->{'approved'}));
 	    }
 	    $resgroup->Unlock();

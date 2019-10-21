@@ -33,6 +33,13 @@ use Getopt::Std;
 use Data::Dumper;
 use JSON;
 use File::Basename;
+use Date::Parse;
+
+#
+# Need to add: 1) pushing out approvals to clusters that were offline.
+# 2) Deleting reservation groups when they expire. 3) deleting reservations
+# if the clusters are offline.
+#
 
 #
 # Update the local usage/history for reservation groups.
@@ -135,7 +142,7 @@ $SIG{HUP} = \&handler
     if (! ($debug || $oneshot));
 
 #
-# Refresh the cached utilization/history data for all reservation groups.
+# Refresh the local state of all groups. 
 #
 sub RefreshGroups()
 {
@@ -158,7 +165,98 @@ sub RefreshGroups()
     }
 }
 
+#
+# Deal with pending changes (approval,cancel,delete,etc).
+#
+sub PushGroups()
+{
+    my @resgroups = APT_Reservation::Group->LookupAll();
+
+    foreach my $resgroup (@resgroups) {
+	my $uuid = $resgroup->uuid();
+	my $op;
+
+	if ($resgroup->deleted()) {
+	    print "$resgroup is marked for deletion\n";
+	    #
+	    # If this is marked on a reservation, it means we have not been
+	    # able to contact all clusters. Keep trying till its gone.
+	    #
+	    $op = "delete";
+	}
+	elsif ($resgroup->canceled() &&
+	       time() > str2time($resgroup->canceled())) {
+	    print "$resgroup is marked for cancellation and its past time\n";
+	    #
+	    # Same as above, the group will hang around until all reservations
+	    # are purged (at the target clusters).
+	    #
+	    $op = "purge";
+	}
+	elsif (time() > str2time($resgroup->end())) {
+	    print "$resgroup is past its expiration time\n";
+	    #
+	    # Again, same as above, we just keep trying until its gone.
+	    #
+	    $op = "delete";
+	}
+	else {
+	    #
+	    # Look for individual reservations that have pending work.
+	    #
+	    foreach my $res ($resgroup->ReservationList()) {
+		if ($res->deleted() && !$res->deleted_pushed()) {
+		    print "$res is marked for deletion and needs a push\n";
+		    $op = "delete";
+		}
+		elsif ($res->canceled() && !$res->canceled_pushed()) {
+		    print "$res is marked for cancel and needs a push\n";
+		    $op = "cancel";
+		}
+		elsif ($res->cancel_canceled()) {
+		    print "$res is marked for uncancel and needs a push\n";
+		    $op = "uncancel";
+		}
+		elsif ($res->canceled() &&
+		       time() > str2time($res->canceled())) {
+		    print "$res is marked for cancellation and its past time\n";
+		    $op = "purge";
+		}
+		elsif ($res->approved() && !$res->approved_pushed()) {
+		    print "$res is marked for approval and needs a push\n";
+		    $op = "approve";
+		}
+	    }
+	}
+	next
+	    if (!$op);
+	
+	if ($impotent) {
+	    print "Would run $op $resgroup\n";
+	    next;
+	}
+	print "Invoking $op on $resgroup\n";
+	my $command = "$SUDO -u $PROTOUSER $WAP $MANAGERESGROUP ";
+	if ($op eq "purge") {
+	    $command .= "cancel -P ";
+	}
+	elsif ($op eq "uncancel") {
+	    $command .= "cancel -c ";
+	}
+	else {
+	    $command .= $op . " ";
+	}
+	$command .= $uuid;
+	print "Running '$command'\n" if ($debug);
+        my $output = emutil::ExecQuiet($command);
+	my $status = $?;
+	print STDERR "$output\n"
+	    if ($output ne "");
+    }
+}
+
 if ($oneshot) {
+    PushGroups();
     RefreshGroups();
     exit(0);
 }
@@ -173,6 +271,7 @@ while (1) {
     print "Running at ".
 	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
 
+    PushGroups();
     RefreshGroups();
 
     print "Waiting for $SLEEP_INTERVAL seconds ...\n";

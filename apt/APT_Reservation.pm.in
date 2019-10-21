@@ -45,6 +45,7 @@ my $MAINSITE      = @TBMAINSITE@;
 ###################################################################
 package APT_Reservation::Group;
 use emdb;
+use Project;
 use libtestbed;
 use Carp;
 use JSON;
@@ -199,7 +200,7 @@ sub Create($$$)
 	$$perrmsg = "Group uuid $uuid already exists!";
 	return undef;
     }
-    my $sets = "uuid='$uuid',locked=now(),locker_pid='$$'";
+    my $sets = "uuid='$uuid'";
     if (exists($argref->{"start"}) && defined($argref->{"start"})) {
 	$sets .= ", start=FROM_UNIXTIME(" . $argref->{"start"} . ")";
 	delete($argref->{"start"});
@@ -216,7 +217,8 @@ sub Create($$$)
 	$sets .= ",created=now()";
     }
     
-    my $query = "insert into apt_reservation_groups set ${sets}, ".
+    my $query = "insert into apt_reservation_groups set ".
+	"locked=now(),locker_pid='$$',${sets}, ".
 	join(",", map("$_=" .
 		      DBQuoteSpecial($argref->{$_}), keys(%{$argref})));
 
@@ -227,6 +229,15 @@ sub Create($$$)
 	return undef;
     }
     DBQueryWarn("unlock tables");
+    if (1) {
+	DBQueryWarn("insert into apt_reservation_group_history ".
+		    " (uuid, pid, pid_idx, creator_uid, creator_idx, ".
+		    "  start, end, created, reason) ".
+		    " select uuid, pid, pid_idx, creator_uid, creator_idx, ".
+		    "        start, end, created, reason ".
+		    " from apt_reservation_groups ".
+		    " where uuid='$uuid'");
+    }
     return Lookup($class, $uuid);
 }
 
@@ -235,13 +246,19 @@ sub Delete($)
     my ($self) = @_;
     my $uuid = $self->uuid();
     
-    DBQueryWarn("delete from apt_reservation_group_reservations ".
-		"where uuid='$uuid'")
-	or return -1;
     DBQueryWarn("delete from apt_reservation_groups ".
 		"where uuid='$uuid'")
 	or return -1;
+
     return 0;
+}
+
+sub GetProject($)
+{
+    my ($self) = @_;
+    require Project;
+    
+    return Project->Lookup($self->pid_idx());
 }
 
 #
@@ -290,8 +307,11 @@ sub Unlock($)
 sub LockTables($)
 {
     DBQueryWarn("lock tables apt_reservation_groups write, ".
-		"            apt_reservation_group_reservations write, ".
-		"            apt_reservation_group_rf_reservations write")
+		"   apt_reservation_group_reservations write, ".
+		"   apt_reservation_group_rf_reservations write, ".
+		"   apt_reservation_group_history write, ".
+		"   apt_reservation_group_reservation_history write, ".
+		"   apt_reservation_group_rf_reservation_history write ")
 	or return -1;
     return 0;
 }
@@ -361,6 +381,12 @@ sub UpdateMeta($$$$)
 		" reason=" . DBQuoteSpecial($reason) . " " .
 		"where uuid='$uuid'")
 	or return -1;
+    if (1) {
+	DBQueryWarn("update apt_reservation_group_history set ".
+		    " start=FROM_UNIXTIME($start),end=FROM_UNIXTIME($end), ".
+		    " reason=" . DBQuoteSpecial($reason) . " " .
+		    "where uuid='$uuid'");
+    }
 
     $self->{'DBROW'}->{'start'}  = $start;
     $self->{'DBROW'}->{'end'}    = $end;
@@ -368,19 +394,91 @@ sub UpdateMeta($$$$)
     return 0;
 }
 
+sub Mark($$;$)
+{
+    my ($self, $which, $value) = @_;
+    my $uuid   = $self->uuid();
+    my $clause = "${which}=";
+
+    if (!defined($value)) {
+	$clause .= "NULL";
+    }
+    elsif ($value eq "now") {
+	$clause .= "now()";
+	$value   = time();
+    }
+    elsif ($value =~ /^\d*$/) {
+	$clause .= "FROM_UNIXTIME($value)";
+    }
+    else {
+	$clause .= DBQuoteSpecial($value);
+    }
+    DBQueryWarn("update apt_reservation_groups ".
+		" set $clause ".
+		"where uuid='$uuid'")
+	or return -1;
+
+    if ($which eq "deleted" || $which eq "canceled") {
+	DBQueryWarn("update apt_reservation_group_history ".
+		    " set $clause ".
+		    "where uuid='$uuid'")
+    }
+    $self->{'DBROW'}->{$which} = $value;
+    return 0;
+
+}
+
+sub MarkDeleted($)
+{
+    my ($self) = @_;
+    return $self->Mark("deleted", "now");
+}
+
+sub MarkCanceled($$)
+{
+    my ($self, $when) = @_;
+    return $self->Mark("canceled", $when);
+}
+sub ClearCanceled($)
+{
+    my ($self) = @_;
+    return $self->Mark("canceled", undef);
+}
+
 #
 # A group needs approval if any of the reservations need approval.
 #
-sub IsApproved($)
+sub NeedsApproval($)
 {
     my ($self) = @_;
-    my $approved = 1;
 
     foreach my $res ($self->ReservationList(), $self->RFReservationList()) {
-	$approved = 0
+	return 1
 	    if (!$res->approved());
     }
-    return $approved;
+    return 0;
+}
+
+sub PartiallyApproved($)
+{
+    my ($self) = @_;
+
+    foreach my $res ($self->ReservationList(), $self->RFReservationList()) {
+	return 1
+	    if ($res->approved());
+    }
+    return 0;
+}
+
+#
+# Expired.
+#
+sub Expired($)
+{
+    my ($self) = @_;
+    my $end = str2time($self->end());
+
+    return time() > $end ? 1 : 0;
 }
 
 ###################################################################
@@ -435,6 +533,14 @@ sub Create($$$$$$)
 		"  aggregate_urn='$aggregate_urn', ".
 		"  type='$type', count='$count'")
 	or return undef;
+    
+    if (1) {
+	DBQueryWarn("insert into apt_reservation_group_reservation_history ".
+		    "  set uuid='$group_uuid', ".
+		    "  remote_uuid='$remote_uuid', ".
+		    "  aggregate_urn='$aggregate_urn', ".
+		    "  type='$type', count='$count'");
+    }
 
     return Lookup($class, $group, $aggregate_urn, $type);
 }
@@ -475,12 +581,12 @@ sub Stringify($)
     my $count  = $self->count();
     my $domain = $self->domain();
 
-    return "[APT_ResGroupAgg $pid $domain $type:$count]";
+    return "[APT_ResGroupRes $pid $domain $type:$count]";
 }
 
-sub Delete($)
+sub Delete($;$)
 {
-    my ($self) = @_;
+    my ($self, $expire) = @_;
     my $uuid = $self->uuid();
     my $urn  = $self->aggregate_urn();
     my $type = $self->type();
@@ -536,7 +642,13 @@ sub UpdateCount($$)
 		"where uuid='$uuid' and aggregate_urn='$urn' and ".
 		"      type='$type'")
 	or return -1;
-
+    if (1) {
+	DBQueryWarn("update apt_reservation_group_reservation_history ".
+		    " set count='$count' ".
+		    "where uuid='$uuid' and aggregate_urn='$urn' and ".
+		    "      type='$type'")
+	    or return -1;
+    }
     $self->{'DBROW'}->{'count'} = $count;
     return 0;
 }
@@ -568,19 +680,33 @@ sub Mark($$;$)
 		"      type='$type'")
 	or return -1;
 
+    if (($which eq "approved" || $which eq "submitted" ||
+	 $which eq "canceled" || $which eq "deleted")) {
+	DBQueryWarn("update apt_reservation_group_reservation_history ".
+		    " set $clause ".
+		    "where uuid='$uuid' and aggregate_urn='$urn' and ".
+		    "      type='$type'")
+	    or return -1;
+    }
     $self->{'DBROW'}->{$which} = $value;
     return 0;
 }
 
-sub MarkDeleted($;$)
+sub MarkDeleted($)
 {
-    my ($self, $value) = @_;
-    if (!defined($value)) {
-	$value = "now";
-    }
-    return $self->Mark("deleted", $value);
+    my ($self) = @_;
+    return $self->Mark("deleted", "now");
 }
-
+sub MarkDeletedPushed($)
+{
+    my ($self) = @_;
+    return $self->Mark("deleted_pushed", "now");
+}
+sub ClearDeletedPushed($)
+{
+    my ($self) = @_;
+    return $self->Mark("deleted_pushed", undef);
+}
 sub MarkApproved($;$)
 {
     my ($self, $value) = @_;
@@ -589,37 +715,73 @@ sub MarkApproved($;$)
     }
     return $self->Mark("approved", $value);
 }
-
-sub MarkCanceled($;$)
+sub MarkApprovedPushed($)
 {
-    my ($self, $value) = @_;
-    if (!defined($value)) {
-	$value = "now";
-    }
-    return $self->Mark("canceled", $value);
+    my ($self) = @_;
+    return $self->Mark("approved_pushed", "now");
+}
+sub MarkCanceled($$)
+{
+    my ($self, $when) = @_;
+    return $self->Mark("canceled", $when);
+}
+sub MarkCanceledPushed($)
+{
+    my ($self) = @_;
+    return $self->Mark("canceled_pushed", "now");
+}
+sub ClearCanceledPushed($)
+{
+    my ($self) = @_;
+    return $self->Mark("canceled_pushed", undef);
 }
 sub ClearCanceled($)
 {
     my ($self) = @_;
+    $self->Mark("canceled_pushed", undef);
     return $self->Mark("canceled", undef);
+}
+sub MarkCancelCanceled($)
+{
+    my ($self) = @_;
+    return $self->Mark("cancel_canceled", "now");
+}
+sub ClearCancelCanceled($)
+{
+    my ($self) = @_;
+    return $self->Mark("cancel_canceled", undef);
 }
 
 sub MarkSubmitted($$)
 {
     my ($self, $approved) = @_;
-    my $uuid = $self->uuid();
-    my $urn  = $self->aggregate_urn();
-    my $type = $self->type();
-    
+    my $uuid   = $self->uuid();
+    my $urn    = $self->aggregate_urn();
+    my $type   = $self->type();
+    my $clause = " submitted=now()," .
+	($approved ? "approved=now() " : "approved=null ");
+
     DBQueryWarn("update apt_reservation_group_reservations set ".
-		" submitted=now(), ".
-		($approved ? "approved=now() " : "approved=null ") .
+		" $clause " . ($approved ? ",approved_pushed=now() " : "") .
 		"where uuid='$uuid' and aggregate_urn='$urn' and ".
 		"      type='$type'")
 	or return -1;
+    if (1) {
+	DBQueryWarn("update apt_reservation_group_reservation_history set ".
+		    " $clause " . 
+		    "where uuid='$uuid' and aggregate_urn='$urn' and ".
+		    "      type='$type'");
+    }
 
     $self->{'DBROW'}->{'submitted'} = time();
-    $self->{'DBROW'}->{'approved'}  = ($approved ? time() : undef);
+    if ($approved) {
+	$self->{'DBROW'}->{'approved'} = time();
+	$self->{'DBROW'}->{'approved_pushed'} = time();
+    }
+    else {
+	$self->{'DBROW'}->{'approved'} = undef;
+	$self->{'DBROW'}->{'approved_pushed'} = undef;
+    }
     return 0;
 }
 
@@ -692,6 +854,12 @@ sub Create($$$$)
 		"  freq_low='$lower', freq_high='$upper'")
 	or return undef;
 
+    if (1) {
+	DBQueryWarn("insert into apt_reservation_group_rf_reservation_history ".
+		    "  set uuid='$group_uuid', ".
+		    "  freq_uuid='$freq_uuid', ".
+		    "  freq_low='$lower', freq_high='$upper'");
+    }
     return Lookup($class, $group, $lower, $upper);
 }
 
@@ -729,7 +897,7 @@ sub Stringify($)
     my $lower  = $self->freq_low();
     my $upper  = $self->freq_high();
 
-    return "[APT_ResGroup $pid $lower:$upper]";
+    return "[APT_ResGroupRF $pid $lower:$upper]";
 }
 
 sub Delete($)
@@ -800,7 +968,14 @@ sub Mark($$;$)
 		" set $clause ".
 		"where uuid='$uuid' and freq_uuid='$freq_uuid'")
 	or return -1;
-
+    if (1) {
+	if ($which eq "submitted" || $which eq "approved" ||
+	    $which eq "canceled") {
+	    DBQueryWarn("update apt_reservation_group_rf_reservation_history ".
+			" set $clause ".
+			"where uuid='$uuid' and freq_uuid='$freq_uuid'")
+	}
+    }
     $self->{'DBROW'}->{$which} = $value;
     return 0;
 }
@@ -817,36 +992,53 @@ sub MarkApproved($;$)
 sub MarkSubmitted($$)
 {
     my ($self, $approved) = @_;
-    my $uuid = $self->uuid();
-    my $urn  = $self->aggregate_urn();
-    my $type = $self->type();
-    
-    DBQueryWarn("update apt_reservation_group_reservations set ".
-		" submitted=now(), ".
-		($approved ? "approved=now() " : "approved=null ") .
-		"where uuid='$uuid' and aggregate_urn='$urn' and ".
-		"      type='$type'")
+    my $uuid       = $self->uuid();
+    my $freq_uuid  = $self->freq_uuid();
+    my $clause     = " submitted=now()," .
+	($approved ? "approved=now() " : "approved=null ");
+
+    DBQueryWarn("update apt_reservation_group_rf_reservations set ".
+		"  $clause ".
+		"where uuid='$uuid' and freq_uuid='$freq_uuid'")
 	or return -1;
+
+    if (1) {
+	DBQueryWarn("update apt_reservation_group_rf_reservation_history ".
+		    " set $clause ".
+		    "where uuid='$uuid' and freq_uuid='$freq_uuid'")
+    }
 
     $self->{'DBROW'}->{'submitted'} = time();
     $self->{'DBROW'}->{'approved'}  = ($approved ? time() : undef);
     return 0;
 }
 
-sub Update($$$)
+#
+# Only the history entry needs to be updated since we immediately delete
+# the record. 
+#
+sub MarkDeleted($)
 {
-    my ($self, $which, $what) = @_;
-    my $uuid      = $self->uuid();
-    my $freq_uuid = $self->freq_uuid();
-    my $safe      = DBQuoteSpecial($what);
-    
-    DBQueryWarn("update apt_reservation_group_rf_reservations set ".
-		" `$which`=$safe ".
-		"where uuid='$uuid' and freq_uuid='$freq_uuid'")
-	or return -1;
+    my ($self, $value) = @_;
+    my $uuid       = $self->uuid();
+    my $freq_uuid  = $self->freq_uuid();
 
-    $self->{'DBROW'}->{$which} = $what;
+    if (1) {
+	DBQueryWarn("update apt_reservation_group_rf_reservation_history ".
+		    " set deleted=now() ".
+		    "where uuid='$uuid' and freq_uuid='$freq_uuid'")
+    }
     return 0;
+}
+sub MarkCanceled($$)
+{
+    my ($self, $when) = @_;
+    return $self->Mark("canceled", $when);
+}
+sub ClearCanceled($)
+{
+    my ($self) = @_;
+    return $self->Mark("canceled", undef);
 }
 
 #

@@ -291,7 +291,7 @@ sub DoReserve()
     $rpcargs{"start"} = TBDateStringGMT($start) if (defined($start));
     $rpcargs{"end"}   = TBDateStringGMT($end) if (defined($end));
     $rpcargs{"count"} = $count if (defined($count));
-    $rpcargs{"type"}  = $type if (!defined($update));
+    $rpcargs{"type"}  = $type;
     $rpcargs{"check"} = $checkonly;
     $rpcargs{"reason"}= $reason if (defined($reason));
     $rpcargs{"update"}= $update if (defined($update));
@@ -883,7 +883,7 @@ sub DoApprove()
     if (GeniResponse::IsError($response)) {
 	ExitWithError($response);
     }
-    if ($type eq "reservation") {
+    if ($type eq "reservation" && !$checkonly) {
 	UpdateReservationRequest($aggregate, $uuid,
 				 $RESERVATION_RECORD_APPROVE);
 	#
@@ -916,10 +916,9 @@ sub DoApprove()
 #
 sub DoCancel()
 {
-    my $optlist = "p:ce:N:t:";
+    my $optlist = "ce:N:t:";
     my $clear   = 0;
     my $when;
-    my $portal;
     my $reason;
     my $errmsg;
     my $type = "reservation";
@@ -942,9 +941,6 @@ sub DoCancel()
 	$reason = readfile($options{"N"});
 	chomp($reason);
     }
-    if (defined($options{"p"})) {
-	$portal = $options{"p"}
-    }
     if (defined($options{"c"})) {
 	$clear = 1;
     }
@@ -961,17 +957,13 @@ sub DoCancel()
 	usage();
     }
     usage()
-	if (@ARGV != 1 || !defined($portal));
+	if (@ARGV != 1);
     my $uuid = shift(@ARGV);
     
     # Check this since Reservation->Lookup() does not validate.
     fatal("Invalid uuid")
 	if (!ValidUUID($uuid));
 
-    my $brand = Brand->Create($portal);
-    if (!defined($brand)) {
-	fatal("Bad branding");
-    }
     my $args = {"uuid" => $uuid, "type" => $type};
     if ($clear) {
 	$args->{"clear"} = 1;
