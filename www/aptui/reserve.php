@@ -69,7 +69,7 @@ if ($edit) {
         }
     }
 }
-if (!$force && ($isadmin || $this_user->admin() || $this_user->stud())) {
+if (!$force || !($isadmin || $this_user->admin() || $this_user->stud())) {
     header("Location: resgroup.php");
     exit();
 }
