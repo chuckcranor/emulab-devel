@@ -115,12 +115,16 @@ $(function ()
 		var resid = 'tr[data-uuid="' + uuid + '"] ';
 		var rrow  = crow.find(resid);
 
-		if (reservation.approved) {
-		    rrow.find(".reservation-status-column .status-approved")
+		if (reservation.deleted) {
+		    rrow.find(".reservation-status-column .status-deleted")
 			.removeClass("hidden");
 		}
-		else if (reservation.canceled == "canceled") {
+		else if (reservation.canceled) {
 		    rrow.find(".reservation-status-column .status-canceled")
+			.removeClass("hidden");
+		}
+		else if (reservation.approved) {
+		    rrow.find(".reservation-status-column .status-approved")
 			.removeClass("hidden");
 		}
 		else {
@@ -132,7 +136,11 @@ $(function ()
 		var resid = 'tr[data-uuid="' + uuid + '"] ';
 		var rrow  = crow.find(resid);
 
-		if (reservation.approved) {
+		if (reservation.canceled) {
+		    rrow.find(".reservation-status-column .status-canceled")
+			.removeClass("hidden");
+		}
+		else if (reservation.approved) {
 		    rrow.find(".reservation-status-column .status-approved")
 			.removeClass("hidden");
 		}
@@ -191,12 +199,16 @@ $(function ()
 		    var resid = 'tr[data-uuid="' + uuid + '"] ';
 		    var rrow  = $('#groups-bytype ' + resid);
 
-		    if (reservation.approved) {
-			rrow.find(".reservation-status-column .status-approved")
+		    if (reservation.canceled) {
+			rrow.find(".reservation-status-column .status-canceled")
 			    .removeClass("hidden");
 		    }
-		    else if (reservation.canceled == "canceled") {
-			rrow.find(".reservation-status-column .status-canceled")
+		    else if (reservation.deleted) {
+			rrow.find(".reservation-status-column .status-deleted")
+			    .removeClass("hidden");
+		    }
+		    else if (reservation.approved) {
+			rrow.find(".reservation-status-column .status-approved")
 			    .removeClass("hidden");
 		    }
 		    else {
@@ -233,7 +245,12 @@ $(function ()
 			var resid = 'tr[data-uuid="' + uuid + '"] ';
 			var rrow  = $('#groups-byrange ' + resid);
 
-			if (reservation.approved) {
+			if (reservation.canceled) {
+			    rrow.find(".reservation-status-column " +
+				      ".status-canceled")
+				.removeClass("hidden");
+			}
+			else if (reservation.approved) {
 			    rrow.find(".reservation-status-column " +
 				      ".status-approved")
 				.removeClass("hidden");
