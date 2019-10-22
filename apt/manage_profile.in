@@ -793,6 +793,12 @@ sub ModifyProfileInternal($$$)
 		$profile->UpdateVersion({$key => $update_args{$key}})
 		    if (exists($update_args{$key}));
 	    }
+	    # Watch for a (parameterized) script no longer being parameterized,
+	    # or even being a script (which would be silly).
+	    if (exists($update_args{"script"}) &&
+		!exists($update_args{"paramdefs"})) {
+		$profile->UpdateVersion({"paramdefs" => undef});
+	    }
 	}
 	foreach my $key ("rspec", "script", "paramdefs",
 			 "repohash", "portal_converted") {
@@ -1058,9 +1064,7 @@ sub UpdateProfileFromRepo()
 	"Profile $profile_pid,$profile_name has been updated ".
 	"from its git repository\n".
 	"as the result of a push webhook.",
-	$project->Brand()->OpsEmailAddress(),
-	# Temporary.
-	"BCC: " . $project->Brand()->LogsEmailAddress());
+	$project->Brand()->OpsEmailAddress());
     
     return 0;
 }

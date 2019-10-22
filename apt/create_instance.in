@@ -418,13 +418,21 @@ if ($profile->repourl()) {
 # active, for display purposes.
 #
 if (defined($paramdefs)) {
-    if (APT_Profile::GetBindings($rspecstr, \$bindings, \$errmsg)) {
-	fatal($errmsg);
+    my $retval = APT_Profile::GetBindings($rspecstr, \$bindings, \$errmsg);
+    if ($retval) {
+	if ($retval < 0) {
+	    fatal($errmsg);
+	}
+	UserError($errmsg);
     }
 }
 elsif ($profile->paramdefs() && $profile->paramdefs() ne "") {
-    if (APT_Profile::GetBindings($rspecstr, \$bindings, \$errmsg)) {
-	fatal($errmsg);
+    my $retval = APT_Profile::GetBindings($rspecstr, \$bindings, \$errmsg);
+    if ($retval) {
+	if ($retval < 0) {
+	    fatal($errmsg);
+	}
+	UserError($errmsg);
     }
 }
 if (defined($bindings)) {

@@ -2214,8 +2214,9 @@ sub GetBindings($$$;$)
     my $dataset = GeniXML::FindNodesNS("n:data_set", $rspec,
 				       $GeniXML::PROFILE_PARAMETERS_NS)->pop();
     if (! defined($dataset)) {
-	$$perrmsg = "No parameter bindings in the rspec";
-	return -1;
+	$$perrmsg = "No parameter bindings in the rspec; ".
+	    "did you call bindParameters()?";
+	return 1;
     }
     # Mistaken data_set in some history entries, so need to process a bit
     # differently
