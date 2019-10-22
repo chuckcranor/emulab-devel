@@ -1718,6 +1718,7 @@ sub DoConvertReservationsToGroups()
 	    $newres->Mark("submitted", str2time($reservation->{'created'}));
 	    if ($reservation->{'approved'} ne "") {
 		$newres->MarkApproved(str2time($reservation->{'approved'}));
+		$newres->MarkApprovedPushed();
 	    }
 	    $resgroup->Unlock();
 	    system("$GROUPCOMMAND refresh " . $resgroup->uuid());

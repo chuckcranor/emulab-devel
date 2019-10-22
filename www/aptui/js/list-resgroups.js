@@ -3,11 +3,14 @@ $(function ()
     'use strict';
 
     var template_list   = ["list-resgroups", "resgroup-list",
+			   "resgroup-list-bytype", "resgroup-list-byrange",
 			   "confirm-modal", "resusage-list", "resusage-graph",
 			   "oops-modal", "waitwait-modal"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
     var mainTemplate    = _.template(templates["list-resgroups"]);
     var listTemplate    = _.template(templates["resgroup-list"]);
+    var bytypeTemplate  = _.template(templates["resgroup-list-bytype"]);
+    var byrangeTemplate = _.template(templates["resgroup-list-byrange"]);
     var usageTemplate   = _.template(templates["resusage-list"]);
     var graphTemplate   = _.template(templates["resusage-graph"]);
     var confirmString   = templates["confirm-modal"];
@@ -168,6 +171,114 @@ $(function ()
 	    placement: 'auto',
 	    container: 'body',
 	});
+
+	if (window.ISADMIN) {
+	    var html = bytypeTemplate({
+		"groups"       : groups,
+		"showcontrols" : false,
+		"showproject"  : true,
+		"showactivity" : true,
+		"showuser"     : true,
+		"showusing"    : true,
+		"showstatus"   : true,
+		"isadmin"      : window.ISADMIN,
+	    });
+	    $("#groups-bytype").html(html);
+
+	    // Status column
+	    _.each(groups, function(group) {
+		_.each(group.clusters, function(reservation, uuid) {
+		    var resid = 'tr[data-uuid="' + uuid + '"] ';
+		    var rrow  = $('#groups-bytype ' + resid);
+
+		    if (reservation.approved) {
+			rrow.find(".reservation-status-column .status-approved")
+			    .removeClass("hidden");
+		    }
+		    else if (reservation.canceled == "canceled") {
+			rrow.find(".reservation-status-column .status-canceled")
+			    .removeClass("hidden");
+		    }
+		    else {
+			rrow.find(".reservation-status-column .status-pending")
+			    .removeClass("hidden");
+		    }
+		});
+	    });
+
+	    // See if we have any ranges.
+	    var ranges = 0;
+	    _.each(groups, function(group) {
+		console.info(group, group.ranges);
+		if (_.size(group.ranges)) {
+		    ranges++;
+		}
+	    });
+	    if (ranges) {
+		html = byrangeTemplate({
+		    "groups"       : groups,
+		    "showcontrols" : false,
+		    "showproject"  : true,
+		    "showactivity" : true,
+		    "showuser"     : true,
+		    "showusing"    : true,
+		    "showstatus"   : true,
+		    "isadmin"      : window.ISADMIN,
+		});
+		$("#groups-byrange").html(html);
+		
+		// Status column
+		_.each(groups, function(group) {
+		    _.each(group.ranges, function(reservation, uuid) {
+			var resid = 'tr[data-uuid="' + uuid + '"] ';
+			var rrow  = $('#groups-byrange ' + resid);
+
+			if (reservation.approved) {
+			    rrow.find(".reservation-status-column " +
+				      ".status-approved")
+				.removeClass("hidden");
+			}
+			else {
+			    rrow.find(".reservation-status-column " +
+				      ".status-pending")
+				.removeClass("hidden");
+			}
+		    });
+		});
+	    }
+
+	    // Format dates with moment before display.
+	    $('#groups-bytype .format-date, #groups-byrange .format-date')
+		.each(function() {
+		    var date = $.trim($(this).html());
+		    if (date != "") {
+			$(this).html(moment(date).format("lll"));
+		    }
+		});
+	    $("#groups-bytype-div").removeClass("hidden");	    
+	    if (ranges) {
+		$("#groups-byrange-div").removeClass("hidden");
+	    }
+	    $('#groups-bytype .tablesorter, #groups-byrange .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+		    // initialize zebra
+		    widgets: ["zebra"],
+		});
+
+	    // This activates the tooltip subsystem.
+	    $('#groups-bytype  [data-toggle="tooltip"], ' +
+	      '#groups-byrange [data-toggle="tooltip"]').tooltip({
+		delay: {"hide" : 250, "show" : 250},
+		placement: 'auto',
+	    });
+	    // This activates the popover subsystem.
+	    $('#groups-bytype  [data-toggle="popover"], ' +
+	      '#groups-byrange [data-toggle="popover"]').popover({
+		placement: 'auto',
+		container: 'body',
+	    });
+	}
     }
 
     // Helper.

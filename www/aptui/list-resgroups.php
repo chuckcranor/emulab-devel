@@ -69,6 +69,7 @@ REQUIRE_SUP();
 REQUIRE_MOMENT();
 AddLibrary("js/resgraphs.js");
 AddTemplateList(array("list-resgroups", "resgroup-list",
+                      "resgroup-list-bytype", "resgroup-list-byrange",
                       "confirm-modal", "resusage-list", "resusage-graph",
                       "oops-modal", "waitwait-modal"));
 SPITREQUIRE("js/list-resgroups.js",
