@@ -248,6 +248,11 @@ sub Install($$$)
 	    ExecQuietFatal("$PREFIX/sbin/setsitevar ".
 			   "general/admission_control 1");
 	};
+	# Default image type.
+	Phase "typelist", "Setting default typelist", sub {
+	    ExecQuietFatal("$PREFIX/sbin/setsitevar ".
+			   "images/default_typelist nuc8650");
+	};
 	
 	#
 	# Add the nodes to the DB.
