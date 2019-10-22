@@ -35,6 +35,7 @@ $(function ()
     var manifests         = {};
     var status_collapsed  = false;
     var status_message    = "";
+    var status_html       = "";
     var statusTemplate    = _.template(statusString);
     var terminateTemplate = _.template(terminateString);
     var prestageTemplate  = _.template(templates['prestage-table']);
@@ -133,8 +134,8 @@ $(function ()
 	    errorURL:           window.HELPFORUM,
 	    lockdown_code:      lockdown_code,
 	};
-	var status_html   = statusTemplate(template_args);
-	$('#status-body').html(status_html);
+	var html = statusTemplate(template_args);
+	$('#status-body').html(html);
 	$('#waitwait_div').html(waitwaitString);
 	$('#oops_div').html(oopsString);
 	$('#register_div').html(registerString);
@@ -369,6 +370,10 @@ $(function ()
 	    window.APT_OPTIONS.gaTabEvent("show",
 					  $(event.target).attr('href'));
 	});
+	$('#prestage-panel .info-button').click(function (event) {
+	    event.preventDefault();
+	    sup.ShowModal('#prestage-info-modal');
+	});
 	
         addTutorialNotifyTab('profile');
         addTutorialNotifyTab('listview');
@@ -473,8 +478,6 @@ $(function ()
 	else {
 	    instanceStatus = json.value.status;
 	}
-	var status_html   = "";
-
 	// The urls can show up at any time cause of async/early return.
 	if (_.has(json.value, "sliverstatus")) {
 	    ShowSliverURLs(json.value.sliverstatus);
@@ -523,15 +526,12 @@ $(function ()
 		status_message = "Your experiment is scheduled to start later";
 	    }
 	    else if (instanceStatus == 'prestage' ||
-		     instanceStatus == 'staging') {
-		status_html = "staging";
+		     instanceStatus == 'staging' ||
+		     instanceStatus == 'staged') {
+		// We label this as provisioning, but change the message
+		// if we have to copy images.
+		status_html = "provisioning";
 		ProgressBarUpdate();
-		status_message = "Copying images to target clusters before " +
-		    "starting experiment";
-		// Show this once when we first get prestage.
-		if (instanceStatus == "prestage") {
-		    sup.ShowModal('#prestage-info-modal');
-		}
 	    }
 	    else if (instanceStatus == 'provisioning') {
 		status_html = "provisioning";
@@ -637,9 +637,6 @@ $(function ()
 		status_message = "The server is temporarily unavailable. " +
 		    "Please check back later.";
 	    }
-	    if (!status_collapsed) {
-		$("#status_message").html(status_message);
-	    }
 	    if (instanceStatus == "quarantined") {
 		$('#explain-quarantine').removeClass("hidden");
 		$('#warnkill-experiment-button').addClass("hidden");
@@ -656,8 +653,6 @@ $(function ()
 		.removeClass('panel-success panel-danger ' +
 			     'panel-warning panel-default panel-info')
 		.addClass(bgtype);
-	    $("#quickvm_status").html(status_html);
-	    $("#quickvm_status_hidden").html(instanceStatus);
 	    UpdateButtons(instanceStatus);
 	}
 	else if (lastStatus == "ready" && instanceStatus == "ready") {
@@ -671,10 +666,6 @@ $(function ()
 		    status_html += " (but some aggregates deferred)";
 		}
 	    }
-	    if ($("#quickvm_status").html() != status_html) {
-		$("#quickvm_status").html(status_html);
-		$("#quickvm_status_hidden").html(instanceStatus);
-	    }
 	}
 	lastStatus = instanceStatus;
 	/*
@@ -683,16 +674,23 @@ $(function ()
 	 */
 	if (_.has(json.value, "prestageStatus")) {
 	    ShowPrestageInfo(json.value.prestageStatus);
-	    if ($('#prestage-info-modal').is(':visible')) {
-		sup.HideModal('#prestage-info-modal');
-	    }
+	    status_message = "Copying images to target clusters " +
+		"before starting experiment";
+	    status_html = "prestaging";
 	}
 	else {
 	    HidePrestageInfo();
-	    if (instanceStatus != "prestage" &&
-		$('#prestage-info-modal').is(':visible')) {
-		sup.HideModal('#prestage-info-modal');
+	}
+
+	// Okay, now we can update if they have not changed.
+	if (!status_collapsed) {
+	    if ($("#status_message").html() != status_message) {
+		$("#status_message").html(status_message);
 	    }
+	}
+	if ($("#quickvm_status").html() != status_html) {
+	    $("#quickvm_status").html(status_html);
+	    $("#quickvm_status_hidden").html(instanceStatus);
 	}
 
 	// Add manifests as we get them or on topo change.
@@ -3563,7 +3561,12 @@ $(function ()
 	//
 	var spinwidth = null;
 	
-	if (instanceStatus == "created" ||
+	if (instanceStatus == "staging" ||
+	    instanceStatus == "prestage" ||
+	    instanceStatus == "staged") {
+	    spinwidth = "15";
+	}
+	else if (instanceStatus == "created" ||
 	    instanceStatus == "provisioning" ||
 	    instanceStatus == "stitching") {
 	    spinwidth = "33";
@@ -3962,13 +3965,12 @@ $(function ()
 	    "status" : status,
 	    "amlist" : amlist,
 	});
-	
 	$('#prestage-panel .panel-body').html(html);
 	$('#prestage-panel').removeClass("hidden");
     }
     function HidePrestageInfo()
     {
-	$('#prestage-panel .panel-body').html("");
+	sup.HideModal('#prestage-info-modal');
 	$('#prestage-panel').addClass("hidden");
     }
 

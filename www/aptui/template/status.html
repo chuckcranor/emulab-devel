@@ -20,6 +20,9 @@ pre {
 	white-space: pre-wrap;
 }
 .panel-body-nopad {
+     padding: 5px;
+ }
+.panel-heading-nopad {
     padding: 5px;
  }
 .table-condensed > thead > tr > th,
@@ -423,8 +426,12 @@ pre {
 	      col-sm-10 col-sm-offset-1
 	      col-xs-12 col-xs-offset-0'>
     <div class="panel panel-info">
-      <div class="panel-heading">
-	<h5>Prestage Progress</h5>
+      <div class="panel-heading panel-heading-nopad">
+	<h5>Prestage Progress
+	  <a href='#' class='btn btn-xs info-button'>
+	    <span class='glyphicon glyphicon-question-sign'
+		  style='margin-bottom: 4px;'></span></a>
+	</h5>
       </div>
       <div class="panel-body">
       </div>
@@ -1583,16 +1590,11 @@ pre {
 	</div>
 	<div class='modal-body' style="font-size: larger;">
 	  <div>
-	    Some of the images used by your profile <em>may</em> need to be
-	    transferred to your resources; we are checking to see if that is
-	    necessary. This will take a minute or two, <b>please be patient!</b>
+	    Some of the images used by your profile need to be
+	    transferred to your resources before we can start your experiment.
+	    This can take a while, <b>please be patient!</b> When all images
+	    have been transferred, your experiment will continue provisioning.
 	  </div>
-	  <div style="margin-top: 10px;">
-	    If any images do need to be transferred, your experiment will be
-	    delayed until those images have been successfully copied over.
-	    This might take a while, <b>please be patient!</b>
-	  </div>
-	  </font>
 	</div>
       </div>
     </div>

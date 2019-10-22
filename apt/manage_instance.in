@@ -4146,6 +4146,28 @@ sub DoPrestageImages()
     }
 
     #
+    # For prestaging, prune out system images, these never need to be
+    # checked and just wastes time.
+    #
+    my %tmp = ();
+    foreach my $urn (keys(%{$imagelist})) {
+	my @list   = @{$imagelist->{$urn}};
+	my @pruned = ();
+
+	foreach my $imageurn (@list) {
+	    my $hrn = GeniHRN->new($imageurn);
+	    next
+		if ($hrn->ospid() eq TBOPSPID());
+
+	    push(@pruned, $imageurn);
+	}
+	if (@pruned) {
+	    $tmp{$urn} = \@pruned;
+	}
+    }
+    $imagelist = \%tmp;
+
+    #
     # The results is a hash, one per aggregate, with a status for the
     # entire aggregate (all images ready, or not ready). Also a hash,
     # one per image, with the status for that image and the current download
