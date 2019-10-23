@@ -764,7 +764,7 @@ CREATE TABLE `apt_reservation_group_history` (
 --
 
 DROP TABLE IF EXISTS `apt_reservation_group_reservation_history`;
-CREATE TABLE `apt_reservation_group_reservation_history (
+CREATE TABLE `apt_reservation_group_reservation_history` (
   `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
   `uuid` varchar(40) NOT NULL default '',
   `aggregate_urn` varchar(128) NOT NULL default '',
