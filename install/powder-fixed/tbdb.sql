@@ -1,3 +1,4 @@
+UPDATE images set architecture='x86_64';
 REPLACE INTO `node_types`
   VALUES ('power','powduino',NULL,NULL,NULL,0,0,0,0,0,0,0,0,0,0,0,0);
 REPLACE INTO `node_type_attributes`
@@ -13,3 +14,12 @@ REPLACE into `outlets` set
       node_id='nuc2',power_id='powduino',outlet='1';
 REPLACE into `outlets` set
       node_id='iris1',power_id='powduino',outlet='2';
+REPLACE into node_attributes
+  VALUES ('nuc1', 'reservation_autoapprove_limit', '0', '0');
+REPLACE into node_attributes
+  VALUES ('nuc2', 'reservation_autoapprove_limit', '0', '0');
+
+REPLACE INTO `interface_types` VALUES ('P2PLTE',100000,1,'NA','NA',1,'Wireless');
+REPLACE INTO `interface_capabilities` VALUES ('P2PLTE','protocols','P2PLTE');
+REPLACE INTO `interface_capabilities` VALUES ('P2PLTE','P2PLTE_defspeed','10000');
+REPLACE INTO `interface_capabilities` VALUES ('P2PLTE','overtheair','1');

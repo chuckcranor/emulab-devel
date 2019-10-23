@@ -218,25 +218,6 @@ sub Install($$$)
 	    };
 	}
 	#
-	# Need to go back and update all the images to the correct
-	# architecture, since that was ignored when the images were
-	# imported (cause no types defined that had an architecture).
-	#
-	Phase "images", "Setting architecture on all images", sub {
-	    my @images = Image->ListAll(undef, TBOPSPID());
-	    foreach my $imagename (@images) {
-		Phase $imagename, $imagename, sub {
-		    my $image = Image->Lookup($imagename);
-		    PhaseFail("lookup failure")
-			if (!defined($image));
-		    
-		    PhaseSucceed("$imagename Done");
-		};
-	    }
-	    PhaseSucceed("Images Done");
-	};
-
-	#
 	# We are a member of the image tracking federation.
 	#
 	Phase "tracker", "Turning on image tracking", sub {
