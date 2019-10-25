@@ -49,6 +49,7 @@ function Do_Reserve()
     global $ajax_args;
     global $suexec_output, $TB_PROJECT_CREATEEXPT;
     global $PORTAL_GENESIS;
+    $this_idx = $this_user->uid_idx();
     $validate = 0;
 
     if (!isset($ajax_args["formfields"])) {
@@ -436,6 +437,7 @@ function Do_Delete()
     global $this_user;
     global $ajax_args;
     global $TBDB_TRUST_GROUPROOT;
+    $this_idx = $this_user->uid_idx();
     $opt = "";
     $resuuid = "";
 
@@ -553,9 +555,10 @@ function Do_Refresh()
     global $this_user;
     global $ajax_args;
     global $TBDB_TRUST_GROUPROOT;
+    $this_idx = $this_user->uid_idx();
     $opt = "";
     sleep(2);
-
+    
     if (!isset($ajax_args["uuid"])) {
 	SPITAJAX_ERROR(-1, "Missing uuid");
 	return -1;
