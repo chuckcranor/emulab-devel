@@ -960,6 +960,11 @@ $(function ()
 	clusters = GetClusterRows();
 	ranges   = GetRangeRows();
 
+	if (! (_.size(clusters) || _.size(ranges))) {
+	    alert("No reservations have been specified");
+	    return;
+	}
+
 	// Clear (hide) previous cluster table errors
 	$('#reserve-request-form .form-group-sm').addClass("hidden");	
 	$('#reserve-request-form tbody').removeClass("has-warning has-error");
@@ -1695,6 +1700,11 @@ $(function ()
 	// Collect the cluster rows into an array.
 	clusters = GetClusterRows();
 	ranges   = GetRangeRows();
+
+	if (! (_.size(clusters) || _.size(ranges))) {
+	    alert("No reservations have been specified");
+	    return;
+	}
 
 	// Clear (hide) previous cluster table errors
 	$('#reserve-request-form .form-group-sm').addClass("hidden");

@@ -151,7 +151,8 @@ $(function ()
 	    });
 	});
 	$('#groups .tablesorter .tablesorter-childRow>td').hide();	
-	$('#groups .tablesorter .show-childrow').click(function (event) {
+	$('#groups .tablesorter .show-childrow .expando').click(function (event) {
+	    event.preventDefault();
 	    // Determine current state for changing the chevron.
 	    var row = $(this).closest('tr')
 		.nextUntil('tr.tablesorter-hasChildRow').find('td')[0];
