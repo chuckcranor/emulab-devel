@@ -150,3 +150,6 @@ CLUSTER_PORTAL="boss.emulab.net"
 CLUSTER_PUBSUBD_SSLPORT=16506
 CLUSTER_PUBSUBD_ALTPORT=16507
 EC2META_ENABLE=1
+
+# Do not send events from bootinfo, we do it from dhcpd instead.
+BOOTINFO_EVENTS=0
