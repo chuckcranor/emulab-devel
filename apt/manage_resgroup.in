@@ -1002,9 +1002,12 @@ sub DoRefresh()
 		# not mark it as deleted, just clean it up.
 		#
 		if (! ($resgroup->Expired() || $resgroup->canceled())) {
-		    $res->MarkDeleted();
-		    # Flag so we do not try to push it out again.
-		    $res->MarkDeletedPushed();
+		    # Do not overwrite the date.
+		    if (!$res->deleted()) {
+			$res->MarkDeleted();
+			# Flag so we do not try to push it out again.
+			$res->MarkDeletedPushed();
+		    }
 		}
 		else {
 		    $res->Delete();
@@ -1211,6 +1214,9 @@ sub DoApprove()
 	my $webtask_id  = $webtask->task_id();
 	my $urn         = $reservation->aggregate_urn();
 	my $remote_uuid = $reservation->remote_uuid();
+	my $portal      = $project->Brand()->brand();
+	# Hmm, might be "classic", which is not a portal. Ick.
+	$portal = "emulab" if ($portal eq "classic");
 	
 	my $command = "$RESCOMMAND -t $webtask_id -a $urn approve ";
 	if ($checkonlyflag) {
@@ -1219,7 +1225,7 @@ sub DoApprove()
 	elsif (defined($options{"F"})) {
 	    $command .= "-F " . $options{"F"} . " ";
 	}
-	$command .= "-p " . $project->Brand()->brand() . " ";
+	$command .= "-p $portal ";
 	$command .= "$remote_uuid";
 
 	print "Running: $command\n";
