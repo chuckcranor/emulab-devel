@@ -54,6 +54,9 @@ my $mailonly  = 0;
 my $opsonly   = 0;
 my $PORT      = 12237;
 my $HOST      = "@POWDER_RFMONITOR_HOST@";
+my $usemax    = 1;
+my $MAXPOWER  = 0; # I like that zero power does not mean zero. 
+my $NOISEFLOOR= -85.0;
 
 #
 # Configure variables
@@ -183,6 +186,11 @@ my %children = ();
 #
 while (1) {
     my $client_socket = $ServerSocket->accept();
+    if (!defined($client_socket)) {
+	print "Hmm, accept returned a bogus value\n";
+	sleep(1);
+	next;
+    }
  
     # get information about a newly connected client
     my $client_address = $client_socket->peerhost();
@@ -377,11 +385,10 @@ sub HandleChild($)
 	# This is bogus, I was expecting the monitor to only send me
 	# messages for actual transmission, not 1000s of lines. So I
 	# need to prune out anything that looks like noise. How do I
-	# do that? Not really sure, but with some playing around, it
-	# appears that -90 DB might be okay. 
+	# do that? 
 	#
 	next
-	    if ($power < -95);
+	    if ($power < $NOISEFLOOR);
 
 	print "Above threshold: $nodeid:$iface: $frequency,$power\n";
 	
@@ -456,8 +463,8 @@ sub HandleChild($)
 	    foreach my $limit (@{$limits}) {
 		if ($measurement->{"frequency"} >= $limit->{"freq_low"} &&
 		    $measurement->{"frequency"} <= $limit->{"freq_high"} &&
-		    # Not doing power comparison yet.
-		    (1 || $measurement->{"power"} <= $limit->{"power"})) {
+		    (($usemax && $measurement->{"power"} <= $MAXPOWER) ||
+		     $measurement->{"power"} <= $limit->{"power"})) {
 		    $inrange = 1;
 		    last;
 		}
