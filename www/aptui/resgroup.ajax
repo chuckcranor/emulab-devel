@@ -394,7 +394,7 @@ function Do_Reserve()
                      "webmanage_resgroup -t " . $webtask->task_id() . " ".
                      "reserve $opt $args", SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
-    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+    #SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 
     if ($retval) {
         #
@@ -512,15 +512,15 @@ function Do_Delete()
                      " delete $opt $uuid $resuuid",
                      SUEXEC_ACTION_IGNORE);
     
-    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+    #SUEXECERROR(SUEXEC_ACTION_CONTINUE);
     $webtask->Refresh();
 
     if (isset($reasonfile)) {
         unlink($reasonfile);
     }
     if ($retval) {
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
         if (!$webtask->exited() || $retval < 0) {
-            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
             SPITAJAX_ERROR(-1, "Internal error deleting reservation");
         }
         else {
@@ -595,11 +595,11 @@ function Do_Refresh()
                      SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
     
-    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+    #SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 
     if ($retval) {
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
         if (!$webtask->exited() || $retval < 0) {
-            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
             SPITAJAX_ERROR(-1, "Internal error refreshing reservation");
         }
         else {
@@ -783,12 +783,12 @@ function Do_Approve()
     }
     $webtask->Refresh();
     
-    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+    #SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 
     if ($retval) {
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
         if (!$webtask->exited() || $retval < 0) {
-            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-            SPITAJAX_ERROR(-1, "Internal error refreshing reservation");
+            SPITAJAX_ERROR(-1, "Internal error approving reservation");
         }
         else {
             SPITAJAX_ERROR(1, $webtask->output());
@@ -859,11 +859,11 @@ function Do_CancelAux($resgroup, $clear, $when)
                      SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
     
-    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+    #SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 
     if ($retval) {
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
         if (!$webtask->exited() || $retval < 0) {
-            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
             SPITAJAX_ERROR(-1, "Internal error canceling reservation.");
         }
         else {
