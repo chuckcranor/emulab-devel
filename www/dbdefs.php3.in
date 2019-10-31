@@ -1157,10 +1157,10 @@ function DBWarn($message)
     if ($DBErrorNumber != 2006 && $DBErrorNumber != 1053 &&
         $DBErrorNumber != 2013 && $DBErrorNumber != 1046 &&
         $DBErrorNumber != 1317) {
-        DBError(false, true);
+        DBError(false, false);
     }
     else {
-        DBError(false, false);
+        DBError(false, true);
     }
 }
 
@@ -1176,10 +1176,10 @@ function DBFatal($message)
     if ($DBErrorNumber != 2006 && $DBErrorNumber != 1053 &&
         $DBErrorNumber != 2013 && $DBErrorNumber != 1046 &&
         $DBErrorNumber != 1317) {
-        DBError(true, true);
+        DBError(true, false);
     }
     else {
-        DBError(true, false);
+        DBError(true, true);
     }
 }
 
@@ -1193,8 +1193,14 @@ function DBError($fatal, $serverdead)
     global      $session_interactive, $session_errorhandler;
     global      $TBMAIL_OPS, $TBMAILADDR, $TBMAILADDR_OPS;
     $script = urldecode($_SERVER['REQUEST_URI']);
+
+    error_log("$fatal, $serverdead, $DBErrorNumber, $DBErrorString");
     
     if (!$serverdead) {
+        # print backtrace
+        $e = new Exception();
+        $trace = $e->getTraceAsString();
+        
         $text = "$message - In " . $_SERVER["PHP_SELF"] . "\n" .
   	    "$DBErrorString\n";
 
@@ -1203,7 +1209,8 @@ function DBError($fatal, $serverdead)
                "WEB DB ERROR REPORT",
                "\n".
                "In $script\n\n".
-               "$text",
+               "$text\n\n".
+               "$trace\n",
                "From: $TBMAIL_OPS");
     }
     if (!$session_interactive) {
