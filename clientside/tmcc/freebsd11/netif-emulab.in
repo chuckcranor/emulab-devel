@@ -254,6 +254,18 @@ cnet_start()
 		if [ -e $ELAB_BOOTDIR/controlif ]; then
 		    _cif=`cat $ELAB_BOOTDIR/controlif`
 		    echo "Emulab control net is $_cif"
+		    #
+		    # XXX much like the nfe, it appears that bnxt devices
+		    # can get hung, albeit after recognizing that it is
+		    # the control net. Like nfe, a simple down/up sequence
+		    # seems to get things moving again.
+		    #
+		    case $_cif in
+		    bnxt*)
+			echo "`date`: $_cif: kicking interface ..."
+			ifconfig $_cif down; sleep 2; ifconfig $_cif up
+			;;
+		    esac
 		else
 		    #
 		    # XXX hack for nfe device on PRObE nodes. The PRObE
