@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,6 +30,12 @@ include("imageid_defs.php");
 #
 $this_user = CheckLogin($check_status);
 $reqargs   = RequiredPageArguments("node_type", PAGEARG_STRING);
+$optargs   = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
+
+if (!$classic) {
+    header("Location: apt/show-nodetype.php?type=$node_type");
+    return;
+}
 
 # Sanitize.
 if (!preg_match("/^[-\w]+$/", $node_type)) {

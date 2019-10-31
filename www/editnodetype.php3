@@ -56,7 +56,14 @@ $optargs = OptionalPageArguments("submit",     PAGEARG_STRING,
 				 "attributes", PAGEARG_ARRAY,
 				 "newattribute_type",  PAGEARG_STRING,
 				 "newattribute_name",  PAGEARG_STRING,
-				 "newattribute_value", PAGEARG_ANYTHING);
+				 "newattribute_value", PAGEARG_ANYTHING,
+                                 "classic", PAGEARG_BOOLEAN);
+
+if (isset($node_type) && !$classic) {
+    header("Location: apt/show-nodetype.php?type=$node_type");
+    return;
+}
+
 if (!isset($node_type)) { $node_type = ""; }
 if (!isset($node_class)) { $node_class = "pc"; }
 if (!isset($attributes)) { $attributes = array(); }

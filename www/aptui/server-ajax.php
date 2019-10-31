@@ -484,6 +484,25 @@ $routing = array("geni-login" =>
                                                      "Do_SaveLogEntry",
                                                  "GetHistory" =>
                                                      "Do_GetHistory")),
+		 "nodetype" =>
+			array("file"    => "nodetype.ajax",
+			      "guest"   => false,
+			      "methods" => array("GetInfo" =>
+                                                     "Do_GetInfo",
+                                                 "SaveFlag" =>
+                                                     "Do_SaveFlag",
+                                                 "SaveFeature" =>
+                                                     "Do_SaveFeature",
+                                                 "SaveAttribute" =>
+                                                     "Do_SaveAttribute",
+                                                 "SaveOSImage" =>
+                                                     "Do_SaveOSImage",
+                                                 "DeleteFeature" =>
+                                                     "Do_DeleteFeature",
+                                                 "DeleteAttribute" =>
+                                                     "Do_DeleteAttribute",
+                                                 "DeleteOSImage" =>
+                                                     "Do_DeleteOSImage")),
 		 "vlan" =>
 			array("file"    => "vlan.ajax",
 			      "guest"   => false,
