@@ -2482,7 +2482,8 @@ $(function ()
 	if (found || isadmin || window.ISSTUD || window.ISPOWDER)
 	{
 	  $(this).prop('disabled', false);
-	  if (allowed.length == 1) {
+	  if (allowed.length == 1 ||
+	      (window.ISPOWDER && value == "Emulab")) {
 	      $(this).attr('selected', "selected");
 	      // This does not appear to do anything, at least in Chrome
 	      $(this).prop('selected', true);
