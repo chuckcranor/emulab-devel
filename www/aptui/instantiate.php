@@ -409,7 +409,7 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "    window.ISADMIN    = $isadmin;\n";
     $isstud = (isset($this_user) && STUDLY() ? 1 : 0);
     echo "    window.ISSTUD    = $isstud;\n";
-    $multisite = (isset($this_user) && $ISCLOUD ? 1 : 0);
+    $multisite = (isset($this_user) && ($ISCLOUD || $ISPOWDER) ? 1 : 0);
     echo "    window.MULTISITE  = $multisite;\n";
     $doconstraints = $TBMAINSITE;
     echo "    window.DOCONSTRAINTS = $doconstraints;\n";
