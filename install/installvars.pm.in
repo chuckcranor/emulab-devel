@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2018 University of Utah and the Flux Group.
+# Copyright (c) 2003-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -208,6 +208,7 @@ $OURDOMAIN		= '@OURDOMAIN@';
 $USERNODE		= '@USERNODE@';
 $FSNODE			= '@FSNODE@';
 $BOSSNODE		= '@BOSSNODE@';
+$WWWHOST		= '@WWWHOST@';
 $BOSSNODE_IP		= '@BOSSNODE_IP@';
 $USERNODE_IP		= '@USERNODE_IP@';
 $FSNODE_IP		= '@FSNODE_IP@';

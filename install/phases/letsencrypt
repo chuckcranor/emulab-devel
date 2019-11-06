@@ -1,0 +1,63 @@
+#
+# The template
+#
+use strict;
+use libinstall;
+use installvars;
+
+my $CHALLENGEDIR = "$TBROOT/www/.well-known/acme-challenge";
+my $APACHEPREFIX  = ("$APACHE_VERSION" == "22" ? "apache22" :
+		     "$APACHE_VERSION" == "24" ? "apache24" : "apache");
+
+sub Install($$$)
+{
+    my ($server, $isupdate, $impotent) = @_;
+
+    # Replace if this script does an update for ip/domain.
+    return 0
+	if ($isupdate);
+
+    Phase "letsencrypt", "Setting up letsencrypt web certificate", sub {
+	Phase "certbot", "Installing py27-certbot", sub {
+	    DoneIfPackageInstalled("py27-certbot", 0);
+	    $ENV{"ASSUME_ALWAYS_YES"} = "true";
+	    ExecQuietFatal("pkg install py27-certbot");
+	};
+	Phase "mkdir", "Creating $CHALLENGEDIR", sub {
+	    DoneIfExists($CHALLENGEDIR);
+	    ExecQuietFatal("mkdir -p $CHALLENGEDIR");
+	};
+	my $CERTBOT = "certbot-2.7 certonly --webroot -w /usr/testbed/www ".
+	    "-d $OURDOMAIN --agree-tos -m $TBOPSEMAIL ";
+
+	if (ISBOSSNODE($server)) {
+	    $CERTBOT .=
+		"-d $WWWHOST -d $BOSSNODE ".
+		"--renew-hook '$APACHE_START_COMMAND graceful www'";
+	}
+	else {
+	    $CERTBOT .=
+		"-d $BOSSNODE ops.${OURDOMAIN} ".
+		"--renew-hook $APACHE_START_COMMAND graceful";
+	}
+	Phase "certbot", "Setting up certbot", sub {
+	    ExecQuietFatal($CERTBOT);
+	};
+	Phase "rcconf", "Updating $RCCONF", sub {
+	    my $new = "${APACHEPREFIX}_flags=\"\$${APACHEPREFIX}_flags ".
+		"-DLETSENCRYPT\"";
+	    DoneIfEdited($RCCONF);
+	    AppendToFileFatal($RCCONF, $new);
+	};
+	Phase "crontab", "Editing $CRONTAB", sub {
+	    DoneIfEdited($CRONTAB);
+	    AppendToFileFatal($CRONTAB,
+		      "1  \t10\t*\t*\t*\troot\t/usr/local/bin/certbot renew");
+	};
+    };
+    return 0;
+}
+
+# Local Variables:
+# mode:perl
+# End:
