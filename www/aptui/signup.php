@@ -527,7 +527,7 @@ if (!$this_user) {
     # Flag to the backend.
     $args["portal"]	   = $PORTAL_GENESIS;
     if ($ISPOWDER) {
-        $args["address1"]  = $formfields["address1"];
+        $args["address"]   = $formfields["address1"];
         if (isset($formfields["address2"])) {
             $args["address2"] = $formfields["address2"];
         }
@@ -555,7 +555,7 @@ if (!$this_user) {
 	    TBERROR("Could not add new user to project group $pid", 1);
 	}
 	$group->NewMemberNotify($user);
-	header("Location: instantiate.php");
+        header("Location: signup.php?finished=1");
 	return;
     }
 
