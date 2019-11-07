@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,7 +30,7 @@ $page_title = "AUP";
 #
 # Only POWDER.
 #
-$AUPURL = "https://www.powderwireless.net/powder/templates/powder-aup.md";
+$AUPURL = "https://www.powderwireless.net/powder/templates/powder-aup-20.md";
 
 #
 # Get current user.

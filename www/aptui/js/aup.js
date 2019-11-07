@@ -2,13 +2,14 @@ $(function ()
 {
     'use strict';
     var template_list   = ["aup"];
-    var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
+    var templates       = APT_OPTIONS.fetchTemplateList(template_list);
+    var mainTemplate    = _.template(templates["aup"]);
 
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
 
-	$('#main-body').html(templates["aup"]);
+	$('#main-body').html(mainTemplate({}));
 	$('#aup-panel .scrollable-panel').css("height",
 					      $(document).height() - 300);
 	$('#aup-panel .scrollable-panel').css("max-height",
@@ -31,6 +32,7 @@ $(function ()
 	    event.preventDefault();
 	    Accept();
 	});
+	sup.ShowModal("#mustaccept-modal");
     }
 
     function Accept()
