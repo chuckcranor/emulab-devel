@@ -84,12 +84,14 @@
 	  (<a class="toggle" data-name="project_disable">Toggle</a>)
 	</td>
       </tr>
-      <tr>
-	<td>Bound to Portal</td>
-	<td><% if (fields.bound_portal) { %>Yes<% } else { %>No<% } %>
-	  (<a class="toggle" data-name="bound_portal">Toggle</a>)
-	</td>
-      </tr>
+      <% if (window.MAINSITE) { %>
+	<tr>
+	  <td>Bound to Portal</td>
+	  <td><% if (fields.bound_portal) { %>Yes<% } else { %>No<% } %>
+	    (<a class="toggle" data-name="bound_portal">Toggle</a>)
+	  </td>
+	</tr>
+      <% } %>
     <% } %>
     <tr>
       <td colspan="2"><center>Long Description</center></td>

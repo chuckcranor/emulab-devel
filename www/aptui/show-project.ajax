@@ -222,6 +222,7 @@ function Do_ProjectProfile()
     $results["created"]     = DateStringGMT($target_project->created());
     $results["approved"]    = $target_project->approved() ? true : false;
     $results["disabled"]    = $target_project->disabled() ? true : false;
+    $results["bound_portal"]= $target_project->bound_portal() ? true : false;
     $results["url"]         = $target_project->URL();
     $results["description"] = $target_project->name();
     $results["why"]         = $target_project->why();
@@ -325,6 +326,16 @@ function Do_Toggle()
                "From: $TBMAIL_OPS\n".
                "Bcc: $TBMAIL_AUDIT\n".
                "Errors-To: $TBMAIL_WWW");
+    }
+    elseif ($toggle == "bound_portal") {
+        $target_project->SetBoundPortal($target_project->bound_portal() ? 0 : 1);
+        if ($target_project->bound_portal()) {
+            $target_project->GetLeader()->SetBoundPortal(1);
+            $members = $target_project->MemberList();
+            foreach ($members as $user) {
+                $user->SetBoundPortal(1);
+            }
+        }
     }
     else {
 	SPITAJAX_ERROR(-1, "Unknown toggle name: $toggle");

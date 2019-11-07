@@ -47,12 +47,14 @@
 	  <td>Portal</td>
 	  <td><%= fields.portal %></td>
 	</tr>
-	<tr>
-	  <td>Bound to Portal</td>
-	  <td><% if (fields.bound_portal) { %>Yes<% } else { %>No<% } %>
-	    (<a class="toggle" data-name="bound_portal">Toggle</a>)
-	  </td>
-	</tr>
+	<% if (window.MAINSITE) { %>
+	  <tr>
+	    <td>Bound to Portal</td>
+	    <td><% if (fields.bound_portal) { %>Yes<% } else { %>No<% } %>
+	      (<a class="toggle" data-name="bound_portal">Toggle</a>)
+	    </td>
+	  </tr>
+	<% } %>
       <% } %>
       <tr>
 	<td>Created</td>
