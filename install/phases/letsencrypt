@@ -60,6 +60,9 @@ sub Install($$$)
 	    AppendToFileFatal($CRONTAB,
 		      "1  \t10\t*\t*\t*\troot\t/usr/local/bin/certbot renew");
 	};
+	Phase "restarting", "Restarting Apache server", sub {
+	    ExecQuietFatal("$APACHE_START_COMMAND restart www");
+	};
     };
     return 0;
 }
