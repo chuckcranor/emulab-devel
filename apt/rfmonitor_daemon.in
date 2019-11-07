@@ -146,6 +146,8 @@ if (! $impotent) {
 # Tempdir for storing data between messages. Removed at exit.
 #
 my $TEMPDIR = tempdir("/tmp/rfmonitor.XXXXX", CLEANUP => 1);
+print "Tempdir is $TEMPDIR\n";
+system("/bin/chmod 755 $TEMPDIR");
 
 #
 # Setup a signal handler for newsyslog.
@@ -280,7 +282,7 @@ sub HandleChild($)
 	    my $stamp = $measurement->{'timestamp'};
 
 	    next
-		if (time() - $stamp > 60);
+		if (time() - $stamp > 120);
 
 	    $tmp->{$key} = $measurement;
 	}
