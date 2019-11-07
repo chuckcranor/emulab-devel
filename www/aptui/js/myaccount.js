@@ -59,6 +59,9 @@ $(function ()
 	    SubmitForm();
 	    return false;
 	});
+	if (window.ADDREQUIRED) {
+	    sup.ShowModal("#addrequired-modal");
+	}
     }
     
     //
@@ -71,7 +74,12 @@ $(function ()
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
-	    window.location.reload();	    
+	    if (window.REFERRER === undefined) {
+		window.location.reload();	    		
+	    }
+	    else {
+		window.location.replace(window.REFERRER);
+	    }
 	};
 	var checkonly_callback = function(json) {
 	    if (json.code) {

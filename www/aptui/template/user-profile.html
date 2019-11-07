@@ -25,6 +25,20 @@
       <td>Affiliation</td>
       <td><%= fields.affiliation %></td>
     </tr>
+    <% if (window.ISPOWDER) { %>
+      <% if (fields.address1 != "") { %>
+	<tr>
+	  <td>Address</td>
+	  <td><%= fields.address1 %></td>
+	</tr>
+      <% } %>
+      <% if (fields.address2 != "") { %>
+	<tr>
+	  <td>Address Line 2</td>
+	  <td><%= fields.address2 %></td>
+	</tr>
+      <% } %>
+    <% } %>
     <tr>
       <td>Country</td>
       <td><%= fields.country %></td>
@@ -37,6 +51,14 @@
       <td>City</td>
       <td><%= fields.city %></td>
     </tr>
+    <% if (window.ISPOWDER) { %>
+      <% if (fields.zip != "") { %>
+	<tr>
+	  <td>Zip/Postal Code</td>
+	  <td><%= fields.zip %></td>
+	</tr>
+      <% } %>
+    <% } %>
     <tr>
       <td>Last Login</td>
       <td class="format-date"><%= fields.last_weblogin %></td>

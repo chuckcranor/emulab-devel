@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -195,6 +195,7 @@ my %xmlfields =
      "URL"		=> ["usr_URL",		$SLOT_OPTIONAL],
      "email"		=> ["usr_email",	$SLOT_OPTIONAL],
      "address"		=> ["usr_addr",		$SLOT_OPTIONAL],
+     "address1"		=> ["usr_addr",		$SLOT_OPTIONAL],
      "address2"		=> ["usr_addr2",	$SLOT_OPTIONAL],
      "city"		=> ["usr_city",		$SLOT_OPTIONAL],
      "state"		=> ["usr_state",	$SLOT_OPTIONAL],

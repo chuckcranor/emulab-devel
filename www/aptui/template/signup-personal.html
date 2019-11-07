@@ -21,6 +21,18 @@
 	 class="form-control format-me" data-key="affiliation"
 	 placeholder="Institutional Affiliation" type="text">
 </div>
+<% if (window.ISPOWDER) { %>
+<div class="form-group sidebyside-form" >
+  <input name="formfields[address1]" value="<%- formfields.address1 %>"
+	 class="form-control format-me" data-key="address1"
+	 placeholder="Home Address Line 1" type="text">
+</div>
+<div class="form-group sidebyside-form" >
+  <input name="formfields[address2]" value="<%- formfields.address2 %>"
+	 class="form-control format-me" data-key="address2"
+	 placeholder="Home Address Line 2" type="text">
+</div>
+<% } %>
 <div class="form-group sidebyside-form" >
   <select id="signup_countries" name="formfields[country]"
           class="form-control format-me bfh-countries"
@@ -36,11 +48,28 @@
           placeholder="State" data-blank="false" data-key="state">
   </select>
 </div>
-<div class="form-group sidebyside-form" >
-  <input name="formfields[city]" value="<%- formfields.city %>"
-	 class="form-control format-me" data-key="city"
-	 placeholder="City" type="text">
-</div>
+<% if (window.ISPOWDER) { %>
+  <div class="form-group sidebyside-form" >
+    <div class="row">
+      <div class="col-xs-8" style="padding-right: 5px;">
+	<input name="formfields[city]" value="<%- formfields.city %>"
+	       class="form-control format-me" data-key="city"
+	       placeholder="City" type="text">
+      </div>
+      <div class="col-xs-4" style="padding-left: 5px;">  
+	<input name="formfields[zip]" value="<%- formfields.zip %>"
+	       class="form-control format-me" data-key="zip"
+	       placeholder="Zip/Postal Code" type="text">
+      </div>
+    </div>
+  </div>
+<% } else { %>
+  <div class="form-group sidebyside-form" >
+    <input name="formfields[city]" value="<%- formfields.city %>"
+	   class="form-control format-me" data-key="city"
+	   placeholder="City" type="text">
+  </div>
+<% } %>
 <% if (!promoting) { %>
   <div class="form-group sidebyside-form" >
     <div class="format-me" data-key="keyfile">

@@ -44,6 +44,22 @@
 		     data-label="Institutional Affiliation"
 		     placeholder="Institutional Affiliation" type="text">
 	    </div>
+	    <% if (window.ISPOWDER) { %>
+	      <div class="form-group">
+		<input name="address1" value="<%- formfields.address1 %>"
+		       class="form-control format-me"
+		       data-key="address1"
+		       data-label="Home Address Line 1"
+		       placeholder="Home Address Line 1" type="text">
+	      </div>
+	      <div class="form-group">
+		<input name="address2" value="<%- formfields.address2 %>"
+		       class="form-control format-me"
+		       data-key="address2"
+		       data-label="Home Address Line 2"
+		       placeholder="Home Address Line 2" type="text">
+	      </div>
+	    <% } %>
 	    <div class="form-group">
 	      <select id="signup_countries" name="country"
 		      class="form-control format-me bfh-countries"
@@ -63,21 +79,68 @@
 		       data-key="state">
 	      </select>
 	    </div>
-	    <div class="form-group">
-	      <input name="city" value="<%- formfields.city %>"
-		     class="form-control format-me"
-		     data-key="city"
-		     data-label="City"
-		     placeholder="City"
-		     type="text">
-	      
-	    </div>
+	    <% if (window.ISPOWDER) { %>
+	      <div class="row">
+		<div class="col-xs-8" style="padding-right: 5px;">  
+		  <div class="form-group">
+		    <input name="city" value="<%- formfields.city %>"
+			   class="form-control format-me"
+			   data-key="city"
+			   data-label="City"
+			   placeholder="City"
+			   type="text">
+		  </div>
+		</div>
+		<div class="col-xs-4" style="padding-left: 5px;">  
+		  <div class="form-group">
+		    <input name="zip" value="<%- formfields.zip %>"
+			   class="form-control format-me"
+			   data-key="zip"
+			   data-label="Zip/Postal Code"
+			   placeholder="Zip/Postal Code"
+			   type="text">
+		  </div>
+		</div>
+	      </div>
+	    <% } else { %>
+	      <div class="form-group">
+		<input name="city" value="<%- formfields.city %>"
+		       class="form-control format-me"
+		       data-key="city"
+		       data-label="City"
+		       placeholder="City"
+		       type="text">
+	      </div>
+	    <% } %>
             <button class='btn btn-primary btn-sm pull-right'
 		    style="margin-top: 15px;"
 		    id='submit_button' disabled
 		    type='submit' name='modify'>Save</button>
 	  </fieldset>
 	</form>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='addrequired-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-header'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<center><h4>Please update your profile</h4></center>
+      </div>
+      <div class='modal-body'>
+	<p class="lead">
+	  <% if (window.ISPOWDER) { %>
+	    As the POWDER platform transitions into availability of
+	    general over-the-air operation, platform users will need to
+	    update their personal information.
+	  <% } else { %>
+	    Please take a moment to fill out the missing parts of your
+	    profile. 
+	  <% } %>
+	</p>
       </div>
     </div>
   </div>

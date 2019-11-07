@@ -331,6 +331,7 @@ class User
     function email()		{ return $this->field("usr_email"); }
     function URL()		{ return $this->field("usr_URL"); }
     function addr()		{ return $this->field("usr_addr"); }
+    function addr1()		{ return $this->field("usr_addr"); }
     function addr2()		{ return $this->field("usr_addr2"); }
     function city()		{ return $this->field("usr_city"); }
     function state()		{ return $this->field("usr_state"); }
@@ -777,7 +778,16 @@ class User
                      "              CONCAT(',', '$portal', ','), ',')) ".
                      "where uid_idx='$uid_idx'");
     }
-
+    #
+    # Does the user need to fill out the extended address fields
+    #
+    function RequireAddress() {
+        if ($this->addr1() == "" || $this->zip() == "") {
+            return 1;
+        }
+        return 0;
+    }
+    
     #
     # Find all the project licenses this user needs to accept (as leader
     # of a project that is required to accept a license).

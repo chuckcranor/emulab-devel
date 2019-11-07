@@ -203,6 +203,11 @@ if (! isset($create)) {
         $defaults["state"]       = $this_user->state();
         $defaults["country"]     = $this_user->country();
         $defaults["affiliation"] = $this_user->affil();
+        $defaults["address1"]    = $this_user->addr1();
+        $defaults["address2"]    = $this_user->addr2();
+        $defaults["zip"]         = $this_user->zip();
+        $defaults["phone"]       = $this_user->phone();
+
     }
     else {
         if (isset($uid)) {
@@ -313,6 +318,27 @@ if (!$this_user || $promoting) {
     }
     elseif (! TBvalid_city($formfields["city"])) {
 	$errors["city"] = TBFieldErrorString();
+    }
+    if ($ISPOWDER) {
+        if (!isset($formfields["address1"]) ||
+            strcmp($formfields["address1"], "") == 0) {
+            $errors["address1"] = "Missing Field";
+        }
+        elseif (! TBvalid_addr($formfields["address1"])) {
+            $errors["address1"] = TBFieldErrorString();
+        }
+        if (isset($formfields["address2"]) &&
+            $formfields["address2"] != "" && 
+            !TBvalid_addr($formfields["address2"])) {
+            $errors["address2"] = TBFieldErrorString();
+        }
+        if (!isset($formfields["zip"]) ||
+            strcmp($formfields["zip"], "") == 0) {
+            $errors["zip"] = "Missing Field";
+        }
+        elseif (! TBvalid_zip($formfields["zip"])) {
+            $errors["zip"] = TBFieldErrorString();
+        }
     }
     if (!$promoting) {
         if (!isset($formfields["password1"]) ||
@@ -468,6 +494,9 @@ if ($this_user && $promoting) {
     $args["country"]       = $formfields["country"];
     $args["shell"]         = 'tcsh';
     $args["affiliation"]   = $formfields["affiliation"];
+    $args["address1"]      = $formfields["address1"];
+    $args["address2"]      = $formfields["address2"];
+    $args["zip"]           = $formfields["zip"];
 
     if (! User::ModUserInfo($this_user, $this_user->uid(), $args, $errors)) {
         # Always respit the form so that the form fields are not lost.
@@ -497,6 +526,13 @@ if (!$this_user) {
     $args["passphrase"]    = $formfields["password1"];
     # Flag to the backend.
     $args["portal"]	   = $PORTAL_GENESIS;
+    if ($ISPOWDER) {
+        $args["address1"]  = $formfields["address1"];
+        if (isset($formfields["address2"])) {
+            $args["address2"] = $formfields["address2"];
+        }
+        $args["zip"]       = $formfields["zip"];
+    }
 
     #
     # Backend verifies pubkey and returns error. 

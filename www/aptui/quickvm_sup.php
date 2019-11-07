@@ -86,11 +86,11 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
 {
     global $PORTAL_MANUAL, $PORTAL_HELPFORUM, $APTMAIL, $APTMAILTO;
     global $TBMAINSITE, $APTTITLE, $FAVICON, $APTLOGO, $APTSTYLE, $ISAPT;
-    global $GOOGLEUA, $ISCLOUD, $TBBASE;
+    global $GOOGLEUA, $ISCLOUD, $TBBASE, $PORTAL_GENESIS;
     global $ISPNET, $ISPOWDER, $ISEMULAB;
     global $login_user, $login_status, $SUPPORT, $FIRSTUSER;
     global $disable_accounts, $page_title, $drewheader, $embedded;
-    global $UI_EXTERNAL_ACCOUNTS;
+    global $UI_EXTERNAL_ACCOUNTS, $BrandMapping;
     $cleanmode = (isset($_COOKIE['cleanmode']) &&
                   $_COOKIE['cleanmode'] == 1 ? 1 : 0);
     $showmenus = 0;
@@ -101,6 +101,8 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     $height = ($thinheader ? 150 : 250);
     $drewheader = 1;
     $nonav = 0;
+    $parsed_url = parse_url($_SERVER['REQUEST_URI']);
+    $script = basename($parsed_url["path"]);
 
     #
     # Figure out who is logged in, if anyone.
@@ -113,24 +115,41 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     if ($login_user && !($login_status & CHECKLOGIN_WEBONLY)) {
         $showmenus = 1;
     }
-    if ($login_user && $login_user->RequireAUP() &&
-        $page_title != "AUP" && $page_title != "Logout") {
-        $referrer = urlencode($_SERVER['REQUEST_URI']);
-        header("Location: portal-aup.php?referrer=$referrer");
-        return;
-    }
-    if ($login_user && $login_user->Licenses() &&
-        $page_title != "Licenses" && $page_title != "Logout") {
-        $referrer = urlencode($_SERVER['REQUEST_URI']);
-        header("Location: licenses.php?referrer=$referrer");
+    if ($TBMAINSITE && $login_user &&
+        $login_user->bound_portal() && $login_user->portal() &&
+        $login_user->portal() != $PORTAL_GENESIS) {
+        $portal_url  = $BrandMapping[$login_user->portal()];
+        $portal_url .= str_replace("/portal/", "/", $_SERVER['REQUEST_URI']);
+        header("Location: $portal_url");
         return;
     }
     if ($login_user && $login_uid == "powdstop") {
         $cleanmode = 1;
         $nonav = 1;
-        if ($page_title != "Logout" &&
-            $page_title != "Powder Shutdown") {
+        if ($script != "logout.php" &&
+            $script != "powder-shutdown.php") {
             header("Location: powder-shutdown.php");
+        }
+    }
+    elseif (0 && $login_user && $ISPOWDER && $login_user->RequireAddress()) {
+        if ($script != "myaccount.php" && $script != "logout.php") {
+            $referrer = urlencode($_SERVER['REQUEST_URI']);
+            header("Location: myaccount.php?addrequired=1&referrer=$referrer");
+            return;
+        }
+    }
+    elseif ($login_user && $login_user->RequireAUP()) {
+        if ($script != "portal-aup.php" && $script != "logout.php") {
+            $referrer = urlencode($_SERVER['REQUEST_URI']);
+            header("Location: portal-aup.php?referrer=$referrer");
+            return;
+        }
+    }
+    elseif ($login_user && $login_user->Licenses()) {
+        if ($script != "licenses.php" && $script != "logout.php") {
+            $referrer = urlencode($_SERVER['REQUEST_URI']);
+            header("Location: licenses.php?referrer=$referrer");
+            return;
         }
     }
 

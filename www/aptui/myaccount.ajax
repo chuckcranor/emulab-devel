@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -77,7 +77,7 @@ function CheckForm()
 {
     global $this_user, $target_user;
     global $ajax_args;
-    global $APTMAIL;
+    global $APTMAIL, $ISPOWDER;
     
     $formfields = $ajax_args["formfields"];
     $errors = array();
@@ -139,6 +139,27 @@ function CheckForm()
     elseif (! TBvalid_city($formfields["city"])) {
         $errors["city"] = TBFieldErrorString();
     }
+    if ($ISPOWDER) {
+        if (!isset($formfields["address1"]) ||
+            strcmp($formfields["address1"], "") == 0) {
+            $errors["address1"] = "Missing Field";
+        }
+        elseif (! TBvalid_addr($formfields["address1"])) {
+            $errors["address1"] = TBFieldErrorString();
+        }
+        if (isset($formfields["address2"]) &&
+            $formfields["address2"] != "" && 
+            !TBvalid_addr($formfields["address2"])) {
+            $errors["address2"] = TBFieldErrorString();
+        }
+        if (!isset($formfields["zip"]) ||
+            strcmp($formfields["zip"], "") == 0) {
+            $errors["zip"] = "Missing Field";
+        }
+        elseif (! TBvalid_zip($formfields["zip"])) {
+            $errors["zip"] = TBFieldErrorString();
+        }
+    }
 
     # Present these errors before we call out to do anything else.
     if (count($errors)) {
@@ -197,7 +218,7 @@ function CheckForm()
 function Do_Update()
 {
     global $this_user, $target_user;
-    global $ajax_args;
+    global $ajax_args, $ISPOWDER;
     
     # For email verification if needed.
     session_start();
@@ -237,6 +258,18 @@ function Do_Update()
     }
     if ($formfields["affiliation"] != $target_user->affil()) {
         $args["affiliation"] = $formfields["affiliation"];
+    }
+    if ($ISPOWDER) {
+        if ($formfields["address1"] != $target_user->addr1()) {
+            $args["address1"] = $formfields["address1"];
+        }
+        if (isset($formfields["address2"]) &&
+            $formfields["address2"] != $target_user->addr2()) {
+            $args["address2"] = $formfields["address2"];
+        }
+        if ($formfields["zip"] != $target_user->zip()) {
+            $args["zip"] = $formfields["zip"];
+        }
     }
     if (count($args) &&
         !User::ModUserInfo($target_user,
