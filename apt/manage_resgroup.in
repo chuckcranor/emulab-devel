@@ -1280,6 +1280,16 @@ sub DoApprove()
 		    $blob->{'errcode'} = $webtask->exitcode();
 		    $blob->{'errmesg'} = $webtask->output();
 		    $errors++;
+		    #
+		    # If we were actually trying to approve, and it is
+		    # refused, then rescind the approval since leaving
+		    # it approved makes it impossible to change it.
+		    #
+		    if (!$checkonlyflag &&
+			$webtask->exitcode() == GENIRESPONSE_REFUSED) {
+			print "Approval refused for $res at target cluster\n";
+			$res->ClearApproved();
+		    }
 		}
 		next;
 	    }
