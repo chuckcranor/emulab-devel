@@ -17,6 +17,8 @@ sub Install($$$)
     return 0
 	if ($isupdate);
 
+    SET_TESTBED_VERSION("letsencrypt");
+    
     Phase "letsencrypt", "Setting up letsencrypt web certificate", sub {
 	Phase "certbot", "Installing py27-certbot", sub {
 	    DoneIfPackageInstalled("py27-certbot", 0);
@@ -28,19 +30,23 @@ sub Install($$$)
 	    ExecQuietFatal("mkdir -p $CHALLENGEDIR");
 	};
 	my $CERTBOT = "certbot-2.7 certonly --webroot -w /usr/testbed/www ".
-	    "-d $OURDOMAIN --agree-tos -m $TBOPSEMAIL ";
+	    "--agree-tos -m $TBOPSEMAIL ";
+	my $CERT    = "/usr/local/etc/letsencrypt/live/";
 
 	if (ISBOSSNODE($server)) {
 	    $CERTBOT .=
-		"-d $WWWHOST -d $BOSSNODE ".
+		"-d $OURDOMAIN -d $WWWHOST -d $BOSSNODE ".
 		"--renew-hook '$APACHE_START_COMMAND graceful www'";
+	    $CERT .= "$OURDOMAIN/cert.pem";
 	}
 	else {
 	    $CERTBOT .=
-		"-d $BOSSNODE ops.${OURDOMAIN} ".
-		"--renew-hook $APACHE_START_COMMAND graceful";
+		"-d $USERNODE -d ops.${OURDOMAIN} ".
+		"--renew-hook '$APACHE_START_COMMAND graceful'";
+	    $CERT .= "$USERNODE/cert.pem";
 	}
 	Phase "certbot", "Setting up certbot", sub {
+	    DoneIfExists($CERT);
 	    ExecQuietFatal($CERTBOT);
 	};
 	Phase "rcconf", "Updating $RCCONF", sub {

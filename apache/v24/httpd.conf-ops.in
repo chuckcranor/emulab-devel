@@ -643,6 +643,8 @@ ScriptAlias /spewrpmtar  /usr/testbed/cgi-bin/spewrpmtar_cgi
 ScriptAlias /spewrpmtar.php3  /usr/testbed/cgi-bin/spewrpmtar_cgi
 ScriptAlias /d77e8041d1ad /usr/testbed/cgi-bin/shellinabox.pl
 Alias /accept_cert.html /usr/testbed/www/accept_cert.html
+# Letsencrypt
+Alias /.well-known/acme-challenge/ "@prefix@/www/.well-known/acme-challenge/"
 
 <Directory "/usr/testbed/cgi-bin">
     Options FollowSymLinks
