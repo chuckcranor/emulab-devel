@@ -50,13 +50,13 @@ sub usage()
 my $optlist   = "dnp:mt";
 my $debug     = 0;
 my $impotent  = 0;
-my $mailonly  = 0;
-my $opsonly   = 0;
+my $mailonly  = 1;
+my $opsonly   = 1;
 my $PORT      = 12237;
 my $HOST      = "@POWDER_RFMONITOR_HOST@";
 my $usemax    = 1;
 my $MAXPOWER  = 0; # I like that zero power does not mean zero. 
-my $NOISEFLOOR= -85.0;
+my $NOISEFLOOR= -110.0;
 
 #
 # Configure variables
