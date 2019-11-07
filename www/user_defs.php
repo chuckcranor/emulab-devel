@@ -369,6 +369,7 @@ class User
     function nonlocal_id()	{ return $this->field("nonlocal_id"); }
     function weblogin_last()	{ return $this->stats("weblogin_last"); }
     function portal()	     { return $this->field("portal"); }
+    function bound_portal()  { return $this->field("bound_portal"); }
     function ga_userid()     { return $this->field("ga_userid"); }
     function portal_interface_warned() {
         return $this->field("portal_interface_warned"); }
@@ -1277,6 +1278,17 @@ class User
 		     "   stud='$onoff' ".
 		     "where uid_idx='$idx'");
 	$this->user["stud"] = $onoff;
+	return 0;
+    }
+    function SetBoundPortal($onoff) {
+	$idx   = $this->uid_idx();
+
+	$onoff = ($onoff ? 1 : 0);
+			    
+	DBQueryFatal("update users set ".
+		     "   bound_portal='$onoff' ".
+		     "where uid_idx='$idx'");
+	$this->user["bound_portal"] = $onoff;
 	return 0;
     }
     function SetForeignAdmin($onoff) {

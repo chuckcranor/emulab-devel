@@ -227,6 +227,7 @@ function Do_AccountDetails()
     if (ISADMIN()) {
         $results["uid_idx"]       = $target_user->uid_idx();
         $results["portal"]        = $target_user->portal();
+        $results["bound_portal"]  = $target_user->bound_portal() ? true:false;
         $results["created"]       = DateStringGMT($target_user->created());
         $results["status"]        = $target_user->status();
         $results["stud"]          = $target_user->stud() ? true : false;
@@ -355,6 +356,9 @@ function Do_Toggle()
             SPITAJAX_ERROR(-1, $suexec_output);
             return -1;
         }
+    }
+    elseif ($toggle == "bound_portal") {
+        $target_user->SetBoundPortal($target_user->bound_portal() ? 0 : 1);
     }
     elseif ($toggle == "foreign_admin") {
         $target_user->SetForeignAdmin($target_user->foreign_admin() ? 0 : 1);

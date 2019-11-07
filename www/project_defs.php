@@ -174,6 +174,7 @@ class Project
     function allow_workbench(){ return $this->field("allow_workbench"); }
     function nonlocal_id()   { return $this->field("nonlocal_id"); }
     function portal()	     { return $this->field("portal"); }
+    function bound_portal()  { return $this->field("bound_portal"); }
     function isAPT()	     { return ($this->portal() &&
                                        $this->portal() == "aptlab" ? 1 : 0); }
     function isCloud()	     { return ($this->portal() &&
@@ -737,6 +738,16 @@ class Project
 		     "where pid_idx='$idx'");
 
 	$this->project["disabled"] = $onoff;
+	return 0;
+    }
+    function SetBoundPortal($onoff) {
+	$idx    = $this->pid_idx();
+	$onoff  = ($onoff ? 1 : 0);
+
+	DBQueryFatal("update projects set bound_portal='$onoff' ".
+		     "where pid_idx='$idx'");
+
+	$this->project["bound_portal"] = $onoff;
 	return 0;
     }
 

@@ -136,6 +136,13 @@ function Do_Approve()
 	SPITAJAX_ERROR(-1, "Internal error updating user membership");
 	return;
     }
+    # Users that join a bound to portal project, also get bound if they
+    # are not already marked for another portal.
+    if ($project->bound_portal()) {
+        if ($project->portal() == $target_user->portal()) {
+            $target_user->SetBoundPortal(1);
+        }
+    }
     SPITAJAX_RESPONSE("User $user_uid was granted membership in project $pid");
 }
 

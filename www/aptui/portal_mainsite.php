@@ -165,4 +165,15 @@ elseif ($_SERVER["SERVER_NAME"] == "www.powderwireless.net") {
     $PORTAL_GENESIS        = "powder";
     $PORTAL_NAME           = "Powder";
 }
+
+#
+# Array to map a portal "genesis" to its URL.
+#
+$BrandMapping = array(
+    "emulab"     => "$TBBASE/portal",
+    "cloudlab"   => "https://www.cloudlab.us",
+    "phantomnet" => "https://www.phantomnet.org",
+    "powder"     => "https://www.powderwireless.net",
+);
+
 ?>

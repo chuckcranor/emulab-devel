@@ -61,6 +61,13 @@ $DEFAULT_AGGREGATE_URN	= "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 $PORTAL_NAME            = "Emulab";
 
 #
+# Array to map a portal "genesis" to its URL. Overridden below.
+#
+$BrandMapping = array(
+    "emulab"     => "$TBBASE/portal",
+);
+
+#
 # The Utah MotherShip defines alternate portals. This needs to be split
 # out into per-domain files at some point. 
 #
