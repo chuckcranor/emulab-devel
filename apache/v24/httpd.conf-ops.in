@@ -1114,7 +1114,12 @@ SSLCipherSuite ALL:!ADH:!EXPORT:!SSLv2:!RC4:!MD5:!AECDH:+HIGH:+MEDIUM:!LOW
 # pass phrase.  Note that a kill -HUP will prompt again.  A new
 # certificate can be generated using the genkey(1) command.
 #SSLCertificateFile /etc/pki/tls/certs/localhost.crt
-SSLCertificateFile /usr/local/etc/apache24/ssl.crt/@USERNODE@.crt
+<IfDefine LETSENCRYPT>
+SSLCertificateFile /usr/local/etc/letsencrypt/live/@USERNODE@/cert.pem
+</IfDefine>
+<IfDefine !LETSENCRYPT>
+SSLCertificateFile /usr/local/etc/apache22/ssl.crt/@USERNODE@.crt
+</IfDefine>
 
 #   Server Private Key:
 #   If the key is not combined with the certificate, use this
@@ -1122,8 +1127,13 @@ SSLCertificateFile /usr/local/etc/apache24/ssl.crt/@USERNODE@.crt
 #   you've both a RSA and a DSA private key you can configure
 #   both in parallel (to also allow the use of DSA ciphers, etc.)
 #SSLCertificateKeyFile /etc/pki/tls/private/localhost.key
-SSLCertificateKeyFile /usr/local/etc/apache24/ssl.key/@USERNODE@.key
-
+<IfDefine LETSENCRYPT>
+SSLCertificateKeyFile /usr/local/etc/letsencrypt/live/@USERNODE@/privkey.pem
+</IfDefine>
+<IfDefine !LETSENCRYPT>
+SSLCertificateKeyFile /usr/local/etc/apache22/ssl.key/@USERNODE@.key
+</IfDefine>
+		      
 #   Server Certificate Chain:
 #   Point SSLCertificateChainFile at a file containing the
 #   concatenation of PEM encoded CA certificates which form the
