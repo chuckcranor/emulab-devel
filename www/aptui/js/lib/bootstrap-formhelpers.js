@@ -14205,7 +14205,7 @@ var BFHTimezonesList = {
       this.$element.html('');
 
       if (this.options.ask === true) {
-        this.$element.append('<option value="">Please Select Country</option>');
+        this.$element.append('<option value="">Select Country</option>');
       }
       else if (this.options.blank === true) {
         this.$element.append('<option value=""></option>');
@@ -17148,7 +17148,7 @@ var BFHTimezonesList = {
       this.$element.html('');
 
       if (this.options.ask === true) {
-        this.$element.append('<option value="">Please Select State</option>');
+        this.$element.append('<option value="">Select State/Province/Region</option>');
       }
       else if (this.options.blank === true) {
         this.$element.append('<option value=""></option>');
