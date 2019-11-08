@@ -371,6 +371,8 @@ class User
     function weblogin_last()	{ return $this->stats("weblogin_last"); }
     function portal()	     { return $this->field("portal"); }
     function bound_portal()  { return $this->field("bound_portal"); }
+    function require_aup()   { return $this->field("require_aup"); }
+    function accepted_aup()  { return $this->field("accepted_aup"); }
     function ga_userid()     { return $this->field("ga_userid"); }
     function portal_interface_warned() {
         return $this->field("portal_interface_warned"); }
@@ -755,28 +757,66 @@ class User
     }
 
     #
+    # Set the AUP requirement on a user. Currently only for Powder.
+    #
+    function SetAUPRequirement() {
+        global $PORTAL_GENESIS, $ISPOWDER;
+	$uid_idx = $this->uid_idx();
+
+        if (!$ISPOWDER) {
+            return;
+        }
+        if ($this->require_aup() &&
+            preg_match("/$PORTAL_GENESIS/", $this->require_aup())) {
+            return;
+        }
+        if ($this->require_aup()) {
+            DBQueryFatal("update users set require_aup = ".
+                         " CONCAT(require_aup, ',', '$PORTAL_GENESIS') ".
+                         "where uid_idx='$uid_idx'");
+        }
+        else {
+            DBQueryFatal("update users set require_aup='$PORTAL_GENESIS' ".
+                         "where uid_idx='$uid_idx'");
+        }
+    }
+
+    #
     # Does the user need to accept the AUP. Always goto the DB for this
     # since the user might have multiple windows/tabs.
     #
     function RequireAUP() {
         global $PORTAL_GENESIS;
 	$uid_idx = $this->uid_idx();
+
+        #
+        # This is to catch users coming from a different portal to the
+        # the powder portal for the first time. Kinda odd situation to
+        # have to look for.
+        #
+        $this->SetAUPRequirement();
 	
 	$query_result =
 	    DBQueryFatal("select require_aup from users ".
 			 "where uid_idx='$uid_idx' and ".
-                         "      FIND_IN_SET(require_aup, '$PORTAL_GENESIS')");
-
+                         " FIND_IN_SET('$PORTAL_GENESIS', require_aup) and ".
+                         " (accepted_aup is null or ".
+                         "  NOT FIND_IN_SET('$PORTAL_GENESIS', accepted_aup))");
+        
         return mysql_num_rows($query_result);
     }
     function AcceptAUP($portal) {
 	$uid_idx = $this->uid_idx();
 
-        DBQueryFatal("update users set ".
-                     "  require_aup=TRIM(BOTH ',' FROM ".
-                     "      REPLACE(CONCAT(',', require_aup, ','), ".
-                     "              CONCAT(',', '$portal', ','), ',')) ".
-                     "where uid_idx='$uid_idx'");
+        if ($this->accepted_aup()) {
+            DBQueryFatal("update users set accepted_aup = ".
+                         " CONCAT(accepted_aup, ',', '$portal') ".
+                         "where uid_idx='$uid_idx'");
+        }
+        else {
+            DBQueryFatal("update users set accepted_aup='$portal' ".
+                         "where uid_idx='$uid_idx'");
+        }
     }
     #
     # Does the user need to fill out the extended address fields

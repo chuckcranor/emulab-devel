@@ -138,14 +138,16 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
             return;
         }
     }
-    elseif ($login_user && $login_user->RequireAUP()) {
+    elseif (0 && $login_user && $login_user->IsActive() &&
+            $login_user->RequireAUP()) {
         if ($script != "portal-aup.php" && $script != "logout.php") {
             $referrer = urlencode($_SERVER['REQUEST_URI']);
             header("Location: portal-aup.php?referrer=$referrer");
             return;
         }
     }
-    elseif ($login_user && $login_user->Licenses()) {
+    elseif ($login_user && $login_user->IsActive() &&
+            $login_user->Licenses()) {
         if ($script != "licenses.php" && $script != "logout.php") {
             $referrer = urlencode($_SERVER['REQUEST_URI']);
             header("Location: licenses.php?referrer=$referrer");

@@ -550,6 +550,7 @@ if (!$this_user) {
 	    SPITFORM($formfields, 0, $errors);
 	    return;
 	}
+        $user->SetAUPRequirement();
 	$group = $project->LoadDefaultGroup();
 	if ($project->AddNewMember($user) < 0) {
 	    TBERROR("Could not add new user to project group $pid", 1);
@@ -638,6 +639,7 @@ if (! ($project = Project::NewNewProject($args, $error))) {
     SPITFORM($formfields, 0, $errors);
     return;
 }
+$project->GetLeader()->SetAUPRequirement();
 
 #
 # Destroy the session if we had a new user. 
