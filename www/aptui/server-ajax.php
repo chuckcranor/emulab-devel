@@ -482,6 +482,8 @@ $routing = array("geni-login" =>
                                                      "Do_GetLog",
                                                  "SaveLogEntry" =>
                                                      "Do_SaveLogEntry",
+                                                 "DeleteLogEntry" =>
+                                                     "Do_DeleteLogEntry",
                                                  "GetHistory" =>
                                                      "Do_GetHistory")),
 		 "nodetype" =>

@@ -446,6 +446,44 @@ function Do_SaveLogEntry()
 }
 
 #
+# Delete log entry for a node.
+#
+function Do_DeleteLogEntry()
+{
+    global $this_user, $ajax_args, $TBADMINGROUP;
+
+    if (! (ISADMIN() || OPSGUY())) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    if (!isset($ajax_args["node_id"])) {
+	SPITAJAX_ERROR(-1, "Missing node ID");
+	return -1;
+    }
+    $node_id = $ajax_args["node_id"];
+    if (!TBvalid_node_id($node_id)) {
+	SPITAJAX_ERROR(-1, "Invalid node ID");
+	return -1;
+    }
+    $node = Node::Lookup($node_id);
+    if (!$node) {
+	SPITAJAX_ERROR(-1, "No such node");
+	return -1;
+    }
+    if (!isset($ajax_args["log_id"])) {
+	SPITAJAX_ERROR(-1, "Missing log entry ID");
+	return -1;
+    }
+    $log_id = $ajax_args["log_id"];
+    if (! TBvalid_integer($log_id)) {
+	SPITAJAX_ERROR(-1, "Log ID is not an integer");
+	return -1;
+    }
+    $node->DeleteNodeLog($log_id);
+    SPITAJAX_RESPONSE(true);
+}
+
+#
 # Get the log entries for a node.
 #
 function Do_GetHistory()

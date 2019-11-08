@@ -65,7 +65,8 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
 SPITREQUIRE("js/show-nodelog.js");
-AddTemplateList(array("show-nodelog", "oops-modal", "waitwait-modal"));
+AddTemplateList(array("show-nodelog", "oops-modal",
+                      "waitwait-modal","confirm-something"));
 SPITFOOTER();
 
 ?>

@@ -21,6 +21,7 @@
 	<table id="log-table"
 	       class='table table-condensed table-bordered table-striped'>
 	  <thead>
+	    <th></th>
 	    <th>ID</th>
 	    <th>Reported</th>
 	    <th>Reporter</th>
@@ -28,7 +29,18 @@
 	  </thead>
 	  <tbody>
 	    <% _.each(entries, function (entry) { %>
-	      <tr>
+	      <tr data-logid="<%- entry.log_id %>">
+		<td>
+		  <a href="#" class="delete-entry-button">
+		    <span class='glyphicon glyphicon-remove'
+			  style='color: red; margiddn-left: 5px;
+				 margin-ddbottom: 4px;'
+			  data-toggle='tooltip'
+			  data-container="body"
+			  data-trigger="hover"
+			  title='Delete this entry'></span>
+		  </a>
+		</td>
 		<td><%- entry.log_id %></td>
 		<td style='white-space: nowrap;'
 		    class="format-date"><%- entry.reported %></td>
@@ -51,6 +63,7 @@
 </div>
 <div id='oops_div'></div>
 <div id='waitwait_div'></div>
+<div id='confirm_div'></div>
 <div id='save-log-modal' class='modal fade'>
   <div class='modal-dialog'>
     <div class='modal-content'>
@@ -84,4 +97,3 @@
     </div>
   </div>
 </div>
-
