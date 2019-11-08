@@ -141,17 +141,11 @@ $(function ()
 		    var node_id = $(vnode).attr("name");
 
 		    // Admins get a link to the shownode page.
-		    if (window.isadmin) {
-			var weburl = amlist[aggregate_urn].weburl +
-			    "/shownode.php3?node_id=" + node_id;
-			var html   = "<a href='" + weburl + "' target=_blank>" +
-			    node_id + "</a>";
-			    
-			clone.find(" [name=node_id]").html(html);
-		    }
-		    else {
-			clone.find(" [name=node_id]").html(node_id);
-		    }
+		    var weburl = amlist[aggregate_urn].weburl +
+			"/portal/show-node.php?node_id=" + node_id;
+		    var html   = "<a href='" + weburl + "' target=_blank>" +
+			node_id + "</a>";
+		    clone.find(" [name=node_id]").html(html);
 		    clone.find(" [name=type]")
 			.html($(vnode).attr("hardware_type"));
 		}

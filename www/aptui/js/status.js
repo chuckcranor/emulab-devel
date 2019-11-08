@@ -1921,7 +1921,7 @@ $(function ()
 
 		    // Link to the (public) shownode page.
 		    var weburl = amlist[aggregate_urn].weburl +
-			"/shownode.php3?node_id=" + node_id;
+			"/portal/show-node.php?node_id=" + node_id;
 		    var html   = "<a href='" + weburl + "' target=_blank>" +
 			node_id + "</a>";
 		    clone.find(" [name=node_id]").html(html);

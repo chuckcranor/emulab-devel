@@ -59,7 +59,7 @@ $(function ()
 		    html = html + "<tr><td>";
 		    if (isadmin) {
 			var url = json.value.url +
-			    "/shownode.php3?node_id=" + value.node_id;
+			    "/portal/show-node.php?node_id=" + value.node_id;
 			html +=
 			    "<a href='" + url + "' target=_blank>" +
 			    value.node_id + "</a></td>";
