@@ -183,10 +183,15 @@ $(function ()
 			}
 		    }
 		    var free  = parseInt(data.free) + parseInt(data.held);
+		    // Link to the (public) shownode page.
+		    var weburl = details.weburl +
+			"/shownodetype.php3?node_type=" + type;
+		    weburl = "<a href='" + weburl + "' target=_blank>" +
+			type + "</a>";
 
 		    html +=
 			"<tr>" +
-			" <td>" + type + "</td>" +
+			" <td>" + weburl + "</td>" +
 			" <td>" + free + "</td>" +
 			"</tr>";
 		}

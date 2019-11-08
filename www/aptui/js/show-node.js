@@ -71,6 +71,7 @@ $(function ()
 	var html = mainTemplate({
 	    fields:		fields,
 	    isadmin:		window.ISADMIN,
+	    isguest:		window.ISGUEST,
 	    canedit:            window.CANEDIT,
 	    canreboot:          window.CANREBOOT,
 	    console:            window.CONSOLE,

@@ -61,28 +61,37 @@ SPITHEADER(1);
 # now it is always the local cluster
 #
 if (isset($aggregate)) {
-    $aggregates = array($aggregate->nickname() => $aggregate->urn());
+    $agglist = array($aggregate);
 }
 elseif ($ISCLOUD) {
-    $aggregates =
-        array("Emulab"    => "urn:publicid:IDN+emulab.net+authority+cm",
-              "APT"       => "urn:publicid:IDN+apt.emulab.net+authority+cm",
-              "Wisconsin" => "urn:publicid:IDN+wisc.cloudlab.us+authority+cm",
-              "Clemson"   => "urn:publicid:IDN+clemson.cloudlab.us+authority+cm",
-              "Utah"      => "urn:publicid:IDN+utah.cloudlab.us+authority+cm",
-              "OneLab"    => "urn:publicid:IDN+lab.onelab.eu+authority+cm");
-}
-elseif ($ISPOWDER) {
-    $tmp = Aggregate::DefaultAggregateList($this_user);
-    $aggregates = array();
-    foreach ($tmp as $urn => $aggregate) {
-        $aggregates[$aggregate->nickname()] = $urn;
+    $tmp = array("urn:publicid:IDN+emulab.net+authority+cm",
+                 "urn:publicid:IDN+apt.emulab.net+authority+cm",
+                 "urn:publicid:IDN+wisc.cloudlab.us+authority+cm",
+                 "urn:publicid:IDN+clemson.cloudlab.us+authority+cm",
+                 "urn:publicid:IDN+utah.cloudlab.us+authority+cm",
+                 "urn:publicid:IDN+lab.onelab.eu+authority+cm");
+    $agglist = array();
+    foreach ($tmp as $urn) {
+        $agglist[] = Aggregate::Lookup($urn);
     }
 }
-else {
-    $aggregate  = Aggregate::Lookup($DEFAULT_AGGREGATE_URN);
-    $aggregates = array($aggregate->nickname() => $aggregate->urn());
+elseif ($ISPOWDER) {
+    $agglist = Aggregate::DefaultAggregateList($this_user);
 }
+else {
+    $agglist = array(Aggregate::Lookup($DEFAULT_AGGREGATE_URN));
+}
+
+$aggregates = array();
+foreach ($agglist as $aggregate) {
+    $aggregates[$aggregate->nickname()] =
+        array("urn"          => $aggregate->urn(),
+              "name"         => $aggregate->name(),
+              "nickname"     => $aggregate->nickname(),
+              "url"          => $aggregate->weburl(),
+              "abbreviation" => $aggregate->nickname());
+}
+
 echo "<link rel='stylesheet'
             href='css/tablesorter.css'>\n";
 

@@ -29,11 +29,20 @@ include_once("imageid_defs.php");
 include_once("osinfo_defs.php");
 chdir("apt");
 
+#
+# We allow anonynous users to get ONLY node type info!
+#
+$GuestUserOkay = false;
+
 function CheckPageArgs($write)
 {
-    global $this_user, $ajax_args, $node;
+    global $this_user, $ajax_args, $GuestUserOkay, $node;
     global $TB_NODEACCESS_READINFO, $TB_NODEACCESS_MODIFYINFO;
 
+    if (! ($GuestUserOkay || $this_user)) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
     if (!isset($ajax_args["type"])) {
 	SPITAJAX_ERROR(-1, "Missing node type");
 	return -1;
@@ -64,11 +73,14 @@ function CheckPageArgs($write)
 #
 function Do_GetInfo()
 {
-    global $this_user, $ajax_args;
+    global $this_user, $ajax_args, $GuestUserOkay;
     global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
     $blob = array();
     $osinfo = array();
 
+    # Only this function allows guest users.
+    $GuestUserOkay = true;
+    
     if (CheckPageArgs(0)) {
         return;
     }

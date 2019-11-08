@@ -41,7 +41,7 @@
 	<div class='col-sm-6'>
 	  <div class='panel panel-default'>
 	    <div class='panel-heading'>
-              <h3 class='panel-title'>Flags</h3>
+              <h3 class='panel-title'>Type</h3>
 	    </div>
 	    <div class='panel-body'>
 	      <table id="flags-table"
@@ -110,26 +110,28 @@
 		    <% } %>
 		  </td>
 		</tr>
-		<tr>
-		  <td>isvirtnode</td>
-		  <td><%- (fields.isvirtnode == "0" ? "No" : "Yes") %></td>
-		</tr>
-		<tr>
-		  <td>isdynamic</td>
-		  <td><%- (fields.isdynamic == "0" ? "No" : "Yes") %></td>
-		</tr>
-		<tr>
-		  <td>isremotenode</td>
-		  <td><%- (fields.isremotenode == "0" ? "No" : "Yes") %></td>
-		</tr>
-		<tr>
-		  <td>issubnode</td>
-		  <td><%- (fields.issubnode == "0" ? "No" : "Yes") %></td>
-		</tr>
-		<tr>
-		  <td>isswitch</td>
-		  <td><%- (fields.isswitch  == "0" ? "No" : "Yes") %></td>
-		</tr>
+		<% if (window.ISADMIN) { %>
+		  <tr>
+		    <td>isvirtnode</td>
+		    <td><%- (fields.isvirtnode == "0" ? "No" : "Yes") %></td>
+		  </tr>
+		  <tr>
+		    <td>isdynamic</td>
+		    <td><%- (fields.isdynamic == "0" ? "No" : "Yes") %></td>
+		  </tr>
+		  <tr>
+		    <td>isremotenode</td>
+		    <td><%- (fields.isremotenode == "0" ? "No" : "Yes") %></td>
+		  </tr>
+		  <tr>
+		    <td>issubnode</td>
+		    <td><%- (fields.issubnode == "0" ? "No" : "Yes") %></td>
+		  </tr>
+		  <tr>
+		    <td>isswitch</td>
+		    <td><%- (fields.isswitch  == "0" ? "No" : "Yes") %></td>
+		  </tr>
+		<% } %>
 	      </table>
 	    </div>
 	  </div>
@@ -145,7 +147,15 @@
 			  type='button'>Add
 		  </button>
 		<% } %>
-		<h3 class='panel-title'>Features</h3>
+		<h3 class='panel-title'>Features
+		  <a href="#" type="button "class='btn btn-xs'
+		     data-toggle='modal'
+		     data-target="#info-modal"
+		     data-trigger="click">
+		    <span style='margin-bottom: 4px; margin-left: 0px;'
+			  class='glyphicon glyphicon-question-sign'></span>
+		  </a>
+		</h3>
 	      </div>
 	      <div class='panel-body'>
 		<table id="features-table"
@@ -228,8 +238,12 @@
 		      </td>
 		      <td>
 			<% if (!window.EDITING) { %>
-			  <a href="<%- info.url %>" target="_blank">
-			    <%- info.name %></a>
+			  <% if (window.ISGUEST) { %>
+			    <%- info.name %>
+			  <% } else { %>			  
+			    <a href="<%- info.url %>" target="_blank">
+			      <%- info.name %></a>
+			  <% } %>
 			<% } else { %>
 			  <% var ilist;
 			    if (info.type == "image") {
@@ -297,12 +311,23 @@
 			type='button'>Add
 		</button>
 	      <% } %>
-              <h3 class='panel-title'>Attributes</h3>
+              <h3 class='panel-title'>Attributes
+		<a href="#" type="button "class='btn btn-xs'
+		   data-toggle='modal'
+		   data-target="#info-modal"
+		   data-trigger="click">
+		  <span style='margin-bottom: 4px; margin-left: 0px;'
+			class='glyphicon glyphicon-question-sign'></span>
+		</a>
+	      </h3>
 	    </div>
 	    <div class='panel-body'>
 	      <table id="attributes-table"
 		     class='table table-condensed table-bordered'>
 		<% _.each(fields.attributes, function(value, name) { %>
+		  <% if (!window.ISADMIN &&
+		         !(name == "processor" ||
+		          name.startsWith("hw_"))) { return; } %>
 		  <% if (typeof(value) !== "object") { %>
 		    <tr>
 		      <td>
@@ -405,6 +430,37 @@
 		  type='button'>Confirm
 	  </button>
 	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='info-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<p>
+	  A note about features and attributes; in general, sizes (like
+	  disk and memory) are reported in megabytes (MB) and speed is
+	  reported in megahertz (MHz).
+	</p>
+	<p>
+	  There are several features that indicate how much disk space
+	  a node has:
+	  <ul>
+	    <li> <b>?+disk_sysvol</b>: The size (in MB) of the root disk.
+	      Note that the <em>root partition</em> is typically much smaller,
+	      on the order of 16GB. But the rest of the disk is available to
+	      use.
+	    </li>
+	    <li> <b>?+disk_nonsysvol</b>: The sum off all other disks
+	      (not including the root disk).
+	    </li>
+	    <li> <b>?+disk_any</b>: The sum of all disks (root and secondary).
+	    </li>
+	  </ul>
+	</p>
       </div>
     </div>
   </div>

@@ -471,7 +471,7 @@ $routing = array("geni-login" =>
                                                      "Do_Modify")),
 		 "node" =>
 			array("file"    => "node.ajax",
-			      "guest"   => false,
+			      "guest"   => true,
 			      "methods" => array("GetInfo" =>
                                                      "Do_GetInfo",
                                                  "Modify" =>
@@ -486,7 +486,8 @@ $routing = array("geni-login" =>
                                                      "Do_GetHistory")),
 		 "nodetype" =>
 			array("file"    => "nodetype.ajax",
-			      "guest"   => false,
+                              # We wllow guest users to see type info.
+			      "guest"   => true,
 			      "methods" => array("GetInfo" =>
                                                      "Do_GetInfo",
                                                  "SaveFlag" =>

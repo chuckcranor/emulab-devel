@@ -3,9 +3,11 @@ $(function ()
     'use strict';
 
     var templates = APT_OPTIONS.fetchTemplateList(['show-nodelog',
+						   "confirm-something",
 						   'oops-modal',
 						   'waitwait-modal']);
     var mainTemplate = _.template(templates['show-nodelog']);
+    var confirmstr   = templates['confirm-something'];
     var formfields   = null;
 
     function initialize()
@@ -47,6 +49,7 @@ $(function ()
 	// Now we can do this.
 	$('#oops_div').html(templates['oops-modal']);
 	$('#waitwait_div').html(templates['waitwait-modal']);
+	$('#confirm_div').html(confirmstr);
 
 	// Format dates with moment before display.
 	$('.format-date').each(function() {
@@ -60,6 +63,12 @@ $(function ()
 	$('#new-entry-button').click(function (event) {
 	    event.preventDefault();
 	    NewLogEntry();
+	});
+
+	// Bind the delete entry buttons
+	$('.delete-entry-button').click(function (event) {
+	    event.preventDefault();
+	    DeleteLogEntry($(this));
 	});
 
 	// This activates the popover subsystem.
@@ -119,6 +128,36 @@ $(function ()
 	    window.location.reload();
 	};
 	sup.CallServerMethod(null, "node", "SaveLogEntry", args, callback);
+    }
+    function DeleteLogEntry(item)
+    {
+	var row   = $(item).closest("tr");
+	var logid = $(row).data("logid");
+	console.info("DeleteLogEntry", logid);
+
+	var args = {
+	    "node_id"  : window.NODE_ID,
+	    "log_id"   : logid,
+	};
+	var callback = function (json) {
+	    console.info(json);
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    $(row).remove();
+	};
+	sup.ConfirmModal({
+	    "modal"  : "confirm-something",
+	    "prompt" : "Delete Log Entry?",
+	    "cancel_function" : function (data) {
+		// Nothing to do, user still sees the edit view.
+	    },
+	    "confirm_function" : function (data) {
+		sup.CallServerMethod(null, "node", "DeleteLogEntry",
+				     args, callback);
+	    },
+	});
     }
 
     $(document).ready(initialize);

@@ -83,6 +83,7 @@ while (list($index, $aggregate) = each($ams)) {
 
     $amlist[$urn] = array("urn"      => $urn,
                           "name"     => $am,
+                          "weburl"   => $aggregate->weburl(),
                           "nickname" => $aggregate->nickname(),
                           "typeinfo" => $aggregate->typeinfo);
 }

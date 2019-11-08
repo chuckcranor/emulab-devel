@@ -1919,18 +1919,12 @@ $(function ()
 		    node_id = $(vnode).attr("name");
 		    hwtype  = $(vnode).attr("hardware_type");
 
-		    // Admins get a link to the shownode page.
-		    if (isadmin) {
-			var weburl = amlist[aggregate_urn].weburl +
-			    "/shownode.php3?node_id=" + node_id;
-			var html   = "<a href='" + weburl + "' target=_blank>" +
-			    node_id + "</a>";
-			    
-			clone.find(" [name=node_id]").html(html);
-		    }
-		    else {
-			clone.find(" [name=node_id]").html(node_id);
-		    }
+		    // Link to the (public) shownode page.
+		    var weburl = amlist[aggregate_urn].weburl +
+			"/shownode.php3?node_id=" + node_id;
+		    var html   = "<a href='" + weburl + "' target=_blank>" +
+			node_id + "</a>";
+		    clone.find(" [name=node_id]").html(html);
 		    clone.find(" [name=type]").html(hwtype);
 		    clientid2nodeid[node] = node_id;
 

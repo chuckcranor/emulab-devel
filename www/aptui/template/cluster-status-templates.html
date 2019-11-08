@@ -35,7 +35,13 @@
     <tbody>
       <%  _.each(totals, function(value, type) { %>
 	<tr>
-	  <td><a href="#" class="counts-type"><%- type %></a></td>
+	  <td>
+	    <a href="<%- weburl %>/portal/show-nodetype.php?type=<%- type %>"
+	       class="counts-type"><%- type %></a>
+	    <a href="#" class="counts-search" data-type="<%- type %>">
+	      <span class='glyphicon glyphicon-search pull-right'
+		    style='margin-bottom: 4px;'></span></a>
+	  </td>
 	  <td><%- value.inuse %></td>
 	  <% if (isadmin) { %>
 	    <td><%- value.preres %>

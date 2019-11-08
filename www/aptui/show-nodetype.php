@@ -30,12 +30,14 @@ include("quickvm_sup.php");
 $page_title = "Show NodeType";
 
 #
-# Get current user.
+# Get current user. GUEST USER ALLOWED.
 #
 RedirectSecure();
-$this_user = CheckLoginOrRedirect();
-$this_idx  = $this_user->uid_idx();
-$isadmin   = (ISADMIN() ? "true" : "false");
+$this_user = CheckLogin($check_status);
+# Operate as a guest user if not logged in,
+if (! ($check_status & CHECKLOGIN_LOGGEDIN)) {
+    $this_user = null;
+}
 
 #
 # Verify page arguments.
@@ -44,13 +46,14 @@ $reqargs = RequiredPageArguments("type",  PAGEARG_STRING);
 $optargs = OptionalPageArguments("edit",  PAGEARG_BOOLEAN);
 
 if ($edit) {
+    $this_user = CheckLoginOrRedirect();
+    if (! ($this_user && ISADMIN())) {
+        SPITUSERERROR("Not enough permission!");
+    }
     $edit = 1;
 }
 else {
     $edit = 0;
-}
-if ($edit && !$isadmin) {
-    SPITUSERERROR("Not enough permission!");
 }
 if (!preg_match("/^[-\w]+$/", $type)) {
     SPITUSERERROR("$node_type contains illegal characters!");
@@ -96,8 +99,9 @@ echo "<link rel='stylesheet'
 
 echo "<script type='text/javascript'>\n";
 echo "    window.TYPE      = '$type';\n";
-echo "    window.ISADMIN   = $isadmin;\n";
+echo "    window.ISADMIN   = " . (ISADMIN() ? "true" : "false") . ";\n";
 echo "    window.EDITING   = $edit;\n";
+echo "    window.ISGUEST   = " . ($this_user ? "false" : "true") . ";\n";
 echo "</script>\n";
 
 if ($edit) {

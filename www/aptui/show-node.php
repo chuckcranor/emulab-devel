@@ -33,9 +33,11 @@ $page_title = "Show Node";
 # Get current user.
 #
 RedirectSecure();
-$this_user = CheckLoginOrRedirect();
-$this_idx  = $this_user->uid_idx();
-$isadmin   = (ISADMIN() ? "true" : "false");
+$this_user = CheckLogin($check_status);
+# Operate as a guest user if not logged in,
+if (! ($check_status & CHECKLOGIN_LOGGEDIN)) {
+    $this_user = null;
+}
 
 #
 # Verify page arguments.
@@ -47,18 +49,18 @@ if (!$node) {
 }
 $node_id = $node->node_id();
 
-if (!($isadmin || $node->AccessCheck($this_user, $TB_NODEACCESS_READINFO))) {
-    SPITUSERERROR("Not enough permission!");
-}
-$console =
-    ($isadmin ||
-     $node->AccessCheck($this_user, $TB_NODEACCESS_LOADIMAGE) ? true : false);
+$console = 
+    ($this_user &&
+     (ISADMIN() || $node->AccessCheck($this_user, $TB_NODEACCESS_LOADIMAGE))) ?
+     "true" : "false";
 $canedit =
-    ($isadmin ||
-     $node->AccessCheck($this_user, $TB_NODEACCESS_MODIFYINFO) ? true : false);
+    ($this_user && 
+     (ISADMIN() || $node->AccessCheck($this_user, $TB_NODEACCESS_MODIFYINFO))) ?
+     "true" : "false";
 $canreboot =
-    ($isadmin ||
-     $node->AccessCheck($this_user, $TB_NODEACCESS_REBOOT) ? true : false);
+    ($this_user &&
+     (ISADMIN() || $node->AccessCheck($this_user, $TB_NODEACCESS_REBOOT))) ?
+     "true" : "false";
 
 SPITHEADER(1);
 
@@ -70,7 +72,8 @@ echo "<link rel='stylesheet'
 
 echo "<script type='text/javascript'>\n";
 echo "    window.NODE_ID        = '$node_id';\n";
-echo "    window.ISADMIN        = $isadmin;\n";
+echo "    window.ISADMIN        = " . (ISADMIN() ? "true" : "false") . "\n";
+echo "    window.ISGUEST        = " . ($this_user ? "false" : "true") . ";\n";
 echo "    window.CANEDIT        = $canedit;\n";
 echo "    window.CANREBOOT      = $canreboot;\n";
 echo "    window.CONSOLEALLOWED = $console;\n";

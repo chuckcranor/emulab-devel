@@ -134,7 +134,7 @@
 	    <td>Control IP</td>
 	    <td><%- fields.control_ip %></td>
 	  </tr>
-	  <% if (fields.management_ip) { %>
+	  <% if (!window.ISGUEST && fields.management_ip) { %>
 	    <tr>
 	      <td>Management IP</td>
 	      <td><%- fields.management_ip %></td>
@@ -298,8 +298,8 @@
     </div>
   </div>
 <% } %>
-<% if (isadmin && (fields.attributes || fields.typeattributes ||
-                   fields.features)) { %>
+<% if (fields.attributes || fields.typeattributes ||
+       fields.features || fields.typefeatures) { %>
   <div class='col-lg-6 col-lg-offset-3
               col-md-6 col-md-offset-3
               col-sm-8 col-sm-offset-2
@@ -307,11 +307,19 @@
     <div>
       <div class='panel panel-default'>
 	<div class='panel-heading'>
-	  <h3 class="panel-title">Attributes and Features</h3>
+	  <h3 class="panel-title">Attributes and Features
+	    <a href="#" type="button "class='btn btn-xs'
+		    data-toggle='modal'
+		    data-target="#info-modal"
+		    data-trigger="click">
+	      <span style='margin-bottom: 4px; margin-left: 0px;'
+		    class='glyphicon glyphicon-question-sign'></span>
+	    </a>
+	  </h3>
 	</div>
 	<div class="panel-body">
 	  <table class='table table-condensed table-bordered'>
-	    <% if (fields.attributes) { %>
+	    <% if (fields.attributes || fields.typeattributes) { %>
 	      <thead>
 		<th>Attribute</th>
 		<th>Value</th>
@@ -323,9 +331,17 @@
 		    <td><%- val %></td>
 		  </tr>
 		<% }); %>
+		<% _.each(fields.typeattributes, function(val, key) { %>
+		  <% if (!(key == "processor" ||
+		          key.startsWith("hw_"))) { return; } %>
+		  <tr>
+		    <td><%- key %></td>
+		    <td><%- val %></td>
+		  </tr>
+		<% }); %>
 	      </tbody>
 	    <% } %>
-	    <% if (fields.features || fields.typeattributes) { %>
+	    <% if (fields.features || fields.typefeatures) { %>
 	      <thead>
 		<th>Feature</th>
 		<th>Weight</th>
@@ -402,7 +418,11 @@
 			url += "#" + info.switch_card + ":" + info.switch_port;
 		      }
 		    %>
-		      <td><a href="<%- url %>"><%- info.switch_id %></a></td>
+		      <% if (window.ISGUEST) { %>
+			<td><%- info.switch_id %></td>
+		      <% } else { %>
+			<td><a href="<%- url %>"><%- info.switch_id %></a></td>
+		      <% } %>
 		      <td><%- info.switch_iface %>
 			(<%- info.switch_card %>,<%- info.switch_port %>)</td>
 		    <% } else { %>
@@ -625,6 +645,37 @@
         <center><h4>Confirm to Reboot node</h4>
           <button class='btn btn-danger btn-sm'
 		  id='confirm-reboot-button'>Confirm</a></center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='info-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<p>
+	  A note about features and attributes; in general, sizes (like
+	  disk and memory) are reported in megabytes (MB) and speed is
+	  reported in megahertz (MHz).
+	</p>
+	<p>
+	  There are several features that indicate how much disk space
+	  a node has:
+	  <ul>
+	    <li> <b>?+disk_sysvol</b>: The size (in MB) of the root disk.
+	      Note that the <em>root partition</em> is typically much smaller,
+	      on the order of 16GB. But the rest of the disk is available to
+	      use.
+	    </li>
+	    <li> <b>?+disk_nonsysvol</b>: The sum off all other disks
+	      (not including the root disk).
+	    </li>
+	    <li> <b>?+disk_any</b>: The sum of all disks (root and secondary).
+	    </li>
+	  </ul>
+	</p>
       </div>
     </div>
   </div>

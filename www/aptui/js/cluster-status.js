@@ -35,7 +35,8 @@ $(function ()
 
     function LoadData()
     {
-	_.each(amlist, function(urn, name) {
+	_.each(amlist, function(info, name) {
+	    var urn = info.urn;
 	    var callback = function(json) {
 		console.log(json);
 		if (json.code) {
@@ -128,6 +129,7 @@ $(function ()
 
 		// These are the totals.
 		html = countsTemplate({"totals" : json.value.totals,
+				       "weburl" : info.url,
 				       "isadmin": isadmin});
 		$('#counts-panel-' + name).html(html);
 		// This activates the tooltip subsystem.
@@ -150,7 +152,8 @@ $(function ()
 	if (!isadmin) {
 	    return;
 	}
-	_.each(amlist, function(urn, name) {
+	_.each(amlist, function(info, name) {
+	    var urn = info.urn;
 	    var callback = function(json) {
 		console.log(json);
 		if (json.code) {
@@ -285,11 +288,11 @@ $(function ()
 	$(tablename).removeClass("hidden");
 
 	// Bind type column in the counts table to initiating search
-	$('#counts-panel-' + name + ' .counts-type').click(function(event) {
+	$('#counts-panel-' + name + ' .counts-search').click(function(event) {
 	    event.preventDefault();
 	    $(tablename +
 	      ' input.tablesorter-filter.form-control[data-column="1"]')
-		.val($(event.target).text());
+		.val($(this).data("type"));
 	    table.trigger('search', false);	    
 	});
     }
