@@ -70,6 +70,8 @@ my $LOGFILE          = "$TB/log/rfmonitor_daemon.log";
 my $POWER            = "$TB/bin/power";
 my $FORMAT           = "portid,timestamp,frequency,power";
 my $MAILDELAY        = 60;
+# Debugging.
+$TBRFOPS             = "powder-rfmon\@flux.utah.edu";
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -111,8 +113,6 @@ if (defined($options{"n"})) {
 }
 if (defined($options{"t"})) {
     $opsonly = 1;
-    # Debugging.
-    $TBRFOPS = "powder-rfmon\@flux.utah.edu";
 }
 if (defined($options{"p"})) {
     $PORT = $options{"p"};
