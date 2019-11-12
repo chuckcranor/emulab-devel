@@ -220,3 +220,7 @@ ATTENUATOR=patten1
 
 # Do not send events from bootinfo, we do it from dhcpd instead.
 BOOTINFO_EVENTS=0
+
+# Powder RF monitor.
+POWDER_RFMONITOR=1
+POWDER_RFMONITOR_HOST="$BOSSNODE_IP"
