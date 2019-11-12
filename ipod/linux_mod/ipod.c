@@ -41,7 +41,7 @@
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Flux Research Group");
-MODULE_VERSION("3.2.0");
+MODULE_VERSION("3.3.0");
 
 #if defined(__aarch64__) || defined(__powerpc64__)
 #define IPOD_QUEUE_RESTART
@@ -81,9 +81,6 @@ char sysctl_ipod_key[32+1] = { "SETMETOSOMETHINGTHIRTYTWOBYTES!!" };
 #define __PHP
 #endif
 
-static u32 __ipod_min = INT_MIN;
-static u32 __ipod_max = INT_MAX;
-
 /*
  * Register the simple icmp table in /proc/sys/net/ipv4 .  This way, if
  * somebody else ever adds a net.ipv4.icmp table, like net.ipv6.icmp, we
@@ -108,17 +105,13 @@ static struct ctl_table ipod_table[] = {
       .data = &sysctl_ipod_host,
       .maxlen = sizeof(u32),
       .mode = 0644,
-      .proc_handler = __PHP proc_dointvec_minmax,
-      .extra1 = &__ipod_min,
-      .extra2 = &__ipod_max,
+      .proc_handler = __PHP proc_dointvec,
     },
     { .procname = "icmp_ipod_mask",
       .data = &sysctl_ipod_mask,
       .maxlen = sizeof(u32),
       .mode = 0644,
-      .proc_handler = __PHP proc_dointvec_minmax,
-      .extra1 = &__ipod_min,
-      .extra2 = &__ipod_max,
+      .proc_handler = __PHP proc_dointvec,
     },
     { .procname = "icmp_ipod_key",
       .data = &sysctl_ipod_key,
