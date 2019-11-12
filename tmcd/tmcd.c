@@ -13110,6 +13110,7 @@ COMMAND_PROTOTYPE(dohwcollect)
 	}
 	if (strcmp(reqp->pid, pideid) ||
 	    (eid != 0 && strcmp(reqp->eid, eid))) {
+		client_writeback(sock, buf, strlen(buf), tcp);
 		free(pideid);
 		free(outputdir);
 		free(commands);
