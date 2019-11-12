@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -55,7 +55,7 @@ use Exporter;
 	     TMCCCMD_NODEUUID TMCCCMD_NODEATTRIBUTES TMCCCMD_DISKS
 	     TMCCCMD_ARPINFO TMCCCMD_STORAGE TMCCCMD_IMAGESIZE
              TMCCCMD_PNETNODEATTRS TMCCCMD_SERVINCEINFO TMCCCMD_PUBLICADDRINFO
-             TMCCCMD_NODETYPE
+             TMCCCMD_NODETYPE TMCCCMD_HWCOLLECT
 	     );
 
 # Must come after package declaration!
@@ -226,6 +226,7 @@ my %commandset =
       "pnetnodeattrs"	=> {TAG => "pnetnodeattrs"},
       "serviceinfo"	=> {TAG => "serviceinfo"},
       "publicaddrinfo"	=> {TAG => "publicaddrinfo"},
+      "hwcollect"	=> {TAG => "hwcollect"},
     );
 
 #
@@ -306,6 +307,7 @@ sub TMCCCMD_IMAGESIZE()	{ $commandset{"imagesize"}->{TAG}; }
 sub TMCCCMD_PNETNODEATTRS() {$commandset{"pnetnodeattrs"}->{TAG}; }
 sub TMCCCMD_SERVINCEINFO() {$commandset{"serviceinfo"}->{TAG}; }
 sub TMCCCMD_PUBLICADDRINFO(){ $commandset{"publicaddrinfo"}->{TAG}; }
+sub TMCCCMD_HWCOLLECT()	{ $commandset{"hwcollect"}->{TAG}; }
 
 #
 # Caller uses this routine to set configuration of this library

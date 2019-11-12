@@ -406,6 +406,7 @@ COMMAND_PROTOTYPE(dopnetnodeattrs);
 COMMAND_PROTOTYPE(doserviceinfo);
 COMMAND_PROTOTYPE(dosubbossinfo);
 COMMAND_PROTOTYPE(dopublicaddrinfo);
+COMMAND_PROTOTYPE(dohwcollect);
 #if PROTOGENI_SUPPORT
 COMMAND_PROTOTYPE(dogeniclientid);
 COMMAND_PROTOTYPE(dogenisliceurn);
@@ -548,6 +549,7 @@ struct command {
 	{ "serviceinfo",  FULLCONFIG_NONE, 0, doserviceinfo },
 	{ "subbossinfo",  FULLCONFIG_NONE, 0, dosubbossinfo },
 	{ "publicaddrinfo",  FULLCONFIG_NONE, F_ALLOCATED, dopublicaddrinfo },
+	{ "hwcollect",	  FULLCONFIG_NONE, 0, dohwcollect},
 #if PROTOGENI_SUPPORT
 	{ "geni_client_id", FULLCONFIG_NONE, 0, dogeniclientid },
 	{ "geni_slice_urn", FULLCONFIG_NONE, 0, dogenisliceurn },
@@ -12997,6 +12999,185 @@ COMMAND_PROTOTYPE(dohwinfo)
 	if (bufp != buf)
 		client_writeback(sock, buf, strlen(buf), tcp);
 	mysql_free_result(res);
+
+	return 0;
+}
+
+/*
+ * Collect information about node hardware.
+ *
+ * This overlaps quite a lot with "hwinfo" on the collection side
+ * but is a little more general. Returns a series of lines:
+ *
+ *   COLLECT=(0|1)	Only collect stats if set to one.
+ *   OUTDIR=<path>	Absolute path for a directory where output is stored
+ *   PREFIX=<string>	Prefix of file name in which to write results
+ *   			File names are of the form:
+ *			<OUTDIR>/<NODE>/<PREFIX>-<NAME>.(out,err,status)
+ *			with stdout, stderr, and exit status respectively
+ *   OS=<OS> NAME=<string> CMDLINE=<cmdline>
+ *			First command to run if node is running OS.
+ *			OS should be one of FreeBSD, Linux, Any, or None.
+ *			Output to files identified by NAME as described above.
+ *   			Everything after 'CMDLINE=' is given to system().
+ *   ...
+ *   OS=<OS> NAME=<string> CMDLINE=<cmdline>
+ *			Last command to run if node is running OS.
+ *
+ * Most of this info comes from sitevars:
+ * 	hwcollect/interval	how often to collect new info, zero to disable
+ *	hwcollect/experiment	<pid> or <pid>/<eid> that node must be in
+ *	hwcollect/outputdir	collection directory
+ *	hwcollect/commands	semicolon separated list of
+ *				OS,NAME,CMDLINE triples
+ */
+COMMAND_PROTOTYPE(dohwcollect)
+{
+	MYSQL_RES	*res;
+	MYSQL_ROW	row;
+	char		buf[MYBUFSIZE];
+	char		*bufp = buf, *ebufp = &buf[sizeof(buf)];
+	int		nrows;
+	int		interval;
+	unsigned int	last = 0;
+	char		*pideid, *outputdir, *commands;
+	char		*bp, *cbp, *attrclause, *eid;
+	struct timeval	now;
+
+	/* Only allocated physical nodes need apply */
+	if (!reqp->allocated || reqp->isvnode) {
+		return 0;
+	}
+
+	/*
+	 * Get our sitevars. If none, consider collection disabled.
+	 */
+	res = mydb_query("select name,value,defaultvalue from sitevariables "
+			 "where name like 'hwcollect/%%'", 3);
+	if (!res || (nrows = (int)mysql_num_rows(res)) == 0) {
+		error("HWCOLLECT: no hwcollect sitevars\n");
+		if (res)
+			mysql_free_result(res);
+		return 0;
+	}
+
+	interval = 0;
+	outputdir = commands = 0;
+	while (nrows) {
+		row = mysql_fetch_row(res);
+		if (strcmp(row[0], "hwcollect/interval") == 0) {
+			if (row[1] && row[1][0])
+				interval = atoi(row[1]);
+			else if (row[2] && row[2][0])
+				interval = atoi(row[2]);
+		} else if (strcmp(row[0], "hwcollect/experiment") == 0) {
+			if (row[1] && row[1][0])
+				pideid = strdup(row[1]);
+			else if (row[2] && row[2][0])
+				pideid = strdup(row[2]);
+		} else if (strcmp(row[0], "hwcollect/outputdir") == 0) {
+			if (row[1] && row[1][0])
+				outputdir = strdup(row[1]);
+			else if (row[2] && row[2][0])
+				outputdir = strdup(row[2]);
+
+		} else if (strcmp(row[0], "hwcollect/commands") == 0) {
+			if (row[1] && row[1][0])
+				commands = strdup(row[1]);
+			else if (row[2] && row[2][0])
+				commands = strdup(row[2]);
+		}
+		nrows--;
+	}
+	mysql_free_result(res);
+
+	bufp += OUTPUT(bufp, ebufp - bufp, "COLLECT=%d\n",
+		       interval > 0 ? 1 : 0);
+	if (interval <= 0 || pideid == 0 || outputdir == 0 || commands == 0) {
+		client_writeback(sock, buf, strlen(buf), tcp);
+		if (pideid)
+			free(pideid);
+		if (outputdir)
+			free(outputdir);
+		if (commands)
+			free(commands);
+		return 0;
+	}
+
+	/* Check the experiment context */
+	if ((eid = strchr(pideid, '/'))) {
+		*eid++ = '\0';
+	}
+	if (strcmp(reqp->pid, pideid) ||
+	    (eid != 0 && strcmp(reqp->eid, eid))) {
+		free(pideid);
+		free(outputdir);
+		free(commands);
+		return 0;
+	}
+	free(pideid);
+
+	gettimeofday(&now, NULL);
+
+	/* See if sufficient time has past */
+	attrclause =
+		"(attrkey='hwcollect_interval' or "
+		" attrkey='hwcollect_last')";
+
+	res = mydb_query("(select attrkey,attrvalue from nodes as n "
+			 " left join node_type_attributes as a on "
+			 "      n.type=a.type "
+			 " where %s and n.node_id='%s') "
+			 "union "
+			 "(select attrkey,attrvalue "
+			 "   from node_attributes "
+			 " where %s and node_id='%s') ",
+			 2, attrclause, reqp->nodeid,
+			 attrclause, reqp->nodeid);
+
+	if (res && (nrows = (int)mysql_num_rows(res) > 0)) {
+		while (nrows--) {
+			row = mysql_fetch_row(res);
+			if (row[1] && row[1][0]) {
+				if (strcmp(row[0], "hwcollect_interval") == 0)
+					interval = atoi(row[1]);
+				else if (strcmp(row[0], "hwcollect_last") == 0)
+					last = (unsigned int)atoi(row[1]);
+			}
+		}
+	}
+	if (res)
+		mysql_free_result(res);
+	if (interval <= 0 || now.tv_sec < (time_t)(last + (interval*60))) {
+		client_writeback(sock, buf, strlen(buf), tcp);
+		free(outputdir);
+		free(commands);
+		return 0;
+	}
+	
+	bufp += OUTPUT(bufp, ebufp - bufp, "OUTDIR=%s\n", outputdir);
+	free(outputdir);
+	
+	/* XXX just use current timestamp as the prefix */
+	bufp += OUTPUT(bufp, ebufp - bufp, "PREFIX=%ld-\n", now.tv_sec);
+
+	cbp = commands;
+	while ((bp = strsep(&cbp, ";")) != NULL) {
+		char *os = strsep(&bp, ",");
+		char *name = strsep(&bp, ",");
+		char *cmdline = bp;
+		bufp += OUTPUT(bufp, ebufp - bufp,
+			       "OS=%s NAME=%s CMDLINE=%s\n",
+			       os, name, cmdline);
+	}
+	free(commands);
+
+	client_writeback(sock, buf, strlen(buf), tcp);
+
+	/* record that info was collected */
+	mydb_update("replace into node_attributes values "
+		    "('%s','hwcollect_last','%u',0)",
+		    reqp->nodeid, (unsigned)now.tv_sec);
 
 	return 0;
 }

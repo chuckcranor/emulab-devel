@@ -192,6 +192,10 @@ INSERT INTO sitevariables VALUES ('reservations/approval_threshold',NULL,'128','
 INSERT INTO sitevariables VALUES ('docker/registry',NULL,'','The URL of the Docker registry where this Emulab stores its custom Docker images; the empty string signifies that users cannot create custom Docker images',0);
 INSERT INTO sitevariables VALUES ('general/allowjumboframes',NULL,'0','Set non-zero to allow experiments to specify jumbo frames on links/lans. NOTE: the experimental network fabric switches must have jumbo frames enabled!',0);
 
+INSERT INTO sitevariables VALUES ('hwcollect/interval',NULL,'0','If non-zero, interval in minutes between HW collection events for any node. Whenever a node is in emulab-ops/hwcheckup and more than the interval has passed since the last collection, new data will be collected. Set to zero to disable collection.',0);
+INSERT INTO sitevariables VALUES ('hwcollect/experiment',NULL,'emulab-ops/hwcheckup','Project (pid) or experiment (pid/eid) in which the node must reside to run collection.',0);
+INSERT INTO sitevariables VALUES ('hwcollect/outputdir',NULL,'/proj/emulab-ops/hwcollect','NFS-shared filesystem into which HW info command output is stored. Directory must exist.',0);
+INSERT INTO sitevariables VALUES ('hwcollect/commands',NULL,'Any,dmesg,dmesg;Linux,lshw,lshw','Collection programs to run. A semi-colon separated list of OS,program,cmdline triples.',0);
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
