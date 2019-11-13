@@ -608,6 +608,12 @@ sub DoGroupReserve()
 	    }
 	    else {
 		#
+		# No start time means user wants the reservation right now.
+		#
+		$start = time()
+		    if (!defined($start));
+	
+		#
 		# Create a new reservation group.
 		#
 		my $args = {

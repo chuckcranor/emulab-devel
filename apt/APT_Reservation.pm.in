@@ -1060,6 +1060,12 @@ sub Fits($$$$$)
     my $freq_uuid = $ref->{'uuid'};
     my @groups    = @{$groups};
     my $fits      = 1;
+
+    #
+    # No start time means user wants the reservation right now.
+    #
+    $start = time()
+	if (!defined($start));
 	
     foreach my $group (@groups) {
 	next
