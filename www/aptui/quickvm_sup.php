@@ -537,8 +537,6 @@ if (!$login_user->portal()) {
                             All Experiments</a></li>
 		                 <li><a href='list-profiles.php'>
                             All Profiles</a></li>
-                                 <li><a href='list-reservations.php?force=1'>
-                            All Reservations</a></li>
                                  <li><a href='list-resgroups.php'>
                             All ResGroups</a></li>
  		                 <li><a href='list-datasets.php'>
