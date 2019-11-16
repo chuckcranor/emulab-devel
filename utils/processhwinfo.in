@@ -1,0 +1,311 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2003-2019 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Data::Dumper;
+use JSON;
+
+#
+# Process hardware info for a node.
+#
+sub usage()
+{
+    print STDERR "Usage: processhwinfo <node_id>\n";
+    print STDERR "Options:\n";
+    print STDERR " -v        - Turn on debugging\n";
+    print STDERR " -n        - Impotent mode\n";
+    print STDERR " -t        - Also set the type hardware info\n";
+    print STDERR " -r        - Remove hardware info instead.\n";
+    print STDERR " -l        - Override default data directory.\n";
+    exit(-1);
+}
+my $optlist   = "tnvrl:";
+my $verbose   = 0;
+my $impotent  = 0;
+my $typetoo   = 0;
+my $remove    = 0;
+my $location;
+
+# Protos
+sub fatal($);
+sub UpdateInfo($$$);
+sub RemoveInfo($$);
+
+# We prune out anything with these keys/class.
+my %prunedKeys = (
+    "class"   => 1,
+    "serial"  => 1,
+    "isa"     => 1,
+    "ip"      => 1,
+    "claimed" => 1,
+);
+my %prunedClasses = (
+    "display"   => 1,
+    "volume"    => 1,
+    "generic"   => 1,
+);
+
+#
+# Configure variables
+#
+my $TB           = "@prefix@";
+my $PROJROOT     = "@PROJROOT_DIR@";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use emdb;
+use EmulabConstants;
+use emutil;
+use User;
+use Node;
+use NodeType;
+
+# After loading libs
+my $HWCOLLECT    = $PROJROOT . "/" . TBOPSPID() . "/hwcollect";
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+
+#
+# Parse command arguments. 
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{'h'})) {
+    usage();
+}
+if (defined($options{'v'})) {
+    $verbose = 1;
+}
+if (defined($options{'n'})) {
+    $impotent = 1;
+}
+if (defined($options{'t'})) {
+    $typetoo = 1;
+}
+if (defined($options{'l'})) {
+    $location = $options{'l'};
+}
+
+#
+# Verify user, must be admin.
+#
+my $this_user = User->ThisUser();
+if (! defined($this_user)) {
+    fatal("You ($UID) do not exist!");
+}
+if (!$this_user->IsAdmin()) {
+    fatal("You are not a testbed administrator!");
+}
+
+usage()
+    if (@ARGV != 1);
+
+my $node_id   = $ARGV[0];
+
+# Sanity check node/portinfo.
+my $node = Node->Lookup($node_id);
+if (!defined($node)) {
+    fatal("No such node $node_id");
+}
+if (!defined($location)) {
+    $location = "$HWCOLLECT/$node_id";
+}
+UpdateInfo($node, $location, $typetoo);
+exit(0);
+
+sub fatal($)
+{
+    my ($mesg) = $_[0];
+
+    die("*** $0:\n".
+	"    $mesg\n");
+}
+
+#
+# Replace hardware info for a node, optionally replacing type table also.
+#
+sub doArray($$$);
+sub doList($$$);
+
+sub UpdateInfo($$$)
+{
+    my ($node, $location, $typetoo) = @_;
+    my $node_id  = $node->node_id();
+    my $type     = $node->type();
+    my $pathinfo = [];
+    my $hwfile;
+    my $prefix;
+
+    if (! -e $location) {
+	fatal("Hardware collection directory does not exist: $location");
+    }
+    opendir(DIR, $location) or
+	fatal("Unable to open directory $location");
+    while (my $dirent = readdir(DIR)) {
+	next
+	    if ($dirent eq "." || $dirent eq "..");
+	if ($dirent =~ /^(\d+)\-/) {
+	    if (!defined($prefix) || $1 > $prefix) {
+		$prefix = $1;
+	    }
+	}
+    }
+    if (!defined($prefix)) {
+	fatal("Cannot find properly named files in $location");
+    }
+    $hwfile = "$location/${prefix}-lshw.out";
+    if (! -e $hwfile) {
+	fatal("Hardware collection file does not exist: $hwfile");
+    }
+    my $text = emutil::ReadFile($hwfile);
+    if (!defined($text)) {
+	fatal("Could not read hardware file: $hwfile");
+    }
+    my $ref = eval { decode_json($text); };
+    if ($@) {
+	fatal("Could not decode json data: $@");
+	next;
+    }
+    doArray($ref, "", $pathinfo);
+    if ($verbose) {
+	print Dumper($ref);
+    }
+    if ($impotent) {
+	print "Not entering data into the DB, as directed.\n";
+	return;
+    }
+    my $safe_json = DBQuoteSpecial($text);
+    if ($typetoo) {
+	print "Entering data into the DB for type $type ...\n";
+	DBQueryFatal("replace into node_type_hardware set ".
+		     "  type='$type',updated=now(), ".
+		     "  rawjson=$safe_json");
+
+	DBQueryFatal("delete from node_type_hardware_paths ".
+		     "where type='$type'");
+	
+	foreach my $ref (@{$pathinfo}) {
+	    my ($path, $val) = @{$ref};
+	    my $safe_path = DBQuoteSpecial($path);
+	    my $safe_val  = DBQuoteSpecial($val);
+	    DBQueryFatal("replace into node_type_hardware_paths set ".
+			 " type='$type',path=$safe_path,value=$safe_val");
+	}
+    }
+    print "Entering data into the DB for node $node_id ...\n";
+    DBQueryFatal("replace into node_hardware set ".
+		 "  node_id='$node_id',updated=now(), ".
+		 "  rawjson=$safe_json");
+
+    DBQueryFatal("delete from node_hardware_paths ".
+		 "where node_id='$node_id'");
+	
+    foreach my $ref (@{$pathinfo}) {
+	my ($path, $val) = @{$ref};
+	my $safe_path = DBQuoteSpecial($path);
+	my $safe_val  = DBQuoteSpecial($val);
+	DBQueryFatal("replace into node_hardware_paths set ".
+		     " node_id='$node_id',path=$safe_path,value=$safe_val");
+    }
+}
+
+sub doArray($$$)
+{
+    my ($ref, $path, $result) = @_;
+    my $id = ($path eq "" ? "" : $ref->{'id'});
+
+    #
+    # Prune out all USB and any pci with no children.
+    # No serial numbers.
+    # No disk volumes or pci:isa or pci:generic
+    #
+    if (defined($id)) {
+	return 
+	    if ($id =~ /usb/);
+    
+	if ($id =~ /pci/) {
+	    return
+		if (!exists($ref->{'children'}));
+	}
+    }
+    foreach my $key (sort(keys(%{$ref}))) {
+	my $val = $ref->{$key};
+	if (ref($val) eq "ARRAY") {
+	    doList($val, "$path", $result);
+	}
+	elsif (ref($val) eq "HASH") {
+	    doArray($val, "$path/$key", $result);
+	}
+	elsif (!exists($prunedKeys{$key})) {
+	    push(@{$result}, ["$path/$key", $val]);
+	}
+    }
+}
+sub doList($$$)
+{
+    my ($ref, $path, $result) = @_;
+
+    foreach my $child (@{$ref}) {
+	if (ref($child) eq "ARRAY") {
+	    doList($child, "$path", $result);
+	}
+	else {
+	    my $id    = $child->{'id'};
+	    my $class = $child->{'class'};
+	    next
+		if (!defined($id));
+
+	    next
+		if (exists($prunedKeys{$id}) ||
+		    exists($prunedClasses{$class}));
+
+	    $id =~ s/:/\//;
+	    doArray($child, "$path/$id", $result);
+	}
+    }    
+}
+
+#
+# Remove Hardware info
+#
+sub RemoveInfo($$)
+{
+    my ($node, $typetoo) = @_;
+
+    return 0;
+}
+

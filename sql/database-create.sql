@@ -3910,6 +3910,57 @@ CREATE TABLE `node_type_features` (
   PRIMARY KEY  (`type`,`feature`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
+
+--
+-- Table structure for table `node_type_hardware`
+--
+
+DROP TABLE IF EXISTS `node_type_hardware`;
+CREATE TABLE `node_type_hardware` (
+  `type` varchar(30) NOT NULL default '',
+  `updated` datetime default NULL,
+  `uname` text,
+  `rawjson` text,  
+  PRIMARY KEY  (`type`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `node_type_hardware_paths`
+--
+
+DROP TABLE IF EXISTS `node_type_hardware_paths`;
+CREATE TABLE `node_type_hardware_paths` (
+  `type` varchar(30) NOT NULL default '',
+  `path` varchar(255) NOT NULL default '',
+  `value` text,
+  PRIMARY KEY  (`type`,`path`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `node_type_hardware`
+--
+
+DROP TABLE IF EXISTS `node_hardware`;
+CREATE TABLE `node_hardware` (
+  `node_id` varchar(30) NOT NULL default '',
+  `updated` datetime default NULL,
+  `uname` text,
+  `rawjson` mediumtext,  
+  PRIMARY KEY  (`node_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `node_type_hardware_paths`
+--
+
+DROP TABLE IF EXISTS `node_hardware_paths`;
+CREATE TABLE `node_hardware_paths` (
+  `node_id` varchar(32) NOT NULL default '',
+  `path` varchar(255) NOT NULL default '',
+  `value` text,
+  PRIMARY KEY  (`node_id`,`path`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
 --
 -- Table structure for table `node_types`
 --

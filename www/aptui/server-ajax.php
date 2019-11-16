@@ -474,6 +474,8 @@ $routing = array("geni-login" =>
 			      "guest"   => true,
 			      "methods" => array("GetInfo" =>
                                                      "Do_GetInfo",
+                                                 "GetHardwareInfo" =>
+                                                     "Do_GetHardwareInfo",
                                                  "Modify" =>
                                                      "Do_Modify",
                                                  "Reboot" =>
@@ -492,6 +494,8 @@ $routing = array("geni-login" =>
 			      "guest"   => true,
 			      "methods" => array("GetInfo" =>
                                                      "Do_GetInfo",
+                                                 "GetHardwareInfo" =>
+                                                     "Do_GetHardwareInfo",
                                                  "SaveFlag" =>
                                                      "Do_SaveFlag",
                                                  "SaveFeature" =>

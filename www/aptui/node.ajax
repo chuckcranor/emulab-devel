@@ -356,6 +356,56 @@ function GetExpInfo($node)
 }
 
 #
+# Get the hardware info for a node.
+#
+function Do_GetHardwareInfo()
+{
+    global $this_user, $ajax_args, $node, $GuestUserOkay;
+    global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+
+    # Only this function allows guest users.
+    $GuestUserOkay = true;
+    
+    if (CheckPageArgs(0)) {
+        return;
+    }
+    #
+    # Guest users allowed to see testnodes only.
+    #
+    if (!$this_user && $node->role() != "testnode") {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    $node_id = $node->node_id();
+    $query_result =
+        DBQueryFatal("select * from node_hardware where node_id='$node_id'");
+    if (!mysql_num_rows($query_result)) {
+	SPITAJAX_ERROR(-1, "No hardware info available for $node_id");
+	return -1;
+    }
+    $row = mysql_fetch_array($query_result);
+
+    $blob = array("node_id" => $node_id,
+                  "updated" => DateStringGMT($row["updated"]),
+                  "uname"   => $row["uname"],
+                  "paths"   => array(),
+    );
+    $query_result =
+        DBQueryFatal("select path,value from node_hardware_paths ".
+                     "where node_id='$node_id'");
+    if (!mysql_num_rows($query_result)) {
+	SPITAJAX_ERROR(-1, "No hardware path info available for $node_id");
+	return -1;
+    }
+    while ($row = mysql_fetch_array($query_result)) {
+        $path  = $row["path"];
+        $value = $row["value"];
+        $blob["paths"][$path] = $value;
+    }
+    SPITAJAX_RESPONSE($blob);
+}
+
+#
 # Get the log entries for a node.
 #
 function Do_GetLog()

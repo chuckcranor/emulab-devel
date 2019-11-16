@@ -422,6 +422,46 @@ function Delete($which)
     SPITAJAX_RESPONSE(1);
 }
 
+function Do_GetHardwareInfo()
+{
+    global $this_user, $ajax_args, $node, $GuestUserOkay;
+    global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+
+    # Only this function allows guest users.
+    $GuestUserOkay = true;
+    
+    if (CheckPageArgs(0)) {
+        return;
+    }
+    $type = $ajax_args["type"];
+    $query_result =
+        DBQueryFatal("select * from node_type_hardware where type='$type'");
+    if (!mysql_num_rows($query_result)) {
+	SPITAJAX_ERROR(-1, "No hardware info available for $type");
+	return -1;
+    }
+    $row = mysql_fetch_array($query_result);
+
+    $blob = array("type"    => $type,
+                  "updated" => DateStringGMT($row["updated"]),
+                  "uname"   => $row["uname"],
+                  "paths"   => array(),
+    );
+    $query_result =
+        DBQueryFatal("select path,value from node_type_hardware_paths ".
+                     "where type='$type'");
+    if (!mysql_num_rows($query_result)) {
+	SPITAJAX_ERROR(-1, "No hardware path info available for $type");
+	return -1;
+    }
+    while ($row = mysql_fetch_array($query_result)) {
+        $path  = $row["path"];
+        $value = $row["value"];
+        $blob["paths"][$path] = $value;
+    }
+    SPITAJAX_RESPONSE($blob);
+}
+
 # Local Variables:
 # mode:php
 # End:
