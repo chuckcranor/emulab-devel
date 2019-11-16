@@ -52,7 +52,7 @@ $(function ()
 	$('#waitwait_div').html(templates['waitwait-modal']);
 
 	var root = {
-	    "id"         : "/",
+	    "id"         : "root",
 	    "text"       : (window.TYPE === undefined ?
 			    window.NODEID : window.TYPE),
 	    "children"   : [],
@@ -69,11 +69,11 @@ $(function ()
 	    var val     = paths[path];
 	    var tokens  = path.split("/");
 	    var current = root;
-	    var id      = "";
+	    var id      = "root";
 
 	    for (var j = 1; j < tokens.length; j++) {
 		var token = tokens[j];
-		id += "/" + token;
+		id += "-" + token;
 
 		if (j == tokens.length - 1) {
 		    // Last token is a property of the current group.
@@ -158,9 +158,13 @@ $(function ()
 			$(".property-search")
 			    .removeClass("jstree-search")
 			    .removeClass("property-search");
+			$('#tree').jstree(true).close_all();
+			$('#tree').jstree(true).open_node("root", null, false);
 		    }
 		    return;
 		}
+		$('#tree').jstree(true).close_all();
+		
 		/*
 		 * Search the path list, looking for values that match.
 		 * Collect the paths, and then select those tree jodes.
@@ -171,18 +175,33 @@ $(function ()
 
 		    if (value.search(v) >= 0) {
 			var tokens = path.split("/");
+			// Last token is propert name.
 			tokens.pop();
-			if (tokens.length > 1) {
-			    path = tokens.join("/");
+			// First token is alway "root", see above
+			tokens[0] = "root";
+			// We converted / to - above.
+			path = tokens.join("-");
+			//console.info(path);
+			
+			/*
+			 * We have to open/show each node in the path cause
+			 * the tree is created lazily.
+			 */
+			var tmp = "";
+			for (var j = 0; j < tokens.length; j++) {
+			    var token = tokens[j];
+
+			    //console.info("foo", tmp);
+			    tmp += token;
+			    if (j < tokens.length - 1) {
+				$('#tree').jstree(true)
+				    .open_node(tmp, null, false);
+			    }
+			    tmp += "-";
 			}
-			else {
-			    path = "/";
-			}
-			console.info(path);
-			$('#tree').jstree(true).show_node(path);
 			// Funky search term cause of slashes "[id='/core']"
 			var term = "[id='" + path + "_anchor']";
-			console.info(term);
+			//console.info(term);
 			$(term).addClass("jstree-search");
 			$(term).addClass("property-search");
 		    }
