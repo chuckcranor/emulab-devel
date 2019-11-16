@@ -264,13 +264,16 @@ sub doArray($$$)
     }
     foreach my $key (sort(keys(%{$ref}))) {
 	my $val = $ref->{$key};
-	if (ref($val) eq "ARRAY") {
+	if (ref($val) eq "ARRAY" && $key eq "children") {
 	    doList($val, "$path", $result);
 	}
 	elsif (ref($val) eq "HASH") {
 	    doArray($val, "$path/$key", $result);
 	}
 	elsif (!exists($prunedKeys{$key})) {
+	    if (ref($val) eq "ARRAY") {
+		$val = join(",", @{$val});
+	    }
 	    push(@{$result}, ["$path/$key", $val]);
 	}
     }
