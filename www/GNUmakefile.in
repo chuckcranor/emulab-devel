@@ -162,6 +162,7 @@ APTTEMPLATES += $(wildcard $(SRCDIR)/aptui/template/*.md)
 APTCSSFILES = $(wildcard $(SRCDIR)/aptui/css/*.css)
 APTFONTS = $(wildcard $(SRCDIR)/aptui/fonts/*)
 APTIMAGES = $(wildcard $(SRCDIR)/aptui/images/*)
+JSTREE = $(wildcard $(SRCDIR)/aptui/jstree/*)
 
 APTNEWJSFILES   = $(wildcard $(SRCDIR)/aptui/js/new/*.js)
 APTNEWTEMPLATES = $(wildcard $(SRCDIR)/aptui/template/new/*.html)
@@ -230,6 +231,7 @@ ALLAPTTEMPLATES = $(notdir $(APTTEMPLATES))
 ALLAPTCSS = $(notdir $(APTCSSFILES))
 ALLAPTFONTS = $(notdir $(APTFONTS))
 ALLAPTIMAGES = $(notdir $(APTIMAGES))
+ALLJSTREE = $(notdir $(JSTREE))
 
 ALLAPTNEWJS  = $(notdir $(APTNEWJSFILES))
 ALLAPTNEWTEMPLATES = $(notdir $(APTNEWTEMPLATES))
@@ -283,6 +285,7 @@ apt-install: 	$(addprefix $(INSTALL_WWWDIR)/apt/, $(ALLAPTUI)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/css/, $(ALLAPTCSS)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/fonts/, $(ALLAPTFONTS)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/images/, $(ALLAPTIMAGES)) \
+	$(addprefix $(INSTALL_WWWDIR)/apt/jstree/, $(ALLJSTREE)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/js/new/, $(ALLAPTNEWJS)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/template/new/, $(ALLAPTNEWTEMPLATES))
 	cd $(INSTALL_WWWDIR) && \
