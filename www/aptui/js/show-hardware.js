@@ -54,6 +54,7 @@ $(function ()
 	    "text"       : text,
 	    "children"   : [],
 	    "properties" : {},
+	    "values"     : [],
 	    "state"      : {
 		"opened"    : true,   // is the node open
 		"disabled"  : false,  // is the node disabled
@@ -94,6 +95,7 @@ $(function ()
 		    // Last token is a property of the current group.
 		    // These are shown in the right side panel.
 		    current.properties[token] = val;
+		    current.values.push(val);
 		    break;
 		}
 		var next = null;
@@ -112,6 +114,7 @@ $(function ()
 			"text"       : token,
 			"children"   : [],
 			"properties" : {},
+			"values"     : [],
 		    };
 		    current.children.push(next);
 		}
@@ -141,6 +144,7 @@ $(function ()
 		    "text"       : name,
 		    "children"   : [],
 		    "properties" : {},
+		    "values"     : [],
 		};
 		GenerateJson(top, details.paths, name);
 		root.children.push(top);
@@ -155,13 +159,28 @@ $(function ()
 		'force_text' : true,
 		'check_callback' : false,
 		'themes' : {
-		    'responsive' : false,
+		    'name' : "default"
 		}
 	    },
 	    'plugins' : ['search'],
+	    'search' : {
+		'search_callback' : function (str, node, f) {
+		    if (f.search(node.text).isMatch) {
+			return true;
+		    }
+		    // Search the property values for a match.
+		    var length = node.original.values.length;
+		    for (var i = 0; i < length; i++) {
+			var val = node.original.values[i];
+			if (f.search(val).isMatch) {
+			    return true;
+			}
+		    }
+		},
+	    },
 	})
 	.on('select_node.jstree', function (event, data) {
-	    console.info(data);
+	    //console.info(data);
 	    var node = data.node;
 	    var properties = node.original.properties;
 	    var html = "";
@@ -178,7 +197,7 @@ $(function ()
 	    $('#tree').jstree(true).select_node(rootid);
 	}, 150);
 
-	// Search boxes
+	// Search boxe
 	var timer = false;
 	$('#hardware-search').keyup(function () {
 	    if (timer) {
@@ -189,71 +208,18 @@ $(function ()
 		$('#tree').jstree(true).search(v);
 	    }, 250);
 	});
-	$('#property-search').keyup(function () {
-	    if (timer) {
-		clearTimeout(timer);
-	    }
-	    timer = setTimeout(function () {
-		var v = $('#property-search').val().toLowerCase();
-		var matches = [];
 
-		if (v.length < 3) {
-		    if (v.length == 0) {
-			$(".property-search")
-			    .removeClass("jstree-search")
-			    .removeClass("property-search");
-			$('#tree').jstree(true).close_all();
-			$('#tree').jstree(true).open_node(rootid, null, false);
-		    }
-		    return;
-		}
+	// Expand All button.
+	$('#expand-all').click(function (event) {
+	    if ($('#expand-all').data("expanded") == false) {
+		$('#tree').jstree(true).open_all();
+		$('#expand-all').data("expanded", true)
+	    }
+	    else {
 		$('#tree').jstree(true).close_all();
 		$('#tree').jstree(true).open_node(rootid, null, false);
-		
-		/*
-		 * Search the path list, looking for values that match.
-		 * Collect the paths, and then select those tree jodes.
-		 */
-		_.each(stuff, function (details, key) {
-		    for (var i = 0; i < details.pathkeys.length; i++) {
-			var path  = details.pathkeys[i];
-			var value = details.paths[path].toLowerCase();
-
-			if (value.search(v) >= 0) {
-			    var tokens = path.split("/");
-			    // Last token is propert name.
-			    tokens.pop();
-			    // First token is always the key,
-			    tokens[0] = key;
-			    // We converted / to - above.
-			    path = tokens.join("-");
-			    //console.info(path);
-			    
-			    /*
-			     * We have to open/show each node in the path cause
-			     * the tree is created lazily.
-			     */
-			    var tmp = "";
-			    for (var j = 0; j < tokens.length; j++) {
-				var token = tokens[j];
-
-				//console.info("foo", tmp);
-				tmp += token;
-				if (j < tokens.length - 1) {
-				    $('#tree').jstree(true)
-					.open_node(tmp, null, false);
-				}
-				tmp += "-";
-			    }
-			    // Funky search term cause of slashes "[id='/core']"
-			    var term = "[id='" + path + "_anchor']";
-			    //console.info(term);
-			    $(term).addClass("jstree-search");
-			    $(term).addClass("property-search");
-			}
-		    }
-		});
-	    }, 250);
+		$('#expand-all').data("expanded", false)
+	    }
 	});
     }
 

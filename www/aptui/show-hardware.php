@@ -77,9 +77,8 @@ SPITHEADER(1);
 #
 # XXX Need to incorporate this ...
 #
-echo "<link rel='stylesheet'
-            href='https://static.jstree.com/latest/assets/dist/themes/default/style.min.css'>\n";
-echo "<script src='https://static.jstree.com/latest/assets/dist/jstree.min.js'></script>\n";
+echo "<link rel='stylesheet' href='css/jstree.css'>\n";
+echo "<script src='js/lib/jstree.js'></script>\n";
 
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
