@@ -250,12 +250,14 @@ sub doArray($$$)
 
     #
     # Prune out all USB and any pci with no children.
-    # No serial numbers.
-    # No disk volumes or pci:isa or pci:generic
+    # "network" at top level are software devices, ignore them.
     #
     if (defined($id)) {
 	return 
 	    if ($id =~ /usb/);
+
+	return
+	    if ($path =~ /^\/network/);
     
 	if ($id =~ /pci/) {
 	    return
