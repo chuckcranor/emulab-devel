@@ -429,16 +429,55 @@ function Do_GetHardwareInfo()
 
     # Only this function allows guest users.
     $GuestUserOkay = true;
-    
-    if (CheckPageArgs(0)) {
+
+    if (isset($ajax_args["typelist"])) {
+        $typelist = preg_split("/,/", $ajax_args["typelist"]);
+        foreach ($typelist as $t) {
+            if (!TBvalid_node_type($t)) {
+                SPITUSERERROR("$t contains illegal characters!");
+                return -1;
+            }
+            $query_result =
+                DBQueryFatal("select type from node_types where type='$t'");
+            if (!mysql_num_rows($query_result)) {
+                SPITUSERERROR("No such node type $t");
+                return -1;
+            }
+        }
+    }
+    elseif (CheckPageArgs(0)) {
         return;
     }
-    $type = $ajax_args["type"];
+    $result = array();
+    
+    if (isset($typelist)) {
+        foreach ($typelist as $t) {
+            $blob = GetHardwareInfoForType($t);
+            if (!$blob) {
+                SPITAJAX_ERROR(-1, "No hardware info available for $t");
+                return -1;
+            }
+            $result[$t] = $blob;
+        }
+    }
+    else {
+        $type = $ajax_args["type"];
+        $blob = GetHardwareInfoForType($type);
+        if (!$blob) {
+            SPITAJAX_ERROR(-1, "No hardware info available for $type");
+            return -1;
+        }
+        $result[$type] = $blob;
+    }
+    SPITAJAX_RESPONSE($result);
+}
+
+function GetHardwareInfoForType($type)
+{
     $query_result =
         DBQueryFatal("select * from node_type_hardware where type='$type'");
     if (!mysql_num_rows($query_result)) {
-	SPITAJAX_ERROR(-1, "No hardware info available for $type");
-	return -1;
+        return null;
     }
     $row = mysql_fetch_array($query_result);
 
@@ -451,15 +490,14 @@ function Do_GetHardwareInfo()
         DBQueryFatal("select path,value from node_type_hardware_paths ".
                      "where type='$type'");
     if (!mysql_num_rows($query_result)) {
-	SPITAJAX_ERROR(-1, "No hardware path info available for $type");
-	return -1;
+        return null;
     }
     while ($row = mysql_fetch_array($query_result)) {
         $path  = $row["path"];
         $value = $row["value"];
         $blob["paths"][$path] = $value;
     }
-    SPITAJAX_RESPONSE($blob);
+    return $blob;
 }
 
 # Local Variables:

@@ -402,7 +402,8 @@ function Do_GetHardwareInfo()
         $value = $row["value"];
         $blob["paths"][$path] = $value;
     }
-    SPITAJAX_RESPONSE($blob);
+    $result = array("$node_id" => $blob);
+    SPITAJAX_RESPONSE($result);
 }
 
 #

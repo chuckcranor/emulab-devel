@@ -42,17 +42,30 @@ if (! ($check_status & CHECKLOGIN_LOGGEDIN)) {
 #
 # Verify page arguments.
 #
-$reqargs = OptionalPageArguments("type",  PAGEARG_STRING,
-                                 "node",  PAGEARG_NODE);
+$reqargs = OptionalPageArguments("type",     PAGEARG_STRING,
+                                 "typelist", PAGEARG_STRING,
+                                 "node",     PAGEARG_NODE);
 
 if (isset($type)) {
     if (!TBvalid_node_type($type)) {
-        SPITUSERERROR("$node_type contains illegal characters!");
+        SPITUSERERROR("$type contains illegal characters!");
     }
     $query_result =
         DBQueryFatal("select type from node_types where type='$type'");
     if (!mysql_num_rows($query_result)) {
         SPITUSERERROR("No such node type");
+    }
+}
+elseif (isset($typelist)) {
+    foreach (preg_split("/,/", $typelist) as $t) {
+        if (!TBvalid_node_type($t)) {
+            SPITUSERERROR("$t contains illegal characters!");
+        }
+        $query_result =
+            DBQueryFatal("select type from node_types where type='$t'");
+        if (!mysql_num_rows($query_result)) {
+            SPITUSERERROR("No such node type $t");
+        }
     }
 }
 elseif (!isset($node)) {
@@ -76,6 +89,9 @@ echo "    window.ISADMIN   = " . (ISADMIN() ? "true" : "false") . ";\n";
 echo "    window.ISGUEST   = " . ($this_user ? "false" : "true") . ";\n";
 if (isset($node)) {
     echo "    window.NODEID    = '" . $node->node_id() . "';\n";
+}
+elseif (isset($typelist)) {
+    echo "    window.TYPELIST  = '$typelist';\n";
 }
 else {
     echo "    window.TYPE      = '$type';\n";
