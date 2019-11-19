@@ -10,7 +10,11 @@ override_dh_install:
 		Makefile ipod.c usr/src/emulab-ipod-dkms-$(DEB_VERSION_UPSTREAM)
 
 override_dh_dkms:
-	dh_dkms -V $(DEB_VERSION_UPSTREAM)
+ifeq ($(DEB_BUILD_ARCH),arm64)
+	dh_dkms -V $(DEB_VERSION_UPSTREAM) -- debian/emulab-ipod-dkms.dkms.aarch64
+else
+	dh_dkms -V $(DEB_VERSION_UPSTREAM) -- debian/emulab-ipod-dkms.dkms.default
+endif
 
 override_dh_auto_configure:
 override_dh_auto_build:

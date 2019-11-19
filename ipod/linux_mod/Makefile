@@ -39,7 +39,7 @@ clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
 endif
 
-emulab-ipod-dkms_$(VERSION)_all.deb: debian/control debian/rules debian/changelog debian/compat debian/emulab-ipod-dkms.dkms
+emulab-ipod-dkms_$(VERSION)_all.deb: debian/control debian/rules debian/changelog debian/compat
 	dpkg-buildpackage -us -uc
 	mv ../emulab-ipod-dkms_$(VERSION)_all.deb .
 
