@@ -394,7 +394,7 @@ $(function ()
 
 	    html += graphTemplate({"details"        : details,
 				   "graphid"        : graphid,
-				   "title"          : details.nickname,
+				   "title"          : details.name,
 				   "urn"            : urn,
 				   "showhelp"       : true,
 				   "showfullscreen" : true});
