@@ -731,8 +731,8 @@ DROP TABLE IF EXISTS `apt_reservation_group_rf_reservations`;
 CREATE TABLE `apt_reservation_group_rf_reservations` (
   `uuid` varchar(40) NOT NULL default '',
   `freq_uuid` varchar(40) NOT NULL default '',
-  `freq_low` float(8,2) NOT NULL DEFAULT '0',
-  `freq_high` float(8,2) NOT NULL DEFAULT '0',
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
   `submitted` datetime DEFAULT NULL,
   `approved` datetime DEFAULT NULL,
   `canceled` datetime DEFAULT NULL,
@@ -788,8 +788,8 @@ CREATE TABLE `apt_reservation_group_rf_reservation_history` (
   `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
   `uuid` varchar(40) NOT NULL default '',
   `freq_uuid` varchar(40) NOT NULL default '',
-  `freq_low` float(8,2) NOT NULL DEFAULT '0',
-  `freq_high` float(8,2) NOT NULL DEFAULT '0',
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
   `submitted` datetime DEFAULT NULL,
   `approved` datetime DEFAULT NULL,
   `canceled` datetime DEFAULT NULL,
@@ -3920,7 +3920,7 @@ CREATE TABLE `node_type_hardware` (
   `type` varchar(30) NOT NULL default '',
   `updated` datetime default NULL,
   `uname` text,
-  `rawjson` text,  
+  `rawjson` mediumtext,  
   PRIMARY KEY  (`type`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 

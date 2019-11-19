@@ -10,7 +10,7 @@ sub DoUpdate($$$)
 		     " `type` varchar(30) NOT NULL default '', ".
 		     " `updated` datetime default NULL, ".
 		     " `uname` text, ".
-		     " `rawjson` text,  ".
+		     " `rawjson` mediumtext,  ".
 		     " PRIMARY KEY  (`type`) ".
 		     ") ENGINE=MyISAM DEFAULT CHARSET=latin1");
     }
@@ -27,7 +27,7 @@ sub DoUpdate($$$)
 		     " `node_id` varchar(30) NOT NULL default '', ".
 		     " `updated` datetime default NULL, ".
 		     " `uname` text, ".
-		     " `rawjson` text,  ".
+		     " `rawjson` mediumtext,  ".
 		     " PRIMARY KEY  (`node_id`) ".
 		     ") ENGINE=MyISAM DEFAULT CHARSET=latin1");
     }
