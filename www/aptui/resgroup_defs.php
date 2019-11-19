@@ -288,16 +288,14 @@ class ReservationGroupRFReservation
     #
     # Constructor to lookup a single reservation in a group.
     #
-    function ReservationGroupRFReservation($group, $lower, $upper) {
+    function ReservationGroupRFReservation($group, $freq_uuid) {
 	$uuid = $group->uuid();
-        $safe_lower  = addslashes($lower);
-        $safe_upper  = addslashes($upper);
+        $safe_uuid  = addslashes($freq_uuid);
 
 	$query_result =
 	    DBQueryWarn("select * from apt_reservation_group_rf_reservations ".
 			"where uuid='$uuid' and ".
-                        "      freq_low='$safe_lower' and ".
-                        "      freq_high='$safe_upper'");
+                        "      freq_uuid='$safe_uuid'");
 
 	if (!$query_result || !mysql_num_rows($query_result)) {
 	    $this->reservation = null;
@@ -322,8 +320,8 @@ class ReservationGroupRFReservation
 	return !is_null($this->reservation);
     }
 
-    function Lookup($group, $lower, $upper) {
-	$foo = new ReservationGroupRFReservation($group, $lower, $upper);
+    function Lookup($group, $uuid) {
+	$foo = new ReservationGroupRFReservation($group, $uuid);
 
 	if ($foo->IsValid()) {
             return $foo;
@@ -339,14 +337,13 @@ class ReservationGroupRFReservation
         $uuid   = $group->uuid();
 
         $query_result =
-            DBQueryFatal("select freq_low,freq_high ".
+            DBQueryFatal("select freq_uuid ".
                          "  from apt_reservation_group_rf_reservations ".
                          "where uuid='$uuid'");
 
 	while ($row = mysql_fetch_array($query_result)) {
             $res = ReservationGroupRFReservation::Lookup($group,
-                                                         $row['freq_low'],
-                                                         $row['freq_high']);
+                                                         $row['freq_uuid']);
             if ($res) {
                 $result[] = $res;
             }

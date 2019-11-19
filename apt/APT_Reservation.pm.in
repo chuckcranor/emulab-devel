@@ -824,15 +824,15 @@ use Data::Dumper;
 use vars qw($AUTOLOAD);
 use overload ('""' => 'Stringify');
 
-sub Lookup($$$$)
+sub Lookup($$$)
 {
-    my ($class, $group, $lower, $upper) = @_;
+    my ($class, $group, $freq_uuid) = @_;
     my $uuid = $group->uuid();
+    my $safe_uuid = DBQuoteSpecial($freq_uuid);
 
     my $query_result =
 	DBQueryWarn("select * from apt_reservation_group_rf_reservations ".
-		    "where uuid='$uuid' and freq_low='$lower' and ".
-		    "      freq_high='$upper'");
+		    "where uuid='$uuid' and freq_uuid=$safe_uuid");
     return undef
 	if (! (defined($query_result) && $query_result->numrows));
 
@@ -865,7 +865,7 @@ sub Create($$$$)
 		    "  freq_uuid='$freq_uuid', ".
 		    "  freq_low='$lower', freq_high='$upper'");
     }
-    return Lookup($class, $group, $lower, $upper);
+    return Lookup($class, $group, $freq_uuid);
 }
 
 AUTOLOAD {
@@ -931,17 +931,17 @@ sub LookupForGroup($$)
     my $uuid   = $group->uuid();
 
     my $query_result =
-	DBQueryWarn("select freq_low,freq_high from ".
+	DBQueryWarn("select freq_uuid from ".
 		    "   apt_reservation_group_rf_reservations ".
 		    "where uuid='$uuid'");
     return ()
 	if (! (defined($query_result) && $query_result->numrows));
 
-    while (my ($lower,$upper) = $query_result->fetchrow_array()) {
-	my $res = Lookup($class, $group, $lower, $upper);
+    while (my ($freq_uuid) = $query_result->fetchrow_array()) {
+	my $res = Lookup($class, $group, $freq_uuid);
 	if (!defined($res)) {
 	    print STDERR "No apt_reservation_group_rf_reservations for ".
-		"$uuid/$lower/$upper\n";
+		"$uuid/$freq_uuid\n";
 	    return ();
 	}
 	$result->{$res->freq_uuid()} = $res;
@@ -1174,21 +1174,25 @@ sub RangeReserved($$$$$$)
     my ($class, $project, $start, $end, $freq_low, $freq_high) = @_;
     my $pid_idx = $project->pid_idx();
 
+    #
+    # mysql floats are stupid.
+    # https://dev.mysql.com/doc/refman/5.7/en/problems-with-float.html
+    #
     my $query_result =
-	DBQueryWarn("select g.uuid from apt_reservation_groups as g ".
+	DBQueryWarn("select g.uuid,rf.freq_low,rf.freq_high ".
+		    "   from apt_reservation_groups as g ".
 		    "left join apt_reservation_group_rf_reservations as rf on ".
 		    "   rf.uuid=g.uuid ".
 		    "where g.pid_idx='$pid_idx' and ".
 		    "      $start >= UNIX_TIMESTAMP(g.start) and ".
 		    "      $end <= UNIX_TIMESTAMP(g.end) and ".
-		    "      rf.approved is not null and ".
-		    "      $freq_low >= rf.freq_low and ".
-		    "      $freq_low <= rf.freq_high and ".
-		    "      $freq_high >= rf.freq_low and ".
-		    "      $freq_high <= rf.freq_high");
-    return 1
-	if ($query_result && $query_result->numrows);
-
+		    "      rf.approved is not null");
+    
+    while (my ($uuid,$lower,$upper) = $query_result->fetchrow_array()) {
+	return 1
+	    if ($freq_low >= $lower && $freq_low <= $upper &&
+		$freq_high >= $lower && $freq_high <= $upper);
+    }
     return 0;
 }
 
