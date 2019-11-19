@@ -1067,6 +1067,7 @@ $(function ()
 
 		ShowResGraph({"forecast"  : json.value.forecast,
 			      "selector"  : id,
+			      "resize"    : true,
 			      "skiptypes"      : json.value.prunelist,
 			      "click_callback" : function(when, type) {
 				  if (!editing) {

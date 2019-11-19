@@ -402,6 +402,14 @@ window.ShowResGraph = (function ()
 	    return;
 	}
 	console.info("ShowResGraph", args, datums);
+	
+	if (_.has(args, "resize") && datums.length > 10) {
+	    var id = '#' + args.selector + " .resgraph-size";
+	    var height = $(id).innerHeight();
+
+	    $(id).css("height", (height + 200) + "px")
+		.css("max-height", (height + 200) + "px");
+	}
 	CreateGraph(datums, args.selector, args.click_callback,
 		    args.showbrush);
     };
