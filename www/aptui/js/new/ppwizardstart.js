@@ -3327,7 +3327,7 @@ $(function () {
 		
 		if (details.multiValue) {
 		    if (!_.has(bindings, details.name)) {
-			bindings[details.name] = {"value" : [], "index" : []};
+			bindings[details.name] = {"value" : "", "index" : []};
 		    }
 		}
 	    });
