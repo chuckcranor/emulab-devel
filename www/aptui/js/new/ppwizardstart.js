@@ -3316,6 +3316,22 @@ $(function () {
 		    field.values[name] = value;
 		}
 	    });
+	    /*
+	     * Hmm, one problem with traversing the form contents, is that
+	     * we miss multivalue fields that are allowed to go to zero.
+	     * When that happens, we need to send a zero length array in
+	     * the bindings to tell geni-lib that it went to zero. 
+	     */
+	    _.each(formFields, function (details, idx) {
+		console.info("foo", details);
+		
+		if (details.multiValue) {
+		    if (!_.has(bindings, details.name)) {
+			bindings[details.name] = {"value" : [], "index" : []};
+		    }
+		}
+	    });
+	    
 	    console.info("formFields", formFields);
 	    console.info("bindings", bindings);
 	    if (0) {
