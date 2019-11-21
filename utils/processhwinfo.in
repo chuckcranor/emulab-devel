@@ -32,17 +32,21 @@ use JSON;
 #
 sub usage()
 {
-    print STDERR "Usage: processhwinfo <node_id>\n";
+    print STDERR "Usage: processhwinfo [-vfnr] <node_id> ...\n";
+    print STDERR "Usage: processhwinfo [-vfnr] -t <node_id>\n";
+    print STDERR "Usage: processhwinfo [-vfnr] -l <node_id>\n";
     print STDERR "Options:\n";
     print STDERR " -v        - Turn on debugging\n";
+    print STDERR " -f        - Force update even if timestamp is not newer\n";
     print STDERR " -n        - Impotent mode\n";
-    print STDERR " -t        - Also set the type hardware info\n";
     print STDERR " -r        - Remove hardware info instead.\n";
-    print STDERR " -l        - Override default data directory.\n";
+    print STDERR " -t        - Also set the node type info from this node.\n";
+    print STDERR " -l        - Override default data directory for a node.\n";
     exit(-1);
 }
-my $optlist   = "tnvrl:";
+my $optlist   = "tnvfrl:";
 my $verbose   = 0;
+my $force     = 0;
 my $impotent  = 0;
 my $typetoo   = 0;
 my $remove    = 0;
@@ -110,8 +114,14 @@ if (defined($options{'h'})) {
 if (defined($options{'v'})) {
     $verbose = 1;
 }
+if (defined($options{'f'})) {
+    $force = 1;
+}
 if (defined($options{'n'})) {
     $impotent = 1;
+}
+if (defined($options{'r'})) {
+    $remove = 1;
 }
 if (defined($options{'t'})) {
     $typetoo = 1;
@@ -132,20 +142,37 @@ if (!$this_user->IsAdmin()) {
 }
 
 usage()
-    if (@ARGV != 1);
+    if (@ARGV == 0);
 
-my $node_id   = $ARGV[0];
+fatal("Can only specify a single node along with 'l' and 't' options")
+    if (($location || $typetoo) && @ARGV > 1);
 
-# Sanity check node/portinfo.
-my $node = Node->Lookup($node_id);
-if (!defined($node)) {
-    fatal("No such node $node_id");
+# Get hwcollect directory from sitevar
+my $dir;
+if (libdb::TBGetSiteVar("hwcollect/outputdir", \$dir)) {
+    $HWCOLLECT = $dir;
 }
-if (!defined($location)) {
-    $location = "$HWCOLLECT/$node_id";
+
+my $rv = 0;
+foreach my $node_id (@ARGV) {
+    my $node = Node->Lookup($node_id);
+    if (!defined($node)) {
+	print STDERR "No such node '$node_id', skipped...\n";
+	next;
+    }
+
+    if ($remove) {
+	$rv += RemoveInfo($node, $typetoo);
+    } else {
+	my $infodir = $location;
+	if (!defined($infodir)) {
+	    $infodir = "$HWCOLLECT/$node_id";
+	}
+	$rv += UpdateInfo($node, $infodir, $typetoo);
+    }
 }
-UpdateInfo($node, $location, $typetoo);
-exit(0);
+
+exit($rv);
 
 sub fatal($)
 {
@@ -167,53 +194,111 @@ sub UpdateInfo($$$)
     my $node_id  = $node->node_id();
     my $type     = $node->type();
     my $pathinfo = [];
-    my $hwfile;
+    my ($hwfile, $unfile);
     my $prefix;
 
-    if (! -e $location) {
-	fatal("Hardware collection directory does not exist: $location");
+    if (! -d $location) {
+	print STDERR "$node_id: ".
+	    "Hardware collection directory '$location' does not exist\n";
+	return 1;
     }
-    opendir(DIR, $location) or
-	fatal("Unable to open directory $location");
+    if (!opendir(DIR, $location)) {
+	print STDERR "$node_id: ".
+	    "Unable to open directory '$location'\n";
+	return 1;
+    }
     while (my $dirent = readdir(DIR)) {
 	next
 	    if ($dirent eq "." || $dirent eq "..");
 	if ($dirent =~ /^(\d+)\-/) {
+	    # Note that prefix is a unix timestamp
 	    if (!defined($prefix) || $1 > $prefix) {
 		$prefix = $1;
 	    }
 	}
     }
     if (!defined($prefix)) {
-	fatal("Cannot find properly named files in $location");
+	print STDERR "$node_id: ".
+	    "Cannot find properly named files in '$location'\n";
+	return 1;
     }
+
+    # Make sure this info is newer than what we have
+    if (!$force) {
+	my $res =
+	    DBQueryFatal("select UNIX_TIMESTAMP(updated) from node_hardware ".
+			 " where node_id='$node_id'");
+	if (!$res) {
+	    fatal("DB error looking up info for '$node_id'");
+	}
+	if ($res->numrows > 0) {
+	    my ($ostamp) = $res->fetchrow_array();
+	    if ($prefix <= $ostamp) {
+		if ($verbose) {
+		    print STDERR "NOT updating $node_id info, ".
+			"new data older than DB data:\n".
+		    "  Old: ". localtime($ostamp). "\n".
+		    "  New: ". localtime($prefix). "\n";
+		} else {
+		    print "$node_id: ".
+			"DB info already up to date ...\n";
+		}
+		return 0;
+	    }
+	    if ($verbose) {
+		print STDERR "Updating $node_id info:\n".
+		    "  Old: ". localtime($ostamp). "\n".
+		    "  New: ". localtime($prefix). "\n";
+	    }
+	}
+    }
+
+    # If there is uname info, collect that
+    my $uninfo;
+    $unfile = "$location/${prefix}-uname.out";
+    if (-e $unfile) {
+	$uninfo = emutil::ReadFile($unfile);
+	if ($uninfo) {
+	    chomp($uninfo);
+	    $uninfo = DBQuoteSpecial($uninfo);
+	}
+    }
+    if (!defined($uninfo)) {
+	$uninfo = "NULL";
+    }
+
     $hwfile = "$location/${prefix}-lshw.out";
     if (! -e $hwfile) {
-	fatal("Hardware collection file does not exist: $hwfile");
+	print STDERR "$node_id: ".
+	    "Hardware collection file '$hwfile' does not exist\n";
+	return 1;
     }
     my $text = emutil::ReadFile($hwfile);
     if (!defined($text)) {
-	fatal("Could not read hardware file: $hwfile");
+	print STDERR "$node_id: ".
+	    "Could not read hardware file '$hwfile'\n";
+	return 1;
     }
     my $ref = eval { decode_json($text); };
     if ($@) {
-	fatal("Could not decode json data: $@");
-	next;
+	print STDERR "$node_id: ".
+	    "Could not decode json data: $@\n";
+	return 1;
     }
     doArray($ref, "", $pathinfo);
     if ($verbose) {
 	print Dumper($ref);
     }
     if ($impotent) {
-	print "Not entering data into the DB, as directed.\n";
-	return;
+	print "$node_id: Not entering data into the DB, as directed.\n";
+	return 0;
     }
     my $safe_json = DBQuoteSpecial($text);
     if ($typetoo) {
-	print "Entering data into the DB for type $type ...\n";
+	print "$node_id: Entering data into the DB for type $type ...\n";
 	DBQueryFatal("replace into node_type_hardware set ".
-		     "  type='$type',updated=now(), ".
-		     "  rawjson=$safe_json");
+		     "  type='$type',updated=FROM_UNIXTIME($prefix), ".
+		     "  uname=$uninfo,rawjson=$safe_json");
 
 	DBQueryFatal("delete from node_type_hardware_paths ".
 		     "where type='$type'");
@@ -226,10 +311,10 @@ sub UpdateInfo($$$)
 			 " type='$type',path=$safe_path,value=$safe_val");
 	}
     }
-    print "Entering data into the DB for node $node_id ...\n";
+    print "$node_id: Entering data into the DB ...\n";
     DBQueryFatal("replace into node_hardware set ".
-		 "  node_id='$node_id',updated=now(), ".
-		 "  rawjson=$safe_json");
+		 "  node_id='$node_id',updated=FROM_UNIXTIME($prefix), ".
+		 "  uname=$uninfo,rawjson=$safe_json");
 
     DBQueryFatal("delete from node_hardware_paths ".
 		 "where node_id='$node_id'");
@@ -241,6 +326,8 @@ sub UpdateInfo($$$)
 	DBQueryFatal("replace into node_hardware_paths set ".
 		     " node_id='$node_id',path=$safe_path,value=$safe_val");
     }
+
+    return 0;
 }
 
 sub doArray($$$)
@@ -310,7 +397,23 @@ sub doList($$$)
 sub RemoveInfo($$)
 {
     my ($node, $typetoo) = @_;
+    my $node_id  = $node->node_id();
 
+    print "$node_id: Removing data from the DB ...\n";
+    DBQueryFatal("delete from node_hardware ".
+		 "where node_id='$node_id'");
+    DBQueryFatal("delete from node_hardware_paths ".
+		 "where node_id='$node_id'");
+
+    if ($typetoo) {
+	my $type = $node->type();
+
+	print "$node_id: Removing data from the DB for type $type ...\n";
+	DBQueryFatal("delete from node_type_hardware ".
+		     "where type='$type'");
+	DBQueryFatal("delete from node_type_hardware_paths ".
+		     "where type='$type'");
+    }
     return 0;
 }
 
