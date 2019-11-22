@@ -35,6 +35,7 @@ sub usage()
     print STDERR "Usage: processhwinfo [-vfnr] <node_id> ...\n";
     print STDERR "Usage: processhwinfo [-vfnr] -t <node_id>\n";
     print STDERR "Usage: processhwinfo [-vfnr] -l <node_id>\n";
+    print STDERR "Usage: processhwinfo [-vn] [-N num] -P\n";
     print STDERR "Options:\n";
     print STDERR " -v        - Turn on debugging\n";
     print STDERR " -f        - Force update even if timestamp is not newer\n";
@@ -42,20 +43,25 @@ sub usage()
     print STDERR " -r        - Remove hardware info instead.\n";
     print STDERR " -t        - Also set the node type info from this node.\n";
     print STDERR " -l        - Override default data directory for a node.\n";
+    print STDERR " -P        - Prune the collection directory.\n";
+    print STDERR " -N num    - When pruning, keep the last num reports.\n";
     exit(-1);
 }
-my $optlist   = "tnvfrl:";
+my $optlist   = "tnvfrl:PN:";
 my $verbose   = 0;
 my $force     = 0;
 my $impotent  = 0;
 my $typetoo   = 0;
 my $remove    = 0;
 my $location;
+my $prune     = 0;
+my $keep      = 2;
 
 # Protos
 sub fatal($);
 sub UpdateInfo($$$);
 sub RemoveInfo($$);
+sub PruneRawInfo();
 
 # We prune out anything with these keys/class.
 my %prunedKeys = (
@@ -129,6 +135,33 @@ if (defined($options{'t'})) {
 if (defined($options{'l'})) {
     $location = $options{'l'};
 }
+if (defined($options{'P'})) {
+    $prune = 1;
+}
+if (defined($options{'N'})) {
+    if ($options{'N'} =~ /^(\d+)$/) {
+	$keep = $1;
+    } else {
+	fatal("Bogus -N argument");
+    }
+}
+
+# Get hwcollect directory from sitevar
+my $dir;
+if (libdb::TBGetSiteVar("hwcollect/outputdir", \$dir)) {
+    $HWCOLLECT = $dir;
+}
+
+if ($prune) {
+    if (!$impotent && $UID != 0) {
+	fatal("Must run as root to prune (-P)");
+    }
+    if (@ARGV != 0) {
+	fatal("Should be no additional arguments when pruning (-P)");
+    }
+    PruneRawInfo();
+    exit(0);
+}
 
 #
 # Verify user, must be admin.
@@ -146,12 +179,6 @@ usage()
 
 fatal("Can only specify a single node along with 'l' and 't' options")
     if (($location || $typetoo) && @ARGV > 1);
-
-# Get hwcollect directory from sitevar
-my $dir;
-if (libdb::TBGetSiteVar("hwcollect/outputdir", \$dir)) {
-    $HWCOLLECT = $dir;
-}
 
 my $rv = 0;
 foreach my $node_id (@ARGV) {
@@ -217,6 +244,7 @@ sub UpdateInfo($$$)
 	    }
 	}
     }
+    closedir(DIR);
     if (!defined($prefix)) {
 	print STDERR "$node_id: ".
 	    "Cannot find properly named files in '$location'\n";
@@ -417,3 +445,123 @@ sub RemoveInfo($$)
     return 0;
 }
 
+#
+# Clean up the collection directory:
+# - keep only the last $keep report sets
+# - get rid of 0x0000 .status files
+# - get rid of empty .err files.
+#
+sub PruneRawInfo()
+{
+    my @nodes = ();
+    my $node;
+
+    if (!opendir(DIR, $HWCOLLECT)) {
+	fatal("Unable to open directory '$HWCOLLECT'");
+    }
+    while (my $dirent = readdir(DIR)) {
+	next
+	    if ($dirent eq "." || $dirent eq "..");
+	if ($dirent =~ /^([-\w]+)$/ && ($node = Node->Lookup($1))) {
+	    push(@nodes, $node);
+	} elsif ($verbose) {
+	    print STDERR "Ignoring non-node directory '$dirent'\n";
+	}
+    }
+    closedir(DIR);
+
+    foreach $node (@nodes) {
+	my $node_id = $node->node_id();
+	my $dir = "$HWCOLLECT/$node_id";
+
+	if (! -d "$dir" || !opendir(DIR, $dir)) {
+	    if ($verbose) {
+		print STDERR "$dir: could not open directory, ignored\n";
+	    }
+	    next;
+	}
+
+	my %infosets = ();
+	while (my $dirent = readdir(DIR)) {
+	    next
+		if ($dirent eq "." || $dirent eq "..");
+	    if ($dirent =~ /^(\d+)\-/) {
+		$infosets{$1} = 1;
+	    } elsif ($verbose) {
+		print STDERR "$dir: unexpected file, ignored\n";
+	    }
+	}
+	closedir(DIR);
+
+	my @stamps = sort { $b <=> $a } keys %infosets;
+
+	if (0 && $verbose) {
+	    print STDERR "$node_id: Found " . int(@stamps) . " collections: ";
+	    print STDERR join(' ', @stamps), "\n";
+	}
+
+	for (my $i = 0; $i < @stamps; $i++) {
+	    my $prefix = $stamps[$i];
+	    my @files = `/bin/ls $dir/$prefix-*`;
+	    chomp(@files);
+
+	    # leave the most recent version alone
+	    if ($i == 0) {
+		next;
+	    }
+	    
+	    # for the next $keep-1 versions, just prune status/err files
+	    if ($i < $keep) {
+		foreach my $f (@files) {
+		    if ($f =~ /(.*\.err)$/) {
+			my $tf = $1;
+			if (-z "$tf") {
+			    if ($impotent) {
+				print STDERR "Would remove $1\n";
+			    } else {
+				if ($verbose) {
+				    print STDERR "Removing $tf ...\n";
+				}
+				unlink($tf);
+			    }
+			}
+			next;
+		    }
+		    if ($f =~ /(.*\.status)$/) {
+			my $tf = $1;
+			my $stat = -1;
+			if (open(STAT, "<$tf")) {
+			    my $v = <STAT>;
+			    close(STAT);
+			    chomp($v);
+			    $stat = hex($v);
+			}
+			if ($stat == 0) {
+			    if ($impotent) {
+				print STDERR "Would remove $tf\n";
+			    } else {
+				if ($verbose) {
+				    print STDERR "Removing $tf ...\n";
+				}
+				unlink($tf);
+			    }
+			}
+			next;
+		    }
+		}
+		next;
+	    }
+
+	    # for the rest, remove all the files
+	    my $filestr = join(' ', @files);
+	    if ($impotent) {
+		print STDERR "Would remove: $filestr\n";
+	    } else {
+		if ($verbose) {
+		    print STDERR "Removing: $filestr ...\n";
+		}
+		unlink(@files);
+	    }
+	}
+    }
+}
