@@ -131,14 +131,14 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
             header("Location: powder-shutdown.php");
         }
     }
-    elseif (0 && $login_user && $ISPOWDER && $login_user->RequireAddress()) {
+    elseif ($login_user && $ISPOWDER && $login_user->RequireAddress()) {
         if ($script != "myaccount.php" && $script != "logout.php") {
             $referrer = urlencode($_SERVER['REQUEST_URI']);
             header("Location: myaccount.php?addrequired=1&referrer=$referrer");
             return;
         }
     }
-    elseif (0 && $login_user && $login_user->IsActive() &&
+    elseif ($login_user && $login_user->IsActive() &&
             $login_user->RequireAUP()) {
         if ($script != "portal-aup.php" && $script != "logout.php") {
             $referrer = urlencode($_SERVER['REQUEST_URI']);
