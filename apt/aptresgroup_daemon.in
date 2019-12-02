@@ -67,7 +67,7 @@ my $MANAGERESGROUP   = "$TB/bin/manage_resgroup";
 my $PROTOUSER	     = "elabman";
 my $WAP              = "$TB/sbin/wap";
 my $SUDO	     = "/usr/local/bin/sudo";
-my $SLEEP_INTERVAL   = 60; # 3600
+my $SLEEP_INTERVAL   = 600;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
