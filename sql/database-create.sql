@@ -3955,7 +3955,7 @@ CREATE TABLE `node_hardware` (
 
 DROP TABLE IF EXISTS `node_hardware_paths`;
 CREATE TABLE `node_hardware_paths` (
-  `node_id` varchar(32) NOT NULL default '',
+  `node_id` varchar(30) NOT NULL default '',
   `path` varchar(255) NOT NULL default '',
   `value` text,
   PRIMARY KEY  (`node_id`,`path`)
