@@ -131,6 +131,11 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
             header("Location: powder-shutdown.php");
         }
     }
+    elseif ($login_user && ($login_status & CHECKLOGIN_PSWDEXPIRED)) {
+        # Bypass the next set of checks, let this proceee. User will
+        # be back here later.
+        ;
+    }
     elseif ($login_user && $ISPOWDER && $login_user->RequireAddress()) {
         if ($script != "myaccount.php" && $script != "logout.php") {
             $referrer = urlencode($_SERVER['REQUEST_URI']);
