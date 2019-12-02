@@ -58,8 +58,8 @@ else {
 if (!preg_match("/^[-\w]+$/", $type)) {
     SPITUSERERROR("$node_type contains illegal characters!");
 }
-$query_result = DBQueryFatal("select type from node_types where type='$type'");
-if (!mysql_num_rows($query_result)) {
+$nodetype = NodeType::Lookup($type);
+if (!$nodetype) {
     SPITUSERERROR("No such node type");
 }
 
@@ -102,6 +102,8 @@ echo "    window.TYPE      = '$type';\n";
 echo "    window.ISADMIN   = " . (ISADMIN() ? "true" : "false") . ";\n";
 echo "    window.EDITING   = $edit;\n";
 echo "    window.ISGUEST   = " . ($this_user ? "false" : "true") . ";\n";
+echo "    window.HASHWINFO = " .
+    ($nodetype->HasHardwareInfo() ? "true" : "false") . ";\n";
 echo "</script>\n";
 
 if ($edit) {

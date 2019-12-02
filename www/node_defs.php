@@ -22,6 +22,7 @@
 # }}}
 #
 include_once("osinfo_defs.php");
+include_once("nodetype_defs.php");
 
 #
 # A cache to avoid lookups. Indexed by node_id.
@@ -1825,6 +1826,20 @@ class Node
             $result[] = $row;
         }
         return $result;
+    }
+
+    #
+    # Is there hardware info for the node.
+    #
+    function HasHardwareInfo()
+    {
+        $node_id = $this->node_id();
+
+        $query_result =
+            DBQueryFatal("select updated from node_hardware ".
+                         "where node_id='$node_id'");
+        
+        return mysql_num_rows($query_result);
     }
 }
 

@@ -34,6 +34,14 @@
              type='button'>Edit</a>
 	<% } %>
       <% } %>
+      <% if (window.HASHWINFO) { %>
+	<a href="show-hardware.php?type=<%= window.TYPE %>"
+	   class='btn btn-info btn-xs pull-right'
+           style='margin-right: 10px; margin-top: -4px;'
+	   data-toggle='tooltip'
+	   title="Detailed hardware info"
+           type='button'>Hardware</a>
+      <% } %>
       <h3 class='panel-title'>Type info for <%- window.TYPE %></h3>
     </div>
     <div class='panel-body' style="padding-top: 10px;">

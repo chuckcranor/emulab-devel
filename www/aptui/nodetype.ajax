@@ -25,9 +25,15 @@ chdir("..");
 include_once("webtask.php");
 include_once("experiment_defs.php");
 include_once("node_defs.php");
+include_once("nodetype_defs.php");
 include_once("imageid_defs.php");
 include_once("osinfo_defs.php");
 chdir("apt");
+
+#
+# Set this for functions
+#
+$nodetype = null;
 
 #
 # We allow anonynous users to get ONLY node type info!
@@ -36,7 +42,7 @@ $GuestUserOkay = false;
 
 function CheckPageArgs($write)
 {
-    global $this_user, $ajax_args, $GuestUserOkay, $node;
+    global $this_user, $ajax_args, $GuestUserOkay, $nodetype;
     global $TB_NODEACCESS_READINFO, $TB_NODEACCESS_MODIFYINFO;
 
     if (! ($GuestUserOkay || $this_user)) {
@@ -52,9 +58,8 @@ function CheckPageArgs($write)
 	SPITAJAX_ERROR(-1, "Invalid node type");
 	return -1;
     }
-    $query_result =
-        DBQueryFatal("select type from node_types where type='$type'");
-    if (!mysql_num_rows($query_result)) {
+    $nodetype = NodeType::Lookup($type);
+    if (!$nodetype) {
 	SPITAJAX_ERROR(-1, "No such type");
 	return -1;
     }
@@ -73,7 +78,7 @@ function CheckPageArgs($write)
 #
 function Do_GetInfo()
 {
-    global $this_user, $ajax_args, $GuestUserOkay;
+    global $this_user, $ajax_args, $GuestUserOkay, $nodetype;
     global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
     $blob = array();
     $osinfo = array();
@@ -84,28 +89,21 @@ function Do_GetInfo()
     if (CheckPageArgs(0)) {
         return;
     }
-    $type = $ajax_args["type"];
-    $query_result = DBQueryFatal("select * from node_types where type='$type'");
-    if (!mysql_num_rows($query_result)) {
-	SPITAJAX_ERROR(-1, "No such type");
-	return -1;
-    }
-    $row = mysql_fetch_array($query_result);
-    $blob["type"]         = $row["type"];
-    $blob["class"]        = $row["class"];
-    $blob["architecture"] = $row["architecture"];
-    $blob["isvirtnode"]   = $row["isvirtnode"];
-    $blob["isjailed"]     = $row["isjailed"];
-    $blob["isdynamic"]    = $row["isdynamic"];
-    $blob["isremotenode"] = $row["isremotenode"];
-    $blob["issubnode"]    = $row["issubnode"];
-    $blob["isswitch"]     = $row["isswitch"];
-    $blob["features"]     = GetTypeFeatures($type);
+    $blob["type"]         = $nodetype->type();
+    $blob["class"]        = $nodetype->typeclass();
+    $blob["architecture"] = $nodetype->architecture();
+    $blob["isvirtnode"]   = $nodetype->isvirtnode();
+    $blob["isjailed"]     = $nodetype->isjailed();
+    $blob["isdynamic"]    = $nodetype->isdynamic();
+    $blob["isremotenode"] = $nodetype->isremotenode();
+    $blob["issubnode"]    = $nodetype->issubnode();
+    $blob["isswitch"]     = $nodetype->isswitch();
+    $blob["features"]     = GetTypeFeatures($nodetype->type());
 
     #
     # We want to convert osids and imageids in the attributes array.
     #
-    GetTypeAttributes($type, $attributes, $osinfo);
+    GetTypeAttributes($nodetype->type(), $attributes, $osinfo);
     $blob["attributes"] = $attributes;
     $blob["osinfo"]     = $osinfo;
     SPITAJAX_RESPONSE($blob);
@@ -228,7 +226,7 @@ function Do_SaveFlag()
 
 function SaveRow($which)
 {
-    global $this_user, $ajax_args;
+    global $this_user, $ajax_args, $nodetype;
     $isnew = 0;
     
     if (CheckPageArgs(1)) {
@@ -237,15 +235,8 @@ function SaveRow($which)
     if (isset($ajax_args["isnew"])) {
         $isnew = 1;
     }
-    if (!isset($ajax_args["type"]) || $ajax_args["type"] == "") {
-	SPITAJAX_ERROR(-1, "Missing type name");
-	return -1;
-    }
-    $type = $ajax_args["type"];
-    if (!TBvalid_node_type($type)) {
-	SPITAJAX_ERROR(-1, "Invalid type name");
-	return -1;
-    }
+    $type = $nodetype->type();
+
     if (!isset($ajax_args["name"]) || $ajax_args["name"] == "") {
 	SPITAJAX_ERROR(-1, "Missing feature name");
 	return -1;
@@ -382,20 +373,13 @@ function Do_DeleteOSImage()
 
 function Delete($which)
 {
-    global $this_user, $ajax_args;
+    global $this_user, $ajax_args, $nodetype;
     
     if (CheckPageArgs(1)) {
         return;
     }
-    if (!isset($ajax_args["type"]) || $ajax_args["type"] == "") {
-	SPITAJAX_ERROR(-1, "Missing type name");
-	return -1;
-    }
-    $type = $ajax_args["type"];
-    if (!TBvalid_node_type($type)) {
-	SPITAJAX_ERROR(-1, "Invalid type name");
-	return -1;
-    }
+    $type = $nodetype->type();
+
     if (!isset($ajax_args["name"]) || $ajax_args["name"] == "") {
 	SPITAJAX_ERROR(-1, "Missing feature or attribute name");
 	return -1;
@@ -424,7 +408,7 @@ function Delete($which)
 
 function Do_GetHardwareInfo()
 {
-    global $this_user, $ajax_args, $node, $GuestUserOkay;
+    global $this_user, $ajax_args, $node, $GuestUserOkay, $nodetype;
     global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
 
     # Only this function allows guest users.
@@ -461,7 +445,7 @@ function Do_GetHardwareInfo()
         }
     }
     else {
-        $type = $ajax_args["type"];
+        $type = $nodetype->type();
         $blob = GetHardwareInfoForType($type);
         if (!$blob) {
             SPITAJAX_ERROR(-1, "No hardware info available for $type");

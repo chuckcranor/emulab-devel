@@ -99,6 +99,14 @@
 	     title="Node History"
              type='button'>History</a>
 	<% } %>
+	<% if (window.HASHWINFO) { %>
+	  <a href="show-hardware.php?node_id=<%= fields.node_id %>"
+	     class='btn btn-info btn-xs pull-right'
+             style='margin-right: 10px; margin-top: -4px;'
+	     data-toggle='tooltip'
+	     title="Detailed hardware info"
+             type='button'>Hardware</a>
+	<% } %>
         <h3 class='panel-title'>Node <%- fields.node_id %></h3>
       </div>
       <div class='panel-body'>

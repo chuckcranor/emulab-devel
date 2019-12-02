@@ -78,6 +78,8 @@ echo "    window.CANEDIT        = $canedit;\n";
 echo "    window.CANREBOOT      = $canreboot;\n";
 echo "    window.CONSOLEALLOWED = $console;\n";
 echo "    window.BROWSERCONSOLE = $BROWSER_CONSOLE_ENABLE;\n";
+echo "    window.HASHWINFO      = " .
+    ($node->HasHardwareInfo() ? "true" : "false") . ";\n";
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
