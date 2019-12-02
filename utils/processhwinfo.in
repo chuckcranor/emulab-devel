@@ -35,24 +35,28 @@ sub usage()
     print STDERR "Usage: processhwinfo [-vfnr] <node_id> ...\n";
     print STDERR "Usage: processhwinfo [-vfnr] -t <node_id>\n";
     print STDERR "Usage: processhwinfo [-vfnr] -l <node_id>\n";
+    print STDERR "Usage: processhwinfo [-vfnr] -a\n";
     print STDERR "Usage: processhwinfo [-vn] [-N num] -P\n";
     print STDERR "Options:\n";
     print STDERR " -v        - Turn on debugging\n";
     print STDERR " -f        - Force update even if timestamp is not newer\n";
     print STDERR " -n        - Impotent mode\n";
     print STDERR " -r        - Remove hardware info instead.\n";
+    print STDERR " -a        - Operate on all nodes.\n";
     print STDERR " -t        - Also set the node type info from this node.\n";
     print STDERR " -l        - Override default data directory for a node.\n";
     print STDERR " -P        - Prune the collection directory.\n";
     print STDERR " -N num    - When pruning, keep the last num reports.\n";
     exit(-1);
 }
-my $optlist   = "tnvfrl:PN:";
+my $optlist   = "tnvfrl:PN:a";
 my $verbose   = 0;
 my $force     = 0;
 my $impotent  = 0;
 my $typetoo   = 0;
 my $remove    = 0;
+my $allnodes  = 0;
+my @nodes     = ();
 my $location;
 my $prune     = 0;
 my $keep      = 2;
@@ -129,6 +133,9 @@ if (defined($options{'n'})) {
 if (defined($options{'r'})) {
     $remove = 1;
 }
+if (defined($options{'a'})) {
+    $allnodes = 1;
+}
 if (defined($options{'t'})) {
     $typetoo = 1;
 }
@@ -174,17 +181,46 @@ if (!$this_user->IsAdmin()) {
     fatal("You are not a testbed administrator!");
 }
 
-usage()
-    if (@ARGV == 0);
+if ($allnodes) {
+    usage()
+	if (@ARGV);
 
-fatal("Can only specify a single node along with 'l' and 't' options")
-    if (($location || $typetoo) && @ARGV > 1);
+    fatal("Not allowed to use '-a' with the 'l' and 't' options")
+	if ($location || $typetoo);
+
+    # We want all test nodes.
+    my $query_result =
+	DBQueryFatal("select node_id from nodes as n ".
+		     "left join node_types as t on t.type=n.type ".
+		     "where n.role='testnode' and class='pc'");
+    if (!$query_result->numrows) {
+	print "No nodes to process!\n";
+	exit(0);
+    }
+    while (my ($node_id) = $query_result->fetchrow_array()) {
+	push(@nodes, $node_id);
+    }
+}
+else {
+    usage()
+	if (@ARGV == 0);
+
+    fatal("Can only specify a single node along with 'l' and 't' options")
+	if (($location || $typetoo) && @ARGV > 1);
+    
+    @nodes = @ARGV;
+}
 
 my $rv = 0;
-foreach my $node_id (@ARGV) {
+foreach my $node_id (@nodes) {
     my $node = Node->Lookup($node_id);
     if (!defined($node)) {
 	print STDERR "No such node '$node_id', skipped...\n";
+	next;
+    }
+    if ($node->isblackbox()) {
+	print "Skipping blackbox node $node_id\n"
+	    if (!$allnodes);
 	next;
     }
 
