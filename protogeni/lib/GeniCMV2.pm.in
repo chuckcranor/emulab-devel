@@ -1956,7 +1956,7 @@ sub RenewSlice($)
 	if (defined($slice) && GeniResponse::IsResponse($slice));
 
     if (! defined($slice)) {
-	return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED(), undef,
 				    "No such slice here");
     }
     main::AddLogfileMetaDataFromSlice($slice);
@@ -2791,6 +2791,11 @@ sub DeleteNodes($)
 	    $ifacestoremovefromlans{$client_id} = $client_id;
 	}
 	$manifest->removeChild($noderef);
+	delete $allnodes{$id};
+    }
+    if (!keys(%allnodes)) {
+	return GeniResponse->Create(GENIRESPONSE_BADARGS(), undef,
+		    "Not allowed to delete all nodes from the topology!");
     }
     # Purge the ifaces from lans.
     if (keys(%ifacestoremovefromlans)) {
