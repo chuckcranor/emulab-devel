@@ -132,7 +132,14 @@ $(function ()
 	if (_.size(stuff) == 1) {
 	    var name    = Object.keys(stuff)[0];
 	    var details = stuff[name];
-	    
+
+	    /*
+	     * We add the updated time and uname
+	     */
+	    details.paths["/updated"] = moment(details.updated).format("lll");
+	    if (details.uname) {
+		details.paths["/uname"]   = details.uname;
+	    }
 	    GenerateJson(root, details.paths, name);
 	    // We need the path keys below for search, so save for later.
 	    details.pathkeys = Object.keys(details.paths);
@@ -146,6 +153,14 @@ $(function ()
 		    "properties" : {},
 		    "values"     : [],
 		};
+		/*
+		 * We add the updated time and uname
+		 */
+		details.paths["/updated"] =
+		    moment(details.updated).format("lll");
+		if (details.uname) {
+		    details.paths["/uname"]   = details.uname;
+		}
 		GenerateJson(top, details.paths, name);
 		root.children.push(top);
 		// We need the path keys below for search, so save for later.
