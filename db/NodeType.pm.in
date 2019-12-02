@@ -66,14 +66,19 @@ sub mysystem($)
 sub Lookup($$)
 {
     my ($class, $type) = @_;
+    my $query_result;
 
     # Look in cache first
     return $nodetypes{$type}
         if (exists($nodetypes{$type}));
 
-    my $query_result =
-	DBQueryWarn("select * from node_types where type='$type'");
-
+    if ($type =~ /^[-\w]+$/) {
+	$query_result =
+	    DBQueryWarn("select * from node_types where type='$type'");
+    }
+    else {
+	return undef;
+    }
     return undef
 	if (!$query_result || !$query_result->numrows);
 
