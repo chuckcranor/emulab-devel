@@ -860,6 +860,15 @@ class Instance
             $skiptypes["d740"]     = true;
             $skiptypes["x310"]     = true;
             $skiptypes["n310"]     = true;
+            $skiptypes["cellsdr1-honors"]    = true;
+            $skiptypes["cellsdr1-ustar"]     = true;
+            $skiptypes["cellsdr1-browning"]  = true;
+            $skiptypes["cellsdr1-meb"]       = true;
+            $skiptypes["cellsdr1-fm"]        = true;
+            $skiptypes["cellsdr1-bes"]       = true;
+            $skiptypes["cellsdr1-ustar"]     = true;
+            $skiptypes["cellsdr1-smt"]       = true;
+            $skiptypes["cellsdr1-dentistry"] = true;
         }
         return $skiptypes;
     }
@@ -1276,7 +1285,8 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
             $amlist[$urn] = array("urn"      => $urn,
                                   "name"     => $am,
                                   "nickname" => $aggregate->nickname(),
-                                  "typelist" => $typelist);
+                                  "typelist" => $typelist,
+                                  "typeinfo" => $aggregate->typeinfo);
         }
         else {
             $amlist[$urn] = $am;
@@ -1306,7 +1316,8 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
             $amlist[$urn] = array("urn"      => $urn,
                                   "name"     => $am,
                                   "nickname" => $aggregate->nickname(),
-                                  "typelist" => $typelist);
+                                  "typelist" => $typelist,
+                                  "typeinfo" => $aggregate->typeinfo);
         }
         else {
             $amlist[$urn] = $am;
