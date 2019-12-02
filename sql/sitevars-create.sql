@@ -196,6 +196,7 @@ INSERT INTO sitevariables VALUES ('hwcollect/interval',NULL,'0','If non-zero, in
 INSERT INTO sitevariables VALUES ('hwcollect/experiment',NULL,'emulab-ops/hwcheckup','Project (pid) or experiment (pid/eid) in which the node must reside to run collection.',0);
 INSERT INTO sitevariables VALUES ('hwcollect/outputdir',NULL,'/proj/emulab-ops/hwcollect','NFS-shared filesystem into which HW info command output is stored. Directory must exist.',0);
 INSERT INTO sitevariables VALUES ('hwcollect/commands',NULL,'Any,dmesg,dmesg;Linux,lshw,lshw','Collection programs to run. A semi-colon separated list of OS,program,cmdline triples.',0);
+INSERT INTO sitevariables VALUES ('rfmonitor/noisefloor',NULL,'-110.0','Noise floor threshold for determining if a radio is transmitting.',0);
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

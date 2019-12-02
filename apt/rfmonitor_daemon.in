@@ -73,13 +73,6 @@ my $MAILDELAY        = 60;
 # Debugging.
 $TBRFOPS             = "powder-rfmon\@flux.utah.edu";
 
-#
-# Need a site variable I guess.
-#
-if ($MAINSITE) {
-    $NOISEFLOOR = -90.0;
-}
-
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
 delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
@@ -256,7 +249,14 @@ sub HandleChild($)
     my %violaters  = ();
     my $datafile   = "$TEMPDIR/$address";
     my $prevdata   = {};
+    my $noisefloor = $NOISEFLOOR;
 
+    # Reread the noisefloor each loop.
+    my $floor;
+    if (GetSiteVar("rfmonitor/noisefloor", \$floor)) {
+	$noisefloor = $floor;
+    }
+    
     #
     # Read in the previous run data.
     #
@@ -397,9 +397,9 @@ sub HandleChild($)
 	# do that? 
 	#
 	next
-	    if ($power < $NOISEFLOOR);
+	    if ($power < $noisefloor);
 
-	print "Above threshold: $nodeid:$iface: $frequency,$power\n";
+	print "Above floor:$noisefloor $nodeid:$iface: $frequency,$power\n";
 	
 	#
 	# Check for a report that comes in after we have powered off the
