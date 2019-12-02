@@ -448,7 +448,7 @@ function Do_SetTypes()
 function Do_Delete()
 {
     global $this_user, $ajax_args, $image;
-    global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    global $TB_IMAGEID_DESTROY;
 
     if (CheckPageArgs(1)) {
         return;
