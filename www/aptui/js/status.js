@@ -551,6 +551,11 @@ $(function ()
 		    status_html += " (but some aggregates deferred)";
 		}
 	    }
+	    else if (json.value.canceled) {
+		status_message = "Your experiment has been canceled!";
+		status_html = "<font color=red>canceled</font>";
+		ProgressBarUpdate();
+	    }
 	    else if (instanceStatus == 'ready') {
 		bgtype = "panel-success";
 		status_message = "Your experiment is ready!";
