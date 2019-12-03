@@ -82,6 +82,7 @@ function Do_ExperimentList()
         $name         = $row["name"];
         $status       = $row["status"];
         $canceled     = $row["canceled"];
+        $paniced      = $row["paniced"];
         $created      = DateStringGMT($row["started"]);
         $expires      = DateStringGMT($row["expires"]);
         $creator_idx  = $row["creator_idx"];
@@ -107,7 +108,10 @@ function Do_ExperimentList()
                 "<a href='user-dashboard.php?user=$creator_uid'>".
                 "$creator_uid</a>";
         }
-        if ($row["expired"]) {
+        if ($paniced) {
+            $status = "quarantined";
+        }
+        elseif ($row["expired"]) {
             $status = "expired";
         }
         elseif ($canceled) {
