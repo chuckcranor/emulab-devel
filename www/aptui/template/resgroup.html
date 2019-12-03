@@ -80,18 +80,18 @@
 	<div style="margin-bottom: 10px;">
 	  <center><span id="general_error" style="color:red;"></span></center>
 	</div>
-	<form id='reserve-request-form'
-              class='form-horizontal' role='form'>
-	  <% var d = new Date(); var offset = d.getTimezoneOffset(); %>
-	  <input id="timezone" name="timezone" type="hidden"
-		 value=<%- offset %>>
-	  <input id="start" name="start" type="hidden">
-	  <input id="end" name="end" type="hidden">
-	  <% if (editing) { %>
-	    <input id="uuid" name="uuid" type="hidden">
-	  <% } %>
-	  <div class='row'>
-	    <div class='col-sm-12'>
+	<div class='row'>
+	  <div class='col-sm-12'>
+	    <form id='reserve-request-form'
+		  class='form-horizontal' role='form'>
+	      <% var d = new Date(); var offset = d.getTimezoneOffset(); %>
+	      <input id="timezone" name="timezone" type="hidden"
+		     value=<%- offset %>>
+	      <input id="start" name="start" type="hidden">
+	      <input id="end" name="end" type="hidden">
+	      <% if (editing) { %>
+		<input id="uuid" name="uuid" type="hidden">
+	      <% } %>
 	      <% if (editing) { %>
 		<div class="form-group" style="margin-bottom: 0px;">
 		  <div class="form-control-fake format-me"
@@ -149,17 +149,15 @@
 		  </table>
 		</div>
 	      </div>
-	      <% if (window.ISPOWDER && (window.ISADMIN || window.ISSTUD)) { %>
-		<div class="form-group">
-		  <div class="format-me"
-		       data-label="Frequency Range(s) (MHz)"
-		       data-colsize="9">
-		    <table class="table table-condensed"
-			   id="range-table">
-		    </table>
-		  </div>
+	      <div class="form-group hidden" id="range-table-div">
+		<div class="format-me"
+		     data-label="Frequency Range(s) (MHz)"
+		     data-colsize="9">
+		  <table class="table table-condensed"
+			 id="range-table">
+		  </table>
 		</div>
-	      <% } %>
+	      </div>
 	      <% if (1) { %>
 		<div class="form-group">
 		  <input name="days"
@@ -303,38 +301,52 @@
 			  data-colsize="9"
 			  placeholder='Please provide a description of why you would like to reserve these resources. The better the description the more likely the reservation will be approved.'></textarea>
 	      </div>
-              <button class='btn btn-primary btn-sm pull-right' disabled
-                      id='reserve-submit-button'
-                      type='submit' name='submit'>Check</button>
-	      <% if (editing) { %>
-		<button class='btn btn-danger btn-sm pull-left' disabled
-			style="margin-right: 10px"
-			id='reserve-delete-button'
-			type='submit' name='delete'>Delete</button>
-		<button class='btn btn-info btn-sm pull-left' disabled
-			style="margin-right: 10px"
-			id='reserve-refresh-button'
-			type='submit' name='refresh'>Refresh</button>
-		<button class='btn btn-info btn-sm pull-left hidden' 
-			style="margin-right: 10px"
-			id='reserve-info-button'
-			type='submit' name='info'>Info</button>
-		<button class='btn btn-info btn-sm pull-left hidden' 
-			style="margin-right: 10px"
-			id='reserve-warn-button'
-			type='submit' name='warn'>Warn</button>
-		<button class='btn btn-danger btn-sm pull-left hidden' 
-			style="margin-right: 10px"
-			id='reserve-uncancel-button'
-			type='submit' name='uncancel'>UnCancel</button>
-		<button class='hidden btn btn-primary btn-sm pull-right'
-			style="margin-right: 10px"
-			id='reserve-approve-button'
-			type='submit' name='submit'>Approve</button>
-	      <% } %>
+	    </form>
+            <button class='btn btn-primary btn-sm pull-right' disabled
+                    id='reserve-submit-button'
+                    type='submit' name='submit'>Check</button>
+	    <% if (editing) { %>
+	      <button class='btn btn-danger btn-sm pull-left' disabled
+		      style="margin-right: 10px"
+		      id='reserve-delete-button'
+		      type='submit' name='delete'>Delete</button>
+	      <button class='btn btn-info btn-sm pull-left' disabled
+		      style="margin-right: 10px"
+		      id='reserve-refresh-button'
+		      type='submit' name='refresh'>Refresh</button>
+	      <button class='btn btn-info btn-sm pull-left hidden' 
+		      style="margin-right: 10px"
+		      id='reserve-info-button'
+		      type='submit' name='info'>Info</button>
+	      <button class='btn btn-info btn-sm pull-left hidden' 
+		      style="margin-right: 10px"
+		      id='reserve-warn-button'
+		      type='submit' name='warn'>Warn</button>
+	      <button class='btn btn-danger btn-sm pull-left hidden' 
+		      style="margin-right: 10px"
+		      id='reserve-uncancel-button'
+		      type='submit' name='uncancel'>UnCancel</button>
+	      <button class='hidden btn btn-primary btn-sm pull-right'
+		      style="margin-right: 10px"
+		      id='reserve-approve-button'
+		      type='submit' name='submit'>Approve</button>
+	    <% } %>
+	    <div class="hidden checkbox pull-right" id="override-checkbox"
+		 style="margin-right: 15px">
+	      <label class="text-danger"
+		     data-toggle='popover'
+		     data-html='true'
+		     data-delay='{"hide":200}'
+		     data-content='Override frequency range conflicts. This
+				   will <b>not</b> override node shortages.
+				   You do not want to use this unless
+				   you really need to!'>
+		<input type="checkbox"
+		       id="admin-override"
+		       value="">Override</label>
 	    </div>
 	  </div>
-	</form>
+	</div>
       </div>
     </div>
     <div class='panel panel-default hidden' id="combined-resgraph">

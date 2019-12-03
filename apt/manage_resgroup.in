@@ -153,12 +153,13 @@ exit(0);
 #
 sub DoGroupReserve()
 {
-    my $optlist    = "s:e:nN:u:p:";
+    my $optlist    = "s:e:nN:u:p:O";
     my @argvcopy   = @ARGV[0..$#ARGV-1];
     my $update     = 0;
     my $checkonly  = 0;
     my $exitcode   = 0;
     my $updateall  = 0;
+    my $override   = 0;	# Only range reservations can be overridden. 
     my ($clusters, $ranges);
     my ($start, $end, $errmsg, $errcode, $reason, $resgroup, $portal, $brand);
 
@@ -213,6 +214,13 @@ sub DoGroupReserve()
 	    fatal("Invalid characters in reason string");
 	}
     }
+    if (defined($options{"O"})) {
+	if (!$this_user->IsAdmin()) {
+	    fatal("Only administrators can override (-O)");
+	}
+	$override = 1;
+	@argvcopy = map { "$_" ne "-O" ? $_ : () } @argvcopy;
+    }
     if (defined($options{"u"})) {
 	$update = 1;
 	$resgroup = APT_Reservation::Group->Lookup($options{"u"});
@@ -230,6 +238,22 @@ sub DoGroupReserve()
     else {
 	usage()
 	    if (! defined($end));
+	#
+	# No start time means user wants the reservation right now.
+	#
+	if (!defined($start)) {
+	    $start = time();
+	}
+	#
+	# But we move it to the next top of hour since that is what
+	# the node reservation system is going to do, and we do not
+	# want the range reservations and node reservations to start
+	# at different times.
+	#
+	$start = ($start - ($start % 3600)) + 3600;
+	if ($start - time() < (15 * 60)) {
+	    $start += 3600;
+	}
     }
     #
     # The file is a JSON array of cluster/range reservation info.
@@ -325,11 +349,11 @@ sub DoGroupReserve()
 	# the end can move earlier.
 	#
 	if ($resgroup->PartiallyApproved()) {
-	    if ($start < $current_start) {
+	    if ($start < $current_start && !$this_user->IsAdmin()) {
 		fatal("Not allowed to move start time earlier on an ".
 		      "approved reservation");
 	    }
-	    if ($end > $current_end) {
+	    if ($end > $current_end && !$this_user->IsAdmin()) {
 		fatal("Not allowed to move end time later on an ".
 		      "approved reservation");
 	    }
@@ -400,6 +424,14 @@ sub DoGroupReserve()
 			push(@range_reservations, $range);
 			# Flag for below.
 			$range->{'update'} = 1;
+			# If an admin is changing a reservation, we keep the
+			# approved flag as is.
+			if ($this_user->IsAdmin()) {
+			    $range->{'approved'} = $reservation->approved();
+			}
+			else {
+			    $range->{'approved'} = 0;
+			}
 		    }
 		    else {
 			$range->{'approved'} = $reservation->approved();
@@ -407,7 +439,9 @@ sub DoGroupReserve()
 		    }
 		}
 		else {
-		    # A new range request.
+		    # A new range request. Must always be approved.
+		    $range->{'approved'} = 0;
+		    $range->{'valid'}    = 0;
 		    push(@range_reservations, $range);
 		}
 	    }
@@ -431,7 +465,9 @@ sub DoGroupReserve()
     # This is what we return to the web UI. Reservations is just an updated
     # version of what came in (clusters and ranges).
     my ($range_results, $cluster_results);
-    my $result = {};
+    my $result = {
+	"hosed" => 0,
+    };
     
     if (defined($ranges)) {
 	$range_results = {"ranges"    => $ranges,
@@ -469,16 +505,17 @@ sub DoGroupReserve()
 		$ref->{'valid'}    = 0;
 		$range_results->{'errors'}++;
 	    }
-	    elsif (!APT_Reservation::Group::RFReservation->Fits(\@allgroups,
-								$start, $end,
-								$ref)) {
+	    elsif (! ($override ||
+		      APT_Reservation::Group::RFReservation->Fits(\@allgroups,
+								  $start, $end,
+								  $ref))) {
 		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
 		$ref->{'output'}   = "Does not fit the schedule";
 		$ref->{'valid'}    = 0;
 		$range_results->{'errors'}++;
 	    }
 	    else {
-		$ref->{'approved'} = 0;
+		# We set approval above; all new ranges must be approved.
 		$ref->{'valid'}    = 1;
 	    }
 	}
@@ -552,8 +589,13 @@ sub DoGroupReserve()
 
 	    if (!$webtask->HasExited() || $webtask->exitcode() < 0) {
 		#
-		# Fatal Error. 
+		# Fatal Error but do not stop. 
 		#
+		$res->{'errcode'}  = -1;
+		$res->{'output'}   = "Internal error";
+		$res->{"approved"} = 0;
+		$cluster_results->{'errors'}++;
+		$result->{'hosed'} = 1;
 	    }
 	    #
 	    # Exit codes.
@@ -1125,13 +1167,14 @@ sub DoApprove()
     #
     # We allow for admins to pass a reason (deny with cause).
     #
-    my $optlist      = "F:nD";
+    my $optlist      = "F:nDO";
     my @cluster_reservations = ();
     my @range_reservations   = ();
     my $errmsg;
     my $results   = {};
     my $checkonly = 0;
     my $nopush    = 0;  # debugging flag only.
+    my $override  = 0;	# Only range reservations can be overridden. 
 
     if (! $this_user->IsAdmin()) {
 	fatal("No permission to approve this reservation")
@@ -1149,6 +1192,9 @@ sub DoApprove()
     }
     if (defined($options{"D"})) {
 	$nopush = 1;
+    }
+    if (defined($options{"O"})) {
+	$override = 1;
     }
     usage()
 	if (@ARGV < 1);
@@ -1193,10 +1239,11 @@ sub DoApprove()
 	    $ref->{'freq_high'} = $res->freq_high();
 	    $ref->{'uuid'}      = $res->freq_uuid();
 
-	    if (!APT_Reservation::Group::RFReservation->Fits(\@allgroups,
+	    if (!($override ||
+		  APT_Reservation::Group::RFReservation->Fits(\@allgroups,
 							     $start, $end,
-							     $ref)) {
-		my $freq_uuid = $res->{'freq_uuid'};
+							     $ref))) {
+		my $freq_uuid = $res->freq_uuid();
 		my $blob = {
 		    "uuid"    => $freq_uuid,
 		    "errcode" => 1,
@@ -1368,10 +1415,11 @@ sub DoApprove()
 	    $ref->{'freq_high'} = $res->freq_high();
 	    $ref->{'uuid'}      = $res->freq_uuid();
 
-	    if (!APT_Reservation::Group::RFReservation->Fits(\@allgroups,
-							     $start, $end,
-							     $ref)) {
-		my $freq_uuid = $res->{'freq_uuid'};
+	    if (!($override ||
+		  APT_Reservation::Group::RFReservation->Fits(\@allgroups,
+							      $start, $end,
+							      $ref))) {
+		my $freq_uuid = $res->freq_uuid();
 		my $blob = {
 		    "uuid"    => $freq_uuid,
 		    "errcode" => 1,

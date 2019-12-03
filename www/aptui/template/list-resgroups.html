@@ -30,6 +30,12 @@
 <div class='col-sm-12'>
   <div class='panel panel-default'>
     <div class='panel-heading panel-heading-list'>
+      <% if (window.ISADMIN) { %>
+	<a href="list-reservations.php?force=1"
+	   class='btn btn-primary btn-xs pull-right'
+           style='margin-right: 10px; margin-top: 5px;'
+           type='button'>Node Reservations</a>
+      <% } %>
       <h4 class="text-center">Reservations</h4>
     </div>
     <div class='panel-body'>

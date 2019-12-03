@@ -468,6 +468,20 @@ $(function ()
 		modified_callback();
 	    }
 	});
+	$('#admin-override').change(function() {
+	    // This is messy; if the admin clicks this to force an approval
+	    // we do not want to flip the button from approve to check.
+	    if (!editing) {
+		modified_callback();
+	    }
+	});
+
+	// Initially, only POWDER gets to see the range table.
+	// But we want to show the range table on existing resgroups,
+	// if looking at it from a different portal. See below.
+	if (window.ISPOWDER && (window.ISADMIN || window.ISSTUD)) {
+	    $("#range-table-div").removeClass("hidden");
+	}
 	aptforms.EnableUnsavedWarning('#reserve-request-form',
 				      modified_callback);
     }
@@ -911,7 +925,7 @@ $(function ()
 	    }
 	    // Set the number of days, so that user can then search if
 	    // the start/end selected do not work.
-	    var hours = end.diff(start, "hours");
+	    var hours = end.diff(start ? start : moment(), "hours");
 	    var days  = hours / 24;
 	    $('#reserve-request-form [name=days]')
 		.val(days.toFixed(1));
@@ -964,15 +978,23 @@ $(function ()
 	    alert("No reservations have been specified");
 	    return;
 	}
+	var args = {
+	    "clusters" : clusters,
+	    "ranges"   : ranges
+	};
+	if (window.ISADMIN && _.size(ranges)) {
+	    $('#override-checkbox').removeClass("hidden");
 
+	    if ($('#admin-override').is(":checked")) {
+		args["override"] = 1;
+	    }
+	}
 	// Clear (hide) previous cluster table errors
 	$('#reserve-request-form .form-group-sm').addClass("hidden");	
 	$('#reserve-request-form tbody').removeClass("has-warning has-error");
 	
 	aptforms.CheckForm('#reserve-request-form', "resgroup",
-			   "Validate", checkonly_callback,
-			   {"clusters" : clusters,
-			    "ranges"   : ranges});
+			   "Validate", checkonly_callback, args);
     }
 
     // Call back from the graphs to change the dates on a blank form
@@ -1615,6 +1637,15 @@ $(function ()
 	    }
 	    sup.ShowModal('#confirm-reservation');
 	};
+	var args = {
+	    "clusters" : clusters,
+	    "ranges"   : ranges
+	};
+	if (window.ISADMIN && _.size(ranges)) {
+	    if ($('#admin-override').is(":checked")) {
+		args["override"] = 1;
+	    }
+	}
 	// Clear (hide) previous cluster table errors
 	$('#reserve-request-form .form-group-sm').addClass("hidden");
 	$('#reserve-request-form tbody').removeClass("has-warning has-error");
@@ -1622,9 +1653,7 @@ $(function ()
 	aptforms.SubmitForm('#reserve-request-form', "resgroup",
 			    "Validate", callback,
 			    "Checking to see if your request can be "+
-			    "accommodated",
-			    {"clusters" : clusters,
-			     "ranges"   : ranges});
+			    "accommodated", args);
     }
 
     /*
@@ -1706,7 +1735,17 @@ $(function ()
 	    alert("No reservations have been specified");
 	    return;
 	}
+	var args = {
+	    "clusters" : clusters,
+	    "ranges"   : ranges
+	};
+	if (window.ISADMIN && _.size(ranges)) {
+	    $('#override-checkbox').removeClass("hidden");
 
+	    if ($('#admin-override').is(":checked")) {
+		args["override"] = 1;
+	    }
+	}
 	// Clear (hide) previous cluster table errors
 	$('#reserve-request-form .form-group-sm').addClass("hidden");
 	$('#reserve-request-form tbody').removeClass("has-warning has-error");
@@ -1714,9 +1753,7 @@ $(function ()
 	aptforms.SubmitForm('#reserve-request-form', "resgroup",
 			    "Reserve", reserve_callback,
 			    "Submitting your reservation request; "+
-			    "patience please",
-			    {"clusters" : clusters,
-			     "ranges"   : ranges});
+			    "patience please", args);
     }
 
     function PopulateReservation()
@@ -1783,6 +1820,8 @@ $(function ()
 	    // Add range rows as needed.
 	    if (_.size(details.ranges)) {
 		_.each(details.ranges, function (res) {
+		    $("#range-table-div").removeClass("hidden");
+		    
 		    var html = frequencyRowTemplate({
 			"freq_low"    : res.freq_low,
 			"freq_high"   : res.freq_high,
@@ -1806,6 +1845,9 @@ $(function ()
 		    AddRangeRow();
 		});
 		$('#range-table .add-range').last().removeClass("hidden");
+		if (window.ISADMIN) {
+		    $('#override-checkbox').removeClass("hidden");
+		}
 	    }
 	    else {
 		// Always show an empty range row.
@@ -2205,17 +2247,24 @@ $(function ()
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
+	    $('#override-checkbox').prop("checked", false);	    
 	    RefreshTables(json.value);
+	    LoadRangeReservations();
 	};
+	var args = {
+	    "uuid"    : window.UUID,
+	};
+	if ($('#admin-override').is(":checked")) {
+	    args["override"] = 1;
+	}
 	// Bind the confirm button in the modal. Do the approval.
 	$('#approve-modal #confirm-approve').click(function () {
 	    sup.HideModal('#approve-modal', function () {
 		var message = $('#approve-modal .user-message').val().trim();
+		args["message"] = message;
 		sup.ShowModal('#waitwait-modal');
 		var xmlthing = sup.CallServerMethod(null, "resgroup",
-						    "Approve",
-						    {"uuid"    : window.UUID,
-						     "message" : message});
+						    "Approve", args);
 		xmlthing.done(callback);
 	    });
 	});
@@ -2414,11 +2463,20 @@ $(function ()
 
     function HandleCountChange(row)
     {
+	var tbody    = $(row);
 	var thisuuid = $(row).attr('data-uuid');
 	var count    = $(row).find(".node-count").val();
-	var cluster  = $(row).find(".cluster-select option:selected").val();
-	var type     =$(row).find(".hardware-select option:selected").val();
+	var cluster;
+	var type;
 
+	if (tbody.hasClass("new-cluster")) {
+	    cluster = tbody.find(".cluster-select option:selected").val();
+	    type    = tbody.find(".hardware-select option:selected").val();
+	}
+	else {
+	    cluster = tbody.find(".cluster-selected").attr("data-urn");
+	    type    = $.trim(tbody.find(".hardware-selected").text());
+	}
 	console.info("HandleCountChange", thisuuid, cluster, type, count);
 	if (cluster == "" || type == "" || count == "" || !isNumber(count)) {
 	    return;
