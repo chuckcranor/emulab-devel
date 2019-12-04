@@ -1558,6 +1558,7 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/linux-sg/GNUmakefile clientside/tmcc/ubuntu7/GNUmakefile \
  clientside/tmcc/centos6/GNUmakefile \
  clientside/tmcc/centos7/GNUmakefile \
+ clientside/tmcc/centos8/GNUmakefile \
  clientside/tmcc/onie/GNUmakefile \
  clientside/tmcc/ubuntu10/GNUmakefile \
  clientside/tmcc/ubuntu11/GNUmakefile \

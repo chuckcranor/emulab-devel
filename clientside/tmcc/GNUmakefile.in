@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -137,6 +137,9 @@ MDSUBDIR  = fedora
 endif
 ifeq ($(MDSUBDIR),centos7)
 MDSUBDIR  = centos7
+endif
+ifeq ($(MDSUBDIR),centos8)
+MDSUBDIR  = centos8
 endif
 ifeq ($(MDSUBDIR),stargate1)
 MDSUBDIR  = linux-sg
