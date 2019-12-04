@@ -1196,5 +1196,97 @@ sub RangeReserved($$$$$$)
     return 0;
 }
 
+#
+# Determine a max extension for an instance,
+#
+sub MaxExtension($)
+{
+    my ($instance) = @_;
+    my $slice   = $instance->GetGeniSlice();
+    my $project = $instance->GetProject();
+    my $pid_idx = $project->pid_idx();
+    my $expires = str2time($slice->expires());
+    # This matches what MaxSliceExtension() does
+    my $newmax  = $expires + (60 * 60 * 24 * 180);
+
+    #
+    # If the instance is not using any spectrum, we are done. Remember,
+    # an instance cannot use RF unless the spectrum is reserved, so we
+    # do not need to check if the current instance is using spectrum unless
+    # the project has some reserved.
+    #
+    my $query_result =
+	DBQueryWarn("select distinct g.uuid ".
+		    " from apt_reservation_group_rf_reservations as rf ".
+		    "left join apt_reservation_groups as g on ".
+		    "     g.uuid=rf.uuid ".
+		    "where g.pid_idx='$pid_idx' and ".
+		    "      rf.approved is not null");
+    return undef
+	if (!defined($query_result));
+    return $newmax
+	if (!$query_result->numrows);
+
+    #
+    # OK, get a list of all spectrum used by the instance.
+    #
+    my $spectrum;
+    if ($instance->GetSpectrum(\$spectrum)) {
+	return undef;
+    }
+    return $newmax
+	if (! @$spectrum);
+    
+    #
+    # Get all RF reservations in *other* projects.
+    #
+    $query_result =
+	DBQueryWarn("select distinct g.uuid ".
+		    " from apt_reservation_group_rf_reservations as rf ".
+		    "left join apt_reservation_groups as g on ".
+		    "     g.uuid=rf.uuid ".
+		    "where g.pid_idx!='$pid_idx' and ".
+		    "      rf.approved is not null");
+
+    return undef
+	if (!defined($query_result));
+    return $newmax
+	if (!$query_result->numrows);
+    
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $resgroup = APT_Reservation::Group->Lookup($uuid);
+	next
+	    if (!defined($resgroup));
+
+	my $res_start = str2time($resgroup->start());
+
+	#
+	# Look for any overlap.
+	#
+	foreach my $ref (@$spectrum) {
+	    my $freq_low  = $ref->{'frequency_low'};
+	    my $freq_high = $ref->{'frequency_low'};
+
+	    foreach my $existing ($resgroup->RFReservationList()) {
+		my $res_low   = $existing->freq_low();
+		my $res_high  = $existing->freq_high();
+
+		# If this reservation does not overlap in freq, skip it.
+		if (($freq_low < $res_low && $freq_high < $res_low) ||
+		    ($freq_low > $res_high)) {
+		    next;
+		}
+		# The start of this reservation is an upper bound on
+		# the expiration time of the instance.
+		if ($newmax > $res_start) {
+		    # One hour pad, just like node reservations.
+		    $newmax = $res_start - 3600;
+		}
+	    }
+	}
+    }
+    return $newmax;
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;

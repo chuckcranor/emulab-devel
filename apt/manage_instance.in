@@ -2082,6 +2082,31 @@ sub ExtendInternal($$$$$$)
     # Save in case of error.
     my $oldexpires = $slice->expires();
 
+    #
+    # Before we ask the clusters, confirm that there are no conflicting
+    # RF reservations for this instance.
+    #
+    my $rfmax = APT_Reservation::Group::RFReservation::MaxExtension($instance);
+    if (!defined($rfmax)) {
+	# Some kind of error.
+	$errmsg  = "Internal error determining RF max extension";
+	$errcode = -1;
+	goto bad;
+    }
+    if ($debug) {
+	print "RF Max extension is $rfmax,\n";
+    }
+    if (time() + $seconds > $rfmax) {
+	if ($debug) {
+	    print "New expiration is greater then RF max extension\n";
+	}
+	if (!$force) {
+	    $errmsg = "Extension refused cause it conflicts with an existing ".
+		"RF reservation";
+	    $errcode = 1;
+	    goto bad;
+	}
+    }
     # Need to update slice before creating new credential. 
     if ($slice->IsExpired()) {
 	$slice->SetExpiration(time() + $seconds);
@@ -2438,6 +2463,25 @@ sub DoMaxExtensionInternal($$)
 	    APT_Utility::ReservationUtilization($res, 0);
 	}
 	$blob->{'reservations'}->{$aptagg->urn()} = $reslist;
+    }
+    #
+    # See if we are bounded by RF reservations.
+    #
+    my $rfmax = APT_Reservation::Group::RFReservation::MaxExtension($instance);
+    if (!defined($rfmax)) {
+	# Some kind of error.
+	$errmsg  = "Internal error determining RF max extension";
+	$errcode = -1;
+	goto bad;
+    }
+    if ($debug) {
+	print "RF Max extension is $rfmax, Node max is $newmax\n";
+    }
+    if ($newmax > $rfmax) {
+	if ($debug) {
+	    print "Cutting back max extension cause of RF reservations.\n";
+	}
+	$newmax = $rfmax;
     }
     $blob->{'maxextension'} = $newmax;
     $$prval = $blob;

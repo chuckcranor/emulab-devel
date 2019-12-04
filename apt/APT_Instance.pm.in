@@ -2114,6 +2114,65 @@ sub ClearAllMaxExtension($$)
     return 0;
 }
 
+#
+# Get the spectrum used by an instance.
+#
+sub GetSpectrum($$)
+{
+    my ($self, $ref)  = @_;
+    my @slivers = $self->AggregateList();
+    if (!@slivers) {
+	$$ref = ();
+	return 0;
+    }
+    my @results = ();
+
+    my $addSpectrum = sub () {
+	my ($spectrum) = @_;
+	
+	foreach my $request (@{$spectrum}) {
+	    push(@results, $request);
+	}
+    };
+    
+    foreach my $sliver (@slivers) {
+	my $manifest = GeniXML::Parse($sliver->manifest());
+	if (! defined($manifest)) {
+	    print STDERR "Could not parse manifest for $sliver\n";
+	    return -1;
+	}
+
+	# Global spectrum
+	my $global_spectrum = GeniXML::GetSpectrum($manifest);
+	if (@$global_spectrum) {
+	    &$addSpectrum($global_spectrum);
+	}
+    
+	# Node spectrum
+	foreach my $ref (GeniXML::FindNodes("n:node",
+					    $manifest)->get_nodelist()) {
+	    my $node_spectrum = GeniXML::GetSpectrum($ref);
+	    if (@$node_spectrum) {
+		&$addSpectrum($node_spectrum);
+	    }
+	}
+    
+	# Iface spectrum
+	foreach my $ref (GeniXML::FindNodes("n:link",
+					    $manifest)->get_nodelist()) {
+	    foreach my $ifaceref (GeniXML::FindNodes("n:interface",
+						     $ref)->get_nodelist()) {
+		my $iface_spectrum = GeniXML::GetSpectrum($ifaceref);
+		if (@$iface_spectrum) {
+		    &$addSpectrum($iface_spectrum);
+		}
+	    }
+	}
+    }
+    $$ref = \@results;
+    return 0;
+}
+
 ###################################################################
 package APT_Instance::History;
 use emdb;
