@@ -246,6 +246,87 @@ sub fatal($)
 }
 
 #
+# Read the results of a collection command and return it (as a big ole
+# long string). Returns:
+#
+# -1 if command was not run (as indicated by no .status and no .out files)
+#  0 if we successfully read the .out file
+# >0 if there was some other error
+# 
+sub ReadInfoFile($$$$$)
+{
+    my ($node_id,$dir,$prefix,$cmd,$resp) = @_;
+    my $file;
+
+    #
+    # If the status file for this command does not exist, the command
+    # either did not run or we have pruned the directory. Look for the
+    # .out file as well.
+    #
+    my $stat = -1;
+    $file = "$dir/${prefix}-${cmd}.status";
+    if (! -e "$file") {
+	if (-e "$dir/${prefix}-${cmd}.out") {
+	    if ($verbose) {
+		print STDERR "$node_id: ".
+		    "No .status for '$cmd', but .out exists, assuming okay\n";
+	    }
+	    $stat = 0;
+	} else {
+	    if ($verbose) {
+		print STDERR "$node_id: ".
+		    "Command '$cmd' did not run\n";
+	    }
+	    return -1;
+	}
+    }
+    #
+    # If the .status file does exist, read it; it should contain zero.
+    #
+    else {
+	if (open(STAT, "<$file")) {
+	    my $v = <STAT>;
+	    close(STAT);
+	    chomp($v);
+	    $stat = hex($v);
+	}
+    }
+    if ($stat != 0) {
+	if ($verbose) {
+	    my $errfile = "$dir/${prefix}-${cmd}.err";
+	    print STDERR "$node_id: ".
+		"Bad status ($stat) for '$cmd', see $errfile\n";
+	}
+	return 1;
+    }
+
+    # read the .out file
+    $file = "$dir/${prefix}-${cmd}.out";
+    if (! -e $file) {
+	if ($verbose) {
+	    my $errfile = "$dir/${prefix}-${cmd}.err";
+	    print STDERR "$node_id: ".
+		"No output file for '$cmd', see $errfile\n";
+	}
+	return 2;
+    }
+    my $info = emutil::ReadFile($file);
+    if (!$info) {
+	if ($verbose) {
+	    print STDERR "$node_id: ".
+		"Could not read output file $file for '$cmd'\n";
+	}
+	return 3;
+    }
+    if ($verbose) {
+	print STDERR "$node_id: ".
+	    "Successfully read output from '$cmd'\n";
+    }
+    $$resp = $info;
+    return 0;
+}
+
+#
 # Replace hardware info for a node, optionally replacing type table also.
 #
 sub doArray($$$);
@@ -257,7 +338,6 @@ sub UpdateInfo($$$)
     my $node_id  = $node->node_id();
     my $type     = $node->type();
     my $pathinfo = [];
-    my ($hwfile, $unfile);
     my $prefix;
 
     if (! -d $location) {
@@ -319,29 +399,27 @@ sub UpdateInfo($$$)
 
     # If there is uname info, collect that
     my $uninfo;
-    $unfile = "$location/${prefix}-uname.out";
-    if (-e $unfile) {
-	$uninfo = emutil::ReadFile($unfile);
-	if ($uninfo) {
-	    chomp($uninfo);
-	    $uninfo = DBQuoteSpecial($uninfo);
-	}
+    if (ReadInfoFile($node_id, $location, $prefix, "uname", \$uninfo) == 0) {
+	chomp($uninfo);
+	$uninfo = DBQuoteSpecial($uninfo);
     }
     if (!defined($uninfo)) {
 	$uninfo = "NULL";
     }
 
-    $hwfile = "$location/${prefix}-lshw.out";
-    if (! -e $hwfile) {
-	print STDERR "$node_id: ".
-	    "Hardware collection file '$hwfile' does not exist\n";
-	return 1;
-    }
-    my $text = emutil::ReadFile($hwfile);
-    if (!defined($text)) {
-	print STDERR "$node_id: ".
-	    "Could not read hardware file '$hwfile'\n";
-	return 1;
+    #
+    # XXX tmp hack: older versions of "lshw" do not properly report NVMe
+    # drives so we built our own newer version. So, see if the newer version
+    # of lshw ran and save its output if so. Otherwise, use the standard
+    # version's output.
+    #
+    my $text;
+    if (ReadInfoFile($node_id, $location, $prefix, "nlshw", \$text) != 0) {
+	if (ReadInfoFile($node_id, $location, $prefix, "lshw", \$text) != 0) {
+	    print STDERR "$node_id: ".
+		"Could not read output from either 'nlshw' or 'lshw'\n";
+	    return 1;
+	}
     }
     my $ref = eval { decode_json($text); };
     if ($@) {
