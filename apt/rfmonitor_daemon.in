@@ -47,11 +47,11 @@ sub usage()
     print "Usage: rfmonitor_daemon [-d] [-n] [-p port]\n";
     exit(1);
 }
-my $optlist   = "dnp:mt";
+my $optlist   = "dnp:mtl:";
 my $debug     = 0;
 my $impotent  = 0;
 my $mailonly  = 1;
-my $opsonly   = 1;
+my $opsonly   = 0;
 my $PORT      = 12237;
 my $HOST      = "@POWDER_RFMONITOR_HOST@";
 my $usemax    = 1;
@@ -63,15 +63,14 @@ my $NOISEFLOOR= -110.0;
 #
 my $TB		     = "@prefix@";
 my $TBOPS            = "@TBOPSEMAIL@";
-my $TBRFOPS          = $TBOPS;
+my $TBRFOPS          = "powder-rfmon\@flux.utah.edu";
+my $OURDOMAIN        = "@OURDOMAIN@";
 my $MAINSITE         = @TBMAINSITE@;
 my $POWDER_RFMONITOR = @POWDER_RFMONITOR@;
 my $LOGFILE          = "$TB/log/rfmonitor_daemon.log";
 my $POWER            = "$TB/bin/power";
 my $FORMAT           = "portid,timestamp,frequency,power";
-my $MAILDELAY        = 60;
-# Debugging.
-$TBRFOPS             = "powder-rfmon\@flux.utah.edu";
+my $MAILDELAY        = 3600;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -113,6 +112,9 @@ if (defined($options{"n"})) {
 }
 if (defined($options{"t"})) {
     $opsonly = 1;
+}
+if (defined($options{"l"})) {
+    $MAILDELAY = $options{"l"};
 }
 if (defined($options{"p"})) {
     $PORT = $options{"p"};
@@ -419,7 +421,7 @@ sub HandleChild($)
 		"$nodeid is supposed to be powered off but is still ".
 		"transmitting on $iface.\n" .
 		"Frequency:" . $frequency . "MHZ, ".
-		"Power:" . $power . "dBm";
+		"Power:" . $power . "dB";
 	    print "$mesg\n";
 	    NodeNotify($nodeid, "system", $mesg);
 	    next;
@@ -561,7 +563,8 @@ sub HandleViolations($$)
     # Simple, send a message per node.
     #
     foreach my $nodeid (keys(%{$violations})) {
-	my ($TO, $CC, $subject, $body);
+	my ($TO, $subject, $body);
+	my $headers;
 
 	my $node = Node->Lookup($nodeid);
 	if (!$node) {
@@ -579,67 +582,81 @@ sub HandleViolations($$)
 	    my $pname	   = $leader->name();
 	    my $pemail	   = $leader->email();
 
+	    # Always CC to TBRFOPS;
+	    $headers = "CC: $TBRFOPS";
+
 	    #
 	    # Nonlocal project (on the geni path), its the creator we want.
-	    # (The swapper is always the geniuser).
+	    # The swapper is always the geniuser; so is the project leader.
 	    #
 	    if ($project->IsNonLocal()) {
 		$user_name  = $creator->name();
 		$user_email = $creator->email();
 	    }
-	    if ($debug) {
-		$pname  = $user_name;
-		$pemail = $user_email;
-	    }
 	    $TO = "$user_name <$user_email>";
-	    $CC = "$pname <$pemail>, $TBOPS";
+
+	    # CC to project leader if a local project.
+	    if (!$debug && $project->IsLocal()) {
+		$headers .= ", $pname <$pemail>";
+	    }
 	}
 	else {
 	    $TO = $TBRFOPS;
 	}
 	$subject = "Transmit frequency/power violations on $nodeid";
-	$body    = "The following interfaces are in violation on $nodeid:\n\n";
+	$body    = "Transmit violations on ${nodeid}\@${OURDOMAIN}:\n\n";
+
+	#
+	# Build up a query to insert the violations into the DB.
+	#
+	my @dbinserts = ();
 
 	foreach my $iface (keys(%{$violations->{$nodeid}})) {
-	    foreach my $measurement (@{$violations->{$nodeid}->{$iface}}) {
-		my $stamp = POSIX::strftime("%m/%d %H:%M:%S %Z",
-					localtime($measurement->{"timestamp"}));
-
-		if (!exists($rflimits->{$nodeid}->{$iface})) {
-		    $body .= "$iface: NO LIMITS DEFINED\n";
-		}
-		else {
-		    $body .= "$iface:\n";
-		
-		    my @limits     = @{$rflimits->{$nodeid}->{$iface}};
-		    foreach my $limit (@limits) {
-			my $freq_low   = $limit->{"freq_low"};
-			my $freq_high  = $limit->{"freq_high"};
-			my $power      = $limit->{"power"};
-
-			$body .=
-			    "  Limits: Min Freq:$freq_low MHZ, ".
-			    "Max Freq:$freq_high MHZ, Max Power:$power dBm\n";
-		    }
-		}
-		$body .=
-		    "  Measured at $stamp: ".
-		    "Frequency: " . $measurement->{"frequency"} . " MHZ, ".
-		    "Power: " . $measurement->{"power"} . " dBm\n";
+	    if (!exists($rflimits->{$nodeid}->{$iface})) {
+		$body .= "$iface: NO LIMITS DEFINED\n";
 	    }
+	    else {
+		$body .= "$iface:\n";
+		$body .= " Limits:\n";
+
+		my @limits     = @{$rflimits->{$nodeid}->{$iface}};
+		foreach my $limit (@limits) {
+		    my $freq_low   = $limit->{"freq_low"};
+		    my $freq_high  = $limit->{"freq_high"};
+		    my $power      = $limit->{"power"};
+
+		    $body .=
+			"\t$freq_low MHZ -> $freq_high MHZ, ".
+			"max power $power dB\n";
+		}
+	    }
+	    $body .= "\n";
+	    $body .= " Violations:\n";
+	    
+	    foreach my $measurement (@{$violations->{$nodeid}->{$iface}}) {
+		my $freq  = sprintf("%.3f", $measurement->{"frequency"});
+		my $power = sprintf("%.3f", $measurement->{"power"});
+
+		$body .= "\t$freq MHZ at $power dB\n";
+
+		push(@dbinserts,
+		     "('$nodeid','$iface',now(),'$freq','$power')");
+	    }
+	    $body .= "\n";
 	}
+	my $query = "insert into node_rf_violations ".
+	    "(node_id, iface, tstamp, frequency, power) values " .
+	    join(",", @dbinserts);
+	
 	if (!$mailonly) {
 	    $body .= "\n" . "This node will be immediately powered off!\n";
 	}
 	if ($debug || $impotent) {
 	    print $subject . "\n";
 	    print $body;
+	    print $query . "\n";
 	}
 	if (!$impotent && ShouldNotify($nodeid, "user")) {
-	    my $headers = undef;
-	    if (defined($CC)) {
-		$headers = "CC: $CC";
-	    }
 	    libtestbed::SENDMAIL($TO, $subject, $body, $TBOPS, $headers);
 	    NodeNotified($nodeid, "user", $body);
 	}
@@ -652,6 +669,9 @@ sub HandleViolations($$)
 		NodeNotify($nodeid, "system",
 			   "Failed to power of $nodeid!\n\n". $output);
 	    }
+	}
+	if (!$impotent) {
+	    DBQueryWarn($query);
 	}
     }
 }
@@ -707,10 +727,11 @@ sub NodeNotify($$$)
     if (!ShouldNotify($nodeid, $which)) {
 	return;
     }
-    SENDMAIL($TBRFOPS,
+    SENDMAIL($TBOPS,
 	     "RF Daemon Critical Notification",
 	     $mesg,
-	     $TBOPS);
+	     $TBOPS,
+	     "BCC: $TBRFOPS");
     
     NodeNotified($nodeid, $which, $mesg);
 }
@@ -726,7 +747,8 @@ sub fatal($)
 	SENDMAIL($TBOPS,
 		 "rfmonitor_daemon died",
 		 $msg,
-		 $TBOPS);
+		 $TBOPS,
+		 "BCC: $TBRFOPS");
     }
     MarkDaemonStopped("rfmonitor_daemon")
 	if (! $impotent);
@@ -741,7 +763,7 @@ sub notify($)
     SENDMAIL($TBOPS,
 	     "RF Daemon Critical Notification",
 	     $mesg,
-	     $TBOPS);
+	     $TBOPS,
+	     "BCC: $TBRFOPS");
 }
-
 
