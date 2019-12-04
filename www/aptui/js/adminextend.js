@@ -52,11 +52,12 @@ $(function ()
 					     "UsageSummary",
 					     {"pid"    : window.PID});
 	$.when(xmlthing1, xmlthing2).done(function(result1, result2) {
+	    console.info(result1, result2);
 	    var html = secondrowTemplate({"uid"     : window.CREATOR,
 					  "pid"     : window.PID,
 					  "uuid"    : window.UUID,
-					  "user"    : result1[0].value,
-					  "project" : result2[0].value});
+					  "user"    : result1.value,
+					  "project" : result2.value});
 	    $("#secondrow").html(html);
 	});
 
