@@ -479,7 +479,7 @@ $(function ()
 	// Initially, only POWDER gets to see the range table.
 	// But we want to show the range table on existing resgroups,
 	// if looking at it from a different portal. See below.
-	if (window.ISPOWDER && (window.ISADMIN || window.ISSTUD)) {
+	if (window.ISPOWDER) {
 	    $("#range-table-div").removeClass("hidden");
 	}
 	aptforms.EnableUnsavedWarning('#reserve-request-form',
