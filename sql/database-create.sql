@@ -3093,9 +3093,9 @@ DROP TABLE IF EXISTS `interfaces_rf_limit`;
 CREATE TABLE `interfaces_rf_limit` (
   `node_id` varchar(32) NOT NULL DEFAULT '',
   `iface` text NOT NULL,
-  `freq_low` float NOT NULL DEFAULT '0',
-  `freq_high` float NOT NULL DEFAULT '0',
-  `power` float NOT NULL DEFAULT '0',
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  `power` float(8,2) NOT NULL DEFAULT '0.00',
   PRIMARY KEY (`node_id`,`iface`(128),`freq_low`,`freq_high`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -3110,6 +3110,21 @@ CREATE TABLE `node_rf_reports` (
   `which` enum('system','user') NOT NULL default 'user',
   `report` mediumtext NOT NULL,
   PRIMARY KEY (`node_id`,`which`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `node_rf_violations`
+--
+
+DROP TABLE IF EXISTS `node_rf_violations`;
+CREATE TABLE `node_rf_violations` (
+  `node_id` varchar(32) NOT NULL DEFAULT '',
+  `iface` text NOT NULL,
+  `tstamp` datetime NOT NULL default '0000-00-00 00:00:00',
+  `frequency` float(8,3) NOT NULL DEFAULT '0.000',
+  `power` float(8,3) NOT NULL DEFAULT '0.000',
+  KEY nodeiface (`node_id`,`iface`(128)),
+  KEY nodestamp (`node_id`,`iface`(128),`tstamp`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
