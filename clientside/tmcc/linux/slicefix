@@ -526,6 +526,7 @@ dofreebsd() {
 	changerootkeys=0
 	changezone=0
 	changentp=0
+	changechrony=0
 	changesshd=0
 
 	fixit=0
@@ -716,6 +717,15 @@ dofreebsd() {
 		cmp -s /etc/ntp.conf /mnt/etc/ntp.conf
 		if [ $? -ne 0 ]; then
 		    changentp=1
+		    fixit=1
+		fi
+	    fi
+
+	    # Check the chrony config.
+	    if [ -e /etc/chrony.conf ]; then
+		cmp -s /etc/chrony.conf /mnt/etc/chrony.conf
+		if [ $? -ne 0 ]; then
+		    changechrony=1
 		    fixit=1
 		fi
 	    fi
@@ -1011,6 +1021,17 @@ EOF1
 
 	    cp -p /etc/ntp.conf /mnt/etc/ntp.conf || {
 	        echo "Failed to create /etc/ntp.conf"
+		umount $rootdev
+		return 1
+	    }
+	fi
+
+	# Copy in new chrony config
+	if [ $changechrony -eq 1 ]; then
+	    echo "  updating /etc/chrony.conf"
+
+	    cp -p /etc/chrony.conf /mnt/etc/chrony.conf || {
+	        echo "Failed to create /etc/chrony.conf"
 		umount $rootdev
 		return 1
 	    }

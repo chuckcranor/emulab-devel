@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -661,6 +661,8 @@ sub setintervals($)
 #
 sub readdrift()
 {
+    my $ischrony = 0;
+
     #
     # If we haven't yet, locate the driftfile.
     # We do this on every drift report because the driftfile
@@ -675,6 +677,9 @@ sub readdrift()
 	    $driftfile = "/var/lib/ntp/drift";
 	} elsif (-e "/var/lib/ntp/ntp.drift") {
 	    $driftfile = "/var/lib/ntp/ntp.drift";
+	} elsif (-e "/var/lib/chrony/drift") {
+	    $ischrony = 1;
+	    $driftfile = "/var/lib/chrony/drift";
 	}
 	logmsg("NTP drift file is $driftfile\n")
 	    if (defined($driftfile));
@@ -688,6 +693,15 @@ sub readdrift()
 	chomp($drift);
 	if ($drift eq "") {
 	    $drift = 0.0;
+	}
+	if ($ischrony) {
+	    if ($drift =~ /^\s*(-?[0-9\.]+)\s+.*$/) {
+		$drift = $1;
+	    }
+	    else {
+		logmsg("WARNING: cannot extract drift for chrony; no drift update done.\n");
+		$drift = "NONE";
+	    }
 	}
     } else {
 	logmsg("WARNING: no NTP drift file found; no drift update done.\n");

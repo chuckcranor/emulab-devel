@@ -1408,6 +1408,17 @@ sub localize
 				"/var/lib/ntp/ntp.drift");
 	}
     }
+
+    # Check the chrony configuration.
+    if (-e "/etc/chrony.conf") {
+	print "Updating /etc/chrony.conf\n";
+
+	system("cp -pf /etc/chrony.conf $imageroot/etc/chrony.conf");
+	if ($?) {
+	    print STDERR "Failed to create /etc/chrony.conf\n";
+	    return;
+	}
+    }
 }
 
 sub hardwire_boss_node

@@ -93,7 +93,8 @@ common-install:	dir-install
 	@echo "no centos-specific common files"
 
 bin-install:	dir-install
-	@echo "no centos-specific bin files"
+	$(INSTALL) -m 755 $(SRCDIR)/chronystart $(BINDIR)/chronystart
+	@echo "centos-specific bin-install done"
 
 etc-install:	dir-install sysetc-install sysetc-remove
 	$(INSTALL) -m 644 $(SRCDIR)/group $(ETCDIR)/group
@@ -115,6 +116,11 @@ sysetc-install:	dir-install
 	$(INSTALL) -m 744 $(SRCDIR)/ifup-emulabcnet $(SYSETCDIR)/sysconfig/network-scripts
 	$(INSTALL) -m 644 $(SRCDIR)/logrotate-syslog $(SYSETCDIR)/logrotate.d/syslog
 	$(INSTALL) -m 644 $(SRCDIR)/rsyslog-emulab.conf $(SYSETCDIR)/rsyslog.d/40-emulab.conf
+	$(INSTALL) -m 644 $(SRCDIR)/chrony.conf $(SYSETCDIR)/chrony.conf
+	$(INSTALL) -m 644 $(SRCDIR)/chronyd.service \
+		$(SYSETCDIR)/systemd/system/chronyd.service
+	ln -sf ../chronyd.service \
+		$(SYSETCDIR)/systemd/system/multi-user.target.wants/chronyd.service
 	-@if [ -z "$(DESTDIR)" ]; then \
 	    systemctl daemon-reload || /bin/true; \
 	fi
