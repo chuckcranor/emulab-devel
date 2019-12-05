@@ -19,7 +19,7 @@ apk update
 apk add git ca-certificates perl \
     gcc make libc-dev byacc libtool openssl-dev 'g++' \
     sudo python python-dev libpcap-dev boost-dev wget patch flex \
-    zlib-dev
+    zlib-dev libtirpc-dev
 
 if [ -z "$EMULABTMPSRC" ]; then
     echo "WARNING: missing EMULABSRC environment variable pointer to src; cloning!"
