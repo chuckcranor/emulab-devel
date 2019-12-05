@@ -85,7 +85,8 @@ while (list($index, $aggregate) = each($ams)) {
                           "name"     => $am,
                           "weburl"   => $aggregate->weburl(),
                           "nickname" => $aggregate->nickname(),
-                          "typeinfo" => $aggregate->typeinfo);
+                          "typeinfo" => $aggregate->typeinfo,
+                          "reservable_nodes" => $aggregate->ReservableNodes());
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
 echo htmlentities(json_encode($amlist));

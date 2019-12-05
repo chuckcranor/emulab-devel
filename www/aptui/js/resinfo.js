@@ -19,6 +19,7 @@ $(function ()
 
 	isadmin  = window.ISADMIN;
 	amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
+	console.info("amlist", amlist);
 
 	GeneratePageBody();
 
@@ -184,8 +185,14 @@ $(function ()
 		    }
 		    var free  = parseInt(data.free) + parseInt(data.held);
 		    // Link to the (public) shownode page.
-		    var weburl = details.weburl +
-			"/shownodetype.php3?node_type=" + type;
+		    var weburl = details.weburl;
+		    // Reservable node hack.
+		    if (_.has(details.reservable_nodes, type)) {
+			weburl += "/shownode.php3?node_id=" + type;
+		    }
+		    else {
+			weburl += "/shownodetype.php3?node_type=" + type;
+		    }
 		    weburl = "<a href='" + weburl + "' target=_blank>" +
 			type + "</a>";
 
