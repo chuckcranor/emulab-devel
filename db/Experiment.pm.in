@@ -7011,6 +7011,22 @@ sub InitKeyDist($)
     return 0;
 }
 
+#
+# Return the portal URL for an experiment (if there is one).
+#
+sub PortalURL($)
+{
+    my ($self) = @_;
+    require GeniSlice;
+
+    if ($self->geniflags()) {
+	my $slice = GeniSlice->LookupByExperiment($self);
+	if (defined($slice)) {
+	    return $slice->GetPortalURL();
+	}
+    }
+    return undef;
+}
 
 # _Always_ make sure that this 1 is at the end of the file...
 1;

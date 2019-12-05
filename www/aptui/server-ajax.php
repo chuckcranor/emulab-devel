@@ -487,7 +487,9 @@ $routing = array("geni-login" =>
                                                  "DeleteLogEntry" =>
                                                      "Do_DeleteLogEntry",
                                                  "GetHistory" =>
-                                                     "Do_GetHistory")),
+                                                     "Do_GetHistory",
+                                                 "GetRFViolations" =>
+                                                     "Do_GetRFViolations")),
 		 "nodetype" =>
 			array("file"    => "nodetype.ajax",
                               # We wllow guest users to see type info.

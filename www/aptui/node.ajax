@@ -35,7 +35,7 @@ chdir("apt");
 $node = null;
 
 #
-# We allow anonynous users to get ONLY general node info!
+# We allow anonynous users to access some entrypoints.
 #
 $GuestUserOkay = false;
 
@@ -89,7 +89,7 @@ function Do_GetInfo()
     global $this_user, $ajax_args, $node, $GuestUserOkay;
     global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
 
-    # Only this function allows guest users.
+    # This function allows guest users.
     $GuestUserOkay = true;
     
     if (CheckPageArgs(0)) {
@@ -363,7 +363,7 @@ function Do_GetHardwareInfo()
     global $this_user, $ajax_args, $node, $GuestUserOkay;
     global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
 
-    # Only this function allows guest users.
+    # This function allows guest users.
     $GuestUserOkay = true;
     
     if (CheckPageArgs(0)) {
@@ -668,6 +668,7 @@ function Do_Reboot()
     if (! (ISADMIN() ||
            $node->AccessCheck($this_user, $TB_NODEACCESS_REBOOT))) {
 	SPITAJAX_ERROR(-1, "Not enough permission");
+        return;
     }
     $node_id = $node->node_id();
     
@@ -682,6 +683,66 @@ function Do_Reboot()
         return;
     }
     SPITAJAX_RESPONSE(true);
+}
+
+#
+# Get RF violations for a node
+#
+function Do_GetRFViolations()
+{
+    global $this_user, $ajax_args, $node, $GuestUserOkay;
+
+    # This function allows guest users.
+    $GuestUserOkay = true;
+    
+    if (CheckPageArgs(0)) {
+        return;
+    }
+    $node_id    = $node->node_id();
+    $experiment = $node->Reservation();
+    $results    = array();
+    
+    # Guest users not allowed to see data if not reserved.
+    if (!$this_user && !$experiment) {
+	SPITAJAX_ERROR(-1, "Not enough permission for guest user");
+        return;
+    }
+    # Mere (guest) users see only as far back as the current experiment start.
+    if (!ISADMIN()) {
+        if (!$experiment) {
+            SPITAJAX_ERROR(-1, "Not enough permission");
+            return;
+        }
+        $start = $experiment->swapped();
+
+        $query_result =
+            DBQueryFatal("select * from node_rf_violations ".
+                         "where node_id='$node_id' and ".
+                         "      tstamp>'$start' ".
+                         "order by tstamp desc ".
+                         "limit 500");
+    }
+    else {
+        $query_result =
+            DBQueryFatal("select * from node_rf_violations ".
+                         "where node_id='$node_id' ".
+                         "order by tstamp desc ".
+                         "limit 500");
+    }
+    if (!mysql_num_rows($query_result)) {
+	SPITAJAX_ERROR(-1, "No violations to show you");
+        return;
+    }
+    while ($row = mysql_fetch_array($query_result)) {
+        $blob = array(
+            "iface"      => $row["iface"],
+	    "stamp"      => DateStringGMT($row["tstamp"]),
+	    "frequency"  => $row["frequency"],
+	    "power"      => $row["power"],
+        );
+        $results[] = $blob;
+    }
+    SPITAJAX_RESPONSE($results);
 }
 
 # Local Variables:

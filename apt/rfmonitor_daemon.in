@@ -65,8 +65,10 @@ my $TB		     = "@prefix@";
 my $TBOPS            = "@TBOPSEMAIL@";
 my $TBRFOPS          = "powder-rfmon\@flux.utah.edu";
 my $OURDOMAIN        = "@OURDOMAIN@";
+my $TBBASE           = "@TBBASE@";
 my $MAINSITE         = @TBMAINSITE@;
 my $POWDER_RFMONITOR = @POWDER_RFMONITOR@;
+my $PGENISUPPORT     = @PROTOGENI_SUPPORT@;
 my $LOGFILE          = "$TB/log/rfmonitor_daemon.log";
 my $POWER            = "$TB/bin/power";
 my $FORMAT           = "portid,timestamp,frequency,power";
@@ -120,6 +122,10 @@ if (defined($options{"p"})) {
     $PORT = $options{"p"};
 }
 
+# For Geni slices: do this early so that we talk to the right DB.
+use vars qw($GENI_DBNAME);
+$GENI_DBNAME = "geni-cm";
+
 # Load the Testbed support stuff.
 use lib "@prefix@/lib";
 use emdb;
@@ -128,6 +134,10 @@ use libtestbed;
 use emutil;
 use libEmulab;
 use Experiment;
+use Brand;
+if ($PGENISUPPORT) {
+    require GeniSlice;
+}
 
 if (! $impotent) {
     if (CheckDaemonRunning("rfmonitor_daemon")) {
@@ -251,7 +261,19 @@ sub HandleChild($)
     my %violaters  = ();
     my $datafile   = "$TEMPDIR/$address";
     my $prevdata   = {};
+    my $nextdata   = {};
     my $noisefloor = $NOISEFLOOR;
+    my @dbinserts  = ();
+
+    # Add a DB insert to the list of violations to store in the DB.
+    my $addInsert = sub {
+	my ($node, $iface, $measurement) = @_;
+	my $freq    = sprintf("%.3f", $measurement->{"frequency"});
+	my $power   = sprintf("%.3f", $measurement->{"power"});
+	my $node_id = $node->node_id();
+
+	push(@dbinserts, "('$node_id','$iface',now(),'$freq','$power')");
+    };
 
     # Reread the noisefloor each loop.
     my $floor;
@@ -280,22 +302,6 @@ sub HandleChild($)
 	}
 	# Will write a new one at the end.
 	unlink($datafile);
-
-	#
-	# Prune out anything that looks stale.
-	#
-	my $tmp = {};
-
-	foreach my $key (keys(%{$prevdata})) {
-	    my $measurement = $prevdata->{$key};
-	    my $stamp = $measurement->{'timestamp'};
-
-	    next
-		if (time() - $stamp > 120);
-
-	    $tmp->{$key} = $measurement;
-	}
-	$prevdata = $tmp;
     }
     print "Previous data:\n";
     print Dumper($prevdata);
@@ -342,7 +348,8 @@ sub HandleChild($)
 	    "iface"      => $iface,
 	    "frequency"  => $frequency,
 	    "power"      => $power,
-	    "timestamp"  => int($timestamp),
+   	    "timestamp"  => int($timestamp),
+	    "repeatcount"=> 0,
 	};
     };
 
@@ -391,15 +398,14 @@ sub HandleChild($)
 	    print STDERR "No such node $nodeid\n";
 	    next;
 	}
-
 	#
 	# This is bogus, I was expecting the monitor to only send me
 	# messages for actual transmission, not 1000s of lines. So I
-	# need to prune out anything that looks like noise. How do I
-	# do that? 
+	# need to prune out anything that looks like noise. 
 	#
+	my $floor = ($frequency < 1000.0 ? $noisefloor + 10 : $noisefloor);
 	next
-	    if ($power < $noisefloor);
+	    if ($power < $floor);
 
 	print "Above floor:$noisefloor $nodeid:$iface: $frequency,$power\n";
 	
@@ -452,16 +458,22 @@ sub HandleChild($)
 	if (!defined($limits)) {
 	    # Ignore sample first time we see it. 	    
 	    if (exists($prevdata->{$key})) {
+		my $previous = $prevdata->{$key};
+		
 		if (!exists($violaters{$nodeid})) {
 		    $violaters{$nodeid} = {};
 		}
 		if (!exists($violaters{$nodeid}->{$iface})) {
 		    $violaters{$nodeid}->{$iface} = [];
 		}
+		&$addInsert($node, $iface, $measurement);
 		push(@{$violaters{$nodeid}->{$iface}}, $measurement);
+
+		# Bump repeat count.
+		$measurement->{'repeatcount'} = $previous->{'repeatcount'} + 1;
 	    }
 	    # Remember for next time
-	    $prevdata->{$key} = $measurement;		    
+	    $nextdata->{$key} = $measurement;
 	    next;
 	}
 	#
@@ -484,27 +496,45 @@ sub HandleChild($)
 	if (!$inrange) {
 	    # Ignore sample first time we see it.
 	    if (exists($prevdata->{$key})) {
+		my $previous = $prevdata->{$key};
+
 		if (!exists($violaters{$nodeid})) {
 		    $violaters{$nodeid} = {};
 		}
 		if (!exists($violaters{$nodeid}->{$iface})) {
 		    $violaters{$nodeid}->{$iface} = [];
 		}
+		&$addInsert($node, $iface, $measurement);
 		push(@{$violaters{$nodeid}->{$iface}}, $measurement);
+
+		# Bump repeat count.
+		$measurement->{'repeatcount'} = $previous->{'repeatcount'} + 1;
 	    }
 	    # Remember for next time
-	    $prevdata->{$key} = $measurement;		    
+	    $nextdata->{$key} = $measurement;		    
 	}
     }
     if (keys(%violaters)) {
 	HandleViolations(\%violaters, \%rflimits);
     }
+    if (@dbinserts) {
+	my $query = "insert into node_rf_violations ".
+	    "(node_id, iface, tstamp, frequency, power) values " .
+	    join(",", @dbinserts);
+
+	if ($impotent || $debug) {
+	    print $query . "\n";
+	}
+	if (!$impotent) {
+	    DBQueryWarn($query);
+	}
+    }
     #
     # Write back the new previous data for next time
     #
     print "New previous data:\n";
-    print Dumper($prevdata);
-    my $string = eval { encode_json($prevdata) };
+    print Dumper($nextdata);
+    my $string = eval { encode_json($nextdata) };
     if ($@) {
 	print STDERR "Could not encode json data\n";
     }
@@ -563,7 +593,8 @@ sub HandleViolations($$)
     # Simple, send a message per node.
     #
     foreach my $nodeid (keys(%{$violations})) {
-	my ($TO, $subject, $body);
+	my ($TO, $subject, $body, $portalurl, $rfurl);
+	my $forcemail = 0;
 	my $headers;
 
 	my $node = Node->Lookup($nodeid);
@@ -584,6 +615,8 @@ sub HandleViolations($$)
 
 	    # Always CC to TBRFOPS;
 	    $headers = "CC: $TBRFOPS";
+	    # Debugging.
+	    #$headers = "CC: stoller\@flux.utah.edu";
 
 	    #
 	    # Nonlocal project (on the geni path), its the creator we want.
@@ -599,17 +632,14 @@ sub HandleViolations($$)
 	    if (!$debug && $project->IsLocal()) {
 		$headers .= ", $pname <$pemail>";
 	    }
+	    # Add to the body.
+	    $portalurl = $experiment->PortalURL();
 	}
 	else {
 	    $TO = $TBRFOPS;
 	}
 	$subject = "Transmit frequency/power violations on $nodeid";
 	$body    = "Transmit violations on ${nodeid}\@${OURDOMAIN}:\n\n";
-
-	#
-	# Build up a query to insert the violations into the DB.
-	#
-	my @dbinserts = ();
 
 	foreach my $iface (keys(%{$violations->{$nodeid}})) {
 	    if (!exists($rflimits->{$nodeid}->{$iface})) {
@@ -639,24 +669,34 @@ sub HandleViolations($$)
 
 		$body .= "\t$freq MHZ at $power dB\n";
 
-		push(@dbinserts,
-		     "('$nodeid','$iface',now(),'$freq','$power')");
+		# We always send email when it is a new frequency.
+		$forcemail = 1
+		    if ($measurement->{'repeatcount'} == 1);
 	    }
 	    $body .= "\n";
 	}
-	my $query = "insert into node_rf_violations ".
-	    "(node_id, iface, tstamp, frequency, power) values " .
-	    join(",", @dbinserts);
-	
 	if (!$mailonly) {
 	    $body .= "\n" . "This node will be immediately powered off!\n";
+	}
+	# Link to the violation history page.
+	if ($MAINSITE) {
+	    my $brand = Brand->Lookup("powder");
+	    $rfurl = $brand->wwwBase() .
+		"/show-rfviolations.php?node_id=$nodeid";
+	}
+	else {
+	    $rfurl = "$TBBASE/portal/show-rfviolations.php?node_id=$nodeid";
+	}
+	$body .= "\n" . "Violation History:\n" . $rfurl . "\n";
+	
+	if ($portalurl) {
+	    $body .= "\n" . "Experiment link:\n" . $portalurl . "\n";
 	}
 	if ($debug || $impotent) {
 	    print $subject . "\n";
 	    print $body;
-	    print $query . "\n";
 	}
-	if (!$impotent && ShouldNotify($nodeid, "user")) {
+	if (!$impotent && ($forcemail || ShouldNotify($nodeid, "user"))) {
 	    libtestbed::SENDMAIL($TO, $subject, $body, $TBOPS, $headers);
 	    NodeNotified($nodeid, "user", $body);
 	}
@@ -669,9 +709,6 @@ sub HandleViolations($$)
 		NodeNotify($nodeid, "system",
 			   "Failed to power of $nodeid!\n\n". $output);
 	    }
-	}
-	if (!$impotent) {
-	    DBQueryWarn($query);
 	}
     }
 }
