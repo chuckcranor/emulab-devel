@@ -11,6 +11,8 @@ $(function ()
     var graphTemplate   = _.template(templates["reservation-graph"]);
     var totalsTemplate  = _.template(templates["resinfo-totals"]);
     var amlist          = null;
+    var FEs             = {};  // Powder
+    var forecasts       = {};
     var isadmin         = false;
 
     function initialize()
@@ -46,6 +48,12 @@ $(function ()
 	// Per clusters rows filled in with templates.
 	_.each(amlist, function(details, urn) {
 	    var graphid = 'resgraph-' + details.nickname;
+
+	    // These go in a combined graph.
+	    if (details.isFE) {
+		FEs[urn] = details;
+		return;
+	    }
 	    
 	    $('#' + details.nickname + " .counts-panel")
 		.html(totalsTemplate({"details"      : details,
@@ -54,21 +62,14 @@ $(function ()
 				      (!window.ISPOWDER ?
 				       details.nickname : details.nickname)}));
 
-	    if (window.ISPOWDER) {
-		if (details.nickname == "Emulab") {
-  		    $('#' + details.nickname + " .resgraph-panel-radios")
-		       .html(graphTemplate({"details"        : details,
+	    if (window.ISPOWDER && details.nickname == "Emulab") {
+  		$('#' + details.nickname + " .resgraph-panel-radios")
+		    .html(graphTemplate({"details"        : details,
 					 "graphid"        : graphid + "-radios",
 					 "title"          : "Powder Radio",
 					 "urn"            : urn,
 					 "showhelp"       : true,
 					 "showfullscreen" : false}));
-		}
-		else {
-		    $('#' + details.nickname + " .resgraph-panel-servers")
-			.removeClass("col-sm-5")
-			.addClass("col-sm-10");
-		}
 	    }
 	    $('#' + details.nickname + " .resgraph-panel-servers")
 		.html(graphTemplate({"details"        : details,
@@ -81,6 +82,19 @@ $(function ()
 				     "showhelp"       : true,
 				     "showfullscreen" : false}));
 	});
+	if (_.size(FEs)) {
+	    $('#fixed-endpoints .counts-panel')
+		.html(totalsTemplate({"title" : "Fixed Endpoints"}));
+
+	    $("#fixed-endpoints .resgraph-panel-servers")
+		.html(graphTemplate({"graphid"        : "resgraph-FEs",
+				     "title"          : "Fixed Endpoint",
+				     "showhelp"       : true,
+				     "showfullscreen" : false}));
+	    
+	    $('#fixed-endpoints').removeClass("hidden");
+	}
+
 	// Handler for the Reservation Graph Help button
 	$('.resgraph-help-button').click(function (event) {
 	    event.preventDefault();
@@ -123,7 +137,14 @@ $(function ()
 			.removeClass("hidden");
 		    return;
 		}
+		var forecast   = json.value.forecast;
 		var skiptypes  = json.value.prunelist;
+		forecasts[urn] = forecast;
+
+		if (details.isFE) {
+		    RegenFEGraph(urn);
+		    return;
+		}
 		// Just POWDER
 		var radiotypes = {"nuc5300"   : true,
 				  "nuc6260"   : true,
@@ -133,8 +154,8 @@ $(function ()
 				  "n310"      : true,
 				  "sdr"       : true};
 
-		if (window.ISPOWDER) {
-		    ShowResGraph({"forecast"       : json.value.forecast,
+		if (window.ISPOWDER && details.nickname == "Emulab") {
+		    ShowResGraph({"forecast"       : forecast,
 				  "selector"       : graphid + "-radios",
 				  "foralloc"       : true,
 				  "maxdays"        : 14,
@@ -146,7 +167,7 @@ $(function ()
 		    // For the servers panel, do not show the radios.
 		    skiptypes = Object.assign(skiptypes, radiotypes);
 		}
-		ShowResGraph({"forecast"       : json.value.forecast,
+		ShowResGraph({"forecast"       : forecast,
 			      "selector"       : graphid + "-servers",
 			      "foralloc"       : true,
 			      "skiptypes"      : skiptypes,
@@ -162,48 +183,7 @@ $(function ()
 		 * Fill in the counts panel. The first tuple in the forecast
 		 * for each type is the immediately available node count.
 		 */
-		var forecast = json.value.forecast;
-		var html     = "";
-
-		// Each node type
-		for (var type in forecast) {
-		    // Skip types we do not want to show.
-		    if (_.has(skiptypes, type)) {
-			continue;
-		    }
-		    // This is an array of objects.
-		    var array = forecast[type];
-		    // We want the first stime stamp, but there might be
-		    // multiple entries for that time stamp, so scan foward
-		    // to find the last one.
-		    var data  = array[0];
-		    for (var i in array) {
-			var datum = array[i];
-			if (datum.t == data.t) {
-			    data = datum;
-			}
-		    }
-		    var free  = parseInt(data.free) + parseInt(data.held);
-		    // Link to the (public) shownode page.
-		    var weburl = details.weburl;
-		    // Reservable node hack.
-		    if (_.has(details.reservable_nodes, type)) {
-			weburl += "/shownode.php3?node_id=" + type;
-		    }
-		    else {
-			weburl += "/shownodetype.php3?node_type=" + type;
-		    }
-		    weburl = "<a href='" + weburl + "' target=_blank>" +
-			type + "</a>";
-
-		    html +=
-			"<tr>" +
-			" <td>" + weburl + "</td>" +
-			" <td>" + free + "</td>" +
-			"</tr>";
-		}
-		$('#' + countid + ' tbody').html(html);
-		$('#' + countid + ' table').removeClass("hidden");
+		GenerateCountPanel(urn, countid, forecast, skiptypes);
 	    };
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
 						"ReservationInfo",
@@ -211,6 +191,90 @@ $(function ()
 						 "anonymous" : 1});
 	    xmlthing.done(callback);
 	});
+    }
+
+    function GenerateCountPanel(urn, selector, forecast, skiptypes)
+    {
+	var details = amlist[urn];
+	var html    = "";
+	
+	// Each node type
+	for (var type in forecast) {
+	    // Skip types we do not want to show.
+	    if (skiptypes && _.has(skiptypes, type)) {
+		continue;
+	    }
+	    // This is an array of objects.
+	    var array = forecast[type];
+	    // We want the first stime stamp, but there might be
+	    // multiple entries for that time stamp, so scan foward
+	    // to find the last one.
+	    var data  = array[0];
+	    for (var i in array) {
+		var datum = array[i];
+		if (datum.t == data.t) {
+		    data = datum;
+		}
+	    }
+	    var free  = parseInt(data.free) + parseInt(data.held);
+	    // Link to the (public) shownode page.
+	    var weburl = details.weburl;
+	    // Reservable hack.
+	    if (_.has(details.reservable_nodes, type)) {
+		weburl += "/portal/show-node.php?node_id=" + type;
+	    }
+	    else {
+		weburl += "/portal/show-nodetype.php?type=" + type;
+	    }
+	    // Powder.
+	    if (details.isFE) {
+		type = details.abbreviation + "/" + type;
+	    }
+	    weburl = "<a href='" + weburl + "' target=_blank>" + type + "</a>";
+
+	    html +=
+		"<tr>" +
+		" <td>" + weburl + "</td>" +
+		" <td>" + free + "</td>" +
+		"</tr>";
+	}
+	$('#' + selector + ' tbody').append(html);
+	$('#' + selector + ' table').removeClass("hidden");
+    }
+
+    function RegenFEGraph(newurn)
+    {
+	var combinedForecasts = {};
+	
+	// Kill the spinners.
+	$('#fixed-endpoints .resgraph-spinner').addClass("hidden");
+
+	console.info("RegenFEGraph");
+
+	_.each(FEs, function (details, urn) {
+	    // Do we have the forecasts yet?
+	    if (!_.has(forecasts, urn)) {
+		return;
+	    }
+	    _.each(forecasts[urn], function(forecast, type) {
+		var id = amlist[urn].abbreviation + "/" + type;
+
+		combinedForecasts[id] = forecasts[urn][type];
+	    });
+	});
+	console.info("AddToFEGraph", combinedForecasts);
+
+	ShowResGraph({"forecast"  : combinedForecasts,
+		      "selector"  : "resgraph-FEs",
+		      "height"    : "400px",
+		      "skiptypes" : {},
+		     });
+
+	/*
+	 * Update the counts panel with the newly added FE.
+	 */
+	var countid = "fixed-endpoints .counts-panel";
+	GenerateCountPanel(newurn, countid, forecasts[newurn], null);
     }
 
     $(document).ready(initialize);

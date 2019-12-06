@@ -149,13 +149,13 @@ while (list($index, $aggregate) = each($ams)) {
             }
         }
     }
-
     $amlist[$urn] = array("urn"      => $urn,
                           "name"     => $am,
                           "nickname" => $aggregate->nickname(),
                           "typeinfo" => $typeinfo,
                           "abbreviation"     => $aggregate->nickname(),
-                          "reservable_nodes" => $reservable_nodes);
+                          "reservable_nodes" => $reservable_nodes,
+                          "isFE"             => $aggregate->isFE());
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
 echo htmlentities(json_encode($amlist));

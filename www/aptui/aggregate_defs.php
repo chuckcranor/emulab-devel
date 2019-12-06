@@ -112,6 +112,17 @@ class Aggregate
 	return !is_null($this->aggregate);
     }
 
+    # Powder Portal, is an aggregate an FE.
+    function isFE() {
+        global $PORTAL_GENESIS;
+        
+        if ($PORTAL_GENESIS == "powder" &&
+            preg_match("/powderwireless\.net/", $this->urn())) {
+            return 1;
+        }
+        return 0;
+    }
+
     # Powder Portal, Emulab is not a "federate", all others are.
     function isfederate() {
         global $PORTAL_GENESIS;

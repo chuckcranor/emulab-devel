@@ -16,11 +16,12 @@
 </style>
 <div>
   <% _.each(amlist, function(details, urn) { %>
+    <% if (details.isFE) { return; } %>
     <div class='row' id='<%- details.nickname %>'>
       <div class='col-sm-2 counts-panel'>
 	<!-- Template goes here -->	    
       </div>
-      <% if (window.ISPOWDER) { %>
+      <% if (window.ISPOWDER && details.nickname == "Emulab") { %>
 	<div class='col-sm-5 resgraph-panel-radios'
 	     style="padding: 0px;">
 	  <!-- Template goes here -->	    
@@ -36,6 +37,14 @@
       <% } %>
     </div>
   <% }) %>
+  <div class='row hidden' id='fixed-endpoints'>
+    <div class='col-sm-2 counts-panel'>
+      <!-- Template goes here -->	    
+    </div>
+    <div class='col-sm-10 resgraph-panel-servers'>
+      <!-- Template goes here -->	    
+    </div>
+  </div>
   <div id='waitwait_div'></div>
   <div id='oops_div'></div>
 </div>

@@ -355,7 +355,7 @@ window.ShowResGraph = (function ()
 		return d3.time.format('%m/%d')(new Date(d))
             });	    
 
-	    var intformater = d3.format(',.0f');
+	    var intformater = d3.format(',d');
 	    var formatter = function (d) {
 		return intformater(d);
 	    };
@@ -409,6 +409,12 @@ window.ShowResGraph = (function ()
 
 	    $(id).css("height", (height + 200) + "px")
 		.css("max-height", (height + 200) + "px");
+	}
+	else if (_.has(args, "height")) {
+	    var id = '#' + args.selector + " .resgraph-size";
+	    var height = args.height;
+
+	    $(id).css("height", height).css("max-height", height);
 	}
 	CreateGraph(datums, args.selector, args.click_callback,
 		    args.showbrush);

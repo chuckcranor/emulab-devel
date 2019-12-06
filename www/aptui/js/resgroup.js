@@ -14,6 +14,7 @@ $(function ()
     var rangeTemplate   = _.template(templates["range-list"]);
     var projlist     = null;
     var amlist       = null;
+    var FEs          = {};	    // Powder thing
     var isadmin      = false;
     var editing      = false;
     var buttonstate  = "check";
@@ -386,12 +387,16 @@ $(function ()
 	    AddClusterRow();
 	    AddRangeRow();
 	}
-	
 	// Graph list(s).
 	html = "";
 	_.each(amlist, function(details, urn) {
 	    var graphid = 'resgraph-' + details.nickname;
 
+	    // POWDER; we draw the FEs in a single combined graph.
+	    if (details.isFE) {
+		FEs[urn] = details;
+		return;
+	    }
 	    html += graphTemplate({"details"        : details,
 				   "graphid"        : graphid,
 				   "title"          : details.name,
@@ -400,6 +405,15 @@ $(function ()
 				   "showfullscreen" : true});
 	});
 	$('#reservation-lists').html(html);
+
+	if (_.size(FEs)) {
+	    html = graphTemplate({"graphid"        : "resgraph-FEs",
+				  "title"          : "Fixed Endpoint",
+				  "showhelp"       : true,
+				  "showfullscreen" : false});
+	    $('#FE-graph').html(html);
+	    $('#FE-graph').removeClass("hidden");
+	}
 
 	// Handler for the Help button
 	$('#reservation-help-button').click(function (event) {
@@ -1087,6 +1101,12 @@ $(function ()
 		}
 		ProcessForecast(urn, json.value.forecast);
 
+		// Powder combined graph.
+		if (_.has(FEs, urn)) {
+		    RegenFEGraph();
+		    return;
+		}
+		
 		ShowResGraph({"forecast"  : json.value.forecast,
 			      "selector"  : id,
 			      "resize"    : true,
@@ -2588,6 +2608,35 @@ $(function ()
 	
 	ShowResGraph({"forecast"  : combinedForecasts,
 		      "selector"  : "combined-resgraph",
+		      "skiptypes" : {},
+		     });
+    }
+
+    function RegenFEGraph()
+    {
+	var combinedForecasts = {};
+	var id = "resgraph-FEs";
+	// Kill the spinner.
+	$('#' + id + ' .resgraph-spinner').addClass("hidden");
+
+	console.info("RegenFEGraph");
+
+	_.each(FEs, function (details, urn) {
+	    // Do we have the forecasts yet?
+	    if (!_.has(forecasts, urn)) {
+		return;
+	    }
+	    _.each(forecasts[urn], function(forecast, type) {
+		var id = amlist[urn].abbreviation + "/" + type;
+
+		combinedForecasts[id] = forecasts[urn][type];
+	    });
+	});
+	console.info("AddToFEGraph", combinedForecasts);
+
+	ShowResGraph({"forecast"  : combinedForecasts,
+		      "selector"  : "resgraph-FEs",
+		      "height"    : "400px",
 		      "skiptypes" : {},
 		     });
     }
