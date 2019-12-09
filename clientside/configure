@@ -4547,11 +4547,14 @@ if test "x$ac_cv_header_rpc_rpc_h" = xyes; then :
   cat >>confdefs.h <<_ACEOF
 #define HAVE_RPC_RPC_H 1
 _ACEOF
- RPC_INCLUDE="$rpcpath" ; break
+ RPC_INCLUDE="$rpcpath"
 fi
 
 done
 
+    if test "x$ac_cv_header_rpc_rpc_h" = xyes ; then
+        break;
+    fi
     $as_unset ac_cv_header_rpc_rpc_h
 done
 # Final "check" so we can return an error message.
@@ -4559,7 +4562,8 @@ if ! test x"${RPC_INCLUDE}" = x"" ; then
     RPC_CPPFLAGS="-I${RPC_INCLUDE}"
 fi
 CPPFLAGS="$old_CPPFLAGS $RPC_CPPFLAGS"
-for ac_header in rpc/rpc.h
+if ! test "x$ac_cv_header_rpc_rpc_h" = xyes ; then
+    for ac_header in rpc/rpc.h
 do :
   ac_fn_c_check_header_mongrel "$LINENO" "rpc/rpc.h" "ac_cv_header_rpc_rpc_h" "$ac_includes_default"
 if test "x$ac_cv_header_rpc_rpc_h" = xyes; then :
@@ -4573,6 +4577,7 @@ fi
 
 done
 
+fi
 CPPFLAGS="$old_CPPFLAGS"
 
 

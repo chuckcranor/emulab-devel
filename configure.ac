@@ -96,6 +96,32 @@ AC_CHECK_HEADERS([Python.h],
 AC_SUBST(PYTHON_INCLUDE)
 # END Python detection.
 
+# On Linux, rpc/rpc.h may be in another place, e.g. for tirpc,
+# /usr/include/tirpc .
+RPC_INCLUDE=""
+RPC_CPPFLAGS=""
+old_CPPFLAGS="$CPPFLAGS"
+for rpcpath in "" "/usr/include/tirpc" ; do
+    if ! test x"$rpcpath" = x"" ; then
+        CPPFLAGS="$old_CPPFLAGS -I$rpcpath"
+    fi
+    AC_CHECK_HEADERS([rpc/rpc.h],[RPC_INCLUDE="$rpcpath"],[])
+    if test "x$ac_cv_header_rpc_rpc_h" = xyes ; then
+        break;
+    fi
+    $as_unset ac_cv_header_rpc_rpc_h
+done
+# Final "check" so we can return an error message.
+if ! test x"${RPC_INCLUDE}" = x"" ; then
+    RPC_CPPFLAGS="-I${RPC_INCLUDE}"
+fi
+CPPFLAGS="$old_CPPFLAGS $RPC_CPPFLAGS"
+if ! test "x$ac_cv_header_rpc_rpc_h" = xyes ; then
+    AC_CHECK_HEADERS([rpc/rpc.h],[],[AC_MSG_ERROR("Cannot find rpc/rpc.h")])
+fi
+CPPFLAGS="$old_CPPFLAGS"
+AC_SUBST(RPC_CPPFLAGS)
+
 # Find perl for gettimezone invocation below
 AC_PATH_PROGS(PERL, perl perl5)
 if test x"$PERL" = x""; then
