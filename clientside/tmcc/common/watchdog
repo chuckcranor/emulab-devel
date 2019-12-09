@@ -695,7 +695,7 @@ sub readdrift()
 	}
 	if ($ischrony) {
 	    if ($drift =~ /^\s*(-?[0-9\.]+)\s+.*$/) {
-		$drift = $1;
+		$drift = -($1 + 0.0);
 	    }
 	    else {
 		logmsg("WARNING: cannot extract drift for chrony; no drift update done.\n");

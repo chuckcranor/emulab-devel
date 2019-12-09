@@ -181,11 +181,12 @@ foreach my $line (@ntpinfo) {
 	    last SWITCH1;
 	};
 	/^DRIFT=(.*)$/ && do {
+	    my $cdrift = -($1 + 0.0);
 	    open(DRIFT, "> $driftfile");
 	    # chrony drift file requires a second number, an estimate of
 	    # the quality of the drift ppm number.  We just start it at
 	    # 0.
-	    print DRIFT "$1 0\n";
+	    print DRIFT "$cdrift 0\n";
 	    close(DRIFT);
 	    # if we are root and there is an chrony user, chown the file to that
 	    if ($UID == 0 && system("grep -q '^chrony:' /etc/passwd") == 0)  {

@@ -422,6 +422,12 @@ if (-f $driftfile) {
     print DRIFT "0\n";
     close(DRIFT);
 }
+print "Resetting chrony drift ...\n";
+for my $fp ("/var/lib/chrony/drift","/var/lib/chrony/chrony.drift") {
+    if (-f $fp) {
+	unlink($fp);
+    }
+}
 
 if (-f "$GRUBDEF.preemulab") {
     print "Restoring original $GRUBDEF file ...\n";
