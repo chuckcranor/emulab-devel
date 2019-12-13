@@ -108,7 +108,7 @@ sub call($$$;$$$$)
 
     my $auth = $self->{USERNAME} . ":" . $self->{PASSWORD};
     my $server = $self->{NAME};
-    if (%data > 0) {
+    if (keys %data > 0) {
 	$datastr = encode_json(\%data);
     } else {
 	$datastr = "";
