@@ -1081,7 +1081,9 @@ $(function () {
 		html = GenerateSelect(name, fieldIndex, details, value,
 				      window.powderTypes.baseStations);
 	    }
-	    else if (details.legalValues) {
+	    else if (details.legalValues &&
+		     Array.isArray(details.legalValues) && 
+		     details.legalValues.length) {
 		html = GenerateSelect(name, fieldIndex, details, value);
 	    }
 	    else if (type == "image") {
@@ -1300,21 +1302,29 @@ $(function () {
 
 		// Print a warning if the value is not in the list.
 		if (value && !validoption) {
-		    var message;
+		    // Hmm, problem. Older profiles that were written with
+		    // the idea that NODETYPE was a plain string, will be
+		    // screwed if they had a string default like "any". So
+		    // just map it to Please Select. 
+		    if (0) {
+			var message;
 
-		    if (rerun_bindings) {
-			message =
-			    "The node type in the parameter set " +
-			    "is not in the list of types. Using the "+
-			    "default node type instead.";
+			if (rerun_bindings) {
+			    message =
+				"The node type in the parameter set " +
+				"is not in the list of types. Using the "+
+				"default node type instead.";
+			}
+			else {
+			    message =
+				"The default node type is not in the set of " +
+				"types.";
+			}
+			paramWarnings.push(message);
+			if (rerun_bindings) {
+			    rerun_warnings.push({"message" : message});
+			}
 		    }
-		    else {
-			message =
-			    "The default node type is not in the set of " +
-			    "types.";
-		    }
-		    paramWarnings.push(message);
-		    rerun_warnings.push({"message" : message});
 		    value = undefined;
 		}
 
