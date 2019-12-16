@@ -106,6 +106,7 @@ sub DoModify();
 sub DoExtend();
 sub DoApprove();
 sub DoSnapshot();
+sub DoDestroy();
 sub DoSnapShotInternal($$$$$);
 sub PollDatasetStatus($$$);
 sub DoImageTrackerStuff($$$$$);
@@ -175,6 +176,9 @@ elsif ($action eq "getcredential") {
 }
 elsif ($action eq "approve") {
     exit(DoApprove());
+}
+elsif ($action eq "destroy") {
+    exit(DoDestroy());
 }
 else {
     usage();
@@ -517,6 +521,29 @@ sub DoDelete()
 	$response->code() != GENIRESPONSE_SEARCHFAILED()) {
 	$dataset->Unlock();
 	ExitWithError($response);
+    }
+    $dataset->Delete();
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    return 0;
+}
+
+#
+# Destroy; do not use this.
+#
+sub DoDestroy()
+{
+    if (@ARGV != 1) {
+	fatal("usage: $0 delete pid/name");
+    }
+    my $token   = shift(@ARGV);
+    my $dataset = APT_Dataset->Lookup($token);
+    if (!defined($dataset)) {
+	fatal("No such dataset");
+    }
+    if ($dataset->Lock()) {
+	UserError("dataset is busy, cannot lock it");
     }
     $dataset->Delete();
     if (defined($webtask)) {
