@@ -117,6 +117,7 @@ function ExperimentList($which, $target)
 {
     global $urn_mapping, $TBBASE;
     global $this_user;
+    $trust_none = TBDB_TRUSTSTRING_NONE;
     $extraclause = "";
 
     if ($which == "user") {
@@ -132,10 +133,11 @@ function ExperimentList($which, $target)
         $target_uuid = $target->uuid();
         $target_idx  = $target->idx();
         $whereclause = "where (a.creator_uuid='$target_uuid' or ".
-                       "       g.uid_idx is not null) and a.pid!='sigcomm2019' ";
+                       "       g.uid_idx is not null) ";
         $extraclause = "left join group_membership as g on ".
                        "     g.uid_idx='$target_idx' and  ".
-                       "     g.pid_idx=a.pid_idx ";
+                       "     g.pid_idx=a.pid_idx and " .
+                       "     g.trust!='$trust_none' ";
     }
     else {
         $target_pid = $target->pid();
@@ -289,6 +291,7 @@ function ProjectProfileList($target_user)
 {
     global $urn_mapping, $TBBASE;
     global $this_user;
+    $trust_none = TBDB_TRUSTSTRING_NONE;
 
     $creator_idx = $target_user->uid_idx();
 
@@ -306,7 +309,8 @@ function ProjectProfileList($target_user)
                      "   where h2.profile_id=v.profileid ".
                      "   order by h2.created desc ".
                      "   limit 1) ".
-                     "where g.uid_idx='$creator_idx' ".
+                     "where g.uid_idx='$creator_idx' and ".
+                     "      g.trust!='$trust_none' ".
                      "order by p.pid");
 
     return ProfileListAux($query_result);
