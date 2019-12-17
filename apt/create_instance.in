@@ -953,7 +953,10 @@ foreach my $aggregate_urn (@aggregate_urns) {
     # We do not do this if the experiment start is deferred.
     if (!defined($start_at)) {
 	if ($aptaggregate->CheckStatus(\$errmsg)) {
-	    if ($usestitcher || !$aptaggregate->deferrable()) {
+	    if ($usestitcher ||
+		!$aptaggregate->deferrable() ||
+		# CheckStatus catches this and sets the error message.
+		$aptaggregate->disabled()) {
 		$slice->Delete();
 		$instance->Delete();
 		UserError($errmsg);
