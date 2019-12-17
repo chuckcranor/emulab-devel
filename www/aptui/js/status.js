@@ -1896,6 +1896,8 @@ $(function ()
 		var coninfo= this.getElementsByTagNameNS(EMULAB_NS, 'console');
 		var recover= this.getElementsByTagNameNS(EMULAB_NS, 'recovery');
 		var vnode  = this.getElementsByTagNameNS(EMULAB_NS, 'vnode');
+		var imageable =
+		    this.getElementsByTagNameNS(EMULAB_NS, 'imageable');
 		var href   = "n/a";
 		var ssh    = "n/a";
 		var cons   = "n/a";
@@ -1960,8 +1962,17 @@ $(function ()
 		    isfw = 1;
 		}
 		else if (node_id) {
-		    // All other named nodes are imageable
-		    imageablenodes[node] = node_id;
+		    if (imageable.length) {
+			var available = $(imageable).attr("available");
+			if (available === "true") {
+			    imageablenodes[node] = node_id;
+			}
+		    }
+		    else {
+			// All other named nodes are imageable
+			// This can go when all clusters updated
+			imageablenodes[node] = node_id;
+		    }
 		}
 		/*
 		 * Find the disk image (if any) for the node and display

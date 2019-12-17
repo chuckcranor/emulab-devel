@@ -917,11 +917,10 @@ sub AnnotateManifest($)
 	    if (defined($ipv4));
     }
     my $services = GeniXML::FindFirst("n:services", $rspec);
-    
+    if (! defined($services)) {
+	$services = GeniXML::AddElement("services", $rspec);
+    }
     if ($experiment->HasNonLocalUsers()) {
-	if (! defined($services)) {
-	    $services = GeniXML::AddElement("services", $rspec);
-	}
 	my $login = GeniXML::FindFirst("n:login", $services);
 	while (defined($login)) {
 	    $services->removeChild($login);
@@ -949,9 +948,6 @@ sub AnnotateManifest($)
     if (!$node->IsTainted()) {
 	if ($node->TipServer(\$tipserver) == 0 && defined($tipserver) ||
 	    $node->isvirtnode()) {
-	    if (! defined($services)) {
-		$services = GeniXML::AddElement("services", $rspec);
-	    }
 	    my $console = GeniXML::FindNodesNS("n:console", $services,
 					       $GeniXML::EMULAB_NS)->pop();
 	    if (defined($console)) {
@@ -963,9 +959,6 @@ sub AnnotateManifest($)
 			     (defined($tipserver) ? $tipserver : $sshdhost));
 	}
 	if ($node->recoverymfs_osid() && !$node->isvirtnode()) {
-	    if (! defined($services)) {
-		$services = GeniXML::AddElement("services", $rspec);
-	    }
 	    my $recovery = GeniXML::FindNodesNS("n:recovery", $services,
 						$GeniXML::EMULAB_NS)->pop();
 	    if (!defined($recovery)) {
@@ -981,6 +974,19 @@ sub AnnotateManifest($)
 		$services->removeChild($recovery);
 	    }
 	}
+    }
+    # Always add this.
+    my $imageable = GeniXML::FindNodesNS("n:imageable", $services,
+					 $GeniXML::EMULAB_NS)->pop();
+    if (!defined($imageable)) {
+	$imageable = GeniXML::AddElement("imageable",
+					 $services, $GeniXML::EMULAB_NS);
+    }
+    if ($node->imageable() && !$node->IsTainted()) {
+	GeniXML::SetText("available", $imageable, "true");
+    }
+    else {
+	GeniXML::SetText("available", $imageable, "false");
     }
 
     my $adb_port;
