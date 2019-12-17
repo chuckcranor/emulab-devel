@@ -1440,6 +1440,16 @@ sub DoTerminate()
     # Skip terminated aggregates, since we retry later on failure.
     my @agglist;
     foreach my $agg ($instance->AggregateList()) {
+	#
+	# Messy here; there is no experiment record at the remote
+	# cluster until we get out of image staging, but there are
+	# several states that mean we are staging images.
+	#
+	if ($agg->status() eq "prestage" ||
+	    $agg->status() eq "staging" ||
+	    $agg->status() eq "staged") {
+	    $agg->SetStatus("terminated");
+	}
 	push(@agglist, $agg)
 	    if ($agg->status() ne "terminated");
     }
