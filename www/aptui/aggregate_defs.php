@@ -443,6 +443,26 @@ class Aggregate
         }
         return $result;
     }
+
+    #
+    # Radio types. Eventually need to get this from the advertisement.
+    # For now all clusters have the same set of radiotypes.
+    #
+    function RadioTypes()
+    {
+        global $ISPOWDER;
+
+        if ($ISPOWDER && $this->nickname() == "Emulab") {
+            return array("nuc5300" => true,
+                         "nuc6260" => true,
+                         "iris030" => true,
+                         "enodeb"  => true,
+                         "x310"    => true,
+                         "n310"    => true,
+                         "sdr"     => true);
+        }
+        return null;
+    }
 }
 
 #

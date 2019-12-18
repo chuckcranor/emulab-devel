@@ -869,6 +869,15 @@ class Instance
             $skiptypes["cellsdr1-ustar"]     = true;
             $skiptypes["cellsdr1-smt"]       = true;
             $skiptypes["cellsdr1-dentistry"] = true;
+            $skiptypes["cbrssdr1-honors"]    = true;
+            $skiptypes["cbrssdr1-ustar"]     = true;
+            $skiptypes["cbrssdr1-browning"]  = true;
+            $skiptypes["cbrssdr1-meb"]       = true;
+            $skiptypes["cbrssdr1-fm"]        = true;
+            $skiptypes["cbrssdr1-bes"]       = true;
+            $skiptypes["cbrssdr1-ustar"]     = true;
+            $skiptypes["cbrssdr1-smt"]       = true;
+            $skiptypes["cbrssdr1-dentistry"] = true;
         }
         return $skiptypes;
     }
@@ -1282,11 +1291,13 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
             foreach ($types as $type => $ignore) {
                 $typelist[$type] = $aggregate->TypeAttributes($type);
             }
-            $amlist[$urn] = array("urn"      => $urn,
-                                  "name"     => $am,
-                                  "nickname" => $aggregate->nickname(),
-                                  "typelist" => $typelist,
-                                  "typeinfo" => $aggregate->typeinfo);
+            $amlist[$urn] =
+                array("urn"      => $urn,
+                      "name"     => $am,
+                      "nickname" => $aggregate->nickname(),
+                      "typelist" => $typelist,
+                      "typeinfo" => $aggregate->typeinfo,
+                      "reservable_nodes" => $aggregate->ReservableNodes());
         }
         else {
             $amlist[$urn] = $am;
