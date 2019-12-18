@@ -540,6 +540,8 @@ $routing = array("geni-login" =>
 			      "guest"   => false,
 			      "methods" => array("ExperimentList" =>
                                                      "Do_ExperimentList",
+                                                 "ClassicExperimentList" =>
+                                                     "Do_ClassicExperimentList",
                                                  "SearchIP" =>
                                                      "Do_SearchIP",
                                                  "ExperimentErrors" =>

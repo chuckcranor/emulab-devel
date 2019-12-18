@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -512,6 +512,27 @@ class Experiment
 
 	$row = mysql_fetch_array($query_result);
 	return $row["count"];
+    }
+
+    #
+    # Return array of types used and their count.
+    #
+    function TypesUsed() {
+        $idx = $this->idx();
+        $result = array();
+
+	$query_result =
+	    DBQueryFatal("select type,count(type) from reserved as r ".
+                         "left join nodes as n on n.node_id=r.node_id ".
+                         "where r.exptidx=$idx group by type");
+
+	while ($row = mysql_fetch_array($query_result)) {
+	    $type  = $row[0];
+	    $count = $row[1];
+	
+	    $result[$type] = $count;
+	}
+	return $result;
     }
 
     #

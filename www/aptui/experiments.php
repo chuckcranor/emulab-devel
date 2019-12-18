@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -65,6 +65,7 @@ REQUIRE_SUP();
 REQUIRE_MOMENT();
 SPITREQUIRE("js/experiments.js");
 
-AddTemplateList(array("experiments", "experiment-list", "waitwait-modal", "oops-modal"));
+AddTemplateList(array("experiments", "experiment-list", "classic-explist",
+                      "waitwait-modal", "oops-modal"));
 SPITFOOTER();
 ?>

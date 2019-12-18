@@ -327,6 +327,23 @@ function Do_SearchIP()
     SPITAJAX_RESPONSE($uuid);
 }
 
+#
+# List of all Classic experiments, not associated with an instance.
+#
+function Do_ClassicExperimentList()
+{
+    global $this_user, $urn_mapping;
+    global $ajax_args;
+    $this_uid = $this_user->uid();
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $blob = ClassicExperimentList("all", null);
+
+    SPITAJAX_RESPONSE($blob);
+}
+
 # Local Variables:
 # mode:php
 # End:

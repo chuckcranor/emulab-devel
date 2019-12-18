@@ -4,6 +4,7 @@ $(function ()
 
     var templates = APT_OPTIONS.fetchTemplateList(['experiments',
 						   'experiment-list',
+						   'classic-explist',
 						   'waitwait-modal',
 						   'oops-modal']);
 
@@ -11,6 +12,7 @@ $(function ()
     var listString     = templates['experiment-list'];
     var waitwaitString = templates['waitwait-modal'];
     var oopsString     = templates['oops-modal'];
+    var classicString  = templates['classic-explist'];
 
     function initialize()
     {
@@ -42,6 +44,7 @@ $(function ()
 	    InitTable();
 	    $('#experiments_loading').addClass("hidden");
 	    $('#experiments_loaded').removeClass("hidden");
+	    LoadClassicExperiments();
 	};
 	sup.CallServerMethod(null, "experiments", "ExperimentList",
 			     null, callback);
@@ -119,6 +122,15 @@ $(function ()
 	$('#radio-buttons input').change(function (e) {
 	    e.preventDefault();
 
+	    // Special case for classic experiments radio button
+	    if ($('#radio-buttons [data-id="#classic"]').is(":checked")) {
+		$('#experiments_div').addClass("hidden");
+		return;
+	    }
+	    else {
+		$('#experiments_div').removeClass("hidden");
+	    }
+	    
 	    /*
 	     * The use of data-id is to avoid page jumping when changing
 	     * the page hash; it wants to jump to the radio buttons.
@@ -250,6 +262,50 @@ $(function ()
 	sup.CallServerMethod(null, "experiments", "SearchIP",
 			     {"ip" : ip}, callback);
     }
-    
+
+    function LoadClassicExperiments()
+    {
+	var callback = function(json) {
+	    console.info("classic", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (json.value.length == 0)
+		return;
+	    var template = _.template(classicString);
+
+	    $('#classic_experiments_content')
+		.html(template({"experiments" : json.value,
+				"showconvert" : false,
+				"showCreator" : true,
+				"showProject" : true,
+				"asProfiles"  : false}));				
+	    
+	    // Format dates with moment before display.
+	    $('#classic_experiments_content .format-date').each(function() {
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
+	    $('#classic_experiments_div').removeClass("hidden");
+	    // The radio button at the top.
+	    $('#classic_radio_button').removeClass("hidden");
+
+	    $('#classic_experiments_content .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+
+		    // initialize zebra and filter widgets
+		    widgets: ["zebra"],
+		});
+	};
+	var xmlthing = sup.CallServerMethod(null, "experiments",
+					    "ClassicExperimentList");
+	xmlthing.done(callback);
+    }
+
     $(document).ready(initialize);
 });
