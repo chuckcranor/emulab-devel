@@ -88,6 +88,7 @@ while (list($index, $aggregate) = each($ams)) {
                           "typeinfo" => $aggregate->typeinfo,
                           "abbreviation"     => $aggregate->nickname(),
                           "reservable_nodes" => $aggregate->ReservableNodes(),
+                          "radiotypes"       => $aggregate->RadioTypes(),
                           "isFE"             => $aggregate->isFE());
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
@@ -103,7 +104,7 @@ REQUIRE_SUP();
 REQUIRE_MOMENT();
 AddLibrary("js/resgraphs.js");
 AddTemplateList(array("resinfo", "resinfo-totals", "reservation-graph",
-                      "oops-modal", "waitwait-modal"));
+                      "range-list", "oops-modal", "waitwait-modal"));
 SPITREQUIRE("js/resinfo.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
             "<script src='js/lib/nv.d3.js'></script>\n".

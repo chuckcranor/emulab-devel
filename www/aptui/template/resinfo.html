@@ -21,7 +21,7 @@
       <div class='col-sm-2 counts-panel'>
 	<!-- Template goes here -->	    
       </div>
-      <% if (window.ISPOWDER && details.nickname == "Emulab") { %>
+      <% if (window.ISPOWDER && details.radiotypes) { %>
 	<div class='col-sm-5 resgraph-panel-radios'
 	     style="padding: 0px;">
 	  <!-- Template goes here -->	    
@@ -45,6 +45,7 @@
       <!-- Template goes here -->	    
     </div>
   </div>
+  <div class='row col-xs-6 col-xs-offset-3 hidden' id='range-list'></div>
   <div id='waitwait_div'></div>
   <div id='oops_div'></div>
 </div>

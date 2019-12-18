@@ -3,16 +3,16 @@ $(function ()
     'use strict';
 
     var template_list   = ["resinfo", "resinfo-totals", "reservation-graph",
-			   "oops-modal", "waitwait-modal"];
+			   "range-list", "oops-modal", "waitwait-modal"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
     var oopsString      = templates["oops-modal"];
     var waitwaitString  = templates["waitwait-modal"];
     var mainTemplate    = _.template(templates["resinfo"]);
     var graphTemplate   = _.template(templates["reservation-graph"]);
     var totalsTemplate  = _.template(templates["resinfo-totals"]);
+    var rangeTemplate   = _.template(templates["range-list"]);
     var amlist          = null;
     var FEs             = {};  // Powder
-    var forecasts       = {};
     var isadmin         = false;
 
     function initialize()
@@ -33,6 +33,9 @@ $(function ()
 	// Not really sure why they do not.
 	setTimeout(function () {
 	    LoadReservations();
+	    if (window.ISPOWDER) {
+		LoadRangeReservations();
+	    }
 	}, 100);	
     }
 
@@ -49,20 +52,17 @@ $(function ()
 	_.each(amlist, function(details, urn) {
 	    var graphid = 'resgraph-' + details.nickname;
 
-	    // These go in a combined graph.
+	    // Powder; these go in a combined graph.
 	    if (details.isFE) {
 		FEs[urn] = details;
 		return;
 	    }
-	    
 	    $('#' + details.nickname + " .counts-panel")
 		.html(totalsTemplate({"details"      : details,
 				      "urn"          : urn,
-				      "title"        :
-				      (!window.ISPOWDER ?
-				       details.nickname : details.nickname)}));
+				      "title"        : details.nickname}));
 
-	    if (window.ISPOWDER && details.nickname == "Emulab") {
+	    if (window.ISPOWDER && details.radiotypes) {
   		$('#' + details.nickname + " .resgraph-panel-radios")
 		    .html(graphTemplate({"details"        : details,
 					 "graphid"        : graphid + "-radios",
@@ -123,6 +123,12 @@ $(function ()
 		console.log("LoadReservations", json);
 		var graphid = 'resgraph-' + details.nickname;
 		var countid = details.nickname + " .counts-panel";
+
+		// Powder
+		if (details.isFE) {
+		    ProcessFE(urn, json);
+		    return;
+		}
 		
 		// Kill the spinners
 		$('#' + details.nickname + ' .resgraph-spinner')
@@ -137,48 +143,46 @@ $(function ()
 			.removeClass("hidden");
 		    return;
 		}
-		var forecast   = json.value.forecast;
-		var skiptypes  = json.value.prunelist;
-		forecasts[urn] = forecast;
+		var forecast  = json.value.forecast;
+		var skiptypes = json.value.prunelist;
 
-		if (details.isFE) {
-		    RegenFEGraph(urn);
-		    return;
-		}
 		// Just POWDER
-		var radiotypes = {"nuc5300"   : true,
-				  "nuc6260"   : true,
-				  "iris030"   : true,
-				  "enodeb"    : true,
-				  "x310"      : true,
-				  "n310"      : true,
-				  "sdr"       : true};
-
-		if (window.ISPOWDER && details.nickname == "Emulab") {
+		if (window.ISPOWDER && details.radiotypes) {
+		    /*
+		     * We want to show radio types, and any reservable
+		     * nodes that are one of the radio types. So extend
+		     * the radiotypes array.
+		     */
+		    _.each(details.reservable_nodes, function (type, node_id) {
+			if (_.has(details.radiotypes, type)) {
+			    details.radiotypes[node_id] = true;
+			}
+		    })
+		    var radioskiptypes = {};
+		    Object.assign(radioskiptypes, skiptypes);
+		    Object.assign(radioskiptypes, details.radiotypes);
+		    
 		    ShowResGraph({"forecast"       : forecast,
 				  "selector"       : graphid + "-radios",
 				  "foralloc"       : true,
 				  "maxdays"        : 14,
-				  "skiptypes"      : skiptypes,
-				  "showtypes"      : radiotypes,
+				  "skiptypes"      : null,
+				  "showtypes"      : details.radiotypes,
+				  "click_callback" : null});
+		    ShowResGraph({"forecast"       : forecast,
+				  "selector"       : graphid + "-servers",
+				  "foralloc"       : true,
+				  "skiptypes"      : radioskiptypes,
+				  "showtypes"      : null,
 				  "click_callback" : null});
 		}
-		if (window.ISPOWDER) {
-		    // For the servers panel, do not show the radios.
-		    skiptypes = Object.assign(skiptypes, radiotypes);
+		else {
+		    ShowResGraph({"forecast"       : forecast,
+				  "selector"       : graphid + "-servers",
+				  "foralloc"       : true,
+				  "skiptypes"      : skiptypes,
+				  "click_callback" : null});
 		}
-		ShowResGraph({"forecast"       : forecast,
-			      "selector"       : graphid + "-servers",
-			      "foralloc"       : true,
-			      "skiptypes"      : skiptypes,
-			      "click_callback" : null});
-		if (window.ISPOWDER) {
-		    // But for the counts panel, we want to show the radios.
-		    for (var type in radiotypes) {
-			delete skiptypes[type];
-		    }
-		}
-
 		/*
 		 * Fill in the counts panel. The first tuple in the forecast
 		 * for each type is the immediately available node count.
@@ -197,9 +201,13 @@ $(function ()
     {
 	var details = amlist[urn];
 	var html    = "";
+
+	// Sort so its consistent.
+	var types = Object.keys(forecast).sort();
+	var type;
 	
 	// Each node type
-	for (var type in forecast) {
+	for (type of types) {
 	    // Skip types we do not want to show.
 	    if (skiptypes && _.has(skiptypes, type)) {
 		continue;
@@ -242,25 +250,56 @@ $(function ()
 	$('#' + selector + ' table').removeClass("hidden");
     }
 
-    function RegenFEGraph(newurn)
+    /*
+     * We handle FE forcasts as they return here, so we can create a
+     * single combined graph. Note that my original trick of replacing
+     * the graph as each one came back, did not work. The NVD3 libraries
+     * cannot handle that, they leave all kinds of state behind.
+     */
+    var FEresults = {};
+    
+    function ProcessFE(urn, json)
     {
+	var details = amlist[urn];
 	var combinedForecasts = {};
 	
+	if (json.code) {
+	    console.log("Could not get reservation data for " +
+			details.name + ": " + json.value);
+	    FEresults[urn] = null;
+	}
+	else {
+	    FEresults[urn] = json.value;
+	}
+	// Wait till they all return.
+	var keys = Object.keys(FEs);
+	for (var i = 0; i < keys.length; i++) {
+	    var urn       = keys[i];
+	    var details   = amlist[urn];
+	    
+	    if (details.isFE && !_.has(FEresults, urn)) {
+		return;
+	    }
+	}
 	// Kill the spinners.
 	$('#fixed-endpoints .resgraph-spinner').addClass("hidden");
 
-	console.info("RegenFEGraph");
-
 	_.each(FEs, function (details, urn) {
-	    // Do we have the forecasts yet?
-	    if (!_.has(forecasts, urn)) {
-		return;
-	    }
-	    _.each(forecasts[urn], function(forecast, type) {
+	    var forecasts = FEresults[urn].forecast;
+	    var skiptypes = FEresults[urn].skiptypes;
+
+	    _.each(forecasts, function(forecast, type) {
 		var id = amlist[urn].abbreviation + "/" + type;
 
-		combinedForecasts[id] = forecasts[urn][type];
+		combinedForecasts[id] = forecast;
 	    });
+
+	    /*
+	     * Update the counts panel with all of the forecasts
+	     */
+	    var countid = "fixed-endpoints .counts-panel";
+	    GenerateCountPanel(urn, countid, forecasts, null);
+	    
 	});
 	console.info("AddToFEGraph", combinedForecasts);
 
@@ -269,13 +308,45 @@ $(function ()
 		      "height"    : "400px",
 		      "skiptypes" : {},
 		     });
-
-	/*
-	 * Update the counts panel with the newly added FE.
-	 */
-	var countid = "fixed-endpoints .counts-panel";
-	GenerateCountPanel(newurn, countid, forecasts[newurn], null);
     }
 
+    /*
+     * Load the range reservation info.
+     */
+    function LoadRangeReservations()
+    {
+	var callback = function(json) {
+	    console.log("LoadRangeReservations", json);
+	    if (json.code) {
+		console.info("Could not get range info");
+		return;
+	    }
+	    if (!_.size(json.value)) {
+		return;
+	    }
+	    
+	    var html = rangeTemplate({"ranges" : json.value});
+	    $('#range-list').html(html).removeClass("hidden");
+
+	    // Format dates with moment before display.
+	    $('#range-list .format-date').each(function() {
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment(date).format("lll"));
+		}
+	    });
+	    $('#range-list .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+		    // initialize zebra
+		    widgets: ["zebra"],
+		});
+	};
+
+	var xmlthing = sup.CallServerMethod(null, "resgroup",
+					    "RangeReservations");
+	xmlthing.done(callback);
+    }
+    
     $(document).ready(initialize);
 });
