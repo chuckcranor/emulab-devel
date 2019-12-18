@@ -32,6 +32,7 @@ function ClassicExperimentList($which, $target, $state = "active")
 {
     global $urn_mapping, $TBBASE;
     global $this_user;
+    $joinclause = "";
 
     if ($state == "active") {
         $stateclause = "and (e.state='active' or ".
@@ -50,11 +51,19 @@ function ClassicExperimentList($which, $target, $state = "active")
         $target_gid  = $target->gid();
         $whereclause = "where e.pid='$target_pid' and e.gid='$target_gid'";
     }
+    elseif ($which == "all") {
+        $joinclause  = "left join experiment_stats as s on s.exptidx=e.idx ".
+        "left join apt_instances as i on i.slice_uuid=s.slice_uuid";
+        $whereclause = "where ((e.pid!='emulab-ops' and e.geniflags=0) or ".
+        "(e.geniflags=1 and i.slice_uuid=s.slice_uuid is null))";
+    }
     else {
         $target_pid = $target->pid();
         $whereclause = "where e.pid='$target_pid'";
     }
-    $whereclause .= " and e.geniflags=0";
+    if ($which != "all") {
+        $whereclause .= " and e.geniflags=0";
+    }
     $whereclause .= " and t.tid is null";
     $results = array();
 
@@ -62,7 +71,7 @@ function ClassicExperimentList($which, $target, $state = "active")
         DBQueryFatal("select idx from experiments as e ".
                      "left join experiment_templates as t on ".
                      "     t.pid=e.pid and t.eid=e.eid ".
-                     "$whereclause $stateclause ".
+                     "$joinclause $whereclause $stateclause ".
                      "order by e.eid");
 
     while ($row = mysql_fetch_array($query_result)) {
@@ -82,7 +91,7 @@ function ClassicExperimentList($which, $target, $state = "active")
         $blob             = array();
         $blob["idx"]      = $idx;
         $blob["pid"]      = "<a href='show-project.php?project=$pid'>$pid</a>";
-        $blob["eid"]      = "<a href='$url'>$eid</a>";
+        $blob["eid"]      = "<a href='$url'target=_blank>$eid</a>";
         $blob["uuid"]     = $experiment->uuid();
         $blob["created"]      = $created;
         $blob["swapped"]      = $swapped;
@@ -107,6 +116,7 @@ function ClassicExperimentList($which, $target, $state = "active")
             $blob["pcount"]       = $pcount;
             $blob["phours"]       = $phours;
             $blob["vcount"]       = $resources->vnodes();
+            $blob["types"]        = $experiment->TypesUsed();
         }
         $results["$pid:$eid"] = $blob;
     }
