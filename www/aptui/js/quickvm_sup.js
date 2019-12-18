@@ -33,14 +33,21 @@ function IsUUID(uuid)
     return /^[\w]{8}-[\w]{4}-[\w]{4}-[\w]{4}-[\w]{12}$/.test(uuid);
 }
 
-function ShowModal(which, hidefunction) 
+function ShowModal(which, hidefunction, showfunction) 
 {
-    var callback = function() {
-	$(which).off('hidden.bs.modal', callback);
+    var hide_callback = function() {
+	$(which).off('hidden.bs.modal', hide_callback);
 	hidefunction();
     };
     if (hidefunction !== undefined) {
-	$(which).on('hidden.bs.modal', callback);
+	$(which).on('hidden.bs.modal', hide_callback);
+    }
+    var show_callback = function() {
+	$(which).off('shown.bs.modal', show_callback);
+	showfunction();
+    };
+    if (showfunction !== undefined) {
+	$(which).on('shown.bs.modal', show_callback);
     }
     $(which).modal('show');
 }
