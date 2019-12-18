@@ -384,8 +384,17 @@ $(function ()
 
 	// Add one unassigned row.
 	if (!editing) {
-	    AddClusterRow();
-	    AddRangeRow();
+	    if (window.FROMRSPEC) {
+		// XXX Need slight delay to wait for parent to write the
+		// rspec into our DOM. Need to revisit this approach.
+		setTimeout(function () {
+		    PopulateFromRspec();
+		}, 150);
+	    }
+	    else {
+		AddClusterRow();
+		AddRangeRow();
+	    }
 	}
 	// Graph list(s).
 	html = "";
@@ -579,16 +588,17 @@ $(function ()
 	    $('#cluster-table .delete-cluster').show();
 	    $('#cluster-table .add-cluster').not(":last").hide();
 	}
+	return row;
     }
 
     /*
      * Add a new range row.
      */
-    function AddRangeRow()
+    function AddRangeRow(freq_low, freq_high)
     {
 	var html = addFrequencyRowTemplate({
-	    "freq_low"    : "",
-	    "freq_high"   : "",
+	    "freq_low"    : (freq_low  === undefined ? "" : freq_low),
+	    "freq_high"   : (freq_high === undefined ? "" : freq_high),
 	    "freq_uuid"   : sup.newUUID(),
 	});
 	var row = $(html);
@@ -1081,6 +1091,7 @@ $(function ()
      */
     function LoadReservations(project)
     {
+	var deferred = [];
 	LoadRangeReservations();
 	
 	_.each(amlist, function(details, urn) {
@@ -1144,9 +1155,15 @@ $(function ()
 		args["project"] = project;
 	    }
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
-						"ReservationInfo", args);
-	    xmlthing.done(callback);
+						"ReservationInfo", args,
+						callback);
+	    deferred.push(xmlthing);
 	});
+	if (window.FROMRSPEC) {
+	    $.when.apply($, deferred).then(function() {
+		RegenCombinedGraph();
+	    });
+	}
     }
 
     //
@@ -1741,6 +1758,10 @@ $(function ()
 			}
 		    });
 		}
+		return;
+	    }
+	    if (window.FROMRSPEC) {
+		window.parent.CloseMyIframe(json.value.uuid);
 		return;
 	    }
 	    window.location.replace("resgroup.php?edit=1" +
@@ -2588,6 +2609,7 @@ $(function ()
     {
 	var clusters = GetClusterRows();
 	var combinedForecasts = {};
+	var waiting = 0;
 	console.info("RegenCombinedGraph", clusters);
 
 	_.each(clusters, function (details) {
@@ -2595,6 +2617,10 @@ $(function ()
 	    var type = details.type;
 
 	    if (!_.has(amlist, urn)) {
+		return;
+	    }
+	    if (!_.has(forecasts[urn], type)) {
+		waiting = waiting + 1;
 		return;
 	    }
 	    var id   = amlist[urn].abbreviation + "/" + type;
@@ -2605,10 +2631,26 @@ $(function ()
 
 	// Must be visible before graph can be drawn.
 	$("#combined-resgraph").removeClass("hidden");
+
+	if (waiting) {
+	    // Do not draw anything until later.
+	    $("#combined-resgraph .resgraph-spinner").removeClass("hidden");
+	    return;
+	}
+	$("#combined-resgraph .resgraph-spinner").addClass("hidden");
 	
-	ShowResGraph({"forecast"  : combinedForecasts,
-		      "selector"  : "combined-resgraph",
-		      "skiptypes" : {},
+	ShowResGraph({"forecast"       : combinedForecasts,
+		      "selector"       : "combined-resgraph",
+		      "skiptypes"      : {},
+		      "click_callback" : function(when, type) {
+			  if (!editing) {
+			      var start = moment(when);
+			      $('#reserve-request-form [name=start_day]')
+				  .val(start.format("MM/DD/YYYY"));
+			      $('#reserve-request-form [name=start_hour]')
+				  .val(start.format("H"));
+			  }
+		      },
 		     });
     }
 
@@ -2639,6 +2681,75 @@ $(function ()
 		      "height"    : "400px",
 		      "skiptypes" : {},
 		     });
+    }
+
+    /*
+     * Populate a new reservation from an rspec.
+     */
+    function PopulateFromRspec()
+    {
+	var rspec     = $('#rspec textarea').val();	
+	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+	var xmlDoc    = $.parseXML(rspec);
+	var spectrum  = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'spectrum');
+	var tcounts   = {"_unbounded" : 0};
+	console.info("PopulateFromRspec", spectrum);
+
+	_.each(spectrum, function(range) {
+	    var freq_low  = $(range).attr("frequency_low");
+	    var freq_high = $(range).attr("frequency_high");
+	    console.info(freq_low,freq_high);
+
+	    AddRangeRow(freq_low, freq_high);
+	});
+
+	// Find all the nodes, gather up type info.
+	$(xmlDoc).find("node").each(function() {
+	    var htype        = $(this).find("hardware_type");
+	    var component_id = $(this).attr("component_id");
+	    var manager_id   = $(this).attr("component_manager_id");
+
+	    console.info("ids", component_id, manager_id);
+
+	    // Reservable nodes are easy.
+	    if (component_id && manager_id &&
+		_.has(amlist, manager_id) &&
+		_.has(amlist[manager_id].reservable_nodes, component_id)) {
+		var row = AddClusterRow();
+
+		console.info("row", row);
+
+		row.find(".cluster-select").val(manager_id).change();
+		row.find(".hardware-select").val(component_id).change();
+		return;
+	    }
+	    // Otherwise, we dig inside and find the hardware type.
+	    // We want to count up how many of each type, and how many
+	    // are unbounded.
+	    if (!htype.length) {
+		tcounts["_unbounded"]++;
+		return;
+	    }
+	    var type = $(htype).attr("name");
+	    if (!_.has(tcounts, type)) {
+		tcounts[type] = 0;
+	    }
+	    tcounts[type]++;
+	});
+	_.each(tcounts, function (count, type) {
+	    // Find the cluster that has this type.
+	    _.each(amlist, function (details, urn) {
+		if (_.has(details.typeinfo, type)) {
+		    var row = AddClusterRow();
+
+		    row.find(".cluster-select").val(urn).change();
+		    row.find(".hardware-select").val(type).change();
+		    row.find(".node-count").val(count).change();
+		    return;
+		}
+	    });
+	});
+	console.info("tcounts", tcounts);
     }
 
     function isNumber(value) {

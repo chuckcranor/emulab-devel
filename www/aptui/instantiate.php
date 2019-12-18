@@ -63,12 +63,12 @@ $optargs = OptionalPageArguments("create",        PAGEARG_STRING,
 				 "refspec",       PAGEARG_STRING,
                                  "rerun_instance",PAGEARG_UUID,
                                  "rerun_paramset",PAGEARG_UUID,
+                                 "skipfirststep", PAGEARG_BOOLEAN,
 				 "formfields",    PAGEARG_ARRAY);
 
 # Need to make non-hardcoded
 $maxduration = 16;
 
-$skipfirststep = 0;
 if (isset($rerun_instance) || isset($rerun_paramset) ||
     (isset($from) && ($from == "manage-profile" || $from == "show-profile"))) {
     $skipfirststep = 1;
@@ -352,6 +352,7 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "<link rel='stylesheet' href='css/jquery-ui.min.css'>\n";
     echo "<link rel='stylesheet' href='css/picker.css'>\n";
     echo "<link rel='stylesheet' href='css/nv.d3.css'>\n";
+    echo "<link rel='stylesheet' href='css/tablesorter.css'>\n";
 
     # I think this will take care of XSS prevention?
     echo "<script type='text/plain' id='form-json'>\n";
@@ -438,12 +439,18 @@ function SPITFORM($formfields, $newuser, $errors)
     }
     if (isset($rerun_paramset)) {
         echo "    window.RERUN_PARAMSET = '$rerun_paramset';\n";
+
     }
+    echo "    window.EMBEDDED_RESGROUPS = true;\n";
     echo "</script>\n";
     echo "<script src='js/lib/d3.v3.js'></script>\n";
     echo "<script src='js/lib/nv.d3.js'></script>\n";
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
     echo "<script src='js/lib/jquery-ui.js'></script>\n";
+    echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
+    echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
+    echo "<script src='js/lib/sugar.min.js'></script>\n";
+    echo "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>\n";
    
     REQUIRE_UNDERSCORE();
     REQUIRE_SUP();
@@ -463,6 +470,7 @@ function SPITFORM($formfields, $newuser, $errors)
     AddLibrary("js/resgraphs.js");
     AddLibrary("js/gitrepo.js");
     AddLibrary("js/paramsets.js");
+    AddLibrary("js/list-resgroups.js");
     SPITREQUIRE("js/instantiate-new.js");
 }
 
@@ -555,7 +563,7 @@ if (!isset($create)) {
                           "aboutapt", "aboutcloudlab", "aboutpnet",
                           "waitwait-modal", "rspectextview-modal",
                           "picker-template","reservation-graph",
-                          "save-paramset-modal"));
+                          "save-paramset-modal", "resgroup-list"));
     SPITFOOTER();
     return;
 }

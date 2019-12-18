@@ -258,11 +258,11 @@
 				  original profile uses.'>
 			  Copy Profile
 			</button>
-			<button class='btn btn-default btn-sm pull-left'
-				type='button' id='profile_show_button'>
-			  Show Profile
-			</button>
 		      <% } %>
+		      <button class='btn btn-default btn-sm pull-left'
+			      type='button' id='profile_show_button'>
+			Show Profile
+		      </button>
 		      <!-- Profile selection box -->
 		      <% if (showpicker) { %>
 			<button id='change-profile'
@@ -557,211 +557,279 @@
     </div>
     <!-- Last step -->
     <h3>Schedule</h3>
-    <div class='col-lg-8  col-lg-offset-2
-		col-md-8  col-md-offset-2
-		col-sm-10 col-sm-offset-1
-		col-xs-12 col-xs-offset-0'>
-      <form id='step3-form' role='form' class="step-forms"
-	    method='post' action='instantiate.php'>
-      <div class='panel panel-default'>
-	<div class='panel-heading'>
-	  Please select when you would like to start this experiment
-	  and then click Finish.
-	</div>
-	<div class='panel-body'>
-	  <center>Start immediately
-	    <div class="row">
-	      <input id='start-immediately' type="checkbox"
-		     name="start-immediately"
-		     value="checked" checked>
-	    </div>
-	    <div style="margin-top: 3px;">
-	      or
-	    </div>
-	    <div style="margin-top: 0px;">
-	      Start on date/time
-	    </div>
-	  </center>
+    <div>
+      <div id="step3-div">
+	<form id='step3-form' role='form' class="step-forms">
 	  <input id="start" name="start" type="hidden">
 	  <input id="end" name="end" type="hidden">
-	  <div class="row"
-	       style="margin-top: 10px;">
-	    <div class="col-xs-4 col-xs-offset-2 format-me">
-	      <input name="start_day"
-		     style='position: relative;'
-		     id='start_day'
-		     value="<%- formfields.start %>"
-		     class="form-control"
-		     placeholder="MM/DD/YYYY"
-		     data-key="start_day"		 
-		     type="text">
-	      <label class='control-label control-error hidden'
-		     for='start_hour'></label>
-	    </div>
-	    <div class="col-xs-4 format-me">
-	      <select name="start_hour" disabled
-		      id='start_hour'
-		      value=""
-		      class="form-control"
-		      data-key="start_hour"
-		      type="text">
-		<option value="">Time</option>
-		<option value="0">12:00 AM</option>
-		<option value="1">1:00 AM</option>
-		<option value="2">2:00 AM</option>
-		<option value="3">3:00 AM</option>
-		<option value="4">4:00 AM</option>
-		<option value="5">5:00 AM</option>
-		<option value="6">6:00 AM</option>
-		<option value="7">7:00 AM</option>
-		<option value="8">8:00 AM</option>
-		<option value="9">9:00 AM</option>
-		<option value="10">10:00 AM</option>
-		<option value="11">11:00 AM</option>
-		<option value="12">12:00 PM</option>
-		<option value="13">1:00 PM</option>
-		<option value="14">2:00 PM</option>
-		<option value="15">3:00 PM</option>
-		<option value="16">4:00 PM</option>
-		<option value="17">5:00 PM</option>
-		<option value="18">6:00 PM</option>
-		<option value="19">7:00 PM</option>
-		<option value="20">8:00 PM</option>
-		<option value="21">9:00 PM</option>
-		<option value="22">10:00 PM</option>
-		<option value="23">11:00 PM</option>
-	      </select>
-	      <label class='control-label control-error hidden'
-		     for='start_day'></label>
-	    </div>
-	    <div class="col-xs-1" style="padding-left: 0px;">
-	      <a href='#' class='btn btn-xs' id="start-hour-help"
-		 style="padding-left: 0px;"
-		 data-toggle='popover'
-		 data-html='true'
-		 data-delay='{"hide":1000}'
-		 data-content='Times are in your local timezone.
-			       Start day/time is optional; your experiment
-			       will start immediately if you select the
-			       <em>start immediately</em> option. A typical
-			       use for this option, is to schedule your
-			       experiment to start shortly after a resource
-			       reservation starts. See the <a target=_blank
-			       href=<%- window.MANUAL %>/reservations.html>
-			       manual</a> for more info on reservations.'>
-		<span class='glyphicon glyphicon-question-sign'></span>
-	      </a>
+	  <div class='col-lg-8  col-lg-offset-2
+ 		      col-md-8  col-md-offset-2
+		      col-sm-10 col-sm-offset-1
+		      col-xs-12 col-xs-offset-0'>
+	    <div class='panel panel-default'>
+	      <div class='panel-heading schedule-experiment'>
+		Please select when you would like to start this experiment
+		and then click Finish.
+	      </div>
+	      <div class='panel-body'>
+		<div class="reserve-resources" style="font-size: 16px;">
+		  <p>
+		    You have requested radio spectrum in your
+		    profile. Have you reserved the resources you need
+		    to run this experiment? You will not be able to
+		    start this experiment until you have created a
+		    reservation for the resources you need, and that
+		    reservation has been approved.</p>
+		  <p>
+		    If you have a reservation then you can
+		    proceed, although you want to be sure to schedule
+		    the start of this experiment to coincide with the
+		    start of your reservation(s). Otherwise, please
+		    click on <em>Create New Resource Reservation</em> to
+		    create a new reservation.
+		  </p>
+		  <p>
+		    You may also set the termination time of your
+		    experiment to coincide with the end of your
+		    reservation(s), so that you do not have to remember
+		    to extend your experiment.
+		  </p>
+		</div>
+		<center>
+		  <div class="schedule-experiment">
+		    Start immediately
+		    <div class="row">
+		      <input id='start-immediately' type="checkbox"
+			     name="start-immediately"
+			     value="checked" checked>
+		    </div>
+		    <div style="margin-top: 3px;">
+		      or
+		    </div>
+		  </div>
+		  <div style="margin-top: 0px;">
+		    Start on date/time
+		  </div>
+		</center>
+		<div class="row"
+		     style="margin-top: 10px;">
+		  <div class="col-xs-4 col-xs-offset-2 format-me">
+		    <input name="start_day"
+			   style='position: relative;'
+			   id='start_day'
+			   value="<%- formfields.start %>"
+			   class="form-control"
+			   placeholder="MM/DD/YYYY"
+			   data-key="start_day"		 
+			   type="text">
+		    <label class='control-label control-error hidden'
+			   for='start_hour'></label>
+		  </div>
+		  <div class="col-xs-4 format-me">
+		    <select name="start_hour" disabled
+			    id='start_hour'
+			    value=""
+			    class="form-control"
+			    data-key="start_hour"
+			    type="text">
+		      <option value="">Time</option>
+		      <option value="0">12:00 AM</option>
+		      <option value="1">1:00 AM</option>
+		      <option value="2">2:00 AM</option>
+		      <option value="3">3:00 AM</option>
+		      <option value="4">4:00 AM</option>
+		      <option value="5">5:00 AM</option>
+		      <option value="6">6:00 AM</option>
+		      <option value="7">7:00 AM</option>
+		      <option value="8">8:00 AM</option>
+		      <option value="9">9:00 AM</option>
+		      <option value="10">10:00 AM</option>
+		      <option value="11">11:00 AM</option>
+		      <option value="12">12:00 PM</option>
+		      <option value="13">1:00 PM</option>
+		      <option value="14">2:00 PM</option>
+		      <option value="15">3:00 PM</option>
+		      <option value="16">4:00 PM</option>
+		      <option value="17">5:00 PM</option>
+		      <option value="18">6:00 PM</option>
+		      <option value="19">7:00 PM</option>
+		      <option value="20">8:00 PM</option>
+		      <option value="21">9:00 PM</option>
+		      <option value="22">10:00 PM</option>
+		      <option value="23">11:00 PM</option>
+		    </select>
+		    <label class='control-label control-error hidden'
+			   for='start_day'></label>
+		  </div>
+		  <div class="col-xs-1" style="padding-left: 0px;">
+		    <a href='#' class='btn btn-xs' id="start-hour-help"
+		       style="padding-left: 0px;"
+		       data-toggle='popover'
+		       data-html='true'
+		       data-delay='{"hide":1000}'
+		       data-content='Times are in your local timezone.
+			     Start day/time is optional; your experiment
+			     will start immediately if you select the
+			     <em>start immediately</em> option. A typical
+			     use for this option, is to schedule your
+			     experiment to start shortly after a resource
+			     reservation starts. See the <a target=_blank
+			     href=<%- window.MANUAL %>/reservations.html>
+			     manual</a> for more info on reservations.'>
+		      <span class='glyphicon glyphicon-question-sign'></span>
+		    </a>
+		  </div>
+		</div>
+		<div class="schedule-experiment">
+		  <center style="margin-top: 25px;">
+		    Experiment Duration
+		  </center>
+		  <div class="row" style="margin-top: 10px;">
+		    <div class="col-xs-3 format-me" style="margin-left: 38%">
+		      <input id='experiment_duration'
+			     class='form-control'
+			     data-key='duration'
+			     name='duration'
+			     value='<%- maxduration %>'>
+		      <label style='position: absolute;
+				    top: 6px;
+				    right: 22px;
+				    font-weight: normal;
+				    color: #aaa'>hours</label>
+		      <label class='control-label control-error hidden'
+			     for='duration'></label>
+		    </div>
+		    <div class="col-xs-1" style="padding-left: 0px;">
+		      <a href='#' class='btn btn-xs' id="start-hour-help"
+			 style="padding-left: 0px;"
+			 data-toggle='popover'
+			 data-html='true'
+			 data-delay='{"hide":500}'
+			 data-content='Sets the intial amount of time that the 
+				experiment will run. Limit: <%- maxduration %>
+				hours. If more time is needed, the duration can
+				be extended after the experiment has been 
+				created. Note that when resources are in short
+				supply you might need to supply a smaller
+				duration to avoid reservation system resource  
+				errors, but typically you would leave the 
+				default value as is.'>
+			<span class='glyphicon glyphicon-question-sign'></span>
+		      </a>
+		    </div>
+		  </div>
+		</div>
+		<div class="reserve-resources hidden">
+		  <center style="margin-top: 10px;">
+		    End on date/time (optional)
+		  </center>
+		  <div class="row" style="margin-top: 10px;">
+		    <div class="col-xs-4 col-xs-offset-2 format-me">
+		      <input name="end_day"
+			     style='position: relative;'
+			     id='end_day'
+			     data-key="end_day"
+			     value="<%- formfields.start %>"
+			     class="form-control"
+			     placeholder="MM/DD/YYYY"
+			     type="text">
+		      <label class='control-label control-error hidden'
+			     for='end_day'></label>
+		    </div>
+		    <div class="col-xs-4 format-me">
+		      <select name="end_hour"
+			      id='end_hour'
+			      data-key="end_hour"
+			      value=""
+			      class="form-control"
+			      type="text">
+			<option value="">Time</option>
+			<option value="0">12:00 AM</option>
+			<option value="1">1:00 AM</option>
+			<option value="2">2:00 AM</option>
+			<option value="3">3:00 AM</option>
+			<option value="4">4:00 AM</option>
+			<option value="5">5:00 AM</option>
+			<option value="6">6:00 AM</option>
+			<option value="7">7:00 AM</option>
+			<option value="8">8:00 AM</option>
+			<option value="9">9:00 AM</option>
+			<option value="10">10:00 AM</option>
+			<option value="11">11:00 AM</option>
+			<option value="12">12:00 PM</option>
+			<option value="13">1:00 PM</option>
+			<option value="14">2:00 PM</option>
+			<option value="15">3:00 PM</option>
+			<option value="16">4:00 PM</option>
+			<option value="17">5:00 PM</option>
+			<option value="18">6:00 PM</option>
+			<option value="19">7:00 PM</option>
+			<option value="20">8:00 PM</option>
+			<option value="21">9:00 PM</option>
+			<option value="22">10:00 PM</option>
+			<option value="23">11:00 PM</option>
+		      </select>
+		      <label class='control-label control-error hidden'
+			     for='end_hour'></label>
+		    </div>
+		    <div class="col-xs-1" style="padding-left: 0px;">
+		      <a href='#' class='btn btn-xs' id="end-hour-help"
+			 style="padding-left: 0px;"
+			 data-toggle='popover'
+			 data-html='true'
+			 data-delay='{"hide":500}'
+			 data-content='Times are in your local timezone.
+				     End day/time is optional; your experiment
+				     will terminate automatically
+				     <%- maxduration %> hours after it starts.'>
+			<span class='glyphicon glyphicon-question-sign'></span>
+		      </a>
+		    </div>
+		  </div>
+		</div>
+		<div id="groups-div" class="hidden"
+		     style="margin-top: 10px;">
+		  <div style="font-size: 16px;">
+		    <p>
+		      These are the current resource reservations in
+		      your project.  If one of these reservations has all
+		      of the resources this experiment needs, click on the
+		      checkbox to copy the start and end times into the
+		      inputs above. Or, click on the button below to
+		      create a brand new resource reservation. 
+		    </p>
+		  </div>
+		  <div id="groups" class="align-center"></div>
+		</div>
+		<center class="reserve-resources"
+			style="margin-top: 10px;">
+		  <button type="button"
+			  class='btn btn-primary btn-sm
+				 reserve-resources-button'>
+		    Create New Resource Reservation</button>
+		</center>
+	      </div>
 	    </div>
 	  </div>
-	  <div>
-	    <center style="margin-top: 25px;">
-	      Experiment Duration
-	    </center>
-	    <div class="row" style="margin-top: 10px;">
-	      <div class="col-xs-3 format-me" style="margin-left: 38%">
-		<input id='experiment_duration'
-		       class='form-control'
-		       data-key='duration'
-		       name='duration'
-		       value='<%- maxduration %>'>
-		<label style='position: absolute;
-			      top: 6px;
-			      right: 22px;
-			      font-weight: normal;
-			      color: #aaa'>hours</label>
-		<label class='control-label control-error hidden'
-		       for='duration'></label>
+	  <div class='col-xs-12 resgroup-div hidden'
+	       style="padding-left: 0px; padding-right: 0px;">
+	    <div class='panel panel-default'>
+	      <div class='panel-heading'>
+		<button type="button"
+			class='btn btn-danger btn-sm pull-right'
+			style="margin-top: -4px"
+			id="cancel-reserve-resources-button">
+		  Cancel</button>
+		Please create a reservation for the resources used by this
+		experiment.
 	      </div>
-	      <div class="col-xs-1" style="padding-left: 0px;">
-		<a href='#' class='btn btn-xs' id="start-hour-help"
-		   style="padding-left: 0px;"
-		   data-toggle='popover'
-		   data-html='true'
-		   data-delay='{"hide":500}'
-		   data-content='Sets the intial amount of time that the 
-		   experiment will run. Limit: <%- maxduration %> hours.
-		   If more time is needed, the duration can be extended
-		   after the experiment has been created. Note that when
-                   resources are in short supply you might need to supply 
-		   a smaller duration to avoid reservation system resource  
-		   errors, but typically you would leave the default
-                   value as is.'>
-		  <span class='glyphicon glyphicon-question-sign'></span>
-		</a>
+	      <div class='panel-body'
+		   style="padding-left: 0px; padding-right: 0px;">
 	      </div>
 	    </div>
 	  </div>
-	  <div class="hidden">
-	    <center style="margin-top: 25px;">
-	      End on date/time (optional)
-	    </center>
-	    <div class="row" style="margin-top: 10px;">
-	      <div class="col-xs-4 col-xs-offset-2 format-me">
-		<input name="end_day"
-		       style='position: relative;'
-		       id='end_day'
-		       data-key="end_day"
-		       value="<%- formfields.start %>"
-		       class="form-control"
-		       placeholder="MM/DD/YYYY"
-		       type="text">
-		<label class='control-label control-error hidden'
-		       for='end_day'></label>
-	      </div>
-	      <div class="col-xs-4 format-me">
-		<select name="end_hour"
-			id='end_hour'
-			data-key="end_hour"
-			value=""
-			class="form-control"
-			type="text">
-		  <option value="">Time</option>
-		  <option value="0">12:00 AM</option>
-		  <option value="1">1:00 AM</option>
-		  <option value="2">2:00 AM</option>
-		  <option value="3">3:00 AM</option>
-		  <option value="4">4:00 AM</option>
-		  <option value="5">5:00 AM</option>
-		  <option value="6">6:00 AM</option>
-		  <option value="7">7:00 AM</option>
-		  <option value="8">8:00 AM</option>
-		  <option value="9">9:00 AM</option>
-		  <option value="10">10:00 AM</option>
-		  <option value="11">11:00 AM</option>
-		  <option value="12">12:00 PM</option>
-		  <option value="13">1:00 PM</option>
-		  <option value="14">2:00 PM</option>
-		  <option value="15">3:00 PM</option>
-		  <option value="16">4:00 PM</option>
-		  <option value="17">5:00 PM</option>
-		  <option value="18">6:00 PM</option>
-		  <option value="19">7:00 PM</option>
-		  <option value="20">8:00 PM</option>
-		  <option value="21">9:00 PM</option>
-		  <option value="22">10:00 PM</option>
-		  <option value="23">11:00 PM</option>
-		</select>
-		<label class='control-label control-error hidden'
-		       for='end_hour'></label>
-	      </div>
-	      <div class="col-xs-1" style="padding-left: 0px;">
-		<a href='#' class='btn btn-xs' id="end-hour-help"
-		   style="padding-left: 0px;"
-		   data-toggle='popover'
-		   data-html='true'
-		   data-delay='{"hide":500}'
-		   data-content='Times are in your local timezone.
-				 End day/time is optional; your experiment
-				 will terminate automatically
-				 <%- maxduration %> hours after it starts.'>
-		  <span class='glyphicon glyphicon-question-sign'></span>
-		</a>
-	      </div>
-	    </div>
-	  </div>
-	</div>
+	</form>
       </div>
-      </form>
     </div>
   </div>
 </div>
@@ -1014,7 +1082,70 @@
 	Your request has been submitted. Please check your email for
 	confirmation. You will receive additional email from Portal
 	Operations when you can proceed. <b>There is no need to repeat
-	this request.</b>
+	  this request.</b>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='gotspectrum-modal' class='modal fade'
+     data-keyboard='false' data-backdrop='static'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-header'>
+	<center><h3>You need to reserve your resources!</h3></center>
+      </div>
+      <div class='modal-body'>
+	<div style="font-size: 18px;">
+	  <p>
+	    You have requested radio spectrum in your profile. Have you
+	    reserved the resources you need to run this experiment? You
+	    will not be able to start this experiment until you have created
+	    a reservation for the resources you need, and that reservation
+	    has been approved.
+	  </p>
+	  <p>
+	    If you have an approved reservation then you can proceed, although
+	    you want to be sure to schedule the start of this experiment to
+	    coincide with the start of your reservation(s). Otherwise, please
+	    click on <em>Create New Resource Reservation</em> to create
+	    a new reservation.
+	  </p>
+	  <center class="control-buttons">
+	    <button id='reserve-resources-button'
+		    class='btn btn-primary btn-sm'>
+	      Reserve Resources</button>
+	    <button type='button' class='btn btn-default btn-sm'
+		    data-dismiss='modal'>
+	      Dismiss</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='resgroup-done-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-header'>
+	<button type='button' class='close' data-dismiss='modal'
+		aria-hidden='true'>
+	  &times;</button>
+	<center><h3>Reservation Submitted!</h3></center>
+      </div>
+      <div class='modal-body'>
+	<div style="font-size: 18px;">
+	  <p>
+	    Your reservation request has been submitted. Since this
+	    reservation must be approved before your experiment can be
+	    started, we have set the scheduled start time for your
+	    experiment to coincide with the start of the reservation.
+	  </p>
+	  <center>
+	    <button type='button' class='btn btn-default btn-sm'
+		    data-dismiss='modal'>
+	      Dismiss</button>
+	  </center>
+	</div>
       </div>
     </div>
   </div>

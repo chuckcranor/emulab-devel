@@ -933,16 +933,20 @@ function CheckStep3()
     if (! (isset($formfields["start-immediately"]) &&
            $formfields["start-immediately"] == "checked")) {
         if (!isset($formfields["start"]) || $formfields["start"] == "") {
-            $errors["error"] = "Missing UTC start time";
+            $errors["start_day"] = "Missing start time";
         }
         else {
             $start_ascii = $formfields["start"];
             $start = strtotime($formfields["start"]);
             if (!$start) {
-                $errors["start"] = "Cannot parse UTC start time";
+                $errors["start_day"] = "Cannot parse UTC start time";
             }
             elseif ($start < time()) {
-                $errors["start_day"] = "Start is in the past";
+                #
+                # If start is in the past, just treat it as now.
+                #
+                unset($start);
+                $formfields["start-immediately"] = "checked";
             }
         }
     }
@@ -950,7 +954,7 @@ function CheckStep3()
         $end_ascii = $formfields["end"];
         $end = strtotime($formfields["end"]);
         if (!$end) {
-            $errors["end"] = "Cannot parse UTC end time";
+            $errors["end_day"] = "Cannot parse end time";
         }
         elseif ($end < time()) {
             $errors["end_day"] = "End is in the past";
@@ -1224,10 +1228,6 @@ function Do_Submit()
             $args["auth_token"] = $_SESSION["auth_token"];
         }
     }
-    if ($this_user) {
-        $args["duration"]  = $formfields["duration"];
-    }
-
     if (0) {
         TBERROR(print_r($args, true), 0);
         SPITAJAX_RESPONSE(0);
@@ -1248,7 +1248,19 @@ function Do_Submit()
            $formfields["start-immediately"] == "checked")) {
         $start = strtotime($formfields["start"]);
         $options .= " --start $start ";
+        
+        if (isset($formfields["end"]) && $formfields["end"] != "") {
+            $end = strtotime($formfields["end"]);
+            $options .= " --stop $end ";
+        }
+        else {
+            $args["duration"]  = $formfields["duration"];
+        }
     }
+    else {
+        $args["duration"]  = $formfields["duration"];
+    }
+    
     if (isset($_SESSION["privkey"])) {
         $keyname = tempnam("/tmp", "genilibkey");
         $fp = fopen($keyname, "w");

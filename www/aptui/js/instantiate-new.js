@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['instantiate-new', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', 'rspectextview-modal', 'reservation-graph']);
+    var templates = APT_OPTIONS.fetchTemplateList(['instantiate-new', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', 'rspectextview-modal', 'reservation-graph', 'resgroup-list']);
     var instantiateString = templates['instantiate-new'];
     var aboutaptString = templates['aboutapt'];
     var aboutcloudString = templates['aboutcloudlab'];
@@ -52,6 +52,7 @@ $(function ()
     var deprecatedList = [];
     var mainTemplate  = _.template(instantiateString);
     var graphTemplate = _.template(templates["reservation-graph"]);
+    var reslistTemplate= _.template(templates["resgroup-list"]);
 
     function enableStepsMotion()
     {
@@ -101,7 +102,7 @@ $(function ()
 		amValueToKey[amlist[key].name] = key;
 	    });
 	    amstatus = decodejson('#amstatus-json');
-	    console.info(amlist);
+	    console.info("amlist", amlist);
 	}
 	if ($('#projects-json').length) {
 	    projlist = decodejson('#projects-json');
@@ -745,15 +746,20 @@ $(function ()
 
 	    // END STOPGAP
 	}
-	else if (currentIndex == 2 && priorIndex == 1) {
-	    // Keep the two panes the same height
-	    $('#inline_container').css('height',
+	else if (currentIndex == 2) {
+	    if (priorIndex == 1) {
+		// Keep the two panes the same height
+		$('#inline_container').css('height',
 			       $('#finalize_container').outerHeight() - 15);
 
-	    // Chrome was having an issue where Jacks was not responding to
-	    // the height change. Had to also add to Jacks root.
-	    $('#inline_jacks').css('height',
+		// Chrome was having an issue where Jacks was not responding to
+		// the height change. Had to also add to Jacks root.
+		$('#inline_jacks').css('height',
 				   $('#finalize_container').outerHeight() - 15);
+	    }
+	}
+	else if (currentIndex == 3) {
+	    CheckForSpectrum();
 	}
 	if (currentIndex < priorIndex) {
 	    // Disable going forward by clicking on the labels
@@ -890,6 +896,11 @@ $(function ()
 		step_callback(false);
 		return;
 	    }
+	    else if (!start_day && !start_hour) {
+		ShowFormErrors({"start_day" : "Missing start day/hour"});
+		step_callback(false);
+		return;
+	    }
 	    else if (start_day && start_hour) {
 		var start = moment(start_day, "MM/DD/YYYY");
 		start.hour(start_hour);
@@ -944,7 +955,7 @@ $(function ()
 	    console.info(json);
 
 	    if (json.code == 0) {
-		selected_rspec = json.value;
+		selected_rspec = SetClusters(json.value);
 		step_callback(true);
 		return;
 	    }
@@ -1725,7 +1736,7 @@ $(function ()
 	    ispprofile       = profile_blob.ispprofile;
 	    isscript         = profile_blob.isscript;
 	    selected_uuid    = profile_value;
-	    selected_rspec   = profile_blob.rspec;
+	    selected_rspec   = SetClusters(profile_blob.rspec);
 	    selected_version = profile_blob.version;
 	    amdefault        = profile_blob.amdefault;
 	    if (profile_blob.newgenilib) {
@@ -1900,9 +1911,9 @@ $(function ()
 	// If not a registered user, we do not get an rspec back, since
 	// the user is not allowed to change the configuration.
 	if (newRspec) {
-	    $('#rspec_textarea').val(newRspec);
-	    selected_rspec = newRspec;
-	    CreateAggregateSelectors(newRspec);
+	    selected_rspec = SetClusters(newRspec);
+	    $('#rspec_textarea').val(selected_rspec);
+	    CreateAggregateSelectors(selected_rspec);
 	}
 	if (window.NOPPRSPEC) {
 	    alert("Guest users may configure parameterized profiles " +
@@ -1972,6 +1983,7 @@ $(function ()
 		sites[siteid] = siteid;
 	    }
 	});
+	console.info("CreateAggregateSelectors2: ", count, bound);
 
 	// All nodes bound, no dropdown.
 	if (count == bound) {
@@ -2729,5 +2741,283 @@ $(function ()
 	    $('#request-license-button').off("click");
 	});
     }
+
+    /*
+     * Check for spectrum used.
+     */
+    function CheckForSpectrum()
+    {
+	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+	var xmlDoc    = $.parseXML(selected_rspec);
+	var spectrum  = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'spectrum');
+	var win;
+
+	console.info("CheckForSpectrum", spectrum);
+
+	if (!spectrum.length) {
+	    $('#step3-div .reserve-resources-button').off("click");
+	    $('#step3-div .schedule-experiment').removeClass("hidden");
+	    $('#step3-div .reserve-resources').addClass("hidden");
+	    $('#start-immediately').prop("checked", true);
+	    $("#start_day").datepicker("option", "disabled", true);
+	    $("#start_hour").prop("disabled", true);
+	    $('#groups-div').addClass("hidden");
+	    $('#groups').html("");
+	    return;
+	}
+
+	/*
+	 * Helper function
+	 */
+	var setPickers = function(start, end) {
+	    var start = moment(start);
+	    var end = moment(end);
+	    
+	    // Set the pickers.
+	    $('#start_day').val(start.format("MM/DD/YYYY"));
+	    $('#start_hour').val(start.format("H"));
+	    $('#end_day').val(end.format("MM/DD/YYYY"));
+	    $('#end_hour').val(end.format("H"));
+	};
+	var clearPickers = function() {
+	    // Set the pickers.
+	    $('#start_day').val("");
+	    $('#start_hour').val("");
+	    $('#end_day').val("");
+	    $('#end_hour').val("");
+		    
+	    // These are in the form.
+	    $('#step3-form [name=start]').val("");
+	    $('#step3-form [name=end]').val("");
+
+	    // Clear checkboxes to make sure there is no confusion.
+	    $(".select-reservation")
+		.each(function(){ this.checked = false; });
+	};
+
+	/*
+	 * For resgroup list, we bind a click handler to copy the
+	 * start/end into the pickers.
+	 */
+	var setupCheckboxes = function (resgroups, uuid) {
+	    $(".select-reservation").change(function (event) {
+		if ($(this).is(":checked")) {
+		    // Uncheck other boxes.
+		    $(".select-reservation")
+			.each(function(){ this.checked = false; });
+		    $(this).prop("checked", true);
+
+		    var uuid  = $(this).val();
+		    var group = resgroups[uuid];
+		    console.info("setupCheckboxes", uuid, group);
+		    setPickers(group.start, group.end);
+		}
+		else {
+		    clearPickers();
+		}
+	    });
+	    // Tooltip for the checkboxes.
+	    $(".select-reservation").tooltip({
+		"container" : "body",
+		"trigger"   : "hover",
+		"title"     : "Click to copy the start/end time for this " +
+		    "reservation, to the start/end inputs above",
+	    });
+	    
+	    // Check this reservation.
+	    if (uuid) {
+		$('#groups input[type=checkbox][value=' + uuid + ']')
+		    .prop("checked", true);
+	    }
+	}
+	/*
+	 * Check for existing reservations and draw the list.
+	 */
+	var showResgroupList = function (uuid) {
+	    sup.CallServerMethod(null, "resgroup", "ListReservationGroups",
+				 {"useronly" : true},
+				 function (json) {
+				     if (json.code) {
+					 console.info(json.value);
+					 return;
+				     }
+				     var groups = json.value;
+				     if (_.size(groups)) {
+					 $('#groups-div').removeClass("hidden");
+					 window.DrawResGroupList(groups);
+					 setupCheckboxes(json.value, uuid);
+				     }
+				     else {
+					 $('#groups-div').addClass("hidden");
+				     }
+				 });
+	}
+	showResgroupList();
+	
+	/*
+	 * We hide the normal scheduling controls and show a list of
+	 * reservations the user can select from for scheduling the
+	 * experiment. I think this is going to be very confusing.
+	 */
+	$('#step3-div .schedule-experiment').addClass("hidden");
+	$('#step3-div .reserve-resources').removeClass("hidden");
+	$('#start-immediately').prop("checked", false);
+	$("#start_day").datepicker("option", "disabled", false);
+	$("#start_hour").prop("disabled", false);
+
+	/*
+	 * Wait for user to decide to create a new reservation.
+	 */
+	$('#step3-div .reserve-resources-button').click(function (event) {
+	    event.preventDefault();
+	    if ($('#reservation-iframe').length) {
+		return;
+	    }
+	    
+	    /*
+	     * Hide steps control buttons until the iframe is closed.
+	     */
+	    $('#stepsContainer .actions').addClass("hidden");
+
+	    /*
+	     * Clear the pickers and the checkboxes.
+	     */
+	    clearPickers();
+
+	    /*
+	     * Place into an iframe in the panel body,
+	     */
+	    var url  = "resgroup.php?fromrspec=1&embedded=1";
+	
+	    var html = '<iframe id="reservation-iframe" class=col-xs-12 ' +
+		'style="padding-left: 0px; padding-right: 0px; border: 0px;" ' +
+		'height=1200 ' + 'src=\'' + url + '\'>';
+	
+	    $('#step3-div .resgroup-div').removeClass("hidden");
+	    $('#step3-div .resgroup-div .panel-body').html(html);
+
+	    var iframe = $('#reservation-iframe')[0];
+	    var iframewindow = (iframe.contentWindow ?
+				iframe.contentWindow :
+				iframe.contentDocument.defaultView);
+
+	    iframewindow.addEventListener('DOMContentLoaded', function (event) {
+		var html = "<div id=rspec class=hidden>" +
+		    "<textarea type='textarea'>" + selected_rspec +
+		    "</textarea></div>";
+		$("body", iframewindow.document).append(html);
+		$("#wrap", iframewindow.document).css("padding", "0px");
+	    });
+
+	    // Slow timer to expand the iframe so no scroll bar.
+	    var timer = setInterval(function() {
+		var height = $("#wrap", iframewindow.document).css("height");
+		var now    = $('#reservation-iframe').css("height");
+		if (height != now) {
+		    console.info("height", height);
+		    $('#reservation-iframe').css("height", height);
+		}
+	    }, 250);
+
+	    // Helper
+	    var closeIframe = function () {
+		$('#cancel-reserve-resources-button').off("click");
+		$('#reservation-iframe').remove();
+		$('#step3-div .resgroup-div').addClass("hidden");
+		
+		// Show the steps control buttons,
+		$('#stepsContainer .actions').removeClass("hidden");
+	    };
+
+	    // Cancel operation.
+	    $('#cancel-reserve-resources-button').click(function (event) {
+		event.preventDefault();
+		clearInterval(timer);
+		closeIframe();
+	    })
+
+	    // Call back after getting the new reservation
+	    var gotres_callback = function (json) {
+		console.info("gotres_callback", json);
+		if (json.code) {
+		    sup.HideModal('#waitwait-modal', function () {
+			alert("Could not get new reservation info");
+		    });
+		    return;
+		}
+		setPickers(json.value.start, json.value.end);
+	    };
+	    
+	    /*
+	     * An iframe cannot close itself, but it can call a function
+	     * here cause its in the same domain.
+	     */
+	    window.CloseMyIframe = function (uuid) {
+		console.info("Reservation is done", uuid);
+		clearInterval(timer);
+
+		if (uuid) {
+		    // Redraw the list.
+		    showResgroupList(uuid);
+		    // Ask for the reservation info so we can set start/end.
+		    sup.CallServerMethod(null, "resgroup",
+					 "GetReservationGroup",
+					 {"uuid"    : uuid},
+					 gotres_callback);
+		}
+		else {
+		    console.info("Did not get a uuid from iframe");
+		}
+		closeIframe();
+		return;
+	    };
+	});
+    }
+    
+    /*
+     * Try to select the clusters for the user based on the node types.
+     * This might not be possible, if there is a conflict in the types.
+     * Do what we can.
+     */
+    function SetClusters(rspec)
+    {
+	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+	var xmlDoc    = $.parseXML(rspec);
+	var changed   = false;
+
+	//console.info("SetClusters", rspec);
+
+	// Find all the nodes, look for types nodes
+	$(xmlDoc).find("node").each(function() {
+	    var node         = this;
+	    var htype        = $(node).find("hardware_type");
+	    var manager_id   = $(node).attr("component_manager_id");
+
+	    // Skip anything with the manager already set.
+	    if (manager_id) {
+		return;
+	    }
+	    // Otherwise, we dig inside and find the hardware type.
+	    if (!htype.length) {
+		return;
+	    }
+	    var type = $(htype).attr("name");
+	    console.info("SetClusters", type);
+	    // Find the cluster that has this type.
+	    _.each(amlist, function (details, urn) {
+		if (_.has(details.typeinfo, type)) {
+		    console.info("SetClusters", type, urn);
+		    $(node).attr("component_manager_id", urn);
+		    changed = true;
+		}
+	    })
+	});
+	if (changed) {
+	    rspec = (new XMLSerializer()).serializeToString(xmlDoc);
+	}
+	//console.info("SetClusters done", rspec);
+	return rspec;
+    }
+    
     $(document).ready(initialize);
 });

@@ -50,6 +50,7 @@ $optargs = OptionalPageArguments("edit",     PAGEARG_BOOLEAN,
                                  "debug",    PAGEARG_BOOLEAN,
                                  "cluster",  PAGEARG_STRING,
                                  "project",  PAGEARG_PROJECT,
+                                 "fromrspec",PAGEARG_BOOLEAN,
                                  "uuid",     PAGEARG_UUID);
 
 if ($edit) {
@@ -178,6 +179,7 @@ if ($edit) {
 else {
     echo "   window.EDITING  = false;\n";
     echo "   window.PID      = '$default_pid';\n";
+    echo "   window.FROMRSPEC= $fromrspec;\n";
 }
 echo "   window.ISADMIN  = $isadmin;\n";
 echo "   window.ISSTUD   = $isstud;\n";

@@ -2,31 +2,28 @@ $(function ()
 {
     'use strict';
 
-    var template_list   = ["list-resgroups", "resgroup-list",
-			   "resgroup-list-bytype", "resgroup-list-byrange",
-			   "confirm-modal", "resusage-list", "resusage-graph",
-			   "oops-modal", "waitwait-modal"];
-    var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
-    var mainTemplate    = _.template(templates["list-resgroups"]);
-    var listTemplate    = _.template(templates["resgroup-list"]);
-    var bytypeTemplate  = _.template(templates["resgroup-list-bytype"]);
-    var byrangeTemplate = _.template(templates["resgroup-list-byrange"]);
-    var usageTemplate   = _.template(templates["resusage-list"]);
-    var graphTemplate   = _.template(templates["resusage-graph"]);
-    var confirmString   = templates["confirm-modal"];
-    var oopsString      = templates["oops-modal"];
-    var waitwaitString  = templates["waitwait-modal"];
-    var amlist = null;
-    
+    var mainTemplate;
+    var listTemplate;
+    var bytypeTemplate;
+    var byrangeTemplate;
+
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
-	amlist  = decodejson('#amlist-json');
 
-	$('#main-body').html(mainTemplate({"amlist" : amlist}));
-	$('#oops_div').html(oopsString);	
-	$('#waitwait_div').html(waitwaitString);
-	$('#confirm_div').html(confirmString);
+	var template_list   = ["list-resgroups", "resgroup-list",
+			       "resgroup-list-bytype", "resgroup-list-byrange",
+			       "oops-modal", "waitwait-modal"];
+	var templates       = APT_OPTIONS.fetchTemplateList(template_list);
+	
+	mainTemplate    = _.template(templates["list-resgroups"]);
+	listTemplate    = _.template(templates["resgroup-list"]);
+	bytypeTemplate  = _.template(templates["resgroup-list-bytype"]);
+	byrangeTemplate = _.template(templates["resgroup-list-byrange"]);
+
+	$('#main-body').html(mainTemplate({}));
+	$('#oops_div').html(templates["oops-modal"]);	
+	$('#waitwait_div').html(templates["waitwait-modal"]);
 
 	sup.CallServerMethod(null, "resgroup", "ListReservationGroups", null,
 			     function (json) {
@@ -36,6 +33,15 @@ $(function ()
 				 }
 				 DoReservations(json.value);
 			     });
+    }
+
+    function Embedded(groups)
+    {
+	var template_list   = ["resgroup-list"];
+	var templates       = APT_OPTIONS.fetchTemplateList(template_list);
+	listTemplate        = _.template(templates["resgroup-list"]);
+
+	DoReservations(groups)
     }
 
     /*
@@ -59,6 +65,7 @@ $(function ()
 	    "showuser"     : true,
 	    "showusing"    : true,
 	    "showstatus"   : true,
+	    "showselect"   : (window.EMBEDDED_RESGROUPS ? true : false),
 	    "isadmin"      : window.ISADMIN,
 	});
 	$("#groups").html(html);
@@ -158,12 +165,12 @@ $(function ()
 		.nextUntil('tr.tablesorter-hasChildRow').find('td')[0];
 	    var display = $(row).css("display");
 	    if (display == "none") {
-		$(this).find(".expando")
+		$(this)
 		    .removeClass("glyphicon-chevron-right")
 		    .addClass("glyphicon-chevron-down");
 	    }
 	    else {
-		$(this).find(".expando")
+		$(this)
 		    .removeClass("glyphicon-chevron-down")
 		    .addClass("glyphicon-chevron-right");
 	    }
@@ -181,7 +188,7 @@ $(function ()
 	    container: 'body',
 	});
 
-	if (window.ISADMIN) {
+	if (window.ISADMIN && !window.EMBEDDED_RESGROUPS) {
 	    var html = bytypeTemplate({
 		"groups"       : groups,
 		"showcontrols" : false,
@@ -303,7 +310,14 @@ $(function ()
     function decodejson(id) {
 	return JSON.parse(_.unescape($(id)[0].textContent));
     }
-    $(document).ready(initialize);
+    if (window.EMBEDDED_RESGROUPS) {
+	window.DrawResGroupList = function (groups) {
+	    Embedded(groups);
+	};
+    }
+    else {
+	$(document).ready(initialize);
+    }
 });
 
 

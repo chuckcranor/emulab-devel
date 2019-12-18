@@ -902,7 +902,7 @@ function Do_ListReservationGroups()
     global $ajax_args;
     $reservations = array();
 
-    if (ISADMIN()) {
+    if (ISADMIN() && !isset($ajax_args["useronly"])) {
         $resgroups = ReservationGroup::LookupAll();
     }
     else {

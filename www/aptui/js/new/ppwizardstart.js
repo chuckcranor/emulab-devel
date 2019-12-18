@@ -33,6 +33,7 @@ $(function () {
 	var rerun_bindings= null;
 	var rerun_warnings= null;
 	var setStepsMotion= null;
+	var resinfo_window= null;
 
 	// List of form elements (fields,groups), in order of appearance.
 	var formFields    = [];
@@ -3027,6 +3028,15 @@ $(function () {
 							{"uuid" : uuid});
 		    xmlthing.done(callback);
 		});
+	    
+	    $('#ppform-buttons .p-resources')
+		.click(function (event) {
+		    event.preventDefault();
+		    resinfo_window =
+			window.open("resinfo.php?embedded=true",
+				    "Resource Availability",
+				    "width=1200,height=800");
+		});
 	}
 
 	/*
@@ -3158,6 +3168,10 @@ $(function () {
 		else {
 		    RSPEC = json.value.rspec;
 		    ConfigureDone();
+		    if (resinfo_window) {
+			resinfo_window.close();
+			resinfo_window = null;
+		    }
 		    // Must be after the callback, so that any changes to
 		    // the aggregate selector is reflected in the final tab
 		    steps_callback(true);

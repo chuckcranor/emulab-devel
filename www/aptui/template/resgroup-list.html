@@ -103,6 +103,11 @@
 		<% } %>
 	      <% } %>
 	    <% } else { %>
+	      <% if (showselect) { %>
+		<input type="checkbox" class="select-reservation"
+		       style='margin-bottom: 4px; margin-left: 0px;'
+		       value="<%- value.uuid %>">
+	      <% } %>
 	      <a href="resgroup.php?edit=1&uuid=<%- value.uuid %>"
 		 target="_blank" 
 		 class="edit-button">
@@ -259,8 +264,8 @@
 	      <div style="ignore-width: 700px;">
 		<table class='tablesorter ranges-table resgroup-child'>
 		  <thead>
-		    <th>Low Freq</th>
-		    <th>High Freq</th>
+		    <th>Low Frequency</th>
+		    <th>High Frequency</th>
 		    <th>Status</th>
 		  </thead>
 		  <tbody>

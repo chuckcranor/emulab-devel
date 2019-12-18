@@ -261,6 +261,23 @@ sub GetProject($)
     return Project->Lookup($self->pid_idx());
 }
 
+sub GetCreator($)
+{
+    my ($self) = @_;
+    require User;
+    
+    return User->Lookup($self->uid_idx());
+}
+
+sub WebURL($)
+{
+    my ($self)  = @_;
+    my $project = $self->GetProject();
+    my $weburl  = $project->Brand()->wwwBase();
+
+    return $weburl . "/resgroup.php?edit=1&uuid=" . $self->uuid();
+}
+
 #
 # Lock and Unlock
 #
@@ -470,6 +487,17 @@ sub PartiallyApproved($)
     return 0;
 }
 
+sub Active($)
+{
+    my ($self) = @_;
+    my $start  = str2time($self->start());
+    my $end    = str2time($self->end());
+
+    return 1
+	if (time() > $start && time() < $end);
+    return 0;
+}
+
 #
 # Expired.
 #
@@ -479,6 +507,36 @@ sub Expired($)
     my $end = str2time($self->end());
 
     return time() > $end ? 1 : 0;
+}
+
+#
+# Is the experiment using any of the RF reservations in the group.
+#
+sub RFInUse($$)
+{
+    my ($self, $instance) = @_;
+    return 0
+	if (!$self->RFReservationList());
+    
+    #
+    # List of all spectrum used by the instance.
+    #
+    my $spectrum;
+    if ($instance->GetSpectrum(\$spectrum)) {
+	return -1;
+    }
+    return 0
+	if (!@$spectrum);
+    
+    foreach my $rf ($self->RFReservationList()) {
+	foreach my $range (@$spectrum) {
+	    if ($rf->Overlaps($range->{'frequency_low'},
+			      $range->{'frequency_high'})) {
+		return 1;
+	    }
+	}
+    }
+    return 0;
 }
 
 ###################################################################
@@ -1046,6 +1104,19 @@ sub ClearCanceled($)
     return $self->Mark("canceled", undef);
 }
 
+sub Overlaps($$$)
+{
+    my ($self, $freq_low, $freq_high) = @_;
+    my $res_low   = $self->freq_low();
+    my $res_high  = $self->freq_high();
+
+    if (($freq_low < $res_low && $freq_high < $res_low) ||
+	($freq_low > $res_high)) {
+	return 0;
+    }
+    return 1;
+}
+
 #
 # See if a request fits the schedule.
 # 
@@ -1128,6 +1199,7 @@ my $allowedRanges = {
     "LTE" => [
 	[698,   763],
 	[1710,  1780],
+	[1790,  1825],
 	[2110,  2180],
 	[2500,  2570],
 	[2620,  2690],
@@ -1136,6 +1208,20 @@ my $allowedRanges = {
 	[5650,  7125],
     ],
 };
+
+#
+# According to Gary and Alex, these frequencies can be auto approved.
+#
+my $autoApproveRanges = [
+    [914.87, 915.13],
+    [1790,   1825],
+    [2400,   2483.5],
+    [2500,   2570],
+    [2620,   2690],
+    [3450,   3490],
+    [3550,   3590],
+    [5725,   5850],
+];
 
 sub RangeAllowed($$$)
 {
@@ -1165,6 +1251,27 @@ sub RangeAllowed($$$)
 	return 1
 	    if (EmulabFeatures->FeatureEnabled("${type}-allowed",
 					       undef, $project));
+    }
+    return 0;
+}
+
+#
+# Can a range be auto approved.
+#
+sub RangeAutoApprove($$)
+{
+    my ($class, $ref) = @_;
+    my $freq_low  = $ref->{'freq_low'};
+    my $freq_high = $ref->{'freq_high'};
+
+    foreach my $range (@$autoApproveRanges) {
+	my ($range_low, $range_high) = @$range;
+
+	return 1
+	    if ($freq_low  >= $range_low &&
+		$freq_low  <= $range_high &&
+		$freq_high >= $range_low &&
+		$freq_high <= $range_high);
     }
     return 0;
 }
@@ -1236,29 +1343,18 @@ sub MaxExtension($)
     }
     return $newmax
 	if (! @$spectrum);
-    
-    #
-    # Get all RF reservations in *other* projects.
-    #
-    $query_result =
-	DBQueryWarn("select distinct g.uuid ".
-		    " from apt_reservation_group_rf_reservations as rf ".
-		    "left join apt_reservation_groups as g on ".
-		    "     g.uuid=rf.uuid ".
-		    "where g.pid_idx!='$pid_idx' and ".
-		    "      rf.approved is not null");
 
-    return undef
-	if (!defined($query_result));
-    return $newmax
-	if (!$query_result->numrows);
-    
+    #
+    # Hmm, it turns out that the max extension is actually when the
+    # reservations that made it possible to start the experiment, are
+    # going to end. 
+    #
     while (my ($uuid) = $query_result->fetchrow_array()) {
 	my $resgroup = APT_Reservation::Group->Lookup($uuid);
 	next
 	    if (!defined($resgroup));
 
-	my $res_start = str2time($resgroup->start());
+	my $res_end = str2time($resgroup->end());
 
 	#
 	# Look for any overlap.
@@ -1276,11 +1372,11 @@ sub MaxExtension($)
 		    ($freq_low > $res_high)) {
 		    next;
 		}
-		# The start of this reservation is an upper bound on
-		# the expiration time of the instance.
-		if ($newmax > $res_start) {
+		# The end of this reservation is an upper bound on how
+		# long the experiment can be extended.
+		if ($newmax > $res_end) {
 		    # One hour pad, just like node reservations.
-		    $newmax = $res_start - 3600;
+		    $newmax = $res_end - 3600;
 		}
 	    }
 	}

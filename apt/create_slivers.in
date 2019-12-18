@@ -494,6 +494,13 @@ if (! (defined($speaksfor_credential) &&
 }
 
 #
+# Check frequency ranges (actually, checking that we have a reservation).
+#
+if ($instance->CheckSpectrumReserved(\$errmsg)) {
+    MyExit(1, "Not all frequency ranges are reserved: $errmsg");
+}
+
+#
 # Generate the extra credentials that tells the backend this experiment
 # can access the datasets.
 #

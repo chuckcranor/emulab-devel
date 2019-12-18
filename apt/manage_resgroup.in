@@ -158,6 +158,7 @@ sub DoGroupReserve()
     my $update     = 0;
     my $checkonly  = 0;
     my $exitcode   = 0;
+    my $autoapprove= 0;
     my $updateall  = 0;
     my $override   = 0;	# Only range reservations can be overridden. 
     my ($clusters, $ranges);
@@ -244,17 +245,8 @@ sub DoGroupReserve()
 	if (!defined($start)) {
 	    $start = time();
 	}
-	#
-	# But we move it to the next top of hour since that is what
-	# the node reservation system is going to do, and we do not
-	# want the range reservations and node reservations to start
-	# at different times.
-	#
-	$start = ($start - ($start % 3600)) + 3600;
-	if ($start - time() < (15 * 60)) {
-	    $start += 3600;
-	}
     }
+    
     #
     # The file is a JSON array of cluster/range reservation info.
     #
@@ -270,6 +262,25 @@ sub DoGroupReserve()
 	fatal("json data is not a HASH");
     }
     print Dumper($blob);
+
+    if (0 && !$update) {
+    	#
+	# Move to the next top of hour since that is what the node
+	# reservation system is going to do, and we do not want the
+	# range reservations and node reservations to start at
+	# different times. Note that if there are no clusters, leave
+	# it as is. This will probably cause confusion when trying add
+	# cluster resources to an existing range only reservation,
+	# since the cluster reservations woill round to next top of
+	# hour.
+	#
+	if (exists($blob->{'clusters'})) {
+	    $start = ($start - ($start % 3600)) + 3600;
+	    if ($start - time() < (15 * 60)) {
+		$start += 3600;
+	    }
+	}
+    }
 
     #
     # Sanity check incoming cluster/range data.
@@ -331,6 +342,12 @@ sub DoGroupReserve()
 	    if (!ValidUUID($range->{"uuid"})) {
 		fatal("Invalid range uuid: " . $range->{"uuid"});
 	    }
+	}
+	#
+	# For now, autoapprove short requests, even if they include ranges.
+	#
+	if ($end - $start < (3600 * 24)) {
+	    $autoapprove = 1;
 	}
     }
 
@@ -439,9 +456,17 @@ sub DoGroupReserve()
 		    }
 		}
 		else {
-		    # A new range request. Must always be approved.
-		    $range->{'approved'} = 0;
-		    $range->{'valid'}    = 0;
+		    # A new range request. See autoapprove above.
+		    if ($this_user->IsAdmin() ||
+			($autoapprove &&
+			 APT_Reservation::Group::RFReservation->RangeAutoApprove
+			 ($range))) {
+			$range->{'approved'} = 1;
+		    }
+		    else  {
+			$range->{'approved'} = 0;
+		    }
+		    $range->{'valid'} = 0;
 		    push(@range_reservations, $range);
 		}
 	    }
@@ -449,7 +474,24 @@ sub DoGroupReserve()
     }
     else {
 	@cluster_reservations = values(%{$clusters}) if (defined($clusters));
-	@range_reservations   = values(%{$ranges}) if (defined($ranges));
+	if (defined($ranges)) {
+	    foreach my $range_uuid (keys(%{$ranges})) {
+		my $range = $ranges->{$range_uuid};
+
+		# A new range request. See autoapprove above.
+		if ($this_user->IsAdmin() ||
+		    ($autoapprove &&
+		     APT_Reservation::Group::RFReservation->RangeAutoApprove
+		     ($range))) {
+		    $range->{'approved'} = 1;
+		}
+		else  {
+		    $range->{'approved'} = 0;
+		}
+		$range->{'valid'}    = 0;
+		push(@range_reservations, $range);
+	    }
+	}
     }
 
     #
@@ -515,8 +557,11 @@ sub DoGroupReserve()
 		$range_results->{'errors'}++;
 	    }
 	    else {
-		# We set approval above; all new ranges must be approved.
+		# We set approval above.
 		$ref->{'valid'}    = 1;
+		if ($ref->{'approved'}) {
+		    $range_results->{'approved'}++;
+		}
 	    }
 	}
     }
@@ -556,8 +601,8 @@ sub DoGroupReserve()
 	    @argvcopy = @tmp;
 	}
 	$command .= "-a $urn reserve -S -t $type ";
-	# When there are ranges, autoapprove is forced off.
-	if (defined($ranges)) {
+	# When there are unapproved ranges, autoapprove is forced off.
+	if (defined($ranges) && !$autoapprove) {
 	    $command .= "-P ";
 	}
 	$command .= " @argvcopy $count";
@@ -810,6 +855,26 @@ sub DoDelete()
     if ($resgroup->Lock()) {
 	UserError("Reservation is locked, please try again later");
     }
+
+    #
+    # Look to see if this project has any experiments running that
+    # are using this reservation; not allowed to delete the reservation
+    # until the experiments are terminated.
+    #
+    if ($resgroup->RFReservationList()) {
+	my $current;
+	if (APT_Instance->LookupForProject($project, \$current)) {
+	    fatal("Could not look up experiments for $project");
+	}
+	foreach my $instance (@$current) {
+	    # Only RF reservations actually matter here
+	    if ($resgroup->RFInUse($instance)) {
+		UserError("You have experiments running that are using this ".
+			  "reservation, please terminate those first");
+	    }
+	}
+    }
+    
     #
     # See if we got specific reservations to delete.
     #
