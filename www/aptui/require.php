@@ -234,9 +234,7 @@ function REQUIRE_PPWIZARDSTART()
   AddTemplate("choose-am");
   AddTemplate("image-picker-modal");
   AddTemplate("ppform-wizard");
-  AddTemplate("ppform-wizard-body");
   AddLibrary("js/ppwizardstart.js");
-  AddLibrary("js/new/ppwizardstart.js");
 }
 
 function REQUIRE_SUP()

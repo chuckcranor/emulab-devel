@@ -40,7 +40,7 @@ $(function ()
       output: null
     };
     var editor        = null;
-    var ppstart       = window.ppstartOld;
+    var ppstart       = window.ppstart;
     var loaded_uuid   = null;
     var ppchanged     = false;
     var monitor       = null;
@@ -1739,12 +1739,6 @@ $(function ()
 	    selected_rspec   = SetClusters(profile_blob.rspec);
 	    selected_version = profile_blob.version;
 	    amdefault        = profile_blob.amdefault;
-	    if (profile_blob.newgenilib) {
-		ppstart = window.ppstartNew;		
-	    }
-	    else {
-		ppstart = window.ppstartOld;		
-	    }
 	    if (ispprofile) {
 		$('#save_paramset_button').removeClass("hidden");
 	    }
