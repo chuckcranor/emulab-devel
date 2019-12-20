@@ -108,7 +108,9 @@ use libtestbed;
 use emutil;
 use libEmulab;
 use GeniResponse;
+use GeniUtil;
 use APT_Instance;
+use APT_Aggregate;
 use APT_Dataset;
 use POSIX qw(strftime ceil);
 
@@ -642,6 +644,9 @@ while (1) {
     }
     exit(0)
 	if ($oneshot);
+
+    emutil::FlushCaches();
+    GeniUtil::FlushCaches();
 
     print "Waiting for $SLEEP_INTERVAL seconds ...\n";
     sleep($SLEEP_INTERVAL);

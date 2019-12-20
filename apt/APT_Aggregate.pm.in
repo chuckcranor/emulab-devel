@@ -47,6 +47,10 @@ my $TBOPS         = "@TBOPSEMAIL@";
 my $OURDOMAIN     = "@OURDOMAIN@";
 my $MYURN	  = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 
+# Cache of instances to avoid regenerating them.
+my %aggregates  = ();
+BEGIN { use emutil; emutil::AddCache(\%aggregates); }
+
 # Protos
 sub STATUS($$;$);
 
@@ -58,6 +62,10 @@ sub Lookup($$)
     my ($class, $token) = @_;
     my $safe_urn = DBQuoteSpecial($token);
     my $query_result;
+
+    # Look in cache first
+    return $aggregates{$token}
+        if (exists($aggregates{$token}));
 
     if (GeniHRN::IsValid($token)) {
 	$query_result =
@@ -72,6 +80,7 @@ sub Lookup($$)
     my $self             = {};
     $self->{'AGGREGATE'} = $query_result->fetchrow_hashref();
     $self->{'AUTHORITY'} = undef;
+    $self->{'TYPEINFO'}  = {};
 
     #
     # Look to see if there is a status row. Create it if it does not exist.
@@ -92,7 +101,26 @@ sub Lookup($$)
     }
     $self->{'STATUS'} = $query_result->fetchrow_hashref();
 
+    #
+    # Basic type info.
+    #
+    $query_result =
+	DBQueryWarn("select type,count,free from apt_aggregate_nodetypes ".
+		    "where urn=$safe_urn");
+    return undef
+	if (!$query_result);
+
+    while (my ($type,$count,$free) = $query_result->fetchrow_array()) {
+	$self->{'TYPEINFO'}->{$type} = {
+	    "count" => $count,
+	    "free"  => $free,
+	};
+    }
     bless($self, $class);
+
+    # Add to cache. 
+    $aggregates{$self->urn()} = $self;
+    
     return $self;
 }
 
@@ -120,12 +148,33 @@ AUTOLOAD {
     carp("No such slot '$name' field in class $type");
     return undef;
 }
+sub Typeinfo($;$)
+{
+    my ($self, $type) = @_;
+
+    return $self->{"TYPEINFO"}
+        if (!defined($type));
+    return undef
+	if (!exists($self->{"TYPEINFO"}->{$type}));
+
+    return $self->{"TYPEINFO"}->{$type};
+}
 
 # Break circular reference someplace to avoid exit errors.
 sub DESTROY {
     my $self = shift;
 
     $self->{'AGGREGATE'} = undef;
+}
+
+#
+# Flush from our little cache, as for the expire daemon.
+#
+sub Flush($)
+{
+    my ($self) = @_;
+
+    delete($aggregates{$self->urn()});
 }
 
 sub IsLocalCluster($)
@@ -458,6 +507,28 @@ sub ExtensionPushPending($)
 
     my ($uuid) = $query_result->fetchrow_array();
     return APT_Instance->Lookup($uuid);
+}
+
+#
+# Class method to map a type to an aggregate, if possible.
+# The caller needs to fill the cache prior to calling this. :-)
+#
+sub MapTypeToAggregate($$)
+{
+    my ($class, $type) = @_;
+
+    # Need a better approach for this cause of multiple aggregates
+    if (!keys(%aggregates)) {
+	APT_Aggregate->LookupAll();
+    }
+    # We use the cache list.
+    foreach my $aggregate (values(%aggregates)) {
+	my $typeinfo = $aggregate->Typeinfo();
+
+	return $aggregate->urn()
+	    if (exists($typeinfo->{$type}));
+    }
+    return undef;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

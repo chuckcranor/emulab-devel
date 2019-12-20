@@ -1297,6 +1297,13 @@ sub SetSites($$$$$$)
     my %interface_map   = ();
     my %aggregates      = ();
 
+    #
+    # Fill the APT_Aggregate cache.
+    #
+    if ($MAINSITE) {
+	APT_Aggregate->LookupAll();
+    }
+
     my $rspec = GeniXML::Parse($$prspecstr);
     if (! defined($rspec)) {
 	$$perrmsg = "Could not parse rspec\n";
@@ -1336,10 +1343,24 @@ sub SetSites($$$$$$)
 	    GeniXML::SetManagerId($ref, $manager_urn);
 	    GeniXML::SetJacksSiteManagerId($ref, $manager_urn);
 	}
-	# Else use the default aggregate.
 	else {
-	    $manager_urn = $default_aggregate_urn;
-	    
+	    if ($MAINSITE) {
+		my $hardtype = GeniXML::FindFirst("n:hardware_type", $ref);
+		if ($hardtype) {
+		    $hardtype = GeniXML::GetText("name", $hardtype);
+		    #
+		    # Try to figure out which aggregate has this type.
+		    #
+		    if ($hardtype) {
+			$manager_urn =
+			    APT_Aggregate->MapTypeToAggregate($hardtype);
+		    }
+		}
+	    }
+	    # Else use the default aggregate.
+	    if (!$manager_urn) {
+		$manager_urn = $default_aggregate_urn;
+	    }
 	    GeniXML::SetManagerId($ref, $manager_urn);
 	}
 	$aggregates{$manager_urn} = $manager_urn;
