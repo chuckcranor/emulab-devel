@@ -928,26 +928,20 @@ function CheckStep3()
     session_start();
 
     #
-    # Verify scheduled start time if not start immediately.
+    # Verify scheduled start time if provided, no start time means
+    # start immediately.
     #
-    if (! (isset($formfields["start-immediately"]) &&
-           $formfields["start-immediately"] == "checked")) {
-        if (!isset($formfields["start"]) || $formfields["start"] == "") {
-            $errors["start_day"] = "Missing start time";
+    if (isset($formfields["start"]) && $formfields["start"] != "") {
+        $start_ascii = $formfields["start"];
+        $start = strtotime($formfields["start"]);
+        if (!$start) {
+            $errors["start_day"] = "Cannot parse start time";
         }
-        else {
-            $start_ascii = $formfields["start"];
-            $start = strtotime($formfields["start"]);
-            if (!$start) {
-                $errors["start_day"] = "Cannot parse UTC start time";
-            }
-            elseif ($start < time()) {
-                #
-                # If start is in the past, just treat it as now.
-                #
-                unset($start);
-                $formfields["start-immediately"] = "checked";
-            }
+        elseif ($start < time()) {
+            #
+            # If start is in the past, just treat it as now.
+            #
+            unset($start);
         }
     }
     if (isset($formfields["end"]) && $formfields["end"] != "") {
@@ -1243,19 +1237,14 @@ function Do_Submit()
             $options .= "--site 'site:${siteid}=${urn}' ";
         }
     }
-    # Scheduled start time if not starting immediately.
-    if (! (isset($formfields["start-immediately"]) &&
-           $formfields["start-immediately"] == "checked")) {
+    # Scheduled start time if set.
+    if (isset($formfields["start"]) && $formfields["start"] != "") {
         $start = strtotime($formfields["start"]);
         $options .= " --start $start ";
-        
-        if (isset($formfields["end"]) && $formfields["end"] != "") {
-            $end = strtotime($formfields["end"]);
-            $options .= " --stop $end ";
-        }
-        else {
-            $args["duration"]  = $formfields["duration"];
-        }
+    }
+    if (isset($formfields["end"]) && $formfields["end"] != "") {
+        $end = strtotime($formfields["end"]);
+        $options .= " --stop $end ";
     }
     else {
         $args["duration"]  = $formfields["duration"];

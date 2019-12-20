@@ -596,19 +596,8 @@
 		  </p>
 		</div>
 		<center>
-		  <div class="schedule-experiment">
-		    Start immediately
-		    <div class="row">
-		      <input id='start-immediately' type="checkbox"
-			     name="start-immediately"
-			     value="checked" checked>
-		    </div>
-		    <div style="margin-top: 3px;">
-		      or
-		    </div>
-		  </div>
 		  <div style="margin-top: 0px;">
-		    Start on date/time
+		    Start on date/time (optional)
 		  </div>
 		</center>
 		<div class="row"
@@ -626,7 +615,7 @@
 			   for='start_hour'></label>
 		  </div>
 		  <div class="col-xs-4 format-me">
-		    <select name="start_hour" disabled
+		    <select name="start_hour"
 			    id='start_hour'
 			    value=""
 			    class="form-control"
@@ -669,9 +658,8 @@
 		       data-delay='{"hide":1000}'
 		       data-content='Times are in your local timezone.
 			     Start day/time is optional; your experiment
-			     will start immediately if you select the
-			     <em>start immediately</em> option. A typical
-			     use for this option, is to schedule your
+			     will start immediately if you leave this empty.
+			     A typical use for this option, is to schedule your
 			     experiment to start shortly after a resource
 			     reservation starts. See the <a target=_blank
 			     href=<%- window.MANUAL %>/reservations.html>

@@ -238,7 +238,7 @@ $(function ()
 	// Insert datepicker on schedule tab,
 	$("#start_day").datepicker({
 	    minDate: 0,		/* earliest date is today */
-	    disabled: true,
+	    disabled: false,
 	    showButtonPanel: true,
 	    onSelect: function (dateString, dateobject) {
 		DateChange("#start_day");
@@ -249,20 +249,6 @@ $(function ()
 	    showButtonPanel: true,
 	    onSelect: function (dateString, dateobject) {
 		DateChange("#end_day");
-	    }
-	});
-	// The start immediately checkbox controls the start date/time
-	// enable/disable state.
-	$('#start-immediately').change(function (event) {
-	    if ($('#start-immediately').is(":checked")) {
-		$("#start_day").datepicker("hide");
-		$("#start_day").datepicker("option", "disabled", true);
-		$("#start_hour").prop("disabled", true);
-	    }
-	    else {
-		$("#start_day").datepicker("option", "disabled", false);
-		$("#start_day").datepicker("show");
-		$("#start_hour").prop("disabled", false);
 	    }
 	});
 	$('#start-hour-help, #end-hour-help').popover({
@@ -883,29 +869,22 @@ $(function ()
 	 * Initial validation on the start/end time.
 	 * Also convert to UTC for submit (to capture local timezone).
 	 */
-	if (! $('#start-immediately').is(":checked")) {
-	    var start_day  = $('#step3-form [name=start_day]').val();
-	    var start_hour = $('#step3-form [name=start_hour]').val();
-	    if (start_day && !start_hour) {
-		ShowFormErrors({"start_hour" : "Missing hour"});
-		step_callback(false);
-		return;
-	    }
-	    else if (!start_day && start_hour) {
-		ShowFormErrors({"start_day" : "Missing day"});
-		step_callback(false);
-		return;
-	    }
-	    else if (!start_day && !start_hour) {
-		ShowFormErrors({"start_day" : "Missing start day/hour"});
-		step_callback(false);
-		return;
-	    }
-	    else if (start_day && start_hour) {
-		var start = moment(start_day, "MM/DD/YYYY");
-		start.hour(start_hour);
-		$('#step3-form [name=start]').val(start.format());
-	    }
+	var start_day  = $('#step3-form [name=start_day]').val();
+	var start_hour = $('#step3-form [name=start_hour]').val();
+	if (start_day && !start_hour) {
+	    ShowFormErrors({"start_hour" : "Missing hour"});
+	    step_callback(false);
+	    return;
+	}
+	else if (!start_day && start_hour) {
+	    ShowFormErrors({"start_day" : "Missing day"});
+	    step_callback(false);
+	    return;
+	}
+	else if (start_day && start_hour) {
+	    var start = moment(start_day, "MM/DD/YYYY");
+	    start.hour(start_hour);
+	    $('#step3-form [name=start]').val(start.format());
 	}
 	var end_day  = $('#step3-form [name=end_day]').val();
 	var end_hour = $('#step3-form [name=end_hour]').val();
@@ -2752,24 +2731,24 @@ $(function ()
 	    $('#step3-div .reserve-resources-button').off("click");
 	    $('#step3-div .schedule-experiment').removeClass("hidden");
 	    $('#step3-div .reserve-resources').addClass("hidden");
-	    $('#start-immediately').prop("checked", true);
-	    $("#start_day").datepicker("option", "disabled", true);
-	    $("#start_hour").prop("disabled", true);
 	    $('#groups-div').addClass("hidden");
 	    $('#groups').html("");
 	    return;
 	}
 
 	/*
-	 * Helper function
+	 * Helper functions
 	 */
 	var setPickers = function(start, end) {
 	    var start = moment(start);
 	    var end = moment(end);
-	    
-	    // Set the pickers.
-	    $('#start_day').val(start.format("MM/DD/YYYY"));
-	    $('#start_hour').val(start.format("H"));
+
+	    // If the reservation group starts in the past, do not set
+	    // a start time.
+	    if (! start.isBefore()) {
+		$('#start_day').val(start.format("MM/DD/YYYY"));
+		$('#start_hour').val(start.format("H"));
+	    }
 	    $('#end_day').val(end.format("MM/DD/YYYY"));
 	    $('#end_hour').val(end.format("H"));
 	};
@@ -2855,9 +2834,6 @@ $(function ()
 	 */
 	$('#step3-div .schedule-experiment').addClass("hidden");
 	$('#step3-div .reserve-resources').removeClass("hidden");
-	$('#start-immediately').prop("checked", false);
-	$("#start_day").datepicker("option", "disabled", false);
-	$("#start_hour").prop("disabled", false);
 
 	/*
 	 * Wait for user to decide to create a new reservation.
