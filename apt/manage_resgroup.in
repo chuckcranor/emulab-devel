@@ -864,11 +864,13 @@ sub DoDelete()
     if ($resgroup->RFReservationList()) {
 	my $current;
 	if (APT_Instance->LookupForProject($project, \$current)) {
+	    $resgroup->Unlock();
 	    fatal("Could not look up experiments for $project");
 	}
 	foreach my $instance (@$current) {
 	    # Only RF reservations actually matter here
 	    if ($resgroup->RFInUse($instance)) {
+		$resgroup->Unlock();
 		UserError("You have experiments running that are using this ".
 			  "reservation, please terminate those first");
 	    }
