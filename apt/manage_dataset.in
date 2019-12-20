@@ -152,6 +152,9 @@ if (! defined($this_user)) {
     fatal("You ($UID) do not exist!");
 }
 $geniuser = GeniUser->CreateFromLocal($this_user);
+if (!defined($geniuser)) {
+    fatal("Could not create geniuser");
+}
 
 if ($action eq "create") {
     exit(DoCreate());
