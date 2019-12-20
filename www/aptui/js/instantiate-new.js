@@ -1095,7 +1095,7 @@ $(function ()
 	if (Object.keys(sites).length) {
 	    formfields["sites"] = sites;
 	}
-	console.info(formfields);
+	console.info("submitform", formfields);
 	var xmlthing = sup.CallServerMethod(null, "instantiate",
 					    (checkonly ?
 					     "CheckForm" : "Submit"),
@@ -2973,6 +2973,10 @@ $(function ()
 	    }
 	    var type = $(htype).attr("name");
 	    console.info("SetClusters", type);
+	    // Crap, c4130 exists at two cluster. Bad!
+	    if (type == "c4130") {
+		return;
+	    }
 	    // Find the cluster that has this type.
 	    _.each(amlist, function (details, urn) {
 		if (_.has(details.typeinfo, type)) {
