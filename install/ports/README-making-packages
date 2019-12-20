@@ -450,6 +450,11 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
 
    h. Make sure port options are correctly set:
 
+      NOTE: if you get a message about "unsupported release" when you
+      try to do a make, it might be because /usr/include/sys/param.h
+      is out of date. Diff it with /usr/src/sys/sys/param.h and update
+      as necessary.
+
       - make -C devel/boost-all config
         and deselect:
           DOCS
@@ -496,7 +501,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
 
        pkg delete -f ipmitool
        cd /usr/ports/misc/emulab-ipmitool-old
-       env BATCH=1 make clean all install package clean
+       env BATCH=1 make clean all install ; make package clean
 
    m. Save packages and update tarball and repo. On boss:
 
@@ -515,8 +520,10 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
       sudo cp -rp packages $www/FreeBSD/11.3/
       sudo pkg repo $www/FreeBSD/11.3/packages
 
-      sudo mv packages-64 packages-64.bak
-      sudo mv packages packages-64
+      # tar up the ports tree that corresponds to these packages
+      set tball="FreeBSD-11.3-ports.tar.gz"
+      sudo tar --exclude=ports/.svn -czf $tball ports
+      sudo cp $tball $www/downloads/
 
    n. Random useful commands to run on the package files.
 
