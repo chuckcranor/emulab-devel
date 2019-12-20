@@ -122,15 +122,6 @@ $(function ()
 	$('#radio-buttons input').change(function (e) {
 	    e.preventDefault();
 
-	    // Special case for classic experiments radio button
-	    if ($('#radio-buttons [data-id="#classic"]').is(":checked")) {
-		$('#experiments_div').addClass("hidden");
-		return;
-	    }
-	    else {
-		$('#experiments_div').removeClass("hidden");
-	    }
-	    
 	    /*
 	     * The use of data-id is to avoid page jumping when changing
 	     * the page hash; it wants to jump to the radio buttons.
@@ -149,19 +140,30 @@ $(function ()
 
         // Javascript to enable link to radio button
         var hash = document.location.hash;
-        if (hash) {
-	    /*
-	     * The use of data-id is to avoid page jumping when changing
-	     * the page hash; it wants to jump to the radio buttons.
-	     */
-	    $('#radio-buttons [data-id="' + hash +'"]').prop("checked", true);
-        }
+
 	// Set the correct radio when a user uses their back/forward button
         $(window).on('hashchange', function (e) {
 	    var hash = window.location.hash;
 	    if (hash == "") {
 		hash = "#all";
 	    }
+
+	    console.info("hash", hash);
+
+	    // Special case for classic experiments radio button
+	    if (hash == "#all") {
+		$('#classic_experiments_div').removeClass("hidden");
+		$('#experiments_div').removeClass("hidden");
+	    }
+	    else if (hash == "#classic") {
+		$('#classic_experiments_div').removeClass("hidden");
+		$('#experiments_div').addClass("hidden");
+	    }
+	    else {
+		$('#classic_experiments_div').addClass("hidden");
+		$('#experiments_div').removeClass("hidden");
+	    }
+	    
 	    /*
 	     * The use of data-id is to avoid page jumping when changing
 	     * the page hash; it wants to jump to the radio buttons.
@@ -169,7 +171,10 @@ $(function ()
 	    $('#radio-buttons [data-id="' + hash +'"]').prop("checked", true);
 	    SetFilters(table);
 	});
-	SetFilters(table);
+	if (hash) {
+	    window.location.hash = hash;
+	    $(window).trigger('hashchange');
+	}
 
 	// Initial sort.
 	if (window.SORTYBY !== undefined && window.SORTYBY == "created") {
@@ -272,8 +277,9 @@ $(function ()
 		console.info(json.value);
 		return;
 	    }
-	    if (json.value.length == 0)
+	    if (json.value.length == 0) {
 		return;
+	    }
 	    var template = _.template(classicString);
 
 	    $('#classic_experiments_content')
@@ -290,7 +296,6 @@ $(function ()
 		    $(this).html(moment($(this).html()).format("ll"));
 		}
 	    });
-	    $('#classic_experiments_div').removeClass("hidden");
 	    // The radio button at the top.
 	    $('#classic_radio_button').removeClass("hidden");
 
