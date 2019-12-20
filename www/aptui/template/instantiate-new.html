@@ -598,6 +598,22 @@
 		<center>
 		  <div style="margin-top: 0px;">
 		    Start on date/time (<b>optional</b>)
+		    <a href='#' class='btn btn-xs' id="start-hour-help"
+		       style="padding-left: 0px; margin-bottom: 4px;"
+		       data-toggle='popover'
+		       data-html='true'
+		       data-delay='{"hide":1000}'
+		       data-content='Times are in your local timezone.
+			     Start day/time is <b>optional</b>;
+			     your experiment
+			     will start immediately if you leave this empty.
+			     A typical use for this option, is to schedule 
+			     your experiment to start shortly after a resource
+			     reservation starts. See the <a target=_blank
+			     href=<%- window.MANUAL %>/reservations.html>
+			     manual</a> for more info on reservations.'>
+			<span class='glyphicon glyphicon-question-sign'></span>
+		      </a>
 		  </div>
 		</center>
 		<div class="row"
@@ -650,23 +666,6 @@
 		    <label class='control-label control-error hidden'
 			   for='start_day'></label>
 		  </div>
-		  <div class="col-xs-1" style="padding-left: 0px;">
-		    <a href='#' class='btn btn-xs' id="start-hour-help"
-		       style="padding-left: 0px;"
-		       data-toggle='popover'
-		       data-html='true'
-		       data-delay='{"hide":1000}'
-		       data-content='Times are in your local timezone.
-			     Start day/time is optional; your experiment
-			     will start immediately if you leave this empty.
-			     A typical use for this option, is to schedule your
-			     experiment to start shortly after a resource
-			     reservation starts. See the <a target=_blank
-			     href=<%- window.MANUAL %>/reservations.html>
-			     manual</a> for more info on reservations.'>
-		      <span class='glyphicon glyphicon-question-sign'></span>
-		    </a>
-		  </div>
 		</div>
 		<div class="schedule-experiment">
 		  <center style="margin-top: 25px;">
@@ -710,6 +709,18 @@
 		<div class="reserve-resources hidden">
 		  <center style="margin-top: 10px;">
 		    End on date/time (<b>optional</b>)
+		    <a href='#' class='btn btn-xs' id="end-hour-help"
+		       style="padding-left: 0px; margin-bottom: 4px"
+		       data-toggle='popover'
+		       data-html='true'
+		       data-delay='{"hide":500}'
+		       data-content='Times are in your local timezone.
+				     End day/time is <b>optional</b>;
+				     your experiment
+				     will terminate automatically
+				     <%- maxduration %> hours after it starts.'>
+		      <span class='glyphicon glyphicon-question-sign'></span>
+		    </a>
 		  </center>
 		  <div class="row" style="margin-top: 10px;">
 		    <div class="col-xs-4 col-xs-offset-2 format-me">
@@ -759,19 +770,6 @@
 		      </select>
 		      <label class='control-label control-error hidden'
 			     for='end_hour'></label>
-		    </div>
-		    <div class="col-xs-1" style="padding-left: 0px;">
-		      <a href='#' class='btn btn-xs' id="end-hour-help"
-			 style="padding-left: 0px;"
-			 data-toggle='popover'
-			 data-html='true'
-			 data-delay='{"hide":500}'
-			 data-content='Times are in your local timezone.
-				     End day/time is optional; your experiment
-				     will terminate automatically
-				     <%- maxduration %> hours after it starts.'>
-			<span class='glyphicon glyphicon-question-sign'></span>
-		      </a>
 		    </div>
 		  </div>
 		</div>
