@@ -4,7 +4,7 @@
     <thead>
       <tr>
 	<th>Name
-	  <% if (showconvert === undefined || showconvert) { %>
+	  <% if (typeof showconvert === 'undefined' || showconvert) { %>
 	    <a href='#' class='btn btn-xs pull-right'
 	       data-toggle='modal' data-target='#conversion-help-modal'>
 	      <span class='glyphicon glyphicon-question-sign pull-right'></span>
@@ -36,7 +36,7 @@
       <% _.each(experiments, function(value, name) { %>
 	<tr>
 	  <td><%= value.eid %>
-	    <% if (showconvert === undefined || showconvert) { %>
+	    <% if (typeof showconvert === 'undefined' || showconvert) { %>
 	      <a href='manage_profile.php?fromexp=<%- value.uuid %>'
 		<span class='glyphicon glyphicon-export pull-right'></span>
 	      </a>
