@@ -2749,6 +2749,10 @@ $(function ()
 		$('#start_day').val(start.format("MM/DD/YYYY"));
 		$('#start_hour').val(start.format("H"));
 	    }
+	    else {
+		$('#start_day').val("");
+		$('#start_hour').val("");
+	    }
 	    $('#end_day').val(end.format("MM/DD/YYYY"));
 	    $('#end_hour').val(end.format("H"));
 	};
