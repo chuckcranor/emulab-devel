@@ -528,9 +528,9 @@ function Do_Delete()
         unlink($reasonfile);
     }
     if ($retval) {
-        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
         if (!$webtask->exited() || $retval < 0) {
             SPITAJAX_ERROR(-1, "Internal error deleting reservation");
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
         }
         else {
             SPITAJAX_ERROR(1, "Could not delete reservation: ".
