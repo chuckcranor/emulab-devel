@@ -522,11 +522,23 @@ sub MapTypeToAggregate($$)
 	APT_Aggregate->LookupAll();
     }
     # We use the cache list.
+
+    #
+    # Watch for a type at more then one cluster and bail.
+    #
+    my $urn   = undef;
+    my $found = 0;
+    
     foreach my $aggregate (values(%aggregates)) {
 	my $typeinfo = $aggregate->Typeinfo();
 
-	return $aggregate->urn()
-	    if (exists($typeinfo->{$type}));
+	if (exists($typeinfo->{$type})) {
+	    $urn = $aggregate->urn();
+	    $found++;
+	}
+    }
+    if ($found == 1) {
+	return $urn;
     }
     return undef;
 }

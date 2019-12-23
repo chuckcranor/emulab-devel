@@ -2964,6 +2964,7 @@ $(function ()
 	// Find all the nodes, look for types nodes
 	$(xmlDoc).find("node").each(function() {
 	    var node         = this;
+	    var node_id      = $(this).attr("client_id");
 	    var htype        = $(node).find("hardware_type");
 	    var manager_id   = $(node).attr("component_manager_id");
 
@@ -2976,19 +2977,25 @@ $(function ()
 		return;
 	    }
 	    var type = $(htype).attr("name");
-	    console.info("SetClusters", type);
-	    // Crap, c4130 exists at two cluster. Bad!
-	    if (type == "c4130") {
-		return;
-	    }
-	    // Find the cluster that has this type.
+	    console.info("SetClusters", node_id, type);
+	    
+	    /*
+	     * Find the cluster that has this type.
+	     * Watch for same type at more then one cluster and bail.
+	     */
+	    var found = 0;
+	    
 	    _.each(amlist, function (details, urn) {
 		if (_.has(details.typeinfo, type)) {
-		    console.info("SetClusters", type, urn);
-		    $(node).attr("component_manager_id", urn);
-		    changed = true;
+		    console.info("SetClusters", node_id, type, urn);
+		    manager_id = urn;
+		    found++;
 		}
 	    })
+	    if (found == 1) {
+		$(node).attr("component_manager_id", manager_id);
+		changed = true;
+	    }
 	});
 	if (changed) {
 	    rspec = (new XMLSerializer()).serializeToString(xmlDoc);
