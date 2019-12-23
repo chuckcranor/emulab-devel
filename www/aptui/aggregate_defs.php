@@ -83,6 +83,7 @@ class Aggregate
     function urn()	    { return $this->field('urn'); }
     function abbreviation() { return $this->field('abbreviation'); }
     function weburl()	    { return $this->field('weburl'); }
+    function ismobile()     { return $this->field('ismobile'); }
     function disabled()     { return $this->field('disabled'); }
     function adminonly()    { return $this->field('adminonly'); }
     function has_datasets() { return $this->field('has_datasets'); }

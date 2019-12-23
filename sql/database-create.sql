@@ -158,6 +158,7 @@ CREATE TABLE `apt_aggregates` (
   `abbreviation` varchar(32) NOT NULL default '',
   `adminonly` tinyint(1) NOT NULL default '0',
   `isfederate` tinyint(1) NOT NULL default '0',
+  `ismobile` tinyint(1) NOT NULL default '0',
   `disabled` tinyint(1) NOT NULL default '0',
   `noupdate` tinyint(1) NOT NULL default '0',
   `nomonitor` tinyint(1) NOT NULL default '0',
