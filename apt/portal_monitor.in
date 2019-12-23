@@ -209,7 +209,7 @@ sub CheckAggregates()
 	my $urn = $aggregate->urn();
 
 	next
-	    if ($aggregate->noupdate() || $aggregate->disabled());
+	    if ($aggregate->nomonitor() || $aggregate->disabled());
 	
 	#
 	# Convert URN into a boss/ops hostnames for the ping/DNS tests.

@@ -193,7 +193,7 @@ sub CheckAggregates()
 	my $urn = $aggregate->urn();
 
 	next
-	    if ($aggregate->noupdate());
+	    if ($aggregate->nomonitor());
 	
 	my $nickname  = $aggregate->nickname();
 	my $authority = APT_Geni::GetAuthority($urn);
