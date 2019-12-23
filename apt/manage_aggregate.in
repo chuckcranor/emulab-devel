@@ -198,6 +198,7 @@ sub DoShow()
     print "Disabled:        " . ($aggregate->disabled() ? "Yes" : "No") . "\n";
     print "Admin:           " . ($aggregate->adminonly() ? "Yes" : "No") . "\n";
     print "Federate:        " . ($aggregate->isfederate() ? "Yes" : "No") . "\n";
+    print "Mobile:          " . ($aggregate->ismobile() ? "Yes" : "No") . "\n";
     print "NoUpdate:        " . ($aggregate->noupdate() ? "Yes" : "No") . "\n";
     print "NoMonitor:       " . ($aggregate->nomonitor() ? "Yes" : "No") . "\n";
     print "Deferrable:      " . ($aggregate->deferrable() ? "Yes" : "No") . "\n";
