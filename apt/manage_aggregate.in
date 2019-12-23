@@ -156,20 +156,14 @@ sub DoList()
     usage()
 	if (@ARGV);
 
-    my $query_result =
-	DBQueryFatal("select urn from apt_aggregates");
-
+    my @aggregates = APT_Aggregate->LookupAll();
     exit(0)
-	if (!$query_result->numrows);
+	if (!@aggregates);
 
     printf("%-20s %-12s %s\n", "Name", "Nickname", "Abbrev");
     printf("---------------------------------------------\n");
 
-    while (my ($urn) = $query_result->fetchrow_array()) {
-	my $aggregate = APT_Aggregate->Lookup($urn);
-	next
-	    if (!defined($aggregate));
-
+    foreach my $aggregate (@aggregates) {
 	printf("%-20s %-12s %s\n",
 	       $aggregate->name(), $aggregate->nickname(),
 	       $aggregate->abbreviation());

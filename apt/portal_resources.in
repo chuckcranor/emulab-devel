@@ -117,6 +117,7 @@ use APT_Geni;
 use Genixmlrpc;
 use GeniResponse;
 use GeniCredential;
+use GeniUtil;
 use GeniXML;
 use GeniHRN;
 use POSIX qw(strftime ceil);
@@ -158,13 +159,11 @@ $SIG{HUP} = \&handler
 #
 sub CheckAggregates()
 {
-    my $query_result =
-	DBQueryWarn("select urn from apt_aggregates ".
-		    "where nomonitor=0");
+    my @aggregates = APT_Aggregate->LookupAll();
 
     return 0
-	if (!$query_result->numrows);
-
+	if (!@aggregates);
+    
     my $credential = APT_Geni::GenAuthCredential($context->certificate());
     if (!defined($credential)) {
 	print STDERR "Could not generate credential!\n";
@@ -190,12 +189,12 @@ sub CheckAggregates()
 	print STDERR "$nickname: $error\n";
     };
 
-    while (my ($urn) = $query_result->fetchrow_array()) {
-	my $aggregate = APT_Aggregate->Lookup($urn);
-	if (!defined($aggregate)) {
-	    print STDERR "Could not lookup aggregate: $urn\n";
-	    next;
-	}
+    foreach my $aggregate (@aggregates) {
+	my $urn = $aggregate->urn();
+
+	next
+	    if ($aggregate->noupdate());
+	
 	my $nickname  = $aggregate->nickname();
 	my $authority = APT_Geni::GetAuthority($urn);
 	if (!defined($authority)) {
@@ -547,6 +546,9 @@ while (1) {
     exit(0)
 	if ($oneshot);
     
+    emutil::FlushCaches();
+    GeniUtil::FlushCaches();
+
     sleep($SLEEP_INTERVAL);
 }
 exit(0);

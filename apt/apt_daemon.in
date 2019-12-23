@@ -298,21 +298,15 @@ sub ReportLockdownExpired()
 #
 sub UpdateAggregateGraphs()
 {
-    my $freeblob = {};
+    my $freeblob   = {};
+    my @aggregates = APT_Aggregate->LookupAll();
 
-    my $query_result =
-	DBQueryWarn("select urn from apt_aggregates where noupdate=0");
-
-    return 0
-	if (!$query_result->numrows);
-
-    while (my ($urn) = $query_result->fetchrow_array()) {
-	my $aggregate = APT_Aggregate->Lookup($urn);
-	if (!defined($aggregate)) {
-	    print STDERR "Could not lookup aggregate: $urn\n";
-	    next;
-	}
+    foreach my $aggregate (@aggregates) {
+	my $urn  = $aggregate->urn();
 	my $name = $aggregate->nickname();
+
+	next
+	    if ($aggregate->noupdate());
 
 	#
 	# Load the nodetype info that the portal_monitor gathers.

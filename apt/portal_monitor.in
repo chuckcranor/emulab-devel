@@ -147,6 +147,7 @@ use GeniResponse;
 use GeniCredential;
 use GeniXML;
 use GeniHRN;
+use GeniUtil;
 use POSIX qw(strftime ceil);
 
 if (! ($oneshot || $impotent)) {
@@ -199,19 +200,18 @@ sub CheckAggregates()
 {
     my %aggregates = ();
     my %pingchecks = ();
-    
-    my $query_result =
-	DBQueryWarn("select urn from apt_aggregates ".
-		    "where nomonitor=0 and disabled=0");
-    return 0
-	if (!$query_result->numrows);
+    my @aggregates = APT_Aggregate->LookupAll();
 
-    while (my ($urn) = $query_result->fetchrow_array()) {
-	my $aggregate = APT_Aggregate->Lookup($urn);
-	if (!defined($aggregate)) {
-	    print STDERR "Could not lookup aggregate: $urn\n";
-	    next;
-	}
+    return 0
+	if (!@aggregates);
+    
+    foreach my $aggregate (@aggregates) {
+	my $urn = $aggregate->urn();
+
+	next
+	    if ($aggregate->noupdate() || $aggregate->disabled());
+	
+	#
 	# Convert URN into a boss/ops hostnames for the ping/DNS tests.
 	#
 	my $hrn  = GeniHRN->new($urn);
@@ -822,6 +822,9 @@ while (1) {
 	}
     }
     CheckAggregates();
+
+    emutil::FlushCaches();
+    GeniUtil::FlushCaches();
     
     print "Done at ".
 	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
