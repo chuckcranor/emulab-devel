@@ -1042,6 +1042,10 @@ sub UpdateField($$$@) {
 # "interface/interfaces_state" returns malformed JSON. So we are going to
 # attempt to parse out the pieces we need.
 #
+# XXX as of at least OS10 version 10.4.3.3 they have fixed whatever issue
+# there was with malformed JSON. So we are back to getting JSON formatted
+# data from call.
+#
 # Returns a hash of refs to stats indexed by interface.
 # Returns an empty hash on any error.
 #
@@ -1054,49 +1058,21 @@ sub getAllStats($)
     $self->{CALLOTHER}++;
     my $path = "interfaces-state";
     my $error = "UNKNOWN";
-    my $raw = $self->{ROBJ}->call("GET", $path, undef, undef, \$error, 1);
-    if (!$raw) {
+    my $json = $self->{ROBJ}->call("GET", $path, undef, undef, \$error, 0);
+    if (!$json) {
 	warn "$id: ERROR: Could not read interface state: $error\n";
 	return %stats;
     }
-    my @strs = split(/{"name":/, $raw);
-    my $first = 1;
-    foreach my $str (@strs) {
-	require JSON::PP;
+    if (exists($json->{"ietf-interfaces:interfaces-state"})) {
+	my $ifs = $json->{"ietf-interfaces:interfaces-state"}->{"interface"};
+	foreach my $info (@{$ifs}) {
+	    my $iface = $info->{"name"};
 
-	if ($str !~ /^"([^"]+)"/) {
-	    if (!$first) {
-		warn "$id: could not find interface name!?\n";
-	    }
-	    $first = 0;
-	    next;
-	}
+	    # only care about ethernet/port-channel interfaces
+	    next if (!exists($self->{PORTS}{$iface}));
 
-	# only care about ethernet/port-channel interfaces
-	my $iface = $1;
-	next if (!exists($self->{PORTS}{$iface}));
-
-	# isolate the "statistics" part of the JSON for this interface
-	my $spos = index($str, "\"statistics\":");
-	if ($spos == -1) {
-	    warn "$id: could not find start of stats for '$iface'!?\n";
-	    next;
+	    $stats{$iface} = $info->{"statistics"};
 	}
-	my $statstr = substr($str, $spos+13);
-	my $epos = index($statstr, "}},");
-	if ($spos == -1) {
-	    warn "$id: could not find end of stats for '$iface'!?\n";
-	    next;
-	}
-	$statstr = substr($statstr, 0, $epos+2);
-
-	# now parse what remains
-	my $json = JSON::PP->new->decode($statstr);
-	if (!$json) {
-	    warn "$id: $iface: could not parse stats, ignored\n";
-	    next;
-	}
-	$stats{$iface} = { "statistics" => $json };
     }
     return %stats;
 }
@@ -2250,7 +2226,7 @@ sub getFields($$$) {
 	my $iface = $ifaces[0];
 	my $path = "interfaces-state/interface=". uri_escape($iface). "/statistics";
 	my $json = $self->{ROBJ}->call("GET", $path);
-	$swstats{$iface} = $json;
+	$swstats{$iface} = $json->{"statistics"};
     } else {
 	if (!$self->getPortInfo()) {
 	    warn "$id: ERROR: could not get port info!\n";
@@ -2269,7 +2245,7 @@ sub getFields($$$) {
 	    warn "$id: no stats for $iface, ignoring\n";
 	    next;
 	} else {
-	    $sref = $swstats{$iface}->{"statistics"};
+	    $sref = $swstats{$iface};
 	}
 	my $j = 0;
 	foreach my $oid (@oids) {
@@ -2354,7 +2330,7 @@ sub getStats()
 	my $nportstr = $swport->getOtherEndPort()->toTripleString();
 	$allports{$nportstr} = $swport;
 	if (exists($swstats{$iface})) {
-	    my $sref = $swstats{$iface}->{"statistics"};
+	    my $sref = $swstats{$iface};
 
 	    my @pstats;
 	    foreach my $var (@vars) {
