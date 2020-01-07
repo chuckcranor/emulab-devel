@@ -1313,6 +1313,10 @@ sub SetSites($$$$$$)
 	my $client_id   = GetVirtualId($ref);
 	my $manager_urn = GetManagerId($ref);	
 	my $site_id     = GeniXML::GetJacksSiteId($ref);
+	my $hardtype    = GeniXML::FindFirst("n:hardware_type", $ref);
+	if ($hardtype) {
+	    $hardtype = GeniXML::GetText("name", $hardtype);
+	}
 
 	# A node can be bound in the rspec.
 	if (defined($manager_urn)) {
@@ -1322,20 +1326,13 @@ sub SetSites($$$$$$)
 	    }
 	}
 	# Or there is a site tag, and a site mapping for it.
-	elsif (defined($site_id)) {
-	    if (defined($sitemap)) {
-		my $site_mid = "site:" . $site_id;
-
-		if (!exists($sitemap->{$site_mid})) {
-		    $$perrmsg =
-			"No site mapping for node $client_id ($site_id)";
-		    return -1;
-		}
-		$manager_urn = $sitemap->{$site_mid};
+	elsif (defined($site_id) && defined($sitemap)) {
+	    my $site_mid = "site:" . $site_id;
+	    if (!exists($sitemap->{$site_mid})) {
+		$$perrmsg = "No site mapping for node $client_id ($site_id)";
+		return -1;
 	    }
-	    else {
-		$manager_urn = $default_aggregate_urn;
-	    }
+	    $manager_urn = $sitemap->{$site_mid};
 	    if (!GeniHRN::IsValid($manager_urn)) {
 		$$perrmsg = "$site_id has an invalid manager URN";
 		return 1;
@@ -1345,16 +1342,11 @@ sub SetSites($$$$$$)
 	}
 	else {
 	    if ($MAINSITE) {
-		my $hardtype = GeniXML::FindFirst("n:hardware_type", $ref);
+		#
+		# Try to figure out which aggregate has this type.
+		#
 		if ($hardtype) {
-		    $hardtype = GeniXML::GetText("name", $hardtype);
-		    #
-		    # Try to figure out which aggregate has this type.
-		    #
-		    if ($hardtype) {
-			$manager_urn =
-			    APT_Aggregate->MapTypeToAggregate($hardtype);
-		    }
+		    $manager_urn = APT_Aggregate->MapTypeToAggregate($hardtype);
 		}
 	    }
 	    # Else use the default aggregate.

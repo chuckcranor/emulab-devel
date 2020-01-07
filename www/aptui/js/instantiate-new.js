@@ -2959,6 +2959,10 @@ $(function ()
 	var xmlDoc    = $.parseXML(rspec);
 	var changed   = false;
 
+	if (0) {
+	    return rspec;
+	}
+
 	//console.info("SetClusters", rspec);
 
 	// Find all the nodes, look for types nodes
