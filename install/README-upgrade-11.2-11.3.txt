@@ -8,9 +8,6 @@ Start with the boss node, and then you will repeat the instructions for ops.
 Note that there are a couple of steps below that you only do on the boss or
 the ops node, so pay attention!
 
-[XXX these would benefit from breaking ops out from boss as they are different
-enough that describing them with a lather-rinse-repeat process is confusing...]
-
 A. Things to do in advance of shutting down Emulab.
 
    These first few steps can be done in advance of shutting down your site.
@@ -35,6 +32,13 @@ A. Things to do in advance of shutting down Emulab.
    This will seriously degrade the performance of the upgrade process due
    to the inefficiencies of disk writes when shadows are present, but it is
    worth it to avoid a total screw up.
+
+1b. Make sure you have sufficient disk space!
+
+   I have never run out of disk space during the process below, but if
+   you did, I suspect it could be a mess to recover. If you have at least
+   4GB free on the root filesystem, you should be fine. Otherwise, you
+   might need to make some space.
 
 2. Fetch the new release with freebsd-update.
 
@@ -173,7 +177,18 @@ A. Things to do in advance of shutting down Emulab.
 
 B. Updating the base FreeBSD system
 
-1. If you are on the boss node, shutdown the testbed and some other services
+1. (CloudLab clusters only) Shut the cluster down at the portal.
+
+   Maybe 10-15 minutes before you plan on starting the upgrade, take
+   the cluster offline at the CloudLab portal to allow things to settle:
+
+     # On mothership boss
+     wap manage_aggregate chflag -a <clustername> disabled yes
+
+   Cluster name comes from running "wap manage_aggregate list" on
+   the Mothership boss. Use the "Nickname".
+   
+2. If you are on the boss node, shutdown the testbed and some other services
    right off the bat.
 
    boss:
@@ -187,7 +202,7 @@ B. Updating the base FreeBSD system
      sudo /usr/local/etc/rc.d/apache24 stop
      sudo /usr/local/etc/rc.d/capture stop
    
-2. Before installing the new binaries/libraries/etc., you might want to back
+3. Before installing the new binaries/libraries/etc., you might want to back
    up the files that have Emulab changes just in case. Those files are:
 
      /etc/hosts
@@ -199,13 +214,16 @@ B. Updating the base FreeBSD system
 
      sudo cp -rp /etc /Oetc
 
-3. Install the new system binaries/libraries/etc:
+4. Install the new system binaries/libraries/etc:
 
    If it has been more than a day or so since you did the "upgrade"
-   command back in step A2, then you might consider doing it again.
-   Doing it again basically throws away everything it built up on the
-   previous run and you will have to go through all the manual merging
-   again. Once you are satisfied, do the install of the new binaries:
+   command back in step A2, then you might consider doing it again because
+   new users and group might have been added. Doing it again basically
+   throws away everything it built up on the previous run and you will
+   have to go through all the manual merging again. Or you can try the
+   WORKAROUND below.
+
+   Once you are satisfied, do the install of the new binaries:
 
     sudo /usr/sbin/freebsd-update install
 
@@ -238,7 +256,10 @@ B. Updating the base FreeBSD system
    fsck -y /
    reboot
 
-   NOTE: when rebooting boss, mysqlcheck might take awhile when rebooting.
+   NOTE: when rebooting boss, mysqlcheck might take awhile (5-10 minutes).
+   During this time, it won't say much...^T is your friend. The ops reboot
+   will also take awhile for the ZFS mounts, but it will talk to you while
+   it is doing it.
 
    When it comes back up, you should login and shutdown services that
    restarted, including some that won't work right.
@@ -261,20 +282,20 @@ B. Updating the base FreeBSD system
    NOTE that it will tell you to rebuild all third-party packages and
    run freebsd-update again. We do this later below, so don't worry.
 
-   Now you can compare against the files you saved to make sure all the
-   Emulab changes were propagated; e.g.:
+   WORKAROUND: if you want to ensure that no new users/groups have been
+   added to the system since you did the "freebsd-update fetch", then
+   you can compare the files you stashed off in /Oetc to the ones that
+   have now been updated in /etc:
 
-     sudo diff -r /Oetc /etc
+     sudo diff /Oetc/passwd /etc/passwd
+     sudo diff /Oetc/group /etc/group
 
-   Of course, this will show you every change made by the update as well,
-   so you might just want to focus on the files listed in B2 above. When
-   you are happy:
-
-     sudo rm -rf /Oetc
+   If there are difference, you will need to manually merge the new
+   accounts from /Oetc to /etc.
 
    LATE BREAKING NEWS: we have noticed that the changes to the password
    file (adding user _ypldap and changing "games" homedir) don't seem
-   to be reflected, like the .db files didn't get properly recreated.
+   to be reflected due to the .db files not get properly recreated.
    (If "echo ~games" shows "/usr/games" instead of "/"). Remake the DB
    files to be certain:
 
@@ -286,7 +307,27 @@ B. Updating the base FreeBSD system
 
      pw: user 'foo' disappeared during update
 
-4. (Utah only) Apply Emulab patches to select system utilities.
+   In general, if you are paranoid you can now compare against the files
+   you saved to make sure all the Emulab changes were propagated; e.g.:
+
+     sudo diff -r /Oetc /etc
+
+   Of course, this will show you every change made by the update as well,
+   so you might just want to focus on the files listed in B2 above.
+
+   Watch our for files that have appeared and disappeared as well:
+
+     sudo diff -r /Oetc /etc | grep '^Only'
+
+   If you are happy you can removed /Oetc, but I would keep it around
+   for a few days/weeks in case something comes up.
+
+   RANDOM: to avoid complaints from syslog about "unknown priority name"
+   you need to create a missing directory:
+
+     sudo mkdir /usr/local/etc/syslog.d
+
+5. (Utah only) Apply Emulab patches to select system utilities.
 
    We have patched a couple of system utilities to better handle the
    large number of users, groups and filesystem mounts that the Emulab
@@ -330,7 +371,7 @@ B. Updating the base FreeBSD system
      sudo make obj
      sudo make all install
 
-5. How did that work out for ya?
+6. How did that work out for ya?
 
    If all went well, skip to C (Updating ports/packages).
 
@@ -350,6 +391,10 @@ C. Updating ports/packages
 
 0. If you forgot to save off your package info back in A4, or it has been
    awhile, then you might want to go back and do that now.
+
+   You may also want to back up config files for third-party packages:
+
+      sudo cp -rp /usr/local/etc /usr/local/Oetc
 
 1. Modify your /etc/pkg/Emulab.conf file, replacing "11.2" with "11.3" in
    the "url" line:
@@ -376,7 +421,9 @@ C. Updating ports/packages
       sudo ln -sf /usr/local/bin/python2.7 /usr/local/bin/python
 
    Note that as the 11.3 install, we should now be doing this automatically
-   in the install of the Emulab metaports. But check to make sure.
+   in the install of the Emulab metaports. But check to make sure:
+
+      ls -laL /usr/bin/perl /usr/local/bin/python
 
    REALLY, REALLY IMPORTANT PART 2: Because perl changed, you will need
    to make sure that the event library SWIG-generated perl module is rebuilt,
@@ -389,7 +436,11 @@ C. Updating ports/packages
    doesn't behave like ipmitool expects as of commit 6dec83ff on
    Sat Jul 25 13:15:41 2015. Anyway, you will need to relace the standard
    ipmitool install with the "emulab-ipmitool-old-1.8.15_1" package from
-   the emulab repository:
+   the emulab repository, unless you already had it installed. Do:
+
+     pkg info | grep ipmi
+
+   and if it shows the "-old" version is installed, you are okay. Otherwise:
 
      sudo pkg unlock ipmitool
      sudo pkg delete ipmitool
@@ -405,12 +456,14 @@ C. Updating ports/packages
 
      # both boss and ops
      sudo pkg delete python2-2_3
+     sudo ln -sf /usr/local/bin/python2.7 /usr/local/bin/python
 
      # boss ONLY
-     sudo pkg delete mod_php56 py27-m2crypto
+     sudo pkg delete mod_php56 py27-m2crypto swig
 
      # ops ONLY
      sudo pkg delete mysql57-server mysql57-client py27-MySQLdb
+     sudo rm /usr/local/etc/rc.d/1.mysql*
 
    It seems like pkg will not upgrade packages of the same version
    when the version number has not changed. This makes sense at some level,
@@ -472,12 +525,21 @@ LoadModule php5_module        libexec/apache24/libphp5.so
    and attempt to reinstall them with "pkg install". Note that just because
    they are old that doesn't mean they need to be reinstalled.
 
+   This is a point at which you might want to check dependencies:
+
+     pkg check -Ba
+     pkg check -da
+
+   and security:
+   
+     pkg audit -F
+
 6. Update your /etc/make.conf file in the event that you need to build a
    port from source in the future. Make sure your DEFAULT_VERSION line(s)
    look like:
 
-   DEFAULT_VERSIONS=perl5=5.26 python=2.7 php=5.6 mysql=5.7 apache=2.4 tcltk=8.6
-   DEFAULT_VERSIONS+=ssl=base
+  DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
+  DEFAULT_VERSIONS+=ssl=base
 
 D. Repeat steps B and C for ops.
 
@@ -520,6 +582,10 @@ E. Update Emulab software
       sudo /usr/local/etc/rc.d/2.mysql-server.sh start
       sudo gmake all boss-install 
 
+      # boss random: this file may be leftover from an elabinelab origin;
+      # it should not be here (it SHOULD exist on ops)
+      sudo rm /usr/local/etc/rc.d/ctrlnode.sh
+
    The reason for the ops install is that, while boss-install updates
    most of the ops binaries/libraries via NFS, there are some that it
    doesn't. So by doing a separate build/install on ops, you are
@@ -552,6 +618,14 @@ E. Update Emulab software
    event schedulers from boss:
 
    sudo /usr/testbed/sbin/eventsys_start
+
+6. (CloudLab clusters only) Reenable the cluster at the portal.
+
+     # On mothership boss
+     wap manage_aggregate chflag -a <clustername> disabled no
+
+   Cluster name comes from running "wap manage_aggregate list" on
+   the Mothership boss. Use the "Nickname".
 
 F. Update the MFSes
 
