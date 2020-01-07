@@ -434,7 +434,11 @@ C. Updating ports/packages
    doesn't behave like ipmitool expects as of commit 6dec83ff on
    Sat Jul 25 13:15:41 2015. Anyway, you will need to relace the standard
    ipmitool install with the "emulab-ipmitool-old-1.8.15_1" package from
-   the emulab repository:
+   the emulab repository, unless you already had it installed. Do:
+
+     pkg info | grep ipmi
+
+   and if it shows the "-old" version is installed, you are okay. Otherwise:
 
      sudo pkg unlock ipmitool
      sudo pkg delete ipmitool
@@ -540,8 +544,8 @@ LoadModule php5_module        libexec/apache24/libphp5.so
    port from source in the future. Make sure your DEFAULT_VERSION line(s)
    look like:
 
-   DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
-   DEFAULT_VERSIONS+=ssl=base
+  DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
+  DEFAULT_VERSIONS+=ssl=base
 
 D. Repeat steps B and C for ops.
 
