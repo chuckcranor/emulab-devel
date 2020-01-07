@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2019 University of Utah and the Flux Group.
+# Copyright (c) 2005-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -147,6 +147,17 @@ sub ExtensionsEmailAddress($)
 	    $self->isCloud() ? "portal-extensions\@cloudlab.us" :
 	    $self->isPNet() ? "portal-extensions\@phantomnet.org" :
 	    $self->isPowder() ? "portal-extensions\@powderwireless.net" :
+	    $TBOPS);
+}
+
+sub ReservationsEmailAddress($)
+{
+    my ($self) = @_;
+
+    return ($self->isAPT() ? "portal-reservations\@aptlab.net" :
+	    $self->isCloud() ? "portal-reservations\@cloudlab.us" :
+	    $self->isPNet() ? "portal-reservations\@phantomnet.org" :
+	    $self->isPowder() ? "portal-reservations\@powderwireless.net" :
 	    $TBOPS);
 }
 

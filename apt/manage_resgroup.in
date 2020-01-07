@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -783,7 +783,7 @@ sub DoGroupReserve()
 		my $this_email = $this_user->email();
 		my $url        = $brand->wwwBase() . "/list-resgroups.php";
     
-		$brand->SendEmail($brand->ExtensionsEmailAddress(),
+		$brand->SendEmail($brand->ReservationsEmailAddress(),
 			  "Pending reservation group request needs approval",
 			  "A reservation group request was made by $this_uid, ".
 			  "but it needs approval.".
