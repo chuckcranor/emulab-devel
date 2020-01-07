@@ -672,6 +672,12 @@ if ($getimage) {
 	    # Make the image believe we are its Mama. 
 	    $image->ConvertToLocal() == 0 or
 		fatal("Could not convert to a local image!");
+
+	    # Set the creator URN so it does not look like a Classic image.
+	    my $creator = User->Lookup($image->creator_idx());
+	    if (defined($creator)) {
+		$image->Update({'creator_urn' => $creator->nonlocalurn()});
+	    }
 	    # Tell the IMS about this new image. If this fails, the daemon
 	    # will take care of it. 
 	    system("$POSTIMAGEINFO -d " . $image->imageid());
