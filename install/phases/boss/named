@@ -94,6 +94,9 @@ sub Install($$$)
 			   "     ${USERNODE}:/etc/resolv.conf");
 	};
 	Phase "copying2", "Copying resolv.conf over to fs", sub {
+	    if ($DISABLE_EXPORTS_SETUP) {
+		PhaseSkip("FS node is not managed by boss");
+	    }
 	    if ($USERNODE eq $FSNODE) {
 		PhaseSkip("FS node is ops node");
 	    }
