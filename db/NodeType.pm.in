@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2019 University of Utah and the Flux Group.
+# Copyright (c) 2005-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -458,6 +458,9 @@ sub isblackbox($;$) {
 }
 sub required_license($;$) {
     return GetAttribute($_[0], "required_license", $_[1]);
+}
+sub requires_frequency_reservation($;$) {
+    return GetAttribute($_[0], "requires_frequency_reservation", $_[1]);
 }
 sub control_interface($;$) { return control_iface($_[0], $_[1]); }
 

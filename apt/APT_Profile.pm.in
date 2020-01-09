@@ -1710,6 +1710,69 @@ sub CheckSpectrum($$$$$$)
     if (&$check($spectrum)) {
 	return 1;
     }
+    return 0
+	if (@$spectrum);
+
+    #
+    # Some node types require that we have spectrum reserved in order to
+    # use them (mimo), cause there is no monitoring. This is a bit of a
+    # bandaid to force the user to tell us what they are doing. Of course,
+    # the user can do anything they like once we let them have the node.
+    #
+    my $rspec = GeniXML::Parse($xml);
+    if (! defined($rspec)) {
+	$$pmsg = "CheckSpectrum: Could not parse rspec";
+	return -1;
+    }
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $manager_urn  = GetManagerId($ref);
+	my $component_id = GeniXML::GetNodeId($ref);
+	my $hardtype;
+
+	next
+	    if ($manager_urn ne $MYURN);
+
+	if ($component_id && $component_id ne "*") {
+	    my $node_id = $component_id;
+		
+	    if (GeniHRN::IsValid($component_id)) {
+		my $hrn = GeniHRN->new($component_id);
+		if (! ($hrn && $hrn->IsNode())) {
+		    $$pmsg = "Not a valid component ID: $component_id";
+		    return 1;
+		}
+		$node_id = $hrn->id();
+	    }
+	    my $node = Node->Lookup($node_id);
+	    if ($node) {
+		# Set this so we check for a type restriction below,
+		# since user probably did not set a hardware type.
+		$hardtype = $node->type();
+	    }
+	}
+	if (!$hardtype) {
+	    $hardtype = GeniXML::FindFirst("n:hardware_type", $ref);
+	    if ($hardtype) {
+		$hardtype = GeniXML::GetText("name", $hardtype);
+	    }
+	}
+	next
+	    if (!$hardtype);
+
+	#
+	# Look up the type, do not worry if we do not have it, this is
+	# just a hack.
+	#
+	my $nodetype = NodeType->Lookup($hardtype);
+	next
+	    if (! $nodetype);
+
+	if ($nodetype->requires_frequency_reservation()) {
+	    $$pmsg = "CheckSpectrum: Hardware type $hardtype requires ".
+		"that you specify what frequencies you will be using";
+	    return 1;
+	}
+    }
     return 0;
 }
 
@@ -1723,7 +1786,7 @@ sub GetSpectrum($$$)
 
     my $rspec = GeniXML::Parse($xml);
     if (! defined($rspec)) {
-	$$perrmsg = "GetSpectrum: Could not parse rspec\n";
+	$$perrmsg = "GetSpectrum: Could not parse rspec";
 	return -1;
     }
 
