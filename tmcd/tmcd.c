@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2019 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2020 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -2185,9 +2185,14 @@ COMMAND_PROTOTYPE(doifconfig)
 			 * MTU:
 			 *   "9000" if using jumbo frames,
 			 *   "" otherwise (use client default)
+			 *
+			 * Note that >=50Gbps always use jumbo frames.
+			 * There are no backward compat issues to worry
+			 * about for these.
 			 */
-			if (allowjumboframes && atoi(speed) >= 10000 &&
-			    row[12] && atoi(row[12]) > 0)
+			if (atoi(speed) >= 50000 ||
+			    (allowjumboframes && atoi(speed) >= 10000 &&
+			     row[12] && atoi(row[12]) > 0))
 				mtu = "9000";
 
 			/*
@@ -2435,9 +2440,14 @@ COMMAND_PROTOTYPE(doifconfig)
 			 * do it if absolutely positively necessary:
 			 * if we support using jumbo frames and
 			 * if the interface speed is at least 10Gbps.
+			 *
+			 * XXX we also always set jumbo frames for 50Gb
+			 * and above.
 			 */
-			if (vers >= 44 && allowjumboframes &&
-			    atoi(row[2]) >= 10000) {
+			if (atoi(row[2]) >= 50000)
+				mtu= "9000";
+			else if (vers >= 44 && allowjumboframes &&
+				 atoi(row[2]) >= 10000) {
 				MYSQL_RES *res2;
 				MYSQL_ROW row2;
 				res2 = mydb_query("select max(vls.capval) "
@@ -2708,7 +2718,9 @@ COMMAND_PROTOTYPE(doifconfig)
 			 */
 			if (vers >= 44) {
 				char *mtu = "";
-				if (allowjumboframes) {
+				if (row[12] && atoi(row[12]) >= 50000)
+					mtu = "9000";
+				else if (allowjumboframes) {
 					if (row[13] && atoi(row[13]) > 0 &&
 					    row[12] && atoi(row[12]) >= 10000)
 						mtu = "9000";
