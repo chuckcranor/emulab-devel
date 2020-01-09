@@ -43,6 +43,7 @@ sub usage()
 my $optlist    = "qsh:m:f:";
 my $quiet      = 0;
 my $silent     = 0;
+my $sflag      = "";
 my $newleader_uid;
 my $message;
 my $mfilename;
@@ -148,6 +149,7 @@ if (defined($options{"q"})) {
 }
 if (defined($options{"s"})) {
     $silent = 1;
+    $sflag = "-s";  # allow us to propagate silent flag (e.g. to modgroups)
 }
 if (defined($options{"m"})) {
     $message = $options{"m"};
@@ -316,8 +318,8 @@ if ($ELABINELAB || !$wasactive) {
 	fatal("$MKACCT $leader_uid failed!");
 }
 
-system("$MODGROUPS -a $pid:$pid:project_root $leader_uid") == 0 or
-    fatal("$MODGROUPS -a $pid:$pid:project_root $leader_uid failed!");
+system("$MODGROUPS $sflag -a $pid:$pid:project_root $leader_uid") == 0 or
+    fatal("$MODGROUPS $sflag -a $pid:$pid:project_root $leader_uid failed!");
 
 $EUID = 0;
 
