@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -9397,6 +9397,9 @@ my $allowedRanges = {
 	[3300,  3600],
 	[3700,  4200],
 	[5650,  7125],
+    ],
+    "Sprint" => [
+	[2496,  2506],
     ],
 };
 sub CheckSpectrum($)
