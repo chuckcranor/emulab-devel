@@ -51,6 +51,7 @@ my $TB           = "@prefix@";
 my $OPSVM_ENABLE = @OPSVM_ENABLE@;
 my $WITHZFS      = @WITHZFS@;
 my $CHFLAGS      = "/bin/chflags";
+my $DISABLEFLAGS = "@DISABLE_FSNODE_CHFLAGS@";
 
 #
 # Store up the list of caches to flush
@@ -1112,7 +1113,7 @@ sub SetNoDelete($)
     if ($OPSVM_ENABLE) {
 	if (`uname -r` =~ /^(\d+)\.(\d+)/) {
 	    if ($1 >= 10) {
-		$useflags = 1;
+		$useflags = 1 unless ($DISABLEFLAGS);
 	    }
 	}
     }
@@ -1138,7 +1139,7 @@ sub ClearNoDelete($)
     if ($OPSVM_ENABLE) {
 	if (`uname -r` =~ /^(\d+)\.(\d+)/) {
 	    if ($1 >= 10) {
-		$useflags = 1;
+		$useflags = 1 unless ($DISABLEFLAGS);
 	    }
 	}
     }

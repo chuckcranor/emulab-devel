@@ -445,8 +445,14 @@ VPUBADDR_BITLEN=none
 #			This has obvious security implications and YOU REALLY
 #			SHOULD NOT DO THIS. 
 #
+# DISABLE_FSNODE_CHFLAGS Do not try and protect critical emulab directories
+#			 from accidental removal with "chflags sunlink" ...
+#			 This is for NFS servers that don't support chflags
+#			 (example: a netapp NAS box).
+#
 DISABLE_NAMED_SETUP=0
 DISABLE_EXPORTS_SETUP=0
+DISABLE_FSNODE_CHFLAGS=0
 
 #
 # Frisbee address/port parameters (and yes meant to spell it that way).
