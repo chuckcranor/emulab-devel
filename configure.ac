@@ -1505,7 +1505,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	install/load-descriptors install/dump-descriptors \
 	install/newnode_sshkeys/GNUmakefile install/smb.conf.head \
         install/clrhouse-install install/genirack/GNUmakefile \
-	install/powder-fixed/GNUmakefile \
+	install/powder-fixed/GNUmakefile install/powder-bus/GNUmakefile \
 	install/libinstall.pm install/update-install install/update-testbed \
 	mote/GNUmakefile mote/tbuisp mote/tbsgmotepower mote/newmote \
 	mote/sgtools/GNUmakefile \

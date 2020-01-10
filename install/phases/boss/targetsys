@@ -22,6 +22,8 @@ my $CONFIGVARS   = "$PREFIX/configvars.txt";
 my $TARGETSYSVARS= "$PREFIX/etc/targetsys/variables.txt";
 my $ELABPASSWORD = "$PREFIX/etc/elabman.pswd";
 my $SWITCHPSWD   = "$PREFIX/etc/switch.pswd";
+my $DEFSEXTRA    = "$TOP_SRCDIR/install/$TARGETSYS_DIR/defs-extra";
+
 my $PORTSRC      = "http://www.emulab.net/downloads/FreeBSD-".
     "${FBSD_MAJOR}.${FBSD_MINOR}" . "-ports.tar.gz";
 my $ZZZ		 = "/usr/local/etc/rc.d/zzz-inelab.sh";
@@ -302,6 +304,20 @@ sub Install($$$)
 			   "   -e 's/^EXTERNAL_NTPS/#EXTERNAL_NTPS/' ".
 			   "   > $NEWDEFSFILE");
 	};
+	#
+	# Extra defs.
+	#
+	if (-e $DEFSEXTRA) {
+	    Phase "defsextra", "Adding extra stuff to the defs file", sub {
+		DoneIfEdited($NEWDEFSFILE);
+		
+		my $EXTRA = `/bin/cat $DEFSEXTRA`;
+		PhaseFail("Cannot read extra defs from file")
+		    if ($?);
+		
+		AppendToFileFatal($NEWDEFSFILE, $EXTRA);
+	    };
+	}
 
 	#
 	# Build and install software without ELABINELAB defined.

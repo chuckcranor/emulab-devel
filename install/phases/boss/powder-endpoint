@@ -27,18 +27,33 @@ my $TARGETSYS_DIR= lc($TARGETSYS_TARGET);
 
 my $RUNCAPTURE   = "$TOP_SRCDIR/install/$TARGETSYS_DIR/run_capture";
 my $SQLSTUFF     = "$TOP_SRCDIR/install/$TARGETSYS_DIR/tbdb.sql";
-my %TYPEFILES    = ("nuc8650" =>
-		        "$TOP_SRCDIR/install/$TARGETSYS_DIR/nuc8650.xml",
-		    "nuc8559" =>
-		        "$TOP_SRCDIR/install/$TARGETSYS_DIR/nuc8559.xml",
-		    "iris030" =>
-		    "$TOP_SRCDIR/install/$TARGETSYS_DIR/iris030.xml");
+my %TYPEFILES;
+my $DEFAULTTYPE;
 my $TELEGRAFCONF = "/usr/local/etc/telegraf.conf";
 my $TELEGRAFPSWD = "$PREFIX/etc/targetsys/telegraf.pswd";
 
-# Placeholder. 
-my %HOSTNAMES = (
-);
+if ($TARGETSYS_TARGET eq "POWDER-FIXED") {
+    %TYPEFILES  = ("nuc8650" =>
+		      "$TOP_SRCDIR/install/$TARGETSYS_DIR/nuc8650.xml",
+		   "nuc8559" =>
+		      "$TOP_SRCDIR/install/$TARGETSYS_DIR/nuc8559.xml",
+		   "iris030" =>
+		      "$TOP_SRCDIR/install/$TARGETSYS_DIR/iris030.xml");
+    $DEFAULTTYPE = "nuc8650";
+}
+elsif ($TARGETSYS_TARGET eq "POWDER-BUS") {
+    %TYPEFILES  = ("e300-8d" =>
+		      "$TOP_SRCDIR/install/$TARGETSYS_DIR/e300-8d.xml");
+    $DEFAULTTYPE = "e300-8d";
+}
+# Placeholders. 
+my %HOSTNAMES  = ();
+my %INTERFACES = ();
+
+if ($TARGETSYS_TARGET eq "POWDER-BUS") {
+    %INTERFACES  = ("xn1"     => "inet 10.10.11.2 netmask 255.255.255.0");
+    %HOSTNAMES   = ("sdrn300" => "10.10.11.4");
+}
 
 sub Install($$$)
 {
@@ -102,6 +117,35 @@ sub Install($$$)
 	};
 
 	#
+	# On the buses, we have to munge the DHCPD fragment, to insert the
+	# the correct MAC address for the N310.
+	#
+	if ($TARGETSYS_TARGET eq "POWDER-BUS") {
+	    my $FRAGFILE = "$PREFIX/etc/dhcpd.conf.frag.one";
+	    my $MACFILE  = "$PREFIX/etc/targetsys/sdr.txt";
+	    my $MAC;
+
+	    Phase "sdr", "Fixing up DHCP fragment file.", sub {
+		Phase "mac", "Picking up sdrn300 MAC", sub {
+		    PhaseFail("MAC file does not exist")
+			if (! -e $MACFILE);
+
+		    $MAC = `/bin/cat $MACFILE`;
+		    PhaseFail("Cannot read MAC from file")
+			if ($?);
+		    chomp($MAC);
+		};
+		Phase "sed", "Running fragment through sed", sub {
+		    PhaseFail("Fragment file does not exist")
+			if (! -e $FRAGFILE);
+
+		    ExecQuietFatal("sed -i.bak -e ".
+				   "'s;00:11:22:33:44:55;$MAC;' $FRAGFILE");
+		};
+	    };
+	}
+	
+	#
 	# Install and localize the telegraf configuration.
 	#
 	Phase "telegraf", "Setting up telegraf", sub {
@@ -111,7 +155,7 @@ sub Install($$$)
 		$ENV{"ASSUME_ALWAYS_YES"} = "true";
 		ExecQuietFatal("pkg install telegraf");
 	    };
-	    my $config = "$TOP_OBJDIR/install/$TARGETSYS_DIR/telegraf.conf";
+	    my $config = "$TOP_OBJDIR/install/powder-fixed/telegraf.conf";
 	    my $password;
 
 	    Phase "password", "Picking up telegraf password", sub {
@@ -124,8 +168,10 @@ sub Install($$$)
 		
 		chomp($password);
 	    };
-	    
+
 	    Phase "conf", "Generating telegraf config file", sub {
+		ExecQuietFatal("cd $TOP_OBJDIR/install/powder-fixed; ".
+			       "$GMAKE telegraf.conf");
 		ExecQuietFatal(" cat $config | sed ".
 			       "   -e 's/__powderpassword__/$password/' ".
 			       "   > $TELEGRAFCONF");
@@ -232,7 +278,7 @@ sub Install($$$)
 	# Default image type.
 	Phase "typelist", "Setting default typelist", sub {
 	    ExecQuietFatal("$PREFIX/sbin/setsitevar ".
-			   "images/default_typelist nuc8650");
+			   "images/default_typelist $DEFAULTTYPE");
 	};
 	
 	#
@@ -268,7 +314,13 @@ sub Install($$$)
 				       "  $ADDINTERFACE -b 1Gb -I $IP ".
 				       "     -M 255.255.255.248 -e ctrl ".
 				       "     -m $MAC $nodeid eth0");
-		    }; 
+		    };
+		    # The nodes are reservable.
+		    Phase "reserve", "Marking node reservable", sub {
+			DBQueryWarn("update nodes set reservable=1 ".
+				    "where node_id='$nodeid'") or
+			    PhaseFail("marking $nodeid");
+		    };
 		}
 	    }
 	    close(CN);
@@ -286,32 +338,30 @@ sub Install($$$)
 			" values ('$BOSSNODE')") or
 		PhaseFail("inserting tipserver");
 
-	    DBQueryWarn("replace into `tiplines` set ".
-			" tipname='powduino',node_id='powduino',".
-			" server='$BOSSNODE',disabled=0") or 
-		PhaseFail("inserting tipline");
-	};
-	Phase "capture", "Installing capture startup file", sub {
-	    ExecQuietFatal("$GMAKE -C $TOP_OBJDIR/rc.d tipserv-install");
-	};
-	Phase "run_capture", "Installing capture run file", sub {
-	    DoneIfExists("$PREFIX/sbin/run_capture");
-	    ExecQuietFatal("/bin/cp -f $RUNCAPTURE $PREFIX/sbin");
+	    # See below, still up in the air for buses.
+	    if ($TARGETSYS_TARGET eq "POWDER-FIXED") {
+		DBQueryWarn("replace into `tiplines` set ".
+			    " tipname='powduino',node_id='powduino',".
+			    " server='$BOSSNODE',disabled=0") or 
+		    PhaseFail("inserting tipline");
+	    }
 	};
 	Phase "tiplogs", "Creating tiplogs directory", sub {
 	    DoneIfExists("$PREFIX/log/tiplogs");
 	    mkdir "$PREFIX/log/tiplogs", 0755 or
 		PhaseFail("Unable to create tiplogs: $!");
 	};
-	# The nucs are reservable.
-	Phase "reserve", "Marking nucs reservable", sub {
-	    DBQueryWarn("update nodes set reservable=1 ".
-			"where node_id='nuc1'") or
-		PhaseFail("marking nuc1");
-	    DBQueryWarn("update nodes set reservable=1 ".
-			"where node_id='nuc2'") or
-		PhaseFail("marking nuc1");
-	};
+
+	# We do not know how this will be done on a bus, yet.
+	if ($TARGETSYS_TARGET eq "POWDER-FIXED") {
+	    Phase "capture", "Installing capture startup file", sub {
+		ExecQuietFatal("$GMAKE -C $TOP_OBJDIR/rc.d tipserv-install");
+	    };
+	    Phase "run_capture", "Installing capture run file", sub {
+		DoneIfExists("$PREFIX/sbin/run_capture");
+		ExecQuietFatal("/bin/cp -f $RUNCAPTURE $PREFIX/sbin");
+	    };
+	}
 
 	#
 	# Fix NAT rule for ops jail.
@@ -416,6 +466,16 @@ sub Install($$$)
 	    push(@strings, 'telegraf_enable="YES"');
 	    push(@strings, 'telegraf_user="root"');
 
+	    # /etc/rc.conf entries for extra interfaces.
+	    if (keys(%INTERFACES)) {
+		foreach my $iface (keys(%INTERFACES)) {
+		    my $line = $INTERFACES{$iface};
+		    push(@strings, "ifconfig_${iface}=\"$line\"");
+		    push(@ifaces, $iface);
+		}
+		push(@strings,
+		     "network_interfaces=\"\$network_interfaces @ifaces\"");
+	    }
 	    push(@strings,
 		 "ifconfig_xn0=\"inet ". $configvars{"TARGETSYS_BOSSIP"} . 
 		 " netmask " . $configvars{"TARGETSYS_NETMASK"} . " -tso\"");

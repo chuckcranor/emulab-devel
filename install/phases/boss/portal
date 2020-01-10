@@ -10,7 +10,7 @@ use EmulabConstants;
 my $MYURN           = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $GENILIB_REPO    = "https://bitbucket.org/emulab/geni-lib";
 my $GENILIB_SRCDIR  = "$TOP_SRCDIR/../geni-lib";
-my $APACHEPREFIX    = ("$APACHE_VERSION" == "22" ? "apache22" : "apache");
+my $APACHEPREFIX    = ("$APACHE_VERSION" == "24" ? "apache24" : "apache22");
 my $PROFILE_ONEVM   = "$TOP_SRCDIR/install/onevm.xml";
 my $PROFILE_ONEPC   = "$TOP_SRCDIR/install/onepc.xml";
 my $MANAGE_PROFILE  = "$TBROOT/bin/manage_profile";

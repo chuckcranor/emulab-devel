@@ -1,0 +1,56 @@
+Once the VMs are ready, copy the directory mentioned above over to the
+inner boss as /usr/testbed/etc/targetsys. Do NOT put this stuff on the
+inner ops!
+
+	boss> sudo scp -rp ~stoller/powder/systems/XXX
+	         	pcvmXXX-1:/usr/testbed/etc/targetsys
+
+Now we convert the VMs for boot in the target environment:
+
+First ssh (as root) into inner ops:
+
+	ops> cd /usr/testbed/obj/testbed/install
+	ops> script
+	ops> sudo perl emulab-install -b -i ops/targetsys ops
+	ops> sudo perl emulab-install -b -i ops/powder-endpoint ops
+	ops> exit
+
+Now ssh (as root) into the inner boss VM from outer boss: Oh, use the
+"script" command to save the errors.
+
+	boss> cd /usr/testbed/obj/testbed/install
+	boss> script
+	boss> sudo perl emulab-install -b -i boss/targetsys boss
+	boss> cd /users/elabman/emulab-devel/obj/install
+	boss> sudo perl emulab-install -b -i boss/powder-endpoint boss
+	boss> exit
+
+Grab (inner) boss:/usr/testbed/etc/elabman.pswd and save it.
+
+Now we have to shutdown the VMs. Log out of the boss/ops vms, and log
+into the physical host and then:
+
+	vhost-0> sudo /usr/local/etc/emulab/vnodesetup -jh pcvmXXX-1
+	
+After David does his magic and boss boots, need to do:
+
+	boss> wap update_sitevars 
+	boss> wap addservers
+        boss> sudo getcacerts -f
+
+Need to flip the enable bit in the apt_aggregates table.
+
+Copy the defs file to Mothership boss, powder-defs directory.
+
+Need to add these:
+PROTOGENI_NOPORTALEXPIRE=1
+PROTOGENI_PORTALONLY=1
+
+and these:
+
+POWDER_RFMONITOR=1
+POWDER_RFMONITOR_HOST="10.10.10.2"
+
+
+ sort -r -n -t, -k 4 /tmp/mon.out | head -30
+ 
