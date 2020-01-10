@@ -1118,7 +1118,7 @@ SSLCipherSuite ALL:!ADH:!EXPORT:!SSLv2:!RC4:!MD5:!AECDH:+HIGH:+MEDIUM:!LOW
 SSLCertificateFile /usr/local/etc/letsencrypt/live/@USERNODE@/cert.pem
 </IfDefine>
 <IfDefine !LETSENCRYPT>
-SSLCertificateFile /usr/local/etc/apache22/ssl.crt/@USERNODE@.crt
+SSLCertificateFile /usr/local/etc/apache24/ssl.crt/@USERNODE@.crt
 </IfDefine>
 
 #   Server Private Key:
@@ -1131,7 +1131,7 @@ SSLCertificateFile /usr/local/etc/apache22/ssl.crt/@USERNODE@.crt
 SSLCertificateKeyFile /usr/local/etc/letsencrypt/live/@USERNODE@/privkey.pem
 </IfDefine>
 <IfDefine !LETSENCRYPT>
-SSLCertificateKeyFile /usr/local/etc/apache22/ssl.key/@USERNODE@.key
+SSLCertificateKeyFile /usr/local/etc/apache24/ssl.key/@USERNODE@.key
 </IfDefine>
 		      
 #   Server Certificate Chain:
