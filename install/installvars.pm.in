@@ -71,9 +71,10 @@ if ($FBSD_MAJOR > 4) {
 	    $FS_PORT = "emulab-fs-7.1";
 	}
         else {
-	    $BOSS_PORT = "emulab-boss-7.2";
-	    $OPS_PORT = "emulab-ops-7.2";
-	    $FS_PORT = "emulab-fs-7.2";
+	    my $ver = "7.$FBSD_MINOR";
+	    $BOSS_PORT = "emulab-boss-$ver";
+	    $OPS_PORT = "emulab-ops-$ver";
+	    $FS_PORT = "emulab-fs-$ver";
 	}
     } elsif ($FBSD_MAJOR == 10 && $FBSD_MINOR > 2) {
 	$BOSS_PORT = "emulab-boss-6.3";
