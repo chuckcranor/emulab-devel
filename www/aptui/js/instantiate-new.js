@@ -1909,6 +1909,7 @@ $(function ()
 	var html   = "";
 	var bound  = 0;
 	var count  = 0;
+	var ammap  = {};
 	sites = {};
 
 	// No need to do this if not showing selectors.
@@ -1946,6 +1947,7 @@ $(function ()
 		// Bound node, no dropdown will be provided for these
 		// nodes, and if all nodes are bound, no dropdown at all.
 		bound++;
+		ammap[manager] = manager;
 	    }
 	    else if (site.length) {
 		var siteid = $(site).attr("id");
@@ -1965,6 +1967,16 @@ $(function ()
 	    $("#cluster_selector").html("");
 	    // Tell the server not to whine about no aggregate selection.
 	    $("#fully_bound").val("1");
+	    // Need to set the "where" form field so that we pass the
+	    // correct default aggregate to the backend.
+	    if (_.size(ammap) == 1) {
+		var manager = _.keys(ammap).first();
+		var name    = amlist[manager].name;
+		
+		$("#cluster_selector")
+		    .html("<input name='where' type='hidden' " +
+			  "value='" + name + "'>");
+	    }
 	    return;
 	}
 
