@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -133,7 +133,7 @@ sub GetImageData($;$)
     my $key = (GeniHRN::IsValid($token) ? "urn" : "url");
 
     # Do not wait long.
-    my $old_timeout = Genixmlrpc->SetTimeout(10);
+    my $old_timeout = Genixmlrpc->SetTimeout(30);
 
     my $response =
 	Genixmlrpc::CallMethod($IMSURL, undef, "GetImageInfo",
