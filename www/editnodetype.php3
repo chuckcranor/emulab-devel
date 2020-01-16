@@ -243,9 +243,6 @@ function SPITFORM($node_type, $formfields, $attributes, $deletes, $errors)
               <td colspan=2>Type:</td>\n";
     if (isset($new_type)) {
         echo "<td class=left>
-                 <input type=hidden
-                        name=classic
-                        value=1>
                  <input type=text
                         name=\"node_type\"
                         value=\"" . $node_type . "\"
@@ -488,6 +485,7 @@ function SPITFORM($node_type, $formfields, $attributes, $deletes, $errors)
 
     echo "<tr>
               <td colspan=3 align=center>
+                    <input type=hidden name=classic value=1>
                  <b><input type=submit name=submit value=Submit></b>
               </td>
           </tr>\n";
