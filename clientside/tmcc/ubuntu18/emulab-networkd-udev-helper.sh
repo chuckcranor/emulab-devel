@@ -13,6 +13,11 @@ if [ -z "$iface" ]; then
 fi
 
 #
+# If this is a management interface, ignore it.
+#
+((echo "$iface" | grep -qi idrac) || (echo "$iface" | grep -qi ilo)) && exit 0
+
+#
 # NB, if the user has overridden this by some file in
 # /etc/systemd/network, that takes precedence, and this won't be run.
 # We have specific code in emulab-networkd.sh that is run from
