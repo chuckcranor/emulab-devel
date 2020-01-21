@@ -1,13 +1,50 @@
 <div>
   <div class='panel panel-default'>
     <div class='panel-heading'>
+      <div id="ppform-buttons" class="btn-group pull-right hidden">
+	<button class="p-resources btn btn-info btn-xs"
+		style="margin-right: 5px;"
+		data-toggle='popover'
+		data-html='true'
+		data-content="Click to popup a resource availability window.">
+	  Resource Availability</button>
+        <button class="p-defaults btn btn-default btn-xs"
+		data-toggle='popover'
+		data-html='true'
+		data-content="Reset form back to parameter default values.">
+	  Defaults</button>
+        <button class="p-last btn btn-default btn-xs hidden"
+		data-toggle='popover'
+		data-html='true'
+		data-content="Use the same parameters as your last experiment.">
+	  Last</button>
+        <div class="btn-group p-choose hidden" role="group"
+	     data-toggle='popover'
+	     data-html='true'
+	     data-content='Choose from a list of <em>parameter sets</em>
+			   to fill out the form options. You can save
+			   parameter sets from your experiment status page
+			   and from your history listing.'>
+	  <button class="btn btn-default btn-xs dropdown-toggle"
+		  data-toggle='dropdown'>
+	    Choose <span class="caret"></span></button>
+	  <ul class="dropdown-menu">
+	  </ul>
+	</div>
+        <a href="#" class="p-history btn btn-default btn-xs hidden"
+	   data-toggle='popover'
+	   data-html='true'
+	   data-content="Open a new window with a list of all current and past
+			 experiments, to choose an experiment to run again."
+	   target="_blank">
+	  History</a>
+      </div>
+      
       This profile is parameterized; please make your selections below,
       and then click <b>Next</b>.
     </div>
-    <div class='panel-body' style="padding-bottom: 0px;">
-      <div id='ppmodal-body'>
-      </div>
+    <div class='panel-body'>
+      <div id='ppmodal-body'></div>
     </div>
   </div>
 </div>
-
