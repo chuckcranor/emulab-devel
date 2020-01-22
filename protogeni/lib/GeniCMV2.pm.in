@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -3957,6 +3957,10 @@ sub CreateImage($)
 	if (defined($bsname) && !$image->isdataset()) {
 	    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 					"This image is not a dataset");
+	}
+	if (!defined($bsname) && $image->isdataset()) {
+	    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+			"This image is a dataset, maybe a name clash");
 	}
 	if (defined($image->relocate_urn())) {
 	    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
