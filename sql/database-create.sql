@@ -158,6 +158,7 @@ CREATE TABLE `apt_aggregates` (
   `abbreviation` varchar(32) NOT NULL default '',
   `adminonly` tinyint(1) NOT NULL default '0',
   `isfederate` tinyint(1) NOT NULL default '0',
+  `isFE` tinyint(1) NOT NULL default '0',
   `ismobile` tinyint(1) NOT NULL default '0',
   `disabled` tinyint(1) NOT NULL default '0',
   `noupdate` tinyint(1) NOT NULL default '0',
@@ -173,6 +174,8 @@ CREATE TABLE `apt_aggregates` (
   `precalcmaxext` tinyint(1) NOT NULL default '0',
   `portals` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `canuse_feature` varchar(64) default NULL,
+  `latitude` float(8,5) default NULL,
+  `longitude` float(8,5) default NULL,
   `required_license` int(11) default NULL,
   `jsondata` text,
   PRIMARY KEY  (`urn`)
