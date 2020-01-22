@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -331,7 +331,10 @@ sub CheckAggregates()
 		    print STDERR "Bad or missing type at $nickname: $node_id\n";
 		    next;
 		}
-		$reservable_nodes->{$node_id} = $type;
+		$reservable_nodes->{$node_id} = {
+		    "type"      => $type,
+		    "available" => 0,
+		};
 	    }
 	}
 	
@@ -345,6 +348,15 @@ sub CheckAggregates()
 	foreach my $ref (GeniXML::FindNodes("n:node",
 					    $manifest)->get_nodelist()) {
 	    my $node_id     = GeniXML::GetNodeId($ref);
+	    my $available   = GeniXML::IsAvailable($ref);
+
+	    if (GeniHRN::IsValid($node_id)) {
+		my $hrn = GeniHRN->new($node_id);
+		$node_id = $hrn->id();
+	    }
+	    if (exists($reservable_nodes->{$node_id}) && $available) {
+		$reservable_nodes->{$node_id}->{'available'} = 1;
+	    }
 	    
 	    #
 	    # Need to search the sliver types for raw-pc.
@@ -356,7 +368,7 @@ sub CheckAggregates()
 		    if ($name eq "raw-pc") {
 			$pcount++;
 			$pavail++
-			    if (GeniXML::IsAvailable($ref));
+			    if ($available);
 
 			foreach my $htype (FindNodes("n:hardware_type",
 						     $ref)->get_nodelist()) {
@@ -393,7 +405,7 @@ sub CheckAggregates()
 			    }
 			    $type_count{$hname} += 1;
 			    $type_avail{$hname} += 1
-				if (GeniXML::IsAvailable($ref));
+				if ($available);
 			}
 		    }
 		    elsif ($name eq "emulab-xen") {
@@ -407,7 +419,7 @@ sub CheckAggregates()
 
 			# And they are available.
 			next
-			    if (!GeniXML::IsAvailable($ref));
+			    if (!$available);
 			    
 			#
 			# We need the pcvm type to find the slots.
@@ -488,14 +500,19 @@ sub CheckAggregates()
 		}
 	    }
 	    foreach my $node_id (keys(%{$reservable_nodes})) {
-		my $type = $reservable_nodes->{$node_id};
+		my $type  = $reservable_nodes->{$node_id}->{'type'};
+		my $avail = $reservable_nodes->{$node_id}->{'available'};
 		if ($impotent || $debug) {
-		    print "$node_id ($type) is reservable\n";
+		    print "$node_id ($type) is reservable";
+		    if ($avail) {
+			print " and available";
+		    }
+		    print "\n";
 		    next
 			if ($impotent);
 		}
 		DBQueryWarn("replace into apt_aggregate_reservable_nodes ".
-			    " set updated=now(),".
+			    " set updated=now(),available='$avail', ".
 			    "  urn='$urn',node_id='$node_id',type='$type'");
 	    }
 	}
