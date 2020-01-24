@@ -15,11 +15,11 @@
 <attribute name="attr_string_architecture">  <value>x86_64</value></attribute>
 <attribute name="attr_integer_bios_waittime">  <value>60</value></attribute>
 <attribute name="attr_integer_bootdisk_unit">  <value>0</value></attribute>
-<attribute name="attr_string_control_interface"> <value>eth0</value></attribute>
+<attribute name="attr_string_control_interface"> <value>eth2</value></attribute>
 <attribute name="attr_integer_control_network">  <value>2</value></attribute>
 <attribute name="attr_integer_delay_capacity">  <value>0</value></attribute>
 <attribute name="attr_float_disksize">  <value>480.0</value></attribute>
-<attribute name="attr_string_disktype">  <value>nvd</value></attribute>
+<attribute name="attr_string_disktype">  <value>ada</value></attribute>
 <attribute name="attr_integer_frequency">  <value>2200</value></attribute>
 <attribute name="attr_boolean_imageable">  <value>1</value></attribute>
 <attribute name="attr_integer_max_interfaces">  <value>2</value></attribute>
@@ -37,7 +37,7 @@
 <attribute name="attr_integer_simnode_capacity">  <value>0</value></attribute>
 <attribute name="attr_integer_trivlink_maxspeed">  <value>10000000</value></attribute>
 <attribute name="attr_integer_virtnode_capacity">  <value>0</value></attribute>
-<attribute name="attr_string_console_type">  <value>vga</value></attribute>
+<attribute name="attr_string_console_type">  <value>sio2</value></attribute>
 <attribute name="attr_string_adminmfs_osid">  <value>emulab-ops,FREEBSD-MFS</value></attribute>
 <attribute name="attr_string_default_osid">  <value>emulab-ops,UBUNTU18-64-STD</value></attribute>
 <attribute name="attr_string_delay_osid">  <value>emulab-ops,FBSD103-64-STD</value></attribute>

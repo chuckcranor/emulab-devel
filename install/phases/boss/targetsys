@@ -22,6 +22,7 @@ my $CONFIGVARS   = "$PREFIX/configvars.txt";
 my $TARGETSYSVARS= "$PREFIX/etc/targetsys/variables.txt";
 my $ELABPASSWORD = "$PREFIX/etc/elabman.pswd";
 my $SWITCHPSWD   = "$PREFIX/etc/switch.pswd";
+my $IPMIPSWD     = "$PREFIX/etc/ipmi.pswd";
 my $DEFSEXTRA    = "$TOP_SRCDIR/install/$TARGETSYS_DIR/defs-extra";
 
 my $PORTSRC      = "http://www.emulab.net/downloads/FreeBSD-".
@@ -124,6 +125,17 @@ sub Install($$$)
 	    CreateFileFatal($SWITCHPSWD,
 			    $configvars{'SWITCH_PASSWORD'});
 	    ExecQuietFatal("$CHMOD 400 $SWITCHPSWD");
+	}
+
+	#
+	# This is the password for the IPMI
+	#
+	if (exists($configvars{'IPMI_PASSWORD'}) &&
+	    $configvars{'IPMI_PASSWORD'} ne "" &&
+	    ! -e $IPMIPSWD) {
+	    CreateFileFatal($IPMIPSWD,
+			    $configvars{'IPMI_PASSWORD'});
+	    ExecQuietFatal("$CHMOD 400 $IPMIPSWD");
 	}
 
 	#

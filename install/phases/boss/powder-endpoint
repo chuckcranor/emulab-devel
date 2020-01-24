@@ -20,9 +20,14 @@ use Image;
 my $CONFIGVARS   = "$PREFIX/configvars.txt";
 my $TARGETSYSVARS= "$PREFIX/etc/targetsys/variables.txt";
 my $NODEFILE     = "$PREFIX/etc/targetsys/nodes.txt";
+my $RADIOFILE    = "$PREFIX/etc/targetsys/radios.txt";
+my $IFACEFILE    = "$PREFIX/etc/targetsys/interfaces.txt";
+my $WIREFILE     = "$PREFIX/etc/targetsys/wires.txt";
 my $ADDNODETYPE  = "$PREFIX/bin/editnodetype";
 my $ADDNODE      = "$PREFIX/sbin/addnode";
 my $ADDINTERFACE = "$PREFIX/sbin/addinterface";
+my $ADDWIRE      = "$PREFIX/sbin/addwire";
+my $ADDMNGIFACE  = "$PREFIX/sbin/addmanagementiface";
 my $TARGETSYS_DIR= lc($TARGETSYS_TARGET);
 
 my $RUNCAPTURE   = "$TOP_SRCDIR/install/$TARGETSYS_DIR/run_capture";
@@ -31,6 +36,7 @@ my %TYPEFILES;
 my $DEFAULTTYPE;
 my $TELEGRAFCONF = "/usr/local/etc/telegraf.conf";
 my $TELEGRAFPSWD = "$PREFIX/etc/targetsys/telegraf.pswd";
+my $IPMIPSWD     = "$PREFIX/etc/ipmi.pswd";
 
 if ($TARGETSYS_TARGET eq "POWDER-FIXED") {
     %TYPEFILES  = ("nuc8650" =>
@@ -43,7 +49,9 @@ if ($TARGETSYS_TARGET eq "POWDER-FIXED") {
 }
 elsif ($TARGETSYS_TARGET eq "POWDER-BUS") {
     %TYPEFILES  = ("e300-8d" =>
-		      "$TOP_SRCDIR/install/$TARGETSYS_DIR/e300-8d.xml");
+		      "$TOP_SRCDIR/install/$TARGETSYS_DIR/e300-8d.xml",
+		   "n300" =>
+		      "$TOP_SRCDIR/install/$TARGETSYS_DIR/n300.xml");
     $DEFAULTTYPE = "e300-8d";
 }
 # Placeholders. 
@@ -117,34 +125,17 @@ sub Install($$$)
 	};
 
 	#
-	# On the buses, we have to munge the DHCPD fragment, to insert the
-	# the correct MAC address for the N310.
+	# Need ipmi tools on the Buses
 	#
 	if ($TARGETSYS_TARGET eq "POWDER-BUS") {
-	    my $FRAGFILE = "$PREFIX/etc/dhcpd.conf.frag.one";
-	    my $MACFILE  = "$PREFIX/etc/targetsys/sdr.txt";
-	    my $MAC;
-
-	    Phase "sdr", "Fixing up DHCP fragment file.", sub {
-		Phase "mac", "Picking up sdrn300 MAC", sub {
-		    PhaseFail("MAC file does not exist")
-			if (! -e $MACFILE);
-
-		    $MAC = `/bin/cat $MACFILE`;
-		    PhaseFail("Cannot read MAC from file")
-			if ($?);
-		    chomp($MAC);
-		};
-		Phase "sed", "Running fragment through sed", sub {
-		    PhaseFail("Fragment file does not exist")
-			if (! -e $FRAGFILE);
-
-		    ExecQuietFatal("sed -i.bak -e ".
-				   "'s;00:11:22:33:44:55;$MAC;' $FRAGFILE");
-		};
+	    Phase "tipserv", "Installing emulab-tipserv package", sub {
+		DoneIfPackageInstalled("emulab-tipserv", 0);
+		# Oh, this is clever.
+		$ENV{"ASSUME_ALWAYS_YES"} = "true";
+		ExecQuietFatal("pkg install -r Emulab emulab-tipserv");
 	    };
 	}
-	
+
 	#
 	# Install and localize the telegraf configuration.
 	#
@@ -280,7 +271,32 @@ sub Install($$$)
 	    ExecQuietFatal("$PREFIX/sbin/setsitevar ".
 			   "images/default_typelist $DEFAULTTYPE");
 	};
-	
+
+	# We need tiplines and tipserver entries.
+	Phase "tip", "Adding tiplines and tipservers to DB", sub {
+	    DBQueryWarn("replace into tipservers ".
+			" values ('$BOSSNODE')") or
+		PhaseFail("inserting tipserver");
+
+	    DBQueryWarn("replace into `tiplines` set ".
+			" tipname='powduino',node_id='powduino',".
+			" server='$BOSSNODE',disabled=0") or 
+		PhaseFail("inserting tipline");
+
+	    # IPMI for the bus experimental node.
+	    if ($TARGETSYS_TARGET eq "POWDER-BUS") {
+		DBQueryWarn("replace into `tiplines` set ".
+			    " tipname='ed1',node_id='ed1',".
+			    " server='$BOSSNODE',disabled=0") or 
+		    PhaseFail("inserting tipline");
+	    }
+	};
+	Phase "tiplogs", "Creating tiplogs directory", sub {
+	    DoneIfExists("$PREFIX/log/tiplogs");
+	    mkdir "$PREFIX/log/tiplogs", 0755 or
+		PhaseFail("Unable to create tiplogs: $!");
+	};
+
 	#
 	# Add the nodes to the DB.
 	#
@@ -292,29 +308,54 @@ sub Install($$$)
 		or PhaseFail("Could not open $NODEFILE: $!");
 	    
 	    while (<NODE>) {
-		if ($_ =~ /^([-\w]+)\s*([-\w]+)\s*([-\w]+)\s*([\.\d]+)$/) {
-		    my $nodeid = $1;
-		    my $type   = $2;
-		    my $MAC    = $3;
-		    my $IP     = $4;
+		chomp($_);
+		next
+		    if ($_ =~ /^#/);
+		
+		my ($nodeid,$type,$MAC,$IP,$MNGMAC,$MNGIP) = split(",", $_);
+		if ($nodeid) {
+		    my $nodetype = NodeType->Lookup($type);
+		    PhaseFail("No such type $type")
+			if (!defined($nodetype));
+		    my $ctrliface = $nodetype->control_interface();
 
 		    Phase $nodeid, "Adding $nodeid", sub {
 			PhaseSkip("already done")
 			    if (Node->Lookup($nodeid));
 			ExecQuietFatal("$SUDO -u $PROTOUSER $WAP ".
 				       "  $ADDNODE -t $type $nodeid");
-		    }; 
-		    Phase "$nodeid interface", "Adding $nodeid interface", sub {
-			my $node = Node->Lookup($nodeid);
-			PhaseFail("lookup failure")
-			    if (!defined($node));
+		    };
+		    my $node = Node->Lookup($nodeid);
+		    PhaseFail("lookup failure")
+			if (!defined($node));
+		    
+		    Phase "${nodeid}_iface", "Adding control iface", sub {
 			PhaseSkip("already done")
 			    if (Interface->LookupControl($node));
 			ExecQuietFatal("$SUDO -u $PROTOUSER $WAP ".
 				       "  $ADDINTERFACE -b 1Gb -I $IP ".
 				       "     -M 255.255.255.248 -e ctrl ".
-				       "     -m $MAC $nodeid eth0");
+				       "     -m $MAC $nodeid $ctrliface");
 		    };
+		    if ($MNGMAC) {
+			Phase "${nodeid}_iface", "Adding mngmnt iface", sub {
+			    PhaseSkip("already done")
+				if (Interface->LookupManagement($node));
+
+			    PhaseFail("Password file does not exist")
+				if (! -e $IPMIPSWD);
+
+			    my $ipmipswd = `/bin/cat $IPMIPSWD`;
+			    PhaseFail("Cannot read password from file")
+				if ($?);
+			    chomp($ipmipswd);
+			
+			    ExecQuietFatal("$SUDO -u $PROTOUSER $WAP ".
+					   "  $ADDMNGIFACE -t ipmi20 " .
+					   "-a pswd -T $BOSSNODE $nodeid ".
+					   "$MNGMAC $MNGIP ADMIN $ipmipswd");
+			};
+		    }
 		    # The nodes are reservable.
 		    Phase "reserve", "Marking node reservable", sub {
 			DBQueryWarn("update nodes set reservable=1 ".
@@ -332,36 +373,114 @@ sub Install($$$)
 	    };
 	    PhaseSucceed("Nodes Done");
 	};
-	# We need tiplines and tipserver entries.
-	Phase "tip", "Adding tiplines and tipservers to DB", sub {
-	    DBQueryWarn("replace into tipservers ".
-			" values ('$BOSSNODE')") or
-		PhaseFail("inserting tipserver");
 
-	    # See below, still up in the air for buses.
-	    if ($TARGETSYS_TARGET eq "POWDER-FIXED") {
-		DBQueryWarn("replace into `tiplines` set ".
-			    " tipname='powduino',node_id='powduino',".
-			    " server='$BOSSNODE',disabled=0") or 
-		    PhaseFail("inserting tipline");
+	# Add radios.
+	Phase "radios", "Adding radios to the database", sub {
+	    PhaseSkip("No radios to add")
+		if (! -e $RADIOFILE);
+	    
+	    open(RADIO, $RADIOFILE)
+		or PhaseFail("Could not open $RADIOFILE: $!");
+	    
+	    while (<RADIO>) {
+		chomp($_);
+		next
+		    if ($_ =~ /^#/);
+		
+		my ($nodeid,$type) = split(",", $_);
+		PhaseFail("Could not parse $RADIOFILE")
+		    if (! (defined($nodeid) && defined($type)));
+		
+		Phase $nodeid, "Adding $nodeid", sub {
+		    PhaseSkip("already done")
+			if (Node->Lookup($nodeid));
+		    ExecQuietFatal("$SUDO -u $PROTOUSER $WAP ".
+				   "  $ADDNODE -t $type $nodeid");
+		};
+		my $node = Node->Lookup($nodeid);
+		PhaseFail("lookup failure for $nodeid")
+		    if (!defined($node));
 	    }
-	};
-	Phase "tiplogs", "Creating tiplogs directory", sub {
-	    DoneIfExists("$PREFIX/log/tiplogs");
-	    mkdir "$PREFIX/log/tiplogs", 0755 or
-		PhaseFail("Unable to create tiplogs: $!");
+	    close(RADIO);
 	};
 
+	# Add additional interfaces
+	Phase "interfaces", "Adding interfaces to the database", sub {
+	    PhaseSkip("No interfaces to add")
+		if (! -e $IFACEFILE);
+	    
+	    open(IFACE, $IFACEFILE)
+		or PhaseFail("Could not open $IFACEFILE: $!");
+	    
+	    while (<IFACE>) {
+		chomp($_);
+		next
+		    if ($_ =~ /^#/);
+		
+		my ($nodeid,$iface,$MAC,$IP,$speed,$role) = split(",", $_);
+		PhaseFail("Could not parse $IFACEFILE")
+		    if (! (defined($nodeid) && defined($role)));
+
+		my $node = Node->Lookup($nodeid);
+		PhaseFail("lookup failure for $nodeid")
+		    if (!defined($node));
+		
+		Phase $nodeid, "Adding ${nodeid}:${iface}", sub {
+		    PhaseSkip("already done")
+			if (Interface->LookupByIface($node, $iface));
+
+		    my $ipopts = "";
+		    if ($IP ne "") {
+			$ipopts = "-I $IP -M 255.255.255.0";
+		    }
+		    ExecQuietFatal("$SUDO -u $PROTOUSER $WAP ".
+				       "  $ADDINTERFACE -b $speed -e $role ".
+				       "   $ipopts -m $MAC $nodeid $iface");
+		};
+		PhaseFail("Lookup failure")
+		    if (!Interface->LookupByIface($node, $iface));
+	    }
+	    close(IFACE);
+	};
+	
+	# Add additional wires
+	Phase "wires", "Adding wires to the database", sub {
+	    PhaseSkip("No wires to add")
+		if (! -e $WIREFILE);
+	    
+	    open(WIRE, $WIREFILE)
+		or PhaseFail("Could not open $WIREFILE: $!");
+	    
+	    while (<WIRE>) {
+		chomp($_);
+		next
+		    if ($_ =~ /^#/);
+
+		my ($nodeid1,$iface1,$card1,$port1,
+		    $nodeid2,$iface2,$card2,$port2,$type) = split(",", $_);
+		PhaseFail("Could not parse $WIREFILE")
+		    if (! (defined($nodeid1) && defined($type)));
+
+		Phase "wire", "Adding wire ${nodeid1}:${nodeid2}", sub {
+		    PhaseSkip("already done")
+			if (Interface::Wire->LookupByIface($nodeid1, $iface1));
+		    ExecQuietFatal("$SUDO -u $PROTOUSER $WAP ".
+				   "  $ADDWIRE -t $type ".
+				   "    ${nodeid1}:${iface1} $card1,$port1 ".
+				   "    ${nodeid2}:${iface2} $card2,$port2");
+		};
+	    }
+	    close(WIRE);
+	};
+	
 	# We do not know how this will be done on a bus, yet.
-	if ($TARGETSYS_TARGET eq "POWDER-FIXED") {
-	    Phase "capture", "Installing capture startup file", sub {
-		ExecQuietFatal("$GMAKE -C $TOP_OBJDIR/rc.d tipserv-install");
-	    };
-	    Phase "run_capture", "Installing capture run file", sub {
-		DoneIfExists("$PREFIX/sbin/run_capture");
-		ExecQuietFatal("/bin/cp -f $RUNCAPTURE $PREFIX/sbin");
-	    };
-	}
+	Phase "capture", "Installing capture startup file", sub {
+	    ExecQuietFatal("$GMAKE -C $TOP_OBJDIR/rc.d tipserv-install");
+	};
+	Phase "run_capture", "Installing capture run file", sub {
+	    DoneIfExists("$PREFIX/sbin/run_capture");
+	    ExecQuietFatal("/bin/cp -f $RUNCAPTURE $PREFIX/sbin");
+	};
 
 	#
 	# Fix NAT rule for ops jail.
