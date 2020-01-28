@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -198,6 +198,7 @@ sub DoShow()
     print "Disabled:        " . ($aggregate->disabled() ? "Yes" : "No") . "\n";
     print "Admin:           " . ($aggregate->adminonly() ? "Yes" : "No") . "\n";
     print "Federate:        " . ($aggregate->isfederate() ? "Yes" : "No") . "\n";
+    print "FE               " . ($aggregate->isFE() ? "Yes" : "No") . "\n";
     print "Mobile:          " . ($aggregate->ismobile() ? "Yes" : "No") . "\n";
     print "NoUpdate:        " . ($aggregate->noupdate() ? "Yes" : "No") . "\n";
     print "NoMonitor:       " . ($aggregate->nomonitor() ? "Yes" : "No") . "\n";
@@ -209,6 +210,8 @@ sub DoShow()
     print "PanicPowerOff:   " . ($aggregate->panicpoweroff() ? "Yes" : "No")."\n";
     print "PreCalcMaxExt:   " . ($aggregate->precalcmaxext() ? "Yes" : "No")."\n";
     print "Portals:         " . $aggregate->portals() . "\n";
+    print "Latitude:        " . $aggregate->latitude() . "\n";
+    print "Longitude:       " . $aggregate->longitude() . "\n";
     print "Use Feature:     " . ($aggregate->canuse_feature() || "") . "\n";
     print "Status:          " . $aggregate->status() . "\n";
     return 0;
@@ -249,6 +252,16 @@ sub DoFlags()
 	};
 	/^federate$/ && do {
 	    $aggregate->Update({"isfederate" => $onoff}) == 0
+		or fatal("Could not update flag");
+	    last;
+	};
+	/^fe$/ && do {
+	    $aggregate->Update({"isFE" => $onoff}) == 0
+		or fatal("Could not update flag");
+	    last;
+	};
+	/^mobile$/ && do {
+	    $aggregate->Update({"ismobile" => $onoff}) == 0
 		or fatal("Could not update flag");
 	    last;
 	};
