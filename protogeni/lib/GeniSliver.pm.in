@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -982,7 +982,8 @@ sub AnnotateManifest($)
 	$imageable = GeniXML::AddElement("imageable",
 					 $services, $GeniXML::EMULAB_NS);
     }
-    if ($node->imageable() && !$node->IsTainted()) {
+    # The imageable test does not generally work for virtnodes.
+    if (($node->isvirtnode() || $node->imageable()) && !$node->IsTainted()) {
 	GeniXML::SetText("available", $imageable, "true");
     }
     else {
