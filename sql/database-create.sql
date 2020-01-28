@@ -15,6 +15,59 @@
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
+
+DROP TABLE IF EXISTS `apt_mobile_aggregates`;
+CREATE TABLE `apt_mobile_aggregates` (
+  `urn` varchar(128) NOT NULL default '',
+  `type` enum('bus') default NULL,
+  PRIMARY KEY  (`urn`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `apt_mobile_buses`;
+CREATE TABLE `apt_mobile_buses` (
+  `urn` varchar(128) NOT NULL default '',
+  `busid` int(8) NOT NULL default '0',
+  `last_ping` datetime default NULL,
+  `last_report` datetime default NULL,
+  `routeid` smallint(5) default NULL,
+  `routedescription` tinytext,
+  `route_changed` datetime default NULL,
+  `latitude` float(8,5) NOT NULL default '0.00000',
+  `longitude` float(8,5) NOT NULL default '0.00000',
+  `speed` float(8,2) NOT NULL default '0.00',
+  `heading` smallint(5) NOT NULL default '0',
+  `location_stamp` datetime default NULL,
+  PRIMARY KEY  (`urn`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `apt_mobile_bus_route_change_history`;
+CREATE TABLE `apt_mobile_bus_route_change_history` (
+  `idx` int(10) unsigned NOT NULL auto_increment,
+  `urn` varchar(128) NOT NULL default '',
+  `busid` int(8) NOT NULL default '0',
+  `routeid` smallint(5) default NULL,
+  `routedescription` tinytext,
+  `route_changed` datetime default NULL,
+  PRIMARY KEY (`busid`,`idx`),
+  KEY `urn` (`urn`,`idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `apt_mobile_bus_routes`;
+CREATE TABLE `apt_mobile_bus_routes` (
+  `routeid` smallint(5) NOT NULL default '0',
+  `description` tinytext,
+  PRIMARY KEY  (`routeid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `apt_instance_bus_routes`;
+CREATE TABLE `apt_instance_bus_routes` (
+  `uuid` varchar(40) NOT NULL default '',
+  `name` varchar(16) default NULL,
+  `routeid` smallint(5) NOT NULL default '0',
+  `routedescription` tinytext,
+  PRIMARY KEY (`uuid`,`routeid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
 --
 -- Table structure for table `address_ranges`
 --
@@ -74,6 +127,23 @@ CREATE TABLE `addr_pool_history` (
   KEY `stamp` (`stamp`),
   KEY `addr` (`addr`),
   KEY `addrstamp` (`addr`,`stamp`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_aggregate_radioinfo`
+--
+
+DROP TABLE IF EXISTS `apt_aggregate_radioinfo`;
+CREATE TABLE `apt_aggregate_radioinfo` (
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `node_id` varchar(32) NOT NULL default '',
+  `location` varchar(64) NOT NULL default '',
+  `installation_type` enum('FE','ME','BS','unknown') NOT NULL default 'unknown',
+  `radio_type` tinytext,
+  `transmit_frequencies` text,
+  `receive_frequencies` text,
+  `notes` text,
+  PRIMARY KEY  (`aggregate_urn`,`node_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
