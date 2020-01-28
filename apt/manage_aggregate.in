@@ -39,7 +39,7 @@ sub usage()
     print STDERR "Usage: manage_aggregate list\n";
     print STDERR "       manage_aggregate show [-a <agg>] ... \n";
     print STDERR "       manage_aggregate chflag [-a <agg>] <flag> yes|no\n";
-    print STDERR "       manage_aggregate ping [-a <agg>]\n";
+    print STDERR "       manage_aggregate ping [-a <agg>] [-s]\n";
     print STDERR "       manage_aggregate portals [-a <agg>] add <portal> \n";
     print STDERR "       manage_aggregate portals [-a <agg>] rem <portal> \n";
     print STDERR "       manage_aggregate feature [-a <agg>] set <feature> \n";
@@ -320,11 +320,15 @@ sub DoFlags()
 #
 sub DoPing()
 {
-    my $optlist = "a:";
+    my $optlist = "a:s";
+    my $fastrpc = 1;
     
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
+    }
+    if (defined($options{"s"})) {
+	$fastrpc = 0;
     }
     usage()
 	if (@ARGV);
@@ -335,7 +339,7 @@ sub DoPing()
 	    if (!defined($aggregate));
     }
     my $error;
-    if ($aggregate->CheckStatus(\$error, 1)) {
+    if ($aggregate->CheckStatus(\$error, $fastrpc)) {
 	print STDERR $error . "\n";
 	exit(1);
     }
