@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2019 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -84,6 +84,7 @@ class Aggregate
     function abbreviation() { return $this->field('abbreviation'); }
     function weburl()	    { return $this->field('weburl'); }
     function ismobile()     { return $this->field('ismobile'); }
+    function isFE()         { return $this->field('isFE'); }
     function disabled()     { return $this->field('disabled'); }
     function adminonly()    { return $this->field('adminonly'); }
     function has_datasets() { return $this->field('has_datasets'); }
@@ -94,6 +95,8 @@ class Aggregate
     function precalcmaxext(){ return $this->field('precalcmaxext'); }
     function portals()      { return $this->field('portals'); }
     function canuse_feature(){ return $this->field('canuse_feature'); }
+    function latitude()      { return $this->field('latitude'); }
+    function longitude()     { return $this->field('longitude'); }
 
     # accessors for the status info.
     function sfield($name) {
@@ -111,17 +114,6 @@ class Aggregate
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
 	return !is_null($this->aggregate);
-    }
-
-    # Powder Portal, is an aggregate an FE.
-    function isFE() {
-        global $PORTAL_GENESIS;
-        
-        if ($PORTAL_GENESIS == "powder" &&
-            preg_match("/powderwireless\.net/", $this->urn())) {
-            return 1;
-        }
-        return 0;
     }
 
     # Powder Portal, Emulab is not a "federate", all others are.
@@ -426,13 +418,13 @@ class Aggregate
     #
     # Reservable nodes.
     #
-    function ReservableNodes()
+    function ReservableNodes($extended = 0)
     {
         $result = array();
         $urn    = $this->urn();
 
         $query_result =
-            DBQueryFatal("select node_id,type from ".
+            DBQueryFatal("select * from ".
                          "  apt_aggregate_reservable_nodes ".
                          "where urn='$urn'");
 
@@ -440,7 +432,16 @@ class Aggregate
             return null;
         }
         while ($row = mysql_fetch_array($query_result)) {
-            $result[$row["node_id"]] = $row["type"];
+            if ($extended) {
+                $blob = array("urn"       => $row["urn"],
+                              "type"      => $row["type"],
+                              "updated"   => DateStringGMT($row["updated"]),
+                              "available" => intval($row["available"]));
+                $result[$row["node_id"]] = $blob;
+            }
+            else {
+                $result[$row["node_id"]] = $row["type"];
+            }
         }
         return $result;
     }

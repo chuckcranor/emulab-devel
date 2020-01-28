@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -615,6 +615,13 @@ $routing = array("geni-login" =>
                                                      "Do_StartShutdown",
                                                  "Status" =>
                                                      "Do_ShutdownStatus")),
+                 "map-support" =>
+			array("file"    => "map-support.ajax",
+			      "guest"   => true,
+			      "methods" => array("GetFixedEndpoints" =>
+                                                     "Do_GetFixedEndpoints",
+                                                 "GetBaseStations" =>
+                                                     "Do_GetBaseStations")),
 );
 
 #

@@ -1,0 +1,174 @@
+<?php
+#
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+chdir("..");
+include_once("webtask.php");
+include_once("aggregate_defs.php");
+chdir("apt");
+
+#
+# Return Fixed Endpoint info.
+#
+function Do_GetFixedEndpoints()
+{
+    global $this_user, $ajax_args;
+    $blob = array();
+    $aggregates = Aggregate::AllAggregatesList();
+    
+    foreach ($aggregates as $urn => $aggregate) {
+        if (! $aggregate->isFE() || $aggregate->disabled()) {
+            continue;
+        }
+        #
+        # Grab the radio info for this one.
+        #
+        $radioinfo = null;
+        
+        $query_result =
+            DBQueryFatal("select * from apt_aggregate_radioinfo ".
+                         "where aggregate_urn='$urn'");
+        if (mysql_num_rows($query_result)) {
+            $radioinfo = array();
+            
+            while ($row = mysql_fetch_array($query_result)) {
+                $radioinfo[$row["node_id"]] = $row;
+            }
+        }
+        $blob[$urn] =
+            array("urn"       => $urn,
+                  "latitude"  => $aggregate->latitude(),
+                  "longitude" => $aggregate->longitude(),
+                  "nickname"  => $aggregate->nickname(),
+                  "name"      => $aggregate->name(),
+                  "typelist"  => $typelist,
+                  "radioinfo" => $radioinfo,
+                  # Ask for extended info.
+                  "reservable_nodes" => $aggregate->ReservableNodes(true));
+    }
+    SPITAJAX_RESPONSE($blob);
+}
+
+#
+# Return Base Station info. All BSs are attached to the MotherShip.
+#
+function Do_GetBaseStations()
+{
+    global $this_user, $ajax_args;
+    $aggregate = Aggregate::ThisAggregate();
+    if (!$aggregate) {
+	SPITAJAX_ERROR(-1, "No aggregate info");
+	return -1;
+    }
+    $urn = $aggregate->urn();
+    $reservable_nodes = $aggregate->ReservableNodes(true);
+
+    $query_result =
+        DBQueryFatal("select * from apt_aggregate_radioinfo ".
+                     "where aggregate_urn='$urn'");
+    if (!mysql_num_rows($query_result)) {
+        SPITAJAX_RESPONSE(null);
+        return 0;
+    }
+    #
+    # This needs to go into the DB at some point.
+    #
+    $baseStations = array(
+        "Medical Tower" =>
+        array("name"      => "Medical Tower",
+              "latitude"  => 40.7674008,
+              "longitude" => -111.8311815,
+              "type"      => "Rooftop Base Station",
+              "street"    => "https://goo.gl/maps/jt5VnRKTAE2AEJmA9",
+              "radioinfo" => null),
+        "Honors" =>
+        array("name"      => "Honors",
+              "latitude"  => 40.7644037,
+              "longitude" => -111.8369526,
+              "type"      => "Rooftop Base Station",
+              "street"    => "https://goo.gl/maps/QR3s1VcjYRuVMEXv7",
+              "radioinfo" => null),
+        "Dentistry" =>
+        array("name"      => "Dentistry",
+              "latitude"  => 40.7571518,
+              "longitude" => -111.8314963,
+              "type"      => "Rooftop Base Station",
+              "street"    => "https://goo.gl/maps/CtW3afez7zPhUtK99",
+              "radioinfo" => null),
+        "Behavioral" =>
+        array("name"      => "Behavioral",
+              "latitude"  => 40.7613391,
+              "longitude" => -111.8462915,
+              "type"      => "Rooftop Base Station",
+              "street"    => "https://goo.gl/maps/t6NynuYL8LqT4HmW9",
+              "radioinfo" => null),
+        "Friendship" =>
+        array("name"      => "Friendship",
+              "latitude"  => 40.7580745,
+              "longitude" => -111.8532534,
+              "type"      => "Rooftop Base Station",
+              "street"    => "https://goo.gl/maps/wXhbuhB6Hn2VU93z5",
+              "radioinfo" => null),
+        "Browning" =>
+        array("name"      => "Browning",
+              "latitude"  => 40.7662732,
+              "longitude" => -111.8477366,
+              "type"      => "Rooftop Base Station",
+              "street"    => "https://goo.gl/maps/chCab9EvmkMGNmAZ7",
+              "radioinfo" => null),
+        "MEB" =>
+        array("name"      => "MEB",
+              "latitude"  => 40.7687871,
+              "longitude" => -111.8458272,
+              "type"      => "Rooftop Base Station",
+              "street"    => "https://goo.gl/maps/c6oUDd5qAV5xK7uk9",
+              "radioinfo" => null),
+        "USTAR" =>
+        array("name"      => "USTAR",
+              "latitude"  => 40.7689874,
+              "longitude" => -111.8416694,
+              "type"      => "Rooftop Base Station",
+              "street"    => "https://goo.gl/maps/8k8MU1KkVsAqzb3H7",
+              "radioinfo" => null),
+    );
+    while ($row = mysql_fetch_array($query_result)) {
+        $location = $row["location"];
+        $node_id  = $row["node_id"];
+        
+        if (isset($reservable_nodes[$node_id])) {
+            $row["available"] = $reservable_nodes[$node_id]["available"];
+        }
+        if ($baseStations[$location]["radioinfo"] == null) {
+            $baseStations[$location]["radioinfo"] = array();
+        }
+        $radioinfo = $baseStations[$location]["radioinfo"];
+        $radioinfo[$row["node_id"]] = $row;
+        $baseStations[$location]["radioinfo"] = $radioinfo;
+    }
+    SPITAJAX_RESPONSE($baseStations);
+}
+
+
+# Local Variables:
+# mode:php
+# End:
+?>
