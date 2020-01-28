@@ -225,13 +225,13 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
         echo "</script>";
     }
 
+    if ($embedded) {
+	goto embed;
+    }
     echo "
     <!-- Container for body, needed for sticky footer -->
     <div id='wrap'>\n";
 
-    if ($embedded) {
-	goto embed;
-    }
     if ($nomenu) {
         return;
     }
@@ -685,7 +685,6 @@ function GET_ANNOUNCEMENTS($user, $update = true)
 $PAGEFOOTER_FUNCTION = function($ignored = NULL) {
     global $PORTAL_HELPFORUM, $PORTAL_NSFNUMBER, $embedded, $PORTAL_TEMPLATES;
 
-    echo "</div>";
     if (!$ignored) {
         echo "</div>\n";
     }
@@ -693,6 +692,7 @@ $PAGEFOOTER_FUNCTION = function($ignored = NULL) {
         if ($PORTAL_NSFNUMBER) {
             SpitNSFModal();
         }
+        echo "</div>\n";
         echo "
           <!--- Footer -->
           <div>
@@ -714,10 +714,10 @@ $PAGEFOOTER_FUNCTION = function($ignored = NULL) {
         echo "&copy; 2020
               <a href='http://www.utah.edu' target='_blank'>
                  The University of Utah</a>
-            </div>
+               </div>
            </div>
           </div>
-          <!-- Placed at the end of the document so the pages load faster -->\n";
+         <!-- Placed at the end of the document so the pages load faster -->\n";
     }
     EchoTemplateList($PORTAL_TEMPLATES);
     echo "</body></html>\n";
