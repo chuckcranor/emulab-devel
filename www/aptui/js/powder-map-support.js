@@ -64,11 +64,12 @@ window.ShowPowderMap = (function()
 	    "esri/widgets/Home",
 	    "esri/widgets/Expand",
             "esri/widgets/DistanceMeasurement2D",
+            "esri/widgets/ScaleBar",
 	    "esri/core/watchUtils",
   	    "dojo/domReady!"
 	], function (number, WebMap, MapView, graphic,
 		     graphicslayer, LayerList,
-		     Home, Expand, Distance2D, watchutils) {
+		     Home, Expand, Distance2D, ScaleBar, watchutils) {
 	    Graphic       = graphic;
 	    GraphicsLayer = graphicslayer;
 	    WatchUtils    = watchutils;
@@ -128,6 +129,12 @@ window.ShowPowderMap = (function()
 		    view: View
 		});
 		View.ui.add(homeWidget, "top-left");
+
+		var scalebar = new ScaleBar({
+		    view: View,
+		    unit: "dual",
+		});
+		View.ui.add(scalebar, "bottom-left");
 
 		// Add a distance widget button.
 		var button =
