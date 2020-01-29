@@ -3,6 +3,7 @@ window.ShowPowderMap = (function()
 {
     'use strict';
 
+    var templates      = APT_OPTIONS.fetchTemplateList(['powder-filters']);
     //var PowderMap      = "ede4026643ec40f7b73ab12d6c01b1da";
     var PowderMap      = "6bb70a0d4abf42fa9efb159db1f169f6";
     var Container      = null;
@@ -12,6 +13,7 @@ window.ShowPowderMap = (function()
     var Graphic        = null;
     var GraphicsLayer  = null;
     var WatchUtils     = null;
+    var ResInfo        = null;
     var LOCATION_URL   = "https://www.uofubus.com/Services/JSONPRelay.svc/" +
 	"GetMapVehiclePoints?ApiKey=ride1791";
     var ROUTES_URL     = "https://www.uofubus.com/Services/JSONPRelay.svc/" +
@@ -59,13 +61,32 @@ window.ShowPowderMap = (function()
 	    "esri/Graphic",
 	    "esri/layers/GraphicsLayer",
 	    "esri/widgets/LayerList",
+	    "esri/widgets/Home",
+	    "esri/widgets/Expand",
+            "esri/widgets/DistanceMeasurement2D",
 	    "esri/core/watchUtils",
   	    "dojo/domReady!"
 	], function (number, WebMap, MapView, graphic,
-		     graphicslayer, LayerList, watchutils) {
+		     graphicslayer, LayerList,
+		     Home, Expand, Distance2D, watchutils) {
 	    Graphic       = graphic;
 	    GraphicsLayer = graphicslayer;
 	    WatchUtils    = watchutils;
+
+	    // Need this later for filtering
+	    if (Options.showreserved) {
+		var callback = function (json) {
+		    console.info("reserve info", json);
+		    if (json.code) {
+			console.info("Could not get resinfo: " + json.value);
+			return;
+		    }
+		    ResInfo = json.value;
+		};
+		sup.CallServerMethod(null, "resgroup",
+				     "ListReservationGroups",
+				     {"useronly" : true}, callback);
+	    }
 	    
 	    Map = new WebMap({
 		basemap: "gray",
@@ -74,17 +95,19 @@ window.ShowPowderMap = (function()
 		    id: PowderMap
 		}
             });
+            View = new MapView({
+		map: Map,
+		zoom: 15,
+		// Slightly shifted to the left to avoid being covered
+		// by the filter/layer widgets.
+		center: [-111.84000, 40.763451],
+		container: Container,
+	    });
 	    // Do not show any of the the base layers in the Legend.
 	    Map.load().then(function () {
 		Map.allLayers.forEach(function (layer) {
 		    layer.listMode = "hide";
 		});
-	    });
-
-            View = new MapView({
-		map: Map,
-		zoom: 15,
-		container: Container,
 	    });
 	    View.when(function() {
 		if (Options.showlegend) {
@@ -92,9 +115,64 @@ window.ShowPowderMap = (function()
 		    var layerList = new LayerList({
 			view: View
 		    });
+		    var expand = new Expand({
+			expandIconClass: "esri-icon-layer-list",
+			view: View,
+			content: layerList,
+			expanded: true
+		    });
 		    // Add widget to the top right corner of the view
-		    View.ui.add(layerList, "top-right");
+		    View.ui.add(expand, "top-right");
 		}
+		var homeWidget = new Home({
+		    view: View
+		});
+		View.ui.add(homeWidget, "top-left");
+
+		// Add a distance widget button.
+		var button =
+		    $('<button class="action-button esri-icon-measure-line" '+
+		      '        id="distanceButton" '+
+		      '   title="Measure distance between two or more points" '+
+		      '        type="button"></button>');
+		View.ui.add($(button).get(0), "top-left");
+
+		var distanceWidget = null;
+
+		$('#distanceButton').click(function (event) {
+		    console.info("distance");
+
+		    if (distanceWidget) {
+			View.ui.remove(distanceWidget);
+			distanceWidget.destroy();			
+			distanceWidget = null;
+		    }
+		    else {
+			distanceWidget = new Distance2D({
+			    view: View,
+			    unit: "yards",
+			});
+			console.info(distanceWidget);
+
+			// skip the initial 'new measurement' button
+			distanceWidget.viewModel.newMeasurement();
+			
+			// Show the actual widget under the button.
+			View.ui.add(distanceWidget, "top-left");
+
+			// Very silly, there is no API to change the
+			// instructions, which are incomplete.
+			window.setTimeout(function() {
+			    var text =
+				$(".esri-distance-measurement-2d__hint-text")
+				.text();
+
+			    text += ". Double click to end measurement.";
+			    $(".esri-distance-measurement-2d__hint-text")
+				.text(text);
+			}, 25);
+		    }
+		});
 
 		// Base layers
 		DrawCoverageArea();
@@ -103,7 +181,17 @@ window.ShowPowderMap = (function()
 		DrawBaseStations();
 
 		if (Options.showfilter) {
-		    SetupFilteringOptions();
+		    var wrapper = document.createElement("div");
+		    $(wrapper).html(templates['powder-filters']);
+		    $(wrapper).css("width", "230px");
+
+		    var expand = new Expand({
+			expandIconClass: "esri-icon-filter",
+			view: View,
+			content: wrapper,
+			expanded: true
+		    });
+		    View.ui.add(expand, "bottom-right");
 		}
 
 		// And now we can get the route data.
@@ -112,31 +200,33 @@ window.ShowPowderMap = (function()
 		}
 	    });
 
-	    View.on("click", function (event) {
-		//console.info("clicked", event);
-		var x = event.x;
-		var y = event.y;
-		var bus = null;
+	    if (Options.showmobile) {
+		View.on("click", function (event) {
+		    //console.info("clicked", event);
+		    var x = event.x;
+		    var y = event.y;
+		    var bus = null;
 
-		_.each(routeList, function (route) {
-		    _.each(route.buses, function (b) {
-			//console.info("bus", b);
-			var point = View.toScreen(b.pointGraphic.geometry);
-			var cx    = point.x;
-			var cy    = point.y;
+		    _.each(routeList, function (route) {
+			_.each(route.buses, function (b) {
+			    //console.info("bus", b);
+			    var point = View.toScreen(b.pointGraphic.geometry);
+			    var cx    = point.x;
+			    var cy    = point.y;
 
-			if (pointInCircle(x, y, cx, cy, 5)) {
-			    console.info("cool", b);
-			    bus = b;
-			    return;
-			}
+			    if (pointInCircle(x, y, cx, cy, 5)) {
+				console.info("cool", b);
+				bus = b;
+				return;
+			    }
+			});
 		    });
+		    if (bus) {
+			event.stopPropagation();
+			DrawPopup(bus.RouteID, bus.Name);
+		    }
 		});
-		if (bus) {
-		    event.stopPropagation();
-		    DrawPopup(bus.RouteID, bus.Name);
-		}
-	    });	    
+	    }
 	});
     }
 
@@ -145,13 +235,15 @@ window.ShowPowderMap = (function()
      */
     function SetupFilteringOptions()
     {
+	console.info("SetupFilteringOptions");
+	
 	var filter = function () {
 	    UnmarkFixedEndpoints();
 	    UnmarkBaseStations();
 	    FilterFixedEndpoints();
 	    FilterBaseStations();
 	};
-	$('#show-available, .radio-type, .range-one input, .range-two input')
+	$('.radio-type, .range-one input, .range-two input')
 	    .change(function (event) {
 		filter();
 	    });
@@ -165,6 +257,30 @@ window.ShowPowderMap = (function()
 		window.setTimeout(function() {
 		    filter();
 		}, 200);
+	});
+
+	if (Options.showreserved) {
+	    $('#show-reserved-checkbox').removeClass("hidden");
+	}
+
+	/*
+	 * I hate radio buttons cause not allowed to deselect.
+	 * But this choice needs to be a radio selection.
+	 */
+	$('#show-available, #show-reserved').change(function (event) {
+	    var availChecked = $('#show-available').is(":checked");
+	    var resChecked   = $('#show-reserved').is(":checked");
+	    var which        = $(event.target).attr("id");
+
+	    if (availChecked && resChecked) {
+		if (which == "show-available") {
+		    $('#show-reserved').prop("checked", false);
+		}
+		else {
+		    $('#show-available').prop("checked", false);
+		}
+	    }
+	    filter();
 	});
     }
 
@@ -309,6 +425,11 @@ window.ShowPowderMap = (function()
 	});
 
 	var callback = function (json) {
+	    // XXX
+	    if (Options.showfilter) {
+		SetupFilteringOptions();
+	    }
+	    
 	    console.info("DrawFixedEndpoints", json);
 	    if (json.code) {
 		console.info("Could not get fixed endpoints: " + json.value);
@@ -549,7 +670,7 @@ window.ShowPowderMap = (function()
 	var endpoints = Layers["FE"].data;
 	var layer     = Layers["FE"].filter;
 
-	_.each(endpoints, function (details) {
+	_.each(endpoints, function (details, urn) {
 	    var showme = 0;
 	    
 	    if (details.radioinfo) {
@@ -573,6 +694,10 @@ window.ShowPowderMap = (function()
 
 		    if ($('#show-available').is(":checked")) {
 			update(details.reservable_nodes[node_id].available);
+		    }
+		    if (Options.showreserved &&
+			$('#show-reserved').is(":checked")) {
+			update(isReserved(urn, node_id));
 		    }
 		    if ($('.radio-type').is(":checked")) {
 			var found = false;
@@ -651,6 +776,27 @@ window.ShowPowderMap = (function()
 	    }
 	}
     }
+    // This could be optimized a bit. 
+    function isReserved(urn, node_id)
+    {
+	//console.info("isReserved", urn, node_id);
+	var result = false;
+
+	_.each(ResInfo, function (resgroup) {
+	    if (result) {
+		return;
+	    }
+	    if (resgroup.clusters) {
+		_.each(resgroup.clusters, function (res) {
+		    if (res.cluster_urn == urn && res.type == node_id) {
+			result = true;
+			return;
+		    }
+		});
+	    }
+	});
+        return result;
+    }
      
     /*
      * Draw the Base Stations
@@ -684,7 +830,7 @@ window.ShowPowderMap = (function()
 	var callback = function (json) {
 	    console.info("DrawBaseStations", json);
 	    if (json.code) {
-		console.info("Could not get fixed endpoints: " + json.value);
+		console.info("Could not get base stations: " + json.value);
 		return;
 	    }
 	    var baseStations = json.value;
@@ -927,6 +1073,10 @@ window.ShowPowderMap = (function()
 
 		    if ($('#show-available').is(":checked")) {
 			update(info.available);
+		    }
+		    if (Options.showreserved &&
+			$('#show-reserved').is(":checked")) {
+			update(isReserved(details.cluster_urn, node_id));
 		    }
 		    if ($('.radio-type').is(":checked")) {
 			var found = false;

@@ -46,9 +46,18 @@ $showreserved  = ($this_user ? 1 : 0);
 $showmobile    = ($this_user ? 1 : 0);
 
 # Optional views
-$optargs = OptionalPageArguments("baseonly",  PAGEARG_BOOLEAN);
+$optargs = OptionalPageArguments("baseonly",   PAGEARG_BOOLEAN,
+                                 "nomobile",   PAGEARG_BOOLEAN);
+
 if ($baseonly) {
-    $showfilter = $showlegend = $showmobile = 0;
+    $baseonly   = 1;
+    $showlegend = $showmobile = $showreserved = 0;
+}
+else {
+    $baseonly   = 0;
+}
+if ($nomobile) {
+    $showmobile = 0;
 }
 SPITHEADER(1);
 
@@ -64,6 +73,7 @@ echo "window.SHOWLEGEND    = $showlegend;\n";
 echo "window.SHOWAVAILABLE = $showavailable;\n";
 echo "window.SHOWRESERVED  = $showreserved;\n";
 echo "window.SHOWMOBILE    = $showmobile;\n";
+echo "window.BASEONLY      = $baseonly;\n";
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

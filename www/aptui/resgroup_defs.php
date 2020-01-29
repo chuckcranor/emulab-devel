@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2019 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -190,6 +190,17 @@ class ReservationGroup
             if ($reservation->approved()) {
                 return 1;
             }
+        }
+        return 0;
+    }
+
+    function Active()
+    {
+        $start = strtotime($this->start());
+        $end   = strtotime($this->end());
+        
+        if (time() > $start && time() < $end) {
+            return 1;
         }
         return 0;
     }

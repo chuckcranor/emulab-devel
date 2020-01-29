@@ -3037,6 +3037,18 @@ $(function () {
 				    "Resource Availability",
 				    "width=1200,height=800");
 		});
+	    if (window.ISPOWDER) {
+		$('#ppform-buttons .p-powdermap')
+		    .removeClass("hidden")
+		    .click(function (event) {
+			event.preventDefault();
+			resinfo_window =
+			    window.open("powder-map.php?embedded=true" +
+					"&nomobile=1",
+					"Radio Map",
+					"width=1200,height=800");
+		    });
+	    }
 	}
 
 	/*

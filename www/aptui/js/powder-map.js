@@ -10,7 +10,7 @@ $(function ()
 	window.APT_OPTIONS.initialize(sup);
 
 	$('#main-body').html(_.template(templates['powder-map']));
-	$('#filtering-options').html(templates['powder-filters']);
+	//$('#filtering-options').html(templates['powder-filters']);
 
 	if (window.EMBEDDED) {
 	    $(".powder-mapview").css("height", "99%");

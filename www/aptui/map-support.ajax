@@ -54,6 +54,8 @@ function Do_GetFixedEndpoints()
                 $radioinfo[$row["node_id"]] = $row;
             }
         }
+        $reservablenodes = $aggregate->ReservableNodes(true);
+
         $blob[$urn] =
             array("urn"       => $urn,
                   "latitude"  => $aggregate->latitude(),
@@ -63,7 +65,7 @@ function Do_GetFixedEndpoints()
                   "typelist"  => $typelist,
                   "radioinfo" => $radioinfo,
                   # Ask for extended info.
-                  "reservable_nodes" => $aggregate->ReservableNodes(true));
+                  "reservable_nodes" => $reservablenodes);
     }
     SPITAJAX_RESPONSE($blob);
 }
@@ -162,7 +164,8 @@ function Do_GetBaseStations()
         }
         $radioinfo = $baseStations[$location]["radioinfo"];
         $radioinfo[$row["node_id"]] = $row;
-        $baseStations[$location]["radioinfo"] = $radioinfo;
+        $baseStations[$location]["radioinfo"]   = $radioinfo;
+        $baseStations[$location]["cluster_urn"] = $urn;
     }
     SPITAJAX_RESPONSE($baseStations);
 }
