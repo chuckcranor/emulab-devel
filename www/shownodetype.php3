@@ -32,7 +32,7 @@ $this_user = CheckLogin($check_status);
 $reqargs   = RequiredPageArguments("node_type", PAGEARG_STRING);
 $optargs   = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
 
-if (!$classic) {
+if (!$CLASSICWEB_OVERRIDE && !$classic) {
     header("Location: apt/show-nodetype.php?type=$node_type");
     return;
 }

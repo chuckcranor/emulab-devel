@@ -47,7 +47,7 @@ $osid = $osinfo->osid();
 $osname = $osinfo->osname();
 $version = $osinfo->vers();
 
-if ($osinfo->ezid() && !$classic) {
+if (!$CLASSICWEB_OVERRIDE && $osinfo->ezid() && !$classic) {
     header("Location: apt/show-image.php?imageid=$osid&version=$version");
     return;
 }

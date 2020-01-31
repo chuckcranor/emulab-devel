@@ -54,7 +54,7 @@ if (!$image->AccessCheck($this_user, $TB_IMAGEID_READINFO)) {
     USERERROR("You do not have permission to access ImageID $imageid.", 1);
 }
 
-if ($image->ezid() && !$classic) {
+if (!$CLASSICWEB_OVERRIDE && $image->ezid() && !$classic) {
     header("Location: apt/show-image.php?imageid=$imageid&version=$version");
     return;
 }
