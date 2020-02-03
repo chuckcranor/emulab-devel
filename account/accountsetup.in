@@ -97,6 +97,7 @@ my $KEYGEN	      = "/usr/bin/ssh-keygen";
 my $SKEL	      = "/usr/share/skel";
 my $PIDFILE           = "/var/run/mountd.pid";
 my $TSFILE	      = "/var/run/mountd.ts";
+my $DISABLEFLAGS      = "@DISABLE_FSNODE_CHFLAGS@";
 my $USEFLAGS          = 0;
 
 # XXX
@@ -109,7 +110,7 @@ my $USEREXISTS  = 65;
 if (!$OPSVM_ENABLE) {
     if (`uname -r` =~ /^(\d+)\.(\d+)/) {
 	if ($1 >= 10) {
-	    $USEFLAGS = 1;
+	    $USEFLAGS = 1 unless ($DISABLEFLAGS);
 	}
     }
 }
