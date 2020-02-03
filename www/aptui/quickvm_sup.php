@@ -439,6 +439,7 @@ function SPITNAV($hiddenxs, $nonav, $navbar_status, $navbar_right, $login_uid)
     global $PORTAL_MANUAL, $APTLOGO, $login_status, $login_user, $TBMAINSITE;
     global $THISHOMEBASE, $ISEMULAB, $ISPNET, $ISPOWDER, $TBBASE;
     global $PORTAL_WIKI;
+    global $UI_DISABLE_DATASETS, $UI_DISABLE_RESERVATIONS;
     global $UI_EXTERNAL_ACCOUNTS;
     $hiddenxs = "";
 echo "
@@ -475,9 +476,15 @@ echo "
 	Experiments <b class='caret'></b></a>
       <ul class='dropdown-menu'>
 	<li><a href='instantiate.php'>Start Experiment</a></li>
-	<li><a href='manage_profile.php'>Create Experiment Profile</a></li>
-       <li><a href='reserve.php'>Reserve " .
-           ($ISPOWDER ? "Resources" : "Nodes") . "</a></li>
+	<li><a href='manage_profile.php'>Create Experiment Profile</a></li>";
+
+      if ($UI_DISABLE_RESERVATIONS == 0 ||
+         ($UI_DISABLE_RESERVATIONS == 1 && ISADMIN()) ) {
+echo "    <li><a href='reserve.php'>Reserve " .
+             ($ISPOWDER ? "Resources" : "Nodes") . "</a></li>";
+      }
+
+echo "
        <li><a href='resinfo.php'>Resource Availability</a></li>
        <li><a href='cluster-status.php'>Cluster Status</a></li>
         ";
@@ -485,10 +492,15 @@ echo " <li class='divider'></li>
         <li><a href='user-dashboard.php#experiments'>
 	    My Experiments</a></li>
 	<li><a href='user-dashboard.php#profiles'>
-            My Profiles</a></li>
-        <li><a href='list-reservations.php'>
-            My Reservations</a></li>
-        <li><a href='activity.php?user=$login_uid&min=$then'>
+            My Profiles</a></li>";
+
+      if ($UI_DISABLE_RESERVATIONS == 0 ||
+         ($UI_DISABLE_RESERVATIONS == 1 && ISADMIN()) ) {
+echo "    <li><a href='list-reservations.php'>
+              My Reservations</a></li>";
+      }
+
+echo "  <li><a href='activity.php?user=$login_uid&min=$then'>
                             My History</a></li>";
 # Classic users, using the Portal, get a link back to it. SAD!
 if (!$login_user->portal()) {
@@ -503,10 +515,16 @@ if (!$login_user->portal()) {
 	 class='dropdown-toggle btn btn-quickvm-home navbar-btn'
 	 data-toggle='dropdown'>
 	Storage <b class='caret'></b></a>
-      <ul class='dropdown-menu'>
+      <ul class='dropdown-menu'>";
+
+if ($UI_DISABLE_DATASETS == 0 || ($UI_DISABLE_DATASETS == 1 && ISADMIN()) ) {
+      echo "
 	<li><a href='create-dataset.php'>Create Dataset</a></li>
 	<li><a href='user-dashboard.php#datasets'>
-	    My Datasets</a></li>
+	    My Datasets</a></li>";
+}
+
+      echo "
 	<li><a href='list-images.php'>My Disk Images</a></li>
         <li><a href='images.php'>Other Disk Images</a></li>
       </ul>
@@ -542,12 +560,16 @@ if (!$login_user->portal()) {
 		               echo "<li><a href='experiments.php#all'>
                             All Experiments</a></li>
 		                 <li><a href='list-profiles.php'>
-                            All Profiles</a></li>
-                                 <li><a href='list-resgroups.php'>
-                            All ResGroups</a></li>
- 		                 <li><a href='list-datasets.php'>
-                            All Datasets</a></li>
-                                 <li><a href='images.php?all=1'>
+                            All Profiles</a></li>";
+                            if ($UI_DISABLE_RESERVATIONS <= 1) {
+                                 echo "<li><a href='list-resgroups.php'>
+                                All ResGroups</a></li>\n";
+                            }
+                            if ($UI_DISABLE_DATASETS <= 1) {
+		                   echo "<li><a href='list-datasets.php'>
+                                All Datasets</a></li>\n";
+                            }
+                               echo "<li><a href='images.php?all=1'>
                             All Images</a></li>
                                  <li><a href='list-vlans.php'>
                             All Vlans</a></li>

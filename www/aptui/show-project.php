@@ -67,6 +67,9 @@ echo "  window.CANAPPROVE     = $canapprove;\n";
 echo "  window.CANBESTOW      = $canbestow;\n";
 echo "  window.EMULAB_LINK    = '$emulablink';\n";
 echo "  window.TARGET_PROJECT = '" . $project->pid() . "';\n";
+echo "  window.UI_DISABLE_DATASETS = '" . $UI_DISABLE_DATASETS . "';\n";
+echo "  window.UI_DISABLE_RESERVATIONS = '" .
+        $UI_DISABLE_RESERVATIONS . "';\n";
 echo "</script>\n";
 
 # Place to hang the toplevel template.

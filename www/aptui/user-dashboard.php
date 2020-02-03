@@ -65,6 +65,9 @@ echo "<script type='text/javascript'>\n";
 echo "  window.ISADMIN     = $isadmin;\n";
 echo "  window.EMULAB_LINK = '$emulablink';\n";
 echo "  window.TARGET_USER = '" . $target_user->uid() . "';\n";
+echo "  window.UI_DISABLE_DATASETS = '" . $UI_DISABLE_DATASETS . "';\n";
+echo "  window.UI_DISABLE_RESERVATIONS = '" .
+        $UI_DISABLE_RESERVATIONS . "';\n";
 echo "</script>\n";
 
 # Place to hang the toplevel template.
