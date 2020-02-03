@@ -52,6 +52,7 @@ my $OURDOMAIN	= "@OURDOMAIN@";
 my $RESCOMMAND  = "$TB/bin/manage_reservations";
 my $GROUPCOMMAND= "$TB/bin/manage_resgroup";
 my $MYURN	= "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+my $UI_DISABLE_RESERVATIONS = @UI_DISABLE_RESERVATIONS@;
 
 #
 # Untaint the path
@@ -125,6 +126,8 @@ if (! defined($this_user)) {
     fatal("You ($UID) do not exist!");
 }
 if ($action eq "reserve") {
+    fatal("Reservations disabled for non-admins")
+        if ($UI_DISABLE_RESERVATIONS && !$this_user->IsAdmin());
     DoGroupReserve();
 }
 elsif ($action eq "delete") {

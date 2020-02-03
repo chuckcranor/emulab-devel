@@ -54,9 +54,11 @@
 		<li role="presentation">
 		  <a href="#profiles" role="tab"
 		     data-toggle="tab">Profiles</a></li>
+		<%  if (disabledset == 0 || (disabledset == 1 && isadmin) ) { %>
 		<li role="presentation">
 		  <a href="#datasets" role="tab"
 		     data-toggle="tab">Datasets</a></li>
+		<% } %>
 		<li role="presentation">
 		  <a href="#members" role="tab"
 		     data-toggle="tab">Members</a></li>
@@ -91,12 +93,16 @@
 		       href="#" role="button">
 		      Admin Menu<span class="caret"></span></a>
 		    <ul class="dropdown-menu">
+		      <% if (disabledres < 2) { %>
 		      <li><a href="reserve.php?project=<%= target_project %>">
 			Create Reservation</a></li>
+		      <% } %>
 		      <li><a href="activity.php?project=<%= target_project %>">
 			Experiment History</a></li>
+		      <% if (disabledres < 2) { %>
 		      <li><a href="reservation-history.php?project=<%= target_project %>">
 			Reservation History</a></li>
+		      <% } %>
 		      <li role="presentation">
 			<a href='<%- emulablink %>'>
 			  Emulab Project Page</a></li>

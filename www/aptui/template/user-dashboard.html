@@ -54,9 +54,11 @@
 		<li role="presentation">
 		  <a href="#projectprofiles" role="tab" data-toggle="tab">
 		    Project Profiles</a></li>
+		<% if (disabledset == 0 || (disabledset == 1 && isadmin) ) { %>
 		<li role="presentation">
 		  <a href="#datasets" role="tab" data-toggle="tab">
 		    Datasets</a></li>
+		<% } %>
 		<li role="presentation" class="hidden paramsets-hidden">
 		  <a href="#paramsets" role="tab" data-toggle="tab">
 		    Parameter Sets</a></li>
@@ -81,16 +83,20 @@
 		    <ul class="dropdown-menu">
 		      <li><a href="activity.php?user=<%= target_user %>">
 			Experiment History</a></li>
+		      <% if (disabledres < 2) { %>
 		      <li><a href="reservation-history.php?user=<%= target_user %>">
 			Reservation History</a></li>
+                      <% } %>
 		      <li><a href="ssh-keys.php?user=<%= target_user %>">
 			Manage SSH Keys</a></li>
 		      <li><a href="myaccount.php?user=<%= target_user %>">
 			Manage Account</a></li>
 		      <li><a href="changepswd.php?user=<%= target_user %>">
 			Change Password</a></li>
+		      <% if (disabledset < 2) { %>
 		      <li><a href="list-datasets.php?user=<%= target_user %>">
 			List Datasets</a></li>
+		      <% } %>
 		      <li><a href="list-images.php?user=<%= target_user %>">
 			List Images</a></li>
                       <li class='divider'></li>
