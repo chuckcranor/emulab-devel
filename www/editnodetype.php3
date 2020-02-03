@@ -59,7 +59,7 @@ $optargs = OptionalPageArguments("submit",     PAGEARG_STRING,
 				 "newattribute_value", PAGEARG_ANYTHING,
                                  "classic", PAGEARG_BOOLEAN);
 
-if (isset($node_type) && !$classic) {
+if (!$CLASSICWEB_OVERRIDE && isset($node_type) && !$classic) {
     header("Location: apt/show-nodetype.php?type=$node_type");
     return;
 }

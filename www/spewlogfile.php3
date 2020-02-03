@@ -46,7 +46,7 @@ $logfileid = $logfile->logid();
 #
 # Switch to APT version.
 #
-if (!isset($isajax) && $logfile->isopen()) {
+if (!$CLASSICWEB_OVERRIDE && !isset($isajax) && $logfile->isopen()) {
     header("Location: apt/spewlogfile.php?logfile=$logfileid");
     return;
 }

@@ -100,7 +100,7 @@ if (isset($baseosinfo) && $baseosinfo->def_parentosid()) {
 # In general, there is no reason for a mere user to do anything but
 # clone or snapshot an existing image. 
 #
-if (!$classic && !$ec2) {
+if (!$CLASSICWEB_OVERRIDE && !$classic && !$ec2) {
     $imageid = $baseimage->imageid();
     $version = $baseimage->version();
     

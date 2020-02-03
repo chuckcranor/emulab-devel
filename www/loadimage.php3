@@ -52,7 +52,7 @@ $image_gid  = $image->gid();
 $image_name = $image->imagename();
 $image_path = $image->path();
 
-if (!$classic) {
+if (!$CLASSICWEB_OVERRIDE && !$classic) {
     $url = "apt/snapshot-image.php?imageid=$imageid&version=$version";
     if (isset($target)) {
         $url .= "&node=$target";
