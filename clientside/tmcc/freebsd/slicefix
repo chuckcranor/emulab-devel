@@ -620,6 +620,11 @@ dofreebsd() {
 		    fixit=1
 		fi
 	    fi
+	    if [ "$SPEED" != "115200" ]; then
+		# non-standard speed requires change to /etc/ttys
+		changedisk=1
+		fixit=1
+	    fi
 	    ;;
 	esac
 
@@ -740,9 +745,11 @@ dofreebsd() {
 	    }
 	    echo "  updating /etc/dumpdates"
 	    sed -E -i .preemulab -e "s;^/dev/[a-zA-Z]+[0-9]+s[0-9]+;/dev/${disk}s${part};" /mnt/etc/dumpdates || {
-		echo "Failed to update /etc/dumpdates"
-		umount $rootdev
-		return 1
+		echo "WARNING: Failed to update /etc/dumpdates"
+	    }
+	    echo "  updating /etc/ttys"
+	    sed -i .preemulab -e "/^console/s;std.115200;std.$SPEED;" /mnt/etc/ttys || {
+		echo "WARNING: Failed to update /etc/ttys"
 	    }
 	fi
 

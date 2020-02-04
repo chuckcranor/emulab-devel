@@ -657,6 +657,11 @@ dofreebsd() {
 		    fixit=1
 		fi
 	    fi
+	    if [ "$SPEED" != "115200" ]; then
+		# non-standard speed requires change to /etc/ttys
+		changedisk=1
+		fixit=1
+	    fi
 	    ;;
 	esac
 
@@ -699,6 +704,7 @@ dofreebsd() {
 		    cmp -s /etc/ssh/ssh_host_${k}key /mnt/etc/ssh/ssh_host_${k}key
 		    if [ $? -ne 0 ]; then
 			changehostkeys=1
+			fixit=1
 		    fi
 		fi
 	    done
@@ -788,9 +794,14 @@ dofreebsd() {
 		    echo "  updating /etc/dumpdates"
 		    cp -fp /mnt/etc/dumpdates /mnt/etc/dumpdates.preemulab
 		    sed -i -e "s;^/dev/[a-zA-Z][a-zA-Z]*[0-9][0-9]*s[0-9][0-9]*;/dev/${freebsd_disk}s${part};" /mnt/etc/dumpdates || {
-			echo "Failed to update /etc/dumpdates"
-			umount $rootdev
-			return 1
+			echo "WARNING: Failed to update /etc/dumpdates"
+		    }
+	    fi
+	    if [ -f /mnt/etc/ttys ]; then
+		    echo "  updating /etc/ttys"
+		    cp -fp /mnt/etc/ttys /mnt/etc/ttys.preemulab
+		    sed -i -e "/^console/s;std.115200;std.$SPEED;" /mnt/etc/ttys || {
+			echo "WARNING: Failed to update /etc/ttys"
 		    }
 	    fi
 	fi
