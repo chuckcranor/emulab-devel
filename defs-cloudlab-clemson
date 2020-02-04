@@ -172,3 +172,7 @@ REPORTBOOT_FLAGS="-C"
 
 # New world order
 PORTAL_ENABLE=1
+
+# No longer allow geni users direct access. Must go through the Portal
+# or the local web interface. 
+PROTOGENI_PORTALONLY=1
