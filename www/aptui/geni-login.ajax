@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -321,6 +321,18 @@ function Do_VerifySpeaksfor()
     else {
         $this_user = User::LookupNonLocal($info["urn"]);
 
+        #
+        # Check project membership before we go any further. We do not
+        # allow users to come in on this interface unless they have
+        # project membership at their home portal.
+        #
+        if (CheckCredentials($_SESSION["certificate"], $speaksfor)) {
+            SPITAJAX_ERROR(1, "Cannot verify your project membership ".
+                           "at your home portal");
+            session_destroy();
+            return;
+        }
+
         if (!$this_user) {
             if (!$TBMAINSITE) {
                 SPITAJAX_ERROR(1, "You do not have an account at this site");
@@ -430,6 +442,42 @@ function CreateNonLocalUser($urn, $email)
 	return -1;
 
     return 0;
+}
+
+#
+# Check membership at home portal before we do anything permanent.
+# 
+function CheckCredentials($cert, $cred)
+{
+    global $TBMAINSITE, $suexec_output;
+
+    $credfile = tempnam("/tmp", "cert");
+    $certfile = tempnam("/tmp", "cred");
+
+    $fp = fopen($credfile, "w");
+    fwrite($fp, $cred);
+    fclose($fp);
+    $fp = fopen($certfile, "w");
+    fwrite($fp, $cert);
+    fclose($fp);
+    chmod($certfile, 0666);
+    chmod($credfile, 0666);
+    
+    $retval = SUEXEC("nobody", "nobody",
+		     "webcheckgeniuser $credfile $certfile",
+		     SUEXEC_ACTION_CONTINUE);
+
+    if ($retval < 0) {
+        $cred = file_get_contents($credfile);
+        $cert = file_get_contents($certfile);
+        TBERROR("checkgeniuser failed.\n ".
+                "Cert:\n${cert}\n\n".
+                "Cred:\n${$cred}\n", 0);
+    }
+    unlink($credfile);
+    unlink($certfile);
+
+    return $retval;
 }
 
 #

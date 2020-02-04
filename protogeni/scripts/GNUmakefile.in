@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -52,7 +52,8 @@ PSBIN_STUFF	= register_resources expire_daemon gencrl postcrl \
 		  mondbd parsecert creategeniuser webcreategeniuser \
 		  updategeniuser webupdategeniuser verifycert webverifycert \
 		  postimagedata getimagedata triggerimageupdate \
-		  deleteimagedata secureimageget genimagecredential
+		  deleteimagedata secureimageget genimagecredential \
+		  checkgeniuser webcheckgeniuser
 
 ifeq ($(ISCLEARINGHOUSE),1)
 PSBIN_STUFF     += ch_daemon
@@ -80,6 +81,7 @@ install: apt-install \
 	$(INSTALL_LIBEXECDIR)/webcacontrol \
 	$(INSTALL_LIBEXECDIR)/webcreategeniuser \
 	$(INSTALL_LIBEXECDIR)/webupdategeniuser \
+	$(INSTALL_LIBEXECDIR)/webcheckgeniuser \
 	$(INSTALL_LIBEXECDIR)/webmaptoslice \
 	$(INSTALL_LIBEXECDIR)/webverifycert
 	-rm -f $(INSTALL_SBINDIR)/protogeni/cleanupticket
