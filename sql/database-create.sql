@@ -815,6 +815,22 @@ CREATE TABLE `apt_reservation_group_rf_reservations` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_reservation_group_route_reservations`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_group_route_reservations`;
+CREATE TABLE `apt_reservation_group_route_reservations` (
+  `uuid` varchar(40) NOT NULL default '',
+  `route_uuid` varchar(40) NOT NULL default '',
+  `routeid` smallint(5) NOT NULL default '0',
+  `routename` tinytext,
+  `submitted` datetime DEFAULT NULL,
+  `approved` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
+  PRIMARY KEY (`uuid`,`route_uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_reservation_group_history`
 --
 
@@ -871,6 +887,25 @@ CREATE TABLE `apt_reservation_group_rf_reservation_history` (
   `deleted` datetime DEFAULT NULL,
   PRIMARY KEY (`idx`),
   KEY `uuids` (`uuid`,`freq_uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_reservation_group_route_reservation_history`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_group_route_reservation_history`;
+CREATE TABLE `apt_reservation_group_route_reservation_history` (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `uuid` varchar(40) NOT NULL default '',
+  `route_uuid` varchar(40) NOT NULL default '',
+  `routeid` smallint(5) NOT NULL default '0',
+  `routename` tinytext,
+  `submitted` datetime DEFAULT NULL,
+  `approved` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
+  `deleted` datetime DEFAULT NULL,
+  PRIMARY KEY (`idx`),
+  KEY `uuids` (`uuid`,`route_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
