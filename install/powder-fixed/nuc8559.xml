@@ -30,7 +30,8 @@
 <attribute name="attr_integer_num_cores">  <value>4</value></attribute>
 <attribute name="attr_integer_num_cpus">  <value>8</value></attribute>
 <attribute name="attr_boolean_rebootable">  <value>1</value></attribute>
-<attribute name="attr_integer_simnode_capacity">  <value>0</value></attribute>
+<attribute name="attr_integer_simnode_capacity"><value>0</value></attribute>
+<attribute name="attr_string_dom0mem">  <value>4096M</value></attribute>
 <attribute name="attr_integer_trivlink_maxspeed">  <value>10000000</value></attribute>
 <attribute name="attr_integer_virtnode_capacity">  <value>0</value></attribute>
 <attribute name="attr_string_console_type">  <value>vga</value></attribute>

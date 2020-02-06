@@ -38,7 +38,8 @@ all: $(TARGETS)
 include $(TESTBED_SRCDIR)/GNUmakerules
 
 install: $(INSTALL_ETCDIR)/dhcpd.conf.frag.one \
-	 $(INSTALL_SBINDIR)/run_capture
+	 $(INSTALL_SBINDIR)/run_capture \
+	 $(INSTALL_SBINDIR)/batterymon
 
 clean: 
 	rm -f $(TARGETS)

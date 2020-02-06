@@ -31,6 +31,8 @@ Now we have to shutdown the VMs. Log out of the boss/ops vms, and log
 into the physical host and then:
 
 	vhost-0> sudo /usr/local/etc/emulab/vnodesetup -jh pcvmXXX-1
+
+# Approve the certificate on the MotherShip.
 	
 After David does his magic and boss boots, need to do:
 
@@ -41,16 +43,51 @@ After David does his magic and boss boots, need to do:
 Need to flip the enable bit in the apt_aggregates table.
 
 Copy the defs file to Mothership boss, powder-defs directory.
+Symlink emulab-devel/defs file to the powder-defs version.
 
-Need to add these:
-PROTOGENI_NOPORTALEXPIRE=1
-PROTOGENI_PORTALONLY=1
+Remove /usr/local/etc/bin/console*
+Remove /usr/local/etc/bin/script_wrapper and stuff symlinked to it.
+batchexp
+console
+create_image
+createdataset
+delay_config
+deletedataset
+endexp
+eventsys_control
+expinfo
+expwait
+extenddataset
+mkblob
+modexp
+node_admin
+node_avail
+node_avail_list
+node_list
+node_reboot
+nscheck
+os_load
+portstats
+readycount
+rmblob
+savelogs
+script_wrapper.py
+showdataset
+startexp
+swapexp
+tbuisp
+template_checkout
+template_commit
+template_export
+template_instantiate
+template_startrun
+template_stoprun
+template_swapin
+template_swapout
+wilink_config
 
-and these:
-
-POWDER_RFMONITOR=1
-POWDER_RFMONITOR_HOST="10.10.10.2"
-
+Need to get the certificates into the SA database on the Mothership.
+Fix manage_aggregate.
 
  sort -r -n -t, -k 4 /tmp/mon.out | head -30
  

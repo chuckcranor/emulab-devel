@@ -11,6 +11,8 @@ REPLACE into `nodes` set
       type='powduino',role='powerctrl';
 REPLACE into `outlets` set
       node_id='ed1-real',power_id='powduino',outlet='0';
+REPLACE INTO `outlets` set
+      node_id='n300-1',power_id='powduino',outlet='1';
 REPLACE into node_attributes
   VALUES ('ed1', 'reservation_autoapprove_limit', '0', '0');
 REPLACE into node_attributes
