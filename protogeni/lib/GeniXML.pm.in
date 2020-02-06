@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2019 University of Utah and the Flux Group.
+# Copyright (c) 2010-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1963,6 +1963,18 @@ sub GetSpectrum($)
 	    "frequency_low"  => GetText("frequency_low", $element),
 	    "frequency_high" => GetText("frequency_high", $element),
 	    "power"          => GetText("power", $element)});
+    }
+    return \@result;
+}
+sub GetBusRoutes($)
+{
+    my ($ref)  = @_;
+    my @result = ();
+
+    foreach my $element (FindNodesNS("n:busroute", $ref,
+				     $EMULAB_NS)->get_nodelist()) {
+	push(@result, {
+	    "name"  => GetText("name", $element)});
     }
     return \@result;
 }
