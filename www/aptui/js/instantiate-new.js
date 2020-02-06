@@ -1995,6 +1995,12 @@ $(function ()
 	    var options = "";
 	    
 	    _.each(amlist, function(details, key) {
+		/*
+		 * Temp; do not show mobile if not an admin
+		 */
+		if (details.ismobile == 1 && !isadmin) {
+		    return;
+		}
 		var name = details.name;
 		options = options + "<option value='" + name + "'";
 		if (amlist.count == 1 || name == selected) {

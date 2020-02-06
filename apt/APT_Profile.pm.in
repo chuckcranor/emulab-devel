@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2019 University of Utah and the Flux Group.
+# Copyright (c) 2007-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -53,6 +53,7 @@ use APT_Reservation;
 use GeniXML;
 use GeniHRN;
 use libtestbed;
+use EmulabFeatures;
 use Project;
 use Lease;
 use Image;
@@ -1825,6 +1826,48 @@ sub GetSpectrum($$$)
 	}
     }
     $$pref = \@ranges;
+    return 0;
+}
+
+#
+# Temporary check, do not allow a bus to be allocated unless the
+# project has the feature granted. Eventually, we will not let buses
+# to be allocated unless they have the route reserved.
+#
+sub CheckForBuses($$$)
+{
+    my ($xml, $project, $perrmsg) = @_;
+    
+    my $rspec = GeniXML::Parse($xml);
+    if (! defined($rspec)) {
+	$$perrmsg = "CheckForBuses: Could not parse rspec";
+	return -1;
+    }
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $manager_urn  = GetManagerId($ref);
+	my $component_id = GeniXML::GetNodeId($ref);
+
+	next
+	    if (!defined($manager_urn));
+
+	my $aggregate = APT_Aggregate->Lookup($manager_urn);
+	if (!defined($aggregate)) {
+	    $$perrmsg = "CheckForBuses: Could not parse rspec";
+	    return -1;
+	}
+	next
+	    if (!$aggregate->ismobile());
+
+	#
+	# Check that the project has the feature.
+	#
+	if (!EmulabFeatures->FeatureEnabled("powder-routes-allowed",
+					    undef, $project)) {
+	    $$perrmsg = "CheckForBuses: No permission to use buses: ".
+		$aggregate->nickname();
+	    return 1;
+	}
+    }
     return 0;
 }
 

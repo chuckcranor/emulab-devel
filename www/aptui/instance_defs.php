@@ -1327,6 +1327,8 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
             }
             $amlist[$urn] = array("urn"      => $urn,
                                   "name"     => $am,
+                                  "isFE"     => $aggregate->isFE(),
+                                  "ismobile" => $aggregate->ismobile(),
                                   "nickname" => $aggregate->nickname(),
                                   "typelist" => $typelist,
                                   "typeinfo" => $aggregate->typeinfo);
