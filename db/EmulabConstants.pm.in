@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -210,7 +210,7 @@ use vars qw(@ISA @EXPORT);
 
 	 TB_NODEHISTORY_OP_FREE TB_NODEHISTORY_OP_ALLOC TB_NODEHISTORY_OP_MOVE
 	 PROTOUSER TB_NODEHISTORY_OP_CREATE TB_NODEHISTORY_OP_DESTROY
-	 PROTOGENI_SUPPORT PROTOGENI_GENIRACK CKUPUSER
+	 PROTOGENI_SUPPORT PROTOGENI_GENIRACK CKUPUSER GENIUSER
 	 );
 
 use English;
@@ -267,6 +267,7 @@ sub TBOPSPID()			{ $TBOPSPID; }
 sub EXPTLOGNAME()		{ $EXPTLOGNAME; }
 sub PROTOUSER()			{ 'elabman'; }
 sub CKUPUSER()			{ 'elabckup'; }
+sub GENIUSER()			{ 'geniuser'; }
 
 sub PROTOGENI_SUPPORT()		{ @PROTOGENI_SUPPORT@; }
 sub PROTOGENI_GENIRACK()	{ @PROTOGENI_GENIRACK@; }
