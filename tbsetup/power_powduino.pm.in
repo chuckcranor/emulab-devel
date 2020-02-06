@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,7 +28,7 @@ package power_powduino;
 
 use Exporter;
 @ISA = ("Exporter");
-@EXPORT = qw( powduinoctrl powduinostatus powduinotemp );
+@EXPORT = qw( powduinoctrl powduinostatus powduinotemp powduinovoltage );
 
 use Socket;
 use IO::Handle;
@@ -107,6 +107,34 @@ sub powduinotemp {
     my $status;
     for my $try (1..$ntries) {
 	$status = syncandsend($controller, $TIP, "temp", $statusp);
+	last
+	    if $status >= 0;
+    }
+    close($TIP);
+    return $status ? 1 : 0;
+}
+
+sub powduinovoltage {
+    my ($controller, $statusp) = @_;
+
+    my($TIP, $i, $insync);
+
+    #
+    # Form the connection to the controller via a "tip" line to the
+    # capture process. Once we have that, we can just talk to the
+    # controller directly.
+    #
+    if (!($TIP = tipconnect($controller))) {
+	print STDERR "*** Could not form TIP connection to $controller\n";
+	return 1;
+    }
+
+    #
+    # Send the command.  Try again a few times if there is a retryable error.
+    #
+    my $status;
+    for my $try (1..$ntries) {
+	$status = syncandsend($controller, $TIP, "voltage", $statusp);
 	last
 	    if $status >= 0;
     }
@@ -286,6 +314,10 @@ sub syncandsend($$$;$) {
 	}
 	if ($statusp) {
 	    if ($line =~ /^Pin\s+(\d+)\s+(on|off)/) {
+		$status{"pin$1"} = $2;
+		$gotstatus = 1;
+		print "status 'pin$1' = ", $status{"pin$1"}, "\n" if ($debug);
+	    } elsif ($line =~ /^Pin\s+(\d+):\s+(\d+)/) {
 		$status{"pin$1"} = $2;
 		$gotstatus = 1;
 		print "status 'pin$1' = ", $status{"pin$1"}, "\n" if ($debug);
