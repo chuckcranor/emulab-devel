@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1013,7 +1013,7 @@ function DateStringGMT($date)
         return null;
     }
     elseif (is_int($date)) {
-        gmdate("Y-m-d\TH:i:s\Z", $date);
+        return gmdate("Y-m-d\TH:i:s\Z", $date);
     }
     return gmdate("Y-m-d\TH:i:s\Z", strtotime($date));
 }
