@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2019 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -838,6 +838,7 @@ class Instance
                            "faros_sfp" => true,
                            "e200-8d"   => true,
                            "e300-8d"   => true,
+                           "sequoia-v8"=> true,
                            "pc2400w"   => true);
 
         #
