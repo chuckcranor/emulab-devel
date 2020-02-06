@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2019 University of Utah and the Flux Group.
+# Copyright (c) 2007-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -211,6 +211,18 @@ sub isPNet($)	{ return $_[0]->Brand()->isPNet() ? 1 : 0; }
 sub isPowder($)	{ return $_[0]->Brand()->isPowder() ? 1 : 0; }
 sub AggregateList($) { return values(%{ $_[0]->{'AGGREGATES'} }); }
 sub AggregateHash($) { return $_[0]->{'AGGREGATES'}; }
+
+#
+# Grab specific aggregate
+#
+sub GetAggregate($$)
+{
+    my ($self, $urn) = @_;
+    my $hash = $self->AggregateHash();
+
+    return $hash->{$urn} if (exists($hash->{$urn}));
+    return undef;
+}
 
 sub Start($)
 {
