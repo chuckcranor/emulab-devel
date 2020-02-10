@@ -20,7 +20,7 @@
 
 
 	function visavailChart(custom_options, dataset) {
-		var d3 = window.d3 ? window.d3 : typeof require !== 'undefined' ? require("d3") : undefined;
+		var d3 = window.d3v5 ? window.d3v5 : typeof require !== 'undefined' ? require("d3") : undefined;
 		var moment = window.moment ? window.moment : typeof require !== 'undefined' ? require("moment") : undefined;
 
 		var t0;
