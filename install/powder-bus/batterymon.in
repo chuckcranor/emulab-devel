@@ -102,7 +102,7 @@ if ($childpid) {
     # Allow a few seconds for this operation.
     #
     local $SIG{ALRM} = sub { kill("TERM", $childpid); };
-    alarm 20;
+    alarm 30;
     waitpid($childpid, 0);
     alarm 0;
     my $ecode = $?;
@@ -110,7 +110,7 @@ if ($childpid) {
 	my $cause;
 	
 	if (($ecode & 0xff) > 0) {
-	    $cause = "timed out after 20 seconds";
+	    $cause = "timed out waiting for child $childpid";
 	} else {
 	    $cause = "failed with exit value ". ($ecode >> 8);
 	}
@@ -163,8 +163,8 @@ if ($pin0 < $PIN0_THRESHOLD) {
 		 "Pin1:    $pin1\n\n",
 		 $TBOPS);
 	# Give it a moment to get out the door.
-	sleep(5);
-	system("/sbin/shudown -p now &");
+	sleep(10);
+	system("/sbin/shutdown -p now &");
     }
 }
 exit(0);
