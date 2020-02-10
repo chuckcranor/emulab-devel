@@ -24,7 +24,9 @@
 		var moment = window.moment ? window.moment : typeof require !== 'undefined' ? require("moment") : undefined;
 
 		var t0;
-			
+                // Do not zoom when scrolling
+	        var scrolling = false;
+
 		if(!d3)
 			throw new Error('Require D3.js before visavail script');
 		if(!moment)
@@ -240,6 +242,26 @@
 			"months": moment.months(),
 			"shortMonths": moment.monthsShort()
 		};
+
+	        if (options.zoom.enabled) {
+		    var scrollTimeout = null;
+		    
+		    // Listen for scroll events
+		    window.addEventListener('scroll', function (event) {
+			//console.info("scroll event");
+			// Clear our timeout throughout the scroll
+			if (scrollTimeout) {
+			    window.clearTimeout(scrollTimeout);
+			    scrollTimeout = null;
+			}
+			scrolling = true;
+			// Set a timeout to run after scrolling ends
+			scrollTimeout = setTimeout(function() {
+			    console.info("scroll done");
+			    scrolling = false;
+			}, 50);
+		    }, false);
+		}
 
 		if (!options.custom_time_format){
 			options.custom_time_format = {
@@ -565,11 +587,19 @@
 					.scaleExtent([1,Infinity])
 					.translateExtent([[0,0],[width, options.height]])
 					.extent([[0, 0], [width, options.height]])
-					
+				        .filter(function () {
+					    console.info("filtering",
+							 scrolling);
+					    
+					    if (scrolling) {
+						return false;
+					    }
+					    return true;
+					})
 					.on("start", function () {
 						var e = d3.event;
 						//console.log("start", e.transform, d3.zoomTransform(svg.select("#g_data").node()))
-													
+
 						if (e.sourceEvent && e.sourceEvent.type === "brush") {
 							return;
 						}
