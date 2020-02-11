@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1008,13 +1008,13 @@ sub NewType($$)
 	    return undef;
 	}
 	$packname = "libossetup_${type}";
-	# Dashes in package names are bad.
-	$packname =~ s/\-/\_/g;
     }
     elsif (defined($typeinfo) && $typeinfo->issubnode()) {
 	$type = "subnode";
 	$packname = "libossetup_subnode";
     }
+    # Dashes in package names are bad.
+    $packname =~ s/\-/\_/g;
 
     my $newtype  = eval { $packname->New($self); };
     # Not loaded?
