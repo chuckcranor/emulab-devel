@@ -47,7 +47,7 @@ $(function ()
     var hidelinktest      = false;
     var projlist          = null;
     var amlist            = null;
-    var aggcount          = 0;
+    var lastSliverStatus  = null;
     var jacksInstance     = null;
     var changingtopo      = false;
     var slowdown          = false;
@@ -536,10 +536,6 @@ $(function ()
 	    else if (instanceStatus == 'provisioning') {
 		status_html = "provisioning";
 		ProgressBarUpdate();
-		if (lastStatus == "ready") {
-		    // We went back to provisioning, the topo is changing.
-		    changingtopo = true;
-		}
 	    }
 	    else if (instanceStatus == 'provisioned') {
 		ProgressBarUpdate();
@@ -700,12 +696,26 @@ $(function ()
 
 	// Add manifests as we get them or on topo change.
 	if (expinfo.started && _.has(json.value, "sliverstatus")) {
-	    // This has a status object for all aggregates.
-	    aggcount = Object.keys(json.value.sliverstatus).length;
+	    /*
+	     * Watch for a change in the aggregates that requires that
+	     * we clean the topology/list tabs and draw new ones. Basically,
+	     * need to compare against last time, and look for deletions.
+	     */
+	    if (lastSliverStatus != null) {
+		$.each(lastSliverStatus , function(urn) {
+		    if (!_.has(json.value.sliverstatus, urn)) {
+			console.info("Topology has changed: " +
+				     urn + " removed");
+			changingtopo = true;
+		    }
+		});
+	    }
 	    // This will not do anything unless it needs to.
 	    ShowTopo(json.value.sliverstatus, function () {
 		// Do this after updates for manifest, which is async.
 		UpdateSliverStatus(json.value.sliverstatus);
+		// Also save the sliverstatus so we can detect changes
+		lastSliverStatus = json.value.sliverstatus;
 		// Async activity is now done, we can tell the caller.
 		// Be nice to use a promise, but have not figured them out yet
 		donefunc();
