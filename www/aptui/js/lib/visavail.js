@@ -257,7 +257,6 @@
 			scrolling = true;
 			// Set a timeout to run after scrolling ends
 			scrollTimeout = setTimeout(function() {
-			    console.info("scroll done");
 			    scrolling = false;
 			}, 50);
 		    }, false);
@@ -560,7 +559,7 @@
 					xScale2.domain([endDate, startDate])
 				}
 				options.xScale = xScale;
-					
+
 				// define axes
 				var xAxis = d3.axisTop(options.xScale)
 					.scale(options.xScale)
@@ -588,9 +587,6 @@
 					.translateExtent([[0,0],[width, options.height]])
 					.extent([[0, 0], [width, options.height]])
 				        .filter(function () {
-					    console.info("filtering",
-							 scrolling);
-					    
 					    if (scrolling) {
 						return false;
 					    }
@@ -839,10 +835,69 @@
 					.attr('class', 'horz_grid');
 
 				// create x axis
-				if (noOfDatasets) {
+			        if (noOfDatasets) {
 					svg.select('#g_axis').append('g')
 						.attr('class', 'xAxis')
-						.call(xAxis);
+				                .call(xAxis);
+				}
+
+			        // xaxis tooltip
+			        if (1) {
+				    svg.select('#g_axis').append('g')
+					.attr('id', 'foo')
+					.append('rect')
+					.attr('width', width)
+					.attr('height', 14)
+					.attr('fill-opacity', 0)
+					.attr('x', 0)
+   					.attr('y', -20)
+					.on('mouseover', function (d, i) {
+					    focus.style('display', null);
+					})
+					.on('mouseout', () => focus.style('display', 'none'))
+   				    	.on('mousemove', function (d, i) {
+					    var when = options.xScale.invert(d3.event.layerX - options.margin.left);
+
+					    focus.select('line.x')
+						.attr('x1', d3.event.layerX - options.margin.left)
+						.attr('x2', d3.event.layerX - options.margin.left)
+						.attr('y1', 0)
+						.attr('y2', height);
+
+					    var tx = (d3.event.layerX - options.margin.left) + 10;
+					    if (width - tx < 112) {
+						tx = tx - 130;
+					    }
+					    focus.select('text').text("");
+					    focus.select('text').attr('x', tx);
+					    focus.select('text').text(moment(when).format('l') + " " +
+								      moment(when).format('LTS'));
+					});
+				    
+				    const focus = svg.append('g')
+					.attr('class', 'focus')
+					.style('display', 'none')
+					.style('opacity', 0.7);
+
+				    focus.append('line')
+					.classed('x', true);
+
+				    d3.selectAll('.focus line')
+					.style("fill",  'none')
+					.style('stroke', 'black')
+					.style('stroke-width', '1.5px')
+					.style('stroke-dasharray', '3 3');
+				    
+				    focus.append('text')
+				        .attr('class', 'visavail-xaxis-tooltip')
+					.attr('x', 12)
+					.attr('dy', '.35em');
+
+				    focus.select('line.x')
+					.attr('x1', 0)
+					.attr('x2', 0)
+					.attr('y1', 0)
+					.attr('y2', height);
 				}
 	
 				// make y groups for different data series

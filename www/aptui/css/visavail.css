@@ -80,6 +80,12 @@ div.y-tooltip.bottom::after {
     border-color: transparent transparent #5c5c5c transparent;
 }
 
+.visavail-xaxis-tooltip {
+    font-family: "Muli", "Helvetica", Arial, sans-serif;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 14px;
+}
+
 .visavail-tooltip .tooltip_has_data {
     /* color of symbol in tooltip if there is data */
     color: #449d44;
