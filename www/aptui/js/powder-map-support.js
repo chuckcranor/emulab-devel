@@ -14,6 +14,7 @@ window.ShowPowderMap = (function()
     var GraphicsLayer  = null;
     var WatchUtils     = null;
     var ResInfo        = null;
+    var OurBuses       = null;
     var LOCATION_URL   = "https://www.uofubus.com/Services/JSONPRelay.svc/" +
 	"GetMapVehiclePoints?ApiKey=ride1791";
     var ROUTES_URL     = "https://www.uofubus.com/Services/JSONPRelay.svc/" +
@@ -1131,6 +1132,18 @@ window.ShowPowderMap = (function()
     {
 	console.info("SetupRoutes", data);
 
+	// Grab current bus info.
+	sup.CallServerMethod(null, "map-support", "GetMobileEndpoints",
+			     null, function (json) {
+				 //console.info(json);
+				 if (json.code) {
+				     console.info("Could not get mobile " +
+						  "endpoints " + json.value);
+				 }
+				 OurBuses = json.value;
+			     });
+	
+
 	// Grab the routes we care about and draw the paths.
 	_.each(data, function(route) {
 	    var routeID = route.RouteID;
@@ -1252,8 +1265,15 @@ window.ShowPowderMap = (function()
         var markerSymbol = {
 	    type: "simple-marker", // autocasts as new SimpleMarkerSymbol()
 	    color: color,
-	    size: 8
+	    size: 10,
 	};
+	if (OurBuses && _.has(OurBuses, busname)) {
+	    markerSymbol["outline"] = {
+		// autocasts as new SimpleLineSymbol()
+		color: "black",
+		width: 3,
+            };
+	}
 	var attributes = {
 	    routeID     : routeID,
 	    busname     : busname,

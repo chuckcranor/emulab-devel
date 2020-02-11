@@ -170,6 +170,44 @@ function Do_GetBaseStations()
     SPITAJAX_RESPONSE($baseStations);
 }
 
+#
+# Return Bus information.
+#
+function Do_GetMobileEndpoints()
+{
+    global $this_user, $ajax_args;
+
+    $query_result =
+        DBQueryFatal("select * from apt_mobile_aggregates as a ".
+                     "left join apt_mobile_buses as b on b.urn=a.urn ".
+                     "where b.busid!='6969' and b.busid!='4209' and ".
+                     "      b.busid!='6996'");
+    if (!mysql_num_rows($query_result)) {
+        SPITAJAX_RESPONSE(null);
+        return 0;
+    }
+    $buses = array();
+    
+    while ($row = mysql_fetch_array($query_result)) {
+        $blob = array(
+            "urn"           => $row["urn"],
+            "type"          => $row["type"],
+            "busid"         => $row["busid"],
+            "last_ping"     => DateStringGMT($row["last_ping"]),
+            "routeid"       => $row["routeid"],
+            "routename"     => $row["routename"],
+            "route_changed" => DateStringGMT($row["route_changed"]),
+            "latitude"      => $row["latitude"],
+            "longitude"     => $row["longitude"],
+            "speed"         => $row["speed"],
+            "heading"       => $row["heading"],
+            "location_stamp"=> DateStringGMT($row["location_stamp"]),
+        );
+        $buses[$row["busid"]] = $blob;
+    }
+    SPITAJAX_RESPONSE($buses);
+}
+
 
 # Local Variables:
 # mode:php

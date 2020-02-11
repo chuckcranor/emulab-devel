@@ -412,6 +412,8 @@ $routing = array("geni-login" =>
                                                      "Do_RequestInfo",
                                                  "RangeReservations" =>
                                                      "Do_RangeReservations",
+                                                 "RouteReservations" =>
+                                                     "Do_RouteReservations",
                                                  "ReservationHistory" =>
                                                      "Do_ReservationHistory")),
 		 "rfresgroup" =>
@@ -621,7 +623,9 @@ $routing = array("geni-login" =>
 			      "methods" => array("GetFixedEndpoints" =>
                                                      "Do_GetFixedEndpoints",
                                                  "GetBaseStations" =>
-                                                     "Do_GetBaseStations")),
+                                                     "Do_GetBaseStations",
+                                                 "GetMobileEndpoints" =>
+                                                     "Do_GetMobileEndpoints")),
 );
 
 #
