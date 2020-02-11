@@ -3,6 +3,7 @@ $(function ()
     'use strict';
 
     var template_list   = ["resgroup", "reserve-faq", "range-list",
+			   "route-list",
 			   "reservation-graph", "oops-modal", "waitwait-modal",
 			   "resusage-graph"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
@@ -12,15 +13,29 @@ $(function ()
     var graphTemplate   = _.template(templates["reservation-graph"]);
     var usageTemplate   = _.template(templates["resusage-graph"]);
     var rangeTemplate   = _.template(templates["range-list"]);
+    var routeTemplate   = _.template(templates["route-list"]);
     var projlist     = null;
     var amlist       = null;
+    var routelist    = null;
     var FEs          = {};	    // Powder thing
+    var Radios       = {};	    // Powder thing
     var isadmin      = false;
     var editing      = false;
     var buttonstate  = "check";
     var forecasts    = {};
+    var routeforecast= null;
     var allranges    = [];
+    var allroutes    = [];
     var IDEAL_STARTHOUR = 7;	// 7am start time preferred.
+
+    var RouteColors = {
+	"Red Detour"       : "red",
+	"Blue Detour"      : "blue",
+	"Green"            : "green",
+	"Purple"           : "purple",
+	"Orange"           : "orange",
+	"Guardsman Direct" : "pink",
+    };
 
     var addClusterRowString = 
 	' <tbody data-uuid="<%- remote_uuid %>" class="new-cluster">' +
@@ -194,7 +209,7 @@ $(function ()
 	'	         size="8"' +
 	'	         class="form-control freq-high"' +
 	'	         type="text">' +
-	'         <span class="form-group-sm hidden has-error '+
+	'         <span class="form-group-sm hidden has-error ' +
 	'                      freq-high-error"> ' +
 	'           <label class="control-label">Error</label>' +
 	'         </span>' +
@@ -283,6 +298,106 @@ $(function ()
     
     var frequencyRowTemplate  = _.template(frequencyRowString);
 
+    var addRouteRowString = 
+	' <tbody data-uuid="<%- route_uuid %>" class="new-route">' +
+	'    <tr>' +
+	'      <td>' +
+	'        <div> ' +
+	'  	   <select class="form-control routename"' +
+	'	   	   placeholder="Please Select">' +
+	'	     <option value="">Select Route</option>' +
+	'	     <% _.each(routelist, function(details) { %>' +
+	'	       <option' +
+	'		   <% if (details.routename == routename) { %>' +
+	'		   selected' +
+	'		   <% } %>' +
+	'		   value="<%= details.routename %>">' +
+	'                     <%= details.routename %>' +
+	'	       </option>' +
+	'	     <% }); %>' +
+	'	   </select>' +
+	'         <span class="form-group-sm hidden has-error ' +
+	'                      routename-error"> ' +
+	'           <label class="control-label">Error</label>' +
+	'         </span>' +
+	'       </div> '+
+	'      </td>' +
+	'      <td style="width: 16px; padding-right: 0px;">' +
+	'        <button type="button" ' +
+	'                class="btn btn-xs btn-default add-route hidden" ' +
+	'                style="">' +
+ 	'           <span class="glyphicon glyphicon-plus" ' +
+	'		 data-toggle="tooltip" ' +
+	' 		 data-container="body" ' +
+	'		 data-trigger="hover" ' +
+	'		 title="Add a new reservation row"></span>' +
+	'        </button>' +
+	'        <button type="button" ' +
+	'                class="btn btn-xs btn-default delete-route hidden"' +
+	'                style="">' +
+ 	'           <span class="glyphicon glyphicon-minus" ' +
+	'		 data-toggle="tooltip" ' +
+	' 		 data-container="body" ' +
+	'		 data-trigger="hover" ' +
+	'		 title="Remove this reservation row"></span>' +
+	'        </button>' +
+	'      </td>' +
+	'    </tr>' +
+	'    <tr class="error-row">' +
+	'      <td colspan=4 class="reservation-error">' +
+	'         <span class="form-group-sm hidden has-error"> ' +
+	'           <label class="control-label">Error</label>' +
+	'         </span>' +
+	'      </td>' +
+	'    </tr>' +
+	'   </tbody>'; 
+	
+    var addRouteRowTemplate  = _.template(addRouteRowString);
+
+    // When editing, use readonly inputs.
+    var routeRowString = 
+	' <tbody data-uuid="<%- route_uuid %>" class="existing-route">' +
+	'    <tr>' +
+	'     <td>' +
+	'      <div>' +
+	'       <input readonly type=text ' +
+	'	       value="<%- routename %>"' +
+	'              class="form-control routename">' +
+	'      </div>' +
+	'     </td>' +
+	'     <td style="width: 16px; padding-right: 0px;">' +
+	'       <button type="button" ' +
+	'               class="btn btn-xs btn-default add-route hidden" ' +
+	'               style="">' +
+ 	'          <span class="glyphicon glyphicon-plus" ' +
+	'		 data-toggle="tooltip" ' +
+	' 		 data-container="body" ' +
+	'		 data-trigger="hover" ' +
+	'		 title="Add a new reservation row"></span>' +
+	'       </button>' +
+	'       <button type="button" ' +
+	'               class="btn btn-xs btn-default delete-route ' +
+	'                      hidden" ' +
+	'               style="color: red;">' +
+ 	'          <span class="glyphicon glyphicon-remove" ' +
+	'		 data-toggle="tooltip" ' +
+	' 		 data-container="body" ' +
+	'		 data-trigger="hover" ' +
+	'		 title="Delete this route reservation"></span>' +
+	'       </button>' +
+	'     </td>' +
+	'    </tr>' +
+	'    <tr class="error-row">' +
+	'      <td colspan=4 class="reservation-error">' +
+	'         <span class="form-group-sm hidden has-error"> ' +
+	'           <label class="control-label">Error</label>' +
+	'         </span>' +
+	'      </td>' +
+	'    </tr>'; 
+	'  </body>'; 
+    
+    var routeRowTemplate  = _.template(routeRowString);
+
     /*
      * Callback when something changes so that we can toggle the
      * button from Submit to Check.
@@ -305,6 +420,7 @@ $(function ()
 	editing  = window.EDITING; 
 	projlist = JSON.parse(_.unescape($('#projects-json')[0].textContent));
 	amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
+	routelist= JSON.parse(_.unescape($('#routelist-json')[0].textContent));
 	console.info("amlist", amlist);
 
 	GeneratePageBody();
@@ -393,7 +509,17 @@ $(function ()
 	    }
 	    else {
 		AddClusterRow();
-		AddRangeRow();
+		// Initially, only POWDER gets to see the range/route tables.
+		// But we want to show the range/route tables on existing
+		// resgroups, if looking at it from a different portal.
+		// See below.
+		if (window.ISPOWDER) {
+		    AddRangeRow();
+		    // For now, only admins see routes
+		    if (isadmin) {
+			AddRouteRow();
+		    }
+		}
 	    }
 	}
 	// Graph list(s).
@@ -414,15 +540,6 @@ $(function ()
 				   "showfullscreen" : true});
 	});
 	$('#reservation-lists').html(html);
-
-	if (_.size(FEs)) {
-	    html = graphTemplate({"graphid"        : "resgraph-FEs",
-				  "title"          : "Fixed Endpoint",
-				  "showhelp"       : true,
-				  "showfullscreen" : false});
-	    $('#FE-graph').html(html);
-	    $('#FE-graph').removeClass("hidden");
-	}
 
 	// Handler for the Help button
 	$('#reservation-help-button').click(function (event) {
@@ -499,12 +616,6 @@ $(function ()
 	    }
 	});
 
-	// Initially, only POWDER gets to see the range table.
-	// But we want to show the range table on existing resgroups,
-	// if looking at it from a different portal. See below.
-	if (window.ISPOWDER) {
-	    $("#range-table-div").removeClass("hidden");
-	}
 	aptforms.EnableUnsavedWarning('#reserve-request-form',
 				      modified_callback);
     }
@@ -596,6 +707,8 @@ $(function ()
      */
     function AddRangeRow(freq_low, freq_high)
     {
+	$("#range-table-div").removeClass("hidden");
+	
 	var html = addFrequencyRowTemplate({
 	    "freq_low"    : (freq_low  === undefined ? "" : freq_low),
 	    "freq_high"   : (freq_high === undefined ? "" : freq_high),
@@ -660,6 +773,91 @@ $(function ()
 		modified_callback();
 	    });
 	row.find('input.freq-low, input.freq-high').change(function () {
+	    modified_callback();
+	});
+	// See above
+	updateButtons();
+    }
+    
+    /*
+     * Add a new route row.
+     */
+    function AddRouteRow(routename)
+    {
+	$("#route-table-div").removeClass("hidden");
+		    
+	var html = addRouteRowTemplate({
+	    "routelist"   : routelist,
+	    "routename"   : (routename  === undefined ? "" : routename),
+	    "route_uuid"  : sup.newUUID(),
+	});
+	var row = $(html);
+
+	// This activates the tooltip subsystem.
+	row.find('[data-toggle="tooltip"]').tooltip({
+	    placement: 'auto'
+	});
+
+	// Handler to regen the combined graph
+	row.find('.routename').change(function (event) {
+	    $(this).find('option:selected')
+		.each(function() {
+		    console.info("route change: " + $(this).val());
+		    RegenCombinedGraph();
+		});
+	});
+	$('#route-table').append(row);
+
+	/*
+	 * Three cases to consider for the delete button
+	 *  1) New reservation, always start with one new route row
+	 *     that cannot be deleted.
+	 *  2) Existing reservation with a route, show add button on
+	 *     last one. All routes get a delete button.
+	 *  3) Existing reservation with no routes, treat like case 1.
+	 */
+	var updateButtons = function () {
+	    if (!editing) {
+		if ($('#route-table tbody.new-route').length == 1) {
+		    $('#route-table .new-route .delete-route').hide();
+		}
+		else {
+		    $('#route-table .new-route .delete-route').show();
+		}
+	    }
+	    else if ($('#route-table tbody.existing-route').length) {
+		$('#route-table .new-route .delete-route').show();
+	    }
+	    else if ($('#route-table tbody.new-route').length == 1) {
+		$('#route-table .new-route .delete-route').hide();
+	    }
+	    else {
+		$('#route-table .new-route .delete-route').show();
+	    }
+	    // Last route always gets an add button
+	    $('#route-table .add-route').not(":last").hide();
+	    $('#route-table .add-route').last().show();
+	    return;
+	};
+	
+	/*
+	 * Add/Delete route. See above for button handling.
+	 */
+	row.find('.add-route')
+	    .removeClass("hidden")
+	    .click(function (event) {
+		AddRouteRow();
+	    });
+	row.find('.delete-route')
+	    .removeClass("hidden")
+	    .click(function (event) {
+		// Kill tooltips since they get left behind if visible.
+		row.find('[data-toggle="tooltip"]').tooltip('destroy');
+		row.remove();
+		updateButtons();
+		modified_callback();
+	    });
+	row.find('input.routename').change(function () {
 	    modified_callback();
 	});
 	// See above
@@ -782,6 +980,33 @@ $(function ()
     }
     
     /*
+     * Generate errors in the routes table.
+     */
+    function GenerateRouteTableFormErrors(routes)
+    {
+	console.info("GenerateRouteTableFormErrors", routes);
+
+	_.each(routes, function (route, uuid) {
+	    if (!_.has(route, "errors")) {
+		return;
+	    }
+	    var tbody = $('#route-table tbody[data-uuid="' + uuid + '"]');
+
+	    _.each(route.errors, function (error, key) {
+		var classname;
+			    
+		if (key == "routename") {
+		    classname = ".routename-error";
+		}
+		tbody.find(classname + " label")
+		    .html(error);
+		tbody.find(classname)
+		    .removeClass("hidden");
+	    });
+	});
+    }
+    
+    /*
      * These are validation errors (not enough nodes, etc).
      */
     function GenerateClusterValidationErrors(clusters)
@@ -823,6 +1048,41 @@ $(function ()
     {
 	_.each(ranges, function (reservation, uuid) {
 	    var tbody = $('#range-table tbody[data-uuid="' + uuid + '"]');
+
+	    if (_.has(reservation, "errcode")) {
+		tbody.find(".reservation-error span label")
+		    .html(reservation.output);
+		tbody.find(".reservation-error span")
+		    .removeClass("has-warning")
+		    .addClass("has-error")
+		    .removeClass("hidden");
+		tbody.removeClass("has-warning has-error")
+		    .addClass("has-error");
+	    }
+	    else if (parseInt(reservation.approved) != 0) {
+		tbody.find(".reservation-error span")
+		    .addClass("hidden");
+	    }
+	    else {
+		tbody.find(".reservation-error span label")
+		    .html("Approval is required");
+		tbody.find(".reservation-error span")
+		    .addClass("has-warning")
+		    .removeClass("has-error")
+		    .removeClass("hidden");
+		tbody.removeClass("has-warning has-error")
+		    .addClass("has-warning");
+	    }
+	});
+    }
+
+    /*
+     * These are validation errors (not enough nodes, etc).
+     */
+    function GenerateRouteValidationErrors(routes)
+    {
+	_.each(routes, function (reservation, uuid) {
+	    var tbody = $('#route-table tbody[data-uuid="' + uuid + '"]');
 
 	    if (_.has(reservation, "errcode")) {
 		tbody.find(".reservation-error span label")
@@ -917,6 +1177,33 @@ $(function ()
 	return ranges;
     }
      
+    /*
+     * Generate list of route rows for passing to the server.
+     */
+    function GetRouteRows()
+    {
+	var routes = {};
+
+	/*
+	 * Collect the route rows into an array.
+	 */
+	$('#route-table tbody').each(function () {
+	    var tbody   = $(this);
+	    var name    = tbody.find(".routename option:selected").val();
+	    var uuid    = tbody.data("uuid");
+
+	    console.info(tbody, name, uuid);
+
+	    // Skip an empty row
+	    if (name == "") {
+		return;
+	    }
+	    routes[uuid] = {"routename" : name,
+			    "uuid"      : uuid};
+	});
+	return routes;
+    }
+     
     //
     // Check form validity. This does not check whether the reservation
     // is valid.
@@ -927,6 +1214,7 @@ $(function ()
 	var end      = null;
 	var clusters = {};
 	var ranges   = {};
+	var routes   = {};
 	
 	var checkonly_callback = function(json) {
 	    if (json.code) {
@@ -945,6 +1233,9 @@ $(function ()
 		if (_.has(json.value, "ranges")) {
 		    GenerateRangeTableFormErrors(json.value.ranges);
 		}
+		if (_.has(json.value, "routes")) {
+		    GenerateRouteTableFormErrors(json.value.routes);
+		}
 		return;
 	    }
 	    // Set the number of days, so that user can then search if
@@ -955,7 +1246,7 @@ $(function ()
 		.val(days.toFixed(1));
 	    
 	    // Now check the actual reservation validity.
-	    ValidateReservation(clusters, ranges);
+	    ValidateReservation(clusters, ranges, routes);
 	}
 	/*
 	 * Before we submit, set the start/end fields to UTC time.
@@ -994,17 +1285,19 @@ $(function ()
 	    end.hour(end_hour);
 	    $('#reserve-request-form [name=end]').val(end.format());
 	}
-	// Collect the cluster and range rows into an array.
+	// Collect the cluster and range/route rows into an array.
 	clusters = GetClusterRows();
 	ranges   = GetRangeRows();
+	routes   = GetRouteRows();
 
-	if (! (_.size(clusters) || _.size(ranges))) {
+	if (! (_.size(clusters) || _.size(ranges) || _.size(routes))) {
 	    alert("No reservations have been specified");
 	    return;
 	}
 	var args = {
 	    "clusters" : clusters,
-	    "ranges"   : ranges
+	    "ranges"   : ranges,
+	    "routes"   : routes,
 	};
 	if (window.ISADMIN && _.size(ranges)) {
 	    $('#override-checkbox').removeClass("hidden");
@@ -1092,8 +1385,12 @@ $(function ()
     function LoadReservations(project)
     {
 	var deferred = [];
-	LoadRangeReservations();
-	
+	if (window.ISPOWDER) {
+	    LoadRangeReservations();
+	    if (isadmin) {
+		LoadRouteReservations();
+	    }
+	}
 	_.each(amlist, function(details, urn) {
 	    var callback = function(json) {
 		console.log("LoadReservations: " + details.nickname, json);
@@ -1116,6 +1413,17 @@ $(function ()
 		if (_.has(FEs, urn)) {
 		    RegenFEGraph();
 		    return;
+		}
+		// Another special case; seperate out Emulab reservable
+		// radios into a different graph using the new graph code.
+		if (window.ISPOWDER && details.nickname == "Emulab") {
+		    _.each(json.value.forecast, function (stuff, key) {
+			if (_.has(details.reservable_nodes, key)) {
+			    Radios[key] = stuff;
+			    delete json.value.forecast[key];
+			}
+		    });
+		    GenerateRadioGraph();
 		}
 		
 		ShowResGraph({"forecast"  : json.value.forecast,
@@ -1251,6 +1559,48 @@ $(function ()
     }
     
     /*
+     * Load the route reservation info.
+     */
+    function LoadRouteReservations()
+    {
+	var callback = function(json) {
+	    console.log("LoadRouteReservations", json);
+	    if (json.code) {
+		console.info("Could not get route info");
+		return;
+	    }
+	    routeforecast = json.value.forecast;
+	    GenerateRouteGraph();
+
+	    if (!_.size(json.value.list)) {
+		return;
+	    }
+	    if (0) {
+		allroutes = json.value.list;
+		var html = routeTemplate({"routes" : allroutes});
+		$('#route-list').html(html).removeClass("hidden");
+
+		// Format dates with moment before display.
+		$('#route-list .format-date').each(function() {
+		    var date = $.trim($(this).html());
+		    if (date != "") {
+			$(this).html(moment(date).format("lll"));
+		    }
+		});
+		$('#route-list .tablesorter')
+		    .tablesorter({
+			theme : 'green',
+			// initialize zebra
+			widgets: ["zebra"],
+		    });
+	    }
+	};
+	var xmlthing = sup.CallServerMethod(null, "resgroup",
+					    "RouteReservations");
+	xmlthing.done(callback);
+    }
+    
+    /*
      * Try to find the first fit.
      */
     function FindFit()
@@ -1262,6 +1612,7 @@ $(function ()
 	// List of reservation requests.
 	var clusters = _.values(GetClusterRows());
 	var ranges   = _.values(GetRangeRows());
+	var routes   = _.values(GetRouteRows());
 
 	if (!_.size(clusters)) {
 	    alert("Need at least one complete cluster definition");
@@ -1339,7 +1690,7 @@ $(function ()
 	if (bail) {
 	    return;
 	}
-	console.info("FindFit: ", days, clusters, ranges);
+	console.info("FindFit: ", days, clusters, ranges, routes);
 
 	/*
 	 * Slightly cheesy way to wait for the cluster data to come in.
@@ -1368,6 +1719,22 @@ $(function ()
 	    return;
 	}
 	/*
+	 * Oh, major cheesiness going on here. Take the route rows and
+	 * make it look like a cluster and add to the cluster list so that
+	 * we process the forecasts in that loop. Do I get a cookie?
+	 */
+	if (routeforecast != null) {
+	    _.each(routes, function (route) {
+		clusters.push({"cluster" : "busroutes",
+			       "type"    : route.routename,
+			       "count"   : 1});
+	    });
+	    forecasts["busroutes"] = routeforecast;
+	    console.info("extend", clusters);
+	}
+	
+	
+	/*
 	 * Find the first fit for a cluster reservation
 	 */
 	var findfirst = function (cluster, lower, upper) {
@@ -1389,6 +1756,7 @@ $(function ()
 		if (data.free >= cluster.count) {
 		    starttime = data.t;
 		    startdata = data;
+		    console.info("baz2", startdata, starttime, lower);
 		    if (lower) {
 			if (tmp.length) {
 			    var next = tmp[0];
@@ -1409,10 +1777,12 @@ $(function ()
 			else {
 			    // Last one, has enough nodes, just move past
 			    // lower bound and be done.
-			    starttime = lower;
+			    if (0 && starttime < lower) {
+				starttime = lower + 60;
+			    }
 			}
 		    }
-		    console.info("boop", data);
+		    console.info("boop", data, starttime);
 		    
 		    for (var i = 0; i < tmp.length; i++) {
 			var next = tmp[i];
@@ -1607,7 +1977,7 @@ $(function ()
     //
     // Validate the reservation. 
     //
-    function ValidateReservation(clusters, ranges)
+    function ValidateReservation(clusters, ranges, routes)
     {
 	var callback = function(json) {
 	    console.info(json);
@@ -1629,6 +1999,9 @@ $(function ()
 		if (_.has(json.value, "ranges")) {
 		    GenerateRangeTableFormErrors(json.value.ranges);
 		}
+		if (_.has(json.value, "routes")) {
+		    GenerateRouteTableFormErrors(json.value.routes);
+		}
 		// Make sure we still warn about an unsaved form.
 		aptforms.MarkFormUnsaved();
 		return;
@@ -1640,7 +2013,7 @@ $(function ()
 	     * we sent over.
 	     */
 	    var results = json.value;
-	    var cluster_results, range_results;
+	    var cluster_results, range_results, route_results;
 	    
 	    if (_.has(results, "cluster_results")) {
 		cluster_results = results.cluster_results;
@@ -1650,9 +2023,14 @@ $(function ()
 		range_results = json.value.range_results;
 		GenerateRangeValidationErrors(range_results.ranges);
 	    }
+	    if (_.has(results, "route_results")) {
+		route_results = json.value.route_results;
+		GenerateRouteValidationErrors(route_results.routes);
+	    }
 	    // User needs to fix things up.
 	    if ((cluster_results && cluster_results.errors) ||
-		(range_results && range_results.errors)) {
+		(range_results && range_results.errors) ||
+		(route_results && route_results.errors)) {
 		return;
 	    }
 	    
@@ -1664,7 +2042,9 @@ $(function ()
 	    if ((cluster_results &&
 		 cluster_results.approved != _.size(clusters)) ||
 		(range_results &&
-		 range_results.approved != _.size(ranges))) {
+		 range_results.approved != _.size(ranges)) ||
+		(route_results &&
+		 route_results.approved != _.size(routes))) {
 		$('#confirm-reservation .needs-approval')
 		    .removeClass("hidden");
 	    }
@@ -1676,7 +2056,8 @@ $(function ()
 	};
 	var args = {
 	    "clusters" : clusters,
-	    "ranges"   : ranges
+	    "ranges"   : ranges,
+	    "routes"   : routes
 	};
 	if (window.ISADMIN && _.size(ranges)) {
 	    if ($('#admin-override').is(":checked")) {
@@ -1700,6 +2081,7 @@ $(function ()
     {
 	var clusters = {};
 	var ranges   = {};
+	var routes   = {};
 	
 	var reserve_callback = function(json) {
 	    console.info(json);
@@ -1714,7 +2096,7 @@ $(function ()
 	     * array we sent over.
 	     */
 	    var results = json.value;
-	    var cluster_results, range_results;
+	    var cluster_results, range_results, route_results;
 	    
 	    if (_.has(results, "cluster_results")) {
 		cluster_results = results.cluster_results;
@@ -1724,8 +2106,13 @@ $(function ()
 		range_results = json.value.range_results;
 		GenerateRangeValidationErrors(range_results.ranges);
 	    }
+	    if (_.has(results, "route_results")) {
+		route_results = json.value.route_results;
+		GenerateRouteValidationErrors(route_results.routes);
+	    }
 	    // User needs to fix things up.
 	    if ((cluster_results && cluster_results.errors) ||
+		(route_results && route_results.errors) ||
 		(range_results && range_results.errors)) {
 		/*
 		 * Partial success. We want to stay here. But if not
@@ -1758,6 +2145,15 @@ $(function ()
 			}
 		    });
 		}
+		if (route_results) {
+		    _.each(route_results.routes, function (res, uuid) {
+			var tbody = $('#route-table tbody[data-uuid="' +
+				  uuid + '"]');
+			if (uuid != res.uuid) {
+			    tbody.attr("data-uuid", res.uuid);
+			}
+		    });
+		}
 		return;
 	    }
 	    if (window.FROMRSPEC) {
@@ -1771,14 +2167,16 @@ $(function ()
 	// Collect the cluster rows into an array.
 	clusters = GetClusterRows();
 	ranges   = GetRangeRows();
+	routes   = GetRouteRows();
 
-	if (! (_.size(clusters) || _.size(ranges))) {
+	if (! (_.size(clusters) || _.size(ranges) || _.size(routes))) {
 	    alert("No reservations have been specified");
 	    return;
 	}
 	var args = {
 	    "clusters" : clusters,
-	    "ranges"   : ranges
+	    "ranges"   : ranges,
+	    "routes"   : routes
 	};
 	if (window.ISADMIN && _.size(ranges)) {
 	    $('#override-checkbox').removeClass("hidden");
@@ -1825,44 +2223,47 @@ $(function ()
 		.val(days.toFixed(1));
 
 	    // Add cluster rows as needed.
-	    _.each(details.clusters, function (res) {
-		var html = clusterRowTemplate({
-		    "cluster"     : res.cluster_id,
-		    "cluster_urn" : res.cluster_urn,
-		    "type"        : res.type,
-		    "count"       : res.count,
-		    "using"       : res.using != null ? res.using : "",
-		    "remote_uuid" : res.remote_uuid,
-		    "active"      : details.active,
-		    "approved"    : res.approved,
+	    if (_.size(details.clusters)) {
+		_.each(details.clusters, function (res) {
+		    var html = clusterRowTemplate({
+			"cluster"     : res.cluster_id,
+			"cluster_urn" : res.cluster_urn,
+			"type"        : res.type,
+			"count"       : res.count,
+			"using"       : res.using != null ? res.using : "",
+			"remote_uuid" : res.remote_uuid,
+			"active"      : details.active,
+			"approved"    : res.approved,
+		    });
+		    var row = $(html);
+		    // Handler for changing node count.
+		    row.find(".node-count").change(function () {
+			HandleCountChange(row);
+		    });
+		    // Handler for delete row.
+		    row.find(".delete-reservation").click(function () {
+			Delete(row);
+		    });
+		    // This activates the tooltip subsystem.
+		    row.find('[data-toggle="tooltip"]').tooltip({
+			placement: 'auto'
+		    });
+		    $('#cluster-table').append(row);
 		});
-		var row = $(html);
-		// Handler for changing node count.
-		row.find(".node-count").change(function () {
-		    HandleCountChange(row);
+		UpdateClustersTable(details);
+		$('#cluster-table .add-cluster').click(function (event) {
+		    AddClusterRow();
 		});
-		// Handler for delete row.
-		row.find(".delete-reservation").click(function () {
-		    Delete(row);
-		});
-		// This activates the tooltip subsystem.
-		row.find('[data-toggle="tooltip"]').tooltip({
-		    placement: 'auto'
-		});
-		$('#cluster-table').append(row);
-	    });
-	    UpdateClustersTable(details);
-	    
-	    $('#cluster-table .add-cluster').click(function (event) {
+		$('#cluster-table .add-cluster').last().removeClass("hidden");
+	    }
+	    else {
+		// Always show an empty cluster row.
 		AddClusterRow();
-	    });
-	    $('#cluster-table .add-cluster').last().removeClass("hidden");
+	    }
 
 	    // Add range rows as needed.
 	    if (_.size(details.ranges)) {
 		_.each(details.ranges, function (res) {
-		    $("#range-table-div").removeClass("hidden");
-		    
 		    var html = frequencyRowTemplate({
 			"freq_low"    : res.freq_low,
 			"freq_high"   : res.freq_high,
@@ -1892,7 +2293,42 @@ $(function ()
 	    }
 	    else {
 		// Always show an empty range row.
-		AddRangeRow();
+		if (window.ISPOWDER) {
+		    AddRangeRow();
+		}
+	    }
+
+	    // Add route rows as needed.
+	    if (_.size(details.routes)) {
+		_.each(details.routes, function (res) {
+		    var html = routeRowTemplate({
+			"routename"   : res.routename,
+			"route_uuid"  : res.route_uuid,
+			"active"      : details.active,
+			"approved"    : res.approved,
+		    });
+		    var row = $(html);
+		    // Handler for delete row.
+		    row.find(".delete-route").click(function () {
+			Delete(row);
+		    });
+		    // This activates the tooltip subsystem.
+		    row.find('[data-toggle="tooltip"]').tooltip({
+			placement: 'auto'
+		    });
+		    $('#route-table').append(row);
+		});
+		UpdateRouteTable(details);
+		$('#route-table .add-route').click(function (event) {
+		    AddRouteRow();
+		});
+		$('#route-table .add-route').last().removeClass("hidden");
+	    }
+	    else {
+		// Always show an empty route row.
+		if (window.ISPOWDER && isadmin) {
+		    AddRouteRow();
+		}
 	    }
 
 	    /*
@@ -2183,6 +2619,85 @@ $(function ()
     }
 
     /*
+     * Update just the route table from current info, say after a refresh.
+     */
+    function UpdateRouteTable(details, operationResults)
+    {
+	var reservations = details.routes;
+	console.info("UpdateRouteTable", details, operationResults);
+
+	/*
+	 * Look for any reservations that are gone (deleted) from the group
+	 */
+	$('#route-table tbody.existing-range').each(function () {
+	    var tbody = $(this);
+	    var uuid  = tbody.attr('data-uuid');
+
+	    if (!_.has(reservations, uuid)) {
+		console.info("reservation is gone: " + uuid);
+		// Kill tooltips since they get left behind if visible.
+		tbody.find('[data-toggle="tooltip"]').tooltip('destroy');
+		tbody.remove();
+	    }
+	});
+	
+	_.each(reservations, function (res) {
+	    var uuid  = res.route_uuid;
+	    var tbody = $('#route-table tbody[data-uuid="' + uuid + '"]');
+	    var newClass = "";
+
+	    if (operationResults &&
+		_.has(operationResults, uuid) &&
+		operationResults[uuid].errcode) {
+		tbody.find(".reservation-error span label")
+		    .html(operationResults[uuid].errmesg);
+		newClass = "has-error";
+	    }
+	    else if (!res.approved) {
+		tbody.find(".reservation-error span label")
+		    .html("The reservation above has not been approved yet");
+		newClass = "has-warning";
+	    }
+	    else if (res.canceled) {
+		var when = moment(res.canceled).format("lll");
+		tbody.find(".reservation-error span label")
+  		   .html("The reservation above is scheduled to be canceled " +
+		         "at " + when);
+		newClass = "has-error";
+	    }
+	    if (newClass == "") {
+		tbody.find(".reservation-error span")
+		    .addClass("hidden");
+		tbody.removeClass("has-warning has-error");
+	    }
+	    else {
+		tbody.find(".reservation-error span")
+		    .removeClass("has-warning has-error")
+		    .addClass(newClass)
+		    .removeClass("hidden");
+		tbody.removeClass("has-warning has-error")
+		    .addClass(newClass);
+	    }
+	});
+	if (details.approved) {
+	    if (isadmin) {
+		$('#reserve-approve-button').addClass("hidden");
+	    }
+	}
+	// Always display delete button on existing routes
+	$('#route-table .existing-route .delete-route').removeClass("hidden");
+
+	// If no new reservations have been added, need to display
+	// add button on last existing reservation.
+	if ($('#route-table tbody.new-route').length == 0) {
+	    $('#route-table tbody.existing-route .add-route')
+		.addClass("hidden");
+	    $('#route-table tbody.existing-route .add-route')
+		.last().removeClass("hidden");
+	}
+    }
+
+    /*
      * Call above function after getting updated reservation details,
      * displaying any errors we need to after an operation.
      */
@@ -2202,6 +2717,8 @@ $(function ()
 				 UpdateClustersTable(json.value,
 						     operationResults);
 				 UpdateRangeTable(json.value,
+						  operationResults);
+				 UpdateRouteTable(json.value,
 						  operationResults);
 			     });
     }
@@ -2291,6 +2808,9 @@ $(function ()
 	    $('#override-checkbox').prop("checked", false);	    
 	    RefreshTables(json.value);
 	    LoadRangeReservations();
+	    if (isadmin) {
+		LoadRouteReservations();
+	    }
 	};
 	var args = {
 	    "uuid"    : window.UUID,
@@ -2608,6 +3128,7 @@ $(function ()
     function RegenCombinedGraph()
     {
 	var clusters = GetClusterRows();
+	var routes   = GetRouteRows();
 	var combinedForecasts = {};
 	var waiting = 0;
 	console.info("RegenCombinedGraph", clusters);
@@ -2627,6 +3148,14 @@ $(function ()
 	    
 	    combinedForecasts[id] = forecasts[urn][type];
 	})
+	_.each(routes, function (details) {
+	    var routename = details.routename;
+
+	    if (_.has(routeforecast, routename)) {
+		combinedForecasts[routename] = routeforecast[routename]
+	    }
+	})
+	
 	console.info("AddToCombinedGraph", combinedForecasts);
 
 	// Must be visible before graph can be drawn.
@@ -2642,6 +3171,7 @@ $(function ()
 	ShowResGraph({"forecast"       : combinedForecasts,
 		      "selector"       : "combined-resgraph",
 		      "skiptypes"      : {},
+		      "colors"         : RouteColors,
 		      "click_callback" : function(when, type) {
 			  if (!editing) {
 			      var start = moment(when);
@@ -2656,12 +3186,12 @@ $(function ()
 
     function RegenFEGraph()
     {
-	var combinedForecasts = {};
-	var id = "resgraph-FEs";
-	// Kill the spinner.
-	$('#' + id + ' .resgraph-spinner').addClass("hidden");
+	$('#FE-graph-div').removeClass("hidden");
+	$('#FE-graph-visavail').html("");
 
-	console.info("RegenFEGraph");
+	var dataset = [];
+	var now     = new Date();
+	var maxend  = now;
 
 	_.each(FEs, function (details, urn) {
 	    // Do we have the forecasts yet?
@@ -2669,18 +3199,195 @@ $(function ()
 		return;
 	    }
 	    _.each(forecasts[urn], function(forecast, type) {
-		var id = amlist[urn].abbreviation + "/" + type;
+		var id = amlist[urn].abbreviation + " " + type;
 
-		combinedForecasts[id] = forecasts[urn][type];
+		var series = {
+		    "measure"   : id,
+		    "interval_s": 3600,
+		    "data"      : [],
+		    "categories": {
+			"Busy": { "color": "black" },
+			"Free": { "color": "green"},
+		    },
+		};
+		for (var i = 0; i < forecast.length; i++) {
+		    var info  = forecast[i];
+		    var start = moment(info.stamp).toDate();
+		    var state = info.free ? "Free" : "Busy";
+		    var end;
+
+		    if (i < forecast.length - 1) {
+			end = moment(forecast[i + 1].stamp).toDate();
+		    }
+		    else {
+			end = new Date(start.getTime());
+			end.setMonth(end.getMonth()+2);
+		    }
+		    // Upper bound on the end of the last entry, so we can
+		    // even things out on the very right side.
+		    if (end > maxend) {
+			maxend = end;
+		    }
+		    series.data.push([start, state, end]);
+		}
+		dataset.push(series);
 	    });
 	});
-	console.info("AddToFEGraph", combinedForecasts);
+	ShowNewGraph(dataset, maxend, "FE-graph-body", "FE-graph-visavail")
+    }
 
-	ShowResGraph({"forecast"  : combinedForecasts,
-		      "selector"  : "resgraph-FEs",
-		      "height"    : "400px",
-		      "skiptypes" : {},
-		     });
+    function GenerateRouteGraph()
+    {
+	$('#route-graph-div').removeClass("hidden");
+	
+	var dataset = [];
+	var now     = new Date();
+	var maxend  = now;
+	_.each(routeforecast, function (forecast, route) {
+	    var series = {
+		"measure"   : route,
+		"interval_s": 3600,
+		"data"      : [],
+		"categories": {
+		    "Busy": { "color": "black" },
+		    "Free": { "color": RouteColors[route]},
+		},
+	    };
+	    for (var i = 0; i < forecast.length; i++) {
+		var info  = forecast[i];
+		var start = moment(info.stamp).toDate();
+		var state = info.free ? "Free" : "Busy";
+		var end;
+
+		if (i < forecast.length - 1) {
+		    end = moment(forecast[i + 1].stamp).toDate();
+		}
+		else {
+		    end = new Date(start.getTime());
+		    end.setMonth(end.getMonth()+2);
+		}
+		// Upper bound on the end of the last entry, so we can
+		// even things out on the very right side.
+		if (end > maxend) {
+		    maxend = end;
+		}
+		series.data.push([start, state, end]);
+	    }
+	    dataset.push(series);
+	});
+	ShowNewGraph(dataset, maxend,
+		     "route-graph-body", "route-graph-visavail");
+    }
+
+    function GenerateRadioGraph()
+    {
+	$('#radio-graph-div').removeClass("hidden");
+	
+	var dataset = [];
+	var now     = new Date();
+	var maxend  = now;
+
+	_.each(Radios, function (forecast, node_id) {
+	    var series = {
+		"measure"   : node_id,
+		"interval_s": 3600,
+		"data"      : [],
+		"categories": {
+		    "Busy": { "color": "black" },
+		    "Free": { "color": "green"},
+		},
+	    };
+	    for (var i = 0; i < forecast.length; i++) {
+		var info  = forecast[i];
+		var start = moment(info.stamp).toDate();
+		var state = info.free ? "Free" : "Busy";
+		var end;
+
+		if (i < forecast.length - 1) {
+		    end = moment(forecast[i + 1].stamp).toDate();
+		}
+		else {
+		    end = new Date(start.getTime());
+		    end.setMonth(end.getMonth()+2);
+		}
+		// Upper bound on the end of the last entry, so we can
+		// even things out on the very right side.
+		if (end > maxend) {
+		    maxend = end;
+		}
+		series.data.push([start, state, end]);
+	    }
+	    dataset.push(series);
+	});
+	ShowNewGraph(dataset, maxend,
+		     "radio-graph-body", "radio-graph-visavail");
+    }
+
+    /*
+     * Generate a new style graph in the provide container.
+     */
+    function ShowNewGraph(dataset, maxend, container, graph)
+    {
+	// Even out the right side.
+	_.each(dataset, function(series) {
+	    var last = series.data[series.data.length - 1];
+	    var end  = last[2];
+	    if (maxend > end) {
+		if (!last.free) {
+		    last[2] = maxend;
+		}
+	    }
+	});
+	console.info("ShowNewGraph", dataset);
+	
+	var options = {
+	    id_div_container: container,
+	    id_div_graph: graph,
+	    moment_locale: null,
+	    line_spacing: 12,
+	    custom_categories: true,
+	    
+	    responsive: {
+		enabled: true,
+	    },
+	    icon: {
+		class_has_data: 'fas fa-fw fa-check',
+		class_has_no_data: 'fas fa-fw fa-exclamation-circle'
+	    },
+	    margin: {
+		// top margin includes title and legend
+		top: 25,
+		// right margin should provide space for last horz. axis title
+		right: 20,
+		bottom: 10,
+		// left margin should provide space for y axis titles
+		left: 110,
+	    },
+	    padding:{
+		// Match left margin above. Not sure why.
+		left: -110
+	    },
+	    graph:{
+		height:12,
+	    },
+	    tooltip: {
+		enabled: true,
+		date_plus_time: true,
+	    },
+	    zoom: {
+		enabled: true,
+	    },
+	    legend: {
+		enabled: false,
+	    },
+	    title: {
+		enabled: false,
+	    },
+	    sub_title: {
+		enabled: false,
+	    },
+	};
+	var chart = visavail.generate(options, dataset)
     }
 
     /*
@@ -2692,8 +3399,9 @@ $(function ()
 	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
 	var xmlDoc    = $.parseXML(rspec);
 	var spectrum  = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'spectrum');
+	var routes    = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'busroutes');
 	var tcounts   = {"_unbounded" : 0};
-	console.info("PopulateFromRspec", spectrum);
+	console.info("PopulateFromRspec", spectrum, routes);
 
 	_.each(spectrum, function(range) {
 	    var freq_low  = $(range).attr("frequency_low");
@@ -2701,6 +3409,12 @@ $(function ()
 	    console.info(freq_low,freq_high);
 
 	    AddRangeRow(freq_low, freq_high);
+	});
+	_.each(routes, function(route) {
+	    var routename  = $(route).attr("routename");
+	    console.info(routename);
+
+	    AddRouteRow(routename);
 	});
 
 	// Find all the nodes, gather up type info.

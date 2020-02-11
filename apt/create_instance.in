@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -457,7 +457,17 @@ if ($tmp) {
 # Yep, this can happen when users do not put any nodes in their rspec.
 #
 if (!@aggregate_urns) {
-    UserError("There are no nodes in your experiment, syntax error?");
+    #
+    # Powder; see if there are routes; we will bind the nodes later.
+    #
+    my $routes;
+    $tmp = APT_Profile::GetRoutes($rspecstr, \$routes, \$errmsg);
+    if ($tmp) {
+	($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
+    }
+    if (!@$routes) {
+	UserError("There are no nodes in your experiment, syntax error?");
+    }
 }
 
 # but do not override command line force.
@@ -778,6 +788,13 @@ if (APT_Profile::CheckSpectrum($rspecstr, $project,
 			       $noresokay, \$errmsg)) {
     UserError($errmsg);
 }
+if (APT_Profile::CheckRoutes($rspecstr, $project,
+			       (defined($start_at) ? $start_at : time()),
+			       (defined($stop_at) ? $stop_at :
+				time() + ($duration * 3600)),
+			       $noresokay, \$errmsg)) {
+    UserError($errmsg);
+}
 
 #
 # Now we know where to send to logs.
@@ -788,6 +805,12 @@ if (!$debug) {
 	AddAuditInfo("cc", "stoller\@flux.utah.edu");
     }
     AddAuditInfo("brand", $project->Brand());
+}
+
+# Very temporary!
+my $foo = APT_Profile::CheckForBuses($rspecstr, $project, \$errmsg);
+if ($foo) {
+    ($foo < 0 ? fatal($errmsg) : UserError($errmsg));
 }
 
 # Check for expired certs and speaksfor.
@@ -1048,7 +1071,6 @@ if (@prestage) {
     foreach my $agg (@prestage) {
 	$agg->SetStatus("prestage");
     }
-    $instance->SetStatus("prestage");
     $instance->Defer();
 }
 elsif (defined($start_at)) {

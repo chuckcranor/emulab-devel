@@ -1872,6 +1872,61 @@ sub CheckForBuses($$$)
 }
 
 #
+# Check route validity.
+#
+sub CheckRoutes($$$$$$)
+{
+    my ($xml, $project, $start, $end, $noresokay, $pmsg) = @_;
+    my $routes = [];
+
+    if (APT_Profile::GetRoutes($xml, \$routes, $pmsg)) {
+	return -1;
+    }
+    foreach my $request (@{$routes}) {
+	my $routename = $request->{"name"};
+
+	if (!TBcheck_dbslot($routename, "default", "tinytext",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+	    $$pmsg = "Invalid name: $routename";
+	    return 1;
+	}
+	my $routeid =
+	    APT_Reservation::Group::RouteReservation::RouteID($routename);
+	
+	if (!$noresokay &&
+	    !APT_Reservation::Group::RouteReservation->RouteReserved($project,
+				$start, $end, $routename)) {
+	    $$pmsg = "Route $routename ($routeid) ".
+		"is not reserved by your project for the duration of your ".
+		"experiment.";
+	    return 1;
+	}
+    }
+    return 0;
+}
+
+#
+# Get bus routes used by an rspec, returned as an array of hashes.
+#
+sub GetRoutes($$$)
+{
+    my ($xml, $pref, $perrmsg) = @_;
+
+    my $rspec = GeniXML::Parse($xml);
+    if (! defined($rspec)) {
+	$$perrmsg = "GetRoutes: Could not parse rspec";
+	return -1;
+    }
+    #
+    # All bus routes are top level.
+    #
+    my $routes = GeniXML::GetBusRoutes($rspec);
+
+    $$pref = $routes;
+    return 0;
+}
+
+#
 # Set the repository for the rspec. This is a top level element. At
 # some point we can think about per-node repos.
 #
@@ -2503,6 +2558,30 @@ sub BindingsToParams($)
 	$paramdefs->{$key} = &$convert($val);
     }
     return $paramdefs;
+}
+
+#
+# Return an rspec fragment for a node at an aggregate. The node id
+# is optional.
+#
+sub RSpecNodeFragment($$;$)
+{
+    my ($aggregate_urn, $client_id, $node_id) = @_;
+    my $aggregate_hrn = GeniHRN->new($aggregate_urn);
+    my $component_id  = "";
+
+    if ($node_id) {
+	my $urn = GeniHRN::Generate($aggregate_hrn->authority(),
+				    "node", $node_id);
+	$component_id = "component_id='$urn'";
+    }
+    my $NODEFORMAT =
+	'<node xmlns="http://www.geni.net/resources/rspec/3" '.
+	'      client_id="%s" exclusive="true" component_manager_id="%s" %s>
+	   <sliver_type name="raw"/>
+	</node>';
+
+    return sprintf($NODEFORMAT, $client_id, $aggregate_hrn, $component_id);
 }
 
 ###################################################################

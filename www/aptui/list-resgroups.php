@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,6 +70,7 @@ REQUIRE_MOMENT();
 AddLibrary("js/resgraphs.js");
 AddTemplateList(array("list-resgroups", "resgroup-list",
                       "resgroup-list-bytype", "resgroup-list-byrange",
+                      "resgroup-list-byroute",
                       "confirm-modal", "resusage-list", "resusage-graph",
                       "oops-modal", "waitwait-modal"));
 SPITREQUIRE("js/list-resgroups.js",

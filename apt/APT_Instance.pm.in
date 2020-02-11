@@ -487,6 +487,25 @@ sub Delete($)
 }
 
 #
+# Delete a single aggregate. Need to deal with history.
+#
+sub DeleteAggregate($$)
+{
+    my ($self, $aggregate) = @_;
+    my $uuid = $self->uuid();
+    my $aggregate_urn = $aggregate->aggregate_urn();
+
+    return 0
+	if (!exists($self->{'AGGREGATES'}->{$aggregate_urn}));
+
+    return -1
+	if ($aggregate->Delete());
+    
+    delete($self->{'AGGREGATES'}->{$aggregate_urn});
+    return 0;
+}
+
+#
 # Lock and unlock operate on the underlying slice.
 #
 sub Lock($)
@@ -515,6 +534,15 @@ sub Locked($)
 	return 0;
     }
     return $slice->locked();
+}
+sub TakeLock($)
+{
+    my ($self) = @_;
+    my $slice  = $self->GetGeniSlice();
+    if (!defined($slice)) {
+	return 0;
+    }
+    return $slice->TakeLock();
 }
 
 sub SetStatus($$)
@@ -1013,6 +1041,61 @@ sub AddAggregate($$)
 
     $self->{'AGGREGATES'}->{$aggregate_urn} = $aggobj;
     return $aggobj;
+}
+
+#
+# Remove an aggregate from a running experiment. This is more complicated
+# since we also have to remove it from the instance rspec and all the other
+# manifests so that the web server does not continue to show it. This is
+# going to mess up the history.
+#
+sub RemoveAggregate($$)
+{
+    my ($self, $aggregate) = @_;
+    my $aggregate_urn      = $aggregate->aggregate_urn();
+
+    #
+    # Remove from the instance rspec.
+    #
+    my $rspec = GeniXML::Parse($self->rspec());
+    if (! defined($rspec)) {
+	print STDERR "RemoveAggregate: Could not parse rspec\n";
+	return -1;
+    }
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $manager_urn = GetManagerId($ref);
+
+	if ($manager_urn eq $aggregate_urn) {
+	    $rspec->removeChild($ref);
+	}
+    }
+    $self->Update({"rspec" => GeniXML::Serialize($rspec)});
+
+    #
+    # Now do the same for the manifests in all of the other aggregates.
+    #
+    foreach my $agg ($self->AggregateList()) {
+	next
+	    if ($agg->aggregate_urn() eq $aggregate_urn);
+
+	my $manifest = GeniXML::Parse($agg->manifest());
+	if (! defined($manifest)) {
+	    print STDERR "RemoveAggregate: ".
+		"Could not parse aggregate manifest for $agg\n";
+	    return -1;
+	}
+	foreach my $ref (GeniXML::FindNodes("n:node",
+					    $manifest)->get_nodelist()) {
+	    my $manager_urn = GetManagerId($ref);
+
+	    if ($manager_urn eq $aggregate_urn) {
+		$manifest->removeChild($ref);
+	    }
+	}
+	$agg->Update({"manifest" => GeniXML::Serialize($manifest)});
+    }
+    $self->DeleteAggregate($aggregate);
+    return 0;
 }
 
 #
@@ -2237,6 +2320,103 @@ sub CheckSpectrumReserved($$)
     return 0;
 }
 
+#
+# Get the routes used by an instance.
+#
+sub GetRoutes($$$)
+{
+    my ($self, $ref, $perrmsg)  = @_;
+    if (APT_Profile::GetRoutes($self->rspec(), $ref, $perrmsg)) {
+	return -1;
+    }
+    return 0;
+}
+
+#
+# Check that we have reservations for any routes used.
+# This check uses the current time and current experiment end,
+#
+sub CheckRoutesReserved($$)
+{
+    my ($self, $perrmsg) = @_;
+    my $rspecstr = $self->rspec();
+    my $project  = $self->GetProject();
+    my $slice    = $self->GetGeniSlice();
+    my $expires  = str2time($slice->expires());
+    my $routes   = [];
+
+    if ($self->GetRoutes(\$routes, $perrmsg)) {
+	return -1;
+    }
+
+    foreach my $request (@{$routes}) {
+	my $routename = $request->{"name"};
+	my $routeid =
+	    APT_Reservation::Group::RouteReservation::RouteID($routename);
+
+	if (!APT_Reservation::Group::RouteReservation->RouteReserved($project,
+		      time(), $expires, $routename)) {
+	    $$perrmsg = "Route $routename ($routeid) ".
+		    "is not reserved by your project for the duration of your ".
+		    "experiment.";
+	    return 1;
+	}
+    }
+    return 0;
+}
+
+sub AddRouteNodes($$)
+{
+    my ($self, $perrmsg) = @_;
+    my $modified = 0;
+    my $routes;
+    if ($self->GetRoutes(\$routes, $perrmsg)) {
+	return -1;
+    }
+    my $rspec = GeniXML::Parse($self->rspec());
+    if (! defined($rspec)) {
+	$$perrmsg = "Could not parse rspec for $self\n";
+	return -1;
+    }
+    my %routes = ();
+    foreach my $ref (@$routes) {
+	# This is from the manifest.
+	my $name = $ref->{'name'};
+	my $id   = APT_Reservation::Group::RouteReservation::RouteID($name);
+	if (!defined($id)) {
+	    $$perrmsg = "AddRouteNodes: No such route $name";
+	    return -1;
+	}
+	foreach my $bus (APT_Aggregate::Mobile::Bus->LookupForRoute($id)) {
+	    my $client_id = "bus-" . $bus->busid();
+	    my $node      = GeniXML::GetNodeByVirtualId($client_id, $rspec);
+
+	    if (!defined($node)) {
+		my $fragment = APT_Profile::RSpecNodeFragment($bus->urn(),
+							      $client_id);
+		$node = GeniXML::Parse($fragment);
+		$rspec->appendChild($node);
+		$modified = 1;
+	    }
+	    if (!$self->GetAggregate($bus->urn())) {
+		my $aggobj = $self->AddAggregate($bus->urn());
+		if (!defined($aggobj)) {
+		    $$perrmsg = "Could not create aggregate object for ".
+			$bus->urn();
+		    return -1;
+		}
+		if ($bus->prestageimages()) {
+		    $aggobj->SetStatus("prestage");
+		}
+	    }
+	}
+    }
+    if ($modified) {
+	$self->Update({"rspec" => GeniXML::Serialize($rspec)});
+    }
+    return 0;
+}
+
 ###################################################################
 package APT_Instance::History;
 use emdb;
@@ -2752,7 +2932,7 @@ sub LookupForInstance($$)
     my $query_result =
 	DBQueryWarn("select aggregate_urn from apt_instance_aggregates ".
 		    "where uuid='$uuid'");
-    return ()
+    return {}
 	if (! (defined($query_result) && $query_result->numrows));
 
     while (my ($aggregate_urn) = $query_result->fetchrow_array()) {
@@ -2764,6 +2944,30 @@ sub LookupForInstance($$)
 	$result->{$aggregate_urn} = $agg;
     }
     return $result;
+}
+
+#
+# Lookup by aggregate URN and return the list of instances.
+#
+sub LookupByURN($$)
+{
+    my ($class, $aggregate_urn) = @_;
+    my @result = ();
+
+    my $query_result =
+	DBQueryWarn("select distinct uuid from apt_instance_aggregates ".
+		    "where aggregate_urn='$aggregate_urn'");
+    return ()
+	if (! (defined($query_result) && $query_result->numrows));
+
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $instance = APT_Instance->Lookup($uuid);
+	if (!defined($instance)) {
+	    print STDERR "No apt_instance for $uuid\n";
+	}
+	push(@result, $instance);
+    }
+    return @result;
 }
 
 # Break circular reference someplace to avoid exit errors.
@@ -4578,6 +4782,149 @@ sub PrestageImages($$$@)
     return Genixmlrpc::CallMethod($cmurl, $context, "PrestageImages", $args);
 }
 
+###################################################################
+#
+# This sub package is not currently used. 
+#
+package APT_Instance::Aggregate::BusRoute;
+use emdb;
+use Carp;
+use WebTask;
+use libtestbed;
+use English;
+use GeniHRN;
+use APT_Geni;
+use APT_Aggregate;
+use Date::Parse;
+use Data::Dumper;
+use vars qw($AUTOLOAD);
+use overload ('""' => 'Stringify');
+
+#
+# Lookup and create a class instance to return.
+#
+sub Lookup($$$)
+{
+    my ($class, $instance, $routeid) = @_;
+    my $uuid = $instance->uuid();
+
+    my $query_result =
+	DBQueryWarn("select * from apt_instance_bus_routes ".
+		    "where uuid='$uuid' and routeid='$routeid'");
+    return undef
+	if (! (defined($query_result) && $query_result->numrows));
+
+    my $self            = {};
+    $self->{'DBROW'}    = $query_result->fetchrow_hashref();
+    $self->{'INSTANCE'} = $instance;
+    bless($self, $class);
+
+    return $self;
+}
+
+#
+# Add a bus route to an instance.
+#
+sub Create($$$)
+{
+    my ($class, $instance, $routeid, $description) = @_;
+    my $safe_desc     = DBQuoteSpecial($description);
+    my $instance_uuid = $instance->uuid();
+    my $instance_name = $instance->name();
+
+    DBQueryWarn("insert into apt_instance_bus_routes set ".
+		"  uuid='$instance_uuid', name='$instance_name', ".
+		"  routeid='$routeid', routedescription=$safe_desc")
+	or return undef;
+
+    return Lookup($class, $instance, $routeid);
+}
+
+AUTOLOAD {
+    my $self  = $_[0];
+    my $type  = ref($self) or confess "$self is not an object";
+    my $name  = $AUTOLOAD;
+    $name =~ s/.*://;   # strip fully-qualified portion
+
+    # A DB row proxy method call.
+    if (exists($self->{'DBROW'}->{$name})) {
+	return $self->{'DBROW'}->{$name};
+    }
+    carp("No such slot '$name' field in class $type");
+    return undef;
+}
+sub instance($)	        { return $_[0]->{'INSTANCE'}; }
+
+# Break circular reference someplace to avoid exit errors.
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'DBROW'}    = undef;
+    $self->{'INSTANCE'} = undef;
+}
+
+#
+# Stringify for output.
+#
+sub Stringify($)
+{
+    my ($self) = @_;
+    
+    my $uuid     = $self->uuid();
+    my $routeid  = $self->routeid();
+
+    return "[APT_Instance::Aggregate::BusRoute: $uuid, $routeid]";
+}
+
+#
+# Lookup all routes for an instance
+#
+sub LookupForInstance($$)
+{
+    my ($class, $instance) = @_;
+    my @result = ();
+    my $uuid   = $instance->uuid();
+
+    my $query_result =
+	DBQueryWarn("select routeid from apt_instance_bus_routes ".
+		    "where uuid='$uuid'");
+    return ()
+	if (! (defined($query_result) && $query_result->numrows));
+
+    while (my ($routeid) = $query_result->fetchrow_array()) {
+	my $route = Lookup($class, $instance, $routeid);
+	if (!defined($route)) {
+	    print STDERR "No apt_instance_bus_route for $uuid/$routeid\n";
+	    next;
+	}
+	push(@result, $route);
+    }
+    return @result;
+}
+
+#
+# Lookup all instances that are using bus routes.
+#
+sub LookupActive($)
+{
+    my ($class) = @_;
+    my @result  = ();
+
+    my $query_result =
+	DBQueryWarn("select distinct uuid from apt_instance_bus_routes");
+    return ()
+	if (! (defined($query_result) && $query_result->numrows));
+
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $instance = APT_Instance->Lookup($uuid);
+	if (!defined($instance)) {
+	    print STDERR "No apt_instance for $uuid\n";
+	    next;
+	}
+	push(@result, $instance);
+    }
+    return @result;
+}
 
 # _Always_ make sure that this 1 is at the end of the file...
 1;

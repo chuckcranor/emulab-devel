@@ -164,7 +164,7 @@ sub DoGroupReserve()
     my $autoapprove= 0;
     my $updateall  = 0;
     my $override   = 0;	# Only range reservations can be overridden. 
-    my ($clusters, $ranges);
+    my ($clusters, $ranges, $routes);
     my ($start, $end, $errmsg, $errcode, $reason, $resgroup, $portal, $brand);
 
     my %options = ();
@@ -353,6 +353,27 @@ sub DoGroupReserve()
 	    $autoapprove = 1;
 	}
     }
+    if (exists($blob->{'routes'})) {
+	$routes = $blob->{'routes'};
+
+	foreach my $route_uuid (keys(%{$routes})) {
+	    my $route     = $routes->{$route_uuid};
+	    my $routename = $route->{"routename"};
+
+	    if (!TBcheck_dbslot($routename, "default", "tinytext",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+		fatal("routename: invalid name");
+	    }
+	    if (!ValidUUID($route_uuid)) {
+		fatal("Invalid route uuid: $route_uuid");
+	    }
+	    if (!ValidUUID($route->{"uuid"})) {
+		fatal("Invalid route uuid: " . $route->{"uuid"});
+	    }
+	}
+	# For now, force autoapprove off whenever a route is requested.
+	$autoapprove = 0;
+    }
 
     #
     # If this is an update, see if the start/end/reason has changed. If
@@ -397,6 +418,7 @@ sub DoGroupReserve()
     #
     my @cluster_reservations = ();
     my @range_reservations   = ();
+    my @route_reservations   = ();
 
     if ($update) {
 	if (defined($clusters)) {
@@ -474,6 +496,49 @@ sub DoGroupReserve()
 		}
 	    }
 	}
+	if (defined($routes)) {
+	    foreach my $route_uuid (keys(%{$routes})) {
+		my $route       = $routes->{$route_uuid};
+		my $res_uuid    = $route->{"uuid"};
+		my $reservation = $resgroup->Reservation($res_uuid);
+
+		if (defined($reservation)) {
+		    # We ignore the routename that came in, in case the
+		    # client tried to change it. See below.
+		    $route->{"routeid"}    = $reservation->routeid();
+		    $route->{"routename"}  = $reservation->routename();
+		
+		    if ($updateall) {
+			push(@route_reservations, $route);
+			# Flag for below.
+			$route->{'update'} = 1;
+			# If an admin is changing a reservation, we keep the
+			# approved flag as is.
+			if ($this_user->IsAdmin()) {
+			    $route->{'approved'} = $reservation->approved();
+			}
+			else {
+			    $route->{'approved'} = 0;
+			}
+		    }
+		    else {
+			$route->{'approved'} = $reservation->approved();
+			$route->{'valid'}    = 1;
+		    }
+		}
+		else {
+		    # A new route request. Never autoapprove
+		    if ($this_user->IsAdmin()) {
+			$route->{'approved'} = 1;
+		    }
+		    else  {
+			$route->{'approved'} = 0;
+		    }
+		    $route->{'valid'} = 0;
+		    push(@route_reservations, $route);
+		}
+	    }
+	}
     }
     else {
 	@cluster_reservations = values(%{$clusters}) if (defined($clusters));
@@ -495,6 +560,21 @@ sub DoGroupReserve()
 		push(@range_reservations, $range);
 	    }
 	}
+	if (defined($routes)) {
+	    foreach my $res_uuid (keys(%{$routes})) {
+		my $route = $routes->{$res_uuid};
+
+		# A new route request. Never autoapprove
+		if ($this_user->IsAdmin()) {
+		    $route->{'approved'} = 1;
+		}
+		else  {
+		    $route->{'approved'} = 0;
+		}
+		$route->{'valid'}    = 0;
+		push(@route_reservations, $route);
+	    }
+	}
     }
 
     #
@@ -509,7 +589,7 @@ sub DoGroupReserve()
 
     # This is what we return to the web UI. Reservations is just an updated
     # version of what came in (clusters and ranges).
-    my ($range_results, $cluster_results);
+    my ($range_results, $cluster_results, $route_results);
     my $result = {
 	"hosed" => 0,
     };
@@ -527,6 +607,13 @@ sub DoGroupReserve()
 			    "approved"  => 0,
 	};
 	$result->{"cluster_results"} = $cluster_results;
+    }
+    if (defined($routes)) {
+	$route_results = {"routes"    => $routes,
+			  "errors"    => 0,
+			  "approved"  => 0,
+	};
+	$result->{"route_results"} = $route_results;
     }
     
     # Ranges first since the are fast and easy.
@@ -568,6 +655,44 @@ sub DoGroupReserve()
 	    }
 	}
     }
+    # Ditto routes
+    if (@route_reservations) {
+	#
+	# Since all routes require admin approval, there is no need to
+	# lock the tables here. We will do that later in approve.
+	#
+	# For each (new or modified) reservation see if it fits the schedule
+	#
+	my @allgroups = APT_Reservation::Group->LookupAll();
+    
+	foreach my $ref (@route_reservations) {
+	    # These flags go back to the web interface.
+	    # We never auto approve route reservations.
+	    if (!($this_user->IsAdmin() ||
+		  APT_Reservation::Group::RouteReservation->RouteAllowed(
+		      $project, $ref))) {
+		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
+		$ref->{'output'}   = "Not allowed to use this route";
+		$ref->{'valid'}    = 0;
+		$route_results->{'errors'}++;
+	    }
+	    elsif (! ($override ||
+		      APT_Reservation::Group::RouteReservation->Fits(
+			  \@allgroups, $start, $end, $ref))) {
+		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
+		$ref->{'output'}   = "Does not fit the schedule";
+		$ref->{'valid'}    = 0;
+		$route_results->{'errors'}++;
+	    }
+	    else {
+		# We set approval above.
+		$ref->{'valid'}    = 1;
+		if ($ref->{'approved'}) {
+		    $route_results->{'approved'}++;
+		}
+	    }
+	}
+    }
     
     #
     # Called for each reference in the @cluster_reservations list,
@@ -604,8 +729,8 @@ sub DoGroupReserve()
 	    @argvcopy = @tmp;
 	}
 	$command .= "-a $urn reserve -S -t $type ";
-	# When there are unapproved ranges, autoapprove is forced off.
-	if (defined($ranges) && !$autoapprove) {
+	# When there are unapproved ranges/routes, autoapprove is forced off.
+	if ((defined($ranges) || defined($routes)) && !$autoapprove) {
 	    $command .= "-P ";
 	}
 	$command .= " @argvcopy $count";
@@ -684,10 +809,12 @@ sub DoGroupReserve()
 	# caller (or add anything to an existing resgroup).
 	#
 	my $newcount =
-	    scalar(@cluster_reservations) + scalar(@range_reservations);
+	    scalar(@cluster_reservations) +
+	    scalar(@range_reservations) + scalar(@route_reservations);
 	my $errcount =
 	    (@cluster_reservations ? $cluster_results->{'errors'} : 0) +
-	    (@range_reservations   ? $range_results->{'errors'}   : 0);
+	    (@range_reservations   ? $range_results->{'errors'}   : 0) +
+	    (@route_reservations   ? $route_results->{'errors'}   : 0);
 	    
 	if ($newcount != $errcount) {
 	    if ($update) {
@@ -776,6 +903,32 @@ sub DoGroupReserve()
 		$res->{'freq_uuid'} = $reservation->freq_uuid();
 		$reservation->MarkSubmitted($res->{'approved'});
 	    }
+	    foreach my $res (@route_reservations) {
+		# Skip ones that do not fit.
+		next
+		    if (! $res->{'valid'});
+		
+		my $routename = $res->{"routename"};
+		my $ruuid     = $res->{"uuid"};
+
+		if ($update) {
+		    my $reservation = $resgroup->Reservation($ruuid);
+		    if ($reservation) {
+			$reservation->MarkSubmitted($res->{'approved'});
+			next;
+		    }
+		}
+		my $reservation = $resgroup->AddRouteReservation($routename);
+		if (!$reservation) {
+		    #
+		    # Need to do something here.
+		    #
+		    fatal("Could not add Route reservation to group");
+		}
+		# We do not trust the uuid from client, we return the new one
+		$res->{'res_uuid'} = $reservation->route_uuid();
+		$reservation->MarkSubmitted($res->{'approved'});
+	    }
 	    $result->{'uuid'} = $resgroup->uuid();
 
 	    #
@@ -822,6 +975,7 @@ sub DoDelete()
     my $optlist   = "N:";
     my @cluster_reservations = ();
     my @range_reservations   = ();
+    my @route_reservations   = ();
     my $errmsg;
     my $errcode;
     my $errors   = 0;
@@ -864,15 +1018,16 @@ sub DoDelete()
     # are using this reservation; not allowed to delete the reservation
     # until the experiments are terminated.
     #
-    if ($resgroup->RFReservationList()) {
+    if ($resgroup->RFReservationList() || $resgroup->RouteReservationList()) {
 	my $current;
 	if (APT_Instance->LookupForProject($project, \$current)) {
 	    $resgroup->Unlock();
 	    fatal("Could not look up experiments for $project");
 	}
 	foreach my $instance (@$current) {
-	    # Only RF reservations actually matter here
-	    if ($resgroup->RFInUse($instance)) {
+	    # Only RF/Route reservations actually matter here
+	    if ($resgroup->RFInUse($instance) ||
+		$resgroup->RoutesInUse($instance)) { 
 		$resgroup->Unlock();
 		UserError("You have experiments running that are using this ".
 			  "reservation, please terminate those first");
@@ -895,8 +1050,11 @@ sub DoDelete()
 	    if ($reservation->IsCluster()) {
 		push(@cluster_reservations, $reservation);
 	    }
-	    else {
+	    elsif ($reservation->IsRange()) {
 		push(@range_reservations, $reservation);
+	    }
+	    else {
+		push(@route_reservations, $reservation);
 	    }
 	}
 	#
@@ -908,7 +1066,8 @@ sub DoDelete()
 	# entry reflects what actually happened. 
 	#
 	if (!$resgroup->Expired()) {
-	    foreach my $res (@cluster_reservations, @range_reservations) {
+	    foreach my $res (@cluster_reservations,
+			     @range_reservations, @route_reservations) {
 		if ($res->IsCluster()) {
 		    # To avoid updating deleted timestamp.
 		    if (!$res->deleted()) {
@@ -926,6 +1085,7 @@ sub DoDelete()
     else {
 	@cluster_reservations = $resgroup->ReservationList();
 	@range_reservations   = $resgroup->RFReservationList();
+	@route_reservations   = $resgroup->RouteReservationList();
 
 	#
 	# Deleting entire reservation. If doing this before expired, mark
@@ -944,6 +1104,16 @@ sub DoDelete()
 		"errcode" => 0,
 	    };
 	    $results->{$res->freq_uuid()} = $blob;
+	    $res->Delete();
+	}
+    }
+    if (@route_reservations) {
+	foreach my $res (@route_reservations) {
+	    my $blob = {
+		"uuid"    => $res->route_uuid(),
+		"errcode" => 0,
+	    };
+	    $results->{$res->route_uuid()} = $blob;
 	    $res->Delete();
 	}
     }
@@ -1015,7 +1185,8 @@ sub DoDelete()
     }
     $resgroup->Delete()
 	if (! (scalar($resgroup->ReservationList()) ||
-	       scalar($resgroup->RFReservationList())));
+	       scalar($resgroup->RFReservationList()) ||
+	       scalar($resgroup->RouteReservationList())));
 
     if (defined($webtask)) {
 	$webtask->results($results);
@@ -1240,11 +1411,12 @@ sub DoApprove()
     my $optlist      = "F:nDO";
     my @cluster_reservations = ();
     my @range_reservations   = ();
+    my @route_reservations   = ();
     my $errmsg;
     my $results   = {};
     my $checkonly = 0;
     my $nopush    = 0;  # debugging flag only.
-    my $override  = 0;	# Only range reservations can be overridden. 
+    my $override  = 0;	# Only range/route reservations can be overridden. 
 
     if (! $this_user->IsAdmin()) {
 	fatal("No permission to approve this reservation")
@@ -1295,6 +1467,10 @@ sub DoApprove()
 	push(@range_reservations, $res)
 	    if (!$res->approved());
     }
+    foreach my $res ($resgroup->RouteReservationList()) {
+	push(@route_reservations, $res)
+	    if (!$res->approved());
+    }
 
     #
     # Prelim check on the range reservations. We can do this unlocked.
@@ -1320,6 +1496,36 @@ sub DoApprove()
 		    "errmesg" => "No longer fits the schedule",
 		};
 		$results->{$freq_uuid} = $blob;
+		$nofits++;
+		next;
+	    }
+	    print "$res still fits the schedule\n";
+	}
+	if ($nofits) {
+	    goto done;
+	}
+    }
+    # Ditto the routes
+    if (@route_reservations) {
+	my @allgroups = APT_Reservation::Group->LookupAll();
+	my $nofits    = 0;
+    
+	foreach my $res (@route_reservations) {
+	    my $ref = {};
+	    $ref->{'routeid'}  = $res->routeid();
+	    $ref->{'uuid'}     = $res->route_uuid();
+
+	    if (!($override ||
+		  APT_Reservation::Group::RouteReservation->Fits(\@allgroups,
+								 $start, $end,
+								 $ref))) {
+		my $route_uuid = $res->route_uuid();
+		my $blob = {
+		    "uuid"    => $route_uuid,
+		    "errcode" => 1,
+		    "errmesg" => "No longer fits the schedule",
+		};
+		$results->{$route_uuid} = $blob;
 		$nofits++;
 		next;
 	    }
@@ -1422,11 +1628,12 @@ sub DoApprove()
     };
 
     #
-    # Prelim check if both cluster and range reservations, or if told
+    # Prelim check if both cluster and range/route reservations, or if told
     # to do so on the command line.
     #
     if (($checkonly && @cluster_reservations) ||
-	(@range_reservations && @cluster_reservations)) {
+	((@range_reservations || @route_reservations)
+	 && @cluster_reservations)) {
 	$checkonlyflag = 1;
 
 	my $responses;
@@ -1473,10 +1680,12 @@ sub DoApprove()
 	    }
 	}
     }
-    if (@range_reservations) {
+    if (@range_reservations || @route_reservations) {
 	if (APT_Reservation::Group->LockTables()) {
 	    fatal("Could not lock tables");
 	}
+    }
+    if (@range_reservations) {
 	my @allgroups = APT_Reservation::Group->LookupAll();
     
 	foreach my $res (@range_reservations) {
@@ -1501,6 +1710,33 @@ sub DoApprove()
 		$res->MarkApproved();
 	    }
 	}
+    }
+    if (@route_reservations) {
+	my @allgroups = APT_Reservation::Group->LookupAll();
+    
+	foreach my $res (@route_reservations) {
+	    my $ref = {};
+	    $ref->{'routeid'}  = $res->routeid();
+	    $ref->{'uuid'}     = $res->route_uuid();
+
+	    if (!($override ||
+		  APT_Reservation::Group::RouteReservation->Fits(\@allgroups,
+								 $start, $end,
+								 $ref))) {
+		my $route_uuid = $res->route_uuid();
+		my $blob = {
+		    "uuid"    => $route_uuid,
+		    "errcode" => 1,
+		    "errmesg" => "No longer fits the schedule",
+		};
+		$results->{$route_uuid} = $blob;
+	    }
+	    else {
+		$res->MarkApproved();
+	    }
+	}
+    }
+    if (@range_reservations || @route_reservations) {
 	APT_Reservation::Group->UnlockTables();
     }
   done:
@@ -1637,12 +1873,13 @@ sub DoCancel()
 	}
     }
     #
-    # Range reservations are simple of course, we just mark them as
+    # Range/Route reservations are simple of course, we just mark them as
     # canceled (or unmark them). The daemon will fire us off again when
     # its time to actually remove the reservation (after whetever the
     # warning delay is).
     #
-    foreach my $res ($resgroup->RFReservationList()) {
+    foreach my $res ($resgroup->RFReservationList(),
+		     $resgroup->RouteReservationList()) {
 	# No point in (un)canceling an unapproved reservation.
 	next
 	    if (!$res->approved());

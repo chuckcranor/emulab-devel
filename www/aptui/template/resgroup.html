@@ -158,6 +158,15 @@
 		  </table>
 		</div>
 	      </div>
+	      <div class="form-group hidden" id="route-table-div">
+		<div class="format-me"
+		     data-label="Bus Routes"
+		     data-colsize="9">
+		  <table class="table table-condensed"
+			 id="route-table">
+		  </table>
+		</div>
+	      </div>
 	      <% if (1) { %>
 		<div class="form-group">
 		  <input name="days"
@@ -373,8 +382,41 @@
   </div>
   <div class='col-lg-5 col-md-5'>
     <div id="range-list" class="hidden"></div>
+    <div id="route-list" class="hidden"></div>
+    <div class='panel panel-default hidden' id="radio-graph-div">
+      <div class='panel-heading'>
+	<center>
+          <h3 class='panel-title'>Powder Radio Availability</h3>
+	</center>
+      </div>
+      <div class='panel-body visavail' style="padding: 2px;"
+	   id="radio-graph-body">
+	<div id="radio-graph-visavail"></div>
+      </div>
+    </div>
+    <div class='panel panel-default hidden' id="FE-graph-div">
+      <div class='panel-heading'>
+	<center>
+          <h3 class='panel-title'>Fixed Endpoint Availability</h3>
+	</center>
+      </div>
+      <div class='panel-body visavail' style="padding: 2px;"
+	   id="FE-graph-body">
+	<div id="FE-graph-visavail"></div>
+      </div>
+    </div>
+    <div class='panel panel-default hidden' id="route-graph-div">
+      <div class='panel-heading'>
+	<center>
+          <h3 class='panel-title'>Bus Route Availability</h3>
+	</center>
+      </div>
+      <div class='panel-body visavail' style="padding: 2px;"
+	   id="route-graph-body">
+	<div id="route-graph-visavail"></div>
+      </div>
+    </div>
     <div id="reservation-lists"></div>
-    <div id="FE-graph" class="hidden"></div>
   </div>
 </div>
 <!-- Confirm reservation -->

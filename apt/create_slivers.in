@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -51,11 +51,11 @@ my $foreground      = 0;
 my $usestitcher     = 0;
 my $ignorefailures  = 0;
 my $usetracker      = 0;
-my $takelock        = 0; # Use when called from create_instance.
+my $takelock        = 0;  # Use when called from create_instance.
+my $sendemail       = 0;
 my $errmsg;
 my $sshkeys;
 my @aggregate_list  = ();
-my $sendemail       = 0;
 
 #
 # Configure variables
@@ -152,6 +152,8 @@ my $instance = APT_Instance->Lookup($ARGV[0]);
 if (!defined($instance)) {
     fatal("No such instance");
 }
+# 
+my $curStatus   = $instance->status();
 my $uuid        = $instance->uuid();
 my $webtask     = $instance->webtask();
 my $webtask_id  = $webtask->task_id();
@@ -169,6 +171,45 @@ else {
     }
 }
 $webtask->AutoStore(1);
+
+#
+# We send email when all deferred aggregates are started.  Note that if the
+# status is still "created", we are coming from create_instance(), so do
+# not send email, since the user is looking at the web interface.
+#
+$sendemail = 1
+    if ($instance->status() ne "created");
+
+#
+# Check frequency ranges (actually, checking that we have a reservation).
+#
+if ($instance->CheckSpectrumReserved(\$errmsg)) {
+    MyExit(1, "Not all frequency ranges are reserved: $errmsg");
+}
+# Ditto routes
+if ($instance->CheckRoutesReserved(\$errmsg)) {
+    MyExit(1, "Not all routes are reserved: $errmsg");
+}
+#
+# For routes, we need to see what buses are currently on the reserved
+# routes and add them to the rspec. We do this here cause scheduled and
+# deferred experiments are started from the scheduler, and I do not
+# want to do it there. Lets see how it goes.
+#
+if ($instance->AddRouteNodes(\$errmsg)) {
+    MyExit(1, "Not all routes are reserved: $errmsg");
+}
+
+#
+# Look to see if any aggregates are in prestage, If so, move the instance
+# to prestage.
+#
+foreach my $agg ($instance->AggregateList()) {
+    if ($agg->status() eq "prestage" || $agg->status() eq "staging") {
+	$instance->SetStatus("prestage");
+	last;
+    }
+}
 
 #
 # In prestage mode, we want to initiate the prestage on any images
@@ -310,16 +351,18 @@ while ($instance->status() eq "prestage" && !$instance->IsCanceled()) {
 	print Dumper($current);
     }
 
+    my $progress = 0;
+    
     #
     # Look at the results to see which aggregates are ready, staging,
     # error.  We keep doing the prestage until all the aggregates report
-    # ready for all images. The we can move on.
+    # ready for all images. Then we can move on.
     #
     foreach my $agg ($instance->AggregateList()) {
 	if ($agg->status() eq "prestage") {
 	    my $result = $results->{$agg->aggregate_urn()}->{"status"};
 	    if ($result eq "ready" || $result eq "notready") {
-		# We did the prestage call at this aggregete successfully.
+		# We did the prestage call at this aggregate successfully.
 		if ($result eq "ready") {
 		    $agg->SetStatus("staged");
 		}
@@ -327,8 +370,10 @@ while ($instance->status() eq "prestage" && !$instance->IsCanceled()) {
 		    $agg->SetStatus("staging");
 		    $done = 0;
 		}
+		$progress = 1;
 	    }
 	    else {
+		# An error; probably unable to contact the cluster.
 		$done = 0;
 	    }
 	}
@@ -339,6 +384,9 @@ while ($instance->status() eq "prestage" && !$instance->IsCanceled()) {
 	    }
 	    else {
 		$done = 0;
+	    }
+	    if ($result ne "error") {
+		$progress = 1;
 	    }
 	}
     }
@@ -351,8 +399,25 @@ while ($instance->status() eq "prestage" && !$instance->IsCanceled()) {
     #
     if (!$done) {
 	print "Still need to prestage at some aggregates.\n";
-	sleep(10);
-	next;
+	if ($progress || $curStatus eq "created") {
+	    # If making progress keep looping. We also keep looping if coming
+	    # from create_instance directly (status=created).
+	    sleep(10);
+	    next;
+	}
+	#
+	# If not making progress, then lets unlock and exit. The scheduler
+	# will start it up again in a little while. Return the instance
+	# to its previous status so the web interface does not sit in
+	# provisioning, which would be annoying since it would prevent the
+	# user from doing some things with other ready aggregates in the
+	# experiment.
+	#
+	print "No prestage progress made, deferring for a little while\n";
+	$instance->SetStatus($curStatus);
+	$instance->Defer();
+	$genislice->UnLock();
+	exit(0);
     }
 
     #
@@ -372,7 +437,6 @@ while ($instance->status() eq "prestage" && !$instance->IsCanceled()) {
     }
     $instance->ResolveDefer();
     $instance->SetStatus("staged");
-    $instance->SetAggregateStatus("staged");
 }
 
 #
@@ -427,15 +491,6 @@ foreach my $agg ($instance->AggregateList()) {
 	next;
     }
     push(@aggregate_list, $agg);
-    #
-    # We send email when all deferred aggregates are started.  Note
-    # that if the status is still "created", we are coming from
-    # create_instance() (not a scheduled experiment), so do not send
-    # email, no need to since the user is looking at the web interface.
-    #
-    $sendemail = 1
-	if (! ($instance->status() eq "created" ||
-	       $instance->status() eq "staged"));
 }
 if (!@aggregate_list) {
     print "No uncreated aggregates to process.\n";
@@ -491,13 +546,6 @@ my ($slice_credential, $speaksfor_credential) =
 if (! (defined($speaksfor_credential) &&
        defined($slice_credential))) {
     fatal("Could not generate credentials");
-}
-
-#
-# Check frequency ranges (actually, checking that we have a reservation).
-#
-if ($instance->CheckSpectrumReserved(\$errmsg)) {
-    MyExit(1, "Not all frequency ranges are reserved: $errmsg");
 }
 
 #

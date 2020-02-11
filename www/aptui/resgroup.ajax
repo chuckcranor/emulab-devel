@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -332,6 +332,72 @@ function Do_Reserve()
             }
         }
     }
+    
+    #
+    # Routes are also optional
+    #
+    $safe_routes  = array();
+    
+    if (isset($formfields["routes"])) {    
+        $routes = $formfields["routes"];
+        if (!is_array($routes)) {
+            $errors["routes"] = "Not an array";
+        }
+        else {
+            $route_errors = 0;
+            foreach ($routes as $route_uuid => &$route) {
+                $required = array("routename", "uuid");
+                $rerrors  = array();
+
+                foreach ($required as $field) {
+                    if (!isset($route[$field]) || $route[$field] == "") {
+                        $rerrors[$field] = "Missing field";
+                    }
+                }
+                if (count($rerrors)) {
+                    $route["errors"] = $rerrors;
+                    $route_errors++;
+                    continue;
+                }
+                $routename = $route["routename"];
+
+                if (!TBvalid_userdata($routename)) {
+                    $rerrors["routename"] = TBFieldErrorString();
+                }
+                if (!IsValidUUID($route_uuid)) {
+                    $rerrors["uuid"] = "Not a valid uuid: $route_uuid";
+                }
+                if (!IsValidUUID($route["uuid"])) {
+                    $rerrors["uuid"] = "Not a valid uuid: " . $route["uuid"];
+                }
+                if (!count($rerrors)) {
+                    #
+                    # Check internal consistency.
+                    #
+                    foreach ($safe_routes as $unused => $safe_route) {
+                        if ($routename != $safe_route["routename"]) {
+                            continue;
+                        }
+                        $rerrors["routename"] = "Already using this route";
+                        break;
+                    }
+                }
+                if (count($rerrors)) {
+                    $route["errors"] = $rerrors;
+                    $route_errors++;
+                    continue;
+                }
+                # Create a new version of the array for passing out to backend,
+                $safe_routes[$route_uuid] =
+                    array("routename" => $routename,
+                          "uuid"      => $route["uuid"]);
+            }
+            if ($route_errors) {
+                $errors["error"]  = "Please fix the errors below";
+                $errors["routes"] = $routes;
+            }
+        }
+    }
     if (count($errors)) {
 	SPITAJAX_ERROR(2, $errors);
 	return;
@@ -382,6 +448,9 @@ function Do_Reserve()
     }
     if (count($safe_ranges)) {
         $blob["ranges"] = $safe_ranges;
+    }
+    if (count($safe_routes)) {
+        $blob["routes"] = $safe_routes;
     }
     $resgroupfile = tempnam("/tmp", "resgroup");
     $fp = fopen($resgroupfile, "w");
@@ -1032,6 +1101,32 @@ function ResgroupBlob($resgroup)
             $details["pending"] += 1;
         }
     }
+    $routes = array();
+    foreach ($resgroup->routereservations() as $reservation) {
+        $blob = array("route_uuid"  => $reservation->route_uuid(),
+                      "routename"   => $reservation->routename(),
+                      "routeid"     => $reservation->routeid(),
+                      "submitted"   => DateStringGMT($reservation->submitted()),
+                      "approved"    => DateStringGMT($reservation->approved()),
+                      "canceled"    => DateStringGMT($reservation->canceled()));
+            
+        if (time() > strtotime($resgroup->start()) &&
+            $reservation->approved()) {
+            $blob["active"] = true;
+        }
+        else {
+            $blob["active"] = false;
+        }
+        $routes[$reservation->route_uuid()] = $blob;
+
+        if (! $reservation->approved()) {
+            $status = "pending";
+        }
+        if (!$reservation->approved()) {
+            $details["approved"] = 0;
+            $details["pending"] += 1;
+        }
+    }
     $details["status"] = $status;
     if (time() > strtotime($resgroup->start()) &&
         ($status == "approved" || $details["pending"] > 0)) {
@@ -1042,6 +1137,7 @@ function ResgroupBlob($resgroup)
     }
     $details["clusters"] = $clusters;
     $details["ranges"]   = $ranges;
+    $details["routes"]   = $routes;
     return $details;
 }
 
@@ -1072,6 +1168,96 @@ function Do_RangeReservations()
         }
     }
     SPITAJAX_RESPONSE($info);
+}
+
+#
+# Ask for route reservation system info. We want to do this so it is
+# easy to turn into something look like a forecast, that can be fed
+# into the resgraph code. Not ideal, but easy for now.
+#
+function Do_RouteReservations()
+{
+    global $this_user;
+    global $ajax_args;
+    $info = array();
+    $allgroups = ReservationGroup::LookupAll();
+    foreach ($allgroups as $reservation) {
+        $routes = $reservation->routereservations();
+        if (!count($routes)) {
+            continue;
+        }
+        $routearray = array();
+        foreach ($routes as $res) {
+            if (!$res->approved()) {
+                continue;
+            }
+            $blob = array("routename"  => $res->routename(),
+                          "routeid"    => $res->routeid(),
+                          "start"      => DateStringGMT($reservation->start()),
+                          "end"        => DateStringGMT($reservation->end()));
+            $info[] = $blob;
+        }
+    }
+    $forecast = array();
+    $query_result =
+        DBQueryFatal("select r.*,g.start,g.end ".
+                     "   from apt_reservation_group_route_reservations as r ".
+                     "left join apt_reservation_groups as g on ".
+                     "   g.uuid=r.uuid ".
+                     "where r.approved is not null and g.start is not null ".
+                     "order by r.routeid,g.start asc");
+    while ($row = mysql_fetch_array($query_result)) {
+        $routename = $row["routename"];
+        $start     = strtotime($row["start"]);
+        $end       = strtotime($row["end"]);
+
+        // Nothing before now.
+        if ($start < time()) {
+            $start = time();
+        }
+        if (!array_key_exists($routename, $forecast)) {
+            $forecast[$routename] = array();
+            #
+            # Need an initial entry stating that the route is free between
+            # now and the time of the first reservation.
+            #
+            if ($start > time()) {
+                $forecast[$routename][] =
+                    array("free"  => 1,
+                          "held"  => 0,
+                          "t"     => time(),
+                          "stamp" => DateStringGMT(time()));
+            }
+        }
+        $forecast[$routename][] = array("free"  => 0,
+                                        "held"  => 1,
+                                        "t"     => $start,
+                                        "stamp" => DateStringGMT($start));
+        $forecast[$routename][] = array("free"  => 1,
+                                        "held"  => 0,
+                                        "t"     => $end,
+                                        "stamp" => DateStringGMT($end));
+    }
+    #
+    # We need stub forecast entries for routes with no reservations.
+    #
+    $query_result =
+        DBQueryFatal("select * from apt_mobile_bus_routes");
+    
+    while ($row = mysql_fetch_array($query_result)) {
+        $routename = $row["description"];
+        $routeid   = $row["routeid"];
+
+        if (!array_key_exists($routename, $forecast)) {
+            $forecast[$routename] = array();
+            $forecast[$routename][] = array("free"  => 1,
+                                            "held"  => 0,
+                                            "t"     => time(),
+                                            "stamp" => DateStringGMT(time()));
+        }
+    }
+    $blob = array("list" => $info, "forecast" => $forecast);
+    SPITAJAX_RESPONSE($blob);
 }
 
 # Local Variables:

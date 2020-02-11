@@ -52,6 +52,9 @@ $optargs = OptionalPageArguments("edit",     PAGEARG_BOOLEAN,
                                  "project",  PAGEARG_PROJECT,
                                  "fromrspec",PAGEARG_BOOLEAN,
                                  "uuid",     PAGEARG_UUID);
+if (!isset($fromrspec)) {
+    $fromrspec = 0;
+}
 
 if ($edit) {
     if (!isset($uuid)) {
@@ -77,7 +80,18 @@ if (isset($cluster)) {
         exit();
     }
 }
-
+# Spit out the route list.
+$query_result =
+    DBQueryFatal("select * from apt_mobile_bus_routes");
+$routelist = array();
+while ($row = mysql_fetch_array($query_result)) {
+    $routename = $row["description"];
+    $routeid   = $row["routeid"];
+    $routelist[$routename] = array(
+        "routename" => $routename,
+        "routeid"   => $routeid,
+    );
+}
 SPITHEADER(1);
 
 echo "<link rel='stylesheet'
@@ -86,6 +100,12 @@ echo "<link rel='stylesheet'
             href='css/tablesorter.css'>\n";
 echo "<link rel='stylesheet'
             href='css/nv.d3.css'>\n";
+echo "<link rel='stylesheet'
+            href='https://fonts.googleapis.com/css?family=Muli'>\n";
+echo "<link rel='stylesheet'
+            href='css/visavail.css'>\n";
+echo "<link rel='stylesheet'
+            href='https://use.fontawesome.com/releases/v5.0.12/css/all.css'>\n";
 
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
@@ -154,12 +174,17 @@ while (list($index, $aggregate) = each($ams)) {
                           "name"     => $am,
                           "nickname" => $aggregate->nickname(),
                           "typeinfo" => $typeinfo,
+                          "radiotypes"       => $aggregate->RadioTypes(),
                           "abbreviation"     => $aggregate->nickname(),
                           "reservable_nodes" => $reservable_nodes,
+                          "ismobile"         => $aggregate->ismobile(),
                           "isFE"             => $aggregate->isFE());
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
 echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
+echo "</script>\n";
+echo "<script type='text/plain' id='routelist-json'>\n";
+echo htmlentities(json_encode($routelist, JSON_NUMERIC_CHECK));
 echo "</script>\n";
 
 $default_pid = "";
@@ -191,13 +216,15 @@ REQUIRE_MOMENT();
 REQUIRE_APTFORMS();
 AddLibrary("js/resgraphs.js");
 AddTemplateList(array("resgroup", "reserve-faq", "reservation-graph",
-                      "range-list",
+                      "range-list", "route-list",
                       "oops-modal", "waitwait-modal", "confirm-modal",
                       "resusage-list", "resusage-graph",
                       "confirm-something", "resusage-graph"));
 SPITREQUIRE("js/resgroup.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
+            "<script src='js/lib/d3.v5.js'></script>\n".
             "<script src='js/lib/nv.d3.js'></script>\n".
+            "<script src='js/lib/visavail.js'></script>\n".
             "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
             "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
             "<script src='js/lib/sugar.min.js'></script>".

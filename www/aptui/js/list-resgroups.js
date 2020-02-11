@@ -6,6 +6,7 @@ $(function ()
     var listTemplate;
     var bytypeTemplate;
     var byrangeTemplate;
+    var byrouteTemplate;
 
     function initialize()
     {
@@ -13,6 +14,7 @@ $(function ()
 
 	var template_list   = ["list-resgroups", "resgroup-list",
 			       "resgroup-list-bytype", "resgroup-list-byrange",
+			       "resgroup-list-byroute",
 			       "oops-modal", "waitwait-modal"];
 	var templates       = APT_OPTIONS.fetchTemplateList(template_list);
 	
@@ -20,6 +22,7 @@ $(function ()
 	listTemplate    = _.template(templates["resgroup-list"]);
 	bytypeTemplate  = _.template(templates["resgroup-list-bytype"]);
 	byrangeTemplate = _.template(templates["resgroup-list-byrange"]);
+	byrouteTemplate = _.template(templates["resgroup-list-byroute"]);
 
 	$('#main-body').html(mainTemplate({}));
 	$('#oops_div').html(templates["oops-modal"]);	
@@ -100,6 +103,10 @@ $(function ()
 		crow.find(".tablesorter.ranges-table thead th")
 		    .addClass("sorter-false");
 	    }
+	    if (_.size(group.routes) == 1) {
+		crow.find(".tablesorter.routes-table thead th")
+		    .addClass("sorter-false");
+	    }
 	    crow.find(".tablesorter").tablesorter({
 		    theme : 'green',
 		    // initialize zebra
@@ -156,26 +163,44 @@ $(function ()
 			.removeClass("hidden");
 		}
 	    });
+	    _.each(group.routes, function(reservation, uuid) {
+		var resid = 'tr[data-uuid="' + uuid + '"] ';
+		var rrow  = crow.find(resid);
+
+		if (reservation.canceled) {
+		    rrow.find(".reservation-status-column .status-canceled")
+			.removeClass("hidden");
+		}
+		else if (reservation.approved) {
+		    rrow.find(".reservation-status-column .status-approved")
+			.removeClass("hidden");
+		}
+		else {
+		    rrow.find(".reservation-status-column .status-pending")
+			.removeClass("hidden");
+		}
+	    });
 	});
 	$('#groups .tablesorter .tablesorter-childRow>td').hide();	
-	$('#groups .tablesorter .show-childrow .expando').click(function (event) {
-	    event.preventDefault();
-	    // Determine current state for changing the chevron.
-	    var row = $(this).closest('tr')
-		.nextUntil('tr.tablesorter-hasChildRow').find('td')[0];
-	    var display = $(row).css("display");
-	    if (display == "none") {
-		$(this)
-		    .removeClass("glyphicon-chevron-right")
-		    .addClass("glyphicon-chevron-down");
-	    }
-	    else {
-		$(this)
-		    .removeClass("glyphicon-chevron-down")
-		    .addClass("glyphicon-chevron-right");
-	    }
-	    $(row).toggle();
-	});
+	$('#groups .tablesorter .show-childrow .expando')
+	    .click(function (event) {
+		event.preventDefault();
+		// Determine current state for changing the chevron.
+		var row = $(this).closest('tr')
+		    .nextUntil('tr.tablesorter-hasChildRow').find('td')[0];
+		var display = $(row).css("display");
+		if (display == "none") {
+		    $(this)
+			.removeClass("glyphicon-chevron-right")
+			.addClass("glyphicon-chevron-down");
+		}
+		else {
+		    $(this)
+			.removeClass("glyphicon-chevron-down")
+			.addClass("glyphicon-chevron-right");
+		}
+		$(row).toggle();
+	    });
 	
 	// This activates the tooltip subsystem.
 	$('#groups [data-toggle="tooltip"]').tooltip({
@@ -271,9 +296,55 @@ $(function ()
 		    });
 		});
 	    }
+	    // See if we have any routes
+	    var routes = 0;
+	    _.each(groups, function(group) {
+		console.info(group, group.routes);
+		if (_.size(group.routes)) {
+		    routes++;
+		}
+	    });
+	    if (routes) {
+		html = byrouteTemplate({
+		    "groups"       : groups,
+		    "showcontrols" : false,
+		    "showproject"  : true,
+		    "showactivity" : true,
+		    "showuser"     : true,
+		    "showusing"    : true,
+		    "showstatus"   : true,
+		    "isadmin"      : window.ISADMIN,
+		});
+		$("#groups-byroute").html(html);
+		
+		// Status column
+		_.each(groups, function(group) {
+		    _.each(group.routes, function(reservation, uuid) {
+			var resid = 'tr[data-uuid="' + uuid + '"] ';
+			var rrow  = $('#groups-byroute ' + resid);
+
+			if (reservation.canceled) {
+			    rrow.find(".reservation-status-column " +
+				      ".status-canceled")
+				.removeClass("hidden");
+			}
+			else if (reservation.approved) {
+			    rrow.find(".reservation-status-column " +
+				      ".status-approved")
+				.removeClass("hidden");
+			}
+			else {
+			    rrow.find(".reservation-status-column " +
+				      ".status-pending")
+				.removeClass("hidden");
+			}
+		    });
+		});
+	    }
 
 	    // Format dates with moment before display.
-	    $('#groups-bytype .format-date, #groups-byrange .format-date')
+	    $('#groups-bytype .format-date, #groups-byrange .format-date, ' +
+	      '#groups-byroute .format-date')
 		.each(function() {
 		    var date = $.trim($(this).html());
 		    if (date != "") {
@@ -284,7 +355,11 @@ $(function ()
 	    if (ranges) {
 		$("#groups-byrange-div").removeClass("hidden");
 	    }
-	    $('#groups-bytype .tablesorter, #groups-byrange .tablesorter')
+	    if (routes) {
+		$("#groups-byroute-div").removeClass("hidden");
+	    }
+	    $('#groups-bytype .tablesorter, #groups-byrange .tablesorter,' +
+	      '#groups-byroute .tablesorter')
 		.tablesorter({
 		    theme : 'green',
 		    // initialize zebra
@@ -293,13 +368,15 @@ $(function ()
 
 	    // This activates the tooltip subsystem.
 	    $('#groups-bytype  [data-toggle="tooltip"], ' +
-	      '#groups-byrange [data-toggle="tooltip"]').tooltip({
+	      '#groups-byrange [data-toggle="tooltip"], ' +
+	      '#groups-byroute [data-toggle="tooltip"]').tooltip({
 		delay: {"hide" : 250, "show" : 250},
 		placement: 'auto',
 	    });
 	    // This activates the popover subsystem.
 	    $('#groups-bytype  [data-toggle="popover"], ' +
-	      '#groups-byrange [data-toggle="popover"]').popover({
+	      '#groups-byrange [data-toggle="popover"], ' +
+	      '#groups-byroute [data-toggle="popover"]').popover({
 		placement: 'auto',
 		container: 'body',
 	    });

@@ -287,6 +287,33 @@
 		</table>
 	      </div>
 	    <% } %>
+	    <% if (_.size(value.routes)) { %>
+	      <div style="ignore-width: 700px;">
+		<table class='tablesorter routes-table resgroup-child'>
+		  <thead>
+		    <th>Route Name</th>
+		    <th>Route ID</th>
+		    <th>Status</th>
+		  </thead>
+		  <tbody>
+		    <% _.each(value.routes, function(info) { %>
+		      <tr data-uuid="<%- info.route_uuid %>">
+			<td><%- info.routename %></td>
+			<td><%- info.routeid %></td>
+			<td class="reservation-status-column">
+			  <span class="status-approved hidden">
+			    Approved</span>
+			  <span class="status-pending hidden text-danger">
+			    Pending</span>
+			  <span class="status-canceled hidden text-danger">
+			    Canceled</span>
+			</td>
+		      </tr>
+		    <% }); %>
+		  </tbody>
+		</table>
+	      </div>
+	    <% } %>
 	  </td>
 	</tr>
       <% }); %>

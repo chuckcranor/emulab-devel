@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -305,19 +305,23 @@ echo "<link rel='stylesheet' href='css/progress.css'>\n";
 echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
 
 #
-# Build up a blob of aggregates info used by this experiment.
+# Build up a blob of all aggregates for this portal. We need the entire
+# list in case new aggregates are added.
 #
+$aggregates = Aggregate::DefaultAggregateList($this_user);
 $blob = array();
-foreach ($slivers as $sliver) {
-    $aggregate_urn = $sliver->aggregate_urn();
-    $aggregate     = Aggregate::Lookup($aggregate_urn);
+
+foreach ($aggregates as $aggregate) {
+    $aggregate_urn = $aggregate->urn();
     $weburl        = $aggregate->weburl();
 
-    $blob[$aggregate_urn] = array("weburl" => $weburl,
-                                  "name"   => $aggregate->name(),
-                                  "nickname" => $aggregate->nickname(),
-                                  "abbreviation" => $aggregate->abbreviation());
+    $blob[$aggregate_urn] =
+        array("weburl"       => $weburl,
+              "name"         => $aggregate->name(),
+              "nickname"     => $aggregate->nickname(),
+              "abbreviation" => $aggregate->abbreviation());
 }
+
 echo "<script type='text/plain' id='amlist-json'>\n";
 echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
 echo "</script>\n";

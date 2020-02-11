@@ -74,6 +74,8 @@ sub ReservationList($)   { return values(%{ $_[0]->{'RESERVATIONS'} }); }
 sub ReservationHash($)   { return $_[0]->{'RESERVATIONS'}; }
 sub RFReservationList($) { return values(%{ $_[0]->{'RFRESERVATIONS'} }); }
 sub RFReservationHash($) { return $_[0]->{'RFRESERVATIONS'}; }
+sub RouteReservationList($) { return values(%{ $_[0]->{'ROUTERESERVATIONS'} });}
+sub RouteReservationHash($) { return $_[0]->{'ROUTERESERVATIONS'}; }
 
 sub DESTROY {
     my $self = shift;
@@ -121,6 +123,8 @@ sub Lookup($$)
 	APT_Reservation::Group::Reservation->LookupForGroup($self);
     $self->{'RFRESERVATIONS'} =
 	APT_Reservation::Group::RFReservation->LookupForGroup($self);
+    $self->{'ROUTERESERVATIONS'} =
+	APT_Reservation::Group::RouteReservation->LookupForGroup($self);
     
     return $self;
 }
@@ -328,7 +332,9 @@ sub LockTables($)
 		"   apt_reservation_group_rf_reservations write, ".
 		"   apt_reservation_group_history write, ".
 		"   apt_reservation_group_reservation_history write, ".
-		"   apt_reservation_group_rf_reservation_history write ")
+		"   apt_reservation_group_rf_reservation_history write, ".
+		"   apt_reservation_group_route_reservations write, ".
+		"   apt_reservation_group_route_reservation_history write ")
 	or return -1;
     return 0;
 }
@@ -370,6 +376,22 @@ sub AddRFReservation($$$)
 	if (!defined($res));
 
     $self->{'RFRESERVATIONS'}->{$res->freq_uuid()} = $res;
+    return $res;
+}
+
+#
+# Add a Route reservation to a group
+#
+sub AddRouteReservation($)
+{
+    my ($self, $routename) = @_;
+
+    my $res = APT_Reservation::Group::RouteReservation->Create($self,
+							       $routename);
+    return undef
+	if (!defined($res));
+
+    $self->{'ROUTERESERVATIONS'}->{$res->route_uuid()} = $res;
     return $res;
 }
 
@@ -539,6 +561,33 @@ sub RFInUse($$)
     return 0;
 }
 
+# Ditto routes,
+sub RoutesInUse($$)
+{
+    my ($self, $instance) = @_;
+    return 0
+	if (!$self->RouteReservationList());
+    
+    #
+    # List of all routes used by the instance.
+    #
+    my $routes;
+    if ($instance->GetRoutes(\$routes)) {
+	return -1;
+    }
+    return 0
+	if (!@$routes);
+    
+    foreach my $r ($self->RouteReservationList()) {
+	foreach my $route (@$routes) {
+	    if ($r->routename() == $route->{'routename'}) {
+		return 1;
+	    }
+	}
+    }
+    return 0;
+}
+
 ###################################################################
 package APT_Reservation::Group::Reservation;
 use emdb;
@@ -620,6 +669,7 @@ sub group($)	        { return $_[0]->{'GROUP'}; }
 sub domain($)		{ return $_[0]->{'AGGURN'}->domain(); }
 sub IsCluster($)        { return 1; }
 sub IsRange($)          { return 0; }
+sub IsRoute($)          { return 0; }
 
 sub DESTROY {
     my $self = shift;
@@ -942,6 +992,7 @@ AUTOLOAD {
 sub group($)	        { return $_[0]->{'GROUP'}; }
 sub IsCluster($)        { return 0; }
 sub IsRange($)          { return 1; }
+sub IsRoute($)          { return 0; }
 
 sub DESTROY {
     my $self = shift;
@@ -961,6 +1012,20 @@ sub Stringify($)
     my $upper  = $self->freq_high();
 
     return "[APT_ResGroupRF $pid $lower:$upper]";
+}
+
+#
+# Pretty print.
+#
+sub Pretty($)
+{
+    my ($self) = @_;
+    
+    my $pid    = $self->group()->pid();
+    my $lower  = $self->freq_low();
+    my $upper  = $self->freq_high();
+
+    return "$pid:$lower,upper";
 }
 
 sub Delete($)
@@ -1373,6 +1438,462 @@ sub MaxExtension($)
 		# If this reservation does not overlap in freq, skip it.
 		if (($freq_low < $res_low && $freq_high < $res_low) ||
 		    ($freq_low > $res_high)) {
+		    next;
+		}
+		# The end of this reservation is an upper bound on how
+		# long the experiment can be extended.
+		if ($newmax > $res_end) {
+		    # One hour pad, just like node reservations.
+		    $newmax = $res_end - 3600;
+		}
+	    }
+	}
+    }
+    return $newmax;
+}
+
+###################################################################
+package APT_Reservation::Group::RouteReservation;
+use emdb;
+use EmulabConstants;
+use libtestbed;
+use EmulabFeatures;
+use Carp;
+use JSON;
+use English;
+use GeniXML;
+use GeniHRN;
+use Date::Parse;
+use Data::Dumper;
+use vars qw($AUTOLOAD);
+use overload ('""' => 'Stringify');
+
+#
+# Mobile endpoints are buses. These are the routes we care about.
+#
+my $BusRoutes = [
+    # Name, RouteID
+    ["Purple",            19],
+    ["Green",             64],
+    ["Blue Detour",       65],
+    ["Guardsman Direct",  66],
+    ["Red Detour",        68],
+    ["Orange",            72],
+    ];
+
+my $RouteMap;
+
+sub RouteID($)
+{
+    my ($routename) = @_;
+
+    if (!defined($RouteMap)) {
+	$RouteMap = {};
+	
+	foreach my $ref (@$BusRoutes) {
+	    my ($name, $id) = @$ref;
+	    
+	    $RouteMap->{$name} = $id;
+	}
+    }
+    if (exists($RouteMap->{$routename})) {
+	return $RouteMap->{$routename};
+    }
+    return undef;
+}
+
+sub Lookup($$$)
+{
+    my ($class, $group, $route_uuid) = @_;
+    my $uuid = $group->uuid();
+    my $safe_uuid = DBQuoteSpecial($route_uuid);
+
+    my $query_result =
+	DBQueryWarn("select * from apt_reservation_group_route_reservations ".
+		    "where uuid='$uuid' and route_uuid=$safe_uuid");
+    return undef
+	if (! (defined($query_result) && $query_result->numrows));
+
+    my $self            = {};
+    $self->{'DBROW'}    = $query_result->fetchrow_hashref();
+    $self->{'GROUP'}    = $group;
+    bless($self, $class);
+
+    return $self;
+}
+
+#
+# Create a route reservation
+#
+sub Create($$$$)
+{
+    my ($class, $group, $routename) = @_;
+    my $group_uuid = $group->uuid();
+    my $route_uuid = NewUUID();
+
+    my $routeid = RouteID($routename);
+    if (!defined($routename)) {
+	print STDERR "No ID for route: $routename\n";
+	return undef;
+    }
+    DBQueryWarn("insert into apt_reservation_group_route_reservations set ".
+		"  uuid='$group_uuid',routename='$routename', ".
+		"  route_uuid='$route_uuid', routeid='$routeid'")
+	or return undef;
+
+    DBQueryWarn("insert into apt_reservation_group_route_reservation_history ".
+		"  set uuid='$group_uuid', ".
+		"  route_uuid='$route_uuid', routeid='$routeid', ".
+		"  routename='$routename'");
+
+    return Lookup($class, $group, $route_uuid);
+}
+
+AUTOLOAD {
+    my $self  = $_[0];
+    my $type  = ref($self) or croak "$self is not an object";
+    my $name  = $AUTOLOAD;
+    $name =~ s/.*://;   # strip fully-qualified portion
+
+    # A DB row proxy method call.
+    if (exists($self->{'DBROW'}->{$name})) {
+	return $self->{'DBROW'}->{$name};
+    }
+    carp("No such slot '$name' field in class $type");
+    return undef;
+}
+sub group($)	        { return $_[0]->{'GROUP'}; }
+sub IsCluster($)        { return 0; }
+sub IsRange($)          { return 0; }
+sub IsRoute($)          { return 1; }
+
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'DBROW'} = undef;
+}
+
+#
+# Stringify for output.
+#
+sub Stringify($)
+{
+    my ($self) = @_;
+    
+    my $pid       = $self->group()->pid();
+    my $routename = $self->routename();
+
+    return "[APT_ResGroupRoute $pid $routename]";
+}
+
+#
+# Pretty print.
+#
+sub Pretty($)
+{
+    my ($self) = @_;
+    
+    my $pid       = $self->group()->pid();
+    my $routename = $self->routename();
+
+    return "$pid:$routename";
+}
+
+sub Delete($)
+{
+    my ($self) = @_;
+    my $uuid       = $self->uuid();
+    my $route_uuid = $self->route_uuid();
+    
+    DBQueryWarn("delete from apt_reservation_group_route_reservations ".
+		"where uuid='$uuid' and route_uuid='$route_uuid'")
+	or return -1;
+
+    my $hash = $self->group()->RouteReservationHash();
+    delete($hash->{$route_uuid});
+
+    return 0;
+}
+
+#
+# Lookup all Route reservations for a group
+#
+sub LookupForGroup($$)
+{
+    my ($class, $group) = @_;
+    my $result = {};
+    my $uuid   = $group->uuid();
+
+    my $query_result =
+	DBQueryWarn("select route_uuid from ".
+		    "   apt_reservation_group_route_reservations ".
+		    "where uuid='$uuid'");
+    return ()
+	if (! (defined($query_result) && $query_result->numrows));
+
+    while (my ($route_uuid) = $query_result->fetchrow_array()) {
+	my $res = Lookup($class, $group, $route_uuid);
+	if (!defined($res)) {
+	    print STDERR "No apt_reservation_group_route_reservations for ".
+		"$uuid/$route_uuid\n";
+	    return ();
+	}
+	$result->{$res->route_uuid()} = $res;
+    }
+    return $result;
+}
+
+sub Mark($$;$)
+{
+    my ($self, $which, $value) = @_;
+    my $uuid       = $self->uuid();
+    my $route_uuid = $self->route_uuid();
+    my $clause     = "${which}=";
+
+    if (!defined($value)) {
+	$clause .= "NULL";
+    }
+    elsif ($value eq "now") {
+	$clause .= "now()";
+	$value   = time();
+    }
+    elsif ($value =~ /^\d*$/) {
+	$clause .= "FROM_UNIXTIME($value)";
+    }
+    else {
+	$clause .= DBQuoteSpecial($value);
+    }
+    DBQueryWarn("update apt_reservation_group_route_reservations ".
+		" set $clause ".
+		"where uuid='$uuid' and route_uuid='$route_uuid'")
+	or return -1;
+
+    if ($which eq "submitted" || $which eq "approved" ||
+	$which eq "canceled") {
+	DBQueryWarn("update apt_reservation_group_route_reservation_history ".
+		    " set $clause ".
+		    "where uuid='$uuid' and route_uuid='$route_uuid'")
+    }
+    $self->{'DBROW'}->{$which} = $value;
+    return 0;
+}
+
+sub MarkApproved($;$)
+{
+    my ($self, $value) = @_;
+    if (!defined($value)) {
+	$value = "now";
+    }
+    return $self->Mark("approved", $value);
+}
+
+sub MarkSubmitted($$)
+{
+    my ($self, $approved) = @_;
+    my $uuid       = $self->uuid();
+    my $route_uuid = $self->route_uuid();
+    my $clause     = " submitted=now()," .
+	($approved ? "approved=now() " : "approved=null ");
+
+    DBQueryWarn("update apt_reservation_group_route_reservations set ".
+		"  $clause ".
+		"where uuid='$uuid' and route_uuid='$route_uuid'")
+	or return -1;
+
+    DBQueryWarn("update apt_reservation_group_route_reservation_history ".
+		" set $clause ".
+		"where uuid='$uuid' and route_uuid='$route_uuid'");
+
+    $self->{'DBROW'}->{'submitted'} = time();
+    $self->{'DBROW'}->{'approved'}  = ($approved ? time() : undef);
+    return 0;
+}
+
+#
+# Only the history entry needs to be updated since we immediately delete
+# the record. 
+#
+sub MarkDeleted($)
+{
+    my ($self, $value) = @_;
+    my $uuid       = $self->uuid();
+    my $route_uuid = $self->route_uuid();
+
+    DBQueryWarn("update apt_reservation_group_route_reservation_history ".
+		" set deleted=now() ".
+		"where uuid='$uuid' and route_uuid='$route_uuid'");
+
+    return 0;
+}
+sub MarkCanceled($$)
+{
+    my ($self, $when) = @_;
+    return $self->Mark("canceled", $when);
+}
+sub ClearCanceled($)
+{
+    my ($self) = @_;
+    return $self->Mark("canceled", undef);
+}
+
+#
+# See if a request fits the schedule.
+# 
+# Do not worry about efficiency, I doubt there will ever be enough
+# reservations to matter.
+#
+sub Fits($$$$$)
+{
+    my ($class, $groups, $start, $end, $ref) = @_;
+    my $routename  = $ref->{'routename'};
+    my $route_uuid = $ref->{'uuid'};
+    my @groups     = @{$groups};
+    my $fits       = 1;
+
+    #
+    # No start time means user wants the reservation right now.
+    #
+    $start = time()
+	if (!defined($start));
+	
+    foreach my $group (@groups) {
+	next
+	    if (! $group->RouteReservationList());
+
+	my $res_start = str2time($group->start());
+	my $res_end   = str2time($group->end());
+
+	foreach my $existing ($group->RouteReservationList()) {
+	    next
+		if (!$existing->approved());
+
+	    my $res_uuid  = $existing->route_uuid();
+	    my $res_name  = $existing->routename();
+
+	    # Skip ourself.
+	    next
+		if ($route_uuid eq $res_uuid);
+
+	    # If this reservation does not overlap in time, skip it.
+	    if (($start < $res_start && $end < $res_start) ||
+		($start > $res_end)) {
+		next;
+	    }
+	    # If this reservation is a different route, skip it.
+	    if ($res_name ne $routename) {
+		next;
+	    }
+	    # Does not fit!
+	    $fits = 0;
+	    last;
+	}
+	last if (!$fits);
+    }
+    return $fits;
+}
+
+sub RouteAllowed($$$)
+{
+    my ($class, $project, $ref) = @_;
+
+    return 1
+	if ($project->pid() eq TBOPSPID());
+
+    return 1
+	if (EmulabFeatures->FeatureEnabled("powder-routes-allowed",
+					   undef, $project));
+    return 0;
+}
+
+#
+# Does the project hold a route reservation for the time. 
+#
+sub RouteReserved($$$$$$)
+{
+    my ($class, $project, $start, $end, $routename) = @_;
+    my $pid_idx = $project->pid_idx();
+
+    my $query_result =
+	DBQueryWarn("select g.uuid,r.routename ".
+		    "   from apt_reservation_groups as g ".
+		    "left join ".
+		    "   apt_reservation_group_route_reservations as r on ".
+		    "   r.uuid=g.uuid ".
+		    "where g.pid_idx='$pid_idx' and ".
+		    "      r.routename='$routename' and ".
+		    "      $start >= UNIX_TIMESTAMP(g.start) and ".
+		    "      $end <= UNIX_TIMESTAMP(g.end) and ".
+		    "      r.approved is not null");
+    return 0
+	if (!defined($query_result) || !$query_result->numrows);
+
+    return $query_result->numrows;
+}
+
+#
+# Determine a max extension for an instance,
+#
+sub MaxExtension($)
+{
+    my ($instance) = @_;
+    my $slice   = $instance->GetGeniSlice();
+    my $project = $instance->GetProject();
+    my $pid_idx = $project->pid_idx();
+    my $expires = str2time($slice->expires());
+    # This matches what MaxSliceExtension() does
+    my $newmax  = $expires + (60 * 60 * 24 * 180);
+
+    #
+    # If the instance is not using any routes, we are done. Remember,
+    # an instance cannot use routes unless the routes are reserved, so we
+    # do not need to check if the current instance is using routes unless
+    # the project has some reserved.
+    #
+    my $query_result =
+	DBQueryWarn("select distinct g.uuid ".
+		    " from apt_reservation_group_route_reservations as r ".
+		    "left join apt_reservation_groups as g on ".
+		    "     g.uuid=r.uuid ".
+		    "where g.pid_idx='$pid_idx' and ".
+		    "      r.approved is not null");
+    return undef
+	if (!defined($query_result));
+    return $newmax
+	if (!$query_result->numrows);
+
+    #
+    # OK, get a list of all routes used by the instance.
+    #
+    my $routes;
+    if ($instance->GetRoutes(\$routes)) {
+	return undef;
+    }
+    return $newmax
+	if (! @$routes);
+
+    #
+    # Hmm, it turns out that the max extension is actually when the
+    # reservations that made it possible to start the experiment, are
+    # going to end. 
+    #
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $resgroup = APT_Reservation::Group->Lookup($uuid);
+	next
+	    if (!defined($resgroup));
+
+	my $res_end = str2time($resgroup->end());
+
+	#
+	# Look for any overlap.
+	#
+	foreach my $ref (@$routes) {
+	    my $routename  = $ref->{'routename'};
+
+	    foreach my $existing ($resgroup->RouteReservationList()) {
+		my $res_name  = $existing->routename();
+
+		# If this reservation is not the route, skip it.
+		if ($res_name != $routename) {
 		    next;
 		}
 		# The end of this reservation is an upper bound on how

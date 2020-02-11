@@ -32,6 +32,7 @@ class ReservationGroup
     var	$resgroup;
     var $reservations;
     var $rfreservations;
+    var $routereservations;
     
     #
     # Constructor by lookup by urn
@@ -52,10 +53,13 @@ class ReservationGroup
             ReservationGroupReservation::LookupForGroup($this);
         $this->rfreservations =
             ReservationGroupRFReservation::LookupForGroup($this);
+        $this->routereservations =
+            ReservationGroupRouteReservation::LookupForGroup($this);
     }
     # accessors
     function reservations()   { return $this->reservations; }
     function rfreservations() { return $this->rfreservations; }
+    function routereservations() { return $this->routereservations; }
     function field($name) {
 	return (is_null($this->resgroup) ? -1 : $this->resgroup[$name]);
     }
@@ -355,6 +359,77 @@ class ReservationGroupRFReservation
 	while ($row = mysql_fetch_array($query_result)) {
             $res = ReservationGroupRFReservation::Lookup($group,
                                                          $row['freq_uuid']);
+            if ($res) {
+                $result[] = $res;
+            }
+        }
+        return $result;
+    }
+}
+class ReservationGroupRouteReservation
+{
+    var $reservation;
+    
+    #
+    # Constructor to lookup a single reservation in a group.
+    #
+    function ReservationGroupRouteReservation($group, $route_uuid) {
+	$uuid = $group->uuid();
+        $safe_uuid  = addslashes($route_uuid);
+
+	$query_result =
+	    DBQueryWarn("select * from ".
+                        "   apt_reservation_group_route_reservations ".
+			"where uuid='$uuid' and ".
+                        "      route_uuid='$safe_uuid'");
+
+	if (!$query_result || !mysql_num_rows($query_result)) {
+	    $this->reservation = null;
+	    return;
+	}
+	$this->reservation = mysql_fetch_array($query_result);
+    }
+    # accessors
+    function field($name) {
+	return (is_null($this->reservation) ? -1 : $this->reservation[$name]);
+    }
+    function uuid()	    { return $this->field('uuid'); }
+    function route_uuid()   { return $this->field('route_uuid'); }
+    function routename()    { return $this->field('routename'); }
+    function routeid()      { return $this->field('routeid'); }
+    function submitted()    { return $this->field('submitted'); }
+    function approved()     { return $this->field('approved'); }
+    function canceled()     { return $this->field('canceled'); }
+    
+    # Hmm, how does one cause an error in a php constructor?
+    function IsValid() {
+	return !is_null($this->reservation);
+    }
+
+    function Lookup($group, $uuid) {
+	$foo = new ReservationGroupRouteReservation($group, $uuid);
+
+	if ($foo->IsValid()) {
+            return $foo;
+        }
+        return null;
+    }
+
+    #
+    # Lookup all reservations for a group
+    #
+    function LookupForGroup($group) {
+        $result = array();
+        $uuid   = $group->uuid();
+
+        $query_result =
+            DBQueryFatal("select route_uuid ".
+                         "  from apt_reservation_group_route_reservations ".
+                         "where uuid='$uuid'");
+
+	while ($row = mysql_fetch_array($query_result)) {
+            $res = ReservationGroupRouteReservation::Lookup($group,
+                                                            $row['route_uuid']);
             if ($res) {
                 $result[] = $res;
             }
