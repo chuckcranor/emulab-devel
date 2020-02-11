@@ -292,11 +292,15 @@ window.ShowResGraph = (function ()
 	    var type = types[t];
 	    var values = [];
 	    
-	    datums[index++] = {
+	    datums[index] = {
 		"key"    : type,
 		"area"   : 0,
 		"values" : values,
 	    };
+	    if (_.has(args, "colors") && _.has(args.colors, type)) {
+		datums[index]["color"] = args.colors[type];
+	    }
+	    index++;
 
 	    for (var i = 0; i < array.length; i++) {
 		var stamp  = array[i].stamp;
