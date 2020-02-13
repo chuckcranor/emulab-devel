@@ -210,8 +210,10 @@ sub DoShow()
     print "PanicPowerOff:   " . ($aggregate->panicpoweroff() ? "Yes" : "No")."\n";
     print "PreCalcMaxExt:   " . ($aggregate->precalcmaxext() ? "Yes" : "No")."\n";
     print "Portals:         " . $aggregate->portals() . "\n";
-    print "Latitude:        " . $aggregate->latitude() . "\n";
-    print "Longitude:       " . $aggregate->longitude() . "\n";
+    if ($aggregate->latitude() && $aggregate->longitude()) {
+	print "Latitude:        " . $aggregate->latitude() . "\n";
+	print "Longitude:       " . $aggregate->longitude() . "\n";
+    }
     print "Use Feature:     " . ($aggregate->canuse_feature() || "") . "\n";
     print "Status:          " . $aggregate->status() . "\n";
     return 0;
