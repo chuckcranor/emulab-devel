@@ -2237,6 +2237,8 @@ $(function ()
 	    // Add cluster rows as needed.
 	    if (_.size(details.clusters)) {
 		_.each(details.clusters, function (res) {
+		    $("#range-table-div").removeClass("hidden");
+		    
 		    var html = clusterRowTemplate({
 			"cluster"     : res.cluster_id,
 			"cluster_urn" : res.cluster_urn,
@@ -2313,6 +2315,7 @@ $(function ()
 	    // Add route rows as needed.
 	    if (_.size(details.routes)) {
 		_.each(details.routes, function (res) {
+		    $("#route-table-div").removeClass("hidden");
 		    var html = routeRowTemplate({
 			"routename"   : res.routename,
 			"route_uuid"  : res.route_uuid,
