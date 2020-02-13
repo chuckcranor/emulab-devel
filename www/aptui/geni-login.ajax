@@ -326,9 +326,10 @@ function Do_VerifySpeaksfor()
         # allow users to come in on this interface unless they have
         # project membership at their home portal.
         #
-        if (CheckCredentials($_SESSION["certificate"], $speaksfor)) {
+        if (CheckCredentials($_SESSION["certificate"], $speaksfor, $info)) {
             SPITAJAX_ERROR(1, "Cannot verify your project membership ".
-                           "at your home portal");
+                           "at your home portal. Are you a member of any ".
+                           "valid projects?");
             session_destroy();
             return;
         }
@@ -447,7 +448,7 @@ function CreateNonLocalUser($urn, $email)
 #
 # Check membership at home portal before we do anything permanent.
 # 
-function CheckCredentials($cert, $cred)
+function CheckCredentials($cert, $cred, $info)
 {
     global $TBMAINSITE, $suexec_output;
 
@@ -465,13 +466,11 @@ function CheckCredentials($cert, $cred)
     
     $retval = SUEXEC("nobody", "nobody",
 		     "webcheckgeniuser $credfile $certfile",
-		     SUEXEC_ACTION_CONTINUE);
+		     SUEXEC_ACTION_IGNORE);
 
-    if ($retval < 0) {
-        $cred = file_get_contents($credfile);
-        $cert = file_get_contents($certfile);
+    if ($retval) {
         TBERROR("checkgeniuser failed.\n ".
-                "Cert:\n${cert}\n\n".
+                print_r($info, TRUE) . "\n" .
                 "Cred:\n${$cred}\n", 0);
     }
     unlink($credfile);
