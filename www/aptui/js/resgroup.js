@@ -3233,16 +3233,118 @@ $(function ()
 	var now     = new Date();
 	var maxend  = now;
 
-	_.each(FEs, function (details, urn) {
-	    // Do we have the forecasts yet?
-	    if (!_.has(forecasts, urn)) {
-		return;
-	    }
-	    _.each(forecasts[urn], function(forecast, type) {
-		var id = amlist[urn].abbreviation + " " + type;
+	Object.keys(FEs)
+	    .sort()
+	    .forEach(function(urn, index) {
+		// Do we have the forecasts yet?
+		if (!_.has(forecasts, urn)) {
+		    return;
+		}
+		var details = FEs[urn];
 
+		Object.keys(forecasts[urn])
+		    .sort()
+		    .forEach(function(type, index) {
+			var forecast = forecasts[urn][type];
+			var id = amlist[urn].abbreviation + " " + type;
+
+			var series = {
+			    "measure"   : id,
+			    "interval_s": 3600,
+			    "data"      : [],
+			    "categories": {
+				"Busy": { "color": "black" },
+				"Free": { "color": "green"},
+			    },
+			};
+			for (var i = 0; i < forecast.length; i++) {
+			    var info  = forecast[i];
+			    var start = moment(info.stamp).toDate();
+			    var state = info.free ? "Free" : "Busy";
+			    var end;
+
+			    if (i < forecast.length - 1) {
+				end = moment(forecast[i + 1].stamp).toDate();
+			    }
+			    else {
+				end = new Date(start.getTime());
+				end.setMonth(end.getMonth()+2);
+			    }
+			    // Upper bound on the end of the last entry, so
+			    // we can even things out on the very right
+			    // side.
+			    if (end > maxend) {
+				maxend = end;
+			    }
+			    series.data.push([start, state, end]);
+			}
+			dataset.push(series);
+		    });
+	    });
+	ShowNewGraph(dataset, maxend, "FE-graph-body", "FE-graph-visavail")
+    }
+
+    function GenerateRouteGraph()
+    {
+	$('#route-graph-div').removeClass("hidden");
+	
+	var dataset = [];
+	var now     = new Date();
+	var maxend  = now;
+
+	Object.keys(routeforecast)
+	    .sort()
+	    .forEach(function(route, index) {
+		var forecast = routeforecast[route];
 		var series = {
-		    "measure"   : id,
+		    "measure"   : route,
+		    "interval_s": 3600,
+		    "data"      : [],
+		    "categories": {
+			"Busy": { "color": "black" },
+			"Free": { "color": "green" },
+		    },
+		};
+		for (var i = 0; i < forecast.length; i++) {
+		    var info  = forecast[i];
+		    var start = moment(info.stamp).toDate();
+		    var state = info.free ? "Free" : "Busy";
+		    var end;
+
+		    if (i < forecast.length - 1) {
+			end = moment(forecast[i + 1].stamp).toDate();
+		    }
+		    else {
+			end = new Date(start.getTime());
+			end.setMonth(end.getMonth()+2);
+		    }
+		    // Upper bound on the end of the last entry, so we can
+		    // even things out on the very right side.
+		    if (end > maxend) {
+			maxend = end;
+		    }
+		    series.data.push([start, state, end]);
+		}
+		dataset.push(series);
+	    });
+	ShowNewGraph(dataset, maxend,
+		     "route-graph-body", "route-graph-visavail");
+    }
+
+    function GenerateRadioGraph()
+    {
+	$('#radio-graph-div').removeClass("hidden");
+	
+	var dataset = [];
+	var now     = new Date();
+	var maxend  = now;
+
+	Object.keys(Radios)
+	    .sort()
+	    .forEach(function(node_id, index) {
+		var forecast = Radios[node_id];
+		var series = {
+		    "measure"   : node_id,
 		    "interval_s": 3600,
 		    "data"      : [],
 		    "categories": {
@@ -3272,93 +3374,6 @@ $(function ()
 		}
 		dataset.push(series);
 	    });
-	});
-	ShowNewGraph(dataset, maxend, "FE-graph-body", "FE-graph-visavail")
-    }
-
-    function GenerateRouteGraph()
-    {
-	$('#route-graph-div').removeClass("hidden");
-	
-	var dataset = [];
-	var now     = new Date();
-	var maxend  = now;
-	_.each(routeforecast, function (forecast, route) {
-	    var series = {
-		"measure"   : route,
-		"interval_s": 3600,
-		"data"      : [],
-		"categories": {
-		    "Busy": { "color": "black" },
-		    "Free": { "color": RouteColors[route]},
-		},
-	    };
-	    for (var i = 0; i < forecast.length; i++) {
-		var info  = forecast[i];
-		var start = moment(info.stamp).toDate();
-		var state = info.free ? "Free" : "Busy";
-		var end;
-
-		if (i < forecast.length - 1) {
-		    end = moment(forecast[i + 1].stamp).toDate();
-		}
-		else {
-		    end = new Date(start.getTime());
-		    end.setMonth(end.getMonth()+2);
-		}
-		// Upper bound on the end of the last entry, so we can
-		// even things out on the very right side.
-		if (end > maxend) {
-		    maxend = end;
-		}
-		series.data.push([start, state, end]);
-	    }
-	    dataset.push(series);
-	});
-	ShowNewGraph(dataset, maxend,
-		     "route-graph-body", "route-graph-visavail");
-    }
-
-    function GenerateRadioGraph()
-    {
-	$('#radio-graph-div').removeClass("hidden");
-	
-	var dataset = [];
-	var now     = new Date();
-	var maxend  = now;
-
-	_.each(Radios, function (forecast, node_id) {
-	    var series = {
-		"measure"   : node_id,
-		"interval_s": 3600,
-		"data"      : [],
-		"categories": {
-		    "Busy": { "color": "black" },
-		    "Free": { "color": "green"},
-		},
-	    };
-	    for (var i = 0; i < forecast.length; i++) {
-		var info  = forecast[i];
-		var start = moment(info.stamp).toDate();
-		var state = info.free ? "Free" : "Busy";
-		var end;
-
-		if (i < forecast.length - 1) {
-		    end = moment(forecast[i + 1].stamp).toDate();
-		}
-		else {
-		    end = new Date(start.getTime());
-		    end.setMonth(end.getMonth()+2);
-		}
-		// Upper bound on the end of the last entry, so we can
-		// even things out on the very right side.
-		if (end > maxend) {
-		    maxend = end;
-		}
-		series.data.push([start, state, end]);
-	    }
-	    dataset.push(series);
-	});
 	ShowNewGraph(dataset, maxend,
 		     "radio-graph-body", "radio-graph-visavail");
     }
