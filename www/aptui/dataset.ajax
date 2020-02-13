@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018, 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -94,16 +94,16 @@ function Do_CreateDataSet()
 	$options .= " -t " . $formfields["dataset_type"];
     }
     if ($formfields["dataset_type"] == "stdataset") {
-	if (!isset($formfields["dataset_expires"]) ||
-	    $formfields["dataset_expires"] == "") {
+	if (!isset($formfields["dataset_expires_gmt"]) ||
+	    $formfields["dataset_expires_gmt"] == "") {
 	    $errors["dataset_expires"] = "Missing field";
 	}
-	elseif (!strtotime($formfields["dataset_expires"])) {
+	elseif (!strtotime($formfields["dataset_expires_gmt"])) {
 	    $errors["dataset_expires"] = "Illegal value";
 	}
 	else {
 	    $options .= " -e " .
-		escapeshellarg($formfields["dataset_expires"]);
+		escapeshellarg($formfields["dataset_expires_gmt"]);
 	}
     }
     if ($formfields["dataset_type"] != "imdataset") {

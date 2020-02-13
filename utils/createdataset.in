@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2019 University of Utah and the Flux Group.
+# Copyright (c) 2013-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -193,9 +193,14 @@ if (defined($options{e})) {
     if ($options{e} eq "never") {
 	$expire = 0;
     } else {
-	$expire = str2time($options{e});
-	if (!defined($expire)) {
-	    fatal("Could not parse expiration date.");
+	if ($options{e} =~ /^\d+$/) {
+	    $expire = $options{e};
+	}
+	else {
+	    $expire = str2time($options{e});
+	    if (!defined($expire)) {
+		fatal("Could not parse expiration date.");
+	    }
 	}
     }
 }

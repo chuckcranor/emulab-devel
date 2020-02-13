@@ -94,7 +94,17 @@ $(function ()
 		$(function() {
 		    $("#dataset_expires").datepicker({
 			showButtonPanel: true,
-			dateFormat: "M d yy 11:59 'PM'"
+			dateFormat: "M d yy 11:59 'PM'",
+			minDate: new Date(),
+		    });
+		    $("#dataset_expires").change(function (event) {
+			var when = $("#dataset_expires").val();
+			if (when != "") {
+			    when = moment(when);
+			    console.info(when, when.format());
+			    $('#create_dataset_form [name=dataset_expires_gmt]')
+				.val(when.format());
+			}
 		    });
 		});
 	    }

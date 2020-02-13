@@ -5523,10 +5523,11 @@ sub CreateDataset($)
 	if (ref($expiration) eq 'Frontier::RPC2::DateTime::ISO8601') {
 	    $expiration = $expiration->value;
 	}
-	if (!str2time($expiration)) {
+	my $when = str2time($expiration);
+	if (!$when) {
 	    return GeniResponse->MalformedArgsResponse("Bad expiration");
 	}
-	$opts .= " -e '" . emutil::TBDateStringLocal($expiration) . "' ";
+	$opts .= " -e '$when' ";
     }
     $opts .= $group->pid() . "/" . $group->gid() . "/" . $dataset_urn->id();
 
