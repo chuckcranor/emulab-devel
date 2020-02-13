@@ -340,13 +340,28 @@
 		      id='reserve-approve-button'
 		      type='submit' name='submit'>Approve</button>
 	    <% } %>
+	    <div class="hidden checkbox pull-left"
+		 id="idle-detection-checkbox-div"
+		 style="margin-left: 5px; margin-top: 5px;">
+	      <label data-toggle='popover'
+		     data-html='true'
+		     data-delay='{"hide":200}'
+		     data-content='Set/Clear reservation idle detection. When
+				   set, unused reservations will be
+				   automatically canceled if they are not
+				   used.'>
+		<input type="checkbox"
+		       id="idle-detection-checkbox"
+		       value="">Idle Detection</label>
+	    </div>
 	    <div class="hidden checkbox pull-right" id="override-checkbox"
-		 style="margin-right: 15px">
+		 style="margin-right: 15px; margin-top: 5px;">
 	      <label class="text-danger"
 		     data-toggle='popover'
 		     data-html='true'
 		     data-delay='{"hide":200}'
-		     data-content='Override frequency range conflicts. This
+		     data-content='Override frequency range conflicts when
+				   clicking Check/Submit/Approve. This
 				   will <b>not</b> override node shortages.
 				   You do not want to use this unless
 				   you really need to!'>

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,7 +38,8 @@ sub usage()
     print("Usage: manage_reservations [-a <urn>] delete pid uuid\n");
     print("Usage: manage_reservations [-a <urn>] approve -p portal uuid\n");
     print("Usage: manage_reservations [-a <urn>] prediction\n");
-    print("Usage: manage_reservations [-a <urn>] cancel\n");
+    print("Usage: manage_reservations [-a <urn>] cancel [-c]\n");
+    print("Usage: manage_reservations [-a <urn>] idledetection [-c]\n");
     print("Usage: manage_reservations [-a <urn>] history [user]\n");
     exit(-1);
 }
@@ -102,6 +103,7 @@ sub DoDelete();
 sub DoApprove();
 sub DoPrediction();
 sub DoCancel();
+sub DoIdleDetection();
 sub DoHistory();
 sub DoAllMaxExtensions();
 sub readfile($);
@@ -195,6 +197,9 @@ elsif ($action eq "history") {
 }
 elsif ($action eq "cancel") {
     DoCancel();
+}
+elsif ($action eq "idledetection") {
+    DoIdleDetection();
 }
 elsif ($action eq "allmaxextensions") {
     DoAllMaxExtensions();
@@ -1004,6 +1009,60 @@ sub DoCancel()
 	    UpdateReservationRequest($aggregate, $uuid,
 				     $RESERVATION_RECORD_CANCEL);
 	}
+    }
+    exit(0);
+}
+
+#
+# Mark/Clear the reservation for no cancel (override unused).
+#
+sub DoIdleDetection()
+{
+    my $optlist = "c";
+    my $clear   = 0;
+    my $errmsg;
+
+    if (!$this_user->IsAdmin()) {
+	fatal("No permission to change reservation idle detection")
+    }    
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"c"})) {
+	$clear = 1;
+    }
+    usage()
+	if (@ARGV != 1);
+    my $uuid = shift(@ARGV);
+    
+    # Check this since Reservation->Lookup() does not validate.
+    fatal("Invalid uuid")
+	if (!ValidUUID($uuid));
+
+    my $args = {"uuid" => $uuid};
+    if ($clear) {
+	$args->{"clear"} = 1;
+    }
+
+    # We can check for disabled aggregate now, nothing below matters.
+    if ($aggregate->CheckStatus(\$errmsg, 1)) {
+	UserError($errmsg);
+    }
+    # PortalRPC will use the root context in this case, which is
+    # essentially saying the caller is an admin.
+    my $response =
+	APT_Geni::PortalRPC($authority, undef,
+			    "ReservationIdleDetection", $args);
+    if (GeniResponse::IsError($response)) {
+	ExitWithError($response);
+    }
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    else {
+	print Dumper($response);
     }
     exit(0);
 }

@@ -767,6 +767,7 @@ CREATE TABLE `apt_reservation_groups` (
   `created` datetime DEFAULT NULL,
   `canceled` datetime DEFAULT NULL,
   `deleted` datetime DEFAULT NULL,
+  `noidledetection` datetime DEFAULT NULL,
   `locked` datetime DEFAULT NULL,
   `locker_pid` int(11) default '0',
   `reason` mediumtext,
@@ -794,6 +795,7 @@ CREATE TABLE `apt_reservation_group_reservations` (
   `cancel_canceled` datetime DEFAULT NULL,
   `deleted` datetime DEFAULT NULL,
   `deleted_pushed` datetime DEFAULT NULL,
+  `noidledetection_needpush` tinyint(1) NOT NULL default '0',
   `jsondata` text,
   PRIMARY KEY (`uuid`,`aggregate_urn`,`type`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;

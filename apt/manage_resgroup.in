@@ -93,6 +93,7 @@ sub DoRefresh();
 sub DoDelete();
 sub DoApprove();
 sub DoCancel();
+sub DoIdleDetection();
 sub DoConvertReservationsToGroups();
 sub CallMethodOnReservations($$@);
 
@@ -141,6 +142,9 @@ elsif ($action eq "approve") {
 }
 elsif ($action eq "cancel") {
     DoCancel();
+}
+elsif ($action eq "idledetection") {
+    DoIdleDetection();
 }
 elsif ($action eq "convert") {
     DoConvertReservationsToGroups();
@@ -972,7 +976,9 @@ sub DoDelete()
     # is an expiration, initiated by the daemon when it sees a reservation
     # group is done. 
     #
-    my $optlist   = "N:";
+    my $optlist   = "N:LM";
+    my $takelock  = 0;
+    my $nolock    = 0;	# Caller holds the lock.
     my @cluster_reservations = ();
     my @range_reservations   = ();
     my @route_reservations   = ();
@@ -988,6 +994,12 @@ sub DoDelete()
     if (defined($options{"N"})) {
 	fatal("Cannot read reason file")
 	    if (! -e $options{"N"});
+    }
+    if (defined($options{"L"})) {
+	$takelock = 1;
+    }
+    if (defined($options{"M"})) {
+	$nolock = 1;
     }
     usage()
 	if (@ARGV < 1);
@@ -1009,8 +1021,13 @@ sub DoDelete()
 	   $project->IsManager())) {
 	fatal("No permission to delete this reservation")
     }
-    if ($resgroup->Lock()) {
-	UserError("Reservation is locked, please try again later");
+    if (!$nolock) {
+	if ($takelock) {
+	    $resgroup->TakeLock();
+	}
+	elsif ($resgroup->Lock()) {
+	    UserError("Reservation is locked, please try again later");
+	}
     }
 
     #
@@ -1021,14 +1038,14 @@ sub DoDelete()
     if ($resgroup->RFReservationList() || $resgroup->RouteReservationList()) {
 	my $current;
 	if (APT_Instance->LookupForProject($project, \$current)) {
-	    $resgroup->Unlock();
+	    $resgroup->Unlock() if (!$nolock);
 	    fatal("Could not look up experiments for $project");
 	}
 	foreach my $instance (@$current) {
 	    # Only RF/Route reservations actually matter here
 	    if ($resgroup->RFInUse($instance) ||
 		$resgroup->RoutesInUse($instance)) { 
-		$resgroup->Unlock();
+		$resgroup->Unlock() if (!$nolock);
 		UserError("You have experiments running that are using this ".
 			  "reservation, please terminate those first");
 	    }
@@ -1044,7 +1061,7 @@ sub DoDelete()
 	    my $res_uuid = shift(@ARGV);
 	    my $reservation = $resgroup->Reservation($res_uuid);
 	    if (!defined($reservation)) {
-		$resgroup->Unlock();
+		$resgroup->Unlock() if (!$nolock);
 		fatal("No such reservation uuid in group: $res_uuid");
 	    }
 	    if ($reservation->IsCluster()) {
@@ -1144,7 +1161,7 @@ sub DoDelete()
 					    @cluster_reservations);
 	if ($errcode) {
 	    $errmsg = $responses;
-	    $resgroup->Unlock();
+	    $resgroup->Unlock() if (!$nolock);
 	    goto bad;
 	}
 
@@ -1192,7 +1209,7 @@ sub DoDelete()
 	$webtask->results($results);
 	$webtask->Exited($errors);
     }
-    $resgroup->Unlock();
+    $resgroup->Unlock() if (!$nolock);
     exit($errors);
     
   bad:
@@ -1408,12 +1425,13 @@ sub DoApprove()
     #
     # We allow for admins to pass a reason (deny with cause).
     #
-    my $optlist      = "F:nDO";
+    my $optlist      = "F:nDOL";
     my @cluster_reservations = ();
     my @range_reservations   = ();
     my @route_reservations   = ();
     my $errmsg;
     my $results   = {};
+    my $takelock  = 0;
     my $checkonly = 0;
     my $nopush    = 0;  # debugging flag only.
     my $override  = 0;	# Only range/route reservations can be overridden. 
@@ -1438,6 +1456,9 @@ sub DoApprove()
     if (defined($options{"O"})) {
 	$override = 1;
     }
+    if (defined($options{"L"})) {
+	$takelock = 1;
+    }
     usage()
 	if (@ARGV < 1);
     my $uuid = shift(@ARGV);
@@ -1453,7 +1474,10 @@ sub DoApprove()
     if (!defined($project)) {
 	fatal("Could not get project for reservation");
     }
-    if ($resgroup->Lock()) {
+    if ($takelock) {
+	$resgroup->TakeLock();
+    }
+    elsif ($resgroup->Lock()) {
 	UserError("Reservation is locked, please try again later");
     }
     my $start = str2time($resgroup->start());
@@ -1763,12 +1787,17 @@ sub DoApprove()
 # gets uncanceled. Note though, that we *do* record if an individual
 # reservation is canceled at the cluster (cause it is unused).
 #
+# Purge: Clear out individual reservations that are past their cancelation
+# date. Straightforward for ranges/routes. For node reservations, we still
+# make sure its gone at the target reservation.
+#
 sub DoCancel()
 {
-    my $optlist = "p:ce:N:PD";
+    my $optlist = "p:ce:N:PDL:";
     my $clear   = 0;
     my $purge   = 0;
     my $nopush  = 0;  # debugging flag only.
+    my $takelock= 0;
     my $when;
     my $reason;
     my $errmsg;
@@ -1788,6 +1817,9 @@ sub DoCancel()
     }
     if (defined($options{"D"})) {
 	$nopush = 1;
+    }
+    if (defined($options{"L"})) {
+	$takelock = 1;
     }
     if (defined($options{"P"})) {
 	$purge = 1;
@@ -1812,7 +1844,10 @@ sub DoCancel()
     if (!defined($resgroup)) {
 	fatal("No such reservation group");
     }
-    if ($resgroup->Lock()) {
+    if ($takelock) {
+	$resgroup->TakeLock();
+    }
+    elsif ($resgroup->Lock()) {
 	UserError("Reservation is locked, please try again later");
     }
     #
@@ -1860,6 +1895,12 @@ sub DoCancel()
 	    }
 	    push(@reservations, $res);
 	}
+	elsif ($purge) {
+	    if ($res->canceled() && time() > str2time($res->canceled())) {
+		# Just in case. 
+		push(@reservations, $res);
+	    }
+	}
 	else {
 	    if (!$res->canceled()) {
 		$res->MarkCanceled($when);
@@ -1890,7 +1931,9 @@ sub DoCancel()
 	    }
 	}
 	elsif ($purge) {
-	    $res->Delete();
+	    if ($res->canceled() && time() > str2time($res->canceled())) {
+		$res->Delete();
+	    }
 	}
 	elsif (!$res->canceled()) {
 	    $res->MarkCanceled($when);
@@ -1903,15 +1946,18 @@ sub DoCancel()
 	my $remote_uuid = $reservation->remote_uuid();
 	my $stamp       = $reservation->canceled();
 	
-	my $command = "$RESCOMMAND -t $webtask_id -a $urn cancel ";
+	my $command = "$RESCOMMAND -t $webtask_id -a $urn ";
 	if (defined($options{"N"})) {
 	    $command .= "-F " . $options{"N"} . " ";
 	}
 	if ($clear) {
-	    $command .= "-c ";
+	    $command .= "cancel -c ";
+	}
+	elsif ($purge) {
+	    $command .= "delete ";
 	}
 	else {
-	    $command .= "-e '$stamp' ";
+	    $command .= "cancel -e '$stamp' ";
 	}
 	$command .= "$remote_uuid";
 
@@ -1959,15 +2005,10 @@ sub DoCancel()
 	    elsif ($webtask->exitcode() == GENIRESPONSE_SEARCHFAILED) {
 		print "$res has been deleted at the target cluster\n";
 
-		if ($res->canceled()) {
-		    # Just delete it; we are here cause we tried to cancel it.
-		    $res->Delete();
-		}
-		else {
-		    # We had tried to uncancel it, but did not get there
-		    # in time. I'm just gonna delete it.
-		    $res->Delete();
-		}
+		#
+		# Just delete it locally, its gone, nothing we can do.
+		#
+		$res->Delete();
 	    }
 	    else {
 		$blob->{'errcode'} = $webtask->exitcode();
@@ -1978,13 +2019,199 @@ sub DoCancel()
 	if ($clear) {
 	    $res->ClearCancelCanceled();
 	}
+	elsif ($purge) {
+	    $res->Delete();
+	}
 	else {
 	    $res->MarkCanceledPushed();
 	}
     }
     $resgroup->Delete()
 	if (! (scalar($resgroup->ReservationList()) ||
-	       scalar($resgroup->RFReservationList())));
+	       scalar($resgroup->RFReservationList()) ||
+	       scalar($resgroup->RouteReservationList())));
+  done:
+    if (defined($webtask)) {
+	$webtask->results($results);
+	$webtask->Exited($errors);
+    }
+    $resgroup->Unlock();
+    exit($errors);
+    
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit(-1);
+}
+
+#
+# Proactively mark a reservation for no idle cancelation. Typically,
+# this would get set if we uncancel a cancellation, but this makes sure
+# the remote cluster (and the local resgroup daemon) do not consider
+# it for cancellation at all.
+#
+sub DoIdleDetection()
+{
+    my $optlist = "cpLD";
+    my $clear   = 0;
+    my $pushonly= 0;
+    my $nopush  = 0;
+    my $takelock= 0;
+    my $errors  = 0;
+    my $errmsg;
+    my @reservations = ();
+
+    if (!$this_user->IsAdmin()) {
+	fatal("No permission to disable reservation idle detection.")
+    }    
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"L"})) {
+	$takelock = 1;
+    }
+    if (defined($options{"c"})) {
+	$clear = 1;
+    }
+    elsif (defined($options{"p"})) {
+	$pushonly = 1;
+    }
+    if (defined($options{"D"})) {
+	$nopush = 1;
+    }
+    usage()
+	if (@ARGV != 1);
+    my $uuid = shift(@ARGV);
+
+    my $resgroup = APT_Reservation::Group->Lookup($uuid);
+    if (!defined($resgroup)) {
+	fatal("No such reservation group");
+    }
+    if ($takelock) {
+	$resgroup->TakeLock();
+    }
+    elsif ($resgroup->Lock()) {
+	UserError("Reservation is locked, please try again later");
+    }
+    if (!$pushonly) {
+	#
+	# Ignore these cases.
+	#
+	if ($resgroup->deleted()) {
+	    $resgroup->Unlock();
+	    UserError("Not allowed to change a deleted reservation group");
+	}
+	if (!$clear && $resgroup->canceled()) {
+	    $resgroup->Unlock();
+	    UserError("Please clear the cancellation first");
+	}
+	if ($resgroup->Expired()) {
+	    $resgroup->Unlock();
+	    UserError("Not allowed to change an expired reservation group");
+	}
+	#
+	# Mark/Clear the group, and then do all the reservations in the group.
+	# Record if anything changed so we know if we need to 
+	#
+	if ($clear) {
+	    $resgroup->DisableIdleDetection();
+	}
+	else {
+	    $resgroup->EnableIdleDetection();
+	}
+    }
+    foreach my $res ($resgroup->ReservationList()) {
+	next
+	    if ($res->deleted());
+
+	if ($pushonly) {
+	    if ($res->noidledetection_needpush()) {
+		push(@reservations, $res);
+	    }
+	}
+	else {
+	    $res->MarkNoIdleDetectionNeedPush();
+	    if (!$res->approved()) {
+		print STDERR "$res still needs approval pushed, skipping\n";
+		next;
+	    }
+	    push(@reservations, $res);
+	}
+    }
+    # nopush is a debugging flag only.
+    goto done
+	if ($nopush);
+
+    my $coderef = sub {
+	my ($reservation, $webtask) = @_;
+	my $webtask_id  = $webtask->task_id();
+	my $urn         = $reservation->aggregate_urn();
+	my $remote_uuid = $reservation->remote_uuid();
+	
+	my $command = "$RESCOMMAND -t $webtask_id -a $urn idledetection ";
+	if ($resgroup->noidledetection()) {
+	    $command .= "-c ";
+	}
+	$command .= "$remote_uuid";
+
+	print "Running: $command\n";
+	system($command);
+	if ($?) {
+	    return 1;
+	}
+	return 0;
+    };
+    my $responses;
+    my $results  = {};
+
+    my $errcode = CallMethodOnReservations($coderef,
+					   \$responses, @reservations);
+    if ($errcode) {
+	$errmsg = $responses;
+	$resgroup->Unlock();
+	goto bad;
+    }
+
+    #
+    # Look at all the responses.
+    #
+    my @responses = @{$responses};
+    foreach my $res (@reservations) {
+	my $webtask = shift(@responses);
+	my $remote_uuid = $res->remote_uuid();
+	my $blob = {
+	    "uuid"    => $remote_uuid,
+	    "errcode" => 0,
+	};
+	$results->{$remote_uuid} = $blob;
+
+	if (!$webtask->HasExited() || $webtask->exitcode()) {
+	    if (!$webtask->HasExited()) {
+		$blob->{'errcode'} = -1;
+		$blob->{'errmesg'} = "Internal error canceling reservation";
+	    }
+	    elsif ($webtask->exitcode() == GENIRESPONSE_SEARCHFAILED) {
+		print "$res has been deleted at the target cluster\n";
+
+		#
+		# Not much we can do. Just delete it.
+		#
+		$res->Delete();
+	    }
+	    else {
+		$blob->{'errcode'} = $webtask->exitcode();
+		$blob->{'errmesg'} = $webtask->output();
+	    }
+	    next;
+	}
+	# Pushed the new override_unused value, clear the push.
+	$res->ClearNoIdleDetectionNeedPush();
+    }
   done:
     if (defined($webtask)) {
 	$webtask->results($results);

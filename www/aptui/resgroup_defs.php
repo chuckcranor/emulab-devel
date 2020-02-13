@@ -75,6 +75,7 @@ class ReservationGroup
     function locked()       { return $this->field('locked'); }
     function locker_pid()   { return $this->field('locker_pid'); }
     function reason()       { return $this->field('reason'); }
+    function noidledetection() { return $this->field('noidledetection'); }
 
     # Project of resgroup.
     function Project() {

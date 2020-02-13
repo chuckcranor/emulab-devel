@@ -615,6 +615,9 @@ $(function ()
 		modified_callback();
 	    }
 	});
+	$('#idle-detection-checkbox').change(function(event) {
+	    ToggleIdleDetection();
+	});
 
 	aptforms.EnableUnsavedWarning('#reserve-request-form',
 				      modified_callback);
@@ -2378,6 +2381,16 @@ $(function ()
 			    Approve();
 			});
 		}
+		else {
+		    if (details.idledetection) {
+			$('#idle-detection-checkbox').prop("checked", true);
+		    }
+		    else {
+			$('#idle-detection-checkbox').prop("checked", false);
+		    }
+		    $('#idle-detection-checkbox-div').removeClass("hidden");
+		}
+		
 		var now   = new Date();
 		var start = new Date(details.start);
 
@@ -2940,6 +2953,33 @@ $(function ()
 	sup.ShowModal("#uncancel-modal");
     }
 
+    /*
+     * Toggle idle detection whenever the checkbox is flipped.
+     */
+    function ToggleIdleDetection()
+    {
+	var value = ($('#idle-detection-checkbox').is(":checked") ? 1 : 0);
+	
+	sup.ShowModal('#waitwait-modal');
+	sup.CallServerMethod(null, "resgroup", "IdleDetection",
+			     {"uuid"    : window.UUID,
+			      "value"   : value},
+			     function (json) {
+				 console.info(json);
+				 if (json.code == 0) {
+				     sup.HideModal('#waitwait-modal');
+				     return;
+				 }
+				 sup.HideModal('#waitwait-modal', function () {
+				     sup.SpitOops("oops", "Cannot toggle idle" +
+						  " detection: " + json.value);
+				 });
+				 // Flip the checkbox back.
+				 $('#idle-detection-checkbox')
+				     .prop("checked", value ? false : true);
+			     });
+    }
+
     function HandleClusterChange(row, selected_cluster)
     {
 	/*
@@ -3080,7 +3120,7 @@ $(function ()
     // Draw the history bar graph.
     function DrawHistoryGraphs(details)
     {
-	$("history-graphs").html("");
+	$("#history-graphs").html("");
 
 	if (!details.active) {
 	    return;

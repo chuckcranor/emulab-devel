@@ -1779,6 +1779,45 @@ sub CancelReservation($)
 }
 
 #
+# Mark/Clear a reservation for no cancellation handling.
+#
+sub ReservationIdleDetection($)
+{
+    my ($argref)  = @_;
+    my $args  = "";
+    my $target;
+
+    #
+    # The Portal decides the user has permission and then uses "admin" mode
+    # to do the deletion.
+    #
+    my $hasperm = CheckPermission(1);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    if (exists($argref->{'uuid'})) {
+	return GeniResponse->MalformedArgsResponse("Illegal reservation uuid")
+	    if (!ValidUUID($argref->{'uuid'}));
+	$target = $argref->{'uuid'};
+    }
+    else {
+	return GeniResponse->MalformedArgsResponse("Missing reservation ID");
+    }
+    
+    my $reservation = Reservation->Lookup($target);
+    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
+	if (!defined($reservation));
+
+    if (exists($argref->{"clear"}) && $argref->{"clear"} == 1) {
+	$reservation->DisableIdleDetection();
+    }
+    else {
+	$reservation->EnableIdleDetection();
+    }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+}
+
+#
 # Reservation info
 #
 sub ReservationSystemInfo($)

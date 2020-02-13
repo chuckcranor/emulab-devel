@@ -344,6 +344,28 @@ sub UnlockTables($)
 	or return -1;
     return 0;
 }
+sub TakeLock($)
+{
+    my ($self) = @_;
+    my $uuid   = $self->uuid();
+
+    return -1
+	if (!DBQueryWarn("lock tables apt_reservation_groups write"));
+
+    my $query_result =
+	DBQueryWarn("update apt_reservation_groups set ".
+		    "  locked=now(),locker_pid='$PID' " .
+		    "where uuid='$uuid'");
+
+    if (! $query_result) {
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    DBQueryWarn("unlock tables");
+    $self->{'DBROW'}->{'locked'}     = time();
+    $self->{'DBROW'}->{'locker_pid'} = $PID;
+    return 0;
+}
 
 #
 # Add a reservation to a group
@@ -482,6 +504,16 @@ sub ClearCanceled($)
 {
     my ($self) = @_;
     return $self->Mark("canceled", undef);
+}
+sub DisableIdleDetection($)
+{
+    my ($self) = @_;
+    return $self->Mark("noidledetection", "now");
+}
+sub EnableIdleDetection($)
+{
+    my ($self) = @_;
+    return $self->Mark("noidledetection", undef);
 }
 
 #
@@ -863,6 +895,32 @@ sub ClearCancelCanceled($)
 {
     my ($self) = @_;
     return $self->Mark("cancel_canceled", undef);
+}
+sub SetNoIdleDetectionNeedPush($$)
+{
+    my ($self, $value) = @_;
+    my $uuid   = $self->uuid();
+    my $urn    = $self->aggregate_urn();
+    my $type   = $self->type();
+
+    DBQueryWarn("update apt_reservation_group_reservations ".
+		" set noidledetection_needpush='$value' ".
+		"where uuid='$uuid' and aggregate_urn='$urn' and ".
+		"      type='$type'")
+	or return -1;
+    
+    $self->{'DBROW'}->{"noidledetection_needpush"} = $value;
+    return 0;
+}
+sub MarkNoIdleDetectionNeedPush($)
+{
+    my ($self) = @_;
+    return $self->SetNoIdleDetectionNeedPush(1);
+}
+sub ClearNoIdleDetectionNeedPush($)
+{
+    my ($self) = @_;
+    return $self->SetNoIdleDetectionNeedPush(0);
 }
 
 sub MarkSubmitted($$)

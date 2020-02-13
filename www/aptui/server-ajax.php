@@ -408,6 +408,8 @@ $routing = array("geni-login" =>
                                                      "Do_Refresh",
                                                  "Cancel" =>
                                                      "Do_Cancel",
+                                                 "IdleDetection" =>
+                                                     "Do_IdleDetection",
                                                  "RequestInfo" =>
                                                      "Do_RequestInfo",
                                                  "RangeReservations" =>

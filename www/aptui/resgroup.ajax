@@ -963,6 +963,66 @@ function Do_CancelAux($resgroup, $clear, $when)
 }
 
 #
+# Toggle idle detection.
+#
+function Do_IdleDetection()
+{
+    global $this_user;
+    global $ajax_args;
+
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Only administrators can toggle idle detection");
+	return;
+    }
+    if (!isset($ajax_args["value"])) {
+	SPITAJAX_ERROR(-1, "Missing value");
+	return -1;
+    }
+    if (!isset($ajax_args["uuid"])) {
+	SPITAJAX_ERROR(-1, "Missing uuid");
+	return -1;
+    }
+    $uuid = $ajax_args["uuid"];
+    if (!IsValidUUID($uuid)) {
+        SPITAJAX_ERROR(-1, "Invalid uuid");
+	return;
+    }
+    $resgroup = ReservationGroup::Lookup($uuid);
+    if (!$resgroup) {
+        SPITAJAX_ERROR(-1, "No such reservation group");
+        return;
+    }
+    $opts = ($ajax_args["value"] == 1 ? "" : "-c");
+    $webtask  = WebTask::CreateAnonymous();
+    $this_uid = $this_user->uid();
+    $uuid     = $resgroup->uuid();
+
+    $retval = SUEXEC($this_uid, "nobody",
+                     "webmanage_resgroup ".
+                     "-t " . $webtask->task_id() .
+                     "   idledetection $opts $uuid",
+                     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+    
+    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+
+    if ($retval) {
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        if (!$webtask->exited() || $retval < 0) {
+            SPITAJAX_ERROR(-1, "Internal error toggling idle detection");
+        }
+        else {
+            SPITAJAX_ERROR(1, $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    $webtask->Delete();
+    SPITAJAX_RESPONSE(1);
+}
+
+
+#
 # List reservation groups for a user (or all users if an admin).
 #
 function Do_ListReservationGroups()
@@ -1026,6 +1086,7 @@ function ResgroupBlob($resgroup)
     $details["canceled"]   = 0;
     $details["uid"]        = $resgroup->creator_uid();
     $details["uid_idx"]    = $resgroup->creator_idx();
+    $details["idledetection"] = $resgroup->noidledetection() ? false : true;
     $clusters = array();
     foreach ($resgroup->reservations() as $reservation) {
         $blob = array(
