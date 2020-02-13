@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2016-2019 University of Utah and the Flux Group.
+# Copyright (c) 2016-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -53,7 +53,7 @@ sub usage()
     print STDERR "Usage: reserve [-C] [-f] [-n] [-q] -t type [-s start] [-e end]\n" .
 	"            [-u] [-U uid] [-N file] [-A file] [-a|-p] pid count\n";
     print STDERR "       reserve [-D file] -c idx\n";
-    print STDERR "       reserve [-f] [-n] [-s start] [-e end] [-u]\n" .
+    print STDERR "       reserve [-f] [-n] [-s start] [-e end] [-u] [-I 0/1]\n".
 	"            [-U uid] [-N file] [-A file] [-S size] [-a] -m idx \n";
     print STDERR "       reserve [-u] -i pid\n";
     print STDERR "       reserve [-u] -l\n";
@@ -84,7 +84,7 @@ sub usage()
     exit( -1 );
 }
 
-my $optlist    = "ac:de:fhilm:npqs:t:uA:CD:N:S:U:T:E:OyF:";
+my $optlist    = "ac:de:fhilm:npqs:t:uA:CD:N:S:U:T:E:OyF:I:";
 my $debug      = 0;
 my $info       = 0;
 my $list       = 0;
@@ -103,6 +103,7 @@ my $approvenotes = undef;
 my $approve    = 0;
 my $pending    = 0;
 my $tidy       = 0;
+my $idledetection;
 my $cancel;
 my $abortcancel= 0;
 my $type;
@@ -271,6 +272,10 @@ if (defined($options{S})) {
     unless( $count =~ /^[0-9]+$/ ) {
 	fatal( "Invalid reservation size." );
     }
+}
+if (defined($options{'I'})) {
+    $idledetection = $options{'I'};
+    fatal( "-I option requires administrator privileges" ) unless( $admin );
 }
 if (defined($options{'a'})) {
     fatal( "-a option requires administrator privileges" ) unless( $admin );
@@ -449,9 +454,9 @@ if ($info) {
 }
 
 #
-# Schedule cancellation and exit.
+# Schedule cancellation and exit. Or set/clear idle detection
 #
-if ($cancel || $abortcancel) {
+if ($cancel || $abortcancel || defined($idledetection)) {
     my $res;
 
     if( $modify_idx ) {
@@ -461,9 +466,18 @@ if ($cancel || $abortcancel) {
     }
     
     if( !defined( $res ) ) {
-	print STDERR "-E or -O option: no matching reservation found.\n";
+	print STDERR "-E or -O or -I option: no matching reservation found.\n";
 	
 	exit( 1 );
+    }
+    if (defined($idledetection)) {
+	if ($idledetection) {
+	    $res->EnableIdleDetection();
+	}
+	else {
+	    $res->DisableIdleDetection();
+	}
+	exit(0);
     }
 
     while (1) {
