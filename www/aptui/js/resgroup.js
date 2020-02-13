@@ -539,7 +539,7 @@ $(function ()
 				   "showhelp"       : true,
 				   "showfullscreen" : true});
 	});
-	$('#reservation-lists').html(html);
+	$('#reservation-lists').append(html);
 
 	// Handler for the Help button
 	$('#reservation-help-button').click(function (event) {
@@ -806,6 +806,7 @@ $(function ()
 	    $(this).find('option:selected')
 		.each(function() {
 		    console.info("route change: " + $(this).val());
+		    ReorderGraphs("routes")
 		    RegenCombinedGraph();
 		});
 	});
@@ -1318,8 +1319,16 @@ $(function ()
     }
 
     // Call back from the graphs to change the dates on a blank form
+    // XXX Not using this aymore.
     function GraphClick(when, type)
     {
+	/*
+	 * Not sure this makes sense anymore, I think its confusing.
+	 */
+	if (1) {
+	    return;
+	}
+	
 	//console.info("graphclick", when, type);
 	// Bump to next hour. Will be confusing at midnight.
 	when.setHours(when.getHours() + 1);
@@ -3006,12 +3015,7 @@ $(function ()
 	row.find(".hardware-select")	
 	    .html("<option value=''>Select Hardware</option>" + options);
 
-	if ($('#reservation-lists :first-child').attr("id") != id) {
-	    $('#' + id).fadeOut("fast", function () {
-		$('#reservation-lists').prepend($('#' + id));
-		$('#' + id).fadeIn("fast");
-	    });
-	}
+	ReorderGraphs(selected_cluster);
 	modified_callback();
     }
 
@@ -3093,6 +3097,41 @@ $(function ()
 		    return;
 		}
 	    }
+	}
+    }
+
+    /*
+     * Routes and FEs and Radios make this harder then it used to be.
+     */
+    function ReorderGraphs(which)
+    {
+	console.info("ReorderGraphs", which);
+	var graphid;
+
+	if (which == "routes") {
+	    graphid = "route-graph-div";
+	}
+	else if (which == "radios") {
+	    graphid = "radio-graph-div";
+	}
+	else {
+	    if (_.has(FEs, which)) {
+		graphid = "FE-graph-div";
+	    }
+	    else {
+		var nickname = amlist[which].nickname;
+		graphid = "resgraph-" + nickname;
+
+		if (window.ISPOWDER && nickname == "Emulab" && _.size(Radios)) {
+		    ReorderGraphs("radios");
+		}
+	    }
+	}
+    	if ($('#reservation-lists :first-child').attr("id") != graphid) {
+	    $('#' + graphid).fadeOut("fast", function () {
+		$('#reservation-lists').prepend($('#' + graphid));
+		$('#' + graphid).fadeIn("fast");
+	    });
 	}
     }
 
