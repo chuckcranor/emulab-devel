@@ -229,7 +229,7 @@ sub PushGroups()
 		}
 		elsif ($res->noidledetection_needpush()) {
 		    print "$res is needs a push for noidledetection\n";
-		    $op = "nocancel";
+		    $op = "idledetection";
 		}
 	    }
 	}
@@ -249,8 +249,8 @@ sub PushGroups()
 	elsif ($op eq "uncancel") {
 	    $command .= "cancel -c ";
 	}
-	elsif ($op eq "nocancel") {
-	    $command .= "nocancel -p ";
+	elsif ($op eq "noidledetection") {
+	    $command .= "noidledetection -p ";
 	}
 	else {
 	    $command .= $op . " ";
