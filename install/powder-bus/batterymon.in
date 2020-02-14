@@ -163,7 +163,7 @@ if ($pin0 < $PIN0_THRESHOLD) {
 		 "Pin1:    $pin1\n\n",
 		 $TBOPS);
 	# Give it a moment to get out the door.
-	sleep(10);
+	sleep(15);
 	system("/sbin/shutdown -p now &");
     }
 }
