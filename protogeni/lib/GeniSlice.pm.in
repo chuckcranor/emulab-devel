@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1081,6 +1081,19 @@ sub SetAsyncError($$)
 	or return -1;
 
     $self->{'SLICE'}->{'async_code'} = $code;
+    return 0;
+}
+sub ClearAsyncError($)
+{
+    my ($self) = @_;
+    my $uuid   = $self->uuid();
+
+    DBQueryWarn("update geni_slices set async_code='0', ".
+		"  async_output='' ".
+		"where uuid='$uuid'")
+	or return -1;
+
+    $self->{'SLICE'}->{'async_code'} = 0;
     return 0;
 }
 

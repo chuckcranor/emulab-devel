@@ -504,6 +504,11 @@ sub CreateSliver($)
 	    return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
 					"Must delete existing slice first");
 	}
+	#
+	# Clear the async return info, in case caller is retrying a
+	# failed slice that never created (read: the portal and buses).
+	#
+	$slice->ClearAsyncError();
     }
     else {
 	#
