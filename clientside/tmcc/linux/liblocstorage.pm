@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2019 University of Utah and the Flux Group.
+# Copyright (c) 2013-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -735,10 +735,14 @@ sub checkfs($$$)
     }
 
     # XXX cannot fsck ufs, right now we just pretend everything is okay
-    if ($fstype ne "ufs" &&
-	mysystem("$FSCK $fopt $mdev $redir")) {
-	warn("*** $lv: fsck of $mdev failed\n");
-	return 0;
+    if ($fstype ne "ufs") {
+	my $rv = mysystem("$FSCK $fopt $mdev $redir");
+
+	# Linux e2fsck returns 1 on corrected errors
+	if ($rv && $rv != (1 << 8)) {
+	    warn("*** $lv: fsck of $mdev failed ($rv)\n");
+	    return 0;
+	}
     }
 
     return 1;
