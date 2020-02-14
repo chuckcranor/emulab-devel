@@ -292,11 +292,6 @@ if (!TBAdmin() &&
 if ($srcdsname) {
     my ($spid, $sgid, $sname) = parseleasename($srcdsname);
 
-    # XXX only allow admins to copy across projects right now
-    if (!TBAdmin() && ($spid ne $pid || $sgid ne $gid)) {
-	fatal("Can only copy leases within a project right now");
-    }
-
     $srcds = Lease->Lookup($spid, $sgid, $sname);
     if (!TBAdmin() && !$srcds->AccessCheck($this_user, LEASE_ACCESS_READ())) {
 	fatal("$srcdsname: you are not allow to copy lease.");
