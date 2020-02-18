@@ -1793,7 +1793,7 @@ sub DoApprove()
 #
 sub DoCancel()
 {
-    my $optlist = "p:ce:N:PDL:";
+    my $optlist = "p:ce:N:PDL";
     my $clear   = 0;
     my $purge   = 0;
     my $nopush  = 0;  # debugging flag only.
@@ -1879,9 +1879,17 @@ sub DoCancel()
     }
     
     foreach my $res ($resgroup->ReservationList()) {
-	# No point in (un)canceling an unapproved or deleted reservation.
+	# No point in (un)canceling an unapproved reservation.
 	next
-	    if (!$res->approved() || $res->deleted());
+	    if (!$res->approved());
+
+	#
+	# Ditto a deleted reservation, unless its a purge, in which
+	# case we want to make sure it is deleted at the target cluster
+	# and delete it locally.
+	#
+	next
+	    if ($res->deleted() && !$purge);
 
 	if ($clear) {
 	    if ($res->canceled()) {
@@ -1954,7 +1962,7 @@ sub DoCancel()
 	    $command .= "cancel -c ";
 	}
 	elsif ($purge) {
-	    $command .= "delete ";
+	    $command .= "delete " . $resgroup->pid() . " ";
 	}
 	else {
 	    $command .= "cancel -e '$stamp' ";

@@ -2237,8 +2237,6 @@ $(function ()
 	    // Add cluster rows as needed.
 	    if (_.size(details.clusters)) {
 		_.each(details.clusters, function (res) {
-		    $("#range-table-div").removeClass("hidden");
-		    
 		    var html = clusterRowTemplate({
 			"cluster"     : res.cluster_id,
 			"cluster_urn" : res.cluster_urn,
@@ -2278,6 +2276,8 @@ $(function ()
 	    // Add range rows as needed.
 	    if (_.size(details.ranges)) {
 		_.each(details.ranges, function (res) {
+		    $("#range-table-div").removeClass("hidden");
+		    
 		    var html = frequencyRowTemplate({
 			"freq_low"    : res.freq_low,
 			"freq_high"   : res.freq_high,
