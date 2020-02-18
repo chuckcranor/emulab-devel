@@ -1871,7 +1871,13 @@ $(function ()
 			});
 		    }
 		    // Stick the text in
-		    $('#instructions_text').html(marked(text));
+		    // Stick the text in
+		    try {
+			$('#instructions_text').html(marked(text));
+		    }
+		    catch(err) {
+			console.info(err);
+		    }
 		    // Make the div visible.
 		    $('#instructions_panel').removeClass("hidden");
 		    
