@@ -1398,7 +1398,8 @@ sub DoRefresh()
     }
     $resgroup->Delete()
 	if (! (scalar($resgroup->ReservationList()) ||
-	       scalar($resgroup->RFReservationList())));
+	       scalar($resgroup->RFReservationList()) ||
+	       scalar($resgroup->RouteReservationList())));
 
     if (defined($webtask)) {
 	if ($errors) {
