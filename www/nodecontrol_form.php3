@@ -88,7 +88,7 @@ if ($isadmin) {
     $osid_result =
 	DBQueryFatal("select o.osname, o.pid, o.osid as oosid, " .
 		     "   o.vers as overs, " .
-		     "   p.osid as posid, p.osid_vers as pvers ".
+		     "   p.osid as posid, p.osid_vers as pvers, p.node_id ".
 		     " from os_info_versions as o ".
 		     "left join `partitions` as p on o.osid=p.osid ".
 		     "where p.node_id='$node_id' or ".
@@ -101,7 +101,7 @@ else {
     $osid_result =
 	DBQueryFatal("select distinct o.osname, o.pid, o.osid as oosid," .
 		     "   o.vers as overs, " .
-		     "   p.osid as posid, p.osid_vers as pvers ".
+		     "   p.osid as posid, p.osid_vers as pvers, p.node_id ".
 		     "from os_info_versions as o ".
 		     "left join group_membership as m on m.pid=o.pid ".
 		     "left join `partitions` as p on o.osid=p.osid ".
@@ -254,7 +254,7 @@ if ($isadmin) {
 	}
 	else {
 	    $osid = $oosid;
-	    $vers = $pvers;
+	    $vers = $overs;
 	}
 
 	echo "<option ";

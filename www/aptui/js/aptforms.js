@@ -20,7 +20,8 @@ $(function () {
 		     * name to the wrapper so we can find it later to
 		     * add the error stuff.
 		     */
-		    var wrapper = $("<div id='form-wrapper-' + key></div>");
+		    var wrapper = $("<div id='form-wrapper-" + key + "'>" +
+				    "</div>");
 
 		    // How do I just move the item into the wrapper?
 		    wrapper.append($(item).clone());
@@ -57,7 +58,7 @@ $(function () {
 
 		    // Squeeze vertical space for this field.
 		    if (_.has(item.dataset, "compact")) {
-			margin = 5;
+			margin = 0;
 		    }
 		    // Column size per row,
 		    if (_.has(item.dataset, "colsize")) {
@@ -86,12 +87,18 @@ $(function () {
 		    if (_.has(item.dataset, "label")) {
 			var label_text =
 			    "<label for='" + key + "' " +
-			    " class='col-sm-3 control-label'> " +
+			    " class='col-sm-3 control-label' ";
+			if (_.has(item.dataset, "optional")) {
+			    label_text = label_text +
+				"style='padding-top: 0px;'";
+			}
+			label_text = label_text + ">" +
 			    item.dataset['label'];
 
 			if (_.has(item.dataset, "help")) {
 			    label_text = label_text +
 				"<a href='#' class='btn btn-xs' " +
+				" style='padding-right: 0px;' " +
 				" data-toggle='popover' " +
 				" data-html='true' " +
 				" data-delay='{\"hide\":1000}' " +
@@ -100,6 +107,10 @@ $(function () {
 				"  class='glyphicon " +
 				"      glyphicon-question-sign'>" +
 				" </span></a>";
+			}
+			if (_.has(item.dataset, "optional")) {
+			    label_text = label_text +
+				"<br><small>(Optional)</small>";
 			}
 			label_text = label_text + "</label>";
 			wrapper.append($(label_text));
@@ -241,17 +252,20 @@ $(function () {
 	/*
 	 * Check a form. We add the errors before we return.
 	 */
-	function CheckForm(form, route, method, callback) {
+	function CheckForm(form, route, method, callback, formfields) {
 	    /*
 	     * Convert form data into formfields array, like all our
 	     * form handler pages expect.
 	     */
-	    var formfields  = {};
+	    if (formfields === undefined) {
+		formfields  = {};
+	    }
 	    
 	    var fields = $(form).serializeArray();
 	    $.each(fields, function(i, field) {
 		formfields[field.name] = field.value;
 	    });
+	    console.info("Checkform", formfields);
 	    ClearFormErrors(form);
 
 	    var checkonly_callback = function(json) {
@@ -277,17 +291,19 @@ $(function () {
 	/*
 	 * Submit form.
 	 */
-	function SubmitForm(form, route, method, callback, message) {
+	function SubmitForm(form, route, method, callback, message, formfields){
 	    /*
 	     * Convert form data into formfields array, like all our
 	     * form handler pages expect.
 	     */
-	    var formfields  = {};
-	    
+	    if (formfields === undefined) {
+		formfields  = {};
+	    }
 	    var fields = $(form).serializeArray();
 	    $.each(fields, function(i, field) {
 		formfields[field.name] = field.value;
 	    });
+	    console.info("Submitform", formfields);
 	    var submit_callback = function(json) {
 		console.info("SubmitForm", json);
 		sup.HideWaitWait();

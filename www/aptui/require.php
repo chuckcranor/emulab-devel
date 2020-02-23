@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -117,7 +117,7 @@ function REQUIRE_EXTEND()
 {
   REQUIRE_UNDERSCORE();
   REQUIRE_SUP();
-  AddTemplateList(array("user-extend-modal", "guest-extend-modal"));
+  AddTemplateList(array("user-extend-modal"));
   AddLibrary("js/extend.js");
 }
 
@@ -160,7 +160,33 @@ function REQUIRE_IMAGE()
 
 function REQUIRE_JACKS()
 {
+  REQUIRE_JACKSMOD();
   AddLibrary("https://www.emulab.net/protogeni/jacks-utah/js/jacks.js");
+}
+
+function REQUIRE_JACKSMOD()
+{
+  $root = "https://www.emulab.net/protogeni/app/jacksmod/";
+  AddLibrary($root . "jacksmod.js");
+  AddLibrary($root . "common/loadbase.js");
+  AddLibrary($root . "common/base.js");
+  AddLibrary($root . "common/Component.js");
+  AddLibrary($root . "common/util.js");
+  AddLibrary($root . "common/ForceGraph.js");
+  AddLibrary($root . "common/Graph.js");
+  AddLibrary($root . "common/RspecLib.js");
+  AddLibrary($root . "common/RspecParser.js");
+  AddLibrary($root . "common/component/WaitingComponent.js");
+  AddLibrary($root . "common/component/MapComponent.js");
+  AddLibrary($root . "common/component/GraphNodeComponent.js");
+  AddLibrary($root . "common/component/GraphLanComponent.js");
+  AddLibrary($root . "common/component/GraphComponent.js");
+  AddLibrary($root . "common/component/FailedComponent.js");
+  AddLibrary($root . "common/component/ImagePickerComponent.js");
+  AddLibrary($root . "thumb/ThumbComponent.js");
+  AddLibrary($root . "imagepicker/main.js");
+  AddLibrary($root . "thumb/main.js");
+  AddLibrary($root . "common/loadcomplete.js");
 }
 
 function REQUIRE_JACKS_EDITOR()
@@ -174,7 +200,7 @@ function REQUIRE_JACKS_EDITOR()
 
 function REQUIRE_JQUERY_STEPS()
 {
-  AddLibrary("js/lib/jquery.steps.min.js");
+  AddLibrary("js/lib/jquery.steps.js");
 }
 
 function REQUIRE_LIQUIDFILLGAUGE()
@@ -205,10 +231,9 @@ function REQUIRE_PPWIZARDSTART()
   REQUIRE_UNDERSCORE();
   REQUIRE_SUP();
   REQUIRE_JACKS_EDITOR();
-  AddTemplate("ppform-wizard");
-  AddTemplate("ppform-wizard-body");
   AddTemplate("choose-am");
   AddTemplate("image-picker-modal");
+  AddTemplate("ppform-wizard");
   AddLibrary("js/ppwizardstart.js");
 }
 

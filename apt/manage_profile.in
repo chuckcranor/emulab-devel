@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,8 +29,9 @@ use File::Temp qw(tempfile :mktemp :POSIX);
 use Data::Dumper;
 use CGI;
 use POSIX ":sys_wait_h";
-use POSIX qw(setsid);
+use POSIX qw(setsid strftime);
 use Carp qw(cluck);
+use JSON;
 
 #
 # Back-end script to manage APT profiles.
@@ -44,6 +45,11 @@ sub usage()
     print("Usage: manage_profile delete -a <profile>\n");
     print("Usage: manage_profile undelete pid,name:version\n");
     print("Usage: manage_profile listimages <profile>\n");
+    print("Usage: manage_profile bindings <instance>\n");
+    print("Usage: manage_profile paramset ".
+	  "[-u user] [-m description] [-b] add <name> <profile> <instance>\n");
+    print("Usage: manage_profile paramset ".
+	  "[-u user] delete <name> <profile>\n");
     exit(-1);
 }
 my $optlist     = "dvt:m";
@@ -58,6 +64,8 @@ my %modifiers   = ();
 my $rspec;
 my $script;
 my $project;
+# Temporary testing.
+my $usenewgenilib = 0;
 
 #
 # Configure variables
@@ -92,6 +100,7 @@ use libEmulab;
 use libtestbed;
 use User;
 use Project;
+use Group;
 use APT_Profile;
 use APT_Instance;
 use APT_Aggregate;
@@ -112,9 +121,12 @@ sub CanDelete($$);
 sub PublishProfile($);
 sub InsertImageRecords($);
 sub ListImages();
-sub HandleScript($);
+sub GetScriptParameters($$$);
 sub VerifyXML($$);
 sub ModifyProfileInternal($$$);
+sub UseNewGenilib($);
+sub Bindings();
+sub ParamSet();
 		      
 # The web interface (and in the future the xmlrpc interface) sets this.
 my $this_user = User->ImpliedUser();
@@ -174,6 +186,7 @@ my %xmlfields =
      "profile_listed"      => ["listed",	$SLOT_OPTIONAL|$SLOT_UPDATE],
      "profile_public"      => ["public",	$SLOT_OPTIONAL|$SLOT_UPDATE],
      "profile_shared"      => ["shared",	$SLOT_OPTIONAL|$SLOT_UPDATE],
+     "profile_project_write"=>["project_write", $SLOT_OPTIONAL|$SLOT_UPDATE],
      "profile_topdog"      => ["topdog",	$SLOT_OPTIONAL|
 			                          $SLOT_UPDATE|$SLOT_ADMINONLY],
      "profile_disabled"    => ["disabled",	$SLOT_OPTIONAL|
@@ -214,6 +227,12 @@ elsif ($action eq "listimages") {
 elsif ($action eq "create") {
     exit(CreateProfile());
 }
+elsif ($action eq "bindings") {
+    exit(Bindings());
+}
+elsif ($action eq "paramset") {
+    exit(ParamSet());
+}
 else {
     usage();
 }
@@ -235,6 +254,7 @@ sub CreateProfile()
     my $parent_profile;
     my $node_id;
     my $usererror;
+    my $reponame;
     my %errors = ();
     
     my %options = ();
@@ -275,6 +295,8 @@ sub CreateProfile()
     elsif (!$project->AccessCheck($this_user, TB_PROJECT_MAKEIMAGEID())) {
 	UserError({"profile_pid" => "Not enough permission in this project"});
     }
+    $usenewgenilib = UseNewGenilib($project);
+    
     # Check datasets.
     if (defined($rspec)) {
 	my $errmsg = "Bad dataset";
@@ -287,12 +309,14 @@ sub CreateProfile()
     # Need to do initial clone. 
     #
     if (exists($new_args{'repourl'})) {
+	$reponame = NewUUID();
 	my $repourl  = $new_args{'repourl'};
-	my $reponame = NewUUID();
 	my $repohash;
+	my $checkout = ($this_user->IsAdmin() ? "-c" : "");
 
 	my $output =
-	    emutil::ExecQuiet("$MANAGEGITREPO clone -n $reponame '$repourl'");
+	    emutil::ExecQuiet("$MANAGEGITREPO clone $checkout -n $reponame ".
+			      "  -S " . $new_args{"name"} . " '$repourl'");
 	if ($?) {
 	    UserError($output);
 	}
@@ -320,9 +344,15 @@ sub CreateProfile()
 	$new_args{'repokey'} = $repokey;
     }
     # Script parameters
-    if (defined($script) && $script ne "") {
-	my $paramdefs = HandleScript($script);
-
+    if (defined($script) && $script ne "" && $script =~ /^import/m) {
+	my $paramdefs;
+	my $retval = GetScriptParameters($script, $reponame, \$paramdefs);
+	if ($retval) {
+	    if ($retval < 0) {
+		fatal("Could not get paramdefs: $paramdefs!");
+	    }
+	    UserError($paramdefs);
+	}
 	$new_args{"paramdefs"} =
 	    $paramdefs if (defined($paramdefs) && $paramdefs ne "");
     }
@@ -611,6 +641,10 @@ sub ModifyProfile()
     if (!defined($profile)) {
 	fatal("Could not lookup profile for update $uuid");
     }
+    my $creator = User->Lookup($profile->creator_idx());
+    if (!defined($creator)) {
+	fatal("Could not lookup creator for $profile");
+    }
     
     # This will exit if there are any errors.
     VerifyXML($xmlfile, 1);
@@ -623,8 +657,28 @@ sub ModifyProfile()
     if (!defined($project)) {
 	UserError({"profile_pid" => "No such project exists"});
     }
-    elsif (!$project->AccessCheck($this_user, TB_PROJECT_MAKEIMAGEID())) {
-	UserError({"profile_pid" => "Not enough permission in this project"});
+    #
+    # Project leader can always update profiles in the project. Other
+    # members can update the profile when the project_write bit has been
+    # set.
+    #
+    if (! ($this_user->IsAdmin() ||
+	   $this_user->SameUser($creator) ||
+	   $project->IsLeader($this_user) ||
+	   $profile->project_write())) {
+	UserError({"profile_pid" =>
+		       "Not enough permission to modify profile"});
+    }
+    #
+    # Slightly different test when changing the project_write bit.
+    #
+    if (exists($update_args{"project_write"}) &&
+	$update_args{"project_write"} != $profile->project_write() &&
+	!($this_user->IsAdmin() ||
+	  $this_user->SameUser($creator) ||
+	  $project->IsLeader($this_user))) {
+	UserError({"profile_pid" =>
+		       "Not enough permission change project write flag"});
     }
     if ($profile->Lock()) {
 	UserError("Profile is busy, cannot lock it.");
@@ -647,6 +701,7 @@ sub ModifyProfileInternal($$$)
     my ($profile, $project, $pmsg)  = @_;
     my %errors     = ();
     my $fromrepo   = 0;
+    $usenewgenilib = UseNewGenilib($project);
 
     # Check datasets.
     if (defined($rspec)) {
@@ -684,19 +739,17 @@ sub ModifyProfileInternal($$$)
 	# For a Parameterized Profile, need to generate and store the form
 	# data. Only python scripts of course.
 	#
-	my ($fh, $filename) = tempfile(UNLINK => 1);
-	if (!defined($fh)) {
-	    $$pmsg = "Could not open temporary file for script";
-	    return -1;
-	}
-	print $fh $script;
-	my $output = emutil::ExecQuiet("$RUNGENILIB -p $filename");
-	if ($?) {
+	my $output;
+	my $retval = GetScriptParameters($script,
+					 $profile->reponame(), \$output);
+	if ($retval) {
+	    if ($retval < 0) {
+		$$pmsg = $output;
+		return -1;
+	    }
 	    $$pmsg = $output;
-	    return $? >> 8;
+	    return 1;
 	}
-	chomp($output);
-
 	# No versioning so need to clear existing paramdefs.
 	$update_args{"paramdefs"} = ($output ne "" ? $output : undef);
     }
@@ -715,7 +768,9 @@ sub ModifyProfileInternal($$$)
     # If the rspec/script changed, then make a new version of the profile.
     # Everything else is metadata.
     #
-    if (exists($update_args{"rspec"}) || exists($update_args{"script"})) {
+    if (exists($update_args{"rspec"}) ||
+	exists($update_args{"script"}) ||
+	exists($update_args{"repohash"})) {
 	if ((exists($update_args{"rspec"}) &&
 	     $update_args{"rspec"} ne $profile->rspec()) ||
 	    (exists($update_args{"script"}) &&
@@ -737,6 +792,12 @@ sub ModifyProfileInternal($$$)
 			     "repohash", "portal_converted") {
 		$profile->UpdateVersion({$key => $update_args{$key}})
 		    if (exists($update_args{$key}));
+	    }
+	    # Watch for a (parameterized) script no longer being parameterized,
+	    # or even being a script (which would be silly).
+	    if (exists($update_args{"script"}) &&
+		!exists($update_args{"paramdefs"})) {
+		$profile->UpdateVersion({"paramdefs" => undef});
 	    }
 	}
 	foreach my $key ("rspec", "script", "paramdefs",
@@ -908,10 +969,16 @@ sub UpdateProfileFromRepo()
     elsif (!$project->AccessCheck($this_user, TB_PROJECT_MAKEIMAGEID())) {
 	fatal("Not enough permission in this project");
     }
-    if ($profile->WaitForLock(10)) {
+    if ($profile->WaitForLock(30)) {
 	print STDERR "Profile is busy, cannot lock it.\n";
 	exit(1);
     }
+    $usenewgenilib = UseNewGenilib($project);
+
+    # For sending email
+    my $profile_name = $profile->name();
+    my $profile_pid  = $profile->pid();
+    my $creator      = User->Lookup($profile->creator_idx());
     
     #
     # We want to update the profile from its URL, and get back the
@@ -921,6 +988,14 @@ sub UpdateProfileFromRepo()
     if ($?) {
 	print STDERR $output;
 	$profile->Unlock();
+	$project->SendEmail($creator->email(),
+		    "Failure to update profile from Git repository",
+		    "Profile $profile_pid,$profile_name could not be pulled\n".
+		    "from its git repository:\n\n" . $output . "\n\n" .
+		    $profile->AdminURL() . "\n",
+		    $project->Brand()->OpsEmailAddress(),
+		    # Temporary.
+		    "BCC: " . $project->Brand()->LogsEmailAddress());
 	fatal("Could not update repo from $repourl");
     }
     if ($verbose) {
@@ -941,14 +1016,28 @@ sub UpdateProfileFromRepo()
 	    $profile->Unlock();
 	    fatal("Could not open temporary file for script");
 	}
+	my $opts = ($usenewgenilib ? "-N" : "");
+	# Import repo into jail.
+	$opts .= " -r " . $profile->reponame();
 	print $fh $script;
-	$output = emutil::ExecQuiet("$RUNGENILIB $filename");
+	$output = emutil::ExecQuiet("$RUNGENILIB $opts $filename");
 	if ($?) {
+	    my $exit_status = $? >> 8;
 	    print STDERR $output;
 	    $profile->Unlock();
-	    print STDERR "$RUNGENILIB failed\n";
+	    
+	    $project->SendEmail($creator->email(),
+		    "Failure to update profile from Git repository",
+		    "Profile $profile_pid,$profile_name could not be updated\n".
+		    "from its git repository:\n\n" . $output . "\n\n" .
+		    $profile->AdminURL() . "\n",
+		    $project->Brand()->OpsEmailAddress(),
+		    # Temporary.
+		    "BCC: " . $project->Brand()->LogsEmailAddress());
+	    
+	    print STDERR "UpdateProfileFromRepo: $RUNGENILIB failed\n";
 	    # Pass along the exit value.
-	    exit($? >> 8);
+	    exit($exit_status);
 	}
 	$rspec = $output;
     }
@@ -970,17 +1059,12 @@ sub UpdateProfileFromRepo()
 	    exit(1);
 	}
     }
-    my $profile_name = $profile->name();
-    my $profile_pid  = $profile->pid();
-    my $creator = User->Lookup($profile->creator_idx());
     $project->SendEmail($creator->email(),
 	"Profile updated from Git repository",
 	"Profile $profile_pid,$profile_name has been updated ".
 	"from its git repository\n".
 	"as the result of a push webhook.",
-	$project->Brand()->OpsEmailAddress(),
-	# Temporary.
-	"BCC: " . $project->Brand()->LogsEmailAddress());
+	$project->Brand()->OpsEmailAddress());
     
     return 0;
 }
@@ -989,23 +1073,29 @@ sub UpdateProfileFromRepo()
 # For a Parameterized Profile, need to generate and store the form
 # data. Only python scripts of course. Does not return on error.
 #
-sub HandleScript($)
+sub GetScriptParameters($$$)
 {
-    my ($script) = @_;
-
-    return undef
-	if ($script !~ /^import/m);
+    my ($script, $reponame, $pref) = @_;
 
     my ($fh, $filename) = tempfile(UNLINK => 1);
-    fatal("Could not open temporary file for script")
-	if (!defined($fh));
+    if (!defined($fh)) {
+	$$pref = "Could not open temporary file for script";
+	return -1;
+    }
+    my $opts = ($usenewgenilib ? "-N" : "");
+    # Import repo into jail.
+    $opts .= " -r $reponame" if (defined($reponame));
     print $fh $script;
-    my $paramdefs = `$RUNGENILIB -p $filename`;
-    fatal("$RUNGENILIB failed")
-	if ($?);
-    chomp($paramdefs);
-    
-    return $paramdefs;
+
+    my $output = emutil::ExecQuiet("$RUNGENILIB $opts -p $filename");
+    if ($?) {
+	$$pref = $output;
+	return $? >> 8;
+    }
+    chomp($output);
+
+    $$pref = $output;
+    return 0;
 }
 
 exit(0);
@@ -1057,6 +1147,33 @@ sub UserError($)
 
 	$webtask->Exited(1);
 	$webtask->output($xml);
+    }
+    else {
+	foreach my $key (keys(%$errors)) {
+	    print "$key: " . $errors->{$key} . "\n";
+	}
+    }
+    # Exit with positive status so web interface treats it as user error.
+    exit(1);
+}
+
+#
+# Not sure what I was thinking above, XML was dumb.
+#
+sub UserErrorSane($)
+{
+    my ($ref) = @_;
+    my $errors = {};
+
+    if (ref($ref) eq "SCALAR") {
+	$errors->{"error"} = $$ref;
+    }
+    else {
+	$errors = $ref;
+    }
+    if (defined($webtask_id)) {
+	$webtask->Exited(1);
+	$webtask->errors($errors);
     }
     else {
 	foreach my $key (keys(%$errors)) {
@@ -1619,5 +1736,233 @@ sub CanDelete($$)
 	if ($user->IsAdmin());
     return 1
 	if ($user->uid_idx() == $profile->creator_idx());
+    return 1
+	if ($user->SameUser($project->GetLeader()));
+    return 0;
+}
+
+#
+# Should user get new PP code for testing. Use project membership.
+#
+sub UseNewGenilib($)
+{
+    my ($project) = @_;
+
+    if (0) {
+	return 1
+	    if (EmulabFeatures->FeatureEnabled("NewPParams", undef, $project));
+    }
+    return 0;
+}
+
+#
+# Get the bindings used in an instance (which might be in the history table)
+# and return them as a json array.
+#
+sub Bindings()
+{
+    my $optlist    = "p";
+    my $asparamdefs= 0;
+    my $bindings;
+    my $errmsg;
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"p"})) {
+	$asparamdefs = 1;
+    }
+    usage()
+	if (@ARGV != 1);
+
+    my $instance = APT_Instance->Lookup($ARGV[0]);
+    if (!$instance) {
+	$instance = APT_Instance::History->Lookup($ARGV[0]);
+	if (!$instance) {
+	    fatal("No such instance");
+	}
+    }
+    #print $instance->rspec() . "\n";
+    my $rspec = GeniXML::Parse($instance->rspec());
+    if (! defined($rspec)) {
+	fatal("Could not parse rspec");
+    }
+    if (APT_Profile::GetBindings($rspec, \$bindings, \$errmsg, $asparamdefs)) {
+	fatal($errmsg);
+    }
+    if (defined($webtask)) {
+	$webtask->bindings($bindings);
+	$webtask->Exited(0);
+    }
+    else {
+	print Dumper($bindings);
+    }
+    return 0;
+}
+    
+#
+# Deal with parameter sets.
+#
+sub ParamSet()
+{
+    my $optlist    = "u:m:bpB:";
+    my $bound      = 0;
+    my $asparamdefs= 0;
+    my $user;
+    my $description;
+    my $bindings;
+    my $errmsg;
+    my $instance;
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"u"})) {
+	$user = User->Lookup($options{"u"});
+	if (!defined($user)) {
+	    fatal("No such user");
+	}
+    }
+    else {
+	$user = $this_user;
+    }
+    my $uid     = $user->uid();
+    my $uid_idx = $user->uid_idx();
+    
+    usage()
+	if (@ARGV < 3);
+    
+    my $op = shift(@ARGV);
+    if (! ($op eq "add" || $op eq "delete")) {
+	fatal("Improper action");
+    }
+    my $name = shift(@ARGV);
+    if ($name !~ /^[-\w]+$/ || length($name) >= 32) {
+	UserErrorSane({"name" => "Alphanumeric no greater then 32 characters"});
+    }
+    my $safe_name = DBQuoteSpecial($name);
+
+    my $profile = APT_Profile->Lookup(shift(@ARGV));
+    if (!defined($profile)) {
+	fatal("No such profile");
+    }
+    my $profileid = $profile->profileid();
+    
+    if ($op eq "delete") {
+	my $query_result =
+	    DBQueryWarn("select uuid from apt_parameter_sets ".
+			"where uid_idx='$uid_idx' and ".
+			"      profileid='$profileid' and name=$safe_name");
+	fatal("Database error")
+	    if (!defined($query_result));
+	if (!$query_result->numrows) {
+	    fatal("No such parameter set");
+	}
+	if (!DBQueryWarn("delete from apt_parameter_sets ".
+			 "where uid_idx='$uid_idx' and ".
+			 "      profileid='$profileid' and name=$safe_name")) {
+	    fatal("DB error deleting parameter set");
+	}
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	return 0;
+    }
+    #
+    # We either get an instance or a file with an XML fragment.
+    #
+    if (defined($options{"B"})) {
+	fatal("Bindings file cannot be read")
+	    if (! -e $options{"B"});
+	my $xml = emutil::ReadFile($options{"B"});
+	fatal("Invalid bindings XML")
+	    if (!defined($xml) || $xml eq "");
+
+	# I know, silly. But necessary.
+	$xml = "<rspec>$xml</rspec>";
+	if (APT_Profile::GetBindings($xml, \$bindings, \$errmsg, 0)) {
+	    fatal($errmsg);
+	}
+    }
+    else {
+	usage()
+	    if (@ARGV != 1);
+
+	$instance = APT_Instance->Lookup($ARGV[0]);
+	if (!$instance) {
+	    $instance = APT_Instance::History->Lookup($ARGV[0]);
+	    if (!$instance) {
+		fatal("No such instance");
+	    }
+	}
+	my $rspec = GeniXML::Parse($instance->rspec());
+	if (! defined($rspec)) {
+	    fatal("Could not parse rspec");
+	}
+	if (APT_Profile::GetBindings($rspec, \$bindings, \$errmsg, 0)) {
+	    fatal($errmsg);
+	}
+    }
+    if (defined($options{"m"})) {
+	$description = $options{"m"};
+	if (! TBcheck_dbslot($description, "default", "tinytext",
+			     TBDB_CHECKDBSLOT_ERROR)) {
+	    UserErrorSane({"description" => TBFieldErrorString()});
+	}
+    }
+    else {
+	$description = "Created on " .
+	    POSIX::strftime("20%y-%m-%d %H:%M:%S %Z", localtime(time()));
+    }
+    if (defined($options{"b"})) {
+	$bound = 1;
+    }
+    
+    # Ensure name is unique.
+    my $query_result =
+	DBQueryWarn("select uuid from apt_parameter_sets ".
+		    "where uid_idx='$uid_idx' and ".
+		    "      profileid='$profileid' and name=$safe_name");
+    fatal("Database error")
+	if (!defined($query_result));
+    if ($query_result->numrows) {
+	UserErrorSane({"name" => "Already in use"});
+    }
+    
+    print Dumper($bindings);
+    $bindings = eval { encode_json($bindings); };
+    if ($@) {
+	fatal("Could not json encode the bindings\n");
+    }
+    my $safe_bindings = DBQuoteSpecial($bindings);
+    my $safe_descrip  = DBQuoteSpecial($description);
+
+    my $query =
+	"insert into apt_parameter_sets set created=now(), ".
+	" uuid=uuid(),uid='$uid',uid_idx='$uid_idx', ".
+	" profileid='$profileid',bindings=$safe_bindings, ".
+	" name=$safe_name,description=$safe_descrip";
+
+    if ($bound) {
+	$query .= ",version_uuid=" . DBQuoteSpecial($profile->uuid());
+	if ($profile->repourl()) {
+	    if (defined($instance)) {
+		$query .= ",reporef=" . DBQuoteSpecial($instance->reporef());
+		$query .= ",repohash=" . DBQuoteSpecial($instance->repohash());
+	    }
+	    else {
+		$query .= ",repohash=" . DBQuoteSpecial($profile->repohash());
+	    }
+	}
+    }
+    $query_result = DBQueryWarn($query);
+    if (!$query_result) {
+	fatal("Could not insert bindings into DB");
+    }
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
     return 0;
 }

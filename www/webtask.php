@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -127,7 +127,9 @@ class WebTask {
     # We delete from the web interface.
     function Delete() {
 	$task_id = $this->task_id();
-	DBQueryWarn("delete from web_tasks where task_id='$task_id'");
+        if (!DBQueryWarn("delete from web_tasks where task_id='$task_id'")) {
+            return -1;
+        }
 	return 0;
     }
 
@@ -137,6 +139,22 @@ class WebTask {
 
         DBQueryFatal("update web_tasks set ".
                      " exited=null,process_id=0,exitcode=0,task_data=''".
+                     "where task_id='$task_id'");
+
+        return $this->Refresh();
+    }
+
+    # Store.
+    function Store() {
+        if (!$this->decoded) {
+            return;
+        }
+        $task_id = $this->task_id();
+        $task_data = json_encode($this->decoded);
+        $safe_data = addslashes($task_data);
+
+        DBQueryFatal("update web_tasks set ".
+                     " task_data='$safe_data' ".
                      "where task_id='$task_id'");
 
         return $this->Refresh();
@@ -154,6 +172,15 @@ class WebTask {
     function exitcode()		{ return $this->field("exitcode"); }
     function exited()		{ return $this->field("exited"); }
     function task_data()	{ return $this->field("task_data"); }
+
+    function TaskDataObject() {
+	if ($this->task_data()) {
+	    return json_decode($this->task_data(), false);
+	}
+	else {
+	    return new stdClass();
+	}
+    }
 
     #
     # Return the task data as a real object intead of JSON

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -57,7 +57,8 @@ $values  = array("adminon"        => array(0,1),
 		 "imageglobal"    => array(0,1),
 		 "imagedoesxen"   => array(0,1),
 		 "adminflag"      => array(0,1),
-		 "hiderun"        => array(0,1));
+		 "hiderun"        => array(0,1),
+		 "project_disable"=> array(0,1));
 
 # list of valid extra variables for the each toggle, and mandatory flag.
 $optargs = array("adminon"        => array(),
@@ -72,7 +73,9 @@ $optargs = array("adminon"        => array(),
 		 "imageglobal"    => array("imageid" => 1),
 		 "imagedoesxen"   => array("imageid" => 1),
 		 "adminflag"      => array("user" => 1),
-		 "hiderun"        => array("instance" => 1, "runidx" => 1));
+		 "hiderun"        => array("instance" => 1, "runidx" => 1),
+                 "project_disable"=> array("pid" => 1));
+
 
 # Mandatory page arguments.
 $reqargs = RequiredPageArguments("type",  PAGEARG_STRING,
@@ -125,10 +128,6 @@ elseif ($type == "webfreeze") {
     $target_user->SetWebFreeze($value);
 }
 elseif ($type == "adminflag") {
-    # This is active on geni racks only.
-    if (0 && !$GENIRACK) {
-	USERERROR("This toggle is disabled on non-geni racks!", 1);
-    }
     # must be admin
     if (! $isadmin) {
 	USERERROR("You do not have permission to toggle $type!", 1);
@@ -264,6 +263,16 @@ elseif ($type == "workbench") {
     }
     $zapurl = CreateURL("showproject", $project);
     $project->SetAllowWorkbench($value);
+}
+elseif ($type == "project_disable") {
+    # Must be admin
+    if (!$isadmin) {
+	USERERROR("You do not have permission to toggle $type!", 1);
+    }
+    if (! ($project = Project::Lookup($pid))) {
+	PAGEARGERROR("Project $pid is not a valid project!");
+    }
+    $project->SetDisabled($value);
 }
 elseif ($type == "hiderun") {
     RequiredPageArguments("instance",  PAGEARG_INSTANCE,

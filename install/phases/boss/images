@@ -13,24 +13,43 @@ my $DESCRIPTORS   = "$TOP_SRCDIR/install/descriptors-v4.xml";
 my $GENDEV        = "$TOP_SRCDIR/install/descriptors-gendev.xml";
 my @MBRS          = ("emulab-mbr.dd", "emulab-mbr2.dd", "emulab-mbr3.dd");
 
-my $LINUXSTDIMAGE = "UBUNTU14-64-STD";
-my $FBSDSTDIMAGE  = "FBSD103-64-STD";
+my $LINUXSTDIMAGE = "UBUNTU16-64-STD";
+my $FBSDSTDIMAGE  = "FBSD113-64-STD";
 my $DEFAULTIMAGE  = $LINUXSTDIMAGE;
 
 #
 # We now use image import.
 #
 my %STDIMAGES     = (
-    "UBUNTU14-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=0a29c738-32b3-11e4-b30a-001143e453fe",
+    "UBUNTU16-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=7683ca8e-5e37-11e6-ac8a-90e2ba22fee4",
     "CENTOS7-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=6fa68fd6-9163-11e6-ac8c-90e2ba22fee4",
+    "FBSD113-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=28b07ebd-8957-11e9-8677-e4434b2381fc",
+    # XXX needed right now for delay nodes (see elabinelab_bossinit)
     "FBSD103-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=f3866e90-2464-11e6-bdf0-d1afad303f71",
+    # be sure to change the xen phase file if you change this
+    "XEN49-64-STD"     => "https://www.emulab.net/image_metadata.php?uuid=a0c25a23-7edf-11e8-b228-90e2ba22fee4",
+);
+
+my %OLDIMAGES     = (
+    "UBUNTU14-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=0a29c738-32b3-11e4-b30a-001143e453fe",
     "XEN46-64-STD"     => "https://www.emulab.net/image_metadata.php?uuid=61799d52-4dff-11e6-ac8a-90e2ba22fee4",
 );
 
 my %NEWIMAGES     = (
-    "UBUNTU16-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=7683ca8e-5e37-11e6-ac8a-90e2ba22fee4",
-    "FBSD111-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=560f4743-795d-11e7-ac90-90e2ba22fee4"
+    "UBUNTU18-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=24543775-7e30-11e8-b228-90e2ba22fee4",
+    "FBSD120-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=9865bb9c-78eb-11e9-8a5c-e4434b2381fc",
 );
+
+#
+# XXX for compat, we keep around some old images.
+#
+if ($FBSD_MAJOR <= 10) {
+    $LINUXSTDIMAGE = "UBUNTU14-64-STD";
+    $FBSDSTDIMAGE  = "FBSD103-64-STD";
+    foreach my $im (keys %OLDIMAGES) {
+	$STDIMAGES{$im} = $OLDIMAGES{$im};
+    }
+}
 
 #
 # Old style mappings, but probably still in use someplace.

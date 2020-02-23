@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,7 +28,7 @@ $drewheader       = 0;
 $noheaders	  = 0;
 $autorefresh      = 0;
 $javascript_debug = 0;
-$currentusage     = 1;
+$currentusage     = ($TBMAINSITE ? 0 : 1);
 $currently_busy   = 0;
 $sortedtables     = array();
 $bodyclosestring  = "";
@@ -149,13 +149,13 @@ function NavMenuButton($text, $link = null, $extratext = null,
 	
 }
 # Ditto, but with a new icon.
-function NavMenuButtonNew($text, $link = null, $divider = FALSE)
+function NavMenuButtonNew($text, $link = null, $divider = FALSE, $target = null)
 {
     global $navmenu, $login_user;
 
     if ($login_user)
 	NavMenuButton($text, $link, "&nbsp;<img src=\"/new.gif\">",
-		      null, $divider);
+		      $target, $divider);
     else
 	WRITESIDEBARBUTTON($text, $link, "&nbsp;<img src=\"/new.gif\" />");
 }
@@ -512,7 +512,7 @@ function WRITELOGINBOX($loginbox_content) {
 function WRITEEXPERIMENTMENU($firstinitstate) {
     global $TBBASE, $TBDOCBASE, $TBMAINSITE;
     global $WIKISUPPORT, $CHECKLOGIN_WIKINAME, $EXPOSETEMPLATES, $FLAVOR;
-    global $login_status, $login_user;
+    global $login_status, $login_user, $currentusage;
 
     # Start Interaction section if going to spit out interaction options.
     if ($login_status & (CHECKLOGIN_LOGGEDIN|CHECKLOGIN_MAYBEVALID)) {
@@ -570,6 +570,12 @@ function WRITEEXPERIMENTMENU($firstinitstate) {
 
 		NavMenuButtonDivider("Node Status",
 				     "$TBBASE/nodecontrol_list.php3");
+
+                if (!$currentusage) {
+                    NavMenuButtonNew("Resource Availability",
+                                     "$TBBASE/portal/resinfo.php",
+                                     false, "_blank");
+                }
 
 		NavMenuButton("List ImageIDs",
 			      "$TBBASE/showimageid_list.php3");
@@ -746,6 +752,7 @@ function WRITESIDEBAR() {
     global $THISHOMEBASE;
     global $currentusage, $FANCYBANNER, $ELABINELAB, $PLABSUPPORT;
     global $WIKIDOCURL, $FORUMURL;
+    global $UI_EXTERNAL_ACCOUNTS;
     $firstinitstate = TBGetFirstInitState();
 
     list($newsBase, $newsDate, $newNews) = GETNEWSINFO();
@@ -792,7 +799,8 @@ function WRITESIDEBAR() {
 		      "$TBDOCBASE/docwrapper.php3?docname=sponsors.html");
     }
     else {
-	NavMenuButton("Projects on Emulab", "$TBDOCBASE/projectlist.php3");
+	NavMenuButton("Projects on $THISHOMEBASE",
+                      "$TBDOCBASE/projectlist.php3");
     }
     if ($TBMAINSITE && !$ISALTDOMAIN) {
 	NavMenuButton("<font color=red>In Memoriam</font>",
@@ -807,7 +815,7 @@ function WRITESIDEBAR() {
     }
 
     $lbox_content = "";
-    if (!$firstinitstate) {
+    if (!$firstinitstate && $UI_EXTERNAL_ACCOUNTS == 0) {
 	$lbox_content .= 
 	    "<a href=\"$TBBASE/reqaccount.php3\">".
 	    "<img alt=\"Request Account\" border=0 ".
@@ -1027,18 +1035,6 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
 	    }
 	}
 
-        # NOTE: This has to come before any images in the div for the float to
-        # work correctly.
-	if ($currentusage && !$login_user) {
-	    if ($FANCYBANNER) {
-		$class = "transparentusageframe";
-	    }
-	    else {
-		$class = "usageframe";
-	    }
-	    echo "<iframe src='$BASEPATH/currentusage.php3' class='$class'
-                          scrolling='no' frameborder='0'></iframe>\n";
-	}
 	if ($login_user) {
 	    #
 	    # It is a violation of Emulab licensing restrictions to remove
@@ -1155,8 +1151,9 @@ function FINISHSIDEBAR($nocontent = 0)
 		     "id=usagefreenodes>\n";
 		echo "</div>\n";
 	    }
-	    echo "</td></tr></table>\n";
+	    echo "</td>\n";
 	}
+        echo "</tr></table>\n";
 	echo "<!-- sidebar ends -->
               </div>";
     }
@@ -1327,7 +1324,12 @@ $PAGEHEADER_FUNCTION = function($title, $view = NULL, $extra_headers = NULL,
 	}
 	if ($login_user) {
         # And start the contentbody.
-	    echo "<div id='fullcontentbody'>";
+	    echo "<div id='fullcontentbody'>\n";
+	    if (0 && $TBMAINSITE) {
+            echo "<center style='margin: 5px;'>";
+            echo "<span class='blink_me'><a target=_blank href='https://gitlab.flux.utah.edu/emulab/emulab-devel/wikis/faq/Using%20the%20Testbed/Emulab%20Classic'>NEW WEB INTERFACE</a> coming on Sept 4th!</span>";
+            echo "</center>\n";
+	    }
 	}
     }
     echo "<!-- begin content -->";
@@ -1349,7 +1351,7 @@ function PAGEHEADER($title, $view = NULL, $extra_headers = NULL,
 $PAGEFOOTER_FUNCTION = function($view = NULL) {
     global $TBDOCBASE, $TBMAILADDR, $THISHOMEBASE, $BASEPATH, $TBBASE;
     global $TBMAINSITE, $bodyclosestring, $currently_busy;
-    global $login_user, $javascript_debug, $sortedtables;
+    global $login_user, $javascript_debug, $sortedtables, $currentusage;
     global $FORUMURL;
 
     if ($currently_busy) {
@@ -1422,7 +1424,7 @@ $PAGEFOOTER_FUNCTION = function($view = NULL) {
     # Plug the home site from all others.
     echo "\n<a href=\"www.emulab.net/netemu.php3\"></a>\n";
 
-    if ($login_user) {
+    if ($currentusage && $login_user) {
 	echo "<script>\n";
 	sajax_show_javascript();
 	?>
@@ -1773,12 +1775,18 @@ class menuBar
 		    echo "$text\n";
 		else {
 		    $mouseover = "";
+                    $target    = "";
 		    if ($item['#mouseover']) {
 			$string = htmlentities($item['#mouseover']);
 			$mouseover =
 			    "onmouseover=\"return escape('$string')\"";
 		    }
-		    echo "<ul><li class=toplevel><a $mouseover href=\"$link\">$text</a></li></ul>\n";
+                    if ($item['#target']) {
+			$target = "target=" . $item['#target'];
+                    }
+		    echo "<ul><li class=toplevel>";
+                    echo "<a $mouseover $target href=\"$link\">$text</a>";
+                    echo "</li></ul>\n";
 		}
 	    }
 	    else {
@@ -1795,12 +1803,15 @@ class menuBar
 		    $text  = $item['#text'];
 		    $extra = $item['#extratext'];
 		    $div   = "";
+                    $target= "";
 
                     # The divider comes before the item.
 		    if ($item['#divider'])
 			$div = "class=divider";
+		    if ($item['#target'])
+			$target = "target=" . $item['#target'];
 
-		    echo "<li $div><a href=\"$link\">$text $extra</a></li>\n";
+		    echo "<li $div><a $target href=\"$link\">$text $extra</a></li>\n";
 		}
 		echo "</ul>";
 #		echo "</td></tr></table></a>";

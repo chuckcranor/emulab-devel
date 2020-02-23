@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2006, 2013 University of Utah and the Flux Group.
+# Copyright (c) 2006, 2013, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,6 +39,17 @@ foreach my $p (@INC) {
 #
 foreach my $p (@INC) {
     if ($p =~ /perl5\/(\d+\.\d+)\//) {
+	print "$1";
+	exit(0);
+    }
+}
+
+#
+# Some Linuxes just don't have a perl5/<major>.<minor>.<patch>; they only
+# have perl/<major>.<minor>.<patch>; so accept that if all else fails.
+#
+foreach my $p (@INC) {
+    if ($p =~ /perl\/(\d+\.\d+\.\d+)$/) {
 	print "$1";
 	exit(0);
     }

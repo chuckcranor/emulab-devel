@@ -79,6 +79,9 @@
   <div class='col-sm-7'>
     <div class='panel panel-default' id='cluster-status-panel'>
       <div class="panel-heading">
+	<a href="aggregate-status.php" target="_blank">
+	  <span style="margin-right: 10px;"
+		class='glyphicon glyphicon-new-window pull-right'></span></a>	
 	<h5><center>Cluster Status</center></h5>
       </div>
       <div class='panel-body panel-body-dashboard'>
@@ -117,7 +120,7 @@
 	      <th>Profile</th>
 	      <th>Cluster</th>
 	      <th>PCs</th>
-	      <th>Created</th>
+	      <th>Started</th>
 	    </tr>
 	  </thead>
 	  <tbody>
@@ -131,7 +134,7 @@
 		  <%- value.profile_name %></a></td>
 		<td><%- value.cluster %></td>
 		<td><%- value.physnode_count %></td>
-		<td class="format-date"><%- value.created %></td>
+		<td class="format-date"><%- value.started %></td>
 	      </tr>
 	    <% }); %>
 	  </tbody>
@@ -249,7 +252,7 @@
 	      <th>Name</th>
 	      <th>Creator</th>
 	      <th>Project</th>
-	      <th>Created</th>
+	      <th>Started</th>
 	      <th>Expires</th>
 	    </tr>
 	  </thead>
@@ -262,7 +265,7 @@
 		  <%- value.creator %></a></td>
 		<td><a href="show-project.php?pid=<%- value.pid %>">
 		  <%- value.pid %></a></td>
-		<td class="format-date-withday"><%- value.created %></td>
+		<td class="format-date-withday"><%- value.started %></td>
 		<td class="format-date-withday"><%- value.expires %></td>
 	      </tr>
 	    <% }); %>
@@ -305,7 +308,7 @@
 	    <% } %>
 	    <td><a href="user-dashboard.php?user=<%- value.creator %>">
 	      <%- value.creator %></a></td>
-	    <td class="format-date"><%- value.created %></td>
+	    <td class="format-date"><%- value.started %></td>
 	    <td><a href="show-profile.php?uuid=<%- value.profile_uuid %>">
 	      <%- value.profile_name %></a></td>
 	    <td><%- value.cluster %></td>
@@ -348,7 +351,7 @@
 	      <th>Profile</th>
 	      <th>Cluster</th>
 	      <th>PCs</th>
-	      <th>Created</th>
+	      <th>Started</th>
 	      <th>Expires</th>
 	    </tr>
 	  </thead>
@@ -367,7 +370,7 @@
 		  <%- value.profile_name %></a></td>
 		<td><%- value.cluster %></td>
 		<td><%- value.physnode_count %></td>
-		<td class="format-date-month"><%- value.created %></td>
+		<td class="format-date-month"><%- value.started %></td>
 		<td class="format-date-relative"><%- value.expires %></td>
 	      </tr>
 	    <% }); %>

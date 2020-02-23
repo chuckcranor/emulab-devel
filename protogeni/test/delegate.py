@@ -38,7 +38,6 @@ import tempfile
 import uuid
 import xml.dom.minidom
 import xmlrpclib
-from M2Crypto import X509
 
 XMLSEC1 = "xmlsec1"
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -76,6 +76,8 @@ function SPITFORM($formfields, $errors)
     $ispp       = 0;
     $isadmin    = (ISADMIN() ? 1 : 0);
     $isstud     = (STUDLY() ? 1 : 0);
+    $isleader   = 0;
+    $iscreator  = 0;
     $canrepo    = (ISADMIN() || STUDLY() ? 1 : 0);
     $multisite  = ($ISCLOUD ? 1 : 0);
     $cloning    = 0;
@@ -97,9 +99,11 @@ function SPITFORM($formfields, $errors)
 	$history      = ($profile->HasHistory() ? 1 : 0);
 	$canmodify    = ($profile->CanModify() ? 1 : 0);
 	$canpublish   = ($profile->CanPublish() ? 1 : 0);
-	$activity     = ($profile->HasActivity() ? 1 : 0);
+	$activity     = ($profile->HasActivity($this_user) ? 1 : 0);
 	$ispp         = ($profile->isParameterized() ? 1 : 0);
         $disabled     = ($profile->isDisabled() ? 1 : 0);
+        $isleader     = ($profile->isLeader($this_user) ? 1 : 0);
+        $iscreator    = ($profile->isCreator($this_user) ? 1 : 0);
         $this_version = $profile->version();
 	if ($canmodify) {
 	    $title    = "Modify Profile";
@@ -124,6 +128,7 @@ function SPITFORM($formfields, $errors)
         }
 	$button_label = "Create";
 	$title        = "Create Profile";
+        $iscreator    = 1;
     }
 
     SPITHEADER(1);
@@ -203,7 +208,9 @@ function SPITFORM($formfields, $errors)
     echo "    window.DISABLED= $disabled;\n";
     echo "    window.ISADMIN  = $isadmin;\n";
     echo "    window.ISSTUD  = $isstud;\n";
-    echo "    window.MULTISITE  = $multisite;\n";
+    echo "    window.ISCREATOR = $iscreator;\n";
+    echo "    window.ISLEADER = $isleader;\n";
+    echo "    window.MULTISITE = $multisite;\n";
     echo "    window.HISTORY  = $history;\n";
     echo "    window.CLONING  = $cloning;\n";
     echo "    window.COPYING  = $copying;\n";
@@ -268,7 +275,7 @@ if (isset($action) && ($action == "edit" || $action == "copy")) {
 	    SPITUSERERROR("Profile has been deleted!");
 	}
 	if ($action == "edit") {
-	    if ($this_idx != $profile->creator_idx() && !ISADMIN()) {
+            if (!$profile->CanEdit($this_user)) {
 		SPITUSERERROR("Not enough permission!");
 	    }
 	}
@@ -447,6 +454,8 @@ if (! isset($create)) {
 		($profile->isDisabled() ? "checked" : "");
 	    $defaults["profile_nodelete"]      =
 		($profile->isLocked() ? "checked" : "");
+	    $defaults["profile_project_write"]      =
+		($profile->project_write() ? "checked" : "");
 
 	    # Warm fuzzy message.
 	    if (isset($_SESSION["notifyupdate"])) {
@@ -463,7 +472,7 @@ if (! isset($create)) {
         # the js code to show the status of the clone.
         #
         $webtask = $profile->webtask();
-        if ($webtask->TaskValue("cloning")) {
+        if ($webtask && $webtask->TaskValue("cloning")) {
             $notifyclone = 1;
         }
     }

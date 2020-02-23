@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,13 +28,13 @@ use Exporter;
 use vars qw(@EXPORT $AUTOLOAD
 	    $NOSTATE $RELOAD $RECONFIG $REBOOT
 	    $RELOAD_FAILED $RECONFIG_FAILED $REBOOT_FAILED $SETUP_FAILED
-	    $SETUP_OKAY);
+	    $SETUP_OKAY $SETUP_CANCELED);
 use base qw( Exporter );
 
 @EXPORT = qw(&die_noretry
 	     $NOSTATE $RELOAD $RECONFIG $REBOOT
 	     $RELOAD_FAILED $RECONFIG_FAILED $REBOOT_FAILED $SETUP_FAILED
-	     $SETUP_OKAY);
+	     $SETUP_OKAY $SETUP_CANCELED);
 
 use libdb;
 use libtestbed;
@@ -53,6 +53,7 @@ use EmulabFeatures;
 my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
 my $NODEREBOOT  = "$TB/bin/node_reboot";
+my $POWER       = "$TB/bin/power";
 my $VNODESETUP  = "$TB/sbin/vnode_setup";
 my $ELABINELAB  = "$TB/sbin/elabinelab";
 my $TBADB       = "$TB/bin/tbadb";
@@ -69,6 +70,7 @@ $RELOAD_FAILED   = 0x01;
 $RECONFIG_FAILED = 0x02;
 $REBOOT_FAILED   = 0x04;
 $SETUP_FAILED    = 0x08;
+$SETUP_CANCELED  = 0x10;
 
 #
 # Used to die with a -1 return code, to indicate to caller (tbswap)
@@ -683,9 +685,9 @@ sub LightUpNodes($@)
 	    ($self->loadobj())->debug($self->debug());
 
 	    # add a few more things for feature checks down the line:
-	    $reload_args{user} = $self->user();
-	    $reload_args{group} = $self->group();
-	    $reload_args{experiment} = $self->experiment();
+	    $reload_args{'user'} = $self->user();
+	    $reload_args{'group'} = $self->group();
+	    $reload_args{'experiment'} = $self->experiment();
 
 	    $pid = ($self->loadobj())->osload(\%reload_args, $reload_failures);
 	    $coderef = sub {
@@ -883,6 +885,17 @@ sub WaitForNodes($@)
 	    my $state_timestamp;
 
 	    #
+	    # Terminate the remaining nodes early ...
+	    #
+	    if ($canceled) {
+		print STDERR "$node_id: not waiting cause of cancellation.\n";
+		$node->_setupstatus($SETUP_CANCELED);
+		delete($nodes{$node_id});
+		$typehandler->WaitDone($node);
+		next;
+	    }
+
+	    #
 	    # Call typehandler specific wait function; 
 	    #
 	    my $retval = $typehandler->WaitForNode($node);
@@ -924,7 +937,12 @@ sub WaitForNodes($@)
 	    }
 	    if (grep {$_ eq $state} @waitstates) {
 		print "$node_id has reported state $state\n";
-		$node->_setupstatus($SETUP_OKAY);
+		if ($state eq TBDB_NODESTATE_ISUP()) {
+		    $node->_setupstatus($SETUP_OKAY);
+		}
+		else {
+		    $node->_setupstatus($SETUP_FAILED);
+		}
 		delete($nodes{$node_id});
 		$typehandler->WaitDone($node);
 		next;
@@ -943,7 +961,7 @@ sub WaitForNodes($@)
 		}
 		else {
 		    if ($typehandler->Retry($node) != 0) {
-			$node->_setupstatus($SETUP_OKAY);
+			$node->_setupstatus($SETUP_FAILED);
 			delete($nodes{$node_id});
 			$typehandler->WaitDone($node);
 		    }
@@ -980,20 +998,29 @@ sub NewType($$)
     # Note that type might be a class, and so Lookup() returns nothing.
     #
     my $typeinfo = NodeType->Lookup($type);
+    my $packname = "libossetup_${type}";
 
-    if ($type eq "pcfedphys" || $type eq "pcfed") {
-	$type = "protogeni";
+    # Switches are special.
+    if (defined($typeinfo) && $typeinfo->isswitch()) {
+	eval "require libossetup_switch";
+	if ($@) {
+	    print STDERR "$self libossetup_switch load failed: " . $@;
+	    return undef;
+	}
+	$packname = "libossetup_${type}";
     }
     elsif (defined($typeinfo) && $typeinfo->issubnode()) {
 	$type = "subnode";
+	$packname = "libossetup_subnode";
     }
+    # Dashes in package names are bad.
+    $packname =~ s/\-/\_/g;
 
-    my $packname = "libossetup_${type}";
     my $newtype  = eval { $packname->New($self); };
     # Not loaded?
     if ($@) {
 	#print STDERR "module load failed: " . $@ . "\n";
-	eval "require libossetup_${type}";
+	eval "require $packname";
 	if ($@) {
 	    if ($@ !~ /Can't locate libossetup_/) {
 		print STDERR "$self NewType($type): module load failed: " . $@;
@@ -1198,7 +1225,7 @@ sub Stringify($)
     
     my $type = $self->type();
 
-    return "[$type]";
+    return "libossetup_$type";
 }
 
 #####################################################################
@@ -1462,8 +1489,7 @@ sub WaitDone($@)
 			tbnotice("could not force into PXEWAIT; failing\n");
 			goto bad;
 		    }
-		    # clear the reload info
-		    $node->ClearCurrentReload();
+
 		    # and partitions
 		    $node->ClearPartitions();
 
@@ -1488,6 +1514,10 @@ sub WaitDone($@)
 		tbnotice("Continuing with experiment setup anyway ...\n");
 		next;
 	    }
+	}
+	elsif ($setupstatus == $libossetup::SETUP_CANCELED) {
+	    # Skip the stuff below, not needed.
+	    next;
 	}
 
       bad:
@@ -1840,10 +1870,10 @@ sub Volunteers($)
 	    #
 	    # The wait times are totally bogus! Need a better way to do this.
 	    #
-	    $node->_maxwait($reboot_time + (120 * $pnode->_vnodecount()));
+	    $node->_maxwait($reboot_time + (300 * $pnode->_vnodecount()));
 
 	    # Add some time if the node is getting a reload. Also bogus.
-	    $node->_maxwait($node->_maxwait() + 500)
+	    $node->_maxwait($node->_maxwait() + 1000)
 		if ($node->_reloaded());
 	}
 	$node->_setupstatus($libossetup::SETUP_OKAY);
@@ -2326,6 +2356,91 @@ sub LightUpNodes($@) {
 
     return $self->SUPER::LightUpNodes(@nodelist);
 }
+
+#####################################################################
+#
+# sdr
+#
+package libossetup_sdr;
+use base qw(libossetup_handler);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
+#
+# A constructor for an object to handle all nodes of this type.
+#
+sub New($$) {
+    my ($class, $parent) = @_;
+
+    my $self = $class->SUPER::New("sdr", $parent);
+    bless($self, $class);
+    return $self;
+}
+
+sub AddNode($$)
+{
+    my ($self, $node) = @_;
+
+    return $self->SUPER::AddNode($node);
+}
+
+#
+# Kirk says we always want to power cycle the SDRs when entering an experiment.
+# We pass -e option to power so it does not change the eventstate.
+#
+sub LightUpNodes($@)
+{
+    my ($self, @nodelist)  = @_;
+    my $parent     = $self->parent();
+    my @nodeids    = ();
+
+    foreach my $node (@nodelist) {
+	push(@nodeids, $node->node_id())
+	    if ($node->allocstate() ne TBDB_ALLOCSTATE_RES_READY());
+    }
+    tbnotice("Power cycling SDR nodes: @nodeids\n");
+    system("$POWER -e cycle @nodeids");
+    my $exitval = $?;
+
+    if ($exitval) {
+	# This is very unusual.
+	$parent->noretry(1);
+	return -1;
+    }
+    #
+    # If the eventstate somewhow managed to get out of ISUP, send it.
+    #
+    foreach my $node (@nodelist) {
+	next
+	    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_READY());
+	
+	if (!$node->IsUp()) {
+	    if ($node->SetEventState(TBDB_NODESTATE_ISUP(), 0)) {
+		$parent->noretry(1);
+		return -1;
+	    }
+	}
+    }
+    return 0;
+    
+}
+
+package libossetup_x310;
+use base qw(libossetup_sdr);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
 
 # This needs to be the last thing in the file.
 1;

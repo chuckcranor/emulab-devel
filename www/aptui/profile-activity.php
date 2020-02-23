@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014, 2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,6 +38,7 @@ $reqargs = RequiredPageArguments("uuid",  PAGEARG_STRING);
 #
 RedirectSecure();
 $this_user = CheckLoginOrRedirect();
+$this_idx  = $this_user->uid_idx();
 
 SPITHEADER(1);
 
@@ -45,7 +46,7 @@ $profile = Profile::Lookup($uuid);
 if (!$profile) {
     SPITUSERERROR("No such profile!");
 }
-else if ($this_user->uid_idx() != $profile->creator_idx() && !ISADMIN()) {
+else if (! ($profile->CanView($this_user) || ISADMIN())) {
     SPITUSERERROR("Not enough permission!");
 }
 $profileid = $profile->profileid();
@@ -56,9 +57,10 @@ $instances = array();
 #
 $query1_result =
     DBQueryFatal("select 1 as active, ".
-                 "   i.uuid,i.profile_version,i.created,'' as destroyed, ".
+                 "   i.uuid,i.profile_version,i.started,'' as destroyed, ".
 		 "   i.creator,p.uuid as profile_uuid,u.email,".
                  "   GROUP_CONCAT(ia.public_url) as public_urls, ".
+                 "   GROUP_CONCAT(aa.abbreviation) as clusters, ".
                  "   i.slice_uuid,f.exitmessage,f.exitcode ".
 		 "  from apt_instances as i ".
                  "left join apt_instance_failures as f ".
@@ -69,14 +71,17 @@ $query1_result =
 		 "     p.profileid=i.profile_id and ".
 		 "     p.version=i.profile_version ".
 		 "left join geni.geni_users as u on u.uuid=i.creator_uuid ".
+                 "left join apt_aggregates as aa on aa.urn=ia.aggregate_urn ".
 		 "where i.profile_id='$profileid' ".
-		 "group by i.uuid order by i.created desc");
+                 (!ISADMIN() ? "and i.creator_idx='$this_idx' " : "") .
+		 "group by i.uuid order by i.started desc");
 
 $query2_result =
     DBQueryFatal("select 0 as active, ".
-                 "    h.uuid,h.profile_version,h.created,h.destroyed, ".
+                 "    h.uuid,h.profile_version,h.started,h.destroyed, ".
 		 "    h.creator,p.uuid as profile_uuid,u.email, ".
                  "    GROUP_CONCAT(ia.public_url) as public_urls, ".
+                 "    GROUP_CONCAT(aa.abbreviation) as clusters, ".
                  "    h.slice_uuid,f.exitmessage,f.exitcode ".
 		 "  from apt_instance_history as h ".
                  "left join apt_instance_failures as f ".
@@ -87,8 +92,10 @@ $query2_result =
 		 "     p.profileid=h.profile_id and ".
 		 "     p.version=h.profile_version ".
 		 "left join geni.geni_users as u on u.uuid=h.creator_uuid ".
+                 "left join apt_aggregates as aa on aa.urn=ia.aggregate_urn ".
 		 "where h.profile_id='$profileid' ".
-		 "group by h.uuid order by h.created desc");
+                 (!ISADMIN() ? "and h.creator_idx='$this_idx' " : "") .
+		 "group by h.uuid order by h.started desc");
 
 if (mysql_num_rows($query1_result) == 0 &&
     mysql_num_rows($query2_result) == 0) {
@@ -103,7 +110,7 @@ foreach (array($query1_result, $query2_result) as $query_result) {
 	$uuid      = $row["uuid"];
 	$puuid     = $row["profile_uuid"];
 	$pversion  = $row["profile_version"];
-	$created   = $row["created"];
+	$created   = $row["started"];
 	$destroyed = $row["destroyed"];
 	$creator   = $row["creator"];
 	$email     = $row["email"];
@@ -111,22 +118,11 @@ foreach (array($query1_result, $query2_result) as $query_result) {
         $exitcode   = $row["exitcode"];
         $public_urls= $row["public_urls"];
         $slice_uuid= $row["slice_uuid"];
+        $clusters  = $row["clusters"];
 	# If a guest user, use email instead.
 	if (isset($email)) {
 	    $creator = $email;
 	}
-        #
-        # If the slice is gone, the public url needs to be replaced.
-        #
-        $tmp = array();
-        foreach (preg_split("/,/", $public_urls) as $url) {
-            if ($destroyed != "" && preg_match("/publicid=\w*/", $url)) {
-                $url = "https://" . parse_url($url, PHP_URL_HOST) .
-                     "/showslicelogs.php?slice_uuid=" . $slice_uuid;
-            }
-            $tmp[] = $url;
-        }
-        $public_urls = implode(",", $tmp);
 	$instance = array();
         $instance["active"]      = intval($active);
 	$instance["uuid"]        = $uuid;
@@ -135,9 +131,7 @@ foreach (array($query1_result, $query2_result) as $query_result) {
 	$instance["creator"]     = $creator;
 	$instance["created"]     = $created;
 	$instance["destroyed"]   = $destroyed;
-        if (ISADMIN()) {
-            $instance["public_urls"]  = $public_urls;
-        }
+	$instance["clusters"]    = ($clusters ? $clusters : "n/a");
         if (isset($exitcode)) {
             $instance["iserror"]       = 1;
 
@@ -161,7 +155,7 @@ echo "<div id='activity-body'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "    window.AJAXURL  = 'server-ajax.php';\n";
-echo "    window.ISADMIN  = " . ISADMIN() . ";\n";
+echo "    window.ISADMIN  = " . (ISADMIN() ? "true" : "false") . ";\n";
 echo "</script>\n";
 echo "<script type='text/plain' id='instances-json'>\n";
 echo json_encode($instances,

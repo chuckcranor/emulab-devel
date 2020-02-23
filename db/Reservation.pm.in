@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2016-2018 University of Utah and the Flux Group.
+# Copyright (c) 2016-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,7 +39,9 @@ use EmulabConstants;
 use Project;
 use User;
 use Experiment;
+use Node;
 use NodeType;
+use POSIX qw(strftime);
 use overload ('""' => 'Stringify');
 
 # Configure variables
@@ -215,6 +217,13 @@ sub Lookup($$;$$$$)
     $self->{'APPROVED'}    = $record->{'a'};
     $self->{'APPROVER'}    = $record->{'approver'};
     $self->{'UUID'}        = $record->{'uuid'};
+    $self->{'NOTIFIED'}    = $record->{'notified'};
+    $self->{'NOTIFIED_UNUSED'} = $record->{'notified_unused'};
+    $self->{'OVERRIDE_UNUSED'} = $record->{'override_unused'};
+    # For compat with history entries.
+    $self->{'DELETED'}     = undef;
+    # Local temp datastore
+    $self->{'DATA'}        = {};
 	
     bless($self, $class);
     
@@ -238,11 +247,32 @@ sub admin_notes($) { return $_[0]->{"ADMIN_NOTES"}; }
 sub approved($)    { return $_[0]->{"APPROVED"}; }
 sub approver($)    { return $_[0]->{"APPROVER"}; }
 sub uuid($)        { return $_[0]->{"UUID"}; }
+sub notified($)    { return $_[0]->{"NOTIFIED"}; }
+sub notified_unused($) { return $_[0]->{"NOTIFIED_UNUSED"}; }
+sub override_unused($) { return $_[0]->{"OVERRIDE_UNUSED"}; }
+# For compat with history entries.
+sub deleted($)     { return $_[0]->{"DELETED"}; }
+# Get/Set some temporary extra data.
+sub data($$;$)
+{
+    my ($self, $key, $val) = @_;
+
+    if (defined($val)) {
+	return $self->{'DATA'}->{$key} = $val;
+    }
+    if (exists($self->{'DATA'}->{$key})) {
+	return $self->{'DATA'}->{$key};
+    }
+    return undef;
+}
 
 sub Stringify($)
 {
     my ($self) = @_;
-    
+
+    my $idx = $self->idx();
+    $idx = "xxx" if (!defined($idx));
+    my $uid = $self->uid();
     my $pid = $self->pid();
     $pid = "(free)" if( !defined( $pid ) );
     
@@ -251,11 +281,13 @@ sub Stringify($)
     }
     my $nodes = $self->nodes();
     my $type = $self->type();
-    my $start = defined( $self->start() ) ? localtime( $self->start() ) :
-	"epoch";
-    my $end = defined( $self->end() ) ? localtime( $self->end() ) : "forever";
-
-    return "[Reservation: $pid, ${nodes}x${type}, ${start}-${end}]";
+    my $start = (defined( $self->start() ) ?
+		 POSIX::strftime("%m/%d/20%y %H:%M:%S",
+				 localtime($self->start())) : "epoch");
+    my $end = (defined( $self->end() ) ?
+		 POSIX::strftime("%m/%d/20%y %H:%M:%S",
+				 localtime($self->end())) : "forever");
+    return "[Reservation:$idx $pid/$uid, ${nodes}x${type}, ${start}-${end}]";
 }
 
 sub SetStart($$)
@@ -291,13 +323,6 @@ sub SetAdminNotes($$)
     my ($self, $notes) = @_;
 
     $self->{'ADMIN_NOTES'} = $notes;
-}
-
-sub SetCancel($$)
-{
-    my ($self, $cancel) = @_;
-
-    $self->{'CANCEL'} = $cancel;
 }
 
 # Mark the reservation as approved.  This DOES NOT update the database
@@ -408,7 +433,6 @@ sub Book($;$)
     my $admin_notes = DBQuoteSpecial( $self->admin_notes() );
     my $approved = $self->approved();
     my $approver = $self->approver();
-    my $cancel = $self->cancel();
 
     my $base_query = "SET pid='$pid', " .
 		     "pid_idx='$pid_idx', " .
@@ -424,8 +448,6 @@ sub Book($;$)
 		       ", admin_notes=$admin_notes" : "" ) .
 		     ( defined( $approved ) ?
 		       ", approved=FROM_UNIXTIME($approved)" : "" ) .
-		     ( defined( $cancel ) ?
-		       ", cancel=FROM_UNIXTIME($cancel)" : ", cancel=null" ) .
 		     ( defined( $approver ) ? ", approver='$approver'" : "" );
 
     my $query_result =
@@ -451,12 +473,22 @@ sub Cancel($)
 
     my $idx = $self->idx();
     my $type = $self->type();
-    
-    DBQueryWarn( "DELETE FROM future_reservations WHERE idx=$idx" )
-	or return -1;
 
+    if (defined($self->approved())) {
+ 	DBQueryFatal("INSERT INTO reservation_history ".
+		     "  (uuid, pid, pid_idx, nodes, type, deleted, canceled, " .
+		     "   created, start, end, uid, uid_idx, ".
+		     "   notes, admin_notes) " .
+		     "SELECT uuid, pid, pid_idx, nodes, type, now(), ".
+		     "  cancel, created,".
+		     "  start, end, uid, uid_idx, notes, admin_notes ".
+		     "FROM future_reservations WHERE idx='$idx'");
+    }
     DBQueryWarn( "DELETE FROM future_reservation_attributes WHERE " . 
 		 "reservation_idx=$idx" )
+	or return -1;
+
+    DBQueryWarn( "DELETE FROM future_reservations WHERE idx=$idx" )
 	or return -1;
 
     delete $cache{$type};
@@ -534,11 +566,13 @@ sub Tidy($)
 		  "reservation_history WRITE, " .
 		  "future_reservation_attributes AS a WRITE, " .
 		  "future_reservations AS r READ" );
-    DBQueryFatal( "INSERT INTO reservation_history( pid, nodes, type, " .
-		  "start, end, uid, notes, admin_notes ) " .
-		  "SELECT pid, nodes, type, start, end, uid, notes, " .
-		  "admin_notes FROM future_reservations WHERE " .
-		  "end < '$stamp'" );
+    DBQueryFatal( "INSERT INTO reservation_history( uuid, pid, pid_idx, ".
+		  "nodes, type, deleted, canceled, " .
+		  "created, start, end, uid, uid_idx, notes, admin_notes ) " .
+		  "SELECT uuid, pid, pid_idx, nodes, type, null, ".
+		  "cancel, created, start, end, uid, uid_idx, " .
+		  "notes, admin_notes FROM future_reservations WHERE " .
+		  "end < '$stamp' and approved is not null" );
     DBQueryFatal( "DELETE FROM future_reservations WHERE " .
 		  "end < '$stamp'" );
     DBQueryFatal( "DELETE a FROM future_reservation_attributes AS a " .
@@ -587,11 +621,14 @@ sub LookupAll($$;$$)
 				"n.node_id=nr.node_id LEFT OUTER JOIN " .
 				"project_reservations AS pr ON " .
 				"n.reserved_pid=pr.pid AND " .
-				"n.reservation_name=pr.name " .
+				"n.reservation_name=pr.name AND " .
+	                        "pr.approved is not null ".
 				"LEFT OUTER JOIN" .
 				"`geni-cm`.geni_slices AS s ON " .
 				"e.eid_uuid=s.uuid " .
-				"WHERE n.type='$type' GROUP BY " .
+				"WHERE (n.reservable=0 and n.type='$type') or ".
+				"      (n.reservable=1 and n.node_id='$type') ".
+				"GROUP BY " .
 				"e.pid, e.eid, n.reserved_pid, nr.pid, " .
 				"UNIX_TIMESTAMP( pr.end )" :
 				"SELECT COUNT(*), e.pid, e.eid, " .
@@ -614,8 +651,10 @@ sub LookupAll($$;$$)
 				"LEFT OUTER JOIN " .
 				"project_reservations AS pr ON " .
 				"n.reserved_pid=pr.pid AND " .
-				"n.reservation_name=pr.name " .
-				"WHERE n.type='$type' " .
+				"n.reservation_name=pr.name AND " .
+	                        "pr.approved is not null ".
+				"WHERE (n.reservable=0 and n.type='$type') or ".
+				"      (n.reservable=1 and n.node_id='$type') ".
 				"GROUP BY e.pid, e.eid, n.reserved_pid, " .
 				"nr.pid, UNIX_TIMESTAMP( pr.end )";
     my $query_result = DBQueryWarn( $query );
@@ -795,8 +834,15 @@ sub IsFeasible($$;$$$$$)
 	push( @$forecast, \%origin );
     }
 
-    my @events = sort { $a->{'t'} <=> $b->{'t'} } @timeline;
-    
+    my @events = sort {
+	if ($a->{'t'} == $b->{'t'}) {
+	    return $a->{'reserved'} <=> $b->{'reserved'};
+	}
+	else {
+	    return $a->{'t'} <=> $b->{'t'};
+	}
+    } @timeline;
+
     foreach my $event ( @events ) {
 	my $pid = $event->{'pid'};
 
@@ -1087,28 +1133,39 @@ sub OutstandingReservation($$;$) {
 
 # Return a list of (pid, nodetype, reserved, used) hashes for any currently
 # active reservations belonging to a listed project.
-sub CurrentReservations($$) {
-    my ($class, $projlist) = @_;
+sub CurrentReservations($;$$) {
+    my ($class, $projlist, $activeonly) = @_;
     my @answer = ();
-    
-    foreach ( @$projlist ) {
-	# reject illegal PIDs
-	return undef unless /^[-\w]+$/;
+    my $pclause = "";
+    $activeonly = 0 if (!defined($activeonly));
+
+    if (defined($projlist) && @$projlist) {
+	foreach ( @$projlist ) {
+	    # reject illegal PIDs
+	    return undef unless /^[-\w]+$/;
+	}
+	$pclause = "r.pid IN ('" . join( "','", @$projlist ) .	"') AND ";
     }
 
     my $query_result = DBQueryFatal(
 	"SELECT r.pid, r.type, SUM( r.nodes ), " .
-	    "(SELECT COUNT(*) FROM reserved AS res, nodes AS n WHERE " .
-	    "res.pid=r.pid AND res.node_id=n.node_id AND n.type=r.type)," .
+	    "(SELECT COUNT(*) FROM reserved AS res, nodes AS n ".
+            "WHERE res.pid=r.pid AND res.node_id=n.node_id AND ".
+	    "      ((n.reservable=0 and n.type=r.type) or ".
+	    "       (n.reservable=1 and n.node_id=r.type))), ".
 	    "(SELECT COUNT(*) FROM nodes AS n LEFT OUTER JOIN reserved " .
-	    "AS res ON n.node_id=res.node_id WHERE n.type=r.type AND " .
-	    "res.pid IS NULL)," .
+	    "AS res ON n.node_id=res.node_id ".
+	    "WHERE ((n.reservable=0 and n.type=r.type) or ".
+	    "       (n.reservable=1 and n.node_id=r.type)) and ".
+	    "      res.pid IS NULL)," .
 	    "(SELECT COUNT(*) FROM nodes AS n, reserved AS res " .
 	    "WHERE n.node_id=res.node_id AND res.pid='emulab-ops' AND " .
 	    "res.eid IN ('reloading', 'reloadpending')) " .
-	"FROM future_reservations AS r WHERE r.pid IN ('" .
-	join( "','", @$projlist ) .
-	"') AND r.approved IS NOT NULL GROUP BY r.pid, r.type" );
+	"FROM future_reservations AS r WHERE $pclause ".
+             "r.approved IS NOT NULL ".
+	     ($activeonly ? 
+	      "AND r.start < NOW() AND r.end > NOW() " : " ") .
+        "GROUP BY r.pid, r.type" );
 
     while( my($pid, $type, $reserved, $used, $ready, $reloading) =
 	   $query_result->fetchrow_array() ) {
@@ -1150,13 +1207,157 @@ sub UpcomingReservations($$) {
     return @answer;
 }
 
+#
+# Return a list of project reservations. Optional type and activeonly.
+# Type can be a single type or a list reference of types.
+#
+sub ProjectReservations($$$;$$) {
+    my ($class, $project, $user, $type, $activeonly) = @_;
+    my $typeclause   = "";
+    my $activeclause = "";
+    my $userclause   = "";
+    my $pidclause    = "";
+    my @answer = ();
+
+    if (defined($type)) {
+	if (ref($type)) {
+	    my @types = @{$type};
+	    $typeclause = "AND type IN ('" . join( "','", @types ) . "')" ;
+	}
+	else {
+	    $typeclause = "AND type='$type'";
+	}
+    }
+    if (defined($activeonly) && $activeonly) {
+	$activeclause = "AND start < NOW() AND end > NOW()";
+    }
+    if (defined($user)) {
+	my $uid = $user->uid();
+	$userclause = "AND uid='$uid'";
+    }
+    if (defined($project)) {
+	my $pid = ref($project) ? $project->pid() : $project;
+	$pidclause = "AND pid='$pid'";
+    }
+    my $query_result =
+	DBQueryFatal("select idx from future_reservations ".
+		     "where approved IS NOT NULL $pidclause ".
+		     "  $typeclause $activeclause $userclause ".
+		     "order by created desc");
+
+    while (my ($idx) = $query_result->fetchrow_array()) {
+	my $res = Reservation->Lookup($idx);
+	push(@answer, $res)
+	    if (defined($res));
+    }
+    return @answer;
+}
+
+#
+# Fake up an object for a historical reservation entry.
+#
+sub LookupHistorical($$) {
+    my ($class, $uuid) = @_;
+
+    my $query_result =
+	DBQueryWarn("select *,UNIX_TIMESTAMP(start) AS s, " .
+		     "       UNIX_TIMESTAMP(end) AS e, ".
+		     "       UNIX_TIMESTAMP(created) AS c, " .
+		     "       UNIX_TIMESTAMP(canceled) AS d, " .
+		     "       UNIX_TIMESTAMP(deleted) AS k " .
+		     "  from reservation_history ".
+		     "where uuid='$uuid'");
+
+    return undef
+	if (!defined($query_result) || !$query_result->numrows);
+
+    my $record = $query_result->fetchrow_hashref();
+    my $self               = {};
+    $self->{'IDX'}         = undef;
+    $self->{'PID'}         = $record->{'pid'};
+    $self->{'PID_IDX'}     = $record->{'pid_idx'};
+    $self->{'EID'}         = undef;
+    $self->{'START'}       = $record->{'s'};
+    $self->{'END'}         = $record->{'e'};
+    $self->{'CREATED'}     = $record->{'c'};
+    $self->{'DELETED'}     = $record->{'k'};
+    $self->{'CANCEL'}      = $record->{'d'};
+    $self->{'TYPE'}        = $record->{'type'};
+    $self->{'NODES'}       = $record->{'nodes'};
+    $self->{'UID'}         = $record->{'uid'};
+    $self->{'UID_IDX'}     = $record->{'uid_idx'};
+    $self->{'NOTES'}       = $record->{'notes'};
+    $self->{'ADMIN_NOTES'} = $record->{'admin_notes'};
+    $self->{'APPROVED'}    = undef;
+    $self->{'APPROVER'}    = undef;
+    $self->{'UUID'}        = $record->{'uuid'};
+    $self->{'NOTIFIED'}    = undef;
+    $self->{'NOTIFIED_UNUSED'} = undef;
+    $self->{'OVERRIDE_UNUSED'} = 0;
+    bless($self, $class);
+    # Local temp datastore
+    $self->{'DATA'}        = {};
+
+    return $self;
+}
+
+#
+# Return a list of historical project reservations. Optional type.
+# Type can be a single type or a list reference of types.
+#
+sub HistoricalReservations($$$;$) {
+    my ($class, $project, $user, $type) = @_;
+    my $pid;
+    my @clauses = ();
+    my @answer  = ();
+
+    if (defined($type)) {
+	if (ref($type)) {
+	    my @types = @{$type};
+	    push(@clauses,
+		 "type IN ('" . join( "','", @types ) . "')");
+	}
+	else {
+	    push(@clauses, "type='$type'");
+	}
+    }
+    if (defined($user)) {
+	my $uid = $user->uid();
+	push(@clauses, "uid='$uid'");
+    }
+    if (defined($project)) {
+	my $pid = $project->pid();
+	push(@clauses, "pid='$pid'");
+    }
+    my $query_result =
+	DBQueryWarn("select uuid from reservation_history ".
+		    "where " . join(" AND ", @clauses) . " " .
+		    "order by start asc");
+
+    return ()
+	if (!defined($query_result) || !$query_result->numrows);
+
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $record = Reservation->LookupHistorical($uuid);
+	push(@answer, $record)
+	    if (defined($record));
+    }
+    return @answer;
+}
+
 sub ExptTypes($) {
     my ($exptidx) = @_;
-    
-    my $query_result = DBQueryFatal( "SELECT DISTINCT( n.type ) FROM " .
-				     "reserved AS r, nodes AS n WHERE " .
-				     "r.node_id=n.node_id AND " .
-				     "r.exptidx='$exptidx'" );
+
+    my $query_result =
+	DBQueryFatal("(SELECT DISTINCT( n.type ) FROM " .
+		     " reserved AS r, nodes AS n WHERE " .
+		     " r.node_id=n.node_id AND n.reservable=0 AND " .
+		     " r.exptidx='$exptidx') ".
+		     "union ".
+		     "(SELECT n.node_id FROM " .
+		     " reserved AS r, nodes AS n WHERE " .
+		     " r.node_id=n.node_id AND n.reservable=1 AND " .
+		     " r.exptidx='$exptidx')");
 
     my @types;
     while( my($type) = $query_result->fetchrow_array() ) {
@@ -1667,7 +1868,8 @@ sub ReservableTypes($)
 	my $query_result =
 	    DBQueryWarn("select count(node_id) from nodes ".
 			"where type='$typename' and ".
-			"    role='" . $Node::NODEROLE_TESTNODE . "'");
+			"      role='" . $Node::NODEROLE_TESTNODE . "' and ".
+			"      reservable=0");
 	return ()
 	    if (!$query_result);
 	next
@@ -1679,6 +1881,118 @@ sub ReservableTypes($)
 	push(@result, $type);
     }
     return @result;
+}
+
+#
+# Reservable nodes for reservation system. Class Method.
+#
+sub ReservableNodes($)
+{
+    my ($class)  = @_;
+    my @result   = ();
+	
+    #
+    # Skip if no physical testnodes of this type.
+    #
+    my $query_result =
+	DBQueryWarn("select node_id from nodes ".
+		    "where reservable=1");
+    return ()
+	if (!$query_result || !$query_result->numrows);
+
+    while (my ($node_id) = $query_result->fetchrow_array()) {
+	my $node = Node->Lookup($node_id);
+	push(@result, $node)
+	    if (defined($node));
+    }
+    return @result;
+}
+
+#
+# Mark the reservation for cancellation because it has not been used.
+# We also mark the notified_unused flag so that we do not interefere
+# with command line cancellation (and cancel cancellation).
+#
+# We are wrapped in a transaction by the caller. 
+#
+sub MarkUnused($$)
+{
+    my ($self, $when) = @_;
+    my $idx = $self->idx();
+
+    if ($when) {
+	DBQueryWarn("update future_reservations set ".
+		    "  cancel=FROM_UNIXTIME($when), notified_unused=now() ".
+		    "where idx='$idx'")
+	    or return -1;
+    }
+    else {
+	DBQueryWarn("update future_reservations set ".
+		    "  cancel=null, notified_unused=null ".
+		    "where idx='$idx'")
+	    or return -1;
+    }
+    $self->{'CANCEL'} = $when;
+    $self->{'NOTIFIED_UNUSED'} = $when;
+    return 0
+}
+sub ClearUnused($) { Reservation::MarkUnused($_[0], undef); }
+
+#
+# Similiar operation for cancel.
+#
+sub MarkCancel($$)
+{
+    my ($self, $when) = @_;
+    my $idx = $self->idx();
+
+    if ($when) {
+	DBQueryWarn("update future_reservations set ".
+		    "  cancel=FROM_UNIXTIME($when), ".
+		    "    notified_unused=null ".
+		    "where idx='$idx'")
+	    or return -1;
+    }
+    else {
+	DBQueryWarn("update future_reservations set ".
+		    "  cancel=null, notified_unused=null ".
+		    "where idx='$idx'")
+	    or return -1;
+    }
+    $self->{'CANCEL'} = $when;
+    $self->{'NOTIFIED_UNUSED'} = undef;
+    return 0;
+}
+sub ClearCancel($) { Reservation::MarkCancel($_[0], undef); }
+
+#
+# Mark/Clear the override_unused flag to prevent idle detection
+#
+sub EnableIdleDetection($)
+{
+    my ($self) = @_;
+    my $idx = $self->idx();
+
+    DBQueryWarn("update future_reservations set ".
+		"  override_unused=0 ".
+		"where idx='$idx'")
+	or return -1;
+
+    $self->{'OVERRIDE_UNUSED'} = 0;
+    return 0;
+}
+sub DisableIdleDetection($)
+{
+    my ($self) = @_;
+    my $idx = $self->idx();
+
+    DBQueryWarn("update future_reservations set ".
+		"  override_unused=1 ".
+		"where idx='$idx'")
+	or return -1;
+
+    $self->{'OVERRIDE_UNUSED'} = 1;
+    return 0;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

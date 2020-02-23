@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -63,6 +63,7 @@ my $SUDO	     = "/usr/local/bin/sudo";
 my $WGET             = "/usr/local/bin/wget";
 my $SLEEP_INTERVAL   = 300;
 my $DAILY_INTERVAL   = 24 * 3600;
+my $HOURLY_INTERVAL  = 3600;
 my $OPENSTACK_INTERVAL = 600;
 
 # un-taint path
@@ -107,7 +108,9 @@ use libtestbed;
 use emutil;
 use libEmulab;
 use GeniResponse;
+use GeniUtil;
 use APT_Instance;
+use APT_Aggregate;
 use APT_Dataset;
 use POSIX qw(strftime ceil);
 
@@ -154,7 +157,9 @@ sub KillInstances()
 		    "where (a.canceled!=0 or ".
 		    "       (a.status='failed' and ".
 		    "        (UNIX_TIMESTAMP(now()) - ".
-		    "         UNIX_TIMESTAMP(a.created) > 7200))) and ".
+		    "         UNIX_TIMESTAMP(IF(a.started is null, ".
+		    "                           a.created, a.started)) ".
+		    "           > 7200))) and ".
 		    # Not locked or corresponding slice does not exist.
 		    "      (s.locked is null or s.idx is null)");
     return
@@ -245,56 +250,6 @@ sub FixFailedImaging()
 }
 
 #
-# Expire instances.
-#
-sub ExpireInstances()
-{
-    my $query_result =
-	DBQueryWarn("select a.uuid,s.expires from apt_instances as a ".
-		    "left join geni.geni_slices as s on s.uuid=a.slice_uuid ".
-		    "where (a.status='ready') and ".
-		    "      a.admin_lockdown=0 and s.lockdown=0 and ".
-		    "      a.paniced=0 and ".
-		    "      (UNIX_TIMESTAMP(now()) > ".
-		    "       UNIX_TIMESTAMP(s.expires))");
-    return
-	if (!$query_result);
-
-    while (my ($uuid,$expires) = $query_result->fetchrow_array()) {
-	my $instance = APT_Instance->Lookup($uuid);
-	if (!defined($instance)) {
-	    print STDERR "No such instance $uuid\n";
-	    next;
-	}
-	print STDERR "$uuid expired at $expires\n";
-
-	#
-	# Try to terminate the instance. We cannot take the lock since
-	# we are going to call manage_instance to do the termination.
-	# So, manage_instance might collide with the sa_daemon which
-	# locks the underlying slice, but if that happens we will just
-	# try again after a short wait. If it still fails, then
-	# something is wrong and we will notify.
-	#
-	if ($impotent) {
-	    print STDERR "Would try to terminate $instance\n";
-	    next;
-	}
-	# Use debug option to keep it from going into the background.
-	my $output = emutil::ExecQuiet("$SUDO -u $PROTOUSER ".
-				       "$MANAGEINSTANCE -d terminate $uuid -e");
-	my $status = $?;
-	print STDERR "$output\n"
-	    if ($output ne "");
-	if ($status) {
-	    #
-	    # Need to send email at some point. 
-	    #
-	}
-    }
-}
-
-#
 # Warn about locked down instances that have expired. 
 #
 sub ReportLockdownExpired()
@@ -343,21 +298,15 @@ sub ReportLockdownExpired()
 #
 sub UpdateAggregateGraphs()
 {
-    my $freeblob = {};
+    my $freeblob   = {};
+    my @aggregates = APT_Aggregate->LookupAll();
 
-    my $query_result =
-	DBQueryWarn("select urn from apt_aggregates where noupdate=0");
-
-    return 0
-	if (!$query_result->numrows);
-
-    while (my ($urn) = $query_result->fetchrow_array()) {
-	my $aggregate = APT_Aggregate->Lookup($urn);
-	if (!defined($aggregate)) {
-	    print STDERR "Could not lookup aggregate: $urn\n";
-	    next;
-	}
+    foreach my $aggregate (@aggregates) {
+	my $urn  = $aggregate->urn();
 	my $name = $aggregate->nickname();
+
+	next
+	    if ($aggregate->noupdate());
 
 	#
 	# Load the nodetype info that the portal_monitor gathers.
@@ -569,16 +518,19 @@ sub GatherOpenstackUtilization()
 }
 
 #
-# Kill off stale datasets (that were deleted at the cluster). They are
-# gone, no point in keeping them around.
+# Refresh/Kill datasets. Once a day we check all datasets. Hourly we
+# check only expired datasets.
 #
-sub KillStaleDatasets()
+sub RefreshDatasets($)
 {
+    my ($doall) = @_;
+    
     my $query_result =
 	DBQueryWarn("select uuid,expires from apt_datasets as d ".
-		    "where (type='stdataset' or type='ltdataset') and ".
-		    "      (UNIX_TIMESTAMP(now()) > ".
-		    "       UNIX_TIMESTAMP(expires))");
+		    "where (type='stdataset' or type='ltdataset') ".
+		    ($doall ? "" :
+		     " and (UNIX_TIMESTAMP(now()) > ".
+		     "      UNIX_TIMESTAMP(expires))"));
     return
 	if (!$query_result);
 
@@ -588,11 +540,18 @@ sub KillStaleDatasets()
 	    print STDERR "No such dataset $uuid\n";
 	    next;
 	}
-	my $pid = $dataset->pid();
-	my $id  = $dataset->dataset_id();
-	my $agg = $dataset->aggregate_urn();
-	print STDERR "Dataset $pid/$id at $agg expired at $expires. ".
-	    "Asking for new info ...\n";
+	my $pid   = $dataset->pid();
+	my $id    = $dataset->dataset_id();
+	my $agg   = $dataset->aggregate_urn();
+	my $state = $dataset->state();
+
+	if ($dataset->IsExpired()) {
+	    print STDERR "Dataset $pid/$id at $agg expired at $expires.\n";
+	}
+	if ($impotent) {
+	    print STDERR "Would try to refresh $dataset (state:$state)\n";
+	    next;
+	}
 
 	#
 	# Try to refresh the dataset. We might get back a new expiration,
@@ -606,12 +565,19 @@ sub KillStaleDatasets()
 	#
 	if (!$?) {
 	    $dataset->Refresh();
-	    if ($dataset->IsExpired()) {
-		# Still expired, not sure what to do here. 
-		print STDERR "Dataset is still expired after refresh?\n";
+	    if (!$doall) {
+		if ($dataset->IsExpired()) {
+		    # Still expired, not sure what to do here. 
+		    print STDERR "Dataset is still expired after refresh?\n";
+		}
+		else {
+		    print STDERR "Dataset expires at ".
+			$dataset->expires() . "\n";
+		}
 	    }
-	    else {
-		print STDERR "Dataset is no longer expired after refresh.\n";
+	    if ($state ne $dataset->state()) {
+		print STDERR "State changed from $state to ".
+		    $dataset->state() . "\n";
 	    }
 	    next;
 	}
@@ -636,46 +602,47 @@ sub KillStaleDatasets()
 }
 
 if ($oneshot) {
-    KillInstances();
-    KillStaleDatasets();
+    RefreshDatasets(0);
     exit(0);
 }
+# Wait a bit before making a bunch of noise.
+sleep($SLEEP_INTERVAL);
 
 my $reportcounter    = 0;
-my $openstackcounter = 0;
-
-# Do this once at startup
-if (! NoLogins()) {
-    ReportLockdownExpired();
-}
+my $lastdaily        = 0;
+my $lasthourly       = 0;
 
 while (1) {
     if (NoLogins()) {
 	sleep(5);
 	next;
     }
-    $reportcounter += $SLEEP_INTERVAL;
-    $openstackcounter += $SLEEP_INTERVAL;
-
     print "Running at ".
 	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
 
     KillInstances();
-    KillStaleDatasets();
     FixFailedImaging();
-    ExpireInstances();
     if ($MAINSITE) {
 	UpdateAggregateGraphs();
     }
     PushUpdates();
 
-    if ($reportcounter >= $DAILY_INTERVAL) {
+    if (time() - $lastdaily > $DAILY_INTERVAL) {
 	ReportLockdownExpired();
-	$reportcounter = 0;
+	RefreshDatasets(1);
+	$lastdaily = time();
+    }
+    if (time() - $lasthourly > $HOURLY_INTERVAL) {
+	RefreshDatasets(0);
+	$lasthourly = time();
     }
     exit(0)
 	if ($oneshot);
-    
+
+    emutil::FlushCaches();
+    GeniUtil::FlushCaches();
+
+    print "Waiting for $SLEEP_INTERVAL seconds ...\n";
     sleep($SLEEP_INTERVAL);
 }
 exit(0);

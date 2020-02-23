@@ -1,6 +1,6 @@
 #!/usr/bin/perl -T
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -81,6 +81,8 @@ use File::Temp qw(tempdir);
 use POSIX;
 use JSON::PP;
 use Digest::SHA qw(sha1_hex);
+use LWP::Simple;
+use MIME::Base64;
 
 # Pull in libvnode
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
@@ -117,7 +119,6 @@ my $SYSCTL = "/sbin/sysctl";
 my $VLANCONFIG = "/sbin/vconfig";
 my $MODPROBE = "/sbin/modprobe";
 my $IPTABLES	= "/sbin/iptables";
-my $IPBIN	= "/sbin/ip";
 my $NETSTAT     = "/bin/netstat";
 my $IMAGEZIP    = "/usr/local/bin/imagezip";
 my $IMAGEUNZIP  = "/usr/local/bin/imageunzip";
@@ -158,17 +159,30 @@ my $USE_DOCKER_CE = 1;
 #
 my $USE_LVM = 1;
 #
+# Which docker storage driver should we use; see rootPreConfig().  Note,
+# if you change this, you should change USE_DOCKER_LVM to 0 if
+# !devicemapper; 1 if devicemapper.
+#
+my $DOCKER_STORAGE_DRIVER = 'overlay2';
+#
 # Should we use the Docker devicemapper direct-lvm storage backend?
 # This should remain set, so that it is used for shared hosts.  User
 # should be able to change to the default AUFS backend on dedicated
 # hosts.
 #
-my $USE_DOCKER_LVM = 1;
+my $USE_DOCKER_LVM = 0;
 #
 # Default NFS mounts to read-only for now so that nothing in the
 # container can blow them away accidentally!
 #
 my $NFS_MOUNTS_READONLY = 0;
+#
+# Should we use libvnode's network data structure caching/indexing
+# powers.  We do not by default, because we can effectively use quick
+# operations in /sys for everything we need -- no need to index to avoid
+# slow calls to brctl or whatnot.
+#
+my $USE_LIBVNODE_NETCACHE = 0;
 #
 # Should we log packets the firewall rejects?
 #
@@ -183,10 +197,6 @@ my $DOCKER_DEFAULT_BRIDGE_CIDR = '192.168.254.1/24';
 # bridges because we need to impose traffic control on the host context
 # half of the veth.
 #
-# There *is* a Docker plugin for openvswitch, but we don't want to use
-# that yet; $BR_USE_OPENVSWITCH is simply for existing code that could
-# enable this feature.
-#
 my $USE_MACVLAN = 0;
 #
 # We support macvlans on the control net, but we don't use them because
@@ -199,12 +209,15 @@ my $USE_MACVLAN = 0;
 # unless someone else can find a way around this.
 #
 my $USE_MACVLAN_CNET = 0;
-my $USE_OPENVSWITCH = 0;
 #
-# This flag controls whether we use OVS for GRE tunnels (i.e. for EGRE),
-# or if we use Linux kernel GRE + routing + veths.
+# We try to use $IP instead of $BRCTL.
 #
-my $TUN_USE_OPENVSWITCH = 0;
+my $USE_BRCTL = 0;
+#
+# Attempt to replace simple COPY instructions from Dockerfile- fragments
+# in image augmentation/emulabization with a single COPY.
+#
+my $COPY_OPTIMIZE = 1;
 
 ##
 ## Detected configuration variables.
@@ -214,6 +227,18 @@ my $TUN_USE_OPENVSWITCH = 0;
 # Is this our customized version of Docker?
 #
 my $ISOURDOCKER = 0;
+
+#
+# Is this our customized version with support for multiple networks
+# (ipv4 subnets) on a single bridged network?
+#
+my $ISMULTINETWORK = 0;
+
+#
+# Does this docker support the DOCKER-USER iptables chain?
+#
+my $HASDOCKERUSERCHAIN = 0;
+
 #
 # Some commands/subsystems have evolved in incompatible ways over time,
 # these vars keep track of such things.
@@ -337,6 +362,13 @@ my $JAILCTRLNETMASK = "255.240.0.0";
 # control net has a lexical name at the beginning of everything.
 #
 my $DOCKERCNET = "_dockercnet";
+#
+# Docker does not allow you to map multiple networks to a single bridge.
+# However, if $ISMULTINETWORK is true later on, we are running our
+# custom version which does.  In that case, we *can* support public
+# control net addresses for containers; without it, we cannot.
+#
+my $DOCKERCNETPUB = "_dockercnetpub";
 
 #
 # Some of the core dirs for Emulabization existing Docker images.
@@ -444,10 +476,10 @@ sub bindNetNS($$);
 sub moveNetDeviceToNetNS($$$);
 sub moveNetDeviceFromNetNS($$$);
 sub unbindNetNS($$);
-sub setupImage($$$$$$$$$$);
+sub setupImage($$$$$$$$$$$);
 sub pullImage($$$$;$);
-sub emulabizeImage($;$$$$$$$$);
-sub analyzeImage($$);
+sub emulabizeImage($;$$$$$$$$$);
+sub analyzeImage($$;$);
 sub AllocateIFBs($$$);
 sub ReleaseIFBs($$);
 sub CreateShapingScripts($$$$;$);
@@ -456,6 +488,7 @@ sub CreateRoutingScripts($$);
 sub RunRoutingScripts($$);
 sub RunWithSignalsBlocked($@);
 sub RunProxies($$);
+sub AreProxiesRunning($$);
 sub KillProxies($$);
 sub InsertPostBootIptablesRules($$$$);
 sub RemovePostBootIptablesRules($$$$);
@@ -505,11 +538,11 @@ sub setConcurrency($)
 
 	if ($cpus > 0 && $disks > 0 && $ram > 0) {
 	    if ($ram < 1024 || (!SHAREDHOST() && $hasswapped)) {
-		$MAXCONCURRENT = 1;
-	    } elsif ($cpus <= 2 || $disks == 1 || $ram <= 2048) {
 		$MAXCONCURRENT = 3;
-	    } else {
+	    } elsif ($cpus <= 2 || $disks == 1 || $ram <= 2048) {
 		$MAXCONCURRENT = 5;
+	    } else {
+		$MAXCONCURRENT = 16;
 	    }
 	}
     }
@@ -648,8 +681,11 @@ sub aptGetEnsureInstalled(@)
     return $rc;
 }
 
-sub refreshNetworkDeviceMaps()
+sub refreshLibVnodeNetCache()
 {
+    return
+	if (!$USE_LIBVNODE_NETCACHE);
+
     makeIfaceMaps();
     if (!$USE_MACVLAN) {
 	makeBridgeMaps();
@@ -684,7 +720,7 @@ sub ensureDeps()
     }
 }
 
-# (Must be called only after refreshNetworkDeviceMaps() is called for
+# (Must be called only after refreshLibVnodeNetCache() is called for
 # the first time in init.)
 sub ensureDockerInstalled()
 {
@@ -708,14 +744,16 @@ sub ensureDockerInstalled()
 	    mysystem2("service docker restart");
 
 	    # Remap, cause Docker creates some ifaces.
-	    refreshNetworkDeviceMaps();
+	    refreshLibVnodeNetCache();
 	}
 
 	#
 	# Check which docker this is.
 	#
-	if (-e "/usr/share/docker.io/EMULAB.md") {
+	my $rc = system('grep -q PrivatePoolId `which dockerd`');
+	if ($rc == 0) {
 	    $ISOURDOCKER = 1;
+	    TBDebugTimeStamp("init: ISOURDOCKER=1");
 	}
     }
     else {
@@ -762,14 +800,53 @@ sub ensureDockerInstalled()
 	    mysystem2("service docker restart");
 
 	    # Remap, cause Docker creates some ifaces.
-	    refreshNetworkDeviceMaps();
+	    refreshLibVnodeNetCache();
 	}
 
 	#
 	# Check which docker this is.
 	#
-	if (-e "/usr/share/docker-ce/EMULAB.md") {
+	my $rc = system('grep -q PrivatePoolId `which dockerd`');
+	if ($rc == 0) {
 	    $ISOURDOCKER = 1;
+	    TBDebugTimeStamp("init: ISOURDOCKER=1");
+	}
+    }
+    if ($ISOURDOCKER) {
+	my $rc = system('grep -q MultiNetwork `which dockerd`');
+	if ($rc == 0) {
+	    $ISMULTINETWORK = 1;
+	    TBDebugTimeStamp("init: ISMULTINETWORK=1");
+	}
+	$rc = system('grep -q DOCKER-USER `which dockerd`');
+	if ($rc == 0) {
+	    $HASDOCKERUSERCHAIN = 1;
+	    TBDebugTimeStamp("init: HASDOCKERUSERCHAIN=1");
+	}
+    }
+
+    #
+    # Wait for docker to be running and responding; this may take awhile if
+    # we are running hundreds of containers.
+    #
+    my @lines = `systemctl is-active docker.service 2>&1`;
+    my $needrestart = 0;
+    if (!($? == 0 || (@lines > 0 && $lines[0] =~ /^activ/))) {
+	$needrestart = 1;
+    }
+    if ($needrestart) {
+	mysystem2("systemctl try-restart docker.service");
+    }
+    my $startwaittime = time();
+    while ((time() - $startwaittime) < 900) {
+	my $rc = system("docker info");
+	if (!$rc) {
+	    TBDebugTimeStamp("docker appears to be running");
+	    last;
+	}
+	else {
+	    TBDebugTimeStamp("docker is not yet running; waiting...");
+	    sleep(1);
 	}
     }
 
@@ -798,13 +875,9 @@ sub ensureDockerInstalled()
 	$json = decode_json($origjsontext);
     }
 
-    # Check to ensure the docker iface has a non-172.16 subnet:
-    my $diface = getIfaceInfo("docker0");
-    if (!defined($diface)) {
-	fatal("Could not find default docker network interface; aborting!");
-    }
-    if ($diface->{'ip'} ne $DOCKER_DEFAULT_BRIDGE_IP
-	|| !defined($json) || !exists($json->{'bip'})
+    # Check to ensure the docker iface has a non-172.16 subnet, unless
+    # we already fixed that:
+    if (!exists($json->{'bip'})
 	|| $json->{'bip'} ne $DOCKER_DEFAULT_BRIDGE_CIDR) {
 	TBDebugTimeStamp("Moving docker0 to $DOCKER_DEFAULT_BRIDGE_CIDR");
 
@@ -814,7 +887,7 @@ sub ensureDockerInstalled()
     }
 
     # Check to ensure we're doing the right thing w.r.t. iptables:
-    my $iptval = ($ISOURDOCKER) ? JSON::PP::true : JSON::PP::false;
+    my $iptval = ($HASDOCKERUSERCHAIN) ? JSON::PP::true : JSON::PP::false;
     my $ichanged = 0;
     if (!defined($json) || !exists($json->{"iptables"})
 	|| $json->{'iptables'} != $iptval) {
@@ -841,7 +914,7 @@ sub ensureDockerInstalled()
 
 	mysystem2("service docker stop");
 
-	if ($ichanged && !$ISOURDOCKER) {
+	if ($ichanged && !$HASDOCKERUSERCHAIN) {
 	    #
 	    # Make sure all the Docker stuff is undone, if this is not
 	    # our Docker.
@@ -852,14 +925,18 @@ sub ensureDockerInstalled()
 	    mysystem("$IPTABLES -F FORWARD");
 	    mysystem("$IPTABLES -F DOCKER");
 	    mysystem2("$IPTABLES -X DOCKER");
-	    mysystem("$IPTABLES -F DOCKER-ISOLATION");
+	    mysystem2("$IPTABLES -F DOCKER-ISOLATION");
 	    mysystem2("$IPTABLES -X DOCKER-ISOLATION");
+	    mysystem2("$IPTABLES -F DOCKER-ISOLATION-STAGE-1");
+	    mysystem2("$IPTABLES -X DOCKER-ISOLATION-STAGE-1");
+	    mysystem2("$IPTABLES -F DOCKER-ISOLATION-STAGE-2");
+	    mysystem2("$IPTABLES -X DOCKER-ISOLATION-STAGE-2");
 	}
 
 	mysystem2("service docker start");
 
 	# Remap, cause Docker creates some ifaces.
-	refreshNetworkDeviceMaps();
+	refreshLibVnodeNetCache();
     }
 
     return 0;
@@ -977,27 +1054,9 @@ sub removeContainerFromDockerExecSSH($) {
     my ($vnode_id,) = @_;
 
     unlink("$DOCKER_EXEC_SSHD_CONFIGDIR/0.${vnode_id}.port");
-    unlink("$DOCKER_EXEC_SSHD_CONFIGDIR/0.${vnode_id}.match");
+    unlink("$DOCKER_EXEC_SSHD_CONFIGDIR/1.${vnode_id}.match");
 
     return rebuildAndReloadDockerExecSSH();
-}
-
-sub getBridgeInterfaces($)
-{
-    my ($brname,) = @_;
-
-    my @output = `$BRCTL show $brname`;
-    if ($?) {
-	return undef;
-    }
-
-    my @retval = ();
-    foreach my $line (@output) {
-	if ($line =~ /^[^\s]+\s+[^\s]+\s+[^\s]+\s+([^\s])+$/) {
-	    push(@retval,$1);
-	}
-    }
-    return @retval;
 }
 
 sub getDockerNetMemberIds($)
@@ -1006,6 +1065,12 @@ sub getDockerNetMemberIds($)
 
     my ($code,$content,$resp) = getClient()->network_inspect($netname);
     if ($code) {
+	return undef;
+    }
+    if (ref($content) eq 'ARRAY') {
+	$content = $content->[0];
+    }
+    if (ref($content) ne 'HASH') {
 	return undef;
     }
     if (!exists($content->{"Containers"})) {
@@ -1195,39 +1260,190 @@ sub setupLVM()
 #
 sub addbr($)
 {
-    my $br  = $_[0];
-    my $cmd = ($USE_OPENVSWITCH ? "$OVSCTL add-br" : "$BRCTL addbr") . " $br";
+    my ($br) = @_;
 
-    system($cmd);
+    if ($USE_BRCTL) {
+	system("$BRCTL addbr $br");
+    }
+    else {
+	system("$IP link add $br type bridge");
+    }
 }
 sub delbr($)
 {
-    my $br  = $_[0];
-    if ($USE_OPENVSWITCH) {
-	mysystem2("$OVSCTL del-br $br");
+    my ($br) = @_;
+
+    if ($USE_BRCTL) {
+	mysystem2("$IP link set $br down");
+	mysystem2("$BRCTL delbr $br");
     }
     else {
-	mysystem2("$IFCONFIG $br down");
-	mysystem2("$BRCTL delbr $br");
+	mysystem2("$IP link del $br");
     }
 }
 sub addbrif($$)
 {
-    my $br  = $_[0];
-    my $if  = $_[1];
-    my $cmd = ($USE_OPENVSWITCH ? "$OVSCTL add-port" : "$BRCTL addif") .
-	" $br $if";
+    my ($br,$if) = @_;
 
-    system($cmd);
+    if ($USE_BRCTL) {
+	system("$BRCTL addif $br $if");
+    }
+    else {
+	system("$IP link set $if master $br");
+    }
 }
 sub delbrif($$)
 {
-    my $br  = $_[0];
-    my $if  = $_[1];
-    my $cmd = ($USE_OPENVSWITCH ? "$OVSCTL del-port" : "$BRCTL delif") .
-	" $br $if";
+    my ($br,$if) = @_;
 
-    system($cmd);
+    if ($USE_BRCTL) {
+	system("$BRCTL delif $br $if");
+    }
+    else {
+	system("$IP link set $if nomaster");
+    }
+}
+
+#
+# Network support.
+#
+
+sub ifaceInfo($) {
+    my ($iface) = @_;
+
+    if ($USE_LIBVNODE_NETCACHE) {
+	return libvnode::getIfaceInfo($iface);
+    }
+    else {
+	return libvnode::getIfaceInfoNoCache($iface);
+    }
+}
+
+sub findIfaceByMAC($) {
+    my ($mac) = @_;
+
+    if ($USE_LIBVNODE_NETCACHE) {
+	return libvnode::findIface($mac);
+    }
+    else {
+	if ($mac !~ /:/) {
+	    $mac = fixupMac($mac);
+	}
+	my $line = `ip -br link | grep $mac`;
+	if (defined($line) && $line =~ /^([^\@\s]+)/) {
+	    return $1;
+	}
+	return undef;
+    }
+}
+
+sub isIfaceInBridge($$) {
+    my ($iface,$bridge) = @_;
+
+    if ($USE_LIBVNODE_NETCACHE) {
+	my $br = libvnode::findBridge($iface);
+	return 1
+	    if (defined($br) && $br eq $bridge);
+	return 0;
+    }
+    else {
+	if (-e "/sys/class/net/$iface/lower_$bridge") {
+	    return 1;
+	}
+	return 0;
+    }
+}
+
+sub getBridgeForIface($) {
+    my ($iface) = @_;
+
+    if ($USE_LIBVNODE_NETCACHE) {
+	return libvnode::findBridge($iface);
+    }
+    else {
+	opendir(DIR,"/sys/class/net/$iface")
+	    or return undef;
+	while (my $dir = readdir(DIR)) {
+	    chomp($dir);
+	    if ($dir =~ /upper_(.+)$/) {
+		return $1;
+	    }
+	}
+	return undef;
+    }
+}
+
+sub getBridgeIfaces($) {
+    my ($brname) = @_;
+
+    if ($USE_LIBVNODE_NETCACHE) {
+	return libvnode::findBridgeIfaces($brname);
+    }
+    else {
+	my @ret = ();
+	opendir(DIR,"/sys/class/net/$brname/")
+	    or return undef;
+	while (my $dir = readdir(DIR)) {
+	    chomp($dir);
+	    if ($dir =~ /lower_(.+)$/) {
+		push(@ret,$1);
+	    }
+	}
+	return @ret;
+    }
+}
+
+sub getMacvlanIfaces($) {
+    my ($brname) = @_;
+
+    if ($USE_LIBVNODE_NETCACHE) {
+	return libvnode::findMacvlanIfaces($brname);
+    }
+    else {
+	my @ret = ();
+	opendir(DIR,"/sys/class/net/$brname/")
+	    or return undef;
+	while (my $dir = readdir(DIR)) {
+	    chomp($dir);
+	    if ($dir =~ /lower_(.+)$/) {
+		push(@ret,$1);
+	    }
+	}
+	return @ret;
+    }
+}
+
+sub getControlNet() {
+    open(FD,"/var/emulab/boot/controlif")
+	or return undef;
+    my $controlif = <FD>;
+    close(FD);
+    chomp($controlif);
+    return undef 
+	if ($controlif eq '');
+    open(FD,"/var/emulab/boot/routerip")
+	or return undef;
+    my $gw = <FD>;
+    close(FD);
+    chomp($gw);
+    return undef 
+	if ($gw eq '');
+    open(FD,"/var/emulab/boot/myip")
+	or return undef;
+    my $ip = <FD>;
+    close(FD);
+    chomp($ip);
+    return undef 
+	if ($ip eq '');
+
+    my $ref = getIfaceInfoNoCache($controlif);
+    return undef
+	if (!defined($ref));
+    return undef
+	if ($ref->{'ip'} ne $ip);
+
+    return ($ref->{'iface'},$ref->{'ip'},$ref->{'mask'},$ref->{'maskbits'},
+	    $ref->{'network'},$ref->{'mac'},$gw);
 }
 
 ##
@@ -1258,8 +1474,21 @@ sub init($)
     #
     # Check which docker this is.
     #
-    if (-e "/usr/share/docker.io/EMULAB.md") {
+    my $rc = system('grep -q PrivatePoolId `which dockerd`');
+    if ($rc == 0) {
 	$ISOURDOCKER = 1;
+	TBDebugTimeStamp("init: ISOURDOCKER=1");
+
+	$rc = system('grep -q MultiNetwork `which dockerd`');
+	if ($rc == 0) {
+	    $ISMULTINETWORK = 1;
+	    TBDebugTimeStamp("init: ISMULTINETWORK=1");
+	}
+	$rc = system('grep -q DOCKER-USER `which dockerd`');
+	if ($rc == 0) {
+	    $HASDOCKERUSERCHAIN = 1;
+	    TBDebugTimeStamp("init: HASDOCKERUSERCHAIN=1");
+	}
     }
 
     return 0;
@@ -1269,9 +1498,9 @@ sub init($)
 # Called on each vnode, but should only be executed once per boot.
 # We use a file in /var/run (cleared on reboots) to ensure this.
 #
-sub rootPreConfig($)
+sub rootPreConfig($;$)
 {
-    my $bossip = shift;
+    my ($bossip,$hostattributes) = @_;
     my ($code,$content,$resp);
 
     #
@@ -1282,7 +1511,7 @@ sub rootPreConfig($)
 	TBDebugTimeStamp("rootPreConfig: grabbing global lock $GLOBAL_CONF_LOCK")
 	    if ($lockdebug);
 	my $locked = TBScriptLock($GLOBAL_CONF_LOCK,
-				  TBSCRIPTLOCK_GLOBALWAIT(), 900);
+				  TBSCRIPTLOCK_GLOBALWAIT(), 1200);
 	if ($locked != TBSCRIPTLOCK_OKAY()) {
 	    return 0
 		if ($locked == TBSCRIPTLOCK_IGNORE());
@@ -1303,9 +1532,28 @@ sub rootPreConfig($)
     TBDebugTimeStamp("Configuring root vhost context");
 
     #
+    # Check if we are using an alternate storage driver.
+    #
+    if (defined($hostattributes)
+	&& exists($hostattributes->{"DOCKER_STORAGE_DRIVER"})) {
+	my $driver = $hostattributes->{"DOCKER_STORAGE_DRIVER"};
+	if ($driver eq 'overlay2' || $driver eq 'aufs') {
+	    $DOCKER_STORAGE_DRIVER = $driver;
+	    $USE_DOCKER_LVM = 0;
+	}
+	elsif ($driver eq 'devicemapper') {
+	    $DOCKER_STORAGE_DRIVER = $driver;
+	    $USE_DOCKER_LVM = 1;
+	}
+	else {
+	    warn("bogus storage driver $driver; ignoring!\n");
+	}
+    }
+
+    #
     # Ensure we have the latest bridge/iface state!
     #
-    refreshNetworkDeviceMaps();
+    refreshLibVnodeNetCache();
 
     #
     # Make sure we actually have Docker.
@@ -1344,8 +1592,12 @@ sub rootPreConfig($)
     }
 
     my ($cnet_iface,$cnet_ip,$cnet_mask,
-	$cnet_maskbits,$cnet_net,$cnet_mac,$cnet_gw) = findControlNet();
-    my ($alias_ip,$alias_mask,$vmac) = hostControlNet();
+	$cnet_maskbits,$cnet_net,$cnet_mac,$cnet_gw) = getControlNet();
+    if (!defined($cnet_iface) || !defined($cnet_ip)) {
+	print STDERR "ERROR: failed to detect control network interface!\n";
+	return -1;
+    }
+    my ($alias_ip,$alias_mask,$vmac) = hostControlNet($cnet_ip,$cnet_mask);
     my ($VCNET_NET,undef,$VCNET_GW,$VCNET_SLASHMASK) = findVirtControlNet();
     my $nettype = ($USE_MACVLAN_CNET) ? "macvlan" : "bridge";
 
@@ -1405,10 +1657,10 @@ sub rootPreConfig($)
             #
 	    print "Creating $DOCKERCNET macvlan on $cnet_iface".
 		" ($alias_ip,$alias_mask)...\n";
-	    mysystem("ip link add link $cnet_iface name $DOCKERCNET".
+	    mysystem("$IP link add link $cnet_iface name $DOCKERCNET".
 		     " address $vmac type macvlan mode bridge");
-	    mysystem("ip addr replace $alias_ip/$alias_mask dev $DOCKERCNET");
-	    mysystem("ip link set up $DOCKERCNET");
+	    mysystem("$IP addr replace $alias_ip/$alias_mask dev $DOCKERCNET");
+	    mysystem("$IP link set up $DOCKERCNET");
 
 	    #my $isroutable = isRoutable($alias_ip);
 	    ## Add a route to reach the vnodes. Do it for the entire
@@ -1436,20 +1688,17 @@ sub rootPreConfig($)
             # above.
             #
 	    $cnet_iface = "dummycnet";
-	    mysystem2("ip link add dummycnet type dummy");
+	    mysystem2("$IP link add dummycnet type dummy");
 	    print "Creating $DOCKERCNET macvlan on $cnet_iface".
 		" ($alias_ip,$alias_mask)...\n";
-	    mysystem("ip link add link $cnet_iface".
+	    mysystem("$IP link add link $cnet_iface".
 		     " name $DOCKERCNET address $vmac type macvlan mode bridge");
-	    mysystem("ip addr replace $alias_ip/$alias_mask dev $DOCKERCNET");
-	    mysystem("ip link set up $DOCKERCNET");
+	    mysystem("$IP addr replace $alias_ip/$alias_mask dev $DOCKERCNET");
+	    mysystem("$IP link set up $DOCKERCNET");
 	}
     }
     elsif (!$USE_MACVLAN_CNET
-	   && (!$dcnexists
-	       || ! -e "/sys/class/net/$DOCKERCNET"
-	       || !defined(findBridge($orig_cnet_iface))
-	       || findBridge($orig_cnet_iface) ne $DOCKERCNET)) {
+	   && (!$dcnexists || !isIfaceInBridge($orig_cnet_iface,$DOCKERCNET))) {
 	my $alias_net =
 	    inet_ntoa(inet_aton($alias_ip) & inet_aton($alias_mask));
 
@@ -1500,7 +1749,7 @@ sub rootPreConfig($)
 
 	    # First grab the default gateway.
 	    my ($defroute,$defrouteiface);
-	    open(ROUTEOUTPUT,"ip route list |")
+	    open(ROUTEOUTPUT,"$IP route list |")
 		or fatal("unable to get route list via 'ip'!");
 	    while (!eof(ROUTEOUTPUT)) {
 		my $line = <ROUTEOUTPUT>;
@@ -1522,11 +1771,10 @@ sub rootPreConfig($)
 	    # it's not in the bridge already.  If it's already in the
 	    # bridge, no need to do any of this.
 	    #
-	    if (!defined(findBridge($orig_cnet_iface))
-		|| findBridge($orig_cnet_iface) ne $DOCKERCNET) {
-		mysystem2("ip link set down $orig_cnet_iface");
-		mysystem2("ip addr del $ipandmaskbits dev $orig_cnet_iface");
-		mysystem2("ip addr flush dev $orig_cnet_iface");
+	    if (!isIfaceInBridge($orig_cnet_iface,$DOCKERCNET)) {
+		mysystem2("$IP link set down $orig_cnet_iface");
+		mysystem2("$IP addr del $ipandmaskbits dev $orig_cnet_iface");
+		mysystem2("$IP addr flush dev $orig_cnet_iface");
 		addbrif($DOCKERCNET,$orig_cnet_iface);
 	    }
 
@@ -1536,7 +1784,7 @@ sub rootPreConfig($)
 	    # Docker insists on setting that itself.
 	    #
 	    if (!$dcnexists && -e "/sys/class/net/$DOCKERCNET") {
-		mysystem2("ip addr flush dev $DOCKERCNET");
+		mysystem2("$IP addr flush dev $DOCKERCNET");
 	    }
 
 	    #
@@ -1558,23 +1806,23 @@ sub rootPreConfig($)
 	    # Always flush the bridge's Docker-imposed addr immediately,
 	    # whether it existed or we created it.
 	    #
-	    mysystem("ip addr flush dev $DOCKERCNET");
+	    mysystem("$IP addr flush dev $DOCKERCNET");
 
 	    #
 	    # Set the $DOCKERCNET configuration to one that both we and
 	    # Docker are happy with.
 	    #
-	    mysystem2("ip addr add $ipandmaskbits dev $DOCKERCNET");
+	    mysystem2("$IP addr add $ipandmaskbits dev $DOCKERCNET");
 	    if ($?) {
-		mysystem("ip addr replace $ipandmaskbits dev $DOCKERCNET");
+		mysystem("$IP addr replace $ipandmaskbits dev $DOCKERCNET");
 	    }
-	    mysystem("ip link set up $DOCKERCNET");
-	    mysystem("ip link set up $orig_cnet_iface");
+	    mysystem("$IP link set up $DOCKERCNET");
+	    mysystem("$IP link set up $orig_cnet_iface");
 	    if ($defrouteiface eq $cnet_iface
 		|| $defrouteiface eq $orig_cnet_iface) {
-		mysystem("ip route replace default via $defroute");
+		mysystem("$IP route replace default via $defroute");
 	    }
-	    mysystem("ip addr add $alias_ip/$alias_mask dev $DOCKERCNET".
+	    mysystem("$IP addr add $alias_ip/$alias_mask dev $DOCKERCNET".
 		     " label $DOCKERCNET:1");
 
 	    #
@@ -1589,8 +1837,8 @@ sub rootPreConfig($)
 	    # If this node is remote, then it gets a bridge without the
 	    # control net.
 	    #
-	    mysystem("ip addr replace $alias_ip/$alias_mask dev $DOCKERCNET");
-	    mysystem("ip link set up $DOCKERCNET");
+	    mysystem("$IP addr replace $alias_ip/$alias_mask dev $DOCKERCNET");
+	    mysystem("$IP link set up $DOCKERCNET");
 	}
     }
 
@@ -1603,7 +1851,7 @@ sub rootPreConfig($)
 	    # Next, we create a docker macvlan network to front for the
 	    # virt control net.
 	    #
-	    TBDebugTimeStamp("creating macvlan docker network $DOCKERCNET");
+	    TBDebugTimeStamp("creating macvlan Docker network $DOCKERCNET");
 	    ($code,$content) = getClient()->network_create_macvlan(
 		$DOCKERCNET,"${VCNET_NET}/${VCNET_SLASHMASK}",$alias_ip,
 		$cnet_iface);
@@ -1613,13 +1861,30 @@ sub rootPreConfig($)
 	    }
 	}
 	else {
-	    TBDebugTimeStamp("creating bridged docker network $DOCKERCNET");
+	    my $argref = undef;
+	    if ($ISMULTINETWORK) {
+		$argref = {
+		    "com.docker.network.bridge.multi_network" => "True"
+		};
+	    }
+	    TBDebugTimeStamp("creating bridged Docker network $DOCKERCNET");
 	    ($code,$content) = getClient()->network_create_bridge(
 		$DOCKERCNET,"${VCNET_NET}/${VCNET_SLASHMASK}",$alias_ip,
-		$DOCKERCNET);
+		$DOCKERCNET,$argref);
 	    if ($code) {
 		fatal("failed to create bridged Docker $DOCKERCNET control net:".
 		      " $content");
+	    }
+	    if ($ISMULTINETWORK) {
+		TBDebugTimeStamp("creating bridged public Docker network".
+				 $DOCKERCNETPUB);
+		($code,$content) = getClient()->network_create_bridge(
+		    $DOCKERCNETPUB,"$cnet_net/$cnet_maskbits",$cnet_ip,
+		    $DOCKERCNET,$argref);
+		if ($code) {
+		    fatal("failed to create public bridged Docker network".
+			  "$DOCKERCNET control net: $content");
+		}
 	    }
 	}
     }
@@ -1628,12 +1893,15 @@ sub rootPreConfig($)
     # Mesh our iptables setup with docker's.  This is nontrivial because
     # Docker does one nasty thing: it continually forces its -j
     # DOCKER-ISOLATION rule into the top of the FORWARD chain on
-    # significant operations (like creating a container).  This has been
-    # much discussed but not fixed, so we have two strategies.  First,
-    # we have a patched version of Docker that does not do this crazy
-    # crap; second, if that is not available, we disable its use of
-    # iptables and do all the stuff Docker would normally do that we
-    # actually need (a subset of what Docker normally does).
+    # significant operations (like creating a container).  This has
+    # since been fixed in more recent versions (there is a DOCKER-USER
+    # chain at the top of the forward chain that we hook into), so we
+    # have two strategies.  First, if DOCKER-USER exists, we hook it;
+    # second, if that is not available, we disable its use of iptables
+    # and do all the stuff Docker would normally do that we actually
+    # need (a subset of what Docker normally does).  However, in this
+    # latter case, iptables won't behave as expected for regular
+    # containers.  Nothing we can do about that.
     #
     # We use the same basic strategy in either case: what we want to do
     # is flow all packets on the control net bridge through our
@@ -1643,7 +1911,29 @@ sub rootPreConfig($)
     mysystem2("$IPTABLES -N EMULAB-ISOLATION");
     mysystem("$IPTABLES -F EMULAB-ISOLATION");
     mysystem("$IPTABLES -A EMULAB-ISOLATION -j RETURN");
-    mysystem("$IPTABLES -I FORWARD -j EMULAB-ISOLATION");
+    if ($HASDOCKERUSERCHAIN) {
+	if (mysystem2("$IPTABLES -L DOCKER-USER") == 1) {
+	    #
+	    # There seems to be bugs where DOCKER-USER does not exist
+	    # sometimes.  So make it exist, and set up the jump rules.
+	    #
+	    mysystem("$IPTABLES -N DOCKER-USER");
+	    mysystem("$IPTABLES -A FORWARD -j DOCKER-USER");
+	}
+	mysystem("$IPTABLES -F DOCKER-USER");
+	mysystem("$IPTABLES -I DOCKER-USER -j EMULAB-ISOLATION");
+	#
+	# In more recent versions of Docker, by default, bridge networks
+	# are not allowed to leave the host (i.e. via masquerading).
+	# So, fix that.
+	#
+	mysystem("$IPTABLES -A DOCKER-USER -o docker0 -j ACCEPT");
+	mysystem("$IPTABLES -A DOCKER-USER -o _dockercnet -j ACCEPT");
+	mysystem("$IPTABLES -A DOCKER-USER -j RETURN");
+    }
+    else {
+	mysystem("$IPTABLES -I FORWARD -j EMULAB-ISOLATION");
+    }
 
     #
     # Also, Docker handles MASQUERADING for us by default.  We don't
@@ -1660,14 +1950,15 @@ sub rootPreConfig($)
     # exceptions ahead of Docker's default MASQ-all rules.
     #
     if (!$ISREMOTENODE) {
-	my (undef,undef,$ctlmask,undef,$ctlnet,undef,undef) = findControlNet();
 	mysystem("$IPTABLES -t nat -I POSTROUTING".
 		 " -s ${VCNET_NET}/${VCNET_SLASHMASK}".
 		 " -d ${VCNET_NET}/${VCNET_SLASHMASK} -j ACCEPT");
 	mysystem("$IPTABLES -t nat -I POSTROUTING".
 		 " -s ${VCNET_NET}/${VCNET_SLASHMASK}".
-		 " -d ${ctlnet}/${ctlmask} -j ACCEPT");
-	if (!$ISOURDOCKER) {
+		 " -d ${cnet_net}/${cnet_mask} -j ACCEPT");
+	# NB: Ok, more recent versions of Docker no longer seem to allow
+	# default outbound masquerading -- so always do it.
+	if (1 || !$ISOURDOCKER) {
 	    mysystem("$IPTABLES -t nat -A POSTROUTING".
 		     " -s ${VCNET_NET}/${VCNET_SLASHMASK}".
 		     " -j MASQUERADE");
@@ -1700,12 +1991,7 @@ sub rootPreConfig($)
     }
 
     # For tunnels
-    if ($USE_OPENVSWITCH) {
-	mysystem("$MODPROBE openvswitch");
-    }
-    else {
-	mysystem("$MODPROBE ip_gre");
-    }
+    mysystem("$MODPROBE ip_gre");
 
     # For VLANs
     mysystem("$MODPROBE 8021q");
@@ -1714,12 +2000,6 @@ sub rootPreConfig($)
     # modprobe.
     mysystem("$MODPROBE sch_netem");
     mysystem("$MODPROBE sch_htb");
-
-    # start up open vswitch stuff.
-    if ($USE_OPENVSWITCH) {
-        # For tunnels
-	mysystem("$OVSSTART --delete-bridges start");
-    }
 
     # For bandwidth contraints.
     mysystem("$MODPROBE ifb");
@@ -1757,7 +2037,7 @@ sub rootPreConfig($)
 	#
 	# If we are instead using the devicemapper direct-lvm backend,
 	# we need both $EXTRAFS and $INFOFS, but we also need a beefy
-	# thinpool for Docker.  In this case, we use max(5GB,3%VG) LV
+	# thinpool for Docker.  In this case, we use min(32GB,15%VG) LV
 	# for $INFOFS; use min(32GB,15%remainingVG) for the $EXTRAFS;
 	# then we provision the thin pool with 90% of the remaining
 	# space (i.e., 0.90*(totalVG - sizeof($EXTRAFS) -
@@ -1774,11 +2054,11 @@ sub rootPreConfig($)
 
 	if (!$USE_DOCKER_LVM) {
 	    # We will only create $EXTRAFS and $INFOFS.
-	    if (0.03 * $remaining < 5) {
-		$infosize = 0.03 * $remaining;
+	    if (0.15 * $remaining < 32) {
+		$infosize = 0.15 * $remaining;
 	    }
 	    else {
-		$infosize = 5;
+		$infosize = 32;
 	    }
 	    $remaining -= $infosize;
 	    $extrasize = 0.90 * $remaining;
@@ -1787,11 +2067,11 @@ sub rootPreConfig($)
 	else {
 	    # We will create $EXTRAFS and $INFOFS, as well as the Docker
 	    # thin pool.
-	    if (0.03 * $remaining < 5) {
-		$infosize = 0.03 * $remaining;
+	    if (0.15 * $remaining < 32) {
+		$infosize = 0.15 * $remaining;
 	    }
 	    else {
-		$infosize = 5;
+		$infosize = 32;
 	    }
 	    $remaining -= $infosize;
 	    if (0.15 * $remaining < 32) {
@@ -1810,35 +2090,41 @@ sub rootPreConfig($)
 	    $tmplvname = $1;
 	}
 	if (!libvnode::lvExists($VGNAME,$tmplvname)) {
-	    print "Creating container info FS ...\n";
-	    if (createExtraFS($INFOFS, $VGNAME, "${infosize}G")) {
-		TBScriptUnlock();
-		return -1;
-	    }
+	    print "Creating container info FS $tmplvname ...\n";
+	}
+	else {
+	    print "Mounting container info FS $tmplvname ...\n";
+	}
+	if (createExtraFS($INFOFS, $VGNAME, "${infosize}G")) {
+	    TBScriptUnlock();
+	    return -1;
 	}
 	if ($EXTRAFS =~ /\/(.*)$/) {
 	    $tmplvname = $1;
 	}
+	my $already = 0;
 	if (!libvnode::lvExists($VGNAME,$tmplvname)) {
-	    print "Creating scratch FS ...\n";
-	    my $already = 0;
+	    print "Creating scratch FS $tmplvname ...\n";
 	    if (-d $EXTRAFS) {
 		$already = 1;
 		mysystem("mv $EXTRAFS ${EXTRAFS}.bak");
 	    }
-	    if (createExtraFS($EXTRAFS, $VGNAME, "${extrasize}G")) {
-		TBScriptUnlock();
-		return -1;
+	}
+	else {
+	    print "Mounting scratch FS $tmplvname ...\n";
+	}
+	if (createExtraFS($EXTRAFS, $VGNAME, "${extrasize}G")) {
+	    TBScriptUnlock();
+	    return -1;
+	}
+	if ($already) {
+	    my @files = glob("${EXTRAFS}.bak/*");
+	    foreach my $file (@files) {
+		my $base = basename($file);
+		mysystem("/bin/mv $file $EXTRAFS")
+		    if (! -e "$EXTRAFS/$base");
 	    }
-	    if ($already) {
-		my @files = glob("${EXTRAFS}.bak/*");
-		foreach my $file (@files) {
-		    my $base = basename($file);
-		    mysystem("/bin/mv $file $EXTRAFS")
-			if (! -e "$EXTRAFS/$base");
-		}
-		mysystem("/bin/rm -rf ${EXTRAFS}.bak");
-	    }
+	    mysystem("/bin/rm -rf ${EXTRAFS}.bak");
 	}
 	if ($USE_DOCKER_LVM && !libvnode::lvExists($VGNAME,"thinpool")) {
 	    print "Creating Docker Thin Pool...\n";
@@ -1872,9 +2158,11 @@ sub rootPreConfig($)
 	    mysystem("lvchange --metadataprofile $VGNAME-thinpool".
 		     " $VGNAME/thinpool");
 	    mysystem("lvs -o+seg_monitor");
-
+	}
+	if (defined($DOCKER_STORAGE_DRIVER)) {
 	    #
-	    # Setup the Docker devicemapper direct-lvm storage backend.
+	    # Setup the Docker storage backend.
+	    # If devicemapper direct-lvm storage backend, like
 	    # { "storage-driver": "devicemapper",
 	    #   "storage-opts": [
 	    #     "dm.thinpooldev=/dev/mapper/docker-thinpool",
@@ -1903,12 +2191,14 @@ sub rootPreConfig($)
 	    # Write our config.
 	    # Don't restart docker; that happens at the end of $USE_LVM.
 	    $needdockerrestart = 1;
-	    $json->{"storage-driver"} = "devicemapper";
-	    $json->{"storage-opts"} = [
-		"dm.thinpooldev=/dev/mapper/${VGNAME}-thinpool",
-		"dm.use_deferred_removal=true",
-		"dm.use_deferred_deletion=true"
-		];
+	    $json->{"storage-driver"} = "$DOCKER_STORAGE_DRIVER";
+	    if ($DOCKER_STORAGE_DRIVER eq 'devicemapper') {
+		$json->{"storage-opts"} = [
+		    "dm.thinpooldev=/dev/mapper/${VGNAME}-thinpool",
+		    "dm.use_deferred_removal=true",
+		    "dm.use_deferred_deletion=true"
+		    ];
+	    }
 
 	    TBDebugTimeStamp("Updating /etc/docker/daemon.json");
 
@@ -1944,22 +2234,25 @@ sub rootPreConfig($)
 		TBScriptUnlock();
 		return -1;
 	    }
-	    mysystem2("mount -t aufs | grep /var/lib/docker/");
+	    my $rca = mysystem2("mount -t aufs | grep /var/lib/docker/");
+	    my $rco = mysystem2("mount -t overlay2 | grep /var/lib/docker/");
 	    if ($? == 0) {
 		warn("filesystems still mounted in /var/lib/docker; aborting!");
 		TBScriptUnlock();
 		return -1;
 	    }
-	    mkdir("$EXTRAFS/var.lib.docker");
-	    #
-	    # We need this stuff to be sticky across reloads, so move it
-	    # into an lvm. If we lose the lvm, well then we are screwed.
-	    #
-	    my @files = glob("/var/lib/docker/*");
-	    foreach my $file (@files) {
-		my $base = basename($file);
-		mysystem("/bin/mv $file $EXTRAFS/var.lib.docker")
-		    if (! -e "$EXTRAFS/var.lib.docker/$base");
+	    if (! -d "$EXTRAFS/var.lib.docker") {
+		mkdir("$EXTRAFS/var.lib.docker");
+		#
+		# We need this stuff to be sticky across reloads, so move it
+		# into an lvm. If we lose the lvm, well then we are screwed.
+		#
+		my @files = glob("/var/lib/docker/*");
+		foreach my $file (@files) {
+		    my $base = basename($file);
+		    mysystem("/bin/mv $file $EXTRAFS/var.lib.docker")
+			if (! -e "$EXTRAFS/var.lib.docker/$base");
+		}
 	    }
 	    mysystem("/bin/rm -rf /var/lib/docker");
 	    mysystem("/bin/ln -s $EXTRAFS/var.lib.docker /var/lib/docker");
@@ -2068,7 +2361,7 @@ sub rootPreConfigNetwork($$$$)
 		     " $GLOBAL_CONF_LOCK")
 	if ($lockdebug);
     if (TBScriptLock($GLOBAL_CONF_LOCK,
-		     TBSCRIPTLOCK_INTERRUPTIBLE(), 900) != TBSCRIPTLOCK_OKAY()){
+		     TBSCRIPTLOCK_INTERRUPTIBLE(), 1200) != TBSCRIPTLOCK_OKAY()){
 	print STDERR "Could not get the global lock!\n";
 	return -1;
     }
@@ -2083,7 +2376,7 @@ sub rootPreConfigNetwork($$$$)
     # cleanup code in bad: depends on us having the lock before we call
     # thi
     #
-    refreshNetworkDeviceMaps();
+    refreshLibVnodeNetCache();
 
     my $vmid;
     if ($vnode_id =~ /^[-\w]+\-(\d+)$/) {
@@ -2096,6 +2389,29 @@ sub rootPreConfigNetwork($$$$)
     
     my @node_ifs = @{ $vnconfig->{'ifconfig'} };
     my @node_lds = @{ $vnconfig->{'ldconfig'} };
+
+    #
+    # See if we have we have blockstore links.  We do not add them as
+    # virtual docker networks; instead we handle the iscsi stuff outside
+    # the container.  We just bind mount into the container stuff from
+    # the root context.  We have to do this because parts of the iscsi
+    # layer in the kernel are not network-namespace-aware, so we cannot
+    # run the iscsi userspace tools in the network namespace, and do the
+    # mount ourselves.  This way, we also reuse almost all the
+    # rc.storage*/liblocstorage code, too.
+    #
+    my %blockstoreIPs = ();
+    if (exists($vnconfig->{'storageconfig'})
+	&& defined($vnconfig->{"storageconfig"})) {
+	foreach my $bsref (@{$vnconfig->{'storageconfig'}}) {
+	    if (exists($bsref->{"HOSTIP"})) {
+		$blockstoreIPs{$bsref->{"HOSTIP"}} =
+		    inet_aton($bsref->{"HOSTIP"});
+	    }
+	}
+	TBDebugTimeStamp("blockstoreIPs: ".Dumper(%blockstoreIPs)."\n")
+	    if ($debug > 1);
+    }
 
     #
     # If we're using veths, figure out what bridges we need to make:
@@ -2118,6 +2434,24 @@ sub rootPreConfigNetwork($$$$)
 
 	print "$vnode_id interface " . Dumper($ifc) . "\n"
 	    if ($debug > 1);
+
+	my $isblockstorelink = 0;
+	if (keys(%blockstoreIPs) > 0
+	    && exists($ifc->{IPMASK}) && exists($ifc->{IPADDR})) {
+	    my ($nip,$nmask) =
+		(inet_aton($ifc->{IPADDR}),inet_aton($ifc->{IPMASK}));
+	    foreach my $k (keys(%blockstoreIPs)) {
+		if (($nip & $nmask) eq ($blockstoreIPs{$k} & $nmask)) {
+		    $isblockstorelink = 1;
+		    last;
+		}
+	    }
+	}
+	if ($isblockstorelink) {
+	    print "$vnode_id interface $ifc->{IPMASK} is a blockstore link;".
+		" we will not create a virtual network for it.\n"
+		if ($debug > 1);
+	}
 
 	#
 	# In the era of shared nodes, we cannot name the bridges
@@ -2166,7 +2500,7 @@ sub rootPreConfigNetwork($$$$)
 		mysystem2("$IFCONFIG $vdev up");
 		# XXX
 		#mysystem2("$ETHTOOL -K $vdev tso off gso off");
-		refreshNetworkDeviceMaps();
+		refreshLibVnodeNetCache();
 
 		# XXX
 		# Another thing that seems to screw up, causing the ciscos
@@ -2201,7 +2535,7 @@ sub rootPreConfigNetwork($$$$)
 	    $brs{$brname}{MEMBERS} = 0;
 	}
 	else {
-	    my $iface = findIface($ifc->{PMAC});
+	    my $iface = findIfaceByMAC($ifc->{PMAC});
 	    $physdev = $iface;
 	    $brname  = $prefix . $iface;
 	    $brs{$brname}{ENCAP} = 1;
@@ -2214,6 +2548,11 @@ sub rootPreConfigNetwork($$$$)
 	    if (defined($physdev));
 	$ifc->{'BRIDGE'} = $brname
 	    if (defined($brname));
+
+	if ($isblockstorelink) {
+	    $brs{$brname}{ISBLOCKSTORELINK} = 1;
+	    $ifc->{ISBLOCKSTORELINK} = 1;
+	}
 
 	#
 	# Docker networks require a subnet (and a gateway; i.e.
@@ -2231,15 +2570,17 @@ sub rootPreConfigNetwork($$$$)
 	#
 	if (exists($ifc->{IPMASK}) && exists($ifc->{IPADDR})) {
 	    # Figure out the subnet for this network:
-	    my $bcast = inet_aton($ifc->{IPMASK});
+	    my $ipaddr = inet_aton($ifc->{IPADDR});
+	    my $netmask = inet_aton($ifc->{IPMASK});
 	    my $maskbits = 0;
-	    my $cval = unpack("N",$bcast);
-	    for (my $i = 0; $i < 32; ++$i) {
-		last if (($cval & 1) == 0);
+	    my $cval = unpack("N",$netmask);
+	    for (my $i = 31; $i >= 0; --$i) {
+		last if (($cval & 0x1) == 1);
 		++$maskbits;
 		$cval = $cval >> 1;
 	    }
-	    $brs{$brname}{CIDR} = $ifc->{IPMASK} . "/$maskbits";
+	    $maskbits = 32 - $maskbits;
+	    $brs{$brname}{CIDR} = inet_ntoa($ipaddr & $netmask) . "/$maskbits";
 
 	    #
 	    # NB XXX: Use the final address in the subnet as the
@@ -2252,7 +2593,8 @@ sub rootPreConfigNetwork($$$$)
 	    # single experiment case, but I'm not sure how to check for
 	    # a shared LAN.  Anyway, we'll just document this too...
 	    #
-	    $brs{$brname}{GW} = inet_ntoa(pack("N",unpack("N",$bcast) - 1));
+	    $brs{$brname}{GW} =
+		inet_ntoa(pack("N",unpack("N",$ipaddr | ~$netmask) - 1));
 	}
 	else {
 	    warn("Fatal: all Docker network interfaces *must* have an".
@@ -2270,6 +2612,10 @@ sub rootPreConfigNetwork($$$$)
     foreach my $k (keys(%brs)) {
 	my $cidr = $brs{$k}{CIDR};
 	my $gw = $brs{$k}{GW};
+	my $isblockstorelink = 0;
+	if (exists($brs{$k}{ISBLOCKSTORELINK})) {
+	    $isblockstorelink = $brs{$k}{ISBLOCKSTORELINK};
+	}
 
 	if (!$USE_MACVLAN) {
 	    #
@@ -2315,7 +2661,7 @@ sub rootPreConfigNetwork($$$$)
 		# might be shared with other containers, so we cannot remove it
 		# unless it is the only one left. 
 		#
-		my $obr = findBridge($physdev);
+		my $obr = getBridgeForIface($physdev);
 		if (defined($obr) && $obr ne $k) {
 		    # Avoid removing the device from the bridge if it
 		    # is in the correct bridge. 
@@ -2329,25 +2675,55 @@ sub rootPreConfigNetwork($$$$)
 		    goto bad
 			if ($?);
 		    # rebuild hashes
-		    makeBridgeMaps();
+		    refreshLibVnodeNetCache();
 		}
 
 		$private->{'physbridgeifaces'}->{$k}->{$physdev} = $physdev;
 	    }
 
 	    #
-	    # Now that the bridge exists, make the Docker network atop it.
+	    # If this is a blockstore link, we just IP the bridge we
+	    # just created; we do not expose this as a Docker virtual
+	    # network.  This way, we can reuse all the existing network
+	    # teardown code.
 	    #
-	    TBDebugTimeStamp("checking existence of docker network $k");
-	    ($code,$content,$resp) = getClient()->network_inspect($k);
-	    if ($code) {
-		TBDebugTimeStamp("creating docker network $k");
-		($code,$content,$resp) = getClient()->network_create_bridge(
-		    $k,$cidr,$gw,$k);
-		goto bad
-		    if ($code);
+	    if ($isblockstorelink) {
+		my ($bsa,$bsm) =
+		    ($brs{$k}{IFC}->{IPADDR},$brs{$k}{IFC}->{IPMASK});
+		mysystem2("$IP addr replace $bsa/$bsm dev $k");
+		mysystem2("$IP link set $k up");
 	    }
-	    $private->{'dockernets'}->{$k} = $k;
+	    else {
+		#
+		# Now that the bridge exists, make the Docker network atop it.
+		#
+		TBDebugTimeStamp("checking existence of docker network $k");
+		($code,$content,$resp) = getClient()->network_inspect($k);
+		if ($code) {
+		    my $ourdocker_extra_args = undef;
+		    if ($ISOURDOCKER) {
+			$ourdocker_extra_args = {
+			    "Options" => { "com.docker.network.bridge.layer2_mode"
+					       => "true" },
+				"IPAM" => { "Options" => { "PrivatePoolId" => $k } },
+			};
+		    }
+		    TBDebugTimeStamp("creating docker network $k");
+		    ($code,$content,$resp) = getClient()->network_create_bridge(
+			$k,$cidr,$gw,$k,$ourdocker_extra_args);
+		    goto bad
+			if ($code);
+		}
+		$private->{'dockernets'}->{$k} = $k;
+		#
+		# Also, if this is our Docker and we have iptables
+		# enabled, we need a default-allow rule for all traffic
+		# within the network -- Docker blocks by default.
+		#
+		if ($ISOURDOCKER) {
+		    DoIPtablesNoFail("-A FORWARD -i $k -o $k -j ACCEPT");
+		}
+	    }
 	}
 	else {
 	    my $basedev;
@@ -2371,21 +2747,29 @@ sub rootPreConfigNetwork($$$$)
 		$private->{'dummys'}->{$k} = $basedev;
 	    }
 
-	    #
-	    # Make the docker network if necessary.
-	    #
-	    TBDebugTimeStamp("checking existence of docker network $k");
-	    ($code,$content,$resp) = getClient()->network_inspect($k);
-	    if ($code) {
-		# Now that the dummy device exists, make the Docker
-		# network atop it.
-		TBDebugTimeStamp("creating docker network $k");
-		($code,$content,$resp) = getClient()->network_create_macvlan(
-		    $k,$cidr,$gw,$basedev);
-		goto bad
-		    if ($code);
+	    if ($isblockstorelink) {
+		my ($bsa,$bsm) =
+		    ($brs{$k}{IFC}->{IPADDR},$brs{$k}{IFC}->{IPMASK});
+		mysystem2("$IP addr replace $bsa/$bsm dev $k");
+		mysystem2("$IP link set $k up");
 	    }
-	    $private->{'dockernets'}->{$k} = $k;
+	    else {
+		#
+		# Make the docker network if necessary.
+		#
+		TBDebugTimeStamp("checking existence of docker network $k");
+		($code,$content,$resp) = getClient()->network_inspect($k);
+		if ($code) {
+		    # Now that the dummy device exists, make the Docker
+		    # network atop it.
+		    TBDebugTimeStamp("creating docker network $k");
+		    ($code,$content,$resp) = getClient()->network_create_macvlan(
+			$k,$cidr,$gw,$basedev);
+		    goto bad
+			if ($code);
+		}
+		$private->{'dockernets'}->{$k} = $k;
+	    }
 	}
     }
 
@@ -2421,27 +2805,19 @@ sub rootPreConfigNetwork($$$$)
     # to look for IFBs that are already allocated to the
     # container. See the allocate routines, which make use of the tag.
     #
+    my $ifbs;
     if (@node_lds) {
-	my $ifbs = AllocateIFBs($vmid, \@node_lds, $private);
-
+	$ifbs = AllocateIFBs($vmid, \@node_lds, $private);
 	goto bad
 	    if (!(defined($ifbs)));
-
-	foreach my $ldc (@node_lds) {
-	    my $tag = "$vnode_id:" . $ldc->{'LINKNAME'};
-	    my $ifb = pop(@$ifbs);
-	    $private->{'ifbs'}->{$ifb} = $tag;
-	    
-	    # Stash for later.
-	    $ldc->{'IFB'} = $ifb;
-	}
-
-	CreateShapingScripts($vnode_id,$private,\@node_ifs,\@node_lds);
     }
 
-    # Setup our routing stuff.
-    CreateRoutingScripts($vnode_id,$private);
-
+    #
+    # We cannot hold the global lock while we run CreateRoutingScripts.
+    # For a large topo, this may call djikstra, and that can be quite
+    # CPU-consuming.  Also, may as well avoid it on
+    # CreateShapingScripts.
+    #
     TBDebugTimeStamp("  releasing global lock")
 	if ($lockdebug);
     TBScriptUnlock();
@@ -2457,6 +2833,25 @@ sub rootPreConfigNetwork($$$$)
 	mysystem2("touch $VMS/$vnode_id/running");
     }
 
+    #
+    # Return to handling the allocated IFBs for shaping.
+    #
+    if (@node_lds) {
+	foreach my $ldc (@node_lds) {
+	    my $tag = "$vnode_id:" . $ldc->{'LINKNAME'};
+	    my $ifb = pop(@$ifbs);
+	    $private->{'ifbs'}->{$ifb} = $tag;
+	    
+	    # Stash for later.
+	    $ldc->{'IFB'} = $ifb;
+	}
+
+	CreateShapingScripts($vnode_id,$private,\@node_ifs,\@node_lds);
+    }
+
+    # Setup our routing stuff.
+    CreateRoutingScripts($vnode_id,$private);
+
     return 0;
 
   bad:
@@ -2470,8 +2865,17 @@ sub rootPreConfigNetwork($$$$)
 	    if (@members == 0) {
 		TBDebugTimeStamp("removing docker network $name");
 		($code,) = getClient()->network_delete($name);
-		delete($private->{'dockernets'}->{$name})
-		    if (!$code);
+		if (!$code) {
+		    delete($private->{'dockernets'}->{$name});
+		    #
+		    # Also, if this is our Docker and we have iptables
+		    # enabled, we need to remove the default-allow rule
+		    # for all traffic within the network.
+		    #
+		    if ($ISOURDOCKER) {
+			DoIPtablesNoFail("-D FORWARD -i $name -o $name -j ACCEPT");
+		    }
+		}
 	    }
 	}
     }
@@ -2480,7 +2884,7 @@ sub rootPreConfigNetwork($$$$)
     # then remove the bridge.
     if (exists($private->{'physbridges'})) {
 	foreach my $brname (keys(%{ $private->{'physbridges'} })) {
-	    my @ifaces = findBridgeIfaces($brname);
+	    my @ifaces = getBridgeIfaces($brname);
 	    if (@ifaces == 0) {
 		TBDebugTimeStamp("removing unused $brname");
 		mysystem2("$IFCONFIG $brname down");
@@ -2530,7 +2934,7 @@ sub rootPreConfigNetwork($$$$)
     # one else is using them.
     if (exists($private->{'dummys'})) {
 	foreach my $brname (keys(%{ $private->{'dummys'} })) {
-	    my @mvs = findMacvlanIfaces($private->{'dummys'}->{$brname});
+	    my @mvs = getMacvlanIfaces($private->{'dummys'}->{$brname});
 	    if (@mvs == 0) {
 		mysystem2("$IP link del dev $brname");
 		delete($private->{'dummys'}->{$brname})
@@ -2543,10 +2947,13 @@ sub rootPreConfigNetwork($$$$)
     # of any other macvlan devices).
     if (exists($private->{'vlandevs'})) {
 	foreach my $brname (keys(%{ $private->{'vlandevs'} })) {
-	    my $brv = findBridge($private->{'dummys'}->{$brname});
-	    my @mvs = findMacvlanIfaces($private->{'dummys'}->{$brname});
+	    my $viface = $private->{'vlandevs'}->{$brname};
+	    next
+		if (!defined($viface));
+	    my $brv = getBridgeForIface($viface);
+	    my @mvs = getMacvlanIfaces($viface);
 	    if (!defined($brv) && @mvs == 0) {
-		mysystem2("$IP link del dev $brname");
+		mysystem2("$IP link del dev $viface");
 		delete($private->{'vlandevs'}->{$brname})
 		    if ($?);
 	    }
@@ -2555,7 +2962,7 @@ sub rootPreConfigNetwork($$$$)
 
     # This shouldn't matter, but let's be complete; we might've deleted
     # some bridges and interfaces.
-    refreshNetworkDeviceMaps();
+    refreshLibVnodeNetCache();
 
     # Release the IFBs
     ReleaseIFBs($vmid, $private)
@@ -2564,6 +2971,31 @@ sub rootPreConfigNetwork($$$$)
   badbad:
     TBScriptUnlock();
     return -1;
+}
+
+sub _docker_get_ext_trans_mountpoint($)
+{
+    my ($mpoint,) = @_;
+
+    my $confdir = CONFDIR();
+    my $tmpoint = `readlink -f $confdir/mountpoints`;
+    chomp($tmpoint);
+    if ($mpoint =~ /^$tmpoint/) {
+	return $mpoint;
+    }
+    else {
+	$mpoint = $tmpoint.$mpoint;
+    }
+    if (! -e $mpoint) {
+	my @dirs = split(/\//,$mpoint);
+	my $tpath = CONFDIR()."/mountpoints";
+	foreach my $dir (@dirs) {
+	    $tpath .= "/$dir";
+	    mkdir($tpath);
+	}
+    }
+
+    return $mpoint;
 }
 
 #
@@ -2596,11 +3028,44 @@ sub vnodeCreate($$$$)
     $vninfo->{'vmid'} = $vmid;
 
     my ($host_iface,$host_ip,$host_mask,$host_maskbits,$host_net,
-	$host_mac,$host_gw) = findControlNet();
+	$host_mac,$host_gw) = getControlNet();
+
+    my ($pid,$eid,$vname) = check_nickname();
+    #
+    # Need the domain, but no conistent way to do it. Ask tmcc for the
+    # boss node and parse out the domain. 
+    #
+    my ($DOMAINNAME,$BOSSIP) = tmccbossinfo();
+    fatal("vnodeCreate: Could not get bossname from tmcc!")
+	if (!defined($DOMAINNAME));
+    if ($DOMAINNAME =~ /^[-\w]+\.(.*)$/) {
+	$DOMAINNAME = $1;
+    }
+    else {
+        fatal("vnodeCreate: Could not parse domain name from bossinfo!");
+    }
+    my $longdomain = "${eid}.${pid}.${DOMAINNAME}";
+    my $shortdomain = `cat /var/emulab/boot/mydomain`;
+    chomp($shortdomain);
 
     if (defined($raref)) {
+	TBDebugTimeStamp("inreload: " . Dumper($raref));
 	$raref = $raref->[0];
 	$inreload = 1;
+    }
+
+    #
+    # A quick sanity check to prevent privileged containers on shared
+    # nodes.  The frontend protects us against this, but have to be
+    # sure.
+    #
+    my $privileged = 0;
+    if (exists($attributes->{'DOCKER_PRIVILEGED'})
+	&& $attributes->{'DOCKER_PRIVILEGED'} eq '1') {
+	if (SHAREDHOST()) {
+	    fatal("vnodeCreate: cannot spawn privileged container on shared host!");
+	}
+	$privileged = 1;
     }
 
     #
@@ -2608,6 +3073,7 @@ sub vnodeCreate($$$$)
     # necessary.
     #
     my ($user,$pass);
+    my $dockerfile;
     if ((!$imagename || $imagename =~ /^emulab-ops-emulab-ops-DOCKER-EXT/)
 	&& exists($attributes->{'DOCKER_EXTIMAGE'})) {
 	$imagename = $attributes->{'DOCKER_EXTIMAGE'};
@@ -2617,6 +3083,24 @@ sub vnodeCreate($$$$)
 	if (exists($attributes->{'DOCKER_EXTPASS'})) {
 	    $pass = $attributes->{'DOCKER_EXTPASS'};
 	}
+    }
+    elsif ((!$imagename || $imagename =~ /^emulab-ops-emulab-ops-DOCKER-EXT/)
+	   && exists($attributes->{'DOCKER_DOCKERFILE'})) {
+	my @evkeyresults = ();
+	if (libtmcc::tmcc(libtmcc::TMCCCMD_EVENTKEY,undef,\@evkeyresults) < 0
+	    || @evkeyresults < 1) {
+	    fatal("Could not get keyhash from server!");
+	}
+	my $eventkey;
+	if ($evkeyresults[0] =~ /EVENTKEY KEY='?([\w\d]+)'?/) {
+	    $eventkey = $1;
+	}
+	else {
+	    fatal("could not extract eventkey from $evkeyresults[0]!");
+	}
+	$dockerfile = $attributes->{'DOCKER_DOCKERFILE'};
+	my $urlhash = sha1_hex($dockerfile);
+	$imagename = lc("$pid-$eid-$eventkey:$urlhash");
     }
     elsif ($inreload) {
 	# For local reloads, username is physical host shortname;
@@ -2632,11 +3116,17 @@ sub vnodeCreate($$$$)
 	chomp($pass);
 	close(FD);
 
-	print "raref:" . Dumper($raref) . "\n";
-	if (!exists($raref->{"PATH"}) || !$raref->{"PATH"}) {
-	    fatal("reload specified, but not external image, and no image PATH!");
+	if (exists($raref->{"PATH"}) && $raref->{"PATH"}) {
+	    $imagename = $raref->{"PATH"};
 	}
-	$imagename = $raref->{"PATH"};
+	elsif (exists($vnconfig->{"config"}->{'IMAGEPATH'})
+	       && $vnconfig->{"config"}->{'IMAGEPATH'}) {
+	    $imagename = $vnconfig->{"config"}->{'IMAGEPATH'};
+	}
+	else {
+	    fatal("reload or image specified, but not external image," .
+		  " and no image PATH nor jailconfig IMAGEPATH!");
+	}
     }
     else {
 	$imagename = $defaultImage{'name'};
@@ -2675,12 +3165,16 @@ sub vnodeCreate($$$$)
 
     my ($newimagename,$newcreateargs,$newcmd,$newization);
     $rc = setupImage($vnode_id,$vnconfig,$private,$imagename,$user,$pass,
+		     $dockerfile,
 		     \$newimagename,\$newcreateargs,\$newcmd,\$newization);
     if ($rc) {
 	libutil::setState("RELOADFAILED");
 	fatal("Failed to setup $imagename for $vnode_id; aborting!");
     }
     $private->{'emulabization'} = $newization;
+    if (!exists($vnconfig->{'attributes'}->{DOCKER_EMULABIZATION})) {
+	$vnconfig->{'attributes'}->{DOCKER_EMULABIZATION} = $newization;
+    }
 
     if ($inreload) {
 	libutil::setState("RELOADDONE");
@@ -2703,6 +3197,30 @@ sub vnodeCreate($$$$)
     addMounts($vnode_id,\%mounts);
 
     #
+    # Handle blockstores/datasets.
+    #
+    my %blockstoreMounts = ();
+    if (exists($vnconfig->{"storageconfig"})
+	&& defined($vnconfig->{"storageconfig"})) {
+	foreach my $bsref (@{$vnconfig->{'storageconfig'}}) {
+	    if (exists($bsref->{"MOUNTPOINT"})) {
+		my $src = _docker_get_ext_trans_mountpoint($bsref->{"MOUNTPOINT"});
+		$blockstoreMounts{$src} = $bsref->{"MOUNTPOINT"};
+	    }
+	}
+	TBDebugTimeStamp("blockstoreMounts: ".Dumper(%blockstoreMounts)."\n")
+	    if ($debug > 1);
+	TBDebugTimeStamp("starting rc.storage")
+	    if ($debug > 1);
+	if (mysystem2("/usr/local/etc/emulab/rc/rc.storage -j $vnode_id boot")) {
+	    fatal("Failed to setup storage in rc.storage; aborting!");
+	}
+	TBDebugTimeStamp("rc.storage finished successfully")
+	    if ($debug > 1);
+	$private->{'blockstores'} = scalar(keys(%blockstoreMounts));
+    }
+
+    #
     # Start building the 'docker create' args.  
     # (NB: see note below about why we have to put the container on the
     # network right away!)
@@ -2713,6 +3231,11 @@ sub vnodeCreate($$$$)
     $args{'AttachStdout'} = JSON::PP::true;
     $args{'AttachStderr'} = JSON::PP::true;
     $args{'OpenStdin'} = JSON::PP::true;
+
+    # Handle privileged containers.  NB: we already checked the sharedhost case above.
+    if ($privileged) {
+	$args{"HostConfig"}{"Privileged"} = JSON::PP::true;
+    }
 
     my @hostspairs = ();
     genhostspairlist($vnode_id,\@hostspairs);
@@ -2729,6 +3252,15 @@ sub vnodeCreate($$$$)
 	if ($NFS_MOUNTS_READONLY) {
 	    $bind .= ":ro";
 	}
+	push(@{$args{"HostConfig"}{"Binds"}},$bind);
+    }
+
+    #
+    # Add blockstore mounts.
+    #
+    foreach my $src (keys(%blockstoreMounts)) {
+	my $dst = $blockstoreMounts{$src};
+	my $bind = "${src}:${dst}";
 	push(@{$args{"HostConfig"}{"Binds"}},$bind);
     }
 
@@ -2770,6 +3302,16 @@ sub vnodeCreate($$$$)
 	 "$mntdir/vmname:/var/emulab/boot/vmname:ro");
 
     #
+    # Tell the clientside to use the gzip'd versions of ltmap and
+    # ltpmap; if we don't use these, on multi-thousand node topos, they
+    # suck up too much space in the host.
+    #
+    open(FD,">$mntdir/ltmap-gzip");
+    close(FD);
+    push(@{$args{"HostConfig"}{"Binds"}},
+	 "$mntdir/ltmap-gzip:/etc/emulab/ltmap-gzip:ro");
+
+    #
     # Tell the inside clientside which event server to use.  NB: we do
     # this as an read-only mount because the container removes it on
     # reboot, and we don't want to have to rewrite it in time.
@@ -2797,6 +3339,67 @@ sub vnodeCreate($$$$)
 	 "/etc/emulab/client.pem:/etc/emulab/client.pem:ro");
     push(@{$args{"HostConfig"}{"Binds"}},
 	 "/etc/emulab/emulab.pem:/etc/emulab/emulab.pem:ro");
+
+    # piping through custom CMD and PATH variables for users of the docker
+    # images. Just have to write them to a file and let the runit utility
+    # do the rest
+    my $ddir = "$mntdir/etc.emulab.docker";
+    mkdir($ddir);
+    if (exists($attributes->{'DOCKER_ENV'})) {
+	my $envvars = $attributes->{'DOCKER_ENV'};
+	if ($envvars =~ /^base64url:(.+)$/) {
+	    $envvars = MIME::Base64::decode_base64url($1);
+	}
+	open(FD, ">$ddir/dockerenv.runtime");
+	print FD "export $envvars\n";
+	close(FD);
+	push(@{$args{"HostConfig"}{"Binds"}},
+	     "$ddir/dockerenv.runtime:/etc/emulab/docker/dockerenv.runtime:ro");
+    }
+    if (exists($attributes->{'DOCKER_CMD'})) {
+	my $c = $attributes->{'DOCKER_CMD'};
+	if ($c =~ /^base64url:(.+)$/) {
+	    $c = MIME::Base64::decode_base64url($1);
+	}
+	TBDebugTimeStamp("runtime cmd: $c\n");
+	if ($c =~ /^\[/) {
+	    $c = decode_json($c);
+	    $c = "array:" . join(",",map { unpack("H*",$_) } @{$c});
+	}
+	elsif ($c ne "") {
+	    $c = "string:" . unpack("H*",$c);
+	}
+	if ($c ne "") {
+	    open(FD, ">$ddir/cmd.runtime");
+	    print FD "$c\n";
+	    close(FD);
+	}
+	TBDebugTimeStamp("encoded runtime cmd: $c\n");
+	push(@{$args{"HostConfig"}{"Binds"}},
+	     "$ddir/cmd.runtime:/etc/emulab/docker/cmd.runtime:ro");
+    }
+    if (exists($attributes->{'DOCKER_ENTRYPOINT'})) {
+	my $e = $attributes->{'DOCKER_ENTRYPOINT'};
+	if ($e =~ /^base64url:(.+)$/) {
+	    $e = MIME::Base64::decode_base64url($1);
+	}
+	TBDebugTimeStamp("runtime entrypoint: $e\n");
+	if ($e =~ /^\[/) {
+	    $e = decode_json($e);
+	    $e = "array:" . join(",",map { unpack("H*",$_) } @{$e});
+	}
+	elsif ($e ne "") {
+	    $e = "string:" . unpack("H*",$e);
+	}
+	if ($e ne "") {
+	    open(FD, ">$ddir/entrypoint.runtime");
+	    print FD "$e\n";
+	    close(FD);
+	}
+	TBDebugTimeStamp("encoded runtime entrypoint: $e\n");
+	push(@{$args{"HostConfig"}{"Binds"}},
+	     "$ddir/entrypoint.runtime:/etc/emulab/docker/entrypoint.runtime:ro");
+    }
 
     #
     # We allow the server to tell us how many VCPUs to allocate to the
@@ -2844,7 +3447,13 @@ sub vnodeCreate($$$$)
     #
     my ($ctrlip,$ctrlmask) = ($vnconfig->{config}{CTRLIP},
 			      $vnconfig->{config}{CTRLMASK});
-    my $ctrlmac = ipToMac($ctrlip);
+    my $ctrlmac;
+    if (exists($vnconfig->{'config'}{CTRLMAC})) {
+	$ctrlmac = $vnconfig->{'config'}{CTRLMAC};
+    }
+    else {
+	$ctrlmac = ipToMac($ctrlip);
+    }
     my $ctrlnetwork = inet_ntoa(inet_aton($ctrlip) & inet_aton($ctrlmask));
     my $fmac = fixupMac($ctrlmac);
     my $maskbits = 0;
@@ -2855,30 +3464,21 @@ sub vnodeCreate($$$$)
 	    $cval = $cval >> 1;
 	}
     }
-    #
-    # Need the domain, but no conistent way to do it. Ask tmcc for the
-    # boss node and parse out the domain. 
-    #
-    my ($DOMAINNAME,$BOSSIP) = tmccbossinfo();
-    die("Could not get bossname from tmcc!")
-	if (!defined($DOMAINNAME));
-    if ($DOMAINNAME =~ /^[-\w]+\.(.*)$/) {
-	$DOMAINNAME = $1;
-    }
-    else {
-        $err = "Could not parse domain name!";
-	goto bad;
-    }
-    my ($pid, $eid, $vname) = check_nickname();
-    my $longdomain = "${eid}.${pid}.${DOMAINNAME}";
-    my $shortdomain = `cat /var/emulab/boot/mydomain`;
-    chomp($shortdomain);
 
     my %cnetconfig = (
-	"IPAMConfig" => { "IPv4Address" => $ctrlip},
-	"MacAddress" => $fmac
+	"IPAMConfig" => { "IPv4Address" => $ctrlip}
     );
-    $args{"NetworkingConfig"}{"EndpointsConfig"}{$DOCKERCNET} = \%cnetconfig;
+    my $dcn = $DOCKERCNET;
+    if ($ISMULTINETWORK && ($ctrlnetwork eq $host_net)) {
+	$dcn = $DOCKERCNETPUB;
+    }
+    $args{"NetworkingConfig"}{"EndpointsConfig"}{$dcn} = \%cnetconfig;
+    # This NetworkMode goo is apparently necessary to set the MacAddress
+    # of the container's initial network.  Go figure -- it's not
+    # documented this way -- but this is the way the CLI does it and it
+    # works.  Needless to say, nothing else works!
+    $args{"HostConfig"}{"NetworkMode"} = $dcn;
+    $args{"MacAddress"} = $fmac;
     $args{"Hostname"} = "$vname.$longdomain";
     #
     # NB XXX: apparently --dns-search *does* work, but not --dns, when
@@ -2998,10 +3598,9 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
     # Maybe allow routable control network.
     my $isroutable = isRoutable($ip);
 
-    #my ($host_ip,$host_mask,$vmac) = hostControlNet();
     my ($host_iface,$host_ip,$host_mask,$host_maskbits,$host_net,
-	$host_mac,$host_gw) = findControlNet();
-    my ($vip,undef,undef) = hostControlNet();
+	$host_mac,$host_gw) = getControlNet();
+    my ($vip,undef,undef) = hostControlNet($host_ip,$host_mask);
     my ($bossdomain,$boss_ip) = tmccbossinfo();
     if (!$boss_ip) {
 	$boss_ip = `cat $BOOTDIR/bossip`;
@@ -3011,12 +3610,29 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
 	warn("could not find bossip anywhere; aborting!");
 	return -1;
     }
-    my (undef,undef,undef,undef,@addrs) = gethostbyname("users");
-    if ($? || @addrs == 0) {
-	warn("could not resolve users.$bossdomain; aborting!");
-	return -1;
+    my $retries = 4;
+    my @addrs = ();
+    my $uname = "users";
+    while ($retries > 0) {
+	(undef,undef,undef,undef,@addrs) = gethostbyname($uname);
+	if ($? || @addrs == 0) {
+	    warn("could not resolve $uname; retrying!");
+	    sleep(4);
+	}
+	else {
+	    last;
+	}
+	$uname = "users.$shortdomain";
+	$retries -= 1;
     }
-    my $ops_ip = inet_ntoa($addrs[0]);
+    my $ops_ip;
+    if (@addrs == 0) {
+	warn("could not resolve users.$bossdomain; sending name to iptables!");
+	$ops_ip = "users";
+    }
+    else {
+	$ops_ip = inet_ntoa($addrs[0]);
+    }
     my $local_tmcd_port = $TMCD_PORT + $vmid;
 
     #
@@ -3130,12 +3746,14 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
 	my $ssh_style = $attributes->{DOCKER_SSH_STYLE};
 	my $exec_shell = $attributes->{DOCKER_EXEC_SHELL};
 
-	if (defined($exec_shell) && $exec_shell =~ /^([\/\w\d\-_]+)$/) {
-	    $exec_shell = $1;
-	}
-	else {
-	    warn("malformed shell: $exec_shell ; defaulting to /bin/sh");
-	    $exec_shell = '/bin/sh';
+	if (defined($exec_shell)) {
+	    if ($exec_shell =~ /^([\/\w\d\-_]+)$/) {
+		$exec_shell = $1;
+	    }
+	    else {
+		warn("malformed shell: $exec_shell ; defaulting to /bin/sh");
+		$exec_shell = '/bin/sh';
+	    }
 	}
 	
 	if (($emulabization ne DOCKER_EMULABIZE_NONE()
@@ -3155,6 +3773,11 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
 	    $private->{'ssh_style'} = 'direct';
 	}
 	else {
+	    if (!defined($exec_shell)) {
+		TBDebugTimeStamp("unspecified exec_shell: defaulting to /bin/sh");
+		$exec_shell = '/bin/sh';
+	    }
+
 	    # Setup our docker exec via ssh.
 	    addContainerToDockerExecSSH(
 		$vnode_id,$vnconfig->{config}->{SSHDPORT},$exec_shell);
@@ -3235,6 +3858,12 @@ sub vnodePreConfigExpNetwork($$$$)
 			 Dumper($ifc))
 	    if ($debug > 1);
 
+	if (exists($ifc->{ISBLOCKSTORELINK}) && $ifc->{ISBLOCKSTORELINK}) {
+	    TBDebugTimeStamp("vnodePreConfigExpNetwork: $vnode_id skipping blockstore interface!")
+		if ($debug > 1);
+	    next;
+	}
+
 	my $br       = $ifc->{"BRIDGE"};
 	my $physdev  = $ifc->{"PHYSDEV"};
 	my $ldinfo;
@@ -3279,7 +3908,7 @@ sub vnodePreConfigExpNetwork($$$$)
 	my ($code,$content,$resp) = getClient()->network_connect_container(
 	    $ifc->{BRIDGE},$vnode_id,$ip,$maskbits,$fmac);
 	if ($code) {
-	    fatal("Could not connect $vnode_id to $DOCKERCNET".
+	    fatal("Could not connect $vnode_id to $ifc->{BRIDGE}".
 		  " ($code,$content); aborting!");
 	}
     }
@@ -3354,6 +3983,10 @@ sub vnodeBootHook($$$$)
     #
     if ($private->{'emulabization'} eq DOCKER_EMULABIZE_NONE()) {
 	libutil::setState("TBSETUP");
+    }
+
+    if (AreProxiesRunning($vnode_id,$vmid) != 1) {
+	RunProxies($vnode_id,$vmid);
     }
 
     #
@@ -3758,19 +4391,12 @@ sub vnodeUnmount($$$$)
 # Remove the transient state, but not the disk.  Basically, remove
 # anything that happened in vnodeBoot and vnodeBootHook.
 #
+# NB: this function does not currently lock, since it doesn't do
+# anything serious.  Be careful!
+#
 sub vnodeTearDown($$$$)
 {
     my ($vnode_id, $vmid, $vnconfig, $private) = @_;
-
-    # Lots of shared resources 
-    TBDebugTimeStamp("vnodeTearDown: grabbing global lock $GLOBAL_CONF_LOCK")
-	if ($lockdebug);
-    if (TBScriptLock($GLOBAL_CONF_LOCK, 0, 900) != TBSCRIPTLOCK_OKAY()) {
-	print STDERR "Could not get the global lock after a long time!\n";
-	return -1;
-    }
-    TBDebugTimeStamp("  got global lock")
-	if ($lockdebug);
 
     KillProxies($vnode_id,$vmid);
     RemovePostBootIptablesRules($vnode_id,$vmid,$vnconfig,$private);
@@ -3780,10 +4406,6 @@ sub vnodeTearDown($$$$)
     #
     unbindNetNS($vnode_id,$private);
 
-  badbad:
-    TBDebugTimeStamp("  releasing global lock")
-	if ($lockdebug);
-    TBScriptUnlock();
     return 0;
 }
 
@@ -3800,6 +4422,30 @@ sub vnodeDestroy($$$$)
     my ($code,$content) = getClient()->container_delete($vnode_id);
     if ($code) {
 	print STDERR "container_delete $vnode_id failed: $content ($code)\n";
+    }
+
+    #
+    # NB: only lock after we do vnodeTearDown and container_delete.  We
+    # cannot have the global lock while destroying the vnode in Docker;
+    # that could take longer.
+    #
+    TBDebugTimeStamp("vnodeDestroy: grabbing global lock $GLOBAL_CONF_LOCK")
+	if ($lockdebug);
+    if (TBScriptLock($GLOBAL_CONF_LOCK, 0, 1200) != TBSCRIPTLOCK_OKAY()) {
+	print STDERR "Could not get the global lock after a long time!\n";
+	return -1;
+    }
+    TBDebugTimeStamp("  got global lock")
+	if ($lockdebug);
+
+    if (exists($private->{'blockstores'})) {
+	TBDebugTimeStamp("starting rc.storage")
+	    if ($debug > 1);
+	if (mysystem2("/usr/local/etc/emulab/rc/rc.storage -j $vnode_id fullreset")) {
+	    fatal("Failed to remove storage in rc.storage; aborting!");
+	}
+	TBDebugTimeStamp("rc.storage finished successfully")
+	    if ($debug > 1);
     }
 
     #
@@ -3898,8 +4544,17 @@ sub vnodeDestroy($$$$)
 	    if (@members == 0) {
 		TBDebugTimeStamp("Deleting empty docker network $name...");
 		($code) = getClient()->network_delete($name);
-		delete($private->{'dockernets'}->{$name})
-		    if (!$code);
+		if (!$code) {
+		    delete($private->{'dockernets'}->{$name});
+		    #
+		    # Also, if this is our Docker and we have iptables
+		    # enabled, we need to remove the default-allow rule
+		    # for all traffic within the network.
+		    #
+		    if ($ISOURDOCKER) {
+			DoIPtablesNoFail("-D FORWARD -i $name -o $name -j ACCEPT");
+		    }
+		}
 	    }
 	}
     }
@@ -3908,7 +4563,7 @@ sub vnodeDestroy($$$$)
     # then remove the bridge.
     if (exists($private->{'physbridges'})) {
 	foreach my $brname (keys(%{ $private->{'physbridges'} })) {
-	    my @ifaces = findBridgeIfaces($brname);
+	    my @ifaces = getBridgeIfaces($brname);
 	    if (@ifaces == 0) {
 		TBDebugTimeStamp("removing unused $brname");
 		if (-e "/sys/class/net/$brname") {
@@ -3962,7 +4617,7 @@ sub vnodeDestroy($$$$)
     # one else is using them.
     if (exists($private->{'dummys'})) {
 	foreach my $brname (keys(%{ $private->{'dummys'} })) {
-	    my @mvs = findMacvlanIfaces($private->{'dummys'}->{$brname});
+	    my @mvs = getMacvlanIfaces($private->{'dummys'}->{$brname});
 	    if (@mvs == 0) {
 		mysystem2("$IP link del dev $brname");
 		delete($private->{'dummys'}->{$brname})
@@ -3975,10 +4630,13 @@ sub vnodeDestroy($$$$)
     # of any other macvlan devices).
     if (exists($private->{'vlandevs'})) {
 	foreach my $brname (keys(%{ $private->{'vlandevs'} })) {
-	    my $brv = findBridge($private->{'dummys'}->{$brname});
-	    my @mvs = findMacvlanIfaces($private->{'dummys'}->{$brname});
+	    my $viface = $private->{'vlandevs'}->{$brname};
+	    next
+		if (!defined($viface));
+	    my $brv = getBridgeForIface($viface);
+	    my @mvs = getMacvlanIfaces($viface);
 	    if (!defined($brv) && @mvs == 0) {
-		mysystem2("$IP link del dev $brname");
+		mysystem2("$IP link del dev $viface");
 		delete($private->{'vlandevs'}->{$brname})
 		    if ($?);
 	    }
@@ -3987,7 +4645,7 @@ sub vnodeDestroy($$$$)
 
     # This shouldn't matter, but let's be complete; we might've deleted
     # some bridges and interfaces.
-    refreshNetworkDeviceMaps();
+    refreshLibVnodeNetCache();
 
     #
     # We keep the IFBs until complete destruction. We do this cause we do
@@ -3999,6 +4657,10 @@ sub vnodeDestroy($$$$)
     ReleaseIFBs($vmid, $private)
 	if (exists($private->{'ifbs'}));
 
+    TBDebugTimeStamp("  releasing global lock")
+	if ($lockdebug);
+    TBScriptUnlock();
+
     return 0;
 }
 
@@ -4006,21 +4668,75 @@ sub vnodeDestroy($$$$)
 ## Utility and helper functions.
 ##
 
+sub analyzeImageWithBusyboxCommand($$$@)
+{
+    my ($image,$configref,$outputref,@bargv) = @_;
+
+    TBDebugTimeStamp("running static busybox (".join('',@bargv).")".
+		     " for image $image...");
+    my $args = {
+	'HostConfig' => {
+	    'Binds' => [ "/bin/busybox:/tmp/busybox:ro" ]
+	},
+	'Entrypoint' => '',
+    };
+    my @argv = ('/tmp/busybox',@bargv);
+    if (defined($configref)) {
+	require Hash::Merge;
+	$args = Hash::Merge::merge($args,$configref);
+	if ($debug) {
+	    print STDERR "DEBUG: merged args = ".Dumper($args)."\n";
+	}
+    }
+    my $tmpname = "busybox-analyzer-".int(rand(POSIX::INT_MAX));
+    our $buf = '';
+    my ($code,$json,$resp,$retval) = getClient->container_run(
+	$tmpname,$image,\@argv,1,$args,sub { $buf .= $_[0]; });
+    if ($code) {
+	warn("failed to run busybox analysis container $tmpname for $image");
+	return $code;
+    }
+    # Santize the output.  For whatever reason(s), under heavy load, it
+    # comes with non-printable chars occasionally, and with CRLF.  Odd.
+    $buf =~ s/[\000-\011\014\015-\037\176-\255]//g;
+
+    TBDebugTimeStamp("busybox analyze output:\n$buf");
+    open(FD,">/vms/contexts/$tmpname.log");
+    print FD $buf;
+    close(FD);
+
+    if (defined($outputref)) {
+	if (ref($outputref) eq 'ARRAY') {
+	    @$outputref = split("\n",$buf);
+	}
+	else {
+	    $outputref = $buf;
+	}
+    }
+
+    return 0;
+}
+
 #
 # Analyze an existing Docker image to extra image metadata,
 # distro/version, and so on.
 #
-sub analyzeImage($$)
+sub analyzeImage($$;$)
 {
-    my ($image,$rethash) = @_;
+    my ($image,$rethash,$force) = @_;
     my $output;
     my @outlines;
     my ($code,$json,$resp,$retval);
+    my $iid;
+    if (!defined($force)) {
+	$force = 0;
+    }
 
     TBDebugTimeStamp("analyzing image $image...");
 
     TBDebugTimeStamp("inspecting image $image...");
     ($code,$json) = getClient()->image_inspect($image);
+
     if ($code) {
 	warn("inspect $image failed -- attempting to continue anyway!");
     }
@@ -4029,6 +4745,10 @@ sub analyzeImage($$)
 	if (ref($json) eq 'ARRAY') {
 	    $jstate = $json->[0];
 	}
+	else {
+	    $jstate = $json;
+	}
+	$iid = $jstate->{'Id'};
 	$jstate = $jstate->{'Config'};
 
 	if (exists($jstate->{'Cmd'})) {
@@ -4053,12 +4773,35 @@ sub analyzeImage($$)
 	    $rethash->{DOCKER_USER} = $jstate->{'User'};
 	}
     }
+    my $needunlock = 0;
+    if (defined($iid)) {
+	if (! -f "/vms/contexts/analyze-$iid") {
+	    if (TBScriptLock("analyze-$iid",
+			     TBSCRIPTLOCK_INTERRUPTIBLE(),
+			     1800) != TBSCRIPTLOCK_OKAY()) {
+		fatal("Could not get analyze-$iid lock for $image analysis!");
+	    }
+	    TBDebugTimeStamp("  got image analysis lock analyze-$iid for $image")
+		if ($lockdebug);
+	    $needunlock = 1;
+	}
+	if (-f "/vms/contexts/analyze-$iid" && !$force) {
+	    TBDebugTimeStamp("not running analysis script for image $image;".
+		" already in /vms/contexts/analyze-$iid\n");
+	    open(FD,"/vms/contexts/analyze-$iid");
+	    @outlines = <FD>;
+	    close(FD);
+	    goto outlines;
+	}
+    }
 
     TBDebugTimeStamp("running analysis script for image $image...");
     my $args = {
 	'HostConfig' => {
 	    'Binds' => [ "/etc/emulab/docker/container-utils:/tmp/docker:ro" ]
-	}
+	},
+	'Entrypoint' => '',
+	'User' => 'root',
     };
     my $tmpname = "analyzer-".int(rand(POSIX::INT_MAX));
     our $buf = '';
@@ -4067,9 +4810,25 @@ sub analyzeImage($$)
 	sub { $buf .= $_[0]; });
     if ($code) {
 	warn("failed to run analysis script container $tmpname for $image");
+	TBScriptUnlock()
+	    if ($needunlock);
 	return $code;
     }
+    # Santize the output.  For whatever reason(s), under heavy load, it
+    # comes with non-printable chars occasionally, and with CRLF.  Odd.
+    #$buf =~ s/[^[:ascii:]]//g;
+    #$buf =~ s/\r\n//g;
+    $buf =~ s/[\000-\011\014\015-\037\176-\255]//g;
+
+    TBDebugTimeStamp("analyze.sh output:\n$buf");
+    open(FD,">/vms/contexts/analyze-$iid");
+    print FD $buf;
+    close(FD);
     @outlines = split("\n",$buf);
+
+  outlines:
+    TBScriptUnlock()
+      if ($needunlock);
     for my $res (@outlines) {
 	if ($res =~ /^[a-zA-Z0-9_]*=[^=]*$/) {
 	    chomp($res);
@@ -4077,6 +4836,103 @@ sub analyzeImage($$)
 	    $rethash->{$key} = $value;
 	}
     }
+    return 0;
+}
+
+sub buildImageFromDockerfile($$)
+{
+    my ($image,$dockerfile) = @_;
+
+    #
+    # We have to lock here, to avoid races.
+    #
+    my $imagelockname = ImageLockName($image);
+    TBDebugTimeStamp("grabbing image lock $imagelockname writeable")
+	if ($lockdebug);
+    if (TBScriptLock($imagelockname,
+		     TBSCRIPTLOCK_INTERRUPTIBLE(),
+		     $MAXIMAGEWAIT) != TBSCRIPTLOCK_OKAY()) {
+	fatal("Could not get $imagelockname lock for $image!");
+    }
+    TBDebugTimeStamp("  got image lock $imagelockname for $image")
+	if ($lockdebug);
+
+    TBDebugTimeStamp("inspecting image $image (dockerfile $dockerfile)...");
+    my ($code,$content) = getClient()->image_inspect($image);
+    if (!$code) {
+	TBScriptUnlock();
+	TBDebugTimeStamp("not rebuilding existing $image for $dockerfile");
+	return 0;
+    }
+
+    TBDebugTimeStamp("$image does not exist; building!");
+    my $cdir = "$CONTEXTDIR/$image";
+    mkdir($cdir);
+
+    if (!LWP::Simple::getstore($dockerfile,"$cdir/Dockerfile")) {
+	TBScriptUnlock();
+	warn("failed to download dockerfile $dockerfile to build $image");
+	return -1;
+    }
+
+    # We could just send the bytes to the daemon (tar -C $cdir -c . |),
+    # but we want to store the file on disk for provenance.
+    my $tarfile = "$cdir-context-" . time() . ".tar";
+    mysystem2("tar -cf $tarfile -C $cdir .");
+    if ($?) {
+	warn("failed to build tar archive of context dir $cdir; aborting!\n");
+	TBScriptUnlock();
+	return -1;
+    }
+    TBDebugTimeStamp("building new image $image");
+    my $buf = '';
+    open(our $fd,">$cdir-build.log");
+    our $bytes = 0;
+    sub bdf_json_log_printer {
+	my ($data,$foo,$resp) = @_;
+	if ($resp->header("content-type") eq 'application/json') {
+	    eval {
+		$data = decode_json($data);
+	    };
+	    if ($@) {
+		warn("build log_printer: $! $@ ($data)\n");
+	    }
+	}
+	print $data;
+	print $fd $data;
+	$bytes += length($data);
+    }
+    ($code,$content) = getClient()->image_build_from_tar_file(
+	$tarfile,$image,undef,undef,\&bdf_json_log_printer);
+    close($fd);
+    if ($code) {
+	warn("failed to build $image from $dockerfile: $content ($code)!");
+	TBScriptUnlock();
+	return -1;
+    }
+    if ($bytes == 0) {
+	open(FD,">$cdir-build.log");
+	if (defined($content) && ref($content) eq 'ARRAY'
+	    && defined($content->[0]) && ref($content->[0]) eq 'HASH'
+	    && defined($content->[0]->{'stream'})) {
+	    foreach my $bit (@$content) {
+		next
+		    if (!defined($bit->{'stream'}));
+		print FD $bit->{'stream'};
+	    }
+	}
+	elsif (defined(ref($content)) && ref($content) ne '') {
+	    print FD Dumper($content);
+	}
+	else {
+	    print FD $content;
+	}
+	close(FD);
+    }
+
+    TBDebugTimeStamp("finished building new image $image from $dockerfile");
+
+    TBScriptUnlock();
     return 0;
 }
 
@@ -4177,10 +5033,10 @@ sub pullImage($$$$;$)
     return $code;
 }
 
-sub emulabizeImage($;$$$$$$$$)
+sub emulabizeImage($;$$$$$$$$$)
 {
     my ($image,$newimageref,$emulabization,$newzationref,$update,
-	$pullpolicy,$username,$password,$iattrsref) = @_;
+	$pullpolicy,$username,$password,$dockerfile,$iattrsref) = @_;
     my $rc;
     my ($code,$content);
 
@@ -4194,24 +5050,32 @@ sub emulabizeImage($;$$$$$$$$)
     # image, then make it!
     #
 
-    if (!defined($emulabization)) {
-	$emulabization = DOCKER_EMULABIZE_DEFAULT();
-    }
-
-    #
-    # If we're supposed to pull a new image, do it.
-    #
     my $havenewbase = 0;
-    if (pullImage($image,$username,$password,$pullpolicy,\$havenewbase)) {
-	warn("failed to pull base Docker image $image");
-	return -1;
+    if (!defined($dockerfile)) {
+	#
+	# If we're supposed to pull a new image, do it.
+	#
+	if (pullImage($image,$username,$password,$pullpolicy,\$havenewbase)) {
+	    warn("failed to pull base Docker image $image");
+	    return -1;
+	}
+    }
+    else {
+	#
+	# Otherwise, check for existence of base image, else, build it.
+	#
+	if (buildImageFromDockerfile($image,$dockerfile)) {
+	    warn("failed to build $image from $dockerfile");
+	    return -1;
+	}
     }
 
     #
-    # Analyze the image to see what we'll need to do it, if anything.
+    # Analyze the image to see what we'll need to do it, if anything.  Note
+    # that if we have a new base image, we force the analysis.
     #
     my %iattrs = ();
-    $rc = analyzeImage($image,\%iattrs);
+    $rc = analyzeImage($image,\%iattrs,$havenewbase);
     if ($rc) {
 	warn("analysis of image $image failed; continuing as best we can!");
     }
@@ -4225,6 +5089,20 @@ sub emulabizeImage($;$$$$$$$$)
     my $curzation = $iattrs{'EMULABIZATION'};
     if (!defined($curzation) || $curzation eq '') {
 	$curzation = DOCKER_EMULABIZE_NONE();
+    }
+
+    #
+    # If the emulabization level was not commanded, and if the base
+    # image was emulabized, we will just use it.  If not, we will use
+    # our default (DOCKER_EMULABIZE_DEFAULT).
+    #
+    if (!defined($emulabization)) {
+	if ($curzation eq DOCKER_EMULABIZE_NONE()) {
+	    $emulabization = DOCKER_EMULABIZE_DEFAULT();
+	}
+	else {
+	    $emulabization = $curzation;
+	}
     }
 
     #
@@ -4280,13 +5158,13 @@ sub emulabizeImage($;$$$$$$$$)
     }
     else {
 	# Nothing to do; just use existing base image.
-	$emulabization = DOCKER_EMULABIZE_NONE();
+	#$emulabization = DOCKER_EMULABIZE_NONE();
     }
 
     if ($newzation eq DOCKER_EMULABIZE_NONE()) {
 	if ($debug) {
 	    print STDERR "DEBUG: image $image will not be emulabized".
-		" ($emulabization, $newzation)\n";
+		" ($emulabization, new=$newzation, current=$curzation)\n";
 	}
 	if (defined($newimageref)) {
 	    $$newimageref = $image;
@@ -4317,6 +5195,7 @@ sub emulabizeImage($;$$$$$$$$)
 	$newimage = $image;
 	$newimage =~ tr/:/-/;
 	$newimagecdirname = $newimage;
+	$newimagecdirname =~ tr/\//---/;
 	$newimage .= ":emulab-$newzation";
 	$newimagecdirname .= "--emulab-$newzation";
     }
@@ -4324,6 +5203,7 @@ sub emulabizeImage($;$$$$$$$$)
 	$newimage = $$newimageref;
 	$newimagecdirname = "$newimage--emulab-$newzation";
 	$newimagecdirname =~ tr/:/-/;
+	$newimagecdirname =~ tr/\//---/;
     }
 
     #
@@ -4402,8 +5282,19 @@ sub emulabizeImage($;$$$$$$$$)
 	#
 	my @copydirs = ();
 	foreach my $td ('common',$dist,$tag,$mintag) {
-	    push(@copydirs,$td)
-		if (-d "$DOCKERFILES/$td");
+	    if (-l "$DOCKERFILES/$td") {
+		push(@copydirs,$td);
+		my $linktarget = readlink("$DOCKERFILES/$td");
+		if ($linktarget =~ /^\//) {
+		    push(@copydirs,"$linktarget");
+		}
+		else {
+		    push(@copydirs,"$linktarget");
+		}
+	    }
+	    elsif (-d "$DOCKERFILES/$td") {
+		push(@copydirs,$td);
+	    }
 	}
 	my @dfiles = ();
 	my @runscripts = ();
@@ -4514,11 +5405,133 @@ sub emulabizeImage($;$$$$$$$$)
 	}
 
 	#
+	# We are overriding the image's default ENTRYPOINT and CMD by
+	# running runit instead.  So we have to emulate them (as best we
+	# can; runit is pid 1, not the entrypointcmd, etc) -- and set
+	# ourselves up for any dynamic changes to entrypoint/cmd per
+	# container at runtime.
+	# See https://docs.docker.com/engine/reference/builder/#understand-how-cmd-and-entrypoint-interact
+	# for a matrix of how ENTRYPOINT and CMD interact.  But here's
+	# what we do.  Each emulabized image contains a runit service
+	# (/etc/service/dockerentrypoint,
+	# see dockerfiles/common/fs/etc/service/dockerentrypoint)
+	# that handles the emulation of those cases.  We feed it by
+	# populating
+	# /etc/emulab/docker/{entrypoint.image.type,entrypoint.image,
+	#   cmd.image.type,cmd.image,user,dockerenv.image} according to
+	# what we find in the image.  Then, those files can be
+	# "overridden" at runtime by
+	# /etc/emulab/docker/{entrypoint.runtime.type,entrypoint.runtime,
+	#   cmd.runtime.type,cmd.runtime}, and added to by
+	# /etc/emulab/docker/dockerenv.runtime .
+	#
+
+	# First, set up the user file, and the USER env var.  NB: we
+	# must set this up; normally Docker sets it prior to running
+	# entrypoint/cmd.
+	my @generatedEnvVars = ();
+	my $ddir = "$hdir/etc/emulab/docker";
+	mkdir("$ddir");
+	if (exists($iattrs{DOCKER_USER}) && defined($iattrs{DOCKER_USER})
+	    && $iattrs{DOCKER_USER} ne "") {
+	    open(FD,">$ddir/user");
+	    print FD $iattrs{DOCKER_USER}."\n";
+	    close(FD);
+	    push(@generatedEnvVars,"USER=$iattrs{DOCKER_USER}");
+	}
+	else {
+	    push(@generatedEnvVars,"USER=root");
+	}
+
+	# Second, ensure that HOME and PATH are properly initialized for
+	# the same reason as above for USER (so that any startup
+	# commands that depend on these variables don't fail).
+	my @retlines;
+	my $foundit = 0;
+	$rc = analyzeImageWithBusyboxCommand($image,{},\@retlines,"env");
+	for my $line (@retlines) {
+	    chomp($line);
+	    if (substr($line, 0, index($line, '=')) eq "HOME") {
+		push(@generatedEnvVars,$line);
+		$foundit = 1;
+		last;
+	    }
+	}
+	if (!$foundit) {
+	    push(@generatedEnvVars,"HOME=/");
+	}
+	push(@generatedEnvVars,
+	     "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
+
+	# Dump our generated (and image-builtin) env vars.  Note we
+	# export them all!  This is what we want for the case where we
+	# exec stuff on behalf of the user; and it arguably what any
+	# user would want.
+	open(FD,">$ddir/dockerenv.entrypoint");
+	for my $var (@generatedEnvVars) {
+	    print FD "export $var\n";
+	}
+	close(FD);
+	if (exists($iattrs{DOCKER_ENV})) {
+	    open(FD,">$ddir/dockerenv.image");
+	    foreach my $elem (@{$iattrs{DOCKER_ENV}}) {
+		print FD "export $elem\n";
+	    }
+	    close(FD);
+	}
+
+	# Dump the image's workingdir into another file that the
+	# entrypoint service looks for.
+	if (exists($iattrs{DOCKER_WORKINGDIR})
+	    && $iattrs{DOCKER_WORKINGDIR} ne "") {
+	    open(FD,">$ddir/workingdir");
+	    print FD $iattrs{DOCKER_WORKINGDIR}."\n";
+	    close(FD);
+	}
+
+	# Dump the image's entrypoint (and type of entrypoint).
+	if (exists($iattrs{DOCKER_ENTRYPOINT})
+	    && defined($iattrs{DOCKER_ENTRYPOINT})) {
+	    my $e = $iattrs{DOCKER_ENTRYPOINT};
+	    TBDebugTimeStamp("image entrypoint: ".Dumper($e).".\n");
+	    if (ref($e) eq 'ARRAY') {
+		$e = "array:" . join(",",map { unpack("H*",$_) } @{$e});
+	    }
+	    elsif ($e ne "") {
+		$e = "string:" . unpack("H*",$e);
+	    }
+	    TBDebugTimeStamp("encoded image entrypoint: $e\n");
+	    if ($e ne "") {
+		open(FD,">$ddir/entrypoint.image");
+		print FD "$e\n";
+		close(FD);
+	    }
+	}
+
+	# Dump the image's cmd (and type of cmd).
+	if (exists($iattrs{DOCKER_CMD}) && defined($iattrs{DOCKER_CMD})) {
+	    my $c = $iattrs{DOCKER_CMD};
+	    TBDebugTimeStamp("image cmd: ".Dumper($c).".\n");
+	    if (ref($c) eq 'ARRAY') {
+		$c = "array:" . join(",",map { unpack("H*",$_) } @{$c});
+	    }
+	    elsif ($c ne "") {
+		$c = "string:" . unpack("H*",$c);
+	    }
+	    TBDebugTimeStamp("encoded image cmd: $c\n");
+	    if ($c ne "") {
+		open(FD,">$ddir/cmd.image");
+		print FD "$c\n";
+		close(FD);
+	    }
+	}
+
+	#
 	# Before we start setting up the new image Dockerfile, run
 	# all the artifact build scripts.
 	#
 	foreach my $ascript (@artifactscripts) {
-	    my %args = ( 'Tty' => JSON::PP::true);
+	    my %args = ( 'Tty' => JSON::PP::true, 'User' => 'root');
 	    $args{'HostConfig'}{'Binds'} = [
 		"$hdir/etc/emulab/CONTEXT:/etc/emulab/CONTEXT:ro",
 		"$adir:/artifacts:rw",
@@ -4532,6 +5545,8 @@ sub emulabizeImage($;$$$$$$$$)
 		];
 	    $args{'Image'} = $image;
 	    $args{'Cmd'} = ["/bin/sh","-c","cd \$CONTEXT && $ascript"];
+	    $args{'Entrypoint'} = '';
+	    $args{'User'} = 'root';
 	    my $tmpname = "artifact-".sha1_hex($image . rand(POSIX::INT_MAX));
 	    TBDebugTimeStamp("creating artifact container $tmpname for".
 			     " artifact script $ascript...");
@@ -4607,7 +5622,16 @@ sub emulabizeImage($;$$$$$$$$)
 	#
 	# First, we are descended FROM the base image.
 	#
-	print DFD "FROM $image\n\n";
+	print DFD "FROM $image\n";
+
+	#
+	# When user is unspecified Docker defaults to root,
+	# however if a user specifies another user we must
+	# set it back to root in order to do our transformations.
+	# However we also must set user back to the Dockerfile's spec 
+	# for entrypoint/cmd ops
+	#
+	print DFD "USER root\n";
 
 	#
 	# Then, if this is emulabization core or full, add an
@@ -4616,12 +5640,13 @@ sub emulabizeImage($;$$$$$$$$)
 	#
 	if ($emulabization eq DOCKER_EMULABIZE_CORE()
 	    || $emulabization eq DOCKER_EMULABIZE_FULL()) {
-	    print DFD "ONBUILD RUN /usr/local/etc/emulab/prepare -M\n\n";
+	    print DFD "ONBUILD RUN /usr/local/etc/emulab/prepare -M\n";
 	}
 
 	#
 	# Second, copy in all the Dockerfile fragments.
 	#
+	my @copies = ();
 	$cwd = getcwd();
 	chdir($DOCKERFILES);
 	foreach my $f (@dfiles) {
@@ -4629,14 +5654,47 @@ sub emulabizeImage($;$$$$$$$$)
 		or fatal("could not open $f to copy into $dockerfile");
 	    my @lines = <FD>;
 	    close(FD);
-	    print DFD join("",@lines)."\n\n";
+	    my @tlines = ();
+	    foreach my $dfline (@lines) {
+		chomp($dfline);
+		if ($dfline =~ /^\s*COPY\s+([^\s]+)\s+(.+)$/) {
+		    push(@copies,[$1,$2]);
+		}
+		else {
+		    push(@tlines,$dfline);
+		}
+	    }
+	    if (@tlines > 0) {
+		print DFD join("\n",@tlines)."\n";
+	    }
 	}
 	chdir($cwd);
 
 	#
 	# Next create COPY and RUN commands.
 	#
-	print DFD "COPY fs/ /\n";
+	if ($COPY_OPTIMIZE) {
+	    $cwd = getcwd();
+	    chdir($cdir);
+	    mkdir("combined-fs");
+	    foreach my $sdref (@copies) {
+		my ($src,$dst) = ($sdref->[0],$sdref->[1]);
+		if ($dst =~ /^[^\/]/) {
+		    $dst = "combined-fs/$dst";
+		}
+		else {
+		    $dst = "combined-fs$dst";
+		}
+		mysystem("rsync -a $src $dst");
+	    }
+	    mysystem("rsync -a fs/ combined-fs/");
+	    chdir($cwd);
+
+	    print DFD "COPY combined-fs/ /\n";
+	}
+	else {
+	    print DFD "COPY fs/ /\n";
+	}
 	my $runcmd = "";
 	foreach my $ruc (@runscripts) {
 	    my $dn = dirname($ruc);
@@ -4667,7 +5725,7 @@ sub emulabizeImage($;$$$$$$$$)
 	    || $curzation eq '' || $curzation eq DOCKER_EMULABIZE_NONE()) {
 	    $runcmd .= " && cp -pv /etc/passwd /etc/group /etc/shadow /etc/gshadow /etc/emulab";
 	}
-	print DFD "RUN /bin/sh -c '$runcmd'\n\n";
+	print DFD "RUN /bin/sh -c '$runcmd'\n";
 	close(DFD);
 
 	# We could just send the bytes to the daemon (tar -C $cdir -c . |),
@@ -4745,9 +5803,9 @@ sub emulabizeImage($;$$$$$$$$)
     return -1;
 }
 
-sub setupImage($$$$$$$$$$)
+sub setupImage($$$$$$$$$$$)
 {
-    my ($vnode_id,$vnconfig,$private,$image,$username,$password,
+    my ($vnode_id,$vnconfig,$private,$image,$username,$password,$dockerfile,
 	$newimageref,$newcreateargsref,$newcmdref,$newzationref) = @_;
     my $rc;
     my $cwd;
@@ -4761,11 +5819,7 @@ sub setupImage($$$$$$$$$$)
     #
     my $emulabization;
     my $update = 0;
-    if (!exists($vnconfig->{'attributes'}->{DOCKER_EMULABIZATION})) {
-	$emulabization = $vnconfig->{'attributes'}->{DOCKER_EMULABIZATION} =
-	    DOCKER_EMULABIZE_DEFAULT();
-    }
-    else {
+    if (exists($vnconfig->{'attributes'}->{DOCKER_EMULABIZATION})) {
 	$emulabization = $vnconfig->{'attributes'}->{DOCKER_EMULABIZATION};
 	if ($emulabization ne DOCKER_EMULABIZE_FULL()
 	    && $emulabization ne DOCKER_EMULABIZE_BUILDENV()
@@ -4777,12 +5831,11 @@ sub setupImage($$$$$$$$$$)
 		 " $vnode_id/$image; aborting!");
 	    return -1;
 	}
+	if ($emulabization eq '') {
+	    $emulabization = DOCKER_EMULABIZE_NONE;
+	}
+	$vnconfig->{'attributes'}->{DOCKER_EMULABIZATION} = $emulabization;
     }
-    # Save this off for later reference.
-    if ($emulabization eq '') {
-	$emulabization = DOCKER_EMULABIZE_NONE;
-    }
-    $vnconfig->{'attributes'}->{DOCKER_EMULABIZATION} = $emulabization;
     if (exists($vnconfig->{'attributes'}->{DOCKER_EMULABIZATION_UPDATE})) {
 	$update = $vnconfig->{'attributes'}->{DOCKER_EMULABIZATION_UPDATE};
     }
@@ -4808,8 +5861,12 @@ sub setupImage($$$$$$$$$$)
 
     my $newimage;
     my $iattrs;
+    if (!defined($newzationref)) {
+	my $tmp;
+	$newzationref = \$tmp;
+    }
     $rc = emulabizeImage($image,\$newimage,$emulabization,$newzationref,$update,
-			 $pullpolicy,$username,$password,\$iattrs);
+			 $pullpolicy,$username,$password,$dockerfile,\$iattrs);
     if ($rc) {
 	warn("failed to emulabize image $image; aborting!\n");
 	return $rc;
@@ -4818,6 +5875,13 @@ sub setupImage($$$$$$$$$$)
     #print "DEBUG: setupImage ".$iattrs->{'DIST'}.",".$iattrs->{'TAG'}.",".$iattrs->{'MINTAG'}."\n";
     my ($dist,$tag,$mintag) =
 	($iattrs->{'DIST'},$iattrs->{'TAG'},$iattrs->{'MINTAG'});
+
+    #
+    # Save off the emulabization level we're going to use, if it was undef.
+    #
+    if (!defined($emulabization)) {
+	$emulabization = $$newzationref;
+    }
 
     #
     # If we're not emulabizing, we don't mess with the cmd or
@@ -5016,7 +6080,7 @@ sub moveNetDeviceToNetNS($$$)
 {
     my ($vnode_id,$private,$dev) = @_;
 
-    mysystem2("ip link $dev set netns $vnode_id");
+    mysystem2("$IP link $dev set netns $vnode_id");
     if (!$?) {
 	if (!exists($private->{"rawnetdevs"})) {
 	    $private->{"rawnetdevs"} = {};
@@ -5038,7 +6102,7 @@ sub moveNetDeviceFromNetNS($$$)
 	     " attempting removal from netns anyway!");
     }
 
-    mysystem2("ip netns exec $vnode_id ip link $dev set netns 1");
+    mysystem2("$IP netns exec $vnode_id ip link $dev set netns 1");
     if (!$?) {
 	warn("device $dev not in $vnode_id netns; removing from".
 	     " our data structures anyway!");
@@ -5089,8 +6153,16 @@ sub genhostspairlist($$)
     # First see if we have a topo file; we can generate our own hosts
     # file if we do, saving a lot of load on tmcd in big experiments.
     #
+    # NB: for a dedicated host, genhostslistfromtopo is really reading
+    # /var/emulab/boot/topomap, not the VM's copy of that!  Thus we
+    # always take the second (slow) path for the SHAREDHOST case,
+    # because in that case the hosts's topomap is irrelevant.  None of
+    # this is desireable, but it's what we've got for now.  Plus, shared
+    # container experiments are not going to be large, so this is only
+    # minor overhead.
+    #
     my $mapfile = "$VMS/$vnode_id/hostmap";
-    if (genhostslistfromtopo($mapfile,\@tmccresults) < 0 &&
+    if ((SHAREDHOST() || genhostslistfromtopo($mapfile,\@tmccresults) < 0) &&
 	tmcc(TMCCCMD_HOSTS,undef,\@tmccresults) < 0) {
 	warn("Could not get hosts file from server!");
 	@$rptr = ();
@@ -5265,14 +6337,14 @@ sub addMounts($$)
 	    else {
 		if (! -e $path) {
 		    if (! os_mkdir($path, "0770")) {
-			warning("Could not make directory $path");
+			warn("Could not make directory $path");
 			next;
 		    }
 		}
 	
 		print STDOUT "  Mounting $remote on $path\n";
 		if (system("$NFSMOUNT $remote $path")) {
-		    warning("Could not $NFSMOUNT $remote on $path");
+		    warn("Could not $NFSMOUNT $remote on $path");
 		    next;
 		}
 		TBDebugTimeStamp("$vnode_id using new $remote")
@@ -5440,6 +6512,14 @@ sub CreateRoutingScripts($$)
 	warn("Could not get router configuration from libsetup!");
 	return -1;
     }
+    #
+    # Remove this temp file that getrouterconfig/calcroutes created as
+    # input for the dijkstra calculator; on a 2k-node topo, it can be
+    # >80MB.
+    #
+    if (-f CONFDIR() . "/linkmap") {
+	unlink(CONFDIR() . "/linkmap");
+    }
 
     my $script = CONFDIR()."/routing.sh";
 
@@ -5495,7 +6575,7 @@ sub CreateRoutingScripts($$)
 	push(@{$downmap{$sip}}, $rcline);
     }
 
-    my $prefix = "ip netns exec $vnode_id ";
+    my $prefix = "$IP netns exec $vnode_id ";
 
     print RC "case \"\$1\" in\n";
     foreach my $arg (keys(%upmap)) {
@@ -5862,6 +6942,24 @@ sub RunProxies($$)
     return 0;
 }
 
+# Returns 1 if proxies are running; 0 if not; -1 on error.
+sub AreProxiesRunning($$)
+{
+    my ($vnode_id,$vmid) = @_;
+
+    if (-e "/var/run/tmccproxy-$vnode_id.pid") {
+	open(FD,"/var/run/tmccproxy-$vnode_id.pid")
+	    or return -1;
+	my $pid = <FD>;
+	close(FD);
+	chomp($pid);
+	if (kill(0,$pid) > 0) {
+	    return 1;
+	}
+    }
+    return 0;
+}
+
 sub KillProxies($$)
 {
     my ($vnode_id,$vmid) = @_;
@@ -5889,7 +6987,7 @@ sub findControlNetVethInfo($$$$;$)
     my $ifidx;
     my $dev;
 
-    open(FD,"ip netns exec $vnode_id ip -br link show |");
+    open(FD,"$IP netns exec $vnode_id ip -br link show |");
     while (!eof(FD)) {
 	my $line = <FD>;
 	chomp($line);
@@ -5900,7 +6998,7 @@ sub findControlNetVethInfo($$$$;$)
     }
     close(FD);
     if (!$ifidx) {
-	open(FD,"ip netns exec $vnode_id ip -br addr show |");
+	open(FD,"$IP netns exec $vnode_id ip -br addr show |");
 	while (!eof(FD)) {
 	    my $line = <FD>;
 	    if ($line =~ /^[^\@]+\@if(\d+).*$vip.*$/) {
@@ -5914,7 +7012,7 @@ sub findControlNetVethInfo($$$$;$)
 	warn("could not find host control net iface ifidx for $vnode_id!");
 	return -1;
     }
-    open(FD,"ip link show |");
+    open(FD,"$IP link show |");
     while (!eof(FD)) {
 	my $line = <FD>;
 	if ($line =~ /^$ifidx: ([^\@]+)\@.*$/) {
@@ -6139,8 +7237,9 @@ sub hostSwapping()
 #
 # Contruct and returns the jail control net IP of the physical host.
 #
-sub hostControlNet()
+sub hostControlNet(;$$)
 {
+    my ($ctrlip,$ctrlmask) = @_;
     #
     # XXX we use a woeful hack to get the virtual control net address,
     # that is unique. I will assume that control network is never
@@ -6148,7 +7247,9 @@ sub hostControlNet()
     # with the lower half of the control network address.
     #
     my (undef,$vmask,$vgw) = findVirtControlNet();
-    my (undef, $ctrlip, $ctrlmask) = findControlNet();
+    if (!defined($ctrlip) || !defined($ctrlip)) {
+	(undef, $ctrlip, $ctrlmask) = getControlNet();
+    }
     my ($a,$b);
 
     if ($vgw =~ /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/) {
@@ -6387,7 +7488,7 @@ sub AllocateIFBs($$$)
 	    }
 	}
 	if (! -e "/sys/class/net/$iname") {
-	    mysystem("ip link add $iname type ifb");
+	    mysystem("$IP link add $iname type ifb");
 	}
 	$MDB{"$iname"} = $vmid;
 	# Record ifb in use
@@ -6423,7 +7524,7 @@ sub ReleaseIFBs($$)
 
     if (exists($private->{'ifbs'})) {
 	for my $iname (keys(%{$private->{'ifbs'}})) {
-	    mysystem("ip link del $iname");	
+	    mysystem("$IP link del $iname");	
 	delete($MDB{$iname});
 	}
     }

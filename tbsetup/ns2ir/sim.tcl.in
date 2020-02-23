@@ -1,6 +1,6 @@
 # -*- tcl -*-
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -928,6 +928,14 @@ Simulator instproc run {} {
 		$self spitxml_data "virt_client_service_hooks" \
 		    $fields $vallist
 	    }
+	}
+    }
+
+    if [info exists ::TBCOMPAT::virt_address_pools] {
+	set fields [list "pool_id" "count"]
+	foreach key [array names ::TBCOMPAT::virt_address_pools] {
+	    $self spitxml_data "virt_address_allocation" \
+		$fields [list $key $::TBCOMPAT::virt_address_pools($key)]
 	}
     }
 

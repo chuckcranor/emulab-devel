@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,6 +50,7 @@ my $restart = 0;
 #
 # Configure variables
 #
+my $TB          = "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
 my $ELABINELAB  = @ELABINELAB@;
 my $BOSSNODE_IP = "@BOSSNODE_IP@";
@@ -242,9 +243,36 @@ while (my %row = $query_result->fetchhash()) {
     }
 }
 
+#
+# First process the template and insert fragments.
+#
+my @lines = ();
+
 open(IF,"<$template") or
     fatal("Unable to open $template for reading");
 while (<IF>) {
+    if (/^(\s*)\%\%fragment=([-\w]+)/) {
+	my $file = "$TB/etc/dhcpd.conf.frag.${2}";
+	if (! -e $file) {
+	    push(@lines, $1 . "#" . $_);
+	    next;
+	}
+	open(FRAG, "$file") or
+	    fatal("Unable to open $file for reading");
+	while (<FRAG>) {
+	    push(@lines, $1 . $_);
+	}
+	close(FRAG);
+	next;
+    }
+    push(@lines, $_);
+}
+close(IF);
+
+#
+# Now run through the updated template lines.
+#
+foreach (@lines) {
 	if (/^(\s*)range\s*;/) {
 		# Comment out a null DHCPD_DYNRANGE line.
 		my $spaces = $1;
@@ -531,7 +559,6 @@ while (<IF>) {
 	    print $OUT $_;
 	}
 }
-close(IF);
 
 if ($install) {
     close(OF) or

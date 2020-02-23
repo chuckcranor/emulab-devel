@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,7 +34,8 @@ $isadmin   = ISADMIN();
 #
 # Verify page arguments.
 #
-$reqargs = RequiredPageArguments("osinfo", PAGEARG_OSINFO);
+$reqargs = RequiredPageArguments("osinfo",  PAGEARG_OSINFO);
+$optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
 
 #
 # Verify permission.
@@ -44,6 +45,12 @@ if (!$osinfo->AccessCheck($this_user, $TB_OSID_READINFO)) {
 }
 $osid = $osinfo->osid();
 $osname = $osinfo->osname();
+$version = $osinfo->vers();
+
+if (!$CLASSICWEB_OVERRIDE && $osinfo->ezid() && !$classic) {
+    header("Location: apt/show-image.php?imageid=$osid&version=$version");
+    return;
+}
 
 #
 # Standard Testbed Header

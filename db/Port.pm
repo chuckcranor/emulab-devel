@@ -176,7 +176,7 @@ sub ParseIfaceString($;$)
 	$striface = $c;
     }
 
-    if ($striface =~ /^(.+):(.+)$/) {
+    if ($striface =~ /^([^:]+):(.+)$/) {
 	return ($1, $2);
     }
 
@@ -195,7 +195,7 @@ sub ParseTripleString($;$)
 	$triplestring = $c;
     }
 
-    if ($triplestring =~ /^(.+):(.+)\.(.+)$/) {
+    if ($triplestring =~ /^([^:]+):(\d+)\.(\d+)$/) {
 	return ($1, $2, $3);
     }
 
@@ -211,11 +211,11 @@ sub ParseCardPortString($;$)
     }
 
     # Should not include all fields
-    if ($cp =~ /^(.+):(.+)[\/\.](.+)$/) {
+    if ($cp =~ /^([^:]+):(\d+)[\/\.](\d+)$/) {
 	return (undef, undef);
     }
 
-    if ($cp =~ /^(.+)\.(.+)$/ || $cp =~ /^(.+)\/(.+)$/) {
+    if ($cp =~ /^(\d+)\.(\d+)$/ || $cp =~ /^(\d+)\/(\d+)$/) {
 	return ($1, $2);
     }
 
@@ -338,7 +338,7 @@ sub fake_IfaceString2TripleTokens($;$)
 
     my ($n, $iface) = ParseIfaceString($i);
     
-    if (defined($iface) && $iface =~ /^(.+)\/(.+)$/) {
+    if (defined($iface) && $iface =~ /^(\d+)\/(\d+)$/) {
 	return ($n, $1, $2);
     }    
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,7 +32,6 @@ $osid_oslist["FreeBSD"]		= 1;
 $osid_oslist["NetBSD"]		= 1;
 $osid_oslist["Windows"]		= 1;
 $osid_oslist["TinyOS"]		= 1;
-$osid_oslist["Oskit"]		= 0;
 $osid_oslist["Other"]		= 1;
 
 # List of allowed OS features. The value is a user-okay flag.
@@ -41,8 +40,7 @@ $osid_featurelist["ping"]	= 1;
 $osid_featurelist["ssh"]	= 1;
 $osid_featurelist["ipod"]	= 1;
 $osid_featurelist["isup"]	= 1;
-$osid_featurelist["veths"]	= 0;
-$osid_featurelist["mlinks"]	= 0;
+$osid_featurelist["mlinks"]	= 1;
 $osid_featurelist["linktest"]	= 1;
 $osid_featurelist["linkdelays"]	= 1;
 $osid_featurelist["vlans"]	= 1;

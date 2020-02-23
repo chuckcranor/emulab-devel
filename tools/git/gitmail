@@ -360,7 +360,7 @@ sub get_merge_base($$);
 sub get_summary($);
 sub uniq(@);
 sub flatten_arrayref($);
-sub commit_mail($$$\@$@);
+sub commit_mail($$$$\@$@);
 sub get_commits($$$);
 sub send_mail($$$@);
 sub short_refname($);
@@ -484,6 +484,7 @@ if (!defined($showcommit_args)) {
 #
 foreach my $refline (@reflines) {
     my @commits;
+    my ($tag_rev,$tag_commit);
     my @changed_files;
 
     chomp $refline;
@@ -515,48 +516,88 @@ foreach my $refline (@reflines) {
     debug("Change type: $ct ($old_type,$new_type)");
 
     #
-    # For now, only handle commit objects.  Tag objects require extra work.
+    # For now, only handle commit and tag objects.  Note that
+    # lightweight tags are just commits, so they could be handled in the
+    # regular commit path -- but we handle them together with annotated
+    # tags (tag objects) for message uniformity.
     #
-    if ($new_type && $new_type ne "commit") {
-        debug("Skipping non-commit");
-        next;
-    }
-
-    #
-    # Figure out which commits we're interested in based on reference type
-    # and change type.
-    #
-    if ($ref_type eq 'tag' || $ref_type eq 'note') {
+    if (($new_type && $new_type eq 'tag')
+	|| ($old_type && $old_type eq 'tag')
+	|| $ref_type eq 'tag') {
 	if ($ct eq $CT_DELETE) {
 	    # We want to know where the tag used to point before deletion
-	    push @commits, $oldrev;
+	    $tag_rev = $oldrev;
 	} else {
 	    # Tags only have delete, create, and update.  Rewind and rebase
 	    # don't make sense in tag context.
 	    #
 	    # We only care about the new value of the tag here.
-	    push @commits, $newrev;
+	    $tag_rev = $newrev;
 	}
-    } elsif ($ref_type eq 'branch') {
-	if ($ct eq $CT_DELETE) {
-	    # We want to know where the branch used to point before deletion
-	    push @commits, $oldrev;
-	} elsif ($ct eq $CT_REWIND) {
-	    # There's no new history to show, but we still want to see where
-	    # the branch now points.
-	    push @commits, $newrev;
-	} else {
-	    @commits = get_commits($oldrev,$newrev,$refname);
-	    # We only want to see *new* commits, which means that commits already
-	    # in the main repository need to be excluded too.
-	    if (defined $exclude_repo) {
-		@commits = filter_out_objects_in_repo($exclude_repo, @commits);
+	#
+	# Map tag to the commit it reference(s|d).  Note that gitlab
+	# sends one event per tag, so we don't need to handle a list.
+	#
+	if ($ref_type eq 'tag') {
+	    $tag_commit = `$GIT rev-list -1 $tag_rev`;
+	    chomp($tag_commit);
+	    if ($? || !$tag_commit) {
+		print "Skipping unknown tag object $tag_rev\n";
+		next;
 	    }
 	}
+	else {
+	    $tag_commit = $tag_rev;
+	}
+	push @commits, $tag_commit;
+    } elsif (($new_type && $new_type eq 'commit')
+	     || ($old_type && $old_type eq 'commit')) {
+	#
+	# Figure out which commits we're interested in based on reference type
+	# and change type.
+	#
+	if ($ref_type eq 'tag' || $ref_type eq 'note') {
+	    if ($ct eq $CT_DELETE) {
+	        # We want to know where the tag used to point before deletion
+	        push @commits, $oldrev;
+	    } else {
+	        # Tags only have delete, create, and update.  Rewind and rebase
+	        # don't make sense in tag context.
+	        #
+	        # We only care about the new value of the tag here.
+	        push @commits, $newrev;
+	    }
+        } elsif ($ref_type eq 'branch') {
+	    if ($ct eq $CT_DELETE) {
+	        # We want to know where the branch used to point before deletion
+	        push @commits, $oldrev;
+	    } elsif ($ct eq $CT_REWIND) {
+	        # There's no new history to show, but we still want to see where
+	        # the branch now points.
+	        push @commits, $newrev;
+	    } else {
+	        @commits = get_commits($oldrev,$newrev,$refname);
+	        # We only want to see *new* commits, which means that commits already
+	        # in the main repository need to be excluded too.
+	        if (defined $exclude_repo) {
+		    @commits = filter_out_objects_in_repo($exclude_repo, @commits);
+	        }
+	    }
+        }
+    } else {
+	debug("Skipping non-commit/tag object $new_type/$ref_type");
+	next;
     }
 
     next unless (@commits);
-    debug("commits are: ", join(" ",@commits));
+
+    if (defined($tag_rev)) {
+	debug("tag is: $tag_rev");
+	debug("tag commit is: $tag_commit");
+    }
+    else {
+	debug("commits are: ", join(" ",@commits));
+    }
 
     @changed_files = changed_files(@commits);
     debug("Changed files: ", join(",",@changed_files));
@@ -570,7 +611,7 @@ foreach my $refline (@reflines) {
     # Send off the mail!
     #
     if (@mailaddrs) {
-        commit_mail($ct,$oldrev,$newrev,@commits,$refname,@mailaddrs);
+	commit_mail($ref_type,$ct,$oldrev,$newrev,@commits,$refname,@mailaddrs);
     }
 }
 
@@ -838,23 +879,20 @@ sub flatten_arrayref($) {
 #
 # Send mail about a regular update commit
 #
-sub commit_mail($$$\@$@) {
-    my ($ct,$oldrev,$newrev,$commits,$refname,@mailaddrs) = @_;
+sub commit_mail($$$$\@$@) {
+    my ($ref_type,$ct,$oldrev,$newrev,$commits,$refname,@mailaddrs) = @_;
 
     #
     # Construct the subject line. For now, we just say what repo (if defined)
     # and what branch/tag it happened on
     #
     my $subject = "git commit: ";
-    my $ref_type;
+    my $shortrefname = short_refname($refname);
     my $short_rev;
     if (defined($reponame)) {
         $subject .= "[$reponame] ";
     }
-
-    $ref_type = ref_type($refname);
-
-    $subject .= $ref_type . ' ' . short_refname($refname);
+    $subject .= $ref_type . ' ' . $shortrefname;
 
     my $what_happened;
     if ($ct eq $CT_UPDATE) {
@@ -870,7 +908,7 @@ sub commit_mail($$$\@$@) {
     }
 
     $subject .= ' ' . $what_happened;
-    my $actionstring = ucfirst($ref_type) . ' ' . short_refname($refname) .
+    my $actionstring = ucfirst($ref_type) . ' ' . $shortrefname .
                        " has been $what_happened";
 
     $short_rev = `$GIT rev-parse --short $refname $STDERRNULL`;
@@ -890,6 +928,52 @@ sub commit_mail($$$\@$@) {
     }
 
     $actionstring .= "\n\n";
+
+    #
+    # If this is a lightweight tag, we still want to stick a tag URL in
+    # immediately after the message in $actionstring.  If it's an
+    # annotated tag, we want to show the "full" tag object, but not the
+    # referenced commit (that is shown in the @commits loop below).
+    # Note that there should only be a single commit specified in @commits
+    # -- and that is all we ever receive from the gitlab event, since it
+    # only sends one tag per tag_push event.
+    #
+    if ($ref_type eq 'tag') {
+	my $rt;
+	if ($ct ne $CT_DELETE) {
+	    $rt = rev_type($newrev);
+	}
+	if (defined($rt) && $rt eq 'tag') {
+	    #
+	    # For a tag object (annotated commit), we want the tag
+	    # details and annotation, but *not* the referenced commit
+	    # (that is printed in the regular loop below).  This command
+	    # grabs just the tag goo, not the referenced commit goo.
+	    # NB: we would prefer to use %(refname:lstrip=2) in the
+	    # format string, but this is unsupported in git 2.7.4.  So
+	    # we just hack it.  Also, the exact format that would
+	    # emulate git show <tag> is
+	    #   'tag %(refname)%0a'.
+	    #   'Tagger: %(taggername) %(taggeremail)%0a'.
+	    #   'Date: %(taggerdate)%0a'.
+	    #   '%0a'.
+	    #   '%(contents)';
+	    # but we don't use that because it is duplicative and noisy.
+	    #
+	    my $fmt = 'Tagger: %(taggername) %(taggeremail)%0a'.
+	      'Date: %(taggerdate)%0a'.
+	      'Annotation: %(contents)';
+	    my $showcommand = "$GIT for-each-ref --format='$fmt' $refname";
+	    debug("running '$showcommand'");
+	    my $ttext = `$showcommand`;
+	    $ttext =~ s/refs\/tags\///g;
+	    $actionstring .= $ttext;
+	}
+	# We only want to print the tag URL if it still exists.
+	if (defined($gitlab_url) && $ct ne $CT_DELETE) {
+	    $actionstring .= "${gitlab_url}/tags/$shortrefname\n\n";
+        }
+    }
 
     #
     # Make a pretty summary of commits if there are enough of them
@@ -991,7 +1075,7 @@ sub commit_mail($$$\@$@) {
             send_mail($subject,
                 $actionstring . join("",@commit_text) . "\n" .
                     join("",@patch_text),
-                short_refname($refname),
+                $shortrefname,
                 @mailaddrs);
         } else {
             push @commitmessages,\@commit_text;
@@ -1033,7 +1117,7 @@ sub commit_mail($$$\@$@) {
             (scalar(@patches) ? "$BODYSEP" : "") .
             join("\n", map { join "",@$_} @patches) .
             $cloneurls,
-            short_refname($refname),
+            $shortrefname,
             @mailaddrs);
     }
 }
@@ -1052,7 +1136,12 @@ sub get_commits($$$) {
     # two revisions we were given.
     #
     if ($ct eq $CT_UPDATE) {
-	my $revstring = "$oldrev..$newrev";
+	my $revstring;
+	if ($oldrev eq $newrev) {
+	    $revstring = $newrev;
+	} else {
+	    $revstring = "$oldrev..$newrev";
+	}
 
 	debug("running '$GIT rev-list --reverse --date-order '$revstring'");
 	my @revs = `$GIT rev-list --reverse --date-order '$revstring'`;
@@ -1161,7 +1250,7 @@ sub send_mail($$$@) {
                #    'Bcc:' lines
                my $mailfrom_str = "";
                if ($mailfrom) {
-                   $mailfrom_str = "-f$mailfrom";
+                   $mailfrom_str = "-f'$mailfrom'";
                }
                open(MAIL, "| $SENDMAIL -odb -oem $mailfrom_str -t");
         }

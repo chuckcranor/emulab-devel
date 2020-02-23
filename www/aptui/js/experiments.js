@@ -4,6 +4,7 @@ $(function ()
 
     var templates = APT_OPTIONS.fetchTemplateList(['experiments',
 						   'experiment-list',
+						   'classic-explist',
 						   'waitwait-modal',
 						   'oops-modal']);
 
@@ -11,6 +12,7 @@ $(function ()
     var listString     = templates['experiment-list'];
     var waitwaitString = templates['waitwait-modal'];
     var oopsString     = templates['oops-modal'];
+    var classicString  = templates['classic-explist'];
 
     function initialize()
     {
@@ -35,11 +37,14 @@ $(function ()
 	    var html = template({"experiments" : json.value,
 				 "showCreator" : true,
 				 "showProject" : true,
+				 "searchUUID"  : true,
+				 "showterminate"  : false,
 				});
 	    $('#experiments_content').html(html);
 	    InitTable();
 	    $('#experiments_loading').addClass("hidden");
 	    $('#experiments_loaded').removeClass("hidden");
+	    LoadClassicExperiments();
 	};
 	sup.CallServerMethod(null, "experiments", "ExperimentList",
 			     null, callback);
@@ -107,7 +112,7 @@ $(function ()
 	    search_timeout =
 		window.setTimeout(function() {
 		    var filters = $.tablesorter.getFilters(table);
-		    filters[12] = userInput;
+		    filters[13] = userInput;
 		    //console.info("Search", filters);
 		    $.tablesorter.setFilters(table, filters, true);
 		}, 500);
@@ -135,19 +140,30 @@ $(function ()
 
         // Javascript to enable link to radio button
         var hash = document.location.hash;
-        if (hash) {
-	    /*
-	     * The use of data-id is to avoid page jumping when changing
-	     * the page hash; it wants to jump to the radio buttons.
-	     */
-	    $('#radio-buttons [data-id="' + hash +'"]').prop("checked", true);
-        }
+
 	// Set the correct radio when a user uses their back/forward button
         $(window).on('hashchange', function (e) {
 	    var hash = window.location.hash;
 	    if (hash == "") {
 		hash = "#all";
 	    }
+
+	    console.info("hash", hash);
+
+	    // Special case for classic experiments radio button
+	    if (hash == "#all") {
+		$('#classic_experiments_div').removeClass("hidden");
+		$('#experiments_div').removeClass("hidden");
+	    }
+	    else if (hash == "#classic") {
+		$('#classic_experiments_div').removeClass("hidden");
+		$('#experiments_div').addClass("hidden");
+	    }
+	    else {
+		$('#classic_experiments_div').addClass("hidden");
+		$('#experiments_div').removeClass("hidden");
+	    }
+	    
 	    /*
 	     * The use of data-id is to avoid page jumping when changing
 	     * the page hash; it wants to jump to the radio buttons.
@@ -155,7 +171,10 @@ $(function ()
 	    $('#radio-buttons [data-id="' + hash +'"]').prop("checked", true);
 	    SetFilters(table);
 	});
-	SetFilters(table);
+	if (hash) {
+	    window.location.hash = hash;
+	    $(window).trigger('hashchange');
+	}
 
 	// Initial sort.
 	if (window.SORTYBY !== undefined && window.SORTYBY == "created") {
@@ -167,6 +186,19 @@ $(function ()
 	else {
 	    table.find('th:eq(0)').trigger('sort');
 	}
+
+	// Bind search for IP.
+	$('#experiment-search-ip button').click(function (event) {
+	    event.preventDefault();
+	    var ip = $.trim($('#experiment-search-ip input').val());
+	    var rx = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+	    if (rx.test(ip)) {
+		SearchForIP(ip, table);
+	    }
+	    else {
+		alert("Invalid IP address");
+	    }
+	});
     }
 
     function SetFilters(table)
@@ -175,8 +207,8 @@ $(function ()
 	var filters = $.tablesorter.getFilters(table);
 	// The "any" filter needs a value or everything disappears.
 	// If there is a term in the search box, it will have a value.
-	if (filters[12] === undefined) {
-	    filters[12] = "";
+	if (filters[13] === undefined) {
+	    filters[13] = "";
 	}
 	if ($('#radio-buttons [data-id="#extending"]').is(":checked")) {
 	    tmp.push("extending");
@@ -192,15 +224,93 @@ $(function ()
 	}
 	if (tmp.length) {
 	    // regex search, plain | does not work.
-	    filters[11] = "/" + tmp.join("|") + "/";
+	    filters[12] = "/" + tmp.join("|") + "/";
 	}
 	else {
 	    // Hmm, an empty string will get everything.
-	    filters[11] = "";
+	    filters[12] = "";
 	}
 	//console.info("SetFilters", filters);
 	$.tablesorter.setFilters(table, filters, true);
     }
-    
+
+    /*
+     * Send the IP to the backend for search, and then update the filters
+     * if we get back a match, so the user sees just the experiment.
+     */
+    function SearchForIP(ip, table)
+    {
+	var filters = $.tablesorter.getFilters(table);
+	
+	var callback = function (json) {
+	    console.info(json);
+	    if (json.code) {
+		console.info(json.value);
+		sup.HideWaitWait(function () {
+		    sup.SpitOops("oops", "Could not find an experiment using " +
+				 "this IP address");
+		});
+		return;
+	    }
+	    sup.HideWaitWait();
+	    filters[12] = "";
+	    filters[13] = json.value;
+	    $.tablesorter.setFilters(table, filters, true);
+	}
+	// Clear this, we search for everything.
+	$("#experiments_search").val("");
+	filters[12] = "";
+	filters[13] = "";
+	$.tablesorter.setFilters(table, filters, true);
+	
+	sup.ShowWaitWait();
+	sup.CallServerMethod(null, "experiments", "SearchIP",
+			     {"ip" : ip}, callback);
+    }
+
+    function LoadClassicExperiments()
+    {
+	var callback = function(json) {
+	    console.info("classic", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (json.value.length == 0) {
+		return;
+	    }
+	    var template = _.template(classicString);
+
+	    $('#classic_experiments_content')
+		.html(template({"experiments" : json.value,
+				"showconvert" : false,
+				"showCreator" : true,
+				"showProject" : true,
+				"asProfiles"  : false}));				
+	    
+	    // Format dates with moment before display.
+	    $('#classic_experiments_content .format-date').each(function() {
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
+	    // The radio button at the top.
+	    $('#classic_radio_button').removeClass("hidden");
+
+	    $('#classic_experiments_content .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+
+		    // initialize zebra and filter widgets
+		    widgets: ["zebra"],
+		});
+	};
+	var xmlthing = sup.CallServerMethod(null, "experiments",
+					    "ClassicExperimentList");
+	xmlthing.done(callback);
+    }
+
     $(document).ready(initialize);
 });

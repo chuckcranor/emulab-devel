@@ -180,13 +180,23 @@ INSERT INTO sitevariables VALUES ('general/admission_control','0','0','When set,
 INSERT INTO sitevariables VALUES ('general/cnet_firewalls','0','0','When set, control network firewalls are supported via control network vlans.',0);
 INSERT INTO sitevariables VALUES ('general/export_active',NULL,'0','Stop exporting shared user and project directories when they have been inactive for this number of days or longer (0==do not inactivate).',0);
 INSERT INTO sitevariables VALUES ('general/root_keypair',NULL,'-1','Default distribution of per-experiment root keypairs (-1==disable root keypair mechanism, 0==do not distribute to any nodes, 1==distribute to all nodes).',0);
+INSERT INTO sitevariables VALUES ('cnetwatch/enable',NULL,'0','Enable control network watcher; only works on clusters that support portstats on the control switches.',0);
+INSERT INTO `sitevariables` VALUES ('cnetwatch/reportlog',NULL,'','Full path of logfile for periodic port counts of all nodes.',0);
 INSERT INTO sitevariables VALUES ('cnetwatch/check_interval',NULL,'600','Interval in seconds at which to collect info (should be at least 10 seconds, 0 means do not run cnetwatch)',0);
 INSERT INTO sitevariables VALUES ('cnetwatch/alert_interval',NULL,'600','Interval in seconds over which to calculate packet/bit rates and to log alerts (should be an integer multiple of check_interval)',0);
 INSERT INTO sitevariables VALUES ('cnetwatch/pps_threshold',NULL,'50000','Packet rate in packets/sec in excess of which to log an alert (0 means do not generate packet rate alerts)',0);
 INSERT INTO sitevariables VALUES ('cnetwatch/bps_threshold',NULL,'500000000','Data rate in bits/sec in excess of which to log an alert (0 means do not generate data rate alerts)',0);
 INSERT INTO sitevariables VALUES ('cnetwatch/mail_interval',NULL,'600','Interval in seconds at which to send email for all alerts logged during the interval (0 means do not send alert email)',0);
 INSERT INTO sitevariables VALUES ('cnetwatch/mail_max',NULL,'1000','Maximum number of alert emails to send; after this alerts are only logged (0 means no limit to the emails)',0);
+INSERT INTO sitevariables VALUES ('reservations/approval_threshold',NULL,'128','Maximum number of node hours for automatic approval of reservation requests (0 means no limit).',0);
+INSERT INTO sitevariables VALUES ('docker/registry',NULL,'','The URL of the Docker registry where this Emulab stores its custom Docker images; the empty string signifies that users cannot create custom Docker images',0);
+INSERT INTO sitevariables VALUES ('general/allowjumboframes',NULL,'0','Set non-zero to allow experiments to specify jumbo frames on links/lans. NOTE: the experimental network fabric switches must have jumbo frames enabled!',0);
 
+INSERT INTO sitevariables VALUES ('hwcollect/interval',NULL,'0','If non-zero, interval in minutes between HW collection events for any node. Whenever a node is in emulab-ops/hwcheckup and more than the interval has passed since the last collection, new data will be collected. Set to zero to disable collection.',0);
+INSERT INTO sitevariables VALUES ('hwcollect/experiment',NULL,'emulab-ops/hwcheckup','Project (pid) or experiment (pid/eid) in which the node must reside to run collection.',0);
+INSERT INTO sitevariables VALUES ('hwcollect/outputdir',NULL,'/proj/emulab-ops/hwcollect','NFS-shared filesystem into which HW info command output is stored. Directory must exist.',0);
+INSERT INTO sitevariables VALUES ('hwcollect/commands',NULL,'Any,dmesg,dmesg;Linux,lshw,lshw','Collection programs to run. A semi-colon separated list of OS,program,cmdline triples.',0);
+INSERT INTO sitevariables VALUES ('rfmonitor/noisefloor',NULL,'-110.0','Noise floor threshold for determining if a radio is transmitting.',0);
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

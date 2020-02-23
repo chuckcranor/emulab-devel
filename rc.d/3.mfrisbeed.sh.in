@@ -68,6 +68,10 @@ esac
 #
 if [ -x @prefix@/sbin/setsitevar ]; then
     disabled=`@prefix@/sbin/setsitevar -c general/testbed_shutdown`
+    if [ $? -ne 0 ]; then
+	echo -n " mysqld not running, skipping mfrisbeed startup"
+	exit 0
+    fi
     if [ $disabled -gt 0 ]; then
 	echo -n " mfrisbeed disabled"
 	exit 0

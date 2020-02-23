@@ -78,18 +78,18 @@ function SpitRankList($target, $days)
         DBQueryFatal("select $which,SUM(physnode_count) as physnode_count,".
                      "   SUM(phours) as phours,u.usr_name,u.usr_affil, ".
                      "   u.uid from ".
-                     " ((select $which,physnode_count,created,NULL, ".
+                     " ((select $which,physnode_count,started,NULL, ".
                      "   physnode_count * (TIMESTAMPDIFF(HOUR, ".
-                     "    IF(created > DATE_SUB(now(), INTERVAL $days DAY), ".
-                     "       created, DATE_SUB(now(), INTERVAL $days DAY)), now())) ".
+                     "    IF(started > DATE_SUB(now(), INTERVAL $days DAY), ".
+                     "       started, DATE_SUB(now(), INTERVAL $days DAY)), now())) ".
                      "    as phours ".
                      "   from apt_instances as c ".
                      "   where physnode_count>0) ".
                      "  union ".
-                     "  (select $which,physnode_count,created,destroyed, ".
+                     "  (select $which,physnode_count,started,destroyed, ".
                      "   physnode_count * (TIMESTAMPDIFF(HOUR, ".
-                     "    IF(created > DATE_SUB(now(), INTERVAL $days DAY), ".
-                     "       created, DATE_SUB(now(), INTERVAL $days DAY)), destroyed))".
+                     "    IF(started > DATE_SUB(now(), INTERVAL $days DAY), ".
+                     "       started, DATE_SUB(now(), INTERVAL $days DAY)), destroyed))".
                      "    as phours ".
                      "   from apt_instance_history as c ".
                      "   where physnode_count>0 and ".
@@ -132,7 +132,7 @@ $query_result =
                  "left join apt_profile_versions as v on ".
                  "   v.profileid=h.profile_id and ".
                  "   v.version=h.profile_version ".
-                 "where h.created>DATE_SUB(now(),INTERVAL $days DAY) ".
+                 "where h.started>DATE_SUB(now(),INTERVAL $days DAY) ".
                  "group by profile_id,v.pid,v.name ".
 		 "order by count desc limit 100");
 

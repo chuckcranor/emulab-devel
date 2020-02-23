@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -97,6 +97,7 @@ if (!ISADMIN()) {
     SPITUSERERROR("You do not have permission to view this information!");
     return;
 }
+$started = $instance->started() ? "true" : "false";
 
 echo "<link rel='stylesheet'
             href='css/tablesorter.css'>\n";
@@ -106,6 +107,7 @@ echo "  window.UUID = '" . $uuid . "';\n";
 echo "  window.PID = '" . $pid . "';\n";
 echo "  window.CREATOR = '" . $creator . "';\n";
 echo "  window.HOURS = $hours;\n";
+echo "  window.STARTED = $started;\n";
 echo "</script>\n";
 
 echo "<link rel='stylesheet'
@@ -118,7 +120,7 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_IDLEGRAPHS();
-
+AddLibrary("js/resgraphs.js");
 SPITREQUIRE("js/adminextend.js",
             "<script src='js/lib/d3.v3.js'></script>".
             "<script src='js/lib/nv.d3.js'></script>".
@@ -145,6 +147,6 @@ if (count($extensions)) {
     echo "</script>\n";
 }
 
-AddTemplateList(array("adminextend", "oops-modal", "waitwait-modal", "admin-history", "admin-firstrow", "admin-secondrow", "admin-utilization", "admin-summary"));
+AddTemplateList(array("adminextend", "oops-modal", "waitwait-modal", "admin-history", "admin-firstrow", "admin-secondrow", "admin-utilization", "admin-summary", "reservation-list"));
 SPITFOOTER();
 ?>

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2017 University of Utah and the Flux Group.
+# Copyright (c) 2007-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,11 +48,17 @@ use emutil;
 use WebTask;
 use emdb;
 use APT_Dataset;
+use APT_Aggregate;
+use APT_Reservation;
 use GeniXML;
 use GeniHRN;
 use libtestbed;
+use EmulabFeatures;
 use Project;
 use Lease;
+use Image;
+use Node;
+use NodeType;
 use English;
 use Data::Dumper;
 use File::Basename;
@@ -82,6 +88,14 @@ sub versname($)
     my ($self) = @_;
 
     return $self->name() . ":" . $self->version();
+}
+
+# Concat pid,name/vers.
+sub pidversname($)
+{
+    my ($self) = @_;
+
+    return $self->pid() . "," . $self->name() . ":" . $self->version();
 }
 
 sub BlessRow($$)
@@ -487,6 +501,8 @@ sub Create($$$$$$)
 	if (exists($argref->{'shared'}) && $argref->{'shared'});
     $cquery .= ",topdog=1"
 	if (exists($argref->{'topdog'}) && $argref->{'topdog'});
+    $cquery .= ",project_write=1"
+	if (exists($argref->{'project_write'}) && $argref->{'project_write'});
 
     # Create the main entry:
     if (! DBQueryWarn("insert into apt_profiles set $cquery")) {
@@ -649,7 +665,7 @@ sub UpdateMetaData($$)
     # This is the only metadata we can update.
     #
     my %mods = ();
-    foreach my $key ("listed", "shared", "public", "topdog") {
+    foreach my $key ("listed", "shared", "public", "topdog", "project_write") {
 	if (exists($argref->{$key})) {
 	    $mods{$key} = $argref->{$key};
 	}
@@ -678,7 +694,7 @@ sub Delete($$)
     
     DBQueryWarn("lock tables apt_profiles write, apt_profile_versions write, ".
 		"     web_tasks write, apt_profile_favorites write, ".
-		"     apt_profile_images write")
+		"     apt_profile_images write, apt_parameter_sets write")
 	or return -1;
 
     if ($purge) {
@@ -703,6 +719,9 @@ sub Delete($$)
 	    if ($self->webtask());
     }
     DBQueryWarn("delete from apt_profile_favorites ".
+		"where profileid='$profileid'")
+	or goto bad;
+    DBQueryWarn("delete from apt_parameter_sets ".
 		"where profileid='$profileid'")
 	or goto bad;
     DBQueryWarn("delete from apt_profile_images ".
@@ -860,8 +879,9 @@ sub CheckFirewall($$)
 	# and closed.
 	#
 	my $style = "closed";
-	if (defined($virtualization_type) &&
-	    $virtualization_type eq "emulab-xen" && !@routable_control_ip) {
+	if (defined($virtualization_type) && !@routable_control_ip &&
+	    ($virtualization_type eq "emulab-xen"
+	     || $virtualization_type eq "emulab-docker")) {
 	    $style = "basic";
 	}
 	
@@ -1278,6 +1298,13 @@ sub SetSites($$$$$$)
     my %interface_map   = ();
     my %aggregates      = ();
 
+    #
+    # Fill the APT_Aggregate cache.
+    #
+    if ($MAINSITE) {
+	APT_Aggregate->LookupAll();
+    }
+
     my $rspec = GeniXML::Parse($$prspecstr);
     if (! defined($rspec)) {
 	$$perrmsg = "Could not parse rspec\n";
@@ -1287,6 +1314,10 @@ sub SetSites($$$$$$)
 	my $client_id   = GetVirtualId($ref);
 	my $manager_urn = GetManagerId($ref);	
 	my $site_id     = GeniXML::GetJacksSiteId($ref);
+	my $hardtype    = GeniXML::FindFirst("n:hardware_type", $ref);
+	if ($hardtype) {
+	    $hardtype = GeniXML::GetText("name", $hardtype);
+	}
 
 	# A node can be bound in the rspec.
 	if (defined($manager_urn)) {
@@ -1296,20 +1327,13 @@ sub SetSites($$$$$$)
 	    }
 	}
 	# Or there is a site tag, and a site mapping for it.
-	elsif (defined($site_id)) {
-	    if (defined($sitemap)) {
-		my $site_mid = "site:" . $site_id;
-
-		if (!exists($sitemap->{$site_mid})) {
-		    $$perrmsg =
-			"No site mapping for node $client_id ($site_id)";
-		    return -1;
-		}
-		$manager_urn = $sitemap->{$site_mid};
+	elsif (defined($site_id) && defined($sitemap)) {
+	    my $site_mid = "site:" . $site_id;
+	    if (!exists($sitemap->{$site_mid})) {
+		$$perrmsg = "No site mapping for node $client_id ($site_id)";
+		return -1;
 	    }
-	    else {
-		$manager_urn = $default_aggregate_urn;
-	    }
+	    $manager_urn = $sitemap->{$site_mid};
 	    if (!GeniHRN::IsValid($manager_urn)) {
 		$$perrmsg = "$site_id has an invalid manager URN";
 		return 1;
@@ -1317,10 +1341,19 @@ sub SetSites($$$$$$)
 	    GeniXML::SetManagerId($ref, $manager_urn);
 	    GeniXML::SetJacksSiteManagerId($ref, $manager_urn);
 	}
-	# Else use the default aggregate.
 	else {
-	    $manager_urn = $default_aggregate_urn;
-	    
+	    if ($MAINSITE) {
+		#
+		# Try to figure out which aggregate has this type.
+		#
+		if ($hardtype) {
+		    $manager_urn = APT_Aggregate->MapTypeToAggregate($hardtype);
+		}
+	    }
+	    # Else use the default aggregate.
+	    if (!$manager_urn) {
+		$manager_urn = $default_aggregate_urn;
+	    }
 	    GeniXML::SetManagerId($ref, $manager_urn);
 	}
 	$aggregates{$manager_urn} = $manager_urn;
@@ -1356,8 +1389,17 @@ sub SetSites($$$$$$)
 	    return 1;
 	}
 	# if more then one site for a link, must use the stitcher.
-	$$pneedstitcher = 1
-	    if (keys(%linksites) > 1);
+	if (keys(%linksites) > 1) {
+	    $$pneedstitcher = 1;
+
+	    #
+	    # Oh, ugly. The stitcher will not accept the link if its
+	    # link_type is set to "lan", which is what happens when
+	    # use create a LAN() in geni-lib. So reset the link type
+	    # to vlan since that is what the stitcher wants to see.
+	    #
+	    GeniXML::SetLinkType($ref, "vlan");
+	}
     }
     foreach my $ref (GeniXML::FindNodesNS("n:routable_pool", $rspec,
 					$GeniXML::EMULAB_NS)->get_nodelist()) {
@@ -1402,6 +1444,489 @@ sub SetSites($$$$$$)
 }
 
 #
+# Does the rspec reference more then one manager in any of the links.
+# If so, we need the stitcher.
+#
+sub NeedStitcher($$)
+{
+    my ($rspecstr, $perrmsg) = @_;
+
+    my $rspec = GeniXML::Parse($rspecstr);
+    if (! defined($rspec)) {
+	$$perrmsg = "Could not parse rspec\n";
+	return -1;
+    }
+    my %linksites = ();
+    
+    foreach my $ref (GeniXML::FindNodes("n:link", $rspec)->get_nodelist()) {
+	my $client_id   = GetVirtualId($ref);
+	my $manager_urn = GetManagerId($ref);
+
+	if (!exists($linksites{$client_id})) {
+	    $linksites{$client_id} = {};
+	}
+	next
+	    if (!defined($manager_urn));
+
+	$linksites{$client_id}->{$manager_urn} = 1;
+    }
+    foreach my $ref (values(%linksites)) {
+	return 1
+	    if (keys(%{$ref}) > 1);
+    }
+    return 0;
+}
+
+#
+# Check licenses. Runs after SetSites().
+#
+sub CheckLicenses($$$$$)
+{
+    my ($rspecstr, $user, $project, $plicenses, $perrmsg) = @_;
+    my $uid_idx = $user->uid_idx();
+    my %licenses = ();
+    
+    my $rspec = GeniXML::Parse($rspecstr);
+    if (! defined($rspec)) {
+	$$perrmsg = "Could not parse rspec\n";
+	return -1;
+    }
+    my $isAccepted = sub ($) {
+	my ($license_idx) = @_;
+
+	my $query_result =
+	    DBQueryWarn("select * from user_licenses ".
+			"where uid_idx='$uid_idx' and ".
+			"      license_idx='$license_idx'");
+	if (!$query_result) {
+	    $$perrmsg = "Internal DB Error";
+	    return -1;
+	}
+	if ($query_result->numrows) {
+	    my $row = $query_result->fetchrow_hashref();
+	    #
+	    # We should not be here if the license is not accepted,
+	    # since the Web UI would have forced the user to accept it.
+	    #
+	    if (!$row->{"accepted"}) {
+		$$perrmsg = "License $license_idx was not accepted";
+		return -1;
+	    }
+	    # Okay to proceed
+	    return 1;
+	}
+	# License is not accepted.
+	return 0;
+    };
+    
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $client_id   = GetVirtualId($ref);
+	my $manager_urn = GetManagerId($ref);
+	my $aptagg      = APT_Aggregate->Lookup($manager_urn);
+
+	#print STDERR "CheckLicenses: $client_id, $manager_urn\n";
+	#
+	# Check for aggregate restriction,
+	#
+	if ($aptagg && $aptagg->required_license()) {
+	    my $license_idx = $aptagg->required_license();
+	    my $accepted    = &$isAccepted($license_idx);
+
+	    if ($accepted < 0) {
+		return -1;
+	    }
+	    if (!$accepted) {
+		#
+		# Not allowed to proceed, tell Web UI to throw up dialog
+		# asking user if they want to request access. 
+		#
+		if (!exists($licenses{"$license_idx"})) {
+		    $licenses{"$license_idx"} = {
+			"type"    => "aggregate",
+			"target"  => $aptagg->urn(),
+			"license" => $aptagg->required_license(),
+		    };
+		}
+	    }
+	}
+	#
+	# Check for node/type restrictions when its our own URN.
+	#
+	if ($manager_urn eq $MYURN) {
+	    my $hardtype      = undef;
+	    my $component_id  = GeniXML::GetNodeId($ref);
+	    if ($component_id && $component_id ne "*") {
+		my $node_id = $component_id;
+		
+		#print STDERR "CheckLicenses: $client_id, $component_id\n";
+
+		if (GeniHRN::IsValid($component_id)) {
+		    my $hrn = GeniHRN->new($component_id);
+		    if (! ($hrn && $hrn->IsNode())) {
+			$$perrmsg = "Not a valid component ID: $component_id";
+			return 1;
+		    }
+		    $node_id = $hrn->id();
+		}
+		my $node = Node->Lookup($node_id);
+		if ($node) {
+		    my $idx;
+
+		    if ($node->NodeAttribute("required_license",
+					     \$idx) == 0 && $idx) {
+			my $accepted = &$isAccepted($idx);
+
+			if ($accepted < 0) {
+			    return -1;
+			}
+			if (!$accepted) {
+			    #
+			    # Not allowed to proceed, tell Web UI to
+			    # throw up dialog asking user if they want
+			    # to request access.
+			    #
+			    if (!exists($licenses{"$idx"})) {
+				$licenses{"$idx"} = {
+				    "type"    => "node",
+				    "target"  => $node_id,
+				    "license" => $idx,
+				};
+			    }
+			}
+		    }
+		    else {
+			# Set this so we check for a type restriction below,
+			# since user probably did not set a hardware type.
+			$hardtype = $node->type();
+		    }
+		}
+	    }
+	    if (!$hardtype) {
+		$hardtype = GeniXML::FindFirst("n:hardware_type", $ref);
+		if ($hardtype) {
+		    $hardtype = GeniXML::GetText("name", $hardtype);
+		}
+	    }
+	    if ($hardtype) {
+		#print STDERR "CheckLicenses: $client_id, $hardtype\n";
+		
+		my $nodetype = NodeType->Lookup($hardtype);
+		if (! $nodetype) {
+		    $$perrmsg = "Not a valid hardware type: $hardtype";
+		    return 1;
+		}
+		if ($nodetype->required_license()) {
+		    my $idx = $nodetype->required_license();
+		    my $accepted = &$isAccepted($idx);
+
+		    if ($accepted < 0) {
+			return -1;
+		    }
+		    if (!$accepted) {
+			#
+			# Not allowed to proceed, tell Web UI to throw
+			# up dialog asking user if they want to
+			# request access.
+			#
+			if (!exists($licenses{"$idx"})) {
+			    $licenses{"$idx"} = {
+				"type"    => "type",
+				"target"  => $hardtype,
+				"license" => $idx,
+			    };
+			}
+		    }
+		}
+	    }
+	}
+    }
+    #
+    # Lookup additonal details to return to the Web UI.
+    #
+    foreach my $idx (keys(%licenses)) {
+	my $details = $licenses{"$idx"};
+	
+	my $query_result =
+	    DBQueryWarn("select * from licenses where license_idx='$idx'");
+	if (!$query_result || !$query_result->numrows) {
+	    $$perrmsg = "Could not look up details for license $idx";
+	    return -1;
+	}
+	my $row = $query_result->fetchrow_hashref();
+	$details->{"license_name"}     = $row->{"license_name"};
+	$details->{"description_text"} = $row->{"description_text"};
+	$details->{"description_type"} = $row->{"description_type"};
+    }
+    my @licenses = values(%licenses);
+    $$plicenses = \@licenses;
+    return scalar(@licenses);
+}
+
+#
+# Check spectrum validity.
+#
+sub CheckSpectrum($$$$$$)
+{
+    my ($xml, $project, $start, $end, $noresokay, $pmsg) = @_;
+    my $spectrum = [];
+    
+    my $check = sub () {
+	my ($spectrum) = @_;
+	
+	foreach my $request (@{$spectrum}) {
+	    my $frequency_low  = $request->{"frequency_low"};
+	    my $frequency_high = $request->{"frequency_high"};
+	    my $power          = $request->{"power"};
+
+	    if (!TBcheck_dbslot($frequency_low, "default", "float",
+				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+		$$pmsg = "Invalid integer or float: $frequency_low";
+		return 1;
+	    }
+	    if (!TBcheck_dbslot($frequency_high, "default", "float",
+				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+		$$pmsg = "Invalid integer or float: $frequency_high";
+		return 1;
+	    }
+	    if (!TBcheck_dbslot($power, "default", "float",
+				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+		$$pmsg = "Invalid integer or float: $power";
+		return 1;
+	    }
+	    if (!$noresokay &&
+		!APT_Reservation::Group::RFReservation->RangeReserved($project,
+			      $start, $end, $frequency_high, $frequency_low)) {
+		$$pmsg = "Frequency range $frequency_low,$frequency_high ".
+		    "is not reserved by your project for the duration of your ".
+		    "experiment.";
+		return 1;
+	    }
+	}
+	return 0;
+    };
+
+    if (APT_Profile::GetSpectrum($xml, \$spectrum, $pmsg)) {
+	return -1;
+    }
+    if (&$check($spectrum)) {
+	return 1;
+    }
+    return 0
+	if (@$spectrum);
+
+    #
+    # Some node types require that we have spectrum reserved in order to
+    # use them (mimo), cause there is no monitoring. This is a bit of a
+    # bandaid to force the user to tell us what they are doing. Of course,
+    # the user can do anything they like once we let them have the node.
+    #
+    my $rspec = GeniXML::Parse($xml);
+    if (! defined($rspec)) {
+	$$pmsg = "CheckSpectrum: Could not parse rspec";
+	return -1;
+    }
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $manager_urn  = GetManagerId($ref);
+	my $component_id = GeniXML::GetNodeId($ref);
+	my $hardtype;
+
+	next
+	    if ($manager_urn ne $MYURN);
+
+	if ($component_id && $component_id ne "*") {
+	    my $node_id = $component_id;
+		
+	    if (GeniHRN::IsValid($component_id)) {
+		my $hrn = GeniHRN->new($component_id);
+		if (! ($hrn && $hrn->IsNode())) {
+		    $$pmsg = "Not a valid component ID: $component_id";
+		    return 1;
+		}
+		$node_id = $hrn->id();
+	    }
+	    my $node = Node->Lookup($node_id);
+	    if ($node) {
+		# Set this so we check for a type restriction below,
+		# since user probably did not set a hardware type.
+		$hardtype = $node->type();
+	    }
+	}
+	if (!$hardtype) {
+	    $hardtype = GeniXML::FindFirst("n:hardware_type", $ref);
+	    if ($hardtype) {
+		$hardtype = GeniXML::GetText("name", $hardtype);
+	    }
+	}
+	next
+	    if (!$hardtype);
+
+	#
+	# Look up the type, do not worry if we do not have it, this is
+	# just a hack.
+	#
+	my $nodetype = NodeType->Lookup($hardtype);
+	next
+	    if (! $nodetype);
+
+	if ($nodetype->requires_frequency_reservation()) {
+	    $$pmsg = "CheckSpectrum: Hardware type $hardtype requires ".
+		"that you specify what frequencies you will be using";
+	    return 1;
+	}
+    }
+    return 0;
+}
+
+#
+# Get spectrum used by an rspec, returned as an array of hashes.
+#
+sub GetSpectrum($$$)
+{
+    my ($xml, $pref, $perrmsg) = @_;
+    my @ranges = ();
+
+    my $rspec = GeniXML::Parse($xml);
+    if (! defined($rspec)) {
+	$$perrmsg = "GetSpectrum: Could not parse rspec";
+	return -1;
+    }
+
+    my $collect = sub () {
+	my ($spectrum) = @_;
+	
+	foreach my $request (@{$spectrum}) {
+	    push(@ranges, $request);
+	}
+    };
+
+    # Global spectrum
+    my $global_spectrum = GeniXML::GetSpectrum($rspec);
+    if (@$global_spectrum) {
+	&$collect($global_spectrum);
+    }
+    
+    # Node spectrum
+    foreach my $ref (GeniXML::FindNodes("n:node",
+					$rspec)->get_nodelist()) {
+	my $spectrum = GeniXML::GetSpectrum($ref);
+	if (@$spectrum) {
+	    &$collect($spectrum);
+	}
+    }
+    
+    # Iface spectrum
+    foreach my $ref (GeniXML::FindNodes("n:link",
+					$rspec)->get_nodelist()) {
+	foreach my $ifaceref (GeniXML::FindNodes("n:interface",
+						 $ref)->get_nodelist()) {
+	    my $spectrum = GeniXML::GetSpectrum($ifaceref);
+	    if (@$spectrum) {
+		&$collect($spectrum);
+	    }
+	}
+    }
+    $$pref = \@ranges;
+    return 0;
+}
+
+#
+# Temporary check, do not allow a bus to be allocated unless the
+# project has the feature granted. Eventually, we will not let buses
+# to be allocated unless they have the route reserved.
+#
+sub CheckForBuses($$$)
+{
+    my ($xml, $project, $perrmsg) = @_;
+    
+    my $rspec = GeniXML::Parse($xml);
+    if (! defined($rspec)) {
+	$$perrmsg = "CheckForBuses: Could not parse rspec";
+	return -1;
+    }
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $manager_urn  = GetManagerId($ref);
+	my $component_id = GeniXML::GetNodeId($ref);
+
+	next
+	    if (!defined($manager_urn));
+
+	my $aggregate = APT_Aggregate->Lookup($manager_urn);
+	if (!defined($aggregate)) {
+	    $$perrmsg = "CheckForBuses: Could not parse rspec";
+	    return -1;
+	}
+	next
+	    if (!$aggregate->ismobile());
+
+	#
+	# Check that the project has the feature.
+	#
+	if (!EmulabFeatures->FeatureEnabled("powder-routes-allowed",
+					    undef, $project)) {
+	    $$perrmsg = "CheckForBuses: No permission to use buses: ".
+		$aggregate->nickname();
+	    return 1;
+	}
+    }
+    return 0;
+}
+
+#
+# Check route validity.
+#
+sub CheckRoutes($$$$$$)
+{
+    my ($xml, $project, $start, $end, $noresokay, $pmsg) = @_;
+    my $routes = [];
+
+    if (APT_Profile::GetRoutes($xml, \$routes, $pmsg)) {
+	return -1;
+    }
+    foreach my $request (@{$routes}) {
+	my $routename = $request->{"name"};
+
+	if (!TBcheck_dbslot($routename, "default", "tinytext",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+	    $$pmsg = "Invalid name: $routename";
+	    return 1;
+	}
+	my $routeid =
+	    APT_Reservation::Group::RouteReservation::RouteID($routename);
+	
+	if (!$noresokay &&
+	    !APT_Reservation::Group::RouteReservation->RouteReserved($project,
+				$start, $end, $routename)) {
+	    $$pmsg = "Route $routename ($routeid) ".
+		"is not reserved by your project for the duration of your ".
+		"experiment.";
+	    return 1;
+	}
+    }
+    return 0;
+}
+
+#
+# Get bus routes used by an rspec, returned as an array of hashes.
+#
+sub GetRoutes($$$)
+{
+    my ($xml, $pref, $perrmsg) = @_;
+
+    my $rspec = GeniXML::Parse($xml);
+    if (! defined($rspec)) {
+	$$perrmsg = "GetRoutes: Could not parse rspec";
+	return -1;
+    }
+    #
+    # All bus routes are top level.
+    #
+    my $routes = GeniXML::GetBusRoutes($rspec);
+
+    $$pref = $routes;
+    return 0;
+}
+
+#
 # Set the repository for the rspec. This is a top level element. At
 # some point we can think about per-node repos.
 #
@@ -1429,11 +1954,12 @@ sub SetRepo($$$$$$)
     #
     my $owner   = $geniuser->uid();
     my $command = "cd /local && sudo chmod 777 . && umask 002 && ".
+	"sudo rm -rf repository && ".
 	"git clone -n '$repourl' repository && " .
 	"cd repository && " .
 	"git config --add core.sharedRepository group && ".
 	"git checkout $repohash ";
-    if ($reporef =~ m"^(refs/|)heads/(.+)") {
+    if (defined($reporef) && $reporef =~ m"^(refs/|)heads/(.+)") {
 	my $branchname = $2;
 	$command .= "&& git branch -ft $branchname origin/$branchname" .
 	    "&& git checkout -B $branchname HEAD ";
@@ -1531,16 +2057,16 @@ sub EncryptBlocks($$$)
 #
 # Add a portal element.
 #
-sub AddPortalTag($$$)
+sub AddPortalTag($$$$)
 {
-    my ($pxml, $tag, $pmsg) = @_;
+    my ($pxml, $tag, $url, $pmsg) = @_;
     
     my $rspec = GeniXML::Parse($$pxml);
     if (! defined($rspec)) {
 	$$pmsg = "AddPortalTag: Could not parse rspec";
 	return -1;
     }
-    GeniXML::SetPortal($rspec, $tag);
+    GeniXML::SetPortal($rspec, $tag, $url);
     $$pxml = GeniXML::Serialize($rspec);
     return 0;
 }
@@ -1871,6 +2397,191 @@ sub Convert2Genilib($)
 			  "      version='$version'"));
     $self->{'DBROW'}->{'script'} = $output;
     return 0;
+}
+
+#
+# Convert data_set in rspec to simplified bindings array.
+#
+sub GetBindings($$$;$)
+{
+    my ($rspec, $pbindings, $perrmsg, $asparamdefs) = @_;
+
+    if (!ref($rspec)) {
+	$rspec = GeniXML::Parse($rspec);
+	if (! defined($rspec)) {
+	    $$perrmsg = "GetBindings: Could not parse rspec";
+	    return -1;
+	}
+    }
+    my $dataset = GeniXML::FindNodesNS("n:data_set", $rspec,
+				       $GeniXML::PROFILE_PARAMETERS_NS)->pop();
+    if (! defined($dataset)) {
+	#
+	# Ick. 
+	#
+	my $OLD_NS = "http://www.protogeni.net/resources/rspec/ext/user-data/1";
+	$dataset = GeniXML::FindNodesNS("n:data_set", $rspec, $OLD_NS)->pop();
+	if (! defined($dataset)) {
+	    $$perrmsg = "No parameter bindings in the rspec; ".
+		"did you call bindParameters()?";
+	    return 1;
+	}
+    }
+    # Mistaken data_set in some history entries, so need to process a bit
+    # differently
+    if (!$dataset->hasChildNodes()) {
+	$dataset = $rspec;
+    }
+
+    # This is silly.
+    my $getName = sub {
+	my ($ref) = @_;
+	my $name = GeniXML::GetText("name", $ref);
+	
+	# Not sure why the name is in dotted notation. Kill it.
+	my @tokens = split(/[.]/, $name);
+	if (@tokens > 1) {
+	    $name = pop(@tokens);
+	}
+	return $name;
+    };
+
+    #
+    # Convert XML goo to multilevel array of bindings.
+    #
+    my $bindings = {};
+    my $processSet;
+
+    #
+    # Process each item in the dataset. 
+    #
+    $processSet = sub {
+	my ($ref) = @_;
+	my $which = $ref->nodeName();
+
+	if ($which eq "data_list") {
+	    my @list  = ();
+
+	    foreach my $child ($ref->childNodes()) {
+		next
+		    if ($child->nodeName() !~ /^data/);
+		
+		push(@list, &$processSet($child));
+	    }
+	    if ($asparamdefs) {
+		return {"value" => \@list};
+	    }
+	    return \@list;
+	}
+	elsif ($which eq "data_struct") {
+	    my $b = {};
+	    
+	    foreach my $child ($ref->childNodes()) {
+		next
+		    if ($child->nodeName() !~ /^data/);
+
+		my $childname = &$getName($child);
+		$b->{$childname} = &$processSet($child);
+	    }
+	    if ($asparamdefs) {
+		return {"value" => $b};
+	    }
+	    return $b;
+	}
+	elsif ($which eq "data_item" ||
+	       $which eq "data_member_item") {
+	    my $value = $ref->findvalue('.');
+
+	    if ($asparamdefs) {
+		$value = {"value" => $value};
+	    }
+	    return $value;
+	}
+    };
+    foreach my $ref ($dataset->childNodes()) {
+	next
+	    if ($ref->nodeName() !~ /^data/ || $ref->nodeName eq "data_set");
+	
+	my $name  = &$getName($ref);
+	my $value = &$processSet($ref);
+
+	print "$name\n";
+	print Dumper($value);
+	
+	#
+	# This was a bad decision, need to fix. Top level struct.
+	#
+	if (!$asparamdefs && $ref->nodeName() eq "struct") {
+	    foreach my $key (keys(%{$value})) {
+		$bindings->{$key} = $value->{$key};
+	    }
+	}
+	else {
+	    $bindings->{$name} = $value;
+	}
+    }
+    $$pbindings = $bindings;
+    return 0;
+}
+
+sub BindingsToParams($)
+{
+    my ($bindings) = @_;
+    my $paramdefs = {};
+    my $convert;
+
+    $convert = sub {
+	my ($val) = @_;
+	
+	if (!ref($val)) {
+	    return {"value" => $val};
+	}
+	if (ref($val) eq "ARRAY") {
+	    my @list = ();
+
+	    foreach my $v (@{$val}) {
+		push(@list, &$convert($v));
+	    }
+	    return {"value" => \@list};
+	}
+	my $b = {};
+
+	foreach my $k (keys(%{$val})) {
+	    $b->{$k} = &$convert($val->{$k});
+	}
+	return $b;
+    };
+
+    foreach my $key (keys(%{$bindings})) {
+	my $val = $bindings->{$key};
+
+	$paramdefs->{$key} = &$convert($val);
+    }
+    return $paramdefs;
+}
+
+#
+# Return an rspec fragment for a node at an aggregate. The node id
+# is optional.
+#
+sub RSpecNodeFragment($$;$)
+{
+    my ($aggregate_urn, $client_id, $node_id) = @_;
+    my $aggregate_hrn = GeniHRN->new($aggregate_urn);
+    my $component_id  = "";
+
+    if ($node_id) {
+	my $urn = GeniHRN::Generate($aggregate_hrn->authority(),
+				    "node", $node_id);
+	$component_id = "component_id='$urn'";
+    }
+    my $NODEFORMAT =
+	'<node xmlns="http://www.geni.net/resources/rspec/3" '.
+	'      client_id="%s" exclusive="true" component_manager_id="%s" %s>
+	   <sliver_type name="raw"/>
+	</node>';
+
+    return sprintf($NODEFORMAT, $client_id, $aggregate_hrn, $component_id);
 }
 
 ###################################################################

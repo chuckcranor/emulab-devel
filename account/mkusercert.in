@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,6 +24,7 @@
 use strict;
 use English;
 use Getopt::Std;
+use Date::Parse;
 
 #
 # Load the Testbed support stuff.
@@ -400,7 +401,7 @@ sub CreateNewCert() {
 	my $genopts =
 	    ($encrypted ? " -passout 'pass:${sh_password}' -des3 " : "");
 
-	system("$OPENSSL genrsa $genopts -out usercert_key.pem 1024")
+	system("$OPENSSL genrsa $genopts -out usercert_key.pem 2048")
 	    == 0 or fatal("Could generate new key");
     }
     my $reqopts = ($encrypted ? "-passin 'pass:${sh_password}' " : "");
@@ -408,11 +409,47 @@ sub CreateNewCert() {
     system("$OPENSSL req $reqopts -new -config usercert.cnf ".
 	   "-key usercert_key.pem -out usercert_req.pem")
 	== 0 or fatal("Could not create certificate request");
+
+    #
+    # Check the expiration on the CA cert, we do not want the new
+    # certificate to expire after the CA (signer) cert expires. 
+    #
+    $UID = 0;
+    my $expires = `$OPENSSL x509 -enddate -noout -in $EMULAB_CERT`;
+    if ($?) {
+	fatal("Could not get expiration from $EMULAB_CERT");
+    }
+    if ($expires =~ /^notAfter=(.*)$/i) {
+	my $tmp = str2time($1);
+	if (!defined($tmp)) {
+	    fatal("Could not convert CA expiration to time: $1");
+	}
+	$expires = $tmp;
+    }
+    else {
+	fatal("Could not parse CA expiration: $expires");
+    }
+    if ($expires < time()) {
+	fatal("CA certificate has expired!");
+    }
+    
+    # If the CA expires in less then 30 days, grind to a halt.
+    my $daystoexpire = int(($expires - time()) / (3600 * 24));
+    if ($daystoexpire <= 30) {
+	fatal("Refusing to sign new certificate; the CA expires in less ".
+	      "then 30 days!");
+    }
+    if ($debug) {
+	print "CA certificate expires in $daystoexpire days.\n";
+    }
+    if ($days > $daystoexpire) {
+	$days = $daystoexpire - 1;
+	print "Shortening certificate expiration to $days\n";
+    }
     
     #
     # Sign the client cert request, creating a client certificate.
     #
-    $UID = 0;
     system("$OPENSSL ca -batch -policy policy_sslxmlrpc -days $days ".
 	   " -name CA_usercerts -config $CACONFIG ".
 	   " -out usercert_cert.pem -cert $EMULAB_CERT -keyfile $EMULAB_KEY ".

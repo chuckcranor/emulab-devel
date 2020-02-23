@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -68,7 +68,7 @@ my $action;
 # Prototypes
 sub prebootvnodes($$);
 sub postbootvnodes($$);
-sub bootvnode($$$);
+sub bootvnode($$$;$);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -198,8 +198,29 @@ if (defined($action) && !$reconfig) {
 	    push(@vnfiles, $1);
 	}
     }
+    #
+    # This is probably true for Xen too, but in some cases, the
+    # vnodesetup early-release hackwaitandexit timeout of 30 seconds
+    # causes a race condition.  Normally, the first node sets up
+    # significant network state, and sometimes flips MAC addresses
+    # around from interface to interface -- OR puts a physical interface
+    # into a bridge, then changes the bridge's MAC address.  There is a
+    # short window of time where both the bridge and the new member
+    # interface share a MAC address -- and if the tmcc ifconfig resolves
+    # the wrong device's MAC address and uses that to flesh out the
+    # ifconfig info, the vnodesetup will be in a world of hurt.  The
+    # chance of this happening is miniscule, but I've seen it.
+    #
+    # So, at least for docker for now, we protect the first vnode against
+    # the 30-second timeout in vnodesetup hackwaitandexit.
+    #
+    my $vht;
+    if (GENVNODETYPE() eq 'docker') {
+	$vht = 0;
+    }
     foreach my $file (sort byvnode @vnfiles) {
-	bootvnode($file, $action, (-e "$vndir/$file/fakejail" ? 0 : 1));
+	bootvnode($file, $action, (-e "$vndir/$file/fakejail" ? 0 : 1),$vht);
+	$vht = undef;
     }
     exit(0);
 }
@@ -281,9 +302,14 @@ exit(0)
 prebootvnodes(\%curvnodelist, \%newvnodelist)
     if (!$fakejails);
 
+my $vht;
+if (GENVNODETYPE() eq 'docker') {
+    $vht = 0;
+}
 foreach my $vnode (sort byvnode keys(%newvnodelist)) {
     # Blocks until mostly setup. 
-    bootvnode($vnode, "boot", $newvnodelist{$vnode});
+    bootvnode($vnode, "boot", $newvnodelist{$vnode},$vht);
+    $vht = undef;
 }
 
 postbootvnodes(\%curvnodelist, \%newvnodelist)
@@ -380,9 +406,9 @@ sub postbootvnodes($$)
 #
 # Helper function to boot/kill/halt/reboot a specific vnode.
 #
-sub bootvnode($$$)
+sub bootvnode($$$;$)
 {
-    my ($vnode, $action, $jailed) = @_;
+    my ($vnode, $action, $jailed, $vnodesetup_hackwaitandexit_timeout) = @_;
     my $opt;
     my $act;
     my $extrawait = $waittime;
@@ -408,6 +434,9 @@ sub bootvnode($$$)
 	#$extrawait = 20 if (GENVNODETYPE() eq "xen");
     }
     $opt .= ($jailed ? " -jVt" : " -i");
+    if (defined($vnodesetup_hackwaitandexit_timeout)) {
+	$opt .= " -F $vnodesetup_hackwaitandexit_timeout";
+    }
     
     print "$act vnode $vnode with options '$opt' at " .
 	libsetup::TBTimeStamp() . "\n";

@@ -16,11 +16,11 @@ $(function ()
 
 	var fields = JSON.parse(_.unescape($('#form-json')[0].textContent));
 	var errors = JSON.parse(_.unescape($('#error-json')[0].textContent));
-
+	var licenses = JSON.parse(_.unescape($('#licenses-json')[0].textContent));
 	console.info(fields);
 	console.info(errors);
 	
-	renderForm(fields, errors,
+	renderForm(fields, errors, licenses,
 		   window.APT_OPTIONS.joinproject,
 		   window.APT_OPTIONS.ShowVerifyModal,
 		   window.APT_OPTIONS.this_user,
@@ -48,7 +48,7 @@ $(function ()
 	}
     }
 
-    function renderForm(formfields, errors, joinproject, showVerify,
+    function renderForm(formfields, errors, licenses, joinproject, showVerify,
 			thisUser, promoting)
     {
 	var buttonLabel = "Submit Request";
@@ -68,7 +68,8 @@ $(function ()
 	});
 	var project_html = projectTemplate({
 	    joinproject: joinproject,
-	    formfields: formfields
+	    formfields: formfields,
+	    licenses: licenses,
 	});
 	var signup = signupTemplate({
 	    button_label: buttonLabel,
@@ -106,6 +107,11 @@ $(function ()
 		aptforms.DisableUnsavedWarning('#quickvm_signup_form');
 	    });
 	}
+	// This activates the popover subsystem.
+	$('[data-toggle="popover"]').popover({
+	    trigger: 'hover',
+	    placement: 'auto',
+	});
     }
     
     $(document).ready(initialize);

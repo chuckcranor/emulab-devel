@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,7 +43,9 @@ else {
 #
 # Verify page arguments.
 #
-$optargs = OptionalPageArguments("target_user", PAGEARG_USER);
+$optargs = OptionalPageArguments("target_user", PAGEARG_USER,
+                                 "referrer", PAGEARG_STRING,
+                                 "addrequired", PAGEARG_BOOLEAN);
 
 if (! isset($target_user)) {
     $target_user = $this_user;
@@ -70,6 +72,11 @@ $defaults["city"]        = $target_user->city();
 $defaults["state"]       = $target_user->state();
 $defaults["country"]     = $target_user->country();
 $defaults["affiliation"] = $target_user->affil();
+$defaults["address1"]    = $target_user->addr1();
+$defaults["address2"]    = $target_user->addr2();
+$defaults["zip"]         = $target_user->zip();
+$defaults["phone"]       = $target_user->phone();
+
 
 SPITHEADER(1);
 echo "<script>\n";
@@ -82,6 +89,14 @@ echo "<script type='text/plain' id='form-json'>\n";
 echo htmlentities(json_encode($defaults)) . "\n";
 echo "</script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+
+echo "<script type='text/javascript'>\n";
+if ($referrer) {
+    $referrer = CleanString($referrer);
+    echo "    window.REFERRER = '$referrer';\n";
+}
+echo "    window.ADDREQUIRED = $addrequired;\n";
+echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();

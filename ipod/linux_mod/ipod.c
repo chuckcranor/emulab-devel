@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2019 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -39,6 +39,28 @@
 #include <linux/version.h>
 #include <linux/limits.h>
 
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Flux Research Group");
+MODULE_VERSION("3.3.0");
+
+#if defined(__aarch64__) || defined(__powerpc64__)
+#define IPOD_QUEUE_RESTART
+#endif
+
+#ifdef IPOD_QUEUE_RESTART
+#include <linux/workqueue.h>
+
+static struct workqueue_struct *restart_queue;
+
+static void restart_work_func(struct work_struct *work)
+{
+        printk(KERN_CRIT "IPOD: restarting (delayed)...\n");
+        emergency_restart();
+}
+
+DECLARE_WORK(restart_work,restart_work_func);
+#endif
+
 #define IPOD_ICMP_TYPE 6
 #define IPOD_ICMP_CODE 6
 
@@ -58,9 +80,6 @@ char sysctl_ipod_key[32+1] = { "SETMETOSOMETHINGTHIRTYTWOBYTES!!" };
 #else
 #define __PHP
 #endif
-
-static u32 __ipod_min = INT_MIN;
-static u32 __ipod_max = INT_MAX;
 
 /*
  * Register the simple icmp table in /proc/sys/net/ipv4 .  This way, if
@@ -86,17 +105,13 @@ static struct ctl_table ipod_table[] = {
       .data = &sysctl_ipod_host,
       .maxlen = sizeof(u32),
       .mode = 0644,
-      .proc_handler = __PHP proc_dointvec_minmax,
-      .extra1 = &__ipod_min,
-      .extra2 = &__ipod_max,
+      .proc_handler = __PHP proc_dointvec,
     },
     { .procname = "icmp_ipod_mask",
       .data = &sysctl_ipod_mask,
       .maxlen = sizeof(u32),
       .mode = 0644,
-      .proc_handler = __PHP proc_dointvec_minmax,
-      .extra1 = &__ipod_min,
-      .extra2 = &__ipod_max,
+      .proc_handler = __PHP proc_dointvec,
     },
     { .procname = "icmp_ipod_key",
       .data = &sysctl_ipod_key,
@@ -104,7 +119,10 @@ static struct ctl_table ipod_table[] = {
       .mode = 0600,
       .proc_handler = __PHP proc_dostring,
     },
-    { 0 },
+    { .procname = NULL,
+      .data = NULL,
+      .proc_handler = NULL,
+    },
 };
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,5,0)
@@ -238,7 +256,11 @@ static unsigned int ipod_hook_fn(
     if (doit) {
 	sysctl_ipod_enabled = 0;
 	printk(KERN_CRIT "IPOD: reboot forced by %pI4...\n",&iph->saddr);
+#ifdef IPOD_QUEUE_RESTART
+	queue_work(restart_queue,&restart_work);
+#else
 	emergency_restart();
+#endif
 	return NF_DROP;
     }
     else {
@@ -270,22 +292,39 @@ static int __init ipod_init_module(void) {
     /*
      * Register our netfilter hook function.
      */
-    rc = nf_register_hook(&ipod_hook_ops);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
+    rc = nf_register_net_hooks(&init_net,&ipod_hook_ops,1);
+#else
+    rc = nf_register_hooks(&ipod_hook_ops,1);
+#endif
     if (rc) {
 	printk(KERN_ERR "netfilter registration failed (%d)!\n",rc);
 	unregister_net_sysctl_table(ipod_table_header);
 	return -1;
     }
 
+#ifdef IPOD_QUEUE_RESTART
+    restart_queue = create_singlethread_workqueue("ipod_restart_queue");
+#endif
+
     return 0;
 }
 
 static void __exit ipod_cleanup_module(void) {
     printk(KERN_INFO "removing IPOD\n");
-    nf_unregister_hook(&ipod_hook_ops);
+
+#ifdef IPOD_QUEUE_RESTART
+    cancel_work_sync(&restart_work);
+    destroy_workqueue(restart_queue);
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
+    nf_unregister_net_hooks(&init_net,&ipod_hook_ops,1);
+#else
+    nf_unregister_hooks(&ipod_hook_ops,1);
+#endif
     unregister_net_sysctl_table(ipod_table_header);
 }
 
 module_init(ipod_init_module);
 module_exit(ipod_cleanup_module);
-MODULE_LICENSE("GPL");

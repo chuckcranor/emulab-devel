@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -148,7 +148,7 @@ if (! isset($create)) {
     $defaults = array();
 
     $defaults["dataset_type"]   = 'stdataset';
-    $defaults["dataset_fstype"] = 'ext3';
+    $defaults["dataset_fstype"] = 'ext4';
     $defaults["dataset_read"]   = 'project';
     $defaults["dataset_modify"] = 'creator';
     $defaults["dataset_am"]     = '';

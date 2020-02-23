@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,12 +30,18 @@ $page_title = "Signup";
 $debug = 0;
 # Update mode.
 $promoting = 0;
+# Powder licenses
+$license_defs = array();
 
 #
 # Get current user.
 #
 RedirectSecure();
-$this_user = CheckLogin($check_status);
+if ($UI_EXTERNAL_ACCOUNTS) {
+    $this_user = CheckLoginOrDie();    # force login, newuser is disabled
+} else {
+    $this_user = CheckLogin($check_status);
+}
 if (isset($this_user)) {
     # Allow unapproved users to join multiple groups ...
     CheckLoginOrDie(CHECKLOGIN_UNAPPROVED|CHECKLOGIN_NONLOCAL);
@@ -62,6 +68,25 @@ $optargs = OptionalPageArguments("create",       PAGEARG_STRING,
 				 "joinproject",  PAGEARG_BOOLEAN,
                                  "toomany",      PAGEARG_BOOLEAN,
 				 "formfields",   PAGEARG_ARRAY);
+#
+# List of licenses for Powder that we display for new projects.
+# The PI is telling us that they will need these restricted resources,
+# but they do not have to accept the licenses till later, after they
+# have been approved.
+#
+if ($ISPOWDER) {
+    $query_result = DBQueryFatal("select * from licenses ".
+                                 "where license_level='project' and ".
+                                 "      license_target='signup'");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $license_defs[$row["license_name"]] =
+            array("license_name" => $row["license_name"],
+                  "form_text"    => $row["form_text"],
+                  "description_type" => $row["description_type"],
+                  "description_text" => $row["description_text"]);
+    }
+}
 
 #
 # Spit the form
@@ -70,7 +95,7 @@ function SPITFORM($formfields, $showverify, $errors)
 {
     global $TBDB_UIDLEN, $TBDB_PIDLEN, $TBDOCBASE, $WWWHOST;
     global $ACCOUNTWARNING, $EMAILWARNING, $this_user, $joinproject, $toomany;
-    global $promoting;
+    global $promoting, $ISPOWDER, $license_defs;
     $button_label = "Create Account";
 
     SPITHEADER(1);
@@ -85,6 +110,9 @@ function SPITFORM($formfields, $showverify, $errors)
     echo "</script>\n";
     echo "<script type='text/plain' id='error-json'>\n";
     echo htmlentities(json_encode($errors));
+    echo "</script>\n";
+    echo "<script type='text/plain' id='licenses-json'>\n";
+    echo htmlentities(json_encode($license_defs));
     echo "</script>\n";
     echo "<script type='text/javascript'>\n";
 
@@ -122,6 +150,7 @@ function SPITFORM($formfields, $showverify, $errors)
 
     REQUIRE_UNDERSCORE();
     REQUIRE_SUP();
+    REQUIRE_MARKED();
     REQUIRE_APTFORMS();
     REQUIRE_FORMHELPERS();
     SPITREQUIRE("js/signup.js");
@@ -149,8 +178,22 @@ if (! isset($create)) {
     $errors   = array();
 
     # Default to start
-    $defaults["startorjoin"] = "start";
-    $joinproject = 0;
+    if (!isset($joinproject)) {
+        $joinproject = 0;
+        $defaults["startorjoin"] = "start";
+    }
+    elseif ($joinproject) {
+        $defaults["startorjoin"] = "join";
+    }
+    else {
+        $defaults["startorjoin"] = "start";
+    }
+
+    if (count($license_defs)) {
+        foreach ($license_defs as $name => $value) {
+            $defaults["license_" . $name] = "no";
+        }
+    }
 
     if ($this_user && $promoting) {
         $defaults["uid"]         = $this_user->uid();
@@ -160,6 +203,11 @@ if (! isset($create)) {
         $defaults["state"]       = $this_user->state();
         $defaults["country"]     = $this_user->country();
         $defaults["affiliation"] = $this_user->affil();
+        $defaults["address1"]    = $this_user->addr1();
+        $defaults["address2"]    = $this_user->addr2();
+        $defaults["zip"]         = $this_user->zip();
+        $defaults["phone"]       = $this_user->phone();
+
     }
     else {
         if (isset($uid)) {
@@ -183,6 +231,9 @@ if (! isset($create)) {
 # Otherwise, must validate and redisplay if errors
 #
 $errors = array();
+
+# Optional licenses;
+$licenses = array();
 
 #
 # Check for start or join right away so we know what we be doing.
@@ -268,6 +319,27 @@ if (!$this_user || $promoting) {
     elseif (! TBvalid_city($formfields["city"])) {
 	$errors["city"] = TBFieldErrorString();
     }
+    if ($ISPOWDER) {
+        if (!isset($formfields["address1"]) ||
+            strcmp($formfields["address1"], "") == 0) {
+            $errors["address1"] = "Missing Field";
+        }
+        elseif (! TBvalid_addr($formfields["address1"])) {
+            $errors["address1"] = TBFieldErrorString();
+        }
+        if (isset($formfields["address2"]) &&
+            $formfields["address2"] != "" && 
+            !TBvalid_addr($formfields["address2"])) {
+            $errors["address2"] = TBFieldErrorString();
+        }
+        if (!isset($formfields["zip"]) ||
+            strcmp($formfields["zip"], "") == 0) {
+            $errors["zip"] = "Missing Field";
+        }
+        elseif (! TBvalid_zip($formfields["zip"])) {
+            $errors["zip"] = TBFieldErrorString();
+        }
+    }
     if (!$promoting) {
         if (!isset($formfields["password1"]) ||
             strcmp($formfields["password1"], "") == 0) {
@@ -335,6 +407,29 @@ if (!$joinproject) {
     elseif (! TBvalid_why($formfields["proj_why"])) {
 	$errors["proj_why"] = TBFieldErrorString();
     }
+    if (count($license_defs)) {
+        foreach ($license_defs as $name => $value) {
+            $fname = "license_" . $name;
+
+            if (isset($formfields[$fname]) && $formfields[$fname] == "yes") {
+                $licenses[$name] = "yes";
+            }
+        }
+    }
+}
+
+#
+# Before respitting form, check for the keyfile, and pass along the
+# contents in formfields (as hidden variable) so we do not lose it.
+#
+if (!$this_user) {
+    if (isset($_FILES['keyfile']) &&
+	$_FILES['keyfile']['name'] != "" &&
+	$_FILES['keyfile']['name'] != "none") {
+
+	$localfile = $_FILES['keyfile']['tmp_name'];
+	$formfields["pubkey"] = CleanString(file_get_contents($localfile));
+    }
 }
 
 # Present these errors before we call out to do anything else.
@@ -399,6 +494,9 @@ if ($this_user && $promoting) {
     $args["country"]       = $formfields["country"];
     $args["shell"]         = 'tcsh';
     $args["affiliation"]   = $formfields["affiliation"];
+    $args["address1"]      = $formfields["address1"];
+    $args["address2"]      = $formfields["address2"];
+    $args["zip"]           = $formfields["zip"];
 
     if (! User::ModUserInfo($this_user, $this_user->uid(), $args, $errors)) {
         # Always respit the form so that the form fields are not lost.
@@ -428,20 +526,18 @@ if (!$this_user) {
     $args["passphrase"]    = $formfields["password1"];
     # Flag to the backend.
     $args["portal"]	   = $PORTAL_GENESIS;
-
-    #
-    # Backend verifies pubkey and returns error. We first look for a 
-    # file and then fall back to an inline field. See SPITFORM().
-    #
-    if (isset($_FILES['keyfile']) &&
-	$_FILES['keyfile']['name'] != "" &&
-	$_FILES['keyfile']['name'] != "none") {
-
-	$localfile = $_FILES['keyfile']['tmp_name'];
-	$args["pubkey"] = file_get_contents($localfile);
-	$formfields["pubkey"] = $args["pubkey"];
+    if ($ISPOWDER) {
+        $args["address"]   = $formfields["address1"];
+        if (isset($formfields["address2"])) {
+            $args["address2"] = $formfields["address2"];
+        }
+        $args["zip"]       = $formfields["zip"];
     }
-    elseif (isset($formfields["pubkey"]) && $formfields["pubkey"] != "") {
+
+    #
+    # Backend verifies pubkey and returns error. 
+    #
+    if (isset($formfields["pubkey"]) && $formfields["pubkey"] != "") {
 	$args["pubkey"] = $formfields["pubkey"];
     }
 
@@ -454,12 +550,13 @@ if (!$this_user) {
 	    SPITFORM($formfields, 0, $errors);
 	    return;
 	}
+        $user->SetAUPRequirement();
 	$group = $project->LoadDefaultGroup();
 	if ($project->AddNewMember($user) < 0) {
 	    TBERROR("Could not add new user to project group $pid", 1);
 	}
 	$group->NewMemberNotify($user);
-	header("Location: instantiate.php");
+        header("Location: signup.php?finished=1");
 	return;
     }
 
@@ -526,16 +623,24 @@ $args["funders"]           = "None";
 $args["whynotpublic"]      = $PORTAL_GENESIS;
 # Flag to the backend.
 $args["portal"] 	   = $PORTAL_GENESIS;
+# Add any requested licenses to the arguments.
+foreach ($licenses as $name => $value) {
+    $args["license_" . $name] = $value;
+}
 
 if (! ($project = Project::NewNewProject($args, $error))) {
     $errors["error"] = $error;
     if ($suexec_retval < 0) {
 	TBERROR("Error Creating APT/CloudLab Project\n${error}\n\n" .
 		print_r($args, TRUE), 0);
+
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
     }
     SPITFORM($formfields, 0, $errors);
     return;
 }
+$project->GetLeader()->SetAUPRequirement();
+
 #
 # Destroy the session if we had a new user. 
 #

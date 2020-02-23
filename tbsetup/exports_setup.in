@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -78,11 +78,16 @@ my $LINUX_FSNODE= @LINUX_FSNODE@;
 my $NFSMAPTOUSER= "@NFSMAPTOUSER@";
 my $WITHZFS     = @WITHZFS@;
 my $ZFS_NOEXPORT= @ZFS_NOEXPORT@;
+my $OPSVM_ENABLE= @OPSVM_ENABLE@;
 my $WITHAMD     = @WITHAMD@;
 my $INC_MOUNTD  = @INCREMENTAL_MOUNTD@;
 my $NOVNODENFS	= @NOVIRTNFSMOUNTS@;
 my $TBLOG	= "@TBLOGFACIL@";
 my $NFSMFSROOT	= "@NFSMFS_ROOT@";
+
+# XXX for the moment we still allow Windows support without Samba,
+# but Windows support means Samba support in this script.
+$WINSUPPORT = 0;
 
 # XXX for TESTMODE: output to stdout
 my $TOSTDOUT	= 0;
@@ -108,7 +113,7 @@ my $EXPORT_PAT	= q(on ([\S]+)\s\\\(.*NFS exported.*\\\));
 # "NFS exported" will not be set. Instead we just look for all mounted
 # ufs or zfs filesystems.
 #
-if ($ZFS_NOEXPORT) {
+if ($ZFS_NOEXPORT || ($OPSVM_ENABLE && $WITHZFS)) {
     $EXPORT_PAT = q(on ([\S]+)\s\\\([uz]fs,.*\\\));
 }
 
@@ -718,6 +723,13 @@ if (!$TESTMODE) {
       if ($bossdirlist) {
 	  system("/bin/cat $bossmountfile.new");
       }
+  }
+  elsif ($OPSVM_ENABLE) {
+      logit("Invoking exports_setup.proxy on boss ...");
+      system("$PROG < $exportstail") == 0 or
+	  fatal("Failed: $PROG < $exportstail: $?");
+      logit("exports_setup.proxy done");
+      unlink("$exportstail");
   }
   else {
       my $arg = ($incremental ? "-i" : "");

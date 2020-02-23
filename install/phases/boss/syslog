@@ -207,7 +207,16 @@ sub Install($$$)
 		"$LOGDIR/apache_ssl_request_log 644  7   10000  *    BZ ".
 		"/var/run/httpd.pid",
 		"$LOGDIR/apache_ssl_access_log  644  7   10000  *    BZ ".
-		"/var/run/httpd.pid");
+		"/var/run/httpd.pid",
+		"$LOGDIR/portal_monitor.log     644  7    1000  *     Z ".
+		"/var/run/portal_monitor.pid",
+                "$LOGDIR/apt_daemon.log         644  7    1000  *     Z ".
+		"/var/run/apt_daemon.pid",
+		"$LOGDIR/aptevent_daemon.log    644  7    1000  *     Z ".
+		"/var/run/aptevent_daemon.pid",
+		"$LOGDIR/apt_scheduler.log      644  7    1000  *     Z ".
+		"/var/run/apt_scheduler.pid"
+		);
 
     	    if ($PROTOGENI_GENIRACK) {
 		@nsyslog_lines = (@nsyslog_lines,

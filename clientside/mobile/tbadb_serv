@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2016 University of Utah and the Flux Group.
+# Copyright (c) 2016, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,6 +27,7 @@ package tbadb_serv;
 use strict;
 use English;
 use DB_File;
+use Socket;
 use IO::Socket::INET;
 use File::Temp;
 use POSIX qw(strftime);
@@ -36,7 +37,6 @@ use base qw(Net::Server::Fork);
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
 
 use libtestbed;
-use libtmcc qw(tmccbossinfo);
 use libjsonrpc;
 use tbadb_rpc;
 
@@ -224,11 +224,25 @@ sub post_configure_hook($) {
     my $self = shift;
     my $prop = $self->{'server'};
 
-    # Get IP for boss server and add it to the allowed list.
-    my (undef, $bossip) = tmccbossinfo();
-    die "tbadb_serv: Could not get IP address for boss server!\n"
-	if (!$bossip || $bossip !~ /^(\d+\.\d+\.\d+\.\d+)$/);
-    push @{$prop->{'cidr_allow'}}, "${1}/32";
+    if (!-e "/etc/emulab/client.pem") {
+	my $hostname = `/bin/hostname`;
+	chomp $hostname;
+	$hostname =~ s/control/boss/;
+
+	my $packed_ip = gethostbyname($hostname);
+	my $ip_address = inet_ntoa($packed_ip);
+	$self->log(1,"$ip_address");	
+	push @{$prop->{'cidr_allow'}}, "${ip_address}/32";
+    }
+    else {
+	require libtmcc;
+
+	# Get IP for boss server and add it to the allowed list.
+	my (undef, $bossip) = tmccbossinfo();
+	die "tbadb_serv: Could not get IP address for boss server!\n"
+	    if (!$bossip || $bossip !~ /^(\d+\.\d+\.\d+\.\d+)$/);
+	push @{$prop->{'cidr_allow'}}, "${1}/32";
+    }
 
     # Setup a warn "signal" handler to redirect "warn" for now.
     $SIG{__WARN__} = sub {
@@ -617,6 +631,12 @@ sub rpc_activate_forwarding($$) {
     $self->error_exit($data->{FID}, RPCERR_BADARGS, "Malformed node_id argument.")
 	if ($node_id !~ /^([-\w]+)$/);
     $node_id = $1;
+
+    # Make sure device is available first (wait for a bit if necessary).
+    if (!$self->wait_for_boot($node_id)) {
+	warn "$node_id is not available!\n";
+	goto BADFWD;
+    }
 
     # Setup forwarding from the ADB daemon on the unit to the
     # destionation port, and report back to caller!
@@ -1065,7 +1085,7 @@ sub wait_for_boot($$) {
     my $stime = time();
     while (!_get_imsi($node_id)) {
 	if (time() - $stime > $ANDROID_BOOT_TMO) {
-	    warn "Timed out waiting for $node_id to boot!\n";
+	    warn "Timed out waiting for $node_id to become responsive!\n";
 	    return 0;
 	}
 	sleep 5;
@@ -1118,7 +1138,7 @@ sub add_apn_profile($$) {
     }
 
     # Check for existing APN profile. If found, use that.
-    my $newapn = `$ADB -s $serial shell content query --uri content://telephony/carriers --where "name=\\'phantomnet\\'"`;
+    my $newapn = `$ADB -s $serial shell content query --uri content://telephony/carriers --where "name=\'phantomnet\'"`;
     if ($?) {
 	warn "Failed when checking for existing APN profile on $node_id\n";
 	return 0;
@@ -1142,7 +1162,7 @@ sub add_apn_profile($$) {
 	    warn "Could not insert APN profile\n";
 	    return 0;
 	}
-	$newapn = `$ADB -s $serial shell content query --uri content://telephony/carriers --where "name=\\'phantomnet\\'"`;
+	$newapn = `$ADB -s $serial shell content query --uri content://telephony/carriers --where "name=\'phantomnet\'"`;
 	if ($?) {
 	    warn "Failed when checking for newly created APN profile\n";
 	    return 0;
@@ -1520,7 +1540,7 @@ sub check_adb($) {
     }
     if (!$srvfound) {
 	warn "adding ipt block rule for adb server.\n";
-	if(system("$IPTABLES -A INPUT ! -s localhost -p tcp -m tcp --dport 5037 -j DROP") != 0) {
+	if(system("$IPTABLES -A INPUT ! -s 127.0.0.1 -p tcp -m tcp --dport 5037 -j DROP") != 0) {
 	    warn "failed to add ipt rule to block traffic to adb server!\n";
 	    goto BADCHK;
 	}

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2009 University of Utah and the Flux Group.
+# Copyright (c) 2009-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,7 +39,7 @@ $USERMAP_LOC = "${TBBASE}/usermap";
 # The headers to load the javascript files
 #
 $USERMAP_SCRIPTHEADERS = <<<EOH
-<script src="http://maps.google.com/maps?file=api&v=2&sensor=false&key=$GMAP_API_KEY"
+<script src="https://maps.google.com/maps?file=api&v=2&sensor=false&key=$GMAP_API_KEY"
               type="text/javascript">
 </script>
 

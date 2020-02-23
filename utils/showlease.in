@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2017 University of Utah and the Flux Group.
+# Copyright (c) 2013-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,6 +38,7 @@ sub usage()
     print STDERR "   -a      Show all leases (admin only)\n";
     print STDERR "   -g      Show only leases in the 'grace' state\n";
     print STDERR "   -l      Long listing\n";
+    print STDERR "   -U      Really long listing (include URNs)\n";
     print STDERR "   -L      Show lock holders (admin only)\n";
     print STDERR "   -D      Describe the system-wide limits on leases\n";
     print STDERR "   -p pid  Show all leases for project <pid>\n";
@@ -45,7 +46,7 @@ sub usage()
     print STDERR "   lid ... Show named leases (name is <pid>/<id>)\n";
     exit(-1);
 }
-my $optlist  = "dhaLDp:u:gl";
+my $optlist  = "dhaLDp:u:glU";
 my $debug = 0;
 my $pid;
 my $uid;
@@ -109,6 +110,9 @@ if (defined($options{g})) {
 }
 if (defined($options{l})) {
     $verbose = 1;
+}
+if (defined($options{U})) {
+    $verbose = 2;
 }
 if (defined($options{L})) {
     $showlockers = 1;
@@ -280,6 +284,7 @@ if (@lids > 0) {
 	#
 	# Get the attributes.
 	# Note that we treat size special and remove it from the attrlist.
+	# Note also that we treat URNs special, only including them for -U.
 	#
 	my $lsize = "";
 	my $attrstr = "";
@@ -290,6 +295,9 @@ if (@lids > 0) {
 		my $v = $attrs->{$k}->{'value'};
 		if ($k eq "size") {
 		    $lsize = $v;
+		    next;
+		}
+		if ($verbose < 2 && $k =~ /_urn$/) {
 		    next;
 		}
 		$attrstr .= "$del$k=$v";

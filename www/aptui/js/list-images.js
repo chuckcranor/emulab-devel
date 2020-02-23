@@ -13,18 +13,44 @@ $(function ()
     var waitwaitString  = templates["waitwait-modal"];
     var amlist = null;
     // Results for each AM so we can get it later. 
-    var imagelist       = {}; 
-    
+    var imagelist       = {};
+
+    // Popover for the URN link
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
 	amlist = decodejson('#amlist-json');
+	window.IMLIST = imagelist;
 
 	$('#oops_div').html(oopsString);	
 	$('#waitwait_div').html(waitwaitString);
 
 	LoadData();
 	LoadClassic();
+    }
+
+    /*
+     * Add urn copy-to-clipboard popovers.
+     */
+    var urnPopoverContent = function (urn) {
+	var string =
+	    "<div style='width 100%'> "+
+	    "  <input readonly type=text " +
+	    "       style='display:inline; width: 93%; padding: 2px;' " +
+	    "       class='form-control input-sm' "+
+	    "       value='" + urn + "'>" +
+	    "  <a href='#' class='btn urn-copy-button' " +
+	    "     style='padding: 0px'>" +
+	    "    <span class='glyphicon glyphicon-copy'></span></a></div>";
+	return string;
+    };
+    function addUrnPopovers(id)
+    {
+	sup.addPopoverClip('#' + id + ' .urn-button',
+			   function (target) {
+			       var urn = $(target).data("urn");
+			       return urnPopoverContent(urn);
+			   });
     }
 
     /*
@@ -38,6 +64,7 @@ $(function ()
 	    var callback = function(json) {
 		var error = null;
 		var images = null;
+		var showformat = false;
 
 		console.info(name, json);
 
@@ -63,13 +90,25 @@ $(function ()
 		    // Save for later
 		    imagelist[name] = images;
 		}
+		// We show the format only if there is more then one
+		// format type.
+		var formats = {};
+		_.each(images, function(value, index) {
+		    _.each(value.versions, function(image, index) {
+			formats[image.format] = 1;
+		    });
+		});
+		if (Object.keys(formats).length > 1) {
+		    showformat = true;
+		}
 		// Generate the main template.
 		var html = listTemplate({
 		    "images"       : images,
-		    "showproject"  : false,
-		    "showuser"     : false,
+		    "showproject"  : window.TARGET_PROJECT === undefined,
+		    "showuser"     : window.TARGET_PROJECT !== undefined,
 		    "name"         : name,
 		    "error"        : error,
+		    "showformat"   : showformat,
 		});
 		html =
 		    "<div class='row' id='" + name + "'>" +
@@ -91,6 +130,9 @@ $(function ()
 		    }
 		});
 
+		// Set up the urn link popovers to the table.
+		addUrnPopovers(name);
+		
 		var TableInit = function(tablename) {
 		    $('#' + name + ' #' + tablename).removeClass("hidden");
 		    
@@ -205,10 +247,16 @@ $(function ()
 		});
 		
 	    }
+	    var args = {"cluster" : name};
+	    if (window.TARGET_PROJECT !== undefined) {
+		args["pid"] = window.TARGET_PROJECT;
+	    }
+	    else {
+		args["uid"] = window.TARGET_USER;
+	    }
 	    var xmlthing = sup.CallServerMethod(null, "images",
-						"ListImages",
-						{"cluster" : name,
-						 "uid" : window.TARGET_USER});
+						"ListImages", args);
+
 	    xmlthing.done(callback);
 	});
     }
@@ -276,30 +324,41 @@ $(function ()
 	    }
 	    table.trigger('update');
 	};
-	var args = {"urn" : urn,
-		    "uid" : window.TARGET_USER,
+	var args = {"urn"     : urn,
+		    "pid"     : imagelist[cluster][index]["pid"],
 		    "cluster" : cluster};
 	/*
 	 * Look to see if this is a row with a profile in it, which
 	 * should be deleted along with the image. Pass that along,
 	 * the backend is going to check anyway.
 	 */
-	if ($(row).find("td.delete-profile").length) {
-	    var uuid = $(row).find("td.delete-profile").attr('data-uuid');
-	    args["profile-delete"] = uuid;
-	}
-
-	/*
-	 * The confirm modal is a template in case we need to warn
-	 * about profiles that will be deleted. Need to find that
-	 * list in the saved data structure.
-	 */
 	var profiles = null;
 	if ($(row).find("td.delete-profile").length) {
+	    var uuid = $(row).find("td.delete-profile").attr('data-uuid');
+	    args["profile-delete"]  = uuid;
+	    args["profile-delete-versions"] = [];
+		
+
+	    /*
+	     * The confirm modal is a template in case we need to warn
+	     * about profiles that will be deleted. Need to find that
+	     * list in the saved data structure.
+	     */
 	    _.each(imagelist[cluster], function(image, index) {
 		_.each(image.versions, function(version, index) {
 		    if (version.urn == urn) {
 			profiles = version.using;
+			/*
+			 * Add the version list to the args.
+			 */
+			_.each(profiles, function(profile, i) { 
+			    _.each(profile.versions, function(version, j) {
+				args["profile-delete-versions"]
+				    .push(version.version);
+			    });
+			});
+			// Just one profile can be deleted.
+			return;
 		    }
 		});
 	    });
@@ -351,6 +410,7 @@ $(function ()
 	$('#confirm-delete-image-modal #confirm-delete-image')
 	    .click(function () {
 		sup.HideModal('#confirm-delete-image-modal');
+
 		sup.ShowWaitWait('It takes a moment to delete an image; ' +
 				 'patience please');
 
@@ -380,8 +440,15 @@ $(function ()
 	    if (json.value.length == 0) {
 		return;
 	    }
+	    // We show the format only if there is more then one format type.
+	    var formats = {};
+	    _.each(json.value, function(value, index) {
+		formats[value.format] = 1;
+	    });
+		   
 	    var html = classicTemplate({
 		"images"       : json.value,
+		"showformat"   : Object.keys(formats).length > 1,
 	    });
 	    $('#classic-images-div').html(html);
 	    // Format dates with moment before display.
@@ -391,29 +458,7 @@ $(function ()
 		    $(this).html(moment($(this).html()).format("ll"));
 		}
 	    });
-	    // This activates the popover subsystem.
-	    $('#classic-images-table [data-toggle="popover"]').popover({
-		placement: 'auto',
-	    });
-	    // Prevent shooting to the top of the page on clicking the popover.
-	    $('#classic-images-table [data-toggle="popover"]')
-		.click(function (event) {
-		    event.preventDefault();
-		});
-	    // This is to make the URN popover go away on click outside.
-	    $('body').on('click', function (e) {
-		$('[data-toggle="popover"]')
-		    .each(function () {
-			//the 'is' for buttons that trigger popups
-			//the 'has' for icons within a button that
-			//triggers a popup
-			if (!$(this).is(e.target) &&
-			    $(this).has(e.target).length === 0 &&
-			    $('.popover').has(e.target).length === 0) {
-			    $(this).popover('hide');
-			}
-		    });
-	    });
+	    addUrnPopovers("classic-images-table");
 	    $('#classic-images-div').removeClass("hidden");
 
 	    var table = $('#classic-images-table')
@@ -430,10 +475,6 @@ $(function ()
 			filter_columnFilters : false,
 			// Search as typing
 			filter_liveSearch : true,
-		    },
-		    headers: {
-			3: {sorter: false},
-			4: {sorter: false},
 		    },
 		});
 	    $.tablesorter.filter.bindSearch(table, $('#classic-images-search'));

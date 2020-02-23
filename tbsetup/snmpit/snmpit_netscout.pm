@@ -47,7 +47,7 @@ use Port;
 my $CLI_UNNAMED_PATTERN = "[Uu]nnamed";
 my $CLI_UNNAMED_NAME = "unnamed";
 my $CLI_NOCONNECTION = "A00";
-my $CLI_TIMEOUT = 10000;
+my $CLI_TIMEOUT = 180;
 
 # commands to show something
 my $CLI_SHOW_CONNECTIONS = "show connections raw\r";
@@ -223,9 +223,6 @@ sub createExpectObject($)
     }
     $exp->raw_pty(0);
     $exp->log_stdout(0);
-    if ($self->{DEBUG}) {
-	$exp->log_file("/tmp/snmpit_netscout.log");
-    }
     $exp->spawn($spawn_cmd)
     or die "Cannot spawn $spawn_cmd: $!\n";
     $exp->expect($CLI_TIMEOUT,
@@ -421,6 +418,19 @@ sub pairConnected($$$$)
     return 1
 	if (exists($ports->{$port1}) && exists($ports->{$port2}));
     return 0;
+}
+
+#
+# Utility function to acl all of the port alarms.
+#
+sub AckPortAlarms($)
+{
+    my ($self) = @_;
+    my $cmd = "ack port alarm all";
+
+    $self->debug("snmpit_netscout:AckPortAlarms: $cmd\n");
+
+    return $self->doCLICmd($cmd);
 }
 
 # 
@@ -695,6 +705,7 @@ sub setPortVlan($$@) {
 	$self->unlock();
 	return 1;
     }
+    $self->AckPortAlarms();
 
     $self->unlock();
     return 0;
@@ -786,10 +797,6 @@ sub removePortsFromVlan($@) {
 		warn("$id: ERROR: Failed to deactivate $vlan_id: $output\n");
 		$errors++;
 	    }
-	}
-	if (keys(%{$ports})) {
-
-
 	}
     }
     return $errors;

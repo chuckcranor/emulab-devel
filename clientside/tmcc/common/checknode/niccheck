@@ -60,7 +60,7 @@ case $os in
 esac
 
 # Ignore virtual devices that won't be in the DB
-badboys="^(ifb|xenbr|vlan)"
+badboys="(ifb|xenbr|vlan|AMPR)"
 
 unset -v d ; declare -a d=($(ifconfig -a | grep $delimiter | grep -Ev $badboys))
 declare -i cnt=0;
@@ -139,7 +139,7 @@ tbresult=${tbinfo[@]}
 #	    failed="$failed TB missing nic "
 #	    failed="$failed TB extra nic "
 
-if [[ "$ifresult" || "$tbresult" ]] ; then
+if [[ ! "$ifresult" && ! "$tbresult" ]] ; then
     if [[ $ifresult ]] ; then
 	failed="${failed}: NotIn TB $ifresult"
     fi

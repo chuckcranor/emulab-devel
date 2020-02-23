@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -52,6 +52,7 @@ if (isset($_SERVER['SERVER_NAME'])) {
 $PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
     global $drewheader, $ISCLOUD, $ISPNET, $ISEMULAB, $ISAPT, $ISPOWDER;
     global $spatrequired, $TBMAINSITE, $PORTAL_HELPFORUM;
+    global $APTMAIL, $APTMAILTO;
 
     if (! $drewheader) {
 	SPITHEADER();
@@ -67,6 +68,8 @@ $PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
     echo "    window.ISPOWDER  = " . ($ISPOWDER ? "1" : "0") . ";\n";
     echo "    window.ISAPT     = " . ($ISAPT    ? "1" : "0") . ";\n";
     echo "    window.MAINSITE  = " . ($TBMAINSITE ? "1" : "0") . ";\n";
+    echo "    window.APTMAIL   = \"$APTMAIL\"\n";
+    echo "    window.APTMAILTO = \"$APTMAILTO\"\n";
     echo "    window.HELPFORUM = " .
         "'https://groups.google.com/d/forum/${PORTAL_HELPFORUM}';\n";
     echo "</script>\n";
@@ -78,15 +81,16 @@ $PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
     die("");
 };
 
-$PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
-				 $ignore2 = NULL, $ignore3 = NULL)
+$PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
+				 $inline = false, $ignore3 = NULL)
 {
-    global $PORTAL_MANUAL, $PORTAL_HELPFORUM;
+    global $PORTAL_MANUAL, $PORTAL_HELPFORUM, $APTMAIL, $APTMAILTO;
     global $TBMAINSITE, $APTTITLE, $FAVICON, $APTLOGO, $APTSTYLE, $ISAPT;
-    global $GOOGLEUA, $ISCLOUD, $TBBASE;
+    global $GOOGLEUA, $ISCLOUD, $TBBASE, $PORTAL_GENESIS;
     global $ISPNET, $ISPOWDER, $ISEMULAB;
-    global $login_user, $login_status, $SUPPORT;
+    global $login_user, $login_status, $SUPPORT, $FIRSTUSER;
     global $disable_accounts, $page_title, $drewheader, $embedded;
+    global $UI_EXTERNAL_ACCOUNTS, $BrandMapping;
     $cleanmode = (isset($_COOKIE['cleanmode']) &&
                   $_COOKIE['cleanmode'] == 1 ? 1 : 0);
     $showmenus = 0;
@@ -96,6 +100,9 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     }
     $height = ($thinheader ? 150 : 250);
     $drewheader = 1;
+    $nonav = 0;
+    $parsed_url = parse_url($_SERVER['REQUEST_URI']);
+    $script = basename($parsed_url["path"]);
 
     #
     # Figure out who is logged in, if anyone.
@@ -108,11 +115,49 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     if ($login_user && !($login_status & CHECKLOGIN_WEBONLY)) {
         $showmenus = 1;
     }
-    if ($login_user && $login_user->RequireAUP() &&
-        $page_title != "AUP" && $page_title != "Logout") {
-        $referrer = urlencode($_SERVER['REQUEST_URI']);
-        header("Location: portal-aup.php?referrer=$referrer");
+    if ($TBMAINSITE && $login_user &&
+        $login_user->bound_portal() && $login_user->portal() &&
+        $login_user->portal() != $PORTAL_GENESIS) {
+        $portal_url  = $BrandMapping[$login_user->portal()];
+        $portal_url .= str_replace("/portal/", "/", $_SERVER['REQUEST_URI']);
+        header("Location: $portal_url");
         return;
+    }
+    if ($login_user && $login_uid == "powdstop") {
+        $cleanmode = 1;
+        $nonav = 1;
+        if ($script != "logout.php" &&
+            $script != "powder-shutdown.php") {
+            header("Location: powder-shutdown.php");
+        }
+    }
+    elseif ($login_user && ($login_status & CHECKLOGIN_PSWDEXPIRED)) {
+        # Bypass the next set of checks, let this proceee. User will
+        # be back here later.
+        ;
+    }
+    elseif ($login_user && $ISPOWDER && $login_user->RequireAddress()) {
+        if ($script != "myaccount.php" && $script != "logout.php") {
+            $referrer = urlencode($_SERVER['REQUEST_URI']);
+            header("Location: myaccount.php?addrequired=1&referrer=$referrer");
+            return;
+        }
+    }
+    elseif ($login_user && $login_user->IsActive() &&
+            $login_user->RequireAUP()) {
+        if ($script != "portal-aup.php" && $script != "logout.php") {
+            $referrer = urlencode($_SERVER['REQUEST_URI']);
+            header("Location: portal-aup.php?referrer=$referrer");
+            return;
+        }
+    }
+    elseif ($login_user && $login_user->IsActive() &&
+            $login_user->Licenses()) {
+        if ($script != "licenses.php" && $script != "logout.php") {
+            $referrer = urlencode($_SERVER['REQUEST_URI']);
+            header("Location: licenses.php?referrer=$referrer");
+            return;
+        }
     }
 
     header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
@@ -126,17 +171,30 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
               type='image/vnd.microsoft.icon'>
         <link rel='stylesheet' href='css/bootstrap.css'>
         <link rel='stylesheet' href='css/quickvm.css'>
-        <link rel='stylesheet' href='css/$APTSTYLE'>";
+        <link rel='stylesheet' href='css/$APTSTYLE'>\n";
     if ($ISPOWDER) {
         echo "<link href='https://www.powderwireless.net/powder/fonts/raleway/style.css' rel='stylesheet'>";
+    }
+    if ($TBMAINSITE) {
+        if ($ISEMULAB) {
+            # This might still be used by google. 
+            echo "<meta name='description' ".
+                "content='emulab - network emulation testbed home'>\n";
+        }
     }
     echo "<script src='js/lib/jquery.min.js'></script>\n";
     echo "<script>APT_CACHE_TOKEN='" . Instance::CacheToken() . "';</script>";
     echo "<script src='js/common.js?nocache=asdfasdf'></script>
         <link rel='stylesheet' href='css/jquery-steps.css'>
         <script src='$TBBASE/emulab_sup.js'></script>
-      </head>
-    <body style='display: none;'>\n";
+      </head>\n";
+
+    if ($inline) {
+        echo "<body>\n";
+    }
+    else {
+        echo "<body style='display: none;'>\n";
+    }
 
     echo "<script type='text/javascript'>\n";
     echo "    window.ISEMULAB = " . ($ISEMULAB ? "1" : "0") . ";\n";
@@ -151,6 +209,8 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     echo "    window.EMBEDDED = $embedded;\n";
     echo "    window.SUPPORT  = '$SUPPORT';\n";
     echo "    window.APTTILE  = '$APTTITLE';\n";
+    echo "    window.APTMAIL   = \"$APTMAIL\"\n";
+    echo "    window.APTMAILTO = \"$APTMAILTO\"\n";
     echo "</script>\n";
     
     if ($TBMAINSITE && !$embedded && file_exists("../google-analytics.php")) {
@@ -165,12 +225,15 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
         echo "</script>";
     }
 
+    if ($embedded) {
+	goto embed;
+    }
     echo "
     <!-- Container for body, needed for sticky footer -->
     <div id='wrap'>\n";
 
-    if ($embedded) {
-	goto embed;
+    if ($nomenu) {
+        return;
     }
 
     #
@@ -213,11 +276,13 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
 	}
 	if (!NOLOGINS()) {
 	    if (!$login_user) {
-                $navbar_right .=
-                    "<li id='signupitem' class='apt-left'>" .
-                    "  <a class='btn btn-success navbar-btn apt-navbar-btn'
-                                id='signupbutton'
-                                href='signup.php'>Sign Up</a></li>\n";
+		if ($UI_EXTERNAL_ACCOUNTS == 0) {
+                    $navbar_right .=
+                        "<li id='signupitem' class='apt-left'>" .
+                        "  <a class='btn btn-success navbar-btn apt-navbar-btn'
+                                    id='signupbutton'
+                                    href='signup.php'>Sign Up</a></li>\n";
+		}
 		if ($page_title != "Login") {
                     $navbar_right .=
                         "<li id='loginitem' class='apt-left'>" .
@@ -233,13 +298,25 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     # and turn them on inside the action menu.
     $hiddenxs = ($showmenus ? "hidden-xs" : "");
 
-    SPITNAV($hiddenxs, $navbar_status, $navbar_right, $login_uid);
+    SPITNAV($hiddenxs, $nonav, $navbar_status, $navbar_right, $login_uid);
 
     # Put announcements, if any, right below the header.
     if (!$cleanmode && $login_user && $login_user->IsActive() &&
         !($login_status & CHECKLOGIN_WEBONLY)) {
         # Always create empty div for announcements, for ajax update.
         echo "<div id='portal-announcement-div'>\n";
+        #
+        # When a classic user hits the Portal interface for the first time,
+        # enter a announcement for the user to make sure they know what is
+        # going on and how to return to the Classic interface. I put a canned
+        # announcement in the announce script. 
+        #
+        if (!$login_user->portal() && !$login_user->portal_interface_warned()) {
+            SUEXEC($FIRSTUSER, "nobody",
+                   "webannounce -a -U $login_uid -p emulab -m 10 -P",
+                   SUEXEC_ACTION_CONTINUE);            
+            $login_user->SetPortalWarned();
+        }
         $announcements = GET_ANNOUNCEMENTS($login_user);
         for ($i = 0; $i < count($announcements); $i++) {
             echo $announcements[$i];
@@ -357,10 +434,13 @@ function SPITHEADER($thinheader = 0,
     $PAGEHEADER_FUNCTION($thinheader, $ignore1, $ignore2, $ignore3);
 }
 
-function SPITNAV($hiddenxs, $navbar_status, $navbar_right, $login_uid)
+function SPITNAV($hiddenxs, $nonav, $navbar_status, $navbar_right, $login_uid)
 {
     global $PORTAL_MANUAL, $APTLOGO, $login_status, $login_user, $TBMAINSITE;
-    global $THISHOMEBASE, $ISEMULAB, $ISPNET, $ISPOWDER;
+    global $THISHOMEBASE, $ISEMULAB, $ISPNET, $ISPOWDER, $TBBASE;
+    global $PORTAL_WIKI;
+    global $UI_DISABLE_DATASETS, $UI_DISABLE_RESERVATIONS;
+    global $UI_EXTERNAL_ACCOUNTS;
     $hiddenxs = "";
 echo "
 
@@ -383,7 +463,7 @@ echo "  <ul class='nav navbar-nav navbar-left apt-left'>";
       echo "<li class='local-name apt-left apt-nav-item'>" . $THISHOMEBASE . "</li>";
     }
 
-   if ($login_user && !($login_status & CHECKLOGIN_WEBONLY)) {
+   if ($login_user && !$nonav && !($login_status & CHECKLOGIN_WEBONLY)) {
 
     if ($login_user->IsActive()) {
       $then = time() - (90 * 3600 * 24);
@@ -396,20 +476,37 @@ echo "
 	Experiments <b class='caret'></b></a>
       <ul class='dropdown-menu'>
 	<li><a href='instantiate.php'>Start Experiment</a></li>
-	<li><a href='manage_profile.php'>Create Experiment Profile</a></li>
-       <li><a href='reserve.php'>Reserve Nodes</a></li>
+	<li><a href='manage_profile.php'>Create Experiment Profile</a></li>";
+
+      if ($UI_DISABLE_RESERVATIONS == 0 ||
+         ($UI_DISABLE_RESERVATIONS == 1 && ISADMIN()) ) {
+echo "    <li><a href='reserve.php'>Reserve " .
+             ($ISPOWDER ? "Resources" : "Nodes") . "</a></li>";
+      }
+
+echo "
        <li><a href='resinfo.php'>Resource Availability</a></li>
+       <li><a href='cluster-status.php'>Cluster Status</a></li>
         ";
 echo " <li class='divider'></li>
         <li><a href='user-dashboard.php#experiments'>
 	    My Experiments</a></li>
 	<li><a href='user-dashboard.php#profiles'>
-            My Profiles</a></li>
-        <li><a href='list-reservations.php'>
-            My Reservations</a></li>
-        <li><a href='activity.php?user=$login_uid&min=$then'>
-                            My History</a></li>
-";
+            My Profiles</a></li>";
+
+      if ($UI_DISABLE_RESERVATIONS == 0 ||
+         ($UI_DISABLE_RESERVATIONS == 1 && ISADMIN()) ) {
+echo "    <li><a href='list-reservations.php'>
+              My Reservations</a></li>";
+      }
+
+echo "  <li><a href='activity.php?user=$login_uid&min=$then'>
+                            My History</a></li>";
+# Classic users, using the Portal, get a link back to it. SAD!
+if (!$login_user->portal()) {
+    echo " <li class='divider'></li>";
+    echo " <li><a href='$TBBASE/classic.php'>Emulab Classic</a></li>";
+}
       echo "
     </ul>
     </li>
@@ -418,10 +515,16 @@ echo " <li class='divider'></li>
 	 class='dropdown-toggle btn btn-quickvm-home navbar-btn'
 	 data-toggle='dropdown'>
 	Storage <b class='caret'></b></a>
-      <ul class='dropdown-menu'>
+      <ul class='dropdown-menu'>";
+
+if ($UI_DISABLE_DATASETS == 0 || ($UI_DISABLE_DATASETS == 1 && ISADMIN()) ) {
+      echo "
 	<li><a href='create-dataset.php'>Create Dataset</a></li>
 	<li><a href='user-dashboard.php#datasets'>
-	    My Datasets</a></li>
+	    My Datasets</a></li>";
+}
+
+      echo "
 	<li><a href='list-images.php'>My Disk Images</a></li>
         <li><a href='images.php'>Other Disk Images</a></li>
       </ul>
@@ -446,7 +549,7 @@ echo " <li class='divider'></li>
 	           echo "     </a></li>\n";
 	       }
                echo "  <li><a href='dashboard.php'>DashBoard</a></li>";
-               echo "  <li><a href='cluster-status.php'>Cluster Status</a></li>";
+               echo "  <li><a href='aggregate-status.php'>Cluster Status</a></li>";
                $then = time() - (14 * 3600 * 24);
                echo "  <li><a href='activity.php?min=$then'>
                             History Data</a></li>
@@ -457,21 +560,27 @@ echo " <li class='divider'></li>
 		               echo "<li><a href='experiments.php#all'>
                             All Experiments</a></li>
 		                 <li><a href='list-profiles.php'>
-                            All Profiles</a></li>
-                                 <li><a href='list-reservations.php'>
-                            All Reservations</a></li>
- 		                 <li><a href='list-datasets.php?all=1'>
-                            All Datasets</a></li>
-                                 <li><a href='images.php?all=1'>
+                            All Profiles</a></li>";
+                            if ($UI_DISABLE_RESERVATIONS <= 1) {
+                                 echo "<li><a href='list-resgroups.php'>
+                                All ResGroups</a></li>\n";
+                            }
+                            if ($UI_DISABLE_DATASETS <= 1) {
+		                   echo "<li><a href='list-datasets.php'>
+                                All Datasets</a></li>\n";
+                            }
+                               echo "<li><a href='images.php?all=1'>
                             All Images</a></li>
+                                 <li><a href='list-vlans.php'>
+                            All Vlans</a></li>
                                  <li><a href='instance-errors.php'>
                             Experiment Errors</a></li>
                                  <li><a href='lists.php'>
                             Users/Projects</a></li>
                                  <li><a href='approve-projects.php'>
                             Approve new projects</a></li>
-                                 <li><a href='edit-news.php'>
-                            Add a news item</a></li>";
+                                 <li><a href='sitevars.php'>
+                            Edit Site Variables</a></li>";
                                echo " </ul>
         </li>\n";
     }
@@ -479,11 +588,23 @@ echo " <li class='divider'></li>
    echo "</ul>";
    echo "  <ul class='nav navbar-nav navbar-right apt-right'>
     $navbar_status
-    $navbar_right
-    <li class='apt-left'>
-      <a class='btn btn-quickvm-home navbar-btn' href='$PORTAL_MANUAL' target='_blank'>Docs</a>
-    </li>
-";
+    $navbar_right\n";
+
+   echo "<li id='quickvm_actions_menu'
+                 class='dropdown apt-left apt-nav-item'>
+               <a href='#'
+	          class='dropdown-toggle btn btn-quickvm-home navbar-btn'
+	          data-toggle='dropdown'>Docs <b class='caret'></b></a>
+               <ul class='dropdown-menu'>
+                 <li><a href='$PORTAL_MANUAL' target='_blank'>Manual</a></li>";
+   if ($PORTAL_WIKI) {
+       echo "    <li><a href='$PORTAL_WIKI' target='_blank'>Wiki</a></li>";
+   }
+   echo "        <li><a href='example-profiles.php'
+                                 target='_blank'>Example Profiles</a></li>";
+   echo "      </ul>
+         </li>\n";
+
 
    if ($login_user) {
    echo "
@@ -493,11 +614,13 @@ echo " <li class='divider'></li>
 	 data-toggle='dropdown'>
 	$login_uid <b class='caret'></b></a>
       <ul class='dropdown-menu'>\n";
-       if (! ($login_status & CHECKLOGIN_WEBONLY)) {
+       if (!$nonav && !($login_status & CHECKLOGIN_WEBONLY)) {
            echo "
 	        <li><a href='myaccount.php'>Manage Account</a></li>
-   	        <li><a href='signup.php'>Start/Join Project</a></li>
-	        <li><a href='changepswd.php'>Change Password</a></li>";
+		<li><a href='signup.php'>Start/Join Project</a></li>";
+           if ($UI_EXTERNAL_ACCOUNTS == 0) {
+	        echo "<li><a href='changepswd.php'>Change Password</a></li>";
+           }
                if ($login_user->isActive()) {
                    echo "
                  <li><a href='getcreds.php'>Download Credentials</a></li>
@@ -523,7 +646,7 @@ function GET_ANNOUNCEMENTS($user, $update = true)
 
   # Add an apt_announcement_info entry for any announcements which don't have one
   $query_result = DBQueryWarn('select a.idx from apt_announcements as a left join apt_announcement_info as i on a.idx=i.aid and ((a.uid_idx is NULL and i.uid_idx="'.$uid_idx.'") or (a.uid_idx is not NULL and a.uid_idx=i.uid_idx)) where a.portal="'.$PORTAL_GENESIS.'" and a.retired=0 and i.uid_idx is NULL and (a.uid_idx is NULL or a.uid_idx="'.$uid_idx.'")');
-  while ($row = mysql_fetch_array($query_result, MYSQL_NUM)) {
+  while ($row = mysql_fetch_row($query_result)) {
       DBQueryWarn('insert into apt_announcement_info set aid="'.$row[0].'", uid_idx="'.$uid_idx.'",seen_count=0');
   }
 
@@ -584,12 +707,14 @@ function GET_ANNOUNCEMENTS($user, $update = true)
 $PAGEFOOTER_FUNCTION = function($ignored = NULL) {
     global $PORTAL_HELPFORUM, $PORTAL_NSFNUMBER, $embedded, $PORTAL_TEMPLATES;
 
-    echo "</div>
-      </div>\n";
+    if (!$ignored) {
+        echo "</div>\n";
+    }
     if (!$embedded) {
         if ($PORTAL_NSFNUMBER) {
             SpitNSFModal();
         }
+        echo "</div>\n";
         echo "
           <!--- Footer -->
           <div>
@@ -608,13 +733,13 @@ $PAGEFOOTER_FUNCTION = function($ignored = NULL) {
                    href='#nsf_supported_modal'
 	           data-target='#nsf_supported_modal'>Supported by NSF</a>\n";
         }
-        echo "&copy; 2018
+        echo "&copy; 2020
               <a href='http://www.utah.edu' target='_blank'>
                  The University of Utah</a>
-            </div>
+               </div>
            </div>
           </div>
-          <!-- Placed at the end of the document so the pages load faster -->\n";
+         <!-- Placed at the end of the document so the pages load faster -->\n";
     }
     EchoTemplateList($PORTAL_TEMPLATES);
     echo "</body></html>\n";

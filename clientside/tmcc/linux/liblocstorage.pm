@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2018 University of Utah and the Flux Group.
+# Copyright (c) 2013-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -58,9 +58,19 @@ BEGIN
 	$VARDIR  = "/etc/rc.d/testbed";
 	$BOOTDIR = "/etc/rc.d/testbed";
     }
-
+    my $genvmtype = "";
+    if (-e "$ETCDIR/genvmtype") {
+	$genvmtype = `cat $ETCDIR/genvmtype`;
+	chomp($genvmtype);
+    }
+    
     $VGNAME = "emulab";
-    if (INXENVM() && -r "$VARDIR/boot/vmname") {
+    
+    if (GENVNODEHOST() && GENVNODETYPE() eq 'docker') {
+	$VGNAME = "docker";
+    } elsif (GENVNODEHOST() && !SHAREDHOST()) {
+	$VGNAME = "xen-vg";
+    } elsif (INXENVM() && -r "$VARDIR/boot/vmname") {
 	my $vname = `cat $VARDIR/boot/vmname`;
 	chomp $vname;
 	if ($vname =~ /^([-\w]+)$/) {
@@ -69,11 +79,20 @@ BEGIN
     }
 }
 
+sub ISFORDOCKERVM() {
+    if (defined(libsetup_getvnodeid())
+	&& GENVNODEHOST() && GENVNODETYPE() eq 'docker') {
+	return 1;
+    }
+    return 0;
+}
+
 my $MOUNT	= "/bin/mount";
 my $UMOUNT	= "/bin/umount";
 my $MKDIR	= "/bin/mkdir";
 my $MKFS	= "/sbin/mke2fs";
 my $FSCK	= "/sbin/e2fsck";
+my $DUMPFS	= "/sbin/dumpe2fs";
 my $DOSTYPE	= "$BINDIR/dostype";
 my $ISCSI	= "/sbin/iscsiadm";
 my $ISCSI_ALT	= "/usr/bin/iscsiadm";
@@ -86,6 +105,20 @@ my $GDISK	= "/sbin/gdisk";
 my $PPROBE	= "/sbin/partprobe";
 my $FRISBEE     = "/usr/local/bin/frisbee";
 my $HDPARM	= "/sbin/hdparm";
+
+my $FSTAB	= "/etc/fstab";
+
+#
+# Time to wait for a session to start.
+#
+# XXX it might take a long time for the target (blockstore server)
+# to export our blockstore if a lot of blockstores are being
+# setup at the same time. So we hang out for a long time.
+#
+# Note that the Linux iscsiadm default timeout is 2 minutes so this
+# value should be a multiple of 120 seconds.
+#
+my $SESSION_TIMEOUT = (12 * 60);
 
 #
 #
@@ -532,8 +565,8 @@ sub get_diskinfo()
     close(FD);
 
     # XXX watch out for mounted disks/partitions (DOS type may be 0)
-    if (!open(FD, "/etc/fstab")) {
-	warn("*** get_diskinfo: could not get mount info from /etc/fstab\n");
+    if (!open(FD, "$FSTAB")) {
+	warn("*** get_diskinfo: could not get mount info from $FSTAB\n");
 	return undef;
     }
     while (<FD>) {
@@ -702,10 +735,14 @@ sub checkfs($$$)
     }
 
     # XXX cannot fsck ufs, right now we just pretend everything is okay
-    if ($fstype ne "ufs" &&
-	mysystem("$FSCK $fopt $mdev $redir")) {
-	warn("*** $lv: fsck of $mdev failed\n");
-	return 0;
+    if ($fstype ne "ufs") {
+	my $rv = mysystem("$FSCK $fopt $mdev $redir");
+
+	# Linux e2fsck returns 1 on corrected errors
+	if ($rv && $rv != (1 << 8)) {
+	    warn("*** $lv: fsck of $mdev failed ($rv)\n");
+	    return 0;
+	}
     }
 
     return 1;
@@ -748,12 +785,38 @@ sub set_iname($$)
     print FD "InitiatorName=$iname\n";
     close(FD);
 
-    # restart iscsid
-    if (mysystem("service open-iscsi restart $redir")) {
-	warn("*** storage: could not restart iscsid!\n");
-	return 0;
+    #
+    # XXX iscsid might already be running with the wrong initiator name.
+    # So, we need to logout of all sessions:
+    #   iscsiadm -m node -U all
+    # restart services:
+    #   systemctl restart iscsid open-iscsi
+    # and login again:
+    #   iscsiadm -m node -L all
+    #
+    # XXX we only do this for Ubuntu 16 and beyond where we know that iscsid
+    # is enabled by default. Conveniently, we can use the existence of systemctl
+    # as an indicator. Basically, we don't care about Ubuntu 14 and before
+    # except to not break it.
+    #
+    if (-x "/bin/systemctl") {
+	my $nsess = `$ISCSI -m session 2>/dev/null | grep -c ^`;
+	chomp($nsess);
+	if ($nsess != 0 && mysystem("$ISCSI -m node -U all $redir")) {
+	    warn("*** storage: could not logout of iscsi sessions!\n");
+	}
+	if (mysystem("/bin/systemctl restart iscsid open-iscsi $redir")) {
+	    warn("*** storage: could not restart iscsi daemons!\n");
+	}
+	if ($nsess != 0 && mysystem("$ISCSI -m node -L all $redir")) {
+	    warn("*** storage: could not login to iscsi sessions!\n");
+	}
+    } else {
+	# restart iscsid
+	if (mysystem("service open-iscsi restart $redir")) {
+	    warn("*** storage: could not restart iscsid!\n");
+	}
     }
-
     return 1;
 }
 
@@ -776,6 +839,20 @@ sub os_init_storage($)
     my $iqn;
 
     my %so = ();
+
+    #
+    # If we are running on the outside of a Docker container, but on its
+    # behalf, we want to do some things differently.
+    #
+    if (ISFORDOCKERVM()) {
+	$FSTAB = CONFDIR()."/fstab-storage";
+	$MOUNT .= " --fstab $FSTAB";
+	#$UMOUNT .= " --fstab $FSTAB";
+	if (! -e $FSTAB) {
+	    open(FD,">$FSTAB");
+	    close(FD);
+	}
+    }
 
     foreach my $href (@{$lref}) {
 	if ($href->{'CMD'} eq "ELEMENT") {
@@ -951,6 +1028,31 @@ sub os_check_storage($$)
     return -1;
 }
 
+sub _docker_get_ext_trans_mountpoint($)
+{
+    my ($mpoint,) = @_;
+
+    my $confdir = CONFDIR();
+    my $tmpoint = `readlink -f $confdir/mountpoints`;
+    chomp($tmpoint);
+    if ($mpoint =~ /^$tmpoint/) {
+	return $mpoint;
+    }
+    else {
+	$mpoint = $tmpoint.$mpoint;
+    }
+    if (! -e $mpoint) {
+	my @dirs = split(/\//,$mpoint);
+	my $tpath = CONFDIR()."/mountpoints";
+	foreach my $dir (@dirs) {
+	    $tpath .= "/$dir";
+	    mkdir($tpath);
+	}
+    }
+
+    return $mpoint;
+}
+
 sub os_check_storage_element($$)
 {
     my ($so,$href) = @_;
@@ -1030,8 +1132,16 @@ sub os_check_storage_element($$)
 	# do for local blockstores. Thus, if the blockstore device is not
 	# mounted, we do it here.
 	#
+	# NB: also, for the Docker case where we setup blockstore access
+	# outside the container, we make alternative $FSTAB entries!
+	#
 	my $mpoint = $href->{'MOUNTPOINT'};
 	if ($mpoint) {
+	    if (ISFORDOCKERVM()) {
+		$mpoint = $href->{'MOUNTPOINT'} =
+		    _docker_get_ext_trans_mountpoint($mpoint);
+	    }
+
 	    my $mdev = $href->{'LVDEV'};
 	    my $mopt = "";
 
@@ -1138,7 +1248,7 @@ sub os_check_storage_slice($$)
     #    see if there is a logical volume with appropriate name
     #  else if BSID==ANY:
     #    see if there is a logical volume with appropriate name
-    #  if there is a mountpoint, see if it exists in /etc/fstab
+    #  if there is a mountpoint, see if it exists in $FSTAB
     #
     if ($href->{'CLASS'} eq "local") {
 	my $lv = $href->{'VOLNAME'};
@@ -1229,10 +1339,15 @@ sub os_check_storage_slice($$)
 	#
 	my $mpoint = $href->{'MOUNTPOINT'};
 	if ($mpoint) {
+	    if (ISFORDOCKERVM()) {
+		$mpoint = $href->{'MOUNTPOINT'} =
+		    _docker_get_ext_trans_mountpoint($mpoint);
+	    }
+
 	    my $line = `$MOUNT | grep '^/dev/$rdev on '`;
 	    if (!$line) {
 		#
-		# See if the mount exists in /etc/fstab.
+		# See if the mount exists in $FSTAB.
 		#
 		# XXX Right now if it does not, it might be because we
 		# removed it prior to creating an image. So we make some
@@ -1243,7 +1358,7 @@ sub os_check_storage_slice($$)
 		# and not only the fstab line but the mountpoint might be
 		# missing. We attempt to repair this case as well.
 		#
-		$line = `grep '^/dev/$dev\[\[:space:\]\]' /etc/fstab`;
+		$line = `grep '^/dev/$dev\[\[:space:\]\]' $FSTAB`;
 		if (!$line) {
 		    warn("  $lv: mount of /dev/$dev missing from fstab; sanity checking and re-adding...\n");
 		    my $fstype = get_fstype($href, "/dev/$dev");
@@ -1267,8 +1382,8 @@ sub os_check_storage_slice($$)
 			return -1;
 		    }
 
-		    if (!open(FD, ">>/etc/fstab")) {
-			warn("*** $lv: could not add mount to /etc/fstab\n");
+		    if (!open(FD, ">>$FSTAB")) {
+			warn("*** $lv: could not add mount to $FSTAB\n");
 			return -1;
 		    }
 		    print FD "# /dev/$dev added by $BINDIR/rc/rc.storage\n";
@@ -1421,6 +1536,17 @@ sub os_create_storage($$)
 	    if ($failed) {
 		$fstype = "ext4";
 		$fsopts = "-F -q -E lazy_itable_init=1,nodiscard";
+		#
+		# XXX temporary hack for 32-bit only imagezip.
+		# If the dataset size is less than 2TB, we make sure that
+		# the 64bit feature is not set. Otherwise, we cannot take
+		# a snapshot of the dataset (until imagezip is enhanced!)
+		#
+		my $vsize = $href->{'VOLSIZE'};
+		if ($vsize < (2 * 1024 * 1024)) {
+		    warn("  $lv: removing 64-bit feature from FS on $mdev\n");
+		    $fsopts .= " -O ^64bit,^huge_file";
+		}
 		$failed = mysystem("$MKFS -t $fstype $fsopts $mdev $redir");
 	    }
 	    if ($failed) {
@@ -1443,20 +1569,25 @@ sub os_create_storage($$)
 	# Mount the filesystem
 	#
 	my $mpoint = $href->{'MOUNTPOINT'};
+	if (defined($mpoint) && ISFORDOCKERVM()) {
+	    $mpoint = $href->{'MOUNTPOINT'} =
+		_docker_get_ext_trans_mountpoint($mpoint);
+	}
+
 	if (! -d "$mpoint" && mysystem("$MKDIR -p $mpoint $redir")) {
 	    warn("*** $lv: could not create mountpoint '$mpoint'$logmsg\n");
 	    return 0;
 	}
 
 	#
-	# XXX because mounts in /etc/fstab happen before iSCSI and possibly
+	# XXX because mounts in $FSTAB happen before iSCSI and possibly
 	# even the network are setup, we don't put our mounts there as we
 	# do for local blockstores. Instead, the check_storage call will
 	# take care of these mounts.
 	#
 	if (!($href->{'CLASS'} eq "SAN" && $href->{'PROTO'} eq "iSCSI")) {
-	    if (!open(FD, ">>/etc/fstab")) {
-		warn("*** $lv: could not add mount to /etc/fstab\n");
+	    if (!open(FD, ">>$FSTAB")) {
+		warn("*** $lv: could not add mount to $FSTAB\n");
 		return 0;
 	    }
 	    print FD "# $mdev added by $BINDIR/rc/rc.storage\n";
@@ -1497,10 +1628,34 @@ sub os_create_storage_element($$$)
 	#
 	# Perform one time iSCSI operations
 	#
-	if (mysystem("$ISCSI -m node -T $uuid -p $hostip -o new $redir") ||
-	    mysystem("$ISCSI -m node -T $uuid -p $hostip -o update -n node.startup -v manual $redir") ||
-	    mysystem("$ISCSI -m node -T $uuid -p $hostip -l $redir")) {
-	    warn("*** Could not perform first-time initialization of block store $bsid (uuid=$uuid)$logmsg\n");
+	if (mysystem("$ISCSI -m node -T $uuid -p $hostip -o new $redir")) {
+	    warn("*** $bsid: first-time init failed; Could not create DB record.\n");
+	    return 0;
+	}
+	if (mysystem("$ISCSI -m node -T $uuid -p $hostip -o update -n node.startup -v manual $redir")) {
+	    warn("*** $bsid: first-time init failed; Could not update DB record.\n");
+	    return 0;
+	}
+	    
+	#
+	# XXX It may take some time for the server to respond on a first
+	# boot as it may be setting up many blockstores. So we retry the
+	# initial operation for awhile. The default iscsiadm timeout for
+	# connecting is 120 seconds, which we will retry 10 times for a
+	# total of 20 minutes. Note that the swapin node boot timeout will
+	# probably trigger before that, but rebooting the node will be
+	# okay here.
+	#
+	my $rv = 0;
+	for (my $tries = 0; $tries < int($SESSION_TIMEOUT/120); $tries++) {
+	    $rv = mysystem("$ISCSI -m node -T $uuid -p $hostip -l $redir");
+	    # exit code 8 indicates timeout
+	    last
+		if ($rv != 0x800);
+	    warn("*** $bsid: could not connect to portal $hostip, retrying...\n");
+	}
+	if ($rv) {
+	    warn("*** $bsid: first-time init failed; Could not login session.\n");
 	    return 0;
 	}
 
@@ -1563,7 +1718,7 @@ sub os_create_storage_slice($$$)
     #	  create an LVM PV/VG from all available space (part 4 on sysvol,
     #	  extra hard drives), create LV with appropriate name from VG.
     #  if there is a mountpoint:
-    #     create a filesystem on device, mount it, add to /etc/fstab
+    #     create a filesystem on device, mount it, add to $FSTAB
     #
     if ($href->{'CLASS'} eq "local") {
 	my $lv = $href->{'VOLNAME'};
@@ -1757,13 +1912,25 @@ sub os_create_storage_slice($$$)
 		}
 	    }
 	    # try a striped LV first
+	    # XXX don't stripe over an excess number of devices
 	    my $pvs = $so->{'LVM_VGDEVS'};
+	    if (defined($pvs) && $pvs > 8) {
+		warn("  $lv: limiting striping to 8 PV devices\n");
+		$pvs = 8;
+	    }
+	    #
+	    # XXX supposedly, using -Zy will wipe (zero) all signatures
+	    # without prompting for confirmation, but that doesn't seem
+	    # to be the case under Ubuntu18. So let's throw in the -y
+	    # option as well!
+	    #
+	    my $wipeopts = "-Zy -y";
 	    if (defined($pvs) && $pvs > 1 &&
-		!mysystem("lvcreate -Zy -i $pvs -n $lv -L ${lvsize}m $VGNAME $redir")) {
+		!mysystem("lvcreate $wipeopts -i $pvs -n $lv -L ${lvsize}m $VGNAME $redir")) {
 		$href->{'LVDEV'} = "/dev/$VGNAME/$lv";
 		return 1;
 	    }
-	    if (mysystem("lvcreate -Zy -n $lv -L ${lvsize}m $VGNAME $redir")) {
+	    if (mysystem("lvcreate $wipeopts -n $lv -L ${lvsize}m $VGNAME $redir")) {
 		warn("*** $lv: could not create LV$logmsg\n");
 		return 0;
 	    }
@@ -1807,6 +1974,10 @@ sub os_remove_storage_element($$$)
 	#
 	if (exists($href->{'MOUNTPOINT'})) {
 	    my $mpoint = $href->{'MOUNTPOINT'};
+	    if (ISFORDOCKERVM()) {
+		$mpoint = $href->{'MOUNTPOINT'} =
+		    _docker_get_ext_trans_mountpoint($mpoint);
+	    }
 
 	    if (mysystem("$UMOUNT $mpoint")) {
 		warn("*** $bsid: could not unmount $mpoint\n");
@@ -1907,6 +2078,10 @@ sub os_remove_storage_slice($$$)
 	#
 	if (exists($href->{'MOUNTPOINT'})) {
 	    my $mpoint = $href->{'MOUNTPOINT'};
+	    if (ISFORDOCKERVM()) {
+		$mpoint = $href->{'MOUNTPOINT'} =
+		    _docker_get_ext_trans_mountpoint($mpoint);
+	    }
 
 	    if (mysystem("$UMOUNT $mpoint")) {
 		warn("*** $lv: could not unmount $mpoint\n");
@@ -1920,8 +2095,8 @@ sub os_remove_storage_slice($$$)
 	    if ($teardown) {
 		my $tdev = "/dev/$dev";
 		$tdev =~ s/\//\\\//g;
-		if (mysystem("sed -E -i -e '/^(# )?$tdev/d' /etc/fstab")) {
-		    warn("*** $lv: could not remove mount from /etc/fstab\n");
+		if (mysystem("sed -E -i -e '/^(# )?$tdev/d' $FSTAB")) {
+		    warn("*** $lv: could not remove mount from $FSTAB\n");
 		}
 	    }
 	}

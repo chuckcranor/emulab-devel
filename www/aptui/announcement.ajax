@@ -37,9 +37,8 @@ function Do_Dismiss()
   global $this_user, $ajax_args;
   $uid_idx = $this_user->uid_idx();
   $aid = $ajax_args['aid'];
-  $dblink = DBConnect("tbdb");
   if (TBvalid_integer($aid)) {
-    DBQueryWarn('update apt_announcement_info set dismissed=1 where aid="'.$aid.'" and uid_idx="'.$uid_idx.'"', $dblink);
+    DBQueryWarn('update apt_announcement_info set dismissed=1 where aid="'.$aid.'" and uid_idx="'.$uid_idx.'"');
   }
 }
 
@@ -51,9 +50,8 @@ function Do_Click()
   global $this_user, $ajax_args;
   $uid_idx = $this_user->uid_idx();
   $aid = $ajax_args['aid'];
-  $dblink = DBConnect("tbdb");
   if (TBvalid_integer($aid)) {
-    DBQueryWarn('update apt_announcement_info set clicked=1 where aid="'.$aid.'" and uid_idx="'.$uid_idx.'"', $dblink);
+    DBQueryWarn('update apt_announcement_info set clicked=1 where aid="'.$aid.'" and uid_idx="'.$uid_idx.'"');
   }
 }
 

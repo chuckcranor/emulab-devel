@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-  var templates = APT_OPTIONS.fetchTemplateList(['adminextend', 'waitwait-modal', 'oops-modal', 'admin-history', 'admin-firstrow', 'admin-secondrow', 'admin-utilization', 'admin-summary']);
+    var templates = APT_OPTIONS.fetchTemplateList(['adminextend', 'waitwait-modal', 'oops-modal', 'admin-history', 'admin-firstrow', 'admin-secondrow', 'admin-utilization', 'admin-summary', "reservation-list"]);
     var mainString = templates['adminextend'];
     var waitwaitString = templates['waitwait-modal'];
     var oopsString = templates['oops-modal'];
@@ -12,10 +12,12 @@ $(function ()
     var utilizationString = templates['admin-utilization'];
     var summaryString = templates['admin-summary'];
 
+    var expinfo            = null;
     var extensions         = null;
     var firstrowTemplate   = null;
     var secondrowTemplate  = null;
     var extensionsTemplate = null;
+    var listTemplate       = null;
     var maxextension       = null;
     var GENIRESPONSE_REFUSED = 7;
 
@@ -30,28 +32,32 @@ $(function ()
 	firstrowTemplate = _.template(firstrowString);
 	secondrowTemplate = _.template(secondrowString);
 	extensionsTemplate = _.template(historyString);
+	listTemplate = _.template(templates["reservation-list"]);
 
-	LoadFirstRow();
-	// Need to serialize this stuff cause of locking in the backend.
-	LoadUtilization(function () {
-	    LoadIdleData(function () {
-		LoadOpenStack();
-	    });
-	});
+	ReloadFirstRow();
+	if (window.STARTED) {
+	    $('#extension-controls').removeClass("hidden");
+	    LoadIdleData();
+	    LoadUtilization();
+	    LoadOpenStack();
+	}
 
 	// Second row is the user/project usage summarys. We make two calls
 	// and use jquery "when" to wait for both to finish before running
 	// the template.
-	var xmlthing1 = sup.CallServerMethod(null, "user-dashboard", "UsageSummary",
+	var xmlthing1 = sup.CallServerMethod(null, "user-dashboard",
+					     "UsageSummary",
 					     {"uid"    : window.CREATOR});
-	var xmlthing2 = sup.CallServerMethod(null, "show-project", "UsageSummary",
+	var xmlthing2 = sup.CallServerMethod(null, "show-project",
+					     "UsageSummary",
 					     {"pid"    : window.PID});
 	$.when(xmlthing1, xmlthing2).done(function(result1, result2) {
+	    console.info(result1, result2);
 	    var html = secondrowTemplate({"uid"     : window.CREATOR,
 					  "pid"     : window.PID,
 					  "uuid"    : window.UUID,
-					  "user"    : result1[0].value,
-					  "project" : result2[0].value});
+					  "user"    : result1.value,
+					  "project" : result2.value});
 	    $("#secondrow").html(html);
 	});
 
@@ -234,7 +240,7 @@ $(function ()
 	    if (window.HOURS) {
 		window.HOURS = window.HOURS - howlong;
 	    }
-	    LoadFirstRow();
+	    ReloadFirstRow();
 	    // Make it harder to repeat action unintentionally. 
 	    if (action == "extend" || action == "terminate") {
 		$('#howlong').val("0");
@@ -252,73 +258,85 @@ $(function ()
     }
 
     // First Row is the experiment summary info.
-    function LoadFirstRow(continuation) {
-	sup.CallServerMethod(null, "status", "ExpInfo", {"uuid" : window.UUID},
+    function LoadFirstRow() {
+	var html = firstrowTemplate(
+	    {"expinfo" : expinfo,
+	     "uuid"    : window.UUID,
+	     "uid"     : window.CREATOR,
+	     "pid"     : window.PID}
+	);
+	$("#firstrow").html(html);
+	$('.format-date').each(function() {
+	    var date = $.trim($(this).html());
+	    if (date != "") {
+		$(this).html(moment(date)
+			     .format("MMM D, YYYY h:mm A"));
+	    }
+	});
+	if (!window.STARTED) {
+	    // Disable the flags. 
+	    $('#lockout-checkbox, #user-lockdown-checkbox, ' +
+	      '#admin-lockdown-checkbox, #quarantine-checkbox')
+		.attr("disabled", "disabled");
+	}
+	else {
+	    // lockout change event handler.
+	    $('#lockout-checkbox').change(function() {
+		DoLockout($(this).is(":checked"));
+	    });	
+	    // lockdown change event handler.
+	    $('#user-lockdown-checkbox')
+		.change(function() {
+		    DoLockdown("user",
+			       $(this).is(":checked"));
+		});
+	    $('#admin-lockdown-checkbox')
+		.change(function() {
+		    DoLockdown("admin",
+			       $(this).is(":checked"));
+		});
+	    $('#quarantine-checkbox')
+		.change(function() {
+		    DoQuarantine($(this).is(":checked"));
+		});
+	}
+	// This activates the popover subsystem.
+	$('[data-toggle="popover"]').popover({
+	    trigger: 'hover',
+	    placement: 'auto',
+	});
+	// No termination.
+	if (expinfo.admin_lockdown) {
+	    $('#terminate-button')
+		.attr("disabled", "disabled");
+	}
+	// Update the Max Extension
+	DoMaxExtension(expinfo.expires);
+	SetupAdminNotes();
+    }
+    
+    function ReloadFirstRow()
+    {
+	sup.CallServerMethod(null, "status", "ExpInfo",
+			     {"uuid" : window.UUID},
 			     function (json) {
 				 console.info(json);
 				 if (json.code == 0) {
-				     var html = firstrowTemplate(
-					 {"expinfo" : json.value,
-					  "uuid"    : window.UUID,
-					  "uid"     : window.CREATOR,
-					  "pid"     : window.PID}
-				     );
-				     $("#firstrow").html(html);
-				     $('.format-date').each(function() {
-					 var date = $.trim($(this).html());
-					 if (date != "") {
-					     $(this).html(moment(date)
-							 .format("MMM D, YYYY h:mm A"));
-					 }
-				     });
-				     // lockout change event handler.
-				     $('#lockout-checkbox').change(function() {
-					 DoLockout($(this).is(":checked"));
-				     });	
-				     // lockdown change event handler.
-				     $('#user-lockdown-checkbox')
-					 .change(function() {
-					     DoLockdown("user",
-							$(this).is(":checked"));
-				     });
-				     $('#admin-lockdown-checkbox')
-					 .change(function() {
-					     DoLockdown("admin",
-							$(this).is(":checked"));
-					 });
-				     $('#quarantine-checkbox')
-					 .change(function() {
-					     DoQuarantine($(this).is(":checked"));
-					 });
-				     // This activates the popover subsystem.
-				     $('[data-toggle="popover"]').popover({
-					 trigger: 'hover',
-					 placement: 'auto',
-				     });
-				     // No termination.
-				     if (json.value.admin_lockdown) {
-					 $('#terminate-button')
-					     .attr("disabled", "disabled");
-				     }
-				     // Update the Max Extension
-				     DoMaxExtension(json.value.expires,
-						    continuation);
-				     SetupAdminNotes();
+				     expinfo = json.value;
+				     LoadFirstRow();
 				 }
 			     });
     }
 
-    function LoadUtilization(continuation) {
-	console.info("LoadUtilization", continuation);
+    function LoadUtilization() {
+	if (!window.STARTED) {
+	    return;
+	}
 	var utilizationTemplate = _.template(utilizationString);
 	var summaryTemplate = _.template(summaryString);
 	
 	var callback = function(json) {
 	    console.info("LoadUtilization", json);
-	    // Fire off the next part.
-	    if (continuation !== undefined) {
-		continuation();
-	    }
 	    if (json.code) {
 		console.info("Could not load utilization");
 		$("#thirdrow .thirdrow-error .well")
@@ -493,8 +511,8 @@ $(function ()
     //
     function DoQuarantine(mode)
     {
-	mode = (mode ? 1 : 0);
-	
+	mode = (mode ? "set" : "clear");
+
 	var callback = function(json) {
 	    if (json.code) {
 		sup.HideModal('#waitwait-modal', function () {
@@ -516,25 +534,66 @@ $(function ()
 	    }
 	    sup.HideModal('#waitwait-modal');
 	}
-	sup.ShowModal('#waitwait-modal');
-	var xmlthing = sup.CallServerMethod(null, "status", "Quarantine",
-					     {"uuid" : window.UUID,
-					      "quarantine" : mode});
-	xmlthing.done(callback);
+	// Handler for hide modal, this is the cancel operation.
+	$('#confirm-quarantine-modal').on('hidden.bs.modal', function (event) {
+	    $(this).unbind(event);
+	    $('#confirm-quarantine').unbind("click.quarantine");
+	    if (mode) {
+		// Flip the checkbox back.
+		$('#quarantine-checkbox')
+		    .prop("checked", false);
+	    }
+	    else {
+		// Flip the checkbox back.
+		$('#quarantine-checkbox')
+		    .prop("checked", true);
+	    }
+	});
+	// Handler for the confirm button,
+	$('#confirm-quarantine').bind("click.quarantine", function (event) {
+	    // Unbind the handlers.
+	    $('#confirm-quarantine').unbind("click.quarantine");
+	    $('#confirm-quarantine-modal').off('hidden.bs.modal');
+	    
+	    sup.HideModal('#confirm-quarantine-modal', function () {
+		var args = {"uuid" : window.UUID,
+			    "quarantine" : mode};
+		if (mode &&
+		    $('#quarantine-poweroff-checkbox').is(":checked")) {
+		    args["poweroff"] = 1;
+		}
+		sup.ShowModal('#waitwait-modal');
+		var xmlthing = sup.CallServerMethod(null, "status",
+						    "Quarantine", args);
+		xmlthing.done(callback);
+	    });
+	});
+	if (mode) {
+	    $('#confirm-quarantine-modal .q-on').removeClass("hidden");
+	    $('#confirm-quarantine-modal .q-off').addClass("hidden");
+	}
+	else {
+	    $('#confirm-quarantine-modal .q-on').addClass("hidden");
+	    $('#confirm-quarantine-modal .q-off').removeClass("hidden");
+	}
+	sup.ShowModal('#confirm-quarantine-modal');
     }
 
     //
     // Get Max Extension and update the table.
     //
-    function DoMaxExtension(expires, continuation)
+    function DoMaxExtension(expires)
     {
-	console.info("DoMaxExtension", expires, continuation);
+	console.info("DoMaxExtension", expires);
+
+	if (! window.STARTED) {
+	    $('#max-extension').html("<span class='text-warning'>" +
+				     "Not Started Yet</span>");	    
+	    return;
+	}
 	
 	// Warn if changing days violates max extension.
 	var callback = function(json) {
-	    if (continuation !== undefined) {
-		continuation();
-	    }
 	    $("#howlong").on("keyup", function (event) {
 		if (!maxextension) {
 		    $('#max-extension-nomax').removeClass("hidden");
@@ -564,6 +623,7 @@ $(function ()
 		$('#max-extension-warning').addClass("hidden");
 		$('#max-extension-warning .max-extension-date').html("");
 	    });
+	    console.info("DoMaxExtension: ", json);
 	    
 	    if (json.code) {
 		console.info("Failed to get max extension", json);
@@ -593,11 +653,85 @@ $(function ()
 		}
 		return;
 	    }
+	    if (Object.keys(json.value.reservations).length) {
+		// Convert to just a single list of reservations.
+		var reservations = {};
+		_.each(json.value.reservations, function(reslist, urn) {
+		    _.each(reslist, function(details, uuid) {
+			reservations[uuid] = details;
+		    });
+		});
+		if (Object.keys(reservations).length) {
+		    console.info("reservations", reservations);
+		    var html = listTemplate({
+			"reservations" : reservations,
+			"showcontrols" : false,
+			"showproject"  : false,
+			"showactivity" : false,
+			"showuser"     : true,
+			"showusing"    : true,
+			"showstatus"   : true,
+			"name"         : "extend",
+			"isadmin"      : true,
+			"error"        : null,
+		    });
+		    $('#reservations-row .panel-body').html(html);
+
+		    // Show the proper status now, we might change it later.
+		    _.each(reservations, function(value, uuid) {
+			var id = '#reservations-row ' +
+			    ' tr[data-uuid="' + uuid + '"] ';
+
+			if (value.cancel) {
+			    $(id + " .status-column .status-canceled")
+				.removeClass("hidden");
+			}
+			else if (value.approved) {
+			    $(id + " .status-column .status-approved")
+				.removeClass("hidden");
+			}
+			else {
+			    $(id + " .status-column .status-pending")
+				.removeClass("hidden");
+			}
+			if (value.approved &&
+			    _.has(value, 'history') && value.history.length) {
+			    $(id + " .resgraph-button").removeClass("invisible");
+
+			    // Bind usage history graph.
+			    $(id + ' .resgraph-button').click(function() {
+				DrawHistoryGraph(value);
+				return false;
+			    });
+			}
+		    });
+
+		    $('#reservations-row .tablesorter')
+			.tablesorter({
+			    theme : 'green',
+			    // initialize zebra
+			    widgets: ["zebra"],
+			});
+		    $('#reservations-row .format-date').each(function() {
+			var date = $.trim($(this).html());
+			if (date != "") {
+			    $(this).html(moment(date)
+					 .format("MMM D, YYYY h:mm A"));
+			}
+		    });
+		    // This activates the popover subsystem.
+		    $('#reservations-row [data-toggle="popover"]').popover({
+			placement: 'auto',
+			container: 'body',
+		    });
+		    $('#reservations-row').removeClass("hidden");
+		}
+	    }	
 	    // Save for checking the extension input field.
-	    maxextension = moment(json.value);
+	    maxextension = moment(json.value.maxextension);
 	    
-	    $('#max-extension').html(moment(json.value)
-				     .format("MMM D, YYYY h:mm A"));
+	    $('#max-extension')
+		.html(maxextension.format("MMM D, YYYY h:mm A"));
 	    
 	    /*
 	     * Look to see if the number of hours requested is going to be
@@ -606,7 +740,7 @@ $(function ()
 	     */
 	    if (window.HOURS) {
 		var exp = new Date(expires);
-		var max = new Date(json.value);
+		var max = new Date(json.value.maxextension);
 		exp.setTime(exp.getTime() + window.HOURS * 3600 * 1000);
 	    
 		if (exp.getTime() > max.getTime()) {
@@ -650,21 +784,21 @@ $(function ()
     //
     // Slothd graphs.
     //
-    function LoadIdleData(continuation)
+    function LoadIdleData()
     {
-	console.info("LoadIdleData", continuation);
-
 	var callback = function (status, json) {
-	    console.info("LoadIdleData callback");
-	    if (status < 0) {
-		// Error, show something that indicates we could not get
-		// the idle data.
-		$('#idledata-error').html("Could not get graph data: " +
-					  json.value);
-		$('#idledata-error').removeClass("hidden");
-	    }
-	    if (continuation !== undefined) {
-		continuation();
+	    if (status <= 0) {
+		if (status == 0) {
+		    // No data.
+		    $('#idledata-nodata').removeClass("hidden");
+		}
+		else {
+		    // Error, show something that indicates we could not get
+		    // the idle data.
+		    $('#idledata-error').html("Could not get graph data: " +
+					      json.value);
+		    $('#idledata-error').removeClass("hidden");
+		}
 	    }
 	};
 	ShowIdleGraphs({"uuid"     : window.UUID,
@@ -680,8 +814,6 @@ $(function ()
     //
     function LoadOpenStack()
     {
-	console.info("LoadIdleData");
-
 	var callback = function(json) {
 	    if (json.code) {
 		return;
@@ -765,6 +897,30 @@ $(function ()
 	sup.ShowModal('#metrics-modal');
     }
 
+    // Draw the history bar graph.
+    function DrawHistoryGraph(details)
+    {
+	// Setup a handler to draw the large version graph in the modal.
+	$('#resusage-graph-modal').on('shown.bs.modal', function() {
+	    window.DrawResHistoryGraph({"details"    : details,
+					"graphid"    : '#resusage-graph-modal',
+					"xaxislabel" : true});
+	});
+	
+	// Make sure nothing left behind before we show it.
+	$('#resusage-graph-modal svg').html("");
+	// Gack, this stuff gets left behind.
+	d3.selectAll('.nvtooltip').remove();
+
+	// Say something informative in the panel header.
+	$('#resusage-graph-modal .resusage-graph-details')
+	    .html("(" + details.nodes + " " + details.type + " nodes)");
+	
+	sup.ShowModal('#resusage-graph-modal', function () {
+	    // Need to unbind the hook above.
+	    $('#resusage-graph-modal').off('shown.bs.modal');
+	});
+    }
     // Helper.
     function decodejson(id) {
 	return JSON.parse(_.unescape($(id)[0].textContent));

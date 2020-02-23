@@ -38,9 +38,9 @@ use libtestbed;
 use libossetup;
 # XXX only works with newer version of libosload!
 use libosload_new;
-use libosload_switch;
 use libtblog_simple;
 use Node;
+use libreboot;
 use English;
 use Data::Dumper;
 use overload ('""' => 'Stringify');
@@ -48,20 +48,16 @@ use overload ('""' => 'Stringify');
 #
 # A constructor for an object to handle all nodes of this type.
 #
-sub New($$) {
-    my ($class, $parent) = @_;
-
-    my $self = $class->SUPER::New("switch", $parent);
+sub New($$$) {
+    my ($class, $type, $parent) = @_;
+    
+    my $self = $class->SUPER::New($type, $parent);
 
     $self->{'OPLIST'} = {};
 
     bless($self, $class);
 
-    my $switchobj = libosload_switch->New();
-    $self->switchobj($switchobj);
-    $switchobj->debug(($self->parent())->debug());
-    print STDERR "$self: new object \n";# . Dumper($self) . "\n";
-
+    print STDERR "$self: new object for $type\n";
     return $self;
 }
 
@@ -109,13 +105,6 @@ sub AddNode($$)
 	    || $node->allocstate() eq TBDB_ALLOCSTATE_RES_INIT_DIRTY()) {
 	    $self->{OPLIST}->{$node_id} = [ $libossetup::RECONFIG ];
 	    $node->_setupoperation($libossetup::RECONFIG);
-	    #
-	    # XXX hack -- our node is already ISUP, and we need to force it
-	    # out of that state so taht WaitForNodes doesn't beat our type
-	    # handler object to forcing it to SHUTDOWN
-	    #
-	    print STDERR "$self AddNode($node_id): forcing to SHUTDOWN before RECONFIG\n";
-	    TBSetNodeEventState($node_id,TBDB_NODESTATE_SHUTDOWN);
 	}
 	elsif ($node->allocstate() ne TBDB_ALLOCSTATE_RES_READY()) {
 	    # only reboot node if assign_wrapper just pulled it into expt.
@@ -525,6 +514,82 @@ sub Retry($$)
     my $node_id = $node->node_id();
 
     return -1;
+}
+
+package libossetup_hp5406;
+use base qw(libossetup_switch);
+
+sub New($$)
+{
+    my ($class, $parent) = @_;
+    my $type = "hp5406";
+    require libosload_hp5406;
+
+    my $self = $class->SUPER::New($type, $parent);
+    bless($self, $class);
+
+    my $switchobj = libosload_hp5406->New(undef, $type);
+    $self->switchobj($switchobj);
+    $switchobj->debug(($self->parent())->debug());
+
+    return $self;
+}
+
+package libossetup_mlnx_sn2410;
+use base qw(libossetup_switch);
+
+sub New($$)
+{
+    my ($class, $parent) = @_;
+    my $type = "mlnx_sn2410";
+    require libosload_mlnx_sn2410;
+
+    my $self = $class->SUPER::New($type, $parent);
+    bless($self, $class);
+
+    my $switchobj = libosload_mlnx_sn2410->New(undef, $type);
+    $self->switchobj($switchobj);
+    $switchobj->debug(($self->parent())->debug());
+
+    return $self;
+}
+
+package libossetup_dell_s3048;
+use base qw(libossetup_switch);
+
+sub New($$)
+{
+    my ($class, $parent) = @_;
+    my $type = "dell_s3048";
+    require libosload_dell_s3048;
+
+    my $self = $class->SUPER::New($type, $parent);
+    bless($self, $class);
+
+    my $switchobj = libosload_dell_s3048->New(undef, $type);
+    $self->switchobj($switchobj);
+    $switchobj->debug(($self->parent())->debug());
+
+    return $self;
+}
+
+package libossetup_dell_s4048;
+use base qw(libossetup_switch);
+
+sub New($$)
+{
+    my ($class, $parent) = @_;
+    my $type = "dell_s4048";
+    require libosload_dell_s4048;
+
+    my $self = $class->SUPER::New($type, $parent);
+    bless($self, $class);
+
+    my $switchobj = libosload_dell_s4048->New(undef, $type);
+    $self->switchobj($switchobj);
+    $switchobj->debug(($self->parent())->debug());
+
+    return $self;
 }
 
 1;

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2018 University of Utah and the Flux Group.
+# Copyright (c) 2007-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,6 +42,7 @@ use GeniCertificate;
 use GeniCredential;
 use GeniAuthority;
 use GeniResponse;
+use Genixmlrpc;
 
 # Configure variables
 my $TB		  = "@prefix@";
@@ -225,6 +226,15 @@ sub GenCredentials($$;$$)
 
 	    $gensacert = 1;
 	}
+	# Another case to watch for; the certificate chain is bad cause
+	# the signer (say, the Geni Portal) is expired.
+	if ($certificate->VerifySSLChain()) {
+	    print STDERR "certificate for $geniuser has a bad chain\n";
+	    goto bad
+		if (!$allowexpired);
+	    
+	    $gensacert = 1;
+	}
 	if ($gensacert) {
 	    # Be careful not to return this.
 	    $speaksfor = undef;
@@ -316,15 +326,27 @@ sub GenCredentials($$;$$)
 sub GetAuthority($)
 {
     my ($urn) = @_;
+    my $context = Genixmlrpc->GetContext();
+
+    if (!defined($context)) {
+	my $tmp = GeniContext();
+	return undef
+	    if (!defined($tmp));
+	Genixmlrpc->SetContext($tmp);
+    }
 
     my $cm_authority = GeniAuthority->Lookup($urn);
     if (!defined($cm_authority)) {
 	$cm_authority = GeniAuthority->CreateFromRegistry("cm", $urn);
 	if (!defined($cm_authority)) {
 	    print STDERR "Could not load CM authority object\n";
+	    Genixmlrpc->SetContext(undef)
+		if (!defined($context));
 	    return undef;
 	}
     }
+    Genixmlrpc->SetContext(undef)
+	if (!defined($context));
     return $cm_authority;
 }
 
@@ -545,11 +567,12 @@ sub PortalRPC($$$@)
 #
 # Ping an aggregate to see if its alive, using getversion.
 #
-sub PingAggregate($$;$)
+sub PingAggregate($$;$$)
 {
-    my ($aggregate, $perrmsg, $portalrpc) = @_;
+    my ($aggregate, $perrmsg, $portalrpc, $timeout) = @_;
     my $authority   = GetAuthority($aggregate->urn());
     my $context     = RootContext();
+    $timeout = 10 if (!defined($timeout));
 
     if (!defined($authority)) {
 	$$perrmsg = "Could not lookup authority for $aggregate!";
@@ -560,13 +583,14 @@ sub PingAggregate($$;$)
 	return -1;
     }
     my $cmurl = $authority->url();
-    if (defined($portalrpc)) {
+    if (defined($portalrpc) && $portalrpc) {
 	$cmurl =~ s/\/cm$/\/cluster/;
     }
     if ($usemydevtree) {
 	$cmurl =~ s/protogeni/protogeni\/stoller/;
     }
-    my $oldto = Genixmlrpc->SetTimeout(10);
+
+    my $oldto = Genixmlrpc->SetTimeout($timeout);
     my $response = Genixmlrpc::CallMethod($cmurl, $context, "GetVersion");
     Genixmlrpc->SetTimeout($oldto);
 

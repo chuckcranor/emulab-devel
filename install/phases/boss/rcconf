@@ -20,6 +20,9 @@ sub Install($$$)
 	return 0;
     }
 
+    my $apache = ("$APACHE_VERSION" eq "22" ? "apache22" :
+		  "$APACHE_VERSION" eq "24" ? "apache24" : "");
+
     Phase "rc.conf", "Adding testbed content to $RCCONF", sub {
 	DoneIfEdited($RCCONF);
 	my @strings = (qq|rpcbind_enable="YES"|,
@@ -28,12 +31,13 @@ sub Install($$$)
 		       qq|inetd_flags="-wW -R 0"|,
 		       qq|syslogd_flags=""|,
 		       qq|tftpd_flags="-lvvvv -C 40 -s /tftpboot"|,
-		       (("$APACHE_VERSION" eq "22") ?
-			(qq|apache22_enable="YES"|,
-			 qq|apache22_flags="-DSSL"|,
-			 qq|apache22_profiles="www"|,
-			 "apache22_www_configfile=\"${HTTPD_CONF}\"",
-			 qq|apache22_www_enable="YES"|) :
+		       (("$APACHE_VERSION" eq "22" ||
+			 "$APACHE_VERSION" eq "24") ?
+			("${apache}_enable=\"YES\"",
+			 "${apache}_flags=\"-DSSL\"",
+			 "${apache}_profiles=\"www\"",
+			 "${apache}_www_configfile=\"${HTTPD_CONF}\"",
+			 "${apache}_www_enable=\"YES\"") :
 			(qq|apache_enable="YES"|,
 			 qq|apache_flags="-DSSL"|)),
 		       qq|pubsubd_flags="-T 10"|);
@@ -46,7 +50,10 @@ sub Install($$$)
 	    push(@strings, qq|nfs_server_flags="-u -t -n 16"|);
 
 	    if ($WINSUPPORT) {
-		if ($FBSD_MAJOR > 8 || ($FBSD_MAJOR == 8 && $FBSD_MINOR > 2)) {
+		if ($FBSD_MAJOR > 10) {
+		    ;
+		} elsif ($FBSD_MAJOR > 8 ||
+			 ($FBSD_MAJOR == 8 && $FBSD_MINOR > 2)) {
 		    push(@strings, qq|samba_enable="YES"|);
 		    push(@strings, qq|nmbd_enable="NO"|);
 		} else {

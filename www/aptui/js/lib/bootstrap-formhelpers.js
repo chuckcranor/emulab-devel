@@ -12649,6 +12649,9 @@ var BFHStatesList = {
     '99' : {'code':'WORCS','name':'Worcestershire'},
     '100' : {'code':'WRX','name':'Wrexham'}
   },
+  'SG':{
+      '1' : {'code':'SG','name':'Singapore'}
+  },
   'US':{
     '1' : {'code':'AL','name':'Alabama'},
     '2' : {'code':'AK','name':'Alaska'},
@@ -14202,7 +14205,7 @@ var BFHTimezonesList = {
       this.$element.html('');
 
       if (this.options.ask === true) {
-        this.$element.append('<option value="">Please Select Country</option>');
+        this.$element.append('<option value="">Select Country</option>');
       }
       else if (this.options.blank === true) {
         this.$element.append('<option value=""></option>');
@@ -17145,7 +17148,7 @@ var BFHTimezonesList = {
       this.$element.html('');
 
       if (this.options.ask === true) {
-        this.$element.append('<option value="">Please Select State</option>');
+        this.$element.append('<option value="">Select State/Province/Region</option>');
       }
       else if (this.options.blank === true) {
         this.$element.append('<option value=""></option>');

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -73,7 +73,7 @@ use Data::Dumper;
 use XML::Simple;
 use XML::LibXML;
 use Date::Parse;
-use POSIX qw(strftime ceil);
+use POSIX qw(strftime ceil :sys_wait_h);
 use Time::Local;
 use Compress::Zlib;
 use File::Temp qw(tempfile tmpnam);
@@ -123,10 +123,12 @@ my $XMLLINT	   = "/usr/local/bin/xmllint";
 my $ADDAUTHORITY   = "$TB/sbin/protogeni/addauthority";
 my $EMULAB_PEMFILE = "@prefix@/etc/genicm.pem";
 my $TARINSTALL     = "/usr/local/bin/install-tarfile";
+my $TAR            = "/usr/bin/tar";
 my $IMAGE_SETUP    = "$TB/sbin/image_setup";
 my $IMAGE_IMPORT   = "$TB/sbin/image_import";
 my $SHAREVLAN      = "$TB/sbin/sharevlan";
 my $RFLINKS	   = "$TB/bin/rflinks";
+my $DOCKERCLI      = "/usr/local/bin/docker-registry-cli";
 my $FWNAME	   = "fw";
 my $API_VERSION    = 1;
 my $PROTOGENI_LOCALUSER   = @PROTOGENI_LOCALUSER@;
@@ -818,7 +820,7 @@ sub GetTicketAuxAux($)
     #
     if (!$isupdate) {
 	$response =
-	    SetSliceExpiration($slice, $expires, 0, 0, 0, @{$credentials});
+	    SetSliceExpiration($slice, $expires, 0, 1, 0, @{$credentials});
 	goto bad
 	    if (GeniResponse::IsResponse($response));
     }
@@ -935,6 +937,19 @@ sub GetTicketAuxAux($)
     }
 
     #
+    # Check global spectrum request
+    #
+    my $spectrum = GeniXML::GetSpectrum($rspec);
+    if (@$spectrum) {
+	print STDERR "Global spectrum:\n";
+	print STDERR Dumper($spectrum);
+	
+	my $response = CheckSpectrum($spectrum);
+	return $response
+	    if (GeniResponse::IsError($response));
+    }
+
+    #
     # Add global vtypes.
     #
     my $vtypes_result =
@@ -1022,6 +1037,17 @@ sub GetTicketAuxAux($)
 	    $virtexperiment->nfsmounts("emulabdefault");
 	}
     }
+    # Record this info for local email about these slices.
+    my ($portal_tag,$portal_url) = GeniXML::GetPortal($rspec);
+    if (defined($portal_tag) && $portal_tag ne "" &&
+	$portal_tag =~ /^([-\w]+)$/) {
+	$slice->SetPortalTag($portal_tag);
+    }
+    if (defined($portal_url) && $portal_url ne "" &&
+	TBcheck_dbslot($portal_url, "default", "tinytext",
+		       TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	$slice->SetPortalURL($portal_url);
+    }
 
     #
     # An rspec is a structure that requests specific nodes. If those
@@ -1039,6 +1065,7 @@ sub GetTicketAuxAux($)
     my %lannodes = ();
     my %allnodes = ();
     my %bsnames  = ();
+    my %prognames= ();
     # Extra nodes (like XEN vhosts).
     my %internal_nodemap  = ();
     # For stitching, keep track of external nodes and links.
@@ -1048,6 +1075,9 @@ sub GetTicketAuxAux($)
     my %external_lanrefs  = ();
     my $routable_ip_count = 0;
     my $sync_server = ($isupdate ? $slice_experiment->sync_server() : undef);
+    # Recall any Docker image/Dockerfile URLs we've already checked.
+    my %checked_docker_extimages = ();
+    my %checked_dockerfile_urls  = ();
 
     # Always do this to avoid buildup.
     $slice_experiment->ClearBackupState();
@@ -1154,6 +1184,28 @@ sub GetTicketAuxAux($)
 
     DebugTimeStamp("Processing nodes");
 
+    # Prepass to setup a mapping of vhost to vnode.  We use this in the
+    # next pass.
+    my %instantiateOnHosts = ();
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $node_nickname = GeniXML::GetVirtualId($ref);
+	my $instantiate_on= GeniXML::GetInstantiateOn($ref);
+
+	# Skip nodes that don't have an instantiate_on relation.
+	next if (!defined($instantiate_on) || $instantiate_on eq '');
+
+	# Let remote nodes pass through.
+	next if (! GeniXML::IsLocalNode($ref));
+
+	# Lan nodes are fake and do not go into the virt topo.
+	next if (GeniXML::IsLanNode($ref));
+
+	if (!exists($instantiateOnHosts{$instantiate_on})) {
+	    $instantiateOnHosts{$instantiate_on} = [];
+	}
+	push(@{$instantiateOnHosts{$instantiate_on}},$node_nickname);
+    }
+
     foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	my $component_id  = GeniXML::GetNodeId($ref);
 	my $vnode_id      = GeniXML::GetVnodeId($ref);
@@ -1174,8 +1226,23 @@ sub GetTicketAuxAux($)
 	my $node;
 	my $isbridge    = 0;
 	my $isfirewall  = 0;
+	my $isvhost     = 0;
 	my $xensettings;
+	my $dockersettings;
 	my $fwsettings;
+
+	#
+	# Check spectrum request
+	#
+	my $spectrum = GeniXML::GetSpectrum($ref);
+	if (@$spectrum) {
+	    print STDERR "Node $node_nickname spectrum:\n";
+	    print STDERR Dumper($spectrum);
+	
+	    my $response = CheckSpectrum($spectrum);
+	    goto bad
+		if (GeniResponse::IsError($response));
+	}
 	
 	# Always populate iface2node mapping, even if we let the node
 	# pass through.
@@ -1190,6 +1257,27 @@ sub GetTicketAuxAux($)
 		goto bad;
 	    }
 	    $iface2node{$virtual_id} = $node_nickname;
+
+	    #
+	    # Check spectrum request
+	    #
+	    my $spectrum = GeniXML::GetSpectrum($linkref);
+	    if (@$spectrum) {
+		my $component_id = GeniXML::GetNodeId($linkref);
+		if (!defined($component_id)) {
+		    $response =
+			GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				"Must supply component_id (interface) for ".
+				"spectrum on $virtual_id");
+		    goto bad;
+		}
+		print STDERR "Interface $virtual_id:$component_id spectrum:\n";
+		print STDERR Dumper($spectrum);
+
+		my $response = CheckSpectrum($spectrum);
+		goto bad
+		    if (GeniResponse::IsError($response));
+	    }
 	}
 
 	# Let remote nodes pass through.
@@ -1198,6 +1286,17 @@ sub GetTicketAuxAux($)
 	    next;
 	}
 
+	#
+	# Catch this early.
+	#
+	if (! TBcheck_dbslot($node_nickname, "virt_nodes", "vname",
+			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    $response =
+		GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+			     "Invalid client id for node: $node_nickname");
+	    goto bad;
+	}
+	
 	#
 	#
 	# Lan nodes are fake and do not go into the virt topo. Need
@@ -1222,6 +1321,12 @@ sub GetTicketAuxAux($)
 				     "Hostname > 63 characters: $fullhostname");
 	    goto bad;
 	}
+
+	# Check to see if this node is hosting other nodes.
+	if (exists($instantiateOnHosts{$node_nickname})) {
+	    $isvhost = 1;
+	}
+
 	#
 	# Check for disk_image request. Specified as a URN. 
 	#
@@ -1250,102 +1355,48 @@ sub GetTicketAuxAux($)
 		$osname = $url;
 	    }
 	    elsif (defined($dname)) {
-		if (! GeniHRN::IsValid($dname)) {
+		my $hrn = GeniHRN->new($dname);
+		if (! (defined($hrn) && $hrn->IsImage() &&
+		       defined($hrn->ospid()) && defined($hrn->osname()))) {
 		    $response =
 			GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 					 "Malformed image URN: $dname");
 		    goto bad;
 		}
-		my ($auth,$type,$id) = GeniHRN::Parse($dname);
-		my ($ospid,$os,undef,$vers) =
-		    ($id =~ m{([^/]+)//([^/]+)(//(\d+))?});		
-		if ($type ne "image" || !defined($ospid) || !defined($os)){
-		    $response =
-			GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-					 "Malformed image URN: $dname");
+		my $image = GeniImage::MapToLocalImage($dname, $realuser, $pid,
+						       $use_imagetracker,
+						       @{$credentials});
+		if (GeniResponse::IsError($image)) {
+		    #
+		    # Map SEARCHFAILED to BADARGS on this path.
+		    #
+		    $response = $image;
+		    if ($response->{'code'} == GENIRESPONSE_SEARCHFAILED) {
+			$response->{'code'} = GENIRESPONSE_BADARGS;
+			$response->{'output'} = "Could not lookup ".
+			    "image at the image server: $dname";
+		    }
 		    goto bad;
 		}
-		# See if we have any version of this image.
-		$osinfo = OSImage->Lookup($ospid, $os);
-		#
-		# If we do and the request was for a specific version of
-		# the image and this image was imported, then the version
-		# number probably refers to the version at the origin. We
-		# want to use the hash to resolve it instead, down in
-		# MapToLocalImage.
-		# 
-		if (defined($osinfo) && defined($vers)) {
-		    if ($osinfo->IsLocal()) {
-			$osinfo = OSImage->Lookup($ospid, $os, $vers);
-			if (!defined($osinfo)) {
-			    $response =
-				GeniResponse->Create(GENIRESPONSE_BADARGS,
-						     undef,
-						     "Unknown image URN: ".
-						     "$dname");
-			    goto bad;
-			}
-		    }
-		    else {
-			$osinfo = undef;
-		    }
+		if ($image->isImageAlias() || !$image->isImage()) {
+		    $osname = $image->pid() . "/" . $image->osname();
 		}
-		if (!defined($osinfo)) {
-		    if ($use_imagetracker) {
-			my $image = GeniImage::MapToLocalImage($dname, $pid);
-			if (GeniResponse::IsError($image)) {
-			    $response = $image;
-			    goto bad;
-			}
-			if ($image->IsLocal() || $image->IsSystemImage()) {
-			    # No need for image_setup to look at it.
-			    # System images are never auto imported.
-			    $osname = $image->versname();
-			}
-			else {
-			    $osname = $image->metadata_url();
-			}
-		    }
-		    else {
-			$response =
-			    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-						 "Unknown image URN: $dname");
-			goto bad;
-		    }
+		elsif ($image->IsLocal() || $image->IsSystemImage()) {
+		    # No need for image_setup to look at it.
+		    # System images are never auto imported.
+		    $osname = $image->versname();
+		}
+		elsif ($use_imagetracker) {
+		    # When using the image tracker, we always get an
+		    # image descriptor (or error). The descriptor might
+		    # be new (notready) in which case we will download
+		    # it later.
+		    $osname = $image->versname();
 		}
 		else {
-		    #
-		    # The OS must be in the current project, or it must
-		    # be global.
-		    #
-		    if (! ($osinfo->global() ||
-			   $osinfo->pid() eq $slice_experiment->pid())) {
-			if ($PROTOGENI_LOCALUSER && $user->IsLocal()) {
-			    my $image = OSImage->Lookup($ospid,$os,$vers);
-			    if (!defined($image)) {
-				$response =
-				    GeniResponse->Create(GENIRESPONSE_BADARGS,
-							 undef,
-							 "No image: $dname");
-				goto bad;
-			    }
-			    goto noperm
-				if (!$image->AccessCheck($user->emulab_user(),
-							 TB_IMAGEID_READINFO));
-			}
-			else {
-			  noperm:
-			    $response =
-				GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-				 "Insufficient permission to use $dname");
-			    goto bad;			
-			}
-		    }
-		    #
-		    # This is only going to be used in raw mode. 
-		    #
-		    $osname  = "$ospid/$os";
-		    $osname .= ":${vers}" if (defined($vers));
+		    # Need to make sure image setup runs on this image
+		    # to get the image file. 
+		    $osname = $image->metadata_url();
 		}
 	    }
 	}
@@ -1390,6 +1441,50 @@ sub GetTicketAuxAux($)
 			    $xensettings = GeniXML::GetXenSettings($ref);
 			}
 			my $ptype = GeniXML::XenPtype($ref);
+			$pctype = $ptype
+			    if (defined($ptype));
+			$virtexperiment->encap_style("vlan");
+
+			#
+			# Per-vnode firewall options.
+			#
+			if (GeniXML::HasFirewallSettings($ref)) {
+			    $fwsettings = GeniXML::GetFirewallSettings($ref);
+			}
+		    }
+		    elsif ($virtualization_subtype eq "emulab-docker") {
+			# Allow caller to set the image to use, but also
+			# trick to set the parent. 
+			if (defined($osinfo)) {
+			    if (! $osinfo->IsSubOS()) {
+				$parent_osname = $osname;
+				$osname = "DOCKER-EXT";
+			    }
+			}
+			elsif (!defined($osname)) {
+			    # Allow for Docker image url via node attribute.
+			    $osname = "DOCKER-EXT";
+			}
+			# If not set, we will pick up the default_image below.
+			#
+			# Look for the knobs
+			#
+			if (GeniXML::HasDockerSettings($ref)) {
+			    $dockersettings = GeniXML::GetDockerSettings($ref);
+			}
+			# If they want an external image (or we
+			# defaulted to one), but one isn't set, set a
+			# good default.
+			if ($osname eq 'DOCKER-EXT') {
+			    if (!defined($dockersettings)) {
+				$dockersettings = {};
+			    }
+			    if (!exists($dockersettings->{'extimage'})
+				&& !exists($dockersettings->{'dockerfile'})) {
+				$dockersettings->{'extimage'} = "ubuntu:16.04";
+			    }
+			}
+			my $ptype = GeniXML::DockerPtype($ref);
 			$pctype = $ptype
 			    if (defined($ptype));
 			$virtexperiment->encap_style("vlan");
@@ -1623,7 +1718,8 @@ sub GetTicketAuxAux($)
 	#
 	if (defined($instantiate_on)) {
 	    if (defined($virtualization_subtype) &&
-		$virtualization_subtype eq "emulab-xen") {
+		($virtualization_subtype eq "emulab-xen" ||
+		 $virtualization_subtype eq "emulab-docker")) {
 
 		if (!exists($allnodes{$instantiate_on})) {
 		    $response =
@@ -1635,15 +1731,40 @@ sub GetTicketAuxAux($)
 	    else {
 		$response =
 		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-			     "Only Xen nodes can use 'instantiate_on'");
+			     "Only Xen or Docker nodes can use 'instantiate_on'");
 		goto bad;
+	    }
+	}
+	if (!defined($osname) && defined($pctype)) {
+	    my $nodetype = NodeType->Lookup($pctype);
+	    if (defined($nodetype) && $nodetype->isblackbox()) {
+		my $default_osid = $nodetype->default_osid();
+		if (!defined($default_osid)) {
+		    print STDERR "Blackbox node type $pctype but no ".
+			"default_osid defined for it.\n";
+		}
+		else {
+		    $osinfo = OSImage->Lookup($default_osid);
+		    if (!defined($osinfo)) {
+			print STDERR "Blackbox node type $pctype but cannot ".
+			    "lookup default_osid defined for it.\n";
+		    }
+		    else {
+			$osname = $osinfo->osname()
+		    }
+		}
+		if (!defined($osname)) {
+		    $response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+						     "Blackbox OS error");
+		    goto bad;
+		}
 	    }
 	}
 	#
 	# If no osname, check for protogeni default osname
 	#
 	if (!defined($osname) &&
-	    !GeniXML::UseTypeDefaultImage($ref) && !$isbridge) {
+	    !GeniXML::UseTypeDefaultImage($ref) && !$isbridge && !$isvhost) {
 	    my $protogeni_os = undef;
 	    if (GetSiteVar('protogeni/default_osname', \$protogeni_os)
 		&& $protogeni_os ne ""
@@ -1655,16 +1776,22 @@ sub GetTicketAuxAux($)
 	#
 	# If no osname by this point, try for the default.
 	#
-	if (defined($node) && !defined($osname) && !$isbridge) {
+	if (defined($node) && !defined($osname) && !$isbridge && !$isvhost) {
 	    if (defined($node->default_osid())) {
-		my $default_osinfo = OSImage->Lookup($node->default_osid());
-		$osname = $default_osinfo->osname()
-		    if (defined($default_osinfo));
+		$osinfo = OSImage->Lookup($node->default_osid());
+		$osname = $osinfo->osname()
+		    if (defined($osinfo));
 	    }
 	}
 	# The slot does not like to be NULL.
-	$osname = ""
-	    if (!defined($osname));
+	if (!defined($osname)) {
+	    if ($isvhost) {
+		print STDERR "Not setting default osname for vhost $node_nickname.\n";
+	    }
+	    else {
+		$osname = "";
+	    }
+	}
 
 	# Need some kind of default.
 	$pctype = "pc"
@@ -1743,10 +1870,24 @@ sub GetTicketAuxAux($)
 		$nodeblob->{"rootkey_private"} = -1; # means did not specify.
 	    }
 	}
-	
-	# Program agents.
+
+	#
+	# Program agents. We have to watch for duplicate names, the event
+	# system assumes each one is uniquely named.
+	#
 	if (my @progagents = GeniXML::GetProgramAgents($ref)) {
 	    foreach my $agent (@progagents) {
+		my $vname = $agent->{"name"};
+		if (!defined($vname)) {
+		    return GeniResponse->MalformedArgsResponse(
+			"No name for program agent");
+		}
+		if (exists($prognames{$vname})) {
+		    return GeniResponse->MalformedArgsResponse(
+			"Emulab program agent names must be unique: $vname");
+		}
+		$prognames{$vname} = $vname;
+		
 		$response = AddProgramAgent($virtexperiment,
 					    $node_nickname, $agent);
 		goto bad
@@ -1788,104 +1929,121 @@ sub GetTicketAuxAux($)
 		$nodeblob->{'startupcmd'} = $startupcmd;
 	    }
 	}
-	elsif ((my @services = GeniXML::GetServices($ref)) &&
+	elsif ((my @services = GeniXML::GetExecuteServices($ref)) &&
 	       (!defined($osinfo) || $osinfo->isImageAlias() || 
 		$osinfo->op_mode() ne
 		EmulabConstants::TBDB_NODEOPMODE_ALWAYSUP())) {
-	    my $startupCommand = undef;
-	    my $startupCount = 0;
+
+	    my $count     = 0;
+	    my $userdir   = $slice_experiment->UserDir();
+	    my $startname = "geni_startup.${node_nickname}";
+	    my $startfile = "$userdir/$startname";
+	    my $tarfile   = "$userdir/startup_tarfile." . $node_nickname;
+	    
+	    # Sanity check
 	    foreach my $service (@services) {
-		if ($service->{'type'} eq "execute") {
-		    if (!defined($service->{'cmd'}) ||
-			$service->{'cmd'} eq "") {
+		my $type = $service->{'type'};
+			
+		if ($type eq "execute") {
+		    my $shell = $service->{'shell'};
+		    my $cmd   = $service->{'cmd'};
+
+		    if (! (defined($shell) && defined($cmd))) {
 			$response =
-			    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-			     "Invalid service command: no command provided");
+			    GeniResponse->Create(GENIRESPONSE_BADARGS,
+						 undef,
+						 "Invalid execute service");
 			goto bad;
 		    }
-		    if ($startupCount == 0) {
-			$startupCommand = $service->{'cmd'};
-		    }
-		    ++$startupCount;
 		}
 	    }
 
-	    if ($startupCount) {
-		if ($startupCount == 1 && length($startupCommand) < 240) {
-		    if (! TBcheck_dbslot($startupCommand,
-					 "virt_nodes", "startupcmd",
-				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
-			$response =
-			    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-				 "Invalid startup command: " .
-						 TBFieldErrorString());
-			goto bad;
-		    }
-		    $nodeblob->{'startupcmd'} = $startupCommand;
-		}
-		else { 
-		    my $count = 0;
-		    my $startfile = $slice_experiment->UserDir() .
-			"/geni_startup." . $node_nickname;
-		    $nodeblob->{'startupcmd'} = $startfile;
+	    if (!open(STARTUP, ">$startfile")) {
+		$response =
+		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					 "Error creating startfile");
+		goto bad;
+	    }
+	    print STARTUP "#!/bin/sh\n\n";
+	    print STARTUP "# echo 'See ${node_nickname}:/var/tmp/startup.log ".
+		"for script output info'\n";
+	    print STARTUP "exec > /var/tmp/startup.log 2>&1\n\n";
+	    print STARTUP "# Exit with result of last command\n";
+	    print STARTUP "status=0\n\n";
 	    
-		    if (!open(STARTUP, ">$startfile")) {
-			$response =
-			    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-						 "Error creating startfile");
-			goto bad;
-		    }
-		    print STARTUP "#!/bin/sh\n\n";
-		    print STARTUP "# Redirect all output to a file\n";
-		    print STARTUP "exec &> /var/tmp/startup.log\n\n";
-
-		    #
-		    # It would be nice to interleave "install" with
-		    # "execute", but Emulab's tarfiles support arranges to
-		    # copy the files locally, and rewrites the names. Need to
-		    # hook into that support somehow, but for now tarfiles are
-		    # all installed as a block above.
-		    #
-		    foreach my $service (@services) {
-			my $type = $service->{'type'};
+	    #
+	    # It would be nice to interleave "install" with
+	    # "execute", but Emulab's tarfiles support arranges to
+	    # copy the files locally, and rewrites the names. Need to
+	    # hook into that support somehow, but for now tarfiles are
+	    # all installed as a block above.
+	    #
+	    foreach my $service (@services) {
+		my $type = $service->{'type'};
 			
-			if ($type eq "execute") {
-			    my $shell = $service->{'shell'};
-			    my $cmd   = $service->{'cmd'};
-			    my $log   = "/var/tmp/startup-${count}.txt";
-			    my $stat  = "/var/tmp/startup-${count}.status";
+		if ($type eq "execute") {
+		    my $shell = $service->{'shell'};
+		    my $cmd   = $service->{'cmd'};
+		    my $log   = "/var/tmp/startup-${count}.txt";
+		    my $stat  = "/var/tmp/startup-${count}.status";
 
-			    #
-			    # Support only sh and csh. Maybe perl later.
-			    #
-			    if (! (defined($shell) &&
-				   ($shell eq "csh" || $shell eq "sh" ||
-				    $shell eq "/bin/csh" ||
-				    $shell eq "/bin/sh"))) {
-				$response =
-				    GeniResponse->Create(GENIRESPONSE_BADARGS,
+		    #
+		    # Not sure this check makes a lot of sense.
+		    #
+		    if (! (defined($shell) &&
+			   $shell =~ /^(\/bin\/)?(csh|sh|bash|tcsh)$/)) {
+			$response =
+			    GeniResponse->Create(GENIRESPONSE_BADARGS,
 						 undef,
 						 "Invalid shell in execute");
-				goto bad;
-			    }
-			    if (! ($shell =~ /bin/)) {
-				$shell = "/bin/$shell";
-			    }
-			    print STARTUP "echo -n 'Services execution $count at '\n";
-			    print STARTUP "date\n\n";
-			    print STARTUP "$shell -c \"$cmd\" >$log 2>&1\n";
-			    print STARTUP "status=\$?\n";
-			    print STARTUP "echo \"\$status\" > $stat\n";
-			    print STARTUP
-				"echo \"Execution $count exited with status \$status\"\n";
-			    print STARTUP "echo '----------------------------------'\n";
-			    $count++;
-			}
+			goto bad;
 		    }
-		    print STARTUP "exit 0\n";
-		    close(STARTUP);
-		    chmod(0755, $startfile);
+		    if (! ($shell =~ /bin/)) {
+			$shell = "/bin/$shell";
+		    }
+		    print STARTUP "echo -n 'Services execution $count at '\n";
+		    print STARTUP "date\n\n";
+		    print STARTUP "# Redirecting stdin/stdout to $log\n";
+		    print STARTUP "$shell -c \"$cmd\" >$log 2>&1\n";
+		    print STARTUP "status=\$?\n";
+		    print STARTUP "# Writing exit status to $stat\n";
+		    print STARTUP "echo \"\$status\" > $stat\n";
+		    print STARTUP "echo " .
+			"\"Execution $count exited with status \$status\"\n";
+		    print STARTUP "echo '----------------------------------'\n";
+		    $count++;
 		}
+	    }
+	    print STARTUP "exit \$status\n";
+	    close(STARTUP);
+	    chmod(0755, $startfile);
+
+	    #
+	    # We cannot depend on NFS anymore, so package the startfile
+	    # into a little tarball and add to the tarfiles list.
+	    #
+	    # OK, a tainted disk image is not allowed to download tarballs
+	    # at least until the client side is fixed (perhaps to make root
+	    # unpacking an option). So if tainted we have to use NFS.
+	    #
+	    if (defined($osinfo) &&
+		!$osinfo->isImageAlias() && $osinfo->IsTainted()) {
+		$nodeblob->{'startupcmd'} = "$startfile";
+	    }
+	    else {
+		system("$TAR cf $tarfile -C $userdir $startname");
+		if ($?) {
+		    $response = GeniResponse->Create(GENIRESPONSE_ERROR,undef,
+  		      "Could not create startup tarfile for $node_nickname");
+		    goto bad;
+		}
+		if (exists($nodeblob->{'tarfiles'})) {
+		    $nodeblob->{'tarfiles'} .= ";/var/tmp $tarfile";
+		}
+		else {
+		    $nodeblob->{'tarfiles'} = "/var/tmp $tarfile";
+		}
+		$nodeblob->{'startupcmd'} = "/var/tmp/$startname";
 	    }
 	}
 
@@ -2050,11 +2208,11 @@ sub GetTicketAuxAux($)
 			# ignore silly user.
 			next;
 		    }
-		    if ($isshared && $attrvalue > 4) {
+		    if ($isshared && $attrvalue > 12) {
 			$response =
 			    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 						 "Bad XEN setting; ".
-						 "limited to 1-4 cores");
+						 "limited to 1-12 cores");
 			goto bad;
 		    }
 		}
@@ -2079,6 +2237,289 @@ sub GetTicketAuxAux($)
 					     {"vname"     => $node_nickname,
 					      "attrkey"   => $attrkey,
 					      "attrvalue" => $attrvalue });
+	    }
+	}
+	if (defined($dockersettings)) {
+	    my ($d_extimage,$d_extserver,$d_extuser,$d_extpass,$d_dockerfile);
+	    foreach my $setting (keys(%$dockersettings)) {
+		my $attrvalue = $dockersettings->{$setting};
+		my $attrkey;
+		my $isshared  = (!defined($exclusive) || !$exclusive ? 1 : 0);
+
+		if ($setting eq "ram") {
+		    if ($attrvalue !~ /^\d*$/) {
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_BADARGS, undef,
+			    "Bad Docker ram value; integers only");
+			goto bad;
+		    }
+		    if ($isshared && 0 && $attrvalue > 1024) {
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_BADARGS, undef,
+			    "Bad Docker shared node ram value;".
+			    " limited to 1024 MB");
+			goto bad;
+		    }
+		    $attrkey = "DOCKER_MEMSIZE";
+		}
+		elsif ($setting eq "cores") {
+		    if ($attrvalue !~ /^\d*$/) {
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_BADARGS, undef,
+			    "Bad Docker cores value; integers only");
+			goto bad;
+		    }
+		    if ($attrvalue <= 0) {
+			# ignore silly user.
+			next;
+		    }
+		    $attrkey = "DOCKER_CORES";
+		    if ($isshared && $attrvalue > 4) {
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_BADARGS, undef,
+			    "Bad Docker shared node cores value; ".
+			    "limited to 1-4 cores");
+			goto bad;
+		    }
+		}
+		elsif ($setting eq "extimage") {
+		    $attrkey = "DOCKER_EXTIMAGE";
+		    $d_extimage = $attrvalue;
+		}
+		elsif ($setting eq "extserver") {
+		    $attrkey = "DOCKER_EXTSERVER";
+		    $d_extserver = $attrvalue;
+		}
+		elsif ($setting eq "extusername") {
+		    $attrkey = "DOCKER_EXTUSER";
+		    $d_extuser = $attrvalue;
+		}
+		elsif ($setting eq "extpassword") {
+		    $attrkey = "DOCKER_EXTPASS";
+		    $d_extpass = $attrvalue;
+		}
+		elsif ($setting eq "dockerfile") {
+		    $attrkey = "DOCKER_DOCKERFILE";
+		    $d_dockerfile = $attrvalue;
+		}
+		elsif ($setting eq "tbaugmentation") {
+		    if ($attrvalue ne 'full' && $attrvalue ne 'buildenv'
+			&& $attrvalue ne 'core' && $attrvalue ne 'basic'
+			&& $attrvalue ne 'none') {
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_BADARGS, undef,
+			    "Bad Docker tbaugmentation value; must be full,".
+			    " buildenv, core, basic, or none");
+			goto bad;
+		    }
+		    $attrkey = "DOCKER_EMULABIZATION";
+		}
+		elsif ($setting eq "tbaugmentation_update") {
+		    $attrkey = "DOCKER_EMULABIZATION_UPDATE";
+		}
+		elsif ($setting eq "ssh_style") {
+		    if ($attrvalue ne 'direct' && $attrvalue ne 'exec') {
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_BADARGS, undef,
+			    "Bad Docker ssh_style value; must be direct or exec");
+			goto bad;
+		    }
+		    $attrkey = "DOCKER_SSH_STYLE";
+		}
+		elsif ($setting eq "exec_shell") {
+		    if ($attrvalue !~ /^[\/\w\d_\-]+$/) {
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_BADARGS, undef,
+			    "Bad Docker exec_shell value; can only have".
+			    " alphanumeric chars, _, -, or /");
+			goto bad;
+		    }
+		    $attrkey = "DOCKER_EXEC_SHELL";
+		}
+		elsif ($setting eq "entrypoint") {
+		    $attrkey = "DOCKER_ENTRYPOINT";
+		    $attrvalue = "base64url:" .
+			MIME::Base64::encode_base64url($attrvalue);
+		}
+		elsif ($setting eq "cmd") {
+		    $attrkey = "DOCKER_CMD";
+		    $attrvalue = "base64url:" .
+			MIME::Base64::encode_base64url($attrvalue);
+		}
+		elsif ($setting eq "env") {
+		    $attrkey = "DOCKER_ENV";
+		    $attrvalue = "base64url:" .
+			MIME::Base64::encode_base64url($attrvalue);
+		}
+		elsif ($setting eq "privileged") {
+		    $attrkey = "DOCKER_PRIVILEGED";
+		    if ($attrvalue eq '1' || $attrvalue =~ /^true$/i) {
+			if ($isshared) {
+			    $response = GeniResponse->Create(
+				GENIRESPONSE_BADARGS, undef,
+				"Shared containers cannot be privileged");
+			    goto bad;
+			}
+			$attrvalue = "1";
+		    }
+		    else {
+			$attrvalue = "0";
+		    }
+		}
+		else {
+		    next;
+		}
+		$virtexperiment->NewTableRow("virt_node_attributes",
+					     {"vname"     => $node_nickname,
+					      "attrkey"   => $attrkey,
+					      "attrvalue" => $attrvalue });
+	    }
+
+	    #
+	    # Do some docker-specific error checking.  First the image
+	    # if specified, then the Dockerfile if specified.
+	    #
+	    if (defined($d_extimage)
+		&& !exists($checked_docker_extimages{$d_extimage})) {
+		my @cmd = ($DOCKERCLI,'--no-cache','--skip-docker-config-auth');
+		push(@cmd,'-s');
+		if (defined($d_extserver)) {
+		    push(@cmd,$d_extserver);
+		}
+		else {
+		    $d_extserver = 'registry.hub.docker.com';
+		    push(@cmd,$d_extserver);
+		}
+		if (defined($d_extuser)) {
+		    push(@cmd,'-u');
+		    push(@cmd,$d_extuser);
+		    if (defined($d_extpass)) {
+			push(@cmd,'-p');
+			push(@cmd,$d_extpass);
+		    }
+		}
+		else {
+		    push(@cmd,'-u');
+		    push(@cmd,'');
+		}
+		push(@cmd,"check_image");
+		my ($repo,$tag);
+		my @rbits = split(':',$d_extimage);
+		if (@rbits == 1) {
+		    $repo = $d_extimage;
+		    $tag = 'latest';
+		}
+		else {
+		    $repo = join(",",@rbits[0..(@rbits-2)]);
+		    $tag = $rbits[@rbits-1];
+		}
+		# If we end up pulling from the docker hub, we need to
+		# prefix the repo with 'library/', because that is how
+		# they do things!
+		# However, do exclude any image with a path separator;
+		# this may be a user or private repo.
+		if (($d_extserver eq 'registry-1.docker.io'
+		     || $d_extserver eq 'registry.hub.docker.com')
+		    && $repo !~ /^library\//
+		    && $repo !~ /\//) {
+		    $repo = 'library/' . $repo;
+		}
+		push(@cmd,'-r');
+		push(@cmd,$repo);
+		push(@cmd,'-t');
+		push(@cmd,$tag);
+
+		DebugTimeStamp("running '".join(' ',@cmd)."' to validate".
+			       " external docker image $d_extimage");
+		print STDERR "DEBUG: running '".join(' ',@cmd)."' to validate".
+			       " external docker image $d_extimage\n";
+
+		# Ok, finally run @cmd via fork/exec, so that we don't
+		# have to escape any args, and so that we can enforce a
+		# timeout.
+		my $dpid = fork();
+		if (!defined($dpid)) {
+		    $response = GeniResponse->Create(
+			GENIRESPONSE_ERROR, undef,
+			"Unable to validate Docker externalimage; try again later");
+		    goto bad;
+		}
+		elsif (!$dpid) {
+		    exec(@cmd)
+			or die("Error running '".join(" ",@cmd)."'!");
+		}
+		else {
+		    my $wait = 30;
+		    my $status;
+		    while ($wait > 0) {
+			my $kid = waitpid($dpid,WNOHANG);
+			if ($kid == -1) {
+			    print STDERR "*** Error waiting for $DOCKERCLI".
+				" pid $dpid: $!";
+			    last;
+			}
+			elsif ($kid == $dpid) {
+			    $status = $? >> 8;
+			    last;
+			}
+			sleep(1);
+		    }
+		    if (!defined($status)) {
+			kill(9,$dpid);
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_ERROR, undef,
+			    "Unable to validate external Docker image: timeout");
+			goto bad;
+		    }
+		    elsif ($status != 0) {
+			$response = GeniResponse->Create(
+			    GENIRESPONSE_ERROR, undef,
+			    "Docker external image validation failed: $status");
+			goto bad;
+		    }
+
+		    # Ok, success: mark this URL as safe.  Note if it
+		    # required auth and they fail to specify auth for
+		    # each node, this will cause them problems in the
+		    # clientside; but that is their problem.  We can't
+		    # do better.
+		    $checked_docker_extimages{$d_extimage} = 1;
+		    DebugTimeStamp("validated external docker image $d_extimage");
+		}
+	    }
+	    if (defined($d_dockerfile)
+		&& !exists($checked_dockerfile_urls{$d_dockerfile})) {
+		use LWP::UserAgent;
+		my $ua = LWP::UserAgent->new;
+		my $req = HTTP::Request->new(GET => $d_dockerfile);
+		my $resp = $ua->request($req);
+		if (!$resp->is_success) {
+		    $response = GeniResponse->Create(
+			GENIRESPONSE_ERROR, undef,
+			"Dockerfile GET failed: ".
+			$resp->message." (".$resp->code.")");
+		    goto bad;
+		}
+		my @lines = split('\r\n',$resp->decoded_content);
+		if (@lines == 1) {
+		    @lines = split('\n',$resp->decoded_content);
+		}
+		my $foundit = 0;
+		for my $line (@lines) {
+		    if ($line =~ /^\s*FROM/) {
+			$foundit = 1;
+		    }
+		}
+		if (!$foundit) {
+		    $response = GeniResponse->Create(
+			GENIRESPONSE_ERROR, undef,
+			"Dockerfile $d_dockerfile does not contain a FROM".
+			" instruction");
+		    goto bad;
+		}
+
+		# Ok, passes our basic sanity check:
+		$checked_dockerfile_urls{$d_dockerfile} = 1;
 	    }
 	}
 	if (defined($fwsettings)) {
@@ -2399,7 +2840,9 @@ sub GetTicketAuxAux($)
 	#
 	# Look for shared and tagging attributes for the link.
 	#
-	if (my $shared_vlan = GeniXML::GetSharedLanName($linkref)) {
+	my $shared_vlan;
+	
+	if ($shared_vlan = GeniXML::GetSharedLanName($linkref)) {
 	    if ($shared_vlan !~ /^[-\w]*$/) {
 		$response =
 		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
@@ -2445,6 +2888,22 @@ sub GetTicketAuxAux($)
 	    $isshared = 1;
 	    $encap    = "vlan";
 	}
+	elsif ($shared_vlan = GeniXML::CreateSharedLan($linkref)) {
+	    if ($shared_vlan !~ /^[-\w]*$/) {
+		$response =
+		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				 "Invalid shared lan name: $shared_vlan");
+		goto bad;
+	    }
+	    my $lanref = Lan->LookupSharedVLanByToken($shared_vlan);
+	    if (defined($lanref)) {
+		$response =
+		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				 "Shared lan already exists: $shared_vlan");
+		goto bad;
+	    }
+	    $encap    = "vlan";
+	}
 	#
 	# Allow user to specify vlan encap, which might override that we
 	# just set it above. Experts only please.
@@ -2477,6 +2936,13 @@ sub GetTicketAuxAux($)
 	if (GeniXML::HasNoBandwidthShapingSetting($linkref)) {
 	    $nobwshaping = 1;
 	}
+	if (GeniXML::HasJumboFramesSetting($linkref)) {
+	    $virtexperiment->NewTableRow("virt_lan_settings",
+					 {"vname"       => $lanname,
+					  "capkey"      => "jumboframes",
+					  "capval"      => 1});
+	}
+	
 	# Ditto for new direct link option.
 	my $nointerswitch = GeniXML::NoInterSwitch($linkref);
 
@@ -2553,17 +3019,26 @@ sub GetTicketAuxAux($)
 	    }
 	}
 	#
+	# Link wide properties. Saves a lot of XML when all the user
+	# wants is to set symmetrical properties for the entire lan.
+	#
+	my $linkwide_properties = GeniXML::GetLinkWideProperties($linkref);
+	
+	#
 	# On a really big lan, we do not want to search the properties
 	# over and over.
 	#
 	my %properties = ();
-	my @properties = GeniXML::GetLinkProperties($linkref);
-	foreach my $property (@properties) {
+	foreach my $property (GeniXML::GetLinkProperties($linkref)) {
 	    my $source = GetText("source_id", $property);
 	    my $dest   = GetText("dest_id", $property);
-	    $properties{"$source:$dest"} = $property;
+	    if (!defined($source) || !defined($dest) ||
+		$source eq "" || $dest eq "") {
+		GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+			     "$lanname: Missing source or dest in property");
+	    }
+	    $properties{"$source:$dest"} = $property;	    
 	}
-
 	my $edgecount = 0;
 
 	foreach my $ref (@interfaces) {
@@ -2692,7 +3167,8 @@ sub GetTicketAuxAux($)
 		$external_linkmap{$lanname} = $linkref;
 		$external_lanrefs{"${lanname}:${manager_id}"} = $external_noderef;
 		# Allow rspec to provide IP for other side.
-		$ip = GeniXML::GetIp($ref, $external_noderef);
+		$ip   = GeniXML::GetIp($ref, $external_noderef);
+		$mask = GeniXML::GetMask($ref, $external_noderef);
 	    }
 	    else {
 		#
@@ -2729,8 +3205,15 @@ sub GetTicketAuxAux($)
 	    }
 
 	    # XXX
-	    $ip     = "10.10.${linknum}.${ifacenum}" if (!defined($ip));
-	    $mask   = "255.255.255.0" if (!defined($mask));
+	    if ($layer == 1 && !defined($ip)) {
+		# Do not provide an IP for layer 1 links unless user says to.
+		$ip   = "";
+		$mask = "255.255.255.0"
+	    }
+	    elsif (!defined($ip)) {
+		$ip     = "10.10.${linknum}.${ifacenum}";
+		$mask = "255.255.255.0" if (!defined($mask));
+	    }
 	    my $member    = "$node_nickname:$iface_vport";
 	    my $bandwidth = $default_bandwidth;
 	    my $rbandwidth= $default_bandwidth;
@@ -2742,11 +3225,32 @@ sub GetTicketAuxAux($)
 	    my $restbw    = undef;
 	    my $uselinkdelay = $forcedelay;
 
-	    # Let user override.
-	    my $user_bandwidth = GeniXML::GetBandwidth($linkref);
-	    if (defined($user_bandwidth)) {
-		$bandwidth  = $user_bandwidth;
-		$rbandwidth = $user_bandwidth;
+	    # Let linkwide property override defaults above.
+	    if (defined($linkwide_properties)) {
+		if (defined($linkwide_properties->{"bandwidth"})) {
+		    $bandwidth  = $linkwide_properties->{"bandwidth"};
+		    $rbandwidth = $bandwidth;
+		    $uselinkdelay = 1
+			if (!$nobwshaping);
+		}
+		if (defined($linkwide_properties->{"latency"})) {
+		    $latency = $linkwide_properties->{"latency"};
+		    if (@interfaces == 2) {
+			$latency = $latency / 2.0
+		    }
+		    $rlatency = $latency;
+		    # Latency, we have to use a link delay.
+		    $uselinkdelay = 1;
+		}
+		if (defined($linkwide_properties->{"lossrate"})) {
+		    $lossrate  = $linkwide_properties->{"lossrate"};
+		    if (@interfaces == 2) {
+			$lossrate = 1.0 - sqrt(1.0 - $lossrate);
+		    }
+		    $rlossrate = $lossrate;
+		    # Lossrate, we have to use a link delay.
+		    $uselinkdelay = 1;
+		}
 	    }
 
 	    # Look for a link to a bridge.
@@ -2804,7 +3308,7 @@ sub GetTicketAuxAux($)
 		}
 		$bridge_vname = $bblob->{'name'};
 	    }
-	    elsif (@properties) {
+	    elsif (keys(%properties)) {
 		$uselinkdelay = 1
 		    if (!$nobwshaping);
 		
@@ -2814,7 +3318,7 @@ sub GetTicketAuxAux($)
 		# let do them independently below.
 		#
 		if (@interfaces == 2) {
-		    foreach my $property (@properties) {
+		    foreach my $property (values(%properties)) {
 			#
 			# Need to make sure we get the correct direction.
 			#
@@ -2825,9 +3329,21 @@ sub GetTicketAuxAux($)
 				if (defined(GetText("capacity", $property)));
 			    if (defined(GetText("latency", $property))) {
 				$latency = GetText("latency", $property) / 2.0;
+				if ($latency < 0) {
+				    $response =
+					GeniResponse->BadArgsResponse(
+					 "$lanname: Bad latency: $latency");
+				    goto bad;
+				}
 			    }
 			    if (defined(GetText("packet_loss", $property))) {
 				$lossrate = GetText("packet_loss", $property);
+				if ($lossrate > 1.0 || $lossrate < 0) {
+				    $response =
+					GeniResponse->BadArgsResponse(
+					 "$lanname: Bad lossrate: $lossrate");
+				    goto bad;
+				}
 				$lossrate = 1.0 - sqrt(1.0 - $lossrate);
 			    }
 			}
@@ -2836,9 +3352,22 @@ sub GetTicketAuxAux($)
 				if (defined(GetText("capacity", $property)));
 			    if (defined(GetText("latency", $property))) {
 				$rlatency = GetText("latency", $property) / 2.0;
+				if ($rlatency < 0) {
+				    $response =
+					GeniResponse->BadArgsResponse(
+					 "$lanname: Bad latency: $rlatency");
+				    goto bad;
+				}
+				
 			    }
 			    if (defined(GetText("packet_loss", $property))) {
 				$rlossrate = GetText("packet_loss", $property);
+				if ($rlossrate > 1.0 || $rlossrate < 0) {
+				    $response =
+					GeniResponse->BadArgsResponse(
+					 "$lanname: Bad lossrate: $rlossrate");
+				    goto bad;
+				}
 				$rlossrate = 1.0 - sqrt(1.0 - $rlossrate);
 			    }
 			}
@@ -2855,18 +3384,40 @@ sub GetTicketAuxAux($)
 			if (defined(GetText("latency", $property))) {
 			    $latency  = GetText("latency", $property);
 			    $rlatency = $latency;
+			    if ($latency < 0) {
+				$response =
+				    GeniResponse->BadArgsResponse(
+					"$lanname: Bad latency: $latency");
+				goto bad;
+			    }
 			}
 			if (defined(GetText("packet_loss", $property))) {
 			    $lossrate  = GetText("packet_loss", $property);
 			    $rlossrate = $lossrate;
+			    if ($lossrate > 1.0 || $lossrate < 0) {
+				$response =
+				    GeniResponse->BadArgsResponse(
+					"$lanname: Bad lossrate: $lossrate");
+				goto bad;
+			    }
 			}
 		    }
 		}
 	    }
 	    if ($isshared) {
-		# Clear all this on "shared" vlans. Maybe later.
-		$bandwidth  = 0;
-		$rbandwidth = 0;
+		# Using this method to allow the user to specify a bandwidth.
+		# What it is basically going to do, is force the mapper to
+		# assign an interface that has the desired bandwidth. 
+		if (defined($linkwide_properties) && 
+		    defined($linkwide_properties->{"bandwidth"})) {
+		    $bandwidth  = $linkwide_properties->{"bandwidth"};
+		    $rbandwidth = $bandwidth;
+		}
+		else {
+		    # Clear all this on "shared" vlans. 
+		    $bandwidth  = 0;
+		    $rbandwidth = 0;
+		}
 		$latency    = 0.0;
 		$rlatency   = 0.0;
 		$lossrate   = 0.0;
@@ -2880,7 +3431,8 @@ sub GetTicketAuxAux($)
 		$rlatency   = 0.0;
 		$lossrate   = 0.0;
 		$rlossrate  = 0.0;
-		$nobwshaping= 1;
+		$nobwshaping  = 1;
+		$uselinkdelay = 0;
 	    }
 	    
 	    my $virtlan =
@@ -2972,6 +3524,7 @@ sub GetTicketAuxAux($)
 	goto bad;
     }
 
+    if (0) {
     # Do IP assignment.
     DebugTimeStamp("Starting ipassign");
     my $poutput = GeniUtil::ExecQuiet("$IPASSIGN $pid $eid");
@@ -2982,6 +3535,7 @@ sub GetTicketAuxAux($)
 	goto bad;
     }
     DebugTimeStamp("Finished ipassign");
+    }
 
     # Allocate any public address pools.
     my $tmp = $slice_experiment->AllocatePublicAddrPools();
@@ -3080,6 +3634,7 @@ sub GetTicketAuxAux($)
 	my $inprecheck   = 0;
 	my $insummary    = 0;
 	my $isassignerror= 0;
+	my $impossible   = 0;
 	my $errorcode = GENIRESPONSE_NO_MAPPING;
 	
 	unlink($tmpfile);
@@ -3112,6 +3667,15 @@ sub GetTicketAuxAux($)
 		$insummary    = 0;
 		$errorcode     = GENIRESPONSE_NO_MAPPING;
 	    }
+	    #
+	    # This is the very last thing the mapper will print, so
+	    # need to be looking for it after ASSIGN FAILED
+	    #
+	    if ($line =~ /cannot be instantiated on this testbed/) {
+		$impossible = 1;
+		last;
+	    }
+	    
 	    # Skipping ahead looking for another assign run
 	    next
 		if ($done);
@@ -3127,18 +3691,6 @@ sub GetTicketAuxAux($)
 		    $logstuff .= $l;
 		}
 		$errorcode = GENIRESPONSE_INSUFFICIENT_NODES();
-		last;
-	    }
-	    if ($line =~ /cannot be instantiated on this testbed/) {
-		$logstuff  = $line;
-		# Snarf up next couple of lines.
-		while ($output =~ /^(.*)$/gm) {
-		    my $l = $1 . "\n";
-		    last
-			if ($l =~ /^\s*\*\*\*/);
-		    $logstuff .= $l;
-		}
-		$errorcode = GENIRESPONSE_MAPPING_IMPOSSIBLE();
 		last;
 	    }
 
@@ -3298,6 +3850,32 @@ sub GetTicketAuxAux($)
 	print STDERR "---------------- Mapper Log ------------------\n";
 	print STDERR $output;
 
+	if ($impossible) {
+	    # WARNING: This error string is important, do not change it!!!
+	    my $message =
+		"Your topology cannot be instantiated on this cluster. ".
+		"You have most likely asked for hardware that does not ".
+		"exist, such as nodes of a type that do not exist, or more ".
+		"network interfaces that exist on any of the nodes at this ".
+		"cluster. You will need to modify your experiment or try ".
+		"a different cluster - re-submitting as-is will always ".
+		"result in failure!";
+		
+	    if ($errorstr ne "") {
+		$errorstr .= "\n\n";
+		$errorstr .= "Note that " . lcfirst($message);
+	    }
+	    else {
+		$errorstr = $message;
+	    }
+	    if ($logstuff ne "") {
+		$logstuff .= "\n\n";
+		$logstuff .= "Note that " . lcfirst($message);
+	    }
+	    else {
+		$logstuff = $message;
+	    }
+	}
 	$response =
 	    GeniResponse->Create($errorcode,
 				 "Could not map to resources" .
@@ -3408,7 +3986,7 @@ sub GetTicketAuxAux($)
 	my $exclusive = (defined($node->sharing_mode()) ? "0" : "1");
 
 	#
-	# Watch for dedicated XEN vhost nodes. We add those to the manifest
+	# Watch for dedicated XEN/Docker vhost nodes. We add those to the manifest
 	# later, and as real sliver objects when the ticket is redeemed.
 	#
 	if ($node->isvirtnode() && $exclusive && !defined($instantiate_on)) {
@@ -4214,8 +4792,10 @@ sub SliverWorkAux($)
 	}
     }
 
-    my %phys2nickname = ();
+    # global spectrum for below.
+    my $global_spectrum = GeniXML::GetSpectrum($rspec);
 
+    my %phys2nickname = ();
     #
     # Make sure all nodes requested are allocated. 
     #
@@ -4479,7 +5059,8 @@ sub SliverWorkAux($)
     DebugTimeStamp("Starting mapper");
     
     # Add -u for update mode, but not -f (fixnode). 
-    my $output = GeniUtil::ExecQuiet("$MAPPER -d -v $solfile -z -u $pid $eid");
+    my $output =
+	GeniUtil::ExecQuiet("$MAPPER -b -d -v $solfile -z -u $pid $eid");
     if ($?) {
 	my $logstuff = "";
 	$message = "Could not map to resources";
@@ -4610,6 +5191,11 @@ sub SliverWorkAux($)
 		if (defined($osinfo) && $osinfo->FeatureSupported("xen-host")){
 		    $node->NoNFSMounts();
 		}
+		if (defined($osinfo)
+		    && ($osinfo->FeatureSupported("docker-host"))) {
+		    #|| $osinfo->osname() =~ /dock/i)) {
+		    $node->NoNFSMounts();
+		}
 	    }
 	}
 	
@@ -4619,6 +5205,8 @@ sub SliverWorkAux($)
 	    #
 	    $inaggregate = 1;
 	    $sliver = $nodemap{$virtual_id};
+	    # Replace the existing rspec/manifest
+	    $sliver->UpdateRspec($ref);
 	}
 	else {
 	    $sliver = GeniSliver::Node->Create($slice, $owner, $node, $ref);
@@ -4632,6 +5220,49 @@ sub SliverWorkAux($)
 	    # Add to the aggregate.
 	    if ($sliver->SetAggregate($aggregate) != 0) {
 		$message = "Could not set aggregate for $sliver to $aggregate";
+		goto bad;
+	    }
+	}
+
+	#
+	# Per-Interface Spectrum
+	#
+	foreach my $ifaceref (GeniXML::FindNodes("n:interface",
+						 $ref)->get_nodelist()) {
+	    my $spectrum = GeniXML::GetSpectrum($ifaceref);
+
+	    if (@$spectrum) {
+		my $component_id = GeniXML::GetNodeId($ifaceref);
+		my $interface = Interface->LookupByIface($node, $component_id);
+		if (!defined($interface) ) {
+		    $message = "Undefined interface $component_id for ".
+			"spectrum on $virtual_id";
+		    goto bad;
+		}
+		if ($node->AddSpectrum($spectrum, $interface)) {
+		    $message = "Could not add interface spectrum to ".
+			"$virtual_id:$component_id";
+		    goto bad;
+		}
+	    }
+	}
+
+	#
+	# Per-node spectrum.
+	#
+	my $spectrum = GeniXML::GetSpectrum($ref);
+	if (@$spectrum) {
+	    if ($node->AddSpectrum($spectrum)) {
+		$message = "Could not add spectrum to $virtual_id";
+		goto bad;
+	    }
+	}
+	#
+	# And the global spectrum
+	#
+	if (@$global_spectrum) {
+	    if ($node->AddSpectrum($global_spectrum)) {
+		$message = "Could not add global spectrum to $virtual_id";
 		goto bad;
 	    }
 	}
@@ -5006,6 +5637,7 @@ sub SliverWorkAux($)
 		    goto bad;
 		}
 	    }
+
 	    # Initial update of the manifest.
 	    $ifaceref = $sliver->AnnotateManifest($ifaceref);
 	    my $outref;
@@ -5014,12 +5646,14 @@ sub SliverWorkAux($)
 	    my $macAddress = undef;
 	    $macAddress = $interface->mac()
 		if (defined($interface));
-	    my $ipAddress;
+	    my ($ipAddress,$ipMask);
 	    if (defined($vinterface)) {
 		$ipAddress = $vinterface->IP();
+		$ipMask    = $vinterface->mask();
 	    }
 	    elsif (defined($interface)) {
 		$ipAddress = $interface->IP();
+		$ipMask    = $interface->mask();
 	    }
 	    # Manifest goes back to the user.
 	    if (GeniXML::IsVersion0($ifaceref)) {
@@ -5044,6 +5678,9 @@ sub SliverWorkAux($)
 		    }
 		    GeniXML::SetText("address", $child, $ipAddress);
 		    GeniXML::SetText("type", $child, "ipv4");
+		    if (defined($ipMask)) {
+			GeniXML::SetText("netmask", $child, $ipMask);
+		    }
 		}
 		GeniXML::SetText($sliverName, $ifaceref,
 				 $sliver->sliver_urn());
@@ -5066,6 +5703,37 @@ sub SliverWorkAux($)
 		$sliver->SetAggregate($linkaggregate) != 0) {
 		$message = "Could not add link sliver $sliver to $aggregate";
 		goto bad;
+	    }
+	}
+	if (my $sharename = GeniXML::CreateSharedLan($linkref)) {
+	    my $vlan = VLan->Lookup($experiment, $linkname);
+	    if (!defined($vlan)) {
+		print STDERR "*** Could lookup vlan $linkname for sharing\n";
+	    }
+	    else {
+		#
+		# This operation has to be done as an admin person.
+		# Use force option to override not ACTIVE experiment.
+		#
+		GeniUtil::FlipToElabMan();
+		my $output = GeniUtil::ExecQuiet("$WAP ".
+						 " $SHAREVLAN -o -f $pid,$eid ".
+						 "   $linkname $sharename");
+		my $ecode  = $?;
+		FlipToUser($slice, $owner);
+		if ($ecode) {
+		    print STDERR "Failed to share vlan:\n";
+		    print STDERR $output;
+		}
+		else {
+		    libtestbed::SENDMAIL($TBOPS, "$linkname has been shared",
+					 "$linkname has been shared.\n\n". 
+					 "Slice: $slice\n".
+					 "Experiment: $experiment\n",
+					 $TBOPS);
+		    print STDERR "$linkname has been shared using name: ".
+			"$sharename\n";
+		}
 	    }
 	}
       manifest:
@@ -5256,7 +5924,8 @@ sub SliverWorkAux($)
 	goto bad;
     }
 
-    my $siteinfo = GeniXML::FindFirst("n:site_info", $manifest);
+    my $siteinfo = GeniXML::FindFirstNS("n:site_info", $manifest,
+					$GeniXML::SITEINFO_NS);
     if (defined($siteinfo)) {
 	# Clean old location.
 	$manifest->removeChild($siteinfo);
@@ -5296,11 +5965,9 @@ sub SliverWorkAux($)
 	print STDERR "GeniUsage->NewAggregate($aggregate) failed\n";
     }
 
-    # This should move someplace else?
+    $aggregate->UpdateManifest($manifest);
+    # Need this below.
     my $manifest_string = GeniXML::Serialize($manifest);
-    DBQueryWarn("replace into geni_manifests set ".
-		"  manifest=". DBQuoteSpecial($manifest_string) . ", " .
-		"  idx=NULL, slice_uuid='$slice_uuid', created=now()");
 
     #
     # Cache the credential for subsequent requests. See GetSliver().
@@ -5480,7 +6147,7 @@ sub RenewSliverAux($$$$)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "No local slice found");
     }
-    if ($slice->Lock() != 0) {
+    if ($slice->WaitForLock(10) != 0) {
 	return GeniResponse->BusyResponse("slice");
     }
     # Shutdown slices get nothing.
@@ -5488,6 +6155,12 @@ sub RenewSliverAux($$$$)
 	$message = "Slice has been shutdown";
 	goto bad;
     }
+    # Ditto termination pending.
+    if ($slice->termination_pending()) {
+	$message = "Slice is marked for termination";
+	goto bad;
+    }
+    
     #
     # We do not save renew logs, so add a metadata tag with the
     # expiration so we can see what the user actually tried to do.
@@ -7055,6 +7728,9 @@ sub CleanupDeadSlice($;$)
     my $experiment = $slice->GetExperiment();
 
     if (defined($experiment)) {
+	# Make sure the cancel flag is cleared.
+	$experiment->SetCancelFlag(0);
+
 	#
 	# Do not allow a paniced slice to be terminated until the panic
 	# is cleared. 
@@ -7126,6 +7802,10 @@ sub CleanupDeadSlice($;$)
 		print STDERR "Failed to remove stale VLANs\n";
 		return -1;
 	    }
+	}
+	if (Interface::LogicalWire->DeleteLogicalWires($experiment)) {
+	    print STDERR "Could not delete logical wires and interfaces\n";
+	    return -1;
 	}
 
 	#
@@ -7425,6 +8105,13 @@ sub FlipToUser($$)
     }
     return undef
 	if (! (defined($project) && defined($group) && defined($creator)));
+
+    #
+    # If creator is frozen we need to use the project leader instead.
+    #
+    if ($creator->frozen()) {
+	$creator = $project->GetLeader();
+    }
     $creator = GeniUser::LocalUser->Create($creator);
 
     #
@@ -7497,6 +8184,7 @@ sub UpdateManifest($)
 	print STDERR "No manifest for $slice/$aggregate\n";
 	return -1;
     }
+    my $changed   = 0;
     my @vlanlist  = ();
     my %vlanpaths = ();
     if ($experiment->PortLanList(\@vlanlist) == 0) {
@@ -7538,7 +8226,32 @@ sub UpdateManifest($)
 	    $el = GeniXML::AddElement("switchpath",
 				      $linkref, $GeniXML::EMULAB_NS);
 	    $el->appendText($vlanpaths{$vname});
+	    $changed++;
 	}
+    }
+    #
+    # Update the disk image, adding it to the emulab vnode extension.
+    #
+    foreach my $noderef (GeniXML::FindNodes("n:node",
+					    $rspec)->get_nodelist()){
+	my $vnoderef = GeniXML::FindNodesNS("n:vnode", $noderef,
+					    $GeniXML::EMULAB_NS)->pop();
+	next
+	    if (! defined($vnoderef));
+	my $node_id = GeniXML::GetText("name", $vnoderef);
+	next
+	    if (!defined($node_id));
+	my $node = Node->Lookup($node_id);
+	next
+	    if (!defined($node));
+	my $osimage = $node->RunningOsImage();
+	# Skip generic images for now.
+	next
+	    if (!(defined($osimage) && $osimage->isImage()));
+	GeniXML::SetText("disk_image", $vnoderef, $osimage->versname());
+	$changed++;
+    }
+    if ($changed) {
 	return $aggregate->UpdateManifest($rspec);
     }
     return 0;
@@ -7821,19 +8534,8 @@ sub ReserveLocalVlanTag($$$)
 sub CheckMonitor($)
 {
     my ($slice) = @_;
-    my $pid = $slice->monitor_pid();
 
-    #
-    # See if the process still exists.
-    #
-    if (kill(0, $pid) == 0) {
-	if ($!{ESRCH}) {
-	    print STDERR "Monitor process $pid no longer exists.\n";
-	    $slice->ClearMonitorPid();
-	    return 0;
-	}
-    }
-    return 0;
+    return $slice->CheckMonitor();
 }
 
 #
@@ -7842,75 +8544,8 @@ sub CheckMonitor($)
 sub KillMonitor($)
 {
     my ($slice) = @_;
-    my $pid = $slice->monitor_pid();
 
-    return 0
-	if (!$pid);
-
-    my $experiment = $slice->GetExperiment();
-    if (!defined($experiment)) {
-	print STDERR "No experiment for $slice\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "No slice experiment");
-    }
-    #
-    # See if the process still exists.
-    #
-    if (kill(0, $pid) == 0) {
-	if ($!{ESRCH}) {
-	    print STDERR "Monitor process $pid no longer exists.\n";
-	    $experiment->SetCancelFlag(0);
-	    $slice->ClearMonitorPid();
-	    return 0;
-	}
-	# What does getting here mean?
-    }
-	
-    print STDERR "Monitor in progress: process id $pid ...\n";
-
-    if ($experiment->canceled()) {
-	print STDERR "Cancel flag already set for $experiment\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "Unable to stop monitor");
-    }
-    #
-    # Okay, before we commit to waiting for something that might
-    # not happen, or erroneously setting the cancel flag, lets lock
-    # the tables and check again, to avoid race in start/restart.
-    #
-    $slice->LockTables();
-    if ($slice->GetMonitorPid()) { 
-	$experiment->SetCancelFlag(1);
-	$slice->UnLockTables();
-
-	#
-	# Wait for the monitor to go away, but should not take long.
-	#
-	my $count = 6;
-	while ($count > 0) {
-	    sleep(5);
-	    # Go to the DB.
-	    my $monitor_pid = $slice->GetMonitorPid();
-	    last
-		if (! $monitor_pid);
-	    $count--;
-	}
-	if ($slice->GetMonitorPid()) {
-	    print STDERR "Monitor process $pid would not die!\n";
-	    SENDMAIL($TBOPS, "Monitor for slice would not die!",
-		     "Monitor would not die: $slice\n\n" .
-		     "$TBBASE/showslice.php?slice_idx=" . $slice->idx() .
-		     "&showtype=cm",
-		     $TBOPS);
-	    print STDERR "Could not shutdown $slice!\n";
-	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-					"Monitor would not die");
-	}
-    }
-    else {
-	$slice->UnLockTables();
-    }
-    return 0;
+    return $slice->CancelMonitor();
 }
 
 #
@@ -8285,6 +8920,8 @@ sub HandleBlockstore($$$$$$$@)
 			goto bad;
 		    }
 		}
+		# When using a URL, the dataset has to be global. Might
+		# revisit this at some point.
 	    }
 	    elsif (GeniHRN::IsValid($dataset_id)) {
 		$dataset_urn = GeniHRN->new($dataset_id);
@@ -8308,26 +8945,11 @@ sub HandleBlockstore($$$$$$$@)
 		    $message = "Not supporting dataset versions yet";
 		    goto bad;
 		}
-		#
-		# If the ID includes a project, strip it. We no longer
-		# put the project there, but old URNs might have it.
-		#
-		my ($ignore,$id) = split("//", $dataset_urn->id());
-		$id = $ignore if (!defined($id));
-
-		#
-		# Use the project from the URN for lookup, to make sure we
-		# get locally resident datasets regardless of the current
-		# slice project.  If it is not local we will import and
-		# grant permission to the the argument pid (the slice
-		# experiment project).
-		#
-		$image = Image->Lookup($dataset_urn->project(), $id);
-		if (!defined($image) && $use_imagetracker) {
-		    $image = GeniImage::MapToLocalDataset($dataset_urn,
-							  $experiment,
-							  @credentials);
-		}
+		$image = GeniImage::MapToLocalDataset($dataset_urn,
+						      $geniuser,
+						      $experiment,
+						      $use_imagetracker,
+						      @credentials);
 		if (!defined($image)) {
 		    $message = "Unknown dataset: $dataset_id";
 		    goto bad;
@@ -8343,46 +8965,6 @@ sub HandleBlockstore($$$$$$$@)
 	    if (!$image->isdataset()) {
 		$message = "Not a dataset: $dataset_id";
 		goto bad;
-	    }
-	    if ($PROTOGENI_LOCALUSER) {
-		#
-		# We use the Emulab permission system.
-		#
-		if (!$image->AccessCheck($geniuser->emulab_user(),
-					 TB_IMAGEID_READINFO())) {
-		    $message = "Not enough permission to use $dataset_id";
-		    goto bad;
-		}
-	    }
-	    #
-	    # The image must be in the current project, or it must
-	    # be global (okay, shared).
-	    #
-	    elsif (! ($image->global() ||
-		      $image->pid() eq $experiment->pid())) {
-		#
-		# Or we have a credential (in the urn case).
-		#
-		my $okay = 0;
-
-		if (defined($dataset_urn)) {
-		    foreach my $credential (@credentials) {
-			next
-			    if (!$credential->HasActualPrivilege("blockstores"));
-
-			if ($credential->target_urn()->domain() eq
-			    $dataset_urn->domain() &&
-			    $credential->target_urn() eq $dataset_urn) {
-			    $okay = 1;
-			    last;
-			}
-		    }
-		}
-		if (!$okay) {
-		    # If we get here, its not allowed.
-		    $message = "No permission to use dataset $dataset_id";
-		    goto bad;
-		}
 	    }
 	    push(@attributes, ["dataset", $image->versname(), 0]);
 	    $btype = "imdataset";
@@ -8788,6 +9370,98 @@ sub CheckForDeprecatedImages($$)
     foreach my $image (values(%needwarning)) {
 	print STDERR "*** WARNING: " . $image->DeprecatedMessage() . "\n";
 	$image->SendDeprecatedMail($user);
+    }
+    return 0;
+}
+
+#
+# Do some sanity checking on spectrum list.
+#
+# Initial limits to apply to all requests, eventually these will come from
+# the database. Express these as a set of ranges with associated max power,
+# which for now is the same for all frequencies. In MHZ and dBm.
+#
+my $allowedRanges = {
+    "ISM" => [
+	[902,   928],
+	[2400,  2483.5],
+	[5725,  5875],
+    ],
+    "LTE" => [
+	[698,   763],
+	[1710,  1780],
+	[1790,  1825],
+	[2110,  2180],
+	[2500,  2570],
+	[2620,  2690],
+	[3300,  3600],
+	[3700,  4200],
+	[5650,  7125],
+    ],
+    "Sprint" => [
+	[2496,  2506],
+    ],
+};
+sub CheckSpectrum($)
+{
+    my ($spectrum) = @_;
+
+    #
+    # Only the Portal or the local cluster can request spectrum
+    #
+    my $hrn = GeniHRN->new($ENV{"GENIURN"});
+    if (! ($hrn->domain() eq "$OURDOMAIN" ||
+	   $hrn->domain() eq "emulab.net")) {
+	return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				    "Not allowed to request radio spectrum");
+    }
+    foreach my $request (@{$spectrum}) {
+	my $frequency_low  = $request->{"frequency_low"};
+	my $frequency_high = $request->{"frequency_high"};
+	my $power          = $request->{"power"};
+
+	$frequency_low  = "" if (!defined($frequency_low));
+	$frequency_high = "" if (!defined($frequency_high));
+	$power = ""          if (!defined($power));
+	
+	if (!TBcheck_dbslot($frequency_low, "default", "float",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				"Invalid integer or float: $frequency_low");
+	}
+	if (!TBcheck_dbslot($frequency_high, "default", "float",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				"Invalid integer or float: $frequency_high");
+	}
+	if (!TBcheck_dbslot($power, "default", "float",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				"Invalid integer or float: $power");
+	}
+	if ($frequency_low > $frequency_high ||
+	    $frequency_low < 0) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				"Invalid spectrum request: " .
+				"$frequency_low,$frequency_high,$power");
+	}
+	# Check for out of range,power.
+	my $allowed = 0;
+	foreach my $key (keys(%{$allowedRanges})) {
+	    foreach my $ref (@{$allowedRanges->{$key}}) {
+		my ($low, $high) = @{$ref};
+		if ($frequency_low >= $low && $frequency_low <= $high &&
+		    $frequency_high >= $low && $frequency_high <= $high) {
+		    $allowed = 1;
+		    last;
+		}
+	    }
+	}
+	if (!$allowed) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+			"Spectrum range request is out of permitted range: ".
+			"$frequency_low,$frequency_high,$power");
+	}
     }
     return 0;
 }

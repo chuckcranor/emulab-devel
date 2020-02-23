@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,9 +43,15 @@ use English;
 use Carp;
 use Date::Parse;
 use Time::Local;
+use Data::Dumper;
+use POSIX qw(:signal_h);
 
 # Configure variables.
-my $TB          = "@prefix@";
+my $TB           = "@prefix@";
+my $OPSVM_ENABLE = @OPSVM_ENABLE@;
+my $WITHZFS      = @WITHZFS@;
+my $CHFLAGS      = "/bin/chflags";
+my $DISABLEFLAGS = "@DISABLE_FSNODE_CHFLAGS@";
 
 #
 # Store up the list of caches to flush
@@ -358,6 +364,7 @@ sub ParRun($$$@)
     my @results  = ();
     my $counter  = 0;
     my $signaled = 0;
+    my $nosighup = 0;
     # We need this below.
     require event;
 
@@ -370,6 +377,8 @@ sub ParRun($$$@)
 	    if (exists($options->{'maxchildren'}));
 	$maxwaittime = $options->{'maxwaittime'}
 	    if (exists($options->{'maxwaittime'}));
+	$nosighup = $options->{'nosighup'}
+	    if (exists($options->{'nosighup'}));
     }
 
     #
@@ -378,20 +387,21 @@ sub ParRun($$$@)
     my $coderef = sub {
 	my ($signame) = @_;
 
-	print STDERR "Caught SIG${signame}! Killing parrun ...";
+	print STDERR "Caught SIG${signame} in $$! Killing parrun ...\n";
 
 	$SIG{TERM} = 'IGNORE';
 	$signaled = 1;
 
 	foreach my $pid (keys(%children)) {
-	    kill('TERM', $pid);
+	    print STDERR "Sending HUP signal to $pid ...\n";
+	    kill('HUP', $pid);
 	}
 	sleep(1);
     };
     local $SIG{QUIT} = $coderef;
     local $SIG{TERM} = $coderef;
-    local $SIG{HUP}  = $coderef;
     local $SIG{INT}  = $coderef;
+    local $SIG{HUP}  = $coderef if (!$nosighup);
 
     #
     # Initialize return.
@@ -400,40 +410,59 @@ sub ParRun($$$@)
 	$results[$i] = -1;
     }
 
-    while (@objects || keys(%children)) {
+    while ((@objects && !$signaled) || keys(%children)) {
 	#
 	# Something to do and still have free slots.
 	#
 	if (@objects && keys(%children) < $maxchildren && !$signaled) {
 	    # Space out the invocation of child processes a little.
 	    sleep(1);
-	    
-	    #
-	    # Run command in a child process, protected by an alarm to
-	    # ensure that whatever happens is not hung up forever in
-	    # some funky state.
-	    #
-	    my $object = shift(@objects);
-	    my $syspid = fork();
 
-	    if ($syspid) {
-		#
-		# Just keep track of it, we'll wait for it finish down below
-		#
-		$children{$syspid} = [$object, $counter, time()];
-		$counter++;
+	    my $newsigset = POSIX::SigSet->new(SIGQUIT,SIGINT,SIGTERM,SIGHUP);
+	    my $oldsigset = POSIX::SigSet->new;
+	    if (! defined(sigprocmask(SIG_BLOCK, $newsigset, $oldsigset))) {
+		print STDERR "sigprocmask (BLOCK) failed!\n";
+		return -1;
 	    }
-	    else {
-		$SIG{TERM} = 'DEFAULT';
-		$SIG{QUIT} = 'DEFAULT';
-		$SIG{HUP}  = 'DEFAULT';
+	    if (!$signaled) {
+		#
+		# Run command in a child process, protected by an alarm to
+		# ensure that whatever happens is not hung up forever in
+		# some funky state.
+		#
+		my $object = shift(@objects);
+		my $syspid = fork();
 
-		# So randomness is not the same in different children
-		srand();
+		if ($syspid) {
+		    #
+		    # Just keep track of it, we'll wait for it finish down below
+		    #
+		    $children{$syspid} = [$object, $counter, time()];
+		    $counter++;
+		}
+		else {
+		    $SIG{TERM} = 'DEFAULT';
+		    $SIG{QUIT} = 'DEFAULT';
+		    $SIG{HUP}  = 'DEFAULT';
+		    $SIG{INT}  = 'IGNORE';
+
+		    # Unblock in child after resetting the handlers.
+		    if (! defined(sigprocmask(SIG_SETMASK, $oldsigset))) {
+			print STDERR "sigprocmask (UNBLOCK) failed!\n";
+		    }
 		
-		# So we get the event system fork too ...
-		event::EventFork();
-		exit(&$function($object));
+		    # So randomness is not the same in different children
+		    srand();
+		
+		    # So we get the event system fork too ...
+		    event::EventFork();
+		    exit(&$function($object));
+		}
+	    }
+	    # Unblock after critical section.
+	    if (! defined(sigprocmask(SIG_SETMASK, $oldsigset))) {
+		print STDERR "sigprocmask (UNBLOCK) failed!\n";
+		return -1;
 	    }
 	}
 	elsif ($signaled) {
@@ -668,6 +697,7 @@ sub SpanningTree($)
     my ($edges)  = @_;
     my %vertices = ();
     my %edges    = ();
+    my $maxloops = 1000;
 
     #
     # Get the unique set of vertices. Also form a hash of edges we can mark.
@@ -691,7 +721,8 @@ sub SpanningTree($)
     #
     # Loop according to Prims algorithm.
     #
-    while (1) {
+    while ($maxloops) {
+	$maxloops--;
 	#
 	# Get the set of marked vertices;
 	#
@@ -729,6 +760,9 @@ sub SpanningTree($)
       loop:
 	#print Dumper(\%edges);
 	#sleep(1);
+    }
+    if ($maxloops <= 0) {
+	print STDERR "*** SpanningTree: aborting infinite loop!\n";
     }
     #
     # Return a new set of *marked* edges.
@@ -903,6 +937,12 @@ sub isMounted($)
     my $MOUNT   = "/sbin/mount";
     my $WITHAMD = @WITHAMD@;
     my $AMDROOT = "@AMD_ROOT@";
+
+    if ($OPSVM_ENABLE && $WITHZFS) {
+	return 0
+	    if (! -e $dir);
+	return 1;
+    }
     
     if ($WITHAMD) {
 	$dir = "${AMDROOT}${dir}";
@@ -1039,6 +1079,92 @@ sub ValidUUID($)
 	return 1;
     }
     return 0;
+}
+
+sub ReadFile($)
+{
+    my ($filename) = @_;
+    my $contents   = "";
+    
+    open(L, $filename)
+	or return undef;
+
+    while (<L>) {
+	$contents .= $_;
+    }
+    close(L);
+    return $contents;
+}
+
+#
+# Use chflags on certain directories to prevent users from deleting things.
+# Just a bandaid on the real problem.
+#
+sub SetNoDelete($)
+{
+    my ($filename) = @_;
+    my $useflags   = 0;
+
+    #
+    # We use flags to prevent deletion of certain dirs, on FreeBSD 10
+    # or greater.  Note that when OPSVM_ENABLE=1, the file systems are
+    # actually on boss, not on ops, so have to this here on boss instead.
+    #
+    if ($OPSVM_ENABLE) {
+	if (`uname -r` =~ /^(\d+)\.(\d+)/) {
+	    if ($1 >= 10) {
+		$useflags = 1 unless ($DISABLEFLAGS);
+	    }
+	}
+    }
+    return 0
+	if (!$useflags);
+
+    system("$CHFLAGS sunlink $filename");
+    return ($? ? -1 : 0);
+}
+sub ClearNoDelete($)
+{
+    my ($filename) = @_;
+    my $useflags   = 0;
+
+    return 0
+	if (! -e $filename);
+
+    #
+    # We use flags to prevent deletion of certain dirs, on FreeBSD 10
+    # or greater.  Note that when OPSVM_ENABLE=1, the file systems are
+    # actually on boss, not on ops, so have to this here on boss instead.
+    #
+    if ($OPSVM_ENABLE) {
+	if (`uname -r` =~ /^(\d+)\.(\d+)/) {
+	    if ($1 >= 10) {
+		$useflags = 1 unless ($DISABLEFLAGS);
+	    }
+	}
+    }
+    return 0
+	if (!$useflags);
+
+    # Do a recursive change here since we tend to do deletions on the
+    # top level directories.
+    system("$CHFLAGS -R nosunlink $filename");
+    return ($? ? -1 : 0);
+}
+
+sub escapeshellarg($)
+{
+    my ($str)  = @_;
+    my @chars  = split('', $str);
+    my $result = "";
+
+    foreach my $ch (@chars) {
+        if ($ch eq '\'') {
+            $result = $result . "\'\\\'";
+	}
+	$result = $result . "$ch";
+    }
+    return "'$result'";
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

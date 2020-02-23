@@ -2,7 +2,7 @@
 
 PORTNAME=	pubsub
 PORTVERSION=	0.99
-PORTREVISION=	11
+PORTREVISION=	13
 CATEGORIES=	misc
 MASTER_SITES=	http://www.emulab.net/distributions/
 DISTFILES=      ${PORTNAME}-${PORTVERSION}_${PORTREVISION}.tar.gz
@@ -12,7 +12,8 @@ MAINTAINER=	testbed-ops@flux.utah.edu
 COMMENT=	"Simple publish subscribe system for Emulab"
 
 USE_AUTOTOOLS=	autoconf
-USES=		gmake libtool:build,keepla
+GNU_CONFIGURE=	yes
+USES=		autoreconf gmake libtool:build,keepla
 INSTALLS_SHLIB=	yes
 
 CONFLICTS=	pubsub-elvincompat-[0-9]*

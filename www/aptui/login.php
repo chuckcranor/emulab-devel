@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -96,6 +96,7 @@ function SPITFORM($uid, $referrer, $error)
     global $TBDB_UIDLEN, $TBBASE, $refer;
     global $ISAPT, $ISCLOUD, $ISPNET, $ISPOWDER;
     global $adminmode, $cleanmode;
+    global $UI_EXTERNAL_ACCOUNTS;
 
     header("Last-Modified: " . gmdate("D, d M Y H:i:s") . " GMT");
     header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
@@ -194,10 +195,17 @@ function SPITFORM($uid, $referrer, $error)
              </div>
 	     <div class='form-group'>
 <!--	       <div class="col-sm-12"> -->
+<?php
+             if ($UI_EXTERNAL_ACCOUNTS == 0) {
+?>
                  <a class='pull-right'
 		    type='button' href='forgotpswd.php'
                     style='margin-right: 10px;'>
                     Forgot Password?</a>
+<?php
+             }
+?>
+
 <!--	       </div> -->
 	     </div>
 <?php
@@ -263,8 +271,41 @@ else {
 	SPITHEADER();
 	echo "<h4>
               Your account has been frozen due to earlier login attempt
-              failures. You must contact $TBMAILADDR to have your account
+              failures. You must contact $SUPPORT to have your account
               restored. <br> <br>
+              Please do not attempt to login again; it will not work!
+              </h4>\n";
+        echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+	SPITNULLREQUIRE();
+	SPITFOOTER();
+	return;
+    }
+    elseif ($dologin_status == DOLOGIN_STATUS_FROZEN) {
+	# Short delay.
+	sleep(1);
+
+	SPITHEADER();
+	echo "<h4>
+              Your account has been frozen!
+              You must contact $SUPPORT to have your account
+              restored. <br> <br>
+              Please do not attempt to login again; it will not work!
+              </h4>\n";
+        echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+	SPITNULLREQUIRE();
+	SPITFOOTER();
+	return;
+    }
+    elseif ($dologin_status == DOLOGIN_STATUS_PROJDISABLED) {
+	# Short delay.
+	sleep(1);
+
+	SPITHEADER();
+	echo "<h4>
+              One of the projects in which you are a member has been
+              disabled. You are not allowed to log in until this has
+              been resolved. Please contact $SUPPORT if you have any
+              further questions. <br> <br>
               Please do not attempt to login again; it will not work!
               </h4>\n";
         echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
@@ -279,7 +320,7 @@ else {
 	SPITHEADER();
 	echo "<h4>
               Your account has gone <b>inactive</b> since it has been so
-              long since your last login. Please contact $TBMAILADDR 
+              long since your last login. Please contact $SUPPORT
               to have your account restored. <br> <br>
               Please do not attempt to login again; it will not work!
               </h4>\n";
@@ -340,6 +381,6 @@ if (isset($referrer) && $CHECKLOGIN_USER->IsActive()) {
     header("Location: $referrer");
 }
 else {
-    header("Location: $APTBASE/landing.php");
+    header("Location: $APTBASE/landing.php?redirect=yes");
 }
 ?>

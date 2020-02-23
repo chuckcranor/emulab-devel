@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -72,7 +72,7 @@ sub usage ()
     print STDERR " -A   - Tell ptopgen all nodes are free; only with -n\n";
     exit($WRAPPER_FAILED);
 }
-my $optlist    = "dvunfprqczxm:ko:altzZACFNL:S:G";
+my $optlist    = "dvunfprqczxm:ko:abltzZACFNL:S:G";
 my $verbose    = 0;
 my $debug      = 0;
 my $fixmode    = 0;
@@ -84,6 +84,7 @@ my $allnodesfree = 0;
 my $toponly    = 0;
 my $prepass    = 0;
 my $alloconly  = 0;
+my $commitmode = 0;
 my $gblinkcheck= 0;
 my $outfile;
 my $mfactor;
@@ -180,6 +181,9 @@ if (defined($options{"v"})) {
 }
 if (defined($options{"a"})) {
     $alloconly++;
+}
+if (defined($options{"b"})) {
+    $commitmode++;
 }
 if (defined($options{"A"})) {
     $allnodesfree++;
@@ -344,6 +348,8 @@ $vtopflags |= $libvtop::VTOP_FLAGS_IMPOTENT
     if ($impotent);
 $vtopflags |= $libvtop::VTOP_FLAGS_ALLOCONLY
     if ($alloconly);
+$vtopflags |= $libvtop::VTOP_FLAGS_COMMITMODE
+    if ($commitmode);
 $vtopflags |= $libvtop::VTOP_FLAGS_REGRESSION
     if ($regression);
 
@@ -557,9 +563,9 @@ sub AssignLoop()
 	}
 	# Hack for Kirk.
 	if (!($impotent || $regression) &&
-	    ($pid eq "MobiCom2017" || $project->IsNonLocal())) {
+	    ($pid eq "mww2019" || $project->IsNonLocal())) {
 	    while (1) {
-		if (libEmulab::EmulabCountLock("mapperlock", 3) == 0) {
+		if (libEmulab::EmulabCountLock("mapperlock", 1) == 0) {
 		    $seriallock = 1;
 		    last;
 		}
@@ -570,10 +576,13 @@ sub AssignLoop()
 	
 	#
 	# RunAssign returns  0 if successful.
-	#           returns -1 if failure, but assign says to stop trying.
+	#           returns -1 if failure, this is a total failure, stop.
 	#           returns  1 if failure, but assign says to try again.
-	#           returns  2 if assign succeeds, but no nodes allocated.
-	#           returns  3 if assign succeeds, but some nodes allocated.
+	#           returns  2 if failure, assign is saying this vtop cannot
+	#                      ever map with the current ptop, but we try
+	#                      with the empty testbed to see if is mappable.
+	#           returns 10 if assign succeeds, but no nodes allocated.
+	#           returns 11 if assign succeeds, but some nodes allocated.
 	#
 	my $retval = RunAssign($precheck, $prefix);
 
@@ -610,7 +619,7 @@ sub AssignLoop()
 	# then we found a solution, and so trying on an empty testbed is
 	# pointless; it will obviously find a solution again.
 	#
-	if (!$precheck && !$tried_precheck && ($retval == 2 || $retval == 3)) {
+	if (!$precheck && !$tried_precheck && ($retval == 10 || $retval == 11)){
 	    $tried_precheck = 1;
 	}
 	if (!$precheck && !$tried_precheck) {
@@ -633,6 +642,16 @@ sub AssignLoop()
 	    $impotent = $save_impotent;
 	    $tried_precheck = 1;
 	}
+	#
+	# If assign failed precheck then no point in continuing, it cannot
+	# map given the currently free resources. 
+	#
+	if ($retval == 2) {
+	    return [{type => 'primary', severity => SEV_ERROR,
+		     error => ['assign_precheck_failure']},
+		    "No progress, giving up."];
+	}
+
 	# We try a minimum number of times, cause the node pool is
 	# always changing. But once we hit the maxrun, we continue
 	# only if progress on the last loop.
@@ -643,7 +662,7 @@ sub AssignLoop()
 	}
 	# See if we made progress or not.
 	# Keep going if we allocated some nodes.
-	$progress = ($retval == 3);
+	$progress = ($retval == 11);
 
 	# A little bit of backoff after failure. 
 	my $sval = int(rand($currentrun * 3)) + 3;
@@ -665,6 +684,7 @@ sub RunAssign($$)
     my ($precheck, $prefix) = @_;
 
     my $typelimitfile = $prefix .".limits";
+    my $imagelistfile = $prefix .".images";
     my $ptopfile = $prefix . ".ptop";
     my $vtopfile = $prefix . ".vtop";
     if ($userspec) {
@@ -774,6 +794,25 @@ sub RunAssign($$)
 		# Unretriable error
 		return -1;
 	    }
+	    next;
+	}
+	#
+	# The type can also be a node id now, so look to see if the topology
+	# has specified a node_id that admission control says it cannot have.
+	#
+	if ($reservation_bounds->{$type} == 0 && keys(%{$vtop->fixednodes()})) {
+	    my @fixed = values(%{$vtop->fixednodes()});
+	    if (grep {$_ eq $type} @fixed) {
+		tberror({type => 'primary', cause => 'temp',
+			 severity => SEV_ERROR,
+			 error => ['admission_control_failure']},
+		"*** Resource reservation violation: ".
+		"Node $type requested, but is not ".
+		"available because of existing resource reservations ".
+		"to other projects.\n");
+		# Unretriable error
+		return -1;
+	    }
 	}
     }
     
@@ -792,6 +831,22 @@ sub RunAssign($$)
 	close(TYPELIMIT);
     }
 
+    #
+    # Give ptopgen a clue about images are is use by the vtop file,
+    # to shrink the size of the ptop file (the nodes lines are huge!).
+    #
+    unlink($imagelistfile)
+	if (-e $imagelistfile);
+    
+    if (defined($vtop->allimages())) {
+	open(IM, ">$imagelistfile") or
+	    return -1;
+
+	foreach my $osid (keys(%{$vtop->allimages()})) {
+	    print IM "$osid\n";
+	}
+	close(IM);
+    }
 
     #
     # Snapshot physical resources.
@@ -837,6 +892,8 @@ sub RunAssign($$)
     }
     $ptopargs .= "-l $typelimitfile "
 	if (scalar(keys(%admission_control)));
+    $ptopargs .= "-I $imagelistfile "
+	if (-e $imagelistfile);
 
     chat("ptopargs: '$ptopargs'\n");
     TBDebugTimeStamp("ptopgen started");
@@ -896,6 +953,7 @@ sub RunAssign($$)
 
 	    if (waitpid($childpid, &WNOHANG) == $childpid) {
 		$assignexitcode = $? >> 8;
+		$assignexitcode = -1 if ($assignexitcode == 255);
 		last;
 	    }
 
@@ -957,12 +1015,13 @@ sub RunAssign($$)
 	#
 	# assign returns two positive error codes (that we care about).
 	# The distinction between them is somewhat murky. An exitval of
-	# 1 means "retryable" while 2 means "unretryable". The former
-	# means we can try again, while the later says there is no possible
-	# way to map it. We pass this back to the caller so that we know
-	# to exit the loop or try again.
+	# 1 means "retryable", which means the annealing phase failed, and
+	# running assign again might produce a valid mapping. 2 means
+	# the precheck failed and running again will not produce a valid
+	# result, so no point in trying. Either way, we still want to
+	# try on the empty testbed once. Any other exit code is bad.
 	#
-	return (($assignexitcode == 1) ? 1 : -1);
+	return $assignexitcode;
     }
     #
     # If we were doing the precheck, go ahead and exit now - there is no

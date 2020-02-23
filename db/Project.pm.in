@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2018 University of Utah and the Flux Group.
+# Copyright (c) 2005-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,10 +25,10 @@ package Project;
 
 use strict;
 use Exporter;
-use vars qw(@ISA @EXPORT);
+use vars qw(@ISA @EXPORT @PROJDIRECTORIES @GROUPDIRECTORIES);
 
 @ISA    = "Exporter";
-@EXPORT = qw ( );
+@EXPORT = qw ();
 
 use libdb;
 use libtestbed;
@@ -59,6 +59,11 @@ my $ZFS_NOEXPORT= @ZFS_NOEXPORT@;
 my $MAILMANSUPPORT = @MAILMANSUPPORT@;
 my $ADDPROJADMINLIST = "$TB/sbin/addprojadminlist";
 my $EXPORTS_SETUP    = "$TB/sbin/exports_setup";
+
+# These are duplicated in account/accountsetup.in ...
+@PROJDIRECTORIES  = ("exp", "images", "logs", "deltas", "tarfiles", "rpms",
+		     "groups", "tiplogs", "images/sigs", "templates");
+@GROUPDIRECTORIES = ("exp", "images", "logs", "tarfiles", "rpms", "tiplogs");
 
 # Cache of instances to avoid regenerating them.
 my %projects   = ();
@@ -146,6 +151,7 @@ sub linked_to_us($)     { return field($_[0], "linked_to_us"); }
 sub expt_count($)       { return field($_[0], "expt_count"); }
 sub expt_last($)        { return field($_[0], "expt_last"); }
 sub approved($)         { return field($_[0], "approved"); }
+sub disabled($)         { return field($_[0], "disabled"); }
 sub wikiname($)         { return field($_[0], "wikiname"); }
 sub mailman_password($) { return field($_[0], "mailman_password"); }
 sub allow_workbench($)  { return field($_[0], "allow_workbench"); }
@@ -581,6 +587,42 @@ sub GetLeader($)
 }
 
 #
+# Is the user the project leader.
+#
+sub IsLeader($$)
+{
+    my ($self, $user) = @_;
+
+    # Must be a real reference. 
+    return 0
+	if (! (ref($self) && ref($user)));
+
+    return $user->SameUser($self->GetLeader());
+}
+
+sub IsManager($$)
+{
+    my ($self, $user) = @_;
+
+    # Must be a real reference. 
+    return 0
+	if (! (ref($self) && ref($user)));
+
+    return TBMinTrust($self->Trust($user), PROJMEMBERTRUST_GROUPROOT());
+}
+
+sub IsMember($$)
+{
+    my ($self, $user) = @_;
+
+    # Must be a real reference. 
+    return 0
+	if (! (ref($self) && ref($user)));
+
+    return TBMinTrust($self->Trust($user), PROJMEMBERTRUST_USER());
+}
+
+#
 # Return project group.
 #
 sub GetProjectGroup($)
@@ -1005,21 +1047,22 @@ sub Usage($$$)
 
     my $query_result =
 	DBQueryWarn("(select e.eid,s.rsrcidx,s.nonlocal_id,s.slice_uuid, ".
-		    "       UNIX_TIMESTAMP(s.swapin_last),0,n.type,".
-		    "       count(n.type) ".
+		    "       s.nonlocal_user_id, ".
+		    "       UNIX_TIMESTAMP(s.swapin_last),0,".
+		    "       e.swapper_idx,n.type,r.node_id ".
 		    " from experiments as e ".
 		    "left join experiment_stats as s on ".
 		    "     s.exptidx=e.idx  ".
 		    "left join reserved as r on r.exptidx=e.idx ".
 		    "left join nodes as n on n.node_id=r.node_id ".
 		    "where e.pid_idx='$pid_idx' and e.state='active' ".
-		    "group by e.eid,s.rsrcidx,s.nonlocal_id,s.slice_uuid, ".
-		    "         UNIX_TIMESTAMP(s.swapin_last),n.type ".
+		    "      and UNIX_TIMESTAMP(s.swapin_last) < $end ".
 		    "order by s.swapin_last desc) ".
 		    "union ".
 		    "(select s.eid,r.idx,s.nonlocal_id,s.slice_uuid, ".
-		    "       r.swapin_time,r.swapout_time,n.type, ".
-		    "      count(n.type) ".
+		    "       s.nonlocal_user_id, ".
+		    "       r.swapin_time,r.swapout_time, ".
+		    "       h.uid_idx,n.type,h.node_id ".
 		    "  from experiment_resources as r ".
 		    "left join experiment_stats as s on ".
 		    "     s.exptidx=r.exptidx  ".
@@ -1037,8 +1080,6 @@ sub Usage($$$)
 		    "      r.swapin_time <= $end) or ".
 		    "     (r.swapout_time > $start and ".
 		    "      r.swapout_time < $end)) ".
-		    "group by s.eid,r.idx,s.nonlocal_id,s.slice_uuid, ".
-		    "         r.swapin_time,r.swapout_time,n.type ".
 		    "order by r.swapin_time desc) "
 	);
 
@@ -1048,8 +1089,8 @@ sub Usage($$$)
     my @summary = ();
     my $lastin  = 0;
 
-    while (my ($eid,$idx,$urn,$slice_uuid,
-	       $swapin_time,$swapout_time,$type,$count) =
+    while (my ($eid,$idx,$urn,$slice_uuid,$user_urn,
+	       $swapin_time,$swapout_time,$swapper_idx,$type,$node_id) =
 	   $query_result->fetchrow_array()) {
 	# In the emulab-ops project, we nalloc nodes to experiments that
 	# have never been swapped in (like hwdown).
@@ -1057,7 +1098,30 @@ sub Usage($$$)
 	    if (!defined($swapin_time));
 	# No phys nodes.
 	next
-	    if ($count == 0 || !defined($type));
+	    if (!defined($type) || !defined($node_id));
+
+	my ($swapper_urn, $swapper_uid, $user);
+	#
+	# A slice created by a local user uses the real local user identity,
+	# but for a nonlocal user we have to find nonlocal identity.
+	#
+	if (defined($slice_uuid)) {
+	    require GeniHRN;
+	    my $hrn = GeniHRN->new($user_urn);
+	    if ($hrn->domain() eq $OURDOMAIN) {
+		$user = User->Lookup($hrn->id());
+	    }
+	    else {
+		$user = User->LookupNonLocal($user_urn);
+	    }
+	}
+	else {
+	    $user = User->Lookup($swapper_idx);
+	}
+	if (defined($user)) {
+	    $swapper_urn = $user->nonlocalurn()->asString();
+	    $swapper_uid = $user->uid();
+	}
 	
 	# The order by clause is important.
 	if ($swapin_time != $lastin) {
@@ -1066,14 +1130,86 @@ sub Usage($$$)
 			       "slice_uuid" => $slice_uuid || "",
 			       "start"  => $swapin_time,
 			       "end"    => $swapout_time || "",
-			       "types"  => {$type => {"count"  => $count}}});
+			       "user_uid" => $swapper_uid,
+			       "user_urn" => $swapper_urn,
+			       "types"  => {$type => {"count"  => 1}},
+			       "nodes"  => {$node_id => 1}});
 	    $lastin = $swapin_time;
 	    next;
 	}
 	my $blob = $summary[0];
-	$blob->{"types"}->{$type} = {"count" => $count};
+	if (!exists($blob->{"types"}->{$type})) {
+	    $blob->{"types"}->{$type} = {"count" => 0};
+	}
+	$blob->{"types"}->{$type}->{"count"} += 1;
+	$blob->{"nodes"}->{$node_id} = 1;
     }
     return \@summary;
+}
+
+#
+# Return count of how many nodes of a type in use.
+#
+sub TypeInUseCount($$)
+{
+    my ($self, $type) = @_;
+    my $pid = $self->pid();
+
+    my $result =
+	DBQueryWarn("select count(n.type) from reserved as r ".
+		    "left join nodes as n on n.node_id=r.node_id ".
+		    "where pid='$pid' and type='$type' ".
+		    "group by type");
+    return 0
+	if (!defined($result) || !$result->numrows);
+
+    my ($count) = $result->fetchrow_array();
+    return $count;
+}
+
+#
+# Lookup all experiments and leases for a project.
+#
+sub Experiments($)
+{
+    my ($self) = @_;
+    my $pid_idx = $self->pid_idx();
+    my @result  = ();
+    require Experiment;
+
+    my $query_result =
+	DBQueryWarn("select idx from experiments where pid='$pid_idx'");
+    if (!$query_result) {
+	return undef;
+    }
+    while (my ($idx) = $query_result->fetchrow_array()) {
+	my $experiment = Experiment->Lookup($idx);
+	if ($experiment) {
+	    push(@result, $experiment);
+	}
+    }
+    return \@result;
+}
+
+sub Leases($)
+{
+    my ($self) = @_;
+    my $pid = $self->pid();
+    my @result  = ();
+    require Lease;
+
+    my $query_result =
+	DBQueryWarn("select lease_idx from project_leases where pid='$pid'");
+    if (!$query_result) {
+	return undef;
+    }
+    while (my ($lease_idx) = $query_result->fetchrow_array()) {
+	my $lease = Lease->Lookup($lease_idx);
+	if ($lease) {
+	    push(@result, $lease);
+	}
+    }
+    return \@result;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

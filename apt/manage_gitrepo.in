@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -108,13 +108,17 @@ sub DoCommitList();
 sub DoCommitInfo();
 sub DoGetSource();
 sub DoGetRepoSize();
-sub GetRepoSource($;$);
+sub DoRemoveRepo();
+sub DoPruneStaleRepos();
+sub GetRepoSource($;$$);
 sub GetRepoSize($);
 sub GetBranchList($);
 sub GetTagList($);
 sub GetCommitList($$);
 sub GetCommitField($$$);
 sub GetRepoName($);
+sub GetProfile($);
+sub GetDefaultBranch($);
 sub RemoveRepo($);
 
 # Locals
@@ -193,6 +197,12 @@ elsif ($action eq "commitinfo") {
 elsif ($action eq "reposize") {
     DoGetRepoSize();
 }
+elsif ($action eq "remove") {
+    DoRemoveRepo();
+}
+elsif ($action eq "prune") {
+    DoPruneStaleRepos();
+}
 else {
     usage();
 }
@@ -262,14 +272,17 @@ sub DoCheckRemote()
 # Use -o to write the file to stdout or a file.
 # Use -r to remove repo after getting the script/rspec.
 # Add -u to update if repo is already cloned.
+# Add -c for a full checkout. Only admins for now.
 #
 sub DoClone()
 {
-    my $optlist = "o:rn:u";
+    my $optlist = "o:rn:uS:c";
     my $ofile;
     my $remove;
     my $reponame;
     my $update;
+    my $sourcename;
+    my $checkout = 0;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -283,11 +296,21 @@ sub DoClone()
     if ($repourl =~ /^(.*)$/) {
 	$repourl = $1;
     }
+    if (defined($options{"c"})) {
+	$checkout = 1;
+    }
     if (defined($options{"o"})) {
 	$ofile = $options{"o"};
     }
     if (defined($options{"r"})) {
 	$remove = 1;
+    }
+    if (defined($options{"S"})) {
+	$sourcename = $options{"S"};
+	# Silly taint check.
+	if ($sourcename =~ /^(.*)$/) {
+	    $sourcename = $1;
+	}
     }
     if (defined($options{"u"})) {
 	$update = 1;
@@ -310,7 +333,11 @@ sub DoClone()
 	$cmd .= "-n $reponame update";
     }
     else {
-	$cmd .= "-n $reponame clone '$repourl'";
+	$cmd .= "-n $reponame clone ";
+	if ($checkout) {
+	    $cmd .= " -c ";
+	}
+	$cmd .= "'$repourl'";
     }
     if ($debug) {
 	print "'$cmd'\n";
@@ -335,7 +362,7 @@ sub DoClone()
 	RemoveRepo($reponame);
 	fatal("Could not estimate repository size");
     }
-    if ($size > 500) {
+    if ($size > 150) {
 	RemoveRepo($reponame);
 	UserError("Repository is too big: greate then 500MiB");
     }
@@ -343,7 +370,7 @@ sub DoClone()
     #
     # Now get the geni-lib script or rspec, write it to the file or stdout.
     #
-    my $source = GetRepoSource($reponame);
+    my $source = GetRepoSource($reponame, undef, $sourcename);
     if (!defined($source)) {
 	RemoveRepo($reponame);
 	UserError("Could not find profile.py or profile.rspec in repository");
@@ -358,6 +385,7 @@ sub DoClone()
 	$webtask->log($log);
 	$webtask->hash($hash);
 	$webtask->size("$size MiB");
+	$webtask->name($reponame);
     }
     if (defined($ofile)) {
 	if ($ofile eq "-") {
@@ -404,6 +432,7 @@ sub DoUpdate()
     my $ofile;
     my $reponame;
     my $repourl;
+    my $sourcename;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -436,6 +465,7 @@ sub DoUpdate()
 	}
 	$reponame = $profile->reponame();
 	$repourl  = $profile->repourl();
+	$sourcename = $profile->name();
     }
     else {
 	usage();
@@ -483,9 +513,9 @@ sub DoUpdate()
     #
     # Now get the geni-lib script or rspec write it to the file or stdout.
     #
-    my $source = GetRepoSource($reponame);
+    my $source = GetRepoSource($reponame, undef, $sourcename);
     if (!defined($source)) {
-	UserError("Could not find profile.py or profile.rspec in repository");
+	UserError("Could not find profile source in repository");
     }
 
     #
@@ -532,7 +562,8 @@ sub DoGetSource()
     my $optlist = "n:p:o:";
     my $reponame;
     my $ofile;
-    my $which = "refs/heads/master";
+    my $which;
+    my $profile;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -542,13 +573,16 @@ sub DoGetSource()
 	$ofile = $options{"o"};	
     }
     $which = shift(@ARGV) if (@ARGV);
+    $profile = GetProfile(\%options);
     $reponame = GetRepoName(\%options);
+    $which = GetDefaultBranch($reponame) if (!defined($which));
 
     # Silly taint check.
     if ($which =~ /^(.*)$/) {
 	$which = $1;
     }
-    my $source = GetRepoSource($reponame, $which);
+    my $source = GetRepoSource($reponame, $which,
+			       defined($profile) ? $profile->name() : undef);
     if (!defined($source)) {
 	UserError("Could not find profile.py or profile.rspec in repository");
     }
@@ -582,13 +616,19 @@ sub DoGetSource()
 #
 # Grab a file from the bare repo.
 #
-sub GetRepoSource($;$)
+sub GetRepoSource($;$$)
 {
-    my ($reponame, $refspec) = @_;
+    my ($reponame, $refspec, $name) = @_;
     my $repodir = "$REPODIR/$reponame";
     my $source;
 
-    $refspec = "refs/heads/master"
+    # List of places to find the source.
+    my @locations = ("profiles/profile", "profile");
+    if (defined($name)) {
+	unshift(@locations, "profiles/$name", "$name");
+    }
+
+    $refspec = GetDefaultBranch($reponame)
 	if (!defined($refspec));
 
     # Lets see if this helps. We know there is a source file, but
@@ -599,37 +639,44 @@ sub GetRepoSource($;$)
     chdir("$repodir") or
 	fatal("Could not chdir to $repodir: $!");
 
-    if (system("$GIT cat-file -e ".
-	       "$refspec:profile.py >/dev/null 2>&1") == 0) {
-	$source = "profile.py";
+    foreach my $maybe (@locations) {
+	my $file;
+	    
+	if (system("$GIT cat-file -e ".
+		   "$refspec:${maybe}.py >/dev/null 2>&1") == 0) {
+	    $file = "${maybe}.py";
+	}
+	elsif (system("$GIT cat-file -e ".
+		      "  $refspec:${maybe}.rspec >/dev/null 2>&1") == 0) {
+	    $file = "${maybe}.rspec";
+	}
+	if ($file) {
+	    #
+	    # Do this seemingly odd cat-file, simply cause its the only way
+	    # --follow-symlinks works. It adds the commit hash as the first
+	    # line of output, so see below where that first line is killed.
+	    #
+	    $source =
+		emutil::ExecQuiet("echo '$refspec:$file' | ".
+				  "  $GIT cat-file --batch ".
+				  "    --follow-symlinks");
+	    if ($?) {
+		print STDERR $source;
+		return undef;
+	    }
+	    # Kill first line.
+	    $source =~ s/^(?:.*\n){1}//;
+	    last;
+	}
     }
-    elsif (system("$GIT cat-file -e ".
-		  "  $refspec:profile.rspec >/dev/null 2>&1") == 0) {
-	$source = "profile.rspec";
-    }
-    else {
+    if (!$source) {
 	print STDERR "$repodir, $refspec\n";
 	print STDERR `/usr/bin/id`;
 	print STDERR `/bin/ls -la`;
 	print STDERR "Could not find source code in repository: $reponame\n";
-	
 	return undef;
     }
-    #
-    # Do this seemingly odd cat-file, simply cause its the only way
-    # --follow-symlinks works. It adds the commit hash as the first
-    # line of output, so see below where that first line is killed.
-    #
-    my $stuff =
-      emutil::ExecQuiet("echo '$refspec:$source' | ".
-			"  $GIT cat-file --batch --follow-symlinks");
-    if ($?) {
-	print STDERR $stuff;
-	return undef;
-    }
-    # Kill first line.
-    $stuff =~ s/^(?:.*\n){1}//;
-    return $stuff;
+    return $source;
 }
 
 #
@@ -638,7 +685,7 @@ sub GetRepoSource($;$)
 sub DoLog()
 {
     my $optlist = "n:p:";
-    my $which = "refs/heads/master";
+    my $which;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -646,6 +693,7 @@ sub DoLog()
     }
     $which = shift(@ARGV) if (@ARGV);
     my $reponame = GetRepoName(\%options);
+    $which = GetDefaultBranch($reponame) if (!defined($which));
 
     my $log = GetCommitField($reponame, $which, "%B");
     print $log;
@@ -662,7 +710,7 @@ sub DoLog()
 sub DoHash()
 {
     my $optlist = "n:p:";
-    my $which = "refs/heads/master";
+    my $which;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -670,6 +718,7 @@ sub DoHash()
     }
     $which = shift(@ARGV) if (@ARGV);
     my $reponame = GetRepoName(\%options);
+    $which = GetDefaultBranch($reponame) if (!defined($which));
 
     my $hash = GetCommitField($reponame, $which, "%H");
     chomp($hash);
@@ -687,7 +736,7 @@ sub DoHash()
 sub GetCommitField($$$)
 {
     my ($reponame, $refspec, $field) = @_;
-    $refspec = "refs/heads/master"
+    $refspec = GetDefaultBranch($reponame)
 	if (!defined($refspec));
 
     # Silly taint check
@@ -729,6 +778,36 @@ sub RemoveRepo($)
 }
 
 #
+# Remove a repo
+#
+sub DoRemoveRepo()
+{
+    my $optlist = "n:p:";
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    my $reponame = GetRepoName(\%options);
+
+    if (! -e "$REPODIR/$reponame") {
+	fatal("Repository does not exist.");
+    }
+    if (RemoveRepo($reponame)) {
+	if (defined($webtask)) {
+	    $webtask->Exited(-1);
+	}
+	exit(-1);
+    }
+    else {
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	exit(0);
+    }
+}
+
+#
 # Return a branch list.
 #
 sub DoBranchList()
@@ -763,6 +842,9 @@ sub GetBranchList($)
     if (! -e "$REPODIR/$reponame") {
 	fatal("Repository does not exist.");
     }
+    # We will mark the default branch.
+    my $default_branch = GetDefaultBranch($reponame);
+
     chdir("$REPODIR/$reponame") or
 	fatal("Could not chdir to $REPODIR/$reponame");
 
@@ -783,9 +865,11 @@ sub GetBranchList($)
 	if ($line =~ /^(\w+)\s+(.*)$/) {
 	    my $name = basename($2);
 	    
-	    my $blob = {"hash"  => $1,
-			"name"  => $name,
-			"ref"   => $2};
+	    my $blob = {"hash"    => $1,
+			"name"    => $name,
+			"ref"     => $2,
+			"default" => ($2 eq $default_branch ? 1 : 0),   
+	    };
 	    # This is the list we return.
 	    push(@{ $branches }, $blob);
 
@@ -1020,6 +1104,9 @@ sub DoCommitInfo()
 	    $which = $1;
 	}
     }
+    else {
+	$which = GetDefaultBranch($reponame);
+    }
     if (! -e "$REPODIR/$reponame") {
 	fatal("Repository does not exist.");
     }
@@ -1045,6 +1132,7 @@ sub DoCommitInfo()
 		"when"      => $when,
 		"log"       => $log,
 		"reponame"  => $reponame,
+		"refspec"   => $which,
 		"size"      => "$size MiB"};
 
     if (defined($webtask)) {
@@ -1090,6 +1178,27 @@ sub GetRepoName($)
 	usage();
     }
     return $reponame;
+}
+
+#
+# Dig the profile out of the options list.
+#
+sub GetProfile($)
+{
+    my ($options) = @_;
+    my %options   = %{ $options };
+    
+    if (defined($options{"p"})) {
+	my $profile = APT_Profile->Lookup($options{"p"});
+	if (!defined($profile)) {
+	    fatal("No such profile");
+	}
+	if (!defined($profile->reponame())) {
+	    fatal("No such repository associated with profile");
+	}
+	return $profile;
+    }
+    return undef;
 }
 
 #
@@ -1162,6 +1271,73 @@ sub GetRepoSize($)
     $mebi = 1
 	if ($mebi == 0);
     return $mebi;
+}
+
+#
+# Prune stale repos (repos we left behind).
+#
+sub DoPruneStaleRepos()
+{
+    my $optlist  = "n";
+    my $impotent = 1;
+    my @stale    = ();
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"n"})) {
+	$impotent = 1;
+    }
+    chdir("$REPODIR") or
+	fatal("Could not chdir to $REPODIR");
+
+    opendir(DIR, $REPODIR) or
+	fatal("Unable to open directory $REPODIR");
+    
+    while (my $dirent = readdir(DIR)) {
+	next
+	    if ($dirent eq "." || $dirent eq "..");
+	next
+	    if (!ValidUUID($dirent));
+
+	my $query_result =
+	    DBQueryFatal("select uuid,deleted from apt_profile_versions ".
+			 "where reponame='$dirent'");
+	if (!$query_result->numrows) {
+	    if ($impotent) {
+		print "Would delete stale repo $dirent\n";
+	    }
+	    push(@stale, $dirent);
+	    next;
+	}
+    }
+    exit(0);    
+}
+
+#
+# Get estimated repository size.
+#
+sub GetDefaultBranch($)
+{
+    my ($reponame) = @_;
+    
+    chdir("$REPODIR/$reponame") or
+	fatal("Could not chdir to $REPODIR/$reponame");
+
+    my $branch = `$GIT symbolic-ref --short HEAD`;
+    if ($?) {
+	fatal("Could not get default branch for $reponame");
+    }
+    chomp($branch);
+
+    if ($branch =~ /^([-\w]+)$/) {
+	$branch = $1;
+    }
+    else {
+	fatal("Illegal default branch name: $branch");
+    }
+    return "refs/heads/$branch";
 }
 
 sub fatal($)

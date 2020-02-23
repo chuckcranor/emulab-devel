@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -226,6 +226,10 @@ sub CallMethodInternal($$$$@)
     }
 
     # Callback to write the data, when streaming to a file.
+    my $dots  = 0;
+    my $col   = 0;
+    my $total = 0;
+    
     my $callback = sub {
 	my ($data) = @_;
 	if ($data =~ /^\<\?xml/) {
@@ -236,7 +240,16 @@ sub CallMethodInternal($$$$@)
 	if (!defined($retval)) {
 	    die("Error writing data to output stream");
 	}
-	print ".";
+	$total += $retval;
+	$dots  += $retval;
+	if ($dots > (1024 * 1024)) {
+	    print ".";
+	    if ($col++ >= 50) {
+		printf(" %d MB\n", int($total / (1024 * 1024)));
+		$col = 0;
+	    }
+	    $dots = 0;
+	}
     };
 
     my $FBSD_MAJOR = 4;
@@ -414,6 +427,14 @@ sub CallMethodInternal($$$$@)
 					 $code, $message);
 	    }
 	}
+	elsif ($code == HTTP_GATEWAY_TIME_OUT()) {
+	    #
+	    # This is the same as the read timeout above.
+	    #
+	    return GeniResponse->new(GENIRESPONSE_NETWORK_ERROR,
+				     GENIRESPONSE_NETWORK_ERROR_TIMEDOUT,
+				     "Timed out talking to server");
+	}
 	#
 	# Otherwise bad news, we want to whine.
 	#
@@ -421,6 +442,9 @@ sub CallMethodInternal($$$$@)
     }
     # Streamed the data okay, we are done.
     if (defined($fp) && !defined($xmlgoo)) {
+	if ($total) {
+	    printf(" %d MB\n", int($total / (1024 * 1024)));
+	}
 	return GeniResponse->new(GENIRESPONSE_SUCCESS);
     }
 

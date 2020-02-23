@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2015-2017 University of Utah and the Flux Group.
+# Copyright (c) 2015-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -83,7 +83,7 @@ sub usage()
  
     exit(-1);
 }
-my $optlist = "du:p:o:n:CRB:N";
+my $optlist = "du:p:o:n:CRB:Nr:h:";
 my $basename = "py-cage";
 my $jailname = "py-cage-$$";
 my $user = "nobody";
@@ -92,6 +92,8 @@ my $gid;
 my $pfile;
 my $ofile;
 my $ifile;
+my $repo;
+my $reporef;
 my $limits = 1;
 my $haverctl = 0;
 
@@ -107,9 +109,17 @@ sub mysystem($);
 #
 # Configure variables
 #
+my $MAINSITE = @TBMAINSITE@;
 my $TBROOT   = "@prefix@";
 my $GENILIB  = "$TBROOT/lib/geni-lib/";
+my $REPODIR  = "/repos";
+my $GIT      = "/usr/local/bin/git";
 my $debug    = 0;
+
+# Watch for this being defined in the calling environment and use that.
+if (exists($ENV{"PYTHONPATH"})) {
+    $GENILIB = $ENV{"PYTHONPATH"};
+}
 
 #
 # Turn off line buffering on output
@@ -160,9 +170,11 @@ END {
 		msg("Destroying jail FS");
 
 		# XXX make sure special FSes get unmounted 
-		mysystem("umount $JAILROOT/$jailtag/dev/fd >/dev/null 2>&1");
-		mysystem("umount $JAILROOT/$jailtag/dev >/dev/null 2>&1");
-		mysystem("umount $JAILROOT/$jailtag$GENILIB_MNT >/dev/null 2>&1");
+		# XXX note that we avoid flushing, any result we needed
+		# has already been copied out.
+		mysystem("umount -n $JAILROOT/$jailtag/dev/fd >/dev/null 2>&1");
+		mysystem("umount -n $JAILROOT/$jailtag/dev >/dev/null 2>&1");
+		mysystem("umount -n $JAILROOT/$jailtag$GENILIB_MNT >/dev/null 2>&1");
 
 		if (mysystem("zfs destroy -f $ZFSBASE/$jailtag")) {
 		    print STDERR
@@ -223,6 +235,31 @@ if (defined($options{"B"})) {
 	usage();
     }
     $basename = $base;
+}
+if (defined($options{"r"})) {
+    $repo = $options{"r"};
+    # Must taint check
+    if ($repo =~ /^([-\w]+)$/) {
+	$repo = $1;
+    }
+    else {
+	print STDERR "Bad data in argument: $repo\n";
+	usage();
+    }
+    if (! -e "$REPODIR/$repo") {
+	print STDERR "No such repo '$repo'\n";
+	usage();
+    }
+    if (defined($options{"h"})) {
+	$reporef = $options{"h"};
+	# Must taint check
+	if ($reporef =~ /^([-\w\/]+)$/) {
+	    $reporef = $1;
+	}
+	else {
+	    die("Bad data in argument: $reporef");
+	}
+    }
 }
 
 #
@@ -347,12 +384,22 @@ my $jailrootdir = "$JAILROOT/$jailtag";
 # This way we don't have to copy in the geni-lib files and they
 # will always be up-to-date. Also make dev trees work.
 #
-# Note that we avoid gratuitous mountd HUP'ing by invoking mount_nullfs
-# directly instead of using mount. Alas, the jail command still does a
-# couple of "mount" commands, so we are still HUP happy.
+# Note that the system mount command wants to HUP mountd when it successfully
+# mounts ANY filesystem, whether exported or not. To avoid this on the
+# mothership, we mount ALL jail filesystems ourselves with the locally added
+# "-N" option which prevents mount from trying to send HUPs.
 #
-if (mysystem("mount_nullfs -o ro $GENILIB $jailrootdir$GENILIB_MNT")) {
-    print STDERR "Could not mount $GENILIB in $jailtag\n";
+my $mo = ($MAINSITE ? "-N" : "");
+if (mysystem("mount -t nullfs $mo -o ro $GENILIB $jailrootdir$GENILIB_MNT")) {
+    print STDERR "Could not mount $GENILIB in jail $jailtag\n";
+    exit(-1);
+}
+if (mysystem("mount -t devfs -o ruleset=4 $mo devfs $jailrootdir/dev")) {
+    print STDERR "Could not mount /dev in jail $jailtag\n";
+    exit(-1);
+}
+if (mysystem("mount -t fdescfs $mo null $jailrootdir/dev/fd")) {
+    print STDERR "Could not mount /dev/fd in jail $jailtag\n";
     exit(-1);
 }
 
@@ -381,6 +428,32 @@ if ($action != 1) {
 	mysystem("chown -R $uid:$gid $jailrootdir$tempdir")) {
 	print STDERR "Could not populate jail\n";
 	exit(-1);
+    }
+    if (defined($repo)) {
+	if (mysystem("$GIT clone -q $REPODIR/$repo ".
+		     "  ${jailrootdir}${tempdir}/repository")) {
+	    print STDERR "Could not clone repo in the jail\n";
+	    exit(-1);
+	}
+	# The root of the repository for module imports.
+	$ENV{"PYTHONPATH"} = "/${tempdir}/repository:" . $ENV{"PYTHONPATH"};
+	
+	if (defined($reporef)) {
+	    if ($reporef =~ m"^(refs/|)heads/(.+)") {
+		my $branchname = $2;
+
+		mysystem("cd ${jailrootdir}${tempdir}/repository; ".
+			 "$GIT checkout -q $branchname");
+	    }
+	    else {
+		mysystem("cd ${jailrootdir}${tempdir}/repository; ".
+			 "$GIT checkout -q $reporef");
+	    }
+	    if ($?) {
+		print STDERR "Could not clone repo in the jail\n";
+		exit(-1);
+	    }
+	}
     }
 
     #
@@ -522,7 +595,8 @@ sub start_jail($$)
     $args .= "allow.chflags=0 allow.mount=0 allow.mount.devfs=0 ";
     $args .= "allow.mount.nullfs=0 allow.mount.procfs=0 allow.mount.tmpfs=0 ";
     $args .= "allow.mount.zfs=0 allow.quotas=0 allow.socket_af=0 ";
-    $args .= "mount.devfs=1 mount.fdescfs=1 ";
+    # XXX we mount these manually
+    $args .= "mount.devfs=0 mount.fdescfs=0 ";
 
     # no networking
     $args .= "ip4=disable ip6=disable ";
@@ -571,8 +645,8 @@ sub limit_jail($$)
 	push @rules, "jail:$name:maxproc:deny=100/jail";
 	push @rules, "jail:$name:nthr:log=200/jail";
 	push @rules, "jail:$name:nthr:deny=200/jail";
-	push @rules, "jail:$name:openfiles:log=200/jail";
-	push @rules, "jail:$name:openfiles:deny=200/jail";
+	push @rules, "jail:$name:openfiles:log=500/jail";
+	push @rules, "jail:$name:openfiles:deny=500/jail";
 	push @rules, "jail:$name:vmemoryuse:log=1g/jail";
 	push @rules, "jail:$name:vmemoryuse:deny=1g/jail";
     }
@@ -608,7 +682,8 @@ sub run_jail($$$$)
     $args .= "allow.chflags=0 allow.mount=0 allow.mount.devfs=0 ";
     $args .= "allow.mount.nullfs=0 allow.mount.procfs=0 allow.mount.tmpfs=0 ";
     $args .= "allow.mount.zfs=0 allow.quotas=0 allow.socket_af=0 ";
-    $args .= "mount.devfs=1 mount.fdescfs=1 ";
+    # XXX we mount these manually
+    $args .= "mount.devfs=0 mount.fdescfs=0 ";
 
     # no networking
     $args .= "ip4=disable ip6=disable ";

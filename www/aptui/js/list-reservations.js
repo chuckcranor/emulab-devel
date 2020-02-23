@@ -2,11 +2,16 @@ $(function ()
 {
     'use strict';
 
-    var template_list   = ["reservation-list", "resusage-list",
-			   "oops-modal", "confirm-modal", "waitwait-modal"];
+    var template_list   = ["list-reservations", "reservation-list",
+			   "prereservation-list",
+			   "confirm-modal", "resusage-list", "resusage-graph",
+			   "oops-modal", "waitwait-modal"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
+    var mainTemplate    = _.template(templates["list-reservations"]);
     var listTemplate    = _.template(templates["reservation-list"]);
+    var prelistTemplate = _.template(templates["prereservation-list"]);
     var usageTemplate   = _.template(templates["resusage-list"]);
+    var graphTemplate   = _.template(templates["resusage-graph"]);
     var confirmString   = templates["confirm-modal"];
     var oopsString      = templates["oops-modal"];
     var waitwaitString  = templates["waitwait-modal"];
@@ -17,10 +22,11 @@ $(function ()
 	window.APT_OPTIONS.initialize(sup);
 	amlist  = decodejson('#amlist-json');
 
+	$('#main-body').html(mainTemplate({"amlist" : amlist}));
 	$('#oops_div').html(oopsString);	
 	$('#waitwait_div').html(waitwaitString);
 	$('#confirm_div').html(confirmString);
-
+	
 	LoadData();
     }
 
@@ -34,10 +40,7 @@ $(function ()
 	
 	_.each(amlist, function(urn, name) {
 	    var callback = function(json) {
-		var error = null;
-		var reservations = null;
-		
-		console.log("LoadData", json);
+		console.log("LoadData", name, json);
 		
 		// Kill the spinner.
 		amcount--;
@@ -47,183 +50,326 @@ $(function ()
 		if (json.code) {
 		    console.log("Could not get reservation data for " +
 				name + ": " + json.value);
-		    error = json.value;
-		}
-		else {
-		    reservations = json.value.reservations;
-		    rescount += reservations.length;
-		
-		    if (reservations.length == 0) {
-			if (amcount == 0 && rescount == 0) {
-			    // No reservations at all, show the message.
-			    $('#noreservations').removeClass("hidden");
-			}
-			return;
-		    }
-		}
-
-		// Generate the main template.
-		var html = listTemplate({
-		    "reservations" : reservations,
-		    "showidx"      : true,
-		    "showproject"  : true,
-		    "showuser"     : true,
-		    "showusing"    : true,
-		    "anonymous"    : false,
-		    "name"         : name,
-		    "isadmin"      : window.ISADMIN,
-		    "error"        : error,
-		});
-		html =
-		    "<div class='row' id='" + name + "'>" +
-		    " <div class='col-xs-12 col-xs-offset-0'>" + html +
-		    " </div>" +
-		    "</div>";
-
-		$('#main-body').prepend(html);
-
-		// On error, no need for the rest of this.
-		if (error)
+		    $('#' + name + " .res-error").html(json.value);
+		    $('#' + name + " .res-error").removeClass("hidden");
+		    $('#' + name).removeClass("hidden");
 		    return;
-
-		// Show the proper status now, we might change it later.
-		_.each(reservations, function(value, uuid) {
-		    var id = '#' + name +
-			' tr[data-uuid="' + uuid + '"] .status-column';
-
-		    if (value.cancel) {
-			$(id + " .status-canceled").removeClass("hidden");
-		    }
-		    else if (value.approved) {
-			$(id + " .status-approved").removeClass("hidden");
-		    }
-		    else {
-			$(id + " .status-pending").removeClass("hidden");
-
-			if (window.ISADMIN) {
-			    id = '#' + name +
-				' tr[data-uuid="' + uuid + '"] ';
-			    
-			    // Bind a deny handler,
-			    $(id + ' .deny-button').click(function() {
-				DenyReservation($(this).closest('tr'));
-				return false;
-			    });
-			    $(id + ' .deny-button').removeClass("invisible");
-			    // Bind an approve handler
-			    $(id + ' .approve-button').click(function() {
-				ApproveReservation($(this).closest('tr'));
-				return false;
-			    });
-			    $(id + ' .approve-button').removeClass("invisible");
-			}
-		    }
-		});
-
-		// Format dates with moment before display.
-		$('#' + name + ' .format-date').each(function() {
-		    var date = $.trim($(this).html());
-		    if (date != "") {
-			$(this).html(moment(date).format("lll"));
-		    }
-		});
-		$('#' + name + ' .tablesorter')
-		    .tablesorter({
-			theme : 'green',
-			// initialize zebra
-			widgets: ["zebra"],
-		    });
-		// Bind a delete handler.
-		$('#' + name + ' .delete-button').click(function() {
-		    DeleteReservation($(this).closest('tr'));
-		    return false;
-		});
-		if (window.ISADMIN) {
-		    // Bind info and warning handler.
-		    $('#' + name + ' .info-button').click(function() {
-			ReservationInfoOrWarning("info", $(this).closest('tr'));
-			return false;
-		    });
-		    $('#' + name + ' .warn-button').click(function() {
-			ReservationInfoOrWarning("warn", $(this).closest('tr'));
-			return false;
-		    });
-		    // Bind a cancel cancellation handler.
-		    $('#' + name + ' .cancel-cancel-button').click(function() {
-			CancelCancellation($(this).closest('tr'));
-			return false;
-		    });
 		}
-		if (_.has(json.value, "history")) {
-		    var history = json.value.history;
-		    console.info("history", name, history);
+		var prereservations = json.value.prereservations;
+		var reservations = json.value.reservations;
+		rescount += _.size(reservations) + _.size(prereservations);
 
-		    $('#' + name + " table tbody tr").each(function () {
-			// Grab the uuid, it is the key into the reservation list.
-			var uuid = $(this).attr('data-uuid');
-			var details = reservations[uuid];
-			var type    = details.type;
-			var urn     = details.project;
-			var pid     = details.pid;
-
-			//console.info("uuid", uuid, details);
-
-			// No history for the project.
-			if (!_.has(history, urn))
-			    return;
-
-			//console.info("history", urn, history[urn]);
-			/*
-			 * Search history entries and prune to only
-			 * those using the type reserved. Might not be
-			 * any experiments using this type.
-			 */
-			var entries = [];
-
-			for (var i = 0; i < history[urn].length; i++) {
-			    var entry = history[urn][i];
-
-			    if (_.has(entry.types, type)) {
-				entries.push(entry);
-			    }
-			}
-			if (entries.length == 0)
-			    return;
-
-			// Contents of the new modal.
-			var html = usageTemplate({"uuid"    : uuid,
-						  "type"    : type,
-						  "project" : pid,
-						  "history" : entries});
-			// And add to all the new modals.
-			$('#resusage-modals').append(html);
-
-			// Show/Activate the button in the list that shows modal.
-			$(this).find(".resusage-button").click(function (event) {
-			    event.preventDefault();
-			    sup.ShowModal('#' + "resusage-modal-" + uuid);
-			});
-			$(this).find(".resusage-button").removeClass("hidden");
-
-			// Format dates in the modal with moment before display.
-			$('#resusage-modal-' + uuid + ' .format-date').each(function() {
-			    var date = $.trim($(this).html());
-			    if (date != "") {
-				$(this).html(moment(date * 1000).format("lll"));
-			    }
-			});
-		    });
+		if (_.size(reservations) == 0 && _.size(prereservations) == 0) {
+		    if (amcount == 0 && rescount == 0) {
+			// No reservations at all, show the message.
+			$('#noreservations').removeClass("hidden");
+		    }
+		    return;
 		}
-		// This activates the tooltip subsystem.
-		$('[data-toggle="tooltip"]').tooltip({
-		    delay: {"hide" : 250, "show" : 250},
-		    placement: 'auto',
-		});
+		if (_.size(reservations)) {
+		    DoReservations(name, urn, json);
+		    $('#' + name + ' .reservation-panel')
+			.removeClass("hidden");
+		}
+		if (_.size(prereservations)) {
+		    DoPreReservations(name, urn, json);
+		    $('#' + name + ' .prereservation-panel')
+			.removeClass("hidden");
+		}
+		$('#' + name).removeClass("hidden");
 	    }
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
 						"ListReservations",
 						{"cluster" : name});
 	    xmlthing.done(callback);
+	});
+    }
+
+    /*
+     * Build the reservation table.
+     */
+    function DoReservations(name, urn, json)
+    {
+	var reservations = json.value.reservations;
+	var panelid      = "#" + name + " .reservation-panel";
+
+	// Generate the main template.
+	var html = listTemplate({
+	    "reservations" : reservations,
+	    "showcontrols" : true,
+	    "showproject"  : true,
+	    "showactivity" : true,
+	    "showuser"     : true,
+	    "showusing"    : true,
+	    "showstatus"   : true,
+	    "name"         : name,
+	    "isadmin"      : window.ISADMIN,
+	});
+	$(panelid + " .panel-body").html(html);
+
+	// Show the proper status now, we might change it later.
+	_.each(reservations, function(value, uuid) {
+	    var id = panelid + ' tr[data-uuid="' + uuid + '"] ';
+
+	    if (value.cancel) {
+		$(id + " .status-column .status-canceled")
+		    .removeClass("hidden");
+	    }
+	    else if (value.approved) {
+		$(id + " .status-column .status-approved")
+		    .removeClass("hidden");
+	    }
+	    else {
+		$(id + " .status-column .status-pending")
+		    .removeClass("hidden");
+
+		if (window.ISADMIN) {
+		    // Bind a deny handler,
+		    $(id + ' .deny-button').click(function() {
+			DenyReservation($(this).closest('tr'));
+			return false;
+		    });
+		    $(id + ' .deny-button').removeClass("invisible");
+		    // Bind an approve handler
+		    $(id + ' .approve-button').click(function() {
+			ApproveReservation($(this).closest('tr'));
+			return false;
+		    });
+		    $(id + ' .approve-button').removeClass("invisible");
+		}
+	    }
+	    if (value.approved &&
+		_.has(value, 'history') && value.history.length) {
+		$(id + " .resgraph-button").removeClass("invisible");
+
+		// Bind usage history graph.
+		$(id + ' .resgraph-button').click(function() {
+		    DrawHistoryGraph(value);
+		    return false;
+		});
+	    }
+	});
+
+	// Format dates with moment before display.
+	$(panelid + ' .format-date').each(function() {
+	    var date = $.trim($(this).html());
+	    if (date != "") {
+		$(this).html(moment(date).format("lll"));
+	    }
+	});
+	$(panelid + ' .tablesorter')
+	    .tablesorter({
+		theme : 'green',
+		// initialize zebra
+		widgets: ["zebra"],
+	    });
+	// Bind a delete handler.
+	$(panelid + ' .delete-button').click(function() {
+	    DeleteReservation($(this).closest('tr'));
+	    return false;
+	});
+	if (window.ISADMIN) {
+	    // Bind info and warning handler.
+	    $(panelid + ' .info-button').click(function() {
+		ReservationInfoOrWarning("info", $(this).closest('tr'));
+		return false;
+	    });
+	    $(panelid + ' .warn-button').click(function() {
+		ReservationInfoOrWarning("warn", $(this).closest('tr'));
+		return false;
+	    });
+	    // Bind a cancel cancellation handler.
+	    $(panelid + ' .cancel-cancel-button').click(function() {
+		CancelCancellation($(this).closest('tr'));
+		return false;
+	    });
+	}
+	if (_.has(json.value, "history")) {
+	    var history = json.value.history;
+	    console.info("history", name, history);
+
+	    $(panelid + " table tbody tr").each(function () {
+		// Grab the uuid, it is the key into the reservation list.
+		var uuid = $(this).attr('data-uuid');
+		var details = reservations[uuid];
+		var type    = details.type;
+		var urn     = details.project;
+		var pid     = details.pid;
+
+		//console.info("uuid", uuid, details);
+
+		// No history for the project.
+		if (!_.has(history, urn))
+		    return;
+
+		//console.info("history", urn, history[urn]);
+		/*
+		 * Search history entries and prune to only
+		 * those using the type reserved. Might not be
+		 * any experiments using this type.
+		 */
+		var entries = [];
+
+		for (var i = 0; i < history[urn].length; i++) {
+		    var entry = history[urn][i];
+
+		    if (_.has(entry.types, type)) {
+			entries.push(entry);
+		    }
+		}
+		if (entries.length == 0)
+		    return;
+
+		// Contents of the new modal.
+		var html = usageTemplate({"uuid"    : uuid,
+					  "type"    : type,
+					  "project" : pid,
+					  "history" : entries});
+		// And add to all the new modals.
+		$('#resusage-modals').append(html);
+
+		// Show/Activate the button in the list that shows modal.
+		$(this).find(".resusage-button").click(function (event) {
+		    event.preventDefault();
+		    sup.ShowModal('#' + "resusage-modal-" + uuid);
+		});
+		$(this).find(".resusage-button")
+		    .removeClass("invisible");
+
+		// Format dates in the modal with moment before display.
+		$('#resusage-modal-' + uuid + ' .format-date').each(function() {
+		    var date = $.trim($(this).html());
+		    if (date != "") {
+			$(this).html(moment(date * 1000).format("lll"));
+		    }
+		});
+	    });
+	}
+	// This activates the tooltip subsystem.
+	$(panelid + ' [data-toggle="tooltip"]').tooltip({
+	    delay: {"hide" : 250, "show" : 250},
+	    placement: 'auto',
+	});
+	// This activates the popover subsystem.
+	$(panelid + ' [data-toggle="popover"]').popover({
+	    placement: 'auto',
+	    container: 'body',
+	});
+    }
+    /*
+     * Build the prereservation table.
+     */
+    function DoPreReservations(name, urn, json)
+    {
+	var prereservations = json.value.prereservations;
+	var panelid      = "#" + name + " .prereservation-panel";
+
+	// Generate the main template.
+	var html = prelistTemplate({
+	    "prereservations" : prereservations,
+	    "showcontrols"    : true,
+	    "showproject"     : true,
+	    "showactivity"    : true,
+	    "showuser"        : true,
+	    "showusing"       : true,
+	    "showstatus"      : true,
+	    "name"            : name,
+	    "isadmin"         : window.ISADMIN,
+	});
+	$(panelid + " .panel-body").html(html);
+
+	// Format dates with moment before display.
+	$(panelid + ' .format-date').each(function() {
+	    var date = $.trim($(this).html());
+	    if (date != "") {
+		$(this).html(moment(date).format("lll"));
+	    }
+	});
+
+	// Show the proper status now, we might change it later.
+	_.each(prereservations, function(value, uuid) {
+	    var id = panelid + ' tr[data-uuid="' + uuid + '"] ';
+
+	    if (value.approved) {
+		$(id + " .status-column .status-approved")
+		    .removeClass("hidden");
+	    }
+	    else {
+		$(id + " .status-column .status-pending")
+		    .removeClass("hidden");
+
+		if (window.ISADMIN) {
+		    // Bind a deny handler,
+		    $(id + ' .deny-button').click(function() {
+			DenyReservation($(this).closest('tr'));
+			return false;
+		    });
+		    $(id + ' .deny-button').removeClass("invisible");
+		    // Bind an approve handler
+		    $(id + ' .approve-button').click(function() {
+			ApproveReservation($(this).closest('tr'));
+			return false;
+		    });
+		    $(id + ' .approve-button').removeClass("invisible");
+		}
+	    }
+	});
+	$(panelid + ' .tablesorter')
+	    .tablesorter({
+		theme : 'green',
+		// initialize zebra
+		widgets: ["zebra"],
+	    });
+	$(panelid + ' .tablesorter .tablesorter-childRow>td').hide();	
+	$(panelid + ' .tablesorter .show-childrow').click(function (event) {
+	    // Determine current state for changing the chevron.
+	    var row = $(this).closest('tr')
+		.nextUntil('tr.tablesorter-hasChildRow').find('td')[0];
+	    var display = $(row).css("display");
+	    if (display == "none") {
+		$(this).find("span")
+		    .removeClass("glyphicon-chevron-right")
+		    .addClass("glyphicon-chevron-down");
+	    }
+	    else {
+		$(this).find("span")
+		    .removeClass("glyphicon-chevron-down")
+		    .addClass("glyphicon-chevron-right");
+	    }
+	    $(row).toggle();
+	});
+
+	// Bind a delete handler.
+	$(panelid + ' .delete-button').click(function() {
+	    DeleteReservation($(this).closest('tr'));
+	    return false;
+	});
+	if (window.ISADMIN) {
+	    // Bind info and warning handler.
+	    $(panelid + ' .info-button').click(function() {
+		ReservationInfoOrWarning("info", $(this).closest('tr'));
+		return false;
+	    });
+	    $(panelid + ' .warn-button').click(function() {
+		ReservationInfoOrWarning("warn", $(this).closest('tr'));
+		return false;
+	    });
+	    // Bind a cancel cancellation handler.
+	    $(panelid + ' .cancel-cancel-button').click(function() {
+		CancelCancellation($(this).closest('tr'));
+		return false;
+	    });
+	}
+
+	// This activates the tooltip subsystem.
+	$(panelid + ' [data-toggle="tooltip"]').tooltip({
+	    delay: {"hide" : 250, "show" : 250},
+	    placement: 'auto',
+	});
+	// This activates the popover subsystem.
+	$(panelid + ' [data-toggle="popover"]').popover({
+	    placement: 'auto',
+	    container: 'body',
 	});
     }
 
@@ -234,9 +380,10 @@ $(function ()
 	// This is what we are deleting.
 	var uuid = $(row).attr('data-uuid');
 	var pid  = $(row).attr('data-pid');
+	var type = $(row).attr('data-type');
 	var cluster = $(row).attr('data-cluster');
 	var table   = $(row).closest("table");
-	
+
 	// Callback for the delete request.
 	var callback = function (json) {
 	    sup.HideModal('#waitwait-modal');
@@ -256,6 +403,7 @@ $(function ()
 						"Delete",
 						{"uuid"    : uuid,
 						 "pid"     : pid,
+						 "type"    : type,
 						 "cluster" : cluster});
 	    xmlthing.done(callback);
 	});
@@ -275,6 +423,7 @@ $(function ()
 	// This is what we are deleting.
 	var uuid = $(row).attr('data-uuid');
 	var pid  = $(row).attr('data-pid');
+	var type    = $(row).attr('data-type');
 	var cluster = $(row).attr('data-cluster');
 	var table   = $(row).closest("table");
 	
@@ -298,6 +447,7 @@ $(function ()
 						    "Delete",
 						    {"uuid"    : uuid,
 						     "pid"     : pid,
+						     "type"    : type,
 						     "cluster" : cluster,
 						     "reason"  : reason});
 		xmlthing.done(callback);
@@ -319,6 +469,7 @@ $(function ()
 	// This is what we are deleting.
 	var uuid = $(row).attr('data-uuid');
 	var cluster = $(row).attr('data-cluster');
+	var type    = $(row).attr('data-type');
 	
 	var callback = function (json) {
 	    sup.HideModal('#waitwait-modal');
@@ -337,10 +488,13 @@ $(function ()
 	// Bind the confirm button in the modal. Do the approval.
 	$('#approve-modal #confirm-approve').click(function () {
 	    sup.HideModal('#approve-modal', function () {
+		var message = $('#approve-modal .user-message').val().trim();
 		sup.ShowModal('#waitwait-modal');
 		var xmlthing = sup.CallServerMethod(null, "reserve",
 						    "Approve",
 						    {"uuid"    : uuid,
+						     "type"    : type,
+						     "message" : message,
 						     "cluster" : cluster});
 		xmlthing.done(callback);
 	    });
@@ -361,8 +515,9 @@ $(function ()
 	// This is what we are deleting.
 	var uuid    = $(row).attr('data-uuid');
 	var pid     = $(row).attr('data-pid');
-	var uid_idx = $(row).attr('data-creator_idx');
+	var uid_idx = $(row).attr('data-uid_idx');
 	var cluster = $(row).attr('data-cluster');
+	var type    = $(row).attr('data-type');
 	var table   = $(row).closest("table");
 	var warning = (which == "warn" ? 1 : 0);
 	var modal   = (warning ? "#warn-modal" : "#info-modal");
@@ -398,6 +553,7 @@ $(function ()
 			"pid"     : pid,
 			"uid_idx" : uid_idx,
 			"cluster" : cluster,
+			"type"    : type,
 			"cancel"  : cancel,
 			"message" : message};
 	    console.info("warninfo", args);
@@ -427,6 +583,7 @@ $(function ()
 	var uuid    = $(row).attr('data-uuid');
 	var pid     = $(row).attr('data-pid');
 	var cluster = $(row).attr('data-cluster');
+	var type    = $(row).attr('data-type');
 	var table   = $(row).closest("table");
 	
 	// Callback for the request.
@@ -452,6 +609,7 @@ $(function ()
 						    {"uuid"    : uuid,
 						     "clear"   : 1,
 						     "pid"     : pid,
+						     "type"    : type,
 						     "cluster" : cluster});
 		xmlthing.done(callback);
 	    });
@@ -464,7 +622,31 @@ $(function ()
 	})
 	sup.ShowModal("#cancel-cancel-modal");
     }
-    
+
+    // Draw the history bar graph.
+    function DrawHistoryGraph(details)
+    {
+	// Setup a handler to draw the large version graph in the modal.
+	$('#resusage-graph-modal').on('shown.bs.modal', function() {
+	    window.DrawResHistoryGraph({"details"    : details,
+					"graphid"    : '#resusage-graph-modal',
+					"xaxislabel" : true});
+	});
+	
+	// Make sure nothing left behind before we show it.
+	$('#resusage-graph-modal svg').html("");
+	// Gack, this stuff gets left behind.
+	d3.selectAll('.nvtooltip').remove();
+
+	$('#resusage-graph-modal .resusage-graph-details')
+	    .html("(" + details.nodes + " " + details.type + " nodes)");
+	
+	sup.ShowModal('#resusage-graph-modal', function () {
+	    // Need to unbind the hook above.
+	    $('#resusage-graph-modal').off('shown.bs.modal');
+	});
+
+    }
     // Helper.
     function decodejson(id) {
 	return JSON.parse(_.unescape($(id)[0].textContent));

@@ -18,6 +18,8 @@ USES+=		tk
 USE_XORG=	xext
 
 USE_AUTOTOOLS=	autoconf
+GNU_CONFIGURE=	yes
+USES+=		autoreconf
 USE_LDCONFIG=	yes
 
 MAKE_JOBS_UNSAFE=yes

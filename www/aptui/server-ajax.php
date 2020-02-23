@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -92,14 +92,18 @@ $routing = array("geni-login" =>
 						     "Do_Instantiate",
 						 "GetParameters" =>
                                                      "Do_GetParameters",
-						     "GetImageList" =>
+						 "GetPreviousBindings" =>
+                                                     "Do_GetPreviousBindings",
+                                                 "GetImageList" =>
 						     "Do_GetImageList",
 						 "GetImageInfo" =>
 						     "Do_GetImageInfo",
 						 "MarkFavorite" =>
 						     "Do_MarkFavorite",
 						 "ClearFavorite" =>
-						     "Do_ClearFavorite")),
+						     "Do_ClearFavorite",
+						 "RequestLicenses" =>
+						     "Do_RequestLicenses")),
 		 "manage_profile" =>
 			array("file"    => "manage_profile.ajax",
 			      "guest"   => false,
@@ -176,6 +180,8 @@ $routing = array("geni-login" =>
                                                      "Do_Reboot",
 						 "Reload" =>
                                                      "Do_Reload",
+						 "Recovery" =>
+                                                     "Do_Recovery",
 						 "Refresh" =>
 						     "Do_Refresh",
 						 "ReloadTopology" =>
@@ -186,6 +192,8 @@ $routing = array("geni-login" =>
                                                      "Do_Lockout",
 						 "Lockdown" =>
                                                      "Do_Lockdown",
+						 "Warn" =>
+                                                     "Do_WarnExperiment",
 						 "Quarantine" =>
 						     "Do_Quarantine",
 						 "SaveAdminNotes" =>
@@ -196,6 +204,8 @@ $routing = array("geni-login" =>
 						     "Do_OpenstackStats",
 						 "MaxExtension" =>
 						     "Do_MaxExtension",
+						 "GetRspec" =>
+						     "Do_GetRspec",
 						 "IgnoreFailure" =>
 						     "Do_IgnoreFailure",
 						 "dismissExtensionDenied" =>
@@ -274,12 +284,18 @@ $routing = array("geni-login" =>
                                                       "Do_ProjectProfileList",
                                                  "Toggle" =>
                                                      "Do_Toggle",
+                                                 "FreezeOrThaw" =>
+                                                     "Do_FreezeOrThaw",
                                                  "SendTestMessage" =>
                                                      "Do_SendTestMessage",
+                                                 "SendPasswordReset" =>
+                                                     "Do_SendPasswordReset",
                                                  "NagPI" =>
                                                      "Do_NagPI",
                                                  "AccountDetails" =>
                                                      "Do_AccountDetails",
+                                                 "ListParameterSets" =>
+                                                     "Do_ListParameterSets",
                                                  "AcceptAUP" =>
                                                      "Do_AcceptAUP")),
 		 "nag" =>
@@ -309,6 +325,8 @@ $routing = array("geni-login" =>
                                                       "Do_GroupList",
                                                  "UsageSummary" =>
                                                       "Do_UsageSummary",
+                                                 "Toggle" =>
+                                                     "Do_Toggle",
                                                  "ProjectProfile" =>
                                                       "Do_ProjectProfile")),
 		 "groups" =>
@@ -366,7 +384,65 @@ $routing = array("geni-login" =>
                                                  "RequestInfo" =>
                                                      "Do_RequestInfo",
                                                  "ReservationInfo" =>
-                                                     "Do_ReservationInfo")),
+                                                     "Do_ReservationInfo",
+                                                 "ReservationHistory" =>
+                                                     "Do_ReservationHistory")),
+		 "resgroup" =>
+			array("file"    => "resgroup.ajax",
+			      "guest"   => false,
+			      "methods" => array("Reserve" =>
+                                                     "Do_Reserve",
+                                                 "Validate" =>
+                                                     "Do_Validate",
+                                                 "ListReservationGroups" =>
+                                                     "Do_ListReservationGroups",
+                                                 "GetReservationGroup" =>
+                                                     "Do_GetReservationGroup",
+                                                 "Approve" =>
+                                                     "Do_Approve",
+                                                 "WarnUser" =>
+                                                     "Do_WarnUser",
+                                                 "Delete" =>
+                                                     "Do_Delete",
+                                                 "Refresh" =>
+                                                     "Do_Refresh",
+                                                 "Cancel" =>
+                                                     "Do_Cancel",
+                                                 "IdleDetection" =>
+                                                     "Do_IdleDetection",
+                                                 "RequestInfo" =>
+                                                     "Do_RequestInfo",
+                                                 "RangeReservations" =>
+                                                     "Do_RangeReservations",
+                                                 "RouteReservations" =>
+                                                     "Do_RouteReservations",
+                                                 "ReservationHistory" =>
+                                                     "Do_ReservationHistory")),
+		 "rfresgroup" =>
+			array("file"    => "rfresgroup.ajax",
+			      "guest"   => false,
+			      "methods" => array("Reserve" =>
+                                                     "Do_Reserve",
+                                                 "Validate" =>
+                                                     "Do_Validate",
+                                                 "ListReservations" =>
+                                                     "Do_ListReservations",
+                                                 "GetReservation" =>
+                                                     "Do_GetReservation",
+                                                 "Approve" =>
+                                                     "Do_Approve",
+                                                 "WarnUser" =>
+                                                     "Do_WarnUser",
+                                                 "Delete" =>
+                                                     "Do_Delete",
+                                                 "Cancel" =>
+                                                     "Do_Cancel",
+                                                 "RequestInfo" =>
+                                                     "Do_RequestInfo",
+                                                 "ReservationInfo" =>
+                                                     "Do_ReservationInfo",
+                                                 "ReservationHistory" =>
+                                                     "Do_ReservationHistory")),
 		 "images" =>
 			array("file"    => "images.ajax",
 			      "guest"   => false,
@@ -376,6 +452,82 @@ $routing = array("geni-login" =>
                                                      "Do_DeleteImage",
                                                  "ClassicImages" =>
                                                      "Do_ClassicImageList")),
+		 "image" =>
+			array("file"    => "image.ajax",
+			      "guest"   => false,
+			      "methods" => array("GetInfo" =>
+                                                     "Do_GetInfo",
+                                                 "SaveAdminNotes" =>
+                                                     "Do_SaveAdminNotes",
+                                                 "Delete" =>
+                                                     "Do_Delete",
+                                                 "SetSharing" =>
+                                                     "Do_SetSharing",
+                                                 "SetTypes" =>
+                                                     "Do_SetTypes",
+                                                 "Clone" =>
+                                                     "Do_Clone",
+                                                 "Snapshot" =>
+                                                     "Do_Snapshot",
+                                                 "SnapshotStatus" =>
+                                                     "Do_SnapshotStatus",
+                                                 "Modify" =>
+                                                     "Do_Modify")),
+		 "node" =>
+			array("file"    => "node.ajax",
+			      "guest"   => true,
+			      "methods" => array("GetInfo" =>
+                                                     "Do_GetInfo",
+                                                 "GetHardwareInfo" =>
+                                                     "Do_GetHardwareInfo",
+                                                 "Modify" =>
+                                                     "Do_Modify",
+                                                 "Reboot" =>
+                                                     "Do_Reboot",
+                                                 "GetLog" =>
+                                                     "Do_GetLog",
+                                                 "SaveLogEntry" =>
+                                                     "Do_SaveLogEntry",
+                                                 "DeleteLogEntry" =>
+                                                     "Do_DeleteLogEntry",
+                                                 "GetHistory" =>
+                                                     "Do_GetHistory",
+                                                 "GetRFViolations" =>
+                                                     "Do_GetRFViolations")),
+		 "nodetype" =>
+			array("file"    => "nodetype.ajax",
+                              # We wllow guest users to see type info.
+			      "guest"   => true,
+			      "methods" => array("GetInfo" =>
+                                                     "Do_GetInfo",
+                                                 "GetHardwareInfo" =>
+                                                     "Do_GetHardwareInfo",
+                                                 "SaveFlag" =>
+                                                     "Do_SaveFlag",
+                                                 "SaveFeature" =>
+                                                     "Do_SaveFeature",
+                                                 "SaveAttribute" =>
+                                                     "Do_SaveAttribute",
+                                                 "SaveOSImage" =>
+                                                     "Do_SaveOSImage",
+                                                 "DeleteFeature" =>
+                                                     "Do_DeleteFeature",
+                                                 "DeleteAttribute" =>
+                                                     "Do_DeleteAttribute",
+                                                 "DeleteOSImage" =>
+                                                     "Do_DeleteOSImage")),
+		 "vlan" =>
+			array("file"    => "vlan.ajax",
+			      "guest"   => false,
+			      "methods" => array("GetInfo" =>
+                                                     "Do_GetInfo",
+                                                 "List" =>
+                                                     "Do_List")),
+		 "wires" =>
+			array("file"    => "wires.ajax",
+			      "guest"   => false,
+			      "methods" => array("List" =>
+                                                     "Do_List")),
 		 "news" =>
 			array("file"    => "news.ajax",
 			      "guest"   => false,
@@ -392,8 +544,17 @@ $routing = array("geni-login" =>
 			      "guest"   => false,
 			      "methods" => array("ExperimentList" =>
                                                      "Do_ExperimentList",
+                                                 "ClassicExperimentList" =>
+                                                     "Do_ClassicExperimentList",
+                                                 "SearchIP" =>
+                                                     "Do_SearchIP",
                                                  "ExperimentErrors" =>
                                                      "Do_ExperimentErrors")),
+		 "activity" =>
+			array("file"    => "activity.ajax",
+			      "guest"   => false,
+			      "methods" => array("Search" =>
+                                                     "Do_Search")),
 		 "approve-projects" =>
 			array("file"    => "approve-projects.ajax",
 			      "guest"   => false,
@@ -414,7 +575,59 @@ $routing = array("geni-login" =>
 						    "Do_GetHealthStatus",
 						 "GetWirelessStatus" =>
 						    "Do_GetWirelessStatus")),
-
+		 "memlane" =>
+			array("file"    => "memlane.ajax",
+			      "guest"   => false,
+			      "methods" => array("HistoryRecord" =>
+						    "Do_HistoryRecord")),
+		 "aggregate-status" =>
+			array("file"    => "aggregate-status.ajax",
+			      "guest"   => false,
+			      "methods" => array("AggregateStatus" =>
+						    "Do_AggregateStatus")),
+		 "sitevars" =>
+			array("file"    => "sitevars.ajax",
+			      "guest"   => false,
+			      "methods" => array("GetSitevars" =>
+						    "Do_GetSitevars",
+                                                 "SetSitevar" =>
+						    "Do_SetSitevar",
+                                                 "ResetSitevar" =>
+						    "Do_ResetSitevar")),
+		 "licenses" =>
+			array("file"    => "licenses.ajax",
+			      "guest"   => false,
+			      "methods" => array("List" =>
+						    "Do_List",
+                                                 "Accept" =>
+                                                     "Do_Accept",
+                                                 "Reject" =>
+                                                     "Do_Reject",
+                                                 "Request" =>
+                                                     "Do_Request")),
+		 "paramsets" =>
+			array("file"    => "paramsets.ajax",
+			      "guest"   => false,
+			      "methods" => array("Create" =>
+                                                     "Do_Create",
+                                                 "Delete" =>
+                                                     "Do_Delete")),
+                 "powder-shutdown" =>
+			array("file"    => "powder-shutdown.ajax",
+			      "guest"   => false,
+			      "methods" => array("Shutdown" =>
+                                                     "Do_StartShutdown",
+                                                 "Status" =>
+                                                     "Do_ShutdownStatus")),
+                 "map-support" =>
+			array("file"    => "map-support.ajax",
+			      "guest"   => true,
+			      "methods" => array("GetFixedEndpoints" =>
+                                                     "Do_GetFixedEndpoints",
+                                                 "GetBaseStations" =>
+                                                     "Do_GetBaseStations",
+                                                 "GetMobileEndpoints" =>
+                                                     "Do_GetMobileEndpoints")),
 );
 
 #

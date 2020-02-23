@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2017 University of Utah and the Flux Group.
+# Copyright (c) 2003-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -64,7 +64,23 @@ $BOSS_PORT = "emulab-boss-1.8";
 $OPS_PORT  = "emulab-ops-1.4"; 
 $FS_PORT   = "emulab-fs-1.4";
 if ($FBSD_MAJOR > 4) {
-    if ($FBSD_MAJOR > 10 || ($FBSD_MAJOR == 10 && $FBSD_MINOR > 1)) {
+    if ($FBSD_MAJOR == 11) {
+	if ($FBSD_MINOR <= 1) {
+	    $BOSS_PORT = "emulab-boss-7.1";
+	    $OPS_PORT = "emulab-ops-7.1";
+	    $FS_PORT = "emulab-fs-7.1";
+	}
+        else {
+	    my $ver = "7.$FBSD_MINOR";
+	    $BOSS_PORT = "emulab-boss-$ver";
+	    $OPS_PORT = "emulab-ops-$ver";
+	    $FS_PORT = "emulab-fs-$ver";
+	}
+    } elsif ($FBSD_MAJOR == 10 && $FBSD_MINOR > 2) {
+	$BOSS_PORT = "emulab-boss-6.3";
+	$OPS_PORT = "emulab-ops-6.3";
+	$FS_PORT = "emulab-fs-6.3";
+    } elsif ($FBSD_MAJOR == 10 && $FBSD_MINOR > 1) {
 	$BOSS_PORT = "emulab-boss-6.2";
 	$OPS_PORT = "emulab-ops-6.2";
 	$FS_PORT = "emulab-fs-6.2";
@@ -177,6 +193,8 @@ $PREFIX			= $TBROOT;
 $MAINSITE		= @TBMAINSITE@;
 $PGENISUPPORT		= @PROTOGENI_SUPPORT@;
 $PROTOGENI_GENIRACK     = @PROTOGENI_GENIRACK@;
+$CONFIG_TARGETSYS       = @CONFIG_TARGETSYS@;
+$TARGETSYS_TARGET       = "@TARGETSYS_TARGET@";
 $PORTAL_ENABLE          = @PORTAL_ENABLE@;
 $ELABINELAB		= @ELABINELAB@;
 $DBNAME			= "@TBDBNAME@";
@@ -191,6 +209,7 @@ $OURDOMAIN		= '@OURDOMAIN@';
 $USERNODE		= '@USERNODE@';
 $FSNODE			= '@FSNODE@';
 $BOSSNODE		= '@BOSSNODE@';
+$WWWHOST		= '@WWWHOST@';
 $BOSSNODE_IP		= '@BOSSNODE_IP@';
 $USERNODE_IP		= '@USERNODE_IP@';
 $FSNODE_IP		= '@FSNODE_IP@';
@@ -216,6 +235,7 @@ $CVSSUPPORT		= @CVSSUPPORT@;
 $BUGDBSUPPORT		= @BUGDBSUPPORT@;
 $WIKISUPPORT		= @WIKISUPPORT@;
 $NOSHAREDFS		= @NOSHAREDFS@;
+$DISABLE_EXPORTS_SETUP  = @DISABLE_EXPORTS_SETUP@;
 # Are we a VM on boss?
 $OPSVM_ENABLE		= @OPSVM_ENABLE@;
 # mrouted no longer needed; replaced by IGMP querier in mfrisbeed
@@ -224,6 +244,7 @@ $ARCHSUPPORT		= @ARCHIVESUPPORT@;
 $BROWSER_CONSOLE_ENABLE = @BROWSER_CONSOLE_ENABLE@;
 $WITHZFS		= @WITHZFS@;
 $WITHAMD		= @WITHAMD@;
+$IMAGEUPLOADTOFS	= @IMAGEUPLOADTOFS@;
 
 #
 # Python/Perl paths
@@ -237,6 +258,7 @@ $EMULAB_PERL_PATH	= "/usr/bin/perl";
 $EMULAB_PYTHON_PATH	= "/usr/local/bin/python";
 $PORT_PERL_PATH		= "/usr/local/bin/perl5";
 $PORT_PYTHON_PATH	= "/usr/local/bin/python2";
+$PORT_PYTHON_PATH2	= "/usr/local/bin/python2.7";
 
 #
 # Some programs we use
@@ -368,7 +390,8 @@ $GENTOPOFILE		= "$PREFIX/libexec/gentopofile";
 $UPDATESITEVARS		= "$PREFIX/sbin/update_sitevars";
 $IMAGEIMPORT            = "$PREFIX/sbin/image_import";
 
-$PROTOUSER_KEY		= "$main::TOP_SRCDIR/install/elabman_dsa.pub";
+$PROTOUSER_DSAKEY	= "$main::TOP_SRCDIR/install/elabman_dsa.pub";
+$PROTOUSER_RSAKEY	= "$main::TOP_SRCDIR/install/elabman_rsa.pub";
 $ROOT_PRIVKEY		= "/root/.ssh/id_rsa";
 $ROOT_PUBKEY		= "$ROOT_PRIVKEY.pub";
 $ROOT_AUTHKEY		= "/root/.ssh/authorized_keys";

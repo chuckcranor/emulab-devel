@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -69,7 +69,7 @@ use vars qw(@ISA @EXPORT);
 	 TBSetExptFirewallVlan TBClearExptFirewallVlan
 	 TBNodeConsoleTail TBExptGetSwapoutAction TBExptGetSwapState
 	 TBNodeSubNodes
-	 TBNodeAdminOSID TBNodeNFSAdmin TBNodeDiskloadOSID
+	 TBNodeAdminOSID TBNodeRecoveryOSID TBNodeNFSAdmin TBNodeDiskloadOSID
 	 TBNodeType TBNodeTypeProcInfo TBNodeTypeBiosWaittime
 	 TBExptPortRange
 	 TBWideareaNodeID TBTipServers
@@ -578,6 +578,8 @@ sub TBPxelinuxConfig($;$)
 		# XXX how we identify the frisbee MFS
 		if ($path =~ /frisbee/) {
 		    $action = "mfsboot";
+		} elsif ($path =~ /recovery/) {
+		    $action = "recovery";
 		} else {
 		    $action = "nfsboot";
 		}
@@ -932,24 +934,19 @@ sub TBSetNodeLogEntry($$$$)
 #
 # Set event state for a node.
 #
-# usage: TBSetNodeEventState(char *node, char *state)
+# usage: TBSetNodeEventState(char *node, char *state; int fatal)
 #        Returns 1 if okay.
 #        Returns 0 if failed.
 #
-sub TBSetNodeEventState($$)
+sub TBSetNodeEventState($$;$)
 {
-    my ($node, $state) = @_;
+    my ($node, $state, $fatal) = @_;
 
-    #
-    # If using the event system, we send out an event for the state daemon to
-    # pick up. Otherwise, we just set the state in the database ourselves
-    #
-    require event;
-    
-    return event::EventSendFatal(objtype   => TBDB_TBEVENT_NODESTATE,
-				 objname   => $node,
-				 eventtype => $state,
-				 host      => $BOSSNODE);
+    if (!ref($node)) {
+	$node = LocalNodeLookup($node);
+    }
+    my $rc = $node->SetEventState($state, $fatal);
+    return (($rc == 0) ? 1 : 0);
 }
 
 #
@@ -1528,6 +1525,17 @@ sub TBNodeAdminOSID($)
     my $node = LocalNodeLookup($nodeid);
     if ($node) {
 	return $node->adminmfs_osid();
+    }
+    return 0;
+}
+
+sub TBNodeRecoveryOSID($)
+{
+    my ($nodeid) = @_;
+
+    my $node = LocalNodeLookup($nodeid);
+    if ($node) {
+	return $node->recoverymfs_osid();
     }
     return 0;
 }

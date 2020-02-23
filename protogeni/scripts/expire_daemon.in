@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -73,6 +73,7 @@ my $DELETEIMAGEDATA = "$TB/sbin/protogeni/deleteimagedata";
 my $IMPORTER      = "$TB/sbin/image_import";
 my $CLEANUPSLICE  = "$TB/sbin/cleanupslice";
 my $CLEANUPTICKET = "$TB/sbin/cleanupticket";
+my $MYSAURN       = "urn:publicid:IDN+@OURDOMAIN@+authority+sa";
 my $SLEEP_INTERVAL= 60;
 
 # un-taint path
@@ -134,6 +135,7 @@ require GeniCertificate;
 require GeniCredential;
 require GeniAggregate;
 require Genixmlrpc;
+require GeniImage;
 use GeniResponse;
 use Experiment;
 use EmulabConstants;
@@ -286,6 +288,25 @@ sub WarnSlices()
 
     while (my ($idx,$expires,$stamp,$created) =
 	   $query_result->fetchrow_array()) {
+	my $slice = GeniSlice->Lookup($idx);
+	if (!defined($slice)) {
+	    # Slice is gone, lets not worry.
+	    delete($expires{$idx});
+	    delete($warned{$idx});
+	    next;
+	}
+	#
+	# This stops us from expiring portal based experiments, the
+	# Portal will fire the DeleteSlice() operation when it decides to.
+	# Only some sites get this (Fixed Endpoints, Buses).
+	#
+	if (@PROTOGENI_NOPORTALEXPIRE@ && defined($slice->portal_tag()) &&
+	    defined($slice->speaksfor_urn())) {
+	    if ($slice->speaksfor_urn() eq $MYSAURN ||
+		$slice->speaksfor_urn() eq $GeniUtil::MOTHERSHIP_SAURN) {
+  		goto skip;
+	    }
+	}
 	if (exists($expires{$idx})) {
 	    #
 	    # We use expires to mark first warning, and to indicate that
@@ -315,13 +336,6 @@ sub WarnSlices()
 	#print STDERR "$stamp, $created, $grace, ". time() . "\n";
 
 	if ($stamp > time() + $grace) {
-	    delete($expires{$idx});
-	    delete($warned{$idx});
-	    next;
-	}
-	my $slice = GeniSlice->Lookup($idx);
-	if (!defined($slice)) {
-	    # Slice is gone, lets not worry.
 	    delete($expires{$idx});
 	    delete($warned{$idx});
 	    next;
@@ -399,13 +413,29 @@ sub WarnSlices()
 	    $warned{$idx} = time();
 	}
 	if (! $impotent) {
-	    SENDMAIL($emailaddr, "Sliver expiring at $OURDOMAIN",
-		     "Sliver $sliver_urn\n".
-		     "from slice $urn,\n".
-		     "is going to expire in approximately $diff $unit.\n\n".
-		     "Please renew it".
-		     " or let it expire if you are not using it anymore.\n",
-		     "Geni Operations <$TBOPS>");
+	    my $subject;
+	    my $message;
+	    if (!defined($slice->portal_tag())) {
+		$subject = "Sliver expiring at $OURDOMAIN";
+		$message = "Sliver $sliver_urn\n".
+		    "from slice $urn,\n".
+		    "is going to expire in approximately $diff $unit.\n\n".
+		    "Please renew it".
+		    " or let it expire if you are not using it anymore.\n";
+	    }
+	    else {
+		my $tag = ucfirst($slice->portal_tag());
+		my $url = $slice->portal_url();
+		my $eid = $slice->portal_eid();
+		$subject = "$tag portal experiment is expiring";
+		$message = "Your $tag portal experiment $eid at $OURDOMAIN".
+		    (defined($url) ?
+		     ":\n\n" . "   $url" . "\n\n" : "\n") .
+		    "is going to expire in approximately $diff $unit.\n\n".
+		    "Please extend it".
+		    " or let it expire if you are not using it anymore.\n";
+	    }
+	    SENDMAIL($emailaddr, $subject, $message, "$TBOPS");
 	}
 	$slice->UnLock();
       skip:
@@ -436,6 +466,18 @@ sub ExpireSlices()
 	    # Slice is gone, lets not worry.
 	    next;
 	}
+	#
+	# This stops us from expiring portal based experiments, the
+	# Portal will fire the DeleteSlice() operation when it decides to.
+	# Only some sites get this (Fixed Endpoints, Buses).
+	#
+	if (@PROTOGENI_NOPORTALEXPIRE@ && defined($slice->portal_tag()) &&
+	    defined($slice->speaksfor_urn())) {
+	    if ($slice->speaksfor_urn() eq $MYSAURN ||
+		$slice->speaksfor_urn() eq $GeniUtil::MOTHERSHIP_SAURN) {
+  		goto skip;
+	    }
+	}
 	if ($slice->Lock() != 0) {
 	    print STDERR "Could not lock slice $slice.\n";
 	    goto skip;
@@ -453,6 +495,7 @@ sub ExpireSlices()
 	}
 	if ($experiment->state() eq EXPTSTATE_PANICED()) {
 	    print STDERR "Refusing to terminate a paniced experiment\n";
+	    $slice->UnLock();
 	    goto skip;
 	}
 	
@@ -530,6 +573,54 @@ sub ExpireSlices()
 	    if (defined($slice));
 	$experiment->Flush()
 	    if (defined($experiment));
+    }
+}
+
+#
+# Terminate slices that are pending, see GeniCMV2::DeleteSlice().
+#
+sub TerminateSlices()
+{
+    my $query_result =
+	GeniDB::DBQueryWarn("select idx from geni_slices ".
+			    "where termination_pending is not null and ".
+			    "      shutdown is null and isshutdown=0");
+
+    while (my ($idx) = $query_result->fetchrow_array()) {
+	my $slice = GeniSlice->Lookup($idx);
+	my $aggregate;
+
+	if (!defined($slice)) {
+	    # Slice is gone, lets not worry.
+	    next;
+	}
+	if ($slice->Lock() != 0) {
+	    print STDERR "Could not lock slice $slice.\n";
+	    goto skip;
+	}
+	$aggregate = GeniAggregate->SliceAggregate($slice);
+	# This would be unusual, so call it quits.
+	if (!defined($aggregate)) {
+	    print STDERR "No aggregate for slice, skipping\n";
+	    $slice->UnLock();
+	    goto skip;
+	}
+	if (!$aggregate->Busy()) {
+	    if (GeniCM::CleanupDeadSlice($slice, 1) != 0) {
+		print STDERR "Could not terminate $slice\n";
+		SENDMAIL($TBOPS, "Could not terminate slice",
+			 "Could not terminate slice $slice");
+	    }
+	}
+	else {
+	    print STDERR "TerminateSlices: $slice is busy\n";
+	}
+	$slice->UnLock();
+      skip:
+	$slice->Flush()
+	    if (defined($slice));
+	$aggregate->Flush()
+	    if (defined($aggregate));
     }
 }
 
@@ -1205,16 +1296,32 @@ sub CheckIdle()
 		    print STDERR "** Slice can no longer be renewed!\n";
 
 		    if (!$impotent) {
-			SENDMAIL($emailaddr,
-			     "Sliver $sliver_urn may not be renewed",
-			     "Sliver $sliver_urn\n".
-			     "from slice $urn,\n".
-			     "has been mostly idle for too long,\n".
-			     "and is using $nodes physical nodes.\n\n".
-			     "$stats\n".
-			     "You will not be allowed to renew this sliver!\n",
-			     "Geni Operations <$TBOPS>", "CC: $TBAUTOMAIL");
+			my $subject;
+			my $message;
+			if (defined($slice->portal_tag())) {
+			    my $tag = ucfirst($slice->portal_tag());
+			    my $url = $slice->portal_url();
+			    my $eid = $slice->portal_eid();
+			    $subject = "$tag portal experiment ".
+				"may not be extended";
+			    $message = "Your $tag portal experiment $eid at ".
+				"$OURDOMAIN".
+				(defined($url) ?
+				 ":\n\n" . "   $url" . "\n\n" : "\n");
+			}
+			else {
+			    $subject = "Sliver $sliver_urn may not be renewed";
+			    $message = "Sliver $sliver_urn\n".
+				"from slice $urn,\n";
+			}
+			$message .= 
+			    "has been mostly idle for too long,\n".
+			    "and is using $nodes physical nodes.\n\n".
+			    "$stats\n".
+			    "You will not be allowed to extend it!\n";
 		
+			SENDMAIL($emailaddr, $subject, $message,
+				 $TBOPS, "CC: $TBAUTOMAIL");
 			$slice->SetRenewLimit(0);
 		    }
 		}
@@ -1232,20 +1339,49 @@ sub CheckIdle()
 		    print STDERR "   Sending mail to $geniuser about ".
 			"idle sliver $aggregate\n";
 
-		    SENDMAIL($emailaddr, "Sliver $sliver_urn is mostly idle",
-			"Sliver $sliver_urn\n".
-			"from slice $urn,\n".
-			"has been mostly idle for an unusual length of time,\n".
-			"and is using $nodes physical nodes.\n\n".
-			"$stats\n".
-			($idlecheck_norenew ?
-			 ($norenew ?
-			  "You may no longer renew this sliver, and it might ".
-			  "be terminated " :
-			  "You will not be allowed to renew this sliver ") :
-			 "This sliver might be terminated ") .
-			"if it stays idle.\n",
-			"Geni Operations <$TBOPS>", "CC: $TBAUTOMAIL");
+		    my $subject;
+		    my $message;
+		    if (defined($slice->portal_tag())) {
+			my $tag = ucfirst($slice->portal_tag());
+			my $url = $slice->portal_url();
+			my $eid = $slice->portal_eid();
+			$subject = "$tag portal experiment ".
+			    "is mostly idle";
+			$message = "Your $tag portal experiment $eid at ".
+			    "$OURDOMAIN".
+			    (defined($url) ?
+			     ":\n\n" . "   $url" . "\n\n" : "\n") .
+			    "has been mostly idle for an unusual length ".
+			    "of time,\n".
+			    "and is using $nodes physical nodes.\n\n".
+			    "$stats\n".
+			    ($idlecheck_norenew ?
+			     ($norenew ?
+			      "You may no longer extend this experiment, and ".
+			      "it might be terminated " :
+			      "You will not be allowed to extend this ".
+			      "experiment ") :
+			     "This experiment might be terminated ") .
+			    "if it stays idle.\n",
+		    }
+		    else {
+			$subject = "Sliver $sliver_urn is mostly idle";
+			$message = "Sliver $sliver_urn\n".
+			    "from slice $urn,\n".
+			    "has been mostly idle for an unusual length ".
+			    "of time,\n".
+			    "and is using $nodes physical nodes.\n\n".
+			    "$stats\n".
+			    ($idlecheck_norenew ?
+			     ($norenew ?
+			      "You may no longer renew this sliver, and it ".
+			      "might be terminated " :
+			      "You will not be allowed to renew this sliver ") :
+			     "This sliver might be terminated ") .
+			    "if it stays idle.\n",
+		    }
+		    SENDMAIL($emailaddr, $subject, $message,
+			     $TBOPS, "CC: $TBAUTOMAIL");
 
 		    emdb::DBQueryWarn("update experiments set ".
 				      "   swap_requests=swap_requests+1, ".
@@ -1267,6 +1403,55 @@ sub CheckIdle()
       skip:
 	$slice->Flush()
 	    if (defined($slice));
+    }
+}
+
+#
+# Check Aggregate states/status. 
+#
+sub CheckAggregates()
+{
+    my $query_result =
+	GeniDB::DBQueryWarn("select idx from geni_aggregates ".
+			    "where type='Aggregate' and status!='ready'");
+
+    while (my ($idx) = $query_result->fetchrow_array()) {
+	my $aggregate = GeniAggregate->Lookup($idx);
+
+	if (!defined($aggregate)) {
+	    # aggregate is gone, lets not worry.
+	    next;
+	}
+	my $slice = $aggregate->GetSlice();
+	if (!defined($slice)) {
+	    # slice is gone, lets not worry.
+	    $aggregate->Flush();
+	    next;
+	}
+	if ($slice->Lock() != 0) {
+	    goto skip;
+	}
+	my $state  = $aggregate->state();
+	my $status = $aggregate->status();
+	my $stamp  = $aggregate->status_state_timestamp();
+	
+	#
+	# If an aggregate have been trying to update users for more then
+	# 30 minutes, kill that and return the aggregate to normal status.
+	#
+	if ($state eq "updating_users" && time() - $stamp > 1 * 60) {
+	    if ($impotent) {
+		print STDERR "Would cancel update accounts for $aggregate\n";
+	    }
+	    else {
+		print STDERR "Canceling update accounts for $aggregate\n";
+		$aggregate->CancelUpdateAccounts();
+	    }
+	}
+	$slice->UnLock();
+      skip:
+	$slice->Flush();
+	$aggregate->Flush();
     }
 }
 
@@ -1356,131 +1541,8 @@ sub NotifyPortal()
     %notify_timestamps = %tmp;
 }
 
-#
-# Deal with image tracker stuff. 
-#
-sub HandleImageTracking()
-{
-    if (!GetSiteVar("protogeni/use_imagetracker")) {
-	return;
-    }
-
-    #
-    # Look for images deletions. Process in order deleted.
-    #
-    my $query_result =
-	DBQueryWarn("select * from image_deletions order by deleted asc");
-    return
-	if (!$query_result);
-    while (my $row = $query_result->fetchrow_hashref()) {
-	my $urn  = $row->{'urn'};
-	my $uuid = $row->{'image_uuid'};
-
-	if ($impotent) {
-	    print "Would trigger image delete for $urn\n";
-	    next;
-	}
-
-	my $output = emutil::ExecQuiet("$DELETEIMAGEDATA '$urn' $uuid");
-	if ($?) {
-	    print $output;
-	    SENDMAIL($TBOPS,
-		     "Could not delete image data at the IMS for $urn/$uuid",
-		     $output,
-		     $TBOPS);
-	    next;
-	}
-	DBQueryWarn("delete from image_deletions ".
-		    "where urn='$urn' and image_uuid='$uuid'");
-    }
-    
-    #
-    # Look for images notifications; these are new local snapshots that need
-    # to be copied back to their origin, so we have to tell the origin of that
-    # image.
-    #
-    $query_result =
-	DBQueryWarn("select * from image_notifications");
-    return
-	if (!$query_result);
-    while (my $row = $query_result->fetchrow_hashref()) {
-	my $imageid = $row->{'imageid'};
-	my $image   = OSImage->Lookup($imageid);
-	if (!defined($image)) {
-	    print STDERR "$imageid no longer exists. Skipping notification.\n";
-	    next;
-	}
-	if ($impotent) {
-	    print "Would trigger update for $image\n";
-	    next;
-	}
-	
-	#
-	# Lets avoid needless errors cause the image is locked, take the
-	# lock here and call it with the nolock option.
-	#
-	if ($image->Lock()) {
-	    print STDERR "$image is locked, skipping\n";
-	    next;
-	}
-	my $output = emutil::ExecQuiet("$TRIGGERUPDATE -l $imageid");
-	my $status = $?;
-	$image->Unlock();
-	if ($?) {
-	    print $output;
-	    SENDMAIL($TBOPS,
-		     "Could not trigger an image update for $imageid",
-		     $output,
-		     $TBOPS);
-	}
-    }
-
-    #
-    # Look for images that need to be copied back (cause we were notified
-    # in the loop above). These are images that need to be imported from
-    # the cluster where the snapshot was made.
-    #
-    $query_result =
-	DBQueryWarn("select * from image_updates");
-    return
-	if (!$query_result);
-    
-    while (my $row = $query_result->fetchrow_hashref()) {
-	my $imageid = $row->{'imageid'};
-	my $image   = OSImage->Lookup($imageid);
-	
-	if (!defined($image)) {
-	    print STDERR "$imageid no longer exists. Skipping update ...\n";
-	    next;
-	}
-	if ($impotent) {
-	    print "Would import new version of $image\n";
-	    next;
-	}
-	my $output = emutil::ExecQuiet("$IMPORTER -d -g -r -c $imageid");
-	if ($?) {
-	    print $output;
-	    SENDMAIL($TBOPS,
-		     "Could not import image update for $imageid",
-		     $output,
-		     $TBOPS);
-	}
-    }
-    my $opt = ($impotent ? "-n" : "");
-
-    # Trigger a posting to the IMS for any new images.
-    my $output = emutil::ExecQuiet("$POSTIMAGEDATA -v $opt all");
-    print $output;
-    if ($? && $? >> 8 == 256) {
-	SENDMAIL($TBOPS,
-		 "Could not post image data to the IMS",
-		 $output,
-		 $TBOPS);
-    }
-}
-
 if ($oneshot) {
-    HandleImageTracking();
+    WarnSlices();
     exit(0);
 }
 
@@ -1523,6 +1585,7 @@ while (1) {
     ExpireTickets();
     WarnSlices();
     ExpireSlices();
+    TerminateSlices();
 
     #
     # Run the idle check periodically. 
@@ -1542,11 +1605,10 @@ while (1) {
 	$reportcounter = 0;
     }
     NotifyPortal();
-    HandleImageTracking();
+    CheckAggregates();
 
     # Be certain stale info is gone.
-    Experiment->FlushAll();
-    Node->FlushAll();
+    emutil::FlushCaches();
     GeniUtil::FlushCaches();
 
   loop:

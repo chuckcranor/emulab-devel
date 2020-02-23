@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -113,6 +113,18 @@ function Do_CreateSecret()
 	return;
     }
     $certificate = $ajax_args["certificate"];
+
+    #
+    # Watch for an expired or invalid certificate. 
+    #
+    if (VerifyLocalUser(null, $certificate)) {
+        SPITAJAX_ERROR(1, "Cannot verify your certificate, please regenerate ".
+                       "your certificate at your home portal (typically ".
+                       "this would be https://portal.geni.net/). You must ".
+                       "also flush your old certificate from ".
+                       "from the Geni Authorization Tool.");
+        return;
+    }
 
     if (!isset($ajax_args["r1_encrypted"])) {
 	SPITAJAX_ERROR(1, "Missing encrypted random string");
@@ -309,6 +321,19 @@ function Do_VerifySpeaksfor()
     else {
         $this_user = User::LookupNonLocal($info["urn"]);
 
+        #
+        # Check project membership before we go any further. We do not
+        # allow users to come in on this interface unless they have
+        # project membership at their home portal.
+        #
+        if (CheckCredentials($_SESSION["certificate"], $speaksfor, $info)) {
+            SPITAJAX_ERROR(1, "Cannot verify your project membership ".
+                           "at your home portal. Are you a member of any ".
+                           "valid projects?");
+            session_destroy();
+            return;
+        }
+
         if (!$this_user) {
             if (!$TBMAINSITE) {
                 SPITAJAX_ERROR(1, "You do not have an account at this site");
@@ -421,6 +446,40 @@ function CreateNonLocalUser($urn, $email)
 }
 
 #
+# Check membership at home portal before we do anything permanent.
+# 
+function CheckCredentials($cert, $cred, $info)
+{
+    global $TBMAINSITE, $suexec_output;
+
+    $credfile = tempnam("/tmp", "cert");
+    $certfile = tempnam("/tmp", "cred");
+
+    $fp = fopen($credfile, "w");
+    fwrite($fp, $cred);
+    fclose($fp);
+    $fp = fopen($certfile, "w");
+    fwrite($fp, $cert);
+    fclose($fp);
+    chmod($certfile, 0666);
+    chmod($credfile, 0666);
+    
+    $retval = SUEXEC("nobody", "nobody",
+		     "webcheckgeniuser $credfile $certfile",
+		     SUEXEC_ACTION_IGNORE);
+
+    if ($retval) {
+        TBERROR("checkgeniuser failed.\n ".
+                print_r($info, TRUE) . "\n" .
+                "Cred:\n${$cred}\n", 0);
+    }
+    unlink($credfile);
+    unlink($certfile);
+
+    return $retval;
+}
+
+#
 # Update the certificate/credential for the user.
 # 
 function UpdateCredentials($user, $cert, $cred, &$error)
@@ -473,14 +532,15 @@ function UpdateCredentials($user, $cert, $cred, &$error)
 function VerifyLocalUser($user, $cert)
 {
     $certfile = tempnam("/tmp", "cert");
+    $args = ($user ? "" : "-e");
 
     $fp = fopen($certfile, "w");
     fwrite($fp, $cert);
     fclose($fp);
     chmod($certfile, 0666);
     
-    $retval = SUEXEC("nobody", "nobody", "webverifycert $certfile",
-		     SUEXEC_ACTION_CONTINUE);
+    $retval = SUEXEC("nobody", "nobody", "webverifycert $args $certfile",
+		     SUEXEC_ACTION_IGNORE);
     unlink($certfile);
     if ($retval)
 	return -1;

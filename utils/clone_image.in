@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,7 +59,7 @@ sub usage()
 	  "       -w      Wait for image to be created\n");
     exit(-1);
 }
-my $optlist     = "densg:wFr:b:UB:";
+my $optlist     = "densg:wFr:b:UB:t:";
 my $debug       = 0;
 my $wholedisk   = 0;
 my $impotent    = 0;
@@ -74,6 +74,8 @@ my $origin_uuid;
 my $bsname;
 my $base_image;
 my $image;
+my $webtask_id;
+my $webtask;
 
 #
 # Configure variables
@@ -109,6 +111,7 @@ use Project;
 use OSImage;
 use Image;   # For datasets
 use Node;
+use WebTask;
 use EmulabFeatures;
 
 # Protos
@@ -163,11 +166,13 @@ if (defined($options{"b"})) {
 	fatal("Bad data in $bsname.");
     }
 }
-if (defined($options{"g"})) {
-    $global = $options{"g"};
-}
-elsif (defined($options{"r"})) {
-    $shared = $options{"r"};
+if (defined($options{"t"})) {
+    $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("No such webtask");
+    }
+    $webtask->AutoStore(1);
 }
 usage()
     if (@ARGV != 2);
@@ -261,6 +266,14 @@ if (defined($image)) {
     #
     if (!($image->ezid() || $image->isdataset())) {
 	fatal("Only EZ images or datasets on this path.");
+    }
+
+    #
+    # Do not allow a deprecated image to be snapshot, even if its
+    # deprecated with warning only.
+    #
+    if ($image->deprecated() && !$this_user->IsAdmin()) { 
+	fatal("Not allowed to clone/snapshot a deprecated image!");
     }
 
     #
@@ -399,9 +412,13 @@ if (defined($image)) {
     if ($nosnapshot) {
 	print "Not taking a snapshot, as directed\n"
 	    if ($debug);
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
 	exit(0);
     }
     my $opts = "-p $pid ";
+    $opts   .= "-t $webtask_id " if (defined($webtask));
     $opts   .= "-w " if ($waitmode);
     $opts   .= "-F " if ($nodelta);
     $opts   .= "-U " if ($update_prepare);
@@ -432,6 +449,42 @@ DoNew:
 #
 if (!$base_image->ezid()) {
     fatal("Cannot clone a non-ez image");
+}
+
+#
+# Figure out the global/shared bits for below.
+#
+if (defined($options{"g"})) {
+    $global = $options{"g"};
+}
+elsif (defined($options{"r"})) {
+    $shared = $options{"r"};
+}
+elsif ($experiment->pid() eq $base_image->pid() || $experiment->geniflags()) {
+    # Not crossing projects, so inherit from the base image.
+    # Or if on the geni path.
+    if ($base_image->global()) {
+	$global = 1;
+    }
+    elsif ($base_image->shared()) {
+	$shared = 1;
+    }
+}
+elsif ($base_image->IsSystemImage()) {
+    # On the Geni Path, everything starts out global so it can be exported.
+    # Note that if we import an non-global image into a project, we will
+    # inherit that when cloning, via the clause above.
+    if ($experiment->geniflags()) {
+	$global = 1;
+    }
+}
+
+#
+# Do not allow cloning a deprecated image, even if its deprecated with
+# warning only.
+#
+if ($base_image->deprecated() && !$this_user->IsAdmin()) { 
+    fatal("Not allowed to clone/snapshot a deprecated image!");
 }
 
 #
@@ -509,6 +562,9 @@ if (defined($base_image)) {
     $xmlfields{"loadpart"}        = $base_image->loadpart();
     $xmlfields{"noexport"}        = $base_image->noexport();
     $xmlfields{"noclone"}         = $base_image->noclone();
+    if ($base_image->format() ne 'ndz') {
+	$xmlfields{"format"} = $base_image->format();
+    }
 
     # Short form uses wholedisk instead. Should fix this. 
     if ($base_image->loadpart() == 0 && $base_image->loadlength() == 4) {
@@ -651,6 +707,9 @@ if ($debug) {
 if ($nosnapshot) {
     print "Not taking a snapshot, as directed\n"
 	if ($debug);
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
     exit(0);
 }
 
@@ -661,6 +720,7 @@ if ($nosnapshot) {
 $nodelta = 1;
 
 my $opts = "-p $pid ";
+$opts   .= "-t $webtask_id " if (defined($webtask));
 $opts   .= "-w " if ($waitmode);
 $opts   .= "-F " if ($nodelta);
 $opts   .= "-U " if ($update_prepare);
@@ -678,6 +738,17 @@ sub fatal($)
 {
     my ($mesg) = @_;
 
+    if (defined($webtask)) {
+	#
+	# If we threw an error in create_image, we do not want to
+	# overwrite that image.
+	#
+	$webtask->Refresh();
+	if (!$webtask->HasExited()) {
+	    $webtask->output($mesg);
+	    $webtask->Exited(1);
+	}
+    }
     die("*** $0:\n".
 	"    $mesg\n");
 }

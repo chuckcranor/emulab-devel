@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2013 University of Utah and the Flux Group.
+# Copyright (c) 2006-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -129,7 +129,10 @@ class GeniSlice
     function needsfirewall(){ return $this->field('needsfirewall'); }
     function monitor_pid()  { return $this->field('monitor_pid'); }
     function expiration_max()  { return $this->field('expiration_max'); }
+    function speaksfor_urn(){ return $this->field('speaksfor_urn'); }
     function renew_limit()  { return $this->field('renew_limit'); }
+    function portal_tag()   { return $this->field('portal_tag'); }
+    function portal_url()   { return $this->field('portal_url'); }
 
     #
     # Class function to return a list of all slices.
@@ -574,5 +577,33 @@ class QuickVM
 	$uuid = $row[0];
  	return QuickVM::Lookup($uuid);
     }
+}
+
+#
+# Generate a Portal URL.
+#
+function GenPortalURL($active, $urn, $slice_uuid)
+{
+    global $OURDOMAIN, $TBBASE;
+    
+    if (! (preg_match("/^[^+]*\+([^+]+)\+([^+]+)\+(.+)$/",
+                      $urn, $matches) &&
+           ($matches[1] == $OURDOMAIN || $matches[1] == "emulab.net"))) {
+        return null;
+    }
+    $domain = $matches[1];
+    if ($domain == $OURDOMAIN) {
+        $portal_url = "$TBBASE/portal/";
+    }
+    else {
+        $portal_url = "https://www.emulab.net/portal/";
+    }
+    if ($active) {
+        $portal_url .= "status.php?slice_uuid=$slice_uuid";
+    }
+    else {
+        $portal_url .= "memlane.php?slice_uuid=$slice_uuid";
+    }
+    return $portal_url;
 }
 ?>

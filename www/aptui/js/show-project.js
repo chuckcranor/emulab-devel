@@ -22,9 +22,13 @@ $(function ()
 	
 	// Generate the main template.
 	var html = mainTemplate({
+	    disabledset    : window.UI_DISABLE_DATASETS,
+	    disabledres    : window.UI_DISABLE_RESERVATIONS,
 	    emulablink     : window.EMULAB_LINK,
 	    isadmin        : window.ISADMIN,
 	    target_project : window.TARGET_PROJECT,
+	    showmore       : (window.ISLEADER || window.ISMANAGER ||
+			      window.ISADMIN ? 1 : 0),
 	});
 	$('#main-body').html(html);
 	$('#waitwait_div').html(waitString);
@@ -120,27 +124,73 @@ $(function ()
 	    }
 	    var template = _.template(experimentString);
 
+	    // Project leaders and admins get a terminate button.
+	    var showterm = (window.ISLEADER || window.ISADMIN ? true : false);
+
 	    $('#experiments_content')
 		.html(template({"experiments" : json.value,
 				"showCreator" : true,
-				"showProject" : false}));
+				"showProject" : false,
+				"searchUUID"  : false,
+				"showterminate" : showterm}));
 	    
 	    // Format dates with moment before display.
 	    $('#experiments_table .format-date').each(function() {
 		var date = $.trim($(this).html());
 		if (date != "") {
-		    $(this).html(moment($(this).html()).format("ll"));
+		    $(this).html(moment($(this).html()).format("lll"));
 		}
 	    });
 	    var table = $('#experiments_table')
 		.tablesorter({
 		    theme : 'green',
 		});
+
+	    // Terminate an experiment.
+	    $('#experiments_content .terminate-button').click(function (event) {
+		event.preventDefault();
+		TerminateExperiment(this);
+	    });
+	    
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "show-project", "ExperimentList",
 					    {"pid" : window.TARGET_PROJECT});
 	xmlthing.done(callback);
+    }
+
+    // Terminate an experiment
+    function TerminateExperiment(target)
+    {
+	console.info($(target), $(target).data("uuid"));
+	var uuid = $(target).data("uuid");
+
+	var callback = function(json) {
+	    sup.HideModal("#waitwait-modal");
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    // Reload the experiments tab. Easier.
+	    LoadExperimentTab();
+	};
+	// Bind the confirm button in the modal. 
+	$('#terminate-modal #terminate-confirm').click(function () {
+	    sup.HideModal('#terminate-modal');
+	    sup.ShowModal('#waitwait-modal');
+
+	    var xmlthing = sup.CallServerMethod(null, "status",
+						"TerminateInstance",
+						{"uuid" : uuid});
+	    xmlthing.done(callback);
+	});
+	// Handler so we know the user closed the modal. We need to
+	// clear the confirm button handler.
+	$('#terminate-modal').on('hidden.bs.modal', function (e) {
+	    $('#terminate-modal #terminate-confirm').unbind("click");
+	    $('#terminate-modal').off('hidden.bs.modal');
+	});
+	sup.ShowModal("#terminate-modal");
     }
 
     function LoadClassicExperiments()
@@ -503,15 +553,28 @@ $(function ()
 	    }
 	    var template = _.template(detailsString);
 
-	    $('#admin_content')
-		.html(template({"fields" : json.value}));
+	    $('#project_content')
+		.html(template({"fields"   : json.value,
+				"isleader" : window.ISLEADER,
+				"isadmin"  : window.ISADMIN}));
 	    
 	    // Format dates with moment before display.
-	    $('#admin_table .format-date').each(function() {
+	    $('#project_table .format-date').each(function() {
 		var date = $.trim($(this).html());
 		if (date != "") {
 		    $(this).html(moment($(this).html()).format("ll"));
 		}
+	    });
+	    $('#project_table [data-toggle="popover"]').popover({
+		trigger: 'hover',
+		placement: 'auto',
+	    });
+	    $('#project_content .toggle').click(function() {
+		Toggle(this);
+	    });
+	    $('#project_content .request-license').click(function(event) {
+		event.preventDefault();
+		RequestLicense(this);
 	    });
 	}
 	var xmlthing = sup.CallServerMethod(null,
@@ -594,6 +657,49 @@ $(function ()
 				 "show-project", "ClassicDatasetList",
 				 {"pid" : window.TARGET_PROJECT});
 	xmlthing.done(callback);
+    }
+    //
+    // Toggle flags.
+    //
+    function Toggle(item) {
+	var name = item.dataset["name"];
+
+	var callback = function(json) {
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    LoadProjectTab();
+	};
+	sup.CallServerMethod(null, "show-project", "Toggle",
+			     {"pid" : window.TARGET_PROJECT,
+			      "toggle" : name},
+			     callback);
+    }
+
+    /*
+     * Request a license.
+     */
+    function RequestLicense(target) {
+	var license_idx = $(target).data("license_idx");
+	
+	var callback = function(json) {
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    // If this is the leader of the project, zap them to
+	    // the license page. If an admin doing this, stay here.
+	    if (window.ISLEADER) {
+		window.location.replace("licenses.php");
+		return;
+	    }
+	    $(target).closest('td').html("Acceptance pending");
+	};
+	sup.CallServerMethod(null, "licenses", "Request",
+			     {"pid" : window.TARGET_PROJECT,
+			      "idx" : license_idx},
+			     callback);
     }
 
     $(document).ready(initialize);

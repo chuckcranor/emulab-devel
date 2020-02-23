@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2017 University of Utah and the Flux Group.
+# Copyright (c) 2013-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,6 +27,7 @@ use Getopt::Std;
 use Date::Parse;
 use File::Temp qw(tempfile);
 use CGI;
+use Data::Dumper;
 
 #
 # Create a new dataset.
@@ -48,13 +49,18 @@ sub usage()
     print STDERR "   -b        Allocate resources in the background\n";
     print STDERR "   name      Name (in the form <pid>/<id> or <pid>/<gid>/<id>)\n";
     print STDERR "\n";
+    print STDERR "Usage: createdataset [-F srcname] [-e expiration] name\n";
+    print STDERR "Copy a persistent dataset to a new one of the same type. Options:\n";
+    print STDERR "   -F srcname Source dataset to copy\n";
+    print STDERR "   name           Name (in the form <pid>/<id> or <pid>/<gid>/<id>)\n";
+    print STDERR "\n";
     print STDERR "Usage: createdataset -t imdataset [-I node,bsname] name\n";
     print STDERR "Create a dataset image. Options:\n";
     print STDERR "   -I node,bsname Take an immediate snapshot of a local blockstore on a node to populate the image.\n";
     print STDERR "   name           Name (in the form <pid>/<id> or <pid>/<gid>/<id>)\n";
     exit(-1);
 }
-my $optlist  = "dhUo:s:t:e:a:f:bCR:W:I:T:";
+my $optlist  = "dhUo:s:t:e:a:f:bCR:W:I:T:F:";
 my $debug = 0;
 my $background = 0;
 my $pid;
@@ -75,6 +81,8 @@ my $needapproval = 0;
 my $unapproved_reason;
 my $webtask_id;
 my $webtask;
+my $srcds;
+my $srcdsname;
 
 my $qprefix = "global_";
 my $quota;
@@ -89,6 +97,7 @@ my %descrip = (
 # Protos
 sub fatal($);
 sub HandleIMDataset();
+sub parseleasename($);
 
 #
 # Configure variables
@@ -184,9 +193,14 @@ if (defined($options{e})) {
     if ($options{e} eq "never") {
 	$expire = 0;
     } else {
-	$expire = str2time($options{e});
-	if (!defined($expire)) {
-	    fatal("Could not parse expiration date.");
+	if ($options{e} =~ /^\d+$/) {
+	    $expire = $options{e};
+	}
+	else {
+	    $expire = str2time($options{e});
+	    if (!defined($expire)) {
+		fatal("Could not parse expiration date.");
+	    }
 	}
     }
 }
@@ -215,30 +229,24 @@ if (defined($options{"T"})) {
     }
     $webtask->AutoStore(1);
 }
+if (defined($options{"F"})) {
+    $srcdsname = $options{"F"};
+    if (defined($options{t}) || defined($options{s}) ||
+	defined($options{f}) || defined($options{a})) {
+	fatal("Cannot specify type/size/fstype/attributes when copying");
+    }
+}
 
 if (@ARGV != 1) {
     print STDERR "Must specify dataset name\n";
     usage();
 }
-if ($dstype ne "imdataset" && !$size) {
+if ($dstype ne "imdataset" && !$srcdsname && !$size) {
     print STDERR "Must specify dataset size\n";
     usage();
 }
 
-# name must include a project
-$lname = $ARGV[0];
-if ($lname =~ /^([-\w]+)\/([-\w]+)$/) {
-    $pid   = $gid = $1;
-    $lname = $2;
-}
-elsif ($lname =~ /^([-\w]+)\/([-\w]+)\/([-\w]+)$/) {
-    $pid   = $1;
-    $gid   = $2;
-    $lname = $3;
-}
-else {
-    fatal("Dataset name $lname not in the form <pid>/<lname>.");
-}
+($pid,$gid,$lname) = parseleasename($ARGV[0]);
 
 my $this_user = User->ThisUser();
 if (! defined($this_user)) {
@@ -276,6 +284,41 @@ my $project = $group->GetProject();
 if (!TBAdmin() &&
     !$project->AccessCheck($this_user, TB_PROJECT_CREATELEASE())) {
     fatal("Must have local_root privileges in $pid");
+}
+
+#
+# When copying a lease, make sure they have access to the source lease.
+#
+if ($srcdsname) {
+    my ($spid, $sgid, $sname) = parseleasename($srcdsname);
+
+    $srcds = Lease->Lookup($spid, $sgid, $sname);
+    if (!TBAdmin() && !$srcds->AccessCheck($this_user, LEASE_ACCESS_READ())) {
+	fatal("$srcdsname: you are not allow to copy lease.");
+    }
+
+    # XXX only allow copy of valid leases right now .
+    if ($srcds->state ne "valid") {
+	fatal("$srcdsname: lease is not in 'valid' state.");
+    }
+
+    # keep most of the attributes from the source
+    $dstype = $srcds->type();
+    my $sattrs = $srcds->GetAttributes();
+    foreach my $a (keys %$sattrs) {
+	# XXX do not copy URNs as they will be invalid in the copy
+	if ($a !~ /_urn$/) {
+	    $attrs{$a} = $sattrs->{$a}->{'value'};
+	}
+    }
+    $size = $attrs{'size'};
+    $fstype = $attrs{'fstype'};
+    delete $attrs{'size'};
+    delete $attrs{'fstype'};
+    $attrstr = "";
+
+    # we want the internal name later
+    $srcdsname = "lease-" . $srcds->lease_idx();
 }
 
 #
@@ -400,6 +443,13 @@ if ($fstype) {
 }
 
 #
+# If this is a copy, add an attribute for the source dataset.
+#
+if ($srcdsname) {
+    $attrs{'copyfrom'} = $srcdsname;
+}
+
+#
 # Check name: lease with this name must not already exist.
 #
 if (Lease->Lookup($pid, $gid, $lname)) {
@@ -477,6 +527,7 @@ if ($vars->{"usequotas"}) {
 	    $unapproved_reason =
 		"Allocation of $size would put $pid over quota ($qsize).";
 	    if (!$alwayscreate) {
+		print STDERR "$unapproved_reason\n";
 		print STDERR
 		    "Try again with '-U' to request special approval by testbed-ops.\n"
 		    if (!$background);
@@ -530,7 +581,8 @@ if (defined($write_access)) {
 
 #
 # Approve the lease unless otherwise told not to.
-# This can take a long time so we lock it to avoid races with others.
+# This can take a long time (due to resource allocation) so we lock it to
+# avoid races with others.
 #
 if ($approveme) {
     my $logname;
@@ -545,7 +597,7 @@ if ($approveme) {
     }
     
     if ($background) {
-	print "Resource allocation proceeding the background ...\n";
+	print "Resource allocation proceeding in the background ...\n";
 	
 	$logname = TBMakeLogname("createdataset");
 	if (my $childpid = TBBackGround($logname)) {
@@ -621,6 +673,31 @@ if (!$approveme) {
 }
 
 exit(0);
+
+#
+# Parse a string as a lease name.
+# Returns (pid,gid,name) on success, exits otherwise.
+#
+sub parseleasename($)
+{
+    my ($n) = @_;
+    my ($p, $g);
+
+    # name must include a project
+    if ($n =~ /^([-\w]+)\/([-\w]+)$/) {
+	$p = $g = $1;
+	$n = $2;
+    }
+    elsif ($n =~ /^([-\w]+)\/([-\w]+)\/([-\w]+)$/) {
+	$p = $1;
+	$g = $2;
+	$n = $3;
+    }
+    else {
+	fatal("Dataset name $n not in the form <pid>/<name> or <pid>/<gid>/<name>.");
+    }
+    return ($p, $g, $n);
+}
 
 #
 # Image backed datasets. Basically create an image and optionally take

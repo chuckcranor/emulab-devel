@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2003-2016 University of Utah and the Flux Group.
+# Copyright (c) 2003-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -91,17 +91,35 @@ $pid        = $group->pid();
 $unix_gid   = $group->unix_gid();
 $project    = $image->Project();
 $unix_pid   = $project->unix_gid();
+$rangearg   = "";
 
-#
-# Datasets are special, they cannot be downloaded on this path
-# unless they are global.
-#
-if ($image->isdataset() && !$image->isglobal()) {
+if ($image->noexport()) {
+    SPITERROR(403, "This image is marked as export restricted");
+}
+if (!$image->isglobal()) {
     SPITERROR(403, "No permission to access image");
 }
 
 #
-# We want to support HEAD requests to avoid send the file.
+# Check for RANGE header. We support a singlw range, there is no
+# reason for the client to ask for multiple ranges for an image.
+#
+if (isset($_SERVER['HTTP_RANGE'])) {
+    // Delimiters are case insensitive
+    if (preg_match('/bytes=(\d*)\-$/i', $_SERVER['HTTP_RANGE'], $matches) ||
+        preg_match('/bytes=(\d*)\-(\d*)$/i', $_SERVER['HTTP_RANGE'], $matches)){
+        $rangearg = "-r " . $matches[1] . "-";
+        if (count($matches) == 3) {
+            $rangearg .= $matches[2];
+        }
+    }
+    else {
+        SPITERROR(416, "Client requested invalid Range.");
+    }
+}
+
+#
+# We want to support HEAD requests to avoid sending the file.
 #
 $ishead  = 0;
 $headarg = "";
@@ -111,7 +129,8 @@ if ($_SERVER['REQUEST_METHOD'] == "HEAD") {
 }
 
 if ($fp = popen("$TBSUEXEC_PATH nobody $unix_pid,$unix_gid ".
-		"webspewimage $arg $headarg -k $access_key $versid", "r")) {
+		"webspewimage $arg $headarg $rangearg -k $access_key $versid",
+                "r")) {
     header("Content-Type: application/octet-stream");
     header("Cache-Control: no-cache, must-revalidate");
     header("Pragma: no-cache");
@@ -136,13 +155,29 @@ if ($fp = popen("$TBSUEXEC_PATH nobody $unix_pid,$unix_gid ".
         # The first read will come back with no output, which means nothing is
         # going to be sent except the headers.
         #
-	$string = fread($fp, 1024);
+	$string = fgets($fp);
 	if ($string) {
-	    print($string);
-	    while (!feof($fp) && connection_status() == 0) {
-		print(fread($fp, 1024*32));
-		flush();
-	    }
+            # We know the first line is a header.
+            $string = rtrim($string);
+            header($string);
+
+            # Look for end of headers.
+            $found_headers = false;
+
+            while (!$found_headers) {
+                $string = fgets($fp);
+                if ($string == "\n") {
+                    $found_headers = true;
+                }
+                else {
+                    $string = rtrim($string);
+                    header($string);
+                }
+            }
+            while (!feof($fp) && connection_status() == 0) {
+                print(fread($fp, 1024*32));
+                flush();
+            }
 	}
     }
     $retval = pclose($fp);

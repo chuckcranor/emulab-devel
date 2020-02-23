@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,6 +37,7 @@ sub usage() {
 	  "  -u    - Generate lists for a user; add -m for new email address\n".
 	  "  -p    - Generate lists for a project (includes subgroups)\n".
 	  "  -P    - Generate lists for all projects (includes subgroups)\n".
+	  "  -T    - Generate powder-announce\n".
 	  "  -t    - Generate activity lists\n".
 	  "  -c    - Generate just the current users list\n".
 	  "  -a    - Generate all email lists; careful ...\n");
@@ -47,18 +48,18 @@ sub ActiveUsers();
 sub RecentUsers();
 sub RecentProjects();
 sub RecentProjectLeaders();
-sub Users();
-sub WideAreaPeople();
 sub ProjectLeaders();
 sub ProjectLists($$);
+sub PortalLists();
 sub genelist($$$$);
 
-my $optlist = "anu:p:tdmfcP";
+my $optlist = "anu:p:tdmfcPT";
 my $debug   = 0;
 my $all     = 0;
 my $update  = 0;
 my $activity= 0;
 my $projects= 0;
+my $portals = 0;
 my $current = 0;
 my $impotent= 0;
 my $force   = 0;
@@ -75,8 +76,10 @@ my $TBALL       = "@TBUSERSARCHIVE@";
 my $ELISTS      = "$TB/lists";
 my $ELABINELAB  = @ELABINELAB@;
 my $MAILMANSUPPORT= @MAILMANSUPPORT@;
+my $PROJECTMAILLISTS = @PROJECTMAILLISTS@;
 my $MMPROG	= "$TB/sbin/setmmlistmembers";
 my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
+my $MAINSITE    = @TBMAINSITE@;
 
 # Note no -n option. We redirect stdin from the new exports file below.
 my $SSH		= "$TB/bin/sshtb -l root -host $USERS";
@@ -95,8 +98,9 @@ use lib "@prefix@/lib";
 use emdbi;
 use libdb;
 use libtestbed;
-use libtblog;
+use libtblog_simple;
 use User;
+use Brand;
 
 #
 # We don't want to run this script unless its the real version.
@@ -148,6 +152,9 @@ if (defined($options{"P"})) {
 }
 if (defined($options{"t"})) {
     $activity = 1;
+}
+if (defined($options{"T"})) {
+    $portals = 1;
 }
 if (defined($options{"n"})) {
     $impotent = 1;
@@ -264,6 +271,9 @@ else {
     $admin_address = $TBOPS;
 }
 
+PortalLists()
+    if ($all || $portals || $update);
+
 ActiveUsers()
     if ($all || $activity || $update || $current);
 
@@ -275,12 +285,6 @@ RecentProjects()
 
 RecentProjectLeaders()
     if ($all || $activity || $update);
-
-Users()
-    if ($all || defined($user));
-
-WideAreaPeople()
-    if ($all || defined($user));
 
 ProjectLeaders()
     if ($all || defined($user) || defined($pid));
@@ -455,43 +459,6 @@ sub RecentProjectLeaders()
 }
 
 #
-# All active users of the testbed.
-# 
-sub Users()
-{
-    my $userlist;
-    my $query_result;
-
-    print "Getting All Users\n" if $debug;
-
-    if (! ($query_result =
-	   DBQuery("SELECT DISTINCT usr_email FROM users ".
-		   "where status='active' order by usr_email"))) {
-	DBFatal("Getting Users!");
-    }
-    $userlist  = "$TBOPS\n";
-    $userlist .= "$TBALL";
-    
-    genelist($query_result, $userlist, "emulab-allusers", 0);
-}
-
-#
-# Special list for people approved to use the widearea-nodes.
-#
-sub WideAreaPeople()
-{
-    my $query_result =
-	DBQueryFatal("SELECT DISTINCT u.usr_email from projects as p ".
-		     "left join group_membership as m on m.pid_idx=p.pid_idx ".
-		     "left join users as u on u.uid_idx=m.uid_idx ".
-		     "where p.approved!=0 and p.pcremote_ok is not null ".
-		     "      and m.trust!='none' and u.status='active' ".
-		     "order by usr_email");
-
-    genelist($query_result, "$TBOPS", "emulab-widearea-users", 0);
-}
-
-#
 # Another list of project leaders.
 #
 sub ProjectLeaders()
@@ -516,6 +483,9 @@ sub ProjectLists($$)
     my ($pid, $gid) = @_;
     my $proj_result;
 
+    return
+	if (!$PROJECTMAILLISTS);
+
     print "Getting project members for $pid/$gid\n" if $debug;
 
     my $query_result =
@@ -538,6 +508,29 @@ sub ProjectLists($$)
 		     ($ELABINELAB ? 0 : 1));
 	}
     }
+}
+
+sub PortalLists()
+{
+    return
+	if (!$MAINSITE);
+
+    # Just the Powder portal.
+    print "Getting powder portal users\n" if $debug;
+
+    my $query_result =
+	DBQueryFatal("SELECT distinct u.usr_email ".
+		     ($MAILMANSUPPORT ?
+		      ", u.uid ,u.usr_name, u.mailman_password " : "") .
+		     " from group_membership as p ".
+		     "left join users as u on u.uid_idx=p.uid_idx ".
+		     "left join projects on projects.pid=p.pid ".
+		     "where p.gid=p.pid and ".
+		     " p.trust!='none' and u.status='active' and ".
+		     " (projects.portal='powder' or u.portal='powder') ".
+		     "order by u.usr_email");
+
+    genelist($query_result, "$TBOPS", "powder-announce", 0);
 }
 
 #

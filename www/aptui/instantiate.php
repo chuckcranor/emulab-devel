@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -61,13 +61,16 @@ $optargs = OptionalPageArguments("create",        PAGEARG_STRING,
 				 "default",       PAGEARG_STRING,
 				 "from",          PAGEARG_STRING,
 				 "refspec",       PAGEARG_STRING,
+                                 "rerun_instance",PAGEARG_UUID,
+                                 "rerun_paramset",PAGEARG_UUID,
+                                 "skipfirststep", PAGEARG_BOOLEAN,
 				 "formfields",    PAGEARG_ARRAY);
 
 # Need to make non-hardcoded
 $maxduration = 16;
 
-$skipfirststep = 0;
-if (isset($from) && ($from == "manage-profile" || $from == "show-profile")) {
+if (isset($rerun_instance) || isset($rerun_paramset) ||
+    (isset($from) && ($from == "manage-profile" || $from == "show-profile"))) {
     $skipfirststep = 1;
 }
 
@@ -105,7 +108,7 @@ elseif ($ISPNET) {
           $profile_default) = explode(',', $portal_default_profile);
 }
 elseif ($ISPOWDER) {
-    $portal_default_profile = "PhantomNet,OAI-Real-Hardware";
+    $portal_default_profile = "PowderProfiles,srsLTE-SIM";
     list ($profile_default_pid,
           $profile_default) = explode(',', $portal_default_profile);
 }
@@ -115,6 +118,7 @@ else {
           $profile_default) = explode(',', $portal_default_profile);
 }
 $profile_array  = array();
+$usageinfo      = UserUsageInfo($this_user);
 
 #
 # if using the super secret URL, make sure the profile exists, and
@@ -154,7 +158,14 @@ if (isset($profile)) {
 	    }
 	}
         $profile = $obj;
-	$profile_array[$profile->uuid()] = $profile->name();
+	$profile_array[$profile->uuid()] =
+            array("name"      => $profile->name(),
+                  "profileid" => $profile->profileid(),
+                  "project"   => $profile->pid(),
+                  "pid"       => $profile->pid(), # JS messes with project.
+                  "creator"   => $profile->creator(),
+                  "usecount"  => $profile->usecount(),
+                  "favorite"  => $profile->isFavorite($this_user));
 	$profilename = $profile->name();
     }
     else {
@@ -180,7 +191,14 @@ if (isset($profile)) {
 	    exit();
 	}
 	$profile = $obj;
-	$profile_array[$profile->uuid()] = $profile->name();
+	$profile_array[$profile->uuid()] = 
+            array("name"      => $profile->name(),
+                  "profileid" => $profile->profileid(),
+                  "project"   => $profile->pid(),
+                  "pid"       => $profile->pid(), # JS messes with project.
+                  "creator"   => $profile->creator(),
+                  "usecount"  => $profile->usecount(),
+                  "favorite"  => $profile->isFavorite($this_user));
 	$profilename = $profile->name();
     }
     if ($profile->isDisabled()) {
@@ -205,14 +223,19 @@ else {
 	$joinclause =
 	    "left join group_membership as g on ".
 	    "     g.uid_idx='$this_idx' and ".
-	    "     g.pid_idx=v.pid_idx and g.pid_idx=g.gid_idx";
+	    "     g.pid_idx=v.pid_idx and g.pid_idx=g.gid_idx ".
+            "left join apt_profile_favorites as f on ".
+            "     f.profileid=p.profileid and f.uid_idx='$this_idx'";
+                    
 	$whereclause =
 	    "p.public=1 or p.shared=1 or v.creator_idx='$this_idx' or ".
 	    "g.uid_idx is not null ";
     }
 
     $query_result =
-	DBQueryFatal("select p.uuid,p.name,p.pid from apt_profiles as p ".
+	DBQueryFatal("select p.uuid,p.name,p.pid,v.creator,p.profileid, ".
+                     "     p.usecount,f.marked ".
+                     "   from apt_profiles as p ".
 		     "left join apt_profile_versions as v on ".
 		     "     v.profileid=p.profileid and ".
 		     "     v.version=p.version ".
@@ -220,7 +243,14 @@ else {
 		     "where locked is null and p.disabled=0 and ".
                      "      v.disabled=0 and ($whereclause) ");
     while ($row = mysql_fetch_array($query_result)) {
-	$profile_array[$row["uuid"]] = $row["name"];
+	$profile_array[$row["uuid"]] =
+            array("name"      => $row["name"],
+                  "profileid" => $row["profileid"],
+                  "project"   => $row["pid"],
+                  "pid"       => $row["pid"],
+                  "creator"   => $row["creator"],
+                  "usecount"  => $row["usecount"],
+                  "favorite"  => $row["marked"] ? 1 : 0);
         if ($row["pid"] == $profile_default_pid &&
             $row["name"] == $profile_default) {
 	    $profile_default = $row["uuid"];
@@ -256,6 +286,13 @@ else {
                 unset($profile_array[$obj->profile_uuid()]);
             }
             $profile_array[$obj->uuid()] = $obj->name();
+                    array("name"      => $obj->name(),
+                          "profileid" => $obj->profileid(),
+                          "project"   => $obj->pid(),
+                          "pid"       => $obj->pid(),
+                          "creator"   => $obj->creator(),
+                          "usecount"  => $obj->usecount(),
+                          "favorite"  => $obj->isFavorite($this_user));
             $profile_default = $obj->uuid();
         }
         else {
@@ -266,60 +303,31 @@ else {
 }
 
 #
-# Rebuild the array with extra info for the profile picker.
+# Update the array with extra info for the profile picker.
 #
-if (isset($this_user)) {
-    $usageinfo = UserUsageInfo($this_user);
-}
-$tmp_array = array();
-while (list ($uuid, $title) = each ($profile_array)) {
-    $tmp = Profile::Lookup($uuid);
-    if ($tmp) {
-        if (1) {
-            # If profile never used, no need to ask if user has used it.
-            if (!$tmp->usecount()) {
-                $count = $lastused = 0;
-            }
-            elseif (isset($this_user)) {
-                $profileid = $tmp->profileid();
-                if (array_key_exists($profileid, $usageinfo)) {
-                    $count    = $usageinfo[$profileid]["count"];
-                    $lastused = $usageinfo[$profileid]["lastused"];
-                }
-                else {
-                    # Use global count instead.
-                    $count    = $tmp->usecount();
-                    $lastused = 0;
-                }
-            }
-            else {
-                # Guest user; just use the global usage count.
-                $count    = $tmp->usecount();
-                $lastused = 0;
-            }
+foreach ($profile_array as $uuid => &$details) {
+    $profileid = $details["profileid"];
+    $usecount  = $details["usecount"];
+    $lastused  = 0;
+    
+    # If profile never used, no need to check if user has used it.
+    if ($usecount) {
+        if (array_key_exists($profileid, $usageinfo)) {
+            $usecount = $usageinfo[$profileid]["count"];
+            $lastused = $usageinfo[$profileid]["lastused"];
         }
-        else {
-            $lastused = time();
-            $count = 0;
-        }
-        $tmp_array[$uuid] =
-            array("name"     => $tmp->name(),
-                  "project"  => $tmp->pid(),
-                  "pid"      => $tmp->pid(), # JS messes with project.
-                  "creator"  => $tmp->creator(),
-                  "favorite" => $tmp->isFavorite($this_user),
-                  "lastused" => $lastused,
-                  "usecount" => $count);
     }
+    $details["usecount"] = $usecount;
+    $details["lastused"] = $lastused;
 }
-$profile_array = $tmp_array;
+reset($profile_array);
 
 function SPITFORM($formfields, $newuser, $errors)
 {
     global $TBBASE, $APTMAIL, $ISAPT, $ISCLOUD, $ISPNET, $PORTAL_NAME;
     global $profile_array, $this_user, $profilename, $profile;
     global $projlist, $skipfirststep, $maxduration, $TBMAINSITE;
-    global $refspec, $ISPOWDER;
+    global $refspec, $ISPOWDER, $ISEMULAB, $rerun_instance, $rerun_paramset;
     
     $showabout  = ($ISAPT && !$this_user ? 1 : 0);
     $registered = (isset($this_user) ? "true" : "false");
@@ -341,8 +349,10 @@ function SPITFORM($formfields, $newuser, $errors)
     }
     SPITHEADER(1);
 
+    echo "<link rel='stylesheet' href='css/jquery-ui.min.css'>\n";
     echo "<link rel='stylesheet' href='css/picker.css'>\n";
     echo "<link rel='stylesheet' href='css/nv.d3.css'>\n";
+    echo "<link rel='stylesheet' href='css/tablesorter.css'>\n";
 
     # I think this will take care of XSS prevention?
     echo "<script type='text/plain' id='form-json'>\n";
@@ -375,12 +385,13 @@ function SPITFORM($formfields, $newuser, $errors)
         echo htmlentities(json_encode($projlist));
         echo "</script>\n";
     }
-    SpitAggregateStatus(true);
+    SpitAggregateStatus(true, $this_user);
 
-    echo "<script type='text/plain' id='skiptypes-json'>\n";
-    echo htmlentities(json_encode(Instance::NodeTypePruneList()));
+    $prunelist = Instance::NodeTypePruneList(null, true);
+    echo "<script type='text/plain' id='prunelist-json'>\n";
+    echo htmlentities(json_encode($prunelist));
     echo "</script>\n";
-    
+
     SpitOopsModal("oops");
     echo "<script type='text/javascript'>\n";
     echo "    window.PROFILE    = '" . $formfields["profile"] . "';\n";
@@ -397,7 +408,9 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "    window.CANCOPY = $cancopy;\n";
     $isadmin = (isset($this_user) && ISADMIN() ? 1 : 0);
     echo "    window.ISADMIN    = $isadmin;\n";
-    $multisite = (isset($this_user) && $ISCLOUD ? 1 : 0);
+    $isstud = (isset($this_user) && STUDLY() ? 1 : 0);
+    echo "    window.ISSTUD    = $isstud;\n";
+    $multisite = (isset($this_user) && ($ISCLOUD || $ISPOWDER) ? 1 : 0);
     echo "    window.MULTISITE  = $multisite;\n";
     $doconstraints = $TBMAINSITE;
     echo "    window.DOCONSTRAINTS = $doconstraints;\n";
@@ -415,19 +428,30 @@ function SPITFORM($formfields, $newuser, $errors)
     }
     # Do we show an aggregate selector?
     if (isset($this_user) && !$this_user->webonly()
-        && !$ISAPT && !$ISPNET && !$ISPOWDER) {
+        && !$ISAPT && !$ISPNET && !$ISEMULAB) {
         echo "    window.CLUSTERSELECT = true;\n";
     }
     else {
         echo "    window.CLUSTERSELECT = false;\n";
     }
+    if (isset($rerun_instance)) {
+        echo "    window.RERUN_INSTANCE = '$rerun_instance';\n";
+    }
+    if (isset($rerun_paramset)) {
+        echo "    window.RERUN_PARAMSET = '$rerun_paramset';\n";
+
+    }
+    echo "    window.EMBEDDED_RESGROUPS = true;\n";
     echo "</script>\n";
     echo "<script src='js/lib/d3.v3.js'></script>\n";
     echo "<script src='js/lib/nv.d3.js'></script>\n";
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-    echo "<script src='https://www.emulab.net/protogeni/jacksmod/stable/jacksmod.js'></script>";
-    echo "<script src='https://www.emulab.net/protogeni/jacksmod/stable/imagepicker.js'></script>";
-    
+    echo "<script src='js/lib/jquery-ui.js'></script>\n";
+    echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
+    echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
+    echo "<script src='js/lib/sugar.min.js'></script>\n";
+    echo "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>\n";
+   
     REQUIRE_UNDERSCORE();
     REQUIRE_SUP();
     REQUIRE_PPWIZARDSTART();
@@ -438,10 +462,15 @@ function SPITFORM($formfields, $newuser, $errors)
     REQUIRE_FILESTYLE();
     REQUIRE_MARKED();
     REQUIRE_MOMENT();
+    REQUIRE_JACKSMOD();
     REQUIRE_JACKS();
     REQUIRE_JQUERY_STEPS();
+    # For the new ppwizardstart and Powder
+    AddLibrary("js/powder-types.js");
     AddLibrary("js/resgraphs.js");
     AddLibrary("js/gitrepo.js");
+    AddLibrary("js/paramsets.js");
+    AddLibrary("js/list-resgroups.js");
     SPITREQUIRE("js/instantiate-new.js");
 }
 
@@ -530,7 +559,11 @@ if (!isset($create)) {
     SPITFORM($defaults, false, array());
     echo "<div style='display: none'><div id='jacks-dummy'></div></div>\n";
 
-    AddTemplateList(array("instantiate", "instantiate-new", "aboutapt", "aboutcloudlab", "aboutpnet", "waitwait-modal", "rspectextview-modal", "picker-template","reservation-graph"));
+    AddTemplateList(array("instantiate-new",
+                          "aboutapt", "aboutcloudlab", "aboutpnet",
+                          "waitwait-modal", "rspectextview-modal",
+                          "picker-template","reservation-graph",
+                          "save-paramset-modal", "resgroup-list"));
     SPITFOOTER();
     return;
 }

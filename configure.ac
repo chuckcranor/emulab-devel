@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -83,7 +83,7 @@ if test x"$PYTHON" = x""; then
     AC_MSG_ERROR([python not detected])
 fi
 
-PYTHON_VERSION=`${PYTHON} -V 2>&1 | cut -d ' ' -f 2 | cut -d '.' -f 1,2`
+PYTHON_VERSION=`${PYTHON} -V 2>&1 | cut -d ' ' -f 2 | cut -d '.' -f 1,2 | head -1`
 PYTHON_PATH=`dirname ${PYTHON}`
 if test ! -d "$PYTHON_PATH/include"; then
     PYTHON_PATH=`dirname ${PYTHON_PATH}`
@@ -95,6 +95,38 @@ AC_CHECK_HEADERS([Python.h],
 		 [AC_MSG_WARN("Cannot find Python.h in ${PYTHON_INCLUDE}")])
 AC_SUBST(PYTHON_INCLUDE)
 # END Python detection.
+
+# On Linux, rpc/rpc.h may be in another place, e.g. for tirpc,
+# /usr/include/tirpc .
+RPC_INCLUDE=""
+RPC_CPPFLAGS=""
+old_CPPFLAGS="$CPPFLAGS"
+for rpcpath in "" "/usr/include/tirpc" ; do
+    if ! test x"$rpcpath" = x"" ; then
+        CPPFLAGS="$old_CPPFLAGS -I$rpcpath"
+    fi
+    AC_CHECK_HEADERS([rpc/rpc.h],[RPC_INCLUDE="$rpcpath"],[])
+    if test "x$ac_cv_header_rpc_rpc_h" = xyes ; then
+        break;
+    fi
+    $as_unset ac_cv_header_rpc_rpc_h
+done
+# Final "check" so we can return an error message.
+if ! test x"${RPC_INCLUDE}" = x"" ; then
+    RPC_CPPFLAGS="-I${RPC_INCLUDE}"
+fi
+CPPFLAGS="$old_CPPFLAGS $RPC_CPPFLAGS"
+if ! test "x$ac_cv_header_rpc_rpc_h" = xyes ; then
+    AC_CHECK_HEADERS([rpc/rpc.h],[],[AC_MSG_ERROR("Cannot find rpc/rpc.h")])
+fi
+CPPFLAGS="$old_CPPFLAGS"
+AC_SUBST(RPC_CPPFLAGS)
+
+# Find perl for gettimezone invocation below
+AC_PATH_PROGS(PERL, perl perl5)
+if test x"$PERL" = x""; then
+    AC_MSG_ERROR([perl not detected])
+fi
 
 AC_CHECK_TOOL(CC,gcc)
 AC_CHECK_TOOL(CXX,g++)
@@ -158,6 +190,7 @@ AC_SUBST(DISABLE_DHCPD_INSTALL)
 AC_SUBST(DISABLE_NAMED_INSTALL)
 AC_SUBST(DISABLE_NAMED_SETUP)
 AC_SUBST(DISABLE_EXPORTS_SETUP)
+AC_SUBST(DISABLE_FSNODE_CHFLAGS)
 AC_SUBST(DISABLE_EVENT_SCHED)
 AC_SUBST(CLIENT_ETCDIR)
 AC_SUBST(CLIENT_BINDIR)
@@ -191,6 +224,7 @@ AC_SUBST(BUGDBSUPPORT)
 AC_SUBST(OPSDBSUPPORT)
 AC_SUBST(NFSTRACESUPPORT)
 AC_SUBST(NTPSERVER)
+AC_SUBST(PROJECTMAILLISTS)
 AC_SUBST(EXTERNAL_NTPSERVER1)
 AC_SUBST(EXTERNAL_NTPSERVER2)
 AC_SUBST(EXTERNAL_NTPSERVER3)
@@ -251,6 +285,8 @@ AC_SUBST(DYNAMICROOTPASSWORDS)
 AC_SUBST(TPM)
 AC_SUBST(REMOTEWIKIDOCS)
 AC_SUBST(PROTOGENI_SUPPORT)
+AC_SUBST(PROTOGENI_NOPORTALEXPIRE)
+AC_SUBST(PROTOGENI_PORTALONLY)
 AC_SUBST(PROTOGENI_WEBSITE)
 AC_SUBST(PROTOGENI_ISCLEARINGHOUSE)
 AC_SUBST(PROTOGENI_EMAIL)
@@ -266,6 +302,8 @@ AC_SUBST(PROTOGENI_URL)
 AC_SUBST(PROTOGENI_GENIRACK)
 AC_SUBST(PROTOGENI_NICKNAME)
 AC_SUBST(STANDALONE_CLEARINGHOUSE)
+AC_SUBST(CONFIG_TARGETSYS)
+AC_SUBST(TARGETSYS_TARGET)
 AC_SUBST(GMAP_API_KEY)
 AC_SUBST(NODE_USAGE_SUPPORT)
 AC_SUBST(NOSTACKMIB)
@@ -278,8 +316,11 @@ AC_SUBST(BIGDB)
 AC_SUBST(NEEDMCQUERIER)
 AC_SUBST(OPSVM_ENABLE)
 AC_SUBST(OPSVM_MOUNTPOINT)
+AC_SUBST(CLASSICWEB_OVERRIDE)
 AC_SUBST(PORTAL_ENABLE)
-AC_SUBST(PORTAL_ISPRIMARY)
+AC_SUBST(PEER_ENABLE)
+AC_SUBST(PEER_ISPRIMARY)
+AC_SUBST(CLOUDLAB_FEDERATED)
 AC_SUBST(LINUX_FSNODE)
 AC_SUBST(VPUBADDR_BASE)
 AC_SUBST(VPUBADDR_BITLEN)
@@ -326,6 +367,13 @@ AC_SUBST(EXPIRE_PASSWORDS)
 AC_SUBST(SDCOLLECTD_DOSTATS)
 AC_SUBST(SDCOLLECTD_USE_RRDTOOL)
 AC_SUBST(BOOTINFO_EVENTS)
+AC_SUBST(REPORTBOOT_ENABLED)
+AC_SUBST(REPORTBOOT_FLAGS)
+AC_SUBST(UI_DISABLE_DATASETS)
+AC_SUBST(UI_DISABLE_RESERVATIONS)
+AC_SUBST(UI_EXTERNAL_ACCOUNTS)
+AC_SUBST(POWDER_RFMONITOR)
+AC_SUBST(POWDER_RFMONITOR_HOST)
 
 #
 # Offer both versions of the email addresses that have the @ escaped
@@ -392,6 +440,7 @@ WIKISUPPORT=0
 BUGDBSUPPORT=0
 OPSDBSUPPORT=0
 MAILMANSUPPORT=0
+PROJECTMAILLISTS=0
 WINSUPPORT=0
 NSVERIFY=1
 CVSSUPPORT=0
@@ -412,6 +461,8 @@ UNIFIED_BOSS_AND_OPS=0
 DISABLE_NAMED_INSTALL=0
 DISABLE_DHCPD_INSTALL=0
 DISABLE_NAMED_SETUP=0
+DISABLE_EXPORTS_SETUP=0
+DISABLE_FSNODE_CHFLAGS=0
 FRISEBEEMCASTADDR="234.5.6"
 FRISEBEEMCASTPORT=3564
 FRISEBEENUMPORTS=0
@@ -426,6 +477,8 @@ DYNAMICROOTPASSWORDS=1
 TPM=0
 REMOTEWIKIDOCS=1
 PROTOGENI_SUPPORT=0
+PROTOGENI_NOPORTALEXPIRE=0
+PROTOGENI_PORTALONLY=0
 PROTOGENI_ISCLEARINGHOUSE=0
 PROTOGENI_EMAIL="geni-dev-utah@flux.utah.edu"
 PROTOGENI_WEBSITE="www.emulab.net"
@@ -438,6 +491,8 @@ PROTOGENI_MAXSERVERLOAD=12
 PROTOGENI_NONFSMOUNTS=0
 GENI_PUBRPCPORT=12370
 PROTOGENI_GENIRACK=0
+CONFIG_TARGETSYS=0
+TARGETSYS_TARGET=""
 PROTOGENI_NICKNAME="unknown"
 STANDALONE_CLEARINGHOUSE=0
 NODE_USAGE_SUPPORT=0
@@ -453,8 +508,11 @@ OPSVM_MOUNTPOINT="/ops"
 OURTIMEZONE="America/Denver"
 NODECONSOLE="sio"
 MFSVERSION=""
+CLASSICWEB_OVERRIDE=0
 PORTAL_ENABLE=0
-PORTAL_ISPRIMARY=0
+PEER_ENABLE=0
+PEER_ISPRIMARY=0
+CLOUDLAB_FEDERATED=0
 LINUX_FSNODE=0
 DHCPD_EXTRAIFS=""
 VPUBADDR_BASE="none"
@@ -491,7 +549,7 @@ ZFS_QUOTA_GROUP_X="1.0"
 ZFS_NOEXPORT=0
 INCREMENTAL_MOUNTD=0
 WITHAMD=0
-AMD_ROOT=/.amd_mnt
+AMD_ROOT=/.amd_mnt/ops
 NFSMFS_ROOT=""
 BS_IQN_PREFIX=iqn.2000-10.net.emulab
 ATTENUATOR=""
@@ -502,6 +560,13 @@ EXPIRE_PASSWORDS=1
 SDCOLLECTD_DOSTATS=0
 SDCOLLECTD_USE_RRDTOOL=0
 BOOTINFO_EVENTS=1
+REPORTBOOT_ENABLED=0
+REPORTBOOT_FLAGS=""
+UI_DISABLE_DATASETS=0
+UI_DISABLE_RESERVATIONS=0
+UI_EXTERNAL_ACCOUNTS=0
+POWDER_RFMONITOR=0
+POWDER_RFMONITOR_HOST="0.0.0.0"
 
 #
 # XXX You really don't want to change these!
@@ -559,8 +624,6 @@ fi
 # for backward compatibility (nobody used to care what they were called)
 if test x"$PROTOGENI_NICKNAME" = x"unknown"; then
     case $OURDOMAIN in
-    *utah.geniracks.net) PROTOGENI_NICKNAME="utah-ig";;
-    *utahddc.geniracks.net) PROTOGENI_NICKNAME="utahddc-ig";;
     *gpolab.bbn.com) PROTOGENI_NICKNAME="gpo-ig";;
     *northwestern.edu) PROTOGENI_NICKNAME="northwestern-ig";;
     *lan.sdn.uky.edu) PROTOGENI_NICKNAME="uky-ig";;
@@ -570,7 +633,6 @@ if test x"$PROTOGENI_NICKNAME" = x"unknown"; then
     *clemson.edu) PROTOGENI_NICKNAME="clemson-ig";;
     *ku.gpeni.net) PROTOGENI_NICKNAME="kansas-ig";;
     *nyu.edu) PROTOGENI_NICKNAME="nyu-ig";;
-    *uidaho.edu) PROTOGENI_NICKNAME="idaho-ig";;
     *maxgigapop.net) PROTOGENI_NICKNAME="max-ig";;
     *nysernet.org) PROTOGENI_NICKNAME="nysernet-ig";;
     *sox.net) PROTOGENI_NICKNAME="sox-ig";;
@@ -580,7 +642,6 @@ if test x"$PROTOGENI_NICKNAME" = x"unknown"; then
     *rutgers.edu) PROTOGENI_NICKNAME="rutgers-ig";;
     *stanford.edu) PROTOGENI_NICKNAME="stanford-ig";;
     *it.cornell.edu) PROTOGENI_NICKNAME="cornell-ig";;
-    *lsu.edu) PROTOGENI_NICKNAME="lsu-ig";;
     *case.edu) PROTOGENI_NICKNAME="cwru-ig";;
     *iu.edu) PROTOGENI_NICKNAME="moxi-ig";;
     *uchicago.edu) PROTOGENI_NICKNAME="uchicago-ig";;
@@ -592,9 +653,19 @@ if test x"$PROTOGENI_NICKNAME" = x"unknown"; then
     *washington.edu) PROTOGENI_NICKNAME="uwashington-ig";;
     *rnet.missouri.edu) PROTOGENI_NICKNAME="missouri-ig";;
     *pks2.sdn.uky.edu) PROTOGENI_NICKNAME="ukypks2-ig";;
+    *mcv.sdn.uky.edu) PROTOGENI_NICKNAME="ukymcv-ig";;
+    *hawaii.edu) PROTOGENI_NICKNAME="hawaii-ig";;
     *colorado.edu) PROTOGENI_NICKNAME="colorado-ig";;
     *cenic.net) PROTOGENI_NICKNAME="cenic-ig";;
     *vt.edu) PROTOGENI_NICKNAME="vt-ig";;
+    *vcu.instageni.net) PROTOGENI_NICKNAME="vcu-ig";;
+    *utc.edu) PROTOGENI_NICKNAME="utc-ig";;
+    *research.umich.edu) PROTOGENI_NICKNAME="umich-ig";;
+    *ucsd.edu) PROTOGENI_NICKNAME="ucsd-ig";;
+    *uvm.edu) PROTOGENI_NICKNAME="uvm-ig";;
+    *utdallas.edu) PROTOGENI_NICKNAME="utdallas-ig";;
+    *odu.edu) PROTOGENI_NICKNAME="odu-ig";;
+    *louisiana.edu) PROTOGENI_NICKNAME="ullafayette-ig";;
     *stitch.geniracks.net) PROTOGENI_NICKNAME="utah-stitch";;
     esac
 fi
@@ -940,9 +1011,16 @@ AC_ARG_WITH(apache-config-dir,
 	APACHE_VERSION="1.3"
 	APACHE_START_COMMAND="/usr/local/etc/rc.d/apache.sh"
     else
-        INSTALL_APACHE_CONFIG="/usr/local/etc/apache22"
-	APACHE_VERSION="22"
-	APACHE_START_COMMAND="/usr/local/etc/rc.d/apache22"
+        foo=`/usr/local/sbin/httpd -V | grep SERVER_CONFIG_FILE | grep 'apache24'`
+	if test "$foo" = ""; then
+	    INSTALL_APACHE_CONFIG="/usr/local/etc/apache22"
+	    APACHE_VERSION="22"
+	    APACHE_START_COMMAND="/usr/local/etc/rc.d/apache22"
+	else
+	    INSTALL_APACHE_CONFIG="/usr/local/etc/apache24"
+	    APACHE_VERSION="24"
+	    APACHE_START_COMMAND="/usr/local/etc/rc.d/apache24"
+	fi
     fi
 ])
 AC_SUBST(INSTALL_APACHE_CONFIG)
@@ -1242,11 +1320,12 @@ fi
 #
 if test -e "$srcdir/utils/gettimezone.pl"; then
     echo -n "Checking to see what timezone we are ... ";
-    ZONE=`$srcdir/utils/gettimezone.pl`
+    ZONE=`$PERL $srcdir/utils/gettimezone.pl`
     if test $? -ne 0; then
         AC_MSG_WARN([Cannot find gettimezone script; defaulting to $OURTIMEZONE]);
+    else
+        OURTIMEZONE=$ZONE
     fi
-    OURTIMEZONE=$ZONE
     echo "$OURTIMEZONE"
 else
     AC_MSG_WARN([Cannot find gettimezone script; defaulting to $OURTIMEZONE]);
@@ -1375,7 +1454,6 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	tbsetup/panic tbsetup/tbrsync tbsetup/nfstrace \
 	tbsetup/checkup/GNUmakefile tbsetup/checkup/checkup_daemon \
 	tbsetup/libtblog.pm tbsetup/template_cvsroot/GNUmakefile \
-	tip/GNUmakefile tip/console \
 	tmcd/GNUmakefile tmcd/tmcd.restart \
 	utils/GNUmakefile utils/vlandiff utils/vlansync utils/delay_config \
 	utils/sshtb utils/create_image utils/node_admin \
@@ -1415,10 +1493,10 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	$pelabfiles \
 	$mobilefiles \
 	apache/GNUmakefile apache/php.ini \
-        xmlrpc/GNUmakefile xmlrpc/emulabclient.py xmlrpc/emulabserver.py \
+        xmlrpc/GNUmakefile xmlrpc/emulabserver.py \
 	xmlrpc/sshxmlrpc_client.py xmlrpc/sshxmlrpc_server.py \
-	xmlrpc/sslxmlrpc_client.py xmlrpc/sslxmlrpc_server.py \
-	xmlrpc/webxmlrpc xmlrpc/script_wrapper.py xmlrpc/libxmlrpc.pm \
+	xmlrpc/sslxmlrpc_server.py \
+	xmlrpc/webxmlrpc \
 	xmlrpc/emulab xmlrpc/node xmlrpc/experiment xmlrpc/fs xmlrpc/user \
 	xmlrpc/imageid xmlrpc/osid xmlrpc/server xmlrpc/xmlrpcbag \
 	cdrom/GNUmakefile cdrom/tbbootconfig/GNUmakefile \
@@ -1433,6 +1511,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	install/load-descriptors install/dump-descriptors \
 	install/newnode_sshkeys/GNUmakefile install/smb.conf.head \
         install/clrhouse-install install/genirack/GNUmakefile \
+	install/powder-fixed/GNUmakefile install/powder-bus/GNUmakefile \
 	install/libinstall.pm install/update-install install/update-testbed \
 	mote/GNUmakefile mote/tbuisp mote/tbsgmotepower mote/newmote \
 	mote/sgtools/GNUmakefile \
@@ -1499,7 +1578,9 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/freebsd/init/10.3/GNUmakefile \
  clientside/tmcc/freebsd/init/10.4/GNUmakefile \
  clientside/tmcc/freebsd/init/11/GNUmakefile \
+ clientside/tmcc/freebsd/init/11.2/GNUmakefile \
  clientside/tmcc/freebsd/init/12/GNUmakefile \
+ clientside/tmcc/freebsd/init/13/GNUmakefile \
  clientside/tmcc/freebsd/supfile clientside/tmcc/freebsd/sethostname \
  clientside/tmcc/linux/GNUmakefile clientside/tmcc/linux/supfile \
  clientside/tmcc/linux/sethostname.dhclient \
@@ -1509,12 +1590,16 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/linux-sg/GNUmakefile clientside/tmcc/ubuntu7/GNUmakefile \
  clientside/tmcc/centos6/GNUmakefile \
  clientside/tmcc/centos7/GNUmakefile \
+ clientside/tmcc/centos8/GNUmakefile \
+ clientside/tmcc/onie/GNUmakefile \
  clientside/tmcc/ubuntu10/GNUmakefile \
  clientside/tmcc/ubuntu11/GNUmakefile \
  clientside/tmcc/ubuntu14/GNUmakefile \
  clientside/tmcc/ubuntu15/GNUmakefile \
  clientside/tmcc/ubuntu16/GNUmakefile \
  clientside/tmcc/ubuntu16-ms/GNUmakefile \
+ clientside/tmcc/ubuntu18/GNUmakefile \
+ clientside/tmcc/ubuntu18-ms/GNUmakefile \
  clientside/tmcc/linux-ms/GNUmakefile \
  clientside/tmcc/archlinux/GNUmakefile \
  clientside/tmcc/alpine/GNUmakefile \
@@ -1526,6 +1611,7 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/freebsd10/GNUmakefile clientside/tmcc/freebsd10/netif-emulab \
  clientside/tmcc/freebsd11/GNUmakefile clientside/tmcc/freebsd11/netif-emulab \
  clientside/tmcc/freebsd12/GNUmakefile clientside/tmcc/freebsd12/netif-emulab \
+ clientside/tmcc/freebsd13/GNUmakefile clientside/tmcc/freebsd13/netif-emulab \
  clientside/tmcc/cygwinxp/GNUmakefile clientside/tmcc/dp/GNUmakefile \
  clientside/tmcc/openbsd/GNUmakefile clientside/tmcc/ron/GNUmakefile \
  clientside/tmcc/plab/GNUmakefile clientside/tmcc/cygwinseven/GNUmakefile \
@@ -1542,6 +1628,10 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/os/imagezip/hashmap/GNUmakefile \
  clientside/os/imagezip/libndz/GNUmakefile \
  clientside/os/capture/GNUmakefile \
+ clientside/tip/GNUmakefile clientside/tip/console \
+ clientside/xmlrpc/GNUmakefile clientside/xmlrpc/emulabclient.py \
+ clientside/xmlrpc/sslxmlrpc_client.py \
+ clientside/xmlrpc/script_wrapper.py clientside/xmlrpc/libxmlrpc.pm \
  clientside/protogeni/GNUmakefile"
  
 #

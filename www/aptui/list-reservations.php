@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,8 +39,13 @@ $isadmin   = (ISADMIN() ? 1 : 0);
 #
 # Verify page arguments. Cluster is a domain that we turn into a URN.
 #
-$optargs = OptionalPageArguments("cluster", PAGEARG_STRING);
+$optargs = OptionalPageArguments("cluster", PAGEARG_STRING,
+                                 "force"  , PAGEARG_BOOLEAN);
 
+if (!$force || !($isadmin || $this_user->admin() || $this_user->stud())) {
+    header("Location: list-resgroups.php");
+    return;
+}
 SPITHEADER(1);
 
 $amlist = array();
@@ -75,22 +80,11 @@ echo "</script>\n";
 
 echo "<link rel='stylesheet'
             href='css/tablesorter.css'>\n";
+echo "<link rel='stylesheet'
+            href='css/nv.d3.css'>\n";
 
 # Place to hang the toplevel template.
-echo "<div id='main-body'>
-        <div id='spinner'>
-          <center id='spinner'><img src='images/spinner.gif' /></center><br>
-        </div>
-        <div id='noreservations' class=hidden>
-          You do not have any reservations. Would you like to
-           <a href='reserve.php'>create</a> one?
-        </div>
-      </div>\n";
-
-# Place to hang the modals for now
-echo "<div id='oops_div'></div>
-      <div id='waitwait_div'></div>
-      <div id='confirm_div'></div>\n";
+echo "<div id='main-body'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "   window.ISADMIN  = $isadmin;\n";
@@ -99,9 +93,14 @@ echo "</script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
-AddTemplateList(array("reservation-list", "confirm-modal", "resusage-list",
+AddLibrary("js/resgraphs.js");
+AddTemplateList(array("list-reservations", "reservation-list",
+                      "prereservation-list",
+                      "confirm-modal", "resusage-list", "resusage-graph",
                       "oops-modal", "waitwait-modal"));
 SPITREQUIRE("js/list-reservations.js",
+            "<script src='js/lib/d3.v3.js'></script>\n".
+            "<script src='js/lib/nv.d3.js'></script>\n".
             "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
             "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
             "<script src='js/lib/sugar.min.js'></script>".

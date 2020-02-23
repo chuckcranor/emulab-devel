@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -106,6 +106,7 @@ sub DoModify();
 sub DoExtend();
 sub DoApprove();
 sub DoSnapshot();
+sub DoDestroy();
 sub DoSnapShotInternal($$$$$);
 sub PollDatasetStatus($$$);
 sub DoImageTrackerStuff($$$$$);
@@ -151,6 +152,9 @@ if (! defined($this_user)) {
     fatal("You ($UID) do not exist!");
 }
 $geniuser = GeniUser->CreateFromLocal($this_user);
+if (!defined($geniuser)) {
+    fatal("Could not create geniuser");
+}
 
 if ($action eq "create") {
     exit(DoCreate());
@@ -175,6 +179,9 @@ elsif ($action eq "getcredential") {
 }
 elsif ($action eq "approve") {
     exit(DoApprove());
+}
+elsif ($action eq "destroy") {
+    exit(DoDestroy());
 }
 else {
     usage();
@@ -248,6 +255,15 @@ sub DoCreate()
 	    fatal("Could not find aggregate for $nodeid");
 	}
 	$aggregate_urn = $aggregate->aggregate_urn();
+
+	#
+	# Not allowed to create a dataset on aggregates that are marked as
+	# nolocalimages. Maybe add "relocation" later, but for now just
+	# throw a user error.
+	#
+	if ($aggregate->GetAptAggregate()->nolocalimages()) {
+	    UserError("Not allowed to create a new dataset on this cluster");
+	}
     }
     else {
 	if (!APT_Dataset::ValidBlockstoreBackend($aggregate_urn)) {	
@@ -279,8 +295,8 @@ sub DoCreate()
 	    if ($size < 0) {
 		fatal("Could not parse size.");
 	    }
-	    if ($size <= 1) {
-		fatal("Size too small, try a little bigger");
+	    if ($size <= 4.5) {
+		UserError("Size too small; minimum is 5MB");
 	    }
 	}
 	else {
@@ -313,7 +329,7 @@ sub DoCreate()
 	fatal("No such project");
     }
     if (!$project->AccessCheck($this_user, TB_PROJECT_CREATELEASE())) {
-	fatal("Not enough permission in project");
+	UserError("Not enough permission to create datasets in project $pid");
     }
     &$usage()
 	if ($type eq "stdataset" && !defined($expires));
@@ -508,6 +524,29 @@ sub DoDelete()
 	$response->code() != GENIRESPONSE_SEARCHFAILED()) {
 	$dataset->Unlock();
 	ExitWithError($response);
+    }
+    $dataset->Delete();
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    return 0;
+}
+
+#
+# Destroy; do not use this.
+#
+sub DoDestroy()
+{
+    if (@ARGV != 1) {
+	fatal("usage: $0 delete pid/name");
+    }
+    my $token   = shift(@ARGV);
+    my $dataset = APT_Dataset->Lookup($token);
+    if (!defined($dataset)) {
+	fatal("No such dataset");
+    }
+    if ($dataset->Lock()) {
+	UserError("dataset is busy, cannot lock it");
     }
     $dataset->Delete();
     if (defined($webtask)) {
@@ -1345,8 +1384,14 @@ sub ExitWithError($)
 	    $webtask->Exited($code);
 	}
 	print STDERR "*** $0:\n".
-	             "    $mesg\n";
-	exit(1);
+	    "    $mesg\n";
+	
+	# Hmm, the apt_daemon cares about the response code, which is
+	# fine except that some response codes are too big. Damn.
+	if ($code > 255) {
+	    $code = 1;
+	}
+	exit($code);
     }
     fatal($mesg);
 }

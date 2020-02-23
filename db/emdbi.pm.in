@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2014 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -65,23 +65,39 @@ sub Wrap($$$)
 
     require Mysql;
     $Mysql::QUIET = 1;
-    my $dbh = Mysql->connect("localhost", $dbname, $dbuser, "none");
-    return undef
-	if (!defined($dbh));
-
-    $dbh->{'dbh'}->{'PrintError'} = 0;
 
     my $self = {};
     bless($self, $class);
 
-    $self->{'PID'}    = $$;
-    $self->{'DBH'}    = $dbh;
+    $self->{'PID'}    = undef;
+    $self->{'DBH'}    = undef;
     $self->{'DBNAME'} = $dbname;
+    $self->{'DBUSER'} = $dbuser;
     return $self;
 }
 sub pid($)	{ return $_[0]->{'PID'}; };
 sub dbh($)	{ return $_[0]->{'DBH'}; };
 sub dbname($)	{ return $_[0]->{'DBNAME'}; };
+sub dbuser($)	{ return $_[0]->{'DBUSER'}; };
+
+# Connect to the database.
+sub Connect($)
+{
+    my ($self) = @_;
+
+    return 0
+        if (defined($self->{'DBH'}));
+
+    my $dbh = Mysql->connect("localhost",
+			     $self->dbname(), $self->dbuser(), "none");
+    return -1
+	if (!defined($dbh));
+
+    $dbh->{'dbh'}->{'PrintError'} = 0;
+    $self->{'PID'} = $$;
+    $self->{'DBH'} = $dbh;
+    return 0;
+}
 
 #
 # Check for existence of DB
@@ -121,11 +137,13 @@ sub DESTROY
 {
     my ($self) = @_;
     # XXX Seems like a problem if parent gets here first.
-    if ($self->pid() != $$) {
+    if (defined($self->pid()) && $self->pid() != $$) {
 	$self->dbh()->setInactiveDestroy(1);
     }
-    $self->dbh()->SUPER::DESTROY()
-	if $self->dbh()->can("SUPER::DESTROY");
+    if (defined($self->dbh())) {
+	$self->dbh()->SUPER::DESTROY()
+	    if $self->dbh()->can("SUPER::DESTROY");
+    }
 }
 
 #############################################################################
@@ -153,23 +171,40 @@ sub Wrap($$$)
     my ($class, $dbname, $dbuser) = @_;
 
     require DBI;
-    my $dbh = DBI->connect("DBI:mysql:database=$dbname;host=localhost",
-			   $dbuser, "none",
-			   {'PrintError' => 0});
-    return undef
-	if (!defined($dbh));
 
     my $self = {};
     bless($self, $class);
 
-    $self->{'PID'}    = $$;
-    $self->{'DBH'}    = $dbh;
+    $self->{'PID'}    = undef;
+    $self->{'DBH'}    = undef;
     $self->{'DBNAME'} = $dbname;
+    $self->{'DBUSER'} = $dbuser;
     return $self;
 }
 sub pid($)	{ return $_[0]->{'PID'}; };
 sub dbh($)	{ return $_[0]->{'DBH'}; };
 sub dbname($)	{ return $_[0]->{'DBNAME'}; };
+sub dbuser($)	{ return $_[0]->{'DBUSER'}; };
+
+sub Connect($)
+{
+    my ($self) = @_;
+    my $dbname = $self->dbname();
+    my $dbuser = $self->dbuser();
+
+    return 0
+        if (defined($self->{'DBH'}));
+
+    my $dbh = DBI->connect("DBI:mysql:database=$dbname;host=localhost",
+			   $dbuser, "none",
+			   {'PrintError' => 0});
+    return -1
+	if (!defined($dbh));
+
+    $self->{'PID'} = $$;
+    $self->{'DBH'} = $dbh;
+    return 0;
+}
 
 #
 # Check for existence of DB
@@ -194,6 +229,9 @@ sub query($$)
     my ($self, $query) = @_;
 
     my $dbh = $self->dbh();;
+    if (!defined($dbh)) {
+	print STDERR Carp::longmess();
+    }
     my $sth = $dbh->prepare($query);
     return undef
 	if (!$sth);
@@ -211,11 +249,13 @@ sub DESTROY
 {
     my ($self) = @_;
     # XXX Seems like a problem if parent gets here first.
-    if ($self->pid() != $$) {
+    if (defined($self->pid()) && $self->pid() != $$) {
 	$self->dbh()->{'InactiveDestroy'} = 1;
     }
-    $self->dbh()->SUPER::DESTROY()
-	if $self->dbh()->can("SUPER::DESTROY");
+    if (defined($self->dbh())) {
+	$self->dbh()->SUPER::DESTROY()
+	    if $self->dbh()->can("SUPER::DESTROY");
+    }
 }
 
 #############################################################################
@@ -393,10 +433,10 @@ my @DB = ();
 
 use vars qw($DBQUERY_MAXTRIES $DBCONN_MAXTRIES $DBErrorString $DBCONN_USEDBI
 	    $DBCONN_EXITONERR $DBQUERY_RECONNECT $DBQUERY_DEBUG);
-$DBQUERY_MAXTRIES  = 1;
+$DBQUERY_MAXTRIES  = 5;  # Retry forever if zero
 $DBQUERY_RECONNECT = 1;
 $DBCONN_USEDBI     = $USEDBI;
-$DBCONN_MAXTRIES   = 5;
+$DBCONN_MAXTRIES   = 5;  # Retry forever if zero
 $DBCONN_EXITONERR  = 1;
 $DBQUERY_DEBUG     = 0;
 $DBErrorString     = "";
@@ -423,7 +463,7 @@ sub DBExists($)
 sub TBDBConnect($$)
 {
     my ($dbnum, $dbname) = @_;
-    my $maxtries = $DBCONN_MAXTRIES;
+    my $maxtries = $DBCONN_MAXTRIES || 999999;
 
     if (!defined($dbname)) {
 	    print STDERR "What DBNAME should I use?\n";
@@ -458,34 +498,43 @@ sub TBDBConnect($$)
     }
     my $dbuser = "$SCRIPTNAME:$name:$PID";
 
-    while ($maxtries) {
-	if ($DBQUERY_DEBUG) {
-	    print STDERR "DBConnect:$dbnum $dbname $$\n";
-	}
-
-	my $dbhw;
-	if ($DBCONN_USEDBI) {
-	    $dbhw = emdbi_wrapper::DBI->Wrap($dbname, $dbuser);
-	}
-	else {
-	    $dbhw = emdbi_wrapper::Mysql->Wrap($dbname, $dbuser);
-	}
-	if (defined($dbhw)) {
-	    $DB[$dbnum] = $dbhw;
-	    last;
-	}
-	$maxtries--;
-	if ($maxtries) {
-	    print STDERR "Cannot connect to DB; trying again in 5 seconds!\n";
-	    sleep(5);
-	}
+    if ($DBQUERY_DEBUG) {
+	print STDERR "DBConnect:$dbnum $dbname $$\n";
     }
-    if (!defined($DB[$dbnum])) {
-	print STDERR
-	    "Cannot connect to DB after $DBQUERY_MAXTRIES attempts!\n";
+    my $dbhw;
+    if ($DBCONN_USEDBI) {
+	$dbhw = emdbi_wrapper::DBI->Wrap($dbname, $dbuser);
+    }
+    else {
+	$dbhw = emdbi_wrapper::Mysql->Wrap($dbname, $dbuser);
+    }
+    if (!defined($dbhw)) {
+	print STDERR "Cannot create database connection wrapper for $dbname\n";
 	return -1
 	    if (! $DBCONN_EXITONERR);
 	exit(-1);
+    }
+    $DB[$dbnum] = $dbhw;
+
+    while ($maxtries) {
+	last
+	    if ($dbhw->Connect() == 0);
+
+	$maxtries--;
+	if ($maxtries) {
+	    print STDERR "Cannot connect to DB $dbname; ".
+		"trying again in a few seconds!\n";
+	    sleep(10);
+	}
+    }
+    if (!$maxtries) {
+	print STDERR "Cannot connect to DB $dbname after a long time!\n";
+	return -1
+	    if (! $DBCONN_EXITONERR);
+	exit(-1);
+    }
+    if ($DBQUERY_DEBUG) {
+	print "DBConnect:$dbnum: Connected to DB $dbname in process $PID\n";
     }
     return 0;
 }
@@ -494,15 +543,20 @@ sub TBDBConnect($$)
 sub TBDBReconnect($)
 {
     my ($retry) = @_;
-    my ($exitonerr,$maxtries);
+    my ($exitonerr);
     
     if ($retry) {
 	$exitonerr = $DBCONN_EXITONERR;
 	$DBCONN_EXITONERR = 0;
-	
-	# And we want to keep trying for a long time!
-	$maxtries = $DBCONN_MAXTRIES;
+
+	#
+	# Once we have started running, we we do not want to quit early
+	# if mysqld fails. We want to wait until it comes back and the
+	# caller can continue. Typically, this will not be long cause the
+	# watchdog is going to get it going in a couple of minutes.
+	#
 	$DBCONN_MAXTRIES  = 10000;
+	$DBQUERY_MAXTRIES = 10000;
     }
 
     for (my $i = 0; $i < @DB; $i++) {
@@ -518,10 +572,7 @@ sub TBDBReconnect($)
 
     if ($retry) {
 	$DBCONN_EXITONERR = $exitonerr;
-	$DBCONN_MAXTRIES  = $maxtries;
     }
-    #print "Reconnected to DB in process $PID\n";
-   
     return 0;
 }
 
@@ -563,15 +614,14 @@ sub NewTBDBHandle($)
 sub DBQueryN($$)
 {
     my($dbnum, $query)   = @_;
-    my $maxtries = $DBQUERY_MAXTRIES;
+    my $maxtries = $DBQUERY_MAXTRIES || 999999;
     my $result;
 
     # Update query count total for debugging purposes
     $queryCount += 1;
 
-    # Not really forever :-)
-    if (!$maxtries) {
-	$maxtries = 100000;
+    if ($DBQUERY_DEBUG) {
+	print STDERR "Query:$dbnum '$query'\n";
     }
 
     # Mostly for ProtoGeni;
@@ -580,45 +630,59 @@ sub DBQueryN($$)
 	print STDERR "Query: '$query'\n";
 	return undef;
     }
-    
+    my $dbw = $DB[$dbnum];
     # Reconnect to mysqld in child of fork.
-    if ($DB[$dbnum]->pid() != $PID) {
+    if (defined($dbw->pid()) && $dbw->pid() != $PID) {
+	#print "DBQueryN:$dbnum Detected a fork in $PID. Reconnecting\n";
+	if (TBDBReconnect(1) != 0) {
+	    $DBErrorString =
+		"  Query: $query\n".
+		"  Error: Could not reconnect to mysqld in child of fork";
+	    return undef;
+	}
+	# New wrapper
+	$dbw = $DB[$dbnum];
+    }
+    # Watch for a dead connection before we even try. We can do this with
+    # the DBI wrapper.
+    if (defined($dbw->dbh()) && $DBCONN_USEDBI && !$dbw->dbh()->ping()) {
+	#print "DBQueryN:$dbnum ping failed in $PID. Reconnecting\n";
 	if (TBDBReconnect(1) != 0) {
 	    $DBErrorString =
 		"  Query: $query\n".
 		"  Error: Could not reconnect to mysqld";
 	    return undef;
 	}
-    }
-
-    if ($DBQUERY_DEBUG) {
-	print STDERR "Query: '$query'\n";
+	# New wrapper
+	$dbw = $DB[$dbnum];
     }
 
     while ($maxtries) {
 	# Get this each time through the loop since we try reconnect below.
-	my $dbw = $DB[$dbnum];
-	my $db  = $dbw->dbh();
-
+	$dbw    = $DB[$dbnum];
 	$result = $dbw->query($query);
 
 	if (! defined($result)) {
+	    my $db  = $dbw->dbh();
 	    my $err = $db->err;
 
 	    $DBErrorString =
 		"  Query: $query\n".
 		"  Error: " . $db->errstr . " ($err)";
 	}
+	my $db = $dbw->dbh();
+	
 	if (defined($result) ||
-	    ($db->err != 2006) && ($db->err != 1053) && ($db->err != 2013) &&
-	    ($db->err != 1046)) {
+	    ($db->err != 2006 && $db->err != 1053 && $db->err != 2013 &&
+	     $db->err != 1046 && $db->err != 1317)) {
 	    last;
 	}
 
 	#
 	# If we lose the connection to mysqld; lets try to reconnect. 
 	#
-	if ($db->err == 2006 || $db->err == 2013) {
+	if ($db->err == 2006 || $db->err == 2013 ||
+	    ($DBCONN_USEDBI && !$dbw->dbh()->ping())) {
 	    # This is just for the mysqld watchdog daemon.
 	    return undef
 		if (! $DBQUERY_RECONNECT);
@@ -627,15 +691,19 @@ sub DBQueryN($$)
 		$DBErrorString =
 		    "  Query: $query\n".
 		    "  Error: Could not reconnect to mysqld";
-
+		DBWarn("mysqld went away in process $PID. Cannot reconnect", 0);
 		return undef;
 	    }
+	    # New wrapper
+	    $dbw = $DB[$dbnum];
 	    next;
 	}
-
 	$maxtries--;
-	DBWarn("mysqld went away in process $PID. $maxtries tries left", 0);
-	sleep(1);
+	DBWarn("mysqld went away in process $PID. $maxtries tries left", 1);
+	sleep(10);
+    }
+    if (!$maxtries) {
+	DBWarn("mysqld went away in process $PID. No tries left", 0);
     }
     return $result;
 }
@@ -759,15 +827,17 @@ sub DBError($$;$)
 sub DBQuoteSpecial($)
 {
     my ($string) = @_;
+    my $dbw = $DB[0];
 
-    return $DB[0]->dbh()->quote($string);
+    return $dbw->dbh()->quote($string);
 }
 
 sub DBQuoteSpecialN($$)
 {
     my ($dbnum, $string) = @_;
+    my $dbw = $DB[$dbnum];
 
-    return $DB[$dbnum]->dbh()->quote($string);
+    return $dbw->dbh()->quote($string);
 }
 
 #
@@ -841,7 +911,9 @@ sub DBHandleN($)
     my ($dbnum) = @_;
     
     my $dbw = $DB[$dbnum];
+    
     my $db  = $dbw->dbh();
+    
 
     return $db;
 }

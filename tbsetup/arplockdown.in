@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2014 University of Utah and the Flux Group.
+# Copyright (c) 2003-2014, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -61,6 +61,7 @@ my $PRIVATE_MASK= "@PRIVATE_NETMASK@";
 my $JAIL_NET    = "@JAILIPBASE@";
 my $JAIL_MASK   = "@JAILIPMASK@";
 my $BOSSNODE_IP = "@BOSSNODE_IP@";
+my $OPSVM_ENABLE= @OPSVM_ENABLE@;
 my $SAVEUID     = $UID;
 my $ARP		= "/usr/sbin/arp";
 my $FINDIF	= "$TB/sbin/findif";
@@ -150,7 +151,7 @@ $UID = 0;
 #
 # First, update the lockdown on the FS/OPs node.
 #
-if (!$impotent) {
+if (!$impotent && !$OPSVM_ENABLE) {
     my $optarg = ($verbose ? "-v" : "");
     
     SSHwithTimeout($CONTROL, "$FIXARPINFO $optarg -u -t 5", 30, $verbose) == 0

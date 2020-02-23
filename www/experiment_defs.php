@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -515,6 +515,27 @@ class Experiment
     }
 
     #
+    # Return array of types used and their count.
+    #
+    function TypesUsed() {
+        $idx = $this->idx();
+        $result = array();
+
+	$query_result =
+	    DBQueryFatal("select type,count(type) from reserved as r ".
+                         "left join nodes as n on n.node_id=r.node_id ".
+                         "where r.exptidx=$idx group by type");
+
+	while ($row = mysql_fetch_array($query_result)) {
+	    $type  = $row[0];
+	    $count = $row[1];
+	
+	    $result[$type] = $count;
+	}
+	return $result;
+    }
+
+    #
     # Return number of events.
     #
     function EventCount() {
@@ -714,6 +735,7 @@ class Experiment
 	$exp_swapuid = $exprow["expt_swap_uid"];
 	$exp_end     = $exprow["expt_end"];
 	$exp_created = $exprow["expt_created"];
+	$exp_expires = $exprow["expt_expires"];
 	$exp_head    = $exprow["expt_head_uid"];
 	$exp_swapper = $exprow["swapper_idx"];
 	$exp_state   = $exprow["state"];
@@ -941,6 +963,12 @@ class Experiment
               </tr>\n";
 
 	    if (ISADMIN()) {
+	        if ($exp_expires) {
+		    echo "<tr>
+		          <td>Expires: </td>
+		          <td class=\"left\">$exp_expires</td>
+		          </tr>\n";
+                }
 		echo "<tr>
                     <td>Idle Ignore:</td>
                     <td class=\"left\">$idle_ignore</td>

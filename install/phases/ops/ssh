@@ -24,8 +24,8 @@ sub Install($$$)
 	    my @strings = ("PermitRootLogin yes",
 			   "Protocol 2");
 
-	    # GPO wants this turned off.
-	    if ($PROTOGENI_GENIRACK) {
+	    # We should probably do this all the time
+	    if ($CONFIG_TARGETSYS) {
 		ExecQuietFatal("sed -i.orig ".
 			       "  -e 's/PasswordAuth/#PasswordAuth/' ".
 			       "  -e 's/PermitRootLogin/#PermitRootLogin/' ".

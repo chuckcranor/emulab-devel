@@ -12,7 +12,15 @@ OSARCH != /usr/bin/uname -m
 EMULAB_PORTVERSION=	UNSUPPORTED
 
 .if ${OSMAJOR} >= 11
+.   if ${OSMINOR} >= 3
+EMULAB_PORTVERSION=	7.3
+.   else
+.    if ${OSMINOR} >= 2
+EMULAB_PORTVERSION=	7.2
+.    else
 EMULAB_PORTVERSION=	7.1
+.    endif
+.   endif
 .else
 .  if ${OSMAJOR} >= 10
 .   if ${OSMINOR} >= 3
@@ -33,21 +41,41 @@ EMULAB_PORTVERSION=	6.1
 # Select PHP and Apache versions
 # Fix up some port diffs
 #
-.if ${EMULAB_PORTVERSION} == "7.1"
-DEFAULT_VERSIONS= perl5=5.24 python=2.7 tcltk=8.6 php=5.6 mysql=5.7 apache=2.2
-APACHE_PORT=www/apache22
+PHP_MAJ=5
+PHP_VER=56
+.if (${EMULAB_PORTVERSION} == "7.3")
+DEFAULT_VERSIONS= perl5=5.30 python=2.7 tcltk=8.6 php=7.2 mysql=5.7 apache=2.4
+APACHE_PORT=www/apache24
+APACHEMODDIR=libexec/apache24
 MYSQL_VER=57
+SWIG_VER=3.0
+SWIG_PORT=devel/swig30
+PHP_MAJ=7
+PHP_VER=72
+.else
+.if (${EMULAB_PORTVERSION} == "7.1" || ${EMULAB_PORTVERSION} == "7.2")
+DEFAULT_VERSIONS= perl5=5.26 python=2.7 tcltk=8.6 php=5.6 mysql=5.7 apache=2.4
+APACHE_PORT=www/apache24
+APACHEMODDIR=libexec/apache24
+MYSQL_VER=57
+SWIG_VER=3.0
+SWIG_PORT=devel/swig30
 .else
 .  if ${EMULAB_PORTVERSION} == "6.3"
 DEFAULT_VERSIONS= perl5=5.24 python=2.7 tcltk=8.6 php=5.6 mysql=5.7 apache=2.2
 APACHE_PORT=www/apache22
+APACHEMODDIR=libexec/apache22
 MYSQL_VER=57
 .  else
 .    if ${EMULAB_PORTVERSION} != "UNSUPPORTED"
 DEFAULT_VERSIONS= perl5=5.20 python=2.7 tcltk=8.6 php=5.6 mysql=5.5 apache=2.2
 APACHE_PORT=www/apache22
+APACHEMODDIR=libexec/apache22
 MYSQL_VER=55
 .    endif
 .  endif
+SWIG_VER=2.0
+SWIG_PORT=devel/swig20
+.endif
 .endif
 .endif

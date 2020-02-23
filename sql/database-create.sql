@@ -15,6 +15,59 @@
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
+
+DROP TABLE IF EXISTS `apt_mobile_aggregates`;
+CREATE TABLE `apt_mobile_aggregates` (
+  `urn` varchar(128) NOT NULL default '',
+  `type` enum('bus') default NULL,
+  PRIMARY KEY  (`urn`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `apt_mobile_buses`;
+CREATE TABLE `apt_mobile_buses` (
+  `urn` varchar(128) NOT NULL default '',
+  `busid` int(8) NOT NULL default '0',
+  `last_ping` datetime default NULL,
+  `last_report` datetime default NULL,
+  `routeid` smallint(5) default NULL,
+  `routedescription` tinytext,
+  `route_changed` datetime default NULL,
+  `latitude` float(8,5) NOT NULL default '0.00000',
+  `longitude` float(8,5) NOT NULL default '0.00000',
+  `speed` float(8,2) NOT NULL default '0.00',
+  `heading` smallint(5) NOT NULL default '0',
+  `location_stamp` datetime default NULL,
+  PRIMARY KEY  (`urn`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `apt_mobile_bus_route_change_history`;
+CREATE TABLE `apt_mobile_bus_route_change_history` (
+  `idx` int(10) unsigned NOT NULL auto_increment,
+  `urn` varchar(128) NOT NULL default '',
+  `busid` int(8) NOT NULL default '0',
+  `routeid` smallint(5) default NULL,
+  `routedescription` tinytext,
+  `route_changed` datetime default NULL,
+  PRIMARY KEY (`busid`,`idx`),
+  KEY `urn` (`urn`,`idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `apt_mobile_bus_routes`;
+CREATE TABLE `apt_mobile_bus_routes` (
+  `routeid` smallint(5) NOT NULL default '0',
+  `description` tinytext,
+  PRIMARY KEY  (`routeid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `apt_instance_bus_routes`;
+CREATE TABLE `apt_instance_bus_routes` (
+  `uuid` varchar(40) NOT NULL default '',
+  `name` varchar(16) default NULL,
+  `routeid` smallint(5) NOT NULL default '0',
+  `routedescription` tinytext,
+  PRIMARY KEY (`uuid`,`routeid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
 --
 -- Table structure for table `address_ranges`
 --
@@ -77,6 +130,23 @@ CREATE TABLE `addr_pool_history` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_aggregate_radioinfo`
+--
+
+DROP TABLE IF EXISTS `apt_aggregate_radioinfo`;
+CREATE TABLE `apt_aggregate_radioinfo` (
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `node_id` varchar(32) NOT NULL default '',
+  `location` varchar(64) NOT NULL default '',
+  `installation_type` enum('FE','ME','BS','unknown') NOT NULL default 'unknown',
+  `radio_type` tinytext,
+  `transmit_frequencies` text,
+  `receive_frequencies` text,
+  `notes` text,
+  PRIMARY KEY  (`aggregate_urn`,`node_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_aggregate_nodetypes`
 --
 
@@ -91,13 +161,52 @@ CREATE TABLE `apt_aggregate_nodetypes` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_aggregate_nodetype_attributes`
+--
+
+DROP TABLE IF EXISTS `apt_aggregate_nodetype_attributes`;
+CREATE TABLE `apt_aggregate_nodetype_attributes` (
+  `urn` varchar(128) NOT NULL default '',
+  `type` varchar(30) NOT NULL default '',
+  `attrkey` varchar(32) NOT NULL default '',
+  `attrvalue` tinytext NOT NULL,
+  PRIMARY KEY  (`urn`,`type`,`attrkey`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_aggregate_reservable_nodes`
+--
+
+DROP TABLE IF EXISTS `apt_aggregate_reservable_nodes`;
+CREATE TABLE `apt_aggregate_reservable_nodes` (
+  `urn` varchar(128) NOT NULL default '',
+  `node_id` varchar(32) NOT NULL default '',
+  `type` varchar(30) NOT NULL default '',
+  `available` tinyint(1) NOT NULL default '0',
+  `updated` datetime default NULL,
+  PRIMARY KEY  (`urn`,`node_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_aggregates_status_events`
+--
+
+DROP TABLE IF EXISTS `apt_aggregate_events`;
+CREATE TABLE `apt_aggregate_events` (
+  `urn` varchar(128) NOT NULL default '',
+  `event` enum('up','down','offline','unknown') NOT NULL default 'unknown',
+  `stamp` datetime NOT NULL default '0000-00-00 00:00:00',
+  PRIMARY KEY  (`urn`,`stamp`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_aggregate_status`
 --
 
 DROP TABLE IF EXISTS `apt_aggregate_status`;
 CREATE TABLE `apt_aggregate_status` (
   `urn` varchar(128) NOT NULL default '',
-  `status` enum('up','down','unknown') NOT NULL default 'unknown',
+  `status` enum('up','down','offline','unknown') NOT NULL default 'unknown',
   `last_success` datetime default NULL,
   `last_attempt` datetime default NULL,
   `pcount` int(11) default '0',
@@ -117,17 +226,28 @@ CREATE TABLE `apt_aggregates` (
   `urn` varchar(128) NOT NULL default '',
   `name` varchar(32) NOT NULL default '',
   `nickname` varchar(32) NOT NULL default '',
-  `abbreviation` varchar(16) NOT NULL default '',
+  `abbreviation` varchar(32) NOT NULL default '',
   `adminonly` tinyint(1) NOT NULL default '0',
   `isfederate` tinyint(1) NOT NULL default '0',
+  `isFE` tinyint(1) NOT NULL default '0',
+  `ismobile` tinyint(1) NOT NULL default '0',
   `disabled` tinyint(1) NOT NULL default '0',
   `noupdate` tinyint(1) NOT NULL default '0',
   `nomonitor` tinyint(1) NOT NULL default '0',
+  `nolocalimages` tinyint(1) NOT NULL default '0',
+  `prestageimages` tinyint(1) NOT NULL default '0',
+  `deferrable` tinyint(1) NOT NULL default '0',
   `updated` datetime NOT NULL default '0000-00-00 00:00:00',
   `weburl` tinytext,
   `has_datasets` tinyint(1) NOT NULL default '0',
   `reservations` tinyint(1) NOT NULL default '0',
+  `panicpoweroff` tinyint(1) NOT NULL default '0',
+  `precalcmaxext` tinyint(1) NOT NULL default '0',
   `portals` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
+  `canuse_feature` varchar(64) default NULL,
+  `latitude` float(8,5) default NULL,
+  `longitude` float(8,5) default NULL,
+  `required_license` int(11) default NULL,
   `jsondata` text,
   PRIMARY KEY  (`urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -172,6 +292,22 @@ CREATE TABLE `apt_datasets` (
   UNIQUE KEY `plid` (`pid_idx`,`dataset_id`),
   UNIQUE KEY `uuid` (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+
+--
+-- Table structure for table `apt_deferred_instances`
+--
+
+DROP TABLE IF EXISTS `apt_deferred_instances`;
+CREATE TABLE `apt_deferred_instances` (
+  `uuid` varchar(40) NOT NULL default '',
+  `name` varchar(16) default NULL,
+  `start_at` datetime default NULL,
+  `last_retry` datetime default NULL,
+  `retry_until` datetime default NULL,
+  PRIMARY KEY (`uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
 
 --
 -- Table structure for table `apt_extension_group_policies`
@@ -221,10 +357,14 @@ CREATE TABLE `apt_instance_aggregate_history` (
   `name` varchar(16) default NULL,
   `aggregate_urn` varchar(128) NOT NULL default '',
   `status` varchar(32) default NULL,
+  `started` datetime default NULL,
   `physnode_count` smallint(5) unsigned NOT NULL default '0',
   `virtnode_count` smallint(5) unsigned NOT NULL default '0',
+  `retry_count` smallint(5) unsigned NOT NULL default '0',
+  `last_retry` datetime default NULL,
   `public_url` tinytext,
   `webtask_id` varchar(128) NOT NULL default '',
+  `extension_needpush` datetime default NULL,
   `manifest` mediumtext,
   PRIMARY KEY (`uuid`,`aggregate_urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -239,10 +379,14 @@ CREATE TABLE `apt_instance_aggregates` (
   `name` varchar(16) default NULL,
   `aggregate_urn` varchar(128) NOT NULL default '',
   `status` varchar(32) default NULL,
+  `started` datetime default NULL,
   `physnode_count` smallint(5) unsigned NOT NULL default '0',
   `virtnode_count` smallint(5) unsigned NOT NULL default '0',
+  `retry_count` smallint(5) unsigned NOT NULL default '0',
+  `last_retry` datetime default NULL,
   `public_url` tinytext,
   `webtask_id` varchar(128) NOT NULL default '',
+  `extension_needpush` datetime default NULL,
   `manifest` mediumtext,
   PRIMARY KEY (`uuid`,`aggregate_urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -293,10 +437,14 @@ CREATE TABLE `apt_instance_failures` (
   `gid` varchar(32) NOT NULL default '',
   `gid_idx` mediumint(8) unsigned NOT NULL default '0',
   `created` datetime default NULL,
+  `start_at` datetime default NULL,
+  `started` datetime default NULL,
+  `stop_at` datetime default NULL,
   `exitcode` int(10) default '0',
   `exitmessage` mediumtext,
   `public_url` tinytext,
   `logfileid` varchar(40) default NULL,
+  `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   PRIMARY KEY (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -322,6 +470,9 @@ CREATE TABLE `apt_instance_history` (
   `public_url` tinytext,
   `logfileid` varchar(40) default NULL,
   `created` datetime default NULL,
+  `start_at` datetime default NULL,
+  `started` datetime default NULL,
+  `stop_at` datetime default NULL,
   `destroyed` datetime default NULL,
   `expired` tinyint(1) NOT NULL default '0',
   `extension_count` smallint(5) unsigned NOT NULL default '0',
@@ -330,6 +481,7 @@ CREATE TABLE `apt_instance_history` (
   `physnode_count` smallint(5) unsigned NOT NULL default '0',
   `virtnode_count` smallint(5) unsigned NOT NULL default '0',
   `servername` tinytext,
+  `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `repourl` tinytext,
   `reponame` varchar(40) default NULL,
   `reporef` varchar(128) default NULL,
@@ -339,7 +491,12 @@ CREATE TABLE `apt_instance_history` (
   `params` mediumtext,
   `manifest` mediumtext,
   PRIMARY KEY (`uuid`),
-  KEY `profile_id` (`profile_id`)
+  KEY `profile_id` (`profile_id`),
+  KEY `creator` (`creator`),
+  KEY `creator_idx` (`creator_idx`),
+  KEY `pid_idx` (`pid_idx`),
+  KEY `servername` (`uuid`,`servername`(32)),
+  KEY `slice_uuid` (`slice_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -398,6 +555,11 @@ CREATE TABLE `apt_instances` (
   `public_url` tinytext,
   `webtask_id` varchar(128) default NULL,
   `created` datetime default NULL,
+  `start_at` datetime default NULL,
+  `started` datetime default NULL,
+  `stop_at` datetime default NULL,
+  `maxextension` datetime default NULL,
+  `maxextension_timestamp` datetime default NULL,
   `status` varchar(32) default NULL,
   `status_timestamp` datetime default NULL,
   `canceled` tinyint(2) NOT NULL default '0',
@@ -425,6 +587,7 @@ CREATE TABLE `apt_instances` (
   `physnode_count` smallint(5) unsigned NOT NULL default '0',
   `virtnode_count` smallint(5) unsigned NOT NULL default '0',
   `servername` tinytext,
+  `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `monitor_pid` int(11) default '0',
   `needupdate` tinyint(3) NOT NULL default '0',
   `isopenstack` tinyint(1) NOT NULL default '0',
@@ -438,6 +601,7 @@ CREATE TABLE `apt_instances` (
   `rspec` mediumtext,
   `script` mediumtext,
   `params` mediumtext,
+  `paramdefs` mediumtext,
   `manifest` mediumtext,
   `openstack_utilization` mediumtext,
   PRIMARY KEY (`uuid`)
@@ -457,6 +621,27 @@ CREATE TABLE `apt_news` (
   `portals` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `body` text,
   PRIMARY KEY  (`idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_parameter_sets`
+--
+
+DROP TABLE IF EXISTS `apt_parameter_sets`;
+CREATE TABLE `apt_parameter_sets` (
+  `uuid` varchar(40) NOT NULL,
+  `uid` varchar(8) NOT NULL default '',
+  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `created` datetime default NULL,
+  `name` varchar(64) NOT NULL default '',
+  `description` text,
+  `profileid` int(10) unsigned NOT NULL default '0',
+  `version_uuid` varchar(40) default NULL,
+  `reporef` varchar(128) default NULL,
+  `repohash` varchar(64) default NULL,
+  `bindings` mediumtext,    
+  PRIMARY KEY (`uuid`),
+  UNIQUE KEY `uid_idx` (`uid_idx`,`profileid`,`name`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -556,12 +741,173 @@ CREATE TABLE `apt_profiles` (
   `no_image_versions` tinyint(1) NOT NULL default '0',
   `disabled` tinyint(1) NOT NULL default '0',
   `nodelete` tinyint(1) NOT NULL default '0',
+  `project_write` tinyint(1) NOT NULL default '0',
   `locked` datetime default NULL,
   `locker_pid` int(11) default '0',
   `lastused` datetime default NULL,
   `usecount` int(11) default '0',
+  `examples_portals` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,  
   PRIMARY KEY (`profileid`),
   UNIQUE KEY `pidname` (`pid_idx`,`name`,`version`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_reservation_groups`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_groups`;
+CREATE TABLE `apt_reservation_groups` (
+  `uuid` varchar(40) NOT NULL default '',
+  `pid` varchar(48) NOT NULL default '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `creator_uid` varchar(8) NOT NULL default '',
+  `creator_idx` mediumint(8) unsigned NOT NULL default '0',
+  `start` datetime DEFAULT NULL,
+  `end` datetime DEFAULT NULL,
+  `created` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
+  `deleted` datetime DEFAULT NULL,
+  `noidledetection` datetime DEFAULT NULL,
+  `locked` datetime DEFAULT NULL,
+  `locker_pid` int(11) default '0',
+  `reason` mediumtext,
+  PRIMARY KEY (`uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_reservation_group_reservations`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_group_reservations`;
+CREATE TABLE `apt_reservation_group_reservations` (
+  `uuid` varchar(40) NOT NULL default '',
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `remote_uuid` varchar(40) NOT NULL default '',
+  `type` varchar(30) NOT NULL DEFAULT '',
+  `count` smallint(5) unsigned NOT NULL DEFAULT '0',
+  `using` smallint(5) unsigned default NULL,
+  `utilization` smallint(5) unsigned default NULL,
+  `submitted` datetime DEFAULT NULL,
+  `approved` datetime DEFAULT NULL,
+  `approved_pushed` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
+  `canceled_pushed` datetime DEFAULT NULL,
+  `cancel_canceled` datetime DEFAULT NULL,
+  `deleted` datetime DEFAULT NULL,
+  `deleted_pushed` datetime DEFAULT NULL,
+  `noidledetection_needpush` tinyint(1) NOT NULL default '0',
+  `jsondata` text,
+  PRIMARY KEY (`uuid`,`aggregate_urn`,`type`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_reservation_group_rf_reservations`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_group_rf_reservations`;
+CREATE TABLE `apt_reservation_group_rf_reservations` (
+  `uuid` varchar(40) NOT NULL default '',
+  `freq_uuid` varchar(40) NOT NULL default '',
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  `submitted` datetime DEFAULT NULL,
+  `approved` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
+  PRIMARY KEY (`uuid`,`freq_uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_reservation_group_route_reservations`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_group_route_reservations`;
+CREATE TABLE `apt_reservation_group_route_reservations` (
+  `uuid` varchar(40) NOT NULL default '',
+  `route_uuid` varchar(40) NOT NULL default '',
+  `routeid` smallint(5) NOT NULL default '0',
+  `routename` tinytext,
+  `submitted` datetime DEFAULT NULL,
+  `approved` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
+  PRIMARY KEY (`uuid`,`route_uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_reservation_group_history`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_group_history`;
+CREATE TABLE `apt_reservation_group_history` (
+  `uuid` varchar(40) NOT NULL default '',
+  `pid` varchar(48) NOT NULL default '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `creator_uid` varchar(8) NOT NULL default '',
+  `creator_idx` mediumint(8) unsigned NOT NULL default '0',
+  `start` datetime DEFAULT NULL,
+  `end` datetime DEFAULT NULL,
+  `created` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
+  `deleted` datetime DEFAULT NULL,
+  `reason` mediumtext,
+  PRIMARY KEY (`uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_reservation_group_reservation_history`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_group_reservation_history`;
+CREATE TABLE `apt_reservation_group_reservation_history` (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `uuid` varchar(40) NOT NULL default '',
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `remote_uuid` varchar(40) NOT NULL default '',
+  `type` varchar(30) NOT NULL DEFAULT '',
+  `count` smallint(5) unsigned NOT NULL DEFAULT '0',
+  `submitted` datetime DEFAULT NULL,
+  `approved` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
+  `deleted` datetime DEFAULT NULL,
+  PRIMARY KEY (`idx`),
+  KEY `agguuid` (`uuid`,`aggregate_urn`,`type`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_reservation_group_rf_reservation_history`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_group_rf_reservation_history`;
+CREATE TABLE `apt_reservation_group_rf_reservation_history` (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `uuid` varchar(40) NOT NULL default '',
+  `freq_uuid` varchar(40) NOT NULL default '',
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  `submitted` datetime DEFAULT NULL,
+  `approved` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
+  `deleted` datetime DEFAULT NULL,
+  PRIMARY KEY (`idx`),
+  KEY `uuids` (`uuid`,`freq_uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_reservation_group_route_reservation_history`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_group_route_reservation_history`;
+CREATE TABLE `apt_reservation_group_route_reservation_history` (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `uuid` varchar(40) NOT NULL default '',
+  `route_uuid` varchar(40) NOT NULL default '',
+  `routeid` smallint(5) NOT NULL default '0',
+  `routename` tinytext,
+  `submitted` datetime DEFAULT NULL,
+  `approved` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
+  `deleted` datetime DEFAULT NULL,
+  PRIMARY KEY (`idx`),
+  KEY `uuids` (`uuid`,`route_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -2232,6 +2578,8 @@ CREATE TABLE `future_reservations` (
   `approved` datetime DEFAULT NULL,
   `approver` varchar(8) DEFAULT NULL,
   `notified` datetime DEFAULT NULL,
+  `notified_unused` datetime DEFAULT NULL,
+  `override_unused` tinyint(1) NOT NULL default '0',
   `uuid` varchar(40) NOT NULL default '',
   PRIMARY KEY (`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -2529,6 +2877,28 @@ CREATE TABLE `image_history` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `image_incoming_relocations`
+--
+
+DROP TABLE IF EXISTS `image_incoming_relocations`;
+CREATE TABLE `image_incoming_relocations` (
+  `imagename` varchar(30) NOT NULL default '',
+  `uid` varchar(8) NOT NULL DEFAULT '',
+  `uid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0',
+  `pid` varchar(48) NOT NULL default '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `gid` varchar(32) NOT NULL default '',
+  `gid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `remote_urn` varchar(128) default NULL,
+  `metadata_url` tinytext,
+  `created` datetime default NULL,
+  `locked` datetime default NULL,
+  PRIMARY KEY  (`pid_idx`,`imagename`),
+  UNIQUE KEY `remote_urn`  (`remote_urn`),
+  UNIQUE KEY  `metadata_url` (`metadata_url`(128))
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `image_notifications`
 --
 
@@ -2623,7 +2993,7 @@ CREATE TABLE `image_versions` (
   `origin_neednotify` tinyint(1) NOT NULL default '0',
   `origin_needupdate` tinyint(1) NOT NULL default '0',
   `authority_urn` varchar(128) default NULL,
-  `credential_string` text,
+  `credential_string_save` text,
   `logfileid` varchar(40) default NULL,
   `noexport` tinyint(1) NOT NULL default '0',
   `noclone` tinyint(1) NOT NULL default '0',
@@ -2664,6 +3034,36 @@ CREATE TABLE `image_updates` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `image_pending_imports`
+--
+
+DROP TABLE IF EXISTS `image_pending_imports`;
+CREATE TABLE `image_pending_imports` (
+  `idx` int(10) unsigned NOT NULL auto_increment,
+  `imagename` varchar(30) NOT NULL default '',
+  `imageid` int(8) unsigned default NULL,
+  `imageuuid` varchar(40) default NULL,
+  `uid` varchar(8) default NULL,
+  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `uid_urn` varchar(128) default NULL,
+  `pid` varchar(48) default NULL,
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `gid` varchar(32) default NULL,
+  `gid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `created` datetime default NULL,
+  `type` enum('import','copyback','relocation') default NULL,
+  `locked` datetime default NULL,
+  `locker_pid` int(11) default '0',
+  `failed` datetime default NULL,
+  `failure_message` text,
+  `remote_urn` varchar(128) default NULL,
+  `metadata_url` varchar(256) default '',
+  `credential_string` text,
+  PRIMARY KEY  (`idx`),
+  UNIQUE KEY `url` (`metadata_url`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `images`
 --
 
@@ -2682,6 +3082,8 @@ CREATE TABLE `images` (
   `nodelta` tinyint(1) NOT NULL default '0',
   `noversioning` tinyint(1) NOT NULL default '0',
   `metadata_url` tinytext,
+  `relocate_urn` tinytext,
+  `credential_string` text,
   `locked` datetime default NULL,
   `locker_pid` int(11) default '0',
   PRIMARY KEY  (`imageid`),
@@ -2780,6 +3182,61 @@ CREATE TABLE `interfaces` (
   KEY `IP` (`IP`),
   KEY `uuid` (`uuid`),
   KEY `role` (`role`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+
+--
+-- Table structure for table `node_ip_changes`
+--
+
+DROP TABLE IF EXISTS `node_ip_changes`;
+CREATE TABLE `node_ip_changes` (
+  `node_id` varchar(32) NOT NULL default '',
+  `oldIP` varchar(15) default NULL,
+  `newIP` varchar(15) default NULL,
+  `changed` datetime NOT NULL default '0000-00-00 00:00:00'
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `interfaces_rf_limit`
+--
+
+DROP TABLE IF EXISTS `interfaces_rf_limit`;
+CREATE TABLE `interfaces_rf_limit` (
+  `node_id` varchar(32) NOT NULL DEFAULT '',
+  `iface` text NOT NULL,
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  `power` float(8,2) NOT NULL DEFAULT '0.00',
+  PRIMARY KEY (`node_id`,`iface`(128),`freq_low`,`freq_high`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `node_rf_reports`
+--
+
+DROP TABLE IF EXISTS `node_rf_reports`;
+CREATE TABLE `node_rf_reports` (
+  `node_id` varchar(32) NOT NULL DEFAULT '',
+  `tstamp` datetime NOT NULL default '0000-00-00 00:00:00',
+  `which` enum('system','user') NOT NULL default 'user',
+  `report` mediumtext NOT NULL,
+  PRIMARY KEY (`node_id`,`which`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `node_rf_violations`
+--
+
+DROP TABLE IF EXISTS `node_rf_violations`;
+CREATE TABLE `node_rf_violations` (
+  `node_id` varchar(32) NOT NULL DEFAULT '',
+  `iface` text NOT NULL,
+  `tstamp` datetime NOT NULL default '0000-00-00 00:00:00',
+  `frequency` float(8,3) NOT NULL DEFAULT '0.000',
+  `power` float(8,3) NOT NULL DEFAULT '0.000',
+  KEY nodeiface (`node_id`,`iface`(128)),
+  KEY nodestamp (`node_id`,`iface`(128),`tstamp`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -2937,6 +3394,27 @@ CREATE TABLE `lease_permissions` (
   `permission_idx` mediumint(8) unsigned NOT NULL default '0',
   `allow_modify` tinyint(1) NOT NULL default '0',
   PRIMARY KEY (`lease_idx`,`permission_type`,`permission_idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `licenses`
+--
+
+DROP TABLE IF EXISTS `licenses`;
+CREATE TABLE `licenses` (
+  `license_idx` int(11) NOT NULL auto_increment,
+  `license_name` varchar(48) NOT NULL default '',
+  `license_level` enum('project','user') NOT NULL default 'project',  
+  `license_target` enum('signup','usage') NOT NULL default 'signup',  
+  `created` datetime default NULL,
+  `validfor` int(11) NOT NULL default '0',
+  `form_text` tinytext,
+  `license_text` text,
+  `license_type` enum('md','text','html') NOT NULL default 'md',
+  `description_text` text,
+  `description_type` enum('md','text','html') NOT NULL default 'md',
+  PRIMARY KEY (`license_idx`),
+  UNIQUE KEY `license_name` (`license_name`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -3365,6 +3843,7 @@ CREATE TABLE `node_attributes` (
   `node_id` varchar(32) NOT NULL default '',
   `attrkey` varchar(32) NOT NULL default '',
   `attrvalue` tinytext NOT NULL,
+  `hidden` tinyint(1) NOT NULL default '0',
   PRIMARY KEY  (`node_id`,`attrkey`),
   KEY `node_id` (`node_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -3558,6 +4037,57 @@ CREATE TABLE `node_type_features` (
   PRIMARY KEY  (`type`,`feature`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
+
+--
+-- Table structure for table `node_type_hardware`
+--
+
+DROP TABLE IF EXISTS `node_type_hardware`;
+CREATE TABLE `node_type_hardware` (
+  `type` varchar(30) NOT NULL default '',
+  `updated` datetime default NULL,
+  `uname` text,
+  `rawjson` mediumtext,  
+  PRIMARY KEY  (`type`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `node_type_hardware_paths`
+--
+
+DROP TABLE IF EXISTS `node_type_hardware_paths`;
+CREATE TABLE `node_type_hardware_paths` (
+  `type` varchar(30) NOT NULL default '',
+  `path` varchar(255) NOT NULL default '',
+  `value` text,
+  PRIMARY KEY  (`type`,`path`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `node_type_hardware`
+--
+
+DROP TABLE IF EXISTS `node_hardware`;
+CREATE TABLE `node_hardware` (
+  `node_id` varchar(30) NOT NULL default '',
+  `updated` datetime default NULL,
+  `uname` text,
+  `rawjson` mediumtext,  
+  PRIMARY KEY  (`node_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `node_type_hardware_paths`
+--
+
+DROP TABLE IF EXISTS `node_hardware_paths`;
+CREATE TABLE `node_hardware_paths` (
+  `node_id` varchar(30) NOT NULL default '',
+  `path` varchar(255) NOT NULL default '',
+  `value` text,
+  PRIMARY KEY  (`node_id`,`path`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
 --
 -- Table structure for table `node_types`
 --
@@ -3701,6 +4231,7 @@ CREATE TABLE `nodes` (
   `destination_orientation` float default NULL,
   `reserved_pid` varchar(48) default NULL,
   `reservation_name` varchar(48) default NULL,
+  `reservable` tinyint(1) NOT NULL default '0',
   `uuid` varchar(40) NOT NULL default '',
   `reserved_memory` int(10) unsigned default '0',
   `nonfsmounts` tinyint(1) NOT NULL default '0',
@@ -3772,7 +4303,7 @@ CREATE TABLE `nonlocal_user_accounts` (
   `uid` varchar(8) NOT NULL default '',
   `uid_idx` mediumint(8) unsigned NOT NULL default '0',
   `uid_uuid` varchar(40) NOT NULL default '',
-  `unix_uid` smallint(5) unsigned NOT NULL auto_increment,
+  `unix_uid` int(10) unsigned NOT NULL auto_increment,
   `created` datetime default NULL,
   `updated` datetime default NULL,
   `privs` enum('user','local_root') default 'local_root',
@@ -4429,6 +4960,20 @@ CREATE TABLE `project_leases` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `project_licenses`
+--
+
+DROP TABLE IF EXISTS `project_licenses`;
+CREATE TABLE `project_licenses` (
+  `pid` varchar(48) NOT NULL default '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `license_idx` int(11) NOT NULL default '0',
+  `accepted` datetime default NULL,
+  `expiration` datetime default NULL,
+  PRIMARY KEY (`pid_idx`,`license_idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `project_quotas`
 --
 
@@ -4466,6 +5011,11 @@ CREATE TABLE `project_reservations` (
   `end` datetime default NULL,
   `active` tinyint(1) NOT NULL default '0',
   `terminal` tinyint(1) NOT NULL default '0',
+  `approved` datetime DEFAULT NULL,
+  `approver` varchar(8) DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
+  `uuid` varchar(40) NOT NULL default '',
+  `notes` mediumtext,
   PRIMARY KEY (`pid_idx`,`name`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -4524,6 +5074,7 @@ CREATE TABLE `projects` (
   `unix_gid` smallint(5) unsigned NOT NULL auto_increment,
   `approved` tinyint(4) default '0',
   `hidden` tinyint(1) default '0',
+  `disabled` tinyint(1) default '0',
   `inactive` tinyint(4) default '0',
   `date_inactive` datetime default NULL,
   `public` tinyint(4) NOT NULL default '0',
@@ -4539,6 +5090,7 @@ CREATE TABLE `projects` (
   `nonlocal_type` tinytext,
   `manager_urn` varchar(128) default NULL,
   `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
+  `bound_portal` tinyint(1) default '0',
   `experiment_accounts` enum('none','swapper') default NULL,
   PRIMARY KEY  (`pid_idx`),
   UNIQUE KEY `pid` (`pid`),
@@ -4623,14 +5175,21 @@ CREATE TABLE `reposition_status` (
 DROP TABLE IF EXISTS `reservation_history`;
 CREATE TABLE `reservation_history` (
   `pid` varchar(48) NOT NULL DEFAULT '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
   `nodes` smallint(5) NOT NULL DEFAULT '0',
   `type` varchar(30) NOT NULL DEFAULT '',
+  `created` datetime DEFAULT NULL,
+  `deleted` datetime DEFAULT NULL,
+  `canceled` datetime DEFAULT NULL,
   `start` datetime DEFAULT NULL,
   `end` datetime DEFAULT NULL,
   `uid` varchar(8) NOT NULL DEFAULT '',
+  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
   `notes` mediumtext,
   `admin_notes` mediumtext,
-  KEY `start` (`start`)
+  `uuid` varchar(40) NOT NULL default '',
+  KEY `start` (`start`),
+  KEY `uuid` (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -5187,6 +5746,22 @@ CREATE TABLE `user_features` (
   PRIMARY KEY  (`feature`,`uid_idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
+
+--
+-- Table structure for table `user_licenses`
+--
+
+DROP TABLE IF EXISTS `user_licenses`;
+CREATE TABLE `user_licenses` (
+  `uid` varchar(48) NOT NULL default '',
+  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `license_idx` int(11) NOT NULL default '0',
+  `accepted` datetime default NULL,
+  `expiration` datetime default NULL,
+  PRIMARY KEY (`uid_idx`,`license_idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+
 --
 -- Table structure for table `user_policies`
 --
@@ -5341,7 +5916,7 @@ CREATE TABLE `users` (
   `usr_shell` tinytext,
   `usr_pswd` tinytext NOT NULL,
   `usr_w_pswd` tinytext,
-  `unix_uid` smallint(5) unsigned NOT NULL default '0',
+  `unix_uid` int(10) unsigned NOT NULL default '0',
   `status` enum('newuser','unapproved','unverified','active','frozen','archived','nonlocal','inactive','other') NOT NULL default 'newuser',
   `admin` tinyint(4) default '0',
   `foreign_admin` tinyint(4) default '0',
@@ -5374,13 +5949,17 @@ CREATE TABLE `users` (
   `nocollabtools` tinyint(1) default '0',
   `initial_passphrase` varchar(128) default NULL,
   `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
+  `bound_portal` tinyint(1) default '0',
   `require_aup` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
+  `accepted_aup` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `ga_userid` varchar(32) default NULL,
+  `portal_interface_warned` tinyint(1) NOT NULL default '0',
   PRIMARY KEY  (`uid_idx`),
   KEY `unix_uid` (`unix_uid`),
   KEY `status` (`status`),
   KEY `uid_uuid` (`uid_uuid`),
-  KEY `uid` (`uid`)
+  KEY `uid` (`uid`),
+  KEY `nonlocal_id` (`nonlocal_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --

@@ -113,7 +113,7 @@ MIN_UNIX_GID=2000
 NODECONSOLE="vga"
 
 # Which version of the MFS.
-MFSVERSION="8-64"
+MFSVERSION="10-64"
 PROTOGENI_SUPPORT=1
 PROTOGENI_GENIRACK=0
 PROTOGENI_DOMAIN="cloudlab"
@@ -190,3 +190,10 @@ NODE_USAGE_SUPPORT=1
 # Enable idle stats collection (RRD files)
 SDCOLLECTD_DOSTATS=1
 SDCOLLECTD_USE_RRDTOOL=1
+
+# New world order
+PORTAL_ENABLE=1
+
+# No longer allow geni users direct access. Must go through the Portal
+# or the local web interface. 
+PROTOGENI_PORTALONLY=1

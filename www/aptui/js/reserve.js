@@ -3,20 +3,22 @@ $(function ()
     'use strict';
 
     var template_list   = ["reserve-request", "reserve-faq",
-			   "reservation-graph", "oops-modal", "waitwait-modal"];
+			   "reservation-graph", "oops-modal", "waitwait-modal",
+			   "resusage-graph"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
     var oopsString      = templates["oops-modal"];
     var waitwaitString  = templates["waitwait-modal"];
     var mainTemplate    = _.template(templates["reserve-request"]);
     var graphTemplate   = _.template(templates["reservation-graph"]);
+    var usageTemplate   = _.template(templates["resusage-graph"]);
     var fields       = null;
     var projlist     = null;
     var amlist       = null;
-    var amorder      = [];
-    var skiptypes    = null;
     var isadmin      = false;
     var editing      = false;
     var buttonstate  = "check";
+    var forecasts    = {};
+    var IDEAL_STARTHOUR = 7;	// 7am start time preferred. 
     
     function initialize()
     {
@@ -27,7 +29,6 @@ $(function ()
 	fields   = JSON.parse(_.unescape($('#form-json')[0].textContent));
 	projlist = JSON.parse(_.unescape($('#projects-json')[0].textContent));
 	amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
-	skiptypes= JSON.parse(_.unescape($('#skiptypes-json')[0].textContent));
 
 	GeneratePageBody(fields);
 
@@ -46,11 +47,21 @@ $(function ()
 		Delete();
 	    });
 	}
-	// Give this a slight delay so that the spinners appear.
-	// Not really sure why they do not.
-	setTimeout(function () {
-	    LoadReservations();
-	}, 100);	
+	else {
+	    // Give this a slight delay so that the spinners appear.
+	    // Not really sure why they do not.
+	    setTimeout(function () {
+		LoadReservations();
+	    }, 100);
+	}
+
+	if (1) {
+	    $('#reserve-request-form .findfit-button')
+		.click(function (event) {
+		    event.preventDefault();
+		    FindFit();
+		});
+	}
     }
 
     //
@@ -125,6 +136,10 @@ $(function ()
 		    return;
 		});
 	});
+	// Handler for hardware type selector,
+	$('#reserve-request-form #type').change(function (event) {
+	    HandleTypeChange();
+	});
 	// Handle submit button.
 	$('#reserve-submit-button').click(function (event) {
 	    event.preventDefault();
@@ -173,7 +188,11 @@ $(function ()
     
     /*
      * When the date selected is today, need to disable the hours
-     * before the current hour.
+     * before the current hour. Also set the initial hour to a
+     * reasonable hour, like 7am since that is a good start work time
+     * for most people. Basically, try to avoid unused reservations
+     * between midnight and 7am, unless people specifically want that
+     * time.
      */
     function DateChange(which)
     {
@@ -187,6 +206,10 @@ $(function ()
 	else {
 	    selecter = "#reserve-request-form #end_hour";
 	}
+	// Remember if the user already set the hour.
+	var hourset =
+	    ($(selecter + " option:selected").val() == "" ? false : true);
+	
 	if (moment(date).isSame(Date.now(), "day")) {
 	    for (var i = 0; i <= now.getHours(); i++) {
 
@@ -207,6 +230,13 @@ $(function ()
 		    .removeAttr("disabled");
 	    }
 	}
+	/*
+	 * Ok, init the hour if not set.
+	 */
+	if (!hourset) {
+	    $(selecter + ' option[value=' + IDEAL_STARTHOUR + ']')
+		.prop('selected', 'selected');
+	}
     }
 
     //
@@ -215,6 +245,9 @@ $(function ()
     //
     function CheckForm()
     {
+	var start = null;
+	var end   = null;
+	
 	var checkonly_callback = function(json) {
 	    if (json.code) {
 		if (json.code != 2) {
@@ -222,6 +255,13 @@ $(function ()
 		}
 		return;
 	    }
+	    // Set the number of days, so that user can then search if
+	    // the start/end selected do not work.
+	    var hours = end.diff(start, "hours");
+	    var days  = hours / 24;
+	    $('#reserve-request-form [name=days]')
+		.val(days.toFixed(1));
+	    
 	    // Now check the actual reservation validity.
 	    ValidateReservation();
 	}
@@ -241,7 +281,7 @@ $(function ()
 	    return;
 	}
 	else if (start_day && start_hour) {
-	    var start = moment(start_day, "MM/DD/YYYY");
+	    start = moment(start_day, "MM/DD/YYYY");
 	    start.hour(start_hour);
 	    $('#reserve-request-form [name=start]').val(start.format());
 	}
@@ -258,7 +298,7 @@ $(function ()
 	    return;
 	}
 	else if (end_day && end_hour) {
-	    var end = moment(end_day, "MM/DD/YYYY");
+	    end = moment(end_day, "MM/DD/YYYY");
 	    end.hour(end_hour);
 	    $('#reserve-request-form [name=end]').val(end.format());
 	}
@@ -332,7 +372,7 @@ $(function ()
      * Load anonymized reservations from each am in the list and
      * generate tables.
      */
-    function LoadReservations()
+    function LoadReservations(project)
     {
 	_.each(amlist, function(details, urn) {
  	    var callback = function(json) {
@@ -350,10 +390,11 @@ $(function ()
 		    $('#' + id + ' .resgraph-error').removeClass("hidden");
 		    return;
 		}
+		ProcessForecast(urn, json.value.forecast);
 
 		ShowResGraph({"forecast"  : json.value.forecast,
 			      "selector"  : id,
-			      "skiptypes"      : skiptypes,
+			      "skiptypes"      : json.value.prunelist,
 			      "click_callback" : function(when, type) {
 				  if (!editing) {
 				      SetCluster(details.nickname, urn);
@@ -381,12 +422,186 @@ $(function ()
 			});
 		    });
  	    }
+	    var args = {"cluster" : details.nickname};
+	    if (project !== undefined) {
+		args["project"] = project;
+	    }
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
-						"ReservationInfo",
-						{"cluster" : details.nickname,
-						 "anonymous" : 1});
+						"ReservationInfo", args);
 	    xmlthing.done(callback);
 	});
+    }
+
+    //
+    // Process the forecast so we use it for reservation fitting.
+    //
+    function ProcessForecast(cluster, forecast)
+    {
+	// Each node type
+	for (var type in forecast) {
+	    // This is an array of objects.
+	    var array = forecast[type];
+
+	    for (var i = 0; i < array.length; i++) {
+		var data = array[i];
+		data.t     = parseInt(data.t);
+		data.free  = parseInt(data.free);
+		data.held  = parseInt(data.held);
+		data.stamp = new Date(parseInt(data.t) * 1000);
+	    }
+
+	    // No data or just one data point, nothing to do.
+	    if (array.length <= 1) {
+		continue;
+	    }
+	    
+	    /*
+	     * Gary says there can be duplicate entries for the same time
+	     * stamp, and we want the last one. So have to splice those
+	     * out before we process. Yuck.
+	     */
+	    var temp = [];
+	    for (var i = 0; i < array.length - 1; i++) {
+		var data     = array[i];
+		var nextdata = array[i + 1];
+		
+		if (data.t == nextdata.t) {
+		    continue;
+		}
+		temp.push(data);
+	    }
+	    temp.push(array[array.length - 1]);
+	    forecast[type] = temp;
+	}
+	//console.info("forecast", cluster, forecast);
+	forecasts[cluster] = forecast;
+    }
+    /*
+     * Try to find the first fit.
+     */
+    function FindFit()
+    {
+	var days     = $('#reserve-request-form [name=days]').val();
+	var count    = $('#reserve-request-form [name=count]').val();
+	var type;
+	var cluster;
+
+	if (editing) {
+	    type     = $('#reserve-request-form [name=type]').val();
+	    cluster  = $('#reserve-request-form [name=cluster]').val();
+	}
+	else {
+	    type     = $('#reserve-request-form ' +
+			 '[name=type] option:selected').val();
+	    cluster  = $('#reserve-request-form ' +
+			 '[name=cluster] option:selected').val();
+	}
+
+	if (! (days && count && type && cluster)) {
+	    alert("Please provide the project name, the number of days, " +
+		  "number of nodes, and which cluster.");
+	    return;
+	}
+	console.info("FindFit: ", days, count, type, cluster);
+
+	/*
+	 * Slightly cheesy way to wait for the cluster data to come in.
+	 */
+	if (forecasts[cluster] === undefined) {
+	    sup.ShowWaitWait("Waiting for cluster reservation data");
+	    var waitfordata = function() {
+		if (forecasts[cluster] !== undefined) {
+		    sup.HideWaitWait();
+		    FindFit();
+		    return;
+		}
+		setTimeout(function() { waitfordata() }, 200);
+	    };
+	    setTimeout(function() { waitfordata() }, 200);
+	    return;
+	}
+	var starttime = null;
+	var startdata = null;
+	var enddata   = null;
+
+	var tmp = forecasts[cluster][type].slice(0);
+	while (tmp.length && starttime == null) {
+	    var data = tmp.shift();
+
+	    if (data.free >= count) {
+		starttime = data.t;
+		startdata = data;
+
+		for (var i = 0; i < tmp.length; i++) {
+		    var next = tmp[i];
+
+		    if (starttime + (3600 * 24 * days) + 3600 < next.t) {
+			// The next time stamp is beyond the days requested,
+			// so it fits.
+			enddata = next;
+			break;
+		    }
+		    if (next.free >= count) {
+			// The next time stamp still has enough nodes,
+			// keep checking.
+			continue;
+		    }
+		    // Otherwise, we no longer fit, need to start over.
+		    starttime = null;
+		    break;
+		}
+	    }
+	}
+	if (starttime == null) {
+	    return;
+	}
+	// enddata can be null if we fit on the last timeline entry.
+	console.info("FindFit: ", startdata, enddata);
+
+	var start = moment(starttime * 1000);
+	/*
+	 * Need to push out the start to the top of hour.
+	 */
+	var minutes = (start.hours() * 60) + start.minutes();
+	start.hour(Math.ceil(minutes / 60));
+
+	/*
+	 * Try to shift the reservation from the middle of the night.
+	 * It is okay if we cannot do this, we still want to give the
+	 * user the earliest possible reservation.
+	 */
+	if (start.hour() < IDEAL_STARTHOUR) {
+	    var tmp = moment(start);
+	    tmp.hour(IDEAL_STARTHOUR);
+
+	    // If no enddata then we can definitely shift it.
+	    if (!enddata || tmp.unix() + ((3600 * 24 * days)) < enddata.t) {
+		console.info("Shifting to later start time");
+		start = tmp;
+	    }
+	}
+	var end = moment(start.valueOf() + ((3600 * 24 * days) * 1000));
+
+	var start_day  = $('#reserve-request-form [name=start_day]').val();
+	var start_hour = $('#reserve-request-form [name=start_hour]').val();
+	var end_day    = $('#reserve-request-form [name=end_day]').val();
+	var end_hour   = $('#reserve-request-form [name=end_hour]').val();
+	var new_start_day  = start.format("MM/DD/YYYY");
+	var new_start_hour = start.format("H");
+	var new_end_day    = end.format("MM/DD/YYYY");
+	var new_end_hour   = end.format("H");
+
+	$('#reserve-request-form [name=start_day]').val(new_start_day);
+	$('#reserve-request-form [name=start_hour]').val(new_start_hour);
+	$('#reserve-request-form [name=end_day]').val(new_end_day);
+	$('#reserve-request-form [name=end_hour]').val(new_end_hour);
+
+	// And if we actually changed anything.
+	if (start_day != new_start_day || start_hour != new_start_hour ||
+	    end_day != new_end_day || end_hour != new_end_hour) {
+	    ToggleSubmit(true, "check");
+	    aptforms.MarkFormUnsaved();
+	}
     }
 
     //
@@ -456,20 +671,35 @@ $(function ()
      */
     function Approve()
     {
-	var callback = function(json) {
-	    sup.HideWaitWait();
+	var callback = function (json) {
+	    sup.HideModal('#waitwait-modal');
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
 	    window.location.reload(true);
 	};
-	sup.ShowWaitWait();
-	var xmlthing = sup.CallServerMethod(null, "reserve",
-					    "Approve",
-					    {"cluster" : window.CLUSTER,
-					     "uuid"    : window.UUID});
-	xmlthing.done(callback);
+	// Bind the confirm button in the modal. Do the approval.
+	$('#approve-modal #confirm-approve').click(function () {
+	    sup.HideModal('#approve-modal', function () {
+		var message = $('#approve-modal .user-message').val().trim();
+		sup.ShowModal('#waitwait-modal');
+		var xmlthing = sup.CallServerMethod(null, "reserve",
+						    "Approve",
+						    {"cluster" : window.CLUSTER,
+						     "uuid"    : window.UUID,
+						     "type"    : "reservation",
+						     "message" : message});
+		xmlthing.done(callback);
+	    });
+	});
+	// Handler so we know the user closed the modal. We need to
+	// clear the confirm button handler.
+	$('#approve-modal').on('hidden.bs.modal', function (e) {
+	    $('#approve-modal #confirm-approve').unbind("click");
+	    $('#approve-modal').off('hidden.bs.modal');
+	})
+	sup.ShowModal("#approve-modal");
     }
 
     function PopulateReservation()
@@ -485,8 +715,8 @@ $(function ()
 	    var details = json.value;
 	    $('#reserve-request-form [name=uuid]').val(details.uuid);
 	    $('#reserve-request-form [name=pid]').val(details.pid);
-	    $('#reserve-request-form [name=count]').val(details.count);
-	    $('#reserve-request-form [name=cluster]').val(details.cluster);
+	    $('#reserve-request-form [name=count]').val(details.nodes);
+	    $('#reserve-request-form [name=cluster]').val(details.cluster_urn);
 	    $('#reserve-request-form [name=cluster_id]').val(details.cluster_id);
 	    $('#reserve-request-form [name=type]').val(details.type);
 	    $('#reserve-request-form [name=reason]').val(details.notes);
@@ -500,7 +730,18 @@ $(function ()
 		.val(end.format("MM/DD/YYYY"));
 	    $('#reserve-request-form [name=end_hour]')
 		.val(end.format("H"));
+	    var hours = end.diff(start, "hours");
+	    var days  = hours / 24;
+	    $('#reserve-request-form [name=days]')
+		.val(days.toFixed(1));
+
 	    //console.log(start, end);
+
+	    /*
+	     * Need this in case the start date is in the past.
+	     */
+	    $("#reserve-request-form #start_day")
+		.datepicker("option", "minDate", start.format("MM/DD/YYYY"));
 
 	    // Set the hour selectors properly in the datepicker object.
 	    $("#reserve-request-form #start_day")
@@ -515,14 +756,14 @@ $(function ()
 		$('#unapproved-warning').removeClass("hidden");
 	    }
 	    // Local user gets a link.
-	    if (_.has(details, 'creator_idx')) {
+	    if (_.has(details, 'uid_idx')) {
 		$('#reserve-requestor').html(
 		    "<a target=_blank href='user-dashboard.php?user=" +
-			details.creator_idx + "'>" +
-			details.creator_uid + "</a>");
+			details.uid_idx + "'>" +
+			details.uid + "</a>");
 	    }
 	    else {
-		$('#reserve-requestor').html(details.creator_uid);
+		$('#reserve-requestor').html(details.uid);
 	    }
 	    
 	    /*
@@ -540,6 +781,12 @@ $(function ()
 	    window.PID = details.pid;
 	    // Now enable delete button
 	    $('#reserve-delete-button').removeAttr("disabled");
+
+	    // Now we can load the graph since we know the project.
+	    LoadReservations(details.pid);
+
+	    // Add append history graph under the reservation graph.
+	    DrawHistoryGraph(details);
 	};
 	sup.ShowWaitWait();
 	var xmlthing = sup.CallServerMethod(null, "reserve",
@@ -573,6 +820,7 @@ $(function ()
 						    {"cluster" : window.CLUSTER,
 						     "uuid"    : window.UUID,
 						     "pid"     : window.PID,
+						     "type"    : "reservation",
 						     "reason"  : reason});
 		xmlthing.done(callback);
 	    });
@@ -594,6 +842,7 @@ $(function ()
 	 */
 	var options  = "";
 	var typelist = amlist[selected_cluster].typeinfo;
+	var nodelist = amlist[selected_cluster].reservable_nodes;
 	var nickname = amlist[selected_cluster].nickname;
 	var id       = "resgraph-" + nickname;
 
@@ -604,6 +853,11 @@ $(function ()
 		"<option value='" + type + "' >" +
 		type + " (" + count + " nodes)</option>";
 	});
+	_.each(nodelist, function(details, node_id) {
+	    options = options +
+		"<option value='" + node_id + "' >" + node_id + "</option>";
+	});
+	
 	$("#reserve-request-form #type")	
 	    .html("<option value=''>Please Select</option>" + options);
 
@@ -612,6 +866,33 @@ $(function ()
 		$('#reservation-lists').prepend($('#' + id));
 		$('#' + id).fadeIn("fast");
 	    });
+	}
+    }
+
+    function HandleTypeChange()
+    {
+	var selected_cluster =
+	    $("#reserve-request-form #cluster option:selected").val();
+	var selected_type =
+	    $("#reserve-request-form #type option:selected").val();
+
+	console.info(selected_cluster, selected_type);
+	if (selected_cluster == "") {
+	    return;
+	}
+	if (selected_type == "") {
+	    return;
+	}
+	var nodelist = amlist[selected_cluster].reservable_nodes;
+	console.info(nodelist);
+
+	if (_.has(nodelist, selected_type)) {
+	    $("#reserve-request-form #count").val("1");
+	    $("#reserve-request-form #count").prop("readonly", true);	    
+	}
+	else {
+	    $("#reserve-request-form #count").val("");
+	    $("#reserve-request-form #count").prop("readonly", false);
 	}
     }
 
@@ -637,6 +918,37 @@ $(function ()
 	    $('#reserve-submit-button').attr("disabled", "disabled");
 	}
 	buttonstate = which;
+    }
+
+    // Draw the history bar graph.
+    function DrawHistoryGraph(details)
+    {
+	if (!_.has(details, 'history') || !details.history.length) {
+	    return;
+	}
+	var graphid = "history-graph";
+	var html = usageTemplate({"graphid"        : graphid,
+				  "showfullscreen" : true});
+	
+	$('#reservation-lists').append(html);
+	window.DrawResHistoryGraph({"details"  : details,
+				    "graphid"  : '#' + graphid});
+
+	// Setup a handler to draw the large version graph in the modal.
+	$('#resusage-modal').on('shown.bs.modal', function() {
+	    window.DrawResHistoryGraph({"details"    : details,
+					"graphid"    : '#resusage-modal',
+					"xaxislabel" : true});
+	});
+	// When modal shows, we draw.
+	$('#' + graphid + ' .resusage-fullscreen').click(function (event) {
+	    // Make sure nothing left behind.
+	    $('#resusage-modal svg').html("");
+	    sup.ShowModal('#resusage-modal', function () {
+		// Need to unbind the hook above.
+		$('#resusage-modal').off('shown.bs.modal');
+	    });
+	});
     }
     $(document).ready(initialize);
 });

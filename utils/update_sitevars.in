@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2012 University of Utah and the Flux Group.
+# Copyright (c) 2012, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -49,6 +49,7 @@ my $hostip;
 #
 my $TB		= "@prefix@";
 my $SBINDIR	= "$TB/sbin";
+my $OPSVM_ENABLE= @OPSVM_ENABLE@;
 
 my $NC_NET	= "@CONTROL_NETWORK@";
 my $NC_MASK	= "@CONTROL_NETMASK@";
@@ -344,6 +345,9 @@ sub GetMACs()
 	}
 	if ($opsoncnet) {
 	    $ops_mac = GetMACFromARP($host, $OPS_IP);
+	}
+	elsif ($OPSVM_ENABLE) {
+	    $ops_mac = $boss_mac;
 	}
 	if ($fsoncnet) {
 	    if ($fsisops) {

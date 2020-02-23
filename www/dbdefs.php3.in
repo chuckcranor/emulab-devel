@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,6 +24,10 @@
 # Database Constants
 #
 require("dbcheck.php3");
+if (explode('.', PHP_VERSION)[0] > 5) {
+    # We need the mysql -> mysqli stubs for 7.x
+    require_once("mysql.php");
+}
 
 $TBDBNAME       = "@TBDBNAME@";
 $TBOPSPID	= "emulab-ops";
@@ -636,6 +640,75 @@ function TBGetSiteVar($name)
 }
 
 #
+# Set site variable.
+#
+function SetSiteVar($name, $args, &$errors) {
+    global $suexec_output, $suexec_output_array;
+
+    #
+    # Generate a temporary file and write in the XML goo.
+    #
+    $xmlname = tempnam("/tmp", "editsitevars");
+    if (! $xmlname) {
+	TBERROR("Could not create temporary filename", 0);
+	$errors[] = "Transient error(1); please try again later.";
+	return null;
+    }
+    if (! ($fp = fopen($xmlname, "w"))) {
+	TBERROR("Could not open temp file $xmlname", 0);
+	$errors[] = "Transient error(2); please try again later.";
+	return null;
+    }
+
+    # Add these. Maybe caller should do this?
+    $args["name"] = $name;
+
+    fwrite($fp, "<sitevar>\n");
+    foreach ($args as $name => $value) {
+	fwrite($fp, "<attribute name=\"$name\">");
+	fwrite($fp, "  <value>" . htmlspecialchars($value) . "</value>");
+	fwrite($fp, "</attribute>\n");
+    }
+    fwrite($fp, "</sitevar>\n");
+    fclose($fp);
+    chmod($xmlname, 0666);
+
+    $retval = SUEXEC("nobody", "nobody", "webeditsitevars $xmlname",
+		     SUEXEC_ACTION_IGNORE);
+
+    if ($retval) {
+	if ($retval < 0) {
+	    $errors[] = "Transient error(3, $retval); please try again later.";
+	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+	}
+	else {
+	    # unlink($xmlname);
+	    if (count($suexec_output_array)) {
+		for ($i = 0; $i < count($suexec_output_array); $i++) {
+		    $line = $suexec_output_array[$i];
+		    if (preg_match("/^([-\w]+):\s*(.*)$/",
+				   $line, $matches)) {
+			$errors[$matches[1]] = $matches[2];
+		    }
+		    else
+			$errors[] = $line;
+		}
+	    }
+	    else
+		$errors[] = "Transient error(4, $retval); please try again later.";
+	}
+	return null;
+    }
+
+    # There are no return value(s) to parse at the end of the output.
+
+    # Unlink this here, so that the file is left behind in case of error.
+    # We can then create the sitevar by hand from the xmlfile, if desired.
+    unlink($xmlname);
+    return true;
+}
+
+#
 # Count available planetlab nodes.
 #
 # usage: TBPlabAvail()
@@ -940,7 +1013,7 @@ function DateStringGMT($date)
         return null;
     }
     elseif (is_int($date)) {
-        gmdate("Y-m-d\TH:i:s\Z", $date);
+        return gmdate("Y-m-d\TH:i:s\Z", $date);
     }
     return gmdate("Y-m-d\TH:i:s\Z", strtotime($date));
 }
@@ -961,21 +1034,6 @@ function NullDate($date)
 #
 $maxtries = 3;
 $DBlinkid = 0;
-while ($maxtries) {
-    $DBlinkid = mysql_connect("localhost", basename($_SERVER["SCRIPT_NAME"]));
-    if ($DBlinkid) {
-	break;
-    }
-    $maxtries--;
-    sleep(1);
-}
-if (! $DBlinkid) {
-    USERERROR("Temporary resource error; ".
-	      "please try again in a few minutes", 1);
-}
-if (!mysql_select_db($TBDBNAME)) {
-    TBERROR("Could not select DB after connecting!", 1);
-}
 $DBlinkids = array();
 $DBlinkids[$TBDBNAME] = $DBlinkid;
 
@@ -990,20 +1048,23 @@ function DBConnect($dbname)
 	return $DBlinkids[$dbname];
     }
 
-    $linkid = mysql_connect("localhost", basename($_SERVER["SCRIPT_NAME"]), "none", 1);
-    if ($linkid) {
-	if (!mysql_select_db($dbname, $linkid)) {
-	    return null;
-	}
+    $linkid = mysql_connect("localhost",
+                            basename($_SERVER["SCRIPT_NAME"]), "none", 1);
+    if ($linkid === FALSE) {
+        return null;
+    }
+    if (!mysql_select_db($dbname, $linkid)) {
+        return null;
     }
     $DBlinkids[$dbname] = $linkid;
     return $linkid;
 }
 
 #
-# Record last DB error string.
+# Record last DB error string and errno.
 #
 $DBErrorString = "";
+$DBErrorNumber = 0;
 
 #
 # This mirrors the routine in the PERL code. The point is to avoid
@@ -1025,7 +1086,7 @@ $DBErrorString = "";
 function DBQuery($query, $linkid = NULL)
 {
     global	$TBDBNAME;
-    global	$DBErrorString;
+    global	$DBErrorString, $DBErrorNumber;
     global      $DBlinkid;
 
     $linkid = is_null($linkid) ? $DBlinkid : $linkid;
@@ -1049,6 +1110,7 @@ function DBQuery($query, $linkid = NULL)
 	$DBErrorString =
 	    "  Query: $query\n".
 	    "  Error: " . mysql_error($linkid);
+        $DBErrorNumber = mysql_errno($linkid);
     }
     return $result;
 }
@@ -1090,12 +1152,16 @@ function DBQueryWarn($query, $linkid = NULL)
 #
 function DBWarn($message)
 {
-    global	$DBErrorString;
-    
-    $text = "$message - In " . $_SERVER["PHP_SELF"] . "\n" .
-  	    "$DBErrorString\n";
+    global	$DBErrorString, $DBErrorNumber;
 
-    TBERROR($text, 0);
+    if ($DBErrorNumber != 2006 && $DBErrorNumber != 1053 &&
+        $DBErrorNumber != 2013 && $DBErrorNumber != 1046 &&
+        $DBErrorNumber != 1317) {
+        DBError(false, false);
+    }
+    else {
+        DBError(false, true);
+    }
 }
 
 #
@@ -1105,12 +1171,70 @@ function DBWarn($message)
 #
 function DBFatal($message)
 {
-    global	$DBErrorString;
+    global	$DBErrorString, $DBErrorNumber;
 
-    $text = "$message - In " . $_SERVER["PHP_SELF"] . "\n" .
+    if ($DBErrorNumber != 2006 && $DBErrorNumber != 1053 &&
+        $DBErrorNumber != 2013 && $DBErrorNumber != 1046 &&
+        $DBErrorNumber != 1317) {
+        DBError(true, false);
+    }
+    else {
+        DBError(true, true);
+    }
+}
+
+#
+# DB errors needs to be handled specially. If the problem is the server,
+# then no point in trying to continue since we will just end up back here.
+#
+function DBError($fatal, $serverdead)
+{
+    global	$DBErrorString, $DBErrorNumber;
+    global      $session_interactive, $session_errorhandler;
+    global      $TBMAIL_OPS, $TBMAILADDR, $TBMAILADDR_OPS;
+    $script = urldecode($_SERVER['REQUEST_URI']);
+
+    error_log("$fatal, $serverdead, $DBErrorNumber, $DBErrorString");
+    
+    if (!$serverdead) {
+        # print backtrace
+        $e = new Exception();
+        $trace = $e->getTraceAsString();
+        
+        $text = "$message - In " . $_SERVER["PHP_SELF"] . "\n" .
   	    "$DBErrorString\n";
 
-    TBERROR($text, 1);
+        # We want email notification of a query error. 
+        TBMAIL($TBMAIL_OPS,
+               "WEB DB ERROR REPORT",
+               "\n".
+               "In $script\n\n".
+               "$text\n\n".
+               "$trace\n",
+               "From: $TBMAIL_OPS");
+    }
+    if (!$session_interactive) {
+	if ($session_errorhandler) {
+	    $session_errorhandler("Database server error", $fatal);
+        }
+        else {
+            # Makes no sense not to have an error handler.
+            echo "<font size=+1><br>
+                   Database server error;
+                     please try again in a few minutes
+         	  </font>
+                  <br><br>\n";
+        }
+        if ($fatal || $serverdead) {
+            exit(-1);
+        }
+        return;
+    }
+    if ($fatal || $serverdead) {
+        echo "<font size=+1><br>Database server error; " .
+            "please try again in a few minutes</font><br><br>\n";
+        exit(1);
+    }
 }
 
 #
@@ -1136,6 +1260,21 @@ function DBQuoteSpecial($stuff, $linkid = NULL)
     $linkid = is_null($linkid) ? $DBlinkid : $linkid;
 
     return mysql_real_escape_string($stuff, $linkid);
+}
+
+while ($maxtries) {
+    $DBlinkid = mysql_connect("localhost", basename($_SERVER["SCRIPT_NAME"]));
+    if ($DBlinkid !== FALSE) {
+	break;
+    }
+    $maxtries--;
+    sleep(1);
+}
+if ($DBlinkid === FALSE) {
+    DBError(true, true);
+}
+if (!mysql_select_db($TBDBNAME, $DBlinkid)) {
+    TBERROR("Could not select DB after connecting!", 1);
 }
 
 ?>

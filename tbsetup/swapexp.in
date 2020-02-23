@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -338,8 +338,28 @@ if (my $instance = Template::Instance->LookupByExptidx($experiment->idx())) {
 	    "    $pid/$eid is a template instance; use another command\n");
     }
 }
+#
+# Verify user and get his DB uid and other info for later.
+#
+my $this_user = User->ThisUser();
+if (! defined($this_user)) {
+    tbdie("You ($UID) do not exist!");
+}
+my $user_dbid  = $this_user->dbid();
+my $user_uid   = $this_user->uid();
+my $user_name  = $this_user->name();
+my $user_email = $this_user->email();
+my $isadmin    = TBAdmin();
 
 # Sanity check.
+if ($inout eq "out" && ! (-e $workdir && -e $userdir && -e $infodir)) {
+    #
+    # Okay, lets try to recover. If this works, then the tests below
+    # will all succeed. If it fails, well then we fail.
+    #
+    print STDERR "Missing a critical directory, trying to recover ...\n";
+    $experiment->CreateDirectory();
+}
 if (! -e $workdir) {
     die("*** $0:\n".
 	"    $pid/$eid is missing a critical directory!\n" .
@@ -371,19 +391,6 @@ if (! -e $infodir) {
 if ($genimode) {
     $experiment->SetState(EXPTSTATE_ACTIVE);
 }
-
-#
-# Verify user and get his DB uid and other info for later.
-#
-my $this_user = User->ThisUser();
-if (! defined($this_user)) {
-    tbdie("You ($UID) do not exist!");
-}
-my $user_dbid  = $this_user->dbid();
-my $user_uid   = $this_user->uid();
-my $user_name  = $this_user->name();
-my $user_email = $this_user->email();
-my $isadmin    = TBAdmin();
 
 #
 # Get email address of the swapper/creator, which may be different than
@@ -1362,6 +1369,18 @@ elsif ($inout eq "out") {
 elsif ($inout eq "modify") {
     $experiment->PostSwap($this_user, TBDB_STATS_SWAPMODIFY) == 0 or
 	fatal("PostSwap failed!");
+}
+
+#
+# Reset autoswap to default. Might be inconvenient, but its interfering with
+# reservations. 
+#
+if ($inout eq "out" && !$isadmin && $pid eq TBOPSPID()) {
+    my $autoswapmode = TBGetSiteVar("general/autoswap_mode") ? 1 : 0;
+    my $autoswaptime = 60 * TBGetSiteVar("general/autoswap_threshold");
+
+    $experiment->SetAutoswap($autoswapmode);
+    $experiment->SetAutoswapTimeout($autoswaptime);
 }
 
 # Accounting info. For swapout, must be after its done with.

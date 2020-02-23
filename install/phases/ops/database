@@ -19,6 +19,11 @@ sub Install($$$)
     Phase "database", "Setting up database", sub {
 	PhaseSkip("mysqld not supported on ops")
 	    if ($FBSD_MAJOR == 4);
+	PhaseSkip("mysqld no longer supported on ops")
+	    if ($FBSD_MAJOR > 10);
+	
+	PhaseSkip("mysqld not supported on targetsys build")
+	    if ($CONFIG_TARGETSYS);
 	
 	# Find out what version is installed
 	Phase "version", "Determine mysqld version", sub {

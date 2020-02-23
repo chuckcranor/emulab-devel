@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2017 University of Utah and the Flux Group.
+# Copyright (c) 2013-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -99,6 +99,15 @@ my $ZVOLBS	= "64K";
 # on the same disk.
 #
 my $VINUMSS	= "81920";
+
+#
+# Time to wait for a session to start.
+#
+# XXX it might take a long time for the target (blockstore server)
+# to export our blockstore if a lot of blockstores are being
+# setup at the same time. So we hang out for a long time.
+#
+my $SESSION_TIMEOUT = (12 * 60);
 
 #
 # To find the block stores exported from a target portal:
@@ -239,8 +248,15 @@ sub init_serial_map()
 {
     my %snmap = ();
     my $compatnames = 1;
+    my @lines;
 
-    my @lines = `ls /dev/ad* /dev/da* /dev/mfid* /dev/mfisyspd* /dev/nvd* 2>&1`;
+    # XXX see if there are any old /dev/ad? names
+    @lines = `ls /dev/ad[0-9]* 2>/dev/null`;
+    if (@lines == 0) {
+	$compatnames = 0;
+    }
+
+    @lines = `ls /dev/ad* /dev/da* /dev/mfid* /dev/mfisyspd* /dev/nvd* 2>/dev/null`;
   again:
     foreach (@lines) {
 	# XXX just use the /dev/ad? traditional names for now
@@ -314,12 +330,19 @@ sub uuid_to_session($$$)
     my ($so, $uuid, $retries) = @_;
 
 again:
+    my $target = "";
     if ($so->{'USE_ISCSID'}) {
 	my @lines = `$ISCSI -Lv 2>&1`;
 	my ($sess, $gotuuid);
 	foreach (@lines) {
 	    if (/^Session ID:\s+(\d+)/) {
 		$sess = $1;
+		next;
+	    }
+	    if (/^Target portal:\s+(\S+)/) {
+		if (defined($sess)) {
+		    $target = " $1";
+		}
 		next;
 	    }
 	    if (/^Target name:\s+(\S+)/) {
@@ -349,8 +372,8 @@ again:
     }
     if ($retries > 0) {
 	$retries--;
-	sleep(1);
-	#warn("    retrying session lookup...\n");
+	sleep(5);
+	warn("     could not connect to portal$target, retrying ...\n");
 	goto again;
     }
 
@@ -614,6 +637,11 @@ sub get_diskinfo($)
 
 	    # assume 2k sector size means a CD drive
 	    if ($vals[0] == 0 && $vals[1] eq "DISK" && $vals[4] == 2048) {
+		next;
+	    }
+
+	    # skip LABEL devices
+	    if ($vals[1] eq "LABEL") {
 		next;
 	    }
 
@@ -1279,7 +1307,7 @@ sub os_check_storage_element($$)
 		warn("*** $bsid: could not create iSCSI session\n");
 		return -1;
 	    }
-	    $session = uuid_to_session($so, $uuid, 5);
+	    $session = uuid_to_session($so, $uuid, int($SESSION_TIMEOUT/5));
 	    if (!defined($session)) {
 		warn("*** $bsid: iSCSI session not created\n");
 		return -1;
@@ -1783,7 +1811,7 @@ EOF
 	#
 	# Find the session ID and device name.
 	#
-	my $session = uuid_to_session($so, $uuid, 5);
+	my $session = uuid_to_session($so, $uuid, int($SESSION_TIMEOUT/5));
 	if (!defined($session)) {
 	    warn("*** $bsid: could not find iSCSI session\n");
 	    return 0;
@@ -1930,11 +1958,11 @@ sub os_create_storage_slice($$$)
 			my $ptype = "freebsd";
 
 			#
-			# If pnum==0, we need an MBR first
+			# If pnum==0, we need a GPT first
 			#
 			if ($pnum == 0) {
 			    if (mysystem("$GPART create -s gpt $disk $redir")) {
-				warn("*** $lv: could not create MBR on $disk$logmsg\n");
+				warn("*** $lv: could not create GPT on $disk$logmsg\n");
 				return 0;
 			    }
 			    $pnum = $spacemap{$disk}{'pnum'} = 1;
@@ -2289,9 +2317,17 @@ sub os_remove_storage_element($$$)
 		    unlink("$ISCSICNF", "$ISCSICNF.new");
 		    if (!mysystem("grep -q '^# iscsid_enable added by.*rc.storage' /etc/rc.conf")) {
 			if (mysystem("sed -i -e '/^# iscsid_enable added by.*rc.storage/,+1d' /etc/rc.conf")) {
-			    warn("*** $lv: could not remove iscsid_enable from /etc/rc.conf\n");
+			    warn("*** $bsid: could not remove iscsid_enable from /etc/rc.conf\n");
 			}
 		    }
+
+		    # kill the iscsi daemon
+		    if ($so->{'USE_ISCSID'}) {
+			if (mysystem("/etc/rc.d/iscsid onestop $redir")) {
+			    warn("*** $bsid: could not kill iscsid\n");
+			}
+		    }
+
 		    # XXX we should kldunload the iscsi module, but it hangs
 		}
 	    }
@@ -2491,7 +2527,7 @@ sub os_remove_storage_slice($$$)
 		# Destroy the pool
 		#
 		if (mysystem("$ZPOOL destroy emulab $redir")) {
-		    warn("*** $lv: could not destroy$logmsg\n");
+		    warn("*** $lv: could not destroy zpool$logmsg\n");
 		}
 
 		#

@@ -1,4 +1,4 @@
-# $FreeBSD: releng/11.0/etc/master.passwd 299365 2016-05-10 12:47:36Z bcr $
+# $FreeBSD: releng/11.3/etc/master.passwd 299365 2016-05-10 12:47:36Z bcr $
 #
 root:$1$0DKicYf8$PsfF3uhmTrtuaJKH/rxtQ/:0:0::0:0:Charlie &:/root:/bin/csh
 toor:$1$0DKicYf8$PsfF3uhmTrtuaJKH/rxtQ/:0:0::0:0:Chaplin &:/root:/bin/csh

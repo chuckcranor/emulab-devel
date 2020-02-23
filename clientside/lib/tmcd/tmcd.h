@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2018 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2019 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -46,4 +46,4 @@
  * it in clientside/tmcc/common/libsetup.pm!
  */
 #define DEFAULT_VERSION		2
-#define CURRENT_VERSION		43
+#define CURRENT_VERSION		44

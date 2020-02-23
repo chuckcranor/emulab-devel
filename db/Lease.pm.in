@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2012-2018 University of Utah and the Flux Group.
+# Copyright (c) 2012-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -652,11 +652,19 @@ sub AllocResources($;$$) {
 	}
 
 	#
+	# If there is a "copyfrom" attribute then we are creating a copy
+	# of an existing blockstore.
+	#
+	my $srcbs = $self->GetAttribute("copyfrom");
+
+	#
 	# XXX hack, hack
 	# XXX this doesn't belong here
 	#
-	if ($fstype) {
-	    print STDERR "NOTE: FS creation could take 5 minutes or longer, ";
+	if ($fstype || $srcbs) {
+	    print STDERR "NOTE: " .
+		($srcbs ? "Dataset copy" : "FS creation") .
+		" could take 5 minutes or longer, ";
 	    if ($interruptable) {
 		print STDERR "please be patient!\n";
 	    } else {
@@ -670,7 +678,10 @@ sub AllocResources($;$$) {
 	# on the storage servers).
 	#
 	my $idx = $self->lease_idx();
-	my $cmd = "$BSCONTROL -l $idx -s $size $fstype create lease-$idx";
+	my $cmd = defined($srcbs) ?
+	    "$BSCONTROL copy $srcbs lease-$idx" :
+	    "$BSCONTROL -l $idx -s $size $fstype create lease-$idx";
+
 	my $rv;
 	if (!$interruptable) {
 	    local $SIG{INT} = "IGNORE";
@@ -702,6 +713,11 @@ sub AllocResources($;$$) {
 	    } else {
 		$self->SetAttribute("last_snapshot", $tstamp, "integer");
 	    }
+	}
+
+	# Clear the "copyfrom" attribute as an indicator we are done
+	if (defined($srcbs)) {
+	    $self->DeleteAttribute("copyfrom");
 	}
     }
 
@@ -1634,6 +1650,10 @@ sub AccessCheck($$$) {
     $gid = $pid
 	if ($gid eq "");
     my $group = Group->Lookup($pid, $gid);
+    if (!$group) {
+	print STDERR "Could not find group $pid/$gid!\n";
+	return 0;
+    }
 
     # Members of the owning project have some implicit permissions, depending
     # on their project trust.
@@ -1641,21 +1661,22 @@ sub AccessCheck($$$) {
     if (TBMinTrust($gtrust, PROJMEMBERTRUST_GROUPROOT())) {
 	return 1;
     }
-    # XXX: Need to decide what the right thing to do is here.
-    #elsif (TBMinTrust($gtrust, PROJMEMBERTRUST_LOCALROOT())) {
-    #	$user_access = LEASE_ACCESS_READ();
-    #}
+    elsif (TBMinTrust($gtrust, PROJMEMBERTRUST_LOCALROOT())) {
+    	$user_access = LEASE_ACCESS_READ();
+    }
     elsif (TBMinTrust($gtrust, PROJMEMBERTRUST_USER())) {
 	$user_access = LEASE_ACCESS_READINFO();
     }
 
     my $idx = $self->idx();
     my $qres = DBQueryWarn("select permission_type,permission_idx,allow_modify from lease_permissions where lease_idx=$idx");
+    return 0
+	if (!defined($qres));
 
     # If nothing was returned, just pass back the result based on the
     # special checks above.
     return (TBMinTrust($user_access, $access_type) ? 1 : 0)
-	if !defined($qres);
+	if (!$qres->numrows);
 
     while (my ($perm_type, $perm_idx, $modify) = $qres->fetchrow_array()) {
 	if ($perm_type eq "global") {

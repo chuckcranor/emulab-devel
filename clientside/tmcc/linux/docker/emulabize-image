@@ -14,7 +14,7 @@ use Data::Dumper;
 sub usage()
 {
     print "Usage: emulabize-image [-d <level>] [-e <emulabizationlevel>]\n".
-	  "         [-P pullpolicy] [-u user] [-p pass] image [newimagename]\n".
+	  "         [-P pullpolicy] [-u user] [-p pass] [-D] image|dockerfile-url [newimagename]\n".
 	  "\n".
           "  -d <level>  Debug mode\n" .
 	  "  -e <level>  Emulabization level (none,basic,core,full,buildenv)\n".
@@ -26,6 +26,8 @@ sub usage()
 	  "  -u <user>   A username to use to pull the base image\n".
 	  "  -p <pass>   A password to use to pull the base image\n".
 	  "  -h          Show this usage message.\n".
+	  "  -D          First non-optional arg is a Dockerfile url, not an\n".
+	  "              image repo:tag.  Requires the <newimagename> param\n".
 	  "\n".
 	  "<image> is the base image name; it will be pulled if it does not\n".
 	  "already exist.  The optional <newimagename> argument will be used\n".
@@ -35,13 +37,14 @@ sub usage()
 	  "didn't specify <newimagename>.\n";
     exit(1);
 }
-my $optlist = "hfd:e:P:u:p:";
-my $debug = 1;
+my $optlist = "hfd:e:P:u:p:D";
+my $debug = 0;
 my $emulabization;
 my $pullpolicy;
 my $update = 0;
 my $user;
 my $pass;
+my $isdockerfile = 0;
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -72,10 +75,23 @@ if (defined($options{"u"})) {
 if (defined($options{"p"})) {
     $pass = $options{"p"};
 }
+if (defined($options{"D"})) {
+    $isdockerfile = 1;
+}
 usage()
     if (@ARGV < 1 || @ARGV > 2);
 
 my ($image,$newimageref) = @ARGV;
+my $dockerfile;
+if ($isdockerfile) {
+    $dockerfile = $image;
+    $image = $newimageref;
+    if (!defined($image)) {
+	warn("-D requires <newimagename>!");
+	usage();
+    }
+    $newimageref = undef;
+}
 
 #
 # Must be root.
@@ -100,7 +116,7 @@ TBDebugTimeStampsOn();
 libvnode_docker::setDebug($debug);
 my $newization;
 my $rc = libvnode_docker::emulabizeImage(
-    $image,\$newimageref,$emulabization,\$newization,$update,$pullpolicy,$user,$pass);
+    $image,\$newimageref,$emulabization,\$newization,$update,$pullpolicy,$user,$pass,$dockerfile);
 if ($rc) {
     fatal("ERROR: failed to emulabize $image!\n");
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2017 University of Utah and the Flux Group.
+# Copyright (c) 2005-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,7 +29,7 @@ use vars qw(@ISA @EXPORT @EXPORT_OK
 	    $VTOP_FLAGS_UPDATE $VTOP_FLAGS_VERBOSE $VTOP_FLAGS_QUIET
 	    $VTOP_FLAGS_FIXNODES $VTOP_FLAGS_IMPOTENT $VTOP_FLAGS_ALLOCONLY
 	    $VTOP_FLAGS_REGRESSION $VTOP_FLAGS_FIXLANNODES
-	    $VTOP_FLAGS_PREASSIGN);
+	    $VTOP_FLAGS_PREASSIGN $VTOP_FLAGS_COMMITMODE);
 
 @ISA    = "Exporter";
 @EXPORT = qw( );
@@ -66,7 +66,6 @@ my $OS_SELECT     = "$TB/bin/os_select";
 my $DELAYCAPACITY = @DELAYCAPACITY@;	# Can be overridden by user.
 my $DELAYTHRESH   = @DELAYTHRESH@;
 my $PGENISUPPORT  = @PROTOGENI_SUPPORT@;
-my $PGENIRACK     = @PROTOGENI_GENIRACK@;
 my $OURDOMAIN     = "@OURDOMAIN@";
 my $MAINSITE      = @TBMAINSITE@;
 my $mycmurn       = "";
@@ -86,11 +85,12 @@ $VTOP_FLAGS_QUIET       = 0x20;
 $VTOP_FLAGS_ALLOCONLY	= 0x40;
 $VTOP_FLAGS_FIXLANNODES	= 0x80;
 $VTOP_FLAGS_PREASSIGN	= 0x100;
+$VTOP_FLAGS_COMMITMODE	= 0x200;
 
 @EXPORT_OK = qw($VTOP_FLAGS_UPDATE $VTOP_FLAGS_VERBOSE $VTOP_FLAGS_FIXNODES
 		$VTOP_FLAGS_IMPOTENT $VTOP_FLAGS_REGRESSION $VTOP_FLAGS_QUIET
 		$VTOP_FLAGS_ALLOCONLY $VTOP_FLAGS_FIXLANNODES
-		$VTOP_FLAGS_PREASSIGN);
+		$VTOP_FLAGS_PREASSIGN $VTOP_FLAGS_COMMITMODE);
 
 #
 # Create an object representing the stuff we need to create the vtop file.
@@ -139,6 +139,7 @@ sub Create($$$$;$)
 			      "fixed"  => [] };
     $self->{'RSPEC'}      = {};
     $self->{'GENIRSPEC'}  = undef;
+    $self->{'IMAGES'}     = {};
 
     # For forcing untyped nodes to an architecture.
     $self->{'FORCEARCH'}  = undef;
@@ -202,6 +203,7 @@ sub pnodes($)           { return $_[0]->{'PNODES'}; }
 sub fixednodes($)       { return $_[0]->{'FIXEDNODES'}; }
 sub newreserved($)      { return $_[0]->{'NEWRESERVED'}; }
 sub clearnewreserved($) { $_[0]->{'NEWRESERVED'} = {}; }
+sub allimages($)        { return $_[0]->{'IMAGES'}; }
 sub rspec($)            { return $_[0]->{'RSPEC'}; }
 sub genirspec($)        { return $_[0]->{'GENIRSPEC'}; }
 sub forcedarchitecture($){ return $_[0]->{'FORCEARCH'}; }
@@ -247,6 +249,7 @@ sub impotent($)		{ return $_[0]->flags() & $VTOP_FLAGS_IMPOTENT; }
 sub alloconly($)	{ return $_[0]->flags() & $VTOP_FLAGS_ALLOCONLY; }
 sub regression($)	{ return $_[0]->flags() & $VTOP_FLAGS_REGRESSION; }
 sub preassign($)	{ return $_[0]->flags() & $VTOP_FLAGS_PREASSIGN; }
+sub commitmode($)	{ return $_[0]->flags() & $VTOP_FLAGS_COMMITMODE; }
 sub printdb($$)		{ print $_[1] if ($_[0]->verbose()); return 1; }
 
 # We name delay nodes internally as they are needed.
@@ -1151,20 +1154,25 @@ sub LoadVirtNodes($)
 	$nodetype = NodeType->LookupAny($type);
 	if (!defined($nodetype)) {
 	    my $vtype = $self->virttypeisvtype($type);
-	    if (!defined($vtype)) {
-		warn("Improper type $type for node $vnode!\n");
-		return -1;
-	    }
-	    #
-	    # For now, just pick the first member type.
-	    #
-	    my @memberlist = split(" ", $vtype->members());
-	    my $vtypename  = $memberlist[0];
-
-	    $nodetype = NodeType->LookupAny($vtypename);
-	    if (!defined($nodetype)) {
-		warn("Improper type $vtypename in vtypes for node $vnode!\n");
+	    if (defined($vtype)) {
+		# For now, just pick the first member type.
+		my @memberlist = split(" ", $vtype->members());
+		my $vtypename = $memberlist[0];
+		$nodetype = NodeType->Lookup($vtypename);
+		if (!defined($nodetype)) {
+		    warn("Improper type $vtypename in vtype $type ".
+			 "for node $vnode!\n");
 		    return -1;
+		}
+	    }
+	    else {
+		my @memberlist = NodeType->GlobalVtypeTypes($type);
+		if (!@memberlist) {
+		    warn("Improper type $type for node $vnode!\n");
+		    return -1;
+		}
+		# For now, just pick the first member type.
+		$nodetype = $memberlist[0];
 	    }
 	    $isvtyped = 1;
 	}
@@ -1292,13 +1300,17 @@ sub LoadVirtNodes($)
 	}
 
 	#
-	# Record the type selections for the mapper.
+	# Record the type selections for the mapper. If this was a vtype,
+	# then we selected the first real type from the list. Might not be
+	# what we want to do.
 	#
-	if (!$vnode->_typeinfo()->IsClass()) {
-	    if (!defined($self->types()->{$type})) {
-		$self->types()->{$type} = 0;
+	if (!$vnode->_typeinfo()->IsClass() || defined($fixed)) {
+	    my $t = $vnode->_typeinfo()->type();
+	    
+	    if (!exists($self->types()->{$t})) {
+		$self->types()->{$t} = 0;
 	    }
-	    $self->types()->{$type}++;
+	    $self->types()->{$t}++;
 	}
 	elsif (defined($self->forcedarchitecture())) {
 	    my $arch = $self->forcedarchitecture();
@@ -1387,7 +1399,7 @@ sub LoadVirtNodes($)
 		$osimage = OSImage->Lookup($parent_osname);
 	    }
 	    else {
-		$osimage = OSImage->LookupByName($pid, $parent_osname);
+		$osimage = OSImage->Lookup($pid, $parent_osname);
 		if (!defined($osimage)) {
 		    $osimage = OSImage->LookupByName($parent_osname);
 		}
@@ -1468,7 +1480,7 @@ sub LoadVirtNodes($)
 		&& $vnode->_parent_osinfo()->FeatureSupported("xen-host")) {
 		$defmem = 1024;
 		$minmem = 256;
-		$maxmem = 1024 * 16;
+		$maxmem = 1024 * 64;
 	    }	    
 	    if (!exists($vnode->_desires()->{"?+ram"})) {
 		$self->printdb("Setting VM memsize to $defmem for $vname\n");
@@ -1534,7 +1546,8 @@ sub LoadVirtNodes($)
 	$self->exptstats()->{"maxlinks"} = $ipcount
 	    if ($ipcount > $self->exptstats()->{"maxlinks"});
 	$self->exptstats()->{"minlinks"} = $ipcount
-	    if ($ipcount < $self->exptstats()->{"minlinks"});
+	    if (!defined($self->exptstats()->{"minlinks"}) ||
+		$ipcount < $self->exptstats()->{"minlinks"});
 
 	# Add to the list.
 	$self->vnodes()->{$vname} = $vnode;
@@ -1589,19 +1602,24 @@ sub LoadVirtNodes($)
 	}
 	my $osimage;
 
-	if (defined($vnode->_parent_osinfo())) {
-	    $osimage = $vnode->_parent_osinfo();
-	}
-	elsif ($self->option("jail_osid")) {
-	    $osimage = OSImage->Lookup($self->option("jail_osid"));
+	if (!defined($fixnode->_osinfo())) {
+	    if (defined($vnode->_parent_osinfo())) {
+		$osimage = $vnode->_parent_osinfo();
+	    }
+	    elsif ($self->option("jail_osid")) {
+		$osimage = OSImage->Lookup($self->option("jail_osid"));
+	    }
+	    else {
+		$osimage = $self->nodejailosinfo($vnode);
+	    }
+	    return -1
+		if (!defined($osimage));
+	
+	    $fixnode->_osinfo($osimage);
 	}
 	else {
-	    $osimage = $self->nodejailosinfo($vnode);
+	    $osimage = $fixnode->_osinfo();
 	}
-	return -1
-	    if (!defined($osimage));
-	
-	$fixnode->_osinfo($osimage);
 	# Convert from the name to the local object.
 	$vnode->_fixedvm($fixnode);
 
@@ -1954,7 +1972,7 @@ sub LoadVirtLans($)
 	$virtlan->_sharednodes(0);
 	$virtlan->_geninodes(0);
 	$virtlan->_implemented_by($implemented_by);
-	$virtlan->_vpath(undef);
+	$virtlan->_vpaths(undef);
 	$virtlan->_bridged(0);
 	$virtlan->_wiretype( $protocol eq "P2PLTE" ? $protocol : "ethernet");
 	if ($vlanmember->ofenabled()) {
@@ -2256,13 +2274,27 @@ sub LoadVirtLans($)
 	    return -1;
 	}
 	# MLE Constraint:
-	#  * A link cannot be in two paths at once. 
+	#  * A link cannot be in two paths at once unless all the paths are
+	#    layer 1. A layer 2 path is special (used in bridging).
 	#
-	if (defined($virtlan->_vpath())) {
-	    my $ovpath = $virtlan->_vpath();
-	    tberror("$vpath: $virtlan is already in path $ovpath\n")
+	if (defined($virtlan->_vpaths())) {
+	    my $oops = ($vpath->layer() == 2 ? 1 : 0);
+	    if (!$oops) {
+		foreach my $vp (@{ $virtlan->_vpaths() }) {
+		    $oops++
+			if ($vp->layer() == 2);
+		}
+	    }
+	    if ($oops) {
+		tberror("$vpath: $virtlan is more then one path and at least ".
+			"one of the paths is layer 2\n");
+		return -1;
+	    }
 	}
-	$virtlan->_vpath($virtpath);
+	else {
+	    $virtlan->_vpaths([]);
+	}
+	$virtlan->_vpaths([ $vpath, @{ $virtlan->_vpaths() }]);
 	$virtpath->addmember($vpath, $virtlan);
 
 	$self->printdb("$virtpath segment: $virtlan\n");
@@ -2290,44 +2322,44 @@ sub LoadVirtLans($)
 	    tberror("Path $vpath at a higher layer then $virtlan");
 	    return -1;
 	}
-	#
-	# MLE Constraints;
-	#  * Any link that is implemented by something can have only
-	#    two members (a duplex link).
-	#  * Endpoint equivalence: The first and last nodes of the link
-	#    must be the same as the first and last nodes of the path.
-	#    This constraint is very important; it means we have to solve
-	#    *just* the lowest layer with assign, and everything is plopped
-	#    down on top of that.
-	#
-	if (scalar($virtlan->memberlist()) != 2) {
-	    tberror("$virtlan is implemented by $vpath, but is not a link");
-	    return -1;
-	}
-	my ($member0,$member1) = $virtlan->memberlist();
-	my $virtnode0 = $member0->virt_node();
-	my $virtnode1 = $member1->virt_node();
-	# Look for VMs that have been "fixed" to another node.
-	if ($virtnode0->fixed()) {
-	    $virtnode0 = $self->vnodes()->{$virtnode0->fixed()};
-	}
-	if ($virtnode1->fixed()) {
-	    $virtnode1 = $self->vnodes()->{$virtnode1->fixed()};
-	}
-	my $firstnode = $vpath->firstmember()->virt_node();
-	my $lastnode  = $vpath->lastmember()->virt_node();
+	if (scalar($virtlan->memberlist()) == 2) {
+	    #
+	    # Endpoint equivalence: The first and last nodes of the link
+	    # must be the same as the first and last nodes of the path.
+	    # This constraint is very important; it means we have to solve
+	    # *just* the lowest layer with assign, and everything is plopped
+	    # down on top of that.
+	    #
+	    my ($member0,$member1) = $virtlan->memberlist();
+	    my $virtnode0 = $member0->virt_node();
+	    my $virtnode1 = $member1->virt_node();
+	    # Look for VMs that have been "fixed" to another node.
+	    if ($virtnode0->_isvirtnode() && $virtnode0->fixed()) {
+		$virtnode0 = $self->vnodes()->{$virtnode0->fixed()};
+	    }
+	    if ($virtnode1->_isvirtnode() && $virtnode1->fixed()) {
+		$virtnode1 = $self->vnodes()->{$virtnode1->fixed()};
+	    }
+	    my $firstnode = $vpath->firstmember()->virt_node();
+	    my $lastnode  = $vpath->lastmember()->virt_node();
 
-	if ("$virtnode0" ne "$firstnode") {
-	    tberror("First node of $vpath is not the same as $virtlan ".
-		    "$virtnode0, $firstnode, $member0, $member1\n");
-	    return -1;
+	    if ("$virtnode0" ne "$firstnode") {
+		tberror("First node of $vpath is not the same as $virtlan ".
+			"$virtnode0, $firstnode, $member0, $member1\n");
+		return -1;
+	    }
+	    if ("$virtnode1" ne "$lastnode") {
+		tberror("Last node of $vpath is not the same as $virtlan ".
+			"$virtnode1, $lastnode, $member0, $member1\n");
+		return -1;
+	    }
 	}
-	if ("$virtnode1" ne "$lastnode") {
-	    tberror("Last node of $vpath is not the same as $virtlan ".
-		    "$virtnode1, $lastnode, $member0, $member1\n");
-	    return -1;
+	else {
+	    #
+	    # Not sure what sanity checking to do on lans yet. Revisit.
+	    #
+	    $self->printdb("$virtlan is a lan implemented by $vpath\n");
 	}
-	
 	$self->printdb("$virtlan is implemented by $vpath\n");
 	$virtlan->_implemented_by($vpath);
 	$vpath->addimplements($virtlan);
@@ -2476,12 +2508,17 @@ sub GenVirtNodes($)
 		if (!defined($posinfo)) {
 		    my $jailosinfo = $self->nodejailosinfo($vnode);
 		    $desires->{"OS-" . $jailosinfo->osid()} = ['', 1.000000];
-		    
+		    # For ptopgen.
+		    $self->allimages()->{$jailosinfo->osid()} = 1;
 		}
 		else {
-		    $desires->{"OS-" . $posinfo->osid()} = ['', 1.000000];
-		    $desires->{"OS-" . $posinfo->osid() . "-" . $osinfo->osid()} =
-			['', 1.000000];
+		    my $osid  = $osinfo->osid();
+		    my $posid = $posinfo->osid();
+		    $desires->{"OS-" . $posid} = ['', 1.000000];
+		    $desires->{"OS-" . $posid . "-" . $osid} = ['', 1.000000];
+		    # For ptopgen.
+		    $self->allimages()->{$posid} = 1;
+		    $self->allimages()->{$posid . "-" . $osid} = 1;
 		}
 	    }
 	    elsif (!$osinfo->mfs()) {
@@ -2491,11 +2528,17 @@ sub GenVirtNodes($)
 		#
 		if (!defined($posinfo)) {
 		    $desires->{"OS-" . $osinfo->osid()} = ['', 1.000000];
+		    # For ptopgen.
+		    $self->allimages()->{$osinfo->osid()} = 1;
 		}
 		else {
-		    $desires->{"OS-" . $posinfo->osid()} = ['', 1.000000];
-		    $desires->{"OS-" . $posinfo->osid() . "-" . $osinfo->osid()} =
-			['', 1.000000];
+		    my $osid  = $osinfo->osid();
+		    my $posid = $posinfo->osid();
+		    $desires->{"OS-" . $posid} = ['', 1.000000];
+		    $desires->{"OS-" . $posid . "-" . $osid} = ['', 1.000000];
+		    # For ptopgen.
+		    $self->allimages()->{$posid} = 1;
+		    $self->allimages()->{$posid . "-" . $osid} = 1;
 		}
 	    }
 	}
@@ -3158,7 +3201,7 @@ sub GenVirtLans($)
 	    # MLE Constraint: Not allowed to use a shared node on
 	    # any link that is part of a vpath.
 	    #
-	    if (defined($vlan->_vpath())) {
+	    if (defined($vlan->_vpaths())) {
 		tberror("Not allowed to use virtual/shared nodes in $vlan ".
 			"since it is part of a path.\n");
 		$errors++;
@@ -3317,19 +3360,25 @@ sub GenVirtLans($)
 		$others->{'emulated'}   = 1;
 		# assign seems to require this, but it seems wrong.
 		$others->{'trivial_ok'} = 1;
+		# This is probably not correct for all situations. 
 		$bw = 1000;
 	    }
 	    foreach my $member (@members) {
 		my $virtnode   = $member->virt_node();
 		my $vnodevname = $virtnode->vname();
 		my $plink      = "portlan/$vname/$member";
+		my (undef,$bw0)= @{$member->_delayinfo()};
+		my $wiretype   = $vlan->_wiretype();
 
+		if ($bw0 != 0) {
+		    $wiretype = $self->GetWiretype($wiretype, $bw0);
+		}
 		$self->createLink($vname, $plink,
 				  [$virtnode->_cmurn()],
 				  {'virtual_node_id' => $vnodevname,
 				   'virtual_interface_id' =>"$member" },
 				  {'virtual_node_id' => $lannode },
-				  $bw, $vlan->_wiretype(), $others);
+				  $bw, $wiretype, $others);
 	    }
 	}
 	elsif (@members == 2) {
@@ -3438,9 +3487,8 @@ sub GenVirtLans($)
 	    #
 	    # MLE Constraint: The links in a path cannot be shaped at all.
 	    #
-	    if (defined($vlan->_vpath()) && $shaped) {
-		my $vpath = $vlan->_vpath();
-		tberror("Not allowed to shape $vlan cause its in $vpath\n");
+	    if (defined($vlan->_vpaths()) && $shaped) {
+		tberror("Not allowed to shape $vlan cause its in a vpath\n");
 		$errors++;
 		next;
 	    }
@@ -3553,7 +3601,7 @@ sub GenVirtLans($)
 			#
 			# We post pass these links. Save.
 			#
-			$self->vlinks()->{"$vlan"} = $plink;
+			$self->vlinks()->{"$vlan"} = [$plink];
 		    }
 		    else {
 			$self->createLink($vname, $plink, [$mycmurn],
@@ -3685,7 +3733,7 @@ sub GenVirtLans($)
 		    #
 		    # We post pass these links. Save.
 		    #
-		    $self->vlinks()->{"$vlan"} = $plink;
+		    $self->vlinks()->{"$vlan"} = [$plink];
 		}
 		else {
 		    #
@@ -3716,7 +3764,7 @@ sub GenVirtLans($)
 		}
 	    }
 	}
-	elsif ($#members != 0) {
+	elsif (@members != 0) {
 	    my $desires = {};
 	    $self->exptstats()->{"lans"} += 1;
 	    my $lannode = ($vlan->_geninodes() ? "lan-$vname" : "lan/$vname");
@@ -3785,6 +3833,38 @@ sub GenVirtLans($)
 		    $shaped = 1;
 		    # Mark the link as shaped for later.
 		    $vlan->setmembershaped($member);
+		}
+
+		#
+		# MLE Constraint: Not allowed to shape a link that is
+		# implemented_by a path, unless it uses link shaping.
+		#
+		if (defined($vlan->_implemented_by()) && $shaped &&
+		    !$self->virtlan_use_linkdelay($vlan, $shaped)) {
+		    tberror("Not allowed to shape (delay nodes) $vlan since it ".
+			    "is implemented_by a path. Try endnode shaping.\n");
+		    $errors++;
+		    next;
+		}
+
+		#
+		# MLE Constraint: The links in a path cannot be shaped at all.
+		#
+		if (defined($vlan->_vpaths()) && $shaped) {
+		    tberror("Not allowed to shape $vlan cause its in a vpath\n");
+		    $errors++;
+		    next;
+		}
+		# And, a layer 1 link cannot be shaped no matter what right now.
+		if ($layer == 1 && $shaped) {
+		    tberror("Not allowed to shape $vlan cause its at layer 1\n");
+		    $errors++;
+		    next;
+		}
+		if (defined($vlan->_implemented_by())) {
+		    if (!exists($self->vlinks()->{"$vlan"})) {
+			$self->vlinks()->{"$vlan"} = [];
+		    }
 		}
 
 		#
@@ -3885,16 +3965,24 @@ sub GenVirtLans($)
 			    $vnodevname = $virtnode->_fixedvm()->vname();
 			}
 		    
-			$self->createLink($vname, $plink, [],
-					  {'virtual_node_id' => $vnodevname,
-					   'virtual_interface_id' =>"$member" },
-					  {'virtual_node_id' => "$lannode" },
-					  ($top_bw == 0 ? "*" : 
-					   max($top_bw,$top_rbw)),
-					  ($emulated ? $vlan->_wiretype() :
-					  $self->GetWiretype($vlan->_wiretype(),
-						      max($top_bw, $top_rbw))),
-					  $others);
+			if (defined($vlan->_implemented_by())) {
+			    #
+			    # We post pass these links. Save.
+			    #
+			    push(@{$self->vlinks()->{"$vlan"}}, $plink);
+			}
+			else {
+			    $self->createLink($vname, $plink, [],
+				      {'virtual_node_id' => $vnodevname,
+				       'virtual_interface_id' =>"$member" },
+				      {'virtual_node_id' => "$lannode" },
+				      ($top_bw == 0 ? "*" : 
+				       max($top_bw,$top_rbw)),
+				      ($emulated ? $vlan->_wiretype() :
+				       $self->GetWiretype($vlan->_wiretype(),
+					      max($top_bw, $top_rbw))),
+					      $others);
+			}
 			
 			$self->printdb("Delay link $plink = " .
 				       join(" ", @delayinfo) . "\n");
@@ -4012,13 +4100,21 @@ sub GenVirtLans($)
 			    [$delay,$bw,$backfill,$loss,
 			     $rdelay,$rbw,$rbackfill,$rloss,1.000000];
 		    }
-		    $self->createLink($vname, $plink,
-				      [$virtnode->_cmurn()],
-				      {'virtual_node_id' => $vnodevname,
-				       'virtual_interface_id' =>"$member" },
-				      {'virtual_node_id' => $lannode },
-				      ($top_bw == 0 ? "*" : $top_bw), 
-				      $wiretype, $others);
+		    if (defined($vlan->_implemented_by())) {
+			#
+			# We post pass these links. Save.
+			#
+			push(@{$self->vlinks()->{"$vlan"}}, $plink);
+		    }
+		    else {
+			$self->createLink($vname, $plink,
+					  [$virtnode->_cmurn()],
+					  {'virtual_node_id' => $vnodevname,
+					   'virtual_interface_id' =>"$member" },
+					  {'virtual_node_id' => $lannode },
+					  ($top_bw == 0 ? "*" : $top_bw), 
+					  $wiretype, $others);
+		    }
 		}
 	    }
 	}
@@ -4226,7 +4322,7 @@ sub CreateVtop($;$)
 	'wirelesslans' => 0,
 	'shapedlinks' => 0,
 	'shapedlans'  => 0,
-	'minlinks'    => 100000,
+	'minlinks'    => undef,
 	# includes emulated links. Maybe thats wrong.
 	'maxlinks'    => 0,
     };
@@ -4294,6 +4390,8 @@ sub CreateVtop($;$)
 	$self->options()->{'delay_desire_type'} = '';
 	$self->options()->{'delay_desire_name'} = "OS-$osid";
 	$self->options()->{'delay_desire_penalty'} = '1';
+	# For ptopgen.
+	$self->allimages()->{$osid} = 1;
     }
     else {
 	$self->options()->{'delay_desire_type'} = '';
@@ -5372,7 +5470,7 @@ sub AllocNodes($)
     #
     # If nalloc failed with a fatal error, lets give it up. No retry.
     # 
-    if ($exitval < 0) {
+    if ($exitval < 0 || $exitval == 255) {
 	tberror("Failed to reserve any nodes.\n");
 	return -1; 
     }
@@ -5473,7 +5571,7 @@ sub AllocNodes($)
 	# if the return value of nalloc (number of nodes not allocated) does
 	# not equal the number of nodes we tried to allocate.
 	#
-	return (($tcount == $exitval) ? 2 : 3);
+	return (($tcount == $exitval) ? 10 : 11);
     }
 
     #
@@ -5528,8 +5626,16 @@ sub AllocNodes($)
 	    # Node is being reused, but for a different purpose, so
 	    # it should be rebooted.
 	    #
+	    # XXX Note that when we use alloconly mode, and then we
+	    # "commit" the allocations, we do not want to change the
+	    # allocstate cause that messes up os_setup later. This is
+	    # relevant to the Geni path only.
+	    #
 	    $pnode->SetAllocState(TBDB_ALLOCSTATE_RES_REBOOT())
-		if (! $self->impotent());
+		if (! ($self->impotent() ||
+		       ($self->commitmode() &&
+			$pnode->allocstate() eq
+			TBDB_ALLOCSTATE_RES_INIT_DIRTY())));
 	}
     }
   skip:
@@ -5854,7 +5960,7 @@ sub AllocVirtNodes($)
 	    while (scalar(@newvlist) && scalar(@delvlist)) {
 		my $del_vnode = pop(@delvlist);
 		if (exists($self->current_v2v->{$del_vnode})) {
-		    my $reserved_node = $$self->current_v2v()->{$del_vnode};
+		    my $reserved_node = $self->current_v2v()->{$del_vnode};
 		    push(@oplist, $reserved_node);
 		    my $new_vnode = pop(@newvlist);
 		    push(@ovlist, $new_vnode);
@@ -5882,7 +5988,14 @@ sub AllocVirtNodes($)
 	    
 	    if ($virtnode->_isdynamic()) {
 		# Always use the base type ... node type system sucks.
-		my $basetype = $virtnode->_typeinfo()->type();
+		my $basetype;
+
+		if ($virtnode->_typeinfo()->IsAuxType()) {
+		    $basetype = $virtnode->_typeinfo()->BaseType()->type();
+		}
+		else {
+		    $basetype = $virtnode->_typeinfo()->type();
+		}
 
 		#
 		# We might be expecting to allocate a shared vnode on
@@ -6065,18 +6178,67 @@ sub InterpLinks($)
 	next
 	    if (!defined($vpath));
 
-	my $vlink = $self->vlinks()->{"$virtlan"};
-	my ($member0,$member1) = $virtlan->memberlist();
-	my $firstmember = $vpath->firstmember();
-	my $lastmember  = $vpath->lastmember();
+	my @vlinks = @{$self->vlinks()->{"$virtlan"}};
+	if (@vlinks == 1) {
+	    my ($vlink) = @vlinks;
+	    my ($member0,$member1) = $virtlan->memberlist();
+	    my $firstmember = $vpath->firstmember();
+	    my $lastmember  = $vpath->lastmember();
+	    my $direct      = $virtlan->_layer() == 3 ? 1 : 0;
 
-	$self->printdb("Adding link $virtlan, implemented by $vpath\n");
+	    $self->printdb("Adding link $virtlan, implemented by $vpath\n");
 
-	$self->AddLinkToSolution($vlink, 0, 0,
-				 $firstmember->_pnode(),
-				 $firstmember->_pport(),
-				 $lastmember->_pnode(),
-				 $lastmember->_pport());
+	    $self->AddLinkToSolution($vlink, 0, $direct,
+				     $firstmember->_pnode(),
+				     $firstmember->_pport(),
+				     $lastmember->_pnode(),
+				     $lastmember->_pport());
+	}
+	else {
+	    $self->printdb("Adding lan $virtlan, implemented by $vpath\n");
+	    foreach my $vlink (@vlinks) {
+		$self->printdb("vlink: $vlink\n");
+		
+		my ($lan,$virtA) = ($vlink =~ m|^linklan/([^/]+)/(.+)$|);
+		if (!defined($lan)) {
+		    tberror("Bad vlink, not a linklan: $vlink\n");
+		    return -1;
+		}
+		my ($vnode) = split(":", $virtA);
+		# The lan we adding.
+		my $virtlan = $self->vlans()->{$lan};
+		# The corresponding member of the lan
+		my $member  = $virtlan->members()->{$virtA};
+
+		# Find the segment in the path that implements this lan member.
+		foreach my $segment ($vpath->virtlanlist()) {
+		    my ($member0,$member1) = $segment->memberlist();
+		    my $pnode0 = $member0->_pnode();
+		    my $pport0 = $member0->_pport();
+		    my $pnode1 = $member1->_pnode();
+		    my $pport1 = $member1->_pport();
+
+		    next
+			if (! ($member0->vnode() eq $vnode ||
+			       $member1->vnode() eq $vnode));
+		    
+		    $self->printdb("$member - $member0,$pnode0,$pport0, ".
+				   "$member1,$pnode1,$pport1\n");
+
+		    # We want the node side of the segment, not the switch side.
+		    if ($member0->vnode() eq $vnode) {
+			$self->AddLinkToSolution($vlink, 0, 0,
+						 $pnode0, $pport0, undef, undef);
+			$member->_segment_member($member0);
+		    }
+		    else {
+			$self->AddLinkToSolution($vlink, 0, 0,
+						 $pnode1, $pport1, undef, undef);
+			$member->_segment_member($member1)
+		    }
+		}
+	    }
+	}
     }
     return -1
 	if ($self->InterpLinksAux() != 0);
@@ -6129,6 +6291,10 @@ sub InterpLinks($)
 	$protovlan->SetEncapStyle("default");
 	# Total hack ... see snmpit.
 	$protovlan->SetAttribute("trunk_mode", "dual");
+
+	# Well, if there are no experimental interfaces, we want to kill
+	# the protovlan so that it does not confused snmpit.
+	my $iface_counter = 0;
 	
 	foreach my $pnode (@sharedpnodes) {
 	    my $pnodename = $pnode->node_id();
@@ -6203,7 +6369,12 @@ sub InterpLinks($)
 			or return -1 if (!($self->impotent() ||
 					   $self->alloconly()));
 		}
+		$iface_counter++;
 	    }
+	}
+	if (!$iface_counter) {
+	    $self->printdb("No interfaces in shared vlan, killing protovlan\n");
+	    $protovlan->Destroy();
 	}
     }
 
@@ -6261,11 +6432,12 @@ sub InterpLinksAux($)
 	my $virtA  = $member0;
 	my $vnodeA = $member0->vnode();
 	my $vportA = $member0->vport();
-	my ($nodeA,$portA) = undef;
+	my ($nodeA,$portA,$pnodeA) = undef;
 	# But it might be trivial, so no portinfo.
 	if (!$trivial) {
 	    $nodeA  = $member0->_pnode();
 	    $portA  = $member0->_pport();
+	    $pnodeA = Node->Lookup($nodeA);
 	}
 	my $virtnodeA = $self->vnodes()->{$vnodeA};
 
@@ -6420,7 +6592,7 @@ sub InterpLinksAux($)
 	    my $virtB  = $member1;
 	    my $vnodeB = $member1->vnode();
 	    my $vportB = $member1->vport();
-	    my ($nodeB,$portB) = undef;
+	    my ($nodeB,$portB,$pnodeB) = undef;
 	    my $protolink;
 	    my $virtnodeB = $self->vnodes()->{$vnodeB};
 
@@ -6435,26 +6607,40 @@ sub InterpLinksAux($)
 	    if (! $trivial) {
 		$nodeB  = $member1->_pnode();
 		$portB  = $member1->_pport();
+		$pnodeB = Node->Lookup($nodeB);
 
 		$self->printdb("LINK simple: $virtA,$virtB - ".
 			       "$nodeA:$portA,$nodeB:$portB\n");
 
 		if ($virtlan->_layer() == 1) {
+		    my $attrs = undef;
+		    
 		    #
 		    # A layer one link is a "wire" between two interfaces
 		    # attached to a layer one switch; snmpit deals with
 		    # wires by creating the links on the layer one switch.
+		    #
+		    # If both nodes are switches, then we mark it as a Trunk
+		    # so that wire is marked appropriately and the ports are
+		    # put into trunk mode.
 		    #
 		    $protolink = ProtoLan->Create($experiment, $lan,
 						  $self->impotent() ||
 						  $self->alloconly());
 		    $protovlans{$lan} = $protolink;
 		    $protolink->SetType("wire");
-		    $protolink->SetRole("link");
+		    
+		    if ($pnodeA->isswitch() && $pnodeB->isswitch()) {
+			$protolink->SetRole("trunk");
+			$attrs = {"trunk_mode" => "equal"};
+		    }
+		    else {
+			$protolink->SetRole("link");
+		    }
 		    $protolink->AddInterface($nodeA, $vnodeA,
-					     $vportA, $portA);
+					     $vportA, $portA, undef, $attrs);
 		    $protolink->AddInterface($nodeB, $vnodeB,
-					     $vportB, $portB);
+					     $vportB, $portB, undef, $attrs);
 
 		    #
 		    # The layer one link when it is in existence, is just like
@@ -6466,7 +6652,9 @@ sub InterpLinksAux($)
 		    # sees that wire (as for snmpit).
 		    #
 		    my $logicalwire =
-			Interface::LogicalWire->Create($self->impotent(),
+			Interface::LogicalWire->Create(($self->impotent() ||
+							$self->alloconly()
+							? 1 : 0),
 						       $nodeA, $portA,
 						       $nodeB, $portB);
 		    return -1
@@ -6487,10 +6675,15 @@ sub InterpLinksAux($)
 		    #
 		    $protolink->SetAttribute("logicalwireid",
 					     $logicalwire->WireID());
-		    
+
+		    # Setup portmap using virt members in plink name.
+		    # For setting speeds later.
+		    $portmap{$virtA} = $portA;
+		    $portmap{$virtB} = $portB;
+	
 		    next;
 		}
-		elsif ($virtlan->_layer() == 2 && $virtlan->_vpath()) {
+		elsif ($virtlan->_layer() == 2 && $virtlan->_vpaths()) {
 		    #
 		    # A layer two path. We know we want to put the
 		    # ports into trunk mode, but we might not know the
@@ -6508,7 +6701,9 @@ sub InterpLinksAux($)
 		    # processed then push this back on the vlinks list
 		    # to be processed later.
 		    #
-		    my $vpath = $virtlan->_vpath();
+		    # We know there is only one.
+		    #
+		    my ($vpath) = @{$virtlan->_vpaths()};
 		    
 		    foreach my $implements (values(%{$vpath->implements()})) {
 			if (!exists($protovlans{$implements->vname()})) {
@@ -6569,8 +6764,8 @@ sub InterpLinksAux($)
 
 		    $self->printdb("$virtlan; $firstwire, $lastwire\n");
 
-		    $portA = $firstwire->ifaceA();
-		    $portB = $lastwire->ifaceB();
+		    $portA = $firstwire->iface1();
+		    $portB = $lastwire->iface1();
 		}
 		if ($virtlan->usevirtiface()) {
 		    my $protovlan;
@@ -6726,22 +6921,6 @@ sub InterpLinksAux($)
 		    $protolink->AddInterface($nodeB, $vnodeB, $vportB, $portB);
 		    $protovlans{$lan} = $protolink;
 		}
-		#
-		# If this link is implemented by a path, link them up so we
-		# encode the ordering in the lans table (for snmpit).
-		#
-		if ($virtlan->_implemented_by()) {
-		    my $vpath = $virtlan->_implemented_by();
-		    my @links = $vpath->virtlanlist();
-
-		    # If the proto link has an underlying proto vlan, that is 
-		    # the actual dependency.
-		    my $protodep = $protolink->link() || $protolink;
-
-		    foreach my $link (@links) {
-			$protovlans{$link->vname()}->SetLink($protodep);
-		    }
-		}
 	    }
 	    else {
 		# If the trivial link has all simulated members, we
@@ -6820,6 +6999,42 @@ sub InterpLinksAux($)
 	    if (! $trivial) {
 		$self->printdb("LAN node: $virtA - $nodeA:$portA\n");
 		
+		#
+		# Special handing for layer two links implemented by a path.
+		#
+		if ($virtlan->_implemented_by()) {
+		    #
+		    # Make sure the underlying links have been processed.
+		    # Push back on the list if not.
+		    #
+		    my $vpath = $virtlan->_implemented_by();
+		    my @links = $vpath->virtlanlist();
+
+		    foreach my $link (@links) {
+			if (!exists($protovlans{$link->vname()})) {
+			    push(@plinks, $plink);
+			    goto loop;
+			}
+		    }
+		    #
+		    # So we have the member of the segment which gets us
+		    # the logical wire. From the logical wire we can get
+		    # the logical interface for the lan.
+		    #
+		    my $segment_member  = $virtA->_segment_member();
+		    my $segment_virtlan = $segment_member->virt_lan();
+		    my $segment_wire    = $segment_virtlan->_logicalwire();
+		    #
+		    # We have an implicit assumption that the node side of
+		    # a wire is on the left and the switch on the right. We
+		    # to get the node side here.
+		    #
+		    my $logical_iface = $segment_wire->iface1();
+		    
+		    $self->printdb("$virtlan; $segment_wire, $logical_iface\n");
+
+		    $portA = $logical_iface;
+		}
 		if ($virtlan->usevirtiface()) {
 		    #
 		    # Look for the underlying protovlan for this lan. Create
@@ -7503,8 +7718,13 @@ sub InitializePhysNode($$$)
 		     "loadlist"          => $loadlist || '',
 		     "failureaction"     => $failureaction,
 		     "routertype"        => $routertype);
-	$nodesets{"startstatus"} = 'none'
-	    if (!exists($self->oldreservednodes()->{$pnodename}));
+	# They never report status, need to set them.
+	if (defined($virtnode->_blockstore())) {
+	    $nodesets{"startstatus"} = 0;
+	}
+	elsif (!exists($self->oldreservednodes()->{$pnodename})) {
+	    $nodesets{"startstatus"} = 'none';
+	}
 		
 	%rsrvsets = ("vname"             => $vnodename,
 		     "erole"             => $role,
@@ -8523,211 +8743,52 @@ sub UploadVlans($)
     }
 
     #
-    # MLE: make a pass through the implemented_by tree setting port speeds
-    # that the user left up to assign (i.e., that are 0).  We start at the
-    # lowest level links and assign default speeds.  Then we propagate those
-    # speeds up to higher level links, and warn the user if the higher level
-    # links don't support those speed settings (if they don't, we're gonna
-    # have a problem :)).
+    # MLE:
     #
-    $self->printdb("Setting speeds for MLE virtlans...\n");
-    my @mlevlans = ();
+    # 1. Set the dependencies on lans so that the underlying segments
+    #    are handled by snmpit first.
+    # 2. Set the switch path. The user specified the path, so we want to
+    #    use that insted of letting snmpit calculate one on the fly. 
+    #
+    $self->printdb("Setting dependencies for MLE virtlans...\n");
     foreach my $virtlan (values(%{ $self->vlans() })) {
 	next
-	    if (!($virtlan->_implemented_by() || $virtlan->_vpath()));
+	    if (!$virtlan->_implemented_by());
+    
+	my $vpath = $virtlan->_implemented_by();
+	my @links = $vpath->virtlanlist();
 
-	if ($virtlan->_vpath()) {
-	    $virtlan->_vpath()->_pathspeed0(0);
-	    $virtlan->_vpath()->_pathspeed1(0);
-	}
-
-	push @mlevlans, $virtlan;
-    }
-    $self->printdb("mle virtlans: ".join(" ",@mlevlans)."\n");
-
-    while (@mlevlans) {
-      mleagain:
-	my $virtlan = shift @mlevlans;
-	
-	# If it's a lan implemented by a path, we need to derive speeds from
-	# the path endpoints.
-	my $vpath;
-	if (defined($vpath = $virtlan->_implemented_by())) {
-	    if ($vpath->_pathspeed0() == 0 || $vpath->_pathspeed1() == 0) {
-		$self->printdb("mlevlanspeed: delaying $virtlan until its" . 
-			       " vpath $vpath is processed\n");
-		push @mlevlans, $virtlan;
-		goto mleagain;
-	    }
-	}
-	else {
-	    $vpath = $virtlan->_vpath();
-	}
-
-	#
-	# Handle a virtlan (whether it's a path segment or a link implemented
-	# by a path -- we handle each case a little differently below):
-	#
 	my $protolink = ProtoLan->Lookup($self->experiment(),
 					 $virtlan->vname());
-	my $lan = Lan->Lookup($self->experiment()->idx(),
-			      $virtlan->vname());
+ 	
+	# If the proto link has an underlying proto vlan, that is 
+	# the actual dependency.
+	my $protodep = $protolink->link() || $protolink;
 
-	my ($member0,$member1) = $virtlan->memberlist();
-	my ($iface0,$iface1,$pnode0,$pnode1);
-	if ($protolink->IfaceList() != 0) {
-	    ($iface0,$iface1,$pnode0,$pnode1) = 
-		($protolink->{"IFACES"}->{$member0}->{"iface"},
-		 $protolink->{"IFACES"}->{$member1}->{"iface"},
-		 $protolink->{"IFACES"}->{$member0}->{"node"},
-		 $protolink->{"IFACES"}->{$member1}->{"node"});
-	}
-	else {
-	    $self->printdb("ERROR: is $protolink a protovlan?!\n");
-	    return -1;
+	foreach my $link (@links) {
+	    my $protolink = ProtoLan->Lookup($self->experiment(), $link->vname());
+	    $protolink->SetLink($protodep);
 	}
 
-	my $member0if = $protolink->{"IFACES"}->{$member0};
-	my $member1if = $protolink->{"IFACES"}->{$member1};
-	my ($cs_member0,$cs_member1) = (0,0);
-
-	if (defined($member0if->{"attrs"})
-	    && exists($member0if->{"attrs"}->{"current_speed"})) {
-	    $cs_member0 = $member0if->{"attrs"}->{"current_speed"};
-	}
-	if (defined($member1if->{"attrs"})
-	    && exists($member1if->{"attrs"}->{"current_speed"})) {
-	    $cs_member1 = $member1if->{"attrs"}->{"current_speed"};
-	}
-
-	if ($virtlan->_implemented_by()) {
-	    $self->printdb("mlevlanspeed: $virtlan (implemented by $vpath):" . 
-			   " $member0 ($pnode0,$iface0,$cs_member0)" . 
-			   " $member1 ($pnode1,$iface1,$cs_member1)\n");
-	}
-	else {
-	    $self->printdb("mlevlanspeed: vpath $vpath segment $virtlan:" . 
-			   " $member0 ($pnode0,$iface0,$cs_member0)" . 
-			   " $member1 ($pnode1,$iface1,$cs_member1)\n");
-	}
+	#
+	# Now do the path
+	#
+	my @switchpath = ();
 	
-	my $interface0 = Interface->LookupByIface($pnode0,$iface0);
-	my $interface1 = Interface->LookupByIface($pnode1,$iface1);
-
-	my ($speed0,$speed1);
-	if ((!exists($self->portbw()->{$member0})
-	     || $self->portbw()->{$member0} == 0)
-	    && $cs_member0 == 0) {
-	    #
-	    # Figure out the default speed if this is a path segment;
-	    # otherwise inherit from the path.
-	    #
-	    if ($virtlan->_implemented_by()) {
-		$speed0 = $vpath->_pathspeed0();
-	    }
-	    else {
-		$speed0 =
-		    $self->interfacespeedmbps($interface0->type(),"ethernet");
-	    }
-
-	    $self->printdb("Setting ifacebw: $pnode0:$iface0 $speed0\n");
-	    #
-	    # Save it off for later rounds of this loop for possible reference
-	    #
-	    $member0if->{"attrs"}->{"current_speed"} = $speed0;
-	    #
-	    # Upload it if we're not impotent or alloconly
-	    #
-	    if (!($self->impotent() || $self->alloconly())) {
-		$interface0->Update({'current_speed' => $speed0 });
+	foreach my $link (@links) {
+	    my $logicalwire = $link->_logicalwire();
+	    my $pnodeA      = Node->Lookup($logicalwire->node_id1());
+	    my $pnodeB      = Node->Lookup($logicalwire->node_id2());
+	    if ($pnodeA->isswitch() && $pnodeB->isswitch()) {
+		push(@switchpath, $pnodeA->node_id() .":". $pnodeB->node_id());
 	    }
 	}
-	else {
-	    $speed0 = (exists($self->portbw()->{$member0})
-		       && $self->portbw()->{$member0}) ? 
-		       $self->portbw()->{$member0} / 1000 :
-		       $cs_member0;
-	    #
-	    # Sanity check: did somebody set a speed already (user or previous
-	    # current_speed attribute from an AddInterface call), and does it
-	    # not match what the underlying path thinks it should be?
-	    #
-	    if ($virtlan->_implemented_by()
-		&& $virtlan->_vpath()->_pathspeed0() ne $speed0) {
-		print STDERR "mlevlanspeed: preset link speed disagreed with" . 
-		    " implementing start path segment!";
-		return -1;
-	    }
-	}
-
-	if ((!exists($self->portbw()->{$member1})
-	     || $self->portbw()->{$member1} == 0)
-	    && $cs_member1 == 0) {
-	    #
-	    # Figure out the default speed if this is a path segment;
-	    # otherwise inherit from the path.
-	    #
-	    if ($virtlan->_implemented_by()) {
-		$speed1 = $vpath->_pathspeed1();
-	    }
-	    else {
-		$speed1 =
-		    $self->interfacespeedmbps($interface1->type(),"ethernet");
-	    }
-
-	    $self->printdb("Setting ifacebw: $pnode1:$iface1 $speed1\n");
-	    #
-	    # Save it off for later rounds of this loop for possible reference
-	    #
-	    $member1if->{"attrs"}->{"current_speed"} = $speed1;
-	    #
-	    # Upload it if we're not impotent or alloconly
-	    #
-	    if (!($self->impotent() || $self->alloconly())) {
-		$interface1->Update({'current_speed' => $speed1 });
-	    }
-	}
-	else {
-	    $speed1 = (exists($self->portbw()->{$member1})
-		       && $self->portbw()->{$member1}) ? 
-		       $self->portbw()->{$member1} / 1000 :
-		       $cs_member1;
-	    #
-	    # Sanity check: did somebody set a speed already (user or previous
-	    # current_speed attribute from an AddInterface call), and does it
-	    # not match what the underlying path thinks it should be?
-	    #
-	    if ($virtlan->_implemented_by()
-		&& $virtlan->_vpath()->_pathspeed1() ne $speed1) {
-		print STDERR "mlevlanspeed: preset link speed disagreed with" . 
-		    " implementing start path segment!";
-		return -1;
-	    }
-	}
-
-	#
-	# Now, if this segment was part of a path, and it's the end or start
-	# segment, set some bits on the path object so we can let links that
-	# are implemented by paths inherit speed settings from the implementing
-	# path endpoints.
-	#
-	if ($virtlan->_vpath()) {
-	    my @links = $vpath->virtlanlist();
-
-	    # save the endpoint speeds!
-	    if ($links[0]->vname() eq $virtlan->vname()) {
-		$vpath->_pathspeed0($speed0);
-		$self->printdb("Saving ifacebw for vpath $vpath start: $speed0\n");
-	    }
-	    elsif ($links[@links-1]->vname() eq $virtlan->vname()
-		   || @links == 1) {
-		$vpath->_pathspeed1($speed1);
-		$self->printdb("Saving ifacebw for vpath $vpath end: $speed1\n");
-	    }
+	if (@switchpath) {
+	    $self->printdb("Switch path for $virtlan: @switchpath\n");
+	    $protolink->SetAttribute("switchpath", "@switchpath");
 	}
     }
-    $self->printdb("Done setting speeds for MLE virtlans.\n");
-    
+
     #
     # Emulated vlans will result in node:port pairs being in more than
     # one vlan since that link is shared for several lans. For hardware
@@ -8990,10 +9051,6 @@ sub UploadVlans($)
 		if (! (exists($self->portbw()->{$member}) &&
 		       exists($self->solution_v2p()->{$member->vnode()})));
 
-	    # Skip anything that is implemented by a path; speed set elsewhere.
-	    next
-		if (defined($virtlan->_implemented_by()));
-
 	    my $iface;
 	    my $pnodename;
 	    my $interface;
@@ -9144,7 +9201,8 @@ sub UpLoadIPAddresses($)
 	my $mask     = $virtlan->_mask();
 
 	next
-	    if ($virtlan->_layer() != 2);
+	    if (!($virtlan->_layer() == 2 || $virtlan->_layer() == 3 ||
+		  ($virtlan->_layer() == 1 && $self->experiment()->geniflags)));
 
 	foreach my $member ($virtlan->memberlist()) {
 	    # Will this happen?
@@ -10299,9 +10357,21 @@ sub GetWiretype($$$)
 	# 1 Gbit
 	$wiretype = "ethernet-1000000";
     }
-    else {
+    elsif ($bandwidth <= 10000000) {
 	# 10 Gbit
 	$wiretype = "ethernet-10000000";
+    }
+    elsif ($bandwidth <= 25000000) {
+	# 25 Gbit
+	$wiretype = "ethernet-25000000";
+    }
+    elsif ($bandwidth <= 40000000) {
+	# 40 Gbit
+	$wiretype = "ethernet-40000000";
+    }
+    else {
+	# 100 Gbit
+	$wiretype = "ethernet-100000000";
     }
     return $wiretype;
 }

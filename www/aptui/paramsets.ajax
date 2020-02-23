@@ -1,0 +1,211 @@
+<?php
+#
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+chdir("..");
+include_once("webtask.php");
+chdir("apt");
+include_once("profile_defs.php");
+include_once("instance_defs.php");
+
+#
+# Create a new parameter set for a profile.
+#
+function Do_Create()
+{
+    global $this_user, $ajax_args;
+    $errors = array();
+    $opts = "";
+    $args = "";
+    
+    if (!isset($ajax_args["profile_uuid"])) {
+	SPITAJAX_ERROR(-1, "Missing profile uuid");
+	return;
+    }
+    $profile_uuid = $ajax_args["profile_uuid"];
+    if (!IsValidUUID($profile_uuid)) {
+	SPITAJAX_ERROR(-1, "Not a valid profile uuid");
+	return;
+    }
+    $profile = Profile::Lookup($profile_uuid);
+    if (!$profile) {
+	SPITAJAX_ERROR(-1, "No such profile");
+	return;
+    }
+    if (! (isset($ajax_args["instance_uuid"]) ||
+           isset($ajax_args["bindings"]))) {
+	SPITAJAX_ERROR(-1, "Missing instance uuid or bindings xml");
+	return;
+    }
+    if (isset($ajax_args["instance_uuid"])) {
+        $instance_uuid = $ajax_args["instance_uuid"];
+        if (!IsValidUUID($instance_uuid)) {
+            SPITAJAX_ERROR(-1, "Not a valid instance uuid");
+            return;
+        }
+        $record = Instance::Lookup($instance_uuid);
+        if (!$record) {
+            $record = InstanceHistory::Lookup($instance_uuid);
+            if (!$record) {
+                SPITAJAX_ERROR(-1, "No such record: $uuid");
+                return;
+            }
+        }
+        $args = $instance_uuid;
+    }
+    if (!isset($ajax_args["name"])) {
+	SPITAJAX_ERROR(-1, "Missing name");
+	return;
+    }
+    if (!isset($ajax_args["description"])) {
+	SPITAJAX_ERROR(-1, "Missing description");
+	return;
+    }
+    $name = $ajax_args["name"];
+    $description = $ajax_args["description"];
+    $bound = "";
+    if (isset($ajax_args["bound"]) && $ajax_args["bound"] == 1) {
+        $bound = "-b";
+    }
+    
+    if (!TBcheck_dbslot($name, "virt_nodes", "vname",
+			TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+        $errors["name"] = TBFieldErrorString();
+    }
+    if (!TBcheck_dbslot($description, "default", "tinytext",
+			TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+        $errors["description"] = TBFieldErrorString();
+    }
+    if (count($errors)) {
+        SPITAJAX_ERROR(2, $errors);
+        return;
+    }
+    if (isset($ajax_args["bindings"])) {
+        # This is an XML fragment. Write to a file and let the backend
+        # script decide if its a valid XML document.
+        $bindings = $ajax_args["bindings"];
+
+        $filename = tempnam("/tmp", "bindings");
+        $fp = fopen($filename, "w");
+        fwrite($fp, $bindings);
+        fclose($fp);
+        chmod($filename, 0666);        
+        $opts = "-B $filename";
+    }
+    $safe_name = escapeshellarg($name);
+    $safe_description = escapeshellarg($description);
+
+    $webtask    = WebTask::CreateAnonymous();
+    $webtask_id = $webtask->task_id();
+    $command    = "webmanage_profile -t $webtask_id paramset ".
+                "-m $safe_description $bound $opts ".
+                "  add $safe_name $profile_uuid $args";
+        
+    $retval = SUEXEC($this_user->uid(), "nobody",
+                     $command, SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+    if (isset($filename)) {
+        unlink($filename);
+    }
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+	    SPITAJAX_ERROR(-1, "Internal error, we have been notified");
+	}
+	else {
+	    SPITAJAX_ERROR(1, $webtask->TaskValue("errors"));
+	}
+        $webtask->Delete();
+        return;
+    }
+    $webtask->Delete();
+    SPITAJAX_RESPONSE(true);
+}
+
+#
+# Delete a parameter set for a profile.
+#
+function Do_Delete()
+{
+    global $this_user, $ajax_args;
+    $errors = array();
+    
+    if (!isset($ajax_args["uuid"])) {
+	SPITAJAX_ERROR(-1, "Missing paramset uuid");
+	return;
+    }
+    $uuid = $ajax_args["uuid"];
+    if (!IsValidUUID($uuid)) {
+	SPITAJAX_ERROR(-1, "Not a valid uuid");
+	return;
+    }
+    if (!isset($ajax_args["uid"])) {
+	SPITAJAX_ERROR(-1, "Missing paramset uid");
+	return;
+    }
+    $target_user = User::LookupByUid($ajax_args["uid"]);
+    if (!$target_user) {
+	SPITAJAX_ERROR(-1, "No such user");
+	return;
+    }
+    $query_result =
+        DBQueryFatal("select * from apt_parameter_sets ".
+                     "where uuid='$uuid'");
+    if (!mysql_num_rows($query_result)) {
+	SPITAJAX_ERROR(-1, "No such parameter set");
+	return;
+    }
+    $row = mysql_fetch_array($query_result);
+    if ($row["uid_idx"] != $target_user->uid_idx() && !ISADMIN()) {
+	SPITAJAX_ERROR(-1, "No permission to delete parameter set");
+	return;
+    }
+    $profileid  = $row["profileid"];
+    $safe_name  = escapeshellarg($row["name"]);
+    $webtask    = WebTask::CreateAnonymous();
+    $webtask_id = $webtask->task_id();
+    $command    = "webmanage_profile -t $webtask_id paramset ".
+        "-u " . $target_user->uid() . " delete $safe_name $profileid";
+        
+    $retval = SUEXEC($this_user->uid(), "nobody", $command,
+                     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+    
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+	    SPITAJAX_ERROR(-1, "Internal error, we have been notified");
+	}
+	else {
+	    SPITAJAX_ERROR(1, $webtask->TaskValue("errors"));
+	}
+        $webtask->Delete();
+        return;
+    }
+    $webtask->Delete();
+    SPITAJAX_RESPONSE(true);
+}
+
+# Local Variables:
+# mode:php
+# End:
+?>

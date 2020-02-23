@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,8 +21,11 @@
 # }}}
 #
 
+VERSION ?= 3.3.0-0
+
 obj-m += ipod.o
 
+ifeq ($(KERNELRELEASE),)
 KDIR ?= /lib/modules/$(shell uname -r)/build
 PWD := $(shell pwd)
 
@@ -34,3 +37,24 @@ install:
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
+endif
+
+emulab-ipod-dkms_$(VERSION)_all.deb: debian/control debian/rules debian/changelog debian/compat
+	dpkg-buildpackage -us -uc
+	mv ../emulab-ipod-dkms_$(VERSION)_all.deb .
+
+deb-dkms: emulab-ipod-dkms_$(VERSION)_all.deb
+
+deb-dkms-install: deb-dkms
+	dpkg -i emulab-ipod-dkms_$(VERSION)_all.deb
+
+rpmbuild/RPMS/noarch/emulab-ipod-dkms-$(VERSION).noarch.rpm: rpm/emulab-ipod-dkms.conf rpm/emulab-ipod-dkms.spec
+	mkdir -p rpmbuild/{RPMS,SRPMS,SPECS,SOURCES}
+	cp -p Makefile ipod.c rpm/emulab-ipod-dkms.conf rpmbuild/SOURCES
+	rpmbuild --define "_topdir "$(shell readlink -f rpmbuild) -ba \
+		rpm/emulab-ipod-dkms.spec
+
+rpm-dkms: rpmbuild/RPMS/noarch/emulab-ipod-dkms-$(VERSION).noarch.rpm
+
+rpm-dkms-install: rpm-dkms
+	rpm -iv rpmbuild/RPMS/noarch/emulab-ipod-dkms-$(VERSION).noarch.rpm

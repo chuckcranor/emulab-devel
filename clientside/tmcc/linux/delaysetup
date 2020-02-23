@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2013, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -187,7 +187,7 @@ sub LinkDelaySetup()
 	open(DEL, ">" . TMLINKDELAY)
 	    or die("Could not open " . TMLINKDELAY . ": $!");
 
-	system("modinfo ifb 2>&1 >/dev/null");
+	system("modinfo ifb >/dev/null 2>&1");
 	if ($? == 0) {
 	    print "Will use ifb kernel module for duplex endnodeshaping\n";
 	    $useifb = 1;
@@ -201,10 +201,11 @@ sub LinkDelaySetup()
 	    $useifb = 0;
 	}
 
-	system("modinfo sch_netem 2>&1 >/dev/null");
+	system("modinfo sch_netem >/dev/null 2>&1");
 	if ($? == 0) {
 	    print "Using sch_netem kernel module for delay/plr\n";
 	    $usenetem = 1;
+	    $checkreplace = 0;
 	    print DEL "modprobe sch_netem\n";
 	}
 	else {
@@ -213,12 +214,12 @@ sub LinkDelaySetup()
 	    $usenetem = 0;
 	    print DEL "modprobe sch_plr\n";
 	    print DEL "modprobe sch_delay\n";
-	    system("modinfo sch_plr 2>&1 >/dev/null");
+	    system("modinfo sch_plr >/dev/null 2>&1");
 	    if ($?) {
 		print "WARNING: sch_plr module does not exist;"
 		    . " shaping may fail!\n";
 	    }
-	    system("modinfo sch_delay 2>&1 >/dev/null");
+	    system("modinfo sch_delay >/dev/null 2>&1");
 	    if ($?) {
 		print "WARNING: sch_delay module does not exist;"
 		    . " shaping may fail!\n";
@@ -376,14 +377,19 @@ sub LinkDelaySetup()
 		# packet loss in netem is percent
 		$plr *= 100;
 
-		print DEL "ifconfig $iface txqueuelen $queue\n";
-		print DEL "$TC qdisc del dev $iface root\n";
-		print DEL "$TC qdisc del dev $iface ingress\n";
+		print DEL "ifconfig $iface txqueuelen $queue\n"
+		    if ($queue);
+		print DEL "$TC qdisc del dev $iface root >/dev/null 2>&1\n";
+		print DEL "$TC qdisc del dev $iface ingress >/dev/null 2>&1\n";
 
 		#
 		# We cannot use HTB at all if bandw is 0 (i.e., no bandwidth
 		# shaping should be performed).
 		#
+		my $dropfrag = "";
+		if ($plr > 0) {
+		    $dropfrag = "drop $plr";
+		}
 		if ($bandw != 0) {
 		    print DEL "$TC qdisc add dev $iface handle ". $pipeno .
 			" root htb default 1\n";
@@ -392,12 +398,12 @@ sub LinkDelaySetup()
 			" htb rate ${bandw} ceil ${bandw}\n";
 		    print DEL "$TC qdisc add dev $iface handle ".
 			($pipeno+10) . " parent " . $pipeno . ":1 " .
-			"netem drop $plr delay ${delay}us\n";
+			"netem $dropfrag delay ${delay}us\n";
 		}
 		else {
 		    print DEL "$TC qdisc add dev $iface handle ".
 			$pipeno . " root " .
-			"netem drop $plr delay ${delay}us\n";
+			"netem $dropfrag delay ${delay}us\n";
 		}
 	    }
 	    else {
@@ -436,6 +442,10 @@ sub LinkDelaySetup()
 		    # We cannot use HTB at all if bandw is 0 (i.e., no bandwidth
 		    # shaping should be performed).
 		    #
+		    my $dropfrag = "";
+		    if ($rplr > 0) {
+			$dropfrag = "drop $rplr";
+		    }
 		    if ($rbandw != 0) {
 			print DEL "$TC qdisc add dev $idev root handle 2: ".
 			    "htb default 1\n";
@@ -443,12 +453,12 @@ sub LinkDelaySetup()
 			    "htb rate ${rbandw} ceil ${rbandw}\n";
 			# Do not use a colon: in the handle. It BREAKS!
 			print DEL "$TC qdisc add dev $idev handle 3 parent 2:1 ".
-			    "netem drop $rplr delay ${rdelay}us\n";
+			    "netem $dropfrag delay ${rdelay}us\n";
 		    }
 		    else {
 			# Do not use a colon: in the handle. It BREAKS!
 			print DEL "$TC qdisc add dev $idev handle 3 root ".
-			    "netem drop $rplr delay ${rdelay}us\n";
+			    "netem $dropfrag delay ${rdelay}us\n";
 		    }
 		}
 		else {
@@ -501,14 +511,16 @@ sub LinkDelaySetup()
 	# node.
 	system("touch " . ISDELAYNODEPATH());
 
-	#
-	# Now do kernel configuration. All of the above work is wasted,
-	# but such is life.
-	#
-	if (!$gotjails) {
-	    $kernel = $KERNELLDELAY;
+	if (!$usenetem) {
+	    #
+	    # Now do kernel configuration. All of the above work is wasted,
+	    # but such is life.
+	    #
+	    if (!$gotjails) {
+		$kernel = $KERNELLDELAY;
+	    }
+	    $checkreplace = 1;
 	}
-	$checkreplace = 1;
     }
     if ($checkreplace) {
 	checkkernel($kernel);

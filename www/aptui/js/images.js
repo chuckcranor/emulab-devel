@@ -4,6 +4,32 @@ $(function ()
 
     var templates = APT_OPTIONS.fetchTemplateList(['images']);
     var mainTemplate = _.template(templates['images']);
+    var filterindex = 7;
+    var showformat = false;
+
+    /*
+     * Add urn copy-to-clipboard popovers.
+     */
+    var urnPopoverContent = function (urn) {
+	var string =
+	    "<div style='width 100%'> "+
+	    "  <input readonly type=text " +
+	    "       style='display:inline; width: 93%; padding: 2px;' " +
+	    "       class='form-control input-sm' "+
+	    "       value='" + urn + "'>" +
+	    "  <a href='#' class='btn urn-copy-button' " +
+	    "     style='padding: 0px'>" +
+	    "    <span class='glyphicon glyphicon-copy'></span></a></div>";
+	return string;
+    };
+    function addUrnPopovers(id)
+    {
+	sup.addPopoverClip('#' + id + ' .urn-button',
+			   function (target) {
+			       var urn = $(target).data("urn");
+			       return urnPopoverContent(urn);
+			   });
+    }
 
     function initialize()
     {
@@ -13,12 +39,23 @@ $(function ()
 	var images = JSON.parse(_.unescape($('#images-json')[0].textContent));
 	console.info("images", images);
 
+	// We show the format only if there is more then one format type.
+	var formats = {};
+	_.each(images, function(value, index) {
+	    formats[value.format] = 1;
+	});
+	if (Object.keys(formats).length > 1) {
+	    showformat = true;
+	    filterindex++;
+	}
+
 	// Generate the main template.
 	var html = mainTemplate({
 	    "images"  : images,
 	    "all"     : window.ISADMIN && window.ALL,
 	    "isadmin" : window.ISADMIN,
 	    "manual"  : window.MANUAL,
+	    "showformat" : showformat,
 	});
 	$('#main-body').html(html);
 
@@ -38,22 +75,10 @@ $(function ()
 	    delay: {"hide" : 500, "show" : 150},
 	    placement: 'auto',
 	});
-	// Prevent shooting to the top of the page on clicking the popover.
-	$('#images-table [data-toggle="popover"]')
-	    .click(function (event) {
-		event.preventDefault();
-	    });
-	$('body').on('click', function (e) {
-	    $('[data-toggle="popover"]').each(function () {
-		//the 'is' for buttons that trigger popups
-		//the 'has' for icons within a button that triggers a popup
-		if (!$(this).is(e.target) &&
-		    $(this).has(e.target).length === 0 &&
-		    $('.popover').has(e.target).length === 0) {
-		    $(this).popover('hide');
-		}
-	    });
-	});
+
+	// Set up the urn link popovers to the table.
+	addUrnPopovers("images-table");
+	
 	// Bind handlers for the checkboxes.
 	$('#my-images, #project-images, #public-images, ' +
 	  '#admin-images, #system-images')
@@ -80,10 +105,6 @@ $(function ()
 		    // Search as typing
 		    filter_liveSearch : true,
 		},
-		headers: {
-		    4: {sorter: false},
-		    5: {sorter: false},
-		},
 	    });
 	
 	/*
@@ -100,7 +121,7 @@ $(function ()
 	    search_timeout =
 		window.setTimeout(function() {
 		    var filters = $.tablesorter.getFilters($('#images-table'));
-		    filters[7] = userInput;
+		    filters[filterindex] = userInput;
 		    console.info("Search", filters);
 		    $.tablesorter.setFilters($('#images-table'), filters, true);
 		}, 500);
@@ -114,8 +135,8 @@ $(function ()
 	var filters = $.tablesorter.getFilters($('#images-table'));
 	// The "any" filter needs a value or everything disappears.
 	// If there is a term in the search box, it will have a value.
-	if (filters[7] === undefined) {
-	    filters[7] = "";
+	if (filters[filterindex] === undefined) {
+	    filters[filterindex] = "";
 	}
 	if ($('#my-images').is(":checked")) {
 	    tmp.push("creator");
@@ -136,11 +157,11 @@ $(function ()
 	}
 	if (tmp.length) {
 	    // regex search, plain | does not work.
-	    filters[6] = "/" + tmp.join("|") + "/";
+	    filters[filterindex - 1] = "/" + tmp.join("|") + "/";
 	}
 	else {
 	    // Hmm, an empty string will get everything.
-	    filters[6] = "WHY";
+	    filters[filterindex - 1] = "WHY";
 	}
 	console.info("SetFilters", filters);
 	$.tablesorter.setFilters($('#images-table'), filters, true);

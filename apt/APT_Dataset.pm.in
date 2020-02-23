@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2018 University of Utah and the Flux Group.
+# Copyright (c) 2007-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -577,13 +577,13 @@ sub GetCertificate($)
 # Helper functions for below.
 sub ContextError()
 {
-    return GeniResponse->Create(GENIRESPONSE_ERROR(), undef,
-				"Could not generate context for RPC");
+    return GeniResponse->new(GENIRESPONSE_ERROR(), -1,
+			     "Could not generate context for RPC");
 }
 sub CredentialError()
 {
-    return GeniResponse->Create(GENIRESPONSE_ERROR(), undef,
-				"Could not generate credentials for RPC");
+    return GeniResponse->new(GENIRESPONSE_ERROR(), -1,
+			     "Could not generate credentials for RPC");
 }
 
 #

@@ -21,28 +21,39 @@ WANT_PHP_MOD=	yes
 
 #
 # PHP modules to build.
-# XXX based on current ops install.
 #
-USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt mysql \
+USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt \
 		openssl pdo phar posix session simplexml sockets tokenizer \
 		xml xmlreader xmlrpc xmlwriter
 
 #
 # Various ports need to agree on what version of apache.
 #
+.if (${EMULAB_PORTVERSION} == "7.1" || ${EMULAB_PORTVERSION} == "7.2" || ${EMULAB_PORTVERSION} == "7.3")
+www_apache24_SET=	SUEXEC
+.MAKEFLAGS+=	APACHE_PORT=www/apache24
+.MAKEFLAGS+=	WITH_SUEXEC=yes
+.else
 www_apache22_SET=	SUEXEC
 .MAKEFLAGS+=	APACHE_PORT=www/apache22
 .MAKEFLAGS+=	WITH_SUEXEC=yes
+.endif
+
+.if (${EMULAB_PORTVERSION} != "7.1" && ${EMULAB_PORTVERSION} != "7.2" && ${EMULAB_PORTVERSION} != "7.3")
+#
+# Use the base version of openssl
+#
+.MAKEFLAGS+=	WITH_OPENSSL_BASE=yes
+.endif
 
 #
 # This prevents any ports from trying to configure interactively.
 #
 BATCH=		yes
-.MAKEFLAGS+=	-DBATCH
+.MAKEFLAGS+=	BATCH=yes
 
 LIB_DEPENDS=	\
 	libmhash.so:${PORTSDIR}/security/mhash \
-	libmysqlclient.so:${PORTSDIR}/databases/mysql${MYSQL_VER}-client \
 	libxmlrpc.so:${PORTSDIR}/net/xmlrpc-c \
 	libpubsub.so:${PORTSDIR}/misc/emulab-pubsub
 
@@ -52,8 +63,10 @@ RUN_DEPENDS:= ${BUILD_DEPENDS}
 #
 # Emulab-hacked versions of standard ports
 #
+.if (${EMULAB_PORTVERSION} != "7.3")
 RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}m2crypto>0:${PORTSDIR}/misc/emulab-py-m2crypto
+.endif
 
 # compensate for incomplete dependencies (boehm-gc via git)
 RUN_DEPENDS+=	\
@@ -70,8 +83,7 @@ RUN_DEPENDS+=	\
 	rsync:${PORTSDIR}/net/rsync \
 	sudo:${PORTSDIR}/security/sudo \
 	wget:${PORTSDIR}/ftp/wget \
-	${LOCALBASE}/bin/flex:${PORTSDIR}/textproc/flex \
-	${LOCALBASE}/libexec/mysqld:${PORTSDIR}/databases/mysql${MYSQL_VER}-server
+	${LOCALBASE}/bin/flex:${PORTSDIR}/textproc/flex
 
 # perl packages
 # XXX all the versions listed here are ones that are known to work
@@ -95,14 +107,14 @@ RUN_DEPENDS+=	\
 
 # python packages
 RUN_DEPENDS+=	\
-	${PYTHON_PKGNAMEPREFIX}MySQLdb>0:${PORTSDIR}/databases/py-MySQLdb \
 	${PYTHON_PKGNAMEPREFIX}dateutil>0:${PORTSDIR}/devel/py-dateutil \
+	${PYTHON_PKGNAMEPREFIX}cryptography>0:${PORTSDIR}/security/py-cryptography \
 	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml
 
 # apache related ports
 RUN_DEPENDS+=	\
-	${LOCALBASE}/libexec/apache22/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
-	${LOCALBASE}/libexec/apache22/mod_fastcgi.so:${PORTSDIR}/www/mod_fastcgi
+	${LOCALBASE}/${APACHEMODDIR}/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
+	${LOCALBASE}/${APACHEMODDIR}/libphp$(PHP_MAJ).so:${PORTSDIR}/www/mod_php$(PHP_VER)
 
 # PHP packages
 RUN_DEPENDS+= \
@@ -113,18 +125,12 @@ RUN_DEPENDS+= \
         bash:${PORTSDIR}/shells/bash \
         zsh:${PORTSDIR}/shells/zsh
 
-#.if ${OSMAJOR} >= 10
-## include GCC for now to build Emulab SW (nsverify)
-#RUN_DEPENDS+= \
-#	${LOCALBASE}/bin/gcc46:${PORTSDIR}/lang/gcc46
-#.endif
-
 # For reasons lost in the mists of time, we install this
 RUN_DEPENDS+=	\
 	${LOCALBASE}/libdata/pkgconfig/x11.pc:${PORTSDIR}/x11/xorg-libraries
 
-USE_PERL5=	yes
-USES=		python:2.7
+#USE_PERL5=	yes
+USES=		perl5 python:2.7 php
 
 NO_BUILD=	yes
 

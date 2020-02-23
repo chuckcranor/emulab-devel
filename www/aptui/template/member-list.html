@@ -6,6 +6,15 @@
 	<th>Name</th>
 	<th>Email</th>
 	<th>Joined</th>
+	<% if (canapprove) { %>
+	  <th>Usage
+	    <span data-toggle="popover"
+		  data-trigger="hover"
+		  data-content="Number of node hours used in the last month."
+		  class='glyphicon glyphicon-question-sign'
+		  style='margin-bottom: 4px;'></span>
+	  </th>
+	<% } %>
 	<th class="sorter-false">Privs
 	  <a href='#' class='btn btn-xs' data-toggle='modal'
              data-target='#privs-help-modal'>
@@ -41,6 +50,15 @@
 			 <% if (!value.approved) { %>text-danger<% } %>">
 	      <%- value.joined %></span>
 	  </td>
+	  <% if (canapprove) { %>
+	    <td>
+	      <% if (_.has(value, "usage")) { %>
+		<%- value.usage.phours %>
+	      <% } else { %>
+		0
+	      <% } %>
+	    </td>
+	  <% } %>
 	  <% if ((canedit || canapprove) &&
 	         value.trust != "leader" && value.candelete) { %>
 	    <% var trustvalues = ["none", "user","root","manager"]; %>

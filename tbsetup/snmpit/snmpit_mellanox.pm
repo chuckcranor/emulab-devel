@@ -1563,9 +1563,18 @@ sub setVlansOnTrunk($$$$) {
 
     my ($poifindex) = $self->convertPortFormat($PORT_FORMAT_IFINDEX, $modport);
     if (!exists($self->{POIFINDEX}{$poifindex})) {
-	warn "$id: WARNING: port $modport is not a portchannel - ".
-	     "not adding/removing vlans.\n";
-	return 0;
+        warn "$id: WARNING: port $modport is not a portchannel.\n";
+        # We still want to be able to handle setVlansOnTrunk being called for 
+        # non-portchannels.  Loop over the vlans and call the proper functions.
+        foreach my $vlan (@vlan_numbers) {
+            next unless $self->vlanNumberExists($vlan);
+            if ($value == 1) {
+                $errors += $self->setPortVlan($vlan, $poifindex);
+            } else {
+                $errors += $self->removeSomePortsFromVlan($vlan, $poifindex);
+            }
+        }
+        return $errors ? 0 : 1;
     }
 
     $self->lock();
@@ -1579,8 +1588,9 @@ sub setVlansOnTrunk($$$$) {
 
     # Yuck.  Have to process each vlan in turn, and deal with the "empty list"
     # problem.  More details in the comments below.
-    my @setcmds = ();
+    my @setcmds;
     foreach my $vlnum (@vlan_numbers) {
+	@setcmds = ();
 	# Only attempt removal if the vlan is actually in the allowed list.
 	if ($value == 0 && exists($pstate->{$poifindex}{ALLOWED}{$vlnum})) { 
 	    # If removing the last entry, then add the default

@@ -73,6 +73,7 @@ $(function ()
 	    version_uuid:	version_uuid,
 	    profile_uuid:	profile_uuid,
 	    history:		window.HISTORY,
+	    activity:		window.ACTIVITY,
 	    isadmin:		window.ISADMIN,
 	    canedit:            window.CANEDIT,
 	    disabled:           window.DISABLED,
@@ -304,16 +305,15 @@ $(function ()
 
     function openEditor(source)
     {
-        window.SHOW_GENILIB_EDITOR(source, null, true);
+        window.SHOW_GENILIB_EDITOR(source, null, true, profile_uuid);
     }
 
     function SetupRepo()
     {
-	gitrepo.InitRepoPicker(version_uuid,
+	gitrepo.InitRepoPicker(version_uuid, null,
 			       function(which) {
 				   SelectRepoTarget(which);
 			       });
-	gitrepo.GetCommitInfo(version_uuid);
     }
     /*
      * User has clicked on a branch/tag. We need to get that branch/tag
@@ -328,7 +328,7 @@ $(function ()
 	    // But if its a script, we have to convert it first.
 	    if (pythonRe.test(source)) {
 		$('#profile_script_textarea').val(source);
-		ConvertScript(source);
+		ConvertScript(source, which);
 	    }
 	    else {
 		$('#profile_rspec_textarea').val(source);
@@ -341,7 +341,7 @@ $(function ()
     //
     // Pass a geni-lib script to the server to run (convert to XML).
     //
-    function ConvertScript(script)
+    function ConvertScript(script, refspec)
     {
 	// Save for later.
 	$('#profile_script_textarea').val(script);
@@ -366,7 +366,9 @@ $(function ()
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "manage_profile",
 					    "CheckScript",
-					    {"script"   : script});
+					    {"script"   : script,
+					     "refspec"  : refspec,
+					     "profile_uuid" : profile_uuid});
 	xmlthing.done(callback);
     }
     

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,6 +32,7 @@ function ClassicExperimentList($which, $target, $state = "active")
 {
     global $urn_mapping, $TBBASE;
     global $this_user;
+    $joinclause = "";
 
     if ($state == "active") {
         $stateclause = "and (e.state='active' or ".
@@ -50,11 +51,19 @@ function ClassicExperimentList($which, $target, $state = "active")
         $target_gid  = $target->gid();
         $whereclause = "where e.pid='$target_pid' and e.gid='$target_gid'";
     }
+    elseif ($which == "all") {
+        $joinclause  = "left join experiment_stats as s on s.exptidx=e.idx ".
+        "left join apt_instances as i on i.slice_uuid=s.slice_uuid";
+        $whereclause = "where ((e.pid!='emulab-ops' and e.geniflags=0) or ".
+        "(e.geniflags=1 and i.slice_uuid=s.slice_uuid is null))";
+    }
     else {
         $target_pid = $target->pid();
         $whereclause = "where e.pid='$target_pid'";
     }
-    $whereclause .= " and e.geniflags=0";
+    if ($which != "all") {
+        $whereclause .= " and e.geniflags=0";
+    }
     $whereclause .= " and t.tid is null";
     $results = array();
 
@@ -62,7 +71,7 @@ function ClassicExperimentList($which, $target, $state = "active")
         DBQueryFatal("select idx from experiments as e ".
                      "left join experiment_templates as t on ".
                      "     t.pid=e.pid and t.eid=e.eid ".
-                     "$whereclause $stateclause ".
+                     "$joinclause $whereclause $stateclause ".
                      "order by e.eid");
 
     while ($row = mysql_fetch_array($query_result)) {
@@ -77,15 +86,17 @@ function ClassicExperimentList($which, $target, $state = "active")
         $eid          = $experiment->eid();
         $swapped      = DateStringGMT($stats->swapin_last());
         $created      = DateStringGMT($experiment->created());
-        $pcount       = $experiment->PCCount();
-        $phours       = sprintf("%.2f",(($pcount * $experiment->SwapSeconds()) /
-                                        3600.0));
+        $cluster      = "Emulab";
         
         $blob             = array();
         $blob["idx"]      = $idx;
         $blob["pid"]      = "<a href='show-project.php?project=$pid'>$pid</a>";
-        $blob["eid"]      = "<a href='$url'>$eid</a>";
+        $blob["eid"]      = "<a href='$url'target=_blank>$eid</a>";
         $blob["uuid"]     = $experiment->uuid();
+        $blob["created"]      = $created;
+        $blob["swapped"]      = $swapped;
+        $blob["state"]        = $experiment->state();
+        $blob["description"]  = $experiment->description();
 
         if (ISADMIN() || $which == "project") {
             $blob["creator"] =
@@ -95,16 +106,18 @@ function ClassicExperimentList($which, $target, $state = "active")
         else {
             $blob["creator"] = $creator_uid;
         }
-        $cluster = "Emulab";
 
-        $blob["cluster"]      = "Emulab";
-        $blob["pcount"]       = $pcount;
-        $blob["phours"]       = $phours;
-        $blob["vcount"]       = $resources->vnodes();
-        $blob["swapped"]      = $swapped;
-        $blob["created"]      = $created;
-        $blob["state"]        = $experiment->state();
-        $blob["description"]  = $experiment->description();
+        if ($experiment->state() == "active") {
+            $pcount       = $experiment->PCCount();
+            $phours       = sprintf("%.2f",(($pcount *
+                                             $experiment->SwapSeconds()) /
+                                            3600.0));
+            $blob["cluster"]      = "Emulab";
+            $blob["pcount"]       = $pcount;
+            $blob["phours"]       = $phours;
+            $blob["vcount"]       = $resources->vnodes();
+            $blob["types"]        = $experiment->TypesUsed();
+        }
         $results["$pid:$eid"] = $blob;
     }
     return $results;
@@ -114,6 +127,7 @@ function ExperimentList($which, $target)
 {
     global $urn_mapping, $TBBASE;
     global $this_user;
+    $trust_none = TBDB_TRUSTSTRING_NONE;
     $extraclause = "";
 
     if ($which == "user") {
@@ -128,11 +142,12 @@ function ExperimentList($which, $target)
     elseif ($which == "membership") {
         $target_uuid = $target->uuid();
         $target_idx  = $target->idx();
-        $whereclause = "where a.creator_uuid='$target_uuid' or ".
-                       "      g.uid_idx is not null ";
+        $whereclause = "where (a.creator_uuid='$target_uuid' or ".
+                       "       g.uid_idx is not null) ";
         $extraclause = "left join group_membership as g on ".
                        "     g.uid_idx='$target_idx' and  ".
-                       "     g.pid_idx=a.pid_idx ";
+                       "     g.pid_idx=a.pid_idx and " .
+                       "     g.trust!='$trust_none' ";
     }
     else {
         $target_pid = $target->pid();
@@ -146,7 +161,7 @@ function ExperimentList($which, $target)
                      "  UNIX_TIMESTAMP(s.expires)) as expired, ".
                      "  truncate(a.physnode_count * ".
                      "   ((UNIX_TIMESTAMP(now()) - ".
-                     "     UNIX_TIMESTAMP(a.created)) / 3600.0),2) as phours, ".
+                     "     UNIX_TIMESTAMP(a.started)) / 3600.0),2) as phours, ".
                      " IFNULL(aggs.count,0) as aggrows, ".
                      " agg.aggregate_urn as aggrow_urn".
                      "  from apt_instances as a ".
@@ -170,6 +185,7 @@ function ExperimentList($which, $target)
         $status       = $row["status"];
         $canceled     = $row["canceled"];
         $created      = DateStringGMT($row["created"]);
+        $started      = DateStringGMT($row["started"]);
         $expires      = DateStringGMT($row["expires"]);
         $creator_idx  = $row["creator_idx"];
         $profile_name = "$profile_id:$version";
@@ -234,8 +250,10 @@ function ExperimentList($which, $target)
         $blob["phours"]   = $phours;
         $blob["vcount"]   = $vcount;
         $blob["created"]  = $created;
+        $blob["started"]  = $started;
         $blob["expires"]  = $expires;
         $blob["lockdown"] = $lockdown;
+        $blob["uuid"]     = $uuid;
         $results["$pid:$name"] = $blob;
     }
     return $results;
@@ -260,11 +278,17 @@ function ProfileList($which, $target)
         $whereclause = "where v.pid_idx='$target_idx'";
     }
     $query_result =
-        DBQueryFatal("select p.*,v.*,DATE(v.created) as created ".
-                     "   from apt_profiles as p ".
+        DBQueryFatal("select p.*,v.*,DATE(v.created) as created, ".
+                     "   DATE(h.started) as last_use ".
+                     " from apt_profiles as p ".
                      "left join apt_profile_versions as v on ".
-                     "     v.profileid=p.profileid and ".
-                     "     v.version=p.version ".
+                     "   v.profileid=p.profileid and ".
+                     "   v.version=p.version ".
+                     "left join apt_instance_history as h on h.uuid = ".
+                     "  (select h2.uuid from apt_instance_history as h2 ".
+                     "   where h2.profile_id=v.profileid ".
+                     "   order by h2.created desc ".
+                     "   limit 1) ".
                      "$whereclause");
 
     return ProfileListAux($query_result);
@@ -277,18 +301,26 @@ function ProjectProfileList($target_user)
 {
     global $urn_mapping, $TBBASE;
     global $this_user;
+    $trust_none = TBDB_TRUSTSTRING_NONE;
 
     $creator_idx = $target_user->uid_idx();
 
     $query_result =
-        DBQueryFatal("select p.*,v.*,DATE(v.created) as created ".
-                     "   from apt_profiles as p ".
+        DBQueryFatal("select p.*,v.*,DATE(v.created) as created, ".
+                     "   DATE(h.started) as last_use ".
+                     " from apt_profiles as p ".
                      "left join apt_profile_versions as v on ".
                      "     v.profileid=p.profileid and ".
                      "     v.version=p.version ".
                      "left join group_membership as g on ".
                      "     g.pid_idx=p.pid_idx and g.gid_idx=p.gid_idx ".
-                     "where g.uid_idx='$creator_idx' ".
+                     "left join apt_instance_history as h on h.uuid = ".
+                     "  (select h2.uuid from apt_instance_history as h2 ".
+                     "   where h2.profile_id=v.profileid ".
+                     "   order by h2.created desc ".
+                     "   limit 1) ".
+                     "where g.uid_idx='$creator_idx' and ".
+                     "      g.trust!='$trust_none' ".
                      "order by p.pid");
 
     return ProfileListAux($query_result);
@@ -311,6 +343,7 @@ function ProfileListAux($query_result)
         $pid     = $row["pid"];
         $desc    = $row["description"];
         $created = DateStringGMT($row["created"]);
+        $last_use= DateStringGMT($row["last_use"]);
         $public  = $row["public"];
         $listed  = $row["listed"];
         $creator = $row["creator"];
@@ -336,6 +369,7 @@ function ProfileListAux($query_result)
         $blob["created"]      = $created;
         $blob["project"]      = $pid;
         $blob["creator"]      = $creator;
+        $blob["last_use"]     = $last_use;
 
         if (ISADMIN() ||
             ($which == "user" && $creator == $target->uid()) ||
@@ -401,7 +435,21 @@ function DatasetList($which, $target)
         $created      = $row["created"];
         $expires      = $row["expires"];
         $cluster      = $row["nickname"];
+        $size         = $row["size"] ? $row["size"] : 0;
+        $state        = $row["state"];
+        # Convert to GB.
+        $size         = sprintf('%0.2f', $size * 0.00104858);
 
+        #
+        # The state is a bit of a problem, since local leases do not have
+        # an "allocating" state. For a remote dataset, we get set to busy.
+        # Need to unify this. But the main point is that we want to tell
+        # the user that the dataset is busy allocation.
+        #
+        if ($state == "busy" ||
+            ($state == "unapproved" && $row["locked"])) {
+            $state = "allocating";
+        }
         $blob = array();
         $blob["uuid"]         = $uuid;
         $blob["name"]         = $name;
@@ -416,6 +464,8 @@ function DatasetList($which, $target)
         $blob["expires"]      = ($type != "imdataset" ? $expires : "");
         $blob["aggregate_urn"]= $aggregate_urn;
         $blob["cluster"]      = $cluster;
+        $blob["size"]         = $size;
+        $blob["state"]        = $state;
 
         $results[$uuid] = $blob;
     }
@@ -542,10 +592,9 @@ function ClassicImageList($target)
         $blob["global"]      = $row["global"];
         $blob["creator"]     = $row["creator"];
         $blob["creator_idx"] = $row["creator_idx"];
+        $blob["format"]      = $row["format"];
         $blob["urn"]         = $urn;
-	$blob["url"]         = $TBBASE . "/" .
-                             CreateURL("showimageid",
-                                       URLARG_IMAGEID, $imageid);
+	$blob["url"]         = "show-image.php?imageid=$imageid";
         $results[] = $blob;
     }
     return $results;

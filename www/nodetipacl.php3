@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2015, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -183,51 +183,7 @@ $console["keylen"]   = $keylen;
 $console["keydata"]  = $keydata;
 $console["certhash"] = $certhash;
 
-#
-# Generate an authentication object to pass to the browser that
-# is passed to the web server on ops. This is used to grant
-# permission to the user to invoke tip to the console. 
-#
-function ConsoleAuthObject($uid, $nodeid, $console)
-{
-    global $USERNODE;
-	
-    $file = "/usr/testbed/etc/sshauth.key";
-    
-    #
-    # We need the secret that is shared with ops.
-    #
-    $fp = fopen($file, "r");
-    if (! $fp) {
-	TBERROR("Error opening $file", 1);
-	return null;
-    }
-    $key = fread($fp, 128);
-    fclose($fp);
-    if (!$key) {
-	TBERROR("Could not get key from $file", 1);
-	return null;
-    }
-    $key   = chop($key);
-    $stuff = GENHASH();
-    $now   = time();
-
-    $authobj = array('uid'       => $uid,
-		     'console'   => $console,
-		     'stuff'     => $stuff,
-		     'nodeid'    => $nodeid,
-		     'timestamp' => $now,
-		     'baseurl'   => "https://${USERNODE}",
-		     'signature_method' => 'HMAC-SHA1',
-		     'api_version' => '1.0',
-		     'signature' => hash_hmac('sha1',
-					      $uid . $stuff . $nodeid . $now .
-					      " " . implode(",", $console),
-					      $key),
-    );
-    return json_encode($authobj);
-}
-$console_auth = ConsoleAuthObject($uid, $node_id, $console);
+$console_auth = $node->ConsoleAuthObject($uid, $console);
 
 if (!isset($key)) {
     PAGEHEADER("$node_id Console");

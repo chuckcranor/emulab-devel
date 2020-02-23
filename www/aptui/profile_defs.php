@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -129,6 +129,7 @@ class Profile
     function topdog()	    { return $this->field('topdog'); }
     function disabled()	    { return $this->field('disabled'); }
     function nodelete()	    { return $this->field('nodelete'); }
+    function project_write(){ return $this->field('project_write'); }
     function repourl()	    { return $this->field('repourl'); }
     function reponame()	    { return $this->field('reponame'); }
     function repohash()	    { return $this->field('repohash'); }
@@ -162,7 +163,10 @@ class Profile
     # with the object, use that. Otherwise create a new one.
     function WebTask() {
         if ($this->webtask_id()) {
-            return WebTask::Lookup($this->webtask_id());
+            $webtask = WebTask::Lookup($this->webtask_id());
+            if ($webtask) {
+                return $webtask;
+            }
         }
         $webtask = WebTask::LookupByObject($this->uuid());
         if (!$webtask) {
@@ -408,12 +412,17 @@ class Profile
     #
     # Has a profile been instantiated?
     #
-    function HasActivity() {
+    function HasActivity($user) {
 	$profileid = $this->profileid();
+        $clause    = "";
+
+        if (!ISADMIN()) {
+            $clause = "and creator_idx='" . $user->uid_idx() . "'";
+        }
 
 	$query_result =
-	    DBQueryWarn("select count(h.uuid) from apt_instance_history as h ".
-			"where h.profile_id='$profileid'");
+	    DBQueryWarn("select count(uuid) from apt_instance_history ".
+			"where profile_id='$profileid' $clause");
 
 	if (!$query_result) {
 	    return 0;
@@ -426,7 +435,7 @@ class Profile
 	}
 	$query_result =
 	    DBQueryWarn("select count(uuid) from apt_instances ".
-			"where profile_id='$profileid'");
+			"where profile_id='$profileid' $clause");
 
 	if (!$query_result) {
 	    return 0;
@@ -438,6 +447,39 @@ class Profile
 	    }
 	}
 	return 0;
+    }
+
+    #
+    # Return parameter set info for user.
+    #
+    function ParameterSets($user) {
+	$profileid = $this->profileid();
+        $uid_idx   = $user->uid_idx();
+
+	$query_result =
+	    DBQueryWarn("select * from apt_parameter_sets  ".
+			"where profileid='$profileid' and ".
+                        "      uid_idx='$uid_idx' ".
+                        "order by name");
+	if (!$query_result || !mysql_num_rows($query_result)) {
+	    return null;
+	}
+        $result = array();
+        
+	while ($row = mysql_fetch_array($query_result)) {
+            $blob = array(
+                "uuid"          => $row["uuid"],
+                "name"          => $row["name"],
+                "description"   => $row["description"],
+                "created"       => DateStringGMT($row["created"]),
+                "bindings"      => json_decode($row["bindings"]),
+                "version_uuid"  => $row["version_uuid"],
+                "reporef"       => $row["reporef"],
+                "repohash"      => $row["repohash"],
+            );
+            $result[] = $blob;
+        }
+        return $result;
     }
 
     #
@@ -472,8 +514,22 @@ class Profile
 	return $this->CanInstantiate($user);
     }
     function CanEdit($user) {
-        if ($this->creator_idx() == $user->uid_idx() || ISADMIN())
+        if ($this->creator_idx() == $user->uid_idx() || ISADMIN()) {
+            return 1;
+        }
+	$project = Project::Lookup($this->pid_idx());
+	if (!$project) {
+	    return 0;
+	}
+        if ($user->uid_idx() == $project->GetLeader()->uid_idx()) {
 	    return 1;
+        }
+        if ($this->project_write()) {
+            $approved = 0;
+            if ($project->IsMember($user, $approved) && $approved) {
+                return 1;
+            }
+        }
         return 0;
     }
     function CanDelete($user) {
@@ -489,7 +545,24 @@ class Profile
         if ($project->isAPT()) {
             return 0;
         }
-        if ($this->creator_idx() == $user->uid_idx() || ISADMIN()) {
+        if ($this->creator_idx() == $user->uid_idx() || ISADMIN() ||
+            $user->uid_idx() == $project->GetLeader()->uid_idx()) {
+	    return 1;
+        }
+        return 0;
+    }
+    function isLeader($user) {
+	$project = Project::Lookup($this->pid_idx());
+	if (!$project) {
+	    return 0;
+	}
+        if ($user->uid_idx() == $project->GetLeader()->uid_idx()) {
+	    return 1;
+        }
+        return 0;
+    }
+    function isCreator($user) {
+        if ($user->uid_idx() == $this->creator_idx()) {
 	    return 1;
         }
         return 0;
@@ -508,20 +581,20 @@ class Profile
         # This is last used.
         #
         $query_result =
-            DBQueryFatal("select max(UNIX_TIMESTAMP(created)) ".
+            DBQueryFatal("select max(UNIX_TIMESTAMP(started)) as started ".
                          "  from apt_instances ".
                          "where profile_id='$profile_id' ".
                          $userclause);
         $row = mysql_fetch_row($query_result);
-        if (!$row[0]) {
+        if (!$row["started"]) {
             $query_result =
-                DBQueryFatal("select max(UNIX_TIMESTAMP(created)) ".
+                DBQueryFatal("select max(UNIX_TIMESTAMP(started)) as started ".
                              "  from apt_instance_history ".
                              "where profile_id='$profile_id' ".
                              $userclause);
             $row = mysql_fetch_row($query_result);
         }
-        if (!$row[0]) {
+        if (!$row["started"]) {
             return array(0, 0);
         }
         $lastused = $row[0];
@@ -589,72 +662,7 @@ class Profile
     }
 
     function BestAggregate($rspec = null) {
-	if (!$rspec) {
-	    $rspec = $this->rspec();
-	}
-	$parsed_xml = simplexml_load_string($rspec);
-
-        if (count($parsed_xml->node) == 0) {
-            return null;
-        }
-	foreach ($parsed_xml->node as $node) {
-	    # No XEN VMs on Cloudlab yet.
-	    if ($node->sliver_type &&
-		$node->sliver_type["name"] &&
-		$node->sliver_type["name"] == "emulab-xen") {
-		return "Utah APT";
-	    }
-	    if ($node->hardware_type &&
-		$node->hardware_type["name"]) {
-                if ($node->hardware_type["name"] == "m400") {
-                    return "Utah Cloudlab";
-                }
-                elseif ($node->hardware_type["name"] == "dl360") {
-                    return "Utah DDC";
-                }
-                elseif ($node->hardware_type["name"] == "r320" ||
-                        $node->hardware_type["name"] == "c6220") {
-                    return "Utah APT";
-                }
-	    }
-	    # Check URL
-	    if (! ($node->sliver_type &&
-		   $node->sliver_type->disk_image &&
-		   ($node->sliver_type->disk_image["url"] ||
-		    $node->sliver_type->disk_image["name"]))) {
-		continue;
-	    }
-            
-	    if ($node->sliver_type->disk_image["name"]) {
-		$name = $node->sliver_type->disk_image["name"];
-		if (preg_match("/^http/", $name)) {
-                    $url = $name;
-                }
-                else {
-                    #
-                    # The only image that runs on Cloudlab is UBUNTU14-64-ARM
-                    #
-                    if (preg_match("/ARM/", $name) ||
-		        preg_match("/HPC/", $name) ||
-		        preg_match("/OSCNF/", $name)) {
-                        return "Utah Cloudlab";
-                    }
-                    return "Utah APT";
-                }
-	    }
-            else {
-                $url = $node->sliver_type->disk_image["url"];
-            }
-            if (preg_match("/utah\.cloudlab\.us/", $url)) {
-                return "Utah Cloudlab";
-            }
-            if (preg_match("/emulab\.net/", $url) ||
-                preg_match("/geniracks\.net/", $url) ||
-                preg_match("/instageni/", $url)) {
-                return "Utah APT";
-            }
-	}
-	return null;
+        return null;
     }
 
     function GenerateFormFragment($json_data = null) {
@@ -802,6 +810,24 @@ class Profile
 	$finalForm = $formBasic . $formAdvanced . $formGroups;
 
 	return array($finalForm, $defaults);
+    }
+
+    #
+    # Temporary hack to control who gets the new genilib code.
+    #
+    function UseNewGeniLib()
+    {
+	$project = Project::Lookup($this->pid_idx());
+	if (!$project) {
+	    return 0;
+	}
+        if (0) {
+            if (FeatureEnabled("NewPParams", null,
+                               $project->DefaultGroup(), null)) {
+                return 1;
+            }
+        }
+        return 0;
     }
 }
 ?>

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -95,14 +95,20 @@ class User
 	    return $foo;
 	}
 	# Insert into cache.
-	$user_cache["$uid_idx"] =& $foo;
+	$user_cache["$uid_idx"]  =& $foo;
+	$user_cache[$foo->uid()] =& $foo;
 	return $foo;
     }
 
     # Backwards compatable lookup by uid. Will eventually flush this.
     function LookupByUid($uid) {
+	global $user_cache;
 	$safe_uid = addslashes($uid);
 	$status_archived = TBDB_USERSTATUS_ARCHIVED;
+
+        # Look in cache first
+	if (array_key_exists("$uid", $user_cache))
+	    return $user_cache["$uid"];
 
 	$query_result =
 	    DBQueryWarn("select uid_idx from users ".
@@ -272,6 +278,7 @@ class User
 		    }
 		}
 		else
+		    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 		    $errors[] = "Transient error(4, $retval); please try again later.";
 	    }
 	    unlink($xmlname);
@@ -324,6 +331,7 @@ class User
     function email()		{ return $this->field("usr_email"); }
     function URL()		{ return $this->field("usr_URL"); }
     function addr()		{ return $this->field("usr_addr"); }
+    function addr1()		{ return $this->field("usr_addr"); }
     function addr2()		{ return $this->field("usr_addr2"); }
     function city()		{ return $this->field("usr_city"); }
     function state()		{ return $this->field("usr_state"); }
@@ -362,7 +370,12 @@ class User
     function nonlocal_id()	{ return $this->field("nonlocal_id"); }
     function weblogin_last()	{ return $this->stats("weblogin_last"); }
     function portal()	     { return $this->field("portal"); }
+    function bound_portal()  { return $this->field("bound_portal"); }
+    function require_aup()   { return $this->field("require_aup"); }
+    function accepted_aup()  { return $this->field("accepted_aup"); }
     function ga_userid()     { return $this->field("ga_userid"); }
+    function portal_interface_warned() {
+        return $this->field("portal_interface_warned"); }
     function isAPT()	     { return ($this->portal() &&
                                        $this->portal() == "aptlab" ? 1 : 0); }
     function isCloud()	     { return ($this->portal() &&
@@ -710,6 +723,9 @@ class User
 	if (array_key_exists("$uid_idx", $user_cache))
 	    unset($user_cache["$uid_idx"]);
 	
+	if (array_key_exists($this->uid(), $user_cache))
+	    unset($user_cache[$this->uid()]);
+	
 	return 0;
     }
 
@@ -741,28 +757,140 @@ class User
     }
 
     #
+    # Set the AUP requirement on a user. Currently only for Powder.
+    #
+    function SetAUPRequirement() {
+        global $PORTAL_GENESIS, $ISPOWDER;
+	$uid_idx = $this->uid_idx();
+
+        if (!$ISPOWDER) {
+            return;
+        }
+        if ($this->require_aup() &&
+            preg_match("/$PORTAL_GENESIS/", $this->require_aup())) {
+            return;
+        }
+        if ($this->require_aup()) {
+            DBQueryFatal("update users set require_aup = ".
+                         " CONCAT(require_aup, ',', '$PORTAL_GENESIS') ".
+                         "where uid_idx='$uid_idx'");
+        }
+        else {
+            DBQueryFatal("update users set require_aup='$PORTAL_GENESIS' ".
+                         "where uid_idx='$uid_idx'");
+        }
+    }
+
+    #
     # Does the user need to accept the AUP. Always goto the DB for this
     # since the user might have multiple windows/tabs.
     #
     function RequireAUP() {
         global $PORTAL_GENESIS;
 	$uid_idx = $this->uid_idx();
+
+        #
+        # This is to catch users coming from a different portal to the
+        # the powder portal for the first time. Kinda odd situation to
+        # have to look for.
+        #
+        $this->SetAUPRequirement();
 	
 	$query_result =
 	    DBQueryFatal("select require_aup from users ".
 			 "where uid_idx='$uid_idx' and ".
-                         "      FIND_IN_SET(require_aup, '$PORTAL_GENESIS')");
-
+                         " FIND_IN_SET('$PORTAL_GENESIS', require_aup) and ".
+                         " (accepted_aup is null or ".
+                         "  NOT FIND_IN_SET('$PORTAL_GENESIS', accepted_aup))");
+        
         return mysql_num_rows($query_result);
     }
     function AcceptAUP($portal) {
 	$uid_idx = $this->uid_idx();
 
-        DBQueryFatal("update users set ".
-                     "  require_aup=TRIM(BOTH ',' FROM ".
-                     "      REPLACE(CONCAT(',', require_aup, ','), ".
-                     "              CONCAT(',', '$portal', ','), ',')) ".
-                     "where uid_idx='$uid_idx'");
+        if ($this->accepted_aup()) {
+            DBQueryFatal("update users set accepted_aup = ".
+                         " CONCAT(accepted_aup, ',', '$portal') ".
+                         "where uid_idx='$uid_idx'");
+        }
+        else {
+            DBQueryFatal("update users set accepted_aup='$portal' ".
+                         "where uid_idx='$uid_idx'");
+        }
+    }
+    #
+    # Does the user need to fill out the extended address fields
+    #
+    function RequireAddress() {
+        if ($this->addr1() == "" || $this->zip() == "") {
+            return 1;
+        }
+        return 0;
+    }
+    
+    #
+    # Find all the project licenses this user needs to accept (as leader
+    # of a project that is required to accept a license).
+    #
+    function ProjectLicenses() {
+	$uid_idx   = $this->uid_idx();
+        $trust     = TBDB_TRUSTSTRING_PROJROOT;
+
+        $query_result = 
+	    DBQueryFatal("select pl.*,l.* from group_membership as g ".
+                         "left join projects as p on p.pid_idx=g.pid_idx ".
+                         "inner join project_licenses as pl on ".
+                         "      pl.pid_idx=g.pid_idx ".
+                         "left join licenses as l on ".
+                         "     l.license_idx=pl.license_idx ".
+			 "where g.pid_idx=g.gid_idx and ".
+			 "      g.uid_idx='$uid_idx' and ".
+                         "      g.trust='$trust' and ".
+                         "      pl.accepted is null and ".
+                         "      p.approved!=0");
+        
+	if (mysql_num_rows($query_result) == 0) {
+	    return null;
+	}
+        $result = array();
+
+        while ($row = mysql_fetch_array($query_result)) {
+            $result[] = $row;
+        }
+        return $result;
+    }
+
+    #
+    # Find all the project licenses this user needs to accept.
+    #
+    function Licenses() {
+	$uid_idx = $this->uid_idx();
+
+        # Not until user is approved
+        if (!$this->IsActive()) {
+            return null;
+        }
+        # First any project based Licenses.
+        $licenses = $this->ProjectLicenses();
+
+        # Then per user based licenses.
+        $query_result = 
+	    DBQueryFatal("select ul.*,l.* from user_licenses as ul ".
+                         "left join licenses as l on ".
+                         "     l.license_idx=ul.license_idx ".
+			 "where ul.uid_idx='$uid_idx' and ".
+                         "      ul.accepted is null");
+        
+	if (mysql_num_rows($query_result) == 0) {
+	    return $licenses;
+	}
+        if (!$licenses) {
+            $licenses = array();
+        }
+        while ($row = mysql_fetch_array($query_result)) {
+            $licenses[] = $row;
+        }
+        return $licenses;
     }
 
     function Show($html = FALSE) {
@@ -1202,6 +1330,17 @@ class User
 	$this->user["stud"] = $onoff;
 	return 0;
     }
+    function SetBoundPortal($onoff) {
+	$idx   = $this->uid_idx();
+
+	$onoff = ($onoff ? 1 : 0);
+			    
+	DBQueryFatal("update users set ".
+		     "   bound_portal='$onoff' ".
+		     "where uid_idx='$idx'");
+	$this->user["bound_portal"] = $onoff;
+	return 0;
+    }
     function SetForeignAdmin($onoff) {
 	$idx   = $this->uid_idx();
 
@@ -1233,6 +1372,15 @@ class User
 		     "   widearearoot='$onoff' ".
 		     "where uid_idx='$idx'");
 	$this->user["stud"] = $onoff;
+	return 0;
+    }
+    function SetPortalWarned() {
+	$idx   = $this->uid_idx();
+
+	DBQueryFatal("update users set ".
+		     "   portal_interface_warned='1' ".
+		     "where uid_idx='$idx'");
+	$this->user["portal_interface_warned"] = 1;
 	return 0;
     }
     function UpdateWebLoginFail() {
@@ -1406,6 +1554,21 @@ class User
 	    $result[] = $project;
 	}
 	return $result;
+    }
+
+    #
+    # Return a list of disabled projects for user, if any.
+    #
+    function DisabledProjects() {
+	$result   = array();
+        $projlist = $this->ProjectMembershipList();
+
+        foreach ($projlist as $project) {
+            if ($project->disabled()) {
+                $result[] = $project;
+            }
+        }
+        return $result;
     }
 
     #

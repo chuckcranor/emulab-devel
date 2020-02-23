@@ -35,20 +35,62 @@
 	     class="form-control format-me" data-key="proj_url"
 	     placeholder="Project Page URL" type="text">
     </div>
-    <div class="form-group sidebyside-form" >
-      <textarea name="formfields[proj_why]" rows="8"
-		class="form-control format-me" data-key="proj_why"
-		placeholder="Project Description (details)"
-		type="textarea"><%- formfields.proj_why %></textarea>
-    </div>
     <% tbname="Emulab";
        if (window.ISCLOUD) { tbname="CloudLab"; } 
        else if (window.ISPNET) { tbname="PhantomNet"; }
-       else if (window.ISAPT) { tbname="PhantomNet"; } %>
-    <div class='alert alert-warning alert-dismissible'
-         role='alert' style='margin-top: -5px;padding: 5px'>
-      <%= tbname %> staff members review this information. The more details
-      you provide, the faster they can approve your project.
+       else if (window.ISPOWDER) { tbname="Powder"; } %>
+    <div class="form-group sidebyside-form" >
+      <textarea name="formfields[proj_why]" rows="8"
+		class="form-control format-me" data-key="proj_why"
+		placeholder="Project Description (details): <%= tbname %> staff members review this description. The more details you provide, the faster they can approve your project."
+		type="textarea"><%- formfields.proj_why %></textarea>
     </div>
+    <% if (_.size(licenses)) { %>
+      <div class="form-group sidebyside-form"
+	   style="margin-bottom: 5px;">
+	<div class="well well-sm" style="padding: 5px; margin-bottom: 0px;">
+	  Please check the licenses you need. Note that you can add these later, so please do not check them unless you are sure you need them now.</div>      </div>
+      <% _.each(licenses, function(license, name) { %>
+	<%
+          var value = "no"; 
+          if (_.has(formfields, "license_" + name)) {
+              value = formfields["license_" + name];
+          }
+	%>
+	<div class="form-group sidebyside-form"
+	     style="margin-bottom: 5px;">
+	  <div class="format-me" data-key="<%- name %>"
+	       style='padding-left: 15px; margin-bottom: 0px;'>
+	    <label class="checkbox-inline"
+		   style='margin-right: 10px;'>
+	      <input type="checkbox" id="<%- name %>"
+		     name="formfields[license_<%- name %>]"
+		     value="yes"
+		     <% if (value == "yes") { %>checked<% } %> >
+	      <%- license.form_text %>
+	      <% if (license.description_text &&
+		license.description_text != "") {
+		var description_html = license.description_text;
+ 		if (license.description_type == "md") {
+		  description_html = marked(description_html);
+		}
+		else if (license.description_type == "text") {
+		  description_html = "<pre>" +
+		  license.description_text + "</pre>";
+		} %>
+	        <a href='#' class='btn btn-xs'
+		   data-toggle='popover'
+		   data-html='true'
+		   data-delay='{"hide":500}'
+		   data-content="<%- description_html %>">
+		  <span class='glyphicon glyphicon-question-sign'
+			style='margin-bottom: 4px;'></span>
+		</a>
+             <% } %>
+  	    </label>
+	  </div>
+	</div>
+      <% }); %>
+    <% } %>
   </div>
 </div>

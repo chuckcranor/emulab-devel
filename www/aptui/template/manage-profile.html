@@ -200,6 +200,14 @@
               col-sm-9
               col-xs-12'>
     <div class='panel panel-default'>
+      <div class='panel-heading'>
+        <h3 class='panel-title text-center'>
+	  <% if (canmodify) { %>
+	    Modify
+	  <% } %>
+	  Profile <%- formfields.profile_pid %>/<%- formfields.profile_name %>
+	</h3>
+      </div>
  <% } else { %>
   <div class='col-sm-10 col-sm-offset-1
               col-xs-12'>
@@ -553,14 +561,15 @@
 
 	    <!-- Permission checkboxes. -->
 	    <div class='row'>
-	      <div class='col-sm-9 col-sm-offset-3'>
+	      <div class='col-sm-9 col-sm-offset-3' style="margin-top: 5px">
 		Who can instantiate your profile?
 	      </div>
 	    </div>
 
 	    <div class='row'>
 	      <div class='col-sm-8 col-sm-offset-4'>
-		<div class='format-me' data-key='profile_who'>
+		<div class='format-me' data-key='profile_who'
+		     data-compact='yep'>
 		  <% if (1) { %>
 		    <div class='radio'>
                       <label>
@@ -602,6 +611,37 @@
                 </div>
               </div>
             </div>
+	    <% if (isadmin || iscreator || isleader) { %>
+	      <div class='row'>
+		<div class='col-sm-9 col-sm-offset-3'>
+		  <div class='checkbox format-me'
+		       data-key='profile_project_write'
+		       data-compact='yep'>
+		    <input type="hidden"
+			   name='profile_project_write' value="unchecked">
+                    <label>
+		      <input name='profile_project_write'
+			     <%- formfields.profile_project_write %>
+			     data-key='profile_project_write'
+			     id='profile_project_write' value='checked'
+			     type='checkbox'>Allow members of your project to
+		      modify this profile.
+		      <a href='#' class='btn btn-xs'
+			 data-toggle='popover'
+			 data-content='Normally only you or your project leader
+				       can modify your profile. Setting this
+				       flag allows anyone in your project to
+				       modify this profile, which is helpful
+				       when collaborating with other members
+				       of your project.'>
+			<span style='margin-bottom: 4px;'
+			      class='glyphicon glyphicon-question-sign'></span>
+		      </a>
+		    </label>
+		  </div>
+		</div>
+	      </div>
+	    <% } %>
 
 	    <% if (isadmin) { %>
 	      <div class='row'>
@@ -701,21 +741,32 @@
 	  <div style="margin-top: 10px;"></div>
 	  <div class='form-group'>
             <div class='col-sm-offset-2 col-sm-10'>
+	      <% if (viewing && canmodify) { %>
+		<button class='btn btn-danger btn-xs pull-right' disabled
+			id='cancel_edit_button'
+			style='margin-right: 10px;'
+			type='submit' name='cancel-edit'>
+		  Cancel
+		</button>
+	      <% } %>
 	      <% if (!viewing || canmodify) { %>
 		<button class='btn btn-primary btn-xs pull-right' disabled
 			id='profile_submit_button'
-			style='margin-right: 10px;'
+			style='margin-right: 5px;'
 			type='submit' name='create'>
 		  <%- button_label %>	
 		</button>
 	      <% } %>
+ 	      <% if (candelete) { %>
+		<button class='btn btn-danger btn-xs pull-left' disabled
+			id='profile_delete_button'
+			style='margin-right: 10px;'
+     			data-toggle='modal'
+			data-target='#confirm-delete-profile-modal'
+			type='button' name='delete'>Delete
+		</button>
+	      <% } %>
 	      <% if (viewing) { %>
-		<% if (!disabled && gotrspec) { %>
-		  <a class='btn btn-primary btn-xs pull-right' disabled
-                     id='profile_instantiate_button'
-                     style='margin-right: 10px;'
-                     type='submit' name='create'>Instantiate
-		  </a>
 		  <a class='btn btn-primary btn-xs pull-left'
                      id='profile_copy_button'
                      style='margin-right: 10px;'
@@ -751,15 +802,12 @@
                       Share
 		    </button>
 		  </span>
-		<% } %>
- 		<% if (candelete) { %>
-		  <button class='btn btn-danger btn-xs pull-left' disabled
-			  id='profile_delete_button'
-			  style='margin-right: 10px;'
-     			  data-toggle='modal'
-			  data-target='#confirm-delete-profile-modal'
-			  type='button' name='delete'>Delete
-		  </button>
+		  <% if (!disabled && gotrspec) { %>
+		    <a class='btn btn-primary btn-xs pull-left' disabled
+                       id='profile_instantiate_button'
+                       style='margin-right: 10px;'
+                       type='submit' name='create'>Instantiate
+		    </a>
 		<% } %>
  		<% if (withpublishing && canpublish) { %>
 		  <span class='pull-right'
@@ -783,6 +831,20 @@
 	  </div>
 	  <div id='rspectext_div'></div>
 	</form>
+      </div>
+    </div>
+  </div>
+  <!-- Confirm cancel edit -->
+  <div id='confirm_cancel_edit_modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+          <button type='button' class='close' data-dismiss='modal'
+                  aria-hidden='true'>&times;</button>
+          <center><h4>Confirm to Discard Changes</h4>
+            <button class='btn btn-danger btn-sm'
+		    id='confirm_cancel_edit'>Confirm</a></center>
+	</div>
       </div>
     </div>
   </div>

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -179,7 +179,7 @@ sio)
 vga)
     CONSOLE=vid
     ;;
-sio1|sio2|sio3|sio4|null|unknown)
+sio1|sio2|sio3|sio4|vid|null|hvc0|unknown)
     ;;
 *)
     echo "WARNING: unknown console type \"$CONSOLE\", assuming \"sio1\""
@@ -490,7 +490,11 @@ dofreebsd() {
 		fsopts=ro
 	elif [ $OS = Linux ]; then
 		echo "Reloading partition table for $disk..."
-		echo w | /sbin/fdisk /dev/$disk > /dev/null 2>&1
+		if [ -x /usr/sbin/partprobe ]; then
+			/usr/sbin/partprobe $disk > /dev/null 2>&1
+		else
+			echo w | /sbin/fdisk /dev/$disk > /dev/null 2>&1
+		fi
 		rootdev=/dev/`$BINDIR/check_disklabel $disk $part`
 		[ "$rootdev" = /dev/ ] && exit 1
 		fstype=ufs
@@ -522,6 +526,7 @@ dofreebsd() {
 	changerootkeys=0
 	changezone=0
 	changentp=0
+	changechrony=0
 	changesshd=0
 
 	fixit=0
@@ -652,6 +657,11 @@ dofreebsd() {
 		    fixit=1
 		fi
 	    fi
+	    if [ "$SPEED" != "115200" ]; then
+		# non-standard speed requires change to /etc/ttys
+		changedisk=1
+		fixit=1
+	    fi
 	    ;;
 	esac
 
@@ -694,6 +704,7 @@ dofreebsd() {
 		    cmp -s /etc/ssh/ssh_host_${k}key /mnt/etc/ssh/ssh_host_${k}key
 		    if [ $? -ne 0 ]; then
 			changehostkeys=1
+			fixit=1
 		    fi
 		fi
 	    done
@@ -712,6 +723,15 @@ dofreebsd() {
 		cmp -s /etc/ntp.conf /mnt/etc/ntp.conf
 		if [ $? -ne 0 ]; then
 		    changentp=1
+		    fixit=1
+		fi
+	    fi
+
+	    # Check the chrony config.
+	    if [ -e /etc/chrony.conf ]; then
+		cmp -s /etc/chrony.conf /mnt/etc/chrony.conf
+		if [ $? -ne 0 ]; then
+		    changechrony=1
 		    fixit=1
 		fi
 	    fi
@@ -774,9 +794,14 @@ dofreebsd() {
 		    echo "  updating /etc/dumpdates"
 		    cp -fp /mnt/etc/dumpdates /mnt/etc/dumpdates.preemulab
 		    sed -i -e "s;^/dev/[a-zA-Z][a-zA-Z]*[0-9][0-9]*s[0-9][0-9]*;/dev/${freebsd_disk}s${part};" /mnt/etc/dumpdates || {
-			echo "Failed to update /etc/dumpdates"
-			umount $rootdev
-			return 1
+			echo "WARNING: Failed to update /etc/dumpdates"
+		    }
+	    fi
+	    if [ -f /mnt/etc/ttys ]; then
+		    echo "  updating /etc/ttys"
+		    cp -fp /mnt/etc/ttys /mnt/etc/ttys.preemulab
+		    sed -i -e "/^console/s;std.115200;std.$SPEED;" /mnt/etc/ttys || {
+			echo "WARNING: Failed to update /etc/ttys"
 		    }
 	    fi
 	fi
@@ -1012,6 +1037,17 @@ EOF1
 	    }
 	fi
 
+	# Copy in new chrony config
+	if [ $changechrony -eq 1 ]; then
+	    echo "  updating /etc/chrony.conf"
+
+	    cp -p /etc/chrony.conf /mnt/etc/chrony.conf || {
+	        echo "Failed to create /etc/chrony.conf"
+		umount $rootdev
+		return 1
+	    }
+	fi
+
 	if [ $changesshd -eq 1 ]; then
 	    dofixsshd 0
 	fi
@@ -1060,8 +1096,13 @@ lilogetkernel() {
 }
 
 dolinux() {
+	devpath=/dev/$linux_disk$part
+	olddevpath=/dev/$old_linux_disk$part
+	(echo $linux_disk | grep -q ^nvme) && devpath=/dev/${linux_disk}p$part
+	(echo $old_linux_disk | grep -q ^nvme) && olddevpath=/dev/${old_linux_disk}p$part
 
-	$BINDIR/linux_slicefix.pl /dev/$linux_disk$part /dev/$old_linux_disk$part
+	$BINDIR/linux_slicefix.pl $devpath $olddevpath
+
 	return $?
 }
 
@@ -1070,8 +1111,16 @@ fixone() {
     	echo "*** ${disk}s${part}:"
     	ptype=`fdisk -${part} ${disk} | grep sysid | sed 's/^sysid \([0-9][0-9]*\).*/\1/'`
     elif [ $OS = Linux ]; then
-    	echo "*** ${disk}${part}:"
-    	ptype=`fdisk -l /dev/$disk | awk /${disk}${part}/'{sub(/\*/,""); print "0x"$5}'`
+	fullpath=${disk}${part}
+	(echo ${disk} | grep -q ^nvme) && fullpath=${disk}p${part}
+    	echo "*** ${fullpath}:"
+	fdisk -l /dev/$disk | grep -qi 'found valid gpt'
+	if [ $? -eq 0 ]; then
+	    # gdisk output converts the gpt partition ID to, e.g., 8300.
+	    ptype=`gdisk -l /dev/$disk | awk "/^ *${part} / {print \\$6}"`
+	else
+    	    ptype=`fdisk -l /dev/$disk | awk /${fullpath}/'{sub(/\*/,""); print "0x"$8}'`
+	fi
     fi
     ptype=${ptype:-0}
 
@@ -1080,7 +1129,7 @@ fixone() {
 	dofreebsd
 	return $?
 	;;
-    131|0x83)
+    131|0x83|8300)
 	dolinux
 	return $?
 	;;

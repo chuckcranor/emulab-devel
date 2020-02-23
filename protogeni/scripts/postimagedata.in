@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -294,7 +294,12 @@ sub PostImageInfo($)
     my $virtualization = "";
     my @types = ();
     if (!$image->isdataset()) {
-	$arch  = "x86_64";
+	if ($image->architecture()) {
+	    $arch = $image->architecture();
+	}
+	else {
+	    $arch  = "x86_64";
+	}
 	$virtualization = "raw-pc";
 	foreach my $nodetype ($image->TypeList()) {
 	    my $type = $nodetype->type();
@@ -303,7 +308,12 @@ sub PostImageInfo($)
 		$arch = "aarch64";
 	    }
 	    if ($type eq "pcvm") {
-		my $virtualization = "emulab-xen";
+		if ($image->format() eq "docker") {
+		    $virtualization = "emulab-docker";
+		}
+		else {
+		    $virtualization = "emulab-xen";
+		}
 	    }
 	}
     }
@@ -541,7 +551,8 @@ sub PostImageAlias($)
     my $errmsg;
     my $count = 3;
     while ($count) {
-	my $msg = "PostImageInfo failed for image " . $image->versname() . " :";
+	my $msg = "PostImageInfo failed for alias " .
+	    $image->imagename() . " :";
 	my $args ={"credential" => $credential->asString(),
 		   "imageinfo"  => $blob};
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -82,7 +82,9 @@ $GMAP_API_KEY   = "@GMAP_API_KEY@";
 $NONAMEDSETUP	= @DISABLE_NAMED_SETUP@;
 $OPS_VM		= @OPSVM_ENABLE@;
 $PORTAL_ENABLE  = @PORTAL_ENABLE@;
-$PORTAL_ISPRIMARY = @PORTAL_ISPRIMARY@;
+$CLUSTER_PORTAL = "@CLUSTER_PORTAL@";
+$PEER_ENABLE    = @PEER_ENABLE@;
+$PEER_ISPRIMARY = @PEER_ISPRIMARY@;
 $SPEWFROMOPS    = @SPEWFROMOPS@;
 $BROWSER_CONSOLE_ENABLE = @BROWSER_CONSOLE_ENABLE@;
 $IPV6_ENABLED       = @IPV6_ENABLED@;
@@ -90,6 +92,10 @@ $IPV6_SUBNET_PREFIX = "@IPV6_SUBNET_PREFIX@";
 $TBMAILTAG      = $THISHOMEBASE;
 $WITHZFS        = @WITHZFS@;
 $ZFS_NOEXPORT   = @ZFS_NOEXPORT@;
+$UI_DISABLE_DATASETS  = @UI_DISABLE_DATASETS@;
+$UI_DISABLE_RESERVATIONS = @UI_DISABLE_RESERVATIONS@;
+$UI_EXTERNAL_ACCOUNTS = @UI_EXTERNAL_ACCOUNTS@;
+$CLASSICWEB_OVERRIDE = @CLASSICWEB_OVERRIDE@;
 
 $TBMAILADDR_OPS		= "@TBOPSEMAIL_NOSLASH@";
 $TBMAILADDR_WWW		= "@TBWWWEMAIL_NOSLASH@";
@@ -304,13 +310,19 @@ function TBERROR ($message, $death, $xmp = 0) {
     global $session_interactive, $session_errorhandler;
     $script = urldecode($_SERVER['REQUEST_URI']);
 
-    CLEARBUSY();
+    # print backtrace
+    $e = new Exception();
+    $trace = $e->getTraceAsString();
 
+    if (function_exists("CLEARBUSY")) {
+        CLEARBUSY();
+    }
     TBMAIL($TBMAIL_OPS,
          "WEB ERROR REPORT",
          "\n".
 	 "In $script\n\n".
          "$message\n\n".
+         "$trace\n\n".
          "Thanks,\n".
          "Testbed WWW\n",
          "From: $TBMAIL_OPS\n".
@@ -452,6 +464,43 @@ function SUEXEC($uid, $gid, $cmdandargs, $action) {
     global $suexec_cmdandargs, $suexec_retval;
     global $suexec_output, $suexec_output_array;
     global $TBMAIL_LOGS;
+
+    #
+    # Allow for uid/gid to be user/group/project objects.
+    #
+    if (is_object($uid)) {
+        $object = $gid;
+        if (is_a($object, "User")) {
+            $uid = $object->uid();
+        }
+        else {
+            error_log("SUEXEC: Bad uid argument");
+            return -1;
+        }
+    }
+    if (is_object($gid)) {
+        $object = $gid;
+        if (is_a($object, "Project")) {
+            $gid = $object->pid();
+            # For debugging, better if we use name if we can, but if the
+            # name is longer then 16 chars, need to use unix gid.
+            if (strlen($gid) > 16) {
+                $gid = $object->unix_gid();
+            }
+        }
+        elseif (is_a($object, "Group")) {
+            $gid = $object->gid();
+            # For debugging, better if we use name if we can, but if the
+            # name is longer then 16 chars, need to use unix gid.
+            if (strlen($gid) > 16) {
+                $gid = $object->unix_gid();
+            }
+        }
+        else {
+            error_log("SUEXEC: Bad gid argument");
+            return -1;
+        }
+    }
 
     $mail_tblog = 0;
     if ($action & SUEXEC_ACTION_MAIL_TBLOGS) {

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004, 2005, 2006 University of Utah and the Flux Group.
+# Copyright (c) 2004-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -65,12 +65,10 @@ use libtestbed;
 # Protos
 sub TryQuery();
 sub RestartMysqld();
+sub notify($);
 
 # Daemonize;
 if (!$debug) {
-    system("mv -f $LOGFILE ${LOGFILE}.old")
-	if (-e $LOGFILE);
-    
     if (TBBackGround($LOGFILE)) {
 	sleep(1);
 	exit(0);
@@ -97,6 +95,17 @@ setsid();
 
 # Loop forever ...
 while (1) {
+    #
+    # We do not want to run this while the database is backing up, since
+    # we might run out of connections and think the mysqld is dead. This
+    # not a great approach, but the proper approach to database backup
+    # needs more work then I have time for today.
+    #
+    if (TBScriptLock("backup", 0, 30 * 60) != TBSCRIPTLOCK_OKAY()) {
+	notify("Could not get the backup lock after a long time!\n");
+	sleep(300);
+	next;
+    }
     if (TryQuery() < 0) {
 	RestartMysqld()
 	    if (!$paused);
@@ -104,8 +113,8 @@ while (1) {
     else {
 	$paused = 0;
     }
-
-    sleep(15);
+    TBScriptUnlock();
+    sleep(60);
 }
 
 #
@@ -128,7 +137,7 @@ sub TryQuery()
 	# Parent waits for child to complete query.
 	#
 	local $SIG{ALRM} = sub { kill("USR1", $childpid); };
-	alarm 30;
+	alarm 60;
 	waitpid($childpid, 0);
 	alarm 0;
 
@@ -161,7 +170,8 @@ sub TryQuery()
 	# Query DB and exit. 
 	#
 	$libdb::DBQUERY_MAXTRIES = 3;
-	$libdb::DBCONN_MAXTRIES  = 2;
+	$libdb::DBCONN_MAXTRIES  = 5;
+	$libdb::DBQUERY_DEBUG    = 1;
 
 	# Must always do this in the child.
 	exit(1)
@@ -200,7 +210,7 @@ sub RestartMysqld()
     #
     # Wait for a little while.
     #
-    sleep(15);
+    sleep(20);
 
     #
     # See if its still running. If mysqld was behaving normally, then a
@@ -245,7 +255,7 @@ sub RestartMysqld()
     # Wait for a little while, and then try another query. 
     #
   retry:
-    sleep(15);
+    sleep(30);
 
     print "Trying another query ...\n";
 

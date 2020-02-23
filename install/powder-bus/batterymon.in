@@ -1,0 +1,187 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use Data::Dumper;
+use POSIX qw(strftime);
+
+#
+# Monitor battery conditioner using the arduino.
+#
+sub usage()
+{
+    print "Usage: batterymon [-dv]\n";
+    exit(1);
+}
+my $optlist   = "dv";
+my $debug     = 0;
+my $verbose   = 0;
+
+#
+# To summarize the power situation on the shuttle:
+#
+#  Shuttle power on -> Shuttle power goes directly out the conditioner
+#  to our gear.
+#  Shuttle power off -> Conditioner battery provides power to our gear
+#       (for 15 minutes, after which it shuts of automatically)
+#
+#  Pin 0: ~100 when running on battery, ~800 when bus providing power. 
+#  Pin 1: Voltage we see. When bus power off, use this to determine the
+#         voltage of our battery. Voltage = Pin1/1024*5*3.
+#
+my $PIN0_THRESHOLD = 150;
+my $PIN1_THRESHOLD = 830;
+
+# Convert
+sub PinConvert($)
+{
+    my ($pin) = @_;
+
+    return sprintf("%.3f", $pin / 1024 * 5 * 3);
+}
+
+#
+# Configure variables
+#
+my $TB         = "@prefix@";
+my $TBOPS      = "@TBOPSEMAIL@";
+my $BOSSNODE   = "@BOSSNODE@";
+my $LOGFILE    = "$TB/log/batterymon.log";
+
+use lib "@prefix@/lib";
+use libdb;
+use power_powduino;
+use libtestbed;
+
+# Protos
+sub logit($);
+
+#
+# Turn off line buffering on output
+#
+$| = 1; 
+
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"v"})) {
+    $verbose = 1;
+}
+die("Only admins are allowed to query status\n")
+    if ($UID != 0 && !TBAdmin($UID));
+
+my $childpid = fork();
+if ($childpid) {
+    #
+    # Allow a few seconds for this operation.
+    #
+    local $SIG{ALRM} = sub { kill("TERM", $childpid); };
+    alarm 30;
+    waitpid($childpid, 0);
+    alarm 0;
+    my $ecode = $?;
+    if ($ecode) {
+	my $cause;
+	
+	if (($ecode & 0xff) > 0) {
+	    $cause = "timed out waiting for child $childpid";
+	} else {
+	    $cause = "failed with exit value ". ($ecode >> 8);
+	}
+	logit("*** Voltage fetch $cause\n");
+	exit(1);
+    }
+    exit(0);
+}
+
+#
+# Ask for the voltage.
+#
+my %status;
+if (powduinovoltage("powduino", \%status)) {
+    exit(1);
+}
+if ($debug) {
+    print Dumper(\%status);
+}
+if (! (exists($status{"pin0"}) && exists($status{"pin1"}))) {
+    logit("Incomplete data from powduino");
+    exit(1);
+}
+my $pin0 = $status{"pin0"};
+my $pin1 = $status{"pin1"};
+#
+# Better both be numbers between 0 and 1000 ... 
+#
+if ($pin0 !~ /^\d+$/ || $pin0 < 0 || $pin0 > 1000) {
+    logit("Bad value for pin0: $pin0");
+    exit(1);
+}
+if ($pin1 !~ /^\d+$/ || $pin1 < 0 || $pin1 > 1100) {
+    logit("Bad value for pin1: $pin1");
+    exit(1);
+}
+my $voltage = PinConvert($pin1);
+if ($verbose) {
+    logit("Pin0:$pin0, Pin1:$pin1, Voltage:$voltage");
+}
+if ($pin0 < $PIN0_THRESHOLD) {
+    logit("Running on battery: $voltage ($pin1)");
+    if ($pin1 < $PIN1_THRESHOLD) {
+	logit("Shutting down now ...");
+	SENDMAIL($TBOPS,
+		 "Shutting down $BOSSNODE",
+		 "Low voltage on $BOSSNODE\n".
+		 "Voltage: $voltage\n".
+		 "Pin0:    $pin0\n".
+		 "Pin1:    $pin1\n\n",
+		 $TBOPS);
+	# Give it a moment to get out the door.
+	sleep(15);
+	system("/sbin/shutdown -p now &");
+    }
+}
+exit(0);
+
+sub logit($) {
+    my ($msg) = @_;
+
+    if ($debug) {
+	print "$msg\n";
+	return;
+    }
+    if (open(LOG, ">>$LOGFILE")) {
+	print LOG strftime("%b %e %H:%M:%S : ", localtime);
+	print LOG "$msg\n";
+	close(LOG);
+    }
+    else {
+	print "$msg\n";
+    }
+}

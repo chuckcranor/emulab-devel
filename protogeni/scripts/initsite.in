@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -59,7 +59,6 @@ my $PROTOGENI_RPCNAME = "@PROTOGENI_RPCNAME@";
 my $PROTOGENI_RPCPORT = "@PROTOGENI_RPCPORT@";
 my $OUTERBOSS_XMLRPCPORT = "@OUTERBOSS_XMLRPCPORT@";
 my $PROTOGENI_WEBSITE  = "@PROTOGENI_WEBSITE@";
-my $PROTOGENI_GENIRACK = @PROTOGENI_GENIRACK@;
 my $PROTOGENI_URL = "@PROTOGENI_URL@";
 my $geniuserid    = "geniuser";
 my $geniprojid    = "GeniSlices";
@@ -97,7 +96,8 @@ my $FETCH	  = "/usr/bin/fetch";
 my $OPENSSL       = "/usr/bin/openssl";
 my $FIXROOTCERT   = "$TB/sbin/fixrootcert";
 my $MYSAURN       = "urn:publicid:IDN+@OURDOMAIN@+authority+sa";
-my $APACHEPREFIX  = ("@APACHE_VERSION@" == "22" ? "apache22" : "apache");
+my $APACHEPREFIX  = ("@APACHE_VERSION@" == "22" ? "apache22" :
+		     "@APACHE_VERSION@" == "24" ? "apache24" : "apache");
 my $APACHE_START  = "@APACHE_START_COMMAND@";
 
 # un-taint path

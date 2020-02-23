@@ -689,6 +689,8 @@ ScriptAlias /spewrpmtar  /usr/testbed/cgi-bin/spewrpmtar_cgi
 ScriptAlias /spewrpmtar.php3  /usr/testbed/cgi-bin/spewrpmtar_cgi
 ScriptAlias /d77e8041d1ad /usr/testbed/cgi-bin/shellinabox.pl
 Alias /accept_cert.html /usr/testbed/www/accept_cert.html
+# Letsencrypt
+Alias /.well-known/acme-challenge/ "@prefix@/www/.well-known/acme-challenge/"
 
 <Directory "/usr/testbed/cgi-bin">
     Options FollowSymLinks
@@ -1158,7 +1160,12 @@ SSLCipherSuite ALL:!ADH:!EXPORT:!SSLv2:!RC4:!MD5:!AECDH:+HIGH:+MEDIUM:!LOW
 # pass phrase.  Note that a kill -HUP will prompt again.  A new
 # certificate can be generated using the genkey(1) command.
 #SSLCertificateFile /etc/pki/tls/certs/localhost.crt
+<IfDefine LETSENCRYPT>
+SSLCertificateFile /usr/local/etc/letsencrypt/live/@USERNODE@/cert.pem
+</IfDefine>
+<IfDefine !LETSENCRYPT>
 SSLCertificateFile /usr/local/etc/apache22/ssl.crt/@USERNODE@.crt
+</IfDefine>
 
 #   Server Private Key:
 #   If the key is not combined with the certificate, use this
@@ -1166,7 +1173,12 @@ SSLCertificateFile /usr/local/etc/apache22/ssl.crt/@USERNODE@.crt
 #   you've both a RSA and a DSA private key you can configure
 #   both in parallel (to also allow the use of DSA ciphers, etc.)
 #SSLCertificateKeyFile /etc/pki/tls/private/localhost.key
+<IfDefine LETSENCRYPT>
+SSLCertificateKeyFile /usr/local/etc/letsencrypt/live/@USERNODE@/privkey.pem
+</IfDefine>
+<IfDefine !LETSENCRYPT>
 SSLCertificateKeyFile /usr/local/etc/apache22/ssl.key/@USERNODE@.key
+</IfDefine>
 
 #   Server Certificate Chain:
 #   Point SSLCertificateChainFile at a file containing the

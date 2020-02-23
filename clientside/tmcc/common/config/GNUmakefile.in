@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,7 +42,8 @@ SCRIPTS		= $(addprefix $(SRCDIR)/, \
 		    rc.startcmd rc.simulator rc.topomap rc.firewall \
 		    rc.tiptunnels rc.trace rc.motelog rc.fakejail \
 		    rc.tpmsetup rc.blobs rc.diskagent \
-		    rc.storage rc.storagelocal rc.storageremote)
+		    rc.storage rc.storagelocal rc.storageremote \
+		    rc.hwcollect)
 
 SUBBOSS_SCRIPTS	= $(addprefix $(SRCDIR)/, \
                     rc.config rc.misc rc.mounts rc.accounts rc.route \

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -65,6 +65,9 @@ echo "<script type='text/javascript'>\n";
 echo "  window.ISADMIN     = $isadmin;\n";
 echo "  window.EMULAB_LINK = '$emulablink';\n";
 echo "  window.TARGET_USER = '" . $target_user->uid() . "';\n";
+echo "  window.UI_DISABLE_DATASETS = '" . $UI_DISABLE_DATASETS . "';\n";
+echo "  window.UI_DISABLE_RESERVATIONS = '" .
+        $UI_DISABLE_RESERVATIONS . "';\n";
 echo "</script>\n";
 
 # Place to hang the toplevel template.
@@ -73,12 +76,13 @@ echo "<div id='main-body'></div>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+AddLibrary("js/paramsets.js");
 SPITREQUIRE("js/user-dashboard.js",
             "<script src='js/lib/jquery.tablesorter.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
             "<script src='js/lib/sugar.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
 
-AddTemplateList(array("user-dashboard", "experiment-list", "profile-list", "project-list", "dataset-list", "user-profile", "oops-modal", "waitwait-modal", "classic-explist", "conversion-help-modal"));
+AddTemplateList(array("user-dashboard", "experiment-list", "profile-list", "project-list", "dataset-list", "user-profile", "oops-modal", "waitwait-modal", "classic-explist", "conversion-help-modal", "paramsets-list"));
 SPITFOOTER();
 ?>

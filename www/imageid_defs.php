@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -127,6 +127,28 @@ class Image
 	# provenance is not turned on for the project cause of a feature.
 	if (mysql_num_rows($query_result) == 0) {
 	    return $this;
+	}
+	$row = mysql_fetch_array($query_result);
+	return Image::Lookup($imageid, $row["version"]);
+    }
+
+    # Lookup next higher version of the image.
+    function LookupNextVersion() {
+	global $DOPROVENANCE;
+	if (!$DOPROVENANCE) {
+	    return $this;
+	}
+	$imageid = $this->imageid();
+        $version = $this->version();
+	
+	$query_result =
+	    DBQueryFatal("select version from image_versions ".
+			 "where imageid='$imageid' and version>$version and ".
+                         "      deleted is null ".
+			 "order by version asc limit 1");
+
+	if (mysql_num_rows($query_result) == 0) {
+	    return null;
 	}
 	$row = mysql_fetch_array($query_result);
 	return Image::Lookup($imageid, $row["version"]);
@@ -308,6 +330,41 @@ class Image
     }
 
     #
+    # Set Shared/Global. Caller did the error checking.
+    #
+    function SetSharedGlobal($shared, $global) {
+	$imageid  = $this->imageid();
+	$version  = $this->version();
+        $shared   = ($shared ? 1 : 0);
+	$global   = ($global ? 1 : 0);
+
+        if (!DBQueryWarn("update image_versions set ".
+                         "  global='$global',shared='$shared' ".
+                         "where imageid='$imageid' and version='$version'")) {
+            return -1;
+        }
+	if ($this->ezid()) {
+            if (!DBQueryWarn("update os_info_versions set shared='$shared' ".
+                             "where osid='$imageid' and vers='$version'")) {
+                return -1;
+            }
+	}
+	return 0;
+    }
+
+    #
+    # Clear the web task.
+    #
+    function ClearWebtask() {
+	$imageid  = $this->imageid();
+
+	DBQueryWarn("update images set webtask_id=NULL ".
+		     "where imageid='$imageid'");
+
+	return 0;
+    }
+
+    #
     # Class function to edit an image descriptor.
     #
     function EditImageid($image, $args, &$errors) {
@@ -430,6 +487,9 @@ class Image
     function hash()		{ return $this->field("hash"); }
     function metadata_url()	{ return $this->field("metadata_url"); }
     function imagefile_url()	{ return $this->field("imagefile_url"); }
+    function origin_uuid()	{ return $this->field("origin_uuid"); }
+    function origin_name()	{ return $this->field("origin_name"); }
+    function origin_urn()	{ return $this->field("origin_urn"); }
     function logfileid()	{ return $this->field("logfileid"); }
     function noexport()		{ return $this->field("noexport"); }
     function ready()		{ return $this->field("ready"); }
@@ -442,7 +502,11 @@ class Image
     function lba_low()		{ return $this->field("lba_low"); }
     function lba_high()		{ return $this->field("lba_high"); }
     function lba_size()		{ return $this->field("lba_size"); }
-    function nodeetypes()	{ return $this->field("nodetypes"); }
+    function nodetypes()	{ return $this->field("nodetypes"); }
+    function webtask_id()	{ return $this->field("webtask_id"); }
+    function deprecated()	{ return $this->field("deprecated"); }
+    function deprecated_iserror(){ return $this->field("deprecated_iserror"); }
+    function deprecated_message(){ return $this->field("deprecated_message"); }
 
     # Return the DB data.
     function DBData()		{ return $this->image; }
@@ -588,6 +652,24 @@ class Image
 	    TBERROR("Could not lookup group $gid_idx!", 1);
 	}
 	return $this->group;
+    }
+
+    #
+    # Last used stamp.
+    #
+    function LastUsed() {
+	$imageid = $this->imageid();
+        
+	$usage_result =
+	    DBQueryFatal("select FROM_UNIXTIME(stamp) as lastused ".
+			 "  from image_history ".
+			 "where action='os_setup' and imageid='$imageid' ".
+			 "order by stamp desc limit 1");
+	if (!mysql_num_rows($usage_result)) {
+            return null;
+        }
+        $urow = mysql_fetch_array($usage_result);
+        return $urow['lastused'];
     }
 
     function Show($showperms = 0) {

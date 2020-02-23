@@ -36,7 +36,6 @@ import getopt
 import os
 import re
 import xmlrpclib
-from M2Crypto import X509
 
 def Usage():
     print "usage: " + sys.argv[ 0 ] + " [option...] [authority]"

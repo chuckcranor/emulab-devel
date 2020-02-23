@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,13 +40,15 @@ sub usage()
  
     exit(-1);
 }
-my $optlist = "u:vpb:WJB:";
+my $optlist = "u:vpb:WJB:Nr:h:";
 my $user;
 my $getparams= 0;
 my $paramsize;
 my $warningsfatal = 0;
 my $usejail = 0;
 my $iocagepath;
+my $repo;
+my $reporef;
 
 #
 # Configure variables
@@ -54,8 +56,9 @@ my $iocagepath;
 my $TB       = "@prefix@";
 my $TBOPS    = "@TBOPSEMAIL@";
 my $TESTMODE = 0;
-my $GENILIB  = "$TB/lib/geni-lib/";
+my $GENILIB  = "$TB/lib/geni-lib";
 my $JAILPROG = "$TB/libexec/genilib-jail";
+my $REPODIR  = "/repos";
 my $TAR      = "/usr/bin/tar";
 my $debug    = 0;
 
@@ -109,10 +112,37 @@ if (defined($options{"u"})) {
 if (defined($options{"W"})) {
     $warningsfatal = 1;
 }
+if (defined($options{"N"})) {
+    $GENILIB .= ".new";
+    $ENV{"PYTHONPATH"} = $GENILIB;
+}
 if (defined($options{"J"})) {
     $usejail = 1;
     if (defined($options{"B"})) {
 	$iocagepath = $options{"B"};
+    }
+}
+if (defined($options{"r"})) {
+    $repo = $options{"r"};
+    # Must taint check
+    if ($repo =~ /^([-\w]+)$/) {
+	$repo = $1;
+    }
+    else {
+	die("Bad data in argument: $repo");
+    }
+    if (! -e "$REPODIR/$repo") {
+	die("No such repo $repo\n");
+    }
+    if (defined($options{"h"})) {
+	$reporef = $options{"h"};
+	# Must taint check
+	if ($reporef =~ /^([-\w\/]+)$/) {
+	    $reporef = $1;
+	}
+	else {
+	    die("Bad data in argument: $reporef");
+	}
     }
 }
 
@@ -228,6 +258,14 @@ if ($warningsfatal) {
 my $exit_status;
 if ($usejail) {
     my $bopt = (defined($iocagepath) ? "-B $iocagepath" : "");
+    my $ropt = "";
+
+    if (defined($repo)) {
+	$ropt = "-r $repo";
+	if (defined($reporef)) {
+	    $ropt .= " -h $reporef";
+	}
+    }
 
     #
     # We are executing the command in a jail, fire off the jail script.
@@ -241,7 +279,7 @@ if ($usejail) {
     # name space. Those copies will be owned by the user so they can be
     # read/written.
     #
-    $exit_status = system("$JAILPROG $bopt -u $user $ifile");
+    $exit_status = system("$JAILPROG $bopt $ropt -u $user $ifile");
 
     #
     # Now that we are done with the files, chown them to the user and
@@ -325,7 +363,8 @@ elsif (! -s $ofile)  {
 else {
     if ($getparams) {
 	if (! -e $pfile) {
-	    if (system("egrep -q -s 'defineParameter' $ifile")) {
+	    if (system("egrep -q -s '^[^#]*defineParameter' $ifile") &&
+		system("egrep -q -s '^[^#]*defineStructParameter' $ifile")) {
 		# No parameters
 		system("touch $pfile");
 	    }

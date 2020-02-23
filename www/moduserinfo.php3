@@ -58,6 +58,7 @@ function SPITFORM($formfields, $errors)
     global $target_user, $wikionly;
     global $shelllist, $defaultshell;
     global $WIKIDOCURL;
+    global $UI_EXTERNAL_ACCOUNTS;
 
     $username = $target_user->uid();
     $uid_idx  = $target_user->uid_idx();
@@ -279,7 +280,8 @@ function SPITFORM($formfields, $errors)
 	# must retype on error.
 	#
 	echo "<tr></tr>\n";
-	echo "<tr>
+	if ($UI_EXTERNAL_ACCOUNTS == 0) {
+	    echo "<tr>
                   <td colspan=2>Password[<b>1</b>]:</td>
                   <td class=left>
                       <input type=password
@@ -288,7 +290,7 @@ function SPITFORM($formfields, $errors)
                              size=8></td>
               </tr>\n";
 
-        echo "<tr>
+            echo "<tr>
                   <td colspan=2>Retype Password:</td>
                   <td class=left>
                       <input type=password
@@ -296,6 +298,7 @@ function SPITFORM($formfields, $errors)
                              value=\"" . $formfields["password2"] . "\"
                              size=8></td>
              </tr>\n";
+	}
 
 	if (!$wikionly) {
 	    #
@@ -497,12 +500,17 @@ if (count($errors)) {
 #
 $args = array();
 
-# Always pass the password fields if specified.
-if (isset($formfields["password1"]) && $formfields["password1"] != "") {
-    $args["password1"] = $formfields["password1"];
-}
-if (isset($formfields["password2"]) && $formfields["password2"] != "") {
-    $args["password2"] = $formfields["password2"];
+#
+# see if UI change password is disabled (e.g. passwords externally managed)
+#
+if ($UI_EXTERNAL_ACCOUNTS == 0) {
+    # Always pass the password fields if specified.
+    if (isset($formfields["password1"]) && $formfields["password1"] != "") {
+	$args["password1"] = $formfields["password1"];
+    }
+    if (isset($formfields["password2"]) && $formfields["password2"] != "") {
+	$args["password2"] = $formfields["password2"];
+    }
 }
 if (isset($formfields["w_password1"]) && $formfields["w_password1"] != "") {
     $args["w_password1"] = $formfields["w_password1"];

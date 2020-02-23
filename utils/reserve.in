@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2016-2017 University of Utah and the Flux Group.
+# Copyright (c) 2016-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,6 +26,7 @@ use English;
 use Getopt::Std;
 use Date::Parse;
 use POSIX;
+use Text::Wrap;
 
 #
 # Configure variables
@@ -43,13 +44,16 @@ use Project;
 use Reservation;
 use WebTask;
 use emutil;
+use Node;
+use NodeType;
+use libEmulab;
 
 sub usage()
 {
     print STDERR "Usage: reserve [-C] [-f] [-n] [-q] -t type [-s start] [-e end]\n" .
 	"            [-u] [-U uid] [-N file] [-A file] [-a|-p] pid count\n";
     print STDERR "       reserve [-D file] -c idx\n";
-    print STDERR "       reserve [-f] [-n] [-s start] [-e end] [-u]\n" .
+    print STDERR "       reserve [-f] [-n] [-s start] [-e end] [-u] [-I 0/1]\n".
 	"            [-U uid] [-N file] [-A file] [-S size] [-a] -m idx \n";
     print STDERR "       reserve [-u] -i pid\n";
     print STDERR "       reserve [-u] -l\n";
@@ -76,10 +80,11 @@ sub usage()
     print STDERR "   -A   Supply file containing admin-only notes about reservation\n";
     print STDERR "   -N   Supply file containing user notes justifying reservation\n";
     print STDERR "   -D   Supply file containing reason why reservation was denied\n";
+    print STDERR "   -F   Supply file containing messsage to accompany approval\n";
     exit( -1 );
 }
 
-my $optlist    = "ac:de:fhilm:npqs:t:uA:CD:N:S:U:T:E:Oy";
+my $optlist    = "ac:de:fhilm:npqs:t:uA:CD:N:S:U:T:E:OyF:I:";
 my $debug      = 0;
 my $info       = 0;
 my $list       = 0;
@@ -94,9 +99,11 @@ my $endtime    = time + 24 * 60 * 60; # default to ending tomorrow
 my $notes      = undef;
 my $adminnotes = undef;
 my $denynotes  = undef;
+my $approvenotes = undef;
 my $approve    = 0;
 my $pending    = 0;
 my $tidy       = 0;
+my $idledetection;
 my $cancel;
 my $abortcancel= 0;
 my $type;
@@ -251,6 +258,9 @@ if (defined($options{"A"})) {
 if (defined($options{"D"})) {
     $denynotes = readfile( $options{"D"} );
 }
+if (defined($options{"F"})) {
+    $approvenotes = readfile( $options{"F"} );
+}
 if (defined($options{"U"})) {
     fatal( "-U option requires administrator privileges" ) unless( $admin );
     $target_user = User->Lookup($options{"U"});
@@ -262,6 +272,10 @@ if (defined($options{S})) {
     unless( $count =~ /^[0-9]+$/ ) {
 	fatal( "Invalid reservation size." );
     }
+}
+if (defined($options{'I'})) {
+    $idledetection = $options{'I'};
+    fatal( "-I option requires administrator privileges" ) unless( $admin );
 }
 if (defined($options{'a'})) {
     fatal( "-a option requires administrator privileges" ) unless( $admin );
@@ -440,9 +454,9 @@ if ($info) {
 }
 
 #
-# Schedule cancellation and exit.
+# Schedule cancellation and exit. Or set/clear idle detection
 #
-if ($cancel || $abortcancel) {
+if ($cancel || $abortcancel || defined($idledetection)) {
     my $res;
 
     if( $modify_idx ) {
@@ -452,19 +466,31 @@ if ($cancel || $abortcancel) {
     }
     
     if( !defined( $res ) ) {
-	print STDERR "-E or -O option: no matching reservation found.\n";
+	print STDERR "-E or -O or -I option: no matching reservation found.\n";
 	
 	exit( 1 );
     }
-
-    $res->SetCancel(($abortcancel ? undef : $cancel));
+    if (defined($idledetection)) {
+	if ($idledetection) {
+	    $res->EnableIdleDetection();
+	}
+	else {
+	    $res->DisableIdleDetection();
+	}
+	exit(0);
+    }
 
     while (1) {
 	if (!defined(Reservation->BeginTransaction(Reservation->GetVersion()))) {
 	    sleep(1);
 	    next;
 	}
-	$res->Book($res->idx());
+	if ($abortcancel) {
+	    $res->ClearCancel();
+	}
+	else {
+	    $res->MarkCancel($cancel);
+	}
 	Reservation->EndTransaction();
 	last;
     }
@@ -531,17 +557,52 @@ if ($clear || $clear_idx) {
     exit( 0 );
 }
 
-# For now, auto-approve reservation requests up to 64 node-hours.
+# For now, auto-approve reservation requests up to some number node-hours
+# as defined by a nifty site variable.
 # Later we'll probably want this threshold to vary based on the node type,
 # how far into the future the reservation starts, existing approved
 # reservations for the same project, the phase of the moon...
 # who knows.
-if( $count * ( $endtime - $starttime ) / 3600 <= 0x40 ) {
-    $approve = 1;
-}
-
+#
 # If they said "-p", don't approve no matter what.
-$approve = 0 if( $pending );
+# If an admin said to force approval, that overrides $pending and limits.
+#
+if (! ($pending || $approve)) {
+    my $approval_threshold;
+    if (! GetSiteVar("reservations/approval_threshold", \$approval_threshold)) {
+	$approval_threshold = 128;
+    }
+    if ($approval_threshold == 0 ||
+	($count * ( $endtime - $starttime ) / 3600 <= $approval_threshold)) {
+	$approve = 1;
+    }
+    #
+    # Check for an override attribute on the node type. Here zero really means
+    # zero instead of unlimited. As above, this limit is node hours.
+    #
+    my $limit;
+    
+    my $nodetype = NodeType->Lookup($type);
+    if (defined($nodetype)) {
+	$limit = $nodetype->GetAttribute("reservation_autoapprove_limit");
+    }
+    else {
+	# Lets see if type is really a node ID.
+	my $node = Node->Lookup($type);
+	if (!defined($node)) {
+	    fatal("Could not look up node type");
+	}
+	$node->NodeAttribute("reservation_autoapprove_limit", \$limit);
+	if (!defined($limit)) {
+	    $limit = $node->NodeTypeAttribute("reservation_autoapprove_limit");
+	}
+    }
+    if (defined($limit)) {
+	if (($count * ( $endtime - $starttime ) / 3600) > $limit) {
+	    $approve = 0;
+	}
+    }
+}
 
 #
 # Do not allow this as root; we want proper history.
@@ -632,6 +693,8 @@ while( 1 ) {
     my $s = convert( $starttime );
     my $e = convert( $endtime );
     if( $approve ) {
+	$Text::Wrap::columns = 60;
+	
 	# The reservation is approved -- presumably it is either newly
 	# approved or edited since first approval.  E-mail the user
 	# unconditionally, since it's probably good for them to hear
@@ -642,6 +705,11 @@ while( 1 ) {
 		  "starting at $s and ending at\n" .
 		  "$e, has been approved.\n" .
 		  "\n" .
+		  ($approvenotes ?
+		   "*****************************************************\n".
+		   wrap("", "", "$approvenotes\n") .
+		   "*****************************************************\n\n"
+		   : "") .
 		  "If you do not intend to use these resources, please\n" .
 		  "cancel this reservation as soon as possible, since\n" .
 		  "the nodes are currently unavailable to other users for\n" .

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2018 University of Utah and the Flux Group.
+# Copyright (c) 2005-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -83,6 +83,17 @@ sub isPowder($)         { return $_[0]->brand() eq "powder" ? 1 : 0; }
 sub isEmulab($)         { return $_[0]->brand() eq "emulab" ? 1 : 0; }
 sub isClassic($)        { return $_[0]->brand() eq "classic" ? 1 : 0; }
 
+sub Server($)
+{
+    my ($self) = @_;
+
+    return ($self->isAPT() ? "www.aptlab.net" :
+	    $self->isCloud() ? "www.cloudlab.us" :
+	    $self->isPNet() ? "www.phantomnet.org" :
+	    $self->isPowder() ? "www.powderwireless.net" :
+	    $self->isEmulab() ?	"@WWWHOST@" : "@WWWHOST@");
+}
+
 sub wwwBase($)
 {
     my ($self) = @_;
@@ -90,7 +101,7 @@ sub wwwBase($)
     return ($self->isAPT() ? "https://www.aptlab.net" :
 	    $self->isCloud() ? "https://www.cloudlab.us" :
 	    $self->isPNet() ? "https://www.phantomnet.org" :
-	    $self->isPowder() ? "@TBBASE@" . "/portal" :
+	    $self->isPowder() ? "https://www.powderwireless.net" :
 	    $self->isEmulab() ?	"@TBBASE@" . "/portal" :
 	    "@TBBASE@");
 }
@@ -124,7 +135,7 @@ sub LogsEmailAddress($)
     return ($self->isAPT() ? "apt-logs\@aptlab.net" :
 	    $self->isCloud() ? "cloudlab-logs\@cloudlab.us" :
 	    $self->isPNet() ? "phantomnet-logs\@phantomnet.org" :
-	    $self->isPowder() ? "powder-logs\@powderwireless.net" :
+	    $self->isPowder() ? "powder-portal-logs\@powderwireless.net" :
 	    $TBLOGS);
 }
 
@@ -136,6 +147,17 @@ sub ExtensionsEmailAddress($)
 	    $self->isCloud() ? "portal-extensions\@cloudlab.us" :
 	    $self->isPNet() ? "portal-extensions\@phantomnet.org" :
 	    $self->isPowder() ? "portal-extensions\@powderwireless.net" :
+	    $TBOPS);
+}
+
+sub ReservationsEmailAddress($)
+{
+    my ($self) = @_;
+
+    return ($self->isAPT() ? "portal-reservations\@aptlab.net" :
+	    $self->isCloud() ? "portal-reservations\@cloudlab.us" :
+	    $self->isPNet() ? "portal-reservations\@phantomnet.org" :
+	    $self->isPowder() ? "portal-reservations\@powderwireless.net" :
 	    $TBOPS);
 }
 

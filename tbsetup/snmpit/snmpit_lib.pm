@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2015, 2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -1198,6 +1198,10 @@ sub getDeviceOptions($) {
     if ($debug) {
 	print "Options for $switch:\n";
 	while (my ($key,$value) = each %options) {
+	    # let's not willingly spit out authentication info
+	    if ($key =~ /^(snmp_community|username|password)$/) {
+		$value = "<hidden>";
+	    }
 	    $value = "undef"
 		if (!defined($value));
 	    print "$key = $value\n"

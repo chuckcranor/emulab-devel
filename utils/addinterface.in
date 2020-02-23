@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2018 University of Utah and the Flux Group.
+# Copyright (c) 2003-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,6 +43,7 @@ sub usage()
     print STDERR " -r        - Delete interface\n";
     print STDERR " -f        - (with -r) force deletion, even if iface used\n";
     print STDERR " -I IP     - Optional IP address (as for control iface)\n";
+    print STDERR " -M Mask   - IP Mask, defaults to 255.255.255.0\n";
     print STDERR " -e role   - Optional interface role, default to 'other'\n";
     print STDERR " -m mac    - Optional MAC address. 0123456789AB format.\n";
     print STDERR " -b speed  - Interface speed; 100Mb,1Gb,10Gb,40Gb,100Gb\n";
@@ -50,13 +51,14 @@ sub usage()
     print STDERR " iface_id  - eth0, eth1, 1/69, 1.6:1, Po4.5/9:1, etc.\n";
     exit(-1);
 }
-my $optlist   = "b:t:nvfm:re:iI:";
+my $optlist   = "b:t:nvfm:re:iI:M:";
 my $verbose   = 0;
 my $impotent  = 0;
 my $remove    = 0;
 my $info      = 0;
 my $force     = 0;
 my $IP;
+my $MASK;
 my $speed;
 my $type;
 my $mac       = "000000000000";
@@ -132,8 +134,14 @@ else {
 }
 if (defined($options{'I'})) {
     $IP = $options{'I'};
-    if ($IP !~ /^(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})$/)  {
+    if ($IP !~ /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/)  {
 	fatal("Invalid IP format");
+    }
+}
+if (defined($options{'M'})) {
+    $MASK = $options{'M'};
+    if ($MASK !~ /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/)  {
+	fatal("Invalid IP mask format");
     }
 }
 if (defined($options{'m'})) {
@@ -199,6 +207,7 @@ my $ifaceargs = {
     "max_speed"   => $type->max_speed() / 1000,
     "mac"         => $mac,
     "IP"          => $IP,
+    "mask"        => $MASK,
 };
 if ($verbose || $impotent) {
     if ($verbose) {
@@ -285,7 +294,8 @@ sub ShowInterface(@)
     my $interface = Interface->LookupByIface($nodeid, $iface);
     fatal("No such interface")
 	if (!defined($interface));
-    print "Iface1:\n";
+    print "Iface1:\n"
+	if ($interface->wiredup());
     $interface->Dump();
     print "\n";
 

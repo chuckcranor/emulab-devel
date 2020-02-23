@@ -101,6 +101,14 @@ with 2015Q3 and I have updated through 2016Q2.
    DEFAULT_VERSIONS=perl5=5.24 python=2.7 php=5.6 mysql=5.7 apache=2.2 tcltk=8.6
    DEFAULT_VERSIONS+=ssl=base
 
+   # for 11.1
+   DEFAULT_VERSIONS=perl5=5.26 python=2.7 php=5.6 mysql=5.7 apache=2.4 tcltk=8.6
+   DEFAULT_VERSIONS+=ssl=base
+
+   # for 11.3
+   DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
+   DEFAULT_VERSIONS+=ssl=base
+
 5. Set non-standard options on some ports.
 
     * Perl. For perl 5.20 make sure that THREADS is defined. It should be,
@@ -375,7 +383,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
        PC
        PL
 
-10. Updating the Emulab package repo (10.3 specific).
+10. Updating the Emulab package repo (11.3 specific).
 
    [ This is a condensed version of the steps above. ]
    
@@ -390,30 +398,35 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
    couple of mysterious updates of things that didn't change, but I
    can live with that...
 
-   a. Make sure the ports tree in /share/freebsd/10.3/ports on ops
+   a. Make sure the ports tree in /share/freebsd/11.3/ports on ops
       is up to date. [ Note that there is not actually an svn repo branch
       called "quarterly" so you have to make sure you are tracking the
       current quarter. ]
 
-      cd /share/freebsd/10.3/ports
+      cd /share/freebsd/11.3/ports
       sudo svn update
 
    b. Make sure the Emulab ports are up to date.
 
-      cd /share/freebsd/10.3/ports/misc
+      cd /share/freebsd/11.3/ports/misc
       diff -r ~mike/testbed-clean/install/ports .
       <update anything that is out of sync>
 
-   c. Swapin a FreeBSD 10.3 node (emulab-ops/freebsd103-64). This will
+   c. Swapin a FreeBSD 11.3 node (experiment emulab-ops/freebsd112-64). This will
       give you a d430 which is the best thing to use.
 
    d. Mount the ports and source trees.
 
       cd /usr
-      sudo mount -o ro fs:/share/freebsd/10.3/ports /usr/ports
-      sudo mount -o ro fs:/share/freebsd/10.3/src /usr/src
+      sudo mount -o ro fs:/share/freebsd/11.3/ports /usr/ports
+      sudo mount -o ro fs:/share/freebsd/11.3/src /usr/src
       
-   e. Cleanse the port environment:
+   e. Make sure /etc/make.conf is up to date. It should have:
+
+  DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
+  DEFAULT_VERSIONS+=ssl=base
+
+   f. Cleanse the port environment:
 
       sudo tcsh
       setenv ASSUME_ALWAYS_YES true
@@ -422,30 +435,46 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
       rm -rf /var/db/ports/*
       rm -rf /usr/obj/ports/usr/ports/*
 
-   f. Make sure the package tool is installed. To avoid occasional issues
-      with certs, I have found the easiest thing to do is:
+   g. Make sure the package tool is installed. Sometimes you can just:
 
-      pushd /share/freebsd/10.3/packages-64
+      pkg info
+
+      and it will reinstall the pkg tool. However, sometimes you will
+      run up against certificate issues, the it won't reinstall it.
+      In that case, I have found the easiest thing to do is:
+
+      pushd /share/freebsd/11.3/packages-64
       pkg add pkg-*
       pkg add ca_root*
       popd
 
-   g. Make sure port options are correctly set:
+   h. Make sure port options are correctly set:
 
-      - in devel/boost-all, "make config" and deselect:
+      NOTE: if you get a message about "unsupported release" when you
+      try to do a make, it might be because /usr/include/sys/param.h
+      is out of date. Diff it with /usr/src/sys/sys/param.h and update
+      as necessary.
+
+      - make -C devel/boost-all config
+        and deselect:
           DOCS
-      - in editors/emacs, "make config" and deselect:
+      - make -C editors/emacs config
+        and deselect:
           DBUS
+          GCONF, GSETTINGS, LCMS2, M17N, OTF, SCROLLBARS, XFT, XIM,
 	  GIF, MAGICK, PNG, SVG, TIFF, XPM,
-          GCONF, GSETTINGS, M17N, OTF, SCROLLBARS, XFT, XIM,
 	  OSS,
-	  GTK2
+	  GTK3
         and select:
 	  XAW
-      - in graphics/cairo, "make config" and deselect OPENGL.
-      - in www/apache22, "make config" and select: SUEXEC, PROXY, PROXY_HTTP
+      - make -C graphics/cairo config
+        and deselect OPENGL.
+      - make -C www/apache24 config
+        and select SUEXEC.
+      - make -C x11-toolkits/pango config
+        and deselect DOCS.
 
-   h. Build em all:
+   i. Build em all:
 
        setenv PACKAGES /usr/obj/ports/packages
        rm -f $PACKAGES/All/*
@@ -455,45 +484,64 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
 	   (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean)
        end
 
-   i. Check for vulnerabilities. If any are revealed, you can either try
-      to update /share/freebsd/10.3/ports with a newer version of the port
+   j. Check for vulnerabilities. If any are revealed, you can either try
+      to update /share/freebsd/11.3/ports with a newer version of the port
       (e.g., from /share/freebsd/current/ports) or just live with the
       vulnerability for now.
 
        pkg audit -F
 
-   j. Create the packages:
+   k. Create the packages:
 
        pkg create -a -o $PACKAGES/All/
 
-   k. Create the alternate ipmitool package. The Moonshot chassis require
+   l. Create the alternate ipmitool package. The Moonshot chassis require
       an older ipmitool embodied in the emulab-ipmitool-old port. It conflicts
       with the regular packages so we have to remove that first.
 
        pkg delete -f ipmitool
        cd /usr/ports/misc/emulab-ipmitool-old
-       make clean all install
-       make package
+       env BATCH=1 make clean all install ; make package clean
 
-   l. Save packages and update tarball and repo. On boss:
+   m. Save packages and update tarball and repo. On boss:
 
-      cd /share/freebsd/10.3
+      cd /share/freebsd/11.3
       mkdir packages
       scp pcXXX:/usr/obj/ports/packages/All/\* packages/
       sudo chown -R root:wheel packages
 
       set www=/usr/testbed/www
-      set tball="FreeBSD-10.3-packages-64-`date +%Y%m%d`.tar.gz"
+      set tball="FreeBSD-11.3-packages-64-`date +%Y%m%d`.tar.gz"
 
       sudo tar czf $tball packages
       sudo cp $tball $www/downloads/
-      sudo ln -sf $tball $www/downloads/FreeBSD-10.3-packages-64.tar.gz
-      sudo mv $www/FreeBSD/10.3/{packages,Opackages}
-      sudo cp -rp packages $www/FreeBSD/10.3/
-      sudo pkg repo $www/FreeBSD/10.3/packages
+      sudo ln -sf $tball $www/downloads/FreeBSD-11.3-packages-64.tar.gz
+      sudo mv $www/FreeBSD/11.3/{packages,Opackages}
+      sudo cp -rp packages $www/FreeBSD/11.3/
+      sudo pkg repo $www/FreeBSD/11.3/packages
 
-      sudo mv packages-64 packages-64.bak
-      sudo mv packages packages-64
+      # tar up the ports tree that corresponds to these packages
+      set tball="FreeBSD-11.3-ports.tar.gz"
+      sudo tar --exclude=ports/.svn -czf $tball ports
+      sudo cp $tball $www/downloads/
+
+   n. Random useful commands to run on the package files.
+
+      For comparing with older package sets, it is sometimes useful to
+      trim off the version number, etc. if you want to see the difference
+      in which ports are installed in each, regardless of version. To
+      make a list of package name only:
+
+        cd packages
+        echo *.txz | xargs -n 1 -J % pkg query -F % '%n' | sort > /tmp/list
+
+      To see what other packages "foo" needs:
+
+        pkg info -F foo.txz -d
+
+      To see what other packages need "foo":
+
+        pkg info -F foo.txz -r
 
 11. Client node packages.
 

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -95,11 +95,13 @@ my $EXPORTS_SETUP  = "$TB/sbin/exports_setup";
 my $GENTOPOFILE    = "$TB/libexec/gentopofile";
 my $GENELISTS      = "$TB/sbin/genelists";
 my $IMAGE_SETUP    = "$TB/sbin/image_setup";
+my $IMPORTER       = "$TB/sbin/image_import";
 my $ARPLOCKDOWN    = "$TB/sbin/arplockdown";
 my $TARFILES_SETUP = "$TB/bin/tarfiles_setup";
 my $ELAB_SETUP     = "$TB/sbin/elabinelab";
 my $TBADB          = "$TB/bin/tbadb";
 my $PUSHROOTKEY	   = "$TB/sbin/pushrootkey";
+my $TEVC	   = "$TB/bin/tevc";
 
 # Cache of instances to avoid regenerating them.
 my %aggregates     = ();
@@ -331,6 +333,12 @@ sub GetCertificate($)
 
 # An alias so that slivers look like aggregates.
 sub resource_type($)	{ return field($_[0], "type"); }
+
+# Busy if status is working (start/restart/stop/reload/reboot).
+sub Busy($)             { return $_[0]->status() eq "working" ? 1 : 0; }
+
+# Are any slivers imaging.
+sub Imaging($)          { return $_[0]->CheckSliverStates("imaging") ? 1 : 0; }
 
 # A place to stash a temporary rspec.
 sub rspec($;$)
@@ -1117,7 +1125,9 @@ sub ActionStart($$;$)
     my %nodes    = ();
     my @restarts = ();
     my @failed   = ();
+    my %imports  = ();
     my $sliver;
+    my $output;
 
     foreach $sliver (@slivers) {
 	if (ref($sliver) ne "GeniSliver::Node") {
@@ -1191,9 +1201,37 @@ sub ActionStart($$;$)
 		$pnode->_bootlog(undef);
 	    }
 	}
+	#
+	# See if we have to download the image (import).
+	#
+	my $image = OSImage->Lookup($node->def_boot_osid(),
+				    $node->def_boot_osid_vers());
+	if (!defined($image)) {
+	    print STDERR "No image can be found for $node\n";
+	    next;
+	}
+	if ($image->isImage() && !$image->IsLocal() && !$image->ready()) {
+	    $imports{$image->imageid()} = $image;
+	}
     }
     # See "bad" label below.
     $sliver = undef;
+
+    #
+    # Fire off image imports for any images that are not ready. This
+    # happens when we are using the image tracker. On the normal Geni
+    # path, images will be specified by URL, and we get those in 
+    # image_setup below.
+    #
+    foreach my $image (values(%imports)) {
+	my $imageid = $image->imageid();
+	
+	GeniUtil::ExecuteAsGeniUser("$IMPORTER -d -G -p GeniSlices $imageid");
+	if ($?) {
+	    $msg = "Could not import " . $image->versname();
+	    goto bad;
+	}
+    }
 
     #
     # Download the images. If this fails, we have wasted our time,
@@ -1207,10 +1245,7 @@ sub ActionStart($$;$)
     # real user, and the current user will not have write permission
     # on it.
     #
-    my $output = 
-	GeniUtil::ExecuteQuietAsGeniUser("$IMAGE_SETUP ".
-					 "-d -g -p GeniSlices $pid,$eid");
-    print STDERR $output;
+    GeniUtil::ExecuteAsGeniUser("$IMAGE_SETUP -d -g -p GeniSlices $pid,$eid");
     if ($?) {
 	$msg = "Could not setup images";
 	goto bad;
@@ -1291,24 +1326,30 @@ sub ActionStart($$;$)
 		goto bad;
 	    }
 	    DebugTimeStamp("syncportvlans done");
-	    GeniCM::UpdateManifest($slice);
 	}
     }
     $sliver = undef;
+
+    #
+    # os_setup requires the expstate to be set appropriately, which we
+    # generally do not do on the geni path.
+    #
+    $experiment->SetState(EXPTSTATE_ACTIVATING());
 
     #
     # So we are going to fork and let os_setup proceed.
     #
     my $childpid = main::WrapperFork();
     if ($childpid) {
+	#
+	# This indicates that while not locked, we are still busy.
+	# KillMonitor operates using the cancel flag, so we should
+	# be fine. 
+	#
+	$slice->SetMonitorPid($childpid);
+	print STDERR "Monitor PID $childpid\n";
 	return 0;
     }
-    #
-    # os_setup requires the expstate to be set appropriately, which we
-    # generally do not do on the geni path. 
-    #
-    $experiment->SetState(EXPTSTATE_ACTIVATING());
-
     #
     # We want to let snmpit run in parallel with os_setup, like the
     # classic path does. 
@@ -1373,10 +1414,35 @@ sub ActionStart($$;$)
     }
     
     my @nodes = keys(%nodes);
-    print STDERR "Calling os_setup @nodes\n";
-    my $rval = system("$OSSETUP $pid $eid @nodes");
-    print STDERR "os_setup exited with status $rval\n";
-    $experiment->SetState($expstate);
+    my $rval  = 0;
+    if (@nodes) {
+	print STDERR "Calling os_setup @nodes\n";
+	$rval = system("$OSSETUP $pid $eid @nodes");
+	print STDERR "os_setup exited with status $rval\n";
+	# Update to get the disk images into the manifest.
+	GeniCM::UpdateManifest($slice);
+    }
+
+    #
+    # Check for cancelation. We skip all the logging and email.
+    #
+    if ($experiment->Canceled()) {
+	print STDERR "ActionStart canceled; terminating early!\n";
+
+	# Mark all thee nodes as canceled (which really means failure).
+	foreach my $node (values(%nodes)) {
+	    $node->_sliver()->SetStatus("canceled")
+		if (defined($node->_sliver()));
+	}
+	# Reset before return; do not want it left.
+	$slice->LockTables();
+	# Do this first so others know we are reacting to the cancel.
+	$slice->ClearMonitorPid();
+	$experiment->SetCancelFlag(0);
+	$slice->UnLockTables();
+	$msg = "canceled; terminating early";
+	goto bad;
+    }
 
     #
     # See what nodes succeeded or failed. We want to hold off setting
@@ -1424,6 +1490,7 @@ sub ActionStart($$;$)
 	my $email  = $creator->email();
 	my $count  = scalar(@failed);
 	my $urn    = $slice->urn();
+	my $purl   = $slice->GetPortalURL();
 	my $logs   = "";
 
 	foreach my $node (@failed) {
@@ -1438,7 +1505,8 @@ sub ActionStart($$;$)
 		 "Nodes:\n".
 		 "  " . join(" ", @failed) . "\n".
 		 "in $urn failed.\n\n" .
-		 "$logs\n\n",
+		 ($logs ne "" ? "$logs\n\n" : "") .
+		 (defined($purl) ? "$purl\n" : ""),
 		 $TBOPS, "Cc: $TBOPS");
     }
     #
@@ -1505,9 +1573,9 @@ sub ActionStart($$;$)
     }
     elsif (($flags & $ACTION_FLAGS_NOEVENTSTART) == 0 && !@failed) {
 	#
-	# Start the event scheduler. Note that the experiment is already
-	# in the ACTIVE state, so the scheduler is going to fire off the
-	# timeline automatically. 
+	# Start the event scheduler. Note that the experiment is not
+	# in the ACTIVE state, so the scheduler will not send the start
+	# event. We do that explicitly.
 	#
 	system("$EVENTSYS start $pid,$eid");
 	if ($?) {
@@ -1521,6 +1589,8 @@ sub ActionStart($$;$)
 		goto bad;
 	    }
 	}
+	print STDERR "Starting event time\n";
+	system("$TEVC -e $pid/$eid now __ns_sequence start");
     }
     if (0) {
 	# Testing.
@@ -1541,6 +1611,10 @@ sub ActionStart($$;$)
     # ready or failed state until we are fully done here.
     $self->SetStatus("mixed");
     $self->ComputeState();
+    $experiment->SetState($expstate);
+    $slice->ClearMonitorPid();
+    # in case we were canceled by DeleteSlice()
+    $experiment->SetCancelFlag(0);
     return 0;
 
   bad:
@@ -1559,6 +1633,10 @@ sub ActionStart($$;$)
 	$self->SetStatus("mixed");
 	$self->ComputeState();
     }
+    $experiment->SetState($expstate);
+    $slice->ClearMonitorPid();
+    # in case we were canceled by DeleteSlice()
+    $experiment->SetCancelFlag(0);
     return -1;
 }
 
@@ -1713,6 +1791,7 @@ sub Action($$$;$)
     # For reload.
     my $osload_object;
     my @reload_children = ();
+    my $output;
 
     #
     # Download the images. If this fails, we have wasted our time,
@@ -1726,10 +1805,7 @@ sub Action($$$;$)
     # real user, and the current user will not have write permission
     # on it.
     #
-    my $output = 
-	GeniUtil::ExecuteQuietAsGeniUser("$IMAGE_SETUP ".
-					 "-d -g -p GeniSlices $pid,$eid");
-    print STDERR $output;
+    GeniUtil::ExecuteAsGeniUser("$IMAGE_SETUP -d -g -p GeniSlices $pid,$eid");
     if ($?) {
 	$msg = "Could not setup images";
 	goto bad;
@@ -2739,7 +2815,7 @@ sub WaitForNodes($$$$@)
     #
     my $waittime  = 0;
     my $minutes   = 0;
-    my $canceled  = $experiment->canceled();
+    my $canceled  = $experiment->Canceled();
 
     #
     # Wait for the nodes to finish booting, as recorded in database.
@@ -2748,7 +2824,7 @@ sub WaitForNodes($$$$@)
 	#
 	# Check for cancelation. We quit the monitor.
 	#
-	$canceled = $experiment->canceled();
+	$canceled = $experiment->Canceled();
 	if ($canceled) {
 	    print STDERR "WaitForNodes canceled; terminating early!\n";
 	    #
@@ -2968,6 +3044,7 @@ sub WaitForNodes($$$$@)
 	my $email  = $creator->email();
 	my $count  = scalar(@failed);
 	my $urn    = $slice->urn();
+	my $purl   = $slice->GetPortalURL();
 	my $logs   = "";
 
 	foreach my $node (@failed) {
@@ -2982,7 +3059,8 @@ sub WaitForNodes($$$$@)
 		 "Nodes:\n".
 		 "  " . join(" ", @failed) . "\n".
 		 "in $urn failed.\n\n" .
-		 "$logs\n\n",
+		 ($logs ne "" ? "$logs\n\n" : "") .
+		 (defined($purl) ? "$purl\n" : ""),
 		 $TBOPS, "Cc: $TBOPS");
 
 	# Tell caller.
@@ -2992,7 +3070,7 @@ sub WaitForNodes($$$$@)
     $slice->LockTables();
     # Do this first. See cancel in DeleteSlice().
     $slice->ClearMonitorPid();
-    if ($experiment->canceled()) {
+    if ($experiment->Canceled()) {
 	$experiment->SetCancelFlag(0);
     }
     $slice->UnLockTables();
@@ -3016,6 +3094,8 @@ sub Stop($$;$)
     # Clear last error.
     $self->ClearBootFailure();
     $self->SetErrorLog("");    
+    # Set new status so ComputeState() knows what is going on.
+    $self->SetStatus("working");
 
     my $experiment = Experiment->Lookup($self->slice_uuid());
     if (!defined($experiment)) {
@@ -3138,10 +3218,18 @@ sub Stop($$;$)
 	$msg .= "Failed to stop the event system";
 	goto bad;
     }
+    # Flip back to mixed to allow ComputeState to do its thing. 
+    $self->SetStatus("mixed");
+    $self->ComputeState();
     return 0;
 
   bad:
     $self->SetBootFailure();
+    if ($self->status() eq "working") {
+	# Flip back to mixed to allow ComputeState to do its thing. 
+	$self->SetStatus("mixed");
+	$self->ComputeState();
+    }
     if (defined($msg)) {
 	$self->SetErrorLog($msg);
 	print STDERR "$msg\n";
@@ -3189,12 +3277,16 @@ sub BatchAction($$@)
     my %starts  = ();
     my %poweron = ();
     my %states  = ();
+    my %switches= ();
     
     foreach my $sliver (@slivers) {
+	my $sliver_idx = $sliver->idx();
+	
 	next
 	    if (ref($sliver) ne "GeniSliver::Node" &&
 		ref($sliver) ne "GeniSliver::Vhost");
-	$states{"$sliver->idx()"} = $sliver->state();
+	
+	$states{"$sliver_idx"} = $sliver->state();
 
 	my $node = Node->Lookup($sliver->resource_id());
 	if (!defined($node)) {
@@ -3244,6 +3336,9 @@ sub BatchAction($$@)
 		    $reboots{$node_id} = $node;
 		}
 	    }
+	    if ($node->isswitch()) {
+		$switches{$node_id} = $node;
+	    }
 	}
 	else {
 	    $msg .= "$node is reserved to another, not $self";
@@ -3268,6 +3363,7 @@ sub BatchAction($$@)
     # We do this so the slivers no longer say "ready" in the status.
     foreach my $sliver (@slivers) {
 	$sliver->SetState("restarting");
+	$sliver->SetStatus("changing");
     }
     
     if ($reload) {
@@ -3276,7 +3372,14 @@ sub BatchAction($$@)
 	# Mark them as being reloaded See below.
 	map { $_->_reloaded(1) } values(%reloads);
 	
-	system("$OSLOAD -c -s @node_ids");
+	#
+	# XXX basically, tell devices that might be reconfig'd via push
+	# from us (like switches) that a reconfig should follow the reload!
+	# Do this in waitmode, since we have wrapper forked, and we want
+	# the output to go our log file. If we do it in the background,
+	# the log output goes to /dev/null.
+	#
+	system("$OSLOAD -R -d -c @node_ids");
 	if ($?) {
 	    $msg .= "OSload failed on @node_ids";
 	    goto bad;
@@ -3298,13 +3401,32 @@ sub BatchAction($$@)
     if (keys(%reboots)) {
 	my @node_ids = keys(%reboots);
 
-	# Mark them as being rebooted. See below.
-	map { $_->_rebooted(1) } values(%reboots);
+	#
+	# Need to cull out the switches and do them special, since we
+	# we do not have switch specific reboot in libreboot. Need to
+	# work on that at some point.
+	#
+	if (keys(%switches)) {
+	    @node_ids = map { exists($switches{$_}) ? () : $_ } @node_ids;
+	}
 
-	system("$NODEREBOOT @node_ids");
-	if ($?) {
-	    $msg .= "Failed to reboot @node_ids";
-	    goto bad;
+	if (@node_ids) {
+	    # Mark them as being rebooted. See below.
+	    map { $_->_rebooted(1) } values(%reboots);
+	
+	    system("$NODEREBOOT @node_ids");
+	    if ($?) {
+		$msg .= "Failed to reboot @node_ids";
+		goto bad;
+	    }
+	}
+	if (keys(%switches)) {
+	    if ($self->RebootSwitches(values(%switches))) {
+		my @ids = keys(%switches);
+		
+		$msg .= "Failed to reboot switches @ids";
+		goto bad;
+	    }
 	}
     }
     if (keys(%starts)) {
@@ -3331,9 +3453,12 @@ sub BatchAction($$@)
     return 0;
 
   bad:
+    # Revert the state to original.
     foreach my $sliver (@slivers) {
-	if (exists($states{$sliver->idx()})) {
-	    $sliver->SetState($states{$sliver->idx()});
+	my $sliver_idx = $sliver->idx();
+	
+	if (exists($states{"$sliver_idx"})) {
+	    $sliver->SetState($states{"$sliver_idx"});
 	}
     }
     if (defined($msg)) {
@@ -3458,8 +3583,29 @@ sub UnProvision($;$)
 	    next;
 	}
     }
+    # Process virtnodes on shared nodes first, as a group.
+    if (@shared) {
+	my $experiment = Experiment->Lookup($self->slice_uuid());
+	if (!defined($experiment)) {
+	    print STDERR "Could not map $self to its experiment\n";
+	    return 0;
+	}
+	my $pid = $experiment->pid();
+	my $eid = $experiment->eid();
+	my @ids = map { $_->resource_id() } @shared;
+
+	system("$VNODESETUP -j -q -m -k $pid $eid @ids");
+	if ($?) {
+	    print STDERR "$VNODESETUP -k failed on @ids\n";
+	    return -1;
+	}
+	# Mark as stopped to avoid duplicate work later.
+	foreach my $sliver (@shared) {
+	    $sliver->SetStatus("stopped");
+	}
+    }
     #
-    # Process the virtnodes first. If we are going to unprovision the
+    # Process the rest of the virtnodes. If we are going to unprovision the
     # physical node, then do not bother since they will all get zapped.
     #
     foreach my $pnode_id (keys(%vnodes)) {
@@ -3483,34 +3629,6 @@ sub UnProvision($;$)
 	    print STDERR "Could not unprovision $sliver in $self\n";
 	    $sliver->SetStatus("broken");
 	    next;
-	}
-    }
-    # Now do the shared nodes in a group.
-    if (@shared) {
-	my $experiment = Experiment->Lookup($self->slice_uuid());
-	if (!defined($experiment)) {
-	    print STDERR "Could not map $self to its experiment\n";
-	    return 0;
-	}
-	my $pid = $experiment->pid();
-	my $eid = $experiment->eid();
-	my @ids = map { $_->resource_id() } @shared;
-
-	system("$VNODESETUP -j -q -m -k $pid $eid @ids");
-	if ($?) {
-	    print STDERR "$VNODESETUP -k failed on @ids\n";
-	}
-	# Mark as stopped to avoid duplicate work later.
-	foreach my $sliver (@shared) {
-	    $sliver->SetStatus("stopped");
-	    #
-	    # Now we can unprovision, which will be much faster now.
-	    #
-	    if ($sliver->UnProvision($nophysfree) != 0) {
-		print STDERR "Could not unprovision $sliver in $self\n";
-		$sliver->SetStatus("broken");
-		next;
-	    }
 	}
     }
     return 0;
@@ -3663,6 +3781,8 @@ sub UpdateAccounts($$)
 	print STDERR "Could not get sliver list for $self\n";
 	return -1;
     }
+    my $marked = 0;
+    
     foreach my $sliver (@slivers) {
 	next
 	    if (ref($sliver) ne "GeniSliver::Node");
@@ -3673,13 +3793,22 @@ sub UpdateAccounts($$)
 		$node->erole() ne EmulabConstants::TBDB_RSRVROLE_NODE() ||
 		$node->op_mode() eq EmulabConstants::TBDB_NODESTATE_ALWAYSUP());
 
+	#
+	# Skip nodes that are not ready; we will just get stuck on them.
+	#
+	if (! ($sliver->status() eq "ready" && $sliver->state() eq "started")) {
+	    print STDERR "UpdateAccounts: Skipping sliver ".
+		$sliver->status() . "/" . $sliver->state() . "\n";
+	    next;
+	}
 	$node->MarkForUpdate();
+	$marked++;
 
 	if ($amapi) {
 	    $sliver->SetState("updating_users");
 	}
     }
-    if ($amapi) {
+    if ($amapi && $marked) {
 	$self->SetState("updating_users");
     }
     return 0;
@@ -3718,12 +3847,16 @@ sub CancelUpdateAccounts($)
 sub GenerateStatusBlob($)
 {
     my ($self) = @_;
+    my $slice = $self->GetSlice();
+    my $slice_experiment = $slice->GetExperiment();
 
     my $sliver_urn    = $self->sliver_urn();
     my $resource_id   = $self->resource_id();
     my $state         = $self->state();
     my $status        = $self->status();
     my $nickname      = $self->nickname() || "";
+    my $shutdown      = $slice->isshutdown();
+    my $paniced       = $slice_experiment->paniced();
 
     # New is the same as stopped. Separate state is handy.
     $state = "stopped"
@@ -3736,8 +3869,32 @@ sub GenerateStatusBlob($)
 	"status"        => $status,
 	"error"         => "",
 	"utc"           => time(),
+	"shutdown"      => $shutdown,
+	"paniced"       => $paniced,
     };
     return $blob;
+}
+
+#
+# Reboot switches. This is messy until we get libreboot recast into
+# type specific modules.
+#
+sub RebootSwitches($@)
+{
+    my ($self, @switches) = @_;
+    require libosload_switch;
+
+    foreach my $switch (@switches) {
+	my $object = libosload_new->New();
+	my $typeobj = $object->NewType($switch->type());
+	$object->debug(1);
+
+	if ($typeobj->RebootWait($switch) != 0) {
+	    print STDERR "RebootNOS of switch $switch failed\n";
+	    return -1;
+	}
+    }
+    return 0;
 }
 
 ############################################################################

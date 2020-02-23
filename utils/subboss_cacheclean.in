@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2016 University of Utah and the Flux Group.
+# Copyright (c) 2016-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,7 +46,7 @@ my $TARGET_SIZE	= 750;
 # time) for an image to keep around. Anything older is pruned.
 # Default: about a year ago.
 #
-my $TARGET_DATE	= "2015-01-01";
+my $TARGET_DATE	= "2019-01-01";
 
 #
 # When targetting recent use, this is the window (from now, measured in days)
@@ -58,7 +58,7 @@ my $TARGET_LAST	= 180;
 
 sub usage()
 {
-    print STDERR "Usage: subboss_cacheclean <criteria> [-dn] cachedir\n";
+    print STDERR "Usage: subboss_cacheclean <criteria> [-dn] [-s style] cachedir\n";
     print STDERR "where <criteria> should be one of:\n";
     print STDERR "  -S size   reduce to no more than <size> GiB of images,\n";
     print STDERR "            or '-' for default ($TARGET_SIZE)\n";
@@ -70,12 +70,18 @@ sub usage()
     print STDERR "  -I        remove images for inactive projects\n";
     print STDERR "  -N        remove non-images (files downloaded via absolute paths)\n";
 
+    print STDERR "options:\n";
+    print STDERR "  -d        show debugging messages\n";
+    print STDERR "  -n        show what would be done but do not do it\n";
+    print STDERR "  -s style  style of cachedir, either 'subboss' (default) or 'geni'\n";
+
     exit(-1);
 }
 
-my $optlist = "dnS:D:L:VIN";
+my $optlist = "dns:S:D:L:VIN";
 my $debug   = 0;
 my $impotent= 0;
+my $style   = "subboss";
 my $cachedir;
 my $target_size;
 my $target_time;
@@ -106,6 +112,14 @@ if (defined($options{"d"})) {
 }
 if (defined($options{"n"})) {
     $impotent = 1;
+}
+if (defined($options{"s"})) {
+    if ($options{"s"} =~ /^(subboss|geni)$/) {
+	$style = $1;
+    } else {
+	print STDERR "Invalid style, must be 'subboss' or 'geni'.\n";
+	usage();
+    }
 }
 if (defined($options{"S"})) {
     $target_size = $options{"S"};
@@ -299,9 +313,10 @@ sub find_images($$)
 	}
 
 	#
-	# See if it is a ,sig file for a known image
+	# See if it is a signature file for a known image
 	#
-	if ($path =~ /^(.*),sig$/) {
+	if ($style eq "subboss" && $path =~ /^(.*),sig$/ ||
+	    $style eq "geni" && $path =~ /^(.*)\.sig$/) {
 	    my $ifile = $1;
 	    my (undef,$iino) = stat($ifile);
 	    if ($iino && exists($images{$iino})) {
@@ -312,8 +327,22 @@ sub find_images($$)
 	}
 
 	#
-	# XXX we cache images fetched by pathname as well as imageid,
-	# so we attempt to identify those here.
+	# Of if it is a SHA1 hash file for a known image.
+	#
+	if ($style eq "geni" && $path =~ /^(.*)\.sha1$/) {
+	    my $hfile = $1;
+	    $hfile .= "$2" if defined($2);
+	    my (undef,$hino) = stat($hfile);
+	    if ($hino && exists($images{$hino})) {
+		print STDERR "$path: SHA1 file for '$hfile'\n" if ($debug);
+		$images{$hino}{'shafile'} = $path;
+		next;
+	    }
+	}
+
+	#
+	# XXX On subbosses, we cache images fetched by pathname as well as
+	# imageid, so we attempt to identify those here.
 	#
 	my $iname = $path;
 	$iname =~ s/^$cachedir//;
@@ -561,6 +590,17 @@ sub remove_image($;$)
 	if ($reason) {
 	    print " ($reason)";
 	}
+	my $aux = "";
+	if (exists($images{$ino}{'sigfile'})) {
+	    $aux .= "sig";
+	}
+	if (exists($images{$ino}{'shafile'})) {
+	    $aux .= "/" if ($aux);
+	    $aux .= "sha1";
+	}
+	if ($aux) {
+	    print " along with $aux file";
+	}
 	print "...\n";
 	return 0;
     }
@@ -582,6 +622,12 @@ sub remove_image($;$)
 	    return 1;
 	}
     }
+    if (exists($images{$ino}{'shafile'})) {
+	if (unlink($images{$ino}{'shafile'}) != 1) {
+	    print STDERR "Could not remove SHA1 file '", $images{$ino}{'shafile'}, "'\n";
+	    return 1;
+	}
+    }
 
     return 0;
 }
@@ -598,7 +644,7 @@ sub stringify_image($)
     } else {
 	shift @names;
     }
-    my $str = "$ino $name [atime=$atime size=$size";
+    my $str = "$name [ino=$ino atime=$atime size=$size";
     if (@names > 0) {
 	$str .= " aliases=" . join(',', @names) . "]";
     }

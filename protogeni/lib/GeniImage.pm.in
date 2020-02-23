@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -46,6 +46,8 @@ use GeniHRN;
 use Genixmlrpc;
 use GeniResponse;
 use GeniUtil;
+use EmulabConstants;
+use emdb qw();
 use OSImage;
 use Image; # For datasets.
 use emutil;
@@ -53,6 +55,7 @@ use Node;
 use English;
 use Data::Dumper;
 use Date::Parse;
+use URI::Escape;
 use overload ('""' => 'Stringify');
 
 # Configure variables
@@ -63,11 +66,14 @@ my $TBAUDIT   	   = "@TBAUDITEMAIL@";
 my $BOSSNODE       = "@BOSSNODE@";
 my $OURDOMAIN      = "@OURDOMAIN@";
 my $PGENIDOMAIN    = "@PROTOGENI_DOMAIN@";
-my $PROTOGENI_LOCALUSER = @PROTOGENI_LOCALUSER@;
+my $PGLOCALUSER    = @PROTOGENI_LOCALUSER@;
 my $IMSURL         = "https://www.emulab.net:12369/protogeni/xmlrpc/ims";
 my $CLIENTVERS     = 1;
 my $IMPORTER       = "$TB/sbin/image_import";
 my $GRANTIMAGE     = "$TB/sbin/grantimage";
+my $WGET	   = "/usr/local/bin/wget";
+my $DD             = "/bin/dd";
+
 if (0) {
     $IMSURL = "https://www.emulab.net:12369/protogeni/stoller/xmlrpc/ims";
 }
@@ -126,10 +132,15 @@ sub GetImageData($;$)
     }
     my $key = (GeniHRN::IsValid($token) ? "urn" : "url");
 
+    # Do not wait long.
+    my $old_timeout = Genixmlrpc->SetTimeout(30);
+
     my $response =
 	Genixmlrpc::CallMethod($IMSURL, undef, "GetImageInfo",
 			       {"credential" => $credential->asString(),
-				$key         => $token});
+				    $key         => $token});
+    
+    Genixmlrpc->SetTimeout($old_timeout);
     
     if (!defined($response) || $response->code()) {
 	my $msg = "GetImageInfo failed for $token:";
@@ -260,72 +271,279 @@ sub PostImageData($;$)
 }
 
 #
-# Map a URN to a local image. We do this by asking the tracker for
-# the image info, then looking to see if we have that image locally,
-# via the image URL.
+# Cache for image server info, to avoid repeated calls for same image.
+#
+my %localblobcache = ();
+
+#
+# Map a URN to a local image. First look locally for the image,
+# If we do not have it, then us the image tracker to get the
+# download info, and try to import it. 
 #
 # I think that we eventually want to stop using the metadata url as
 # the lookup token, and switch to recording the URN of the origin image.
 # For one, this will avoid call backs to the image tracker server.
 #
-# If we do not have a local copy, try to load it using the URL.
-#
-# Cache just for this, to avoid repeated calls for same image.
-#
-my %localblobcache = ();
-
-sub MapToLocalImage($$)
+sub MapToLocalImage($$$$@)
 {
-    my ($urn, $pid) = @_;
-    my $hrn = GeniHRN->new($urn);
-    my $blob;
-
-    if (exists($localblobcache{$urn})) {
-	$blob = $localblobcache{$urn};
-    }
-    else {
-	$blob = GetImageData($urn);
-	return $blob
-	    if (GeniResponse::IsError($blob));
-	$localblobcache{$urn} = $blob;
-    }
-    my $url = $blob->{'metadata_url'};
-    if (!defined($url)) {
-	print STDERR "No metadata url in info returned from image server.\n";
-	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
-				    "No url for $urn at the image server");
-    }
-
-    #print STDERR Dumper($blob);
+    my ($urn, $geniuser, $pid, $use_imagetracker, @credentials) = @_;
+    my $hrn    = GeniHRN->new($urn);
+    my $ospid  = $hrn->ospid();
+    my $osname = $hrn->osname();
+    my $osvers = $hrn->osvers();
+    my ($blob, $url);
 
     # The image might be version specific.
-    my ($ospid,$imagename,$version) = split("\/\/", $hrn->id());
-    if (defined($version) && $version !~ /^\d+$/) {
-	print STDERR "Bad version number in $urn\n";
-	return undef;
+    if (defined($osvers) && $osvers !~ /^\d+$/) {
+	return GeniResponse->BadArgsResponse("Bad version number in $urn");
     }
 
     #
-    # We used to handle this in the caller, but if a user wants a specific
-    # version of an imported image we already have locally, that version
-    # number almost certainly refers to the version history at the origin,
-    # not the local history which might not have all of the versions that
-    # are present at the origin. This is a flaw in the original design; we
-    # should have been synchronizing the image history. But at this point
-    # there is nothing we can do except hope that the local history has a
-    # version with the same hash as what the image server tells us.
+    # Short circuit some local cases. Permission checks will be handled later. 
     #
-    if (defined($version)) {
-	my $image = OSImage->Lookup($ospid, $imagename);
+    if ($ospid eq TBOPSPID()) {
+	my $image = OSImage->Lookup($ospid, $osname);
 	if (defined($image)) {
-	    my @allversions = ();
-	    if ($image->AllVersions(\@allversions) == 0) {
-		foreach my $im (@allversions) {
-		    if (defined($im->hash()) && exists($blob->{'sha1hash'}) &&
-			$im->hash() eq $blob->{'sha1hash'}) {
-			print STDERR "MapToLocalImage: Found local image $im\n";
-			return $im;
+	    if ($image->isImageAlias()) {
+		return $image
+		    if (!defined($osvers));
+
+		# Makes no sense to specify a version number on an alias.
+		return GeniResponse->BadArgsResponse(
+		    "Not allowed to use version numbers on $urn");
+	    }
+	    # Generic, MFS, etc.
+	    return $image
+		if (!$image->isImage());
+
+	    if ($image->global()) {
+		#
+		# If user wants latest version, we are good.
+		#
+		return $image
+		    if (!defined($osvers));
+
+		#
+		# If the image is local, then looking up the specific image
+		# version is all we need to do.
+		#
+		if ($image->IsLocal()) {
+		    $image = OSImage->Lookup($ospid, $osname, $osvers);
+		    if (!defined($image)) {
+			return GeniResponse->BadArgsResponse(
+			    "No such version number: $urn");
 		    }
+		    return $image;
+		}
+		#
+		# The only thing that makes sense is to use versions numbers
+		# relative to the home image, since the local versions numbers
+		# are not in sync. If we are using the image tracker, then
+		# we can get the hash and do a search using the hash (see
+		# below). If not using the image tracker, then throw an error.
+		#
+		if (!$use_imagetracker) {
+		    return GeniResponse->BadArgsResponse(
+			"Improper use of version number on ".
+			"imported system image: $urn");
+		}
+		# Fall through to below.
+	    }
+	    #
+	    # Not a global image so need a credential, we want to fall
+	    # through. But that will break on the case that the domain in
+	    # the image URN is wrong and using the image tracker. Will deal
+	    # with that later.
+	    #
+	}
+    }
+    
+    if ($use_imagetracker) {
+	if (exists($localblobcache{$urn})) {
+	    $blob = $localblobcache{$urn};
+	}
+	else {
+	    $blob = GetImageData($urn);
+	    return $blob
+		if (GeniResponse::IsError($blob));
+	    $localblobcache{$urn} = $blob;
+	}
+	#print STDERR Dumper($blob);
+
+	$url = $blob->{'metadata_url'};
+	if (!defined($url)) {
+	    print STDERR "No url in info returned from image server.\n";
+	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+					"No url for $urn at the image server");
+	}
+	$url =~ s/\/image/\/dev\/stoller\/image/ if ($usemydevtree);
+    }
+
+    #
+    # Some images cannot be transferred without a credential from the
+    # cluster where it lives. The Portal will have sent that along. A
+    # user can do this too, but I doubt it would ever happen (too much
+    # hassle). Anyway, this will be a delegated credential, to the
+    # local CM certificate. 
+    #
+    my $credential;
+    foreach my $cred (@credentials) {
+	next
+	    if (! ($cred->owner_urn() eq $ENV{'MYURN'} &&
+		   $cred->target_urn()->IsImage()));
+
+	# We do not have credentials for individual versions.
+	if ($cred->target_urn()->ospid() eq $hrn->ospid() &&
+	    $cred->target_urn()->osname() eq $hrn->osname()) {
+	    $credential = $cred;
+	    last;
+	}
+    }
+
+    # 
+    # Grant image permission as needed. Global images do not need
+    # extra permission, but otherwise we need a credential granting
+    # permission to download the image, thus we can grant permission
+    # to use that image (for the mapper and beyond).
+    #
+    my $setPerms = sub($) {
+	my ($image) = @_;
+	my $permerror = GeniResponse->BadArgsResponse(
+	    "Not allowed to use restricted image $urn");
+
+	#
+	# If no geniuser then doing a prestage, do not need to set permissions
+	# just mkaing sure the image exists or is being imported.
+	#
+	return $image
+	    if (!defined($geniuser));
+
+	#
+	# Check for existence of the image file, in case the user or us
+	# deleted it and we have to download it again. Note that if the
+	# image is gone at the source cluster, the user is screwed. Need
+	# to do this as root of course.
+	#
+	if ($image->isImage() && !$image->IsLocal() && $image->ready()) {
+	    my $SAVEUID = $UID;
+	    $UID = 0;
+	    if (! -e $image->FullImageFile()) {
+		$image->ClearReady();
+	    }
+	    $UID = $SAVEUID;
+	}
+	
+	return $image
+	    if ($image->global());
+
+	#
+	# If the image is not global and local, and no credential was
+	# provided, then do local checks to see if the user should be
+	# able to access the image. We have to keep in mind that the
+	# user might have been granted permission via a credential in
+	# a previous slice, but no longer has permission, so this
+	# check only makes sense when the image is local and the user
+	# is local.
+	#
+	if ($image->IsLocal() && !defined($credential)) {
+	    if ($geniuser->IsLocal() &&
+		$image->AccessCheck($geniuser->emulab_user(),
+				    TB_IMAGEID_READINFO)) {
+		return $image;
+	    }
+	}
+
+	#
+	# We better have a credential for this image. We do not check
+	# if the project is currently allowed to use the image, since
+	# we never actually revoke anything (a flaw in the design!).
+	# So if we do not get a credential, this user or project is no
+	# longer allowed to use the image.
+	#
+	return $permerror
+	    if (!defined($credential));
+
+	#
+	# Current project gets read access so it can use the image, down
+	# the road in the mapper and frisbee.
+	#
+	my $imageid = $image->imageid();
+	print STDERR "Granting read privs for $image to $pid/$pid\n";
+	GeniUtil::ExecuteAsGeniUser("$GRANTIMAGE -g $pid/$pid $imageid");
+	if ($?) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Error granting image permission");
+	}
+	# Set the credential for later download
+	$image->SetCredential($credential->asString())
+	    if (defined($credential));
+	
+	return $image;
+    };
+
+    # See if we have any version of this image.
+    my $image = OSImage->Lookup($ospid, $osname);
+    if (defined($image)) {
+	#
+	# If we have it and its local, then we are good unless the user
+	# wants a specific version that does not exist. 
+	#
+	if (!$image->isImageAlias() && $image->IsLocal()) {
+	    return &$setPerms($image)
+		if (!defined($osvers));
+
+	    $image = OSImage->Lookup($ospid, $osname, $osvers);
+	    return &$setPerms($image)
+		if (defined($image));
+
+	    return GeniResponse->BadArgsResponse("No version $osvers exists ".
+						 "for $urn");
+	}
+	if (!defined($osvers)) {
+	    return &$setPerms($image);
+	}
+	#
+	# If the user wants a specific version of an imported image we already
+	# have locally, that version number almost certainly refers to the
+	# version history at the origin, not the local history which might not
+	# have all of the versions that are present at the origin. This is a
+	# flaw in the original design; we should have been synchronizing the
+	# image history. But at this point there is nothing we can do except
+	# hope that the local history has a version with the same hash as what
+	# the image server tells us.
+	#
+	# If not using the image server, we cannot do this search, since we
+	# do not have a hash to compare.
+	#
+	if (defined($blob)) {
+	    my @allversions = ();
+	    #
+	    # This might be an image alias, and on this path it is okay to
+	    # look at all versions of all images to see if we can find one
+	    # with correct hash. Image alias does not export AllVersions,
+	    # cause that generally does not make sense, so we have to do
+	    # it specially here.
+	    #
+	    if ($image->isImageAlias()) {
+		my $coderef = sub {
+		    my $image = $_[0];
+		    my @tmp   = ();
+
+		    $image->AllVersions(\@tmp);
+		    push(@allversions, @tmp)
+			if (@tmp);
+		    return 0;
+		};
+		$image->ImageIterate($coderef);
+	    }
+	    else {
+		$image->AllVersions(\@allversions);
+	    }
+	    foreach my $im (@allversions) {
+		if (defined($im->hash()) && exists($blob->{'sha1hash'}) &&
+		    $im->hash() eq $blob->{'sha1hash'}) {
+		    print STDERR "MapToLocalImage: Found local image $im\n";
+		    return &$setPerms($im);
 		}
 	    }
 	}
@@ -342,8 +560,8 @@ sub MapToLocalImage($$)
     # We are looking for an image with the same name, but we verify with
     # the hash that is stored at the image server. 
     #
-    my $image = OSImage->Lookup($pid,$imagename);
-    if (defined($image)) {
+    $image = OSImage->Lookup($pid,$osname);
+    if (defined($image) && defined($blob)) {
 	#
 	# So, we might not have all the versions of the image, and in fact
 	# we might be out of sync with the origin (might change with delta
@@ -352,26 +570,34 @@ sub MapToLocalImage($$)
 	#
 	my @allversions = ();
 	if ($image->AllVersions(\@allversions)) {
-	    return undef;
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				"Could not get all versions for $image");
 	}
 	foreach my $im (@allversions) {
 	    if (defined($im->hash()) && exists($blob->{'sha1hash'}) &&
 		$im->hash() eq $blob->{'sha1hash'}) {
 		print STDERR "MapToLocalImage: Found local image $im\n";
-		return $im;
+		return &$setPerms($im);
 	    }
 	}
     }
+    #
+    # If not using the image tracker, we are done. 
+    #
+    return GeniResponse->BadArgsResponse("Unknown image URN: $urn")
+	if (!$use_imagetracker);
 
-    # Now look for the URL. It will be updated later if it needs to be.
+    #
+    # Now look for the URL. Note that URL is version specific, so if
+    # we find it, we know we have the image we want.
+    #
     $image = OSImage->LookupByURL($url);
     if (defined($image)) {
-	#
 	# Update this field.
-	#
 	$image->SetNoVersioning(!$blob->{'isversioned'});
-	return $image;
+	return &$setPerms($image);
     }
+    
     #
     # See if we have an image from the same "family" (same image uuid)
     # in the local GeniSlices project. If we do, we want to update that
@@ -399,7 +625,7 @@ sub MapToLocalImage($$)
 	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				"Could not lookup image after import: $url");
 	}
-	return $image;
+	return &$setPerms($image);
     }
     #
     # Well, the local shadow might have been created before the
@@ -422,17 +648,20 @@ sub MapToLocalImage($$)
     }
 
     #
-    # Try to import the descriptor. Since we are putting the image into
-    # the GeniSlices project, we must execute as the GeniUser. But
-    # when PROTOGENI_LOCALUSER=1, we might be running as the user
-    # creating the slice. All imported images are globally available,
-    # so makes no sense to put them into the project of the slice,
-    # and in fact, if someone else uses the image, the update check
-    # will fail unless we do it as the geniuser.
+    # Try to import the descriptor. Since we are putting the image into the
+    # GeniSlices project, we must execute as the GeniUser. But when
+    # PROTOGENI_LOCALUSER=1, we might be running as the user creating the
+    # slice. Putting them into GeniSlices allows anyone using the image
+    # to cause it to update if its out of date. 
     #
-    my $safe_url = GeniUtil::escapeshellarg($url);
-
-    GeniUtil::ExecuteAsGeniUser("$IMPORTER -d -p GeniSlices $safe_url");
+    my $command = "$IMPORTER -d -p GeniSlices ";
+    if ($credential) {
+	my $credname = $credential->WriteToFile();
+	$command .= " -C $credname ";
+    }
+    $command .= GeniUtil::escapeshellarg($url);
+    print STDERR "Running: '$command'\n";
+    GeniUtil::ExecuteAsGeniUser("$command");
     if ($?) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Image importer failure for $urn");
@@ -453,14 +682,15 @@ sub MapToLocalImage($$)
     if (!$blob->{'isversioned'}) {
 	$image->SetNoVersioning(1);
     }
-    return $image;
+    return &$setPerms($image);
 }
 
-sub MapToLocalDataset($$@)
+sub MapToLocalDataset($$$$@)
 {
-    my ($urn, $experiment, @credentials) = @_;
+    my ($urn, $geniuser, $experiment, $use_imagetracker, @credentials) = @_;
+    my $pid = $experiment->pid();
     $urn = GeniHRN->new($urn);
-    my $blob;
+    my ($blob, $url);
 
     #
     # Look for version;
@@ -470,37 +700,117 @@ sub MapToLocalDataset($$@)
 	return undef;
     }
 
-    if (exists($localblobcache{$urn})) {
-	$blob = $localblobcache{$urn};
-    }
-    else {
-	$blob = GetImageData($urn);
-	if (GeniResponse::IsError($blob)) {
-	    return $blob
-		if ($blob->{'code'} != GENIRESPONSE_SEARCHFAILED);
-
-	    ## Look for a pid, used to support this.
-	    my ($ignore,$id) = split("//", $urn->id());
-	    return $blob
-		if (!defined($id));
-	    $urn = GeniHRN::Generate($urn->authority(), $urn->type(), $id);
-	    $urn = GeniHRN->new($urn);
-						  
-	    $blob = GetImageData($urn);
-	    return $blob
-		if (GeniResponse::IsError($blob));
+    if ($use_imagetracker) {
+	if (exists($localblobcache{$urn})) {
+	    $blob = $localblobcache{$urn};
 	}
-	$localblobcache{$urn} = $blob;
+	else {
+	    $blob = GetImageData($urn);
+	    if (GeniResponse::IsError($blob)) {
+		return $blob
+		    if ($blob->{'code'} != GENIRESPONSE_SEARCHFAILED);
+
+		## Look for a pid, used to support this.
+		my ($ignore,$id) = split("//", $urn->id());
+		return $blob
+		    if (!defined($id));
+		$urn = GeniHRN::Generate($urn->authority(), $urn->type(), $id);
+		$urn = GeniHRN->new($urn);
+		
+		$blob = GetImageData($urn);
+		return $blob
+		    if (GeniResponse::IsError($blob));
+	    }
+	    $localblobcache{$urn} = $blob;
+	}
+	$url = $blob->{'metadata_url'};
+	if (!defined($url)) {
+	    print STDERR "No url in info returned from image server.\n";
+	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+					"No url for $urn at the image server");
+	}
+	$url =~ s/\/image/\/dev\/stoller\/image/ if ($usemydevtree);
     }
-    return $blob if (0);
-    my $url  = $blob->{'metadata_url'};
 
     #
-    # If the ID includes a project, strip it. We no longer
-    # put the project there, but old URNs might have it.
+    # Datasets cannot be transferred without a credential from the cluster
+    # where it lives. The portal will have sent that along. A user can do
+    # this too, but I doubt it would ever happen (too much hassle). Anyway,
+    # this will be a delegated credential, to the local CM certificate.
     #
-    my ($ignore,$id) = split("//", $urn->id());
-    $id = $ignore if (!defined($id));
+    my $credential;
+    foreach my $cred (@credentials) {
+
+	next
+	    if (! ($cred->owner_urn() eq $ENV{'MYURN'} &&
+		   $cred->target_urn()->IsDataset()));
+
+	# We do not have credentials for individual versions.
+	if ($cred->target_urn()->dsetpid() eq $urn->dsetpid() &&
+	    $cred->target_urn()->dsetname() eq $urn->dsetname()) {
+	    $credential = $cred;
+	    last;
+	}
+    }
+
+    # 
+    # Grant image permission as needed. Global images do not need
+    # extra permission, but otherwise we need a credential granting
+    # permission to download the image, thus we can grant permission
+    # to use that image (for the mapper and beyond).
+    #
+    my $setPerms = sub($) {
+	my ($image) = @_;
+	my $permerror = GeniResponse->BadArgsResponse(
+	    "Not allowed to use restricted image $urn");
+
+	return $image
+	    if ($image->global());
+
+	#
+	# If the image is not global and local, and no credential was
+	# provided, then do local checks to see if the user should be
+	# able to access the image. We have to keep in mind that the
+	# user might have been granted permission via a credential in
+	# a previous slice, but no longer has permission, so this
+	# check only makes sense when the image is local and the user
+	# is local.
+	#
+	if ($image->IsLocal() && !defined($credential)) {
+	    if ($geniuser->IsLocal() &&
+		$image->AccessCheck($geniuser->emulab_user(),
+				    TB_IMAGEID_READINFO)) {
+		return $image;
+	    }
+	}
+
+	#
+	# We better have a credential for this image. We do not check
+	# if the project is currently allowed to use the image, since
+	# we never actually revoke anything (a flaw in the design!).
+	# So if we do not get a credential, this user or project is no
+	# longer allowed to use the image.
+	#
+	return $permerror
+	    if (!defined($credential));
+
+	#
+	# Current project gets read access so it can use the image, down
+	# the road in the mapper and frisbee.
+	#
+	my $imageid = $image->imageid();
+	print STDERR "Granting read privs for $image to $pid/$pid\n";
+	GeniUtil::ExecuteAsGeniUser("$GRANTIMAGE -g $pid/$pid $imageid");
+	if ($?) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Error granting image permission");
+	}
+	# Set the credential for later download
+	$image->SetCredential($credential->asString())
+	    if (defined($credential));
+	
+	return $image;
+    };
 
     #
     # Use the project from the URN for lookup, to make sure we get
@@ -508,16 +818,40 @@ sub MapToLocalDataset($$@)
     # project.  If it is not local we will import and grant permission
     # to the the argument pid (the slice experiment project).
     # 
-    my $image = Image->Lookup($urn->project(), $id);
-    # Standard image permissions apply since its a local dataset.
-    return $image
+    my $image = Image->Lookup($urn->dsetpid(), $urn->dsetname());
+    return &$setPerms($image)
 	if (defined($image));
+
+    #
+    # So, look to see if the user is trying to use an image that is
+    # present in the current project. This will happen if after an import
+    # the user takes a snapshot, then uses it again on the local cluster.
+    # We can avoid the re-importation of the image into GeniSlices, although
+    # if a user in a different project tries to use the newer version of
+    # the image, we will still end up doing an import into GeniSlices.
+    #
+    # We are looking for an image with the same name, but we verify with
+    # the hash that is stored at the image server. 
+    #
+    $image = Image->Lookup($pid,$urn->dsetname());
+    if (defined($image) && 
+	$image->hash() eq $blob->{'sha1hash'}) {
+	print STDERR "MapToLocalDataset: Found local image $image\n";
+	return &$setPerms($image);
+    }
+
+    #
+    # If not using the image tracker, we are done. 
+    #
+    return GeniResponse->BadArgsResponse("Unknown image URN: $urn")
+	if (!$use_imagetracker);
 
     # Now look by URL, which means we already have it imported.
     $image = Image->LookupByURL($url);
     if (defined($image)) {
-	goto doperms;
+	return &$setPerms($image);
     }
+    
     #
     # Alternately, look for the image family We do not version datasets
     # locally, but this will avoid creating a newly named version of the
@@ -526,11 +860,18 @@ sub MapToLocalDataset($$@)
     #
     $image = Image->LookupByOriginUUID("GeniSlices", $blob->{'image_uuid'});
     if (defined($image)) {
+	my $command = "$IMPORTER -d -r ";
+	if ($credential) {
+	    my $credname = $credential->WriteToFile();
+	    $command .= " -C $credname ";
+	}
+	$command .= $image->imageid();
+	print STDERR "Running '$command'\n";
 	#
 	# Invoke the importer to update our shadow of the origin,
 	# so that we have the correct image descriptor to return.
 	#
-	GeniUtil::ExecuteAsGeniUser("$IMPORTER -d -r ". $image->imageid());
+	GeniUtil::ExecuteAsGeniUser($command);
 	if ($?) {
 	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Image importer failure for $urn");
@@ -541,7 +882,7 @@ sub MapToLocalDataset($$@)
 	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				"Could not lookup image after import: $url");
 	}
-	goto doperms;
+	return &$setPerms($image);
     }
 
     #
@@ -560,24 +901,15 @@ sub MapToLocalDataset($$@)
     # as the GeniUser. But when PROTOGENI_LOCALUSER=1, we might be
     # running as the user creating the slice, so have to flip. 
     #
-    my $safe_url = GeniUtil::escapeshellarg($url);
-
-    #
-    # Datasets cannot be transferred without a credential from the cluster
-    # where it lives. The portal will have sent that along. A user can do
-    # this too, but I doubt it would ever happen (too much hassle). Anyway,
-    # this will be a delegated credential, to the local CM certificate.
-    # Note that we do not (yet) need the credential for the importer here
-    # creating the image desciptor, not downloading it.
-    #
-    my $credential;
-    foreach my $cred (@credentials) {
-	if ($cred->target_urn() eq $urn && $cred->owner_urn() eq $ENV{'MYURN'}){
-	    $credential = $cred;
-	    last;
-	}
+    my $command = "$IMPORTER -d -p GeniSlices ";
+    if ($credential) {
+	my $credname = $credential->WriteToFile();
+	$command .= " -C $credname ";
     }
-    GeniUtil::ExecuteAsGeniUser("$IMPORTER -d -p GeniSlices $safe_url");
+    $command .= GeniUtil::escapeshellarg($url);
+    print STDERR "Running '$command'\n";
+
+    GeniUtil::ExecuteAsGeniUser($command);
     if ($?) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Image importer failure for $urn");
@@ -590,23 +922,7 @@ sub MapToLocalDataset($$@)
     }
     # No versioning on copies of datasets. 
     $image->SetNoVersioning(1);
-    # and the credential for later download
-    $image->SetCredential($credential->asString())
-	if (defined($credential));
-
-  doperms:
-    my $imageid = $image->imageid();
-    #
-    # Deal with permission as discussed above. Current project gets read
-    # access so it can use the dataset.
-    #
-    if (!$image->global()) {
-	my $pid = $experiment->pid();
-
-	print STDERR "Granting read privs for $image to $pid/$pid\n";
-	GeniUtil::ExecuteAsGeniUser("$GRANTIMAGE -g $pid/$pid $imageid");
-    }
-    return $image;
+    return &$setPerms($image);
 }
 
 #
@@ -682,13 +998,22 @@ sub TriggerUpdate($$)
     };
 
     #
-    # For datasets, we have to send along a credential so the origin can
-    # securely download the image filefrom us.
+    # For datasets or restricted images, we have to send along a
+    # credential so the origin can securely download the image
+    # file from us.
     #
     if ($image->isdataset()) {
 	my $credential = CreateDatasetCredential($image, $authority);
 	if (!defined($credential)) {
 	    $$pmsg = "Could not create credential for dataset image";
+	    return -1;
+	}
+	$blob->{"credential"} = $credential->asString();
+    }
+    elsif (! $image->global()) {
+	my $credential = CreateImageCredential($image, $authority);
+	if (!defined($credential)) {
+	    $$pmsg = "Could not create credential for image";
 	    return -1;
 	}
 	$blob->{"credential"} = $credential->asString();
@@ -754,7 +1079,7 @@ sub TriggerUpdate($$)
 }
 
 #
-# A credential that gives the target permission to access the local image,
+# A credential that gives the target permission to access the local dataset,
 # as for secure image download.
 #
 sub CreateDatasetCredential($$)
@@ -770,14 +1095,12 @@ sub CreateDatasetCredential($$)
     }
     else {
 	$id = $object->imagename();
-	$uuid = $object->uuid();
+	$uuid = $object->image_uuid();
     }
     my $certificate = GeniCertificate->Lookup($uuid);
     if (defined($certificate)) {
 	# Kill stale certificate, we just need it to generate this credential,
-	# but do not want to save it. At least not until we start using
-	# version numbers in dataset URNs. For now, we need this certificate
-	# to refer to this image version. Revisit later.
+	# but do not want to save it. 
 	$certificate->Delete();
 	$certificate = undef;
     }
@@ -795,7 +1118,11 @@ sub CreateDatasetCredential($$)
 	$certificate->Delete();
 	return undef;
     }
-    $credential->SetExpiration(str2time($certificate->enddate()));
+    #
+    # XXX Need to deal with proper expiration times. For now, we use
+    # a short lived credential to grant access for the current operation.
+    #
+    $credential->SetExpiration(time() + (24 * 3600));
     if ($credential->Sign($GeniCredential::LOCALCM_FLAG) != 0) {
 	$credential->Delete();
 	$certificate->Delete();
@@ -804,6 +1131,134 @@ sub CreateDatasetCredential($$)
     }
     $certificate->Delete();
     return $credential;
+}
+
+#
+# Very similar to above, but for plain images, the credential always
+# refers to the entire image, not going to bother with credentials for
+# specific versions. The caller will need to supply the version specific
+# URN as an argument.
+#
+sub CreateImageCredential($$)
+{
+    my ($image, $target) = @_;
+    my $urn  = $image->urn();
+    my $pid  = $image->pid();
+    my $id   = $image->imagename();
+    my $uuid = $image->image_uuid();
+    
+    my $certificate = GeniCertificate->Lookup($uuid);
+    if (defined($certificate)) {
+	# Kill stale certificate, we just need it to generate this credential,
+	# but do not want to save it. 
+	$certificate->Delete();
+	$certificate = undef;
+    }
+    if (!defined($certificate)) {
+	$certificate =
+	    GeniCertificate->Create({"urn"   => $urn,
+				     "uuid"  => $uuid,
+				     "email" => "$TBOPS",
+				     "hrn"   => "$OURDOMAIN.$pid.$id"});
+	return undef
+	    if (!defined($certificate));
+    }
+    my $credential = GeniCredential->Create($certificate, $target);
+    if (!defined($credential)) {
+	print STDERR "Could not create new credential object\n";
+	$certificate->Delete();
+	return undef;
+    }
+    #
+    # XXX Need to deal with proper expiration times. For now, we use
+    # a short lived credential to grant access for the current operation.
+    #
+    $credential->SetExpiration(time() + (24 * 3600));
+    if ($credential->Sign($GeniCredential::LOCALCM_FLAG) != 0) {
+	$credential->Delete();
+	$certificate->Delete();
+	print STDERR "Could not sign credential for $certificate\n";
+	return undef;
+    }
+    $certificate->Delete();
+    return $credential;
+}
+
+#
+# Convert a local image to an imported image. Need to get the metadata
+# so we have all the info.
+#
+sub ConvertToImported($$)
+{
+    my ($image, $remote_urn) = @_;
+    my $xml = "";
+    require XML::Simple;
+
+    my $old_timeout = Genixmlrpc->SetTimeout(10);
+    my $blob = GeniImage::GetImageData($remote_urn);
+    Genixmlrpc->SetTimeout($old_timeout);
+
+    # The error does not matter.
+    return -1
+	if (GeniResponse::IsError($blob));
+
+    #
+    # The image server has it, so now we can make the local image look
+    # like it is imported from the remote cluster.
+    #
+    my $metadata_url = $blob->{'metadata_url'};
+
+    #
+    # This is copied out of image_import ... 
+    #
+    my $METADATA_CLIENTVERSION = 4;
+    
+    $metadata_url .= "&clientversion=" . $METADATA_CLIENTVERSION;
+    my $safe_url = emutil::escapeshellarg($metadata_url);
+    my $cmd  = "$WGET -q --no-check-certificate -O - $safe_url ";
+    # Avoid bogus URLs that download a giant file.
+    $cmd .= "| $DD 2>/dev/null bs=1 count=5k ";
+
+    print STDERR "Running '$cmd'\n";
+
+    if (open(META, "$cmd |")) {
+	while (<META>) {
+	    $xml .= $_;
+	}
+	if (!close(META)) {
+	    print STDERR "Could not read metadata from $metadata_url\n";
+	    return -1;
+	}
+    }
+    else {
+	print STDERR "Could not access $metadata_url\n";
+	return -1;
+    }
+    if ($xml eq "") {
+	print STDERR "No metadata returned from $metadata_url\n";
+	return -1;
+    }
+    my $xmlparse = eval { XML::Simple::XMLin($xml,
+					     VarAttr => 'name',
+					     ContentKey => '-content',
+					     SuppressEmpty => undef); };
+    if ($@) {
+	print STDERR $xml . "\n";
+	print STDERR "$@ \n";
+	return -1;
+    }
+    my $metadata = {};
+    foreach my $key (keys(%{ $xmlparse->{'attribute'} })) {
+	my $value = $xmlparse->{'attribute'}->{"$key"}->{'value'};
+	$metadata->{$key} = $value;
+    }
+    $metadata->{'metadata_url'} = $metadata_url;
+    print STDERR Dumper($metadata);
+    
+    if ($image->ConvertToImported($metadata)) {
+	return -1;
+    }
+    return 0;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

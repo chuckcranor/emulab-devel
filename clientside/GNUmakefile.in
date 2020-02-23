@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -31,12 +31,15 @@ REL	       := $(shell $(SRCDIR)/tmcc/osstuff.sh -r)
 
 include $(OBJDIR)/Makeconf
 
-SUBDIRS         = lib tools os sensors protogeni
+SUBDIRS         = lib tools os sensors protogeni xmlrpc
 ifneq ($(EVENTSYS),0)
 SUBDIRS += event
 endif
 ifeq ($(MOBILESUPPORT),1)
 SUBDIRS += mobile
+endif
+ifneq ($(SYSTEM),CYGWIN_NT-5.1)
+SUBDIRS += tip
 endif
 # tmcc should be last as the freenas* install targets mess with the hierarchy
 SUBDIRS += tmcc
@@ -62,6 +65,26 @@ subboss-install: client client-mkdirs subboss-install-subdirs
 post-install:	post-install-subdirs
 clean:		clean-subdirs
 distclean:	distclean-subdirs
+
+onie-dongle:
+	$(MAKE) -C lib onie-dongle
+	$(MAKE) -C os onie-dongle
+	$(MAKE) -C tmcc onie-dongle
+
+onie-dongle-install: onie-dongle
+	$(MAKE) -C lib onie-dongle-install
+	$(MAKE) -C os onie-dongle-install
+	$(MAKE) -C tmcc onie-dongle-install
+
+rack-control:
+	$(MAKE) -C lib rack-control
+	$(MAKE) -C os rack-control
+	$(MAKE) -C tip rack-control
+
+rack-control-install: rack-control
+	$(MAKE) -C lib rack-control-install
+	$(MAKE) -C os rack-control-install
+	$(MAKE) -C tip rack-control-install
 
 destdircheck:
 	@if [ -z "$(DESTDIR)" ]; then \
@@ -101,6 +124,13 @@ tarball-check:
 client-tarball: tarball-check
 	echo "Building and installing client-side in $(TARBALLDESTDIR)..."
 	DESTDIR=$(TARBALLDESTDIR) $(MAKE) client-install
+	echo "Creating tarball..."
+	tar czf emulab-client.tar.gz -C $(TARBALLDESTDIR) .
+
+xen-client-tarball: tarball-check
+	echo "Building and installing client-side in $(TARBALLDESTDIR)..."
+	DESTDIR=$(TARBALLDESTDIR) $(MAKE) client-install
+	DESTDIR=$(TARBALLDESTDIR) $(MAKE) -C tmcc/linux xen-install
 	echo "Creating tarball..."
 	tar czf emulab-client.tar.gz -C $(TARBALLDESTDIR) .
 

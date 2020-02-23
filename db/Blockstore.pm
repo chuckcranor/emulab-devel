@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2012-2017 University of Utah and the Flux Group.
+# Copyright (c) 2012-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -903,7 +903,8 @@ sub Release($)
     # of the lease.
     #
     # XXX currently, we also create a new snapshot of the blockstore
-    # if the blockstore is marked as "multiuse" and is mapped RW.
+    # if the blockstore is marked as "multiuse" and is mapped RW and
+    # not a clone.
     #
     if ($lease_idx != 0) {
 	require Lease;
@@ -911,7 +912,8 @@ sub Release($)
 	my $lease = Lease->Lookup($lease_idx);
 	if ($lease) {
 	    $lease->BumpLastUsed();
-	    if (!$lease->IsExclusiveUse() && !$self->IsReadOnly() &&
+	    if (!$lease->IsExclusiveUse() &&
+		!$self->IsReadOnly() && !$self->IsRWClone() &&
 		$lease->CreateResourceSnapshot(1)) {
 		print STDERR "Blockstore->Release: ".
 		    "Could not create snapshot for $bsidx ($lease); ".

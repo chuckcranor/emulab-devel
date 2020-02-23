@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,15 +28,16 @@ use Exporter;
 @ISA    = "Exporter";
 @EXPORT = qw( makeIfaceMaps makeBridgeMaps makeMacvlanMaps
 	      findControlNet existsIface findIface findMac getIfaceInfo
-	      existsBridge findBridge findBridgeIfaces
+	      getIfaceInfoNoCache existsBridge findBridge findBridgeIfaces
               existsMacvlanParent findMacvlanParent findMacvlanIfaces
               downloadImage getKernelVersion createExtraFS
               forwardPort removePortForward lvSize lvExists
               DoIPtables DoIPtablesNoFail
-              restartDHCP computeStripeSize
+              restartDHCP reconfigDHCP computeStripeSize
             );
 
 use Data::Dumper;
+BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
 use libutil;
 use libgenvnode;
 use libsetup;
@@ -48,6 +49,7 @@ use libtestbed;
 my $PCNET_IP_FILE   = "/var/emulab/boot/myip";
 my $PCNET_MASK_FILE = "/var/emulab/boot/mynetmask";
 my $PCNET_GW_FILE   = "/var/emulab/boot/routerip";
+my $VIFROUTING      = ((-e "$ETCDIR/xenvifrouting") ? 1 : 0);
 
 # Other local constants
 my $IPTABLES   = "/sbin/iptables";
@@ -475,47 +477,19 @@ sub makeIfaceMaps()
 	# open.  The only reason we'll fail to open here is if the device
 	# has gone away after the initial dir listing.
 	#
-	open(FD,"/sys/class/net/$iface/address") 
-	    or next;
-	my $mac = <FD>;
-	close(FD);
-	next if (!defined($mac) || $mac eq '');
-
-	$mac =~ s/://g;
-	chomp($mac);
-	$mac = lc($mac);
+	my $ifinfo = getIfaceInfoNoCache($iface);
+	next
+	    if (!defined($ifinfo));
+	my ($mac,$ip) = ($ifinfo->{'mac'},$ifinfo->{'ip'});
+	$if2info{$iface} = $ifinfo;
 	$if2mac{$iface} = $mac;
 	$mac2if{$mac} = $iface;
-	$if2info{$iface} = { 'mac' => $mac, 'iface' => $iface };
-
-	# also find ip, ugh
-	my $pip = `ip addr show dev $iface | grep 'inet '`;
-	chomp($pip);
-	if ($pip =~ /^\s+inet\s+(\d+\.\d+\.\d+\.\d+)\/(\d+)/) {
-	    my $ip = $1;
-	    $ip2if{$ip} = $iface;
-	    my @ip = split(/\./,$ip);
-	    my $bits = int($2);
-	    my @netmask = (0,0,0,0);
-	    my ($idx,$counter) = (0,8);
-	    for (my $i = $bits; $i > 0; --$i) {
-		--$counter;
-		$netmask[$idx] += 2 ** $counter;
-		if ($counter == 0) {
-		    $counter = 8;
-		    ++$idx;
-		}
-	    }
-	    my @network = ($ip[0] & $netmask[0],$ip[1] & $netmask[1],
-			   $ip[2] & $netmask[2],$ip[3] & $netmask[3]);
-	    $ip2net{$ip} = join('.',@network);
-	    $ip2mask{$ip} = join('.',@netmask);
-	    $ip2maskbits{$ip} = $bits;
-
-	    $if2info{$iface}->{'ip'} = $ip;
-	    $if2info{$iface}->{'network'} = $ip2net{$ip};
-	    $if2info{$iface}->{'mask'} = $ip2mask{$ip};
-	    $if2info{$iface}->{'maskbits'} = $ip2maskbits{$ip};
+	# If the 'ip' key isn't set, none of this stuff will be there;
+	# for interfaces that have no IP.
+	if (defined($ip)) {
+	    $ip2net{$ip} = $ifinfo->{'network'};
+	    $ip2mask{$ip} = $ifinfo->{'mask'};
+	    $ip2maskbits{$ip} = $ifinfo->{'maskbits'};
 	}
     }
 
@@ -575,6 +549,58 @@ sub findIface($) {
         if (exists($mac2if{$mac}));
 
     return undef;
+}
+
+sub getIfaceInfoNoCache($) {
+    my ($iface) = @_;
+    my $ret = {};
+
+    open(FD,"/sys/class/net/$iface/address") 
+	or return undef;
+    my $mac = <FD>;
+    close(FD);
+    return undef
+	if (!defined($mac) || $mac eq '');
+
+    $mac =~ s/://g;
+    chomp($mac);
+    $mac = lc($mac);
+    $ret = { 'mac' => $mac, 'iface' => $iface };
+
+    # We do not care about any of the stuff below for our bridges, and
+    # on a shared node this was taking 60 seconds every time we called
+    # makeIfaceMaps(), which we do a lot, plus we now call it from
+    # emulab-cnet when containers are booting or shutting down.
+    return $ret
+	if ($iface =~ /^br\d+$/);
+
+    # Find IP info
+    my $pip = `ip addr show dev $iface | grep 'inet '`;
+    chomp($pip);
+    if ($pip =~ /^\s+inet\s+(\d+\.\d+\.\d+\.\d+)\/(\d+)/) {
+	my $ip = $1;
+	$ip2if{$ip} = $iface;
+	my @ip = split(/\./,$ip);
+	my $bits = int($2);
+	my @netmask = (0,0,0,0);
+	my ($idx,$counter) = (0,8);
+	for (my $i = $bits; $i > 0; --$i) {
+	    --$counter;
+	    $netmask[$idx] += 2 ** $counter;
+	    if ($counter == 0) {
+		$counter = 8;
+		++$idx;
+	    }
+	}
+	my @network = ($ip[0] & $netmask[0],$ip[1] & $netmask[1],
+		       $ip[2] & $netmask[2],$ip[3] & $netmask[3]);
+	$ret->{'network'} = join('.',@network);
+	$ret->{'mask'} = join('.',@netmask);
+	$ret->{'maskbits'} = $bits;
+	$ret->{'ip'} = $ip;
+    }
+
+    return $ret;
 }
 
 #
@@ -903,11 +929,61 @@ sub lvSize($)
     return $lv_size;
 }
 
+#
+# Reset the list of interfaces that DHCPD should listen on.
+#
+sub reconfigDHCP()
+{
+    my @vifs = "";
+    my $defaults = '/etc/default/isc-dhcp-server';
+
+    if ($VIFROUTING) {
+	#
+	# We want to set the list of vifs that dhcpd listens on, since if
+	# there are too many VMs coming and going, it can take a long time
+	# for dhcpd to process all the virtual interfaces that exist
+	# (like ifbs, veths, bridges, etc) that it does not care about
+	# cause they are down or otherwise. So figure out the vif list
+	# and write that into the /etc/defaults.
+	#
+	my $devdir = '/sys/class/net';
+	if (!opendir(SD,$devdir)) {
+	    print STDERR "Could not find $devdir!\n";
+	    return -1;
+	}
+	@vifs = grep { /^vif.*/ && -f "$devdir/$_/address" } readdir(SD);
+	closedir(SD);
+    }
+
+    #
+    # Also need the control network bridge.
+    #
+    makeIfaceMaps();
+    my ($cnet_iface) = findControlNet();
+    my @ifaces = "$cnet_iface @vifs";
+
+    if (! -e $defaults) {
+	mysystem2("echo 'INTERFACES=\"@ifaces\"' > $defaults");
+    }
+    else {
+	mysystem2("/bin/sed -i.bak -e ".
+		 " 's,^INTERFACES=.*\$,INTERFACES=\"@ifaces\",i' $defaults");
+    }
+    return -1
+	if ($?);
+
+    return 0;
+}
+
 sub restartDHCP()
 {
     my $dhcpd_service = 'dhcpd';
-    if (-f '/etc/init/isc-dhcp-server.conf') {
+    if (-f '/etc/init/isc-dhcp-server.conf' ||
+	-f '/lib/systemd/system/isc-dhcp-server.service') {
         $dhcpd_service = 'isc-dhcp-server';
+    }
+    if (reconfigDHCP()) {
+	return;
     }
 
     # make sure dhcpd is running

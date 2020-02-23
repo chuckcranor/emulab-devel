@@ -1,309 +1,235 @@
 <style>
- .panel-body-dashboard {
-     padding: 2px;
- }
- .table-dashboard {
-     margin: 1px;
- }
  .popover{
      max-width: 800px;
  }
- .fixedsize-panel {
-     max-height:350px;
-     height:350px;
- }
- .table-condensed > thead > tr > th,
- .table-condensed > tbody > tr > th,
- .table-condensed > tfoot > tr > th,
- .table-condensed > thead > tr > td,
- .table-condensed > tbody > tr > td,
- .table-condensed > tfoot > tr > td {
-     padding: 2px;
- }
- .panel-heading-list {
-     padding: 2px;
+ .tablesorter-green th.sorter-false .tablesorter-header-inner {
+     padding-left: 4px;
  }
 </style>
 <div>
-  <div class='panel panel-default'>
-    <div class="panel-heading panel-heading-list">
-      <h5>
-	<center><%- name %> Reservations
-	  <% if (anonymous) { %>
-	    <span class='glyphicon glyphicon-question-sign text-primary'
+  <table class='tablesorter' id='reservations-table-<%- name %>'>
+    <thead>
+      <tr>
+	<% if (showcontrols) { %><th class="sorter-false">&nbsp</th><% } %>
+	<th class="sorter-false">&nbsp</th>
+	<% if (showuser) { %><th>Creator</th><% } %>
+	<% if (showproject) { %><th>Project</th><% } %>
+	<th>Type</th>
+	<th>Count</th>
+	<% if (showusing) { %>	  
+	  <th class="sorter-false">Using</th>
+	<% } %>
+	<th>Util</th>
+	<th>Created</th>
+	<th>Starts</th>
+	<th>Ends
+	  <% if (!showusing) { %>
+	    <span class='glyphicon glyphicon-question-sign'
 		  style='margin-bottom: 4px;'
 		  data-toggle='tooltip'
 		  data-container="body"
 		  data-trigger="hover"
-		  title='All reservations (including yours and other users).'>
+		  title='End dates in orange mean the user deleted the
+			 reservation before it expired. Red indicates the
+			 reservation was canceled by an administrator.'>
 	    </span>
 	  <% } %>
-	</center>
-      </h5>
-    </div>
-    <div class='panel-body panel-body-dashboard'>
-      <% if (error) { %>
-	<div class="text-center text-danger"><%- error %></div>
-      <% } else { %>
-      <table class='tablesorter' id='reservations-table-<%- name %>'>
-	<thead>
-	  <tr>
-	    <% if (showidx) { %><th class="sorter-false">&nbsp</th><% } %>
-	    <% if (showuser) { %><th>Creator</th><% } %>
-	    <% if (showproject) { %><th>Project</th><% } %>
-	    <th>Type</th>
-	    <th>Count</th>
-	    <% if (showusing) { %>	  
-	      <th class="sorter-false">Using</td>
-	    <% } %>
-	    <th>Created</th>
-	    <th>Starts</th>
-	    <th>Ends</th>
-	    <th>Status</th>
-	  </tr>
-	</thead>
-	<tbody>
-	  <% _.each(reservations, function(value, uuid) { %>
-	    <tr <% if (showidx) { %> data-uuid="<%- value.uuid %>"
-				     data-pid="<%- value.pid %>"
-				     data-cluster="<%- value.cluster %>"
-				     <% if (value.creator_idx) { %>
-				     data-creator_idx="<%- value.creator_idx %>"
-				     <% } %>				     
-	        <% } %>>
-	      <% if (showidx) { %>
-		<td style='white-space: nowrap;'>
-		  <% if (isadmin) { %>
-		    <a href="#" class="deny-button invisible">
-		      <span class='glyphicon glyphicon-thumbs-down pull-left'
-			    style='color: red; margin-left: 0px;
-				   margin-bottom: 4px;'
-			    data-toggle='tooltip'
-			    data-container="body"
-			    data-trigger="hover"
-			    title='Deny with reason'></span>
-		    </a>
-		    <a href="#" class="approve-button invisible">
-		      <span class='glyphicon glyphicon-thumbs-up pull-left'
-			    style='color: red; margin-left: 5px;
-				   margin-bottom: 4px;'
-			    data-toggle='tooltip'
-			    data-container="body"
-			    data-trigger="hover"
-			    title='Approve reservation'></span>
-		    </a>
-		  <% } %>
-		  <a href="#" class="delete-button">
-		    <span class='glyphicon glyphicon-remove pull-left'
-			  style='color: red; margin-left: 5px;
-				 margin-bottom: 4px;'
-			  data-toggle='tooltip'
-			  data-container="body"
-			  data-trigger="hover"
-			  title='Delete reservation'></span>
-		  </a>
-		  <a href="reserve.php?edit=1&cluster=<%- value.cluster %>&uuid=<%- value.uuid %>"
-		     class="edit-button">
-		    <span class='glyphicon glyphicon-pencil pull-left text-primary'
-			  style='margin-left: 5px;
-			         margin-bottom: 4px;'
-			  data-toggle='tooltip'
-			  data-container="body"
-			  data-trigger="hover"
-			  title='Edit reservation details'></span>
-		  </a>
-		  <% if (isadmin) { %>
-		    <% if (value.creator_idx) { %>
-		      <a href="#" class="info-button">
-			<span class='glyphicon glyphicon-info-sign pull-left
-				     text-warning'
-			      style='margin-bottom: 4px;
-				     margin-left: 5px;'
-			      data-toggle='tooltip'
-			      data-container="body"
-			      data-trigger="hover"
-			      title='Send a message to user'></span>
-		      </a>
-		    <% } %>
-		    <a href="#" class="warn-button">
-		      <span class='glyphicon glyphicon-warning-sign pull-left
-				   text-warning'
-			    style='margin-bottom: 4px;
-				   margin-left: 5px;'
-			    data-toggle='tooltip'
-			    data-container="body"
-			    data-trigger="hover"
-			    title='Warn user about unused reservaton'></span>
-		    </a>
-		  <% } %>	    
-		  <a href="#" class="resusage-button hidden">
-		    <span class='glyphicon glyphicon-list-alt pull-left text-info'
+	</th>
+	<% if (showstatus) { %><th>Status</th><% } %>
+	<th class="sorter-false">Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% _.each(reservations, function(value, uuid) { %>
+	<tr data-uuid="<%- value.uuid %>"
+	    data-type="reservation"
+	    data-pid="<%- value.pid %>"
+	    data-cluster="<%- value.cluster_id %>"
+	    <% if (value.uid_idx) { %>
+	      data-uid_idx="<%- value.uid_idx %>"
+	    <% } %>>
+	  <% if (showcontrols) { %>
+	    <td style='white-space: nowrap;'>
+	      <% if (isadmin) { %>
+		<a href="#" class="deny-button invisible">
+		  <span class='glyphicon glyphicon-thumbs-down pull-left'
+			style='color: red; margin-left: 0px;
+			       margin-bottom: 4px;'
+			data-toggle='tooltip'
+			data-container="body"
+			data-trigger="hover"
+			title='Deny with reason'></span>
+		</a>
+		<a href="#" class="approve-button invisible">
+		  <span class='glyphicon glyphicon-thumbs-up pull-left'
+			style='color: red; margin-left: 5px;
+			       margin-bottom: 4px;'
+			data-toggle='tooltip'
+			data-container="body"
+			data-trigger="hover"
+			title='Approve reservation'></span>
+		</a>
+	      <% } %>
+	      <a href="#" class="delete-button">
+		<span class='glyphicon glyphicon-remove pull-left'
+		      style='color: red; margin-left: 5px;
+			     margin-bottom: 4px;'
+		      data-toggle='tooltip'
+		      data-container="body"
+		      data-trigger="hover"
+		      title='Delete reservation'></span>
+	      </a>
+	      <a href="reserve.php?edit=1&force=1&cluster=<%- value.cluster_id %>&uuid=<%- value.uuid %>"
+		 target="_blank"
+		 class="edit-button">
+		<span class='glyphicon glyphicon-pencil pull-left text-primary'
+		      style='margin-left: 5px;
+			     margin-bottom: 4px;'
+		      data-toggle='tooltip'
+		      data-container="body"
+		      data-trigger="hover"
+		      title='Edit reservation details'></span>
+	      </a>
+	      <% if (isadmin) { %>
+		<% if (value.uid_idx) { %>
+		  <a href="#" class="info-button">
+		    <span class='glyphicon glyphicon-info-sign pull-left
+				 text-warning'
 			  style='margin-bottom: 4px;
 				 margin-left: 5px;'
 			  data-toggle='tooltip'
 			  data-container="body"
 			  data-trigger="hover"
-			  title='Show recent project activity'></span>
+			  title='Send a message to user'></span>
 		  </a>
-		</td>
-	      <% } %>	    
-	      <% if (showuser) { %>
-		<td style='white-space: nowrap;'>
-		  <% if (value.creator_idx) { %>
-		    <a href='user-dashboard.php?user=<%- value.creator_uid %>'>
-		      <%- value.creator_uid %></a>
-		  <% } else { %>
-		    <%- value.creator_uid %>
-		  <% } %>
-		</td>
-	      <% } %>	    
-	      <% if (showproject) { %>	  
-		<td style='white-space: nowrap;'>
-		  <% if (value.pid_idx) { %>
-		    <a href='show-project.php?project=<%- value.pid %>'>
-		      <%- value.pid %></a>
-		  <% } else { %>
-		    <%- value.pid %>
-		  <% } %>
-		</td>
-	      <% } %>
-	      <td><%- value.type %></td>
-	      <td><%- value.count %></td>
-	      <% if (showusing) { %>
-		<% if (new Date().getTime() > new Date(value.start).getTime() && value.using < value.count) { %>
-		  <td><span class="text-danger"><%- value.using %></span></td>
-		<% } else { %>
-		  <td><%- value.using %></td>
+		  <a href="#" class="warn-button">
+		    <span class='glyphicon glyphicon-warning-sign pull-left
+				 text-warning'
+			  style='margin-bottom: 4px;
+				 margin-left: 5px;'
+			  data-toggle='tooltip'
+			  data-container="body"
+			  data-trigger="hover"
+			  title='Warn user about unused reservaton'></span>
+		  </a>
 		<% } %>
 	      <% } %>
-	      <td class="format-date"><%- value.created %></td>
-	      <td>
-		<% if (new Date().getTime() > new Date(value.start).getTime()) { %>
-		  <span class="format-date"
-			style="color: green;"><%- value.start %></span>
-		<% } else { %>
-		  <span class="format-date"><%- value.start %></span>
-		<% } %>
-	      </td>
-	      <td class="format-date"><%- value.end %></td>
-	      <td class="status-column">
-		<span class="status-approved hidden">Approved</span>
-		<span class="status-pending hidden text-danger">Pending</span>
-		<span class="status-canceled hidden">
-		  <span class="text-danger">Canceled</span>
-		  <% if (isadmin) { %>
-		    <a href="#" class="cancel-cancel-button">
-		      <span class='glyphicon glyphicon-thumbs-up'
-			    style='color: green; margin-left: 5px;
-				   margin-bottom: 4px;'
-			    data-toggle='tooltip'
-			    data-container="body"
-			    data-trigger="hover"
-			    title='Cancel Cancellation'></span>
-		    </a>
-		  <% } %>
-		</span>
-	      </td>
-	    </tr>
-	  <% }); %>
-	</tbody>
-      </table>
-      <% } %>
-    </div>
-  </div>
+	    </td>
+	  <% } %>
+	  <td>
+	    <% if (showactivity) { %>
+	      <a href="#" class="resusage-button invisible">
+		<span class='glyphicon glyphicon-list-alt pull-left text-info'
+		      style='margin-bottom: 4px;
+			     margin-left: 5px;'
+		      data-toggle='tooltip'
+		      data-container="body"
+		      data-trigger="hover"
+		      title='Show recent project activity'></span>
+	      </a>
+	    <% } %>
+	    <a href="#" class="resgraph-button invisible">
+	      <span class='glyphicon glyphicon-calendar
+			   pull-left text-info'
+		    style='margin-bottom: 4px;
+			   margin-left: 5px;'
+		    data-toggle='tooltip'
+		    data-container="body"
+		    data-trigger="hover"
+		    title='Show reservation utilization'></span>
+	    </a>
+	  </td>
+	  <% if (showuser) { %>
+	    <td style='white-space: nowrap;'>
+	      <% if (value.uid_idx) { %>
+		<a href='user-dashboard.php?user=<%- value.uid %>'>
+		  <%- value.uid %></a>
+	      <% } else { %>
+		<%- value.uid %>
+	      <% } %>
+	    </td>
+	  <% } %>	    
+	  <% if (showproject) { %>	  
+	    <td style='white-space: nowrap;'>
+	      <% if (value.pid_idx) { %>
+		<a href='show-project.php?project=<%- value.pid %>'>
+		  <%- value.pid %></a>
+	      <% } else { %>
+		<%- value.pid %>
+	      <% } %>
+	    </td>
+	  <% } %>
+	  <td><%- value.type %></td>
+	  <td><%- value.nodes %></td>
+	  <% if (showusing) { %>
+	    <% if (new Date().getTime() > new Date(value.start).getTime() && value.using < value.nodes) { %>
+	      <td><span class="text-danger"><%- value.using %></span></td>
+	    <% } else { %>
+	      <td><%- value.using %></td>
+	    <% } %>
+	  <% } %>
+	  <td>
+	    <% if (_.has(value, "utilization") && value.utilization) { %>
+	      <%- value.utilization %>%
+	    <% } else { %>
+	      &nbsp;
+	    <% } %>
+	  </td>
+	  <td class="format-date"><%- value.created %></td>
+	  <td>
+	    <% if (new Date().getTime() > new Date(value.start).getTime()) { %>
+	      <span class="format-date"
+		    style="color: green;"><%- value.start %></span>
+	    <% } else { %>
+	      <span class="format-date"><%- value.start %></span>
+	    <% } %>
+	  </td>
+	  <td>
+	    <% if (_.has(value, "deleted") && value.deleted) { %>
+	      <% if (_.has(value, "canceled") && value.canceled) { %>
+		<span class="format-date text-danger">
+		  <%- value.deleted %></span>
+	      <% } else { %>
+		<span class="format-date text-warning">
+		  <%- value.deleted %></span>
+	      <% } %>
+	    <% } else { %>
+	      <span class="format-date"><%- value.end %></span>
+	    <% } %>
+	  </td>
+	  <% if (showstatus) { %>
+	  <td class="status-column">
+	    <span class="status-approved hidden">Approved</span>
+	    <span class="status-pending hidden text-danger">Pending</span>
+	    <span class="status-canceled hidden">
+	      <span class="text-danger">Canceled</span>
+	      <% if (isadmin && showcontrols) { %>
+		<a href="#" class="cancel-cancel-button">
+		  <span class='glyphicon glyphicon-thumbs-up'
+			style='color: green; margin-left: 5px;
+			       margin-bottom: 4px;'
+			data-toggle='tooltip'
+			data-container="body"
+			data-trigger="hover"
+			title='Cancel Cancellation'></span>
+		</a>
+	      <% } %>
+	    </span>
+	  </td>
+	  <% } %>
+	  <td align="center">
+	    <a href="#" 
+	       data-toggle='popover'
+	       data-html='true'
+	       data-trigger='hover'
+	       data-title="Reservation Notes"
+	       data-content="<div class='form-control'
+			     style='height: auto;'><%- value.notes %></div>">
+	      <span>&#8230;</span>
+	    </a>
+	  </td>
+	</tr>
+      <% }); %>
+    </tbody>
+  </table>
 </div>
-<div id='deny-modal' class='modal fade'>
-  <div class='modal-dialog'>
-    <div class='modal-content'>
-      <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
-        <center><h4>Confirm to Deny Reservation</h4>
-	  Message to send to user
-	  <div>
-	    <textarea id='deny-reason'
-		      class='form-control'
-		      rows=5></textarea>
-	  </div>
-	  <br>
-          <button class='btn btn-danger btn-sm'
-		  id='confirm-deny'>Confirm</a>
-	</center>
-      </div>
-    </div>
-  </div>
-</div>
-<div id='approve-modal' class='modal fade'>
-  <div class='modal-dialog'>
-    <div class='modal-content'>
-      <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
-        <center><h4>Confirm to Approve Reservation</h4>
-	  <br>
-          <button class='btn btn-danger btn-sm'
-		  id='confirm-approve'>Confirm</a>
-	</center>
-      </div>
-    </div>
-  </div>
-</div>
-<div id='info-modal' class='modal fade'>
-  <div class='modal-dialog'>
-    <div class='modal-content'>
-      <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
-        <center><h4>Confirm to Send Message</h4>
-	  <span class="hidden nomessage-error text-danger">Give me Text!</span>
-	  <div>
-	    <textarea class='form-control user-message'
-		      rows=5></textarea>
-	  </div>
-	  <br>
-          <button class='btn btn-danger btn-sm confirm-button'>Confirm</button>
-	</center>
-      </div>
-    </div>
-  </div>
-</div>
-<div id='warn-modal' class='modal fade'>
-  <div class='modal-dialog'>
-    <div class='modal-content'>
-      <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
-        <center><h4>Confirm to Send Warning Message</h4>
-	  Additional text to send with warning (no text is okay):</span>
-	  <div>
-	    <textarea class='form-control user-message'
-		      rows=5></textarea>
-	  </div>
-	  <input type=checkbox id='schedule-cancellation' value=yes>
-	  Cancel reservation in 24 hours?
-	  <div style="margin-top:10px;">
-            <button class='btn btn-danger btn-sm confirm-button'>Confirm</button>
-	  </div>
-	</center>
-      </div>
-    </div>
-  </div>
-</div>
-<div id='cancel-cancel-modal' class='modal fade'>
-  <div class='modal-dialog'>
-    <div class='modal-content'>
-      <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
-        <center><h4>Confirm to Cancel Cancellation</h4>
-	  <div style="margin-top:10px;">
-            <button id="confirm-cancel-cancel-button"
-		    class='btn btn-danger btn-sm confirm-button'>
-	      Confirm</button>
-	  </div>
-	</center>
-      </div>
-    </div>
-  </div>
-</div>
-<div id="resusage-modals"></div>

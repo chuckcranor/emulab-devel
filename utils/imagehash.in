@@ -54,6 +54,8 @@ my $SHA1	= "/sbin/sha1";
 
 # Protos
 sub fatal($);
+sub ShowHash($);
+sub UpdateHash($);
 
 #
 # Untaint the path
@@ -99,6 +101,61 @@ if (!defined($image)) {
 }
 my $imageid = $image->imageid();
 
+#
+# Show the full hash if that's all we're doing.
+#
+if ($showhash) {
+    ShowHash("full");
+    exit(0);
+}
+
+#
+# See if this is a Docker image; use libimageops if so.
+#
+if ($image->format() eq 'docker') {
+    use libimageops;
+
+    libimageops::setDebug(1)
+	if ($debug);
+    my %args = ('impotent' => $impotent,'showhash' => $showhash);
+
+    my $iops = libimageops::Factory("image" => $image);
+    my ($rc,$msg) = $iops->UpdateHash($image,\%args);
+    if (!defined($rc) && defined($msg)) {
+	print STDERR "Error: $msg\n";
+	exit(1);
+    }
+    else {
+	print "$rc\n";
+	exit(0);
+    }
+}
+else {
+    UpdateHash("full");
+    UpdateHash("delta");
+
+    exit(0);
+}
+
+sub ShowHash($)
+{
+    my ($which) = @_;
+    my ($path, $hash);
+
+    if ($which eq "full") {
+	$path      = $image->FullImageFile();
+	$hash      = $image->hash();
+	$hashfile  = $image->FullImageSHA1File()
+    }
+    else {
+	$path      = $image->DeltaImageFile();
+	$hash      = $image->deltahash();
+	$hashfile  = $image->DeltaImageSHA1File()
+    }
+    $hash = "No hash yet" if (!defined($hash));
+    print "$path = $hash\n";
+}
+
 sub UpdateHash($)
 {
     my ($which) = @_;
@@ -114,12 +171,7 @@ sub UpdateHash($)
 	$hash      = $image->deltahash();
 	$hashfile  = $image->DeltaImageSHA1File()
     }
-    if ($showhash) {
-	$hash = "No hash yet" if (!defined($hash));
-    
-	print "$path = $hash\n";
-	exit(0);
-    }
+
     return
 	if (! -e $path);
 
@@ -147,10 +199,6 @@ sub UpdateHash($)
     }
     print "$path = $hash\n";
 }
-UpdateHash("full");
-UpdateHash("delta");
-
-exit(0);
 
 sub fatal($)
 {

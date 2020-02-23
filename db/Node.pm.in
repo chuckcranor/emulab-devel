@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2018 University of Utah and the Flux Group.
+# Copyright (c) 2005-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -417,7 +417,7 @@ sub Create($$$$)
 	    print STDERR "*** No virtnode_capacity for $type! Using zero.\n";
 	    $virtnode_capacity = 0;
 	}
-	if ($isremote || $typeinfo->isfakenode()) {
+	if ($isremote || $typeinfo->isfakenode() || $typeinfo->isblackbox()) {
 	    $osid   = "NULL";
 	    $opmode = "";
 
@@ -1409,6 +1409,12 @@ sub InitKeyDist($;$$)
 	goto done;
     }
     
+    # XXX beware the blackbox nodes
+    if ($self->isblackbox()) {
+	$priv = $pub = 0;
+	goto done;
+    }
+
     my $node_id = $self->node_id();
 
     # Get user-supplied values from virt_nodes
@@ -1736,6 +1742,7 @@ sub isgeninode($)     { return NodeTypeInfo($_[0])->isgeninode(); }
 sub isfednode($)      { return NodeTypeInfo($_[0])->isfednode(); }
 sub isdedicatedremote($) { return NodeTypeInfo($_[0])->isdedicatedremote(); }
 sub isswitch($)       { return NodeTypeInfo($_[0])->isswitch(); }
+sub isblackbox($)     { return NodeTypeInfo($_[0])->isblackbox(); }
 
 #
 # Later has arrived...
@@ -1747,6 +1754,7 @@ sub default_osid($;$) {
     my $val = undef;
 
     if (NodeAttribute($self, "default_osid", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return NodeTypeInfo($self)->default_osid($stuff);
@@ -1757,15 +1765,34 @@ sub adminmfs_osid($;$) {
     my $val = undef;
     require OSImage;
 
-    if (NodeAttribute($self, "adminmfs_osid", \$val) == 0 &&
-	defined($val)) {
+    if (NodeAttribute($self, "adminmfs_osid", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     if (NodeTypeAttribute($self, "adminmfs_osid", \$val) == 0 &&
 	defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return OSImage->Lookup(TBOPSPID(), TB_OSID_FREEBSD_MFS())->osid();
+}
+
+sub recoverymfs_osid($;$) {
+    my ($self,$stuff) = @_;
+    my $val = undef;
+    require OSImage;
+
+    if (NodeAttribute($self, "recoverymfs_osid", \$val) == 0 &&
+	defined($val)) {
+	$$stuff = $val if (defined($stuff));
+	return $val;
+    }
+    if (NodeTypeAttribute($self, "recoverymfs_osid", \$val) == 0 &&
+	defined($val)) {
+	$$stuff = $val if (defined($stuff));
+	return $val;
+    }
+    return undef;
 }
 
 sub diskloadmfs_osid($;$) {
@@ -1775,10 +1802,12 @@ sub diskloadmfs_osid($;$) {
 
     if (NodeAttribute($self, "diskloadmfs_osid", \$val) == 0 &&
 	defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     if (NodeTypeAttribute($self, "diskloadmfs_osid", \$val) == 0 &&
 	defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return OSImage->Lookup(TBOPSPID(), TB_OSID_FRISBEE_MFS())->osid();
@@ -1789,6 +1818,7 @@ sub default_imageid($;$) {
     my $val = undef;
 
     if (NodeAttribute($self, "default_imageid", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return NodeTypeInfo($self)->default_imageid($stuff);
@@ -1826,6 +1856,7 @@ sub disksize($;$) {
     my $val = undef;
 
     if (NodeAttribute($self, "disksize", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return NodeTypeInfo($self)->disksize($stuff);
@@ -1836,6 +1867,7 @@ sub disktype($;$) {
     my $val = undef;
 
     if (NodeAttribute($self, "disktype", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return NodeTypeInfo($self)->disktype($stuff);
@@ -1846,6 +1878,7 @@ sub bootdisk_unit($;$) {
     my $val = undef;
 
     if (NodeAttribute($self, "bootdisk_unit", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return NodeTypeInfo($self)->bootdisk_unit($stuff);
@@ -1856,9 +1889,21 @@ sub cyclewhenoff($;$) {
     my $val = undef;
 
     if (NodeAttribute($self, "cyclewhenoff", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
 	return $val;
     }
     return NodeTypeInfo($self)->cyclewhenoff($stuff);
+}
+
+sub rebootable($;$) {
+    my ($self,$stuff) = @_;
+    my $val = undef;
+
+    if (NodeAttribute($self, "rebootable", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
+	return $val;
+    }
+    return NodeTypeInfo($self)->rebootable($stuff);
 }
 
 sub root_password($) {
@@ -1884,9 +1929,6 @@ sub imageable($;$) {
 }
 sub control_iface($;$) {
     return NodeTypeInfo($_[0])->control_iface($_[1]);
-}
-sub rebootable($;$) {
-    return NodeTypeInfo($_[0])->rebootable($_[1]);
 }
 sub isfakenode($;$) {
     return NodeTypeInfo($_[0])->isfakenode($_[1]);
@@ -1965,7 +2007,8 @@ sub ClearBootAttributes($)
     my $node_id = (ref($self) ? $self->node_id() : $self);
     my $allocFreeState = TBDB_ALLOCSTATE_FREE_DIRTY();
 
-    DBQueryWarn("update nodes set startupcmd='',rpms='',deltas='', ".
+    DBQueryWarn("update nodes set ".
+		"startupcmd='',startstatus='none',rpms='',deltas='', ".
 		"tarballs='',failureaction='fatal', routertype='none', ".
 		"def_boot_cmd_line='',next_boot_cmd_line='', ".
 		"temp_boot_osid=NULL,next_boot_osid=NULL, ".
@@ -2297,11 +2340,13 @@ sub GetBootLog($$)
 }
 
 #
-# Set event state for a node.
+# Set event state for a node. Note that we do not change the DB here,
+# but let stated do that. If stated dies ...
 #
-sub SetEventState($$)
+sub SetEventState($$;$)
 {
-    my ($self, $state) = @_;
+    my ($self, $state, $fatal) = @_;
+    my $rval;
     require event;
 
     # Must be a real reference. 
@@ -2310,17 +2355,19 @@ sub SetEventState($$)
 
     my $node_id = $self->node_id();
 
-    #
-    # If using the event system, we send out an event for the state daemon to
-    # pick up. Otherwise, we just set the state in the database ourselves
-    #
-    return event::EventSendFatal(objtype   => TBDB_TBEVENT_NODESTATE,
-				 objname   => $node_id,
-				 eventtype => $state,
-				 host      => $BOSSNODE);
-
-    return $self->Update({"eventstate"      => $state,
-			  "state_timestamp" => time()});
+    if (!defined($fatal) || $fatal) {
+	$rval = event::EventSendFatal(objtype   => TBDB_TBEVENT_NODESTATE,
+				      objname   => $node_id,
+				      eventtype => $state,
+				      host      => $BOSSNODE);
+    }
+    else {
+	$rval = event::EventSendWarn(objtype   => TBDB_TBEVENT_NODESTATE,
+				     objname   => $node_id,
+				     eventtype => $state,
+				     host      => $BOSSNODE);
+    }
+    return ($rval == 1 ? 0 : -1);
 }
 
 sub ResetStartStatus($)
@@ -2335,6 +2382,60 @@ sub ResetStartStatus($)
     
     $self->{"DBROW"}->{'startstatus'} = 'none';
     return $self->Update({"startstatus" => 'none'});
+}
+
+#
+# Return the node startupcmd and status fields.
+#
+sub GetStartupCmd($)
+{
+    my ($self) = @_;
+
+    my $oldcmd = $self->startupcmd();
+    my $oldstatus = $self->startstatus();
+
+    return ($oldcmd, $oldstatus);
+}
+
+#
+# Set the node startupcmd field to the given value or the value
+# in the virt_nodes table entry if no value is given.
+#
+sub SetStartupCmd($$$)
+{
+    my ($self, $cmd, $status) = @_;
+    $status = 'none' if (!defined($status));
+    my $node_id = $self->node_id();
+
+    if (!$cmd) {
+	# Get value from virt_nodes
+	my $result =
+	    DBQueryWarn("select v.startupcmd ".
+			" from virt_nodes as v, reserved as r ".
+			" where v.exptidx=r.exptidx and v.vname=r.vname ".
+			"  and r.node_id='$node_id'");
+	if ($result && $result->numrows > 0) {
+	    ($cmd) = $result->fetchrow_array();
+	}
+    }
+    if ($cmd) {
+	$self->Update({'startupcmd' => $cmd, 'startstatus' => $status});
+    }
+}
+
+#
+# Clear the node startupcmd and status fields.
+# Returns the old command and status.
+#
+sub ClearStartupCmd($)
+{
+    my ($self) = @_;
+
+    my $oldcmd = $self->startupcmd();
+    my $oldstatus = $self->startstatus();
+
+    $self->Update({'startupcmd' => '', 'startstatus' => 'none'});
+    return ($oldcmd, $oldstatus);
 }
 
 #
@@ -3457,6 +3558,10 @@ sub OSSelect($$$$)
 	return -1;
     }
 
+    if (defined($osimage) && $osimage->isImage()) {
+	$osimage->GetProject()->BumpActivity();
+    }
+
     if ($debug) {
 	print STDERR "Current opmode for $nodeid is $curmode.\n";
 	if (defined($osimage)) {
@@ -3829,24 +3934,14 @@ sub GetJailIP($;$)
 	}
     }
 
-    my $node_id = $self->node_id();
-    my $query_result =
-	DBQueryWarn( "SELECT IP, mask FROM virt_node_public_addr WHERE " .
-		     "node_id='$node_id'" );
-
-    if( $query_result && $query_result->numrows ) {
-	# we've assigned a public address to this one
-	return $query_result->fetchrow_array();
-    } else {
-	my $nodenumlimit = $ISUTAH ? 200 : 254;
-	my $pnet = $IPBASE2;
-	my $pnode2 = int($ipbase);
-	while ($pnode2 > $nodenumlimit) {
-	    $pnet++;
-	    $pnode2 -= $nodenumlimit;
-	}
-	return ("${IPBASE1}.${pnet}.${pnode2}.${num}", $JAILIPMASK);
+    my $nodenumlimit = $ISUTAH ? 200 : 254;
+    my $pnet = $IPBASE2;
+    my $pnode2 = int($ipbase);
+    while ($pnode2 > $nodenumlimit) {
+	$pnet++;
+	$pnode2 -= $nodenumlimit;
     }
+    return ("${IPBASE1}.${pnet}.${pnode2}.${num}", $JAILIPMASK);
 }
 
 #
@@ -3935,7 +4030,8 @@ sub CheckPreReserve($$$)
 		    "left join project_reservations on ".
 		    "     project_reservations.pid=nodes.reserved_pid and ".
 		    "     project_reservations.name=nodes.reservation_name ".
-		    "where nodes.node_id='$node_id'");
+		    "where nodes.node_id='$node_id' and ".
+		    "      project_reservations.approved is not null");
 
     # numrows would be zero if the node was suddenly deleted.
     goto done
@@ -3970,8 +4066,9 @@ sub CheckPreReserve($$$)
     # Find only active unfilled reservations.
     $query_result =
 	DBQueryWarn("select pid,count,name from project_reservations ".
-		    "where active=1 and terminal=0 and count>0 and ".
-		    "       (types is null or ".
+		    "where approved is not null and ".
+		    "      active=1 and terminal=0 and count>0 and ".
+		    "      (types is null or ".
 		    "        FIND_IN_SET('$type', types)) ".
 		    "order by priority desc, created asc ");
 
@@ -4501,6 +4598,51 @@ sub NeedsAdminMFS($)
 	
 	if (OSImage->Lookup($self->temp_boot_osid)->IsNfsMfs()) {
 	    return 1;
+	}
+    }
+    return 0;
+}
+
+#
+# Spectrum stuff.
+#
+sub AddSpectrum($$$)
+{
+    my ($self, $spectrum, $iface) = @_;
+    my $node_id = $self->node_id();
+    my @ifaces = ();
+    require EmulabConstants;
+
+    if (defined($iface)) {
+	@ifaces = ($iface);
+    }
+    else {
+	if (Interface->LookupAll($self, \@ifaces)) {
+	    return -1;
+	}
+    }
+    foreach $iface (@ifaces) {
+	my $iface_id = $iface->iface();
+
+	next
+	    if ($iface->role() ne EmulabConstants::TBDB_IFACEROLE_EXPERIMENT());
+
+	# Check to see if this is an OTA interface.
+	my $ota;
+	next
+	    if (! ($iface->TypeCapability("overtheair", \$ota) == 0 && $ota));
+
+	foreach my $request (@{$spectrum}) {
+	    my $frequency_low  = DBQuoteSpecial($request->{"frequency_low"});
+	    my $frequency_high = DBQuoteSpecial($request->{"frequency_high"});
+	    my $power          = DBQuoteSpecial($request->{"power"});
+
+	    return -1
+		if (!DBQueryWarn("insert into interfaces_rf_limit set ".
+				 "  node_id='$node_id', iface='$iface_id', ".
+				 "  freq_low=$frequency_low, ".
+				 "  freq_high=$frequency_high, ".
+				 "  power=$power"));
 	}
     }
     return 0;

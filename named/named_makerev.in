@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,7 +38,7 @@ sub usage {
 # Configure variables
 #
 my $ELABINELAB		     = "@ELABINELAB@";
-my $PROTOGENI_GENIRACK       = @PROTOGENI_GENIRACK@;
+my $CONFIG_TARGETSYS         = @CONFIG_TARGETSYS@;
 my $OURDOMAIN                = "@OURDOMAIN@";
 my $TESTBED_NETWORK          = "@TESTBED_NETWORK@";
 my $TESTBED_NETMASK          = "@TESTBED_NETMASK@";
@@ -101,7 +101,7 @@ for (my $i = $jb; $i <= $jb + (255 - $jmb); $i++) {
     system("cp -f reverse.head $internal_revfile") == 0 or
 	die("Unable to copy $infile to $internal_revfile\n");
 
-    if ($PROTOGENI_GENIRACK) {
+    if ($CONFIG_TARGETSYS) {
 	system("echo '	IN	NS	ns.emulab.net.' >> $internal_revfile");
     }
 
@@ -145,7 +145,7 @@ for (my $i = $ic; $i <= $ic + (255 - $imc); $i++) {
     system("cp -f reverse.head $internal_revfile") == 0 or
 	die("Unable to copy $infile to $internal_revfile\n");
 
-    if ($PROTOGENI_GENIRACK) {
+    if ($CONFIG_TARGETSYS) {
 	system("echo '	IN	NS	ns.emulab.net.' >> $internal_revfile");
     }
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -71,6 +71,7 @@ define("CHECKLOGIN_ISFOREIGN_ADMIN",	0x0800000);  # Admin of another Emulab.
 define("CHECKLOGIN_NONLOCAL",		0x1000000);
 define("CHECKLOGIN_INACTIVE",		0x2000000);
 define("CHECKLOGIN_NOPROJECTS",		0x4000000);
+define("CHECKLOGIN_PROJDISABLED",	0x8000000);  # Member of disabled proj
 
 #
 # Constants for tracking possible login attacks.
@@ -85,6 +86,8 @@ define("DOLOGIN_STATUS_ERROR",		-1);
 define("DOLOGIN_STATUS_IPFREEZE",	-2);
 define("DOLOGIN_STATUS_WEBFREEZE",	-3);
 define("DOLOGIN_STATUS_INACTIVE",	-4);
+define("DOLOGIN_STATUS_FROZEN", 	-5);
+define("DOLOGIN_STATUS_PROJDISABLED", 	-6);
 
 # So we can redefine this in the APT pages.
 $CHANGEPSWD_PAGE = "moduserinfo.php3";
@@ -266,7 +269,7 @@ function LoginStatus() {
 		     "       user_interface,n.type,u.stud,u.wikiname, ".
 		     "       u.wikionly,g.pid,u.foreign_admin,u.uid_idx, " .
 		     "       p.allow_workbench,u.weblogin_frozen, ".
-                     "       u.nonlocal_id ".
+                     "       u.nonlocal_id,p.disabled ".
 		     " from users as u ".
 		     "left join login as l on l.uid_idx=u.uid_idx ".
 		     "left join group_membership as g on g.uid_idx=u.uid_idx ".
@@ -293,6 +296,7 @@ function LoginStatus() {
     $frozen    = 0;
     $nonlocal  = 0;
     $pcount    = 0;
+    $pdisabled = 0;
     
     while ($row = mysql_fetch_array($query_result)) {
 	$expired = $row[0];
@@ -335,6 +339,10 @@ function LoginStatus() {
 	$workbench      += $row[17];
 	$frozen          = $row[18];
 	$nonlocal        = $row[19] ? 1 : 0;
+        $disable         = $row[20];
+        if ($disable) {
+            $pdisabled++;
+        }
 
 	$CHECKLOGIN_NODETYPES[$type] = 1;
     }
@@ -350,7 +358,7 @@ function LoginStatus() {
     #
     # Check for frozen account. Might do something interesting later.
     #
-    if ($frozen ||
+    if ($pdisabled || $frozen ||
 	$status == TBDB_USERSTATUS_FROZEN) {
 	DBQueryFatal("DELETE FROM login WHERE uid_idx='$uid_idx'");
 	$CHECKLOGIN_STATUS = CHECKLOGIN_NOTLOGGEDIN;
@@ -872,6 +880,7 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
     global $TBMAIL_OPS, $TBMAIL_AUDIT, $TBMAIL_WWW;
     global $WIKISUPPORT, $WIKICOOKIENAME;
     global $BUGDBSUPPORT, $BUGDBCOOKIENAME, $CHECKLOGIN_USER;
+    global $TB_PROJECT_READINFO;
     
     # Caller makes these checks too.
     if ((!TBvalid_uid($token) && !TBvalid_email($token)) ||
@@ -896,6 +905,8 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 	    $ipfrozen = $iprow['frozen'];
 
 	    if ($ipfrozen) {
+                #TBMAIL('stoller', "Login Debug", "Disabled IP $token $IP");
+                
 		DBQueryFatal("update login_failures set ".
 			     "       failcount=failcount+1, ".
 			     "       failstamp='$now' ".
@@ -936,6 +947,11 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 	    $user->UpdateWebLoginFail();
 	    return DOLOGIN_STATUS_WEBFREEZE;
 	}
+        # Check for membership in disabled project.
+        $plist = $user->DisabledProjects();
+        if (count($plist)) {
+            return DOLOGIN_STATUS_PROJDISABLED;
+        }
 	if (!$nopassword) {
 	    $encoding = crypt("$password", $db_encoding);
 	    if (strcmp($encoding, $db_encoding)) {
@@ -972,8 +988,11 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
             $user->SetGaUserid($ga_userid);
         }
         
-        # But inactive users need special handling.
-	if ($user->status() == TBDB_USERSTATUS_INACTIVE) {
+        # But inactive/frozen users need special handling.
+	if ($user->status() == TBDB_USERSTATUS_FROZEN) {
+          return DOLOGIN_STATUS_FROZEN;
+        }
+	elseif ($user->status() == TBDB_USERSTATUS_INACTIVE) {
             if (1) {
                 TBMAIL($user->email(),
                        "Web Login Inactivity Alert: '$uid'",
@@ -1160,9 +1179,11 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
             
             # failed, reset the timestamp
             if ($rv) {
-                DBQueryFatal("update user_stats set ".
-                             " last_activity='$lastactivestr' ".
-                             "where uid_idx='$uid_idx'");
+                if ($lastactivestr != '') {                
+                    DBQueryFatal("update user_stats set ".
+                                 " last_activity='$lastactivestr' ".
+                                 "where uid_idx='$uid_idx'");
+                }
                 SUEXECERROR(SUEXEC_ACTION_DIE);
                 return;
             }

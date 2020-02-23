@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -72,6 +72,7 @@ my $BACKUPDAYS  = "30";
 my $extension;
 my @updatefiles = ();
 my $dohotcopy   = 0;
+my $locked      = 0;
 my $dbname      = "mysql";
 my $dbuser      = "root";
 my $dbpass;
@@ -148,6 +149,13 @@ if ($clean) {
 	   "         -o -name 'slowqueries.*' \\\) ".
 	   "-mtime +${BACKUPDAYS} -print $doit");
     exit(0);
+}
+
+if (! $opsmode) {
+    if (TBScriptLock("backup", 0, 60) != TBSCRIPTLOCK_OKAY()) {
+	fatal("Could not get the lock after a long time!\n");
+    }
+    $locked = 1;
 }
 
 #
@@ -339,6 +347,8 @@ if ($dohotcopy && -e "$BACKUPDIR/tbdb") {
 system("$SETSITEVAR web/message -")
     if (!$opsmode);
 unlink("$logname");
+TBScriptUnlock()
+    if ($locked);
 exit 0;
 
 sub fatal($) {
@@ -349,5 +359,7 @@ sub fatal($) {
     SENDMAIL($TBOPS, "DB Backup Failed", $msg, undef, undef, ($logname));
     system("$SETSITEVAR web/message -");
     unlink("$logname");
+    TBScriptUnlock()
+	if ($locked);
     exit(1);
 }

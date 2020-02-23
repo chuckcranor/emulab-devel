@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2015, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,23 +34,12 @@ PAGEHEADER("Emulab Software Distributions");
 
 <ul>
 <li> The latest version of the Emulab software can be
-     <a href="http://wiki.emulab.net/wiki/GitRepository">downloaded via Git</a>.
-</li><p>
+     <a href="https://gitlab.flux.utah.edu/emulab/emulab-devel/wikis/Git-Repository">downloaded via Git</a>.
+</li>
 
-<li> 
-     The Emulab GUI Client v0.2.<br>
-     <a href="/downloads/netlab-client.jar">(JAR</a>,
-     <a href="/downloads/netlab-client-0.2.tar.gz">source tarball</a>
-     <!-- <img src="/new.gif" alt="&lt;NEW&gt;"> -->).
-     This is the fancier of the GUI clients for creating and
-     interacting with experiments.  The GUI provides an alternative to using
-     the web-based interface or logging into users.emulab.net and using the
-     command line tools.  Take a look at the
-     <a href="netlab/client.php3">tutorial</a>
-     for more information.
-     </li><p>
-
-<li> The Frisbee disk loader.<br>
+<br>
+    
+<li> The Frisbee disk loader;
      We no longer support Frisbee as a separate distribution.
      The Frisbee source is part of the Emulab source distribution and can
      be found in the <code>clientside/os/frisbee.redux</code> subdirectory.
@@ -69,7 +58,7 @@ PAGEHEADER("Emulab Software Distributions");
      be able to build the Frisbee client and embed it in the bootable
      distro of your choice.
      </li>
-<ul>
+</ul>
 
 <?php
 

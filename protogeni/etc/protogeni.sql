@@ -56,6 +56,7 @@ CREATE TABLE `geni_slices` (
   `created` datetime default NULL,
   `expires` datetime default NULL,
   `shutdown` datetime default NULL,
+  `termination_pending` datetime default NULL,
   `locked` datetime default NULL,
   `stitch_locked` datetime default NULL,
   `hosed` tinyint(1) NOT NULL default '0',
@@ -77,6 +78,8 @@ CREATE TABLE `geni_slices` (
   `async_mode` tinyint(1) NOT NULL default '0',
   `async_code` int(11) default '0',
   `async_output` mediumtext,
+  `portal_tag` varchar(64) default NULL,
+  `portal_url` tinytext,
   PRIMARY KEY  (`idx`),
   UNIQUE KEY `hrn` (`hrn`),
   UNIQUE KEY `uuid` (`uuid`)
@@ -340,7 +343,8 @@ CREATE TABLE `manifest_history` (
   `manifest` mediumtext,
   PRIMARY KEY  (`idx`),
   INDEX `aggregate_urn` (`aggregate_urn`(255)),
-  KEY `created` (`created`)
+  KEY `created` (`created`),
+  KEY `aggregate_uuid` (`aggregate_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 DROP TABLE IF EXISTS `ticket_history`;

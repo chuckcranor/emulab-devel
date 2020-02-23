@@ -1,6 +1,9 @@
 <style>
 .toggle {
-	cursor: pointer;
+    cursor: pointer;
+}
+.freeze {
+    cursor: pointer;
 }
 </style>
 <div>
@@ -22,6 +25,20 @@
       <td>Affiliation</td>
       <td><%= fields.affiliation %></td>
     </tr>
+    <% if (window.ISPOWDER) { %>
+      <% if (fields.address1 != "") { %>
+	<tr>
+	  <td>Address</td>
+	  <td><%= fields.address1 %></td>
+	</tr>
+      <% } %>
+      <% if (fields.address2 != "") { %>
+	<tr>
+	  <td>Address Line 2</td>
+	  <td><%= fields.address2 %></td>
+	</tr>
+      <% } %>
+    <% } %>
     <tr>
       <td>Country</td>
       <td><%= fields.country %></td>
@@ -34,6 +51,14 @@
       <td>City</td>
       <td><%= fields.city %></td>
     </tr>
+    <% if (window.ISPOWDER) { %>
+      <% if (fields.zip != "") { %>
+	<tr>
+	  <td>Zip/Postal Code</td>
+	  <td><%= fields.zip %></td>
+	</tr>
+      <% } %>
+    <% } %>
     <tr>
       <td>Last Login</td>
       <td class="format-date"><%= fields.last_weblogin %></td>
@@ -44,6 +69,14 @@
 	  <td>Portal</td>
 	  <td><%= fields.portal %></td>
 	</tr>
+	<% if (window.MAINSITE) { %>
+	  <tr>
+	    <td>Bound to Portal</td>
+	    <td><% if (fields.bound_portal) { %>Yes<% } else { %>No<% } %>
+	      (<a class="toggle" data-name="bound_portal">Toggle</a>)
+	    </td>
+	  </tr>
+	<% } %>
       <% } %>
       <tr>
 	<td>Created</td>
@@ -51,7 +84,11 @@
       </tr>
       <tr>
 	<td>Status</td>
-	<td><%= fields.status %></td>
+	<td><%= fields.status %>
+	  <span class="freezethaw hidden">
+	    (<a class="freeze text-danger">foo</a>)
+	  </span>
+	</td>
       </tr>
       <% if (fields.nonlocal_id != "") { %>
 	<tr>

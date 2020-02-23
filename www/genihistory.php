@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2015, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -126,7 +126,7 @@ if (1) {
 	}
     }
     $query_result =
-	DBQueryFatal("select a.*,c.DN,s.idx as slice_idx ".
+	DBQueryFatal("select a.*,c.DN,s.portal_url,s.idx as slice_idx ".
 		     "  from aggregate_history as a ".
 		     "left join geni_slices as s on s.uuid=a.slice_uuid ".
 		     "left join geni_certificates as c on ".
@@ -135,15 +135,20 @@ if (1) {
 		     "order by a.idx desc limit 20",
 		     $dblink);
 
-    $table = array('#id'	   => 'aggregate',
-		   '#title'        => "Aggregate History",
-		   '#headings'     => array("idx"          => "ID",
-					    "slice_hrn"    => "Slice",
-					    "creator_hrn"  => "Creator",
-					    "created"      => "Created",
-					    "Destroyed"    => "Destroyed",
-					    "Manifest"     => "Manifest"));
-    $rows = array();
+    echo "<center>\n";
+    echo "<br>";
+    echo "<font size=+1><b>Aggregate History</b></font>";
+    echo "<br>\n";
+    echo "<table>\n";
+    echo " <thead>\n";
+    echo "  <tr>\n";
+    echo "   <th>ID</th>\n";
+    echo "   <th>Slice/Creator</th>\n";
+    echo "   <th>Created/Destroyed</th>\n";
+    echo "   <th>Manifest/Portal</th>\n";
+    echo "  </tr>\n";
+    echo " </thead>\n";
+    echo " <tbody>\n";
 
     if (mysql_num_rows($query_result)) {
 	while ($row = mysql_fetch_array($query_result)) {
@@ -158,6 +163,7 @@ if (1) {
 	    $created     = $row["created"];
 	    $destroyed   = $row["destroyed"];
 	    $DN          = $row["DN"];
+            $portal_url  = "&nbsp";
 
 	    # If we have urns, show those instead.
 	    $slice_info = $slice_hrn;
@@ -189,19 +195,39 @@ if (1) {
 	    $url .= "$slice_info</a>";
 
 	    $manifest_url = "<a href='manifesthistory.php?uuid=$uuid'>manifest</a>";
+            #
+            # Try to form a URL back to the (Utah) Portal. 
+            #
+            if ($row["portal_url"]) {
+                $tmp = $row["portal_url"];
+                $portal_url = "<a href='$tmp'>portal</a>";
+            }
+            elseif ($row["speaksfor_urn"] && $row["speaksfor_urn"] != "") {
+                $active = ($destroyed ? 0 : 1);
+                $tmp = GenPortalURL($active,
+                                    $row["speaksfor_urn"], $slice_uuid);
+                if ($tmp) {
+                    $portal_url = "<a href='$tmp'>portal</a>";
+                }
+            }
+            echo "<tr>";
+            echo " <td rowspan=2>$idx</td>";
+            echo " <td>$url</td>";
+            echo " <td>$created</td>";
+            echo " <td>$manifest_url</td>";
+            echo "</tr>";
+            echo "<tr>";
+            echo " <td>$creator_info</td>";
+            echo " <td>$destroyed</td>";
+            echo " <td>$portal_url</td>";
+            echo "</tr>";
+	    echo "<tr></tr>\n";
 
-	    $tablerow = array("idx"       => $idx,
-			      "hrn"       => $url,
-			      "creator"   => $creator_info,
-			      "created"   => $created,
-			      "destroyed" => $destroyed,
-			      "manifest"  => $manifest_url );
-
-	    $rows[]  = $tablerow;
 	    $myindex = $idx;
 	}
-	list ($html, $button) = TableRender($table, $rows);
-	echo $html;
+        echo "</tbody>\n";
+        echo "</table>\n";
+        echo "</center>\n";
 
 	$query_result =
 	    DBQueryFatal("select count(*) from aggregate_history as a ".

@@ -1,3 +1,10 @@
+<style type="text/css">
+ .nowrap {  white-space: nowrap; }
+
+ .hidden-column {
+     display: none;
+ }
+</style>
 <div class='row'>
   <div class='col-xs-10 col-xs-offset-1'>
     <div id='date-slider'></div>
@@ -12,63 +19,31 @@
               col-md-12 col-md-offset-0
               col-sm-12 col-sm-offset-0
               col-xs-12 col-xs-offset-0'>
-    <input class='form-control search' type='search' data-column='all'
-           id='activity_table_search' placeholder='Search'>
-    <table class='tablesorter' id='activity_table'>
-      <thead>
-	<tr>
-	  <th>Name</th>
-	  <th>Profile</th>
-	  <th>Pid</th>
-	  <th>Creator</th>
-	  <th>PCs</th>
-	  <th>PHours</th>
-	  <th>VMs</th>
-	  <th>Created</th>
-	  <th>Destroyed</th>
-	</tr>
-	<tr>
-          <th class='filter-false sorter-false'>Totals</th>
-	  <th class='filter-false sorter-false' colspan=3></th>
-          <th class='filter-false sorter-false' data-math='col-sum'>0</th>
-          <th class='filter-false sorter-false' data-math='col-sum'
-	      data-math-mask='##0'>0</th>
-          <th class='filter-false sorter-false' data-math='col-sum'>0</th>
-	  <th class='filter-false sorter-false' data-math='col-count'>0</th>
-	  <th class='filter-false sorter-false'></th>
-	</tr>
-      </thead>
-      <tfoot>
-	<tr>
-          <th class='filter-false sorter-false'>Totals</th>
-	  <th class='filter-false sorter-false' colspan=3></th>
-          <th class='filter-false sorter-false' data-math='col-sum'>0</th>
-          <th class='filter-false sorter-false' data-math='col-sum'
-	      data-math-mask='##0'>0</th>
-          <th class='filter-false sorter-false' data-math='col-sum'>0</th>
-	  <th class='filter-false sorter-false' data-math='col-count'>0</th>
-	  <th class='filter-false sorter-false'></th>
-	</tr>
-      </tfoot>
-      <tbody>
-	<% _.each(instances, function(instance) { %>
-	<tr>
-	  <td><%- instance[9] %></a></td>
-	  <td>
-	    <a href='show-profile.php?action=edit&uuid=<%- instance[2] %>'>
-	      <%- instance[0] %></a>
-	  </td>
-	  <td><%- instance[1] %></a></td>
-	  <td><%- instance[5] %></td>
-	  <td><%- instance[3] %></td>
-	  <td><%- instance[8] %></td>
-	  <td><%- instance[4] %></td>
-	  <td class='format-date'><%- instance[6] %></td>
-	  <td class='format-date'><%- instance[7] %></td>
-	</tr>
-	<% }); %>
-      </tbody>
-    </table>
+    <div class="form-group row">
+      <div class="col-xs-6">
+	<input class='form-control search' type='search' data-column='all'
+               id='activity_table_search' placeholder='Search'>
+      </div>
+      <% if (window.ISADMIN) { %>
+	<div class="col-xs-6">
+	  <div class="input-group" id="search-ip">
+	    <input class='form-control col-xs-6'
+		   type='search'
+		   placeholder='IP Address'>
+	    <span class="input-group-btn">
+              <button class="btn btn-default"
+		      type="button">Search</button>
+	    </span>
+	  </div>
+	</div>
+      <% } %>
+    </div>
+    <center id="waiting">
+      <h5>Patience please, this will take a few moments</h5>
+      <br>
+      <img src='images/spinner.gif' />
+    </center>
+    <div id="table-div"></div>
   </div>
 </div>
 

@@ -8,7 +8,7 @@
         <p>Are you sure you want to terminate this experiment? 
           Click on the button below if you are really sure.
 	</p>
-	<% if (user_lockdown) { %>
+	<% if (expinfo.user_lockdown) { %>
 	<p class='text-warning'>
 	  This experiment has been flagged as important, possibly because
 	  it was granted an extension by an administrator; please confirm
@@ -19,13 +19,6 @@
 	  <input size=5 readonly value='<%- lockdown_code %>'>
 	  <input size=5 id='terminate_lockdown_code'>
 	</center>
-	<% if (extension_reason != "") { %>
-	<br>
-	<div class='text-center'>Most recent extension request reason</div>
-	<div style='border: solid #000 1px;'>
-	  <div style='padding-left: 2px; padding-right: 2px;'><%- extension_reason %></div>
-	</div>
-	<% } %>
 	<% } %>
 	<br>
         <button class='btn btn-primary align-center' id='terminate'

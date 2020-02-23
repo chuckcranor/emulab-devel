@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -147,7 +147,8 @@ JSFILES += $(wildcard $(SRCDIR)/js/*.js)
 
 BLOBFILES += $(wildcard blob/*.php3)
 
-APTUIFILES  = $(wildcard $(SRCDIR)/aptui/*.php)
+APTUIFILES  = $(wildcard $(SRCDIR)/aptui/*.html)
+APTUIFILES += $(wildcard $(SRCDIR)/aptui/*.php)
 APTUIFILES += $(wildcard $(SRCDIR)/aptui/*.ajax)
 APTUIFILES += $(wildcard $(SRCDIR)/aptui/*.png)
 APTUIFILES += $(wildcard $(SRCDIR)/aptui/*.ico)
@@ -161,6 +162,10 @@ APTTEMPLATES += $(wildcard $(SRCDIR)/aptui/template/*.md)
 APTCSSFILES = $(wildcard $(SRCDIR)/aptui/css/*.css)
 APTFONTS = $(wildcard $(SRCDIR)/aptui/fonts/*)
 APTIMAGES = $(wildcard $(SRCDIR)/aptui/images/*)
+JSTREE = $(wildcard $(SRCDIR)/aptui/jstree/*)
+
+APTNEWJSFILES   = $(wildcard $(SRCDIR)/aptui/js/new/*.js)
+APTNEWTEMPLATES = $(wildcard $(SRCDIR)/aptui/template/new/*.html)
 
 # need to make it *.gz; with simply "*", 
 # we end up sucking over "CVS"
@@ -226,6 +231,10 @@ ALLAPTTEMPLATES = $(notdir $(APTTEMPLATES))
 ALLAPTCSS = $(notdir $(APTCSSFILES))
 ALLAPTFONTS = $(notdir $(APTFONTS))
 ALLAPTIMAGES = $(notdir $(APTIMAGES))
+ALLJSTREE = $(notdir $(JSTREE))
+
+ALLAPTNEWJS  = $(notdir $(APTNEWJSFILES))
+ALLAPTNEWTEMPLATES = $(notdir $(APTNEWTEMPLATES))
 
 INSTALLFILES = $(addprefix $(INSTALL_SBINDIR)/, htmlinstall) \
 	$(addprefix $(INSTALL_WWWDIR)/, $(ALLFILES)) \
@@ -275,7 +284,10 @@ apt-install: 	$(addprefix $(INSTALL_WWWDIR)/apt/, $(ALLAPTUI)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/template/, $(ALLAPTTEMPLATES)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/css/, $(ALLAPTCSS)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/fonts/, $(ALLAPTFONTS)) \
-	$(addprefix $(INSTALL_WWWDIR)/apt/images/, $(ALLAPTIMAGES))
+	$(addprefix $(INSTALL_WWWDIR)/apt/images/, $(ALLAPTIMAGES)) \
+	$(addprefix $(INSTALL_WWWDIR)/apt/jstree/, $(ALLJSTREE)) \
+	$(addprefix $(INSTALL_WWWDIR)/apt/js/new/, $(ALLAPTNEWJS)) \
+	$(addprefix $(INSTALL_WWWDIR)/apt/template/new/, $(ALLAPTNEWTEMPLATES))
 	cd $(INSTALL_WWWDIR) && \
 		rm -f portal; \
 		ln -s apt portal;

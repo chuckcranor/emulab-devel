@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2014, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -41,19 +41,31 @@ include("showlogfile_sup.php3");
 $reqargs = RequiredPageArguments("image",     PAGEARG_IMAGE);
 $optargs = OptionalPageArguments("target",    PAGEARG_STRING,
 				 "canceled",  PAGEARG_STRING,
-				 "confirmed", PAGEARG_STRING);
+				 "confirmed", PAGEARG_STRING,
+                                 "classic",   PAGEARG_BOOLEAN);
+
+# Need these below.
+$imageid    = $image->imageid();
+$version    = $image->version();
+$image_pid  = $image->pid();
+$image_gid  = $image->gid();
+$image_name = $image->imagename();
+$image_path = $image->path();
+
+if (!$CLASSICWEB_OVERRIDE && !$classic) {
+    $url = "apt/snapshot-image.php?imageid=$imageid&version=$version";
+    if (isset($target)) {
+        $url .= "&node=$target";
+    }
+    header("Location: $url");
+    return;
+}
 
 #
 # Standard Testbed Header
 #
 PAGEHEADER("Snapshot Node Disk into New or Existing Image");
 
-# Need these below.
-$imageid    = $image->imageid();
-$image_pid  = $image->pid();
-$image_gid  = $image->gid();
-$image_name = $image->imagename();
-$image_path = $image->path();
 
 if (!$image->AccessCheck($this_user, $TB_IMAGEID_MODIFYINFO )) {
     USERERROR("You do not have permission to modify image '$imageid'.", 1);
@@ -70,7 +82,8 @@ if (! isset($target) || isset($canceled)) {
     }
     echo "<br />";
 
-    $url = CreateURL("loadimage", $image); 
+    $url = CreateURL("loadimage", $image);
+    $url .= "&classic=1";
 
     echo "<form action='$url' method='post'>\n".
 	 "<font size=+1>Node to snapshot into image '$image_name':</font> ".
@@ -87,7 +100,7 @@ if (! isset($target) || isset($canceled)) {
 }
 
 #
-# A node or something else to pass through?
+# A node to pass through?
 #
 if (preg_match("/^[-\w]+$/", "$target")) {
     $node = Node::Lookup($target);
@@ -123,6 +136,7 @@ else {
 
 if (! isset($confirmed)) {
     $url = CreateURL("loadimage", $image);
+    $url .= "&classic=1";
     $newurl = CreateURL("newimageid_ez", "node_id", $target);
     
     echo "<br><center><form action='$url' method='post'>\n".

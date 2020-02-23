@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -254,7 +254,7 @@ function Do_ProfileList()
 function Do_MemberList()
 {
     global $this_user, $target_group;
-    global $newTrustMap;
+    global $newTrustMap, $TB_PROJECT_ADDUSER;
 
     if (CheckPageArgs()) {
         return;
@@ -265,6 +265,10 @@ function Do_MemberList()
     $memberlist    = $target_group->MemberList(0, 1);
     $nonmemberlist = $target_group->NonMemberList();
     $leader        = $target_group->GetLeader();
+    # Canapprove is a proxy for group_root or better.
+    $statsokay     = (ISADMIN() ||
+                      $target_group->AccessCheck($this_user,
+                                                 $TB_PROJECT_ADDUSER));
 
     foreach ($memberlist as $user) {
         $membership = $target_group->MemberShipInfo($user);
@@ -291,6 +295,13 @@ function Do_MemberList()
             (ISADMIN() ||
              $target_group->CanDeleteUser($this_user, $user) ? 1 : 0);
 
+        if ($statsokay) {
+            list($pcount, $phours) = Instance::MonthsUsage($user,$target_group);
+            if ($phours) {
+                $blob["usage"] = array("pcount" => $pcount,
+                                       "phours" => intval($phours));
+            }
+        }
         $members[$user->uid()] = $blob;
     }
     foreach ($nonmemberlist as $user) {
@@ -389,7 +400,8 @@ function Do_EditMembership()
         }
         if ($action == "remove") {
             # Check permission to do this. This is really a project test.
-            if (!$target_group->CanDeleteUser($this_user, $target_user)) {
+            if (!ISADMIN() &&
+    	        !$target_group->CanDeleteUser($this_user, $target_user)) {
                 SPITAJAX_ERROR(-1, "Not allowed to remove user: $uid");
                 return -1;
             }

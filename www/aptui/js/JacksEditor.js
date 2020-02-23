@@ -11,25 +11,19 @@ $(function () {
 	    "defaults": [
 		{
 		    "name": "Add VM",
-		    "image": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "image": "urn:publicid:IDN+emulab.net+image+emulab-ops:UBUNTU14-64-STD",
 		    "type": "emulab-xen"
 		}
 	    ],
 	    "images": [
-/*
-			{
-			    "id": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:FBSD100-64-STD",
-			    "name": "FreeBSD 10.0 64-bit version"
-			},
-*/
 		{
-		    "id": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "id": "urn:publicid:IDN+emulab.net+image+emulab-ops:UBUNTU14-64-STD",
 		    "name": "Ubuntu 14.04 LTS 64-bit"
-		}/*,
-			{
-			    "id": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
-			    "name": "Ubuntu 14.04 LTS 64-bit"
-			}*/
+		},
+		{
+		    "id": "urn:publicid:IDN+emulab.net+image+emulab-ops:UBUNTU16-64-STD",
+		    "name": "Ubuntu 16.04 LTS 64-bit"
+		}
 	    ],
 	    "types": [
 		{
@@ -45,18 +39,18 @@ $(function () {
 	    "defaults": [
 		{
 		    "name": "Xen VM",
-		    "image": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "image": "urn:publicid:IDN+emulab.net+image+emulab-ops:UBUNTU14-64-STD",
 		    "type": "emulab-xen"
 		},
 		{
 		    "name": "Bare Metal PC",
-		    "image": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "image": "urn:publicid:IDN+emulab.net+image+emulab-ops:UBUNTU14-64-STD",
 		    "type": "raw-pc"
 		}
 	    ],
 	    "images": [
 		{
-		    "id": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "id": "urn:publicid:IDN+emulab.net+image+emulab-ops:UBUNTU14-64-STD",
 		    "name": "Ubuntu 14.04 LTS 64-bit"
 		}
 	    ],
@@ -76,9 +70,12 @@ $(function () {
     var waitingInstances = [];
     var contextFetched = false;
 
-    var contextUrl = "";
+    var contextUrl = null;
     var context = aptContext;
-    if (window.ISCLOUD)
+    if (0) {
+        context = localContext;
+    }
+    else if (window.ISCLOUD)
     {
         contextUrl = 'https://www.emulab.net/protogeni/jacks-context/cloudlab-utah.json';
     }
@@ -95,8 +92,8 @@ $(function () {
 	contextUrl = 'https://www.emulab.net/protogeni/jacks-context/phantomnet.json';
     }
 
-    if (window.ISCLOUD || window.ISPNET || window.ISPOWDER ||
-	(window.ISEMULAB && window.MAINSITE))
+    if (contextUrl && (window.ISCLOUD || window.ISPNET || window.ISPOWDER ||
+		       (window.ISEMULAB && window.MAINSITE)))
     {
 	$('#edit_topo_modal_button').prop('disabled', true);
 	$.get(contextUrl).then(contextReady, contextFail);
@@ -108,6 +105,7 @@ $(function () {
 
     function contextReady(data)
     {
+        console.info("contextReady", data);
 	$('#edit_topo_modal_button').prop('disabled', false);
         context = data;
       var callback = function(json) {

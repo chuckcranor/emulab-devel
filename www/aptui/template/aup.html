@@ -21,8 +21,26 @@
     </div>
   </div>
 </div>
-
-
-
-
-
+<div id='mustaccept-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-header'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<center><h4>Please Accept our AUP</h4></center>
+      </div>
+      <div class='modal-body'>
+	<p class="lead">
+	  <% if (window.ISPOWDER) { %>
+	    As the POWDER platform transitions into availability of
+	    general over-the-air operation, platform users need to
+	    agree to this updated acceptable-use-policy (AUP).
+	  <% } else { %>
+	    Please take a moment to read and accept this updated
+	    acceptable-use-policy (AUP).
+	  <% } %>
+	</p>
+      </div>
+    </div>
+  </div>
+</div>

@@ -40,7 +40,7 @@ sub usage()
     print STDERR " -n        - Impotent mode\n";
     print STDERR " -r        - Delete wire\n";
     print STDERR " -i        - Show info about wire from DB\n";
-    print STDERR " -f        - (with -r) force deletion, even if iface exists\n";
+    print STDERR " -f        - (with -r) force deletion, even if wire is in use\n";
     print STDERR " -c cable  - Cable ID\n";
     print STDERR " -l len    - Cable length\n";
     print STDERR " -t type   - Wire type (defaults to Unused)\n";
@@ -54,7 +54,7 @@ my $impotent  = 0;
 my $remove    = 0;
 my $info      = 0;
 my $force     = 0;
-my $type      = "other";
+my $type      = "Unused";
 my $cable;
 my $cablelen;
 my ($node_id1,$iface_id1,$card1,$port1,$node_id2,$iface_id2,$card2,$port2);
@@ -211,7 +211,7 @@ $wire = Interface::Wire->LookupAny($node_id1, $card1, $port1);
 if (defined($wire)) {
     fatal("Wire using interface two already exists: $wire\n");
 }
-$wire = Interface::Wire->LookupAny($node_id1, $card2, $port2);
+$wire = Interface::Wire->LookupAny($node_id2, $card2, $port2);
 if (defined($wire)) {
     fatal("Wire using interface two already exists: $wire\n");
 }

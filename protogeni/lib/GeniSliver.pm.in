@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -47,6 +47,7 @@ use GeniUsage;
 use GeniHRN;
 use GeniXML;
 use GeniEvent;
+use EmulabConstants;
 use emutil;
 use Node;
 use English;
@@ -732,6 +733,7 @@ use GeniSlice;
 use GeniCredential;
 use GeniCertificate;
 use GeniUtil;
+use EmulabConstants;
 use emutil;
 use XML::Simple;
 use Data::Dumper;
@@ -915,11 +917,10 @@ sub AnnotateManifest($)
 	    if (defined($ipv4));
     }
     my $services = GeniXML::FindFirst("n:services", $rspec);
-    
+    if (! defined($services)) {
+	$services = GeniXML::AddElement("services", $rspec);
+    }
     if ($experiment->HasNonLocalUsers()) {
-	if (! defined($services)) {
-	    $services = GeniXML::AddElement("services", $rspec);
-	}
 	my $login = GeniXML::FindFirst("n:login", $services);
 	while (defined($login)) {
 	    $services->removeChild($login);
@@ -944,20 +945,49 @@ sub AnnotateManifest($)
     # one, expecting it to be available by the time the user might
     # want to use it.
     #
-    if (!$node->IsTainted() &&
-	(($node->TipServer(\$tipserver) == 0 && defined($tipserver)) ||
-	 $node->isvirtnode())) {
-	if (! defined($services)) {
-	    $services = GeniXML::AddElement("services", $rspec);
+    if (!$node->IsTainted()) {
+	if ($node->TipServer(\$tipserver) == 0 && defined($tipserver) ||
+	    $node->isvirtnode()) {
+	    my $console = GeniXML::FindNodesNS("n:console", $services,
+					       $GeniXML::EMULAB_NS)->pop();
+	    if (defined($console)) {
+		$services->removeChild($console);
+	    }
+	    $console = GeniXML::AddElement("console",
+					   $services, $GeniXML::EMULAB_NS);
+	    GeniXML::SetText("server", $console,
+			     (defined($tipserver) ? $tipserver : $sshdhost));
 	}
-	my $console = GeniXML::FindNodesNS("n:console", $services,
-					   $GeniXML::EMULAB_NS)->pop();
-	if (defined($console)) {
-	    $services->removeChild($console);
+	if ($node->recoverymfs_osid() && !$node->isvirtnode()) {
+	    my $recovery = GeniXML::FindNodesNS("n:recovery", $services,
+						$GeniXML::EMULAB_NS)->pop();
+	    if (!defined($recovery)) {
+		$recovery = GeniXML::AddElement("recovery",
+						$services, $GeniXML::EMULAB_NS);
+	    }
+	    GeniXML::SetText("available", $recovery, "true");
 	}
-	$console = GeniXML::AddElement("console",$services,$GeniXML::EMULAB_NS);
-	GeniXML::SetText("server", $console,
-			 (defined($tipserver) ? $tipserver : $sshdhost));
+	elsif (defined($services)) {
+	    my $recovery = GeniXML::FindNodesNS("n:recovery", $services,
+						$GeniXML::EMULAB_NS)->pop();
+	    if (defined($recovery)) {
+		$services->removeChild($recovery);
+	    }
+	}
+    }
+    # Always add this.
+    my $imageable = GeniXML::FindNodesNS("n:imageable", $services,
+					 $GeniXML::EMULAB_NS)->pop();
+    if (!defined($imageable)) {
+	$imageable = GeniXML::AddElement("imageable",
+					 $services, $GeniXML::EMULAB_NS);
+    }
+    # The imageable test does not generally work for virtnodes.
+    if (($node->isvirtnode() || $node->imageable()) && !$node->IsTainted()) {
+	GeniXML::SetText("available", $imageable, "true");
+    }
+    else {
+	GeniXML::SetText("available", $imageable, "false");
     }
 
     my $adb_port;
@@ -1543,6 +1573,7 @@ sub ComputeStatus($;$)
 	$status = "failed";
     }
     elsif ($eventstate eq TBDB_NODESTATE_SHUTDOWN() ||
+	   $eventstate eq TBDB_NODESTATE_POWEROFF() ||
 	   $eventstate eq TBDB_NODESTATE_PXEWAIT()) {
 	$status = "notready";
     }
@@ -1694,6 +1725,13 @@ sub GenerateStatusBlob($)
     $state = "stopped"
 	if ($state eq "new");
 
+    # See if booted into the recovery MFS (not admin or frisbee).
+    my $recovery = 0;
+    if ($node->recoverymfs_osid() && $node->temp_boot_osid() &&
+	$node->recoverymfs_osid() == $node->temp_boot_osid()) {
+	$recovery = 1;
+    }
+
     #
     # So we have a bunch of timestamps for various bits of state.
     # Not much atomicity, but I think we are okay. Use the most
@@ -1714,6 +1752,7 @@ sub GenerateStatusBlob($)
 	"rawstate"      => $rawstate,
 	"nodestatus"    => $nodestatus,
 	"utc"           => $utc,
+	"recovery"      => $recovery,
     };
 
     #

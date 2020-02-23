@@ -94,7 +94,7 @@ main_diskcheck() {
     declare -i -r rspeed_val=23
     declare -i -r wcache=24
     declare -i -r wcache_val=25
-    declare -i -r lastslot=25
+    declare -i -r lastslot=25 # used for iteration thru values
 
     # init a default string
     unset -v d; declare -a d=()
@@ -165,8 +165,6 @@ main_diskcheck() {
 	# Must have size val before attempting disk speed tests
 	if (( $mfsmode == 1 )) ; then
 	    for ((i=0;i<=$lastslot;i++)) ; do
-		# moved here getwcache so it will only run in mfsmode, and will run befor read/write test 
-		d[$wcache_val]=$(getwcache ${drive[$idx]})
 		case $i in
 		    $rspeed_val ) 
 		# check the size, if small then might be a USB drive
@@ -177,7 +175,7 @@ main_diskcheck() {
 		    fi
 		    ;;
 		    $wspeed_val ) 
-# XXX test to call getwcache a second time just before write-test - really for testing only
+		    # check the WCE before the speed test
 		    d[$wcache_val]=$(getwcache ${drive[$idx]})
 		    if [ ${d[$size_val]} -gt 8 ] ; then
 			d[$wspeed_val]=$(getwspeed ${drive[$idx]})
@@ -571,7 +569,7 @@ getwcache() {
 		res="enabled"
 	    elif [ "${x/0}" != "$x" ] ; then
 		res="disabled"
-		printf " %s:%d "  "Setting WCE" ${$sd} >> ${logfile4tb}
+#		printf " %s:%s\n"  "Setting WCE" "$sd" >> ${logfile4tb}
 		/usr/local/etc/emulab/camwce -P on $sd  > /dev/null 2>&1
 	    fi
 	fi

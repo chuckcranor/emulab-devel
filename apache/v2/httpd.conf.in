@@ -1122,7 +1122,12 @@ SSLCipherSuite ALL:!ADH:!EXPORT:!SSLv2:!RC4:!MD5:!AECDH:+HIGH:+MEDIUM:!LOW
 # pass phrase.  Note that a kill -HUP will prompt again.  A new
 # certificate can be generated using the genkey(1) command.
 #SSLCertificateFile /etc/pki/tls/certs/localhost.crt
+<IfDefine LETSENCRYPT>
+SSLCertificateFile /usr/local/etc/letsencrypt/live/@OURDOMAIN@/cert.pem
+</IfDefine>
+<IfDefine !LETSENCRYPT>
 SSLCertificateFile /usr/local/etc/apache22/ssl.crt/www.@OURDOMAIN@.crt
+</IfDefine>
 
 #   Server Private Key:
 #   If the key is not combined with the certificate, use this
@@ -1130,7 +1135,12 @@ SSLCertificateFile /usr/local/etc/apache22/ssl.crt/www.@OURDOMAIN@.crt
 #   you've both a RSA and a DSA private key you can configure
 #   both in parallel (to also allow the use of DSA ciphers, etc.)
 #SSLCertificateKeyFile /etc/pki/tls/private/localhost.key
+<IfDefine LETSENCRYPT>
+SSLCertificateKeyFile /usr/local/etc/letsencrypt/live/@OURDOMAIN@/privkey.pem
+</IfDefine>
+<IfDefine !LETSENCRYPT>
 SSLCertificateKeyFile /usr/local/etc/apache22/ssl.key/www.@OURDOMAIN@.key
+</IfDefine>
 
 #   Server Certificate Chain:
 #   Point SSLCertificateChainFile at a file containing the
@@ -1145,7 +1155,9 @@ SSLCertificateKeyFile /usr/local/etc/apache22/ssl.key/www.@OURDOMAIN@.key
 #   Set the CA certificate verification path where to find CA
 #   certificates for client authentication or alternatively one
 #   huge file containing all of them (file must be PEM encoded)
+<IfDefine !LETSENCRYPT>
 SSLCACertificateFile @prefix@/etc/emulab.pem
+</IfDefine>
 
 #   Client Authentication (Type):
 #   Client certificate verification type and depth.  Types are

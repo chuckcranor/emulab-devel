@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2009-2017 University of Utah and the Flux Group.
+# Copyright (c) 2009-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -232,7 +232,7 @@ foreach my $type (@nodetypes) {
 
     # need to do this for each type encountered.
     TBDebugTimeStampWithDate("starting $type rootPreConfig()");
-    $libops{$type}{'rootPreConfig'}->($BOSSIP);
+    $libops{$type}{'rootPreConfig'}->($BOSSIP,\%attributes);
     TBDebugTimeStampWithDate("finished $type rootPreConfig()");
 }
 if ($debug) {
@@ -309,6 +309,7 @@ my %vnconfig = ( "vnodeid"   => $vnodeid,
 		 "environment"   => undef,
                  "storageconfig" => undef,
 		 "fwconfig"      => undef,
+		 "hostattributes"=> \%attributes,
 );
 sub VNCONFIG($) { return $vnconfig{'config'}->{$_[0]}; }
 
@@ -476,7 +477,7 @@ sub handler ($) {
     $SIG{HUP}  = 'IGNORE';
 
     my $str = "killed";
-    if ($signame eq 'USR1') {
+    if ($signame eq 'HUP') {
 	$leaveme = $LEAVEME_HALT;
 	$str = "halted";
     }
@@ -599,11 +600,11 @@ if (-e "$VNDIR/vnode.info") {
 #
 $SIG{TERM} = 'IGNORE';
 # Halt container and exit. Tear down transient state, leave disk.
-$SIG{USR1} = \&handler;
+$SIG{HUP} = \&handler;
 # Halt container and exit. Leave all state intact (we are rebooting).
 $SIG{USR2} = \&handler;
 # Halt container and exit. Tear down all state including disk.
-$SIG{HUP}  = \&handler;
+$SIG{USR1}  = \&handler;
 $SIG{INT}  = \&handler;
 
 #

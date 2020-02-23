@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -119,7 +119,7 @@ if ($isadmin) {
 # Portal support; show exports.
 #
 $exports_html = null;
-if ($PORTAL_ENABLE && $PORTAL_ISPRIMARY) {
+if ($PEER_ENABLE && $PEER_ISPRIMARY) {
     $pid_idx = $project->pid_idx();
     
     $query_result =

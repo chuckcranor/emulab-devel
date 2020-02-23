@@ -2,7 +2,10 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['user-dashboard', 'experiment-list', 'profile-list', 'project-list', 'dataset-list', 'user-profile', 'oops-modal', 'waitwait-modal', 'classic-explist','conversion-help-modal']);
+    var templates = APT_OPTIONS.fetchTemplateList(['user-dashboard',
+	   'experiment-list', 'profile-list', 'project-list', 'dataset-list', 
+	   'user-profile', 'oops-modal', 'waitwait-modal', 'classic-explist',
+	   'conversion-help-modal','paramsets-list']);
     var mainString = templates['user-dashboard'];
     var experimentString = templates['experiment-list'];
     var profileListString = templates['profile-list'];
@@ -21,6 +24,8 @@ $(function ()
 
 	// Generate the main template.
 	var html = mainTemplate({
+	    disabledset : window.UI_DISABLE_DATASETS,
+	    disabledres : window.UI_DISABLE_RESERVATIONS,
 	    emulablink  : window.EMULAB_LINK,
 	    isadmin     : window.ISADMIN,
 	    target_user : window.TARGET_USER,
@@ -65,6 +70,7 @@ $(function ()
 	LoadProjectsTab();
 	LoadProfileTab();
 	LoadDatasetTab();
+	LoadParameterSetsTab();
 	LoadClassicDatasets();
 
 	/*
@@ -72,6 +78,9 @@ $(function ()
 	 */
 	$('#sendtestmessage').click(function () {
 	    SendTestMessage();
+	});
+	$('#sendpasswordreset').click(function () {
+	    SendPasswordReset();
 	});
     }
 
@@ -142,7 +151,9 @@ $(function ()
 		$('#experiments_content')
 		    .html(template({"experiments" : json.value.user_experiments,
 				    "showCreator" : false,
-				    "showProject" : true}));
+				    "showProject" : true,
+				    "searchUUID"  : false,
+				    "showterminate" : true}));
 	    }
 	    if (json.value.project_experiments.length != 0) {
 		$('#project_experiments_content')
@@ -151,7 +162,9 @@ $(function ()
 			  template({"experiments" :
 				        json.value.project_experiments,
 				    "showCreator" : true,
-				    "showProject" : true}) +
+				    "showProject" : true,
+				    "searchUUID"  : false,
+				    "showterminate" : false}) +
 			  "</div>");
 	    }
 	    // Format dates with moment before display.
@@ -175,11 +188,50 @@ $(function ()
 			theme : 'green',
 		    });
 	    }
+	    // Terminate an experiment.
+	    $('#experiments_content .terminate-button').click(function (event) {
+		event.preventDefault();
+		TerminateExperiment(this);
+	    });
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "user-dashboard", "ExperimentList",
 					    {"uid" : window.TARGET_USER});
 	xmlthing.done(callback);
+    }
+
+    // Terminate an experiment
+    function TerminateExperiment(target)
+    {
+	console.info($(target), $(target).data("uuid"));
+	var uuid = $(target).data("uuid");
+
+	var callback = function(json) {
+	    sup.HideModal("#waitwait-modal");
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    // Reload the experiments tab. Easier.
+	    LoadExperimentTab();
+	};
+	// Bind the confirm button in the modal. 
+	$('#terminate-modal #terminate-confirm').click(function () {
+	    sup.HideModal('#terminate-modal');
+	    sup.ShowModal('#waitwait-modal');
+
+	    var xmlthing = sup.CallServerMethod(null, "status",
+						"TerminateInstance",
+						{"uuid" : uuid});
+	    xmlthing.done(callback);
+	});
+	// Handler so we know the user closed the modal. We need to
+	// clear the confirm button handler.
+	$('#terminate-modal').on('hidden.bs.modal', function (e) {
+	    $('#terminate-modal #terminate-confirm').unbind("click");
+	    $('#terminate-modal').off('hidden.bs.modal');
+	});
+	sup.ShowModal("#terminate-modal");
     }
 
     function LoadClassicExperiments()
@@ -249,7 +301,7 @@ $(function ()
 	    });
 	    // This activates the tooltip subsystem.
 	    $('[data-toggle="tooltip"]').tooltip({
-		delay: {"hide" : 500, "show" : 500},
+		delay: {"hide" : 100, "show" : 300},
 		placement: 'auto',
 	    });
 	    // Display the topo.
@@ -317,7 +369,7 @@ $(function ()
 	    });
 	    // This activates the tooltip subsystem.
 	    $('[data-toggle="tooltip"]').tooltip({
-		delay: {"hide" : 500, "show" : 500},
+		delay: {"hide" : 100, "show" : 300},
 		placement: 'auto',
 	    });
 	    // Display the topo.
@@ -475,10 +527,31 @@ $(function ()
 		$('#admin_content .toggle').click(function() {
 		    Toggle(this);
 		});
+		// Freeze or Thaw.
+		if (json.value.status == "active" ||
+		    json.value.status == "frozen") {
+		    if (json.value.status == "active") {
+			$('#admin_content .freeze').html("Freeze");
+		    }
+		    else {
+			$('#admin_content .freeze').html("Thaw");
+		    }
+		    $('#admin_content .freezethaw').removeClass("hidden");
+		    $('#admin_content .freeze').click(function (event) {
+			FreezeOrThaw(json.value.status);
+		    });
+		}
 	    }
 	    $('#myprofile_content')
 		.html(template({"fields"  : json.value,
 				"isadmin" : 0}));
+	    // Format dates with moment before display.
+	    $('#myprofile_content .format-date').each(function() {
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "user-dashboard", "AccountDetails",
@@ -522,6 +595,69 @@ $(function ()
 	var xmlthing =
 	    sup.CallServerMethod(null,
 				 "user-dashboard", "DatasetList",
+				 {"uid" : window.TARGET_USER});
+	xmlthing.done(callback);
+    }
+
+    function LoadParameterSetsTab()
+    {
+	var paramsets_table;
+	
+	var callback = function(json) {
+	    console.info("paramsets", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (! json.value) {
+		$('#paramsets_noparamsets').removeClass("hidden");
+		return;
+	    }
+	    var template = _.template(templates["paramsets-list"]);
+
+	    // Temporary until new geni-lib/ppwizard rolled out
+	    $('.paramsets-hidden').removeClass("hidden");
+	    
+	    $('#paramsets_content')
+		.html(template({"paramsets"   : json.value}));
+
+	    // Bind the delete button.
+	    $('#paramsets_content #delete-paramset-button')
+		.click(function (event) {
+		    event.preventDefault();
+		    var row = $(this).closest("tr");
+		    var paramset_uuid = $(row).attr("data-uuid");
+
+		    paramsets.InitDeleteParameterSet(window.TARGET_USER,
+						     paramset_uuid,
+			     function () {
+				 $(row).remove();
+				 paramsets_table.trigger('update');
+			     });
+		});
+	    
+	    // Format dates with moment before display.
+	    $('#paramsets_content table .format-date').each(function(){
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
+	    // This activates the tooltip subsystem.
+	    $('#paramsets_content [data-toggle="tooltip"]').tooltip({
+		delay: {"hide" : 100, "show" : 300},
+		placement: 'auto',
+	    });
+	    
+	    paramsets_table = $('#paramsets_content .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+		});
+	}
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "user-dashboard", "ListParameterSets",
 				 {"uid" : window.TARGET_USER});
 	xmlthing.done(callback);
     }
@@ -600,6 +736,45 @@ $(function ()
 			     callback);
     }
 
+    //
+    // Freeze or Thaw
+    //
+    function FreezeOrThaw(status) {
+	var tag = (status == "active" ? "Freeze" : "Thaw");
+
+	console.info("FreezeOrThaw: ", status, tag);
+	
+	// Handler for hide modal to unbind the click handler.
+	$('#confirm-freezethaw-modal').on('hidden.bs.modal', function (event) {
+	    $(this).unbind(event);
+	    $('#confirm-freezethaw').unbind("click.freezethaw");
+	});
+	$('#confirm-freezethaw').bind("click.freezethaw", function (event) {
+	    var callback = function(json) {
+		sup.HideWaitWait();
+	    
+		if (json.code) {
+		    sup.SpitOops("oops",
+				 "Failed to " + tag + " user");
+		    return;
+		}
+		LoadProfileTab();
+	    };
+	    var doit = function () {
+		sup.ShowWaitWait("This will take a minute. Patience please.");
+		var xmlthing =
+		    sup.CallServerMethod(null, "user-dashboard",
+					 "FreezeOrThaw",
+					 {"uid"   : window.TARGET_USER,
+					  "which" : tag});
+		xmlthing.done(callback);
+	    };
+	    sup.HideModal('#confirm-freezethaw-modal', doit);
+	});
+	$('#confirm-freezethaw-modal .which').html(tag);
+	sup.ShowModal('#confirm-freezethaw-modal');
+    }
+
     function SendTestMessage()
     {
 	var callback = function(json) {
@@ -611,6 +786,22 @@ $(function ()
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "user-dashboard", "SendTestMessage",
+					    {"uid" : window.TARGET_USER});
+	xmlthing.done(callback);
+    }
+
+    function SendPasswordReset()
+    {
+	var callback = function(json) {
+	    if (json.code) {
+		alert("Password reset could not be sent!");
+		return;
+	    }
+	    alert("Password reset has has been sent");
+	}
+	var xmlthing = sup.CallServerMethod(null,
+					    "user-dashboard",
+					    "SendPasswordReset",
 					    {"uid" : window.TARGET_USER});
 	xmlthing.done(callback);
     }

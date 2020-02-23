@@ -4,8 +4,8 @@
 
 PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-/etc/init.d/rcS
-/etc/init.d/rmnologin
+# /etc/init.d/rcS
+# /etc/init.d/rmnologin
 
 touch /etc/runit/stopit
 chmod 0 /etc/runit/stopit

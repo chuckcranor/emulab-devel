@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2013 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -47,12 +47,14 @@ sub usage()
     print STDERR "  -a     - Add certificate to approved list instead.\n";
     print STDERR "  -c     - Move certificate (commonname) to approved list.\n";
     print STDERR "  -r     - Remove certificate with given commonname.\n";
+    print STDERR "  -R     - With -r, remove cm/sa/ses authorities.\n";
     exit(1);
 }
-my $optlist    = "dnawcri";
+my $optlist    = "dnawcrRi";
 my $fromweb    = 0;
 my $approve    = 0;
 my $remove     = 0;
+my $purge      = 0;
 my $impotent   = 0;
 my $debug      = 0;
 my $commonname;
@@ -71,6 +73,7 @@ my $TEMPBUNDLE	  = "$TB/etc/unapproved.bundle";
 my $CERTDIR	  = "$TB/etc/genicacerts";
 my $GENCABUNDLE   = "$TB/sbin/gencabundle";
 my $GENCRLBUNDLE  = "$TB/sbin/protogeni/gencrlbundle";
+my $REMAUTH       = "$TB/sbin/protogeni/remauthority";
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -81,6 +84,7 @@ sub fatal($);
 sub ReadBundle($);
 sub Regenerate($$);
 sub AddCertificate($$);
+sub RemoveAuthorities($);
 sub Initialize();
 
 # Flag to regen the unapproved bundle
@@ -104,6 +108,7 @@ require GeniDB;
 import GeniDB;
 require GeniCertificate;
 require GeniAuthority;
+use GeniHRN;
 
 #
 # Check args.
@@ -139,6 +144,9 @@ if (defined($options{"c"})) {
 elsif (defined($options{"r"})) {
     $commonname = $ARGV[0];
     $remove = 1;
+    if (defined($options{"R"})) {
+	$purge = 1;
+    }
 }
 else {
     $certfile = $ARGV[0];
@@ -191,6 +199,9 @@ if ($remove) {
 	    delete($unapproved_certs{$cert->DN()});
 	    print "Deleting from unapproved list: " . $cert->DN() . "\n";
 	    Regenerate(1, 1);
+	    if ($purge) {
+		RemoveAuthorities($cert);
+	    }
 	    exit(0);
 	}
     }
@@ -218,6 +229,9 @@ if ($remove) {
 		    or fatal("Could not remove ${certfile}: $!");
 	    }
 	    Regenerate(0, 1);
+	    if ($purge) {
+		RemoveAuthorities($cert);
+	    }
 	    exit(0);
 	}
     }
@@ -551,6 +565,26 @@ sub Initialize()
 	    or fatal("Could not update DB");
     }
     return 0;
+}
+
+#
+# Remove authorities from the CH database.
+#
+sub RemoveAuthorities($)
+{
+    my ($cert) = @_;
+    my $domain = $cert->urn()->authority();
+    my $type   = $cert->urn()->type();
+
+    foreach my $which ("cm", "sa", "ses") {
+	my $urn = GeniHRN::Generate($domain, $type, $which);
+	print "Deleting authority from CH database:\n";
+	print "  $urn\n";
+	next
+	    if ($impotent);
+
+	system("$REMAUTH -c '$urn'");
+    }
 }
 
 sub fatal($)

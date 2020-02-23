@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -28,6 +28,7 @@ chdir("apt");
 include("quickvm_sup.php");
 include_once("instance_defs.php");
 include_once("aggregate_defs.php");
+include_once("resgroup_defs.php");
 $page_title = "Reservations";
 
 #
@@ -48,13 +49,31 @@ $optargs = OptionalPageArguments("edit",     PAGEARG_BOOLEAN,
                                  "debug",    PAGEARG_BOOLEAN,
                                  "cluster",  PAGEARG_STRING,
                                  "project",  PAGEARG_PROJECT,
-                                 "uuid",     PAGEARG_UUID);
+                                 "uuid",     PAGEARG_UUID,
+                                 "force",    PAGEARG_BOOLEAN);
 
 if ($edit) {
     if (! (isset($cluster) && isset($uuid))) {
         SPITUSERERROR("Missing arguments for edit mode");
         exit();
     }
+    #
+    # Check to see if this reservation is part of a reservation group. Mere
+    # users no longer get access to this interface.
+    #
+    if (!$force) {
+        $resgroup = ReservationGroup::LookupByMemberReservation($uuid);
+        if ($resgroup) {
+            header("Location: resgroup.php?edit=1&uuid=" . $resgroup->uuid());
+            exit();
+        }
+    }
+}
+if (!$force || !($isadmin || $this_user->admin() || $this_user->stud())) {
+    header("Location: resgroup.php");
+    exit();
+}
+if (isset($cluster)) {
     $aggregate = Aggregate::LookupByNickname($cluster);
     if (!$aggregate) {
         SPITUSERERROR("No such cluster: $cluster");
@@ -100,14 +119,14 @@ echo htmlentities(json_encode($plist));
 echo "</script>\n";
 
 # List of clusters.
-if ($edit) {
+if ($edit || isset($aggregate)) {
     $ams = array($aggregate);
 }
 elseif (isset($debug) && $debug) {
     $ams = array(Aggregate::ThisAggregate());
 }
 else {
-    $ams = Aggregate::SupportsReservations();
+    $ams = Aggregate::SupportsReservations($this_user);
 }
 if (!count($ams)) {
     SPITUSERERROR("No clusters support reservations.");
@@ -117,18 +136,30 @@ $amlist  = array();
 while (list($index, $aggregate) = each($ams)) {
     $urn = $aggregate->urn();
     $am  = $aggregate->name();
+    $reservable_nodes = $aggregate->ReservableNodes();
+    $typeinfo = $aggregate->typeinfo;
+
+    # Subtract out reservable nodes from the type count, do not want
+    # to confuse users. 
+    if ($reservable_nodes) {
+        foreach ($reservable_nodes as $node_id => $type) {
+            # There will not be a type extry if its zero (all nodes of
+            # that type are "reservable nodes")
+            if (array_key_exists($type, $typeinfo)) {
+                $count = $typeinfo[$type]["count"];
+                $typeinfo[$type]["count"] = $count - 1;
+            }
+        }
+    }
 
     $amlist[$urn] = array("urn"      => $urn,
                           "name"     => $am,
                           "nickname" => $aggregate->nickname(),
-                          "typeinfo" => $aggregate->typeinfo);
+                          "typeinfo" => $typeinfo,
+                          "reservable_nodes" => $reservable_nodes);
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
 echo htmlentities(json_encode($amlist));
-echo "</script>\n";
-
-echo "<script type='text/plain' id='skiptypes-json'>\n";
-echo htmlentities(json_encode(Instance::NodeTypePruneList()));
 echo "</script>\n";
 
 $defaults = array();
@@ -162,7 +193,8 @@ REQUIRE_MOMENT();
 REQUIRE_APTFORMS();
 AddLibrary("js/resgraphs.js");
 AddTemplateList(array("reserve-request", "reserve-faq", "reservation-graph",
-                      "oops-modal", "waitwait-modal", "confirm-modal"));
+                      "oops-modal", "waitwait-modal", "confirm-modal",
+                      "resusage-graph"));
 SPITREQUIRE("js/reserve.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
             "<script src='js/lib/nv.d3.js'></script>\n".

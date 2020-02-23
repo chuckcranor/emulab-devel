@@ -46,11 +46,28 @@ echo "packager    ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 sudo -u packager sh $DIRNAME/alpine3/runit-packager.sh
 
 cd /tmp/runit/x86_64
-cp -p *.apk $DESTDIR/
+mkdir -p $DESTDIR/tmp
+chown root:root $DESTDIR/tmp
+chmod 1777 $DESTDIR/tmp
+cp -p *.apk $DESTDIR/tmp
 
 # cd ../..
-# cp -p *.deb $DESTDIR/
+# cp -p *.deb $DESTDIR/tmp
 # rm -rf runit *.deb *.dsc
+
+#
+# Also rebuild shadow to support user/group names with capitalized letters.
+#
+cd /tmp/
+wget https://www.emulab.net/downloads/alpine-shadow-src.tar.gz
+tar -xzvf alpine-shadow-src.tar.gz
+chown -R packager shadow
+cd shadow
+sudo -u packager abuild checksum
+sudo -u packager -H abuild -r
+cp -p /home/packager/packages/tmp/x86_64/shadow-4*.apk \
+    /home/packager/packages/tmp/x86_64/shadow-uidmap-4*.apk \
+    $DESTDIR/tmp
 
 $DIRNAME/alpine/cleanup.sh
 

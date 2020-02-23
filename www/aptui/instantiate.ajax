@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -79,6 +79,7 @@ function Do_GetProfile()
                             'repohash'    => ($profile->repourl() ?
                                               substr($profile->repohash(),0,8)
                                               : ""),
+                            'newgenilib'  => $profile->UseNewGeniLib(),
 			    'amdefault'   => $amdefault));
 }
 
@@ -90,6 +91,7 @@ function Do_GetParameters()
     global $this_user;
     global $ajax_args;
     global $suexec_output, $suexec_output_array;
+    $parameter_sets = null;
 
     if (!isset($ajax_args["uuid"])) {
 	SPITAJAX_ERROR(1, "Missing profile uuid");
@@ -126,8 +128,148 @@ function Do_GetParameters()
         $paramdefs = $profile->paramdefs();
     }
     list ($formfrag, $defaults) = $profile->GenerateFormFragment($paramdefs);
-    SPITAJAX_RESPONSE(array("formfrag" => htmlentities($formfrag),
-			    "defaults" => $defaults));
+    $blob = array("formfrag"    => htmlentities($formfrag),
+                  "defaults"    => $defaults,
+                  "hasactivity" => $profile->HasActivity($this_user),
+                  "paramdefs"   => json_decode($paramdefs),
+                  "paramsets"   => $profile->ParameterSets($this_user));
+    
+    #
+    # If we get a rerun uuid, we need to get the bindings for that instance
+    #
+    if (isset($ajax_args["rerun_instance"])) {
+        if (!IsValidUUID($ajax_args["rerun_instance"])) {
+            SPITAJAX_ERROR(1, "Rerun instance UUID is not a valid UUID");
+            return;
+        }
+        $rerun_uuid   = $ajax_args["rerun_instance"];
+        $profile_uuid = $profile->uuid();
+        $webtask      = WebTask::CreateAnonymous();
+        $webtask_id   = $webtask->task_id();
+
+        $retval = SUEXEC($this_user->uid(), "nobody",
+                         "webmanage_profile -t $webtask_id -- ".
+                         "  bindings $rerun_uuid ",
+                         SUEXEC_ACTION_CONTINUE);
+        $webtask->Refresh();
+        
+        if ($retval) {
+            if (!$webtask->exited() || $retval < 0) {
+                SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
+            }
+            else {
+                SPITAJAX_ERROR(1, $webtask->output());
+            }
+            $webtask->Delete();
+            return;
+        }
+        $blob["rerun_bindings"] = $webtask->TaskValue("bindings");
+        $webtask->Delete();
+    }
+    elseif (isset($ajax_args["rerun_paramset"])) {
+        if (!IsValidUUID($ajax_args["rerun_paramset"])) {
+            SPITAJAX_ERROR(1, "Rerun paramset UUID is not a valid UUID");
+            return;
+        }
+        $rerun_uuid   = $ajax_args["rerun_paramset"];
+        $query_result = DBQueryFatal("select * from apt_parameter_sets ".
+                                     "where uuid='$rerun_uuid'");
+
+        if (!mysql_num_rows($query_result)) {
+            SPITAJAX_ERROR(1, "No such parameter set");
+            return;
+        }
+        $row = mysql_fetch_array($query_result);
+        if ($row["uid_idx"] != $this_user->uid_idx() && !ISADMIN()) {
+            SPITAJAX_ERROR(1, "Not enough permission to use parameter set");
+            return;
+        }
+        $blob["rerun_bindings"] = json_decode($row["bindings"]);        
+    }
+    SPITAJAX_RESPONSE($blob);
+}
+
+#
+# Return bindings for the last run of this profile.
+#
+function Do_GetPreviousBindings()
+{
+    global $this_user;
+    global $ajax_args;
+
+    if (!isset($ajax_args["uuid"])) {
+	SPITAJAX_ERROR(1, "Missing profile uuid");
+	return;
+    }
+    $profile = Profile::Lookup($ajax_args["uuid"]);
+    if (!$profile) {
+	SPITAJAX_ERROR(1, "Unknown profile uuid");
+	return;
+    }
+    if (!isset($this_user)) {
+	if (!$profile->ispublic()) {
+	    SPITAJAX_ERROR(1, "Not enough permission to instantiate profile");
+	    return;
+	}	    
+    }
+    elseif (! ($profile->CanInstantiate($this_user) || ISADMIN())) {
+	SPITAJAX_ERROR(1, "Not enough permission to instantiate profile");
+	return;
+    }
+
+    #
+    # Look for any running instances, use the latest if there are any.
+    #
+    $profileid = $profile->profileid();
+    $this_idx  = $this_user->uid_idx();
+    
+    $query_result =
+        DBQueryWarn("select uuid from apt_instances ".
+                    "where profile_id='$profileid' and ".
+                    "      creator_idx='$this_idx' ".
+                    "order by created desc limit 1");
+    if ($query_result && mysql_num_rows($query_result)) {
+        $row = mysql_fetch_array($query_result);
+        $rerun_uuid = $row["uuid"];
+    }
+    else {
+        $query_result =
+            DBQueryWarn("select uuid from apt_instance_history ".
+                        "where profile_id='$profileid' and ".
+                        "      creator_idx='$this_idx' ".
+                        "order by created desc limit 1");
+        if ($query_result && mysql_num_rows($query_result)) {
+            $row = mysql_fetch_array($query_result);
+            $rerun_uuid = $row["uuid"];
+        }
+        else {
+            SPITAJAX_ERROR(1, "No previous bindings");
+            return;
+        }
+    }
+    $profile_uuid = $profile->uuid();
+    $webtask      = WebTask::CreateAnonymous();
+    $webtask_id   = $webtask->task_id();
+
+    $retval = SUEXEC($this_user->uid(), "nobody",
+                     "webmanage_profile -t $webtask_id -- ".
+                     "  bindings $rerun_uuid ",
+                     SUEXEC_ACTION_CONTINUE);
+    $webtask->Refresh();
+        
+    if ($retval) {
+        if (!$webtask->exited() || $retval < 0) {
+            SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
+        }
+        else {
+            SPITAJAX_ERROR(1, $webtask->output());
+        }
+        $webtask->Delete();
+        return;
+    }
+    $blob = $webtask->TaskValue("bindings");
+    $webtask->Delete();
+    SPITAJAX_RESPONSE($blob);
 }
 
 #
@@ -172,13 +314,13 @@ function Do_GetImageList()
     if ($this_user && $this_user->webonly()) {
         # Only public images
 	$publicImages = ImagesWhere("where v.visibility='public' and i.project_urn not like '%$systemProject+authority+sa'", $dblink);
-	$systemImages = ImagesWhere("where i.project_urn like '%$systemProject+authority+sa'", $dblink);
+	$systemImages = ImagesWhere("where i.project_urn like '%$systemProject+authority+sa' and v.deprecated is NULL", $dblink);
     } else if ($this_user) {
 	$user_urn = addslashes($this_user->urn());
 	# Public images that weren't created by the user
 	$publicImages = ImagesWhere("where v.visibility='public' and i.project_urn not like '%$systemProject+authority+sa' and v.creator_urn != '$user_urn'", $dblink);
 	# System images that weren't created by the user
-	$systemImages = ImagesWhere("where v.visibility='public' and i.project_urn like '%$systemProject+authority+sa' and v.creator_urn != '$user_urn'", $dblink);
+	$systemImages = ImagesWhere("where v.visibility='public' and i.project_urn like '%$systemProject+authority+sa' and v.creator_urn != '$user_urn' and v.deprecated is NULL", $dblink);
         # All images for user
 	$myImages = ImagesWhere("where v.creator_urn='$user_urn'", $dblink);
     }
@@ -440,8 +582,7 @@ function Do_GetImageInfo()
 }
 
 #
-# Allow for checking at each step, although at the moment we
-# do notreally do this.
+# Allow for checking at each step.
 #
 function Do_CheckForm()
 {
@@ -458,6 +599,11 @@ function Do_CheckForm()
     }
     if ($ajax_args["step"] == 2) {
         if (CheckStep2() == 0) {
+            SPITAJAX_RESPONSE(0);
+        }
+    }
+    if ($ajax_args["step"] == 3) {
+        if (CheckStep3() == 0) {
             SPITAJAX_RESPONSE(0);
         }
     }
@@ -646,7 +792,6 @@ function CheckStep2()
     global $ajax_args;
     global $ISAPT, $ISPNET, $ISCLOUD, $ISEMULAB, $ISPOWDER;
     global $TB_PROJECT_CREATEEXPT;
-    global $maxduration;
 
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(-1, "Missing formfields");
@@ -701,7 +846,7 @@ function CheckStep2()
                 }
             }
         }
-        elseif ($ISAPT || $ISPNET || $ISEMULAB || $ISPOWDER) {
+        elseif ($ISAPT || $ISPNET || $ISEMULAB) {
             # No choice
             ;
         }
@@ -760,12 +905,70 @@ function CheckStep2()
                 $errors["name"] = "Already in use by another experiment";
             }
         }
+    }
+    if (count($errors)) {
+	SPITAJAX_ERROR(2, $errors);
+	return -1;
+    }
+    return 0;
+}
+function CheckStep3()
+{
+    global $this_user;
+    global $ajax_args;
+    global $ISAPT, $ISPNET, $ISCLOUD, $ISEMULAB, $ISPOWDER;
+    global $maxduration;
+    $start = null;
 
+    if (!isset($ajax_args["formfields"])) {
+	SPITAJAX_ERROR(-1, "Missing formfields");
+	return -1;
+    }
+    $formfields = $ajax_args["formfields"];
+    session_start();
+
+    #
+    # Verify scheduled start time if provided, no start time means
+    # start immediately.
+    #
+    if (isset($formfields["start"]) && $formfields["start"] != "") {
+        $start_ascii = $formfields["start"];
+        $start = strtotime($formfields["start"]);
+        if (!$start) {
+            $errors["start_day"] = "Cannot parse start time";
+        }
+        elseif ($start < time()) {
+            #
+            # If start is in the past, just treat it as now.
+            #
+            unset($start);
+        }
+    }
+    if (isset($formfields["end"]) && $formfields["end"] != "") {
+        $end_ascii = $formfields["end"];
+        $end = strtotime($formfields["end"]);
+        if (!$end) {
+            $errors["end_day"] = "Cannot parse end time";
+        }
+        elseif ($end < time()) {
+            $errors["end_day"] = "End is in the past";
+        }
+        elseif ($start && $end <= $start) {
+            $errors["end_day"] = "End is before the start";
+        }
+        elseif (($start && $end < $start + 3600) ||
+                $end < time() + 3600) {
+            $errors["end_day"] = "Too short, must be > 1 hour";
+        }
+    }
+    else {
         if (!isset($formfields["duration"]) || $formfields["duration"] == "") {
             $errors["duration"] = "Must set an experiment duration";
         }
-        elseif (!ctype_digit($formfields["duration"]) || (((int)$formfields["duration"]) <= 0 || ((int)$formfields["duration"]) > $maxduration)) {
-            $errors["duration"] = "Must be an integer between 1 and ".$maxduration;
+        elseif (!ctype_digit($formfields["duration"]) ||
+                (((int)$formfields["duration"]) <= 0 ||
+                 ((int)$formfields["duration"]) > $maxduration)) {
+            $errors["duration"] = "Must be between 1 and $maxduration hours";
         }
     }
     if (count($errors)) {
@@ -784,6 +987,16 @@ function Do_RunScript()
     global $this_user;
     global $ajax_args;
     global $suexec_output, $suexec_output_array;
+    $newgenilib = 0;
+    $profile = null;
+
+    if (isset($ajax_args["uuid"])) {
+        $profile = Profile::Lookup($ajax_args["uuid"]);
+        if (!$profile) {
+	    SPITAJAX_ERROR(1, "Unknown profile uuid");
+	    return;
+        }
+    }
 
     $script = "";
     if (isset($ajax_args["script"])) {
@@ -799,11 +1012,6 @@ function Do_RunScript()
 	    SPITAJAX_ERROR(1, "Missing profile uuid");
 	    return;
         }
-        $profile = Profile::Lookup($ajax_args["uuid"]);
-        if (!$profile) {
-	    SPITAJAX_ERROR(1, "Unknown profile uuid");
-	    return;
-        }
         if (!$profile->script()) {
 	    SPITAJAX_ERROR(1, "Not a geni-lib script");
 	    return;
@@ -816,19 +1024,36 @@ function Do_RunScript()
 	        SPITAJAX_RESPONSE($profile->rspec());
 	    } else {
 	        SPITAJAX_ERROR(1, "No rspec for guest user");
-	    }
+            }
         }
         $this_idx = $this_user->uid_idx();
         $this_uid = $this_user->uid();
-    
         if (! ($profile->CanInstantiate($this_user) || ISADMIN())) {
 	    SPITAJAX_ERROR(1, "Not enough permission to instantiate profile");
 	    return;
         }
     }
+    # Temporary
+    if ($profile && $profile->UseNewGeniLib()) {
+        $newgenilib = 1;
+    }
 
     if (preg_match("/^import/m", $script)) {
         $command = "webrungenilib";
+        if ($newgenilib) {
+            $command .= " -N ";
+        }
+        if ($profile && $profile->repourl()) {
+            $command .= " -r " . $profile->reponame();
+
+            if (isset($ajax_args["refspec"])) {
+                if (!preg_match('/^[-\w\/]+$/', $ajax_args["refspec"])) {
+                    SPITAJAX_ERROR(1, "Invalid refspec");
+                    return;
+                }
+                $command .= " -h " . escapeshellarg($ajax_args["refspec"]);
+            }
+        }
     }
     elseif (preg_match("/^source tb_compat/m", $script)) {
         $command = "webns2rspec -a";
@@ -899,6 +1124,9 @@ function Do_Submit()
     if (CheckStep2()) {
         return;
     }
+    if (CheckStep3()) {
+        return;
+    }
     $formfields = $ajax_args["formfields"];
     $amlist     = Instance::DefaultAggregateList();
     $am_array   = array();
@@ -949,6 +1177,9 @@ function Do_Submit()
         if (isset($formfields["repohash"]) && $formfields["repohash"] != "") {
             $args["repohash"] = $formfields["repohash"];
         }
+        if (isset($formfields["paramdefs"]) && $formfields["paramdefs"] != "") {
+            $args["paramdefs"] = $formfields["paramdefs"];
+        }
     }
 
     $aggregate_urn = "";
@@ -962,7 +1193,7 @@ function Do_Submit()
                 }
             }
         }
-        elseif ($ISAPT || $ISPNET || $ISEMULAB | $ISPOWDER) {
+        elseif ($ISAPT || $ISPNET || $ISEMULAB) {
             $aggregate_urn = $DEFAULT_AGGREGATE_URN;
         }
         elseif (isset($formfields["where"])) {
@@ -991,10 +1222,6 @@ function Do_Submit()
             $args["auth_token"] = $_SESSION["auth_token"];
         }
     }
-    if ($this_user) {
-        $args["duration"]  = $formfields["duration"];
-    }
-
     if (0) {
         TBERROR(print_r($args, true), 0);
         SPITAJAX_RESPONSE(0);
@@ -1003,13 +1230,26 @@ function Do_Submit()
     $options = "";
 
     if ($aggregate_urn != "") {
-        $options = " -a '$aggregate_urn'";
+        $options = " -a '$aggregate_urn' ";
     }
     elseif (count($sitemap)) {
         while (list($siteid, $urn) = each($sitemap)) {
             $options .= "--site 'site:${siteid}=${urn}' ";
         }
     }
+    # Scheduled start time if set.
+    if (isset($formfields["start"]) && $formfields["start"] != "") {
+        $start = strtotime($formfields["start"]);
+        $options .= " --start $start ";
+    }
+    if (isset($formfields["end"]) && $formfields["end"] != "") {
+        $end = strtotime($formfields["end"]);
+        $options .= " --stop $end ";
+    }
+    else {
+        $args["duration"]  = $formfields["duration"];
+    }
+    
     if (isset($_SESSION["privkey"])) {
         $keyname = tempnam("/tmp", "genilibkey");
         $fp = fopen($keyname, "w");
@@ -1038,10 +1278,17 @@ function Do_Submit()
         Instance::Instantiate($uuid, $this_user, $options, $args, $webtask);
 
     if (!$instance) {
-        # Create error is handled differently.
-	SPITAJAX_ERROR(3, $webtask->output());
         if (isset($keyname)) {
             unlink($keyname);
+        }
+        # Create error is handled differently.
+        $licenses = $webtask->TaskValue("required_licenses");
+        if ($licenses) {
+            SPITAJAX_ERROR(3, $licenses);
+            $_SESSION["licenses"] = $licenses;
+        }
+        else {
+            SPITAJAX_ERROR(1, $webtask->output());
         }
         $webtask->Delete();
         return;
@@ -1075,6 +1322,53 @@ function Do_Submit()
     session_destroy();
     SPITAJAX_RESPONSE($blob);
     return;
+}
+
+#
+# Send license email. 
+#
+function Do_RequestLicenses()
+{
+    global $this_user;
+    global $ajax_args;
+    session_start();
+
+    $email       = $this_user->email();
+    $name        = $this_user->name();
+    $uid         = $this_user->uid();
+    $adminemail  = $this_user->adminEmail();
+    $licenses    = json_decode(json_encode($_SESSION["licenses"]), true);
+    $body        = "";
+
+    foreach ($licenses as $idx => $details) {
+        $lname  = $details["license_name"];
+        $type   = $details["type"];
+        $target = $details["target"];
+        
+        $body .= "License ${lname}: ";
+        if ($type == "node") {
+            $body .= "Node $target";
+        }
+        elseif ($type == "type") {
+            $body .= "Node type $target";
+        }
+        elseif ($type == "aggregate") {
+            $body .= "Location $target";
+        }
+        $body .= "\n\n";
+    }
+
+    TBMAIL($adminemail, 
+           "$name ($uid) is requesting access to restricted resources",
+           "$name ($uid) is requesting access to restricted resources:\n\n".
+           $body .
+           "Operations staff will contact you if more information is needed.\n".
+           "You will receive email when permission to use these resources\n".
+           "has been granted.\n",
+           "From: $adminemail\n".
+           "CC: $name <$email>");
+
+    SPITAJAX_RESPONSE(1);
 }
 
 #

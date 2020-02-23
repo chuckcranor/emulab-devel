@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,9 +28,10 @@ $APTHOST	= "$WWWHOST";
 # causes confusion in geni-login.ajax. 
 $COOKDIEDOMAIN  = "$WWWHOST";
 $APTBASE	= "$TBBASE/portal";
-$APTMAIL        = $TBMAIL_OPS;
 $SUPPORT        = $TBMAILADDR_OPS;
-$APTTITLE       = "Emulab";
+$APTMAIL        = $TBMAIL_OPS;
+$APTMAILTO      = "<a href='mailto:$SUPPORT'>Testbed Operations</a>";
+$APTTITLE       = "$THISHOMEBASE";
 $FAVICON        = "../favicon.ico";
 $APTLOGO        = "emulab-logo.svg";
 $APTSTYLE       = "emulab.css";
@@ -50,6 +51,7 @@ $WITHPUBLISHING = 0;
 # Other Portal globals. 
 #
 $PORTAL_MANUAL          = "http://docs.emulab.net";
+$PORTAL_WIKI            = "https://gitlab.flux.utah.edu/emulab/emulab-devel/wikis/home";
 $PORTAL_HELPFORUM       = "emulab-users";
 $PORTAL_PASSWORD_HELP   = "Emulab Username or Email";
 $PORTAL_NSFNUMBER       = "1513121";
@@ -57,6 +59,13 @@ $PORTAL_GENESIS         = "emulab";
 $DEFAULT_AGGREGATE      = "Emulab";
 $DEFAULT_AGGREGATE_URN	= "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 $PORTAL_NAME            = "Emulab";
+
+#
+# Array to map a portal "genesis" to its URL. Overridden below.
+#
+$BrandMapping = array(
+    "emulab"     => "$TBBASE/portal",
+);
 
 #
 # The Utah MotherShip defines alternate portals. This needs to be split

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -583,7 +583,9 @@ if ($isadmin) {
 	}
 
 	SUBMENUSECTION("Admin Options");
-
+        WRITESUBMENUBUTTON("Show Vlans",
+                           "portal/list-vlans.php?exptidx=$expindex");
+        
 	if ($expstate == $TB_EXPTSTATE_ACTIVE && !$geniflags) {
 	    WRITESUBMENUBUTTON("Send an Idle Info Request",
 			       CreateURL("request_idleinfo", $experiment));

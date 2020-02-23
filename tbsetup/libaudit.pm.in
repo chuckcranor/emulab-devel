@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,7 +33,7 @@ use Exporter;
 	 LogStart LogEnd LogAbort AuditDisconnect AuditPrefork
 	 LIBAUDIT_NODAEMON LIBAUDIT_DAEMON LIBAUDIT_LOGONLY
 	 LIBAUDIT_NODELETE LIBAUDIT_FANCY LIBAUDIT_LOGTBOPS LIBAUDIT_LOGTBLOGS
-	 LIBAUDIT_DEBUG
+	 LIBAUDIT_DEBUG LIBAUDIT_NOCHILD
        );
 
 # After package decl.
@@ -47,6 +47,7 @@ use Carp;
 # Testbed Support libraries
 #
 use libtestbed;
+use Brand;
 
 my $TBOPS	= "@TBOPSEMAIL@";
 my $TBAUDIT	= "@TBAUDITEMAIL@";
@@ -84,6 +85,12 @@ my $fancy       = 0;
 
 # We be forked.
 my $forked      = 0;
+
+# Do not send email from children, just the parent.
+my $nochild     = 0;
+
+# Branding for email. Set via audit info.
+my $brand;
 
 # Extra info used when AUDIT_FANCY is set
 my %AUDIT_INFO;
@@ -129,6 +136,7 @@ sub LIBAUDIT_FANCY      { 0x08; } # Only use if libdb and libtblog are
 sub LIBAUDIT_LOGTBOPS	{ 0x10; }
 sub LIBAUDIT_LOGTBLOGS	{ 0x20; }
 sub LIBAUDIT_DEBUG	{ 0x40; }
+sub LIBAUDIT_NOCHILD	{ 0x80; }
 
 #
 # Start an audit (or log) of a script. First arg is a flag indicating if
@@ -146,7 +154,7 @@ sub AuditStart($;$$)
     # should now what they do!
     #
     if (defined($ENV{'TBAUDITON'})) {
-	return;
+	return 0;
     }
 
     # Reset to default for rentry in log running script.
@@ -157,11 +165,15 @@ sub AuditStart($;$$)
     $savelog    = 0;
     $fancy      = 0;
     $forked     = 0;
+    $brand      = Brand->Create(); # Default Brand.
 
     # Logging instead of "auditing" ...
     if (defined($options)) {
 	if ($options & LIBAUDIT_NODELETE()) {
 	    $savelog = 1;
+	}
+	if ($options & LIBAUDIT_NOCHILD()) {
+	    $nochild = 1;
 	}
 	if ($options & LIBAUDIT_DEBUG()) {
 	    $debugfile = "/var/tmp/auditdebug.$$";
@@ -191,10 +203,10 @@ sub AuditStart($;$$)
     # "what was done" message to the audit list, and CC it to tbops if it
     # exits with an error. But the log is the responsibility of the user.
     #
-    if (!$daemon && isatty(STDIN)) {
+    if (!$daemon && isatty(STDOUT)) {
 	$auditing = 1;
 	$ENV{'TBAUDITON'} = "$SCRIPTNAME:$USERNAME";
-	return;
+	return 0;
     }
     # Clear this in case left behind, as for long running process.
     unlink($PREFORKFILE)
@@ -221,6 +233,8 @@ sub AuditStart($;$$)
 	if (defined(&libtblog::tblog_new_child_process)) {
 	    libtblog::tblog_new_child_process();
 	}
+	# For forked|nochild
+	$SAVEPID = $PID;
     }
     $auditing = 1;
 
@@ -303,7 +317,7 @@ sub AuditEnd(;$)
     
     SendAuditMail($status);
     delete @ENV{'TBAUDITLOG', 'TBAUDITON'};
-    unlink($logfile)
+    DeleteLogFile()
 	if (defined($logfile) && !$savelog);
     return 0;
 }
@@ -362,7 +376,7 @@ sub AuditAbort()
 	    # This should be okay; the process will keep writing to it,
 	    # but will be deleted once the process ends and its closed.
 	    #
-	    unlink($logfile)
+	    DeleteLogFile()
 	    	if (!$savelog);
 	    undef($logfile);
 	}
@@ -463,6 +477,22 @@ sub AuditFork()
 }
 
 #
+# Try to delete the log file. We might have to flip back to root.
+#
+sub DeleteLogFile()
+{
+    return
+	if (!defined($logfile) || $savelog);
+
+    return
+	if (unlink($logfile));
+
+    # Failed, try flipping (which will fail of course if not setuid).
+    $EUID = 0;
+    unlink($logfile);
+}
+
+#
 # Internal function to send the email. First argument is exit status.
 #
 # Two messages are sent. A topical message is sent to the audit list. This
@@ -506,13 +536,13 @@ sub SendAuditMail($)
 	my $FROM     = "$GCOS <${USERNAME}\@${OURDOMAIN}>";
 
 	if (! $logonly) {
-	    SENDMAIL($TBAUDIT, $subject, $body, $FROM, undef, ());
+	    $brand->SendEmail($TBAUDIT, $subject, $body, $FROM, undef, ());
 	}
 
 	# Success and no log ...
 	if ($exitstatus == 0 && !(defined($logfile) && -s $logfile)) {
 	    # Do not save empty logfile. 
-	    unlink($logfile)
+	    DeleteLogFile()
 		if (defined($logfile));
 	    goto done;
 	}
@@ -566,11 +596,11 @@ sub SendAuditMail($)
 	    $HDRS .= "CC: " . join(', ', @{ $AUDIT_INFO{'cc'} });
 	}
 
-	# Leave logfile if sendmail fails. 
-	if (SENDMAIL($TO, $subject, $body, $FROM, $HDRS, @FILES)) {
-	    unlink($logfile)
-		if (defined($logfile) && !$savelog);
-	}
+	# This always succeeds, stop leaving file in /tmp
+	$brand->SendEmail($TO, $subject, $body, $FROM, $HDRS, @FILES);
+	DeleteLogFile()
+	    if (defined($logfile) && !$savelog);
+
       done:
 	system("/usr/bin/touch $prefork")
 	    if (defined($prefork));
@@ -631,11 +661,14 @@ sub SendFancyMail($)
 	my $what = "Failed: $SCRIPTNAME";
 	$what = $AUDIT_INFO{failure_frag} if defined $AUDIT_INFO{failure_frag};
 	$which = $AUDIT_INFO{which};
+
+	# Ick.
+	local $libtestbed::MAILTAG = $brand->EmailTag();
+    
 	$sendmail_res 
 	    = tblog_email_error($d, $TO, $what,	$which, 
 				$FROM, $extra_cc, "Cc: $TBOPS",
-				$prefix, @FILES); 
-
+				$prefix, @FILES);
     } else {
 
 	my $subject  = "$SCRIPTNAME succeeded";
@@ -649,11 +682,11 @@ sub SendFancyMail($)
 	$HDRS .= "Bcc: $TBLOGS";
 	
 	$sendmail_res 
-	    = SENDMAIL($TO, $subject, $body, $FROM, $HDRS, @FILES);
+	    = $brand->SendEmail($TO, $subject, $body, $FROM, $HDRS, @FILES);
     }
     
     if ($sendmail_res) {
-	unlink($logfile)
+	DeleteLogFile()
 	    if (defined($logfile) && !$savelog);
     }
 }
@@ -667,7 +700,8 @@ my %AUDIT_METAINFO =
       failure_frag => 'string', # ie "Bla Failure"
       message      => 'string',
       to           => 'list',   # Send audit mail to these people
-      cc           => 'list');  # Cc audit mail to these people
+      cc           => 'list',   # Cc audit mail to these people
+      brand        => 'brand'); # Brand object for sendmail
 
 #
 # AddAuditInfo($key, $value)
@@ -689,7 +723,7 @@ sub AddAuditInfo ($$) {
     }
 
     if ($AUDIT_METAINFO{$key} eq 'string') {
-	
+
 	$AUDIT_INFO{$key} = $value;
 	return 1;
 
@@ -698,6 +732,8 @@ sub AddAuditInfo ($$) {
 	push @{$AUDIT_INFO{$key}}, $value;
 	return 1;
 
+    } elsif ($AUDIT_METAINFO{$key} eq 'brand') {
+	$brand = $value;
     } else {
 
 	carp "Unknown key, \"$key\" in AddAuditInfo";
@@ -711,7 +747,7 @@ sub AddAuditInfo ($$) {
 # 
 END {
     return
-	if ($forked && $PID != $SAVEPID);
+	if (($forked || $nochild) && $PID != $SAVEPID);
     
     # Save, since shell commands will alter it.
     my $exitstatus = $?;

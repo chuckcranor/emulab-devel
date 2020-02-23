@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2009-2017 University of Utah and the Flux Group.
+# Copyright (c) 2009-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -341,6 +341,15 @@ sub GenerateImage($$$$)
     }
     return Generate($authority, "image", $pid . "//" . $os);
 }
+sub GenerateDataset($$$$$)
+{
+    my ($domain,$type,$pid,$name,$vers) = @_;
+    my $authority = "${domain}:${pid}";
+    if (defined($vers)) {
+	$name .= "//" . $vers;
+    }
+    return Generate($authority, $type, $name);
+}
 
 #
 # OO implementation, tired of typing same stuff all the time
@@ -364,7 +373,7 @@ sub new($$)
     $self->{'id'}         = $id;
     $self->{'authority'}  = $authority;
     my ($domain,$subauth) = split(":", $authority, 2);
-    $self->{'domain'}     = $domain;
+    $self->{'domain'}     = lc($domain);
     $self->{'subauth'}    = $subauth;
     if (defined($subauth)) {
 	($project,$group) = split(":", $subauth, 2);
@@ -372,6 +381,7 @@ sub new($$)
     $self->{'project'}    = $project;
     $self->{'group'}      = $group;
     $self->{'IMAGEPARSE'} = undef;
+    $self->{'DATASETPARSE'} = undef;
     
     bless($self, $class);
     return $self;
@@ -396,6 +406,9 @@ sub IsRoot($)		{ return ($_[0]->IsAuthority() &&
 				  $_[0]->id() =~ /^root$/i ? 1 : 0); }
 sub IsUser($)		{ return $_[0]->type() =~ /^user$/i ? 1 : 0; }
 sub IsNode($)		{ return $_[0]->type() =~ /^node$/i ? 1 : 0; }
+sub IsProject($)	{ return $_[0]->type() =~ /^project$/i ? 1 : 0; }
+sub IsOurDomain($)	{ return $_[0]->domain() eq lc("@OURDOMAIN@") ? 1 : 0; }
+sub IsMotherShip($)     { return $_[0]->domain() eq lc("emulab.net") ? 1 : 0; }
 
 #
 # Image accessors. If we use any of these we want to parse the urn
@@ -405,7 +418,7 @@ sub imagefield($$)
 {
     my ($self, $field) = @_;
 
-    if (defined($self->{'IMAGEPARSE'})) {
+    if (!defined($self->{'IMAGEPARSE'})) {
 	my (undef, $ospid, $os, $vers) = $self->ParseImage();
 
 	$self->{'IMAGEPARSE'} = {
@@ -419,7 +432,44 @@ sub imagefield($$)
 sub osname($)	{ return $_[0]->imagefield("osname"); }
 sub ospid($)	{ return $_[0]->imagefield("ospid"); }
 sub osvers($)	{ return $_[0]->imagefield("osvers"); }
-sub IsImage($)  { return $_[0]->type() =~ /^image$/i ? 1 : 0; }
+sub IsImage($)
+{
+    my ($self) = @_;
+    # Make sure we have parsed it.
+    return 0
+	if (!defined($self->ospid()));
+    
+    return $_[0]->type() =~ /^image$/i ? 1 : 0; }
+
+#
+# Datasets do not put the project in the id like images.
+#
+sub datasetfield($$)
+{
+    my ($self, $field) = @_;
+
+    if (!defined($self->{'DATASETPARSE'})) {
+	my ($authority,$type,$id) = Parse($self->urn());
+
+	return undef
+	    if ($type !~ /^(lt|st|im)dataset$/);
+
+	my ($name,undef,$vers) = ($id =~ m{([^/]+)(//(\d+))?});
+	return undef if (!defined($name));
+
+	$self->{'DATASETPARSE'} = {
+	    "name" => $name,
+	    "vers" => $vers,
+	};
+    }
+    return $self->{'DATASETPARSE'}->{$field};
+}
+sub dsetname($)	{ return $_[0]->datasetfield("name"); }
+sub dsetpid($)	{ return $_[0]->project(); }
+sub dsetgid($)	{ return $_[0]->group(); }
+sub dsetvers($)	{ return $_[0]->datasetfield("vers"); }
+sub IsDataset($){ return $_[0]->type() =~ /^(lt|st|im)?dataset$/i ? 1 : 0; }
+sub IsIMDataset($){ return $_[0]->type() =~ /^(im)?dataset$/i ? 1 : 0; }
 
 #
 # Stringify for text context.

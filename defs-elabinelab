@@ -111,7 +111,8 @@ ZFS_QUOTA_USER="none"
 ZFS_QUOTA_PROJECT="none"
 ZFS_QUOTA_GROUP="none"
 WITHAMD=changeme
-AMD_ROOT=/.amd_mnt/ops
+# This will default to /.amd_mnt/ops in configure
+AMD_ROOT=changeme
 
 # Which console to use in the MFS. We need to set this for GeniRacks.
 NODECONSOLE=changeme
@@ -123,3 +124,10 @@ IMAGEDIRECTORIES=1
 
 # Fancy new browser in the console support
 BROWSER_CONSOLE_ENABLE=1
+
+# Do not expire passwords.
+EXPIRE_PASSWORDS=0
+
+# Collect idle statistics by default, and store in RRD files.
+SDCOLLECTD_DOSTATS=1
+SDCOLLECTD_USE_RRDTOOL=1

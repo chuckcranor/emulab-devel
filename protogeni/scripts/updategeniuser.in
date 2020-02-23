@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -53,6 +53,7 @@ my $certfile;
 my $TB		  = "@prefix@";
 my $SACERT	  = "$TB/etc/genisa.pem";
 my $ADDPUBKEY     = "$TB/sbin/addpubkey";
+my $CHECKGENIUSER = "$TB/sbin/protogeni/checkgeniuser";
 
 # Do this early so that we talk to the right DB. 
 use vars qw($GENI_DBNAME);
@@ -154,13 +155,25 @@ if ($doprojects) {
     if ($target_user->ProjectMembershipList(\@projects)) {
 	fatal("Error getting local project list");
     }
+    #
     # XXX All nonlocal cloudlab users are a member of the holding project,
-    # but that does not count as project membership.
-    if (@projects > 1) {
+    # but that does not count as project membership. There has to be at
+    # least a one real local project.
+    #
+    if (@projects) {
 	print "Local membership: @projects\n";
-	$target_user->Update({"webonly" => 0})
-	    if (!$impotent);
-	exit(0);
+	
+	my $count = 0;
+
+	foreach my $project (@projects) {
+	    $count++
+		if ($project->IsLocal());
+	}
+	if ($count > 1) {
+	    $target_user->Update({"webonly" => 0})
+		if (!$impotent);
+	    exit(0);
+	}
     }
     my @geniprojects = ProjectMembership();
     if (@geniprojects) {
@@ -180,18 +193,6 @@ if ($doprojects) {
     }
     else {
 	$target_user->Update({"webonly" => 1});
-    }
-    if (0) {
-    my @projects;
-    $target_user->ProjectMembershipList(\@projects);
-    foreach my $project (@projects) {
-	my $membership = $project->GetProjectGroup()->LookupUser($target_user);
-	next
-	    if (!defined($membership));
-	$membership->ModifyTrust((@geniprojects ?
-				  $Group::MemberShip::TRUSTSTRING_LOCALROOT :
-				  $Group::MemberShip::TRUSTSTRING_USER));
-    }
     }
 }
 exit(0);
@@ -302,6 +303,12 @@ sub UpdateSSHKeys()
 	@params = ("KEY", @params);
 	$isportal = 1;
     }
+    elsif ($auth =~ /auth\.onelab\.eu/) {
+	$url = "https://auth.onelab.eu:8008/ma/2";
+	$method = "lookup";
+	@params = ("KEY", @params);
+	$isportal = 1;
+    }
     else {
 	$url = $certificate->url();
 	$url =~ s/sa$/geni-ma/;
@@ -404,99 +411,25 @@ sub UpdateSSHKeys()
 # Request project membership from GPO Portal. 
 #
 sub ProjectMembership()
-{
-    #
-    # Load the SA cert to act as caller context.
-    #
-    my $sa_certificate = GeniCertificate->LoadFromFile($SACERT);
-    if (!defined($sa_certificate)) {
-	fatal("Could not load certificate from $SACERT\n");
-    }
-    my $context = Genixmlrpc->Context($sa_certificate);
-    if (!defined($context)) {
-	fatal("Could not create context to talk to MA");
-    }
-    
-    #
-    # Need the credential and the certificate. The certificate allows us
-    # to figure out who to talk to, to get the keys. For protogeni it is
-    # the URL in the certificate. For the GCF, well just hardwire it to
-    # the common federation api URL. 
-    #
-    my ($cred,$cert) = $target_user->GetStoredCredential();
-    fatal("No stored credential for $target_user")
-	if (!defined($cred) || !defined($cert));
-    
-    my $speaksfor = GeniCredential->CreateFromSigned($cred);
-    if (!defined($speaksfor)) {
-	fatal("Could not parse credential from string");
-    }
-    my $geni_type = ($speaksfor->type() eq "abac") ? "geni_abac" : "geni_sfa";
-    my $geni_vers = ($speaksfor->type() eq "abac") ? 1 : 3;
-	
-    my $certificate = GeniCertificate->LoadFromString($cert);
-    if (!defined($certificate)) {
-	fatal("Could not parse certificate from string");
-    }
-    my $user_urn = $certificate->urn();
-
-    #
-    # We need a URL to make the RPC. IG certs have that url in
-    # the certificate (clever people that we are), but GPO certs refer
-    # to a nonexistent SA. So just hardwire it, just like flack
-    # does.
-    #
-    # We are going to use the FED API. 
-    #
-    my @params = ([{"geni_type" => $geni_type,
-		    "geni_version" => $geni_vers,
-		    "geni_value" => $speaksfor->asString()}
-		  ],
-		  # Options array.
-		  {"speaking_for" => $user_urn,
-		   "geni_speaking_for" => $user_urn,
-		  });
-    my $method = "lookup_projects_for_member";
-    my $url;
-    my ($auth,$type,$id) = GeniHRN::Parse($user_urn);
-    #
-    # XXX We need to ask for the version ... 
-    #
-    if ($auth =~ /geni\.net/) {
-	$url = "https://ch.geni.net/SA";
-	@params = ($user_urn, @params);
-    }
-    elsif ($auth =~ /iminds\.be/) {
-	$url = $certificate->url();
-	$url =~ s/sa$/geni-sa/;
-	$url .= "/1";
-	@params = ($user_urn, @params);
-    }
-    else {
-	$url = $certificate->url();
-	$url =~ s/sa$/geni-sa/;
-	@params = ($user_urn, @params);
-    }
-    my $response =
-	Genixmlrpc::CallMethod($url, $context, $method, @params);
-    if (!defined($response)) {
-	fatal("Internal error getting self credential");
-    }
-    if ($response->code() != GENIRESPONSE_SUCCESS) {
-	print STDERR Dumper(\@params);
-	fatal("Could not get project membership: " . $response->output());
-    }
-    if (! ref($response->value())) {
-	fatal("No project list returned in response");
-    }
+{ 
     my @projects = ();
+    
+    #
+    # Pass this off to new script to check project membership,
+    #
+    my $output = `$CHECKGENIUSER $target_uid`;
+    if ($?) {
+	my $status = $? >> 8;
+	if ($status < 0 || $status == 255) {
+	    fatal("$CHECKGENIUSER failed");
+	}
+	return @projects;
+    }
+    chomp($output);
+    @projects = split(" ", $output);
 
-    print Dumper($response->value())
-	if ($debug);
-
-    foreach my $ref (@{ $response->value() }) {
-	push(@projects, $ref->{'PROJECT_URN'})
-	    if (!$ref->{'EXPIRED'});
+    if ($debug) {
+	print "@projects\n";
     }
     return @projects;
 }
@@ -580,6 +513,14 @@ sub UpdatePersonalData()
 			       'MEMBER_LASTNAME'];
 	@params = ("MEMBER", $param1, $param2);
     }
+    elsif ($auth =~ /auth\.onelab\.eu/) {
+	$url = "https://auth.onelab.eu:8008/ma/2";
+	$method = "lookup";
+	$param2->{'filter'} = ['MEMBER_FIRSTNAME',
+			       '_GENI_MEMBER_DISPLAYNAME',
+			       'MEMBER_LASTNAME'];
+	@params = ("MEMBER", $param1, $param2);
+    }
     else {
 	$url = $certificate->url();
 	$url =~ s/sa$/geni-ma/;
@@ -592,7 +533,7 @@ sub UpdatePersonalData()
 	fatal("Internal error getting self credential");
     }
     if ($response->code() != GENIRESPONSE_SUCCESS) {
-	fatal("Could not get member info: " . $response->code() . ": " .
+	fatal("Could not get member info ".$user_urn." : " . $response->code() . ": " .
 	      $response->output());
     }
     print Dumper($response)

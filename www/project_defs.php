@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -84,7 +84,12 @@ class Project
     # Backwards compatable lookup by pid. Will eventually flush this.
     function LookupByPid($pid) {
 	$safe_pid = addslashes($pid);
+	global $project_cache;
 
+        # Look in cache first
+	if (array_key_exists($pid, $project_cache))
+	    return $project_cache[$pid];
+	
 	$query_result =
 	    DBQueryWarn("select pid_idx from projects where pid='$safe_pid'");
 
@@ -96,8 +101,11 @@ class Project
 
 	$foo = new Project($idx); 
 
-	if ($foo->IsValid())
+	if ($foo->IsValid()) {
+            # Insert into cache.
+            $project_cache[$pid] = $foo;
 	    return $foo;
+        }
 	
 	return null;
     }
@@ -151,6 +159,7 @@ class Project
     function why()           { return $this->field("why"); }
     function control_node()  { return $this->field("control_node"); }
     function approved()      { return $this->field("approved"); }
+    function disabled()      { return $this->field("disabled"); }
     function inactive()      { return $this->field("inactive"); }
     function date_inactive() { return $this->field("date_inactive"); }
     function ispublic()      { return $this->field("public"); }
@@ -165,6 +174,7 @@ class Project
     function allow_workbench(){ return $this->field("allow_workbench"); }
     function nonlocal_id()   { return $this->field("nonlocal_id"); }
     function portal()	     { return $this->field("portal"); }
+    function bound_portal()  { return $this->field("bound_portal"); }
     function isAPT()	     { return ($this->portal() &&
                                        $this->portal() == "aptlab" ? 1 : 0); }
     function isCloud()	     { return ($this->portal() &&
@@ -188,7 +198,7 @@ class Project
 	return ($this->isAPT() ? "https://www.aptlab.net" :
 		($this->isCloud() ? "https://www.cloudlab.us" : 
 		 ($this->isPNet() ? "https://www.phantomnet.org" :
-                  ($this->isPowder() ? $TBBASE :
+                  ($this->isPowder() ? "https://www.powderwireless.net" :
                    $TBBASE))));
     }
     function ApprovalEmailAddress() {
@@ -509,6 +519,17 @@ class Project
         }
         return 0;
     }
+    function IsManager($user) {
+        global $TBDB_TRUST_GROUPROOT;
+        
+	$pid = $this->pid();
+	$uid = $user->uid();
+
+        if (TBMinTrust(TBGrpTrust($uid, $pid, $pid), $TBDB_TRUST_GROUPROOT)) {
+            return 1;
+        }
+        return 0;
+    }
 
     #
     # Add *new* member to project group; starts out with trust=none.
@@ -702,11 +723,31 @@ class Project
     }
     function SetAllowWorkbench($onoff) {
 	$idx    = $this->pid_idx();
-	$onofff = ($onoff ? 1 : 0);
+	$onoff  = ($onoff ? 1 : 0);
 
 	DBQueryFatal("update projects set allow_workbench='$onoff' ".
 		     "where pid_idx='$idx'");
 
+	return 0;
+    }
+    function SetDisabled($onoff) {
+	$idx    = $this->pid_idx();
+	$onoff  = ($onoff ? 1 : 0);
+
+	DBQueryFatal("update projects set disabled='$onoff' ".
+		     "where pid_idx='$idx'");
+
+	$this->project["disabled"] = $onoff;
+	return 0;
+    }
+    function SetBoundPortal($onoff) {
+	$idx    = $this->pid_idx();
+	$onoff  = ($onoff ? 1 : 0);
+
+	DBQueryFatal("update projects set bound_portal='$onoff' ".
+		     "where pid_idx='$idx'");
+
+	$this->project["bound_portal"] = $onoff;
 	return 0;
     }
 
@@ -1039,5 +1080,23 @@ class Project
 	echo "</table>\n";
     }
 
+    #
+    # Return license status for all licenses.
+    #
+    function LicenseStatus() {
+	$pid_idx = $this->pid_idx();
+        $result  = array();
+
+        $query_result =
+            DBQueryFatal("select l.*,pl.pid,pl.accepted from licenses as l ".
+                         "left join project_licenses as pl on ".
+                         "   pl.license_idx=l.license_idx and ".
+                         "   pl.pid_idx='$pid_idx'");
+
+	while ($row = mysql_fetch_array($query_result)) {
+            $result[] = $row;
+        }
+        return $result;
+    }
 }
 ?>

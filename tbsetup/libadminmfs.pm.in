@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2017 University of Utah and the Flux Group.
+# Copyright (c) 2005-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -45,6 +45,8 @@ use vars qw(@ISA @EXPORT);
 use libdb;
 use libtestbed;
 use StateWait;
+use OSImage;
+use Node;
 
 #
 # Function prototypes
@@ -66,6 +68,7 @@ my $nodereboot	= "$TB/bin/node_reboot";
 my $power	= "$TB/bin/power";
 my $osselect    = "$TB/bin/os_select";
 my $nfsmfssetup = "$TB/sbin/nfsmfs_setup";
+my $dhcpd_makeconf = "$TB/sbin/dhcpd_makeconf";
 
 #
 # The number of nodes we will power on at a time and the time to wait
@@ -288,6 +291,8 @@ sub TBAdminMfsBoot($$@)
 #	'on'	   1 to set temp OSID to MFS, 0 to clear
 #	'clearall' 1 to clear one-shot and partition boot OSIDs
 #		   (if 'on' is set), 0 leaves them alone
+#       'recovery' use the recovery MFS instead of Admin (falling back
+#                  to admin if not defined for the node).
 #
 # Returns zero if we successfully set the state for all nodes,
 # and non-zero otherwise.  If the $failed ref is defined, it is an
@@ -309,6 +314,7 @@ sub TBAdminMfsSelect($$@)
     my $me = $args->{'name'};
     my $on = $args->{'on'};
     my $only = $args->{'clearall'};
+    my $recovery = $args->{'recovery'};
     my @good = ();
     my @bad = ();
 
@@ -328,11 +334,22 @@ sub TBAdminMfsSelect($$@)
 	# determine the correct admin OSID for all nodes
 	my %adminosid = ();
 	for my $node (@nodes) {
-	    my $osid = TBNodeAdminOSID($node);
+	    my $osid;
+	    if ($recovery) {
+		$osid = TBNodeRecoveryOSID($node);
+		if (!$osid) {
+		    $osid = TBNodeAdminOSID($node);
+		}
+	    }
+	    else {
+		$osid = TBNodeAdminOSID($node);
+	    }
 	    push @{$adminosid{$osid}}, $node;
 	}
 
 	# and set it
+	my $pxechanged = 0;
+	my @admingood = ();
 	for my $osid (keys %adminosid) {
 	    my @n = @{$adminosid{$osid}};
 	    if (system("$osselect -t $osid @n")) {
@@ -341,13 +358,64 @@ sub TBAdminMfsSelect($$@)
 		push(@bad, @n);
 	    } else {
 		push(@good, @n);
+
+		# Construct the good list for nodes that are booting the
+		# admin MFS; this list may be different than the @good
+		# list (some nodes may boot the recovery MFS, for
+		# instance).
+		foreach my $nodeid (@n) {
+		    if (TBNodeAdminOSID($nodeid) == $osid) {
+			push @admingood, $nodeid;
+		    }
+		}
+
+		#
+		# See if this OSID requires a different pxeboot program.
+		# If the OSID is a Linux MFS that needs to be booted by
+		# grub2pxe, and if the node or node type has the
+		# grub2pxe_path attribute, then change next_pxe_boot_path.
+		#
+		# If the default pxe_boot_path node/type attr is already
+		# a grub2pxe, no need to set the grub2pxe_path node/type
+		# attr for this to work.
+		#
+		my $osi = OSImage->Lookup($osid);
+		my $path = $osi->osinfo()->path();
+		if (-e "$path/grub.cfg") {
+		    foreach my $nodeid (@n) {
+			my $nodeobject = Node->Lookup($nodeid);
+			my $gp;
+			$nodeobject->NodeAttribute('grub2pxe_path',\$gp);
+			if (!defined($gp)) {
+			    $nodeobject->NodeTypeAttribute('grub2pxe_path',\$gp);
+			}
+			next
+			    if (!defined($gp));
+			my $node_pxechanged = 0;
+			if ($nodeobject->PXESelect($gp, "next_pxe_boot_path",
+						   0, \$node_pxechanged)) {
+			    print STDERR "$me: pxe_select $nodeid $gp failed!";
+			    next;
+			}
+			$pxechanged += $node_pxechanged;
+		    }
+		}
 	    }
 	}
+	if ($pxechanged && system("$dhcpd_makeconf -i -r")) {
+	    print STDERR "*** $me: restart DHCPD failed!";
+	    return 1;
+	}
 
+	#
+	# Possibly construct a dynamic NFS MFS for some nodes, but only
+	# for those that are going to load the node/type default admin
+	# mfs, because that is all the NFS MFS creation script supports.
+	#
 	my %cargs;
 	$cargs{'name'} = $me;
 	my @cfailed = ();
-	if (TBAdminMfsCreate(\%cargs, \@cfailed, @good)) {
+	if (@admingood && TBAdminMfsCreate(\%cargs, \@cfailed, @admingood)) {
 	    print STDERR "*** $me:\n".
 		"    Failed to create NFS FS for @cfailed; ".
 		"continuing, but those nodes won't boot!\n";
@@ -371,10 +439,32 @@ sub TBAdminMfsSelect($$@)
 	}
 	@good = @nodes;
 
+	my $pxechanged = 0;
+	foreach my $nodeid (@nodes) {
+	    my $nodeobject = Node->Lookup($nodeid);
+	    my $node_pxechanged = 0;
+	    if (defined($nodeobject->next_pxe_boot_path)) {
+		if ($nodeobject->PXESelect("", "next_pxe_boot_path",
+					   0, \$node_pxechanged)) {
+		    print STDERR "$me: pxe_select $nodeid '' failed!";
+		    next;
+		}
+		$pxechanged += $node_pxechanged;
+	    }
+	}
+	if ($pxechanged && system("$dhcpd_makeconf -i -r")) {
+	    print STDERR "*** $me: restart DHCPD failed!";
+	    return 1;
+	}
+
 	#
 	# XXX note that this is a "soft" destroy.
 	# We will only rename the existing MFS so that if the node
 	# is currently running on it, it will continue to function.
+	#
+	# XXX: note that we call this even if we might not be running
+	# the admin mfs (e.g. if we were told to run the recovery MFS
+	# above).  This is harmless in that case.
 	#
 	my %cargs;
 	$cargs{'name'} = $me;
@@ -636,8 +726,6 @@ sub TBAdminMfsCreate($$@)
     #
     my @nfsnodes = ();
     for my $node (@nodes) {
-	require OSImage;
-
 	my $osobj = OSImage->Lookup(TBNodeAdminOSID($node));
 	if ($osobj && $osobj->IsNfsMfs()) {
 	    push @nfsnodes, $node;
@@ -697,8 +785,6 @@ sub TBAdminMfsDestroy($$@)
     #
     my @nfsnodes = ();
     for my $node (@nodes) {
-	require OSImage;
-
 	my $osobj = OSImage->Lookup(TBNodeAdminOSID($node));
 	if ($osobj && $osobj->IsNfsMfs()) {
 	    push @nfsnodes, $node;

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -100,6 +100,20 @@ if ($slice->publicid()) {
     $url = "$TBBASE/showslicepub.php?publicid=" . $slice->publicid();
     
     $rows[] = array("Public URL" => "<a href='$url'>https:// ...</a>");
+}
+if ($slice->portal_tag()) {
+    $rows[] = array("Portal" => $slice->portal_tag());
+    if ($slice->portal_url()) {
+        $url = $slice->portal_url();
+        $rows[] = array("Portal URL" => "<a href='$url'>https:// ...</a>");
+    }
+}
+elseif ($slice->speaksfor_urn()) {
+    $portal_url = GenPortalURL(1, $slice->speaksfor_urn(), $slice->uuid());
+    if ($portal_url) {
+        $rows[] = array("Portal URL" =>
+                        "<a href='$portal_url'>https:// ...</a>");
+    }
 }
 if (($manifest = $slice->GetManifest())) {
     $popups[] = GeneratePopupDiv("manifest$manifestidx", $manifest);

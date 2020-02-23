@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,6 +46,7 @@ my $TBOPS       = "@TBOPSEMAIL@";
 my $ISOLATEADMINS = @ISOLATEADMINS@;
 my $TBBASE      = "@TBBASE@";
 my $MKCERT      = "$TB/sbin/mkusercert";
+my $CHECKQUOTA  = "$TB/sbin/checkquota";
 my $SUDO	= "/usr/local/bin/sudo";
 my $PROTOUSER   = "elabman";
 my $MAINSITE    = @TBMAINSITE@;
@@ -67,14 +68,6 @@ use Project;
 use User;
 
 #
-# Only real root can call this.
-# 
-if ($UID != 0) {
-    print STDERR "You must be root to run this script!\n";
-    exit(-1);
-}
-
-#
 # Parse command arguments. Once we return from getopts, all that should
 # left are the required arguments.
 #
@@ -93,6 +86,14 @@ if (defined($options{"n"})) {
 }
 
 #
+# Only real root can call this, unless we are impotent.
+#
+if (!$impotent && $UID != 0) {
+    print STDERR "You must be root to run this script (unless impotent)!\n";
+    exit(-1);
+}
+
+#
 # Form a temp name.
 #
 my $logname = TBMakeLogname("audit");
@@ -102,7 +103,7 @@ my $query_result;
 # Reopen both stdout and stderr so that we can record all the output for
 # later mailing.
 #
-if (! $debug) {
+if (! $debug && !$impotent) {
     open(STDERR, ">> $logname") or die("opening $logname for STDERR: $!");
     open(STDOUT, ">> $logname") or die("opening $logname for STDOUT: $!");
 }
@@ -414,11 +415,109 @@ if ($ISOLATEADMINS) {
 #
 # Age any login entries that have timed out.
 #
-DBQueryWarn("delete from login ".
-	    "where (unix_timestamp(now()) - timeout) > (12 * 60 * 60)");
+if (!$impotent) {
+    DBQueryWarn("delete from login ".
+		"where (unix_timestamp(now()) - timeout) > (12 * 60 * 60)");
+}
+else {
+    my $query_result =
+	DBQueryWarn("delete from login ".
+		    "where (unix_timestamp(now()) - timeout) > (12 * 60 * 60)");
+    print "".$query_result->numrows()." stale logins would be deleted.\n";
+}
+
+my %overquota = ();
+
+sub checkquota($) {
+    if (!exists($overquota{$_[0]})) {
+	$overquota{$_[0]} = system("$CHECKQUOTA $_[0]");
+    }
+    return $overquota{$_[0]};
+}
 
 #
-# Warn users of expiring encrypted certificates. Regenerate expired or
+# Generate any missing certs.  There was a time when nonlocal users did
+# not automatically receive unencrypted certs, for instance.  Don't tell
+# the user about this.
+#
+$query_result =
+    DBQueryWarn("select u.uid,u.uid_idx,cu.created as unencrypted_created,".
+		"  ce.created as encrypted_created ".
+		" from users as u ".
+		"left join user_stats as s on s.uid_idx=u.uid_idx ".
+		"left outer join user_sslcerts as cu ".
+		"  on (u.uid_idx=cu.uid_idx and cu.encrypted=0) ".
+		"left outer join user_sslcerts as ce ".
+		"  on (u.uid_idx=ce.uid_idx and ce.encrypted=1) ".
+		"where u.status='active' ".
+		"  and (cu.created is NULL or ce.created is NULL)");
+my $count = 0;
+while (my $row = $query_result->fetchrow_hashref()) {
+    $count += 1;
+
+    my $uid       = $row->{'uid'};
+    my $uid_idx   = $row->{'uid_idx'};
+    my $unenc_ctime = $row->{'unencrypted_created'};
+    my $enc_ctime = $row->{'encrypted_created'};
+
+    if (!defined($unenc_ctime) || $unenc_ctime eq '') {
+	print STDERR
+	    "Unencrypted Certificate for $uid missing. Regenerating.\n";
+
+	if (checkquota($uid)) {
+	    print STDERR "User $uid over quota, not generating certificate!\n";
+	    next;
+	}
+
+	next
+	    if ($impotent);
+
+	system("$SUDO -u $PROTOUSER $MKCERT $uid_idx");
+	if ($?) {
+	    SENDMAIL($TBOPS, "Error generating missing certificate for $uid",
+		     "Error generating missing unencrypted certificate for $uid",
+		     $TBOPS)
+	}
+
+	# Poor-man's ratelimiting.
+	if (!$impotent && $count > 32) {
+	    sleep(1);
+	}
+    }
+
+    if (!defined($enc_ctime) || $enc_ctime eq '') {
+	print STDERR
+	    "Encrypted Certificate for $uid missing. Regenerating.\n";
+
+	if (checkquota($uid)) {
+	    print STDERR "User $uid over quota, not generating certificate!\n";
+	    next;
+	}
+
+	next
+	    if ($impotent);
+
+	# Since they don't actually have an encrypted cert (for whatever
+	# reason), we have to gen a new passphrase for them (normally
+	# tbacct does this)).
+	my $pphrase = User::escapeshellarg(substr(TBGenSecretKey(), 0, 12));
+	system("$SUDO -u $PROTOUSER $MKCERT -p $pphrase $uid_idx");
+	if ($?) {
+	    SENDMAIL($TBOPS, "Error generating missing certificate for $uid",
+		     "Error generating missing encrypted certificate for $uid",
+		     $TBOPS)
+	}
+
+	# Poor-man's ratelimiting.  As noted above, there may be large
+	# one-time costs here, so be a little nice.
+	if (!$impotent && $count > 32) {
+	    sleep(1);
+	}
+    }
+}
+
+#
+# Warn users of expiring certificates. Regenerate expired or
 # expiring unencrypted certificates.
 #
 $query_result =
@@ -428,7 +527,7 @@ $query_result =
 		" from user_sslcerts as c ".
 		"left join users as u on u.uid_idx=c.uid_idx ".
 		"left join user_stats as s on s.uid_idx=u.uid_idx ".
-		"where u.status='active' and u.nonlocal_id is null and ".
+		"where u.status='active' and ".
 		"     revoked is null and warned is null and ".
 		"     s.last_activity is not null and ".
 		"     (UNIX_TIMESTAMP(now()) > UNIX_TIMESTAMP(expires) || ".
@@ -449,6 +548,11 @@ while (my $row = $query_result->fetchrow_hashref()) {
 	print STDERR 
 	"Unencrypted Certificate for $uid expires on $expires. Regenerating.\n";
 
+	if (checkquota($uid)) {
+	    print STDERR "User $uid over quota, not generating certificate!\n";
+	    next;
+	}
+
 	next
 	    if ($impotent);
 
@@ -468,6 +572,11 @@ while (my $row = $query_result->fetchrow_hashref()) {
 
     print STDERR
 	"Encrypted Certificate for $uid expires on $expires. Regenerating\n";
+
+    if (checkquota($uid)) {
+	print STDERR "User $uid over quota, not generating certificate!\n";
+	next;
+    }
 
     if (!$impotent) {
 	system("$SUDO -u $PROTOUSER $MKCERT -P $uid_idx");
@@ -605,13 +714,13 @@ while (my ($pid,$eid,$lan,$tag,$lanid,$estate,$hid,$released) =
 #
 # Send email if anything was reported.
 #
-if (!$debug && -s $logname) {
+if (!$debug && !$impotent && -s $logname) {
     SENDMAIL($TBOPS, "Testbed Audit Results", "Testbed Audit Results",
 	     $TBOPS, undef, ($logname));
 }
 
 unlink("$logname")
-    if (-e $logname);
+    if (!$debug && !$impotent && -e $logname);
 exit 0;
 
 sub fatal($) {
@@ -620,6 +729,6 @@ sub fatal($) {
     print STDERR "$msg\n";
     SENDMAIL($TBOPS, "Testbed Audit Failed", $msg, undef, undef, ($logname));
     unlink("$logname")
-	if (-e $logname);
+	if (!$debug && !$impotent && -e $logname);
     exit(1);
 }

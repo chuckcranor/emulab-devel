@@ -29,13 +29,7 @@ include("imageid_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
 include("dataset_defs.php");
-$page_title = "My Datasets";
-
-#
-# Verify page arguments.
-#
-$optargs = OptionalPageArguments("target_user",   PAGEARG_USER,
-				 "all",           PAGEARG_BOOLEAN);
+$page_title = "All Datasets";
 
 #
 # Get current user.
@@ -43,67 +37,29 @@ $optargs = OptionalPageArguments("target_user",   PAGEARG_USER,
 RedirectSecure();
 $this_user = CheckLoginOrRedirect();
 
-if (!isset($target_user)) {
-    $target_user = $this_user;
+if (!ISADMIN()) {
+    SPITUSERERROR("You do not have permission to view this page");
+    exit();
 }
-if (!$this_user->SameUser($target_user)) {
-    if (!ISADMIN()) {
-	SPITUSERERROR("You do not have permission to view ".
-		      "target user's profiles");
-	exit();
-    }
-}
-$target_idx = $target_user->uid_idx();
-$target_uid = $target_user->uid();
 
 SPITHEADER(1);
 
 echo "<link rel='stylesheet'
             href='css/tablesorter.css'>\n";
 
-$whereclause1 = "where l.owner_uid='$target_uid' and ad.uuid is null";
-$whereclause2 = "where v.creator='$target_uid' and v.isdataset=1";
-$whereclause3 = "where d.creator_uid='$target_uid'";
+$whereclause1 = "where ad.uuid is null";
+$whereclause2 = "where v.isdataset=1";
+$whereclause3 = "";
 $joinclause1  = "";
 $joinclause2  = "left join image_versions as v on ".
     "              v.imageid=i.imageid and v.version=i.version ";
 $joinclause3  = "";
 
-if (isset($all)) {
-    if (ISADMIN()) {
-	$whereclause1 = "where ad.uuid is null";
-	$whereclause2 = "where v.isdataset=1";
-	$whereclause3 = "";
-    }
-    else {
-	$joinclause1 =
-	    "left join group_membership as g on ".
-	    "     g.uid='$target_uid' and ".
-	    "     g.pid=l.pid and g.pid_idx=g.gid_idx";
-	$joinclause2 .=
-	    "left join group_membership as g on ".
-	    "     g.uid='$target_uid' and ".
-	    "     g.pid=i.pid and g.pid_idx=g.gid_idx";
-	$joinclause3 =
-	    "left join group_membership as g on ".
-	    "     g.uid='$target_uid' and ".
-	    "     g.pid=d.pid and g.pid_idx=g.gid_idx";
-	$whereclause1 =
-	    "where l.owner_uid='$target_uid' or ".
-	    "      g.uid_idx is not null ";
-	$whereclause2 =
-	    "where (v.creator='$target_uid' or ".
-	    "       g.uid_idx is not null) and v.isdataset=1 ";
-	$whereclause3 =
-	    "where (d.creator_uid='$target_uid' or ".
-	    "       g.uid_idx is not null) ";
-    }
-}
 #
 # In the main portal, we show only those datasets on the local cluster.
 #
 if ($ISEMULAB) {
-    $whereclause3 .= "and agg.urn='$DEFAULT_AGGREGATE_URN'";
+    $whereclause3 = "where agg.urn='$DEFAULT_AGGREGATE_URN'";
 }
 
 $classic_result =
@@ -134,7 +90,7 @@ echo "<div class='row'>
                    col-xs-12 col-xs-offset-0'>\n";
 
 function SPITTABLE($which, $results, $where) {
-    global $all,$embedded;
+    global $embedded, $ISEMULAB;
 
     if ($which == "main") {
         echo "<input class='form-control search' type='search' data-column='all'
@@ -143,17 +99,15 @@ function SPITTABLE($which, $results, $where) {
     echo "  <table class='tablesorter' id='${which}_table'>
              <thead>
               <tr>
-               <th>Name</th>";
-        if (isset($all) && ISADMIN()) {
-            echo " <th>Creator</th>";
-        }
-        echo "     <th>Project</th>
-                   <th>Type</th>\n";
-        if ($where == "portal") {
+               <th>Name</th>
+               <th>Creator</th>
+               <th>Project</th>
+               <th>Type</th>\n";
+        if ($where == "portal" && !$ISEMULAB) {
             echo " <th>Cluster</th>\n";
         }
         echo "     <th>State</th>
-                   <th>Size</th>
+                   <th>Size (GB)</th>
                    <th>Expires</th>
               </tr>
             </thead>
@@ -178,7 +132,10 @@ function SPITTABLE($which, $results, $where) {
             $pid     = $dataset->pid();
             $creator = $dataset->owner_uid();
             $expires = $dataset->expires();
-            $size    = $dataset->size() ? $dataset->size() : "0";
+            $size    = $dataset->size() ? $dataset->size() : 0;
+            # Convert to GB.
+            $size     = sprintf('%0.2f', $size * 0.00104858);
+            
             #
             # The state is a bit of a problem, since local leases do not have
             # an "allocating" state. For a remote dataset, we get set to busy.
@@ -197,18 +154,16 @@ function SPITTABLE($which, $results, $where) {
                 <td><a href='show-dataset.php?uuid=$uuid&embedded=$embedded'>
                 $name</a></td>\n";
 
-            if (isset($all) && ISADMIN()) {
-                echo "<td><a href='user-dashboard.php?user=$creator'>
+            echo "<td><a href='user-dashboard.php?user=$creator'>
 		       $creator</a></td>";
-            }
             echo "<td><a href='show-project.php?project=$pid'>$pid</a></td>
                     <td>$dtype</td>\n";
-            if ($where == "portal") {
+            if ($where == "portal" && !$ISEMULAB) {
                 $cluster = $row["nickname"];
                 echo "<td>$cluster</th>";
             }
             echo "  <td>$state</td>
-                    <td>$size MiB</td>
+                    <td>$size</td>
                     <td class='format-date'>$expires</td>
                  </tr>\n";
         }

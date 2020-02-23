@@ -35,11 +35,17 @@ $(function ()
 
     function LoadData()
     {
-	_.each(amlist, function(urn, name) {
+	_.each(amlist, function(info, name) {
+	    var urn = info.urn;
 	    var callback = function(json) {
 		console.log(json);
 		if (json.code) {
 		    console.log("Could not get cluster data: " + json.value);
+		    $('#cluster-status-' + name + ' .cluster-status-error')
+			.html(json.value)
+			.removeClass("hidden");
+		    $('#cluster-status-' + name + ' .resgraph-spinner')
+			.addClass("hidden");
 		    return;
 		}
 		var inuse = json.value.inuse;
@@ -50,9 +56,18 @@ $(function ()
 		    if (_.has(value, "type")) {
 			type = value.type;
 		    }
-		    html = html + "<tr>" +
-			"<td>" + value.node_id + "</td>" +
-			"<td>" + type + "</td>";
+		    html = html + "<tr><td>";
+		    if (isadmin) {
+			var url = json.value.url +
+			    "/portal/show-node.php?node_id=" + value.node_id;
+			html +=
+			    "<a href='" + url + "' target=_blank>" +
+			    value.node_id + "</a></td>";
+		    }
+		    else {
+			html += value.node_id + "</td>";
+		    }
+		    html += "<td>" + type + "</td>";
 
 		    if (isadmin) {
 			var expires = "";
@@ -84,6 +99,13 @@ $(function ()
 				    "' target=_blank>" +
 				    value.instance_name + "</a>";
 			    }
+			    else {
+				var url = json.value.url +
+				    "/showexp.php3?pid=" + value.pid +
+				    "&eid=" + value.eid;
+				eid = "<a href='" + url + "' target=_blank>" +
+				    value.eid + "</a>";
+			    }
 			}
 			html = html +
 			    "<td>" + value.pid + "</td>" +
@@ -107,6 +129,7 @@ $(function ()
 
 		// These are the totals.
 		html = countsTemplate({"totals" : json.value.totals,
+				       "weburl" : info.url,
 				       "isadmin": isadmin});
 		$('#counts-panel-' + name).html(html);
 		// This activates the tooltip subsystem.
@@ -118,6 +141,8 @@ $(function ()
 
 		// We reference the totals table in InitTable();
 		InitTable(name);
+		$('#cluster-status-' + name + ' .resgraph-spinner')
+		    .addClass("hidden");
 	    }
 	    var xmlthing = sup.CallServerMethod(null, "cluster-status",
 						"GetStatus",
@@ -127,11 +152,15 @@ $(function ()
 	if (!isadmin) {
 	    return;
 	}
-	_.each(amlist, function(urn, name) {
+	_.each(amlist, function(info, name) {
+	    var urn = info.urn;
 	    var callback = function(json) {
 		console.log(json);
 		if (json.code) {
 		    console.log("Could not get prereserve data: " + json.value);
+		    return;
+		}
+		if (json.value == null) {
 		    return;
 		}
 		var expando_class  = "expando-" + name;
@@ -259,11 +288,11 @@ $(function ()
 	$(tablename).removeClass("hidden");
 
 	// Bind type column in the counts table to initiating search
-	$('#counts-panel-' + name + ' .counts-type').click(function(event) {
+	$('#counts-panel-' + name + ' .counts-search').click(function(event) {
 	    event.preventDefault();
 	    $(tablename +
 	      ' input.tablesorter-filter.form-control[data-column="1"]')
-		.val($(event.target).text());
+		.val($(this).data("type"));
 	    table.trigger('search', false);	    
 	});
     }

@@ -23,10 +23,13 @@ sub Install($$$)
 	};
 	Phase "pythonlink", "Looking for working $EMULAB_PYTHON_PATH link", sub {
 	    DoneIfExecutable($EMULAB_PYTHON_PATH);
-	    if (! -x $PORT_PYTHON_PATH) {
+	    if (-x $PORT_PYTHON_PATH) {
+		ExecQuietFatal("ln -sf $PORT_PYTHON_PATH $EMULAB_PYTHON_PATH");
+	    } elsif (-x $PORT_PYTHON_PATH2) {
+		ExecQuietFatal("ln -sf $PORT_PYTHON_PATH2 $EMULAB_PYTHON_PATH");
+	    } else {
 		PhaseFail("$PORT_PYTHON_PATH does not exist!");
 	    }
-	    ExecQuietFatal("ln -sf $PORT_PYTHON_PATH $EMULAB_PYTHON_PATH");
 	};
 	Phase "rsync", "Looking for rsync", sub {
 	    DoneIfPackageInstalled("rsync");
@@ -134,9 +137,15 @@ sub Install($$$)
 	}
 	if ($PGENISUPPORT) {
 	    Phase "mod_wsgi3", "Looking for mod_wsgi3 and installing", sub {
-		DoneIfPackageInstalled("ap22-mod_wsgi");
-		my $pname = GetPackage("ap22-mod_wsgi", $packagedir);
-		AddPackage($pname, $packagedir);
+		if ($FBSD_MAJOR >= 11) {
+		    DoneIfPackageInstalled("ap24-py27-mod_wsgi");
+		    my $pname = GetPackage("ap24-py27-mod_wsgi", $packagedir);
+		    AddPackage($pname, $packagedir);
+		} else {
+		    DoneIfPackageInstalled("ap22-mod_wsgi");
+		    my $pname = GetPackage("ap22-mod_wsgi", $packagedir);
+		    AddPackage($pname, $packagedir);
+		}
 	    };
 	    Phase "py-flask", "Looking for py-flask and installing", sub {
 		DoneIfPackageInstalled("py27-Flask");

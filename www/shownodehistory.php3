@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2014, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,7 +48,17 @@ $optargs = OptionalPageArguments("showall",   PAGEARG_BOOLEAN,
 				 "mac",       PAGEARG_STRING,
 				 # To allow for pcvm search, since they are
                                  # transient and will not map to a node.
-				 "node_id",   PAGEARG_STRING);
+				 "node_id",   PAGEARG_STRING,
+                                 "classic",   PAGEARG_BOOLEAN);
+
+if (!$classic) {
+    $url = "portal/show-nodehistory.php";
+    if (isset($node_id)) {
+        $url .= "?node_id=$node_id";
+    }
+    header("Location: $url");
+    return;
+}
 
 #
 # Standard Testbed Header

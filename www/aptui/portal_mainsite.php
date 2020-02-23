@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,8 +39,9 @@ if ($_SERVER["SERVER_NAME"] == "www.aptlab.net") {
     $APTHOST      = "www.aptlab.net";
     $WWWHOST      = "www.aptlab.net";
     $APTBASE      = "https://www.aptlab.net";
-    $APTMAIL      = "APT Operations <portal-ops@aptlab.net>";
     $SUPPORT      = "portal-ops@aptlab.net";
+    $APTMAIL      = "APT Operations <$SUPPORT>";
+    $APTMAILTO    = "<a href='mailto:$SUPPORT'>APT Operations</a>";
     $APTTITLE     = "APT";
     $FAVICON      = "aptlab.ico";
     $APTLOGO      = "aptlogo.png";
@@ -54,6 +55,7 @@ if ($_SERVER["SERVER_NAME"] == "www.aptlab.net") {
         $APTBASE .= "/" . $matches[1];
     }
     $PORTAL_MANUAL         = "http://docs.aptlab.net";
+    $PORTAL_WIKI           = null;
     $PORTAL_HELPFORUM      = "apt-users";
     $PORTAL_PASSWORD_HELP  = "Aptlab.net or Emulab.net Username";
     $PORTAL_NSFNUMBER      = "1338155";
@@ -69,8 +71,9 @@ elseif ($_SERVER["SERVER_NAME"] == "www.cloudlab.us") {
     $APTHOST      = "www.cloudlab.us";
     $WWWHOST      = "www.cloudlab.us";
     $APTBASE      = "https://www.cloudlab.us";
-    $APTMAIL      = "CloudLab Operations <portal-ops@cloudlab.us>";
     $SUPPORT      = "portal-ops@cloudlab.us";
+    $APTMAIL      = "Cloudlab Operations <$SUPPORT>";
+    $APTMAILTO    = "<a href='mailto:$SUPPORT'>Cloulab Operations</a>";
     $APTTITLE     = "CloudLab";
     $FAVICON      = "cloudlab.ico";
     $APTLOGO      = "cloudlogo.png";
@@ -86,6 +89,7 @@ elseif ($_SERVER["SERVER_NAME"] == "www.cloudlab.us") {
 	$APTBASE .= "/" . $matches[1];
     }
     $PORTAL_MANUAL       = "http://docs.cloudlab.us";
+    $PORTAL_WIKI         = null;
     $PORTAL_HELPFORUM    = "cloudlab-users";
     $PORTAL_PASSWORD_HELP= "CloudLab.us or Emulab.net Username";
     $PORTAL_NSFNUMBER    = "1419199";
@@ -99,9 +103,10 @@ elseif ($ISALTDOMAIN && $_SERVER["SERVER_NAME"] == "www.phantomnet.org") {
     $COOKDIEDOMAIN= "www.phantomnet.org";
     $APTHOST      = "www.phantomnet.org";
     $WWWHOST      = "www.phantomnet.org";
-    $APTBASE      = "https://www.phantomnet.org";
-    $APTMAIL      = "PhantomNet Operations <portal-ops@phantomnet.org>";
+    $APTBASE      = "https://www.phantomnet.org"; 
     $SUPPORT      = "portal-ops@phantomnet.org";
+    $APTMAIL      = "PhantomNet Operations <$SUPPORT>";
+    $APTMAILTO    = "<a href='mailto:$SUPPORT'>PhantomNet Operations</a>";
     $APTTITLE     = "PhantomNet";
     $FAVICON      = "phantomnet.ico";
     $APTLOGO      = "phantomlogo.png";
@@ -117,6 +122,7 @@ elseif ($ISALTDOMAIN && $_SERVER["SERVER_NAME"] == "www.phantomnet.org") {
 	$APTBASE .= "/" . $matches[1];
     }
     $PORTAL_MANUAL         = "http://docs.phantomnet.org";
+    $PORTAL_WIKI           = "https://wiki.phantomnet.org/wiki/phantomnet";
     $PORTAL_HELPFORUM      = "phantomnet-users";
     $PORTAL_PASSWORD_HELP  = "PhantomNet.org or Emulab.net Username";
     $PORTAL_NSFNUMBER      = "1305384";
@@ -132,8 +138,9 @@ elseif ($_SERVER["SERVER_NAME"] == "www.powderwireless.net") {
     $APTHOST      = "www.powderwireless.net";
     $WWWHOST      = "www.powderwireless.net";
     $APTBASE      = "https://www.powderwireless.net";
-    $APTMAIL      = "Powder Wireless Operations <powder-ops@powderwireless.net>";
     $SUPPORT      = "powder-ops@powderwireless.net";
+    $APTMAIL      = "Powder Wireless Operations <$SUPPORT>";
+    $APTMAILTO    = "<a href='mailto:$SUPPORT'>Powder Wireless Operations</a>";
     $APTTITLE     = "Powder";
     $FAVICON      = "powder.ico";
     $APTLOGO      = "powderlogo.png";
@@ -149,6 +156,7 @@ elseif ($_SERVER["SERVER_NAME"] == "www.powderwireless.net") {
 	$APTBASE .= "/" . $matches[1];
     }
     $PORTAL_MANUAL         = "http://docs.powderwireless.net";
+    $PORTAL_WIKI           = null;
     $PORTAL_HELPFORUM      = "powder-users";
     $PORTAL_PASSWORD_HELP  = "powderwireless.net or emulab.net Username";
     $PORTAL_NSFNUMBER      = false;
@@ -157,4 +165,15 @@ elseif ($_SERVER["SERVER_NAME"] == "www.powderwireless.net") {
     $PORTAL_GENESIS        = "powder";
     $PORTAL_NAME           = "Powder";
 }
+
+#
+# Array to map a portal "genesis" to its URL.
+#
+$BrandMapping = array(
+    "emulab"     => "$TBBASE/portal",
+    "cloudlab"   => "https://www.cloudlab.us",
+    "phantomnet" => "https://www.phantomnet.org",
+    "powder"     => "https://www.powderwireless.net",
+);
+
 ?>

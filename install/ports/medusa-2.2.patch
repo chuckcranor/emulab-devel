@@ -1,0 +1,81 @@
+diff -Nur medusa-2.2.orig/src/medusa-net.c medusa-2.2/src/medusa-net.c
+--- src/medusa-net.c	2015-11-09 11:06:40.000000000 -0700
++++ src/medusa-net.c	2019-12-26 14:16:47.203962000 -0700
+@@ -120,7 +120,7 @@
+     if ( nSourcePort != 0 ) {
+       int bind_ok=0;
+        
+-      source.sin_family = PF_INET;
++      source.sin_family = AF_INET;
+       source.sin_port = htons(nSourcePort);
+       source.sin_addr.s_addr = INADDR_ANY;
+   
+@@ -153,12 +153,12 @@
+     if (nUseProxy > 0)
+     {
+       target.sin_port = htons(nProxyStringPort);
+-      memcpy(&target.sin_addr.s_addr, &nProxyStringIP, sizeof(unsigned long));
++      target.sin_addr.s_addr = nProxyStringIP;
+     }
+     else
+     {
+       target.sin_port = htons(nPort);
+-      memcpy(&target.sin_addr.s_addr, &nHost, sizeof(unsigned long));
++      target.sin_addr.s_addr = nHost;
+     }
+     target.sin_family = AF_INET;
+ 
+@@ -282,7 +282,7 @@
+       buf = malloc(4096);
+       memset(buf, 0, 4096);
+       memset(&target, 0, sizeof(struct sockaddr_in));
+-      memcpy(&target.sin_addr.s_addr, &nHost, sizeof(unsigned long));
++      target.sin_addr.s_addr = nHost;
+       target.sin_family = AF_INET;
+ 
+       if (szProxyAuthentication == NULL)
+diff -Nur medusa-2.2.orig/src/medusa-trace.c medusa-2.2/src/medusa-trace.c
+--- src/medusa-trace.c	2015-11-09 11:06:40.000000000 -0700
++++ src/medusa-trace.c	2019-12-26 14:18:08.245061000 -0700
+@@ -129,23 +129,23 @@
+   char bufOut[16384];
+   char temp[6];
+   unsigned char cTemp;
+-  unsigned int i = 0;
++  unsigned int i = 0, len;
+  
+   if (pMsg == NULL) {
+     fprintf(stderr, "CRITICAL: writeError() called with NULL message.\n");
+   }
+   else if (iLevel <= iErrorLevel) {
+     va_start(ap, pMsg);
+-    memset(bufOut, 0, 16384);
+-    memset(buf, 0, 4096);
+-    vsnprintf(buf, sizeof(buf), pMsg, ap);
++    memset(bufOut, 0, sizeof(bufOut));
++    memset(buf, 0, sizeof(buf));
++    len = vsnprintf(buf, sizeof(buf), pMsg, ap);
+  
+     // Convert any chars less than 32d or greater than 126d to hex
+-    for (i = 0; i < sizeof(buf); i++)
++    for (i = 0; i < len; i++)
+     {
+       memset(temp, 0, 6);
+       cTemp = (unsigned char)buf[i];
+-      if ((cTemp < 32 && cTemp > 0) || cTemp > 126)
++      if ((cTemp < 32 && cTemp >= 0) || cTemp > 126)
+       {
+         snprintf(temp, 6, "[%02X]", cTemp);        
+       }
+diff -Nur medusa-2.2.orig/src/medusa.c medusa-2.2/src/medusa.c
+--- src/medusa.c	2015-11-09 11:06:40.000000000 -0700
++++ src/medusa.c	2019-12-26 14:15:45.609379000 -0700
+@@ -881,7 +881,7 @@
+ char* findLocalPass(sAudit *_psAudit)
+ {
+   char *pPass;
+-  char *pComboTmp;
++  char *pComboTmp = NULL;
+ 
+   if ((_psAudit->PassType == L_COMBO) || (_psAudit->PassType == L_PWDUMP))
+   {

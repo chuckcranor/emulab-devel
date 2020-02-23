@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -176,7 +176,9 @@ cnet_start()
 	ib[0-9])
 		;;
 	# XXX skip Intel 10Gb for now; they require huge numbers of mbufs
-	ix[0-9]|ixl[0-9])
+	# XXX this should no longer be a problem as of FreeBSD 10.1 and we
+	#     relax to allow ixl0 for certain Powder nodes.
+	ix[0-9]|ixl[1-9])
 		;;
 	ath*)
 		;;
@@ -267,6 +269,18 @@ cnet_start()
 		if [ -e $ELAB_BOOTDIR/controlif ]; then
 		    _cif=`cat $ELAB_BOOTDIR/controlif`
 		    echo "Emulab control net is $_cif"
+		    #
+		    # XXX much like the nfe, it appears that bnxt devices
+		    # can get hung, albeit after recognizing that it is
+		    # the control net. Like nfe, a simple down/up sequence
+		    # seems to get things moving again.
+		    #
+		    case $_cif in
+		    bnxt*)
+			echo "`date`: $_cif: kicking interface ..."
+			ifconfig $_cif down; sleep 2; ifconfig $_cif up
+			;;
+		    esac
 		else
 		    #
 		    # XXX hack for nfe device on PRObE nodes. The PRObE

@@ -165,7 +165,9 @@ EXTERNAL_FSNODE_IP=$EXTERNAL_USERNODE_IP
 
 #
 # Network definitions - see doc/setup-network.txt for a description of how
-# we recommend laying out your network
+# we recommend laying out your network. The definitions below are for the
+# "segmented" topology. If you using a "basic" (or "flat") topology, see
+# the commented out defintions further down.
 #
 
 #
@@ -222,6 +224,30 @@ PUBLIC_NETMASK=255.255.255.0
 # You need at least one.
 #
 DHCPD_DYNRANGE="10.1.34.200 10.1.34.219"
+
+#
+# This commented out set of network defintions is for a basic (everything
+# on one flat subnet) topology. Note that you can still multihome boss
+# and ops, as described above. 
+#
+#BOSSNODE_IP=10.1.32.2
+#USERNODE_IP=10.1.32.3
+#FSNODE_IP=$USERNODE_IP
+#EXTERNAL_BOSSNODE_IP=$BOSSNODE_IP
+#EXTERNAL_USERNODE_IP=$USERNODE_IP
+#EXTERNAL_FSNODE_IP=$EXTERNAL_USERNODE_IP
+#TESTBED_NETWORK=10.1.32.0
+#TESTBED_NETMASK=255.255.255.0
+#CONTROL_ROUTER_IP=10.1.32.1
+#CONTROL_NETWORK=10.1.32.0
+#CONTROL_NETMASK=255.255.255.0
+#PRIVATE_NETWORK=10.1.32.0
+#PRIVATE_ROUTER=10.1.32.1
+#PRIVATE_NETMASK=255.255.255.0
+#PUBLIC_NETWORK=10.1.32.0
+#PUBLIC_ROUTER=10.1.32.1
+#PUBLIC_NETMASK=255.255.255.0
+#DHCPD_DYNRANGE="10.1.32.200 10.1.32.219"
 
 #
 # Fill in the nameservers for your campus network here - the nameserver on boss
@@ -419,8 +445,14 @@ VPUBADDR_BITLEN=none
 #			This has obvious security implications and YOU REALLY
 #			SHOULD NOT DO THIS. 
 #
+# DISABLE_FSNODE_CHFLAGS Do not try and protect critical emulab directories
+#			 from accidental removal with "chflags sunlink" ...
+#			 This is for NFS servers that don't support chflags
+#			 (example: a netapp NAS box).
+#
 DISABLE_NAMED_SETUP=0
 DISABLE_EXPORTS_SETUP=0
+DISABLE_FSNODE_CHFLAGS=0
 
 #
 # Frisbee address/port parameters (and yes meant to spell it that way).
@@ -481,6 +513,18 @@ NFSTRACESUPPORT=0
 OPSDBSUPPORT=0
 
 #
+# New Portal code, which requires Protogeni.
+#
+PORTAL_ENABLE=1
+PROTOGENI_SUPPORT=1
+PROTOGENI_GENIRACK=0
+PROTOGENI_DOMAIN="XXX"		# XXX This needs to be localized
+PROTOGENI_LOCALUSER=1
+PROTOGENI_ISCLEARINGHOUSE=1
+PROTOGENI_WEBSITE=$BOSSNODE
+ISOLATEADMINS=0
+
+#
 # You shouldn't have to change anything below this point
 #
 
@@ -499,3 +543,7 @@ IMAGEDIRECTORIES=1
 
 # Fancy new browser in the console support
 BROWSER_CONSOLE_ENABLE=1
+
+# Collect idle statistics by default, and store in RRD files.
+SDCOLLECTD_DOSTATS=1
+SDCOLLECTD_USE_RRDTOOL=1

@@ -154,16 +154,26 @@ APT_OPTIONS.CallServerMethod = function (url, route, method, args, callback)
     url = 'https://' + window.location.host + '/apt/server-ajax.php';
     url = 'server-ajax.php';
 
+    var networkError = {
+	"code"  : -1,
+	"value" : "Server error, possible network failure. Try again later.",
+    };
+
     if (args == null) {
         args = {"noargs" : "noargs"};
     }
-    return $.ajax({
+    var jqxhr = $.ajax({
         // the URL for the request
         url: url,
         success: function (json) {
 	    window.APT_OPTIONS.gaAjaxEvent(route, method, json.code);
 	    if (callback !== undefined) {
 		callback(json);
+	    }
+	},
+	error: function (jqXHR, textStatus, errorThrown) {
+	    if (callback !== undefined) {
+		callback(networkError);
 	    }
 	},
  
@@ -180,6 +190,16 @@ APT_OPTIONS.CallServerMethod = function (url, route, method, args, callback)
         // the type of data we expect back
         dataType : "json",
     });
+    var defer = $.Deferred();
+    
+    jqxhr.done(function (data) {
+	defer.resolve(data);
+    });
+    jqxhr.fail(function (jqXHR, textStatus, errorThrown) {
+	networkError["jqXHR"] = jqXHR;
+	defer.resolve(networkError);
+    });
+    return defer;
 };
 
 window.APT_OPTIONS.announceDismiss = function (aid) {
@@ -237,12 +257,18 @@ window.APT_OPTIONS.endPage = function () {
 }
 
 window.APT_OPTIONS.updatePage = function (data) {
-  window.APT_OPTIONS.postTutorial({ url: window.location.href, update: data });
+    if (0) {
+	window.APT_OPTIONS.postTutorial({ url: window.location.href,
+					  update: data });
+    }
 }
 
 window.APT_OPTIONS.postTutorial = function (data) {
   //console.log('PostTutorial: ', data);
-  //console.log('parent: ', window.parent.location.hostname, window.parent.location.port, window.parent.location.protocol);
+    //console.log('parent: ', window.parent.location.hostname, window.parent.location.port, window.parent.location.protocol);
+  if (1) {
+      return;
+  }
   window.parent.postMessage(data, 'http://tutorial.cloudlab.us:5000');
   try {
     if (window.parent) {
@@ -273,7 +299,7 @@ window.APT_OPTIONS.Announcements = function () {
 	var newhtml = "";
 	
 	if (json.value.length) {
-	    console.info("announcements", json);
+	    //console.info("announcements", json);
 	    _.each(json.value, function(html) {
 		newhtml += html;
 	    });

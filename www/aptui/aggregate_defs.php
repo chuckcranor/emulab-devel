@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -79,15 +79,24 @@ class Aggregate
 	return (is_null($this->aggregate) ? -1 : $this->aggregate[$name]);
     }
     function name()	    { return $this->field('name'); }
-    function urn()	    { return $this->field('urn'); }
     function nickname()	    { return $this->field('nickname'); }
+    function urn()	    { return $this->field('urn'); }
     function abbreviation() { return $this->field('abbreviation'); }
     function weburl()	    { return $this->field('weburl'); }
+    function ismobile()     { return $this->field('ismobile'); }
+    function isFE()         { return $this->field('isFE'); }
     function disabled()     { return $this->field('disabled'); }
+    function adminonly()    { return $this->field('adminonly'); }
     function has_datasets() { return $this->field('has_datasets'); }
     function reservations() { return $this->field('reservations'); }
-    function isfederate()   { return $this->field('isfederate'); }
+    function nomonitor()    { return $this->field('nomonitor'); }
+    function nolocalimages(){ return $this->field('nolocalimages'); }
+    function prestageimages(){ return $this->field('prestageimages'); }
+    function precalcmaxext(){ return $this->field('precalcmaxext'); }
     function portals()      { return $this->field('portals'); }
+    function canuse_feature(){ return $this->field('canuse_feature'); }
+    function latitude()      { return $this->field('latitude'); }
+    function longitude()     { return $this->field('longitude'); }
 
     # accessors for the status info.
     function sfield($name) {
@@ -105,6 +114,18 @@ class Aggregate
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
 	return !is_null($this->aggregate);
+    }
+
+    # Powder Portal, Emulab is not a "federate", all others are.
+    function isfederate() {
+        global $PORTAL_GENESIS;
+        if ($PORTAL_GENESIS == "powder") {
+            if ($this->nickname() == "Emulab") {
+                return 0;
+            }
+            return 1;
+        }
+        return $this->field('isfederate');
     }
 
     # Lookup up by urn,
@@ -175,6 +196,9 @@ class Aggregate
 		TBERROR("Aggregate::SupportsDatasetsList: ".
 			"Could not load aggregate $urn!", 1);
 	    }
+            if ($aggregate->adminonly() && !(ISADMIN() || STUDLY())) {
+                continue;
+            }
 	    $result[] = $aggregate;
 	}
         return $result;
@@ -183,52 +207,158 @@ class Aggregate
     #
     # Return a list of aggregates supporting reservations,
     #
-    function SupportsReservations() {
-	$result  = array();
+    function SupportsReservations($user = null) {
+	$ordered   = array();
+        $unordered = array();
         global $PORTAL_GENESIS;
 
         $query_result =
             DBQueryFatal("select urn from apt_aggregates ".
                          "where disabled=0 and reservations=1 and ".
-                         "      FIND_IN_SET('$PORTAL_GENESIS', portals)".
-                         "order by isfederate,name");
+                         "      FIND_IN_SET('$PORTAL_GENESIS', portals) ".
+                         ($PORTAL_GENESIS != "powder" ?
+                          "order by isfederate,name" : "order by nickname"));
         
 	while ($row = mysql_fetch_array($query_result)) {
 	    $urn = $row["urn"];
+            $allowed = 1;
 
 	    if (! ($aggregate = Aggregate::Lookup($urn))) {
 		TBERROR("Aggregate::SupportsReservations: ".
 			"Could not load aggregate $urn!", 1);
 	    }
-	    $result[] = $aggregate;
+            # Admins always see everything.
+            if (ISADMIN()) {
+                $allowed = 1;
+            }
+            elseif ($aggregate->adminonly() && !(ISADMIN() || STUDLY())) {
+                $allowed = 0;
+            }
+            elseif ($user && $aggregate->canuse_feature()) {
+                $allowed = 0;
+                $feature = $PORTAL_GENESIS . "-" . $aggregate->canuse_feature();
+
+                # Does the user have the feature?
+                if (FeatureEnabled($feature, $user, null, null)) {
+                    $allowed = 1;
+                }
+                else {
+                    # If not, see if in a project that has it enabled.
+                    $projects = $user->ProjectMembershipList();
+                    foreach ($projects as $project) {
+                        $approved = 0;
+                        $group    = $project->DefaultGroup();
+                        
+                        if ($project->approved() &&
+                            !$project->disabled() &&
+                            # Must be approved in the project.
+                            $project->IsMember($user, $approved) && $approved &&
+                            FeatureEnabled($feature, null, $group, null)) {
+                            $allowed = 1;
+                            break;
+                        }
+                    }
+                }
+            }
+            if ($allowed) {
+                $ordered[] = $aggregate;
+                $unordered[$aggregate->nickname()] = $aggregate;
+            }
 	}
-        return $result;
+        #
+        # Ick, Powder ordering. Need a better way to deal with this.
+        #
+        if ($PORTAL_GENESIS == "powder") {
+            $ordered = array();
+            $ordered[] = $unordered["Emulab"];
+            $ordered[] = $unordered["Utah"];
+            foreach ($unordered as $aggregate) {
+                if ($aggregate->nickname() != "Emulab" &&
+                    $aggregate->nickname() != "Utah") {
+                    $ordered[] = $aggregate;
+                }
+            }
+        }
+        return $ordered;
     }
 
     #
     # Return the list of allowed aggregates based on the portal in use.
     #
-    function DefaultAggregateList() {
+    function DefaultAggregateList($user = null) {
         global $PORTAL_GENESIS, $PORTAL_HEALTH;
 	$genesis = $PORTAL_GENESIS;
 	if ($PORTAL_HEALTH)
 	{
 	  $genesis = "cloudlab";
 	}
-        $am_array = array();
+	$am_array = array();
 
         $query_result =
-            DBQueryFatal("select urn,name,adminonly from apt_aggregates ".
+            DBQueryFatal("select urn from apt_aggregates ".
                          "where disabled=0 and ".
                          "      FIND_IN_SET('$genesis', portals)");
         
 	while ($row = mysql_fetch_array($query_result)) {
             $urn       = $row["urn"];
-            $adminonly = $row["adminonly"];
+            $allowed   = 1;
 
-            if ($adminonly && !(ISADMIN() || STUDLY() || $PORTAL_HEALTH)) {
-                continue;
+	    if (! ($aggregate = Aggregate::Lookup($urn))) {
+		TBERROR("Aggregate::DefaultAggregateList: ".
+			"Could not load aggregate $urn!", 1);
+	    }
+            # Admins always see everything.
+            if (ISADMIN()) {
+                $allowed = 1;
             }
+            elseif ($aggregate->adminonly() && !(ISADMIN() || STUDLY())) {
+                $allowed = 0;
+            }
+            elseif ($user && $aggregate->canuse_feature()) {
+                $allowed = 0;
+                $feature = $PORTAL_GENESIS . "-" . $aggregate->canuse_feature();
+
+                # Does the user have the feature?
+                if (FeatureEnabled($feature, $user, null, null)) {
+                    $allowed = 1;
+                }
+                else {
+                    # If not, see if in a project that has it enabled.
+                    $projects = $user->ProjectMembershipList();
+                    foreach ($projects as $project) {
+                        $approved = 0;
+                        $group    = $project->DefaultGroup();
+                        
+                        if ($project->approved() &&
+                            !$project->disabled() &&
+                            # Must be approved in the project.
+                            $project->IsMember($user, $approved) && $approved &&
+                            FeatureEnabled($feature, null, $group, null)) {
+                            $allowed = 1;
+                            break;
+
+                        }
+                    }
+                }
+            }
+            if ($allowed) {
+                $am_array[$urn] = $aggregate;
+            }
+        }
+        return $am_array;
+    }
+
+    #
+    # All aggregates
+    #
+    function AllAggregatesList() {
+        $am_array = array();
+
+        $query_result =
+             DBQueryFatal("select urn from apt_aggregates");
+        
+	while ($row = mysql_fetch_array($query_result)) {
+            $urn       = $row["urn"];
 	    if (! ($aggregate = Aggregate::Lookup($urn))) {
 		TBERROR("Aggregate::SupportsReservations: ".
 			"Could not load aggregate $urn!", 1);
@@ -247,6 +377,93 @@ class Aggregate
                     "Could not load aggregate $urn!", 1);
         }
         return $aggregate;
+    }
+
+    #
+    # List of types available at this aggregate. For now we just want
+    # the type names.
+    #
+    function TypeList()
+    {
+        $result = array();
+
+        foreach ($this->typeinfo as $type => $info) {
+            $result[$type] = $type;
+        }
+        return $result;
+    }
+
+    #
+    # Array of type attributes for the specified type.
+    #
+    function TypeAttributes($type)
+    {
+        $result = array();
+        $urn    = $this->urn();
+
+        $query_result =
+            DBQueryFatal("select attrkey,attrvalue from ".
+                         "  apt_aggregate_nodetype_attributes ".
+                         "where type='$type' and urn='$urn'");
+
+        if (!mysql_num_rows($query_result)) {
+            return null;
+        }
+        while ($row = mysql_fetch_array($query_result)) {
+            $result[$row["attrkey"]] = $row["attrvalue"];
+        }
+        return $result;
+    }
+
+    #
+    # Reservable nodes.
+    #
+    function ReservableNodes($extended = 0)
+    {
+        $result = array();
+        $urn    = $this->urn();
+
+        $query_result =
+            DBQueryFatal("select * from ".
+                         "  apt_aggregate_reservable_nodes ".
+                         "where urn='$urn'");
+
+        if (!mysql_num_rows($query_result)) {
+            return null;
+        }
+        while ($row = mysql_fetch_array($query_result)) {
+            if ($extended) {
+                $blob = array("urn"       => $row["urn"],
+                              "type"      => $row["type"],
+                              "updated"   => DateStringGMT($row["updated"]),
+                              "available" => intval($row["available"]));
+                $result[$row["node_id"]] = $blob;
+            }
+            else {
+                $result[$row["node_id"]] = $row["type"];
+            }
+        }
+        return $result;
+    }
+
+    #
+    # Radio types. Eventually need to get this from the advertisement.
+    # For now all clusters have the same set of radiotypes.
+    #
+    function RadioTypes()
+    {
+        global $ISPOWDER;
+
+        if ($ISPOWDER && $this->nickname() == "Emulab") {
+            return array("nuc5300" => true,
+                         "nuc6260" => true,
+                         "iris030" => true,
+                         "enodeb"  => true,
+                         "x310"    => true,
+                         "n310"    => true,
+                         "sdr"     => true);
+        }
+        return null;
     }
 }
 

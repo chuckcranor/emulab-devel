@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2017 University of Utah and the Flux Group.
+# Copyright (c) 2017-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -87,7 +87,13 @@ my $runonce = 0;
 my $TB		= "@prefix@";
 my $TBOPS	= "@TBOPSEMAIL@";
 my $TBLOG	= "@TBLOGFACIL@";
+my $TBBASE      = "@TBBASE@";
+my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 my $LOGFILE     = "$TB/log/cnetwatch.log";
+
+# For Geni slices: do this early so that we talk to the right DB.
+use vars qw($GENI_DBNAME);
+$GENI_DBNAME = "geni-cm";
 
 #
 # E-mail config
@@ -98,12 +104,6 @@ my $MAILTO	= $TBOPS;
 my $MAIL_IV	= (10 * 60);
 # Do not send more than this many total messages (0 == no limit)
 my $MAIL_MAX	= 1000;
-
-# XXX testing
-if (0) {
-    $MAIL_IV = 60;
-    $MAIL_MAX = 10;
-}
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin';
@@ -124,6 +124,8 @@ sub fatal($);
 $| = 1; 
 
 my $portstats	= "$TB/bin/portstats";
+my $wap         = "$TB/sbin/withadminprivs";
+my $sudo        = "/usr/local/bin/sudo";
 my @nodes       = ();
 my %switches	= ();
 my %pcs		= ();
@@ -133,6 +135,7 @@ my $rateivs	= 1;
 my $maillast = 0;
 my $mailsent = 0;
 my @mailbody = ();
+my @maildetails = ();
 
 # Set this to turn off tblog in libraries.
 $ENV{'TBLOG_OFF'} = "yep";
@@ -143,11 +146,24 @@ $ENV{'WITH_TB_ADMIN_PRIVS'} = 1;
 
 # Load the Testbed support stuff.
 use lib "@prefix@/lib";
+use EmulabConstants;
 use libdb;
 use libtestbed;
+use Experiment;
+if ($PGENISUPPORT) {
+    require GeniSlice;
+    require GeniHRN;
+}
 
 #
 # Read sitevars to establish defaults:
+#
+# cnetwatch/enable
+#   Zero means don't run cnetwatch (exit immediately).
+#   
+# cnetwatch/reportlog
+#   If set, a file in which to log the port counts for all nodes (-l).
+#   Unset means do not log.
 #
 # cnetwatch/check_interval
 #   Interval at which to collect info.
@@ -174,7 +190,22 @@ use libtestbed;
 #   Zero means no limit to the emails.
 #
 my $tmp;
-my $svar = "cnetwatch/check_interval";
+my $svar = "cnetwatch/enable";
+if (TBGetSiteVar($svar, \$tmp)) {
+    if ($tmp == 0) {
+	print STDERR "WARNING: cnetwatch disabled by sitevar\n";
+	exit(0);
+    }
+}
+$svar = "cnetwatch/reportlog";
+if (TBGetSiteVar($svar, \$tmp) && $tmp ne "") {
+    if ($tmp =~ /^([-\w\.\/\+]*[-\w\.\+])$/) {
+	$reportlog = $1;
+    } else {
+	print STDERR "WARNING: invalid path: '$tmp', ignored.\n";	
+    }
+}
+$svar = "cnetwatch/check_interval";
 if (TBGetSiteVar($svar, \$tmp)) {
     if ($tmp == 0 || $tmp >= 10) {
 	$interval = $tmp;
@@ -212,6 +243,9 @@ $svar = "cnetwatch/mail_interval";
 if (TBGetSiteVar($svar, \$tmp)) {
     if ($tmp >= 0) {
 	$MAIL_IV = $tmp;
+	if ($MAIL_IV > 0) {
+	    $sendmail = 1;
+	}
     } else {
 	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
     }
@@ -225,6 +259,15 @@ if (TBGetSiteVar($svar, \$tmp)) {
 	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
     }
 
+}
+
+# XXX testing
+if (0) {
+    $interval = 30;
+    $alertinterval = (2 * $interval);
+    $MAIL_IV = 30;
+    $MAIL_MAX = 10;
+    $MAX_PPS = 10;
 }
 
 #
@@ -298,20 +341,17 @@ if ($MAIL_IV == 0) {
     $MAIL_IV = $alertinterval;
 }
 
-#
-# Check user id.
-#
-if ($UID == 0) {
-    fatal("Do not run as root or portstats will fail!");
-}
-if (!TBAdmin()) {
-    fatal("Must run as an admin user or portstats will fail!");
-}
-
 # Go to ground.
-if (!$debug) {
+if (! ($debug || $runonce)) {
+    if (CheckDaemonRunning("cnetwatch")) {
+	fatal("Not starting another cnetwatch, use debug/runonce mode!");
+    }
+    # Go to ground.
     if (TBBackGround($LOGFILE)) {
 	exit(0);
+    }
+    if (MarkDaemonRunning("cnetwatch")) {
+	fatal("Could not mark daemon as running!");
     }
 }
 
@@ -325,8 +365,7 @@ if ($reportlog) {
     } elsif (open(RL, ">>$reportlog")) {
 	RL->autoflush(1);
     } else {
-	print STDERR "Could not open report log '$reportlog'\n";
-	exit(1);
+	fatal("Could not open report log '$reportlog'");
     }
 }
 
@@ -452,6 +491,8 @@ sub sortem($$)
 
 #
 # Check for prolonged high traffic volumes from nodes.
+# Counts: 0==s-bytes, 1==s-uni, 2==s-multi, 3==s-broad
+#         4==r-bytes, 5==r-uni, 6==r-multi, 7==r-broad
 #
 sub reportevents($)
 {
@@ -468,13 +509,20 @@ sub reportevents($)
 	}
 	my $secs = $ref->{'tstamp'};
 	my @counts = @{$ref->{$node}{'counts'}};
-	my $pps = $counts[1] + $counts[2] + $counts[3] +
-	    $counts[5] + $counts[6] + $counts[7];
-	my $bps = $counts[0] + $counts[4];
+
+	my $spkts = $counts[1] + $counts[2] + $counts[3];
+	my $rpkts = $counts[5] + $counts[6] + $counts[7];
+	my $sbytes = $counts[0];
+	my $rbytes = $counts[4];
 
 	$secs += $rates{$node}{'elapsed'};
-	$pps += $rates{$node}{'pkts'};
-	$bps += $rates{$node}{'bytes'};
+	$spkts += $rates{$node}{'spkts'};
+	$rpkts += $rates{$node}{'rpkts'};
+	$sbytes += $rates{$node}{'sbytes'};
+	$rbytes += $rates{$node}{'rbytes'};
+
+	my $pkts = $spkts + $rpkts;
+	my $bytes = $sbytes + $rbytes;
 
 	#
 	# XXX right now we do discrete intervals, we could do a sliding 
@@ -487,12 +535,24 @@ sub reportevents($)
 		my $ideal = ($rateivs * $interval);
 		logit("elapsed: actual=$sec, ideal=$ideal");
 	    }
-	    $pps = int($pps / $sec);
-	    $bps = int($bps * 8 / $sec);
+	    my $pps = int($pkts / $sec);
+	    my $bps = int($bytes * 8 / $sec);
 	    if (($MAX_PPS && $pps > $MAX_PPS) ||
 		($MAX_BPS && $bps > $MAX_BPS)) {
-		logit("$node: WARNING: pkts/sec=$pps, bits/sec=$bps over $sec seconds");
+		my $spps = int($spkts / $sec);
+		my $sbps = int($sbytes * 8 / $sec);
+		my $rpps = int($rpkts / $sec);
+		my $rbps = int($rbytes * 8 / $sec);
+
+		logit("$node: WARNING: pkts/sec=$pps (send=$spps, recv=$rpps)".
+		      ", bits/sec=$bps (send=$sbps, recv=$rbps)".
+		      " over $sec seconds");
 		if ($sendmail) {
+		    my $exp = $pcs{$node}{'exp'};
+		    my $expname = $pcs{$node}{'expname'};
+		    my $url = $pcs{$node}{'url'};
+		    my $portalurl = $pcs{$node}{'portalurl'};
+		    
 		    if (@mailbody == 0) {
 			my $pth = $bth = "no limit on";
 			if ($MAX_PPS) {
@@ -508,21 +568,42 @@ sub reportevents($)
 			     sprintf("%20s %30s %8s %8s %s",
 				     "Node:port", "Expt", "Pkts/sec", "Mb/sec", "When"));
 		    }
+		    if (@maildetails == 0) {
+			push(@maildetails,
+			     "\nDetails:");
+			push(@maildetails,
+			     sprintf("%20s %17s %17s %s",
+				     "Node:port", "Send/Recv pps", "Send/Recv Mbs", "Duration"));
+		    }
 		    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S",
 						localtime($ref->{'start'}));
 		    push(@mailbody,
 			 sprintf("%20s %30s %8d %8d %s for %d sec",
-				 $node, $pcs{$node}{'exp'}, $pps,
+				 $node, $expname, $pps,
 				 int($bps/1000000), $stamp, $secs));
+		    push(@mailbody, sprintf("%30s %s", "", $url))
+			if (defined($url));
+		    push(@mailbody, sprintf("%30s %s", "", $portalurl))
+			if (defined($portalurl));
+
+		    push(@maildetails,
+			 sprintf("%20s %8d/%-8d %8d/%-8d %d sec",
+				 $node, $spps, $rpps,
+				 int($sbps/1000000), int($rbps/1000000),
+				 $secs));
 		}
 	    }
-	    $rates{$node}{'pkts'} = 0; 
-	    $rates{$node}{'bytes'} = 0;
+	    $rates{$node}{'spkts'} = 0; 
+	    $rates{$node}{'rpkts'} = 0; 
+	    $rates{$node}{'sbytes'} = 0;
+	    $rates{$node}{'rbytes'} = 0;
 	    $rates{$node}{'iv'} = 0;
 	    $rates{$node}{'elapsed'} = 0;
 	} else {
-	    $rates{$node}{'pkts'} = $pps;
-	    $rates{$node}{'bytes'} = $bps;
+	    $rates{$node}{'spkts'} = $spkts;
+	    $rates{$node}{'rpkts'} = $rpkts;
+	    $rates{$node}{'sbytes'} = $sbytes;
+	    $rates{$node}{'rbytes'} = $rbytes;
 	    $rates{$node}{'iv'} = $iv;
 	    $rates{$node}{'elapsed'} = $secs;
 	}
@@ -538,17 +619,24 @@ sub reportevents($)
 	}
 	SENDMAIL($MAILTO,
 		 "Excessive traffic on control network",
-		 join("\n", @mailbody),
+		 join("\n", @mailbody, @maildetails),
 		 $TBOPS);
 	$maillast = time();
 	@mailbody = ();
+	@maildetails = ();
     }
 }
 
+#
+# Make a periodic report.
+# Counts: 0==s-bytes, 1==s-uni, 2==s-multi, 3==s-broad
+#         4==r-bytes, 5==r-uni, 6==r-multi, 7==r-broad
+#
 sub report($)
 {
     my ($ref) = @_;
 
+    # XXX allow for differentiation down the road
     my $send = 1;
     my $recv = 1;
 
@@ -575,7 +663,7 @@ sub report($)
 	    $bpkts += $counts[7];
 	}
 	$ref->{$node}{'totals'} =
-	    [ $oct, $upkts, $mpkts, $upkts + $mpkts + $bpkts];
+	    [ $oct, $upkts, $mpkts, $upkts + $mpkts + $bpkts ];
 	$pcs{$node}{'total'} = $upkts + $mpkts + $bpkts;
 	push(@list, $node);
     }
@@ -588,11 +676,11 @@ sub report($)
         "Node", "Experiment", "Tot Pkts", "Unicast", "Multicast", "Tot Bytes";
     foreach my $node (@list) {
 	my $name = $pcs{$node}{'name'};
-	my $exp = $pcs{$node}{'exp'};
+	my $expname = $pcs{$node}{'expname'};
 	my $tot = $ref->{$node}{'totals'};
 
 	printf RL "%20s %30s %12d %12d %12d %14d\n",
-	    $name, $exp, $tot->[3], $tot->[1], $tot->[2], $tot->[0];
+	    $name, $expname, $tot->[3], $tot->[1], $tot->[2], $tot->[0];
     }
 }
 
@@ -660,11 +748,24 @@ sub getnodeinfo($)
 	    next;
 	}
 
-	my $exp;
+	my ($exp,$expname,$url,$portalurl);
 	if (defined($row{'pid'})) {
-	    $exp = $row{'pid'} . "/" . $row{'eid'};
-	} else {
-	    $exp = "<NONE>";
+	    $exp = Experiment->Lookup($row{'pid'}, $row{'eid'});
+	}
+	if (defined($exp)) {
+	    $expname = $exp->pideid();
+	    if ($exp->geniflags) {
+		my $slice = GeniSlice->LookupByExperiment($exp);
+		if (defined($slice)) {
+		    $portalurl = $slice->GetPortalURL();
+		}
+	    }
+	    my $pid = $exp->pid();
+	    my $eid = $exp->eid();
+	    $url = "$TBBASE/showexp.php3?pid=$pid&eid=$eid";
+	}
+	else {
+	    $expname = "<NONE>";
 	}
 	# portstats now accepts node:iface, and spits out in that format (-i).
 	#
@@ -672,12 +773,17 @@ sub getnodeinfo($)
 
 	push(@{$switches{$switch}}, $cnet);
 	$newpcs{$cnet}{'exp'} = $exp;
+	$newpcs{$cnet}{'expname'} = $expname;
+	$newpcs{$cnet}{'url'} = $url;
+	$newpcs{$cnet}{'portalurl'} = $portalurl;
 	$newpcs{$cnet}{'state'} = $row{'eventstate'};
 	$newpcs{$cnet}{'name'} = $pc;
 
 	if (!exists($pcs{$cnet})) {
-	    $rates{$cnet}{'pkts'} = 0;
-	    $rates{$cnet}{'bytes'} = 0;
+	    $rates{$cnet}{'spkts'} = 0;
+	    $rates{$cnet}{'rpkts'} = 0;
+	    $rates{$cnet}{'sbytes'} = 0;
+	    $rates{$cnet}{'rbytes'} = 0;
 	    $rates{$cnet}{'iv'} = 0;
 	    $rates{$cnet}{'elapsed'} = 0;
 	    if ($whine) {
@@ -723,7 +829,8 @@ sub gather($)
 	my $slist = join(' ', @{$switches{$switch}});
 	print STDERR "$switch: invoking '$portstats -i -H -r -l -c -p $slist':\n"
 	    if ($debug > 1);
-	if (!open(PS, "$portstats -i -H -r -l -c -p $slist 2>&1 |")) {
+	if (!open(PS, "$sudo -u ". PROTOUSER() . " $wap ".
+		  "$portstats -i -H -r -l -c -p $slist 2>&1 |")) {
 	    print STDERR "*** $switch: portstats failed on open, ignored\n";
 	    next;
 	}

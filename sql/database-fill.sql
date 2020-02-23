@@ -356,6 +356,12 @@ REPLACE INTO mode_transitions VALUES ('ALWAYSUP','SHUTDOWN','RELOAD-UE','SHUTDOW
 REPLACE INTO mode_transitions VALUES ('ALWAYSUP','ISUP','RELOAD-UE','SHUTDOWN','ReloadStart');
 REPLACE INTO mode_transitions VALUES ('ALWAYSUP','ISUP','RELOAD-UE','ISUP','ReloadStart');
 REPLACE INTO mode_transitions VALUES ('RELOAD-UE','SHUTDOWN','ALWAYSUP','ISUP','ReloadDone');
+REPLACE INTO mode_transitions VALUES ('ALWAYSUP','SHUTDOWN','RELOAD','SHUTDOWN','');
+REPLACE INTO mode_transitions VALUES ('RELOAD','SHUTDOWN','ALWAYSUP','SHUTDOWN','');
+REPLACE INTO mode_transitions VALUES ('RELOAD','RELOADDONE','ALWAYSUP','SHUTDOWN','');
+REPLACE INTO mode_transitions VALUES ('ONIE','SHUTDOWN','RELOAD','SHUTDOWN','');
+REPLACE INTO mode_transitions VALUES ('RELOAD','SHUTDOWN','ONIE','SHUTDOWN','');
+REPLACE INTO mode_transitions VALUES ('RELOAD','RELOADDONE','ONIE','SHUTDOWN','');
 
 --
 -- Dumping data for table `priorities`
@@ -445,7 +451,15 @@ REPLACE INTO state_timeouts VALUES ('PXEKERNEL','PXEBOOTING',240,'REBOOT');
 -- Dumping data for table `state_transitions`
 --
 
-
+REPLACE INTO state_transitions VALUES ('ONIE','ISUP','SHUTDOWN','');
+REPLACE INTO state_transitions VALUES ('ONIE','SHUTDOWN','BOOTING','');
+REPLACE INTO state_transitions VALUES ('ONIE','SHUTDOWN','PXEWAIT','');
+REPLACE INTO state_transitions VALUES ('ONIE','BOOTING','ISUP','');
+REPLACE INTO state_transitions VALUES ('ONIE','BOOTING','BOOTING','');
+REPLACE INTO state_transitions VALUES ('ONIE','PXEWAIT','PXEWAIT','bootinfoclient');
+REPLACE INTO state_transitions VALUES ('ONIE','PXEWAIT','PXEWAKEUP','');
+REPLACE INTO state_transitions VALUES ('ONIE','PXEWAKEUP','BOOTING','');
+REPLACE INTO state_transitions VALUES ('ONIE','ISUP','ISUP','');
 REPLACE INTO state_transitions VALUES ('ALWAYSUP','ISUP','SHUTDOWN','Reboot');
 REPLACE INTO state_transitions VALUES ('ALWAYSUP','SHUTDOWN','ISUP','BootDone');
 REPLACE INTO state_transitions VALUES ('PCVM','ISUP','BOOTING','Crash');
@@ -1308,8 +1322,8 @@ REPLACE INTO table_regex VALUES ('emulab_sites','os_version','text','redirect','
 REPLACE INTO table_regex VALUES ('emulab_sites','perl_version','text','redirect','default:tinytext',0,0,NULL);
 REPLACE INTO table_regex VALUES ('emulab_sites','tbops','text','redirect','users:usr_email',0,0,NULL);
 
-REPLACE INTO table_regex VALUES ('default','fulltext','text','regex','^[\\040-\\073\\075\\077-\\176\\012\\015\\011]*$',0,20000,NULL);
-REPLACE INTO table_regex VALUES ('default','html_fulltext','text','regex','^[\\040-\\176\\012\\015\\011]*$',0,20000,NULL);
+REPLACE INTO table_regex VALUES ('default','fulltext','text','regex','^[\\040-\\073\\075\\077-\\176\\012\\015\\011]*$',0,100000,NULL);
+REPLACE INTO table_regex VALUES ('default','html_fulltext','text','regex','^[\\040-\\176\\012\\015\\011]*$',0,100000,NULL);
 
 REPLACE INTO table_regex VALUES ('default','tinytext','text','regex','^[\\040-\\073\\075\\077-\\176]*$',0,256,NULL);
 REPLACE INTO table_regex VALUES ('default','html_tinytext','text','regex','^[\\040-\\176]*$',0,256,NULL);
@@ -1336,6 +1350,7 @@ REPLACE INTO table_regex VALUES ('apt_profiles','public','int','redirect','defau
 REPLACE INTO table_regex VALUES ('apt_profiles','listed','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('apt_profiles','shared','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('apt_profiles','topdog','int','redirect','default:boolean',0,0,NULL);
+REPLACE INTO table_regex VALUES ('apt_profiles','project_write','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('apt_profiles','disabled','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('apt_profiles','nodelete','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('apt_profiles','description','text','redirect','default:html_fulltext',0,512,NULL);

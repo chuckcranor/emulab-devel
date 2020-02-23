@@ -1701,7 +1701,7 @@ int
 event_notification_insert_hmac(event_handle_t handle,
 			       event_notification_t notification)
 {
-	HMAC_CTX	ctx;
+	HMAC_CTX	*ctxp;
 	unsigned char	mac[EVP_MAX_MD_SIZE];
 	unsigned int	len = EVP_MAX_MD_SIZE;
 
@@ -1720,22 +1720,42 @@ event_notification_insert_hmac(event_handle_t handle,
 	pubsub_notification_remove(notification->pubsub_notification,
 				   "___elvin_ordered___", &handle->status);
 
-	memset(&ctx, 0, sizeof(ctx));
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L)
+	ctxp = HMAC_CTX_new();
+	if (!ctxp) {
+		ERROR("HMAC_CTX_new failed to alloc ctx\n");
+		return 1;
+	}
+	HMAC_Init_ex(ctxp, handle->keydata, handle->keylen, EVP_sha1(), NULL);
+#else
+	HMAC_CTX	ctx;
+	ctxp = &ctx;
+	memset(ctxp, 0, sizeof(ctx));
 #if (OPENSSL_VERSION_NUMBER < 0x0090703f)
-	HMAC_Init(&ctx, handle->keydata, handle->keylen, EVP_sha1());
+	HMAC_Init(ctxp, handle->keydata, handle->keylen, EVP_sha1());
 #else	
-	HMAC_CTX_init(&ctx);
-	HMAC_Init_ex(&ctx, handle->keydata, handle->keylen, EVP_sha1(), NULL);
+	HMAC_CTX_init(ctxp);
+	HMAC_Init_ex(ctxp, handle->keydata, handle->keylen, EVP_sha1(), NULL);
+#endif
 #endif
 	if (!pubsub_notification_traverse(notification->pubsub_notification,
 					  hmac_traverse,
-					  &ctx, &handle->status)) {
+					  ctxp, &handle->status)) {
 	    ERROR("event_notification_insert_hmac failed: hmac_traverse\n");
-	    HMAC_cleanup(&ctx);
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L)
+	    HMAC_CTX_free(ctxp);
+#else
+	    HMAC_cleanup(ctxp);
+#endif
 	    return 1;
 	}
-	HMAC_Final(&ctx, mac, &len);
-	HMAC_cleanup(&ctx);
+	HMAC_Final(ctxp, mac, &len);
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L)
+	HMAC_CTX_free(ctxp);
+#else
+	HMAC_cleanup(ctxp);
+#endif
+	ctxp = NULL;
 
 	if (0) {
 		hmac_dump("event_notification_insert_hmac", mac, len);
@@ -1833,7 +1853,10 @@ static int
 event_notification_check_hmac(event_handle_t handle,
 			      event_notification_t notification)
 {
-	HMAC_CTX	ctx;
+#if (OPENSSL_VERSION_NUMBER < 0x10100000L)
+	HMAC_CTX        ctx;
+#endif
+	HMAC_CTX	*ctxp = NULL;
 	unsigned char	srcmac[EVP_MAX_MD_SIZE], mac[EVP_MAX_MD_SIZE];
 	char		*pmac;
 	unsigned int	srclen, len = EVP_MAX_MD_SIZE;
@@ -1842,6 +1865,11 @@ event_notification_check_hmac(event_handle_t handle,
 #ifdef ELVIN_COMPAT
 	struct elvin_hashtable  *hashtable;
 #endif
+
+#if (OPENSSL_VERSION_NUMBER < 0x10100000L)
+	ctxp = &ctx;
+#endif
+
 	if (0)
 		INFO("event_notification_check_hmac (key): %s\n",
 		     handle->keydata);
@@ -1900,18 +1928,32 @@ event_notification_check_hmac(event_handle_t handle,
 	     * order, and uses __hmac__ to compare against.
 	     */
 	    if (! elvin_ordered) {
-	        memset(&ctx, 0, sizeof(ctx));
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L)
+	        ctxp = HMAC_CTX_new();
+		if (!ctxp) {
+		    ERROR("HMAC_CTX_new failed to alloc ctx\n");
+		    return 1;
+		}
+		HMAC_Init_ex(ctxp, handle->keydata, handle->keylen, EVP_sha1(), NULL);
+#else
+	        memset(ctxp, 0, sizeof(ctx));
 #if (OPENSSL_VERSION_NUMBER < 0x0090703f)
-		HMAC_Init(&ctx, handle->keydata, handle->keylen, EVP_sha1());
+		HMAC_Init(ctxp, handle->keydata, handle->keylen, EVP_sha1());
 #else	
-		HMAC_CTX_init(&ctx);
-		HMAC_Init_ex(&ctx, handle->keydata, handle->keylen,
+		HMAC_CTX_init(ctxp);
+		HMAC_Init_ex(ctxp, handle->keydata, handle->keylen,
 			     EVP_sha1(), NULL);
+#endif
 #endif
 		hashtable = elvin_hashtable_alloc(0, &handle->status);
 		if (hashtable == NULL) {
 		    ERROR("event_notification_check_hmac failed: "
 			  "hashtable alloc\n");
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L)
+		    HMAC_CTX_free(ctxp);
+#else
+		    HMAC_cleanup(ctxp);
+#endif
 		    return -1;
 		}
 		if (!pubsub_notification_traverse(pubsub_notification,
@@ -1921,18 +1963,32 @@ event_notification_check_hmac(event_handle_t handle,
 		    ERROR("event_notification_check_hmac failed: "
 			  "hmac_fill_hash\n");
 		    elvin_hashtable_free(hashtable);
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L)
+		    HMAC_CTX_free(ctxp);
+#else
+		    HMAC_cleanup(ctxp);
+#endif
 		    return -1;
 		}
 		if (!elvin_hashtable_traverse(hashtable, hmac_traverse,
-					      &ctx, &handle->status)) {
+					      ctxp, &handle->status)) {
 		    ERROR("event_notification_check_hmac failed: "
 			  "notify_traverse\n");
 		    elvin_hashtable_free(hashtable);
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L)
+		    HMAC_CTX_free(ctxp);
+#else
+		    HMAC_cleanup(ctxp);
+#endif
 		    return -1;
 		}
 		elvin_hashtable_free(hashtable);
-		HMAC_Final(&ctx, mac, &len);
-		HMAC_cleanup(&ctx);
+		HMAC_Final(ctxp, mac, &len);
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L)
+		HMAC_reset(ctxp);
+#else
+		HMAC_cleanup(ctxp);
+#endif
 
 		if (0) {
 			hmac_dump("event_notification_check_hmac (elvin)",
@@ -1945,22 +2001,44 @@ event_notification_check_hmac(event_handle_t handle,
 	/*
 	 * Do a normal HMAC check.
 	 */
-	memset(&ctx, 0, sizeof(ctx));
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L)
+	if (!ctxp) {
+	    ctxp = HMAC_CTX_new();
+	    if (!ctxp) {
+	        ERROR("HMAC_CTX_new failed to alloc ctx\n");
+		return 1;
+	    }
+	}
+	else {
+	    HMAC_CTX_reset(ctxp);
+	}
+	HMAC_Init_ex(ctxp, handle->keydata, handle->keylen, EVP_sha1(), NULL);
+#else
+	memset(ctxp, 0, sizeof(ctx));
 #if (OPENSSL_VERSION_NUMBER < 0x0090703f)
-	HMAC_Init(&ctx, handle->keydata, handle->keylen, EVP_sha1());
+	HMAC_Init(ctxp, handle->keydata, handle->keylen, EVP_sha1());
 #else	
-	HMAC_CTX_init(&ctx);
-	HMAC_Init_ex(&ctx, handle->keydata, handle->keylen, EVP_sha1(), NULL);
+	HMAC_CTX_init(ctxp);
+	HMAC_Init_ex(ctxp, handle->keydata, handle->keylen, EVP_sha1(), NULL);
+#endif
 #endif
 	if (!pubsub_notification_traverse(pubsub_notification,
 					  hmac_traverse,
-					  &ctx, &handle->status)) {
-	    HMAC_cleanup(&ctx);
+					  ctxp, &handle->status)) {
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L)
+	    HMAC_CTX_free(ctxp);
+#else
+	    HMAC_cleanup(ctxp);
+#endif
 	    return -1;
 	}
 
-	HMAC_Final(&ctx, mac, &len);
-	HMAC_cleanup(&ctx);
+	HMAC_Final(ctxp, mac, &len);
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L)
+	HMAC_CTX_free(ctxp);
+#else
+	HMAC_cleanup(ctxp);
+#endif
 
 	if (0) {
 		hmac_dump("event_notification_check_hmac (plain)", mac, len);

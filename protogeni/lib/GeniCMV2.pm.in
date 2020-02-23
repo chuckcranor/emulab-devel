@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -59,11 +59,12 @@ use GeniStd;
 use emutil;
 use libEmulab;
 use English;
+use EmulabConstants;
 use libtestbed;
 use Data::Dumper;
 use XML::Simple;
 use Date::Parse;
-use POSIX qw(strftime tmpnam);
+use POSIX qw(strftime);
 use POSIX qw(setsid :sys_wait_h);
 use Time::Local;
 use Compress::Zlib;
@@ -78,12 +79,14 @@ my $TBOPS          = "@TBOPSEMAIL@";
 my $TBLOGS         = "@TBLOGSEMAIL@";
 my $TBAPPROVAL     = "@TBAPPROVALEMAIL@";
 my $TBAUDIT   	   = "@TBAUDITEMAIL@";
+my $MAINSITE       = @TBMAINSITE@;
 my $BOSSNODE       = "@BOSSNODE@";
 my $OURDOMAIN      = "@OURDOMAIN@";
 my $PGENIDOMAIN    = "@PROTOGENI_DOMAIN@";
 my $ELABINELAB     = "@ELABINELAB@";
 my $TBBASE         = "@TBBASE@";
 my $TBDOCBASE      = "@TBDOCBASE@";
+my $CLUSTER_PORTAL = "@CLUSTER_PORTAL@";
 my $CREATEEXPT     = "$TB/bin/batchexp";
 my $ENDEXPT        = "$TB/bin/endexp";
 my $NALLOC	   = "$TB/bin/nalloc";
@@ -114,6 +117,7 @@ my $WAP            = "$TB/sbin/withadminprivs";
 my $SHAREVLAN      = "$TB/sbin/sharevlan";
 my $PANIC          = "$TB/sbin/panic";
 my $LINKTEST       = "$TB/sbin/linktest_control";
+my $NODEADMIN      = "$TB/bin/node_admin";
 my $XMLLINT	   = "/usr/local/bin/xmllint";
 my $IMAGEINFO      = "$TB/sbin/imageinfo";
 my $PRERENDER      = "$TB/libexec/vis/prerender";
@@ -500,6 +504,11 @@ sub CreateSliver($)
 	    return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
 					"Must delete existing slice first");
 	}
+	#
+	# Clear the async return info, in case caller is retrying a
+	# failed slice that never created (read: the portal and buses).
+	#
+	$slice->ClearAsyncError();
     }
     else {
 	#
@@ -721,6 +730,268 @@ sub CreateSliver($)
 }
 
 #
+# Prestage Images needed by a slice.
+#
+sub PrestageImages($)
+{
+    my ($argref) = @_;
+    my $slice_urn    = $argref->{'slice_urn'};
+    my $credentials  = $argref->{'credentials'};
+    my $imagelist    = $argref->{'imagelist'};
+    my $operation    = $argref->{'operation'};
+    my $mypid        = $PID;
+    my $response;
+    my $retval;
+    require Experiment;
+    require libtestbed;
+    require WebTask;
+    require Image;
+
+    # For now, I am not worrying about the slice_urn argument.
+    if (! (defined($credentials) && defined($operation) &&
+	   defined($slice_urn) && defined($imagelist))) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    if (! GeniHRN::IsValid($slice_urn)) {
+	return GeniResponse->MalformedArgsResponse("Bad characters in URN");
+    }
+    if (ref($imagelist) ne "ARRAY") {
+	return GeniResponse->MalformedArgsResponse("Imagelist is not an array");
+    }
+    my ($credential,$speaksfor,@morecreds) =
+	GeniStd::CheckCredentials($credentials);
+    return $credential
+	if (GeniResponse::IsResponse($credential));
+
+    main::AddLogfileMetaData("slice_urn", $slice_urn);
+
+    my $user = GeniCM::CreateUserFromCertificate($credential);
+    if (GeniResponse::IsResponse($user)) {
+	print STDERR "Could not create geni user for $credential\n";
+	return $user;
+    }
+
+    my %map      = ();
+    my %prestage = ();
+    my $blob = {
+	"status" => {},
+    };
+
+    # Get the project and group.
+    my $group = GeniUtil::GetHoldingProject($slice_urn, $user);
+    if (GeniResponse::IsResponse($group)) {
+	$response = $group;
+	goto bad;
+    }
+
+    #
+    # Go through image list and do the same MapToLocalImage() that we
+    # do when actually starting an experiment. 
+    #
+    foreach my $urn (@{ $imagelist }) {
+	my $image;
+	
+	my $hrn = GeniHRN->new($urn);
+	if (!defined($hrn)) {
+	    $response =
+		GeniResponse->MalformedArgsResponse("Not a valid URN: $urn");
+	    goto bad;
+	}
+	if ($hrn->IsImage()) {
+	    if (! (defined($hrn->ospid()) && defined($hrn->osname()))) {
+		$response =
+		    GeniResponse->MalformedArgsResponse(
+			"Malformed image URN: $urn");
+		goto bad;
+	    }
+	    $image = GeniImage::MapToLocalImage($urn, undef,
+						$group->pid(),
+						# Assumes image tracking.
+						1, @morecreds);
+	    if (GeniResponse::IsError($image)) {
+		$response = $image;
+		goto bad;
+	    }
+	}
+	elsif ($hrn->IsIMDataset()) {
+	    $response =
+		GeniResponse->MalformedArgsResponse("Do not know how to ".
+						    "prestage : $urn");
+	    goto bad;
+	}
+	else {
+	    $response =
+		GeniResponse->MalformedArgsResponse("Do not know how to ".
+						    "prestage : $urn");
+	    goto bad;
+	}
+	my $status = {
+	    "status"   => "ready"
+	};
+	if ($image->isImage()) {
+	    $status->{"versname"} = $image->versname();
+	    $status->{"urn"} = $urn;
+	    # What the user is waiting for. 
+	    $status->{"size"} = $image->size() ? int($image->size() / 1024) : 0;
+	}
+	
+	#
+	# If any of these are true, then we do not have to worry about
+	# prestaging
+	#
+	if (! ($image->isImageAlias() || !$image->isImage() ||
+	       $image->IsLocal() || $image->IsSystemImage())) {
+	    if (! $image->ready()) {
+		$status->{"status"} = "notready";
+		# Start the image prestaging if requested.
+		$prestage{$urn} = $image
+		    if ($operation eq "prestage");
+		# Lets try to figure out the current size of the import file.
+		$status->{"progress"} = $image->ImportImageFileSize();
+	    }
+	    else {
+		$status->{"progress"} = $status->{"size"};
+	    }
+	}
+	$blob->{"status"}->{$urn} = $status;
+    }
+    print STDERR Dumper($blob);
+
+    #
+    # We want to fire off imports for the images we need to get, but
+    # we do this in the background and have the caller poll for status.
+    # Only one at a time, since the reason we do prestage is because
+    # we have poor connectivity to this aggregate.
+    #
+    if ($operation eq "prestage" && keys(%prestage)) {
+	my @todo = keys(%prestage);
+	while (@todo) {
+	    my $urn   = shift(@todo);
+	    my $image = $prestage{$urn};
+
+	    if ($image->Lock()) {
+		print STDERR "$image is currently locked. Waiting ...\n";
+
+		if ($image->WaitLock(30)) {
+		    print STDERR "Still locked, moving on to another.\n";
+		    push(@todo, $urn);
+		    next;
+		}
+	    }
+	    print STDERR "Got the lock on $image.\n";
+
+	    #
+	    # Make sure image is still not ready, maybe someone else
+	    # got in and was working on it.
+	    #
+	    $image->Refresh();
+	    if ($image->ready()) {
+		print STDERR "$image is ready after locking. Moving on\n";
+		$image->Unlock();
+		next;
+	    }
+
+	    #
+	    # Enter a pending entry so the daemon can pick things up.
+	    # In general, we prestage cause connectivity and/or bandwidth
+	    # is very limited, so serializing is probably the better
+	    # approach. Revisit later if needed. Note that we can receive
+	    # multiple prestage requests for the same image, say from two
+	    # different experiments wanting to start. Both are going to
+	    # have to wait on the same pending entry to finish up.
+	    #
+	    my $pending = Image::PendingImport->Lookup($image->imageid());
+	    if (defined($pending)) {
+		# Already working on it elsewhere.
+		print STDERR "Pending already exists, moving on.\n";
+		$image->Unlock();
+		next;
+	    }
+	    $pending = Image::PendingImport->Lookup($image->metadata_url());
+	    if (defined($pending)) {
+
+	    }
+	    $pending = Image::PendingImport->Create({
+		"uid"          => $image->creator(),
+		"uid_idx"      => $image->creator_idx(),
+		"pid"          => $image->pid(),
+		"pid_idx"      => $image->pid_idx(),
+		"type"         => "import",
+		"imagename"    => $image->imagename(),
+		"imageid"      => $image->imageid(),
+		"metadata_url" => $image->metadata_url(),
+	    });
+	    if (!defined($pending)) {
+		print STDERR "Could not pending import object\n";
+		$image->Unlock();
+		$response =
+		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				 "Could not create pending import object");
+		goto bad;
+	    }
+	    $image->Unlock();
+	    $map{$urn} = $pending;
+	}
+	if (keys(%map)) {
+	    # debugging
+	    if (0) {
+		print STDERR "Not importing images yet\n";
+	    }
+	    else {
+		#
+		# Fire off the imports in the background. Hopefully
+		# these work first time and the daemon will not have
+		# to ever deal with them.
+		#
+		$mypid = main::WrapperFork();
+		if ($mypid) {
+		    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+		}
+		my @todo = keys(%map);
+		while (@todo) {
+		    my $urn     = shift(@todo);
+		    my $pending = $map{$urn};
+		    my $image   = $prestage{$urn};
+
+		    #
+		    # Use a webtask, we want better reporting from the importer
+		    # so we can report back. Network issues need to be treated
+		    # as a retryable error. 
+		    #
+		    my $webtask = WebTask->CreateAnonymous();
+		    if (!defined($webtask)) {
+			print STDERR "Could not create web task.\n";
+			next;
+		    }
+		    my $command = "$IMPORTER -d -t ". $webtask->task_id() .
+			" -g -P " . $pending->idx();
+
+		    print STDERR "Running: '$command'\n";
+		    GeniUtil::ExecuteAsGeniUser("$command");
+		    $webtask->Refresh();
+		    if ($?) {
+			my $code = $? >> 8;
+			if (!$webtask->HasExited() || $webtask->code() < 0) {
+			    $pending->Failed($webtask->HasExited() ?
+					     $webtask->output() :
+					     "Internal error importing image");
+			}
+		    }
+		    $webtask->Delete();
+		}
+		return 0;
+	    }
+	}
+    }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+
+  bad:
+    return -1
+      if ($mypid != $PID);
+    return $response;
+}
+
+#
 # Delete a Sliver.
 #
 sub DeleteSliver($)
@@ -756,23 +1027,19 @@ sub DeleteSliver($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
-
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
     if ($slice->Lock() != 0) {
 	return GeniResponse->BusyResponse();
     }
-    # If a monitor process is running, we are "busy".
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid()) {
-	$slice->UnLock();
-	return GeniResponse->MonitorResponse();
-    }
-    
-    # If any slivers are imaging, then we are busy as well.
-    if ($aggregate->CheckSliverStates("imaging")) {
+    if ($aggregate->Busy() ||
+	$aggregate->Imaging()) {
 	$slice->UnLock();
 	return GeniResponse->BusyResponse();
     }
-    
     main::AddLogfileMetaData("sliver_urn", $sliver_urn);
     main::AddLogfileMetaDataFromSlice($slice);
     
@@ -862,7 +1129,6 @@ sub DeleteSlice($)
     my $impotent     = $argref->{'impotent'} || 0;
     my $cancel       = 0;
     my $blocking     = 0;
-    my $canceled     = 0;
 
     if (! (defined($credentials) && defined($slice_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
@@ -901,43 +1167,90 @@ sub DeleteSlice($)
 	return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
 				    "Slice is locked down");
     }
-    if ($slice->Lock() != 0) {
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+		    "Slice is already marked for termination, be patient");
+    }
+    if ($slice->WaitForLock(5) != 0) {
 	return GeniResponse->BusyResponse();
+    }
+    if (!defined($aggregate)) {
+	# Easy. Force blocking off and cleanup.
+	$blocking = 1;
+	goto cleanit;
+    }
+    my $slice_experiment = $slice->GetExperiment();
+    
+    #
+    # Do not allow a paniced slice to be terminated until the panic
+    # is cleared.
+    #
+    if (defined($slice_experiment) && 
+	($slice_experiment->state() eq EXPTSTATE_PANICED() ||
+	 $slice_experiment->paniced())) {
+	#
+	# We are going to let the slice's SA clear the panic so it
+	# can terminate. We know that it is in level 1 or 3, so we
+	# can just clear it without rebooting, the nodes are going to
+	# go into reloading anyway.
+	#
+	my $caller = GeniHRN->new($credential->owner_urn());
+	if (! ($caller->IsSA() && 
+	       $caller->domain() eq $slice->urn()->domain())) {
+	    print STDERR "Refusing to terminate a paniced experiment\n";
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
+				"Refusing to terminate a paniced experiment");
+	}
+	if (! ($slice_experiment->paniced() == 1 ||
+	       $slice_experiment->paniced() == 3)) {
+	    return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
+				"Paniced experiment is not at correct level");
+	}
+	#
+	# This operation has to be done as an admin person. 
+	#
+	my $pid = $slice_experiment->pid();
+	my $eid = $slice_experiment->eid();
+	my $command = "$WAP $PANIC -c $pid $eid";
+	print STDERR "Clearing panic before termination\n";
+	GeniUtil::FlipToElabMan();
+	system($command);
+	if ($?) {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				"Could not clear panic before termination");
+	}
+	$slice->ClearShutdown();
+	GeniUtil::FlipToGeniUser();	
     }
 
     #
-    # If a monitor process is running, then the slice is busy.
-    # This might mean that the user will not be able to delete
-    # the slice for a long time, but we are having problems with
-    # users canceling slices before they finish setting up, and
-    # the XEN client side is not handling this very well. Note that
-    # the cleanupslice script calls GeniCM::CleanupDeadSlice()
-    # directly, which *does* kill the monitor, so admin cleanup
-    # is not affected.
+    # If the aggregate is busy, then we are in the midst of a long running
+    # operation (start/restart/reload/reboot). In general we need to wait
+    # for that to finish before we can actually do the delete. This might
+    # mean that the user will not be able to delete the slice for a long
+    # time, but we are having problems with users canceling slices before
+    # they finish setting up, and the XEN client side is not handling this
+    # very well. Note that the cleanupslice script calls
+    # GeniCM::CleanupDeadSlice() directly, which *does* kill the monitor,
+    # so admin cleanup is not affected.
     #
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid()) {
+    # If additional cancel option is provided, we mark the slice for
+    # termination after it is not busy anymore. We also set the cancel flag
+    # which will stop experiment setup early (well, a little early).  We
+    # have the slice locked, so we can hang out waiting, but we mark the
+    # slice in case we timeout (or just plain die) here, the daemon can
+    # pick it up the baton later. 
+    #
+    if ($aggregate->Busy()) {
 	if (!$cancel) {
 	    $slice->UnLock();
-	    return GeniResponse->MonitorResponse()
+	    return GeniResponse->BusyResponse();
 	}
-	    
-	#
-	# But what we can do is set the cancel flag, which the monitor is
-	# checking each time through the loop. This will cause it to stop
-	# rebooting timed out nodes, and quit earlier. The caller will not
-	# have to retry as long. 
-	#
-	my $slice_experiment = $slice->GetExperiment();
-	if (defined($slice_experiment)) {
-	    $slice_experiment->SetCancelFlag(1);
-	}
-	print STDERR "Canceling the monitor (" . $slice->monitor_pid() . ")\n";
-	$canceled = 1;
     }
     # If any slivers are imaging, then we are busy as well.
-    elsif (defined($aggregate) &&
-	$aggregate->CheckSliverStates("imaging")) {
+    elsif ($aggregate->Imaging()) {
 	$slice->UnLock();
 	return GeniResponse->BusyResponse();
     }
@@ -952,28 +1265,76 @@ sub DeleteSlice($)
 	    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 	}
     }
+
     #
-    # If we were canceled, we wait for the monitor to stop, instead of
+    # OK, we want to wait for the aggregate to stop being Busy, so that
+    # we can proceed with the termination. We will set the flag in the
+    # slice record in case we die here, so that the daemon can pick it up
+    # later and finish.
     #
-    if ($canceled) {
-	while ($slice->monitor_pid()) {
-	    sleep(10);
-	    GeniCM::CheckMonitor($slice);
-	    print STDERR "Checking to see if monitor has stopped ...\n";
+    # We also set the slice experiment cancelation flag, which will stop
+    # a new experiment setup early.
+    #
+    if ($aggregate->Busy()) {
+	my $slice_uuid = $slice->uuid();
+	print STDERR "aggregate is busy, marking for cancelation\n";
+	$slice->MarkForTermination();
+	$slice_experiment->SetCancelFlag(1);
+
+	if (0) {
+	    $slice->UnLock();
+	    return 0
+		if (!$blocking);
+	    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 	}
+
+	#
+	# Now we wait. Release the lock in case we die, the daemon
+	# will be watching as well, but it will not do anything unless
+	# it gets the lock and the aggregate is no longer busy. We are
+	# doing the same thing here. Of course, need to watch for the
+	# slice disappearing (if the daemon beats us to it).
+	#
+	$slice->UnLock();
+	$slice->Flush();
+	while (1) {
+	    sleep(10);
+	    $slice = GeniSlice->Lookup($slice_uuid);
+	    if (!defined($slice)) {
+		print STDERR "Slice is gone, quiting ...\n";
+		goto done;
+	    }
+	    # If it is locked, go around again, maybe the daemon has it.
+	    next
+		if ($slice->Lock());
+
+	    $aggregate->Flush();
+	    $aggregate = GeniAggregate->SliceAggregate($slice);
+	    # This would be unusual, so call it quits.
+	    if (!defined($aggregate)) {
+		print STDERR "No aggregate for slice, giving up\n";
+		$slice->UnLock();
+		goto done;
+	    }
+	    last
+		if (!$aggregate->Busy());
+	    
+	    $slice->UnLock();
+	    $slice->Flush();
+	}
+	# Make sure the cancel flag is cleared (checked in endexp).
+	$slice_experiment->SetCancelFlag(0);
     }
+  cleanit:
     my $retval = GeniCM::CleanupDeadSlice($slice, 1);
     if ($retval) {
-        #wvdemeer: Something went wrong deleting the slice.
-        #          But we have a taken a lock above.
-        #          So we need to unlock, or retry becomes impossible and the slice stays locked forever.
-        #          If all is successfull, unlock is apparently not needed, I assume this is because the lock is deleted along with the slice.
+	# Must unlock so we can try again.
         $slice->UnLock();
-
 	return -1
 	    if (!$blocking);
 	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
+  done:
     return 0
 	if (!$blocking);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);
@@ -1063,9 +1424,12 @@ sub ReloadSliver($)
     my $slice_urn    = $argref->{'slice_urn'};
     my $sliver_urns  = $argref->{'sliver_urns'} || $argref->{'component_urns'};
     my $credentials  = $argref->{'credentials'};
+    my $asyncmode    = (exists($argref->{'asyncmode'}) ?
+			$argref->{'asyncmode'} : 0);
 
     return SliverAction("reload",
-			$slice_urn, $sliver_urns, $credentials, undef, 0);
+			$slice_urn, $sliver_urns, $credentials, undef,
+			$asyncmode);
 }
 
 sub SliverAction($$$$$$)
@@ -1146,20 +1510,22 @@ sub SliverAction($$$$$$)
 					"Credential does not match the URN");
 	}
     }
-    if ($slice->Lock() != 0) {
-	return GeniResponse->BusyResponse();
-    }
-    # If a monitor process is running, we are "busy".
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid()) {
-	$slice->UnLock();
-	return GeniResponse->MonitorResponse();
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
     }
     # Shutdown slices get nothing.
     if ($slice->shutdown()) {
-	$slice->UnLock();
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 				    "Slice has been shutdown");
+    }
+    if ($slice->Lock() != 0) {
+	return GeniResponse->BusyResponse();
+    }
+    if ($aggregate->Busy() ||
+	$aggregate->Imaging()) {
+	$slice->UnLock();
+	return GeniResponse->BusyResponse();
     }
     if ($aggregate->ComputeState()) {
 	$slice->UnLock();
@@ -1262,7 +1628,12 @@ sub SliverAction($$$$$$)
 	    if ($mypid) {
 		return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 	    }
-	    # Remember our pid in case callee wrapper forks again.
+	    #
+	    # The callee might also do a wrapper fork, so remember our PID
+	    # to make sure we unlock properly in only the parent side of the
+	    # fork. That child would run with the slice unlocked, Might not
+	    # be a safe thing to do needs more thought. 
+	    #
 	    $isasync = $PID;
 	}
 	$response = &$PerformAction($aggregate, $action);
@@ -1322,7 +1693,12 @@ sub SliverAction($$$$$$)
 	    goto bad
 		if (GeniResponse::IsResponse($response));
 
-	    # Callee did not fork again, we can unlock.
+	    #
+	    # The callee might also do a wrapper fork, so remember our PID
+	    # to make sure we unlock properly in only the parent side of the
+	    # fork. That child would run with the slice unlocked, Might not
+	    # be a safe thing to do needs more thought. 
+	    #
 	    if ($isasync == $PID) {
 		$slice->UnLock();
 	    }
@@ -1333,8 +1709,8 @@ sub SliverAction($$$$$$)
 		goto bad
 		    if (GeniResponse::IsResponse($response));
 	    }
+	    $slice->UnLock();
 	}
-	$slice->UnLock();
 	return ($isasync ? GENIRESPONSE_SUCCESS :
 		GeniResponse->Create(GENIRESPONSE_SUCCESS));
     }
@@ -1388,6 +1764,8 @@ sub SliverStatus($)
     if ($slice->Lock() != 0) {
 	return GeniResponse->BusyResponse();
     }
+    my $slice_experiment = $slice->GetExperiment();
+    
     if ($aggregate->ComputeState()) {
 	print STDERR "SliverStatus: Could not compute state for $aggregate\n";
 	$slice->UnLock();
@@ -1401,8 +1779,7 @@ sub SliverStatus($)
     # If the status is "working" convert to "changing" for the caller, this
     # is an internal status for the newer start/restart code.
     #
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid() || $status eq "working") {
+    if ($aggregate->Busy()) {
 	$status = "changing";
     }
 
@@ -1423,6 +1800,8 @@ sub SliverStatus($)
 		"details" => {},
 		"boot_failure" => $aggregate->boot_failure(),
 		"error"   => $aggregate->ErrorLog() || "",
+		"shutdown"=> $slice->isshutdown(),
+		"paniced" => $slice_experiment->paniced(),
 	       };
     $blob->{'public_url'} =
 	"$TBBASE/showslicepub.php?publicid=" .	$slice->publicid()
@@ -1509,6 +1888,12 @@ sub Shutdown($)
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
     }
     main::AddLogfileMetaDataFromSlice($slice);
+
+    # No point in shutting down a slice marked for termination.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
     
     #
     # Do not worry about locking when setting the shutdown time.
@@ -1576,7 +1961,7 @@ sub RenewSlice($)
 	if (defined($slice) && GeniResponse::IsResponse($slice));
 
     if (! defined($slice)) {
-	return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED(), undef,
 				    "No such slice here");
     }
     main::AddLogfileMetaDataFromSlice($slice);
@@ -1629,11 +2014,13 @@ sub GetTicket($)
 	    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 					"Credential does not match the URN");
 	}
-
-	# If a monitor process is running, we are "busy".
-	GeniCM::CheckMonitor($slice);
-	if ($slice->monitor_pid()) {
-	    return GeniResponse->MonitorResponse();
+	# Terminated slices get nothing.
+	if ($slice->termination_pending()) {
+	    return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+					"Slice is marked for termination");
+	}
+	if (defined($aggregate) && $aggregate->Busy()) {
+	    return GeniResponse->BusyResponse();
 	}
 	
 	#
@@ -1757,18 +2144,16 @@ sub UpdateTicket($)
 				    "Slice does not exist here");
     }
     main::AddLogfileMetaDataFromSlice($slice);
-	
-    # If a monitor process is running, we are "busy".
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid()) {
-	return GeniResponse->MonitorResponse();
-    }
 
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
     if ($slice->IsExpired()) {
 	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
 				    "Slice has expired");
     }
-    
     #
     # UpdateTicket applies only to slices that are not active. Must
     # use UpdateSliver() for an active sliver.
@@ -1865,12 +2250,11 @@ sub UpdateSliver($)
     }
     main::AddLogfileMetaDataFromSlice($slice);
 
-    # If a monitor process is running, we are "busy".
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid()) {
-	return GeniResponse->MonitorResponse();
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
     }
-
     # Must be an aggregate (top level sliver).
     if (ref($aggregate) ne "GeniAggregate") {
 	return GeniResponse->MalformedArgsResponse("Must supply aggregate");
@@ -1879,6 +2263,14 @@ sub UpdateSliver($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
+    if ($aggregate->Busy()) {
+	return GeniResponse->BusyResponse();
+    }
+    if ($slice->IsExpired()) {
+	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
+				    "Slice has expired");
+    }
+
     #
     # It is an error if there is an outstanding ticket. That ticket
     # must be released first.
@@ -1887,11 +2279,6 @@ sub UpdateSliver($)
     if (defined($ticket)) {
 	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
 				    "Must release unredeemed ticket first");
-    }
-
-    if ($slice->IsExpired()) {
-	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
-				    "Slice has expired");
     }
 
     #
@@ -1974,6 +2361,14 @@ sub AddNodes($)
 				"Could not get manifest for slice")
 	if (!defined($manifest));
 
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
+    if ($aggregate->Busy()) {
+	return GeniResponse->BusyResponse();
+    }
     #
     # Make sure no duplicates.
     #
@@ -2332,6 +2727,14 @@ sub DeleteNodes($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
+    if ($aggregate->Busy()) {
+	return GeniResponse->BusyResponse();
+    }
     my $manifest = $aggregate->GetManifest(0);
     return GeniResponse->Create(GENIRESPONSE_ERROR(), undef,
 				"Could not get manifest for slice")
@@ -2343,26 +2746,42 @@ sub DeleteNodes($)
     my %allnodes = ();
     foreach my $noderef (GeniXML::FindNodes("n:node",
 					    $manifest)->get_nodelist()) {
+	# Ignore nodes on other CMs.
+	next
+	    if (! GeniXML::IsLocalNode($noderef));
+
 	my $id = GeniXML::GetVirtualId($noderef);
 	if (!defined($id)) {
 	    print STDERR "No virtual node for $noderef\n";
 	    return GeniResponse->Create(GENIRESPONSE_ERROR());
 	}
-	$allnodes{$id} = $id;
+	my $vnode_id = GeniXML::GetVnodeId($noderef);
+	my $pnode = GeniUtil::LookupNode($vnode_id);
+	if (!defined($pnode)) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Bad resource $vnode_id in manifest");
+	}
+	$allnodes{$id} = $pnode;
     }
     foreach my $nodeid (keys(%nodelist)) {
 	if (!exists($allnodes{$nodeid})) {
 	    return GeniResponse->Create(GENIRESPONSE_BADARGS(), undef,
-					"No such node $nodeid in the topology!");
+				"No such node $nodeid in the topology!");
+	}
+	my $pnode = $allnodes{$nodeid};
+	if ($pnode->isswitch()) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS(), undef,
+			"Not allowed to delete switches from topology!");
 	}
     }
     main::AddLogfileMetaDataFromSlice($slice);
 
     #
     # Suck out nodes. Also figure out what nodes have to be removed
-    # from which lans.
+    # from which lans, and which ifaces from which nodes.
     #
-    my %ifacestoremovefromlans = ();
+    my %ifacestoremovefromlans  = ();
+    my %ifacestoremovefromnodes = ();
     
     foreach my $noderef (GeniXML::FindNodes("n:node",
 					    $manifest)->get_nodelist()) {
@@ -2377,11 +2796,18 @@ sub DeleteNodes($)
 	    $ifacestoremovefromlans{$client_id} = $client_id;
 	}
 	$manifest->removeChild($noderef);
+	delete $allnodes{$id};
+    }
+    if (!keys(%allnodes)) {
+	return GeniResponse->Create(GENIRESPONSE_BADARGS(), undef,
+		    "Not allowed to delete all nodes from the topology!");
     }
     # Purge the ifaces from lans.
     if (keys(%ifacestoremovefromlans)) {
 	foreach my $linkref (GeniXML::FindNodes("n:link",
 						$manifest)->get_nodelist()) {
+	    my $link_id = GeniXML::GetVirtualId($linkref);
+	    
 	    foreach my $iref (GeniXML::FindNodes("n:interface_ref",
 						 $linkref)->get_nodelist()) {
 		my $client_id = GeniXML::GetInterfaceId($iref);
@@ -2392,6 +2818,35 @@ sub DeleteNodes($)
 	    }
 	}
     }
+    # Purge links if we reduced the number of interfaces to <= 1.
+    foreach my $linkref (GeniXML::FindNodes("n:link",
+					    $manifest)->get_nodelist()) {
+	my @ifaces = GeniXML::FindNodes("n:interface_ref",
+					$linkref)->get_nodelist();
+	if (@ifaces <= 1) {
+	    # Need to find this last iface in the node and delete it
+	    # since otherwise the rspec would be malformed.
+	    foreach my $iref (@ifaces) {
+		my $client_id = GeniXML::GetInterfaceId($iref);
+		$ifacestoremovefromnodes{$client_id} = $client_id;
+	    }
+	    $manifest->removeChild($linkref);
+	}
+    }
+    # Purge the ifaces from nodes for links left with just one iface.
+    if (keys(%ifacestoremovefromnodes)) {
+	foreach my $noderef (GeniXML::FindNodes("n:node",
+						$manifest)->get_nodelist()) {
+	    foreach my $iref (GeniXML::FindNodes("n:interface",
+						 $noderef)->get_nodelist()) {
+		my $client_id = GeniXML::GetInterfaceId($iref);
+		if (exists($ifacestoremovefromnodes{$client_id})) {
+		    $noderef->removeChild($iref);
+		}
+	    }
+	}
+    }
+    
     my $rspecstr = GeniXML::Serialize($manifest);
     print STDERR "$rspecstr\n";
 
@@ -2543,11 +2998,13 @@ sub RedeemTicket($)
 				    "No slice here");
     }
     main::AddLogfileMetaDataFromSlice($slice);
-    
-    # If a monitor process is running, we are "busy".
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid()) {
-	return GeniResponse->MonitorResponse();
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
+    if (defined($aggregate) && $aggregate->Busy()) {
+	return GeniResponse->BusyResponse();
     }
 
     my $open_ticket = GeniTicket->SliceTicket($slice);
@@ -2623,6 +3080,11 @@ sub BindToSlice($)
     if (!defined($creator)) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR(), undef,
 				    "Could not lookup slice creator");
+    }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
     }
     if ($slice->Lock() != 0) {
 	return GeniResponse->BusyResponse();
@@ -3319,6 +3781,9 @@ sub CreateImage($)
     my $update_prepare = 0;
     my ($bsname,$blockstore);
     my $copyback_uuid;
+    my $description;
+    my $relocate_urn;
+    my $relocate_timeout = 0;
     my $response;
 
     require EmulabConstants;
@@ -3326,6 +3791,7 @@ sub CreateImage($)
     require OSImage;
     require WebTask;
     require GeniEvent;
+    require GeniImage;
     
     if (! (defined($credentials) && defined($imagename) &&
 	   defined($slice_urn) && defined($sliver_urn))) {
@@ -3356,6 +3822,24 @@ sub CreateImage($)
 	return GeniResponse->MalformedArgsResponse("Improper copyback argument")
 	    if ($copyback_uuid !~ /^[-\w\.\+]*$/);
     }
+    # Optional description.
+    if (exists($argref->{'description'})) {
+	$description = $argref->{'description'};
+	return GeniResponse->MalformedArgsResponse("Improper description")
+	    if (!TBcheck_dbslot($description, "images", "description",
+			       TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR));
+    }
+    # Optional relocate directive.
+    if (exists($argref->{'relocate_urn'})) {
+	$relocate_urn = $argref->{'relocate_urn'};
+	return GeniResponse->MalformedArgsResponse("Improper relocate argument")
+	    if (!GeniHRN::IsValid($relocate_urn));
+    }
+    if ($relocate_urn && $copyback_uuid) {
+	return GeniResponse->MalformedArgsResponse("Not allowed to say both".
+						   "copyback and relocate");
+    }
+    
     my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
     return $credential
 	if (GeniResponse::IsResponse($credential));
@@ -3374,16 +3858,20 @@ sub CreateImage($)
     }
     main::AddLogfileMetaDataFromSlice($slice);
 
-    # If a monitor process is running, we are "busy".
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid()) {
-	return GeniResponse->MonitorResponse();
-    }
-    
     if ($slice_urn ne $slice->urn()) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
+    if ($aggregate->Busy() ||
+	$aggregate->Imaging()) {
+	return GeniResponse->BusyResponse();
+    }
+    
     my $sliver = GeniSliver->Lookup($sliver_urn);
     if (!defined($sliver)) {
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
@@ -3448,8 +3936,8 @@ sub CreateImage($)
     # that they are operating in withadminprivs context. Need a credential
     # to provide that, maybe later.
     #
-    if (OSImage->LookupByName($imagename) &&
-	!($user->IsLocal() && $user->emulab_user()->admin())) {
+    if ($experiment->pid() ne EmulabConstants::TBOPSPID() &&
+	OSImage->LookupByName($imagename)) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 				    "Not allowed to shadow system images; ".
 				    "use a different name for your image");
@@ -3474,6 +3962,16 @@ sub CreateImage($)
 	if (defined($bsname) && !$image->isdataset()) {
 	    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 					"This image is not a dataset");
+	}
+	if (!defined($bsname) && $image->isdataset()) {
+	    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+			"This image is a dataset, maybe a name clash");
+	}
+	if (defined($image->relocate_urn())) {
+	    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+					"This image is waiting to be ".
+					"relocated back to ".
+					$image->relocate_urn());
 	}
     }
     elsif (defined($bsname)) {
@@ -3559,10 +4057,6 @@ sub CreateImage($)
     if (exists($argref->{'global'})) {
 	$opt .= " -g " . ($argref->{'global'} ? "1" : "0");
     }
-    else {
-	# Force shared (within project). 
-	$opt .= " -r 1";
-    }
     print STDERR "CM: '$CLONEIMAGE $opt -s $imagename $node_id'\n";
     
     my $output =
@@ -3587,6 +4081,18 @@ sub CreateImage($)
 	$image->Update({"creator_urn" =>
 			    (defined($speaksfor) ?
 			     $speaksfor->target_urn() : $ENV{'GENIURN'})});
+
+	# This will only happen on initial snapshot.
+	if (defined($relocate_urn)) {
+	    $image->SetImageRelocateURN($relocate_urn) == 0 or
+		print STDERR "Could not set relocate_urn to $relocate_urn\n";
+	}
+	# Since this is a new image, be sure to set the shared flag
+	# if we did not get a global directive above, and the image
+	# is not global by inheritance. 
+	if (!$image->global()) {
+	    $image->Update({"shared" => 1});
+	}
     }
     else {
 	# Cause of image versioning.
@@ -3596,6 +4102,13 @@ sub CreateImage($)
 			    (defined($speaksfor) ?
 			     $speaksfor->target_urn() : $ENV{'GENIURN'})});
     }
+    #
+    # Optional descriptive text. 
+    #
+    if (defined($description)) {
+	$image->SetDescription($description);
+    }
+    
     #
     # Form an image URN so the user knows how to request the new image.
     #
@@ -3767,19 +4280,58 @@ sub CreateImage($)
 	sleep(30);
 	# $webtask->Delete();
     }
-    
     if ($user->email()) {
 	libtestbed::SENDMAIL($user->email(),
 			     ($image->isdataset() ?
 			      "Finished taking snapshot of dataset" :
 			      "Finished cloning image"),
-			     "Image URN: $image_urn\n".
-			     "Image URL: $image_url\n".
+			     (! (defined($copyback_uuid) ||
+				 defined($relocate_urn)) ?
+			      "Image URN: $image_urn\n".
+			      "Image URL: $image_url\n" :
+			      "We have finished ".
+			      ($image->isdataset() ?
+			       "taking a snapshot of your dataset." :
+			       "cloning your image.") . "\n" .
+			      "Your image is now being transfered, you will ".
+			      "receive another message\n".
+			      "when that is complete.\n") .
 			     "\n".
 			     "-----------------------------------------\n".
 			     "$output\n",
 			     $user->email(),
 			     "Bcc: $TBLOGS");
+    }
+    if ($relocate_urn) {
+	#
+	# We are waiting for the Mothership to pick up the image.
+	#
+	# If the relocation does not happen in a reasonable amount of
+	# time, we can give up cause the expire daemon is also looking
+	# for this and will take care of it. 
+	#
+	if ($image->WaitLock(90)) {
+	    print STDERR "Could not get image lock for relocation wait\n";
+	}
+	else {
+	    my $waitfor = 900;
+	    
+	    print STDERR "Waiting for relocation: $relocate_urn\n";
+	    while ($waitfor >= 0) {
+		if (GeniImage::ConvertToImported($image, $relocate_urn) == 0) {
+		    $image->SchedIMSDeletion(1);
+		    $image->SetImageRelocateURN(undef);
+		    print STDERR "Relocation complete\n";
+		    last;
+		}
+		sleep(15);
+		$waitfor -= 15;
+	    }
+	    if ($waitfor < 0) {
+		print STDERR "Giving up on relocation, for now\n";
+	    }
+	    $image->Unlock();
+	}
     }
     return 0;
   bad:
@@ -3856,6 +4408,10 @@ sub DeleteImage($)
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
 				    "No such image: $image_urn");
     }
+    if (defined($image->deleted())) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Already deleted: $image_urn");
+    }
     my $imageid     = $image->imageid();
     my $creator_urn = $image->creator_urn();
 
@@ -3868,28 +4424,53 @@ sub DeleteImage($)
 				    "No project for image");
     }
 
-    if (! ((defined($creator_urn) && $creator_urn eq $user->urn()) ||
-	   GeniHRN::SameDomain($project->nonlocal_id(), $authority->urn()))) {
+    if (! ((defined($creator_urn) &&
+	    ($creator_urn eq $user->urn() ||
+	     $creator_urn eq $ENV{'REALGENIURN'})) ||
+	   GeniHRN::SameDomain($project->nonlocalurn(), $authority->urn()))) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 		    "Not enough permission to delete image; wrong SA or user");
+    }
+    my $fliptouser = $user;
+
+    #
+    # New approach is a project credential which the Portal will grant
+    # to the project leader/managers. We leave the old checks in place.
+    #
+    if ($credential->target_urn()->IsProject()) {
+	if ($credential->target_urn()->authority() ne
+	    $project->nonlocalurn()->authority()) {
+	    return GeniResponse->BadArgsResponse(
+		    "Project credential does not match image domain/project");
+	}
+	#
+	# If not the creator, operate as project leader. This can result
+	# in the email not providing the actual person doing the deletion
+	# unless we move the email here instead of in delete_image.
+	#
+	if (! (defined($creator_urn) &&
+	       ($creator_urn eq $user->urn() ||
+		$creator_urn eq $ENV{'REALGENIURN'}))) {
+	    # fliptouser will flip to image project creator.
+	    $fliptouser = undef;
+	}
     }
     #
     # If not the creator, then require override to prevent
     # accidental removal of images not belonging to current user.
     # Note that not all images have the creator_urn set (yet).
     #
-    if (!((defined($creator_urn) &&
-	   !($creator_urn eq $user->urn() ||
-	     $creator_urn eq $ENV{'REALGENIURN'})) ||
-	  ($user->IsLocal() &&
-	   $image->AccessCheck($user->emulab_user(),
+    elsif (!((defined($creator_urn) &&
+	      !($creator_urn eq $user->urn() ||
+		$creator_urn eq $ENV{'REALGENIURN'})) ||
+	     ($user->IsLocal() &&
+	      $image->AccessCheck($user->emulab_user(),
 			       EmulabConstants::TB_IMAGEID_DESTROY())))) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 		    "Not your image; please specify original creator urn")
 	    if (!defined($overide_urn) || $overide_urn ne $creator_urn);
     }
-
-    if (!defined(GeniCM::FlipToUser($image, $user))) {
+    if (!defined(GeniCM::FlipToUser($image, $fliptouser))) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "FlipToUser failed");
     }
@@ -4025,6 +4606,7 @@ sub TriggerImageUpdate($)
     my $blob         = $argref->{'info'};
     my $credentials  = $argref->{'credentials'};
     require OSImage;
+    require Image;
     require emdb;
 
     if (! (defined($credentials) && defined($blob))) {
@@ -4084,19 +4666,12 @@ sub TriggerImageUpdate($)
 				    "image is locked");
     }
     #
-    # If we already have a conflicting entry in the updates table,
+    # If we already have a conflicting entry in the pending imports table,
     # that is bad.
     #
-    my $query_result =
-	emdb::DBQueryWarn("select url from image_updates ".
-			  "where imageid='$imageid'");
-    if (!defined($query_result)) {
-	$localimage->Unlock();
-	return GeniResponse->Create(GENIRESPONSE_ERROR);
-    }
-    if ($query_result->numrows) {
-	my ($url) = $query_result->fetchrow_array();
-	if ($url eq $blob->{'metadata_url'}) {
+    my $pending = Image::PendingImport->Lookup($blob->{'metadata_url'});
+    if (defined($pending)) {
+	if ($pending->imageid() == $imageid) {
 	    $localimage->Unlock();
 	    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 	}
@@ -4104,34 +4679,50 @@ sub TriggerImageUpdate($)
 	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
 				    "Conflicting image update is pending");
     }
-    my $safe_url = DBQuoteSpecial($blob->{'metadata_url'});
-    my $safe_urn = DBQuoteSpecial($blob->{'updater_urn'});
-    my $update_fields = "";
-
+    my $args = {
+	"uid_urn"      => $blob->{'updater_urn'},
+	"pid"          => $localimage->pid(),
+	"pid_idx"      => $localimage->pid_idx(),
+	"gid"          => $localimage->gid(),
+	"gid_idx"      => $localimage->gid_idx(),
+	"type"         => "copyback",
+	"imagename"    => $localimage->imagename(),
+	"imageid"      => $localimage->imageid(),
+	"remote_urn"   => $blob->{'remote_urn'},
+	"metadata_url" => $blob->{'metadata_url'},
+    };
     #
     # We might know the updater or we might not. If we do that is nice,
     # cause then we can set the updater fields in the new image version
     # accordingly. If not a local user record, then at least we can set
     # updater URN, but do the actual import update in the context of the
-    # image creator (image_import decides this). 
+    # image creator (image_import decides this).
+    #
+    # Ick, setgroups skips nonlocal users, so local use does not have
+    # permission to do this on ops, so have to fall back to the creator.
     #
     my $update_user = GeniUser->Lookup($blob->{'updater_urn'}, 1);
-    if (defined($update_user)) {
-	my $updater = $update_user->uid();
-	my $updater_idx = $update_user->idx();
-	
-	$update_fields = ", updater='$updater',updater_idx='$updater_idx'";
+    if (defined($update_user)
+	&& $update_user->IsLocal() && $update_user->emulab_user()->IsLocal()) {
+	$args->{"uid"}     = $update_user->uid();
+	$args->{"uid_idx"} = $update_user->uid_idx();
     }
-    # We need the credential for secure download (datasets).
+    else {
+	$args->{"uid"}     = $localimage->creator();
+	$args->{"uid_idx"} = $localimage->creator_idx();
+    }
+    # We need the credential for secure download.
     if (exists($blob->{"credential"})) {
-	$update_fields .= ", credential_string=" .
-	    DBQuoteSpecial($blob->{"credential"});
+	$args->{"credential_string"} = $blob->{"credential"};
     }
-    emdb::DBQueryWarn("insert into image_updates set ".
-		      "  imageid='$imageid',url=$safe_url, ".
-		      "  updater_urn=$safe_urn,updated=now() $update_fields");
+    $pending = Image::PendingImport->Create($args);
+    if (!defined($pending)) {
+	$localimage->Unlock();
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Internal error creating pending import")
+    }
     $localimage->Unlock();
-
+    
     #
     # At this point, we can just return to the caller. It is now up to
     # us to pull the new image in, and if we fail we send email and hope
@@ -4139,11 +4730,11 @@ sub TriggerImageUpdate($)
     #
     my $mypid = main::WrapperFork();
     if ($mypid) {
-	return GeniResponse->Create(GENIRESPONSE_SUCCESS)
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
     }
 
     # Try to import right away, if it fails the daemon will catch it later.
-    system("$IMPORTER -d -g -r -c $imageid");
+    system("$IMPORTER -d -g -P " . $pending->idx());
     return 0;
 }
 
@@ -4156,6 +4747,7 @@ sub ListImages($)
 {
     my ($argref) = @_;
     my $user_urn     = $argref->{'user_urn'};
+    my $project_urn  = $argref->{'project_urn'};
     my $credentials  = $argref->{'credentials'};
     my @images       = ();
     require OSImage;
@@ -4165,6 +4757,9 @@ sub ListImages($)
     }
     if (defined($user_urn) && !GeniHRN::IsValid($user_urn)) {
 	return GeniResponse->MalformedArgsResponse("Invalid User URN");
+    }
+    if (defined($project_urn) && !GeniHRN::IsValid($project_urn)) {
+	return GeniResponse->MalformedArgsResponse("Invalid Project URN");
     }
     my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
     return $credential
@@ -4186,16 +4781,54 @@ sub ListImages($)
     my $isadmin = ($user->IsLocal() && $user->admin() ? 1 : 0);
 
     if (defined($user_urn) && $user->urn() ne $user_urn) {
-	my ($userauth,undef,undef) = GeniHRN::Parse($user_urn);
-	my ($thisauth,undef,undef) = GeniHRN::Parse($authority->urn());
+	my $hrn = GeniHRN->new($user_urn);
 
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 				    "No permission to list images")
-	    if ($userauth ne $thisauth && !$isadmin);
+	    if ($hrn->authority() ne
+		$authority->urn()->authority() && !$isadmin);
 
 	@images = OSImage->ListForURN($user_urn);
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS, [])
 	    if (!@images);
+    }
+    elsif (defined($project_urn)) {
+	my $hrn = GeniHRN->new($project_urn);
+	#
+	# Must have a project credential granting permission to get the list.
+	#
+	if (!$credential->target_urn()->IsProject()) {
+	    return GeniResponse->BadArgsResponse("Not a project credential");
+	}
+	if ($project_urn ne $credential->target_urn()) {
+	    return GeniResponse->BadArgsResponse("Credential does not match ".
+						 "project URN");
+	}
+	my $project;
+	
+	if ($hrn->IsOurDomain()) {
+	    $project = Project->Lookup($hrn->id());
+	    if (!defined($project)) {
+		return GeniResponse->SearchFailedResponse(
+		    "No local project for $project_urn");
+	    }
+	}
+	else  {
+	    my $temp = GeniHRN::Generate($hrn->authority(), "authority", "sa");
+	    
+	    $project = Project->LookupNonLocal($temp);
+	    #
+	    # No project means we have never seen anything that would cause
+	    # the local shadow to be created. Treat that as no images found.
+	    #
+	    if (!defined($project)) {
+		return GeniResponse->Create(GENIRESPONSE_SUCCESS, []);
+	    }
+	}
+	@images = OSImage->ListForGroup($project->GetProjectGroup());
+	if (!@images) {
+	    return GeniResponse->Create(GENIRESPONSE_SUCCESS, [])
+	}
     }
     else {
 	$user_urn = $user->urn();
@@ -4220,10 +4853,24 @@ sub ListImages($)
 
 	my $blob = {"urn"     => $image_urn . ":" . $image->version(),
 		    "url"     => $image_url,
+		    "uuid"    => $image->uuid(),
 		    "created" => emutil::TBDateStringGMT($image->created()),
 		    "updated" => emutil::TBDateStringGMT($image->updated()),
+		    "format"  => $image->format(),
+		    "description" => $image->description(),
 	};
-	
+	if (defined($project_urn)) {
+	    print STDERR "$image\n";
+	    
+	    $blob->{"creator_urn"} =
+		($image->creator_urn() ? $image->creator_urn() :
+		 $image->GetCreator()->nonlocalurn());
+	    if (defined($image->updater())) {
+		$blob->{"updater_urn"} =
+		    ($image->updater_urn() ? $image->updater_urn() :
+		     $image->GetUpdater()->nonlocalurn());
+	    }
+	}
 	#
 	# Get the file size on disk.
 	#
@@ -4247,7 +4894,6 @@ sub ListImages($)
 	}
 	push(@result, $blob);
     }
-    print STDERR "Image for $user_urn:\n";
     print STDERR Dumper(\@result);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, \@result);
 }
@@ -4406,17 +5052,21 @@ sub ShareLanAux($$)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
+    if ($aggregate->Busy() ||
+	$aggregate->Imaging()) {
+	return GeniResponse->BusyResponse();
+    }
+
     #
-    # Lock the slice; we do not the user to mess with things.
+    # Lock the slice; we do not let the user to mess with things.
     #
     if ($slice->Lock() != 0) {
 	return GeniResponse->BusyResponse();
-    }
-    # If a monitor process is running, we are "busy".
-    GeniCM::CheckMonitor($slice);
-    if ($slice->monitor_pid()) {
-	$slice->UnLock();
-	return GeniResponse->MonitorResponse();
     }
     my $experiment = $slice->GetExperiment();
     if (!defined($experiment)) {
@@ -4573,6 +5223,11 @@ sub ConsoleURL($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
     my $sliver = GeniSliver->Lookup($sliver_urn);
     if (!defined($sliver)) {
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
@@ -4657,6 +5312,11 @@ sub ConsoleInfo($)
     if ($slice_urn ne $slice->urn()) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
+    }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
     }
     if ($user->urn() ne $slice->creator_urn()) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
@@ -4868,10 +5528,11 @@ sub CreateDataset($)
 	if (ref($expiration) eq 'Frontier::RPC2::DateTime::ISO8601') {
 	    $expiration = $expiration->value;
 	}
-	if (!str2time($expiration)) {
+	my $when = str2time($expiration);
+	if (!$when) {
 	    return GeniResponse->MalformedArgsResponse("Bad expiration");
 	}
-	$opts .= " -e '" . emutil::TBDateStringLocal($expiration) . "' ";
+	$opts .= " -e '$when' ";
     }
     $opts .= $group->pid() . "/" . $group->gid() . "/" . $dataset_urn->id();
 
@@ -4992,6 +5653,7 @@ sub DeleteDataset($)
     return $credential
 	if (GeniResponse::IsResponse($credential));
 
+    # This does the permission to access check.
     my $dataset = Credential2Dataset($dataset_urn, $credential);
     return $dataset
 	if (GeniResponse::IsResponse($dataset));
@@ -5049,6 +5711,7 @@ sub ModifyDataset($)
     return $credential
 	if (GeniResponse::IsResponse($credential));
 
+    # This does the permission to access check.
     my $dataset = Credential2Dataset($dataset_urn, $credential);
     return $dataset
 	if (GeniResponse::IsResponse($dataset));
@@ -5145,6 +5808,7 @@ sub DescribeDataset($)
     return $credential
 	if (GeniResponse::IsResponse($credential));
 
+    # This does the permission to access check.
     my $dataset = Credential2Dataset($dataset_urn, $credential);
     return $dataset
 	if (GeniResponse::IsResponse($dataset));
@@ -5219,8 +5883,11 @@ sub ApproveDataset($)
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
     }
     $dataset_urn = GeniHRN->new($dataset_urn);
-    if ($dataset_urn->type() !~ /^(lt|st)dataset$/) {
-	return GeniResponse->MalformedArgsResponse("Bad dataset type");
+    if (!$dataset_urn->IsDataset()) {
+	return GeniResponse->MalformedArgsResponse("Not a dataset URN");
+    }
+    if ($dataset_urn->IsIMDataset()) {
+	return GeniResponse->MalformedArgsResponse("Not a lt/st dataset URN");
     }
     my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
     return $credential
@@ -5274,8 +5941,8 @@ sub GetDatasetCredential($)
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
     }
     $dataset_urn = GeniHRN->new($dataset_urn);
-    if ($dataset_urn->type() !~ /^(im|lt|st)?dataset$/) {
-	return GeniResponse->MalformedArgsResponse("Bad dataset type");
+    if (!$dataset_urn->IsDataset()) {
+	return GeniResponse->MalformedArgsResponse("Not a dataset URN");
     }
     my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
     return $credential
@@ -5316,14 +5983,14 @@ sub Credential2Dataset($$)
 	       $dataset_urn->authority() eq
 	       $credential->target_urn()->authority() ||
 	       # Locally issued credential with GetDatasetCredential().
-	       $credential->target_urn()->domain() eq $OURDOMAIN));
+	       $credential->target_urn()->IsOurDomain()));
     
     return GeniResponse->MalformedArgsResponse("No project specified")
 	if (!defined($dataset_urn->project()));
 
     # Locally issued credential, use the urn in the credential.
-    if ($credential->target_urn()->domain() eq $OURDOMAIN &&
-	$credential->target_urn()->type() =~ /^(im|lt|st)?dataset$/) {
+    if ($credential->target_urn()->IsOurDomain() &&
+	$credential->target_urn()->IsDataset()) {
 	$dataset_urn = $credential->target_urn();
     }
 
@@ -5427,6 +6094,7 @@ sub SecureImageDownload($)
 {
     my ($argref)  = @_;
     my $credentials = $argref->{'credentials'};
+    my $image_urn   = $argref->{'image_urn'};
 
     if (! (defined($credentials))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
@@ -5435,34 +6103,55 @@ sub SecureImageDownload($)
     return $credential
 	if (GeniResponse::IsResponse($credential));
 
-    my $image_urn = $credential->target_urn();
-    return GeniResponse->MalformedArgsResponse("Improper image type")
-	if ($image_urn->type() ne "imdataset");
-    return GeniResponse->MalformedArgsResponse("No project in URN")
-	if (!defined($image_urn->project()));
-
-    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
+    # Backwards compat until all clusters updated.
+    if (!defined($image_urn)) {
+	$image_urn = $credential->target_urn();	
+    }
+    else {
+	$image_urn = GeniHRN->new($image_urn);
+	if (!defined($image_urn)) {
+	    return GeniResponse->MalformedArgsResponse("Invalid image urn");
+	}
+    }
+    return GeniResponse->MalformedArgsResponse("Improper type in URN")
+	if (! ($image_urn->IsDataset() || $image_urn->IsImage()));
+    
+    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef, "fooey")
 	if ($credential->target_urn()->domain() ne $OURDOMAIN);
 
-    #
-    # Use the UUID for lookup, since that will reference the correct
-    # image version. Not sure how we want to do versions yet.
-    #
-    my $image = Image->Lookup($credential->target_uuid());   
+    my ($pid,$name,$vers);
+
+    if ($image_urn->IsDataset()) {
+	$pid  = $image_urn->dsetpid();
+	$name = $image_urn->dsetname();
+	$vers = $image_urn->dsetvers();	
+	return GeniResponse->MalformedArgsResponse("Credential does not ".
+						   "match URN")
+	    if (! ($pid eq $credential->target_urn()->dsetpid() &&
+		   $name eq $credential->target_urn()->dsetname()));
+    }
+    else {
+	$pid  = $image_urn->ospid();
+	$name = $image_urn->osname();
+	$vers = $image_urn->osvers();
+	return GeniResponse->MalformedArgsResponse("Credential does not ".
+						   "match URN")
+	    if (! ($pid eq $credential->target_urn()->ospid() &&
+		   $name eq $credential->target_urn()->osname()));
+    }
+    my $image = Image->Lookup($pid, $name, $vers);
     return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
 	if (!defined($image));
-    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
-	if ($image->urn() ne $credential->target_urn());
     my $group = $image->GetGroup();
     return GeniResponse->Create(GENIRESPONSE_ERROR)
 	if (!defined($group));
 
     # Better make sure we have project mounted.
     $group->GetProject()->UpdateExports();
+    my $file = $image->FullImageFile();
 
     # Need to set our groups so we can read the file.
     GeniUtil::FlipToUser("root", $group->pid(), $group->unix_gid());
-    my $file = $image->FullImageFile();
     
     if (! -r $file) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
@@ -5476,6 +6165,8 @@ sub SecureImageDownload($)
     open(FD, "< $file") or
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Could not open file for reading");
+    # Flip back now that we have it opened.
+    GeniUtil::FlipToGeniUser();
 
     # This sets STDOUT back to apache.
     main::AbortLogging();
@@ -5570,6 +6261,11 @@ sub Lockdown($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "No local experiment for slice");
     }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
 
     #
     # Only the SA for the slice can do this.
@@ -5628,7 +6324,10 @@ sub Panic($)
     my ($argref) = @_;
     my $slice_urn    = $argref->{'slice_urn'};
     my $clear        = $argref->{'clear'};
+    my $poweroff     = $argref->{'poweroff'};
+    my $radiosonly   = $argref->{'radiosonly'};
     my $credentials  = $argref->{'credentials'};
+    my $forked       = 0;
     
     if (! (defined($credentials) && defined($slice_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
@@ -5656,6 +6355,7 @@ sub Panic($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
+    
     #
     # Only the SA for the slice can do this.
     #
@@ -5665,7 +6365,7 @@ sub Panic($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 			    "Not enough permission to turn on/off panic mode");
     }
-    if ($slice->Lock() != 0) {
+    if ($slice->WaitForLock(5) != 0) {
 	return GeniResponse->BusyResponse();
     }
     main::AddLogfileMetaDataFromSlice($slice);
@@ -5675,50 +6375,98 @@ sub Panic($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "No local experiment for slice");
     }
-    my $pid = $experiment->pid();
-    my $eid = $experiment->eid();
-    my $command = "$WAP $PANIC -l 1 " . ($clear ? "-r " : "") . "$pid $eid";
+
     #
-    # The backend script sends a bunch of stuff to stdout, so capture it.
-    # We want to do this in the background cause it is going to take a long
-    # time, so fork and start the backend script, but wait a few seconds for
-    # early errors.
+    # Watch for the caller being out of sync with reality.
     #
-    my $mypid = main::WrapperFork();
-    if ($mypid) {
-	sleep(3);
-	my $kid = waitpid($mypid, &WNOHANG);
-	if ($kid == $mypid) {
-	    my $stat = $?;
-	    if ($stat & 127) {
-		# died with a signal, return the signal
-		$stat = $stat & 127;
-	    } else {
-		# else return the exit code
-		$stat = $stat >> 8;
-	    }
-	    $slice->UnLock();
-	    return GeniResponse->Create(GENIRESPONSE_ERROR);
-	}
-	# We want to unlock it so we can get status, so we set the shutdown
-	# flag since that will prevent any other changes from happening.
-	if (!$clear) {
-	    $slice->SetShutdown(undef, 1);
-	}
+    if ($clear && !$experiment->Paniced()) {
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS);	
+    }
+    elsif (!$clear && $experiment->Paniced()) {
 	$slice->UnLock();
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
     }
+    # This would make no sense.
+    if ($clear && $aggregate->Busy()) {
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Inconsistent busy state for clear");
+    }
+
+    #
+    # OK, we want to wait for the aggregate to stop being Busy, so that
+    # we can proceed with the panic.
+    #
+    # We also set the slice experiment cancelation flag, which will stop
+    # a new experiment (or reload/reboot/restart) early.
+    #
+    if ($aggregate->Busy() && !$clear) {
+	my $slice_uuid = $slice->uuid();
+	print STDERR "aggregate is busy, marking for cancelation\n";
+	$experiment->SetCancelFlag(1);
+
+	# Do not do this, the caller needs to wait, since this is a
+	# very unusual activity, we want the caller to know for sure
+	# if it works or fails.
+	if (0) {
+	#
+	# At this point, we can just return to the caller, tell it we are
+	# working on it.
+	#
+	my $mypid = main::WrapperFork();
+	if ($mypid) {
+	    return GeniResponse->Create(GENIRESPONSE_INPROGRESS);
+	}
+	# No need to fork again.
+	$forked = 1;
+	}
+
+	#
+	# Now we wait. 
+	#
+	$slice->Flush();
+	while (1) {
+	    sleep(10);
+	    $slice = GeniSlice->Lookup($slice_uuid);
+	    if (!defined($slice)) {
+		print STDERR "Slice is gone, quiting ...\n";
+		goto done;
+	    }
+	    $aggregate->Flush();
+	    $aggregate = GeniAggregate->SliceAggregate($slice);
+	    # This would be unusual, so call it quits.
+	    if (!defined($aggregate)) {
+		print STDERR "No aggregate for slice, giving up\n";
+		$slice->UnLock();
+		return GeniResponse->Create(GENIRESPONSE_ERROR);
+	    }
+	    last
+		if (!$aggregate->Busy());
+	    
+	    $slice->Flush();
+	}
+	# Make sure the cancel flag is cleared.
+	$experiment->SetCancelFlag(0);
+    }
+    my $pid = $experiment->pid();
+    my $eid = $experiment->eid();
+    my $command = "$WAP $PANIC -l " . ($poweroff ? "3" : "1") . " " .
+	($MAINSITE && $radiosonly ? "-R" : "") . " " .
+	($clear ? "-r " : "") . "$pid $eid";
+
     GeniUtil::FlipToElabMan();
-    my $output = GeniUtil::ExecQuiet($command);
-    # Not a typical op, so always print debugging info;
-    print STDERR $output;
+    print STDERR "Running '$command'\n";
+    system($command);
     if ($?) {
-	return -1;
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
     if ($clear) {
 	$slice->ClearShutdown();
     }
-    return 0;
+    $slice->UnLock();
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
 
 #
@@ -5769,6 +6517,11 @@ sub RunLinktest($)
     if ($slice_urn ne $slice->urn()) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
+    }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
     }
     if (!defined(GeniCM::FlipToUser($slice, $user))) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
@@ -5867,6 +6620,93 @@ sub RunLinktest($)
     return GeniResponse->Create(GENIRESPONSE_SUCCESS,
 				{"status"  => "stopped",
 				 "results" => $output}, $output);
+}
+
+#
+# Another Emulab specific function to put a node into "recovery" mode.
+# In other words, a linux MFS so the user can fix what they broke.
+#
+sub Recovery($)
+{
+    my ($argref) = @_;
+    my $slice_urn    = $argref->{'slice_urn'};
+    my $credentials  = $argref->{'credentials'};
+    my $sliver_urn   = $argref->{'sliver_urn'};
+    my $clear        = $argref->{'clear'};
+    
+    if (! (defined($credentials) && 
+	   defined($slice_urn) && defined($sliver_urn))) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
+    return $credential
+	if (GeniResponse::IsResponse($credential));
+
+    my ($slice, $aggregate) = Credential2SliceAggregate($credential);
+    return $slice
+	if (defined($slice) && GeniResponse::IsResponse($slice));
+
+    if (! (defined($slice) && defined($aggregate))) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver does not exist");
+    }
+    my $user = GeniCM::CreateUserFromCertificate($credential);
+    return $user
+	if (GeniResponse::IsResponse($user));
+
+    main::AddLogfileMetaDataFromSlice($slice);
+
+    if ($slice_urn ne $slice->urn()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
+				    "Credential does not match the URN");
+    }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
+    my $sliver = GeniSliver->Lookup($sliver_urn);
+    if (!defined($sliver)) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver does not exist");
+    }
+    if ($sliver->slice_uuid() ne $slice->uuid()) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver is not in slice");
+    }
+    my $node_id = $sliver->resource_id();
+    my $node = Node->Lookup($node_id);
+    if (!defined($node)) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "No node for sliver urn");
+    }
+    if ($node->IsTainted()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+				    "node is tainted - recovery mode denied");
+    }
+    if (!defined(GeniCM::FlipToUser($slice, $user))) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "FlipToUser failed");
+    }
+    my $experiment = $slice->GetExperiment();
+    if (!defined($experiment)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No local experiment for slice");
+    }
+    my $output = "";
+
+    if ($clear) {
+	$output = GeniUtil::ExecQuiet("$NODEADMIN -R off $node_id");
+    }
+    else {
+	$output = GeniUtil::ExecQuiet("$NODEADMIN -R on $node_id");
+    }
+    if ($?) {
+	print STDERR $output . "\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Failed to change recovery mode");
+    }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

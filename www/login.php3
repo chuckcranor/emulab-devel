@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -131,6 +131,7 @@ function SPITFORM($uid, $key, $referrer, $error, $adminmode, $simple, $view)
 {
     global $TBDB_UIDLEN, $TBBASE;
     global $isgenitool;
+    global $UI_EXTERNAL_ACCOUNTS;
     
     PAGEHEADER("Login",$view);
 
@@ -209,9 +210,11 @@ function SPITFORM($uid, $key, $referrer, $error, $adminmode, $simple, $view)
     echo "</form>
           </table>\n";
 
-    echo "<center><h2>
-          <a href='password.php3'>Forgot your password?</a>
-          </h2></center>\n";
+    if ($UI_EXTERNAL_ACCOUNTS == 0) {
+	echo "<center><h2>
+	    <a href='password.php3'>Forgot your password?</a>
+	    </h2></center>\n";
+    }
 }
 
 #
@@ -256,6 +259,22 @@ else {
               Your account has been frozen due to earlier login attempt
               failures. You must contact $TBMAILADDR to have your account
               restored. <br> <br>
+              Please do not attempt to login again; it will not work!
+              </h4>\n";
+	PAGEFOOTER($view);
+	die("");
+    }
+    else if ($dologin_status == DOLOGIN_STATUS_IPFREEZE) {
+	# Short delay.
+	sleep(1);
+	$IP = $_SERVER['REMOTE_ADDR'];
+
+	PAGEHEADER("Login", $view);
+	echo "<h4>
+              There have been too many failures from your IP address, we
+              have blocked $IP from further attempts.
+              You must contact $TBMAILADDR to have this IP unblocked.
+              <br> <br>
               Please do not attempt to login again; it will not work!
               </h4>\n";
 	PAGEFOOTER($view);

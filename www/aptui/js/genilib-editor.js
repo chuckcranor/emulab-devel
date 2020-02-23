@@ -19,6 +19,7 @@ $(function ()
   var isReadOnly = false;
   var isShown = false;
   var hasChanged = false;
+  var profile_uuid = null;
 
   function initialize()
   {
@@ -63,11 +64,13 @@ $(function ()
   // Hide the current page (#page-body) and show the genilib editor.
   // 'source' is a plaintext genilib source code string
   // 'callback' is called when the user clicks ok or cancel with either the new source (if they clicked ok in edit mode) or null (if they clicked cancel or are in readonly mode).
-  window.SHOW_GENILIB_EDITOR = function (source, newCallback, newIsReadOnly)
+  window.SHOW_GENILIB_EDITOR = function (source, newCallback,
+					 newIsReadOnly, uuid)
   {
     isShown = true;
     callback = newCallback;
     isReadOnly = newIsReadOnly;
+    profile_uuid = uuid;
     $('#page-body').hide();
     $('#genilib-editor-body').show();
     render();
@@ -231,9 +234,12 @@ $(function ()
       isWaiting = true;
 
       var script = editor.getValue();
-      var call = sup.CallServerMethod(null, "instantiate",
-				      "RunScript",
-				      {"script" : script});
+      var args = {"script" : script};
+      if (profile_uuid) {
+	  args["uuid"] = profile_uuid;
+      }
+      var call = sup.CallServerMethod(null, "instantiate", "RunScript", args);
+				      
       call.done(runComplete);
     }
   }

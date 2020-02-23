@@ -8,7 +8,7 @@ $(function () {
 	/*
 	 * Get the branches and tags for a profile, and draw the picker.
 	 */
-	function InitRepoPicker(uuid, change_callback)
+	function InitRepoPicker(uuid, refspec, change_callback)
 	{
 	    var callback = function(json) {
 		console.info("InitRepoPicker", json);
@@ -20,6 +20,7 @@ $(function () {
 		branchlist = json.value.branchlist;
 		taglist    = json.value.taglist;
 		ShowRepoPicker(uuid, change_callback);
+		GetCommitInfo(uuid, refspec);
 	    }
 	    // Visible cue that something is happening
 	    $('#gitpicker-div table').css("opacity", 0.4);
@@ -118,9 +119,6 @@ $(function () {
 	 */
 	function GetCommitInfo(uuid, refspec)
 	{
-	    if (refspec === undefined) {
-		refspec = "refs/heads/master";
-	    }
 	    var callback = function(json) {
 		console.info("GetCommitInfo", json);
 		
@@ -128,7 +126,6 @@ $(function () {
 		    console.info("GetCommitInfo", json.value);
 		    return;
 		}
-		json.value.refspec = refspec;
 		UpdateInfoPanel(json.value);
 	    }
 	    // Visible cue that something is happening

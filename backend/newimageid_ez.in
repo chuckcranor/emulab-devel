@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,13 +37,16 @@ sub usage()
     print("Usage: newimageid [-v] [-a] [-s] [-t target] <xmlfile>\n");
     exit(-1);
 }
-my $optlist = "dvfast:";
+my $optlist = "dvfast:u:L:";
 my $debug   = 0;
 my $force   = 0;
 my $verify  = 0;	# Check data and return status only.
 my $allpc   = 0;        # insert mappings for all pc types.
 my $skipadmin = 0;      # Skip SLOT_ADMINONLY checks.
+my $lockpid;
 my $target;
+my $this_user;
+my $target_user;
 
 #
 # Configure variables
@@ -111,6 +114,12 @@ if (defined($options{"v"})) {
 if (defined($options{"s"})) {
     $skipadmin = 1;
 }
+if (defined($options{"L"})) {
+    $lockpid = $options{"L"};
+    if ($lockpid !~ /^\d+$/) {
+	fatal("Not a process id (integer) for -L argument");
+    }
+}
 if (defined($options{"a"})) {
     $allpc = 1;
 }
@@ -128,6 +137,13 @@ if (defined($options{"t"})) {
 	$target = $node->node_id();
     }
 }
+if (defined($options{"u"})) {
+    $target_user = User->Lookup($options{"u"});
+    if (! defined($target_user)) {
+	fatal("User " . $options{"u"} . " does not exist!");
+    }
+}
+
 if (@ARGV != 1) {
     usage();
 }
@@ -138,8 +154,6 @@ my $xmlfile  = shift(@ARGV);
 # If invoked as "nobody" we are coming from the web interface and the
 # current user context is "implied" (see tbauth.php3).
 #
-my $this_user;
-
 if (getpwuid($UID) ne "nobody") {
     $this_user = User->ThisUser();
 
@@ -176,6 +190,12 @@ else {
 	fatal("Cannot determine implied user!");
     }
 }
+if (!defined($target_user)) {
+    $target_user = $this_user;
+}
+elsif (!$this_user->SameUser($target_user) && !$this_user->IsAdmin()) {
+    fatal("Not allowed to operate on behalf of another user");
+}
 
 #
 # These are the fields that we allow to come in from the XMLfile.
@@ -210,6 +230,7 @@ my %xmlfields =
      "global",		=> ["global",		$SLOT_OPTIONAL,    0],
      "noexport",	=> ["noexport",		$SLOT_OPTIONAL,    0],
      "mbr_version",	=> ["mbr_version",	$SLOT_OPTIONAL],
+     "format",		=> ["format",		$SLOT_OPTIONAL],
      "metadata_url",	=> ["metadata_url",	$SLOT_ADMINONLY],
      "imagefile_url",	=> ["imagefile_url",	$SLOT_ADMINONLY],
      "origin_uuid",	=> ["origin_uuid",	$SLOT_ADMINONLY],
@@ -219,12 +240,14 @@ my %xmlfields =
      "hash",		=> ["hash",		$SLOT_ADMINONLY],
      "deltahash",	=> ["deltahash",	$SLOT_ADMINONLY],
      "nextosid",	=> ["nextosid",		$SLOT_ADMINONLY],
+     "size",		=> ["size",		$SLOT_ADMINONLY],
      "def_parentosid",	=> ["def_parentosid",	$SLOT_OPTIONAL],
      "isdataset",	=> ["isdataset",	$SLOT_OPTIONAL],
      "lba_low",    	=> ["lba_low",		$SLOT_OPTIONAL],
      "lba_high",	=> ["lba_high",		$SLOT_OPTIONAL],
      "lba_size",	=> ["lba_size",		$SLOT_OPTIONAL],
      "architecture",	=> ["architecture",	$SLOT_OPTIONAL],
+     "taint_states",	=> ["taint_states",	$SLOT_OPTIONAL],
 );
 
 #
@@ -488,7 +511,7 @@ else {
 
 # Permission check if we managed to get a proper group above.
 if ($group &&
-    ! $group->AccessCheck($this_user, TB_PROJECT_MAKEIMAGEID())) {
+    ! $group->AccessCheck($target_user, TB_PROJECT_MAKEIMAGEID())) {
     UserError("Project: Not enough permission");
 }
 
@@ -576,10 +599,16 @@ else {
 }
 if ($isadmin) {
     #
+    # Ignore path if global image in emulab-ops
+    #
+    if ($global && $ipid eq TBOPSPID()) {
+	$newimageid_args{"path"} = $spath;
+    }
+    #
     # Admins can provide a path, but this is probably a bad idea too.
     # Ignore it unless /usr/testbed/images.
     #
-    if (exists($newimageid_args{"path"}) &&
+    elsif (exists($newimageid_args{"path"}) &&
 	$newimageid_args{"path"} =~ /^\/usr\/testbed\/images/) {
 	$newimageid_args{"path"} = $spath;
     }
@@ -626,7 +655,7 @@ if (exists($newimageid_args{"node_id"}) &&
     if (!($node = Node->Lookup($newimageid_args{"node_id"}))) {
 	UserError("Node: Invalid node name");
     }
-    elsif (!$node->AccessCheck($this_user, TB_NODEACCESS_LOADIMAGE())) {
+    elsif (!$node->AccessCheck($target_user, TB_NODEACCESS_LOADIMAGE())) {
 	UserError("Node: Not enough permission");
     }
     else {
@@ -787,7 +816,7 @@ if (!$isdataset) {
     my %newosid_args = %newimageid_args;
     $newosid_args{"shared"} = 1
 	if ($global);
-    my $new_osinfo = OSinfo->Create($project, $this_user, $imagename,
+    my $new_osinfo = OSinfo->Create($project, $target_user, $imagename,
 				    \%newosid_args, \$usrerr);
     UserError($usrerr)
 	if (defined($usrerr));
@@ -822,8 +851,9 @@ if (!$isdataset) {
     $newimageid_args{"makedefault"} = 1
 	if ($node_types_selected);
 }
-my $new_image = Image->Create($project, $group, $this_user, $imagename, $osid,
-			      \%newimageid_args, \$usrerr);
+my $new_image = Image->Create($project, $group, $target_user,
+			      $isadmin, $lockpid,
+			      $imagename, $osid, \%newimageid_args, \$usrerr);
 UserError($usrerr)
     if (defined($usrerr));
 fatal("Could not create new Image!")

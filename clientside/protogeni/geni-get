@@ -32,6 +32,7 @@ import getopt
 import re
 import socket
 import sys
+import os
 
 PORT=7777
 VERSION=1
@@ -98,6 +99,16 @@ if command == None:
         sys.exit( 1 )
 
 # Our tmcd server is also our DNS server, so that's how we find it.
+# But we can be overridden by /etc/emulab/bossnode .
+if not server and os.access("/etc/emulab/bossnode",os.R_OK):
+    fd = open( "/etc/emulab/bossnode", "r" )
+    lines = fd.readlines()
+    for line in lines:
+        match = re.search( r"([0-9.]+)", line )
+        if match:
+            server = match.group( 1 )
+            break
+    fd.close()
 if not server:
     resolv_conf = open( "/etc/resolv.conf", "r" )
     for line in resolv_conf.readlines():

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -86,6 +86,7 @@ my $vnode_id  = shift(@ARGV);
 my $vnode_ip  = shift(@ARGV);
 my $vnode_mac = shift(@ARGV);
 my $elabinelab= shift(@ARGV);
+my $ipaliases = shift(@ARGV);
 
 # The caller (xmcreate) puts this into the environment.
 my $vif         = $ENV{'vif'};
@@ -181,17 +182,19 @@ sub Online()
     mysystem2("ifconfig $vif txqueuelen 256");
 
     if ($VIFROUTING) {
+	my $lockref;
+	
 	#
 	# When using routing instead of bridging, we have to restart
 	# dhcp *after* the vif has been created so that dhcpd will
 	# start listening on it. 
 	#
-	if (TBScriptLock("dhcpd", 0, 900) != TBSCRIPTLOCK_OKAY()) {
+	if (TBScriptLock("dhcpd", 0, 900, \$lockref) != TBSCRIPTLOCK_OKAY()) {
 	    print STDERR "Could not get the dhcpd lock after a long time!\n";
 	    return -1;
 	}
 	restartDHCP();
-	TBScriptUnlock();
+	TBScriptUnlock($lockref);
 
 	#
 	# And this clears the arp caches.
@@ -256,6 +259,14 @@ sub Online()
 	push(@rules,
 	     "-I FORWARD -m physdev --physdev-is-bridged ".
 	     "--physdev-in $vif -s $vnode_ip -j $OUTGOING_CHAIN");
+	    
+	if ($ipaliases ne "") {
+	    foreach my $alias (split(",", $ipaliases)) {
+		push(@rules,
+		     "-I FORWARD -m physdev --physdev-is-bridged ".
+		     "--physdev-in $vif -s $alias -j $OUTGOING_CHAIN");
+	    }
+	}
 	    
 	push(@rules,
 	     "-I FORWARD -m physdev --physdev-is-bridged ".
@@ -448,9 +459,21 @@ sub Online()
 
 sub Offline()
 {
-    my @rules;
+    my @rules = ();
 
-    @rules = ();
+    if ($VIFROUTING) {
+	my $lockref;
+	#
+	# When using routing instead of bridging, we have to clean
+	# up the dhcp defaults file for the list of interfaces. 
+	#
+	if (TBScriptLock("dhcpd", 0, 900, \$lockref) != TBSCRIPTLOCK_OKAY()) {
+	    print STDERR "Could not get the dhcpd lock after a long time!\n";
+	    return -1;
+	}
+	reconfigDHCP();
+	TBScriptUnlock($lockref);
+    }
 
     # dhcp
     push(@rules,
@@ -477,6 +500,13 @@ sub Offline()
 	push(@rules,
 	     "-D FORWARD -m physdev --physdev-is-bridged ".
 	     "--physdev-in $vif -s $vnode_ip -j $OUTGOING_CHAIN");
+	if ($ipaliases ne "") {
+	    foreach my $alias (split(",", $ipaliases)) {
+		push(@rules,
+		     "-D FORWARD -m physdev --physdev-is-bridged ".
+		     "--physdev-in $vif -s $alias -j $OUTGOING_CHAIN");
+	    }
+	}
 	push(@rules,
 	     "-D FORWARD -m physdev --physdev-is-bridged ".
 	     "--physdev-out $vif -j $INCOMING_CHAIN");
@@ -584,7 +614,6 @@ sub Offline()
     if (DoIPtablesNoFail(@rules) != 0) {
 	print STDERR "WARNING: could not remove iptables rules\n";
     }
-
     return 0;
 }
 

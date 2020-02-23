@@ -18,12 +18,17 @@ sub Install($$$)
     return 0
 	if ($isupdate);
 
+    if ($IMAGEUPLOADTOFS) {
+	push(@LOGFILES, "$LOGDIR/mfrisbeed.log");
+	push(@LOGFILES, "$LOGDIR/frisuploadd.log");
+    }
+
     # Extras for Geni Racks, to handle foam stuff.
     if ($PROTOGENI_GENIRACK) {
 	push(@LOGFILES, "/var/log/foam.log");
 	push(@LOGFILES, "/var/log/flowvisor.log");
     }
-
+    
     #
     # Set up syslog
     #
@@ -105,6 +110,12 @@ sub Install($$$)
 	    print SC "*.*\t\t\t\t\t\t${LOGDIR}/elvin_gateway.log\n";
 	    print SC "!shellinabox\n";
 	    print SC "*.*\t\t\t\t\t\t${LOGDIR}/shellinabox.log\n";
+	    if ($IMAGEUPLOADTOFS) {
+		print SC "!mfrisbeed\n";
+		print SC "*.*\t\t\t\t\t\t${LOGDIR}/mfrisbeed.log\n";
+		print SC "!frisuploadd\n";
+		print SC "*.*\t\t\t\t\t\t${LOGDIR}/frisuploadd.log\n";
+	    }
 	    if ($PROTOGENI_GENIRACK) {
 		print SC "!foam\n";
 		print SC "*.*\t\t\t\t\t\t/var/log/foam.log\n";
@@ -157,6 +168,8 @@ sub Install($$$)
 		"/var/log/foam.log\t\t640  7     *    168   Z",
 		"/var/log/flowvisor.log\t\t640  7    1000 *    Z",
 		"$LOGDIR/shellinabox.log\t\t640  7    1000 *    Z",
+		"$LOGDIR/mfrisbeed.log\t\t640  7    1000 *    Z",
+		"$LOGDIR/frisuploadd.log\t\t640  7    1000 *    Z",
 		);
 	};
     };

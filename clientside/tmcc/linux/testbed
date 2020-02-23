@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -106,6 +106,12 @@ case "$1" in
 	echo -n "  capture-nossl: "
 	killproc capture-nossl
 	echo
+	if [ -e $ETCDIR/genvmtype -a -x $BINDIR/bootvnodes ]; then
+	    echo "  bootvnodes: halting vnodes..."
+	    # Foreground mode.
+	    $BINDIR/bootvnodes -f -h
+	    echo "  bootvnodes: halted vnodes ($?)"
+	fi
         if [ ! -f /var/lock/subsys/tbprepare ]; then
 	    echo "Informing the testbed we're rebooting ..."
 	    $BINDIR/tmcc state SHUTDOWN

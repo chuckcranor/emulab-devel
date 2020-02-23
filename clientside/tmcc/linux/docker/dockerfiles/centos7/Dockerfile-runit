@@ -1,1 +1,1 @@
-COPY artifacts/runit/runit-*.rpm /tmp/
+COPY artifacts/runit/ /

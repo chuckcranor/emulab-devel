@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,17 +33,22 @@ SUBDIRS		=
 BIN_SCRIPTS	= manage_profile manage_instance manage_dataset \
                   create_instance rungenilib ns2rspec nsgenilib.py \
                   rspec2genilib ns2genilib manage_reservations manage_gitrepo \
-                  manage_images rtecheck checkprofile manage_extensions
+                  manage_images rtecheck checkprofile manage_extensions \
+		  create_slivers searchip start-experiment manage_resgroup
 SBIN_SCRIPTS	= apt_daemon aptevent_daemon portal_xmlrpc apt_checkup \
-		  portal_monitor
+		  portal_monitor apt_scheduler portal_resources \
+		  manage_licenses manage_aggregate powder_shutdown \
+		  rfmonitor_daemon aptimage_daemon aptexpire_daemon \
+		  recalcmaxext aptresgroup_daemon
 LIB_SCRIPTS     = APT_Profile.pm APT_Instance.pm APT_Dataset.pm APT_Geni.pm \
-		  APT_Aggregate.pm APT_Utility.pm APT_Rspec.pm
+		  APT_Aggregate.pm APT_Utility.pm APT_Rspec.pm \
+		  APT_Reservation.pm
 WEB_BIN_SCRIPTS = webmanage_profile webmanage_instance webmanage_dataset \
                   webcreate_instance webrungenilib webns2rspec webns2genilib \
 		  webrspec2genilib webmanage_reservations webmanage_gitrepo \
-                  webmanage_images webrtecheck
+                  webmanage_images webrtecheck websearchip webmanage_resgroup
 APACHEHOOKS     = apt_gitrepo.hook
-WEB_SBIN_SCRIPTS= webportal_xmlrpc
+WEB_SBIN_SCRIPTS= webportal_xmlrpc webmanage_licenses webpowder_shutdown
 LIBEXEC_SCRIPTS	= $(WEB_BIN_SCRIPTS) $(WEB_SBIN_SCRIPTS)
 USERLIBEXEC     = rungenilib.proxy genilib-jail genilib-iocage gitrepo.proxy
 

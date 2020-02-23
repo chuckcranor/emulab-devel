@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,12 +39,8 @@ include("showlogfile_sup.php3");
 # Verify page arguments.
 #
 $reqargs = RequiredPageArguments("image",   PAGEARG_IMAGE);
-$optargs = OptionalPageArguments("showlog", PAGEARG_BOOLEAN);
-
-#
-# Standard Testbed Header
-#
-PAGEHEADER("Image Descriptor");
+$optargs = OptionalPageArguments("showlog", PAGEARG_BOOLEAN,
+                                 "classic", PAGEARG_BOOLEAN);
 
 # Need these below.
 $imageid = $image->imageid();
@@ -54,8 +50,19 @@ $version = $image->version();
 # Verify permission.
 #
 if (!$image->AccessCheck($this_user, $TB_IMAGEID_READINFO)) {
+    PAGEHEADER("Image Descriptor");
     USERERROR("You do not have permission to access ImageID $imageid.", 1);
 }
+
+if (!$CLASSICWEB_OVERRIDE && $image->ezid() && !$classic) {
+    header("Location: apt/show-image.php?imageid=$imageid&version=$version");
+    return;
+}
+
+#
+# Standard Testbed Header
+#
+PAGEHEADER("Image Descriptor");
 
 if (isset($showlog)) {
     $logfile = $image->GetLogfile();

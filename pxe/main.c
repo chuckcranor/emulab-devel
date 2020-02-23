@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -35,6 +35,7 @@
 #include <db.h>
 #include <fcntl.h>
 #include <time.h>
+#include "config.h"
 #include "log.h"
 #include "tbdefs.h"
 #include "bootwhat.h"
@@ -69,7 +70,8 @@ usage()
 		"options:\n"
 		"-E         - Do not send BOOTING events\n"
 		"-d         - Turn on debugging\n"
-		"-p port    - Specify port number to listen on\n",
+		"-p port    - Specify port number to listen on\n"
+		"-i address - Specify IP address to bind to\n",
 		progname);
 	exit(-1);
 }
@@ -86,15 +88,22 @@ main(int argc, char **argv)
 {
 	int			sock, mlen, err, c;
 	struct sockaddr_in	name, client;
+	struct in_addr          bindaddr;
 	socklen_t		length;
 	boot_info_t		boot_info;
 	int		        port = BOOTWHAT_DSTPORT;
 	FILE			*fp;
 	extern char		build_info[];
-
+	bindaddr.s_addr	= INADDR_ANY;
+#ifdef ELABINELAB
+	if (!inet_aton(BOSSNODE_IP, &bindaddr)) {
+		fprintf(stderr, "Invalid bind IP '%s'\n", BOSSNODE_IP);
+		exit(1);
+	}
+#endif
 	progname = argv[0];
 
-	while ((c = getopt(argc, argv, "Ep:dhv")) != -1) {
+	while ((c = getopt(argc, argv, "Ep:dhvi:")) != -1) {
 		switch (c) {
 		case 'E':
 			noevents = 1;
@@ -108,6 +117,13 @@ main(int argc, char **argv)
 		case 'v':
 		    	fprintf(stderr, "%s\n", build_info);
 			exit(0);
+			break;
+		case 'i':
+			if (!inet_aton(optarg, &bindaddr)) {
+				fprintf(stderr, "Invalid bind IP '%s'\n",
+					optarg);
+				exit(1);
+			}
 			break;
 		case 'h':
 		case '?':
@@ -155,7 +171,7 @@ main(int argc, char **argv)
 	
 	/* Create name. */
 	name.sin_family = AF_INET;
-	name.sin_addr.s_addr = INADDR_ANY;
+	name.sin_addr.s_addr = bindaddr.s_addr;
 	name.sin_port = htons((u_short) port);
 	if (bind(sock, (struct sockaddr *) &name, sizeof(name))) {
 		errorc("binding datagram socket");

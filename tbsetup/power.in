@@ -1,7 +1,7 @@
-#!/usr/bin/perl -wT
+#!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -51,10 +51,13 @@ use power_sgmote;
 use power_mail;
 use power_whol;
 use power_ilo;
+use power_ibmbc;
 use power_icebox;
 use power_apc;
+use power_raritan;
 use power_racktivity;
 use power_ue;
+use power_powduino;
 use libtestbed;
 use User;
 use Node;
@@ -224,6 +227,9 @@ if ($ELABINELAB) {
     }
     if ($sendevent) {
 	foreach my $node (values(%nodes)) {
+	    next
+		if ($node->isblackbox());
+	    
 	    my $oldstate = $node->eventstate();
 	    my $newstate;
 
@@ -409,6 +415,19 @@ foreach my $power_id (keys %outlets) {
 	    }
 	}
     }
+    elsif ($type eq "ibmbc") {
+	my $device = new power_ibmbc($IP,$verbose);
+	if (!defined $device) {
+	    warn "Unable to contact controller for $nodestr. Skipping...\n";
+	    next;
+	} else {
+	    print "Calling device->power($op,@outlets)\n" if $verbose > 1;
+	    if ($device->power($op,@outlets)) {
+		print "Control of $nodestr failed.\n";
+		$errors++;
+	    }
+	}
+    }
     elsif ($type eq "icebox") {
         my $device = new power_icebox($IP,$verbose);
 	if (!defined $device) {
@@ -424,6 +443,19 @@ foreach my $power_id (keys %outlets) {
     }
     elsif ($type eq "APC") {
 	my $device = new snmpit_apc($IP,$verbose);
+	if (!defined $device) {
+	    warn "Unable to contact controller for $nodestr. Skipping...\n";
+	    next;
+	} else {
+	    print "Calling device->power($op,@outlets)\n"
+		if $verbose > 1;
+	    if ($device->power($op,@outlets)) {
+		print "Control of $nodestr failed.\n";
+		$errors++;
+	    }
+	}
+    } elsif ($type eq "Raritan") {
+	my $device = new power_raritan($IP,$verbose);
 	if (!defined $device) {
 	    warn "Unable to contact controller for $nodestr. Skipping...\n";
 	    next;
@@ -452,6 +484,12 @@ foreach my $power_id (keys %outlets) {
     } elsif ($type =~ "RPC") {
 	if (rpc27ctrl($op,$power_id,@outlets)) {
 	    print "Control of $nodestr failed.\n"; $exitval++;
+	    $errors++;
+	}
+    } elsif ($type eq "powduino") {
+	if (powduinoctrl($op,$power_id,@outlets)) {
+	    print "Control of $nodestr failed.\n"; $exitval++;
+	    $errors++;
 	}
     } elsif (($class eq "sg") || ($type eq "garcia")) {
 	# XXX: 'garcia' is temporary until stargates are subnodes of
@@ -494,7 +532,14 @@ foreach my $power_id (keys %outlets) {
 	if ($op eq "cycle") {
 	    foreach my $nodeid (@nodes) {
 		my $node = $nodes{$nodeid};
-		if ($node->cyclewhenoff()) {
+		#
+		# XXX disallow cycle-when-off when node is in hwdown.
+		# It is likely powered off for a reason.
+		#
+		if ($node->cyclewhenoff() &&
+		    !($node->IsReserved() &&
+		      $node->pid() eq NODEDEAD_PID() &&
+		      $node->eid() eq NODEDEAD_EID())) {
 		    push @forcenodes, $nodeid;
 		} else {
 		    push @unforcenodes, $nodeid;
@@ -747,7 +792,28 @@ sub dostatus(@) {
     for my $ctrl (@nwanted) {
 	my %status;
 
-	if ($ctrls{$ctrl} eq 'icebox') {
+	if ($ctrls{$ctrl} eq 'ibmbc') {
+	    my $device = new power_ibmbc($IPs{$ctrl}, $verbose);
+	    if (!defined $device) {
+		warn "Unable to contact controller $ctrl.\n";
+		$errors++;
+		next;
+	    } else {
+		print "Calling device->status()\n"
+		    if $verbose > 1;
+		if ($device->status(\%status)) {
+		    print "Could not get status for $ctrl.\n";
+		    $errors++;
+		    next;
+		}
+		for my $outlet (1..14) {
+		    my $ostr = "outlet$outlet";
+		    print "$ctrl Outlet $outlet: ", $status{$ostr}, "\n"
+			if (defined($status{$ostr}));
+		}
+		print "\n";
+	    }
+	} elsif ($ctrls{$ctrl} eq 'icebox') {
   	    my $device = new power_icebox($IPs{$ctrl}, $verbose);
 	    if (!defined $device) {
 		warn "Unable to contact controller $ctrl.\n";
@@ -785,6 +851,33 @@ sub dostatus(@) {
 	    }
 	    print "$ctrl Current: ", $status{current}, " Amps\n"
 		if defined($status{current});
+	    for my $outlet (1..24) {
+		my $ostr = "outlet$outlet";
+		print "$ctrl Outlet $outlet: ", $status{$ostr}, "\n"
+		    if (defined($status{$ostr}));
+	    }
+	    print "\n";
+	} elsif ($ctrls{$ctrl} eq "Raritan") {
+	    my $device = new power_raritan($IPs{$ctrl}, $verbose);
+	    if (!defined $device) {
+		warn "Unable to contact controller $ctrl.\n";
+		$errors++;
+		next;
+	    } else {
+		print "Calling device->status()\n"
+		    if $verbose > 1;
+		if ($device->status(\%status)) {
+		    print "Could not get status for $ctrl.\n";
+		    $errors++;
+		    next;
+		}
+	    }
+	    print "$ctrl Current: ", $status{current}, " Amps\n"
+		if defined($status{current});
+	    print "$ctrl Power: ", $status{power}, " Watts\n"
+		if defined($status{power});
+	    print "$ctrl Energy: ", $status{energy}, " KW hours\n"
+		if defined($status{energy});
 	    for my $outlet (1..24) {
 		my $ostr = "outlet$outlet";
 		print "$ctrl Outlet $outlet: ", $status{$ostr}, "\n"
@@ -852,6 +945,18 @@ sub dostatus(@) {
 		}
 		print "$ctrl Node $outlet: $state\n";
 	    }
+	} elsif ($ctrls{$ctrl} eq 'powduino') {
+	    if (powduinostatus($ctrl,\%status)) {
+		print "Could not get status for $ctrl.\n";
+		$errors++;
+		next;
+	    }
+	    for my $pin (0..3) {
+		my $ostr = "pin$pin";
+		print "$ctrl Pin $pin: ", $status{$ostr}, "\n"
+		    if (defined($status{$ostr}));
+	    }
+	    print "\n";
 	} elsif (!$doall) {
 	    warn "Cannot get status for $ctrl (type " .
 		$ctrls{$ctrl} . ") yet\n";

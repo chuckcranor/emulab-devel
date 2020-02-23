@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2017 University of Utah and the Flux Group.
+# Copyright (c) 2007-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -49,6 +49,8 @@ my $TBWWW         = "@TBWWW@";
 
 # Cache of instances to avoid regenerating them.
 my %osids	= ();
+BEGIN { use emutil;
+	emutil::AddCache(\%osids); }
 my $debug	= 0;
 
 # Valid features. Mirrored in the web interface. The value is a user-okay flag.
@@ -61,6 +63,7 @@ my %FEATURES	= ( "ping"	 => 1,
 		    "linktest"	 => 1,
 		    "linkdelays" => 0,
 		    "xen-host"   => 0,
+		    "docker-host"=> 0,
 		    "suboses"    => 0 );
 
 # Valid OS names. Mirrored in the web interface. The value is a user-okay flag.
@@ -363,7 +366,7 @@ sub Create($$$$$$)
 		     "osfeatures", "ezid", "shared", "mustclean",
 		     "op_mode", "nextosid", "old_nextosid",
 		     "max_concurrent", "mfs", "reboot_waittime",
-		     "def_parentosid") {
+		     "def_parentosid","taint_states") {
 	if (exists($argref->{$key})) {
 	    push(@arg_slots, $key);
 	}

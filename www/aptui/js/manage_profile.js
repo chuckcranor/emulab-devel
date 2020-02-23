@@ -24,9 +24,11 @@ $(function ()
     var snapping     = 0;
     var gotrspec     = 0;
     var gotscript    = 0;
+    var goodscript   = 0;
     var fromrepo     = 0;
     var repohash     = null;
-    var reporefspec  = "refs/heads/master";
+    var reporefspec  = null;
+    var repobusy     = false;
     var ajaxurl      = "";
     var amlist       = null;
     var modified     = false;
@@ -89,6 +91,7 @@ $(function ()
 	// Ditto a script.
 	if (_.has(fields, "profile_script") && fields["profile_script"] != "") {
 	    gotscript = 1;
+	    goodscript = 1;
 	    if (_.has(fields, "portal_converted") &&
 		fields["portal_converted"] == "yes") {
 		portal_converted = 1;
@@ -145,6 +148,8 @@ $(function ()
 	    canpublish:		window.CANPUBLISH,
 	    isadmin:		window.ISADMIN,
 	    isstud:		window.ISSTUD,
+	    iscreator:		window.ISCREATOR,
+	    isleader:		window.ISLEADER,
 	    history:		window.HISTORY,
 	    activity:		window.ACTIVITY,
 	    manual:             window.MANUAL,
@@ -226,7 +231,7 @@ $(function ()
 	    "       style='display:inline; width: 93%; padding: 2px;' " +
 	    "       class='form-control input-sm' "+
 	    "       value='" + fields.profile_repopushurl + "'>" +
-	    "  <a href='#' class='btn btn-xs' id='push-url-copy' " +
+	    "  <a href='#' class='btn' id='push-url-copy' " +
 	    "     style='padding: 0px'>" +
 	    "    <span class='glyphicon glyphicon-copy'></span></a></div>";
 	
@@ -301,6 +306,10 @@ $(function ()
 
 	$('#edit_topo_modal_button').click(function (event) {
 	    event.preventDefault();
+	    // Do this now instead of on page load, since user might switch
+	    // between geni-lib and rspec, and that changes whether the
+	    // editor is read-only or writable.
+	    CreateJacksEditor();
 	    editor.show($('#profile_rspec_textarea').val(),
 			function (newrspec) {
 			    // Only for a new profile or profile converted
@@ -553,6 +562,27 @@ $(function ()
 	});
 
 	/*
+	 * Cancel Edit button.
+	 */
+	$('#cancel_edit_button').click(function (e) {
+	    e.preventDefault();
+
+	    /*
+	     * Bind a handler for the confirm button,
+	     */
+	    $('#confirm_cancel_edit').click(function (event) {
+		event.preventDefault();
+		modified = false;
+		window.location.reload();
+	    })
+	    sup.ShowModal('#confirm_cancel_edit_modal',
+			  // Delete handler no matter how it hides.
+			  function () {
+			      $('#confirm_cancel_edit').off("click");
+			  });
+	});
+
+	/*
 	 * If the description/instructions textarea are edited, copy
 	 * the text back into the rspec since that is what actually
 	 * gets submitted; the rspec is authoritative.
@@ -576,6 +606,7 @@ $(function ()
 	$('#profile_topdog').change(function() { ProfileModified(); });
 	$('#profile_disabled').change(function() { ProfileModified(); });
 	$('#profile_nodelete').change(function() { ProfileModified(); });
+	$('#profile_project_write').change(function() { ProfileModified(); });
 	
 	/*
 	 * A double click handler that will render the instructions or
@@ -628,7 +659,6 @@ $(function ()
 	if (gotrspec) {
 	    ExtractFromRspec();
 	}
-	CreateJacksEditor();
 	UpdateButtons();
 	
 	//
@@ -660,6 +690,7 @@ $(function ()
 	    EnableButtons();
 	    modified = false;
 	    DisableButton("profile_submit_button");
+	    DisableButton("cancel_edit_button");
 	    if (window.UPDATED) {
 		initNotifyUpdate();
 	    }
@@ -721,7 +752,16 @@ $(function ()
 	    // A geni-lib script. We are going to pass the script to
 	    // the server to be "run", which returns XML.
 	    //
-	    if (newRspec != $('#profile_script_textarea').val()) {
+	    // Need to normalize the newline characters for this
+	    // comparison to be meaningful, else we think the
+	    // source has changed when it really has not.
+	    //
+	    var newr = $.trim(newRspec);
+	    var oldr = $.trim($('#profile_script_textarea').val());
+	    newr = newr.replace(new RegExp(/\r?\n|\r/g), " ");
+	    oldr = oldr.replace(new RegExp(/\r?\n|\r/g), " ");
+	    
+	    if (oldr != newr || goodscript == 0) {
 		console.info("geni-lib code has changed");
 		if (portal_converted) {
 		    /*
@@ -730,7 +770,8 @@ $(function ()
 		     */
 		    rteCheckScript(newRspec);
 		}
-		else {
+	        else {
+		    gotscript = 1;
 		    checkScript(newRspec, repoupdate_callback);
 		}
 	    }
@@ -764,6 +805,7 @@ $(function ()
 	if (!initialized) {
 	    modified = false;
 	    DisableButton("profile_submit_button");
+	    DisableButton("cancel_edit_button");
 	}
 	initialized = true;
     }
@@ -773,6 +815,7 @@ $(function ()
 	    modified = true;
 	    DisableButtons();
 	    EnableButton("profile_submit_button");
+	    EnableButton("cancel_edit_button");
 	}
     }
 
@@ -984,8 +1027,15 @@ $(function ()
 	newrspec     = $.trim(newrspec);
 	var oldrspec = $.trim($('#profile_rspec_textarea').val());
 	gotrspec     = 1;
+
+	// Need to normalize the newline characters for this
+	// comparison to be meaningful, else we think the source has
+	// changed when it really has not.
+	//
+	var newr = newrspec.replace(new RegExp(/\r?\n|\r/g), " ");
+	var oldr = oldrspec.replace(new RegExp(/\r?\n|\r/g), " ");
 	
-	if (newrspec == oldrspec) {
+	if (newr == oldr) {
 	    // In case rspec does not change.
 	    UpdateButtons();
 	    return;
@@ -1155,6 +1205,7 @@ $(function ()
 			     else {
 				 EnableButtons();
 				 DisableButton("profile_submit_button");
+				 DisableButton("cancel_edit_button");
 			     }
 			 },
 	                 true);
@@ -1176,6 +1227,7 @@ $(function ()
 	EnableButton("profile_delete_button");
 	EnableButton("profile_instantiate_button");
 	EnableButton("profile_submit_button");
+	EnableButton("cancel_edit_button");
 	EnableButton("profile_copy_button");
 	EnableButton("profile_publish_button");
     }
@@ -1184,6 +1236,7 @@ $(function ()
 	DisableButton("profile_delete_button");
 	DisableButton("profile_instantiate_button");
 	DisableButton("profile_submit_button");
+	DisableButton("cancel_edit_button");
 	DisableButton("profile_copy_button");
 	DisableButton("profile_publish_button");
     }
@@ -1318,7 +1371,7 @@ $(function ()
 		return;
 	    }
 	    if (json.value.rspec != "") {
-		gotscript = 1;
+		goodscript = 1;
 		// Kill the rspec so that we always use the new one.
 		$('#profile_rspec_textarea').val("");
 		NewRspecHandler(json.value.rspec);
@@ -1332,6 +1385,8 @@ $(function ()
 		}
 		// Show the XML source button.
 		$('#show_xml_modal_button').removeClass("hidden");
+	    } else {
+	      goodscript = 0;
 	    }
 	}
 	/*
@@ -1345,9 +1400,19 @@ $(function ()
 	    "script"   : script,
 	    "pid"      : $('#profile_pid').val(),
 	};
-	if (repoupdate_callback !== undefined) {
-	    // Pass along uuid as a flag to update repo.
-	    args["repoupdate"] = version_uuid;
+	if (profile_uuid) {
+	    args["profile_uuid"] = profile_uuid;
+	}
+	if (fromrepo) {
+	    if (repoupdate_callback !== undefined) {
+		// Pass along flag to update repo (if allowed).
+		args["updaterepo"] = true;
+	    }
+	    else {
+		// Pass along refspec for running genilib
+		// Will be null on initial profile creation.
+		args["refspec"] = reporefspec;
+	    }
 	}
 	WaitWait("We are converting your geni-lib script to XML");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
@@ -1392,16 +1457,30 @@ $(function ()
 	    $('#sourcefile-button-div').addClass("hidden");
 	    // Add the url to the form.
 	    $('#quickvm_create_profile_form #repourl').val(repourl);
-	    sup.HideWaitWait(function() {
-		changeRspec(json.value.script);
-	    });
+	    // Save for later.
+	    $('#profile_script_textarea').val(json.value.script);
+	    // Kill the rspec so that we always use the new one.
+	    $('#profile_rspec_textarea').val("");
+	    NewRspecHandler(json.value.rspec);
+	    ProfileModified();
+	    // Show the XML source button.
+	    $('#show_xml_modal_button').removeClass("hidden");
+	    sup.HideWaitWait();
+	}
+	var args = {"repourl" : repourl,
+		    // XXX Temporary for usenewgenilib check. 
+		    "pid"     : $('#profile_pid').val()};
+
+	// If there is profile name, pass that through so we can look
+	// for a script or rspec with the same name (instead of profile.py).
+	if ($.trim($('#profile_name').val()) != "") {
+	    args["profile_name"] = $.trim($('#profile_name').val());
 	}
 	WaitWait("We are attempting to clone your repository. " +
 		 "Patience please.");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "manage_profile",
-					    "GetRepository",
-					    {repourl : repourl});
+					    "GetRepository", args);
 					    
 	xmlthing.done(callback);
     }
@@ -1412,8 +1491,15 @@ $(function ()
      */
     function HandleGitRepoUpdate()
     {
+	console.info("HandleGitRepoUpdate");
+	
 	var callback = function(blob) {
 	    console.info("HandleGitRepoUpdate", blob);
+	    if (blob) {
+		// Mark as HEAD in the page.
+		repohash = blob.hash;
+	    }
+	    
 	    if (blob) {
 		/*
 		 * If the source was an rspec, we updated the profile
@@ -1426,8 +1512,6 @@ $(function ()
 		 */
 		if (!pythonRe.test(blob.source)) {
 		    NewRspecHandler(blob.source);
-		    // Mark as HEAD in the page.
-		    repohash = blob.hash;
 		    // Reset the list of tags and branches whenever we
 		    // successfully update our clone.
 		    SetupRepo();
@@ -1439,28 +1523,44 @@ $(function ()
 		 * has done the profile update, so we can finish things up.
 		 */
 		changeRspec(blob.source, function(modified) {
-		    // Mark as HEAD in the page.
-		    repohash = blob.hash;
 		    // Reset the list of tags and branches whenever we
 		    // successfully update our clone.
 		    SetupRepo();
 		});
 	    }
 	};
-	gitrepo.UpdateRepo(version_uuid, callback);
+	/*
+	 * Need to wait if the auto check for the repo change is
+	 * not running. It hurts to run this at the same time that
+	 * is running.
+	 *
+	 * We are never going to set repobusy=false after this, so
+	 * CheckRepoChange() will never run again once the user has
+	 * used the update button. Not worth the trouble to get the
+	 * synchronization correct.
+	 */
+	var checker = function () {
+	    if (!repobusy) {
+		// See comment above ...
+		repobusy = true;
+		gitrepo.UpdateRepo(version_uuid, callback);
+		return;
+	    }
+	    setTimeout(function f() { checker() }, 250);
+	};
+	checker();
     }
 
     function SetupRepo()
     {
-	gitrepo.InitRepoPicker(version_uuid,
+	console.info("SetupRepo");
+
+	gitrepo.InitRepoPicker(version_uuid, reporefspec,
 			       function(which) {
 				   // So we remember what the user selected.
 				   reporefspec = which;
 				   SelectRepoTarget(which);
 			       });
-	// This updates the info panel on the left side, but we want
-	// to stay on the same refspec the user switched to. 
-	gitrepo.GetCommitInfo(version_uuid, reporefspec);
     }
 
     /*
@@ -1469,12 +1569,51 @@ $(function ()
      */
     function SelectRepoTarget(which)
     {
+	console.info("SelectRepoTarget");
+
 	var callback = function (source, hash) {
 	    if (source) {
 		changeRspec(source);
 	    }
 	};
 	gitrepo.GetRepoSource(version_uuid, which, callback);
+    }
+
+    /*
+     * Timer to ask for the current repository hash value to determine
+     * if it has changed. 
+     */
+    function CheckRepoChange()
+    {
+	//console.info("CheckRepoChange", repobusy);
+	
+	if (repobusy) {
+	    setTimeout(function f() { CheckRepoChange() }, 15000);
+	    return;
+	}
+	repobusy = true;
+	
+	var callback = function(json) {
+	    //console.info("CheckRepoChange", json);
+    
+	    if (json.code == 0 && repohash != json.value) {
+		if (window.confirm("We have detected a change to the " +
+				   "profile repository. Do you want to " +
+				   "reload this page so you are looking at " +
+				   "the latest version?")) {
+		    window.location.reload();
+		}
+		// Do not run the auto check after this, no point.
+		repobusy = false;
+		return;
+	    }
+	    setTimeout(function f() { CheckRepoChange() }, 15000);
+	    repobusy = false;
+	};
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "manage_profile", "GetRepoHash",
+					    {"uuid"   : version_uuid});
+	xmlthing.done(callback);
     }
 
     /*
@@ -1522,12 +1661,12 @@ $(function ()
         var readonly = true;
         if ((window.CANMODIFY !== 0 ||
 	     window.ACTION === 'create') &&
-	    fromrepo === 0 &&
-	    gotscript === 1)
+	     fromrepo === 0 &&
+	     gotscript == 1)
         {
 	    readonly = false;
         }
-        window.SHOW_GENILIB_EDITOR(source, closeEditor, readonly);
+        window.SHOW_GENILIB_EDITOR(source, closeEditor, readonly, profile_uuid);
     }
 
     function closeEditor(source)
@@ -1637,39 +1776,9 @@ $(function ()
 		      });
     }
 
-    /*
-     * Timer to ask for the current repository hash value to determine
-     * if it has changed. We tell the user to reload the page. 
-     */
-    function CheckRepoChange()
-    {
-	var callback = function(json) {
-	    //console.info("CheckRepoChange", json);
-    
-	    if (json.code == 0 && repohash != json.value) {
-		repohash = json.value;
-		// Reset the list of tags and branches whenever we
-		// successfully update our clone.
-		SetupRepo();
-		// New source code from the refspec the user is looking at.
-		gitrepo.GetRepoSource(version_uuid, reporefspec,
-				      function (source, hash) {
-					  if (source) {
-					      changeRspec(source);
-					  }
-				      });
-	    }
-	    setTimeout(function f() { CheckRepoChange() }, 10000);
-	};
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "manage_profile", "GetRepoHash",
-					    {"uuid"   : version_uuid});
-	xmlthing.done(callback);
-    }
-
     function CreateJacksEditor()
     {
-        var isViewer = gotscript && !portal_converted;
+        var isViewer = window.ISPOWDER || (gotscript && !portal_converted);
 	if (editor) {
 	    $('#editmodal_div').empty();
 	}
@@ -1699,7 +1808,12 @@ $(function ()
 		     fromrepo, gotscript, gotrspec, portal_converted);
 
 	if (! (gotscript || gotrspec)) {
-	    $('#edit_topo_modal_button').html('Create Topology');
+	    if (window.ISPOWDER) {
+		$('#edit_topo_modal_button').addClass('hidden');
+	    }
+	    else {
+		$('#edit_topo_modal_button').html('Create Topology');
+	    }
 	    $('#show_source_modal_button').html('Edit Code');
 	}
 	else {
@@ -1721,7 +1835,8 @@ $(function ()
 		// Hide the git-repo button.
 		$('#git-repo-button-div').addClass("hidden");
 	    }
-	    if (canedittopo) {
+	    $('#edit_topo_modal_button').removeClass('hidden');
+	    if (canedittopo && !window.ISPOWDER) {
 		$('#edit_topo_modal_button').html('Edit Topology');
 	    }
 	    else {

@@ -24,10 +24,14 @@ sub Install($$$)
 	};
 	Phase "pythonlink", "Looking for working $EMULAB_PYTHON_PATH link", sub {
 	    DoneIfExecutable($EMULAB_PYTHON_PATH);
-	    if (! -x $PORT_PYTHON_PATH) {
+	    if (-x $PORT_PYTHON_PATH) {
+		ExecQuietFatal("ln -sf $PORT_PYTHON_PATH $EMULAB_PYTHON_PATH");
+	    } elsif (-x $PORT_PYTHON_PATH2) {
+		ExecQuietFatal("ln -sf $PORT_PYTHON_PATH2 $EMULAB_PYTHON_PATH");
+	    } else {
 		PhaseFail("$PORT_PYTHON_PATH does not exist!");
 	    }
-	    ExecQuietFatal("ln -sf $PORT_PYTHON_PATH $EMULAB_PYTHON_PATH");
+
 	};
 	Phase "rsync", "Looking for rsync and installing", sub {
 	    DoneIfPackageInstalled("rsync");
@@ -38,6 +42,10 @@ sub Install($$$)
 	    Phase "samba", "Looking for Samba and installing", sub {
 		if (!ISFS($server)) {
 		    PhaseSkip("Not FS Node");
+		}
+		if ($FBSD_MAJOR > 10 ||
+		    ($FBSD_MAJOR == 10 && $FBSD_MINOR > 2)) {
+		    PhaseSkip("Samba no longer supported");
 		}
 		DoneIfPackageInstalled("samba");
 		my $pname = GetPackage("samba", $packagedir);

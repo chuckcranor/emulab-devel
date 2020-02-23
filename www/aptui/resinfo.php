@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -70,7 +70,7 @@ elseif (isset($debug) && $debug) {
     $ams = array(Aggregate::ThisAggregate());
 }
 else {
-    $ams = Aggregate::SupportsReservations();
+    $ams = Aggregate::SupportsReservations($this_user);
 }
 if (!count($ams)) {
     SPITUSERERROR("No clusters support reservations.");
@@ -83,19 +83,20 @@ while (list($index, $aggregate) = each($ams)) {
 
     $amlist[$urn] = array("urn"      => $urn,
                           "name"     => $am,
+                          "weburl"   => $aggregate->weburl(),
                           "nickname" => $aggregate->nickname(),
-                          "typeinfo" => $aggregate->typeinfo);
+                          "typeinfo" => $aggregate->typeinfo,
+                          "abbreviation"     => $aggregate->nickname(),
+                          "reservable_nodes" => $aggregate->ReservableNodes(),
+                          "radiotypes"       => $aggregate->RadioTypes(),
+                          "isFE"             => $aggregate->isFE());
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
-echo htmlentities(json_encode($amlist));
+echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
 echo "</script>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "   window.ISADMIN  = $isadmin;\n";
-echo "</script>\n";
-
-echo "<script type='text/plain' id='skiptypes-json'>\n";
-echo htmlentities(json_encode(Instance::NodeTypePruneList()));
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
@@ -103,7 +104,7 @@ REQUIRE_SUP();
 REQUIRE_MOMENT();
 AddLibrary("js/resgraphs.js");
 AddTemplateList(array("resinfo", "resinfo-totals", "reservation-graph",
-                      "oops-modal", "waitwait-modal"));
+                      "range-list", "oops-modal", "waitwait-modal"));
 SPITREQUIRE("js/resinfo.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
             "<script src='js/lib/nv.d3.js'></script>\n".

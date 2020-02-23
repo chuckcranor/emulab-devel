@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2015, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # Copyright (c) 2004-2009 Regents, University of California.
 # 
 # {{{EMULAB-LGPL
@@ -1212,11 +1212,14 @@ sub setVlanOnTrunks2($$$$@) {
     my $value = shift;
     my $trunkref = shift;
     my @trunks = @_;
+    my $act = ($value ? "set" : "clear");
 
     #
     # Now, we go through the list of trunks that need to be modifed, and
     # do it! We have to modify both ends of the trunk, or we'll end up wasting
     # the trunk bandwidth.
+    #
+    # XXX trying to remove a VLAN that doesn't exist should not be fatal.
     #
     my $errors = 0;
     foreach my $trunk (@trunks) {
@@ -1246,7 +1249,8 @@ sub setVlanOnTrunks2($$$$@) {
             } else { 
 		if (!$self->{DEVICES}{$src}->
                         setVlansOnTrunk($trunkIndex,$value,$vlan_number)) {
-                    warn "ERROR - unable to set trunk on switch $src\n";
+                    warn "ERROR - unable to $act vlan $vlan_number ".
+			 "on trunk on switch $src\n";
                     $errors += 1;
                 }
 	    }
@@ -1267,7 +1271,8 @@ sub setVlanOnTrunks2($$$$@) {
             } else {
 		if (!$self->{DEVICES}{$dst}->
                         setVlansOnTrunk($trunkIndex,$value,$vlan_number)) {
-                    warn "ERROR - unable to set trunk on switch $dst\n";
+                    warn "ERROR - unable to $act vlan $vlan_number ".
+			"on trunk on switch $dst\n";
                     $errors += 1;
                 }
 	    }
@@ -1675,6 +1680,12 @@ sub snap($) {
 		$device = new snmpit_mellanox($devicename,$self->{DEBUG});
 		last;
 	        }; # /mellanox.*/
+	    (/dellrest/)
+		    && do {
+ 		require snmpit_dellrest;
+		$device = new snmpit_dellrest($devicename,$self->{DEBUG});
+		last;
+	        }; # /Dell RESTCONF switch.*/
 	    (/force10/)
 		    && do {
  		require snmpit_force10;

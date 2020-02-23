@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -31,6 +31,14 @@ RedirectSecure();
 $this_user = CheckLogin($check_status);
 if ($CHECKLOGIN_STATUS & CHECKLOGIN_LOGGEDIN) {
     SPITUSERERROR("You are already logged in!");
+}
+
+#
+# see if UI change password is disabled (e.g. passwords externally managed)
+#
+if ($UI_EXTERNAL_ACCOUNTS) {
+    SPITUSERERROR("Password change disabled on this system");
+    return;
 }
 
 #
@@ -144,7 +152,7 @@ if ($user = User::Lookup($username)) {
     if ($user->weblogin_frozen()) {
 	$errors["username"] = "This account is frozen";
     }
-    elseif ($user->email() != $email) {
+    elseif (strtolower($user->email()) != strtolower($email)) {
 	$errors["email"] = "Wrong email address for user";
     }
 }

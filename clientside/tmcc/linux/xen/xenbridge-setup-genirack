@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2012-2014 University of Utah and the Flux Group.
+# Copyright (c) 2012-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -78,7 +78,8 @@ my ($address,$netmask);
 while (!eof(IFOUTPUT)) {
     my $line = <IFOUTPUT>;
     chomp $line;
-    if ($line =~ /^\s+inet\s+addr:(\d+\.\d+\.\d+\.\d+).*Mask:(\d+\.\d+\.\d+\.\d+)/) {
+    if ($line =~ /^\s+inet\s+addr:(\d+\.\d+\.\d+\.\d+).*Mask:(\d+\.\d+\.\d+\.\d+)/ ||
+	$line =~ /^\s+inet (\d+\.\d+\.\d+\.\d+)\s+netmask (\d+\.\d+\.\d+\.\d+)/) {
         $address = $1;
         $netmask = $2;
     }

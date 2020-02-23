@@ -7,8 +7,9 @@ PKGNAMEPREFIX=	p5-
 MAINTAINER=	sklower@berkeley.edu
 COMMENT=	sendmsg, recvmsg and ancillary data in Perl5
 
+NO_ARCH=	yes
 USES=		perl5
-USE_PERL5=	configure modbuild
+USE_PERL5=	modbuild
 
 MAN3=		IO::EventMux::Socket::MsgHdr.3
 

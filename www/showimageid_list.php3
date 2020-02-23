@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -36,7 +36,13 @@ $isadmin   = ISADMIN();
 # ones in their projects or ones that are globally available.
 #
 $optargs = OptionalPageArguments("searchfor", PAGEARG_STRING,
-				 "searchby",  PAGEARG_STRING);
+				 "searchby",  PAGEARG_STRING,
+                                 "classic",   PAGEARG_BOOLEAN);
+
+if (!$CLASSICWEB_OVERRIDE && !$classic) {
+    header("Location: apt/images.php");
+    return;
+}
 $extraclause = "";
 $extrajoin   = "";
 

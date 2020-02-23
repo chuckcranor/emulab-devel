@@ -1,0 +1,66 @@
+<div id='save-paramset-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class="modal-header">
+	<center><h4>Save Parameter Set</h4></center>
+      </div>
+      <div class='modal-body'>
+	Save the parameters used to create this experiment. The next
+	time you instantiate this profile, there will be an option to
+	apply the saved parameters. You can save multiple parameters
+	sets for a profile, just give them unique names. All of your
+	saved parameter sets can be found on your
+	<a href="user-dashboard.php#paramsets" target="_blank">dashboard</a>.
+	
+	<div style="margin-top: 20px;">
+          <center>
+	    Please provide an alphanumeric name for this parameter set:
+	    <div>
+	      <input id="paramset-name" style="width: 20%;"
+		     class="form-control">
+	      <div class="text-danger hidden paramset-error name-error"
+		   style="text-align: center;"></div>
+	    </div>
+	    <div style="margin-top: 10px">
+	      Please briefly describe this parameter set to help you remember:
+	      <div>
+		<textarea id="paramset-description" style="width: 80%;"
+			  rows=2 type='textarea'></textarea>		
+		<div class="text-danger hidden paramset-error description-error"
+		     style="text-align: center;"></div>
+	      </div>
+	    </div>
+	    <div style="margin-top: 10px">
+	      Bind these parameters to the profile version <b>[1]</b>:
+	      <div>
+		<input id="paramset-bound" type="checkbox"> Yes
+	      </div>
+	    </div>
+	  </center>
+	</div>
+	<div style="margin-top: 15px;">
+          <center>
+            <button type='button' style='margin-right: 20px;'
+                    class='btn btn-primary btn-sm' 
+                    data-dismiss='modal' aria-hidden='true'>
+	      Cancel</button>
+	    <button type='button' class='btn btn-success btn-sm'
+		    id='save-paramset-confirm'>
+              Save</button>
+	    <div class="text-danger hidden paramset-error general-error"
+		 style="text-align: center;"></div>
+	  </center>
+	</div>
+	<div style="margin-top: 15px;">
+	  <b>[1]</b> Typically you want to leave this box unchecked so
+	  that your parameter set can be used with <b>any</b> version of
+	  the profile. Checking this box means that you will need to
+	  create another parameter set if you edit your profile and save
+	  a new version. Contact us for more information before checking
+	  this box.
+	</div>
+      </div>
+    </div>
+  </div>
+</div>
+

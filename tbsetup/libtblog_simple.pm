@@ -65,10 +65,10 @@ use vars qw($SCRIPTNAME
 # tblog_capture() will redirect the real STDOUT and STDERR
 #
 
-open SOUT ,">&=STDOUT"; # Must be "&=" not "&" to avoid creating a
+#open SOUT ,">&=STDOUT"; # Must be "&=" not "&" to avoid creating a
                         # new low level file descriper as this
                         # interacts strangly with the fork in swapexp.
-autoflush SOUT 1;
+#autoflush SOUT 1;
 open SERR ,">&=STDERR"; # Ditto
 autoflush SERR 1;
 						       

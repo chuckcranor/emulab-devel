@@ -27,7 +27,7 @@ echo "`date`: ${interface}: ${reason}" >>$LOGDIR/dhclient-exit.log 2>&1
 
 if [ x$reason != xREBOOT -a x$reason != xBOUND -a x$reason != xRENEW -a x$reason != xREBIND ]
 then
-    exit 0
+    return 0
 fi
 
 #
@@ -51,7 +51,7 @@ if [ x"$new_domain_name_servers" = "x1.1.1.1" ]; then
 	cp /dev/null /etc/resolv.conf
     fi
     exit_status=1
-    exit 1
+    return 1
 fi >>$LOGDIR/dhclient-exit.log 2>&1
 
 #
@@ -82,7 +82,7 @@ esac
 # no hostname.  We don't need to record anything in this case, so skip it.
 #
 if [ x"$new_host_name" = x ]; then
-    exit 0
+    return 0
 fi
 
 #
@@ -112,4 +112,4 @@ echo "`date`: ${interface}: ${reason}: done" >>$LOGDIR/dhclient-exit.log 2>&1
 # by the dhclient caller (sysconfig/network-scripts/ifcfg-eth99)
 #
 
-exit 0
+# No need to return or exit; we are run inline.

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2018 University of Utah and the Flux Group.
+# Copyright (c) 2005-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -95,6 +95,10 @@ AUTOLOAD {
     # canceled is a special case.
     if ($name eq "canceled") {
 	return Canceled($self);
+    }
+    # Ditto paniced
+    elsif ($name eq "paniced") {
+	return Paniced($self);
     }
     # A DB row proxy method call.
     elsif (exists($self->{'EXPT'}->{$name})) {
@@ -393,6 +397,17 @@ sub Stringify($)
 # the stats stats record, but was not being updated
 sub elabinelab($) { return $_[0]->elab_in_elab(); }
 
+# Convenience function.
+sub pideid($)
+{
+    my ($self) = @_;
+    
+    my $pid   = $self->pid();
+    my $eid   = $self->eid();
+
+    return "$pid/$eid";
+}
+
 #
 # For canceled, goto to the DB. See AUTOLOAD above.
 #
@@ -412,6 +427,23 @@ sub Canceled($)
     my ($canceled) = $query_result->fetchrow_array();
     $self->{'EXPT'}->{'canceled'} = $canceled;
     return $canceled;
+}
+# Ditto the panic flag.
+sub Paniced($)
+{
+    my ($self) = @_;
+    my $idx = $self->idx();
+
+    my $query_result =
+	DBQueryWarn("select paniced from experiments where idx='$idx'");
+
+    if (! $query_result ||
+	$query_result->numrows == 0) {
+	return 0;
+    }
+    my ($paniced) = $query_result->fetchrow_array();
+    $self->{'EXPT'}->{'paniced'} = $paniced;
+    return $paniced;
 }
 
 1;
@@ -492,6 +524,34 @@ sub UserExperimentList($$$)
 
 	if (!defined($experiment)) {
 	    print STDERR "Experiment::UserExperimentList: ".
+		"No object for $idx!\n";
+	    return -1;
+	}
+	push(@result, $experiment);
+    }
+    @$plist = @result;
+    return 0;
+}
+
+#
+# All experiments, Class method.
+#
+sub AllExperimentList($$)
+{
+    my ($class, $plist) = @_;
+    my @result  = ();
+    
+    my $query_result =
+	DBQueryWarn("select idx from experiments ".
+		    "where state!='" . EXPTSTATE_SWAPPED() . "'");
+    return -1
+	if (! $query_result);
+
+    while (my ($idx) = $query_result->fetchrow_array()) {
+	my $experiment = Experiment->Lookup($idx);
+
+	if (!defined($experiment)) {
+	    print STDERR "Experiment::AllExperimentList: ".
 		"No object for $idx!\n";
 	    return -1;
 	}
@@ -3636,6 +3696,7 @@ sub RemovePhysicalState($;$)
 {
     my ($self, $purge) = @_;
     require Lan;
+    require Interface;
 
     # Must be a real reference. 
     return -1
@@ -3670,6 +3731,9 @@ sub RemovePhysicalState($;$)
     }
     return -1
 	if (Lan->DestroyExperimentLans($self, $purge) != 0);
+
+    return -1
+        if (Interface::LogicalWire->RemoveLogicalWires($self) != 0);
     
     if (@pnodenames || @vnodenames) {
 	my $clause1 = join(" or ", map("node_id='$_'",  @pnodenames))
@@ -3695,6 +3759,12 @@ sub RemovePhysicalState($;$)
 		    "where ($clause) and ".
 		    "       role='" . TBDB_IFACEROLE_EXPERIMENT() . "' ")
 	    or $errors++;
+
+	# RF interfaces (also cleaned in nfree).
+	DBQueryWarn("DELETE FROM interfaces_rf_limit WHERE $clause")
+	    or $errors++;
+	DBQueryWarn("delete from node_rf_reports where $clause")
+	    or $errors++;
     }
     
     foreach my $table (keys(%physicalTables)) {
@@ -3712,6 +3782,7 @@ sub BackupPhysicalState($;$$)
 {
     my ($self, $directory, $regression) = @_;
     require Lan;
+    require Interface;
 
     # Must be a real reference. 
     return -1
@@ -3754,6 +3825,9 @@ sub BackupPhysicalState($;$$)
     }
     return -1
 	if (Lan->BackupExperimentLans($self, $pstateDir) != 0);
+
+    return -1
+	if (Interface::LogicalWire->BackupLogicalWires($self, $pstateDir) != 0);
 
     if (@pnodenames || @vnodenames) {
 	my $clause = join(" or ", map("node_id='$_'",
@@ -3823,6 +3897,7 @@ sub RestorePhysicalState($)
 {
     my ($self) = @_;
     require Lan;
+    require Interface;
 
     # Must be a real reference. 
     return -1
@@ -3836,6 +3911,9 @@ sub RestorePhysicalState($)
 
     return -1
 	if (Lan->RestoreExperimentLans($self, $pstateDir) != 0);
+
+    return -1
+	if (Interface::LogicalWire->RestoreLogicalWires($self, $pstateDir));
     
     foreach my $table (keys(%physicalTables),
 		       "vinterfaces", "interface_settings") {
@@ -4228,7 +4306,7 @@ sub SetupNetworkAgents($)
 	    $agentname = "${vlanname}-${vnode}";
 	}
 
-	DBQueryFatal("insert into virt_agents ".
+	DBQueryFatal("replace into virt_agents ".
 		     " (exptidx, pid, eid, vname, vnode, objecttype) ".
 		     " select '$idx', '$pid', '$eid', ".
 		     "   '$agentname', '*', ".
@@ -5143,6 +5221,24 @@ sub HasPhysNodes($)
     return $query_result->num_rows;
 }
 
+sub TypesInUse($)
+{
+    my ($self) = @_;
+    my $idx = $self->idx();
+
+    my $query_result =
+	DBQueryFatal("SELECT DISTINCT(n.type) FROM " .
+		     "reserved AS r, nodes AS n WHERE " .
+		     "r.node_id=n.node_id AND " .
+		     "r.exptidx='$idx'");
+
+    my @types = ();
+    while( my($type) = $query_result->fetchrow_array() ) {
+	push( @types, $type );
+    }
+    return @types;
+}
+
 sub HasVirtInterfaces($)
 {
     my ($self) = @_;
@@ -5773,6 +5869,63 @@ sub SetElabInElabAttr($$$$;$)
 		"  attrvalue=$safe_value, ordering='$ordering'")
 	or return -1;
 
+    return 0;
+}
+
+#
+# Set the IP for the ops node in an elabinelab, when using a FreeBSD
+# jail for ops (OPSVM). We have to do this early on, when boss is a
+# XEN VM, since we have have to tell the vhost about the OPS IP so that
+# it can adjust the firewall rules. Ick.
+#
+sub AssignElabInElabOpsIP($)
+{
+    my ($self) = @_;
+    my $bossnode;
+    my $ip;
+
+    # Grab the elabinelab attributes for search.
+    my $attributes = $self->GetElabInElabAttrs();
+    return -1
+	if (!defined($attributes) || !keys(%{$attributes}));
+
+    # Only relevant if OPSVM defined.
+    return 0
+	if (!exists($attributes->{'CONFIG_OPSVM'}));
+
+    #
+    # Need to find the boss physical node and see if its a VM.
+    #
+    my @pnodes = $self->NodeList(0, 1);
+    foreach my $pnode (@pnodes) {
+	my $elabrole = $pnode->inner_elab_role();
+	if (defined($elabrole) && $elabrole =~ /^boss/) {
+	    $bossnode = $pnode;
+	    last;
+	}
+    }
+    return -1
+	if (!defined($bossnode));
+
+    #
+    # If we have an address pool for 'opsvm' then allocate the IP
+    # from that. Otherwise a jail IP.
+    #
+    my $ips = $self->LookupAddressPools("opsvm");
+    if (@$ips) {
+	my ($ref) = @{$ips};
+	$ip = $ref->{'ip'};
+	# XEN clientside looks at the *virt* attributes. 
+	$self->SetVirtNodeAttribute($bossnode->vname(), "XEN_IPALIASES", $ip);
+    }
+    else {
+	($ip) = $bossnode->GetJailIP();
+    }
+    print "Setting the IP for OPS jail to $ip\n";
+    $self->SetElabInElabAttr("boss", "OPSIP", $ip);
+    $self->SetElabInElabAttr("ops",  "OPSIP", $ip);
+    $self->SetElabInElabAttr("fs",   "OPSIP", $ip);
+    
     return 0;
 }
 
@@ -6858,6 +7011,22 @@ sub InitKeyDist($)
     return 0;
 }
 
+#
+# Return the portal URL for an experiment (if there is one).
+#
+sub PortalURL($)
+{
+    my ($self) = @_;
+    require GeniSlice;
+
+    if ($self->geniflags()) {
+	my $slice = GeniSlice->LookupByExperiment($self);
+	if (defined($slice)) {
+	    return $slice->GetPortalURL();
+	}
+    }
+    return undef;
+}
 
 # _Always_ make sure that this 1 is at the end of the file...
 1;

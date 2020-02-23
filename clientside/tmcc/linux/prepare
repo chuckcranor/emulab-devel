@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -286,6 +286,17 @@ while ($dirent = readdir(LOG)) {
 }
 closedir(LOG);
 
+#
+# Clear out systemd journals.
+#
+if (-d "/var/log/journal") {
+    print "Cleaning systemd journal files...\n";
+    system("journalctl --vacuum-time=1s");
+    # Vacuum does not kill off the active journals, so truncate them.
+    # They might reappear.
+    system("truncate -s 0 /var/log/journal/*/*.journal");
+}
+
 my $XLOGDIR = "$LOGDIR/xen";
 if (-d $XLOGDIR) {
     print "Cleaning Xen logfiles ...\n";
@@ -411,6 +422,12 @@ if (-f $driftfile) {
     print DRIFT "0\n";
     close(DRIFT);
 }
+print "Resetting chrony drift ...\n";
+for my $fp ("/var/lib/chrony/drift","/var/lib/chrony/chrony.drift") {
+    if (-f $fp) {
+	unlink($fp);
+    }
+}
 
 if (-f "$GRUBDEF.preemulab") {
     print "Restoring original $GRUBDEF file ...\n";
@@ -422,6 +439,12 @@ system("rm -rf $RUNDIR/*.pid $RUNDIR/sudo/* $RUNDIR/pump.sock");
 
 print "Clearing out /tmp ...\n";
 system("rm -rf /tmp/* /tmp/.??*");
+
+my $GITREPO = "/local/repository";
+if (-e $GITREPO) {
+    print "Removing $GITREPO ...\n";
+    system("rm -rf $GITREPO");
+}
 
 print "Cleaning out /local/logs ...\n";
 system("rm -rf /local/logs/* /local/logs/.??*");
@@ -526,6 +549,24 @@ for my $pdir (@PHOOKSDIRS) {
 	    system("$file");
 	}
     }
+}
+
+#
+# Get set up to force a regeneration of the system machine-id.  This
+# should be done last; it can make the system unstable; see man
+# dbus-uuidgen.  We only do this if we've got a dbus-uuidgen.  NB:
+# systems are theoretically supposed to regen /etc/machine-id if it's
+# not present, but this doesn't happen on Ubuntu 18, for instance (see
+# also https://bugzilla.redhat.com/show_bug.cgi?id=1379800).
+# Fortunately, if the file is present and empty, it does get
+# regenerated.  So we empty it, and ensure that /var/lib/dbus/machine-id
+# is a symlink to /etc/machine-id.
+#
+if (-e "/etc/machine-id" && -e "/var/lib/dbus/machine-id") {
+    open(FD,">/etc/machine-id");
+    close(FD);
+    system("ln -sf /etc/machine-id /var/lib/dbus/machine-id");
+    print "Forcing regeneration of machine-id on next boot.\n";
 }
 
 # Leave this print statement here; create_image depends on it.

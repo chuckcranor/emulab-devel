@@ -10,9 +10,10 @@
 	  <th>Creator</th>
 	  <th>Created</th>
 	  <th>Destroyed</th>
+	  <th>Clusters</th>
 	  <th>Error</th>
 	  <% if (window.ISADMIN) { %>
-	    <th>Logs</th>
+	    <th>View</th>
 	  <% } %>
 	</tr>
       </thead>
@@ -25,12 +26,8 @@
 	  </td>
 	  <td><%- instance.creator %></td>
 	  <td><%- instance.created %></td>
-	  <% if (instance.active) { %>
-	    <td><a href='status.php?uuid=<%- instance.uuid %>' target="_blank">
-	      <span class="glyphicon glyphicon-eye-open"></span></a></td>
-	  <% } else { %>
-	    <td><%- instance.destroyed %></td>
-	  <% } %>
+	  <td><%- instance.destroyed %></td>
+	  <td><%- instance.clusters %></td>
 	  <td class="text-danger">
 	    <% if (_.has(instance, "iserror")) { %>
 	      <% if (_.has(instance, "error_message")) { %>
@@ -46,14 +43,15 @@
 	      <% } %>
 	    <% } %>
 	  </td>
-	  <% if (window.ISADMIN) { %>
-	    <td>
-	      <% _.each(instance.public_urls.split(","), function(url) { %>
-		<a href='<%- url %>' target="_blank">
-		  <span class="glyphicon glyphicon-link"></span></a>
-	      <% }); %>
-	    </td>
-	  <% } %>
+	  <td>
+	    <% if (instance.active) { %>
+	      <a href='status.php?uuid=<%- instance.uuid %>' target="_blank">
+		<span class="glyphicon glyphicon-eye-open"></span></a>
+	    <% } else { %>
+	      <a href='memlane.php?uuid=<%- instance.uuid %>' target="_blank">
+		<span class="glyphicon glyphicon-eye-open"></span></a>
+	    <% } %>
+	  </td>
 	</tr>
 	<% }); %>
       </tbody>

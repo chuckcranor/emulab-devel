@@ -14,9 +14,29 @@ export DEBIAN_FRONTEND=noninteractive
 
 apt-get install -y --no-install-suggests --no-install-recommends \
     git ca-certificates \
-    gcc make libc-dev byacc libtool-bin libssl-dev 'g++' \
+    gcc make libc-dev byacc libtool-bin 'g++' \
     sudo python python-dev libpcap-dev libboost-dev wget patch flex ntp \
     zlib1g-dev
+dpkg-query -l libssl-dev
+if [ ! $? -eq 0 ]; then
+    # First try to install it.  If there is a problem installing the
+    # candidate, try to install the version that matches the installed
+    # libssl\*, if any.
+    apt-get install -y --no-install-suggests --no-install-recommends libssl-dev
+    if [ ! $? -eq 0 ]; then
+	dpkg-query -l libssl\*
+	if [ ! $? -eq 0 ]; then
+	    echo "ERROR: failed to install libssl-dev!"
+	    exit 1
+	fi
+	version=`dpkg-query -W libssl\* | sed -e 's/^[^\t ]*[\t ]*\([^\t ]*\)[\t ]*.*/\1/'`
+	apt-get install -y --no-install-suggests --no-install-recommends libssl-dev=$version
+	if [ ! $? -eq 0 ]; then
+	    echo "ERROR: failed to install libssl-dev=$version!"
+	    exit 1
+	fi
+    fi
+fi
 
 if [ -z "$EMULABSRC" ]; then
     echo "WARNING: missing EMULABSRC environment variable pointer to src; cloning!"

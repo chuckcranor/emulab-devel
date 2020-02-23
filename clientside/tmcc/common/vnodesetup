@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -31,7 +31,7 @@ use POSIX ":sys_wait_h";
 #
 # Prototypes
 #
-sub hackwaitandexit($);
+sub hackwaitandexit($;$);
 
 # Drag in path stuff so we can find emulab stuff.
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
@@ -49,12 +49,14 @@ sub usage()
 	" -i creates a fake virtual node.\n".
 	"\n".
 	"Use -b when starting the virtual node at boot time.\n".
+	"Use -F <timeout> to change the hackwaitandexit timeout;\n".
+	"                 < 1 means no timeout.\n".
 	"Use -r when rebooting the virtual node.\n".
 	"Use -h when halting the virtual node.\n".
 	"Use -k when killing the virtual node (removes filesystems).\n";
     exit(1);
 }
-my $optlist	= "kbdjsVrhptie";
+my $optlist	= "kbdjsVrhptieF:";
 
 # Locals
 my $killit	= 0;
@@ -73,6 +75,7 @@ my $leavejail    = 0;
 my $timestamps  = 0;
 my $jailpid;
 my $cleanupstate = "SHUTDOWN";
+my $hackwaitandexit_timeout = 30;
 
 #
 # Turn off line buffering on output
@@ -171,6 +174,14 @@ if (defined($options{"p"})) {
 }
 if (defined($options{"i"})) {
     $fakevnode = 1;
+}
+if (defined($options{"F"})) {
+    if ($options{"F"} < 1) {
+	$hackwaitandexit_timeout = 0;
+    }
+    else {
+	$hackwaitandexit_timeout = int($options{"F"});
+    }
 }
 if (@ARGV != 1) {
     usage();
@@ -319,7 +330,7 @@ if (!$debug && !$interactive && (my $cpid = TBBackGround($logname))) {
     # setup first. This whole approach is wildly hacky.
     #
     if ($dojail) {
-	hackwaitandexit($cpid);
+	hackwaitandexit($cpid,$hackwaitandexit_timeout);
     }
     exit(0);
 }
@@ -355,21 +366,32 @@ my $pgrp = getpgrp(0);
 sub handler ($) {
     my ($signame) = @_;
     
+    #
+    # Disable all future signals til we get things sorted out.
+    # We used to do the print/TBDebug.. first thing, but that opens up
+    # a huge opportunity for races, so now we immediately block all
+    # signals til we get things sorted out.
+    #
+    $SIG{USR1} = 'IGNORE';
+    $SIG{USR2} = 'IGNORE';
+    $SIG{TERM} = 'IGNORE';
+    $SIG{INT}  = 'IGNORE';
+    $SIG{HUP}  = 'IGNORE';
+
     print STDERR "vnodesetup ($PID) caught a SIG${signame}!\n";
     TBDebugTimeStampWithDate("vnodesetup shutting down ...");
 
-    $SIG{USR1} = 'IGNORE';
-    $SIG{USR2} = 'IGNORE';
-
     if ($signame eq 'USR2') {
+	# XXX should these be enabled during a reboot?
+	# This is the way it has always been, so don't mess with it...
+	$SIG{TERM} = \&handler;
+	$SIG{INT}  = \&handler;
+	$SIG{HUP}  = \&handler;
 	reboot();
 	$SIG{USR1} = \&handler;
 	$SIG{USR2} = \&handler;
 	return;
     }
-    $SIG{TERM} = 'IGNORE';
-    $SIG{INT}  = 'IGNORE';
-    $SIG{HUP}  = 'IGNORE';
     
     #
     # If we catch a TERM, we want to leave the jail around since TERM
@@ -704,7 +726,7 @@ sub rebootvnode() {
 	return -1;
     }
 
-    hackwaitandexit(0);
+    hackwaitandexit(0,$hackwaitandexit_timeout);
     return 0;
 }
 
@@ -731,11 +753,11 @@ sub cleanup()
 	if ($leavejail) {
 	    # Leave disk intact, kill all other transient state.
 	    # Halting or physical node rebooting.
-	    $sigtosend = 'USR1';
+	    $sigtosend = 'HUP';
 	}
 	else {
 	    # All trace removed.
-	    $sigtosend = 'HUP';
+	    $sigtosend = 'USR1';
 	}
 	kill($sigtosend, $jailpid);
 	sleep(5);
@@ -746,19 +768,21 @@ sub cleanup()
 	
 	#
 	# The jail process sometimes refuses to die. Keep trying.
-	# We send the signal again cause I have seen cases where it
-	# is ignored, for no reason that I can find. We need to
+	# We send the signal again periodically cause I have seen cases
+	# where it is ignored, for no reason that I can find. We need to
 	# eventually stop, but not sure how to deal with this.
 	#
-	while (defined($jailpid)) {
-	    sleep(15);
+	for (my $retries = 0; defined($jailpid); $retries++) {
+	    sleep(5);
 	    my $kidpid = waitpid($jailpid, &WNOHANG);
 	    if ($kidpid == $jailpid) {
 		undef($jailpid);
 		last;
 	    }
-	    print STDERR "$jailpid would not die; signalling again.\n";
-	    kill($sigtosend, $jailpid);
+	    if ((++$retries % 3) == 0) {
+		print STDERR "$jailpid would not die; signalling again.\n";
+		kill($sigtosend, $jailpid);
+	    }
 	}
 
 	#
@@ -779,6 +803,7 @@ sub cleanup()
 
     if (! $leavejail) {
 	removeconfdir(CONFDIR());
+	TBDebugTimeStamp("vnodesetup vnode destroyed");
     }
     system("rm -f $pidfile");
 }
@@ -941,12 +966,18 @@ sub removeconfdir($)
 # for setup failure from the direct child, so we can tell the caller.
 # Otherwise, need to use the normal wait path (timeout or TBFAILED).
 # 
-sub hackwaitandexit($)
+sub hackwaitandexit($;$)
 {
-    my $cpid  = shift();
+    my ($cpid,$count) = @_;
     my $now   = time();
     my $goofy;
-    my $count = 30;
+    if (!defined($count)) {
+	$count = 30;
+    }
+    my $forever = 0;
+    if ($count < 1) {
+	$forever = 1;
+    }
 
     # The first case is for our own (non-plab) vservers.
     if (-e "/vservers") {
@@ -963,7 +994,7 @@ sub hackwaitandexit($)
 	$goofy = CONFDIR() . "/root/var/run/emulab-watchdog.pid";
     }
 	
-    while ($count--) {
+    while ($forever || $count--) {
 	sleep(1);
 	if (-e $goofy) {
 	    my ($mtime,$ctime) = (stat($goofy))[8,9];

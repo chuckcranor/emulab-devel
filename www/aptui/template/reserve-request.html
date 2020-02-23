@@ -67,6 +67,7 @@
 	  <input id="end" name="end" type="hidden">
 	  <% if (editing) { %>
 	    <input id="uuid" name="uuid" type="hidden">
+	    <!-- This is a URN -->
 	    <input id="cluster" name="cluster" type="hidden">
 	  <% } %>
 	  <div class='row'>
@@ -113,7 +114,58 @@
 	        <% } %>
 	      <% } %>
 	      <div class="form-group">
+		<% if (editing) { %>
+		  <!-- This is a Nickname -->
+		  <input name="cluster_id" readonly
+			 id="cluster_id"
+			 value="<%- formfields.cluster_id %>"
+			 class="form-control format-me"
+			 data-label="Cluster"
+			 data-key="cluster_id">
+		<% } else { %>
+		  <select name="cluster"
+			  id="cluster"
+			  class='form-control format-me'
+			  data-colsize="4"
+			  data-key="cluster"
+			  data-label="Cluster"
+			  placeholder='Please Select'>
+		    <option value=''>Please Select</option>
+		    <% _.each(amlist, function(details, urn) { %>
+		      <option
+			  <% if (urn == formfields.cluster) { %>
+			  selected
+			  <% } %>
+			  value='<%= urn %>'><%= details.name %>
+		      </option>
+		    <% }); %>
+		  </select>
+		<% } %>
+	      </div>
+	      <div class="form-group">
+		<% if (editing) { %>
+		  <input name="type" readonly
+			 value="<%- formfields.type %>"
+			 id="type"
+			 class='form-control format-me'
+			 data-key="type"
+			 data-label="Hardware"
+			 data-colsize="4">
+		<% } else { %>
+		  <select name="type"
+			  id="type"
+			  class='form-control format-me'
+			  data-key="type"
+			  data-label="Hardware"
+			  placeholder='Please Select'
+			  data-colsize="4">
+		    <option value=''>Please Select</option>
+		  </select>
+		<% } %>
+	      </div>
+	      <div class="form-group">
 		<input name="count"
+		       id="count"
 		       value="<%- formfields.count %>"
 		       class="form-control format-me"
 		       data-key="count"
@@ -121,10 +173,30 @@
 		       data-colsize="2"
 		       type="text">
 	      </div>
+	      <% if (1) { %>
+		<div class="form-group">
+		  <input name="days"
+			 id="days"
+			 class="form-control format-me"
+			 data-key="days"
+			 data-label="Number of Days"
+			 data-optional="yep"
+			 data-compact="yep"
+			 data-colsize="2"
+			 type="text">
+		  <button class='btn btn-primary btn-xs findfit-button'
+			  style="display: inline-block; margin-top: -22px;"
+			  name='days-findfit'>Search</button>
+		  <span style="display: inline-block; margin-left: 10px">
+		    <small>If you tell us how many days, we will find<br>
+		           a slot and set the Start/End for you.
+		    </small></span>
+		</div>
+	      <% } %>
 	      <div class="form-group">
 		<div class="format-me"
-		     data-label="Reservation Start<br>
-				 <small>(Optional)</small>"
+		     data-label="Reservation Start"
+		     data-optional="yep"
 		     data-colsize="9"
 		     data-key="start">
 		  <div class="row">
@@ -233,55 +305,6 @@
 		    </div>
 		  </div>
 		</div>
-	      </div>
-	      <div class="form-group">
-		<% if (editing) { %>
-		  <input name="cluster_id" readonly
-			 id="cluster_id"
-			 value="<%- formfields.cluster_id %>"
-			 class="form-control format-me"
-			 data-label="Cluster"
-			 data-key="cluster_id">
-		<% } else { %>
-		  <select name="cluster"
-			  id="cluster"
-			  class='form-control format-me'
-			  data-colsize="4"
-			  data-key="cluster"
-			  data-label="Cluster"
-			  placeholder='Please Select'>
-		    <option value=''>Please Select</option>
-		    <% _.each(amlist, function(details, urn) { %>
-		      <option
-			  <% if (urn == formfields.cluster) { %>
-			  selected
-			  <% } %>
-			  value='<%= urn %>'><%= details.name %>
-		      </option>
-		    <% }); %>
-		  </select>
-		<% } %>
-	      </div>
-	      <div class="form-group">
-		<% if (editing) { %>
-		  <input name="type" readonly
-			 value="<%- formfields.type %>"
-			 id="type"
-			 class='form-control format-me'
-			 data-key="type"
-			 data-label="Hardware Type"
-			 data-colsize="4">
-		<% } else { %>
-		  <select name="type"
-			  id="type"
-			  class='form-control format-me'
-			  data-key="type"
-			  data-label="Hardware Type"
-			  placeholder='Please Select'
-			  data-colsize="4">
-		    <option value=''>Please Select</option>
-		  </select>
-		<% } %>
 	      </div>
 	      <div class="form-group">
 		<textarea name="reason"
@@ -505,4 +528,23 @@
     </div>
   </div>
 </div>
-
+<div id='approve-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+        <center><h4>Confirm to Approve Reservation</h4>
+	  Additional text to send with approval (no text is okay):
+	  <div>
+	    <textarea class='form-control user-message'
+		      rows=5></textarea>
+	  </div>
+	  <br>
+          <button class='btn btn-danger btn-sm'
+		  id='confirm-approve'>Confirm</a>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>

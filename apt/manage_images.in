@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,14 +33,18 @@ use JSON;
 #
 sub usage()
 {
-    print STDERR "Usage: manage_images [options --] list ...\n";
-    print STDERR "Usage: manage_images [options --] delete <urn> ...\n";
+    print STDERR "Usage: manage_images [options] list ...\n";
+    print STDERR "Usage: manage_images [options] delete <urn> ...\n";
+    print STDERR "Usage: manage_images [options] getcredential <urn>\n";
+    print STDERR "Usage: manage_images [options] relocate ...\n";
+    print STDERR "Usage: manage_images [options] prestage ...\n";
     exit(-1);
 }
-my $optlist     = "dt:";
+my $optlist     = "dt:u:";
 my $debug       = 0;
 my $webtask_id;
 my $webtask;
+my $target_user;
 
 #
 # Configure variables
@@ -49,7 +53,9 @@ my $TB		  = "@prefix@";
 my $TBOPS         = "@TBOPSEMAIL@";
 my $OURDOMAIN     = "@OURDOMAIN@";
 my $MYURN         = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+my $CMCERT	  = "$TB/etc/genicm.pem";
 my $MANAGEPROFILE = "$TB/bin/manage_profile";
+my $IMPORTER      = "$TB/sbin/image_import";
 my $MAINSITE      = @TBMAINSITE@;
 
 # For development.
@@ -77,17 +83,26 @@ use Project;
 use User;
 use WebTask;
 use GeniResponse;
+use GeniCertificate;
+use GeniCredential;
+use GeniImage;
+use Genixmlrpc;
 use GeniXML;
 use GeniUser;
 use APT_Geni;
 use APT_Profile;
 use APT_Aggregate;
+use APT_Instance;
+use APT_Utility;
 
 # Protos
 sub fatal($);
 sub UserError($);
 sub DoListImages();
 sub DoDeleteImage();
+sub DoGetCredential();
+sub DoRelocate();
+sub DoPrestage();
 sub ExitWithError($);
 
 #
@@ -116,17 +131,34 @@ if (@ARGV < 1) {
 my $action = shift(@ARGV);
 
 # Need a real user.
-my $this_user = User->ThisUser();
-if (! defined($this_user)) {
-    fatal("You ($UID) do not exist!");
+if (defined($options{"u"})) {
+    $target_user = User->Lookup($options{"u"});
+    if (! defined($target_user)) {
+	fatal("No such user!");
+    }
 }
-my $geniuser = GeniUser->CreateFromLocal($this_user);
+else {
+    $target_user = User->ThisUser();
+    if (! defined($target_user)) {
+	fatal("You ($UID) do not exist!");
+    }
+}
+my $geniuser = GeniUser->CreateFromLocal($target_user);
 
 if ($action eq "list") {
     exit(DoListImages());
 }
 elsif ($action eq "delete") {
     exit(DoDeleteImage());
+}
+elsif ($action eq "getcredential") {
+    exit(DoGetCredential());
+}
+elsif ($action eq "relocate") {
+    exit(DoRelocate());
+}
+elsif ($action eq "prestage") {
+    exit(DoPrestage());
 }
 else {
     usage();
@@ -139,12 +171,12 @@ exit(1);
 sub DoListImages()
 {
     my $usage = sub {
-	print STDERR "Usage: manage_images list [-a am_urn]\n";
+	print STDERR "Usage: manage_images list [-a am_urn] [-p pid]\n";
 	exit(-1);
     };
-    my $optlist = "a:p";
+    my $optlist = "a:p:";
     my $aggregate_urn = $MYURN;
-    my $withprofiles  = 0;
+    my $project;
     my $errmsg;
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -154,7 +186,15 @@ sub DoListImages()
 	$aggregate_urn = $options{"a"};
     }
     if (defined($options{"p"})) {
-	$withprofiles = 1;
+	$project = Project->Lookup($options{"p"});
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+	if (! ($target_user->IsAdmin() ||
+	       $project->IsLeader($target_user) ||
+	       $project->IsManager($target_user))) {
+	    UserError("Not enough permissions to list images in project");
+	}
     }
     my $context = APT_Geni::GeniContext();
     if (!defined($context)) {
@@ -180,23 +220,32 @@ sub DoListImages()
     if ($usemydevtree) {
 	$cmurl =~ s/protogeni/protogeni\/stoller/;
     }
-    my ($credential, $speaksfor) = APT_Geni::GenUserCredential($geniuser);
+    my $args = {};
+    my ($credential, $speaksfor);
+    
+    if (defined($project)) {
+	($credential, $speaksfor) = APT_Geni::GenProjectCredential($project,
+								   $geniuser);
+	$args->{"project_urn"} = $project->urn();
+    }
+    else {
+	($credential, $speaksfor) = APT_Geni::GenUserCredential($geniuser);
+    }
     fatal("Could not generate credentials for user")
 	if (!defined($credential));
-
     my $credentials = [$credential->asString()];
     if (defined($speaksfor)) {
 	$credentials = [@$credentials, $speaksfor->asString()];
     }
-    my $args = {
-	"credentials" => $credentials,
-    };
+    $args->{"credentials"} = $credentials;
+    
     my $response = Genixmlrpc::CallMethod($cmurl, undef, "ListImages", $args);
 
     if ($response->code() != GENIRESPONSE_SUCCESS) {
 	print STDERR $response->error() . "\n";
 	ExitWithError($response);
     }
+    
     #
     # We get back a flat list, which can include mulitple versions of
     # each image. Lets reorganize into multilevel hash structure
@@ -221,6 +270,8 @@ sub DoListImages()
 	    if (!defined($authority));
 	# URN without the version.
 	$urn = GeniHRN::GenerateImage($auth,$ospid,$os,undef);
+	# Put it into the object so that PHP/JS code can find it easy.
+	$image->{'imagename'} = $os;
 	
 	# Default to version zero, for old sites not reporting version.
 	my $vers = (defined($osvers) ? $osvers : 0);
@@ -230,6 +281,29 @@ sub DoListImages()
 	# Try and set a local project, but use remote pid otherwise.
 	$image->{'pid'} = $ospid;
 
+	# Convert creator and updater when getting list for project.
+	if (defined($project)) {
+	    my $hrn      = GeniHRN->new($image->{'creator_urn'});
+	    my $geniuser = MapUserURN($hrn);
+	    if (defined($geniuser)) {
+		$image->{'creator_uid'}  = $geniuser->uid();
+		$image->{'creator_idx'}  = $geniuser->idx();
+	    }
+	    else {
+		$image->{'creator_uid'} = $hrn->id();
+	    }
+	    if (exists($image->{'updater_urn'})) {
+		$hrn      = GeniHRN->new($image->{'updater_urn'});
+		$geniuser = MapUserURN($hrn);
+		if (defined($geniuser)) {
+		    $image->{'updater_uid'} = $geniuser->uid();
+		    $image->{'updater_idx'} = $geniuser->idx();
+		}
+		else {
+		    $image->{'updater_uid'} = $hrn->id();
+		}
+	    }
+	}
 	if (!exists($ilist{$urn})) {
 	    $ilist{$urn} = [];
 	}
@@ -258,19 +332,34 @@ sub DoListImages()
 	#
 	if (exists($image0->{'project_urn'})) {
 	    my $projhrn = GeniHRN->new($image0->{'project_urn'});
-	    if ($projhrn->domain() eq $OURDOMAIN &&
-		defined($projhrn->project())) {
-		my $project = Project->Lookup($projhrn->project());
+	    
+	    if ($projhrn->domain() eq $OURDOMAIN) {
+		my $project;
+		
+		if (defined($projhrn->project())) {
+		    $project = Project->Lookup($projhrn->project());
+		}
+		else {
+		    # Backwards compat; we did not always send project urns.
+		    $project = Project->Lookup($image0->{'pid'});
+		}
 		if (defined($project)) {
 		    $ref->{'pid'}     = $project->pid();
 		    $ref->{'pid_idx'} = $project->pid_idx();
 		}
 	    }
+	    $ref->{"project_urn"} = $image0->{'project_urn'};
 	}
 	else {
 	    # Remote pid, set above
 	    $ref->{'pid'} = $image0->{'pid'};
 	}
+	if (defined($project)) {
+	    $ref->{'creator_uid'} = $image0->{'creator_uid'};
+	    $ref->{'creator_idx'} = $image0->{'creator_idx'}
+	        if (exists($image0->{'creator_idx'}));
+	}
+	$ref->{'imagename'}   = $image0->{'imagename'};
 	
 	#
 	# Find profiles using the named image
@@ -322,10 +411,17 @@ sub DoListImages()
 	while (@versions) {
 	    my $image = shift(@versions);
 	    my $urn = $image->{'urn'};
+	    my $hrn = GeniHRN->new($urn);
 	    my @using = ();
 	    $image->{'using'} = [];
 	    $image->{'candelete'} = 0;
 	    $image->{'deleted'} = 0;
+
+	    my (undef, undef, undef, $osvers) = $hrn->ParseImage();
+	    # Default to version zero, for old sites not reporting version.
+	    my $vers = (defined($osvers) ? $osvers : 0);
+	    # Put it into the object so that PHP/JS code can find it easy.
+	    $image->{'version'} = int($vers);
 
 	    next
 		if (APT_Profile::ImageInfo::FindProfilesUsing($urn, \@using));
@@ -392,20 +488,31 @@ sub DoListImages()
 sub DoDeleteImage()
 {
     my $usage = sub {
-	print STDERR "Usage: manage_images delete [-a am_urn] <image_urn>\n";
+	print STDERR "Usage: manage_images delete [-a am_urn] ".
+	    "[-d profile -v versions] <image_urn>\n";
 	exit(-1);
     };
-    my $optlist = "a:d:n";
+    my $optlist = "a:d:v:np:";
     my $aggregate_urn = $MYURN;
     my $impotent      = 0;
     my $profile;
     my $errmsg;
+    my $project;
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	&$usage();
     }
     if (defined($options{"a"})) {
 	$aggregate_urn = $options{"a"};
+    }
+    if (defined($options{"p"})) {
+	$project = Project->Lookup($options{"p"});
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+	if (! ($target_user->IsAdmin() || $project->IsMember($target_user))) {
+	    fatal("Not enough permission in project");
+	}
     }
     if (defined($options{"n"})) {
 	$impotent = 1;
@@ -422,64 +529,24 @@ sub DoDeleteImage()
 	if ($profile->isLocked()) {
 	    fatal("Profile is locked down, cannot be deleted");
 	}
+
 	#
-	# This argument says; delete any version of the specified
-	# profile, that reference the image being deleted. So we
-	# have to go through every version of the profile and check
-	# to see if its using this image. For any of those versions,
-	# we try to delete it.
+	# The caller tells us what versions of the image to delete,
 	#
+	if (!exists($options{"v"})) {
+	    fatal("Missing version number list");
+	}
+	if ($options{"v"} !~ /^[\d,]+$/) {
+	    fatal("Version number list should be comma separated integers");
+	}
 	my @todelete = ();
 	
-	foreach my $version ($profile->AllVersions()) {
-	    my $usingimage = 0;
-	    my $conflict;
+	foreach my $versnum (split(",", $options{"v"})) {
+	    my $version = APT_Profile->Lookup($profile->profileid(), $versnum);
+	    next
+		if (!defined($version));
 
-	    #
-	    # Check image references for this version. We want to
-	    # know if there are any other images associated with this
-	    # version beside the one we are trying to delete. If so,
-	    # we cannot delete the profile version since that will
-	    # result in another image getting deleted.
-	    #
-	    my %irefs = %{ $version->images() };
-	    
-	    foreach my $client_id (keys(%irefs)) {
-		my $imageinfo = $irefs{$client_id};
-		
-		# We do not ever care about system images.
-		next
-		    if ($imageinfo->ospid() eq "emulab-ops");
-
-		# The image we are trying to delete is okay
-		if ($imageinfo->image() eq $image_urn) {
-		    $usingimage = 1;
-		    next;
-		}
-
-		my $snapname = $profile->name() . "." . $client_id;
-		if ($imageinfo->os() eq $profile->name() ||
-		    $imageinfo->os() eq $snapname) {
-		    $conflict = $imageinfo;
-		}
-	    }
-	    if ($usingimage && $conflict) {
-		my $mesg =
-		    "Version " . $version->version() . " of the " .
-		    $version->name() . " profile has another ".
-		    "image that would be deleted as well: ".
-		    $conflict->image() . ". ".
-		    "You will need to go to the profile page and delete ".
-		    "that profile version before you can delete this image.";
-
-		if ($webtask) {
-		    $webtask->reason("conflict");
-		    $webtask->profile($version->uuid());
-		    $webtask->image($conflict->image());
-		}
-		UserError($mesg);
-	    }
-	    if ($usingimage && $version->isLocked()) {
+	    if ($version->isLocked()) {
 		my $mesg =
 		    "Version " . $version->version() . " of the " .
 		    $version->name() . " profile is locked down, ".
@@ -491,11 +558,42 @@ sub DoDeleteImage()
 		}
 		UserError($mesg);
 	    }
-	    if ($usingimage) {
-		push(@todelete, $version);
-		print "Would delete version " . $version->version() .
-		    " of profile " . $profile->name() . "\n";
+
+	    #
+	    # Check image references for this version. We want to
+	    # know if there are any other images associated with this
+	    # version beside the one we are trying to delete. If so,
+	    # we cannot delete the profile version since that will
+	    # result in another image getting deleted.
+	    #
+	    my %irefs = %{ $version->images() };
+
+	    if (keys(%irefs) > 1) {
+		foreach my $client_id (keys(%irefs)) {
+		    my $imageinfo = $irefs{$client_id};
+		    
+		    # We do not ever care about system images.
+		    next
+			if ($imageinfo->ospid() eq "emulab-ops");
+
+		    my $mesg =
+			"Version " . $version->version() . " of the " .
+			$version->name() . " profile is using multiple ".
+			"images. As a safety measure, we require that you ".
+			"delete or edit that profile before you can delete ".
+			"this image.";
+
+		    if ($webtask) {
+			$webtask->reason("conflict");
+			$webtask->profile($version->uuid());
+			$webtask->image($imageinfo->image());
+		    }
+		    UserError($mesg);
+		}
 	    }
+	    print "Would delete version " . $version->version() .
+		" of profile " . $profile->name() . "\n";
+	    push(@todelete, $version);
 	}
 	foreach my $version (@todelete) {
 	    my $vers = $version->version();
@@ -537,18 +635,29 @@ sub DoDeleteImage()
     if ($usemydevtree) {
 	$cmurl =~ s/protogeni/protogeni\/stoller/;
     }
-    my ($credential, $speaksfor) = APT_Geni::GenUserCredential($geniuser);
+    my $args = {
+	"image_urn"   => $image_urn,
+    };
+    my ($credential, $speaksfor);
+    
+    if ($target_user->IsAdmin() ||
+	(defined($project) &&
+	 ($project->IsLeader($target_user) ||
+	  $project->IsManager($target_user)))) {
+	($credential, $speaksfor) = APT_Geni::GenProjectCredential($project,
+								   $geniuser);
+    }
+    else {
+	($credential, $speaksfor) = APT_Geni::GenUserCredential($geniuser);
+    }
     fatal("Could not generate credentials for user")
 	if (!defined($credential));
-
     my $credentials = [$credential->asString()];
     if (defined($speaksfor)) {
 	$credentials = [@$credentials, $speaksfor->asString()];
     }
-    my $args = {
-	"image_urn"   => $image_urn,
-	"credentials" => $credentials,
-    };
+    $args->{"credentials"} = $credentials;
+
     if ($impotent) {
 	$args->{"impotent"} = 1;
     }
@@ -577,6 +686,297 @@ sub DoDeleteImage()
     if (defined($webtask)) {
 	$webtask->Exited(0);
     }
+    exit(0);
+}
+
+sub GetCredentialInternal($$$)
+{
+    my ($image_urn, $context, $perror) = @_;
+
+    # Convert the image urn into the authority URN.
+    my $hrn      = GeniHRN->new($image_urn);
+    my $authurn  = GeniHRN::Generate($hrn->domain(), "authority", "cm");
+    my $manager  = APT_Geni::GetAuthority($authurn);
+    if (!defined($manager)) {
+	$$perror = "Could not lookup authority $authurn";
+	return undef;
+    }
+    my $args = {"image_urn" => $image_urn};
+    my $response = APT_Geni::PortalRPC($manager, $context,
+				       "GetImageCredential", $args);
+    if (GeniResponse::IsError($response)) {
+	return $response;
+    }
+    my $credential = GeniCredential->CreateFromSigned($response->value());
+    if (!defined($credential)) {
+	$$perror = "Could not parse new credential";
+	return undef;
+    }
+    return $credential;
+}
+
+#
+# Request an image credential via the Portal fast path.
+#
+sub DoGetCredential()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_images getcredential [-a urn] ".
+	    "<image_urn>\n";
+	print STDERR "Options:\n";
+	print STDERR "  -a urn    - URN of the remote cluster (cm)\n";
+	print STDERR " image_urn  - URN of the image at the remote cluster\n";
+	exit(-1);
+    };
+    my $optlist = "a:";
+    my $authority;
+    my $errmsg;
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	&$usage();
+    }
+    if (defined($options{"a"})) {
+	my $urn = $options{"a"};
+	$authority = APT_Geni::GetAuthority($urn);
+	if (!defined($authority)) {
+	    fatal("Could not lookup authority $urn");
+	}
+    }
+    &$usage()
+	if (!@ARGV);
+    my $image_urn = shift(@ARGV);
+    if (!GeniHRN::IsValid($image_urn)) {
+	fatal("Not a valid urn");
+    }
+    # Convert the image urn into the authority URN.
+    my $hrn = GeniHRN->new($image_urn);
+    if (!$hrn->IsImage()) {
+	fatal("Not an image urn");
+    }
+    my $context  = APT_Geni::GeniContext();
+    my $credential = GetCredentialInternal($image_urn, $context, \$errmsg);
+    if (!defined($credential)) {
+	fatal($errmsg);
+    }
+    if (GeniResponse::IsError($credential)) {
+	ExitWithError($credential);
+    }
+    if (defined($authority)) {
+	my $delegated = $credential->Delegate($authority);
+	$delegated->Sign($context);
+	$credential = $delegated;
+    }
+    print $credential->asString();
+    exit(0);
+}
+
+#
+# Relocate an image back to this cluster. 
+#
+sub DoRelocate()
+{
+    $debug = 1;
+    
+    my $usage = sub {
+	print STDERR "Usage: manage_images relocate [-s] [-u user] -p pid ".
+	    "-i imagename <image_urn> <url>\n";
+	print STDERR "       manage_images relocate <pending idx>\n";
+	print STDERR "Use the -s option to *also* schedule.\n";
+	print STDERR "Use the -S option to *only* schedule.\n";
+	print STDERR "Use the second form to start a scheduled relocation\n";
+	exit(-1);
+    };
+    my $optlist  = "p:i:u:sS";
+    my $schedule = 0;
+    my $project;
+    my $group;
+    my $pid;
+    my $user;
+    my $image_urn;
+    my $image_url;
+    my $imagename;
+    my $pending;
+    my $errmsg;
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	&$usage();
+    }
+    if (defined($options{"s"}) || defined($options{"S"})) {
+	$schedule = 1;
+    }
+    if (defined($options{"p"})) {
+	$pid = $options{"p"};
+	$project = Project->Lookup($pid);
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+	$group = $project->GetProjectGroup();
+    }
+    if (defined($options{"u"})) {
+	$user = User->Lookup($options{"u"});
+	if (!defined($user)) {
+	    fatal("No such user");
+	}
+    }
+    else {
+	$user = $target_user;
+    }
+    if (defined($options{"i"})) {
+	$imagename = $options{"i"};
+	if (!TBcheck_dbslot($imagename, "images", "imagename",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+	    fatal("Not a valid imagename");
+	}
+    }
+
+    if (@ARGV == 2) {
+	&$usage()
+	    if (!(defined($pid) && defined($imagename)));
+	
+	$image_urn = shift(@ARGV);
+	if (!GeniHRN::IsValid($image_urn)) {
+	    fatal("Not a valid urn");
+	}
+        $image_url = shift(@ARGV);
+
+	if ($schedule) {
+	    $pending = Image::PendingImport->Create({
+		"uid"          => $user->uid(),
+		"uid_idx"      => $user->uid_idx(),
+		"pid"          => $group->pid(),
+		"pid_idx"      => $group->pid_idx(),
+		"gid"          => $group->gid(),
+		"gid_idx"      => $group->gid_idx(),
+		"type"         => "relocation",
+		"imagename"    => $imagename,
+		"remote_urn"   => $image_urn,
+		"metadata_url" => $image_url});
+	    if (!defined($pending)) {
+		fatal("Could not schedule incoming relocation for $image_urn");
+	    }
+	    if (exists($options{"S"})) {
+		exit(0);
+	    }
+	}
+    }
+    elsif (@ARGV == 1) {    
+	$pending = Image::PendingImport->Lookup($ARGV[0]);
+	if (!defined($pending)) {
+	    fatal("Could not lookup scheduled relocation");
+	}
+	$image_urn = $pending->image_urn();
+    }
+    else {
+	&usage();
+    }
+    
+    #
+    # The context for image import is the CM.
+    #
+    my $cmcert = GeniCertificate->LoadFromFile($CMCERT);
+    if (!defined($cmcert)) {
+	fatal("Could not load certificate from $CMCERT\n");
+    }
+    my $context = Genixmlrpc->Context($cmcert);
+    if (!defined($context)) {
+	fatal("Could not create RPC context");
+    }
+    my $credential = GetCredentialInternal($image_urn, $context, \$errmsg);
+    if (!defined($credential)) {
+	fatal("Could not generate credential: $errmsg");
+    }
+    if (GeniResponse::IsError($credential)) {
+	ExitWithError($credential);
+    }
+    # This will autodelete
+    my $credfile = $credential->WriteToFile();
+    if (!defined($credfile)) {
+	fatal("Could not write credential to file");
+    }
+    my $cmd = "$IMPORTER ";
+    $cmd .= "-d " if ($debug);
+    if ($pending) {
+	$cmd .= " -C $credfile -P " . " " . $pending->idx();
+    }
+    else {
+	$cmd .= "-R -C $credfile -p $pid -u " . $user->uid() . " " ;
+	$cmd .= "-i '$imagename' '$image_url'";
+	if ($debug) {
+	    print "Running '$cmd'\n";
+	}
+    }
+    system($cmd);
+    if ($?) {
+	fatal("Could not relocate image");
+    }
+    exit(0);
+}
+
+#
+# Ask a cluster to prestage a list of images.
+#
+sub DoPrestage()
+{
+    $debug = 1;
+    
+    my $usage = sub {
+	print STDERR "Usage: manage_images prestage <op> <instance> <aggregate> ".
+	    "[image urns ...]\n";
+	exit(-1);
+    };
+    my $optlist  = "";
+    my @imagelist = ();
+    my $slice;
+    my $errmsg;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	&$usage();
+    }
+    &$usage()
+	if (@ARGV < 4);
+
+    my $op = shift(@ARGV);
+    if (! ($op eq "precheck" || $op eq "prestage" || $op eq "status")) {
+	fatal("Bad operation, must be precheck,prestage,status");
+    }
+    my $instance = APT_Instance->Lookup(shift(@ARGV));
+    if (!defined($instance)) {
+	fatal("No such instance");
+    }
+    my $aptaggregate = APT_Utility::LookupAggregate(shift(@ARGV));
+    if (!defined($aptaggregate)) {
+	fatal("No such aggregate");
+    }
+    if (!exists($instance->AggregateHash()->{$aptaggregate->urn()})) {
+	fatal("Not an aggregate in this instance");
+    }
+    my $aggregate = $instance->AggregateHash()->{$aptaggregate->urn()};
+
+    # Need a context for talking to the image server.
+    my $context  = APT_Geni::GeniContext();
+    Genixmlrpc->SetContext($context);
+
+    #
+    # List of images. We want to make sure they exist in the image server
+    # before we try prestage them.
+    #
+    foreach my $urn (@ARGV) {
+	my $hrn = GeniHRN->new($urn);
+	if (! (defined($hrn) &&
+	       ($hrn->IsImage() || $hrn->IsIMDataset()))) {
+	    fatal("Not a valid image urn: $urn");
+	}
+	my $info = GeniImage::GetImageData($urn, \$errmsg);
+	if (!defined($info)) {
+	    fatal("Image is not in the image server: $urn");
+	}
+	#
+	# Need to deal with image credentials.
+	#
+    }
+    my $response = $aggregate->PrestageImages($op, \@ARGV);
+    print Dumper($response);
     exit(0);
 }
 

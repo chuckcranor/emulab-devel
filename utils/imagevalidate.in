@@ -669,6 +669,32 @@ sub doimage($)
     my $imageid = $image->imageid();
 
     #
+    # See if this is a Docker image; use libimageops if so.
+    #
+    if ($image->format() eq 'docker') {
+	use libimageops;
+
+	libimageops::setDebug(1)
+	    if ($debug);
+	my %args = (
+	    'update' => $update,'fastupdate' => $fastupdate,
+	    'quiet' => $quiet,'allvers' => $allvers,'nouser' => $nouser,
+	    'newhash' => $newhash,'dodeleted' => $dodeleted,
+	    'validate' => \%validate
+	    );
+
+	my $iops = libimageops::Factory("image" => $image);
+	my ($rc,$msg) = $iops->Validate($image,\%args);
+	if ($rc && defined($msg)) {
+	    print STDERR "Error: $msg\n";
+	    return 1;
+	}
+	else {
+	    return 0;
+	}
+    }
+
+    #
     # If the user is not an admin, must have perm on the image.
     #
     # We also test to see if the user can access the directory in which

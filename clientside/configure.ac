@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -82,6 +82,10 @@ AC_SUBST(WITH_EMULAB)
 # TPM stuff. See option below.
 TPM=0
 AC_SUBST(TPM)
+
+# Need this in a couple of places that share with Emulab.
+BOSSNODE="boss"
+AC_SUBST(BOSSNODE)
 
 #
 # Elvin compat option, which we	still need. Always turn on event system.
@@ -207,7 +211,7 @@ if test x"$PYTHON" = x""; then
     AC_MSG_ERROR([python not detected])
 fi
 
-PYTHON_VERSION=`${PYTHON} -V 2>&1 | cut -d ' ' -f 2 | cut -d '.' -f 1,2`
+PYTHON_VERSION=`${PYTHON} -V 2>&1 | cut -d ' ' -f 2 | cut -d '.' -f 1,2 | head -1`
 PYTHON_PATH=`dirname ${PYTHON}`
 if test ! -d "$PYTHON_PATH/include"; then
     PYTHON_PATH=`dirname ${PYTHON_PATH}`
@@ -219,6 +223,32 @@ AC_CHECK_HEADERS([Python.h],
 		 [AC_MSG_WARN("Cannot find Python.h in ${PYTHON_INCLUDE}")])
 AC_SUBST(PYTHON_INCLUDE)
 # END Python detection.
+
+# On Linux, rpc/rpc.h may be in another place, e.g. for tirpc,
+# /usr/include/tirpc .
+RPC_INCLUDE=""
+RPC_CPPFLAGS=""
+old_CPPFLAGS="$CPPFLAGS"
+for rpcpath in "" "/usr/include/tirpc" ; do
+    if ! test x"$rpcpath" = x"" ; then
+        CPPFLAGS="$old_CPPFLAGS -I$rpcpath"
+    fi
+    AC_CHECK_HEADERS([rpc/rpc.h],[RPC_INCLUDE="$rpcpath"],[])
+    if test "x$ac_cv_header_rpc_rpc_h" = xyes ; then
+        break;
+    fi
+    $as_unset ac_cv_header_rpc_rpc_h
+done
+# Final "check" so we can return an error message.
+if ! test x"${RPC_INCLUDE}" = x"" ; then
+    RPC_CPPFLAGS="-I${RPC_INCLUDE}"
+fi
+CPPFLAGS="$old_CPPFLAGS $RPC_CPPFLAGS"
+if ! test "x$ac_cv_header_rpc_rpc_h" = xyes ; then
+    AC_CHECK_HEADERS([rpc/rpc.h],[],[AC_MSG_ERROR("Cannot find rpc/rpc.h")])
+fi
+CPPFLAGS="$old_CPPFLAGS"
+AC_SUBST(RPC_CPPFLAGS)
 
 # Conditional files created for various versions of Windows
 # based on which variables are defined.
@@ -290,7 +320,9 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/freebsd/init/10.3/GNUmakefile \
 	  tmcc/freebsd/init/10.4/GNUmakefile \
 	  tmcc/freebsd/init/11/GNUmakefile \
+	  tmcc/freebsd/init/11.2/GNUmakefile \
 	  tmcc/freebsd/init/12/GNUmakefile \
+	  tmcc/freebsd/init/13/GNUmakefile \
 	  tmcc/freebsd/supfile tmcc/freebsd/sethostname \
 	  tmcc/linux/GNUmakefile tmcc/linux/supfile \
 	  tmcc/linux/sethostname.dhclient \
@@ -304,6 +336,8 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/ubuntu15/GNUmakefile \
 	  tmcc/ubuntu16/GNUmakefile \
 	  tmcc/ubuntu16-ms/GNUmakefile \
+	  tmcc/ubuntu18/GNUmakefile \
+	  tmcc/ubuntu18-ms/GNUmakefile \
 	  tmcc/linux-ms/GNUmakefile \
 	  tmcc/archlinux/GNUmakefile \
 	  tmcc/alpine/GNUmakefile \
@@ -315,6 +349,7 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/freebsd10/GNUmakefile tmcc/freebsd10/netif-emulab \
 	  tmcc/freebsd11/GNUmakefile tmcc/freebsd11/netif-emulab \
 	  tmcc/freebsd12/GNUmakefile tmcc/freebsd12/netif-emulab \
+	  tmcc/freebsd13/GNUmakefile tmcc/freebsd13/netif-emulab \
 	  tmcc/freenas8/GNUmakefile tmcc/freenas9/GNUmakefile \
 	  tmcc/freenas11/GNUmakefile \
 	  tmcc/cygwinxp/GNUmakefile tmcc/dp/GNUmakefile \
@@ -322,6 +357,12 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/plab/GNUmakefile tmcc/cygwinseven/GNUmakefile \
 	  tmcc/centos6/GNUmakefile \
 	  tmcc/centos7/GNUmakefile \
+	  tmcc/centos8/GNUmakefile \
+	  tmcc/onie/GNUmakefile \
+	  tip/GNUmakefile \
+	  xmlrpc/GNUmakefile xmlrpc/emulabclient.py \
+	  xmlrpc/sslxmlrpc_client.py \
+	  xmlrpc/script_wrapper.py xmlrpc/libxmlrpc.pm \
 	  os/GNUmakefile os/syncd/GNUmakefile \
 	  os/dijkstra/GNUmakefile os/genhostsfile/GNUmakefile \
 	  os/frisbee.redux/GNUmakefile \

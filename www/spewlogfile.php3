@@ -44,24 +44,11 @@ if (! isset($logfile)) {
 $logfileid = $logfile->logid();
 
 #
-# Spew is broken in Chrome, so we have switched to a pure ajax
-# approach (thanks Jon!). If the logfile is currently open, we
-# return an HTML fragment that requests this page again, but as
-# an ajax request, so that the client gets periodic updates.
+# Switch to APT version.
 #
-if (!isset($isajax) && $logfile->isopen()) {
-   header("Content-type: text/html; charset=utf-8");
-   header("Last-Modified: " . gmdate("D, d M Y H:i:s") . " GMT");
-   header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
-   header("Cache-Control: no-cache, must-revalidate");
-   header("Pragma: no-cache");
-   header("Access-Control-Allow-Origin: *");
-   echo "<html>\n";
-   echo "<script src='$TBBASE/apt/js/lib/jquery-2.0.3.min.js'></script>\n";
-   echo "<script src='$TBBASE/apt/js/lib/underscore-min.js'></script>\n";
-   readfile("fetchlogfile.html");
-   echo "</html>\n";
-   return;
+if (!$CLASSICWEB_OVERRIDE && !isset($isajax) && $logfile->isopen()) {
+    header("Location: apt/spewlogfile.php?logfile=$logfileid");
+    return;
 }
 
 #

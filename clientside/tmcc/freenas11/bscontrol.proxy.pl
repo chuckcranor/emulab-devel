@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2017 University of Utah and the Flux Group.
+# Copyright (c) 2013-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,6 +43,10 @@ sub usage()
     print STDERR "            Create a snapshot of <pool>/<vol> with timestamp <tstamp>\n";
     print STDERR "   clone    <pool> <ovol> <nvol> [ <tstamp> ]\n";
     print STDERR "            Create a clone of <pool>/<vol> called <nvol> from the snapshot at <tstamp> (most recent if not specified)\n";
+    print STDERR "   copy     <pool> <ovol> <nvol>\n";
+    print STDERR "            Create a copy of <pool>/<vol> called <nvol>\n";
+    print STDERR "   copystatus <pool> <vol>\n";
+    print STDERR "            Print info about the status of a copy\n";
     print STDERR "   destroy <pool> <vol>\n";
     print STDERR "            Destroy <vol> in <pool>\n";
     print STDERR "   desnapshot <pool> <vol> [ <tstamp> ]\n";
@@ -94,6 +98,8 @@ my %cmds = (
     "targets"    => \&targets,
     "assocs"     => \&assocs,
     "desnapshotall" => \&desnapshotall,
+    "copy"       => \&copy,
+    "copystatus" => \&copystatus,
 );
 
 #
@@ -149,10 +155,12 @@ sub volumes()
 	my $pool = $vref->{$vol}->{'pool'};
 	my $iname = $vref->{$vol}->{'iname'};
 	my $size = int($vref->{$vol}->{'size'});
+	my $used = int($vref->{$vol}->{'used'});
+	my $refer = int($vref->{$vol}->{'refer'});
 	my $snapshots = $vref->{$vol}->{'snapshots'};
 	my $cloneof = $vref->{$vol}->{'cloneof'};
 
-	print "volume=$vol pool=$pool size=$size";
+	print "volume=$vol pool=$pool size=$size used=$used refer=$refer";
 	if ($iname) {
 	    print " iname=$iname";
 	}
@@ -333,10 +341,10 @@ sub create($$$;$)
 	return 1;
     }
 
-    my $rv = freenasVolumeCreate($pool, $vol, $size, $sparse);
+    my $rv = freenasVolumeCreate($pool, $vol, $size, $sparse, 1);
     if ($rv == 0 && $fstype ne "none") {
-	$rv = freenasFSCreate($pool, $vol, $fstype);
-	if ($rv && freenasVolumeDestroy($pool, $vol)) {
+	$rv = freenasFSCreate($pool, $vol, $fstype, 1);
+	if ($rv && freenasVolumeDestroy($pool, $vol, 1)) {
 	    print STDERR "bscontrol_proxy: could not destroy new volume ".
 		"after FS creation failure.\n";
 	}
@@ -368,7 +376,7 @@ sub snapshot($$$)
 	return 1;
     }
 
-    return freenasVolumeSnapshot($pool, $vol, $tstamp);
+    return freenasVolumeSnapshot($pool, $vol, $tstamp, 1);
 }
 
 sub desnapshot($$$)
@@ -396,7 +404,7 @@ sub desnapshot($$$)
 	}
     }
 
-    return freenasVolumeDesnapshot($pool, $vol, $tstamp, 0);
+    return freenasVolumeDesnapshot($pool, $vol, $tstamp, 0, 1);
 }
 
 sub desnapshotall($$)
@@ -416,7 +424,7 @@ sub desnapshotall($$)
 	return 1;
     }
 
-    return freenasVolumeDesnapshot($pool, $vol, undef, 1);
+    return freenasVolumeDesnapshot($pool, $vol, undef, 1, 1);
 }
 
 sub clone($$$;$)
@@ -453,7 +461,7 @@ sub clone($$$;$)
 	$tstamp = 0;
     }
 
-    return freenasVolumeClone($pool, $ovol, $nvol, $tstamp);
+    return freenasVolumeClone($pool, $ovol, $nvol, $tstamp, 1);
 }
 
 sub destroy($$$)
@@ -473,7 +481,7 @@ sub destroy($$$)
 	return 1;
     }
 
-    return freenasVolumeDestroy($pool, $vol);
+    return freenasVolumeDestroy($pool, $vol, 1);
 }
 
 sub declone($$$)
@@ -493,5 +501,63 @@ sub declone($$$)
 	return 1;
     }
 
-    return freenasVolumeDeclone($pool, $vol);
+    return freenasVolumeDeclone($pool, $vol, 1);
+}
+
+#
+# Create a deep copy of a dataset using zend/zrecv.
+#
+sub copy($$$)
+{
+    my ($pool,$ovol,$nvol) = @_;
+
+    if (defined($pool) && $pool =~ /^([-\w]+)$/) {
+	$pool = $1;
+    } else {
+	print STDERR "bscontrol_proxy: bogus pool arg\n";
+	return 1;
+    }
+    if (defined($ovol) && $ovol =~ /^([-\w]+)$/) {
+	$ovol = $1;
+    } else {
+	print STDERR "bscontrol_proxy: bogus origin volume arg\n";
+	return 1;
+    }
+    if (defined($nvol) && $nvol =~ /^([-\w]+)$/) {
+	$nvol = $1;
+    } else {
+	print STDERR "bscontrol_proxy: bogus clone volume arg\n";
+	return 1;
+    }
+
+    return freenasVolumeCopy($pool, $ovol, $nvol, 1);
+}
+
+#
+# Report the progress of a copy.
+#
+sub copystatus($$)
+{
+    my ($pool,$vol) = @_;
+
+    if (defined($pool) && $pool =~ /^([-\w]+)$/) {
+	$pool = $1;
+    } else {
+	print STDERR "bscontrol_proxy: bogus pool arg\n";
+	return 1;
+    }
+    if (defined($vol) && $vol =~ /^([-\w]+)$/) {
+	$vol = $1;
+    } else {
+	print STDERR "bscontrol_proxy: bogus volume arg\n";
+	return 1;
+    }
+
+    my ($status, $size) = freenasVolumeCopyStatus($pool, $vol);
+    if (!defined($status)) {
+	return 1;
+    }
+
+    print "status=$status size=$size\n";
+    return 0;
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2011-2016 University of Utah and the Flux Group.
+# Copyright (c) 2011-2016, 2018 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -120,12 +120,8 @@ if ($?) {
     #
     # Something whacky is going on; httpd refuses to die!
     #
-    system("$APACHE_START stop") == 0
-	or fatal("Could not stop apache!");
-    sleep(2);
-    system("killall httpd");
-    system("$APACHE_START start") == 0
-	or fatal("Could not start apache!");
+    system("$APACHE_START graceful") == 0
+	or fatal("Could not gracefully restart apache!");
     
     $UID  = $SAVEUID;
 }

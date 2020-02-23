@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -72,25 +72,11 @@ sub SendStatus($)
 {
     my ($status) = @_;
     
-    if (1) {
-	# Error, we are done.
-	LogEnd($status);
-    }
-    else {
-	# We want to keep logging, not send an email here.
-	LogStop();
-    }
     print "Content-Type: text/plain \n\n";
     print "We love all profiles equally.\n";
     print "Exited with $status\n";
     exit(0);    
 }
-
-#
-# Send logs to tblogs (only)
-#
-LogStart(0, undef, LIBAUDIT_LOGONLY() | LIBAUDIT_LOGTBLOGS());
-AddAuditInfo("to", $TBLOGS);
 
 # The query holds the token we need to find the profile.
 my $query = new CGI();
@@ -148,7 +134,12 @@ if ($mypid) {
     SendStatus(0);
 }
 sleep(1);
-libaudit::AuditFork();
+
+#
+# Send logs to tblogs (only)
+#
+LogStart(0, undef, LIBAUDIT_LOGONLY() | LIBAUDIT_LOGTBLOGS());
+AddAuditInfo("to", $TBLOGS);
 
 if ($debug) {
     print "$profile\n";
@@ -180,5 +171,5 @@ if ($?) {
 if ($debug > 1) {
     print $output;
 }
-LogEnd(0);
+
 exit(0);

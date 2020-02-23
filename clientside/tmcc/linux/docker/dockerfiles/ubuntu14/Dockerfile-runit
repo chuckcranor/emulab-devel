@@ -1,1 +1,1 @@
-COPY artifacts/runit/runit*.deb /tmp/
+COPY artifacts/runit/ /

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -42,11 +42,13 @@ use GeniCredential;
 use GeniCertificate;
 use GeniUser;
 use GeniHRN;
+use GeniResponse;
 use English;
 use libEmulab;
 use emutil;
 use Date::Parse;
 use Data::Dumper;
+use Errno qw(:POSIX);
 use vars qw();
 use overload ('""' => 'Stringify');
 
@@ -332,6 +334,9 @@ sub description($)      { return field($_[0], "description"); }
 sub async_mode($)       { return field($_[0], "async_mode"); }
 sub async_code($)       { return field($_[0], "async_code"); }
 sub async_output($)     { return field($_[0], "async_output"); }
+sub portal_tag($)       { return field($_[0], "portal_tag"); }
+sub portal_url($)       { return field($_[0], "portal_url"); }
+sub termination_pending($) { return field($_[0], "termination_pending"); }
 sub cert($)		{ return $_[0]->{'CERT'}->cert(); }
 sub GetCertificate($)   { return $_[0]->{'CERT'}; }
 sub LOCKED($)           { return $_[0]->{'LOCKED'}; }
@@ -379,6 +384,24 @@ sub Delete($)
     delete($slices{$self->hrn()});
 
     return 0;
+}
+
+#
+# Class method to get the slice urn from a slice uuid, without all the
+# the other cruft.
+#
+sub UUID2URN($$)
+{
+    my ($class, $uuid) = @_;
+
+    my $query_result =
+	DBQueryWarn("select urn from geni_certificates where uuid='$uuid'");
+    return undef
+	if (!defined($query_result) || !$query_result->numrows);
+
+    my ($urn) = $query_result->fetchrow_array();
+
+    return GeniHRN->new($urn);
 }
 
 # The slicename is the last token in the hrn.
@@ -547,6 +570,14 @@ sub UnLock($)
     
     $self->{'LOCKED'} = 0;
     $self->{'STITCHLOCKED'} = 0;
+    return 0;
+}
+sub TakeLock($)
+{
+    my ($self) = @_;
+    
+    $self->{'LOCKED'} = $$;
+    $self->{'STITCHLOCKED'} = $$;
     return 0;
 }
 
@@ -764,6 +795,9 @@ sub Flush($)
 
     $self->GetCertificate()->Flush();
     delete($slices{$self->idx()});
+    delete($slices{$self->urn()});
+    delete($slices{$self->uuid()});
+    delete($slices{$self->hrn()});
 }
 
 #
@@ -1049,6 +1083,19 @@ sub SetAsyncError($$)
     $self->{'SLICE'}->{'async_code'} = $code;
     return 0;
 }
+sub ClearAsyncError($)
+{
+    my ($self) = @_;
+    my $uuid   = $self->uuid();
+
+    DBQueryWarn("update geni_slices set async_code='0', ".
+		"  async_output='' ".
+		"where uuid='$uuid'")
+	or return -1;
+
+    $self->{'SLICE'}->{'async_code'} = 0;
+    return 0;
+}
 
 #
 # Set the speaksfor stuff.
@@ -1183,6 +1230,21 @@ sub SetIdleIgnore($$)
     else {
 	return $experiment->SetIdleSwapFlags(1, 0);
     }
+}
+
+#
+# Mark slice for termination.
+#
+sub MarkForTermination($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+
+    DBQueryWarn("update geni_slices set termination_pending=now() ".
+		"where uuid='$uuid'")
+	or return -1;
+    
+    return 0;
 }
 
 #
@@ -1566,6 +1628,176 @@ sub AddGenericCert($$$)
 	$query .= ",privkey=" . DBQuoteSpecial($key);
     }
     return DBQueryWarn($query);
+}
+
+sub SetPortalTag($$)
+{
+    my ($self, $tag) = @_;
+    my $uuid = $self->uuid();
+    my $safe_tag = DBQuoteSpecial($tag);
+
+    return -1
+	if (!DBQueryWarn("update geni_slices set portal_tag=$safe_tag " .
+			 "where uuid='$uuid'"));
+
+    $self->{'SLICE'}->{'portal_tag'} = $tag;
+    return 0;
+}
+sub SetPortalURL($$)
+{
+    my ($self, $url) = @_;
+    my $uuid = $self->uuid();
+    my $safe_url = DBQuoteSpecial($url);
+
+    return -1
+	if (!DBQueryWarn("update geni_slices set portal_url=$safe_url " .
+			 "where uuid='$uuid'"));
+
+    $self->{'SLICE'}->{'portal_url'} = $url;
+    return 0;
+}
+
+# Turn the URN into an experiment ID at the Portal.
+sub portal_eid($)
+{
+    my ($self) = @_;
+    my $urn = $self->urn();
+
+    return undef
+	if (!defined($self->portal_tag()));
+
+    my $eid = $urn->id();
+    $eid = $urn->project() . "/" . $eid if (defined($urn->project()));
+
+    return $eid;
+}
+
+#
+# Generate a Portal URL.
+#
+sub GetPortalURL($)
+{
+    my ($self) = @_;
+    my $portal_url;
+
+    return $self->portal_url()
+	if (defined($self->portal_url()));
+
+    my $speaker = $self->speaksfor_urn();
+    return undef
+	if (!defined($speaker));
+
+    return undef
+	if (! ($speaker->domain() eq $OURDOMAIN ||
+	       $speaker->domain() eq "emulab.net"));
+    
+    if ($speaker->domain() eq $OURDOMAIN) {
+        $portal_url = "$TBBASE/portal/";
+    }
+    else {
+        $portal_url = "https://www.emulab.net/portal/";
+    }
+    $portal_url .= "status.php?slice_uuid=" . $self->uuid();
+    return $portal_url;
+}
+
+#
+# Check the monitor process, clear it if it died.
+#
+sub CheckMonitor($)
+{
+    my ($slice) = @_;
+    my $pid = $slice->GetMonitorPid();
+
+    #
+    # See if the process still exists.
+    #
+    if (kill(0, $pid) == 0) {
+	if ($!{ESRCH}) {
+	    print STDERR "Monitor process $pid no longer exists.\n";
+	    $slice->ClearMonitorPid();
+	    return 0;
+	}
+    }
+    return 0;
+}
+
+#
+# Cancel the slice monitor process.
+#
+sub CancelMonitor($)
+{
+    my ($slice) = @_;
+    my $pid = $slice->GetMonitorPid();
+    require libtestbed;
+
+    return 0
+	if (!$pid);
+
+    my $experiment = $slice->GetExperiment();
+    if (!defined($experiment)) {
+	print STDERR "No experiment for $slice\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No slice experiment");
+    }
+    #
+    # See if the process still exists.
+    #
+    if (kill(0, $pid) == 0) {
+	if ($!{ESRCH}) {
+	    print STDERR "Monitor process $pid no longer exists.\n";
+	    $experiment->SetCancelFlag(0);
+	    $slice->ClearMonitorPid();
+	    return 0;
+	}
+	# What does getting here mean?
+    }
+	
+    print STDERR "Monitor in progress: process id $pid ...\n";
+
+    if ($experiment->Canceled()) {
+	print STDERR "Cancel flag already set for $experiment\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Slice experiment is already canceled.");
+    }
+    #
+    # Okay, before we commit to waiting for something that might
+    # not happen, or erroneously setting the cancel flag, lets lock
+    # the tables and check again, to avoid race in start/restart.
+    #
+    $slice->LockTables();
+    if ($slice->GetMonitorPid()) { 
+	$experiment->SetCancelFlag(1);
+	$slice->UnLockTables();
+
+	#
+	# Wait for the monitor to go away, but should not take long.
+	#
+	my $count = 10;
+	while ($count > 0) {
+	    sleep(10);
+	    # Go to the DB.
+	    my $monitor_pid = $slice->GetMonitorPid();
+	    last
+		if (! $monitor_pid);
+	    $count--;
+	    print STDERR "Waiting for monitor to die ...\n";
+	}
+	if ($slice->GetMonitorPid()) {
+	    print STDERR "Monitor process $pid would not die!\n";
+	    libtestbed::SENDMAIL($TBOPS, "Monitor for slice would not die!",
+		     "Monitor would not die: $slice\n\n" .
+		     "$TBBASE/showslice.php?slice_idx=" . $slice->idx() .
+		     "&showtype=cm",
+		     $TBOPS);
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Monitor would not die");
+	}
+    }
+    else {
+	$slice->UnLockTables();
+    }
+    return 0;
 }
 
 ##########################################################################

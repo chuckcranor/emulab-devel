@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -195,6 +195,45 @@ sub GenerateNodeStatements($)
 	    if (defined($node->{'xen_ptype'})) {
 		my $ptype = $node->{'xen_ptype'};
 		$node->addTagStatement("xen_ptype = '$ptype'");
+	    }
+	    if (defined($node->{'instantiate_on'})) {
+		my $vhost = $node->{'instantiate_on'};
+		$node->addTagStatement("InstantiateOn('$vhost')");
+	    }
+	}
+	elsif ($ntype eq "emulab-docker") {
+	    $node->addStatement("$ntag = request.DockerContainer('$client_id')");
+
+	    #
+	    # This is the only time we need to spit this out, since
+	    # the default is False.
+	    #
+	    if (defined($node->{'exclusive'}) && $node->{'exclusive'}) {
+		$node->addTagStatement("exclusive = True");
+	    }
+	    
+	    if (defined($node->{'docker_settings'})) {
+		my $settings = $node->{'docker_settings'};
+
+		foreach my $setting (sort(keys(%{$settings}))) {
+		    my $value = $settings->{$setting};
+		    if ($setting eq "ram") {
+			$node->addTagStatement("ram = $value");
+		    }
+		    elsif ($setting eq "cores") {
+			$node->addTagStatement("cores = $value");
+		    }
+		    elsif ($setting eq "extimage") {
+			$node->addTagStatement("docker_extimage = $value");
+		    }
+		    elsif ($setting eq "dockerfile") {
+			$node->addTagStatement("docker_dockerfile = $value");
+		    }
+		}
+	    }
+	    if (defined($node->{'docker_ptype'})) {
+		my $ptype = $node->{'docker_ptype'};
+		$node->addTagStatement("docker_ptype = '$ptype'");
 	    }
 	    if (defined($node->{'instantiate_on'})) {
 		my $vhost = $node->{'instantiate_on'};

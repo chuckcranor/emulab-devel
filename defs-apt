@@ -119,7 +119,7 @@ MIN_UNIX_GID=2000
 NODECONSOLE="sio2"
 
 # Which version of the MFS.
-MFSVERSION="8-64"
+MFSVERSION="10-64"
 PROTOGENI_SUPPORT=1
 PROTOGENI_GENIRACK=0
 PROTOGENI_DOMAIN="apt"
@@ -157,6 +157,16 @@ ZFS_QUOTA_GROUP="10G"
 WITHAMD=0
 AMD_ROOT=/.amd_mnt/ops
 
+#
+# We have enough filesystems and enough nodes that we need to optimize --mike
+#
+# Note that when you turn on ZFS_NOEXPORT, you need to set the ZFS "sharenfs"
+# attribute to "off" for the root of the users/proj/groups filesystems,
+# otherwise filesystems will be exported twice.
+#
+ZFS_NOEXPORT=1
+INCREMENTAL_MOUNTD=1
+
 # Blockstores
 BS_IQN_PREFIX=iqn.2014-05.net.emulab.apt
 
@@ -169,3 +179,6 @@ NODE_USAGE_SUPPORT=1
 # Enable idle stats collection (RRD files)
 SDCOLLECTD_DOSTATS=1
 SDCOLLECTD_USE_RRDTOOL=1
+
+# New world order
+PORTAL_ENABLE=1

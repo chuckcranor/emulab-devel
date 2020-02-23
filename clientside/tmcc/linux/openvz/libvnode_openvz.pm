@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2014 University of Utah and the Flux Group.
+# Copyright (c) 2008-2014, 2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -288,9 +288,9 @@ sub vz_init {
 #
 # Prepare the root context.  Run once at boot.
 #
-sub vz_rootPreConfig($)
+sub vz_rootPreConfig($;$)
 {
-    my $bossip = shift;
+    my ($bossip,$hostattributes) = @_;
     #
     # Only want to do this once, so use file in /var/run, which
     # is cleared at boot.

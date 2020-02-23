@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2017 University of Utah and the Flux Group.
+# Copyright (c) 2007-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -58,6 +58,8 @@ my $GROUPROOT     = "@GROUPSROOT_DIR@";
 
 # Cache of instances to avoid regenerating them.
 my %images    = ();
+BEGIN { use emutil;
+	emutil::AddCache(\%images); }
 my $debug      = 0;
 
 # Concat id/vers.
@@ -607,16 +609,15 @@ sub Refresh($)
 # Create a new os_info. This installs the new record in the DB,
 # and returns an instance. There is some bookkeeping along the way.
 #
-sub Create($$$$$$$$)
+sub Create($$$$$$$$$$)
 {
-    my ($class, $project, $group, $creator,
+    my ($class, $project, $group, $creator, $isadmin, $lockpid,
 	$imagename, $imageid, $argref, $usrerr_ref) = @_;
     require OSinfo;
 
     return undef
 	if (ref($class) || !ref($project));
 
-    my $isadmin = $creator->IsAdmin();
     my $isdataset = (exists($argref->{"isdataset"}) ?
 		     $argref->{"isdataset"} : 0);
     my $architecture = $argref->{'architecture'}
@@ -638,7 +639,7 @@ sub Create($$$$$$$$)
     }
     # Pass-through optional slots, otherwise the DB default is used.
     foreach my $key ("path", "shared", "global", "ezid", "mbr_version",
-		     "metadata_url", "imagefile_url", "released",
+		     "format", "metadata_url", "imagefile_url", "released",
 		     "isdataset", "lba_size", "lba_low", "lba_high",
 		     "origin_uuid", "origin_urn", "origin_name") {
 	if (exists($argref->{$key})) {
@@ -727,6 +728,12 @@ sub Create($$$$$$$$)
     $bquery .= ",architecture='$architecture'"
 	if (defined($architecture));
 
+    # Lock directive.
+    my $prelock = "";
+    if (defined($lockpid)) {
+	$prelock = ",locked=now(),locker_pid='$lockpid'";
+    }
+
     $query .= ",creator='$uid',creator_idx='$uid_idx'";
     $query .= ",uuid='$version_uuid'";
     $query .= ",created=now()";
@@ -752,7 +759,8 @@ sub Create($$$$$$$$)
     }
 
     # Create the main entry:
-    if (! DBQueryWarn("insert into images set $bquery,uuid='$image_uuid'")) {
+    if (! DBQueryWarn("insert into images set ".
+		      " $bquery,uuid='$image_uuid' $prelock")) {
 	DBQueryWarn("unlock tables");
 	tberror("Error inserting new images record for $pid/$imagename!");
 	return undef;
@@ -983,7 +991,7 @@ sub NewVersion($$$$)
 		"  parent_imageid=$parent_imageid,".
 		"  parent_version=$parent_version, ".
 		"  origin_neednotify=0,origin_needupdate=0, ".
-		"  origin_uuid=NULL,origin_name=NULL,credential_string=NULL, ".
+		"  origin_uuid=NULL,origin_name=NULL, ".
 		"  hash=null,deltahash=null,size=0,deltasize=0, ".
 		"  updater='$uid',updater_idx='$uid_idx' $updater_urn ".
 		"where imageid='$osid'")
@@ -1322,10 +1330,16 @@ sub Update($;$)
 
     my $imageid = $self->imageid();
     my $version = $self->version();
+    my @sets    = ();
 
-    my $query = 
-	join(",", map("$_=" . DBQuoteSpecial($argref->{$_}), keys(%{$argref})));
+    foreach my $key (keys(%{$argref})) {
+	my $val = $argref->{$key};
 
+	# Treat NULL special.
+	push (@sets, "${key}=" . (!defined($val) || $val eq "NULL" ?
+				  "NULL" : DBQuoteSpecial($val)));
+    }
+    my $query = join(",", @sets);
     $query .= " where imageid='$imageid'";
     $query .= " and version='$version'" if (!$allvers);
 
@@ -1596,6 +1610,23 @@ sub GetCreator($)
     return $user;
 }
 
+sub GetUpdater($)
+{
+    my ($self) = @_;
+    require User;
+
+    return undef
+	if (!$self->updater_idx());
+
+    my $user = User->Lookup($self->updater_idx());
+    
+    if (! defined($user)) {
+	print("*** WARNING: Could not lookup user object for $self!\n");
+	return undef;
+    }
+    return $user;
+}
+
 #
 # Check permissions. Note that root may ask permission, which comes in
 # as an undef user.
@@ -1793,6 +1824,31 @@ sub GetDiskOffset($)
 	if ($self->loadpart() > 4);
 
     return $mbr{$self->mbr_version()}[$self->loadpart()];
+}
+
+#
+# Return created time for image as a UNIX timestamp via the passed ref.
+# Return 0 on success, non-zero otherwise.
+#
+sub GetCreate($$)
+{
+    my ($self,$stampp) = @_;
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    my $imageid     = $self->imageid();
+    my $version     = $self->version();
+
+    my $result =
+	DBQueryWarn("select UNIX_TIMESTAMP(created) from image_versions ".
+		    "where imageid='$imageid' and version='$version'");
+    if ($result && $result->numrows) {
+	my ($stamp) = $result->fetchrow_array();
+	$$stampp = $stamp;
+	return 0;
+    }
 }
 
 #
@@ -2090,6 +2146,32 @@ sub Unlock($)
     return 0;
 }
 
+#
+# Steal the lock
+#
+sub TakeLock($)
+{
+    my ($self) = @_;
+
+    return -1
+	if (!DBQueryWarn("lock tables images write"));
+
+    my $imageid = $self->imageid();
+
+    my $query_result =
+	DBQueryWarn("update images set locker_pid=$PID " .
+		    "where imageid='$imageid' and locked is not null");
+
+    if (! $query_result ||
+	$query_result->numrows == 0) {
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    DBQueryWarn("unlock tables");
+    $self->{'IMAGE'}->{'locker_pid'} = $PID;
+    return 0;
+}
+
 sub GotLock($)
 {
     my ($self) = @_;
@@ -2259,6 +2341,7 @@ sub LookupAccess($$$$)
     if (!$query_result->numrows) {
 	$$paccess    = 0;
 	$$pwriteable = 0 if (defined($pwriteable));
+	return 0;
     }
     my ($writeable) = $query_result->fetchrow_array();
     $$paccess    = 1;
@@ -2457,6 +2540,34 @@ sub ListForURN($$)
 		    "where creator_urn='$urn' and deleted is null and ".
 		    "      isdataset=0 ".
 		    "order by pid,imagename,version");
+
+    while (my ($imageid,$version) = $query_result->fetchrow_array()) {
+	# Want latest version.
+	my $image = Image->Lookup($imageid, $version);
+	next
+	    if (!defined($image));
+
+	push(@result, $image);
+    }
+
+    return @result;
+}
+
+#
+# List of images for a Group
+#
+sub ListForGroup($$)
+{
+    my ($class, $group) = @_;
+    my @result = ();
+    my $pid_idx = $group->pid_idx();
+    my $gid_idx = $group->gid_idx();
+
+    my $query_result =
+	DBQueryWarn("select imageid,version from image_versions ".
+		    "where pid_idx='$pid_idx' and gid_idx='$gid_idx' and ".
+		    "      deleted is null and isdataset=0 ".
+		    "order by imagename,version");
 
     while (my ($imageid,$version) = $query_result->fetchrow_array()) {
 	# Want latest version.
@@ -2714,6 +2825,94 @@ sub SetImageMetadataURL($$)
     return 0;
 }
 
+sub SetImageFileURL($$)
+{
+    my ($self, $url) = @_;
+    $url = DBQuoteSpecial($url);
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    my $imageid = $self->imageid();
+    my $version = $self->version();
+
+    DBQueryWarn("update image_versions set imagefile_url=$url ".
+		"where imageid='$imageid' and version='$version'")
+	or return -1;
+	    
+    $self->{'IMAGE'}->{'image_metadata_url'} = $url;
+    return 0;
+}
+
+sub SetImageRelocateURN($$)
+{
+    my ($self, $urn) = @_;
+    if (defined($urn)) {
+	$urn = DBQuoteSpecial($urn);
+    }
+    else {
+	$urn = "NULL";
+    }
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    my $imageid = $self->imageid();
+
+    return -1
+	if (! DBQueryWarn("update images set relocate_urn=$urn " .
+			  "where imageid='$imageid'"));
+	    
+    $self->{'IMAGE'}->{'relocate_urn'} = $urn;
+    return 0;
+}
+
+sub SetCredential($$)
+{
+    my ($self, $credstr) = @_;
+    if (defined($credstr)) {
+	$credstr = DBQuoteSpecial($credstr);
+    }
+    else {
+	$credstr = "NULL";
+    }
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    my $imageid = $self->imageid();
+
+    return -1
+	if (! DBQueryWarn("update images set credential_string=$credstr " .
+			  "where imageid='$imageid'"));
+	    
+    $self->{'IMAGE'}->{'credential_string'} = $credstr;
+    return 0;
+}
+
+sub SetFormat($$)
+{
+    my ($self, $format) = @_;
+
+    return -1
+	if ($self->Update({'format' => $format}));
+
+    return 0;
+}
+
+sub SetPath($$)
+{
+    my ($self, $path) = @_;
+
+    return -1
+	if ($self->Update({'path' => $path}));
+
+    return 0;
+}
+
 sub LocalURL($)
 {
     my ($self) = @_;
@@ -2748,15 +2947,6 @@ sub GetCredential($)
 
     require GeniCredential;
     return GeniCredential->CreateFromSigned($self->credential_string());
-}
-sub SetCredential($$)
-{
-    my ($self, $credstr) = @_;
-
-    return -1
-	if (! $PGENISUPPORT);
-
-    return $self->Update({"credential_string" => $credstr});
 }
 
 #
@@ -2818,7 +3008,7 @@ sub DeprecatedMessage($;$)
 	    ". " . "Please choose a different image!";
     }
     else {
-	$result = "Image $name is deprecated and no longer available to use".
+	$result = "Image $name is deprecated and should no longer be used".
 	    (defined($message) && $message ne "" ? ": ${message}" : "") .
 	    ". " . "You can continue to use this image for now but you should ".
 	    "choose a different one before this image is deleted!";
@@ -2856,7 +3046,8 @@ sub IsDirPath($)
 	return 0;
     }
     return 1
-	if ($self->path() =~ /\/$/);
+	if ($self->path() =~ /\/$/
+	    && (!defined($self->format()) || $self->format() ne 'docker'));
     return 0;
 }
 sub FullImagePath($)
@@ -2958,7 +3149,9 @@ sub IsSystemImage($)
     my ($self) = @_;
 
     # Yuck.
-    return ($self->path() =~ /^\/usr\/testbed\// ? 1 : 0);
+    return ($self->path() =~ /^\/usr\/testbed\// ? 1 : 0
+	    || ($self->format() eq 'docker' && $self->global()
+		&& $self->path() =~ /emulab-ops\/emulab-ops/));
 }
 #
 # When images are stored in sub directories.
@@ -2998,7 +3191,7 @@ sub CreateDirectory($$)
     my ($self, $directory) = @_;
 
     return 0
-	if (-e $self->path());
+	if (-e $directory);
     
     if (!mkdir($directory, 0775)) {
 	print STDERR "Could not mkdir $directory: $!\n";
@@ -3054,6 +3247,328 @@ sub SaveDir($)
 	if ($self->IsDirPath());
 
     return $savedir;
+}
+
+#
+# Convert an imported image to a local image.
+#
+sub ConvertToLocal($)
+{
+    my ($self) = @_;
+    
+    my $args = {
+	"imagefile_url"  => undef,
+	"metadata_url"   => undef,
+	"origin_name"    => undef,
+	"origin_uuid"    => undef,
+	"origin_urn"     => undef,
+    };
+    return $self->Update($args);
+}
+
+#
+# Convert a local image to an imported image.
+#
+sub ConvertToImported($$)
+{
+    my ($self, $metadata) = @_;
+    
+    my $args = {
+	"imagefile_url"  => $metadata->{"imagefile_url"},
+	"metadata_url"   => $metadata->{"metadata_url"},
+	"origin_name"    => $metadata->{"origin_name"},
+	"origin_uuid"    => $metadata->{"origin_uuid"},
+	"origin_urn"     => $metadata->{"origin_urn"},
+    };
+    return $self->Update($args);
+}
+
+#
+# Get size of the file on the disk We know we are setuid when we call it.
+# Use this to determine image import progress, in the "resume" case, where
+# image_import is starting again to continue downloading an image where it
+# left off. This is information purposes only, so we can provide feedback
+# to the user.
+#
+# Returns KB.
+#
+sub ImportImageFileSize($)
+{
+    my ($self) = @_;
+    my $filename = $self->FullImageFile() . ".new";
+    my $SAVEUID  = $UID;
+
+    $UID = 0;
+    if (! -e $filename) {
+	$UID = $SAVEUID;
+	return 0;
+    }
+
+    my $cursize = (stat($filename))[7];
+    if (!defined($cursize)) {
+	$cursize = 0;
+    }
+    $cursize = int($cursize / 1024);
+    $UID = $SAVEUID;
+    return $cursize;
+}
+
+#############################################################################
+#
+# Pending Import support. 
+#
+package Image::PendingImport;
+use Carp;
+use English;
+use Data::Dumper;
+use File::Basename;
+use Exporter;
+use vars qw(@ISA @EXPORT $AUTOLOAD);
+
+@ISA    = "Exporter";
+@EXPORT = qw ( );
+
+use libtestbed;
+use libdb;
+use EmulabConstants;
+use emutil;
+use overload ('""' => 'Stringify');
+
+AUTOLOAD {
+    my $self  = $_[0];
+    my $type  = ref($self) or croak "$self is not an object";
+    my $name  = $AUTOLOAD;
+    $name =~ s/.*://;   # strip fully-qualified portion
+
+    # A DB row proxy method call.
+    if (exists($self->{'IMPORT'}->{$name})) {
+	# Allow update.
+	if (scalar(@_) == 2) {
+	    $self->{'IMPORT'}->{$name} = $_[1];
+	}
+	return $self->{'IMPORT'}->{$name};
+    }
+    print STDERR Dumper($self);
+    carp("No such slot '$name' field in class $type");
+    return undef;
+}
+sub field($$) {
+    my ($self, $name) = @_;
+    
+    if (exists($self->{'IMPORT'}->{$name})) {
+	return $self->{'IMPORT'}->{$name};
+    }
+    return undef;
+}
+sub fieldSet($$$) {
+    my ($self, $name, $value) = @_;
+
+    $self->{'IMPORT'}->{$name} = $value;
+    return $value;
+}
+
+# Break circular reference someplace to avoid exit errors.
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'IMPORT'} = undef;
+}
+
+sub Delete($)
+{
+    my ($self) = @_;
+    my $idx = $self->idx();
+
+    DBQueryWarn("delete from image_pending_imports where idx='$idx'");
+
+    return 0;
+}
+
+#
+# Create, always return it locked.
+#
+sub Create($$)
+{
+    my ($class, $argref) = @_;
+    my @required = ("imagename", "metadata_url");
+
+    if (!exists($argref->{"type"})) {
+	print STDERR "Image::PendingImport::Create(): missing type\n";
+	return undef;
+    }
+    my $type = $argref->{"type"};
+
+    #
+    # Depending on the type, we have to have certain fields.
+    #
+    if ($type eq "import") {
+	@required = (@required, "uid", "uid_idx", "pid", "pid_idx");
+    }
+    elsif ($type eq "relocation") {
+	@required = (@required, "uid", "uid_idx", "pid", "pid_idx",
+		     "gid", "gid_idx", "remote_urn");
+    }
+    elsif ($type eq "copyback") {
+	@required = (@required, "uid", "uid_idx", "pid", "pid_idx",
+		     "gid", "gid_idx", "remote_urn", "imageid", "uid_urn");
+    }
+    else {
+	print STDERR "Image::PendingImport::Create(): bad type: $type\n";
+	return undef;
+    }
+    foreach my $key (@required) {
+	if (!exists($argref->{$key})) {
+	    print STDERR "Image::PendingImport::Create(): ".
+		"missing key: $key\n";
+	    return undef;
+	}
+    }
+    my @sets = ();
+    foreach my $key (keys(%{$argref})) {
+	my $val = $argref->{$key};
+
+	# Treat NULL special.
+	push (@sets, "${key}=" .
+	      (!defined($val) || $val eq "NULL" ?
+	       "NULL" : DBQuoteSpecial($val)));
+    }
+    push(@sets, "created=now()");
+    my $query = "insert into image_pending_imports set " . join(",", @sets);
+
+    return undef
+	if (!DBQueryWarn("lock tables images write, ".
+			 "            image_pending_imports write"));
+
+    my $pending = Lookup($class, $argref->{'metadata_url'});
+    if (defined($pending)) {
+	DBQueryWarn("unlock tables");
+	return $pending;
+    }
+    if (!DBQueryWarn($query)) {
+	DBQueryWarn("unlock tables");
+	return undef;
+    }
+    DBQueryWarn("unlock tables");
+    return Lookup($class, $argref->{"metadata_url"});
+}
+
+#
+# metadata_url is the primary key. 
+#
+sub Lookup($$)
+{
+    my ($class, $token) = @_;
+    my $query_result;
+
+    if ($token =~ /^\d+$/) {
+	$query_result = DBQueryWarn("select * from image_pending_imports ".
+				    "where idx='$token'");
+    }
+    elsif ($token =~ /^http/) {
+	my $safe_token = DBQuoteSpecial($token);
+	$query_result = DBQueryWarn("select * from image_pending_imports ".
+				    "where metadata_url=$safe_token");
+    }
+    else {
+	return undef;
+    }
+    return undef
+	if (! (defined($query_result) && $query_result->numrows));
+    
+    my $self           = {};
+    $self->{'IMPORT'}  = $query_result->fetchrow_hashref();
+
+    bless($self, $class);
+    return $self;
+}
+
+#
+# Stringify for output.
+#
+sub Stringify($)
+{
+    my ($self) = @_;
+
+    my $idx       = $self->idx();
+    my $pid       = $self->pid();
+    my $imagename = $self->imagename();
+
+    return "[Image::PendingImport idx:$idx $pid,$imagename]";
+}
+
+#
+# Lock and Unlock. 
+#
+sub Lock($)
+{
+    my ($self) = @_;
+    my $idx = $self->idx();
+
+    return -1
+	if (!DBQueryWarn("lock tables images write, ".
+			 "            image_pending_imports write"));
+
+    my $query_result =
+	DBQueryWarn("update image_pending_imports set ".
+		    "  locked=now(),locker_pid=$PID " .
+		    "where idx='$idx' and locked is null");
+
+    if (! $query_result ||
+	$query_result->numrows == 0) {
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    DBQueryWarn("unlock tables");
+    $self->fieldset("locked", time());
+    $self->fieldset("locker_pid", $PID);
+    return 0;
+}
+
+sub Unlock($)
+{
+    my ($self) = @_;
+    my $idx = $self->idx();
+
+    return -1
+	if (! DBQueryWarn("update image_pending_imports set ".
+			  "   locked=null,locker_pid=0 " .
+			  "where idx='$idx'"));
+    
+    $self->fieldset("locked", 0);
+    $self->fieldset("locker_pid", 0);
+    return 0;
+}
+
+sub GotLock($)
+{
+    my ($self) = @_;
+
+    return 1
+	if ($self->locked() && $self->locker_pid() == $PID);
+    return 0;
+}
+
+sub GetImage($)
+{
+    my ($self) = @_;
+    return undef
+	if (!defined($self->imageid()));
+
+    return Image->Lookup($self->imageid());
+}
+
+sub Failed($$)
+{
+    my ($self, $message) = @_;
+    my $safe_message = DBQuoteSpecial($message);
+    my $idx = $self->idx();
+
+    DBQueryWarn("update image_pending_imports set ".
+		"  failed=now(),failure_message=$safe_message ".
+		"where idx='$idx'")
+	or return -1;
+
+    return 0;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

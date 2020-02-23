@@ -241,7 +241,7 @@ DHCPD_DYNRANGE="128.104.223.200 128.104.223.250"
 # For our MANAGEMENT_NETWORK vlan interface:
 # 2015-02-26
 # bpkroth
-DHCPD_EXTRAIFS="em1"
+DHCPD_EXTRAIFS="xn1"
 
 #
 # Fill in the nameservers for your campus network here - the nameserver on boss
@@ -404,7 +404,7 @@ NODECONSOLE="sio"
 # "82"    Semi-old FreeBSD 8.2, 32-bit; use if you have 32-bit nodes
 # "8-64"  Semi-old FreeBSD 8.2, 64-bit; use if you have ALL 64-bit nodes
 #
-MFSVERSION="8-64"
+MFSVERSION="10-64"
 
 #
 # Set this if you are running:
@@ -601,19 +601,15 @@ AMD_ROOT=/.amd_mnt/ops.wisc.cloudlab.us
 # 2015-04-04
 # bpkroth
 ZFS_NOEXPORT=1
-# But that also adds an assumption that we've included Utah's incremental
-# mountd update patches to FreeBSD, which we haven't.  So, add another flag to
-# skip that.
-# 2015-04-08
-# bpkroth
-# RT #543192
-# NOTE: This option has since been taken upstream and renamed to
-# INCREMENTAL_MOUNTD, which defaults to 0, since really only Utah has that hack
-# right now.
-# 2015-04-10
-# bpkroth
-WITHOUT_INCREMENTAL_MOUNTD_UPDATES=1
+INCREMENTAL_MOUNTD=1
 
 # Enable idle stats collection (RRD files)
 SDCOLLECTD_DOSTATS=1
 SDCOLLECTD_USE_RRDTOOL=1
+
+# New world order
+PORTAL_ENABLE=1
+
+# No longer allow geni users direct access. Must go through the Portal
+# or the local web interface. 
+PROTOGENI_PORTALONLY=1

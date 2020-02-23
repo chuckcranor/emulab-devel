@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2018 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2020 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -185,6 +185,7 @@ typedef struct {
 	char gid[TBDB_FLEN_GID];
 	char name[TBDB_FLEN_IMAGENAME];
 	char version[11]; /* Max size of a 32-bit int in string form. */
+	char *path; /* A dynamically-allocated path string, if relevant. */
 } imstrings_t;
 
 int		debug = 0;
@@ -298,6 +299,7 @@ static int	checkdbredirect(tmcdreq_t *);
 static int      sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, 
 			      char *vname, int dopersist, char *localproto);
 static int      get_imagestrings(tmcdreq_t *reqp, imstrings_t *imstrings);
+static void     free_imagestrings_content(imstrings_t *imstrings);
 
 #ifdef EVENTSYS
 int			myevent_send(address_tuple_t address);
@@ -404,6 +406,7 @@ COMMAND_PROTOTYPE(dopnetnodeattrs);
 COMMAND_PROTOTYPE(doserviceinfo);
 COMMAND_PROTOTYPE(dosubbossinfo);
 COMMAND_PROTOTYPE(dopublicaddrinfo);
+COMMAND_PROTOTYPE(dohwcollect);
 #if PROTOGENI_SUPPORT
 COMMAND_PROTOTYPE(dogeniclientid);
 COMMAND_PROTOTYPE(dogenisliceurn);
@@ -422,6 +425,7 @@ COMMAND_PROTOTYPE(dogenistatus);
 COMMAND_PROTOTYPE(dogenicommands);
 COMMAND_PROTOTYPE(dogeniall);
 COMMAND_PROTOTYPE(dogeniparam);
+COMMAND_PROTOTYPE(dogenirpccert);
 COMMAND_PROTOTYPE(dogeniinvalid);
 #endif
 
@@ -545,6 +549,7 @@ struct command {
 	{ "serviceinfo",  FULLCONFIG_NONE, 0, doserviceinfo },
 	{ "subbossinfo",  FULLCONFIG_NONE, 0, dosubbossinfo },
 	{ "publicaddrinfo",  FULLCONFIG_NONE, F_ALLOCATED, dopublicaddrinfo },
+	{ "hwcollect",	  FULLCONFIG_NONE, 0, dohwcollect},
 #if PROTOGENI_SUPPORT
 	{ "geni_client_id", FULLCONFIG_NONE, 0, dogeniclientid },
 	{ "geni_slice_urn", FULLCONFIG_NONE, 0, dogenisliceurn },
@@ -564,6 +569,7 @@ struct command {
 	{ "geni_commands", FULLCONFIG_NONE, 0, dogenicommands },
 	{ "geni_all",     FULLCONFIG_NONE, 0, dogeniall },
 	{ "geni_param",   FULLCONFIG_NONE, 0, dogeniparam },
+	{ "geni_rpccert",   FULLCONFIG_NONE, 0, dogenirpccert },
 	/* A rather ugly hack to avoid making error handling a special case.
 	   THIS MUST BE THE LAST ENTRY IN THE ARRAY! */
 	{ "geni_invalid", FULLCONFIG_NONE, 0, dogeniinvalid }
@@ -1325,22 +1331,25 @@ handle_request(int sock, struct sockaddr_in *client, char *rdata, int rdatalen, 
 	 */
 	if ((err = iptonodeid(client->sin_addr, reqp, privkey))) {
 		if (privkey) {
-			error("No such node with wanode_key [%s]\n", privkey);
+			error("No such node with wanode_key [%s] at %s\n",
+			      privkey, inet_ntoa(client->sin_addr));
 		}
 		else if (reqp->external_key[0]) {
 			if (reqp->isvnode)
-				error("No such vnode %s with key %s\n",
-				      reqp->vnodeid, reqp->external_key);
+				error("No such vnode %s with key %s at %s\n",
+				      reqp->vnodeid, reqp->external_key,
+				      inet_ntoa(client->sin_addr));
 			else
-				error("No such node with key %s\n",
-				      reqp->external_key);
+				error("No such node with key %s at %s\n",
+				      reqp->external_key,
+				      inet_ntoa(client->sin_addr));
 		}
 		else if (reqp->isvnode) {
-			error("No such vnode %s associated with %s\n",
+			error("No such vnode %s at %s\n",
 			      reqp->vnodeid, inet_ntoa(client->sin_addr));
 		}
 		else {
-			error("No such node: %s\n",
+			error("No such node at %s\n",
 			      inet_ntoa(client->sin_addr));
 		}
 		goto skipit;
@@ -2073,6 +2082,26 @@ COMMAND_PROTOTYPE(doifconfig)
 	int		nrows;
 	int		num_interfaces=0;
 	int		cookedgeninode = (reqp->geniflags & 0x2);
+	int		allowjumboframes = 0;
+
+	/*
+	 * Figure out if jumbo frames are a possibility at this site.
+	 * XXX we only do this if the client is new enough to set jumbos.
+	 */
+	if (vers >= 44) {
+		res = mydb_query("select value,defaultvalue "
+				 "from sitevariables "
+				 "where name='general/allowjumboframes'", 2);
+		if (res && (int)mysql_num_rows(res) > 0) {
+			row = mysql_fetch_row(res);
+			if (row[0] && row[0][0])
+				allowjumboframes = (atoi(row[0]) > 0 ? 1 : 0);
+			else if (row[1] && row[1][0])
+				allowjumboframes = (atoi(row[1]) > 0 ? 1 : 0);
+		}
+		if (res)
+			mysql_free_result(res);
+	}
 
 	if (cookedgeninode)
 		goto skipphys;
@@ -2090,13 +2119,16 @@ COMMAND_PROTOTYPE(doifconfig)
 	 */
 	res = mydb_query("select 0,i.IP,i.MAC,i.current_speed,"
 			 "       i.duplex,i.IPaliases,i.iface,i.role,i.mask,"
-			 "       i.rtabid,i.interface_type,vl.vname "
+			 "       i.rtabid,i.interface_type,vl.vname,vs.capval "
 			 "  from interfaces as i "
 			 "left join virt_lans as vl on "
 			 "  vl.pid='%s' and vl.eid='%s' and "
 			 "  vl.vnode='%s' and vl.ip=i.IP "
+			 "left join virt_lan_settings as vs on "
+			 "  vs.exptidx=vl.exptidx and vs.vname=vl.vname "
+			 "    and vs.capkey='jumboframes' "
 			 "where i.node_id='%s' and %s",
-			 12, reqp->pid, reqp->eid, reqp->nickname,
+			 13, reqp->pid, reqp->eid, reqp->nickname,
 			 reqp->issubnode ? reqp->nodeid : reqp->pnodeid,
 			 clause);
 
@@ -2111,6 +2143,9 @@ COMMAND_PROTOTYPE(doifconfig)
 		return 1;
 	}
 
+	/*
+	 * Handle physical interfaces with IP addresses
+	 */
 	nrows = (int)mysql_num_rows(res);
 	while (nrows) {
 		row = mysql_fetch_row(res);
@@ -2122,6 +2157,7 @@ COMMAND_PROTOTYPE(doifconfig)
 			char *speed  = "100";
 			char *unit   = "Mbps";
 			char *duplex = "full";
+			char *mtu    = "";
 			char *bufp   = buf;
 			char *mask;
 
@@ -2144,6 +2180,20 @@ COMMAND_PROTOTYPE(doifconfig)
 				speed = row[3];
 			if (row[4] && row[4][0])
 				duplex = row[4];
+
+			/*
+			 * MTU:
+			 *   "9000" if using jumbo frames,
+			 *   "" otherwise (use client default)
+			 *
+			 * Note that >=50Gbps always use jumbo frames.
+			 * There are no backward compat issues to worry
+			 * about for these.
+			 */
+			if (atoi(speed) >= 50000 ||
+			    (allowjumboframes && atoi(speed) >= 10000 &&
+			     row[12] && atoi(row[12]) > 0))
+				mtu = "9000";
 
 			/*
 			 * We now use the MAC to determine the interface, but
@@ -2217,6 +2267,10 @@ COMMAND_PROTOTYPE(doifconfig)
 				bufp += OUTPUT(bufp, ebufp - bufp,
 					       " LAN=%s", lan);
 			}
+			if (vers >= 44) {
+				bufp += OUTPUT(bufp, ebufp - bufp,
+					       " MTU=%s", mtu);
+			}
 
 			OUTPUT(bufp, ebufp - bufp, "\n");
 			client_writeback(sock, buf, strlen(buf), tcp);
@@ -2240,9 +2294,12 @@ COMMAND_PROTOTYPE(doifconfig)
 			 " where attrkey like 'shared_lan_%%' and "
 			 " node_id='%s'", 2, reqp->nodeid);
 	if (res) {
-		char _ip[16], _mask[16], _mac[18], _speed[8];
+		char _ip[16], _mask[16], _mac[18], _speed[8], _mtu[6];
 		char *bufp = buf;
 		int got = 0;
+
+		/* XXX optional */
+		strcpy(_mtu, "");
 
 		nrows = (int)mysql_num_rows(res);
 		while (nrows > 0) {
@@ -2266,6 +2323,9 @@ COMMAND_PROTOTYPE(doifconfig)
 				strncpy(_speed, row[1], sizeof(_speed)-1);
 				_speed[sizeof(_speed)-1] = '\0';
 				got++;
+			} else if (strcmp(row[0], "shared_lan_mtu") == 0) {
+				strncpy(_mtu, row[1], sizeof(_mtu)-1);
+				_mtu[sizeof(_mtu)-1] = '\0';
 			}
 		}
 		if (got == 4) {
@@ -2273,8 +2333,13 @@ COMMAND_PROTOTYPE(doifconfig)
 				       "INTERFACE IFACETYPE=ixgbe "
 				       "INET=%s MASK=%s MAC=%s "
 				       "SPEED=%sMbps DUPLEX=full "
-				       "IFACE= RTABID=0 LAN=shared_lan_0\n",
+				       "IFACE= RTABID=0 LAN=shared_lan_0",
 				       _ip, _mask, _mac, _speed);
+			if (vers >= 44) {
+				bufp += OUTPUT(bufp, ebufp - bufp,
+					       " MTU=%s", _mtu);
+			}
+			OUTPUT(bufp, ebufp - bufp, "\n");
 			client_writeback(sock, buf, strlen(buf), tcp);
 			if (verbose)
 				info("%s: IFCONFIG: %s", reqp->nodeid, buf);
@@ -2336,14 +2401,14 @@ COMMAND_PROTOTYPE(doifconfig)
 		char *aliasstr;
 
 		res = mydb_query("select i.interface_type,i.mac, "
-				 "       i.current_speed,i.duplex "
+				 "       i.current_speed,i.duplex,i.iface "
 				 "  from interfaces as i "
 				 "where i.current_speed!='0' and "
 				 "      i.current_speed!='' and "
 				 "      i.role!='ctrl' and "
 				 "      (i.IP='' or i.IP is null) and "
 				 "      i.role='expt' and i.node_id='%s'",
-				 4, reqp->pnodeid);
+				 5, reqp->pnodeid);
 		if (!res) {
 			error("%s: IFCONFIG: "
 			     "DB Error getting active physical interfaces!\n",
@@ -2358,17 +2423,84 @@ COMMAND_PROTOTYPE(doifconfig)
 
 		nrows = (int)mysql_num_rows(res);
 		while (nrows) {
+			char *mtu = "";
 			char *bufp   = buf;
+
 			row = mysql_fetch_row(res);
+
+			/*
+			 * XXX we have to figure out if any vinterfaces
+			 * associated with this interface require jumbo
+			 * frames and set jumbo frames on the physical
+			 * interface if so. This could no doubt be combined
+			 * with the above query, but my head would explode
+			 * if I tried that.
+			 *
+			 * XXX since this is such a skank query, we only
+			 * do it if absolutely positively necessary:
+			 * if we support using jumbo frames and
+			 * if the interface speed is at least 10Gbps.
+			 *
+			 * XXX we also always set jumbo frames for 50Gb
+			 * and above.
+			 */
+			if (atoi(row[2]) >= 50000)
+				mtu= "9000";
+			else if (vers >= 44 && allowjumboframes &&
+				 atoi(row[2]) >= 10000) {
+				MYSQL_RES *res2;
+				MYSQL_ROW row2;
+				res2 = mydb_query("select max(vls.capval) "
+						  "from vinterfaces as v "
+						  "left join interfaces as i "
+						  " on i.node_id=v.node_id "
+						  "  and i.iface=v.iface "
+						  "left join virt_lan_lans as vll "
+						  " on vll.idx=v.virtlanidx "
+						  "  and vll.exptidx=v.exptidx "
+						  "left join lan_attributes as la2 "
+						  " on la2.lanid=v.vlanid "
+						  "  and la2.attrkey='stack' "
+						  "left join virt_lan_settings as vls "
+						  " on vls.exptidx=vll.exptidx "
+						  "  and vls.vname=vll.vname "
+						  "  and vls.capkey='jumboframes' "
+						  "where v.exptidx='%d' "
+						  " and v.node_id='%s' "
+						  " and v.iface='%s' "
+						  " and (la2.attrvalue='Experimental' "
+						  "  or la2.attrvalue is null) "
+						  "and v.vnode_id is NULL",
+						  1, reqp->exptidx,
+						  reqp->nodeid, row[4]);
+				if (res2 && (int)mysql_num_rows(res2) > 0) {
+					row2 = mysql_fetch_row(res2);
+					if (row2[0] && atoi(row2[0]) > 0)
+						mtu = "9000";
+				}
+				if (res2)
+					mysql_free_result(res2);
+			}
 
 			bufp += OUTPUT(bufp, ebufp - bufp,
 				       "INTERFACE IFACETYPE=%s "
 				       "INET= MASK= MAC=%s "
 				       "SPEED=%sMbps DUPLEX=%s "
-				       "%sIFACE= RTABID= LAN=\n",
+				       "%sIFACE= RTABID= LAN=",
 				       row[0], row[1], row[2], row[3],
 				       aliasstr);
 
+			/*
+			 * XXX MTU:
+			 *   "9000" if allowing jumbo frames,
+			 *   "" if not (use client default)
+			 */
+			if (vers >= 44) {
+				bufp += OUTPUT(bufp, ebufp - bufp,
+					       " MTU=%s", mtu);
+			}
+
+			OUTPUT(bufp, ebufp - bufp, "\n");
 			client_writeback(sock, buf, strlen(buf), tcp);
 			if (verbose)
 				info("%s: IFCONFIG: %s", reqp->nodeid, buf);
@@ -2394,7 +2526,7 @@ COMMAND_PROTOTYPE(doifconfig)
 	 */
 	res = mydb_query("select v.unit,v.IP,v.mac,i.mac,v.mask,v.rtabid, "
 			 "       v.type,vll.vname,v.virtlanidx,vlans.tag, "
-			 "       l.lanid,rvt.tag "
+			 "       l.lanid,rvt.tag,i.current_speed,vls.capval "
 			 "  from vinterfaces as v "
 			 "left join interfaces as i on "
 			 "  i.node_id=v.node_id and i.iface=v.iface "
@@ -2408,11 +2540,14 @@ COMMAND_PROTOTYPE(doifconfig)
 			 "  rvt.lanid=v.vlanid "
 			 "left join lan_attributes as la2 on "
 			 "  la2.lanid=v.vlanid and la2.attrkey='stack' "
+			 "left join virt_lan_settings as vls on "
+			 "  vls.exptidx=vll.exptidx and vls.vname=vll.vname "
+			 "      and vls.capkey='jumboframes' "
 			 "where v.exptidx='%d' and v.node_id='%s' and "
 			 "      (la2.attrvalue='Experimental' or "
 			 "       la2.attrvalue is null) "
 			 "      and %s",
-			 12, reqp->exptidx, reqp->pnodeid, buf);
+			 14, reqp->exptidx, reqp->pnodeid, buf);
 	if (!res) {
 		error("%s: IFCONFIG: DB Error getting veth interfaces!\n",
 		      reqp->nodeid);
@@ -2422,7 +2557,7 @@ COMMAND_PROTOTYPE(doifconfig)
 	while (nrows) {
 		char *bufp   = buf;
 		char *ifacetype;
-		int isveth, doencap;
+		int isveth, doencap, isloop;
 
 		row = mysql_fetch_row(res);
 		nrows--;
@@ -2436,17 +2571,46 @@ COMMAND_PROTOTYPE(doifconfig)
 		if (strcmp(row[6], "alias") == 0)
 			continue;
 
+		isloop = (strcmp(row[6], "vlan") == 0 && !row[3]) ? 1 : 0;
+
 		/*
 		 * When the proxy is asking for the container, we give it info
 		 * for a plain interface, since that is all it sees.
 		 */
 		if (reqp->isvnode && reqp->asvnode) {
+			char *speed = "100Mbps";
+			char *mtuopt = "";
+
+			/*
+			 * XXX MTU setting.
+			 *
+			 * On a node-local interface (isloop != 0) we won't
+			 * have an associated physical inteface and thus no
+			 * current_speed setting. So here we just use the
+			 * specified jumboframes capability to decide if the
+			 * MTU should be set to 9000.
+			 *
+			 * If we are going to be setting MTU=9000, then we
+			 * also explicitly set the speed to 10000Mbps just
+			 * so the user doesn't get weirded-out by a 100Mbps
+			 * link with jumbo frames.
+			 */
+			if (vers >= 44) {
+				if (allowjumboframes &&
+				    isloop && row[13] && atoi(row[13]) > 0) {
+					mtuopt = " MTU=9000";
+					speed = "10000Mbps";
+				} else {
+					mtuopt = " MTU=";
+				}
+			}
 			bufp += OUTPUT(bufp, ebufp - bufp,
 				       "INTERFACE IFACETYPE=any "
 				       "INET=%s MASK=%s MAC=%s "
-				       "SPEED=100Mbps DUPLEX=full "
-				       "IFACE= RTABID= LAN=%s\n",
-				       row[1], row[4], row[2], row[7]);
+				       "SPEED=%s DUPLEX=full "
+				       "IFACE= RTABID= LAN=%s%s\n",
+				       row[1], row[4], row[2], speed,
+				       row[7], mtuopt);
 
 			client_writeback(sock, buf, strlen(buf), tcp);
 			if (verbose)
@@ -2455,7 +2619,7 @@ COMMAND_PROTOTYPE(doifconfig)
 			continue;
 		}
 
-		if (strcmp(row[6], "vlan") == 0 && !row[3]) {
+		if (isloop) {
 			/*
 			 * A vlan that ended up trivial since all the
 			 * members are on the same node. Convert to a
@@ -2539,6 +2703,33 @@ COMMAND_PROTOTYPE(doifconfig)
 			}
 
 			bufp += OUTPUT(bufp, ebufp - bufp, " VTAG=%s", tag);
+
+			/*
+			 * MTU: see if jumboframes capability is set, but
+			 * then only set if physical interface is >= 10Gbps.
+			 *
+			 * XXX ugh. for VLAN devices on a physical node
+			 * (!reqp->isvnode), we cannot just return the
+			 * default "MTU=" if we want a non-jumbo (1500 byte)
+			 * MTU. This is because we may have set the parent
+			 * physical interface to an MTU of 9000, in which
+			 * case "the default" will now be 9000 and not 1500!
+			 * So always explicitly set the MTU for VLAN devices.
+			 */
+			if (vers >= 44) {
+				char *mtu = "";
+				if (row[12] && atoi(row[12]) >= 50000)
+					mtu = "9000";
+				else if (allowjumboframes) {
+					if (row[13] && atoi(row[13]) > 0 &&
+					    row[12] && atoi(row[12]) >= 10000)
+						mtu = "9000";
+					else if (!reqp->isvnode)
+						mtu = "1500";
+				}
+				bufp += OUTPUT(bufp, ebufp - bufp, " MTU=%s",
+					       mtu);
+			}
 		}
 		OUTPUT(bufp, ebufp - bufp, "\n");
 		client_writeback(sock, buf, strlen(buf), tcp);
@@ -2567,6 +2758,7 @@ COMMAND_PROTOTYPE(doifconfig)
 		while (nrows) {
 			char *bufp = buf;
 			char *ip = "", *ipmask = "", *mac = "", *lan = "";
+			char *mtu = "";
 			
 			row = mysql_fetch_row(res);
 			nrows--;
@@ -2601,15 +2793,24 @@ COMMAND_PROTOTYPE(doifconfig)
 				else if (!strcmp(row2[0], "tunnel_lan")) {
 					lan = row2[1];
 				}
+				else if (!strcmp(row2[0], "tunnel_mtu")) {
+					mtu = row2[1];
+				}
 			}
 			bufp = buf;
 			bufp += OUTPUT(bufp, ebufp - bufp,
 				       "INTERFACE IFACETYPE=gre "
 				       "INET=%s MASK=%s MAC=%s "
 				       "SPEED=100Mbps DUPLEX=full "
-				       "IFACE= RTABID= LAN=%s\n",
+				       "IFACE= RTABID= LAN=%s",
 				       ip, ipmask, mac, lan);
 
+			if (vers >= 44) {
+				bufp += OUTPUT(bufp, ebufp - bufp,
+					       " MTU=%s", mtu);
+			}
+
+			OUTPUT(bufp, ebufp - bufp, "\n");
 			client_writeback(sock, buf, strlen(buf), tcp);
 			if (verbose)
 				info("%s: IFCONFIG: %s", reqp->nodeid, buf);
@@ -2647,17 +2848,26 @@ COMMAND_PROTOTYPE(doifconfig)
 		
 		nrows = (int)mysql_num_rows(res);
 		while (nrows > 0) {
+			char *bufp = buf;
+
 			nrows--;
 			row = mysql_fetch_row(res);
 			if (!row || !row[0] || !row[1] || !row[2] ||
 			    !row[3] || !row[4])
 				continue;
-			OUTPUT(buf, sizeof(buf),
-			       "INTERFACE IFACETYPE=alias "
-			       "INET=%s MASK=%s ID=%s VMAC=%s PMAC=none "
-			       "RTABID= ENCAPSULATE=0 LAN=%s VTAG=\n",
-			       row[0], CHECKMASK(row[1]), row[2], row[3], 
-			       row[4]);
+			bufp += OUTPUT(bufp, ebufp - bufp,
+				       "INTERFACE IFACETYPE=alias "
+				       "INET=%s MASK=%s ID=%s VMAC=%s PMAC=none "
+				       "RTABID= ENCAPSULATE=0 LAN=%s VTAG=",
+				       row[0], CHECKMASK(row[1]), row[2],
+				       row[3], row[4]);
+
+			/* XXX expected */
+			if (vers >= 44) {
+				bufp += OUTPUT(bufp, ebufp - bufp, " MTU=");
+			}
+
+			OUTPUT(bufp, ebufp - bufp, "\n");
 			client_writeback(sock, buf, strlen(buf), tcp);
 			if (verbose)
 				info("%s: IFCONFIG: %s", reqp->nodeid, buf);
@@ -4010,7 +4220,7 @@ COMMAND_PROTOTYPE(dohosts)
 		/*
 		 * Only care about this nodes vlans.
 		 */
-		if (strcmp(host->nodeid, reqp->nodeid) == 0 && host->vlan) {
+		if (strcmp(host->nodeid, reqp->nodeid) == 0) {
 			struct hostentry *tmphost = hosts;
 
 			while (tmphost) {
@@ -4827,7 +5037,8 @@ COMMAND_PROTOTYPE(dostorageconfig)
 	}
 	mysql_free_result(res);
 
-	res = mydb_query("select rb.bsidx, r.vname, rb.vname, rb.size "
+	res = mydb_query("select rb.bsidx, r.vname, rb.vname, rb.size, vl.ip, "
+			 " vl.mask "
 			 "from reserved_blockstores as rb "
 			 " left join reserved as r "
 			 "  on r.node_id = rb.vnode_id and "
@@ -4837,7 +5048,7 @@ COMMAND_PROTOTYPE(dostorageconfig)
 			 "     r.exptidx = vl.exptidx "
 			 "where vl.vname in (%s) "
 			 " and vl.pid='%s' and vl.eid='%s'",
-			 4, buf, reqp->pid, reqp->eid);
+			 6, buf, reqp->pid, reqp->eid);
 
 	if (!res) {
 		error("STORAGECONFIG: %s: DB Error getting connected "
@@ -4856,8 +5067,9 @@ COMMAND_PROTOTYPE(dostorageconfig)
 		volsize = atoi(row[3]);
 	       
 		OUTPUT(buf, sizeof(buf), 
-		       "CMD=ELEMENT IDX=%d HOSTID=%s VOLNAME=%s VOLSIZE=%d", 
-		       cmdidx++, hostid, vname, volsize);
+		       "CMD=ELEMENT IDX=%d HOSTID=%s VOLNAME=%s VOLSIZE=%d"
+		       " HOSTIP=%s HOSTMASK=%s",
+		       cmdidx++, hostid, vname, volsize, row[4], row[5]);
 		sendstoreconf(sock, tcp, reqp, buf, vname, 1, NULL);
 	}
 	mysql_free_result(res);
@@ -4968,6 +5180,16 @@ sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, char *vname,
 			      "IQN string buffer", mynodeid);
 			mysql_free_result(res);
 			return 1;
+		}
+
+		/*
+		 * XXX FreeNAS does not like '_' in its IQNs,
+		 * so change them to '-'.
+		 */
+		if (strchr(iqn, '_') != NULL) {
+			char *cp = iqn;
+			while ((cp = strchr(cp, '_')) != NULL)
+				*cp++ = '-';
 		}
 
 		bufp = buf;
@@ -5984,7 +6206,7 @@ get_node_loadinfo(tmcdreq_t *reqp, char **serverp, char **disktypep,
 		gettimeofday(&now, NULL);
 		if (now.tv_sec > (time_t)(trimtime + trimiv)) {
 			mydb_update("replace into node_attributes values "
-				    "('%s','bootdisk_lasttrim','%u')",
+				    "('%s','bootdisk_lasttrim','%u',0)",
 				    reqp->nodeid, (unsigned)now.tv_sec);
 			dotrim = 1;
 		}
@@ -8734,6 +8956,12 @@ COMMAND_PROTOTYPE(dojailconfig)
 				       imstrings.version);
 		}
 		bufp += OUTPUT(bufp, ebufp - bufp, "\"\n");
+		if (imstrings.path) {
+			bufp += OUTPUT(bufp, ebufp - bufp,
+				       "IMAGEPATH=\"%s\"\n", 
+				       imstrings.path);
+		}
+		free_imagestrings_content(&imstrings);
 	}
 	client_writeback(sock, buf, strlen(buf), tcp);
 	return 0;
@@ -8750,6 +8978,7 @@ COMMAND_PROTOTYPE(doimageid)
 		       imstrings.pid, imstrings.gid, 
 		       imstrings.name, imstrings.version);
 		client_writeback(sock, buf, strlen(buf), tcp);
+		free_imagestrings_content(&imstrings);
 	}
 
 	return 0;
@@ -8768,7 +8997,8 @@ int get_imagestrings(tmcdreq_t *reqp, imstrings_t *imstrings)
 	}
 
 	/* We want data on the default OS set for this node. */
-	res = mydb_query("select p.pid,g.gid,iv.imagename,iv.version "
+	res = mydb_query("select p.pid,g.gid,iv.imagename,iv.version,"
+			 " iv.format,iv.path "
 			 "  from nodes as n "
 			 "left join `partitions` as pa on "
 			 "     pa.node_id=n.node_id and "
@@ -8779,7 +9009,7 @@ int get_imagestrings(tmcdreq_t *reqp, imstrings_t *imstrings)
 			 "left join projects as p on iv.pid_idx=p.pid_idx "
 			 "left join groups as g on iv.gid_idx=g.gid_idx "
 			 "where n.node_id='%s'",
-			 4, reqp->nodeid);
+			 6, reqp->nodeid);
 
 	if (!res) {
 		error("get_imagestrings: %s: DB Error getting image info!\n",
@@ -8790,7 +9020,7 @@ int get_imagestrings(tmcdreq_t *reqp, imstrings_t *imstrings)
 	/* Fill out the imstrings struct passed in with info from the DB. */
 	if (mysql_num_rows(res)) {
 		row = mysql_fetch_row(res);
-		if (!row[0] || !row[1] || !row[3] || !row[4]) {
+		if (!row[0] || !row[1] || !row[2] || !row[3]) {
 			error("get_imagestrings: %s: invalid data returned "
 			      "from DB query!\n", reqp->nodeid);
 			return 1;
@@ -8799,12 +9029,23 @@ int get_imagestrings(tmcdreq_t *reqp, imstrings_t *imstrings)
 		strncpy(imstrings->gid, row[1], sizeof(imstrings->gid));
 		strncpy(imstrings->name, row[2], sizeof(imstrings->name));
 		strncpy(imstrings->version, row[3], sizeof(imstrings->version));
+		if (row[4] && row[4][0] && strcmp("docker",row[4]) == 0
+		    && row[5] && row[5][0]) {
+			imstrings->path = strdup(row[5]);
+		}
+		else {
+			imstrings->path = NULL;
+		}
 
-		if (debug)
+		if (debug) {
 			info("get_imagestrings: %s: PID=%s GID=%s NAME=%s "
 			     "VERSION=%s",
 			     reqp->nodeid, imstrings->pid, imstrings->gid, 
 			     imstrings->name, imstrings->version);
+			if (imstrings->path)
+				info("get_imagestrings: %s: IMAGEPATH=%s",
+				     reqp->nodeid, imstrings->path);
+		}
 		retval = 0;
 	} else {
 		error("get_imagestrings: %s: No info returned for image "
@@ -8814,6 +9055,18 @@ int get_imagestrings(tmcdreq_t *reqp, imstrings_t *imstrings)
 
 	mysql_free_result(res);
 	return retval;
+}
+
+void free_imagestrings_content(imstrings_t *imstrings)
+{
+	/* Sanity. */
+	if (imstrings == NULL) {
+		error("free_imagestrings_content: NULL pointer argument!\n");
+	}
+	if (imstrings->path) {
+		free(imstrings->path);
+		imstrings->path = NULL;
+	}
 }
 
 /*
@@ -12724,7 +12977,7 @@ COMMAND_PROTOTYPE(dohwinfo)
 	 */
 	res = mydb_query("select mac,iface from interfaces where "
 			 " mac not like '000000%%' and "
-			 " role!='mngmnt' and guid is NULL and "
+			 " role!='mngmnt' and "
 			 " node_id='%s' order by iface",
 			 2, reqp->nodeid);
 	if (!res) {
@@ -12758,6 +13011,186 @@ COMMAND_PROTOTYPE(dohwinfo)
 	if (bufp != buf)
 		client_writeback(sock, buf, strlen(buf), tcp);
 	mysql_free_result(res);
+
+	return 0;
+}
+
+/*
+ * Collect information about node hardware.
+ *
+ * This overlaps quite a lot with "hwinfo" on the collection side
+ * but is a little more general. Returns a series of lines:
+ *
+ *   COLLECT=(0|1)	Only collect stats if set to one.
+ *   OUTDIR=<path>	Absolute path for a directory where output is stored
+ *   PREFIX=<string>	Prefix of file name in which to write results
+ *   			File names are of the form:
+ *			<OUTDIR>/<NODE>/<PREFIX>-<NAME>.(out,err,status)
+ *			with stdout, stderr, and exit status respectively
+ *   OS=<OS> NAME=<string> CMDLINE=<cmdline>
+ *			First command to run if node is running OS.
+ *			OS should be one of FreeBSD, Linux, Any, or None.
+ *			Output to files identified by NAME as described above.
+ *   			Everything after 'CMDLINE=' is given to system().
+ *   ...
+ *   OS=<OS> NAME=<string> CMDLINE=<cmdline>
+ *			Last command to run if node is running OS.
+ *
+ * Most of this info comes from sitevars:
+ * 	hwcollect/interval	how often to collect new info, zero to disable
+ *	hwcollect/experiment	<pid> or <pid>/<eid> that node must be in
+ *	hwcollect/outputdir	collection directory
+ *	hwcollect/commands	semicolon separated list of
+ *				OS,NAME,CMDLINE triples
+ */
+COMMAND_PROTOTYPE(dohwcollect)
+{
+	MYSQL_RES	*res;
+	MYSQL_ROW	row;
+	char		buf[MYBUFSIZE];
+	char		*bufp = buf, *ebufp = &buf[sizeof(buf)];
+	int		nrows;
+	int		interval;
+	unsigned int	last = 0;
+	char		*pideid, *outputdir, *commands;
+	char		*bp, *cbp, *attrclause, *eid;
+	struct timeval	now;
+
+	/* Only allocated physical nodes need apply */
+	if (!reqp->allocated || reqp->isvnode) {
+		return 0;
+	}
+
+	/*
+	 * Get our sitevars. If none, consider collection disabled.
+	 */
+	res = mydb_query("select name,value,defaultvalue from sitevariables "
+			 "where name like 'hwcollect/%%'", 3);
+	if (!res || (nrows = (int)mysql_num_rows(res)) == 0) {
+		error("HWCOLLECT: no hwcollect sitevars\n");
+		if (res)
+			mysql_free_result(res);
+		return 0;
+	}
+
+	interval = 0;
+	outputdir = commands = 0;
+	while (nrows) {
+		row = mysql_fetch_row(res);
+		if (strcmp(row[0], "hwcollect/interval") == 0) {
+			if (row[1] && row[1][0])
+				interval = atoi(row[1]);
+			else if (row[2] && row[2][0])
+				interval = atoi(row[2]);
+		} else if (strcmp(row[0], "hwcollect/experiment") == 0) {
+			if (row[1] && row[1][0])
+				pideid = strdup(row[1]);
+			else if (row[2] && row[2][0])
+				pideid = strdup(row[2]);
+		} else if (strcmp(row[0], "hwcollect/outputdir") == 0) {
+			if (row[1] && row[1][0])
+				outputdir = strdup(row[1]);
+			else if (row[2] && row[2][0])
+				outputdir = strdup(row[2]);
+
+		} else if (strcmp(row[0], "hwcollect/commands") == 0) {
+			if (row[1] && row[1][0])
+				commands = strdup(row[1]);
+			else if (row[2] && row[2][0])
+				commands = strdup(row[2]);
+		}
+		nrows--;
+	}
+	mysql_free_result(res);
+
+	bufp += OUTPUT(bufp, ebufp - bufp, "COLLECT=%d\n",
+		       interval > 0 ? 1 : 0);
+	if (interval <= 0 || pideid == 0 || outputdir == 0 || commands == 0) {
+		client_writeback(sock, buf, strlen(buf), tcp);
+		if (pideid)
+			free(pideid);
+		if (outputdir)
+			free(outputdir);
+		if (commands)
+			free(commands);
+		return 0;
+	}
+
+	/* Check the experiment context */
+	if ((eid = strchr(pideid, '/'))) {
+		*eid++ = '\0';
+	}
+	if (strcmp(reqp->pid, pideid) ||
+	    (eid != 0 && strcmp(reqp->eid, eid))) {
+		client_writeback(sock, buf, strlen(buf), tcp);
+		free(pideid);
+		free(outputdir);
+		free(commands);
+		return 0;
+	}
+	free(pideid);
+
+	gettimeofday(&now, NULL);
+
+	/* See if sufficient time has past */
+	attrclause =
+		"(attrkey='hwcollect_interval' or "
+		" attrkey='hwcollect_last')";
+
+	res = mydb_query("(select attrkey,attrvalue from nodes as n "
+			 " left join node_type_attributes as a on "
+			 "      n.type=a.type "
+			 " where %s and n.node_id='%s') "
+			 "union "
+			 "(select attrkey,attrvalue "
+			 "   from node_attributes "
+			 " where %s and node_id='%s') ",
+			 2, attrclause, reqp->nodeid,
+			 attrclause, reqp->nodeid);
+
+	if (res && (nrows = (int)mysql_num_rows(res) > 0)) {
+		while (nrows--) {
+			row = mysql_fetch_row(res);
+			if (row[1] && row[1][0]) {
+				if (strcmp(row[0], "hwcollect_interval") == 0)
+					interval = atoi(row[1]);
+				else if (strcmp(row[0], "hwcollect_last") == 0)
+					last = (unsigned int)atoi(row[1]);
+			}
+		}
+	}
+	if (res)
+		mysql_free_result(res);
+	if (interval <= 0 || now.tv_sec < (time_t)(last + (interval*60))) {
+		client_writeback(sock, buf, strlen(buf), tcp);
+		free(outputdir);
+		free(commands);
+		return 0;
+	}
+	
+	bufp += OUTPUT(bufp, ebufp - bufp, "OUTDIR=%s\n", outputdir);
+	free(outputdir);
+	
+	/* XXX just use current timestamp as the prefix */
+	bufp += OUTPUT(bufp, ebufp - bufp, "PREFIX=%ld-\n", now.tv_sec);
+
+	cbp = commands;
+	while ((bp = strsep(&cbp, ";")) != NULL) {
+		char *os = strsep(&bp, ",");
+		char *name = strsep(&bp, ",");
+		char *cmdline = bp;
+		bufp += OUTPUT(bufp, ebufp - bufp,
+			       "OS=%s NAME=%s CMDLINE=%s\n",
+			       os, name, cmdline);
+	}
+	free(commands);
+
+	client_writeback(sock, buf, strlen(buf), tcp);
+
+	/* record that info was collected */
+	mydb_update("replace into node_attributes values "
+		    "('%s','hwcollect_last','%u',0)",
+		    reqp->nodeid, (unsigned)now.tv_sec);
 
 	return 0;
 }
@@ -13417,6 +13850,44 @@ static char *getgenistatus( tmcdreq_t *reqp ) {
 	return strdup( buf );
 }
 
+static char *getgenirpccert(tmcdreq_t *reqp)
+{
+    
+	MYSQL_RES	*res;
+	MYSQL_ROW	row;
+	char		buf[MAXTMCDPACKET];
+	buf[0] = (char) NULL;
+
+	if (!reqp->geniflags) {
+		return NULL;
+	}
+
+	res = mydb_query("select cert,privkey from user_sslcerts "
+			 "where uid='%s' and encrypted=0 and "
+			 "      DN like '%%sslxmlrpc%%'",
+			 2, reqp->creator);
+
+	if (!res || !mysql_num_rows(res)) {
+		error("getgenirpccert: %s: "
+		      "DB error getting certificate for %s!\n",
+		      reqp->nodeid, reqp->creator);
+		return NULL;
+	}
+	row = mysql_fetch_row(res);
+	strcpy(buf, "-----BEGIN RSA PRIVATE KEY-----\n");
+	strcat(buf, row[1]);
+	strcat(buf, "-----END RSA PRIVATE KEY-----\n");
+	strcat(buf, "-----BEGIN CERTIFICATE-----\n");
+	strcat(buf, row[0]);
+	strcat(buf, "-----END CERTIFICATE-----\n");
+	mysql_free_result(res);
+	
+	if (1 || verbose)
+		info("%s: getgenicert %s", reqp->nodeid, reqp->creator);
+
+	return strdup(buf);
+}
+
 #define MAKEGENICOMMAND( cmd ) \
         COMMAND_PROTOTYPE( dogeni ## cmd ) { \
 		return dogeni( sock, reqp, tcp, getgeni ## cmd ); \
@@ -13436,6 +13907,7 @@ MAKEGENICOMMAND(version)
 MAKEGENICOMMAND(getversion)
 MAKEGENICOMMAND(sliverstatus)
 MAKEGENICOMMAND(status)
+MAKEGENICOMMAND(rpccert)
 
 struct genicommand {
     char *tag;
@@ -13469,6 +13941,7 @@ struct genicommand {
     { "version", getgeniversion, 1, NULL },
     { "certificate", getgenicert, 1, NULL },
     { "key", getgenikey, 1, NULL },
+    { "rpccert", getgenirpccert, 1, NULL },
 };
 
 COMMAND_PROTOTYPE(dogenicommands)

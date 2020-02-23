@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2014 University of Utah and the Flux Group.
+# Copyright (c) 2014, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -95,7 +95,7 @@ if (defined($options{"d"})) {
     $debug = 1;
 }
 if (defined($options{"a"})) {
-    if ($options{"a"} =~ /^(diskboot|mfsboot|nfsboot|pxewait|pxefail|default)$/) {
+    if ($options{"a"} =~ /^(diskboot|mfsboot|nfsboot|pxewait|pxefail|default|recovery)$/) {
 	$action = $1;
     } else {
 	usage();
@@ -192,7 +192,14 @@ sub donode($$)
     # Need to create a new version.
     # XXX racy. Maybe we should do "install -C"?
     #
+    my $nodetype = $node->type();
     my $tmpfile = "$configdir/$nodeid.$PID";
+    if (-e "${template}.$nodeid") {
+	$template = "${template}.$nodeid";
+    }
+    elsif (-e "${template}.$nodetype") {
+	$template = "${template}.$nodetype";
+    }
     if (open(IFD, "<$template") && open(OFD, ">$tmpfile")) {
 	while (<IFD>) {
 	    s/%default%/$action/;

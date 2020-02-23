@@ -108,23 +108,6 @@ sub Install($$$)
 		};
 	    }
 	};
-	if ($OPSVM_ENABLE) {
-	    # This only happens on boss.
-	    Phase "symlinks", "Symlinking to OPS VM", sub {
-		Phase $OPSDIR_MOUNTPOINT, $OPSDIR_MOUNTPOINT, sub {
-		    PhaseSkip("exists")
-			if (-e $OPSDIR_MOUNTPOINT && -l $OPSDIR_MOUNTPOINT);
-		    ExecQuietFatal("ln -s ${OPSVM_MOUNTPOINT}/usr/testbed ".
-				   "$OPSDIR_MOUNTPOINT");
-		};
-		Phase $USERSVAR_MOUNTPOINT, $USERSVAR_MOUNTPOINT, sub {
-		    PhaseSkip("exists")
-			if (-e $USERSVAR_MOUNTPOINT && -l $USERSVAR_MOUNTPOINT);
-		    ExecQuietFatal("ln -s ${OPSVM_MOUNTPOINT}/var ".
-				   "$USERSVAR_MOUNTPOINT");
-		};
-	    };
-	}
     };
     return 0;
 }

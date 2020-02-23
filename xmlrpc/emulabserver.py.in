@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 #
-# Copyright (c) 2004-2017 University of Utah and the Flux Group.
+# Copyright (c) 2004-2017, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -345,6 +345,7 @@ class EmulabServer:
         self.instances["subboss"]    = subboss(self);
         self.instances["blob"]       = blob(self);
         self.instances["dataset"]    = dataset(self);
+        self.instances["portal"]     = portal(self);
         return
 
     def __getattr__(self, name):
@@ -5981,6 +5982,199 @@ class dataset:
             return EmulabResponse( RESPONSE_ERROR, exitval >> 8, output=output )
         else:
             return EmulabResponse( RESPONSE_SUCCESS, value=0, output=output )
+
+#
+# This class implements the server side of the XMLRPC interface to the Portal
+#
+class portal:
+    ##
+    # Initialize the object.  Currently only sets the objects 'VERSION' value.
+    #
+    def __init__(self, server):
+        self.server   = server
+        self.readonly = server.readonly
+        self.uid      = server.uid
+        self.uid_idx  = server.uid_idx
+        self.debug    = server.debug
+        self.VERSION  = VERSION
+        return
+
+    ##
+    # Echo a message, basically, prepend the host name to the parameter list.
+    #
+    # @param args The argument list to echo back.
+    # @return The 'msg' value with this machine's name prepended.
+    #
+    def echo(self, version, argdict):
+        if not argdict.has_key("str"):
+            return EmulabResponse(RESPONSE_BADARGS,
+                                  output="Must supply a string to echo!")
+        
+        return EmulabResponse(RESPONSE_SUCCESS, 0,
+                              socket.gethostname() + ": " + str(version)
+                            + " " + argdict["str"])
+        pass
+
+    #
+    # Start a portal experiment.
+    #
+    def startExperiment(self, version, argdict):
+        if version != self.VERSION:
+            return EmulabResponse(RESPONSE_BADVERSION,
+                                  output="Client version mismatch!")
+
+        if self.readonly:
+            return EmulabResponse(RESPONSE_FORBIDDEN,
+                              output="Insufficient privledge to invoke method")
+        
+        try:
+            checknologins()
+            pass
+        except NoLoginsError, e:
+            return EmulabResponse(RESPONSE_REFUSED, output=str(e))
+
+        argerror = CheckRequiredArgs(argdict, ("proj", "profile"))
+        if (argerror):
+            return argerror
+
+        argstr     = ""
+        profile    = None
+        
+        for opt, val in argdict.items():
+            if opt == "name":
+                argstr += " --name "
+                argstr += escapeshellarg(val)
+                pass
+            elif opt == "proj":
+                argstr += " --project "
+                argstr += escapeshellarg(val)
+                pass
+            elif opt == "duration":
+                argstr += " --duration "
+                argstr += escapeshellarg(val)
+                pass
+            elif opt == "start":
+                argstr += " --start "
+                argstr += escapeshellarg(val)
+                pass
+            elif opt == "stop":
+                argstr += " --stop "
+                argstr += escapeshellarg(val)
+                pass
+            elif opt == "paramset":
+                argstr += " --paramset "
+                argstr += escapeshellarg(val)
+                pass
+            elif opt == "refspec":
+                argstr += " --refspec "
+                argstr += escapeshellarg(val)
+                pass
+            elif opt == "aggregate":
+                argstr += " -a "
+                argstr += escapeshellarg(val)
+                pass
+            elif opt == "profile":
+                profile = val
+                pass
+            pass
+        
+        argstr += " "
+        argstr += escapeshellarg(profile)
+        
+        (exitval, output) = runcommand(TBDIR +
+                                       "/bin/start-experiment " + argstr)
+
+        if exitval:
+            return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
+        
+        return EmulabResponse(RESPONSE_SUCCESS, output=output)
+
+    #
+    # Terminate a portal experiment.
+    #
+    def terminateExperiment(self, version, argdict):
+        if version != self.VERSION:
+            return EmulabResponse(RESPONSE_BADVERSION,
+                                  output="Client version mismatch!")
+
+        if self.readonly:
+            return EmulabResponse(RESPONSE_FORBIDDEN,
+                              output="Insufficient privledge to invoke method")
+        
+        try:
+            checknologins()
+            pass
+        except NoLoginsError, e:
+            return EmulabResponse(RESPONSE_REFUSED, output=str(e))
+
+        argerror = CheckRequiredArgs(argdict, ("experiment",))
+        if (argerror):
+            return argerror
+
+        argstr     = "terminate "
+        experiment = None
+        
+        for opt, val in argdict.items():
+            if opt == "experiment":
+                experiment = val
+                pass
+            pass
+        
+        argstr += escapeshellarg(experiment)
+        
+        (exitval, output) = runcommand(TBDIR +
+                                       "/bin/manage_instance " + argstr)
+
+        if exitval:
+            return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
+        
+        return EmulabResponse(RESPONSE_SUCCESS, output=output)
+
+
+    #
+    # Portal experiment status
+    #
+    def experimentStatus(self, version, argdict):
+        if version != self.VERSION:
+            return EmulabResponse(RESPONSE_BADVERSION,
+                                  output="Client version mismatch!")
+
+        if self.readonly:
+            return EmulabResponse(RESPONSE_FORBIDDEN,
+                              output="Insufficient privledge to invoke method")
+        
+        try:
+            checknologins()
+            pass
+        except NoLoginsError, e:
+            return EmulabResponse(RESPONSE_REFUSED, output=str(e))
+
+        argerror = CheckRequiredArgs(argdict, ("experiment",))
+        if (argerror):
+            return argerror
+
+        argstr     = "status "
+        experiment = None
+        
+        for opt, val in argdict.items():
+            if opt == "experiment":
+                experiment = val
+                pass
+            pass
+        
+        argstr += escapeshellarg(experiment)
+
+        # Slow down the polling.
+        time.sleep(3)
+        
+        (exitval, output) = runcommand(TBDIR +
+                                       "/bin/manage_instance " + argstr)
+
+        if exitval:
+            return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
+        
+        return EmulabResponse(RESPONSE_SUCCESS, output=output)
+
 
 #
 # Utility functions

@@ -1,15 +1,22 @@
 $(function () {
     'use strict';
-    var ajaxurl = null;
-    var templates = APT_OPTIONS.fetchTemplateList(['activity']);
-    var profileTemplate = _.template(templates['activity']);
+
+    var templates = APT_OPTIONS.fetchTemplateList(['activity',
+						   'activity-table',
+						   "waitwait-modal",
+						   "oops-modal"]);
+
+    var mainTemplate  = _.template(templates['activity']);
+    var tableTemplate = _.template(templates['activity-table']);
+    var default_min;
+    var default_max;
 
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
-	ajaxurl  = window.AJAXURL;
-	var default_min = new Date(2014, 6, 1);
-	var default_max = new Date();
+
+	default_min = new Date(2014, 6, 1);
+	default_max = new Date();
 
 	if (window.MIN) {
 	    default_min = new Date(window.MIN * 1000);
@@ -17,18 +24,11 @@ $(function () {
 	if (window.MAX) {
 	    default_max = new Date(window.MAX * 1000);
 	}
-	var instances =
-	    JSON.parse(_.unescape($('#instances-json')[0].textContent));
-	var activity_html = profileTemplate({instances: instances});
-	$('#activity-body').html(activity_html);
+	$('#activity-body').html(mainTemplate({}));
+	$('#waitwait_div').html(templates['waitwait-modal']);
+	$('#oops_div').html(templates['oops-modal']);
 
-	// Format dates with moment before display.
-	$('.format-date').each(function() {
-	    var date = $.trim($(this).html());
-	    if (date != "") {
-		$(this).html(moment($(this).html()).format("lll"));
-	    }
-	});
+	// Date slider
 	$("#date-slider").dateRangeSlider({
 	    bounds: {min: new Date(2014, 6, 1),
 		     max: new Date()},
@@ -37,17 +37,68 @@ $(function () {
 	});
 	// Handler for the date range search button.
 	$('#slider-go-button').click(function() {
-	    var dateValues = $("#date-slider").dateRangeSlider("values");
-	    var min = Math.floor(dateValues.min.getTime()/1000);
-	    var max = Math.floor(dateValues.max.getTime()/1000);
-	    var url = "activity.php?";
-	    if (window.ARG) {
-		url = url + window.ARG + "&";
-	    }
-	    url = url + "min=" + min + "&max=" + max;
-	    window.location.replace(url);
+	    SearchAgain();
 	});
+	// Bind search for IP.
+	if (window.ISADMIN) {
+	    $('#search-ip button').click(function (event) {
+		event.preventDefault();
+		SearchAgain();		
+	    });
+	}
+	// Do the initial search
+	LoadData(function(json) {
+	    console.info(json);
+	    $('#waiting').addClass("hidden");
+	    if (json.code) {
+		alert(json.value);
+		return;
+	    }
+	    GenerateTable(json.value);
+	});
+    }
 
+    function LoadData(callback)
+    {
+	var args = {
+	    "min"  : Math.floor(default_min.getTime() / 1000),
+	    "max"  : Math.floor(default_max.getTime() / 1000),
+	};
+	if (window.TARGET_USER) {
+	    args["target_user"] = window.TARGET_USER;
+	}
+	if (window.TARGET_PROJECT) {
+	    args["target_project"] = window.TARGET_PROJECT;
+	}
+	if (window.PORTALONLY) {
+	    args["portalonly"] = true;
+	}
+	var ip = $.trim($('#search-ip input').val());
+	if (ip != "") {
+	    var rx = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+	    if (rx.test(ip)) {
+		args["IP"] = ip;
+	    }
+	    else {
+		alert("Invalid IP address");
+	    }
+	}
+	sup.CallServerMethod(null, "activity", "Search", args, callback);
+    }
+
+    function GenerateTable(instances)
+    {
+	$('#table-div').empty();
+	var activity_html = tableTemplate({instances: instances});
+	$('#table-div').html(activity_html);
+
+	// Format dates with moment before display.
+	$('.format-date').each(function() {
+	    var date = $.trim($(this).html());
+	    if (date != "") {
+		$(this).html(moment($(this).html()).format("lll"));
+	    }
+	});
 	var tablename  = "#activity_table";
 	var searchname = "#activity_table_search";
 	
@@ -89,5 +140,35 @@ $(function () {
 	// pressing escape to cancel the search
 	$.tablesorter.filter.bindSearch(table, $(searchname));
     }
+
+    function SearchAgain()
+    {
+    	var dateValues = $("#date-slider").dateRangeSlider("values");
+	
+	default_min = dateValues.min;
+	default_max = dateValues.max;
+
+	sup.ShowWaitWait("Patience please, this will take a few moments");
+	
+	LoadData(function(json) {
+	    console.info(json);
+	    if (json.code) {
+		sup.HideWaitWait(function () {
+		    sup.SpitOops("oops", json.value);
+		});
+		return;
+	    }
+	    var results = json.value;
+	    if (results.length == 0) {
+		sup.HideWaitWait(function () {
+		    sup.SpitOops("oops", "No matching results");
+		});
+		return;
+	    }
+	    sup.HideWaitWait();
+	    GenerateTable(json.value);
+	});
+    }
+
     $(document).ready(initialize);
 });

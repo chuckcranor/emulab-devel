@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -110,6 +110,9 @@ class Instance
     function creator_idx()  { return $this->field('creator_idx'); }
     function creator_uuid() { return $this->field('creator_uuid'); }
     function created()	    { return $this->field('created'); }
+    function started()	    { return $this->field('started'); }
+    function start_at()     { return $this->field('start_at'); }
+    function stop_at()      { return $this->field('stop_at'); }
     function profile_id()   { return $this->field('profile_id'); }
     function profile_version() { return $this->field('profile_version'); }
     function status()	    { return $this->field('status'); }
@@ -146,11 +149,16 @@ class Instance
     function repourl()	    { return $this->field('repourl'); }
     function reporef()	    { return $this->field('reporef'); }
     function repohash()	    { return $this->field('repohash'); }
+    function rspec()	    { return $this->field('rspec'); }
     function admin_notes()  { return $this->field('admin_notes'); }
     function isopenstack()  { return $this->field('isopenstack'); }
+    function params()       { return $this->field('params'); }
+    function paramdefs()    { return $this->field('paramdefs'); }
     function openstack_utilization() {
         return $this->field('openstack_utilization');
     }
+    # Convenience
+    function isActive()     { return 1; }
     function IsAPT() {
 	return preg_match('/aptlab/', $this->servername());
     }
@@ -160,6 +168,7 @@ class Instance
     function IsPNet() {
 	return preg_match('/phantomnet/', $this->servername());
     }
+
     # Grab the webtask. Backwards compat mode, see if there is one associated
     # with the object, use that. Otherwise create a new one.
     function WebTask() {
@@ -424,8 +433,8 @@ class Instance
     #
     # Return aggregate based on the current user.
     #
-    function DefaultAggregateList() {
-        return Aggregate::DefaultAggregateList();
+    function DefaultAggregateList($user = null) {
+        return Aggregate::DefaultAggregateList($user);
     }
 
     # helper
@@ -508,6 +517,21 @@ class Instance
 	}
         return 0;
     }
+    function CanTerminate($user) {
+	global $TBDB_TRUST_GROUPROOT;
+
+	if ($this->creator_idx() == $user->uid_idx()) {
+	    return 1;
+	}
+	# Otherwise a project membership test.
+	$project = Project::Lookup($this->pid_idx());
+	if (!$project) {
+	    return 0;
+	}
+        $uid = $user->uid();
+        $pid = $project->pid();
+        return TBMinTrust(TBGrpTrust($uid, $pid, $pid), $TBDB_TRUST_GROUPROOT);
+    }
     function CanDoSSH($user) {
 	if ($this->creator_idx() == $user->uid_idx()) {
 	    return 1;
@@ -549,7 +573,7 @@ class Instance
                 DBQueryFatal("select sum(physnode_count), ".
                          " truncate(sum(physnode_count * ".
                          "  ((UNIX_TIMESTAMP(now()) - ".
-                         "    UNIX_TIMESTAMP(created)) / 3600.0)),2) as phours ".
+                         "    UNIX_TIMESTAMP(started)) / 3600.0)),2) as phours".
                          "  from apt_instances ".
                          "where creator_idx='$user_idx' and physnode_count>0");
         }
@@ -560,7 +584,7 @@ class Instance
                 DBQueryFatal("select sum(physnode_count), ".
                          " truncate(sum(physnode_count * ".
                          "  ((UNIX_TIMESTAMP(now()) - ".
-                         "    UNIX_TIMESTAMP(created)) / 3600.0)),2) as phours ".
+                         "    UNIX_TIMESTAMP(started)) / 3600.0)),2) as phours".
                          "  from apt_instances ".
                          "where pid_idx='$pid_idx' and physnode_count>0");
         }
@@ -593,13 +617,14 @@ class Instance
         # This gets existing experiments back one week.
         #
         $query_result =
-            DBQueryFatal("select physnode_count,UNIX_TIMESTAMP(created) ".
+            DBQueryFatal("select physnode_count, ".
+                         "    UNIX_TIMESTAMP(started) as started ".
                          "  from apt_instances ".
                          "where $clause and physnode_count>0");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $pnodes   = $row[0];
-            $created  = $row[1];
+            $pnodes   = $row["physnode_count"];
+            $created  = $row["started"];
 
             if ($created < $weekago)
                 $diff = (3600 * 24 * 7);
@@ -614,16 +639,17 @@ class Instance
         # This gets experiments terminated in the last week.
         #
         $query_result =
-            DBQueryFatal("select physnode_count,UNIX_TIMESTAMP(created), ".
-                         "       UNIX_TIMESTAMP(destroyed) ".
+            DBQueryFatal("select physnode_count,".
+                         "       UNIX_TIMESTAMP(started) as started, ".
+                         "       UNIX_TIMESTAMP(destroyed) as destroyed ".
                          "  from apt_instance_history ".
                          "where $clause and physnode_count>0 and " .
                          "      destroyed>DATE_SUB(curdate(), INTERVAL 1 WEEK)");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $pnodes    = $row[0];
-            $created   = $row[1];
-            $destroyed = $row[2];
+            $pnodes    = $row["physnode_count"];
+            $created   = $row["started"];
+            $destroyed = $row["destroyed"];
 
             if ($created < $weekago)
                 $diff = $destroyed - $weekago;
@@ -642,7 +668,7 @@ class Instance
     #
     # Usage over the last months Just phours, cause pcount is not very useful.
     #
-    function MonthsUsage($target) {
+    function MonthsUsage($target, $group = null) {
         $monthago = time() - (3600 * 24 * 28);
         $pcount   = 0;
         $phours   = 0;
@@ -651,6 +677,14 @@ class Instance
         if (get_class($target) == "User") {
             $user_idx = $target->idx();
             $clause = "creator_idx='$user_idx'";
+            #
+            # Optional group target for user.
+            #
+            if ($group) {
+                $pid = $group->pid();
+                $gid = $group->gid();
+                $clause .= " and pid='$pid' and gid='$gid' ";
+            }
         }
         else {
             $pid_idx = $target->pid_idx();
@@ -661,13 +695,14 @@ class Instance
         # This gets existing experiments back one week.
         #
         $query_result =
-            DBQueryFatal("select physnode_count,UNIX_TIMESTAMP(created) ".
+            DBQueryFatal("select physnode_count,".
+                         "    UNIX_TIMESTAMP(started) as started ".
                          "  from apt_instances ".
                          "where $clause and physnode_count>0");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $pnodes   = $row[0];
-            $created  = $row[1];
+            $pnodes   = $row["physnode_count"];
+            $created  = $row["started"];
 
             if ($created < $monthago)
                 $diff = (3600 * 24 * 28);
@@ -682,16 +717,17 @@ class Instance
         # This gets experiments terminated in the last week.
         #
         $query_result =
-            DBQueryFatal("select physnode_count,UNIX_TIMESTAMP(created), ".
-                         "       UNIX_TIMESTAMP(destroyed) ".
+            DBQueryFatal("select physnode_count,".
+                         "       UNIX_TIMESTAMP(started) as started, ".
+                         "       UNIX_TIMESTAMP(destroyed) as destroyed ".
                          "  from apt_instance_history ".
                          "where $clause and physnode_count>0 and " .
                          "      destroyed>DATE_SUB(curdate(), INTERVAL 1 MONTH)");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $pnodes    = $row[0];
-            $created   = $row[1];
-            $destroyed = $row[2];
+            $pnodes    = $row["physnode_count"];
+            $created   = $row["started"];
+            $destroyed = $row["destroyed"];
 
             if ($created < $monthago)
                 $diff = $destroyed - $monthago;
@@ -726,18 +762,18 @@ class Instance
         $query_result =
             DBQueryFatal("select $which,SUM(physnode_count) as physnode_count,".
                          "   SUM(phours) as phours from ".
-                         " ((select $which,physnode_count,created,NULL, ".
+                         " ((select $which,physnode_count,started,NULL, ".
                          "   physnode_count * (TIMESTAMPDIFF(HOUR, ".
-                         "    IF(created > DATE_SUB(now(), INTERVAL $days DAY), ".
-                         "       created, DATE_SUB(now(), INTERVAL $days DAY)), now())) ".
+                         "    IF(started > DATE_SUB(now(),INTERVAL $days DAY),".
+                         "       started, DATE_SUB(now(), INTERVAL $days DAY)), now())) ".
                          "    as phours ".
                          "   from apt_instances ".
                          "   where physnode_count>0) ".
                          "  union ".
-                         "  (select $which,physnode_count,created,destroyed, ".
+                         "  (select $which,physnode_count,started,destroyed, ".
                          "   physnode_count * (TIMESTAMPDIFF(HOUR, ".
-                         "    IF(created > DATE_SUB(now(), INTERVAL $days DAY), ".
-                         "       created, DATE_SUB(now(), INTERVAL $days DAY)), destroyed)) ".
+                         "    IF(started > DATE_SUB(now(),INTERVAL $days DAY),".
+                         "       started, DATE_SUB(now(), INTERVAL $days DAY)), destroyed)) ".
                          "    as phours ".
                          "   from apt_instance_history ".
                          "   where physnode_count>0 and ".
@@ -784,9 +820,14 @@ class Instance
     #
     # Return a list of types not to show user.
     #
-    function NodeTypePruneList() {
-        global $ISEMULAB, $ISCLOUD, $ISAPT, $ISPNET, $ISPOWDER;
-        
+    function NodeTypePruneList($aggregate = null, $all = false) {
+        global $ISEMULAB, $ISCLOUD, $ISAPT, $ISPNET, $ISPOWDER, $TBMAINSITE;
+        global $DEFAULT_AGGREGATE_URN;
+        $aggregate_urn = ($aggregate ? $aggregate->urn() : "");
+
+        #
+        # We never want to show these.
+        #
         $skiptypes = array("dboxvm"    => true,
                            "d430k"     => true,
                            "d530"      => true,
@@ -794,15 +835,216 @@ class Instance
                            "pc2830qx2" => true,
                            "pc2400hp"  => true,
                            "d2100"     => true,
+                           "faros_sfp" => true,
+                           "e200-8d"   => true,
+                           "e300-8d"   => true,
+                           "sequoia-v8"=> true,
                            "pc2400w"   => true);
-                   
-        if ($ISEMULAB || $ISCLOUD || $ISAPT) {
+
+        #
+        # If showing nodes from another cluster, then we show them
+        # all (not sure how long this rule will last). Otherwise,
+        # only the Powder/Phantom portals get to see all these types.
+        #
+        if ($TBMAINSITE && 
+            !($ISPOWDER || $ISPNET) &&
+            ($all || $aggregate_urn == $DEFAULT_AGGREGATE_URN)) {
             $skiptypes["sdr"]      = true;
             $skiptypes["nuc5300"]  = true;
             $skiptypes["enodeb"]   = true;
             $skiptypes["nuc6260"]  = true;
+            $skiptypes["nuc8650"]  = true;
+            $skiptypes["nuc8559"]  = true;
+            $skiptypes["nuc7100"]  = true;
+            $skiptypes["iris030"]  = true;
+            $skiptypes["d840"]     = true;
+            $skiptypes["d740"]     = true;
+            $skiptypes["x310"]     = true;
+            $skiptypes["n310"]     = true;
+            $skiptypes["cellsdr1-honors"]    = true;
+            $skiptypes["cellsdr1-ustar"]     = true;
+            $skiptypes["cellsdr1-browning"]  = true;
+            $skiptypes["cellsdr1-meb"]       = true;
+            $skiptypes["cellsdr1-fm"]        = true;
+            $skiptypes["cellsdr1-bes"]       = true;
+            $skiptypes["cellsdr1-ustar"]     = true;
+            $skiptypes["cellsdr1-smt"]       = true;
+            $skiptypes["cellsdr1-dentistry"] = true;
+            $skiptypes["cbrssdr1-honors"]    = true;
+            $skiptypes["cbrssdr1-ustar"]     = true;
+            $skiptypes["cbrssdr1-browning"]  = true;
+            $skiptypes["cbrssdr1-meb"]       = true;
+            $skiptypes["cbrssdr1-fm"]        = true;
+            $skiptypes["cbrssdr1-bes"]       = true;
+            $skiptypes["cbrssdr1-ustar"]     = true;
+            $skiptypes["cbrssdr1-smt"]       = true;
+            $skiptypes["cbrssdr1-dentistry"] = true;
         }
         return $skiptypes;
+    }
+}
+
+class InstanceHistory
+{
+    var	$record;
+    var $slivers;
+    
+    #
+    # Constructor by lookup on unique index.
+    #
+    function InstanceHistory($uuid) {
+	$safe_uuid = addslashes($uuid);
+
+	$query_result =
+	    DBQueryWarn("select h.*,f.exitmessage,f.exitcode ".
+                        "  from apt_instance_history as h ".
+                        "left join apt_instance_failures as f ".
+                        "     on f.uuid=h.uuid ".
+			"where h.uuid='$safe_uuid'");
+
+	if (!$query_result || !mysql_num_rows($query_result)) {
+	    $this->record = null;
+	    return;
+	}
+	$this->record  = mysql_fetch_array($query_result);
+
+        #
+        # Get the list of aggregate records. Early records do not have one.
+        #
+	$query_result =
+	    DBQueryWarn("select * from apt_instance_aggregate_history ".
+			"where uuid='$uuid'");
+	if (!$query_result) {
+	    $this->record = null;
+	    return;
+	}
+        if (!mysql_num_rows($query_result)) {
+            $this->slivers = array(
+                array("uuid" => $this->record["uuid"],
+                      "name" => $this->record["name"],
+                      "aggregate_urn" => $this->record["aggregate_urn"],
+                      "status" => $this->record["status"],
+                      "public_url" => $this->record["public_url"],
+                      "manifest" => $this->record["manifest"],
+                ));
+        }
+        else {
+            $this->slivers = array();
+
+            while ($row = mysql_fetch_array($query_result)) {
+                $this->slivers[] = $row;
+            }
+        }
+    }
+    # accessors
+    function slivers()      { return $this->slivers; }
+    function field($name) {
+	return (is_null($this->record) ? -1 : $this->record[$name]);
+    }
+    function uuid()	    { return $this->field('uuid'); }
+    function name()	    { return $this->field('name'); }
+    function profile_id()   { return $this->field('profile_id'); }
+    function profile_version() { return $this->field('profile_version'); }
+    function slice_uuid()   { return $this->field('slice_uuid'); }
+    function creator()	    { return $this->field('creator'); }
+    function creator_idx()  { return $this->field('creator_idx'); }
+    function creator_uuid() { return $this->field('creator_uuid'); }
+    function pid()	    { return $this->field('pid'); }
+    function pid_idx()	    { return $this->field('pid_idx'); }
+    function gid()	    { return $this->field('gid'); }
+    function gid_idx()	    { return $this->field('gid_idx'); }
+    function aggregate_urn(){ return $this->field('aggregate_urn'); }
+    function public_url()   { return $this->field('public_url'); }
+    function logfileid()    { return $this->field('logfileid'); }
+    function created()	    { return $this->field('created'); }
+    function start_at()     { return $this->field('start_at'); }
+    function stop_at()      { return $this->field('stop_at'); }
+    function started()      { return $this->field('started'); }
+    function destroyed()    { return $this->field('destroyed'); }
+    function expired()      { return $this->field('expired'); }
+    function extension_count()   { return $this->field('extension_count'); }
+    function extension_days()    { return $this->field('extension_days'); }
+    function extension_hours()   { return $this->field('extension_hours'); }
+    function physnode_count()    { return $this->field('physnode_count'); }
+    function virtnode_count()    { return $this->field('virtnode_count'); }
+    function servername()   { return $this->field('servername'); }
+    function repourl()	    { return $this->field('repourl'); }
+    function reporef()	    { return $this->field('reporef'); }
+    function repohash()	    { return $this->field('repohash'); }
+    function rspec()	    { return $this->field('rspec'); }
+    function script()	    { return $this->field('script'); }
+    function params()	    { return $this->field('params'); }
+    function manifest()	    { return $this->field('manifest'); }
+    # Convenience
+    function isActive()     { return 0; }
+    function IsAPT() {
+	return preg_match('/aptlab/', $this->servername());
+    }
+    function IsCloud() {
+	return preg_match('/cloudlab/', $this->servername());
+    }
+    function IsPNet() {
+	return preg_match('/phantomnet/', $this->servername());
+    }
+    # Hmm, how does one cause an error in a php constructor?
+    function IsValid() {
+	return !is_null($this->record);
+    }
+    # Lookup up an instance by uuid
+    function Lookup($uuid) {
+	$foo = new InstanceHistory($uuid);
+
+	if ($foo->IsValid()) {
+            # Insert into cache.
+	    return $foo;
+	}	
+	return null;
+    }
+    function LookupBySlice($slice_uuid)
+    {
+	$safe_uuid = addslashes($slice_uuid);
+
+	$query_result =
+	    DBQueryWarn("select uuid from apt_instance_history ".
+			"where slice_uuid='$safe_uuid'");
+
+	if (!$query_result || !mysql_num_rows($query_result)) {
+            return null;
+	}
+        $row = mysql_fetch_array($query_result);
+        return InstanceHistory::Lookup($row[0]);
+    }
+    function SliceToUUID($slice_uuid)
+    {
+	$safe_uuid = addslashes($slice_uuid);
+
+	$query_result =
+	    DBQueryWarn("select uuid from apt_instance_history ".
+			"where slice_uuid='$safe_uuid'");
+
+	if (!$query_result || !mysql_num_rows($query_result)) {
+            return null;
+	}
+        $row = mysql_fetch_array($query_result);
+        return $row[0];
+    }
+    #
+    # Permission check; does user have permission to view instance.
+    #
+    function CanView($user) {
+	if ($this->creator_idx() == $user->uid_idx()) {
+	    return 1;
+	}
+	# Otherwise a project membership test.
+	$project = Project::Lookup($this->pid_idx());
+	if (!$project) {
+	    return 0;
+	}
+	$isapproved = 0;
+	if ($project->IsMember($user, $isapproved) && $isapproved) {
+	    return 1;
+	}
+	return 0;
     }
 }
 
@@ -820,10 +1062,11 @@ class InstanceSliver
 	    return;
         }
 	$uuid = $instance->uuid();
+        $safe_urn = addslashes($urn);
 
 	$query_result =
 	    DBQueryWarn("select * from apt_instance_aggregates ".
-			"where uuid='$uuid' and aggregate_urn='$urn'");
+			"where uuid='$uuid' and aggregate_urn='$safe_urn'");
 
 	if (!$query_result || !mysql_num_rows($query_result)) {
 	    $this->sliver = null;
@@ -1031,9 +1274,9 @@ class ExtensionInfo
 
 # $amlist, $fedlist, and $status are all output arrays
 function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
-                                  $extended = false) {
+                                  $extended = false, $user = null) {
     global $TBMAINSITE, $DEFAULT_AGGREGATE_URN, $CHECKLOGIN_USER;
-    $am_array = Instance::DefaultAggregateList();
+    $am_array = Instance::DefaultAggregateList($user);
 
     #
     # If not the Cloudlab Portal then we get local status only.
@@ -1043,9 +1286,19 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
         $urn = $aggregate->urn();
         $am  = $aggregate->name();
         if ($extended) {
-            $amlist[$urn] = array("urn"      => $urn,
-                                  "name"     => $am,
-                                  "nickname" => $aggregate->nickname());
+            $typelist = array();
+            $types = $aggregate->TypeList();
+
+            foreach ($types as $type => $ignore) {
+                $typelist[$type] = $aggregate->TypeAttributes($type);
+            }
+            $amlist[$urn] =
+                array("urn"      => $urn,
+                      "name"     => $am,
+                      "nickname" => $aggregate->nickname(),
+                      "typelist" => $typelist,
+                      "typeinfo" => $aggregate->typeinfo,
+                      "reservable_nodes" => $aggregate->ReservableNodes());
         }
         else {
             $amlist[$urn] = $am;
@@ -1066,9 +1319,19 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
         $urn = $aggregate->urn();
         $am  = $aggregate->name();
         if ($extended) {
+            $typelist = array();
+            $types = $aggregate->TypeList();
+
+            foreach ($types as $type => $ignore) {
+                $typelist[$type] = $aggregate->TypeAttributes($type);
+            }
             $amlist[$urn] = array("urn"      => $urn,
                                   "name"     => $am,
-                                  "nickname" => $aggregate->nickname());
+                                  "isFE"     => $aggregate->isFE(),
+                                  "ismobile" => $aggregate->ismobile(),
+                                  "nickname" => $aggregate->nickname(),
+                                  "typelist" => $typelist,
+                                  "typeinfo" => $aggregate->typeinfo);
         }
         else {
             $amlist[$urn] = $am;
@@ -1142,11 +1405,11 @@ function CalculateWirelessStatus(&$result) {
     $result["controlled"] = $controlled1 + $controlled2;
 }
     
-function SpitAggregateStatus($extended = false) {
+function SpitAggregateStatus($extended = false, $user = null) {
     $amlist     = array();
     $fedlist    = array();
     $status     = array();
-    CalculateAggregateStatus($amlist, $fedlist, $status, $extended);
+    CalculateAggregateStatus($amlist, $fedlist, $status, $extended, $user);
     echo "<script type='text/plain' id='amlist-json'>\n";
     echo htmlentities(json_encode($amlist));
     echo "</script>\n";
@@ -1167,31 +1430,31 @@ function UserUsageInfo($user) {
     $results     = array();
 
     $query_result =
-        DBQueryFatal("select profile_id,count(profile_id), ".
-                     "       max(UNIX_TIMESTAMP(created)) ".
+        DBQueryFatal("select profile_id,count(profile_id) as count, ".
+                     "       max(UNIX_TIMESTAMP(started)) as lastused ".
                      "  from apt_instances ".
                      " where creator_idx='$user_idx' ".
                      " group by profile_id");
 
     while ($row = mysql_fetch_array($query_result)) {
-        $profile_id = $row[0];
-        $count      = $row[1];
-        $lastused   = $row[2];
+        $profile_id = $row["profile_id"];
+        $count      = $row["count"];
+        $lastused   = $row["lastused"];
 
         $results[$profile_id] = array("count"    => $count,
                                       "lastused" => $lastused);
     }
     $query_result =
-        DBQueryFatal("select profile_id,count(profile_id), ".
-                     "       max(UNIX_TIMESTAMP(created)) ".
+        DBQueryFatal("select profile_id,count(profile_id) as count, ".
+                     "       max(UNIX_TIMESTAMP(started)) as lastused ".
                      "  from apt_instance_history ".
                      " where creator_idx='$user_idx' ".
                      " group by profile_id");
 
     while ($row = mysql_fetch_array($query_result)) {
-        $profile_id = $row[0];
-        $count      = $row[1];
-        $lastused   = $row[2];
+        $profile_id = $row["profile_id"];
+        $count      = $row["count"];
+        $lastused   = $row["lastused"];
 
         if (!array_key_exists($profile_id, $results)) {
             $results[$profile_id] = array("count"    => $count,

@@ -1,6 +1,6 @@
 #!/usr/local/bin/python
 #
-# Copyright (c) 2005-2017 University of Utah and the Flux Group.
+# Copyright (c) 2005-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -232,6 +232,10 @@ for child in tree.getroot():
                 pass
             elif element.tag == "routertype" and element.text:
                 routertype = element.text
+                if routertype == "static-old":
+                    Fatal("Unsupported routertype static-old on node " +
+                          vname + ": " + element.text)
+                    pass
                 if routertype == "static-ddijk":
                     routertype = "static"
                     pass
@@ -429,6 +433,9 @@ for child in tree.getroot():
             pass
         if key == "placement":
             bs.placement = val;
+            pass
+        if key == "rwclone" and val == "1":
+            bs.rwclone = True
             pass
         pass
     pass

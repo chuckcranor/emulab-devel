@@ -171,17 +171,16 @@ def init_server():
             sys.exit(2)
             pass
         
-        from M2Crypto.m2xmlrpclib import SSL_Transport
-        from M2Crypto import SSL
+        import ssl
         
         URI = "https://" + XMLRPC_SERVER + ":" + str(XMLRPC_PORT) + prefix
         
-        ctx = SSL.Context("sslv23")
-        ctx.load_cert(CERTIFICATE, CERTIFICATE)
-        ctx.set_verify(SSL.verify_none, 16)
-        ctx.set_allow_unknown_ca(0)
+        ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+        ctx.load_cert_chain(CERTIFICATE)
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
         
-        SERVER = xmlrpclib.ServerProxy(URI, SSL_Transport(ctx))
+        SERVER = xmlrpclib.ServerProxy(URI, context=ctx)
         pass
     return
 

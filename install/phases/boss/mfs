@@ -85,6 +85,19 @@ sub Install($$$)
 	# Its the generic stuff; must localize.
 	#
 	my $fv = $MFSVERSION;
+
+	#
+	# XXX hack, hack. Right now there is no FreeBSD 11 MFS,
+	# just a FreeBSD 11 kernel to use with FreeBSD 10 MFS.
+	#
+	if ($fv eq "11-64") {
+	    $fv = "10-64";
+	    if (-x "$TFTP_DIR/freebsd/boot/kernel11" ||
+		-x "$TFTP_DIR/freebsd10-64/boot/kernel11") {
+		$kernelvers = 11;
+	    }
+	}
+
 	if (! -e "$TFTP_DIR/freebsd${fv}") {
 	    if ($fv eq "10-64") {
 		$fv = "8-64";
@@ -108,9 +121,19 @@ sub Install($$$)
 	    ExecQuietFatal("cd $TFTP_DIR; ".
 			   "$CP -p $pdir/pxeboot.emu-${cons} pxeboot.emu");
 	};
+
+	#
+	# XXX conventionally, "freebsd" and "frisbee" were 32-bit versions
+	# of MFSes and "freebsd<vers>-64" and "frisbee<vers>-64" were 64-bit
+	# versions. We had different sets of OS descriptors for each.
+	# But we really don't support 32-bit machines anymore, so both
+	# versions are 64-bit. Since the paths are still different for the
+	# descriptors, we symlink "frisbee<vers>-64" to "frisbee" and
+	# similarly for "freebsd".
+	# 
 	Phase "freemv", "Using freebsd${fv} version of admin MFS", sub {
 	    DoneIfExists("$TFTP_DIR/freebsd");
-	    ExecQuietFatal("cd $TFTP_DIR; $MV freebsd${fv} freebsd");
+	    ExecQuietFatal("cd $TFTP_DIR; ln -s freebsd${fv} freebsd");
 	    # find the best MFS kernel to use
 	    if (!$kernelvers) {
 		if (-x "$TFTP_DIR/freebsd/boot/kernel10") {
@@ -122,7 +145,7 @@ sub Install($$$)
 	};
 	Phase "frismv", "Using frisbee${fv} version of disk load MFS", sub {
 	    DoneIfExists("$TFTP_DIR/frisbee");
-	    ExecQuietFatal("cd $TFTP_DIR; $MV frisbee${fv} frisbee");
+	    ExecQuietFatal("cd $TFTP_DIR; ln -s frisbee${fv} frisbee");
 	    # find the best MFS kernel to use
 	    if (!$kernelvers) {
 		if (-x "$TFTP_DIR/frisbee/boot/kernel10") {
@@ -139,7 +162,7 @@ sub Install($$$)
 	    Phase "newnode", "Using freebsd${fv} version of newnode MFS", sub {
 		DoneIfExists("$TFTP_DIR/freebsd.newnode");
 		ExecQuietFatal("cd $TFTP_DIR; ".
-			       "$MV freebsd${fv}.newnode freebsd.newnode");
+			       "ln -s freebsd${fv}.newnode freebsd.newnode");
 		# find the best MFS kernel to use
 		if (!$kernelvers) {
 		    if (-x "$TFTP_DIR/freebsd.newnode/boot/kernel10") {

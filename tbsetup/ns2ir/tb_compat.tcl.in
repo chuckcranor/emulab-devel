@@ -1,6 +1,6 @@
 # -*- tcl -*-
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -189,8 +189,11 @@ namespace eval TBCOMPAT {
     set elabinelab_attributes {}
     variable EINEROLE  {^(all|boss|ops|fs|router|node)$}
     variable EINEKEY   {^([-\w\.]+)$}
-    variable EINEVALUE {^([-\w\.\+\,\s\/:\@]+)$}
+    variable EINEVALUE {^([-\w\.\+\,\s\/:\@]*)$}
     variable EINEORDER {^\d+$}
+
+    # Address Pool.
+    variable virt_address_pools
 
     # virt blobs stuff
     variable vblob_id_count 0
@@ -571,6 +574,12 @@ proc tb-set-node-service {service args} {
 	    [list $(-node) $serviceidx $(-env) $(-whence) \
 		 $vblobid $(-enable) $(-enablehooks) $(-fatal)]
     }
+}
+
+proc tb-add-address-pool {id count} {
+    var_import ::TBCOMPAT::virt_address_pools
+
+    set virt_address_pools($id) $count
 }
 
 proc tb-add-node-service-hook {service args} {
@@ -1864,6 +1873,16 @@ proc tbx-log {msg} {
     if {[info exists tbxlogfile]} {
 	puts $tbxlogfile $msg
     }
+}
+
+#
+# XXX quick hack.
+# Enable use of jumbo frames (9K) for 10Gb and beyond links. Assumes that the
+# experiment switches involved all have jumbo frames enabled.
+#
+proc tb-use-jumbo-frames {onoff} {
+    perror "\[tb-use-jumbo-frames] no longer supported, ignoring."
+    return
 }
 
 ##

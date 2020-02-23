@@ -185,11 +185,13 @@ my $CAPTUREOPTS	= "-i -C -L -T 10 -R 2000";
 
 #
 # Create a thin pool with the name $POOL_NAME using not more
-# than $POOL_FRAC of any disk.
+# than $POOL_FRAC of any disk. Note that for shared nodes, we use a
+# larger fraction of space since they will host more VMs and more images.
+
 # 
 my $usethin = 1;
 my $POOL_NAME = "disk-pool";
-my $POOL_FRAC = 0.75;
+my $POOL_FRAC = SHAREDHOST() ? 0.60 : 0.30;
 
 #
 # If set to one, we will destroy a golden disk when no vnode disks
@@ -577,9 +579,9 @@ sub ImageLVName($)
 # Called on each vnode, but should only be executed once per boot.
 # We use a file in /var/run (cleared on reboots) to ensure this.
 #
-sub rootPreConfig($)
+sub rootPreConfig($;$)
 {
-    my $bossip = shift;
+    my ($bossip,$hostattributes) = @_;
     #
     # Haven't been called yet, grab the lock and double check that someone
     # didn't do it while we were waiting.
@@ -606,6 +608,10 @@ sub rootPreConfig($)
     }
     
     print "Configuring root vnode context\n";
+
+    $usethin = 0
+	if (exists($hostattributes->{'XEN_LVMNOTHINPOOL'}) &&
+	    (lc($hostattributes->{'XEN_LVMNOTHINPOOL'}) eq "yes"));
 
     #
     # For compatibility with existing (physical host) Emulab images,
@@ -744,6 +750,7 @@ sub rootPreConfig($)
     # See if our LVM volume group for VMs exists and create it if not.
     #
     my $vg = `vgs | grep $VGNAME`;
+    my $blockdevstr = "";
     if ($vg !~ /^\s+${VGNAME}\s/) {
 	print "Creating volume group...\n"
 	    if ($debug);
@@ -868,7 +875,7 @@ sub rootPreConfig($)
 	    return -1;
 	}
 		    
-	my $blockdevstr = join(' ', sort @blockdevs);
+	$blockdevstr = join(' ', sort @blockdevs);
 
 	#
 	# If we are doing a reliable LVM setup, setup an mdadm RAID10
@@ -904,17 +911,20 @@ sub rootPreConfig($)
 	    print STDERR "WARNING: physical disk space below the desired ".
 		" minimum value ($size < $XEN_MIN_VGSIZE), expect trouble.\n";
 	}
-
-	#
-	# Create an image pool for golden images.
-	# If this fails, we just don't use thin volumes!
-	#
-	if ($usethin && createThinPool($blockdevstr)) {
-	    print STDERR "WARNING: could not create a thin pool, ".
-		"disabling golden image support\n";
-	    $usethin = 0;
-	}
+    } else {
+	$blockdevstr = join(" ", listPVs($VGNAME));
     }
+
+    #
+    # Create an image pool for golden images if it is desired and doesn't
+    # already exist. If this fails, we just don't use thin volumes!
+    #
+    if ($usethin && !findThinPool() && createThinPool($blockdevstr)) {
+	print STDERR "WARNING: could not create a thin pool, ".
+	    "disabling golden image support\n";
+	$usethin = 0;
+    }
+
     $STRIPE_COUNT = computeStripeSize($VGNAME);
     
     #
@@ -1409,12 +1419,15 @@ sub vnodeCreate($$$$)
 	else {
 	    #
 	    # Cannot use/create a golden image if there is a user-specified
-	    # extra filesystem.
+	    # extra filesystem or we are creating a large second partition.
 	    #
 	    my $extrafs = 
 		(exists($attributes->{'XEN_EXTRAFS'}) ?
 		 $attributes->{'XEN_EXTRAFS'} : undef);
-	    if ($extrafs) {
+	    my $s2size =
+		(exists($attributes->{'XEN_SLICE2IMAGE'}) ?
+		 $XEN_LDSIZE_3 : $XEN_EMPTYSIZE);
+	    if ($extrafs || $s2size != $XEN_EMPTYSIZE) {
 		$dothinlv = 0;
 	    }
 
@@ -1449,7 +1462,7 @@ sub vnodeCreate($$$$)
 	    # Either way, we need to unpack the images to create a disk.
 	    #
 	    if (CreatePrimaryDisk($lvname, $imagemetadata,
-				  $vnode_id, $extrafs, $dothinlv)) {
+				  $vnode_id, $extrafs, $s2size, $dothinlv)) {
 		releaseGoldenLock($glock)
 		    if ($glock);
 		TBScriptUnlock();
@@ -1735,10 +1748,20 @@ okay:
 	addConfig($vninfo, "apic=1", 2);
 	addConfig($vninfo, "acpi=1", 2);
 	addConfig($vninfo, "pae=1", 2);
-	    # XXX wont start without vnc=1
+	# XXX wont start without vnc=1
 	addConfig($vninfo, "vnc=1", 2);
 	addConfig($vninfo, "sdl=0", 2);
 	addConfig($vninfo, "stdvga=0", 2);
+	#
+	# Not sure how to do this for PVM.
+	#
+	if (exists($attributes->{'XEN_USBDEVICES'})) {
+	    my $devices = $attributes->{'XEN_USBDEVICES'};
+	    addConfig($vninfo, "usb=1", 2);
+	    addConfig($vninfo, "usbdevices = [".
+		      join(",", map {"'" . $_ . "'"} split(",", $devices)) .
+		      "]", 2);
+	}
     } else {
 	if ($os eq "FreeBSD") {
 	    addConfig($vninfo, "extra = 'boot_verbose=1" .
@@ -1897,7 +1920,8 @@ sub vnodePreConfig($$$$$){
 		$vninfo->{'elabinelab'} = 1;
 	    }
 	    print STDERR "vnodePreConfig: $vnode_id root already localized\n";
-	    goto done;
+	    mysystem("umount $dev");
+	    goto done2;
 	}
 
 	# needs to be customized, remount RW
@@ -2154,6 +2178,7 @@ sub vnodePreConfig($$$$$){
 	mysystem2("$FSCKUFS -yf $dev");
     }
 
+  done2:
     # XXX let vnodesetup exit early
     if ($vsrelease eq "early" && $retval == 0) {
 	TBDebugTimeStamp("vnodePreConfig: touching $VMS/$vnode_id/running");
@@ -2176,6 +2201,7 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
     my ($vnode_id, $vmid, $vnconfig, $private,
 	$ip,$mask,$mac,$gw, $vname,$longdomain,$shortdomain,$bossip) = @_;
     my $vninfo = $private;
+    my $attributes = $vnconfig->{'attributes'};
 
     if (!exists($vninfo->{'cffile'})) {
 	die("libvnode_xen: vnodePreConfig: no state for $vnode_id!?");
@@ -2201,9 +2227,15 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
     # Create a network config script for the interface
     my $stuff = {'name' => $vnode_id,
 		 'ip' => $ip,
+		 'ipaliases' => "",
 		 'hip' => $gw,
 		 'fqdn', => $longdomain,
 		 'mac' => $fmac};
+    # Look for aliases on the ip. Need to pass these to emulab-cnet
+    # for antispoofing rules.
+    if (exists($attributes->{'XEN_IPALIASES'})) {
+	$stuff->{'ipaliases'} = $attributes->{'XEN_IPALIASES'};
+    }
     createControlNetworkScript($vmid, $vnconfig, $stuff, $cscript);
 
     #
@@ -2332,6 +2364,18 @@ sub vnodePreConfigExpNetwork($$$$)
     my $ifconfigs  = $vnconfig->{'ifconfig'};
     my $ldconfigs  = $vnconfig->{'ldconfig'};
     my $tunconfigs = $vnconfig->{'tunconfig'};
+    my $attributes = $vnconfig->{'attributes'};
+    my $noantispoof= 0;
+
+    $noantispoof = 1
+	if (exists($attributes->{'XEN_NOANTISPOOFING'}) &&
+	    (lc($attributes->{'XEN_NOANTISPOOFING'}) eq "yes"));
+
+    # Strictly for debugging.
+    if ($noantispoof) {
+	mysystem("$IPTABLES -P FORWARD ACCEPT");
+    }
+
     my $ifbs;
 
     # Keep track of links (and implicitly, bridges) that need to be created
@@ -2347,7 +2391,7 @@ sub vnodePreConfigExpNetwork($$$$)
     my $vifstr = "vif = [$viftype " .
 	"mac=" . $vninfo->{'cnet'}->{'mac'} . ", " .
 	# This tells vif-bridge to use antispoofing iptable rules.
-	"ip=" . $vninfo->{'cnet'}->{'ip'} . ", " .
+	(!$noantispoof ? "ip=" . $vninfo->{'cnet'}->{'ip'} . ", " : "") .
         "bridge=" . $vninfo->{'cnet'}->{'bridge'} . ", " .
 	# For vif-route.
         "gatewaydev=" . $vninfo->{'cnet'}->{'bridge'} . ", " .
@@ -2688,6 +2732,7 @@ sub vnodeBoot($$$$)
 {
     my ($vnode_id, $vmid, $vnconfig, $private) = @_;
     my $vninfo = $private;
+    my $attributes = $vnconfig->{'attributes'};
     my $ip = $vninfo->{'dhcp'}->{'ip'};
 
     if (!exists($vninfo->{'cffile'})) {
@@ -2719,6 +2764,18 @@ sub vnodeBoot($$$$)
     if ($rpid == 0) {
 	print STDERR "vnodeBoot: WARNING: capture was not running, starting\n";
 	captureStart($vnode_id);
+    }
+
+    if (exists($attributes->{'XEN_STARTUPSCRIPT'})) {
+	my $script = $attributes->{'XEN_STARTUPSCRIPT'};
+	if (! -x $script) {
+	    print STDERR "vnodeBoot: ERROR, $script does not exist\n";
+	}
+	mysystem2("$script $vnode_id");
+	if ($?) {
+	    print STDERR "vnodeBoot: ERROR, $script failed\n";
+	    return -1;
+	}
     }
 
     # notify stated that we are about to boot. We need this transition for
@@ -3205,11 +3262,12 @@ sub findRoot()
 #
 # Create primary disk.
 #
-sub CreatePrimaryDisk($$$$;$)
+sub CreatePrimaryDisk($$$$;$$)
 {
-    my ($lvname, $imagemetadata, $target, $extrafs, $dothinlv) = @_;
+    my ($lvname, $imagemetadata, $target, $extrafs, $s2size, $dothinlv) = @_;
 
     # XXX when called externally by mkimagecache
+    $s2size = $XEN_EMPTYSIZE if (!defined($s2size));
     $dothinlv = 0 if (!defined($dothinlv));
 
     #
@@ -3264,7 +3322,7 @@ sub CreatePrimaryDisk($$$$;$)
     # Add room for "empty" slice, swap partition and for extra disk.
     #
     if ($loadslice != 0) {
-	$lv_size += $XEN_EMPTYSIZE;
+	$lv_size += $s2size;
 	$lv_size += $XEN_SWAPSIZE;
 	if (defined($extrafs)) {
 	    # In GB, so convert to K
@@ -3360,7 +3418,7 @@ sub CreatePrimaryDisk($$$$;$)
 	if ($mbrvers == 3) {
 	    $slice1_start = 2048;
 	    $slice1_size  = $XEN_LDSIZE_3 * 2;
-	    $slice2_size  = $XEN_EMPTYSIZE * 2;
+	    $slice2_size  = $s2size * 2;
 	    if ($imagemetadata->{'PARTOS'} =~ /freebsd/i) {
 		$slice1_type  = "0xA5";
 	    } else {
@@ -4339,7 +4397,15 @@ sub modDHCP($$$$$)
     }
 
     if ($doHUP) {
-        restartDHCP();
+	#
+	# When using XENVIFROUTING, no point in restarting for a new VM;
+	# the new vif does not exist yet. Instead, we do the restart in
+	# emulab-cnet which is called after the vif (container) is created.
+	# Ditto when removing, this is done in emulab-cnet.
+	#
+	if (!$VIFROUTING) {
+	    restartDHCP();
+	}
     }
 
     TBDebugTimeStamp("  releasing DHCP lock")
@@ -4382,6 +4448,7 @@ sub createControlNetworkScript($$$$)
     my $host_ip = $data->{'hip'};
     my $name = $data->{'name'};
     my $ip = $data->{'ip'};
+    my $ipaliases = $data->{'ipaliases'};
     my $mac = $data->{'mac'};
     my $elabinelab = (exists($vnconfig->{'config'}->{'ELABINELAB'}) ?
 		      $vnconfig->{'config'}->{'ELABINELAB'} : 0);
@@ -4397,7 +4464,7 @@ sub createControlNetworkScript($$$$)
     print FILE "if [ -e \"$file.debug\" ]; then ".
 	"mv -f $file.debug $file.debug.0; fi\n";
     print FILE "/etc/xen/scripts/emulab-cnet.pl ".
-	"$vmid $host_ip $name $ip $mac $elabinelab \$* >$file.debug 2>&1\n";
+	"$vmid $host_ip $name $ip $mac $elabinelab '$ipaliases' \$* >$file.debug 2>&1\n";
     print FILE "exit \$?\n";
     close(FILE);
     chmod(0555, $file);
@@ -5062,6 +5129,24 @@ sub parseXenDiskInfo($$)
 # who knows where--all of which made me nervous.
 #
 
+sub listPVs()
+{
+    my ($vgname) = @_;
+
+    my $command  = "vgdisplay -v $vgname 2>/dev/null";
+    my @devices = ();
+    
+    if (open(PFD, "$command |")) {
+	while (my $line = <PFD>) {
+	    if ($line =~ /^\s*PV Name\s+(\/dev\/\S+)\s*$/) {
+		push @devices, $1;
+	    }
+	}
+	close(PFD);
+    }
+    return @devices;
+}
+
 #
 # Create a thin pool that uses most of the VG space.
 #
@@ -5126,6 +5211,20 @@ sub createThinPool($)
     return 0;
 }
 
+#
+# XXX note we cannot use lvmFindVolume here as it searches for
+# a link in /dev/xen-vg. That link does not exist for the thin pool.
+#
+sub findThinPool()
+{
+    my ($lvm)  = @_;
+    my $exists = `lvs --noheadings -o name $VGNAME/$POOL_NAME >/dev/null 2>&1`;
+    return 0
+	if ($?);
+
+    return 1;
+}
+
 sub doingThinLVM()
 {
     # globally disabled
@@ -5134,7 +5233,7 @@ sub doingThinLVM()
     }
 
     # see if pool exists
-    if (!lvmFindVolume($POOL_NAME)) {
+    if (!findThinPool()) {
 	print STDERR "WARNING: no thin pool found, ".
 	    "disabling golden image support\n";
 	$usethin = 0;

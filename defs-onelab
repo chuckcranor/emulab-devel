@@ -22,7 +22,7 @@
 #
 
 # The name of this installation
-THISHOMEBASE=Couldlab.Onelab.Eu
+THISHOMEBASE=Onelab.Eu
 
 #
 # Various domain and host names
@@ -411,6 +411,9 @@ NOSTACKMIB=0
 IMAGEPROVENANCE=1
 IMAGEDELTAS=0
 
+# Image directories
+IMAGEDIRECTORIES=1
+
 # ZFS -- added by hibler 12/17/15
 WITHZFS=1
 ZFS_ROOT=storage
@@ -482,6 +485,7 @@ CLUSTER_PUBSUBD_SSLPORT=16506
 CLUSTER_PUBSUBD_ALTPORT=16507
 FANCYBANNER=1
 ISOLATEADMINS=0
+PORTAL_ENABLE=1
 #
 # Fancy new browser in the console support
 #
@@ -500,3 +504,6 @@ BOOTINFO_EVENTS=0
 # Enable idle stats collection (RRD files)
 SDCOLLECTD_DOSTATS=1
 SDCOLLECTD_USE_RRDTOOL=1
+
+# New world order
+PORTAL_ENABLE=1

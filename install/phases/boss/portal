@@ -10,7 +10,7 @@ use EmulabConstants;
 my $MYURN           = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $GENILIB_REPO    = "https://bitbucket.org/emulab/geni-lib";
 my $GENILIB_SRCDIR  = "$TOP_SRCDIR/../geni-lib";
-my $APACHEPREFIX    = ("$APACHE_VERSION" == "22" ? "apache22" : "apache");
+my $APACHEPREFIX    = ("$APACHE_VERSION" == "24" ? "apache24" : "apache22");
 my $PROFILE_ONEVM   = "$TOP_SRCDIR/install/onevm.xml";
 my $PROFILE_ONEPC   = "$TOP_SRCDIR/install/onepc.xml";
 my $MANAGE_PROFILE  = "$TBROOT/bin/manage_profile";
@@ -39,7 +39,7 @@ sub Install($$$)
 			"  nickname='$THB', ".
 			"  abbreviation='$THB', ".
 			"  weburl='$TBBASE', ".
-			"  updated=now(),has_datasets=1, ".
+			"  updated=now(),has_datasets=1,reservations=1, ".
 			"  portals='emulab'")
 		or PhaseFail("DB Error");
 	};
@@ -60,6 +60,17 @@ sub Install($$$)
 		ExecQuietFatal("cd $TOP_SRCDIR/..; ".
 			       "rsync -a geni-lib $TBROOT/opsdir/lib");
 	    };
+	};
+	Phase "mod_fcgid", "Looking for mod_fcgid and installing", sub {
+	    DoneIfPackageInstalled("mod_fcgid");
+	    ExecQuietFatal("pkg install mod_fcgid");
+	};
+	Phase "fcgidsock", "Fixing /var/run/fcgidsock", sub {
+	    ExecQuietFatal("chown nobody:nobody /var/run/fcgidsock");
+	    ExecQuietFatal("chmod 770 /var/run/fcgidsock");
+	};
+	Phase "emulabkey", "Fixing perms on $TBROOT/etc/emulab.key", sub {
+	    ExecQuietFatal("chmod 644 $TBROOT/etc/emulab.key");
 	};
 	Phase "rc.conf", "Adding fcgid to apache flags", sub {
 	    PhaseSkip("already added") unless `grep -q PGENI_FCGID $RCCONF`;

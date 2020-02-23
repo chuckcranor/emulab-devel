@@ -9,6 +9,7 @@ my $RM = '/bin/rm';
 my $CP = '/bin/cp';
 my $CPIO = 'cpio';
 my $GZIP = 'gzip';
+my $XZ = 'xz';
 my $MKSWAP = '/sbin/mkswap';
 my $UUIDGEN = 'uuidgen';
 my $LOSETUP = 'losetup';
@@ -20,6 +21,8 @@ use constant GZHDR1 => 0x1f8b0800;
 use constant GZHDR2 => 0x1f8b0808;
 use constant LARGEST_PAGE_SIZE => 0x4000;
 use constant UUID_OFFSET => 1036;
+use constant ELFHDR => 0x7f454c46;
+use constant XZHDRSTART => 0xfd377a58;
 
 #
 # Turn off line buffering on output
@@ -222,6 +225,19 @@ sub fix_grub_dom0mem
 	return;
 }
 
+sub get_linux_device_components
+{
+	my ($devpath) = @_;
+
+	if ($devpath =~ m#/dev/nvme(\d+)(n\d+)p(\d+)$#) {
+		return ("nvme$1$2","p$3",int($1),int($3));
+	}
+	elsif ($devpath =~ m#/dev/([hs]d)(.)(\d+)$#) {
+		my $disk_num =~ y/[a-h]/[0-7]/;
+		return ("$1$2","$3",int($disk_num),int($3));
+	}
+}
+
 sub fix_swap_partitions
 {
 	my ($imageroot, $root, $old_root) = @_;
@@ -229,8 +245,8 @@ sub fix_swap_partitions
 
 	return undef unless (-x $MKSWAP);
 
-	my ($root_disk) = ($root =~ m#^(/dev/[a-z]+)#);
-	my ($old_root_disk) = ($old_root =~ m#^(/dev/[a-z]+)#);
+	my ($root_disk) = get_linux_device_components($root);
+	my ($old_root_disk) = get_linux_device_components($old_root);
 	my @swap_partitions = find_swap_partitions($root_disk);
 	my ($l, $u) = binary_supports_blkid("$imageroot/sbin/swapon");
 
@@ -426,8 +442,8 @@ sub find_default_grub2_entry
 sub set_grub_root_device
 {
 	my ($imageroot, $grub_config, $root) = @_;
-	my ($root_disk, $root_part) =
-	   ($root =~ m#/dev/(.+)(\d+)#);
+	my ($root_disk, $root_part, $root_disk_num, $root_part_num) =
+	    get_linux_device_components($root);
 	my $grub_disk;
 
 	if (-f $BOOTDIR . "/edd_map") {
@@ -445,20 +461,18 @@ sub set_grub_root_device
 	}
 
 	if (not defined $grub_disk) {
-		$grub_disk = $root;
-		$grub_disk =~ s/^\/dev\/[hs]d(.).*$/$1/;
-		$grub_disk =~ y/[a-h]/[0-7]/;
+		$grub_disk = $root_disk_num;
 		print "Found GRUB root device by guessing\n";
 	}
 
-	printf "GRUB root device is (hd%d,%d)\n", $grub_disk, $root_part - 1;
-	$root_part--;
+	printf "GRUB root device is (hd%d,%d)\n", $grub_disk, $root_part_num - 1;
+	$root_part_num--;
 
 	open FILE, "+<$imageroot/$grub_config" or
 	     die "Couldn't open GRUB config: $!\n";
 	my @buffer;
 	while (<FILE>) {
-		s/^(\s*)root \([^)]*\)/$1root (hd$grub_disk,$root_part)/;
+		s/^(\s*)root \([^)]*\)/$1root (hd$grub_disk,${root_part_num})/;
 		push @buffer, $_;
 	}
 	seek FILE, 0, 0;
@@ -470,8 +484,8 @@ sub set_grub_root_device
 sub set_grub2_root_device
 {
 	my ($imageroot, $grub_config, $root) = @_;
-	my ($root_disk, $root_part) =
-	   ($root =~ m#/dev/(.+)(\d+)#);
+	my ($root_disk, $root_part, $root_disk_num, $root_part_num) =
+	    get_linux_device_components($root);
 	my $grub_disk;
 
 	if (-f $BOOTDIR . "/edd_map") {
@@ -489,13 +503,11 @@ sub set_grub2_root_device
 	}
 
 	if (not defined $grub_disk) {
-		$grub_disk = $root;
-		$grub_disk =~ s/^\/dev\/[hs]d(.).*$/$1/;
-		$grub_disk =~ y/[a-h]/[0-7]/;
+		$grub_disk = $root_disk_num;
 		print "Found GRUB root device by guessing\n";
 	}
 
-	printf "GRUB root device is (hd%d,%d)\n", $grub_disk, $root_part;
+	printf "GRUB root device is (hd%d,%d)\n", $grub_disk, $root_part_num;
 
 	open FILE, "+<$imageroot/$grub_config" or
 	     die "Couldn't open GRUB config: $!\n";
@@ -503,7 +515,7 @@ sub set_grub2_root_device
 	while (<FILE>) {
 		# XXX eat the newline so the RE does not!
 		chomp;
-		s/^(\s*set\s+root\s*=\s*["']?\(?)[^)'"]*(\)?["']?)/$1hd$grub_disk,$root_part$2/;
+		s/^(\s*set\s+root\s*=\s*["']?\(?)[^)'"]*(\)?["']?)/$1hd$grub_disk,${root_part_num}$2/;
 		push @buffer, "$_\n";
 	}
 	seek FILE, 0, 0;
@@ -701,15 +713,21 @@ sub check_kernel
 	my $offset = 0;;
 	my $buffer;
 	my $rc;
-	my $kernel_file = "/tmp/kernel.$$";
+	my $kernel_tmpfile;
+	my $kernel_file = $kernel;
 	my $kernel_has_ide = 0;
 	my $version_string;
+	my $compression;
 
 	open KERNEL, $kernel or die "Couldn't open $kernel: $!\n";
 	read KERNEL, $buffer, 4;
 	while ($rc = read KERNEL, $buffer, 1, length($buffer)) {
 		my ($value) = unpack 'N', $buffer;
 		if ($value == GZHDR1 || $value == GZHDR2) {
+			$compression = 'gzip';
+			last;
+		}
+		elsif ($value == ELFHDR) {
 			last;
 		}
 		$buffer = substr $buffer, 1;
@@ -719,13 +737,23 @@ sub check_kernel
 		return undef;
 	}
 
-	open GZIP, "|$GZIP -dc > $kernel_file 2> /dev/null";
-	print GZIP $buffer;
-	while (read KERNEL, $buffer, 4096) {
+	if ($compression) {
+		$kernel_tmpfile = "/tmp/kernel.$$";
+		$kernel_file = $kernel_tmpfile;
+		#
+		# XXX if gzip sees trailing garbage it exits non-zero causing a SIGPIPE in the
+		# while loop and making perl terminate.
+		# New Linux kernel compressions seem to cause this (on Ubuntu 18 at least).
+		#
+		$SIG{'PIPE'} = 'IGNORE';
+		open GZIP, "|$GZIP -dc > $kernel_tmpfile 2> /dev/null";
 		print GZIP $buffer;
+		while (read KERNEL, $buffer, 4096) {
+			print GZIP $buffer;
+		}
+		close KERNEL;
+		close GZIP;
 	}
-	close KERNEL;
-	close GZIP;
 
 	open KERNEL, $kernel_file or die "Couldn't open raw kernel: $!\n";
 	while (<KERNEL>) {
@@ -738,7 +766,8 @@ sub check_kernel
 	}
 	close KERNEL;
 
-	unlink "$kernel_file";
+	unlink "$kernel_tmpfile"
+		if (defined($kernel_tmpfile));
 
 	return ($version_string, $kernel_has_ide);
 }
@@ -750,13 +779,87 @@ sub check_initrd
 	my $initrd_dir = "/tmp/initrd.dir.$$";
 	my $handles_label = 0;
 	my $handles_uuid = 0;
+	my $has_early_cpio = 0;
+	my $compression;
 
 	return undef if (! -f $initrd);
 
 	mkdir $initrd_dir;
-	`$GZIP -dc < "$initrd" > "$decompressed_initrd" 2> /dev/null`;
+
+	# Check to see if there's an uncompressed early cpio archive
+	# prepended to the main gzip'd cpio hunk.  We have to parse the cpio
+	# headers to find the correct next place to read, unfortunately.
+	#
+	# Assume that we won't find anything; in that case we will
+	# decompress $initrd below.
+	my $initrd_filename = $initrd;
+	my $rc;
+	my $buffer;
+	my $offset = 0;
+	open INITRD, $initrd or die "Couldn't open $initrd: $!\n";
+	while ($rc = read INITRD, $buffer, 6) {
+		# Basically, read any uncompressed newc-format CPIO
+		# headers that we can.  If we find any, the compressed
+		# CPIO blob follows the final uncompressed header.
+		if ($buffer eq '070701' || $buffer eq '070702') {
+			my $tbuf;
+			$rc = read(INITRD,$tbuf,110-6);
+			if ($rc != (110-6)) {
+				die "Malformed early uncompressed initramfs!\n";
+			}
+			$buffer .= $tbuf;
+			my $namesize = hex(substr($buffer,94,8));
+			my $filesize = hex(substr($buffer,54,8));
+			$offset += 110;
+			$offset = (($offset + $namesize + 3) & ~3);
+			$offset = (($offset + $filesize + 3) & ~3);
+			seek(INITRD,$offset,0);
+		}
+		elsif ($offset > 0 && ord(substr($buffer,0,1)) == 0) {
+			$offset += 4;
+			seek(INITRD,$offset,0);
+			next;
+		}
+		else {
+			last;
+		}
+	}
+	if ($offset > 0) {
+		my $inner_initrd = "/tmp/initrd.inner.$$";
+		seek(INITRD,$offset,0);
+		open(INNERINITRD,">$inner_initrd")
+			or die "Con't open $inner_initrd: $!\n";
+		while ($rc = read(INITRD,$buffer,4096)) {
+			print INNERINITRD $buffer;
+		}
+		close(INNERINITRD);
+		# If we extracted an inner blob, change the filename we
+		# will attempt to decompress.
+		$initrd_filename = $inner_initrd;
+		$has_early_cpio = 1;
+	}
+	close(INITRD);
+
+	open INITRD, $initrd_filename or die "Couldn't open $initrd_filename: $!\n";
+	read INITRD, $buffer, 4;
+	my ($value) = unpack 'N', $buffer;
+	if ($value == GZHDR1 || $value == GZHDR2) {
+		$compression = 'gzip';
+	}
+	elsif ($value == XZHDRSTART) {
+		$compression = 'lzma';
+	}
+	close INITRD;
+
+	if (defined($compression) && $compression eq 'lzma') {
+		`$XZ -dc < "$initrd_filename" > "$decompressed_initrd" 2> /dev/null`;
+	}
+	else {
+		# Just bail to gzip no matter what.
+		`$GZIP -dc < "$initrd_filename" > "$decompressed_initrd" 2> /dev/null`;
+	}
 	if ($? >> 8) {
-		`$CP "$initrd" "$decompressed_initrd"`;
+		`$CP "$initrd_filename" "$decompressed_initrd"`;
 		if ($? & 0xff) {
 			return undef;
 		}
@@ -791,7 +894,8 @@ sub check_initrd
 	# machinery to extract the real initrd CPIO archive that appears to
 	# be appended to the initial small one. I'm just not that in to it.
 	#
-	if (!$handles_label && !$handles_uuid && -f "$initrd_dir/early_cpio") {
+	if (!$handles_label && !$handles_uuid
+	    && ($has_early_cpio || -f "$initrd_dir/early_cpio")) {
 	    print "Found initrd early_cpio; assuming handles label/UUID\n";
 	    $handles_label = $handles_uuid = 1;
 	}
@@ -800,7 +904,7 @@ sub check_initrd
 	`$RM -rf "$initrd_dir" "$decompressed_initrd"`;
 	
 	my @loopdevs;
-	open LOSETUP, "$LOSETUP|";
+	open LOSETUP, "$LOSETUP -a |";
 	while (<LOSETUP>) {
 		chomp;
 		split /:/;
@@ -864,6 +968,11 @@ sub fix_console
     if (!$console) {
 	print STDERR "no SLICEFIX_CONSOLE, leaving console as is\n";
 	return;
+    }
+
+    # XXX BSDism
+    if ($console eq "vid") {
+	$console = "vga";
     }
 
     print STDERR "Setting console device to $console\n";
@@ -979,7 +1088,11 @@ sub fix_grub_defaults
     # append our info
     push @buffer, "$esig\n";
     push @buffer, "# DO NOT ADD ANYTHING AFTER THIS POINT AS IT WILL GET REMOVED.\n";
-    if ($sunit < 0) {
+    if ($sunit < 0 && $console =~ /^hvc/) {
+	push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0 console=$console\"\n";
+	push @buffer, "GRUB_TERMINAL=console\n";
+	push @buffer, "GRUB_SERIAL_COMMAND=\"\"\n";
+    } elsif ($sunit < 0) {
 	push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0\"\n";
 	push @buffer, "GRUB_TERMINAL=console\n";
 	push @buffer, "GRUB_SERIAL_COMMAND=\"\"\n";
@@ -1064,6 +1177,17 @@ sub fix_grub_console
 		    # change tty0 to appropriate serial device
 		    s#console=tty0#console=ttyS$sunit,$sspeed#;
 		}
+		#
+		# Virtual consoles (e.g. hvcX on POWER).  Not true
+		# serial consoles, so must be handled specially.
+		# Image grub.cfg must have console=tty0, or
+		# console=$console, for this to work.
+		#
+		if ($console =~ /^hvc/) {
+		    if (! /console=$console/) {
+			s#console=tty0#console=tty0 console=$console#;
+		    }
+		}
 		push @buffer, $_;
 		next;
 	    }
@@ -1115,7 +1239,6 @@ sub fix_grub_console
 		push @buffer, $_;
 		next;
 	    }
-
 	    #
 	    # Otherwise, just copy
 	    #
@@ -1285,6 +1408,17 @@ sub localize
 				"/var/lib/ntp/ntp.drift");
 	}
     }
+
+    # Check the chrony configuration.
+    if (-e "/etc/chrony.conf") {
+	print "Updating /etc/chrony.conf\n";
+
+	system("cp -pf /etc/chrony.conf $imageroot/etc/chrony.conf");
+	if ($?) {
+	    print STDERR "Failed to create /etc/chrony.conf\n";
+	    return;
+	}
+    }
 }
 
 sub hardwire_boss_node
@@ -1340,6 +1474,8 @@ sub main
 	my $label = get_label($root);
 	my $bootloader = guess_bootloader($root);
 	my $old_fstab_root = get_fstab_root($imageroot);
+	my $arch = `uname -m`;
+	chomp($arch);
 
 	# HACK: there's no simple way to distinguish grub2 from grub
 	# by the boot sector.
@@ -1347,6 +1483,12 @@ sub main
 	    (-f "$imageroot/boot/grub2/grub.cfg" ||
 	     -f "$imageroot/boot/grub/grub.cfg")) {
 		$bootloader = 'grub2';
+	}
+	# ppc64le systems can boot via OPAL/petitboot kexec, so a
+	# bootloader may not be installed in the partition.
+	elsif (!$bootloader && $arch eq 'ppc64le'
+	       && -f "$imageroot/boot/grub/grub.cfg") {
+	    $bootloader = 'grub2';
 	}
 
 	if ($bootloader eq 'lilo') {

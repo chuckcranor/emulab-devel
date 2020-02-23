@@ -29,6 +29,7 @@ class Lease
 {
     var	$lease;
     var $attributes;
+    var $project;
 
     #
     # Constructor by lookup on unique index.
@@ -73,6 +74,8 @@ class Lease
 	    $attrs[$key] = $val;
 	}
 	$this->attributes = $attrs;
+	# Load lazily;
+	$this->project    = null;
     }
 
     # Hmm, how does one cause an error in a php constructor?
@@ -257,6 +260,19 @@ class Lease
     function grantCommand($webtask) {
 	return  "webgrantlease ";
     }
+
+    function Project() {
+	$pid = $this->pid();
+
+	if ($this->project)
+	    return $this->project;
+
+	$this->project = Project::Lookup($pid);
+	if (! $this->project) {
+	    TBERROR("Could not lookup project $pid!", 1);
+	}
+	return $this->project;
+    }
 }
 
 #
@@ -265,6 +281,7 @@ class Lease
 class ImageDataset
 {
     var	$image;
+    var $project;
 
     #
     # Constructor by lookup on unique index.
@@ -276,6 +293,8 @@ class ImageDataset
 	    return;
         }
         $this->image = $image;
+	# Load lazily;
+	$this->project = null;
     }
 
     # Hmm, how does one cause an error in a php constructor?
@@ -320,6 +339,7 @@ class ImageDataset
     function locked()	     { return $this->image->locked(); }
     function locker_pid()    { return $this->image->locker_pid(); }
     function islocal()       { return 1; }
+    function updated()       { return $this->image->updated(); }
 
     #
     # Convert to mebi.
@@ -450,6 +470,18 @@ class ImageDataset
     }
     function grantCommand($webtask) {
 	return  "webgrantimage ";
+    }
+    function Project() {
+	$pid = $this->pid();
+
+	if ($this->project)
+	    return $this->project;
+
+	$this->project = Project::Lookup($pid);
+	if (! $this->project) {
+	    TBERROR("Could not lookup project $pid!", 1);
+	}
+	return $this->project;
     }
 }
 

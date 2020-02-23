@@ -30,8 +30,8 @@ sub Install($$$)
 			   "         $WAP $CREATETYPE $NODETYPEXML");
 	};
 
-	# Do not run this in a genirack setup; must wait till later.
-	if (!$PROTOGENI_GENIRACK) {
+	# Do not run this in a targetsys setup; must wait till later.
+	if (!$CONFIG_TARGETSYS) {
 	    Phase "adding", "Adding control nodes", sub {
 		PhaseSkip("already added")
 		    if (defined(Node->Lookup("ops")));

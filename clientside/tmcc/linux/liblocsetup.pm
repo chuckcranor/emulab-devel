@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -115,7 +115,7 @@ my $GROUPADD	= "/usr/sbin/groupadd";
 my $GROUPDEL	= "/usr/sbin/groupdel";
 my $IPBIN       = "/sbin/ip";
 my $IFCONFIGBIN = "/sbin/ifconfig";
-my $IFCONFIG    = "$IFCONFIGBIN %s inet %s netmask %s";
+my $IFCONFIG    = "$IFCONFIGBIN %s inet %s netmask %s %s";
 my $VLANCONFIG  = "/sbin/vconfig";
 # XXX 10000 is probably not right, but we don't use mii-tool here
 my $IFC_10000MBS = "10000baseTx";
@@ -125,6 +125,8 @@ my $IFC_10MBS   = "10baseT";
 my $IFC_FDUPLEX = "FD";
 my $IFC_HDUPLEX = "HD";
 my $IFC_AUTO    = "$IFC_1000MBS,$IFC_100MBS,$IFC_10MBS";
+my $IFC_1500MTU = "mtu 1500";
+my $IFC_9000MTU = "mtu 9000";
 my @LOCKFILES   = ("/etc/group.lock", "/etc/gshadow.lock");
 my $MKDIR	= "/bin/mkdir";
 my $GATED	= "/usr/sbin/gated";
@@ -409,11 +411,11 @@ sub os_account_cleanup($)
 # Generate and return an ifconfig line that is approriate for putting
 # into a shell script (invoked at bootup).
 #
-sub os_ifconfig_line($$$$$$$$;$$$)
+sub os_ifconfig_line($$$$$$$$;$$$%)
 {
     my ($iface, $inet, $mask, $speed, $duplex, $aliases, $iface_type, $lan,
-	$settings, $rtabid, $cookie) = @_;
-    my ($miirest, $miisleep, $miisetspd, $media);
+	$mtu, $settings, $rtabid, $cookie) = @_;
+    my ($miirest, $miisleep, $miisetspd, $media, $mtuopt);
     my ($uplines, $downlines);
 
     #
@@ -583,7 +585,7 @@ sub os_ifconfig_line($$$$$$$$;$$$)
         $uplines   = $wlccmd . "\n";
 	$uplines  .= $privcmd . "\n";
 	$uplines  .= $iwcmd . "\n";
-	$uplines  .= sprintf($IFCONFIG, $athiface, $inet, $mask) . "\n";
+	$uplines  .= sprintf($IFCONFIG, $athiface, $inet, $mask, "") . "\n";
 	$downlines  = "$IFCONFIGBIN $athiface down\n";
 	$downlines .= "$WLANCONFIG $athiface destroy\n";
 	$downlines .= "$IFCONFIGBIN $iface down\n";
@@ -640,7 +642,7 @@ sub os_ifconfig_line($$$$$$$$;$$$)
         $uplines = $tuncmd . " > /dev/null 2>&1 &\n";
         $uplines .= "sleep 5\n";
         $uplines .= "$IFCONFIGBIN $iface hw ether $mac\n";
-        $uplines .= sprintf($IFCONFIG, $iface, $inet, $mask) . "\n";
+        $uplines .= sprintf($IFCONFIG, $iface, $inet, $mask, "") . "\n";
         $downlines = "$IFCONFIGBIN $iface down";
         return ($uplines, $downlines);
     }
@@ -650,6 +652,7 @@ sub os_ifconfig_line($$$$$$$$;$$$)
     # mean anything.  We need this for virtnodes whose networks must be
     # config'd from inside the container, vm, whatever.
     #
+    $mtuopt = "";
     if ($iface_type ne 'veth') {
         #
         # Need to check units on the speed. Just in case.
@@ -772,13 +775,25 @@ sub os_ifconfig_line($$$$$$$$;$$$)
 	} else {
 	    $uplines = "/sbin/mii-tool --force=$media $iface\n    ";
 	}
+
+	#
+	# XXX only recognize 1500 and 9000 for MTUs.
+	# Anything else results in the default (no explicit setting).
+	#
+	if (defined($mtu)) {
+	    if ($mtu eq "1500") {
+		$mtuopt = $IFC_1500MTU;
+	    } elsif ($mtu eq "9000") {
+		$mtuopt = $IFC_9000MTU;
+	    }
+	}
     }
 
     if ($inet eq "") {
-	$uplines .= "$IFCONFIGBIN $iface up";
+	$uplines .= "$IFCONFIGBIN $iface up $mtuopt";
     }
     else {
-	$uplines  .= sprintf($IFCONFIG, $iface, $inet, $mask);
+	$uplines  .= sprintf($IFCONFIG, $iface, $inet, $mask, $mtuopt);
 	$downlines = "$IFCONFIGBIN $iface down";
     }
 
@@ -792,10 +807,10 @@ sub os_ifconfig_line($$$$$$$$;$$$)
 #	'vlan'	802.1q tagged vlan devices
 #	'alias'	IP aliases on physical interfaces
 #
-sub os_ifconfig_veth($$$$$;$$$$%)
+sub os_ifconfig_veth($$$$$;$$$$$%)
 {
     my ($iface, $inet, $mask, $id, $vmac,
-	$rtabid, $encap, $vtag, $itype, $cookie) = @_;
+	$rtabid, $encap, $vtag, $itype, $mtu, $cookie) = @_;
     my ($uplines, $downlines);
 
     if ($itype !~ /^(alias|vlan|veth)$/) {
@@ -839,7 +854,7 @@ sub os_ifconfig_veth($$$$$;$$$$%)
 		$uplines .= "$IFCONFIGBIN $iface up";
 	    }
 	    else {
-		$uplines  .= sprintf($IFCONFIG, $iface, $inet, $mask);
+		$uplines  .= sprintf($IFCONFIG, $iface, $inet, $mask, "");
 		$downlines = "$IFCONFIGBIN $iface down";
 	    }
 
@@ -901,7 +916,7 @@ sub os_ifconfig_veth($$$$$;$$$$%)
 
     #
     # VLANs
-    #   insmod 8021q (once only)
+    #   modprobe 8021q (once only)
     #   vconfig set_name_type VLAN_PLUS_VID_NO_PAD (once only)
     #
     #	ifconfig eth0 up (should be done before we are ever called)
@@ -917,6 +932,19 @@ sub os_ifconfig_veth($$$$$;$$$$%)
 	    return "";
 	}
 
+	#
+	# XXX only recognize 1500 and 9000 for MTUs.
+	# Anything else results in the default (no explicit setting).
+	#
+	my $mtuopt = "";
+	if (defined($mtu)) {
+	    if ($mtu eq "1500") {
+		$mtuopt = $IFC_1500MTU;
+	    } elsif ($mtu eq "9000") {
+		$mtuopt = $IFC_9000MTU;
+	    }
+	}
+
 	# XXX starting with CentOS7, vconfig is no longer
 	my $useip = 0;
 	if (! -x $VLANCONFIG) {
@@ -925,7 +953,7 @@ sub os_ifconfig_veth($$$$$;$$$$%)
 
 	# one time stuff
 	if (!exists($cookie->{"vlan"})) {
-	    $uplines  = "/sbin/insmod 8021q >/dev/null 2>&1\n    ";
+	    $uplines  = "/sbin/modprobe 8021q >/dev/null 2>&1\n    ";
 	    $uplines .= "$VLANCONFIG set_name_type VLAN_PLUS_VID_NO_PAD\n    "
 		if (!$useip);
 	    $cookie->{"vlan"} = 1;
@@ -938,7 +966,7 @@ sub os_ifconfig_veth($$$$$;$$$$%)
 	} else {
 	    $uplines   .= "$VLANCONFIG add $iface $vtag\n    ";
 	}
-	$uplines   .= sprintf($IFCONFIG, $vdev, $inet, $mask);
+	$uplines   .= sprintf($IFCONFIG, $vdev, $inet, $mask, $mtuopt);
 	# configure the MAC address.
 	$uplines   .= "\n    $IFCONFIGBIN $vdev hw ether $vmac"
 	    if ($vmac);

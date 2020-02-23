@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,6 +25,7 @@ use strict;
 use English;
 use Getopt::Long qw(:config no_ignore_case);
 use POSIX qw(strftime);
+use Date::Parse;
 
 #
 # Load the Testbed support stuff.
@@ -54,6 +55,7 @@ my $urn;
 my $oldkeyfile;
 my $authority;
 my $notca    = 0;
+my $days     = 2000;
 my $include_uuid = 0;
 my %optlist = ( "debug" => \$debug,
 		"password=s" => \$password,
@@ -296,13 +298,20 @@ if( defined( $oldkeyfile ) ) {
     my $genopts =
 	($encrypted ? " -passout 'pass:${sh_password}' -des3 " : "");
 
-    system("$OPENSSL genrsa $genopts -out syscert_key.pem 1024")
-	    == 0 or fatal("Could generate new key");
-    
-    system("$OPENSSL req -text -new -config syscert.cnf ".
-	   ($encrypted ? " -passin 'pass:${sh_password}' " : "") .
-	   " -key syscert_key.pem -out syscert_req.pem $outline") == 0
-	   or fatal("Could not create certificate request");
+    my $output =
+	emutil::ExecQuiet("$OPENSSL genrsa $genopts -out syscert_key.pem 2048");
+    if ($?) {
+	print STDERR $output;
+	fatal("Could generate new key");	
+    }
+    $output =
+	emutil::ExecQuiet("$OPENSSL req -text -new -config syscert.cnf ".
+			  ($encrypted ? " -passin 'pass:${sh_password}' " : "") .
+			  " -key syscert_key.pem -out syscert_req.pem $outline");
+    if ($?) {
+	print STDERR $output;
+	fatal("Could not create certificate request");
+    }
 }
 
 #
@@ -312,8 +321,45 @@ if( defined( $oldkeyfile ) ) {
 #
 my $startdate = POSIX::strftime("%y%m%d%H%M%SZ", gmtime(time() - 3600));
 
+#
+# Check the expiration on the CA cert, we do not want the new
+# certificate to expire after the CA (signer) cert expires. 
+#
 $UID = 0;
+my $expires = `$OPENSSL x509 -enddate -noout -in $certfile`;
+if ($?) {
+    fatal("Could not get expiration from $certfile");
+}
+if ($expires =~ /^notAfter=(.*)$/i) {
+    my $tmp = str2time($1);
+    if (!defined($tmp)) {
+	fatal("Could not convert $certfile expiration to time: $1");
+    }
+    $expires = $tmp;
+}
+else {
+    fatal("Could not parse $certfile expiration: $expires");
+}
+if ($expires < time()) {
+    fatal("$certfile certificate has expired!");
+}
+
+# If the CA expires in less then 30 days, grind to a halt.
+my $daystoexpire = int(($expires - time()) / (3600 * 24));
+if ($daystoexpire <= 30) {
+    fatal("Refusing to sign new certificate; the $certfile expires in less ".
+	  "then 30 days!");
+}
+if ($debug) {
+    print "CA certificate expires in $daystoexpire days.\n";
+}
+if ($days > $daystoexpire) {
+    $days = $daystoexpire - 1;
+    print "Shortening certificate expiration to $days\n";
+}
+    
 system("$OPENSSL ca -batch -policy policy_sslxmlrpc -startdate $startdate ".
+       " -days $days ".
        " -name CA_syscerts -config $CACONFIG ".
        " -out syscert_cert.pem -cert $certfile -keyfile $keyfile ".
        " -infiles syscert_req.pem $outline") == 0

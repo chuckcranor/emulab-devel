@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -53,11 +53,11 @@ for token in $IPODINFO; do
 	if [ $key = HOST ]; then
 		IPOD_HOST_IP="$value"
 		IPODHOST=`echo $value | \
-			awk -F. '{ printf "0x%02x%02x%02x%02x\n",$1,$2,$3,$4 }'`
+			awk -F. '{ val=($1*2^24)+($2*2^16)+($3*2^8)+$4 ; if (val > 2147483647.0) { printf "%.0f\n",val-4294967296 } else { printf "%.0f\n",val } }'`
 	elif [ $key = MASK ]; then
 		IPOD_MASK_IP="$value"
 		IPODMASK=`echo $value | \
-			awk -F. '{ printf "0x%02x%02x%02x%02x\n",$1,$2,$3,$4 }'`
+			awk -F. '{ val=($1*2^24)+($2*2^16)+($3*2^8)+$4 ; if (val > 2147483647.0) { printf "%.0f\n",val-4294967296 } else { printf "%.0f\n",val } }'`
 	elif [ $key = HASH ]; then
 		IPODKEY="$value"
 	fi

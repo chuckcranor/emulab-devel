@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2002-2015 University of Utah and the Flux Group.
+# Copyright (c) 2002-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,15 +47,18 @@ CONFIG_GENI     = httpd-geni.conf
 CONFIG_FILES   += $(CONFIG_GENI)
 endif
 
-#
-# Move to Apache 22 ...
-#
+ifeq ($(APACHE_VERSION),24)
+# For VPATH.
+MOSTLY_SRCDIRS = ${SRCDIR}/v24
+SCRIPT_HACK     = 0
+else
 ifeq ($(APACHE_VERSION),22)
 # For VPATH.
 MOSTLY_SRCDIRS = ${SRCDIR}/v2
 SCRIPT_HACK     = 0
 else
 MOSTLY_SRCDIRS = ${SRCDIR}/v1
+endif
 endif
 INSTALL_PHP_CONFIG = /usr/local/etc
 
@@ -140,7 +143,13 @@ ifeq ($(SCRIPT_HACK),1)
 	$(INSTALL) -m 755 $(SRCDIR)/apache-emulab /usr/local/etc/rc.d/apache.sh
 endif
 
-ifeq ($(APACHE_VERSION),22)
+ifeq ($(APACHE_VERSION),1.3)
+install: install-dirs install-scripts httpd.conf.fixed
+	$(INSTALL_DATA) httpd.conf.fixed $(INSTALL_APACHE_CONFIG)/httpd.conf
+
+control-install: install-dirs install-scripts httpd.conf-ops.fixed
+	$(INSTALL_DATA) httpd.conf-ops.fixed $(INSTALL_APACHE_CONFIG)/httpd.conf
+else
 install: install-dirs install-scripts httpd.conf pgeni-install
 	$(INSTALL_DATA) httpd.conf $(INSTALL_APACHE_CONFIG)/httpd.conf
 
@@ -153,12 +162,6 @@ ifeq ($(PGENISUPPORT),1)
 endif
 
 utah: httpd.conf.utah httpd.conf-ops.utah
-else
-install: install-dirs install-scripts httpd.conf.fixed
-	$(INSTALL_DATA) httpd.conf.fixed $(INSTALL_APACHE_CONFIG)/httpd.conf
-
-control-install: install-dirs install-scripts httpd.conf-ops.fixed
-	$(INSTALL_DATA) httpd.conf-ops.fixed $(INSTALL_APACHE_CONFIG)/httpd.conf
 endif
 
 install-php-ini: php.ini

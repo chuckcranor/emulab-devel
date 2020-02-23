@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,6 +22,7 @@
 # }}}
 #
 chdir("..");
+include_once("webtask.php");
 chdir("apt");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
@@ -59,7 +60,7 @@ function Do_ExperimentList()
                      "  UNIX_TIMESTAMP(s.expires)) as expired, ".
                      "  truncate(a.physnode_count * ".
                      "   ((UNIX_TIMESTAMP(now()) - ".
-                     "     UNIX_TIMESTAMP(a.created)) / 3600.0),2) as phours, ".
+                     "     UNIX_TIMESTAMP(a.started)) / 3600.0),2) as phours, ".
                      " IFNULL(aggs.count,0) as aggrows, ".
                      " agg.aggregate_urn as aggrow_urn ".
                      "  from apt_instances as a ".
@@ -81,7 +82,8 @@ function Do_ExperimentList()
         $name         = $row["name"];
         $status       = $row["status"];
         $canceled     = $row["canceled"];
-        $created      = DateStringGMT($row["created"]);
+        $paniced      = $row["paniced"];
+        $created      = DateStringGMT($row["started"]);
         $expires      = DateStringGMT($row["expires"]);
         $creator_idx  = $row["creator_idx"];
         $profile_name = "$profile_id:$version";
@@ -106,7 +108,10 @@ function Do_ExperimentList()
                 "<a href='user-dashboard.php?user=$creator_uid'>".
                 "$creator_uid</a>";
         }
-        if ($row["expired"]) {
+        if ($paniced) {
+            $status = "quarantined";
+        }
+        elseif ($row["expired"]) {
             $status = "expired";
         }
         elseif ($canceled) {
@@ -139,8 +144,15 @@ function Do_ExperimentList()
         else {
             $cluster = $urn_mapping[$row["aggregate_urn"]];
         }
-        $blob["name"]     = "<a href='adminextend.php?uuid=$uuid'>$name</a>";
-        $blob["project"]  = "<a href='show-project.php?project=$pid'>$pid</a>";
+        $namefrag = "<a href='adminextend.php?uuid=$uuid'>$name</a>
+               <a href='status.php?uuid=$uuid' target=_blank>
+	       <span class='pull-right glyphicon glyphicon-eye-open'>
+               </span></a>";
+        $pidfrag = "<a href='show-project.php?project=$pid'>$pid</a>";
+
+        $blob["uuid"]           = $uuid;
+        $blob["name"]           = $namefrag;
+        $blob["project"]        = $pidfrag;
         $blob["cluster"]        = $cluster;
         $blob["pcount"]         = $pcount;
         $blob["phours"]         = $phours;
@@ -187,10 +199,11 @@ function Do_ExperimentErrors()
     }
     if (isset($ajax_args["stamp"]) && TBvalid_integer($ajax_args["stamp"])) {
         $stamp = $ajax_args["stamp"];
-        $clause = "where UNIX_TIMESTAMP(f.created) <= $stamp";
+        $clause = "where UNIX_TIMESTAMP(f.started) <= $stamp";
     }
     $query_result =
-        DBQueryFatal("select f.name,exitcode,f.created,f.public_url,f.uuid,".
+        DBQueryFatal("select f.name,exitcode,f.started,f.public_url,".
+	             "  IF(i.uuid,i.uuid,f.uuid) as uuid, ".
                      "  IF(i.uuid,1,0) as active,f.exitmessage, ".
                      "  p.uuid as profile_uuid,p.name as profile_name, ".
                      "  IF(i.uuid,i.aggregate_urn,h.aggregate_urn) ".
@@ -204,16 +217,16 @@ function Do_ExperimentErrors()
                      "left join apt_profiles as p on ".
                      "     p.profileid=f.profile_id ".
                      $clause . " " .
-                     "order by f.created desc limit 25");
+                     "order by f.started desc limit 100");
 
     while ($row = mysql_fetch_array($query_result)) {
         $name       = $row["name"];
         $exitcode   = $row["exitcode"];
         $url        = $row["public_url"];
         $logfileid  = $row["logfileid"];
-        $active     = $row["active"] ? 1 : 0;
         $uuid       = $row["uuid"];
-        $created    = DateStringGMT($row["created"]);
+        $active     = $row["active"] ? 1 : 0;
+        $started    = DateStringGMT($row["started"]);
         $creator    = $row["creator"];
         $message    = $row["exitmessage"];
         $reason     = $exitcode;
@@ -221,7 +234,7 @@ function Do_ExperimentErrors()
         $profile_uuid = $row["profile_uuid"];
         $profile_name = $row["profile_name"];
         $aggregate_urn= $row["aggregate_urn"];
-        $cluster      = "N/A";
+        $cluster      = null;
 
         if ($exitcode >= 0 && $exitcode <= count($geni_response_codes)) {
             $reason = $geni_response_codes[$exitcode];
@@ -259,20 +272,76 @@ function Do_ExperimentErrors()
                 $url = null;
             }
         }
-        $results[$uuid] = array("name"     => $name,
-                                "uuid"     => $uuid,
-                                "exitcode" => $exitcode,
-                                "active"   => $active,
-                                "created"  => $created,
-                                "creator"  => $creator,
-                                "reason"   => $reason,
-                                "message"  => $message,
-                                "url"      => $url,
-                                "cluster"  => $cluster,
-                                "profile_uuid" => $profile_uuid,
-                                "profile_name" => $profile_name);
+        $results[] = array("name"     => $name,
+                           "uuid"     => $uuid,
+                           "exitcode" => $exitcode,
+                           "active"   => $active,
+                           "started"  => $started,
+                           "creator"  => $creator,
+                           "reason"   => $reason,
+                           "message"  => $message,
+                           "url"      => $url,
+                           "cluster"  => $cluster,
+                           "profile_uuid" => $profile_uuid,
+                           "profile_name" => $profile_name);
     }
     SPITAJAX_RESPONSE($results);    
+}
+
+#
+# Search for an IP.
+#
+function Do_SearchIP()
+{
+    global $this_user, $urn_mapping;
+    global $ajax_args;
+    $this_uid = $this_user->uid();
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $ip = $ajax_args["ip"];
+    if (! preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/', $ip)) {
+	SPITAJAX_ERROR(-1, "Bad IP address");
+        return;
+    }
+    $webtask = WebTask::CreateAnonymous();
+    $retval = SUEXEC($this_uid, "nobody",
+		     "websearchip -t " . $webtask->task_id() . " $ip",
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+    
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error");
+        }
+        else {
+            SPITAJAX_ERROR($webtask->exitcode(), $webtask->output());
+        }
+        $webtask->Delete();
+        return;
+    }
+    $uuid = $webtask->TaskValue("instance");
+    $webtask->Delete();
+    SPITAJAX_RESPONSE($uuid);
+}
+
+#
+# List of all Classic experiments, not associated with an instance.
+#
+function Do_ClassicExperimentList()
+{
+    global $this_user, $urn_mapping;
+    global $ajax_args;
+    $this_uid = $this_user->uid();
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $blob = ClassicExperimentList("all", null);
+
+    SPITAJAX_RESPONSE($blob);
 }
 
 # Local Variables:

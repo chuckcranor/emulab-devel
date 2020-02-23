@@ -5,7 +5,7 @@ echo -n 'testbed config: '
 /usr/local/etc/emulab/rc/rc.testbed
 if [ ! $? -eq 0 ]; then
     echo "Failed to start /usr/local/etc/emulab/rc/rc.testbed: $?"
-    #touch /etc/service/testbed/down
+    #sv down testbed
     exit $?
 fi
 touch /var/lock/subsys/testbed

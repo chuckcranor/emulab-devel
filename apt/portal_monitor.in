@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -48,6 +48,8 @@ my $optlist   = "dns";
 my $debug     = 0;
 my $impotent  = 0;
 my $oneshot   = 0;
+my %status    = ();
+my $lastdaily = 0;
 
 # Debugging
 my $usemydevtree  = 0;
@@ -70,11 +72,29 @@ my $TBOPS            = "@TBOPSEMAIL@";
 my $TBLOGS           = "@TBLOGSEMAIL@";
 my $MAINSITE         = @TBMAINSITE@;
 my $LOGFILE          = "$TB/log/portal_monitor.log";
-my $PROTOUSER	     = "elabman";
-my $SUDO	     = "/usr/local/bin/sudo";
-my $WGET             = "/usr/local/bin/wget";
-my $SLEEP_INTERVAL   = 300;
+my $DIG              = "/usr/local/bin/dig";
+my $PING             = "/sbin/ping";
+my $FPING            = "/usr/local/sbin/fping";
+my $CURL             = "/usr/local/bin/curl";
+my $SLEEP_INTERVAL   = 60;
+my $AGGDOWN_THRESHOLD= 180;
 my $DAILY_INTERVAL   = 24 * 3600;
+my $SLACK	     = "https://hooks.slack.com/services";
+my $SLACKURL         = "$SLACK/T0D79QFGC/B9V105D99/kTE1wzm0binEIsBsQFuCkqfK";
+
+#
+# Mothership extra node definitions, which will go into the database
+# at some point.
+#
+my %mothershipnodes = (
+    "emulab.net"          => ["dbox1", "dbox2",
+			      "subboss", "subboss2", "subboss3",
+			      "tipserv3", "tipserv4", "tipserv5", "tipserv6"],
+    "apt.emulab.net"      => ["subboss"],
+    "utah.cloudlab.us"    => ["dbox1", "subboss"],
+    "wisc.cloudlab.us"    => ["dbox"],
+    "clemson.cloudlab.us" => ["dbox"],
+);
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -82,6 +102,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 # Protos
 sub fatal($);
+sub doPing($$);
 	  
 #
 # Turn off line buffering on output
@@ -90,6 +111,10 @@ $| = 1;
 
 if ($UID != 0) {
     fatal("Must be root to run this script\n");
+}
+# Silently exit if not the Mothership, this currently is specific to Utah.
+if (!$MAINSITE) {
+    exit(0);
 }
 
 #
@@ -121,9 +146,11 @@ use Genixmlrpc;
 use GeniResponse;
 use GeniCredential;
 use GeniXML;
+use GeniHRN;
+use GeniUtil;
 use POSIX qw(strftime ceil);
 
-if (!$oneshot) {
+if (! ($oneshot || $impotent)) {
     if (CheckDaemonRunning("portal_monitor")) {
 	fatal("Not starting another portal_monitor daemon!");
     }
@@ -140,6 +167,17 @@ if (!$oneshot) {
 my $context = APT_Geni::GeniContext();
 fatal("Could not load our XMLRPC context")
     if (!defined($context));
+
+my $credential = APT_Geni::GenAuthCredential($context->certificate());
+if (!defined($credential)) {
+    print STDERR "Could not generate credential!\n";
+    return -1;
+}
+
+#
+# We want this to be a quick test, not a long timeout.
+#
+Genixmlrpc->SetTimeout(15);
 
 #
 # Setup a signal handler for newsyslog.
@@ -160,311 +198,608 @@ $SIG{HUP} = \&handler
 #
 sub CheckAggregates()
 {
-    my $query_result =
-	DBQueryWarn("select urn from apt_aggregates ".
-		    "where nomonitor=0");
+    my %aggregates = ();
+    my %pingchecks = ();
+    my @aggregates = APT_Aggregate->LookupAll();
 
     return 0
-	if (!$query_result->numrows);
+	if (!@aggregates);
+    
+    foreach my $aggregate (@aggregates) {
+	my $urn = $aggregate->urn();
 
-    my $credential = APT_Geni::GenAuthCredential($context->certificate());
-    if (!defined($credential)) {
-	print STDERR "Could not generate credential!\n";
-	return -1;
+	next
+	    if ($aggregate->nomonitor() || $aggregate->disabled());
+	
+	#
+	# Convert URN into a boss/ops hostnames for the ping/DNS tests.
+	#
+	my $hrn  = GeniHRN->new($urn);
+	my $boss = "boss." . $hrn->domain();
+	
+	$aggregates{$urn} = {
+	    "aggregate" => $aggregate,
+	    "alive"     => 1,
+	    "domain"    => $hrn->domain(),
+	    "boss"      => "boss." . $hrn->domain(),
+	    "status"    => undef,
+	    "dns"       => undef,
+	    "nodes"     => {},
+	};
+	#
+	# Hack alert; we have a gross test in for powderwireless until
+	# DB is updated; the ops nodes do not have public IPs.
+	#
+	if ($hrn->domain() !~ /powderwireless\.net$/) {
+	    $aggregates{$urn}->{"nodes"}->{"ops." . $hrn->domain()} = undef;
+	}
+
+	#
+	# Another hacky check for other nodes that need to be checked.
+	#
+	if ($MAINSITE) {
+	    if (exists($mothershipnodes{$hrn->domain()})) {
+		foreach my $hostname (@{$mothershipnodes{$hrn->domain()}}) {
+		    my $host = "${hostname}." . $hrn->domain();
+		    
+		    $aggregates{$urn}->{"nodes"}->{$host} = undef;
+		}
+	    }
+	}
+
+	# Add new history entries since last loop. 
+	if (!exists($status{$urn})) {
+	    $status{$urn} = {
+		"alive"     => "up",
+		"stamp"     => time(),
+		"status"    => {"status" => "up", "stamp" => time()},
+		"dns"       => {"status" => "up", "stamp" => time()},
+		"nodes"     => {},
+	    };
+	    foreach my $node (keys(%{$aggregates{$urn}->{"nodes"}})) {
+		$status{$urn}->{"nodes"}->{$node} = {
+		    "status" => "up", "stamp" => time()
+		};
+	    }
+	}
     }
+    # Cull out status entries that are gone from the DB since last loop.
+    foreach my $urn (keys(%status)) {
+	delete $status{$urn} if (!exists($aggregates{$urn}));
+    }
+
     #
-    # AM V3 API.
+    # Generate a list to check with fping. First check all the boss nodes.
+    # If we cannot ping boss, then we can skip everything else, marking
+    # the aggregate down.
     #
-    my @params = ([{"geni_type" => "geni_sfa",
-		    "geni_version" => 3,
-		    "geni_value" => $credential->asString()},
-		  ],
-		  # Options array.
-		  {"geni_compressed"    => 1,
-		   "geni_rspec_version" => {'type'    => 'GENI',
-					    'version' => '3'}}
-	);
+    foreach my $urn (keys(%aggregates)) {
+	my $aggregate = $aggregates{$urn}->{"aggregate"};
+	my $boss      = $aggregates{$urn}->{"boss"};
 
-    my $markError = sub($$) {
-	my ($aggregate, $error) = @_;
-	my $nickname  = $aggregate->nickname();
-
-	print STDERR "$nickname: $error\n";
-	
 	#
-	# Decide if aggregate should be marked as down. 
+	# Do not do this on the local host, no point and it will often
+	# fail if we are in a VM.
 	#
-	my $status;
-	
-	if (!defined($aggregate->last_contact())) {
-	    $status = "down";
-	}
-	else {
-	    my $last_attempt = str2time($aggregate->last_attempt());
-	    my $last_contact = str2time($aggregate->last_contact());
+	next
+	    if ($aggregate->IsLocalCluster());
 
-	    if ($last_attempt - $last_contact < 600) {
-		$status = "unknown";
-	    }
-	    else {
-		$status = "down";
-	    }
-	}
-	if ($impotent) {
-	    print STDERR "Would mark $aggregate as $status\n";
-	}
-	else {
-	    $aggregate->status($status);
-	    $aggregate->last_error($error);
-	}
-    };
+	$pingchecks{$boss} = $urn;
+    }
+    my %pingresults = ();
+    doPing(\%pingchecks, \%pingresults);
 
-    while (my ($urn) = $query_result->fetchrow_array()) {
-	my $aggregate = APT_Aggregate->Lookup($urn);
-	if (!defined($aggregate)) {
-	    print STDERR "Could not lookup aggregate: $urn\n";
+    #
+    # Go through the results, mark any that failed as down.
+    #
+    foreach my $boss (keys(%pingchecks)) {
+	my $urn       = $pingchecks{$boss};
+	my $alive     = $pingresults{$boss};
+	my $aggregate = $aggregates{$urn}->{"aggregate"};
+
+	next
+	    if ($alive);
+
+	print STDERR "Ping $boss failed\n";
+	$aggregates{$urn}->{"alive"} = 0;
+    }
+
+    #
+    # Check the nodes, skipping any aggregates that failed boss fping, with
+    # boss unreachable the status of anything else at the aggregate is
+    # suspect and likely to generate needless noise.
+    #
+    %pingchecks = ();
+    
+    foreach my $urn (keys(%aggregates)) {
+	my $aggregate = $aggregates{$urn}->{"aggregate"};
+	my $nodelist  = $aggregates{$urn}->{"nodes"};
+	foreach my $hostname (keys(%{$nodelist})) {
+	    $pingchecks{$hostname} = $urn;
+	}
+    }
+    %pingresults = ();
+    doPing(\%pingchecks, \%pingresults);
+
+    #
+    # Mark down nodes, process below. 
+    #
+    foreach my $hostname (keys(%pingchecks)) {
+	my $urn       = $pingchecks{$hostname};
+	my $alive     = $pingresults{$hostname};
+
+	if ($alive) {
+	    $aggregates{$urn}->{"nodes"}->{$hostname} = "up";
 	    next;
 	}
-	my $nickname  = $aggregate->nickname();
-	my $authority = APT_Geni::GetAuthority($urn);
-	if (!defined($authority)) {
-	    &$markError($aggregate, "Could not lookup authority: $urn");
-	    next;
-	}
-	my $cmurl = $authority->url();
-	# Convert URL.
-	$cmurl =~ s/\/cm$/\/am/;
-	$cmurl = devurl($cmurl) if ($usemydevtree);
-	$cmurl .= "/3.0";
+	print STDERR "Ping $hostname failed\n";
+	$aggregates{$urn}->{"nodes"}->{$hostname} = "down";
+    }
+
+    #
+    # DNS checks on boss nodes. If just named is dead the test below will
+    # still likely work cause of secondaries answering, but we want to know
+    # if named dies and report it separately.
+    #
+    foreach my $urn (keys(%aggregates)) {
+	my $aggregate = $aggregates{$urn}->{"aggregate"};
+	my $boss      = $aggregates{$urn}->{"boss"};
+
+	#
+	# Do not do this if boss ping failed.
+	#
+	next
+	    if (!$aggregates{$urn}->{"alive"});
 
 	if ($debug) {
-	    print "$nickname -> $cmurl\n";
+	    print "Doing DNS test on $boss\n";
 	}
-	#
-	# Mark as trying to contact.
-	#
-	$aggregate->last_attempt(time())
-	    if (!$impotent);
-
-	#
-	# Do a quick test to see if we can even get there.
-	#
-	Genixmlrpc->SetTimeout(10);
-	
-	my $response =
-	    Genixmlrpc::CallMethod($cmurl, $context, "GetVersion");
-
-	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    &$markError($aggregate,
-			"GetVersion error: " . $response->output());
-	    next;
-	}
-	
-	#
-	# This can take some time on a big cluster, which is why we
-	# did the GetVersion above, cause we know that will be fast,
-	# so its a good initial check.
-	#
-	Genixmlrpc->SetTimeout(180);
-	
-	$response =
-	    Genixmlrpc::CallMethod($cmurl, $context, "ListResources", @params);
-
-	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    &$markError($aggregate,
-			"ListResources error: ". $response->output());
-	    next;
-	}
-	if ($debug > 1) {
-	    print $response->value() . "\n";
-	}
-
-	#
-	# Decode and decompress.
-	#
-	my $decoded = eval { decode_base64($response->value()); };
-	if ($@) {
-	    &$markError($aggregate, "Could not base64 decode response");
-	    next;
-	}
-	my $xml = eval { uncompress($decoded); };
-	if ($@) {
-	    &$markError($aggregate, "Could not uncompress response");
-	    next;
-	}
-	if ($debug > 1) {
-	    print $xml . "\n";
-	}
-	my $manifest = GeniXML::Parse($xml);
-	if (!defined($manifest)) {
-	    &$markError($aggregate, "Could not parse manifest");
-	    next;
-	}
-	#
-	# Mark that we could get the advertisement. Also mark it as up.
-	# Not sure about when to mark it down though.
-	#
-	if ($impotent) {
-	    print "Would mark $aggregate as up\n";
+	system("$DIG $boss \@${boss} +norecurse +short +noanswer +time=3");
+	if ($?) {
+	    print STDERR "DNS $boss failed\n";
+	    $aggregates{$urn}->{"dns"} = "down";
 	}
 	else {
-	    $aggregate->last_success($aggregate->last_attempt());
-	    $aggregate->status("up");
-	    $aggregate->last_error("");
+	    $aggregates{$urn}->{"dns"} = "up";
 	}
+    }
+    # Not yet sure what to do if this fails.
+    if (GetVersion(\%aggregates)) {
+	next;
+    }
+    # Process the results and send email.
+    ProcessResults(\%aggregates);
+}
 
-	#
-	# Get the list of reservable types. Need to be backwards compat
-	# here until all clusters updated with this element. See below.
-	#
-	my $reservable_types;
+#
+# Process the results, updating ongoing status info for next time,
+# and sending email.
+#
+sub ProcessResults($)
+{
+    my ($aggregates) = @_;
+    my %downbosses  = ();
+    my %upbosses    = ();
+    my %downaggs    = ();
+    my %upaggs      = ();
+    my %downnodes   = ();
+    my %upnodes     = ();
+    my %downdns     = ();
+    my %updns       = ();
+    my $dailymail   = 0;
 
-	if (my $ref = GeniXML::FindNodesNS("n:reservable_types",
-					   $manifest,
-					   $GeniXML::EMULAB_NS)->pop()) {
-	    $reservable_types = {};
-	    
-	    foreach my $t (GeniXML::FindNodesNS("n:type", $ref,
-					$GeniXML::EMULAB_NS)->get_nodelist()) {
-		my $typename = GeniXML::GetText("name", $t);
-		$reservable_types->{$typename} = $typename;
+    #
+    # We send a summary email once every 24 hours. Maybe do this at a
+    # set time of day?
+    #
+    if (time() - $lastdaily >= $DAILY_INTERVAL) {
+	$dailymail = 1;
+	$lastdaily = time();
+    }
+
+    #
+    # First check for ping failures to boss nodes; these aggregates
+    # are clearly down, but wait till a second loop to mark them and
+    # send email. 
+    #
+    foreach my $urn (keys(%{$aggregates})) {
+	my $ref       = $aggregates->{$urn};
+	my $aggregate = $ref->{"aggregate"};
+	my $nickname  = $aggregate->nickname();
+
+	if ($aggregate->IsLocalCluster()) {
+	    # We skipped the ping test on the local host.
+	}
+	elsif (!$ref->{'alive'}) {
+	    if ($status{$urn}->{'alive'} eq "down") {
+		# Down last time too, mark as dead, send email.
+		if ($impotent) {
+		    print STDERR "Would mark $nickname as down\n";
+		}
+		else {
+		    if ($aggregate->status() ne "down") {
+			$aggregate->status("down");
+			$aggregate->StatusEvent("down");
+		    }
+		    $aggregate->last_error("Ping failed");
+		}
+		$downbosses{$urn} = $status{$urn}->{'stamp'};
+
+		# Mark that we have sent email
+		$status{$urn}->{'alive'} = "dead";
+	    }
+	    elsif ($dailymail && $status{$urn}->{'alive'} eq "dead") {
+		$downbosses{$urn} = $status{$urn}->{'stamp'};
+	    }
+	    elsif ($status{$urn}->{'alive'} eq "up") {
+		# Remember for next time, we need to send email.
+		$status{$urn}->{'alive'} = "down";
+		$status{$urn}->{'stamp'} = time();
 	    }
 	}
-	
-	my $pcount = 0;
-	my $pavail = 0;
-	my $vcount = 0;
-	my $vfree  = 0;
-	my %type_count = ();
-	my %type_avail = ();
-
-	foreach my $ref (GeniXML::FindNodes("n:node",
-					    $manifest)->get_nodelist()) {
-	    my $node_id     = GeniXML::GetNodeId($ref);
+	elsif ($status{$urn}->{'alive'} ne "up") {
 	    #
-	    # Need to search the sliver types for raw-pc.
+	    # Dead last time, up this time. Mark as up and send email.
 	    #
-	    foreach my $sref (GeniXML::FindNodes("n:sliver_type",
-						 $ref)->get_nodelist()) {
-		my $name = GeniXML::GetText("name", $sref);
-		if (defined($name)) {
-		    if ($name eq "raw-pc") {
-			$pcount++;
-			$pavail++
-			    if (GeniXML::IsAvailable($ref));
+	    if ($status{$urn}->{'alive'} eq "dead") {
+		if ($impotent) {
+		    print STDERR "Would mark $nickname as up\n";
+		}
+		else {
+		    $aggregate->last_error("");
+		    if ($aggregate->status() ne "up") {
+			$aggregate->status("up");
+			$aggregate->StatusEvent("up");
+		    }
+		}
+		$upbosses{$urn} = $status{$urn}->{'stamp'};
+	    }
+	    $status{$urn}->{'alive'} = "up";
+	    $status{$urn}->{'stamp'} = undef;
+	}
+	if ($status{$urn}->{'alive'} eq "up") {
+	    $aggregate->last_success(time());
+	}
+	#
+	# Check the nodes associated this aggregate.
+	#
+	foreach my $host (keys(%{$ref->{'nodes'}})) {
+	    my $thisstatus = $ref->{'nodes'}->{$host};
+	    my $laststatus = $status{$urn}->{'nodes'}->{$host}->{'status'};
 
-			foreach my $htype (FindNodes("n:hardware_type",
-						     $ref)->get_nodelist()) {
-			    my $hname = GeniXML::GetText("name", $htype);
-			    if (defined($reservable_types)) {
-				next
-				    if (!exists($reservable_types->{$hname}));
-			    }
-			    else {
-				# This can be deleted when clusters updated.
-				next
-				    if (!defined($hname) || $hname eq "" || 
-					$hname eq "pcvm" || $hname eq "pc" ||
-					$hname =~ /^delay/ ||
-					# Protect DB.
-					$hname !~ /^[-\w]+$/);
-			    }
-			    my $ntype =
-				GeniXML::FindNodesNS("n:node_type",
-					     $htype,
-					     $GeniXML::EMULAB_NS)->pop();
-			    next
-				if (!$ntype);
+	    if ($thisstatus eq "down") {
+		if ($laststatus eq "up") {
+		    # Mark as down, record time.
+		    $status{$urn}->{'nodes'}->{$host}->{'status'} = "down";
+		    $status{$urn}->{'nodes'}->{$host}->{'stamp'}  = time();
+		}
+		elsif ($dailymail && $laststatus eq "dead") {
+		    # Mark for email
+		    $downnodes{$urn}->{$host} =
+			$status{$urn}->{'nodes'}->{$host}->{'stamp'};
+		}
+		elsif ($laststatus ne "dead") {
+		    # Mark for email
+		    $downnodes{$urn}->{$host} =
+			$status{$urn}->{'nodes'}->{$host}->{'stamp'};
+		    # Mark as dead so we know we sent email.
+		    $status{$urn}->{'nodes'}->{$host}->{'status'} = "dead";
+		}
+	    }
+	    elsif ($laststatus ne "up") {
+		# Node is back, mark for email and clear previous status.
+		if ($laststatus eq "dead") {
+		    $upnodes{$urn}->{$host} =
+			$status{$urn}->{'nodes'}->{$host}->{'stamp'};
+		}
+		$status{$urn}->{'nodes'}->{$host}->{'status'} = "up";
+		$status{$urn}->{'nodes'}->{$host}->{'stamp'}  = undef;
+	    }
+	}
+	#
+	# Check DNS. These rate seperate email. But if boss did not
+	# ping, then we skip since we do not know anything about DNS.
+	#
+	if ($ref->{'alive'}) {
+	    if ($ref->{'dns'} eq "down") {
+		if ($status{$urn}->{'dns'}->{'status'} eq "down") {
+		    # Dead last time too, mark as dead, send email.
+		    $downdns{$urn} = $status{$urn}->{'dns'}->{'stamp'};
 
-			    my $slots = GeniXML::GetText("type_slots", $ntype);
-			    next
-				if (!defined($slots) || $slots !~ /^\d+$/);
-			    next
-				if ($slots > 1);
+		    # Mark that we have sent email
+		    $status{$urn}->{'dns'}->{'status'} = "dead";
+		}
+		elsif ($dailymail &&
+		       $status{$urn}->{'dns'}->{'status'} eq "dead") {
+		    # Mark for email
+		    $downdns{$urn} = $status{$urn}->{'dns'}->{'stamp'};
+		}
+		elsif ($status{$urn}->{'dns'}->{'status'} eq "up") {
+		    # Remember for next time, we need to send email.
+		    $status{$urn}->{'dns'}->{'status'} = "down";
+		    $status{$urn}->{'dns'}->{'stamp'}  = time();
+		}
+	    }
+	    elsif ($status{$urn}->{'dns'}->{'status'} ne "up") {
+		# DNS is back, mark for email and clear previous status.
+		if ($status{$urn}->{'dns'}->{'status'} eq "dead") {
+		    $updns{$urn} = $status{$urn}->{'dns'}->{'stamp'};
+		}
+		$status{$urn}->{'dns'}->{'status'} = "up";
+		$status{$urn}->{'dns'}->{'stamp'}  = undef;
+	    }
+	}
+	#
+	# Check Aggregate status. These also rate seperate email. But if
+	# boss did not ping, then we skip since we do not know anything
+	# about the aggregate.
+	#
+	if ($ref->{'alive'}) {
+	    if ($ref->{'status'} eq "down") {
+		if ($status{$urn}->{'status'}->{'status'} eq "down") {
+		    # Dead last time too, mark as dead, send email.
+		    $downaggs{$urn} = $status{$urn}->{'status'}->{'stamp'};
 
-			    if (!exists($type_count{$hname})) {
-				$type_count{$hname} = 0;
-				$type_avail{$hname} = 0;
-			    }
-			    $type_count{$hname} += 1;
-			    $type_avail{$hname} += 1
-				if (GeniXML::IsAvailable($ref));
+		    # Mark that we have sent email
+		    $status{$urn}->{'status'}->{'status'} = "dead";
+
+		    if ($aggregate->status() eq "up") {
+			if ($impotent) {
+			    print STDERR "Would mark $nickname as offline\n";
+			}
+			else {
+			    $aggregate->status("offline");
+			    $aggregate->StatusEvent("offline");
 			}
 		    }
-		    elsif ($name eq "emulab-xen") {
-			my $exclusive = GeniXML::GetExclusive($ref);
-
-			#print "$node_id, $exclusive\n";
-
-			# Shared nodes are marked as not exclusive.
-			next
-			    if (!defined($exclusive) || $exclusive);
-
-			# And they are available.
-			next
-			    if (!GeniXML::IsAvailable($ref));
-			    
-			#
-			# We need the pcvm type to find the slots.
-			#
-			foreach my $htype (FindNodes("n:hardware_type",
-						     $ref)->get_nodelist()) {
-			    my $hname = GeniXML::GetText("name", $htype);
-			    next
-				if (!defined($hname) || $hname ne "pcvm");
-			    
-			    my $ntype =
-				GeniXML::FindNodesNS("n:node_type",
-					     $htype,
-					     $GeniXML::EMULAB_NS)->pop();
-			    next
-				if (!$ntype);
-
-			    my $slots = GeniXML::GetText("type_slots", $ntype);
-			    next
-				if (!defined($slots) || $slots !~ /^\d+$/);
-
-			    #
-			    # Yuck, we do not get the total available on
-			    # shared node, only how many still avail. Kludge
-			    # it for now. 
-			    #
-			    $vcount += 50;
-			    $vfree  += $slots;
-			}
+		}
+		elsif ($dailymail &&
+		       $status{$urn}->{'status'}->{'status'} eq "dead") {
+		    # Mark for email.
+		    $downaggs{$urn} = $status{$urn}->{'status'}->{'stamp'};
+		}
+		elsif ($status{$urn}->{'status'}->{'status'} eq "up") {
+		    # Remember for next time, we need to send email.
+		    $status{$urn}->{'status'}->{'status'} = "down";
+		    $status{$urn}->{'status'}->{'stamp'}  = time();
+		}
+	    }
+	    elsif ($status{$urn}->{'status'}->{'status'} ne "up") {
+		# Aggregate is back, mark for email and clear previous status.
+		if ($status{$urn}->{'status'}->{'status'} eq "dead") {
+		    $upaggs{$urn} = $status{$urn}->{'status'}->{'stamp'};
+		}
+		$status{$urn}->{'status'}->{'status'} = "up";
+		$status{$urn}->{'status'}->{'stamp'}  = undef;
+		if ($aggregate->status() eq "offline") {
+		    if ($impotent) {
+			print STDERR "Would mark $nickname as up\n";
+		    }
+		    else {
+			$aggregate->status("up");
+			$aggregate->StatusEvent("up");
 		    }
 		}
 	    }
 	}
-	print "$nickname: pcount:$pcount, pfree:$pavail, ".
-	  "vcount:$vcount vfree:$vfree\n";
-	foreach my $type (keys(%type_count)) {
-	    my $count = $type_count{$type};
-	    my $avail = $type_avail{$type};
-	    if ($debug || $impotent) {
-		print "$type $count:$avail\n";
-	    }
-	    if (!$impotent) {
-		DBQueryWarn("replace into apt_aggregate_nodetypes set ".
-			    " urn='$urn',type='$type',".
-			    " count='$count',free='$avail'");
-	    }
+    }
+    
+    #
+    # And send email.
+    #
+    if (keys(%downbosses)) {
+	my $subject = "Portal Boss Nodes are " .
+	    ($dailymail ? "still " : "") . "unreachable";
+	my $body = "";
+
+	foreach my $urn (keys(%downbosses)) {
+	    my $when = $downbosses{$urn};
+	    my $boss = $aggregates->{$urn}->{'boss'};
+	    
+	    $body .= "${boss}: is unreachable since ".
+		TBDateStringLocal($when) . "\n";
 	}
-	if (!$impotent) {
-	    $aggregate->pcount($pcount);
-	    $aggregate->pfree($pavail);
-	    $aggregate->vcount($vcount);
-	    $aggregate->vfree($vfree);
+	NotifySlack($body);
+	SENDMAIL($TBOPS, $subject, $body, $TBOPS);
+    }
+    if (keys(%upbosses)) {
+	my $subject = "Portal Boss Nodes are back online";
+	my $body = "";
+
+	foreach my $urn (keys(%upbosses)) {
+	    my $when = $upbosses{$urn};
+	    my $boss = $aggregates->{$urn}->{'boss'};
+
+	    $body .= "${boss}: is now online " . "\n";
+	}
+	NotifySlack($body);
+	SENDMAIL($TBOPS, $subject, $body, $TBOPS);
+    }
+    if (keys(%downaggs)) {
+	my $subject = "Portal Aggregates are " .
+	    ($dailymail ? "still " : "") . "offlne";
+	my $body = "";
+
+	foreach my $urn (keys(%downaggs)) {
+	    my $when = $downaggs{$urn};
+	    my $boss = $aggregates->{$urn}->{'boss'};
+	    
+	    $body .= "${boss}: CM is offline since ".
+		TBDateStringLocal($when) . "\n";
+	}
+	NotifySlack($body);
+	SENDMAIL($TBOPS, $subject, $body, $TBOPS);
+    }
+    if (keys(%upaggs)) {
+	my $subject = "Portal Aggregates are back online";
+	my $body = "";
+
+	foreach my $urn (keys(%upaggs)) {
+	    my $when = $upaggs{$urn};
+	    my $boss = $aggregates->{$urn}->{'boss'};
+
+	    $body .= "${boss}: CM is now online " . "\n";
+	}
+	NotifySlack($body);
+	SENDMAIL($TBOPS, $subject, $body, $TBOPS);
+    }
+    if (keys(%downdns)) {
+	my $subject = "Portal DNS servers are " .
+	    ($dailymail ? "still " : "") . "offline";
+	my $body = "";
+
+	foreach my $urn (keys(%downdns)) {
+	    my $when = $downdns{$urn};
+	    my $boss = $aggregates->{$urn}->{'boss'};
+	    
+	    $body .= "${boss}: DNS is offline since ".
+		TBDateStringLocal($when) . "\n";
+	}
+	NotifySlack($body);
+	SENDMAIL($TBOPS, $subject, $body, $TBOPS);
+    }
+    if (keys(%updns)) {
+	my $subject = "Portal DNS servers are back online";
+	my $body = "";
+
+	foreach my $urn (keys(%updns)) {
+	    my $when = $updns{$urn};
+	    my $boss = $aggregates->{$urn}->{'boss'};
+
+	    $body .= "${boss}: DNS is now online " . "\n";
+	}
+	NotifySlack($body);
+	SENDMAIL($TBOPS, $subject, $body, $TBOPS);
+    }
+    if (keys(%downnodes)) {
+	my $subject = "Portal Nodes are " .
+	    ($dailymail ? "still " : "") . "unreachable";
+	my $body = "";
+
+	foreach my $urn (keys(%downnodes)) {
+	    foreach my $hostname (keys(%{$downnodes{$urn}})) {
+		my $when = $downnodes{$urn}->{$hostname};
+	    
+		$body .= "${hostname}: is unreachable since ".
+		    TBDateStringLocal($when) . "\n";
+	    }
+	    $body .= "\n";
+	}
+	NotifySlack($body);
+	SENDMAIL($TBOPS, $subject, $body, $TBOPS);
+    }
+    if (keys(%upnodes)) {
+	my $subject = "Portal Nodes are back online";
+	my $body = "";
+
+	foreach my $urn (keys(%upnodes)) {
+	    foreach my $hostname (keys(%{$upnodes{$urn}})) {
+		my $when = $upnodes{$urn}->{$hostname};
+	    
+		$body .= "${hostname}: is now online\n";
+	    }
+	    $body .= "\n";
+	}
+	NotifySlack($body);
+	SENDMAIL($TBOPS, $subject, $body, $TBOPS);
+    }
+}
+
+#
+# Do a Getversion on all aggregates in parallel.
+#
+sub GetVersion($)
+{
+    my ($aggregates) = @_;
+    my @return_codes = ();
+    my @agglist      = ();
+
+    # Only check if we could ping boss.
+    foreach my $urn (keys(%{$aggregates})) {
+	push(@agglist, $aggregates->{$urn}->{"aggregate"})
+	    if ($aggregates->{$urn}->{"alive"});
+    }
+    if ($debug) {
+	print "GetVersion: @agglist\n";
+    }
+    my $coderef = sub {
+	my ($aggregate) = @_;
+	my $error;
+
+	if ($debug) {
+	    print "Checking status: $aggregate\n";
+	}
+	# Ping test using GetVersion. We want the actual error message
+	# back so use this directly instead of $aggregate->CheckStatus()
+	# Also want to change the default timeout to be more robust on 
+	# very busy aggregates. 
+	my $retval = APT_Geni::PingAggregate($aggregate, \$error, undef, 20);
+	if ($retval) {
+	    $aggregate->last_error($error);
+	    return -1;
+	}
+	return 0;
+    };
+    if (ParRun({"maxwaittime" => 600,
+		"maxchildren" => 10,
+		"nosighup"    => 1}, \@return_codes, $coderef, @agglist)) {
+	print STDERR "ParRun failed";
+	return -1;
+    }
+    #
+    # Process return codes and update status since work done in fork.
+    #
+    foreach my $aggregate (@agglist) {
+	my $code = shift(@return_codes);
+	my $urn  = $aggregate->urn();
+	$aggregate->Refresh();
+
+	if ($code) {
+	    my $nickname = $aggregate->nickname();
+	    my $error    = $aggregate->last_error();
+	    print "Aggregate $nickname is down: $error\n";
+	    # Mark for processing.
+	    $aggregates->{$urn}->{"status"} = "down";
+	}
+	else {
+	    $aggregates->{$urn}->{"status"} = "up";
 	}
     }
     return 0;
 }
 
-if ($oneshot) {
-    CheckAggregates();
-    exit(0);
-}
+#
+# Run fping on a set of nodes and store results for caller
+#
+sub doPing($$)
+{
+    my ($hosts, $results) = @_;
+    my @hostnames = keys(%{$hosts});
 
+    if (! -f "$FPING") {
+        fatal("$FPING is not installed\n");
+    }
+    if (! -x "$FPING") {
+        fatal("$FPING is not executable\n");
+    }
+    if ($debug) {
+	print "Running fping on @hostnames\n";
+    }
+    open(FPING, "$FPING -B 1.1 -r 10 -i 250 -p 250 -t 250 @hostnames|") ||
+	fatal("Could not fork fping: $!\n");
+
+    while (<FPING>) {
+	chomp;
+	if ($_ =~ /^([^\ ]+) is alive/) {
+	    $results->{$1} = 1;
+	}
+	elsif ($_ =~ /^([^\ ]+) is/) {
+	    $results->{$1} = 0;
+	}
+    }
+    close(FPING);
+}
+    
 while (1) {
     if (NoLogins()) {
 	sleep(5);
@@ -473,20 +808,64 @@ while (1) {
     print "Running at ".
 	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
 
+    #
+    # At the MotherShip, skip this round if our uplink is down since
+    # that will generate a blizzard of down email, and we already get
+    # enough email. Test this with a check if we can resolve at
+    # Google's DNS. 
+    #
+    if ($MAINSITE) {
+	system("$DIG google.com \@8.8.8.8 +short +noanswer");
+	if ($?) {
+	    print "Cannot contact 8.8.8.8, skipping this round\n";
+	    goto loop;
+	}
+    }
     CheckAggregates();
+
+    emutil::FlushCaches();
+    GeniUtil::FlushCaches();
+    
+    print "Done at ".
+	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
 
     exit(0)
 	if ($oneshot);
-    
+
+  loop:
     sleep($SLEEP_INTERVAL);
 }
 exit(0);
+
+#
+# Notify Slack.
+#
+sub NotifySlack($)
+{
+    my ($message) = @_;
+
+    return
+	if ($impotent);
+
+    if (open(PIPE, "| $CURL -s -X POST -H ".
+	     "'Content-type: application/json' --data \@- $SLACKURL")){
+
+	$message = join("\\n", split(/\n/, $message));
+	print PIPE '{"text" : "' . $message . '"}';
+	if (!close(PIPE)) {
+	    print STDERR "$CURL exited with status $?\n";
+	}
+    }
+    else {
+	print STDERR "Could not start $CURL\n";
+    }
+}
 
 sub fatal($)
 {
     my ($msg) = @_;
 
-    if (! ($oneshot || $debug)) {
+    if (! ($oneshot || $debug || $impotent)) {
 	#
 	# Send a message to the testbed list. 
 	#
@@ -496,7 +875,7 @@ sub fatal($)
 		 $TBOPS);
     }
     MarkDaemonStopped("portal_monitor")
-	if (!$oneshot);
+	if (! ($oneshot || $impotent));
 
     die("*** $0:\n".
 	"    $msg\n");

@@ -30,6 +30,10 @@
 #     suit our purposes, but not any other kind of sshd).
 #
 
+# Docker attach is sometimes racy so give it observer a chance to attach
+# before printing output
+sleep 4
+
 #
 # Find the distro, release number, etc.
 #
@@ -73,6 +77,12 @@ if [ -r /etc/centos-release ]; then
     rel=$trel
     major=`echo $rel | sed -nre 's/^([0-9]+).*$/\1/p'`
     minor=`echo $rel | sed -nre 's/^[0-9]+\.([0-9]+).*$/\1/p'`
+fi
+
+if [ "$dist" = "debian" -a -z "$major" ]; then
+    major="S"
+    minor="S"
+    rel="S"
 fi
 
 if [ -n "$dist" -a -z "$tag" ]; then
@@ -293,6 +303,8 @@ if [ -f /etc/emulab/version ]; then
 fi
 
 echo "# Result variables:"
+echo ""
+echo "TAG=$tag"
 echo "TAG=$tag"
 echo "MINTAG=$mintag"
 echo "DIST=$dist"

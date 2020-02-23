@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2011-2017 University of Utah and the Flux Group.
+# Copyright (c) 2011-2017, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -587,17 +587,25 @@ sub CommitWire
     my $result = ResolveRow($id);
     while (my ($skip, $cable, $len, $type, $node_id1, $card1, $port1,
 	       $node_id2, $card2, $port2) = $result->fetchrow()) {
-	my $interface1 = Interface->Lookup($node_id1, $card1, $port1);
+	my $iface1 = "eth${card1}";
+	my $iface2 = "${card2}/${port2}";
+	    
+	my $interface1 = Interface->LookupByIface($node_id1, $iface1);
 	if (!defined($interface1)) {
 	    $errors{"command"} = "Cannot lookup interface1";
 	    return;
 	}
-	my $interface2 = Interface->Lookup($node_id2, $card2, $port2);
+	my $interface2 = Interface->LookupByIface($node_id2, $iface2);
 	if (!defined($interface2)) {
 	    $errors{"command"} = "Cannot lookup interface2";
 	    return;
 	}
-	my $wireargs = {};
+	my $wireargs = {
+	    "card1" => $card1,
+	    "port1" => $port1,
+	    "card2" => $card2,
+	    "port2" => $port2,
+	};
 	$wireargs->{"cable"}  = $cable if (defined($cable));
 	$wireargs->{"length"} = $len if (defined($len));
 	if ($fake) {

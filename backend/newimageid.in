@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -174,6 +174,7 @@ my %xmlfields =
      "global",		=> ["global",		$SLOT_ADMINONLY,   0],
      "mbr_version",	=> ["mbr_version",	$SLOT_OPTIONAL],
      "makedefault",	=> ["makedefault",	$SLOT_ADMINONLY,   0],
+     "format",		=> ["format",		$SLOT_ADMINONLY,   "ndz"],
 );
 
 #
@@ -490,14 +491,27 @@ elsif (! $isadmin) {
 	UserError("Path: Invalid Path");
     }
 }
-if ($newimageid_args{"path"} =~ /\/$/) {
-    if (-e $newimageid_args{"path"} && ! -d $newimageid_args{"path"}) {
-	UserError("Path: invalid path, it should be a directory");	
+if (defined($newimageid_args{"format"})
+    && $newimageid_args{"format"} eq "docker") {
+    #
+    # We only allow a specific path for docker images, since the storage
+    # backend relies on an ACL of repos a user can access.  It's not a
+    # filesystem with UNIX permissions.  With a docker registry,
+    # permissions are tied to specific paths.  Don't even let admins
+    # override this for now; there is no point.
+    #
+}
+else {
+    if ($newimageid_args{"path"} =~ /\/$/) {
+	if (-e $newimageid_args{"path"} && ! -d $newimageid_args{"path"}) {
+	    UserError("Path: invalid path, it should be a directory");	
+	}
+    }
+    elsif (-d $newimageid_args{"path"} =~ /\/$/) {
+	UserError("Path: invalid path, its a directory");
     }
 }
-elsif (-d $newimageid_args{"path"} =~ /\/$/) {
-    UserError("Path: invalid path, its a directory");
-}
+
 #
 # See what node types this image will work on. Must be at least one!
 #
@@ -625,8 +639,8 @@ exit(0)
 delete($newimageid_args{"imagename"});
 
 my $usrerr;
-my $new_image = Image->Create($project, $group, $this_user, $imagename, 0,
-			      \%newimageid_args, \$usrerr);
+my $new_image = Image->Create($project, $group, $this_user, $isadmin,
+			      $imagename, 0, \%newimageid_args, \$usrerr);
 UserError($usrerr)
     if (defined($usrerr));
 fatal("Could not create new Image!")

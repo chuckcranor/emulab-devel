@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2017 University of Utah and the Flux Group.
+# Copyright (c) 2007-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -63,10 +63,10 @@ my $TBWWW         = "@TBWWW@";
     "i386"    => "i386",
     "x86_64"  => "x86_64",
     "aarch64" => "aarch64",
+    "ppc64le" => "ppc64le",
 );
 
 # Cache of instances to avoid regenerating them.
-my %images    = ();
 my $debug      = 0;
 
 #
@@ -443,6 +443,18 @@ sub SetProvenance($$)
     return 0;
 }
 
+sub SetDescription($$)
+{
+    my ($self, $description) = @_;
+    my $args = {"description" => $description};
+
+    return -1
+	if ($self->image()->Update($args) ||
+	    $self->osinfo()->Update($args));
+
+    return 0;
+}
+
 #
 # Highest number version, rather then what is deemed most recent by the
 # images table.
@@ -596,6 +608,12 @@ sub GetCreator($)
 
     return $self->image()->GetCreator();
 }
+sub GetUpdater($)
+{
+    my ($self) = @_;
+
+    return $self->image()->GetUpdater();
+}
 
 #
 # Load the group object for an image
@@ -660,6 +678,17 @@ sub Chunks($)
     my ($self) = @_;
 
     return $self->image()->Chunks();
+}
+
+#
+# Return updated time for image as a UNIX timestamp via the passed ref.
+# Return 0 on success, non-zero otherwise.
+#
+sub GetCreate($$)
+{
+    my ($self,$stampp) = @_;
+
+    return $self->image()->GetCreate($stampp);
 }
 
 #
@@ -795,6 +824,13 @@ sub GotLock($)
     return $self->image()->GotLock();
 }
 
+sub TakeLock($)
+{
+    my ($self) = @_;
+
+    return $self->image()->TakeLock();
+}
+
 #
 # Wait to get lock.
 #
@@ -889,6 +925,29 @@ sub ListForURN($$)
 	if (!defined($tmp)) {
 	    print STDERR "Could not lookup image $imageid,$version\n";
 	    return -1;
+	}
+	push(@result, $tmp);
+    }
+    return @result;
+}
+
+#
+# List of images in a project/group
+#
+sub ListForGroup($$)
+{
+    my ($class, $group) = @_;
+    my @result  = ();
+
+    my @images = Image->ListForGroup($group);
+    
+    foreach my $image (@images) {
+	my $imageid = $image->imageid();
+	my $version = $image->version();
+	my $tmp = OSImage->Lookup($imageid, $version);
+	if (!defined($tmp)) {
+	    print STDERR "Could not lookup image $imageid,$version\n";
+	    next;
 	}
 	push(@result, $tmp);
     }
@@ -1045,11 +1104,32 @@ sub SetNoVersioning($$)
     return $self->image()->SetNoVersioning($value);
 }
 
+sub SetImageRelocateURN($$)
+{
+    my ($self, $url) = @_;
+
+    return $self->image()->SetImageRelocateURN($url);
+}
+
 sub SetImageMetadataURL($$)
 {
     my ($self, $url) = @_;
 
     return $self->image()->SetImageMetadataURL($url);
+}
+
+sub SetFormat($$)
+{
+    my ($self, $format) = @_;
+
+    return $self->image()->SetFormat($format);
+}
+
+sub SetPath($$)
+{
+    my ($self, $path) = @_;
+
+    return $self->image()->SetPath($path);
 }
 
 sub LocalURL($)
@@ -1439,6 +1519,21 @@ sub InheritTaintStates($$)
     my ($self, $osinfo) = @_;
 
     return $self->osinfo()->InheritTaintStates($osinfo);
+}
+
+sub ConvertToLocal($)
+{
+    return $_[0]->image()->ConvertToLocal();
+}
+
+sub ConvertToImported($$)
+{
+    return $_[0]->image()->ConvertToImported($_[1]);
+}
+
+sub ImportImageFileSize($)
+{
+    return $_[0]->image()->ImportImageFileSize();
 }
 
 #############################################################################

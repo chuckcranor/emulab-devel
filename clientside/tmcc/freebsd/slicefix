@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -488,6 +488,7 @@ dofreebsd() {
 	changerootkeys=0
 	changezone=0
 	changentp=0
+	changechrony=0
 	changesshd=0
 	changeauth=0
 
@@ -619,6 +620,11 @@ dofreebsd() {
 		    fixit=1
 		fi
 	    fi
+	    if [ "$SPEED" != "115200" ]; then
+		# non-standard speed requires change to /etc/ttys
+		changedisk=1
+		fixit=1
+	    fi
 	    ;;
 	esac
 
@@ -684,6 +690,15 @@ dofreebsd() {
 		fi
 	    fi
 
+	    # Check the chrony config.
+	    if [ -e /etc/chrony.conf ]; then
+		cmp -s /etc/chrony.conf /mnt/etc/chrony.conf
+		if [ $? -ne 0 ]; then
+		    changechrony=1
+		    fixit=1
+		fi
+	    fi
+
 	fi
 
 	# See if we need to update sshd_config
@@ -730,9 +745,11 @@ dofreebsd() {
 	    }
 	    echo "  updating /etc/dumpdates"
 	    sed -E -i .preemulab -e "s;^/dev/[a-zA-Z]+[0-9]+s[0-9]+;/dev/${disk}s${part};" /mnt/etc/dumpdates || {
-		echo "Failed to update /etc/dumpdates"
-		umount $rootdev
-		return 1
+		echo "WARNING: Failed to update /etc/dumpdates"
+	    }
+	    echo "  updating /etc/ttys"
+	    sed -i .preemulab -e "/^console/s;std.115200;std.$SPEED;" /mnt/etc/ttys || {
+		echo "WARNING: Failed to update /etc/ttys"
 	    }
 	fi
 
@@ -962,6 +979,17 @@ EOF1
 
 	    cp -p /etc/ntp.conf /mnt/etc/ntp.conf || {
 	        echo "Failed to create /etc/ntp.conf"
+		umount $rootdev
+		return 1
+	    }
+	fi
+
+	# Copy in new chrony config
+	if [ $changechrony -eq 1 ]; then
+	    echo "  updating /etc/chrony.conf"
+
+	    cp -p /etc/chrony.conf /mnt/etc/chrony.conf || {
+	        echo "Failed to create /etc/chrony.conf"
 		umount $rootdev
 		return 1
 	    }
@@ -1482,6 +1510,11 @@ dolinux() {
 	    # GRUB_CMDLINE_LINUX="console=ttySN,S"
 	    # GRUB_TERMINAL=serial
 	    # GRUB_SERIAL_COMMAND="serial --speed=S --unit=N"
+	    #
+	    # XXX Need to put in Xen lines:
+	    #
+	    # GRUB_CMDLINE_XEN="gnttab_max_nr_frames=64 loglvl=all guest_loglvl=all com2=115200,8n1 console=com2 dom0_mem=4096M"
+	    # GRUB_CMDLINE_LINUX_XEN_REPLACE="console=hvc0 earlyprintk=xen net.ifnames=0"
 	    #
 	    gdef="/mnt/etc/default/grub"
 	    if [ -e "$gdef" ]; then

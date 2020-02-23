@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008 University of Utah and the Flux Group.
+# Copyright (c) 2008, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -423,27 +423,42 @@ sub detectArch($) {
 	return "";
     }
 
-    my $output = `file -b $testfile`;
-    chomp($output);
-    my @fields = split(/,/,$output);
+    my ($output,$arch);
 
-    my ($bits,$arch) = ("","");
-    foreach my $f (@fields) {
-	if ($f =~ /(\d+)\-bit/) {
-	    $bits = $1;
+    $output = `which file`;
+    if ($output ne "") {
+	$output = `file -b $testfile`;
+	chomp($output);
+	my @fields = split(/, /,$output);
+
+	my $bits;
+	($bits,$arch) = ("","");
+	foreach my $f (@fields) {
+	    if ($f =~ /(\d+)\-bit/) {
+		$bits = $1;
+	    }
+	    elsif ($f =~ /x86(\-|_)64/) {
+		$arch = "x86_64";
+	    }
+	    elsif ($f =~ /80(\d86)/) {
+		$arch = "i${1}";
+	    }
+	    elsif ($f =~ /ppc64/ || $f =~ /aarch64/ || $f =~ /arm64/) {
+		$arch = $f;
+		$bits = 64;
+	    }
 	}
-	elsif ($f =~ /x86(\-|_)64/) {
-	    $arch = "x86_64";
+	if (!defined($arch) && defined($bits)) {
+	    $arch = "${bits}-bit";
 	}
-	elsif ($f =~ /80(\d86)/) {
-	    $arch = "i${1}";
+	elsif (!defined($arch) && !defined($bits)) {
+	    $arch = $fields[1];
 	}
     }
-    if (!defined($arch) && defined($bits)) {
-	$arch = "${bits}-bit";
-    }
-    elsif (!defined($arch) && !defined($bits)) {
-	$arch = $fields[1];
+    else {
+	$arch = `uname -m`;
+	chomp($arch);
+	print "No file binary; assuming target arch is equivalent to host ($arch)!\n";
     }
 
     return $arch;

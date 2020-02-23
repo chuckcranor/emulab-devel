@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,7 +42,14 @@ if (! $isadmin) {
 # Verify Page Arguments.
 #
 $optargs = OptionalPageArguments("showtype",   PAGEARG_STRING,
-				 "searchfor",  PAGEARG_STRING);
+				 "searchfor",  PAGEARG_STRING,
+                                 "classic",    PAGEARG_BOOLEAN);
+
+if ($isadmin && !$classic) {
+    $url = "portal/lists.php";
+    header("Location: $url");
+    return;
+}
 
 if (!isset($showtype)) {
     $showtype='loggedin';

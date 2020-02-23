@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -236,6 +236,7 @@ $EUID = 0;
 # 
 DBQueryFatal("delete FROM last_reservation where pid_idx='$pid_idx'");
 DBQueryFatal("delete FROM project_reservations where pid_idx='$pid_idx'");
+DBQueryFatal("delete FROM project_licenses where pid_idx='$pid_idx'");
 DBQueryFatal("delete FROM nodetypeXpid_permissions where pid_idx='$pid_idx'");
 DBQueryFatal("delete FROM project_stats where pid_idx='$pid_idx'");
 DBQueryFatal("delete FROM group_stats where pid_idx='$pid_idx'");

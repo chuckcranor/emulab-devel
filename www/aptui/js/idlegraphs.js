@@ -330,6 +330,10 @@ window.ShowIdleGraphs = (function ()
 	function GetManifests()
 	{
 	    var callback = function(json) {
+		if (json.code) {
+		    console.info("GetManifests error:", json);
+		    return;
+		}
 		_.each(json.value, function(manifest, aggregate_urn) {
 		    var xmlDoc = $.parseXML(manifest);
 		    var xml = $(xmlDoc);
@@ -380,11 +384,23 @@ window.ShowIdleGraphs = (function ()
 		    }
 		    return;
 		}
+		//console.info("rpc", json);
 		_.each(json.value, function(data, name) {
-		    var idledata = JSON.parse(data);
-		    rawData[name] = idledata;
+		    // No data, skip
+		    if (data == "") {
+			return;
+		    }
+		    rawData[name] = JSON.parse(data);
 		});
-		console.info("raw", rawData);
+		//console.info("raw", rawData);
+		
+		// No data, tell caller and done.
+		if (Object.keys(rawData).length == 0) {
+		    if (C_callback) {
+			C_callback(0, json);
+		    }
+		    return;
+		}
 		var load = ProcessData("load", "avg");
 		var ctrl = ProcessData("ctrl", "avg");
 		var expt = ProcessData("expt", "avg");
@@ -402,6 +418,14 @@ window.ShowIdleGraphs = (function ()
 		}
 
 		if (load.length) {
+		    if (load.length > 60) {
+			var height = $(loadID +" .idlegraph-div")
+			    .innerHeight();
+			
+			$(loadID + " .idlegraph-div")
+			    .css("height", (height + 500) + "px")
+			    .css("max-height", (height + 500) + "px");
+		    }
 		    CreateOneGraph(loadID, "load", load,
 				   {"ytype"  : "float",
 				    "ylabel" : "Unix Load Average"});
@@ -421,6 +445,14 @@ window.ShowIdleGraphs = (function ()
 		    });
 		}
 		if (ctrl.length) {
+		    if (ctrl.length > 60) {
+			var height = $(ctrlID +" .idlegraph-div")
+			    .innerHeight();
+			
+			$(ctrlID + " .idlegraph-div")
+			    .css("height", (height + 500) + "px")
+			    .css("max-height", (height + 500) + "px");
+		    }
 		    CreateOneGraph(ctrlID, "ctrl", ctrl,
 				   {"ytype"  : "int",
 				    "ylabel" : "Packets Per Second"});
@@ -454,6 +486,14 @@ window.ShowIdleGraphs = (function ()
 		    });
 		}
 		if (expt.length) {
+		    if (expt.length > 60) {
+			var height = $(exptID +" .idlegraph-div")
+			    .innerHeight();
+			
+			$(exptID + " .idlegraph-div")
+			    .css("height", (height + 500) + "px")
+			    .css("max-height", (height + 500) + "px");
+		    }
 		    CreateOneGraph(exptID, "expt", expt,
 				   {"ytype"  : "int",
 				    "ylabel" : "Packets Per Second"});

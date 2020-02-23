@@ -12,18 +12,16 @@ window.ShowImagingModal = (function()
 	var imaging_modal_active  = false;
 	var status_callback;
 	var completion_callback;
+	var laststatus = "preparing";
 
 	function ShowImagingModalSecret()
 	{
-	    var laststatus = "preparing";
-	    
 	    //
 	    // Ask the server for information to populate the imaging modal. 
 	    //
 	    var callback = function(json) {
 		var value = json.value;
-		console.log("ShowImagingModal");
-		console.log(json);
+		console.log("ShowImagingModal", json);
 
 		if (json.code) {
 		    if (imaging_modal_active) {
@@ -65,93 +63,105 @@ window.ShowImagingModal = (function()
 		$('#imaging_modal_node_status').html(value["node_status"]);
 		$('#imaging_modal_image_size').html(value["image_size"]);
 
-		if (_.has(value, "image_status")) {
-		    var status = value["image_status"];
-
-		    if (status == "imaging") {
-			$('#tracker-imaging').removeClass('progtrckr-todo');
-			$('#tracker-imaging').addClass('progtrckr-done');
-		    }
-		    else if (status == "finishing") {
-			$('#tracker-imaging').removeClass('progtrckr-todo');
-			$('#tracker-imaging').addClass('progtrckr-done');
-			$('#tracker-finishing').removeClass('progtrckr-todo');
-			$('#tracker-finishing').addClass('progtrckr-done');
-		    }
-		    else if (status == "copying") {
-			$('#tracker-imaging').removeClass('progtrckr-todo');
-			$('#tracker-imaging').addClass('progtrckr-done');
-			$('#tracker-finishing').removeClass('progtrckr-todo');
-			$('#tracker-finishing').addClass('progtrckr-done');
-			$('#tracker-copying').removeClass('progtrckr-todo');
-			$('#tracker-copying').addClass('progtrckr-done');
-		    }
-		    else if (status == "ready") {
-			$('#tracker-imaging').removeClass('progtrckr-todo');
-			$('#tracker-imaging').addClass('progtrckr-done');
-			$('#tracker-finishing').removeClass('progtrckr-todo');
-			$('#tracker-finishing').addClass('progtrckr-done');
-			$('#tracker-copying').removeClass('progtrckr-todo');
-			$('#tracker-copying').addClass('progtrckr-done');
-			$('#tracker-ready').removeClass('progtrckr-todo');
-			$('#tracker-ready').addClass('progtrckr-done');
-			$('#imaging-spinner').addClass("hidden");
-			if (_.has(value, "image_name")) {
-			    $('#imaging-done-modal-imagename')
-				.text(value["image_name"]);
-			    $('#imaging-modal-imagename')
-				.text(value["image_name"]);
-
-			    if (!imaging_modal_active) {
-				sup.ShowModal("#imaging-done-modal");
-			    }
-			    else {
-				$('#imaging_modal_done_div')
-				    .removeClass("hidden");
-			    }
-			}
-			$('#imaging-close').removeClass("hidden");
-			completion_callback(0);
-			return;
-		    }
-		    else if (status == "failed") {
+		var updateProgress = function (status, laststatus) {
+		    if (status == "failed") {
 			if (laststatus == "preparing") {
-			    $('#tracker-imaging').removeClass('progtrckr-todo');
-			    $('#tracker-imaging').addClass('progtrckr-failed');
+			    $('#tracker-imaging')
+				.removeClass('progtrckr-todo');
+			    $('#tracker-imaging')
+				.addClass('progtrckr-failed');
 			}
 			if (laststatus == "imaging" ||
 			    laststatus == "preparing") {
-			    $('#tracker-finishing').removeClass('progtrckr-todo');
-			    $('#tracker-finishing').addClass('progtrckr-failed');
+			    $('#tracker-finishing')
+				.removeClass('progtrckr-todo');
+			    $('#tracker-finishing')
+				.addClass('progtrckr-failed');
 			}
 			if (laststatus == "imaging" ||
 			    laststatus == "preparing" ||
 			    laststatus == "finishing") {
-			    $('#tracker-copying').removeClass('progtrckr-todo');
-			    $('#tracker-copying').addClass('progtrckr-failed');
+			    $('#tracker-copying')
+				.removeClass('progtrckr-todo');
+			    $('#tracker-copying')
+				.addClass('progtrckr-failed');
 			}
 			$('#tracker-ready').removeClass('progtrckr-todo');
 			$('#tracker-ready').addClass('progtrckr-failed');
-			
 			$('#tracker-ready').html("Failed");
-			$('#imaging-spinner').addClass("invisible");
-			$('#imaging-close').removeClass("hidden");
-			completion_callback(1);
 			return;
 		    }
-		    laststatus = status;
+		    switch (status) {
+		    case "ready":
+			$('#tracker-ready').removeClass('progtrckr-todo');
+			$('#tracker-ready').addClass('progtrckr-done');
+		    case "copying":
+			$('#tracker-copying').removeClass('progtrckr-todo');
+			$('#tracker-copying').addClass('progtrckr-done');
+		    case "finishing":
+			$('#tracker-finishing').removeClass('progtrckr-todo');
+			$('#tracker-finishing').addClass('progtrckr-done');
+		    case "imaging":
+			$('#tracker-imaging').removeClass('progtrckr-todo');
+			$('#tracker-imaging').addClass('progtrckr-done');
+		    }
+		};
+		var errmsg = "Failed";
+		var status = null;
+		if (_.has(value, "image_status")) {
+		    status = value["image_status"];
 		}
 		//
-		// Done, we need to do something here if we exited before
-		// ready or failed above. 
+		// We need to watch for exit before ready or fail.
+		// Well, ready before exit is not supposed to happen.
 		//
 		if (_.has(value, "exited")) {
+		    var exitcode = value["exitcode"];
+		    
+		    if (exitcode != 0) {
+			status = "failed";
+			errmsg = value["errmsg"];
+		    }
+		    else if (status != "ready") {
+			status = "failed";
+			errmsg = "Internal error creating image";
+		    }
+		}
+		if (status == "failed") {
+		    updateProgress(status, laststatus);
+		    $('#imaging-spinner').addClass("hidden");
+		    $('#imaging-close').removeClass("hidden");
+		    $('#imaging-modal-failure').html(errmsg);
+		    $('#imaging_modal_failed_div').removeClass("hidden");
+		    completion_callback(1);
+		    return;
+		}
+		if (status != laststatus) {
+		    updateProgress(status, laststatus);
+		}
+		if (status == "ready") {
+		    if (_.has(value, "image_name")) {
+			$('#imaging-done-modal-imagename')
+			    .text(value["image_name"]);
+			$('#imaging-modal-imagename')
+			    .text(value["image_name"]);
+
+			if (!imaging_modal_active) {
+			    sup.ShowModal("#imaging-done-modal");
+			}
+			else {
+			    $('#imaging_modal_done_div')
+				.removeClass("hidden");
+			}
+		    }
 		    $('#imaging-spinner').addClass("hidden");
 		    $('#imaging-close').removeClass("hidden");
 		    completion_callback(0);
 		    return;
 		}
-	    
+		if (status)
+		    laststatus = status;
+
 		// And check again in a little bit.
 		setTimeout(function f() { ShowImagingModalSecret() }, 5000);
 	    }
@@ -175,7 +185,9 @@ window.ShowImagingModal = (function()
 		console.log(json);
 		
     		var imaging_html = imagingTemplate({
-		    "needcopy"   : _.has(json.value, "copyback_uuid"),
+		    "needcopy"   : (_.has(json.value, "copyback_urn") ||
+				    _.has(json.value, "copyback_uuid") ?
+				    1 : 0),
 		    "nokeyboard" : nokeyboard});
 		$('#imaging_div').html(imaging_html);
 		

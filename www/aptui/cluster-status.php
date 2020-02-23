@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,25 +38,60 @@ $this_user = CheckLoginOrRedirect();
 $isadmin   = (ISADMIN() ? 1 : 0);
 $isfadmin  = (ISFOREIGN_ADMIN() ? 1 : 0);
 
+#
+# Verify page arguments. Cluster is a domain that we turn into a URN.
+#
+$optargs = OptionalPageArguments("cluster",  PAGEARG_STRING);
+
+if (isset($cluster)) {
+    $aggregate = Aggregate::LookupByNickname($cluster);
+    if (!$aggregate) {
+        SPITUSERERROR("No such cluster: $cluster");
+        exit();
+    }
+    if ($aggregate->adminonly() && !($isadmin || $isfadmin)) {
+        SPITUSERERROR("No permission to view cluster: $cluster");
+        exit();
+    }
+}
 SPITHEADER(1);
 
 #
 # The apt_aggregates table should tell us what clusters, but for
 # now it is always the local cluster
 #
-if ($TBMAINSITE && $ISCLOUD) {
-    $aggregates =
-        array("Emulab"    => "urn:publicid:IDN+emulab.net+authority+cm",
-              "APT"       => "urn:publicid:IDN+apt.emulab.net+authority+cm",
-              "Wisconsin" => "urn:publicid:IDN+wisc.cloudlab.us+authority+cm",
-              "Clemson"   => "urn:publicid:IDN+clemson.cloudlab.us+authority+cm",
-              "Utah"      => "urn:publicid:IDN+utah.cloudlab.us+authority+cm",
-              "OneLab"    => "urn:publicid:IDN+lab.onelab.eu+authority+cm");
+if (isset($aggregate)) {
+    $agglist = array($aggregate);
+}
+elseif ($ISCLOUD) {
+    $tmp = array("urn:publicid:IDN+emulab.net+authority+cm",
+                 "urn:publicid:IDN+apt.emulab.net+authority+cm",
+                 "urn:publicid:IDN+wisc.cloudlab.us+authority+cm",
+                 "urn:publicid:IDN+clemson.cloudlab.us+authority+cm",
+                 "urn:publicid:IDN+utah.cloudlab.us+authority+cm",
+                 "urn:publicid:IDN+lab.onelab.eu+authority+cm");
+    $agglist = array();
+    foreach ($tmp as $urn) {
+        $agglist[] = Aggregate::Lookup($urn);
+    }
+}
+elseif ($ISPOWDER) {
+    $agglist = Aggregate::DefaultAggregateList($this_user);
 }
 else {
-    $aggregate  = Aggregate::Lookup($DEFAULT_AGGREGATE_URN);
-    $aggregates = array($aggregate->nickname() => $aggregate->urn());
+    $agglist = array(Aggregate::Lookup($DEFAULT_AGGREGATE_URN));
 }
+
+$aggregates = array();
+foreach ($agglist as $aggregate) {
+    $aggregates[$aggregate->nickname()] =
+        array("urn"          => $aggregate->urn(),
+              "name"         => $aggregate->name(),
+              "nickname"     => $aggregate->nickname(),
+              "url"          => $aggregate->weburl(),
+              "abbreviation" => $aggregate->nickname());
+}
+
 echo "<link rel='stylesheet'
             href='css/tablesorter.css'>\n";
 

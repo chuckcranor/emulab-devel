@@ -27,21 +27,35 @@ WANT_PHP_MOD=	yes
 # PHP modules to build.
 # XXX based on current boss install.
 #
+.if (${EMULAB_PORTVERSION} == "7.3")
+USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt mysqli \
+		openssl pdo phar posix session simplexml sockets tokenizer \
+		xml xmlreader xmlrpc xmlwriter
+.else
 USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt mysql \
 		openssl pdo phar posix session simplexml sockets tokenizer \
 		xml xmlreader xmlrpc xmlwriter
+.endif
 
 #
 # Various ports need to agree on what version of apache.
 #
+.if (${EMULAB_PORTVERSION} == "7.1" || ${EMULAB_PORTVERSION} == "7.2" || ${EMULAB_PORTVERSION} == "7.3")
+www_apache24_SET=	SUEXEC
+.MAKEFLAGS+=	APACHE_PORT=www/apache24
+.MAKEFLAGS+=	WITH_SUEXEC=yes
+.else
 www_apache22_SET=	SUEXEC
 .MAKEFLAGS+=	APACHE_PORT=www/apache22
 .MAKEFLAGS+=	WITH_SUEXEC=yes
+.endif
 
+.if (${EMULAB_PORTVERSION} != "7.1" && ${EMULAB_PORTVERSION} != "7.2" && ${EMULAB_PORTVERSION} != "7.3")
 #
 # Use the base version of openssl
 #
 .MAKEFLAGS+=	WITH_OPENSSL_BASE=yes
+.endif
 
 #
 # This prevents any ports from trying to configure interactively.
@@ -79,13 +93,16 @@ RUN_DEPENDS+=	\
 # Emulab-hacked versions of standard ports
 #
 RUN_DEPENDS+=	\
-	${LOCALBASE}/libexec/tftpd:${PORTSDIR}/misc/emulab-tftp-hpa \
+	${LOCALBASE}/libexec/tftpd:${PORTSDIR}/misc/emulab-tftp-hpa
+.if (${EMULAB_PORTVERSION} != "7.3")
+RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}m2crypto>0:${PORTSDIR}/misc/emulab-py-m2crypto
+.endif
 
 # apps
 RUN_DEPENDS+=	\
 	anytopnm:${PORTSDIR}/graphics/netpbm \
-	autoconf:${PORTSDIR}/devel/autoconf \
+	autoconf>=2.69:${PORTSDIR}/devel/autoconf \
 	curl:${PORTSDIR}/ftp/curl \
 	git:${PORTSDIR}/devel/git \
 	gmake:${PORTSDIR}/devel/gmake \
@@ -98,7 +115,7 @@ RUN_DEPENDS+=	\
 	rpm:${PORTSDIR}/archivers/rpm4 \
 	rrdtool:${PORTSDIR}/databases/rrdtool \
 	rsync:${PORTSDIR}/net/rsync \
-	swig2.0:${PORTSDIR}/devel/swig20 \
+	swig${SWIG_VER}:${PORTSDIR}/${SWIG_PORT} \
 	sudo:${PORTSDIR}/security/sudo \
 	medusa:${PORTSDIR}/security/medusa \
 	wget:${PORTSDIR}/ftp/wget \
@@ -143,24 +160,26 @@ RUN_DEPENDS+=	\
 RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}MySQLdb>0:${PORTSDIR}/databases/py-MySQLdb \
 	${PYTHON_PKGNAMEPREFIX}dateutil>0:${PORTSDIR}/devel/py-dateutil \
+	${PYTHON_PKGNAMEPREFIX}cryptography>0:${PORTSDIR}/security/py-cryptography \
 	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml
 
 # apache related ports
 RUN_DEPENDS+=	\
-	${LOCALBASE}/libexec/apache22/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
-	${LOCALBASE}/libexec/apache22/mod_fcgid.so:${PORTSDIR}/www/mod_fcgid
+	${LOCALBASE}/${APACHEMODDIR}/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
+	${LOCALBASE}/${APACHEMODDIR}/libphp$(PHP_MAJ).so:${PORTSDIR}/www/mod_php$(PHP_VER) \
+	${LOCALBASE}/${APACHEMODDIR}/mod_fcgid.so:${PORTSDIR}/www/mod_fcgid
 
 # Port versions of current or former "core" utilties
 RUN_DEPENDS+=	\
-	dhcpd:${PORTSDIR}/net/isc-dhcp43-server \
-	${LOCALBASE}/sbin/rndc:${PORTSDIR}/dns/bind99
+	dhcpd:${PORTSDIR}/net/isc-dhcp44-server \
+	${LOCALBASE}/sbin/rndc:${PORTSDIR}/dns/bind911
 
 # XXX For building loghole doc from www/tutorial
 RUN_DEPENDS+=	\
 	man2html:${PORTSDIR}/textproc/man2html
 
-USE_PERL5=	yes
-USES=		python:2.7
+#USE_PERL5=	yes
+USES=		perl5 python:2.7 php
 
 NO_BUILD=	yes
 
@@ -179,5 +198,4 @@ vars:
 	@echo "APACHE_PORT/VERSION=${APACHE_PORT}/${APACHE_VERSION}"
 	@echo "USE_APACHE/USE_APACHE_BUILD/USE_APACHE_RUN=${USE_APACHE}/${USE_APACHE_BUILD}/${USE_APACHE_RUN}"
 	@echo "USE_PHP=${USE_PHP}"
-	@echo "TCL_VER/TK_VER=${TCL_VER}/${TK_VER}"
-
+	@echo "USES=${USES}"

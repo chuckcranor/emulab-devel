@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2017 University of Utah and the Flux Group.
+# Copyright (c) 2010-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -31,17 +31,18 @@ use Data::Dumper;
 #
 sub usage()
 {
-    print("Usage: localize_mfs [-d] [-c console] [-F version] <path>\n");
+    print("Usage: localize_mfs [-d] [-c console] [-F version] [-I msg] <path>\n");
     print("  -d          Turn on debugging.\n");
     print("  -c console  Set the MFS console device to one of:\n");
     print("              'vga', 'sio', 'sio2', 'sio3', 'sio4', 'null'\n");
     print("              NOTE: not needed with newer MFS setups\n");
     print("  -F version  Set kernel version used in a FreeBSD MFS:\n");
-    print("              One of: '8', '9', or '10'\n");
+    print("              One of: '8', '9', '10', or '11'\n");
     print("              Only applies to FreeBSD MFSes (duh!)\n");
+    print("  -I msg      Identification msg to put in /etc/issue\n");
     exit(-1);
 }
-my $optlist = "dc:F:i";
+my $optlist = "dc:F:iI:";
 my $debug   = 0;
 my $igbcruft= 0;
 
@@ -53,7 +54,13 @@ my $ETCDIR	= "$TB/etc";
 my $ELABINELAB  = @ELABINELAB@;
 my $MFSCONSOLE  = "@NODECONSOLE@";
 my $OURTIMEZONE = "@OURTIMEZONE@";
+my $MFSVERSION  = "@MFSVERSION@";
+
+# Use defs variable to initialize
 my $FBSDKERNEL  = 8;
+if ($MFSVERSION && $MFSVERSION =~ /^(8|9|10|11)[-\d]/) {
+    $FBSDKERNEL = $1;
+}
 
 # Need these below.
 my $FBSD_MAJOR;
@@ -125,7 +132,7 @@ if (defined($options{"c"})) {
 }
 if (defined($options{"F"})) {
     $FBSDKERNEL = $options{"F"};
-    if ($FBSDKERNEL !~ /^(8|9|10)$/) {
+    if ($FBSDKERNEL !~ /^(8|9|10|11)$/) {
 	fatal("Invalid FreeBSD kernel version '$FBSDKERNEL'");
     }
 }
@@ -401,8 +408,12 @@ sub LocalizeBSD()
     # Boss certificate. Need emulab.pem for TPM. 
     ExecQuiet("$CP -p $ETCDIR/emulab.pem $ETCDIR/client.pem $mpoint/etc/emulab")
 	== 0 or goto bad;
+    ExecQuiet("$CHOWN root:wheel $mpoint/etc/emulab/*.pem")
+	== 0 or goto bad;
     # All MFSs and images get the same ssh host keys.
     ExecQuiet("$CP -p $IMAGEKEYS_DIR/* $mpoint/etc/ssh")
+	== 0 or goto bad;
+    ExecQuiet("$CHOWN root:wheel $mpoint/etc/ssh/ssh_host*")
 	== 0 or goto bad;
     # Copy boss timezone into the MFS.
     ExecQuiet("$CP -p $ZONEINFO/$OURTIMEZONE $mpoint/etc/localtime")
@@ -482,6 +493,15 @@ sub LocalizeBSD()
 	    "    appropriate node type entry in the web page and add/modify the\n".
 	    "    \"pxe_boot_path\" attribute setting the value to\n".
 	    "    \"/tftpboot/pxeboot.emu-$cstr\".\n";
+    }
+
+    #
+    # update /etc/issue if requested
+    #
+    if (defined($options{'I'})) {
+	open(ISSUE, ">$mpoint/etc/issue") or goto bad;
+	printf ISSUE "%s\n", $options{'I'} or goto bad;
+	close(ISSUE) or goto bad;
     }
 
     #
@@ -575,10 +595,12 @@ sub LocalizeLinux($)
     # Boss certificate. Need emulab.pem for TPM. 
     ExecQuiet("$CP -p $ETCDIR/emulab.pem $ETCDIR/client.pem etc/emulab")
 	== 0 or goto bad;
-    ExecQuiet("$CHOWN root:wheel $ETCDIR/emulab.pem $ETCDIR/client.pem")
+    ExecQuiet("$CHOWN root:wheel etc/emulab/*.pem")
 	== 0 or goto bad;
     # All MFSs and images get the same ssh host keys.
     ExecQuiet("$CP -p $IMAGEKEYS_DIR/* etc/ssh")
+	== 0 or goto bad;
+    ExecQuiet("$CHOWN root:wheel etc/ssh/ssh_host*")
 	== 0 or goto bad;
     # Copy boss timezone into the MFS.
     ExecQuiet("$CP -p $ZONEINFO/$OURTIMEZONE etc/localtime")
@@ -600,6 +622,15 @@ sub LocalizeLinux($)
     #
     UpdateSSHD($mpoint, "/etc/testbed/slicefix")
 	or goto bad;
+
+    #
+    # update /etc/issue if requested
+    #
+    if (defined($options{'I'})) {
+	open(ISSUE, ">etc/issue") or goto bad;
+	printf ISSUE "%s\n", $options{'I'} or goto bad;
+	close(ISSUE) or goto bad;
+    }
 
     #
     # Mark as "localized". This tells slicefix that it should copy all

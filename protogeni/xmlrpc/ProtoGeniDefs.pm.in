@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2010, 2016, 2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -197,6 +197,7 @@ $V2_METHODS = {
     "DeleteNodes"       => \&GeniCMV2::DeleteNodes,
     "Panic"             => \&GeniCMV2::Panic,
     "RunLinktest"       => \&GeniCMV2::RunLinktest,
+    "Recovery"          => \&GeniCMV2::Recovery,
 };
 
 ProtoGeniDefs::AddModule("cm",
@@ -283,7 +284,12 @@ ProtoGeniDefs::AddModule("cluster",
 		  "DeleteReservation"    => \&GeniCluster::DeleteReservation,
 		  "ReservationSystemInfo"=> \&GeniCluster::ReservationSystemInfo,
 		  "ReservationPrediction"=> \&GeniCluster::ReservationPrediction,
+		  "ReservationHistory"   => \&GeniCluster::ReservationHistory,
 		  "CancelReservation"    => \&GeniCluster::CancelReservation,
+		  "ReservationIdleDetection" =>
+		                     \&GeniCluster::ReservationIdleDetection,
+		  "GetImageCredential"   => \&GeniCluster::GetImageCredential,
+		  "AllSliceMaxExtensions"=> \&GeniCluster::AllSliceMaxExtensions,
 	      }},
 	  });
 

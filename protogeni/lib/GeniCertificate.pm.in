@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -188,9 +188,9 @@ sub email($)
 {
     my ($self) = @_;
 
-    if ($self->DN() =~ /emailAddress=([A-Z0-9._%-]+@[A-Z0-9.-]+\.[A-Z]{2,4})/i ||
-        $self->DN() =~ /\/emailAddress=(.*)/ ||
-	$self->DN() =~ /^emailAddress=(.*),/) {
+    if ($self->DN() =~ /emailAddress=([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4})/i ||
+        $self->DN() =~ /\/emailAddress=([^\/, ]*)/ ||
+	$self->DN() =~ /^emailAddress=([^\/, ]*),/) {
 	return $1
 	    if ($1 ne "");
     }
@@ -224,7 +224,7 @@ sub Create($$;$)
     my $nostore  = (exists($argref->{'nostore'}) ? $argref->{'nostore'} :0);
     my $keyfile  = (exists($argref->{'keyfile'}) ? $argref->{'keyfile'} :undef);
 
-    print STDERR Dumper($argref);
+    # print STDERR Dumper($argref);
 
     # Let mkcert generate a new one.
     $uuid = ""
@@ -245,7 +245,7 @@ sub Create($$;$)
 
     my $cmd = "$MKCERT $keyarg $altcaopt $caflag ".
 	"-i \"$urn\" $url -e \"$email\" $hrn $showuuidflag$uuid";
-    print STDERR "$cmd\n";
+    #print STDERR "$cmd\n";
     
     if (! open(CERT, "$cmd |")) {
 	print STDERR "Could not start $MKCERT\n";

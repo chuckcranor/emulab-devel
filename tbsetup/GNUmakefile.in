@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,10 +29,13 @@ UNIFIED         = @UNIFIED_BOSS_AND_OPS@
 PLABSUPPORT     = @PLABSUPPORT@
 ISMAINSITE	= @TBMAINSITE@
 NSVERIFY	= @NSVERIFY@
-PORTAL_ISPRIMARY= @PORTAL_ISPRIMARY@
+PEER_ISPRIMARY  = @PEER_ISPRIMARY@
 SYSTEM         := $(shell uname -s)
 
 include $(OBJDIR)/Makeconf
+
+LOCALBOSS_BIN_STUFF = powerlocal 
+LOCALBOSS_LIB_STUFF = libtestbed.pm power_apc.pm power_raritan.pm
 
 SUBBOSS_SBIN_SCRIPTS = reportboot reportboot_daemon
 SUBDIRS		= checkpass ns2ir nseparse checkup template_cvsroot \
@@ -64,7 +67,7 @@ SBIN_STUFF	= resetvlans console_setup.proxy sched_reload named_setup \
 		  newnode_reboot savelogs.proxy eventsys.proxy \
 		  elabinelab panic node_attributes \
 		  nfstrace plabinelab smbpasswd_setup smbpasswd_setup.proxy \
-		  rmproj pool_daemon \
+		  rmproj pool_daemon mkprojdirs \
 		  checknodes_daemon snmpit.proxyv3 image_setup tcpp \
 		  arplockdown bscontrol reportboot reportboot_daemon \
 		  nfsmfs_setup nfsmfs_setup.proxy manage_expsettings
@@ -72,8 +75,8 @@ SBIN_STUFF	= resetvlans console_setup.proxy sched_reload named_setup \
 ifeq ($(ISMAINSITE),1)
 SBIN_STUFF     += repos_daemon
 endif
-ifeq ($(PORTAL_ISPRIMARY),1)
-SBIN_STUFF     += portal_daemon
+ifeq ($(PEER_ISPRIMARY),1)
+SBIN_STUFF     += peer_daemon
 endif
 
 CTRLSBIN_STUFF  = console_setup.proxy sfskey_update.proxy \
@@ -106,16 +109,22 @@ LIBEXEC_STUFF	= wanlinksolve wanlinkinfo os_setup mkexpdir console_setup \
                   $(WEB_BIN_SCRIPTS) $(WEB_SBIN_SCRIPTS)
 
 LIB_STUFF       = libtbsetup.pm exitonwarn.pm libtestbed.pm \
-                  power_rpc27.pm power_apc.pm power_ue.pm \
-		  power_sgmote.pm power_racktivity.pm \
+                  power_rpc27.pm power_apc.pm power_ue.pm power_powduino.pm \
+		  power_sgmote.pm power_racktivity.pm power_raritan.pm \
 		  libaudit.pm libreboot.pm libosload.pm libtestbed.py \
 		  libadminmfs.pm libtblog.pm libtblog_simple.pm libArchive.pm \
 		  power_mail.pm power_whol.pm Template.pm power_rmcp.pm \
 		  power_ilo.pm libvtop.pm libptop.pm \
 		  libossetup.pm \
 		  power_ipmi.pm libosload_new.pm libosload_switch.pm \
-		  libosload_ue.pm libossetup_switch.pm power_icebox.pm \
-		  libvtop_stable.pm libvtop_test.pm
+		  libosload_ue.pm libossetup_switch.pm power_ibmbc.pm \
+		  power_icebox.pm \
+		  libvtop_stable.pm libvtop_test.pm \
+                  libosload_dell_s3048.pm libosload_dell_s4048.pm \
+                  libosload_mlnx_sn2410.pm libosload_dell.pm \
+                  libosload_hp5406.pm \
+		  libimageops.pm libimageops_ndz.pm libimageops_docker.pm \
+		  libimageops_ec2.pm
 
 
 # These scripts installed setuid, with sudo. 
@@ -125,7 +134,7 @@ SETUID_SBIN_SCRIPTS  = mkproj rmgroup mkgroup frisbeehelper \
 			rmuser idleswap named_setup exports_setup \
 			sfskey_update setgroups newnode_reboot vnode_setup \
 			elabinelab nfstrace rmproj arplockdown \
-			bscontrol nfsmfs_setup
+			bscontrol nfsmfs_setup mkprojdirs
 SETUID_LIBX_SCRIPTS  = console_setup spewrpmtar_verify
 SETUID_SUEXEC_SCRIPTS= spewlogfile
 
@@ -154,6 +163,8 @@ COMPILED_TARGETS    =
 # configure if the .in file is changed.
 # 
 all:	$(TARGETS) $(addprefix compiled/, $(COMPILED_TARGETS))
+
+localboss: $(LOCALBOSS_BIN_STUFF) $(LOCALBOSS_LIB_STUFF)
 
 subboss: $(SUBBOSS_SBIN_SCRIPTS)
 
@@ -206,6 +217,9 @@ endif
 
 boss-install: all script-install subdir-install
 	@echo "Don't forget to do a post-install as root"
+
+localboss-install: $(addprefix $(INSTALL_BINDIR)/, $(LOCALBOSS_BIN_STUFF)) \
+	$(addprefix $(INSTALL_LIBDIR)/, $(LOCALBOSS_LIB_STUFF))
 
 subboss-install: $(addprefix $(INSTALL_SBINDIR)/, $(SUBBOSS_SBIN_SCRIPTS))
 	ln -sf $(INSTALL_SBINDIR)/reportboot \

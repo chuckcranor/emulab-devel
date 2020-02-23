@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,6 +22,7 @@
 # }}}
 #
 include_once("osinfo_defs.php");
+include_once("nodetype_defs.php");
 
 #
 # A cache to avoid lookups. Indexed by node_id.
@@ -62,6 +63,9 @@ class Node
     function Lookup($node_id) {
 	global $node_cache;
 
+        if (!TBvalid_node_id($node_id)) {
+	    return null;
+        }
         # Look in cache first
 	if (array_key_exists("$node_id", $node_cache))
 	    return $node_cache["$node_id"];
@@ -154,6 +158,7 @@ class Node
     function next_boot_path() {return $this->field("next_boot_path"); }
     function next_boot_cmd_line() {return $this->field("next_boot_cmd_line"); }
     function pxe_boot_path() {return $this->field("pxe_boot_path"); }
+    function next_pxe_boot_path() {return $this->field("next_pxe_boot_path"); }
     function rpms() {return $this->field("rpms"); }
     function deltas() {return $this->field("deltas"); }
     function tarballs() {return $this->field("tarballs"); }
@@ -407,6 +412,31 @@ class Node
     }
 
     #
+    # Get subboss info.
+    #
+    function SubBossInfo()
+    {
+        $node_id = $this->node_id();
+
+        $query_result =
+            DBQueryFatal("select service,subboss_id from subbosses ".
+                         "where node_id ='$node_id' and disabled=0");
+
+	if (mysql_num_rows($query_result) == 0) {
+	    return null;
+	}
+        $result = array();
+
+        while ($row = mysql_fetch_array($query_result)) {
+            $service = $row["service"];
+            $subboss = $row["subboss_id"];
+
+            $result[$service] = $subboss;
+        }
+        return $result;
+    }        
+
+    #
     # Return the virtual name of a reserved node.
     #
     function VirtName() {
@@ -479,6 +509,40 @@ class Node
     }
 
     #
+    # Get the last activity values.
+    #
+    function LastActivity() {
+	$node_id = $this->node_id();
+
+	$query_result =
+	    DBQueryFatal("select * from node_activity ".
+                         "where node_id='$node_id'");
+
+	if (mysql_num_rows($query_result) == 0) {
+	    return null;
+	}
+	return mysql_fetch_array($query_result);
+    }
+
+    #
+    # Root password (when node is allocated).
+    #
+    function RootPassword() {
+	$node_id = $this->node_id();
+
+	$query_result =
+	    DBQueryFatal("select attrvalue from node_attributes ".
+			 "where node_id='$node_id' and ".
+			 "      attrkey='root_password'");
+        
+	if (mysql_num_rows($query_result) == 0) {
+	    return null;
+	}
+	$row = mysql_fetch_array($query_result);
+        return $row[0];
+    }
+
+    #
     # Check to see if node is tainted.
     #
     function IsTainted($instate = "") {
@@ -497,6 +561,39 @@ class Node
 	    }
 	}
 	return 0;
+    }
+
+    #
+    # Control IP
+    #
+    function ControlIP() {
+	$node_id = $this->node_id();
+
+        $query_result =
+            DBQueryFatal("select IP from interfaces ".
+                         "where node_id='$node_id' and ".
+                         "      role='" . TBDB_IFACEROLE_CONTROL . "'");
+
+	if (mysql_num_rows($query_result) == 0) {
+            return "";
+	}
+	$row = mysql_fetch_array($query_result);
+        return $row[0];
+    }
+    # And the management IP
+    function ManagementIP() {
+	$node_id = $this->node_id();
+
+        $query_result =
+            DBQueryFatal("select IP from interfaces ".
+                         "where node_id='$node_id' and ".
+                         "      role='" . TBDB_IFACEROLE_MANAGEMENT . "'");
+
+	if (mysql_num_rows($query_result) == 0) {
+            return null;
+	}
+	$row = mysql_fetch_array($query_result);
+        return $row[0];
     }
 
     #
@@ -1187,6 +1284,7 @@ class Node
 	$query_result =
 	    DBQueryFatal("select attrkey,attrvalue from node_attributes ".
 			 "where node_id='$node_id' ".
+			 (!ISADMIN() ? "and hidden=0 " : " ").
 			 ($noroot ? "and attrkey!='root_password'" : ""));
 			 
 	if (!$short && mysql_num_rows($query_result)) {
@@ -1477,6 +1575,272 @@ class Node
 	    return "ssh://${uid}@${node_id}.${OURDOMAIN}";
 	}
     }
+    #
+    # Generate an authentication object to pass to the browser that
+    # is passed to the web server on ops. This is used to grant
+    # permission to the user to invoke tip to the console. 
+    #
+    function ConsoleAuthObject($uid, $console)
+    {
+        global $USERNODE;
+        $node_id = $this->node_id();
+	
+        $file = "/usr/testbed/etc/sshauth.key";
+    
+        #
+        # We need the secret that is shared with ops.
+        #
+        $fp = fopen($file, "r");
+        if (! $fp) {
+            TBERROR("Error opening $file", 1);
+            return null;
+        }
+        $key = fread($fp, 128);
+        fclose($fp);
+        if (!$key) {
+            TBERROR("Could not get key from $file", 1);
+            return null;
+        }
+        $key   = chop($key);
+        $stuff = GENHASH();
+        $now   = time();
+
+        $authobj = array('uid'       => $uid,
+                         'console'   => $console,
+                         'stuff'     => $stuff,
+                         'nodeid'    => $node_id,
+                         'timestamp' => $now,
+                         'baseurl'   => "https://${USERNODE}",
+                         'signature_method' => 'HMAC-SHA1',
+                         'api_version' => '1.0',
+                         'signature' => hash_hmac('sha1',
+                                           $uid . $stuff . $node_id . $now .
+                                           " " . implode(",", $console),
+                                           $key),
+        );
+        return json_encode($authobj);
+    }
+
+    #
+    # Get interface/switch related info for the node. 
+    #
+    function GetInterfaceInfo($iface = null)
+    {
+        $node_id = $this->node_id();
+        $blob = array();
+
+        if (!($this->role() == "testswitch" || $this->role() == "ctrlswitch")) {
+            $clause = ($iface ? "and i.iface='$iface'" : "");
+            
+            $query_result =
+                DBQueryFatal("select i.*,w.*,c.capval as protocols ".
+                             "  from interfaces as i ".
+                             "left join wires as w on ".
+                             "     i.node_id=w.node_id1 and i.iface=w.iface1 ".
+                             "left join interface_capabilities as c on ".
+                             "     i.interface_type=c.type and ".
+                             "     c.capkey='protocols' ".
+                             "where node_id='$node_id' $clause".
+                             "order by i.iface");
+
+            if (!mysql_num_rows($query_result)) {
+                if ($iface) {
+                    return null;
+                }
+                else {
+                    return $blob;
+                }
+            }
+            while ($row = mysql_fetch_array($query_result)) {
+                $info = array();
+        
+                $info["node_id"]      = $node_id;
+                $info["iface"]        = $row["iface"];
+                $info["type"]         = $row["interface_type"];
+                $info["role"]         = $row["role"];
+                $info["mac"]          = $row["mac"];
+                $info["IP"]           = $row["IP"];
+                $info["protocols"]    = $row["protocols"];
+                $info["switch_id"]    = $row["node_id2"];
+                $info["switch_iface"] = $row["iface2"];
+                $info["switch_card"]  = $row["card2"];
+                $info["switch_port"]  = $row["port2"];
+                $info["wire_type"]    = $row["type"];
+                // Speed is in Mbs.
+                $info["current_speed"] = $row["current_speed"];
+
+                $info["switch_isswitch"] = false;
+                if ($switch = Node::Lookup($row["node_id2"])) {
+                    if ($switch->TypeClass() == "switch") {
+                        $info["switch_isswitch"] = true;
+                    }
+                }
+                $blob[] = $info;
+            }
+            if ($iface) {
+                return $blob[0];
+            }
+            return $blob;
+        }
+        $query_result =
+            DBQueryFatal("select distinct w.*,".
+                         "       i1.role as irole1,i1.interface_type as itype1,".
+                         "       i2.role as irole2,i2.interface_type as itype2,".
+                         "       t1.isswitch as isswitch1,".
+                         "       t2.isswitch as isswitch2 ".
+                         "  from wires as w ".
+                         "left join interfaces as i1 on ".
+                         "     i1.node_id=w.node_id1 and i1.iface=w.iface1 ".
+                         "left join interfaces as i2 on ".
+                         "     i2.node_id=w.node_id2 and i2.iface=w.iface2 ".
+                         "left join nodes as n1 on n1.node_id=w.node_id1 ".
+                         "left join node_types as t1 on t1.type=n1.type ".
+                         "left join nodes as n2 on n2.node_id=w.node_id2 ".
+                         "left join node_types as t2 on t2.type=n2.type ".
+                         "where w.node_id1='$node_id' or w.node_id2='$node_id' ".
+                         "order by w.iface1");
+    
+        while ($row = mysql_fetch_array($query_result)) {
+            $info = array();
+
+            $info["wire_type"]     = $row["type"];
+            $info["wire_length"]   = $row["len"];
+            $info["wire_id"]       = $row["cable"];
+        
+            $info["node_id1"]      = $row["node_id1"];
+            $info["iface1"]        = $row["iface1"];
+            $info["type1"]         = $row["itype1"];
+            $info["role1"]         = $row["irole1"];
+            $info["card1"]         = $row["card1"];
+            $info["port1"]         = $row["port1"];
+            $info["isswitch1"]     = $row["isswitch1"] == 1 ? true : false;
+        
+            $info["node_id2"]      = $row["node_id2"];
+            $info["iface2"]        = $row["iface2"];
+            $info["type2"]         = $row["itype2"];
+            $info["role2"]         = $row["irole2"];
+            $info["card2"]         = $row["card2"];
+            $info["port2"]         = $row["port2"];
+            $info["isswitch2"]     = $row["isswitch2"] == 1 ? true : false;
+            $blob[] = $info;
+        }
+        return $blob;
+    }
+
+    #
+    # Get list of vlans this node is a member of.
+    #
+    function GetVlans()
+    {
+        $node_id = $this->node_id();
+        $blob = array();
+
+        if (!($this->role() == "testswitch" || $this->role() == "ctrlswitch")) {
+            $query_result =
+                DBQueryFatal("select * from vlans ".
+                             "where members like '%${node_id}:%'".
+                             "order by id");
+
+            if (!mysql_num_rows($query_result)) {
+                return null;
+            }
+            while ($row = mysql_fetch_array($query_result)) {
+                $members = $row["members"];
+        
+                foreach (preg_split("/\s/", $members) as $member) {
+                    list ($node,$iface) = preg_split('/:/', $member);
+                    if ($node == $node_id) {
+                        if (!array_key_exists($iface, $blob)) {
+                            $blob[$iface] = array();
+                        }
+                        $blob[$iface][] = $row;
+                    }
+                }
+            }
+            return $blob;
+        }
+        return null;
+    }
+
+    #
+    # List of Vnodes on a Pnode.
+    #
+    function GetVnodes()
+    {
+        $node_id = $this->node_id();
+        $result  = array();
+        
+        $query_result =
+            DBQueryFatal("select n.node_id,pid,eid,exptidx ".
+                         " from nodes as n ".
+                         "left join reserved as r on r.node_id=n.node_id ".
+                         "where n.phys_nodeid='$node_id' and ".
+                         "      n.node_id!=n.phys_nodeid");
+        
+        if (!mysql_num_rows($query_result)) {
+            return null;
+        }
+        while($row = mysql_fetch_array($query_result)) {
+            $blob = array();
+            $blob["node_id"] = $row["node_id"];
+            $blob["pid"]     = $row["pid"];
+            $blob["eid"]     = $row["eid"];
+            $result[] = $blob;
+        }
+        return $result;
+    }
+
+    #
+    # List of virtual (vlan) interfaces on a pnode or vnode.
+    #
+    function GetVinterfaces()
+    {
+        $node_id = $this->node_id();
+        $result  = array();
+
+        if ($this->IsVirtNode()) {
+            $query_result =
+                DBQueryFatal("select v.*,vlans.tag as vlantag,vll.vname ".
+                             "  from vinterfaces as v ".
+                             "left join vlans on vlans.id=v.vlanid ".
+                             "left join virt_lan_lans as vll on ".
+                             "     vll.exptidx=v.exptidx and ".
+                             "     vll.idx=v.virtlanidx ".
+                             "where v.vnode_id='$node_id'");
+        }
+        else {
+            $query_result =
+                DBQueryFatal("select v.*,vlans.tag as vlantag,vll.vname ".
+                             "  from vinterfaces as v ".
+                             "left join vlans on vlans.id=v.vlanid ".
+                             "left join virt_lan_lans as vll on ".
+                             "     vll.exptidx=v.exptidx and ".
+                             "     vll.idx=v.virtlanidx ".
+                             "where v.node_id='$node_id' and ".
+                             "      v.vnode_id is null");
+        }
+        if (!mysql_num_rows($query_result)) {
+            return null;
+        }
+        while($row = mysql_fetch_array($query_result)) {
+            $result[] = $row;
+        }
+        return $result;
+    }
+
+    #
+    # Is there hardware info for the node.
+    #
+    function HasHardwareInfo()
+    {
+        $node_id = $this->node_id();
+
+        $query_result =
+            DBQueryFatal("select updated from node_hardware ".
+                         "where node_id='$node_id'");
+        
+        return mysql_num_rows($query_result);
+    }
 }
 
 #
@@ -1485,9 +1849,10 @@ class Node
 function ShowNodeHistory($node_id = null, $record = null,
 			 $count = 200, $showall = 0, $reverse = 0,
 			 $date = null, $IP = null, $mac = null,
-			 $node_opt = "") {
+			 $node_opt = "", $asdata = false) {
     global $TBSUEXEC_PATH;
     global $PROTOGENI;
+    $shownodeid = $node_id ? false : true;
     $atime = 0;
     $ftime = 0;
     $rtime = 0;
@@ -1502,7 +1867,9 @@ function ShowNodeHistory($node_id = null, $record = null,
 	$opt .= " -r";
     }
     if ($date) {
-	$date = date("Y-m-d H:i:s", strtotime($date));
+        if (! is_int($date)) {
+            $date = date("Y-m-d H:i:s", strtotime($date));
+        }
 	$opt .= " -d " . escapeshellarg($date);
     }
     elseif ($record) {
@@ -1523,7 +1890,6 @@ function ShowNodeHistory($node_id = null, $record = null,
     }
     else {
 	$opt .= " -A";
-	$node_id = "";
 	$nodestr = "<th>Node</th>";
 	#
 	# When supplying a date, we want a summary of all nodes at that
@@ -1535,38 +1901,48 @@ function ShowNodeHistory($node_id = null, $record = null,
     }
     if ($fp = popen("$TBSUEXEC_PATH nobody nobody ".
 		    "  webnode_history $opt $arg", "r")) {
-	if (!$showall) {
-	    $str = "Allocation";
-	} else {
-	    $str = "";
-	}
-	if ($node_id == "") {
-	    echo "<center><b>
+        if (!$asdata) {
+            if (!$showall) {
+                $str = "Allocation";
+            } else {
+                $str = "";
+            }
+            if (!$node_id) {
+                echo "<center><b>
                   $str History for All Nodes.
                   </b></center>\n";
-	} else {
-	    $node_url = CreateURL("shownode", URLARG_NODEID, $node_id);
-	    echo "<center><b>
+            } else {
+                $node_url = CreateURL("shownode", URLARG_NODEID, $node_id);
+                echo "<center><b>
                   $str History for Node <a href='$node_url'>$node_id</a>.
                   </b></center>\n";
-	}
+            }
+        }
 
 	# Keep track of history record bounds, for paging through.
 	$max_history_id = 0;
 	$min_history_id = 1000000000;
 
 	# Build up table contents
-	ob_start();
+        if ($asdata) {
+            $data_results = array();
+        }
+        else {
+            ob_start();
+        }
 
 	$line = fgets($fp);
 	while (!feof($fp)) {
+            if ($asdata) {
+                $blob = array();                
+            }
 	    #
 	    # Formats:
 	    # nodeid REC tstamp duration uid pid eid
 	    # nodeid SUM alloctime freetime reloadtime downtime
 	    #
 	    $results = preg_split("/[\s]+/", $line, 9, PREG_SPLIT_NO_EMPTY);
-	    $nodeid = $results[0];
+	    $node_id = $results[0];
 	    $type = $results[1];
 	    if ($type == "SUM") {
 		# Save summary info for later
@@ -1575,23 +1951,22 @@ function ShowNodeHistory($node_id = null, $record = null,
 		$rtime = $results[4];
 		$dtime = $results[5];
 	    } elseif ($type == "REC") {
-		$stamp = $results[2];
+		$stamp = intval($results[2]);
 		$datestr = date("Y-m-d H:i:s", $stamp);
-		$duration = $results[3];
+		$duration = $tmp = $results[3];
 		$durstr = "";
-		if ($duration >= (24*60*60)) {
-		    $durstr = sprintf("%dd", $duration / (24*60*60));
-		    $duration %= (24*60*60);
+		if ($tmp >= (24*60*60)) {
+		    $durstr = sprintf("%dd", $tmp / (24*60*60));
+		    $tmp %= (24*60*60);
 		}
-		if ($duration >= (60*60)) {
-		    $durstr = sprintf("%s%dh", $durstr, $duration / (60*60));
-		    $duration %= (60*60);
+		if ($tmp >= (60*60)) {
+		    $durstr = sprintf("%s%dh", $durstr, $tmp / (60*60));
+		    $tmp %= (60*60);
 		}
-		if ($duration >= 60) {
-		    $durstr = sprintf("%s%dm", $durstr, $duration / 60);
-		    $duration %= 60;
+		if ($tmp >= 60) {
+		    $durstr = sprintf("%s%dm", $durstr, $tmp / 60);
+		    $tmp %= 60;
 		}
-		$durstr = sprintf("%s%ds", $durstr, $duration);
 		$uid = $results[4];
 		$pid = $results[5];
 		$thisid = intval($results[8]);
@@ -1601,77 +1976,118 @@ function ShowNodeHistory($node_id = null, $record = null,
 		if ($thisid < $min_history_id) {
 		    $min_history_id = $thisid;
 		}
+                if ($asdata) {
+                    $blob["history_id"] = $thisid;
+                    $blob["node_id"]    = $node_id;
+                }
 		$slice = "--";
 		$expurl = null;
-		if ($pid == "FREE") {
-		    $pid = "--";
-		    $eid = "--";
-		    $uid = "--";
+		if ($pid == "<FREE>") {
+                    if ($asdata) {
+                        $blob["pid"] = null;
+                        $blob["eid"] = null;
+                        $blob["uid"] = null;
+                    }
+                    else {
+                        $pid = "--";
+                        $eid = "--";
+                        $uid = "--";
+                    }
 		} else {
 		    $eid = $results[6];
 		    if ($results[7]) {
 			$experiment = Experiment::Lookup($results[7]);
 			$experiment_stats = ExperimentStats::Lookup($results[7]);
-			if ($experiment_stats &&
-			    $experiment_stats->slice_uuid()) {
-			    $url = CreateURL("genihistory",
-					     "slice_uuid",
-					     $experiment_stats->slice_uuid());
-			    $slice = "<a href='$url'>" .
-				"<img src=\"greenball.gif\" border=0></a>";
-			}
-			if ($experiment) {
-			    $expurl = CreateURL("showexp",
+                        if ($asdata) {
+                            $blob["pid"]     = $pid;
+                            $blob["pid_idx"] = $experiment_stats->pid_idx();
+                            $blob["eid"]     = $eid;
+                            $blob["eid_idx"] = $results[7];
+                            $blob["uid"]     = $uid;
+                            if ($experiment_stats->slice_uuid()) {
+                                $blob["slice_uuid"] =
+                                    $experiment_stats->slice_uuid();
+                            }
+                            $blob["isrunning"] = ($experiment ? true : false);
+                        }
+                        else {
+                            if ($experiment_stats &&
+                                $experiment_stats->slice_uuid()) {
+                                $url = CreateURL("genihistory",
+                                                 "slice_uuid",
+                                                 $experiment_stats->slice_uuid());
+                                $slice = "<a href='$url'>" .
+                                    "<img src=\"greenball.gif\" border=0></a>";
+                            }
+                            if ($experiment) {
+                                $expurl = CreateURL("showexp",
 						URLARG_EID, $experiment->idx());
-			}
-			else {
-			    $expurl = CreateURL("showexpstats",
-						"record",
-						$experiment_stats->exptidx());
-			}
-		    }
+                            }
+                            else {
+                                $expurl = CreateURL("showexpstats",
+                                                    "record",
+                                                    $experiment_stats->exptidx());
+                            }
+                        }
+                    }
 		}
-		
-		if ($node_id == "") {
-		    $nodeurl = CreateURL("shownodehistory",
-					 URLARG_NODEID, $nodeid);
-		    echo "<tr>
+                if ($asdata) {
+                    $blob["allocated"] = gmdate("Y-m-d\TH:i:s\Z", $stamp);
+                    $blob["released"]  = gmdate("Y-m-d\TH:i:s\Z",
+                                                $stamp + intval($duration));
+                    $blob["duration"]  = intval($duration);
+                    $blob["duration_string"] = $durstr;
+                }
+                else {
+                    if ($shownodeid) {
+                        $nodeurl = CreateURL("shownodehistory",
+                                             URLARG_NODEID, $nodeid);
+                        echo "<tr>
                           <td><a href='$nodeurl'>$nodeid</a></td>
                           <td>$pid</td>";
-		    if ($expurl) {
-			echo "<td><a href='$expurl'>$eid</a></td>";
-		    }
-		    else {
-			echo "<td>$eid</td>";
-		    }
-		    if ($PROTOGENI) {
-			echo "<td>$slice</td>";
-		    }
-                    echo "<td>$uid</td>
+                        if ($expurl) {
+                            echo "<td><a href='$expurl'>$eid</a></td>";
+                        }
+                        else {
+                            echo "<td>$eid</td>";
+                        }
+                        if ($PROTOGENI) {
+                            echo "<td>$slice</td>";
+                        }
+                        echo "<td>$uid</td>
                           <td>$datestr</td>
                           <td>$durstr</td>
                           </tr>\n";
-		} else {
-		    echo "<tr>
+                    } else {
+                        echo "<tr>
                           <td>$pid</td>";
-		    if ($expurl) {
-			echo "<td><a href='$expurl'>$eid</a></td>";
-		    }
-		    else {
-			echo "<td>$eid</td>";
-		    }
-		    if ($PROTOGENI) {
-			echo "<td>$slice</td>";
-		    }
-                    echo "<td>$uid</td>
+                        if ($expurl) {
+                            echo "<td><a href='$expurl'>$eid</a></td>";
+                        }
+                        else {
+                            echo "<td>$eid</td>";
+                        }
+                        if ($PROTOGENI) {
+                            echo "<td>$slice</td>";
+                        }
+                        echo "<td>$uid</td>
                           <td>$datestr</td>
                           <td>$durstr</td>
                           </tr>\n";
-		}
+                    }
+                }
+                if ($asdata) {
+                    $data_results[] = $blob;
+                }
 	    }
 	    $line = fgets($fp, 1024);
 	}
 	pclose($fp);
+        if ($asdata) {
+            return array("min"     => $min_history_id,
+                         "max"     => $max_history_id,
+                         "entries" => $data_results);
+        }
 	$table_html = ob_get_contents();
 	ob_end_clean();
 	
@@ -1704,7 +2120,7 @@ function ShowNodeHistory($node_id = null, $record = null,
 	if ($ttime) {
 	    echo "<br>
                   <center><b>
-                  Usage Summary for Node $node_id.
+                  Usage Summary
                   </b></center><br>\n";
 
 	    echo "<table border=1 align=center>\n";

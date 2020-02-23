@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,6 +35,13 @@ $isadmin   = ISADMIN();
 # Verify page arguments.
 #
 $reqargs = RequiredPageArguments("node", PAGEARG_NODE);
+$optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
+$node_id = $node->node_id();
+
+if (!$classic) {
+    header("Location: portal/show-nodelog.php?node_id=$node_id");
+    return;
+}
 
 #
 # Standard Testbed Header

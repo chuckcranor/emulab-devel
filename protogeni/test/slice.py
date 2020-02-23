@@ -35,7 +35,6 @@ import socket
 import sys
 import xml.dom.minidom
 import xmlrpclib
-from M2Crypto import X509
 
 ACCEPTSLICENAME=1
 

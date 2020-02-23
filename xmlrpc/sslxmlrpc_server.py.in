@@ -1,6 +1,6 @@
 #!/usr/local/bin/python
 #
-# Copyright (c) 2005-2017 University of Utah and the Flux Group.
+# Copyright (c) 2005-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -31,6 +31,8 @@ import syslog
 import string
 import socket
 import BaseHTTPServer
+import ssl
+import SocketServer
 
 from SimpleXMLRPCServer import SimpleXMLRPCDispatcher
 
@@ -43,16 +45,11 @@ if TBPATH not in sys.path:
 
 from libdb        import *
 
-try:
-    from M2Crypto import SSL
-    from M2Crypto.SSL import SSLError
-except ImportError, e:
-    sys.stderr.write("error: The py-m2crypto port is not installed\n")
-    sys.exit(1)
-    pass
-
 # When debugging, runs in foreground printing to stdout instead of syslog
 debug           = 0
+
+# For daemon wrapper, run in foreground mode.
+foreground      = 0
 
 # The port to listen on. We should get this from configure.
 PORT            = 3069
@@ -65,47 +62,20 @@ server_cert     = "@prefix@/etc/server.pem"
 ca_cert         = "@prefix@/etc/emulab.pem"
 
 #
-# This is an optional feature, off by default except at the MAINSITE, to
+# This is an optional feature, on by default, to
 # ensure the SSL part of accept() does not block the main thread.  Our
 # server is single-threaded, and thus if a client such as a
 # connection-based scanner connects and sends no data, that connection
 # will block the server from accept()ing other incoming connections
 # until socket timeout, probably around 30 seconds.
 #
-# However, this feature depends on certain m2crypto internals (and
-# cannot be done more cleanly, at least on 0.21.1, given m2crypto's
-# model).  Thus, it is off by default.
-#
-LIMIT_SSL_ACCEPT_TIME = False
-TBMAINSITE = "@TBMAINSITE@"
-if TBMAINSITE == "1":
-    LIMIT_SSL_ACCEPT_TIME = True
+LIMIT_SSL_ACCEPT_TIME = True
 # Set a timeout for the SSL_accept phase of the client session setup.
 # This allows us to not block the main thread indefinitely if a non-SSL
 # or malicious client connects to us and says nothing.
 SSL_CLIENT_ACCEPT_TIMEOUT = 3
 # Set a timeout that is used for the client socket *after* SSL accept.
-SSL_CLIENT_REQUEST_TIMEOUT = -1.0
-
-have_ssl_timeout_error = False
-try:
-    from M2Crypto.SSL import SSLTimeoutError
-    have_ssl_timeout_error = True
-except:
-    sys.stderr.write(
-        "warning: old m2crypto, cannot warn about ssl timeouts")
-    have_ssl_timeout_error = False
-    pass
-if LIMIT_SSL_ACCEPT_TIME:
-    try:
-        import SocketServer
-        from M2Crypto.SSL import Checker
-    except:
-        sys.stderr.write(
-            "error: you must disable LIMIT_SSL_ACCEPT_TIME; necessary"
-            " M2Crypto modules not found!")
-        sys.exit(1)
-    pass
+SSL_CLIENT_REQUEST_TIMEOUT = None
 
 #
 # By default, run a wrapper class that includes all off the modules.
@@ -135,6 +105,19 @@ LOGFACIL	= "@TBLOGFACIL@"
 # See below.
 WITHZFS            = @WITHZFS@
 ZFS_NOEXPORT       = @ZFS_NOEXPORT@
+
+def usage():
+    print ("Usage: " + sys.argv[0] 
+                     + " [-hd] [-s server] [-p port] [-c certfile] [--cacert cacertfile]")
+    print
+    print "Options:"
+    print "  -h, --help\t\t  Display this help message"
+    print "  -d, --debug\t\t  Stay in foreground and print to stdout"
+    print "  -s, --server-address\t\t  Set the server listen address"
+    print "  -p, --port\t\t  Set the server port"
+    print "  -c, --cert\t\t  Set the certificate to use (default %s)" % (server_cert)
+    print "      --cacert\t\t  Set the CA certificate (default %s)" % (ca_cert)
+    return
 
 ##
 # Taken from the SimpleXMLRPCServer module in the python installation and
@@ -199,61 +182,25 @@ class MyXMLRPCRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if self.server.logRequests:
             BaseHTTPServer.BaseHTTPRequestHandler.log_request(self, code, size)
 
-class MyConnection(SSL.Connection):
-    """
-    A simple subclassing of the native SSL.Connection, because that
-    class does not give you the ability to set a timeout for the ssl
-    acceptance of a new client socket, once it has been accept()ed.
-    """
 
+class MySSLSocket(ssl.SSLSocket):
     def accept(self):
-        """
-        (NB: this comes nearly directly from M2Crypto.SSL.Connection; it
-        is only slightly modified to allow a timeout during the SSL part
-        of the accept, once the socket accept has finished.  Once that
-        succeeds, we restore a sane timeout for the client socket,
-        because we use a forking mixin, so all further work will happen
-        in the child.
-        
-        Accept an SSL connection. The return value is a pair (ssl,
-        addr) where ssl is a new SSL connection object and addr is the
-        address bound to the other end of the SSL connection.
-        """
-        sock, addr = self.socket.accept()
-        try:
-            # Use our subclass, not the default SSL.connection
-            ssl = MyConnection(self.ctx, sock)
-            # Set non-blocking so that the M2Crypto openssl wrapper glue
-            # will honor the _timeout we're about to set; but only if the
-            # timeout is not None.
-            if SSL_CLIENT_ACCEPT_TIMEOUT is not None:
-                sock.setblocking(False)
-            # Set a timeout that gets used in the below call of ssl.accept_ssl()
-            ssl._timeout = SSL_CLIENT_ACCEPT_TIMEOUT
-            ssl.addr = addr
-            ssl.setup_ssl()
-            ssl.set_accept_state()
-            ssl.accept_ssl()
-            check = getattr(self, 'postConnectionCheck',
-                            self.serverPostConnectionCheck)
-            if check is not None:
-                if not check(ssl.get_peer_cert(), ssl.addr[0]):
-                    raise Checker.SSLVerificationError(
-                        'post connection check failed')
-            # Make the socket blocking again.
-            sock.setblocking(True)
-            # ... and undo our timeout.
-            ssl._timeout = SSL_CLIENT_REQUEST_TIMEOUT
-            return ssl, addr
-        except Exception, exc:
-            exc.__setattr__('client_address',addr)
-            raise
+        """Accepts a new connection from a remote client, and returns
+        a tuple containing that new connection wrapped with a server-side
+        SSL channel, and the address of the remote client."""
 
+        newsock, addr = socket.socket.accept(self)
+        newsock.settimeout(self.gettimeout())
+        newsock = self.context.wrap_socket(newsock,
+                    do_handshake_on_connect=self.do_handshake_on_connect,
+                    suppress_ragged_eofs=self.suppress_ragged_eofs,
+                    server_side=True)
+        return newsock, addr
 #
 # A simple server based on the forking version SSLServer. We fork cause
 # we want to change our uid/gid to that of the person on the other end.
 # 
-class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
+class MyServer(SocketServer.ForkingTCPServer, SimpleXMLRPCDispatcher):
     def __init__(self, debug):
         self.debug         = debug
         self.logRequests   = 0
@@ -262,33 +209,45 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
         self.plist         = {};
         self.flipped       = 0;
         
-        ctx = SSL.Context('sslv23')
-        ctx.load_cert(server_cert, server_cert)
-        ctx.load_verify_info(ca_cert)
-        ctx.set_verify(SSL.verify_peer | SSL.verify_fail_if_no_peer_cert, 16)
-        ctx.set_allow_unknown_ca(0)
-        #ctx.set_info_callback()
-        
+        ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        ctx.options &= ~ssl.OP_NO_SSLv3
+        ctx.load_cert_chain(server_cert)
+        ctx.load_verify_locations(cafile=ca_cert)
+        ctx.verify_mode = ssl.CERT_REQUIRED
+        self.ssl_ctx = ctx
+
+        SocketServer.ForkingTCPServer.__init__(
+            self, (ADDR,PORT), MyXMLRPCRequestHandler, bind_and_activate=False)
+        # Oh, so glad this is built into TCPServer.
+        self.allow_reuse_address = True
+
         dargs = (self,)
         if sys.version_info[0] >= 2 and sys.version_info[1] >= 5:
             dargs = (self,False,None)
             pass
         SimpleXMLRPCDispatcher.__init__(*dargs)
+
+        # Wrap the server socket with SSL.  Use our socket so that we
+        # can control the accept() method, which fails to pass along
+        # timeout values from the server socket to the client socket
+        # prior to the SSL handshake.  We must have a timeout on the SSL
+        # handshake, because in all these Python SocketServers, fork
+        # happens *after* both the socket accept and the SSL handshake.
+        # See above MySSLSocket class, and how we wrap the server socket
+        # manually here, instead of using wrap_socket:
+        #self.socket = ctx.wrap_socket(self.socket,do_handshake_on_connect=False)
+        self.socket = MySSLSocket(
+            sock=self.socket,server_side=False,
+            do_handshake_on_connect=True,suppress_ragged_eofs=True,
+            server_hostname=None,_context=self.ssl_ctx)
         if LIMIT_SSL_ACCEPT_TIME:
-            #
-            # Ugh -- duplicate the SSL.SSLServer constructor body, other
-            # than to use our little MyConnection wrapper instead of
-            # SSLConnection.
-            SocketServer.BaseServer.__init__(self, (ADDR,PORT),
-                                             MyXMLRPCRequestHandler)
-            self.ssl_ctx = ctx
-            self.socket = MyConnection(self.ssl_ctx)
-            self.server_bind()
-            self.server_activate()
-        else:
-            SSL.SSLServer.__init__(self, (ADDR, PORT),
-                                   MyXMLRPCRequestHandler, ctx)
-        pass
+            self.logit("setting socket timeout to %s" % (
+                str(SSL_CLIENT_ACCEPT_TIMEOUT)))
+            self.socket.settimeout(SSL_CLIENT_ACCEPT_TIMEOUT)
+
+        # Kick things off.
+        self.server_bind()
+        self.server_activate()
 
     ##
     # Log a message to stdout, if in debug mode, otherwise write to syslog.
@@ -418,7 +377,7 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
     def setupuser(self, request, client):
         exports_active = TBGetSiteVar("general/export_active");
         
-        subject = request.get_peer_cert().get_subject()
+        subject = request.getpeercert()['subject']
         if self.debug:
             self.logit(str(subject))
             pass
@@ -426,8 +385,17 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
         #
         # The CN might look like UUID,serial so split it up.
         #
-        cnwords = getattr(subject, "CN").split(",")
-        self.uuid = cnwords[0]
+        self.uuid = None
+        for dt in subject:
+            (k,v) = dt[0]
+            if k == "commonName":
+                cnwords = v.split(",")
+                self.uuid = cnwords[0]
+                break
+        if not self.uuid:
+            self.logit("Bogus certificate: commonName must be a UUID",
+                       facility=syslog.LOG_ERR)
+            raise Exception("Malformed peer certificate: no commonName")
         
         #
         # Must be a valid and non-zero unix_uid from the DB.
@@ -468,7 +436,7 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
         # must match a certificate that is in the DB for that user. This
         # is my crude method of certificate revocation. 
         #
-        serial = request.get_peer_cert().get_serial_number()
+        serial = int(request.getpeercert()['serialNumber'],16)
         
         if self.checkcert(self.uid_idx, serial) == 0:
             self.logit('No such cert with serial "%s"' % serial,facility=syslog.LOG_ERR)
@@ -593,11 +561,20 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
                 self.active_children.append(pid)
             else:
                 self.active_children.add(pid)
-            request.socket.close()
+            request.close()
             return
         else:
             # Child process.
             # This must never return, hence os._exit()!
+
+            # If we had set a different value for
+            # SSL_CLIENT_ACCEPT_TIMEOUT, we now want that changed,
+            # possibly:
+            if request.gettimeout() != SSL_CLIENT_REQUEST_TIMEOUT:
+                request.settimeout(SSL_CLIENT_REQUEST_TIMEOUT)
+                self.logit("changed client socket timeout to %s" % (
+                    str(SSL_CLIENT_REQUEST_TIMEOUT)))
+
             try:
                 self.setupuser(request, client_address);
 
@@ -605,8 +582,8 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
                 # New stateful firewall kills long term connections, as
                 # for state waiting.
                 #
-                request.socket.setsockopt(socket.SOL_SOCKET,
-                                          socket.SO_KEEPALIVE, 1);
+                request.setsockopt(socket.SOL_SOCKET,
+                                   socket.SO_KEEPALIVE, 1);
 
                 # Remove the old path since the user can request a different
                 # one.
@@ -625,29 +602,65 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
         return True
 
     def handle_error(self, request, client_address):
+        (ext,exv,extb) = sys.exc_info()
         caddr = "UNKNOWN"
         if client_address is None:
-            (ext,exv,extb) = sys.exc_info()
             if exv is not None and hasattr(exv,'client_address'):
                 caddr = exv.client_address[0]
         if client_address is not None:
             caddr = client_address[0]
-
-        if exv is not None \
-          and have_ssl_timeout_error and isinstance(exv,SSLTimeoutError):
-            self.logit("SSLTimeoutError from %s" % (str(caddr)))
-        else:
-            self.logit(
-                "error from %s: %s" % (str(caddr),traceback.format_exc()),
-                facility=syslog.LOG_ERR)
+        self.logit(
+            "error from %s: %s" % (str(caddr),traceback.format_exc()),
+            facility=syslog.LOG_ERR)
 
     pass
 
 #
-# Check for debug flag.
+# Process program arguments.
 # 
-if len(sys.argv) > 1 and sys.argv[1] == "-d":
-    debug = 1
+try:
+    # Parse the options,
+    opts, req_args =  getopt.getopt(sys.argv[1:],
+                      "dhs:p:c:f",
+                      [ "debug", "foreground", "help", "server=", "port=",
+                        "cert=", "cacert=" ])
+    # ... act on them appropriately, and
+    for opt, val in opts:
+        if opt in ("-h", "--help"):
+            usage()
+            sys.exit()
+            pass
+        elif opt in ("-s", "--server"):
+            ADDR = val
+            #
+            # Allow port spec here too.
+            #
+            if val.find(":") > 0:
+                (ADDR,PORT) = string.split(val, ":", 1)
+                PORT = int(PORT)
+                pass
+            pass
+        elif opt in ("-p", "--port"):
+            PORT = int(val)
+            pass
+        elif opt in ("-d", "--debug"):
+            debug = 1
+            pass
+        elif opt in ("-f", "--foreground"):
+            foreground = 1
+            pass
+        elif opt in ("-c", "--cert"):
+            server_cert = val
+            pass
+        elif opt in ("--cacert"):
+            ca_cert = val
+            pass
+        pass
+    pass
+except getopt.error, e:
+    print e.args[0]
+    usage()
+    sys.exit(2)
     pass
 
 #
@@ -661,28 +674,32 @@ if not debug:
                    getattr(syslog, "LOG_" + string.upper(LOGFACIL)))
     syslog.syslog(syslog.LOG_INFO, "SSL XMLRPC server starting up");
 
-    #
-    # Daemonize. We redirect our output into a log file cause I have no
-    # idea what is going to use plain print. 
-    #
-    try:
-        fp = open("@prefix@/log/sslxmlrpc_server.log", "a");
-        sys.stdout = fp
-        sys.stderr = fp
-        sys.stdin.close();
+    # We use foreground mode from daemon_wrapper.
+    if not foreground:
+        #
+        # We redirect our output into a log file cause I have no
+        # idea what is going to use plain print. 
+        #
+        try:
+            fp = open("@prefix@/log/sslxmlrpc_server.log", "a");
+            sys.stdout = fp
+            sys.stderr = fp
+            sys.stdin.close();
+            pass
+        except:
+            print "Could not open log file for append"
+            sys.exit(1);
+            pass
+        
+        pid = os.fork()
+        if pid:
+            os.system("echo " + str(pid) + " > /var/run/sslxmlrpc_server.pid")
+            sys.exit(0)
+            pass
+        os.setsid();
         pass
-    except:
-        print "Could not open log file for append"
-        sys.exit(1);
-        pass
-
-    pid = os.fork()
-    if pid:
-        os.system("echo " + str(pid) + " > /var/run/sslxmlrpc_server.pid")
-        sys.exit(0)
-        pass
-    os.setsid();
-    pass
+else:
+    print "SSL XMLRPC server starting up"
 
 #
 # Create the server and serve forever. We register the instance above

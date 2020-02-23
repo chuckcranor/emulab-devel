@@ -251,14 +251,14 @@ foreach my $attr (keys(%attrs)) {
     if ($modify_attrs) {
         foreach my $node (@nodes) {
             DBQueryFatal("replace into $NODEATTRS_TABLE values ".
-                         "('$node','$attr','$value')");
+                         "('$node','$attr','$value','0')");
         }
     }
     # XXX: maybe just merge this with modify operation.
     elsif ($add_attrs) {
         foreach my $node (@nodes) {
             DBQueryFatal("insert into $NODEATTRS_TABLE values ".
-                         "('$node','$attr','$value')");
+                         "('$node','$attr','$value','0')");
         }
     }
     elsif ($remove_attrs) {

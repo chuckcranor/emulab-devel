@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,12 +59,14 @@ SBIN_SCRIPTS	= vlandiff vlansync withadminprivs export_tables cvsupd.pl \
 		  addrfdevice addrfpath reserve announce createimagealias \
 		  predict test-reserve notify-reservations \
 		  deprecate_image pushrootkey addinterface addwire cnetwatch \
-		  addswitch
+		  powerlog \
+		  addswitch addtypetoimages resutil addstack addnode \
+		  processhwinfo
 
 WEB_SBIN_SCRIPTS= webnewnode webdeletenode webspewconlog webarchive_list \
                   webspewimage webdumpdescriptor webemulabfeature \
 		  webdelete_image websitecheckin webclone_image webgrantimage \
-		  webreserve
+		  webreserve webannounce
 WEB_BIN_SCRIPTS = webcreate_image websetdest weblinkmon_ctl webspewevents \
 		  webdelay_config webcreatedataset webdeletelease \
 		  webapprovelease webextendlease webmodlease webgrantlease
@@ -91,7 +93,7 @@ SETUID_SUEXEC_SCRIPTS  = xlogin
 # 
 all:	$(BIN_SCRIPTS) $(SBIN_SCRIPTS) $(LIBEXEC_SCRIPTS) $(CTRLSBIN_SCRIPTS) \
 	$(SBSBIN_SCRIPTS) $(SETUID_BIN_SCRIPTS) $(SETUID_SBIN_SCRIPTS) \
-	$(SUBDIRS) firstuser setbuildinfo cnetwatch
+	$(SUBDIRS) firstuser setbuildinfo
 
 subboss: $(SBSBIN_SCRIPTS)
 

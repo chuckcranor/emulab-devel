@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -53,11 +53,12 @@ $isfadmin = 0;
 #
 # Verify page arguments.
 #
-$reqargs = OptionalPageArguments("uuid",      PAGEARG_STRING,
+$reqargs = OptionalPageArguments("uuid",      PAGEARG_UUID,
+                                 "slice_uuid",PAGEARG_UUID,
                                  "maxextend", PAGEARG_INTEGER,
 				 "oneonly",   PAGEARG_BOOLEAN);
 
-if (!isset($uuid)) {
+if (! (isset($uuid) || isset($slice_uuid))) {
     SPITHEADER(1);
     echo "<div class='align-center'>
             <p class='lead text-center'>
@@ -72,7 +73,12 @@ if (!isset($uuid)) {
 #
 # See if the instance exists. If not, redirect back to the create page
 #
-$instance = Instance::Lookup($uuid);
+if (isset($uuid)) {
+    $instance = Instance::Lookup($uuid);
+}
+else {
+    $instance = Instance::LookupBySlice($slice_uuid);
+}
 if (!$instance) {
     SPITHEADER(1);
     echo "<div class='align-center'>
@@ -87,6 +93,33 @@ if (!$instance) {
     PAGEREPLACE("landing.php");
     return;
 }
+
+#
+# When coming her via the slice_uuid, we want to flip over to the
+# correct portal. Hacky.
+#
+if ($TBMAINSITE && isset($slice_uuid) &&
+    $instance->servername() != $_SERVER['SERVER_NAME']) {
+    if ($instance->servername() == "www.aptlab.net") {
+        $url = "https://www.aptlab.net";
+    }
+    elseif ($instance->servername() == "www.cloudlab.us") {
+        $url = "https://www.cloudlab.us";
+    }
+    elseif ($instance->servername() == "www.phantomnet.org") {
+        $url = "https://www.phantomnet.org";
+    }
+    elseif ($instance->servername() == "www.powderwireless.net") {
+        $url = "https://www.powderwireless.net";
+    }
+    if (isset($url)) {
+        $url = $url . str_replace("/portal/", "/", $_SERVER['REQUEST_URI']);
+	header("Location: $url");
+        return;
+    }
+}
+
+$uuid = $instance->uuid();
 $creator = GeniUser::Lookup("sa", $instance->creator_uuid());
 if (! $creator) {
     $creator = User::LookupByUUID($instance->creator_uuid());
@@ -127,73 +160,55 @@ $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
 
 $instance_status = $instance->status();
 $creator_uid     = $creator->uid();
-$creator_email   = $creator->email();
+$cansnapshot     = ((isset($this_user) &&
+                     $this_user->idx() == $creator->idx()) ||
+                    ISADMIN() ? 1 : 0);
+$canterminate    = ((isset($this_user) &&
+                     $instance->CanTerminate($this_user)) ||
+                    ISADMIN() ? 1 : 0);
+$cancopy_profile   = 0;
+$canclone_profile  = 0;
+$canupdate_profile = 0;
+$cansave_parameters= 0;
+$isscript          = 0;
+
 if ($profile = Profile::Lookup($instance->profile_id(),
 			       $instance->profile_version())) {
-    $profile_name   = $profile->name();
-    $profile_uuid   = $profile->uuid();
-    $profile_public = ($profile->ispublic() ? "true" : "false");
-    $cansnap        = ((isset($this_user) &&
-			$this_user->idx() == $creator->idx() &&
-			$this_user->idx() == $profile->creator_idx()) ||
-		       ISADMIN() ? 1 : 0);
-    $canclone       = ((isset($this_user) &&
-                        $profile->CanClone($this_user)) ||
-		       ISADMIN() ? 1 : 0);
-    $public_url     = ($instance->public_url() ?
-		       "'" . $instance->public_url() . "'" : "null");
-    $isscript       = ($profile->script() && $profile->script() != "" ? 1 : 0);
-}
-else {
-    $profile_name   = "";
-    $profile_uuid   = "";
-    $profile_public = "false";
-    $cansnap        = 0;
-    $canclone       = 0;
-    $public_url     = "null";
-    $isscript      = 0;
-
-}
-if ($slice) {
-    $slice_urn       = $slice->urn();
-    $instance_name   = $instance->name();
-    # Until old instances are gone.
-    if (!$instance_name) {
-        list ($a,$b,$instance_name) = Instance::ParseURN($slice_urn);
+    #
+    # Not allowed to copy/clone/update a repo based profile. 
+    #
+    if (!$profile->repourl())  {
+        $cancopy_profile   = ((isset($this_user) &&
+                               $profile->CanInstantiate($this_user)) ||
+                              ISADMIN() ? 1 : 0);
+        $canclone_profile  = ((isset($this_user) &&
+                               $profile->CanClone($this_user)) ||
+                              ISADMIN() ? 1 : 0);
+        $canupdate_profile = ((isset($this_user) &&
+                               $this_user->idx() == $profile->creator_idx()) ||
+                              ISADMIN() ? 1 : 0);
     }
-    $slice_expires   = DateStringGMT($slice->expires());
-    $slice_expires_text = gmdate("m-d\TH:i\Z", strtotime($slice->expires()));
-    $slice_created   = DateStringGMT($instance->created());
-}
-else {
-    $slice_urn = "";
-    $slice_expires = "";
-    $slice_expires_text = ""; 
-    $slice_created  = "";
-    $instance_name  = "";
+    $isscript = ($profile->script() && $profile->script() != "" ? 1 : 0);
+    if ($profile->isParameterized()) {
+        $cansave_parameters= $profile->UseNewGeniLib() ? 1 : 0;
+    }
 }
 $registered      = (isset($this_user) ? "true" : "false");
 $snapping        = 0;
 $oneonly         = (isset($oneonly) && $oneonly ? 1 : 0);
 $isadmin         = (ISADMIN() ? 1 : 0);
-$user_lockdown   = ($instance->user_lockdown() ? 1 : 0);
-$admin_lockdown  = ($instance->admin_lockdown() ? 1 : 0);
-$extension_reason= ($instance->extension_reason() ?
-                    CleanString($instance->extension_reason()) : "");
-$extension_denied_reason= ($instance->extension_denied_reason() ?
-                    CleanString($instance->extension_denied_reason()) : "");
-$extension_denied= $instance->extension_denied();
-$freenodes_url   = Aggregate::Lookup($instance->aggregate_urn())->FreeNodesURL();
-$extension_disabled = $instance->extension_disabled();
-$extension_disabled_reason = ($instance->extension_disabled_reason() ?
-                    CleanString($instance->extension_disabled_reason()) : "");
-$isopenstack     = $instance->isopenstack();
-$paniced         = $instance->paniced();
-$pid             = $instance->pid();
-$gid             = $instance->gid();
-$extensions      = ExtensionInfo::LookupForInstance($instance);
+$slivers         = InstanceSliver::LookupForInstance($instance);
 $isstud          = (isset($this_user) && $this_user->stud() ? 1 : 0);
-$wholedisk       = FeatureEnabled("WholeDiskImage", $creator, $instance->Group());
+$wholedisk       = FeatureEnabled("WholeDiskImage",$creator,$instance->Group());
+
+#
+# Temp hack, maybe generalize. These people should not be creaing
+# new images.
+#
+#if ($instance->pid() == "cord-testdrive" && !ISADMIN()) {
+#    $cansnap = 0;
+#}
+#$cansnap = 0;
 
 #
 # We give ssh to the creator (real user or guest user).
@@ -230,17 +245,6 @@ echo "<div id='status-body'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "  window.APT_OPTIONS.uuid = '" . $uuid . "';\n";
-echo "  window.APT_OPTIONS.name = '" . $instance_name . "';\n";
-echo "  window.APT_OPTIONS.instanceStatus = '" . $instance_status . "';\n";
-echo "  window.APT_OPTIONS.profileName = '" . $profile_name . "';\n";
-echo "  window.APT_OPTIONS.profileUUID = '" . $profile_uuid . "';\n";
-echo "  window.APT_OPTIONS.profilePublic = " . $profile_public . ";\n";
-echo "  window.APT_OPTIONS.sliceURN = '" . $slice_urn . "';\n";
-echo "  window.APT_OPTIONS.sliceExpires = '" . $slice_expires . "';\n";
-echo "  window.APT_OPTIONS.sliceExpiresText = '" . $slice_expires_text . "';\n";
-echo "  window.APT_OPTIONS.sliceCreated = '" . $slice_created . "';\n";
-echo "  window.APT_OPTIONS.creatorUid = '" . $creator_uid . "';\n";
-echo "  window.APT_OPTIONS.creatorEmail = '" . $creator_email . "';\n";
 if (isset($this_user)) {
     echo "  window.APT_OPTIONS.thisUid = '" . $this_user->uid() . "';\n";
 }
@@ -251,34 +255,19 @@ echo "  window.APT_OPTIONS.registered = $registered;\n";
 echo "  window.APT_OPTIONS.isadmin = $isadmin;\n";
 echo "  window.APT_OPTIONS.isfadmin = $isfadmin;\n";
 echo "  window.APT_OPTIONS.isstud = $isstud;\n";
-echo "  window.APT_OPTIONS.cansnap = $cansnap;\n";
-echo "  window.APT_OPTIONS.canclone = $canclone;\n";
+echo "  window.APT_OPTIONS.cansnapshot = $cansnapshot;\n";
+echo "  window.APT_OPTIONS.canclone_profile = $canclone_profile;\n";
+echo "  window.APT_OPTIONS.canupdate_profile = $canupdate_profile;\n";
+echo "  window.APT_OPTIONS.cancopy_profile = $cancopy_profile;\n";
+echo "  window.APT_OPTIONS.cansave_parameters = $cansave_parameters;\n";
+echo "  window.APT_OPTIONS.canterminate = $canterminate;\n";
 echo "  window.APT_OPTIONS.wholedisk = $wholedisk;\n";
 echo "  window.APT_OPTIONS.snapping = $snapping;\n";
 echo "  window.APT_OPTIONS.hidelinktest = false;\n";
 echo "  window.APT_OPTIONS.oneonly = $oneonly;\n";
 echo "  window.APT_OPTIONS.dossh = $dossh;\n";
 echo "  window.APT_OPTIONS.isscript = $isscript;\n";
-echo "  window.APT_OPTIONS.publicURL = $public_url;\n";
-echo "  window.APT_OPTIONS.user_lockdown = $user_lockdown;\n";
-echo "  window.APT_OPTIONS.admin_lockdown = $admin_lockdown;\n";
-echo "  window.APT_OPTIONS.lockout = $extension_disabled;\n";
-echo "  window.APT_OPTIONS.isopenstack = $isopenstack;\n";
-echo "  window.APT_OPTIONS.paniced = $paniced;\n";
-echo "  window.APT_OPTIONS.project = '$pid';\n";
-echo "  window.APT_OPTIONS.group = '$gid';\n";
-echo "  window.APT_OPTIONS.extension_requested = " .
-    $instance->extension_requested() . ";\n";
-echo "  window.APT_OPTIONS.extension_denied = $extension_denied;\n";
 echo "  window.APT_OPTIONS.AJAXURL = 'server-ajax.php';\n";
-echo "  window.APT_OPTIONS.physnode_count = " .
-    $instance->physnode_count() . ";\n";
-echo "  window.APT_OPTIONS.virtnode_count = " .
-    $instance->virtnode_count() . ";\n";
-echo "  window.APT_OPTIONS.physnode_hours = " .
-    sprintf("%.2f;\n", $instance->physnode_count() *
-            ((time() - strtotime($instance->created())) / 3600));
-echo "  window.APT_OPTIONS.freenodesurl = '$freenodes_url';\n";
 if (isset($maxextend) && $maxextend != "") {
     # Assumed to be hours.
     echo "  window.APT_OPTIONS.MAXEXTEND = $maxextend;\n";
@@ -286,25 +275,16 @@ if (isset($maxextend) && $maxextend != "") {
 else {
     echo "  window.APT_OPTIONS.MAXEXTEND = null;\n";
 }
-echo "  window.APT_OPTIONS.hasnotes = " .
-    ($instance->admin_notes() && $instance->admin_notes() != "" ? 1 : 0) . ";\n";
-if ($instance->repourl()) {
-    echo "  window.APT_OPTIONS.repourl = '" . $instance->repourl() . "';\n";
-    if ($instance->reporef()) {
-        echo "  window.APT_OPTIONS.reporef = '" . $instance->reporef() . "';\n";
-        echo "  window.APT_OPTIONS.repohash = '" .
-                substr($instance->repohash(),0,8) . "';\n";
-    }
-}
+
 echo "</script>\n";
 echo "<script src='js/lib/d3.v3.js'></script>\n";
 echo "<script src='js/lib/nv.d3.js'></script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/jquery-ui.js'></script>\n";
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
+echo "<script src='js/lib/filesize.min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
-REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_MARKED();
 REQUIRE_URITEMPLATE();
@@ -313,6 +293,9 @@ REQUIRE_EXTEND();
 REQUIRE_IDLEGRAPHS();
 REQUIRE_OPENSTACKGRAPHS();
 REQUIRE_CONTEXTMENU();
+REQUIRE_SUP();
+AddLibrary("js/bindings.js");
+AddLibrary("js/paramsets.js");
 SPITREQUIRE("js/status.js");
 
 echo "<link rel='stylesheet'
@@ -322,22 +305,24 @@ echo "<link rel='stylesheet' href='css/progress.css'>\n";
 echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
 
 #
-# Build up a blob of stuff to json encode. This should be moved to
-# an ajax method on the instance ...
+# Build up a blob of all aggregates for this portal. We need the entire
+# list in case new aggregates are added.
 #
+$aggregates = Aggregate::DefaultAggregateList($this_user);
 $blob = array();
 
-$blob["extension_reason"] = $extension_reason;
-$blob["extension_denied_reason"] = $extension_denied_reason;
-$blob["extension_disabled_reason"] = $extension_disabled_reason;
-if (count($extensions)) {
-    $foo = array();
-    foreach ($extensions as $extension) {
-        $foo[$extension->idx()] = $extension->info;
-    }
-    $blob["extensions"] = $foo;
+foreach ($aggregates as $aggregate) {
+    $aggregate_urn = $aggregate->urn();
+    $weburl        = $aggregate->weburl();
+
+    $blob[$aggregate_urn] =
+        array("weburl"       => $weburl,
+              "name"         => $aggregate->name(),
+              "nickname"     => $aggregate->nickname(),
+              "abbreviation" => $aggregate->abbreviation());
 }
-echo "<script type='text/plain' id='extension-blob-json'>\n";
+
+echo "<script type='text/plain' id='amlist-json'>\n";
 echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
 echo "</script>\n";
 
@@ -353,7 +338,12 @@ if (isset($this_user)) {
     echo "</script>\n";
 }
 
-AddTemplateList(array("status", "waitwait-modal", "oops-modal", "register-modal", "terminate-modal", "oneonly-modal", "approval-modal", "linktest-modal"));
+AddTemplateList(array("status", "waitwait-modal", "oops-modal",
+                      "register-modal", "terminate-modal", "oneonly-modal",
+                      "approval-modal", "linktest-modal",
+                      "destroy-experiment", "save-paramset-modal",
+                      "prestage-table"));
+
 AddTemplateKey("linktest-md", "template/linktest.md");
 SPITFOOTER();
 ?>

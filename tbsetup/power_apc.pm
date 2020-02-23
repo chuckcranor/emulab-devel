@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -36,8 +36,16 @@ $| = 1; # Turn off line buffering on output
 use SNMP;
 use strict;
 
+#
 # XXX for configurations in which APC unit always returns error
 # even when it works.
+#
+# NOTE: You can probably fix such units by instead making sure the
+# controller uses the 'rPDUOutletControlOutletCommand' OID in power() below.
+# The default 'sPDUOutletCtl' will work on these controllers but will return
+# a '' status. I would guess that everything running "masterSwitch.6" and
+# later should be using the newer OID.
+#
 my $ignore_errors = 0;
 
 sub new($$;$) {
@@ -54,7 +62,7 @@ sub new($$;$) {
     }
 
     if ($debug) {
-	print "snmpit_apm module initializing... debug level $debug\n";
+	print "snmpit_apc module initializing... debug level $debug\n";
     }
 
     $SNMP::debugging = ($debug - 5) if $debug > 5;
@@ -103,15 +111,21 @@ sub power {
 	if ($type eq "masterSwitchrPDU") {
 	    $oids = $CtlOIDS{"rPDU"};
 	}
-	# XXX the AP8941 power controllers we have need to use this OID
-	# else they return an error on set operations (though the operations
-	# do work!)
-	elsif ($type eq "masterSwitch.6") {
+	# XXX wonky APC power controllers at the fort (AP7941) return
+	# either masterSwitch.5 or masterSwitch.5.1.3.4.5
+	elsif ($type =~ /^masterSwitch.5/) {
+	    $oids = $CtlOIDS{"rPDU"};
+	}
+	# XXX newer APC power controllers we have (AP8941, AP7900B) need to
+	# use this OID else they return an error on set operations (though
+	# the operations do work!)
+	elsif ($type eq "masterSwitch.6" || $type eq "masterSwitch.8") {
 	    $oids = $CtlOIDS{"rPDU"};
 	}
     }
 
-#   "sPDUOutletCtl" is ".1.3.6.1.4.1.318.1.1.4.4.2.1.3";
+#   "rPDUOutletControl" is ".1.3.6.1.4.1.318.1.1.12.3.3";
+#   "sPDUOutletCtl"     is ".1.3.6.1.4.1.318.1.1.4.4.2.1.3";
     if    ($op eq "on")  { $op = @$oids[1]; }
     elsif ($op eq "off") { $op = @$oids[2]; }
     elsif ($op =~ /cyc/) { $op = @$oids[3]; }
@@ -134,6 +148,7 @@ sub status {
     my $statusp = shift;
     my %status;
 
+# status for AP7941: .1.3.6.1.4.1.318.1.1.12.3.5
     my $StatOID = ".1.3.6.1.4.1.318.1.1.4.2.2";
     my $Status = 0;
 

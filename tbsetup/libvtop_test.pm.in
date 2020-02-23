@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2018 University of Utah and the Flux Group.
+# Copyright (c) 2005-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,7 +29,7 @@ use vars qw(@ISA @EXPORT @EXPORT_OK
 	    $VTOP_FLAGS_UPDATE $VTOP_FLAGS_VERBOSE $VTOP_FLAGS_QUIET
 	    $VTOP_FLAGS_FIXNODES $VTOP_FLAGS_IMPOTENT $VTOP_FLAGS_ALLOCONLY
 	    $VTOP_FLAGS_REGRESSION $VTOP_FLAGS_FIXLANNODES
-	    $VTOP_FLAGS_PREASSIGN);
+	    $VTOP_FLAGS_PREASSIGN $VTOP_FLAGS_COMMITMODE);
 
 @ISA    = "Exporter";
 @EXPORT = qw( );
@@ -66,7 +66,6 @@ my $OS_SELECT     = "$TB/bin/os_select";
 my $DELAYCAPACITY = @DELAYCAPACITY@;	# Can be overridden by user.
 my $DELAYTHRESH   = @DELAYTHRESH@;
 my $PGENISUPPORT  = @PROTOGENI_SUPPORT@;
-my $PGENIRACK     = @PROTOGENI_GENIRACK@;
 my $OURDOMAIN     = "@OURDOMAIN@";
 my $MAINSITE      = @TBMAINSITE@;
 my $mycmurn       = "";
@@ -86,11 +85,12 @@ $VTOP_FLAGS_QUIET       = 0x20;
 $VTOP_FLAGS_ALLOCONLY	= 0x40;
 $VTOP_FLAGS_FIXLANNODES	= 0x80;
 $VTOP_FLAGS_PREASSIGN	= 0x100;
+$VTOP_FLAGS_COMMITMODE	= 0x200;
 
 @EXPORT_OK = qw($VTOP_FLAGS_UPDATE $VTOP_FLAGS_VERBOSE $VTOP_FLAGS_FIXNODES
 		$VTOP_FLAGS_IMPOTENT $VTOP_FLAGS_REGRESSION $VTOP_FLAGS_QUIET
 		$VTOP_FLAGS_ALLOCONLY $VTOP_FLAGS_FIXLANNODES
-		$VTOP_FLAGS_PREASSIGN);
+		$VTOP_FLAGS_PREASSIGN $VTOP_FLAGS_COMMITMODE);
 
 #
 # Create an object representing the stuff we need to create the vtop file.
@@ -139,6 +139,7 @@ sub Create($$$$;$)
 			      "fixed"  => [] };
     $self->{'RSPEC'}      = {};
     $self->{'GENIRSPEC'}  = undef;
+    $self->{'IMAGES'}     = {};
 
     # For forcing untyped nodes to an architecture.
     $self->{'FORCEARCH'}  = undef;
@@ -202,6 +203,7 @@ sub pnodes($)           { return $_[0]->{'PNODES'}; }
 sub fixednodes($)       { return $_[0]->{'FIXEDNODES'}; }
 sub newreserved($)      { return $_[0]->{'NEWRESERVED'}; }
 sub clearnewreserved($) { $_[0]->{'NEWRESERVED'} = {}; }
+sub allimages($)        { return $_[0]->{'IMAGES'}; }
 sub rspec($)            { return $_[0]->{'RSPEC'}; }
 sub genirspec($)        { return $_[0]->{'GENIRSPEC'}; }
 sub forcedarchitecture($){ return $_[0]->{'FORCEARCH'}; }
@@ -247,6 +249,7 @@ sub impotent($)		{ return $_[0]->flags() & $VTOP_FLAGS_IMPOTENT; }
 sub alloconly($)	{ return $_[0]->flags() & $VTOP_FLAGS_ALLOCONLY; }
 sub regression($)	{ return $_[0]->flags() & $VTOP_FLAGS_REGRESSION; }
 sub preassign($)	{ return $_[0]->flags() & $VTOP_FLAGS_PREASSIGN; }
+sub commitmode($)	{ return $_[0]->flags() & $VTOP_FLAGS_COMMITMODE; }
 sub printdb($$)		{ print $_[1] if ($_[0]->verbose()); return 1; }
 
 # We name delay nodes internally as they are needed.
@@ -1477,7 +1480,7 @@ sub LoadVirtNodes($)
 		&& $vnode->_parent_osinfo()->FeatureSupported("xen-host")) {
 		$defmem = 1024;
 		$minmem = 256;
-		$maxmem = 1024 * 16;
+		$maxmem = 1024 * 64;
 	    }	    
 	    if (!exists($vnode->_desires()->{"?+ram"})) {
 		$self->printdb("Setting VM memsize to $defmem for $vname\n");
@@ -1599,19 +1602,24 @@ sub LoadVirtNodes($)
 	}
 	my $osimage;
 
-	if (defined($vnode->_parent_osinfo())) {
-	    $osimage = $vnode->_parent_osinfo();
-	}
-	elsif ($self->option("jail_osid")) {
-	    $osimage = OSImage->Lookup($self->option("jail_osid"));
+	if (!defined($fixnode->_osinfo())) {
+	    if (defined($vnode->_parent_osinfo())) {
+		$osimage = $vnode->_parent_osinfo();
+	    }
+	    elsif ($self->option("jail_osid")) {
+		$osimage = OSImage->Lookup($self->option("jail_osid"));
+	    }
+	    else {
+		$osimage = $self->nodejailosinfo($vnode);
+	    }
+	    return -1
+		if (!defined($osimage));
+	
+	    $fixnode->_osinfo($osimage);
 	}
 	else {
-	    $osimage = $self->nodejailosinfo($vnode);
+	    $osimage = $fixnode->_osinfo();
 	}
-	return -1
-	    if (!defined($osimage));
-	
-	$fixnode->_osinfo($osimage);
 	# Convert from the name to the local object.
 	$vnode->_fixedvm($fixnode);
 
@@ -2500,12 +2508,17 @@ sub GenVirtNodes($)
 		if (!defined($posinfo)) {
 		    my $jailosinfo = $self->nodejailosinfo($vnode);
 		    $desires->{"OS-" . $jailosinfo->osid()} = ['', 1.000000];
-		    
+		    # For ptopgen.
+		    $self->allimages()->{$jailosinfo->osid()} = 1;
 		}
 		else {
-		    $desires->{"OS-" . $posinfo->osid()} = ['', 1.000000];
-		    $desires->{"OS-" . $posinfo->osid() . "-" . $osinfo->osid()} =
-			['', 1.000000];
+		    my $osid  = $osinfo->osid();
+		    my $posid = $posinfo->osid();
+		    $desires->{"OS-" . $posid} = ['', 1.000000];
+		    $desires->{"OS-" . $posid . "-" . $osid} = ['', 1.000000];
+		    # For ptopgen.
+		    $self->allimages()->{$posid} = 1;
+		    $self->allimages()->{$posid . "-" . $osid} = 1;
 		}
 	    }
 	    elsif (!$osinfo->mfs()) {
@@ -2515,11 +2528,17 @@ sub GenVirtNodes($)
 		#
 		if (!defined($posinfo)) {
 		    $desires->{"OS-" . $osinfo->osid()} = ['', 1.000000];
+		    # For ptopgen.
+		    $self->allimages()->{$osinfo->osid()} = 1;
 		}
 		else {
-		    $desires->{"OS-" . $posinfo->osid()} = ['', 1.000000];
-		    $desires->{"OS-" . $posinfo->osid() . "-" . $osinfo->osid()} =
-			['', 1.000000];
+		    my $osid  = $osinfo->osid();
+		    my $posid = $posinfo->osid();
+		    $desires->{"OS-" . $posid} = ['', 1.000000];
+		    $desires->{"OS-" . $posid . "-" . $osid} = ['', 1.000000];
+		    # For ptopgen.
+		    $self->allimages()->{$posid} = 1;
+		    $self->allimages()->{$posid . "-" . $osid} = 1;
 		}
 	    }
 	}
@@ -3341,19 +3360,25 @@ sub GenVirtLans($)
 		$others->{'emulated'}   = 1;
 		# assign seems to require this, but it seems wrong.
 		$others->{'trivial_ok'} = 1;
+		# This is probably not correct for all situations. 
 		$bw = 1000;
 	    }
 	    foreach my $member (@members) {
 		my $virtnode   = $member->virt_node();
 		my $vnodevname = $virtnode->vname();
 		my $plink      = "portlan/$vname/$member";
+		my (undef,$bw0)= @{$member->_delayinfo()};
+		my $wiretype   = $vlan->_wiretype();
 
+		if ($bw0 != 0) {
+		    $wiretype = $self->GetWiretype($wiretype, $bw0);
+		}
 		$self->createLink($vname, $plink,
 				  [$virtnode->_cmurn()],
 				  {'virtual_node_id' => $vnodevname,
 				   'virtual_interface_id' =>"$member" },
 				  {'virtual_node_id' => $lannode },
-				  $bw, $vlan->_wiretype(), $others);
+				  $bw, $wiretype, $others);
 	    }
 	}
 	elsif (@members == 2) {
@@ -3739,7 +3764,7 @@ sub GenVirtLans($)
 		}
 	    }
 	}
-	elsif ($#members != 0) {
+	elsif (@members != 0) {
 	    my $desires = {};
 	    $self->exptstats()->{"lans"} += 1;
 	    my $lannode = ($vlan->_geninodes() ? "lan-$vname" : "lan/$vname");
@@ -4365,6 +4390,8 @@ sub CreateVtop($;$)
 	$self->options()->{'delay_desire_type'} = '';
 	$self->options()->{'delay_desire_name'} = "OS-$osid";
 	$self->options()->{'delay_desire_penalty'} = '1';
+	# For ptopgen.
+	$self->allimages()->{$osid} = 1;
     }
     else {
 	$self->options()->{'delay_desire_type'} = '';
@@ -5544,7 +5571,7 @@ sub AllocNodes($)
 	# if the return value of nalloc (number of nodes not allocated) does
 	# not equal the number of nodes we tried to allocate.
 	#
-	return (($tcount == $exitval) ? 2 : 3);
+	return (($tcount == $exitval) ? 10 : 11);
     }
 
     #
@@ -5599,8 +5626,16 @@ sub AllocNodes($)
 	    # Node is being reused, but for a different purpose, so
 	    # it should be rebooted.
 	    #
+	    # XXX Note that when we use alloconly mode, and then we
+	    # "commit" the allocations, we do not want to change the
+	    # allocstate cause that messes up os_setup later. This is
+	    # relevant to the Geni path only.
+	    #
 	    $pnode->SetAllocState(TBDB_ALLOCSTATE_RES_REBOOT())
-		if (! $self->impotent());
+		if (! ($self->impotent() ||
+		       ($self->commitmode() &&
+			$pnode->allocstate() eq
+			TBDB_ALLOCSTATE_RES_INIT_DIRTY())));
 	}
     }
   skip:
@@ -5925,7 +5960,7 @@ sub AllocVirtNodes($)
 	    while (scalar(@newvlist) && scalar(@delvlist)) {
 		my $del_vnode = pop(@delvlist);
 		if (exists($self->current_v2v->{$del_vnode})) {
-		    my $reserved_node = $$self->current_v2v()->{$del_vnode};
+		    my $reserved_node = $self->current_v2v()->{$del_vnode};
 		    push(@oplist, $reserved_node);
 		    my $new_vnode = pop(@newvlist);
 		    push(@ovlist, $new_vnode);
@@ -6256,6 +6291,10 @@ sub InterpLinks($)
 	$protovlan->SetEncapStyle("default");
 	# Total hack ... see snmpit.
 	$protovlan->SetAttribute("trunk_mode", "dual");
+
+	# Well, if there are no experimental interfaces, we want to kill
+	# the protovlan so that it does not confused snmpit.
+	my $iface_counter = 0;
 	
 	foreach my $pnode (@sharedpnodes) {
 	    my $pnodename = $pnode->node_id();
@@ -6330,7 +6369,12 @@ sub InterpLinks($)
 			or return -1 if (!($self->impotent() ||
 					   $self->alloconly()));
 		}
+		$iface_counter++;
 	    }
+	}
+	if (!$iface_counter) {
+	    $self->printdb("No interfaces in shared vlan, killing protovlan\n");
+	    $protovlan->Destroy();
 	}
     }
 
@@ -6608,8 +6652,9 @@ sub InterpLinksAux($)
 		    # sees that wire (as for snmpit).
 		    #
 		    my $logicalwire =
-			Interface::LogicalWire->Create($self->impotent() ||
-						       $self->alloconly(),
+			Interface::LogicalWire->Create(($self->impotent() ||
+							$self->alloconly()
+							? 1 : 0),
 						       $nodeA, $portA,
 						       $nodeB, $portB);
 		    return -1
@@ -9156,7 +9201,8 @@ sub UpLoadIPAddresses($)
 	my $mask     = $virtlan->_mask();
 
 	next
-	    if ($virtlan->_layer() != 2 && $virtlan->_layer() != 3);
+	    if (!($virtlan->_layer() == 2 || $virtlan->_layer() == 3 ||
+		  ($virtlan->_layer() == 1 && $self->experiment()->geniflags)));
 
 	foreach my $member ($virtlan->memberlist()) {
 	    # Will this happen?
@@ -10311,9 +10357,21 @@ sub GetWiretype($$$)
 	# 1 Gbit
 	$wiretype = "ethernet-1000000";
     }
-    else {
+    elsif ($bandwidth <= 10000000) {
 	# 10 Gbit
 	$wiretype = "ethernet-10000000";
+    }
+    elsif ($bandwidth <= 25000000) {
+	# 25 Gbit
+	$wiretype = "ethernet-25000000";
+    }
+    elsif ($bandwidth <= 40000000) {
+	# 40 Gbit
+	$wiretype = "ethernet-40000000";
+    }
+    else {
+	# 100 Gbit
+	$wiretype = "ethernet-100000000";
     }
     return $wiretype;
 }

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -73,7 +73,8 @@ function Do_SearchUsers()
                      "where (uid like '$safe_text' or ".
                      "       usr_affil like '$safe_text' or ".
                      "       LCASE(usr_email) like '$safe_text' or ".
-                     "       usr_name like '$safe_text') ".
+                     "       usr_name like '$safe_text') and ".
+                     "       status!='archived' ".
                      "order by uid");
 
     while ($row = mysql_fetch_array($query_result)) {
@@ -107,7 +108,7 @@ function Do_SearchProjects()
 	return -1;
     }
     $text = $ajax_args["text"];
-    if (!preg_match("/^\w*$/", $text)) {
+    if (!preg_match("/^[\w\-]+$/", $text)) {
 	SPITAJAX_ERROR(-1, "Illegal text to search for");
 	return -1;
     }

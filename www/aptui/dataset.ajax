@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018, 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -94,16 +94,16 @@ function Do_CreateDataSet()
 	$options .= " -t " . $formfields["dataset_type"];
     }
     if ($formfields["dataset_type"] == "stdataset") {
-	if (!isset($formfields["dataset_expires"]) ||
-	    $formfields["dataset_expires"] == "") {
+	if (!isset($formfields["dataset_expires_gmt"]) ||
+	    $formfields["dataset_expires_gmt"] == "") {
 	    $errors["dataset_expires"] = "Missing field";
 	}
-	elseif (!strtotime($formfields["dataset_expires"])) {
+	elseif (!strtotime($formfields["dataset_expires_gmt"])) {
 	    $errors["dataset_expires"] = "Illegal value";
 	}
 	else {
 	    $options .= " -e " .
-		escapeshellarg($formfields["dataset_expires"]);
+		escapeshellarg($formfields["dataset_expires_gmt"]);
 	}
     }
     if ($formfields["dataset_type"] != "imdataset") {
@@ -248,7 +248,7 @@ function Do_CreateDataSet()
 	$command  = "webmanage_dataset $wopt -- create $options";
     }
     
-    $retval = SUEXEC($this_uid, $pid, $command, SUEXEC_ACTION_IGNORE);
+    $retval = SUEXEC($this_uid, $project, $command, SUEXEC_ACTION_IGNORE);
     if ($retval) {
         $webtask->Refresh();
         if (!$webtask->exited() || $retval < 0) {
@@ -343,6 +343,8 @@ function Do_ModifyDataSet()
 	SPITAJAX_ERROR(1, "Unknown dataset");
 	return;
     }
+    $project = $dataset->Project();
+    
     if ($this_uid != $dataset->owner_uid() && !ISADMIN()) {
 	SPITAJAX_ERROR(1, "Not enough permission");
 	return;
@@ -457,7 +459,7 @@ function Do_ModifyDataSet()
     if ($opt != "") {
         if ($dataset->islocal()) {
             $command = $dataset->grantCommand() . " ";
-            $retval = SUEXEC($this_uid, $dataset->pid(),
+            $retval = SUEXEC($this_uid, $project,
                              "$command $opt $leaseid",
                              SUEXEC_ACTION_CONTINUE);
             if ($retval) {
@@ -468,7 +470,7 @@ function Do_ModifyDataSet()
         else {
             $webtask = WebTask::CreateAnonymous();
             $command = $dataset->grantCommand($webtask);
-            $retval = SUEXEC($this_uid, $dataset->pid(),
+            $retval = SUEXEC($this_uid, $project,
                              "$command $opt $leaseid",
                              SUEXEC_ACTION_IGNORE);
             if ($retval) {
@@ -495,7 +497,7 @@ function Do_ModifyDataSet()
         $pid         = $dataset->pid();
 
         if ($embedded || $dataset->islocal()) {
-            $retval = SUEXEC($this_uid, $dataset->pid(),
+            $retval = SUEXEC($this_uid, $project,
                              "webclone_image -b $safe_bsname ".
                              "$dname $safe_nodeid",
                              SUEXEC_ACTION_IGNORE);
@@ -509,7 +511,7 @@ function Do_ModifyDataSet()
         }
         else {
             $webtask = WebTask::CreateAnonymous();
-            $retval = SUEXEC($this_uid, $dataset->pid(),
+            $retval = SUEXEC($this_uid, $project,
                              "webmanage_dataset -t ". $webtask->task_id() .
                              " snapshot -i $instance_uuid ".
                              "   -b $safe_bsname $pid/$dname $safe_nodeid",
@@ -562,6 +564,8 @@ function Do_DeleteDataset()
 	SPITAJAX_ERROR(1, "Unknown dataset");
 	return;
     }
+    $project = $dataset->Project();
+    
     if ($this_uid != $dataset->owner_uid() && !ISADMIN()) {
 	SPITAJAX_ERROR(1, "Not enough permission");
 	return;
@@ -572,7 +576,7 @@ function Do_DeleteDataset()
     #
     if ($dataset->islocal()) {
         $command = $dataset->deleteCommand();
-        $retval = SUEXEC($this_uid, $dataset->pid(), $command,
+        $retval = SUEXEC($this_uid, $project, $command,
                          SUEXEC_ACTION_IGNORE);
         if ($retval != 0) {
             if ($retval < 0) {
@@ -590,7 +594,7 @@ function Do_DeleteDataset()
     else {
         $webtask = WebTask::CreateAnonymous();
         $command = $dataset->deleteCommand($webtask);
-        $retval = SUEXEC($this_uid, $dataset->pid(), $command,
+        $retval = SUEXEC($this_uid, $project, $command,
                          SUEXEC_ACTION_IGNORE);
         if ($retval) {
             $webtask->Refresh();
@@ -644,7 +648,7 @@ function Do_ApproveDataset()
 	return;
     }
     if ($dataset->islocal()) {
-        $retval = SUEXEC($this_uid, $dataset->pid(),
+        $retval = SUEXEC($this_uid, $dataset->Project(),
                          "webapprovelease " .
                          $dataset->pid() . "/" .
                          $dataset->gid() . "/" . $dataset->lease_id(),
@@ -662,7 +666,7 @@ function Do_ApproveDataset()
     else {
         $webtask = WebTask::CreateAnonymous();
     
-        $retval = SUEXEC($this_uid, $dataset->pid(),
+        $retval = SUEXEC($this_uid, $dataset->Project(),
                          "webmanage_dataset -t ". $webtask->task_id() .
                          " approve " . $dataset->pid() . "/" . $dataset->id(),
                          SUEXEC_ACTION_IGNORE);
@@ -712,7 +716,7 @@ function Do_RefreshDataset()
     #
     $webtask  = WebTask::CreateAnonymous();
     
-    $retval = SUEXEC($this_uid, $dataset->pid(),
+    $retval = SUEXEC($this_uid, $dataset->Project(),
 		     "webmanage_dataset -t ". $webtask->task_id() . 
                      " refresh " . $dataset->pid() . "/" . $dataset->id(),
 		     SUEXEC_ACTION_IGNORE);
@@ -772,7 +776,7 @@ function Do_ExtendDataset()
 	$command  = "webextendlease ";
         $command .= $dataset->pid() . "/" . $dataset->id();
         
-        $retval = SUEXEC($this_uid, $dataset->pid(), $command,
+        $retval = SUEXEC($this_uid, $dataset->Project(), $command,
                          SUEXEC_ACTION_IGNORE);
         if ($retval != 0) {
             if ($retval < 0) {
@@ -789,7 +793,7 @@ function Do_ExtendDataset()
     }
     else {
         $webtask  = WebTask::CreateAnonymous();
-        $retval = SUEXEC($this_uid, $dataset->pid(),
+        $retval = SUEXEC($this_uid, $dataset->Project(),
                          "webmanage_dataset -t ". $webtask->task_id() .
                          " extend ". $dataset->pid() . "/" . $dataset->id(),
                          SUEXEC_ACTION_IGNORE);
@@ -849,7 +853,7 @@ function Do_GetInfo()
     else {
         $blob["state"] = $dataset->state();
     }
-    $blob["size"] = $dataset->size() ? $dataset->size() : "0";
+    $blob["size"] = $dataset->size() ? $dataset->size() : 0;
 
     # A local lease via Classic interface (embedded).
     if ($islease) {

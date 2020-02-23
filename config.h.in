@@ -219,6 +219,9 @@
 /* Support Protogeni rack */
 #undef PROTOGENI_GENIRACK
 
+/* Configure for a target system (like a rack) */
+#undef CONFIG_TARGETSYS
+
 /* Support Protogeni */
 #undef PROTOGENI_SUPPORT
 

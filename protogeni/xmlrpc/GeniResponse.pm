@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -56,6 +56,7 @@ use vars qw(@ISA @EXPORT);
 	      XMLRPC_NO_SUCH_METHOD
 	      XMLRPC_SYSTEM_ERROR XMLRPC_TRANSPORT_ERROR
 	      HTTP_INTERNAL_SERVER_ERROR HTTP_SERVICE_UNAVAILABLE
+	      HTTP_GATEWAY_TIME_OUT GENIRESPONSE_GATEWAY_TIMEOUT
               GENIRESPONSE_NETWORK_ERROR GENIRESPONSE_NETWORK_ERROR_TIMEDOUT
               GENIRESPONSE_NETWORK_ERROR_NOCONNECT
 	      GENIRESPONSE_SETUPFAILURE GENIRESPONSE_SETUPFAILURE_OSSETUP
@@ -112,7 +113,9 @@ sub GENIRESPONSE_SETUPFAILURE_MAXERROR()   {170; }
 sub GENIRESPONSE_STITCHER_ERROR()          {101; }
 sub HTTP_INTERNAL_SERVER_ERROR()           {500; }
 sub HTTP_SERVICE_UNAVAILABLE()             {503; }
+sub HTTP_GATEWAY_TIME_OUT()                {504; }
 sub GENIRESPONSE_SERVER_UNAVAILABLE()      {HTTP_SERVICE_UNAVAILABLE();}
+sub GENIRESPONSE_GATEWAY_TIMEOUT()         {HTTP_GATEWAY_TIME_OUT();}
 sub GENIRESPONSE()		  { return $current_response; }
 
 my @GENIRESPONSE_STRINGS =
@@ -212,9 +215,9 @@ sub new($$;$$$)
     return $self;
 }
 
-sub Create($$;$$)
+sub Create($$;$$$)
 {
-    my ($class, $code, $value, $output) = @_;
+    my ($class, $code, $value, $output, $logurl) = @_;
 
     if (!defined($output)) {
 	$output = "";
@@ -229,6 +232,8 @@ sub Create($$;$$)
     my $self = {"code"   => $code,
 		"value"  => $value,
 		"output" => $output};
+    $self->{"logurl"} = $logurl
+	if (defined($logurl));
 
     $current_response = $self;
     return $self;
@@ -246,7 +251,8 @@ sub Bless($$)
 sub Unbless($)
 {
     my ($ref) = @_;
-    return GeniResponse->Create($ref->code(), $ref->value(), $ref->output());
+    return GeniResponse->Create($ref->code(), $ref->value(),
+				$ref->output(), $ref->logurl());
 }
 
 # accessors
@@ -371,9 +377,9 @@ sub MonitorResponse($)
 			undef, "start/restart in progress; try again later");
 }
 
-sub BadArgsResponse(;$)
+sub BadArgsResponse($;$)
 {
-    my ($msg) = @_;
+    my (undef,$msg) = @_;
 
     $msg = "Bad arguments to method"
 	if (!defined($msg));
@@ -381,9 +387,9 @@ sub BadArgsResponse(;$)
     return GeniResponse->Create(GENIRESPONSE_BADARGS, undef, $msg);
 }
 
-sub SearchFailedResponse(;$)
+sub SearchFailedResponse($;$)
 {
-    my ($msg) = @_;
+    my (undef,$msg) = @_;
 
     $msg = "Search Failure"
 	if (!defined($msg));

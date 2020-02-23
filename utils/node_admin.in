@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2009 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,13 +35,15 @@ sub usage()
     print STDOUT "-h     This message\n";
     print STDOUT "-n     Do not reboot node\n";
     print STDOUT "-w     Wait for node to come back up if rebooted\n";
+    print STDOUT "-R     Boot node into 'recovery' MFS instead\n";
     print STDOUT "-e     Operate on all nodes in an experiment\n";
     print STDOUT "-c cmd Run command in MFS and wait for completion\n".
 		 "       (-n and -w apply after the command is run).\n";
     exit(-1);
 }
-my $optlist  = "hnwe:c:";
+my $optlist  = "hnwe:c:R";
 my $waitmode = 0;
+my $recovery = 0;
 my $reboot   = 1;
 my $runcmd   = "";
 my $onoff;
@@ -96,6 +98,9 @@ if (defined($options{"n"})) {
 }
 if (defined($options{"w"})) {
     $waitmode = 1;
+}
+if (defined($options{"R"})) {
+    $recovery = 1;
 }
 if (defined($options{"c"})) {
     $runcmd = $options{"c"};
@@ -212,6 +217,14 @@ if ($runcmd ne "") {
 	    "    Could not turn admin mode off for @bad!\n");
     }
 
+    #
+    # Restore the startupcmd from the virt_nodes table since MfsRunCmd()
+    # cleared it. We need to do this after the MfsSelect call above.
+    #
+    foreach my $node (@nodes) {
+	$node->SetStartupCmd();
+    }
+
     if ($reboot) {
 	%args = ();
 	$args{'name'} = $0;
@@ -229,10 +242,21 @@ if ($runcmd ne "") {
 $args{'name'} = $0;
 $args{'on'} = ($onoff eq "on");
 $args{'clearall'} = 0;
+$args{'recovery'} = 1 if ($recovery && $onoff eq "on");
 if (TBAdminMfsSelect(\%args, \@bad, @nodeids)) {
     die("*** $0:\n".
 	"    Could not turn admin mode $onoff for @bad!\n");
 }
+
+#
+# If turning off admin mode, reset the startupcmd.
+#
+if ($onoff eq "off") {
+    foreach my $node (@nodes) {
+	$node->SetStartupCmd();
+    }
+}
+
 if ($reboot) {
     %args = ();
     $args{'name'} = $0;

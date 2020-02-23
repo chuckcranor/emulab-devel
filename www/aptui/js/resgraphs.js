@@ -92,10 +92,21 @@ window.ShowResGraph = (function ()
 		    /*
 		     * Oh, turns out two consecutive timestamps can have
 		     * the same free/held values. Cull those out too.
+		     * We want the first one, eating up the subsequent
+		     * timestamps with the same values.
 		     */
 		    if (data.free == nextdata.free &&
 			data.held == nextdata.held) {
-			//console.info("toss2", type, data, nextdata);
+			//console.info("toss2", type, data);
+			temp.push(data);
+			for (i = i + 1; i < array.length - 1; i++) {
+			    nextdata = array[i];
+			    if (! (data.free == nextdata.free &&
+				   data.held == nextdata.held)) {
+				break;
+			    }
+			    //console.info("toss2-B", nextdata);
+			}
 			continue;
 		    }
 		    /*
@@ -272,7 +283,7 @@ window.ShowResGraph = (function ()
 	temp.push(data);
 	
 	array = temp;
-	console.info(array);
+	//console.info(array);
 
 	/*
 	 * Finally, create the series data for NVD3.
@@ -281,11 +292,15 @@ window.ShowResGraph = (function ()
 	    var type = types[t];
 	    var values = [];
 	    
-	    datums[index++] = {
+	    datums[index] = {
 		"key"    : type,
 		"area"   : 0,
 		"values" : values,
 	    };
+	    if (_.has(args, "colors") && _.has(args.colors, type)) {
+		datums[index]["color"] = args.colors[type];
+	    }
+	    index++;
 
 	    for (var i = 0; i < array.length; i++) {
 		var stamp  = array[i].stamp;
@@ -330,8 +345,8 @@ window.ShowResGraph = (function ()
 	    var maxTime = d3.max(datums[0].values,
 				 function (d) { return d.x; });
 	    // Adjust the brush to the first day.
-	    if (maxTime - minTime > (3600 * 24 * 7 * 1000)) {
-		maxTime = minTime + (3600 * 24 * 7 * 1000);
+	    if (maxTime - minTime > (3600 * 24 * 14 * 1000)) {
+		maxTime = minTime + (3600 * 24 * 14 * 1000);
 	    }
 	    if (showbrush) {
 		chart.brushExtent([minTime,maxTime]);
@@ -344,7 +359,7 @@ window.ShowResGraph = (function ()
 		return d3.time.format('%m/%d')(new Date(d))
             });	    
 
-	    var intformater = d3.format(',.0f');
+	    var intformater = d3.format(',d');
 	    var formatter = function (d) {
 		return intformater(d);
 	    };
@@ -384,16 +399,245 @@ window.ShowResGraph = (function ()
     }
     // Pass in forecast info for a single aggregate.
     return function(args) {
-	console.info("ShowResGraph", args);
+	//console.info("ShowResGraph", args);
 	
 	var datums = ProcessData(args);
 	if (datums == null) {
 	    return;
 	}
-	console.info("datums", datums);
+	console.info("ShowResGraph", args, datums);
+	
+	if (_.has(args, "resize") && datums.length > 10) {
+	    var id = '#' + args.selector + " .resgraph-size";
+	    var height = $(id).innerHeight();
+
+	    $(id).css("height", (height + 200) + "px")
+		.css("max-height", (height + 200) + "px");
+	}
+	else if (_.has(args, "height")) {
+	    var id = '#' + args.selector + " .resgraph-size";
+	    var height = args.height;
+
+	    $(id).css("height", height).css("max-height", height);
+	}
 	CreateGraph(datums, args.selector, args.click_callback,
 		    args.showbrush);
     };
+}
+)();
+window.DrawResHistoryGraph = (function ()
+{
+    return function(args)
+    {
+	var details = args.details;
+	var history = details.history;
+	var graphid = args.graphid;
+	var xlabel  = false;
+	var uvalues = [];
+	var pvalues = [];
+	var backup  = false;
+	var zero    = false;
+	var minY    = 99999;
+	var maxY    = 0;
+	var now     = new Date().getTime();
+	
+	var i = 0;
+
+	if (_.has(args, "xaxislabel")) {
+	    xlabel = args.xaxislabel;
+	}
+
+	// Need start/end of the reservation to narrow what we show,
+	// since the timeline is going to include stamps before the
+	// start of the reservation cause of experiments that span
+	// the reservation start time. But no stamps after the end.
+	var start  = new Date(details.start).getTime();
+	var end    = new Date(details.end).getTime();
+	console.info("draw start/end", start, end, details.uuid);
+
+	// Scan past any initial timeline entries that are before the
+	// start of the reservation.
+	for (i = 0; i < history.length; i++) {
+	    var record    = history[i];
+	    var stamp     = parseInt(record.t) * 1000;
+
+	    console.info("record", stamp, record);
+
+	    if (stamp > start) {
+		if (i == 0) {
+		    // If this is the first record, then the reservation
+		    // started with zero nodes allocated. Add a zero entry.
+		    uvalues.push({"x" : start, "y" : 0});
+		    pvalues.push({"x" : start, "y" : 0});
+		    minY = 0;
+		    zero = true;
+		    console.info("added zero entry at ", stamp);
+		}
+		else {
+		    // We skipped some entries. Flag that we want to
+		    // add the previous entry at beginning of the res.
+		    backup = true;
+		    i--;
+		    console.info("added backup entry at ", start, stamp, i);
+		}
+		break;
+	    }
+	}
+	if (i == history.length) {
+	    // All the entries are before the start, we need to do the
+	    // backup entry as above.
+	    backup = true;
+	    i--;
+	    console.info("added initial backup entry at ", stamp, i);
+	}
+
+	for (; i < history.length; i++) {
+	    var record    = history[i];
+	    var stamp     = parseInt(record.t) * 1000;
+	    var reserved  = record.reserved;
+	    var allocated = record.allocated;
+
+	    // If this is before or after the reservation, reserved will
+	    // be empty. Skip it.
+	    if (Array.isArray(reserved)) {
+		continue;
+	    }
+	    
+	    var pcount = parseInt(allocated[details.remote_pid][details.type]);
+	    // Watch for nothing allocated by the user at this time stamp
+	    var ucount = 0;
+	    if (_.has(allocated, details.remote_uid)) {
+		ucount = parseInt(allocated[details.remote_uid][details.type]);
+	    }
+	    if (zero) {
+		// No slopes, just rectangles please.
+		uvalues.push({"x" : stamp - 100, "y" : 0});
+		pvalues.push({"x" : stamp - 100, "y" : 0});
+		zero = false;
+	    }
+	    else if (backup) {
+		stamp  = start;
+		backup = false;
+	    }
+	    if (i > 0) {
+		var prev = history[i - 1];
+
+		if (_.has(prev, "pcount")) {
+		    var prevstamp = record.realstamp + (24 * 3600 * 1000);
+		    
+		    while (prevstamp < stamp - 10000) {
+			uvalues.push({"x" : prevstamp, "y" : prev.ucount});
+			pvalues.push({"x" : prevstamp, "y" : prev.pcount});
+			prevstamp += 24 * 3600 * 1000;
+		    }
+		    // No slopes, just rectangles please.
+		    uvalues.push({"x" : stamp - 100, "y" : prev.ucount});
+		    pvalues.push({"x" : stamp - 100, "y" : prev.pcount});
+		}
+	    }
+	    uvalues.push({"x" : stamp, "y" : ucount});
+	    pvalues.push({"x" : stamp, "y" : pcount});
+	    record["pcount"] = pcount;
+	    record["ucount"] = ucount;
+	    record["realstamp"] = stamp;
+
+	    /*
+	     * Keep track of min/max for altering the Y range below.
+	     * Makes the graphs a little easier to read. 
+	     */
+	    var max = (pcount >= ucount ? pcount : ucount);
+	    var min = (pcount <= ucount ? pcount : ucount);
+	    if (max > maxY) {
+		maxY = max;
+	    }
+	    if (min < minY) {
+		minY = min;
+	    }
+	}
+	// Always want the reservation node count to be the maxY
+	// so it is obvious when the user is not using all the nodes.
+	if (maxY < details.nodes) {
+	    maxY = details.nodes; 
+	}
+	// We need a point at end so that the X scale is correct. This
+	// depends on whether its a current reservation or a historical
+	// reservation.
+	if (details.deleted) {
+	    end = new Date(details.deleted).getTime();
+	}
+	else if (now < end) {
+	    end = now;
+	}
+	uvalues.push({"x" : end,
+		      "y" : uvalues[uvalues.length - 1].y});
+	pvalues.push({"x" : end,
+		      "y" : pvalues[pvalues.length - 1].y});
+
+	
+	var minX = uvalues[0].x;
+	var maxX = uvalues[uvalues.length - 1].x;
+	var data = [{"key" : "Project", "values" : pvalues, "color" : "green"},
+		    {"key" : "User", "values" : uvalues, "color" : "blue"}
+		   ];
+	console.info("usage datums", data);
+
+	nv.addGraph(function() {
+	    var chart = window.nv.models.lineWithFocusChart()
+		.useInteractiveGuideline(true)
+		.forceY([minY > 0 ? minY - 1 : 0, maxY + 1]);
+
+	    chart.margin({"left":25,"right":15,"top":20,"bottom":40});
+
+	    chart.xAxis.tickFormat(function(d) {
+		return d3.time.format('%m/%d')(new Date(d))
+            });	    
+	    chart.x2Axis.tickFormat(function(d) {
+		return d3.time.format('%m/%d')(new Date(d))
+	    });
+	    
+	    chart.yAxis
+		.tickFormat(d3.format(',d'));
+
+	    // This draws a dashed line to mark the number of nodes reserved.
+	    chart.dispatch.on('renderEnd', function(){
+		console.log('render complete');
+		var line = d3.select(graphid + ' svg')
+		    .append('line')
+		    .attr({
+			x1: chart.margin().left + chart.xAxis.scale()(minX),
+			y1: 30 + chart.yAxis.scale()(details.nodes),
+			x2: chart.margin().left + chart.xAxis.scale()(maxX),
+			y2: 30 + chart.yAxis.scale()(details.nodes)
+		    })
+		    .style('stroke-dasharray', '5,5')
+		    .style('stroke-width', '2px')
+		    .style("stroke", "#000");
+	    });
+
+	    if (xlabel) {
+		var start = moment(details.start);
+		var end   = moment(details.end);
+
+		chart.xAxis.axisLabel(start.format('lll') + " ... " +
+				      end.format('lll'));
+	    }
+
+            // set up the tooltip to display full dates
+            var tsFormat = d3.time.format('%b %-d, %I:%M%p');
+            var tooltip = chart.interactiveLayer.tooltip;
+            tooltip.headerFormatter(function (d) {
+		return tsFormat(new Date(d));
+	    });
+
+	    d3.select(graphid + ' svg')
+		.datum(data)
+		.call(chart);
+	    
+	    nv.utils.windowResize(chart.update);
+
+	    return chart;
+	});
+    }
 }
 )();
 });

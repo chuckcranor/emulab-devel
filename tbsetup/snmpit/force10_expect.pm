@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2013,2014 University of Utah and the Flux Group.
+# Copyright (c) 2013-2018 University of Utah and the Flux Group.
 # Copyright (c) 2006-2014 Universiteit Gent/iMinds, Belgium.
 # Copyright (c) 2004-2006 Regents, University of California.
 # 
@@ -103,7 +103,7 @@ sub createExpectObject($)
     my $self = shift;
     my $id = "$self->{NAME}::createExpectObject()";
     my $error = 0;
-    my $spawn_cmd = "ssh -l $self->{USERNAME} $self->{NAME}";
+    my $spawn_cmd = "ssh -o UserKnownHostsFile=/dev/null -l $self->{USERNAME} $self->{NAME}";
     # Create Expect object and initialize it:
     my $exp = new Expect();
     if (!$exp) {
@@ -123,7 +123,7 @@ sub createExpectObject($)
 	return undef;
     }
     $exp->expect($CONN_TIMEOUT,
-         ["$self->{USERNAME}\@$self->{NAME}'s password:" => 
+         [qr/$self->{USERNAME}\@$self->{NAME}(\.[-\w\.]+)?\'s password:/ =>
 	  sub { my $e = shift;
 		$e->send($self->{PASSWORD}."\n");
 		exp_continue;}],

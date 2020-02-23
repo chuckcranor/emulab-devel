@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -98,7 +98,7 @@ function SpitProjectList($days)
                      " left join projects as p on p.pid_idx=i.pid_idx ".
                      " left join users as u on u.uid_idx=p.head_idx ".
                      " where i.servername='$APTHOST' and ".
-                     "       i.created>DATE_SUB(curdate(), INTERVAL 2 MONTH))");
+                     "       i.started>DATE_SUB(curdate(), INTERVAL 2 MONTH))");
                      
     $results = array();
 

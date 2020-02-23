@@ -4,8 +4,8 @@
 	overflow-y:scroll;
 }
 .fixedsize-panel {
-	max-height:350px;
-	height:350px;
+	max-height:500px;
+	height:500px;
 }
 td textarea {
 	width: 100%;
@@ -51,7 +51,7 @@ pre {
 <div class="row hidden" id="extension-reason-row">
   <div class='col-sm-8 col-sm-offset-2' style="margin-bottom: 10px;"><pre></pre></div>
 </div>
-<div class='row'>
+<div id="extension-controls" class='row hidden'>
   <div class='col-sm-8 col-sm-offset-2' style="margin-bottom: 10px;">
     <center>
       Message to send to user
@@ -105,7 +105,7 @@ pre {
 	<button class='btn btn-primary btn-sm'
 		style='margin-left: 30px;'
 		id='do-moreinfo'
-		type='submit' name='moreinfo'>More Info</button>
+		type='submit' name='moreinfo'>Request More Info</button>
       </div>
       <div id="max-extension-warning" class="hidden">
 	<span class="text-danger">Granting an extension to
@@ -122,6 +122,16 @@ pre {
 <div class="row" id="thirdrow">
   <div class='col-sm-6 col-sm-offset-3 hidden thirdrow-error'>
     <div class="well well-sm text-danger"></div>
+  </div>
+</div>
+<div class="row hidden" id="reservations-row">
+  <div class='col-sm-10 col-sm-offset-1'>
+    <div class='panel panel-default'>
+      <div class="panel-heading clearfix">
+	<center>Reservations for node types used by this experiment</center>
+      </div>
+      <div class='panel-body'></div>
+    </div>
   </div>
 </div>
 <div class='row'>
@@ -199,6 +209,9 @@ pre {
   <div class='col-sm-10 col-sm-offset-1
 	      col-xs-12 col-xs-offset-0'>
     <div class="well well-sm text-danger hidden" id="idledata-error"></div>
+    <div class="well well-sm hidden" id="idledata-nodata">
+	There is insufficient data to graph, please check back later.
+    </div>
     <div class='panel panel-default hidden' id="loadavg-panel-div">
       <div class="panel-heading">
 	<a data-toggle="collapse" id="loadavg-toggle"
@@ -225,7 +238,8 @@ pre {
 	  <div class='col-xs-12 col-xs-offset-0'
 	       style="padding:0px;">
 	    <div id="loadavg-chart"
-		 class='fixedsize-panel with-3d-shadow with-transitions'>
+		 class='fixedsize-panel idlegraph-div
+			with-3d-shadow with-transitions'>
 	      <svg></svg>
 	    </div>
 	  </div>
@@ -280,7 +294,8 @@ pre {
 	  <div class='col-xs-12 col-xs-offset-0'
 	       style="padding:0px;">
 	    <div id="ctrl-traffic-chart"
-		 class='fixedsize-panel with-3d-shadow with-transitions'>
+		 class='fixedsize-panel idlegraph-div
+			with-3d-shadow with-transitions'>
 	      <svg></svg>
 	    </div>
 	  </div>
@@ -332,7 +347,8 @@ pre {
 	  <div class='col-xs-12 col-xs-offset-0'
 	       style="padding:0px;">
 	    <div id="expt-traffic-chart"
-		 class='fixedsize-panel with-3d-shadow with-transitions'>
+		 class='fixedsize-panel idlegraph-div
+			with-3d-shadow with-transitions'>
 	      <svg></svg>
 	    </div>
 	  </div>
@@ -361,6 +377,20 @@ pre {
   <script id="summary-template" type="text/template">
   </script>
 </div>
+<!-- Loading Data -->
+<div id='confirm-terminate-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+        <center><h3>Confirm to Terminate</h3>
+          <button class='btn btn-danger btn-sm'
+		  id='do-terminate'>Confirm</button></center>
+      </div>
+    </div>
+  </div>
+</div>
 <!-- Confirm Terminate -->
 <div id='confirm-terminate-modal' class='modal fade'>
   <div class='modal-dialog'>
@@ -371,6 +401,32 @@ pre {
         <center><h3>Confirm to Terminate</h3>
           <button class='btn btn-danger btn-sm'
 		  id='do-terminate'>Confirm</button></center>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Confirm Quarantine -->
+<div id='confirm-quarantine-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<center>
+	  <div class="q-on hidden">
+	    <h3>Confirm to Quarantine</h3>
+	    <div>
+	      Power Off Nodes? <input type="checkbox"
+				      id="quarantine-poweroff-checkbox">
+	    </div>
+	  </div>
+	  <div class="q-off hidden">
+	    <h3>Confirm to release from Quarantine</h3>
+	  </div>
+          <button class='btn btn-danger btn-sm'
+		  style="margin-top: 10px;"
+		  id='confirm-quarantine'>Confirm</button>
+	</center>
       </div>
     </div>
   </div>
@@ -449,6 +505,27 @@ pre {
 	  <br>
           <button class='btn btn-danger btn-sm confirm-button'>Confirm</button>
 	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div class='modal fade' id="resusage-graph-modal">
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+	<div class='panel panel-default'>
+	  <div class="panel-heading panel-heading-list">
+            <button type='button' class='close' data-dismiss='modal'
+                    aria-hidden='true'>&times;</button>
+	    <center>
+	      <h5>Reservation Usage
+		<span class="resusage-graph-details"></span></h5>
+	    </center>
+	  </div>
+	  <div class='panel-body panel-body-dashboard'>
+	    <svg style="height: 75%; padding: 0px;"></svg>
+	  </div>
+	</div>
       </div>
     </div>
   </div>

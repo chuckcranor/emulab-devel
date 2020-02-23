@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,7 +38,7 @@ sub usage {
 # Configure variables
 #
 my $OURDOMAIN                = "@OURDOMAIN@";
-my $PROTOGENI_GENIRACK       = @PROTOGENI_GENIRACK@;
+my $CONFIG_TARGETSYS         = @CONFIG_TARGETSYS@;
 my ($BOSSTOKEN)              = ("@BOSSNODE@" =~ /^([-\w]+).*$/);
 my ($USERTOKEN)              = ("@USERNODE@" =~ /^([-\w]+).*$/);
 my ($FSTOKEN)                = ("@FSNODE@" =~ /^([-\w]+).*$/);
@@ -211,7 +211,7 @@ while (<IF>) {
                     if (isroutable($CONTROL_ROUTER_IP));
 	    }
 	    elsif ($2 eq "secondaries") {
-		if ($PROTOGENI_GENIRACK) {
+		if ($CONFIG_TARGETSYS) {
 		    my $foo = "	IN	NS	ns.emulab.net.\n";
 
 		    $internal_strings .= $foo;
