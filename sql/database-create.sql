@@ -360,11 +360,14 @@ CREATE TABLE `apt_instance_aggregate_history` (
   `started` datetime default NULL,
   `physnode_count` smallint(5) unsigned NOT NULL default '0',
   `virtnode_count` smallint(5) unsigned NOT NULL default '0',
+  `deferred` tinyint(1) NOT NULL default '0',
+  `deferred_reason` tinytext,
   `retry_count` smallint(5) unsigned NOT NULL default '0',
   `last_retry` datetime default NULL,
   `public_url` tinytext,
   `webtask_id` varchar(128) NOT NULL default '',
   `extension_needpush` datetime default NULL,
+  `prestage_data` mediumtext,  
   `manifest` mediumtext,
   PRIMARY KEY (`uuid`,`aggregate_urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -382,11 +385,14 @@ CREATE TABLE `apt_instance_aggregates` (
   `started` datetime default NULL,
   `physnode_count` smallint(5) unsigned NOT NULL default '0',
   `virtnode_count` smallint(5) unsigned NOT NULL default '0',
+  `deferred` tinyint(1) NOT NULL default '0',
+  `deferred_reason` tinytext,
   `retry_count` smallint(5) unsigned NOT NULL default '0',
   `last_retry` datetime default NULL,
   `public_url` tinytext,
   `webtask_id` varchar(128) NOT NULL default '',
   `extension_needpush` datetime default NULL,
+  `prestage_data` mediumtext,  
   `manifest` mediumtext,
   PRIMARY KEY (`uuid`,`aggregate_urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
