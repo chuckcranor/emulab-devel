@@ -471,7 +471,7 @@ function CheckCredentials($cert, $cred, $info)
     if ($retval) {
         TBERROR("checkgeniuser failed.\n ".
                 print_r($info, TRUE) . "\n" .
-                "Cred:\n${$cred}\n", 0);
+                "Cred:\n${cred}\n", 0);
     }
     unlink($credfile);
     unlink($certfile);
