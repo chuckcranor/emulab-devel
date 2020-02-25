@@ -3358,7 +3358,7 @@ $(function ()
 		    }
 		    else {
 			end = new Date(start.getTime());
-			end.setMonth(end.getMonth()+2);
+			end.setMonth(end.getMonth()+1);
 		    }
 		    // Upper bound on the end of the last entry, so we can
 		    // even things out on the very right side.
@@ -3405,7 +3405,7 @@ $(function ()
 		    }
 		    else {
 			end = new Date(start.getTime());
-			end.setMonth(end.getMonth()+2);
+			end.setMonth(end.getMonth()+1);
 		    }
 		    // Upper bound on the end of the last entry, so we can
 		    // even things out on the very right side.
