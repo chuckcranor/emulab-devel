@@ -3013,6 +3013,9 @@ $(function () {
 	    $('#ppform-buttons .p-last')
 		.click(function (event) {
 		    event.preventDefault();
+		    // Hide the popover
+		    $(this).popover("hide");
+		    
 		    var callback = function(json) {
 			console.info("GetPreviousBindings", json);
 			if (json.code) {
@@ -3091,7 +3094,15 @@ $(function () {
 		    $('#ppform-buttons .p-choose ul').append(item);
 
 		});
-		$('#ppform-buttons .p-choose').removeClass("hidden");
+		$('#ppform-buttons .p-choose')
+		    .removeClass("hidden");
+		
+		$('#ppform-buttons .p-choose .btn')
+		    .click(function () {
+			console.info("foo");
+ 			// Hide the popover
+			$('#ppform-buttons .p-choose').popover("hide");
+		    });
 	    }
 	}
 	    
