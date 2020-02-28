@@ -240,6 +240,9 @@ SPITHEADER(1);
 echo "<link rel='stylesheet'
             href='css/nv.d3.css'>\n";
 
+echo "<link rel='stylesheet'
+            href='css/tablesorter.css'>\n";
+
 # Place to hang the toplevel template.
 echo "<div id='status-body'></div>\n";
 
@@ -283,6 +286,8 @@ echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/jquery-ui.js'></script>\n";
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
 echo "<script src='js/lib/filesize.min.js'></script>\n";
+echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
+echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_MOMENT();
