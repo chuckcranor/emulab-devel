@@ -1213,6 +1213,8 @@ $(function ()
 				      "placement" : "auto right",
 				     });
 		    }
+		    $('#listview-row-' + node_id + ' td[name="startup"]')
+			.html(tag);
 		}
 		html += "</tbody></table>";
 		UpdateNodePopover(node_id, jacksID, html);
@@ -1810,15 +1812,16 @@ $(function ()
 	"<tr id='listview-row'>" +
 	" <td name='client_id'>n/a</td>" +
 	" <td name='node_id'>n/a</td>" +
-	" <td name='status'>n/a</td>" +
 	" <td name='type'>n/a</td>" +
+	" <td name='status'>n/a</td>" +
+	" <td name='startup'>n/a</td>" +
 	" <td name='image'>n/a</td>" +
 	" <td name='sshurl'>n/a</td>" +
 	" <td align=left><input name='select' type=checkbox>" +
 	" <td name='menu' align=center> " +
 	"  <div name='action-menu' class='dropdown'>" +
 	"  <button id='action-menu-button' type='button' " +
-	"          class='btn btn-primary btn-sm dropdown-toggle' " +
+	"          class='btn btn-primary btn-xs dropdown-toggle' " +
 	"          data-toggle='dropdown'> " +
 	"      <span class='glyphicon glyphicon-cog'></span> " +
 	"  </button> " +
@@ -2216,10 +2219,23 @@ $(function ()
 	    $("#showtopo_container").removeClass("invisible");
 	    $('#quicktabs_ul a[href="#manifest"]')
 		.parent().removeClass("hidden");
-	    $('#quicktabs_ul a[href="#listview"]')
-		.parent().removeClass("hidden");
 	    $('#quicktabs_content #manifest').removeClass("hidden");
-	    $('#quicktabs_content #listview').removeClass("hidden");
+	    /*
+	     * Cannot be hidden to initialize tablesorter
+	     */
+	    if ($('#quicktabs_content #listview').hasClass("hidden")) {
+	   	$('#quicktabs_ul a[href="#listview"]')
+		    .parent().removeClass("hidden");
+		$('#quicktabs_content #listview').removeClass("hidden");
+
+		$('#listview_table')
+		    .tablesorter({
+			theme : 'green',
+		    
+			// initialize zebra and filter widgets
+			widgets: ["zebra"],
+		    });
+	    }
 
 	    if (Object.keys(statusblob).length > 1 ||
 		nodecount < MAXJACKSNODES) {
