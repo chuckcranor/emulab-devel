@@ -282,40 +282,6 @@ $(function ()
 	    xmlthing.done(callback);
 	});
 	SetupWarnKill();
-
-	// Handler for select/deselect all rows in the list view.
-	$('#select-all').change(function () {
-	    if ($(this).prop("checked")) {
-		$('#listview_table [name=select]')
-		    .prop("checked", true);
-	    }
-	    else {
-		$('#listview_table [name=select]')
-		    .prop("checked", false);
-	    }
-	});
-	// Handler for the action menu next to the select-all checkbox:
-	// Foreign admins do not get a menu, but easier to just hide it.
-	if (isfadmin) {
-	    $('#listview-action-menu').addClass("invisible");
-	}
-	else {
-	    $('#listview-action-menu li a')
-		.click(function (e) {
-		    window.APT_OPTIONS.gaButtonEvent(e);
-		    var checked = [];
-
-		    // Get the list of checked nodes.
-		    $('#listview_table [name=select]').each(function() {
-			if ($(this).prop("checked")) {
-			    checked.push($(this).attr("id"));
-			}
-		    });
-		    if (checked.length) {
-			ActionHandler($(e.target).attr("name"), checked);
-		    }
-		});
-	}
 	SetupSnapshotModal();
 
 	/*
@@ -2235,6 +2201,41 @@ $(function ()
 			// initialize zebra and filter widgets
 			widgets: ["zebra"],
 		    });
+
+		// Handler for select/deselect all rows in the list view.
+		$('#select-all').change(function () {
+		    if ($(this).prop("checked")) {
+			$('#listview_table [name=select]')
+			    .prop("checked", true);
+		    }
+		    else {
+			$('#listview_table [name=select]')
+			    .prop("checked", false);
+		    }
+		});
+		// Handler for the action menu next to the select-all checkbox:
+		// Foreign admins do not get a menu, but easier to just hide it.
+		if (isfadmin) {
+		    $('#listview-action-menu').addClass("invisible");
+		}
+		else {
+		    $('#listview-action-menu li a')
+			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
+			    var checked = [];
+
+			    // Get the list of checked nodes.
+			    $('#listview_table [name=select]').each(function() {
+				if ($(this).prop("checked")) {
+				    checked.push($(this).attr("id"));
+				}
+			    });
+			    if (checked.length) {
+				ActionHandler($(e.target).attr("name"),
+					      checked);
+			    }
+			});
+		}
 	    }
 
 	    if (Object.keys(statusblob).length > 1 ||
