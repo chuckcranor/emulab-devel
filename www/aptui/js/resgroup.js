@@ -1432,7 +1432,8 @@ $(function ()
 		    _.each(json.value.forecast, function (stuff, key) {
 			if (_.has(details.reservable_nodes, key)) {
 			    Radios[key] = stuff;
-			    delete json.value.forecast[key];
+			    //delete json.value.forecast[key];
+			    json.value.prunelist[key] = true;
 			}
 		    });
 		    GenerateRadioGraph();
@@ -1789,7 +1790,7 @@ $(function ()
 			else {
 			    // Last one, has enough nodes, just move past
 			    // lower bound and be done.
-			    if (0 && starttime < lower) {
+			    if (starttime < lower) {
 				starttime = lower + 60;
 			    }
 			}
@@ -1881,6 +1882,9 @@ $(function ()
 	    if (!fit || _.size(ranges) == 0) {
 		continue;
 	    }
+	    // Set lower in case we have to go around again, we bump it below.
+	    lower = fit["starttime"];
+	    
 	    /*
 	     * Ok, we have something that works for the clusters, lets look
 	     * at the ranges. This is a bit easier since current ranges
@@ -1897,13 +1901,13 @@ $(function ()
 
 		for (var r = 0; r < allranges.length; r++) {
 		    var existing = allranges[r];
-		    var lower    = parseFloat(existing.freq_low);
-		    var upper    = parseFloat(existing.freq_high);
+		    var low      = parseFloat(existing.freq_low);
+		    var high     = parseFloat(existing.freq_high);
 		    var starts   = moment(existing.start).unix();
 		    var ends     = moment(existing.end).unix();
 		    var fitend   = fit.starttime + (3600 * 24 * days) + 3600;
 
-		    console.info("Existing:" + r, lower,upper,starts,ends);
+		    console.info("Existing:" + r, low,high,starts,ends);
 
 		    // If this range does not overlap in time, keep going
 		    if ((fit.starttime < starts && fitend < starts) ||
@@ -1911,18 +1915,18 @@ $(function ()
 			continue;
 		    }
 		    // If this range does not overlap in frequency, keep going
-		    if ((freq_low < lower && freq_high < lower) ||
-			(freq_low > upper)) {
+		    if ((freq_low < low && freq_high < low) ||
+			(freq_low > high)) {
 			continue;
 		    }
-		    // Does not fit! Move past the conflicting reservation.
+		    // Does not fit!
 		    console.info("Range does not fit");
 		    fit   = null;
-		    lower = ends + (3600 * 4);
 		    break;
 		}
 		// No point in continuing, start over.
 		if (!fit) {
+		    lower = lower + (3600 * 4);
 		    break;
 		}
 	    }
@@ -3222,12 +3226,12 @@ $(function ()
 	    if (!_.has(amlist, urn)) {
 		return;
 	    }
-	    if (!_.has(forecasts[urn], type)) {
+	    if (!_.has(forecasts, urn)) {
 		waiting = waiting + 1;
 		return;
 	    }
 	    var id   = amlist[urn].abbreviation + "/" + type;
-	    
+
 	    combinedForecasts[id] = forecasts[urn][type];
 	})
 	_.each(routes, function (details) {
