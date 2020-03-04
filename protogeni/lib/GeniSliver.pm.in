@@ -920,7 +920,7 @@ sub AnnotateManifest($)
     if (! defined($services)) {
 	$services = GeniXML::AddElement("services", $rspec);
     }
-    if ($experiment->HasNonLocalUsers()) {
+    if ($experiment->HasNonLocalUsers() && !$node->isblackbox()) {
 	my $login = GeniXML::FindFirst("n:login", $services);
 	while (defined($login)) {
 	    $services->removeChild($login);
