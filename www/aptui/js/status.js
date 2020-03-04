@@ -2008,6 +2008,11 @@ $(function ()
 			    return false;
 			});		    
 		}
+		else {
+		    // Need to do this on the context menu too, but painful.
+		    clone.find(' [name=shell]')
+			.parent().addClass('disabled');		    
+		}
 
 		//
 		// Foreign admins do not get a menu, but easier to just
@@ -2093,6 +2098,9 @@ $(function ()
 		    $(clone).find("li[id=recovery]").addClass("disabled");
 		    // For ActionHandler()
 		    $(clone).find("[name=recovery]").attr("disabled", true);
+		}
+		if (! (login.length && dossh)) {
+		    $(clone).find("li[id=shell]").addClass("disabled");
 		}
 		
 		// If a vhost/firewall, then grey out options. Or if there
