@@ -368,8 +368,8 @@ sub Install($$$)
 	    Phase "named", "Restarting named", sub {
 		ExecQuietFatal($NAMED_SETUP);
 	    };
-	    Phase "dhcpd", "Restarting dhcpd", sub {
-		ExecQuietFatal("$DHCPD_MAKECONF -r -i");
+	    Phase "dhcpd", "Regenerating dhcpd.conf", sub {
+		ExecQuietFatal("$DHCPD_MAKECONF -i");
 	    };
 	    PhaseSucceed("Nodes Done");
 	};
