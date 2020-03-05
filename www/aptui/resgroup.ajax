@@ -110,6 +110,11 @@ function Do_Reserve()
             !$project->AccessCheck($this_user, $TB_PROJECT_CREATEEXPT)) {
             $errors["error"] = "Not enough permission in project";
         }
+        # XXX
+        if ($project->pid() == "cord-testdrive" ||
+            $project->pid() == "CloudLab") {
+            $errors["pid"] = "Not allowed to reserve resources in this project";
+        }
     }
     if (!$project) {
         $errors["pid"] = "No such project";
