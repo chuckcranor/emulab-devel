@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -458,7 +458,7 @@ sub dolisting() {
     if ($UID && !TBAdmin($UID)) {
 	my ($me) = getpwuid($UID);
 	$query_result =
-	    DBQueryFatal("select distinct i.pid,i.imagename from images as i ".
+	    DBQueryFatal("select distinct i.pid,i.imagename,i.imageid from images as i ".
 			 "left join image_versions as v on ".
 			 "     v.imageid=i.imageid and v.version=i.version ".
 			 "left join group_membership as g on ".
@@ -467,7 +467,7 @@ sub dolisting() {
 			 "order by i.pid,i.imageid");
     } else {
 	$query_result =
-	    DBQueryFatal("SELECT distinct pid,imagename FROM images ".
+	    DBQueryFatal("SELECT distinct pid,imagename,imageid FROM images ".
 			 "order by imageid");
     }
 
