@@ -32,62 +32,26 @@ into the physical host and then:
 
 	vhost-0> sudo /usr/local/etc/emulab/vnodesetup -jh pcvmXXX-1
 
-# Approve the certificate on the MotherShip.
+Approve the certificate on the MotherShip.
+
+	msboss> sudo cacontrol -c ...
+	msboss> sudo /usr/local/etc/rc.d/2.portalpsd.sh start
 	
 After David does his magic and boss boots, need to do:
 
 	boss> wap update_sitevars 
 	boss> wap addservers
         boss> sudo getcacerts -f
+	boss> sudo /bin/rm -rf `cat rmfiles.txt`
 
-Need to flip the enable bit in the apt_aggregates table.
+And back on Mothership boss:
+
+    	 msboss> manage_aggregate ping -a XXX -s
+    	 msboss> manage_aggregate chflag -a XXX disabled no
 
 Copy the defs file to Mothership boss, powder-defs directory.
 Symlink emulab-devel/defs file to the powder-defs version.
 
-Remove /usr/local/etc/bin/console*
-Remove /usr/local/etc/bin/script_wrapper and stuff symlinked to it.
-batchexp
-console
-create_image
-createdataset
-delay_config
-deletedataset
-endexp
-eventsys_control
-expinfo
-expwait
-extenddataset
-mkblob
-modexp
-node_admin
-node_avail
-node_avail_list
-node_list
-node_reboot
-nscheck
-os_load
-portstats
-readycount
-rmblob
-savelogs
-script_wrapper.py
-showdataset
-startexp
-swapexp
-tbuisp
-template_checkout
-template_commit
-template_export
-template_instantiate
-template_startrun
-template_stoprun
-template_swapin
-template_swapout
-wilink_config
 
-Need to get the certificates into the SA database on the Mothership.
-Fix manage_aggregate.
-
- sort -r -n -t, -k 4 /tmp/mon.out | head -30
+sort -r -n -t, -k 4 /tmp/mon.out | head -30
  
