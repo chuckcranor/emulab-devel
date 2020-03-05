@@ -51,6 +51,11 @@ if ($FBSD_MAJOR <= 10) {
     }
 }
 
+if ($TARGETSYS_TARGET eq "POWDER-BUS") {
+    $STDIMAGES{"UBUNTU18-64-GR38-PACK"} =
+	"https://www.emulab.net/image_metadata.php?uuid=1f67cefc-c375-11e9-b1eb-e4434b2381fc";
+}
+
 #
 # Old style mappings, but probably still in use someplace.
 #
