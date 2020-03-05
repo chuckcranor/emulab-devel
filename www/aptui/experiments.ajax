@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,7 +46,7 @@ function CheckPageArgs()
 
 function Do_ExperimentList()
 {
-    global $this_user, $urn_mapping;
+    global $this_user, $urn_mapping, $PORTAL_GENESIS;
     global $ajax_args;
     $results = array();
 
@@ -97,6 +97,7 @@ function Do_ExperimentList()
         $phours       = $row["phours"];
         $email        = $row["email"];
         $extending    = $row["extension_requested"];
+        $portal       = $row["portal"];
         $blob         = array();
 
         # If a guest user, use email instead.
@@ -162,6 +163,7 @@ function Do_ExperimentList()
         $blob["user_lockdown"]  = ($user_lockdown ? 1 : 0);
         $blob["admin_lockdown"] = ($admin_lockdown ? 1 : 0);
         $blob["lockdown"]       = $lockdown;
+        $blob["portal"]         = $portal;
         $blob["extension_requested"] = $extending;
 
         #
@@ -176,6 +178,9 @@ function Do_ExperimentList()
         }
         if ($extending) {
             $filters[] = "extending";
+        }
+        if ($portal == $PORTAL_GENESIS) {
+            $filters[] = "portal";
         }
         if (time() - strtotime($created) > (45 * 24 * 3600)) {
             $filters[] = "old";

@@ -219,6 +219,9 @@ $(function ()
 	if ($('#radio-buttons [data-id="#expired"]').is(":checked")) {
 	    tmp.push("expired");
 	}
+	if ($('#radio-buttons [data-id="#portal"]').is(":checked")) {
+	    tmp.push("portal");
+	}
 	if ($('#radio-buttons [data-id="#old"]').is(":checked")) {
 	    tmp.push("old");
 	}
