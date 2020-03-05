@@ -49,7 +49,11 @@ while True:
             time.sleep(5)
             continue
 
-        arduino.write("voltage\r");
+        try:
+            arduino.write("voltage\r");
+        except:
+            break
+        
         while True:
             try:
                 # The last bit gets rid of the newline            
@@ -63,6 +67,24 @@ while True:
             if data.find("Pin") >= 0:
                 print data
                 pass
+            pass
+        
+        try:
+            arduino.write("temp\r");
+        except:
+            break
+        
+        while True:
+            try:
+                # The last bit gets rid of the newline            
+                data = arduino.readline()[:-2]
+            except:
+                break
+
+            if not data:
+                break
+
+            print data
             pass
         if not debug:
             os.fsync(sys.stdout.fileno())
