@@ -15,18 +15,14 @@ window.ShowPowderMap = (function()
     var WatchUtils     = null;
     var ResInfo        = null;
     var OurBuses       = null;
+    var routeList      = {};
+    var Aggregates     = {};
+    var Loaded         = false;
     var LOCATION_URL   = "https://www.uofubus.com/Services/JSONPRelay.svc/" +
 	"GetMapVehiclePoints?ApiKey=ride1791";
     var ROUTES_URL     = "https://www.uofubus.com/Services/JSONPRelay.svc/" +
 	"GetRoutesForMapWithScheduleWithEncodedLine?ApiKey=ride1791";
-    
-    // These are the routes we care about. 
-    var routeList      = {"19" : null,
-			  "64" : null,
-			  "65" : null,
-			  "66" : null,
-			  "68" : null,
-			  "72" : null};
+
     /*
      * These are layers we need to control externally.
      */
@@ -137,6 +133,14 @@ window.ShowPowderMap = (function()
 		});
 		View.ui.add(scalebar, "bottom-left");
 
+		if (0) {
+		// Fires each time an action button is clicked
+		// Use this for the Node action menu.
+		View.popup.on("trigger-action", function(event) {
+		    console.info(event);
+		});
+		}
+
 		// Add a distance widget button.
 		var button =
 		    $('<button class="action-button esri-icon-measure-line" '+
@@ -185,8 +189,15 @@ window.ShowPowderMap = (function()
 		// Base layers
 		DrawCoverageArea();
 		DrawDataCenters();
-		DrawFixedEndpoints();
-		DrawBaseStations();
+		// Need to wait till these are done before we mark resources
+		// The return the promise.
+		$.when(DrawFixedEndpoints(), DrawBaseStations())
+		    .done(function (r1, r2) {
+			if (_.has(Options, "experiment")) {
+			    MarkExperimentResources();
+			    Loaded = true;
+			}
+		    });
 
 		if (Options.showfilter) {
 		    var wrapper = document.createElement("div");
@@ -210,7 +221,7 @@ window.ShowPowderMap = (function()
 
 	    if (Options.showmobile) {
 		View.on("click", function (event) {
-		    //console.info("clicked", event);
+		    console.info("clicked", event);
 		    var x = event.x;
 		    var y = event.y;
 		    var bus = null;
@@ -236,6 +247,43 @@ window.ShowPowderMap = (function()
 		});
 	    }
 	});
+    }
+
+    /*
+     * In experiment mode (which implies no filtering), we poll the
+     * info to get the manifests. We slow poll to catch changes, but
+     * also export a global function call for when this page is
+     * embedded in the status page, cause it knows sooner when an
+     * experiment has changed.
+     */
+    function GetExperimentInfo(continuation)
+    {
+	var callback = function (json) {
+	    console.info("Manifests", json);
+		
+	    if (json.code) {
+		console.info("GetInstanceManifest failed: " + json.value);
+		return;
+	    }
+	    _.each(json.value, function (manifest, urn) {
+		var xmlDoc = $.parseXML(manifest);
+		var nodes  = {};
+
+		$(xmlDoc).find("node").each(function() {
+		    var client_id = $(this).attr("client_id");
+		    var vnode     = getEmulabNS(this, "vnode");
+
+		    if (vnode.length) {
+			var node_id = $(vnode).attr("name");
+			nodes[node_id] = client_id;
+		    }
+		});
+		Aggregates[urn] = nodes;
+	    });
+	    continuation();
+	};
+	sup.CallServerMethod(null, "status", "GetInstanceManifest",
+			     {"uuid" : Options.experiment}, callback);
     }
 
     /*
@@ -289,6 +337,41 @@ window.ShowPowderMap = (function()
 		}
 	    }
 	    filter();
+	});
+    }
+
+    /*
+     * Markthe current set of resources that are used by the experiment.
+     */
+    function MarkExperimentResources()
+    {
+	UnmarkFixedEndpoints();
+	UnmarkBaseStations();
+	
+	_.each(Layers["FE"].data, function (details, urn) {
+	    if (_.has(Aggregates, urn)) {
+		MarkFixedEndpoint(details.name, false);
+	    }
+	});
+
+	_.each(Layers["BS"].data, function (details) {
+	    var markit = 0;
+	    var urn = details.cluster_urn;
+
+	    if (details.radioinfo) {
+		_.each(details.radioinfo, function (info, index) {
+		    var node_id = info.node_id;
+		    
+		    if (_.has(Aggregates, urn) &&
+			_.has(Aggregates[urn], node_id)) {
+			markit = 1;
+		    }
+		});
+	    }
+	    // Experiment is using (part of) this base station.
+	    if (markit) {
+		MarkBaseStation(details.name, false);
+	    }
 	});
     }
 
@@ -452,7 +535,7 @@ window.ShowPowderMap = (function()
 		width: "24px",
 		height: "24px",
 	    };
-	    _.each(endpoints, function (details) {
+	    _.each(endpoints, function (details, urn) {
 		var mapurl = " https://maps.google.com/maps?q=" +
 		    details.latitude + "," + details.longitude;
 		
@@ -597,7 +680,7 @@ window.ShowPowderMap = (function()
 		    popupTemplate: popup,
 		});
 		layer.add(graphic);
-		
+
 		// Add label text below the icon
 		var textGraphic = new Graphic({
 		    geometry: {
@@ -620,8 +703,8 @@ window.ShowPowderMap = (function()
 		layer.add(textGraphic);
 	    });
 	};
-    	sup.CallServerMethod(null, "map-support", "GetFixedEndpoints",
-			     null, callback);
+    	return sup.CallServerMethod(null, "map-support", "GetFixedEndpoints",
+				    null, callback);
     }
 
     /*
@@ -851,6 +934,10 @@ window.ShowPowderMap = (function()
 		height: "24px",
 	    };
 	    _.each(baseStations, function (details) {
+		// For specific experiment marking.
+		var markit = 0;
+		var urn = details.cluster_urn;
+		
 		var point = {
 		    type: "point", // autocasts as new Point()
 		    latitude: details.latitude,
@@ -1003,8 +1090,8 @@ window.ShowPowderMap = (function()
 		layer.add(textGraphic);
 	    });
 	};
-	sup.CallServerMethod(null, "map-support", "GetBaseStations",
-			     null, callback);
+	return sup.CallServerMethod(null, "map-support", "GetBaseStations",
+				    null, callback);
     }
     /*
      * Mark a BS on the filter layer.
@@ -1132,36 +1219,54 @@ window.ShowPowderMap = (function()
     {
 	console.info("SetupRoutes", data);
 
-	// Grab current bus info.
-	sup.CallServerMethod(null, "map-support", "GetMobileEndpoints",
-			     null, function (json) {
-				 //console.info(json);
-				 if (json.code) {
-				     console.info("Could not get mobile " +
-						  "endpoints " + json.value);
-				 }
-				 OurBuses = json.value;
-			     });
+	var callback = function (json) {
+	    console.info(json);
+	    if (json.code) {
+		console.info("Could not get mobile endpoints " + json.value);
+	    }
+	    OurBuses = json.value.buses;
+	    var routes = json.value.routes;
 	
+	    // Grab the routes we care about and draw the paths.
+	    _.each(data, function(route) {
+		var routeID = route.RouteID;
 
-	// Grab the routes we care about and draw the paths.
-	_.each(data, function(route) {
-	    var routeID = route.RouteID;
-	    
-	    if (_.has(routeList, routeID)) {
+		// Not a route we care about.
+		if (!_.has(routes, routeID)) {
+		    return;
+		}
+		// In experiment mode, show only the routes used.
+		if (_.has(Options, "experiment") &&
+		    routes[routeID].experiment != Options.experiment) {
+		    return;
+		}
 		routeList[routeID] = {
-		    "data"  : route,
-		    "path"  : polylineDecode(route.EncodedPolyline),
-		    "layer" : null,
-		    "buses" : {},
+		    "data"       : route,
+		    "path"       : polylineDecode(route.EncodedPolyline),
+		    "layer"      : null,
+		    "buses"      : {},
+		    "experiment" : routes[routeID].experiment,
 		};
 		DrawRoute(routeID);
-	    }
-	});
-	PollLocationData();
-	console.info("view", View);
-	console.info("map", Map);
-	
+
+		// Show all routes used by an experiment, otherwise
+		// I like the Red route.
+		if (_.has(Options, "experiment")) {
+		    ShowRoute(routeID);
+		}
+		else if (routeID == 68) {
+		    ShowRoute(routeID);
+		}
+	    });
+	    console.info("routelist", routeList);
+	    console.info("view", View);
+	    console.info("map", Map);
+	    PollLocationData();
+	    
+	};
+	// Grab current bus info.
+	return sup.CallServerMethod(null, "map-support", "GetMobileEndpoints",
+				    null, callback);
     }
     function GetRouteData(handler)
     {
@@ -1200,11 +1305,6 @@ window.ShowPowderMap = (function()
 	layer.add(graphic);
 	Map.add(layer);
 	routeList[routeID].layer = layer;
-
-	// start with Red showing.
-	if (routeID == 68) {
-	    ShowRoute(routeID);
-	}
     }
     function ShowRoute(routeID)
     {
@@ -1270,7 +1370,7 @@ window.ShowPowderMap = (function()
 	if (OurBuses && _.has(OurBuses, busname)) {
 	    markerSymbol["outline"] = {
 		// autocasts as new SimpleLineSymbol()
-		color: "black",
+		color: "green",
 		width: 3,
             };
 	}
@@ -1460,12 +1560,46 @@ window.ShowPowderMap = (function()
 	return coordinates;
     }
 
+    // Helper for Emulab Namespace
+    function getEmulabNS(item, tag)
+    {	
+	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+	
+	return item.getElementsByTagNameNS(EMULAB_NS, tag);
+    }
+
     return function(id, options)
     {
 	Container = $(id).get(0);
 	Options   = options;
-	
-	DrawBaseMap();
+
+	console.info("options", Options);
+
+	if (_.has(Options, "experiment")) {
+	    GetExperimentInfo(function () {
+		DrawBaseMap();
+
+		// Periodic poll to refresh things.
+		setInterval(function () {
+		    if (!Loaded) {
+			return;
+		    }
+		    GetExperimentInfo(MarkExperimentResources);
+		}, 120000);
+		
+		// And this is a hook for the status page when inside
+		// an iframe on that page, to trigger an update.
+		window.PowderMapUpdate = function () {
+		    if (!Loaded) {
+			return;
+		    }
+		    GetExperimentInfo(MarkExperimentResources);
+		};
+	    });
+	}
+	else {
+	    DrawBaseMap();
+	}
     }
 })()
 });

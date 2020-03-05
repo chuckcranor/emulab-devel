@@ -181,7 +181,7 @@ function Do_GetMobileEndpoints()
         DBQueryFatal("select * from apt_mobile_aggregates as a ".
                      "left join apt_mobile_buses as b on b.urn=a.urn ".
                      "where b.busid!='6969' and b.busid!='4209' and ".
-                     "      b.busid!='6996'");
+                     "      b.busid!='6996' and b.busid!='6970'");
     if (!mysql_num_rows($query_result)) {
         SPITAJAX_RESPONSE(null);
         return 0;
@@ -205,7 +205,29 @@ function Do_GetMobileEndpoints()
         );
         $buses[$row["busid"]] = $blob;
     }
-    SPITAJAX_RESPONSE($buses);
+
+    #
+    # Routes we care about. For convenience lets include the experiment
+    # uuid holding the route, for the experiment view.
+    #
+    $routes = array();
+    
+    $query_result =
+        DBQueryFatal("select r.*,ir.uuid from apt_mobile_bus_routes as r ".
+                     "left join apt_instance_bus_routes as ir on ".
+                     "     ir.routeid=r.routeid ");
+    while ($row = mysql_fetch_array($query_result)) {
+        $blob = array(
+            "routeid"       => $row["routeid"],
+            "description"   => $row["description"],
+            "experiment"    => $row["uuid"],
+        );
+        $routes[$row["routeid"]] = $blob;
+    }
+    $result = array("buses"  => $buses,
+                    "routes" => $routes);
+    
+    SPITAJAX_RESPONSE($result);
 }
 
 
