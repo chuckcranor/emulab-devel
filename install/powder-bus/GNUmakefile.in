@@ -27,7 +27,7 @@ SUBDIR		= install/powder-bus
 
 include $(OBJDIR)/Makeconf
 
-TARGETS		= dhcpd.conf.frag.one
+TARGETS		= dhcpd.conf.frag.one batterymon
 
 #
 # Force dependencies on the scripts so that they will be rerun through

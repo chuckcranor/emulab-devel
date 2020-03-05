@@ -71,7 +71,8 @@ my $BOSSNODE   = "@BOSSNODE@";
 my $LOGFILE    = "$TB/log/batterymon.log";
 
 use lib "@prefix@/lib";
-use libdb;
+use emdb;
+use emdbi;
 use power_powduino;
 use libtestbed;
 
@@ -93,8 +94,8 @@ if (defined($options{"d"})) {
 if (defined($options{"v"})) {
     $verbose = 1;
 }
-die("Only admins are allowed to query status\n")
-    if ($UID != 0 && !TBAdmin($UID));
+die("Only root please\n")
+    if ($UID != 0);
 
 my $childpid = fork();
 if ($childpid) {
@@ -150,6 +151,15 @@ if ($pin1 !~ /^\d+$/ || $pin1 < 0 || $pin1 > 1100) {
 my $voltage = PinConvert($pin1);
 if ($verbose) {
     logit("Pin0:$pin0, Pin1:$pin1, Voltage:$voltage");
+}
+if (emdbi::DBExists("battery_monitor")) {
+    my $DBNUM = emdbi::NewTBDBHandle("battery_monitor");
+    my $onbattery = ($pin0 < $PIN0_THRESHOLD ? 1 : 0);
+
+    emdbi::DBQueryWarnN($DBNUM,
+			"insert into battery_monitor set ".
+			"  stamp=now(), onbattery=$onbattery, ".
+			"  voltage='$voltage', pinval='$pin1'");
 }
 if ($pin0 < $PIN0_THRESHOLD) {
     logit("Running on battery: $voltage ($pin1)");
