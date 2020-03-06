@@ -32,7 +32,9 @@
 	    </div>
 	    <div class="form-group">
 	      <input name="email" value="<%- formfields.email %>"
-		     readonly
+		     <% if (window.ISADMIN == 0) { %>
+		       readonly
+		     <% } %>
 		     class="form-control format-me"
 		     data-key="email"
 		     data-label="Email"

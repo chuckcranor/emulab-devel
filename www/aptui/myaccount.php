@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -57,6 +57,10 @@ if ($target_user->uid() != $this_user->uid() && !ISADMIN()) {
     SPITUSERERROR("Not enough permission");
     return;
 }
+$isadmin = (ISADMIN() ? 1 : 0);
+if (!isset($addrequired)) {
+    $addrequired = 0;
+}
 
 # We use a session. in case we need to do verification
 session_start();
@@ -96,6 +100,7 @@ if ($referrer) {
     echo "    window.REFERRER = '$referrer';\n";
 }
 echo "    window.ADDREQUIRED = $addrequired;\n";
+echo "    window.ISADMIN     = $isadmin;\n";
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
