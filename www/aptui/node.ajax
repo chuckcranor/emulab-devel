@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -704,7 +704,9 @@ function Do_GetRFViolations()
     
     # Guest users not allowed to see data if not reserved.
     if (!$this_user && !$experiment) {
-	SPITAJAX_ERROR(-1, "Not enough permission for guest user");
+	SPITAJAX_ERROR(-1, "Not enough permission for guest users to see ".
+                       "RF violations since $node_id is not allocated to ".
+                       "an experiment.");
         return;
     }
     # Mere (guest) users see only as far back as the current experiment start.
