@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -238,6 +238,14 @@ function Do_Update()
     $target_uid = $target_user->uid();
     $args   = array();
     $errors = array();
+
+    # Temporary
+    if ($formfields["email"] != $target_user->email() && !ISADMIN()) {
+        $errors = array();
+        $errors["email"] = "Not allowed to change email address";
+	SPITAJAX_ERROR(2, $errors);
+        return -1;
+    }
 
     #
     # If the info has not changed, do not send it through, the backend
