@@ -288,6 +288,20 @@ function Do_VerifySpeaksfor()
     }
 
     #
+    # Yuck.
+    #
+    if ($info["email"] == "" ||
+        preg_match("/impsec\.net$/", $info["email"]) ||
+        preg_match("/ril\.com$/", $info["email"]) ||
+        preg_match("/gavilan\.edu$/", $info["email"])) {
+	TBERROR("Warning: Geni login attempt with enail: " .
+                $info["email"] . "\n", 0);
+	SPITAJAX_ERROR(-1, "Not permitted");
+	session_destroy();
+	return;
+    }
+
+    #
     # Find the user and log them in, returning the cookies to the caller.
     # If the user is actually a user with a real local account, we use
     # that account, we do not want to create a new user.

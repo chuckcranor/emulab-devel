@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018, 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -940,6 +940,15 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 	$usr_email   = $user->email();
         $ga_userid   = $user->ga_userid();
         $lastlogin   = $user->weblogin_last();
+
+        #
+        # Yuck.
+        #
+        if (preg_match("/impsec\.net$/", $usr_email) ||
+            preg_match("/ril\.com$/", $usr_email) ||
+            preg_match("/gavilan\.edu$/", $usr_email)) {
+            break;
+        }
 
 	# Check for frozen accounts. We do not update the IP record when
 	# an account is frozen.

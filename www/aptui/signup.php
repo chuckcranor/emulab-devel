@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -282,6 +282,11 @@ if (!$this_user || $promoting) {
     }
     elseif (! TBvalid_email($formfields["email"])) {
 	$errors["email"] = TBFieldErrorString();
+    }
+    elseif (preg_match("/impsec\.net$/", $formfields["email"]) ||
+            preg_match("/ril\.com$/", $formfields["email"]) ||
+            preg_match("/gavilan\.edu$/", $formfields["email"])) {
+        $errors["email"] = "Not permitted";
     }
     elseif (!$promoting &&
             User::LookupByEmail($formfields["email"])) {
