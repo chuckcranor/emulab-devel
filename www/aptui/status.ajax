@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -103,6 +103,7 @@ function Do_GetInstanceStatus()
     $blob["paniced"] = $instance->paniced() ? 1 : 0;
     $blob["started"] = DateStringGMT($instance->started());
     $blob["sliverstatus"] = array();
+    $prestageStatus = array();
 
     if ($instance->logfileid()) {
         $blob["logfile_url"] =
@@ -113,48 +114,73 @@ function Do_GetInstanceStatus()
     $haveopenstack = $instance->isopenstack() ? 1 : 0;
 
     foreach ($instance->slivers() as $sliver) {
-        $sliverblob = array("status"  => $sliver->status(),
-                            "offline" => false);
-        #
-        # See if the aggregate is offline.
-        #
-        $aggregate = Aggregate::Lookup($sliver->aggregate_urn());
-        if ($aggregate && $aggregate->status() == "down") {
-            $sliverblob["offline"] = true;
-        }
-        if (!$sliver->manifest()) {
-            $sliverblob["havemanifest"] = 0;
-        }
-        else {
-            $sliverblob["havemanifest"] = 1;
-            $statusblob = array();
+        $sliverblob =
+            array("aggregate_urn"   => $sliver->aggregate_urn(),
+                  "status"          => $sliver->status(),
+                  "deferred"        => $sliver->deferred(),
+                  "havemanifest"    => 0,
+                  "offline"         => false);
 
-            foreach ($sliver->StatusArray() as $status) {
-                if (isset($status["sliver_data"])) {
-                    $statusblob[$status["client_id"]]
-                        = $status["sliver_details"];
+        if ($sliver->deferred()) {
+            #
+            # See if the aggregate is offline.
+            #
+            $aggregate = Aggregate::Lookup($sliver->aggregate_urn());
+            if ($aggregate && $aggregate->status() == "down") {
+                $sliverblob["offline"] = true;
+            }
+            $sliverblob["retry_count"] = $sliver->retry_count();
+            $sliverblob["last_retry"]  = DateStringGMT($sliver->last_retry());
+            $sliverblob["deferred_reason"] = $sliver->deferred_reason();
+            $sliverblob["deferred_cause"]  = null;
+
+            #
+            # If we have a retry count, there is going to be an error
+            # associated with it in the webtask. Lets pull out that text
+            # and show it to the user so they have some idea of what is
+            # going on.
+            #
+            if ($sliver->retry_count()) {
+                $wtask = $sliver->WebTask();
+                if ($wtask && $wtask->TaskValue("output")) {
+                    $sliverblob["deferred_cause"] =
+                        htmlentities($wtask->TaskValue("output"));
                 }
             }
-            $sliverblob["details"] = $statusblob;
+        }
+        else {
+            if ($sliver->manifest()) {
+                $sliverblob["havemanifest"] = 1;
+                $statusblob = array();
+
+                foreach ($sliver->StatusArray() as $status) {
+                    if (isset($status["sliver_data"])) {
+                        $statusblob[$status["client_id"]]
+                            = $status["sliver_details"];
+                    }
+                }
+                $sliverblob["details"] = $statusblob;
+            }
         }
         if ($sliver->public_url()) {
             $sliverblob["url"] = $sliver->public_url();
         }
+        # Prestage info
+        if (($sliver->status() == "prestage" ||
+             $sliver->status() == "staging" ||
+             $sliver->status() == "staged") && $sliver->prestage_data()) {
+            $prestageStatus[$sliver->aggregate_urn()] =
+                json_decode($sliver->prestage_data(), true);            
+        }
         $blob["sliverstatus"][$sliver->aggregate_urn()] = $sliverblob;
     }
     $blob["haveopenstackstats"] = $haveopenstack;
-
-    # Prestaging status to display
-    $webtask = $instance->WebTask();
-    if ($webtask &&
-        ($instance->status() == "prestage" ||
-         $instance->status() == "staging" ||
-         $instance->status() == "staged")) {
-        $pstatus = $webtask->TaskValue("prestageStatus");
-        if ($pstatus) {
-            $blob["prestageStatus"] = $pstatus;
-        }
+    if (count($prestageStatus)) {
+        $blob["prestageStatus"] = $prestageStatus;
     }
+
+    $webtask = $instance->WebTask();
+    
     # Reflect errors back to the user.
     if ($webtask && $webtask->exited()) {
         $blob["code"] = $webtask->exitcode();

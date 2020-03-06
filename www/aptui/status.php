@@ -324,7 +324,9 @@ foreach ($aggregates as $aggregate) {
         array("weburl"       => $weburl,
               "name"         => $aggregate->name(),
               "nickname"     => $aggregate->nickname(),
-              "abbreviation" => $aggregate->abbreviation());
+              "abbreviation" => $aggregate->abbreviation(),
+              "ismobile"     => $aggregate->ismobile(),
+              "isFE"         => $aggregate->isFE());
 }
 
 echo "<script type='text/plain' id='amlist-json'>\n";

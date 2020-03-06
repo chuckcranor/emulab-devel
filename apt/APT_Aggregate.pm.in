@@ -156,6 +156,7 @@ AUTOLOAD {
     carp("No such slot '$name' field in class $type");
     return undef;
 }
+
 sub Typeinfo($;$)
 {
     my ($self, $type) = @_;
@@ -936,15 +937,17 @@ sub UpdateLocation($$)
 #
 # Mark as pinged.
 #
-sub Ping($)
+sub Ping($$$)
 {
-    my ($self) = @_;
-    my $safe_urn  = DBQuoteSpecial($self->urn());
+    my ($self, $bossalive, $controlalive) = @_;
+    my $safe_urn = DBQuoteSpecial($self->urn());
 
-    DBQueryWarn("update apt_mobile_buses set ".
-		"  last_ping=now() ".
-		"where urn=$safe_urn")
-	or return -1;
+    if ($bossalive) {
+	DBQueryWarn("update apt_mobile_buses set ".
+		    "  last_ping=now() ".
+		    "where urn=$safe_urn")
+	    or return -1;
+    }
 
     return 0;
 }

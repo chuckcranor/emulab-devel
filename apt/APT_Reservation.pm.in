@@ -1945,13 +1945,13 @@ sub MaxExtension($)
 	# Look for any overlap.
 	#
 	foreach my $ref (@$routes) {
-	    my $routename  = $ref->{'routename'};
+	    my $routename  = $ref->{'name'};
 
 	    foreach my $existing ($resgroup->RouteReservationList()) {
 		my $res_name  = $existing->routename();
 
 		# If this reservation is not the route, skip it.
-		if ($res_name != $routename) {
+		if ($res_name ne $routename) {
 		    next;
 		}
 		# The end of this reservation is an upper bound on how

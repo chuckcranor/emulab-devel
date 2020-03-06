@@ -491,12 +491,9 @@ $(function ()
 		ProgressBarUpdate();
 		status_message = "Your experiment is scheduled to start later";
 	    }
-	    else if (instanceStatus == 'prestage' ||
-		     instanceStatus == 'staging' ||
-		     instanceStatus == 'staged') {
-		// We label this as provisioning, but change the message
-		// if we have to copy images.
-		status_html = "provisioning";
+	    else if (instanceStatus == 'prestaging') {
+		status_html = "prestaging";
+		status_message = "Copying images to target clusters";
 		ProgressBarUpdate();
 	    }
 	    else if (instanceStatus == 'provisioning') {
@@ -641,9 +638,6 @@ $(function ()
 	 */
 	if (_.has(json.value, "prestageStatus")) {
 	    ShowPrestageInfo(json.value.prestageStatus);
-	    status_message = "Copying images to target clusters " +
-		"before starting experiment";
-	    status_html = "prestaging";
 	}
 	else {
 	    HidePrestageInfo();
@@ -719,12 +713,8 @@ $(function ()
 	        destroy = 0;
   	        break;
 
-	    case 'staging':
-	    case 'prestage':
-	    case 'staged':
 	    case 'provisioned':
 	    case 'scheduled':
-	    case 'deferred':
 	    case 'pending':
 	        refresh = reloadtopo = extend = snapshot = destroy = 0;
   	        terminate = 1;
@@ -1021,8 +1011,8 @@ $(function ()
 	$.each(statusblob , function(urn, iblob) {
 	    // Will not have node details until manifest is ready.
 	    if (!_.has(iblob, "details")) {
-		if (iblob.status == "deferred") {
-		    deferAggregate(urn);
+		if (iblob.deferred != 0) {
+		    deferAggregate(iblob);
 		}
 		return;
 	    }
@@ -1240,22 +1230,35 @@ $(function ()
 	}
     }
 
-    function deferAggregate(urn)
+    function deferAggregate(sliver)
     {
+	var urn    = sliver.aggregate_urn;
+	var reason = sliver.deferred_reason;
+	var cause  = sliver.deferred_cause;
+	    
 	if (!_.has(jacksSites, urn)) {
 	    // Manifest not processed yet.
 	    return;
 	}
 	$.each(jacksSites[urn], function(node_id, jacksID) {
+	    var html;
+	    
 	    //console.info("deferAggregate: ", urn, node_id, jacksID);
 	    $('#' + jacksID + ' .node .nodebox')
-		.css("fill", "blue");
+		.css("fill", "#ff9248");
 
-	    var html =
-		"This node is currently unavailable and cannot be added " +
-		"to your experiment. We will continue trying to contact " +
-		"this node.";
-
+	    if (reason) {
+		html = reason;
+	    }
+	    else {
+		html =
+		    "This node is currently unavailable and cannot be added " +
+		    "to your experiment. We will continue trying to contact " +
+		    "this node.";
+	    }
+	    if (cause) {
+		html = html + "<br><pre>" + cause + "</pre>";
+	    }
 	    UpdateNodePopover(node_id, jacksID, html);
 	});
     }
@@ -1322,8 +1325,7 @@ $(function ()
     {
 	if (_.has(blob, "sliverstatus")) {
 	    for (var urn in blob.sliverstatus) {
-		var status = blob.sliverstatus[urn].status;
-		if (status == "deferred") {
+		if (blob.sliverstatus[urn].deferred != 0) {
 		    return 1;
 		}
 	    }
@@ -1704,6 +1706,8 @@ $(function ()
     //
     function ActionHandler(action, clientList)
     {
+	console.info(action,clientList);
+	
 	//
 	// Do not show in the terminating or terminated state.
 	//
@@ -1809,6 +1813,9 @@ $(function ()
     {
 	//console.info("ShowTopo", changingtopo, statusblob);
 
+	// For Powder map redraw after topology change.
+	var redrawpowdermap = false;
+
 	//
 	// Maybe this should come from rspec? Anyway, we might have
 	// multiple manifests, but only need to do this once, on any
@@ -1839,8 +1846,7 @@ $(function ()
 			    text = text.replace(regex, host);
 			});
 		    }
-		    // Stick the text in
-		    // Stick the text in
+		    // Stick the text in. 
 		    try {
 			$('#instructions_text').html(marked(text));
 		    }
@@ -2127,6 +2133,7 @@ $(function ()
 	    // Need to redo the lists.
 	    clientid2nodeid = {};
 	    imageablenodes  = {};
+	    redrawpowdermap = true;
 	}
 	/*
 	 * If we have all the manifests then nothing to do.
@@ -2166,6 +2173,22 @@ $(function ()
 	    // Update the snapshot modal with new nodes.
 	    UpdateSnapshotModal();
 
+	    if (window.ISPOWDER) {
+		if (redrawpowdermap) {
+		    UpdatePowderMap()
+		    return;
+		}
+		var showmap = true;
+		
+		$.each(statusblob, function(urn) {
+		    if (!_.has(manifests, urn)) {
+			showmap = false;
+		    }
+		});
+		if (showmap) {
+		    ShowPowderMapTab();
+		}
+	    }
 	    // Signal GetStatus() looper that we are done, 
 	    donefunc();
 	};
@@ -2259,7 +2282,6 @@ $(function ()
 		else if (changingtopo) {
 		    // When we get first new manifest, clear the viewer palette.
 		    ClearViewer(manifest);
-		    changingtopo = false;
 		}
 		else {
 		    AddToViewer(manifest);
@@ -2268,6 +2290,10 @@ $(function ()
 	    else {
 		$('#quicktabs_ul a[href="#listview"]').tab('show');
 		ShowManifest(manifest);
+	    }
+	    // Clear changingtopo state on first new manifest.
+	    if (changingtopo) {
+		changingtopo = false;
 	    }
 
 	    /*
@@ -3212,6 +3238,42 @@ $(function ()
 	xmlthing.done(callback);
     }
 
+    //
+    // Show the powder map in a tab, inside an iframe.
+    //
+    function ShowPowderMapTab()
+    {
+	// Do nothing if already visible.
+	if (!$('#quicktabs_content #powder-map').hasClass("hidden")) {
+	    return;
+	}
+	
+	// Show the tab.
+	$('#quicktabs_ul a[href="#powder-map"]')
+	    .parent().removeClass("hidden");
+	$('#quicktabs_content #powder-map').removeClass("hidden");
+
+	DrawPowderMapTab();
+    }
+    function DrawPowderMapTab()
+    {
+	// Create the powder map iframe inside the tab
+	var iwidth  = "100%";
+	var iheight = 850;
+	var url     = "powder-map.php?embedded=1&experiment=" + uuid;
+		
+	var html = '<iframe id="powder-map_iframe" ' +
+	    'width=' + iwidth + ' ' +
+	    'height=' + iheight + ' ' +
+	    'src=\'' + url + '\'>';
+	    
+	$('#powder-map .powder-mapview').html(html);
+    }
+    function UpdatePowderMap()
+    {
+	$('#powder-map_iframe')[0].contentWindow.PowderMapUpdate();
+    }
+
     var jacksInput;
     var jacksOutput;
     var jacksRspecs;
@@ -3612,14 +3674,11 @@ $(function ()
 	//
 	var spinwidth = null;
 	
-	if (instanceStatus == "staging" ||
-	    instanceStatus == "prestage" ||
-	    instanceStatus == "staged") {
-	    spinwidth = "15";
+	if (instanceStatus == "created") {
+	    spinwidth = "25";
 	}
-	else if (instanceStatus == "created" ||
-	    instanceStatus == "provisioning" ||
-	    instanceStatus == "stitching") {
+	else if (instanceStatus == "provisioning" ||
+		 instanceStatus == "stitching") {
 	    spinwidth = "33";
 	}
 	else if (instanceStatus == "provisioned") {

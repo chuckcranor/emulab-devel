@@ -176,6 +176,11 @@ case "$1" in
 			@prefix@/sbin/aptresgroup_daemon
 		fi
 
+		if [ $MAINSITE == "1" -a -x @prefix@/sbin/aptbus_monitor ]; then
+			echo -n " aptbus_monitor"
+			@prefix@/sbin/aptbus_monitor
+		fi
+
 		if [ -x @prefix@/sbin/aptimage_daemon ]; then
 			echo -n " aptimage_daemon"
 			@prefix@/sbin/aptimage_daemon
@@ -343,6 +348,9 @@ case "$1" in
 		fi
 		if [ -r /var/run/aptresgroup_daemon.pid ]; then
 			kill `cat /var/run/aptresgroup_daemon.pid`
+		fi
+		if [ -r /var/run/aptbus_monitor.pid ]; then
+			kill `cat /var/run/aptbus_monitor.pid`
 		fi
 		if [ -r /var/run/aptimage_daemon.pid ]; then
 			kill `cat /var/run/aptimage_daemon.pid`

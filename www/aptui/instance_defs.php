@@ -1084,6 +1084,11 @@ class InstanceSliver
     function status()	    { return $this->field('status'); }
     function public_url()   { return $this->field('public_url'); }
     function webtask_id()   { return $this->field('webtask_id'); }
+    function prestage_data(){ return $this->field('prestage_data'); }
+    function deferred()     { return $this->field('deferred'); }
+    function deferred_reason(){ return $this->field('deferred_reason'); }
+    function last_retry()   { return $this->field('last_retry'); }
+    function retry_count()  { return $this->field('retry_count'); }
     function manifest()	    { return $this->field('manifest'); }
     function physnode_count() { return $this->field('physnode_count'); }
     function virtnode_count() { return $this->field('virtnode_count'); }
@@ -1167,6 +1172,14 @@ class InstanceSliver
             $result[] = $row;
         }
         return $result;
+    }
+
+    # Grab the webtask. 
+    function WebTask() {
+        if ($this->webtask_id()) {
+            return WebTask::Lookup($this->webtask_id());
+        }
+        return null;
     }
 }
 

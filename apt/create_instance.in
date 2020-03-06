@@ -454,17 +454,18 @@ if ($tmp) {
     ($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
 }
 #
+# Powder; see if there are routes; we will bind the nodes later.
+#
+my $routes;
+$tmp = APT_Profile::GetRoutes($rspecstr, \$routes, \$errmsg);
+if ($tmp) {
+    ($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
+}
+
+#
 # Yep, this can happen when users do not put any nodes in their rspec.
 #
 if (!@aggregate_urns) {
-    #
-    # Powder; see if there are routes; we will bind the nodes later.
-    #
-    my $routes;
-    $tmp = APT_Profile::GetRoutes($rspecstr, \$routes, \$errmsg);
-    if ($tmp) {
-	($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
-    }
     if (!@$routes) {
 	UserError("There are no nodes in your experiment, syntax error?");
     }
@@ -1064,22 +1065,19 @@ print STDERR "$rspecstr\n";
 #
 # Check to see if any of the aggregates need a prestage check, if so
 # set the status to "prestage" to flag create_slivers to do that first.
-# We will catch the start_at deferment later after we are done with
-# precheck/prestage.
 #
 if (@prestage) {
     foreach my $agg (@prestage) {
 	$agg->SetStatus("prestage");
     }
-    $instance->Defer();
 }
-elsif (defined($start_at)) {
-    #
-    # If scheduled, then mark it and exit immediately.
-    #
-    $instance->SetAggregateStatus("deferred");
+#
+# If scheduled, then mark it and exit immediately. If there are also prestage
+# aggregates, the scheduler will pick it up as needed.
+#
+if (defined($start_at)) {
     $instance->SetStatus("scheduled");
-    $instance->Defer($start_at);
+    $instance->Schedule($start_at);
     $slice->UnLock();
     exit(0);
 }

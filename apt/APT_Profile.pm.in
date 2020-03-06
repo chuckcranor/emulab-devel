@@ -1939,15 +1939,6 @@ sub SetRepo($$$$$$)
 	$$perrmsg = "Could not parse rspec\n";
 	return -1;
     }
-    my $repo = GeniXML::FindNodesNS("n:repository", $rspec,
-				    $GeniXML::EMULAB_NS)->pop();
-    if (! defined($repo)) {
-	$repo = GeniXML::AddElement("repository", $rspec, $GeniXML::EMULAB_NS);
-	GeniXML::SetText("type", $repo, "git");
-	GeniXML::SetText("url", $repo, $repourl);
-	GeniXML::SetText("refspec", $repo, $reporef);
-	GeniXML::SetText("commit", $repo, $repohash);
-    }
     #
     # Temporary, lets just throw an execute service onto each node.
     # We put it before any existing execute services.
@@ -1977,24 +1968,67 @@ sub SetRepo($$$$$$)
 	my $sshurl = "git\@${host}:${org}${project}";
 	$command .= "&& git remote set-url --push origin '$sshurl'";
     }
-    
+
+    #
+    # Stash all the info at toplevel for later.
+    #
+    my $repo = GeniXML::FindNodesNS("n:repository", $rspec,
+				    $GeniXML::EMULAB_NS)->pop();
+    if (! defined($repo)) {
+	$repo = GeniXML::AddElement("repository", $rspec, $GeniXML::EMULAB_NS);
+	GeniXML::SetText("type", $repo, "git");
+	GeniXML::SetText("url", $repo, $repourl);
+	GeniXML::SetText("refspec", $repo, $reporef);
+	GeniXML::SetText("commit", $repo, $repohash);
+	GeniXML::SetText("command", $repo, $command);
+    }
+
     foreach my $node (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
-	my $service;
-	my $services = FindNodes("n:services", $node)->shift();
-	if (!defined($services)) {
-	    $services = GeniXML::AddElement("services", $node);
-	    $service  = GeniXML::AddElement("execute", $services);
-	}
-	else {
-	    $service = XML::LibXML::Element->new("execute");
-	    $services->insertBefore($service,
-				    FindNodes("n:execute", $services)->shift());
-	}
-	GeniXML::SetText("shell", $service, "/bin/sh");
-	GeniXML::SetText("command", $service, $command);
+	SetRepoOnNode($node, $command);
     }
     $$prspecstr = GeniXML::Serialize($rspec);
     return 0;
+}
+
+#
+# Set the repo command on a single node.
+#
+sub SetRepoOnNode($$)
+{
+    my ($node, $command) = @_;
+
+    my $service;
+    my $services = FindNodes("n:services", $node)->shift();
+    if (!defined($services)) {
+	$services = GeniXML::AddElement("services", $node);
+	$service  = GeniXML::AddElement("execute", $services);
+    }
+    else {
+	$service = XML::LibXML::Element->new("execute");
+	$services->insertBefore($service,
+				FindNodes("n:execute", $services)->shift());
+    }
+    GeniXML::SetText("shell", $service, "/bin/sh");
+    GeniXML::SetText("command", $service, $command);
+    return 0;
+}
+
+#
+# Get the repo command that we stashed into the rspec. Takes an XML object.
+#
+sub GetRepoCommand($)
+{
+    my ($rspec) = @_;
+
+    my $repo = GeniXML::FindNodesNS("n:repository", $rspec,
+				    $GeniXML::EMULAB_NS)->pop();
+    if (defined($repo)) {
+	my $command = GeniXML::GetText("command", $repo);
+	if ($command) {
+	    return $command;
+	}
+    }
+    return undef;
 }
 
 #
@@ -2564,9 +2598,9 @@ sub BindingsToParams($)
 # Return an rspec fragment for a node at an aggregate. The node id
 # is optional.
 #
-sub RSpecNodeFragment($$;$)
+sub RSpecNodeFragment($$$;$)
 {
-    my ($aggregate_urn, $client_id, $node_id) = @_;
+    my ($aggregate_urn, $client_id, $protonode, $node_id) = @_;
     my $aggregate_hrn = GeniHRN->new($aggregate_urn);
     my $component_id  = "";
 
@@ -2575,13 +2609,45 @@ sub RSpecNodeFragment($$;$)
 				    "node", $node_id);
 	$component_id = "component_id='$urn'";
     }
+    
     my $NODEFORMAT =
 	'<node xmlns="http://www.geni.net/resources/rspec/3" '.
 	'      client_id="%s" exclusive="true" component_manager_id="%s" %s>
-	   <sliver_type name="raw"/>
+	   <sliver_type name="raw"></sliver_type>
 	</node>';
 
-    return sprintf($NODEFORMAT, $client_id, $aggregate_hrn, $component_id);
+    my $xml  = sprintf($NODEFORMAT, $client_id, $aggregate_hrn, $component_id);
+    my $node = GeniXML::Parse($xml);
+    
+    return $node
+	if (!defined($protonode));
+
+    #
+    # Now update with stuff from the protonode.
+    #
+    # So that the following code works right.
+    $protonode->setNamespace("http://www.geni.net/resources/rspec/3");
+    print "$protonode\n";
+
+    my $diskimage = GeniXML::FindFirst("n:disk_image", $protonode);
+    if ($diskimage) {
+	my $urn = GetText("name", $diskimage);
+	if (defined($urn)) {
+	    GeniXML::SetDiskImage($node, $urn);
+	}
+    }
+    my $protoservices = GeniXML::FindNodes("n:services", $protonode);
+    if ($protoservices) {
+	my $services = GeniXML::AddElement("services", $node);
+
+	foreach my $service ($protoservices->get_nodelist()) {
+	    foreach my $current ($service->childNodes()) {
+		my $copy = $current->cloneNode(1);
+		$services->appendChild($copy);
+	    }
+	}
+    }
+    return $node;
 }
 
 ###################################################################

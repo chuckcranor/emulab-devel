@@ -178,7 +178,7 @@ $webtask->AutoStore(1);
 # not send email, since the user is looking at the web interface.
 #
 $sendemail = 1
-    if ($instance->status() ne "created");
+    if ($curStatus ne "created");
 
 #
 # Check frequency ranges (actually, checking that we have a reservation).
@@ -201,271 +201,27 @@ if ($instance->AddRouteNodes(\$errmsg)) {
 }
 
 #
-# Look to see if any aggregates are in prestage, If so, move the instance
-# to prestage.
-#
-foreach my $agg ($instance->AggregateList()) {
-    if ($agg->status() eq "prestage" || $agg->status() eq "staging") {
-	$instance->SetStatus("prestage");
-	last;
-    }
-}
-
-#
-# In prestage mode, we want to initiate the prestage on any images
-# that need to get pulled over. Since some of the clusters might not
-# be available for the initial prestage, we use the agg status to
-# determine which ones need to be initiated. We keep trying (via
-# defer) until all aggregates have been contacted.
-#
-while ($instance->status() eq "prestage" && !$instance->IsCanceled()) {
-    my $temp_webtask = WebTask->CreateAnonymous();
-    my $temp_taskid  = $temp_webtask->task_id();
-
-    system("$MANAGEINSTANCE -t $temp_taskid prestageimages $uuid prestage");
-    $temp_webtask->Refresh();
-    $instance->Refresh();
-
-    if ($? || !$temp_webtask->HasExited()) {
-	my $exitval = $? >> 8;
-
-	if ($exitval < 0 || !$temp_webtask->HasExited()) {
-	    $errmsg = "Internal error staging images";
-
-	    $webtask->output($errmsg);
-	    $webtask->Exited(GENIRESPONSE_ERROR);
-	    $instance->RecordError(GENIRESPONSE_ERROR, $errmsg);
-	    $instance->SetStatus("failed");
-	    $instance->ResolveDefer();
-	    $temp_webtask->Delete();
-	    $genislice->UnLock();
-	    exit(-1);
-	}
-	#
-	# Ignore most errors, we are going to try again later. But some
-	# really are bad and result in instance failure.
-	#
-	if ($temp_webtask->exitcode() == GENIRESPONSE_ERROR() ||
-	    $temp_webtask->exitcode() == GENIRESPONSE_SEARCHFAILED() ||
-	    $temp_webtask->exitcode() == GENIRESPONSE_BADARGS() ||
-	    $temp_webtask->exitcode() == GENIRESPONSE_RPCERROR() ||
-	    $temp_webtask->exitcode() == GENIRESPONSE_FORBIDDEN()) {
-	    $errmsg = $temp_webtask->output();
-	    
-	    $webtask->output($errmsg);
-	    $webtask->Exited($temp_webtask->exitcode());
-	    $instance->RecordError($temp_webtask->exitcode(), $errmsg);
-	    $instance->SetStatus("failed");
-	    $instance->ResolveDefer();
-	    $temp_webtask->Delete();
-	    $genislice->UnLock();
-	    exit(1);
-	}
-    }
-    my $results = $temp_webtask->value();
-    my $done = 1;
-    $temp_webtask->Delete();
-
-    print "prestageimages results\n";
-    print Dumper($results);
-
-    #
-    # Store prestaging info in the instance webtask so we can display 
-    # information about prestage progress in the web UI. But, we do not
-    # want to show an empty table or a table of images that are already
-    # there. So prune out uninteresting results while merging in new
-    # results as we are able to contact the aggregates (some might be
-    # offline).
-    #
-    my $current = $webtask->prestageStatus();
-    if (!defined($current)) {
-	$current = {};
-    }
-    foreach my $aggurn (keys(%{$results})) {
-	my $aggregate = $instance->AggregateHash()->{$aggurn};
-	my $images    = $results->{$aggurn}->{"images"};
-	my $status    = $results->{$aggurn}->{"status"};
-
-	#
-	# This test tells us if the initial prestage call has been made,
-	# or if we are now doing status calls for the aggregate. See below
-	# where we switch to "staging" after the prestage call is made.
-	#
-	if ($aggregate->status() eq "prestage") {
-	    #
-	    # We only care about images that are not ready, these are
-	    # the ones that go into the table. Skip images that start
-	    # out ready.
-	    #	    
-	    my $curimages = {};
-	
-	    foreach my $imgurn (keys(%{$images})) {
-		my $status = $images->{$imgurn}->{"status"};
-		if ($status ne "ready") {
-		    $curimages->{$imgurn} = $images->{$imgurn};
-		}
-	    }
-	    if (keys(%{$curimages})) {
-		$current->{$aggurn} = {};
-		$current->{$aggurn}->{"images"} = $curimages;
-		$current->{$aggurn}->{"status"} = $status;
-	    }
-	}
-	else {
-	    #
-	    # Now tracking status for this aggregate.
-	    #
-	    # Skip if the prestage phase check above did not find any
-	    # images to track.
-	    #
-	    next
-		if (!exists($current->{$aggurn}));
-
-	    my $curimages = $current->{$aggurn}->{'images'};
-	    foreach my $imgurn (keys(%{$images})) {
-		# Not tracking this image
-		next
-		    if (!exists($curimages->{$imgurn}));
-		
-		my $curimg      = $curimages->{$imgurn};
-		my $newstatus   = $images->{$imgurn}->{"status"};
-		my $newprogress = $images->{$imgurn}->{"progress"};
-		
-		$curimg->{"status"} = $newstatus;
-		# Do not overwrite a non-zero progress with a zero.
-		if ($newprogress) {
-		    $curimg->{"progress"} = $newprogress;
-		}
-		# Hmm, if ready we might not get the final size. Force it
-		# for the web UI.
-		if ($newstatus eq "ready") {
-		    $curimg->{"progress"} = $curimg->{"size"};
-		}
-	    }
-	}
-    }
-    # Only store if there is something to show the user.
-    if (keys(%{$current})) {
-	$webtask->prestageStatus($current);
-	print "prestageimages distilled for web ui\n";
-	print Dumper($current);
-    }
-
-    my $progress = 0;
-    
-    #
-    # Look at the results to see which aggregates are ready, staging,
-    # error.  We keep doing the prestage until all the aggregates report
-    # ready for all images. Then we can move on.
-    #
-    foreach my $agg ($instance->AggregateList()) {
-	if ($agg->status() eq "prestage") {
-	    my $result = $results->{$agg->aggregate_urn()}->{"status"};
-	    if ($result eq "ready" || $result eq "notready") {
-		# We did the prestage call at this aggregate successfully.
-		if ($result eq "ready") {
-		    $agg->SetStatus("staged");
-		}
-		else {
-		    $agg->SetStatus("staging");
-		    $done = 0;
-		}
-		$progress = 1;
-	    }
-	    else {
-		# An error; probably unable to contact the cluster.
-		$done = 0;
-	    }
-	}
-	elsif ($agg->status() eq "staging") {
-	    my $result = $results->{$agg->aggregate_urn()}->{"status"};
-	    if ($result eq "ready") {
-		$agg->SetStatus("staged");
-	    }
-	    else {
-		$done = 0;
-	    }
-	    if ($result ne "error") {
-		$progress = 1;
-	    }
-	}
-    }
-
-    last
-	if ($instance->IsCanceled());
-
-    #
-    # Need to keep trying on some clusters.
-    #
-    if (!$done) {
-	print "Still need to prestage at some aggregates.\n";
-	if ($progress || $curStatus eq "created") {
-	    # If making progress keep looping. We also keep looping if coming
-	    # from create_instance directly (status=created).
-	    sleep(10);
-	    next;
-	}
-	#
-	# If not making progress, then lets unlock and exit. The scheduler
-	# will start it up again in a little while. Return the instance
-	# to its previous status so the web interface does not sit in
-	# provisioning, which would be annoying since it would prevent the
-	# user from doing some things with other ready aggregates in the
-	# experiment.
-	#
-	print "No prestage progress made, deferring for a little while\n";
-	$instance->SetStatus($curStatus);
-	$instance->Defer();
-	$genislice->UnLock();
-	exit(0);
-    }
-
-    #
-    # No longer staging images, we can proceed unless scheduled
-    #
-    if (defined($instance->start_at())) {
-	my $start_at = str2time($instance->start_at());
-	if ($start_at > time()) {
-	    $instance->SetAggregateStatus("deferred");
-	    $instance->SetStatus("scheduled");
-	    # Clear the old defer since we are changing the type of deferment.
-	    $instance->ResolveDefer();
-	    $instance->Defer($instance->start_at());
-	    $genislice->UnLock();
-	    exit(0);
-	}
-    }
-    $instance->ResolveDefer();
-    $instance->SetStatus("staged");
-}
-
-#
-# If we were canceled, stop now and terminate.
-#
-if ($instance->IsCanceled()) {
-    $instance->ResolveDefer();
-    $genislice->UnLock();
-    print "Cancelation flag set, aborting and terminating ...\n";
-
-    #
-    # If someone gets the lock, this will fail. But the apt daemon will
-    # see the canceled flag too and fire off a termination. 
-    #
-    system("$MANAGEINSTANCE -t $webtask_id terminate $uuid");
-    exit(0);
-}
-
-#
-# Anything to do? See create_instance; Note that we skip anything
-# that is already being worked on.
+# Anything to do?
 #
 foreach my $agg ($instance->AggregateList()) {
     my $aptagg = $agg->GetAptAggregate();
-    
+
+    #
+    # Move anything that is in "staged" back to created, since that is next
+    # place to go. As a side effect, this will clear the prestage table in
+    # the web interface.
+    #
+    if ($agg->status() eq "staged") {
+	$agg->SetStatus("created");
+    }
+
+    #
+    # These are the states for aggs that need to fired off here. 
+    #
     next
 	if (! ($agg->status() eq "created" ||
-	       $agg->status() eq "staged" ||
-	       $agg->status() eq "deferred"));
+	       $agg->status() eq "prestage" ||
+	       $agg->status() eq "staging"));
 
     #
     # See if the aggregate is online, lets not go to a ton of trouble
@@ -475,7 +231,7 @@ foreach my $agg ($instance->AggregateList()) {
 	print STDERR "$errmsg\n";
 	#
 	# If the cluster is not deferrable, then its an error and the
-	# instance has failed.
+	# instance has failed. 
 	#
 	if (!$aptagg->deferrable()) {
 	    $instance->SetStatus("failed");
@@ -486,8 +242,11 @@ foreach my $agg ($instance->AggregateList()) {
 	    $genislice->UnLock();
 	    exit(1);
 	}
-	# Mark as deferred since we have to wait on it.
-	$agg->SetStatus("deferred");
+	#
+	# The scheduler is going to pick us up again later, since we will
+	# defer the instance (below);
+	#
+	$agg->Defer("Aggregate offline");
 	next;
     }
     push(@aggregate_list, $agg);
@@ -627,7 +386,7 @@ if (!($debug || $foreground)) {
     }
     AddAuditInfo("brand", $project->Brand());
 }
-    
+
 # Bind the process id.
 $webtask->SetProcessID($PID);
 
@@ -685,12 +444,27 @@ else {
 my @tmp = ();
 foreach my $aggobj (@aggregate_list) {
     push(@tmp, $aggobj)
-	if ($aggobj->status() ne "deferred");
+	if (! $aggobj->deferred());
 
 }
 if (!@tmp) {
     print STDERR "No progress made, ".
 	"all pending aggregates deferred till later\n";
+
+    #
+    # If no aggregates have been created, lets set the instance status
+    # to something that makes sense for the web interface.
+    #
+    if (scalar($instance->AggregateList()) ==
+	scalar($instance->DeferredAggregateList())) {
+	$instance->SetStatus("pending");
+    }
+    else {
+	# Back to where we were, most likely ready.
+	$instance->SetStatus($curStatus);
+    }
+    # This updates the record so we know when last retry was.
+    $instance->Defer();
     $genislice->UnLock();
     exit(0);
 }
@@ -838,8 +612,24 @@ else {
 	my $headers =
 	    "CC: " . $brand->OpsEmailAddress() . "\n" .
 	    "BCC: " . $brand->LogsEmailAddress();
+
+	#
+	# Mobile nodes get a different message.
+	#
+	my @buslist = ();
+	foreach my $agg (@aggregate_list) {
+	    my $aptagg = $agg->GetAptAggregate();
+	    
+	    if ($aptagg->ismobile()) {
+		push(@buslist, $aptagg);
+	    }
+	}
 	
-	if ($instance->start_at()) {
+	if ($instance->start_at() && $curStatus eq "created") {
+	    #
+	    # Send this email when we first start a scheduled experiment,
+	    # not when we are adding deferred aggregates later.
+	    #
 	    my $start_at = TBDateStringUTC($instance->start_at());
 	    
 	    $subject = "Scheduled experiment $pid/$eid is now running";
@@ -847,6 +637,34 @@ else {
 		"start at $start_at, is now running.";
 	    if ($instance->DeferredAggregateList()) {
 		$message .= "\n" .
+		    "But some resources are still unreachable, we will send\n".
+		    "email when those resources become available.";
+	    }
+	}
+	elsif (@buslist) {
+	    $subject = "Mobile endpoints in experiment $pid/$eid ".
+		"are now running";
+	    $message = 
+		"The following mobile endpoints have been incorporated\n".
+		"into your experiment and are now running:\n\n".
+		"\t" . join(",", map {"bus-" . $_->busid()} @buslist);
+	    
+	    if ($instance->DeferredAggregateList()) {
+		$message .= "\n\n" .
+		    "But some resources are still unreachable, we will send\n".
+		    "email when those resources become available.";
+	    }
+	}
+	elsif ($instance->DeferredAggregateList()) {
+	    $subject = "Resources in experiment $pid/$eid are now running";
+	    $message = 
+		"The following deferred resources have been incorporated\n".
+		"into your experiment and are now running:\n\n".
+		"\t" . join(",", map {$_->GetAptAggregate()->nickname()}
+			    $instance->DeferredAggregateList());
+	    
+	    if ($instance->DeferredAggregateList()) {
+		$message .= "\n\n" .
 		    "But some resources are still unreachable, we will send\n".
 		    "email when those resources become available.";
 	    }
@@ -890,6 +708,7 @@ sub CreateSliver($)
     my $webtask   = $aggobj->webtask();
     my $authority = $aggobj->GetGeniAuthority();
     my $status    = $aggobj->status();
+    my $aptagg    = $aggobj->GetAptAggregate();
     my $cmurl     = $authority->url();
     my $urn       = $authority->urn();
     my @dsetcreds = ();
@@ -897,6 +716,73 @@ sub CreateSliver($)
     my $manifest;
     $webtask->Refresh();
 
+    # Debugging
+    $cmurl = APT_Instance::devurl($cmurl);
+
+    #
+    # Look to see if in prestage or staging. We need complete image staging
+    # before we can proceed. We have the lock, so we tell manage_instance to
+    # operate without locking. 
+    #
+    if ($aggobj->status() eq "prestage" || $aggobj->status() eq "staging") {
+	my $temp_webtask = WebTask->CreateAnonymous();
+	my $temp_taskid  = $temp_webtask->task_id();
+	my $command = "$MANAGEINSTANCE -t $temp_taskid prestageimages ".
+	    "   $uuid -N -w prestage $urn";
+
+	print "Running: '$command'\n";
+	system($command);
+	$temp_webtask->Refresh();
+
+	if ($? || !$temp_webtask->HasExited()) {
+	    my $exitval = $? >> 8;
+
+	    if ($exitval < 0 || !$temp_webtask->HasExited()) {
+		my $errmsg = "Internal error staging images to the " .
+		    $aptagg->name() . " cluster";
+
+		$webtask->output($errmsg);
+		$webtask->Exited(GENIRESPONSE_ERROR);
+		$aggobj->SetStatus("failed");
+		$temp_webtask->Delete();
+		return -1;
+	    }
+	    #
+	    # Ignore most errors, we are going to try again later. But some
+	    # really are bad and result in instance failure.
+	    #
+	    if ($temp_webtask->exitcode() == GENIRESPONSE_ERROR() ||
+		$temp_webtask->exitcode() == GENIRESPONSE_SEARCHFAILED() ||
+		$temp_webtask->exitcode() == GENIRESPONSE_BADARGS() ||
+		$temp_webtask->exitcode() == GENIRESPONSE_RPCERROR() ||
+		$temp_webtask->exitcode() == GENIRESPONSE_FORBIDDEN()) {
+
+		my $errmsg = "Error staging images to the " .
+		    $aptagg->name() . " cluster: " . $temp_webtask->error();
+	    
+		$webtask->output($errmsg);
+		$webtask->Exited($temp_webtask->exitcode());
+		$aggobj->SetStatus("failed");
+		$temp_webtask->Delete();
+		return -1;
+	    }
+	}
+	$temp_webtask->Delete();
+	
+	#
+	# If prestaging has not finished, need to defer this one.
+	#
+	$aggobj->Refresh();
+	if ($aggobj->status() ne "staged") {
+	    #
+	    # Return a positive error code, CreateSlivers() will notice
+	    # it is still in prestage.
+	    #
+	    $webtask->output("Image prestaging has not completed");
+	    $webtask->Exited(GENIRESPONSE_SERVER_UNAVAILABLE());
+	    return 1;
+	}
+    }
     #
     # Clear any stored max extensions for the aggregate between the
     # provisioning and provisioned stages. This is a critical section,
@@ -919,9 +805,6 @@ sub CreateSliver($)
     
     # Critical section end.
     APT_Utility::ExtensionUnlock();
-
-    # Debugging
-    $cmurl = APT_Instance::devurl($cmurl);
 
     Genixmlrpc->SetTimeout(900);
 
@@ -1015,7 +898,7 @@ sub CreateSliver($)
 	    $webtask->output($response->error());
 	    $webtask->Exited($response->code());
 	    $aggobj->SetStatus("failed");
-	    
+
 	    if (defined($response->logurl())) {
 		$aggobj->SetPublicURL($response->logurl());
 	    }
@@ -1173,10 +1056,12 @@ sub CreateSlivers()
     # Remember any aggregates that need to be deferred till later.
     #
     my @deferred = ();
-    
+
     foreach my $aggobj (@aggregate_list) {
-	my $cluster    = $aggobj->GetAptAggregate()->name();
-	my $deferrable = $aggobj->GetAptAggregate()->deferrable();
+	my $aptagg     = $aggobj->GetAptAggregate();
+	my $cluster    = $aptagg->name();
+	my $deferrable = $aptagg->deferrable();
+	my $ismobile   = $aptagg->ismobile();
 	
 	#
 	# Have to refresh the sliver objects since they were updated in a fork.
@@ -1194,6 +1079,18 @@ sub CreateSlivers()
 
 	    if ($exitcode == GENIRESPONSE_SERVER_UNAVAILABLE && $deferrable) {
 		print STDERR "$cluster is offline; deferring till later\n";
+		$aggobj->Defer();
+		push(@deferred, $aggobj);
+		next;
+	    }
+	    if ($ismobile &&
+		($exitcode == GENIRESPONSE_NO_MAPPING() ||
+		 $exitcode == GENIRESPONSE_INSUFFICIENT_NODES()) &&
+		defined($aptagg->routename()) &&
+		$instance->CheckRouteReserved($aptagg->routename()) > 0) {
+		print STDERR "$cluster says node able to map experiment yet; ".
+		    "deferring till later\n";
+		$aggobj->Defer("Unable to map resources, deferring till later");
 		push(@deferred, $aggobj);
 		next;
 	    }
@@ -1221,6 +1118,11 @@ sub CreateSlivers()
 	    $instance->SetStatus("failed");
 	    return $code;
 	}
+	#
+	# Resolve the defer now that it is starting up. 
+	#
+	$aggobj->ResolveDefer()
+	    if ($aggobj->deferred());
     }
     #
     # No errors, but we have deferred aggregates. Need to schedule these
@@ -1228,9 +1130,9 @@ sub CreateSlivers()
     #
     if (@deferred) {
 	foreach my $aggobj (@deferred) {
-	    $aggobj->Defer();
+	    # Reset status back to created since we have to try again.
+	    $aggobj->SetStatus("created");
 	}
-	$instance->Defer();
     }
     return 0;
 }
