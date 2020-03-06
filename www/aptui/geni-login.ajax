@@ -291,7 +291,7 @@ function Do_VerifySpeaksfor()
     # Yuck.
     #
     if ($info["email"] == "" ||
-        preg_match("/impsec\.net$/", $info["email"]) ||
+        preg_match("/impscet\.net$/", $info["email"]) ||
         preg_match("/ril\.com$/", $info["email"]) ||
         preg_match("/gavilan\.edu$/", $info["email"])) {
 	TBERROR("Warning: Geni login attempt with enail: " .

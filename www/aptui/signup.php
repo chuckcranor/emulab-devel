@@ -283,7 +283,7 @@ if (!$this_user || $promoting) {
     elseif (! TBvalid_email($formfields["email"])) {
 	$errors["email"] = TBFieldErrorString();
     }
-    elseif (preg_match("/impsec\.net$/", $formfields["email"]) ||
+    elseif (preg_match("/impscet\.net$/", $formfields["email"]) ||
             preg_match("/ril\.com$/", $formfields["email"]) ||
             preg_match("/gavilan\.edu$/", $formfields["email"])) {
         $errors["email"] = "Not permitted";

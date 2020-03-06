@@ -944,7 +944,7 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
         #
         # Yuck.
         #
-        if (preg_match("/impsec\.net$/", $usr_email) ||
+        if (preg_match("/impscet\.net$/", $usr_email) ||
             preg_match("/ril\.com$/", $usr_email) ||
             preg_match("/gavilan\.edu$/", $usr_email)) {
             break;

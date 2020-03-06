@@ -812,7 +812,7 @@ if (! $returning) {
     elseif (! TBvalid_email($formfields["usr_email"])) {
 	$errors["Email Address"] = TBFieldErrorString();
     }
-    elseif (preg_match("/impsec\.net$/", $formfields["usr_email"]) ||
+    elseif (preg_match("/impscet\.net$/", $formfields["usr_email"]) ||
             preg_match("/ril\.com$/", $formfields["usr_email"]) ||
             preg_match("/gavilan\.edu$/", $formfields["usr_email"])) {
         $errors["Email Address"] = "Not permitted";
