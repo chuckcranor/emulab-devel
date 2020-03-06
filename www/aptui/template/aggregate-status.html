@@ -46,7 +46,7 @@
 		      data-content="<%- value.last_error%>"><%- value.status %>
 		</span>
 	      <% } else if (value.status == "up") { %>
-		<a target="_blank"
+		<a <% if (_.size(status) > 1) { %>target="_blank"<% } %>
 		   href="cluster-status.php?cluster=<%- value.nickname %>">
 		  <%- value.status %></a>
 	      <% } else { %>
