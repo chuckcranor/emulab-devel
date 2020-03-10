@@ -530,6 +530,12 @@ sub EnableIdleDetection($)
     my ($self) = @_;
     return $self->Mark("noidledetection", undef);
 }
+sub MarkNotified($)
+{
+    my ($self) = @_;
+    
+    return $self->Mark("notified", "now");
+}
 
 #
 # A group needs approval if any of the reservations need approval.

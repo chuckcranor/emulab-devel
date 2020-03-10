@@ -752,7 +752,7 @@ function Do_InfoOrWarn($warning = false)
         $method  = "cancel";
     }
     else {
-        $opts    = "";
+        $opts    = ($warning ? "-w " : "");
         $method  = "infowarn";
     }
     if (isset($ajax_args["message"]) && $ajax_args["message"] != "") {

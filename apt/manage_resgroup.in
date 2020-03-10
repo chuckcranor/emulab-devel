@@ -93,6 +93,7 @@ sub DoGroupReserve();
 sub DoRefresh();
 sub DoDelete();
 sub DoApprove();
+sub DoInfoOrWarn();
 sub DoCancel();
 sub DoIdleDetection();
 sub DoConvertReservationsToGroups();
@@ -143,6 +144,9 @@ elsif ($action eq "approve") {
 }
 elsif ($action eq "cancel") {
     DoCancel();
+}
+elsif ($action eq "infowarn") {
+    DoInfoOrWarn();
 }
 elsif ($action eq "idledetection") {
     DoIdleDetection();
@@ -943,7 +947,7 @@ sub DoGroupReserve()
 	    if ($resgroup->NeedsApproval()) {
 		my $this_uid   = $this_user->uid();
 		my $this_email = $this_user->email();
-		my $url        = $brand->wwwBase() . "/list-resgroups.php";
+		my $url        = $resgroup->WebURL();
     
 		$brand->SendEmail($brand->ReservationsEmailAddress(),
 			  "Pending reservation group request needs approval",
@@ -1837,7 +1841,7 @@ sub DoApprove()
 	my $creator    = $resgroup->GetCreator();
 	my $email      = $creator->email();
 	my $pid        = $project->pid();
-	my $url        = $brand->wwwBase() . "/list-resgroups.php";
+	my $url        = $resgroup->WebURL();
 
 	$brand->SendEmail($email,
 			  "Pending reservation group request has been approved",
@@ -1866,6 +1870,76 @@ sub DoApprove()
 	$webtask->Exited(-1);
     }
     exit(-1);
+}
+
+#
+# Ask for info or warn user.
+#
+sub DoInfoOrWarn()
+{
+    my $optlist = "N:w";
+    my $warning = 0;
+    my $reason;
+
+    if (!$this_user->IsAdmin()) {
+	fatal("No permission to send info/warn email")
+    }    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"N"})) {
+	fatal("Cannot read reason file")
+	    if (! -e $options{"N"});
+	$reason = emutil::ReadFile($options{"N"});
+    }
+    if (defined($options{"w"})) {
+	$warning = 1;
+    }
+    elsif (!defined($reason)) {
+	fatal("Must provide a message for the user");
+    }
+    usage()
+	if (@ARGV != 1);
+    my $uuid = shift(@ARGV);
+
+    my $resgroup = APT_Reservation::Group->Lookup($uuid);
+    if (!defined($resgroup)) {
+	fatal("No such reservation group");
+    }
+    my $brand      = $resgroup->Brand();
+    my $creator    = $resgroup->GetCreator();
+    my $email      = $creator->email();
+    my $pid        = $resgroup->pid();
+    my $url        = $resgroup->WebURL();
+    my $subject;
+    my $message;
+
+    if ($warning) {
+        $subject = "Unused Reservation Warning";
+	$message =
+	    "Your reservation group in project $pid is currently either\n".
+            "underused or unused. Tying up resources in this manner means\n".
+            "other users may not be able to get their work done.\n\n".
+	    (defined($reason) ? "$reason\n\n" : "").
+	    "If your reservation is still underused in 24 hours, it\n".
+	    "will be canceled. You may also reduce/shorten and/or split the\n".
+	    "reservation so that you are not wasting resources.\n";
+    }
+    else {
+        $subject = "Reservation Info Request";
+	$message = "We need information about your reservation group ".
+	    "in project $pid.\n\n" . $reason;
+    }
+    $brand->SendEmail($email, $subject,
+		      $message . "\n\n" .
+		      $resgroup->InfoString() .
+		      "See: $url", $brand->ReservationsEmailAddress());
+  done:
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    exit(0);
 }
 
 #
@@ -1977,7 +2051,7 @@ sub DoCancel()
 	my $creator    = $resgroup->GetCreator();
 	my $email      = $creator->email();
 	my $pid        = $resgroup->pid();
-	my $url        = $brand->wwwBase() . "/list-resgroups.php";
+	my $url        = $resgroup->WebURL();
 
 	if ($clear) {
 	    $brand->SendEmail($email,

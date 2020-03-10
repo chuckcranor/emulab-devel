@@ -163,6 +163,59 @@ sub RefreshGroups()
 }
 
 #
+# Notify users about upcoming resgroups and resgroups that are now active
+#
+sub NotifyUsers()
+{
+    #
+    # The idea here is to warn the user when the reservation start is
+    # coming up, but not if the user created the reservation recently.
+    #
+    my $query_result =
+	DBQueryWarn("select uuid, ".
+		    "   time_to_sec(timediff(start,now())) as sdiff, ".
+		    "   time_to_sec(timediff(now(),created)) as cdiff ".
+		    "  from apt_reservation_groups ".
+		    "where start > now() and notified is null ".
+		    " and creator_uid='stoller' ".
+		    "having sdiff < (3600 * 16) and cdiff > (3600 * 0)");
+
+    while (my ($uuid,$sdiff,$cdiff) = $query_result->fetchrow_array()) {
+	my $resgroup = APT_Reservation::Group->Lookup($uuid);
+	next
+	    if (!$resgroup);
+
+	my $brand      = $resgroup->Brand();
+	my $creator    = $resgroup->GetCreator();
+	my $email      = $creator->email();
+	my $pid        = $resgroup->pid();
+	my $url        = $resgroup->WebURL();
+	my $hours      = sprintf("%.1f", $sdiff / 3600.0);
+	my $subject    = "Reservation group in project $pid is starting soon";
+	my $message =
+	    "Your reservation group in project $pid is going to start\n".
+	    "in $hours hours\n\n". 
+	    "If you do not intend to use these resources, please cancel\n" .
+	    "this reservation as soon as possible, since the resources\n" .
+	    "will be unavailable to other users for the duration of your\n".
+	    "reservation.\n\n" .
+	    "Failure to use your reservation within six hours will result\n".
+	    "in cancellation of the reservation so that the resources are\n".
+	    "available to other users.\n\n".
+	    $resgroup->InfoString() .
+	    "See: $url\n";
+	    
+	if ($impotent) {
+	    print "$message";
+	    next;
+	}
+	$brand->SendEmail($email, $subject,
+			  $message, $brand->ReservationsEmailAddress());
+	$resgroup->MarkNotified();
+    }
+}
+
+#
 # Deal with pending changes (approval,cancel,delete,etc).
 #
 sub PushGroups()
@@ -680,8 +733,7 @@ sub CheckRangesAndRoutes()
 }
 
 if ($oneshot) {
-    PushGroups();
-    RefreshGroups();
+    NotifyUsers();
     exit(0);
 }
 # Wait a bit before making a bunch of noise.
@@ -697,6 +749,7 @@ while (1) {
 
     PushGroups();
     RefreshGroups();
+    NotifyUsers();
     if (time() - $lasthourly > $HOURLY_INTERVAL) {
 	#CheckRangesAndRoutes();
 	$lasthourly = time();
