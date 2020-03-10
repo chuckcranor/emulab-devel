@@ -452,11 +452,24 @@
 		  data-dismiss='modal' aria-hidden='true'>Submit</button>
 	</center>
 	<div style="margin-top: 5px;" class="needs-approval hidden">
-	  NOTE: This reservation request can be accomodated, but the
-	  size and/or duration means that the reservation needs to
-	  be approved by an administrator before it is fully active.
-	  The administrator will be notified when you submit this
-	  request, and will act on this request as soon as possible.</div>
+	  <b>This reservation request can be accomodated, but the
+	    size and/or duration means that the reservation needs to
+	    be approved by an administrator before it is fully active.</b>
+	  <div style="margin-top: 5px;">
+	    <% if (window.ISPOWDER) { %>
+	      <em>Reservations that require administrative approval
+		take time for review.  During normal business hours (8
+		AM - 5 PM Mountain Time), these are typically handled
+		within an hour or two.  Outside of business hours and on
+		weekends, administrative review may be delayed until the
+		next business day.  Please plan accordingly when
+		submitting your reservation requests.</em>
+	    <% } else { %>
+	      The administrator will be notified when you submit this
+	      request, and will act on this request as soon as possible.
+	    <% } %>
+	  </div>	  
+	</div>
       </div>
     </div>
   </div>
