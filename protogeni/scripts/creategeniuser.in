@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017, 2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -51,6 +51,8 @@ my $project;
 
 # Configure ...
 my $TB		  = "@prefix@";
+my $TBOPS         = "@TBOPSEMAIL@";
+my $TBAUDIT       = "@TBAUDITEMAIL@";
 my $TBACCT	  = "$TB/sbin/tbacct";
 my $MKUSERCERT    = "$TB/sbin/mkusercert";
 my $MODGROUPS     = "$TB/sbin/modgroups";
@@ -59,6 +61,7 @@ my $WAP           = "$TB/sbin/withadminprivs";
 use lib '@prefix@/lib';
 use emutil;
 use emdb;
+use libtestbed;
 use User;
 use Project;
 use GeniCertificate;
@@ -218,6 +221,16 @@ if ($?) {
     }
     fatal("Could not instantiate user account!")
 }
+
+# Send auditing email before next step in case of failure.
+SENDMAIL($TBOPS,
+	 "New Geni user created: $usr_uid",
+	 "New Geni user has logged in via the trusted signer.\n\n".
+	 "Uid:   $usr_uid\n".
+	 "Email: $email\n".
+	 "URN:   $urn\n".
+	 "\n",
+	 $TBOPS, "Bcc: $TBAUDIT");
 
 # We need to generate the encrypted ssl certificate to keep
 # things happy.
