@@ -177,7 +177,6 @@ sub NotifyUsers()
 		    "   time_to_sec(timediff(now(),created)) as cdiff ".
 		    "  from apt_reservation_groups ".
 		    "where start > now() and notified is null ".
-		    " and creator_uid='stoller' ".
 		    "having sdiff < (3600 * 16) and cdiff > (3600 * 0)");
 
     while (my ($uuid,$sdiff,$cdiff) = $query_result->fetchrow_array()) {
