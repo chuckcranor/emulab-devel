@@ -286,7 +286,7 @@ class Aggregate
     # Return the list of allowed aggregates based on the portal in use.
     #
     function DefaultAggregateList($user = null) {
-        global $PORTAL_GENESIS, $PORTAL_HEALTH;
+        global $PORTAL_GENESIS, $PORTAL_HEALTH, $TBMAINSITE;
 	$genesis = $PORTAL_GENESIS;
 	if ($PORTAL_HEALTH)
 	{
@@ -338,6 +338,18 @@ class Aggregate
                             break;
 
                         }
+                    }
+                }
+            }
+            elseif ($user && $TBMAINSITE) {
+                $project = Project::Lookup("OCTatMGHPCC");
+                if ($project && $project->IsMember($user, $approved) &&
+                    !$project->IsLeader($user)) {
+                    if ($aggregate->nickname() == "Mass") {
+                        $allowed = 1;
+                    }
+                    else {
+                        $allowed = 0;
                     }
                 }
             }
