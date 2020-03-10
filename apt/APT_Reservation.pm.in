@@ -36,6 +36,7 @@ my $TB		  = "@prefix@";
 my $TBOPS         = "@TBOPSEMAIL@";
 my $OURDOMAIN     = "@OURDOMAIN@";
 my $MYURN         = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+my $ANNOUNCE      = "$TB/sbin/announce";
 my $MAINSITE      = @TBMAINSITE@;
 
 #
@@ -46,13 +47,16 @@ my $MAINSITE      = @TBMAINSITE@;
 package APT_Reservation::Group;
 use emdb;
 use Project;
+use Brand;
 use libtestbed;
+use APT_Aggregate;
 use Carp;
 use JSON;
 use English;
 use GeniXML;
 use GeniHRN;
 use Date::Parse;
+use Date::Format;
 use Data::Dumper;
 use vars qw($AUTOLOAD);
 use overload ('""' => 'Stringify');
@@ -70,6 +74,7 @@ AUTOLOAD {
     carp("No such slot '$name' field in class $type");
     return undef;
 }
+sub Brand()              { return $_[0]->{'BRAND'}; }
 sub ReservationList($)   { return values(%{ $_[0]->{'RESERVATIONS'} }); }
 sub ReservationHash($)   { return $_[0]->{'RESERVATIONS'}; }
 sub RFReservationList($) { return values(%{ $_[0]->{'RFRESERVATIONS'} }); }
@@ -81,6 +86,7 @@ sub DESTROY {
     my $self = shift;
 
     $self->{'DBROW'} = undef;
+    $self->{'BRAND'} = undef;
 }
 
 #
@@ -125,7 +131,14 @@ sub Lookup($$)
 	APT_Reservation::Group::RFReservation->LookupForGroup($self);
     $self->{'ROUTERESERVATIONS'} =
 	APT_Reservation::Group::RouteReservation->LookupForGroup($self);
-    
+
+    # Cache this too.
+    if (defined($self->portal())) {
+	$self->{'BRAND'} = Brand::Create("Brand", $self->portal());
+    }
+    else {
+	$self->{'BRAND'} = $self->GetProject()->Brand();
+    }
     return $self;
 }
 
@@ -249,6 +262,9 @@ sub Delete($)
 {
     my ($self) = @_;
     my $uuid = $self->uuid();
+
+    # Errors are nonfatal.
+    $self->DeleteAnnouncement();
     
     DBQueryWarn("delete from apt_reservation_groups ".
 		"where uuid='$uuid'")
@@ -270,14 +286,13 @@ sub GetCreator($)
     my ($self) = @_;
     require User;
     
-    return User->Lookup($self->uid_idx());
+    return User->Lookup($self->creator_idx());
 }
 
 sub WebURL($)
 {
     my ($self)  = @_;
-    my $project = $self->GetProject();
-    my $weburl  = $project->Brand()->wwwBase();
+    my $weburl  = $self->Brand()->wwwBase();
 
     return $weburl . "/resgroup.php?edit=1&uuid=" . $self->uuid();
 }
@@ -620,6 +635,129 @@ sub RoutesInUse($$)
     return 0;
 }
 
+#
+# Return a string for email message display.
+#
+sub InfoString($;$$$)
+{
+    my ($self, $clusters, $ranges, $routes) = @_;
+    my (@cluster_reservations, @range_reservations, @route_reservations);
+    my $nodates = 0;
+    my $string  = "";
+
+    if (defined($clusters) || defined($ranges) || defined($routes)) {
+	@cluster_reservations = @$clusters;
+	@range_reservations   = @$ranges;
+	@route_reservations   = @$routes;
+	$nodates = 1;
+    }
+    else {
+	@cluster_reservations = $self->ReservationList();
+	@range_reservations   = $self->RFReservationList();
+	@route_reservations   = $self->RouteReservationList();
+    }
+
+    if (@cluster_reservations) {
+	my %clusters = ();
+
+	foreach my $res (@cluster_reservations) {
+	    my $agg     = APT_Aggregate->Lookup($res->aggregate_urn());
+	    my $abbrev  = $agg->abbreviation();
+
+	    if (!exists($clusters{$abbrev})) {
+		$clusters{$abbrev} = [];
+	    }
+	    push(@{$clusters{$abbrev}}, $res->InfoString());
+	}
+	foreach my $abbrev (sort(keys(%clusters))) {
+	    my @list = sort(@{$clusters{$abbrev}});
+
+	    $string .= "\t${abbrev}: " . join(",", @list) . "\n";
+	}
+	$string = "    Cluster Resources:\n" . $string . "\n";
+    }
+    if (@range_reservations) {
+	my $ranges = "";
+	
+	foreach my $res (@range_reservations) {
+	    $ranges .= "\t" . $res->InfoString()  . "\n";
+	}
+	$string .= "    Frequency Ranges:\n" . $ranges . "\n";
+    }
+    if (@route_reservations) {
+	my $routes = "";
+	
+	foreach my $res (@route_reservations) {
+	    my $routename = $res->routename();
+
+	    $routes .= "\t" . "$routename\n";
+	} 
+	$string .= "    Bus Routes:\n" . $routes . "\n";
+    }
+    if (!$nodates) {
+	my $start = time2str("%c %z", str2time($self->start()));
+	my $end   = time2str("%c %z", str2time($self->end()));
+
+	$string = "    Start: $start\n" . "    End: $end\n" . $string;
+    }
+    return $string;
+}
+
+#
+# Add or Edit a reservation announcement.
+#
+sub AddAnnouncement($)
+{
+    my ($self) = @_;
+    my $uuid    = $self->uuid();
+    my $uid     = $self->creator_uid();
+    my $url     = $self->WebURL();
+    my $project = $self->GetProject();
+    my $pid     = $project->pid();
+    my $portal  = $self->Brand()->brand();
+    my $start   = str2time($self->start());
+    my $text    = "You have a reservation group starting soon in project $pid";
+    my $dateopt = "";
+    my $command;
+
+    # XXX
+    $portal = "emulab" if ($portal eq "classic");
+
+    #
+    # If the reservation is more then 24 hours out, schedule an announcement
+    # for 24 hours ahead. 
+    #
+    if ($start - time() > (3600 * 24)) {
+	$dateopt = "-S " . ($start - (3600 * 23));
+    }
+    
+    # This is awkward, the announcement stuff should be a library some day.
+    my $query_result =
+	DBQueryWarn("select idx from apt_announcements where uuid='$uuid'");
+    return
+	if (!$query_result);
+    
+    # Update mode.
+    if ($query_result->numrows) {
+	$command = "$ANNOUNCE -A $uuid -b 'View Reservation' ".
+	    "-u '$url' $dateopt '$text'";
+    }
+    else {
+	$command = "$ANNOUNCE -a -p $portal -U $uid -I 4 ".
+	    "-b 'View Reservation' -u '$url' -t $uuid $dateopt '$text'";
+    }
+    print "$command\n";
+    system($command);
+    return 0;
+}
+sub DeleteAnnouncement($)
+{
+    my ($self) = @_;
+    my $uuid   = $self->uuid();
+
+    system("$ANNOUNCE -R $uuid");    
+}
+
 ###################################################################
 package APT_Reservation::Group::Reservation;
 use emdb;
@@ -722,6 +860,18 @@ sub Stringify($)
     my $domain = $self->domain();
 
     return "[APT_ResGroupRes $pid $domain $type:$count]";
+}
+sub InfoString($)
+{
+    my ($self) = @_;
+    
+    my $type      = $self->type();
+    my $count     = $self->count();
+    my $agg       = APT_Aggregate->Lookup($self->aggregate_urn());
+    my $resnodes  = $agg->ReservableNodes();
+
+    $type .= ":$count" if (!exists($resnodes->{$type}));
+    return $type;
 }
 
 sub Delete($;$)
@@ -1070,6 +1220,15 @@ sub Stringify($)
     my $upper  = $self->freq_high();
 
     return "[APT_ResGroupRF $pid $lower:$upper]";
+}
+sub InfoString($)
+{
+    my ($self) = @_;
+    
+    my $lower  = $self->freq_low();
+    my $upper  = $self->freq_high();
+
+    return "$lower MHz => $upper MHz";
 }
 
 #

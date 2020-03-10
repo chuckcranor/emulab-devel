@@ -2880,7 +2880,7 @@ $(function ()
 	var callback = function (json) {
 	    console.log(method, json);
 	    if (json.code) {
-		if (!warning) {
+		if (cancel) {
 		    sup.HideWaitWait(function () {
 			sup.SpitOops("oops", json.value);
 		    });
@@ -2890,10 +2890,8 @@ $(function ()
 		}
 		return;
 	    }
-	    if (!warning) {
-		sup.HideWaitWait();
-	    }
 	    if (cancel) {
+		sup.HideWaitWait();
 		RefreshTables(json.value);
 	    }
 	};
@@ -2913,7 +2911,7 @@ $(function ()
 	    console.info("warninfo", args);
 	    
 	    sup.HideModal(modal, function () {
-		if (!warning) {
+		if (cancel) {
 		    // This will take a few moments.
 		    sup.ShowWaitWait();
 		}

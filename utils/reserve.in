@@ -33,6 +33,7 @@ use Text::Wrap;
 #
 my $TB		 = "@prefix@";
 my $TBOPS        = "@TBOPSEMAIL@";
+my $DISABLE_EMAIL= @DISABLE_RESERVATION_EMAIL@;
 
 #
 # Testbed Support libraries
@@ -494,7 +495,9 @@ if ($cancel || $abortcancel || defined($idledetection)) {
 	Reservation->EndTransaction();
 	last;
     }
-    
+    if ($quiet || $DISABLE_EMAIL) {
+	exit(0);
+    }
     my $user = User->Lookup( $res->uid() );
     my $count = $res->nodes();
     my $type = $res->type();
@@ -552,7 +555,7 @@ if ($clear || $clear_idx) {
 	      "$e, has been CANCELLED.\n" .
 	      ( defined( $denynotes ) ?
 		"The reason for cancellation is:\n" .
-		$denynotes . "\n" : "" ) ) unless( $quiet );
+		$denynotes . "\n" : "" ) ) unless( $quiet || $DISABLE_EMAIL);
 	
     exit( 0 );
 }
@@ -725,7 +728,7 @@ while( 1 ) {
 		  "system failures.  Please send reports about the\n" .
 		  "reservation system to $TBOPS.\n" .
 		  "Thank you for your assistance in debugging this\n" .
-		  "feature!\n" ) unless( $quiet );
+		  "feature!\n" ) unless( $quiet || $DISABLE_EMAIL);
 	if (defined($webtask)) {
 	    $webtask->Exited(0);
 	    $webtask->reservation($res->idx());
@@ -747,7 +750,7 @@ while( 1 ) {
 		  "\n" .
 		  "You can approve the request by invoking:\n" .
 		  "    reserve -a -m $idx\n" .
-		  "on boss.\n" ) unless( $quiet );
+		  "on boss.\n" ) unless( $quiet || $DISABLE_EMAIL);
 	
 	if (defined($webtask)) {
 	    $webtask->Exited(2);

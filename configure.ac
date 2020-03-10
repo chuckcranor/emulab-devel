@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -374,6 +374,7 @@ AC_SUBST(UI_DISABLE_RESERVATIONS)
 AC_SUBST(UI_EXTERNAL_ACCOUNTS)
 AC_SUBST(POWDER_RFMONITOR)
 AC_SUBST(POWDER_RFMONITOR_HOST)
+AC_SUBST(DISABLE_RESERVATION_EMAIL)
 
 #
 # Offer both versions of the email addresses that have the @ escaped
@@ -567,6 +568,7 @@ UI_DISABLE_RESERVATIONS=0
 UI_EXTERNAL_ACCOUNTS=0
 POWDER_RFMONITOR=0
 POWDER_RFMONITOR_HOST="0.0.0.0"
+DISABLE_RESERVATION_EMAIL=0
 
 #
 # XXX You really don't want to change these!

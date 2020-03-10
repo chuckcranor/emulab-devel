@@ -776,6 +776,8 @@ CREATE TABLE `apt_reservation_groups` (
   `noidledetection` datetime DEFAULT NULL,
   `locked` datetime DEFAULT NULL,
   `locker_pid` int(11) default '0',
+  `notified` datetime DEFAULT NULL,
+  `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `reason` mediumtext,
   PRIMARY KEY (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -854,6 +856,7 @@ CREATE TABLE `apt_reservation_group_history` (
   `created` datetime DEFAULT NULL,
   `canceled` datetime DEFAULT NULL,
   `deleted` datetime DEFAULT NULL,
+  `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `reason` mediumtext,
   PRIMARY KEY (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;

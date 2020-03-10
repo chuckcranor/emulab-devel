@@ -56,7 +56,6 @@ my $aggregate;
 my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
 my $OURDOMAIN	= "@OURDOMAIN@";
-my $ANNOUNCE    = "$TB/sbin/announce";
 my $MYURN	= "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $UI_DISABLE_RESERVATIONS = @UI_DISABLE_RESERVATIONS@;
 
@@ -107,10 +106,6 @@ sub DoIdleDetection();
 sub DoHistory();
 sub DoAllMaxExtensions();
 sub readfile($);
-sub AddAnnouncement($$$$$$$);
-sub DeleteAnnouncement($);
-sub RetireAnnouncement($);
-sub RestoreAnnouncement($);
 sub RecordReservationRequest($$$$;$);
 sub UpdateReservationRequest($$$);
 my $RESERVATION_RECORD_APPROVE  = 1;
@@ -413,12 +408,6 @@ sub DoReserve()
 	      "\n\n".
 	      "See: $url", $this_email);
 	}
-    }
-    elsif (defined($uuid)) {
-	#
-	# Schedule an announcement for the user.
-	#
-	AddAnnouncement($portal, $brand, $uuid, $this_user, $count, $type, $start);
     }
     if ($approved) {
 	APT_Instance->ClearAllMaxExtension($aggregate->urn());
@@ -814,7 +803,6 @@ sub DoDelete()
     }
     if ($type eq "reservation") {
 	UpdateReservationRequest($aggregate, $uuid, $RESERVATION_RECORD_DELETE);
-	DeleteAnnouncement($uuid);
     }
     if (defined($webtask)) {
 	$webtask->Exited(0);
@@ -894,19 +882,6 @@ sub DoApprove()
     if ($type eq "reservation" && !$checkonly) {
 	UpdateReservationRequest($aggregate, $uuid,
 				 $RESERVATION_RECORD_APPROVE);
-	#
-	# Schedule an announcement for the user.
-	#
-	$blob = $response->value();
-	if (exists($blob->{'user'})) {
-	    my $geniuser = GeniUser->Lookup($blob->{'user'}, 1);
-	    if (defined($geniuser) && $geniuser->IsLocal()) {
-		AddAnnouncement($portal, $brand, $uuid,
-				$geniuser->emulab_user(),
-				$blob->{'nodes'}, $blob->{'type'},
-				$blob->{'start'});
-	    }
-	}
     }
     APT_Instance->ClearAllMaxExtension($aggregate->urn());
     
@@ -1002,10 +977,8 @@ sub DoCancel()
 	if ($clear) {
 	    UpdateReservationRequest($aggregate, $uuid,
 				     $RESERVATION_RECORD_UNCANCEL);
-	    RestoreAnnouncement($uuid);
 	}
 	else {
-	    RetireAnnouncement($uuid);
 	    UpdateReservationRequest($aggregate, $uuid,
 				     $RESERVATION_RECORD_CANCEL);
 	}
@@ -1540,70 +1513,6 @@ sub readfile($) {
     my $contents = <FILE>;
     close(FILE);
     return $contents;
-}
-
-#
-# Add or Edit a reservation announcement.
-#
-sub AddAnnouncement($$$$$$$)
-{
-    my ($portal, $brand, $uuid, $user, $nodes, $type, $start) = @_;
-    my $this_uid = $user->uid();
-    my $nickname = $aggregate->nickname();
-    my $name     = $aggregate->name();
-    my $url      = $brand->wwwBase() .
-	"/reserve.php?edit=1&uuid=${uuid}&cluster=${nickname}";
-    my $text = "You have a reservation at $name for $nodes $type ".
-	"node(s) starting soon.";
-    my $command;
-    my $dateopt = "";
-
-    #
-    # If the reservation is more then 24 hours out, schedule an announcement
-    # for 24 hours ahead. 
-    #
-    if (defined($start)) {
-	if ($start !~ /^\d+$/) {
-	    $start = str2time($start);
-	}
-	if ($start - time() > (3600 * 24)) {
-	    $dateopt = "-S " . ($start - (3600 * 23));
-	}
-    }
-
-    # This is awkward, the announcement stuff should be a library some day.
-    my $query_result =
-	emdb::DBQueryWarn("select idx from apt_announcements where uuid='$uuid'");
-    return
-	if (!$query_result);
-    # Update mode.
-    if ($query_result->numrows) {
-	$command = "$ANNOUNCE -A $uuid -b 'View Reservation' ".
-	    "-u '$url' $dateopt '$text'";
-    }
-    else {
-	$command = "$ANNOUNCE -a -p $portal -U $this_uid -I 4 ".
-	    "-b 'View Reservation' -u '$url' -t $uuid $dateopt '$text'";
-    }
-    system($command);
-}
-sub DeleteAnnouncement($)
-{
-    my ($uuid) = @_;
-
-    system("$ANNOUNCE -R $uuid");    
-}
-sub RetireAnnouncement($)
-{
-    my ($uuid) = @_;
-
-    system("$ANNOUNCE -r $uuid");    
-}
-sub RestoreAnnouncement($)
-{
-    my ($uuid) = @_;
-
-    system("$ANNOUNCE -w $uuid");    
 }
 
 #

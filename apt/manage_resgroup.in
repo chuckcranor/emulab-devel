@@ -29,6 +29,7 @@ use JSON;
 use POSIX ":sys_wait_h";
 use POSIX qw(:signal_h ceil);
 use Date::Parse;
+use Date::Format;
 
 #
 # Back-end script to manage APT profiles.
@@ -845,6 +846,7 @@ sub DoGroupReserve()
 		    "start"       => $start,
 		    "end"         => $end,
 		    "reason"      => $reason,
+		    "portal"      => $brand->brand(),
 		};
 		$resgroup = APT_Reservation::Group->Create($args);
 		if (!defined($resgroup)) {
@@ -949,7 +951,13 @@ sub DoGroupReserve()
 			  "but it needs approval.".
 			  "\n\n".
 			  "See: $url", $this_email);
-	    }	    
+	    }
+	    elsif ($update) {
+		$resgroup->UpdateAnnouncement();
+	    }
+	    else {
+		$resgroup->AddAnnouncement();
+	    }
 	}
     }
     $resgroup->Unlock() if (defined($resgroup));
@@ -979,9 +987,11 @@ sub DoDelete()
     my $optlist   = "N:LM";
     my $takelock  = 0;
     my $nolock    = 0;	# Caller holds the lock.
+    my $noemail   = 0;
     my @cluster_reservations = ();
     my @range_reservations   = ();
     my @route_reservations   = ();
+    my $reason;
     my $errmsg;
     my $errcode;
     my $errors   = 0;
@@ -994,9 +1004,12 @@ sub DoDelete()
     if (defined($options{"N"})) {
 	fatal("Cannot read reason file")
 	    if (! -e $options{"N"});
+
+	$reason = emutil::ReadFile($options{"N"});
     }
     if (defined($options{"L"})) {
 	$takelock = 1;
+	$noemail  = 1;
     }
     if (defined($options{"M"})) {
 	$nolock = 1;
@@ -1097,6 +1110,24 @@ sub DoDelete()
 		    $res->MarkDeleted();
 		}
 	    }
+	    if (!$noemail) {
+		#
+		# Notify the user that a resgroup has been deleted.
+		#
+		my $brand      = $resgroup->Brand();
+		my $creator    = $resgroup->GetCreator();
+		my $email      = $creator->email();
+		my $pid        = $project->pid();
+		my $string     = $resgroup->InfoString(\@cluster_reservations,
+						       \@range_reservations,
+						       \@route_reservations);
+		$brand->SendEmail($email,
+		  "Resources in reservation group have been removed",
+		  "Resources in your reservation group in project $pid ".
+		  "have been removed from the group.\n".
+		  (defined($reason) ? "\n$reason\n" : "\n") . $string,
+		  $brand->ReservationsEmailAddress());
+	    }
 	}
     }
     else {
@@ -1112,6 +1143,24 @@ sub DoDelete()
 	#
 	if (!$resgroup->Expired() && !$resgroup->deleted()) {
 	    $resgroup->MarkDeleted();
+
+	    if (!$noemail) {
+		#
+		# Notify the user that a resgroup has been deleted.
+		#
+		my $brand      = $resgroup->Brand();
+		my $creator    = $resgroup->GetCreator();
+		my $email      = $creator->email();
+		my $pid        = $project->pid();
+
+		$brand->SendEmail($email,
+			  "Reservation group has been deleted",
+			  "Your reservation group in project $pid ".
+			  "has been deleted.\n".
+			  (defined($reason) ? "\n$reason\n" : "\n"). 
+			  $resgroup->InfoString(),
+			  $brand->ReservationsEmailAddress());
+	    }
 	}
     }
     if (@range_reservations) {
@@ -1430,12 +1479,15 @@ sub DoApprove()
     my @cluster_reservations = ();
     my @range_reservations   = ();
     my @route_reservations   = ();
+    my @approved_reservations= ();
     my $errmsg;
     my $results   = {};
     my $takelock  = 0;
     my $checkonly = 0;
     my $nopush    = 0;  # debugging flag only.
-    my $override  = 0;	# Only range/route reservations can be overridden. 
+    my $override  = 0;	# Only range/route reservations can be overridden.
+    my $noemail   = 0;
+    my $reason;
 
     if (! $this_user->IsAdmin()) {
 	fatal("No permission to approve this reservation")
@@ -1447,6 +1499,7 @@ sub DoApprove()
     if (defined($options{"F"})) {
 	fatal("Cannot read reason file")
 	    if (! -e $options{"F"});
+	$reason = emutil::ReadFile($options{"F"});
     }
     if (defined($options{"n"})) {
 	$checkonly = 1;
@@ -1459,6 +1512,7 @@ sub DoApprove()
     }
     if (defined($options{"L"})) {
 	$takelock = 1;
+	$noemail  = 1;
     }
     usage()
 	if (@ARGV < 1);
@@ -1495,6 +1549,11 @@ sub DoApprove()
     foreach my $res ($resgroup->RouteReservationList()) {
 	push(@route_reservations, $res)
 	    if (!$res->approved());
+    }
+    if (!(@cluster_reservations || @range_reservations || @route_reservations)){
+	print "Nothing to approve\n";
+	$resgroup->Unlock();
+	exit(0);
     }
 
     #
@@ -1568,7 +1627,7 @@ sub DoApprove()
 	my $webtask_id  = $webtask->task_id();
 	my $urn         = $reservation->aggregate_urn();
 	my $remote_uuid = $reservation->remote_uuid();
-	my $portal      = $project->Brand()->brand();
+	my $portal      = $resgroup->Brand()->brand();
 	# Hmm, might be "classic", which is not a portal. Ick.
 	$portal = "emulab" if ($portal eq "classic");
 	
@@ -1648,6 +1707,7 @@ sub DoApprove()
 		next;
 	    }
 	    $res->MarkApprovedPushed() if (!$checkonlyflag);
+	    push(@approved_reservations, $res);
 	}
 	return $errors;
     };
@@ -1699,7 +1759,7 @@ sub DoApprove()
 		$resgroup->Unlock();
 		goto bad;
 	    }
-	    # We will skip range approval if any failures here.
+	    # We will skip range/route approval if any failures here.
 	    if (&$checkResponses($responses)) {
 		goto done;
 	    }
@@ -1733,6 +1793,7 @@ sub DoApprove()
 	    }
 	    else {
 		$res->MarkApproved();
+		push(@approved_reservations, $res);
 	    }
 	}
     }
@@ -1758,6 +1819,7 @@ sub DoApprove()
 	    }
 	    else {
 		$res->MarkApproved();
+		push(@approved_reservations, $res);
 	    }
 	}
     }
@@ -1765,6 +1827,30 @@ sub DoApprove()
 	APT_Reservation::Group->UnlockTables();
     }
   done:
+    if (!$checkonly && @approved_reservations && !$noemail) {
+	#
+	# Notify the user that a resgroup was approved. The wrinkle is
+	# partial approval, but that should be a rare case, so lets now
+	# worry for now.
+	#
+	my $brand      = $resgroup->Brand();
+	my $creator    = $resgroup->GetCreator();
+	my $email      = $creator->email();
+	my $pid        = $project->pid();
+	my $url        = $brand->wwwBase() . "/list-resgroups.php";
+
+	$brand->SendEmail($email,
+			  "Pending reservation group request has been approved",
+			  "Your reservation group request in project $pid ".
+			  "has been approved.\n".
+			  (defined($reason) ? "\n$reason\n" : "") . "\n" .
+			  $resgroup->InfoString() .
+			  "\n".
+			  "See: $url", $brand->ReservationsEmailAddress());
+
+	# Schedule an announcement for the user.
+	$resgroup->AddAnnouncement();
+    }
     print Dumper($results);
     if (defined($webtask)) {
 	$webtask->results($results);
@@ -1799,6 +1885,7 @@ sub DoCancel()
     my $purge   = 0;
     my $nopush  = 0;  # debugging flag only.
     my $takelock= 0;
+    my $noemail = 0;
     my $when;
     my $reason;
     my $errmsg;
@@ -1815,12 +1902,14 @@ sub DoCancel()
     if (defined($options{"N"})) {
 	fatal("Cannot read reason file")
 	    if (! -e $options{"N"});
+	$reason = emutil::ReadFile($options{"N"});
     }
     if (defined($options{"D"})) {
 	$nopush = 1;
     }
     if (defined($options{"L"})) {
 	$takelock = 1;
+	$noemail  = 1;
     }
     if (defined($options{"P"})) {
 	$purge = 1;
@@ -1876,6 +1965,44 @@ sub DoCancel()
 		fatal("Missing the termination (-e) argument");
 	    }
 	    $resgroup->MarkCanceled($when);
+	}
+    }
+
+    #
+    # Send mail now. Failure is not an option.
+    #
+    if (! ($noemail || $purge)) {
+	my $project    = $resgroup->GetProject();
+	my $brand      = $resgroup->Brand();
+	my $creator    = $resgroup->GetCreator();
+	my $email      = $creator->email();
+	my $pid        = $resgroup->pid();
+	my $url        = $brand->wwwBase() . "/list-resgroups.php";
+
+	if ($clear) {
+	    $brand->SendEmail($email,
+			  "Reservation group cancellation rescinded!",
+			  "Your reservation group in project $pid that was\n".
+			  "scheduled for cancellation, is no longer scheduled ".
+			  "for cancellation.\n\n".
+			  $resgroup->InfoString() .
+			  "See: $url", $brand->ReservationsEmailAddress());
+	}
+	else {
+	    my $whentime = TBDateStringGMT($when);
+		
+	    $brand->SendEmail($email,
+		"Reservation group is scheduled to be canceled!",
+		"Your reservation in project $pid is currently either\n".
+                "underused or unused. Tying up resources in this manner\n".
+                "means other users may not be able to get their work done.\n".
+		(defined($reason) ? "\n$reason\n\n" : "") .
+                "Your reservation is now scheduled to be canceled ".
+                "at $whentime.\n ".
+                "Please contact the support staff if you would like to keep\n".
+		"your reservation.\n\n".
+		$resgroup->InfoString() .
+		"See: $url", $brand->ReservationsEmailAddress());
 	}
     }
     
@@ -1957,7 +2084,7 @@ sub DoCancel()
 	
 	my $command = "$RESCOMMAND -t $webtask_id -a $urn ";
 	if (defined($options{"N"})) {
-	    $command .= "-F " . $options{"N"} . " ";
+	    $command .= "-N " . $options{"N"} . " ";
 	}
 	if ($clear) {
 	    $command .= "cancel -c ";

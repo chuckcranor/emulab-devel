@@ -569,7 +569,7 @@ function Do_Delete()
     # Admins can add an optional cause when denying a reservation.
     #
     if (ISADMIN()) {
-        if (isset($ajax_args["reason"])) {
+        if (isset($ajax_args["reason"]) && $ajax_args["reason"] != "") {
             $reason  = $ajax_args["reason"];
 
             if (!TBvalid_fulltext($reason)) {
@@ -738,7 +738,6 @@ function Do_InfoOrWarn($warning = false)
 	SPITAJAX_ERROR(-1, "No such user");
 	return;
     }
-
     if (!$warning &&
         (!isset($ajax_args["message"]) || $ajax_args["message"] == "")) {
 	SPITAJAX_ERROR(-1, "Missing message");
@@ -748,52 +747,62 @@ function Do_InfoOrWarn($warning = false)
         isset($ajax_args["cancel"]) && $ajax_args["cancel"] == 1) {
         $cancel = 1;
     }
-    $url = "${APTBASE}/resgroup.php?edit=1&uuid=$uuid\n";
-    
-    if ($warning) {
-        $subject = "Unused Reservation Warning";
-        $message = "Your reservation in project $pid is currently either\n".
-            "underused or unused. Tying up resources in this manner means\n".
-            "other users may not be able to get their work done.\n\n".
-            ($cancel ?
-             "Your reservation is now scheduled to be canceled in 24 hours,\n".
-             "please contact the support staff if you would like to keep\n".
-             "your reservation.\n"
-             :
-             "If your reservation is still underused in 24 hours, it\n".
-             "will be canceled. You may also reduce/shorten and/or split the\n".
-             "reservation so that you are not wasting resources.\n") . "\n";
-
-        if (isset($ajax_args["message"]) && $ajax_args["message"] != "") {
-            $message .= $ajax_args["message"] . "\n";
-        }
-        $message .= "\n\n$url\n";
+    if ($cancel) {
+        $opts    = "-e " . (time() + (3600 * 24)) . " ";
+        $method  = "cancel";
     }
     else {
-        $subject = "Reservation Info Request";
-        $message = $ajax_args["message"] . "\n\n";
-        $message .= "$url\n";
+        $opts    = "";
+        $method  = "infowarn";
     }
-    #
-    # Do this before we send mail. If we cannot get to the cluster,
-    # we do not want spit out an email message each time we retry.
-    #
-    if ($cancel) {
-        # This will output status.
-        if (Do_CancelAux($resgroup, 0, time() + (3600 * 24))) {
+    if (isset($ajax_args["message"]) && $ajax_args["message"] != "") {
+        $reason  = $ajax_args["message"];
+
+        if (!TBvalid_fulltext($reason)) {
+            SPITAJAX_ERROR(-1, "Illegal characters in reason");
             return;
         }
-    }
-    TBMAIL($user->email(), $subject, $message,
-           "From: $APTMAIL\n".
-           "CC: $APTMAIL");
+        $reasonfile = tempnam("/tmp", "reason");
 
-    if ($cancel) {
-        # Status was sent by Do_CancelAux();
-        return;
+        $fp = fopen($reasonfile, "w");
+        fwrite($fp, $reason);
+        fclose($fp);
+        chmod($reasonfile, 0666);
+        $opts .= "-N $reasonfile";
     }
-    sleep(2);
-    SPITAJAX_RESPONSE(1);
+    $webtask  = WebTask::CreateAnonymous();
+    $this_uid = $this_user->uid();
+
+    $retval = SUEXEC($this_uid, "nobody",
+                     "webmanage_resgroup ".
+                     "-t " . $webtask->task_id() .
+                     "   $method $opts $uuid",
+                     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+    if (isset($reasonfile)) {
+        unlink($reasonfile);
+    }
+    if ($retval) {
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        if (!$webtask->exited() || $retval < 0) {
+            SPITAJAX_ERROR(-1, "Internal error");
+        }
+        else {
+            SPITAJAX_ERROR(1, $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    if ($cancel) {
+        # Nonfatal error, we still get a status vector back. We want to show
+        # those errors to the user.
+        $blob = $webtask->TaskValue("results");
+        SPITAJAX_RESPONSE($blob);
+    }
+    else {
+        SPITAJAX_RESPONSE(1);
+    }
+    $webtask->Delete();
 }
 function Do_WarnUser()
 {
@@ -891,7 +900,7 @@ function Do_Approve()
 }
 
 #
-# Cancel (or clear).
+# UnCancel
 #
 function Do_Cancel()
 {
@@ -920,38 +929,21 @@ function Do_Cancel()
 	SPITAJAX_ERROR(-1, "Only clear supported on this path.");
 	return;
     }
-    # This will output the result.
-    Do_CancelAux($resgroup, 1, null);
-}
-
-function Do_CancelAux($resgroup, $clear, $when)
-{
-    global $this_user;
-    global $PORTAL_GENESIS;
-
     $webtask  = WebTask::CreateAnonymous();
     $this_uid = $this_user->uid();
     $uuid     = $resgroup->uuid();
 
-    if ($clear) {
-        $opts = "-c";
-    }
-    else {
-        $opts = "-e '$when'";
-    }
     $retval = SUEXEC($this_uid, "nobody",
                      "webmanage_resgroup ".
                      "-t " . $webtask->task_id() .
-                     "   cancel -p $PORTAL_GENESIS $opts $uuid",
+                     "   cancel -c $uuid",
                      SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
     
-    #SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-
     if ($retval) {
         SUEXECERROR(SUEXEC_ACTION_CONTINUE);
         if (!$webtask->exited() || $retval < 0) {
-            SPITAJAX_ERROR(-1, "Internal error canceling reservation.");
+            SPITAJAX_ERROR(-1, "Internal error uncanceling reservation.");
         }
         else {
             SPITAJAX_ERROR(1, $webtask->output());
