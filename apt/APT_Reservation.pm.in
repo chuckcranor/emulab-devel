@@ -249,9 +249,9 @@ sub Create($$$)
     if (1) {
 	DBQueryWarn("insert into apt_reservation_group_history ".
 		    " (uuid, pid, pid_idx, creator_uid, creator_idx, ".
-		    "  start, end, created, reason) ".
+		    "  start, end, created, portal, reason) ".
 		    " select uuid, pid, pid_idx, creator_uid, creator_idx, ".
-		    "        start, end, created, reason ".
+		    "        start, end, created, portal, reason ".
 		    " from apt_reservation_groups ".
 		    " where uuid='$uuid'");
     }
