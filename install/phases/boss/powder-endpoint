@@ -271,6 +271,21 @@ sub Install($$$)
 	    ExecQuietFatal("$PREFIX/sbin/setsitevar ".
 			   "images/default_typelist $DEFAULTTYPE");
 	};
+	if ($TARGETSYS_TARGET eq "POWDER-BUS") {
+	    Phase "idlepower", "Enabling idlepower", sub {
+		ExecQuietFatal("$PREFIX/sbin/setsitevar ".
+			       "general/idlepower_enable 1");
+	    };
+	    Phase "idlepower", "Setting idletime", sub {
+		ExecQuietFatal("$PREFIX/sbin/setsitevar ".
+			       "general/idlepower_idletime 900");
+	    };
+	    Phase "crontab", "Adding idlepower to crontab", sub {
+		DoneIfEdited($CRONTAB);
+		AppendToFileFatal($CRONTAB,
+		      "0/5\t*\t*\t*\t*\troot\t$PREFIX/sbin/idlepower -r");
+	    };
+	}
 
 	# We need tiplines and tipserver entries.
 	Phase "tip", "Adding tiplines and tipservers to DB", sub {
