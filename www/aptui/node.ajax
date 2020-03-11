@@ -126,6 +126,7 @@ function Do_GetInfo()
     $blob["op_mode"]         = $node->op_mode();
     $blob["control_ip"]      = $node->ControlIP();
     $blob["eventstate"]      = $node->eventstate();
+    $blob["allocstate"]      = $node->allocstate();
     if ($this_user) {
         $blob["management_ip"] = $node->ManagementIP();
         $blob["expinfo"]       = GetExpInfo($node);
