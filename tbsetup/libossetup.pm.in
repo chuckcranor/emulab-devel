@@ -2387,31 +2387,61 @@ sub AddNode($$)
 {
     my ($self, $node) = @_;
 
-    return $self->SUPER::AddNode($node);
+    $self->SUPER::AddNode($node);
+
+    # Need something, should be in ISUP by the time we get there
+    # but stated might be delayed.
+    $node->_maxwait(60);
+    return 0;
 }
 
 #
 # Kirk says we always want to power cycle the SDRs when entering an experiment.
 # We pass -e option to power so it does not change the eventstate.
 #
+# Also handle the case where we have put the node into idle POWEROFF, in
+# that case, we just do the power on. 
+#
 sub LightUpNodes($@)
 {
     my ($self, @nodelist)  = @_;
     my $parent     = $self->parent();
-    my @nodeids    = ();
+    my @cycles     = ();
+    my @ons        = ();
 
     foreach my $node (@nodelist) {
-	push(@nodeids, $node->node_id())
-	    if ($node->allocstate() ne TBDB_ALLOCSTATE_RES_READY());
-    }
-    tbnotice("Power cycling SDR nodes: @nodeids\n");
-    system("$POWER -e cycle @nodeids");
-    my $exitval = $?;
+	next
+	    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_READY());
 
-    if ($exitval) {
-	# This is very unusual.
-	$parent->noretry(1);
-	return -1;
+	if ($node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
+	    push(@ons, $node->node_id())
+	}
+	else {
+	    push(@cycles, $node->node_id())
+	}
+    }
+    if (@ons) {
+	tbnotice("Power on SDR nodes: @ons\n");
+	# We need the event state change here.
+	system("$POWER on @ons");
+	my $exitval = $?;
+
+	if ($exitval) {
+	    # This is very unusual.
+	    $parent->noretry(1);
+	    return -1;
+	}
+    }
+    if (@cycles) {
+	tbnotice("Power cycling SDR nodes: @cycles\n");
+	system("$POWER -e cycle @cycles");
+	my $exitval = $?;
+
+	if ($exitval) {
+	    # This is very unusual.
+	    $parent->noretry(1);
+	    return -1;
+	}
     }
     #
     # If the eventstate somewhow managed to get out of ISUP, send it.
@@ -2428,10 +2458,20 @@ sub LightUpNodes($@)
 	}
     }
     return 0;
-    
 }
 
 package libossetup_x310;
+use base qw(libossetup_sdr);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
+package libossetup_n300;
 use base qw(libossetup_sdr);
 
 use libdb;
