@@ -44,9 +44,10 @@ sub usage()
     print STDERR "Usage: $0 -r <urn>\n";
     exit(1);
 }
-my $optlist  = "nrp:";
+my $optlist  = "nrp:m";
 my $impotent = 0;
 my $delete   = 0;
+my $notify   = 0;
 my $project;
 
 # Configure ...
@@ -89,6 +90,9 @@ if (! getopts($optlist, \%options)) {
 }
 if (defined($options{"n"})) {
     $impotent = 1;
+}
+if (defined($options{"m"})) {
+    $notify = 1;
 }
 if (defined($options{"r"})) {
     usage()
@@ -223,14 +227,16 @@ if ($?) {
 }
 
 # Send auditing email before next step in case of failure.
-SENDMAIL($TBOPS,
-	 "New Geni user created: $usr_uid",
-	 "New Geni user has logged in via the trusted signer.\n\n".
-	 "Uid:   $usr_uid\n".
-	 "Email: $email\n".
-	 "URN:   $urn\n".
-	 "\n",
-	 $TBOPS, "Bcc: $TBAUDIT");
+if ($notify) {
+    SENDMAIL($TBOPS,
+	     "New Geni user created: $usr_uid",
+	     "New Geni user has logged in via the trusted signer.\n\n".
+	     "Uid:   $usr_uid\n".
+	     "Email: $email\n".
+	     "URN:   $urn\n".
+	     "\n",
+	     $TBOPS, "Bcc: $TBAUDIT");
+}
 
 # We need to generate the encrypted ssl certificate to keep
 # things happy.

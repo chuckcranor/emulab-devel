@@ -451,7 +451,7 @@ function CreateNonLocalUser($urn, $email)
     # non-negative value if the user already exists.
     #
     $retval = SUEXEC("elabman", $TBOPSPID,
-		     "webcreategeniuser -p CloudLab $safe_urn $safe_email",
+		     "webcreategeniuser -p CloudLab -m $safe_urn $safe_email",
 		     SUEXEC_ACTION_CONTINUE);
     if ($retval < 0)
 	return -1;
