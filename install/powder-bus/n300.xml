@@ -18,5 +18,6 @@
 <attribute name="attr_boolean_noshowfreenodes">  <value>1</value></attribute>
 <attribute name="attr_integer_power_delay">  <value>60</value></attribute>
 <attribute name="attr_boolean_rebootable">  <value>0</value></attribute>
+<attribute name="attr_boolean_idlepower_enable">  <value>1</value></attribute>
 <attribute name="attr_string_default_osid">  <value>emulab-ops,GENERICDEV-NOVLANS</value></attribute>
 </nodetype>

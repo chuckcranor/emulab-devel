@@ -34,6 +34,7 @@
 <attribute name="attr_integer_hw_cpu_threads">  <value>1</value></attribute>
 <attribute name="attr_integer_hw_mem_size">  <value>65536</value></attribute>
 <attribute name="attr_boolean_rebootable">  <value>1</value></attribute>
+<attribute name="attr_boolean_idlepower_enable">  <value>1</value></attribute>
 <attribute name="attr_integer_simnode_capacity">  <value>0</value></attribute>
 <attribute name="attr_integer_trivlink_maxspeed"><value>10000000</value></attribute>
 <attribute name="attr_string_dom0mem">  <value>4096M</value></attribute>
