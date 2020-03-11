@@ -462,6 +462,8 @@ REPLACE INTO state_transitions VALUES ('ONIE','PXEWAKEUP','BOOTING','');
 REPLACE INTO state_transitions VALUES ('ONIE','ISUP','ISUP','');
 REPLACE INTO state_transitions VALUES ('ALWAYSUP','ISUP','SHUTDOWN','Reboot');
 REPLACE INTO state_transitions VALUES ('ALWAYSUP','SHUTDOWN','ISUP','BootDone');
+REPLACE INTO state_transitions VALUES ('ALWAYSUP','ISUP','POWEROFF','');
+REPLACE INTO state_transitions VALUES ('ALWAYSUP','POWEROFF','SHUTDOWN','');
 REPLACE INTO state_transitions VALUES ('PCVM','ISUP','BOOTING','Crash');
 REPLACE INTO state_transitions VALUES ('EXPTSTATE','TERMINATING','SWAPPED','Error');
 REPLACE INTO state_transitions VALUES ('EXPTSTATE','TERMINATING','ENDED','NoError');
