@@ -954,6 +954,7 @@ sub DoGroupReserve()
 			  "A reservation group request was made by $this_uid, ".
 			  "but it needs approval.".
 			  "\n\n".
+			  $resgroup->InfoString() . "\n" .
 			  "See: $url", $this_email);
 	    }
 	    elsif ($update) {
