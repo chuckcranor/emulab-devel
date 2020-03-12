@@ -272,10 +272,12 @@ sub Install($$$)
 			   "images/default_typelist $DEFAULTTYPE");
 	};
 	if ($TARGETSYS_TARGET eq "POWDER-BUS") {
-	    Phase "idlepower", "Enabling idlepower", sub {
-		ExecQuietFatal("$PREFIX/sbin/setsitevar ".
-			       "general/idlepower_enable 1");
-	    };
+	    if (0) {
+		Phase "idlepower", "Enabling idlepower", sub {
+		    ExecQuietFatal("$PREFIX/sbin/setsitevar ".
+				   "general/idlepower_enable 1");
+		};
+	    }
 	    Phase "idlepower", "Setting idletime", sub {
 		ExecQuietFatal("$PREFIX/sbin/setsitevar ".
 			       "general/idlepower_idletime 900");
