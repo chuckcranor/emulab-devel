@@ -38,8 +38,9 @@ all: $(TARGETS)
 include $(TESTBED_SRCDIR)/GNUmakerules
 
 install: $(INSTALL_ETCDIR)/dhcpd.conf.frag.one \
-	 $(INSTALL_SBINDIR)/run_capture \
-	 $(INSTALL_SBINDIR)/batterymon \
+	 $(INSTALL_SBINDIR)/run_capture
+
+install-extra: $(INSTALL_SBINDIR)/batterymon \
 	 $(INSTALL_SBINDIR)/idlefix \
 	 $(INSTALL_RCDIR)/idlefix.sh
 
