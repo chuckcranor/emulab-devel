@@ -87,13 +87,13 @@ my $node = Node->Lookup("ed1");
 if (!defined($node)) {
     fatal("No such node ed1");
 }
-if (!$node->IsReserved() && $node->IsUp()) {
-    print "ed1 is in ISUP and in the free pool.\n";
+if (!$node->IsReserved()) {
+    print "ed1 is in the free pool.\n";
     if (!$impotent) {
-	print "Rebooting ed1\n";
-	system("$SUDO -u elabman $WAP $NODEREBOOT ed1");
+	print "Powering off ed1\n";
+	system("$SUDO -u elabman $WAP $POWER off ed1");
 	if ($?) {
-	    fatal("Could not reboot ed1");
+	    fatal("Could not power off ed1");
 	}
     }
 }
