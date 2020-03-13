@@ -426,7 +426,14 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
   DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
   DEFAULT_VERSIONS+=ssl=base
 
-   f. Cleanse the port environment:
+   f. (NEW for 2020!) Create a /usr/obj filesystem. There is not enough
+      space in the root filesystem to hold all the build trees. You need
+      on the order of 25GB, so just use the rest of the root disk
+      (YOU MUST DO THIS BEFORE REMOVING /usr/local!):
+
+      sudo /usr/local/etc/emulab/mkextrafs.pl /usr/obj
+
+   g. Cleanse the port environment:
 
       sudo tcsh
       setenv ASSUME_ALWAYS_YES true
@@ -435,7 +442,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
       rm -rf /var/db/ports/*
       rm -rf /usr/obj/ports/usr/ports/*
 
-   g. Make sure the package tool is installed. Sometimes you can just:
+   h. Make sure the package tool is installed. Sometimes you can just:
 
       pkg info
 
@@ -448,7 +455,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
       pkg add ca_root*
       popd
 
-   h. Make sure port options are correctly set:
+   i. Make sure port options are correctly set:
 
       NOTE: if you get a message about "unsupported release" when you
       try to do a make, it might be because /usr/include/sys/param.h
@@ -469,12 +476,14 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
 	  XAW
       - make -C graphics/cairo config
         and deselect OPENGL.
+      - make -C graphics/jasper config
+        and deselect OPENGL.
       - make -C www/apache24 config
         and select SUEXEC.
       - make -C x11-toolkits/pango config
         and deselect DOCS.
 
-   i. Build em all:
+   j. Build em all:
 
        setenv PACKAGES /usr/obj/ports/packages
        rm -f $PACKAGES/All/*
@@ -484,18 +493,18 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
 	   (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean)
        end
 
-   j. Check for vulnerabilities. If any are revealed, you can either try
+   k. Check for vulnerabilities. If any are revealed, you can either try
       to update /share/freebsd/11.3/ports with a newer version of the port
       (e.g., from /share/freebsd/current/ports) or just live with the
       vulnerability for now.
 
        pkg audit -F
 
-   k. Create the packages:
+   l. Create the packages:
 
        pkg create -a -o $PACKAGES/All/
 
-   l. Create the alternate ipmitool package. The Moonshot chassis require
+   m. Create the alternate ipmitool package. The Moonshot chassis require
       an older ipmitool embodied in the emulab-ipmitool-old port. It conflicts
       with the regular packages so we have to remove that first.
 
@@ -503,7 +512,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
        cd /usr/ports/misc/emulab-ipmitool-old
        env BATCH=1 make clean all install ; make package clean
 
-   m. Save packages and update tarball and repo. On boss:
+   n. Save packages and update tarball and repo. On boss:
 
       cd /share/freebsd/11.3
       mkdir packages
@@ -525,7 +534,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
       sudo tar --exclude=ports/.svn -czf $tball ports
       sudo cp $tball $www/downloads/
 
-   n. Random useful commands to run on the package files.
+   o. Random useful commands to run on the package files.
 
       For comparing with older package sets, it is sometimes useful to
       trim off the version number, etc. if you want to see the difference
