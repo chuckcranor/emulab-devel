@@ -118,6 +118,7 @@ RUN_DEPENDS+=	\
 	swig${SWIG_VER}:${PORTSDIR}/${SWIG_PORT} \
 	sudo:${PORTSDIR}/security/sudo \
 	medusa:${PORTSDIR}/security/medusa \
+	nmap:${PORTSDIR}/security/nmap \
 	wget:${PORTSDIR}/ftp/wget \
 	xvcg:${PORTSDIR}/graphics/vcg \
 	${LOCALBASE}/libexec/mysqld:${PORTSDIR}/databases/mysql${MYSQL_VER}-server \
@@ -154,7 +155,8 @@ RUN_DEPENDS+=	\
 	p5-Tree-Binary>=1.05:${PORTSDIR}/devel/p5-Tree-Binary \
 	p5-XML-LibXML>=2.0107:${PORTSDIR}/textproc/p5-XML-LibXML \
 	p5-XML-Parser>=2.41:${PORTSDIR}/textproc/p5-XML-Parser \
-	p5-XML-Simple>=2.20:${PORTSDIR}/textproc/p5-XML-Simple
+	p5-XML-Simple>=2.20:${PORTSDIR}/textproc/p5-XML-Simple \
+        p5-RRDTool-OO>=0.36:${PORTSDIR}/devel/p5-RRDTool-OO
 
 # python packages
 RUN_DEPENDS+=	\
@@ -173,6 +175,12 @@ RUN_DEPENDS+=	\
 RUN_DEPENDS+=	\
 	dhcpd:${PORTSDIR}/net/isc-dhcp44-server \
 	${LOCALBASE}/sbin/rndc:${PORTSDIR}/dns/bind911
+
+.if (${EMULAB_PORTVERSION} == "7.3")
+# dig and friends
+RUN_DEPENDS+=	\
+	${LOCALBASE}/bin/dig:${PORTSDIR}/dns/bind-tools
+.endif
 
 # XXX For building loghole doc from www/tutorial
 RUN_DEPENDS+=	\
