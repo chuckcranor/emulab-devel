@@ -102,7 +102,7 @@ if (defined($options{"a"})) {
     if ($options{"a"} =~ /^(diskboot|mfsboot|nfsboot|pxewait|pxefail|default|recovery)$/) {
 	$action = $1;
     } else {
-	print STDERR "Bogus action '$1'\n";
+	print STDERR "Bogus action '" . $options{"a"} . "'\n";
 	usage();
     }
 }
@@ -120,7 +120,8 @@ if (!$doall && @ARGV < 1) {
 }
 
 # Set up syslog
-openlog("pxelinux_makeconf", "pid", $TBLOG);
+openlog("pxelinux_makeconf", "pid", $TBLOG)
+    if (!$debug);
 
 my @nodes;
 if ($doall) {
