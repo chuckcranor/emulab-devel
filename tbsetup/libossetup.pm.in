@@ -105,6 +105,7 @@ sub New($$$@)
     $self->{'FAILCOUNT'}  = 0;
     $self->{'OSMAP'}      = {};
     $self->{'TYPECACHE'}  = {};
+    $self->{'CLASSCACHE'} = {};
     $self->{'OPLIST'}     = {};
 
     # For informing users of failed nodes.
@@ -212,7 +213,8 @@ sub OperationList($)
 {
     my ($self) = @_;
     
-    return [ values(%{ $self->{'TYPECACHE'} }) ];
+    return [ values(%{ $self->{'TYPECACHE'} }),
+	     values(%{ $self->{'CLASSCACHE'} })];
 }
 
 #
@@ -1034,7 +1036,6 @@ sub NewType($$)
 	    return undef;
 	}
     }
-    $self->{'TYPECACHE'}->{$type} = $newtype;
     
 #    print STDERR "Created type object $type with parent $self\n"
 #	if ($self->debug());
@@ -1047,27 +1048,36 @@ sub NewType($$)
 sub TypeLookup($$)
 {
     my ($self, $node) = @_;
-
     my $type  = $node->type();
-    my $class = $node->class();
 
-    #
-    # These special cases will eventually be encoded in the DB.
-    #
-    if ($type eq "pcfedphys" || $type eq "pcfed") {
-	$type = "protogeni";
-    }
-    elsif ($node->issubnode()) {
+    if ($node->issubnode()) {
 	$type = "subnode";
     }
-
     return $self->{'TYPECACHE'}->{$type}
         if (exists($self->{'TYPECACHE'}->{$type}));
 
-    return $self->{'TYPECACHE'}->{$class}
-        if (exists($self->{'TYPECACHE'}->{$class}));
+    my $newtype = $self->NewType($type);
+    if (defined($newtype)) {
+	$self->{'TYPECACHE'}->{$type} = $newtype;
+    }
+    return $newtype;
+}
+#
+# Return the cached class object.
+#
+sub ClassLookup($$)
+{
+    my ($self, $node) = @_;
+    my $class = $node->class();
 
-    return undef;
+    return $self->{'CLASSCACHE'}->{$class}
+        if (exists($self->{'CLASSCACHE'}->{$class}));
+
+    my $newtype = $self->NewType($class);
+    if (defined($newtype)) {
+	$self->{'CLASSCACHE'}->{$class} = $newtype;
+    }
+    return $newtype;
 }
 
 #
