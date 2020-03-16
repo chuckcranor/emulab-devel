@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2014, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2014-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,6 +24,8 @@
 use English;
 use strict;
 use Getopt::Std;
+use Sys::Syslog;
+use Sys::Syslog qw(:standard :macros);
 
 #
 # Import an image from an external source. 
@@ -47,6 +49,7 @@ my $doall = 0;
 # Configure variables
 #
 my $TB		= "@prefix@";
+my $TBLOG	= "@TBLOGFACIL@";
 
 #
 # Untaint the path
@@ -82,6 +85,7 @@ my $template = "$configdir/boot.template";
 
 # Protos
 sub donode($$);
+sub logit($);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -98,6 +102,7 @@ if (defined($options{"a"})) {
     if ($options{"a"} =~ /^(diskboot|mfsboot|nfsboot|pxewait|pxefail|default|recovery)$/) {
 	$action = $1;
     } else {
+	print STDERR "Bogus action '$1'\n";
 	usage();
     }
 }
@@ -110,8 +115,12 @@ if (defined($options{"A"})) {
 }
 
 if (!$doall && @ARGV < 1) {
+    print STDERR "Must specify one or more nodes.\n";
     usage();
 }
+
+# Set up syslog
+openlog("pxelinux_makeconf", "pid", $TBLOG);
 
 my @nodes;
 if ($doall) {
@@ -126,14 +135,14 @@ foreach my $nodeid (@nodes) {
     if ($nodeid =~ /^([-\w]+)$/) {
 	$nodeid = $1;
     } else {
-	print STDERR "$nodeid: bogus nodeid!\n";
+	logit("$nodeid: bogus nodeid!");
 	usage();
     }
 
     # No permissions checks right now, we assume the caller is legit.
     my $node = Node->Lookup($nodeid);
     if (!$node) {
-	print STDERR "$nodeid: bogus node!\n";
+	logit("$nodeid: bogus node!");
 	usage();
     }
 
@@ -147,11 +156,11 @@ sub donode($$)
     my ($node, $action) = @_;
     my $nodeid = $node->node_id();
 
-    print "$nodeid: called to set action $action\n"
+    logit("$nodeid: called to set action $action")
 	if ($debug);
 
     if ($node->boot_method() ne "pxelinux") {
-	print STDERR "$nodeid: not a pxelinux booted node, ignored\n";
+	logit("$nodeid: not a pxelinux booted node, ignored");
 	return 0;
     }
 
@@ -159,14 +168,14 @@ sub donode($$)
 	TBPxelinuxConfig($node, \$action);
 	if ($action eq "default" || $action eq "pxefail") {
 	    # something went wrong
-	    print STDERR "$nodeid: could not determine the correct action!?\n";
+	    logit("$nodeid: could not determine the correct action!?");
 	    return 1;
 	}
     }
 
     my $cnet = Interface->LookupControl($node);
     if (!$cnet || !$cnet->mac() || $cnet->mac() !~ /^(..)(..)(..)(..)(..)(..)$/) {
-	print STDERR "$nodeid: bogus cnet MAC.\n";
+	logit("$nodeid: bogus cnet MAC.");
 	return 1;
     } else {
 	$cfile = "$configdir/01-$1-$2-$3-$4-$5-$6";
@@ -178,7 +187,7 @@ sub donode($$)
 	    if (/^ONTIMEOUT\s+(\S+)/) {
 		if ($1 eq $action) {
 		    close(FD);
-		    print "$nodeid: already set to '$action'\n"
+		    logit("$nodeid: already set to '$action'")
 			if ($debug);
 		    return 0;
 		}
@@ -212,15 +221,26 @@ sub donode($$)
 
 	if (!rename($tmpfile, $cfile)) {
 	    unlink($tmpfile);
-	    print STDERR "$nodeid: could not install new pxelinux config!\n";
+	    logit("$nodeid: could not install new pxelinux config!");
 	    return 1;
 	}
-	print "$nodeid: updated $cfile with action $action\n"
+	logit("$nodeid: updated $cfile with action $action")
 	    if ($debug);
 	return 0;
     }
 
-    print STDERR "$nodeid: could not read template or write config!\n";
+    logit("$nodeid: could not read template or write config!");
     return 1;
 }
 
+sub logit($)
+{
+    my ($msg) = @_;
+
+    if ($debug) {
+	my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+	print STDERR "$stamp: pxelinux_makeconf: $msg\n";
+    } else {
+	syslog(LOG_INFO, $msg);
+    }
+}
