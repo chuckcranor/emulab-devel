@@ -26,7 +26,9 @@
 
 package power_powduino;
 
+use strict;
 use Exporter;
+use vars qw(@ISA @EXPORT);
 @ISA = ("Exporter");
 @EXPORT = qw( powduinoctrl powduinostatus powduinotemp powduinovoltage );
 
@@ -152,6 +154,7 @@ sub powduinovoltage {
 # 
 sub powduinoctrl {
     my($cmd, $controller, @outlets) = @_;
+    my $TIP;
 
     #
     # Check parameters
@@ -161,7 +164,7 @@ sub powduinoctrl {
 	return 1;
     }
     if (grep {$_ < 0 || $_ > 3} @outlets) {
-	print STDERR "*** Invalid outlet '$outlet': Must be 0-3\n";
+	print STDERR "*** Invalid outlet '@outlets': Must be 0-3\n";
 	return 1;
     }
 
@@ -245,27 +248,30 @@ sub syncandsend($$$;$) {
 
 	if (syswrite($TIP, "\r") == 0) {
 	    print STDERR
-		"*** Power control sync write failed ($controller/$outlet)\n";
+		"*** Power control sync write failed ($controller)\n";
 	    return 1;
 	}
 
-	$line = rpc_readline($TIP);
-	if (!defined($line)) {
-	    print STDERR
-		"*** Power control sync read failed ".
-		    "($controller/$outlet)\n";
-	    return 1;
-	}
-	if ($debug) {
-	    print "Read: $line";
-	}
-	if ($line =~ /$PROMPT/) {
-	    if ($debug) {
-		print "Matched prompt '$PROMPT'!\n";
+	while (1) {
+	    $line = rpc_readline($TIP);
+	    if (!defined($line)) {
+		print STDERR
+		    "*** Power control sync read failed ($controller)\n";
+		return 1;
 	    }
-	    $insync = 1;
-	    last;
+	    if ($debug) {
+		print "Read: $line";
+	    }
+	    if ($line =~ /$PROMPT/) {
+		if ($debug) {
+		    print "Matched prompt '$PROMPT'!\n";
+		}
+		$insync = 1;
+		last;
+	    }
 	}
+	last
+	    if ($insync);
     }
     if (! $insync) {
 	print STDERR "*** Could not sync with power controller! ".
@@ -279,7 +285,7 @@ sub syncandsend($$$;$) {
 
     # Okay, got a prompt. Send it the string:
     if (syswrite($TIP, "$cmd\r") == 0) {
-    	print STDERR "*** Power control write failed ($controller/$outlet)\n";
+    	print STDERR "*** Power control write failed ($controller)\n";
     	return 1;
     }
 
@@ -321,7 +327,7 @@ sub syncandsend($$$;$) {
 		$status{"pin$1"} = $2;
 		$gotstatus = 1;
 		print "status 'pin$1' = ", $status{"pin$1"}, "\n" if ($debug);
-	    } elsif ($line =~ /^(\d+(\.\d+)?)/) {
+	    } elsif ($line =~ /^(\-?\d+(\.\d+)?)/) {
 		$status{"tempC"} = $1;
 		$gotstatus = 1;
 		print "status 'temp' = ", $status{"tempC"}, "\n" if ($debug);
@@ -341,7 +347,7 @@ sub syncandsend($$$;$) {
 #
 sub tipconnect($) {
     my($controller) = $_[0];
-    my($server, $portnum, $keylen, $keydata, $capreturn);
+    my($server, $portnum, $keylen, $keydata, $capreturn, $disabled);
     my($inetaddr, $paddr, $proto);
     my(%powerid_row);
     local *TIP;
