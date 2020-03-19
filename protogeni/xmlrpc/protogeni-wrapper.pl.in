@@ -351,7 +351,9 @@ if (@PROTOGENI_PORTALONLY@) {
 		$hrn->domain() eq "clemson.cloudlab.us" ||
 		$hrn->domain() =~ /\.powderwireless\.net$/ ||
 		$hrn->domain() eq "lab.onelab.eu" ||
-		$hrn->domain() eq "cloudlab.umass.edu" ? 1 : 0);
+		$hrn->domain() eq "cloudlab.umass.edu" ||
+		$hrn->domain() eq "ilabt.imec.be" ||
+		$hrn->domain() eq "wall2.ilabt.iminds.be" ? 1 : 0);
 
     #
     # On the MotherShip, we have to allow access to some of the entrypoints
