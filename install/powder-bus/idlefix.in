@@ -90,11 +90,10 @@ if (!defined($node)) {
 if (!$node->IsReserved()) {
     print "ed1 is in the free pool.\n";
     if (!$impotent) {
-	print "Powering off ed1\n";
-	system("$SUDO -u elabman $WAP $POWER off ed1");
-	if ($?) {
-	    fatal("Could not power off ed1");
-	}
+	print "Powering off/on ed1\n";
+	system("$SUDO $POWER off ed1-real");
+	sleep(10);
+	system("$SUDO $POWER on ed1-real");
     }
 }
 

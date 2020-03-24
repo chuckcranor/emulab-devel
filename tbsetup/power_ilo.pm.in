@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2016, 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -540,7 +540,7 @@ sub ipmiexec($$$$$$$;$$$$) {
 
 again:
     my $privlvl_args = ($privlvl) ? " -L $privlvl" : '';
-    my $ipmicmd = "ipmitool -I $iface -H $IP -U $key_uid $privlvl_args -E -K power $cmd";
+    my $ipmicmd = "ipmitool -I $iface -H $IP -R 8 -U $key_uid $privlvl_args -E -K power $cmd";
     print "*** Executing '$ipmicmd', output:\n"
 	if ($debug > 1);
 

@@ -431,6 +431,7 @@ sub rebootable($;$)    {return GetAttribute($_[0], "rebootable",$_[1]);}
 sub power_delay($;$)   {return GetAttribute($_[0], "power_delay",$_[1]);}
 sub shared($;$)        {return GetAttribute($_[0], "shared",$_[1]);}
 sub cyclewhenoff($;$)  {return GetAttribute($_[0], "cyclewhenoff",$_[1]);}
+sub brokenipmi($;$)    {return GetAttribute($_[0], "brokenipmi",$_[1]);}
 
 sub initial_experiment($;$) {
     return GetAttribute($_[0], "initial_experiment",$_[1]);

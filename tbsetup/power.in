@@ -637,7 +637,35 @@ foreach my $power_id (keys %outlets) {
 	foreach my $nodeid (@nodes) {
 	    my $node = $nodes{$nodeid};
 	    print "$nodeid now ",($op eq "cycle" ? "rebooting" : $op),"\n";
+
 	    if (defined($node) && $sendevent) {
+		#
+		# So ... for ipmi power off, might have to wait for a
+		# SHUTDOWN event if ipmi on the node does an acpi shutdown
+		# and the node sends a SHUTDOWN state event.
+		#
+		if ($op eq "off" &&
+		    $type eq "ipmi20" && $node->brokenipmi()) {
+		    print "Broken IPMI on $nodeid, waiting for SHUTDOWN\n"
+			if ($verbose);
+		    
+		    #
+		    # Simple short loop waiting for a SHUTDOWN before
+		    # sending POWEROFF.
+		    #
+		    for (my $i = 0; $i < 15; $i++) {
+			sleep(2);
+			$node->Refresh();
+			if ($node->eventstate() eq "SHUTDOWN") {
+			    print "$nodeid got a SHUTDOWN event.\n"
+				if ($verbose);
+			    last;
+			}
+		    }
+		    if ($node->eventstate() ne "SHUTDOWN") {
+			print "$nodeid did not get a SHUTDOWN event\n";
+		    }
+		}
 		my $oldstate = $node->eventstate();
 		my $newstate;
 
