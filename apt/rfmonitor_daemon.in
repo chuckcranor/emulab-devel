@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -70,6 +70,7 @@ my $MAINSITE         = @TBMAINSITE@;
 my $POWDER_RFMONITOR = @POWDER_RFMONITOR@;
 my $PGENISUPPORT     = @PROTOGENI_SUPPORT@;
 my $LOGFILE          = "$TB/log/rfmonitor_daemon.log";
+my $RAWDATADIR       = "$TB/www/rfmonitor";
 my $POWER            = "$TB/bin/power";
 my $FORMAT           = "portid,timestamp,frequency,power";
 my $MAILDELAY        = 3600;
@@ -87,6 +88,8 @@ sub NodeNotified($$$);
 sub HandleChild($);
 sub LoadNodeData($);
 sub HandleViolations($$);
+sub WriteRawData($);
+
 #
 # Turn off line buffering on output
 #
@@ -264,6 +267,7 @@ sub HandleChild($)
     my $nextdata   = {};
     my $noisefloor = $NOISEFLOOR;
     my @dbinserts  = ();
+    my %csvdata    = ();
 
     # Add a DB insert to the list of violations to store in the DB.
     my $addInsert = sub {
@@ -392,12 +396,23 @@ sub HandleChild($)
 	my $power     = $measurement->{"power"} + 0.0;
 	my $timestamp = $measurement->{"timestamp"};
 	my $key       = "${nodeid}:${iface}:${frequency}";
-	
+
 	my $node = Node->Lookup($nodeid);
 	if (!$node) {
 	    print STDERR "No such node $nodeid\n";
 	    next;
 	}
+	#print "$nodeid:$iface: $frequency,$power\n";
+
+	#
+	# Raw data is going to go into a csv file for graphing.
+	# We assume already sorted (by frequency) data.
+	#
+	if (!exists($csvdata{"${nodeid}:${iface}"})) {
+	    $csvdata{"${nodeid}:${iface}"} = [];
+	}
+	push(@{ $csvdata{"${nodeid}:${iface}"} }, [$frequency, $power]);
+	
 	#
 	# This is bogus, I was expecting the monitor to only send me
 	# messages for actual transmission, not 1000s of lines. So I
@@ -545,6 +560,11 @@ sub HandleChild($)
     else {
 	print STDERR "Could not open $datafile for writing: $!\n";
     }
+    #
+    # Write the raw data file(s)
+    #
+    WriteRawData(\%csvdata);
+
     print "Finished with $address:$port at " .
 	POSIX::strftime("%m/%d %H:%M:%S", localtime()) . "\n";
     exit(0);
@@ -771,6 +791,43 @@ sub NodeNotify($$$)
 	     "BCC: $TBRFOPS");
     
     NodeNotified($nodeid, $which, $mesg);
+}
+
+#
+# Write RAW data to CSV files in /usr/testbed/www
+#
+sub WriteRawData($)
+{
+    my ($data) = @_;
+
+    foreach my $portid (keys(%{$data})) {
+	my @samples  = @{$data->{$portid}};
+	my $newname  = "$RAWDATADIR/${portid}.new";
+	my $csvname  = "$RAWDATADIR/${portid}.csv";
+
+	if (open(CSV, "> $newname")) {
+	    print CSV "frequency,power\n";
+	    
+	    foreach my $ref (@samples) {
+		my ($freq, $power) = @$ref;
+		$freq  = sprintf("%.3f", $freq);
+		$power = sprintf("%.3f", $power);
+		
+		print CSV "$freq,$power\n";
+	    }
+	    if (close(CSV)) {
+		if (!rename($newname, $csvname)) {
+		    print STDERR "Could not rename new CSV file $newname: $!\n";
+		}
+	    }
+	    else {
+		print STDERR "Could not close new CSV file $newname: $!\n";
+	    }
+	}
+	else {
+	    print STDERR "Could not open new CSV file $newname: $!\n";
+	}
+    }
 }
 
 sub fatal($)

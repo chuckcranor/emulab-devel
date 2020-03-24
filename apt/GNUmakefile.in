@@ -80,6 +80,7 @@ install: $(addprefix $(INSTALL_BINDIR)/, $(BIN_SCRIPTS)) \
 	$(INSTALL_ETCDIR)/cloudlab-nofed.json
 
 boss-install: install install-subdirs
+	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor
 
 subboss-install: 
 
