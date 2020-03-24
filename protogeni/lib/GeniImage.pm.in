@@ -643,8 +643,8 @@ sub MapToLocalImage($$$$@)
     # think not, so lets return an error. 
     #
     if ($blob->{'issystem'}) {
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "Not allowed to import system image: $urn");
+	return GeniResponse->BadArgsResponse(
+	    "Not allowed to import system image: $urn");
     }
 
     #
