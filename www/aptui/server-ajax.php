@@ -627,7 +627,18 @@ $routing = array("geni-login" =>
                                                  "GetBaseStations" =>
                                                      "Do_GetBaseStations",
                                                  "GetMobileEndpoints" =>
-                                                     "Do_GetMobileEndpoints")),
+                                                     "Do_GetMobileEndpoints",
+                                                 "GetRadioInfo" =>
+                                                     "Do_GetRadioInfo",
+                              )
+                        ),
+		 "frequency-graph" =>
+			array("file"    => "frequency-graph.ajax",
+			      "guest"   => false,
+			      "methods" => array("GetFrequencyData" =>
+						     "Do_GetFrequencyData",
+                              )
+                        ),
 );
 
 #

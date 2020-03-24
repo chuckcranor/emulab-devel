@@ -27,6 +27,29 @@ include_once("aggregate_defs.php");
 chdir("apt");
 
 #
+# Return the radio info for all radios.
+#
+function Do_GetRadioInfo()
+{
+    global $this_user, $ajax_args;
+    $blob = array();
+
+    $query_result =
+        DBQueryFatal("select * from apt_aggregate_radioinfo");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $urn      = $row["aggregate_urn"];
+        $node_id  = $row["node_id"];
+
+        if (!array_key_exists($urn, $blob)) {
+            $blob[$urn] = array();
+        }
+        $blob[$urn][$node_id] = $row;
+    }
+    SPITAJAX_RESPONSE($blob);
+}
+
+#
 # Return Fixed Endpoint info.
 #
 function Do_GetFixedEndpoints()

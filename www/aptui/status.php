@@ -241,6 +241,9 @@ echo "<link rel='stylesheet'
             href='css/nv.d3.css'>\n";
 
 echo "<link rel='stylesheet'
+            href='css/frequency-graph.css'>\n";
+
+echo "<link rel='stylesheet'
             href='css/tablesorter.css'>\n";
 
 # Place to hang the toplevel template.
@@ -281,6 +284,7 @@ else {
 
 echo "</script>\n";
 echo "<script src='js/lib/d3.v3.js'></script>\n";
+echo "<script src='js/lib/d3.v5.js'></script>\n";
 echo "<script src='js/lib/nv.d3.js'></script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/jquery-ui.js'></script>\n";
@@ -301,6 +305,9 @@ REQUIRE_CONTEXTMENU();
 REQUIRE_SUP();
 AddLibrary("js/bindings.js");
 AddLibrary("js/paramsets.js");
+if ($ISPOWDER) {
+    AddLibrary("js/freqgraphs.js");
+}
 SPITREQUIRE("js/status.js");
 
 echo "<link rel='stylesheet'
@@ -333,6 +340,30 @@ echo "<script type='text/plain' id='amlist-json'>\n";
 echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
 echo "</script>\n";
 
+#
+# For Powder, send the radio info.
+#
+if ($ISPOWDER) {
+    $blob = array();
+
+    $query_result =
+        DBQueryFatal("select * from apt_aggregate_radioinfo");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $urn      = $row["aggregate_urn"];
+        $node_id  = $row["node_id"];
+
+        if (!array_key_exists($urn, $blob)) {
+            $blob[$urn] = array();
+        }
+        $blob[$urn][$node_id] = $row;
+    }
+    echo "<script type='text/plain' id='radioinfo-json'>\n";
+    echo json_encode($blob,
+                     JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
+    echo "</script>\n";
+}
+
 # This is for Clone.
 if (isset($this_user)) {
     $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
@@ -349,7 +380,7 @@ AddTemplateList(array("status", "waitwait-modal", "oops-modal",
                       "register-modal", "terminate-modal", "oneonly-modal",
                       "approval-modal", "linktest-modal",
                       "destroy-experiment", "save-paramset-modal",
-                      "prestage-table"));
+                      "prestage-table", "frequency-graph"));
 
 AddTemplateKey("linktest-md", "template/linktest.md");
 SPITFOOTER();

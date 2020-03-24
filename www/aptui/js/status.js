@@ -3,7 +3,12 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['status', 'waitwait-modal', 'oops-modal', 'register-modal', 'terminate-modal', 'oneonly-modal', 'approval-modal', 'linktest-modal', 'linktest-md', "destroy-experiment", "prestage-table"]);
+    var templates = APT_OPTIONS
+	.fetchTemplateList(['status', 'waitwait-modal',
+			    'oops-modal', 'register-modal', 'terminate-modal',
+			    'oneonly-modal', 'approval-modal', 'linktest-modal',
+			    'linktest-md', "destroy-experiment",
+			    "prestage-table", "frequency-graph"]);
 
     var statusString = templates['status'];
     var waitwaitString = templates['waitwait-modal'];
@@ -51,6 +56,9 @@ $(function ()
     var jacksInstance     = null;
     var changingtopo      = false;
     var slowdown          = false;
+    var radioinfo         = null;
+    var radios            = {};
+    var monitorTemplate   = null;
     var EMULAB_OPS        = "emulab-ops";
     var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
     var GENIRESPONSE_REFUSED = 7;
@@ -94,6 +102,10 @@ $(function ()
 	    // console.info(projlist);
 	}
 	amlist = decodejson('#amlist-json');
+	if (window.ISPOWDER) {
+	    radioinfo = decodejson('#radioinfo-json');
+	    monitorTemplate = _.template(templates['frequency-graph']);
+	}
 
 	/*
 	 * Need to grab the experiment info so we can draw the page.
@@ -1776,6 +1788,9 @@ $(function ()
 	else if (action == "recovery") {
 	    DoRecovery(clientList[0]);
 	}
+	else if (action == "monitor") {
+	    NewMonitorTab(clientList[0]);
+	}
     }
 
     var listview_row = 
@@ -1799,6 +1814,8 @@ $(function ()
 	"    <li><a href='#' name='shell'>Shell</a></li> " +
 	"    <li><a href='#' name='console'>Console</a></li> " +
 	"    <li><a href='#' name='consolelog'>Console Log</a></li> " +
+	"    <li class='hidden'> " +
+	"       <a href='#' name='monitor'>Monitor Graph</a></li> " +
 	"    <li><a href='#' name='delete'>Delete Node</a></li> " +
 	"  </ul>" +
 	"  </div>" +
@@ -1896,6 +1913,8 @@ $(function ()
 		var node_id= null;
 		var hwtype = null;
 		var clone  = $(listview_row);
+		var CMclone= $("#context-menu").clone();
+		
 		// Cause of nodes in the emulab namespace (vhost).
 		if (!login.length) {
 		    login = this.getElementsByTagNameNS(EMULAB_NS, 'login');
@@ -2070,53 +2089,71 @@ $(function ()
 			.parent().addClass('disabled');		    
 		}
 
+		/*
+		 * Powder; if the node is a radio (or hosts a radio)
+		 * enable the option to load the monitor graph into
+		 * a tab.
+		 */
+		if (window.ISPOWDER && radioinfo && node_id) {
+		    var info = IsPowderRadio(manager_urn, node_id);
+		    if (info) {
+			clone.find(' [name=monitor]')
+			    .click(function (e) {
+				ActionHandler("monitor", [node]);
+			    });
+			clone.find(' [name=monitor]')
+			    .parent().removeClass('hidden');
+
+			// Context menu option
+			CMclone.find("li[id=monitor]").removeClass("hidden");
+
+			// Mark it as a radio with its info. 
+			radios[node] = info;
+		    }
+		}
+
 		// Insert into the table, we will attach the handlers below.
 		$('#listview_table > tbody:last').append(clone);
 
-		/*
-		 * Make a copy of the master context menu and init.
-		 */
-		var clone = $("#context-menu").clone();
-
 		// Change the ID of the clone so its unique.
-		clone.attr('id', "context-menu-" + node);
+		CMclone.attr('id', "context-menu-" + node);
 
 		// Activate tooltips in the menu.
-		clone.find('[data-toggle="tooltip"]')
+		CMclone.find('[data-toggle="tooltip"]')
 		    .tooltip({"trigger"   : "hover",
 			      "container" : "body",
 			      "placement" : "auto right",
 			     });
 	    
 		// Insert into the context-menus div.
-		$('#context-menus').append(clone);
+		$('#context-menus').append(CMclone);
 
 		// If no console, then grey out the options.
 		if (!_.has(consolenodes, node)) {
-		    $(clone).find("li[id=console]").addClass("disabled");
-		    $(clone).find("li[id=consolelog]").addClass("disabled");
+		    $(CMclone).find("li[id=console]").addClass("disabled");
+		    $(CMclone).find("li[id=consolelog]").addClass("disabled");
 		    // For ActionHandler()
-		    $(clone).find("[name=console]").attr("disabled", true);
-		    $(clone).find("[name=consolelog]").attr("disabled", true);
+		    $(CMclone).find("[name=console]").attr("disabled", true);
+		    $(CMclone).find("[name=consolelog]").attr("disabled", true);
 		}
 		// If no recovery mode, grey out the option.
 		if (!canrecover) {
-		    $(clone).find("li[id=recovery]").addClass("disabled");
+		    $(CMclone).find("li[id=recovery]").addClass("disabled");
 		    // For ActionHandler()
-		    $(clone).find("[name=recovery]").attr("disabled", true);
+		    $(CMclone).find("[name=recovery]").attr("disabled", true);
 		}
 		if (! (login.length && dossh)) {
-		    $(clone).find("li[id=shell]").addClass("disabled");
+		    $(CMclone).find("li[id=shell]").addClass("disabled");
 		}
 		
 		// If a vhost/firewall, then grey out options. Or if there
 		// is just one node at this site.
 		if (isvhost || isfw || rawcount == 1) {
-		    $(clone).find("li[id=delete]").addClass("disabled");
+		    $(CMclone).find("li[id=delete]").addClass("disabled");
 		    // For ActionHandler()
-		    $(clone).find("[name=delete]").attr("disabled", true);
+		    $(CMclone).find("[name=delete]").attr("disabled", true);
 		}
-		contextMenus[node] = clone;
+		contextMenus[node] = CMclone;
 		nodecount++;
 	    });
 	}
@@ -4082,6 +4119,80 @@ $(function ()
     {
 	sup.HideModal('#prestage-info-modal');
 	$('#prestage-panel').addClass("hidden");
+    }
+
+    /*
+     * On the Powder Portal, we want a link to the monitoring graph
+     * for nodes marked as a radio (or hosting a radio).
+     */
+    function IsPowderRadio(aggregate_urn, node_id)
+    {
+	if (_.has(radioinfo, aggregate_urn) &&
+	    _.has(radioinfo[aggregate_urn], node_id)) {
+	    return radioinfo[aggregate_urn][node_id];
+	}
+	return null;
+    }
+
+    /*
+     * Create a tab for a monitoring graph
+     */
+    function NewMonitorTab(client_id)
+    {
+	var info = radios[client_id];
+	
+	//
+	// Create the tab. The template inserted into the tab has a defined
+	// height, so do not worry about that here.
+	//
+	var tabname = client_id + "monitor_tab";
+	if (! $("#" + tabname).length) {
+	    // The tab.
+	    var html = "<li><a href='#" + tabname + "' data-toggle='tab'>" +
+		client_id + "-Graph" +
+		"<button class='close' type='button' " +
+		"        id='" + tabname + "_kill'>x</button>" +
+		"</a>" +
+		"</li>";	
+
+	    // Append to end of tabs
+	    $("#quicktabs_ul").append(html);
+
+	    // Install a kill click handler for the X button.
+	    $("#" + tabname + "_kill").click(function(e) {
+		e.preventDefault();
+		// remove the li from the ul. this=ul.li.a.button
+		$(this).parent().parent().remove();
+		// Activate the "profile" tab.
+		$('#quicktabs_ul li a:first').tab('show');
+		// Remove the content div. Have to delay this though.
+		$("#" + tabname).remove();
+	    });
+	    var options = {
+		"selector" : "#" + tabname + " .frequency-graph-div",
+		"cluster"  : amlist[info.aggregate_urn].nickname,
+		"node_id"  : info.node_id,
+		"iface"    : "rf0",
+	    }
+	    var html = monitorTemplate(options);
+
+	    // The content div.
+	    html = "<div class='tab-pane' id='" + tabname + "'>" +
+		html + "</div>";
+
+	    $("#quicktabs_content").append(html);
+
+	    // And make it active
+	    $('#quicktabs_ul a:last').tab('show') // Select last tab
+
+	    // Now we can create the graph.
+	    ShowFrequencyGraph(options);
+	}
+	else {
+	    // Switch back to it.
+	    $('#quicktabs_ul a[href="#' + tabname + '"]').tab('show');
+	    return;
+	}
     }
 
     // Helper.
