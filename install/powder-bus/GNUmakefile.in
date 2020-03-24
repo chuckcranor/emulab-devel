@@ -27,7 +27,8 @@ SUBDIR		= install/powder-bus
 
 include $(OBJDIR)/Makeconf
 
-TARGETS		= dhcpd.conf.frag.one batterymon idlefix idlefix.sh
+TARGETS		= dhcpd.conf.frag.one batterymon batterymon.sh \
+		 idlefix idlefix.sh poweron poweron.sh
 
 #
 # Force dependencies on the scripts so that they will be rerun through
@@ -38,11 +39,15 @@ all: $(TARGETS)
 include $(TESTBED_SRCDIR)/GNUmakerules
 
 install: $(INSTALL_ETCDIR)/dhcpd.conf.frag.one \
-	 $(INSTALL_SBINDIR)/run_capture
+	 $(INSTALL_SBINDIR)/run_capture \
+	 $(INSTALL_SBINDIR)/batterymon \
+	 $(INSTALL_RCDIR)/batterymon.sh
 
-install-extra: $(INSTALL_SBINDIR)/batterymon \
-	 $(INSTALL_SBINDIR)/idlefix \
+install-idlefix: $(INSTALL_SBINDIR)/idlefix \
 	 $(INSTALL_RCDIR)/idlefix.sh
+
+install-poweron: $(INSTALL_SBINDIR)/poweron \
+	 $(INSTALL_RCDIR)/poweron.sh
 
 # Like the INSTALL_BINDIR target
 $(INSTALL_RCDIR)/%: %

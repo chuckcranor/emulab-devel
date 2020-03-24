@@ -1,0 +1,182 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use Data::Dumper;
+
+#
+# At boss boot power on the experimental node (real power, not ipmi).
+# Also power on the radio if it is allocated to an experiment
+#
+sub usage()
+{
+    print "Usage: poweron [-n]\n";
+    exit(1);
+}
+my $optlist   = "dn";
+my $debug     = 0;
+my $impotent  = 0;
+
+#
+# Configure variables
+#
+my $TB         = "@prefix@";
+my $TBOPS      = "@TBOPSEMAIL@";
+my $PROTOUSER  = "elabman";
+my $WAP        = "$TB/sbin/wap";
+my $SUDO       = "/usr/local/bin/sudo";
+my $NODEREBOOT = "$TB/bin/node_reboot";
+my $POWER      = "$TB/bin/power";
+
+# Power Pins
+my $ED1_PIN    = "pin0";
+my $N3001_PIN  = "pin1";
+
+use lib "@prefix@/lib";
+use emdb;
+use WebTask;
+use Node;
+use power_powduino;
+use libtestbed;
+
+# Protos
+sub fatal($);
+
+#
+# Turn off line buffering on output
+#
+$| = 1; 
+
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+
+#
+# Protect the arduino access with a timeout. 
+#
+# Use a webtask to transmit the voltage values from the child to
+# the parent.
+#
+my $webtask = WebTask->CreateAnonymous();
+if (!defined($webtask)) {
+    fatal("Could not allocate a webtask");
+}
+my $childpid = fork();
+if ($childpid) {
+    #
+    # Allow a few seconds for this operation.
+    #
+    local $SIG{ALRM} = sub { kill("TERM", $childpid); };
+    alarm 10;
+    waitpid($childpid, 0);
+    alarm 0;
+    my $ecode = $?;
+    if ($ecode) {
+	my $cause;
+	
+	if (($ecode & 0xff) > 0) {
+	    $cause = "timed out waiting for child $childpid";
+	}
+	else {
+	    $cause = "failed with exit value ". ($ecode >> 8);
+	}
+	$webtask->Delete();
+	fatal("Could not get arduino power status");
+    }
+    $webtask->Refresh();
+}
+else {
+    # The child ...
+    #
+    # Ask for the voltage.
+    #
+    my %status;
+    if (powduinostatus("powduino", \%status)) {
+	exit(1);
+    }
+    $webtask->result(\%status);
+    $webtask->Store();
+    $webtask->Exited(0);
+    exit(0);
+}
+my $status = $webtask->result();
+print Dumper($status);
+
+#
+# If ED1 is powerered off, turn it on. It should boot up into PXEWAIT
+# or into ISUP (if allocated). If it goes into PXEWAIT, the idlepower
+# daemon will catch it and turn the IPMI power off.
+#
+if (!exists($status->{$ED1_PIN})) {
+    fatal("No $ED1_PIN in powduino status");
+}
+if ($status->{$ED1_PIN} eq "off") {
+    print "Powering on ed1-real\n";
+    if (!$impotent) {
+	system("$SUDO $POWER on ed1-real");
+	if ($?) {
+	    fatal("Could not power on ed1-real");
+	}
+    }
+}
+#
+# Ditto the N300, for now. 
+#
+if (!exists($status->{$N3001_PIN})) {
+    fatal("No $N3001_PIN in powduino status");
+}
+if ($status->{$N3001_PIN} eq "off") {
+    print "Powering on n300-1\n";
+    if (!$impotent) {
+	system("$SUDO $POWER on n300-1");
+	if ($?) {
+	    fatal("Could not power on n300-1");
+	}
+    }
+}
+exit(0);
+
+sub fatal($)
+{
+    my ($msg) = @_;
+
+    #
+    # Send a message to the testbed list. 
+    #
+    SENDMAIL($TBOPS,
+	     "Bus power on failed",
+	     $msg,
+	     $TBOPS);
+
+    die("*** $0:\n".
+	"    $msg\n");
+}
