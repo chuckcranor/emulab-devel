@@ -66,6 +66,7 @@ sub usage()
     print("Usage: manage_instance idledata instance\n");
     print("Usage: manage_instance openstackstats instance\n");
     print("Usage: manage_instance getmanifests instance\n");
+    print("Usage: manage_instance dumpmanifests instance\n");
     print("Usage: manage_instance warn instance\n");
     print("Usage: manage_instance status instance\n");
     print("Usage: manage_instance applyextensionpolicy instance\n");
@@ -148,6 +149,7 @@ sub DoRecovery();
 sub DoLockdown();
 sub DoPanic();
 sub DoManifests();
+sub DoDumpManifests();
 sub DoLinktest();
 sub DoUpdateKeys();
 sub DoDeleteNodes();
@@ -287,6 +289,9 @@ elsif ($action eq "writecreds") {
 }
 elsif ($action eq "getmanifests") {
     DoManifests()
+}
+elsif ($action eq "dumpmanifests") {
+    DoDumpManifests()
 }
 elsif ($action eq "deletenodes") {
     DoDeleteNodes()
@@ -1343,10 +1348,11 @@ sub DoTerminate()
     my $errcode;
     my $exitcode = 1;
     my $logfile;
+    my $doperms  = 0;
     my $takelock = 0;
     my $expired  = $RECORDHISTORY_TERMINATED;
 
-    my $optlist = "eL";
+    my $optlist = "eLX";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
@@ -1356,6 +1362,24 @@ sub DoTerminate()
     }
     if (defined($options{"L"})) {
 	$takelock = 1;
+    }
+    if (defined($options{"X"})) {
+	$doperms = 1;
+    }
+
+    #
+    # NOTE: This is called from legacy XMLRPC server, so do a permission
+    # check here for it. Only the creator on this path, the web interface
+    # will suffice for anyone else.
+    #
+    if ($doperms) {
+	my $creator = $instance->GetGeniUser();
+	if (!defined($creator)) {
+	    fatal("Cannot lookup creator");
+	}
+	if (!$this_user->SameUser($creator->emulab_user())) {
+	    UserError("Not enough permission to terminate experiment");
+	}
     }
 
     #
@@ -3159,6 +3183,60 @@ sub DoManifests()
 	$webtask->Exited($errcode);
     }
     exit($exitcode);
+}
+
+#
+# 
+#
+sub DoDumpManifests()
+{
+    my $optlist = "jX";
+    my $doperms = 0;
+    my $asjson  = 0;
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"j"})) {
+	$asjson = 1;
+    }
+    if (defined($options{"X"})) {
+	$doperms = 1;
+    }
+    #
+    # NOTE: This is called from legacy XMLRPC server, so do a permission
+    # check here for it. Only the creator on this path, the web interface
+    # will suffice for anyone else.
+    #
+    if ($doperms) {
+	my $creator = $instance->GetGeniUser();
+	if (!defined($creator)) {
+	    fatal("Cannot lookup creator");
+	}
+	if (!$this_user->SameUser($creator->emulab_user())) {
+	    UserError("Not enough permission to get experiment manifests");
+	}
+    }
+
+    if ($instance->status() ne "ready") {
+	UserError("Experiment is not in the ready state");
+    }
+    my $blob = {};
+
+    foreach my $agg ($instance->AggregateList()) {
+	$blob->{$agg->aggregate_urn()} = $agg->manifest();
+    }
+    if ($asjson) {
+	my $json = eval { encode_json($blob); };
+	if ($@) {
+	    fatal($@);
+	}
+	print $json;
+    }
+    else {
+	print Dumper($blob);
+    }
+    exit(0);
 }
 
 #

@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 #
-# Copyright (c) 2004-2019 University of Utah and the Flux Group.
+# Copyright (c) 2004-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -186,6 +186,8 @@ API = {
                               "help" : "Terminate a Portal experiment" },
     "experimentStatus"  : { "func" : "experimentStatus",
                             "help" : "Get status for a Portal experiment" },
+    "experimentManifests" : { "func" : "experimentManifests",
+                            "help" : "Get manifests for a Portal experiment" },
 };
 
 #
@@ -3132,7 +3134,48 @@ class experimentStatus:
         return rval
 
     def usage(self):
-        print "Usage: terminateExperiment <optons> <experiment>"
+        print "Usage: experimentStatus <optons> <experiment>"
+        print "where:"
+        print "experiment     - Either UUID or pid,name"
+        wrapperoptions();
+        return
+    pass
+
+#
+# Get manifests for a portal experiment
+#
+class experimentManifests:
+    def __init__(self, argv=None):
+        self.argv = argv;
+        return
+
+    def apply(self):
+        try:
+            opts, req_args = getopt.getopt(self.argv, "h", [ "help"]);
+            pass
+        except getopt.error, e:
+            print e.args[0]
+            self.usage();
+            return -1;
+        
+        params = {};
+        for opt, val in opts:
+            if opt in ("-h", "--help"):
+                self.usage()
+                return 0
+            pass
+
+        # Do this after so --help is seen.
+        if len(req_args) != 1:
+            self.usage();
+            return -1;
+
+        params["experiment"] = req_args[0]
+        rval,response = do_method("portal", "experimentManifests", params)
+        return rval
+
+    def usage(self):
+        print "Usage: experimentManifests <optons> <experiment>"
         print "where:"
         print "experiment     - Either UUID or pid,name"
         wrapperoptions();

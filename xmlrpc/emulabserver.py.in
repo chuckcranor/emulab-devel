@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 #
-# Copyright (c) 2004-2017, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2004-2017, 2019, 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,6 +40,7 @@ import types
 import datetime
 import syslog
 import subprocess
+import json
 
 # Configure variables
 TBDIR = "@prefix@"
@@ -6121,6 +6122,8 @@ class portal:
             pass
         
         argstr += escapeshellarg(experiment)
+        # Tell manage_instance to do permission checks.
+        argstr += " -X "
         
         (exitval, output) = runcommand(TBDIR +
                                        "/bin/manage_instance " + argstr)
@@ -6167,6 +6170,49 @@ class portal:
         # Slow down the polling.
         time.sleep(3)
         
+        (exitval, output) = runcommand(TBDIR +
+                                       "/bin/manage_instance " + argstr)
+
+        if exitval:
+            return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
+        
+        return EmulabResponse(RESPONSE_SUCCESS, output=output)
+
+    #
+    # Portal experiment manifests
+    #
+    def experimentManifests(self, version, argdict):
+        if version != self.VERSION:
+            return EmulabResponse(RESPONSE_BADVERSION,
+                                  output="Client version mismatch!")
+
+        if self.readonly:
+            return EmulabResponse(RESPONSE_FORBIDDEN,
+                              output="Insufficient privledge to invoke method")
+        
+        try:
+            checknologins()
+            pass
+        except NoLoginsError, e:
+            return EmulabResponse(RESPONSE_REFUSED, output=str(e))
+
+        argerror = CheckRequiredArgs(argdict, ("experiment",))
+        if (argerror):
+            return argerror
+
+        argstr     = "dumpmanifests "
+        experiment = None
+        
+        for opt, val in argdict.items():
+            if opt == "experiment":
+                experiment = val
+                pass
+            pass
+        
+        argstr += escapeshellarg(experiment)
+        # Tell manage_instance to do permission checks.
+        argstr += " -X -j "
+
         (exitval, output) = runcommand(TBDIR +
                                        "/bin/manage_instance " + argstr)
 
