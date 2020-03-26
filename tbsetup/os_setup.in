@@ -318,7 +318,7 @@ foreach my $node (@nodelist) {
 	# Otherwise use the class.
 	#
 	$object = $MyStruct->ClassLookup($node);
-	if ($@) {
+	if (!defined($object)) {
 	    die_noretry("No type/class specific setup module for $node");
 	}
     }

@@ -700,7 +700,7 @@ sub HandleViolations($$)
 	}
 	# Link to the violation history page.
 	if ($MAINSITE) {
-	    my $brand = Brand->Lookup("powder");
+	    my $brand = Brand->Create("powder");
 	    $rfurl = $brand->wwwBase() .
 		"/show-rfviolations.php?node_id=$nodeid";
 	}
