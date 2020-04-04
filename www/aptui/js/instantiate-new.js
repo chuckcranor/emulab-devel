@@ -2830,7 +2830,7 @@ $(function ()
 	 */
 	var showResgroupList = function (uuid) {
 	    sup.CallServerMethod(null, "resgroup", "ListReservationGroups",
-				 {"useronly" : true},
+				 {"project" : $('#profile_pid').val()},
 				 function (json) {
 				     if (json.code) {
 					 console.info(json.value);
@@ -2879,7 +2879,8 @@ $(function ()
 	    /*
 	     * Place into an iframe in the panel body,
 	     */
-	    var url  = "resgroup.php?fromrspec=1&embedded=1";
+	    var url  = "resgroup.php?fromrspec=1&embedded=1" +
+		"&project=" + $('#profile_pid').val();
 	
 	    var html = '<iframe id="reservation-iframe" class=col-xs-12 ' +
 		'style="padding-left: 0px; padding-right: 0px; border: 0px;" ' +
@@ -2903,7 +2904,8 @@ $(function ()
 
 	    // Slow timer to expand the iframe so no scroll bar.
 	    var timer = setInterval(function() {
-		var height = $("#wrap", iframewindow.document).css("height");
+		var doc    = iframewindow.document;
+		var height = $("#main-body", doc).css("height");
 		var now    = $('#reservation-iframe').css("height");
 		if (height != now) {
 		    console.info("height", height);

@@ -129,9 +129,6 @@ $plist = array();
 while (list($p) = each($projlist)) {
     $plist[] = $p;
 }
-if (ISADMIN() && isset($project)) {
-    $plist[] = $project->pid();
-}
 echo "<script type='text/plain' id='projects-json'>\n";
 echo htmlentities(json_encode($plist));
 echo "</script>\n";
@@ -189,7 +186,7 @@ echo "</script>\n";
 
 $default_pid = "";
 # Default project.
-if (ISADMIN() && isset($project)) {
+if (isset($project)) {
     $default_pid = $project->pid();
 }
 elseif (count($plist) == 1) {

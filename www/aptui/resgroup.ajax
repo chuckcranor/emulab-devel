@@ -1020,15 +1020,32 @@ function Do_IdleDetection()
 
 
 #
-# List reservation groups for a user (or all users if an admin).
+# List reservation groups for a user or project (or all users if an admin).
 #
 function Do_ListReservationGroups()
 {
     global $this_user;
     global $ajax_args;
+    global $TB_PROJECT_CREATEEXPT;
     $reservations = array();
 
-    if (ISADMIN() && !isset($ajax_args["useronly"])) {
+    if (isset($ajax_args["project"])) {
+        if (!TBvalid_pid($ajax_args["project"])) {
+            SPITAJAX_ERROR(-1, "Invalid project name");
+            return;
+        }
+        $project = Project::Lookup($ajax_args["project"]);
+        if (!$project) {
+            SPITAJAX_ERROR(-1, "No such project");
+            return;
+        }
+        if (!$project->AccessCheck($this_user, $TB_PROJECT_CREATEEXPT)) {
+            SPITAJAX_ERROR(-1, "Not enough permission in project");
+            return;
+        }
+        $resgroups = ReservationGroup::LookupForProject($project);
+    }
+    elseif (ISADMIN() && !isset($ajax_args["useronly"])) {
         $resgroups = ReservationGroup::LookupAll();
     }
     else {
