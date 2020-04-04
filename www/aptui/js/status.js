@@ -2807,7 +2807,6 @@ $(function ()
 	    });
 	    $('#confirm-update-systemimage').click(function() {
 		sup.HideModal('#confirm-update-systemimage-modal');
-		$('#snapshot_update_prepare_option').addClass("hidden");
 		DoSnapshotNodeAux();
 	    });
 	    sup.ShowModal('#confirm-update-systemimage-modal',
