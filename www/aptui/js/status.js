@@ -102,6 +102,7 @@ $(function ()
 	    // console.info(projlist);
 	}
 	amlist = decodejson('#amlist-json');
+	console.info(amlist);
 	if (window.ISPOWDER) {
 	    radioinfo = decodejson('#radioinfo-json');
 	    monitorTemplate = _.template(templates['frequency-graph']);
@@ -1354,6 +1355,15 @@ $(function ()
     }
     function DoReload(nodeList)
     {
+	for (var i = 0; i < nodeList.length; i++) {
+	    var node = nodeList[i];
+
+	    if (_.has(inrecovery, node) && inrecovery[node]) {
+		alert(node + " is in recovery mode, you cannot reload a node " +
+		      "while it is in recovery mode");
+		return;
+	    }
+	}
 	DoRebootReload("reload", nodeList);
     }
     function DoRebootReload(which, nodeList)
@@ -1814,6 +1824,7 @@ $(function ()
 	"    <li><a href='#' name='shell'>Shell</a></li> " +
 	"    <li><a href='#' name='console'>Console</a></li> " +
 	"    <li><a href='#' name='consolelog'>Console Log</a></li> " +
+	"    <li><a href='#' name='recovery'>Recovery</a></li> " +
 	"    <li class='hidden'> " +
 	"       <a href='#' name='monitor'>Monitor Graph</a></li> " +
 	"    <li><a href='#' name='delete'>Delete Node</a></li> " +
@@ -2086,6 +2097,17 @@ $(function ()
 		}
 		else {
 		    clone.find(' [name=delete]')
+			.parent().addClass('disabled');		    
+		}
+		if (canrecover) {
+		    // Recovery button handler
+		    clone.find(' [name=recovery]')
+			.click(function (e) {
+			    ActionHandler("recovery", [node]);
+			});
+		}
+		else {
+		    clone.find(' [name=recovery]')
 			.parent().addClass('disabled');		    
 		}
 
