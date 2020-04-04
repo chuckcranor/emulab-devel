@@ -35,6 +35,7 @@ use File::Temp qw(tempfile :mktemp tmpnam :POSIX);
 use Date::Parse;
 use Data::Dumper;
 use Cwd qw(realpath);
+use Carp qw(cluck);
 
 #
 # Create a quick VM.
@@ -55,6 +56,7 @@ my $takelock        = 0;  # Use when called from create_instance.
 my $sendemail       = 0;
 my $errmsg;
 my $sshkeys;
+my $havespectrum    = 0;
 my @aggregate_list  = ();
 
 #
@@ -172,6 +174,16 @@ else {
 }
 $webtask->AutoStore(1);
 
+my $warned = 0;
+$SIG{__WARN__} = sub {
+    my $message = shift;
+    exit(-1)
+	if ($warned);
+    $warned = 1;
+    cluck($message);
+    $warned = 0;
+};
+
 #
 # We send email when all deferred aggregates are started.  Note that if the
 # status is still "created", we are coming from create_instance(), so do
@@ -181,10 +193,10 @@ $sendemail = 1
     if ($curStatus ne "created");
 
 #
-# Check frequency ranges (actually, checking that we have a reservation).
+# Check frequency ranges.
 #
-if ($instance->CheckSpectrumReserved(\$errmsg)) {
-    MyExit(1, "Not all frequency ranges are reserved: $errmsg");
+if ($instance->CheckSpectrum(\$errmsg, \$havespectrum)) {
+    MyExit(1, $errmsg);
 }
 # Ditto routes
 if ($instance->CheckRoutesReserved(\$errmsg)) {
@@ -301,7 +313,9 @@ Genixmlrpc->SetContext($context);
 # Generate credentials we need.
 #
 my ($slice_credential, $speaksfor_credential) =
-    APT_Geni::GenCredentials($genislice, $geniuser, undef, 0);
+    APT_Geni::GenCredentials($genislice, $geniuser,
+			     $havespectrum ?
+			     ["use-spectrum", "instantiate"] : undef, 0);
 if (! (defined($speaksfor_credential) &&
        defined($slice_credential))) {
     fatal("Could not generate credentials");
@@ -711,8 +725,6 @@ sub CreateSliver($)
     my $aptagg    = $aggobj->GetAptAggregate();
     my $cmurl     = $authority->url();
     my $urn       = $authority->urn();
-    my @dsetcreds = ();
-    my @imcreds   = ();
     my $manifest;
     $webtask->Refresh();
 
@@ -808,17 +820,20 @@ sub CreateSliver($)
 
     Genixmlrpc->SetTimeout(900);
 
+    my @allcreds = (
+	$slice_credential->asString(),
+	$speaksfor_credential->asString()
+    );
     #
     # Dataset and image credentials are per aggregate cause of speaksfor
     # rules checking at the CM.
     #
     if (exists($dataset_credentials->{$authority->urn()})) {
-	@dsetcreds = @{$dataset_credentials->{$authority->urn()}};
+	@allcreds = (@allcreds, @{$dataset_credentials->{$authority->urn()}});
     }
     if (exists($image_credentials->{$authority->urn()})) {
-	@imcreds = @{$image_credentials->{$authority->urn()}};
+	@allcreds = (@allcreds, @{$image_credentials->{$authority->urn()}});
     }
-
     #
     # This creates the sliver and starts it. We have to watch for the
     # server being too busy.
@@ -836,12 +851,7 @@ sub CreateSliver($)
 				   { "slice_urn"   => $slice_urn,
 				     "rspec"       => $rspecstr,
 				     "keys"        => $sshkeys,
-				     "credentials" =>
-					 [$slice_credential->asString(),
-					  $speaksfor_credential->asString(),
-					  @dsetcreds,
-					  @imcreds,
-					 ],
+				     "credentials" => \@allcreds,
 				     "certificate" => $instance->cert(),
 				     "key"         => $instance->privkey(),
 				     "usetracker"  => $usetracker,

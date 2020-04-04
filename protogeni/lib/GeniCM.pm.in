@@ -944,7 +944,7 @@ sub GetTicketAuxAux($)
 	print STDERR "Global spectrum:\n";
 	print STDERR Dumper($spectrum);
 	
-	my $response = CheckSpectrum($spectrum);
+	my $response = CheckSpectrum($spectrum, $credentials);
 	return $response
 	    if (GeniResponse::IsError($response));
     }
@@ -1239,7 +1239,7 @@ sub GetTicketAuxAux($)
 	    print STDERR "Node $node_nickname spectrum:\n";
 	    print STDERR Dumper($spectrum);
 	
-	    my $response = CheckSpectrum($spectrum);
+	    my $response = CheckSpectrum($spectrum, $credentials);
 	    goto bad
 		if (GeniResponse::IsError($response));
 	}
@@ -1274,7 +1274,7 @@ sub GetTicketAuxAux($)
 		print STDERR "Interface $virtual_id:$component_id spectrum:\n";
 		print STDERR Dumper($spectrum);
 
-		my $response = CheckSpectrum($spectrum);
+		my $response = CheckSpectrum($spectrum, $credentials);
 		goto bad
 		    if (GeniResponse::IsError($response));
 	    }
@@ -9375,46 +9375,37 @@ sub CheckForDeprecatedImages($$)
 }
 
 #
-# Do some sanity checking on spectrum list.
+# Do some sanity checking on spectrum list. We are not checking the
+# range validity, since that info is stored at the Portal. We need
+# a way to verify it is not a direct access by a user to the CM, so
+# lets use a credential that only the Portal can issue. 
 #
-# Initial limits to apply to all requests, eventually these will come from
-# the database. Express these as a set of ranges with associated max power,
-# which for now is the same for all frequencies. In MHZ and dBm.
-#
-my $allowedRanges = {
-    "ISM" => [
-	[902,   928],
-	[2400,  2483.5],
-	[5725,  5875],
-    ],
-    "LTE" => [
-	[698,   763],
-	[1710,  1780],
-	[1790,  1825],
-	[2110,  2180],
-	[2500,  2570],
-	[2620,  2690],
-	[3300,  3600],
-	[3700,  4200],
-	[5650,  7125],
-    ],
-    "Sprint" => [
-	[2496,  2506],
-    ],
-};
-sub CheckSpectrum($)
+
+sub CheckSpectrum($$)
 {
-    my ($spectrum) = @_;
+    my ($spectrum, $credentials) = @_;
 
     #
-    # Only the Portal or the local cluster can request spectrum
+    # We have to have a special credential from Portal/Local cluster
     #
-    my $hrn = GeniHRN->new($ENV{"GENIURN"});
-    if (! ($hrn->domain() eq "$OURDOMAIN" ||
-	   $hrn->domain() eq "emulab.net")) {
+    my $spectrumcred;
+    
+    foreach my $credential (@$credentials) {
+	if ($credential->HasActualPrivilege("use-spectrum")) {
+	    $spectrumcred = $credential;
+	    last;
+	}
+    }
+    if (!defined($spectrumcred)) {
+	return GeniResponse->BadArgsResponse("Missing spectrum credential");
+    }
+    # The target (and thus the signer) has to be the Portal or local cluster
+    if (! ($spectrumcred->target_urn()->domain() eq "$OURDOMAIN" ||
+	   $spectrumcred->target_urn()->domain() eq "emulab.net")) {
 	return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 				    "Not allowed to request radio spectrum");
     }
+    
     foreach my $request (@{$spectrum}) {
 	my $frequency_low  = $request->{"frequency_low"};
 	my $frequency_high = $request->{"frequency_high"};
@@ -9444,23 +9435,6 @@ sub CheckSpectrum($)
 	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 				"Invalid spectrum request: " .
 				"$frequency_low,$frequency_high,$power");
-	}
-	# Check for out of range,power.
-	my $allowed = 0;
-	foreach my $key (keys(%{$allowedRanges})) {
-	    foreach my $ref (@{$allowedRanges->{$key}}) {
-		my ($low, $high) = @{$ref};
-		if ($frequency_low >= $low && $frequency_low <= $high &&
-		    $frequency_high >= $low && $frequency_high <= $high) {
-		    $allowed = 1;
-		    last;
-		}
-	    }
-	}
-	if (!$allowed) {
-	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-			"Spectrum range request is out of permitted range: ".
-			"$frequency_low,$frequency_high,$power");
 	}
     }
     return 0;
