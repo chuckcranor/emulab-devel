@@ -595,7 +595,7 @@ $(function ()
 	$("#reserve-request-form #start_day").datepicker({
 	    minDate: 0,		/* earliest date is today */
 	    showButtonPanel: true,
-	    onSelect: function (dateString, dateobject) {
+	    onClose: function (dateString, dateobject) {
 		DateChange("#start_day");
 		modified_callback();
 	    }
@@ -603,11 +603,18 @@ $(function ()
 	$("#reserve-request-form #end_day").datepicker({
 	    minDate: 0,		/* earliest date is today */
 	    showButtonPanel: true,
-	    onSelect: function (dateString, dateobject) {
+	    onClose: function (dateString, dateobject) {
 		DateChange("#end_day");
 		modified_callback();
 	    }
 	});
+	$("#reserve-request-form #start_hour").change(function () {
+	    UpdateFormTime();
+	});
+	$("#reserve-request-form #end_hour").change(function () {
+	    UpdateFormTime();
+	});
+	
 	$('#admin-override').change(function() {
 	    // This is messy; if the admin clicks this to force an approval
 	    // we do not want to flip the button from approve to check.
@@ -919,8 +926,41 @@ $(function ()
 	    $(selecter + ' option[value=' + IDEAL_STARTHOUR + ']')
 		.prop('selected', 'selected');
 	}
+	UpdateFormTime();
     }
 
+    /*
+     * Update the real form start/end values whenever the day/hour changes.
+     */
+    function UpdateFormTime()
+    {
+	var start_day  = $('#reserve-request-form [name=start_day]').val();
+	var start_hour = $('#reserve-request-form [name=start_hour]').val();
+	if (start_day && start_hour) {
+	    var start = moment(start_day, "MM/DD/YYYY");
+	    start.hour(start_hour);
+	    $('#reserve-request-form [name=start]').val(start.format());
+	    console.info("UpdateFormTime start: " + start.format());
+	}
+	else {
+	    $('#reserve-request-form [name=start]').val("");
+	    console.info("UpdateFormTime clear start");
+	}
+	
+	var end_day  = $('#reserve-request-form [name=end_day]').val();
+	var end_hour = $('#reserve-request-form [name=end_hour]').val();
+	if (end_day && end_hour) {
+	    var end = moment(end_day, "MM/DD/YYYY");
+	    end.hour(end_hour);
+	    $('#reserve-request-form [name=end]').val(end.format());
+	    console.info("UpdateFormTime end: " + end.format());
+	}
+	else {
+	    $('#reserve-request-form [name=end]').val("");
+	    console.info("UpdateFormTime clear end");
+	}
+    }
+    
     /*
      * Generate errors in the cluster table.
      */
@@ -1068,8 +1108,15 @@ $(function ()
 		    .addClass("hidden");
 	    }
 	    else {
-		tbody.find(".reservation-error span label")
-		    .html("Approval is required");
+		if (_.has(reservation, "noautoapprove_reason")) {
+		    tbody.find(".reservation-error span label")
+			.html("Approval is required: " +
+			      reservation.noautoapprove_reason);
+		}
+		else {
+		    tbody.find(".reservation-error span label")
+			.html("Approval is required");
+		}
 		tbody.find(".reservation-error span")
 		    .addClass("has-warning")
 		    .removeClass("has-error")
@@ -1244,8 +1291,10 @@ $(function ()
 	    }
 	    // Set the number of days, so that user can then search if
 	    // the start/end selected do not work.
-	    var hours = end.diff(start ? start : moment(), "hours");
-	    var days  = hours / 24;
+	    var res_start = start ? moment(start) : moment();
+	    var res_end   = moment(end);
+	    var hours     = res_end.diff(res_start, "hours");
+	    var days      = hours / 24;
 	    $('#reserve-request-form [name=days]')
 		.val(days.toFixed(1));
 	    
@@ -1253,41 +1302,19 @@ $(function ()
 	    ValidateReservation(clusters, ranges, routes);
 	}
 	/*
-	 * Before we submit, set the start/end fields to UTC time.
+	 * On a new reservation, start is optional. Must always have end
 	 */
-	var start_day  = $('#reserve-request-form [name=start_day]').val();
-	var start_hour = $('#reserve-request-form [name=start_hour]').val();
-	if (start_day && !start_hour) {
+	start = $('#reserve-request-form [name=start]').val();
+	end   = $('#reserve-request-form [name=end]').val();
+	if (editing && !start) {
 	    aptforms.GenerateFormErrors('#reserve-request-form',
-					{"start" : "Missing hour"});
+					{"start" : "Missing start date/hour"});
 	    return;
 	}
-	else if (!start_day && start_hour) {
+	if (!end) {
 	    aptforms.GenerateFormErrors('#reserve-request-form',
-					{"start" : "Missing day"});
+					{"end" : "Missing end date/hour"});
 	    return;
-	}
-	else if (start_day && start_hour) {
-	    start = moment(start_day, "MM/DD/YYYY");
-	    start.hour(start_hour);
-	    $('#reserve-request-form [name=start]').val(start.format());
-	}
-	var end_day  = $('#reserve-request-form [name=end_day]').val();
-	var end_hour = $('#reserve-request-form [name=end_hour]').val();
-	if (end_day && !end_hour) {
-	    aptforms.GenerateFormErrors('#reserve-request-form',
-					{"end" : "Missing hour"});
-	    return;
-	}
-	else if (!end_day && end_hour) {
-	    aptforms.GenerateFormErrors('#reserve-request-form',
-					{"end" : "Missing day"});
-	    return;
-	}
-	else if (end_day && end_hour) {
-	    end = moment(end_day, "MM/DD/YYYY");
-	    end.hour(end_hour);
-	    $('#reserve-request-form [name=end]').val(end.format());
 	}
 	// Collect the cluster and range/route rows into an array.
 	clusters = GetClusterRows();
@@ -2055,12 +2082,32 @@ $(function ()
 	    // Make sure we still warn about an unsaved form.
 	    aptforms.MarkFormUnsaved();
 
-	    if ((cluster_results &&
-		 cluster_results.approved != _.size(clusters)) ||
-		(range_results &&
-		 range_results.approved != _.size(ranges)) ||
-		(route_results &&
-		 route_results.approved != _.size(routes))) {
+	    // Gotta search all the requests looking to see if any
+	    // are not approved and need admin intervention.
+	    var needsApproval = 0;
+
+	    if (cluster_results) {
+		_.each(cluster_results.clusters, function (result) {
+		    if (!result.approved) {
+			needsApproval++;
+		    }
+		});
+	    }
+	    if (range_results) {
+		_.each(range_results.ranges, function (result) {
+		    if (!result.approved) {
+			needsApproval++;
+		    }
+		});
+	    }
+	    if (route_results) {
+		_.each(route_results.routes, function (result) {
+		    if (!result.approved) {
+			needsApproval++;
+		    }
+		});
+	    }
+	    if (needsApproval) {
 		$('#confirm-reservation .needs-approval')
 		    .removeClass("hidden");
 	    }
@@ -2224,7 +2271,11 @@ $(function ()
 	    $('#reserve-request-form [name=uuid]').val(details.uuid);
 	    $('#reserve-request-form [name=reason]').val(details.notes);
 	    var start = moment(details.start);
-	    var end = moment(details.end);	
+	    var end = moment(details.end);
+	    // Populate the form for submit. Updated when date/hour changes.
+	    $('#reserve-request-form [name=start]').val(start.format());
+	    $('#reserve-request-form [name=end]').val(end.format());
+
 	    $('#reserve-request-form [name=start_day]')
 		.val(start.format("MM/DD/YYYY"));
 	    $('#reserve-request-form [name=start_hour]')

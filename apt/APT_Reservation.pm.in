@@ -712,9 +712,9 @@ sub InfoString($;$$$)
 #
 # Add or Edit a reservation announcement.
 #
-sub AddAnnouncement($)
+sub AddAnnouncement($$)
 {
-    my ($self) = @_;
+    my ($self, $isupdate) = @_;
     my $uuid    = $self->uuid();
     my $uid     = $self->creator_uid();
     my $url     = $self->WebURL();
@@ -728,6 +728,16 @@ sub AddAnnouncement($)
 
     # XXX
     $portal = "emulab" if ($portal eq "classic");
+
+    #
+    # Well, if the reservation is going to start really soon, lets not
+    # bother the user.
+    #
+    if (!$isupdate) {
+	if ($start < time() || $start - time() < (3600 * 2)) {
+	    return 0;
+	}
+    }
 
     #
     # If the reservation is more then 24 hours out, schedule an announcement
@@ -1146,6 +1156,14 @@ use Data::Dumper;
 use vars qw($AUTOLOAD);
 use overload ('""' => 'Stringify');
 
+# Rules.
+# No single range can be bigger then this.
+my $AUTOAPPROVE_MAXRANGE  = 10;   # MHz
+# The total spectrum use cannot be more then this.
+my $AUTOAPPROVE_MAXTOTAL  = 20;   # MHz
+# If reservation is for longer then this, it must be admin approved.
+my $AUTOAPPROVE_MAXTIME   = 3600 * 24 * 2;
+
 sub Lookup($$$)
 {
     my ($class, $group, $freq_uuid) = @_;
@@ -1244,7 +1262,7 @@ sub Pretty($)
 {
     my ($self) = @_;
     
-    my $pid    = $self->group()->pid();
+   my $pid    = $self->group()->pid();
     my $lower  = $self->freq_low();
     my $upper  = $self->freq_high();
 
@@ -1416,7 +1434,7 @@ sub Fits($$$$$)
     my ($class, $groups, $start, $end, $ref) = @_;
     my $freq_low  = $ref->{'freq_low'};
     my $freq_high = $ref->{'freq_high'};
-    my $freq_uuid = $ref->{'uuid'};
+    my $freq_uuid = $ref->{'uuid'}; # XXX bad naming
     my @groups    = @{$groups};
     my $fits      = 1;
 
@@ -1464,105 +1482,183 @@ sub Fits($$$$$)
     return $fits;
 }
 
-# Gary Wong
 #
-# I think the current policy (very much subject to change) should be
-# approximately that members of projects who have been through manual
-# approval (and in particular signed the appropriate legalese) should
-# be able to reserve and allocate 902-928, 2400-2483.5 and 5725-5875
-# MHz (all ISM).  Operating there isn't strcictly legit but is
-# overwhelmingly unlikely to upset anybody.
+# This variant is for checking that an experiment (possibly without
+# spectrum reserved) can swap in (does not conflict with existing
+# reservations in other projects for the start/end duration. There are
+# also the same auto approval rules.
 #
-# Additionally, project members who have gone through additional prior
-# arrangement with us should also be able to reserve and allocate
-# 698-763, 1710-1780, 2110-2180, 2390-2400, 2500-2570, 2620-2690,
-# 3300-3600, 3700-4200, and 5650-7125 MHz.
-#
-my $allowedRanges = {
-    "ISM" => [
-	[902,   928],
-	[2400,  2483.5],
-	[5725,  5875],
-    ],
-    "LTE" => [
-	[698,   763],
-	[1710,  1780],
-	[1790,  1825],
-	[2110,  2180],
-	[2500,  2570],
-	[2620,  2690],
-	[3300,  3600],
-	[3700,  4200],
-	[5650,  7125],
-    ],
-    "Sprint" => [
-	[2496,  2506],
-    ],
-};
-
-#
-# According to Gary and Alex, these frequencies can be auto approved.
-#
-my $autoApproveRanges = [
-    [914.87, 915.13],
-    [1790,   1825],
-    [2400,   2483.5],
-    [2500,   2570],
-    [2620,   2690],
-    [3450,   3490],
-    [3550,   3590],
-    [5725,   5850],
-];
-
-sub RangeAllowed($$$)
+sub CanStart($$$$$)
 {
-    my ($class, $project, $ref) = @_;
-    my $freq_low  = $ref->{'freq_low'};
-    my $freq_high = $ref->{'freq_high'};
+    my ($class, $project, $start, $end, $spectrum, $pmsg) = @_;
+    my @spectrum    = @$spectrum;
+    my @notreserved = ();
 
+    # Can start if not using spectrum, or there are no current reservations, 
     return 1
-	if ($project->pid() eq TBOPSPID());
+	if (!@spectrum);
+
+    my @groups = APT_Reservation::Group->LookupAll();
 
     #
-    # Find the type of range
+    # No start time means starting up right now.
     #
-    my ($type);
-    
-    foreach my $key (keys(%{$allowedRanges})) {
-	foreach my $ref (@{$allowedRanges->{$key}}) {
-	    my ($low, $high) = @{$ref};
-	    if ($freq_low >= $low && $freq_low <= $high &&
-		$freq_high >= $low && $freq_high <= $high) {
-		$type = $key;
-		last;
+    $start = time()
+	if (!defined($start));
+
+    #
+    # First, check to see if the project has all the spectrum reserved.
+    #
+    foreach my $ref (@spectrum) {
+	my $freq_low  = $ref->{'frequency_low'};
+	my $freq_high = $ref->{'frequency_high'};
+
+	if (!RangeReserved($class, $project, $start,
+			   $end, $freq_low, $freq_high)) {
+	    push(@notreserved, $ref);
+	}
+    }
+    return 1
+	if (!@notreserved);
+
+    #
+    # Because we now allow some experiments to start without having
+    # reserved the ranges it is using, we have to check current experiments
+    # too.
+    #
+    foreach my $ref (@notreserved) {
+	my $freq_low  = $ref->{'frequency_low'};
+	my $freq_high = $ref->{'frequency_high'};
+
+	if (APT_Instance::RFRanges->InUse($project, $freq_low,
+					  $freq_high, $start, $end)) {
+	    $$pmsg = "Frequency range $freq_low,$freq_high is not ".
+		"available for the duration of your experiment because ".
+		"another project is currently using it. Maybe you want ".
+		"to reserve the spectrum you want to use.";
+	    return 0;
+	}
+    }
+
+    #
+    # Make sure the not reserved list does not conflict with reservations
+    # in other projects
+    #
+    foreach my $ref (@notreserved) {
+	my $freq_low  = $ref->{'frequency_low'};
+	my $freq_high = $ref->{'frequency_high'};
+
+	foreach my $group (@groups) {
+	    my $res_project = $group->GetProject();
+	    
+	    next
+		if (! $group->RFReservationList());
+
+	    # Skip reservations in our own project, they do not conflict
+	    next
+		if ($project->SameProject($res_project));	    
+
+	    my $res_start   = str2time($group->start());
+	    my $res_end     = str2time($group->end());
+
+	    foreach my $existing ($group->RFReservationList()) {
+		next
+		    if (!$existing->approved());
+
+		my $res_low   = $existing->freq_low();
+		my $res_high  = $existing->freq_high();
+
+		# If this reservation does not overlap in time, skip it.
+		if (($start < $res_start && $end < $res_start) ||
+		    ($start > $res_end)) {
+		    next;
+		}
+		# If this reservation does not overlap in freq, skip it.
+		if (($freq_low < $res_low && $freq_high < $res_low) ||
+		    ($freq_low > $res_high)) {
+		    next;
+		}
+		# Does not fit the schedule.
+		$$pmsg = "Frequency range $freq_low,$freq_high is not ".
+		    "available for the duration of your experiment.";
+		return 0;
 	    }
 	}
     }
-    if ($type) {
-	return 1
-	    if (EmulabFeatures->FeatureEnabled("${type}-allowed",
-					       undef, $project));
+    # OK, no reservation conflict, make sure they pass the autoapprove rules
+    my $total = 0;
+
+    foreach my $ref (@notreserved) {
+	my $freq_low  = $ref->{'frequency_low'};
+	my $freq_high = $ref->{'frequency_high'};
+
+	if ($freq_high - $freq_low > $AUTOAPPROVE_MAXRANGE) {
+	    $$pmsg = "Frequency range $freq_low,$freq_high is bigger then ".
+		"$AUTOAPPROVE_MAXRANGE MHz, you will need a reservation ".
+		"for this frequency range before you can start ".
+		"your experiment.";
+	    return 0;
+	}
+	$total += ($freq_high - $freq_low);
     }
-    return 0;
+    if ($total > $AUTOAPPROVE_MAXTOTAL) {
+	$$pmsg = "You have requested more then $AUTOAPPROVE_MAXTOTAL MHz ".
+	    "unreserved spectrum, you will need a reservation ".
+	    "for this much spectrum before you can start your experiment.";
+	return 0;
+    }
+    return 1;
 }
 
 #
-# Can a range be auto approved.
+# Check ranges from manage_resgroup, for auto approval. Set the flag.
 #
-sub RangeAutoApprove($$)
+sub SetAutoApprove($$$@)
 {
-    my ($class, $ref) = @_;
-    my $freq_low  = $ref->{'freq_low'};
-    my $freq_high = $ref->{'freq_high'};
+    my ($class, $start, $end, @ranges) = @_;
+    my $total       = 0;
+    
+    if ($end - $start > $AUTOAPPROVE_MAXTIME) {
+	my $message = "Duration is greater than ".
+	    $AUTOAPPROVE_MAXTIME / (3600 * 24) . " days";
+	print "SetAutoApprove: $message\n";
+	# Send this back to the user.
+	map { $_->{"noautoapprove_reason"} = $message } @ranges;
+	return 0;
+    }
 
-    foreach my $range (@$autoApproveRanges) {
-	my ($range_low, $range_high) = @$range;
+    #
+    # Count up total amount of spectrum. If using too much, then
+    # nothing is auto approved.
+    #
+    foreach my $ref (@ranges) {
+	my $freq_low  = $ref->{'freq_low'};
+	my $freq_high = $ref->{'freq_high'};
 
-	return 1
-	    if ($freq_low  >= $range_low &&
-		$freq_low  <= $range_high &&
-		$freq_high >= $range_low &&
-		$freq_high <= $range_high);
+	$total += ($freq_high - $freq_low);
+    }
+    if ($total > $AUTOAPPROVE_MAXTOTAL) {
+	my $message = "Total spectrum requested is greater than ".
+	    "$AUTOAPPROVE_MAXTOTAL MHz\n";
+	# Send this back to the user.
+	print "SetAutoApprove: $message\n";
+	map { $_->{"noautoapprove_reason"} = $message } @ranges;
+	return 0;
+    }
+    # Width rule
+    foreach my $ref (@ranges) {
+	my $freq_low  = $ref->{'freq_low'};
+	my $freq_high = $ref->{'freq_high'};
+
+	if ($freq_high - $freq_low > $AUTOAPPROVE_MAXRANGE) {
+	    my $message = "Range $freq_low,$freq_high is greater than ".
+		"$AUTOAPPROVE_MAXRANGE MHz";
+	    print "SetAutoApprove: $message\n";
+	    $ref->{"noautoapprove_reason"} = $message;
+	}
+	else {
+	    $ref->{'approved'} = 1;
+	}
     }
     return 0;
 }

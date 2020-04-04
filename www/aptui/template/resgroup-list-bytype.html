@@ -17,6 +17,7 @@
 	<% if (showuser) { %><th>Creator</th><% } %>
 	<% if (showproject) { %><th>Project</th><% } %>
 	<th>Type</th>
+	<th>Cluster</th>
 	<th>Count</th>
 	<th>Using</th>
 	<th>Utilization</th>
@@ -64,6 +65,7 @@
 	      </td>
 	    <% } %>
 	    <td><%- res.type %></td>
+	    <td><%- res.cluster_id %></td>
 	    <td><%- res.count %></td>
 	    <td>
 	      <% if (res.active && res.using != null) { %>

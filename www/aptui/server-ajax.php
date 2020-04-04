@@ -328,7 +328,9 @@ $routing = array("geni-login" =>
                                                  "Toggle" =>
                                                      "Do_Toggle",
                                                  "ProjectProfile" =>
-                                                      "Do_ProjectProfile")),
+                                                      "Do_ProjectProfile",
+                                                 "RFRanges" =>
+                                                      "Do_RFRanges")),
 		 "groups" =>
 			array("file"    => "groups.ajax",
 			      "guest"   => false,

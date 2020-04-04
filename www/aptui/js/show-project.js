@@ -63,6 +63,9 @@ $(function ()
 	LoadProjectTab();
 	LoadDatasetTab();
 	LoadClassicDatasets();
+	if (window.ISPOWDER) {
+	    LoadRFRanges();
+	}
     }
 
     function LoadUsage()
@@ -658,6 +661,84 @@ $(function ()
 				 {"pid" : window.TARGET_PROJECT});
 	xmlthing.done(callback);
     }
+
+    function LoadRFRanges()
+    {
+	var callback = function(json) {
+	    console.info("LoadRFRanges", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (_.size(json.value.project_ranges) == 0 &&
+		_.size(json.value.global_ranges) == 0) {
+		return;
+	    }
+	    var html = "";
+	    var addRange = function (range, global) {
+		html = html + "<tr>";
+
+		if (window.ISADMIN) {
+		    var id = range.range_id ? range.range_id : range.idx;
+		    html = html +
+			" <td> " + id + "</td>";
+		}
+		
+		html = html +
+		    " <td> " + range.freq_low + "</td>" +
+		    " <td> " + range.freq_high + "</td>";
+		
+		if (window.ISADMIN) {
+		    html = html +
+			" <td> " + (global ? "Yes" : "No") + "</td>";
+		}
+		html = html + "</tr>";
+	    };
+	    _.each(json.value.project_ranges, function(range) {
+		addRange(range, 0);
+	    });
+	    _.each(json.value.global_ranges, function(range) {
+		addRange(range, 1);
+	    });
+	    $('#rfranges_content .allowed-rfranges ' +
+	      '.tablesorter tbody').html(html)
+	    $('.rfranges-hidden').removeClass("hidden");
+	    
+	    var table = $('#rfranges_content .allowed-rfranges .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+		});
+
+	    if (!json.value.instance_ranges) {
+		return;
+	    }
+	    html = "";
+	    _.each(json.value.instance_ranges, function(info) {
+		var url = "status.php?uuid=" + info.uuid;
+		
+		html = html + "<tr>" +
+		    "<td><a href='" + url + "'>" + info.name + "</a></td>" +
+		    "<td>" + info.freq_low + "</td>" +
+		    "<td>" + info.freq_high + "</td>" +
+		    "</tr>";
+	    });
+	    $('#rfranges_content .inuse-rfranges ' +
+	      '.tablesorter tbody').html(html)
+	    $('#rfranges_content .inuse-rfranges').removeClass("hidden");
+	    
+	    $('#rfranges_content .inuse-rfranges .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+		});
+	};
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "show-project", "RFRanges",
+				 {"pid" : window.TARGET_PROJECT});
+	xmlthing.done(callback);
+    }
+    
     //
     // Toggle flags.
     //

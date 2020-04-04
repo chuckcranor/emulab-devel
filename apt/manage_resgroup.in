@@ -77,10 +77,13 @@ use Brand;
 use User;
 use Project;
 use EmulabConstants;
+use EmulabFeatures;
 use libEmulab;
 use libtestbed;
 use WebTask;
+use APT_Instance;
 use APT_Reservation;
+use APT_RFRange;
 use APT_Aggregate;
 use APT_Utility;
 use GeniResponse;
@@ -170,7 +173,7 @@ sub DoGroupReserve()
     my $update     = 0;
     my $checkonly  = 0;
     my $exitcode   = 0;
-    my $autoapprove= 0;
+    my $autoapprove= 1; # This might be turned off below
     my $updateall  = 0;
     my $override   = 0;	# Only range reservations can be overridden. 
     my ($clusters, $ranges, $routes);
@@ -355,12 +358,6 @@ sub DoGroupReserve()
 		fatal("Invalid range uuid: " . $range->{"uuid"});
 	    }
 	}
-	#
-	# For now, autoapprove short requests, even if they include ranges.
-	#
-	if ($end - $start < (3600 * 24)) {
-	    $autoapprove = 1;
-	}
     }
     if (exists($blob->{'routes'})) {
 	$routes = $blob->{'routes'};
@@ -490,11 +487,8 @@ sub DoGroupReserve()
 		    }
 		}
 		else {
-		    # A new range request. See autoapprove above.
-		    if ($this_user->IsAdmin() ||
-			($autoapprove &&
-			 APT_Reservation::Group::RFReservation->RangeAutoApprove
-			 ($range))) {
+		    # A new range request. 
+		    if ($this_user->IsAdmin()) {
 			$range->{'approved'} = 1;
 		    }
 		    else  {
@@ -502,6 +496,27 @@ sub DoGroupReserve()
 		    }
 		    $range->{'valid'} = 0;
 		    push(@range_reservations, $range);
+		}
+	    }
+	    #
+	    # Update the approval flags based on auto approve check.
+	    #
+	    if (! $this_user->IsAdmin()) {
+		APT_Reservation::Group::RFReservation->SetAutoApprove(
+		    $start, $end, @range_reservations);
+
+		#
+		# If none of the ranges can be auto approved, disable
+		# autoapprove so that the node requests need approval too,
+		# this will avoid approving node reeservations that are
+		# useless without the ranges.
+		#
+		my $count = 0;
+		map { $count += $_->{'approved'} } @range_reservations;
+		if ($count == 0) {
+		    print "Turning off autoapprove cause no ranges can ".
+			"be auto approved\n";
+		    $autoapprove = 0;
 		}
 	    }
 	}
@@ -555,11 +570,8 @@ sub DoGroupReserve()
 	    foreach my $range_uuid (keys(%{$ranges})) {
 		my $range = $ranges->{$range_uuid};
 
-		# A new range request. See autoapprove above.
-		if ($this_user->IsAdmin() ||
-		    ($autoapprove &&
-		     APT_Reservation::Group::RFReservation->RangeAutoApprove
-		     ($range))) {
+		# A new range request. 
+		if ($this_user->IsAdmin()) {
 		    $range->{'approved'} = 1;
 		}
 		else  {
@@ -567,6 +579,27 @@ sub DoGroupReserve()
 		}
 		$range->{'valid'}    = 0;
 		push(@range_reservations, $range);
+	    }
+	    #
+	    # Update the approval flags based on auto approve check.
+	    #
+	    if (! $this_user->IsAdmin()) {
+		APT_Reservation::Group::RFReservation->SetAutoApprove(
+		    $start, $end, @range_reservations);
+
+		#
+		# If none of the ranges can be auto approved, disable
+		# autoapprove so that the node requests need approval too,
+		# this will avoid approving node reeservations that are
+		# useless without the ranges.
+		#
+		my $count = 0;
+		map { $count += $_->{'approved'} } @range_reservations;
+		if ($count == 0) {
+		    print "Turning off autoapprove cause no ranges can ".
+			"be auto approved\n";
+		    $autoapprove = 0;
+		}
 	    }
 	}
 	if (defined($routes)) {
@@ -634,13 +667,16 @@ sub DoGroupReserve()
 	# For each (new or modified) reservation see if it fits the schedule
 	#
 	my @allgroups = APT_Reservation::Group->LookupAll();
+	my $rfrange   = APT_RFRange::Project->Lookup($project);
     
 	foreach my $ref (@range_reservations) {
+	    my $freq_low  = $ref->{"freq_low"};
+	    my $freq_high = $ref->{"freq_high"};
+		
 	    # These flags go back to the web interface.
 	    # We never auto approve frequency reservations.
 	    if (!($this_user->IsAdmin() ||
-		  APT_Reservation::Group::RFReservation->RangeAllowed($project,
-								      $ref))) {
+		  $rfrange->Allowed($ref->{'freq_low'}, $ref->{'freq_high'}))) {
 		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
 		$ref->{'output'}   = "Not allowed to use this frequency range";
 		$ref->{'valid'}    = 0;
@@ -652,6 +688,14 @@ sub DoGroupReserve()
 								  $ref))) {
 		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
 		$ref->{'output'}   = "Does not fit the schedule";
+		$ref->{'valid'}    = 0;
+		$range_results->{'errors'}++;
+	    }
+	    elsif (!$override &&
+		   APT_Instance::RFRanges->InUse($project, $freq_low,
+						 $freq_high, $start, $end)) {
+		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
+		$ref->{'output'}   = "Currently in use by another project";
 		$ref->{'valid'}    = 0;
 		$range_results->{'errors'}++;
 	    }
@@ -796,8 +840,8 @@ sub DoGroupReserve()
 		$cluster_results->{'errors'}++;		
 	    }
 	    else {
-		$res->{"approved"} = $webtask->approved();
-		if ($webtask->approved()) {
+		$res->{"approved"} = int($webtask->approved());
+		if ($res->{"approved"}) {
 		    $cluster_results->{'approved'}++;
 		}
 	    }
@@ -957,11 +1001,8 @@ sub DoGroupReserve()
 			  $resgroup->InfoString() . "\n" .
 			  "See: $url", $this_email);
 	    }
-	    elsif ($update) {
-		$resgroup->UpdateAnnouncement();
-	    }
 	    else {
-		$resgroup->AddAnnouncement();
+		$resgroup->AddAnnouncement($update);
 	    }
 	}
     }

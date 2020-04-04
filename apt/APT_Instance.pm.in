@@ -58,6 +58,7 @@ use APT_Aggregate;
 use APT_Geni;
 use APT_Utility;
 use APT_Reservation;
+use EmulabFeatures;
 use Genixmlrpc;
 use GeniResponse;
 use GeniCertificate;
@@ -509,6 +510,9 @@ sub Delete($)
 	return -1;
 
     DBQueryWarn("delete from apt_instance_bus_routes where uuid='$uuid'") or
+	return -1;
+
+    DBQueryWarn("delete from apt_instance_rfranges where uuid='$uuid'") or
 	return -1;
 
     # We do not "own" the webtask until create_sliver exits successfully.
@@ -2336,9 +2340,9 @@ sub GetSpectrum($$)
 # Check that we have reservations for any spectrum used.
 # This check uses the current time and current experiment end,
 #
-sub CheckSpectrumReserved($$)
+sub CheckSpectrum($$$)
 {
-    my ($self, $perrmsg) = @_;
+    my ($self, $perrmsg, $pflag) = @_;
     my $rspecstr = $self->rspec();
     my $project  = $self->GetProject();
     my $slice    = $self->GetGeniSlice();
@@ -2348,20 +2352,48 @@ sub CheckSpectrumReserved($$)
     if (APT_Profile::GetSpectrum($rspecstr, \$spectrum, $perrmsg)) {
 	return -1;
     }
+    return 0
+	if (!@$spectrum);
+
+    # Top level check for OTA access (might have been revoked)
+    if (!EmulabFeatures->FeatureEnabled("OTA-allowed", undef, $project)) {
+	$$perrmsg = "Not enough permission to use OTA resources.";
+	return -1;
+    }
+    my $rfrange  = APT_RFRange::Project->Lookup($project);
 
     foreach my $request (@{$spectrum}) {
 	my $frequency_low  = $request->{"frequency_low"};
 	my $frequency_high = $request->{"frequency_high"};
-	my $power          = $request->{"power"};
-
-	if (!APT_Reservation::Group::RFReservation->RangeReserved($project,
-		      time(), $expires, $frequency_high, $frequency_low)) {
-	    $$perrmsg = "Frequency range $frequency_low,$frequency_high ".
-		    "is not reserved by your project for the duration of your ".
-		    "experiment.";
-	    return 1;
+	
+	if (!$rfrange->Allowed($frequency_low, $frequency_high)) {
+	    $$perrmsg = "Not enough permission to use ".
+		"frequency range $frequency_low,$frequency_high ".
+		"in your project.";
+	    return -1;
 	}
     }
+    if (!APT_Reservation::Group::RFReservation->CanStart($project,
+			 time(), $expires, $spectrum, $perrmsg)) {
+	return -1;
+    }
+    #
+    # Add the spectrum to this instance (we are starting it).
+    #
+    foreach my $request (@{$spectrum}) {
+	my $frequency_low  = $request->{"frequency_low"};
+	my $frequency_high = $request->{"frequency_high"};
+	
+	if (!APT_Instance::RFRanges->Lookup($self,
+					    $frequency_low, $frequency_high)) {
+	    if (!APT_Instance::RFRanges->Create($self,
+				       $frequency_low, $frequency_high)) {
+		$$perrmsg = "Could not create rfrange entry";
+		return -1;
+	    }
+	}
+    }
+    $$pflag = 1;
     return 0;
 }
 
@@ -4932,7 +4964,7 @@ sub PrestageImages($$$@)
 
 ###################################################################
 #
-# Record what instances are currently using bus routes. Faster then
+# Record what instances are currently using rf ranges routes. Faster then
 # parsing the manifests every time.
 #
 package APT_Instance::Aggregate::BusRoute;
@@ -5029,7 +5061,7 @@ sub Delete($)
 {
     my ($self) = @_;
     my $uuid     = $self->uuid();
-    my $routeid  = $self-routeid();
+    my $routeid  = $self->routeid();
 
     DBQueryWarn("delete from apt_instance_bus_routes ".
 		"where uuid='$uuid' and routeid='$routeid'")
@@ -5116,6 +5148,194 @@ sub LookupActive($)
 	push(@result, $instance);
     }
     return @result;
+}
+
+###################################################################
+#
+# Record what instances are currently using RF ranges. Faster then
+# parsing the manifests every time.
+#
+package APT_Instance::RFRanges;
+use emdb;
+use Carp;
+use WebTask;
+use libtestbed;
+use English;
+use GeniHRN;
+use APT_Geni;
+use APT_Aggregate;
+use APT_Reservation;
+use Date::Parse;
+use Data::Dumper;
+use vars qw($AUTOLOAD);
+use overload ('""' => 'Stringify');
+
+#
+# Lookup and create a class instance to return.
+#
+sub Lookup($$$;$)
+{
+    my ($class, $instance, $token, $freq_high) = @_;
+    my $uuid = $instance->uuid();
+    my $query_result;
+
+    if (!defined($freq_high) &&	$token =~ /^\d+$/ ) {
+	$query_result = 
+	    DBQueryWarn("select * from apt_instance_rfranges ".
+			"where uuid='$uuid' and idx='$token'");
+    }
+    elsif (defined($token) && defined($freq_high)) {
+	$query_result = 
+	    DBQueryWarn("select * from apt_instance_rfranges ".
+			"where uuid='$uuid' and ".
+			"      freq_low=$token and ".
+			"      freq_high=$freq_high");
+    }
+    else {
+	return undef;
+    }
+    return undef
+	if (! (defined($query_result) && $query_result->numrows));
+
+    my $self            = {};
+    $self->{'DBROW'}    = $query_result->fetchrow_hashref();
+    $self->{'INSTANCE'} = $instance;
+    bless($self, $class);
+
+    return $self;
+}
+
+#
+# Add an rfrange to an instance.
+#
+sub Create($$$)
+{
+    my ($class, $instance, $freq_low, $freq_high) = @_;
+    my $instance_uuid = $instance->uuid();
+    my $instance_name = $instance->name();
+
+    DBQueryWarn("insert into apt_instance_rfranges set ".
+		"  uuid='$instance_uuid', name='$instance_name', ".
+		"  freq_low='$freq_low', freq_high='$freq_high'")
+	or return undef;
+
+    # Add to the history table.
+    DBQueryWarn("insert into apt_instance_rfrange_history set ".
+		"  uuid='$instance_uuid', ".
+		"  freq_low='$freq_low', freq_high='$freq_high'")
+	or return undef;
+
+    return Lookup($class, $instance, $freq_low, $freq_high);
+}
+
+AUTOLOAD {
+    my $self  = $_[0];
+    my $type  = ref($self) or confess "$self is not an object";
+    my $name  = $AUTOLOAD;
+    $name =~ s/.*://;   # strip fully-qualified portion
+
+    # A DB row proxy method call.
+    if (exists($self->{'DBROW'}->{$name})) {
+	return $self->{'DBROW'}->{$name};
+    }
+    carp("No such slot '$name' field in class $type");
+    return undef;
+}
+sub instance($)	        { return $_[0]->{'INSTANCE'}; }
+
+# Break circular reference someplace to avoid exit errors.
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'DBROW'}    = undef;
+    $self->{'INSTANCE'} = undef;
+}
+
+sub Delete($)
+{
+    my ($self) = @_;
+    my $uuid     = $self->uuid();
+    my $idx      = $self->idx();
+
+    DBQueryWarn("delete from apt_instance_rfranges ".
+		"where uuid='$uuid' and idx='$idx'")
+	or return -1;
+    
+    return 0;
+}
+
+#
+# Stringify for output.
+#
+sub Stringify($)
+{
+    my ($self) = @_;
+    
+    my $uuid      = $self->uuid();
+    my $freq_low  = $self->freq_low();
+    my $freq_high = $self->freq_high();
+
+    return "[APT_Instance::RFRanges: $uuid, $freq_low,$freq_high]";
+}
+
+#
+# Lookup all rfranges for an instance
+#
+sub LookupForInstance($$)
+{
+    my ($class, $instance) = @_;
+    my $result = {};
+    my $uuid   = $instance->uuid();
+
+    my $query_result =
+	DBQueryWarn("select idx from apt_instance_rfranges ".
+		    "where uuid='$uuid'");
+    return $result
+	if (! (defined($query_result) && $query_result->numrows));
+
+    while (my ($idx) = $query_result->fetchrow_array()) {
+	my $range = Lookup($class, $instance, $idx);
+	if (!defined($range)) {
+	    print STDERR "No apt_instance_rfrange $uuid/$idx\n";
+	    next;
+	}
+	$result->{$idx} = $range;
+    }
+    return $result;
+}
+
+#
+# Is a range currently in use by a running experiment, for the requested
+# start/end time, by a different project.
+#
+sub InUse($$$$$$)
+{
+    my ($class, $project, $freq_low, $freq_high, $start, $end) = @_;
+    my $pid_idx = $project->pid_idx();
+
+    #
+    # mysql floats are stupid.
+    # https://dev.mysql.com/doc/refman/5.7/en/problems-with-float.html
+    #
+    my $query_result =
+	DBQueryWarn("select rf.uuid,rf.freq_low,rf.freq_high ".
+		    "   from apt_instance_rfranges as rf ".
+		    "left join apt_instances as i on ".
+		    "   rf.uuid=i.uuid ".
+		    "left join geni.geni_slices as s on ".
+		    "     s.uuid=i.slice_uuid ".
+		    "where i.pid_idx!='$pid_idx' and ".
+		    "      $start <= UNIX_TIMESTAMP(s.expires)");
+    
+    while (my ($uuid,$inuse_lower,$inuse_upper) =
+	   $query_result->fetchrow_array()) {
+	print "Inuse: $freq_low, $freq_high, $inuse_lower, $inuse_upper\n";
+	if ($freq_high > $inuse_lower &&
+	    $freq_low  <= $inuse_upper) {
+	    return 1;
+	}
+    }
+    return 0;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,6 +26,7 @@ chdir("apt");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
 include_once("ajax-routines.ajax");
+include_once("rfrange_defs.php");
 
 # We set this in CheckPageArgs
 $target_project = null;
@@ -342,6 +343,56 @@ function Do_Toggle()
         return;
     }
     SPITAJAX_RESPONSE(1);
+}
+
+#
+# Project RFranges.
+#
+function Do_RFRanges()
+{
+    global $this_user, $target_project;
+    global $ajax_args;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $pid_idx = $target_project->pid_idx();
+    $rfanges = ProjectRFRanges::Lookup($target_project);
+    $blob = array("project_ranges"  => array(),
+                  "global_ranges"   => array(),
+                  "instance_ranges" => null);
+
+    foreach ($rfanges->ProjectRanges() as $range) {
+        $blob["project_ranges"][$range->idx()] = $range->rawdata();
+    }
+    foreach ($rfanges->GlobalRanges() as $range) {
+        $blob["global_ranges"][$range->idx()] = $range->rawdata();
+    }
+    #
+    # Lets show a table of RF usage in the project.
+    #
+    $query_result =
+        DBQueryFatal("select i.uuid,i.name,r.freq_low,r.freq_high ".
+                     "   from apt_instance_rfranges as r ".
+                     "left join apt_instances as i on i.uuid=r.uuid ".
+                     "where i.pid_idx='$pid_idx' ".
+                     "order by i.name");
+
+    if (mysql_num_rows($query_result)) {
+        $ranges = array();
+
+	while ($row = mysql_fetch_array($query_result)) {
+            $range = array(
+                "uuid"      => $row["uuid"],
+                "name"      => $row["name"],
+                "freq_low"  => $row["freq_low"],
+                "freq_high" => $row["freq_high"]
+            );
+            $ranges[] = $range;
+        }
+        $blob["instance_ranges"] = $ranges;
+    }
+    SPITAJAX_RESPONSE($blob);
 }
 
 # Local Variables:

@@ -825,6 +825,90 @@ CREATE TABLE `apt_reservation_group_rf_reservations` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_project_rfranges`
+--
+
+DROP TABLE IF EXISTS `apt_project_rfranges`;
+CREATE TABLE `apt_project_rfranges` (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `pid` varchar(48) NOT NULL default '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `range_id` varchar(32) default NULL,
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  `disabled` tinyint(1) NOT NULL default '0',
+  PRIMARY KEY (`pid_idx`,`idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_global_rfranges`
+--
+
+DROP TABLE IF EXISTS `apt_global_rfranges`;
+CREATE TABLE `apt_global_rfranges` (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `range_id` varchar(32) default NULL,
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  `disabled` tinyint(1) NOT NULL default '0',
+  PRIMARY KEY (`idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_named_rfranges`
+--
+
+DROP TABLE IF EXISTS `apt_named_rfranges`;
+CREATE TABLE `apt_named_rfranges` (
+  `range_id` varchar(32) NOT NULL DEFAULT '',
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  PRIMARY KEY (`range_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_rfrange_sets`
+--
+
+DROP TABLE IF EXISTS `apt_rfrange_sets`;
+CREATE TABLE `apt_rfrange_sets` (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `setname` varchar(32) NOT NULL DEFAULT '',
+  `range_id` varchar(32) default NULL,
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  `disabled` tinyint(1) NOT NULL default '0',
+  PRIMARY KEY (`setname`,`idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_instance_rfranges`
+--
+
+DROP TABLE IF EXISTS `apt_instance_rfranges`;
+CREATE TABLE `apt_instance_rfranges` (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `uuid` varchar(40) NOT NULL default '',
+  `name` varchar(16) default NULL,
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  PRIMARY KEY (`uuid`,`idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_instance_rfrange_history`
+--
+
+DROP TABLE IF EXISTS `apt_instance_rfrange_history`;
+CREATE TABLE `apt_instance_rfrange_history` (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `uuid` varchar(40) NOT NULL default '',
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  PRIMARY KEY (`uuid`,`idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_reservation_group_route_reservations`
 --
 

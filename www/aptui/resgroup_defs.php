@@ -114,6 +114,23 @@ class ReservationGroup
         return $result;
     }
 
+    # Lookup for a project.
+    function LookupForProject($project)
+    {
+        $pid_idx = $project->pid_idx();
+        $result = array();
+        
+        $query_result = DBQueryFatal("select uuid from apt_reservation_groups ".
+                                     "where pid_idx='$pid_idx'");
+	while ($row = mysql_fetch_array($query_result)) {
+            $reservation = ReservationGroup::Lookup($row["uuid"]);
+            if ($reservation) {
+                $result[] = $reservation;
+            }
+        }
+        return $result;
+    }
+
     # Lookup all (admin)
     function LookupAll()
     {
@@ -180,6 +197,11 @@ class ReservationGroup
                 return $reservation;
             }
         }
+        foreach ($this->routereservations() as $reservation) {
+            if ($reservation->route_uuid() == $uuid) {
+                return $reservation;
+            }
+        }
         return null;
     }
 
@@ -192,6 +214,11 @@ class ReservationGroup
             }
         }
         foreach ($this->rfreservations() as $reservation) {
+            if ($reservation->approved()) {
+                return 1;
+            }
+        }
+        foreach ($this->routereservations() as $reservation) {
             if ($reservation->approved()) {
                 return 1;
             }
