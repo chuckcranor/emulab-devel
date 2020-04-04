@@ -4741,21 +4741,15 @@ sub createExpBridges($$$)
 		    if ($?);
 
 		if (! -d "/sys/class/net/$pdev") {
-		    mysystem2("$VLANCONFIG set_name_type DEV_PLUS_VID_NO_PAD");
-		    mysystem2("$VLANCONFIG add $iface $tag");
-		    goto bad
-			if ($?);
-		    mysystem2("$VLANCONFIG set_name_type VLAN_PLUS_VID_NO_PAD");
-
 		    #
 		    # We do not want the vlan device to have the same
 		    # mac as the physical device, since that will confuse
 		    # findif later.
 		    #
 		    my $bmac = fixupMac(GenFakeMac());
-		    mysystem2("$IPBIN link set $pdev address $bmac");
-		    goto bad
-			if ($?);
+		    
+		    mysystem2("$IPBIN link add link $iface name $pdev ".
+			      " address $bmac type vlan id $tag");
 		    
 		    mysystem2("$IFCONFIG $pdev up");
 		    mysystem2("$ETHTOOL -K $pdev tso off gso off");
