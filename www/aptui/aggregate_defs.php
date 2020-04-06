@@ -477,6 +477,26 @@ class Aggregate
         }
         return null;
     }
+
+    # Class method. 
+    function RadioInfo()
+    {
+        $blob = array();
+
+        $query_result =
+            DBQueryFatal("select * from apt_aggregate_radioinfo");
+
+        while ($row = mysql_fetch_array($query_result)) {
+            $urn      = $row["aggregate_urn"];
+            $node_id  = $row["node_id"];
+
+            if (!array_key_exists($urn, $blob)) {
+                $blob[$urn] = array();
+            }
+            $blob[$urn][$node_id] = $row;
+        }
+        return $blob;
+    }
 }
 
 #

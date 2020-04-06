@@ -48,6 +48,7 @@ $(function ()
     var prunetypes    = null;
     var hardware      = null;
     var resinfo       = null;
+    var radioinfo     = null;
     var currentStep   = 0;
     var deprecatedList = [];
     var mainTemplate  = _.template(instantiateString);
@@ -111,6 +112,10 @@ $(function ()
 	var profileToArray = _.pairs(profilelist);
 	prunetypes = decodejson('#prunelist-json');
 	console.info(prunetypes);
+	if ($('#radioinfo-json').length) {
+	    radioinfo = decodejson('#radioinfo-json');
+	    console.info("radioinfo", radioinfo);
+	}
 
 	/*
 	 * Sort the entire list by recently used if a registered user,
@@ -742,6 +747,9 @@ $(function ()
 		// the height change. Had to also add to Jacks root.
 		$('#inline_jacks').css('height',
 				   $('#finalize_container').outerHeight() - 15);
+	    }
+	    if (priorIndex < currentIndex) {
+		CheckForRadioUsage();
 	    }
 	}
 	else if (currentIndex == 3) {
@@ -2733,6 +2741,56 @@ $(function ()
 	});
     }
 
+    /*
+     * Check for radio usage and no spectrum defined
+     */
+    function CheckForRadioUsage()
+    {
+	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+	var xmlDoc    = $.parseXML(selected_rspec);
+	var spectrum  = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'spectrum');
+
+	console.info("CheckForRadioUsage");
+
+	if (!spectrum.length && radioinfo) {
+	    /*
+	     * Check for radio usage, alert the user that using radios
+	     * without a spectrum specification is bad news.
+	     */
+	    var using = 0;
+		
+	    $(xmlDoc).find("node").each(function() {
+		// Gotta have a manager to know anything.
+		var manager_urn = $(this).attr("component_manager_id");
+		if (!manager_urn.length) {
+		    return;
+		}
+		// Ditto the component ID
+		var component_id = $(this).attr("component_id");
+		if (!component_id.length) {
+		    return;
+		}
+		// Might be a urn.
+		var hrn = sup.ParseURN(component_id);
+		if (hrn) {
+		    component_id = hrn.id;
+		}
+		if (_.has(radioinfo, manager_urn) &&
+		    _.has(radioinfo[manager_urn], component_id)) {
+		    var txfreqs =
+			radioinfo[manager_urn][component_id]
+			.transmit_frequencies;
+		    if (txfreqs != "") {
+			using = 1;
+		    }
+		}
+	    });
+	    if (using) {
+		sup.ShowModal('#nospectrum-warning');
+	    }
+	}
+    }
+     
     /*
      * Check for spectrum used.
      */

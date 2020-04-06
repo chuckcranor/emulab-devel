@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -386,6 +386,14 @@ function SPITFORM($formfields, $newuser, $errors)
         echo "</script>\n";
     }
     SpitAggregateStatus(true, $this_user);
+
+    if ($ISPOWDER) {
+        # Powder Radio info.
+        $radioinfo = Aggregate::RadioInfo();
+        echo "<script type='text/plain' id='radioinfo-json'>\n";
+        echo htmlentities(json_encode($radioinfo));
+        echo "</script>\n";
+    }
 
     $prunelist = Instance::NodeTypePruneList(null, true);
     echo "<script type='text/plain' id='prunelist-json'>\n";
