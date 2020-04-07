@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017, 2019, 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -78,6 +78,7 @@ my $makeconf        = "$TB/sbin/dhcpd_makeconf";
 my $snmpit          = "$TB/bin/snmpit";
 my $dynmfssetup     = "$TB/sbin/nfsmfs_setup";
 my $tbadb           = "$TB/bin/tbadb";
+my $power           = "$TB/bin/power";
 my $reloadpid	    = "emulab-ops";
 my $pendingeid      = "reloadpending";
 my $rppendingeid    = "repositionpending";
@@ -666,6 +667,7 @@ foreach my $node (@freed_nodes) {
 	next;
     }
     elsif (!$TESTMODE && !exists($ENV{'NORELOAD'}) &&
+	   !$node->delayreloadtillalloc() && 
 	   ((!$isvirt && $imageable) || # XXX force reload hack!
 	    $inreloads || $mustzero{$node_id})) { # XXX Garcia hack
 	print "Moving $node to $reloading_experiment\n"
@@ -687,6 +689,7 @@ foreach my $node (@freed_nodes) {
 	next;
     }
 
+    #
     # No reloads or reservation changes, so really free the node
     #
     # This little sillyness is for disk reloading. Remember the last
@@ -701,6 +704,32 @@ foreach my $node (@freed_nodes) {
     # Handle pre-reserve.
     my $rpid = $node->CheckPreReserve(1, $quiet);
 
+    #
+    # Delay reload till next allocation. We want to clear the partition
+    # table in the DB so it cannot boot from disk again by mistake.
+    # Then power off the node until next allocation.
+    #
+    if ($node->delayreloadtillalloc()) {
+	$node->ClearPartitions();
+	#
+	# The project still has the node, so this will be allowed. 
+	#
+	print "Powering off '$node_id' instead of reloading\n";
+	system("$power -a off $node_id");
+	#
+	# If this fails, fall back to immediate reload. 
+	#
+	if ($?) {
+	    if ($node->MoveReservation($reloading_experiment) == 0) {
+		$node->SetNodeHistory(TB_NODEHISTORY_OP_MOVE, $this_user,
+				      $reloading_experiment);
+	    }
+	    else {
+		$error++;
+	    }
+	    next;
+	}
+    }
     print "Releasing node '$node_id' ...\n"
 	if (!$quiet);
     if (DBQueryWarn("delete from reserved where node_id='$node_id'")) {

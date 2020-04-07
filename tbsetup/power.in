@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -71,9 +71,10 @@ use Sys::Syslog;
 
 sub usage() {
     print << "END";
-Usage: $0 [-v n] [-e] <on|off|cycle> <node ...>
+Usage: $0 [-v n] [-e] [-a] <on|off|cycle> <node ...>
 -e     Surpress sending of event - for use by scripts that have already sent it
 -v n   Run with verbosity level n
+-a     Skip the access check, caller is knows what it is doing
 END
     1;
 }
@@ -104,7 +105,7 @@ sub logit($);
 # Process command-line arguments
 #
 my %opt = ();
-getopts("v:he",\%opt);
+getopts("v:hea",\%opt);
 
 if ($opt{h}) {
     exit usage();
@@ -120,6 +121,10 @@ print "VERBOSE ON: Set to level $verbose\n" if $verbose;
 my $sendevent = 1;
 if ($opt{e}) {
     $sendevent = 0;
+}
+my $nopermcheck = 0;
+if ($opt{"a"}) {
+    $nopermcheck = 1;
 }
 
 #
@@ -200,8 +205,8 @@ if ($ELABINELAB) {
 	    die("*** $0:\n".
 		"    No such node $nodeid\n");
 	}
-	if ($UID && !$node->AccessCheck($this_user,
-					TB_NODEACCESS_POWERCYCLE)) {
+	if ($UID && !$nopermcheck &&
+	    !$node->AccessCheck($this_user, TB_NODEACCESS_POWERCYCLE)) {
 	    warn "You are not authorized to control $nodeid. Skipping...\n";
 	    next;
 	}
@@ -282,7 +287,7 @@ foreach my $nodeid (@machines) {
 	# We allow root/admins to power cycle a non-existent node
 	# (a new node that has not been added yet).
 	#
-	if (defined($this_user) &&
+	if (defined($this_user) && !$nopermcheck && 
 	    !$node->AccessCheck($this_user, TB_NODEACCESS_POWERCYCLE)) {
 	    warn "You are not authorized to control $nodeid. Skipping...\n";
 	    next;

@@ -463,6 +463,9 @@ sub required_license($;$) {
 sub requires_frequency_reservation($;$) {
     return GetAttribute($_[0], "requires_frequency_reservation", $_[1]);
 }
+sub delayreloadtillalloc($;$) {
+    return GetAttribute($_[0], "delayreloadtillalloc", $_[1]);
+}
 sub control_interface($;$) { return control_iface($_[0], $_[1]); }
 
 #

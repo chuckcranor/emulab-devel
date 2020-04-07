@@ -121,6 +121,7 @@ sub New($$$@)
 	$node->_vnodecount(0);
 	$node->_reloaded(0);
 	$node->_bootlog(undef);
+	$node->_reloadordie(0);
     }
 
     bless($self, $class);
@@ -663,6 +664,13 @@ sub LightUpNodes($@)
 		$nodeflags{$node_id}{'nowait'} = 1;
 	    }
 
+	    #
+	    # If a node needs prepare, then force that node.
+	    #
+	    if ($node->_reloadordie()) {
+		$nodeflags{$node_id}{'prepare'} = 2;  # level 2, all disks.
+	    }
+
 	    $node->SetAllocState(TBDB_ALLOCSTATE_RES_RELOAD());
 	    # No point in reboot/reconfig obviously, since node will reboot!
 	    delete $reboots{$node_id};
@@ -1151,6 +1159,20 @@ sub AddNode($$)
     $node->_setupoperation($libossetup::NOSTATE);
 
     #
+    # If the partitions table is empty, say, cleared in nfree cause we
+    # are waiting till a node is allocted before reloading it, then we
+    # ignore the failureaction and force a fatal error. We do not want
+    # the user to get a hold of the node cause we might leak something
+    # from the previous experiment.
+    #
+    if (!$node->HasPartitions()) {
+	print "$node_id has no partitions, reload failure is not an option\n";
+	$node->_reloadordie(1);
+    }
+    else {
+	$node->_reloadordie(0);
+    }
+    #
     # This sets the OS that should boot, as well as any reloads, reboots
     # and reconfigs that are needed.
     #
@@ -1472,6 +1494,15 @@ sub WaitDone($@)
 	}
 
 	#
+	# If reload failed on a reloadordie() node, we clear canfail
+	# (ignore failureaction). It is okay if it failed later.
+	#
+	if ($node->_reloadordie() &&
+	    $setupstatus == $libossetup::RELOAD_FAILED) {
+	    $node->_canfail(0);
+	}
+
+	#
 	# Handle non-fatal failures (if we have not been canceled or aborted).
 	#
 	if ($node->_canfail() &&
@@ -1539,7 +1570,8 @@ sub WaitDone($@)
 	# doing the nfree on nodes with a DOWN allocstate).
 	#
 	my $osinfo = $node->_bootosinfo();
-	if (! defined($osinfo->pid()) || $osinfo->pid() eq TBOPSPID()) {
+	if (! defined($osinfo->pid()) || $osinfo->pid() eq TBOPSPID() ||
+	    $node->_reloadordie()) {
 	    $node->MarkAsIll();
 	    $node->InsertNodeLogEntry($parent->user(),
 				      TB_DEFAULT_NODELOGTYPE(),
