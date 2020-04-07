@@ -563,11 +563,15 @@ $BINDIR/tmcc state RELOADSETUP
 
 BOSSINFO=`$BINDIR/tmcc bossinfo`
 
+# Can we run nodecheck?
+NODECHECK=0
+
 # See if we are in the reloading experiment
 INRELOADING=0
 case `$BINDIR/tmcc status` in
 *ALLOCATED=emulab-ops/reloading*)
     INRELOADING=1
+    NODECHECK=1
     ;;
 esac
 
@@ -604,9 +608,11 @@ fi
 $BINDIR/tmcc state RELOADING
 
 #
-# HACK ALERT: If PREPARE > 1, it is an indication that we are doing a
-# full experiment reload, possibly not in the context of the reloading
-# experiment. We treat this like we are in reloading.
+# Handle full reloads when not in the reloading experiment. This is
+# indicated by PREPARE=2.
+#
+# Since the PREPARE= attribute will be the same for each line of the image,
+# we only need look at the first line.
 #
 if [ $INRELOADING -eq 0 ]; then
     _PREPARE=`getvar PREPARE "$1" 0`
@@ -675,7 +681,7 @@ if [ $INRELOADING -eq 1 ]; then
     # (if nodecheck "collect" is enabled in the DB) and to run a destructive
     # disk write speed test (as part of a nodecheck "check" operation).
     #
-    if [ -x $BINDIR/rc.nodecheck ]; then
+    if [ -x $BINDIR/rc.nodecheck -a $NODECHECK -eq 1 ]; then
 	$BINDIR/rc.nodecheck boot
     fi
 fi
