@@ -450,6 +450,7 @@ function SPITFORM($formfields, $newuser, $errors)
 
     }
     echo "    window.EMBEDDED_RESGROUPS = true;\n";
+    echo "    window.EMBEDDED_RESGROUPS_SELECT = true;\n";
     echo "</script>\n";
     echo "<script src='js/lib/d3.v3.js'></script>\n";
     echo "<script src='js/lib/nv.d3.js'></script>\n";

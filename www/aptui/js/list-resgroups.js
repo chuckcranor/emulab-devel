@@ -68,7 +68,7 @@ $(function ()
 	    "showuser"     : true,
 	    "showusing"    : true,
 	    "showstatus"   : true,
-	    "showselect"   : (window.EMBEDDED_RESGROUPS ? true : false),
+	    "showselect"   : (window.EMBEDDED_RESGROUPS_SELECT ? true : false),
 	    "isadmin"      : window.ISADMIN,
 	});
 	$("#groups").html(html);

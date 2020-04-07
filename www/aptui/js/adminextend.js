@@ -35,6 +35,7 @@ $(function ()
 	listTemplate = _.template(templates["reservation-list"]);
 
 	ReloadFirstRow();
+	LoadResGroups();
 	if (window.STARTED) {
 	    $('#extension-controls').removeClass("hidden");
 	    LoadIdleData();
@@ -653,80 +654,6 @@ $(function ()
 		}
 		return;
 	    }
-	    if (Object.keys(json.value.reservations).length) {
-		// Convert to just a single list of reservations.
-		var reservations = {};
-		_.each(json.value.reservations, function(reslist, urn) {
-		    _.each(reslist, function(details, uuid) {
-			reservations[uuid] = details;
-		    });
-		});
-		if (Object.keys(reservations).length) {
-		    console.info("reservations", reservations);
-		    var html = listTemplate({
-			"reservations" : reservations,
-			"showcontrols" : false,
-			"showproject"  : false,
-			"showactivity" : false,
-			"showuser"     : true,
-			"showusing"    : true,
-			"showstatus"   : true,
-			"name"         : "extend",
-			"isadmin"      : true,
-			"error"        : null,
-		    });
-		    $('#reservations-row .panel-body').html(html);
-
-		    // Show the proper status now, we might change it later.
-		    _.each(reservations, function(value, uuid) {
-			var id = '#reservations-row ' +
-			    ' tr[data-uuid="' + uuid + '"] ';
-
-			if (value.cancel) {
-			    $(id + " .status-column .status-canceled")
-				.removeClass("hidden");
-			}
-			else if (value.approved) {
-			    $(id + " .status-column .status-approved")
-				.removeClass("hidden");
-			}
-			else {
-			    $(id + " .status-column .status-pending")
-				.removeClass("hidden");
-			}
-			if (value.approved &&
-			    _.has(value, 'history') && value.history.length) {
-			    $(id + " .resgraph-button").removeClass("invisible");
-
-			    // Bind usage history graph.
-			    $(id + ' .resgraph-button').click(function() {
-				DrawHistoryGraph(value);
-				return false;
-			    });
-			}
-		    });
-
-		    $('#reservations-row .tablesorter')
-			.tablesorter({
-			    theme : 'green',
-			    // initialize zebra
-			    widgets: ["zebra"],
-			});
-		    $('#reservations-row .format-date').each(function() {
-			var date = $.trim($(this).html());
-			if (date != "") {
-			    $(this).html(moment(date)
-					 .format("MMM D, YYYY h:mm A"));
-			}
-		    });
-		    // This activates the popover subsystem.
-		    $('#reservations-row [data-toggle="popover"]').popover({
-			placement: 'auto',
-			container: 'body',
-		    });
-		    $('#reservations-row').removeClass("hidden");
-		}
-	    }	
 	    // Save for checking the extension input field.
 	    maxextension = moment(json.value.maxextension);
 	    
@@ -921,6 +848,28 @@ $(function ()
 	    $('#resusage-graph-modal').off('shown.bs.modal');
 	});
     }
+
+    /*
+     * Check for existing reservations and draw the list.
+     */
+    function LoadResGroups()
+    {
+	sup.CallServerMethod(null, "resgroup", "ListReservationGroups",
+			     {"project" : window.PID},
+			     function (json) {
+				 if (json.code) {
+				     console.info(json.value);
+				     return;
+				 }
+				 var groups = json.value;
+				 if (_.size(groups)) {
+				     $('#reservations-row')
+					 .removeClass("hidden");
+				     window.DrawResGroupList(groups);
+				 }
+			     });
+    }
+    
     // Helper.
     function decodejson(id) {
 	return JSON.parse(_.unescape($(id)[0].textContent));
