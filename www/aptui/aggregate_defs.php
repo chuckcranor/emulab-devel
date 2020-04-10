@@ -199,6 +199,10 @@ class Aggregate
             if ($aggregate->adminonly() && !(ISADMIN() || STUDLY())) {
                 continue;
             }
+            # Hack for Mike.
+            if ($aggregate->nickname() == "APT" && !ISADMIN()) {
+                continue;
+            }
 	    $result[] = $aggregate;
 	}
         return $result;
@@ -285,7 +289,7 @@ class Aggregate
     #
     # Return the list of allowed aggregates based on the portal in use.
     #
-    function DefaultAggregateList($user = null) {
+    function DefaultAggregateList($user = null, $frontpage = false) {
         global $PORTAL_GENESIS, $PORTAL_HEALTH, $TBMAINSITE;
 	$genesis = $PORTAL_GENESIS;
 	if ($PORTAL_HEALTH)
@@ -309,6 +313,10 @@ class Aggregate
 	    }
             # Admins always see everything.
             if (ISADMIN()) {
+                $allowed = 1;
+            }
+            # For the frontpage code, send everything.
+            elseif ($frontpage) {
                 $allowed = 1;
             }
             elseif ($aggregate->adminonly() && !(ISADMIN() || STUDLY())) {
