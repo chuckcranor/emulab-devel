@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,7 +43,7 @@ SBIN_SCRIPTS	= vlandiff vlansync withadminprivs export_tables cvsupd.pl \
 		  grabswitchconfig backupswitches cvsinit checkquota \
 		  spewconlog opsdb_control newnode suchown archive_list \
                   spewimage \
-                  anonsendmail epmodeset fixexpinfo node_traffic switch_traffic \
+                  epmodeset fixexpinfo node_traffic switch_traffic \
 		  dumpdescriptor subboss_tftpboot_sync testbed-control \
 		  archive-expinfo grantfeature emulabfeature addblob readblob \
 		  prereserve grantimage getimages localize_mfs \
@@ -71,7 +71,7 @@ WEB_BIN_SCRIPTS = webcreate_image websetdest weblinkmon_ctl webspewevents \
 		  webdelay_config webcreatedataset webdeletelease \
 		  webapprovelease webextendlease webmodlease webgrantlease
 LIBEXEC_SCRIPTS	= spewleds webcopy spewsource webcvsweb xlogin webviewvc \
-                  $(WEB_BIN_SCRIPTS) $(WEB_SBIN_SCRIPTS)
+                  $(WEB_BIN_SCRIPTS) $(WEB_SBIN_SCRIPTS) tbsendmail 
 
 CTRLSBIN_SCRIPTS= opsdb_control.proxy daemon_wrapper ec2import.proxy \
 		 ec2import-image.pl GrubConf.rb export-template-remote.rb \
@@ -82,9 +82,9 @@ SBSBIN_SCRIPTS=   daemon_wrapper subboss_cacheclean
 # These scripts installed setuid, with sudo. 
 SETUID_BIN_SCRIPTS   = create_image
 SETUID_SBIN_SCRIPTS  = grabwebcams checkquota spewconlog opsdb_control suchown \
-                       anonsendmail readblob image_import delete_image \
+                       readblob image_import delete_image \
                        pxelinux_makeconf imageinfo image_import-new pushrootkey
-
+SETUID_LIBX_SCRIPTS  = tbsendmail
 SETUID_SUEXEC_SCRIPTS  = xlogin
 
 #

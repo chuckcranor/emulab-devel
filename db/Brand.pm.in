@@ -41,7 +41,8 @@ my $TBAPPROVAL  = "@TBAPPROVALEMAIL@";
 my $TBAUDIT	= "@TBAUDITEMAIL@";
 my $TBBASE      = "@TBBASE@";
 my $TBWWW       = "@TBWWW@";
- 
+my $MAINSITE    = @TBMAINSITE@;
+
 #
 # Return an object representing a "brand" ... yes, its silly.
 #
@@ -62,6 +63,7 @@ sub Create($$)
     elsif ($brand =~ /phantomnet/) {
 	$brand = "phantomnet";
     }
+
     elsif ($brand =~ /powder/) {
 	$brand = "powder";
     }
@@ -82,6 +84,34 @@ sub isPNet($)           { return $_[0]->brand() eq "phantomnet" ? 1 : 0; }
 sub isPowder($)         { return $_[0]->brand() eq "powder" ? 1 : 0; }
 sub isEmulab($)         { return $_[0]->brand() eq "emulab" ? 1 : 0; }
 sub isClassic($)        { return $_[0]->brand() eq "classic" ? 1 : 0; }
+
+#
+# Lookup the brand by domain. See utils/tbsendmail.in
+#
+sub LookupByDomain($$)
+{
+    my ($class, $domain) = @_;
+
+    if (!$MAINSITE) {
+	return Create($class, "emulab");
+    }
+    return Create($class, $domain);
+}
+
+#
+# This is used for sendmail.
+#
+sub EnvelopeSender($)
+{
+    my ($self) = @_;
+
+    return ($self->isAPT() ? "aptlab.net" :
+	    # There is no boss.cloudlab.us.
+	    $self->isCloud() ? "www.cloudlab.us" :
+	    $self->isPNet() ? "boss.phantomnet.org" :
+	    $self->isPowder() ? "boss.powderwireless.net" :
+	    "@BOSSNODE@");
+}
 
 sub Server($)
 {
@@ -218,15 +248,6 @@ sub SendEmail($$$$;$$@)
     SENDMAIL($to, $subject, $body, $from, $headers, @files);
     return 0;
 }
-# So we can localize MAILTAG variable.
-sub AnonSendEmail($$$$;$$@)
-{
-    my ($self, $to, $subject, $body, $from, $headers, @files) = @_;
 
-    # All this function does is this. 
-    local $libtestbed::MAILTAG = $self->EmailTag();
-    
-    AnonSENDMAIL($to, $subject, $body, $from, $headers, @files);
-    return 0;
-}
-
+# _Always_ make sure that this 1 is at the end of the file...
+1;

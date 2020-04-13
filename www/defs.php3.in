@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -116,6 +116,7 @@ $TBETC_DIR	= "$TBDIR"."etc/";
 $TBLIBEXEC_DIR	= "$TBDIR"."libexec/";
 $TBSUEXEC_PATH  = "$TBLIBEXEC_DIR/suexec";
 $TBCHKPASS_PATH = "$TBLIBEXEC_DIR/checkpass";
+$TBSENDMAIL_PATH= "$TBLIBEXEC_DIR/tbsendmail";
 $TBCSLOGINS     = "$TBETC_DIR/cslogins";
 $UUIDGEN_PATH   = "@UUIDGEN@";
 
@@ -232,10 +233,14 @@ $session_errorhandler = 0;
 # line that indicates what testbed. Useful when multiple testbed
 # email to the same list.
 #
+# In order to make the email look less spammy, we want the envelope
+# sender to match the From address domain. We do this by letting an
+# external script send the mail, adding the root only -f option to
+# sendmail. 
 # 
 function TBMAIL($to, $subject, $message, $headers = 0)
 {
-    global $TBMAILTAG;
+    global $TBMAILTAG, $TBSENDMAIL_PATH;
 
     $subject = strtoupper($TBMAILTAG) . ": $subject";
 
@@ -247,7 +252,16 @@ function TBMAIL($to, $subject, $message, $headers = 0)
     else {
 	$headers = $tag;
     }
-    return mail($to, $subject, $message, $headers);
+    $fd = popen("$TBSENDMAIL_PATH", "w");
+    fwrite($fd, "To: " . $to . "\n");
+    fwrite($fd, $headers . "\n");
+    fwrite($fd, "Subject: " . $subject . "\n");
+    fwrite($fd, "\n");
+    fwrite($fd, $message . "\n");
+    if (pclose($fd)) {
+        error_log("TBMAIL: Failed to send email message to $to");
+        error_log("TBMAIL: Subject: $subject");
+    }
 }
 
 #

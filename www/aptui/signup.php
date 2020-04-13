@@ -460,12 +460,12 @@ if (!$this_user || $promoting) {
     if (!isset($_SESSION["verified"])) {
 	if (!isset($verify) || $verify == "" ||
 	    $verify != $_SESSION["verify_key"]) {
-	    mail($formfields["email"],
-		 "Confirm your email to create your account",
-		 "Here is your user verification code. Please copy and\n".
-		 "paste this code into the box on the account page.\n\n".
-		 "\t" . $_SESSION["verify_key"] . "\n",
-		 "From: $APTMAIL");
+	    TBMAIL($formfields["email"],
+                   "Confirm your email to create your account",
+                   "Here is your user verification code. Please copy and\n".
+                   "paste this code into the box on the account page.\n\n".
+                   "\t" . $_SESSION["verify_key"] . "\n",
+                   "From: $APTMAIL");
 	
 	    #
             # Respit complete form but show the verify email modal.

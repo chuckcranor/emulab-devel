@@ -184,7 +184,7 @@ function CheckForm()
         #
         if (!$_SESSION["verified"]) {
             if (!$_SESSION["codesent"]) {
-                mail($formfields["email"],
+                TBMAIL($formfields["email"],
                      "Confirm your new email",
                      "Here is your email verification code. Please copy and\n".
                      "paste this code into the box on the account page.\n\n".

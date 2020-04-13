@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2019 University of Utah and the Flux Group.
+# Copyright (c) 2005-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -184,10 +184,6 @@ sub SignupURL($)             { return $_[0]->Brand()->SignupURL($_[0]); }
 sub SendEmail($$$$;$$)
 {
     return $_[0]->Brand()->SendEmail($_[1],$_[2],$_[3],$_[4],$_[5]);
-}
-sub AnonSendEmail($$$$;$$)
-{
-    return $_[0]->Brand()->AnonSendEmail($_[1],$_[2],$_[3],$_[4],$_[5]);
 }
 
 #

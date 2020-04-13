@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -683,7 +683,7 @@ function CheckStep0()
         # If we need to verify and we have not sent the email, do so.
         #
         if (!$_SESSION["verified"] && !$_SESSION["codesent"]) {
-	    mail($formfields["email"],
+	    TBMAIL($formfields["email"],
 		 "aptlab.net: Verification code for creating your experiment",
 		 "Here is your user verification code. Please copy and\n".
 		 "paste this code into the box on the experiment page.\n\n".
