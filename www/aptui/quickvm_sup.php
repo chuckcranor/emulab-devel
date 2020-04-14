@@ -572,8 +572,12 @@ if ($UI_DISABLE_DATASETS == 0 || ($UI_DISABLE_DATASETS == 1 && ISADMIN()) ) {
                                echo "<li><a href='images.php?all=1'>
                             All Images</a></li>
                                  <li><a href='list-vlans.php'>
-                            All Vlans</a></li>
-                                 <li><a href='instance-errors.php'>
+                            All Vlans</a></li>";
+                            if ($ISPOWDER) {
+		                   echo "<li><a href='list-rfranges.php'>
+                                All RF Ranges</a></li>\n";
+                            }
+                               echo "<li><a href='instance-errors.php'>
                             Experiment Errors</a></li>
                                  <li><a href='lists.php'>
                             Users/Projects</a></li>
