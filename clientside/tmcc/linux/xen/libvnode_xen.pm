@@ -4750,6 +4750,8 @@ sub createExpBridges($$$)
 		    
 		    mysystem2("$IPBIN link add link $iface name $pdev ".
 			      " address $bmac type vlan id $tag");
+		    goto bad
+			if ($?);
 		    
 		    mysystem2("$IFCONFIG $pdev up");
 		    mysystem2("$ETHTOOL -K $pdev tso off gso off");
