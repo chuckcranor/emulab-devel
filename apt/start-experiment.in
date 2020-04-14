@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -72,6 +72,7 @@ use Project;
 use Group;
 use WebTask;
 use emutil;
+use GeniHRN;
 
 # Protos
 sub fatal($);
@@ -171,6 +172,36 @@ if (!defined($portal)) {
 	$portal = "emulab";
     }
 }
+if (defined($duration)) {
+    if ($duration !~ /^\d+$/) {
+	fatal("Duration is not an integer");
+    }
+}
+if (defined($name)) {
+    if (length($name) > 16) {
+	fatal("Experiment name is too long: must be <= 16 characters");
+    }
+    elsif (! TBcheck_dbslot($name, "experiments", "eid",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	fatal("Invalid experiment name");
+    }
+}
+if (defined($options{"a"})) {
+    if (!GeniHRN::IsValid($options{"a"})) {
+	fatal("Ivalid aggregate URN");
+    }
+}
+if (defined($start_at)) {
+    if (!str2time($start_at)) {
+	fatal("Could not parse the start time");
+    }
+}
+if (defined($stop_at)) {
+    if (!str2time($stop_at)) {
+	fatal("Could not parse the start time");
+    }
+}
+
 # This was a dumb mistake, I need to convert from servername to portal.
 $ENV{"SERVER_NAME"} = $project->Brand()->Server();
 
