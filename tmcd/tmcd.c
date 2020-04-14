@@ -170,6 +170,7 @@ CHECKMASK(char *arg)
 #define TB_TAINTSTATE_BLACKBOX  1
 #define TB_TAINTSTATE_USERONLY  2
 #define TB_TAINTSTATE_DANGEROUS 4
+#define TB_TAINTSTATE_MUSTRELOAD  8
 #define HAS_ANY_TAINTS(tset, tcheck) (tset & tcheck)
 #define HAS_ALL_TAINTS(tset, tcheck) ((tset & tcheck) == tcheck)
 #define HAS_TAINT(tset, tcheck) HAS_ALL_TAINTS(tset, tcheck)
@@ -8233,6 +8234,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				reqp->taintstates |= TB_TAINTSTATE_USERONLY;
 			} else if (strcmp(tok,"dangerous") == 0) {
 				reqp->taintstates |= TB_TAINTSTATE_DANGEROUS;
+			} else if (strcmp(tok,"mustreload") == 0) {
+				reqp->taintstates |= TB_TAINTSTATE_MUSTRELOAD;
 			} else {
 				error("iptonodeid: %s: Unknown taintstate: '%s'\n", reqp->nodeid, tok);
 			}
