@@ -48,6 +48,7 @@ use Logfile;
 use English;
 use Data::Dumper;
 use EmulabFeatures;
+use EmulabConstants;
 
 # Configure variables
 my $TB		= "@prefix@";
@@ -782,8 +783,23 @@ sub LightUpNodes($@)
 	    if ($pid == 0);
 
 	if ($pid > 0) {
-	    next
-		if (! &$waitfunc($pid));
+	    if (! &$waitfunc($pid)) {
+		foreach my $node_id (@{ $listref }) {
+		    my $node = $self->node($node_id);
+
+		    #
+		    # Slightly cumbersome place to do this. But we want
+		    # to clear this taint as soon as possible instead of
+		    # after all the waiting, in case the user wants the
+		    # console. 
+		    #
+		    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_RELOAD() &&
+			$node->IsTainted(TB_TAINTSTATE_MUSTRELOAD())) {
+			$node->RemoveTaintState(TB_TAINTSTATE_MUSTRELOAD());
+		    }
+		}
+		next;
+	    }
 	}
 	
 	#
@@ -798,8 +814,23 @@ sub LightUpNodes($@)
 	}
 	else {
 	    foreach my $node_id (keys(%{ $hashref })) {
-		push(@nlist, $node_id)
-		    if ($hashref->{$node_id});
+		if ($hashref->{$node_id}) {
+		    push(@nlist, $node_id);
+		}
+		else {
+		    my $node = $self->node($node_id);
+
+		    #
+		    # Slightly cumbersome place to do this. But we want
+		    # to clear this taint as soon as possible instead of
+		    # after all the waiting, in case the user wants the
+		    # console. 
+		    #
+		    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_RELOAD() &&
+			$node->IsTainted(TB_TAINTSTATE_MUSTRELOAD())) {
+			$node->RemoveTaintState(TB_TAINTSTATE_MUSTRELOAD());
+		    }
+		}
 	    }
 	}
 
@@ -1159,14 +1190,10 @@ sub AddNode($$)
     $node->_setupoperation($libossetup::NOSTATE);
 
     #
-    # If the partitions table is empty, say, cleared in nfree cause we
-    # are waiting till a node is allocted before reloading it, then we
-    # ignore the failureaction and force a fatal error. We do not want
-    # the user to get a hold of the node cause we might leak something
-    # from the previous experiment.
+    # If the node is tainted with MUSTRELOAD, then we must succeed.
     #
-    if (!$node->HasPartitions()) {
-	print "$node_id has no partitions, reload failure is not an option\n";
+    if ($node->IsTainted(TB_TAINTSTATE_MUSTRELOAD())) {
+	print "$node_id is tainted, reload failure is not an option\n";
 	$node->_reloadordie(1);
     }
     else {
@@ -1447,6 +1474,7 @@ sub WaitDone($@)
 	    print "$node_id is alive and well\n";
 	    $node->SetBootStatus(NODEBOOTSTATUS_OKAY);
 	    $node->SetAllocState(TBDB_ALLOCSTATE_RES_READY());
+
 	    # Set this so we know a successful reboot was done.
 	    # Important for VMs that depend on this node.
 	    $node->_rebooted(1)
@@ -1497,9 +1525,15 @@ sub WaitDone($@)
 	# If reload failed on a reloadordie() node, we clear canfail
 	# (ignore failureaction). It is okay if it failed later.
 	#
-	if ($node->_reloadordie() &&
-	    $setupstatus == $libossetup::RELOAD_FAILED) {
-	    $node->_canfail(0);
+	if ($node->_reloadordie()) {
+	    #
+	    # We removed the MUSTRELOAD taint if reload was successful,
+	    # so it is still tainted, something went wrong.
+	    # 
+	    if ($setupstatus == $libossetup::RELOAD_FAILED ||
+		$node->IsTainted(TB_TAINTSTATE_MUSTRELOAD())) {
+		$node->_canfail(0);
+	    }
 	}
 
 	#
@@ -1578,7 +1612,10 @@ sub WaitDone($@)
 				      "'Moved to hwcheckup by os_setup; ".
 				      "failed to boot image for $osinfo " .
 				      "in $pid/$eid'");
-
+	    if ($node->_reloadordie()) {
+		# Force the partition table back to cleared so it cannot boot
+		$node->ClearPartitions();
+	    }
 	    $parent->add_failed_node_inform_tbopsfatal($node_id);
 	}
 	else {

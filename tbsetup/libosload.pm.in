@@ -268,7 +268,12 @@ sub osload ($$) {
 	# to zero all node disks, then capture that here too.
 	my $zeronode = 0;
 	if ($nodeobject->IsTainted()) {
-	    $zeronode = 2;
+	    if ($nodeobject->TaintIs(TB_TAINTSTATE_MUSTRELOAD())) {
+		$zeronode = $zerofree;
+	    }
+	    else {
+		$zeronode = 2;
+	    }
 	}
 	elsif ($zerofree) {
 	    $zeronode = $zerofree;
@@ -895,7 +900,7 @@ sub osload ($$) {
     }
   done:
     print "osload: Done! There were $failures failures.\n";
-    
+
     #
     # Since we use this in long running daemons, be sure to release
     # the event system connection, or else we stack up lots of handles

@@ -4377,6 +4377,12 @@ sub IsTainted($;$) {
 
     return libTaintStates::IsTainted($self, $taint);
 }
+sub TaintIs($@) {
+    my ($self, @taint_states) = @_;
+    require libTaintStates;
+
+    return libTaintStates::TaintIs($self, @taint_states);
+}
 sub SetTaintStates($@) {
     my ($self, @taint_states) = @_;
     require libTaintStates;

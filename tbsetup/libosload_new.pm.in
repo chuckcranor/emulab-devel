@@ -681,7 +681,9 @@ sub osload($$$) {
 	# Check to see if the node is tainted.  If so, then the disk
 	# needs to be cleaned up (zeroed).
 	if ($nodeobject->IsTainted()) {
-	    $nargs{'zerofree'} = 2;
+	    if (!$nodeobject->TaintIs(TB_TAINTSTATE_MUSTRELOAD())) {
+		$nargs{'zerofree'} = 2;
+	    }
 	}
 
 	# Wait, don't do this -- waitmode is global; nowait is per-node!

@@ -69,6 +69,7 @@ use Node;
 use OSImage;
 use Lan;
 use EmulabFeatures;
+use EmulabConstants;
 
 # Local stuff
 my $consetup	    = "$TB/libexec/console_setup";
@@ -707,10 +708,14 @@ foreach my $node (@freed_nodes) {
     #
     # Delay reload till next allocation. We want to clear the partition
     # table in the DB so it cannot boot from disk again by mistake.
-    # Then power off the node until next allocation.
+    # Then power off the node until next allocation. We also "taint"
+    # node since the user should not have access in the next experiment
+    # until it is reloaded.
     #
     if ($node->delayreloadtillalloc()) {
 	$node->ClearPartitions();
+	$node->SetTaintStates(TB_TAINTSTATE_MUSTRELOAD());
+	
 	#
 	# The project still has the node, so this will be allowed. 
 	#

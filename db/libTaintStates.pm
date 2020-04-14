@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2014-2016 University of Utah and the Flux Group.
+# Copyright (c) 2014-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,6 +48,7 @@ use English;
 # Function prototypes
 sub GetTaintStates($);
 sub IsTainted($;$);
+sub TaintIs($@);
 sub SetTaintStates($@);
 sub AddTaint($$);
 sub RemoveTaint($;$);
@@ -94,6 +95,24 @@ sub IsTainted($;$)
 
     # Looking for a specific taint.
     return grep {$_ eq $taint} @taint_states;
+}
+
+#
+# Check to see if the object has the exact taint list provided.
+#
+sub TaintIs($@)
+{
+    my ($obj, @taint_states) = @_;
+    my @current = GetTaintStates($obj);
+
+    return 0
+	if (scalar(@taint_states) != scalar(@current));
+
+    foreach my $state (@taint_states) {
+	return 0
+	    if (! grep {$_ eq $state} @current);
+    }
+    return 1;
 }
 
 #
