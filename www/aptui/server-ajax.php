@@ -328,9 +328,9 @@ $routing = array("geni-login" =>
                                                  "Toggle" =>
                                                      "Do_Toggle",
                                                  "ProjectProfile" =>
-                                                      "Do_ProjectProfile",
-                                                 "RFRanges" =>
-                                                      "Do_RFRanges")),
+                                                      "Do_ProjectProfile"
+                              )
+                        ),
 		 "groups" =>
 			array("file"    => "groups.ajax",
 			      "guest"   => false,
@@ -639,6 +639,21 @@ $routing = array("geni-login" =>
 			      "guest"   => false,
 			      "methods" => array("GetFrequencyData" =>
 						     "Do_GetFrequencyData",
+                              )
+                        ),
+		 "rfrange" =>
+			array("file"    => "rfrange.ajax",
+			      "guest"   => false,
+			      "methods" => array("ProjectRanges" =>
+                                                     "Do_ProjectRanges",
+                                                 "GlobalRanges" =>
+                                                     "Do_GlobalRanges",
+                                                 "AllProjectRanges" =>
+                                                     "Do_AllProjectRanges",
+                                                 "ProjectInuseRanges" =>
+                                                     "Do_ProjectInuseRanges",
+                                                 "AllInuseRanges" =>
+                                                     "Do_AllInuseRanges"
                               )
                         ),
 );

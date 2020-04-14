@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2019 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -141,6 +141,7 @@ class Project
 	return (is_null($this->project) ? -1 : $this->project[$name]);
     }
     function pid_idx()	     { return $this->field("pid_idx"); }
+    function gid_idx()	     { return $this->field("pid_idx"); }
     function pid()	     { return $this->field("pid"); }
     function created()       { return $this->field("created"); }
     function expires()       { return $this->field("expires"); }

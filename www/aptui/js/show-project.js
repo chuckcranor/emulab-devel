@@ -664,19 +664,17 @@ $(function ()
 
     function LoadRFRanges()
     {
-	var callback = function(json) {
-	    console.info("LoadRFRanges", json);
-
+	var ProjectRanges = function(json) {
 	    if (json.code) {
 		console.info(json.value);
 		return;
 	    }
-	    if (_.size(json.value.project_ranges) == 0 &&
-		_.size(json.value.global_ranges) == 0) {
+	    if (!_.size(json.value)) {
 		return;
 	    }
 	    var html = "";
-	    var addRange = function (range, global) {
+
+	    _.each(json.value, function(range) {
 		html = html + "<tr>";
 
 		if (window.ISADMIN) {
@@ -684,22 +682,11 @@ $(function ()
 		    html = html +
 			" <td> " + id + "</td>";
 		}
-		
 		html = html +
 		    " <td> " + range.freq_low + "</td>" +
-		    " <td> " + range.freq_high + "</td>";
-		
-		if (window.ISADMIN) {
-		    html = html +
-			" <td> " + (global ? "Yes" : "No") + "</td>";
-		}
-		html = html + "</tr>";
-	    };
-	    _.each(json.value.project_ranges, function(range) {
-		addRange(range, 0);
-	    });
-	    _.each(json.value.global_ranges, function(range) {
-		addRange(range, 1);
+		    " <td> " + range.freq_high + "</td>" +
+		    " <td> " + (range.global ? "Yes" : "No") + "</td>" +
+		    "</tr>";
 	    });
 	    $('#rfranges_content .allowed-rfranges ' +
 	      '.tablesorter tbody').html(html)
@@ -709,18 +696,25 @@ $(function ()
 		.tablesorter({
 		    theme : 'green',
 		});
-
-	    if (!json.value.instance_ranges) {
+	};
+	var InuseRanges = function(json) {
+	    if (json.code) {
+		console.info(json.value);
 		return;
 	    }
-	    html = "";
-	    _.each(json.value.instance_ranges, function(info) {
+	    if (!_.size(json.value)) {
+		return;
+	    }
+	    var html = "";
+	    _.each(json.value, function(info) {
 		var url = "status.php?uuid=" + info.uuid;
 		
 		html = html + "<tr>" +
 		    "<td><a href='" + url + "'>" + info.name + "</a></td>" +
 		    "<td>" + info.freq_low + "</td>" +
 		    "<td>" + info.freq_high + "</td>" +
+		    "<td>" + moment(info.expires).format("MMM Do, h:m A") +
+		    "</td>" +
 		    "</tr>";
 	    });
 	    $('#rfranges_content .inuse-rfranges ' +
@@ -732,11 +726,19 @@ $(function ()
 		    theme : 'green',
 		});
 	};
-	var xmlthing =
-	    sup.CallServerMethod(null,
-				 "show-project", "RFRanges",
+	var xmlthing1 =
+	    sup.CallServerMethod(null, "rfrange", "ProjectRanges",
 				 {"pid" : window.TARGET_PROJECT});
-	xmlthing.done(callback);
+	var xmlthing2 =
+	    sup.CallServerMethod(null, "rfrange", "ProjectInuseRanges",
+				 {"pid" : window.TARGET_PROJECT});
+
+	$.when(xmlthing1, xmlthing2)
+	    .done(function(result1, result2) {
+		console.info("LoadRFRanges", result1, result2);
+		ProjectRanges(result1);
+		InuseRanges(result2);
+	    });
     }
     
     //

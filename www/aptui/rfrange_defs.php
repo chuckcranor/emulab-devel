@@ -54,8 +54,7 @@ class RFRange
 
 class ProjectRFRanges
 {
-    var $pranges;
-    var $granges;
+    var $ranges;
     var $project;
     
     #
@@ -87,19 +86,47 @@ class ProjectRFRanges
             $range = new RFRange($row);
             $pranges[$range->idx()] = $range;
         }
+        $this->project = $project;
+	$this->ranges  = $pranges;
+    }
+    function Project()        { return $this->project; }
+    function Count()          { return count($this->ranges); }
+    function Ranges()         { return $this->ranges; }
 
+    # Hmm, how does one cause an error in a php constructor?
+    function IsValid() {
+	return !is_null($this->ranges);
+    }
+    
+    function Lookup($project) {
+	$foo = new ProjectRFRanges($project);
+        if (!is_null($foo->ranges)) {
+            return $foo;
+        }
+        return null;
+    }
+}
+
+class GlobalRFRanges
+{
+    var $ranges;
+    
+    #
+    # Constructor
+    #
+    function GlobalRFRanges() {
         $query_result =
-            DBQueryWarn("select p.*,n.freq_low as named_low,".
-                        "       n.freq_high as named_high ".
-                        "  from apt_global_rfranges as p ".
-                        "left join apt_named_rfranges as n on ".
-                        "  p.range_id is not null and n.range_id=p.range_id ".
-                        "where disabled=0 and ".
-                        # Ignore named ranges that have no definition
-                        "      not (p.range_id is not null and ".
-                        "           n.range_id is null)");
+            DBQueryFatal("select p.*,n.freq_low as named_low,".
+                         "       n.freq_high as named_high ".
+                         "  from apt_global_rfranges as p ".
+                         "left join apt_named_rfranges as n on ".
+                         "  p.range_id is not null and n.range_id=p.range_id ".
+                         "where disabled=0 and ".
+                         # Ignore named ranges that have no definition
+                         "      not (p.range_id is not null and ".
+                         "           n.range_id is null)");
 
-        $granges = array();
+        $ranges = array();
 	while ($row = mysql_fetch_array($query_result)) {
             #
             # If this was an indirect (named) range, copy the frequencies over
@@ -109,25 +136,21 @@ class ProjectRFRanges
                 $row['freq_high'] = $row['named_high'];
             }
             $range = new RFRange($row);
-            $granges[$range->idx()] = $range;
+            $ranges[$range->idx()] = $range;
         }
-        $this->project = $project;
-	$this->pranges = $pranges;
-	$this->granges = $granges;
+	$this->ranges = $ranges;
     }
-    function Project()        { return $this->project; }
-    function Count()          { return count($this->pranges); }
-    function ProjectRanges()  { return $this->pranges; }
-    function GlobalRanges()   { return $this->granges; }
+    function Count()          { return count($this->ranges); }
+    function Ranges()         { return $this->ranges; }
 
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
-	return !is_null($this->pranges);
+	return !is_null($this->ranges);
     }
     
-    function Lookup($project) {
-	$foo = new ProjectRFRanges($project);
-        if (!is_null($foo->pranges)) {
+    function Lookup() {
+	$foo = new GlobalRFRanges();
+        if (!is_null($foo->ranges)) {
             return $foo;
         }
         return null;

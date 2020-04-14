@@ -3,7 +3,6 @@ $(function ()
     'use strict';
 
     var template_list   = ["resgroup", "reserve-faq", "range-list",
-			   "route-list",
 			   "reservation-graph", "oops-modal", "waitwait-modal",
 			   "resusage-graph"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
@@ -13,7 +12,7 @@ $(function ()
     var graphTemplate   = _.template(templates["reservation-graph"]);
     var usageTemplate   = _.template(templates["resusage-graph"]);
     var rangeTemplate   = _.template(templates["range-list"]);
-    var routeTemplate   = _.template(templates["route-list"]);
+    var current_pid  = null;
     var projlist     = null;
     var amlist       = null;
     var routelist    = null;
@@ -785,6 +784,9 @@ $(function ()
 	row.find('input.freq-low, input.freq-high').change(function () {
 	    modified_callback();
 	});
+	row.find('input.freq-low, input.freq-high').focus(function () {
+	    ReorderGraphs("ranges");
+	});
 	// See above
 	updateButtons();
     }
@@ -813,10 +815,13 @@ $(function ()
 	    $(this).find('option:selected')
 		.each(function() {
 		    console.info("route change: " + $(this).val());
-		    ReorderGraphs("routes")
 		    RegenCombinedGraph();
 		});
 	});
+	row.find('.routename').focus(function (event) {
+	    ReorderGraphs("routes")
+	});
+	
 	$('#route-table').append(row);
 
 	/*
@@ -1564,38 +1569,204 @@ $(function ()
      */
     function LoadRangeReservations()
     {
-	var callback = function(json) {
-	    console.log("LoadRangeReservations", json);
-	    if (json.code) {
-		console.info("Could not get range info");
-		return;
-	    }
-	    if (!_.size(json.value)) {
-		return;
-	    }
-	    allranges = json.value;
-	    
-	    var html = rangeTemplate({"ranges" : json.value});
-	    $('#range-list').html(html).removeClass("hidden");
+	var this_pid = (editing ? current_pid : $('#pid').val());
+	var project_ranges = null;
 
-	    // Format dates with moment before display.
-	    $('#range-list .format-date').each(function() {
-		var date = $.trim($(this).html());
-		if (date != "") {
-		    $(this).html(moment(date).format("lll"));
+	var OverLaps = function(x, y) {
+	    var x1 = +x.freq_low;
+	    var x2 = +x.freq_high;
+	    var y1 = +y.freq_low;
+	    var y2 = +y.freq_high;
+	    
+	    return x1 <= y2 && y1 <= x2;
+	};
+	
+	var ProjectRanges = function(json) {
+	    if (json.code || !_.size(json.value)) {
+		if (json.code) {
+		    console.info("Could not get project range info");
 		}
+		project_ranges = null;
+		$('#allowed-ranges table tbody').html("");
+		$('.allowed-ranges-hidden').addClass("hidden");
+		return;
+	    }
+	    project_ranges = json.value;
+	    var html = "";
+
+	    _.each(json.value, function(range) {
+		var range_id = range.range_id ? range.range_id : range.idx;
+		
+		html = html +
+		    "<tr>" +
+		    "<td>" + range_id + "</td>" +
+		    "<td>" + range.freq_low + "</td>" +
+		    "<td>" + range.freq_high + "</td>" +
+		    "</tr>";
 	    });
-	    $('#range-list .tablesorter')
+	    $('#allowed-ranges table tbody').html(html);
+	    $('#range-info-div').removeClass("hidden");
+	    $('.allowed-ranges-hidden').removeClass("hidden");
+	    // Activate the tab,
+	    $('#range-info-div a[href="#allowed-ranges"]').tab('show');
+
+	    $('#allowed-ranges .tablesorter')
 		.tablesorter({
 		    theme : 'green',
 		    // initialize zebra
 		    widgets: ["zebra"],
 		});
 	};
+	var ReservedRanges = function(json) {
+	    $('#reserved-ranges table tbody').html("");
+	    $('.reserved-ranges-hidden').addClass("hidden");
+	    
+	    if (json.code || !_.size(json.value)) {
+		if (json.code) {
+		    console.info("Could not get reserved range info");
+		}
+		// Do not include stale info in search
+		allranges = [];
+		return;
+	    }
+	    // For the search button
+	    allranges = json.value;
+	    
+	    var html = "";
 
-	var xmlthing = sup.CallServerMethod(null, "resgroup",
-					    "RangeReservations");
-	xmlthing.done(callback);
+	    _.each(allranges, function(info) {
+		/*
+		 * If this range does not overlap with any of the ranges
+		 * the projet is allowed to use, then skip it.
+		 */
+		var overlaps = 0;
+		
+		for (var i = 0; i < project_ranges.length; i++) {
+		    var that = project_ranges[i];
+		    
+		    if (OverLaps(info, that)) {
+			overlaps = 1;
+			break;
+		    }
+		}
+		if (!overlaps) {
+		    return;
+		}
+		html = html +
+		    "<tr>" +
+		    "<td>" + info.freq_low + "</td>" +
+		    "<td>" + info.freq_high + "</td>" +
+		    "<td>" + moment(info.start).format("lll") + "</td>" +
+		    "<td>" + moment(info.end).format("lll") + "</td>" +
+		    "</tr>";
+	    });
+	    if (html == "") {
+		return;
+	    }
+	    $('#reserved-ranges table tbody').html(html);
+	    $('#range-info-div').removeClass("hidden");
+	    $('.reserved-ranges-hidden').removeClass("hidden");
+
+	    $('#reserved-ranges .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+		    // initialize zebra
+		    widgets: ["zebra"],
+		});
+	};
+	var InUseRanges = function(json) {
+	    $('#inuse-ranges table tbody').html("");
+	    $('.inuse-ranges-hidden').addClass("hidden");
+	    
+	    if (json.code || !_.size(json.value)) {
+		if (json.code) {
+		    console.info("Could not get inuse range info: " +
+				 json.value);
+		}
+		return;
+	    }
+	    var html = "";
+
+	    _.each(json.value, function(range) {
+		/*
+		 * If this range does not overlap with any of the ranges
+		 * the projet is allowed to use, then skip it.
+		 */
+		var overlaps = 0;
+		
+		for (var i = 0; i < project_ranges.length; i++) {
+		    var that = project_ranges[i];
+		    
+		    if (OverLaps(range, that)) {
+			overlaps = 1;
+			break;
+		    }
+		}
+		if (!overlaps) {
+		    return;
+		}
+		html = html +
+		    "<tr>" +
+		    "<td>" + range.freq_low + "</td>" +
+		    "<td>" + range.freq_high + "</td>" +
+		    "<td>" + moment(range.end).format("lll") + "</td>" +
+		    "</tr>";
+	    });
+	    if (html == "") {
+		return;
+	    }
+	    $('#inuse-ranges table tbody').html(html);
+	    $('#range-info-div').removeClass("hidden");
+	    $('.inuse-ranges-hidden').removeClass("hidden");
+
+	    $('#inuse-ranges .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+		    // initialize zebra
+		    widgets: ["zebra"],
+		});
+	};
+	var xmlthing1 = sup.CallServerMethod(null, "rfrange", "ProjectRanges",
+					     {"pid" : this_pid});
+	var xmlthing2 = sup.CallServerMethod(null, "resgroup",
+					     "RangeReservations");
+	var xmlthing3 = sup.CallServerMethod(null, "rfrange",
+					     "AllInuseRanges");
+					     
+	$.when(xmlthing1, xmlthing2, xmlthing3)
+	    .done(function(result1, result2, result3) {
+		console.info("LoadRangeReservations",
+			     result1, result2, result3);
+
+		if (!editing) {
+		    // If the project changed while we were gone,
+		    // abort this one and go again.
+		    if (this_pid != $('#pid').val()) {
+			console.info("LoadRangeReservations: project changed " +
+				     "from " + current_pid +
+				     " to " + selected_pid);
+			LoadRangeReservations();
+			return;
+		    }
+		}
+		// If no project ranges allowed, then hide the div.
+		ProjectRanges(result1);
+		if ($('#range-info-div ' +
+		      '.allowed-ranges-hidden').hasClass("hidden")) {
+		    $('#range-info-div').addClass("hidden");
+		}
+		else {
+		    ReservedRanges(result2);
+		    InUseRanges(result3);
+		}
+
+		if (!editing) {
+		    // Reload range reservations after project change.
+		    $('#pid').one("change", function () {
+			LoadRangeReservations();
+		    });
+		}
+	    });
     }
     
     /*
@@ -1614,25 +1785,6 @@ $(function ()
 
 	    if (!_.size(json.value.list)) {
 		return;
-	    }
-	    if (0) {
-		allroutes = json.value.list;
-		var html = routeTemplate({"routes" : allroutes});
-		$('#route-list').html(html).removeClass("hidden");
-
-		// Format dates with moment before display.
-		$('#route-list .format-date').each(function() {
-		    var date = $.trim($(this).html());
-		    if (date != "") {
-			$(this).html(moment(date).format("lll"));
-		    }
-		});
-		$('#route-list .tablesorter')
-		    .tablesorter({
-			theme : 'green',
-			// initialize zebra
-			widgets: ["zebra"],
-		    });
 	    }
 	};
 	var xmlthing = sup.CallServerMethod(null, "resgroup",
@@ -2433,6 +2585,7 @@ $(function ()
 	    else {
 		$('#pid').html(details.pid);
 	    }
+	    current_pid = details.pid;
 	    
 	    if (isadmin) {
 		/*
@@ -3169,6 +3322,9 @@ $(function ()
 	}
 	else if (which == "radios") {
 	    graphid = "radio-graph-div";
+	}
+	else if (which == "ranges") {
+	    graphid = "range-info-div";
 	}
 	else {
 	    if (_.has(FEs, which)) {

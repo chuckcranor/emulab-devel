@@ -396,9 +396,62 @@
     <div id="history-graphs"></div>
   </div>
   <div class='col-lg-5 col-md-5'>
-    <div id="range-list" class="hidden"></div>
-    <div id="route-list" class="hidden"></div>
     <div id="reservation-lists">
+      <div id="range-info-div" class="hidden" style="margin-bottom: 20px;">
+	<ul class="nav nav-tabs" role="tablist">
+	  <li role="presentation" class="allowed-ranges-hidden hidden">
+	    <a href="#allowed-ranges" role="tab" 
+	       data-toggle="tab">Allowed Ranges</a>
+	  </li>
+	  <li role="presentation" class="reserved-ranges-hidden hidden">
+	    <a href="#reserved-ranges" role="tab"
+	       data-toggle="tab">Reserved Ranges</a>
+	  </li>
+	  <li role="presentation" class="inuse-ranges-hidden hidden">
+	    <a href="#inuse-ranges" role="tab" 
+	       data-toggle="tab">Ranges In Use</a>
+	  </li>
+	</ul>
+	<div class="tab-content">
+	  <div role="tabpanel" id="allowed-ranges"
+	       class="tab-pane allowed-ranges-hidden hidden">
+	    <table class='tablesorter'>
+	      <thead>
+		<th>ID</th>
+		<th>Low (MHz)</th>
+		<th>High (MHz)</th>
+	      </thead>
+	      <tbody>
+	      </tbody>
+	    </table>
+	  </div>
+	  <div role="tabpanel" id="reserved-ranges"
+	       class="tab-pane reserved-ranges-hidden hidden">
+	    <table class='tablesorter'>
+	      <thead>
+		<th>Low (MHz)</th>
+		<th>High (MHz)</th>
+		<th>Start</th>
+		<th>End</th>
+	      </thead>
+	      <tbody>
+	      </tbody>
+	    </table>
+	  </div>
+	  <div role="tabpanel" id="inuse-ranges"
+	       class="tab-pane inuse-ranges-hidden hidden">
+	    <table class='tablesorter'>
+	      <thead>
+		<th>Low (MHz)</th>
+		<th>High (MHz)</th>
+		<th>Expires</th>
+	      </thead>
+	      <tbody>
+	      </tbody>
+	    </table>
+	  </div>
+	</div>
+      </div>
       <div class='panel panel-default hidden' id="radio-graph-div">
 	<div class='panel-heading'>
 	  <center>

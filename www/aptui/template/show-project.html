@@ -99,7 +99,7 @@
 		      Admin Menu<span class="caret"></span></a>
 		    <ul class="dropdown-menu">
 		      <% if (disabledres < 2) { %>
-		      <li><a href="reserve.php?project=<%= target_project %>">
+		      <li><a href="resgroup.php?project=<%= target_project %>">
 			Create Reservation</a></li>
 		      <% } %>
 		      <li><a href="activity.php?project=<%= target_project %>">
@@ -187,9 +187,7 @@
 			      <% } %>
 			      <th>Lower (MHz)</th>
 			      <th>Upper (MHz)</th>
-			      <% if (isadmin) { %>
-				<th>Global</th>
-			      <% } %>
+			      <th>Global</th>
 			    </tr>
 			  </thead>
 			  <tbody></tbody>
@@ -205,6 +203,7 @@
 			      <th>Name</th>
 			      <th>Lower (MHz)</th>
 			      <th>Upper (MHz)</th>
+			      <th>Expires</th>
 			    </tr>
 			  </thead>
 			  <tbody></tbody>
