@@ -78,6 +78,7 @@ my $IDLESTATS      = "$TB/bin/idlestats";
 my $SUDO           = "/usr/local/bin/sudo";
 my $SSH            = "/usr/bin/ssh";
 my $WAP            = "$TB/sbin/withadminprivs";
+my $NODE_TOP       = "$TB/sbin/node_top";
 my $API_VERSION    = 1.0;
 my $CLOUDLAB_FEDERATED = @CLOUDLAB_FEDERATED@;
 
@@ -2084,6 +2085,55 @@ sub ReservationHistory($)
     };
     #print STDERR Dumper($blob);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+}
+
+#
+# Grab a Top for a node.
+#
+sub NodeTop($)
+{
+    my ($argref)  = @_;
+
+    #
+    # The Portal decides the user has permission and then uses "admin" mode.
+    #
+    my $hasperm = CheckPermission(1);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    if (!exists($argref->{'component_id'})) {
+	return GeniResponse->BadArgsResponse("Missing component ID");
+    }
+    my $hrn = GeniHRN->new($argref->{'component_id'});
+    if (!defined($hrn)) {
+	return GeniResponse->BadArgsResponse("Invalid component ID");
+    }
+    my $node = Node->Lookup($hrn->id());
+    if (!defined($node)) {
+	return GeniResponse->BadArgsResponse("No such node");
+    }
+    my $node_id = $node->node_id();
+    
+    # Use a webtask to get back output.
+    my $webtask = WebTask->CreateAnonymous();
+    return GeniResponse->Create(GENIRESPONSE_ERROR)
+	if (!defined($webtask));
+
+    my $command = "$WAP $NODE_TOP -t " . $webtask->task_id() . " " . $node_id;
+    print STDERR "Running '$command'\n";
+    GeniUtil::FlipToElabMan();
+    my $output = GeniUtil::ExecQuiet($command);
+    if ($?) {
+	GeniUtil::FlipToGeniUser();
+	print STDERR "$output\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
+    }
+    GeniUtil::FlipToGeniUser();
+    $webtask->Refresh();
+    my $results = $webtask->results()->{$node_id};
+    $webtask->Delete();
+    
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $results);
 }
 
 #

@@ -4962,6 +4962,22 @@ sub PrestageImages($$$@)
     return Genixmlrpc::CallMethod($cmurl, $context, "PrestageImages", $args);
 }
 
+#
+# Grab a "top"
+#
+sub Top($$)
+{
+    my ($self, $component_id) = @_;
+    my $authority = $self->GetGeniAuthority();
+    return ContextError()
+	if (! (defined($authority)));
+
+    my $args = {
+	"component_id" => $component_id,
+    };
+    return APT_Geni::PortalRPC($authority, undef, "NodeTop", $args);
+}
+
 ###################################################################
 #
 # Record what instances are currently using rf ranges routes. Faster then

@@ -1154,6 +1154,11 @@ pre {
 	   data-toggle='tooltip'
 	   title='Radio monitoring graph'
 	   data-trigger="hover">Monitor Graph</a></li>
+      <li id="nodetop" class="hidden">
+	<a name="nodetop"
+	   data-toggle='tooltip'
+	   title='Top Processes'
+	   data-trigger="hover">Top Processes</a></li>
       <li id="delete">
 	<a name="delete"
 	   data-toggle='tooltip'
@@ -1657,6 +1662,20 @@ pre {
 		    id='ignore-failure-confirm'>
 	      Ignore Failure</button>
 	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='top-processes-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+          <button type='button' class="close"
+                  data-dismiss='modal' aria-hidden='true'>&times;</button>
+	  <pre>
+	  </pre>
+	  Idle processes not shown, top run as:
+	  <tt>top -c -b -n 1 -i -w 120</tt>
 	</div>
       </div>
     </div>

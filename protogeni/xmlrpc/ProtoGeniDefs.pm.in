@@ -290,6 +290,7 @@ ProtoGeniDefs::AddModule("cluster",
 		                     \&GeniCluster::ReservationIdleDetection,
 		  "GetImageCredential"   => \&GeniCluster::GetImageCredential,
 		  "AllSliceMaxExtensions"=> \&GeniCluster::AllSliceMaxExtensions,
+		  "NodeTop"              => \&GeniCluster::NodeTop,
 	      }},
 	  });
 

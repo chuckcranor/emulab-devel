@@ -208,6 +208,8 @@ $routing = array("geni-login" =>
 						     "Do_GetRspec",
 						 "IgnoreFailure" =>
 						     "Do_IgnoreFailure",
+						 "Top" =>
+						     "Do_Top",
 						 "dismissExtensionDenied" =>
                                                  "Do_DismissExtensionDenied")),
 		 "approveuser" =>

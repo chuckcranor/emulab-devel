@@ -172,6 +172,7 @@ sub DoDelete();
 sub DoStatus();
 sub DoPrestageImages();
 sub DoPushExtension();
+sub DoTop();
 sub DenyExtensionInternal($);
 sub ExtendInternal($$$$$$);
 sub CallMethodOnAggregates($$$@);
@@ -331,6 +332,9 @@ elsif ($action eq "prestageimages") {
 }
 elsif ($action eq "pushextension") {
     DoPushExtension()
+}
+elsif ($action eq "top") {
+    DoTop()
 }
 else {
     usage();
@@ -2478,7 +2482,8 @@ sub DoMaxExtensionInternal($$)
 	    }
 	    $max = str2time($max);
 	    if ($debug) {
-		print "$aggregate: $result, $max\n";
+		print "$aggregate: $max\n";
+		print Dumper($result);
 	    }
 	}
 	$newmax = $max
@@ -5841,6 +5846,79 @@ sub DoSchedTerminate()
 	$webtask->Exited(0);
     }
     $slice->UnLock();
+    exit(0);
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit($exitcode);
+}
+
+#
+# Grab a "top" for a node using the fast path. Maybe expand this later.
+#
+sub DoTop()
+{
+    my $errmsg;
+    my $errcode;
+    my $exitcode = -1;
+    
+    usage()
+	if (@ARGV != 1);
+
+    my $aggregate;
+    my $component_id;
+
+    foreach my $obj ($instance->AggregateList()) {
+	my $manifest = GeniXML::Parse($obj->manifest());
+	if (! defined($manifest)) {
+	    fatal("Could not parse manifest");
+	}
+	my @nodes = (GeniXML::FindNodes("n:node", $manifest)->get_nodelist(),
+		     GeniXML::FindNodesNS("n:vhost", $manifest,
+					  $GeniXML::EMULAB_NS)->get_nodelist());
+	foreach my $node (@nodes) {
+	    my $client_id = GeniXML::GetVirtualId($node);
+	    if ($client_id eq $ARGV[0]) {
+		my $sliver_urn  = GeniXML::GetSliverId($node);
+		my $manager_urn = GetManagerId($node);
+
+		# No sliver urn or a different aggregate.
+		next
+		    if (! (defined($sliver_urn) &&
+			   defined($manager_urn) &&
+			   $manager_urn eq $obj->aggregate_urn()));
+
+		$aggregate = $obj;
+		$component_id = GeniXML::GetNodeId($node);
+		last;
+	    }
+	}
+	last
+	    if (defined($aggregate));
+    }
+    if (!defined($aggregate)) {
+	$errmsg   = "No such node in the experiment";
+	$errcode  = GENIRESPONSE_BADARGS;
+	$exitcode = 1;
+	goto bad;
+    }
+
+    my $response = $aggregate->Top($component_id);
+    if ($response->code()) {
+	$errcode = $response->code();
+	($exitcode, $errmsg) = ResponseErrorMessage($aggregate, $response);
+	goto bad;
+    }
+    if (defined($webtask)) {
+	$webtask->results($response->value());
+	$webtask->Exited(0);
+    }
+    else {
+	print Dumper($response->value());
+    }
     exit(0);
   bad:
     print STDERR $errmsg . "\n";

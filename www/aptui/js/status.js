@@ -1798,6 +1798,9 @@ $(function ()
 	else if (action == "recovery") {
 	    DoRecovery(clientList[0]);
 	}
+	else if (action == "nodetop") {
+	    DoTop(clientList[0]);
+	}
 	else if (action == "monitor") {
 	    NewMonitorTab(clientList[0]);
 	}
@@ -1827,6 +1830,8 @@ $(function ()
 	"    <li><a href='#' name='recovery'>Recovery</a></li> " +
 	"    <li class='hidden'> " +
 	"       <a href='#' name='monitor'>Monitor Graph</a></li> " +
+	"    <li class='hidden'> " +
+	"       <a href='#' name='nodetop'>Top Processes</a></li> " +
 	"    <li><a href='#' name='delete'>Delete Node</a></li> " +
 	"  </ul>" +
 	"  </div>" +
@@ -2133,6 +2138,16 @@ $(function ()
 			radios[node] = info;
 		    }
 		}
+
+		// Node "top"
+		clone.find(' [name=nodetop]')
+		    .click(function (e) {
+			ActionHandler("nodetop", [node]);
+		    });
+		clone.find(' [name=nodetop]')
+		    .parent().removeClass('hidden');
+		// Context menu option
+		CMclone.find("li[id=nodetop]").removeClass("hidden");
 
 		// Insert into the table, we will attach the handlers below.
 		$('#listview_table > tbody:last').append(clone);
@@ -3291,6 +3306,32 @@ $(function ()
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status",
 					    "ConsoleURL",
+					    {"uuid" : uuid,
+					     "node" : client_id});
+	xmlthing.done(callback);
+    }
+
+    //
+    // Node Top. 
+    //
+    function DoTop(client_id)
+    {
+	var callback = function(json) {
+	    console.info(json);
+	    if (json.code) {
+		sup.HideModal('#waitwait-modal', function () {
+		    sup.SpitOops("oops", json.value);
+		});
+		return;
+	    }
+	    sup.HideModal('#waitwait-modal', function () {
+		$('#top-processes-modal pre').text(json.value.result);
+		sup.ShowModal('#top-processes-modal');
+	    });
+	}
+	sup.ShowModal('#waitwait-modal');
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "status", "Top",
 					    {"uuid" : uuid,
 					     "node" : client_id});
 	xmlthing.done(callback);

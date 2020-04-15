@@ -2111,6 +2111,46 @@ function Do_Recovery()
     return;
 }
 
+#
+# Request top processes
+#
+function Do_Top()
+{
+    global $instance, $creator, $this_user;
+    global $ajax_args, $TBDB_TRUST_LOCALROOT;
+
+    if (StatusSetupAjax(0)) {
+	return;
+    }
+    if (!isset($ajax_args["node"])) {
+	SPITAJAX_ERROR(1, "Missing node argument");
+	return 1;
+    }
+    $node = $ajax_args["node"];
+    $uuid = $instance->uuid();
+    $webtask = WebTask::CreateAnonymous();
+    $retval = SUEXEC("nobody", "nobody",
+		     "webmanage_instance -t " . $webtask->task_id() . " ".
+                     "  top $uuid " . escapeshellarg($node),
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error getting top info");
+        }
+        else {
+            SPITAJAX_ERROR(1, "Could not get top info: ". $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    SPITAJAX_RESPONSE($webtask->TaskValue("results"));
+    $webtask->Delete();
+    return;
+}
+
 # Local Variables:
 # mode:php
 # End:

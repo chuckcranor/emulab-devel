@@ -42,7 +42,7 @@ SBIN_SCRIPTS	= vlandiff vlansync withadminprivs export_tables cvsupd.pl \
 		  opsreboot deletenode node_statewait grabwebcams \
 		  grabswitchconfig backupswitches cvsinit checkquota \
 		  spewconlog opsdb_control newnode suchown archive_list \
-                  spewimage \
+                  spewimage node_top \
                   epmodeset fixexpinfo node_traffic switch_traffic \
 		  dumpdescriptor subboss_tftpboot_sync testbed-control \
 		  archive-expinfo grantfeature emulabfeature addblob readblob \
@@ -82,7 +82,7 @@ SBSBIN_SCRIPTS=   daemon_wrapper subboss_cacheclean
 # These scripts installed setuid, with sudo. 
 SETUID_BIN_SCRIPTS   = create_image
 SETUID_SBIN_SCRIPTS  = grabwebcams checkquota spewconlog opsdb_control suchown \
-                       readblob image_import delete_image \
+                       readblob image_import delete_image node_top \
                        pxelinux_makeconf imageinfo image_import-new pushrootkey
 SETUID_LIBX_SCRIPTS  = tbsendmail
 SETUID_SUEXEC_SCRIPTS  = xlogin
