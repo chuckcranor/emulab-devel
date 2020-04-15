@@ -1580,6 +1580,22 @@ $(function ()
 	    
 	    return x1 <= y2 && y1 <= x2;
 	};
+	var Within = function(x, y) {
+	    var x1 = +x.freq_low;
+	    var x2 = +x.freq_high;
+	    var y1 = +y.freq_low;
+	    var y2 = +y.freq_high;
+
+	    // Check frequencies for x being a subrange of y
+	    if (x1 >= y1 && x2 <= y2) {
+		// OK, then check if a temporal subrange.
+		if (moment(x.start).isAfter(y.start) &&
+		    moment(x.end).isBefore(y.end)) {
+		    return 1;
+		}
+	    }
+	    return 0;
+	};
 	
 	var ProjectRanges = function(json) {
 	    if (json.code || !_.size(json.value)) {
@@ -1617,49 +1633,111 @@ $(function ()
 		    widgets: ["zebra"],
 		});
 	};
-	var ReservedRanges = function(json) {
+	var ReservedRanges = function(json1, json2) {
 	    $('#reserved-ranges table tbody').html("");
 	    $('.reserved-ranges-hidden').addClass("hidden");
 	    
-	    if (json.code || !_.size(json.value)) {
-		if (json.code) {
+	    if (json1.code || json2.code) {
+		if (json1.code) {
 		    console.info("Could not get reserved range info");
+		}
+		else {
+		    console.info("Could not get inuse info");
 		}
 		// Do not include stale info in search
 		allranges = [];
 		return;
 	    }
-	    // For the search button
-	    allranges = json.value;
-	    
+	    if (!_.size(json1.value) && !_.size(json2.value)) {
+		// Do not include stale info in search
+		allranges = [];
+		return;
+	    }
 	    var html = "";
+	    var reserved = [];
+	    
+	    if (_.size(json1.value)) {
+		// For the search button
+		allranges = json1.value;
+	    
 
-	    _.each(allranges, function(info) {
-		/*
-		 * If this range does not overlap with any of the ranges
-		 * the projet is allowed to use, then skip it.
-		 */
-		var overlaps = 0;
+		_.each(allranges, function(info) {
+		    /*
+		     * If this range does not overlap with any of the ranges
+		     * the projet is allowed to use, then skip it.
+		     */
+		    var overlaps = 0;
 		
-		for (var i = 0; i < project_ranges.length; i++) {
-		    var that = project_ranges[i];
+		    for (var i = 0; i < project_ranges.length; i++) {
+			var that = project_ranges[i];
 		    
-		    if (OverLaps(info, that)) {
-			overlaps = 1;
-			break;
+			if (OverLaps(info, that)) {
+			    overlaps = 1;
+			    break;
+			}
 		    }
-		}
-		if (!overlaps) {
-		    return;
-		}
-		html = html +
-		    "<tr>" +
-		    "<td>" + info.freq_low + "</td>" +
-		    "<td>" + info.freq_high + "</td>" +
-		    "<td>" + moment(info.start).format("lll") + "</td>" +
-		    "<td>" + moment(info.end).format("lll") + "</td>" +
-		    "</tr>";
-	    });
+		    if (!overlaps) {
+			return;
+		    }
+		    reserved.push(info);
+		    
+		    html = html +
+			"<tr>" +
+			"<td>" + info.freq_low + "</td>" +
+			"<td>" + info.freq_high + "</td>" +
+			"<td>" + moment(info.start).format("lll") + "</td>" +
+			"<td>" + moment(info.end).format("lll") + "</td>" +
+			"</tr>";
+		});
+	    }
+	    if (_.size(json2.value)) {
+		_.each(json2.value, function(range) {
+		    /*
+		     * If this range does not overlap with any of the ranges
+		     * the projet is allowed to use, then skip it.
+		     */
+		    var overlaps = 0;
+		
+		    for (var i = 0; i < project_ranges.length; i++) {
+			var that = project_ranges[i];
+
+			if (OverLaps(range, that)) {
+			    overlaps = 1;
+			    break;
+			}
+		    }
+		    if (!overlaps) {
+			return;
+		    }
+		    /*
+		     * Well, the problem with putting these in the same table
+		     * is that inuse ranges can be a duplicate (or a subrange)
+		     * of a reserved range. With two tables it did not really
+		     * matter much, but now we need to try to cull those out.
+		     * I am looking for proper subranges only. 
+		     */
+		    var isdup = 0;
+
+		    for (var i = 0; i < reserved.length; i++) {
+			var that = reserved[i];
+
+			if (Within(range, that)) {
+			    isdup = 1;
+			    break;
+			}
+		    }
+		    if (isdup) {
+			return;
+		    }
+		    html = html +
+			"<tr>" +
+			"<td>" + range.freq_low + "</td>" +
+			"<td>" + range.freq_high + "</td>" +
+			"<td>" + moment(range.start).format("lll") + "</td>" +
+			"<td>" + moment(range.end).format("lll") + "</td>" +
+			"</tr>";
+		});
+	    }
 	    if (html == "") {
 		return;
 	    }
@@ -1668,58 +1746,6 @@ $(function ()
 	    $('.reserved-ranges-hidden').removeClass("hidden");
 
 	    $('#reserved-ranges .tablesorter')
-		.tablesorter({
-		    theme : 'green',
-		    // initialize zebra
-		    widgets: ["zebra"],
-		});
-	};
-	var InUseRanges = function(json) {
-	    $('#inuse-ranges table tbody').html("");
-	    $('.inuse-ranges-hidden').addClass("hidden");
-	    
-	    if (json.code || !_.size(json.value)) {
-		if (json.code) {
-		    console.info("Could not get inuse range info: " +
-				 json.value);
-		}
-		return;
-	    }
-	    var html = "";
-
-	    _.each(json.value, function(range) {
-		/*
-		 * If this range does not overlap with any of the ranges
-		 * the projet is allowed to use, then skip it.
-		 */
-		var overlaps = 0;
-		
-		for (var i = 0; i < project_ranges.length; i++) {
-		    var that = project_ranges[i];
-		    
-		    if (OverLaps(range, that)) {
-			overlaps = 1;
-			break;
-		    }
-		}
-		if (!overlaps) {
-		    return;
-		}
-		html = html +
-		    "<tr>" +
-		    "<td>" + range.freq_low + "</td>" +
-		    "<td>" + range.freq_high + "</td>" +
-		    "<td>" + moment(range.end).format("lll") + "</td>" +
-		    "</tr>";
-	    });
-	    if (html == "") {
-		return;
-	    }
-	    $('#inuse-ranges table tbody').html(html);
-	    $('#range-info-div').removeClass("hidden");
-	    $('.inuse-ranges-hidden').removeClass("hidden");
-
-	    $('#inuse-ranges .tablesorter')
 		.tablesorter({
 		    theme : 'green',
 		    // initialize zebra
@@ -1756,8 +1782,7 @@ $(function ()
 		    $('#range-info-div').addClass("hidden");
 		}
 		else {
-		    ReservedRanges(result2);
-		    InUseRanges(result3);
+		    ReservedRanges(result2, result3);
 		}
 
 		if (!editing) {

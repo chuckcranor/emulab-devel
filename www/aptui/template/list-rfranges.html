@@ -22,7 +22,7 @@
 	      <%- range.pid %></a></td>
 	    <td><%- range.freq_low %></td>
 	    <td><%- range.freq_high %></td>
-	    <td><%- moment(range.expires).format("MMM Do, h:m A") %></td>
+	    <td><%- moment(range.end).format("MMM Do, h:m A") %></td>
 	  </tr>
 	<% }); %>
       </tbody>
