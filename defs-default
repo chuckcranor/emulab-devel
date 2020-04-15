@@ -8,11 +8,11 @@
 TBDBNAME=tbdb
 TBERRORLOGDBNAME=errorlog
 TBADMINGROUP=tbadmin
-TBOPSEMAIL=testbed-ops@flux.utah.edu
+TBOPSEMAIL=testbed-ops@emulab.net
 TBLOGSEMAIL=testbed-logs@flux.utah.edu
 TBROBOCOPSEMAIL=testbed-robocops@flux.utah.edu
 TBWWWEMAIL=testbed-www@flux.utah.edu
-TBAPPROVALEMAIL=testbed-approval@flux.utah.edu
+TBAPPROVALEMAIL=testbed-approval@emulab.net
 TBAUDITEMAIL=testbed-audit@flux.utah.edu
 TBSTATEDEMAIL=testbed-stated@flux.utah.edu
 TBTESTSUITEEMAIL=testbed-testsuite@flux.utah.edu
