@@ -2190,6 +2190,7 @@ $(function ()
 	// And if we actually changed anything.
 	if (start_day != new_start_day || start_hour != new_start_hour ||
 	    end_day != new_end_day || end_hour != new_end_hour) {
+	    UpdateFormTime();
 	    modified_callback();
 	}
     }
