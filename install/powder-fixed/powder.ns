@@ -31,6 +31,9 @@ tb-set-elabinelab-attribute NAMED_ALSONOTIFY 155.98.32.70
 # Turn this on to federate with the MotherShip.
 tb-set-elabinelab-attribute CLOUDLAB_FEDERATED 1
 
+# OPS is an unroutable VM, so boss is the mailer host.
+tb-set-elabinelab-attribute MAILERNODE "boss"
+
 # These are ignored.
 tb-set-elabinelab-attribute TARGETSYS_TBOPS    "powder-ops@flux.utah.edu"
 tb-set-elabinelab-attribute TARGETSYS_TBLOGS   "powder-logs@flux.utah.edu"

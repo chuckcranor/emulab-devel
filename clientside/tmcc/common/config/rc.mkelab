@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2019 University of Utah and the Flux Group.
+# Copyright (c) 2004-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1976,19 +1976,6 @@ sub SetupOpsNode($)
     mysystem("cd $TBDIR/obj/testbed; gmake $itarget");
 
     #
-    # Lets populate the mail lists with the creator of the experiment so
-    # that email goes someplace useful.
-    # 
-    opendir(DIR, "/etc/mail/lists") or
-	SetupFatal("Cannot opendir /etc/mail/lists: $!");
-    my @lists = grep { $_ ne "." && $_ ne ".." } readdir(DIR);
-    closedir(DIR);
-
-    foreach my $list (@lists) {
-	mysystem("echo ${creator}\@${outer_domain} > /etc/mail/lists/$list");
-    }
-
-    #
     # We do need to restart nfs services so that boss-install can work
     # (it requires mounting our filesystems; and yes this is true even
     # if we are not the FS server).
@@ -2814,6 +2801,12 @@ sub SetupBossNode($)
     # Restart sendmail since boss-install wants to send email
     #
     if ($FBSD_VERSION >= 5) {
+	#
+	# XXX force regeneration of a key and cert for sendmail
+	#
+	if ($FBSD_VERSION >= 10) {
+	    mysystem("rm -f /etc/mail/certs/[ch]*");
+	}
 	mysystem("/etc/rc.d/sendmail start");
     } else {
 	# XXX FBSD4 is such a pain...
@@ -3416,19 +3409,6 @@ sub SetupOpsJail()
     mysystem("cd $TBDIR/obj/testbed; gmake ops-install");
 
     #
-    # Lets populate the mail lists with the creator of the experiment so
-    # that email goes someplace useful.
-    # 
-    opendir(DIR, "/etc/mail/lists") or
-	SetupFatal("Cannot opendir /etc/mail/lists: $!");
-    my @lists = grep { $_ ne "." && $_ ne ".." } readdir(DIR);
-    closedir(DIR);
-
-    foreach my $list (@lists) {
-	mysystem("echo ${creator}\@${outer_domain} > /etc/mail/lists/$list");
-    }
-
-    #
     # We do need to restart nfs services so that boss-install can work
     # (it requires mounting our filesystems; and yes this is true even
     # if we are not the FS server).
@@ -3562,7 +3542,16 @@ sub CreateDefsFile($)
 	    # Look for things that include "changeme". Emails are special.
 	    #
 	    if ($val =~ /^(.*)\@(changeme)$/) {
-		print OUTDEFS "${key}=${1}\@${opsnode_hostname}.${ourdomain}\n";
+		my $mailtarget;
+		
+		if (exists($emulabconfig{"MAILERNODE"}) &&
+		    $emulabconfig{"MAILERNODE"} eq "boss") {
+		    $mailtarget = "${ourdomain}";
+		}
+		else {
+		    $mailtarget = "${opsnode_hostname}.${ourdomain}";
+		}
+		print OUTDEFS "${key}=${1}\@${mailtarget}\n";
 		next;
 	    }
 	    if (! ($val =~ /changeme/)) {
@@ -3850,6 +3839,19 @@ sub CreateDefsFile($)
 			my $amdroot = $emulabconfig{"AMD_ROOT"};
 			print OUTDEFS "AMD_ROOT=\"$amdroot\"\n";
 		    }
+		    last SWITCH;
+		};
+		/^MAILERNODE$/ && do {
+		    # If not provided, we get the value from configure.
+		    if (exists($emulabconfig{"MAILERNODE"})) {
+			my $mailernode = $emulabconfig{"MAILERNODE"};
+			print OUTDEFS "MAILERNODE=\"$mailernode\"\n";
+		    }
+		    last SWITCH;
+		};
+		/^ELABINELAB_MAILTARGET$/ && do {
+		    my $target = "${creator}\@${outer_domain}";
+		    print OUTDEFS "ELABINELAB_MAILTARGET=\"$target\"\n";
 		    last SWITCH;
 		};
 

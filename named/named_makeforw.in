@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018, 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -65,7 +65,8 @@ my $PUBLIC_ROUTER      = "@PUBLIC_ROUTER@";
 my $PUBLIC_NETMASK     = "@PUBLIC_NETMASK@";
 my $NAMED_FORWARDERS   = "@NAMED_FORWARDERS@";
 
-my $MXSTR = "\t\tIN\tMX 10\tops\n";
+my $MXHOST = (@OPSVM_ENABLE@ ? "boss" : "ops");
+my $MXSTR  = "\t\tIN\tMX 10\t${MXHOST}\n";
 
 # Testbed libraries.
 use lib "@prefix@/lib";
@@ -107,16 +108,26 @@ while (<IF>) {
 	    elsif ($2 eq "usernode_ina") {
                 $internal_strings .=
                     "${USERTOKEN}\t\tIN\tA\t\t${USERNODE_IP}\n";
-                $external_strings .=
-                    "${USERTOKEN}\t\tIN\tA\t\t${EXTERNAL_USERNODE_IP}\n";
+		if ($MXHOST ne "ops") {
+		    $internal_strings .= ${MXSTR};
+		}
+		if (isroutable($EXTERNAL_USERNODE_IP)) {
+		    $external_strings .=
+			"${USERTOKEN}\t\tIN\tA\t\t${EXTERNAL_USERNODE_IP}\n";
+		    if ($MXHOST ne "ops") {
+			$external_strings .= ${MXSTR};
+		    }
+		}
 		#
 		# If name is not "ops", we need an A record for that as well
 		#
 		if ($USERTOKEN ne "ops") {
 		    $internal_strings .=
 			"${MXSTR}ops\t\tIN\tA\t\t${USERNODE_IP}\n";
-		    $external_strings .=
-			"${MXSTR}ops\t\tIN\tA\t\t${EXTERNAL_USERNODE_IP}\n";
+		    if (isroutable($EXTERNAL_USERNODE_IP)) {
+			$external_strings .=
+			    "${MXSTR}ops\t\tIN\tA\t\t${EXTERNAL_USERNODE_IP}\n";
+		    }
 		}
 		#
 		# If name is not "users" we need a CNAME for that
@@ -124,8 +135,23 @@ while (<IF>) {
 		if ($USERTOKEN ne "users") {
 		    $internal_strings .=
 			"users\t\tIN\tCNAME\tops\n";
+		    if (isroutable($EXTERNAL_USERNODE_IP)) {		    
+			$external_strings .=
+			    "users\t\tIN\tCNAME\tops\n";
+		    }
+		}
+		# Other names ops is known by.
+		$internal_strings .=
+		    "event-server\tIN\tCNAME\tops\n";
+		if (isroutable($EXTERNAL_USERNODE_IP)) {
 		    $external_strings .=
-			"users\t\tIN\tCNAME\tops\n";
+			"event-server\tIN\tCNAME\tops\n";
+		}
+		$internal_strings .=
+		    "wiki\t\tIN\tCNAME\tops\n";
+		if (isroutable($EXTERNAL_USERNODE_IP)) {
+		    $external_strings .=
+			"wiki\t\tIN\tCNAME\tops\n";
 		}
 	    }
 	    elsif ($2 eq "bossnode_ina") {
@@ -171,6 +197,10 @@ while (<IF>) {
 		    $external_strings .=
                           "${FSTOKEN}\t\tIN\tA\t\t${EXTERNAL_FSNODE_IP}\n";
 		}
+	    }
+	    elsif ($2 eq "bossnode_mx") {
+		$internal_strings .= ${MXSTR};
+		$external_strings .= ${MXSTR};
 	    }
 	    elsif ($2 eq "fsnode_mx") {
 		if ("$USERNODE_IP" ne "$FSNODE_IP" &&

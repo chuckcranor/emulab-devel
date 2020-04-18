@@ -24,6 +24,8 @@ DELAYCAPACITY=1
 BOSSNODE=changeme
 USERNODE=changeme
 FSNODE=changeme
+# This would typically not change, is usually ops. But can be boss too.
+MAILERNODE=changeme
 OURDOMAIN=changeme
 FSDIR_GROUPS=changeme
 FSDIR_PROJ=changeme
@@ -51,6 +53,8 @@ NTPSERVER=changeme
 DISABLE_NSE=1
 # This means it is an inner elab!
 ELABINELAB=1
+# For getting initial email setup
+ELABINELAB_MAILTARGET=changeme
 # If we can run old images ... depends on whther elvind is installed.
 ELVIN_COMPAT=changeme
 # The name of the outer boss for inner boss to request services from.

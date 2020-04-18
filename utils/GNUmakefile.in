@@ -103,6 +103,7 @@ install: $(addprefix $(INSTALL_BINDIR)/, $(BIN_SCRIPTS)) \
 	$(addprefix $(INSTALL_SBINDIR)/, $(SBIN_SCRIPTS)) \
 	$(addprefix $(INSTALL_LIBEXECDIR)/, $(LIBEXEC_SCRIPTS)) \
 	$(addprefix $(INSTALL_DIR)/opsdir/sbin/, $(CTRLSBIN_SCRIPTS)) \
+	$(INSTALL_DIR)/opsdir/libexec/tbsendmail \
 	subdir-install
 	$(INSTALL_PROGRAM) template_record \
 		$(INSTALL_DIR)/opsdir/bin/template_record
@@ -163,3 +164,11 @@ $(INSTALL_DIR)/opsdir/sbin/%: %
 	-mkdir -p $(INSTALL_DIR)/opsdir/sbin
 	$(INSTALL) $< $@
 
+$(INSTALL_DIR)/opsdir/libexec/tbsendmail: tbsendmail
+	echo "Installing (link to wrapper) $<"
+	mkdir -p $(INSTALL_DIR)/opsdir/libexec
+	-rm -f $@
+	ln -s $(INSTALL_LIBEXECDIR)/runsuid $@
+	echo "Installing (real script) $<"
+	-mkdir -p $(INSTALL_DIR)/opsdir/suidbin
+	$(SUDO) $(INSTALL_PROGRAM) $< $(INSTALL_DIR)/opsdir/suidbin/$<

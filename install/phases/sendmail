@@ -9,6 +9,11 @@ sub Install($$$)
 {
     my ($server, $isupdate, $impotent) = @_;
 
+    # Either boss or ops.
+    if ($server ne $MAILERNODE) {
+	return 0;
+    }
+
     my @LOCAL_HOSTS         = ($OURDOMAIN,$BOSSNODE,$USERNODE,$FSNODE);
 
     if ($PROTOGENI_GENIRACK) {
@@ -56,7 +61,8 @@ sub Install($$$)
 		foreach my $list (@MAILING_LIST_NAMES) {
 		    Phase $list, $list, sub {
 			DoneIfExists("$LIST_DIR/$list");
-			CreateFileFatal("$LIST_DIR/$list");
+			CreateFileFatal("$LIST_DIR/$list",
+					$ELABINELAB_MAILTARGET);
 		    };
 		}
 	    };

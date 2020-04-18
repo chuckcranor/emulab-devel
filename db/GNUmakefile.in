@@ -1,5 +1,5 @@
 
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,7 +39,6 @@ SBIN_SCRIPTS	= avail inuse showgraph if2port backup webcontrol node_status \
 		  dumperrorlog changeleader checkstats changecreator \
 		  dbupdate geni_control subboss_sync showvlans updatewires \
 		  changeiface elabinelab_adminusers
-
 WEB_SBIN_SCRIPTS= webnodelog webidlemail webchangeuid \
 		  webchangeleader
 WEB_BIN_SCRIPTS = webnfree
@@ -56,7 +55,7 @@ LIB_SCRIPTS     = libdb.pm Node.pm libdb.py libadminctrl.pm Experiment.pm \
 
 # Stuff installed on plastic.
 USERSBINS	= genelists.proxy dumperrorlog.proxy backup
-USERLIBS	= libtbdb.pm libdb.py
+USERLIBS	= libtbdb.pm libdb.py Brand.pm
 
 # These scripts installed setuid, with sudo. 
 SETUID_BIN_SCRIPTS   = 

@@ -88,6 +88,10 @@ sub Install($$$)
 		    }
 		};
 	    }
+	    # Restart sendmail so it picks up named changes.
+	    Phase "sendmail", "Restarting sendmail", sub {
+		ExecQuietFatal("/etc/rc.d/sendmail restart");
+	    };
 	}
 	Phase "copying", "Copying resolv.conf over to ops", sub {
 	    ExecQuietFatal("$SCP $TOP_OBJDIR/named/resolv.conf.ops ".

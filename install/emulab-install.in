@@ -240,7 +240,7 @@ elsif ($server eq "boss") {
     @files = ('perl', 'usersgroups', 'dirs', 'tftp',
 	      'boss/ports', 'boss/portfix', 'boss/patches', 'cracklib',
 	      'apache', 'boss/rcfiles', 'ntpd', 'boss/rcconf', 'boss/syslog',
-	      'boss/database', 'etchosts', 'resolvetest',
+	      'sendmail', 'boss/database', 'etchosts', 'resolvetest',
 	      'exports', 'automount', 'nfsmounts',
 	      'boss/mibs', 'boss/crontab', 'sudoers',
 	      'samba', 'boss/ssh', 'boss/hostkeys',
