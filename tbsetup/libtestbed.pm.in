@@ -28,7 +28,7 @@ use Exporter;
 
 @ISA = "Exporter";
 @EXPORT =
-    qw ( SENDMAIL OPENMAIL TBTimeStamp TBBackGround TBDateTimeFSSafe
+    qw ( SENDMAIL TBTimeStamp TBBackGround TBDateTimeFSSafe
 	 TBMakeLogname TB_BOSSNODE TB_OPSEMAIL TB_WWWEMAIL TB_AUDITEMAIL
 	 TBMAIL_OPS TBMAIL_WWW TBMAIL_AUDIT TBGenSecretKey TBDebugTimeStamp
 	 TBDebugTimeStampsOn TBForkCmd TB_BOSSEVENTPORT TB_EVENTSERVER
@@ -60,6 +60,7 @@ my $UUIDGEN	 = "@UUIDGEN@";
 my $NOREPLY      = "no-reply\@@OURDOMAIN@";
 my $SCRIPTNAME	 = "Unknown";
 my $TBSENDMAIL   = "$TB/libexec/tbsendmail";
+my $SENDMAIL     = "/usr/sbin/sendmail";
 
 # So we can localize this variable.
 use vars qw($MAILTAG);
@@ -159,26 +160,40 @@ sub SENDMAIL($$$;$$@)
     delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
     #
-    # We no longer expose the user running this command via the envelope
-    # sender, it is always anonymous (root). See the tbsendmail script.
-    # But we want the envelope domain to be correct, so we pass that along
-    # so it can pass the correct envelope sender via -f to sendmail.
+    # We use this library on ops, but do not want to use the setuid sendmail
+    # wrapper on ops since users have accounts there,
     #
-    my $opt = "-a";
-    if (defined($From) && $From) {
-	# Gotta taint check.
-	if ($From =~ /^([-\w\+\.]+)\@([-\w\.]+)$/) {
-	    $From = "${1}\@${2}";
-	    $opt = "-f " . escapeshellarg($From);
+    my $hostname = `/bin/hostname`;
+    chomp($hostname);
+    if ($hostname eq $BOSSNODE) {
+	#
+	# We no longer expose the user running this command via the envelope
+	# sender, it is always anonymous (root). See the tbsendmail script.
+	# But we want the envelope domain to be correct, so we pass that along
+	# so it can pass the correct envelope sender via -f to sendmail.
+	#
+	my $opt = "-a";
+	if (defined($From) && $From) {
+	    # Gotta taint check.
+	    if ($From =~ /^([-\w\+\.]+)\@([-\w\.]+)$/) {
+		$From = "${1}\@${2}";
+		$opt = "-f " . escapeshellarg($From);
+	    }
+	    else {
+		# Let tbsendmail figure it out
+		$opt = "";
+	    }
 	}
-	else {
-	    # Let tbsendmail figure it out
-	    $opt = "";
+	if (! open(MAIL, "| $TBSENDMAIL $opt")) {
+	    print STDERR "SENDMAIL: Could not start $TBSENDMAIL: $!\n";
+	    goto bad;
 	}
     }
-    if (! open(MAIL, "| $TBSENDMAIL $opt")) {
-	print STDERR "SENDMAIL: Could not start $TBSENDMAIL: $!\n";
-	goto bad;
+    else {
+	if (! open(MAIL, "| $SENDMAIL -i -t")) {
+	    print STDERR "SENDMAIL: Could not start $SENDMAIL: $!\n";
+	    goto bad;
+	}
     }
 
     #
@@ -223,58 +238,6 @@ sub SENDMAIL($$$;$$@)
   bad:
     $ENV{'PATH'} = $SAVE_PATH;
     return 0;
-}
-
-#
-# Fire up a sendmail process, and return the handle for the caller
-# to print the body of the message into. This is easer in many places.
-#
-# OPENMAIL(To, Subject, [From], [More Headers])
-#
-sub OPENMAIL($$;$$)
-{
-    my($To, $Subject, $From, $Headers) = @_;
-    local *MAIL;
-    my $tag = uc($MAILTAG);
-
-    #
-    # We no longer expose the user running this command via the envelope
-    # sender, it is always anonymous (root). See the tbsendmail script.
-    # But we want the envelope domain to be correct, so we pass that along
-    # so it can pass the correct envelope sender via -f to sendmail.
-    #
-    my $opt = "-a";
-    if (defined($From) && $From) {
-	# Gotta taint check.
-	if ($From =~ /^([-\w\+\.]+)\@([-\w\.]+)$/) {
-	    $From = "${1}\@${2}";
-	    $opt = "-f " . escapeshellarg($From);
-	}
-	else {
-	    # Let tbsendmail figure it out
-	    $opt = "";
-	}
-    }
-    if (! open(MAIL, "| $TBSENDMAIL $opt")) {
-	print STDERR "OPENMAIL: Could not start $TBSENDMAIL: $!\n";
-	return 0;
-    }
-
-    #
-    # Sendmail will figure this out if not given.
-    # 
-    if (defined($From) && $From) {
-	print MAIL "From: $From\n";
-    }
-    print MAIL "To: $To\n";
-    print MAIL "Subject: $tag: $Subject\n";
-    if (defined($Headers)) {
-	print MAIL "$Headers\n";
-    }
-    print MAIL "X-NetBed: $SCRIPTNAME\n";
-    print MAIL "\n";
-
-    return(*MAIL);
 }
 
 #
