@@ -42,6 +42,8 @@
 <attribute name="attr_string_dom0mem">  <value>4096M</value></attribute>
 <attribute name="attr_integer_virtnode_capacity">  <value>0</value></attribute>
 <attribute name="attr_string_console_type">  <value>sio2</value></attribute>
+<attribute name="attr_boolean_bootdisk_trim">  <value>1</value></attribute>
+<attribute name="attr_integer_bootdisk_trim_interval">  <value>86400</value></attribute>
 <attribute name="attr_string_adminmfs_osid">  <value>emulab-ops,FREEBSD-MFS</value></attribute>
 <attribute name="attr_string_default_osid">  <value>emulab-ops,UBUNTU18-64-STD</value></attribute>
 <attribute name="attr_string_delay_osid">  <value>emulab-ops,FBSD103-64-STD</value></attribute>
