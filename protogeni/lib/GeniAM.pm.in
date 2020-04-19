@@ -924,7 +924,7 @@ sub Update
     my ($slice, $aggregate) = GeniCMV2::Credential2SliceAggregate($cred);
     if (defined($slice)) {
 	if (GeniResponse::IsError($slice)) {
-	    return $response;
+	    return $slice;
 	}
 	main::AddLogfileMetaDataFromSlice($slice);
 
