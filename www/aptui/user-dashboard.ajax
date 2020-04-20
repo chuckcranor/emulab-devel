@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -230,7 +230,8 @@ function Do_AccountDetails()
 
     if (ISADMIN()) {
         $results["uid_idx"]       = $target_user->uid_idx();
-        $results["portal"]        = $target_user->portal();
+        $results["portal"]        = ($target_user->portal() ?
+                                     $target_user->portal() : "classic");
         $results["bound_portal"]  = $target_user->bound_portal() ? true:false;
         $results["created"]       = DateStringGMT($target_user->created());
         $results["status"]        = $target_user->status();
