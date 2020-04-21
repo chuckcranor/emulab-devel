@@ -45,6 +45,8 @@ $(function ()
 	var fields = JSON.parse(_.unescape($('#form-json')[0].textContent));
 	amlist     = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 
+	console.info("profile", fields);
+
 	if (_.has(fields, "profile_rspec") && fields["profile_rspec"] != "") {
 	    gotrspec = 1;
 	}
@@ -235,6 +237,10 @@ $(function ()
 	if (gotscript) {
 	    $('#show_xml_modal_button').removeClass("hidden");
 	}
+	if (gotscript &&
+	    _.has(fields, "paramdefs") && fields["paramdefs"] != "") {
+	    ShowParameterHelp(fields["paramdefs"]);
+	}
     }
 
     //
@@ -348,7 +354,7 @@ $(function ()
 
 	var callback = function(json) {
 	    sup.HideWaitWait();
-	    //console.info(json.value);
+	    console.info("ConvertScript", json.value);
 
 	    if (json.code) {
 		sup.SpitOops("oops",
@@ -361,6 +367,12 @@ $(function ()
 		$('#profile_rspec_textarea').val(json.value.rspec);
 		ExtractFromRspec();
 	    }
+	    if (_.has(json.value, "paramdefs")) {
+		ShowParameterHelp(JSON.parse(json.value.paramdefs));
+	    }
+	    else {
+		HideParameterHelp();
+	    }
 	}
 	sup.ShowWaitWait("We are converting the geni-lib script");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
@@ -368,8 +380,92 @@ $(function ()
 					    "CheckScript",
 					    {"script"   : script,
 					     "refspec"  : refspec,
+					     "getparams": true,
 					     "profile_uuid" : profile_uuid});
 	xmlthing.done(callback);
+    }
+
+    function ShowParameterHelp(paramdefs)
+    {
+	// We are creating markdown text.
+	var text = "";
+
+	if (paramdefs == "") {
+	    HideParameterHelp();
+	    return;
+	}
+
+	var doOne = function (param, value, indent) {
+	    var desc     = param.description;
+	    var longdesc = param.longDescription;
+	    var type     = param.type;
+	    var mvalue   = param.multiValue;
+	    var spaces   = (indent ? "    " : "");
+
+	    console.info(desc, String(value), indent);
+
+	    text += spaces + "- *" + desc + "*" + "\n\n";
+	    if (longdesc) {
+		text += spaces + "    ";
+		text += longdesc + "  \n";
+	    }
+	    text += spaces + "    ";
+	    text += "(default value: ";
+	    if (type == "boolean") {
+		text += "*" + (value ? "True" : "False") + "*";
+	    }
+	    else if (value === "") {
+		text += '""';
+	    }
+	    else {
+		text += "*" + String(value) + "*";
+	    }
+	    if (mvalue) {
+		text += ", multiValue: *True*";
+	    }
+	    text += ")" + "\n\n";
+	};
+
+	_.each(paramdefs, function (param, name) {
+	    var desc     = param.description;
+	    var longdesc = param.longDescription;
+	    var value    = param.defaultValue;
+	    var type     = param.type;
+	    var mvalue   = param.multiValue;
+
+	    // Not going to get too fancy with structs yet.
+	    if (type == "struct") {
+		if (mvalue) {
+		    var mtitle = param.multiValueTitle;
+		    if (!mtitle) {
+			mtitle = desc;
+		    }
+		    text += "- *" + mtitle + "*" + "  \n";
+		    text += "(multiValue Group: *True*)\n\n";
+		}
+		else {
+		    text += "- *" + desc + "*" + "\n\n";
+		    if (longdesc) {
+			text += "    ";
+			text += longdesc + "  \n";
+		    }
+		}
+		_.each(param.parameters, function (param, name) {
+		    doOne(param, param.defaultValue, true);
+		});
+	    }
+	    else {
+		doOne(param, value, false);
+	    }
+	});
+	console.info(text);
+	$('#profile_parameters').closest(".form-group").removeClass("hidden");
+	$('#profile_parameters').html(marked(text));
+    }
+    function HideParameterHelp()
+    {
+	$('#profile_parameters').closest(".form-group").addClass("hidden");
+	$('#profile_parameters').html("");
     }
     
     $(document).ready(initialize);

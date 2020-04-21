@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -104,6 +104,9 @@ if ($profile->script() && $profile->script() != "") {
 }
 if ($profile->repourl() && $profile->repourl() != "") {
     $defaults["profile_repourl"] = $profile->repourl();
+}
+if ($profile->isParameterized()) {
+    $defaults["paramdefs"] = json_decode($profile->paramdefs());
 }
 $latest_profile = Profile::Lookup($profile->profile_uuid());
 $defaults["latest_uuid"] = $latest_profile->uuid();
