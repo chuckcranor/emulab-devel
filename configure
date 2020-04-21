@@ -5430,7 +5430,7 @@ fi
 # for backward compatibility (nobody used to care what they were called)
 if test x"$PROTOGENI_NICKNAME" = x"unknown"; then
     case $OURDOMAIN in
-    *gpolab.bbn.com) PROTOGENI_NICKNAME="gpo-ig";;
+    *bbn.instageni.net) PROTOGENI_NICKNAME="gpo-ig";;
     *northwestern.edu) PROTOGENI_NICKNAME="northwestern-ig";;
     *lan.sdn.uky.edu) PROTOGENI_NICKNAME="uky-ig";;
     *kettering.edu) PROTOGENI_NICKNAME="kettering-ig";;
