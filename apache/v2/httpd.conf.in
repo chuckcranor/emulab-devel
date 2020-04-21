@@ -1150,7 +1150,9 @@ SSLCertificateKeyFile /usr/local/etc/apache22/ssl.key/www.@OURDOMAIN@.key
 #   when the CA certificates are directly appended to the server
 #   certificate for convinience.
 #SSLCertificateChainFile /etc/pki/tls/certs/server-chain.crt
-
+<IfDefine LETSENCRYPT>
+SSLCertificateChainFile /usr/local/etc/letsencrypt/live/@OURDOMAIN@/chain.pem
+</IfDefine>
 #   Certificate Authority (CA):
 #   Set the CA certificate verification path where to find CA
 #   certificates for client authentication or alternatively one
