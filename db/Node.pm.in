@@ -4237,6 +4237,20 @@ sub GetOutletAuthInfo($$)
     return ($login, $auxinfo);
 }
 
+sub HasOutlet($)
+{
+    my ($self) = @_;
+    my $node_id = $self->node_id();
+
+    my $query_result =
+	DBQueryWarn("select node_id from outlets ".
+		    "where node_id='$node_id'");
+    return 0
+	if (!defined($query_result) || !$query_result->numrows);
+
+    return 1;
+}
+
 #
 # Get the currently running os/image for a node.
 #
