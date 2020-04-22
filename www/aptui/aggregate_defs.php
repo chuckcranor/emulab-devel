@@ -472,16 +472,19 @@ class Aggregate
     #
     function RadioTypes()
     {
-        global $ISPOWDER;
-
-        if ($ISPOWDER && $this->nickname() == "Emulab") {
+        #
+        # Return this for all Portals, at the moment the JS
+        # code decides if it needs it for the current portal.
+        #
+        if ($this->nickname() == "Emulab") {
             return array("nuc5300" => true,
                          "nuc6260" => true,
                          "iris030" => true,
                          "enodeb"  => true,
                          "x310"    => true,
                          "n310"    => true,
-                         "sdr"     => true);
+                         "sdr"     => true,
+                         "faros_sfp" => true);
         }
         return null;
     }

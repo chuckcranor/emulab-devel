@@ -861,6 +861,7 @@ class Instance
             $skiptypes["d740"]     = true;
             $skiptypes["x310"]     = true;
             $skiptypes["n310"]     = true;
+            $skiptypes["mmimo1"]   = true;
             $skiptypes["cellsdr1-honors"]    = true;
             $skiptypes["cellsdr1-ustar"]     = true;
             $skiptypes["cellsdr1-browning"]  = true;

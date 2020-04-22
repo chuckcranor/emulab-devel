@@ -1458,14 +1458,18 @@ $(function ()
 		    RegenFEGraph();
 		    return;
 		}
+		// Copy of the prunelist.
+		var prunelist = {};
+		Object.assign(prunelist, details.prunelist);
+		
 		// Another special case; seperate out Emulab reservable
 		// radios into a different graph using the new graph code.
 		if (window.ISPOWDER && details.nickname == "Emulab") {
 		    _.each(json.value.forecast, function (stuff, key) {
 			if (_.has(details.reservable_nodes, key)) {
 			    Radios[key] = stuff;
-			    //delete json.value.forecast[key];
-			    json.value.prunelist[key] = true;
+			    // Add to the copy of the prunelist for the graph.
+			    prunelist[key] = true;
 			}
 		    });
 		    GenerateRadioGraph();
@@ -1474,7 +1478,7 @@ $(function ()
 		ShowResGraph({"forecast"  : json.value.forecast,
 			      "selector"  : id,
 			      "resize"    : true,
-			      "skiptypes"      : json.value.prunelist,
+			      "skiptypes"      : prunelist,
 			      "click_callback" : function(when, type) {
 				  if (!editing) {
 				      // Needs work for res groups.
@@ -1495,7 +1499,7 @@ $(function ()
 			$('#resgraph-modal').on('shown.bs.modal', function() {
 			    ShowResGraph({"forecast"  : json.value.forecast,
 					  "selector"  : "resgraph-modal",
-					  "skiptypes" : json.value.prunelist,
+					  "skiptypes" : prunelist,
 					  "click_callback" : GraphClick});
 			});
 			sup.ShowModal('#resgraph-modal', function () {
@@ -3233,16 +3237,23 @@ $(function ()
 	var typelist = amlist[selected_cluster].typeinfo;
 	var nodelist = amlist[selected_cluster].reservable_nodes;
 	var nickname = amlist[selected_cluster].nickname;
+	var prunelist= amlist[selected_cluster].prunelist;
 	var id       = "resgraph-" + nickname;
 
 	_.each(typelist, function(details, type) {
 	    var count = details.count;
-	    
+
+	    if (_.has(prunelist, type)) {
+		return;
+	    }
 	    options = options +
 		"<option value='" + type + "' >" +
 		type + " (" + count + ")</option>";
 	});
 	_.each(nodelist, function(details, node_id) {
+	    if (_.has(prunelist, node_id)) {
+		return;
+	    }
 	    options = options +
 		"<option value='" + node_id + "' >" + node_id + "</option>";
 	});

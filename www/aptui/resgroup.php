@@ -167,15 +167,24 @@ while (list($index, $aggregate) = each($ams)) {
             }
         }
     }
+    #
+    # Each cluster should have its own set of types to skip depending
+    # on the Portal and the phases of the moon, but that is not what
+    # we got. 
+    #
+    $prunelist = Instance::NodeTypePruneList($aggregate);
+    
     $amlist[$urn] = array("urn"      => $urn,
                           "name"     => $am,
                           "nickname" => $aggregate->nickname(),
                           "typeinfo" => $typeinfo,
+                          "prunelist"=> $prunelist,
                           "radiotypes"       => $aggregate->RadioTypes(),
                           "abbreviation"     => $aggregate->nickname(),
                           "reservable_nodes" => $reservable_nodes,
                           "ismobile"         => $aggregate->ismobile(),
                           "isFE"             => $aggregate->isFE());
+                          
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
 echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
