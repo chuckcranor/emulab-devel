@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2019 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -343,6 +343,8 @@ class User
     function w_pswd()		{ return $this->field("usr_w_pswd"); }
     function unix_uid()		{ return $this->field("unix_uid"); }
     function status()		{ return $this->field("status"); }
+    function frozen_stamp()	{ return $this->field("frozen_stamp"); }
+    function frozen_by()	{ return $this->field("frozen_by"); }
     function admin()		{ return $this->field("admin"); }
     function foreign_admin()	{ return $this->field("foreign_admin"); }
     function dbedit()		{ return $this->field("dbedit"); }

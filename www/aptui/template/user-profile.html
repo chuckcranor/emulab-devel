@@ -89,11 +89,13 @@
 	    (<a class="freeze text-danger">foo</a>)
 	  </span>
 	</td>
-      </tr>
-      <tr>
-	<td>Portal</td>
-	<td><%= fields.portal %></td>
-      </tr>
+	<% if (fields.status == "frozen") { %>
+	  <tr>
+	    <td>Frozen on (by)</td>
+	    <td><%= moment(fields.frozen_stamp).format("lll") %>
+	      (<%= fields.frozen_by %>)</td>
+	  </tr>
+      <% } %>
       <% if (fields.nonlocal_id != "") { %>
 	<tr>
 	  <td>Nonlocal ID</td>

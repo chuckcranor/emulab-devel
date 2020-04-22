@@ -761,12 +761,19 @@ $(function ()
 		LoadProfileTab();
 	    };
 	    var doit = function () {
+		var args = {
+		    "uid"   : window.TARGET_USER,
+		    "which" : tag,
+		};
+		var message = $('#confirm-freezethaw-modal .user-message')
+		    .val().trim();
+		if (message != "") {
+		    args["message"] = message;
+		}
 		sup.ShowWaitWait("This will take a minute. Patience please.");
 		var xmlthing =
 		    sup.CallServerMethod(null, "user-dashboard",
-					 "FreezeOrThaw",
-					 {"uid"   : window.TARGET_USER,
-					  "which" : tag});
+					 "FreezeOrThaw", args);
 		xmlthing.done(callback);
 	    };
 	    sup.HideModal('#confirm-freezethaw-modal', doit);
