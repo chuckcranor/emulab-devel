@@ -6011,6 +6011,8 @@ CREATE TABLE `users` (
   `usr_w_pswd` tinytext,
   `unix_uid` int(10) unsigned NOT NULL default '0',
   `status` enum('newuser','unapproved','unverified','active','frozen','archived','nonlocal','inactive','other') NOT NULL default 'newuser',
+  `frozen_stamp` datetime default NULL,
+  `frozen_by` varchar(8) default NULL,
   `admin` tinyint(4) default '0',
   `foreign_admin` tinyint(4) default '0',
   `dbedit` tinyint(4) default '0',
