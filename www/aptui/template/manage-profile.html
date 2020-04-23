@@ -6,7 +6,7 @@
      overflow-y: auto;
      position: relative;
      height: auto;
-     max-height: 150px;
+     max-height: 175px;
      min-height: 24px;
  } 
 }
@@ -493,7 +493,8 @@
  		              to see a rendering.'>
 		<div id='profile_instructions'>
 		  <textarea class="form-control hidden" rows=3
-			    placeholder="Provide optional instructions for users of your profile."
+			    placeholder="Provide optional instructions
+					 for users of your profile."
 			    type='textarea'></textarea>
 		  <div class="textarea hidden">
 		    <div class="form-control textdiv scrolly"></div>
@@ -503,6 +504,33 @@
 			<a href='#' class='btn btn-xs'
 			   data-toggle='modal'
 			   data-target="#docstring-help-modal">
+			  <span style='margin-bottom: 4px; margin-left: 0px;'
+				class='glyphicon glyphicon-question-sign'>
+			  </span>
+			</a>
+		      </small>
+		    </div>
+		  </div>
+		</div>
+	      </div>
+	    </div>
+	    <div class="form-group hidden">
+	      <div class='format-me'
+		   data-key='profile_parameters'
+		   data-label='Parameters'
+		   data-help='Parameter help text that will be displayed when
+			      your profile is instantiated.'>
+		<div>
+		  <div class="textarea">
+		    <div id='profile_parameters'
+			 style="padding-inline-start: 10px;"
+			 class="form-control textdiv scrolly"></div>
+		    <div class="geni-lib-warning">
+		      <small class="pull-right">
+			Parameters set by geni-lib script
+			<a href='#' class='btn btn-xs'
+			   data-toggle='modal'
+			   data-target="#parameter-help-modal">
 			  <span style='margin-bottom: 4px; margin-left: 0px;'
 				class='glyphicon glyphicon-question-sign'>
 			  </span>

@@ -181,6 +181,7 @@ REQUIRE_APTFORMS();
 REQUIRE_MARKED();
 REQUIRE_GENILIB_EDITOR();
 AddLibrary("js/gitrepo.js");
+AddLibrary("js/paramhelp.js");
 SPITREQUIRE("js/show-profile.js",
             "<script src='js/lib/jquery-ui.js'></script>\n".
             "<script src='js/lib/jquery.appendGrid-1.3.1.min.js'></script>");

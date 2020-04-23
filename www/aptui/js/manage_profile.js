@@ -659,6 +659,9 @@ $(function ()
 	if (gotrspec) {
 	    ExtractFromRspec();
 	}
+	if (gotscript && _.has(fields, "profile_paramdefs")) {
+	    paramHelp.ShowParameterHelp(JSON.parse(fields.profile_paramdefs));
+	}
 	UpdateButtons();
 	
 	//
@@ -1375,6 +1378,13 @@ $(function ()
 		// Kill the rspec so that we always use the new one.
 		$('#profile_rspec_textarea').val("");
 		NewRspecHandler(json.value.rspec);
+		if (_.has(json.value, "paramdefs")) {
+		    paramHelp.ShowParameterHelp(
+			JSON.parse(json.value.paramdefs));
+		}
+		else {
+		    paramHelp.HideParameterHelp();
+		}
 		if (repoupdate_callback !== undefined) {
 		    repoupdate_callback(true /* modified */);
 		}
@@ -1399,6 +1409,7 @@ $(function ()
 	var args = {
 	    "script"   : script,
 	    "pid"      : $('#profile_pid').val(),
+	    "getparams": true,
 	};
 	if (profile_uuid) {
 	    args["profile_uuid"] = profile_uuid;
