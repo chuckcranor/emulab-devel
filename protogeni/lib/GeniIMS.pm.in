@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -83,7 +83,8 @@ my $SERVERVERSION = 1;
 my @X86TYPES = ("C240M4","C220M4","pcvm","r320","c6220","dl360","r720",
 		"c8220","c8220x","d2100","d710","d820","d430","pc3000",
 		"c220g1", "c220g2", "c6320", "m510", "c4130", "nuc6260",
-		"c220g5", "c240g5", "c240g2", "c6420", "xl170");
+		"c220g5", "c240g5", "c240g2", "c6420", "xl170",
+		"rs440", "rs630");
 
 # We are using a different DB.
 my $DB;
