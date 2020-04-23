@@ -37,6 +37,7 @@ $(function ()
 	    var html = template({"experiments" : json.value,
 				 "showCreator" : true,
 				 "showProject" : true,
+				 "showPortal"  : true,
 				 "searchUUID"  : true,
 				 "showterminate"  : false,
 				});

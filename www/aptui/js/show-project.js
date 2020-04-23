@@ -134,6 +134,7 @@ $(function ()
 		.html(template({"experiments" : json.value,
 				"showCreator" : true,
 				"showProject" : false,
+				"showPortal"  : false,
 				"searchUUID"  : false,
 				"showterminate" : showterm}));
 	    

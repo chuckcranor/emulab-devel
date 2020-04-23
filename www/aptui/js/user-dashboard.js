@@ -152,6 +152,7 @@ $(function ()
 		    .html(template({"experiments" : json.value.user_experiments,
 				    "showCreator" : false,
 				    "showProject" : true,
+				    "showPortal"  : false,
 				    "searchUUID"  : false,
 				    "showterminate" : true}));
 	    }
@@ -163,6 +164,7 @@ $(function ()
 				        json.value.project_experiments,
 				    "showCreator" : true,
 				    "showProject" : true,
+				    "showPortal"  : false,
 				    "searchUUID"  : false,
 				    "showterminate" : false}) +
 			  "</div>");
