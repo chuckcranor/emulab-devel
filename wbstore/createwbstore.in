@@ -1,0 +1,536 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2020 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Data::Dumper;
+
+#
+# Create a "write back" store.
+#
+# These are small-ish directories on an aggregate ops node that are
+# continuously mirrored back to the mothership ops node. These are intended
+# for use by Powder mobile endpoints that have low-bandwidth and/or spotty
+# connectivity via their control plane (e.g., LTE or WiFi).
+#
+# Multiple stores may exist on an aggregate at anytime: one for any current
+# experiment plus zero or more for past experiments that were not able to
+# offload all their data before being disconnected (e.g., a bus turned off).
+#
+# We currently use `syncthing` to implement these stores. For each store,
+# a send-only instance exists on the aggregate and a corresponding
+# receive-only runs on the mothership.
+#
+# This script builds configs for both sides and creates tarballs for each.
+# If is intended to be run on mothership boss as root.
+#
+sub usage()
+{
+    print STDERR "Usage: createwbstore [-hd] -p pid -i instance host ...\n";
+    print STDERR "Create a write-back store for the specified experiment instance.\n";
+    print STDERR "Options:\n";
+    print STDERR "   -h          This message\n";
+    print STDERR "   -d          Debug: print additional info\n";
+    print STDERR "   -k          Debug: keep temporary directories\n";
+    print STDERR "   -p pid      Project ID of instance\n";
+    print STDERR "   -i instance Instance UUID for experiment\n";
+    print STDERR "   host ...    FQDN of remote host(s)\n";
+    print STDERR "\n";
+    exit(-1);
+}
+my $optlist  = "hdki:p:";
+my $debug = 0;
+my $keep = 0;
+my $pid;
+my $instance;
+my $uuid;
+my @fqdns;
+my %hosts;
+
+# Protos
+sub parseinstance($);
+sub parsehostname($);
+sub createconfig($);
+sub customizeconfig($);
+sub expandconfig($$$$@);
+sub packageconfig($);
+sub dumpinfo();
+sub fatal($);
+
+#
+# Configure variables
+#
+my $TB		 = "@prefix@";
+my $TBOPS        = "@TBOPSEMAIL@";
+my $TBPROJ_DIR	 = "@PROJROOT_DIR@";
+my $STHOME_DIR	 = "$TB/wbstore";
+my $STTEMPLATE_DIR = "$TB/wbstore/templates";
+my $TMPDIR	 = "$TB/wbstore/tarballs";
+my $STCMD	 = "/usr/local/bin/syncthing";
+my $SERVER       = "@USERNODE@";
+
+# XXX keep it inside Emulab
+my $EMULABNET	 = "155.98.32.0/20";
+
+##
+## Testbed Support libraries
+##
+#use lib "@prefix@/lib";
+#use EmulabConstants;
+#use libtestbed;
+#use emutil;
+#use libdb;
+#use Project;
+#use Group;
+#use User;
+#use Experiment;
+#use Node;
+#use WebTask;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{h})) {
+    usage();
+}
+if (defined($options{d})) {
+    $debug = 1;
+}
+if (defined($options{k})) {
+    $keep = 1;
+}
+if (defined($options{p})) {
+    $pid = $options{p};
+    if ($pid !~ /^[-\w]+$/) {
+	fatal("Not a valid pid string");
+    }
+}
+if (defined($options{i})) {
+    $instance = parseinstance($options{i});
+}
+if (!defined($pid) || !defined($instance)) {
+    print STDERR "Must specify an experiment pid and instance\n";
+    usage();
+}
+if (@ARGV == 0) {
+    print STDERR "Must specify one or more hosts\n";
+    usage();
+}
+
+# "Validate" node names, including server
+@fqdns = @ARGV;
+foreach my $h ($SERVER, @fqdns) {
+    my ($host, $domain) = parsehostname($h);
+    $hosts{$h}{'host'} = $host;
+    $hosts{$h}{'domain'} = $domain;
+
+    # XXX pid is different on mothership and aggregates
+    # XXX /proj is actually /ops/proj on aggregates
+    my $lproj;
+    if ($h eq $SERVER) {
+	$hosts{$h}{'pid'} = $pid;
+	$lproj = $TBPROJ_DIR;
+    } else {
+	$hosts{$h}{'pid'} = lc($pid) . "-PG0";
+	$lproj = "/ops$TBPROJ_DIR";
+    }
+    $lproj =~ s/^\///;
+    $hosts{$h}{'proj'} = $lproj;
+}
+
+# Working directory we need to remove on failure
+my $tmpdir = "$TMPDIR/$instance";
+
+#
+# Create syncthing hierarchy for each aggregate and the server
+# XXX this adds info to the %hosts hash so must be done before any configuration
+#
+foreach my $h (keys %hosts) {
+    createconfig($h);
+}
+
+#
+# Preconfigure the syncthing config.xml files to reflect all aggregates
+# sending to the server. Gather up the results in a tarball that can be
+# shipped off to the hosts.
+#
+foreach my $rh (keys %hosts) {
+    customizeconfig($rh);
+    packageconfig($rh);
+}
+dumpinfo()
+    if ($debug);
+exit(0);
+
+## Must be a valid user
+#my $this_user = User->ThisUser();
+#if (! defined($this_user)) {
+#    fatal("You ($UID) do not exist!");
+#}
+
+#
+# Create the configuration hierarchy for a syncthing instance.
+# The hierarchy mimics what will be installed at '/' on each node:
+#
+#    usr/testbed/wbstore/<instance>/<domain>    syncthing configuration dir
+#    proj/<pid>/wbstore/<instance>/<domain>     experiment data directory
+#
+sub createconfig($)
+{
+    my ($fqdn) = @_;
+
+    my $lpid = $hosts{$fqdn}{'pid'};
+    my $lproj = $hosts{$fqdn}{'proj'};
+    my $domain = $hosts{$fqdn}{'domain'};
+    my $metadir = "$tmpdir/$domain/usr/testbed/wbstore/$instance/$domain";
+    my $datadir = "$tmpdir/$domain/$lproj/$lpid/wbstore/$instance/$domain";
+
+    # Setup tmp dirs
+    if (system("mkdir -p $tmpdir $metadir $datadir")) {
+	fatal("createconfig: could not create tmp directories");
+    }
+    if (chmod(0700, $tmpdir, $metadir) != 2 || chmod(0770, $datadir) != 1) {
+	fatal("createconfig: could not chmod tmp directories");
+    }
+
+    # Create the syncthing marker directory
+    if (system("mkdir $datadir/.stfolder")) {
+	fatal("createconfig: could not create marker directory");
+    }
+
+    # Generate the syncthing configuration. Includes config, keys, certs, ID.
+    if (system("$STCMD -generate=$metadir >$tmpdir/$domain/st.log 2>&1")) {
+	fatal("Could not create tmp metadata directory '$metadir'");
+    }
+
+    # Extract the Device ID and API key for customizing our template
+    my $stuuid = `$STCMD -home=$metadir -device-id 2>/dev/null`;
+    if ($? || !$stuuid) {
+	fatal("Could not read device-id");
+    }
+    chomp($stuuid);
+    $hosts{$fqdn}{'devid'} = $stuuid;
+
+    my $apikey = `grep '<apikey>' $metadir/config.xml`;
+    if ($? || $apikey !~ /<apikey>(.*)<\/apikey>/) {
+	fatal("Could not read API key");
+    }
+    $hosts{$fqdn}{'apikey'} = $1;
+}
+
+sub customizeconfig($)
+{
+    my ($fqdn) = @_;
+    my $domain = $hosts{$fqdn}{'domain'};
+    my $metadir = "$tmpdir/$domain/usr/testbed/wbstore/$instance/$domain";
+
+    # Customize the config.xml file from our template
+    my $cfile = "$metadir/config.xml";
+    my $lpid = $hosts{$fqdn}{'pid'};
+    my $lproj = $hosts{$fqdn}{'proj'};
+
+    if ($fqdn eq $SERVER) {
+	my %vars = (
+	    APIKEY    => $hosts{$fqdn}{'apikey'},
+	    FID       => "$instance-$domain",
+	    FLABEL    => $domain,
+	    FPATH     => "/$lproj/$lpid/wbstore/$instance/$domain",
+	    GUILISTEN => "127.0.0.1:8384",
+	    MAXBW     => "0",
+	    MYADDR    => "tcp4://$fqdn",
+	    MYDEVID   => $hosts{$fqdn}{'devid'},
+	    MYNAME    => $fqdn,
+	    MYNET     => $EMULABNET,
+	    OTHERADDR => "",
+	    OTHERDEVID=> "",
+	    OTHERNAME => "",
+	    OTHERNET  => $EMULABNET,
+	);
+	my $template = "$STTEMPLATE_DIR/recv-template.xml";
+
+	# Note that the server is different since it receives from all nodes
+	my @rhlist = grep { $_ ne $SERVER } keys %hosts;
+	expandconfig($cfile, $template, \%vars, $SERVER, @rhlist);
+    } else {
+	my %vars = (
+	    APIKEY    => $hosts{$fqdn}{'apikey'},
+	    FID       => "$instance-$domain",
+	    FLABEL    => $domain,
+	    FPATH     => "/$lproj/$lpid/wbstore/$instance/$domain",
+	    GUILISTEN => "127.0.0.1:8384",
+	    MAXBW     => "500",
+	    MYADDR    => "tcp4://$fqdn",
+	    MYDEVID   => $hosts{$fqdn}{'devid'},
+	    MYNAME    => $fqdn,
+	    MYNET     => $EMULABNET,
+	    OTHERADDR => "tcp4://$SERVER",
+	    OTHERDEVID=> $hosts{$SERVER}{'devid'},
+	    OTHERNAME => $SERVER,
+	    OTHERNET  => $EMULABNET,
+	);
+	my $template = "$STTEMPLATE_DIR/send-template.xml";
+
+	expandconfig($cfile, $template, \%vars, $fqdn, $SERVER);
+    }
+
+
+}
+
+#
+# The tarball is put in $TMPDIR/<instance>-<fqdn>.tar.gz
+#
+sub packageconfig($)
+{
+    my ($fqdn) = @_;
+    my $domain = $hosts{$fqdn}{'domain'};
+    my $lproj = $hosts{$fqdn}{'proj'};
+    my $rootdir = "$tmpdir/$domain";
+    my $tarball = "$TMPDIR/$instance-$domain.tar.gz";
+
+    # Tar everything up
+    if (system("tar -C $rootdir -czf $tarball $lproj usr")) {
+	fatal("packageconfig: could not create '$tarball' from '$rootdir'");
+    }
+
+    # Remove the tmp files
+    if (!$keep) {
+	if (system("rm -rf $rootdir")) {
+	    fatal("Could not remove tmpdir '$rootdir'");
+	}
+    } else {
+	print STDERR "WARNING: tmpdir '$rootdir' not removed!\n";
+    }
+}
+
+#
+# Parse a string as an experiment instance UUID.
+# Returns uuid on success, exits otherwise.
+#
+sub parseinstance($)
+{
+    my ($n) = @_;
+    my ($u, $p); 
+
+    # XXX name must be a UUID
+    if ($n =~ /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i) {
+	$u = $1;
+    }
+    else {
+	fatal("Experiment instance name '$n' not a valid UUID.");
+    }
+
+    return $u;
+}
+
+#
+# Parse a FQDN.
+# Must be of the form <host>.<domain>+.<tld>
+# Returns (host,domain) if success, exits otherwise.
+#
+sub parsehostname($)
+{
+    my ($str) = @_;
+    my @names = split('\.', $str);
+    if (@names < 3) {
+	fatal("Could not parse '$str' as FQDN");
+    }
+    foreach my $n (@names) {
+	if ($n !~ /^[-a-zA-Z0-9]+$/) {
+	    fatal("Invalid FQDN '$str'");
+	}
+    }
+    my $host = shift @names;
+    my $dom = join('.', @names);
+
+    return ($host, $dom);
+}
+
+#
+# Expand variables in the given config file. Variables are:
+#
+#    APIKEY     Generated by syncthing
+#    FPATH      /proj/<pid>/wbstore/<expt-uuid>/<aggregate-domain>
+#    FID        <expt-uuid>-<aggregate-domain>
+#    FLABEL     <aggregate-domain>
+#    GUILISTEN  127.0.0.1:<unique-port>
+#    MAXBW      500
+#    MYADDR     tcp4://<ipaddr>:<port> (maybe just tcp4://<fqdn>)
+#    MYDEVID    Generated by syncthing
+#    MYNAME     <fqdn>
+#    MYNET      <network>/<bits>
+#    OTHERADDR  tcp4://<ipaddr>:<port> (maybe just tcp4://<fqdn>)
+#    OTHERDEVID Generated by syncthing
+#    OTHERNAME  <fqdn>
+#    OTHERNET   <network>/<bits>
+#
+# We just do a simple textual find and replace rather than parsing XML.
+#
+sub expandconfig($$$$@)
+{
+    my ($cfile, $template, $vars, $fqdn, @rhosts) = @_;
+
+    print "Vars:\n", Dumper($vars), "\n"
+	if ($debug);
+
+    open(OF, "<$template") or
+	fatal("Cannot open config template file '$template'");
+    open(NF, ">$cfile") or
+	fatal("Cannot open new config file '$cfile'");
+  LINE: while (<OF>) {
+	while (/\@([A-Z]+)\@/) {
+	    my $var = $1;
+
+	    # expand the folder template for all remote devices
+	    if ($var eq "FOLDERS") {
+		if (@rhosts == 0) {
+		    fatal("Must have at least one remote device");
+		}
+		open(TF, "<$STTEMPLATE_DIR/recv-folder-template.xml") or
+		    fatal("Cannot open device template file");
+
+		foreach my $rh (@rhosts) {
+		    my $domain = $hosts{$rh}{'domain'};
+		    my ($lpid,$lproj);
+		    if ($fqdn eq $SERVER) {
+			$lpid = $hosts{$SERVER}{'pid'};
+			$lproj = $hosts{$SERVER}{'proj'};
+		    } else {
+			$lpid = $hosts{$rh}{'pid'};
+			$lproj = $hosts{$rh}{'proj'};
+		    }
+		    my %fvars = (
+			FID    => "$instance-$domain",
+			FLABEL => $domain,
+			FPATH  => "/$lproj/$lpid/wbstore/$instance/$domain",
+			MYDEVID    => $vars->{'MYDEVID'},
+			OTHERADDR  => "tcp4://$rh",
+			OTHERDEVID => $hosts{$rh}{'devid'},
+			OTHERNAME  => $rh,
+		    );
+
+		    seek(TF, 0, 0);
+		    while (<TF>) {
+			while (/\@([A-Z]+)\@/) {
+			    my $v = $1;
+			    if (!exists($fvars{$v}) || !defined($fvars{$v})) {
+				close(NF);
+				unlink($cfile);
+				fatal("No expansion for variable $v");
+			    }
+			    s/\@$v\@/$fvars{$v}/;
+			}
+			print NF $_;
+		    }
+		}
+		close(TF);
+		next LINE;
+	    }
+
+	    # expand the device template for all remote devices 
+	    if ($var eq "DEVICES") {
+		if (@rhosts == 0) {
+		    fatal("Must have at least one remote device");
+		}
+		open(TF, "<$STTEMPLATE_DIR/recv-device-template.xml") or
+		    fatal("Cannot open device template file");
+		foreach my $rh (@rhosts) {
+		    my %ovars = (
+			OTHERADDR  => "tcp4://$rh",
+			OTHERDEVID => $hosts{$rh}{'devid'},
+			OTHERNAME  => $rh,
+			OTHERNET   => $EMULABNET,
+		    );
+
+		    seek(TF, 0, 0);
+		    while (<TF>) {
+			while (/\@([A-Z]+)\@/) {
+			    my $v = $1;
+			    if (!exists($ovars{$v}) || !defined($ovars{$v})) {
+				close(NF);
+				unlink($cfile);
+				fatal("No expansion for variable $v");
+			    }
+			    s/\@$v\@/$ovars{$v}/;
+			}
+			print NF $_;
+		    }
+		}
+		close(TF);
+		next LINE;
+	    }
+	    if (!exists($vars->{$var}) || !defined($vars->{$var})) {
+		close(NF);
+		unlink($cfile);
+		fatal("No expansion for variable $var");
+	    }
+	    s/\@$var\@/$vars->{$var}/g;
+	}
+	print NF $_;
+    }
+    close(OF);
+    close(NF);
+}
+
+sub dumpinfo()
+{
+    if ($debug) {
+	foreach my $h (keys %hosts) {
+	    print "$h: host='", $hosts{$h}{'host'},
+		"', domain='", $hosts{$h}{'domain'},
+		"', devid='", $hosts{$h}{'devid'},
+		"', apikey='", $hosts{$h}{'apikey'}, "'\n";
+	}
+    }
+}
+
+sub fatal($)
+{
+    my ($mesg) = $_[0];
+
+    if ($keep) {
+	print STDERR "Need to remove tmpdir by hand:\n";
+	print STDERR "$tmpdir\n" if ($tmpdir);
+    } else {
+	if ($tmpdir) {
+	    system("rm -rf $tmpdir");
+	}
+    }
+    die("*** $0:\n".
+	"    $mesg\n");
+}

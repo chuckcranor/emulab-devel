@@ -1,0 +1,56 @@
+#
+# Copyright (c) 2020 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+SRCDIR		= @srcdir@
+TESTBED_SRCDIR	= @top_srcdir@
+OBJDIR		= ..
+SUBDIR		= wbstore
+
+SBIN_FILES	= createwbstore wbstoremonitor
+LIB_FILES	= WBStore.pm
+DATA_FILES	= send-template.xml recv-template.xml \
+		  recv-device-template.xml recv-folder-template.xml
+INSTALL_DATADIR = $(INSTALL_TOPDIR)/wbstore/templates
+
+include $(OBJDIR)/Makeconf
+
+#
+# Force dependencies on the scripts so that they will be rerun through
+# configure if the .in file is changed.
+# 
+all: $(SBIN_FILES) $(LIB_FILES) $(DATA_FILES)
+
+include $(TESTBED_SRCDIR)/GNUmakerules
+
+install:
+
+control-install: $(addprefix $(INSTALL_SBINDIR)/, $(SBIN_FILES)) \
+	$(addprefix $(INSTALL_DATADIR)/, $(DATA_FILES))
+
+clean: 
+	rm -f $(SBIN_FILES) $(DATA_FILES)
+
+$(INSTALL_DATADIR)/%: %
+	@echo "Installing $<"
+	-mkdir -p $(INSTALL_DATADIR)
+	$(INSTALL_DATA) $< $@

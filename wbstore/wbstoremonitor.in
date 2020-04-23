@@ -1,0 +1,550 @@
+#!/usr/bin/perl -w
+
+#
+# Copyright (c) 2020 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+use English;
+use Getopt::Std;
+use Data::Dumper;
+use POSIX qw(strftime);
+
+#
+# The Powder write-back store monitor, aggregate edition.
+#
+# Powder endpoint aggregates have low-bandwidth, and not always-on
+# control net connections (think campus shuttle buses that are turned off
+# overnight. As such, we use an opportunistic service to provide data
+# "write back" to the Mothership from experiment nodes whenever the aggregate
+# is running. Since write-back might need to continue after an experiment
+# terminates on the aggregate, we need to keep track of which aggregates
+# and experiments are still offloading and kill them off when they are done.
+# Hence this monitor.
+#
+# Syncthing is the tool used to handle the write back. In the current
+# implementation, there are potentially multiple instances of syncthing
+# running both on an aggregate boss (us) and on the mothership ops node.
+# There is one instance on the ops node for every (current and past)
+# experiment instance with outstanding data. This instance has a data
+# "folder" for every Powder aggregate involved in the experiment.
+# Likewise, there is an instance on each Powder aggregate boss node for
+# every such experiment. These instances "push" outstanding data to the
+# appropriate mothership ops instance. For running experiments, this is
+# an ongoing process. For past experiments, they only run til they have
+# pushed up all outstanding data.
+#
+# The monitor's job is to periodically scan through the /usr/testbed/wbstore
+# directory, and for each identified syncthing configuration, make sure
+# syncthing is operating as it should and shutdown when it is done.
+#
+# The process:
+#
+# * Take a "wbstore" lock to avoid racing with experiment creation/teardown
+#   trigger by the mothership.
+# * Scan /usr/testbed/wbstore to find all known syncthing configs.
+# * Unlock after the scan. Races? New experiments that happen will get their
+#   syncthing started and we will pick them up on the next pass. Terminated
+#   experiments leave their syncthing running and are left for us to deal with.
+# * For an experiment UUID that is listed in the aggregate DB as "running";
+#   i.e. matches experiments.eid_uuid for some experiment, make sure the
+#   configuration reflects its currency (i.e., a real-time change "watcher"
+#   is enabled), fire up a syncthing process if missing.
+# * For past experiments we ensure that a watcher is not running, fire up
+#   (or restart) a syncthing instance, and run one complete scan/upload
+#   pass, kill the syncthing and remove the syncthing state. Since this is
+#   unbounded time-wise, We will likely have to impose a timeout if an
+#   instance cannot connect to its mothership instance.
+# * A naive technique for "one and done": Turn off the watcher, set to sync
+#   oldest to newest, create a special marker file (e.g., "DONE"), and fire
+#   off syncthing. Once it reports (via an event) that it is insync, shut it
+#   down and remove everything. The "DONE" indicator is for the benefit of
+#   the mothership side (see below). We might also be able to detect when
+#   things are in sync from the mothership side by seeing if the syncthing
+#   instance is connected, idle, and in-sync.
+#
+# Why the obsession with a "watcher"? We could leave the real-time change
+# watcher running, but under FreeBSD, it requires an open file for every
+# file or directory being watched. This could really add up depending on
+# how many past experiments there are and what they were doing.
+#
+
+sub usage()
+{
+    print STDOUT "Usage: wbstore_monitor [-dn1] [-I interval]\n" .
+	"    -d     Prevent daemonization\n" .
+	"    -n     Just state what would be done without doing it\n" .
+	"    -1     Run a single pass and then quit\n" .
+	"    -I int Time between passes (in minutes, default 5)\n";
+    exit(1);
+}
+my  $optlist = "dn1I:";
+
+#
+# Configure variables
+#
+my $TB       = "@prefix@";
+my $TBOPS    = "@TBOPSEMAIL@";
+my $OPSNODE  = "@USERNODE@";
+my $METADIR  = "$TB/wbstore";
+my $STBIN    = "/usr/local/bin/syncthing";
+my $STMARKER = ".stfolder";
+my $STDONE   = ".WBDONE";
+
+# Set this to turn off tblog in libraries.
+$ENV{'TBLOG_OFF'} = "yep";
+
+# Testbed Support library
+use lib ".";
+use lib "@prefix@/lib";
+use libdb;
+use libtestbed;
+use WBStore;
+
+# Protos
+sub parsehostname($);
+sub scanmetadir();
+sub checksyncthing($$$;$);
+sub fatal($);
+sub logit($);
+sub notify($);
+
+my %vars	= ();
+my $logfile	= "$TB/log/wbstore_monitor.log";
+my $debug	= 0;
+my $impotent	= 0;
+my $checkint	= 5 * 60;
+my $onceonly	= 0;
+
+#
+# Array of instance objects.
+# In addition to belonging to an active or past experiment, instances can
+# be in a variety of states:
+#
+#	DEAD:      no instance of syncthing is running
+#	RUNNING:   an instance of syncthing is running
+#	CONNECTED: RUNNING + connected to the other side
+#	INSYNC:    CONNECTED + up to date
+#
+# Further, if the "done" indicator is set, we are in the process of
+# finishing. An instance can be "done" and in any of the above states.
+#
+# Only when an instance is "done" and INSYNC can we completely terminate.
+#
+my @instance = ();
+sub WTF()       { -1; }
+sub DEAD()      { 0; }
+sub RUNNING()   { 1; }
+sub CONNECTED() { 2; }
+sub INSYNC()    { 3; }
+
+#
+# Turn off line buffering on output (dots ...).
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/usr/bin:";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+%options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (@ARGV != 0) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = $options{"d"};
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"I"})) {
+    $checkint = $options{"I"} * 60;
+}
+if (defined($options{"1"})) {
+    $onceonly = 1;
+}
+
+# This should always run as root.
+if ($UID != 0) {
+    die("*** $0:\n".
+	"    Only root can run this script!\n");
+}
+
+my $host = `hostname`;
+my $domain;
+chomp($host);
+($host,$domain) = parsehostname($host);
+
+# Only one please.
+if (CheckDaemonRunning("wbstore_monitor")) {
+    fatal("Not starting wbstore monitor!");
+}
+
+# Go to ground.
+if (!$debug) {
+    if (TBBackGround($logfile)) {
+	exit(0);
+    }
+}
+if (MarkDaemonRunning("wbstore_monitor")) {
+    fatal("Could not mark wbstore monitor as running!");
+}
+
+#
+# Setup a signal handler for newsyslog.
+#
+sub handler()
+{
+    ReOpenLog($logfile);
+}
+$SIG{HUP} = \&handler
+    if (!$debug);
+
+#
+# Let the show begin!
+#
+logit("Write-back store monitoring daemon starting... pid $$");
+
+my $started = 0;
+while (1) {
+    if ($started) {
+	sleep($checkint);
+    } else {
+	$started = 1;
+    }
+    logit("=== Starting pass.");
+    my $now = time();
+
+    # Find all the write-back stores we have metadata for.
+    scanmetadir();
+
+    #
+    # Ensure all instances are running for the current experiment
+    #
+    foreach my $i (@instance) {
+	if ($i->active()) {
+	    if (!checksyncthing($i, 1, 0, { fsWatcherEnabled => "true" })) {
+		my $inst = $i->uuid();
+		logit("WARNING: $inst: could not start syncthing");
+	    }
+	}
+    }
+
+    #
+    # Check up on all past instances.
+    #
+    # See if there is a past instance for which we are currently handling
+    # a final sync. If so, make sure it is done or at least making progress.
+    #
+    foreach my $i (@instance) {
+	if (!$i->active()) {
+	    ;
+	}
+    }
+
+# sub checksyncthing($$$;$)
+#  my ($instance, $forcestart, $forcestop, $attrs) = @_;
+
+    logit("=== Finished pass.");
+
+    if ($onceonly) {
+	MarkDaemonStopped("wbstore_monitor");
+	exit(0)
+    }
+}
+fatal("forever just ended!");
+
+#
+# Janky parse of syncthing metadata to determine outstanding instances.
+#
+sub scanmetadir()
+{
+    if (TBScriptLock("wbstore", 1, 0) != TBSCRIPTLOCK_OKAY()) {
+	fatal("Could not get wbstore metadata lock!");
+    }
+
+    @instance = WBStore->LookupAll();
+    foreach my $i (@instance) {
+	my $uuid = $i->uuid();
+	my $ddir = $i->datadir();
+	my ($piddead,$apidead);
+
+	# See if syncing is done
+	my $done = 0;
+	if (-e "$ddir/$STDONE") {
+	    $done = 1;
+	}
+	$i->_done($done);
+
+	# See if syncthing process is running
+	if (checksyncthing($i, 0, 0)) {
+	    $piddead = 0;
+	} else {
+	    $piddead = 1;
+	}
+	# See if API is responding
+	if (my $id = $i->IsRunning()) {
+	    $apidead = 0;
+	    $i->_id($id);
+	} else {
+	    $apidead = 1;
+	}
+	# Attempt to reconcile the two
+	if ($piddead && $apidead) {
+	    $i->_state = DEAD;
+	} elsif (!$piddead && !$apidead) {
+	    $i->_state = CONNECTED;
+	} else {
+	    $i->_state = WTF;
+	}
+
+	my $active = $i->active();
+	print STDERR "Found instance '$uuid', ",
+	    ($active ? "active" : "past", " experiment"),
+	    ($done ? ", final sync done" : ""),
+	    "\n"
+	    if ($debug);
+    }
+    TBScriptUnlock();
+}
+
+#
+# Check whether a syncthing process is running for the experiment identified
+# by $instance. If $forcestart ($forcestop) is non-zero, start (stop)
+# syncthing. If $attrs is set, it is a hash reference of syncthing folder
+# or device attributes (name=>value) that should be set as indicated.
+#
+# Returns -1 on error, 0 if not running, 1 otherwise.
+#
+sub checksyncthing($$$;$)
+{
+    my ($iobj, $forcestart, $forcestop, $attrs) = @_;
+    my $inst = $iobj->uuid();
+    my $confdir = $iobj->confdir();
+    my $pidfile = "$confdir/syncthing.pid";
+    my $running = 0;
+
+    # See if syncthing is running (based on the pidfile)
+    my $pid;
+    if (-e $pidfile) {
+	$pid = `cat $pidfile`;
+	chomp($pid);
+	if ($pid =~ /^(\d+)$/) {
+	    $pid = $1;
+	} else {
+	    $pid = undef;
+	}
+    } else {
+	logit("WARNING: $inst: no pidfile, assuming not running!");
+    }
+    if (defined($pid) && kill(0, $pid)) {
+	$running = 1;
+    }
+
+    # only want the status
+    if (!$forcestart && !$forcestop) {
+	return $running;
+    }
+
+    #
+    # See if we need to change config file settings
+    #
+    if ($attrs) {
+	my $ofile = "$confdir/config.xml";
+	my $nfile = "$confdir/config.xml.new";
+
+	# Something changed, install the new config (restarting if necessary)
+	if (modifyconfig($iobj, $nfile, $attrs)) {
+	    if ($running) {
+		if (!kill('TERM', $pid)) {
+		    logit("WARNING: $inst: could not kill syncthing!".
+			  " Config unchanged.");
+		    unlink($nfile);
+		    return -1;
+		}
+		unlink($pidfile);
+		$running = 0;
+		if (!$forcestop) {
+		    $forcestart = 1;
+		} else {
+		    logit("$inst: syncthing pid $pid stopped");
+		}
+	    }
+	    if (!rename($nfile, $ofile)) {
+		logit("WARNING: $inst: could not modify syncthing config!".
+		      " Continuing with old config.");
+	    }
+	    print STDERR "config file '$ofile' modified\n"
+		if ($debug);
+	} else {
+	    print STDERR "config file '$ofile' not modified\n"
+		if ($debug);
+	}
+    }
+
+    # Running and we want it dead; kill it
+    if ($running && $forcestop) {
+	if (!kill('TERM', $pid)) {
+	    logit("WARNING: $inst: could not kill syncthing!");
+	    return -1;
+	}
+	logit("$inst: syncthing pid $pid stopped");
+	unlink($pidfile);
+	return 0;
+    }
+
+    # Not running and we want it running; start it
+    if (!$running && $forcestart) {
+	my $log = "/dev/null";
+	my $cmd = "$STBIN -no-browser -home=\"$confdir\"";
+	if (system("($cmd >$log 2>&1 & echo \$!) > $pidfile")) {
+	    logit("WARNING: $inst: could not run '$cmd', see '$log'");
+	    return 0;
+	}
+
+	# give it a chance to start and make sure it is still running
+	sleep(1);
+	$pid = undef;
+	if (-e $pidfile) {
+	    $pid = `cat $pidfile`;
+	    chomp($pid);
+	    if ($pid =~ /^(\d+)$/) {
+		$pid = $1;
+	    } else {
+		$pid = undef;
+	    }
+	}
+	if (defined($pid) && kill(0, $pid)) {
+	    logit("$inst: syncthing pid $pid started");
+	    return 1;
+	}
+	logit("WARNING: $inst: (re)start of syncthing failed, see $log"); 
+	return 0;
+    }
+
+    # Otherwise, just return the status
+    logit("$inst: syncthing already " . ($running ? "started." : "stopped."));
+    return $running;
+}
+
+#
+# Create a new configuration file $nfile from $ofile with the given folder
+# and device attributes $attr set as indicated.
+# Returns non-zero if something changed, 0 otherwise.
+#
+# XXX this is an utter hack for setting/clearing the folder fsWatcher
+# attribute. Shame on me for pretending it is more general than that.
+#
+sub modifyconfig($$$)
+{
+    my ($inst, $nfile, $attrs) = @_;
+    my $changed = 0;
+
+    print STDERR "Attrs:\n", Dumper($attrs), "\n"
+	if ($debug);
+
+    while (my ($a,$v) = each %$attrs) {
+	if ($a eq "fsWatcherEnabled") {
+	    my $ov = $inst->fsWatcherEnabled();
+	    if ($ov ne $v) {
+		$inst->fsWatcherEnabled($v);
+		$changed++;
+	    }
+	} else {
+	    fatal("Unknown attribute '$a'");
+	}
+    }
+
+    if ($changed && $inst->PutConfig($nfile)) {
+	fatal("$inst: could not write new config file '$nfile'");
+    }
+
+    return $changed;
+}
+
+#
+# Parse a FQDN.
+# Must be of the form <host>.<domain>+.<tld>
+# Returns (host,domain) if success, exits otherwise.
+#
+sub parsehostname($)
+{
+    my ($str) = @_;
+    my @names = split('\.', $str);
+    if (@names < 3) {
+	fatal("Could not parse '$str' as FQDN");
+    }
+    foreach my $n (@names) {
+	if ($n !~ /^[-a-zA-Z0-9]+$/) {
+	    fatal("Invalid FQDN '$str'");
+	}
+    }
+    my $host = shift @names;
+    my $dom = join('.', @names);
+
+    return ($host, $dom);
+}
+
+sub fatal($)
+{
+    my ($msg) = @_;
+
+    #
+    # Send a message to the testbed list. 
+    #
+    SENDMAIL($TBOPS,
+	     "Write-back Monitor died",
+	     $msg,
+	     $TBOPS)
+	if (!$impotent);
+
+    MarkDaemonStopped("wbstore_monitor");
+
+    die("*** $0:\n".
+	"    $msg\n");
+}
+
+sub logit($)
+{
+    my ($msg) = @_;
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+
+    print "$stamp: $msg\n";
+}
+
+sub notify($)
+{
+    my ($msg) = @_;
+
+    logit("sending mail to $TBOPS:\n$msg");
+    SENDMAIL($TBOPS, "Write-back Monitor Message",
+	     "Write-back Monitor Message:\n\n$msg", $TBOPS)
+	if (!$impotent);
+}
