@@ -207,23 +207,35 @@ while (1) {
     else {
 	# The child ...
 	#
-	# Ask for the temp.
+	# Ask for the temp. We seem to be getting some spurious data
+	# from the arduino, so retry if it look bogus. Just once, and
+	# if it still whacky, throw back an error so we do not act on
+	# it.
 	#
 	my %temp;
-	if (powduinotemp("powduino", \%temp)) {
-	    exit(1);
+
+	for (my $i = 0; $i < 2; $i++) {
+	    if (powduinotemp("powduino", \%temp)) {
+		exit(1);
+	    }
+	    if ($verbose > 1) {
+		print Dumper(\%temp);
+	    }
+	    if (! exists($temp{"tempC"})) {
+		logit("Incomplete temperature data from powduino");
+		exit(1);
+	    }
+	    my $tempF = TempConvert($temp{"tempC"});
+	    if ($tempF < 200) {
+		$webtask->temp(\%temp);
+		$webtask->Store();
+		$webtask->Exited(0);
+		exit(0);
+	    }
+	    logit("Got back bogus value from powduino: $tempF, retrying.");
+	    sleep(2);
 	}
-	if ($verbose > 1) {
-	    print Dumper(\%temp);
-	}
-	if (! exists($temp{"tempC"})) {
-	    logit("Incomplete temperature data from powduino");
-	    exit(1);
-	}
-	$webtask->temp(\%temp);
-	$webtask->Store();
-	$webtask->Exited(0);
-	exit(0);
+	exit(1);
     }
     my $tempC = $webtask->temp()->{"tempC"};
     $webtask->Delete();
@@ -236,10 +248,10 @@ while (1) {
 	    $fakeTempIndex++;
 	}
     }
-
     if ($verbose) {
 	logit("TempF: $tempF");
     }
+    
     # We need to do this, for the current reservation info.
     map { $_->Refresh() } @nodes;
 
