@@ -804,7 +804,7 @@ CREATE TABLE `apt_reservation_group_reservations` (
   `deleted` datetime DEFAULT NULL,
   `deleted_pushed` datetime DEFAULT NULL,
   `noidledetection_needpush` tinyint(1) NOT NULL default '0',
-  `jsondata` text,
+  `jsondata` mediumtext,
   PRIMARY KEY (`uuid`,`aggregate_urn`,`type`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
