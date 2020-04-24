@@ -179,10 +179,10 @@ $(function ()
 
 	// Initial sort.
 	if (window.SORTYBY !== undefined && window.SORTYBY == "created") {
-	    table.find('th:eq(9)').trigger('sort');
+	    table.find('th:eq(10)').trigger('sort');
 	}
 	else if (hash === "#extending") {
-	    table.find('th:eq(10)').trigger('sort');
+	    table.find('th:eq(11)').trigger('sort');
 	}
 	else {
 	    table.find('th:eq(0)').trigger('sort');
@@ -208,8 +208,8 @@ $(function ()
 	var filters = $.tablesorter.getFilters(table);
 	// The "any" filter needs a value or everything disappears.
 	// If there is a term in the search box, it will have a value.
-	if (filters[13] === undefined) {
-	    filters[13] = "";
+	if (filters[14] === undefined) {
+	    filters[14] = "";
 	}
 	if ($('#radio-buttons [data-id="#extending"]').is(":checked")) {
 	    tmp.push("extending");
@@ -228,11 +228,11 @@ $(function ()
 	}
 	if (tmp.length) {
 	    // regex search, plain | does not work.
-	    filters[12] = "/" + tmp.join("|") + "/";
+	    filters[13] = "/" + tmp.join("|") + "/";
 	}
 	else {
 	    // Hmm, an empty string will get everything.
-	    filters[12] = "";
+	    filters[13] = "";
 	}
 	//console.info("SetFilters", filters);
 	$.tablesorter.setFilters(table, filters, true);
@@ -257,14 +257,14 @@ $(function ()
 		return;
 	    }
 	    sup.HideWaitWait();
-	    filters[12] = "";
-	    filters[13] = json.value;
+	    filters[13] = "";
+	    filters[14] = json.value;
 	    $.tablesorter.setFilters(table, filters, true);
 	}
 	// Clear this, we search for everything.
 	$("#experiments_search").val("");
-	filters[12] = "";
 	filters[13] = "";
+	filters[14] = "";
 	$.tablesorter.setFilters(table, filters, true);
 	
 	sup.ShowWaitWait();
