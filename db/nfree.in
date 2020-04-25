@@ -678,6 +678,12 @@ foreach my $node (@freed_nodes) {
 	    $node->SetNodeHistory(TB_NODEHISTORY_OP_MOVE, $this_user,
 				  $reloading_experiment);
 
+	    # Clear node-specific cnetwatch ignores
+	    DBQueryWarn("delete from node_attributes ".
+			"where node_id='$node_id' and ".
+			"attrkey='cnetwatch_disable'")
+		or $error++;
+
 	    # This little sillyness is for disk reloading.
 	    # Kill the last reservation since this path is special.
 	    DBQueryWarn("delete from last_reservation ".
@@ -716,6 +722,12 @@ foreach my $node (@freed_nodes) {
 	$node->ClearPartitions();
 	$node->SetTaintStates(TB_TAINTSTATE_MUSTRELOAD());
 	
+	# Clear node-specific cnetwatch ignores
+	DBQueryWarn("delete from node_attributes ".
+		    "where node_id='$node_id' and ".
+		    "attrkey='cnetwatch_disable'")
+	    or $error++;
+
 	#
 	# The project still has the node, so this will be allowed. 
 	#
