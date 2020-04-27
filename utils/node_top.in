@@ -31,11 +31,11 @@ use Getopt::Std;
 sub usage()
 {
     print STDOUT "Usage: node_top [-h] [node ....]\n";
-    print STDOUT "       node_top [-h] -e pid,eid>\n";
+    print STDOUT "       node_top [-h] -e pid,eid\n";
     print STDOUT "-h     This message\n";
     exit(-1);
 }
-my $optlist  = "hdt:";
+my $optlist  = "hdt:e:";
 my $debug    = 0;
 my $webtask_id;
 my $webtask;
