@@ -113,7 +113,7 @@ $(function ()
 	    search_timeout =
 		window.setTimeout(function() {
 		    var filters = $.tablesorter.getFilters(table);
-		    filters[13] = userInput;
+		    filters[14] = userInput;
 		    //console.info("Search", filters);
 		    $.tablesorter.setFilters(table, filters, true);
 		}, 500);
