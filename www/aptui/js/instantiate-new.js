@@ -2436,6 +2436,9 @@ $(function ()
 
     function updateSiteConstraints(nodes, domNode)
     {
+	if (1) {
+	    return 0;
+	}
       var allowed = [];
       var rejected = [];
       var breakdown = {};
