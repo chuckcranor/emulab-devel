@@ -679,9 +679,7 @@ foreach my $node (@freed_nodes) {
 				  $reloading_experiment);
 
 	    # Clear node-specific cnetwatch ignores
-	    DBQueryWarn("delete from node_attributes ".
-			"where node_id='$node_id' and ".
-			"attrkey='cnetwatch_disable'")
+	    $node->ClearNodeAttribute('cnetwatch_disable') == 0
 		or $error++;
 
 	    # This little sillyness is for disk reloading.
@@ -723,9 +721,7 @@ foreach my $node (@freed_nodes) {
 	$node->SetTaintStates(TB_TAINTSTATE_MUSTRELOAD());
 	
 	# Clear node-specific cnetwatch ignores
-	DBQueryWarn("delete from node_attributes ".
-		    "where node_id='$node_id' and ".
-		    "attrkey='cnetwatch_disable'")
+	$node->ClearNodeAttribute('cnetwatch_disable') == 0
 	    or $error++;
 
 	#
