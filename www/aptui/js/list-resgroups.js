@@ -58,11 +58,14 @@ $(function ()
 	    $('#nogroups').removeClass("hidden");
 	    return;
 	}
+	var showportal = (window.ISADMIN && window.MAINSITE &&
+			  !window.EMBEDDED_RESGROUPS ? true : false);
 
 	// Generate the main template.
 	var html = listTemplate({
 	    "groups"       : groups,
 	    "showcontrols" : false,
+	    "showportal"   : showportal,
 	    "showproject"  : true,
 	    "showactivity" : true,
 	    "showuser"     : true,

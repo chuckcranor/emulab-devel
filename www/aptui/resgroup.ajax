@@ -1096,6 +1096,7 @@ function ResgroupBlob($resgroup)
     $details = array();
     # Compute a status column based on reservations.
     $status  = "approved";
+    $project = Project::Lookup($resgroup->pid_idx());
     
     $details["uuid"]       = $resgroup->uuid();
     $details["pid"]        = $resgroup->pid();
@@ -1110,6 +1111,8 @@ function ResgroupBlob($resgroup)
     $details["uid"]        = $resgroup->creator_uid();
     $details["uid_idx"]    = $resgroup->creator_idx();
     $details["idledetection"] = $resgroup->noidledetection() ? false : true;
+    $details["portal"]     = ($project->portal() ?
+                              $project->portal() : "emulab");
     $clusters = array();
     foreach ($resgroup->reservations() as $reservation) {
         $blob = array(

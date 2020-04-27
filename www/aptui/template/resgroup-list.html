@@ -16,6 +16,7 @@
 	<th class="sorter-false">&nbsp</th>
 	<% if (showuser) { %><th>Creator</th><% } %>
 	<% if (showproject) { %><th>Project</th><% } %>
+	<% if (showportal) { %><th>Portal</th><% } %>
 	<th>Created</th>
 	<th>Starts</th>
 	<th>Ends</th>
@@ -139,6 +140,9 @@
 		<%- value.remote_pid %>
 	      <% } %>
 	    </td>
+	  <% } %>
+	  <% if (showportal) { %>	  
+	    <td><%- value.portal %></td>
 	  <% } %>
 	  <td class="format-date"><%- value.created %></td>
 	  <td>

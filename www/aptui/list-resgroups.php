@@ -62,6 +62,8 @@ echo "<div id='main-body'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "   window.ISADMIN  = $isadmin;\n";
+echo "   window.EMBEDDED_RESGROUPS = false;\n";
+echo "   window.EMBEDDED_RESGROUPS_SELECT = false;\n";
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
