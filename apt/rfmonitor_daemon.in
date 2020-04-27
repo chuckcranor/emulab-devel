@@ -91,6 +91,33 @@ sub HandleViolations($$);
 sub WriteRawData($);
 
 #
+# Explanatory text.
+#
+my $explain = 
+    "Our monitoring has detected transmissions from a radio in your\n ".
+    "experiment that are above our 'noise floor' threshold.  These may be a\n".
+    "direct result of signals you are transmitting, including:\n".
+    "\n".
+    " * Signal extending beyond the low or high ends of your experiment's\n".
+    "   allocated/declared spectrum.\n".
+    " * Spurious emissions introduced in the analog transmission path\n".
+    "   (harmonics, inter-modulation products, etc.)\n".
+    " * Intentional or accidental transmission in spectrum you do not have\n".
+    "   allocated.\n".
+    "\n".
+    "Other things outside of your control that may trigger the monitor ".
+    "include:\n".
+    "\n".
+    " * Errant detection\n".
+    " * Third-party signals\n".
+    "\n".
+    "As we are still tuning our monitoring system, we will not automatically\n".
+    "halt your transmissions.  Please stop your transmitters and reconfigure\n".
+    "them to avoid the violations if they appear related to what you are\n".
+    "doing. Email support\@powderwireless.net if you are unsure of how to\n".
+    "proceed, or if you think this detection is in error.\n";
+
+#
 # Turn off line buffering on output
 #
 $| = 1; 
@@ -659,7 +686,8 @@ sub HandleViolations($$)
 	    $TO = $TBRFOPS;
 	}
 	$subject = "Transmit frequency/power violations on $nodeid";
-	$body    = "Transmit violations on ${nodeid}\@${OURDOMAIN}:\n\n";
+	$body    = "Transmit violations on ${nodeid}\@${OURDOMAIN}!\n\n";
+	$body   .= $explain . "\n";
 
 	foreach my $iface (keys(%{$violations->{$nodeid}})) {
 	    if (!exists($rflimits->{$nodeid}->{$iface})) {
@@ -680,7 +708,6 @@ sub HandleViolations($$)
 			"max power $power dB\n";
 		}
 	    }
-	    $body .= "\n";
 	    $body .= " Violations:\n";
 	    
 	    foreach my $measurement (@{$violations->{$nodeid}->{$iface}}) {
