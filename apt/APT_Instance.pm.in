@@ -1274,6 +1274,10 @@ sub GetSSHKeys($$;$)
 		next
 		    if ($member->SameUser($geniuser->emulab_user()));
 	    
+		# Skip frozen users.
+		next
+		    if ($member->frozen());
+
 		my $guser = GeniUser->CreateFromLocal($member);
 		next
 		    if (!defined($guser));
