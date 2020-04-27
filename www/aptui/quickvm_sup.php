@@ -496,7 +496,7 @@ echo " <li class='divider'></li>
 
       if ($UI_DISABLE_RESERVATIONS == 0 ||
          ($UI_DISABLE_RESERVATIONS == 1 && ISADMIN()) ) {
-echo "    <li><a href='list-reservations.php'>
+echo "    <li><a href='list-resgroups.php'>
               My Reservations</a></li>";
       }
 
