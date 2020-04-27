@@ -1078,8 +1078,15 @@ $(function ()
 		    .addClass("hidden");
 	    }
 	    else {
-		tbody.find(".reservation-error span label")
-		    .html("Approval is required");
+		if (_.has(reservation, "noautoapprove_reason")) {
+		    tbody.find(".reservation-error span label")
+			.html("Approval is required: " +
+			      reservation.noautoapprove_reason);
+		}
+		else {
+		    tbody.find(".reservation-error span label")
+			.html("Approval is required");
+		}
 		tbody.find(".reservation-error span")
 		    .addClass("has-warning")
 		    .removeClass("has-error")

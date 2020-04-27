@@ -171,13 +171,13 @@ sub DoGroupReserve()
     my $optlist    = "s:e:nN:u:p:O";
     my @argvcopy   = @ARGV[0..$#ARGV-1];
     my $update     = 0;
-    my $checkonly  = 0;
     my $exitcode   = 0;
     my $autoapprove= 1; # This might be turned off below
     my $updateall  = 0;
     my $override   = 0;	# Only range reservations can be overridden. 
     my ($clusters, $ranges, $routes);
     my ($start, $end, $errmsg, $errcode, $reason, $resgroup, $portal, $brand);
+    my $checkonly;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -246,6 +246,7 @@ sub DoGroupReserve()
     }
     if (defined($options{"n"})) {
 	$checkonly = 1;
+	@argvcopy = map { "$_" ne "-n" ? $_ : () } @argvcopy;
     }
     if ($update) {
 	usage()
@@ -378,7 +379,8 @@ sub DoGroupReserve()
 	    }
 	}
 	# For now, force autoapprove off whenever a route is requested.
-	$autoapprove = 0;
+	$autoapprove = 0
+	    if (!$this_user->IsAdmin());
     }
 
     #
@@ -415,7 +417,12 @@ sub DoGroupReserve()
 	}
 	if (defined($reason) && $reason ne $resgroup->reason()) {
 	    print "Reason has changed\n";
-	    $updateall = 1;
+	    #
+	    # Lets not worry about updating the reservations, hardly
+	    # anyone ever edits the reason, just update locally and
+	    # call it good.
+	    #
+	    $resgroup->UpdateReason($reason);
 	}
     }
     
@@ -457,45 +464,45 @@ sub DoGroupReserve()
 	    }
 	}
 	if (defined($ranges)) {
+	    my @autocheck = ();
+	    
 	    foreach my $range_uuid (keys(%{$ranges})) {
 		my $range       = $ranges->{$range_uuid};
 		my $freq_uuid   = $range->{"uuid"};
 		my $reservation = $resgroup->Reservation($freq_uuid);
-
+		
 		if (defined($reservation)) {
 		    # We ignore the low/high that came in, in case the
 		    # client tried to change it. See below.
 		    $range->{"freq_low"}  = $reservation->freq_low();
 		    $range->{"freq_high"} = $reservation->freq_high();
-		
+
+		    #
+		    # We need to send the entire set of ranges through the
+		    # autoapprove check below (if not an admin), even if
+		    # the range is already approved, since the additional
+		    # ranges might tip it over one of the thresholds. The
+		    # already approved ones will stay approved of course.
+		    #
+		    push(@autocheck, $range);
+
+		    #
+		    # If updateall is set, its a start/end date change.
+		    #
 		    if ($updateall) {
 			push(@range_reservations, $range);
-			# Flag for below.
-			$range->{'update'} = 1;
-			# If an admin is changing a reservation, we keep the
-			# approved flag as is.
-			if ($this_user->IsAdmin()) {
-			    $range->{'approved'} = $reservation->approved();
-			}
-			else {
-			    $range->{'approved'} = 0;
-			}
 		    }
-		    else {
-			$range->{'approved'} = $reservation->approved();
-			$range->{'valid'}    = 1;
-		    }
+		    $range->{'autoapprove'} = $this_user->IsAdmin();
+		    $range->{'valid'}       = 1;
+		    # This goes back to the web UI for all ranges.
+		    $range->{'approved'}    = $reservation->approved();
 		}
 		else {
 		    # A new range request. 
-		    if ($this_user->IsAdmin()) {
-			$range->{'approved'} = 1;
-		    }
-		    else  {
-			$range->{'approved'} = 0;
-		    }
-		    $range->{'valid'} = 0;
+		    $range->{'autoapprove'} = $this_user->IsAdmin();
+		    $range->{'valid'}       = 0;
 		    push(@range_reservations, $range);
+		    push(@autocheck, $range);
 		}
 	    }
 	    #
@@ -503,18 +510,16 @@ sub DoGroupReserve()
 	    #
 	    if (! $this_user->IsAdmin()) {
 		APT_Reservation::Group::RFReservation->SetAutoApprove(
-		    $start, $end, @range_reservations);
+		    $start, $end, @autocheck);
 
 		#
-		# If none of the ranges can be auto approved, disable
-		# autoapprove so that the node requests need approval too,
-		# this will avoid approving node reeservations that are
-		# useless without the ranges.
+		# If any of the ranges cannot be auto approved, turn off
+		# autoapprove for the entire group.
 		#
 		my $count = 0;
-		map { $count += $_->{'approved'} } @range_reservations;
-		if ($count == 0) {
-		    print "Turning off autoapprove cause no ranges can ".
+		map { $count += $_->{'autoapprove'} } @range_reservations;
+		if ($count != scalar(@range_reservations)) {
+		    print "Turning off autoapprove cause some ranges cannot ".
 			"be auto approved\n";
 		    $autoapprove = 0;
 		}
@@ -534,31 +539,13 @@ sub DoGroupReserve()
 		
 		    if ($updateall) {
 			push(@route_reservations, $route);
-			# Flag for below.
-			$route->{'update'} = 1;
-			# If an admin is changing a reservation, we keep the
-			# approved flag as is.
-			if ($this_user->IsAdmin()) {
-			    $route->{'approved'} = $reservation->approved();
-			}
-			else {
-			    $route->{'approved'} = 0;
-			}
 		    }
-		    else {
-			$route->{'approved'} = $reservation->approved();
-			$route->{'valid'}    = 1;
-		    }
+		    $route->{'valid'}    = 1;
+		    # This goes back to the web UI for all ranges.
+		    $route->{'approved'} = $reservation->approved();
 		}
 		else {
-		    # A new route request. Never autoapprove
-		    if ($this_user->IsAdmin()) {
-			$route->{'approved'} = 1;
-		    }
-		    else  {
-			$route->{'approved'} = 0;
-		    }
-		    $route->{'valid'} = 0;
+		    $route->{'valid'}       = 0;
 		    push(@route_reservations, $route);
 		}
 	    }
@@ -571,49 +558,38 @@ sub DoGroupReserve()
 		my $range = $ranges->{$range_uuid};
 
 		# A new range request. 
-		if ($this_user->IsAdmin()) {
-		    $range->{'approved'} = 1;
+		if (! $this_user->IsAdmin()) {
+		    $range->{'autoapprove'} = 0;
 		}
-		else  {
-		    $range->{'approved'} = 0;
-		}
-		$range->{'valid'}    = 0;
+		$range->{'valid'} = 0;
 		push(@range_reservations, $range);
 	    }
 	    #
-	    # Update the approval flags based on auto approve check.
+	    # Mark per range autoapprove.
 	    #
 	    if (! $this_user->IsAdmin()) {
+		# This will update the "autoapprove" slot in each range
 		APT_Reservation::Group::RFReservation->SetAutoApprove(
 		    $start, $end, @range_reservations);
 
 		#
-		# If none of the ranges can be auto approved, disable
-		# autoapprove so that the node requests need approval too,
-		# this will avoid approving node reeservations that are
-		# useless without the ranges.
+		# If any of the ranges cannot be auto approved, turn off
+		# autoapprove for the entire group.
 		#
 		my $count = 0;
-		map { $count += $_->{'approved'} } @range_reservations;
-		if ($count == 0) {
-		    print "Turning off autoapprove cause no ranges can ".
+		map { $count += $_->{'autoapprove'} } @range_reservations;
+		if ($count != scalar(@range_reservations)) {
+		    print "Turning off autoapprove cause some ranges cannot ".
 			"be auto approved\n";
 		    $autoapprove = 0;
 		}
 	    }
 	}
+	# autoapprove is always off when using routes. See above.
 	if (defined($routes)) {
 	    foreach my $res_uuid (keys(%{$routes})) {
 		my $route = $routes->{$res_uuid};
-
-		# A new route request. Never autoapprove
-		if ($this_user->IsAdmin()) {
-		    $route->{'approved'} = 1;
-		}
-		else  {
-		    $route->{'approved'} = 0;
-		}
-		$route->{'valid'}    = 0;
+		$route->{'valid'} = 0;
 		push(@route_reservations, $route);
 	    }
 	}
@@ -657,96 +633,7 @@ sub DoGroupReserve()
 	};
 	$result->{"route_results"} = $route_results;
     }
-    
-    # Ranges first since the are fast and easy.
-    if (@range_reservations) {
-	#
-	# Since all ranges require admin approval, there is no need to
-	# lock the tables here. We will do that later in approve.
-	#
-	# For each (new or modified) reservation see if it fits the schedule
-	#
-	my @allgroups = APT_Reservation::Group->LookupAll();
-	my $rfrange   = APT_RFRange::Project->Lookup($project);
-    
-	foreach my $ref (@range_reservations) {
-	    my $freq_low  = $ref->{"freq_low"};
-	    my $freq_high = $ref->{"freq_high"};
-		
-	    # These flags go back to the web interface.
-	    # We never auto approve frequency reservations.
-	    if (!($this_user->IsAdmin() ||
-		  $rfrange->Allowed($ref->{'freq_low'}, $ref->{'freq_high'}))) {
-		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
-		$ref->{'output'}   = "Not allowed to use this frequency range";
-		$ref->{'valid'}    = 0;
-		$range_results->{'errors'}++;
-	    }
-	    elsif (! ($override ||
-		      APT_Reservation::Group::RFReservation->Fits(\@allgroups,
-								  $start, $end,
-								  $ref))) {
-		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
-		$ref->{'output'}   = "Does not fit the schedule";
-		$ref->{'valid'}    = 0;
-		$range_results->{'errors'}++;
-	    }
-	    elsif (!$override &&
-		   APT_Instance::RFRanges->InUse($project, $freq_low,
-						 $freq_high, $start, $end)) {
-		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
-		$ref->{'output'}   = "Currently in use by another project";
-		$ref->{'valid'}    = 0;
-		$range_results->{'errors'}++;
-	    }
-	    else {
-		# We set approval above.
-		$ref->{'valid'}    = 1;
-		if ($ref->{'approved'}) {
-		    $range_results->{'approved'}++;
-		}
-	    }
-	}
-    }
-    # Ditto routes
-    if (@route_reservations) {
-	#
-	# Since all routes require admin approval, there is no need to
-	# lock the tables here. We will do that later in approve.
-	#
-	# For each (new or modified) reservation see if it fits the schedule
-	#
-	my @allgroups = APT_Reservation::Group->LookupAll();
-    
-	foreach my $ref (@route_reservations) {
-	    # These flags go back to the web interface.
-	    # We never auto approve route reservations.
-	    if (!($this_user->IsAdmin() ||
-		  APT_Reservation::Group::RouteReservation->RouteAllowed(
-		      $project, $ref))) {
-		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
-		$ref->{'output'}   = "Not allowed to use this route";
-		$ref->{'valid'}    = 0;
-		$route_results->{'errors'}++;
-	    }
-	    elsif (! ($override ||
-		      APT_Reservation::Group::RouteReservation->Fits(
-			  \@allgroups, $start, $end, $ref))) {
-		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
-		$ref->{'output'}   = "Does not fit the schedule";
-		$ref->{'valid'}    = 0;
-		$route_results->{'errors'}++;
-	    }
-	    else {
-		# We set approval above.
-		$ref->{'valid'}    = 1;
-		if ($ref->{'approved'}) {
-		    $route_results->{'approved'}++;
-		}
-	    }
-	}
-    }
-    
+
     #
     # Called for each reference in the @cluster_reservations list,
     # with a webtask to use when calling manage_reservations.
@@ -782,8 +669,10 @@ sub DoGroupReserve()
 	    @argvcopy = @tmp;
 	}
 	$command .= "-a $urn reserve -S -t $type ";
-	# When there are unapproved ranges/routes, autoapprove is forced off.
-	if ((defined($ranges) || defined($routes)) && !$autoapprove) {
+	$command .= "-n " if ($checkonly);
+	# Global autoapprove might have been turned off but in check mode
+	# we *do* want to know if the reservation is possible
+	if (!$checkonly && !$autoapprove) {
 	    $command .= "-P ";
 	}
 	$command .= " @argvcopy $count";
@@ -796,16 +685,14 @@ sub DoGroupReserve()
     };
     my $responses;
 
-    if (@cluster_reservations) {
+    my $submitClusters = sub {
 	$errcode = CallMethodOnReservations($coderef, \$responses,
 					    @cluster_reservations);
 	if ($errcode) {
 	    $errmsg   = $responses;
 	    $exitcode = -1;
-	    $resgroup->Unlock();
-	    goto bad;
+	    return -1;
 	}
-
 	#
 	# Look at all the responses.
 	#
@@ -850,6 +737,184 @@ sub DoGroupReserve()
 		$res->{"uuid"} = $webtask->uuid();
 	    }
 	}
+	return 0;
+    };
+    
+    if (@cluster_reservations) {
+	#
+	# In checkonly mode we do one pass. In submit mode we do two
+	# passes, the first is a checkonly pass to see if any clusters
+	# are going to say the reservation needs approval. So always
+	# start with a checkonly call.
+	#
+	my $submitting = !$checkonly;
+	$checkonly = 1;
+	if (&$submitClusters()) {
+	    $resgroup->Unlock();
+	    goto bad;
+	}
+	$checkonly = 0 if ($submitting);
+
+	#
+	# In checkonly mode if some of the reservations cannot be auto
+	# approved, we want to mark all the reservations as needing to
+	# be approved (no partial approvals). Refused reservations do
+	# not count, since the user has to delete them or change them,
+	# and so do not ultimately affect the outcome.
+	#
+	# If autoapprove was turned off up above on routes/ranges, same.
+	#
+	if (!$this_user->IsAdmin() &&
+	    (!$autoapprove ||
+	     ($cluster_results->{'approved'} + $cluster_results->{'errors'}
+	      != scalar(@cluster_reservations)))) {
+	    # Turn off all auto approval for ranges/routes below.
+	    $autoapprove = 0;
+	    #
+	    # Turn off approval, but indicate why an approved reservation
+	    # cannot be auto approved (all or nothing)
+	    #
+	    foreach my $res (@cluster_reservations) {
+		if ($res->{'approved'}) {
+		    $res->{'noautoapprove_reason'} =
+			"Auto approval denied on another reservation";
+		}
+		$res->{'approved'} = 0;
+	    }
+	    $cluster_results->{'approved'} = 0;
+	}
+	#
+	# OK, user was doing a submit. If the checkonly pass returned some
+	# errors, then abort and switch to checkonly/noautoapprove so that
+	# the user gets back the results, just like it was an initial
+	# check. The user will have to change things and Check again.
+	# If no errors, then really submit.
+	#
+	if (!$checkonly) {
+	    if ($cluster_results->{'errors'}) {
+		# Turn off all auto approval for ranges/routes below.
+		$autoapprove = 0;
+		map { $_->{'approved'} = 0 } @cluster_reservations;
+		$cluster_results->{'approved'} = 0;
+		$checkonly = 1;
+	    }
+	    else {
+		# Clear these since we are going to redo it.
+		$cluster_results->{'errors'}   = 0;
+		$cluster_results->{'approved'} = 0;
+
+		if (&$submitClusters()) {
+		    $resgroup->Unlock();
+		    goto bad;
+		}
+		#
+		# If we got errors this time, some of the reservations
+		# might have been approved. We could clean this up, but
+		# not sure its worth the trouble, I think it will be rare.
+		# 
+	    }
+	}
+    }
+    if (@range_reservations) {
+	#
+	# Since all ranges require admin approval, there is no need to
+	# lock the tables here. We will do that later in approve.
+	#
+	# For each (new or modified) reservation see if it fits the schedule
+	#
+	my @allgroups = APT_Reservation::Group->LookupAll();
+	my $rfrange   = APT_RFRange::Project->Lookup($project);
+    
+	foreach my $ref (@range_reservations) {
+	    my $freq_low  = $ref->{"freq_low"};
+	    my $freq_high = $ref->{"freq_high"};
+		
+	    # These flags go back to the web interface.
+	    if (!($this_user->IsAdmin() ||
+		  $rfrange->Allowed($ref->{'freq_low'}, $ref->{'freq_high'}))) {
+		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
+		$ref->{'output'}   = "Not allowed to use this frequency range";
+		$ref->{'valid'}    = 0;
+		$range_results->{'errors'}++;
+	    }
+	    elsif (! ($override ||
+		      APT_Reservation::Group::RFReservation->Fits(\@allgroups,
+								  $start, $end,
+								  $ref))) {
+		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
+		$ref->{'output'}   = "Does not fit the schedule";
+		$ref->{'valid'}    = 0;
+		$range_results->{'errors'}++;
+	    }
+	    elsif (!$override &&
+		   APT_Instance::RFRanges->InUse($project, $freq_low,
+						 $freq_high, $start, $end)) {
+		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
+		$ref->{'output'}   = "Currently in use by another project";
+		$ref->{'valid'}    = 0;
+		$range_results->{'errors'}++;
+	    }
+	    else {
+		$ref->{'valid'} = 1;
+		#
+		# If autoapprove is on, mark this is as approved since it
+		# passes all the other criteria.
+		#
+		if ($autoapprove || $this_user->IsAdmin()) {
+		    $ref->{'approved'} = 1;
+		    $range_results->{'approved'}++;
+		}
+		else {
+		    if ($ref->{'autoapprove'}) {
+			# Would have been autoapproved, but another reservation
+			# failed autoapprove.
+			$ref->{'noautoapprove_reason'} =
+			    "Auto approval denied on another reservation";
+		    }
+		    $ref->{'approved'} = 0;
+		}
+	    }
+	}
+    }
+    if (@route_reservations) {
+	#
+	# Since all routes require admin approval, there is no need to
+	# lock the tables here. We will do that later in approve.
+	#
+	# For each (new or modified) reservation see if it fits the schedule
+	#
+	my @allgroups = APT_Reservation::Group->LookupAll();
+    
+	foreach my $ref (@route_reservations) {
+	    # These flags go back to the web interface.
+	    # We never auto approve route reservations.
+	    if (!($this_user->IsAdmin() ||
+		  APT_Reservation::Group::RouteReservation->RouteAllowed(
+		      $project, $ref))) {
+		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
+		$ref->{'output'}   = "Not allowed to use this route";
+		$ref->{'valid'}    = 0;
+		$route_results->{'errors'}++;
+	    }
+	    elsif (! ($override ||
+		      APT_Reservation::Group::RouteReservation->Fits(
+			  \@allgroups, $start, $end, $ref))) {
+		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
+		$ref->{'output'}   = "Does not fit the schedule";
+		$ref->{'valid'}    = 0;
+		$route_results->{'errors'}++;
+	    }
+	    else {
+		$ref->{'valid'} = 1;
+		if ($autoapprove || $this_user->IsAdmin()) {
+		    $ref->{'approved'} = 1;
+		    $route_results->{'approved'}++;
+		}
+		else {
+		    $ref->{'approved'} = 0;
+		}
+	    }
+	}
     }
     
     if (!$checkonly) {
@@ -873,7 +938,7 @@ sub DoGroupReserve()
 	    if ($update) {
 		# One of start/end/reason changed, update resgroup
 		if ($updateall) {
-		    $resgroup->UpdateMeta($start, $end, $reason);
+		    $resgroup->UpdateMeta($start, $end);
 		}
 	    }
 	    else {

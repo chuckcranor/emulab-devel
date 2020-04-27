@@ -447,25 +447,40 @@ sub Reservation($$)
     return undef;
 }
 
-sub UpdateMeta($$$$)
+sub UpdateMeta($$$)
 {
-    my ($self, $start, $end, $reason) = @_;
+    my ($self, $start, $end) = @_;
     my $uuid = $self->uuid();
     
     DBQueryWarn("update apt_reservation_groups set ".
-		" start=FROM_UNIXTIME($start),end=FROM_UNIXTIME($end), ".
-		" reason=" . DBQuoteSpecial($reason) . " " .
+		" start=FROM_UNIXTIME($start),end=FROM_UNIXTIME($end) ".
 		"where uuid='$uuid'")
 	or return -1;
     if (1) {
 	DBQueryWarn("update apt_reservation_group_history set ".
-		    " start=FROM_UNIXTIME($start),end=FROM_UNIXTIME($end), ".
-		    " reason=" . DBQuoteSpecial($reason) . " " .
+		    " start=FROM_UNIXTIME($start),end=FROM_UNIXTIME($end) ".
 		    "where uuid='$uuid'");
     }
 
     $self->{'DBROW'}->{'start'}  = $start;
     $self->{'DBROW'}->{'end'}    = $end;
+    return 0;
+}
+
+sub UpdateReason($$)
+{
+    my ($self, $reason) = @_;
+    my $uuid = $self->uuid();
+    
+    DBQueryWarn("update apt_reservation_groups set ".
+		" reason=" . DBQuoteSpecial($reason) . " " .
+		"where uuid='$uuid'")
+	or return -1;
+    if (1) {
+	DBQueryWarn("update apt_reservation_group_history set ".
+		    " reason=" . DBQuoteSpecial($reason) . " " .
+		    "where uuid='$uuid'");
+    }
     $self->{'DBROW'}->{'reason'} = $reason;
     return 0;
 }
@@ -1657,7 +1672,7 @@ sub SetAutoApprove($$$@)
 	    $ref->{"noautoapprove_reason"} = $message;
 	}
 	else {
-	    $ref->{'approved'} = 1;
+	    $ref->{'autoapprove'} = 1;
 	}
     }
     return 0;

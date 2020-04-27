@@ -291,17 +291,28 @@ class Aggregate
     #
     function DefaultAggregateList($user = null, $frontpage = false) {
         global $PORTAL_GENESIS, $PORTAL_HEALTH, $TBMAINSITE;
-	$genesis = $PORTAL_GENESIS;
-	if ($PORTAL_HEALTH)
-	{
-	  $genesis = "cloudlab";
-	}
 	$am_array = array();
 
+        if ($frontpage && $PORTAL_HEALTH) {
+            $query_result =
+                DBQueryFatal("select urn from apt_aggregates ".
+                             "where disabled=0 and adminonly=0");
+        
+            while ($row = mysql_fetch_array($query_result)) {
+                $urn = $row["urn"];
+
+                if (! ($aggregate = Aggregate::Lookup($urn))) {
+                    TBERROR("Aggregate::DefaultAggregateList: ".
+                            "Could not load aggregate $urn!", 1);
+                }
+                $am_array[$urn] = $aggregate;
+            }
+            return $am_array;
+        }
         $query_result =
             DBQueryFatal("select urn from apt_aggregates ".
                          "where disabled=0 and ".
-                         "      FIND_IN_SET('$genesis', portals)");
+                         "      FIND_IN_SET('$PORTAL_GENESIS', portals)");
         
 	while ($row = mysql_fetch_array($query_result)) {
             $urn       = $row["urn"];
@@ -495,7 +506,10 @@ class Aggregate
         $blob = array();
 
         $query_result =
-            DBQueryFatal("select * from apt_aggregate_radioinfo");
+            DBQueryFatal("select i.*,r.available from ".
+                         "  apt_aggregate_radioinfo as i ".
+                         "join apt_aggregate_reservable_nodes as r on ".
+                         "  r.urn=i.aggregate_urn and r.node_id=i.node_id");
 
         while ($row = mysql_fetch_array($query_result)) {
             $urn      = $row["aggregate_urn"];
