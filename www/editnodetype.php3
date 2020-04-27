@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -60,7 +60,7 @@ $optargs = OptionalPageArguments("submit",     PAGEARG_STRING,
                                  "classic", PAGEARG_BOOLEAN);
 
 if (!$CLASSICWEB_OVERRIDE && isset($node_type) && !$classic) {
-    header("Location: apt/show-nodetype.php?type=$node_type");
+    header("Location: apt/show-nodetype.php?type=$node_type&edit=1");
     return;
 }
 

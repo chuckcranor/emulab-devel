@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -60,7 +60,8 @@ if ($this_user && ISADMIN()) {
     SUBPAGESTART();
     SUBMENUSTART("More Options");
     WRITESUBMENUBUTTON("Edit this type",
-		       "editnodetype.php3?node_type=$node_type");
+		       "editnodetype.php3?node_type=$node_type".
+                       ($classic ? "&classic=1" : ""));
     WRITESUBMENUBUTTON("Create a PC type",
 		       "editnodetype.php3?new_type=1&node_class=pc");
     WRITESUBMENUBUTTON("Create a Switch type",
