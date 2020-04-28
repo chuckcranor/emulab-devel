@@ -3214,6 +3214,13 @@ sub GetTicketAuxAux($)
 		$ip     = "10.10.${linknum}.${ifacenum}";
 		$mask = "255.255.255.0" if (!defined($mask));
 	    }
+	    elsif (defined($ip) && !defined($mask)) {
+		$response =
+		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				 "$lanname:$node_nickname must provide a ".
+				  "netmask if you specify an IP address");
+		goto bad;
+	    }
 	    my $member    = "$node_nickname:$iface_vport";
 	    my $bandwidth = $default_bandwidth;
 	    my $rbandwidth= $default_bandwidth;
