@@ -687,7 +687,11 @@ sub HandleViolations($$)
 	}
 	$subject = "Transmit frequency/power violations on $nodeid";
 	$body    = "Transmit violations on ${nodeid}\@${OURDOMAIN}!\n\n";
-	$body   .= $explain . "\n";
+
+	# Help user to understand why they got the message.
+	if ($node->IsReserved()) {
+	    $body .= $explain . "\n";
+	}
 
 	foreach my $iface (keys(%{$violations->{$nodeid}})) {
 	    if (!exists($rflimits->{$nodeid}->{$iface})) {
