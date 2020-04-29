@@ -46,6 +46,10 @@ while [ ! $found -eq 1 ]; do
 	    #
 	    echo "CriticalConnection=yes" >> /run/systemd/network/${iface}.network
 	    found=1
+	    if [ -e $STATICRUNDIR/emulab-networkd/${iface}.network.tail ]; then
+		cat $STATICRUNDIR/emulab-networkd/${iface}.network.tail \
+		    >> /run/systemd/network/${iface}.network
+	    fi
 	fi
     fi
 done
