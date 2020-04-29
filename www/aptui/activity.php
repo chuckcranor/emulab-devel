@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,6 +34,7 @@ $page_title = "Activity";
 $optargs = OptionalPageArguments("target_user",    PAGEARG_USER,
 				 "target_project", PAGEARG_PROJECT,
                                  "portalonly",     PAGEARG_BOOLEAN,
+                                 "cluster",        PAGEARG_STRING,
                                  "min",            PAGEARG_INTEGER,
                                  "max",            PAGEARG_INTEGER);
 #
@@ -61,6 +62,15 @@ if (!$isadmin) {
         $target_user = $this_user;
     }
 }
+else {
+    if (isset($cluster)) {
+        $aggregate = Aggregate::LookupByNickname($cluster);
+        if (!$aggregate) {
+            SPITUSERERROR("No such cluster: $cluster");
+            exit();
+        }
+    }
+}    
 #
 # Allow for targeted searches
 #
@@ -102,6 +112,9 @@ if (isset($target_user)) {
 }
 elseif (isset($target_project)) {
     echo "    window.TARGET_PROJECT = '$target_pid';\n";
+}
+if (isset($aggregate)) {
+    echo "    window.CLUSTER = '$cluster';\n";
 }
 if (isset($portalonly) && $portalonly) {
     echo "    window.PORTALONLY = true;\n";

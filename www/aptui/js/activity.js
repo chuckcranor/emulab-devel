@@ -73,6 +73,9 @@ $(function () {
 	if (window.PORTALONLY) {
 	    args["portalonly"] = true;
 	}
+	if (window.CLUSTER) {
+	    args["cluster"] = window.CLUSTER;
+	}
 	var ip = $.trim($('#search-ip input').val());
 	if (ip != "") {
 	    var rx = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
@@ -83,6 +86,7 @@ $(function () {
 		alert("Invalid IP address");
 	    }
 	}
+	console.info(args);
 	sup.CallServerMethod(null, "activity", "Search", args, callback);
     }
 

@@ -28,6 +28,7 @@
 	  <th>% Full</th>
 	  <th>Inuse</th>
 	  <th>Total</th>
+	  <th class="sorter-false">Activity</th>
 	  <th class="sorter-false">URN</th>
 	  <th class="sorter-false">URL</th>
 	</tr>
@@ -58,6 +59,14 @@
 	    <td><%- value.ratio %></td>
 	    <td><%- value.pcount - value.pfree %></td>
 	    <td><%- value.pcount %></td>
+	    <td align="center">
+	      <a href="activity.php?cluster=<%- value.nickname %>"
+		 data-toggle='popover'
+		 data-trigger='hover'
+		 data-title="Activity for previous last 30 days"
+		<span class="glyphicon glyphicon-stats"></span>
+	      </a>
+	    </td>	    
 	    <td align="center">
 	      <a href="#" 
 		 data-toggle='popover'
