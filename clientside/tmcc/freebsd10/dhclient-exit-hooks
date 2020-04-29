@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -91,14 +91,6 @@ case "$new_host_name" in
 esac   
 
 #
-# If this is a newnode boot, boss (inner or outer) will have returned with
-# no hostname.  We don't need to record anything in this case, so skip it.
-#
-if [ x"$new_host_name" = x ]; then
-    exit 0
-fi
-
-#
 # Since we have our IP address, let's kill off all dhclient instances
 # so they don't interfere and shutdown all the other interfaces dhclient
 # was working on.
@@ -115,6 +107,14 @@ do
         ifconfig $_if down remove
     fi >>$LOGDIR/dhclient.log 2>&1
 done
+
+#
+# If this is a newnode boot, boss (inner or outer) will have returned with
+# no hostname.  We don't need to record anything in this case, so skip it.
+#
+if [ x"$new_host_name" = x ]; then
+    exit 0
+fi
 
 #
 # XXX compenstate for a stupid long time bug in the dhclient-script
