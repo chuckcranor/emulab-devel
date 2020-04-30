@@ -47,7 +47,7 @@ use Data::Dumper;
 #
 sub usage()
 {
-    print STDERR "Usage: createwbstore [-hd] -p pid -i instance host ...\n";
+    print STDERR "Usage: createwbstore [-hd] -p pid -i instance -o offset host ...\n";
     print STDERR "Create a write-back store for the specified experiment instance.\n";
     print STDERR "Options:\n";
     print STDERR "   -h          This message\n";
@@ -55,15 +55,17 @@ sub usage()
     print STDERR "   -k          Debug: keep temporary directories\n";
     print STDERR "   -p pid      Project ID of instance\n";
     print STDERR "   -i instance Instance UUID for experiment\n";
+    print STDERR "   -o offset   Integer offset from the base port\n";
     print STDERR "   host ...    FQDN of remote host(s)\n";
     print STDERR "\n";
     exit(-1);
 }
-my $optlist  = "hdki:p:";
+my $optlist  = "hdki:p:o:";
 my $debug = 0;
 my $keep = 0;
 my $pid;
 my $instance;
+my $portoffset;
 my $uuid;
 my @fqdns;
 my %hosts;
@@ -144,8 +146,14 @@ if (defined($options{p})) {
 if (defined($options{i})) {
     $instance = parseinstance($options{i});
 }
-if (!defined($pid) || !defined($instance)) {
-    print STDERR "Must specify an experiment pid and instance\n";
+if (defined($options{o})) {
+    $portoffset = $options{o};
+    if ($portoffset !~ /^\d+$/) {
+	fatal("Not a valid offset number");
+    }
+}
+if (!defined($pid) || !defined($instance) || !defined($portoffset)) {
+    print STDERR "Must specify an experiment pid, instance and port offset\n";
     usage();
 }
 if (@ARGV == 0) {
@@ -225,6 +233,8 @@ sub createconfig($)
     if (system("mkdir -p $tmpdir $metadir $datadir")) {
 	fatal("createconfig: could not create tmp directories");
     }
+    print STDERR "made '$tmpdir', '$metadir', '$datadir'\n"
+	if ($debug);
     if (chmod(0700, $tmpdir, $metadir) != 2 || chmod(0770, $datadir) != 1) {
 	fatal("createconfig: could not chmod tmp directories");
     }
@@ -236,7 +246,7 @@ sub createconfig($)
 
     # Generate the syncthing configuration. Includes config, keys, certs, ID.
     if (system("$STCMD -generate=$metadir >$tmpdir/$domain/st.log 2>&1")) {
-	fatal("Could not create tmp metadata directory '$metadir'");
+	fatal("could not create syncthing config in '$metadir'");
     }
 
     # Extract the Device ID and API key for customizing our template
@@ -264,6 +274,8 @@ sub customizeconfig($)
     my $cfile = "$metadir/config.xml";
     my $lpid = $hosts{$fqdn}{'pid'};
     my $lproj = $hosts{$fqdn}{'proj'};
+    my $port = 22000 + $portoffset;
+    my $gport = 8384 + $portoffset;
 
     if ($fqdn eq $SERVER) {
 	my %vars = (
@@ -271,9 +283,9 @@ sub customizeconfig($)
 	    FID       => "$instance-$domain",
 	    FLABEL    => $domain,
 	    FPATH     => "/$lproj/$lpid/wbstore/$instance/$domain",
-	    GUILISTEN => "127.0.0.1:8384",
+	    GUILISTEN => "127.0.0.1:$gport",
 	    MAXBW     => "0",
-	    MYADDR    => "tcp4://$fqdn",
+	    MYADDR    => "tcp4://$fqdn:$port",
 	    MYDEVID   => $hosts{$fqdn}{'devid'},
 	    MYNAME    => $fqdn,
 	    MYNET     => $EMULABNET,
@@ -293,13 +305,13 @@ sub customizeconfig($)
 	    FID       => "$instance-$domain",
 	    FLABEL    => $domain,
 	    FPATH     => "/$lproj/$lpid/wbstore/$instance/$domain",
-	    GUILISTEN => "127.0.0.1:8384",
+	    GUILISTEN => "127.0.0.1:$gport",
 	    MAXBW     => "500",
-	    MYADDR    => "tcp4://$fqdn",
+	    MYADDR    => "tcp4://$fqdn:$port",
 	    MYDEVID   => $hosts{$fqdn}{'devid'},
 	    MYNAME    => $fqdn,
 	    MYNET     => $EMULABNET,
-	    OTHERADDR => "tcp4://$SERVER",
+	    OTHERADDR => "tcp4://$SERVER:$port",
 	    OTHERDEVID=> $hosts{$SERVER}{'devid'},
 	    OTHERNAME => $SERVER,
 	    OTHERNET  => $EMULABNET,
@@ -404,6 +416,7 @@ sub parsehostname($)
 sub expandconfig($$$$@)
 {
     my ($cfile, $template, $vars, $fqdn, @rhosts) = @_;
+    my $port = 22000 + $portoffset;
 
     print "Vars:\n", Dumper($vars), "\n"
 	if ($debug);
@@ -439,7 +452,7 @@ sub expandconfig($$$$@)
 			FLABEL => $domain,
 			FPATH  => "/$lproj/$lpid/wbstore/$instance/$domain",
 			MYDEVID    => $vars->{'MYDEVID'},
-			OTHERADDR  => "tcp4://$rh",
+			OTHERADDR  => "tcp4://$rh:$port",
 			OTHERDEVID => $hosts{$rh}{'devid'},
 			OTHERNAME  => $rh,
 		    );
@@ -471,7 +484,7 @@ sub expandconfig($$$$@)
 		    fatal("Cannot open device template file");
 		foreach my $rh (@rhosts) {
 		    my %ovars = (
-			OTHERADDR  => "tcp4://$rh",
+			OTHERADDR  => "tcp4://$rh:$port",
 			OTHERDEVID => $hosts{$rh}{'devid'},
 			OTHERNAME  => $rh,
 			OTHERNET   => $EMULABNET,

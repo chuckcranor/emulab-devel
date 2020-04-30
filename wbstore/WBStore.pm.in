@@ -79,7 +79,7 @@ my $STDONE    = ".WBDONE";
 # time to wait for HTTP response to arrive
 my $apitimeout = 10;
 
-my $debug = 3;
+my $debug = 0;
 
 #
 # Lookup by <experiment-slice-URN>/<aggregate-FQDN>
@@ -250,6 +250,12 @@ sub LookupAll($)
     return @result;
 }
 
+sub SetDebug($$)
+{
+    my ($class, $ndebug) = @_;
+    $debug = $ndebug;
+}
+
 AUTOLOAD {
     my $self  = $_[0];
     my $type  = ref($self) or croak "$self is not an object";
@@ -348,15 +354,15 @@ sub IsRunning($)
 
 #
 # Returns a hash of known devices indicating whether each is connected or not.
-# Key is the devid, value is 1 if connected 0 if not.
-# Returns zero on success (with the hashref filled), 0 otherwise.
+# Key is the devid, value is 1 if connected, 0 if not.
+# Returns zero on success (with the hashref filled), an error otherwise.
 #
 sub GetConnections($$)
 {
     my ($self, $devref) = @_;
     my %devs = ();
 
-    return undef
+    return -1
 	if (!ref($self) || !$devref);
 
     my $robj = $self->GetREST();
@@ -366,9 +372,9 @@ sub GetConnections($$)
 			      undef, undef, undef, undef, \$msg);
     if (!$json) {
 	$msg =~ s/.*Syncthing API error: (.*)/$1/s;
-	print STDERR "$self: IsRunning: $msg\n"
+	print STDERR "$self: GetConnections: $msg\n"
 	    if ($debug);
-	return 0;
+	return -1;
     }
 
     foreach my $id (keys %{$json->{'connections'}}) {
@@ -380,7 +386,7 @@ sub GetConnections($$)
 	if ($debug > 1);
 
     $$devref = \%devs;
-    return 1;
+    return 0;
 }
 
 #
@@ -424,7 +430,8 @@ sub GetCompletionStatus($$)
 #   If 'lastid' is undef, it means since the last time we called
 #   If 'limit' is undef, it means all unread events
 #   If 'timeout' is undef, uses the object default 'apitimeout'
-# Returns an array of converted JSON events on success, undef on error.
+# Returns a reference to an array of converted JSON events on success,
+# undef on error.
 #
 sub GetEvents($$$$$)
 {
@@ -438,7 +445,7 @@ sub GetEvents($$$$$)
     # So you MUST specify the lastid.
     #
     return undef
-	if (!ref($self) || $lastid);
+	if (!ref($self) || !defined($lastid));
 
     # Check params and build up parameter string
     if ($evstr) {
@@ -461,7 +468,7 @@ sub GetEvents($$$$$)
 	print STDERR "GetEvents: Invalid event ID.\n";
 	return undef;
     }
-    if ($limit) {
+    if (defined($limit)) {
 	if ($limit =~ /^\d+$/) {
 	    $params{'limit'} = $limit;
 	} else {
@@ -469,7 +476,7 @@ sub GetEvents($$$$$)
 	    return undef;
 	}
     }
-    if ($timeout) {
+    if (defined($timeout)) {
 	if ($timeout =~ /^\d+$/) {
 	    $params{'timeout'} = $timeout;
 	} else {
@@ -488,29 +495,29 @@ sub GetEvents($$$$$)
 	$msg =~ s/.*Syncthing API error: (.*)/$1/s;
 	print STDERR "$self: GetEvents: $msg\n"
 	    if ($debug);
-	return -1;
+	return undef;
     }
 
     print STDERR "$self: STATUS:\n", Dumper($json), "\n"
 	if ($debug > 1 && scalar(@$json) <= 10);
 
-    my @events = @$json;
-    if (0 && @events > 0) {
+    if (0 && @$json > 0) {
 	#
 	# XXX note we use the 'globalID' here as 'id' seems to be based
 	# on the total number of events of the requested type(s).
 	#
-	$lastid = $events[$#events]->{'globalID'};
+	my $ix = @$json - 1;
+	$lastid = $json->[$ix]->{'globalID'};
 	if ($lastid &&
 	    (!defined($self->{'WBSTORE'}->{'lastevent'}) ||
 	     $lastid > $self->{'WBSTORE'}->{'lastevent'})) {
 	    $self->{'WBSTORE'}->{'lastevent'} = $lastid;
 	}
     }
-    print STDERR "GetEvents: returns " . scalar(@events) . " events\n"
+    print STDERR "GetEvents: returns " . scalar(@$json) . " events\n"
 	if ($debug);
 
-    return @events;
+    return $json;
 }    
 
 #
@@ -532,6 +539,16 @@ sub GetConfig($;$)
 	    return undef;
 	}
 	$self->{'CONFIG'} = $config;
+
+	# Extract our device ID as it is useful in various places
+	# XXX the device with our domain in the name is us
+	my $dref = $config->{'configuration'}[0]->{'device'};
+	foreach my $dev (@$dref) {
+	    if ($dev->{'name'} =~ /$OURDOMAIN$/) {
+		$self->{'WBSTORE'}->{'devid'} = $dev->{'id'};
+		last;
+	    }
+	}
     }
 
     return $config;
@@ -713,6 +730,57 @@ sub fsWatcherEnabled($;$)
     return $val;
 }
 
+sub GetDevID($) {
+    my ($self) = @_;
+    return undef
+	if (!ref($self));
+
+    my $config = $self->GetConfig();
+    return undef
+	if (!$config);
+
+    return $self->{'WBSTORE'}->{'devid'};
+}
+
+#
+# Return a hash of remote devices and their associated WBStore.
+# Hash key is the device ID and value is the WBStore (folder) ID.
+# Returns hashref on success, undef on failure.
+#
+# XXX we extract this from the config file.
+#
+sub GetDevices($)
+{
+    my ($self) = @_;
+    my %devs;
+
+    return undef
+	if (!ref($self));
+
+    my $config = $self->GetConfig();
+    return undef
+	if (!$config);
+
+    my $myid = $self->GetDevID();
+    return undef
+	if (!$myid);
+
+    # For each folder associate it with the proper device
+    my $ref = $config->{'configuration'}[0]->{'folder'};
+    foreach my $fref (@$ref) {
+	my $id = $fref->{'id'};
+	my $dref = $fref->{'device'};
+	foreach my $dev (@$dref) {
+	    my $did = $dev->{'id'};
+	    if ($did ne $myid) {
+		$devs{$did} = $id;
+	    }
+	}
+    }
+
+    return \%devs;
+}
+
 #
 # Parse the XML config file 'cfile' and store the result into the hash
 # referenced by 'xmlparse'.
@@ -857,7 +925,9 @@ sub Request($$;$$$$$)
     $method = "GET"
 	if (!defined($method));
 
-    $datastr = encode_json(\%data);
+    if ($datap) {
+	$datastr = encode_json(\%data);
+    }
     $paramstr = "";
     if ($paramp) {
 	my @params = ();
@@ -880,8 +950,10 @@ sub Request($$;$$$$$)
     );
     my %options = ("headers" => \%headers, "content" => $datastr); 
 
-    print STDERR "Request: URL: $url\nCONTENT: $datastr\n"
+    print STDERR "Request: URL: $url\n"
 	if ($debug > 2);
+    print STDERR "CONTENT: $datastr\n"
+	if ($datastr && $debug > 2);
 
     my $res = $http->request($method, $url, \%options);
 
