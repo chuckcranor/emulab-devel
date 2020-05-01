@@ -95,6 +95,11 @@ my $error           = 0;
 my %mustzero        = ();
 my $mustmakeconf    = 0;
 
+my @reloading_clear_attributes = (
+    "cnetwatch_disable",
+    "stated_noreboot"
+);
+
 #
 # Parse command arguments. Once we return from getopts, all that should
 # left are the required arguments.
@@ -678,9 +683,11 @@ foreach my $node (@freed_nodes) {
 	    $node->SetNodeHistory(TB_NODEHISTORY_OP_MOVE, $this_user,
 				  $reloading_experiment);
 
-	    # Clear node-specific cnetwatch ignores
-	    $node->ClearNodeAttribute('cnetwatch_disable') == 0
-		or $error++;
+	    # Clear experiment-lifetime node attributes
+	    foreach my $na (@reloading_clear_attributes) {
+		$node->ClearNodeAttribute($na) == 0
+		    or $error++;
+	    }
 
 	    # This little sillyness is for disk reloading.
 	    # Kill the last reservation since this path is special.
@@ -720,9 +727,11 @@ foreach my $node (@freed_nodes) {
 	$node->ClearPartitions();
 	$node->SetTaintStates(TB_TAINTSTATE_MUSTRELOAD());
 	
-	# Clear node-specific cnetwatch ignores
-	$node->ClearNodeAttribute('cnetwatch_disable') == 0
-	    or $error++;
+	# Clear experiment-lifetime node attributes
+	foreach my $na (@reloading_clear_attributes) {
+	    $node->ClearNodeAttribute($na) == 0
+		or $error++;
+	}
 
 	#
 	# The project still has the node, so this will be allowed. 
