@@ -1283,7 +1283,12 @@ sub handleCtrlEvent($$) {
 
 	    foreach ($action) {
 		/^$TBTIMEOUTREBOOT/ && do {
-		    if ($timedout>3) {
+		    my $noreboot;
+		    if (!$nodeobj->NodeAttribute("stated_noreboot", \$noreboot)
+			&& $noreboot) {
+			info("Node $node: Ignoring timeout reboot as directed\n");
+		    }
+		    elsif ($timedout>3) {
 			# We've tried too many times...
 			notify("Node $node has timed out too many times!\n".
 			       "Giving up until it boots sucessfully.\n");
