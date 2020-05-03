@@ -59,19 +59,18 @@ use vars qw(@ISA @EXPORT $AUTOLOAD);
 @EXPORT = qw ();
 
 # Must come after package declaration!
-use EmulabConstants;
-use emdb;
-use emutil;
 use libtestbed;
 
 # Configure variables
 my $TB        = "@prefix@";
-my $MAINSITE  = @TBMAINSITE@;
 my $TBOPS     = "@TBOPSEMAIL@";
 my $OURDOMAIN = "@OURDOMAIN@";
+my $MAINSITE  = @TBMAINSITE@;
 my $OPSNODE   = "@USERNODE@";
-my $PROJDIR   = "@PROJROOT_DIR@";
-my $METADIR   = ($MAINSITE ? "$TB/opsdir/wbstore" : "$TB/wbstore");
+# XXX we use the "realpath" when building syncthing config files
+# so we use FSDIR_PROJ and not PROJROOT_DIR
+my $PROJDIR   = "@FSDIR_PROJ@";
+my $METADIR   = "$TB/wbstore";
 my $STBIN     = "/usr/local/bin/syncthing";
 my $STMARKER  = ".stfolder";
 my $STDONE    = ".WBDONE";
@@ -95,7 +94,8 @@ sub Lookup($$;$)
     my $live = 0;
 
     if ($token !~ /^(\w{8}-\w{4}-\w{4}-\w{4}-\w{12})\/([-a-z0-9\.]+)$/i) {
-	print STDERR "WBStore Lookup: not a valid uuid/domain identifier\n"
+	print STDERR "WBStore Lookup: ".
+	    "'$token' is not a valid uuid/domain identifier\n"
 	    if ($debug);
 	return undef;
     }
@@ -109,13 +109,28 @@ sub Lookup($$;$)
     # aggregate.
     #
     if ($MAINSITE) {
-	$result = DBQueryWarn("select name,pid from apt_instances ".
-			      "where slice_uuid='$uuid'");
-	if ($result && $result->numrows) {
-	    ($name,$pid) = $result->fetchrow_array();
+	#
+	# XXX On the mothership, we actually run on ops where we do
+	# not have access to the DB. So we just assume all experiments
+	# are live for now.
+	#
+	if (1) {
 	    $live = 1;
+	} else {
+	    require emdb;
+	    emdb->import;
+
+	    $result = DBQueryWarn("select name,pid from apt_instances ".
+				  "where slice_uuid='$uuid'");
+	    if ($result && $result->numrows) {
+		($name,$pid) = $result->fetchrow_array();
+		$live = 1;
+	    }
 	}
     } else {
+	require emdb;
+	emdb->import;
+
 	$result = DBQueryWarn("select eid,pid from experiments ".
 			      "where eid_uuid='$uuid'");
 	if ($result && $result->numrows) {
@@ -131,27 +146,45 @@ sub Lookup($$;$)
     #
     if (!$live) {
 	if ($MAINSITE) {
-	    $result = DBQueryWarn("select name,pid from apt_instances ".
-				  "where slice_uuid='$uuid'");
-	    if ($result && $result->numrows) {
-		($name,$pid) = $result->fetchrow_array();
+	    if (1) {
+		;
 	    } else {
-		print STDERR "WBStore Lookup: invalid instance '$uuid': ".
-		    "not a valid past experiment\n"
-		    if ($debug);
-		return undef;
+		require emdb;
+		emdb->import;
+
+		$result = DBQueryWarn("select name,pid from apt_instance_history ".
+				      "where slice_uuid='$uuid'");
+		if ($result && $result->numrows) {
+		    ($name,$pid) = $result->fetchrow_array();
+		}
+		# XXX debug hack XXX
+		elsif ($uuid eq "00000000-0000-0000-0000-000000000000") {
+		    $name = "MikeHack";
+		    $pid = "emulab-ops";
+		}
+		else {
+		    print STDERR "WBStore Lookup: invalid instance '$uuid': ".
+			"not a valid past experiment\n"
+			if ($debug);
+		    return undef;
+		}
 	    }
 	}
     }
 
     #
     # There must be configuration and data directories.
+    # This is complicated because there may be only one syncthing
+    # (configuration) managing multiple WBStore instances.
     #
-    #   Config dir is /usr/testbed/wbstore/<uuid>/<domain>
+    #   Config dir is /usr/testbed/wbstore/<uuid>/$OURDOMAIN
     #   Data dir is extracted from the config file
     #   (should be /proj/<pid>/wbstore/<uuid>/<domain>)
     #
-    $cdir = "$METADIR/$uuid/$domain";
+    # Note that we put the "realpath" in the config file when we create it,
+    # so there might be some prefix to "/proj".
+    #
+    $cdir = "$METADIR/$uuid/$OURDOMAIN";
     my $cfile = "$cdir/config.xml";
     if (! -e $cfile) {
 	print STDERR "WBStore Lookup: invalid instance '$uuid': ".
@@ -160,36 +193,42 @@ sub Lookup($$;$)
 	return undef;
     }
     my @path = `grep path= $cfile`;
-    if ($? || @path != 1) {
+    if ($?) {
+	print STDERR "WBStore Lookup: invalid configuration file for '$uuid'\n"
+	    if ($debug);
+	return undef;
+    }
+    chomp(@path);
+    foreach my $path (@path) {
+	# Extract the part we care about
+	$path =~ s/.*path=\"([^\"]*)\".*/$1/;
+
+	#
+	# Make sure path is in the form we expect.
+	# Extract the pid (for dead instances) while we are in there.
+	#
+	if ($path !~ m#^$PROJDIR/([^/]+)/wbstore/$uuid/$domain$#) {
+	    next;
+	}
+	if (!$pid) {
+	    $pid = $1;
+	    $name = $uuid;
+	}
+
+	# Make sure it is a directory and has the syncthing marker
+	$ddir = "$PROJDIR/$pid/wbstore/$uuid/$domain";
+	if (! -d "$ddir" || ! -e "$ddir/$STMARKER") {
+	    print STDERR "WBStore Lookup: invalid instance '$uuid': ".
+		"data directory or marker does not exist\n"
+		if ($debug);
+	    return undef;
+	}
+    }
+    if (!$ddir) {
 	print STDERR "WBStore Lookup: invalid instance '$uuid': ".
 	    "no data directory path in config file\n"
 	    if ($debug);
 	return undef;
-    }
-
-    if ($path[0] !~ /path=\"([^\"]+)\"/ ||
-	! -d "$1" || ! -e "$1/$STMARKER") {
-	print STDERR "WBStore Lookup: invalid instance '$uuid': ".
-	    "data directory or marker does not exist\n"
-	    if ($debug);
-	return undef;
-    }
-    $ddir = $1;
-
-    #
-    # XXX for past experiments on aggregates, we can extract the pid
-    # from the data path.
-    #
-    if (!$pid) {
-	if ($ddir =~ /$PROJDIR\/([^\/]+)\/wbstore/) {
-	    $pid = $1;
-	    $name = "UNKNOWN";
-	} else {
-	    print STDERR "WBStore Lookup: invalid instance '$uuid': ".
-		"no pid name in data path\n"
-		if ($debug);
-	    return undef;
-	}
     }
 
     my $self            = {};
@@ -226,10 +265,55 @@ sub Lookup($$;$)
 }
 
 #
-# Find all current WBStores.
-# A "valid" WBStore is one whose config directory exists in $METADIR
+# Returns all WBStores associated with the given experiment UUID.
 #
-# XXX only works for aggregates right now.
+sub LookupByUUID($$)
+{
+    my ($class,$uuid) = @_;
+    my @result = ();
+
+    my $cfile = "$METADIR/$uuid/$OURDOMAIN/config.xml";
+    if (! -e "$cfile") {
+	print STDERR "WBStore LookupByUUID: ".
+	    "Could not find configfile '$cfile'\n"
+	    if ($debug > 1);
+	return @result;
+    }
+
+    #
+    # XXX we "parse" the syncthing config file with grep to find all
+    # path= attributes and lookup those.
+    #
+    my @path = `grep path= $cfile`;
+    if ($?) {
+	print STDERR "WBStore LookupByUUID: ".
+	    "grep for paths in $cfile failed: $?\n"
+	    if ($debug > 1);
+	return @result;
+    }
+    chomp(@path);
+    foreach my $path (@path) {
+	# Extract the part we care about
+	$path =~ s/.*path=\"([^\"]*)\".*/$1/;
+
+	# Make sure path is in the form we expect.
+	if ($path =~ m#^$PROJDIR/[^/]+/wbstore/$uuid/(.+)$#) {
+	    my $store = WBStore->Lookup("$uuid/$1");
+	    push(@result, $store)
+		if ($store);
+	} elsif ($debug) {
+	    print STDERR "WBStore LookupByUUID: ".
+		"found unexpected path '$path' in config file $cfile\n";
+	}
+    }
+
+    return @result;
+}
+
+#
+# Find all current WBStores.
+# All experiment instances will have a config dir $METADIR/$OURDOMAIN.
+# The config file for those instances might describe multiple WBStores.
 #
 sub LookupAll($)
 {
@@ -241,9 +325,7 @@ sub LookupAll($)
 
     foreach my $i (@idirs) {
 	if ($i =~ /^(\w{8}-\w{4}-\w{4}-\w{4}-\w{12})$/i) {
-	    my $store = WBStore->Lookup("$i/$OURDOMAIN");
-	    push(@result, $store)
-		if ($store);
+	    push(@result, WBStore->LookupByUUID($i));
 	}
     }
 
@@ -297,8 +379,9 @@ sub Stringify($)
     my ($self) = @_;
 
     my $uuid = $self->uuid();
+    my $dom = $self->domain();
 
-    return "[WBStore $uuid]";
+    return "[WBStore $uuid/$dom]";
 }
 
 #
@@ -342,7 +425,7 @@ sub IsRunning($)
 			      undef, undef, undef, undef, \$msg);
     if (!$json) {
 	$msg =~ s/.*Syncthing API error: (.*)/$1/s;
-	print STDERR "$self: IsRunning: $msg"
+	print STDERR "$self: IsRunning: $msg\n"
 	    if ($debug);
 	return undef;
     }
@@ -705,7 +788,8 @@ sub apiaddress($;$)
 }
 
 #
-# XXX this is intended for the aggregate config where there is only one folder
+# Get or set the fsWatcherEnabled attribute on the folder corresponding to
+# this instance. Returns the new value of the attributes or undef on error.
 #
 sub fsWatcherEnabled($;$)
 {
@@ -717,16 +801,22 @@ sub fsWatcherEnabled($;$)
     return undef
 	if (!$config);
 
+    my $wbid = $self->uuid() . "-" . $self->domain();
     my $ref = $config->{'configuration'}[0]->{'folder'};
-    if (scalar(@$ref) != 1 || !exists(@$ref[0]->{'fsWatcherEnabled'})) {
-	return undef;
+    foreach my $f (@$ref) {
+	if ($f->{'id'} eq $wbid) {
+	    if (!exists(@$ref[0]->{'fsWatcherEnabled'})) {
+		return undef;
+	    }
+	    if (scalar(@_) == 2) {
+		$f->{'fsWatcherEnabled'} = $val;
+	    } else {
+		$val = $f->{'fsWatcherEnabled'};
+	    }
+	    last;
+	}
     }
-    if (scalar(@_) == 2) {
-	@$ref[0]->{'fsWatcherEnabled'} = $val;
-    } else {
-	$val = @$ref[0]->{'fsWatcherEnabled'};
-    }
-
+    
     return $val;
 }
 
@@ -742,6 +832,9 @@ sub GetDevID($) {
     return $self->{'WBSTORE'}->{'devid'};
 }
 
+#
+# This call returns all devices associated with the syncthing
+# handling our WBStore.
 #
 # Return a hash of remote devices and their associated WBStore.
 # Hash key is the device ID and value is the WBStore (folder) ID.
@@ -858,9 +951,11 @@ use vars qw(@ISA @EXPORT $AUTOLOAD);
 @EXPORT = qw ( );
 
 use libtestbed;
-use libdb;
-use EmulabConstants;
-use emutil;
+if (!$MAINSITE) {
+require libdb;
+require EmulabConstants;
+require emutil;
+}
 use overload ('""' => 'Stringify');
 
 sub Create($$$;$)
@@ -951,14 +1046,14 @@ sub Request($$;$$$$$)
     my %options = ("headers" => \%headers, "content" => $datastr); 
 
     print STDERR "Request: URL: $url\n"
-	if ($debug > 2);
+	if ($debug > 3);
     print STDERR "CONTENT: $datastr\n"
-	if ($datastr && $debug > 2);
+	if ($datastr && $debug > 3);
 
     my $res = $http->request($method, $url, \%options);
 
     print STDERR "Request: RESPONSE: ", Dumper($res), "\n"
-	if ($debug > 2);
+	if ($debug > 3);
 
     $exstat = $status{$method}
 	if (!defined($exstat));

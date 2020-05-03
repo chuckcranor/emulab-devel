@@ -105,6 +105,7 @@ my  $optlist = "d:n1I:";
 my $TB       = "@prefix@";
 my $TBOPS    = "@TBOPSEMAIL@";
 my $OPSNODE  = "@USERNODE@";
+my $MAINSITE  = @TBMAINSITE@;
 my $METADIR  = "$TB/wbstore";
 my $STBIN    = "/usr/local/bin/syncthing";
 my $STMARKER = ".stfolder";
@@ -116,13 +117,12 @@ $ENV{'TBLOG_OFF'} = "yep";
 # Testbed Support library
 use lib ".";
 use lib "@prefix@/lib";
-use libdb;
 use libtestbed;
 use WBStore;
 
 # Protos
 sub parsehostname($);
-sub scanmetadir();
+sub getinstances();
 sub checksyncthing($$$;$);
 sub fatal($);
 sub logit($);
@@ -138,12 +138,13 @@ my $onceonly	= 0;
 #
 # Array of instance objects.
 # In addition to belonging to an active or past experiment, instances can
-# be in a variety of states:
+# be in a variety of states. The syncthing associated with an instance
+# can be one of:
 #
 #	DEAD:      no instance of syncthing is running
 #	RUNNING:   an instance of syncthing is running
 #
-# Remote devices associated with the instance can be in different states:
+# The "remote" side of the instance (a device) can be in different states:
 # 
 #	DEAD:      we have not received a DeviceConnected event
 #	CONNECTED: have received a DeviceConnected event
@@ -154,6 +155,7 @@ my $onceonly	= 0;
 #
 #	SCANNING:  have received a scan-waiting or scanning StateChanged event
 #	IDLE:      have received an idle StateChanged event
+#	DONE:      DONE sentinel exists, IDLE/SCANNING no longer matter
 #
 
 # Further, if the "done" indicator is set, we are in the process of
@@ -171,6 +173,7 @@ sub SYNCING()	{ "SYNCING"; }
 sub INSYNC()    { "INSYNC"; }
 sub SCANNING()	{ "SCANNING"; }
 sub IDLE()	{ "IDLE"; }
+my %syncthing = ();
 
 #
 # Turn off line buffering on output (dots ...).
@@ -224,7 +227,7 @@ if (CheckDaemonRunning("wbstore_monitor")) {
 }
 
 # Go to ground.
-if (!$debug) {
+if (!$debug && !$onceonly) {
     if (TBBackGround($logfile)) {
 	exit(0);
     }
@@ -261,16 +264,18 @@ while (1) {
     my $now = time();
 
     # Find all the write-back stores we have metadata for.
-    scanmetadir();
+    getinstances();
 
-    if (0) {
     #
     # Ensure all instances are running for current experiments
     #
-    foreach my $t (keys %instance) {
+    foreach my $t (sort keys %instance) {
 	my $inst = $instance{$t}{'obj'};
 	if ($inst->active()) {
-	    if (!checksyncthing($inst, 1, 0, { fsWatcherEnabled => "true" })) {
+	    # never enable fsWatcher on mothership
+	    $fswe = ($MAINSITE ? "false" : "true");
+
+	    if (!checksyncthing($inst, 1, 0, { fsWatcherEnabled => $fswe })) {
 		my $uuid = $inst->uuid();
 		logit("WARNING: $uuid: could not start syncthing");
 	    }
@@ -285,12 +290,24 @@ while (1) {
     #
     foreach my $t (keys %instance) {
 	my $inst = $instance{$t}{'obj'};
-	if (!$inst->active()) {
-	    ;
+	next
+	    if ($inst->active());
+
+	#
+	# XXX right now we just fire them all up in non-watcher mode!
+	#
+	if (!checksyncthing($inst, 1, 0, { fsWatcherEnabled => "false" })) {
+	    my $uuid = $inst->uuid();
+	    logit("WARNING: $uuid: could not start syncthing");
 	}
-    }
-# sub checksyncthing($$$;$)
-#  my ($instance, $forcestart, $forcestop, $attrs) = @_;
+
+	#
+	# Cases:
+	#
+	# done/not
+	# 1. done and DEAD: assume we are all finished arrange to remove
+	# 2. done, RUNNING, 
+	#
     }
 
     logit("=== Finished pass.");
@@ -304,12 +321,18 @@ fatal("forever just ended!");
 
 #
 # Get events of interest for this instance.
+#
 # Returns a reference to an array of hashrefs of event info or undef on error.
+#
+# XXX This is really a syncthing call as we return events for all WBStores
+# managed by a syncthing. We are careful to only call this once per
+# syncthing, but we really need to sort the two things out.
 #
 sub getevents($)
 {
     my ($inst) = @_;
     my @events = ();
+    my $st = $syncthing{$inst->uuid()};
 
     #
     # XXX we just get all events to be safe.
@@ -321,13 +344,11 @@ sub getevents($)
     #
     my $wanttype = undef;
 
-    my $lastid = ($inst->_lastscan() ? $inst->_lastscan() : 0);
+    my $lastid = ($st->{'lastscan'} ? $st->{'lastscan'} : 0);
     print STDERR "get events starting at $lastid\n"
 	if ($debug);
 
-logit("doing GetEvents");
     $evref = $inst->GetEvents($wanttype, $lastid, undef, 1);
-logit("back from GetEvents with ". scalar(@$evref). " events");
     if (!$evref) {
 	logit("$inst: could not get events!");
 	return undef;
@@ -335,18 +356,20 @@ logit("back from GetEvents with ". scalar(@$evref). " events");
     if (@$evref == 0) {
 	return @events;
     }
+    print STDERR "getevents from index $lastid returned ",
+	scalar(@$evref), " events\n"
+	if ($debug);
 
     #
     # Fetch our device -> folder mapping
     # We need a folder -> device hash, so gen that up.
     #
-    my $devs = $inst->_devices();
+    my $devs = $st->{'devinfo'};
     my %folders;
     foreach my $did (keys %$devs) {
 	$folders{$devs->{$did}{'folder'}} = $did;
     }
 
-    my $myid = defined($inst->_id()) ? $inst->_id : "";
     foreach my $e (@$evref) {
 	my $etype = $e->{'type'};
 	my $ev = {
@@ -358,18 +381,18 @@ logit("back from GetEvents with ". scalar(@$evref). " events");
 	$lastid = $e->{'id'};
 
 	if ($etype eq "DeviceConnected" || $etype eq "DeviceDisconnected") {
-	    # only care when it isn't us
-	    next if ($e->{'data'}->{'id'} eq $myid);
-
 	    $ev->{'device'} = $e->{'data'}->{'id'};
 	} elsif ($etype eq "FolderCompletion") {
-	    # only care when it isn't us
-	    next if ($e->{'data'}->{'device'} eq $myid);
+	    # make sure it is a folder under our control
+	    next if (!exists($folders{$e->{'data'}->{'folder'}}));
 
 	    $ev->{'device'} = $e->{'data'}->{'device'};
 	    $ev->{'folder'} = $e->{'data'}->{'folder'};
 	    $ev->{'pct'} = int($e->{'data'}->{'completion'});
 	} elsif ($etype eq "StateChanged") {
+	    # make sure it is a folder under our control
+	    next if (!exists($folders{$e->{'data'}->{'folder'}}));
+
 	    $ev->{'device'} = $folders{$e->{'data'}->{'folder'}};
 	    $ev->{'folder'} = $e->{'data'}->{'folder'};
 	    $ev->{'from'} = $e->{'data'}->{'from'};
@@ -381,7 +404,7 @@ logit("back from GetEvents with ". scalar(@$evref). " events");
 	push @events, $ev;
     }
 
-    $inst->_lastscan($lastid);
+    $st->{'lastscan'} = $lastid;
     return \@events;
 }
 
@@ -392,7 +415,7 @@ logit("back from GetEvents with ". scalar(@$evref). " events");
 sub setdevicestates($)
 {
     my ($inst) = @_;
-    my $devs = $inst->_devices();
+    my $devs = $syncthing{$inst->uuid()}{'devinfo'};
     if (keys %$devs == 0) {
 	return;
     }
@@ -403,7 +426,6 @@ sub setdevicestates($)
 	print STDERR "$inst: EVENTS:\n", Dumper($evlist), "\n";
     }
 
-    my $myid = $inst->_id();
     my %laststate = ();
     foreach my $e (@$evlist) {
 	my $etype = $e->{'type'};
@@ -411,7 +433,7 @@ sub setdevicestates($)
 
 	# we only care about wbstore devices (there should not be others)
 	if (!exists($devs->{$devid})) {
-	    if ($debug && $myid ne $devid) {
+	    if ($debug) {
 		print STDERR "$devid: unknown remote device ignored\n";
 	    }
 	    next;
@@ -426,7 +448,6 @@ sub setdevicestates($)
 	    next;
 	}
 
-	my $name = $devs->{$devid}{'name'};
 	if ($etype eq "DeviceConnected") {
 	    $devs->{$devid}{'state'} = CONNECTED;
 	} elsif ($etype eq "DeviceDisconnected") {
@@ -452,9 +473,25 @@ sub setdevicestates($)
 }
 
 #
-# Janky parse of syncthing metadata to determine outstanding instances.
+# Find all WBStore instances and gather info about their current state.
+# Note that a WBStore instance refers to a directory ("folder") that is
+# synced between an aggregate boss and the mothership. On the mothership,
+# WBStore instances may share the same syncthing process.
 #
-sub scanmetadir()
+# Because of this, we create our own syncthing objects since much of what
+# we do is related to those processes. syncthing "objects" are indexed by
+# experiment instance UUIDs.
+#
+# XXX things are screwed up right now because we do not correctly distinguish
+# between our per instance+aggregate WBStore objects and the underlying
+# syncthing. I had been assuming they were one-to-one. As a result, some
+# WBStore methods (e.g., GetEvents) should really be methods on a real
+# syncthing object. It still works, we just might make multiple calls to
+# the same syncthing for different WBStores. This matters for a method
+# such as GetEvents where we return lots of data covering all WBStores
+# and we don't really want to be making redundent calls for the same info.
+#
+sub getinstances()
 {
     if (TBScriptLock("wbstore", 1, 0) != TBSCRIPTLOCK_OKAY()) {
 	fatal("Could not get wbstore metadata lock!");
@@ -462,12 +499,16 @@ sub scanmetadir()
 
     #
     # Determine all current instances, adding new ones and removing those
-    # that no longer exist.
+    # that no longer exist. Ditto for syncthing instances.
     #
     my @ninstance = WBStore->LookupAll();
     foreach my $t (keys %instance) {
 	delete $instance{$t}{'found'};
     }
+    foreach my $st (keys %syncthing) {
+	delete $syncthing{$st}{'found'};
+    }
+
     foreach my $ni (@ninstance) {
 	my $token = $ni->uuid() . "/" . $ni->domain();
 	if (!exists($instance{$token})) {
@@ -475,6 +516,7 @@ sub scanmetadir()
 	    $instance{$token}{'obj'} = $ni;
 	}
 	$instance{$token}{'found'} = 1;
+	$syncthing{$ni->uuid()}{'found'} = 1;
     }
     @ninstance = ();
     foreach my $t (keys %instance) {
@@ -484,124 +526,170 @@ sub scanmetadir()
 	    delete $instance{$t};
 	}
     }
+    foreach my $st (keys %syncthing) {
+	if (!exists($syncthing{$st}{'found'})) {
+	    delete $syncthing{$st};
+	} else {
+	    # we are going to use this below
+	    delete $syncthing{$st}{'found'};
+	}
+    }
     
-    foreach my $t (keys %instance) {
+    foreach my $t (sort keys %instance) {
 	my $inst = $instance{$t}{'obj'};
 	my $uuid = $inst->uuid();
-	my $ddir = $inst->datadir();
 	my ($piddead,$apidead);
-	my $mydevs = $inst->_devices();
+	my $mydevs;
 
-	# See if syncing is done
+	#
+	# See if syncthing process is running.
+	# Since multiple instances may use the same syncthing instance,
+	# we are careful to only do this once per syncthing.
+	#
+	if (!exists($syncthing{$uuid}{'found'})) {
+	    $syncthing{$uuid}{'found'} = 1;
+
+	    if (checksyncthing($inst, 0, 0)) {
+		$piddead = 0;
+	    } else {
+		$piddead = 1;
+	    }
+	    # See if API is responding
+	    my $id = $inst->IsRunning();
+	    if ($id) {
+		$apidead = 0;
+		$inst->_id($id);
+	    } else {
+		$apidead = 1;
+	    }
+	    # Attempt to reconcile the two
+	    if ($piddead && $apidead) {
+		$syncthing{$uuid}{'state'} = DEAD;
+	    } elsif ($piddead || $apidead) {
+		$syncthing{$uuid}{'state'} = WTF;
+	    } else {
+		$syncthing{$uuid}{'state'} = RUNNING;
+
+		#
+		# Collect an initial notion of syncthing's devices and
+		# their state.
+		#
+		if (!exists($syncthing{$uuid}{'devinfo'})) {
+		    $mydevs = {};
+
+		    #
+		    # Find all of our peer devices and the associated folders.
+		    # For an aggregate, there should only be one.
+		    # For the mothership, there could be connections for
+		    # multiple aggregates.
+		    #
+		    my $alldevs = $inst->GetDevices();
+		    if ($alldevs) {
+			foreach my $d (keys %$alldevs) {
+			    my $folder = $alldevs->{$d};
+			    $mydevs->{$d}{'folder'} = $folder;
+			    $mydevs->{$d}{'state'} = DEAD;
+			}
+		    } else {
+			logit("$inst: could not get devices, ignored");
+			next;
+		    }
+		    
+		    #
+		    # Take an initial stab at their state as returned by
+		    # syncthing.
+		    #
+		    my $devs;
+		    if ($inst->GetConnections(\$devs) == 0) {
+			foreach my $cid (keys %$devs) {
+			    next
+				if (!exists($mydevs->{$cid}));
+
+			    if ($devs->{$cid}) {
+				$mydevs->{$cid}{'state'} = CONNECTED;
+			    } else {
+				$mydevs->{$cid}{'state'} = DEAD;
+			    }
+			}
+		    } else {
+			logit("$inst: could not get device connections, ".
+			      "ignored");
+			next;
+		    }
+		    $syncthing{$uuid}{'devinfo'} = $mydevs;
+		    if ($debug > 1) {
+			print STDERR "$inst: DEVICES:\n",
+			    Dumper($mydevs), "\n";
+		    }
+		} else {
+		    $mydevs = $syncthing{$uuid}{'devinfo'};
+		}
+
+		#
+		# Look at the event stream to determine the state of our
+		# connected devices and see if they are in sync.
+		#
+		# How do we know that? We should have a "DeviceConnected"
+		# event followed by a "FolderCompletion" for that device
+		# that shows 100% and the latest "StateChanged" should
+		# show that the folder is idle (not scan-waiting or scanning).
+		# There should be no disconnects or non-100% completion events
+		# after. 
+		#
+		setdevicestates($inst);
+	    }
+	} else {
+	    $mydevs = $syncthing{$uuid}{'devinfo'};
+	}
+
+	#
+	# See if the DONE sentinel exists. We use this to set the
+	# folder state over riding any setting in the devinfo.
+	#
 	my $done = 0;
+	my $ddir = $inst->datadir();
 	if (-e "$ddir/$STDONE") {
 	    $done = 1;
 	}
-	$inst->_done($done);
 
-	# See if syncthing process is running
-	if (checksyncthing($inst, 0, 0)) {
-	    $piddead = 0;
-	} else {
-	    $piddead = 1;
-	}
-	# See if API is responding
-	my $id = $inst->IsRunning();
-	if ($id) {
-	    $apidead = 0;
-	    $inst->_id($id);
-	} else {
-	    $apidead = 1;
-	}
-	# Attempt to reconcile the two
-	if ($piddead && $apidead) {
-	    $inst->_state(DEAD);
-	} elsif ($piddead || $apidead) {
-	    $inst->_state(WTF);
-	} else {
-	    #
-	    # We are at least running.
-	    #
-	    $inst->_state(RUNNING);
-
-	    if (!$mydevs) {
-		$mydevs = {};
-
-		#
-		# Find all of our peer devices and the associated folders.
-		# For an aggregate, there should only be one.
-		# For the mothership, there could be connections for
-		# multiple aggregates.
-		#
-		my $alldevs = $inst->GetDevices();
-		if ($alldevs) {
-		    foreach my $d (keys %$alldevs) {
-			my $folder = $alldevs->{$d};
-			$mydevs->{$d}{'folder'} = $folder;
-			# provide a more palatable name for messages
-			if ($folder =~ /^.*-([a-z0-9\.]+)$/i) {
-			    $mydevs->{$d}{'name'} = $1;
-			} else {
-			    $mydevs->{$d}{'name'} = $folder;
-			}
-			$mydevs->{$d}{'state'} = DEAD;
-		    }
-		} else {
-		    logit("$inst: could not get devices, ignored");
-		    next;
-		}
-		
-		#
-		# Take an initial stab at their state as returned by syncthing
-		#
-		my $devs;
-		if ($inst->GetConnections(\$devs) == 0) {
-		    foreach my $cid (keys %$devs) {
-			next
-			    if (!exists($mydevs->{$cid}));
-
-			if ($devs->{$cid}) {
-			    $mydevs->{$cid}{'state'} = CONNECTED;
-			} else {
-			    $mydevs->{$cid}{'state'} = DEAD;
-			}
-		    }
-		} else {
-		    logit("$inst: could not get device connections, ignored");
-		    next;
-		}
-		$inst->_devices($mydevs);
-		if ($debug > 1) {
-		    print STDERR "$inst: DEVICES:\n", Dumper($mydevs), "\n";
+	#
+	# Find the "other" device that shares our WBStore
+	#
+	my $rid;
+	if ($mydevs) {
+	    my $myfolder = "$uuid-" . $inst->domain();
+	    foreach my $dev (keys %$mydevs) {
+		if ($mydevs->{$dev}{'folder'} eq $myfolder) {
+		    $rid = $dev;
+		    $inst->_remoteid($dev);
+		    last;
 		}
 	    }
-
-	    #
-	    # Look at the event stream to determine the state of our
-	    # connected devices and see if they are in sync.
-	    #
-	    # How do we know that? We should have a "DeviceConnected"
-	    # event followed by a "FolderCompletion" for that device
-	    # that shows 100% and the latest "StateChanged" should
-	    # show that the folder is idle (not scan-waiting or scanning).
-	    # There should be no disconnects or non-100% completion events
-	    # after. 
-	    #
-	    setdevicestates($inst);
 	}
 
+	#
+	# Propagate all the appropriate state from the syncthing to our
+	# instance. Syncthing device info is indexed by the device ID.
+	#
+	if ($rid) {
+	    $inst->_state($mydevs->{$rid}{'state'});
+	    $inst->_fstate($done ? DONE : $mydevs->{$rid}{'fstate'});
+	} elsif (exists($syncthing{$uuid}{'state'})) {
+	    $inst->_state($syncthing{$uuid}{'state'});
+	    $inst->_fstate($done ? DONE : IDLE);
+	}
+	
 	my $active = $inst->active();
-	my $state = $inst->_state();
+	my $STstate = $syncthing{$uuid}{'state'};
+	my $Rstate = $inst->_state();
+	my $WBstate = $inst->_fstate();
 	if ($debug) {
-	    print STDERR "Found instance '$uuid', state $state, ",
+	    my $name = $uuid;
+	    $name .= "/" . $inst->domain() if ($MAINSITE);
+	    print STDERR "[$name]: ",
+		"state (syncthing/remote/store) $STstate/$Rstate/$WBstate, ",
 		($active ? "active" : "past", " experiment"),
 		($done ? ", final sync done" : ""), "\n";
-	    foreach my $devid (keys %$mydevs) {
-		my $dname = $mydevs->{$devid}{'name'};
-		my $dstate = $mydevs->{$devid}{'state'};
-		my $fstate = $mydevs->{$devid}{'fstate'};
-		print STDERR "  Device $dname: $dstate, $fstate\n";
-	    }
 	}
     }
     TBScriptUnlock();
@@ -609,7 +697,14 @@ sub scanmetadir()
 
 #
 # Check whether a syncthing process is running for the experiment identified
-# by $instance. If $forcestart ($forcestop) is non-zero, start (stop)
+# by $instance. Because a WBStore instances refers to a directory ("folder")
+# and multiple folders may be managed by the same syncthing instance,
+# WBStore instances may share the same syncthing process.
+#
+# Because of this, we create our own syncthing objects since much of what
+# we do is related to those processes.
+#
+# If $forcestart ($forcestop) is non-zero, start (stop)
 # syncthing. If $attrs is set, it is a hash reference of syncthing folder
 # or device attributes (name=>value) that should be set as indicated.
 #
@@ -694,7 +789,8 @@ sub checksyncthing($$$;$)
 
     # Not running and we want it running; start it
     if (!$running && $forcestart) {
-	my $log = "/dev/null";
+	#my $log = "/dev/null";
+	my $log = "$confdir/st.log";
 	my $cmd = "$STBIN -no-browser -home=\"$confdir\"";
 	if (system("($cmd >$log 2>&1 & echo \$!) > $pidfile")) {
 	    logit("WARNING: $inst: could not run '$cmd', see '$log'");
@@ -740,7 +836,7 @@ sub modifyconfig($$$)
     my $changed = 0;
 
     print STDERR "Attrs:\n", Dumper($attrs), "\n"
-	if ($debug);
+	if ($debug > 1);
 
     while (my ($a,$v) = each %$attrs) {
 	if ($a eq "fsWatcherEnabled") {
