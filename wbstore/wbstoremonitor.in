@@ -109,7 +109,6 @@ my $MAINSITE  = @TBMAINSITE@;
 my $METADIR  = "$TB/wbstore";
 my $STBIN    = "/usr/local/bin/syncthing";
 my $STMARKER = ".stfolder";
-my $STDONE   = ".WBDONE";
 
 # Set this to turn off tblog in libraries.
 $ENV{'TBLOG_OFF'} = "yep";
@@ -204,7 +203,7 @@ if (defined($options{"n"})) {
     $impotent = 1;
 }
 if (defined($options{"I"})) {
-    $checkint = $options{"I"} ;#* 60;
+    $checkint = $options{"I"} * 60;
 }
 if (defined($options{"1"})) {
     $onceonly = 1;
@@ -345,7 +344,7 @@ sub getevents($)
     my $wanttype = undef;
 
     my $lastid = ($st->{'lastscan'} ? $st->{'lastscan'} : 0);
-    print STDERR "get events starting at $lastid\n"
+    print STDERR "$inst: get events starting at $lastid\n"
 	if ($debug);
 
     $evref = $inst->GetEvents($wanttype, $lastid, undef, 1);
@@ -356,7 +355,7 @@ sub getevents($)
     if (@$evref == 0) {
 	return @events;
     }
-    print STDERR "getevents from index $lastid returned ",
+    print STDERR "$inst: getevents from index $lastid returned ",
 	scalar(@$evref), " events\n"
 	if ($debug);
 
@@ -549,6 +548,8 @@ sub getinstances()
 	if (!exists($syncthing{$uuid}{'found'})) {
 	    $syncthing{$uuid}{'found'} = 1;
 
+	    print STDERR "$inst: gathering info for syncthing...\n"
+		if ($debug);
 	    if (checksyncthing($inst, 0, 0)) {
 		$piddead = 0;
 	    } else {
@@ -558,7 +559,6 @@ sub getinstances()
 	    my $id = $inst->IsRunning();
 	    if ($id) {
 		$apidead = 0;
-		$inst->_id($id);
 	    } else {
 		$apidead = 1;
 	    }
@@ -643,35 +643,22 @@ sub getinstances()
 	}
 
 	#
-	# See if the DONE sentinel exists. We use this to set the
-	# folder state over riding any setting in the devinfo.
+	# See if the DONE sentinel exists. The sentinel is a file called
+	# ".<folder-id>" in the folder. It is highly unlikely that any
+	# application will produce a file with this name.
 	#
 	my $done = 0;
-	my $ddir = $inst->datadir();
-	if (-e "$ddir/$STDONE") {
+	my $sentinel = $inst->datadir() . "/.$uuid-" . $inst->domain();
+	if (-e "$sentinel") {
 	    $done = 1;
-	}
-
-	#
-	# Find the "other" device that shares our WBStore
-	#
-	my $rid;
-	if ($mydevs) {
-	    my $myfolder = "$uuid-" . $inst->domain();
-	    foreach my $dev (keys %$mydevs) {
-		if ($mydevs->{$dev}{'folder'} eq $myfolder) {
-		    $rid = $dev;
-		    $inst->_remoteid($dev);
-		    last;
-		}
-	    }
 	}
 
 	#
 	# Propagate all the appropriate state from the syncthing to our
 	# instance. Syncthing device info is indexed by the device ID.
 	#
-	if ($rid) {
+	my $rid = $inst->remoteid();
+	if ($rid && exists($mydevs->{$rid})) {
 	    $inst->_state($mydevs->{$rid}{'state'});
 	    $inst->_fstate($done ? DONE : $mydevs->{$rid}{'fstate'});
 	} elsif (exists($syncthing{$uuid}{'state'})) {

@@ -73,10 +73,12 @@ my $PROJDIR   = "@FSDIR_PROJ@";
 my $METADIR   = "$TB/wbstore";
 my $STBIN     = "/usr/local/bin/syncthing";
 my $STMARKER  = ".stfolder";
-my $STDONE    = ".WBDONE";
 
 # time to wait for HTTP response to arrive
 my $apitimeout = 10;
+
+# All instances for an aggregate share one syncthing config
+my %stconfigs = ();
 
 my $debug = 0;
 
@@ -251,7 +253,8 @@ sub Lookup($$;$)
     $self->{'REST'} = undef;
     
     # Read the configuration file info now if desired.
-    $self->{'CONFIG'} = undef;
+    $self->{'WBSTORE'}->{'devid'} = undef;
+    $self->{'WBSTORE'}->{'remoteid'} = undef;
     if ($getconfig) {
 	if (!GetConfig($self, 1)) {
 	    print STDERR "WBStore Lookup: could not read config file.\n"
@@ -368,7 +371,6 @@ sub DESTROY {
 
     $self->{'WBSTORE'} = undef;
     $self->{'HASH'}    = undef;
-    $self->{'CONFIG'}  = undef;
 }
 
 #
@@ -535,7 +537,8 @@ sub GetEvents($$$$$)
 	if ($evstr =~ /^[A-Za-z,]+$/) {
 	    $params{'events'} = $evstr;
 	} else {
-	    print STDERR "GetEvents: Invalid event type string.\n";
+	    print STDERR "GetEvents: Invalid event type string.\n"
+		if ($debug);
 	    return undef;
 	}
     }
@@ -548,14 +551,16 @@ sub GetEvents($$$$$)
     if ($lastid =~ /^\d+$/) {
 	$params{'since'} = $lastid;
     } else {
-	print STDERR "GetEvents: Invalid event ID.\n";
+	print STDERR "GetEvents: Invalid event ID.\n"
+	    if ($debug);
 	return undef;
     }
     if (defined($limit)) {
 	if ($limit =~ /^\d+$/) {
 	    $params{'limit'} = $limit;
 	} else {
-	    print STDERR "GetEvents: Invalid limit.\n";
+	    print STDERR "GetEvents: Invalid limit.\n"
+		if ($debug);
 	    return undef;
 	}
     }
@@ -563,7 +568,8 @@ sub GetEvents($$$$$)
 	if ($timeout =~ /^\d+$/) {
 	    $params{'timeout'} = $timeout;
 	} else {
-	    print STDERR "GetEvents: Invalid timeout.\n";
+	    print STDERR "GetEvents: Invalid timeout.\n"
+		if ($debug);
 	    return undef;
 	}
     } else {
@@ -614,23 +620,75 @@ sub GetConfig($;$)
     return undef
 	if (!ref($self));
 
-    my $config = $self->{'CONFIG'};
+    my $config;
+    my $uuid = $self->uuid();
+    if (exists($stconfigs{$uuid})) {
+	$config = $stconfigs{$uuid};
+    }
+
     if (!$config || $force) {
-	my $cfile = $self->{'WBSTORE'}->{'confdir'} . "/config.xml";
+	my $cfile = "$METADIR/$uuid/$OURDOMAIN/config.xml";
 	if (ReadConfig($cfile, \$config)) {
-	    print STDERR "$self: could not read configuration from '$cfile'\n";
+	    print STDERR "$self: could not read configuration from '$cfile'\n"
+		if ($debug);
+	    $stconfigs{$uuid} = undef;
 	    return undef;
 	}
-	$self->{'CONFIG'} = $config;
+	$stconfigs{$uuid} = $config;
 
-	# Extract our device ID as it is useful in various places
-	# XXX the device with our domain in the name is us
+	# force these to be reread in case someone else flushed the config
+	$self->{'WBSTORE'}->{'devid'} = undef;
+	$self->{'WBSTORE'}->{'remoteid'} = undef;
+    }
+
+    #
+    # Extract our device ID as it is useful in various places
+    # XXX the device with our domain in the name is us
+    #
+    if (!$self->{'WBSTORE'}->{'devid'}) {
+	my $myid;
 	my $dref = $config->{'configuration'}[0]->{'device'};
 	foreach my $dev (@$dref) {
 	    if ($dev->{'name'} =~ /$OURDOMAIN$/) {
-		$self->{'WBSTORE'}->{'devid'} = $dev->{'id'};
+		$myid = $self->{'WBSTORE'}->{'devid'} = $dev->{'id'};
 		last;
 	    }
+	}
+	if (!$myid) {
+	    print STDERR "$self: could not get our device ID\n"
+		if ($debug);
+	    return undef;
+	}
+
+	#
+	# Every instance (folder) has a specific "other side" as well.
+	# Save the device ID for that as well.
+	#
+	my $wbid = $self->uuid() . "-" . $self->domain();
+	my $fref = $config->{'configuration'}[0]->{'folder'};
+	foreach my $f (@$fref) {
+	    if ($f->{id} eq $wbid) {
+		foreach my $dev (@{$f->{'device'}}) {
+		    if ($dev->{'id'} ne $myid) {
+			$self->{'WBSTORE'}->{'remoteid'} = $dev->{'id'};
+			last;
+		    }
+		}
+		last;
+	    }
+	}
+	if (!$self->{'WBSTORE'}->{'remoteid'}) {
+	    print STDERR "$self: could not get remote device ID\n"
+		if ($debug);
+	    return undef;
+	}
+
+	if ($debug) {
+	    my $myid = $self->{'WBSTORE'}->{'devid'};
+	    $myid =~ s/.*(....)$/$1/;
+	    my $rmid = $self->{'WBSTORE'}->{'remoteid'};
+	    $rmid =~ s/.*(....)$/$1/;
+	    print STDERR "$self: ...$myid -> ...$rmid\n";
 	}
     }
 
@@ -643,14 +701,18 @@ sub GetConfig($;$)
 #
 sub PutConfig($;$)
 {
-    my ($self,$cfile) = @_;
-    my $config = $self->{'CONFIG'};
+    my ($self, $cfile) = @_;
 
     return -1
-	if (!ref($self) || !$config);
+	if (!ref($self));
+
+    my $uuid = $self->uuid();
+    my $config = $stconfigs{$uuid};
+    return -1
+	if (!$config);
     
     if (!$cfile) {
-	$cfile = $self->{'WBSTORE'}->{'confdir'} . "/config.xml";
+	my $cfile = "$METADIR/$uuid/$OURDOMAIN/config.xml";
     }
     if (WriteConfig($cfile, $config)) {
 	print STDERR "$self: could not write configuration '$cfile'\n";
@@ -670,7 +732,7 @@ sub FlushConfig($)
     return -1
 	if (!ref($self));
 
-    $self->{'CONFIG'}  = undef;
+    $stconfigs{$self->uuid()} = undef;
     return 0;
 }
 
@@ -732,6 +794,35 @@ sub ModifyConfig($$$)
     }
 
     return $changed;
+}
+
+#
+# These methods get their info as a side effect of GetConfig
+#
+sub devid($)
+{
+    my ($self) = @_;
+    return undef
+	if (!ref($self));
+
+    my $config = $self->GetConfig();
+    return undef
+	if (!$config);
+
+    return $self->{'WBSTORE'}->{'devid'};
+}
+
+sub remoteid($)
+{
+    my ($self) = @_;
+    return undef
+	if (!ref($self));
+
+    my $config = $self->GetConfig();
+    return undef
+	if (!$config);
+
+    return $self->{'WBSTORE'}->{'remoteid'};
 }
 
 #
@@ -820,18 +911,6 @@ sub fsWatcherEnabled($;$)
     return $val;
 }
 
-sub GetDevID($) {
-    my ($self) = @_;
-    return undef
-	if (!ref($self));
-
-    my $config = $self->GetConfig();
-    return undef
-	if (!$config);
-
-    return $self->{'WBSTORE'}->{'devid'};
-}
-
 #
 # This call returns all devices associated with the syncthing
 # handling our WBStore.
@@ -854,19 +933,26 @@ sub GetDevices($)
     return undef
 	if (!$config);
 
-    my $myid = $self->GetDevID();
+    my $myid = $self->{'WBSTORE'}->{'devid'};
     return undef
 	if (!$myid);
+
+    my $uuid = $self->uuid();
 
     # For each folder associate it with the proper device
     my $ref = $config->{'configuration'}[0]->{'folder'};
     foreach my $fref (@$ref) {
-	my $id = $fref->{'id'};
+	# folder has to be associated with our instance
+	my $fid = $fref->{'id'};
+	if ($fid !~ /^$uuid-/) {
+	    next;
+	}
+
 	my $dref = $fref->{'device'};
 	foreach my $dev (@$dref) {
 	    my $did = $dev->{'id'};
 	    if ($did ne $myid) {
-		$devs{$did} = $id;
+		$devs{$did} = $fid;
 	    }
 	}
     }
