@@ -1,4 +1,4 @@
-#
+e#
 # Stub file for setting up elab in elab.
 #
 # Use the --with-TBDEFS=filename to specify your own file.
@@ -150,6 +150,7 @@ EC2META_ENABLE=1
 MOBILESUPPORT=1
 POWDER_RFMONITOR=1
 POWDER_RFMONITOR_HOST="10.10.10.2"
+POWDER_NICKNAME="WEB"
 # Collect idle statistics by default, and store in RRD files.
 SDCOLLECTD_DOSTATS=1
 SDCOLLECTD_USE_RRDTOOL=1
