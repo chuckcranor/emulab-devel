@@ -678,6 +678,7 @@ TBOPSEMAIL_NOSLASH
 TBOPSEMAIL
 POWDER_RFMONITOR_HOST
 POWDER_RFMONITOR
+POWDER_NICKNAME
 UI_EXTERNAL_ACCOUNTS
 UI_DISABLE_RESERVATIONS
 UI_DISABLE_DATASETS
@@ -5367,6 +5368,7 @@ UI_DISABLE_RESERVATIONS=0
 UI_EXTERNAL_ACCOUNTS=0
 POWDER_RFMONITOR=0
 POWDER_RFMONITOR_HOST="0.0.0.0"
+POWDER_NICKNAME=""
 DISABLE_RESERVATION_EMAIL=0
 MAILERNODE="ops"
 
@@ -7299,6 +7301,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	protogeni/rspec-emulab/0.2/GNUmakefile \
 	protogeni/rspec-emulab/2/GNUmakefile \
         apt/GNUmakefile \
+        powder/GNUmakefile \
         collab/GNUmakefile \
 	collab/exp-vis/GNUmakefile collab/exp-vis/fetch-vis \
 	node_usage/GNUmakefile node_usage/mk-plots \

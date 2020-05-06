@@ -1,0 +1,360 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Data::Dumper;
+use Date::Parse;
+use POSIX qw(strftime ceil);
+
+#
+# Powder deadman switch; if do not hear from the Mothership within
+# <insert number> minutes, we power throw all local experiment into
+# panic (with power off) mode.
+#
+sub usage()
+{
+    print "Usage: powder_deadman [-d] [-s] [-n]\n";
+    exit(1);
+}
+my $optlist   = "dns";
+my $debug     = 0;
+my $impotent  = 0;
+my $oneshot   = 0;
+my $counter   = 0;
+my $lastping;
+
+#
+# Configure variables
+#
+my $TB		     = "@prefix@";
+my $TBOPS            = "@TBOPSEMAIL@";
+my $MAINSITE         = @TBMAINSITE@;
+my $POWDER_DEADMAN   = @POWDER_DEADMAN@;
+my $LOGFILE          = "$TB/log/powder_deadman.log";
+my $WAP              = "$TB/sbin/wap";
+my $SUDO	     = "/usr/local/bin/sudo";
+my $POWER            = "$TB/bin/power";
+my $SLEEP_INTERVAL   = 10;
+my $NOALIVE_THRESHOLD= 30;
+my $ISALIVE_THRESHOLD= 60;
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Protos
+sub fatal($);
+sub PowerAll($);
+sub PowerControl($@);
+sub NotifyTBOPS($$);
+	  
+#
+# Turn off line buffering on output
+#
+$| = 1; 
+
+if ($UID != 0) {
+    fatal("Must be root to run this script\n");
+}
+# Silently exit if not enabled, specific to powder aggregates.
+if (!$POWDER_DEADMAN) {
+    exit(0);
+}
+
+#
+# 
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"s"})) {
+    $oneshot = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use emdb;
+use EmulabConstants;
+use libtestbed;
+use emutil;
+use libEmulab;
+use Node;
+
+# In EmulabConstants
+my $PROTOUSER = PROTOUSER();
+
+if (! ($oneshot || $impotent)) {
+    if (CheckDaemonRunning("powder_deadman")) {
+	fatal("Not starting another powder_deadman daemon!");
+    }
+    # Go to ground.
+    if (! $debug) {
+	if (TBBackGround($LOGFILE)) {
+	    exit(0);
+	}
+    }
+    if (MarkDaemonRunning("powder_deadman")) {
+	fatal("Could not mark daemon as running!");
+    }
+}
+
+#
+# When starting up, set this so know we are getting fresh keepalives
+# from the Mothership.
+#
+emutil::UpdateVersionInfo('powder_isalive', time());
+emutil::UpdateVersionInfo('powder_deadman', undef);
+
+#
+# Local enable. We just want to print something to the log if disabled.
+#
+my $enable;
+if (GetSiteVar("powder/deadman_enable", \$enable) && $enable == 0) {
+    print "Currently disabled via sitevar powder/deadman_enable\n";
+}
+
+while (1) {
+    #
+    # We are not updated while NoLogins() is true.
+    #
+    if (NoLogins()) {
+	goto again;
+    }
+    #
+    # Local enable. 
+    #
+    my $enable;
+    if (GetSiteVar("powder/deadman_enable", \$enable) && $enable == 0) {
+	goto again;
+    }
+    print "Running at ".
+	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
+
+    my $thisping = emutil::VersionInfo('powder_isalive');
+    goto again
+	if (!defined($thisping));
+
+    my $deadman = emutil::VersionInfo('powder_deadman');
+
+    if ($debug) {
+	print "keepalive: $thisping\n";
+	if ($deadman) {
+	    print "deadman: $deadman, counter: $counter, lastping:" .
+		($lastping ? $lastping : 0) . "\n";
+	}
+    }
+
+    #
+    # If we are already in a deadman state, we are waiting on getting
+    # keepalives from the MotherShip. We want to see isalive change a
+    # a few times in the last while before we power things on.
+    #
+    if ($deadman) {
+	if ($lastping == $thisping) {
+	    # Nothing changing. 
+	}
+	elsif (time() - $lastping > $ISALIVE_THRESHOLD) {
+	    # Nothing for a while, lets reset the counter, we want to
+	    # get three good keepalives within a smallish window.
+	    $lastping = $thisping;
+	    $counter  = 0;
+	}
+	elsif ($counter < 3) {
+	    $counter++;
+	    $lastping = $thisping;
+	}
+	else {
+	    #
+	    # Mother is alive. 
+	    #
+	    print "Mothership is alive at ".
+		POSIX::strftime("20%y-%m-%d %H:%M:%S",
+				localtime($lastping)) . "\n";
+	    PowerAll("on");
+	    emutil::UpdateVersionInfo('powder_deadman', undef);
+	    $lastping = undef;
+	    $counter  = 0;
+	}
+    }
+    elsif (time() - $thisping > $NOALIVE_THRESHOLD) {
+	print "No contact from the Mothership for $NOALIVE_THRESHOLD seconds\n";
+	emutil::UpdateVersionInfo('powder_deadman', time());
+	$lastping = $thisping;
+	PowerAll("off");
+    }
+    exit(0)
+	if ($oneshot);
+
+    emutil::FlushCaches();
+  again:
+    sleep($SLEEP_INTERVAL);
+}
+exit(0);
+
+#
+# Put all active experiments into panic (with power off) mode.
+#
+sub PowerAll($)
+{
+    my ($onoff) = @_;
+    my @nodes   = ();
+
+    my $query_result =
+	DBQueryFatal("select node_id from nodes where role='testnode'");
+
+    while (my ($node_id) = $query_result->fetchrow_array()) {
+	my $node = Node->Lookup($node_id);
+	if (!defined($node)) {
+	    print STDERR "Could not lookup node $node_id\n";
+	    next;
+	}
+	if (!$node->HasOutlet()) {
+	    print STDERR "$node_id does not have an outlet, skipping.\n";
+	    next;
+	}
+	# When powering on, only reserved nodes/radios
+	next 
+	    if ($onoff eq "on" && 
+		(!$node->IsReserved() ||
+		 ($node->pid() eq NODEDEAD_PID() &&
+		  $node->eid() eq NODEDEAD_EID())));
+
+	push(@nodes, $node);
+    }
+    return
+	if (!@nodes);
+    
+    PowerControl($onoff, @nodes);
+}
+
+sub PowerControl($@)
+{
+    my ($onoff, @nodes) = @_;
+
+    foreach my $node (@nodes) {
+	my $node_id = $node->node_id();
+
+	$node->Refresh();
+    
+	if ($onoff eq "on") {
+	    if ($node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
+		if ($impotent) {
+		    print "Would power on $node_id\n";
+		}
+		else {
+		    print "Powering on $node_id\n";
+		    system("$SUDO -u $PROTOUSER $WAP $POWER on $node_id");
+		    #
+		    # We want to notify if this fails ...
+		    #
+		}
+	    }
+	}
+	else {
+	    if ($node->eventstate() ne TBDB_NODESTATE_POWEROFF()) {
+		if ($impotent) {
+		    print "Would power off $node_id\n";
+		}
+		else {
+		    print "Powering off $node_id\n";
+		    system("$SUDO -u $PROTOUSER $WAP $POWER off $node_id");
+		    #
+		    # We want to notify if this fails.
+		    #
+		}
+	    }
+	}
+    }
+    return 0;
+}
+
+sub fatal($)
+{
+    my ($msg) = @_;
+
+    if (! ($oneshot || $debug || $impotent)) {
+	#
+	# Send a message to the testbed list. 
+	#
+	SENDMAIL($TBOPS,
+		 "powder_deadman died",
+		 $msg,
+		 $TBOPS);
+    }
+    MarkDaemonStopped("powder_deadman")
+	if (! ($oneshot || $impotent));
+
+    die("*** $0:\n".
+	"    $msg\n");
+}
+
+#
+# Notify TBOPS
+#
+sub NotifyTBOPS($$)
+{
+    my ($subject, $message) = @_;
+
+    if ($impotent) {
+	print "$subject\n";
+	print "$message\n";
+	return;
+    }
+    SENDMAIL($TBOPS, $subject, $message, $TBOPS);
+}
+
+#
+# We notify a user if the experimental node is reserved. 
+#
+sub NotifyUser($$$)
+{
+    my ($node, $subject, $message) = @_;
+    my $experiment = $node->Reservation();
+    my $node_id    = $node->node_id();
+    my $creator    = $experiment->GetCreator();
+    my $user_email = $creator->email();
+    my $user_name  = $creator->name();
+
+    if ($impotent) {
+	print "$subject\n";
+	print "$message\n";
+	return;
+    }
+    SENDMAIL("$user_name <$user_email>", $subject, $message, $TBOPS);
+}
+

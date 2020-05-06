@@ -375,6 +375,7 @@ AC_SUBST(UI_DISABLE_RESERVATIONS)
 AC_SUBST(UI_EXTERNAL_ACCOUNTS)
 AC_SUBST(POWDER_RFMONITOR)
 AC_SUBST(POWDER_RFMONITOR_HOST)
+AC_SUBST(POWDER_NICKNAME)
 AC_SUBST(DISABLE_RESERVATION_EMAIL)
 AC_SUBST(MAILERNODE)
 
@@ -571,6 +572,7 @@ UI_DISABLE_RESERVATIONS=0
 UI_EXTERNAL_ACCOUNTS=0
 POWDER_RFMONITOR=0
 POWDER_RFMONITOR_HOST="0.0.0.0"
+POWDER_NICKNAME=""
 DISABLE_RESERVATION_EMAIL=0
 MAILERNODE="ops"
 
@@ -1534,6 +1536,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	protogeni/rspec-emulab/0.2/GNUmakefile \
 	protogeni/rspec-emulab/2/GNUmakefile \
         apt/GNUmakefile \
+        powder/GNUmakefile \
         collab/GNUmakefile \
 	collab/exp-vis/GNUmakefile collab/exp-vis/fetch-vis \
 	node_usage/GNUmakefile node_usage/mk-plots \

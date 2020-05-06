@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017, 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,7 +59,7 @@ ifeq ($(ISMAINSITE),1)
 SUBDIRS += tools/rmanage tools/whol
 endif
 ifeq ($(PGENISUPPORT),1)
-SUBDIRS += protogeni apt
+SUBDIRS += protogeni apt powder
 endif
 else
 SUBDIRS = db tbsetup account protogeni

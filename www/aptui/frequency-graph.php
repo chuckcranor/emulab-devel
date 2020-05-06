@@ -41,6 +41,8 @@ $isadmin   = (ISADMIN() ? 1 : 0);
 $reqargs = RequiredPageArguments("cluster",   PAGEARG_STRING,
                                  "node_id",   PAGEARG_STRING,
                                  "iface",     PAGEARG_STRING);
+$optargs = OptionalPageArguments("logid",     PAGEARG_STRING,
+                                 "archived",  PAGEARG_BOOLEAN);
 
 #
 # The monitor looks at only one iface, rf0. That may change later.
@@ -67,6 +69,16 @@ if ($iface != "rf0") {
     SPITUSERERROR("Illegal interface: $iface");
     exit();
 }
+if (isset($logid)) {
+    if (!TBvalid_userdata($logid)) {
+        SPITUSERERROR("Illegal logid: $logid");
+        exit();
+    }
+}
+if (!isset($archived)) {
+    $archived = 0;
+}
+$url = $aggregate->weburl() . "/rfmonitor";
 SPITHEADER(1);
 
 echo "<link rel='stylesheet'
@@ -84,6 +96,11 @@ echo "<script type='text/javascript'>\n";
 echo "    window.CLUSTER     = '$cluster';\n";
 echo "    window.NODEID      = '$node_id';\n";
 echo "    window.IFACE       = '$iface';\n";
+echo "    window.URL         = '$url';\n";
+echo "    window.ARCHIVED    = $archived;\n";
+if (isset($logid)) {
+    echo "    window.LOGID       = '$logid';\n";
+}
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
@@ -93,6 +110,7 @@ REQUIRE_APTFORMS();
 AddLibrary("js/freqgraphs.js");
 AddTemplateList(array("frequency-graph"));
 SPITREQUIRE("js/frequency-graph.js",
+            "<script src='js/lib/pako/pako.min.js'></script>\n".
             "<script src='js/lib/d3.v5.js'></script>\n");
 SPITFOOTER();
 ?>

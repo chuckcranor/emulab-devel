@@ -4235,6 +4235,7 @@ $(function ()
 		"cluster"  : amlist[info.aggregate_urn].nickname,
 		"node_id"  : info.node_id,
 		"iface"    : "rf0",
+		"logid"    : null,
 	    }
 	    var html = monitorTemplate(options);
 

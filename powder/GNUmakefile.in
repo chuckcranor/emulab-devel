@@ -1,0 +1,96 @@
+#
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+SRCDIR		= @srcdir@
+TESTBED_SRCDIR	= @top_srcdir@
+OBJDIR		= ..
+SUBDIR		= powder
+
+include $(OBJDIR)/Makeconf
+
+SUBDIRS		= 
+
+SBIN_SCRIPTS	= powder_shutdown powderstats \
+		  powder_keepalive powder_deadman bspowerconfig
+WEB_SBIN_SCRIPTS= webpowder_shutdown
+LIBEXEC_SCRIPTS	= $(WEB_SBIN_SCRIPTS)
+
+#
+# Force dependencies on the scripts so that they will be rerun through
+# configure if the .in file is changed.
+# 
+all:	$(SBIN_SCRIPTS) $(LIBEXEC_SCRIPTS) listing.php
+
+subboss: 
+
+include $(TESTBED_SRCDIR)/GNUmakerules
+
+install: rfmonitor-install \
+	$(addprefix $(INSTALL_SBINDIR)/, $(SBIN_SCRIPTS)) \
+	$(addprefix $(INSTALL_LIBEXECDIR)/, $(LIBEXEC_SCRIPTS))
+
+boss-install: install install-subdirs
+
+rfmonitor-install: rfmonitor-subdir \
+	$(INSTALL_WWWDIR)/rfmonitor/.htaccess \
+	$(INSTALL_WWWDIR)/rfmonitor/listing.php
+
+$(INSTALL_WWWDIR)/rfmonitor/.htaccess: htaccess
+	$(INSTALL) -m 644 $< $@
+
+$(INSTALL_WWWDIR)/rfmonitor/listing.php: listing.php
+	$(INSTALL) -m 644 $< $@
+
+rfmonitor-subdir:
+	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor
+	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor/archive
+
+subboss-install: 
+
+post-install: 
+
+#
+# Control node installation (aka, ops)
+#
+control-install:
+
+# This rule says what web* script depends on which installed binary directory.
+$(WEB_SBIN_SCRIPTS): $(INSTALL_SBINDIR)
+
+# Just in case the dirs are not yet created,
+$(INSTALL_SBINDIR) $(INSTALL_BINDIR):
+
+# And then how to turn the template into the actual script. 
+$(WEB_SBIN_SCRIPTS): $(TESTBED_SRCDIR)/WEBtemplate.in
+	@echo "Generating $@"
+	cat $< | sed -e 's,@PROGTOINVOKE@,$(word 2,$^)/$(subst web,,$@),' > $@
+
+clean:	clean-subdirs
+
+# How to recursively descend into subdirectories to make general
+# targets such as `all'.
+%.MAKE:
+	@$(MAKE) -C $(dir $@) $(basename $(notdir $@))
+%-subdirs: $(addsuffix /%.MAKE,$(SUBDIRS)) ;
+
+.PHONY:	$(SUBDIRS) install

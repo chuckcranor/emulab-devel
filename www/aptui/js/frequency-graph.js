@@ -14,6 +14,9 @@ $(function ()
 	    "cluster"   : window.CLUSTER,
 	    "node_id"   : window.NODEID,
 	    "iface"     : window.IFACE,
+	    "url"       : window.URL,
+	    "logid"     : window.LOGID,
+	    "archived"  : window.ARCHIVED,
 	};
 	$('#main-body').html(mainTemplate(options));
 	// Its a little too big by itself

@@ -307,6 +307,7 @@ AddLibrary("js/bindings.js");
 AddLibrary("js/paramsets.js");
 if ($ISPOWDER) {
     AddLibrary("js/freqgraphs.js");
+    AddLibrary("js/lib/pako/pako.min.js");
 }
 SPITREQUIRE("js/status.js");
 

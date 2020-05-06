@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -159,7 +159,7 @@ while (my ($uuid) = $query_result->fetchrow_array()) {
 	my $aptagg = $agg->GetAptAggregate();
     
 	next
-	    if ($agg->status() eq "deferred");
+	    if ($agg->deferred());
 
 	#
 	# Skip anything that is not ready. Need to handle imaging.

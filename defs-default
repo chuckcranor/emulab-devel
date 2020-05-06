@@ -225,6 +225,7 @@ BOOTINFO_EVENTS=0
 # Powder RF monitor.
 POWDER_RFMONITOR=1
 POWDER_RFMONITOR_HOST="$BOSSNODE_IP"
+POWDER_NICKNAME="Emulab"
 
 # No longer allow geni users direct access. Must go through the Portal
 # or the local web interface. 

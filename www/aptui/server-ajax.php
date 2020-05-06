@@ -641,6 +641,8 @@ $routing = array("geni-login" =>
 			      "guest"   => false,
 			      "methods" => array("GetFrequencyData" =>
 						     "Do_GetFrequencyData",
+                                                 "GetListing" =>
+						     "Do_GetListing",
                               )
                         ),
 		 "rfrange" =>

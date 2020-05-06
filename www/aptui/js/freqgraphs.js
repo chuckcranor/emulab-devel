@@ -11,7 +11,7 @@ window.ShowFrequencyGraph = (function ()
     var d3 = d3v5;
 
     function CreateGraph(args, data) {
-	console.log(data);
+	//console.log(data);
 	
 	var selector     = args.selector + " .frequency-graph-subgraph";
 	var parentWidth  = $(selector).width();
@@ -282,7 +282,7 @@ window.ShowFrequencyGraph = (function ()
 	    });
 	    bin.avg = sum / _.size(bin.samples);
 	});
-	console.info("bins", result);
+	//console.info("bins", result);
 	return result;
     }
 
@@ -317,6 +317,11 @@ window.ShowFrequencyGraph = (function ()
 	var ParentTop    = $(selector).position().top;
 	var ParentLeft   = $(selector).position().left;
 
+	// Clear old graph
+	$(selector).html("");
+	// And the sub graph.
+	$(args.selector + " .frequency-graph-subgraph").html("");
+	
 	var margin  = {top: 20, right: 20, bottom: 130, left: 55};
 	var width   = parentWidth - margin.left - margin.right;
 	var height  = parentHeight - margin.top - margin.bottom;
@@ -591,9 +596,12 @@ window.ShowFrequencyGraph = (function ()
 	return d;
     }
 
-    function GetFrequencyData(url, route, method, args, callback)
+    function GetFrequencyData(datatype, route, method, args, callback)
     {
 	var url = 'server-ajax.php';
+	if (!datatype) {
+	    datatype = "text";
+	}
 
 	var networkError = {
 	    "code"  : -1,
@@ -626,7 +634,7 @@ window.ShowFrequencyGraph = (function ()
             type: "GET",
  
             // the type of data we expect back
-            dataType : "text",
+            dataType : datatype,
 	});
 	var defer = $.Deferred();
     
@@ -640,24 +648,152 @@ window.ShowFrequencyGraph = (function ()
 	return defer;
     }
 
-    return function(args) {
-	console.info("ShowFrequencyGraph", args);
+    // Easier to get a binary (gzip) file this way, since jquery does
+    // not directly support doing this. 
+    function GetBlob(url, success, failure) {
+	var oReq = new XMLHttpRequest();
+	oReq.open("GET", url, true);
+	oReq.responseType = "arraybuffer";
 
-	GetFrequencyData(null, "frequency-graph", "GetFrequencyData",
-			 {"cluster"    : args.cluster,
-			  "node_id"    : args.node_id,
-			  "iface"      : args.iface},
-			 function (value) {
-			     // XXX This will always be a string. Need to
-			     // figure out how to deal with errors.
-			     if (typeof(value) == "object") {
-				 console.info("Could not get CVS data" +
-					      "data: " + value.value);
-				 return;
-			     }
-			     var data = d3.csvParse(value, type);
-			     CreateBinGraph(args, data);
-			 });
+	oReq.onload = function(oEvent) {
+	    success(oReq.response)
+	};
+	oReq.onerror = function(oEvent) {
+	    failure();
+	};
+	oReq.send();
+    }
+
+    /*
+     * Saving this. It is faster to go directly to the aggregate, but
+     * they all have to have valid certificates. Note that we cannot load
+     * it via http from inside an https page, the browser will block it.
+     */
+    function SaveMe(args) {
+	console.info("ShowFrequencyGraph", args);
+	GetBlob(window.URL + ".gz",
+		function (arrayBuffer) {
+		    console.info("gz version");
+		    var output = pako.inflate(arrayBuffer, { 'to': 'string' });
+		    
+		    var data = d3.csvParse(output, type);
+		    CreateBinGraph(args, data);
+		},
+		function () {
+		    $.get(window.URL)
+			.done(function (data) {
+			    console.info("text version");
+			    data = d3.csvParse(data, type);
+			    CreateBinGraph(args, data);
+			})
+			.fail(function() {
+			    alert("Could not get data file: " + window.URL);
+			});
+		});
+    }
+
+    function BuildMenu(args)
+    {
+	var callback = function (value) {
+	    // XXX This will always be a string. Need to
+	    // figure out how to deal with errors.
+	    if (typeof(value) == "object") {
+		console.info("Could not get listing data: " + value.value);
+		return;
+	    }
+	    var listing = JSON.parse(_.unescape(value));
+	    console.info(listing);
+	    // nuc2:rf0-1588699912.csv.gz
+	    var re = /([^:]+):([^\-]+)\-(\d+)\.csv\.gz/;
+	    _.each(listing, function(info, index) {
+		var name  = info.name;
+		var match = name.match(re);
+		//console.info(name, match);
+		if (!match) {
+		    return;
+		}
+		info["node_id"]  = match[1];
+		info["iface"]    = match[2];
+		info["logid"]    = match[3];
+		info["cluster"]  = args.cluster;
+		info["selector"] = args.selector;
+
+		var url = "frequency-graph.php" +
+		    "?cluster="  + args.cluster +
+		    "&node_id="  + info.node_id +
+		    "&iface="    + info.iface +
+		    "&logid="    + info.logid;
+		if (info.archived) {
+		    url + "&archived=" + info.archived;
+		}
+		var html =
+		    "<li>" +
+		    " <a href='" + url + "' index='<%- index %>'>" +
+		    match[1] + ":" + match[2] + " - " +
+		    moment(match[3], "X").format("L LT") + "</a></li>";
+		var item = $(html);
+		// If the incoming args match this listing, start it active.
+		if (args.logid &&
+		    info.node_id == args.node_id &&
+		    info.iface   == args.iface &&
+		    info.logid   == args.logid) {
+		    $(item).addClass("active");
+		}
+		$(item).find("a").click(function (event) {
+		    event.preventDefault();
+		    $('#moregraphs-dropdown').find("li").removeClass("active");
+		    $(item).addClass("active");
+		    $(".frequency-graph-date")
+			.html(moment(match[3], "X").format("L LT"))
+			.removeClass("hidden");
+		    UpdateGraph(info);
+		});
+		$('#moregraphs-dropdown').append(item);
+	    });
+	};
+	GetFrequencyData("html", "frequency-graph", "GetListing",
+			 {"cluster"    : args.cluster}, callback);
+    }
+
+    function UpdateGraph(args)
+    {
+	/*
+	 * Gack, we cannot get binary data with the jquery ajax call.
+	 * Well there is lots of noise from google about how to mess
+	 * with it, but instead I am just going to create a GET url
+	 * that talks ajax server routine.
+	 */
+	var url = "server-ajax.php" +
+	    "?ajax_route=frequency-graph" +
+	    "&ajax_method=GetFrequencyData" +
+	    "&ajax_args[cluster]=" + args.cluster +
+	    "&ajax_args[node_id]=" + args.node_id +
+	    "&ajax_args[iface]="   + args.iface;
+	// Optional specific log.
+	if (args.logid) {
+	    url = url + "&ajax_args[logid]=" + args.logid;
+	}
+	if (args.archived) {
+	    url = url + "&ajax_args[archived]=1";
+	}
+	console.info(url);
+
+	GetBlob(url,
+		function (arrayBuffer) {
+		    console.info("gz version");
+		    var output = pako.inflate(arrayBuffer, { 'to': 'string' });
+		    
+		    var data = d3.csvParse(output, type);
+		    CreateBinGraph(args, data);
+		},
+		function () {
+		    alert("Could not get data file: " + url);
+		});
+    }
+
+    return function(args) {
+	BuildMenu(args);
+	UpdateGraph(args);
     };
 }
 )();

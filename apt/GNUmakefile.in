@@ -37,10 +37,10 @@ BIN_SCRIPTS	= manage_profile manage_instance manage_dataset \
 		  create_slivers searchip start-experiment manage_resgroup
 SBIN_SCRIPTS	= apt_daemon aptevent_daemon portal_xmlrpc apt_checkup \
 		  portal_monitor apt_scheduler portal_resources \
-		  manage_licenses manage_aggregate powder_shutdown \
+		  manage_licenses manage_aggregate \
 		  rfmonitor_daemon aptimage_daemon aptexpire_daemon \
 		  recalcmaxext aptresgroup_daemon aptbus_monitor \
-		  aptroute_monitor manage_rfranges powderstats
+		  aptroute_monitor manage_rfranges 
 LIB_SCRIPTS     = APT_Profile.pm APT_Instance.pm APT_Dataset.pm APT_Geni.pm \
 		  APT_Aggregate.pm APT_Utility.pm APT_Rspec.pm \
 		  APT_Reservation.pm APT_RFRange.pm

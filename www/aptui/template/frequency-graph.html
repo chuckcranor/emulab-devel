@@ -1,8 +1,33 @@
+<style>
+  #moregraphs-dropdown {
+      max-height: 400px;
+      overflow-y: scroll;
+  }
+</style>
 <div class="frequency-graph-div">
+  <span class='dropdown pull-right'>
+    <button id='action-menu-button' type='button'
+	    class='btn btn-default btn-xs dropdown-toggle'
+	    data-toggle='dropdown'>
+      More Graphs <span class="caret"></span>
+    </button>
+    <ul class='dropdown-menu text-left' id="moregraphs-dropdown" role='menu'>
+    </ul>
+  </span>
   <center>
     <h4>
       Radio Monitoring Graph for
-      <%- cluster %> <%- node_id %>:<%- iface %>
+      <%- cluster %> 
+      <span class="frequency-graph-nodeid">
+	<%- node_id %></span>:<span class="frequency-graph-iface"><%- iface %>
+	</span>
+	<% if (logid) { %>
+	  <span class="frequency-graph-date" style="margin-left: 15px;">
+	    <%- moment(logid, "X").format("L LT") %></span>
+	<% } else { %>
+	  <span class="frequency-graph-date hidden"
+		style="margin-left: 15px;"></span>
+	<% } %>
     </h4>
   </center>
   <div class="panel panel-default" style="margin-bottom: 0px;">

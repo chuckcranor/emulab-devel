@@ -1,0 +1,180 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Data::Dumper;
+use Date::Parse;
+use POSIX qw(strftime ceil);
+
+#
+# Ping each of the remote endpoints to let them know boss is still
+# here and operational. powder_deadman at the endpoints is watching
+# for the keep alive signal, and will shutdown the local radios if
+# it does not hear from the Mothership for some length of time, to
+# be determined.
+#
+sub usage()
+{
+    print "Usage: powder_keepalive [-d] [-s] [-n]\n";
+    exit(1);
+}
+my $optlist   = "dns";
+my $debug     = 0;
+my $impotent  = 0;
+my $oneshot   = 0;
+my $deadman   = 0;
+
+#
+# Configure variables
+#
+my $TB		     = "@prefix@";
+my $TBOPS            = "@TBOPSEMAIL@";
+my $MAINSITE         = @TBMAINSITE@;
+my $LOGFILE          = "$TB/log/powder_keepalive.log";
+my $SLEEP_INTERVAL   = 300;
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Protos
+sub fatal($);
+	  
+#
+# Turn off line buffering on output
+#
+$| = 1; 
+
+if ($UID != 0) {
+    fatal("Must be root to run this script\n");
+}
+if (!$MAINSITE) {
+    exit(0);
+}
+
+#
+# 
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"s"})) {
+    $oneshot = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use emdb;
+use libtestbed;
+use emutil;
+use libEmulab;
+use APT_Aggregate;
+
+if (! ($oneshot || $impotent)) {
+    if (CheckDaemonRunning("powder_keepalive")) {
+	fatal("Not starting another powder_keepalive daemon!");
+    }
+    # Go to ground.
+    if (! $debug) {
+	if (TBBackGround($LOGFILE)) {
+	    exit(0);
+	}
+    }
+    if (MarkDaemonRunning("powder_keepalive")) {
+	fatal("Could not mark daemon as running!");
+    }
+}
+
+while (1) {
+    #
+    # We always run, we do not look at NoLogins().
+    #
+    print "Running at ".
+	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
+
+    my @aggregates = APT_Aggregate->LookupAll();
+    if (!@aggregates) {
+	print "No Aggregates!\n";
+	goto again;
+    }
+    foreach my $aggregate (@aggregates) {
+	next
+	    if (!($aggregate->isFE() || $aggregate->ismobile()));
+	
+	# Skip if the monitor marked it as down.
+	next
+	    if (!$aggregate->IsUp());
+	
+	my $nickname = $aggregate->nickname();
+	if ($debug) {
+	    print "Pinging $nickname\n";
+	}
+	my $error;
+	# Use the fastpath RPC
+	if ($aggregate->CheckStatus(\$error, 1)) {
+	    print STDERR "$nickname: $error\n";
+	}
+    }
+    exit(0)
+	if ($oneshot);
+
+    emutil::FlushCaches();
+  again:
+    sleep($SLEEP_INTERVAL);
+}
+exit(0);
+
+sub fatal($)
+{
+    my ($msg) = @_;
+
+    if (! ($oneshot || $debug || $impotent)) {
+	#
+	# Send a message to the testbed list. 
+	#
+	SENDMAIL($TBOPS,
+		 "powder_keepalive died",
+		 $msg,
+		 $TBOPS);
+    }
+    MarkDaemonStopped("powder_keepalive")
+	if (! ($oneshot || $impotent));
+
+    die("*** $0:\n".
+	"    $msg\n");
+}

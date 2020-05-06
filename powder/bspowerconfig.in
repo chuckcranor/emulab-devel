@@ -1,0 +1,142 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Data::Dumper;
+use Date::Parse;
+
+#
+# Generate config files for the local power control setup on the
+# base station cnucs.
+#
+sub usage()
+{
+    print "Usage: bspowerconfig bsname\n";
+    exit(1);
+}
+my $optlist   = "d";
+my $debug     = 0;
+my %pduinfo   = ();
+
+#
+# Configure variables
+#
+my $TB		     = "@prefix@";
+my $TBOPS            = "@TBOPSEMAIL@";
+my $MAINSITE         = @TBMAINSITE@;
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Protos
+sub fatal($);
+	  
+#
+# Turn off line buffering on output
+#
+$| = 1; 
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use emdb;
+use libtestbed;
+use emutil;
+use libEmulab;
+use Node;
+
+#
+# Load the radio info, which for now tells the node IDs of the radios.
+# From there we can find the pdu info in the outlets table.
+#
+my $query_result =
+    DBQueryFatal("select node_id,location from apt_aggregate_radioinfo ".
+		 "where installation_type='BS'");
+
+while (my ($node_id,$location) = $query_result->fetchrow_array()) {
+    my $node = Node->Lookup($node_id);
+    if (!defined($node)) {
+	fatal("No such node $node_id in the DB");
+    }
+    my $outlet_result =
+	DBQueryFatal("select power_id,outlet from outlets ".
+		     "where node_id='$node_id'");
+    if (!$outlet_result->numrows) {
+	print "No outlet info for $node_id, skipping\n";
+	next;
+    }
+    my ($power_id,$outlet) = $outlet_result->fetchrow_array();
+    my $powernode = Node->Lookup($power_id);
+    if (!defined($powernode)) {
+	fatal("No such node $power_id in the DB");
+    }
+    my $iface = $powernode
+}
+
+#
+# Hmm, we do not have anything in the DB that maps a base station
+# to its PDU name.
+#
+my %pdus = (
+    "powder-pdu-smt"
+    "powder-pdu-fm"
+    "powder-pdu-meb"
+    "powder-pdu-dentistry"
+    "powder-pdu-ustar"
+    "powder-pdu-honors"
+| powder-pdu-browning  |
+| powder-pdu-bes       |
+| powder-pdu-hospital    
+);
+
+#
+# 
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+usage()
+    if (!@ARGV);
+
+exit(0);
+
+sub fatal($)
+{
+    my ($msg) = @_;
+
+    die("*** $0:\n".
+	"    $msg\n");
+}
+
