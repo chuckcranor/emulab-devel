@@ -770,7 +770,7 @@ sub CreateSliver($)
 		$temp_webtask->exitcode() == GENIRESPONSE_FORBIDDEN()) {
 
 		my $errmsg = "Error staging images to the " .
-		    $aptagg->name() . " cluster: " . $temp_webtask->error();
+		    $aptagg->name() . " cluster: " . $temp_webtask->output();
 	    
 		$webtask->output($errmsg);
 		$webtask->Exited($temp_webtask->exitcode());
