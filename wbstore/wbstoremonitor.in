@@ -94,10 +94,13 @@ sub usage()
 	"    -d lev Prevent daemonization and print debug info\n" .
 	"    -n     Just state what would be done without doing it\n" .
 	"    -1     Run a single pass and then quit\n" .
-	"    -I int Time between passes (in minutes, default 5)\n";
+	"    -I int Time between passes (in minutes, default 5)\n" .
+	"    -A     Archive (tarball) old DONE experiments\n" .
+	"    -D     Irrevocably delete old DONE experiments (USE WITH CAUTION)\n" .
+	"    -K     Kill all syncthing instances\n";
     exit(1);
 }
-my  $optlist = "d:n1I:";
+my  $optlist = "d:n1I:ADK";
 
 #
 # Configure variables
@@ -122,6 +125,7 @@ use WBStore;
 # Protos
 sub parsehostname($);
 sub getinstances();
+sub cleanupinstance($);
 sub checksyncthing($$$;$);
 sub fatal($);
 sub logit($);
@@ -133,6 +137,8 @@ my $debug	= 0;
 my $impotent	= 0;
 my $checkint	= 5 * 60;
 my $onceonly	= 0;
+my $handledead  = 0;
+my $killall	= 0;
 
 #
 # Array of instance objects.
@@ -208,6 +214,16 @@ if (defined($options{"I"})) {
 if (defined($options{"1"})) {
     $onceonly = 1;
 }
+if (defined($options{"D"})) {
+    $handledead = -1;
+}
+if (defined($options{"A"})) {
+    $handledead = 1;
+}
+if (defined($options{"K"})) {
+    $killall = 1;
+    $onceonly = 1;
+}
 
 # This should always run as root.
 if ($UID != 0) {
@@ -219,6 +235,20 @@ my $host = `hostname`;
 my $domain;
 chomp($host);
 ($host,$domain) = parsehostname($host);
+
+if ($killall) {
+    my $err = 0;
+
+    getinstances();
+    foreach my $uuid (keys %syncthing) {
+	my $inst = $syncthing{$uuid}{'obj'};
+	if (checksyncthing($inst, 0, 1) != 0) {
+	    logit("$inst: WARNING: could not shutdown syncthing");
+	    $err++;
+	}
+    }
+    exit($err);
+}
 
 # Only one please.
 if (CheckDaemonRunning("wbstore_monitor")) {
@@ -268,15 +298,16 @@ while (1) {
     #
     # Ensure all instances are running for current experiments
     #
-    foreach my $t (sort keys %instance) {
-	my $inst = $instance{$t}{'obj'};
-	if ($inst->active()) {
+    foreach my $uuid (keys %syncthing) {
+	if ($syncthing{$uuid}{'active'}) {
+	    logit("$uuid: found active experiment");
+
 	    # never enable fsWatcher on mothership
 	    $fswe = ($MAINSITE ? "false" : "true");
 
+	    my $inst = $syncthing{$uuid}{'obj'};
 	    if (!checksyncthing($inst, 1, 0, { fsWatcherEnabled => $fswe })) {
-		my $uuid = $inst->uuid();
-		logit("WARNING: $uuid: could not start syncthing");
+		logit("$inst: WARNING: could not start syncthing");
 	    }
 	}
     }
@@ -284,29 +315,102 @@ while (1) {
     #
     # Check up on all past instances.
     #
-    # See if there is a past instance for which we are currently handling
-    # a final sync. If so, make sure it is done or at least making progress.
-    #
-    foreach my $t (keys %instance) {
-	my $inst = $instance{$t}{'obj'};
+    foreach my $uuid (keys %syncthing) {
 	next
-	    if ($inst->active());
+	    if ($syncthing{$uuid}{'active'});
+
+	logit("$uuid: found past experiment");
 
 	#
-	# XXX right now we just fire them all up in non-watcher mode!
+	# See if the syncthing daemon is running.
 	#
-	if (!checksyncthing($inst, 1, 0, { fsWatcherEnabled => "false" })) {
-	    my $uuid = $inst->uuid();
-	    logit("WARNING: $uuid: could not start syncthing");
+	my $inst = $syncthing{$uuid}{'obj'};
+	my $rv = checksyncthing($inst, 0, 0);
+	if ($rv < 0) {
+	    logit("$uuid: WARNING: ".
+		  "Could not detect status of syncthing instance!");
+	    next;
 	}
 
 	#
-	# Cases:
+	# For those marked as DONE, make sure we dispose of them properly.
 	#
-	# done/not
-	# 1. done and DEAD: assume we are all finished arrange to remove
-	# 2. done, RUNNING, 
+	# If the sentinel file exists on the mothership, we know absolutely
+	# that everything is finished. On an aggregate, there is a slight
+	# possibility that we created the sentinel and something died before
+	# it gone sent, but we can live with that window.
 	#
+	if ($syncthing{$uuid}{'done'}) {
+	    if ($rv > 0) {
+		#
+		# If syncthing is still running, kill it and check again
+		# on the next pass.
+		#
+		$rv = checksyncthing($inst, 0, 1);
+		if ($rv != 0) {
+		    logit("$uuid: WARNING: ".
+			  "Error while stopping syncthing for done instance!");
+		} else {
+		    logit("$uuid: Stopping syncthing for DONE experiment");
+		}
+	    } else {
+		#
+		# Syncthing is dead, clean up
+		#
+		if (cleanupinstance($inst)) {
+		    logit("$uuid: WARNING: Could not cleanup done instance!"); 
+		}
+	    }
+	    next;
+	}
+
+	#
+	# Not DONE yet. If syncthing is not running, try to get it started.
+	#
+	# We turn off the real-time file watcher because there is no need
+	# for fine-grained tracking and it just results in lots of open files
+	# in the syncthing instance.
+	#
+	if ($rv == 0) {
+	    $rv = checksyncthing($inst, 1, 0, { fsWatcherEnabled => "false" });
+	    if ($rv != 1) {
+		logit("$uuid: WARNING: ".
+		      "Could not start syncthing for past instance!");
+	    } else {
+		logit("$uuid: Starting syncthing for past instance");
+	    }
+	    next;
+	}
+
+	#
+	# Syncthing for past instance is running. Check each folder and
+	# see if it is INSYNC. If so, drop the DONE sentinel to inform
+	# the mothership.
+	#
+	foreach my $t (sort keys %instance) {
+	    $inst = $instance{$t}{'obj'};
+
+	    # not associated with this syncthing
+	    next
+		if ($inst->uuid() ne $uuid);
+	    # already marked as done
+	    next
+		if ($inst->_fstate eq DONE);
+	    # not yet in sync
+	    next
+		if ($inst->_state ne INSYNC);
+
+	    # We are synced up! Drop the DONE sentinel
+	    my $sentinel = $inst->datadir() . "/.$uuid-" . $inst->domain();
+	    if (open(FD, ">$sentinel")) {
+		# what the heck, drop a timestamp in it.
+		print FD time() . "\n";
+		close(FD);
+	    } else {
+		logit("$uuid: WARNING: ".
+		      "Could not write DONE sentinel '$sentinel'");
+	    }
+	}
     }
 
     logit("=== Finished pass.");
@@ -317,6 +421,27 @@ while (1) {
     }
 }
 fatal("forever just ended!");
+
+sub cleanupinstance($)
+{
+    my ($inst) = @_;
+
+    return
+	if ($handledead == 0);
+
+    my $confdir = $inst->confdir();
+    my $datadir = $inst->datadir();
+
+    if ($handledead == -1) {
+	print STDERR "$inst: would remove '$datadir' ...\n"
+	    if ($debug);
+    } else {
+	print STDERR "$inst: would archive '$datadir' to '$confdir'...\n"
+	    if ($debug);
+    }
+
+    return 0;
+}
 
 #
 # Get events of interest for this instance.
@@ -509,13 +634,15 @@ sub getinstances()
     }
 
     foreach my $ni (@ninstance) {
-	my $token = $ni->uuid() . "/" . $ni->domain();
+	my $uuid = $ni->uuid();
+	my $token = "$uuid/" . $ni->domain();
 	if (!exists($instance{$token})) {
-	    logit("added new instance '$ni'");
+	    logit("added new instance '$ni'")
+		if (!$onceonly);
 	    $instance{$token}{'obj'} = $ni;
 	}
 	$instance{$token}{'found'} = 1;
-	$syncthing{$ni->uuid()}{'found'} = 1;
+	$syncthing{$uuid}{'found'} = 1;
     }
     @ninstance = ();
     foreach my $t (keys %instance) {
@@ -529,8 +656,10 @@ sub getinstances()
 	if (!exists($syncthing{$st}{'found'})) {
 	    delete $syncthing{$st};
 	} else {
-	    # we are going to use this below
+	    # we are going to need these below
 	    delete $syncthing{$st}{'found'};
+	    delete $syncthing{$st}{'active'};
+	    delete $syncthing{$st}{'done'};
 	}
     }
     
@@ -547,6 +676,7 @@ sub getinstances()
 	#
 	if (!exists($syncthing{$uuid}{'found'})) {
 	    $syncthing{$uuid}{'found'} = 1;
+	    $syncthing{$uuid}{'obj'} = $inst;
 
 	    print STDERR "$inst: gathering info for syncthing...\n"
 		if ($debug);
@@ -667,6 +797,19 @@ sub getinstances()
 	}
 	
 	my $active = $inst->active();
+
+	#
+	# And aggregate some state for the syncthing instance:
+	# - if any instance using this syncthing is active, syncthing is active
+	# - if any instance is not DONE, syncthing is not DONE
+	#
+	if (!exists($syncthing{$uuid}{'active'}) || $active) {
+	    $syncthing{$uuid}{'active'} = $active;
+	}
+	if (!exists($syncthing{$uuid}{'done'}) || !$done) {
+	    $syncthing{$uuid}{'done'} = $done;
+	}
+
 	my $STstate = $syncthing{$uuid}{'state'};
 	my $Rstate = $inst->_state();
 	my $WBstate = $inst->_fstate();
@@ -715,8 +858,6 @@ sub checksyncthing($$$;$)
 	} else {
 	    $pid = undef;
 	}
-    } else {
-	logit("WARNING: $inst: no pidfile, assuming not running!");
     }
     if (defined($pid) && kill(0, $pid)) {
 	$running = 1;
@@ -759,7 +900,7 @@ sub checksyncthing($$$;$)
 		if ($debug);
 	} else {
 	    print STDERR "config file '$ofile' not modified\n"
-		if ($debug);
+		if ($debug > 1);
 	}
     }
 
@@ -779,7 +920,7 @@ sub checksyncthing($$$;$)
 	#my $log = "/dev/null";
 	my $log = "$confdir/st.log";
 	my $cmd = "$STBIN -no-browser -home=\"$confdir\"";
-	if (system("($cmd >$log 2>&1 & echo \$!) > $pidfile")) {
+	if (system("($cmd >$log 2>&1 & echo \$!) </dev/null >$pidfile")) {
 	    logit("WARNING: $inst: could not run '$cmd', see '$log'");
 	    return 0;
 	}

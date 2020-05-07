@@ -423,8 +423,10 @@ sub IsRunning($)
     my $robj = $self->GetREST();
 
     my $msg;
+    my $otimo = $robj->SetTimeout(1);
     my $json = $robj->Request("system/status",
 			      undef, undef, undef, undef, \$msg);
+    $robj->SetTimeout($otimo);
     if (!$json) {
 	$msg =~ s/.*Syncthing API error: (.*)/$1/s;
 	print STDERR "$self: IsRunning: $msg\n"
@@ -432,7 +434,7 @@ sub IsRunning($)
 	return undef;
     }
 
-    print STDERR "$self: STATUS:\n", Dumper($json), "\n"
+    print STDERR "$self: IsRunning:\n", Dumper($json), "\n"
 	if ($debug > 1);
     return $json->{'myID'};
 }
@@ -467,7 +469,7 @@ sub GetConnections($$)
 
 	$devs{$id} = ($dref->{'connected'} != 0 ? 1 : 0);
     }
-    print STDERR "$self: STATUS:\n", Dumper($json), "\n"
+    print STDERR "$self: GetConnections:\n", Dumper($json), "\n"
 	if ($debug > 1);
 
     $$devref = \%devs;
@@ -499,7 +501,7 @@ sub GetCompletionStatus($$)
 	return -1;
     }
 
-    print STDERR "$self: STATUS:\n", Dumper($json), "\n"
+    print STDERR "$self: GetCompletionStatus:\n", Dumper($json), "\n"
 	if ($debug);
 
     my $pct = int($json->{'completion'});
@@ -1072,6 +1074,16 @@ sub Stringify($)
     return "[WBStore::REST $addr]";
 }
 
+sub SetTimeout($$)
+{
+    my ($self, $timo) = @_;
+
+    my $otimo = $self->{'timeout'};
+    $self->{'timeout'} = $timo;
+
+    return $otimo;
+}
+			
 #
 # Make a request via the Syncthing REST API.
 #   $resourse is the resource path, e.g., "system/config"
