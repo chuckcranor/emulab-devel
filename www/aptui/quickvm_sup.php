@@ -52,7 +52,7 @@ if (isset($_SERVER['SERVER_NAME'])) {
 $PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
     global $drewheader, $ISCLOUD, $ISPNET, $ISEMULAB, $ISAPT, $ISPOWDER;
     global $spatrequired, $TBMAINSITE, $PORTAL_HELPFORUM;
-    global $APTMAIL, $APTMAILTO;
+    global $APTMAIL, $APTMAILTO, $PROTOGENI_GENIWEBLOGIN;
 
     if (! $drewheader) {
 	SPITHEADER();
@@ -68,6 +68,8 @@ $PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
     echo "    window.ISPOWDER  = " . ($ISPOWDER ? "1" : "0") . ";\n";
     echo "    window.ISAPT     = " . ($ISAPT    ? "1" : "0") . ";\n";
     echo "    window.MAINSITE  = " . ($TBMAINSITE ? "1" : "0") . ";\n";
+    echo "    window.PGENILOGIN  = " .
+        ($PROTOGENI_GENIWEBLOGIN ? "1" : "0") . ";\n";
     echo "    window.APTMAIL   = \"$APTMAIL\"\n";
     echo "    window.APTMAILTO = \"$APTMAILTO\"\n";
     echo "    window.HELPFORUM = " .
@@ -87,7 +89,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     global $PORTAL_MANUAL, $PORTAL_HELPFORUM, $APTMAIL, $APTMAILTO;
     global $TBMAINSITE, $APTTITLE, $FAVICON, $APTLOGO, $APTSTYLE, $ISAPT;
     global $GOOGLEUA, $ISCLOUD, $TBBASE, $PORTAL_GENESIS;
-    global $ISPNET, $ISPOWDER, $ISEMULAB;
+    global $ISPNET, $ISPOWDER, $ISEMULAB, $PROTOGENI_GENIWEBLOGIN;
     global $login_user, $login_status, $SUPPORT, $FIRSTUSER;
     global $disable_accounts, $page_title, $drewheader, $embedded;
     global $UI_EXTERNAL_ACCOUNTS, $BrandMapping;
@@ -203,6 +205,8 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     echo "    window.ISPOWDER = " . ($ISPOWDER ? "1" : "0") . ";\n";
     echo "    window.ISAPT    = " . ($ISAPT    ? "1" : "0") . ";\n";
     echo "    window.MAINSITE = " . ($TBMAINSITE ? "1" : "0") . ";\n";
+    echo "    window.PGENILOGIN  = " .
+        ($PROTOGENI_GENIWEBLOGIN ? "1" : "0") . ";\n";
     echo "    window.MANUAL   = '$PORTAL_MANUAL';\n";
     echo "    window.HELPFORUM = " .
         "'https://groups.google.com/d/forum/${PORTAL_HELPFORUM}';\n";
@@ -869,7 +873,7 @@ function SpitVerifyModal($id, $label)
 #
 function SpitLoginModal($id)
 {
-    global $PORTAL_PASSWORD_HELP;
+    global $PORTAL_PASSWORD_HELP, $PROTOGENI_GENIWEBLOGIN;
     global $APTTITLE, $ISCLOUD, $ISPNET, $ISPOWDER;
     $referrer = CleanString($_SERVER['REQUEST_URI']);
 ?>
@@ -909,7 +913,7 @@ function SpitLoginModal($id)
              <div class='form-group'>
                <div class='col-sm-offset-2 col-sm-10'>
 <?php
-    if ($ISCLOUD || $ISPNET) {
+        if ($PROTOGENI_GENIWEBLOGIN) {
 	?>
                  <button class='btn btn-info btn-sm pull-left' disabled
 		    type='button'

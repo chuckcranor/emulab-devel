@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -94,7 +94,7 @@ function SPITFORM($uid, $referrer, $error)
 {
     global $PORTAL_PASSWORD_HELP;
     global $TBDB_UIDLEN, $TBBASE, $refer;
-    global $ISAPT, $ISCLOUD, $ISPNET, $ISPOWDER;
+    global $ISAPT, $ISCLOUD, $ISPNET, $ISPOWDER, $PROTOGENI_GENIWEBLOGIN;
     global $adminmode, $cleanmode;
     global $UI_EXTERNAL_ACCOUNTS;
 
@@ -178,7 +178,7 @@ function SPITFORM($uid, $referrer, $error)
              <div class='form-group'>
                <div class='col-sm-offset-2 col-sm-10'>
 <?php
-    if ($ISCLOUD || $ISPNET || $ISPOWDER) {
+    if ($PROTOGENI_GENIWEBLOGIN) {
 	?>
                  <button class='btn btn-info btn-sm pull-left'
 		    type='button'

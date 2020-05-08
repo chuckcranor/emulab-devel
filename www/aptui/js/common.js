@@ -93,7 +93,7 @@ window.APT_OPTIONS.initialize = function (sup)
 	$('#loginbutton').click(function (event) {
 	    event.preventDefault();
 	    sup.ShowModal('#quickvm_login_modal');
-	    if (window.ISCLOUD || window.ISPNET || window.ISPOWDER) {
+	    if (window.PGENILOGIN) {
 		console.info("Loading geni auth code");
 		sup.InitGeniLogin(embedded);
 	        $('#quickvm_geni_login_button').removeAttr("disabled");
