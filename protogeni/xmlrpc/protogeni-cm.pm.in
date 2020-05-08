@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -94,6 +94,7 @@ elsif ($GENI_VERSION eq "2.0") {
 	"StartSliver"       => \&GeniCMV2::StartSliver,
 	"StopSliver"        => \&GeniCMV2::StopSliver,
 	"RestartSliver"     => \&GeniCMV2::RestartSliver,
+	"PowerCycleSliver"  => \&GeniCMV2::PowerCycleSliver,
 	"ReloadSliver"      => \&GeniCMV2::ReloadSliver,
 	"BindToSlice"       => \&GeniCMV2::BindToSlice,
 	"ListUsage"         => \&GeniCMV2::ListUsage,

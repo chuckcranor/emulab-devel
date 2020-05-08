@@ -1366,9 +1366,16 @@ $(function ()
 	}
 	DoRebootReload("reload", nodeList);
     }
+    function DoPowerCycle(nodeList)
+    {
+	DoRebootReload("powercycle", nodeList);
+    }
     function DoRebootReload(which, nodeList)
     {
-	var tag = (which == "reload" ? "Reload" : "Reboot");
+	var method = (which == "reload" ? "Reload" :
+		      which == "powercycle" ? "PowerCycle" : "Reboot");
+	var tag    = (which == "reload" ? "Reload" :
+		      which == "powercycle" ? "Power Cycle" : "Reboot");
 	
 	// Handler for hide modal to unbind the click handler.
 	$('#confirm_reload_modal').on('hidden.bs.modal', function (event) {
@@ -1392,7 +1399,7 @@ $(function ()
 		GetStatus();
 	    }
 	    sup.ShowModal('#waitwait-modal');
-	    var xmlthing = sup.CallServerMethod(ajaxurl, "status", tag,
+	    var xmlthing = sup.CallServerMethod(ajaxurl, "status", method,
 						{"uuid"     : uuid,
 						 "node_ids" : nodeList});
 	    xmlthing.done(callback);
@@ -1789,6 +1796,9 @@ $(function ()
 	else if (action == "reboot") {
 	    DoReboot(clientList);
 	}
+	else if (action == "powercycle") {
+	    DoPowerCycle(clientList);
+	}
 	else if (action == "delete") {
 	    DoDeleteNodes(clientList);
 	}
@@ -1832,6 +1842,8 @@ $(function ()
 	"       <a href='#' name='monitor'>Monitor Graph</a></li> " +
 	"    <li class='hidden'> " +
 	"       <a href='#' name='nodetop'>Top Processes</a></li> " +
+	"    <li class='hidden'> " +
+	"       <a href='#' name='powercycle'>Power Cycle</a></li> " +
 	"    <li><a href='#' name='delete'>Delete Node</a></li> " +
 	"  </ul>" +
 	"  </div>" +
@@ -1918,6 +1930,7 @@ $(function ()
 		var stype  = $(this).find("sliver_type");
 		var login  = $(this).find("login");
 		var coninfo= this.getElementsByTagNameNS(EMULAB_NS, 'console');
+		var pcycle = this.getElementsByTagNameNS(EMULAB_NS, 'powercycle');
 		var recover= this.getElementsByTagNameNS(EMULAB_NS, 'recovery');
 		var vnode  = this.getElementsByTagNameNS(EMULAB_NS, 'vnode');
 		var imageable =
@@ -2137,6 +2150,23 @@ $(function ()
 			// Mark it as a radio with its info. 
 			radios[node] = info;
 		    }
+		}
+
+		//
+		// Power cycle handler
+		//
+		if (pcycle.length) {
+		    // Attach handler to the menu button.
+		    clone.find(' [name=powercycle]')
+			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
+			    ActionHandler("powercycle", [node]);
+			});
+		    clone.find(' [name=powercycle]')
+			.parent().removeClass('hidden');
+
+		    // Context menu option
+		    CMclone.find("li[id=powercycle]").removeClass("hidden");
 		}
 
 		// Node "top"

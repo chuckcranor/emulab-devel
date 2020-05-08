@@ -176,6 +176,8 @@ $routing = array("geni-login" =>
 						     "Do_Snapshot",
 						 "SnapshotStatus" =>
                                                      "Do_SnapshotStatus",
+						 "PowerCycle" =>
+                                                     "Do_PowerCycle",
 						 "Reboot" =>
                                                      "Do_Reboot",
 						 "Reload" =>

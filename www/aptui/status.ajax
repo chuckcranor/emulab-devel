@@ -1115,6 +1115,10 @@ function Do_Reload()
 {
     Do_RebootOrReload("reload");
 }
+function Do_PowerCycle()
+{
+    Do_RebootOrReload("powercycle");
+}
 
 #
 # Delete nodes from an experiment

@@ -975,6 +975,24 @@ sub AnnotateManifest($)
 	    }
 	}
     }
+    #
+    # Can a physical node be power cycled
+    #
+    if (!$node->isvirtnode()) {
+	my $powercycle = GeniXML::FindNodesNS("n:powercycle", $services,
+					      $GeniXML::EMULAB_NS)->pop();
+	if ($node->HasOutlet()) {
+	    if (!defined($powercycle)) {
+		$powercycle = GeniXML::AddElement("powercycle",
+					$services, $GeniXML::EMULAB_NS);
+	    }
+	    GeniXML::SetText("available", $powercycle, "true");
+	}
+	elsif (defined($powercycle)) {
+	    $services->removeChild($powercycle);
+	}
+    }
+    
     # Always add this.
     my $imageable = GeniXML::FindNodesNS("n:imageable", $services,
 					 $GeniXML::EMULAB_NS)->pop();
@@ -1357,13 +1375,20 @@ sub Reload($$)
     return $self->Action($version, "reload");
 }
 
+sub PowerCycle($$)
+{
+    my ($self, $version) = @_;
+
+    return $self->Action($version, "powercycle");
+}
+
 #
 # Start, Restart, and Reload.
 #
 sub Action($$$)
 {
     my ($self, $version, $action) = @_;
-    my $restart = ($action eq "restart" ? 1 : 0);
+    my $restart = ($action eq "restart" || $action eq "powercycle" ? 1 : 0);
     my $reload  = ($action eq "reload" ? 1 : 0);
 
     return -1
@@ -1418,7 +1443,9 @@ sub Action($$$)
 		system("$POWER on $node_id");
 	    }
 	    elsif ($restart) {
-		system("$NODEREBOOT $node_id");
+		my $opt = ($action eq "powercycle" ? "-f" : "");
+		
+		system("$NODEREBOOT $opt $node_id");
 	    }
 	}
 	return -1

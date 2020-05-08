@@ -44,6 +44,7 @@ sub usage()
     print("Usage: manage_instance terminate instance\n");
     print("Usage: manage_instance refresh instance\n");
     print("Usage: manage_instance reboot instance node_id ...\n");
+    print("Usage: manage_instance powercycle instance node_id ...\n");
     print("Usage: manage_instance reload instance node_id ...\n");
     print("Usage: manage_instance recovery instance [-c] node_id\n");
     print("Usage: manage_instance deletenodes instance node_id ...\n");
@@ -144,6 +145,7 @@ sub DoExtend();
 sub DoDenyOrMoreInfo($);
 sub DoRefresh();
 sub DoReboot();
+sub DoPowerCycle();
 sub DoReload();
 sub DoRecovery();
 sub DoLockdown();
@@ -260,6 +262,9 @@ elsif ($action eq "schedterminate") {
 }
 elsif ($action eq "refresh") {
     DoRefresh()
+}
+elsif ($action eq "powercycle") {
+    DoPowerCycle()
 }
 elsif ($action eq "reboot") {
     DoReboot()
@@ -3019,8 +3024,9 @@ sub DoRebootOrReload($)
     }
     exit($exitcode);
 }
-sub DoReboot() { return DoRebootOrReload("reboot"); }
-sub DoReload() { return DoRebootOrReload("reload"); }
+sub DoReboot()     { return DoRebootOrReload("reboot"); }
+sub DoReload()     { return DoRebootOrReload("reload"); }
+sub DoPowerCycle() { return DoRebootOrReload("powercycle"); }
 
 #
 # Recovery mode.

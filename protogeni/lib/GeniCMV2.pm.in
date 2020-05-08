@@ -1432,6 +1432,20 @@ sub ReloadSliver($)
 			$asyncmode);
 }
 
+sub PowerCycleSliver($)
+{
+    my ($argref) = @_;
+    my $slice_urn    = $argref->{'slice_urn'};
+    my $sliver_urns  = $argref->{'sliver_urns'} || $argref->{'component_urns'};
+    my $credentials  = $argref->{'credentials'};
+    my $asyncmode    = (exists($argref->{'asyncmode'}) ?
+			$argref->{'asyncmode'} : 0);
+
+    return SliverAction("powercycle",
+			$slice_urn, $sliver_urns, $credentials, undef,
+			$asyncmode);
+}
+
 sub SliverAction($$$$$$)
 {
     my ($action, $slice_urn, $sliver_urns, $credentials,
@@ -1554,6 +1568,12 @@ sub SliverAction($$$$$$)
 					    "Sliver is not started (yet)");
 	    }
 	}
+	elsif ($action eq "powercycle") {
+	    if ($object->state() ne "started" && $object->state() ne "mixed") {
+		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
+					    "Sliver is not started (yet)");
+	    }
+	}
 	elsif ($action eq "reload") {
 	    if ($object->state() ne "started" && $object->state() ne "stopped"){
 		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
@@ -1579,6 +1599,14 @@ sub SliverAction($$$$$$)
 	    }
 	    else {
 		$exitval = $object->Restart($API_VERSION);
+	    }
+	}
+	elsif ($action eq "powercycle") {
+	    if (@slivers) {
+		$exitval = $object->BatchAction("powercycle", @slivers);
+	    }
+	    else {
+		$exitval = $object->PowerCycle($API_VERSION);
 	    }
 	}
 	elsif ($action eq "reload") {

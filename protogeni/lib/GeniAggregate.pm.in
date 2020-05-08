@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1071,6 +1071,16 @@ sub Reload($$;$)
     return $self->Action($version, "reload", $flags);
 }
 
+sub PowerCycle($$;$)
+{
+    my ($self, $version, $flags) = @_;
+
+    if ($self->UseOsSetup()) {
+	return $self->ActionPowerCycle($version, $flags);
+    }
+    return $self->Action($version, "powercycle", $flags);
+}
+
 #
 # New version of start that uses libossetup.
 #
@@ -1670,6 +1680,35 @@ sub ActionReload($$;$)
 }
 
 #
+# Powercycle all slivers. 
+#
+sub ActionPowerCycle($$;$)
+{
+    my ($self, $version, $flags) = @_;
+    my @reload = ();
+
+    my @slivers = ();
+    if ($self->SliverList(\@slivers) != 0) {
+	$self->SetErrorLog("Could not get sliver list for $self");
+	return -1;
+    }
+    foreach my $sliver (@slivers) {
+	next
+	    if (ref($sliver) ne "GeniSliver::Node" &&
+		ref($sliver) ne "GeniSliver::Vhost");
+	
+	push(@reload, $sliver);
+    }
+
+    #
+    # Since this was an aggregate level reload, we have already forked
+    # from the parent. Hand it off to BatchAction() to take care of the
+    # rest, reload is simple so just pass it all the slivers. 
+    #
+    return $self->BatchAction("powercycle", @reload);
+}
+
+#
 # Restart all slivers that need to be restarted.
 #
 sub ActionRestart($$;$)
@@ -1712,7 +1751,7 @@ sub Action($$$;$)
     my ($self, $version, $action, $flags) = @_;
     my $msg = "Internal Error: ";
     my $bootfailure_code = GENIRESPONSE_SETUPFAILURE();
-    my $restart = ($action eq "restart" ? 1 : 0);
+    my $restart = ($action eq "restart" || $action eq "powercycle" ? 1 : 0);
     my $reload  = ($action eq "reload" ? 1 : 0);
     $flags      = 0 if (!defined($flags));
     require Lan;
@@ -2203,7 +2242,7 @@ sub Action($$$;$)
 	}
     }
 
-    if ($version >= 2 && !$reload) {
+    if ($version >= 2 && !$reload && $action ne "powercycle") {
 	#
 	# Dump the manifest into the experiment directory.
 	#
@@ -2479,6 +2518,9 @@ sub Action($$$;$)
 	#
 	if ($externalNodeManagement) {
 	    $cmdbits = " -b ";
+	}
+	elsif ($action eq "powercycle") {
+	    $cmdbits = " -f ";
 	}
 
 	#
@@ -3249,7 +3291,7 @@ sub BatchAction($$@)
 {
     my ($self, $action, @slivers) = @_;
     my $msg = "Internal Error: ";
-    my $restart = ($action eq "restart" ? 1 : 0);
+    my $restart = ($action eq "restart" || $action eq "powercycle" ? 1 : 0);
     my $reload  = ($action eq "reload" ? 1 : 0);
 
     # Set new status so ComputeState() knows what is going on.
@@ -3411,10 +3453,12 @@ sub BatchAction($$@)
 	}
 
 	if (@node_ids) {
+	    my $opt = ($action eq "powercycle" ? "-f" : "");
+	    
 	    # Mark them as being rebooted. See below.
 	    map { $_->_rebooted(1) } values(%reboots);
 	
-	    system("$NODEREBOOT @node_ids");
+	    system("$NODEREBOOT $opt @node_ids");
 	    if ($?) {
 		$msg .= "Failed to reboot @node_ids";
 		goto bad;

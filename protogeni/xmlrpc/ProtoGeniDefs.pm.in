@@ -170,6 +170,7 @@ $V2_METHODS = {
     "StopSliver"        => \&GeniCMV2::StopSliver,
     "RestartSliver"     => \&GeniCMV2::RestartSliver,
     "ReloadSliver"      => \&GeniCMV2::ReloadSliver,
+    "PowerCycleSliver"  => \&GeniCMV2::PowerCycleSliver,
     "BindToSlice"       => \&GeniCMV2::BindToSlice,
     "ListUsage"         => \&GeniCMV2::ListUsage,
     "ListHistory"       => \&GeniCMV2::ListHistory,

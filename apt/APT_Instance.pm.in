@@ -4325,7 +4325,9 @@ sub SliverAction($$;@)
 {
     my ($self, $which, @slivers) = @_;
     my $method    = ($which eq "reboot" ? "RestartSliver" :
-		     ($which eq "start" ? "StartSliver" : "ReloadSliver"));
+		     ($which eq "start" ? "StartSliver" :
+		      ($which eq "powercycle" ? "PowerCycleSliver" :
+		       "ReloadSliver")));
     my $authority = $self->GetGeniAuthority();
     my $geniuser  = $self->instance()->GetGeniUser();
     my $urn       = $self->aggregate_urn();
