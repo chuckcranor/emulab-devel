@@ -47,12 +47,13 @@ use Data::Dumper;
 #
 sub usage()
 {
-    print STDERR "Usage: createwbstore [-hd] -p pid -i instance -o offset host ...\n";
+    print STDERR "Usage: createwbstore [-hd] -u uid -p pid -i instance -o offset host ...\n";
     print STDERR "Create a write-back store for the specified experiment instance.\n";
     print STDERR "Options:\n";
     print STDERR "   -h          This message\n";
     print STDERR "   -d          Debug: print additional info\n";
     print STDERR "   -k          Debug: keep temporary directories\n";
+    print STDERR "   -u user     User name of instance creator\n";
     print STDERR "   -p pid      Project ID of instance\n";
     print STDERR "   -i instance Instance UUID for experiment\n";
     print STDERR "   -o offset   Integer offset from the base port\n";
@@ -60,9 +61,10 @@ sub usage()
     print STDERR "\n";
     exit(-1);
 }
-my $optlist  = "hdki:p:o:";
+my $optlist  = "hdki:u:p:o:";
 my $debug = 0;
 my $keep = 0;
+my $uid;
 my $pid;
 my $instance;
 my $portoffset;
@@ -95,21 +97,6 @@ my $SERVER       = "@USERNODE@";
 # XXX keep it inside Emulab
 my $EMULABNET	 = "155.98.32.0/20";
 
-##
-## Testbed Support libraries
-##
-#use lib "@prefix@/lib";
-#use EmulabConstants;
-#use libtestbed;
-#use emutil;
-#use libdb;
-#use Project;
-#use Group;
-#use User;
-#use Experiment;
-#use Node;
-#use WebTask;
-
 #
 # Turn off line buffering on output
 #
@@ -137,6 +124,12 @@ if (defined($options{d})) {
 if (defined($options{k})) {
     $keep = 1;
 }
+if (defined($options{u})) {
+    $uid = $options{u};
+    if ($uid !~ /^\w+$/) {
+	fatal("Not a valid user name");
+    }
+}
 if (defined($options{p})) {
     $pid = $options{p};
     if ($pid !~ /^[-\w]+$/) {
@@ -152,8 +145,9 @@ if (defined($options{o})) {
 	fatal("Not a valid offset number");
     }
 }
-if (!defined($pid) || !defined($instance) || !defined($portoffset)) {
-    print STDERR "Must specify an experiment pid, instance and port offset\n";
+if (!defined($uid) || !defined($pid) ||
+    !defined($instance) || !defined($portoffset)) {
+    print STDERR "Must specify an experiment creator name, pid, instance and port offset\n";
     usage();
 }
 if (@ARGV == 0) {
@@ -186,9 +180,12 @@ foreach my $h ($SERVER, @fqdns) {
 my $tmpdir = "$TMPDIR/$instance";
 
 #
-# Create syncthing hierarchy for each aggregate and the server
-# XXX this adds info to the %hosts hash so must be done before any configuration
+# Create syncthing hierarchy for each aggregate and the server.
 #
+# XXX this adds info to the %hosts hash so must be done before any
+# configuration.
+#
+my $found = 0;
 foreach my $h (keys %hosts) {
     createconfig($h);
 }
@@ -219,29 +216,56 @@ exit(0);
 #    usr/testbed/wbstore/<instance>/<domain>    syncthing configuration dir
 #    proj/<pid>/wbstore/<instance>/<domain>     experiment data directory
 #
+# XXX for the server, we need to create the data directory for all
+# aggregates (but only a single metadir).
+# XXX take another stab at getting the permissions reasonable.
+#
 sub createconfig($)
 {
     my ($fqdn) = @_;
 
     my $lpid = $hosts{$fqdn}{'pid'};
     my $lproj = $hosts{$fqdn}{'proj'};
-    my $domain = $hosts{$fqdn}{'domain'};
-    my $metadir = "$tmpdir/$domain/usr/testbed/wbstore/$instance/$domain";
-    my $datadir = "$tmpdir/$domain/$lproj/$lpid/wbstore/$instance/$domain";
 
     # Setup tmp dirs
-    if (system("mkdir -p $tmpdir $metadir $datadir")) {
+    my $domain = $hosts{$fqdn}{'domain'};
+    my $metadir = "$tmpdir/$domain/usr/testbed/wbstore/$instance/$domain";
+    if (system("mkdir -p $tmpdir $metadir")) {
 	fatal("createconfig: could not create tmp directories");
     }
-    print STDERR "made '$tmpdir', '$metadir', '$datadir'\n"
+    print STDERR "made '$tmpdir', '$metadir'\n"
 	if ($debug);
-    if (chmod(0700, $tmpdir, $metadir) != 2 || chmod(0770, $datadir) != 1) {
+    if (chmod(0700, $tmpdir, $metadir) != 2) {
 	fatal("createconfig: could not chmod tmp directories");
     }
 
-    # Create the syncthing marker directory
-    if (system("mkdir $datadir/.stfolder")) {
-	fatal("createconfig: could not create marker directory");
+    #
+    # Create the data directory. Note that the server node has a directory
+    # for all aggregates as well.
+    #
+    my @dirs = ();
+    if ($fqdn eq $SERVER) {
+	foreach my $h (keys %hosts) {
+	    my $dom = $hosts{$h}{'domain'};
+	    push(@dirs, "$tmpdir/$domain/$lproj/$lpid/wbstore/$instance/$dom");
+	}
+    } else {
+	push(@dirs, "$tmpdir/$domain/$lproj/$lpid/wbstore/$instance/$domain");
+    }
+    foreach my $ddir (@dirs) {
+	if (system("mkdir -p $ddir")) {
+	    fatal("createconfig: could not create data directory '$ddir'");
+	}
+	print STDERR "made '$ddir'\n"
+	    if ($debug);
+	if (chmod(0770, $ddir) != 1) {
+	    fatal("createconfig: could not chmod data directory '$ddir'");
+	}
+
+	# Create the syncthing marker directory
+	if (system("mkdir $ddir/.stfolder")) {
+	    fatal("createconfig: could not create marker directory");
+	}
     }
 
     # Generate the syncthing configuration. Includes config, keys, certs, ID.
@@ -262,6 +286,13 @@ sub createconfig($)
 	fatal("Could not read API key");
     }
     $hosts{$fqdn}{'apikey'} = $1;
+
+    # XXX Drop the creator name/group into a file in the config directory
+    # XXX Assumes the primary group name is the same as the project
+    if (open(FD, ">$metadir/creator")) {
+	print FD "$uid:$lpid\n";
+	close(FD);
+    }
 }
 
 sub customizeconfig($)
