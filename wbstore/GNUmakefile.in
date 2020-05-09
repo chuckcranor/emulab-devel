@@ -26,7 +26,7 @@ TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= ..
 SUBDIR		= wbstore
 
-SBIN_FILES	= createwbstore wbstoremonitor
+SBIN_FILES	= createwbstore installwbstore wbstoremonitor
 LIB_FILES	= WBStore.pm
 DATA_FILES	= send-template.xml recv-template.xml \
 		  recv-device-template.xml recv-folder-template.xml

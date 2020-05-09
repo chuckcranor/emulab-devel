@@ -110,14 +110,17 @@ my $TBOPS    = "@TBOPSEMAIL@";
 my $OPSNODE  = "@USERNODE@";
 my $MAINSITE  = @TBMAINSITE@;
 my $METADIR  = "$TB/wbstore";
+my $PROJDIR   = "@PROJROOT_DIR@";
 my $STBIN    = "/usr/local/bin/syncthing";
 my $STMARKER = ".stfolder";
 
 # Set this to turn off tblog in libraries.
 $ENV{'TBLOG_OFF'} = "yep";
 
-# Testbed Support library
+# XXX tmp remove me when WBStore is installed
 use lib ".";
+
+# Testbed Support libraries
 use lib "@prefix@/lib";
 use libtestbed;
 use WBStore;
@@ -365,6 +368,16 @@ while (1) {
 	}
 
 	#
+	# XXX that should be it for the mothership, since an instance
+	# is either active or done.
+	#
+	if ($MAINSITE) {
+	    logit("$uuid: WARNING: ".
+		  "Mothership instance not active and not done!");
+	    next;
+	}
+
+	#
 	# Not DONE yet. If syncthing is not running, try to get it started.
 	#
 	# We turn off the real-time file watcher because there is no need
@@ -400,15 +413,20 @@ while (1) {
 	    next
 		if ($inst->_state ne INSYNC);
 
-	    # We are synced up! Drop the DONE sentinel
-	    my $sentinel = $inst->datadir() . "/.$uuid-" . $inst->domain();
-	    if (open(FD, ">$sentinel")) {
-		# what the heck, drop a timestamp in it.
-		print FD time() . "\n";
-		close(FD);
-	    } else {
+	    #
+	    # We are synced up! Drop the DONE sentinel and force a final scan.
+	    # XXX this should not take too long, not sure what happens if
+	    # we timeout here.
+	    #
+	    if ($inst->SetDone()) {
 		logit("$uuid: WARNING: ".
-		      "Could not write DONE sentinel '$sentinel'");
+		      "Could not write DONE sentinel!");
+		next;
+	    }
+	    if ($inst->FinalSync()) {
+		logit("$uuid: WARNING: ".
+		      "Could not perform final sync!");
+		next;
 	    }
 	}
     }
@@ -429,15 +447,61 @@ sub cleanupinstance($)
     return
 	if ($handledead == 0);
 
+    my $uuid = $inst->uuid();
+    my $pid = $inst->pid();
     my $confdir = $inst->confdir();
     my $datadir = $inst->datadir();
+    my $action = ($handledead == -1 ? "removing" : "archiving");
+
+    # XXX
+    if ($uuid eq "00000000-0000-0000-0000-000000000000") {
+	logit("$inst: not $action mikes magic experiment");
+	return 0;
+    }
+
+    # XXX paranoid sanity checks
+    if ($confdir !~ m#^($METADIR/$uuid)/.+#) {
+	logit("$inst: WARNING: cleanup detected unexpected path for ".
+	      "config dir ($confdir), not $action!");
+	return 1;
+    }
+    $confdir = $1;
+    if ($datadir !~ m#^($PROJDIR/$pid/wbstore/$uuid)/.+#) {
+	logit("$inst: WARNING: cleanup detected unexpected path for ".
+	      "data dir ($datadir), not $action!");
+	return 1;
+    }
+    $datadir = $1;
 
     if ($handledead == -1) {
-	print STDERR "$inst: would remove '$datadir' ...\n"
-	    if ($debug);
+	my $out = "$datadir.rm.out";
+	if (system("rm -rf $confdir $datadir >$out 2>&1")) {
+	    logit("$inst: WARNING: cleanup could not remove ".
+		  "config dir ($confdir) and data dir ($datadir)! ".
+		  "See $out.");
+	    return 1;
+	}
+	logit("$inst: removed config and data directories");
     } else {
-	print STDERR "$inst: would archive '$datadir' to '$confdir'...\n"
-	    if ($debug);
+	my $tarball = "$datadir.tgz";
+	my $out = "$datadir.tgz.out";
+	if (system("tar czf $tarball $confdir $datadir >$out 2>&1")) {
+	    logit("$inst: WARNING: cleanup could not archive ".
+		  "config dir ($confdir) and data dir ($datadir)! ".
+		  "See $out.");
+	    unlink($tarball);
+	    return 1;
+	}
+	$out = "$datadir.rm.out";
+	if (system("rm -rf $confdir $datadir >$out 2>&1")) {
+	    logit("$inst: WARNING: cleanup could not remove ".
+		  "config dir ($confdir) and data dir ($datadir) ".
+		  "after archiving! ".
+		  "See $out.");
+
+	    return 1;
+	}
+	logit("$inst: archived config and data directories");
     }
 
     return 0;
@@ -617,7 +681,7 @@ sub setdevicestates($)
 #
 sub getinstances()
 {
-    if (TBScriptLock("wbstore", 1, 0) != TBSCRIPTLOCK_OKAY()) {
+    if (TBScriptLock("wbstore") != TBSCRIPTLOCK_OKAY()) {
 	fatal("Could not get wbstore metadata lock!");
     }
 
@@ -640,6 +704,21 @@ sub getinstances()
 	    logit("added new instance '$ni'")
 		if (!$onceonly);
 	    $instance{$token}{'obj'} = $ni;
+	} else {
+	    # active-ness and done-ness can change
+	    my $ci = $instance{$token}{'obj'};
+	    if ($ci->active() != $ni->active) {
+		print STDERR "*** $ci: ACTIVE ".
+		    $ci->active() . " -> " . $ni->active() . "\n"
+		    if ($debug);
+		$ci->active($ni->active());
+	    }
+	    if ($ci->done() != $ni->done) {
+		print STDERR "*** $ci: DONE ".
+		    $ci->done() . " -> " . $ni->done() . "\n"
+		    if ($debug);
+		$ci->done($ni->done());
+	    }
 	}
 	$instance{$token}{'found'} = 1;
 	$syncthing{$uuid}{'found'} = 1;
@@ -656,7 +735,7 @@ sub getinstances()
 	if (!exists($syncthing{$st}{'found'})) {
 	    delete $syncthing{$st};
 	} else {
-	    # we are going to need these below
+	    # we are going to reset these below
 	    delete $syncthing{$st}{'found'};
 	    delete $syncthing{$st}{'active'};
 	    delete $syncthing{$st}{'done'};
@@ -772,16 +851,8 @@ sub getinstances()
 	    $mydevs = $syncthing{$uuid}{'devinfo'};
 	}
 
-	#
-	# See if the DONE sentinel exists. The sentinel is a file called
-	# ".<folder-id>" in the folder. It is highly unlikely that any
-	# application will produce a file with this name.
-	#
-	my $done = 0;
-	my $sentinel = $inst->datadir() . "/.$uuid-" . $inst->domain();
-	if (-e "$sentinel") {
-	    $done = 1;
-	}
+	my $active = $inst->active();
+	my $done = $inst->done();
 
 	#
 	# Propagate all the appropriate state from the syncthing to our
@@ -795,8 +866,6 @@ sub getinstances()
 	    $inst->_state($syncthing{$uuid}{'state'});
 	    $inst->_fstate($done ? DONE : IDLE);
 	}
-	
-	my $active = $inst->active();
 
 	#
 	# And aggregate some state for the syncthing instance:

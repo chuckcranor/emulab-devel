@@ -1,4 +1,4 @@
-    <folder id="@FID@" label="@FLABEL@" path="@FPATH@" type="receiveonly" rescanIntervalS="60" fsWatcherEnabled="false" fsWatcherDelayS="10" ignorePerms="false" autoNormalize="true">
+    <folder id="@FID@" label="@FLABEL@" path="@FPATH@" type="receiveonly" rescanIntervalS="0" fsWatcherEnabled="false" fsWatcherDelayS="10" ignorePerms="false" autoNormalize="true">
         <filesystemType>basic</filesystemType>
         <device id="@MYDEVID@" introducedBy=""></device>
         <device id="@OTHERDEVID@" introducedBy=""></device>
@@ -9,7 +9,7 @@
         <hashers>0</hashers>
         <order>random</order>
         <ignoreDelete>false</ignoreDelete>
-        <scanProgressIntervalS>0</scanProgressIntervalS>
+        <scanProgressIntervalS>10</scanProgressIntervalS>
         <pullerPauseS>0</pullerPauseS>
         <maxConflicts>10</maxConflicts>
         <disableSparseFiles>false</disableSparseFiles>

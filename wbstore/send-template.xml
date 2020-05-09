@@ -10,7 +10,7 @@
         <hashers>0</hashers>
         <order>random</order>
         <ignoreDelete>false</ignoreDelete>
-        <scanProgressIntervalS>0</scanProgressIntervalS>
+        <scanProgressIntervalS>10</scanProgressIntervalS>
         <pullerPauseS>0</pullerPauseS>
         <maxConflicts>-1</maxConflicts>
         <disableSparseFiles>false</disableSparseFiles>
@@ -72,7 +72,7 @@
         <upgradeToPreReleases>false</upgradeToPreReleases>
         <keepTemporariesH>24</keepTemporariesH>
         <cacheIgnoredFiles>false</cacheIgnoredFiles>
-        <progressUpdateIntervalS>5</progressUpdateIntervalS>
+        <progressUpdateIntervalS>10</progressUpdateIntervalS>
         <limitBandwidthInLan>false</limitBandwidthInLan>
         <minHomeDiskFree unit="%">1</minHomeDiskFree>
         <releasesURL>https://upgrades.syncthing.net/meta.json</releasesURL>

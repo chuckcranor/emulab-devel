@@ -47,7 +47,7 @@ use Data::Dumper;
 #
 sub usage()
 {
-    print STDERR "Usage: createwbstore [-hd] -u uid -p pid -i instance -o offset host ...\n";
+    print STDERR "Usage: createwbstore [-hd] -u uid -p pid -i instance -o offset domain ...\n";
     print STDERR "Create a write-back store for the specified experiment instance.\n";
     print STDERR "Options:\n";
     print STDERR "   -h          This message\n";
@@ -57,7 +57,7 @@ sub usage()
     print STDERR "   -p pid      Project ID of instance\n";
     print STDERR "   -i instance Instance UUID for experiment\n";
     print STDERR "   -o offset   Integer offset from the base port\n";
-    print STDERR "   host ...    FQDN of remote host(s)\n";
+    print STDERR "   domain ...  Domain name of aggregate(s)\n";
     print STDERR "\n";
     exit(-1);
 }
@@ -87,7 +87,6 @@ sub fatal($);
 #
 my $TB		 = "@prefix@";
 my $TBOPS        = "@TBOPSEMAIL@";
-my $TBPROJ_DIR	 = "@PROJROOT_DIR@";
 my $STHOME_DIR	 = "$TB/wbstore";
 my $STTEMPLATE_DIR = "$TB/wbstore/templates";
 my $TMPDIR	 = "$TB/wbstore/tarballs";
@@ -151,29 +150,22 @@ if (!defined($uid) || !defined($pid) ||
     usage();
 }
 if (@ARGV == 0) {
-    print STDERR "Must specify one or more hosts\n";
+    print STDERR "Must specify one or more aggregate domains\n";
     usage();
 }
 
+# For all aggregates, we run on "boss"
+@fqdns = map { "boss.$_" } @ARGV;
+
 # "Validate" node names, including server
-@fqdns = @ARGV;
 foreach my $h ($SERVER, @fqdns) {
     my ($host, $domain) = parsehostname($h);
     $hosts{$h}{'host'} = $host;
     $hosts{$h}{'domain'} = $domain;
-
-    # XXX pid is different on mothership and aggregates
-    # XXX /proj is actually /ops/proj on aggregates
-    my $lproj;
-    if ($h eq $SERVER) {
-	$hosts{$h}{'pid'} = $pid;
-	$lproj = $TBPROJ_DIR;
-    } else {
-	$hosts{$h}{'pid'} = lc($pid) . "-PG0";
-	$lproj = "/ops$TBPROJ_DIR";
-    }
-    $lproj =~ s/^\///;
-    $hosts{$h}{'proj'} = $lproj;
+    $hosts{$h}{'pid'} = $pid;
+    # keep this generic since we will have to fix it up at each aggregate
+    $hosts{$h}{'proj'} = "/proj";
+    $hosts{$h}{'proj'} =~ s/^\///;
 }
 
 # Working directory we need to remove on failure
@@ -185,7 +177,6 @@ my $tmpdir = "$TMPDIR/$instance";
 # XXX this adds info to the %hosts hash so must be done before any
 # configuration.
 #
-my $found = 0;
 foreach my $h (keys %hosts) {
     createconfig($h);
 }
@@ -203,33 +194,19 @@ dumpinfo()
     if ($debug);
 exit(0);
 
-## Must be a valid user
-#my $this_user = User->ThisUser();
-#if (! defined($this_user)) {
-#    fatal("You ($UID) do not exist!");
-#}
-
 #
-# Create the configuration hierarchy for a syncthing instance.
-# The hierarchy mimics what will be installed at '/' on each node:
-#
-#    usr/testbed/wbstore/<instance>/<domain>    syncthing configuration dir
-#    proj/<pid>/wbstore/<instance>/<domain>     experiment data directory
-#
-# XXX for the server, we need to create the data directory for all
-# aggregates (but only a single metadir).
-# XXX take another stab at getting the permissions reasonable.
+# Create the configuration directory contents for a syncthing instance.
+# This mirrors what will be installed in /usr/testbed/wbstore on the aggregate.
 #
 sub createconfig($)
 {
     my ($fqdn) = @_;
 
-    my $lpid = $hosts{$fqdn}{'pid'};
-    my $lproj = $hosts{$fqdn}{'proj'};
+    my $pid = $hosts{$fqdn}{'pid'};
 
     # Setup tmp dirs
     my $domain = $hosts{$fqdn}{'domain'};
-    my $metadir = "$tmpdir/$domain/usr/testbed/wbstore/$instance/$domain";
+    my $metadir = "$tmpdir/$domain/$instance/$domain";
     if (system("mkdir -p $tmpdir $metadir")) {
 	fatal("createconfig: could not create tmp directories");
     }
@@ -237,35 +214,6 @@ sub createconfig($)
 	if ($debug);
     if (chmod(0700, $tmpdir, $metadir) != 2) {
 	fatal("createconfig: could not chmod tmp directories");
-    }
-
-    #
-    # Create the data directory. Note that the server node has a directory
-    # for all aggregates as well.
-    #
-    my @dirs = ();
-    if ($fqdn eq $SERVER) {
-	foreach my $h (keys %hosts) {
-	    my $dom = $hosts{$h}{'domain'};
-	    push(@dirs, "$tmpdir/$domain/$lproj/$lpid/wbstore/$instance/$dom");
-	}
-    } else {
-	push(@dirs, "$tmpdir/$domain/$lproj/$lpid/wbstore/$instance/$domain");
-    }
-    foreach my $ddir (@dirs) {
-	if (system("mkdir -p $ddir")) {
-	    fatal("createconfig: could not create data directory '$ddir'");
-	}
-	print STDERR "made '$ddir'\n"
-	    if ($debug);
-	if (chmod(0770, $ddir) != 1) {
-	    fatal("createconfig: could not chmod data directory '$ddir'");
-	}
-
-	# Create the syncthing marker directory
-	if (system("mkdir $ddir/.stfolder")) {
-	    fatal("createconfig: could not create marker directory");
-	}
     }
 
     # Generate the syncthing configuration. Includes config, keys, certs, ID.
@@ -287,10 +235,15 @@ sub createconfig($)
     }
     $hosts{$fqdn}{'apikey'} = $1;
 
-    # XXX Drop the creator name/group into a file in the config directory
-    # XXX Assumes the primary group name is the same as the project
+    #
+    # Drop the creator name/group into a file in the config directory.
+    # These will be mapped to the aggregate equivalents and used to
+    # update the config file.
+    #
+    # XXX Assumes the group name is the same as the project name.
+    #
     if (open(FD, ">$metadir/creator")) {
-	print FD "$uid:$lpid\n";
+	print FD "$uid:$pid\n";
 	close(FD);
     }
 }
@@ -299,7 +252,7 @@ sub customizeconfig($)
 {
     my ($fqdn) = @_;
     my $domain = $hosts{$fqdn}{'domain'};
-    my $metadir = "$tmpdir/$domain/usr/testbed/wbstore/$instance/$domain";
+    my $metadir = "$tmpdir/$domain/$instance/$domain";
 
     # Customize the config.xml file from our template
     my $cfile = "$metadir/config.xml";
@@ -367,7 +320,7 @@ sub packageconfig($)
     my $tarball = "$TMPDIR/$instance-$domain.tar.gz";
 
     # Tar everything up
-    if (system("tar -C $rootdir -czf $tarball $lproj usr")) {
+    if (system("tar -C $rootdir -czf $tarball $instance")) {
 	fatal("packageconfig: could not create '$tarball' from '$rootdir'");
     }
 

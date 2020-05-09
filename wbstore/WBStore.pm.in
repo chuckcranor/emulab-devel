@@ -67,9 +67,7 @@ my $TBOPS     = "@TBOPSEMAIL@";
 my $OURDOMAIN = "@OURDOMAIN@";
 my $MAINSITE  = @TBMAINSITE@;
 my $OPSNODE   = "@USERNODE@";
-# XXX we use the "realpath" when building syncthing config files
-# so we use FSDIR_PROJ and not PROJROOT_DIR
-my $PROJDIR   = "@FSDIR_PROJ@";
+my $PROJDIR   = "@PROJROOT_DIR@";
 my $METADIR   = "$TB/wbstore";
 my $STBIN     = "/usr/local/bin/syncthing";
 my $STMARKER  = ".stfolder";
@@ -94,6 +92,7 @@ sub Lookup($$;$)
     my $result;
     my ($name,$pid,$cdir,$ddir);
     my $live = 0;
+    my $done = 0;
 
     if ($token !~ /^(\w{8}-\w{4}-\w{4}-\w{4}-\w{12})\/([-a-z0-9\.]+)$/i) {
 	print STDERR "WBStore Lookup: ".
@@ -110,25 +109,15 @@ sub Lookup($$;$)
     # (slice_uuid) on the mothership or in experiments (eid_uuid) on an
     # aggregate.
     #
+    # XXX On the mothership, we actually run on ops where we do not have
+    # access to the DB. So we differentiate live/past by detecting if the
+    # DONE sentinel exists (below). An instance will be "past" potentially
+    # well before it is DONE, but on the mothership side, it doesn't
+    # matter; we treat syncthing the same way for live and recently
+    # deceased experiments.
+    #
     if ($MAINSITE) {
-	#
-	# XXX On the mothership, we actually run on ops where we do
-	# not have access to the DB. So we just assume all experiments
-	# are live for now.
-	#
-	if (1) {
-	    $live = 1;
-	} else {
-	    require emdb;
-	    emdb->import;
-
-	    $result = DBQueryWarn("select name,pid from apt_instances ".
-				  "where slice_uuid='$uuid'");
-	    if ($result && $result->numrows) {
-		($name,$pid) = $result->fetchrow_array();
-		$live = 1;
-	    }
-	}
+	$live = 1;
     } else {
 	require emdb;
 	emdb->import;
@@ -225,6 +214,25 @@ sub Lookup($$;$)
 		if ($debug);
 	    return undef;
 	}
+
+	#
+	# See if the DONE sentinel exists. The sentinel is a file called
+	# ".<folder-id>" in the folder. It is highly unlikely that any
+	# application will produce a file with this name.
+	#
+	my $sentinel = "$ddir/.$uuid-$domain";
+	if (-e "$sentinel") {
+	    $done = 1;
+	    #
+	    # XXX if an instance is DONE it is also not active.
+	    # On the mothership, this is how we detect past experiments
+	    # (see comment above). On an aggregate, this is just a
+	    # reality check.
+	    #
+	    $live = 0;
+	}
+
+	last;
     }
     if (!$ddir) {
 	print STDERR "WBStore Lookup: invalid instance '$uuid': ".
@@ -244,6 +252,7 @@ sub Lookup($$;$)
     $self->{'WBSTORE'}->{'confdir'} = $cdir;
     $self->{'WBSTORE'}->{'datadir'} = $ddir;
     $self->{'WBSTORE'}->{'active'} = $live;
+    $self->{'WBSTORE'}->{'done'} = $done;
     $self->{'WBSTORE'}->{'apitimeout'} = $apitimeout;
 
     # Caller supplied info
@@ -349,6 +358,10 @@ AUTOLOAD {
 
     # A DB row proxy method call.
     if (exists($self->{'WBSTORE'}->{$name})) {
+	# Allow update.
+	if (scalar(@_) == 2) {
+	    $self->{'WBSTORE'}->{$name} = $_[1];
+	}
 	return $self->{'WBSTORE'}->{$name};
     }
     # Or it is for a local storage slot.
@@ -384,6 +397,34 @@ sub Stringify($)
     my $dom = $self->domain();
 
     return "[WBStore $uuid/$dom]";
+}
+
+#
+# Mark an instance as DONE.
+# On an aggregate, this creates the sentinel file in addition to updating
+# the DB state. Returns 0 on success, non-zero on error.
+#
+sub SetDone($)
+{
+    my ($self) = @_;
+    
+    if (!$MAINSITE) {
+	my $sentinel = $self->datadir() . "/." .
+	    $self->uuid() . "-" . $self->domain();
+	if (!open(FD, ">$sentinel")) {
+	    print STDERR "$self: SetDone: ".
+		"Could not write DONE sentinel '$sentinel'"
+		if ($debug);
+	    return 1;
+	}
+
+	# what the heck, drop a timestamp in it.
+	print FD time() . "\n";
+	close(FD);
+    }
+
+    $self->{'WBSTORE'}->{'done'} = 1;
+    return 0;
 }
 
 #
@@ -437,6 +478,46 @@ sub IsRunning($)
     print STDERR "$self: IsRunning:\n", Dumper($json), "\n"
 	if ($debug > 1);
     return $json->{'myID'};
+}
+
+#
+# Attempt to push out our sentinel file to the other side.
+# Since it is only the single file, we hope this doesn't take too long!
+# Returns zero on success, non-zero otherwise.
+#
+sub FinalSync($)
+{
+    my ($self) = @_;
+    my $timo = 60;
+
+    return -1
+	if (!ref($self));
+
+    my $robj = $self->GetREST();
+    return -1
+	if (!ref($robj));
+
+    my $folder = $self->uuid() . "-" . $self->domain();
+    my $sfile = ".$folder";
+    return 1
+	if (! -e $self->datadir() . "/" . "$sfile");
+    
+    my $msg;
+    my $otimo = $robj->SetTimeout($timo);
+    my $json = $robj->Request("db/scan", "POST",
+			      { 'folder' => $folder,
+				'sub' => $sfile,
+				'next' => $timo*2 },
+			      undef, "200", \$msg);
+    $robj->SetTimeout($otimo);
+    if (!$json) {
+	$msg =~ s/.*Syncthing API error: (.*)/$1/s;
+	print STDERR "$self: FinalSync: $msg\n"
+	    if ($debug);
+	return -1;
+    }
+
+    return 0;
 }
 
 #
