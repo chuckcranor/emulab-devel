@@ -851,6 +851,7 @@ class Instance
             ($all || $aggregate_urn == $DEFAULT_AGGREGATE_URN)) {
             $skiptypes["sdr"]      = true;
             $skiptypes["nuc5300"]  = true;
+            $skiptypes["nexus5"]   = true;
             $skiptypes["enodeb"]   = true;
             $skiptypes["nuc6260"]  = true;
             $skiptypes["nuc8650"]  = true;

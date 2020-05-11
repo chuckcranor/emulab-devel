@@ -1858,8 +1858,8 @@ sub ReservableTypes($)
     
     foreach my $type (@alltypes) {
 	next
-	    if ($type->class() ne "pc");
-	
+	    if ($type->class() ne "pc" && !$type->reservable());
+
 	my $typename = $type->type();
 	
 	#
