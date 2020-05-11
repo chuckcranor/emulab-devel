@@ -2038,6 +2038,12 @@ $(function ()
 		selected = $('#finalize_options .cluster-group ' +
 			     'select option:selected').text();
 	    }
+	    else {
+		// Always default Powder dropdown to Emulab
+		if (window.ISPOWDER) {
+		    selected = "Emulab";
+		}
+	    }
 	    var options = createDropdowns(selected);
 	    
 	    html = 
@@ -2765,12 +2771,12 @@ $(function ()
 	    $(xmlDoc).find("node").each(function() {
 		// Gotta have a manager to know anything.
 		var manager_urn = $(this).attr("component_manager_id");
-		if (!manager_urn.length) {
+		if (!manager_urn) {
 		    return;
 		}
 		// Ditto the component ID
 		var component_id = $(this).attr("component_id");
-		if (!component_id.length) {
+		if (!component_id) {
 		    return;
 		}
 		// Might be a urn.
@@ -2806,12 +2812,11 @@ $(function ()
 
 	console.info("CheckForSpectrum", spectrum);
 
-	if (!spectrum.length) {
-	    $('#step3-div .reserve-resources-button').off("click");
-	    $('#step3-div .schedule-experiment').removeClass("hidden");
-	    $('#step3-div .reserve-resources').addClass("hidden");
-	    $('#groups-div').addClass("hidden");
-	    $('#groups').html("");
+	/*
+	 * Kirk requested that we do not predicate this on using spectrum
+	 * but always on the Powder portal.
+	 */
+	if (!window.ISPOWDER) {
 	    return;
 	}
 
@@ -3058,7 +3063,7 @@ $(function ()
 		return;
 	    }
 	    // Otherwise, we dig inside and find the hardware type.
-	    if (!htype.length) {
+	    if (htype) {
 		return;
 	    }
 	    var type = $(htype).attr("name");
