@@ -2817,6 +2817,11 @@ $(function ()
 	 * but always on the Powder portal.
 	 */
 	if (!window.ISPOWDER) {
+            $('#step3-div .reserve-resources-button').off("click");
+            $('#step3-div .schedule-experiment').removeClass("hidden");
+            $('#step3-div .reserve-resources').addClass("hidden");
+            $('#groups-div').addClass("hidden");
+            $('#groups').html("");
 	    return;
 	}
 
