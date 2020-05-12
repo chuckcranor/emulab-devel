@@ -30,7 +30,7 @@ include $(OBJDIR)/Makeconf
 
 SUBDIRS		= 
 
-SBIN_SCRIPTS	= powder_shutdown powderstats \
+SBIN_SCRIPTS	= powder_shutdown powderstats powder_report \
 		  powder_keepalive powder_deadman bspowerconfig
 WEB_SBIN_SCRIPTS= webpowder_shutdown
 LIBEXEC_SCRIPTS	= $(WEB_SBIN_SCRIPTS)
