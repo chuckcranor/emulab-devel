@@ -895,6 +895,17 @@ sub NewCredential($$)
     return undef
 	if (! (ref($self) && ref($owner)));
 
+    if ($self->GetCertificate()->IsExpired()) {
+	print STDERR "Aggregate Certificate is expired! ".
+	    "Trying to generate a new one.\n";
+	
+	if ($self->RegenCertificate()) {
+	    SENDMAIL($TBOPS, "Could not regen expired certificate",
+		     "Could not regenerate expired certificate for $self",
+		     $TBOPS);
+	    # Not fatal, but indicates something amiss.
+	}
+    }
     my $credential = GeniCredential->Create($self, $owner);
     if (!defined($credential)) {
 	print STDERR "Could not create credential for $self, $owner\n";
@@ -911,6 +922,35 @@ sub NewCredential($$)
 	return undef;
     }
     return $credential;
+}
+
+#
+# Regenerate the certificate
+#
+sub RegenCertificate($)
+{
+    my ($self) = @_;
+
+    #
+    # Reuse the key, so write the cert with key to a temp file.
+    # This file is deleted automatically.
+    #
+    my $keyfile = $self->GetCertificate()->WriteToFile(1);
+
+    my $certificate =
+	GeniCertificate->Create({
+	    'urn'     => $self->urn(),
+	    'hrn'     => $self->hrn(),
+	    'uuid'    => $self->uuid(),
+	    'keyfile' => $keyfile,
+	    'email' => $TBOPS});
+    if (!defined($certificate)) {
+	return -1;
+    }
+    $self->GetCertificate()->Delete();
+    $certificate->Store();
+    $self->{'CERTIFICATE'} = $certificate;
+    return 0;
 }
 
 #
