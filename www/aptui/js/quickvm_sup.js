@@ -354,7 +354,7 @@ function StartGeniLogin()
 function VerifySpeaksfor(speaksfor, signature)
 {
     var callback = function(json) {
-	HideModal("#waitwait-modal");
+	HideWaitWait();
 	    
 	if (json.code) {
 	    alert("Could not verify speaksfor: " + json.value);
@@ -405,7 +405,7 @@ function VerifySpeaksfor(speaksfor, signature)
 	    window.location.replace(json.value.url);
 	}
     }
-    ShowModal("#waitwait-modal");
+    ShowWaitWait("This will take a minute; patience please!");
     var $xmlthing = CallServerMethod(null,
 				     "geni-login", "VerifySpeaksfor",
 				     {"speaksfor" : speaksfor,

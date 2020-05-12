@@ -97,12 +97,11 @@ function Do_CreateSecret()
     #
     # Destroy any existing session data to prevent replay.
     #
-    if (!(session_start() &&
-	  session_destroy())) {
-	SPITAJAX_ERROR(-1, "Internal session error 1");
-	return;
-    }
+    session_start();
+    session_unset();
+    session_destroy();
     session_commit();
+
     if (!session_start()) {
 	SPITAJAX_ERROR(-1, "Internal session error 2");
 	return;
@@ -198,7 +197,8 @@ function Do_CreateSecret()
 function Do_VerifySpeaksfor()
 {
     global $ajax_args;
-    global $TBDIR, $COOKDIEDOMAIN, $TBMAINSITE, $PROTOGENI_GENIWEBLOGIN;
+    global $TBDIR, $COOKDIEDOMAIN, $TBMAINSITE;
+    global $PROTOGENI_GENIWEBLOGIN, $PROTOGENI_HOLDINGPROJECT;
     global $TBAUTHCOOKIE, $TBLOGINCOOKIE, $TBAUTHTIMEOUT, $TBNAMECOOKIE;
     global $OURDOMAIN, $TBMAILADDR;
     $embedded = 0;
@@ -349,7 +349,7 @@ function Do_VerifySpeaksfor()
         }
 
         if (!$this_user) {
-            if (!$TBMAINSITE) {
+            if (!$PROTOGENI_GENIWEBLOGIN) {
                 SPITAJAX_ERROR(1, "You do not have an account at this site");
                 session_destroy();
                 return;
@@ -372,12 +372,9 @@ function Do_VerifySpeaksfor()
             # we have a user record but they might not be a member of the
             # Cloudlab holding project. 
             #
-            if ($TBMAINSITE) {
-                $project = Project::Lookup("CloudLab");
-                if (! $project->IsMember($this_user, $ignored)) {
-                    $project->AddNewMember($this_user,
-                                           TBDB_TRUSTSTRING_LOCALROOT);
-                }
+            $project = Project::Lookup($PROTOGENI_HOLDINGPROJECT);
+            if (! $project->IsMember($this_user, $ignored)) {
+                $project->AddNewMember($this_user, TBDB_TRUSTSTRING_LOCALROOT);
             }
             if ($this_user->status() == TBDB_USERSTATUS_INACTIVE) {
                 SPITAJAX_ERROR(1, "Your account has gone inactive. Please ".
@@ -442,7 +439,7 @@ function Do_VerifySpeaksfor()
 #
 function CreateNonLocalUser($urn, $email)
 {
-    global $TBOPSPID;
+    global $TBOPSPID, $PROTOGENI_HOLDINGPROJECT;
     $safe_urn = escapeshellarg($urn);
     $safe_email = escapeshellarg($email);
     
@@ -451,7 +448,8 @@ function CreateNonLocalUser($urn, $email)
     # non-negative value if the user already exists.
     #
     $retval = SUEXEC("elabman", $TBOPSPID,
-		     "webcreategeniuser -p CloudLab -m $safe_urn $safe_email",
+		     "webcreategeniuser -p $PROTOGENI_HOLDINGPROJECT ".
+                     "   -m $safe_urn $safe_email",
 		     SUEXEC_ACTION_CONTINUE);
     if ($retval < 0)
 	return -1;
@@ -464,7 +462,7 @@ function CreateNonLocalUser($urn, $email)
 # 
 function CheckCredentials($cert, $cred, $info)
 {
-    global $TBMAINSITE, $suexec_output;
+    global $suexec_output;
 
     $credfile = tempnam("/tmp", "cert");
     $certfile = tempnam("/tmp", "cred");
@@ -498,13 +496,13 @@ function CheckCredentials($cert, $cred, $info)
 # 
 function UpdateCredentials($user, $cert, $cred, &$error)
 {
-    global $TBMAINSITE, $suexec_output;
+    global $PROTOGENI_GENIWEBLOGIN, $suexec_output;
 
     $uid = $user->uid();
     $project = $user->FirstApprovedProject();
     $pid = (isset($project) ? $project->pid() : "nobody");
     # Update keys on main site, no need to do this on backend clusters.
-    $arg = ($TBMAINSITE ? "-s" : "");
+    $arg = ($PROTOGENI_GENIWEBLOGIN ? "-s" : "");
     
     $credfile = tempnam("/tmp", "cert");
     $certfile = tempnam("/tmp", "cred");

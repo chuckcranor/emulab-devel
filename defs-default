@@ -106,6 +106,10 @@ PROTOGENI_NICKNAME="utah-pg"
 PROTOGENI_MAXSERVERLOAD=24
 # Do not set this without asking Utah.
 PROTOGENI_LOCALUSER=1
+# Geni Login Button
+PROTOGENI_GENIWEBLOGIN=1
+# What project to dump geni users into.
+PROTOGENI_HOLDINGPROJECT="CloudLab"
 # Portal for the Cloudlab Cluster.
 CLUSTER_PORTAL="boss.emulab.net"
 CLUSTER_PUBSUBD_SSLPORT=16506

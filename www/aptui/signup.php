@@ -636,7 +636,7 @@ foreach ($licenses as $name => $value) {
 if (! ($project = Project::NewNewProject($args, $error))) {
     $errors["error"] = $error;
     if ($suexec_retval < 0) {
-	TBERROR("Error Creating APT/CloudLab Project\n${error}\n\n" .
+	TBERROR("Error Creating New Project\n${error}\n\n" .
 		print_r($args, TRUE), 0);
 
         SUEXECERROR(SUEXEC_ACTION_CONTINUE);

@@ -502,7 +502,7 @@ sub ProjectLists($$)
     if ($query_result->numrows) {
 	if ($pid eq $gid) {
 	    genelist($query_result, undef, "$pid-users",
-		     ($pid eq "CloudLab" ? 0 : 1));
+		     ($pid eq "@PROTOGENI_HOLDINGPROJECT@" ? 0 : 1));
 	}
 	else {
 	    genelist($query_result, undef, "$pid-$gid-users",
