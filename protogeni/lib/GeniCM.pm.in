@@ -3216,7 +3216,7 @@ sub GetTicketAuxAux($)
 	    }
 	    elsif (defined($ip) && !defined($mask)) {
 		$response =
-		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+		    GeniResponse->BadArgsResponse(
 				 "$lanname:$node_nickname must provide a ".
 				  "netmask if you specify an IP address");
 		goto bad;
