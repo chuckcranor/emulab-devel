@@ -2660,6 +2660,42 @@ AUTOLOAD {
 sub AggregateList($) { return values(%{ $_[0]->{'AGGREGATES'} }); }
 sub AggregateHash($) { return $_[0]->{'AGGREGATES'}; }
 
+
+sub LookupBySlice($$)
+{
+    my ($class, $token) = @_;
+    my $slice_uuid;
+
+    if ($token =~ /^\w+\-\w+\-\w+\-\w+\-\w+$/) {
+	$slice_uuid = $token;
+    }
+    elsif (GeniHRN::IsValid($token)) {
+	#
+	# We should put the slice_urn into the apt_instances table.
+	#
+	require GeniSlice;
+	my $slice = GeniSlice->Lookup($token);
+	return undef
+	    if (!defined($slice));
+	$slice_uuid = $slice->uuid();
+	$slice->Flush();
+    }
+    else {
+	return undef;
+    }
+
+    my $query_result =
+	DBQueryWarn("select uuid from apt_instance_history ".
+		    "where slice_uuid='$slice_uuid'");
+	
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my ($uuid) = $query_result->fetchrow_array();
+    my $foo = APT_Instance::History->Lookup($uuid);
+    return $foo;
+}
+
 #
 # Stringify for output.
 #
