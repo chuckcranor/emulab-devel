@@ -2768,6 +2768,13 @@ sub DESTROY {
     $self->{'DBROW'}   = undef;
 }
 
+sub GetAptAggregate($)
+{
+    my ($self) = @_;
+
+    return APT_Aggregate->Lookup($self->aggregate_urn());
+}
+
 ###################################################################
 package APT_Instance::ExtensionInfo;
 use emdb;
