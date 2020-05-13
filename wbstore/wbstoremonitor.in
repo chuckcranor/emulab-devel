@@ -154,10 +154,12 @@ my $killall	= 0;
 #
 # The "remote" side of the instance (a device) can be in different states:
 # 
-#	DEAD:      we have not received a DeviceConnected event
 #	CONNECTED: have received a DeviceConnected event
+#	DEAD:      we have received a DeviceDisconnected event
 #	SYNCING:   have received a < 100% FolderCompletion event
 #	INSYNC:    have received a 100% FolderCompletion event
+#	GONE:      remote is never coming back (determined OOB)
+#	FAILED:    experiment has failed (determined OOB on mothership only)
 #
 # Finally, the wbstore directory (folder) can be in a couple of states:
 #
@@ -175,6 +177,8 @@ my $killall	= 0;
 my %instance = ();
 sub WTF()       { "WtF"; }
 sub DEAD()      { "DEAD"; }
+sub GONE()      { "GONE"; }
+sub FAILED()    { "FAILED"; }
 sub RUNNING()   { "RUNNING"; }
 sub CONNECTED() { "CONNECTED"; }
 sub SYNCING()	{ "SYNCING"; }
@@ -286,12 +290,15 @@ logit("Write-back store monitoring daemon starting... pid $$");
 WBStore->SetDebug($debug);
 
 my $started = 0;
+my $sleeptime;
 while (1) {
     if ($started) {
-	sleep($checkint);
+	sleep($sleeptime);
     } else {
 	$started = 1;
     }
+    $sleeptime = $checkint;
+
     logit("=== Starting pass.");
     my $now = time();
 
@@ -309,9 +316,12 @@ while (1) {
 	    $fswe = ($MAINSITE ? "false" : "true");
 
 	    my $inst = $syncthing{$uuid}{'obj'};
-	    if (!checksyncthing($inst, 1, 0, { fsWatcherEnabled => $fswe })) {
+	    my $pid = checksyncthing($inst, 1, 0,
+				     { fsWatcherEnabled => $fswe });
+	    if (!$pid) {
 		logit("$inst: WARNING: could not start syncthing");
 	    }
+	    $syncthing{$uuid}{'pid'} = $pid;
 	}
     }
 
@@ -328,8 +338,8 @@ while (1) {
 	# See if the syncthing daemon is running.
 	#
 	my $inst = $syncthing{$uuid}{'obj'};
-	my $rv = checksyncthing($inst, 0, 0);
-	if ($rv < 0) {
+	my $pid = $syncthing{$uuid}{'pid'} = checksyncthing($inst, 0, 0);
+	if ($pid < 0) {
 	    logit("$uuid: WARNING: ".
 		  "Could not detect status of syncthing instance!");
 	    next;
@@ -344,61 +354,69 @@ while (1) {
 	# it gone sent, but we can live with that window.
 	#
 	if ($syncthing{$uuid}{'done'}) {
-	    if ($rv > 0) {
+	    my $st = $inst->_state();
+
+	    if ($pid > 0) {
 		#
 		# If syncthing is still running, kill it and check again
 		# on the next pass.
 		#
-		$rv = checksyncthing($inst, 0, 1);
-		if ($rv != 0) {
+		$pid = checksyncthing($inst, 0, 1);
+		if ($pid != 0) {
 		    logit("$uuid: WARNING: ".
-			  "Error while stopping syncthing for done instance!");
+			  "Error while stopping syncthing for $st instance!");
 		} else {
-		    logit("$uuid: Stopping syncthing for DONE experiment");
+		    logit("$uuid: Stopping syncthing for $st experiment");
+		    $sleeptime = 30;
 		}
 	    } else {
 		#
 		# Syncthing is dead, clean up
 		#
 		if (cleanupinstance($inst)) {
-		    logit("$uuid: WARNING: Could not cleanup done instance!"); 
+		    logit("$uuid: WARNING: Could not cleanup $st instance!"); 
 		}
 	    }
 	    next;
 	}
 
 	#
-	# XXX that should be it for the mothership, since an instance
-	# is either active or done.
-	#
-	if ($MAINSITE) {
-	    logit("$uuid: WARNING: ".
-		  "Mothership instance not active and not done!");
-	    next;
-	}
-
-	#
 	# Not DONE yet. If syncthing is not running, try to get it started.
 	#
-	# We turn off the real-time file watcher because there is no need
-	# for fine-grained tracking and it just results in lots of open files
-	# in the syncthing instance.
+	# On aggregates, even if it is already running, we turn off the
+	# real-time file watcher because there is no need for fine-grained
+	# tracking and it just results in lots of open files in the syncthing
+	# instance. And it could slow down the final sync below.
 	#
-	if ($rv == 0) {
-	    $rv = checksyncthing($inst, 1, 0, { fsWatcherEnabled => "false" });
-	    if ($rv != 1) {
+	if (!$MAINSITE || $pid == 0) {
+	    my $opid = $pid;
+
+	    $pid = checksyncthing($inst, 1, 0,
+				  { fsWatcherEnabled => "false" });
+	    if ($pid == 0) {
 		logit("$uuid: WARNING: ".
-		      "Could not start syncthing for past instance!");
-	    } else {
-		logit("$uuid: Starting syncthing for past instance");
+		      "Could not (re)start syncthing for past instance!");
+		next;
 	    }
+	    if ($pid != $opid) {
+		logit("$uuid: (Re)starting syncthing for past instance");
+		$syncthing{$uuid}{'pid'} = $pid;
+		$sleeptime = 30;
+		next;
+	    }
+	}
+
+	#
+	# That is it for the mothership, just wait for DONE
+	#
+	if ($MAINSITE) {
 	    next;
 	}
 
 	#
-	# Syncthing for past instance is running. Check each folder and
-	# see if it is INSYNC. If so, drop the DONE sentinel to inform
-	# the mothership.
+	# Syncthing for past instance is running with file watcher disabled.
+	# Check each folder and see if it is INSYNC. If so, drop the DONE
+	# sentinel to inform the mothership.
 	#
 	foreach my $t (sort keys %instance) {
 	    $inst = $instance{$t}{'obj'};
@@ -415,19 +433,23 @@ while (1) {
 
 	    #
 	    # We are synced up! Drop the DONE sentinel and force a final scan.
-	    # XXX this should not take too long, not sure what happens if
-	    # we timeout here.
+	    # XXX this is done synchronously, but should not take too long.
+	    # If the final sync fails, we clear the DONE sentinel and will
+	    # keep trying on every pass.
 	    #
-	    if ($inst->SetDone()) {
+	    if ($inst->SetDone(1)) {
 		logit("$uuid: WARNING: ".
 		      "Could not write DONE sentinel!");
 		next;
 	    }
 	    if ($inst->FinalSync()) {
 		logit("$uuid: WARNING: ".
-		      "Could not perform final sync!");
+		      "final sync failed, will keep trying");
+		$inst->SetDone(0);
 		next;
 	    }
+	    logit("$uuid: final sync completed");
+	    $sleeptime = 30;
 	}
     }
 
@@ -447,11 +469,17 @@ sub cleanupinstance($)
     return
 	if ($handledead == 0);
 
+    # XXX Force destruction of FAILED instances
+    my $handle = $handledead;
+    if ($inst->_state() eq FAILED) {
+	$handle = -1;
+    }
+
     my $uuid = $inst->uuid();
     my $pid = $inst->pid();
     my $confdir = $inst->confdir();
     my $datadir = $inst->datadir();
-    my $action = ($handledead == -1 ? "removing" : "archiving");
+    my $action = ($handle == -1 ? "removing" : "archiving");
 
     # XXX
     if ($uuid eq "00000000-0000-0000-0000-000000000000") {
@@ -473,7 +501,7 @@ sub cleanupinstance($)
     }
     $datadir = $1;
 
-    if ($handledead == -1) {
+    if ($handle == -1) {
 	my $out = "$datadir.rm.out";
 	if (system("rm -rf $confdir $datadir >$out 2>&1")) {
 	    logit("$inst: WARNING: cleanup could not remove ".
@@ -705,19 +733,17 @@ sub getinstances()
 		if (!$onceonly);
 	    $instance{$token}{'obj'} = $ni;
 	} else {
-	    # active-ness and done-ness can change
+	    #
+	    # Active-ness and Done-ness can change, but only in one
+	    # direction--wbstores do not come back from the dead and
+	    # they are not undone.
+	    #
 	    my $ci = $instance{$token}{'obj'};
-	    if ($ci->active() != $ni->active) {
-		print STDERR "*** $ci: ACTIVE ".
-		    $ci->active() . " -> " . $ni->active() . "\n"
-		    if ($debug);
-		$ci->active($ni->active());
+	    if (!$ni->active()) {
+		$ci->active(0);
 	    }
-	    if ($ci->done() != $ni->done) {
-		print STDERR "*** $ci: DONE ".
-		    $ci->done() . " -> " . $ni->done() . "\n"
-		    if ($debug);
-		$ci->done($ni->done());
+	    if ($ni->done()) {
+		$ci->done(1);
 	    }
 	}
 	$instance{$token}{'found'} = 1;
@@ -728,6 +754,7 @@ sub getinstances()
 	if (!exists($instance{$t}{'found'})) {
 	    my $oi = $instance{$t}{'obj'};
 	    logit("removed old instance '$oi'");
+	    $oi->FlushConfig();
 	    delete $instance{$t};
 	}
     }
@@ -742,11 +769,16 @@ sub getinstances()
 	}
     }
     
+    if ($debug) {
+	print STDERR "Instances:  ", join(' ', keys %instance), "\n";
+	print STDERR "Syncthings: ", join(' ', keys %syncthing), "\n";
+    }
+
     foreach my $t (sort keys %instance) {
 	my $inst = $instance{$t}{'obj'};
 	my $uuid = $inst->uuid();
 	my ($piddead,$apidead);
-	my $mydevs;
+	my ($mydevs,$msstate);
 
 	#
 	# See if syncthing process is running.
@@ -757,9 +789,10 @@ sub getinstances()
 	    $syncthing{$uuid}{'found'} = 1;
 	    $syncthing{$uuid}{'obj'} = $inst;
 
-	    print STDERR "$inst: gathering info for syncthing...\n"
+	    print STDERR "$uuid: gathering info for syncthing...\n"
 		if ($debug);
-	    if (checksyncthing($inst, 0, 0)) {
+	    my $pid = checksyncthing($inst, 0, 0);
+	    if ($pid) {
 		$piddead = 0;
 	    } else {
 		$piddead = 1;
@@ -778,6 +811,7 @@ sub getinstances()
 		$syncthing{$uuid}{'state'} = WTF;
 	    } else {
 		$syncthing{$uuid}{'state'} = RUNNING;
+		$syncthing{$uuid}{'pid'} = $pid;
 
 		#
 		# Collect an initial notion of syncthing's devices and
@@ -800,7 +834,7 @@ sub getinstances()
 			    $mydevs->{$d}{'state'} = DEAD;
 			}
 		    } else {
-			logit("$inst: could not get devices, ignored");
+			logit("$uuid: could not get devices, ignored");
 			next;
 		    }
 		    
@@ -821,15 +855,14 @@ sub getinstances()
 			    }
 			}
 		    } else {
-			logit("$inst: could not get device connections, ".
+			logit("$uuid: could not get device connections, ".
 			      "ignored");
 			next;
 		    }
 		    $syncthing{$uuid}{'devinfo'} = $mydevs;
-		    if ($debug > 1) {
-			print STDERR "$inst: DEVICES:\n",
-			    Dumper($mydevs), "\n";
-		    }
+		    print STDERR "$uuid: DEVICES:\n", Dumper($mydevs), "\n"
+			if ($debug > 1);
+
 		} else {
 		    $mydevs = $syncthing{$uuid}{'devinfo'};
 		}
@@ -847,8 +880,42 @@ sub getinstances()
 		#
 		setdevicestates($inst);
 	    }
+
+	    #
+	    # XXX mothership hackery.
+	    #
+	    $msstate = $syncthing{$uuid}{'msstate'} = getmsstate($inst);
+	    if ($msstate) {
+		logit("$uuid: experiment forced to $msstate");
+	    }
 	} else {
 	    $mydevs = $syncthing{$uuid}{'devinfo'};
+	    $msstate = $syncthing{$uuid}{'msstate'};
+	}
+
+	#
+	# Incorporate OOB mothership state into what we know.
+	#   DONE in this context means the experiment is past
+	#     (only applies on the mothership)
+	#   GONE implies no further updates, mark instance as done
+	#   FAIL implies experiment failed, mark instance as FAILED
+	#
+	if ($msstate) {
+	    if ($MAINSITE && $msstate eq "DONE") {
+		$inst->active(0);
+	    }
+	    elsif ($msstate eq "GONE") {
+		$inst->active(0);
+		$inst->done(1);
+	    }
+	    elsif ($msstate eq "FAIL") {
+		my $rid = $inst->remoteid();
+		if ($rid) {
+		    $mydevs->{$rid}{'state'} = FAILED;
+		}
+		$inst->active(0);
+		$inst->done(1);
+	    }
 	}
 
 	my $active = $inst->active();
@@ -878,20 +945,77 @@ sub getinstances()
 	if (!exists($syncthing{$uuid}{'done'}) || !$done) {
 	    $syncthing{$uuid}{'done'} = $done;
 	}
+    }
 
+    # Report on what we found
+    foreach my $uuid (sort keys %syncthing) {
 	my $STstate = $syncthing{$uuid}{'state'};
-	my $Rstate = $inst->_state();
-	my $WBstate = $inst->_fstate();
-	if ($debug) {
-	    my $name = $uuid;
-	    $name .= "/" . $inst->domain() if ($MAINSITE);
-	    print STDERR "[$name]: ",
-		"state (syncthing/remote/store) $STstate/$Rstate/$WBstate, ",
-		($active ? "active" : "past", " experiment"),
-		($done ? ", final sync done" : ""), "\n";
+	my $astr = $syncthing{$uuid}{'active'} ? "active" : "past";
+	my $dstr = $syncthing{$uuid}{'done'} ? "done" : "not done";
+	if ($STstate eq RUNNING) {
+	    my $pid = $syncthing{$uuid}{'pid'};
+	    logit("$uuid: $astr experiment, wbstore $dstr, ".
+		  "syncthing RUNNING (pid $pid)");
+	} else {
+	    logit("$uuid: $astr experiment, wbstore $dstr, ".
+		  "syncthing $STstate");
+	}
+	foreach my $t (sort keys %instance) {
+	    my $inst = $instance{$t}{'obj'};
+	    if ($inst->uuid() eq $uuid) {
+		my $dom = $inst->domain();
+		my $Rstate = $inst->_state();
+		my $WBstate = $inst->_fstate();
+		# XXX these states don't really mean anything on ops
+		if ($MAINSITE) {
+		    $Rstate = CONNECTED()
+			if ($Rstate ne DEAD());
+		    $WBstate = "NOT-DONE"
+			if (!$WBstate || $WBstate ne "DONE");
+		}
+		logit("  $dom: remote $Rstate, wbstore $WBstate");
+	    }
 	}
     }
+
     TBScriptUnlock();
+}
+
+#
+# This is a temporary out-of-band mechanism for
+# communicating experiment status from the portal to the
+# ops node monitor. boss will use a destroywbstore script
+# that will ssh to ops and drop a "status" file into
+# /usr/testbed/wbstore/$uuid/$domain conveying either
+# that the experiment has finished ("DONE"), that it
+# failed ("FAIL"), or that it is in a state where no
+# more syncing will be possible ("GONE").
+#
+# The short-term goal here is to provide DB info
+# (equivalent to what the aggregates get from their DBs)
+# about whether the experiment is active or past, and to
+# be able to easily archive and cleanup experiments that
+# we know have no meaningful state or for which we have
+# received all the state we are going to get (but that
+# we cannot automatically detect).
+#
+sub getmsstate($)
+{
+    my ($inst) = @_;
+
+    my $sfile = "$METADIR/". $inst->uuid(). "/$domain/status";
+    my $state = "";
+
+    if (-e "$sfile" && open(FD, "<$sfile")) {
+	$state = <FD>;
+	close(FD);
+	chomp $state;
+	if ($state =~ /^(DONE|GONE|FAIL)$/) {
+	    $state = $1;
+	}
+    }
+
+    return $state;
 }
 
 #
@@ -907,12 +1031,12 @@ sub getinstances()
 # syncthing. If $attrs is set, it is a hash reference of syncthing folder
 # or device attributes (name=>value) that should be set as indicated.
 #
-# Returns -1 on error, 0 if not running, 1 otherwise.
+# Returns -1 on error, 0 if not running, syncthing pid otherwise.
 #
 sub checksyncthing($$$;$)
 {
     my ($iobj, $forcestart, $forcestop, $attrs) = @_;
-    my $inst = $iobj->uuid();
+    my $uuid = $iobj->uuid();
     my $confdir = $iobj->confdir();
     my $pidfile = "$confdir/syncthing.pid";
     my $running = 0;
@@ -934,7 +1058,7 @@ sub checksyncthing($$$;$)
 
     # only want the status
     if (!$forcestart && !$forcestop) {
-	return $running;
+	return ($running ? $pid : 0);
     }
 
     #
@@ -948,7 +1072,7 @@ sub checksyncthing($$$;$)
 	if (modifyconfig($iobj, $nfile, $attrs)) {
 	    if ($running) {
 		if (!kill('TERM', $pid)) {
-		    logit("WARNING: $inst: could not kill syncthing!".
+		    logit("WARNING: $uuid: could not kill syncthing!".
 			  " Config unchanged.");
 		    unlink($nfile);
 		    return -1;
@@ -958,11 +1082,11 @@ sub checksyncthing($$$;$)
 		if (!$forcestop) {
 		    $forcestart = 1;
 		} else {
-		    logit("$inst: syncthing pid $pid stopped");
+		    logit("$uuid: syncthing pid $pid stopped");
 		}
 	    }
 	    if (!rename($nfile, $ofile)) {
-		logit("WARNING: $inst: could not modify syncthing config!".
+		logit("WARNING: $uuid: could not modify syncthing config!".
 		      " Continuing with old config.");
 	    }
 	    print STDERR "config file '$ofile' modified\n"
@@ -976,10 +1100,10 @@ sub checksyncthing($$$;$)
     # Running and we want it dead; kill it
     if ($running && $forcestop) {
 	if (!kill('TERM', $pid)) {
-	    logit("WARNING: $inst: could not kill syncthing!");
+	    logit("WARNING: $uuid: could not kill syncthing!");
 	    return -1;
 	}
-	logit("$inst: syncthing pid $pid stopped");
+	logit("$uuid: syncthing pid $pid stopped");
 	unlink($pidfile);
 	return 0;
     }
@@ -990,7 +1114,7 @@ sub checksyncthing($$$;$)
 	my $log = "$confdir/st.log";
 	my $cmd = "$STBIN -no-browser -home=\"$confdir\"";
 	if (system("($cmd >$log 2>&1 & echo \$!) </dev/null >$pidfile")) {
-	    logit("WARNING: $inst: could not run '$cmd', see '$log'");
+	    logit("WARNING: $uuid: could not run '$cmd', see '$log'");
 	    return 0;
 	}
 
@@ -1007,16 +1131,16 @@ sub checksyncthing($$$;$)
 	    }
 	}
 	if (defined($pid) && kill(0, $pid)) {
-	    logit("$inst: syncthing pid $pid started");
-	    return 1;
+	    logit("$uuid: syncthing pid $pid started");
+	    return $pid;
 	}
-	logit("WARNING: $inst: (re)start of syncthing failed, see $log"); 
+	logit("WARNING: $uuid: (re)start of syncthing failed, see $log"); 
 	return 0;
     }
 
     # Otherwise, just return the status
-    logit("$inst: syncthing already " . ($running ? "started." : "stopped."));
-    return $running;
+    logit("$uuid: syncthing already " . ($running ? "started." : "stopped."));
+    return ($running ? $pid : 0);
 }
 
 #

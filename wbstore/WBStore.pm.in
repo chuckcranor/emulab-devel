@@ -400,30 +400,39 @@ sub Stringify($)
 }
 
 #
-# Mark an instance as DONE.
+# Mark an instance as DONE (no val or val==1) or not DONE (val==0).
 # On an aggregate, this creates the sentinel file in addition to updating
 # the DB state. Returns 0 on success, non-zero on error.
 #
-sub SetDone($)
+sub SetDone($;$)
 {
-    my ($self) = @_;
+    my ($self,$val) = @_;
+    $val = 1 if (!defined($val));
     
     if (!$MAINSITE) {
 	my $sentinel = $self->datadir() . "/." .
 	    $self->uuid() . "-" . $self->domain();
-	if (!open(FD, ">$sentinel")) {
-	    print STDERR "$self: SetDone: ".
-		"Could not write DONE sentinel '$sentinel'"
-		if ($debug);
-	    return 1;
+	if ($val) {
+	    if (!open(FD, ">$sentinel")) {
+		print STDERR "$self: SetDone: ".
+		    "Could not write DONE sentinel '$sentinel'"
+		    if ($debug);
+		return 1;
+	    }
+	    # what the heck, drop a timestamp in it.
+	    print FD time() . "\n";
+	    close(FD);
+	} else {
+	    if (!unlink($sentinel)) {
+		print STDERR "$self: SetDone: ".
+		    "Could not unlink DONE sentinel '$sentinel'"
+		    if ($debug);
+		return 1;
+	    }
 	}
-
-	# what the heck, drop a timestamp in it.
-	print FD time() . "\n";
-	close(FD);
     }
 
-    $self->{'WBSTORE'}->{'done'} = 1;
+    $self->{'WBSTORE'}->{'done'} = $val;
     return 0;
 }
 

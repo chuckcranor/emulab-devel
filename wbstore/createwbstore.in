@@ -47,8 +47,11 @@ use Data::Dumper;
 #
 sub usage()
 {
-    print STDERR "Usage: createwbstore [-hd] -u uid -p pid -i instance -o offset domain ...\n";
+    print STDERR "Usage: createwbstore [-hdkBDI] experiment-uuid\n";
+    print STDERR "Usage: createwbstore [-hdkBDI] -o offset -u uid -p pid -i instance domain ...\n";
     print STDERR "Create a write-back store for the specified experiment instance.\n";
+    print STDERR "The former is the normal usage where an experiment instance uuid is specified.\n";
+    print STDERR "The latter is for debugging and allows explicit specification of all the pieces\n  (if there is no actual experiment).\n";
     print STDERR "Options:\n";
     print STDERR "   -h          This message\n";
     print STDERR "   -d          Debug: print additional info\n";
@@ -57,28 +60,36 @@ sub usage()
     print STDERR "   -p pid      Project ID of instance\n";
     print STDERR "   -i instance Instance UUID for experiment\n";
     print STDERR "   -o offset   Integer offset from the base port\n";
+    print STDERR "   -B          Do distribution/installation in background.\n";
+    print STDERR "   -D          Distribute config(s) to involved aggregates\n";
+    print STDERR "   -I          Install configs on aggregates (implies -D)\n";
     print STDERR "   domain ...  Domain name of aggregate(s)\n";
     print STDERR "\n";
     exit(-1);
 }
-my $optlist  = "hdki:u:p:o:";
+my $optlist  = "hdkBDIi:u:p:o:";
 my $debug = 0;
 my $keep = 0;
 my $uid;
 my $pid;
+my $exptuuid;
 my $instance;
 my $portoffset;
-my $uuid;
+my $background = 0;
+my $bgpid;
+my $distribute = 0;
+my $install = 0;
 my @fqdns;
 my %hosts;
 
 # Protos
-sub parseinstance($);
+sub parseinstance($;$);
 sub parsehostname($);
 sub createconfig($);
 sub customizeconfig($);
 sub expandconfig($$$$@);
 sub packageconfig($);
+sub distribconfigs();
 sub dumpinfo();
 sub fatal($);
 
@@ -92,9 +103,16 @@ my $STTEMPLATE_DIR = "$TB/wbstore/templates";
 my $TMPDIR	 = "$TB/wbstore/tarballs";
 my $STCMD	 = "/usr/local/bin/syncthing";
 my $SERVER       = "@USERNODE@";
+my $SSH_ARGS	 = "@SSH_ARGS@";
 
 # XXX keep it inside Emulab
 my $EMULABNET	 = "155.98.32.0/20";
+
+# Testbed Support libraries
+use lib "@prefix@/lib";
+use libtestbed;
+use emutil qw(TBGetUniqueIndex);
+use APT_Instance;
 
 #
 # Turn off line buffering on output
@@ -123,6 +141,15 @@ if (defined($options{d})) {
 if (defined($options{k})) {
     $keep = 1;
 }
+if (defined($options{B})) {
+    $background = 1;
+}
+if (defined($options{D})) {
+    $distribute = 1;
+}
+if (defined($options{I})) {
+    $install = $distribute = 1;
+}
 if (defined($options{u})) {
     $uid = $options{u};
     if ($uid !~ /^\w+$/) {
@@ -144,18 +171,64 @@ if (defined($options{o})) {
 	fatal("Not a valid offset number");
     }
 }
-if (!defined($uid) || !defined($pid) ||
-    !defined($instance) || !defined($portoffset)) {
-    print STDERR "Must specify an experiment creator name, pid, instance and port offset\n";
+
+if (@ARGV == 0) {
+    print STDERR "Must specify an experiment UUID or one or more aggregate domains\n";
     usage();
 }
-if (@ARGV == 0) {
-    print STDERR "Must specify one or more aggregate domains\n";
-    usage();
+if (@ARGV == 1 && ($exptuuid = parseinstance($ARGV[0], 1))) {
+    if (defined($uid) || defined($pid) || defined($instance)) {
+	print STDERR "Must NOT specify an experiment creator name, pid, or instance when using the UUID form\n";
+	usage();
+    }
+
+    my $inst = APT_Instance->Lookup($exptuuid);
+    if (!$inst) {
+	fatal("$exptuuid: Not a valid APT instance\n");
+    }
+    $uid = $inst->creator();
+    $pid = $inst->pid();
+    $instance = $inst->slice_uuid();
+    my @aggs = $inst->AggregateList();
+    foreach my $agg (@aggs) {
+	if (1 || $agg->dosyncthing()) {
+	    my $urn = $agg->aggregate_urn();
+	    if ($urn =~ /^urn:publicid:IDN\+(.*)\+authority\+cm$/) {
+		push(@fqdns, $1);
+	    } else {
+		print STDERR "$exptuuid: unexpected urn '$urn' ignored\n"
+		    if ($debug);
+	    }
+	}
+    }
+    $inst->Flush();
+
+    #
+    # XXX This is an utter and awful hack which might not even get off the
+    # ground. Right now we preconfigure ports to use in the syncthing config
+    # and we make this absolutely feeble attempt to make them unique to our
+    # instances of syncthing. We do absolutely NOTHING to ensure the port is
+    # available or does not conflict with a current use. I expect to see me
+    # back here soon!
+    #
+    $portoffset = (TBGetUniqueIndex("syncthing_index", 0, 1) % 50);
+    print STDERR "$exptuuid: using port offset $portoffset\n"
+	if ($debug);
+} else {
+    if (!defined($uid) || !defined($pid) || !defined($instance) ||
+	!defined($portoffset)) {
+	print STDERR "Must specify an experiment creator name, pid, port-offset, and instance\n";
+	usage();
+    }
+    @fqdns = @ARGV;
+}
+if (@fqdns == 0) {
+    print "$instance: experiment has no appropriate aggregates.\n";
+    exit(0);
 }
 
 # For all aggregates, we run on "boss"
-@fqdns = map { "boss.$_" } @ARGV;
+@fqdns = map { "boss.$_" } @fqdns;
 
 # "Validate" node names, including server
 foreach my $h ($SERVER, @fqdns) {
@@ -192,6 +265,11 @@ foreach my $rh (keys %hosts) {
 }
 dumpinfo()
     if ($debug);
+
+if ($distribute) {
+    distribconfigs();
+}
+
 exit(0);
 
 #
@@ -212,7 +290,7 @@ sub createconfig($)
     }
     print STDERR "made '$tmpdir', '$metadir'\n"
 	if ($debug);
-    if (chmod(0700, $tmpdir, $metadir) != 2) {
+    if (chmod(0750, $tmpdir, $metadir) != 2) {
 	fatal("createconfig: could not chmod tmp directories");
     }
 
@@ -304,8 +382,6 @@ sub customizeconfig($)
 
 	expandconfig($cfile, $template, \%vars, $fqdn, $SERVER);
     }
-
-
 }
 
 #
@@ -335,19 +411,143 @@ sub packageconfig($)
 }
 
 #
-# Parse a string as an experiment instance UUID.
-# Returns uuid on success, exits otherwise.
+# Spend the rest of our life trying to distribute and (optionally) install
+# the tarball on each aggregate. Since aggregates may not be up at the
+# time of our call, we need to keep retrying periodically (in the background)
+# as long as the experiment is legit.
 #
-sub parseinstance($)
+sub distribconfigs()
 {
-    my ($n) = @_;
+    my $TARGETDIR = "$TB/wbstore/tarballs";
+    my $installbin = "$TB/sbin/installwbstore";
+    my $logfile = "$tmpdir/distrib.out";
+    my $pidfile = "$tmpdir/distrib.pid";
+
+    $SSH_ARGS .= " -o ConnectTimeout=5";
+
+    if ($background) {
+	if (($bgpid = TBBackGround($logfile)) != 0) {
+	    print STDERR "$instance: distribution/installation ".
+		"will continue in background (see $logfile).\n";
+	    if (open(FD, ">$pidfile")) {
+		print FD "$bgpid\n";
+		close(FD);
+	    }
+	    return;
+	}
+	libdb::TBdbfork();
+    }
+
+    my $done = 0;
+    my %todo;
+    foreach my $rh (keys %hosts) {
+	$todo{$rh} = 1;
+    }
+
+    do {
+	my $rv;
+
+	foreach my $rh (keys %hosts) {
+	    if (!exists($todo{$rh})) {
+		next;
+	    }
+
+	    my $domain = $hosts{$rh}{'domain'};
+	    print STDERR "$instance: attempting to distribute ".
+		($install ? "and install " : "") . "to $domain ...\n"
+		if ($debug);
+
+	    my $tarball = "$TMPDIR/$instance-$domain.tar.gz";
+	    if (! -e "$tarball") {
+		print STDERR "$instance: config for $domain does not exist, ".
+		    "ignored.\n";
+		delete $todo{$rh};
+		next;
+	    }
+
+	    my $host =
+		($domain eq "emulab.net" ? "users" : "boss") . ".$domain";
+	    $rv = system("scp $SSH_ARGS $tarball $host:$TARGETDIR/");
+	    if ($rv) {
+		$rv >>= 8;
+		if ($rv == 255) {
+		    print STDERR "$instance: could not connect to $host, ".
+			"trying again later.\n";
+		} else {
+		    print STDERR "$instance: copy of tarball to $host failed ".
+			"(stat=$rv), trying again later.\n";
+		}
+		next;
+	    }
+
+	    if ($install &&
+		($rv = system("ssh $SSH_ARGS $host $installbin -f $instance"))) {
+		$rv >>= 8;
+		if ($rv == 255) {
+		    print STDERR "$instance: could not connect to $host, ".
+			"trying again later.\n";
+		} else {
+		    print STDERR "$instance: install of tarball on $host failed ".
+			"(stat=$rv), trying again later.\n";
+		}
+		next;
+	    }
+
+	    print STDERR "$instance: $domain done.\n"
+		if ($debug);
+
+	    unlink($tarball);
+	    delete $todo{$rh};
+	}
+
+	# If we reached everyone, we can quit now
+	if (keys(%todo) == 0) {
+	    # nothing left to do?
+	    print STDERR "$instance: finished aggregate installs!\n";
+	    $done = 1;
+	}
+
+	# XXX for our debug invocation, just try once
+	elsif (!$exptuuid) {
+	    $done = 1;
+	}
+
+	# Wait awhile before trying again
+	else {
+	    sleep(60);
+	    
+	    # Is experiment still valid?
+	    my $inst = APT_Instance->Lookup($exptuuid);
+	    if (!$inst) {
+		print STDERR "$instance: no longer valid, ".
+		    "terminating installs.\n";
+		$done = 1;
+	    } else {
+		$inst->Flush();
+	    }
+	}
+    } while (!$done);
+
+    # If we were in the background, remove the pidfile since we are exiting
+    if ($background) {
+	unlink($pidfile, $logfile);
+    }
+}
+
+#
+# Parse a string as an experiment instance UUID.
+# Returns uuid on success, undef otherwise. Or exits on error.
+#
+sub parseinstance($;$)
+{
+    my ($n,$nonfatal) = @_;
     my ($u, $p); 
 
     # XXX name must be a UUID
     if ($n =~ /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i) {
 	$u = $1;
     }
-    else {
+    elsif (!$nonfatal) {
 	fatal("Experiment instance name '$n' not a valid UUID.");
     }
 

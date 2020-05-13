@@ -180,6 +180,9 @@ if (!rename($tconfdir, "$STHOME_DIR/$uuid")) {
     fatal("Could not rename $tconfdir to $STHOME_DIR/$uuid");
 }
 
+# Remove the tarball
+unlink($tarball);
+
 exit(0);
 
 #
@@ -234,7 +237,8 @@ sub createdatadirs()
     my $npath = "$proj/$pid";
     my $cfile = "$tconfdir/$domain/config.xml";
 
-    print STDERR "Will replace '$opath' with '$npath' in $tconfdir\n";
+    print STDERR "Will replace '$opath' with '$npath' in $tconfdir\n"
+	if ($debug);
 
     # Read in the XML config file.
     my $config;
@@ -251,7 +255,8 @@ sub createdatadirs()
     my $ref = $config->{'configuration'}[0]->{'folder'};
     foreach my $f (@$ref) {
 	if ($f->{'path'} !~ m#^$opath/(wbstore/$uuid/.+)#) {
-	    print "WARNING: malformed folder ". $f->{'path'} . " ignored\n"
+	    print STDERR "WARNING: malformed folder ". $f->{'path'} .
+		" ignored\n"
 		if ($debug);
 	    next;
 	}
