@@ -1558,9 +1558,9 @@ sub DoTerminate()
 	if ($errcode);
 
     $instance->SetStatus("terminated");
-    $slice->Delete();
     $instance->RecordHistory($expired);
   killit:
+    $slice->Delete() if (defined($slice));
     $instance->Delete();
     unlink($logfile)
 	if (defined($logfile));
