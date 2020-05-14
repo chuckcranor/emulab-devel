@@ -1206,6 +1206,10 @@ sub Reserve($)
 	if (exists($argref->{"noapprove"}) && $argref->{"noapprove"} != 0) {
 	    $args = "-p $args";
 	}
+	elsif (!$check && $asadmin) {
+	    # Admin submit, just approve it.
+	    $args = "-a $args";
+	}
     }
 
     # Write the reason to a tempfile to pass in. This will auto unlink.
