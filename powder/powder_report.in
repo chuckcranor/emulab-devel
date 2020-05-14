@@ -36,12 +36,14 @@ use Data::Dumper;
 
 sub usage()
 {
-    print STDERR "Usage: powder_report -s YYYY-MM-DD [-e YYYY-MM-DD]\n";
+    print STDERR "Usage: powder_report -s YYYY-MM-DD [-e YYYY-MM-DD] ".
+	"[-p filename]\n";
     exit(-1);
 }
-my $optlist   = "s:e:";
+my $optlist   = "s:e:p:";
 my $start     = "2020-04-01";
 my $end;
+my $pcsvname;
 
 #
 # Configure variables
@@ -81,6 +83,16 @@ if (defined($options{"e"})) {
 	print STDERR "Cannot parse -e argument\n";
 	exit(-1);
     }
+}
+if (defined($options{"s"})) {
+    $start = $options{"s"};
+    if (!str2time($start)) {
+	print STDERR "Cannot parse -s argument\n";
+	exit(-1);
+    }
+}
+if (defined($options{"p"})) {
+    $pcsvname = $options{"p"};
 }
 
 #
@@ -227,6 +239,7 @@ while (<HIST>) {
     if (!exists($stats{$pid}->{$exptidx})) {
 	$stats{$pid}->{$exptidx} = {
 	    "duration" => $seconds,
+	    "started"  => str2time($instance->started()),
 	    "eid"      => $eid,
             "uid"      => $uid,
 	    "types"    => {},
@@ -267,7 +280,7 @@ my $query_result =
 		 "      ia.physnode_count,aa.nickname, ".
                  "      (UNIX_TIMESTAMP(h.destroyed) - ".
                  "        UNIX_TIMESTAMP(h.started)) as seconds, ".
-		 "      s.exptidx ".
+		 "      h.started,s.exptidx ".
 		 "  from apt_instance_history as h ".
 		 "left join apt_instance_failures as f on ".
 		 "     f.uuid=h.uuid ".
@@ -279,13 +292,13 @@ my $query_result =
 		 "left join users as u on u.uid_idx=h.creator_idx ".
 		 "where h.started is not null and ".
 		 "      h.started > '$start' and ".
-		 (defined($end) ? "h,started < '$end' and " : "") .
+		 (defined($end) ? "h.started < '$end' and " : "") .
 		 "      f.uuid is null and ".
 		 "      u.usr_email not like '%utah.edu' and ".
 		 "      u.usr_email not like '%rice.edu' and ".
 		 "      aa.isFE=1");
 
-while (my ($uuid,$pid,$uid,$eid,$count,$nickname,$seconds,$exptidx) =
+while (my ($uuid,$pid,$uid,$eid,$count,$nickname,$seconds,$started,$exptidx) =
        $query_result->fetchrow_array()) {
 
     #
@@ -318,6 +331,7 @@ while (my ($uuid,$pid,$uid,$eid,$count,$nickname,$seconds,$exptidx) =
     if (!exists($stats{$pid}->{$exptidx})) {
 	$stats{$pid}->{$exptidx} = {
 	    "duration" => $seconds,
+	    "started"  => str2time($started),
 	    "eid"      => $eid,
             "uid"      => $uid,
 	    "types"    => {},
@@ -334,14 +348,28 @@ while (my ($uuid,$pid,$uid,$eid,$count,$nickname,$seconds,$exptidx) =
 
 #print Dumper(\%stats);
 
-print "project,leader,email,description\n";
+# The output stream for the project CSV file.
+my $POUT = *STDOUT;
+if ($pcsvname) {
+   open(PCSV, "> $pcsvname") or
+	die("Could not create $pcsvname: $!\n");
+   $POUT = *PCSV;
+}
+print $POUT "project,leader,email,description\n";
 foreach my $project (@projects) {
     my $creator = $project->GetLeader();
-    print $project->pid() . "," . $creator->uid() . "," . $creator->email() . ",";
-    print escapeString($project->why()) . "\n";
+    print $POUT $project->pid() . "," . $creator->uid() . "," .
+	$creator->email() . ",";
+    print $POUT escapeString($project->why()) . "\n";
 }
-print "\n";
-print "project,experiment,user,duration,radios,compute,shared,mmimo,Controlled RF";
+if ($pcsvname) {
+    close(PCSV);
+}
+else {
+    print $POUT "\n";
+}
+
+print "project,experiment,user,started,duration,radios,compute,shared,mmimo,Controlled RF";
 foreach my $fe (@FEList) {
     print ",$fe";
 }
@@ -351,6 +379,7 @@ foreach my $pid (sort(keys(%stats))) {
 	my $ref      = $stats{$pid}->{$idx};
 	my $eid      = $ref->{'eid'};
 	my $uid      = $ref->{'uid'};
+	my $started  = $ref->{'started'};
 	my $seconds  = $ref->{'duration'};
 	my $radios   = $ref->{'radios'};
 	my $compute  = $ref->{'compute'};
@@ -367,7 +396,8 @@ foreach my $pid (sort(keys(%stats))) {
 	    $shared = 1;
 	}
 
-	print "$pid,$eid,$uid,$seconds,$radios,$compute,$shared,$mimos,$rfenv";
+	print "$pid,$eid,$uid,$started,$seconds,$radios,$compute,$shared,".
+	    "$mimos,$rfenv";
 	foreach my $fe (@FEList) {
 	    if (exists($FEs->{$fe})) {
 		print "," . $FEs->{$fe};
