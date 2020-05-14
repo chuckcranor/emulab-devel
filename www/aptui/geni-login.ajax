@@ -480,10 +480,12 @@ function CheckCredentials($cert, $cred, $info)
 		     "webcheckgeniuser $credfile $certfile",
 		     SUEXEC_ACTION_IGNORE);
 
-    if ($retval) {
+    if ($retval < 0) {
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
         TBERROR("checkgeniuser failed.\n ".
                 print_r($info, TRUE) . "\n" .
                 "Cred:\n${cred}\n", 0);
+        return -1;
     }
     unlink($credfile);
     unlink($certfile);
@@ -519,15 +521,16 @@ function UpdateCredentials($user, $cert, $cred, &$error)
     $retval = SUEXEC($uid, $pid,
 		     "webupdategeniuser -p -u ".
                      "  -c $credfile -e $certfile $arg $uid",
-		     SUEXEC_ACTION_CONTINUE);
+		     SUEXEC_ACTION_IGNORE);
 
-    if ($retval) {
+    if ($retval < 0) {
         $cred = file_get_contents($credfile);
         $cert = file_get_contents($certfile);
         TBERROR("webupdategeniuser failed.\n ".
                 "Cert:\n${cert}\n\n".
                 "Cred:\n${$cred}\n", 0);
-        $error = $suexec_output;
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        return -1;
     }
     unlink($credfile);
     unlink($certfile);
