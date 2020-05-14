@@ -2006,7 +2006,7 @@ $(function ()
 		/*
 		 * Temp; do not show mobile if not an admin
 		 */
-		if (details.ismobile == 1 && !isadmin) {
+		if (0 && details.ismobile == 1 && !isadmin) {
 		    return;
 		}
 		var name = details.name;
