@@ -27,7 +27,7 @@ include("node_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
-$page_title = "Bus Stuff";
+$page_title = "POWDER Map";
 
 #
 # Get current user.
