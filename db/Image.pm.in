@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2019 University of Utah and the Flux Group.
+# Copyright (c) 2007-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -3263,6 +3263,7 @@ sub ConvertToLocal($)
 	"origin_uuid"    => undef,
 	"origin_urn"     => undef,
     };
+    $self->SetNoVersioning(0);
     return $self->Update($args);
 }
 
