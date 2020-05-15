@@ -702,7 +702,9 @@ window.ShowFrequencyGraph = (function ()
 		return;
 	    }
 	    var listing = JSON.parse(_.unescape(value));
-	    console.info(listing);
+	    console.info("listing", listing);
+	    // Prune the items and then we sort them by the timestamp
+	    var items   = [];
 	    // nuc2:rf0-1588699912.csv.gz
 	    var re = /([^:]+):([^\-]+)\-(\d+)\.csv\.gz/;
 	    _.each(listing, function(info, index) {
@@ -712,12 +714,23 @@ window.ShowFrequencyGraph = (function ()
 		if (!match) {
 		    return;
 		}
+		// Prune out other radios and interfaces.
+		if (match[1] != args.node_id || match[2] != args.iface) {
+		    return;
+		}
 		info["node_id"]  = match[1];
 		info["iface"]    = match[2];
-		info["logid"]    = match[3];
+		info["logid"]    = parseInt(match[3]);
 		info["cluster"]  = args.cluster;
 		info["selector"] = args.selector;
 
+		items.push(info)
+	    });
+	    // Sort by timestamp.
+	    items.sort(function (a, b) {
+		return b.logid - a.logid;
+	    });
+	    _.each(items, function(info, index) {
 		var url = "frequency-graph.php" +
 		    "?cluster="  + args.cluster +
 		    "&node_id="  + info.node_id +
@@ -729,8 +742,8 @@ window.ShowFrequencyGraph = (function ()
 		var html =
 		    "<li>" +
 		    " <a href='" + url + "' index='<%- index %>'>" +
-		    match[1] + ":" + match[2] + " - " +
-		    moment(match[3], "X").format("L LT") + "</a></li>";
+		    info.node_id + ":" + info.iface + " - " +
+		    moment(info.logid, "X").format("L LTS") + "</a></li>";
 		var item = $(html);
 		// If the incoming args match this listing, start it active.
 		if (args.logid &&
@@ -744,7 +757,7 @@ window.ShowFrequencyGraph = (function ()
 		    $('#moregraphs-dropdown').find("li").removeClass("active");
 		    $(item).addClass("active");
 		    $(".frequency-graph-date")
-			.html(moment(match[3], "X").format("L LT"))
+			.html(moment(info.logid, "X").format("L LTS"))
 			.removeClass("hidden");
 		    UpdateGraph(info);
 		});
@@ -752,7 +765,11 @@ window.ShowFrequencyGraph = (function ()
 	    });
 	};
 	GetFrequencyData("html", "frequency-graph", "GetListing",
-			 {"cluster"    : args.cluster}, callback);
+			 {"cluster"    : args.cluster,
+			  "node_id"    : args.node_id,
+			  "iface"      : args.iface,
+			 },
+			 callback);
     }
 
     function UpdateGraph(args)
