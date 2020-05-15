@@ -39,7 +39,7 @@ OPS_LIB_FILES	= WBStore.pm
 else
 BOSS_SBIN_FILES = wbstoremonitor installwbstore
 BOSS_LIB_FILES  = WBStore.pm
-BOSS_DATA_FILES  =
+BOSS_DATA_FILES =
 OPS_SBIN_FILES  = 
 OPS_LIB_FILES	= 
 endif
@@ -53,12 +53,19 @@ all: $(BOSS_SBIN_FILES) $(OPS_SBIN_FILES) $(BOSS_LIB_FILES) $(OPS_LIB_FILES) $(B
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
-install: $(addprefix $(INSTALL_SBINDIR)/, $(BOSS_SBIN_FILES)) \
-	$(addprefix $(INSTALL_LIBDIR)/, $(BOSS_LIB_FILES)) \
-	$(addprefix $(INSTALL_DATADIR)/, $(BOSS_DATA_FILES))
+install-dirs:
+	-mkdir -m 750 -p $(INSTALL_DIR)/wbstore/tarballs
+ifeq ($(ISMAINSITE),1)
+	-mkdir -m 750 -p $(INSTALL_DIR)/opsdir/wbstore/tarballs
+endif
 
-control-install: $(addprefix $(INSTALL_SBINDIR)/, $(OPS_SBIN_FILES)) \
-		$(addprefix $(INSTALL_LIBDIR)/, $(OPS_LIB_FILES))
+install: install-dirs $(addprefix $(INSTALL_SBINDIR)/, $(BOSS_SBIN_FILES)) \
+	$(addprefix $(INSTALL_LIBDIR)/, $(BOSS_LIB_FILES)) \
+	$(addprefix $(INSTALL_DATADIR)/, $(BOSS_DATA_FILES)) \
+	$(addprefix $(INSTALL_DIR)/opsdir/sbin/, $(OPS_SBIN_FILES)) \
+	$(addprefix $(INSTALL_DIR)/opsdir/lib/, $(OPS_LIB_FILES))
+
+control-install:
 
 clean: 
 	rm -f $(BOSS_SBIN_FILES) $(OPS_SBIN_FILES) $(BOSS_LIB_FILES) $(OPS_LIB_FILES) $(BOSS_DATA_FILES)
@@ -66,4 +73,14 @@ clean:
 $(INSTALL_DATADIR)/%: %
 	@echo "Installing $<"
 	-mkdir -p $(INSTALL_DATADIR)
+	$(INSTALL_DATA) $< $@
+
+$(INSTALL_DIR)/opsdir/sbin/%: %
+	@echo "Installing $<"
+	-mkdir -p $(INSTALL_DIR)/opsdir/sbin
+	$(INSTALL) $< $@
+
+$(INSTALL_DIR)/opsdir/lib/%: %
+	@echo "Installing $<"
+	-mkdir -p $(INSTALL_DIR)/opsdir/lib
 	$(INSTALL_DATA) $< $@

@@ -32,12 +32,12 @@ use Data::Dumper;
 #
 sub usage()
 {
-    print STDERR "Usage: destroywbstore [-hd] [-s state] uuid\n";
+    print STDERR "Usage: destroywbstore [-hdB] [-s state] uuid\n";
     print STDERR "Destroy a write-back store for the specified experiment instance.\n";
     print STDERR "Options:\n";
     print STDERR "   -h          This message\n";
     print STDERR "   -d          Debug: print additional info\n";
-    print STDERR "   -s state    \n";
+    print STDERR "   -s state    One of 'DONE', 'FAIL', 'GONE', 'DONE' is the default\n";
     print STDERR "   -B          Talk to aggregates in the background\n";
     print STDERR "   uuid        Experiment instance UUID\n";
     print STDERR "\n";
@@ -136,7 +136,7 @@ my @slivers = $inst->AggregateList();
 foreach my $sliver (@slivers) {
     my $urn = $sliver->aggregate_urn();
     my $agg = APT_Aggregate->Lookup($urn);
-    if (1 || $agg->does_syncthing()) {
+    if ($agg->does_syncthing()) {
 	if ($urn =~ /^urn:publicid:IDN\+(.*)\+authority\+cm$/) {
 	    push(@fqdns, $1);
 	} else {

@@ -47,7 +47,7 @@ use Data::Dumper;
 #
 sub usage()
 {
-    print STDERR "Usage: createwbstore [-hdkBDI] experiment-uuid\n";
+    print STDERR "Usage: createwbstore [-hdkBDI] uuid\n";
     print STDERR "Usage: createwbstore [-hdkBDI] -o offset -u uid -p pid -i instance domain ...\n";
     print STDERR "Create a write-back store for the specified experiment instance.\n";
     print STDERR "The former is the normal usage where an experiment instance uuid is specified.\n";
@@ -60,9 +60,10 @@ sub usage()
     print STDERR "   -p pid      Project ID of instance\n";
     print STDERR "   -i instance Instance UUID for experiment\n";
     print STDERR "   -o offset   Integer offset from the base port\n";
-    print STDERR "   -B          Do distribution/installation in background.\n";
+    print STDERR "   -B          Do any distribution/installation in background.\n";
     print STDERR "   -D          Distribute config(s) to involved aggregates\n";
     print STDERR "   -I          Install configs on aggregates (implies -D)\n";
+    print STDERR "   uuid        UUID of experiment instance\n";
     print STDERR "   domain ...  Domain name of aggregate(s)\n";
     print STDERR "\n";
     exit(-1);
@@ -177,8 +178,9 @@ if (@ARGV == 0) {
     usage();
 }
 if (@ARGV == 1 && ($exptuuid = parseinstance($ARGV[0], 1))) {
-    if (defined($uid) || defined($pid) || defined($instance)) {
-	print STDERR "Must NOT specify an experiment creator name, pid, or instance when using the UUID form\n";
+    if (defined($uid) || defined($pid) || defined($instance) ||
+	defined($portoffset)) {
+	print STDERR "Must NOT specify an experiment creator name, pid, port-offset, or instance when using the UUID form\n";
 	usage();
     }
 
@@ -189,10 +191,11 @@ if (@ARGV == 1 && ($exptuuid = parseinstance($ARGV[0], 1))) {
     $uid = $inst->creator();
     $pid = $inst->pid();
     $instance = $inst->slice_uuid();
-    my @aggs = $inst->AggregateList();
-    foreach my $agg (@aggs) {
-	if (1 || $agg->dosyncthing()) {
-	    my $urn = $agg->aggregate_urn();
+    my @slivers = $inst->AggregateList();
+    foreach my $sliver (@slivers) {
+	my $urn = $sliver->aggregate_urn();
+	my $agg = APT_Aggregate->Lookup($urn);
+	if ($agg->does_syncthing()) {
 	    if ($urn =~ /^urn:publicid:IDN\+(.*)\+authority\+cm$/) {
 		push(@fqdns, $1);
 	    } else {
@@ -202,6 +205,11 @@ if (@ARGV == 1 && ($exptuuid = parseinstance($ARGV[0], 1))) {
 	}
     }
     $inst->Flush();
+
+    if (@fqdns == 0) {
+	print "$instance: experiment has no appropriate aggregates.\n";
+	exit(0);
+    }
 
     #
     # XXX This is an utter and awful hack which might not even get off the
@@ -221,10 +229,6 @@ if (@ARGV == 1 && ($exptuuid = parseinstance($ARGV[0], 1))) {
 	usage();
     }
     @fqdns = @ARGV;
-}
-if (@fqdns == 0) {
-    print "$instance: experiment has no appropriate aggregates.\n";
-    exit(0);
 }
 
 # For all aggregates, we run on "boss"

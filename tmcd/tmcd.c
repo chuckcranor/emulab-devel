@@ -408,6 +408,7 @@ COMMAND_PROTOTYPE(doserviceinfo);
 COMMAND_PROTOTYPE(dosubbossinfo);
 COMMAND_PROTOTYPE(dopublicaddrinfo);
 COMMAND_PROTOTYPE(dohwcollect);
+COMMAND_PROTOTYPE(dowbstore);
 #if PROTOGENI_SUPPORT
 COMMAND_PROTOTYPE(dogeniclientid);
 COMMAND_PROTOTYPE(dogenisliceurn);
@@ -551,6 +552,7 @@ struct command {
 	{ "subbossinfo",  FULLCONFIG_NONE, 0, dosubbossinfo },
 	{ "publicaddrinfo",  FULLCONFIG_NONE, F_ALLOCATED, dopublicaddrinfo },
 	{ "hwcollect",	  FULLCONFIG_NONE, 0, dohwcollect},
+	{ "wbstore",	  FULLCONFIG_NONE, 0, dowbstore},
 #if PROTOGENI_SUPPORT
 	{ "geni_client_id", FULLCONFIG_NONE, 0, dogeniclientid },
 	{ "geni_slice_urn", FULLCONFIG_NONE, 0, dogenisliceurn },
@@ -13194,6 +13196,39 @@ COMMAND_PROTOTYPE(dohwcollect)
 	mydb_update("replace into node_attributes values "
 		    "('%s','hwcollect_last','%u',0)",
 		    reqp->nodeid, (unsigned)now.tv_sec);
+
+	return 0;
+}
+
+/*
+ * Return info about write-back store.
+ */
+COMMAND_PROTOTYPE(dowbstore)
+{
+	MYSQL_RES	*res;
+	MYSQL_ROW	row;
+	char		buf[MYBUFSIZE];
+	char		*bufp = buf, *ebufp = &buf[sizeof(buf)];
+
+	if (!reqp->allocated)
+		return 0;
+
+	res = mydb_query("select eid_uuid from experiments "
+			 "where pid='%s' and eid='%s'",
+			 1, reqp->pid, reqp->eid);
+	if (!res || (int)mysql_num_rows(res) == 0) {
+		if (res)
+			mysql_free_result(res);
+		return 0;
+	}
+
+	row = mysql_fetch_row(res);
+	if (row[0] && row[0][0]) {
+		bufp += OUTPUT(bufp, ebufp - bufp,
+			       "UUID=%s PID=%s\n", row[0], reqp->pid);
+		client_writeback(sock, buf, strlen(buf), tcp);
+	}
+	mysql_free_result(res);
 
 	return 0;
 }
