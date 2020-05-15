@@ -3068,7 +3068,7 @@ $(function ()
 		return;
 	    }
 	    // Otherwise, we dig inside and find the hardware type.
-	    if (htype) {
+	    if (!htype) {
 		return;
 	    }
 	    var type = $(htype).attr("name");

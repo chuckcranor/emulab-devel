@@ -107,7 +107,7 @@ function Do_GetListing()
     $opt = "";
 
     if (!isset($ajax_args["cluster"])) {
-	SPITAJAX_ERROR(1, "Missing urn argument");
+	SPITAJAX_ERROR(1, "Missing cluster argument");
 	return 1;
     }
     $cluster = $ajax_args["cluster"];
