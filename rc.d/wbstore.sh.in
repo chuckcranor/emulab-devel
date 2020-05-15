@@ -24,10 +24,9 @@ case "$1" in
 	if [ -x @prefix@/sbin/daemon_wrapper ]; then
 	    echo -n " wbstoremonitor wrapper"
 	    @prefix@/sbin/daemon_wrapper -n wbstoremonitor -l $logfile \
-		@prefix@/sbin/wbstoremonitor $opts
+		@prefix@/sbin/wbstoremonitor -d 1 $opts
 	else
-	    # logs for itself
-	    @prefix@/sbin/wbstoremonitor $opts >/dev/null 2>&1 &
+	    @prefix@/sbin/wbstoremonitor $opts >$logfile 2>&1 &
 	    echo "$!" > /var/run/wbstoremonitor_wrapper.pid
 	fi
 	;;

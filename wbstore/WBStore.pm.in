@@ -592,7 +592,7 @@ sub GetCompletionStatus($$)
     }
 
     print STDERR "$self: GetCompletionStatus:\n", Dumper($json), "\n"
-	if ($debug);
+	if ($debug > 1);
 
     my $pct = int($json->{'completion'});
 
@@ -696,7 +696,7 @@ sub GetEvents($$$$$)
 	}
     }
     print STDERR "GetEvents: returns " . scalar(@$json) . " events\n"
-	if ($debug);
+	if ($debug > 1);
 
     return $json;
 }    
@@ -775,7 +775,7 @@ sub GetConfig($;$)
 	    return undef;
 	}
 
-	if ($debug) {
+	if ($debug > 1) {
 	    my $myid = $self->{'WBSTORE'}->{'devid'};
 	    $myid =~ s/.*(....)$/$1/;
 	    my $rmid = $self->{'WBSTORE'}->{'remoteid'};
@@ -854,7 +854,7 @@ sub ModifyConfig($$$)
 
     # Make sure the specified attributes can be changed
     print STDERR "File: '$nfile', Attrs:\n", Dumper($attrs), "\n"
-	if ($debug);
+	if ($debug > 1);
     foreach my $a (keys %$attrs) {
 	if (!exists($changefunc{$a})) {
 	    return -1;

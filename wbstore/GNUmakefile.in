@@ -54,8 +54,10 @@ all: $(BOSS_SBIN_FILES) $(OPS_SBIN_FILES) $(BOSS_LIB_FILES) $(OPS_LIB_FILES) $(B
 include $(TESTBED_SRCDIR)/GNUmakerules
 
 install-dirs:
+	-mkdir -m 755 -p $(INSTALL_DIR)/wbstore
 	-mkdir -m 750 -p $(INSTALL_DIR)/wbstore/tarballs
 ifeq ($(ISMAINSITE),1)
+	-mkdir -m 755 -p $(INSTALL_DIR)/opsdir/wbstore
 	-mkdir -m 750 -p $(INSTALL_DIR)/opsdir/wbstore/tarballs
 endif
 
