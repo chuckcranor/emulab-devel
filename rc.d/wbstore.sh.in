@@ -13,7 +13,7 @@ fi
 
 # Export (-E) dead experiments on mothership ops, remove (-D) otherwise
 # XXX archive (-A) on the aggregates for now, switch to -D when comfortable
-if [ "@MAINSITE@" = "0" ]; then
+if [ "@TBMAINSITE@" = "0" ]; then
     opts=-A
 else
     opts=-E
