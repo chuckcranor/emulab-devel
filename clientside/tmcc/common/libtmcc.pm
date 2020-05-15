@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -55,7 +55,7 @@ use Exporter;
 	     TMCCCMD_NODEUUID TMCCCMD_NODEATTRIBUTES TMCCCMD_DISKS
 	     TMCCCMD_ARPINFO TMCCCMD_STORAGE TMCCCMD_IMAGESIZE
              TMCCCMD_PNETNODEATTRS TMCCCMD_SERVINCEINFO TMCCCMD_PUBLICADDRINFO
-             TMCCCMD_NODETYPE TMCCCMD_HWCOLLECT
+             TMCCCMD_NODETYPE TMCCCMD_HWCOLLECT TMCCCMD_WBSTORE
 	     );
 
 # Must come after package declaration!
@@ -227,6 +227,7 @@ my %commandset =
       "serviceinfo"	=> {TAG => "serviceinfo"},
       "publicaddrinfo"	=> {TAG => "publicaddrinfo"},
       "hwcollect"	=> {TAG => "hwcollect"},
+      "wbstore"		=> {TAG => "wbstore"},
     );
 
 #
@@ -308,6 +309,7 @@ sub TMCCCMD_PNETNODEATTRS() {$commandset{"pnetnodeattrs"}->{TAG}; }
 sub TMCCCMD_SERVINCEINFO() {$commandset{"serviceinfo"}->{TAG}; }
 sub TMCCCMD_PUBLICADDRINFO(){ $commandset{"publicaddrinfo"}->{TAG}; }
 sub TMCCCMD_HWCOLLECT()	{ $commandset{"hwcollect"}->{TAG}; }
+sub TMCCCMD_WBSTORE()	{ $commandset{"wbstore"}->{TAG}; }
 
 #
 # Caller uses this routine to set configuration of this library
