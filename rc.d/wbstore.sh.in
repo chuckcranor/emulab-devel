@@ -1,0 +1,46 @@
+#!/bin/sh
+
+# PROVIDE: wbstore
+# REQUIRE: NETWORKING testbed
+# BEFORE: LOGIN
+# KEYWORD: nojail shutdown
+
+logfile=@prefix@/log/wbstoremonitor_wrapper.log
+
+if [ "@POWDER_WBSTORE@" != "1" ]; then
+    exit 0
+fi
+
+# Export (-E) dead experiments on mothership ops, remove (-D) otherwise
+# XXX archive (-A) on the aggregates for now, switch to -D when comfortable
+if [ "@MAINSITE@" = "0" ]; then
+    opts=-A
+else
+    opts=-E
+fi
+
+case "$1" in
+    start|faststart|quietstart|onestart|forcestart)
+	if [ -x @prefix@/sbin/daemon_wrapper ]; then
+	    echo -n " wbstoremonitor wrapper"
+	    @prefix@/sbin/daemon_wrapper -n wbstoremonitor -l $logfile \
+		@prefix@/sbin/wbstoremonitor $opts
+	else
+	    # logs for itself
+	    @prefix@/sbin/wbstoremonitor $opts >/dev/null 2>&1 &
+	    echo "$!" > /var/run/wbstoremonitor_wrapper.pid
+	fi
+	;;
+    stop|faststop|quietstop|onestop|forcestop)
+	if [ -r /var/run/wbstoremonitor_wrapper.pid ]; then
+	    kill `cat /var/run/wbstoremonitor_wrapper.pid`
+	fi
+	;;
+    *)
+	echo ""
+	echo "Usage: `basename $0` { start | stop }"
+	echo ""
+	exit 64
+	;;
+esac
+exit 0

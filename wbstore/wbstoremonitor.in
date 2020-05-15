@@ -96,11 +96,12 @@ sub usage()
 	"    -1     Run a single pass and then quit\n" .
 	"    -I int Time between passes (in minutes, default 5)\n" .
 	"    -A     Archive (tarball) old DONE experiments\n" .
+	"    -E     Like archive, but with user-friendly filenames\n" .
 	"    -D     Irrevocably delete old DONE experiments (USE WITH CAUTION)\n" .
 	"    -K     Kill all syncthing instances\n";
     exit(1);
 }
-my  $optlist = "d:n1I:ADK";
+my  $optlist = "d:n1I:AEDK";
 
 #
 # Configure variables
@@ -111,6 +112,7 @@ my $OPSNODE  = "@USERNODE@";
 my $MAINSITE  = @TBMAINSITE@;
 my $METADIR  = "$TB/wbstore";
 my $PROJDIR   = "@PROJROOT_DIR@";
+my $RUNMONITOR = @POWDER_WBSTORE@;
 my $STBIN    = "/usr/local/bin/syncthing";
 my $STMARKER = ".stfolder";
 
@@ -227,6 +229,9 @@ if (defined($options{"D"})) {
 if (defined($options{"A"})) {
     $handledead = 1;
 }
+if (defined($options{"E"})) {
+    $handledead = 2;
+}
 if (defined($options{"K"})) {
     $killall = 1;
     $onceonly = 1;
@@ -242,6 +247,25 @@ my $host = `hostname`;
 my $domain;
 chomp($host);
 ($host,$domain) = parsehostname($host);
+
+#
+# Should we be running?
+#
+my $runhere = 0;
+if ($RUNMONITOR) {
+    if ($MAINSITE) {
+	# only runs on mothership ops
+	if ($host eq "ops") {
+	    $runhere = 1;
+	}
+    } else {
+	$runhere = 1;
+    }
+}
+if (!$runhere) {
+    print STDERR "wbstore monitor not enabled\n";
+    exit(0);
+}
 
 if ($killall) {
     my $err = 0;

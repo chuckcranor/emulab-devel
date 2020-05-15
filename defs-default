@@ -231,6 +231,9 @@ POWDER_RFMONITOR=1
 POWDER_RFMONITOR_HOST="$BOSSNODE_IP"
 POWDER_NICKNAME="Emulab"
 
+# Powder write-back data collection.
+POWDER_WBSTORE=1
+
 # No longer allow geni users direct access. Must go through the Portal
 # or the local web interface. 
 PROTOGENI_PORTALONLY=1
