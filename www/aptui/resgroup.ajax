@@ -48,7 +48,7 @@ function Do_Reserve()
     global $this_user;
     global $ajax_args;
     global $suexec_output, $TB_PROJECT_CREATEEXPT;
-    global $PORTAL_GENESIS;
+    global $PORTAL_GENESIS, $PROTOGENI_HOLDINGPROJECT;
     $this_idx = $this_user->uid_idx();
     $validate = 0;
     $override = 0;
@@ -112,7 +112,7 @@ function Do_Reserve()
         }
         # XXX
         if ($project->pid() == "cord-testdrive" ||
-            $project->pid() == "CloudLab") {
+            $project->pid() == $PROTOGENI_HOLDINGPROJECT) {
             $errors["pid"] = "Not allowed to reserve resources in this project";
         }
     }
