@@ -435,7 +435,9 @@
 		      <% } else { %>
 			<td><a href="<%- url %>"><%- info.switch_id %></a></td>
 		      <% } %>
-		      <td><%- info.switch_iface %>
+		      <td <%- (info.wire_type == 'Unused' ?
+			       "class=text-danger" : "") %> >
+			<%- info.switch_iface %>
 			(<%- info.switch_card %>,<%- info.switch_port %>)</td>
 		    <% } else { %>
 		      <td></td>
