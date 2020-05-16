@@ -533,17 +533,18 @@ class Instance
         return TBMinTrust(TBGrpTrust($uid, $pid, $pid), $TBDB_TRUST_GROUPROOT);
     }
     function CanDoSSH($user) {
+        global $PROTOGENI_HOLDINGPROJECT;
+        
 	if ($this->creator_idx() == $user->uid_idx()) {
 	    return 1;
 	}
         #
         # These are the guest projects.
         #
-        $APT_HOLDINGPROJECT   = "aptguests";
-        $CLOUD_HOLDINGPROJECT = "CloudLab";
+        $APT_HOLDINGPROJECT = "aptguests";
         
         if ($this->pid() == $APT_HOLDINGPROJECT ||
-            $this->pid() == $CLOUD_HOLDINGPROJECT) {
+            $this->pid() == $PROTOGENI_HOLDINGPROJECT) {
             return 0;
         }
         
