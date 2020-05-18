@@ -173,6 +173,21 @@ if (defined($options{o})) {
     }
 }
 
+#
+# We do not want to run this script unless its the real version.
+#
+if ($EUID != 0) {
+    fatal("Must be setuid! Maybe its a development version?");
+}
+
+#
+# This script is setuid, so please do not run it as root. Hard to track
+# what has happened.
+# 
+if ($UID == 0) {
+    fatal("Please do not run this as root! Its already setuid!");
+}
+
 if (@ARGV == 0) {
     print STDERR "Must specify an experiment UUID or one or more aggregate domains\n";
     usage();

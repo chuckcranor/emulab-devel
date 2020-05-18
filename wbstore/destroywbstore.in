@@ -108,14 +108,24 @@ if (@ARGV != 1) {
     usage();
 }
 
-# This should always run as root.
-if ($UID != 0) {
-    fatal("Only root can run this script!");
-}
-
 $exptuuid = parseinstance($ARGV[0], 1);
 if (!$exptuuid) {
     fatal("$exptuuid: Not a valid experiment UUID\n");
+}
+
+#
+# We do not want to run this script unless its the real version.
+#
+if ($EUID != 0) {
+    fatal("Must be setuid! Maybe its a development version?");
+}
+
+#
+# This script is setuid, so please do not run it as root. Hard to track
+# what has happened.
+# 
+if ($UID == 0) {
+    fatal("Please do not run this as root! Its already setuid!");
 }
 
 #
@@ -190,11 +200,10 @@ if ($background) {
 # For all aggregates, we run on "boss"
 @fqdns = map { "boss.$_" } @fqdns;
 
-# "Validate" node names, including server
 #
 # Try once to push out the the state to each aggregate. Since aggregates
 # may not be up at the time of our call, this may not succeed.
-# We do ops first, since it is the one that matter most.
+# We do ops first, since it is the one that matters most.
 #
 foreach my $h ($SERVER, @fqdns) {
     my ($host, $domain) = parsehostname($h);
