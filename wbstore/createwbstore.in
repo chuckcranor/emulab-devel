@@ -304,7 +304,7 @@ sub createconfig($)
     # Setup tmp dirs
     my $domain = $hosts{$fqdn}{'domain'};
     my $metadir = "$tmpdir/$domain/$instance/$domain";
-    if (system("mkdir -p $tmpdir $metadir")) {
+    if (mysystem("mkdir -p $tmpdir $metadir")) {
 	fatal("createconfig: could not create tmp directories");
     }
     print STDERR "made '$tmpdir', '$metadir'\n"
@@ -314,7 +314,7 @@ sub createconfig($)
     }
 
     # Generate the syncthing configuration. Includes config, keys, certs, ID.
-    if (system("$STCMD -generate=$metadir >$tmpdir/$domain/st.log 2>&1")) {
+    if (mysystem("$STCMD -generate=$metadir >$tmpdir/$domain/st.log 2>&1")) {
 	fatal("could not create syncthing config in '$metadir'");
     }
 
@@ -415,13 +415,13 @@ sub packageconfig($)
     my $tarball = "$TMPDIR/$instance-$domain.tar.gz";
 
     # Tar everything up
-    if (system("tar -C $rootdir -czf $tarball $instance")) {
+    if (mysystem("tar -C $rootdir -czf $tarball $instance")) {
 	fatal("packageconfig: could not create '$tarball' from '$rootdir'");
     }
 
     # Remove the tmp files
     if (!$keep) {
-	if (system("rm -rf $rootdir")) {
+	if (mysystem("rm -rf $rootdir")) {
 	    fatal("Could not remove tmpdir '$rootdir'");
 	}
     } else {
@@ -486,10 +486,7 @@ sub distribconfigs()
 
 	    my $host =
 		($domain eq "emulab.net" ? "users" : "boss") . ".$domain";
-	    my $SAVEUID = $UID;
-	    $UID = 0;
-	    $rv = system("scp $SSH_ARGS $tarball $host:$TARGETDIR/");
-	    $UID = $SAVEUID;
+	    $rv = mysystem("scp $SSH_ARGS $tarball $host:$TARGETDIR/");
 	    if ($rv) {
 		$rv >>= 8;
 		if ($rv == 255) {
@@ -503,9 +500,7 @@ sub distribconfigs()
 	    }
 
 	    if ($install) {
-		$UID = 0;
-		$rv = system("ssh $SSH_ARGS $host $installbin -f $instance");
-		$UID = $SAVEUID;
+		$rv = mysystem("ssh $SSH_ARGS $host $installbin -f $instance");
 		if ($rv) {
 		    $rv >>= 8;
 		    if ($rv == 255) {
@@ -740,6 +735,22 @@ sub dumpinfo()
 		"', apikey='", $hosts{$h}{'apikey'}, "'\n";
 	}
     }
+}
+
+# system run as root
+sub mysystem($)
+{
+    my ($cmd) = @_;
+
+    print STDERR "system($cmd) as root ...\n"
+	if ($debug > 1);
+
+    my $SAVEUID = $UID;
+    $UID = 0;
+    my $rv = system($cmd);
+    $UID = $SAVEUID;
+
+    return $rv;
 }
 
 sub fatal($)
