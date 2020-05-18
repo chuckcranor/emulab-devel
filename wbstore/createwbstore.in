@@ -97,7 +97,9 @@ sub fatal($);
 #
 # Configure variables
 #
-my $TB		 = "@prefix@";
+# XXX avoid issues with dev trees by hardwiring
+#my $TB		 = "@prefix@";
+my $TB		 = "/usr/testbed";
 my $TBOPS        = "@TBOPSEMAIL@";
 my $STHOME_DIR	 = "$TB/wbstore";
 my $STTEMPLATE_DIR = "$TB/wbstore/templates";

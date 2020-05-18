@@ -60,7 +60,9 @@ sub fatal($);
 #
 my $TB		 = "@prefix@";
 my $TBOPS        = "@TBOPSEMAIL@";
-my $CONFDIR	 = "$TB/wbstore";
+# XXX avoid issues with dev trees by hardwiring
+#my $CONFDIR	 = "$TB/wbstore";
+my $CONFDIR	 = "/usr/testbed/wbstore";
 my $SERVER       = "@USERNODE@";
 my $SSH_ARGS	 = "@SSH_ARGS@";
 
