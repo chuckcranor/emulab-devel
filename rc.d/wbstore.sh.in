@@ -7,7 +7,7 @@
 
 logfile=@prefix@/log/wbstoremonitor_wrapper.log
 
-if [ "@POWDER_WBSTORE@" != "1" ]; then
+if [ "@POWDER_WBSTORE@" != "1" -o ! -x @prefix@/sbin/wbstoremonitor ]; then
     exit 0
 fi
 
