@@ -486,7 +486,10 @@ sub distribconfigs()
 
 	    my $host =
 		($domain eq "emulab.net" ? "users" : "boss") . ".$domain";
+	    my $SAVEUID = $UID;
+	    $UID = 0;
 	    $rv = system("scp $SSH_ARGS $tarball $host:$TARGETDIR/");
+	    $UID = $SAVEUID;
 	    if ($rv) {
 		$rv >>= 8;
 		if ($rv == 255) {
@@ -499,17 +502,21 @@ sub distribconfigs()
 		next;
 	    }
 
-	    if ($install &&
-		($rv = system("ssh $SSH_ARGS $host $installbin -f $instance"))) {
-		$rv >>= 8;
-		if ($rv == 255) {
-		    print STDERR "$instance: could not connect to $host, ".
-			"trying again later.\n";
-		} else {
-		    print STDERR "$instance: install of tarball on $host failed ".
-			"(stat=$rv), trying again later.\n";
+	    if ($install) {
+		$UID = 0;
+		$rv = system("ssh $SSH_ARGS $host $installbin -f $instance");
+		$UID = $SAVEUID;
+		if ($rv) {
+		    $rv >>= 8;
+		    if ($rv == 255) {
+			print STDERR "$instance: could not connect to $host, ".
+			    "trying again later.\n";
+		    } else {
+			print STDERR "$instance: install of tarball on $host failed ".
+			    "(stat=$rv), trying again later.\n";
+		    }
+		    next;
 		}
-		next;
 	    }
 
 	    print STDERR "$instance: $domain done.\n"

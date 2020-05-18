@@ -172,7 +172,9 @@ if (-e "$pidfile") {
 	print STDERR "$exptuuid: killing background installer ($bgpid)\n"
 	    if ($debug);
 	chomp($bgpid);
-	kill('TERM', $bgpid);
+	if ($bgpid =~ /^(\d+)$/) {
+	    kill('TERM', $1);
+	}
     }
     unlink($pidfile);
 }
@@ -214,7 +216,11 @@ foreach my $h ($SERVER, @fqdns) {
 	if ($debug);
 
     my $target = "$CONFDIR/$uuid/$domain/status";
-    if (system("ssh $SSH_ARGS $h 'echo $state > $target'")) {
+    my $SAVEUID = $UID;
+    $UID = 0;
+    my $rv = system("ssh $SSH_ARGS $h 'echo $state > $target'");
+    $UID = $SAVEUID;
+    if ($rv) {
 	my $stat = ($? >> 8);
 	print STDERR "$uuid: WARNING: setting state=$state at $h failed ($stat)\n";
     } else {
