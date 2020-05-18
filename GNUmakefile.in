@@ -52,7 +52,7 @@ ifeq ($(STANDALONE_CLEARINGHOUSE),0)
 SUBDIRS = \
 	clientside/lib \
 	db assign www @optional_subdirs@ clientside ipod security sensors \
-	pxe tbsetup account tmcd utils backend ipod vis \
+	pxe tbsetup account tmcd utils wbstore backend ipod vis \
 	sensors os xmlrpc autofs install/newnode_sshkeys \
 	tools/svn collab/exp-vis node_usage install
 ifeq ($(ISMAINSITE),1)
