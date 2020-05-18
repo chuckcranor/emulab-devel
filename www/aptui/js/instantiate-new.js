@@ -49,6 +49,7 @@ $(function ()
     var hardware      = null;
     var resinfo       = null;
     var radioinfo     = null;
+    var usingRadios   = false;
     var currentStep   = 0;
     var deprecatedList = [];
     var mainTemplate  = _.template(instantiateString);
@@ -2761,13 +2762,16 @@ $(function ()
 
 	console.info("CheckForRadioUsage");
 
-	if (!spectrum.length && radioinfo) {
+	// In case user changes profile late.
+	usingRadios = false;
+
+	if (radioinfo) {
+	    var usingTransmitter = false;
+	    
 	    /*
 	     * Check for radio usage, alert the user that using radios
 	     * without a spectrum specification is bad news.
 	     */
-	    var using = 0;
-		
 	    $(xmlDoc).find("node").each(function() {
 		// Gotta have a manager to know anything.
 		var manager_urn = $(this).attr("component_manager_id");
@@ -2786,15 +2790,17 @@ $(function ()
 		}
 		if (_.has(radioinfo, manager_urn) &&
 		    _.has(radioinfo[manager_urn], component_id)) {
+		    usingRadios = true;
+		    
 		    var txfreqs =
 			radioinfo[manager_urn][component_id]
 			.transmit_frequencies;
 		    if (txfreqs != "") {
-			using = 1;
+			usingTransmitter = true;
 		    }
 		}
 	    });
-	    if (using) {
+	    if (usingTransmitter && !spectrum.length) {
 		sup.ShowModal('#nospectrum-warning');
 	    }
 	}
@@ -2816,7 +2822,7 @@ $(function ()
 	 * Kirk requested that we do not predicate this on using spectrum
 	 * but always on the Powder portal.
 	 */
-	if (!window.ISPOWDER) {
+	if (!window.ISPOWDER || !usingRadios) {
             $('#step3-div .reserve-resources-button').off("click");
             $('#step3-div .schedule-experiment').removeClass("hidden");
             $('#step3-div .reserve-resources').addClass("hidden");
