@@ -1724,7 +1724,7 @@ sub GetTicketAuxAux($)
 		if (!exists($allnodes{$instantiate_on})) {
 		    $response =
 			GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-			     "Bad binding of $node_nickname to $subnode_of");
+			     "Bad binding of $node_nickname to $instantiate_on");
 		    goto bad;
 		}
 	    }
