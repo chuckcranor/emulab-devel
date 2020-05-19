@@ -4714,8 +4714,12 @@ sub AddSpectrum($$$)
 	    my $frequency_high = DBQuoteSpecial($request->{"frequency_high"});
 	    my $power          = DBQuoteSpecial($request->{"power"});
 
+	    #
+	    # Lets not worry about duplicates across the three different,
+	    # we insert global first, then per-node, then per-interface.
+	    #
 	    return -1
-		if (!DBQueryWarn("insert into interfaces_rf_limit set ".
+		if (!DBQueryWarn("replace into interfaces_rf_limit set ".
 				 "  node_id='$node_id', iface='$iface_id', ".
 				 "  freq_low=$frequency_low, ".
 				 "  freq_high=$frequency_high, ".

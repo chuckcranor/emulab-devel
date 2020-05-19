@@ -5232,7 +5232,26 @@ sub SliverWorkAux($)
 	}
 
 	#
-	# Per-Interface Spectrum
+	# And the global spectrum
+	#
+	if (@$global_spectrum) {
+	    if ($node->AddSpectrum($global_spectrum)) {
+		$message = "Could not add global spectrum to $virtual_id";
+		goto bad;
+	    }
+	}
+	#
+	# Per-node spectrum (which can override global)
+	#
+	my $spectrum = GeniXML::GetSpectrum($ref);
+	if (@$spectrum) {
+	    if ($node->AddSpectrum($spectrum)) {
+		$message = "Could not add spectrum to $virtual_id";
+		goto bad;
+	    }
+	}
+	#
+	# Per-Interface Spectrum (which can override node)
 	#
 	foreach my $ifaceref (GeniXML::FindNodes("n:interface",
 						 $ref)->get_nodelist()) {
@@ -5251,26 +5270,6 @@ sub SliverWorkAux($)
 			"$virtual_id:$component_id";
 		    goto bad;
 		}
-	    }
-	}
-
-	#
-	# Per-node spectrum.
-	#
-	my $spectrum = GeniXML::GetSpectrum($ref);
-	if (@$spectrum) {
-	    if ($node->AddSpectrum($spectrum)) {
-		$message = "Could not add spectrum to $virtual_id";
-		goto bad;
-	    }
-	}
-	#
-	# And the global spectrum
-	#
-	if (@$global_spectrum) {
-	    if ($node->AddSpectrum($global_spectrum)) {
-		$message = "Could not add global spectrum to $virtual_id";
-		goto bad;
 	    }
 	}
 
