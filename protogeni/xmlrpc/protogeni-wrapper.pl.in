@@ -143,7 +143,7 @@ my $PEER_ISPRIMARY   = @PEER_ISPRIMARY@;
 my $OURDOMAIN	     = "@OURDOMAIN@";
 my $TBBASE           = "@TBBASE@";
 my $GENIGROUP        = "GeniSlices";
-my $PGERRORS	     = "protogeni-errors\@flux.utah.edu";
+my $PGERRORS	     = "@PROTOGENI_PGERRORS@";
 my $MODULE;
 my $GENIURN;
 
@@ -586,15 +586,15 @@ $SIG{__DIE__} = sub {
 #
 if ($MAINSITE) {
     LogStart(0, $logfile->filename(), LIBAUDIT_NODELETE());
-    AddAuditInfo("to", $PGERRORS);
 }
 else {
     LogStart(0, $logfile->filename(), LIBAUDIT_LOGTBLOGS()|LIBAUDIT_NODELETE());
 }
+if ($PGERRORS ne "") {
+    # CC errors to alternate list for easy inspection.
+    AddAuditInfo("cc", $PGERRORS);
+}
 $logging = 1;
-
-# CC errors to Utah for now.
-AddAuditInfo("cc", $PGERRORS);
 
 #
 # This is lifted from the Frontier code. I want the actual response

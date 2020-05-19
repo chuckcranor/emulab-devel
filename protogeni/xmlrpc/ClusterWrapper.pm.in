@@ -75,7 +75,7 @@ my $TBLOGS           = "@TBLOGSEMAIL@";
 my $TBBASE           = "@TBBASE@";
 my $OURDOMAIN	     = "@OURDOMAIN@";
 my $GENIGROUP        = "GeniSlices";
-my $PGERRORS	     = "protogeni-errors\@flux.utah.edu";
+my $PGERRORS	     = "@PROTOGENI_PGERRORS@";
 # We preload the CA certs at startup.
 my $GENICERTS        = "$TB/etc/genicacerts";
 
@@ -532,11 +532,12 @@ sub Start($$)
     #
     if ($MAINSITE) {
 	LogStart(0, $logfilename, LIBAUDIT_NODELETE());
-	AddAuditInfo("to", $PGERRORS);
     }
     else {
 	LogStart(0, $logfilename, LIBAUDIT_LOGTBLOGS()|LIBAUDIT_NODELETE());
-        # CC errors to Utah for now.
+    }
+    if ($PGERRORS ne "") {
+	# CC errors to alternate list for easy inspection.
 	AddAuditInfo("cc", $PGERRORS);
     }
     $logging = 1;
