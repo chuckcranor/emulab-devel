@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/perl -wT
 #
 # Copyright (c) 2020 University of Utah and the Flux Group.
 # 
@@ -60,9 +60,7 @@ sub fatal($);
 #
 my $TB		 = "@prefix@";
 my $TBOPS        = "@TBOPSEMAIL@";
-# XXX avoid issues with dev trees by hardwiring
-#my $CONFDIR	 = "$TB/wbstore";
-my $CONFDIR	 = "/usr/testbed/wbstore";
+my $CONFDIR	 = "$TB/wbstore";
 my $SERVER       = "@USERNODE@";
 my $SSH_ARGS	 = "@SSH_ARGS@";
 
@@ -104,6 +102,7 @@ if (defined($options{s})) {
     if ($state !~ /^(DONE|FAIL|GONE)$/) {
 	fatal("Not a valid experiment state");
     }
+    $state = $1;
 }
 if (@ARGV != 1) {
     print STDERR "Must specify an experiment UUID\n";
@@ -217,7 +216,9 @@ foreach my $h ($SERVER, @fqdns) {
     print STDERR "$uuid: attempting to set state=$state on $domain ...\n"
 	if ($debug);
 
-    my $target = "$CONFDIR/$uuid/$domain/status";
+    # XXX we hardwire /usr/testbed here because we don't know their config
+    my $target = "/usr/testbed/wbstore/$uuid/$domain/status";
+
     my $SAVEUID = $UID;
     $UID = 0;
     my $rv = system("ssh $SSH_ARGS $h 'echo $state > $target'");

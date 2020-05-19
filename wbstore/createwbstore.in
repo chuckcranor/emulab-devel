@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/perl -wT
 #
 # Copyright (c) 2020 University of Utah and the Flux Group.
 # 
@@ -97,9 +97,7 @@ sub fatal($);
 #
 # Configure variables
 #
-# XXX avoid issues with dev trees by hardwiring
-#my $TB		 = "@prefix@";
-my $TB		 = "/usr/testbed";
+my $TB		 = "@prefix@";
 my $TBOPS        = "@TBOPSEMAIL@";
 my $STHOME_DIR	 = "$TB/wbstore";
 my $STTEMPLATE_DIR = "$TB/wbstore/templates";
@@ -126,6 +124,9 @@ $| = 1;
 # Untaint the path
 # 
 $ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+
+# XXX syncthing -generate needs this
+$ENV{'HOME'} = "/tmp";
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -439,8 +440,9 @@ sub packageconfig($)
 #
 sub distribconfigs()
 {
-    my $TARGETDIR = "$TB/wbstore/tarballs";
-    my $installbin = "$TB/sbin/installwbstore";
+    # XXX we hardwire /usr/testbed here because we don't know the remote config
+    my $TARGETDIR = "/usr/testbed/wbstore/tarballs";
+    my $installbin = "/usr/testbed/sbin/installwbstore";
     my $logfile = "$tmpdir/distrib.out";
     my $pidfile = "$tmpdir/distrib.pid";
 
@@ -745,7 +747,7 @@ sub mysystem($)
     my ($cmd) = @_;
 
     print STDERR "system($cmd) as root ...\n"
-	if ($debug > 1);
+	if ($debug);
 
     my $SAVEUID = $UID;
     $UID = 0;
