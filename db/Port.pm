@@ -24,7 +24,7 @@
 # or merely parse tokens from string and vice-verse must
 # use the converters provided in this class.
 #
-# Copyright (c) 2011-2013, 2017 University of Utah and the Flux Group.
+# Copyright (c) 2011-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1066,4 +1066,15 @@ sub Stringify($)
     return $self->toString();
 }
 
+#
+# Comparison
+#
+sub SamePort($$)
+{
+    my ($this, $that) = @_;
+
+    return ($this->node_id() eq $that->node_id() &&
+	    $this->card() == $that->card() &&
+	    $this->port() == $that->port() ? 1 : 0);
+}
 return 1;
