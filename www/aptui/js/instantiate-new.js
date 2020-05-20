@@ -2020,8 +2020,12 @@ $(function ()
 	    return options;
 	};
 
+	console.info(sites);
+	console.info(ammap);
+
 	// If multisite is disabled for the user, or no sites or 1 site.
-	if (!multisite || Object.keys(sites).length <= 1) {
+	if (!multisite ||
+	    (Object.keys(sites).length <= 1))  {
 	    var siteid;
 	    if (Object.keys(sites).length == 0) {
 		siteid = "Site 1";
@@ -2056,6 +2060,7 @@ $(function ()
 		"    </label> " +
 		"    <div class='col-sm-6 site-selector'>" +
 		"      <select id='site"+sitenum+"_selector' name='where' " +
+		"              data-siteid='nosite_selector' " +
 		"              class='form-control select_where'>" +
 		"        <option value=''>Please Select</option>" +
 		options +
@@ -2096,6 +2101,7 @@ $(function ()
 		    "    </label> " +
 		    "    <div class='col-sm-6 site-selector'>" +
 		    "      <select id='" + selectID + "' " +
+		    "              data-siteid='" + siteid + "' " +
 		    "              name=\"sites[" + siteid + "]\"" +
 		    "              class='form-control select_where'>" +
 		    "        <option value=''>Please Select</option>" +
@@ -2139,6 +2145,19 @@ $(function ()
 	    }
 	});
 	return allgood;
+    }
+    // Cluster selection mapping by selector id.
+    function ClusterSelections()
+    {
+	var clusters = {};
+	
+	$('#cluster_selector').find('select').each(function () {
+	    var cluster = $(this).val();
+	    var urn     = amValueToKey[cluster];
+	    
+	    clusters[$(this).data("siteid")] = urn;
+	});
+	return clusters;
     }
 
     var constraints;
@@ -2985,9 +3004,14 @@ $(function ()
 				iframe.contentDocument.defaultView);
 
 	    iframewindow.addEventListener('DOMContentLoaded', function (event) {
-		var html = "<div id=rspec class=hidden>" +
-		    "<textarea type='textarea'>" + selected_rspec +
-		    "</textarea></div>";
+		var html =
+		    "<div id=rspec class=hidden>" +
+		    "  <textarea type='textarea'>" +
+		        selected_rspec + "</textarea>" +
+		    "</div>" +
+		    "<script type='text/plain' id='cluster-selections'>" +
+		       JSON.stringify(ClusterSelections()) +
+		    "</script>";
 		$("body", iframewindow.document).append(html);
 		$("#wrap", iframewindow.document).css("padding", "0px");
 	    });
@@ -3041,6 +3065,15 @@ $(function ()
 		clearInterval(timer);
 
 		if (uuid) {
+		    // Look for updated rspec.
+		    var rspec = $("#rspec textarea",
+				  iframewindow.document).val();
+
+		    if (rspec != selected_rspec) {
+			console.info("RSpec changed", rspec);
+			$('#rspec_textarea').val(rspec);
+			selected_rspec = rspec;
+		    }
 		    // Redraw the list.
 		    showResgroupList(uuid);
 		    // Ask for the reservation info so we can set start/end.

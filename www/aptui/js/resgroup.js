@@ -25,6 +25,7 @@ $(function ()
     var routeforecast= null;
     var allranges    = [];
     var allroutes    = [];
+    var JACKS_NS     = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
     var IDEAL_STARTHOUR = 7;	// 7am start time preferred.
 
     var RouteColors = {
@@ -40,7 +41,7 @@ $(function ()
 	' <tbody data-uuid="<%- remote_uuid %>" class="new-cluster">' +
 	'    <tr>' +
 	'      <td>' +
-	'        <div>' +
+	'       <div class="cluster-select-div form-control-div"> ' +
 	'  	   <select class="form-control cluster-select"' +
 	'	   	   placeholder="Please Select">' +
 	'	     <option value="">Select Cluster</option>' +
@@ -58,7 +59,7 @@ $(function ()
 	'        </div>' +
 	'      </td>' +
 	'      <td>' +
-	'       <div> ' +
+	'       <div class="hardware-select-div form-control-div"> ' +
 	'	  <select class="form-control hardware-select"' +
 	'	  	placeholder="Select Hardware">' +
 	'	    <option value="">Select Hardware</option>' +
@@ -68,7 +69,7 @@ $(function ()
 	'       </div> '+
 	'      </td>' +
 	'      <td>' +
-	'       <div> ' +
+	'       <div class="node-count-div form-control-div"> ' +
 	'	  <input placeholder="#Nodes"' +
 	'	         value="<%- count %>"' +
 	'	         size="4"' +
@@ -965,6 +966,64 @@ $(function ()
 	    console.info("UpdateFormTime clear end");
 	}
     }
+
+    /*
+     * Mark a cluster field with an error.
+     */
+    function MarkClusterRowField(tbody, which, message) {
+	var classname;
+
+	if (which == "count") {
+	    classname = ".count-error";
+	}
+	else if (which == "type") {
+	    classname = ".hardware-error";
+	}
+	else if (which == "cluster") {
+	    classname = ".cluster-error";
+	}
+	$(tbody).find(classname + " label")
+	    .html(message);
+	$(tbody).find(classname)
+	    .removeClass("has-warning")
+	    .addClass("has-error")
+	    .removeClass("hidden");
+    }
+
+    /*
+     * Precheck the cluster rows for inconsistencies
+     */
+    function PreCheckClusterRows()
+    {
+	var errors = 0;
+	
+	$('#cluster-table tbody.new-cluster').each(function () {
+	    var tbody   = $(this);
+	    var count   = tbody.find(".node-count").val();
+	    var cluster = tbody.find(".cluster-select option:selected").val();
+	    var type    = tbody.find(".hardware-select option:selected").val();
+	    
+	    // Skip an empty row
+	    if (cluster == "" && type == "" && count == "") {
+		return;
+	    }
+	    // Skip a complete row
+	    if (cluster != "" && type != "" && count != "") {
+		return;
+	    }
+	    if (cluster == "") {
+		MarkClusterRowField(tbody, "cluster", "Missing Field");
+	    }
+	    if (type == "") {
+		MarkClusterRowField(tbody, "type", "Missing Field");
+	    }
+	    if (count == "") {
+		MarkClusterRowField(tbody, "count", "Missing Field");
+	    }
+	    errors++;
+	});
+	return errors;
+    }
     
     /*
      * Generate errors in the cluster table.
@@ -980,24 +1039,65 @@ $(function ()
 	    var tbody = $('#cluster-table tbody[data-uuid="' + uuid + '"]');
 
 	    _.each(cluster.errors, function (error, key) {
-		var classname;
-			    
-		if (key == "count") {
-		    classname = ".count-error";
-		}
-		else if (key == "type") {
-		    classname = ".hardware-error";
-		}
-		else if (key == "cluster") {
-		    classname = ".cluster-error";
-		}
-		tbody.find(classname + " label")
-		    .html(error);
-		tbody.find(classname)
-		    .removeClass("hidden");
+		MarkClusterRowField(tbody, key, error);
 	    });
 	});
     }
+
+    /*
+     * Mark a cluster field with an error.
+     */
+    function MarkRangeRowField(tbody, which, message) {
+	var classname;
+
+	if (which == "freq_low") {
+	    classname = ".freq-low-error";
+	}
+	else if (which == "freq_high") {
+	    classname = ".freq-high-error";
+	}
+	$(tbody).find(classname + " label")
+	    .html(message);
+	$(tbody).find(classname)
+	    .removeClass("has-warning")
+	    .addClass("has-error")
+	    .removeClass("hidden");
+    }
+
+    /*
+     * Precheck the cluster rows for inconsistencies
+     */
+    function PreCheckRangeRows()
+    {
+	var errors = 0;
+
+	/*
+	 * Collect the range rows into an array.
+	 */
+	$('#range-table tbody.new-range').each(function () {
+	    var tbody   = $(this);
+	    var low     = tbody.find(".freq-low").val();
+	    var high    = tbody.find(".freq-high").val();
+
+	    // Skip an empty row
+	    if (low == "" && high == "") {
+		return;
+	    }
+	    // Skip a complete row
+	    if (low != "" && high != "") {
+		return;
+	    }
+	    if (low == "") {
+		MarkRangeRowField(tbody, "freq_low", "Missing Field");
+	    }
+	    if (high == "") {
+		MarkRangeRowField(tbody, "freq_high", "Missing Field");
+	    }
+	    errors++;
+	});
+	return errors;
+    }
+    
     /*
      * Generate errors in the ranges table.
      */
@@ -1012,18 +1112,7 @@ $(function ()
 	    var tbody = $('#range-table tbody[data-uuid="' + uuid + '"]');
 
 	    _.each(range.errors, function (error, key) {
-		var classname;
-			    
-		if (key == "freq_low") {
-		    classname = ".freq-low-error";
-		}
-		else if (key == "freq_high") {
-		    classname = ".freq-high-error";
-		}
-		tbody.find(classname + " label")
-		    .html(error);
-		tbody.find(classname)
-		    .removeClass("hidden");
+		MarkRangeRowField(tbody, key, "Missing Field");
 	    });
 	});
     }
@@ -1278,6 +1367,7 @@ $(function ()
 	var clusters = {};
 	var ranges   = {};
 	var routes   = {};
+	var errors   = 0;
 	
 	var checkonly_callback = function(json) {
 	    if (json.code) {
@@ -1313,6 +1403,16 @@ $(function ()
 	    // Now check the actual reservation validity.
 	    ValidateReservation(clusters, ranges, routes);
 	}
+	// Clear (hide) previous cluster table errors
+	aptforms.ClearFormErrors('#reserve-request-form');
+	$('#reserve-request-form .form-group-sm').addClass("hidden");	
+	$('#reserve-request-form tbody').removeClass("has-warning has-error");
+	$('#reserve-request-form .form-control-div')
+	    .removeClass("has-warning has-error");
+	
+	errors += PreCheckClusterRows();
+	errors += PreCheckRangeRows();
+	
 	/*
 	 * On a new reservation, start is optional. Must always have end
 	 */
@@ -1321,13 +1421,17 @@ $(function ()
 	if (editing && !start) {
 	    aptforms.GenerateFormErrors('#reserve-request-form',
 					{"start" : "Missing start date/hour"});
-	    return;
+	    errors++;
 	}
 	if (!end) {
 	    aptforms.GenerateFormErrors('#reserve-request-form',
 					{"end" : "Missing end date/hour"});
+	    errors++;
+	}
+	if (errors) {
 	    return;
 	}
+	
 	// Collect the cluster and range/route rows into an array.
 	clusters = GetClusterRows();
 	ranges   = GetRangeRows();
@@ -1349,10 +1453,6 @@ $(function ()
 		args["override"] = 1;
 	    }
 	}
-	// Clear (hide) previous cluster table errors
-	$('#reserve-request-form .form-group-sm').addClass("hidden");	
-	$('#reserve-request-form tbody').removeClass("has-warning has-error");
-	
 	aptforms.CheckForm('#reserve-request-form', "resgroup",
 			   "Validate", checkonly_callback, args);
     }
@@ -2319,6 +2419,8 @@ $(function ()
 	// Clear (hide) previous cluster table errors
 	$('#reserve-request-form .form-group-sm').addClass("hidden");
 	$('#reserve-request-form tbody').removeClass("has-warning has-error");
+	$('#reserve-request-form .form-control-div')
+	    .removeClass("has-warning has-error");
 	
 	aptforms.SubmitForm('#reserve-request-form', "resgroup",
 			    "Validate", callback,
@@ -2409,6 +2511,7 @@ $(function ()
 		return;
 	    }
 	    if (window.FROMRSPEC) {
+		UpdateRspec();
 		window.parent.CloseMyIframe(json.value.uuid);
 		return;
 	    }
@@ -2440,6 +2543,8 @@ $(function ()
 	// Clear (hide) previous cluster table errors
 	$('#reserve-request-form .form-group-sm').addClass("hidden");
 	$('#reserve-request-form tbody').removeClass("has-warning has-error");
+	$('#reserve-request-form .form-control-div')
+	    .removeClass("has-warning has-error");
 
 	aptforms.SubmitForm('#reserve-request-form', "resgroup",
 			    "Reserve", reserve_callback,
@@ -3311,9 +3416,12 @@ $(function ()
 		.prop("readonly", true);
 	}
 	else {
-	    $(row).find(".node-count")
-		.val("")
-		.prop("readonly", false);
+	    // Do not reset count for the special unbound-types rows.
+	    if (! $(row).hasClass("untyped-nodes")) {
+		$(row).find(".node-count")
+		    .val("")
+		    .prop("readonly", false);
+	    }
 	}
 	RegenCombinedGraph();
 	modified_callback();
@@ -3745,35 +3853,55 @@ $(function ()
      */
     function PopulateFromRspec()
     {
-	var rspec     = $('#rspec textarea').val();	
+	var rspec     = $('#rspec textarea').val();
 	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
-	var xmlDoc    = $.parseXML(rspec);
+	var xmlDoc    = $.parseXML(rspec.replace('&', '&amp;'));
 	var spectrum  = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'spectrum');
 	var routes    = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'busroutes');
-	var tcounts   = {"_unbounded" : 0};
-	console.info("PopulateFromRspec", spectrum, routes);
+	var tcounts   = {};
+	var untyped   = {};
 
-	_.each(spectrum, function(range) {
-	    var freq_low  = $(range).attr("frequency_low");
-	    var freq_high = $(range).attr("frequency_high");
-	    console.info(freq_low,freq_high);
+	// Cluster selections passed in.
+	var cluster_selections =
+	    JSON.parse(_.unescape($('#cluster-selections')[0].textContent));
+	
+	console.info("PopulateFromRspec", rspec,
+		     cluster_selections, spectrum, routes);
 
-	    AddRangeRow(freq_low, freq_high);
-	});
-	_.each(routes, function(route) {
-	    var routename  = $(route).attr("routename");
-	    console.info(routename);
+	if (spectrum.length) {
+	    _.each(spectrum, function(range) {
+		var freq_low  = $(range).attr("frequency_low");
+		var freq_high = $(range).attr("frequency_high");
+		console.info(freq_low,freq_high);
 
-	    AddRouteRow(routename);
-	});
+		AddRangeRow(freq_low, freq_high);
+	    });
+	}
+	else if (window.ISPOWDER) {
+	    AddRangeRow();
+	}
+
+	if (routes.length) {
+	    _.each(routes, function(route) {
+		var routename  = $(route).attr("routename");
+		console.info(routename);
+
+		AddRouteRow(routename);
+	    });
+	}
+	else if (window.ISPOWDER && isadmin) {
+	    // For now, only admins see routes
+	    AddRouteRow();
+	}	
 
 	// Find all the nodes, gather up type info.
 	$(xmlDoc).find("node").each(function() {
 	    var htype        = $(this).find("hardware_type");
 	    var component_id = $(this).attr("component_id");
 	    var manager_id   = $(this).attr("component_manager_id");
+	    var site         = this.getElementsByTagNameNS(JACKS_NS, 'site');
 
-	    console.info("ids", component_id, manager_id);
+	    console.info("node", htype, component_id, manager_id, site);
 
 	    // Reservable nodes are easy.
 	    if (component_id && manager_id &&
@@ -3789,9 +3917,27 @@ $(function ()
 	    }
 	    // Otherwise, we dig inside and find the hardware type.
 	    // We want to count up how many of each type, and how many
-	    // are unbounded.
+	    // are untyped
 	    if (!htype.length) {
-		tcounts["_unbounded"]++;
+		var tag;
+		
+		if (manager_id) {
+		    tag = manager_id;
+		}
+		else if (site.length) {
+		    var siteid = $(site).attr("id");
+		    if (siteid === undefined) {
+			console.error("No site ID in " + site);
+		    }
+		    tag = siteid;
+		}
+		else {
+		    tag = "nosite_selector";
+		}
+		if (!_.has(untyped, tag)) {
+		    untyped[tag] = 0;
+		}
+		untyped[tag]++;
 		return;
 	    }
 	    var type = $(htype).attr("name");
@@ -3813,7 +3959,88 @@ $(function ()
 		}
 	    });
 	});
-	console.info("tcounts", tcounts);
+	console.info("untyped", untyped);
+	
+	_.each(untyped, function (count, tag) {
+	    var row = AddClusterRow();
+	    var urn;
+
+	    if (tag == "nosite_selector") {
+		urn = cluster_selections["nosite_selector"];
+	    }
+	    else if (tag.startsWith("urn:")) {
+		urn = tag;
+	    }
+	    else {
+		urn = cluster_selections[tag];
+	    }
+	    row.find(".cluster-select").val(urn).change();
+	    row.find(".node-count").val(count).change();
+	    row.find(".hardware-select").focus();
+	    row.find(".error-row label")
+		.html("Please select a hardware type for your "+
+		      "compute nodes");
+	    row.find(".reservation-error span")
+		.removeClass("has-error")
+		.addClass("has-warning")
+		.removeClass("hidden");
+	    row.find(".hardware-select-div")
+		.removeClass("has-warning")
+		.addClass("has-error");
+	    // Mark this so we can find it later.
+	    row.addClass("untyped-nodes");
+	});
+    }
+
+    /*
+     * Update untyped nodes before returning back to the instantiate page.
+     */
+    function UpdateRspec()
+    {
+	var rows = $('.untyped-nodes');
+
+	console.info("UpdateRspec", rows);
+
+	if (!rows.length) {
+	    return;
+	}
+	var rspec     = $('#rspec textarea').val();
+	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+	var xmlDoc    = $.parseXML(rspec.replace('&', '&amp;'));
+	var changed   = false;
+
+	// Find all the nodes, gather up type info.
+	$(xmlDoc).find("node").each(function() {
+	    var htype        = $(this).find("hardware_type");
+	    var component_id = $(this).attr("component_id");
+	    var manager_id   = $(this).attr("component_manager_id");
+
+	    // Skip reservable nodes.
+	    if (component_id && manager_id &&
+		_.has(amlist, manager_id) &&
+		_.has(amlist[manager_id].reservable_nodes, component_id)) {
+		return;
+	    }
+	    // Only untyped nodes.
+	    if (htype.length) {
+		return;
+	    }
+	    // Find the selector.
+	    var row   = rows[0];
+	    var stype = $(row).find(".hardware-select option:selected").val();
+	    console.info("UpdateRspec", this, stype);
+
+	    var ns      = xmlDoc.getElementsByTagName("rspec")[0].namespaceURI
+	    var element = xmlDoc.createElementNS(ns, "hardware_type");
+	    element.setAttribute("name", stype);
+	    this.appendChild(element);
+	    changed = true;
+	});
+	if (changed) {
+	    rspec = (new XMLSerializer()).serializeToString(xmlDoc);
+	    console.info("UpdateRspec", rspec);
+	    $('#rspec textarea').val(rspec);
+	}
     }
 
     function isNumber(value) {
