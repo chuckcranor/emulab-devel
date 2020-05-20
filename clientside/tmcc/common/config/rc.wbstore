@@ -26,7 +26,9 @@ use Getopt::Std;
 
 #
 # Configure a convenience link for accessing any write-back store.
-# Also make sure the directory is properly protected.
+# We create a sub directory for each node and point /save to that
+# so that there is a unique store per experiment node in the event
+# that an experiment has multiple nodes on the same aggregate.
 #
 
 sub usage()
@@ -147,12 +149,36 @@ sub doboot()
 	return;
     }
 
+    #
+    # Determine our node name.
+    # We use the experiment vname if available, otherwise use the local
+    # part of the hostname.
+    #
+    my $node;
+    if (-e "$BOOTDIR/nickname") {
+	$node = `cat $BOOTDIR/nickname`;
+    } elsif (-e "$BOOTDIR/realname") {
+	$node = `cat $BOOTDIR/realname`;
+    } else {
+	$node = `hostname`;
+    }
+    chomp $node;
+    if ($node =~ /^([^\.]+)\..*$/) {
+	$node = $1;
+    }
+    
     $link = "/save";
     $path = "/proj/$pid/wbstore/$uuid/$domain";
     if (! -d "$path") {
-	warn("*** WARNING: '$path' does not exist, wbstore not setup\n");
+	warn("*** WARNING: '$path' does not exist (/proj/$pid not mounted?), ".
+	     "setting up symlink anyway\n");
+    } elsif (! -d "$path/$node" && !mkdir("$path/$node")) {
+	warn("*** WARNING: could not create '$path/$node', ".
+	     "setting up symlink anyway\n");
+    } else {
+	chmod(0775, "$path/$node");
     }
-    system("ln -sf $path $link");
+    system("ln -sf $path/$node $link");
 }    
 
 sub doshutdown()
