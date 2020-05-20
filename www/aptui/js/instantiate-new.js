@@ -2822,13 +2822,26 @@ $(function ()
 	 * Kirk requested that we do not predicate this on using spectrum
 	 * but always on the Powder portal.
 	 */
-	if (!window.ISPOWDER || !usingRadios) {
+	if (!window.ISPOWDER) {
             $('#step3-div .reserve-resources-button').off("click");
             $('#step3-div .schedule-experiment').removeClass("hidden");
             $('#step3-div .reserve-resources').addClass("hidden");
             $('#groups-div').addClass("hidden");
             $('#groups').html("");
 	    return;
+	}
+	// But if not using radios, different warning text, it worries people.
+	if (usingRadios) {
+	    $('#step3-div .reserve-resources .radio-warning')
+		.removeClass("hidden");
+	    $('#step3-div .reserve-resources .noradio-warning')
+		.addClass("hidden");
+	}
+	else {
+	    $('#step3-div .reserve-resources .radio-warning')
+		.addClass("hidden");
+	    $('#step3-div .reserve-resources .noradio-warning')
+		.removeClass("hidden");
 	}
 
 	/*
