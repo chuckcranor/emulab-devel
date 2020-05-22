@@ -197,7 +197,6 @@ $registered      = (isset($this_user) ? "true" : "false");
 $snapping        = 0;
 $oneonly         = (isset($oneonly) && $oneonly ? 1 : 0);
 $isadmin         = (ISADMIN() ? 1 : 0);
-$slivers         = InstanceSliver::LookupForInstance($instance);
 $isstud          = (isset($this_user) && $this_user->stud() ? 1 : 0);
 $wholedisk       = FeatureEnabled("WholeDiskImage",$creator,$instance->Group());
 
@@ -322,6 +321,18 @@ echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
 # list in case new aggregates are added.
 #
 $aggregates = Aggregate::DefaultAggregateList($this_user);
+#
+# Because of cross portal linking on the Mothership, make sure there
+# are no missing aggregates.
+#
+foreach ($instance->slivers() as $sliver) {
+    $aggregate_urn = $sliver->aggregate_urn();
+
+    if (!array_key_exists($aggregate_urn, $aggregates)) {
+        $aggregate = Aggregate::Lookup($aggregate_urn);
+        $aggregates[$aggregate_urn] = $aggregate;
+    }
+}
 $blob = array();
 
 foreach ($aggregates as $aggregate) {
@@ -336,7 +347,6 @@ foreach ($aggregates as $aggregate) {
               "ismobile"     => $aggregate->ismobile(),
               "isFE"         => $aggregate->isFE());
 }
-
 echo "<script type='text/plain' id='amlist-json'>\n";
 echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
 echo "</script>\n";
