@@ -607,6 +607,7 @@ $(function ()
 	$('#profile_disabled').change(function() { ProfileModified(); });
 	$('#profile_nodelete').change(function() { ProfileModified(); });
 	$('#profile_project_write').change(function() { ProfileModified(); });
+	$('.examples_portals_checkbox').change(function(){ProfileModified(); });
 	
 	/*
 	 * A double click handler that will render the instructions or
@@ -642,6 +643,28 @@ $(function ()
 		return false;
 	    }
 	    sup.ShowModal("#share_profile_modal");
+	});
+	// Handler for updates to the example portals field, on the
+	// the Mothership, where we have multiple portals.
+	$('.examples_portals_checkbox').click(function(event) {
+	    // Gotta be public to list in examples page.
+	    if ($('.examples_portals_checkbox:checked').length &&
+		!$('#profile_who_public').is(":checked")) {
+		event.preventDefault();
+		alert("Only public profiles can be listed on "+
+		      "the Examples page. Please click that first.");
+		return false;
+	    }
+	    var portals =
+		$('.examples_portals_checkbox:checked')
+		    .map(function() {
+			return $(this).data("portal");
+		    })
+		    .get()
+		    .join();
+
+	    $('#quickvm_create_profile_form ' +
+	      '[name=examples_portals]').val(portals);
 	});
 
 	/*
@@ -886,7 +909,7 @@ $(function ()
 	});
 	
 	// Show the steps area.
-	$('#profile_steps_div').removeClass("hidden");
+	// $('#profile_steps_div').removeClass("hidden");
     }
 
     //

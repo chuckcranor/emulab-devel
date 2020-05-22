@@ -569,24 +569,6 @@
 
 	  <fieldset id="metadata-fields"
 		    <% if (!viewing || !gotrspec) { %>class="hidden" <% } %> >
-	    <!-- Public listing checkbox -->
-	    <% if (isadmin) { %>
-	      <div class='row'>
-		<div class='col-sm-9 col-sm-offset-3'>
-		  <div class='checkbox format-me' data-compact='yep'>
-                    <label>
-		      <input name='profile_listed'
-			     <%- formfields.profile_listed %>
-			     data-key='profile_listed'
-			     id='profile_listed' value='checked'
-			     type='checkbox'>List on the home page for
-		      anyone to view.
-		    </label>
-		  </div>
-		</div>
-	      </div>
-	    <% } %>
-
 	    <!-- Permission checkboxes. -->
 	    <div class='row'>
 	      <div class='col-sm-9 col-sm-offset-3' style="margin-top: 5px">
@@ -674,6 +656,27 @@
 	    <% if (isadmin) { %>
 	      <div class='row'>
 		<div class='col-sm-9 col-sm-offset-3'>
+		  <hr style="margin-top: 5px; margin-bottom: 0px;"></div>
+	      </div>
+	      
+	      <!-- Public listing checkbox -->
+	      <div class='row'>
+		<div class='col-sm-9 col-sm-offset-3'>
+		  <div class='checkbox format-me' data-compact='yep'>
+                    <label>
+		      <input name='profile_listed'
+			     <%- formfields.profile_listed %>
+			     data-key='profile_listed'
+			     id='profile_listed' value='checked'
+			     type='checkbox'>List on the home page for
+		      anyone to view.
+		    </label>
+		  </div>
+		</div>
+	      </div>
+	      
+	      <div class='row'>
+		<div class='col-sm-9 col-sm-offset-3'>
 		  <div class='checkbox format-me' data-key='profile_topdog'
 		       data-compact='yep'>
                     <label>
@@ -746,6 +749,85 @@
 			     value='checked'
 			     type='checkbox'>Apply to all versions.
 		    </label>
+		  </div>
+		</div>
+	      </div>
+	      <div class='row'>
+		<div class='col-sm-9 col-sm-offset-3'>
+		  <div class='checkbox format-me' data-key='examples_portals'
+		       data-compact='yep'>
+		    <% if (window.MAINSITE) { %>
+		      <span style="margin-right: 10px;">List in Examples:</span>
+                      <label>
+			<input name='profile_example_emulab'
+			       class="examples_portals_checkbox"
+			       data-portal="emulab"
+			       <% if (_.has(formfields, "examples_portals") &&
+				      formfields.examples_portals
+				      .indexOf("emulab") >= 0) { %>
+			       checked
+			       <% } %>
+			       type='checkbox'>Emulab
+		      </label>
+                      <label>
+			<input name='profile_example_cloudlab'
+			       class="examples_portals_checkbox"
+			       data-portal="cloudlab"
+			       <% if (_.has(formfields, "examples_portals") &&
+				      formfields.examples_portals
+				       .indexOf("cloudlab") >= 0) { %>
+			         checked
+			       <% } %>
+			       type='checkbox'>Cloudlab
+		      </label>
+                      <label>
+			<input name='profile_example_phantomnet'
+			       class="examples_portals_checkbox"
+			       data-portal="phantomnet"
+			       <% if (_.has(formfields, "examples_portals") &&
+				 formfields.examples_portals
+				 .indexOf("phantomnet") >= 0) { %>
+			       checked
+			       <% } %>
+			       type='checkbox'>PhantomNet
+		      </label>
+                      <label>
+			<input name='profile_example_powder'
+			       class="examples_portals_checkbox"
+			       data-portal="powder"
+			       <% if (_.has(formfields, "examples_portals") &&
+				 formfields.examples_portals
+				 .indexOf("powder") >= 0) { %>
+			       checked
+			       <% } %>
+			       type='checkbox'>Powder
+		      </label>
+		    <% } else { %>
+                      <label>
+			<input name='profile_example_emulab'
+			       class="examples_portals_checkbox"
+			       data-portal="emulab"
+			       <% if (_.has(formfields, "examples_portals") &&
+				 formfields.examples_portals
+				 .indexOf("emulab") >= 0) { %>
+			       checked
+			       <% } %>
+			       type='checkbox'>List in Examples
+			<a href='#' class='btn btn-xs'
+			   style="padding-left: 0px"
+			   data-toggle='popover'
+			   data-html='true'
+			   data-delay='{"hide":500}'
+			   data-content="List this profile on the
+					 Examples page">
+			  <span class='glyphicon glyphicon-question-sign'
+				style='margin-bottom: 4px;'></span>
+			</a>
+		      </label>
+		    <% } %>
+		    <input name='examples_portals'
+			   value="<%- formfields.examples_portals %>"
+			   type='hidden'>
 		  </div>
 		</div>
 	      </div>

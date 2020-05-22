@@ -460,6 +460,9 @@ if (! isset($create)) {
 		($profile->isLocked() ? "checked" : "");
 	    $defaults["profile_project_write"]      =
 		($profile->project_write() ? "checked" : "");
+	    $defaults["examples_portals"]      =
+                ($profile->examples_portals() ?
+                 $profile->examples_portals() : "");
 
 	    # Warm fuzzy message.
 	    if (isset($_SESSION["notifyupdate"])) {

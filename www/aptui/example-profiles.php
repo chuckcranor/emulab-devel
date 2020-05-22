@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,11 +34,6 @@ $page_title = "Example Profiles";
 RedirectSecure();
 $this_user = CheckLoginOrRedirect();
 
-#
-# Eventually use the portal to determine what profiles to show.
-#
-$pid = "PortalProfiles";
-
 SPITHEADER(1);
 
 echo "<link rel='stylesheet'
@@ -53,7 +48,6 @@ echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
 
-# List of all profiles in the PortalProfiles project.
 $profiles = array();
 
 # Make sure the profile is public, no point in showing it if not.
@@ -63,9 +57,8 @@ $query_result
                    "left join apt_profile_versions as v on ".
                    "     v.profileid=p.profileid and ".
                    "     v.version=p.version ".
-                   "where (p.pid='$pid' and p.public!=0 and ".
-                   "       (p.examples_portals is null or ".
-                   "        FIND_IN_SET('$PORTAL_GENESIS',examples_portals))) ".
+                   "where (p.public!=0 and ".
+                   "        FIND_IN_SET('$PORTAL_GENESIS',examples_portals)) ".
                    "order by p.name");
 
 while ($row = mysql_fetch_array($query_result)) {

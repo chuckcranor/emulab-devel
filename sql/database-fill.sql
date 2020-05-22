@@ -1361,6 +1361,7 @@ REPLACE INTO table_regex VALUES ('apt_profiles','script','text','redirect','defa
 REPLACE INTO table_regex VALUES ('apt_profiles','repourl','text','redirect','default:tinytext',0,0,NULL);
 REPLACE INTO table_regex VALUES ('apt_profiles','repohash','text','regex','^[\\w]+$',0,64,NULL);
 REPLACE INTO table_regex VALUES ('apt_profiles','portal_converted','int','redirect','default:boolean',0,0,NULL);
+REPLACE INTO table_regex VALUES ('apt_profiles','examples_portals','text','regex','^((emulab|cloudlab|powder|phantomnet),?+){0,4}$',0,0,NULL);
 --
 -- Dumping data for table `testsuite_preentables`
 --

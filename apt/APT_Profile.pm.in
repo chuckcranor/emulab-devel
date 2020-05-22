@@ -666,7 +666,8 @@ sub UpdateMetaData($$)
     # This is the only metadata we can update.
     #
     my %mods = ();
-    foreach my $key ("listed", "shared", "public", "topdog", "project_write") {
+    foreach my $key ("listed", "shared", "public", "topdog",
+		     "project_write", "examples_portals") {
 	if (exists($argref->{$key})) {
 	    $mods{$key} = $argref->{$key};
 	}

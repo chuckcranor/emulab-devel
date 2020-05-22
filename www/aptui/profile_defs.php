@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2019 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -142,6 +142,7 @@ class Profile
     function parent_version()      { return $this->field('parent_version'); }
     function profile_nodelete()    { return $this->field('profile_nodelete'); }
     function portal_converted()    { return $this->field('portal_converted'); }
+    function examples_portals()    { return $this->field('examples_portals'); }
 
     # Private means only in the same project.
     function IsPrivate() {
