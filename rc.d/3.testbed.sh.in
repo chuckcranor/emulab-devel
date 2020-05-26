@@ -5,7 +5,7 @@
 
 # PROVIDE: testbed
 # REQUIRE: mysql pubsub mfrisbeed
-# BEFORE: apache22
+# BEFORE: apache24
 # KEYWORD: shutdown
 
 MAINSITE="@TBMAINSITE@"
