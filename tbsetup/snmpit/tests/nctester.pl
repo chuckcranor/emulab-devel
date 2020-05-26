@@ -25,7 +25,13 @@ if ($xmlarg) {
     $argnode = $argfrag->firstChild();
 }
 
-my $ncconn = snmpit_libNetconf->new($switch, $user, $pass);
+my $args = {
+    "USERNAME"  => $user,
+    "PASSWORD"  => $pass,
+    "PORT"      => undef,
+};
+
+my $ncconn = snmpit_libNetconf->new($switch, $args);
 $ncconn->debug(1);
 if (!$ncconn) {
     print "Could not create new Netconf object for $switch!\n";

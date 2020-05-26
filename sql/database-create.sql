@@ -3268,6 +3268,7 @@ CREATE TABLE `interfaces` (
   `whol` tinyint(4) NOT NULL default '0',
   `trunk` tinyint(1) NOT NULL default '0',
   `trunk_mode` enum('equal','dual') NOT NULL default 'equal',
+  `LAG` tinyint(1) NOT NULL default '0',
   `uuid` varchar(40) NOT NULL default '',
   `logical` tinyint(1) unsigned NOT NULL default '0',
   `autocreated` tinyint(1) unsigned NOT NULL default '0',

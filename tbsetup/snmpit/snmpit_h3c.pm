@@ -20,7 +20,7 @@
 # 
 # }}}
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # Copyright (c) 2004-2015 Regents, University of California.
 # All rights reserved.
 #
@@ -39,6 +39,7 @@ $| = 1; # Turn off line buffering on output
 
 use English;
 use SNMP;
+use File::Temp qw(tempfile);
 use lib '/usr/testbed/lib';
 use snmpit_lib;
 
@@ -168,6 +169,12 @@ sub new($$$;$) {
     } else {
 	$self->{PASSWORD} = $community;
     }
+    if (exists($options->{'sshkey'})) {
+	$self->{SSHKEY} = $options->{'sshkey'};
+    }
+    else {
+	$self->{SSHKEY} = undef;
+    }
 
     # Use jumbo frames?
     if (exists($options->{'use_jumbo'}) 
@@ -175,6 +182,13 @@ sub new($$$;$) {
 	$self->{DOJUMBO} = 1;
     } else {
 	$self->{DOJUMBO} = 0;
+    }
+
+    # Funky switch (firmware) that cannot manipulate BAGGs with snmp.
+    if (exists($options->{'badBAGG'}) && $options->{'badBAGG'} == 1) {
+	$self->{BADBAGG} = 1;
+    } else {
+	$self->{BADBAGG} = 0;
     }
 
     # Use VRF for OF controller communication (H3C)?
@@ -1677,6 +1691,15 @@ sub setVlansOnTrunk($$$$) {
 	return 0;
     }
 
+    #
+    # Look to see if this is an aggregate on a switch we have marked as not
+    # being able to manipulate BAGGs with snmp. The ifIndex is already
+    # converted if its a BAGG, so the easiest way to check is to compare to
+    # the base trunk offset.
+    #
+    if ($self->{BADBAGG} && $ifIndex > $self->{"TRUNKOFFSET"}) {
+	return $self->setVlansOnBAGG($ifIndex, $value, @vlan_numbers);
+    }
     foreach my $vlan_number (@vlan_numbers) {
 	if ($self->updateOneVlan(0, 0, $value, $vlan_number, $modport))  {
 	    $errors++;
@@ -1685,6 +1708,36 @@ sub setVlansOnTrunk($$$$) {
 	}
     }
     return !$errors;
+}
+
+#
+# 
+#
+sub setVlansOnBAGG($$$@)
+{
+    my ($self, $bagIndex, $value, @vlan_numbers) = @_;
+    my $id = $self->{NAME} . "::setVlansOnBAGG";
+
+    # We need the BAGG name.
+    my $bagName = $self->{IFDESCR}->{$bagIndex};
+
+    my $cmdstr = "interface $bagName\n";
+    if (!$value) {
+	$cmdstr .= "undo ";
+    }
+    $cmdstr .= "port trunk permit vlan " . join(' ', @vlan_numbers) . "\n";
+    $self->debug("$id: $cmdstr\n");
+    my $clires = $self->doH3CNetconfCLI($cmdstr);
+    if (!defined($clires)) {
+	warn "$id: Internal error setting BAGG membership on $bagName: " .
+	    join(' ', @vlan_numbers) . "\n";
+	return 0;
+    }
+    if ($clires =~ /^\s+(%.+)$/m) {
+	warn "id: Error returned from CLI:\n" . "\t$1\n";
+	return 0;
+    }
+    return 1;
 }
 
 #
@@ -2113,6 +2166,7 @@ package snmpit_h3c;
 use strict;
 use English;
 use XML::LibXML;
+use File::Temp qw(tempfile);
 use snmpit_lib;
 use snmpit_libNetconf;
 use vars qw(@ISA);
@@ -2159,9 +2213,39 @@ sub new($$$;$) {
 	# Errors have already been emitted.
 	return undef;
     }
-
-    my $ncobj = snmpit_libNetconf->new($devicename, $self->{USERNAME}, 
-				       $self->{PASSWORD}, undef, $debuglevel);
+    my $args = {
+	"USERNAME"  => $self->{USERNAME}, 
+	"PASSWORD"  => $self->{PASSWORD}, 
+	"PORT"      => $self->{PORT},
+    };
+    
+    #
+    # See if we are using an ssh key for the netconf connection. We have to
+    # copy the key and set the mode so that ssh is happy.
+    #
+    if ($self->{"SSHKEY"}) {
+	my $sshkey;
+	
+	if (open(SSH, $self->{"SSHKEY"})) {
+	    while (<SSH>) {
+		$sshkey .= $_;
+	    }
+	    close(SSH);
+	}
+	else {
+	    warn "$self->{NAME}: Could open " . $self->{"SSHKEY"} . "\n";
+	    return undef;
+	}
+	my ($tempfile, $filename) =
+	    tempfile("/tmp/snmpit_ssh.XXXXX", "UNLINK" => 1);
+	print $tempfile $sshkey;
+	close($tempfile);
+	# To make ssh happy.
+	system("/bin/chmod 600 $filename");
+	$args->{"SSHKEY"} = $filename;
+    }
+    
+    my $ncobj = snmpit_libNetconf->new($devicename, $args, $debuglevel);
     if (!defined($ncobj)) {
 	warn "$self->{NAME}: Could not instantiate a libNetconf object!\n";
 	return undef;
@@ -2321,6 +2405,9 @@ sub setPortVlan($$@) {
 	if (@newTaggedPorts);
     my $errors = $self->setVlanMembers($vlan_number,$newInfo);
     $self->unlock();
+    if ($errors) {
+	return $errors;
+    }
 
     my $onoroff = ($vlan_number ne "1") ? "enable" : "disable";
     $self->debug("$id; will $onoroff"  . join(',',@ports) . "...\n");
@@ -2345,6 +2432,8 @@ my %h3c_cmdOIDs =
     #"full"   => ["hh3cifEthernetDuplex","full"],
     #"half"   => ["hh3cifEthernetDuplex","half"],
 );
+
+use Data::Dumper;
 
 sub readifIndex($) {
     my $self = shift;
@@ -2402,19 +2491,28 @@ sub readifIndex($) {
     map {if (($t_off == 0) || ($t_off > @$_[1])) {$t_off = @$_[1];};} @$rows;
     if ($t_off > 0) { $t_off--; }
     foreach my $rowref (@$rows) {
-	($name,$ifindex,$iidoid) = @$rowref;
-	my @mems = $self->portSetToList($iidoid);
-	next unless(@mems);
-	if (ref($self) eq 'snmpit_h3cv5')
-	    { @mems = map { $self->{d1dx2ifx}{$_};} @mems; }
-	$self->{TRUNKS}{$ifindex - $t_off} = [ @mems];
-	map {$self->{TRUNKINDEX}{$_} = $ifindex - $t_off; } @mems;
-	$modport = $self->{IFINDEX}{$mems[0]};
-	foreach $port (@mems, $ifindex) {
-	    $name = $self->{IFINDEX}{$port} || "0.$ifindex";
-	    $self->{IFINDEX}{$port} = $modport;
-	    $self->{IFINDEX}{$name} = $ifindex;
-	}
+        ($name,$ifindex,$iidoid) = @$rowref;
+        $self->debug("got $name, $ifindex\n", 2);
+        my @mems = $self->portSetToList($iidoid);
+        next unless(@mems);
+        $self->debug("agg port `mems` before mapping: @mems\n", 2);
+	@mems = map { $self->{d1dx2ifx}{$_};} @mems;
+        $self->debug("agg port `mems` after mapping: @mems\n", 2);
+        $self->{TRUNKS}{$ifindex - $t_off} = [ @mems];
+        map {$self->{TRUNKINDEX}{$_} = $ifindex - $t_off; } @mems;
+        $modport = $self->{IFINDEX}{$mems[0]};
+        foreach $port (@mems, $ifindex) {
+            $name = $self->{IFINDEX}{$port} || "0.$ifindex";
+            $self->{IFINDEX}{$port} = $modport;
+            $self->{IFINDEX}{$name} = $ifindex;
+        }
+    }
+    if (0) {
+	print STDERR Dumper($self->{"IFDESCR"});
+	print STDERR Dumper($self->{"IFINDEX"});
+	print STDERR Dumper($self->{"TRUNKS"});
+	print STDERR Dumper($self->{"TRUNKINDEX"});
+	print STDERR $t_off . "\n";
     }
 
     # Record some final metadata for this switch.

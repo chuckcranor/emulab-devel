@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # Copyright (c) 2004-2009 Regents, University of California.
 # 
 # {{{EMULAB-LGPL
@@ -299,6 +299,7 @@ sub setPortVlan($$@) {
     my $self = shift;
     my $vlan_id = shift;
     my @ports = @_;
+    my @trunkedStitchPorts = ();
 
     my $errors = 0;
 
@@ -308,9 +309,33 @@ sub setPortVlan($$@) {
     my $vlan_number = $self->findVlan($vlan_id);
     if (!$vlan_number) {
 	print STDERR
-	"ERROR: VLAN with identifier $vlan_id does not exist on stack " .
-	$self->{STACKID} . "\n" ;
+	    "ERROR: setPortVlan: VLAN with identifier $vlan_id does not exist ".
+	    "on stack " . $self->{STACKID} . "\n" ;
 	return 1;
+    }
+
+    #
+    # Look for trunked stitch points. A stitch point is a wire with
+    # type=Node, and usually this is fine, that wire is a plain wire
+    # in trunk mode, and we just add vlans to the port. But sometimes
+    # the wire really is a Trunk (EtherChannel, LAG), in which case
+    # we have to use setVlanOnTrunks2 on one side of the trunk instead.
+    #
+    my @tmp = getTrunkedStitchPorts();
+    if (@tmp) {
+	$self->debug("setPortVlan: all trunked stitch ports: @tmp\n");
+	$self->debug("setPortVlan: port set: @ports\n");
+	
+	foreach my $port (@tmp) {
+	    if (grep { $_->SamePort($port)} @ports) {
+		push(@trunkedStitchPorts, $port);
+		#
+		# And remove from the list of ports.
+		#
+		@ports = grep { !$_->SamePort($port)} @ports;
+	    }
+	}
+	$self->debug("setPortVlan: modified port set: @ports\n");
     }
 
     #
@@ -422,6 +447,13 @@ sub setPortVlan($$@) {
 
     if ($vlan_id ne 'default') {
 	$errors += (!$self->setVlanOnTrunks2($vlan_number,1,\%trunks,@trunks));
+    }
+
+    foreach my $port (@trunkedStitchPorts) {
+	if ($self->setVlanOnTrunk2ByPorts($port->switch_node_id(),
+					  $vlan_number, 1, $port)) {
+	    $errors++;
+	}
     }
 
     #
@@ -842,6 +874,27 @@ sub removeVlan($@) {
 	    # We can keep going, 'cause we can still remove the VLAN
 	    #
 	}
+
+	#
+	# Look for stitch points. A stitch point is essentially a Trunk
+	# but we control only our side, so do what setVlanOnTrunks2()
+	# does, but just on our side. Not all stitch points are Trunks,
+	# typically they are just plain wires and would not be marked
+	# as being like a trunk.
+	#
+	my @stitchPorts = getTrunkedStitchPorts();
+	if (@stitchPorts) {
+	    my @ports = getVlanPorts($vlan_id);
+
+	    foreach my $port (@stitchPorts) {
+		if (grep { $_->SamePort($port)} @ports) {
+		    if ($self->setVlanOnTrunk2ByPorts($port->switch_node_id(),
+						      $vlan_number, 0, $port)) {
+			$errors++;
+		    }
+		}
+	    }
+	}
     }
 
     #
@@ -1176,8 +1229,8 @@ sub setVlanOnSwitchTrunks($$$) {
     my $vlan_number = $self->findVlan($vlan_id);
     if (!$vlan_number) {
 	print STDERR
-	"ERROR: VLAN with identifier $vlan_id does not exist on stack " .
-	$self->{STACKID} . "\n" ;
+	    "ERROR: setVlanOnSwitchTrunks: VLAN with identifier $vlan_id does ".
+	    "not exist on stack " . $self->{STACKID} . "\n" ;
 	return 0;
     }
 
@@ -1232,54 +1285,49 @@ sub setVlanOnTrunks2($$$$@) {
         if (!$self->{DEVICES}{$src} || !$self->{DEVICES}{$dst}) {
             next;
         }
-
-	if (!$self->{DEVICES}{$src}) {
-	    warn "ERROR - Bad device $src found in setVlanOnTrunks!\n";
-	    $errors++;
-	} else {
-	    #
-	    # Trunks might be EtherChannels, find the ifIndex
-	    #
-            my $trunkIndex = $self->{DEVICES}{$src}->
-                             getChannelIfIndex(@{ $$trunkref{$src}{$dst} });
-            if (!defined($trunkIndex)) {
-                warn "ERROR - unable to find channel information on $src ".
-		     "for $src-$dst EtherChannel\n";
-                $errors += 1;
-            } else { 
-		if (!$self->{DEVICES}{$src}->
-                        setVlansOnTrunk($trunkIndex,$value,$vlan_number)) {
-                    warn "ERROR - unable to $act vlan $vlan_number ".
-			 "on trunk on switch $src\n";
-                    $errors += 1;
-                }
-	    }
+	if ($self->setVlanOnTrunk2ByPorts($src,$vlan_number,$value,
+					  @{ $$trunkref{$src}{$dst} })) {
+	    $errors += 1;
 	}
-	if (!$self->{DEVICES}{$dst}) {
-	    warn "ERROR - Bad device $dst found in setVlanOnTrunks!\n";
-	    $errors++;
-	} else {
-	    #
-	    # Trunks might be EtherChannels, find the ifIndex
-	    #
-            my $trunkIndex = $self->{DEVICES}{$dst}->
-                             getChannelIfIndex(@{ $$trunkref{$dst}{$src} });
-            if (!defined($trunkIndex)) {
-                warn "ERROR - unable to find channel information on $dst ".
-		     "for $src-$dst EtherChannel\n";
-                $errors += 1;
-            } else {
-		if (!$self->{DEVICES}{$dst}->
-                        setVlansOnTrunk($trunkIndex,$value,$vlan_number)) {
-                    warn "ERROR - unable to $act vlan $vlan_number ".
-			"on trunk on switch $dst\n";
-                    $errors += 1;
-                }
-	    }
+	if ($self->setVlanOnTrunk2ByPorts($dst,$vlan_number,$value,
+					  @{ $$trunkref{$dst}{$src} })) {
+	    $errors += 1;
 	}
     }
-
     return (!$errors);
+}
+
+#
+# Set vlan on a single trunk, see above. 
+#
+sub setVlanOnTrunk2ByPorts($$$$@)
+{
+    my $self = shift;
+    my $device = shift;
+    my $vlan_number = shift;
+    my $value = shift;
+    my @ports = @_;
+    my $act = ($value ? "set" : "clear");
+    
+    $self->debug("setVlanOnTrunk2ByPorts: ".
+		 "$device, $vlan_number, $value, @ports\n");
+
+    #
+    # Trunks might be EtherChannels, find the ifIndex
+    #
+    my $trunkIndex = $self->{DEVICES}{$device}->getChannelIfIndex(@ports);
+    if (!defined($trunkIndex)) {
+	warn "ERROR - unable to find channel information for [@ports]".
+	    "on $device\n";
+	return 1;
+    }
+    if (!$self->{DEVICES}{$device}->
+	     setVlansOnTrunk($trunkIndex,$value,$vlan_number)) {
+	warn "ERROR - unable to $act vlan $vlan_number for [@ports] ".
+			"on trunk on switch $device\n";
+	return 1;
+    }
+    return 0;
 }
 
 #
