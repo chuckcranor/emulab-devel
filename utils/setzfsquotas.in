@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2017 University of Utah and the Flux Group.
+# Copyright (c) 2017-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -49,7 +49,7 @@ use Getopt::Std;
 
 sub usage()
 {
-    print STDERR "Usage: setzfsquotas [-adhqnr] [-Q value] [-F factor] FS ...\n";
+    print STDERR "Usage: setzfsquotas [-adhqnrI] [-Q value] [-F factor] FS ...\n";
     print STDERR "\nSet ZFS quota/refquota as indicated for each specified\n";
     print STDERR "standard Emulab filesystem\n";
     print STDERR "   -h         This message\n";
@@ -66,11 +66,14 @@ sub usage()
     print STDERR "              1.0 will set quota==refquota. Larger values will permit space\n";
     print STDERR "              in excess of what the user can allocate (i.e., for backup purposes)\n";
     print STDERR "              Default comes from the defs- file ZFS_QUOTA_*_X variables\n";
+    print STDERR "   -I         Initialize quotas using the specified quota and multiplier.\n";
+    print STDERR "              This will set quotas for any filesystem not currently having a refquota/quota.\n";
     print STDERR "\nFS should be one of more of 'users', 'proj', 'groups'.\n";
     print STDERR "Not required if '-a' is specified.\n";
+    print STDERR "Never changes anthing for users/elabman or proj/emulab-ops.\n";
 }
 
-my $optlist = "adhnqrF:Q:";
+my $optlist = "adhnqrF:Q:I";
 my $doall = 0;
 my $debug = 0;
 my $quiet = 0;
@@ -78,6 +81,7 @@ my $quotaval;
 my $factor;
 my $recursive = 0;
 my $impotent = 0;
+my $initialize = 0;
 
 #
 # Configure variables
@@ -166,6 +170,9 @@ if (defined($options{'F'})) {
 	exit(1);
     }
 }
+if (defined($options{"I"})) {
+    $initialize = 1;
+}
 if ($doall) {
     @fses = ("users", "proj", "groups");
 } else {
@@ -209,6 +216,9 @@ if ($recursive) {
     @fses = @allfs;
 }
 
+print STDERR "Operating on FSes: ", join(' ', @fses), "\n"
+    if ($debug);
+
 foreach my $fs (sort @fses) {
     print "Processing $fs ...\n"
 	if (!$quiet);
@@ -221,17 +231,20 @@ foreach my $fs (sort @fses) {
     print STDERR "$fs: refquota='$rq', quota='$q', desquota='$desq', mult='$mult'\n"
 	if ($debug);
 
-    # if no quotas, nothing changes
-    if ($rq == 0 && $q == 0) {
-	print "$fs: no quotas set, not modified.\n"
-	    if (!$quiet);
-	next;
-    }
-
     my ($newrq, $newq);
 
+    # if no quotas, nothing changes unless we are initializing
+    if ($rq == 0 && $q == 0) {
+	if (!$initialize) {
+	    print "$fs: no quotas set, not modified.\n"
+		if (!$quiet);
+	    next;
+	}
+	$newrq = $desq;
+	$newq = $newrq * $mult;
+    }
     # refquota is zero, set to quota value and calculate new quota value
-    if ($rq == 0) {
+    elsif ($rq == 0) {
 	$newrq = $q;
 	$newq = $newrq * $mult;
     }
@@ -366,6 +379,11 @@ sub getsubfses($$)
 	chomp $line;
 	my ($name,$refq,$q) = split '\s+', $line;
 	if ($name eq $fs) {
+	    next;
+	}
+	# ignore Emulab/Cloudlab-related FSes
+	if ($name =~ m#proj/emulab-ops$# || $name =~ m#proj/GeniSlices$# ||
+	    $name =~ m#users/elabman$#) {
 	    next;
 	}
 	push @fslist, $name;
