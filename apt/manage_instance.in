@@ -95,6 +95,7 @@ my $CREATESLIVERS  = "$TB/bin/create_slivers";
 my $MANAGEINSTANCE = "$TB/bin/manage_instance";
 my $MANAGEIMAGES   = "$TB/bin/manage_images";
 my $IMPORTER       = "$TB/sbin/image_import";
+my $DESTROYWBSTORE = "$TB/sbin/destroywbstore";
 my $WAP            = "$TB/sbin/wap";
 my $TBACCT         = "$TB/sbin/tbacct";
 
@@ -1480,6 +1481,12 @@ sub DoTerminate()
 	    exit($status);
 	}
     }
+
+    #
+    # Tell syncthing the instance is terminating. 
+    #
+    system("$DESTROYWBSTORE -B -s ".
+	   ($old_status eq "failed" ? "FAIL" : "DONE") . " $uuid");
 
     # Skip terminated aggregates, since we retry later on failure.
     my @agglist;

@@ -71,6 +71,8 @@ my $MYURN	     = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $SACERT	     = "$TB/etc/genisa.pem";
 my $MANAGEINSTANCE   = "$TB/bin/manage_instance";
 my $STITCHER         = "$TB/gcf/src/stitcher.py";
+my $CREATEWBSTORE    = "$TB/sbin/createwbstore";
+my $DESTROYWBSTORE   = "$TB/sbin/destroywbstore";
 
 #
 # Untaint the path
@@ -403,6 +405,19 @@ if (!($debug || $foreground)) {
 
 # Bind the process id.
 $webtask->SetProcessID($PID);
+
+#
+# If starting the experiment (it might have been deferred), then
+# initialize the start time.
+#
+if (!defined($instance->started())) {
+    $instance->Start();
+
+    #
+    # First time we try to start things up, fire off syncthing
+    #
+    system("$CREATEWBSTORE -d -BI $uuid");
+}
 
 if ($usestitcher) {
     my $rval = RunStitcher();
@@ -1036,13 +1051,6 @@ sub CreateSlivers()
     my ($perrmsg) = @_;
     my @return_codes = ();
 
-    #
-    # If starting the experiment (it might have been deferred), then
-    # initialize the start time.
-    #
-    if (!defined($instance->started())) {
-	$instance->Start();
-    }
     $instance->SetStatus("provisioning");
 
     #
@@ -1165,14 +1173,6 @@ sub RunStitcher()
     my $failed        = 0;
     my $errcode       = GENIRESPONSE_STITCHER_ERROR();
 
-    #
-    # If starting the experiment (it might have been deferred), then
-    # initialize the start time.
-    #
-    if (!defined($instance->started())) {
-	$instance->Start();
-    }
-    
     #
     # Mark the aggregates as doing something, we never retry these
     # on any stitcher failure.
