@@ -1655,6 +1655,7 @@ sub DoExtend()
     my $creator       = $instance->GetGeniUser();
     my $slice         = $instance->GetGeniSlice();
     my $name          = $instance->name();
+    my $pid           = $instance->pid();
     my $url           = $instance->webURL();
     my $clusters      = join(",", map { $_->domain() }
 			     $instance->AggregateList());
@@ -2085,7 +2086,7 @@ sub DoExtend()
 	    if (defined($reason));
     }
     $instance->Brand()->SendEmail($creator->email(),
-	       "Experiment Extension: $name",
+	       "Experiment Extension: $pid/$name",
 	       $mailmessage .
                "\n\n".
                "Your experiment was started on $created\n".
@@ -2736,6 +2737,7 @@ sub DoDenyOrMoreInfo($)
     my $creator   = $instance->GetGeniUser();
     my $slice     = $instance->GetGeniSlice();
     my $name      = $instance->name();
+    my $pid       = $instance->pid();
     my $expires   = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z",
 				    localtime(str2time($slice->expires())));
     my $created   = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z",
@@ -2749,11 +2751,11 @@ sub DoDenyOrMoreInfo($)
     my ($message,$subject);
     if ($action eq "deny") {
 	$message = "Your extension was denied by the site administrator!";
-	$subject = "Experiment Extension Denied: $name";
+	$subject = "Experiment Extension Denied: $pid/$name";
     }
     else {
 	$message = "Hi, we need more information about your experiment: $name";
-	$subject = "Information request for Experiment: $name";
+	$subject = "Information request for Experiment: $pid/$name";
     }
 
     #
