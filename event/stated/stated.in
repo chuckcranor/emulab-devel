@@ -1180,6 +1180,8 @@ sub handleCtrlEvent($$) {
 		notify("$node/$event: Could not clear next_boot_path!\n");
 	    }
 	    my ($bosid,$bopmode) = TBBootWhat($node, 0);
+	    $bosid = "UNDEF" if (!defined($bosid));
+	    $bopmode = "UNDEF" if (!defined($bopmode));
 	    info("$node: $TBRESET done, bootwhat returns $bopmode,$bosid\n");
 	    last;
 	};
