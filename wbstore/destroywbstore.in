@@ -39,14 +39,16 @@ sub usage()
     print STDERR "   -d          Debug: print additional info\n";
     print STDERR "   -s state    One of 'DONE', 'FAIL', 'GONE', 'DONE' is the default\n";
     print STDERR "   -B          Talk to aggregates in the background\n";
+    print STDERR "   -S          UUID is the slice UUID and not the instance UUID\n";
     print STDERR "   uuid        Experiment instance UUID\n";
     print STDERR "\n";
     exit(-1);
 }
-my $optlist  = "hds:B";
+my $optlist  = "hds:BS";
 my $debug = 0;
 my $state = "DONE";
 my $exptuuid;
+my $isslice = 0;
 my $background;
 my @fqdns;
 
@@ -97,6 +99,9 @@ if (defined($options{d})) {
 if (defined($options{B})) {
     $background = 1;
 }
+if (defined($options{S})) {
+    $isslice = 1;
+}
 if (defined($options{s})) {
     $state = $options{s};
     if ($state !~ /^(DONE|FAIL|GONE)$/) {
@@ -133,13 +138,20 @@ if ($UID == 0) {
 # See if it is a valid current or past instance
 #
 my $active = 1;
-my $inst = APT_Instance->Lookup($exptuuid);
+my $inst = ($isslice ?
+	    APT_Instance->LookupBySlice($exptuuid) :
+	    APT_Instance->Lookup($exptuuid));
 if (!$inst) {
-    $inst = APT_Instance::History->Lookup($exptuuid);
+    $inst = ($isslice ?
+	     APT_Instance::History->LookupBySlice($exptuuid) :
+	     APT_Instance::History->Lookup($exptuuid));
     if (!$inst) {
 	fatal("$exptuuid: Not a valid APT instance\n");
     }
     $active = 0;
+}
+if ($isslice) {
+    $exptuuid = $inst->uuid();
 }
 
 my $uuid = $inst->slice_uuid();
@@ -213,7 +225,8 @@ foreach my $h ($SERVER, @fqdns) {
 
     $SSH_ARGS .= " -o ConnectTimeout=5";
 
-    print STDERR "$uuid: attempting to set state=$state on $domain ...\n"
+    print STDERR "$exptuuid: " .
+	"attempting to set state=$state on $domain for slice $uuid ...\n"
 	if ($debug);
 
     # XXX we hardwire /usr/testbed here because we don't know their config
@@ -225,9 +238,10 @@ foreach my $h ($SERVER, @fqdns) {
     $UID = $SAVEUID;
     if ($rv) {
 	my $stat = ($? >> 8);
-	print STDERR "$uuid: WARNING: setting state=$state at $h failed ($stat)\n";
+	print STDERR "$exptuuid: WARNING: setting state=$state " .
+	    "for slice $uuid at $h failed ($stat)\n";
     } else {
-	print STDERR "$uuid: $domain done.\n"
+	print STDERR "$exptuuid: $domain done.\n"
 	    if ($debug);
     }
 }

@@ -72,8 +72,10 @@ my $optlist  = "hdkBDIi:u:p:o:";
 my $debug = 0;
 my $keep = 0;
 my $uid;
+my $email;
 my $pid;
 my $exptuuid;
+my $exptname;
 my $instance;
 my $portoffset;
 my $background = 0;
@@ -207,7 +209,11 @@ if (@ARGV == 1 && ($exptuuid = parseinstance($ARGV[0], 1))) {
 	fatal("$exptuuid: Not a valid APT instance\n");
     }
     $uid = $inst->creator();
+    my $user = User->Lookup($uid);
+    $email = $user->email()
+	if ($user);
     $pid = $inst->pid();
+    $exptname = $inst->name();
     $instance = $inst->slice_uuid();
     my @slivers = $inst->AggregateList();
     foreach my $sliver (@slivers) {
@@ -343,7 +349,16 @@ sub createconfig($)
     # XXX Assumes the group name is the same as the project name.
     #
     if (open(FD, ">$metadir/creator")) {
-	print FD "$uid:$pid\n";
+	print FD "$uid:$pid";
+	print FD ":$email"
+	    if ($email);
+	print FD "\n";
+	close(FD);
+    }
+
+    # ...and the experiment project/name.
+    if (open(FD, ">$metadir/experiment")) {
+	print FD "$pid/$exptname\n";
 	close(FD);
     }
 }
