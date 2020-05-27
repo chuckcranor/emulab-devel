@@ -371,6 +371,7 @@ class User
     function mailman_password() { return $this->field("mailman_password"); }
     function nonlocal_id()	{ return $this->field("nonlocal_id"); }
     function weblogin_last()	{ return $this->stats("weblogin_last"); }
+    function news_read()	{ return $this->field("news_read"); }
     function portal()	     { return $this->field("portal"); }
     function bound_portal()  { return $this->field("bound_portal"); }
     function require_aup()   { return $this->field("require_aup"); }
@@ -1789,6 +1790,36 @@ class User
 	
 	$row = mysql_fetch_array($query_result);
 	return $row["pubkey"];
+    }
+
+    function APTNewsRead() {
+    	$uid_idx = $this->uid_idx();
+
+        DBQueryWarn("update users set news_read=now() ".
+                    "where uid_idx='$uid_idx'");
+    }
+    function APTNewNews() {
+        global $PORTAL_GENESIS;
+    	$uid_idx = $this->uid_idx();
+
+        $query_result = 
+            DBQueryFatal("select count(*) as count from users ".
+                         "join apt_news as news ".
+                         "where news.created > users.news_read and ".
+                         "      FIND_IN_SET('$PORTAL_GENESIS',news.portals) ".
+                         "  and users.uid_idx='$uid_idx'");
+	$row = mysql_fetch_array($query_result);
+	return $row["count"];
+    }
+    function APTAnyNews() {
+        global $PORTAL_GENESIS;
+    	$uid_idx = $this->uid_idx();
+
+        $query_result = 
+            DBQueryFatal("select count(*) as count from apt_news as news ".
+                         "where FIND_IN_SET('$PORTAL_GENESIS',news.portals)");
+	$row = mysql_fetch_array($query_result);
+	return $row["count"];
     }
 }
 ?>

@@ -543,15 +543,6 @@ if ($UI_DISABLE_DATASETS == 0 || ($UI_DISABLE_DATASETS == 1 && ISADMIN()) ) {
                         data-toggle='dropdown'>
                     Admin <b class='caret'></b></a>
                   <ul class='dropdown-menu'>\n";
- 	       if (ISADMIN() && HaveNews()) {
-	           echo "  <li><a href='news.php'>News ";
-	           if (NewNews()) {
-	               echo "<span class='glyphicon glyphicon-asterisk ".
-		            "             text-success' ".
-		            "      style='margin-bottom: 4px;'></span> ";
-	           }
-	           echo "     </a></li>\n";
-	       }
                echo "  <li><a href='dashboard.php'>DashBoard</a></li>";
                echo "  <li><a href='aggregate-status.php'>Cluster Status</a></li>";
                $then = time() - (14 * 3600 * 24);
@@ -588,12 +579,21 @@ if ($UI_DISABLE_DATASETS == 0 || ($UI_DISABLE_DATASETS == 1 && ISADMIN()) ) {
                                  <li><a href='approve-projects.php'>
                             Approve new projects</a></li>
                                  <li><a href='sitevars.php'>
-                            Edit Site Variables</a></li>";
+                            Edit Site Variables</a></li>
+                                 <li><a href='news.php'>
+                            Manage News</a></li>";
                                echo " </ul>
         </li>\n";
     }
    }
+ 
+   if ($login_user && $login_user->APTNewNews()) {
+       echo "<li class='apt-left apt-nav-item'>
+              <a id='new-news-button' href='news.php' target='_blank'
+                 class='btn btn-quickvm-news navbar-btn'>News!</a></li>";
+   }
    echo "</ul>";
+
    echo "  <ul class='nav navbar-nav navbar-right apt-right'>
     $navbar_status
     $navbar_right\n";
@@ -610,6 +610,10 @@ if ($UI_DISABLE_DATASETS == 0 || ($UI_DISABLE_DATASETS == 1 && ISADMIN()) ) {
    }
    echo "        <li><a href='example-profiles.php'
                                  target='_blank'>Example Profiles</a></li>";
+   if ($login_user && $login_user->APTAnyNews()) {
+       echo "    <li><a href='news.php'
+                             target='_blank'>News</a></li>";
+   }
    echo "      </ul>
          </li>\n";
 
@@ -1135,25 +1139,6 @@ function CheckLoginOrRedirect($modifier = 0)
     }
     CheckLoginConditions($check_status & ~($modifier|CHECKLOGIN_NONLOCAL));
     return $this_user;
-}
-
-#
-# See if there is recent news and news of any kind.
-#
-function HaveNews()
-{
-    $query_result = DBQueryFatal("select idx from apt_news limit 1");
-    return mysql_num_rows($query_result);
-}
-function NewNews()
-{
-    # Within the last week.
-    $query_result = 
-	DBQueryFatal("select idx from apt_news ".
-                     "where (UNIX_TIMESTAMP(now()) - ".
-                     "       UNIX_TIMESTAMP(created)) < (24 * 3600 * 7) ".
-                     "limit 1");
-    return mysql_num_rows($query_result);
 }
 
 ?>

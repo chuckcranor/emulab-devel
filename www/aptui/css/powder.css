@@ -77,7 +77,10 @@ body {
 .nav > li > a.btn-quickvm-signup:focus,
 .nav > li > a.btn-quickvm-signup.dropdown-toggle,
 .nav > li > a.btn-quickvm-signup.dropdown-toggle:hover,
-.nav > li > a.btn-quickvm-signup.dropdown-toggle:focus {
+.nav > li > a.btn-quickvm-signup.dropdown-toggle:focus,
+.nav > li > a.btn-quickvm-news,
+.nav > li > a.btn-quickvm-news:hover,
+.nav > li > a.btn-quickvm-news:focus {
   font-weight: normal;
   color: #222;
 }

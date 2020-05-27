@@ -17,9 +17,13 @@
 	  <a href="edit-news.php?edit=<%- fields.idx %>">
 	    <span class='glyphicon glyphicon-pencil'></span></a>)
 	</span>
+	<% if (window.MAINSITE) { %>
+	  <br>
+	  Portals: <%- fields.portals %>
+	<% } %>
       <% } %>
     </p>
     <div class="blog-post-body"><%= fields.body %></div>
+    <hr>
   </div>
-  <hr>
 </div>

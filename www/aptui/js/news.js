@@ -44,6 +44,8 @@ $(function ()
      */
     function DisplayNewsItems()
     {
+	var count = 6;
+	
 	var callback = function(json) {
 	    console.info(json.value);
 
@@ -52,9 +54,11 @@ $(function ()
 		return;
 	    }
 	    // No more entries, kill the More Entries clicker.
-	    if (json.value.length == 0) {
+	    if (json.value.length < count) {
 		$('#more-entries').addClass("hidden");
-		return;
+		if (json.value.length == 0) {
+		    return;
+		}
 	    }
 	    _.each(json.value, function(blob) {
 		//console.info(blob);
@@ -90,7 +94,7 @@ $(function ()
 	var xmlthing = sup.CallServerMethod(null, "news",
 					    "getnews",
 					    {"idx"   : window.IDX,
-					     "count" : 6});
+					     "count" : count});
 	xmlthing.done(callback);
     }
 

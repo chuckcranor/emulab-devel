@@ -6051,6 +6051,7 @@ CREATE TABLE `users` (
   `accepted_aup` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `ga_userid` varchar(32) default NULL,
   `portal_interface_warned` tinyint(1) NOT NULL default '0',
+  `news_read` datetime NOT NULL default '0000-00-00 00:00:00',
   PRIMARY KEY  (`uid_idx`),
   KEY `unix_uid` (`unix_uid`),
   KEY `status` (`status`),

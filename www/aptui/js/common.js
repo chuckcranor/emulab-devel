@@ -102,6 +102,15 @@ window.APT_OPTIONS.initialize = function (sup)
 	});
     }
     /*
+     * When the clicks to read new news, tell the server and hide the button
+     */
+    if ($('#new-news-button').length) {
+	$('#new-news-button').click(function (event) {
+	    $('#new-news-button').addClass("hidden");
+	});
+    }
+    
+    /*
      * Setup a timer to ask for announcements.
      */
     setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 10000);

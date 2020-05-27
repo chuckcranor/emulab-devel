@@ -544,7 +544,10 @@ $routing = array("geni-login" =>
 						 "delete" =>
 						      "Do_DeleteNews",
 						 "getnews" =>
-						      "Do_GetNews")),
+                                                      "Do_GetNews",
+						 "gotnews" =>
+                                                      "Do_GotNews",
+                              )),
 		 "experiments" =>
 			array("file"    => "experiments.ajax",
 			      "guest"   => false,
