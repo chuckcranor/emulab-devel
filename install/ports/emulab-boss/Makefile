@@ -107,6 +107,7 @@ RUN_DEPENDS+=	\
 	git:${PORTSDIR}/devel/git \
 	gmake:${PORTSDIR}/devel/gmake \
 	hg:${PORTSDIR}/devel/mercurial \
+	ipmitool:${PORTSDIR}/sysutils/ipmitool \
 	kmetis:${PORTSDIR}/math/metis4 \
 	libtool:${PORTSDIR}/devel/libtool \
 	neato:${PORTSDIR}/graphics/graphviz \
@@ -185,6 +186,10 @@ RUN_DEPENDS+=	\
 # XXX For building loghole doc from www/tutorial
 RUN_DEPENDS+=	\
 	man2html:${PORTSDIR}/textproc/man2html
+
+# XXX For Powder end point boss nodes, maybe they should have their own port
+RUN_DEPENDS+= \
+	syncthing:${PORTSDIR}/net/syncthing
 
 #USE_PERL5=	yes
 USES=		perl5 python:2.7 php
