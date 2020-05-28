@@ -468,6 +468,7 @@ sub hostResources();
 sub hostIP($);
 sub fixupMac($);
 sub lvmVGSize($);
+sub lvmVGMaxPossibleLVSize($;$);
 sub checkForInterrupt();
 sub genhostspairlist($$);
 sub addMounts($$);
@@ -2049,7 +2050,8 @@ sub rootPreConfig($;$)
 	# necessary.
 	#
 	my ($extrasize,$infosize,$thinpoolsize) = (0,0,0);
-	my $vgsize = lvmVGSize($VGNAME);
+	#my $vgsize = lvmVGSize($VGNAME);
+	my $vgsize = lvmVGMaxPossibleLVSize($VGNAME);
 	my $remaining = $vgsize;
 
 	if (!$USE_DOCKER_LVM) {
@@ -2084,6 +2086,8 @@ sub rootPreConfig($;$)
 	    $thinpoolsize = 0.90 * $remaining;
 	    $remaining -= $thinpoolsize;
 	}
+
+	print "LVM sizes: extra=$extrasize,info=$infosize,thinpool=$thinpoolsize\n";
 
 	my $tmplvname;
 	if ($INFOFS =~ /\/(.*)$/) {
@@ -7419,6 +7423,24 @@ sub createThinPool($)
     return 0;
 }
 
+sub lvmConvertSize($)
+{
+    my ($sizestr) = @_;
+    my $size;
+
+    if ($sizestr =~ /(\d+\.\d+)([mgt])/i) {
+	$size = $1;
+	my $u = lc($2);
+	if ($u eq "m") {
+	    $size /= 1000;
+	} elsif ($u eq "t") {
+	    $size *= 1000;
+	}
+    }
+
+    return $size;
+}
+
 #
 # Return size of volume group in (decimal, aka disk-manufactuer) GB.
 #
@@ -7427,17 +7449,67 @@ sub lvmVGSize($)
     my ($vg) = @_;
 
     my $size = `vgs --noheadings -o size $vg`;
-    if ($size =~ /(\d+\.\d+)([mgt])/i) {
-	$size = $1;
-	my $u = lc($2);
-	if ($u eq "m") {
-	    $size /= 1000;
-	} elsif ($u eq "t") {
-	    $size *= 1000;
-	}
-	return $size;
-    }
+    $size = lvmConvertSize($size);
+    return $size
+	if (defined($size));
     die "libvnode_docker: cannot parse LVM volume group size";
+}
+
+sub lvmVGPVCount($)
+{
+    my ($vg) = @_;
+
+    my @lines = `pvs -S "vg_name=$vg" --no-headings`;
+
+    return scalar(@lines);
+}
+
+#
+# Return the max LV size for the given VG, modulo stripe size -- but NB
+# we only support the case where stripe size == # PVs in VG.  We are not
+# going to play the game of emulating the choice of *which* PVs to
+# stripe across if #stripes < #PVs in VG.  Anyway, this makes it simple;
+# if #stripes == #PVs in VG, the max possible LV = least free space on
+# any PV in the VG * #stripes.
+#
+sub lvmVGMaxPossibleLVSize($;$)
+{
+    my ($vg,$dofree) = @_;
+
+    if (!defined($dofree)) {
+	$dofree = 0;
+    }
+    my $stripes = computeStripeSize($vg);
+    my $pvcount = lvmVGPVCount($vg);
+
+    return undef
+	if ($stripes != $pvcount);
+
+    my $min;
+    my $total = 0;
+    my $kwname = "size";
+    if ($dofree) {
+	$kwname = "free";
+    }
+    foreach my $line (`pvs -S "vg_name=$vg" -o $kwname --no-headings`) {
+	chomp($line);
+	if ($line =~ /^\s*(\d+\.\d+[mgt])$/i) {
+	    my $sz = lvmConvertSize($1);
+	    if (defined($sz)) {
+		if (!defined($min) || $sz < $min) {
+		    $min = $sz;
+		}
+		$total += $sz;
+	    }
+	}
+    }
+
+    if ($stripes == 1) {
+	return $total;
+    }
+    else {
+	return $stripes * $min;
+    }
 }
 
 #

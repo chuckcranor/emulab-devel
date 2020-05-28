@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,7 +32,7 @@ $page_title = "News";
 # Get current user.
 #
 RedirectSecure();
-$this_user = CheckLoginOrDie($check_status);
+$this_user = CheckLoginOrDie();
 $isadmin   = 0;
 if (ISADMIN()) {
     $isadmin = 1;
@@ -42,6 +42,11 @@ if (ISADMIN()) {
 # Verify page arguments. 
 #
 $optargs = OptionalPageArguments("idx",      PAGEARG_INTEGER);
+
+#
+# Mark this user as having read news, so that we no longer show New News.
+#
+$this_user->APTNewsRead();
 
 SPITHEADER(1);
 

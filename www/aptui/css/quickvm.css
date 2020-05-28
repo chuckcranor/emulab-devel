@@ -92,7 +92,10 @@ body {
 .nav > li > a.btn-quickvm-signup:focus,
 .nav > li > a.btn-quickvm-signup.dropdown-toggle,
 .nav > li > a.btn-quickvm-signup.dropdown-toggle:hover,
-.nav > li > a.btn-quickvm-signup.dropdown-toggle:focus {
+.nav > li > a.btn-quickvm-signup.dropdown-toggle:focus,
+.nav > li > a.btn-quickvm-news,
+.nav > li > a.btn-quickvm-news:hover,
+.nav > li > a.btn-quickvm-news:focus {
   font-weight: bold;
   color: #fafafa;
   border-color: rgba(255, 255, 255, 0.3);
@@ -109,11 +112,21 @@ body {
   background-color: rgba(0, 0, 0, 0.05);
 }
 
+.nav > li > a.btn-quickvm-news,
+.nav > li > a.btn-quickvm-news:hover,
+.nav > li > a.btn-quickvm-news:focus {
+  background-color: red;
+}
+
 .nav > li > a.btn-quickvm-home:hover,
 .nav > li > a.btn-quickvm-home:active,
 .nav > li > a.btn-quickvm-home.dropdown-toggle:hover,
 .nav > li > a.btn-quickvm-home.dropdown-toggle:active {
   background-color: rgba(255, 255, 255, 0.1);
+}
+.nav > li > a.btn-quickvm-news:hover,
+.nav > li > a.btn-quickvm-news:active {
+  background-color: #ff4040;
 }
 /*
 .nav > li > a.btn-success {
