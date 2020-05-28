@@ -43,7 +43,7 @@ SCRIPTS		= $(addprefix $(SRCDIR)/, \
 		    rc.tiptunnels rc.trace rc.motelog rc.fakejail \
 		    rc.tpmsetup rc.blobs rc.diskagent \
 		    rc.storage rc.storagelocal rc.storageremote \
-		    rc.hwcollect rw.wbstore)
+		    rc.hwcollect rc.wbstore)
 
 SUBBOSS_SCRIPTS	= $(addprefix $(SRCDIR)/, \
                     rc.config rc.misc rc.mounts rc.accounts rc.route \
