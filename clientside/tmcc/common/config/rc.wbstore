@@ -75,6 +75,8 @@ sub doshutdown();
 sub doreset();
 sub doreconfig();
 
+my $LINK = "$VARDIR/save";
+
 # Parse command line.
 if (! getopts($optlist, \%options)) {
     usage();
@@ -130,7 +132,7 @@ sub doboot()
 	$res{$key} = $val;
     }
 
-    my ($link,$path,$pid,$uuid,$domain);
+    my ($path,$pid,$uuid,$domain);
 
     foreach my $k ('UUID','PID') {
 	if (!exists($res{$k})) {
@@ -167,28 +169,34 @@ sub doboot()
 	$node = $1;
     }
     
-    $link = "/save";
+    my $found = 0;
     $path = "/proj/$pid/wbstore/$uuid/$domain";
     if (! -d "$path") {
-	warn("*** WARNING: '$path' does not exist (/proj/$pid not mounted?), ".
-	     "setting up symlink anyway\n");
+	# XXX do not complain, this is the path for non-wbstore experiments
+	;
     } elsif (! -d "$path/$node" && !mkdir("$path/$node")) {
 	warn("*** WARNING: could not create '$path/$node', ".
 	     "setting up symlink anyway\n");
     } else {
 	chmod(0775, "$path/$node");
+	$found = 1;
     }
-    system("ln -sf $path/$node $link");
+    if (!system("ln -sf $path/$node $LINK") && $found) {
+	print "$LINK available for archiving data.\n";
+    }
 }    
 
 sub doshutdown()
 {
+    unlink($LINK);
 }
 
 sub doreconfig()
 {
+    unlink($LINK);
 }
 
 sub doreset()
 {
+    unlink($LINK);
 }
