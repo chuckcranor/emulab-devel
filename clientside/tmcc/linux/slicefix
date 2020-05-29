@@ -496,7 +496,17 @@ dofreebsd() {
 			echo w | /sbin/fdisk /dev/$disk > /dev/null 2>&1
 		fi
 		rootdev=/dev/`$BINDIR/check_disklabel $disk $part`
-		[ "$rootdev" = /dev/ ] && exit 1
+		#
+		# XXX Linux seems to no longer detect the BSD disk label
+		# when there is a single BSD partition. For all our recent
+		# BSD images, the single BSD partition starts at offset 0
+		# of the DOS partition, so we can just use the DOS device.
+		# Dodgey, but since only mike cares about FreeBSD, have him
+		# complain to himself if this breaks.
+		#
+		if [ "$rootdev" = /dev/ ]; then
+		    rootdev="/dev/$disk$part"
+		fi
 		fstype=ufs
 		fsopts="ro,ufstype=44bsd"
 	fi
@@ -528,6 +538,7 @@ dofreebsd() {
 	changentp=0
 	changechrony=0
 	changesshd=0
+	changeauth=0
 
 	fixit=0
 
