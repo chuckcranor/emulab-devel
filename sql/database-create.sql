@@ -5171,6 +5171,7 @@ CREATE TABLE `projects` (
   `hidden` tinyint(1) default '0',
   `disabled` tinyint(1) default '0',
   `inactive` tinyint(4) default '0',
+  `forClass` tinyint(1) default '0',
   `date_inactive` datetime default NULL,
   `public` tinyint(4) NOT NULL default '0',
   `public_whynot` tinytext,

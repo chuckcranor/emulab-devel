@@ -188,6 +188,7 @@ if (! isset($create)) {
     else {
         $defaults["startorjoin"] = "start";
     }
+    $defaults["proj_class"] = 0;
 
     if (count($license_defs)) {
         foreach ($license_defs as $name => $value) {
@@ -412,6 +413,10 @@ if (!$joinproject) {
     elseif (! TBvalid_why($formfields["proj_why"])) {
 	$errors["proj_why"] = TBFieldErrorString();
     }
+    if (isset($formfields["proj_class"]) &&
+        !TBvalid_boolean($formfields["proj_class"])) {
+	$errors["proj_class"] = TBFieldErrorString();
+    }
     if (count($license_defs)) {
         foreach ($license_defs as $name => $value) {
             $fname = "license_" . $name;
@@ -631,6 +636,9 @@ $args["portal"] 	   = $PORTAL_GENESIS;
 # Add any requested licenses to the arguments.
 foreach ($licenses as $name => $value) {
     $args["license_" . $name] = $value;
+}
+if (isset($formfields["proj_class"])) {
+    $args["class"]  = $formfields["proj_class"];
 }
 
 if (! ($project = Project::NewNewProject($args, $error))) {

@@ -824,6 +824,7 @@ REPLACE INTO table_regex VALUES ('projects','name','text','redirect','default:ti
 REPLACE INTO table_regex VALUES ('projects','funders','text','redirect','default:tinytext',0,256,NULL);
 REPLACE INTO table_regex VALUES ('projects','public','int','redirect','default:tinyint',0,1,NULL);
 REPLACE INTO table_regex VALUES ('projects','linked_to_us','int','redirect','default:tinyint',0,1,NULL);
+REPLACE INTO table_regex VALUES ('projects','forClass','int','redirect','default:tinyint',0,1,NULL);
 REPLACE INTO table_regex VALUES ('projects','public_whynot','text','redirect','default:tinytext',0,256,NULL);
 REPLACE INTO table_regex VALUES ('projects','default_user_interface','text','regex','^(emulab|plab)$',2,12,NULL);
 REPLACE INTO table_regex VALUES ('projects','pid','text','regex','^[-\\w]+$',2,48,NULL);

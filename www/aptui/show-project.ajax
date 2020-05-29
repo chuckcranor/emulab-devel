@@ -227,6 +227,7 @@ function Do_ProjectProfile()
     $results["url"]         = $target_project->URL();
     $results["description"] = $target_project->name();
     $results["why"]         = $target_project->why();
+    $results["forClass"]    = $target_project->forClass() ? true : false;
     $results["licenses"]    = array();
 
     if ($ISPOWDER) {
@@ -337,6 +338,9 @@ function Do_Toggle()
                 $user->SetBoundPortal(1);
             }
         }
+    }
+    elseif ($toggle == "project_forClass") {
+        $target_project->SetforClass($target_project->forClass() ? 0 : 1);
     }
     else {
 	SPITAJAX_ERROR(-1, "Unknown toggle name: $toggle");
