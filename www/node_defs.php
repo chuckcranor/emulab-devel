@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2019 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1582,7 +1582,7 @@ class Node
     #
     function ConsoleAuthObject($uid, $console)
     {
-        global $USERNODE;
+        global $USERNODE, $WWWHOST, $BROWSER_CONSOLE_PROXIED;
         $node_id = $this->node_id();
 	
         $file = "/usr/testbed/etc/sshauth.key";
@@ -1604,13 +1604,18 @@ class Node
         $key   = chop($key);
         $stuff = GENHASH();
         $now   = time();
-
+        if ($BROWSER_CONSOLE_PROXIED) {
+            $baseurl = "https://${WWWHOST}";
+        }
+        else {
+            $baseurl = "https://${USERNODE}";
+        }
         $authobj = array('uid'       => $uid,
                          'console'   => $console,
                          'stuff'     => $stuff,
                          'nodeid'    => $node_id,
                          'timestamp' => $now,
-                         'baseurl'   => "https://${USERNODE}",
+                         'baseurl'   => $baseurl,
                          'signature_method' => 'HMAC-SHA1',
                          'api_version' => '1.0',
                          'signature' => hash_hmac('sha1',

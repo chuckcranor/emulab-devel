@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2013 University of Utah and the Flux Group.
+ * Copyright (c) 2004-2013, 2020 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -640,7 +640,19 @@ void doTunnelConnection()
   int conSock;
   struct sockaddr_in name;
   socklen_t namelen = sizeof( name );
+  char buf[BUFSIZ];
+  struct hostent *he;
+  struct in_addr myipaddr;
 
+  if (gethostname(buf, sizeof(buf)) < 0) {
+      perror("getting hostname");
+      exit(-1);
+  }
+  if ((he = gethostbyname(buf)) == NULL) {
+      perror("Could not get IP address");
+      exit(-1);
+  }
+  memcpy((char *)&myipaddr, he->h_addr, he->h_length);
 acceptor:
   conSock = accept( tunnelSock, (struct sockaddr *)&name, &namelen );
 
@@ -650,7 +662,8 @@ acceptor:
   }
 
   if (!allowRemote && 
-      ntohl( name.sin_addr.s_addr ) != INADDR_LOOPBACK) {
+      ntohl( name.sin_addr.s_addr ) != INADDR_LOOPBACK &&
+      name.sin_addr.s_addr != myipaddr.s_addr) {
     const char reject[] = 
       "Connection attempted from non-local machine (ignored.)\n"
       "Use -r switch to allow non-local connections.\n";
