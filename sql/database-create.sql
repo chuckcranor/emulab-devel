@@ -142,6 +142,7 @@ CREATE TABLE `apt_aggregate_radioinfo` (
   `radio_type` tinytext,
   `transmit_frequencies` text,
   `receive_frequencies` text,
+  `power_id` varchar(32) default NULL,
   `notes` text,
   PRIMARY KEY  (`aggregate_urn`,`node_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
