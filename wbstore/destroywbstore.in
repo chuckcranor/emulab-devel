@@ -169,6 +169,11 @@ foreach my $sliver (@slivers) {
     }
 }
 
+# nothing to destroy
+if (@fqdns == 0) {
+    exit(0);
+}
+
 if ($debug) {
     print STDERR "$exptuuid: found " . $active ? "active" : "past" .
 	" experiment with aggregates: " . join(' ', @fqdns) . "\n";
