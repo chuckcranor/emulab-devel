@@ -1817,19 +1817,19 @@ sub DoApprove()
 		}
 		next;
 	    }
-	    $res->MarkApprovedPushed() if (!$checkonlyflag);
-	    push(@approved_reservations, $res);
+	    if (!$checkonlyflag) {
+		$res->MarkApprovedPushed();
+		push(@approved_reservations, $res);
+	    }
 	}
 	return $errors;
     };
 
     #
-    # Prelim check if both cluster and range/route reservations, or if told
-    # to do so on the command line.
+    # Prelim check to make sure all cluster reservations still fit.
+    # We do not want a partially approved reservation.
     #
-    if (($checkonly && @cluster_reservations) ||
-	((@range_reservations || @route_reservations)
-	 && @cluster_reservations)) {
+    if ($checkonly || @cluster_reservations) {
 	$checkonlyflag = 1;
 
 	my $responses;
