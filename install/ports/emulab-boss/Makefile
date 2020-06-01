@@ -108,7 +108,6 @@ RUN_DEPENDS+=	\
 	gmake:${PORTSDIR}/devel/gmake \
 	hg:${PORTSDIR}/devel/mercurial \
 	ipmitool:${PORTSDIR}/sysutils/ipmitool \
-	kmetis:${PORTSDIR}/math/metis4 \
 	libtool:${PORTSDIR}/devel/libtool \
 	neato:${PORTSDIR}/graphics/graphviz \
 	otclsh:${PORTSDIR}/misc/otcl \
@@ -124,6 +123,17 @@ RUN_DEPENDS+=	\
 	xvcg:${PORTSDIR}/graphics/vcg \
 	${LOCALBASE}/libexec/mysqld:${PORTSDIR}/databases/mysql${MYSQL_VER}-server \
 	${LOCALBASE}/include/boost/config.hpp:${PORTSDIR}/devel/boost-all
+
+#
+# Metis version changed
+.if (${EMULAB_PORTVERSION} == "7.3")
+RUN_DEPENDS+=	\
+	gpmetis:${PORTSDIR}/math/metis
+.else
+RUN_DEPENDS+=	\
+	kmetis:${PORTSDIR}/math/metis4
+.endif
+
 
 # perl packages
 # XXX all the versions listed here are ones that are known to work
