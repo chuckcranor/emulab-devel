@@ -115,7 +115,7 @@ MIN_UNIX_GID=2000
 WITHZFS=1
 ZFS_ROOT="emulab"
 ZFS_QUOTA_USER="none"
-ZFS_QUOTA_PROJECT="none"
+ZFS_QUOTA_PROJECT="10G"
 ZFS_QUOTA_GROUP="none"
 WITHAMD=1
 # This will default to /.amd_mnt/ops in configure
