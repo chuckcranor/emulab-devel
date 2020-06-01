@@ -3314,6 +3314,37 @@ sub ImportImageFileSize($)
     return $cursize;
 }
 
+#
+# Is an image in use and should not be deleted.
+#
+sub InUse($)
+{
+    my ($self) = @_;
+    my $imageid = $self->imageid();
+    my $version = $self->version();
+
+    my $query_result =
+	DBQueryWarn("select node_id from nodes ".
+		    "where def_boot_osid='$imageid' and ".
+		    "      def_boot_osid_vers='$version'");
+    return 1
+	if (!$query_result || $query_result->numrows);
+
+    $query_result =
+	DBQueryWarn("select * from current_reloads ".
+		    "where image_id='$imageid' and imageid_version='$version'");
+    return 1
+	if (!$query_result || $query_result->numrows);
+
+    $query_result =
+	DBQueryWarn("select * from scheduled_reloads ".
+		    "where image_id='$imageid'");
+    return 1
+	if (!$query_result || $query_result->numrows);
+
+    return 0;
+}
+
 #############################################################################
 #
 # Pending Import support. 

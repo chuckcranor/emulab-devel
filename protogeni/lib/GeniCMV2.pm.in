@@ -4452,6 +4452,15 @@ sub DeleteImage($)
 				    "No project for image");
     }
 
+    #
+    # Check to make sure image is not in use by a node, it is bad to the
+    # image a node is running.
+    #
+    if ($image->InUse()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+				    "Image is currently in use");
+    }
+
     if (! ((defined($creator_urn) &&
 	    ($creator_urn eq $user->urn() ||
 	     $creator_urn eq $ENV{'REALGENIURN'})) ||
