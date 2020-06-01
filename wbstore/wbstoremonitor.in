@@ -92,6 +92,7 @@ sub usage()
 {
     print STDOUT "Usage: wbstore_monitor [-dn1] [-I interval]\n" .
 	"    -d lev Prevent daemonization and print debug info\n" .
+	"    -e     Debug: save events in a logfile\n" .
 	"    -n     Just state what would be done without doing it\n" .
 	"    -1     Run a single pass and then quit\n" .
 	"    -I int Time between passes (in minutes, default 5)\n" .
@@ -101,7 +102,7 @@ sub usage()
 	"    -K     Kill all syncthing instances\n";
     exit(1);
 }
-my  $optlist = "d:n1I:AEDK";
+my  $optlist = "d:en1I:AEDK";
 
 #
 # Configure variables
@@ -132,6 +133,7 @@ sub parsehostname($);
 sub getinstances();
 sub cleanupinstance($);
 sub checksyncthing($$$;$);
+sub isemptystore($$);
 sub fatal($);
 sub logit($);
 sub notify($);
@@ -144,6 +146,8 @@ my $checkint	= 5 * 60;
 my $onceonly	= 0;
 my $handledead  = 0;
 my $killall	= 0;
+my $saveevents  = 0;
+my $eventlog    = "$TB/log/wbstore_event.log";
 
 #
 # Array of instance objects.
@@ -197,7 +201,7 @@ $| = 1;
 #
 # Untaint the path
 # 
-$ENV{'PATH'} = "/bin:/usr/bin:";
+$ENV{'PATH'} = "/bin:/usr/bin:/sbin:/usr/sbin";
 delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 #
@@ -213,6 +217,9 @@ if (@ARGV != 0) {
 }
 if (defined($options{"d"})) {
     $debug = $options{"d"};
+}
+if (defined($options{"e"})) {
+    $saveevents = 1;
 }
 if (defined($options{"n"})) {
     $impotent = 1;
@@ -313,6 +320,7 @@ logit("Write-back store monitoring daemon starting... pid $$");
 
 WBStore->SetDebug($debug);
 
+my $passno = 0;
 my $started = 0;
 my $sleeptime;
 while (1) {
@@ -323,7 +331,8 @@ while (1) {
     }
     $sleeptime = $checkint;
 
-    logit("=== Starting pass.");
+    $passno++;
+    logit("=== Starting pass $passno.");
     my $now = time();
 
     # Find all the write-back stores we have metadata for.
@@ -336,14 +345,34 @@ while (1) {
 	if ($syncthing{$uuid}{'active'}) {
 	    logit("$uuid: found active experiment");
 
-	    # never enable fsWatcher on mothership
-	    $fswe = ($MAINSITE ? "false" : "true");
-
+	    #
+	    # See if the syncthing daemon is running.
+	    # Mostly we do this to get the current pid.
+	    #
 	    my $inst = $syncthing{$uuid}{'obj'};
-	    my $pid = checksyncthing($inst, 1, 0,
-				     { fsWatcherEnabled => $fswe });
-	    if (!$pid) {
-		logit("$inst: WARNING: could not start syncthing");
+	    my $pid = $syncthing{$uuid}{'pid'} = checksyncthing($inst, 0, 0);
+	    if ($pid < 0) {
+		logit("$uuid: WARNING: ".
+		      "Could not detect status of syncthing instance!");
+		next;
+	    }
+
+	    #
+	    # Regardless of its current status, we make sure it is running
+	    # with the correct fsWather setting: enabled on aggregates,
+	    # disabled on mothership.
+	    #
+	    $fswe = ($MAINSITE ? "false" : "true");
+	    my $opid = $pid;
+	    $pid = checksyncthing($inst, 1, 0, { fsWatcherEnabled => $fswe });
+	    if ($pid <= 0) {
+		logit("$uuid: WARNING: ".
+		      "Error while (re)starting syncthing instance!");
+	    } elsif ($pid != $opid) {
+		logit("$uuid: (Re)starting syncthing for active instance");
+		# reset the event counter
+		delete $syncthing{$uuid}{'lastscan'};
+		$sleeptime = 30;
 	    }
 	    $syncthing{$uuid}{'pid'} = $pid;
 	}
@@ -425,13 +454,18 @@ while (1) {
 	    if ($pid != $opid) {
 		logit("$uuid: (Re)starting syncthing for past instance");
 		$syncthing{$uuid}{'pid'} = $pid;
+		# reset the event counter
+		delete $syncthing{$uuid}{'lastscan'};
 		$sleeptime = 30;
 		next;
 	    }
 	}
 
 	#
-	# That is it for the mothership, just wait for DONE
+	# That is it for the mothership, just wait for DONE.
+	# DONE will come either from the aggregate (by creating the sentinel
+	# file) or from boss (via the destroywbstore script placing a
+	# different file (/usr/testbed/wbstore/.../status).
 	#
 	if ($MAINSITE) {
 	    next;
@@ -477,7 +511,7 @@ while (1) {
 	}
     }
 
-    logit("=== Finished pass.");
+    logit("=== Finished pass $passno.");
 
     if ($onceonly) {
 	MarkDaemonStopped("wbstore_monitor");
@@ -525,38 +559,206 @@ sub cleanupinstance($)
     }
     $datadir = $1;
 
+    #
+    # If we are asked to archive, but there are no files in any instance
+    # subdir related to this syncthing, mark datadir to be removed.
+    #
+    # XXX this is state we could collect on every pass and aggregate for
+    # the syncthing instance, but we only care about that state here at
+    # the end, so we just do it once here.
+    #
+    if ($handle != -1 && isemptystore($uuid, $datadir)) {
+	logit("$inst: removing empty data directory");
+	$handle = -1;
+    }
+
+    #
+    # Remove the config and data directories.
+    #
     if ($handle == -1) {
 	my $out = "$datadir.rm.out";
 	if (system("rm -rf $confdir $datadir >$out 2>&1")) {
 	    logit("$inst: WARNING: cleanup could not remove ".
 		  "config dir ($confdir) and data dir ($datadir)! ".
 		  "See $out.");
+	    notify("Could not remove one or both of:\n$confdir\n$datadir\n".
+		   "See $out. Remove those directories manually.\n");
 	    return 1;
 	}
-	logit("$inst: removed config and data directories");
-    } else {
-	my $tarball = "$datadir.tgz";
-	my $out = "$datadir.tgz.out";
-	if (system("tar czf $tarball $confdir $datadir >$out 2>&1")) {
-	    logit("$inst: WARNING: cleanup could not archive ".
-		  "config dir ($confdir) and data dir ($datadir)! ".
-		  "See $out.");
-	    unlink($tarball);
-	    return 1;
-	}
-	$out = "$datadir.rm.out";
-	if (system("rm -rf $confdir $datadir >$out 2>&1")) {
-	    logit("$inst: WARNING: cleanup could not remove ".
-		  "config dir ($confdir) and data dir ($datadir) ".
-		  "after archiving! ".
-		  "See $out.");
+	unlink($out);
+	logit("$inst: removed data directory");
+	return 0;
+    }
 
-	    return 1;
+    #
+    # Tar up the data directory. Note that we do not tar up the config
+    # directory but we do remove it.
+    #
+    # On the mothership, where we make it available to the user, we chown the
+    # tarball to the creator/group of the experiment and 640 it. If we are
+    # archiving on the aggregate, it is strictly for debugging or paranoia
+    # and don't bother.
+    #
+    # Also grab the experiment name for use in email to the user.
+    #
+    my ($fuid,$fgid,$email,$pideid);
+    if ($MAINSITE) {
+	my $domdir = "$confdir/$domain";
+	if (-e "$domdir/creator" && open(FD, "<$domdir/creator")) {
+	    my $val = <FD>;
+	    chomp $val;
+	    close(FD);
+	    if ($val =~ /^([^:]+):([^:]+)(?::(.*))?$/) {
+		$fuid = $1;
+		$fgid = $2;
+		$email = $3;
+	    }
 	}
-	logit("$inst: archived config and data directories");
+	if (-e "$domdir/experiment" && open(FD, "<$domdir/experiment")) {
+	    $val = <FD>;
+	    chomp $val;
+	    close(FD);
+	    if ($val =~ /^([^\/]+\/[^\/]+)$/) {
+		$pideid = $1;
+	    }
+	}
+    }
+
+    my $tardir = "$PROJDIR/$pid/wbstore";
+    my $tarball = "$datadir.tgz";
+    my $out = "$datadir.tgz.out";
+    my $exclude = "--exclude $STMARKER --exclude '.$uuid-*'";
+    if (system("tar -C $tardir $exclude -czf $tarball $uuid >$out 2>&1")) {
+	logit("$inst: WARNING: cleanup could not archive ".
+	      "data dir ($datadir)! See $out.");
+	unlink($tarball);
+	notify("Could not create tarball of experiment write-back store.\n".
+	       "Create manually with:\n".
+	       "tar -C $tardir $exclude -czf $tarball $uuid\n".
+	       "and inform the user ($email).\n");
+	return 1;
+    }
+    unlink($out);
+    # XXX ids are not numeric so can't use perl chown and too lazy to convert
+    system("chown $fuid:$fgid $tarball")
+	if (defined($fuid) && defined($fgid));
+    chmod(0640, $tarball);
+
+    $out = "$datadir.rm.out";
+    if (system("rm -rf $confdir $datadir >$out 2>&1")) {
+	logit("$inst: WARNING: cleanup could not remove ".
+	      "config dir ($confdir) and data dir ($datadir) ".
+	      "after archiving! ".
+	      "See $out.");
+	notify("Could not remove one or both of:\n$confdir\n$datadir\n".
+	       "after archiving. See $out. Remove those directories manually.\n");
+	return 1;
+    }
+    unlink($out);
+
+    if ($MAINSITE && $email) {
+	my $msg = <<EOF;
+The contents of the /var/emulab/save directories on all aggregates involved
+in your $pideid experiment have been collected in a tarball:
+
+    $tarball
+
+To access the tarball, you will need an experiment running on the Emulab
+cluster in the same project. If you have an existing experiment, you can
+access the tarball from any node in that experiment. Otherwise, you will
+need to create a single-node experiment (e.g., with this profile:
+https://www.cloudlab.us/p/PortalProfiles/single-pc
+being sure to select the "Emulab" cluster to instantiate on).
+
+The top level of the tarball contains a single directory named by the UUID
+of your experiment instance. Underneath that is a subdirectory for each
+aggregate.
+EOF
+	SENDMAIL($email, "Saved data for experiment $pideid", $msg, $TBOPS);
+	logit("$inst: archived data directory, email sent to '$email'");
+    } else {
+	logit("$inst: archived data directory");
     }
 
     return 0;
+}
+
+#
+# Determine if the data directory associated with a syncthing instance
+# is "empty". An empty directory will have only the .stfolder file,
+# the "DONE" sentinel, and possibly other empty top-level directories
+# for each node.
+#
+# Yes, there could be top-level directories with nothing but other
+# empty directories in them and this just screams out for a recursive
+# solution. But I only care about one level, and not just "right now"
+# but "forever". So in the spirit of avoiding gratuitous recursion,
+# here it is.
+#
+sub isemptystore($$)
+{
+    my ($uuid, $datadir) = @_;
+    
+    my $empty = 1;
+    foreach my $t (sort keys %instance) {
+	my $i = $instance{$t}{'obj'};
+	if ($i->uuid() eq $uuid) {
+	    my $d = $i->domain();
+	    if (opendir(FD, "$datadir/$d")) {
+		my $sentinel = ".$uuid-$d";
+		while (readdir(FD)) {
+		    # usual directory stuff
+		    if ($_ eq "." || $_ eq "..") {
+			next;
+		    }
+		    # syncthing marker or wbstore sentinel
+		    if ($_ eq $STMARKER || $_ eq $sentinel) {
+			next;
+		    }
+		    #
+		    # Every experiment node on an aggregate creates
+		    # a subdir bearing its name. Since we cannot easily
+		    # know that name, we just look for any empty top-level
+		    # directory. If the user is creating empty directories
+		    # to record state, then they are going to lose...
+		    #
+		    if (-d "$_") {
+			if (opendir(SFD, "$_")) {
+			    while (my $entry = readdir(SFD)) {
+				# usual directory stuff
+				if ($entry eq "." || $entry eq "..") {
+				    next;
+				}
+				$empty = 0;
+				last;
+			    }
+			    closedir(SFD);
+			} else {
+			    logit("$i: could not open '$datadir/$_', ".
+				  "assuming not empty--forcing archive");
+			    $empty = 0;
+			}
+			if ($empty) {
+			    next;
+			}
+		    }
+		    print STDERR "$i: cleanup found a file ('$_'), ".
+			"must archive\n"
+			if ($debug);
+		    $empty = 0;
+		}
+		closedir(FD);
+	    } else {
+		logit("$i: could not find data directory in '$datadir', ".
+		      "something is wrong--forcing archive");
+		$empty = 0;
+	    }
+	    if (!$empty) {
+		last;
+	    }
+	}
+    }
+    return $empty;
 }
 
 #
@@ -584,7 +786,7 @@ sub getevents($)
     #
     my $wanttype = undef;
 
-    my $lastid = ($st->{'lastscan'} ? $st->{'lastscan'} : 0);
+    my $lastid = (exists($st->{'lastscan'}) ? $st->{'lastscan'} : 0);
     print STDERR "$inst: get events starting at $lastid\n"
 	if ($debug);
 
@@ -593,12 +795,12 @@ sub getevents($)
 	logit("$inst: could not get events!");
 	return undef;
     }
-    if (@$evref == 0) {
-	return @events;
-    }
     print STDERR "$inst: getevents from index $lastid returned ",
 	scalar(@$evref), " events\n"
 	if ($debug);
+    if (@$evref == 0) {
+	return @events;
+    }
 
     #
     # Fetch our device -> folder mapping
@@ -610,6 +812,14 @@ sub getevents($)
 	$folders{$devs->{$did}{'folder'}} = $did;
     }
 
+    my $EFD;
+    if ($saveevents) {
+	if (!open($EFD, ">>$eventlog")) {
+	    $EFD = undef;
+	}
+	my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+	print $EFD "========= $$: pass $passno at $stamp\n";
+    }
     foreach my $e (@$evref) {
 	my $etype = $e->{'type'};
 	my $ev = {
@@ -620,29 +830,61 @@ sub getevents($)
 	};
 	$lastid = $e->{'id'};
 
+	if ($EFD) {
+	    my $stamp = $ev->{'stamp'};
+	    my $frac = "";
+	    if ($stamp =~ /^(\d+)(\.\d+)?$/) {
+		$stamp = $1;
+		$frac = sprintf ".%03d", int($2 * 1000 + 0.5) if ($2);
+	    }
+	    $stamp = POSIX::strftime("%H:%M:%S", localtime($stamp));
+	    $stamp .= $frac;
+	    print $EFD
+		"$stamp: id=$lastid, type=$etype";
+	}
+
 	if ($etype eq "DeviceConnected" || $etype eq "DeviceDisconnected") {
-	    $ev->{'device'} = $e->{'data'}->{'id'};
+	    my $device = $e->{'data'}->{'id'};
+	    print $EFD ", device=$device\n"
+		if ($EFD);
+	    $ev->{'device'} = $device;
 	} elsif ($etype eq "FolderCompletion") {
-	    # make sure it is a folder under our control
-	    next if (!exists($folders{$e->{'data'}->{'folder'}}));
+	    my $device = $e->{'data'}->{'device'};
+	    my $folder = $e->{'data'}->{'folder'};
+	    my $pct = $e->{'data'}->{'completion'};
+	    print $EFD ", device=$device, folder=$folder, pct=$pct\n"
+		if ($EFD);
 
-	    $ev->{'device'} = $e->{'data'}->{'device'};
-	    $ev->{'folder'} = $e->{'data'}->{'folder'};
-	    $ev->{'pct'} = int($e->{'data'}->{'completion'});
+	    # make sure it is a folder under our control
+	    next if (!exists($folders{$folder}));
+
+	    $ev->{'device'} = $device;
+	    $ev->{'folder'} = $folder;
+	    $ev->{'pct'} = int($pct);
 	} elsif ($etype eq "StateChanged") {
-	    # make sure it is a folder under our control
-	    next if (!exists($folders{$e->{'data'}->{'folder'}}));
+	    my $folder = $e->{'data'}->{'folder'};
+	    my $from = $e->{'data'}->{'from'};
+	    my $to = $e->{'data'}->{'to'};
+	    print $EFD ", folder=$folder, from=$from, to=$to\n"
+		if ($EFD);
 
-	    $ev->{'device'} = $folders{$e->{'data'}->{'folder'}};
-	    $ev->{'folder'} = $e->{'data'}->{'folder'};
-	    $ev->{'from'} = $e->{'data'}->{'from'};
-	    $ev->{'to'} = $e->{'data'}->{'to'};
+	    # make sure it is a folder under our control
+	    next if (!exists($folders{$folder}));
+
+	    $ev->{'device'} = $folders{$folder};
+	    $ev->{'folder'} = $folder;
+	    $ev->{'from'} = $from;
+	    $ev->{'to'} = $to;
 	} else {
+	    print $EFD "\n"
+		if ($EFD);
 	    next;
 	}
 
 	push @events, $ev;
     }
+    close($EFD)
+	if ($EFD);
 
     $st->{'lastscan'} = $lastid;
     return \@events;
@@ -753,7 +995,7 @@ sub getinstances()
 	my $uuid = $ni->uuid();
 	my $token = "$uuid/" . $ni->domain();
 	if (!exists($instance{$token})) {
-	    logit("added new instance '$ni'")
+	    logit("scan: added new instance '$ni'")
 		if (!$onceonly);
 	    $instance{$token}{'obj'} = $ni;
 	} else {
@@ -777,7 +1019,7 @@ sub getinstances()
     foreach my $t (keys %instance) {
 	if (!exists($instance{$t}{'found'})) {
 	    my $oi = $instance{$t}{'obj'};
-	    logit("removed old instance '$oi'");
+	    logit("scan: removed old instance '$oi'");
 	    $oi->FlushConfig();
 	    delete $instance{$t};
 	}
@@ -1228,11 +1470,15 @@ sub parsehostname($)
 sub fatal($)
 {
     my ($msg) = @_;
+    my $addr = $TBOPS;
+
+    # XXX for now
+    $addr = "mike\@flux.utah.edu";
 
     #
     # Send a message to the testbed list. 
     #
-    SENDMAIL($TBOPS,
+    SENDMAIL($addr,
 	     "Write-back Monitor died",
 	     $msg,
 	     $TBOPS)
@@ -1255,9 +1501,16 @@ sub logit($)
 sub notify($)
 {
     my ($msg) = @_;
+    my $addr = $TBOPS;
 
-    logit("sending mail to $TBOPS:\n$msg");
-    SENDMAIL($TBOPS, "Write-back Monitor Message",
+    # XXX for now
+    $addr = "mike\@flux.utah.edu";
+
+    return
+	if (!$MAINSITE);
+
+    logit("sending email to $addr");
+    SENDMAIL($addr, "Write-back Monitor Message",
 	     "Write-back Monitor Message:\n\n$msg", $TBOPS)
 	if (!$impotent);
 }
