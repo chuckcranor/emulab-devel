@@ -65,7 +65,8 @@ sub Install($$$)
 	}
     }
 
-    if (!$OPSVM_ENABLE && $server eq $OPS_SERVERNAME) {
+    if ($server eq $OPS_SERVERNAME &&
+	(!$OPSVM_ENABLE || $BROWSER_CONSOLE_PROXIED)) {
 	my $apache = ("$APACHE_VERSION" eq "22" ? "apache22" :
 		      "$APACHE_VERSION" eq "24" ? "apache24" : "");
 
