@@ -216,7 +216,7 @@ function StartConsole(id, authobject)
         var url     = jsonauth.baseurl;
 
         if (proxied) {
-            # mod_proxy/mod_rewrite rule
+            // mod_proxy/mod_rewrite rule
             url = url + '/shellinabox/' + port;
         }
         else {
