@@ -1269,7 +1269,7 @@ CustomLog @prefix@/log/apache_ssl_request_log \
     RewriteRule ^/d77e8041d1ad$	    https://@USERNODE@/d77e8041d1ad [P,L]
 
     # Proxy to the per console shellinabox server
-    RewriteRule ^/shellinabox/([0-9]*)/(.*)$  http://@USERNODE@:$1/$2 [L,P]
+    RewriteRule ^/shellinabox/([0-9]*)/(.*)$  https://@USERNODE@:$1/$2 [L,P]
 </IfModule>
 <IfModule mod_proxy.c>
     ProxyRequests Off
