@@ -3498,6 +3498,7 @@ sub CreateDefsFile($)
 	$control_netmask    = $emulabconfig{"TARGETSYS_NETMASK"};
 	$bossnode_hostname  = "boss";
 	$opsnode_hostname   = "ops";
+	$wwwnode_hostname   = "www";
 	$fsnode_hostname    = ($opsvm ? "boss" : "ops");
 	$ourdomain	    = $emulabconfig{"TARGETSYS_DOMAIN"};
 	$thishomebase       = $emulabconfig{"TARGETSYS_HOMEBASE"}
@@ -3586,7 +3587,7 @@ sub CreateDefsFile($)
 		    last SWITCH;
 		};
 		/^WWWHOST$/ && do {
-		    print OUTDEFS "WWWHOST=${bossnode_hostname}.${ourdomain}\n";
+		    print OUTDEFS "WWWHOST=${wwwnode_hostname}.${ourdomain}\n";
 		    last SWITCH;
 		};
 		/^THISHOMEBASE$/ && do {
