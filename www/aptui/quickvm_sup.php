@@ -580,7 +580,7 @@ if ($UI_DISABLE_DATASETS == 0 || ($UI_DISABLE_DATASETS == 1 && ISADMIN()) ) {
                             Approve new projects</a></li>
                                  <li><a href='sitevars.php'>
                             Edit Site Variables</a></li>
-                                 <li><a href='news.php'>
+                                 <li><a href='portal-news.php'>
                             Manage News</a></li>";
                                echo " </ul>
         </li>\n";
@@ -589,7 +589,7 @@ if ($UI_DISABLE_DATASETS == 0 || ($UI_DISABLE_DATASETS == 1 && ISADMIN()) ) {
  
    if ($login_user && $login_user->APTNewNews()) {
        echo "<li class='apt-left apt-nav-item'>
-              <a id='new-news-button' href='news.php' target='_blank'
+              <a id='new-news-button' href='portal-news.php' target='_blank'
                  class='btn btn-quickvm-news navbar-btn'>News!</a></li>";
    }
    echo "</ul>";
@@ -611,7 +611,7 @@ if ($UI_DISABLE_DATASETS == 0 || ($UI_DISABLE_DATASETS == 1 && ISADMIN()) ) {
    echo "        <li><a href='example-profiles.php'
                                  target='_blank'>Example Profiles</a></li>";
    if ($login_user && $login_user->APTAnyNews()) {
-       echo "    <li><a href='news.php'
+       echo "    <li><a href='portal-news.php'
                              target='_blank'>News</a></li>";
    }
    echo "      </ul>

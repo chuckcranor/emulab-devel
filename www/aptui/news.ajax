@@ -109,7 +109,7 @@ function Do_CreateNews($idx = null)
 	SPITAJAX_ERROR(-1, "Could not insert new news item");
 	return;
     }
-    SPITAJAX_RESPONSE("news.php");
+    SPITAJAX_RESPONSE("portal-news.php");
 }
 
 #
