@@ -671,8 +671,13 @@ $(function ()
 	 * The instantiate button.
 	 */
 	$('#profile_instantiate_button').click(function (event) {
-	    window.location.replace("instantiate.php?profile=" +
-				    version_uuid + "&from=manage-profile");
+	    var url = "instantiate.php?profile=" +
+		version_uuid + "&from=manage-profile"
+
+	    if (reporefspec) {
+		url += "&refspec=" + reporefspec;
+	    }
+	    window.location.replace(url);
 	});
 	
 	/*
@@ -1603,7 +1608,7 @@ $(function ()
      */
     function SelectRepoTarget(which)
     {
-	console.info("SelectRepoTarget");
+	console.info("SelectRepoTarget: ", which);
 
 	var callback = function (source, hash) {
 	    if (source) {

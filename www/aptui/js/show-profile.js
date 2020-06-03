@@ -21,6 +21,7 @@ $(function ()
     var gotrspec     = 0;
     var gotscript    = 0;
     var fromrepo     = 0;
+    var reporefspec  = null;
     var ajaxurl      = "";
     var amlist       = null;
     var isppprofile  = false;
@@ -218,8 +219,13 @@ $(function ()
 	 * The instantiate button.
 	 */
 	$('#profile_instantiate_button').click(function (event) {
-	    window.location.replace("instantiate.php?profile=" +
-				    version_uuid + "&from=show-profile");
+	    var url = "instantiate.php?profile=" +
+		version_uuid + "&from=show-profile"
+
+	    if (reporefspec) {
+		url += "&refspec=" + reporefspec;
+	    }
+	    window.location.replace(url);
 	});
 	// Handler for normal instantiate submit button, which is in
 	// the modal.
@@ -327,6 +333,11 @@ $(function ()
      */
     function SelectRepoTarget(which)
     {
+	console.info("SelectRepoTarget: ", which);
+
+	// So we remember what the user selected for instantiate button
+	reporefspec = which;
+	
 	var callback = function (source, hash) {
 	    console.info(source);
 
