@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2009 University of Utah and the Flux Group.
+# Copyright (c) 2004-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -71,6 +71,17 @@ while (my $arg = shift @ARGV) {
     } else {
 	# Not one of ours, must be for assign
 	push @assign_args, $arg;
+    }
+}
+
+#
+# Make sure we can find a Metis binary
+#
+if (! -e "$METIS") {
+    # XXX metis5 did away with the kmetis command
+    $METIS = "/usr/local/bin/gpmetis";
+    if (! -e "$METIS") {
+	die "No metis partitioning command!\n";
     }
 }
 
@@ -860,10 +871,10 @@ sub run_metis($$$$;$) {
     print FH @$metisfile;
     close FH;
 
-    print "Partitioning with kmets into $npart partitions\n";
+    print "Partitioning with $METIS into $npart partitions\n";
     print "$METIS $metisfilename $npart > $metislogfile 2>&1\n";
     if (!system "$METIS $metisfilename $npart > $metislogfile 2>&1") {
-	die "kmetis failed!\n";
+	die "$METIS failed!\n";
     }
 
     return read_metis_partfile("$metisfilename.part.$npart",$nodes);
