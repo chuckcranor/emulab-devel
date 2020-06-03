@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -138,10 +138,10 @@ SETUID_SBIN_SCRIPTS  = mkproj rmgroup mkgroup frisbeehelper \
 SETUID_LIBX_SCRIPTS  = console_setup spewrpmtar_verify
 SETUID_SUEXEC_SCRIPTS= spewlogfile
 
-ifeq ($(SYSTEM),FreeBSD)
-SUBDIRS  += ipassign
-IPASSIGN  = Yes
-endif
+#ifeq ($(SYSTEM),FreeBSD)
+#SUBDIRS  += ipassign
+#IPASSIGN  = Yes
+#endif
 
 #
 # Targets
