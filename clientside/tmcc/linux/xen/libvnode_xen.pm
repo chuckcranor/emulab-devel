@@ -526,7 +526,7 @@ sub init($)
 
     # See which sfdisk we have. Version 2.26 removed some options we used.
     my $out = `sfdisk -v`;
-    if (defined($out) && $out =~ /2\.(\d+)(\.\d+)$/) {
+    if (defined($out) && $out =~ /2\.(\d+)(\.\d+)?$/) {
 	if (int($1) >= 26) {
 	    $newsfdisk = 1;
 	}
