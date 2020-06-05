@@ -644,20 +644,15 @@ inithostname() {
 findSmartctl() {
     local findit=$(which smartctl)
     if [ "$os" == "FreeBSD" ] ; then
-	if [ "$osrel" == "9" ] ; then
-	    findit=$(which smartctl9)
-	elif [ "$osrel" == "10" ] ; then
-	    findit=$(which smartctl10)
+	findit=$(which smartctl$osrel)
+	if [ -z "${findit}" ] ; then
+	    if [ -x "/usrlocal/sbin/smartctl" ]; then
+		findit="/usr/local/sbin/smartctl"
+	    else
+		findit=$NOSM
+	    fi
 	fi
-    fi
-    if [ -z "${findit}" ] ; then
-	if [ -x "/usr/sbin/smartctl" ]; then
-	    findit="/usr/sbin/smartctl"
-	else
-	    findit=$NOSM
-	fi
-    fi
-
+    fi	
     echo $findit
     return 0
 }
