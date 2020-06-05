@@ -1007,6 +1007,40 @@ sub rootPreConfig($;$)
     mysystem2("$SYSCTL -w ".
 	      " net.ipv4.netfilter.ip_conntrack_tcp_timeout_established=54000");
 
+    # Kernels and initramfses are getting larger and larger, and because
+    # pygrub uses a tmpfile inside /run, and because dom0_mem is usually
+    # quite low (and thus so is the default /run tmpfs allocation), we
+    # have to increase the max size of /run.  128M should be fine for
+    # now, and that is below dom0_mem in all of our cases.  Someday we
+    # might need to be more intelligent about how we set /run's size.
+    my $runsize;
+    foreach my $runline (`cat /proc/mounts`) {
+	if ($runline =~ /^tmpfs\s+\/run\s+.*size=(\d+)([kKmMgG]?).*$/) {
+	    TBDebugTimeStamp("detected /run size $1$2");
+	    $runsize = int($1);
+	    if (defined($2) && $2 ne '') {
+		if ($2 eq 'k' || $2 eq 'K') {
+		    $runsize /= 1024;
+		}
+		elsif ($2 eq 'g' || $2 eq 'G') {
+		    $runsize *= 1024;
+		}
+		elsif ($2 eq 'm' || $2 eq 'M') { }
+		else {
+		    # Not going to risk making a mistake with a size
+		    # we're uncertain of.
+		    $runsize = undef;
+		}
+	    }
+	    last;
+	}
+    }
+    # I suppose this might fail in the dom0_mem=512M, so be best-effort.
+    if (defined($runsize) && $runsize < 128.0) {
+	TBDebugTimeStamp("detected /run size below threshold 128M; increasing");
+	mysystem2("mount -o remount,size=128M /run");
+    }
+
     mysystem("touch /var/run/xen.ready");
     TBDebugTimeStamp("  releasing global lock")
 	if ($lockdebug);
