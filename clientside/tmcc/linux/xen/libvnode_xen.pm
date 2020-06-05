@@ -686,8 +686,12 @@ sub rootPreConfig($;$)
     mysystem("$OVSSTART --delete-bridges start");
 
     # For gre tunnels to work with iptables
-    mysystem("$MODPROBE nf_conntrack_proto_gre");
-    mysystem("$MODPROBE nf_conntrack_pptp");
+    if (system("modinfo nf_conntrack_proto_gre") == 0) {
+        mysystem("$MODPROBE nf_conntrack_proto_gre");
+    }
+    if (system("modinfo nf_conntrack_pptp") == 0) {
+        mysystem("$MODPROBE nf_conntrack_pptp");
+    }
 
     # For bandwidth contraints.
     mysystem("$MODPROBE ifb numifbs=$MAXIFB");
