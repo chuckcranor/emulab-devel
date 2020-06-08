@@ -30,7 +30,7 @@ use Date::Parse;
 use POSIX qw(strftime);
 
 #
-# The Powder write-back store monitor, aggregate edition.
+# The Powder write-back store monitor.
 #
 # Powder endpoint aggregates have low-bandwidth, and not always-on
 # control net connections (think campus shuttle buses that are turned off
@@ -43,10 +43,10 @@ use POSIX qw(strftime);
 #
 # Syncthing is the tool used to handle the write back. In the current
 # implementation, there are potentially multiple instances of syncthing
-# running both on an aggregate boss (us) and on the mothership ops node.
-# There is one instance on the ops node for every (current and past)
-# experiment instance with outstanding data. This instance has a data
-# "folder" for every Powder aggregate involved in the experiment.
+# running both on an aggregate boss (!$MAINSITE) and on the mothership ops
+# node ($MAINSITE). There is one instance on the ops node for every (current
+# and past) experiment instance with outstanding data. This instance has a
+# data "folder" for every Powder aggregate involved in the experiment.
 # Likewise, there is an instance on each Powder aggregate boss node for
 # every such experiment. These instances "push" outstanding data to the
 # appropriate mothership ops instance. For running experiments, this is
@@ -74,13 +74,17 @@ use POSIX qw(strftime);
 #   pass, kill the syncthing and remove the syncthing state. Since this is
 #   unbounded time-wise, We will likely have to impose a timeout if an
 #   instance cannot connect to its mothership instance.
-# * A naive technique for "one and done": Turn off the watcher, set to sync
-#   oldest to newest, create a special marker file (e.g., "DONE"), and fire
-#   off syncthing. Once it reports (via an event) that it is insync, shut it
+# * On the mothership side, once we know an instance is done (on all
+#   involved aggregates), we tar up the data directory and fire off some
+#   email to the user telling them where to find it. This is less than
+#   ideal since they will have to start a new experiment to access the
+#   tarball.
+# * Our technique for "one and done": Turn off the watcher to avoid picking
+#   up further changes, run til the other side reports it is insync (via
+#   a syncthing event), create a special marker file (e.g., "DONE"), and do
+#   a synchronous scan via the API. Once that scan returns, shut syncthing
 #   down and remove everything. The "DONE" indicator is for the benefit of
-#   the mothership side (see below). We might also be able to detect when
-#   things are in sync from the mothership side by seeing if the syncthing
-#   instance is connected, idle, and in-sync.
+#   the mothership side.
 #
 # Why the obsession with a "watcher"? We could leave the real-time change
 # watcher running, but under FreeBSD, it requires an open file for every
@@ -116,6 +120,7 @@ my $PROJDIR   = "@PROJROOT_DIR@";
 my $RUNMONITOR = @POWDER_WBSTORE@;
 my $STBIN    = "/usr/local/bin/syncthing";
 my $STMARKER = ".stfolder";
+my $MIKEMAGIC = "00000000-0000-0000-0000-000000000000";
 
 # Set this to turn off tblog in libraries.
 $ENV{'TBLOG_OFF'} = "yep";
@@ -539,12 +544,6 @@ sub cleanupinstance($)
     my $datadir = $inst->datadir();
     my $action = ($handle == -1 ? "removing" : "archiving");
 
-    # XXX
-    if ($uuid eq "00000000-0000-0000-0000-000000000000") {
-	logit("$inst: not $action mikes magic experiment");
-	return 0;
-    }
-
     # XXX paranoid sanity checks
     if ($confdir !~ m#^($METADIR/$uuid)/.+#) {
 	logit("$inst: WARNING: cleanup detected unexpected path for ".
@@ -568,7 +567,7 @@ sub cleanupinstance($)
     # the end, so we just do it once here.
     #
     if ($handle != -1 && isemptystore($uuid, $datadir)) {
-	logit("$inst: removing empty data directory");
+	logit("$uuid: removing empty data directory");
 	$handle = -1;
     }
 
@@ -578,7 +577,7 @@ sub cleanupinstance($)
     if ($handle == -1) {
 	my $out = "$datadir.rm.out";
 	if (system("rm -rf $confdir $datadir >$out 2>&1")) {
-	    logit("$inst: WARNING: cleanup could not remove ".
+	    logit("$uuid: WARNING: cleanup could not remove ".
 		  "config dir ($confdir) and data dir ($datadir)! ".
 		  "See $out.");
 	    notify("Could not remove one or both of:\n$confdir\n$datadir\n".
@@ -586,7 +585,7 @@ sub cleanupinstance($)
 	    return 1;
 	}
 	unlink($out);
-	logit("$inst: removed data directory");
+	logit("$uuid: removed data directory");
 	return 0;
     }
 
@@ -629,7 +628,7 @@ sub cleanupinstance($)
     my $out = "$datadir.tgz.out";
     my $exclude = "--exclude $STMARKER --exclude '.$uuid-*'";
     if (system("tar -C $tardir $exclude -czf $tarball $uuid >$out 2>&1")) {
-	logit("$inst: WARNING: cleanup could not archive ".
+	logit("$uuid: WARNING: cleanup could not archive ".
 	      "data dir ($datadir)! See $out.");
 	unlink($tarball);
 	notify("Could not create tarball of experiment write-back store.\n".
@@ -646,7 +645,7 @@ sub cleanupinstance($)
 
     $out = "$datadir.rm.out";
     if (system("rm -rf $confdir $datadir >$out 2>&1")) {
-	logit("$inst: WARNING: cleanup could not remove ".
+	logit("$uuid: WARNING: cleanup could not remove ".
 	      "config dir ($confdir) and data dir ($datadir) ".
 	      "after archiving! ".
 	      "See $out.");
@@ -1160,13 +1159,32 @@ sub getinstances()
 	}
 
 	#
+	# XXX for mike's magical test uuid we let the mothership state
+	# determine whether we are active or not.
+	#
+	if ($uuid eq $MIKEMAGIC) {
+	    if (!$msstate) {
+		$inst->active(1);
+	    } else {
+		$inst->active(0);
+		$inst->done(1);
+		if ($msstate eq "FAIL") {
+		    my $rid = $inst->remoteid();
+		    if ($rid) {
+			$mydevs->{$rid}{'state'} = FAILED;
+		    }
+		}
+	    }
+	}
+
+	#
 	# Incorporate OOB mothership state into what we know.
 	#   DONE in this context means the experiment is past
 	#     (only applies on the mothership)
 	#   GONE implies no further updates, mark instance as done
 	#   FAIL implies experiment failed, mark instance as FAILED
 	#
-	if ($msstate) {
+	elsif ($msstate) {
 	    if ($MAINSITE && $msstate eq "DONE") {
 		$inst->active(0);
 	    }
