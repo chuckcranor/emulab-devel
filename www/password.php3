@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -205,6 +205,18 @@ if ($user->weblogin_frozen()) {
     echo "<center>
 	     The password cannot be changed; please contact $TBMAILADDR.<br>
              <br>
+          <font size=+1 color=red>
+            Please do not attempt to change your password again;
+                it will not work!
+          </font>
+          </center><br>\n";
+    return;
+}
+# Safety
+if ($user->nonlocal_id()) {
+    PAGEHEADER("Forgot Your Password?", $view);
+    echo "<center>
+	     This account is not allowed to do this.
           <font size=+1 color=red>
             Please do not attempt to change your password again;
                 it will not work!

@@ -329,6 +329,22 @@ else {
 	SPITFOOTER();
 	return;
     }
+    else if ($dologin_status == DOLOGIN_STATUS_NOGENIUSER) {
+	# Short delay.
+	sleep(1);
+
+	SPITHEADER();
+	echo "<h4>
+              This account was created by logging in via the <b>Geni Login</b>
+              button. Please go back the <a href=login.php>login page</a>
+              and click on the <b>Geni Login</b> button. If you would like
+              to change your account to <em>direct login</em> please
+              contact $SUPPORT.</h4>\n";
+        echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+	SPITNULLREQUIRE();
+	SPITFOOTER();
+	return;
+    }
     else if ($dologin_status == DOLOGIN_STATUS_OKAY) {
 	$login_status = $STATUS_LOGGEDIN;
     }

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018, 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -118,7 +118,8 @@ function Do_ChangePassword()
         # admins do not need to provide an old password when changing another
         # user password, but they need it to change their own password.
         #
-        if (!ISADMIN() || $target_uid == $this_user->uid()) {
+        if (!((ISADMIN() && !$this_user->SameUser($target_user)) ||
+              ($target_user->nonlocal_id() && $target_user->pswd() == "*"))) {
             if (!isset($formfields["oldpassword"]) ||
                 $formfields["oldpassword"] == "") {
                 $errors["oldpassword"] = "Missing Field";

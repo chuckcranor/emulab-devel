@@ -88,6 +88,7 @@ define("DOLOGIN_STATUS_WEBFREEZE",	-3);
 define("DOLOGIN_STATUS_INACTIVE",	-4);
 define("DOLOGIN_STATUS_FROZEN", 	-5);
 define("DOLOGIN_STATUS_PROJDISABLED", 	-6);
+define("DOLOGIN_STATUS_NOGENIUSER", 	-7);
 
 # So we can redefine this in the APT pages.
 $CHANGEPSWD_PAGE = "moduserinfo.php3";
@@ -961,6 +962,11 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
         if (count($plist)) {
             return DOLOGIN_STATUS_PROJDISABLED;
         }
+        # Check for a geni user trying to login with a password.
+        if (!$nopassword && $user->nonlocal_id()) {
+            return DOLOGIN_STATUS_NOGENIUSER;
+        }
+        
 	if (!$nopassword) {
 	    $encoding = crypt("$password", $db_encoding);
 	    if (strcmp($encoding, $db_encoding)) {
