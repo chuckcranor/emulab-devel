@@ -106,8 +106,8 @@ PROTOGENI_NICKNAME="utah-pg"
 PROTOGENI_MAXSERVERLOAD=24
 # Do not set this without asking Utah.
 PROTOGENI_LOCALUSER=1
-# Geni Login Button
-PROTOGENI_GENIWEBLOGIN=1
+# Geni Login Button. On the Mothership we set this in www/portal_mainsite.php
+PROTOGENI_GENIWEBLOGIN=0
 # What project to dump geni users into.
 PROTOGENI_HOLDINGPROJECT="CloudLab"
 # Portal for the Cloudlab Cluster.
