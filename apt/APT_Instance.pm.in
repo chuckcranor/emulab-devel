@@ -1260,7 +1260,8 @@ sub GetSSHKeys($$;$)
 	if (defined($target_user));
 
     if (! ($project->pid() eq $APT_HOLDINGPROJECT ||
-	   $project->pid() eq $PROTOGENI_HOLDINGPROJECT)) {
+	   $project->pid() eq $PROTOGENI_HOLDINGPROJECT ||
+	   $project->pid() eq "cord-testdrive")) {
 	#
 	# Get other users from the project. Real local users are easy,
 	# nonlocal users from the GPO portal are messy.
