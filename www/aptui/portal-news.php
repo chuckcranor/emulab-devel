@@ -32,7 +32,7 @@ $page_title = "News";
 # Get current user.
 #
 RedirectSecure();
-$this_user = CheckLoginOrDie();
+$this_user = CheckLoginOrDie(CHECKLOGIN_NONLOCAL);
 $isadmin   = 0;
 if (ISADMIN()) {
     $isadmin = 1;
