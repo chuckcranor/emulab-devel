@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,12 +21,13 @@
 # 
 # }}}
 #
-include("defs.php3");
+include_once("defs.php3");
 
 #
 # Only known and logged in users can do this.
+# Geni Users need to be able to get their credentials too. 
 #
-$this_user = CheckLoginOrDie();
+$this_user = CheckLoginOrDie(CHECKLOGIN_NOLOGINS);
 $uid       = $this_user->uid();
 $isadmin   = ISADMIN();
 
