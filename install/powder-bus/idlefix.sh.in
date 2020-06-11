@@ -4,7 +4,7 @@
 #
 # PROVIDE: idlefix
 # REQUIRE: testbed
-# BEFORE: apache22
+# BEFORE: apache24
 # KEYWORD: shutdown
 
 case "$1" in

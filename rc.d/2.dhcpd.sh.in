@@ -2,6 +2,15 @@
 #
 # Wrapper for DHCPD which has a habit of dying. 
 #
+
+#
+# These are the dependencies specified in the isc-dhcpd startup script.
+#
+# PROVIDE: dhcpd
+# REQUIRE: DAEMON
+# BEFORE: LOGIN
+# KEYWORD: shutdown
+
 elabinelab="@ELABINELAB@"
 configfile="/usr/local/etc/dhcpd.conf"
 extraifs="@DHCPD_EXTRAIFS@"

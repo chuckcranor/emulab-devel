@@ -1,8 +1,14 @@
 #!/bin/sh
 
+#
+# capture needs the network (NETWORKING) for IPMI based captures.
+# It also needs the capserver running (testbed) on a boss node.
+# We start it up before apache so that we are capturing before
+# users can use the web-based console.
+#
 # PROVIDE: capture
-# REQUIRE: DAEMON testbed
-# BEFORE: LOGIN
+# REQUIRE: NETWORKING testbed
+# BEFORE: apache24
 # KEYWORD: shutdown
 
 #
