@@ -386,8 +386,22 @@ while (1) {
 	    "Voltage:   $voltage\n\n";
 	    
 	if (defined($tempShutdownTime) && !defined($onBatteryTime)) {
-	    $message .= "Powering on radios and nodes\n";
-	    PowerControl("on", $n300, $ed1);
+	    #
+	    # Lets not power on nodes that are not allocated, they will
+	    # get turned on later when allocated.
+	    #
+	    if ($ed1->IsReserved()) {
+		my $client_id = $ed1->vname();
+		
+		NotifyUser($node,
+			   "Bus $client_id temperature returning to normal",
+			   "Bus $client_id has cooled down to $tempF ".
+			   "degrees (F).\n\n".
+			   "Radios and nodes have been powered back on\n");
+		
+		$message .= "Powering on allocated radios and nodes\n";
+		PowerControl("on", $n300, $ed1);
+	    }
 	}
 	NotifyTBOPS("$BOSSNODE temperature is returning to normal", $message);
 	$tempShutdownTime = undef;
@@ -482,13 +496,13 @@ while (1) {
     # a lot of power even if it is not doing anything and we want to
     # keep boss up as long as possible.
     #
-    if (time() - $onBatteryTime > $MAX_RADIOTIME) {
+    if (time() - $onBatteryTime > $MAX_RADIOTIME || $pin1 < $PIN1_THRESHOLD) {
 	PowerControl("off", $n300);
     }
     #
     # And a little while later, the experiment node.
     #
-    if (time() - $onBatteryTime > $MAX_NODETIME) {
+    if (time() - $onBatteryTime > $MAX_NODETIME || $pin1 < $PIN1_THRESHOLD) {
 	PowerControl("off", $ed1);
     }
     if ($pin1 < $PIN1_THRESHOLD ||
