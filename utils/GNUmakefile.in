@@ -61,7 +61,8 @@ SBIN_SCRIPTS	= vlandiff vlansync withadminprivs export_tables cvsupd.pl \
 		  deprecate_image pushrootkey addinterface addwire cnetwatch \
 		  powerlog \
 		  addswitch addtypetoimages resutil addstack addnode \
-		  processhwinfo cnetwatch_disable mksysproj
+		  processhwinfo cnetwatch_disable mksysproj \
+		  certbot_renew certbot_authhook
 
 WEB_SBIN_SCRIPTS= webnewnode webdeletenode webspewconlog webarchive_list \
                   webspewimage webdumpdescriptor webemulabfeature \

@@ -29,14 +29,24 @@ sub Install($$$)
 	    DoneIfExists($CHALLENGEDIR);
 	    ExecQuietFatal("mkdir -p $CHALLENGEDIR");
 	};
-	my $CERTBOT = "certbot-2.7 certonly --webroot -w /usr/testbed/www ".
+	my $CERTBOT = "certbot-2.7 certonly -n --webroot -w /usr/testbed/www ".
 	    "--agree-tos -m $TBOPSEMAIL ";
+	my $RENEW   = "/usr/local/bin/certbot-2.7 renew";
 	my $CERT    = "/usr/local/etc/letsencrypt/live/";
 
 	if (ISBOSSNODE($server)) {
-	    $CERTBOT .=
-		"-d $OURDOMAIN -d $WWWHOST -d $BOSSNODE ".
-		"--renew-hook '$APACHE_START_COMMAND graceful www'";
+	    if ($OPSVM_ENABLE) {
+		#
+		# Ops uses the same cert, and we do it with DNS which is harder,
+		# so call out to a script.
+		#
+		$CERTBOT = $RENEW = "$TBROOT/sbin/certbot_renew";
+	    }
+	    else {
+		$CERTBOT .=
+		    "-d $OURDOMAIN -d $WWWHOST -d $BOSSNODE ".
+		    "--renew-hook '$APACHE_START_COMMAND graceful www'";
+	    }
 	    $CERT .= "$OURDOMAIN/cert.pem";
 	}
 	else {
@@ -45,7 +55,7 @@ sub Install($$$)
 		"--renew-hook '$APACHE_START_COMMAND graceful'";
 	    $CERT .= "$USERNODE/cert.pem";
 	}
-	Phase "certbot", "Setting up certbot", sub {
+	Phase "certbot", "Setting up certbot (patience please!)", sub {
 	    DoneIfExists($CERT);
 	    ExecQuietFatal($CERTBOT);
 	};
@@ -58,7 +68,7 @@ sub Install($$$)
 	Phase "crontab", "Editing $CRONTAB", sub {
 	    DoneIfEdited($CRONTAB);
 	    AppendToFileFatal($CRONTAB,
-		      "1  \t10\t*\t*\t*\troot\t/usr/local/bin/certbot-2.7 renew");
+		  "15 \t3\t*\t*\t*\troot\t$RENEW");
 	};
 	Phase "restarting", "Restarting Apache server", sub {
 	    ExecQuietFatal("$APACHE_START_COMMAND restart www");
