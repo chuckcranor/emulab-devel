@@ -452,6 +452,12 @@ while (1) {
 				   "powered on.\n");
 		    }
 		}
+		NotifyTBOPS("$BOSSNODE is back on bus power",
+			    "$BOSSNODE is back on bus power\n".
+			    "Voltage:   $voltage\n".
+			    "Pin0:      $pin0\n".
+			    "Pin1:      $pin1\n".
+			    "Temp (F):  $tempF\n");
 	    }
 	}
 	goto again;
