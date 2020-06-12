@@ -13,7 +13,7 @@
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #
 
-import os, sys, string, struct, tempfile, re, traceback
+import os, sys, string, struct, tempfile, re, traceback, stat, errno
 import copy
 import logging
 import platform
@@ -32,6 +32,16 @@ import grub.ExtLinuxConf
 
 PYGRUB_VER = 0.6
 FS_READ_MAX = 1024 * 1024
+SECTOR_SIZE = 512
+
+def read_size_roundup(fd, size):
+    if platform.system() != 'FreeBSD':
+        return size
+    st = os.fstat(fd)
+    if (not stat.S_ISCHR(st.st_mode)):
+        return size
+    # Round up to sector size if it's a raw character device
+    return (((size)+((SECTOR_SIZE)-1))&(~((SECTOR_SIZE)-1)))
 
 def enable_cursor(ison):
     if ison:
@@ -48,7 +58,7 @@ DISK_TYPE_RAW, DISK_TYPE_HYBRIDISO, DISK_TYPE_DOS = range(3)
 def identify_disk_image(file):
     """Detect DOS partition table or HybridISO format."""
     fd = os.open(file, os.O_RDONLY)
-    buf = os.read(fd, 0x8006)
+    buf = os.read(fd, read_size_roundup(fd, 0x8006))
     os.close(fd)
 
     if len(buf) >= 512 and \
@@ -59,7 +69,6 @@ def identify_disk_image(file):
         return DISK_TYPE_DOS
     return DISK_TYPE_RAW
 
-SECTOR_SIZE=512
 DK_LABEL_LOC=1
 DKL_MAGIC=0xdabe
 V_ROOT=0x2
@@ -94,7 +103,7 @@ def get_fs_offset_gpt(file):
     i = partcount
     offsets = []
     while i>0:
-        buf = os.read(fd, partsize)
+        buf = os.read(fd, read_size_roundup(fd, partsize))
         offsets.append(struct.unpack("<Q", buf[32:40])[0] * SECTOR_SIZE)
         i -= 1
     os.close(fd)
@@ -150,6 +159,11 @@ def get_partition_offsets(file):
             part_offs.insert(0, offset)
         else:
             part_offs.append(offset)
+
+    # We thought we had a DOS partition table, but didn't find any
+    # actual valid partition entries. This can happen because an MBR
+    # (e.g. grubs) may contain the same signature.
+    if not part_offs: part_offs = [0]
 
     return part_offs
 
@@ -696,14 +710,17 @@ def sniff_netware(fs, cfg):
     return cfg
 
 def format_sxp(kernel, ramdisk, args):
-    s = "linux (kernel %s)" % kernel
+    s = "linux (kernel %s)" % repr(kernel)
     if ramdisk:
-        s += "(ramdisk %s)" % ramdisk
+        s += "(ramdisk %s)" % repr(ramdisk)
     if args:
-        s += "(args \"%s\")" % args
+        s += "(args \"%s\")" % repr(args)
     return s
                 
 def format_simple(kernel, ramdisk, args, sep):
+    for check in (kernel, ramdisk, args):
+        if check is not None and sep in check:
+            raise RuntimeError, "simple format cannot represent delimiter-containing value"
     s = ("kernel %s" % kernel) + sep
     if ramdisk:
         s += ("ramdisk %s" % ramdisk) + sep
@@ -716,7 +733,7 @@ if __name__ == "__main__":
     sel = None
     
     def usage():
-        print >> sys.stderr, "Usage: %s [-q|--quiet] [-i|--interactive] [-l|--list-entries] [-n|--not-really] [--output=] [--kernel=] [--ramdisk=] [--args=] [--entry=] [--output-directory=] [--output-format=sxp|simple|simple0] <image>" %(sys.argv[0],)
+        print >> sys.stderr, "Usage: %s [-q|--quiet] [-i|--interactive] [-l|--list-entries] [-n|--not-really] [--output=] [--kernel=] [--ramdisk=] [--args=] [--entry=] [--output-directory=] [--output-format=sxp|simple|simple0] [--offset=] <image>" %(sys.argv[0],)
 
     def copy_from_image(fs, file_to_read, file_type, output_directory,
                         not_really):
@@ -758,7 +775,7 @@ if __name__ == "__main__":
     try:
         opts, args = getopt.gnu_getopt(sys.argv[1:], 'qilnh::',
                                    ["quiet", "interactive", "list-entries", "not-really", "help",
-                                    "output=", "output-format=", "output-directory=",
+                                    "output=", "output-format=", "output-directory=", "offset=",
                                     "entry=", "kernel=", 
                                     "ramdisk=", "args=", "isconfig", "debug"])
     except getopt.GetoptError:
@@ -769,16 +786,17 @@ if __name__ == "__main__":
         usage()
         sys.exit(1)
     file = args[0]
-        
+    fs = None
     output = None
     entry = None
     interactive = True
     list_entries = False
     isconfig = False
+    part_offs = None
     debug = False
     not_really = False
     output_format = "sxp"
-    output_directory = "/var/run/xend/boot"
+    output_directory = "/var/run/xen/pygrub"
 
     # what was passed in
     incfg = { "kernel": None, "ramdisk": None, "args": "" }
@@ -807,6 +825,13 @@ if __name__ == "__main__":
             incfg["ramdisk"] = a
         elif o in ("--args",):
             incfg["args"] = a
+        elif o in ("--offset",):
+            try:
+                part_offs = [ int(a) ]
+            except ValueError:
+                print "offset value must be an integer"
+                usage()
+                sys.exit(1)
         elif o in ("--entry",):
             entry = a
             # specifying the entry to boot implies non-interactive
@@ -817,15 +842,27 @@ if __name__ == "__main__":
             debug = True
         elif o in ("--output-format",):
             if a not in ["sxp", "simple", "simple0"]:
-                print "unkonwn output format %s" % a
+                print "unknown output format %s" % a
                 usage()
                 sys.exit(1)
             output_format = a
         elif o in ("--output-directory",):
+            if not os.path.isdir(a):
+                print "%s is not an existing directory" % a
+                sys.exit(1)
             output_directory = a
 
     if debug:
 	logging.basicConfig(level=logging.DEBUG)
+
+
+    try:
+        os.makedirs(output_directory, 0700)
+    except OSError,e:
+        if (e.errno == errno.EEXIST) and os.path.isdir(output_directory):
+            pass
+        else:
+            raise
 
     if output is None or output == "-":
         fd = sys.stdout.fileno()
@@ -850,11 +887,8 @@ if __name__ == "__main__":
         bootfsoptions = ""
 
     # get list of offsets into file which start partitions
-    part_offs = get_partition_offsets(file)
-    print str(part_offs);
-    if len(part_offs) == 0:
-        part_offs = [0]
-        pass
+    if part_offs is None:
+        part_offs = get_partition_offsets(file)
 
     for offset in part_offs:
         try:
@@ -886,7 +920,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     # Did looping through partitions find us a kernel?
-    if not fs:
+    if fs is None:
         raise RuntimeError, "Unable to find partition containing kernel"
 
     bootcfg["kernel"] = copy_from_image(fs, chosencfg["kernel"], "kernel",
