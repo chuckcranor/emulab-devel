@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2007-2018 University of Utah and the Flux Group.
+# Copyright (c) 2007-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -137,12 +137,20 @@ Linux)
         rel=1.0  # XXX probably wrong
     fi
     if [ "$dist" = "Ubuntu" -a `uname -m` = "aarch64" ]; then
-	if [ "$rel" = "18.04" ]; then
+	if [ "$rel" = "20.04" ]; then
+	    tag=MoonshotUbuntu20
+	elif [ "$rel" = "18.04" ]; then
 	    tag=MoonshotUbuntu18
 	elif [ "$rel" = "16.04" ]; then
 	    tag=MoonshotUbuntu16
 	else
 	    tag=Moonshot
+	fi
+    elif [ "$dist" = "Ubuntu" -a `uname -m` = "ppc64le" ]; then
+	if [ "$rel" = "20.04" ]; then
+	    tag=PPC64leUbuntu20
+	elif [ "$rel" = "18.04" ]; then
+	    tag=PPC64leUbuntu18
 	fi
     fi
     ;;

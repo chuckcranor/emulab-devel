@@ -338,7 +338,10 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/ubuntu16-ms/GNUmakefile \
 	  tmcc/ubuntu18/GNUmakefile \
 	  tmcc/ubuntu18-ms/GNUmakefile \
+	  tmcc/ubuntu18-ppc64le/GNUmakefile \
 	  tmcc/ubuntu20/GNUmakefile \
+	  tmcc/ubuntu20-ms/GNUmakefile \
+	  tmcc/ubuntu20-ppc64le/GNUmakefile \
 	  tmcc/linux-ms/GNUmakefile \
 	  tmcc/archlinux/GNUmakefile \
 	  tmcc/alpine/GNUmakefile \

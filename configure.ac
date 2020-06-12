@@ -1622,7 +1622,10 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/ubuntu16-ms/GNUmakefile \
  clientside/tmcc/ubuntu18/GNUmakefile \
  clientside/tmcc/ubuntu18-ms/GNUmakefile \
+ clientside/tmcc/ubuntu18-ppc64le/GNUmakefile \
  clientside/tmcc/ubuntu20/GNUmakefile \
+ clientside/tmcc/ubuntu20-ms/GNUmakefile \
+ clientside/tmcc/ubuntu20-ppc64le/GNUmakefile \
  clientside/tmcc/linux-ms/GNUmakefile \
  clientside/tmcc/archlinux/GNUmakefile \
  clientside/tmcc/alpine/GNUmakefile \
