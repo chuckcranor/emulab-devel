@@ -4,7 +4,7 @@
 #
 
 # PROVIDE: tbdbcheck
-# REQUIRE: mysql-emulab
+# REQUIRE: mysql-testbed
 # BEFORE: testbed
 # KEYWORD: shutdown
 

@@ -1,9 +1,8 @@
 #!/bin/sh
 
 #
-# The write-back store monitor needs the /proj filesystem (FILESYSTEMS) which
-# it accesses, networking (NETWORKING) so that syncthing can talk to other
-# instances, and the Emulab DB (tbdbcheck). Note that are use of syncthing
+# We run the write-back store monitor after all the basic FreeBSD daemons
+# (DAEMON) and after the Emulab DB (tbdbcheck). Note that our use of syncthing
 # is totally independent of any system-wide syncthing, so we don't have any
 # dependency on the syncthing startup scripts.
 #
@@ -11,7 +10,7 @@
 # to reduce experiment start/end races.
 #
 # PROVIDE: wbstore
-# REQUIRE: FILESYSTEMS NETWORKING tbdbcheck
+# REQUIRE: DAEMON tbdbcheck
 # BEFORE: testbed
 # KEYWORD: nojail shutdown
 

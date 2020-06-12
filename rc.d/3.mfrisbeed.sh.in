@@ -1,9 +1,9 @@
 #!/bin/sh
 
 # PROVIDE: mfrisbeed
-# REQUIRE: DAEMON ntpd tbdbcheck
+# REQUIRE: DAEMON tbdbcheck
 # BEFORE: testbed
-# KEYWORD: shutdown
+# KEYWORD: nojail shutdown
 
 #
 # Set to run with debugging enabled.

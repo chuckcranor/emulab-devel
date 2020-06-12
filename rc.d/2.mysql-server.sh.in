@@ -3,7 +3,10 @@
 # The current mysql-server startup script only requires LOGIN, which
 # basically means it starts late in the game. But that causes all sorts
 # of cyclic dependencies with our scripts, which often want to run after
-# after mysql but *before* LOGIN.
+# after mysql but *before* LOGIN. I have moved this to run after DAEMON
+# so that basic services like ntpdate start up before we do. This is more
+# like the "olden days" when stuff in /usr/local/etc/rc.d ran after
+# everything in /etc/rc.d...
 #
 # Note that "mysql-client" no longer exists in today's world. Its sole
 # purpose is to run ldconfig and add the mysql library dir. Apparently
@@ -11,9 +14,9 @@
 # still exists. But we keep our mysql-client for right now.
 #
 # PROVIDE: mysql
-# PROVIDE: mysql-emulab
-# REQUIRE: NETWORKING SERVERS mysql-client
-# BEFORE: DAEMON
+# PROVIDE: mysql-testbed
+# REQUIRE: NETWORKING DAEMON mysql-client
+# BEFORE: testbed
 # KEYWORD: shutdown
 
 MAINSITE="@TBMAINSITE@"
