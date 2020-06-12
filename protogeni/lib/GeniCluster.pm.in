@@ -219,7 +219,8 @@ sub InUse()
 		    "left join `geni-cm`.geni_certificates as cert on ".
 		    "     cert.uuid=stats.slice_uuid ".
 		    "left join users as u on u.uid_idx=e.swapper_idx ".
-		    "where n.role='testnode' and t.class='pc' ".
+		    "where n.role='testnode' and ".
+		    "      (t.class='pc' or t.class='ue') ".
 		    "order by n.node_id");
     while (my ($node_id,$type,$pid,$eid,$reserved_pid,$expires,
 	       $autoswap,$ttl,$uid,$slice_uuid,$slice_urn,
