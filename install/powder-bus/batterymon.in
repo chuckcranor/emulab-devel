@@ -393,8 +393,7 @@ while (1) {
 	    if ($ed1->IsReserved()) {
 		my $client_id = $ed1->vname();
 		
-		NotifyUser($node,
-			   "Bus $client_id temperature returning to normal",
+		NotifyUser("Bus $client_id temperature returning to normal",
 			   "Bus $client_id has cooled down to $tempF ".
 			   "degrees (F).\n\n".
 			   "Radios and nodes have been powered back on\n");
