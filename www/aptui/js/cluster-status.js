@@ -17,6 +17,34 @@ $(function ()
 	isadmin = window.ISADMIN || window.ISFADMIN;
 	amlist = JSON.parse(_.unescape($('#agglist-json')[0].textContent));
 	
+	/*
+	 * We want things ordered specially in Powder, alphabetic no good. :-(
+	 */
+	if (window.ISPOWDER) {
+	    var ordered = {};
+	    if (_.has(amlist, "Emulab")) {
+		ordered["Emulab"] = amlist["Emulab"];
+		amlist["Emulab"]  = undefined;
+	    }
+	    _.each(amlist, function (details, nickname) {
+		if (details && !(details.isFE || details.isME)) {
+		    ordered[nickname] = amlist[nickname];
+		    amlist[nickname]  = undefined;
+		}
+	    });
+	    _.each(amlist, function (details, nickname) {
+		if (details && details.isFE) {
+		    ordered[nickname] = amlist[nickname];
+		    amlist[nickname]  = undefined;
+		}
+	    });
+	    _.each(amlist, function (details, nickname) {
+		if (details) {
+		    ordered[nickname] = amlist[nickname];
+		}
+	    });
+	    amlist = ordered;
+	}
 	var html = mainTemplate({
 	    "amlist"  : amlist,
 	    "isadmin" : isadmin,

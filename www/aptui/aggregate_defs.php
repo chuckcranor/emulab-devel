@@ -330,7 +330,7 @@ class Aggregate
             elseif ($frontpage) {
                 $allowed = 1;
             }
-            elseif ($aggregate->adminonly() && !(ISADMIN() || STUDLY())) {
+            elseif ($aggregate->adminonly() && !ISADMIN()) {
                 $allowed = 0;
             }
             elseif ($user && $aggregate->canuse_feature()) {
