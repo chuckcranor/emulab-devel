@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2018, 2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,6 +39,7 @@ sub usage {
 #
 my $OURDOMAIN                = "@OURDOMAIN@";
 my $CONFIG_TARGETSYS         = @CONFIG_TARGETSYS@;
+my $TARGETSYS_TARGET         = "@TARGETSYS_TARGET@";
 my ($BOSSTOKEN)              = ("@BOSSNODE@" =~ /^([-\w]+).*$/);
 my ($USERTOKEN)              = ("@USERNODE@" =~ /^([-\w]+).*$/);
 my ($FSTOKEN)                = ("@FSNODE@" =~ /^([-\w]+).*$/);
@@ -240,10 +241,28 @@ while (<IF>) {
 		$external_strings .= $foo
                     if (isroutable($CONTROL_ROUTER_IP));
 	    }
+	    elsif ($2 eq "primaries") {
+		my $foo = "	IN	NS	ns.${OURDOMAIN}.\n";
+		
+		if ($which eq "-internal") {
+		    $internal_strings .= $foo;
+		}
+		else {
+		    # This needs to come from configure
+		    if (!$CONFIG_TARGETSYS || $TARGETSYS_TARGET !~ /^POWDER/) {
+			$external_strings .= $foo;
+		    }
+		}
+	    }
 	    elsif ($2 eq "secondaries") {
 		if ($CONFIG_TARGETSYS) {
 		    my $foo = "	IN	NS	ns.emulab.net.\n";
 
+		    # This needs to come from configure
+		    if ($TARGETSYS_TARGET =~ /^POWDER/) {
+			$foo .= "	IN	NS	ns2.emulab.net.\n";
+			$foo .= "	IN	NS	ns5.emulab.net.\n";
+		    }
 		    $internal_strings .= $foo;
 		    $external_strings .= $foo;
 		}
