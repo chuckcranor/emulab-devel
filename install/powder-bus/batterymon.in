@@ -496,13 +496,13 @@ while (1) {
     # a lot of power even if it is not doing anything and we want to
     # keep boss up as long as possible.
     #
-    if (time() - $onBatteryTime > $MAX_RADIOTIME) {
+    if (time() - $onBatteryTime > $MAX_RADIOTIME || $pin1 < $PIN1_THRESHOLD) {
 	PowerControl("off", $n300);
     }
     #
     # And a little while later, the experiment node.
     #
-    if (time() - $onBatteryTime > $MAX_NODETIME) {
+    if (time() - $onBatteryTime > $MAX_NODETIME || $pin1 < $PIN1_THRESHOLD) {
 	PowerControl("off", $ed1);
     }
     if ($pin1 < $PIN1_THRESHOLD ||
