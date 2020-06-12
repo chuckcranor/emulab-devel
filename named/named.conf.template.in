@@ -48,9 +48,9 @@ view "internal" {
     };
 
     zone "0.0.127.in-addr.arpa" {
-	      type master;
-	      file "localhost.rev";
-	  };
+	type master;
+	file "localhost.rev";
+    };
 
     zone "." in {
 	      type hint;
@@ -73,9 +73,10 @@ view "external" {
     };
 
     zone "0.0.127.in-addr.arpa" {
-	      type master;
-	      file "localhost.rev";
-	  };
+        notify no;
+        type master;
+        file "localhost.rev";
+    };
 
     zone "." in {
 	      type hint;
