@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # PROVIDE: mysql-client
-# REQUIRE: NETWORKING DAEMON ldconfig
+# REQUIRE: NETWORKING SERVERS ldconfig
 # BEFORE: mysql-testbed apache24
 # KEYWORD: shutdown
 

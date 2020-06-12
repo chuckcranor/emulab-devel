@@ -3,10 +3,19 @@
 # The current mysql-server startup script only requires LOGIN, which
 # basically means it starts late in the game. But that causes all sorts
 # of cyclic dependencies with our scripts, which often want to run after
-# after mysql but *before* LOGIN. I have moved this to run after DAEMON
-# so that basic services like ntpdate start up before we do. This is more
-# like the "olden days" when stuff in /usr/local/etc/rc.d ran after
-# everything in /etc/rc.d...
+# after mysql but *before* LOGIN.
+#
+# I have moved this to run after DAEMON so that basic services like
+# ntpdate start up before we do. This is more like the "olden days" when
+# stuff in /usr/local/etc/rc.d ran after everything in /etc/rc.d...
+#
+# Okay, let's change that back to running after NETWORKING/SERVERS again.
+# Running this after DAEMON indirectly caused named setup to happen after
+# ntpdate, and then we could not resolve the ntpdate server name. Fixing
+# this would require changing dependencies in a core or standard port
+# startup script, or requires a change to rc.conf to use an IP address
+# for ntpdate. Either of these approaches would require fixing all running
+# Emulab clusters out there. No thanks.
 #
 # Note that "mysql-client" no longer exists in today's world. Its sole
 # purpose is to run ldconfig and add the mysql library dir. Apparently
@@ -15,7 +24,7 @@
 #
 # PROVIDE: mysql
 # PROVIDE: mysql-testbed
-# REQUIRE: NETWORKING DAEMON mysql-client
+# REQUIRE: NETWORKING SERVERS mysql-client
 # BEFORE: testbed
 # KEYWORD: shutdown
 
