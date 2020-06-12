@@ -4,7 +4,7 @@
 #
 
 # PROVIDE: testbed
-# REQUIRE: mysql pubsub mfrisbeed
+# REQUIRE: tbdbcheck pubsub mfrisbeed
 # BEFORE: apache24
 # KEYWORD: shutdown
 

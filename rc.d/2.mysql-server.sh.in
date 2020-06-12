@@ -11,6 +11,7 @@
 # still exists. But we keep our mysql-client for right now.
 #
 # PROVIDE: mysql
+# PROVIDE: mysql-emulab
 # REQUIRE: NETWORKING SERVERS mysql-client
 # BEFORE: DAEMON
 # KEYWORD: shutdown
