@@ -252,6 +252,7 @@ if (@ARGV == 1 && ($exptuuid = parseinstance($ARGV[0], 1))) {
 	print STDERR "Must specify an experiment creator name, pid, port-offset, and instance\n";
 	usage();
     }
+    $exptname = "FAKE";
     @fqdns = @ARGV;
 }
 
@@ -342,11 +343,15 @@ sub createconfig($)
     $hosts{$fqdn}{'apikey'} = $1;
 
     #
-    # Drop the creator name/group into a file in the config directory.
+    # Drop the creator name/project into a file in the config directory.
     # These will be mapped to the aggregate equivalents and used to
     # update the config file.
     #
-    # XXX Assumes the group name is the same as the project name.
+    # XXX you might think we really want the creator's group here rather
+    # than the project...and you would be right. But the group name on the
+    # aggregate may be different than on the mothership and there is no
+    # non-local mapping for groups. The one thing we know is that, given
+    # the local project name, we can map that to the correct group.
     #
     if (open(FD, ">$metadir/creator")) {
 	print FD "$uid:$pid";
@@ -606,13 +611,15 @@ sub parsehostname($)
     if (@names < 3) {
 	fatal("Could not parse '$str' as FQDN");
     }
+    my @utnames = ();
     foreach my $n (@names) {
-	if ($n !~ /^[-a-zA-Z0-9]+$/) {
+	if ($n !~ /^([-a-zA-Z0-9]+)$/) {
 	    fatal("Invalid FQDN '$str'");
 	}
+	push(@utnames, $1);
     }
-    my $host = shift @names;
-    my $dom = join('.', @names);
+    my $host = shift @utnames;
+    my $dom = join('.', @utnames);
 
     return ($host, $dom);
 }

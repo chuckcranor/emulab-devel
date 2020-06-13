@@ -377,7 +377,15 @@ while (1) {
 		logit("$uuid: (Re)starting syncthing for active instance");
 		# reset the event counter
 		delete $syncthing{$uuid}{'lastscan'};
-		$sleeptime = 30;
+		#
+		# We shorten the wait time til the next pass, but not as
+		# much since restarting the syncthing will cause a complete
+		# scan to take place. For a wbstore of any consequences,
+		# it will likely still take longer than 120 seconds, but
+		# we can still catch a fair number with this.
+		#
+		$sleeptime = 120
+		    if ($checkint > 120);
 	    }
 	    $syncthing{$uuid}{'pid'} = $pid;
 	}
@@ -604,14 +612,36 @@ sub cleanupinstance($)
     if ($MAINSITE) {
 	my $domdir = "$confdir/$domain";
 	if (-e "$domdir/creator" && open(FD, "<$domdir/creator")) {
+	    my $_pid;
 	    my $val = <FD>;
 	    chomp $val;
 	    close(FD);
 	    if ($val =~ /^([^:]+):([^:]+)(?::(.*))?$/) {
 		$fuid = $1;
-		$fgid = $2;
+		# XXX this is a pid and not a gid (see below)
+		$_pid = $2;
 		$email = $3;
 	    }
+
+	    #
+	    # XXX The pid name is not always the unix group name. FreeBSD has
+	    # a 16-char group name limit and if the project name is longer
+	    # than 16 chars, the gid will be different. So we lookup the
+	    # project's unix_gid in the group table which does the necessary
+	    # mapping to the group name that really exists.
+	    #
+	    $fgid = $_pid;
+	    if ($_pid && length($_pid) > 16) {
+		require Group;
+
+		my $grp = Group->Lookup("$_pid/$_pid");
+		if ($grp) {
+		    $fgid = $grp->unix_name();
+		    print STDERR "$uuid: mapped pid '$_pid' to unix group '$fgid'\n"
+			if ($debug);
+		}
+	    }
+
 	}
 	if (-e "$domdir/experiment" && open(FD, "<$domdir/experiment")) {
 	    $val = <FD>;
@@ -721,13 +751,16 @@ sub isemptystore($$)
 		    # directory. If the user is creating empty directories
 		    # to record state, then they are going to lose...
 		    #
-		    if (-d "$_") {
-			if (opendir(SFD, "$_")) {
+		    if (-d "$datadir/$d/$_") {
+			if (opendir(SFD, "$datadir/$d/$_")) {
 			    while (my $entry = readdir(SFD)) {
 				# usual directory stuff
 				if ($entry eq "." || $entry eq "..") {
 				    next;
 				}
+				print STDERR "$i: cleanup found non-empty ".
+				    "subdir '$_' ('$entry'), must archive\n"
+				    if ($debug);
 				$empty = 0;
 				last;
 			    }
@@ -737,9 +770,10 @@ sub isemptystore($$)
 				  "assuming not empty--forcing archive");
 			    $empty = 0;
 			}
-			if ($empty) {
-			    next;
+			if (!$empty) {
+			    last;
 			}
+			next;
 		    }
 		    print STDERR "$i: cleanup found a file ('$_'), ".
 			"must archive\n"

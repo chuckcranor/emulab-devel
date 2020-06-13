@@ -186,7 +186,7 @@ unlink($tarball);
 exit(0);
 
 #
-# Map the mothership user and project names to ours.
+# Map the mothership user, group, and project names to ours.
 #
 sub getids()
 {
@@ -198,7 +198,10 @@ sub getids()
     close(FD);
     chomp $str;
     my ($msuid, $mspid) = split(':', $str);
-    my ($uid, $pid);
+    # XXX msgid is not always mspid, but it is as close as we can get
+    my $msgid = $mspid;
+
+    my ($uid, $gid, $pid);
 
     if ($MAINSITE) {
 	$uid = $msuid;
@@ -220,10 +223,32 @@ sub getids()
 	$pid = $proj->pid();
     }
 
-    print STDERR "getids: user: '$msuid'->'$uid', proj: '$mspid'->'$pid'\n"
+    #
+    # XXX Sigh...the group name is usually the same as the project name,
+    # but this is not always the case. FreeBSD has a 16-char group
+    # name limit and if the project name is longer than 16 chars, the gid
+    # will be different. So we lookup the project's unix_gid in the group
+    # table which does the necessary mapping (truncation) to the group name
+    # that really exists.
+    #
+    #
+    my $gid = $pid;
+    if (length($pid) > 16) {
+	require Group;
+
+	my $grp = Group->Lookup("$pid/$pid");
+	if ($grp) {
+	    $gid = $grp->unix_name();
+	    print STDERR "mapped pid '$pid' to unix group '$gid'\n"
+		if ($debug);
+	}
+    }
+
+    print STDERR "getids: user: '$msuid'->'$uid', group: '$msgid'->'$gid', ".
+	"proj: '$mspid'->'$pid'\n"
 	if ($debug);
 
-    return ($msuid, $uid, $mspid, $pid);
+    return ($msuid, $uid, $msgid, $gid, $mspid, $pid);
 }
 
 #
@@ -232,7 +257,7 @@ sub getids()
 sub createdatadirs()
 {
     my $proj = $TBPROJ_DIR;
-    my (undef, undef, $mspid, $pid) = getids();
+    my (undef, undef, undef, $gid, $mspid, $pid) = getids();
     my $opath = "/proj/$mspid";
     my $npath = "$proj/$pid";
     my $cfile = "$tconfdir/$domain/config.xml";
@@ -296,10 +321,8 @@ sub createdatadirs()
     #
     # Collectively change the owner:group of the folders
     # Right now we just make the owner root and make the dirs group writable.
-    # Note also that the group name is the same as the project name.
     #
     my $uid = "root";
-    my $gid = $pid;
     if (system("chown -R $uid:$gid $npath/wbstore/$uuid")) {
 	print STDERR "$uuid: WARNING: ".
 	    "could not chown '$npath/wbstore/$uuid'\n"; 
