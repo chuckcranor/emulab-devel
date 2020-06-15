@@ -94,9 +94,6 @@ if ($TB ne "/usr/testbed") {
 use lib '@prefix@/lib';
 use libaudit;
 
-# For error log.
-my $errors = 0;
-
 #
 # Check args.
 #
@@ -156,8 +153,7 @@ system("$APACHE_START graceful") == 0
 $UID  = $SAVEUID;
 
 # Apache spits out stuff. No errors at this point, nothing to report.
-AuditEnd()
-    if (!$errors);
+AuditAbort();
 exit(0);
 
 sub fatal($)
