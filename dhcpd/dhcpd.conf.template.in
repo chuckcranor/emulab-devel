@@ -19,6 +19,9 @@ default-lease-time              36000;                  # 10 hours
 max-lease-time                  36000;                  # 10 hours
 ddns-update-style               none;                   # req'd vers 3 directive
 
+# Prevent logging to /var/log/messages
+log-facility			local5;
+
 # Define the PXE option space
 # Code 1: Multicast IP address of bootfile
 # Code 2: UDP port that client should monitor for MTFTP responses
