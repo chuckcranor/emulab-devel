@@ -175,9 +175,9 @@ fi
 if [ "$MCQUERIER" = "true" ]; then
     args="$args -Q 30"
     # XXX it is a v2 querier
-    sysctl net.inet.igmp.default_version=2
-    sysctl net.inet.igmp.legacysupp=1
-    sysctl net.inet.igmp.v2enable=1
+    /sbin/sysctl net.inet.igmp.default_version=2
+    /sbin/sysctl net.inet.igmp.legacysupp=1
+    /sbin/sysctl net.inet.igmp.v2enable=1
 fi
 if [ "$DEBUG" = "true" ]; then
    args="-ddD $args"
