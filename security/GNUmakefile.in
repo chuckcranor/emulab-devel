@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -71,6 +71,10 @@ genlastlog:	genlastlog.c
 install: $(addprefix $(INSTALL_LIBEXECDIR)/, $(BINS)) \
 	$(addprefix $(INSTALL_SBINDIR)/, $(SBINS)) \
 	$(addprefix $(INSTALL_DIR)/opsdir/libexec/, $(SETUID_CTRL_LIBX_PROGS))
+
+install-hosts-allow: hosts.allow
+	sudo $(INSTALL_DATA) hosts.allow /etc/hosts.allow
+	sudo scp hosts.allow $(USERNODE):/etc
 
 post-install:
 	@echo "post-install no longer required"
