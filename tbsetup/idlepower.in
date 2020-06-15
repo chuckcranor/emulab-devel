@@ -34,7 +34,7 @@ sub usage()
     exit(-1);
 }
 # Hidden switch: -r = root mode - used by idlemail
-my $optlist   = "nrs:d";
+my $optlist   = "nrs:dq";
 
 #
 # Configure variables
@@ -56,6 +56,7 @@ my $no_action = 0;
 my $seconds_of_idle;
 my $rootokay  = 0;
 my $debug     = 0;
+my $quiet     = 0; # Silence when running from crontab.
 
 # Untaint the path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -71,6 +72,7 @@ if (! getopts($optlist, \%options)) { usage(); }
 if (defined($options{"d"})) { $debug = 1; }
 if (defined($options{"n"})) { $no_action= 1; }
 if (defined($options{"r"})) { $rootokay = 1; }
+if (defined($options{"q"})) { $quiet = 1; }
 if (defined($options{"s"})) { 
     if ($options{"s"} =~ /^\d+$/) {
     	$seconds_of_idle = $options{'s'}; 
@@ -107,7 +109,8 @@ if (! TBGetSiteVar("general/idlepower_enable", \$idlepower_enable)) {
     exit(-1);
 }
 if (!$idlepower_enable) {
-    print "Idle power saving is globally disabled. Exiting ...\n";
+    print "Idle power saving is globally disabled. Exiting ...\n"
+	if (!$quiet);
     exit(0);
 }
 
@@ -168,11 +171,13 @@ while (my ($node,$type,$physnode,$class,$issubnode,$idle_time,$reserved,
     if ($type || $physnode || $class || $eventstate) {}
 }
 
-if (@nodes > 0) {
-    print "Powering off @nodes\n";
-} else {
-    print "No nodes suitable for powering off.\n";
-    exit(0);
+if (!$quiet) {
+    if (@nodes > 0) {
+	print "Powering off @nodes\n";
+    } else {
+	print "No nodes suitable for powering off.\n";
+	exit(0);
+    }
 }
 exit(0)
     if ($no_action);
@@ -189,5 +194,4 @@ if ($?) {
 	     $TBOPS);
     exit(-1);
 }
-
-
+exit(0);
