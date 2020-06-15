@@ -1809,7 +1809,7 @@ okay:
 	else {
 	    addConfig($vninfo, "root = '/dev/$rootvdisk ro'", 2);
 	    addConfig($vninfo, "extra = ".
-		      "        'console=hvc0 xencons=tty apparmor=0 selinux=0'", 2);
+		      "        'console=hvc0 xencons=tty'", 2);
 	}
     }
   done:
