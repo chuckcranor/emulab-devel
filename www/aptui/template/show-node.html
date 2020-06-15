@@ -345,7 +345,8 @@
 		<% }); %>
 		<% _.each(fields.typeattributes, function(val, key) { %>
 		  <% if (!(key == "processor" ||
-		          key.startsWith("hw_"))) { return; } %>
+		           key == "dom0mem" ||
+		           key.startsWith("hw_"))) { return; } %>
 		  <tr>
 		    <td><%- key %></td>
 		    <td><%- val %></td>
