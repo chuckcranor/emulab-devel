@@ -68,7 +68,7 @@ sub Install($$$)
 	Phase "crontab", "Editing $CRONTAB", sub {
 	    DoneIfEdited($CRONTAB);
 	    AppendToFileFatal($CRONTAB,
-		  "15 \t3\t*\t*\t*\troot\t$RENEW");
+		  "15 \t3,13\t*\t*\t*\troot\t$RENEW");
 	};
 	Phase "restarting", "Restarting Apache server", sub {
 	    ExecQuietFatal("$APACHE_START_COMMAND restart www");
