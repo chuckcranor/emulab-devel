@@ -111,6 +111,11 @@ RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}cryptography>0:${PORTSDIR}/security/py-cryptography \
 	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml
 
+.if (${EMULAB_PORTVERSION} == "7.3")
+RUN_DEPENDS+=	\
+	${PYTHON_PKGNAMEPREFIX}certbot>0:${PORTSDIR}/security/py-certbot
+.endif
+
 # apache related ports
 RUN_DEPENDS+=	\
 	${LOCALBASE}/${APACHEMODDIR}/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
