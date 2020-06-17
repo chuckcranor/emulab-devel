@@ -13,7 +13,7 @@ my $DESCRIPTORS   = "$TOP_SRCDIR/install/descriptors-v4.xml";
 my $GENDEV        = "$TOP_SRCDIR/install/descriptors-gendev.xml";
 my @MBRS          = ("emulab-mbr.dd", "emulab-mbr2.dd", "emulab-mbr3.dd");
 
-my $LINUXSTDIMAGE = "UBUNTU16-64-STD";
+my $LINUXSTDIMAGE = "UBUNTU18-64-STD";
 my $FBSDSTDIMAGE  = "FBSD113-64-STD";
 my $DEFAULTIMAGE  = $LINUXSTDIMAGE;
 
@@ -21,6 +21,8 @@ my $DEFAULTIMAGE  = $LINUXSTDIMAGE;
 # We now use image import.
 #
 my %STDIMAGES     = (
+    "UBUNTU18-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=24543775-7e30-11e8-b228-90e2ba22fee4",
+    # XXX leave this for now
     "UBUNTU16-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=7683ca8e-5e37-11e6-ac8a-90e2ba22fee4",
     "CENTOS7-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=6fa68fd6-9163-11e6-ac8c-90e2ba22fee4",
     "FBSD113-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=28b07ebd-8957-11e9-8677-e4434b2381fc",
@@ -36,8 +38,8 @@ my %OLDIMAGES     = (
 );
 
 my %NEWIMAGES     = (
-    "UBUNTU18-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=24543775-7e30-11e8-b228-90e2ba22fee4",
-    "FBSD120-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=9865bb9c-78eb-11e9-8a5c-e4434b2381fc",
+    "UBUNTU20-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=bb5bfa77-a5a7-11ea-b1eb-e4434b2381fc",
+    "FBSD121-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=534f70f7-0d66-11ea-b1eb-e4434b2381fc",
 );
 
 #
