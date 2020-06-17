@@ -582,6 +582,8 @@ $routing = array("geni-login" =>
 			      "guest"   => true,
 			      "methods" => array("GetHealthStatus" =>
 						    "Do_GetHealthStatus",
+						 "GetHealthStatusExtended" =>
+                                                   "Do_GetHealthStatusExtended",
 						 "GetWirelessStatus" =>
 						    "Do_GetWirelessStatus")),
 		 "memlane" =>

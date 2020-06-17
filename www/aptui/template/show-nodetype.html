@@ -344,7 +344,8 @@
 		<% _.each(fields.attributes, function(value, name) { %>
 		  <% if (!window.ISADMIN &&
 		         !(name == "processor" ||
-		          name.startsWith("hw_"))) { return; } %>
+			   name == "dom0mem" ||
+		           name.startsWith("hw_"))) { return; } %>
 		  <% if (typeof(value) !== "object") { %>
 		    <tr>
 		      <td>
