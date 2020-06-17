@@ -885,6 +885,26 @@ class Instance
         }
         return $skiptypes;
     }
+    
+    #
+    # Return a list of frequency ranges in use.
+    #
+    # Used for the front page code!
+    #
+    function RFRangesUnUse()
+    {
+        global $PORTAL_HEALTH;
+        $result = array();
+
+        $query_result =
+            DBQueryFatal("select freq_low,freq_high ".
+                         "from apt_instance_rfranges");
+	while ($row = mysql_fetch_array($query_result)) {
+            $result[] = array("freq_low"  => $row["freq_low"],
+                              "freq_high" => $row["freq_high"]);
+        }
+        return $result;
+    }
 }
 
 class InstanceHistory
@@ -1290,9 +1310,10 @@ class ExtensionInfo
 
 # $amlist, $fedlist, and $status are all output arrays
 function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
-                                  $extended = false, $user = null) {
+                                  $extended = false, $user = null,
+                                  $frontpage = false) {
     global $TBMAINSITE, $DEFAULT_AGGREGATE_URN, $CHECKLOGIN_USER;
-    $am_array = Instance::DefaultAggregateList($user);
+    $am_array = Aggregate::DefaultAggregateList($user, $frontpage);
 
     #
     # If not the Cloudlab Portal then we get local status only.

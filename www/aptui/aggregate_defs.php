@@ -327,7 +327,7 @@ class Aggregate
                 $allowed = 1;
             }
             # For the frontpage code, send everything.
-            elseif ($frontpage) {
+            elseif ($frontpage || $PORTAL_HEALTH) {
                 $allowed = 1;
             }
             elseif ($aggregate->adminonly() && !ISADMIN()) {
@@ -514,11 +514,32 @@ class Aggregate
         while ($row = mysql_fetch_array($query_result)) {
             $urn      = $row["aggregate_urn"];
             $node_id  = $row["node_id"];
+            $alive    = true;
 
-            if (!array_key_exists($urn, $blob)) {
-                $blob[$urn] = array();
+            #
+            # Grab the aggregate. We use the status info to determine if the
+            # aggregate is alive (reachable).
+            #
+            if ($aggregate = Aggregate::Lookup($urn)) {
+                if (!array_key_exists($urn, $blob)) {
+                    $blob[$urn] = array();
+                }
+                if ($row["installation_type"] == "BS") {
+                    #
+                    # The CNUC determines if a base station is alive.
+                    #
+                    $cnuc = Node::Lookup($row["cnuc_id"]);
+                    if ($cnuc && $cnuc->RealNodeStatus() != "up") {
+                        $alive = false;
+                    }
+                }
+                elseif ($aggregate->status() != "up" || $aggregate->disabled()){
+                    $alive = false;
+                }
+                $row["alive"] = $alive;
+                $row["reachable"] = $alive;
+                $blob[$urn][$node_id] = $row;
             }
-            $blob[$urn][$node_id] = $row;
         }
         return $blob;
     }

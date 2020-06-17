@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -23,10 +23,10 @@
 #
 chdir("..");
 include_once("geni_defs.php");
+include_once("node_defs.php");
 chdir("apt");
 include_once("instance_defs.php");
 
-# Fetch overall cluster aggregate health status.
 # Can be done without logging in (for front page status).
 function Do_GetHealthStatus()
 {
@@ -35,8 +35,24 @@ function Do_GetHealthStatus()
     $fedlist    = array();
     $status     = array();
     $PORTAL_HEALTH = 1;
-    CalculateAggregateStatus($amlist, $fedlist, $status);
+    CalculateAggregateStatus($amlist, $fedlist, $status, true, null, true);
+
     SPITAJAX_RESPONSE($status);
+}
+
+# Fetch overall cluster aggregate health status.
+# Can be done without logging in (for front page status).
+function Do_GetHealthStatusExtended()
+{
+    global $ajax_args, $PORTAL_HEALTH;
+    $amlist     = array();
+    $fedlist    = array();
+    $status     = array();
+    $radioinfo  = Aggregate::RadioInfo();
+    $rfranges   = Instance::RFRangesUnUse();
+    $PORTAL_HEALTH = 1;
+    CalculateAggregateStatus($amlist, $fedlist, $status, true, null, true);
+    SPITAJAX_RESPONSE(array($status, $amlist, $radioinfo, $rfranges));
 }
 
 # Fetch wireless health status.
