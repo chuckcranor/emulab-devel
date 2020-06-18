@@ -144,6 +144,7 @@ CREATE TABLE `apt_aggregate_radioinfo` (
   `receive_frequencies` text,
   `power_id` varchar(32) default NULL,
   `cnuc_id` varchar(32) default NULL,
+  `monitored` tinyint(1) NOT NULL default '0',
   `notes` text,
   PRIMARY KEY  (`aggregate_urn`,`node_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
