@@ -110,6 +110,7 @@ REQUIRE_APTFORMS();
 AddLibrary("js/freqgraphs.js");
 AddTemplateList(array("frequency-graph", "waitwait-modal", "oops-modal"));
 SPITREQUIRE("js/frequency-graph.js",
+            "<script src='js/lib/streamsaver.js'></script>\n".
             "<script src='js/lib/pako/pako.min.js'></script>\n".
             "<script src='js/lib/d3.v5.js'></script>\n");
 SPITFOOTER();

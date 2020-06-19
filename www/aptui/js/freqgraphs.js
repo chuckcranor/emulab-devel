@@ -706,12 +706,28 @@ window.ShowFrequencyGraph = (function ()
 	    // Prune the items and then we sort them by the timestamp
 	    var items   = [];
 	    // nuc2:rf0-1588699912.csv.gz
-	    var re = /([^:]+):([^\-]+)\-(\d+)\.csv\.gz/;
+	    var re1 = /([^:]+):([^\-]+)\-(\d+)\.csv\.gz/;
+	    // nuc2:rf0.csv.gz
+	    var re2 = /([^:]+):([^\-]+)\.csv\.gz/;
 	    _.each(listing, function(info, index) {
 		var name  = info.name;
-		var match = name.match(re);
+		var match = name.match(re1);
 		//console.info(name, match);
 		if (!match) {
+		    if (!args.logid) {
+			/*
+			 * XXX we were loading whatever the latest file
+			 * was, so no timestamp in the timestamp. So find
+			 * it by name in the listing and use the modtime.
+			 * Need to stop using the file name for this.
+			 */
+			match = name.match(re2);
+			if (match) {
+			    $(".frequency-graph-date")
+				.html(moment(info.lastmod, "X").format("L LTS"))
+				.removeClass("hidden");
+			}
+		    }
 		    return;
 		}
 		// Prune out other radios and interfaces.
@@ -772,6 +788,50 @@ window.ShowFrequencyGraph = (function ()
 			 callback);
     }
 
+    /*
+     * Setup the download button to download the CSV data as a file.
+     */
+    function SetupDownload(args, csvdata)
+    {
+	var selector = args.selector + " .download-button";
+	var filename = args.node_id + ":" + args.iface +
+	    (args.logid ? "-" + args.logid : "") + ".csv";
+
+	console.info("Download", args, filename);
+	$(selector)
+	    .unbind("click")
+	    .removeAttr("disabled")
+	    .click(function (event) {
+		event.preventDefault();
+	    
+		var blob     = new Blob([csvdata], {type: 'text/csv'});
+		const fileStream = streamSaver.createWriteStream(filename, {
+		    size: blob.size 
+		});
+
+		const readableStream = blob.stream();
+
+		// more optimized pipe version
+		// (Safari may have pipeTo but it's useless
+		//   without the WritableStream)
+		if (window.WritableStream && readableStream.pipeTo) {
+		    return readableStream.pipeTo(fileStream)
+			.then(() => console.log('done writing'));
+		}
+		
+		// Write (pipe) manually
+		window.writer = fileStream.getWriter();
+		
+		const reader = readableStream.getReader();
+		const pump = () => reader.read()
+		    .then(res => res.done
+			  ? writer.close()
+			  : writer.write(res.value).then(pump));
+
+		pump();
+	    });
+    }
+
     function UpdateGraph(args)
     {
 	/*
@@ -795,6 +855,9 @@ window.ShowFrequencyGraph = (function ()
 	}
 	console.info(url);
 
+	// Disable the download button until we have the data.
+	$(args.selector + " .download-button").attr("disabled", "disabled");
+
 	GetBlob(url,
 		function (arrayBuffer) {
 		    console.info("gz version");
@@ -802,6 +865,7 @@ window.ShowFrequencyGraph = (function ()
 		    
 		    var data = d3.csvParse(output, type);
 		    CreateBinGraph(args, data);
+		    SetupDownload(args, output);
 		},
 		function () {
 		    alert("Could not get data file: " + url);
