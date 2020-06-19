@@ -645,7 +645,7 @@ $routing = array("geni-login" =>
                         ),
 		 "frequency-graph" =>
 			array("file"    => "frequency-graph.ajax",
-			      "guest"   => false,
+			      "guest"   => true,
 			      "methods" => array("GetFrequencyData" =>
 						     "Do_GetFrequencyData",
                                                  "GetListing" =>

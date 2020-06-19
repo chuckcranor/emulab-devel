@@ -32,8 +32,15 @@ $page_title = "Frequency Graphs";
 # Get current user.
 #
 RedirectSecure();
-$this_user = CheckLoginOrRedirect();
-$isadmin   = (ISADMIN() ? 1 : 0);
+$this_user = CheckLogin($check_status);
+$isadmin   = 0;
+# Operate as a guest user if not logged in,
+if (! ($check_status & CHECKLOGIN_LOGGEDIN)) {
+    $this_user = null;
+}
+elseif (ISADMIN()) {
+    $isadmin = 1;
+}
 
 #
 # Verify page arguments.
@@ -110,6 +117,7 @@ REQUIRE_APTFORMS();
 AddLibrary("js/freqgraphs.js");
 AddTemplateList(array("frequency-graph", "waitwait-modal", "oops-modal"));
 SPITREQUIRE("js/frequency-graph.js",
+            "<script src='js/lib/ponyfill.min.js'></script>\n".
             "<script src='js/lib/streamsaver.js'></script>\n".
             "<script src='js/lib/pako/pako.min.js'></script>\n".
             "<script src='js/lib/d3.v5.js'></script>\n");

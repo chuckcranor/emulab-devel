@@ -808,8 +808,14 @@ window.ShowFrequencyGraph = (function ()
 		const fileStream = streamSaver.createWriteStream(filename, {
 		    size: blob.size 
 		});
-
-		const readableStream = blob.stream();
+		
+		var readableStream;
+		if (0) {
+		    readableStream = blob.stream();
+		}
+		else {
+		    readableStream = new Response(Blob).body;
+		}
 
 		// more optimized pipe version
 		// (Safari may have pipeTo but it's useless
@@ -818,11 +824,11 @@ window.ShowFrequencyGraph = (function ()
 		    return readableStream.pipeTo(fileStream)
 			.then(() => console.log('done writing'));
 		}
-		
 		// Write (pipe) manually
 		window.writer = fileStream.getWriter();
 		
 		const reader = readableStream.getReader();
+		
 		const pump = () => reader.read()
 		    .then(res => res.done
 			  ? writer.close()
