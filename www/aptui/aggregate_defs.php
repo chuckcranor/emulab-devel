@@ -22,6 +22,9 @@
 # }}}
 #
 #
+chdir("..");
+include_once("node_defs.php");
+chdir("apt");
 
 # Set this variable when fetching health status of portal
 # aggregates instead of using them.
