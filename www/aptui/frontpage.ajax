@@ -37,6 +37,9 @@ function Do_GetHealthStatus()
     $PORTAL_HEALTH = 1;
     CalculateAggregateStatus($amlist, $fedlist, $status, true, null, true);
 
+    # Allow this to be fetched from pages loaded anywhere
+    header("Access-Control-Allow-Origin: *");
+
     SPITAJAX_RESPONSE($status);
 }
 
@@ -52,6 +55,10 @@ function Do_GetHealthStatusExtended()
     $rfranges   = Instance::RFRangesUnUse();
     $PORTAL_HEALTH = 1;
     CalculateAggregateStatus($amlist, $fedlist, $status, true, null, true);
+
+    # Allow this to be fetched from pages loaded anywhere
+    header("Access-Control-Allow-Origin: *");
+
     SPITAJAX_RESPONSE(array($status, $amlist, $radioinfo, $rfranges));
 }
 
@@ -61,6 +68,10 @@ function Do_GetWirelessStatus()
 {
     $status     = array();
     CalculateWirelessStatus($status);
+
+    # Allow this to be fetched from pages loaded anywhere
+    header("Access-Control-Allow-Origin: *");
+
     SPITAJAX_RESPONSE($status);
 }
 
