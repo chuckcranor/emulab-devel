@@ -3,12 +3,13 @@
 	<table id='radioinfo-table' "class='tablesorter'>
 	  <thead>
 	    <tr>
-	      <th>Cluster</th>
+	      <th>Location</th>
 	      <th>Node</th>
 	      <th>Radio Type</th>
 	      <th class="sorter-false">TX Ranges</th>
 	      <th class="sorter-false">RX Ranges</th>
 	      <th class="sorter-false">Monitor</th>
+	      <th class="sorter-false">Free?</th>
 	      <th class="sorter-false">Notes</th>
 	    </tr>
 	  </thead>
@@ -16,7 +17,12 @@
 	    <% _.each(radioinfo, function(aggregate, urn) { %>
 	      <% _.each(aggregate, function(details, node_id) { %>
 		<tr>
-		  <td><%- amlist[urn].nickname %></td>
+		  <td><a href="powder-map.php?location=<%- details.location %>"
+			 class="location"
+			 data-urn="<%- urn %>"
+			 data-location="<%- details.location %>"
+			 data-type="<%- details.installation_type %>">
+		    <%- details.location %></a></td>
 		  <td><%- details.node_id %></td>
 		  <td><%- details.radio_type %></td>
 		  <td><%- details.transmit_frequencies %></td>
@@ -34,6 +40,7 @@
 			n/a
 		    <% } %>
 		  </td>
+		  <td><%- details.available ? "Yes" : "No" %></td>
 		  <td><%- details.notes %></td>
 		</tr>
 	      <% }); %>

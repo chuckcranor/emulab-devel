@@ -32,6 +32,25 @@ $(function ()
 		// initialize zebra
 		widgets: ["zebra"],
 	    });
+
+	if (0) {
+	    var map = null;
+	    $(".location").click(function (event) {
+		event.preventDefault();
+		if (map == null || map.closed) {
+		    map = window.open('powder-map.php', 'Power Map');
+		}
+		else {
+		    map.focus();
+		}
+		var args = {
+		    "urn"      : $(this).data("urn"),
+		    "location" : $(this).data("location"),
+		    "type"     : $(this).data("type"),
+		};
+		map.postMessage(args);
+	    });
+	}
     }
     $(document).ready(initialize);
 });

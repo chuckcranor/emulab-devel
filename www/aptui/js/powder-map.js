@@ -24,6 +24,9 @@ $(function ()
 	if (window.EXPERIMENT !== undefined) {
 	    options["experiment"] = window.EXPERIMENT;
 	}
+	if (window.LOCATION !== undefined) {
+	    options["location"] = window.LOCATION;
+	}
 	ShowPowderMap(".powder-mapview", options);
     }
     $(document).ready(initialize);

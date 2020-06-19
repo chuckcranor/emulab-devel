@@ -48,7 +48,8 @@ $showmobile    = ($this_user ? 1 : 0);
 # Optional views
 $optargs = OptionalPageArguments("baseonly",   PAGEARG_BOOLEAN,
                                  "experiment", PAGEARG_UUID,
-                                 "nomobile",   PAGEARG_BOOLEAN);
+                                 "nomobile",   PAGEARG_BOOLEAN,
+                                 "location",   PAGEARG_STRING);
 
 if ($experiment) {
     $baseonly   = 0;
@@ -83,6 +84,9 @@ echo "window.SHOWMOBILE    = $showmobile;\n";
 echo "window.BASEONLY      = $baseonly;\n";
 if ($experiment) {
     echo "window.EXPERIMENT = '$experiment';\n";
+}
+if ($location) {
+    echo "window.LOCATION   = '$location';\n";
 }
 echo "</script>\n";
 

@@ -32,8 +32,15 @@ $page_title = "Radio Info";
 # Get current user.
 #
 RedirectSecure();
-$this_user = CheckLoginOrRedirect();
-$isadmin   = (ISADMIN() ? 1 : 0);
+$this_user = CheckLogin($check_status);
+$isadmin   = 0;
+# Operate as a guest user if not logged in,
+if (! ($check_status & CHECKLOGIN_LOGGEDIN)) {
+    $this_user = null;
+}
+elseif (ISADMIN()) {
+    $isadmin = 1;
+}
 
 SPITHEADER(1);
 

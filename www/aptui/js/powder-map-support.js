@@ -197,6 +197,11 @@ window.ShowPowderMap = (function()
 			    MarkExperimentResources();
 			    Loaded = true;
 			}
+			else if (_.has(Options, "location")) {
+			    MarkLocation(Options.location);
+			}
+			window.addEventListener("message",
+						receiveMessage, false);
 		    });
 
 		if (Options.showfilter) {
@@ -373,6 +378,27 @@ window.ShowPowderMap = (function()
 		MarkBaseStation(details.name, false);
 	    }
 	});
+    }
+
+    /*
+     * Mark a specific location at startup.
+     */
+    function MarkLocation(location)
+    {
+	_.each(Layers["FE"].data, function (details, urn) {
+	    if (details.name == location) {
+		MarkFixedEndpoint(details.name, false);
+		View.popup.open({features :[details.graphic]});
+	    }
+	});
+
+	_.each(Layers["BS"].data, function (details) {
+	    if (details.name == location) {
+		MarkBaseStation(details.name, false);
+		View.popup.open({features :[details.graphic]});
+	    }
+	});
+
     }
 
     /*
@@ -680,6 +706,7 @@ window.ShowPowderMap = (function()
 		    popupTemplate: popup,
 		});
 		layer.add(graphic);
+		details["graphic"] = graphic;
 
 		// Add label text below the icon
 		var textGraphic = new Graphic({
@@ -1067,6 +1094,7 @@ window.ShowPowderMap = (function()
 		    popupTemplate: popup,
 		});
 		layer.add(graphic);
+		details["graphic"] = graphic;
 
 		// Add label text below the icon
 		var textGraphic = new Graphic({
@@ -1566,6 +1594,38 @@ window.ShowPowderMap = (function()
 	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
 	
 	return item.getElementsByTagNameNS(EMULAB_NS, tag);
+    }
+
+    // Receive messages to mark locations.
+    function receiveMessage(event)
+    {
+	console.info(event.data);
+	
+	UnmarkFixedEndpoints();
+	UnmarkBaseStations();
+	
+	if (event.data.type == "BS") {
+	    MarkBaseStation(event.data.location, false);
+	}
+	else if (event.data.type == "FE") {
+	    MarkFixedEndpoint(event.data.location, false);
+
+	    var endpoints = Layers["FE"].data;
+	    _.each(endpoints, function (details) {
+		if (details.name == event.data.location) {
+		    if (View.popup) {
+			View.popup.close();
+		    }
+		    View.goTo({
+			target:  details.graphic,
+			animate: true
+		    })
+			.then(function() {
+			    View.popup.open({features :[details.graphic]});
+			});
+		}
+	    });
+	}
     }
 
     return function(id, options)
