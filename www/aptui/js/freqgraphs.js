@@ -791,7 +791,7 @@ window.ShowFrequencyGraph = (function ()
     /*
      * Setup the download button to download the CSV data as a file.
      */
-    function SetupDownload(args, csvdata)
+    function SetupDownloadOld(args, csvdata)
     {
 	var selector = args.selector + " .download-button";
 	var filename = args.node_id + ":" + args.iface +
@@ -838,6 +838,16 @@ window.ShowFrequencyGraph = (function ()
 	    });
     }
 
+    function SetupDownload(args, url)
+    {
+	console.info("Download", url);
+	var selector = args.selector + " .download-button";
+
+	$(selector)
+	    .attr("href", url + "&ajax_args[download]=1")
+	    .removeAttr("disabled");
+    }
+
     function UpdateGraph(args)
     {
 	/*
@@ -871,7 +881,7 @@ window.ShowFrequencyGraph = (function ()
 		    
 		    var data = d3.csvParse(output, type);
 		    CreateBinGraph(args, data);
-		    SetupDownload(args, output);
+		    SetupDownload(args, url);
 		},
 		function () {
 		    alert("Could not get data file: " + url);

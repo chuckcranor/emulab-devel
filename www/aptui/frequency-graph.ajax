@@ -82,6 +82,10 @@ function Do_GetFrequencyData()
     if (isset($ajax_args["archived"]) && $ajax_args["archived"] == "1") {
         $archived = 1;
     }
+    $download = 0;
+    if (isset($ajax_args["download"]) && $ajax_args["download"] == "1") {
+        $download = 1;
+    }
     $url = $aggregate->weburl() . "/rfmonitor/" .
         ($archived ? "/archive/" : "") .
         "${node_id}:${iface}${logid}.csv.gz";
@@ -91,6 +95,15 @@ function Do_GetFrequencyData()
     if (!$socket) {
         SPITAJAX_ERROR(-1, "Could not open URL");
         return;
+    }
+    if ($download) {
+        $headers = $http_response_header;
+        
+        foreach ($headers as $k => $v) {
+            header($v);
+        }
+        header("Content-Disposition: inline; ".
+               "filename='${node_id}:${iface}${logid}.csv.gz'");
     }
     fpassthru($socket);
     fclose($socket);
