@@ -1794,8 +1794,13 @@ sub MaxSwapIn($$$) {
     my ($class, $experiment, $type) = @_;
     my $MAX = 10000;
     my $overflow;
+    my $details;
+
+    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read");        
     
-    my $reservations = LookupAll( $class, $type );
+    my $reservations = LookupAll( $class, $type, undef, \$details );
+    #print $details . "\n" if ($type eq "d430");
+
     foreach my $res ( @$reservations ) {
 	if( defined( $res->pid() ) && defined( $res->eid() ) &&
 	    $res->pid() eq $experiment->pid() &&
@@ -1822,6 +1827,7 @@ sub MaxSwapIn($$$) {
 	   !IsFeasible( $class, $reservations, undef, undef, \$overflow ) ) {
 	$reservation->SetNodes( $reservation->nodes() - $overflow );
     }
+    DBQueryFatal("unlock tables");
 
     my $avail = $reservation->nodes() > 0 ? $reservation->nodes() : 0;
 
