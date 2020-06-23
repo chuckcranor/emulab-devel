@@ -3469,6 +3469,7 @@ sub CreateDefsFile($)
     my $bossnode_hostname  = $emulabconfig{"BOSSNODE"}; 
     my $opsnode_hostname   = $emulabconfig{"OPSNODE"}; 
     my $fsnode_hostname    = $emulabconfig{"FSNODE"};
+    my $wwwnode_hostname   = "www";
     my $ourdomain	   = $domain;
     my $thishomebase       = $eid;
     my $cookiesuffix       = $eid;
