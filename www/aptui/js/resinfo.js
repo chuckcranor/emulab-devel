@@ -13,6 +13,8 @@ $(function ()
     var rangeTemplate   = _.template(templates["range-list"]);
     var amlist          = null;
     var FEs             = {};  // Powder
+    var radioinfo       = {};  // Powder
+    var matrixinfo      = {};  // Powder
     var isadmin         = false;
 
     function initialize()
@@ -22,7 +24,15 @@ $(function ()
 	isadmin  = window.ISADMIN;
 	amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 	console.info("amlist", amlist);
-
+	if (window.ISPOWDER) {
+	    radioinfo = JSON.parse(
+		_.unescape($('#radioinfo-json')[0].textContent));
+	    console.info("radioinfo", radioinfo);
+	    
+	    matrixinfo = JSON.parse(
+		_.unescape($('#matrixinfo-json')[0].textContent));
+	    console.info("matrixinfo", matrixinfo);
+	}
 	GeneratePageBody();
 
 	// Now we can do this. 
@@ -49,44 +59,62 @@ $(function ()
 	});
 	$('#main-body').html(html);
 	// Per clusters rows filled in with templates.
-	_.each(amlist, function(details, urn) {
+
+	/*
+	 * Power is a spectial arrangement of graphs.
+	 */
+	if (window,ISPOWDER) {
+	    $('#powder-radios .counts-panel')
+		.html(totalsTemplate({"title" : "Radios"}));
+
+	    $('#powder-servers .counts-panel')
+		.html(totalsTemplate({"title" : "Servers"}));
+
+  	    $('#powder-servers .resgraph-panel')
+		.html(graphTemplate({
+		    "graphid"        : "resgraph-powder-servers",
+		    "title"          : "Powder Server",
+		    "urn"            : window.EMULABURN,
+		    "showhelp"       : true,
+		    "showfullscreen" : false
+		}));
+
+	    $('#powder-matrix .counts-panel')
+		.html(totalsTemplate({"title" : "Attenuator Matrix"}));
+	}
+	_.each(amlist, function (details, urn) {
 	    var graphid = 'resgraph-' + details.nickname;
 
-	    // Powder; these go in a combined graph.
-	    if (details.isFE) {
-		FEs[urn] = details;
-		return;
+	    if (window.ISPOWDER) {
+		// Powder; these go in a combined graph.
+		if (details.isFE) {
+		    FEs[urn] = details;
+		    return;
+		}
+		// Powder; Emulab was handled above.
+		if (details.nickname == "Emulab") {
+		    return;
+		}
 	    }
+	    
 	    $('#' + details.nickname + " .counts-panel")
-		.html(totalsTemplate({"details"      : details,
-				      "urn"          : urn,
-				      "title"        : details.nickname}));
+		.html(totalsTemplate({"title" : details.nickname}));
 
-	    if (window.ISPOWDER && details.radiotypes) {
-  		$('#' + details.nickname + " .resgraph-panel-radios")
-		    .html(graphTemplate({"details"        : details,
-					 "graphid"        : graphid + "-radios",
-					 "title"          : "Powder Radio",
-					 "urn"            : urn,
-					 "showhelp"       : true,
-					 "showfullscreen" : false}));
-	    }
-	    $('#' + details.nickname + " .resgraph-panel-servers")
-		.html(graphTemplate({"details"        : details,
-				     "graphid"        : graphid + "-servers",
-				     "title"          :
-				     (!window.ISPOWDER ?
-				      details.nickname :
-				      details.nickname + " Server"),
-				     "urn"            : urn,
-				     "showhelp"       : true,
-				     "showfullscreen" : false}));
+	    $('#' + details.nickname + " .resgraph-panel")
+		.html(graphTemplate({
+		    "details"        : details,
+		    "graphid"        : graphid + "-servers",
+		    "title"          : details.nickname,
+		    "urn"            : urn,
+		    "showhelp"       : true,
+		    "showfullscreen" : false
+		}));
 	});
-	if (_.size(FEs)) {
+	if (window.ISPOWDER && _.size(FEs)) {
 	    $('#fixed-endpoints .counts-panel')
 		.html(totalsTemplate({"title" : "Fixed Endpoints"}));
 
-	    $("#fixed-endpoints .resgraph-panel-servers")
+	    $("#fixed-endpoints .resgraph-panel")
 		.html(graphTemplate({"graphid"        : "resgraph-FEs",
 				     "title"          : "Fixed Endpoint",
 				     "showhelp"       : true,
@@ -124,12 +152,18 @@ $(function ()
 		var graphid = 'resgraph-' + details.nickname;
 		var countid = details.nickname + " .counts-panel";
 
-		// Powder
-		if (details.isFE) {
-		    ProcessFE(urn, json);
-		    return;
+		if (window.ISPOWDER) {
+		    // FEs all go into a single graph.
+		    if (details.isFE) {
+			ProcessFE(urn, json);
+			return;
+		    }
+		    // Emulab handled specially.
+		    if (details.nickname == "Emulab") {
+			ProcessPowder(urn, json);
+			return;
+		    }
 		}
-		
 		// Kill the spinners
 		$('#' + details.nickname + ' .resgraph-spinner')
 		    .addClass("hidden");
@@ -146,48 +180,17 @@ $(function ()
 		var forecast  = json.value.forecast;
 		var skiptypes = json.value.prunelist;
 
-		// Just POWDER
-		if (window.ISPOWDER && details.radiotypes) {
-		    /*
-		     * We want to show radio types, and any reservable
-		     * nodes that are one of the radio types. So extend
-		     * the radiotypes array.
-		     */
-		    _.each(details.reservable_nodes, function (type, node_id) {
-			if (_.has(details.radiotypes, type)) {
-			    details.radiotypes[node_id] = true;
-			}
-		    })
-		    var radioskiptypes = {};
-		    Object.assign(radioskiptypes, skiptypes);
-		    Object.assign(radioskiptypes, details.radiotypes);
-		    
-		    ShowResGraph({"forecast"       : forecast,
-				  "selector"       : graphid + "-radios",
-				  "foralloc"       : true,
-				  "maxdays"        : 14,
-				  "skiptypes"      : null,
-				  "showtypes"      : details.radiotypes,
-				  "click_callback" : null});
-		    ShowResGraph({"forecast"       : forecast,
-				  "selector"       : graphid + "-servers",
-				  "foralloc"       : true,
-				  "skiptypes"      : radioskiptypes,
-				  "showtypes"      : null,
-				  "click_callback" : null});
-		}
-		else {
-		    ShowResGraph({"forecast"       : forecast,
-				  "selector"       : graphid + "-servers",
-				  "foralloc"       : true,
-				  "skiptypes"      : skiptypes,
-				  "click_callback" : null});
-		}
+		ShowResGraph({"forecast"       : forecast,
+			      "selector"       : graphid + "-servers",
+			      "foralloc"       : true,
+			      "skiptypes"      : skiptypes,
+			      "click_callback" : null});
+		
 		/*
 		 * Fill in the counts panel. The first tuple in the forecast
 		 * for each type is the immediately available node count.
 		 */
-		GenerateCountPanel(urn, countid, forecast, skiptypes);
+		GenerateCountPanel(urn, countid, forecast, skiptypes, false);
 	    };
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
 						"ReservationInfo",
@@ -197,7 +200,85 @@ $(function ()
 	});
     }
 
-    function GenerateCountPanel(urn, selector, forecast, skiptypes)
+    /*
+     * Powder treats Emulab as three difference groups.
+     */
+    function ProcessPowder(urn, json)
+    {
+	var details  = amlist[urn];
+	var forecast = {};
+
+	// Kill the spinners
+	$('#powder-radios .resgraph-spinner, ' +
+	  '#powder-matrix .resgraph-spinner, ' +
+	  '#powder-servers .resgraph-spinner')
+	    .addClass("hidden");
+
+	if (json.code) {
+	    console.log("Could not get reservation data for " +
+			details.name + ": " + json.value);
+
+	    $('#powder-radios .resgraph-error, ' +
+	      '#powder-matrix .resgraph-error, ' +
+	      '#powder-servers .resgraph-error')
+		.html(json.value)
+		.reemoveClass("hidden");
+
+	    return;
+	}
+	var forecasts = FixForecast(json.value.forecast);
+	
+	/*
+	 * The radio graph consists of individually reservable nodes that
+	 * are in the radioinfo object. No others.
+	 */
+	_.each(forecasts, function (info, key) {
+	    if (_.has(radioinfo[urn], key)) {
+		forecast[key] = info;
+	    }
+	});
+	ShowNewGraph(forecast, "radio-graph-body", "radio-graph-visavail")
+	GenerateCountPanel(urn, "powder-radios .counts-panel",
+			   forecast, null, true);
+
+	/*
+	 * The matrix graph consists of nodes in the matrixinfo object
+	 */
+	forecast = {};
+	_.each(forecasts, function (info, key) {
+	    if (_.has(matrixinfo, key)) {
+		forecast[key] = info;
+	    }
+	});
+	ShowNewGraph(forecast, "matrix-graph-body", "matrix-graph-visavail")
+	GenerateCountPanel(urn, "powder-matrix .counts-panel",
+			   forecast, null, true);
+	
+	/*
+	 * Servers are everything else.
+	 */
+	forecast = {};
+	_.each(forecasts, function (info, key) {
+	    if (! (_.has(matrixinfo, key) ||
+		   _.has(radioinfo[urn], key))) {
+		forecast[key] = info;
+	    }
+	});
+	var radioskiptypes = {};
+	Object.assign(radioskiptypes, json.value.prunelist);
+	Object.assign(radioskiptypes, details.radiotypes);
+	
+	ShowResGraph({"forecast"       : forecast,
+		      "selector"       : "resgraph-powder-servers",
+		      "foralloc"       : true,
+		      "skiptypes"      : radioskiptypes,
+		      "showtypes"      : null,
+		      "click_callback" : null});
+	GenerateCountPanel(urn, "powder-servers .counts-panel",
+			   forecast, json.value.prunelist, false);
+    }
+
+    function GenerateCountPanel(urn, selector, forecast, skiptypes, asnodes)
     {
 	var details = amlist[urn];
 	var html    = "";
@@ -234,12 +315,20 @@ $(function ()
 	    else {
 		weburl += "/portal/show-nodetype.php?type=" + type;
 	    }
-	    // Powder.
 	    if (details.isFE) {
-		type = details.abbreviation + "/" + type;
+		type = details.abbreviation + " " + type;
+	    }
+	    else if (0 && window.ISPOWDER) {
+		if (_.has(radioinfo[urn], type) && type.search(/\-/) < 0) {
+		    type = radioinfo[urn][type].location + " " + type;
+		}
 	    }
 	    weburl = "<a href='" + weburl + "' target=_blank>" + type + "</a>";
 
+	    // One node, use Yes/No instead of 0/1
+	    if (asnodes) {
+		free = (free ? "Yes" : "No");
+	    }
 	    html +=
 		"<tr>" +
 		" <td>" + weburl + "</td>" +
@@ -247,6 +336,9 @@ $(function ()
 		"</tr>";
 	}
 	$('#' + selector + ' tbody').append(html);
+	if (asnodes) {
+	    $('#' + selector + ' .type-header').html("Node");
+	}
 	$('#' + selector + ' table').removeClass("hidden");
     }
 
@@ -262,11 +354,13 @@ $(function ()
     {
 	var details = amlist[urn];
 	var combinedForecasts = {};
+	var countid = "fixed-endpoints .counts-panel";
 	
 	if (json.code) {
 	    console.log("Could not get reservation data for " +
 			details.name + ": " + json.value);
 	    FEresults[urn] = null;
+	    return;
 	}
 	else {
 	    FEresults[urn] = json.value;
@@ -284,30 +378,183 @@ $(function ()
 	// Kill the spinners.
 	$('#fixed-endpoints .resgraph-spinner').addClass("hidden");
 
-	_.each(FEs, function (details, urn) {
-	    var forecasts = FEresults[urn].forecast;
-	    var skiptypes = FEresults[urn].skiptypes;
+	// Combine into a single forecast
+	Object.keys(FEs)
+	    .sort()
+	    .forEach(function(urn, index) {
+		// Do we have the forecasts yet?
+		if (!FEresults[urn]) {
+		    return;
+		}
+		var forecasts = FixForecast(FEresults[urn].forecast);
+		var tmp = {};
+		
+		Object.keys(forecasts)
+		    .sort()
+		    .forEach(function(type, index) {
+			var forecast = forecasts[type];
+			var id = amlist[urn].abbreviation + " " + type;
 
-	    _.each(forecasts, function(forecast, type) {
-		var id = amlist[urn].abbreviation + "/" + type;
-
-		combinedForecasts[id] = forecast;
+			tmp[type] = forecast;
+			combinedForecasts[id] = forecast;
+		    });
+		GenerateCountPanel(urn, countid, tmp, null, true);
 	    });
+	ShowNewGraph(combinedForecasts, "FE-graph-body", "FE-graph-visavail")
+    }
 
-	    /*
-	     * Update the counts panel with all of the forecasts
-	     */
-	    var countid = "fixed-endpoints .counts-panel";
-	    GenerateCountPanel(urn, countid, forecasts, null);
-	    
+    /*
+     * Generate a new style graph in the provide container.
+     */
+    function ShowNewGraph(forecasts, container, graph)
+    {
+	var dataset = [];
+	var now     = new Date();
+	var maxend  = now;
+	
+	Object.keys(forecasts)
+	    .sort()
+	    .forEach(function(id, index) {
+		var forecast = forecasts[id];
+		console.info(id, forecast);
+
+		var series = {
+		    "measure"   : id,
+		    "interval_s": 3600,
+		    "data"      : [],
+		    "categories": {
+			"Busy": { "color": "black" },
+			"Free": { "color": "green"},
+		    },
+		};
+		for (var i = 0; i < forecast.length; i++) {
+		    var info  = forecast[i];
+		    var start = moment(info.stamp).toDate();
+		    var state = info.free ? "Free" : "Busy";
+		    var end;
+
+		    if (i < forecast.length - 1) {
+			end = moment(forecast[i + 1].stamp).toDate();
+		    }
+		    else {
+			end = new Date(start.getTime());
+			end.setMonth(end.getMonth()+2);
+		    }
+		    // Upper bound on the end of the last entry, so
+		    // we can even things out on the very right
+		    // side.
+		    if (end > maxend) {
+			maxend = end;
+		    }
+		    series.data.push([start, state, end]);
+		}
+		dataset.push(series);
+	    });
+	
+	// Even out the right side.
+	_.each(dataset, function(series) {
+	    var last = series.data[series.data.length - 1];
+	    var end  = last[2];
+	    if (maxend > end) {
+		if (!last.free) {
+		    last[2] = maxend;
+		}
+	    }
 	});
-	console.info("AddToFEGraph", combinedForecasts);
+	console.info("ShowNewGraph", dataset);
+	
+	var options = {
+	    id_div_container: container,
+	    id_div_graph: graph,
+	    moment_locale: null,
+	    line_spacing: 12,
+	    custom_categories: true,
+	    
+	    responsive: {
+		enabled: true,
+	    },
+	    icon: {
+		class_has_data: 'fas fa-fw fa-check',
+		class_has_no_data: 'fas fa-fw fa-exclamation-circle'
+	    },
+	    margin: {
+		// top margin includes title and legend
+		top: 25,
+		// right margin should provide space for last horz. axis title
+		right: 20,
+		bottom: 0,
+		// left margin should provide space for y axis titles
+		left: 120,
+	    },
+	    padding:{
+		// Match left margin above. Not sure why.
+		left: -120
+	    },
+	    graph:{
+		height:12,
+	    },
+	    tooltip: {
+		enabled: true,
+		date_plus_time: true,
+	    },
+	    zoom: {
+		enabled: true,
+	    },
+	    legend: {
+		enabled: false,
+	    },
+	    title: {
+		enabled: false,
+	    },
+	    sub_title: {
+		enabled: false,
+	    },
+	};
+	var chart = visavail.generate(options, dataset)
+    }
 
-	ShowResGraph({"forecast"  : combinedForecasts,
-		      "selector"  : "resgraph-FEs",
-		      "height"    : "400px",
-		      "skiptypes" : {},
-		     });
+    //
+    // Fix the forecasts 
+    //
+    function FixForecast(forecast)
+    {
+	// Each node type
+	for (var type in forecast) {
+	    // This is an array of objects.
+	    var array = forecast[type];
+
+	    for (var i = 0; i < array.length; i++) {
+		var data = array[i];
+		data.t     = parseInt(data.t);
+		data.free  = parseInt(data.free);
+		data.held  = parseInt(data.held);
+		data.stamp = new Date(parseInt(data.t) * 1000);
+	    }
+
+	    // No data or just one data point, nothing to do.
+	    if (array.length <= 1) {
+		continue;
+	    }
+	    
+	    /*
+	     * Gary says there can be duplicate entries for the same time
+	     * stamp, and we want the last one. So have to splice those
+	     * out before we process. Yuck.
+	     */
+	    var temp = [];
+	    for (var i = 0; i < array.length - 1; i++) {
+		var data     = array[i];
+		var nextdata = array[i + 1];
+		
+		if (data.t == nextdata.t) {
+		    continue;
+		}
+		temp.push(data);
+	    }
+	    temp.push(array[array.length - 1]);
+	    forecast[type] = temp;
+	}
+	return forecast;
     }
 
     /*

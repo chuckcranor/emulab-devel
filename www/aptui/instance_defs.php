@@ -840,7 +840,14 @@ class Instance
                            "e200-8d"   => true,
                            "e300-8d"   => true,
                            "sequoia-v8"=> true,
-                           "pc2400w"   => true);
+                           "pc2400w"   => true,
+                           "nuc5300"   => true,
+                           "nexus5"    => true,
+                           "enodeb"    => true,
+                           "nuc6260"   => true,
+                           "nuc8650"   => true,
+                           "nuc8559"   => true,
+                           "nuc7100"   => true);
 
         #
         # If showing nodes from another cluster, then we show them
@@ -851,13 +858,6 @@ class Instance
             !($ISPOWDER || $ISPNET) &&
             ($all || $aggregate_urn == $DEFAULT_AGGREGATE_URN)) {
             $skiptypes["sdr"]      = true;
-            $skiptypes["nuc5300"]  = true;
-            $skiptypes["nexus5"]   = true;
-            $skiptypes["enodeb"]   = true;
-            $skiptypes["nuc6260"]  = true;
-            $skiptypes["nuc8650"]  = true;
-            $skiptypes["nuc8559"]  = true;
-            $skiptypes["nuc7100"]  = true;
             $skiptypes["iris030"]  = true;
             $skiptypes["d840"]     = true;
             $skiptypes["d740"]     = true;
@@ -882,6 +882,24 @@ class Instance
             $skiptypes["cbrssdr1-ustar"]     = true;
             $skiptypes["cbrssdr1-smt"]       = true;
             $skiptypes["cbrssdr1-dentistry"] = true;
+            $skiptypes["nuc1"]               = true;
+            $skiptypes["nuc2"]               = true;
+            $skiptypes["nuc3"]               = true;
+            $skiptypes["nuc4"]               = true;
+            $skiptypes["nuc5"]               = true;
+            $skiptypes["nuc6"]               = true;
+            $skiptypes["nuc7"]               = true;
+            $skiptypes["nuc8"]               = true;
+            $skiptypes["nuc9"]               = true;
+            $skiptypes["nuc10"]              = true;
+            $skiptypes["ue1"]                = true;
+            $skiptypes["ue2"]                = true;
+            $skiptypes["ue3"]                = true;
+            $skiptypes["ue4"]                = true;
+            $skiptypes["pnbase3"]            = true;
+            $skiptypes["pnbase4"]            = true;
+            $skiptypes["iris03"]             = true;
+            $skiptypes["iris04"]             = true;
         }
         return $skiptypes;
     }

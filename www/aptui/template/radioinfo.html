@@ -16,14 +16,19 @@
 	  <tbody>
 	    <% _.each(radioinfo, function(aggregate, urn) { %>
 	      <% _.each(aggregate, function(details, node_id) { %>
+		<% var url = amlist[urn].weburl +
+  		    "/portal/show-node.php?node_id=" + details.node_id; %>
 		<tr>
 		  <td><a href="powder-map.php?location=<%- details.location %>"
 			 class="location"
 			 data-urn="<%- urn %>"
 			 data-location="<%- details.location %>"
 			 data-type="<%- details.installation_type %>">
-		    <%- details.location %></a></td>
-		  <td><%- details.node_id %></td>
+		    <%- details.location %></a>
+		  </td>
+		  <td><a href="<%- url %>" target="_blank">
+		    <%- details.node_id %></a>
+		  </td>
 		  <td><%- details.radio_type %></td>
 		  <td><%- details.transmit_frequencies %></td>
 		  <td><%- details.receive_frequencies %></td>

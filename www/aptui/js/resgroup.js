@@ -15,9 +15,10 @@ $(function ()
     var current_pid  = null;
     var projlist     = null;
     var amlist       = null;
-    var routelist    = null;
-    var FEs          = {};	    // Powder thing
-    var Radios       = {};	    // Powder thing
+    var routelist    = null;	// Powder
+    var FEs          = {};	// Powder
+    var radioinfo    = {};	// Powder
+    var matrixinfo   = {};	// Powder
     var isadmin      = false;
     var editing      = false;
     var buttonstate  = "check";
@@ -420,9 +421,21 @@ $(function ()
 	editing  = window.EDITING; 
 	projlist = JSON.parse(_.unescape($('#projects-json')[0].textContent));
 	amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
-	routelist= JSON.parse(_.unescape($('#routelist-json')[0].textContent));
 	console.info("amlist", amlist);
-
+	
+	if (window.ISPOWDER) {
+	    routelist= JSON.parse(
+		_.unescape($('#routelist-json')[0].textContent));
+	    console.info("routelist", routelist);
+	    
+	    radioinfo = JSON.parse(
+		_.unescape($('#radioinfo-json')[0].textContent));
+	    console.info("radioinfo", radioinfo);
+	    
+	    matrixinfo = JSON.parse(
+		_.unescape($('#matrixinfo-json')[0].textContent));
+	    console.info("matrixinfo", matrixinfo);
+	}
 	GeneratePageBody();
 
 	// Now we can do this. 
@@ -523,7 +536,6 @@ $(function ()
 	    }
 	}
 	// Graph list(s).
-	html = "";
 	_.each(amlist, function(details, urn) {
 	    var graphid = 'resgraph-' + details.nickname;
 
@@ -532,14 +544,20 @@ $(function ()
 		FEs[urn] = details;
 		return;
 	    }
-	    html += graphTemplate({"details"        : details,
-				   "graphid"        : graphid,
-				   "title"          : details.name,
-				   "urn"            : urn,
-				   "showhelp"       : true,
-				   "showfullscreen" : true});
+	    var html = graphTemplate({"details"        : details,
+				      "graphid"        : graphid,
+				      "title"          : details.name,
+				      "urn"            : urn,
+				      "showhelp"       : true,
+				      "showfullscreen" : true});
+	    
+	    if (window.ISPOWDER && details.nickname == "Emulab") {
+		$('#powder-graph-div').prepend(html);
+	    }
+	    else {
+		$('#reservation-lists').append(html);
+	    }
 	});
-	$('#reservation-lists').append(html);
 
 	// Handler for the Help button
 	$('#reservation-help-button').click(function (event) {
@@ -648,8 +666,10 @@ $(function ()
 	row.find('.cluster-select').change(function (event) {
 	    $(this).find('option:selected')
 		.each(function() {
-		    console.info("cluster change: " + $(this).val());
-		    HandleClusterChange(row, $(this).val());
+		    if ($(this).val() != "") {
+			console.info("cluster change: " + $(this).val());
+			HandleClusterChange(row, $(this).val());
+		    }
 		});
 	});
 
@@ -1560,28 +1580,24 @@ $(function ()
 		}
 		ProcessForecast(urn, json.value.forecast);
 
-		// Powder combined graph.
-		if (_.has(FEs, urn)) {
-		    RegenFEGraph();
-		    return;
-		}
 		// Copy of the prunelist.
 		var prunelist = {};
 		Object.assign(prunelist, details.prunelist);
-		
-		// Another special case; seperate out Emulab reservable
-		// radios into a different graph using the new graph code.
-		if (window.ISPOWDER && details.nickname == "Emulab") {
-		    _.each(json.value.forecast, function (stuff, key) {
-			if (_.has(details.reservable_nodes, key)) {
-			    Radios[key] = stuff;
-			    // Add to the copy of the prunelist for the graph.
-			    prunelist[key] = true;
-			}
-		    });
-		    GenerateRadioGraph();
+
+		// Powder special case for radios and the matrix and FEs.
+		if (window.ISPOWDER) {
+		    // Combined graph.
+		    if (_.has(FEs, urn)) {
+			RegenFEGraph();
+			return;
+		    }
+		    if (details.nickname == "Emulab") {
+			ProcessPowder(urn, json, prunelist);
+			Object.assign(prunelist, details.radiotypes);
+		    }
+		    // Fall through to generating Emulab server graph
+		    // with updated prunelist.
 		}
-		
 		ShowResGraph({"forecast"  : json.value.forecast,
 			      "selector"  : id,
 			      "resize"    : true,
@@ -1673,6 +1689,42 @@ $(function ()
 	}
 	//console.info("forecast", cluster, forecast);
 	forecasts[cluster] = forecast;
+    }
+
+    /*
+     * Handle the radio/matrix graphs and updating the prunelist for the
+     * server graph.
+     */
+    function ProcessPowder(urn, json, prunelist)
+    {
+	var details  = amlist[urn];
+	var forecast = {};
+
+	/*
+	 * The radio graph consists of individually reservable nodes that
+	 * are in the radioinfo object. No others.
+	 */
+	_.each(json.value.forecast, function (info, key) {
+	    if (_.has(radioinfo[urn], key)) {
+		forecast[key]  = info;
+		prunelist[key] = true;
+	    }
+	});
+	$('#radio-graph-div').removeClass("hidden");
+	ShowNewGraph(forecast, "radio-graph-body", "radio-graph-visavail")
+
+	/*
+	 * The matrix graph consists of nodes in the matrixinfo object
+	 */
+	forecast = {};
+	_.each(json.value.forecast, function (info, key) {
+	    if (_.has(matrixinfo, key)) {
+		forecast[key] = info;
+		prunelist[key] = true;
+	    }
+	});
+	$('#matrix-graph-div').removeClass("hidden");
+	ShowNewGraph(forecast, "matrix-graph-body", "matrix-graph-visavail")
     }
 
     /*
@@ -3472,9 +3524,6 @@ $(function ()
 	if (which == "routes") {
 	    graphid = "route-graph-div";
 	}
-	else if (which == "radios") {
-	    graphid = "radio-graph-div";
-	}
 	else if (which == "ranges") {
 	    graphid = "range-info-div";
 	}
@@ -3484,10 +3533,12 @@ $(function ()
 	    }
 	    else {
 		var nickname = amlist[which].nickname;
-		graphid = "resgraph-" + nickname;
 
-		if (window.ISPOWDER && nickname == "Emulab" && _.size(Radios)) {
-		    ReorderGraphs("radios");
+		if (window.ISPOWDER && nickname == "Emulab") {
+		    graphid = "powder-graph-div";
+		}
+		else {
+		    graphid = "resgraph-" + nickname;
 		}
 	    }
 	}
@@ -3631,11 +3682,9 @@ $(function ()
     {
 	$('#FE-graph-div').removeClass("hidden");
 	$('#FE-graph-visavail').html("");
+	var combinedForecasts = {};
 
-	var dataset = [];
-	var now     = new Date();
-	var maxend  = now;
-
+	// Combine into a single forecast
 	Object.keys(FEs)
 	    .sort()
 	    .forEach(function(urn, index) {
@@ -3643,111 +3692,42 @@ $(function ()
 		if (!_.has(forecasts, urn)) {
 		    return;
 		}
-		var details = FEs[urn];
-
 		Object.keys(forecasts[urn])
 		    .sort()
 		    .forEach(function(type, index) {
 			var forecast = forecasts[urn][type];
 			var id = amlist[urn].abbreviation + " " + type;
-
-			var series = {
-			    "measure"   : id,
-			    "interval_s": 3600,
-			    "data"      : [],
-			    "categories": {
-				"Busy": { "color": "black" },
-				"Free": { "color": "green"},
-			    },
-			};
-			for (var i = 0; i < forecast.length; i++) {
-			    var info  = forecast[i];
-			    var start = moment(info.stamp).toDate();
-			    var state = info.free ? "Free" : "Busy";
-			    var end;
-
-			    if (i < forecast.length - 1) {
-				end = moment(forecast[i + 1].stamp).toDate();
-			    }
-			    else {
-				end = new Date(start.getTime());
-				end.setMonth(end.getMonth()+2);
-			    }
-			    // Upper bound on the end of the last entry, so
-			    // we can even things out on the very right
-			    // side.
-			    if (end > maxend) {
-				maxend = end;
-			    }
-			    series.data.push([start, state, end]);
-			}
-			dataset.push(series);
+			
+			combinedForecasts[id] = forecast;
 		    });
 	    });
-	ShowNewGraph(dataset, maxend, "FE-graph-body", "FE-graph-visavail")
+	ShowNewGraph(combinedForecasts, "FE-graph-body", "FE-graph-visavail");
     }
 
     function GenerateRouteGraph()
     {
 	$('#route-graph-div').removeClass("hidden");
-	
-	var dataset = [];
-	var now     = new Date();
-	var maxend  = now;
 
-	Object.keys(routeforecast)
-	    .sort()
-	    .forEach(function(route, index) {
-		var forecast = routeforecast[route];
-		var series = {
-		    "measure"   : route,
-		    "interval_s": 3600,
-		    "data"      : [],
-		    "categories": {
-			"Busy": { "color": "black" },
-			"Free": { "color": "green" },
-		    },
-		};
-		for (var i = 0; i < forecast.length; i++) {
-		    var info  = forecast[i];
-		    var start = moment(info.stamp).toDate();
-		    var state = info.free ? "Free" : "Busy";
-		    var end;
-
-		    if (i < forecast.length - 1) {
-			end = moment(forecast[i + 1].stamp).toDate();
-		    }
-		    else {
-			end = new Date(start.getTime());
-			end.setMonth(end.getMonth()+1);
-		    }
-		    // Upper bound on the end of the last entry, so we can
-		    // even things out on the very right side.
-		    if (end > maxend) {
-			maxend = end;
-		    }
-		    series.data.push([start, state, end]);
-		}
-		dataset.push(series);
-	    });
-	ShowNewGraph(dataset, maxend,
-		     "route-graph-body", "route-graph-visavail");
+	ShowNewGraph(routeforecast, "route-graph-body", "route-graph-visavail");
     }
 
-    function GenerateRadioGraph()
+    /*
+     * Generate a new style graph in the provide container.
+     */
+    function ShowNewGraph(forecasts, container, graph)
     {
-	$('#radio-graph-div').removeClass("hidden");
-	
 	var dataset = [];
 	var now     = new Date();
 	var maxend  = now;
-
-	Object.keys(Radios)
+	
+	Object.keys(forecasts)
 	    .sort()
-	    .forEach(function(node_id, index) {
-		var forecast = Radios[node_id];
+	    .forEach(function(id, index) {
+		var forecast = forecasts[id];
+		console.info(id, forecast);
+
 		var series = {
-		    "measure"   : node_id,
+		    "measure"   : id,
 		    "interval_s": 3600,
 		    "data"      : [],
 		    "categories": {
@@ -3766,10 +3746,11 @@ $(function ()
 		    }
 		    else {
 			end = new Date(start.getTime());
-			end.setMonth(end.getMonth()+1);
+			end.setMonth(end.getMonth()+2);
 		    }
-		    // Upper bound on the end of the last entry, so we can
-		    // even things out on the very right side.
+		    // Upper bound on the end of the last entry, so
+		    // we can even things out on the very right
+		    // side.
 		    if (end > maxend) {
 			maxend = end;
 		    }
@@ -3777,15 +3758,7 @@ $(function ()
 		}
 		dataset.push(series);
 	    });
-	ShowNewGraph(dataset, maxend,
-		     "radio-graph-body", "radio-graph-visavail");
-    }
-
-    /*
-     * Generate a new style graph in the provide container.
-     */
-    function ShowNewGraph(dataset, maxend, container, graph)
-    {
+	
 	// Even out the right side.
 	_.each(dataset, function(series) {
 	    var last = series.data[series.data.length - 1];

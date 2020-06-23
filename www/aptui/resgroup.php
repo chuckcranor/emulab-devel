@@ -80,18 +80,6 @@ if (isset($cluster)) {
         exit();
     }
 }
-# Spit out the route list.
-$query_result =
-    DBQueryFatal("select * from apt_mobile_bus_routes");
-$routelist = array();
-while ($row = mysql_fetch_array($query_result)) {
-    $routename = $row["description"];
-    $routeid   = $row["routeid"];
-    $routelist[$routename] = array(
-        "routename" => $routename,
-        "routeid"   => $routeid,
-    );
-}
 SPITHEADER(1);
 
 echo "<link rel='stylesheet'
@@ -182,16 +170,39 @@ while (list($index, $aggregate) = each($ams)) {
                           "radiotypes"       => $aggregate->RadioTypes(),
                           "abbreviation"     => $aggregate->nickname(),
                           "reservable_nodes" => $reservable_nodes,
-                          "ismobile"         => $aggregate->ismobile(),
+                          "isME"             => $aggregate->ismobile(),
                           "isFE"             => $aggregate->isFE());
                           
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
 echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
 echo "</script>\n";
-echo "<script type='text/plain' id='routelist-json'>\n";
-echo htmlentities(json_encode($routelist, JSON_NUMERIC_CHECK));
-echo "</script>\n";
+if ($ISPOWDER) {
+    $radioinfo = Aggregate::RadioInfo();
+    echo "<script type='text/plain' id='radioinfo-json'>\n";
+    echo htmlentities(json_encode($radioinfo, JSON_NUMERIC_CHECK));
+    echo "</script>\n";
+    $matrixinfo = Aggregate::MatrixInfo();
+    echo "<script type='text/plain' id='matrixinfo-json'>\n";
+    echo htmlentities(json_encode($matrixinfo, JSON_NUMERIC_CHECK));
+    echo "</script>\n";
+
+    # Spit out the route list.
+    $query_result =
+        DBQueryFatal("select * from apt_mobile_bus_routes");
+    $routelist = array();
+    while ($row = mysql_fetch_array($query_result)) {
+        $routename = $row["description"];
+        $routeid   = $row["routeid"];
+        $routelist[$routename] = array(
+            "routename" => $routename,
+            "routeid"   => $routeid,
+        );
+    }
+    echo "<script type='text/plain' id='routelist-json'>\n";
+    echo htmlentities(json_encode($routelist, JSON_NUMERIC_CHECK));
+    echo "</script>\n";
+}
 
 $default_pid = "";
 # Default project.

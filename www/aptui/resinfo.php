@@ -58,6 +58,12 @@ echo "<link rel='stylesheet'
             href='css/tablesorter.css'>\n";
 echo "<link rel='stylesheet'
             href='css/nv.d3.css'>\n";
+echo "<link rel='stylesheet'
+            href='https://fonts.googleapis.com/css?family=Muli'>\n";
+echo "<link rel='stylesheet'
+            href='css/visavail.css'>\n";
+echo "<link rel='stylesheet'
+            href='https://use.fontawesome.com/releases/v5.0.12/css/all.css'>\n";
 
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
@@ -89,14 +95,25 @@ while (list($index, $aggregate) = each($ams)) {
                           "abbreviation"     => $aggregate->nickname(),
                           "reservable_nodes" => $aggregate->ReservableNodes(),
                           "radiotypes"       => $aggregate->RadioTypes(),
-                          "isFE"             => $aggregate->isFE());
+                          "isFE"             => $aggregate->isFE(),
+                          "isME"             => $aggregate->ismobile());
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
 echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
 echo "</script>\n";
-
+if ($ISPOWDER) {
+    $radioinfo = Aggregate::RadioInfo();
+    echo "<script type='text/plain' id='radioinfo-json'>\n";
+    echo htmlentities(json_encode($radioinfo, JSON_NUMERIC_CHECK));
+    echo "</script>\n";
+    $matrixinfo = Aggregate::MatrixInfo();
+    echo "<script type='text/plain' id='matrixinfo-json'>\n";
+    echo htmlentities(json_encode($matrixinfo, JSON_NUMERIC_CHECK));
+    echo "</script>\n";
+}
 echo "<script type='text/javascript'>\n";
-echo "   window.ISADMIN  = $isadmin;\n";
+echo "   window.ISADMIN   = $isadmin;\n";
+echo "   window.EMULABURN = '$DEFAULT_AGGREGATE_URN';\n";
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
@@ -107,7 +124,9 @@ AddTemplateList(array("resinfo", "resinfo-totals", "reservation-graph",
                       "range-list", "oops-modal", "waitwait-modal"));
 SPITREQUIRE("js/resinfo.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
+            "<script src='js/lib/d3.v5.js'></script>\n".
             "<script src='js/lib/nv.d3.js'></script>\n".
+            "<script src='js/lib/visavail.js'></script>\n".
             "<script src='js/lib/jquery.tablesorter.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
             "<script src='js/lib/sugar.min.js'></script>".

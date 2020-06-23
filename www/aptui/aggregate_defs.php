@@ -491,9 +491,9 @@ class Aggregate
         # code decides if it needs it for the current portal.
         #
         if ($this->nickname() == "Emulab") {
-            return array("nuc5300" => true,
-                         "nuc6260" => true,
-                         "iris030" => true,
+            return array("iris030" => true,
+                         "nexus5"  => true,
+                         "nuc5300" => true,
                          "enodeb"  => true,
                          "x310"    => true,
                          "n310"    => true,
@@ -542,6 +542,33 @@ class Aggregate
                 $row["alive"] = $alive;
                 $row["reachable"] = $alive;
                 $blob[$urn][$node_id] = $row;
+            }
+        }
+        return $blob;
+    }
+
+    # Class method to get info about Phantomnet matrix nodes. 
+    function MatrixInfo()
+    {
+        $blob = array();
+
+        $query_result =
+            DBQueryFatal("select node_id from node_features ".
+                         "where feature='rf-controlled'");
+
+        if (!mysql_num_rows($query_result)) {
+            return $blob;
+        }
+        while ($row = mysql_fetch_array($query_result)) {
+            $node_id  = $row["node_id"];
+            $node     = Node::Lookup($node_id);
+
+            if ($node) {
+                #
+                # Not really sure what info is needed yet. But need
+                # to know it is a node in the matrix.
+                #
+                $blob[$node_id] = array("node_id" => $node_id);
             }
         }
         return $blob;
