@@ -428,6 +428,10 @@ if ($usestitcher) {
 			       (defined($webtask->output()) ?
 				$webtask->output() : ""));
 	$webtask->Exited($rval);
+	# Print this error so I can zip all the way to the bottom and find it!
+	if (defined($webtask->output())) {
+	    print STDERR "RunStitcher error: " . $webtask->output() . "\n";
+	}
 	exit($rval);
     }
     $instance->SetStatus("provisioned");
