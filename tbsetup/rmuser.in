@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -314,6 +314,9 @@ if (defined($project)) {
     }
     $EUID = 0;
 
+    # So, this is not such a good thing after all. We do not have anything
+    # in place to regen these certs if/when the user joins another project.
+    if (0) {
     #
     # Lets check to see if any projects left. If not, revoke their
     # certificate.
@@ -329,6 +332,7 @@ if (defined($project)) {
 		$UID = $SAVEUID;
 	    }
 	}
+    }
     }
     exit($estatus)
 	if (!$nuke);
