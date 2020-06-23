@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -106,6 +106,22 @@ class Lease
 	}
 	$row = mysql_fetch_array($query_result);
 	return Lease::Lookup($row["lease_idx"]);
+    }
+    # Lookup for project
+    function LookupAllByProject($project) {
+	$pid    = $project->pid();
+        $result = array();
+	
+	$query_result =
+	    DBQueryFatal("select lease_idx from project_leases ".
+			 "where pid='$pid'");
+	while ($row = mysql_fetch_array($query_result)) {
+            $lease = Lease::Lookup($row["lease_idx"]);
+            if ($lease) {
+                $result[] = $lease;
+            }
+        }
+	return $result;
     }
 
     # accessors
