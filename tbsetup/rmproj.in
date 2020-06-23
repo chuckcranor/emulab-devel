@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -127,6 +127,24 @@ if (! defined($target_project)) {
 my $pid     = $target_project->pid();
 my $pid_idx = $target_project->pid_idx();
 my $gid_idx = $target_project->gid_idx();
+
+#
+# Sanity checks.
+#
+my $experiments = $target_project->Experiments();
+if (!defined($experiments)) {
+    fatal("Could not get experiment list for project");
+}
+if (@{$experiments}) {
+    fatal("There are experiments in this project, they must be deleted");
+}
+my $leases = $target_project->Leases();
+if (!defined($leases)) {
+    fatal("Could not get lease list for project");
+}
+if (@{$leases}) {
+    fatal("There are leases in this project, they must be deleted");
+}
 
 #
 # This script is always audited. Mail is sent automatically upon exit.
