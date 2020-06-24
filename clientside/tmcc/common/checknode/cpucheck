@@ -59,6 +59,21 @@ round1p() {
 
     #truncate decimal
     y=${in%%.*}
+
+    # retrive the numbers to the left of the digit
+    d=${in##*.}
+    # what if there is only one number, times it by 10
+    n=${#d}
+    if [ $n == 1 ] ; then
+	d=$(( $d * 10 ))
+    fi
+    # if the 10th and 100th digits are greater then 50 add one unit, if less then just truncate decimal
+    if (( 50 >= ${d} )) ; then
+	# This happens to work if $in does not have a decimal number and is greater then 50.
+	echo -n $y
+	return 0
+    fi	
+    
     #count digits
     n=${#y}
     # according to #digits add roundup and get most sig-bits
