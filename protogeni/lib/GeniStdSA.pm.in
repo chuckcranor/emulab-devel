@@ -973,14 +973,19 @@ sub CreateSliverInfo($$$$)
     }
 
     my $created = defined($fields->{'SLIVER_INFO_CREATION'}) ? 
-    $fields->{'SLIVER_INFO_CREATION'} : 
-    POSIX::strftime("20%y-%m-%d %H:%M:%S", gmtime(time())); #now
+       POSIX::strftime("%Y-%m-%d %H:%M:%S", localtime(str2time($fields->{'SLIVER_INFO_CREATION'}))) :
+       POSIX::strftime("%Y-%m-%d %H:%M:%S", gmtime(time())); #now
+
+    my $expires = defined($fields->{'SLIVER_INFO_EXPIRATION'}) ?
+       POSIX::strftime("%Y-%m-%d %H:%M:%S", localtime(str2time($fields->{'SLIVER_INFO_EXPIRATION'}))) :
+       undef;
+
 
     my $blob= {
         'creator_urn' => $fields->{'SLIVER_INFO_CREATOR_URN'},
         'urn' => $fields->{'SLIVER_INFO_URN'},
         'created' => $created,
-        'expires' => $fields->{'SLIVER_INFO_EXPIRATION'}
+        'expires' => $expires
     };
 
     if ($slice->Lock() != 0) {
@@ -1086,9 +1091,7 @@ sub UpdateSliverInfo($$)
 
     if (exists($fields->{'SLIVER_INFO_EXPIRATION'})) {
         my $new_expire_str = $fields->{'SLIVER_INFO_EXPIRATION'};
-        my $new_expire_date = GeniStd::RFC3339StringToDateTime($new_expire_str);
-        #for some reason, you can't put UC times into the DB, or time gets screwed up. So we need to put localtime in there.
-        my $new_expire_dbdate = strftime('%Y-%m-%dT%H:%M:%S%z', localtime($new_expire_date));
+        my $new_expire_dbdate = POSIX::strftime("%Y-%m-%d %H:%M:%S", localtime(str2time($new_expire_str))) 
         print STDOUT "new_expire_dbdate=$new_expire_dbdate\n";
         my $update_success = $sliver->UpdateExpire($new_expire_dbdate) == 0;
         if (!$update_success) {
