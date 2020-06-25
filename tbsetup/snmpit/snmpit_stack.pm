@@ -884,7 +884,7 @@ sub removeVlan($@) {
 	#
 	my @stitchPorts = getTrunkedStitchPorts();
 	if (@stitchPorts) {
-	    my @ports = getVlanPorts($vlan_id);
+	    my @ports = getAllVlanPorts($vlan_id);
 
 	    foreach my $port (@stitchPorts) {
 		if (grep { $_->SamePort($port)} @ports) {

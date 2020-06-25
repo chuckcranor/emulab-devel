@@ -43,7 +43,7 @@ $PORT_FORMAT_PORTINDEX= 5;
 @EXPORT = qw( macport portnum portiface Dev vlanmemb vlanid
 		getTestSwitches getControlSwitches getSwitchesInStack
                 getSwitchesInStacks
-		getVlanPorts
+		getVlanPorts getAllVlanPorts
 		getExperimentTrunks setVlanStack
 		getExperimentVlans getDeviceNames getDeviceType
 		getInterfaceSettings mapPortsToDevices getSwitchPrimaryStack
@@ -853,6 +853,25 @@ sub getExperimentPorts ($$) {
     my ($pid, $eid) = @_;
 
     return getVlanPorts(getExperimentVlans($pid,$eid));
+}
+
+#
+# Returns all ports for a vlan, from lans and from vlans.
+# Cause of syncVlansFromTables ...
+#
+sub getAllVlanPorts($)
+{
+    my ($vlan_id) = @_;
+    my @ports    = ();
+
+    if (VLan->Lookup($vlan_id)) {
+	@ports = uniq_ports(getVlanPorts($vlan_id),
+			    getExperimentVlanPorts($vlan_id));
+    }
+    else {
+	@ports = getExperimentVlanPorts($vlan_id);
+    }
+    return @ports;
 }
 
 #
