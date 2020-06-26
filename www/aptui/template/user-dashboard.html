@@ -59,6 +59,12 @@
 		  <a href="#datasets" role="tab" data-toggle="tab">
 		    Datasets</a></li>
 		<% } %>
+		<%  if (disabledres == 0 || (disabledres == 1 && isadmin) ) { %>
+		  <li role="presentation" class="hidden resgroups-hidden">
+		    <a href="#resgroups" role="tab"
+		       data-toggle="tab">
+		      Reservations</a></li>
+		<% } %>
 		<li role="presentation" class="hidden paramsets-hidden">
 		  <a href="#paramsets" role="tab" data-toggle="tab">
 		    Parameter Sets</a></li>
@@ -163,6 +169,14 @@
 		    <div id="classic_datasets_content_div"></div>
 		  </div>
 		</div>
+		<div role="tabpanel" class="tab-pane hidden resgroups-hidden"
+		     id="resgroups">
+		  <div id="resgroups_content"></div>
+		  <div id="project_resgroups" class="hidden">
+		    <center><h4>Other Reservations in my Projects</h4></center>
+		    <div id="project_resgroups_content"></div>
+		  </div>
+ 		</div>
 		<div role="tabpanel" class="tab-pane hidden paramsets-hidden"
 		     id="paramsets">
 		  <div id="paramsets_content">

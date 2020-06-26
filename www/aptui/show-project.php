@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,6 +70,8 @@ echo "  window.TARGET_PROJECT = '" . $project->pid() . "';\n";
 echo "  window.UI_DISABLE_DATASETS = '" . $UI_DISABLE_DATASETS . "';\n";
 echo "  window.UI_DISABLE_RESERVATIONS = '" .
         $UI_DISABLE_RESERVATIONS . "';\n";
+echo "  window.EMBEDDED_RESGROUPS = true;\n";
+echo "  window.EMBEDDED_RESGROUPS_SELECT = false;\n";
 echo "</script>\n";
 
 # Place to hang the toplevel template.
@@ -79,12 +81,13 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MARKED();
 REQUIRE_MOMENT();
+AddLibrary("js/list-resgroups.js");
 SPITREQUIRE("js/show-project.js",
             "<script src='js/lib/jquery.tablesorter.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
             "<script src='js/lib/sugar.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
 
-AddTemplateList(array("show-project", "experiment-list", "profile-list", "member-list", "dataset-list", "project-profile", "classic-explist", "group-list", "waitwait-modal", "oops-modal", "conversion-help-modal"));
+AddTemplateList(array("show-project", "experiment-list", "profile-list", "member-list", "dataset-list", "project-profile", "classic-explist", "group-list", "waitwait-modal", "oops-modal", "conversion-help-modal", "resgroup-list"));
 SPITFOOTER();
 ?>

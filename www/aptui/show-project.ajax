@@ -27,6 +27,7 @@ include_once("profile_defs.php");
 include_once("instance_defs.php");
 include_once("ajax-routines.ajax");
 include_once("rfrange_defs.php");
+include_once("resgroup_defs.php");
 
 # We set this in CheckPageArgs
 $target_project = null;
@@ -118,6 +119,21 @@ function Do_DatasetList()
     }
     $results = DatasetList("project", $target_project);
     SPITAJAX_RESPONSE($results);
+}
+
+function Do_ResgroupList()
+{
+    global $this_user, $target_project;
+    $reservations = array();
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $resgroups = ReservationGroup::LookupForProject($target_project);
+    foreach ($resgroups as $resgroup) {
+        $reservations[$resgroup->uuid()] = $resgroup->Blob();
+    }
+    SPITAJAX_RESPONSE($reservations);
 }
 
 function Do_ClassicDatasetList()

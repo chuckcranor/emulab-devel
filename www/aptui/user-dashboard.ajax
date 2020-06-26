@@ -26,6 +26,7 @@ chdir("apt");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
 include_once("ajax-routines.ajax");
+include_once("resgroup_defs.php");
 
 # We set this in CheckPageArgs
 $target_user = null;
@@ -134,6 +135,37 @@ function Do_DatasetList()
     }
     $results = DatasetList("user", $target_user);
     SPITAJAX_RESPONSE($results);
+}
+
+function Do_ResgroupList()
+{
+    global $this_user, $target_user;
+    $result  = array();
+    $listing = array();
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $resgroups = ReservationGroup::LookupForUser($target_user);
+    foreach ($resgroups as $resgroup) {
+        $listing[$resgroup->uuid()] = $resgroup->Blob();
+    }
+    $result["user"] = $listing;
+
+    #
+    # Also all resgroups in projects the user belongs to. 
+    #
+    $projlist  = $target_user->ProjectMembershipList();
+    $listing   = array();
+
+    foreach ($projlist as $project) {
+        $resgroups = ReservationGroup::LookupForProject($project);
+        foreach ($resgroups as $resgroup) {
+            $listing[$resgroup->uuid()] = $resgroup->Blob();
+        }
+    }
+    $result["project"] = $listing;
+    SPITAJAX_RESPONSE($result);
 }
 
 function Do_ClassicDatasetList()

@@ -286,6 +286,8 @@ $routing = array("geni-login" =>
                                                       "Do_ProfileList",
                                                  "ProjectProfileList" =>
                                                       "Do_ProjectProfileList",
+                                                 "ResgroupList" =>
+                                                      "Do_ResgroupList",
                                                  "Toggle" =>
                                                      "Do_Toggle",
                                                  "FreezeOrThaw" =>
@@ -327,6 +329,8 @@ $routing = array("geni-login" =>
                                                       "Do_MemberList",
                                                  "GroupList" =>
                                                       "Do_GroupList",
+                                                 "ResgroupList" =>
+                                                      "Do_ResgroupList",
                                                  "UsageSummary" =>
                                                       "Do_UsageSummary",
                                                  "Toggle" =>

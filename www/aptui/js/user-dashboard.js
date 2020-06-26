@@ -70,6 +70,7 @@ $(function ()
 	LoadProjectsTab();
 	LoadProfileTab();
 	LoadDatasetTab();
+	LoadResgroupTab();
 	LoadParameterSetsTab();
 	LoadClassicDatasets();
 
@@ -597,6 +598,48 @@ $(function ()
 	var xmlthing =
 	    sup.CallServerMethod(null,
 				 "user-dashboard", "DatasetList",
+				 {"uid" : window.TARGET_USER});
+	xmlthing.done(callback);
+    }
+
+    function LoadResgroupTab()
+    {
+	var callback = function(json) {
+	    console.info("resgroup", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    var userlist = json.value.user;
+	    var projlist = json.value.project;
+	    
+	    if (! (_.size(userlist) || _.size(projlist))) {
+		return;
+	    }
+	    $(".resgroups-hidden").removeClass("hidden");
+	    window.DrawResGroupList("#resgroups_content", userlist);
+	    $("#resgroups_content .expando").trigger("click");
+
+	    /*
+	     * Prune out project reservations in the table above,
+	     * and if any left, show those in another table below.
+	     */
+	    for (var uuid in userlist) {
+		if (_.has(projlist, uuid)) {
+		    delete projlist[uuid];
+		}
+	    }
+	    if (! _.size(projlist)) {
+		return;
+	    }
+	    $("#project_resgroups").removeClass("hidden");
+	    console.info("new projlist", projlist);
+	    window.DrawResGroupList("#project_resgroups_content", projlist);
+	}
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "user-dashboard", "ResgroupList",
 				 {"uid" : window.TARGET_USER});
 	xmlthing.done(callback);
     }

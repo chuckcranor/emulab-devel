@@ -55,9 +55,14 @@
 		  <a href="#profiles" role="tab"
 		     data-toggle="tab">Profiles</a></li>
 		<%  if (disabledset == 0 || (disabledset == 1 && isadmin) ) { %>
-		<li role="presentation">
-		  <a href="#datasets" role="tab"
-		     data-toggle="tab">Datasets</a></li>
+		  <li role="presentation">
+		    <a href="#datasets" role="tab"
+		       data-toggle="tab">Datasets</a></li>
+		<% } %>
+		<%  if (disabledres == 0 || (disabledres == 1 && isadmin) ) { %>
+		<li role="presentation" class="hidden resgroups-hidden">
+		  <a href="#resgroups" role="tab"
+		     data-toggle="tab">Reservations</a></li>
 		<% } %>
 		<li role="presentation">
 		  <a href="#members" role="tab"
@@ -156,6 +161,10 @@
 		    <center><h4>Classic Datasets</h4></center>
 		    <div id="classic_datasets_content_div"></div>
 		  </div>
+		</div>
+		<div role="tabpanel" class="tab-pane hidden resgroups-hidden"
+		     id="resgroups">
+		  <div id="resgroups_content"></div>
 		</div>
 		<div role="tabpanel" class="tab-pane" id="members">
 		  <div id="members_content"></div>

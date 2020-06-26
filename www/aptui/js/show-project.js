@@ -62,6 +62,7 @@ $(function ()
 	LoadGroupsTab();
 	LoadProjectTab();
 	LoadDatasetTab();
+	LoadResgroupTab();
 	LoadClassicDatasets();
 	if (window.ISPOWDER) {
 	    LoadRFRanges();
@@ -619,6 +620,29 @@ $(function ()
 	var xmlthing =
 	    sup.CallServerMethod(null,
 				 "show-project", "DatasetList",
+				 {"pid" : window.TARGET_PROJECT});
+	xmlthing.done(callback);
+    }
+
+    function LoadResgroupTab()
+    {
+	var callback = function(json) {
+	    console.info("resgroups", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (!_.size(json.value)) {
+		return;
+	    }
+	    $(".resgroups-hidden").removeClass("hidden");
+	    window.DrawResGroupList("#resgroups_content", json.value);
+	    $("#resgroups_content .expando").trigger("click");
+	}
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "show-project", "ResgroupList",
 				 {"pid" : window.TARGET_PROJECT});
 	xmlthing.done(callback);
     }

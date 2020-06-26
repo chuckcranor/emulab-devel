@@ -34,23 +34,23 @@ $(function ()
 				     sup.SpitOops("oops", json.value);
 				     return;
 				 }
-				 DoReservations(json.value);
+				 DoReservations('#groups', json.value);
 			     });
     }
 
-    function Embedded(groups)
+    function Embedded(selector, groups)
     {
 	var template_list   = ["resgroup-list"];
 	var templates       = APT_OPTIONS.fetchTemplateList(template_list);
 	listTemplate        = _.template(templates["resgroup-list"]);
 
-	DoReservations(groups)
+	DoReservations(selector, groups)
     }
 
     /*
      * Load reservations from each am in the list and generate a table.
      */
-    function DoReservations(groups)
+    function DoReservations(selector, groups)
     {
 	console.info("DoReservations", groups);
 
@@ -74,16 +74,16 @@ $(function ()
 	    "showselect"   : (window.EMBEDDED_RESGROUPS_SELECT ? true : false),
 	    "isadmin"      : window.ISADMIN,
 	});
-	$("#groups").html(html);
+	$(selector).html(html);
 
 	// Format dates with moment before display.
-	$('#groups .format-date').each(function() {
+	$(selector + ' .format-date').each(function() {
 	    var date = $.trim($(this).html());
 	    if (date != "") {
 		$(this).html(moment(date).format("lll"));
 	    }
 	});
-	$('#groups .tablesorter.resgroup-list')
+	$(selector + ' .tablesorter.resgroup-list')
 	    .tablesorter({
 		theme : 'green',
 		// initialize zebra
@@ -93,7 +93,7 @@ $(function ()
 	// Show the proper status, for the group and for each reservation
 	// in the group.
 	_.each(groups, function(group, uuid) {
-	    var groupid = '#groups tr[data-uuid="' + uuid + '"] ';
+	    var groupid = selector + ' tr[data-uuid="' + uuid + '"] ';
 	    var grow    = $(groupid);
 	    var crow    = grow.next();
 
@@ -184,10 +184,11 @@ $(function ()
 		}
 	    });
 	});
-	$('#groups .tablesorter .tablesorter-childRow>td').hide();	
-	$('#groups .tablesorter .show-childrow .expando')
+	$(selector + ' .tablesorter .tablesorter-childRow>td').hide();	
+	$(selector + ' .tablesorter .show-childrow .expando')
 	    .click(function (event) {
 		event.preventDefault();
+		console.info("foo");
 		// Determine current state for changing the chevron.
 		var row = $(this).closest('tr')
 		    .nextUntil('tr.tablesorter-hasChildRow').find('td')[0];
@@ -206,18 +207,70 @@ $(function ()
 	    });
 	
 	// This activates the tooltip subsystem.
-	$('#groups [data-toggle="tooltip"]').tooltip({
+	$(selector + ' [data-toggle="tooltip"]').tooltip({
 	    delay: {"hide" : 250, "show" : 250},
 	    placement: 'auto',
 	});
 	// This activates the popover subsystem.
-	$('#groups [data-toggle="popover"]').popover({
+	$(selector + ' [data-toggle="popover"]').popover({
 	    placement: 'auto',
 	    container: 'body',
 	});
 
 	if (window.ISADMIN && !window.EMBEDDED_RESGROUPS) {
-	    var html = bytypeTemplate({
+	    DoAlternateTables(groups);
+	}
+    }
+
+    function DoAlternateTables(groups)
+    {
+	var html = bytypeTemplate({
+	    "groups"       : groups,
+	    "showcontrols" : false,
+	    "showproject"  : true,
+	    "showactivity" : true,
+	    "showuser"     : true,
+	    "showusing"    : true,
+	    "showstatus"   : true,
+	    "isadmin"      : window.ISADMIN,
+	});
+	$("#groups-bytype").html(html);
+
+	// Status column
+	_.each(groups, function(group) {
+	    _.each(group.clusters, function(reservation, uuid) {
+		var resid = 'tr[data-uuid="' + uuid + '"] ';
+		var rrow  = $('#groups-bytype ' + resid);
+
+		if (reservation.canceled) {
+		    rrow.find(".reservation-status-column .status-canceled")
+			.removeClass("hidden");
+		}
+		else if (reservation.deleted) {
+		    rrow.find(".reservation-status-column .status-deleted")
+			.removeClass("hidden");
+		}
+		else if (reservation.approved) {
+		    rrow.find(".reservation-status-column .status-approved")
+			.removeClass("hidden");
+		}
+		else {
+		    rrow.find(".reservation-status-column .status-pending")
+			.removeClass("hidden");
+		}
+	    });
+	});
+
+	// See if we have any ranges.
+	var ranges = 0;
+	_.each(groups, function(group) {
+	    console.info(group, group.ranges);
+	    if (_.size(group.ranges)) {
+		ranges++;
+	    }
+	});
+	if (ranges) {
+	    html = byrangeTemplate({
 		"groups"       : groups,
 		"showcontrols" : false,
 		"showproject"  : true,
@@ -227,163 +280,116 @@ $(function ()
 		"showstatus"   : true,
 		"isadmin"      : window.ISADMIN,
 	    });
-	    $("#groups-bytype").html(html);
-
+	    $("#groups-byrange").html(html);
+	    
 	    // Status column
 	    _.each(groups, function(group) {
-		_.each(group.clusters, function(reservation, uuid) {
+		_.each(group.ranges, function(reservation, uuid) {
 		    var resid = 'tr[data-uuid="' + uuid + '"] ';
-		    var rrow  = $('#groups-bytype ' + resid);
+		    var rrow  = $('#groups-byrange ' + resid);
 
 		    if (reservation.canceled) {
-			rrow.find(".reservation-status-column .status-canceled")
-			    .removeClass("hidden");
-		    }
-		    else if (reservation.deleted) {
-			rrow.find(".reservation-status-column .status-deleted")
+			rrow.find(".reservation-status-column " +
+				  ".status-canceled")
 			    .removeClass("hidden");
 		    }
 		    else if (reservation.approved) {
-			rrow.find(".reservation-status-column .status-approved")
+			rrow.find(".reservation-status-column " +
+				  ".status-approved")
 			    .removeClass("hidden");
 		    }
 		    else {
-			rrow.find(".reservation-status-column .status-pending")
+			rrow.find(".reservation-status-column " +
+				  ".status-pending")
 			    .removeClass("hidden");
 		    }
 		});
 	    });
-
-	    // See if we have any ranges.
-	    var ranges = 0;
-	    _.each(groups, function(group) {
-		console.info(group, group.ranges);
-		if (_.size(group.ranges)) {
-		    ranges++;
-		}
-	    });
-	    if (ranges) {
-		html = byrangeTemplate({
-		    "groups"       : groups,
-		    "showcontrols" : false,
-		    "showproject"  : true,
-		    "showactivity" : true,
-		    "showuser"     : true,
-		    "showusing"    : true,
-		    "showstatus"   : true,
-		    "isadmin"      : window.ISADMIN,
-		});
-		$("#groups-byrange").html(html);
-		
-		// Status column
-		_.each(groups, function(group) {
-		    _.each(group.ranges, function(reservation, uuid) {
-			var resid = 'tr[data-uuid="' + uuid + '"] ';
-			var rrow  = $('#groups-byrange ' + resid);
-
-			if (reservation.canceled) {
-			    rrow.find(".reservation-status-column " +
-				      ".status-canceled")
-				.removeClass("hidden");
-			}
-			else if (reservation.approved) {
-			    rrow.find(".reservation-status-column " +
-				      ".status-approved")
-				.removeClass("hidden");
-			}
-			else {
-			    rrow.find(".reservation-status-column " +
-				      ".status-pending")
-				.removeClass("hidden");
-			}
-		    });
-		});
+	}
+	// See if we have any routes
+	var routes = 0;
+	_.each(groups, function(group) {
+	    console.info(group, group.routes);
+	    if (_.size(group.routes)) {
+		routes++;
 	    }
-	    // See if we have any routes
-	    var routes = 0;
-	    _.each(groups, function(group) {
-		console.info(group, group.routes);
-		if (_.size(group.routes)) {
-		    routes++;
-		}
+	});
+	if (routes) {
+	    html = byrouteTemplate({
+		"groups"       : groups,
+		"showcontrols" : false,
+		"showproject"  : true,
+		"showactivity" : true,
+		"showuser"     : true,
+		"showusing"    : true,
+		"showstatus"   : true,
+		"isadmin"      : window.ISADMIN,
 	    });
-	    if (routes) {
-		html = byrouteTemplate({
-		    "groups"       : groups,
-		    "showcontrols" : false,
-		    "showproject"  : true,
-		    "showactivity" : true,
-		    "showuser"     : true,
-		    "showusing"    : true,
-		    "showstatus"   : true,
-		    "isadmin"      : window.ISADMIN,
-		});
-		$("#groups-byroute").html(html);
-		
-		// Status column
-		_.each(groups, function(group) {
-		    _.each(group.routes, function(reservation, uuid) {
-			var resid = 'tr[data-uuid="' + uuid + '"] ';
-			var rrow  = $('#groups-byroute ' + resid);
+	    $("#groups-byroute").html(html);
+	    
+	    // Status column
+	    _.each(groups, function(group) {
+		_.each(group.routes, function(reservation, uuid) {
+		    var resid = 'tr[data-uuid="' + uuid + '"] ';
+		    var rrow  = $('#groups-byroute ' + resid);
 
-			if (reservation.canceled) {
-			    rrow.find(".reservation-status-column " +
-				      ".status-canceled")
-				.removeClass("hidden");
-			}
-			else if (reservation.approved) {
-			    rrow.find(".reservation-status-column " +
-				      ".status-approved")
-				.removeClass("hidden");
-			}
-			else {
-			    rrow.find(".reservation-status-column " +
-				      ".status-pending")
-				.removeClass("hidden");
-			}
-		    });
-		});
-	    }
-
-	    // Format dates with moment before display.
-	    $('#groups-bytype .format-date, #groups-byrange .format-date, ' +
-	      '#groups-byroute .format-date')
-		.each(function() {
-		    var date = $.trim($(this).html());
-		    if (date != "") {
-			$(this).html(moment(date).format("lll"));
+		    if (reservation.canceled) {
+			rrow.find(".reservation-status-column " +
+				  ".status-canceled")
+			    .removeClass("hidden");
+		    }
+		    else if (reservation.approved) {
+			rrow.find(".reservation-status-column " +
+				  ".status-approved")
+			    .removeClass("hidden");
+		    }
+		    else {
+			rrow.find(".reservation-status-column " +
+				  ".status-pending")
+			    .removeClass("hidden");
 		    }
 		});
-	    $("#groups-bytype-div").removeClass("hidden");	    
-	    if (ranges) {
-		$("#groups-byrange-div").removeClass("hidden");
-	    }
-	    if (routes) {
-		$("#groups-byroute-div").removeClass("hidden");
-	    }
-	    $('#groups-bytype .tablesorter, #groups-byrange .tablesorter,' +
-	      '#groups-byroute .tablesorter')
-		.tablesorter({
-		    theme : 'green',
-		    // initialize zebra
-		    widgets: ["zebra"],
-		});
-
-	    // This activates the tooltip subsystem.
-	    $('#groups-bytype  [data-toggle="tooltip"], ' +
-	      '#groups-byrange [data-toggle="tooltip"], ' +
-	      '#groups-byroute [data-toggle="tooltip"]').tooltip({
-		delay: {"hide" : 250, "show" : 250},
-		placement: 'auto',
-	    });
-	    // This activates the popover subsystem.
-	    $('#groups-bytype  [data-toggle="popover"], ' +
-	      '#groups-byrange [data-toggle="popover"], ' +
-	      '#groups-byroute [data-toggle="popover"]').popover({
-		placement: 'auto',
-		container: 'body',
 	    });
 	}
+
+	// Format dates with moment before display.
+	$('#groups-bytype .format-date, #groups-byrange .format-date, ' +
+	  '#groups-byroute .format-date')
+	    .each(function() {
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment(date).format("lll"));
+		}
+	    });
+	$("#groups-bytype-div").removeClass("hidden");	    
+	if (ranges) {
+	    $("#groups-byrange-div").removeClass("hidden");
+	}
+	if (routes) {
+	    $("#groups-byroute-div").removeClass("hidden");
+	}
+	$('#groups-bytype .tablesorter, #groups-byrange .tablesorter,' +
+	  '#groups-byroute .tablesorter')
+	    .tablesorter({
+		theme : 'green',
+		// initialize zebra
+		widgets: ["zebra"],
+	    });
+
+	// This activates the tooltip subsystem.
+	$('#groups-bytype  [data-toggle="tooltip"], ' +
+	  '#groups-byrange [data-toggle="tooltip"], ' +
+	  '#groups-byroute [data-toggle="tooltip"]').tooltip({
+	      delay: {"hide" : 250, "show" : 250},
+	      placement: 'auto',
+	  });
+	// This activates the popover subsystem.
+	$('#groups-bytype  [data-toggle="popover"], ' +
+	  '#groups-byrange [data-toggle="popover"], ' +
+	  '#groups-byroute [data-toggle="popover"]').popover({
+	      placement: 'auto',
+	      container: 'body',
+	  });
     }
 
     // Helper.
@@ -391,8 +397,8 @@ $(function ()
 	return JSON.parse(_.unescape($(id)[0].textContent));
     }
     if (window.EMBEDDED_RESGROUPS) {
-	window.DrawResGroupList = function (groups) {
-	    Embedded(groups);
+	window.DrawResGroupList = function (selector, groups) {
+	    Embedded(selector, groups);
 	};
     }
     else {

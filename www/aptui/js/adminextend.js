@@ -865,7 +865,7 @@ $(function ()
 				 if (_.size(groups)) {
 				     $('#reservations-row')
 					 .removeClass("hidden");
-				     window.DrawResGroupList(groups);
+				     window.DrawResGroupList("#groups", groups);
 				 }
 			     });
     }
