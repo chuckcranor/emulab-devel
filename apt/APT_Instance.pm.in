@@ -1748,21 +1748,30 @@ sub CreateDatasetCreds($$$)
 	    # credential from the CM where the dataset lives. We do that by
 	    # requesting a credential, and delegating it to the target CM.
 	    #
-	    my $pid = $dataset->pid();
-	    my $id  = $dataset->dataset_id();
-	    my $cmd = "$MANAGEDATASET getcredential -a $manager_urn $pid/$id";
+	    my $wtask = WebTask->CreateAnonymous();
+	    my $pid   = $dataset->pid();
+	    my $id    = $dataset->dataset_id();
+	    my $cmd   = "$MANAGEDATASET -t " . $wtask->task_id() . " -- " .
+		"getcredential -a $manager_urn $pid/$id";
 	    my $output = emutil::ExecQuiet($cmd);
+	    $wtask->Refresh();
 	    if ($?) {
-		$$pmsg = "Could not generate credential for $dataset_urn";
-		if (($? >> 8) > 0) {
-		    if ($output ne "") {
-			$$pmsg = "$dataset_urn" . ": " . $output;
-		    }
-		    return 1;
+		print STDERR $output;
+		my $rval;
+		$$pmsg = "Could not generate credential for $dataset_urn: ";
+		if (!$wtask->HasExited()) {
+		    $$pmsg .= "internal error";
+		    $rval   = -1;
 		}
-		return -1;
+		else {
+		    $$pmsg .= $wtask->output();
+		    $rval   = $wtask->exitcode();
+		}
+		$wtask->Delete();
+		return $rval;
 	    }
-	    $credentials{$manager_urn}->{$dataset_urn} = $output;
+	    $credentials{$manager_urn}->{$dataset_urn} = $wtask->credential();
+	    $wtask->Delete();
 	}
     }
     #

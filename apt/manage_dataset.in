@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1113,10 +1113,13 @@ sub DoGetCredential()
 	$delegated->Sign($certificate);
 	$credential = $delegated;
     }
-    print $credential->asString();
     $dataset->Unlock();
     if (defined($webtask)) {
+	$webtask->credential($credential->asString());
 	$webtask->Exited(0);
+    }
+    else {
+	print $credential->asString();
     }
     return 0;
 }
