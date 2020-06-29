@@ -2582,16 +2582,11 @@ sub GetTicketAuxAux($)
 	#
 	# Local blockstores
 	#
-	foreach my $blockref (GeniXML::FindNodesNS("n:blockstore",
-						   $ref,
-				   $GeniXML::EMULAB_NS)->get_nodelist()) {
-	    $response = HandleBlockstore($slice_experiment, $virtexperiment,
-					 $user, $slice, $ref,
-					 $use_imagetracker,
-					 $blockref, @$credentials);
-	    goto bad
-		if (GeniResponse::IsError($response));
-	}
+	$response = HandleBlockstore($slice_experiment, $virtexperiment,
+				     $user, $slice, $ref,
+				     $use_imagetracker, @$credentials);
+	goto bad
+	    if (GeniResponse::IsError($response));
 
 	#
 	# Look for interface forward declarations that will be used later
@@ -8808,380 +8803,518 @@ sub SliceExpirationChanged($$@)
 #
 # Handle BlockStores. 
 #
-sub HandleBlockstore($$$$$$$@)
+sub HandleBlockstore($$$$$$@)
 {
     my ($experiment, $virtexperiment, $geniuser,
-	$slice, $noderef, $use_imagetracker, $blockref, @credentials) = @_;
-    my $errorcode = GENIRESPONSE_BADARGS;
+	$slice, $noderef, $use_imagetracker, @credentials) = @_;
+    my $errorcode = 0;
     my $message   = "Unknown Error";
     my $nodename  = GeniXML::GetVirtualId($noderef);
-    my @attributes = ();
+    my @blockrefs  =
+	GeniXML::FindNodesNS("n:blockstore", $noderef,
+			     $GeniXML::EMULAB_NS)->get_nodelist();
+
+    return 0
+	if (!@blockrefs);
 
     require Image;
     require Lease;
     require Blockstore;
+    #
+    # For local blockstores, need to add up that ?+disk_xxx totals and
+    # add node desires. So need to process all blockstores for the node.
+    #
+    my %all_placements = (
+	"ANY" => {
+	    "size"  => 0,
+	    "count" => 0,
+	},
+	"SYSVOL" => {
+	    "size"  => 0,
+	    "count" => 0,
+	},
+	"NONSYSVOL" => {
+	    "size"  => 0,
+	    "count" => 0,
+	},
+    );
+	
+    foreach my $blockref (@blockrefs) {
+	my $bsname     = GeniXML::GetText("name", $blockref);
+	my $class      = GeniXML::GetText("class", $blockref);
+	my $mount      = GeniXML::GetText("mountpoint", $blockref);
+	my $readonly   = GeniXML::GetText("readonly", $blockref);
+	my $rwclone    = GeniXML::GetText("rwclone", $blockref);
+	my $dataset_id = GeniXML::GetText("dataset", $blockref);
+	my $placement  = GeniXML::GetText("placement", $blockref);
+	my $btype      = "";
+	my $fixed      = $nodename;
+	my $size       = undef;
+	my @attributes = ();
 
-    my $bsname    = GeniXML::GetText("name", $blockref);
-    my $class     = GeniXML::GetText("class", $blockref);
-    my $mount     = GeniXML::GetText("mountpoint", $blockref);
-    my $readonly  = GeniXML::GetText("readonly", $blockref);
-    my $rwclone   = GeniXML::GetText("rwclone", $blockref);
-    my $dataset_id= GeniXML::GetText("dataset", $blockref);
-    my $placement = GeniXML::GetText("placement", $blockref);
-    my $btype     = "";
-    my $fixed     = $nodename;
-    my $size      = undef;
-
-    if (!defined($class) || !($class eq "local" || $class eq "remote")) {
-	$message = "Illegal blockstore class";
-	goto bad;
-    }
-    if ($class eq "local") {
-	if (!defined($bsname)) {
-	    $message = "Local blockstores must be named";
+	if (!defined($class) || !($class eq "local" || $class eq "remote")) {
+	    $message = "Illegal blockstore class";
 	    goto bad;
 	}
-	if (!TBcheck_dbslot($bsname, "blockstores", "bs_id",
+	if ($class eq "local") {
+	    if (!defined($bsname)) {
+		$message   = "Local blockstores must be named";
+		$errorcode = GENIRESPONSE_BADARGS;
+		last;
+	    }
+	    if (!TBcheck_dbslot($bsname, "blockstores", "bs_id",
+				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+		$message   = "Illegal blockstore name: $bsname";
+		$errorcode = GENIRESPONSE_BADARGS;
+		last;
+	    }
+	    #
+	    # Check the tables for an existing blockstore with this name, they
+	    # have to be experiment unique.
+	    #
+	    if ($virtexperiment->Find("virt_blockstores", $bsname)) {
+		$message   = "Already have a blockstore with name: $bsname";
+		$errorcode = GENIRESPONSE_BADARGS;
+		last;
+	    }
+	}
+	if (defined($mount) &&
+	    !TBcheck_dbslot($mount, "os_info", "path",
 			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
-	    $message = "Illegal blockstore name: $bsname";
-	    goto bad;
+	    $message   = "Invalid mountpoint for blockstore";
+	    $errorcode = GENIRESPONSE_BADARGS;
+	    last;
 	}
-	#
-	# Check the tables for an existing blockstore with this name, they
-	# have to be experiment unique.
-	#
-	if ($virtexperiment->Find("virt_blockstores", $bsname)) {
-	    $message = "Already have a blockstore with name: $bsname";
-	    goto bad;
-	}
-    }
-    if (defined($mount) &&
-	!TBcheck_dbslot($mount, "os_info", "path",
-			TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
-	$message = "Invalid mountpoint for blockstore";
-	goto bad;
-    }
-    if (!defined($readonly)) {
-	$readonly = 0;
-    }
-    else {
-	$readonly = ($readonly eq "true" ? 1 : 0);
-    }
-    if (!defined($rwclone)) {
-	$rwclone = 0;
-    }
-    else {
-	$rwclone = ($rwclone eq "true" ? 1 : 0);
-    }
-    if (defined($placement)) {
-	if (lc($placement) !~ /^(any|sysvol|nonsysvol)$/i) {
-	    $message = "Improper placement: $placement";
-	    goto bad;
-	}
-	$placement = uc($placement);
-    }
-    else {
-	$placement = "ANY";
-    }
-    #
-    # If ephemeral, size is optional, means give me everything.
-    # Else we get it below from the lease, or we get it from the image
-    # if its an image backed blockstore.
-    #
-    if ($class eq "local") {
-	if (!defined($dataset_id)) {
-	    $size = GeniXML::GetText("size", $blockref);
+	if (!defined($readonly)) {
+	    $readonly = 0;
 	}
 	else {
-	    my ($image, $dataset_urn);
-	    
+	    $readonly = ($readonly eq "true" ? 1 : 0);
+	}
+	if (!defined($rwclone)) {
+	    $rwclone = 0;
+	}
+	else {
+	    $rwclone = ($rwclone eq "true" ? 1 : 0);
+	}
+	if (defined($placement)) {
+	    if (lc($placement) !~ /^(any|sysvol|nonsysvol)$/i) {
+		$message   = "Improper placement: $placement";
+		$errorcode = GENIRESPONSE_BADARGS;
+		last;
+	    }
+	    $placement = uc($placement);
+	}
+	else {
+	    $placement = "ANY";
+	}
+	#
+	# If ephemeral, size is optional, means give me everything.
+	# Else we get it below from the lease, or we get it from the image
+	# if its an image backed blockstore.
+	#
+	if ($class eq "local") {
 	    #
-	    # Is it a url. We might not have the image locally, but
-	    # will later when image_setup runs. But lets do a check to
-	    # make sure it really exist by trying to import it. This will
-	    # get the descriptor and the information we need.
+	    # Lots of rules about placement. This one is easy. Only one allowed
 	    #
-	    if ($dataset_id =~ /^(ftp|http|https):/) {
-		if (!TBcheck_dbslot($dataset_id, "virt_nodes", "osname",
+	    if ($placement eq "SYSVOL" &&
+		$all_placements{"SYSVOL"}->{"count"}) {
+		$message   = "Improper placement: Only one SYSVOL allowed";
+		$errorcode = GENIRESPONSE_BADARGS;
+		last;
+	    }
+	    if (!defined($dataset_id)) {
+		$size = GeniXML::GetText("size", $blockref);
+	    }
+	    else {
+		my ($image, $dataset_urn);
+		
+		#
+		# Is it a url. We might not have the image locally, but
+		# will later when image_setup runs. But lets do a check to
+		# make sure it really exist by trying to import it. This will
+		# get the descriptor and the information we need.
+		#
+		if ($dataset_id =~ /^(ftp|http|https):/) {
+		    if (!TBcheck_dbslot($dataset_id, "virt_nodes", "osname",
 				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
-		    $message = "Invalid url for dataset";
-		    goto bad;
-		}
-		$image = Image->LookupByURL($dataset_id);
-		if (!defined($image)) {
-		    my $safe_url = User::escapeshellarg($dataset_id);
-		    my $pid = $experiment->pid();
-
-		    print STDERR "$dataset_id is not here, trying to get it\n";
-		    system("$IMAGE_IMPORT -p $pid $safe_url");
-		    if ($?) {
-			$message = "Could not import $dataset_id";
-			$errorcode = GENIRESPONSE_ERROR;
-			goto bad;
+			$message   = "Invalid url for dataset";
+			$errorcode = GENIRESPONSE_BADARGS;
+			last;
 		    }
 		    $image = Image->LookupByURL($dataset_id);
 		    if (!defined($image)) {
-			$message = "Could not lookup dataset after import";
-			$errorcode = GENIRESPONSE_ERROR;
-			goto bad;
+			my $safe_url = User::escapeshellarg($dataset_id);
+			my $pid = $experiment->pid();
+
+			print STDERR "$dataset_id is not here, ".
+			    "trying to get it\n";
+			system("$IMAGE_IMPORT -p $pid $safe_url");
+			if ($?) {
+			    $message = "Could not import $dataset_id";
+			    $errorcode = GENIRESPONSE_ERROR;
+			    last;
+			}
+			$image = Image->LookupByURL($dataset_id);
+			if (!defined($image)) {
+			    $message = "Could not lookup dataset after import";
+			    $errorcode = GENIRESPONSE_ERROR;
+			    last;
+			}
+		    }
+		    # When using a URL, the dataset has to be global. Might
+		    # revisit this at some point.
+		}
+		elsif (GeniHRN::IsValid($dataset_id)) {
+		    $dataset_urn = GeniHRN->new($dataset_id);
+		    if ($dataset_urn->type() !~ /^(im)?dataset$/) {
+			$message   = "Illegal dataset type in $dataset_id";
+			$errorcode = GENIRESPONSE_BADARGS;
+			last;
+		    }
+		    if (!defined($dataset_urn->project())) {
+			$message   = "No project in $dataset_id";
+			$errorcode = GENIRESPONSE_BADARGS;
+			last;
+		    }
+		    if (!$use_imagetracker &&
+			$dataset_urn->domain() ne $OURDOMAIN){
+			$message   = "Not the correct site for $dataset_id";
+			$errorcode = GENIRESPONSE_BADARGS;
+			last;
+		    }
+		    
+		    #
+		    # Look for version;
+		    #
+		    if ($dataset_urn->id() =~ /\/\/(\d+)$/) {
+			$message   = "Not supporting dataset versions yet";
+			$errorcode = GENIRESPONSE_BADARGS;
+			last;
+		    }
+		    $image = GeniImage::MapToLocalDataset($dataset_urn,
+							  $geniuser,
+							  $experiment,
+							  $use_imagetracker,
+							  @credentials);
+		    if (!defined($image)) {
+			$message   = "Unknown dataset: $dataset_id";
+			$errorcode = GENIRESPONSE_BADARGS;
+			last;
+		    }
+		    if (GeniResponse::IsError($image)) {
+			return $image;
 		    }
 		}
-		# When using a URL, the dataset has to be global. Might
-		# revisit this at some point.
+		else {
+		    $message   = "Invalid name/url for dataset";
+		    $errorcode = GENIRESPONSE_BADARGS;
+		    last;
+		}
+		if (!$image->isdataset()) {
+		    $message   = "Not a dataset: $dataset_id";
+		    $errorcode = GENIRESPONSE_BADARGS;
+		    last;
+		}
+		push(@attributes, ["dataset", $image->versname(), 0]);
+		$btype = "imdataset";
+		
+		if (! ($image->lba_low() || $image->lba_high())) {
+		    $message = "No local size info for $dataset_id";
+		    $errorcode = GENIRESPONSE_ERROR;
+		    last;
+		}
+		$size = int(($image->lba_high() -
+			     $image->lba_low() + 1) /
+			    (1024 / $image->lba_size())) . "KB";
 	    }
-	    elsif (GeniHRN::IsValid($dataset_id)) {
-		$dataset_urn = GeniHRN->new($dataset_id);
-		if ($dataset_urn->type() !~ /^(im)?dataset$/) {
-		    $message = "Illegal dataset type in $dataset_id";
-		    goto bad;
+	    if (defined($size)) {
+		$size = Blockstore::ConvertToMebi($size);
+		if ($size < 0) {
+		    $message   = "Illegal blockstore size for $bsname";
+		    $errorcode = GENIRESPONSE_BADARGS;
+		    last;
+		}
+		#
+		# A non-zero size ANY/NONSYSVOL means all avail space, so it
+		# cannot be mixed with ones that do not have a size.
+		#
+		if ($placement eq "ANY" || $placement eq "NONSYSVOL") {
+		    if ($all_placements{$placement}->{"count"} &&
+			$all_placements{$placement}->{"size"} == 0) {
+			$message   = "Improper blockstore size for $bsname: ".
+			    "Not allowed to mix zero sized with non-zero size";
+			$errorcode = GENIRESPONSE_BADARGS;
+			last;
+		    }
+		}
+		$all_placements{$placement}->{"size"} += $size;
+	    }
+	    else {
+		#
+		# A zero size ANY/NONSYSVOL means all avail space, so it
+		# cannot be mixed with ones that have a size.
+		#
+		if ($placement eq "ANY" || $placement eq "NONSYSVOL") {
+		    if ($all_placements{$placement}->{"count"} &&
+			$all_placements{$placement}->{"size"} != 0) {
+			$message   = "Improper blockstore size for $bsname: ".
+			    "Not allowed to mix zero sized with non-zero size";
+			$errorcode = GENIRESPONSE_BADARGS;
+			last;
+		    }
+		}
+		$all_placements{$placement}->{"size"} += $size;
+
+	    }
+	    $all_placements{$placement}->{"count"}++;
+	    #
+	    # Mike says "cannot mix ANY with either SYSVOL or NONSYSVOL"
+	    #
+	    if ($all_placements{"ANY"}->{"count"} &&
+		($all_placements{"SYSVOL"}->{"count"} ||
+		 $all_placements{"NONSYSVOL"}->{"count"})) {
+		$message   = "Improper blockstore placement for $bsname: ".
+		    "Not allowed to mix ANY with SYSVOL or NONSYSVOL";
+		$errorcode = GENIRESPONSE_BADARGS;
+		last;
+	    }
+	}
+	push(@attributes, ["mountpoint", $mount, 0])
+	    if (defined($mount) && $mount ne "");
+	push(@attributes, ["placement", $placement, 0]);
+	push(@attributes, ["readonly", $readonly, 0]);
+	push(@attributes, ["class", ($class eq "local" ? "local" : "SAN"), 1]);
+	
+	if ($class eq "remote") {
+	    $fixed = $bsname = $nodename;
+	    push(@attributes, ["protocol", "iSCSI", 1]);
+
+	    #
+	    # The "rwclone" attribute allows you to map a writable copy of the
+	    # indicated SAN-based dataset. In this way, multiple nodes can map
+	    # the same dataset simultaneously. In many situations, this is more
+	    # useful than a "readonly" mapping. For example, a dataset
+	    # containing a Linux source tree could be mapped into multiple
+	    # nodes, each of which could do its own independent,
+	    # non-conflicting configure and build in their respective copies.
+	    # Currently, rwclones are "ephemeral" in that any changes made are
+	    # lost when the experiment mapping the clone is terminated.
+	    #
+	    push(@attributes, ["rwclone", $rwclone, 0]) if ($rwclone);
+
+	    if (defined($dataset_id)) {
+		if (!GeniHRN::IsValid($dataset_id)) {
+		    $message   = "Invalid dataset urn for $dataset_id";
+		    $errorcode = GENIRESPONSE_BADARGS;
+		    last;
+		}
+		my $dataset_urn = GeniHRN->new($dataset_id);
+		if ($dataset_urn->type() !~ /^(lt|st)?dataset$/) {
+		    $message   = "Illegal dataset type in $dataset_id";
+		    $errorcode = GENIRESPONSE_BADARGS;
+		    last;
+		}
+		if ($dataset_urn->domain() ne $OURDOMAIN) {
+		    $message   = "Not the correct site for $dataset_id";
+		    $errorcode = GENIRESPONSE_BADARGS;
+		    last;
 		}
 		if (!defined($dataset_urn->project())) {
-		    $message = "No project in $dataset_id";
-		    goto bad;
+		    $message   = "No project in $dataset_id";
+		    $errorcode = GENIRESPONSE_BADARGS;
+		    last;
 		}
-		if (!$use_imagetracker && $dataset_urn->domain() ne $OURDOMAIN){
-		    $message = "This is not the correct site for $dataset_id";
-		    goto bad;
-		}
-		
-		#
-		# Look for version;
-		#
-		if ($dataset_urn->id() =~ /\/\/(\d+)$/) {
-		    $message = "Not supporting dataset versions yet";
-		    goto bad;
-		}
-		$image = GeniImage::MapToLocalDataset($dataset_urn,
-						      $geniuser,
-						      $experiment,
-						      $use_imagetracker,
-						      @credentials);
-		if (!defined($image)) {
-		    $message = "Unknown dataset: $dataset_id";
-		    goto bad;
-		}
-		if (GeniResponse::IsError($image)) {
-		    return $image;
-		}
-	    }
-	    else {
-		$message = "Invalid name/url for dataset";
-		goto bad;
-	    }
-	    if (!$image->isdataset()) {
-		$message = "Not a dataset: $dataset_id";
-		goto bad;
-	    }
-	    push(@attributes, ["dataset", $image->versname(), 0]);
-	    $btype = "imdataset";
-	    
-	    if (! ($image->lba_low() || $image->lba_high())) {
-		$message = "No local size info for $dataset_id";
-		$errorcode = GENIRESPONSE_ERROR;
-		goto bad;
-	    }
-	    $size = int(($image->lba_high() -
-			 $image->lba_low() + 1) /
-			(1024 / $image->lba_size())) . "KB";
-	}
-	if (defined($size)) {
-	    $size = Blockstore::ConvertToMebi($size);
-	    if ($size < 0) {
-		$message = "Illegal blockstore size for $bsname";
-		goto bad;
-	    }
-	}
-    }
-    push(@attributes, ["mountpoint", $mount, 0])
-	if (defined($mount) && $mount ne "");
-    push(@attributes, ["placement", $placement, 0]);
-    push(@attributes, ["readonly", $readonly, 0]);
-    push(@attributes, ["class", ($class eq "local" ? "local" : "SAN"), 1]);
-	
-    if ($class eq "remote") {
-	$fixed = $bsname = $nodename;
-	push(@attributes, ["protocol", "iSCSI", 1]);
+		my $pid = $dataset_urn->project();
+		my $gid = $dataset_urn->group();
+		$gid = $pid if (!defined($gid));
 
-	#
-	# The "rwclone" attribute allows you to map a writable copy of the
-	# indicated SAN-based dataset. In this way, multiple nodes can map
-	# the same dataset simultaneously. In many situations, this is more
-	# useful than a "readonly" mapping. For example, a dataset
-	# containing a Linux source tree could be mapped into multiple
-	# nodes, each of which could do its own independent,
-	# non-conflicting configure and build in their respective copies.
-	# Currently, rwclones are "ephemeral" in that any changes made are
-	# lost when the experiment mapping the clone is terminated.
-	#
-	push(@attributes, ["rwclone", $rwclone, 0]) if ($rwclone);
-
-	if (defined($dataset_id)) {
-	    if (!GeniHRN::IsValid($dataset_id)) {
-		$message = "Invalid dataset urn for $dataset_id";
-		goto bad;
-	    }
-	    my $dataset_urn = GeniHRN->new($dataset_id);
-	    if ($dataset_urn->type() !~ /^(lt|st)?dataset$/) {
-		$message = "Illegal dataset type in $dataset_id";
-		goto bad;
-	    }
-	    if ($dataset_urn->domain() ne $OURDOMAIN) {
-		$message = "This is not the correct site for $dataset_id";
-		goto bad;
-	    }
-	    if (!defined($dataset_urn->project())) {
-		$message = "No project in $dataset_id";
-		goto bad;
-	    }
-	    my $pid = $dataset_urn->project();
-	    my $gid = $dataset_urn->group();
-	    $gid = $pid if (!defined($gid));
-
-	    #
-	    # If the ID includes a project, strip it. We no longer
-	    # put the project there, but old URNs might have it.
-	    #
-	    my ($ignore,$id) = split("//", $dataset_urn->id());
-	    $id = $ignore if (!defined($id));
-
-	    my $lease = Lease->Lookup($pid, $gid, $id);
-	    if (!defined($lease)) {
 		#
-		# Dataset must already exist.
+		# If the ID includes a project, strip it. We no longer
+		# put the project there, but old URNs might have it.
 		#
-		$message = "No such dataset for $bsname: $dataset_urn";
-		goto bad;
-	    }
-	    if ($PROTOGENI_LOCALUSER) {
+		my ($ignore,$id) = split("//", $dataset_urn->id());
+		$id = $ignore if (!defined($id));
+
+		my $lease = Lease->Lookup($pid, $gid, $id);
+		if (!defined($lease)) {
+		    #
+		    # Dataset must already exist.
+		    #
+		    $message   = "No such dataset for $bsname: $dataset_urn";
+		    $errorcode = GENIRESPONSE_BADARGS;
+		    last;
+		}
+		if ($PROTOGENI_LOCALUSER) {
+		    #
+		    # We use the Emulab permission system.
+		    #
+		    goto permokay
+			if ($lease->AccessCheck($geniuser->emulab_user(),
+						LEASE_ACCESS_READ()));
+		    $message = "Not enough permission to use ".
+		      "dataset: $dataset_id";
+		    $errorcode = GENIRESPONSE_BADARGS;
+		    last;
+		}
 		#
-		# We use the Emulab permission system.
+		# Normal emulab permissions are going to be applied later,
+		# so either it is the same user that created the lease, or
+		# it is usable by anyone, or it has to be in the same
+		# project (same SA) as the experiment being created (since
+		# the user has permission to operate in the same project
+		# as the lease).
+		#
+		# Lease access checks are for local users only, so we are
+		# limited to local users for now, or the lease is public.
 		#
 		goto permokay
-		    if ($lease->AccessCheck($geniuser->emulab_user(),
-					    LEASE_ACCESS_READ()));
-		$message = "Not enough permission to use dataset: $dataset_id";
-		goto bad;
-	    }
-	    #
-	    # Normal emulab permissions are going to be applied later,
-	    # so either it is the same user that created the lease, or
-	    # it is usable by anyone, or it has to be in the same
-	    # project (same SA) as the experiment being created (since
-	    # the user has permission to operate in the same project
-	    # as the lease).
-	    #
-	    # Lease access checks are for local users only, so we are
-	    # limited to local users for now, or the lease is public.
-	    #
-	    goto permokay
-		if (($geniuser->IsLocal() &&
-		     ($lease->IsPermRO() ||
-		      ($lease->pid() eq $experiment->pid() &&
-		       $lease->gid() eq $experiment->gid()))) ||
-		    $lease->IsAnonRO());
+		    if (($geniuser->IsLocal() &&
+			 ($lease->IsPermRO() ||
+			  ($lease->pid() eq $experiment->pid() &&
+			   $lease->gid() eq $experiment->gid()))) ||
+			$lease->IsAnonRO());
 
-	    #
-	    # XXX We used to look at credentials here, but that made no
-	    # difference, since we did not do anything with the lease
-	    # access. Maybe add that later.
-	    #
-	    # If we get here, its not allowed.
-	    $message = "No permission to use dataset $dataset_id";
-	    goto bad;
+		#
+		# XXX We used to look at credentials here, but that made no
+		# difference, since we did not do anything with the lease
+		# access. Maybe add that later.
+		#
+		# If we get here, its not allowed.
+		$message   = "No permission to use dataset $dataset_id";
+		$errorcode = GENIRESPONSE_BADARGS;
+		last;
 
-	  permokay:
-	    #
-	    # Only one read-write user at a time.
-	    #
-	    if ($readonly && $lease->InUseReadWrite()) {
-		$message = "Dataset $dataset_id is already in use RW";
-		goto bad;
-	    }
-	    # We need some stuff from the blockstore to fill out the
-	    # virt tables below.
-	    my $blockstore = Blockstore->LookupByLease($lease->lease_idx());
-	    if (!defined($blockstore)) {
-		$message = "Could not get blockstore for dataset $dataset_id";
-		goto bad;
-	    }
-	    $btype = $lease->type();
-	    $size  = $blockstore->total_size();
+	      permokay:
+		#
+		# Only one read-write user at a time.
+		#
+		if ($readonly && $lease->InUseReadWrite()) {
+		    $message = "Dataset $dataset_id is already in use RW";
+		    $errorcode = GENIRESPONSE_BADARGS;
+		    last;
+	      }
+		# We need some stuff from the blockstore to fill out the
+		# virt tables below.
+		my $blockstore = Blockstore->LookupByLease($lease->lease_idx());
+		if (!defined($blockstore)) {
+		    $message = "No blockstore lease for dataset $dataset_id";
+		    $errorcode = GENIRESPONSE_BADARGS;
+		    last;
+		}
+		$btype = $lease->type();
+		$size  = $blockstore->total_size();
 
-	    push(@attributes, ["lease", $lease->lease_idx(), 1]);
-	}
-	else {
-	    $size = GeniXML::GetText("size", $blockref);
-	
-	    if (!defined($size)) {
-		$message = "Missing blockstore size for $bsname";
-		goto bad;
-	    }
-	    $size = Blockstore::ConvertToMebi($size);
-	    if ($size < 0) {
-		$message = "Illegal blockstore size for $bsname";
-		goto bad;
-	    }
-	}
-    }
-    else {
-	#
-	# Might be a XEN VM. The easiest thing to do is add a XEN_EXTRAFS
-	# argument, which will be ignored if not a XEN VM. There might be
-	# a xen settings section in the node, but we will ignore it and
-	# just delete/insert a properly sized attribute.
-	#
-	my $attrkey;
-	my $attrvalue;
-	my $row;
-
-	#
-	# Size is optional on physical hosts, but we cannot do that on
-	# XEN VMs.
-	#
-	my $virtualization_subtype = GeniXML::GetVirtualizationSubtype($noderef);
-	if (defined($virtualization_subtype) &&
-	    $virtualization_subtype eq "emulab-xen") {
-	    if (!defined($size)) {	    
-		$message = "Missing blockstore size for $bsname";
-		goto bad;
+		push(@attributes, ["lease", $lease->lease_idx(), 1]);
 	    }
 	    else {
-		$attrkey   = "XEN_EXTRADISKS";
-		$attrvalue = "$bsname:" . ceil($size / 1024) . "GB";
-
-		$row = $virtexperiment->Find("virt_node_attributes",
-					     $nodename, $attrkey);
-		if (defined($row)) {
-		    $attrvalue  = $row->attrvalue() . "," . $attrvalue;
+		$size = GeniXML::GetText("size", $blockref);
+		
+		if (!defined($size)) {
+		    $message = "Missing blockstore size for $bsname";
+		    $errorcode = GENIRESPONSE_BADARGS;
+		    last;
+		}
+		$size = Blockstore::ConvertToMebi($size);
+		if ($size < 0) {
+		    $message = "Illegal blockstore size for $bsname";
+		    $errorcode = GENIRESPONSE_BADARGS;
+		    last;
 		}
 	    }
-	    if (defined($row)) {
-		$row->Delete($VirtExperiment::STORE_FLAGS_DEBUG);
+	}
+	else {
+	    #
+	    # Might be a XEN VM. The easiest thing to do is add a XEN_EXTRAFS
+	    # argument, which will be ignored if not a XEN VM. There might be
+	    # a xen settings section in the node, but we will ignore it and
+	    # just delete/insert a properly sized attribute.
+	    #
+	    my $attrkey;
+	    my $attrvalue;
+	    my $row;
+
+	    #
+	    # Size is optional on physical hosts, but we cannot do that on
+	    # XEN VMs.
+	    #
+	    my $virtualization_subtype = GeniXML::GetVirtualizationSubtype($noderef);
+	    if (defined($virtualization_subtype) &&
+		$virtualization_subtype eq "emulab-xen") {
+		if (!defined($size)) {	    
+		    $message = "Missing blockstore size for $bsname";
+		    $errorcode = GENIRESPONSE_BADARGS;
+		    last;
+		}
+		else {
+		    $attrkey   = "XEN_EXTRADISKS";
+		    $attrvalue = "$bsname:" . ceil($size / 1024) . "GB";
+
+		    $row = $virtexperiment->Find("virt_node_attributes",
+						 $nodename, $attrkey);
+		    if (defined($row)) {
+			$attrvalue  = $row->attrvalue() . "," . $attrvalue;
+		    }
+		}
+		if (defined($row)) {
+		    $row->Delete($VirtExperiment::STORE_FLAGS_DEBUG);
+		}
+		$virtexperiment->NewTableRow("virt_node_attributes",
+					     {"vname"     => $nodename,
+					      "attrkey"   => $attrkey,
+					      "attrvalue" => $attrvalue});
 	    }
-	    $virtexperiment->NewTableRow("virt_node_attributes",
-					 {"vname"     => $nodename,
-					  "attrkey"   => $attrkey,
-					  "attrvalue" => $attrvalue});
+	}
+	$virtexperiment->NewTableRow("virt_blockstores",
+				     {"vname"     => $bsname,
+				      "type"      => $btype,
+				      "size"      => defined($size) ? $size : 0,
+				      "fixed"     => $fixed});
+	foreach my $aref (@attributes) {
+	    my ($aname, $value, $isdesire) = @{$aref};
+	    $virtexperiment->NewTableRow("virt_blockstore_attributes",
+					 {"vname"     => $bsname,
+					  "attrkey"   => $aname,
+					  "attrvalue" => $value,
+					  "isdesire"  => $isdesire,
+					 });
 	}
     }
-    $virtexperiment->NewTableRow("virt_blockstores",
-				 {"vname"     => $bsname,
-				  "type"      => $btype,
-				  "size"      => defined($size) ? $size : 0,
-				  "fixed"     => $fixed});
-    foreach my $aref (@attributes) {
-	my ($aname, $value, $isdesire) = @{$aref};
-	$virtexperiment->NewTableRow("virt_blockstore_attributes",
-				     {"vname"     => $bsname,
-				      "attrkey"   => $aname,
-				      "attrvalue" => $value,
-				      "isdesire"  => $isdesire,
-				     });
+    if ($errorcode) {
+	return GeniResponse->Create($errorcode, undef, $message);
+    }
+    #
+    # disk size desires for the node. 
+    #
+    foreach my $which (keys(%all_placements)) {
+	my $size  = $all_placements{$which}->{"size"};
+	my $dname = "?+disk_" . lc($which);
+	
+	next
+	    if ($size == 0);
+
+	#
+	# But there might already be a desire, that was set by the
+	# NS to GeniLib converter (cause these desires added in the
+	# NS parser). If there is, then let that be authoritative.
+	# Might not be the right approach, we will see.
+	#
+	my $found   = undef;
+	my @desires = $virtexperiment->Table("virt_node_desires")->Rows();
+	foreach my $desire (@desires) {
+	    if ($desire->vname() eq $nodename && $desire->desire() eq $dname) {
+		$found = $desire;
+		last;
+	    }
+	}
+	if (!$found) {
+	    $virtexperiment->NewTableRow("virt_node_desires",
+					 {"vname"    => $nodename,
+					  "desire"   => $dname,
+					  "weight"   => $size});
+	}
     }
     return 0;
-
-  bad:
-    return GeniResponse->Create($errorcode, undef, $message);
 }
 
 sub AnnotateAddressPools($$)
