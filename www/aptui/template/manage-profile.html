@@ -913,7 +913,10 @@
 		    </button>
 		  </span>
 		  <% if (!disabled && gotrspec) { %>
+		    <% 	var url = "instantiate.php?profile=" +
+		           version_uuid + "&from=manage-profile"; %>
 		    <a class='btn btn-primary btn-xs pull-left' disabled
+		       href="<%- url %>"
                        id='profile_instantiate_button'
                        style='margin-right: 10px;'
                        type='submit' name='create'>Instantiate

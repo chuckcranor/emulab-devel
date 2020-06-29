@@ -215,18 +215,6 @@ $(function ()
 	    $('#modal_profile_rspec_textarea').val("");
 	});
 
-	/*
-	 * The instantiate button.
-	 */
-	$('#profile_instantiate_button').click(function (event) {
-	    var url = "instantiate.php?profile=" +
-		version_uuid + "&from=show-profile"
-
-	    if (reporefspec) {
-		url += "&refspec=" + reporefspec;
-	    }
-	    window.location.replace(url);
-	});
 	// Handler for normal instantiate submit button, which is in
 	// the modal.
 	$('#instantiate_submit_button').click(function (event) {
@@ -335,8 +323,8 @@ $(function ()
     {
 	console.info("SelectRepoTarget: ", which);
 
-	// So we remember what the user selected for instantiate button
 	reporefspec = which;
+	UpdateInstantiateButton();
 	
 	var callback = function (source, hash) {
 	    console.info(source);
@@ -396,5 +384,18 @@ $(function ()
 	xmlthing.done(callback);
     }
 
+    /*
+     * Update the instantiate button when we switch repo targets.
+     */
+    function UpdateInstantiateButton()
+    {
+	var url = "instantiate.php?profile=" +
+	    version_uuid + "&from=manage-profile";
+
+	if (reporefspec) {
+	    url += "&refspec=" + reporefspec;
+	}
+	$('#profile_instantiate_button').attr("href", url);
+    }
     $(document).ready(initialize);
 });

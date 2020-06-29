@@ -624,12 +624,6 @@ $(function ()
 		$('#renderer_modal_div').html($(this).html());
 		sup.ShowModal("#renderer_modal");
 	    });
-	// Handler for normal instantiate submit button, which is in
-	// the modal.
-	$('#instantiate_submit_button').click(function (event) {
-	    event.preventDefault();
-	    Instantiate();
-	});
 	// Handler for publish submit button, which is in the modal.
 	$('#publish_submit_button').click(function (event) {
 	    event.preventDefault();
@@ -667,19 +661,6 @@ $(function ()
 	      '[name=examples_portals]').val(portals);
 	});
 
-	/*
-	 * The instantiate button.
-	 */
-	$('#profile_instantiate_button').click(function (event) {
-	    var url = "instantiate.php?profile=" +
-		version_uuid + "&from=manage-profile"
-
-	    if (reporefspec) {
-		url += "&refspec=" + reporefspec;
-	    }
-	    window.location.replace(url);
-	});
-	
 	/*
 	 * If we were given an rspec, suck the description and instructions
 	 * out of the rspec and put them into the text boxes.
@@ -1190,32 +1171,6 @@ $(function ()
     }
 
     //
-    // Instantiate a profile.
-    //
-    function Instantiate()
-    {
-	var callback = function(json) {
-	    sup.HideModal("#waitwait-modal");
-	    
-	    if (json.code) {
-		sup.SpitOops("oops", json.value);
-		return;
-	    }
-	    window.location.replace(json.value);
-	}
-
-	var blob = {"uuid" : version_uuid};
-	if (amlist.length) {
-	    blob.where = $('#instantiate_where').val();
-	}
-	WaitWait();
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "instantiate",
-					    "Instantiate", blob);
-	xmlthing.done(callback);
-    }
-
-    //
     // Progress Modal
     //
     function ShowProgressModal()
@@ -1598,6 +1553,7 @@ $(function ()
 			       function(which) {
 				   // So we remember what the user selected.
 				   reporefspec = which;
+				   UpdateInstantiateButton();
 				   SelectRepoTarget(which);
 			       });
     }
@@ -1948,5 +1904,19 @@ $(function ()
 	xmlthing.done(callback);
     }
 
+    /*
+     * Update the instantiate button when we switch repo targets.
+     */
+    function UpdateInstantiateButton()
+    {
+	var url = "instantiate.php?profile=" +
+	    version_uuid + "&from=manage-profile";
+
+	if (reporefspec) {
+	    url += "&refspec=" + reporefspec;
+	}
+	$('#profile_instantiate_button').attr("href", url);
+    }
+    
     $(document).ready(initialize);
 });

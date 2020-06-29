@@ -225,11 +225,14 @@
 	</form>
 	<% if (!disabled) { %>
 	  <% if (gotrspec) { %>
-	    <button class='btn btn-primary btn-xs pull-right'
-		    id='profile_instantiate_button'
-		    style='margin-right: 10px;'
-		    name='create'>Instantiate
-	    </button>
+	    <% 	var url = "instantiate.php?profile=" +
+	           version_uuid + "&from=manage-profile"; %>
+	    <a class='btn btn-primary btn-xs pull-right'
+	       href="<%- url %>"
+	       id='profile_instantiate_button'
+	       style='margin-right: 10px;'
+	       name='create'>Instantiate
+	    </a>
 	  <% } %>
 	  <a id="copy-profile-button"
 	     class='btn btn-primary btn-xs pull-right'
