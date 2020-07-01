@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -590,11 +590,19 @@ sub UpdateVersionInfo($$)
 {
     my ($name, $value) = @_;
     my $safe_name  = DBQuoteSpecial($name);
-    my $safe_value = DBQuoteSpecial($value);
 
-    return -1
-	if (!DBQueryWarn("replace into version_info set ".
-			 "  name=$safe_name, value=$safe_value"));
+    if (!defined($value)) {
+	return -1
+	    if (!DBQueryWarn("delete from version_info ".
+			     "where name=$safe_name"));
+    }
+    else {
+	my $safe_value = DBQuoteSpecial($value);
+
+	return -1
+	    if (!DBQueryWarn("replace into version_info set ".
+			     "  name=$safe_name, value=$safe_value"));
+    }
     return 0;
 }
 

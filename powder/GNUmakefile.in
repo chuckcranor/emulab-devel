@@ -25,31 +25,37 @@ SRCDIR		= @srcdir@
 TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= ..
 SUBDIR		= powder
+ISMAINSITE	= @TBMAINSITE@
 
 include $(OBJDIR)/Makeconf
 
 SUBDIRS		= 
 
 SBIN_SCRIPTS	= powder_shutdown powderstats powder_report \
-		  powder_keepalive powder_deadman bspowerconfig
+		  powder_deadman
 WEB_SBIN_SCRIPTS= webpowder_shutdown
 LIBEXEC_SCRIPTS	= $(WEB_SBIN_SCRIPTS)
+
+ifeq ($(ISMAINSITE),1)
+SBIN_SCRIPTS   += powder_keepalive
+RCFILE          = $(INSTALL_RCDIR)/powder_keepalive.sh
+endif
 
 #
 # Force dependencies on the scripts so that they will be rerun through
 # configure if the .in file is changed.
 # 
-all:	$(SBIN_SCRIPTS) $(LIBEXEC_SCRIPTS) listing.php
+all:	$(SBIN_SCRIPTS) $(LIBEXEC_SCRIPTS) listing.php powder_keepalive.sh
 
 subboss: 
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
-install: rfmonitor-install \
+install: rfmonitor-install install-mainsite \
 	$(addprefix $(INSTALL_SBINDIR)/, $(SBIN_SCRIPTS)) \
 	$(addprefix $(INSTALL_LIBEXECDIR)/, $(LIBEXEC_SCRIPTS))
 
-boss-install: install install-subdirs
+boss-install: install
 
 rfmonitor-install: rfmonitor-subdir \
 	$(INSTALL_WWWDIR)/rfmonitor/.htaccess \
@@ -65,6 +71,8 @@ rfmonitor-subdir:
 	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor
 	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor/archive
 
+install-mainsite: $(RCFILE)
+
 subboss-install: 
 
 post-install: 
@@ -73,6 +81,12 @@ post-install:
 # Control node installation (aka, ops)
 #
 control-install:
+
+# Like the INSTALL_BINDIR target
+$(INSTALL_RCDIR)/%: %
+	@echo "Installing $<"
+	-mkdir -p $(INSTALL_RCDIR)
+	$(INSTALL_PROGRAM) $< $@
 
 # This rule says what web* script depends on which installed binary directory.
 $(WEB_SBIN_SCRIPTS): $(INSTALL_SBINDIR)

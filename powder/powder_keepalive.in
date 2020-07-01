@@ -41,6 +41,10 @@ use POSIX qw(strftime ceil);
 # it does not hear from the Mothership for some length of time, to
 # be determined.
 #
+# NOTE: This script needs to run all the time, we do not stop it when
+# shutting down the Mothership for maintenance, since that would throw all
+# the remote endpoints in a tizzy for no reason.
+#
 sub usage()
 {
     print "Usage: powder_keepalive [-d] [-s] [-n]\n";
@@ -59,7 +63,7 @@ my $TB		     = "@prefix@";
 my $TBOPS            = "@TBOPSEMAIL@";
 my $MAINSITE         = @TBMAINSITE@;
 my $LOGFILE          = "$TB/log/powder_keepalive.log";
-my $SLEEP_INTERVAL   = 300;
+my $SLEEP_INTERVAL   = 30;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -67,6 +71,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 # Protos
 sub fatal($);
+sub logit($);
 	  
 #
 # Turn off line buffering on output
@@ -124,12 +129,8 @@ while (1) {
     #
     # We always run, we do not look at NoLogins().
     #
-    print "Running at ".
-	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
-
     my @aggregates = APT_Aggregate->LookupAll();
     if (!@aggregates) {
-	print "No Aggregates!\n";
 	goto again;
     }
     foreach my $aggregate (@aggregates) {
@@ -142,12 +143,14 @@ while (1) {
 	
 	my $nickname = $aggregate->nickname();
 	if ($debug) {
-	    print "Pinging $nickname\n";
+	    logit("Pinging $nickname");
 	}
 	my $error;
-	# Use the fastpath RPC
+	# Use the fastpath RPC. This will set the timeout to 10 seconds,
+	# and with mobile enpoints, we could see some transient delays
+	# in just getting through all of them.
 	if ($aggregate->CheckStatus(\$error, 1)) {
-	    print STDERR "$nickname: $error\n";
+	    logit("$nickname failure: $error");
 	}
     }
     exit(0)
@@ -177,4 +180,12 @@ sub fatal($)
 
     die("*** $0:\n".
 	"    $msg\n");
+}
+
+sub logit($)
+{
+    my ($msg) = @_;
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+
+    print "$stamp: $msg\n";
 }

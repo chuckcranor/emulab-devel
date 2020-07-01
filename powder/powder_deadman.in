@@ -36,8 +36,7 @@ use POSIX qw(strftime ceil);
 
 #
 # Powder deadman switch; if do not hear from the Mothership within
-# <insert number> minutes, we power throw all local experiment into
-# panic (with power off) mode.
+# <insert number> minutes, we power off all nodes/radios.
 #
 sub usage()
 {
@@ -46,7 +45,7 @@ sub usage()
 }
 my $optlist   = "dns";
 my $debug     = 0;
-my $impotent  = 0;
+my $impotent  = 1;
 my $oneshot   = 0;
 my $counter   = 0;
 my $lastping;
@@ -62,9 +61,24 @@ my $LOGFILE          = "$TB/log/powder_deadman.log";
 my $WAP              = "$TB/sbin/wap";
 my $SUDO	     = "/usr/local/bin/sudo";
 my $POWER            = "$TB/bin/power";
-my $SLEEP_INTERVAL   = 10;
-my $NOALIVE_THRESHOLD= 30;
-my $ISALIVE_THRESHOLD= 60;
+my $SLEEP_INTERVAL   = 30;
+#
+# If we go this long without contact (upated timestamp) from the
+# Mothership, then we consider ourself motherless and must power down
+# the experimental nodes.
+#
+my $NOALIVE_THRESHOLD= 900;
+#
+# Once we start hearing from the Mothership again, we want this many
+# consecutive pings before we consider the link good, and we can power
+# the nodes back on.
+#
+my $ISALIVE_COUNT    = 3;
+#
+# But if we go too long between pings while waiting for the link to
+# come back solidly, then restart the count back at zero. 
+#
+my $ISALIVE_THRESHOLD= 90;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -72,6 +86,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 # Protos
 sub fatal($);
+sub logit($);
 sub PowerAll($);
 sub PowerControl($@);
 sub NotifyTBOPS($$);
@@ -143,8 +158,8 @@ emutil::UpdateVersionInfo('powder_deadman', undef);
 #
 # Local enable. We just want to print something to the log if disabled.
 #
-my $enable;
-if (GetSiteVar("powder/deadman_enable", \$enable) && $enable == 0) {
+my $enabled;
+if (GetSiteVar("powder/deadman_enable", \$enabled) && $enabled == 0) {
     print "Currently disabled via sitevar powder/deadman_enable\n";
 }
 
@@ -153,29 +168,45 @@ while (1) {
     # We are not updated while NoLogins() is true.
     #
     if (NoLogins()) {
-	goto again;
+	#
+	# Clear the state, we do not want to turn back on with stale state.
+	#
+	emutil::UpdateVersionInfo('powder_isalive', time());
+	emutil::UpdateVersionInfo('powder_deadman', undef);
     }
     #
     # Local enable. 
     #
-    my $enable;
-    if (GetSiteVar("powder/deadman_enable", \$enable) && $enable == 0) {
+    my $tmp;
+    if (GetSiteVar("powder/deadman_enable", \$tmp)) {
+	if ($tmp != $enabled) {
+	    logit("Switched to " . ($tmp == 0 ? "disabled" : "enabled"));
+
+	    # Coming back on, clear our state.
+	    if ($tmp != 0) {
+		emutil::UpdateVersionInfo('powder_isalive', time());
+		emutil::UpdateVersionInfo('powder_deadman', undef);
+	    }
+	}
+	$enabled = $tmp;
+	goto again
+	    if ($enabled == 0);
+    }
+    else {
+	# Problem; skip to lext loop;
 	goto again;
     }
-    print "Running at ".
-	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
-
     my $thisping = emutil::VersionInfo('powder_isalive');
     goto again
 	if (!defined($thisping));
 
     my $deadman = emutil::VersionInfo('powder_deadman');
 
-    if ($debug) {
-	print "keepalive: $thisping\n";
+    if ($debug || $deadman) {
+	logit("keepalive: $thisping");
 	if ($deadman) {
-	    print "deadman: $deadman, counter: $counter, lastping:" .
-		($lastping ? $lastping : 0) . "\n";
+	    logit("deadman: $deadman, counter: $counter, lastping:" .
+		  ($lastping ? $lastping : 0));
 	}
     }
 
@@ -194,7 +225,7 @@ while (1) {
 	    $lastping = $thisping;
 	    $counter  = 0;
 	}
-	elsif ($counter < 3) {
+	elsif ($counter < $ISALIVE_COUNT) {
 	    $counter++;
 	    $lastping = $thisping;
 	}
@@ -202,9 +233,8 @@ while (1) {
 	    #
 	    # Mother is alive. 
 	    #
-	    print "Mothership is alive at ".
-		POSIX::strftime("20%y-%m-%d %H:%M:%S",
-				localtime($lastping)) . "\n";
+	    logit("Mothership is alive at ".
+		  POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime($lastping)));
 	    PowerAll("on");
 	    emutil::UpdateVersionInfo('powder_deadman', undef);
 	    $lastping = undef;
@@ -212,7 +242,7 @@ while (1) {
 	}
     }
     elsif (time() - $thisping > $NOALIVE_THRESHOLD) {
-	print "No contact from the Mothership for $NOALIVE_THRESHOLD seconds\n";
+	logit("No contact from the Mothership for $NOALIVE_THRESHOLD seconds");
 	emutil::UpdateVersionInfo('powder_deadman', time());
 	$lastping = $thisping;
 	PowerAll("off");
@@ -240,11 +270,11 @@ sub PowerAll($)
     while (my ($node_id) = $query_result->fetchrow_array()) {
 	my $node = Node->Lookup($node_id);
 	if (!defined($node)) {
-	    print STDERR "Could not lookup node $node_id\n";
+	    logit("Could not lookup node $node_id");
 	    next;
 	}
 	if (!$node->HasOutlet()) {
-	    print STDERR "$node_id does not have an outlet, skipping.\n";
+	    logit("$node_id does not have an outlet, skipping.");
 	    next;
 	}
 	# When powering on, only reserved nodes/radios
@@ -274,10 +304,10 @@ sub PowerControl($@)
 	if ($onoff eq "on") {
 	    if ($node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
 		if ($impotent) {
-		    print "Would power on $node_id\n";
+		    logit("Would power on $node_id");
 		}
 		else {
-		    print "Powering on $node_id\n";
+		    logit("Powering on $node_id");
 		    system("$SUDO -u $PROTOUSER $WAP $POWER on $node_id");
 		    #
 		    # We want to notify if this fails ...
@@ -288,10 +318,10 @@ sub PowerControl($@)
 	else {
 	    if ($node->eventstate() ne TBDB_NODESTATE_POWEROFF()) {
 		if ($impotent) {
-		    print "Would power off $node_id\n";
+		    logit("Would power off $node_id");
 		}
 		else {
-		    print "Powering off $node_id\n";
+		    logit("Powering off $node_id");
 		    system("$SUDO -u $PROTOUSER $WAP $POWER off $node_id");
 		    #
 		    # We want to notify if this fails.
@@ -358,3 +388,10 @@ sub NotifyUser($$$)
     SENDMAIL("$user_name <$user_email>", $subject, $message, $TBOPS);
 }
 
+sub logit($)
+{
+    my ($msg) = @_;
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+
+    print "$stamp: $msg\n";
+}
