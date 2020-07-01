@@ -81,6 +81,7 @@ my $WAP            = "$TB/sbin/withadminprivs";
 my $NODE_TOP       = "$TB/sbin/node_top";
 my $API_VERSION    = 1.0;
 my $CLOUDLAB_FEDERATED = @CLOUDLAB_FEDERATED@;
+my $POWDER_DEADMAN = @POWDER_DEADMAN@;
 
 #
 # Check permission. At the moment, only the Mothership can issue requests
@@ -139,7 +140,16 @@ sub GetVersion()
     my $hasperm = CheckPermission(0);
     return $hasperm
 	if (GeniResponse::IsError($hasperm));
-	    
+
+    if ($POWDER_DEADMAN) {
+	my $now = time();
+	
+	#
+	# Update a slot in the emulab version info table with current
+	# time. Another process is watching this value. 
+	#
+	emutil::UpdateVersionInfo('powder_isalive', $now);
+    }
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $API_VERSION);
 }
 
