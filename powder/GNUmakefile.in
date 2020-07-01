@@ -86,7 +86,7 @@ control-install:
 $(INSTALL_RCDIR)/%: %
 	@echo "Installing $<"
 	-mkdir -p $(INSTALL_RCDIR)
-	$(INSTALL_PROGRAM) $< $@
+	$(SUDO) $(INSTALL_PROGRAM) $< $@
 
 # This rule says what web* script depends on which installed binary directory.
 $(WEB_SBIN_SCRIPTS): $(INSTALL_SBINDIR)
