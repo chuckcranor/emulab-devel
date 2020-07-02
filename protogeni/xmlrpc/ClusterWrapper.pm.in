@@ -372,7 +372,7 @@ sub Start($$)
     #
     if (@PROTOGENI_PORTALONLY@) {
 	my $okay = ($hrn->domain() eq $OURDOMAIN ||
-		    $hrn->domain() eq "emulab.net" ||
+		    $hrn->domain() =~ /\.emulab\.net$/ ||
 		    $hrn->domain() eq "apt.emulab.net" ||
 		    $hrn->domain() eq "aptlab.net" ||
 		    $hrn->domain() eq "utah.cloudlab.us" ||
