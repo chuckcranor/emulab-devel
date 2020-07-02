@@ -45,7 +45,8 @@ sub usage()
 }
 my $optlist   = "dns";
 my $debug     = 0;
-my $impotent  = 1;
+my $impotent  = 0;
+my $donothing = 1;
 my $oneshot   = 0;
 my $counter   = 0;
 my $lastping;
@@ -303,7 +304,7 @@ sub PowerControl($@)
     
 	if ($onoff eq "on") {
 	    if ($node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
-		if ($impotent) {
+		if ($donothing || $impotent) {
 		    logit("Would power on $node_id");
 		}
 		else {
@@ -317,7 +318,7 @@ sub PowerControl($@)
 	}
 	else {
 	    if ($node->eventstate() ne TBDB_NODESTATE_POWEROFF()) {
-		if ($impotent) {
+		if ($donothing || $impotent) {
 		    logit("Would power off $node_id");
 		}
 		else {
