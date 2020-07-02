@@ -492,6 +492,9 @@ echo "
        <li><a href='resinfo.php'>Resource Availability</a></li>
        <li><a href='cluster-status.php'>Cluster Status</a></li>
         ";
+      if ($ISPOWDER) {
+          echo "<li><a href='radioinfo.php'>Powder Radio Info</a></li>";
+      }
 echo " <li class='divider'></li>
         <li><a href='user-dashboard.php#experiments'>
 	    My Experiments</a></li>
