@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,6 +56,7 @@ my $GUNZIP	= "/usr/bin/gunzip";
 my $logname;
 my $isopen;
 my $logfile;
+my $this_user;
 
 #
 # Load the Testbed support stuff. 
@@ -115,7 +116,7 @@ if ($UID == 0) {
 # Verify user and get his DB uid and other info for later.
 #
 if (!$anon) {
-    my $this_user = User->ThisUser();
+    $this_user = User->ThisUser();
     if (! defined($this_user)) {
 	die("*** $0:\n".
 	    "    You ($UID) do not exist!");
@@ -156,11 +157,47 @@ if (!$isopen || $nowait) {
     if (!defined($logname)) {
 	print STDOUT "Log file has no content; this is not an error.\n";
     }
-    elsif ($logfile->compressed()) {
-	system("$GUNZIP -c $logname");
-    }
     else {
-	system("/bin/cat $logname");
+	my $FP;
+	
+	if ($logfile->compressed()) {
+	    if (!open(ZIP, "$GUNZIP -c $logname |")) {
+		print "Could unzip file for output\n";
+		exit(0);
+	    }
+	    $FP = *ZIP;
+	}
+	else {
+	    if (!open(LOG, $logname)) {
+		print "Could not open file for output\n";
+		exit(0);
+	    }
+	    $FP = *LOG;
+	}
+	if (defined($this_user) && $this_user->IsAdmin()) {
+	    my $buf;
+    
+	    while (sysread($FP, $buf, 8192)) {
+		print $buf;
+	    }
+	}
+	else {
+	    my $inkey = 0;
+	    
+	    while (<$FP>) {
+		if ($_ =~ /-----BEGIN RSA PRIVATE KEY-----/) {
+		    $inkey = 1;
+		}
+		elsif ($_ =~ /-----END RSA PRIVATE KEY-----/) {
+		    $inkey = 0;
+		}
+		elsif ($inkey) {
+		    next;
+		}
+		print $_;
+	    }
+	}
+	close($FP);
     }
     exit(0);
 }
@@ -205,12 +242,28 @@ if ($logfile->MetadataList()) {
 # Loop reading the file in nonblocking mode. Sleep between loops, and
 # check for a change in status.
 #
+my $inkey = 0;
 while (1) {
-    my $tmp;
-    my $buf;
+    if (defined($this_user) && $this_user->IsAdmin()) {
+	my $buf;
     
-    while (sysread(LOG, $buf, 2048)) {
-	print STDOUT "$buf";
+	while (sysread(LOG, $buf, 8192)) {
+	    print $buf;
+	}
+    }
+    else {
+	while (<LOG>) {
+	    if ($_ =~ /-----BEGIN RSA PRIVATE KEY-----/) {
+		$inkey = 1;
+	    }
+	    elsif ($_ =~ /-----END RSA PRIVATE KEY-----/) {
+		$inkey = 0;
+	    }
+	    elsif ($inkey) {
+		next;
+	    }
+	    print $_;
+	}
     }
     # Stop if the logfile object becomes invalid (deleted by someone).
     last
