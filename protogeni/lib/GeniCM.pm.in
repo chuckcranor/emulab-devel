@@ -9064,8 +9064,6 @@ sub HandleBlockstore($$$$$$@)
 			last;
 		    }
 		}
-		$all_placements{$placement}->{"size"} += $size;
-
 	    }
 	    $all_placements{$placement}->{"count"}++;
 	    #
