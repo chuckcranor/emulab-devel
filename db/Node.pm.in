@@ -1600,9 +1600,10 @@ sub GetNodeAttributes($)
 # Set an attribute for a node, overwriting the same attribute if it
 # already exists.
 #
-sub SetNodeAttribute($$$) {
-    my ($self, $attrkey, $attrval) = @_;
+sub SetNodeAttribute($$$;$) {
+    my ($self, $attrkey, $attrval, $hidden) = @_;
     my $node_id = $self->node_id();
+    my $hidden  = (defined($hidden) && $hidden ? 1 : 0);
 
     return -1
 	if (!$attrkey || !$attrval);
@@ -1614,7 +1615,8 @@ sub SetNodeAttribute($$$) {
 	if (!DBQueryWarn("replace into node_attributes set".
 			 "  node_id='$node_id',".
 			 "  attrkey=$attrkey,".
-			 "  attrvalue=$attrval"));
+			 "  attrvalue=$attrval,".
+			 "  hidden='$hidden'"));
 
     if (!defined($self->{"ATTRS"})) {
 	if ($self->LoadNodeAttributes()) {
