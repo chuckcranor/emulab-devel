@@ -27,6 +27,10 @@ Now ssh (as root) into the inner boss VM from outer boss: Oh, use the
 
 Grab (inner) boss:/usr/testbed/etc/elabman.pswd and save it.
 
+Need to remove a bunch of client files;
+
+	boss> rm -rf `cat rmfiles.txt`
+
 Now we have to shutdown the VMs. Log out of the boss/ops vms, and log
 into the physical host and then:
 
@@ -46,8 +50,8 @@ After David does his magic and boss boots, need to do:
 
 And back on Mothership boss:
 
-    	 msboss> manage_aggregate ping -a XXX -s
-    	 msboss> manage_aggregate chflag -a XXX disabled no
+	msboss> manage_aggregate ping -a XXX -s
+    	msboss> manage_aggregate chflag -a XXX disabled no
 
 Copy the defs file to Mothership boss, powder-defs directory.
 Symlink emulab-devel/defs file to the powder-defs version.

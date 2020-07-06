@@ -1,5 +1,5 @@
 <nodetype>
-<attribute name="node_type">  <value>nexus5</value></attribute>
+<attribute name="node_type">  <value>pixel3a-PL</value></attribute>
 <attribute name="new_type">  <value>1</value></attribute>
 <attribute name="class">  <value>ue</value></attribute>
 <attribute name="isvirtnode">  <value>0</value></attribute>
@@ -12,9 +12,7 @@
 <attribute name="isgeninode">  <value>0</value></attribute>
 <attribute name="isfednode">  <value>0</value></attribute>
 <attribute name="isswitch">  <value>0</value></attribute>
-<attribute name="attr_boolean_imageable">  <value>1</value></attribute>
-<attribute name="attr_boolean_rebootable">  <value>1</value></attribute>
-<attribute name="attr_integer_power_delay">  <value>30</value></attribute>
-<attribute name="attr_string_default_osid">  <value>emulab-ops,ANDROID444-STD</value></attribute>
-<attribute name="attr_string_default_imageid">  <value>emulab-ops:ANDROID444-STD</value></attribute>
+<attribute name="attr_boolean_imageable">  <value>0</value></attribute>
+<attribute name="attr_boolean_rebootable">  <value>0</value></attribute>
+<attribute name="attr_string_default_osid">  <value>emulab-ops,GENERICDEV-NOVLANS</value></attribute>
 </nodetype>

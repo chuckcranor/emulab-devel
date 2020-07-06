@@ -392,6 +392,7 @@ $TBACCT			= "$PREFIX/sbin/tbacct";
 $GENTOPOFILE		= "$PREFIX/libexec/gentopofile";
 $UPDATESITEVARS		= "$PREFIX/sbin/update_sitevars";
 $IMAGEIMPORT            = "$PREFIX/sbin/image_import";
+$IMAGEVALIDATE          = "$PREFIX/sbin/imagevalidate";
 
 $PROTOUSER_DSAKEY	= "$main::TOP_SRCDIR/install/elabman_dsa.pub";
 $PROTOUSER_RSAKEY	= "$main::TOP_SRCDIR/install/elabman_rsa.pub";

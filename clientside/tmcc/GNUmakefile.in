@@ -233,6 +233,9 @@ newnode-mfs: client
 newnode-mfs-install: newnode-mfs
 	@$(MAKE) -C $(MDSUBDIR) newnode-mfs-install
 
+mobile-control-install:
+	$(MAKE) -C common mobile-control-install
+
 #
 # XXX argh!  assumes FreeBSD inner boss
 #
