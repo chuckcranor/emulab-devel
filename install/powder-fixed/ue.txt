@@ -11,14 +11,20 @@
 	sudo /sbin/lvcreate -n z -L 20G xen-vg
 	sudo mke2fs -j /dev/xen-vg/z
 	sudo mount /dev/xen-vg/z /z
-	sudo mkdir /z/tbadb_img_cache
+***	sudo mkdir /z/tbadb_img_cache
 	echo '/dev/xen-vg/z /z ext3 defaults 0 0' | sudo csh -c '(cat >> /etc/fstab)'
 
+-- Make sure SIM is installed:
+
+	adb shell getprop gsm.sim.state
+	READY
+	
 -- Find UE IMSI by running on adb:
 
-	adb shell service call iphonesubinfo 3
+	adb shell service call iphonesubinfo 3  | cut -d "'" -f2 | grep -Eo '[0-9]' | xargs | sed 's/\ //g'
 
    which prints out hex format.
+   XXX For the prospecta pixel phones, it is 7 instead of 3.
    
 
 -- Find the UE Serial number:
@@ -45,6 +51,11 @@
 	sudo make path-install
 	cd ../../../../emulab-devel/clientside/tmcc/common/
 	sudo cp libtestbed.pm /usr/local/etc/emulab
+	sudo cp libtmcc.pm /usr/local/etc/emulab
+
+
+-- Copy aver boss' root ssh public key and install in /root/.ssh
+
 
 -------
 
@@ -64,6 +75,7 @@ cd /usr/testbed/images/ANDROID444-STD/
 mv ANDROID444-STD.ndz.new ANDROID444-STD.ndz    
 mv ANDROID444-STD.ndz.new.sha1 ANDROID444-STD.ndz.sha1
 imagevalidate -u -V size emulab-ops,ANDROID444-STD
+wap imagerelease -f -m emulab-ops,ANDROID444-STD
 
 wap editnodetype /tmp/nexus5.xml
 
