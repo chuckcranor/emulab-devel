@@ -240,6 +240,10 @@ def do_method(module, method, params):
     URI = "https://" + xmlrpc_server + ":" + str(xmlrpc_port) + SERVER_PATH
 
     ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+    try:
+        ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
+    except:
+        pass
     ctx.load_cert_chain(certificate)
     if not verify:
         ctx.check_hostname = False
