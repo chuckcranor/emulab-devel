@@ -3210,11 +3210,20 @@ $(function ()
 		xmlthing.done(callback);
 	    });
 	});
+	// Helper for common issue;
+	$('#delete-reservation-modal .nolongerfits').click(function (e) {
+	    e.preventDefault();
+	    $('#delete-reason').val("This reservation no longer fits the " +
+				    "schedule. Please login and create a " +
+				    "new one, and we will get it approved " +
+				    "as soon as possible.");
+	});
 	
 	// Handler so we know the user closed the modal. We need to
 	// clear the confirm button handler.
 	$('#delete-reservation-modal').on('hidden.bs.modal', function (e) {
 	    $('#delete-reservation-modal #confirm-delete').unbind("click");
+	    $('#delete-reservation-modal .nolongerfits').unbind("click");
 	    $('#delete-reservation-modal').off('hidden.bs.modal');
 	})
 	sup.ShowModal("#delete-reservation-modal");

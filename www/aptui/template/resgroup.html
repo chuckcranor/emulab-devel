@@ -684,6 +684,10 @@
           <button class='btn btn-danger btn-sm'
 		  id='confirm-delete'>Confirm</a></button>
 	</center>
+	<% if (window.ISADMIN) { %>
+	    <input type=checkbox class="nolongerfits" value=yes>
+	    No longer fits the schedule
+	<% } %>
       </div>
     </div>
   </div>
