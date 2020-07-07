@@ -405,6 +405,7 @@ DocumentRoot "@prefix@/www/"
     Order deny,allow
     deny from all
     # Add your allow statements here.
+    IncludeOptional /usr/local/etc/apache24/utah-nets.conf
 </Directory>
 
 #
