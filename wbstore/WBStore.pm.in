@@ -38,7 +38,7 @@
 # one for each aggregate in the experiment. Here a WBStore is associated with
 # a single syncthing instance, but all WBStores for the experiment use the
 # same syncthing instance. The syncthing instance runs on the ops node and
-# is managed via ssh commands from boss (where this code runs).
+# is managed via ssh commands from boss.
 #
 
 package WBStore;

@@ -532,6 +532,7 @@ while (1) {
     }
 }
 fatal("forever just ended!");
+exit(1);
 
 sub cleanupinstance($)
 {
@@ -729,10 +730,26 @@ sub isemptystore($$)
     my ($uuid, $datadir) = @_;
     
     my $empty = 1;
-    foreach my $t (sort keys %instance) {
-	my $i = $instance{$t}{'obj'};
-	if ($i->uuid() eq $uuid) {
-	    my $d = $i->domain();
+
+    my @dlist = sort keys %instance;
+    #
+    # XXX On the mothership, we also check the "emulab.net" domain subdir,
+    # which is not in the instances.
+    #
+    if ($MAINSITE) {
+	push(@dlist, "$uuid/emulab.net");
+    }
+
+    foreach my $id (@dlist) {
+	my ($u,$d);
+	if (exists($instance{$id})) {
+	    my $inst = $instance{$id}{'obj'};
+	    $u = $inst->uuid();
+	    $d = $inst->domain();
+	} else {
+	    ($u,$d) = split('/', $id);
+	}
+	if ($u eq $uuid) {
 	    if (opendir(FD, "$datadir/$d")) {
 		my $sentinel = ".$uuid-$d";
 		while (readdir(FD)) {
@@ -758,7 +775,7 @@ sub isemptystore($$)
 				if ($entry eq "." || $entry eq "..") {
 				    next;
 				}
-				print STDERR "$i: cleanup found non-empty ".
+				print STDERR "$id: cleanup found non-empty ".
 				    "subdir '$_' ('$entry'), must archive\n"
 				    if ($debug);
 				$empty = 0;
@@ -766,7 +783,7 @@ sub isemptystore($$)
 			    }
 			    closedir(SFD);
 			} else {
-			    logit("$i: could not open '$datadir/$_', ".
+			    logit("$id: could not open '$datadir/$_', ".
 				  "assuming not empty--forcing archive");
 			    $empty = 0;
 			}
@@ -775,14 +792,14 @@ sub isemptystore($$)
 			}
 			next;
 		    }
-		    print STDERR "$i: cleanup found a file ('$_'), ".
+		    print STDERR "$id: cleanup found a file ('$_'), ".
 			"must archive\n"
 			if ($debug);
 		    $empty = 0;
 		}
 		closedir(FD);
 	    } else {
-		logit("$i: could not find data directory in '$datadir', ".
+		logit("$id: could not find data directory in '$datadir', ".
 		      "something is wrong--forcing archive");
 		$empty = 0;
 	    }
@@ -791,6 +808,7 @@ sub isemptystore($$)
 	    }
 	}
     }
+
     return $empty;
 }
 

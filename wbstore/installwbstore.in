@@ -296,6 +296,15 @@ sub createdatadirs()
 	fatal("$uuid: Could not write new configuration");
     }
 
+    #
+    # On the mothership, we create a subdir for "emulab.net" so that base-station
+    # supporting nodes on the mothership can participate. They will just write the
+    # /proj directory directly (since it is NFS mounted), there is no need for syncthing.
+    #
+    if ($MAINSITE) {
+	push(@dirs, "$npath/wbstore/$uuid/emulab.net");
+    }
+    
     foreach my $ddir (@dirs) {
 	if (-e $ddir) {
 	    if (!$force || system("rm -rf $ddir")) {
