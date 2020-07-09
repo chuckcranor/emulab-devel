@@ -1027,6 +1027,10 @@ class InstanceHistory
     function IsPNet() {
 	return preg_match('/phantomnet/', $this->servername());
     }
+    # Project of instance.
+    function Project() {
+        return Project::Lookup($this->pid_idx());
+    }
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
 	return !is_null($this->record);

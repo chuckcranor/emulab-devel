@@ -124,7 +124,7 @@ LIB_STUFF       = libtbsetup.pm exitonwarn.pm libtestbed.pm \
                   libosload_mlnx_sn2410.pm libosload_dell.pm \
                   libosload_hp5406.pm \
 		  libimageops.pm libimageops_ndz.pm libimageops_docker.pm \
-		  libimageops_ec2.pm
+		  libimageops_ec2.pm libSignedURL.pm
 
 
 # These scripts installed setuid, with sudo. 
@@ -260,6 +260,7 @@ script-install:	$(addprefix $(INSTALL_BINDIR)/, $(BIN_STUFF)) \
 	 $(addprefix $(INSTALL_LIBEXECDIR)/, $(LIBEXEC_STUFF)) \
 	 $(addprefix $(INSTALL_DIR)/opsdir/lib/, libtestbed.pm) \
 	 $(addprefix $(INSTALL_DIR)/opsdir/lib/, libtestbed.py) \
+	 $(addprefix $(INSTALL_DIR)/opsdir/lib/, libSignedURL.pm) \
 	 $(addprefix $(INSTALL_DIR)/opsdir/cgi-bin/, spewrpmtar_cgi) \
 	 $(addprefix $(INSTALL_DIR)/opsdir/bin/, $(CTRLBIN_STUFF)) \
 	 $(addprefix $(INSTALL_DIR)/opsdir/sbin/, $(CTRLSBIN_STUFF))\
@@ -329,7 +330,8 @@ endif
 #
 control-install:	$(addprefix $(INSTALL_SBINDIR)/, $(CTRLSBIN_STUFF)) \
 			$(addprefix $(INSTALL_BINDIR)/, $(CTRLBIN_STUFF)) \
-			$(addprefix $(INSTALL_LIBDIR)/, libtestbed.pm)
+			$(addprefix $(INSTALL_LIBDIR)/, libtestbed.pm) \
+			$(addprefix $(INSTALL_LIBDIR)/, libSignedURL.pm)
 	@$(MAKE) -C ns2ir control-install
 ifeq ($(NSVERIFY),1)
 	@$(MAKE) -C nsverify control-install
