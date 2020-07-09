@@ -688,21 +688,17 @@ sub cleanupinstance($)
 
     if ($MAINSITE && $email) {
 	my $msg = <<EOF;
-The contents of the /var/emulab/save directories on all aggregates involved
-in your $pideid experiment have been collected in a tarball:
+The contents of the /var/emulab/save directories from all nodes in your
+$pideid experiment have been collected in a tarball which can be
+downloaded at:
 
-    $tarball
+    https://www.powderwireless.net/get-wbtarball.php?uuid=$uuid
 
-To access the tarball, you will need an experiment running on the Emulab
-cluster in the same project. If you have an existing experiment, you can
-access the tarball from any node in that experiment. Otherwise, you will
-need to create a single-node experiment (e.g., with this profile:
-https://www.cloudlab.us/p/PortalProfiles/single-pc
-being sure to select the "Emulab" cluster to instantiate on).
-
-The top level of the tarball contains a single directory named by the UUID
-of your experiment instance. Underneath that is a subdirectory for each
-aggregate.
+The top level of the tarball contains a single directory named by the UUID of
+your experiment instance. Underneath that is a subdirectory for each aggregate
+(Powder endpoint), and under that a directory for each node at that aggregate.
+Wired nodes (from the Emulab cluster) will appear in the "emulab.net"
+aggregate subdirectory.
 EOF
 	SENDMAIL($email, "Saved data for experiment $pideid", $msg, $TBOPS);
 	logit("$inst: archived data directory, email sent to '$email'");
