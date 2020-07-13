@@ -27,7 +27,10 @@ function ParseURN(urn)
     }
     return hrn;
 }
-
+function CreateURN(domain, authority, id)
+{
+    return "urn:publicid:IDN+" + domain + "+" + authority + "+" + id;
+}
 function IsUUID(uuid)
 {
     return /^[\w]{8}-[\w]{4}-[\w]{4}-[\w]{4}-[\w]{12}$/.test(uuid);
@@ -492,6 +495,7 @@ function newUUID()
 // Exports from this module for use elsewhere
 return {
     ParseURN: ParseURN,
+    CreateURN: CreateURN,
     IsUUID: IsUUID,
     newUUID: newUUID,
     ShowModal: ShowModal,

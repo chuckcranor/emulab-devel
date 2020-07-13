@@ -2948,7 +2948,8 @@ $(function ()
 				     var groups = json.value;
 				     if (_.size(groups)) {
 					 $('#groups-div').removeClass("hidden");
-					 window.DrawResGroupList(groups);
+					 window.DrawResGroupList('#groups-div',
+								 groups);
 					 setupCheckboxes(json.value, uuid);
 				     }
 				     else {

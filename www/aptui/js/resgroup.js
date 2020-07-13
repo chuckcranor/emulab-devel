@@ -3883,6 +3883,16 @@ $(function ()
 	    var manager_id   = $(this).attr("component_manager_id");
 	    var site         = this.getElementsByTagNameNS(JACKS_NS, 'site');
 
+	    if (component_id) {
+		var hrn = sup.ParseURN(component_id);
+		if (hrn) {
+		    component_id = hrn.id;
+		    if (!manager_id) {
+			manager_id = sup.CreateURN(hrn.domain,
+						   "authority", "cm");
+		    }
+		}
+	    }
 	    console.info("node", htype, component_id, manager_id, site);
 
 	    // Reservable nodes are easy.
@@ -3996,7 +4006,18 @@ $(function ()
 	    var htype        = $(this).find("hardware_type");
 	    var component_id = $(this).attr("component_id");
 	    var manager_id   = $(this).attr("component_manager_id");
+	    var stype        = $(this).find("sliver_type");
 
+	    if (component_id) {
+		var hrn = sup.ParseURN(component_id);
+		if (hrn) {
+		    component_id = hrn.id;
+		    if (!manager_id) {
+			manager_id = sup.CreateURN(hrn.domain,
+						   "authority", "cm");
+		    }
+		}
+	    }
 	    // Skip reservable nodes.
 	    if (component_id && manager_id &&
 		_.has(amlist, manager_id) &&
@@ -4007,6 +4028,12 @@ $(function ()
 	    if (htype.length) {
 		return;
 	    }
+	    // And they have to raw nodes, we do not want to change the
+	    // type of nodes indiscriminately.
+	    if (! (stype.len && $(stype).attr("name") === "raw")) {
+		return;
+	    }
+	    
 	    // Find the selector.
 	    var row   = rows[0];
 	    var stype = $(row).find(".hardware-select option:selected").val();
