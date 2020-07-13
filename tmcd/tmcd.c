@@ -2199,6 +2199,40 @@ COMMAND_PROTOTYPE(doifconfig)
 				mtu = "9000";
 
 			/*
+			 * XXX As of 2020, our clientside will still attempt
+			 * to explicitly set the speed of an interface based
+			 * on the SPEED= value we return. If that fails, the
+			 * script falls back on auto-negotiation. However, we
+			 * have now hit a situation where we have interfaces
+			 * that _must_ auto-negotiate or there is no link.
+			 *
+			 * Fortunately we can do that by passing zero as the
+			 * speed. So look for the magic (anti-)capability
+			 * on the interface type and change the speed to zero
+			 * if it is set. Why wait all the wait til now to do
+			 * this instead of just recording a zero speed in the
+			 * DB? Well, we need the real speed as part of our
+			 * MTU setting hack which is also done here.
+			 *
+			 * Don't hate on me.
+			 */
+			if (atoi(speed) > 0) {
+				MYSQL_RES *res2;
+				MYSQL_ROW row2;
+				res2 = mydb_query("select capval from "
+						  "interface_capabilities "
+						  "where type='%s'", 1, type);
+				if (res2 && (int)mysql_num_rows(res2) > 0) {
+					row2 = mysql_fetch_row(res2);
+					if (row2[0] &&
+					    strcmp(row2[0], "force") == 0)
+						speed = "0";
+				}
+				if (res2)
+					mysql_free_result(res2);
+			}
+
+			/*
 			 * We now use the MAC to determine the interface, but
 			 * older images still want that tag at the front.
 			 */
@@ -2428,6 +2462,7 @@ COMMAND_PROTOTYPE(doifconfig)
 		while (nrows) {
 			char *mtu = "";
 			char *bufp   = buf;
+			char *speed = row[2];
 
 			row = mysql_fetch_row(res);
 
@@ -2447,10 +2482,10 @@ COMMAND_PROTOTYPE(doifconfig)
 			 * XXX we also always set jumbo frames for 50Gb
 			 * and above.
 			 */
-			if (atoi(row[2]) >= 50000)
+			if (atoi(speed) >= 50000)
 				mtu= "9000";
 			else if (vers >= 44 && allowjumboframes &&
-				 atoi(row[2]) >= 10000) {
+				 atoi(speed) >= 10000) {
 				MYSQL_RES *res2;
 				MYSQL_ROW row2;
 				res2 = mydb_query("select max(vls.capval) "
@@ -2485,12 +2520,32 @@ COMMAND_PROTOTYPE(doifconfig)
 					mysql_free_result(res2);
 			}
 
+			/*
+			 * XXX see if we need to force auto-negotiation on
+			 * the physical link. See comment above for details.
+			 */
+			if (atoi(speed) > 0) {
+				MYSQL_RES *res2;
+				MYSQL_ROW row2;
+				res2 = mydb_query("select capval from "
+						  "interface_capabilities "
+						  "where type='%s'", 1, row[0]);
+				if (res2 && (int)mysql_num_rows(res2) > 0) {
+					row2 = mysql_fetch_row(res2);
+					if (row2[0] &&
+					    strcmp(row2[0], "force") == 0)
+						speed = "0";
+				}
+				if (res2)
+					mysql_free_result(res2);
+			}
+
 			bufp += OUTPUT(bufp, ebufp - bufp,
 				       "INTERFACE IFACETYPE=%s "
 				       "INET= MASK= MAC=%s "
 				       "SPEED=%sMbps DUPLEX=%s "
 				       "%sIFACE= RTABID= LAN=",
-				       row[0], row[1], row[2], row[3],
+				       row[0], row[1], speed, row[3],
 				       aliasstr);
 
 			/*
