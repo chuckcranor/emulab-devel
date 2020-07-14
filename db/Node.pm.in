@@ -1603,7 +1603,7 @@ sub GetNodeAttributes($)
 sub SetNodeAttribute($$$;$) {
     my ($self, $attrkey, $attrval, $hidden) = @_;
     my $node_id = $self->node_id();
-    my $hidden  = (defined($hidden) && $hidden ? 1 : 0);
+    $hidden  = (defined($hidden) && $hidden ? 1 : 0);
 
     return -1
 	if (!$attrkey || !$attrval);
