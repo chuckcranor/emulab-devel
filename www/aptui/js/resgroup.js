@@ -614,7 +614,7 @@ $(function ()
 	    minDate: 0,		/* earliest date is today */
 	    showButtonPanel: true,
 	    onClose: function (dateString, dateobject) {
-		DateChange("#start_day");
+		DateChange("start");
 		modified_callback();
 	    }
 	});
@@ -622,15 +622,15 @@ $(function ()
 	    minDate: 0,		/* earliest date is today */
 	    showButtonPanel: true,
 	    onClose: function (dateString, dateobject) {
-		DateChange("#end_day");
+		DateChange("end");
 		modified_callback();
 	    }
 	});
 	$("#reserve-request-form #start_hour").change(function () {
-	    UpdateFormTime();
+	    UpdateFormTime("start");
 	});
 	$("#reserve-request-form #end_hour").change(function () {
-	    UpdateFormTime();
+	    UpdateFormTime("end");
 	});
 	
 	$('#admin-override').change(function() {
@@ -911,14 +911,18 @@ $(function ()
      */
     function DateChange(which)
     {
-	var date = $("#reserve-request-form " + which).datepicker("getDate");
+	console.info("DateChange");
+	
 	var now = new Date();
+	var date;
 	var selecter;
 
-	if (which == "#start_day") {
+	if (which == "#start") {
+	    date     = $("#start_day " + which).datepicker("getDate");
 	    selecter = "#reserve-request-form #start_hour";
 	}
 	else {
+	    date     = $("#end_day " + which).datepicker("getDate");
 	    selecter = "#reserve-request-form #end_hour";
 	}
 	// Remember if the user already set the hour.
@@ -952,38 +956,43 @@ $(function ()
 	    $(selecter + ' option[value=' + IDEAL_STARTHOUR + ']')
 		.prop('selected', 'selected');
 	}
-	UpdateFormTime();
+	UpdateFormTime(which);
     }
 
     /*
      * Update the real form start/end values whenever the day/hour changes.
      */
-    function UpdateFormTime()
+    function UpdateFormTime(which)
     {
-	var start_day  = $('#reserve-request-form [name=start_day]').val();
-	var start_hour = $('#reserve-request-form [name=start_hour]').val();
-	if (start_day && start_hour) {
-	    var start = moment(start_day, "MM/DD/YYYY");
-	    start.hour(start_hour);
-	    $('#reserve-request-form [name=start]').val(start.format());
-	    console.info("UpdateFormTime start: " + start.format());
+	console.info("UpdateFormTime");
+
+	if (which == "start") {
+	    var start_day  = $('#reserve-request-form [name=start_day]').val();
+	    var start_hour = $('#reserve-request-form [name=start_hour]').val();
+	    if (start_day && start_hour) {
+		var start = moment(start_day, "MM/DD/YYYY");
+		start.hour(start_hour);
+		$('#reserve-request-form [name=start]').val(start.format());
+		console.info("UpdateFormTime start: " + start.format());
+	    }
+	    else {
+		$('#reserve-request-form [name=start]').val("");
+		console.info("UpdateFormTime clear start");
+	    }
 	}
 	else {
-	    $('#reserve-request-form [name=start]').val("");
-	    console.info("UpdateFormTime clear start");
-	}
-	
-	var end_day  = $('#reserve-request-form [name=end_day]').val();
-	var end_hour = $('#reserve-request-form [name=end_hour]').val();
-	if (end_day && end_hour) {
-	    var end = moment(end_day, "MM/DD/YYYY");
-	    end.hour(end_hour);
-	    $('#reserve-request-form [name=end]').val(end.format());
-	    console.info("UpdateFormTime end: " + end.format());
-	}
-	else {
-	    $('#reserve-request-form [name=end]').val("");
-	    console.info("UpdateFormTime clear end");
+	    var end_day  = $('#reserve-request-form [name=end_day]').val();
+	    var end_hour = $('#reserve-request-form [name=end_hour]').val();
+	    if (end_day && end_hour) {
+		var end = moment(end_day, "MM/DD/YYYY");
+		end.hour(end_hour);
+		$('#reserve-request-form [name=end]').val(end.format());
+		console.info("UpdateFormTime end: " + end.format());
+	    }
+	    else {
+		$('#reserve-request-form [name=end]').val("");
+		console.info("UpdateFormTime clear end");
+	    }
 	}
     }
 
@@ -2351,9 +2360,12 @@ $(function ()
 	$('#reserve-request-form [name=end_hour]').val(new_end_hour);
 
 	// And if we actually changed anything.
-	if (start_day != new_start_day || start_hour != new_start_hour ||
-	    end_day != new_end_day || end_hour != new_end_hour) {
-	    UpdateFormTime();
+	if (start_day != new_start_day || start_hour != new_start_hour) {
+	    UpdateFormTime("start");
+	    modified_callback();
+	}
+	if (end_day != new_end_day || end_hour != new_end_hour) {
+	    UpdateFormTime("start");
 	    modified_callback();
 	}
     }
