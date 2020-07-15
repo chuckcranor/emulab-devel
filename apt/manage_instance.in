@@ -2143,6 +2143,7 @@ sub ExtendInternal($$$$$$)
     my @refused  = ();
     my @failed   = ();
     my @busy     = ();
+    my $tmp;
     
     # Save in case of error.
     my $oldexpires = str2time($slice->expires());
@@ -2151,10 +2152,11 @@ sub ExtendInternal($$$$$$)
     # Before we ask the clusters, confirm that there are no conflicting
     # RF reservations for this instance.
     #
-    my $rfmax = APT_Reservation::Group::RFReservation::MaxExtension($instance);
+    my $rfmax =
+	APT_Reservation::Group::RFReservation::MaxExtension($instance, \$tmp);
     if (!defined($rfmax)) {
 	# Some kind of error.
-	$errmsg  = "Internal error determining Range max extension";
+	$errmsg  = "Internal error determining Range max extension: $tmp";
 	$errcode = -1;
 	goto bad;
     }
@@ -2163,7 +2165,10 @@ sub ExtendInternal($$$$$$)
     }
     if ($oldexpires + $seconds > $rfmax) {
 	if ($debug) {
-	    print "New expiration is greaterthen Range max extension\n";
+	    print "New expiration is greater then Range max extension\n";
+	    if (defined($tmp)) {
+		print "-> $tmp\n";
+	    }
 	}
 	if (!$force) {
 	    $errmsg = "Extension refused cause it conflicts with an existing ".
@@ -2411,6 +2416,7 @@ sub DoMaxExtensionInternal($$)
     my $maxinfo;
     my $errmsg;
     my $errcode;
+    my $tmp;
     my $expires = str2time($slice->expires());
     # This matches what MaxSliceExtension() does
     my $newmax  = $expires + (60 * 60 * 24 * 180);
@@ -2558,10 +2564,11 @@ sub DoMaxExtensionInternal($$)
     #
     # See if we are bounded by RF reservations.
     #
-    my $rfmax = APT_Reservation::Group::RFReservation::MaxExtension($instance);
+    my $rfmax =
+	APT_Reservation::Group::RFReservation::MaxExtension($instance, \$tmp);
     if (!defined($rfmax)) {
 	# Some kind of error.
-	$errmsg  = "Internal error determining RF max extension";
+	$errmsg  = "Internal error determining RF max extension: $tmp";
 	$errcode = -1;
 	goto bad;
     }
@@ -2571,6 +2578,9 @@ sub DoMaxExtensionInternal($$)
     if ($newmax > $rfmax) {
 	if ($debug) {
 	    print "Cutting back max extension cause of RF reservations.\n";
+	    if (defined($tmp)) {
+		print "-> $tmp\n";
+	    }
 	}
 	$newmax = $rfmax;
     }
