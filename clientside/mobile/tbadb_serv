@@ -635,7 +635,7 @@ sub rpc_activate_forwarding($$) {
     # Make sure device is available first (wait for a bit if necessary).
     if (!$self->wait_for_boot($node_id)) {
 	warn "$node_id is not available!\n";
-	goto BADFWD;
+	$self->error_exit($data->{FID}, RCPERR_NODE_ERR, "Error waiting for node.")
     }
 
     # Setup forwarding from the ADB daemon on the unit to the
