@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -485,7 +485,7 @@ if (defined($bsname)) {
     $image = Image->Lookup($imagepid, $imagename);
     if (!defined($image)) {
 	die("*** $0:\n".
-	    "Dataset must does not exist\n");
+	    "Dataset $imagepid/$imagename does not exist\n");
     }
     elsif (!$image->isdataset()) {
 	die("*** $0:\n".
@@ -1854,6 +1854,7 @@ sub run_with_ssh($$)
 	my $stat = 0;
 	if (system($cmd)) {
 	    $stat = $?;
+	    print STDERR "Image creation failed, status=$stat\n";
 	}
 	if ($stat & 127) {
 	    # died with a signal, return the signal
