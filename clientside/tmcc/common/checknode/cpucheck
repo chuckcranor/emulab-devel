@@ -34,6 +34,7 @@ declare -i sockets=0 cores_socket=0 threads_core=0 mhz=0 err=0
 declare -i hyperthread=0  x64bit=0 hwvirt=0
 declare p1="" p2="" p3=""
 declare phy="" cid=" "
+declare d=0
 declare p p1 p3 p3 phy
 
 finish() {
@@ -53,7 +54,7 @@ reads_core Mhz:$mhz HT:${hyperthread} 64bit:${x64bit} HV:${hwvirt}"
     fi
 }
 
-round1p() {
+round2nearest() {
     # round up 1 place
     in=$1
 
@@ -104,10 +105,36 @@ round1p() {
     return 0
 }
 
+# given 3 args 'foundx','dby' and 'close'. If the precentage diff between 'foundx' and 'dby' is smaller then 'close' return dby else return foundx
+# function to find percentage between two numbers = ((200 * $a/$b -  100 * $a/$b ))
+compareXandY() {
+    local foundx dby close
+    foundx=$1
+    dby=$2
+    close=$3 # percent diff between the two numbers has to be smaller then this var.
+
+    foundx=${foundx%%.*}
+    dby=${dby%%.*}
+    
+    percent=$((200 * $dby/$foundx - 100 * $dby/$foundx ))
+
+    if [ $percent -gt 100 ] ; then
+	percent=$(($percent - 100 ))
+    elif [ $percent -lt 100 ] ; then
+	percent=$((100 - $percent))
+    else
+	percent=0
+    fi
+
+    [[ $percent -gt $close ]] && echo -n $foundx || echo -n $dby
+    
+    return 0
+}
+
 initialize $@
 cp /dev/null ${tmplog}
 
-# check that external need program are installed
+# check that external needed programs are installed
 
 s=""
 case $os in
@@ -190,7 +217,7 @@ case $os in
 		x=${x#*: }
 	    fi
 	    rawmhz=$x
-	    mhz=$(round1p $rawmhz)
+	    mhz=$(round2nearest $rawmhz)
 
 	    cpuflags=$(grep flags /proc/cpuinfo | head -1)
 	    restore_e
@@ -199,6 +226,7 @@ case $os in
 	    [[ ("${cpuflags}" = "${cpuflags/vmx/}") && ("${cpuflags}" = "${cpuflags/svm/}") ]] && hwvirt=0 || hwvirt=1
 	    ;;
     FreeBSD )
+	    # find system arch
 	    x=y=""
 	    x=$(grep 'CPU:' /var/run/dmesg.boot | grep CPU:)
 
@@ -209,44 +237,61 @@ case $os in
 		x=${x/(R) /}
 		x=${x// /} # remove all spaces
 	    #standardize name
-		case $x in
-		    "IntelPentiumIII") arch="i686" ;;
-		    "Xeon(TM)" | "Xeon" ) arch=x86_64 ;;
-		    "IntelPentiumII") arch="i386" ;;
-		    "AMDEPYC745232-CoreProcessor") arch="amd64" ;;
-		    * ) arch="Unknown" ;;
-		esac
-		save_e
-		set +e
-		x=$(grep 'FreeBSD/SMP:' /var/run/dmesg.boot | grep package)
-		x=${x#FreeBSD/SMP: }
-		[[ $x ]] && sockets=${x%%package*} || sockets=1
+	    case $x in
+		"IntelPentiumIII") arch="i686" ;;
+		"Xeon(TM)" | "Xeon" ) arch=x86_64 ;;
+		"IntelPentiumII") arch="i386" ;;
+		"AMDEPYC745232-CoreProcessor") arch="amd64" ;;
+		* ) arch="Unknown" ;;
+	    esac
+	    # find number of sockets
+	    save_e
+	    set +e
+	    x=$(grep 'FreeBSD/SMP:' /var/run/dmesg.boot | grep package)
+	    x=${x#FreeBSD/SMP: }
+	    [[ $x ]] && sockets=${x%%package*} || sockets=1
 
-		x=$(grep 'FreeBSD/SMP:' /var/run/dmesg.boot | grep core)
-		x=${x#FreeBSD/SMP: }
-		x=${x#*package(s) x }
-		[[ $x ]] && cores_socket=${x%%core(s)*} || cores_socket=1
-		
-		x=$(grep 'FreeBSD/SMP:' /var/run/dmesg.boot | grep thread)
-		x=${x#FreeBSD/SMP: } # chop front off
-		x=${x#*core(s) x } # chop end off
-		               # set end delimiter 
-		x=${x/HTT/SMT} # pc3000 vs r710
-		x=${x/hardware/SMT} # xl170, d6515
-		[[ $x ]] && threads_core=${x%%SMT*} || threads_core=1
-		
-		x=$(grep 'CPU\|SMP' /var/run/dmesg.boot | grep CPU:)
-		restore_e
-		# example CPU: Intel(R) Xeon(TM) CPU 3.00GHz (2992.71-MHz 686-class CPU)
-		x=${x%%-MHz*}
-		mhz=$(round1p ${x##*(})
-		    
-		cpuflags="$(grep Features /var/run/dmesg.boot | head -1) $(grep Features2 /var/run/dmesg.boot | head -1) $(grep 'AMD Features' /var/run/dmesg.boot | head -1)"
-		[[ "${cpuflags}" = "${cpuflags/HTT/}" ]] && hyperthread=0 || hyperthread=1
-		[[ "${cpuflags}" = "${cpuflags/LM/}" ]] && x64bit=0 || x64bit=1
-		[[ "${cpuflags}" = "${cpuflags/HVM/}" && ("${cpuflags}" = "${cpuflags/VMX/}") && ("${cpuflags}" = "${cpuflags/VME/}") ]] && hwvirt=0 || hwvirt=1
-		;;
-    * )
+	    # find number number of cores pre socket
+	    x=$(grep 'FreeBSD/SMP:' /var/run/dmesg.boot | grep core)
+	    x=${x#FreeBSD/SMP: }
+	    x=${x#*package(s) x }
+	    [[ $x ]] && cores_socket=${x%%core(s)*} || cores_socket=1
+
+	    # find number of thread per cord
+	    x=$(grep 'FreeBSD/SMP:' /var/run/dmesg.boot | grep thread)
+	    x=${x#FreeBSD/SMP: } # chop front off
+	    x=${x#*core(s) x } # chop end off
+	    # set end delimiter 
+	    x=${x/HTT/SMT} # pc3000 vs r710
+	    x=${x/hardware/SMT} # xl170, d6515
+	    [[ $x ]] && threads_core=${x%%SMT*} || threads_core=1
+	    restore_e
+	    
+	    # find cpu speed from system
+	    x=$(grep 'CPU\|SMP' /var/run/dmesg.boot | grep CPU:)
+	    # example CPU: Intel(R) Xeon(TM) CPU 3.00GHz (2992.71-MHz 686-class CPU)
+	    # from the end chop of and thing and including -MHz
+	    x=${x%%-MHz*}
+	    # from the front chop off everything up to the (
+	    x=${x##*(}
+
+	    # get the speed from the database
+	    tbinfo=$(getfromtb CPUINFO)
+	    # example 'SOCKETS=2 CORES=8 THREADS=2 SPEED=2600 BITS=64 HV=1'
+	    y=${tbinfo##*SPEED=} #chop off front
+	    y=${y%% B*} #chop off end
+	    # is x any y within 5 percent of each other
+	    mhz=$(compareXandY $x $y 5 )
+
+	    # find the cpu flags
+	    cpuflags="$(grep Features /var/run/dmesg.boot | head -1) $(grep Features2 /var/run/dmesg.boot | head -1) $(grep 'AMD Features' /var/run/dmesg.boot | head -1)"
+	    [[ "${cpuflags}" = "${cpuflags/HTT/}" ]] && hyperthread=0 || hyperthread=1
+	    [[ "${cpuflags}" = "${cpuflags/LM/}" ]] && x64bit=0 || x64bit=1
+	    [[ "${cpuflags}" = "${cpuflags/HVM/}" && ("${cpuflags}" = "${cpuflags/VMX/}") && ("${cpuflags}" = "${cpuflags/VME/}") ]] && hwvirt=0 || hwvirt=1
+	    ;;
+	    
+	  * )
+	    # can't recover for unknow os type 
 	    echo "internal error cpucheck"
 	    failed=FAIL
 	    exit 1
