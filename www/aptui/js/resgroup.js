@@ -1761,8 +1761,8 @@ $(function ()
 	    // Check frequencies for x being a subrange of y
 	    if (x1 >= y1 && x2 <= y2) {
 		// OK, then check if a temporal subrange.
-		if (moment(x.start).isAfter(y.start) &&
-		    moment(x.end).isBefore(y.end)) {
+		if (moment(x.start).isSameOrAfter(y.start) &&
+		    moment(x.end).isSameOrBefore(y.end)) {
 		    return 1;
 		}
 	    }
@@ -1863,10 +1863,12 @@ $(function ()
 		});
 	    }
 	    if (_.size(json2.value)) {
+		var inuse = "";
+		
 		_.each(json2.value, function(range) {
 		    /*
 		     * If this range does not overlap with any of the ranges
-		     * the projet is allowed to use, then skip it.
+		     * the project is allowed to use, then skip it.
 		     */
 		    var overlaps = 0;
 		
@@ -1901,14 +1903,22 @@ $(function ()
 		    if (isdup) {
 			return;
 		    }
-		    html = html +
+		    inuse = inuse +
 			"<tr>" +
-			"<td>" + range.freq_low + "</td>" +
+			"<td>" + range.freq_low + "<small>" +
+			"   <span class='inuse-range pull-right " +
+			"        glyphicon glyphicon-asterisk'>" +
+			"   </span></small>" + "</td>" +
 			"<td>" + range.freq_high + "</td>" +
 			"<td>" + moment(range.start).format("lll") + "</td>" +
 			"<td>" + moment(range.end).format("lll") + "</td>" +
 			"</tr>";
 		});
+		if (inuse != "") {
+		    html += inuse;
+		    $('#reserved-ranges .experiment-reserved-ranges')
+			.removeClass("hidden");
+		}
 	    }
 	    if (html == "") {
 		return;
