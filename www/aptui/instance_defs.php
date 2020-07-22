@@ -841,13 +841,17 @@ class Instance
                            "e300-8d"   => true,
                            "sequoia-v8"=> true,
                            "pc2400w"   => true,
-                           "nuc5300"   => true,
                            "nexus5"    => true,
+                           "sdr"       => true,
                            "enodeb"    => true,
+                           "nuc5300"   => true,
                            "nuc6260"   => true,
                            "nuc8650"   => true,
                            "nuc8559"   => true,
-                           "nuc7100"   => true);
+                           "nuc7100"   => true,
+                           "x310"      => true,
+                           "n310"      => true,
+        );
 
         #
         # If showing nodes from another cluster, then we show them
@@ -857,12 +861,10 @@ class Instance
         if ($TBMAINSITE && 
             !($ISPOWDER || $ISPNET) &&
             ($all || $aggregate_urn == $DEFAULT_AGGREGATE_URN)) {
-            $skiptypes["sdr"]      = true;
+            $skiptypes["nuc5300"]  = true;
             $skiptypes["iris030"]  = true;
             $skiptypes["d840"]     = true;
             $skiptypes["d740"]     = true;
-            $skiptypes["x310"]     = true;
-            $skiptypes["n310"]     = true;
             $skiptypes["mmimo1"]   = true;
             $skiptypes["cellsdr1-honors"]    = true;
             $skiptypes["cellsdr1-ustar"]     = true;
@@ -896,6 +898,8 @@ class Instance
             $skiptypes["ue2"]                = true;
             $skiptypes["ue3"]                = true;
             $skiptypes["ue4"]                = true;
+            $skiptypes["pnbase1"]            = true;
+            $skiptypes["pnbase2"]            = true;
             $skiptypes["pnbase3"]            = true;
             $skiptypes["pnbase4"]            = true;
             $skiptypes["iris03"]             = true;
