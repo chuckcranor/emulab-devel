@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -755,21 +755,75 @@ sub RunAssign($$)
 	    return -1;
 	}
     }
+    my %adjusted_adcontrol =
+	map {$_ => $admission_control{$_} } keys(%admission_control);
 
     # Bound the results to avoid future reservation conflicts.
     Reservation->FlushAll();
     my $reservation_bounds = Reservation->MaxSwapInMap($experiment);
+    #print STDERR Dumper($reservation_bounds);
     # Dump to file.
     DumpReservationInfo($resinfolog, $reservation_bounds);
+    my %reservation_nodes = ();
     foreach my $type (keys(%$reservation_bounds)) {
-	if (exists($admission_control{$type})) {
-	    if ($reservation_bounds->{$type} < $admission_control{$type}) {
-		$admission_control{$type} = $reservation_bounds->{$type};
+	#
+	# See if this is actually a reservable node instead of a type.
+	#
+	my $node = Node->Lookup($type);
+
+	#
+	# Only types need to go into the admission control file.
+	# But we need to process these first cause we might change
+	# them below.
+	#
+	if (!defined($node)) {
+	    if (exists($adjusted_adcontrol{$type})) {
+		if ($reservation_bounds->{$type} < $adjusted_adcontrol{$type}) {
+		    $adjusted_adcontrol{$type} = $reservation_bounds->{$type};
+		}
+	    }
+	    else {
+		$adjusted_adcontrol{$type} = $reservation_bounds->{$type};
 	    }
 	}
 	else {
-	    $admission_control{$type} = $reservation_bounds->{$type};
+	    my $node_type = $node->type();
+	    
+	    if (!exists($reservation_nodes{$node_type})) {
+		$reservation_nodes{$node_type} = [];
+	    }
+	    push(@{$reservation_nodes{$node_type}}, $node);
 	}
+    }
+    #
+    # Helper function.
+    #
+    my $already_reserved = sub () {
+	my ($node)    = @_;
+	my $node_id   = $node->node_id();
+	my $node_type = $node->type();
+	my $message   = "*** Resource reservation violation: ".
+	    "Node $node_id ($node_type) requested, but is not ".
+	    "available because ";
+
+	if ($node->IsReserved() && $node->eid() ne $eid) {
+	    $message .= "it is already allocated to another experiment in ".
+		"this project.\n";
+	}
+	else {
+	    $message .= "of existing resource reservations ".
+		"to other projects.\n";
+	}
+	tberror({type => 'primary', cause => 'temp',
+		 severity => SEV_ERROR,
+		 error => ['admission_control_failure']}, $message);
+    };
+    foreach my $type (keys(%$reservation_bounds)) {
+	#
+	# See if this is actually a reservable node instead of a type.
+	#
+	my $node = Node->Lookup($type);
+
 	#
 	# Look to see if topology specifies nodes with this specific
 	# type. If so, we can tell right away that the user is asking for
@@ -783,35 +837,123 @@ sub RunAssign($$)
 	    my $bound  = $reservation_bounds->{$type};
 	    my $wanted = $vtop->types()->{$type};
 
+	    print "Type:$type wanted:$wanted, bound:$bound\n";
+	    #
+	    # Look to see if the user requested a specific node of this
+	    # type. If it is a reservable node, then decrement the number
+	    # we want of that type since the node request overrides the
+	    # type request.
+	    #
+	    if (exists($reservation_nodes{$type})) {
+		foreach my $node (@{$reservation_nodes{$type}}) {
+		    my $node_id = $node->node_id();
+		    
+		    if (exists($vtop->fixed()->{$node_id})) {
+			if ($reservation_bounds->{$node_id} == 0) {
+			    &$already_reserved($node);
+			    # Unretriable error
+			    return -1;
+			}
+			#
+			# User is requesting the node, not the type, so
+			# decrement the $wanted count.
+			#
+			$wanted -= 1;
+			print "Decrementing wanted count for $type ".
+			    "($node_id)\n";
+			#
+			# But for assign/ptop, bump the number since user still
+			# needs to be able to allocate the type.
+			# We fix that up in the next clause below.
+			#
+		    }
+		    else {
+			#
+			# User is allowed to use this node,
+			#
+			# If the node is already reserved to another
+			# experiment in the same project, stop here,
+			# we do not want to bump the bound count below
+			# since the node will not be in the ptop file
+			# and assign will pick some other node, and
+			# nalloc will whine. If we catch it here, the
+			# error is easier to grok.
+			#
+			if ($node->IsReserved() && $node->eid() ne $eid) {
+			    &$already_reserved($node);
+			    # Unretriable error
+			    return -1;
+			}
+			$bound += 1;
+			$adjusted_adcontrol{$type} += 1;
+			print "Incrementing bound count for $type ".
+			    "($node_id)\n";
+		    }
+		}
+	    }
 	    if ($wanted > $bound) {
 		tberror({type => 'primary', cause => 'temp',
 			 severity => SEV_ERROR,
 			 error => ['admission_control_failure']},
-		"*** Resource reservation violation: ".
-		"$wanted nodes of type $type requested, but only $bound ".
-		"available because of existing resource reservations ".
-		"to other projects.\n");
+			"*** Resource reservation violation: ".
+			"$wanted nodes of type $type requested, but only ".
+			"$bound available because of existing resource ".
+			"reservations to other projects.\n");
 		# Unretriable error
 		return -1;
 	    }
-	    next;
 	}
 	#
 	# The type can also be a node id now, so look to see if the topology
 	# has specified a node_id that admission control says it cannot have.
 	#
-	if ($reservation_bounds->{$type} == 0 && keys(%{$vtop->fixednodes()})) {
-	    my @fixed = values(%{$vtop->fixednodes()});
-	    if (grep {$_ eq $type} @fixed) {
+	if (exists($vtop->fixed()->{$type})) {
+	    my $node_id   = $type;
+	    my $node_type = $vtop->fixed()->{$node_id};
+
+	    print "Fixed: $node_id, $node_type\n";
+	    
+	    if ($reservation_bounds->{$node_id} == 0) {
 		tberror({type => 'primary', cause => 'temp',
 			 severity => SEV_ERROR,
 			 error => ['admission_control_failure']},
 		"*** Resource reservation violation: ".
-		"Node $type requested, but is not ".
+		"Node $node_id requested, but is not ".
 		"available because of existing resource reservations ".
 		"to other projects.\n");
 		# Unretriable error
 		return -1;
+	    }
+	    #
+	    # If the node is already reserved to another experiment in
+	    # the same project, stop here, we do not want to bump the
+	    # type count below since the node will not be in the
+	    # ptop file and assign will pick some other node, and nalloc
+	    # will whine. If we catch it here, the error is easier to
+	    # grok.
+	    #
+	    if ($node->IsReserved() && $node->eid() ne $eid) {
+		&$already_reserved($node);
+		# Unretriable error
+		return -1;
+	    }
+	    #
+	    # We need to change limits so that assign lets this node satisfy
+	    # any physical node constraints.
+	    #
+	    # Have to go back to the original admission_control number, we
+	    # can never violate that.
+	    #
+	    if (exists($admission_control{$node_type})) {
+		if ($adjusted_adcontrol{$node_type} <
+		    $admission_control{$node_type}) {
+		    $adjusted_adcontrol{$node_type} += 1;
+		    print "Adjusting admission_control for $node_type by 1\n";
+		}
+	    }
+	    elsif (exists($adjusted_adcontrol{$node_type})) {
+		$adjusted_adcontrol{$node_type} += 1;
+		print "Adjusting reservation bounds for $node_type by 1\n";
 	    }
 	}
     }
@@ -819,14 +961,15 @@ sub RunAssign($$)
     #
     # Append this admission control results to ptopgen.
     #
-    if (scalar(keys(%admission_control))) {
+    if (scalar(keys(%adjusted_adcontrol))) {
 	open(TYPELIMIT, ">$typelimitfile") or
 	    return -1;
 
-	foreach my $typeclass (keys(%admission_control)) {
-	    my $count = $admission_control{$typeclass};
+	foreach my $typeclass (keys(%adjusted_adcontrol)) {
+	    my $count = $adjusted_adcontrol{$typeclass};
 
 	    print TYPELIMIT "$typeclass $count\n";
+	    print STDERR "$typeclass $count\n";
 	}
 	close(TYPELIMIT);
     }
@@ -891,7 +1034,7 @@ sub RunAssign($$)
 	}
     }
     $ptopargs .= "-l $typelimitfile "
-	if (scalar(keys(%admission_control)));
+	if (scalar(keys(%adjusted_adcontrol)));
     $ptopargs .= "-I $imagelistfile "
 	if (-e $imagelistfile);
 

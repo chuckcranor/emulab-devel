@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2019 University of Utah and the Flux Group.
+# Copyright (c) 2005-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -115,6 +115,7 @@ sub Create($$$$;$)
     $self->{'VIRTEXPT'}   = $virtexperiment;
     $self->{'FLAGS'}      = $flags;
     $self->{'TYPES'}      = {};
+    $self->{'FIXED'}      = {};
     $self->{'VNODES'}     = {};
     $self->{'DELAYNODES'} = {};
     $self->{'LANNODES'}   = {};
@@ -174,7 +175,9 @@ sub user($)             { return $_[0]->{'USER'}; }
 sub realuser($)         { return $_[0]->{'REALUSER'}; }
 sub virtexperiment($)   { return $_[0]->{'VIRTEXPT'}; }
 sub flags($)            { return $_[0]->{'FLAGS'}; }
+# These two go back to the mapper for admission control.
 sub types($)            { return $_[0]->{'TYPES'}; }
+sub fixed($)            { return $_[0]->{'FIXED'}; }
 sub vnodes($)           { return $_[0]->{'VNODES'}; }
 sub delaynodes($)       { return $_[0]->{'DELAYNODES'}; }
 sub bridges($)          { return $_[0]->{'BRIDGES'}; }
@@ -1311,6 +1314,21 @@ sub LoadVirtNodes($)
 		$self->types()->{$t} = 0;
 	    }
 	    $self->types()->{$t}++;
+
+	    #
+	    # If the node is fixed to a physical node, we want to pass that
+	    # info back to the mapper for admission control and reservation
+	    # checks, wrt reservable nodes. But at this point, we do not
+	    # know if this is a VM fixed to another node in the topology,
+	    # so just record it, and down below in the post pass we will
+	    # clean it up.
+	    #
+	    # Note that we do not use fixednodes(), since that includes
+	    # more then just what is specified in topology.
+	    #
+	    if (defined($fixed)) {
+		$self->fixed()->{$fixed} = $t;
+	    }
 	}
 	elsif (defined($self->forcedarchitecture())) {
 	    my $arch = $self->forcedarchitecture();
@@ -1624,6 +1642,11 @@ sub LoadVirtNodes($)
 	$vnode->_fixedvm($fixnode);
 
 	$self->printdb("Fixing VM $vname to $fixnode, $osimage\n");
+	#
+	# Clear from the fixed() list since this is not a physical node.
+	# See comment above.
+	#
+	delete($self->fixed()->{$fixnode})
     }
 
     #
