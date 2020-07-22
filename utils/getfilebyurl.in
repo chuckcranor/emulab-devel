@@ -154,7 +154,7 @@ sub SpewFile($)
 
     print "Content-Type: application/octet-stream\n";
     print "Content-Length: $bytelen\n";
-    print "Content-Disposition: inline; filename='$filename'\n";
+    print "Content-Disposition: inline; filename=$filename\n";
     print "Expires: Mon, 26 Jul 1997 05:00:00 GMT\n";
     print "Cache-Control: no-cache, must-revalidate\n";
     print "Pragma: no-cache\n";
