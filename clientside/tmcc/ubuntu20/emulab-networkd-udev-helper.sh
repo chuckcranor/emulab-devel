@@ -36,9 +36,9 @@ Name=$iface
 Description=Emulab control net search on $iface
 DHCP=yes
 
-[DHCP]
+[DHCPv4]
 UseNTP=yes
-UseHostname=yes
+UseHostname=no
 UseDomains=yes
 EOF
 
