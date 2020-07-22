@@ -3100,7 +3100,15 @@ sub GenVirtLans($)
 	    $errors++;
 	    next;
 	}
-	if ($virtnodes) {
+	if ($protocol eq "P2PLTE") {
+	    #
+	    # These links do not get any shaping or encapsulation.
+	    #
+	    $encapval    = "default";
+	    $nobwshaping = 1;
+	    $emulated    = 0;
+	}
+	elsif ($virtnodes) {
 	    #
 	    # At the present time, links with virtnodes require that we 
 	    # multiplex (and use encapsulation). If emulated is not set,
