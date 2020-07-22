@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2015 University of Utah and the Flux Group.
+# Copyright (c) 2003-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -173,7 +173,7 @@ my $lease_id  = $lease->lease_id();
 my $lease_idx = $lease->lease_idx();
     
 # User must have permission.
-if (! $lease->AccessCheck($this_user, LEASE_ACCESS_MODIFY())) {
+if (! $lease->AccessCheck($this_user, LEASE_ACCESS_MODIFYINFO())) {
     fatal("You do not have permission to change the permissions");
 }
 

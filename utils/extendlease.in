@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2018 University of Utah and the Flux Group.
+# Copyright (c) 2013-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -140,7 +140,7 @@ $lease = Lease->Lookup($pid, $gid, $lname);
 if (!$lease) {
     fatal("$pid/$gid/$lname: lease does not exist.");
 }
-if (!$lease->AccessCheck($this_user, LEASE_ACCESS_MODIFY())) {
+if (!$lease->AccessCheck($this_user, LEASE_ACCESS_MODIFYINFO())) {
     fatal("Cannot access lease $pid/$lname.");
 }
 

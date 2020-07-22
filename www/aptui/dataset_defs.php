@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -149,7 +149,7 @@ class Dataset
             }
         }
         if ($write_access == "creator") {
-            if ($access_type > $LEASE_ACCESS_READINFO) {
+            if ($access_type == $LEASE_ACCESS_MODIFY) {
                 return 0;
             }
         }
@@ -165,6 +165,10 @@ class Dataset
         # 
 	if ($access_type == $LEASE_ACCESS_READINFO) {
 	    $mintrust = $TBDB_TRUST_USER;
+	}
+	elseif ($access_type == $LEASE_ACCESS_DESTROY ||
+                $access_type == $LEASE_ACCESS_MODIFYINFO) {
+	    $mintrust = $TBDB_TRUST_GROUPROOT;
 	}
 	else {
 	    $mintrust = $TBDB_TRUST_LOCALROOT;

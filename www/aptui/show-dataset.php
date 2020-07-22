@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -65,8 +65,9 @@ if (!$dataset) {
 if (!$dataset->AccessCheck($this_user, $LEASE_ACCESS_READINFO)) {
     SPITUSERERROR("Not enough permission!");
 }
-# Owner or admin can delete.
-$candelete  = (ISADMIN() || $dataset->owner_uid() == $this_uid ? 1 : 0);
+$candelete  = (ISADMIN() ||
+               $dataset->AccessCheck($this_user,
+                                     $LEASE_ACCESS_DESTROY) ? 1 : 0);
 
 # An admin can approve an unapproved lease.
 $canapprove = ((ISADMIN() && !$dataset->locked() &&
@@ -76,7 +77,10 @@ $canapprove = ((ISADMIN() && !$dataset->locked() &&
 $canrefresh = ($dataset->islocal() ? 0 : 1);
 
 # Can an image backed dataset be updated.
-$cansnapshot = ($candelete && $dataset->type() == "imdataset" ? 1 : 0);
+$cansnapshot = ($dataset->type() == "imdataset" &&
+                (ISADMIN() ||
+                 $dataset->AccessCheck($this_user,
+                                       $LEASE_ACCESS_MODIFY)) ? 1 : 0);
 
 $fields = array();
 if ($dataset->type() == "stdataset") {
