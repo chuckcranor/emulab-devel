@@ -622,6 +622,7 @@ ac_includes_default="\
 ac_subst_vars='LTLIBOBJS
 LIBOBJS
 DISTCLEAN_FILES
+TRUSTED_NODE_SUBNET
 MOBILESUPPORT
 RPC_CPPFLAGS
 PYTHON_INCLUDE
@@ -4595,6 +4596,9 @@ fi
 
 MOBILESUPPORT=0
 
+
+TRUSTED_NODE_SUBNET=""
+
 # Check whether --enable-mobile was given.
 if test "${enable_mobile+set}" = set; then :
   enableval=$enable_mobile;
@@ -4610,7 +4614,8 @@ fi
 if test $MOBILESUPPORT -eq 0; then
 	mobilefiles=""
 else
-	mobilefiles="mobile/GNUmakefile"
+	mobilefiles="mobile/GNUmakefile \
+	             mobile/tbadb_serv"
 
 cat >>confdefs.h <<_ACEOF
 #define MOBILESUPPORT 1
