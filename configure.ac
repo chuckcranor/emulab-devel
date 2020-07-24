@@ -280,6 +280,7 @@ AC_SUBST(MIN_UNIX_GID)
 AC_SUBST(DELAYTHRESH)
 AC_SUBST(PELABSUPPORT)
 AC_SUBST(MOBILESUPPORT)
+AC_SUBST(TRUSTED_NODE_SUBNET)
 AC_SUBST(ELVIN_COMPAT)
 AC_SUBST(ISOLATEADMINS)
 AC_SUBST(DYNAMICROOTPASSWORDS)
@@ -481,6 +482,7 @@ MIN_UNIX_GID=6000
 DELAYTHRESH=2
 PELABSUPPORT=0
 MOBILESUPPORT=0
+TRUSTED_NODE_SUBNET=""
 ELVIN_COMPAT=0
 ISOLATEADMINS=1
 DYNAMICROOTPASSWORDS=1
@@ -1135,7 +1137,8 @@ if test $MOBILESUPPORT -eq 0; then
 	mobilefiles="";
 else
 	mobilefiles="mobile/GNUmakefile \
-	             clientside/mobile/GNUmakefile";
+	             clientside/mobile/GNUmakefile \
+		     clientside/mobile/tbadb_serv";
 	optional_subdirs="$optional_subdirs mobile";
 fi
 

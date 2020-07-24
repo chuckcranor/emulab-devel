@@ -163,6 +163,9 @@ NAMED_FORWARDERS=""
 VPUBADDR_BASE=none
 VPUBADDR_BITLEN=none
 
+# For adb "-anynode-" access (mobile networking support)
+TRUSTED_NODE_SUBNET="$CONTROL_NETWORK/$CONTROL_NETMASK"
+
 # XXX backward compat for anyone using this defs file
 NTPDRIFTFILE="/etc/ntp.drift"
 

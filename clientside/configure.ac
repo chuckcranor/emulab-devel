@@ -264,6 +264,9 @@ fi
 AC_SUBST(MOBILESUPPORT)
 MOBILESUPPORT=0
 
+AC_SUBST(TRUSTED_NODE_SUBNET)
+TRUSTED_NODE_SUBNET=""
+
 AC_ARG_ENABLE(mobile,
 [  --enable-mobile[[=yes/no]]  Enable mobile support (PhantomNet) [[default=no]]])
 
@@ -276,7 +279,8 @@ fi
 if test $MOBILESUPPORT -eq 0; then
 	mobilefiles=""
 else
-	mobilefiles="mobile/GNUmakefile"
+	mobilefiles="mobile/GNUmakefile \
+	             mobile/tbadb_serv"
         AC_DEFINE_UNQUOTED(MOBILESUPPORT, 1, [Support mobile networking])
 fi
 

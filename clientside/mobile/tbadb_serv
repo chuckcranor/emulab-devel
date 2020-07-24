@@ -56,6 +56,9 @@ my %DISPATCH = (
     'exit'         => \&rpc_exit,
 );
 
+# Autoconf Variables
+my $TRUSTED_NODE_SUBNET = "@TRUSTED_NODE_SUBNET@";
+
 # Constants
 my $DEF_LOGLEVEL = 2;
 my $PIDFILE = "/var/run/tbadb_serv.pid";
@@ -66,7 +69,7 @@ my $ADB = "/usr/bin/adb";
 my $FASTBOOT = "/usr/bin/fastboot";
 my $TOUCH = "/usr/bin/touch";
 my $IPTABLES = "/sbin/iptables";
-my $HOST = "/usr/bin/host";
+my $DIG = "/usr/bin/dig";
 my $FILE = "/usr/bin/file";
 my $RM = "/bin/rm";
 my $UNZIP = "/usr/bin/unzip";
@@ -635,7 +638,7 @@ sub rpc_activate_forwarding($$) {
     # Make sure device is available first (wait for a bit if necessary).
     if (!$self->wait_for_boot($node_id)) {
 	warn "$node_id is not available!\n";
-	$self->error_exit($data->{FID}, RCPERR_NODE_ERR, "Error waiting for node.")
+	$self->error_exit($data->{FID}, RPCERR_NODE_ERR, "Error waiting for node.")
     }
 
     # Setup forwarding from the ADB daemon on the unit to the
@@ -1272,13 +1275,17 @@ sub _lock_n_load($) {
 # Resolve host to IP addr, if necessary.
 sub _resolve_host($) {
     my $host = shift;
+    my $ippat = qr/^(\d+\.\d+\.\d+\.\d+)$/;
 
-    if ($host !~ /^\d+\.\d+\.\d+\.\d+$/) {
-	my $res = `$HOST -t A $host 2>&1`;
-	if ($res =~ /has address ([\.\d]+)/) {
+    if ($host eq "-anynode-") {
+	$host = $TRUSTED_NODE_SUBNET
+    }
+    elsif ($host !~ $ippat) {
+	my $res = `$DIG -t A +short $host 2>&1`;
+	if ($res =~ $ippat) {
 	    $host = $1;
 	} else {
-	    return undef;
+	    $host = undef;
 	}
     }
 
@@ -1463,22 +1470,19 @@ sub remove_android_forward($$;$) {
 	goto BADFWD;
     }
 
-    # Clear the iptables rule.
+    # Clear any associated iptables rule(s).
     my $ipt_rules = `$IPTABLES -L INPUT --line-numbers 2>&1`;
     if ($? != 0) {
 	warn "Unable to list iptables rules!\n";
 	goto BADFWD;
     }
-    my $rulenum = 0;
     foreach my $rule (split(/\n/, $ipt_rules)) {
 	if ($rule =~ /^(\d+)\s+.+\/\* $serial \*\//i) {
-	    $rulenum = $1;
-	    last;
+	    if (system("$IPTABLES -D INPUT $1 >/dev/null 2>&1") != 0) {
+		warn "Unable to clear iptables rule for $node_id!\n";
+		goto BADFWD;
+	    }
 	}
-    }
-    if ($rulenum && system("$IPTABLES -D INPUT $rulenum >/dev/null 2>&1") != 0) {
-	warn "Unable to clear iptables rule for $node_id!\n";
-	goto BADFWD;
     }
 
     # Remove any/all entries for device from forwarding table hash.
@@ -1548,10 +1552,10 @@ sub check_adb($) {
 
     # Now make sure the adb server is running.
     my $isrunning = 
-	system("$PS auxwww | $GREP 'adb.*fork-server' | $GREP -qv grep") == 0;
+	system("$PS auxwww | $GREP 'adb.*nodaemon' | $GREP -qv grep") == 0;
     if (!$isrunning) {
 	warn "(re)starting adb server.\n";
-	if (system("$ADB -a -P 5037 fork-server server &") != 0) {
+	if (system("$ADB -a nodaemon server &") != 0) {
 	    warn "could not start adb server!\n";
 	    goto BADCHK;
 	}

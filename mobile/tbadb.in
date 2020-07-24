@@ -56,6 +56,7 @@ sub ConnectRPCHost($);
 my $TB = "@prefix@";
 my $MINHLEN   = 2;
 my $MAXHLEN   = 32;
+my $MAXDLEN   = 128;
 my $MINCMDLEN = 2;
 my $MAXCMDLEN = 32;
 my %RPCPIPES = ();
@@ -362,7 +363,7 @@ sub cmd_reserveport($@) {
     die "tbadb::cmd_reserveport: missing arguments! (Need: <target_host>)\n"
 	if (!$node_id || !$thost);
     die "tbadb::cmd_reserveport: malformed target host!"
-	if ($thost !~ /^([-\.\w]{$MINHLEN,$MAXHLEN})$/);
+	if ($thost !~ /^([-\.\w]{$MINHLEN,$MAXDLEN})$/);
     $thost = $1;
 
     # Make sure user has access to requested node
