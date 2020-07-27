@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -77,7 +77,6 @@ sub SENDMAIL($$$;$$@)
 sub SENDMAILWith($$$$;$$@)
 {
     my($Command, $To, $Subject, $Message, $From, $Headers, @Files) = @_;
-    my $tag = uc($MAILTAG);
 
     #
     # Untaint the path locally. Note that using a "local" fails on older perl!
@@ -100,11 +99,10 @@ sub SENDMAILWith($$$$;$$@)
     if (defined($Headers) && length($Headers) > 0) {
 	print MAIL "$Headers\n";
     }
-    print MAIL "X-NetBed: $SCRIPTNAME\n";
     if (defined($To)) {
 	print MAIL "To: $To\n";
     }
-    print MAIL "Subject: $tag: $Subject\n";
+    print MAIL "Subject: $Subject\n";
     print MAIL "\n";
     print MAIL "$Message\n";
     print MAIL "\n";
