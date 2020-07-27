@@ -562,17 +562,17 @@ $(function ()
      */
     function LoadRangeReservations()
     {
-	var callback = function(json) {
-	    console.log("LoadRangeReservations", json);
-	    if (json.code) {
+	var callback = function(json1, json2) {
+	    if (json1.code || json2.code) {
 		console.info("Could not get range info");
 		return;
 	    }
-	    if (!_.size(json.value)) {
+	    if (! (_.size(json1.value) || _.size(json2.value))) {
 		return;
 	    }
-	    
-	    var html = rangeTemplate({"ranges" : json.value});
+	    var html = rangeTemplate({
+		"ranges" : json1.value.concat(json2.value),
+	    });
 	    $('#range-list').html(html).removeClass("hidden");
 
 	    // Format dates with moment before display.
@@ -588,11 +588,21 @@ $(function ()
 		    // initialize zebra
 		    widgets: ["zebra"],
 		});
+	    if (_.size(json2.value)) {
+		$('#range-list .experiment-reserved-ranges')
+		    .removeClass("hidden");
+	    }
 	};
 
-	var xmlthing = sup.CallServerMethod(null, "resgroup",
+	var xmlthing1 = sup.CallServerMethod(null, "resgroup",
 					    "RangeReservations");
-	xmlthing.done(callback);
+	var xmlthing2 = sup.CallServerMethod(null, "rfrange",
+					     "AllInuseRanges");
+	$.when(xmlthing1, xmlthing2)
+	    .done(function(result1, result2) {
+		console.info("LoadRangeReservations", result1, result2);
+		callback(result1, result2);
+	    });
     }
     
     $(document).ready(initialize);
