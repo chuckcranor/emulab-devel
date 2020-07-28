@@ -3127,11 +3127,21 @@ sub GenVirtLans($)
 	    #
 	    # These links do not get any shaping or encapsulation.
 	    #
-	    $encapval    = "default";
+	    $linkencap   = "default";
 	    $nobwshaping = 1;
 	    $emulated    = 0;
+
+	    #
+	    # Someone was trying to create a P2PLTE link with VMs, which we
+	    # cannot do, and were silently turning that into a vlan. Lets
+	    # throw an error instead and burst their bubble.
+	    #
+	    if ($virtnodes) {
+		tberror("$vname: P2PLTE links cannot be used with VMs!\n");
+		return -1;
+	    }
 	}
-	elsif ($virtnodes) {
+	if ($virtnodes) {
 	    #
 	    # At the present time, links with virtnodes require that we 
 	    # multiplex (and use encapsulation). If emulated is not set,
