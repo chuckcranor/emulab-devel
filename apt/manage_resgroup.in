@@ -1159,16 +1159,15 @@ sub DoDelete()
     # are using this reservation; not allowed to delete the reservation
     # until the experiments are terminated.
     #
-    if ($resgroup->RFReservationList() || $resgroup->RouteReservationList()) {
+    if ($resgroup->RouteReservationList()) {
 	my $current;
 	if (APT_Instance->LookupForProject($project, \$current)) {
 	    $resgroup->Unlock() if (!$nolock);
 	    fatal("Could not look up experiments for $project");
 	}
 	foreach my $instance (@$current) {
-	    # Only RF/Route reservations actually matter here
-	    if ($resgroup->RFInUse($instance) ||
-		$resgroup->RoutesInUse($instance)) { 
+	    # Only Route reservations actually matter here
+	    if ($resgroup->RoutesInUse($instance)) { 
 		$resgroup->Unlock() if (!$nolock);
 		UserError("You have experiments running that are using this ".
 			  "reservation, please terminate those first");
