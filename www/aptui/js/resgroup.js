@@ -917,18 +917,18 @@ $(function ()
 	var date;
 	var selecter;
 
-	if (which == "#start") {
-	    date     = $("#start_day " + which).datepicker("getDate");
+	if (which == "start") {
+	    date     = $("#reserve-request-form #start_day").datepicker("getDate");
 	    selecter = "#reserve-request-form #start_hour";
 	}
 	else {
-	    date     = $("#end_day " + which).datepicker("getDate");
+	    date     = $("#reserve-request-form #end_day").datepicker("getDate");
 	    selecter = "#reserve-request-form #end_hour";
 	}
 	// Remember if the user already set the hour.
 	var hourset =
 	    ($(selecter + " option:selected").val() == "" ? false : true);
-	
+
 	if (moment(date).isSame(Date.now(), "day")) {
 	    for (var i = 0; i <= now.getHours(); i++) {
 
@@ -944,7 +944,7 @@ $(function ()
 	    }
 	}
 	else {
-	    for (var i = 0; i <= now.getHours(); i++) {
+	    for (var i = 0; i <= 23; i++) {
 		$(selecter + " option[value='" + i + "']")
 		    .removeAttr("disabled");
 	    }
