@@ -54,7 +54,7 @@ my $GITMAIL = dirname(abs_path($0)) . "/gitmail";
 my $PORT = 4577;
 
 # URL used to make gitlab API calls
-my $BASEURL = "https://gitlab.flux.utah.edu/";
+my $BASEURL = "https://gitlab.flux.utah.edu/api/v4/";
 
 # Path where gitlab repos live in the FS - doesn't seem available through
 # the gitlab API
