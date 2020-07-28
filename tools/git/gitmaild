@@ -32,6 +32,8 @@ use strict;
 #                 project
 # noarchive=1   : If set, does *not* send mail to the default archive list,
 #                 and turns on mailmembers=1
+# groupmembers=1 : If set, and mailmembers is also set, include members of the
+#                 group that the project belongs to
 #
 
 #
@@ -87,7 +89,7 @@ my $result = GetOptions("v" => \$verbose, "d" => \$debug, "c:s" => \$configfile)
 sub run_gitmail($$);
 sub format_options(@);
 sub call_gitlab_api($);
-sub get_member_addresses($);
+sub get_member_addresses($$);
 
 #
 # Parse config file if given
@@ -247,8 +249,12 @@ sub run_gitmail($$) {
     # If requested, send mail to everyone who's listed on the project
     if (exists $get_vars->{'mailmembers'} || exists $get_vars->{'noarchive'} ||
         $NOARCHIVE_DEFAULT) {
+        my $groupmembers = 0;
+        if (exists $get_vars->{'groupmembers'}) {
+            $groupmembers = 1;
+        }
         $options{'alwaysmail'} =
-            get_member_addresses($data->{"project_id"});
+            get_member_addresses($data->{"project_id"},$groupmembers);
     }
     if (defined($ALWAYSMAIL_ADDRESS) && $ALWAYSMAIL_ADDRESS ne "") {
         if (exists($options{'alwaysmail'})) {
@@ -364,9 +370,13 @@ sub format_options(@) {
 #
 # Get email addresses for all memebers of the given project
 #
-sub get_member_addresses($) {
-    my ($repo_id) = @_;
-    my $memberinfo = call_gitlab_api("/projects/" . $repo_id . "/members");
+sub get_member_addresses($$) {
+    my ($repo_id, $groupmembers) = @_;
+    my $path = "/projects/" . $repo_id . "/members"; 
+    if ($groupmembers) {
+        $path += "/all";
+    }
+    my $memberinfo = call_gitlab_api($path);
 
     my @addresses;
     foreach my $member (@$memberinfo) {
