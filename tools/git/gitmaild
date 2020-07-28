@@ -157,7 +157,6 @@ while (my $connection = $listen_socket->accept()) {
             my %get_vars = $request->uri->query_form;
             if ($verbose) {
                 print "Request URL is " . $request->uri. "\n";
-                print "Query part is " . $request->uri->query . "\n";
                 print "GET vars are: " . join(",",keys %get_vars) . "\n";
             }
 
