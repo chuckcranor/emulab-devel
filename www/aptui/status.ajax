@@ -890,11 +890,7 @@ function Do_SnapshotStatus()
 	return;
     }
     $this_idx = $this_user->uid_idx();
-    if ($this_idx != $instance->creator_idx() && !ISADMIN()) {
-	SPITAJAX_ERROR(1, "Not enough permission");
-	return;
-    }
-    $webtask = $instance->WebTask();
+    $webtask  = $instance->WebTask();
     if (!$webtask) {
 	SPITAJAX_ERROR(1, "No status descriptor found");
 	return;
