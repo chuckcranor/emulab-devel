@@ -380,13 +380,11 @@ sub get_member_addresses($$) {
 
     my @addresses;
     foreach my $member (@$memberinfo) {
-        # We have to grab the user information explicitly, most of this is no
-        # longer included in the member API call
-        my $userinfo = call_gitlab_api("/users/" . $member->{id});
-        my $address = $userinfo->{'email'};
-        if ($verbose) {
-            print "User details: . " . Dumper($userinfo) . "\n";
-            print "User address: $address\n";
+        if (exists $member->{'email'}) {
+            my $address = $member->{'email'};
+            if ($verbose) {
+                print "User address: $address\n";
+            }
         }
         push @addresses, $address;
     }
