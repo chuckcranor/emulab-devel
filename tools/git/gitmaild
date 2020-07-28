@@ -384,8 +384,8 @@ sub get_member_addresses($$) {
             if ($verbose) {
                 print "User address: $address\n";
             }
+            push @addresses, $address;
         }
-        push @addresses, $address;
     }
 
     return \@addresses;
