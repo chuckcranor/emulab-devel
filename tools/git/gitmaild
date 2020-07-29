@@ -21,6 +21,7 @@ use Cwd 'abs_path';
 use File::Basename;
 use Data::Dumper;
 use POSIX "setsid";
+use Digest::SHA qw(sha256_hex);
 
 use strict;
 
@@ -90,6 +91,8 @@ sub run_gitmail($$);
 sub format_options(@);
 sub call_gitlab_api($);
 sub get_member_addresses($$);
+sub old_fs_path($);
+sub new_fs_path($);
 
 #
 # Parse config file if given
@@ -220,8 +223,21 @@ sub run_gitmail($$) {
     # Change to the directory where the repo lives - this is the simplest way
     # to make all tools happy
     #
-    my $repodir = $BASEPATH . "/" . $repoinfo->{"path_with_namespace"} . ".git";
-    chdir $repodir;
+    my $dir = old_fs_path($repoinfo);
+    if (!-d $dir) {
+        if ($verbose) {
+            $dir = new_fs_path($repoinfo);
+        }
+    }
+
+    if ($verbose) {
+        print "Using filesystem path $dir\n";
+    }
+
+    if (!chdir $dir) {
+        print("Unable to change directory to $dir, aborting run of gitmail\n");
+        return 0;
+    }
 
     #
     # Build up options that we'll pass to gitmail
@@ -388,4 +404,25 @@ sub get_member_addresses($$) {
     }
 
     return \@addresses;
+}
+
+#
+# Given a repoinfo, get the old-style (repo name) path to the actual repository
+# on disk
+#
+sub old_fs_path($) {
+    my ($repoinfo) = @_;
+    return $BASEPATH . "/" . $repoinfo->{"path_with_namespace"} . ".git";
+}
+
+#
+# Given a repoinfo, get the new-style (hashed) path to the actual repository
+# on disk
+#
+sub new_fs_path($) {
+    my ($repoinfo) = @_;
+    my $hash = sha256_hex($repoinfo->{'id'});
+    my $firsttwo = substr($hash,0,2);
+    my $secondtwo = substr($hash,2,2);
+    return $BASEPATH . "/\@hashed/$firsttwo/$secondtwo/$hash.git";
 }
