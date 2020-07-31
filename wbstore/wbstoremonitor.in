@@ -454,11 +454,21 @@ while (1) {
 	# tracking and it just results in lots of open files in the syncthing
 	# instance. And it could slow down the final sync below.
 	#
+	# XXX change of plan. If we have to restart a running syncthing to
+	# change its file watcher flag, then the new syncthing will have to
+	# make a full scan of the directory even if it was INSYNC before.
+	# That can delay notification to the user by 10 minutes or more.
+	# So, for a running syncthing, we leave it running with the watcher
+	# enabled. If no syncthing was running, we start it without the
+	# file watcher since a full scan will be needed anyway.
+	#
 	if (!$MAINSITE || $pid == 0) {
 	    my $opid = $pid;
 
-	    $pid = checksyncthing($inst, 1, 0,
-				  { fsWatcherEnabled => "false" });
+	    if (!$opid) {
+		$pid = checksyncthing($inst, 1, 0,
+				      { fsWatcherEnabled => "false" });
+	    }
 	    if ($pid == 0) {
 		logit("$uuid: WARNING: ".
 		      "Could not (re)start syncthing for past instance!");
