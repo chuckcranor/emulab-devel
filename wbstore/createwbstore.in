@@ -47,7 +47,7 @@ use Data::Dumper;
 #
 sub usage()
 {
-    print STDERR "Usage: createwbstore [-hdkBDI] uuid\n";
+    print STDERR "Usage: createwbstore [-hdkBDIM] uuid\n";
     print STDERR "Usage: createwbstore [-hdkBDI] -o offset -u uid -p pid -i instance domain ...\n";
     print STDERR "Create a write-back store for the specified experiment instance.\n";
     print STDERR "The former is the normal usage where an experiment instance uuid is specified.\n";
@@ -63,14 +63,16 @@ sub usage()
     print STDERR "   -B          Do any distribution/installation in background.\n";
     print STDERR "   -D          Distribute config(s) to involved aggregates\n";
     print STDERR "   -I          Install configs on aggregates (implies -D)\n";
+    print STDERR "   -M          Send email to the experiment creator when done\n";
     print STDERR "   uuid        UUID of experiment instance\n";
     print STDERR "   domain ...  Domain name of aggregate(s)\n";
     print STDERR "\n";
     exit(-1);
 }
-my $optlist  = "hdkBDIi:u:p:o:";
+my $optlist  = "hdkBDIMi:u:p:o:";
 my $debug = 0;
 my $keep = 0;
+my $sendemail = 0;
 my $uid;
 my $email;
 my $pid;
@@ -156,6 +158,9 @@ if (defined($options{D})) {
 if (defined($options{I})) {
     $install = $distribute = 1;
 }
+if (defined($options{M})) {
+    $sendemail = 1;
+}
 if (defined($options{u})) {
     $uid = $options{u};
     if ($uid !~ /^\w+$/) {
@@ -211,7 +216,7 @@ if (@ARGV == 1 && ($exptuuid = parseinstance($ARGV[0], 1))) {
     $uid = $inst->creator();
     my $user = User->Lookup($uid);
     $email = $user->email()
-	if ($user);
+	if ($user && $sendemail);
     $pid = $inst->pid();
     $exptname = $inst->name();
     $instance = $inst->slice_uuid();

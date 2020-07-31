@@ -147,7 +147,7 @@ my %vars	= ();
 my $logfile	= "$TB/log/wbstore_monitor.log";
 my $debug	= 0;
 my $impotent	= 0;
-my $checkint	= 5 * 60;
+my $checkint	= 2 * 60;
 my $onceonly	= 0;
 my $handledead  = 0;
 my $killall	= 0;
@@ -613,7 +613,9 @@ sub cleanupinstance($)
     # On the mothership, where we make it available to the user, we chown the
     # tarball to the creator/group of the experiment and 640 it. If we are
     # archiving on the aggregate, it is strictly for debugging or paranoia
-    # and don't bother.
+    # and don't bother. Note we create the tarball to a tmpfile and then
+    # rename it atomically in case an interested party is waiting for the
+    # existence of the tarball to indicate everything is done.
     #
     # Also grab the experiment name for use in email to the user.
     #
@@ -664,23 +666,35 @@ sub cleanupinstance($)
 
     my $tardir = "$PROJDIR/$pid/wbstore";
     my $tarball = "$datadir.tgz";
+    my $tmpball = "$tarball.tmp";
     my $out = "$datadir.tgz.out";
     my $exclude = "--exclude $STMARKER --exclude '.$uuid-*'";
-    if (system("tar -C $tardir $exclude -czf $tarball $uuid >$out 2>&1")) {
+    unlink($tmpball);
+    if (system("tar -C $tardir $exclude -czf $tmpball $uuid >$out 2>&1")) {
 	logit("$uuid: WARNING: cleanup could not archive ".
 	      "data dir ($datadir)! See $out.");
-	unlink($tarball);
+	unlink($tmpball);
 	notify("Could not create tarball of experiment write-back store.\n".
 	       "Create manually with:\n".
 	       "tar -C $tardir $exclude -czf $tarball $uuid\n".
-	       "and inform the user ($email).\n");
+	       "and inform the user".
+	       ($email ? " ($email).\n" : ".\n"));
 	return 1;
     }
     unlink($out);
+
     # XXX ids are not numeric so can't use perl chown and too lazy to convert
-    system("chown $fuid:$fgid $tarball")
+    system("chown $fuid:$fgid $tmpball")
 	if (defined($fuid) && defined($fgid));
-    chmod(0640, $tarball);
+    chmod(0640, $tmpball);
+    if (!rename($tmpball, $tarball)) {
+	logit("$uuid: WARNING: Could not rename $tmpball to $tarball!");
+	notify("Could not rename tarball of experiment write-back store.\n".
+	       "Tarball exists as $tmpball. ".
+	       "Rename to $tarball and inform the user".
+	       ($email ? " ($email).\n" : ".\n"));
+	return 1;
+    }
 
     $out = "$datadir.rm.out";
     if (system("rm -rf $confdir $datadir >$out 2>&1")) {
