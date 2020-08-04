@@ -119,6 +119,7 @@ chown($uid, $gid, $logname) or
 
 # Convenient.
 $ENV{"HOME"} = $homedir;
+$ENV{"USER"} = $login;
 
 #
 # Fork a child so that we can run the command as the user and wait for it.
