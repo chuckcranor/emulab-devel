@@ -2856,7 +2856,8 @@ sub GenVirtLans($)
 	my $sharednodes  = 0;
 	my $geninodes    = 0;
 	my %nodesdo      = ("alias"=>0, "veth"=>0, "vlan"=>0, "ldelay"=>0,
-			    "veth-ne"=>0, "veth-en"=>0, "rem-bstore"=>0);
+			    "veth-ne"=>0, "veth-en"=>0, "rem-bstore"=>0,
+			    "none"=>0);
 	my $trivial_ok   = 0;
 	my $emulated     = $vlan->_emulated();
         my $uselinkdelay = $vlan->_uselinkdelay();
@@ -2985,6 +2986,9 @@ sub GenVirtLans($)
 	    # Figure out how many nodes support a feature
 	    $nodesdo{"alias"}++
 		# All OSs support this. 
+		if (1);
+	    $nodesdo{"none"}++
+		# All OSs support no encap
 		if (1);
 	    $nodesdo{"veth"}++
 		if ($osdoesveth{$osid});
@@ -3127,7 +3131,7 @@ sub GenVirtLans($)
 	    #
 	    # These links do not get any shaping or encapsulation.
 	    #
-	    $linkencap   = "default";
+	    $linkencap   = "none";
 	    $nobwshaping = 1;
 	    $emulated    = 0;
 
