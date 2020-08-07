@@ -561,6 +561,14 @@ handle_loadinfo()
 	local DOM0MEM=`get_value "$LOADINFO" DOM0MEM`
 
 	#
+	# Initial sanity check
+	#
+	if [ ! -e /dev/$DISK ]; then
+	    echo "No such disk /dev/$DISK; is disk type set correctly for this node type?"
+	    return 1
+	fi
+
+	#
 	# XXX check for secure diskloading info.
 	# XXX only return info for a single image right now
 	#
