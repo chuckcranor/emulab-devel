@@ -23,6 +23,6 @@ REPLACE INTO `interface_capabilities` VALUES ('P2PLTE','protocols','P2PLTE');
 REPLACE INTO `interface_capabilities` VALUES ('P2PLTE','P2PLTE_defspeed','10000');
 REPLACE INTO `interface_capabilities` VALUES ('P2PLTE','overtheair','1');
 
-INSERT INTO `node_type_features` VALUES ('e300-8d','?+disk_sysvol',454000);
-INSERT INTO `node_type_features` VALUES ('e300-8d','?+disk_any',454000);
-INSERT INTO `node_type_features` VALUES ('e300-8d','?+disk_nonsysvol',0);
+REPLACE INTO `node_type_features` VALUES ('e300-8d','?+disk_sysvol',454000);
+REPLACE INTO `node_type_features` VALUES ('e300-8d','?+disk_any',454000);
+REPLACE INTO `node_type_features` VALUES ('e300-8d','?+disk_nonsysvol',0);
