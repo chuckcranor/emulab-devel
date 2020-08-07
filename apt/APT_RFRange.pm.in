@@ -126,13 +126,18 @@ sub DESTROY {
     $self->{'HASH'} = undef;
 }
 
-# Copy
+# Copy (and dereferenced).
 sub Copy($)
 {
     my ($self) = @_;
-    my %row    = map {$_ => $self->hash()->{$_}} keys(%{$self->hash()});
+    my $row    = {};
 
-    return APT_RFRange::Range->Range(\%row);
+    $row->{"idx"}       = $self->idx();
+    $row->{"range_id"}  = $self->range_id()
+	if (exists($self->hash()->{"range_id"}));
+    $row->{"freq_low"}  = $self->freq_low();
+    $row->{"freq_high"} = $self->freq_high();
+    return APT_RFRange::Range->Range($row);
 }
 
 # Print a range,
@@ -843,11 +848,17 @@ sub Smush($)
     while (@all) {
 	my $next = shift(@all);
 
+	#print "foo\n";
+	#print $range->freq_low() . "," . $next->freq_high() . "\n";
+	#print $next->freq_low() . "," . $range->freq_high() . "\n";
+
 	if ($range->freq_low() <= $next->freq_high() &&
 	    $next->freq_low() <= $range->freq_high()) {
 	    
 	    my $low  = min($range->freq_low(), $next->freq_low());
 	    my $high = max($range->freq_high(), $next->freq_high());
+	    #print "l,w: $low,$high\n";
+	    
 	    $range->hash()->{'freq_low'}  = $low;
 	    $range->hash()->{'freq_high'} = $high;
 	}
