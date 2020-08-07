@@ -1694,7 +1694,7 @@ sub CreateDatasetCreds($$$)
 			# errors early.  The CM will do its own check
 			# of course.
 			#
-			if (!$image->global() &&
+			if ($image && !$image->global() &&
 			    $PROTOGENI_LOCALUSER && $geniuser->IsLocal() &&
 			    !$image->AccessCheck($geniuser->emulab_user(),
 						   TB_IMAGEID_READINFO())) {
