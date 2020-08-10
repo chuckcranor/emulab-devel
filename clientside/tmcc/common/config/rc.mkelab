@@ -3014,6 +3014,7 @@ sub CreateOpsJail($)
     print CONF "ops {\n";
     print CONF "       path = \"/ops\";\n";
     print CONF "       interface = \"${outer_controlif}\";\n";
+    print CONF "       allow.chflags = 1;\n";
     print CONF "       allow.mount.procfs = 1;\n";
     print CONF "       allow.mount.devfs = 1;\n";
     print CONF "       mount.devfs;\n";
