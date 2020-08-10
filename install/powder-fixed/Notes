@@ -40,6 +40,10 @@ Approve the certificate on the MotherShip.
 
 	msboss> sudo cacontrol -c ...
 	msboss> sudo /usr/local/etc/rc.d/2.portalpsd.sh start
+
+Add the named entries to bas and ddc named server.
+
+	bas> sudo /usr/local/etc/rc.d/named restart
 	
 After David does his magic and boss boots, need to do:
 
@@ -47,11 +51,36 @@ After David does his magic and boss boots, need to do:
 	boss> wap addservers
         boss> sudo getcacerts -f
 	boss> sudo /bin/rm -rf `cat rmfiles.txt`
+	boss> sudo testbed-control boot
 
 And back on Mothership boss:
 
+Add the apt_aggregates entry to the DB, and then:
+
+        mysql> REPLACEINTO `apt_aggregates` VALUES
+	        ('urn:publicid:IDN+bus-4964.powderwireless.net+authority+cm',
+		 'Bus 4964','Bus4964','Bus4964',1,0,0,1,0,1,1,1,1,1,0,
+		 'me-allowed',NULL,NULL,NULL,1,now(),
+		 'https://www.bus-4964.powderwireless.net',0,1,1,'powder',NULL);
+	mysql> REPLACE INTO `apt_aggregate_status` VALUES
+	         ('urn:publicid:IDN+bus-4964.powderwireless.net+authority+cm',
+		  'up',now(),NULL,2,2,0,0,'');
+
+	musql> REPLACE into apt_mobile_aggregates set
+	       urn='urn:publicid:IDN+bus-4964.powderwireless.net+authority+cm',
+	        type='bus';
+
+	mysql> REPLACE into apt_mobile_buses set
+	       urn='urn:publicid:IDN+bus-4964.powderwireless.net+authority+cm',
+	       busid='4964';
+
 	msboss> manage_aggregate ping -a XXX -s
     	msboss> manage_aggregate chflag -a XXX disabled no
+
+Back on the node, lets to the letsencrypt thing.
+
+	boss> cd ~/emulab-devel/obj/install
+	boss> sudo perl emulab-install -b -i letsencrypt boss
 
 Copy the defs file to Mothership boss, powder-defs directory.
 Symlink emulab-devel/defs file to the powder-defs version.
