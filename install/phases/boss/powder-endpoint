@@ -15,6 +15,7 @@ use emdb;
 use NodeType;
 use Node;
 use Interface;
+use OSImage;
 use Image;
 
 my $CONFIGVARS   = "$PREFIX/configvars.txt";
@@ -255,6 +256,7 @@ sub Install($$$)
 	#
 	if ($TARGETSYS_TARGET eq "POWDER-BUS") {
 	    Phase "ANDROID444", "Fetching ANDROID444 image. Patience!", sub {
+		my $url   = $ANDROID444;
 		my $image = OSImage->Lookup(TBOPSPID(), "ANDROID444-STD");
 		PhaseSkip("already fetched")
 		    if (defined($image));
