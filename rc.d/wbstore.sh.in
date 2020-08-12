@@ -14,7 +14,8 @@
 # BEFORE: testbed
 # KEYWORD: nojail shutdown
 
-logfile=@prefix@/log/wbstoremonitor_wrapper.log
+logfile=@prefix@/log/wbstoremonitor.log
+pidfile=/var/run/wbstoremonitor.pid
 
 if [ "@POWDER_WBSTORE@" != "1" -o ! -x @prefix@/sbin/wbstoremonitor ]; then
     exit 0
@@ -27,21 +28,25 @@ if [ "@TBMAINSITE@" = "0" ]; then
 else
     opts=-E
 fi
+opts="$opts -l $logfile -p $pidfile"
 
 case "$1" in
     start|faststart|quietstart|onestart|forcestart)
 	if [ -x @prefix@/sbin/daemon_wrapper ]; then
 	    echo -n " wbstoremonitor wrapper"
-	    @prefix@/sbin/daemon_wrapper -n wbstoremonitor -l $logfile \
-		@prefix@/sbin/wbstoremonitor -d 1 $opts
+	    @prefix@/sbin/daemon_wrapper -n wbstoremonitor \
+	     @prefix@/sbin/wbstoremonitor -d 1 $opts
 	else
-	    @prefix@/sbin/wbstoremonitor $opts >$logfile 2>&1 &
-	    echo "$!" > /var/run/wbstoremonitor_wrapper.pid
+	    @prefix@/sbin/wbstoremonitor $opts
 	fi
 	;;
     stop|faststop|quietstop|onestop|forcestop)
 	if [ -r /var/run/wbstoremonitor_wrapper.pid ]; then
 	    kill `cat /var/run/wbstoremonitor_wrapper.pid`
+	fi
+	sleep 1
+	if [ -r $pidfile ]; then
+	    kill `cat $pidfile`
 	fi
 	;;
     *)
