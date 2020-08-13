@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2019 University of Utah and the Flux Group.
+# Copyright (c) 2019-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -227,6 +227,27 @@ sub makeVlanSpec($$$)
     return $vlanhash;
 }
 
+#
+# Make sure each port appears only once in the given list.
+# Returns a new list.
+#
+# XXX without this, the REST data/interfaces/interface/vlanN PATCH command
+# (for adding ports to a VLAN) will fail with "Conflict" and "entry exists".
+#
+sub uniquePortList(@) {
+    my (@olist) = @_;
+
+    my %pseen = ();
+    my @nlist = ();
+    foreach my $p (@olist) {
+	if (!exists($pseen{$p})) {
+	    push @nlist, $p;
+	    $pseen{$p} = 1;
+	}
+    }
+    return @nlist;
+}
+
 sub addPortsVlanSpec($$$$)
 {
     my ($self,$tag,$uportref,$tportref) = @_;
@@ -241,10 +262,12 @@ sub addPortsVlanSpec($$$$)
     };
 
     if (@uports) {
-	$vlanhash->{"interface"}->[0]->{"dell-interface:untagged-ports"} = [@uports];
+	$vlanhash->{"interface"}->[0]->{"dell-interface:untagged-ports"} =
+	    [uniquePortList(@uports)];
     }
     if (@tports) {
-	$vlanhash->{"interface"}->[0]->{"dell-interface:tagged-ports"} = [@tports];
+	$vlanhash->{"interface"}->[0]->{"dell-interface:tagged-ports"} =
+	    [uniquePortList(@tports)];
     }
     
     return $vlanhash;
