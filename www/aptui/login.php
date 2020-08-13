@@ -336,7 +336,7 @@ else {
 	SPITHEADER();
 	echo "<h4>
               This account was created by logging in via the <b>Geni Login</b>
-              button. Please go back the <a href=login.php>login page</a>
+              button. Please go back to the <a href=login.php>login page</a>
               and click on the <b>Geni Login</b> button. If you would like
               to change your account to <em>direct login</em> please
               contact $SUPPORT.</h4>\n";
