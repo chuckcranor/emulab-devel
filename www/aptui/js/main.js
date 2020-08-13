@@ -10,7 +10,11 @@ $(function ()
 	$('[data-toggle="popover"]').popover({
 	    trigger: 'hover',
 	});
-	$('body').show();
+	if (window.APT_OPTIONS.PAGEREPLACE !== undefined) {
+	    setTimeout(function () {
+		window.location.replace(window.APT_OPTIONS.PAGEREPLACE);
+	    }, 5000);
+	}
     }
 
     $(document).ready(initialize);
