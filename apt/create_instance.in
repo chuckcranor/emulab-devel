@@ -45,11 +45,12 @@ sub usage()
     print "Usage: quickvm [-u uuid] [--site site:1=aggregate ...] <xmlfile>\n";
     exit(1);
 }
-my @optlist = ('d', 'v', 'f', 'u=s', 'a=s', 'S', 'k=s', 'i', 't=s');
+my @optlist = ('d', 'v', 'f', 'u=s', 'a=s', 'S', 'k=s', 'i', 't=s', 'P');
 my $debug   = 0;
 my $verbose = 1;
 my $foreground     = 0;
 my $ignorefailures = 0;
+my $nopending      = 0;
 my $xmlfile;
 my $webtask;
 my $webtask_id;
@@ -71,7 +72,7 @@ my @prestage = ();
 
 # Protos
 sub fatal($);
-sub UserError($);
+sub UserError($;$);
 
 #
 # Configure variables
@@ -173,6 +174,9 @@ if (defined($options{"S"})) {
 }
 if (defined($options{"u"})) {
     $quickuuid = $options{"u"};
+}
+if (defined($options{"P"})) {
+    $nopending = 1;
 }
 if (defined($start_at) && $start_at !~ /^\d+$/) {
     fatal("Invalid --start_at parameter");
@@ -846,7 +850,8 @@ if (GeniSlice->Lookup($slice_hrn) || GeniSlice->Lookup($slice_urn) ||
     if (defined($userslice_id)) {
 	UserError("Experiment name already in use, please use another. If you ".
 		  "just terminated an experiment with this name, it takes a ".
-		  "minute or two for the name to become available again.");
+		  "minute or two for the name to become available again.",
+		  GENIRESPONSE_ALREADYEXISTS());
     }
     else {
 	fatal("Could not form a unique slice name");
@@ -987,6 +992,7 @@ foreach my $aggregate_urn (@aggregate_urns) {
 	if ($aptaggregate->CheckStatus(\$errmsg)) {
 	    if ($usestitcher ||
 		!$aptaggregate->deferrable() ||
+		$nopending ||
 		# CheckStatus catches this and sets the error message.
 		$aptaggregate->disabled()) {
 		$slice->Delete();
@@ -1133,16 +1139,17 @@ sub fatal($) {
 	         "    $mesg\n";
     exit(-1);
 }
-sub UserError($) {
-    my($mesg) = $_[0];
+sub UserError($;$) {
+    my($mesg,$code) = @_;
+    $code = 1 if (!defined($code));
 
     if (defined($webtask)) {
 	$webtask->output($mesg);
-	$webtask->Exited(1);
+	$webtask->Exited($code);
     }
     AuditAbort()
 	if (!$debug);
     print $mesg . "\n";
-    exit(1);
+    exit($code);
 }
 
