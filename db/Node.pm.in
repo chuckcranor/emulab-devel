@@ -4083,14 +4083,17 @@ sub CheckPreReserve($$$)
     # Need to check for existing reserved_pid, but have to go to the DB,
     # not look in the object ($self) since it might be stale.
     #
+    # There is a builtin assumption that we get back a row if the
+    # node still exists, although it will be a row of nulls if there
+    # is no prereserve marking. 
+    #
     my $query_result =
 	DBQueryWarn("select reserved_pid,reservation_name, ".
-		    "  count,active,terminal from nodes ".
+		    "  count,active,terminala,approved from nodes ".
 		    "left join project_reservations on ".
 		    "     project_reservations.pid=nodes.reserved_pid and ".
 		    "     project_reservations.name=nodes.reservation_name ".
-		    "where nodes.node_id='$node_id' and ".
-		    "      project_reservations.approved is not null");
+		    "where nodes.node_id='$node_id'");
 
     # numrows would be zero if the node was suddenly deleted.
     goto done
@@ -4101,7 +4104,7 @@ sub CheckPreReserve($$$)
     # if the reservation request is still active. If not, we can clear it,
     # which will allow it to be set again below, if needed.
     #
-    my ($pid,$resname,$count,$active,$terminal) =
+    my ($pid,$resname,$count,$active,$terminal,$approved) =
 	$query_result->fetchrow_array();
     if (defined($pid)) {
 	# There is an active pre-reserve for this node.
