@@ -80,17 +80,29 @@ else {
     $instance = Instance::LookupBySlice($slice_uuid);
 }
 if (!$instance) {
+    $instance = InstanceHistory::Lookup($uuid);
+    
     SPITHEADER(1);
-    echo "<div class='align-center'>
+    echo "<div class='align-center' style='margin-top: 15px;'>
             <p class='lead text-center'>
-              Experiment does not exist. Redirecting to the front page.
+              Experiment does not exist.
+              Redirecting to the front page in a few seconds ...
             </p>
           </div>\n";
+    if ($instance && (ISADMIN() || $instance->CanView($this_user))) {
+        $url = "memlane.php?uuid=$uuid";
+        echo "<div class='align-center' style='margin-top: 15px;'>
+               <p class='text-center'>
+                 You can also visit the
+                 <a href='$url'>history page</a> for this experiment.
+               </p>
+             </div>\n";
+    }
+    echo "<script type='text/javascript'>\n";
+    echo "  window.APT_OPTIONS.PAGEREPLACE = 'landing.php';\n";
+    echo "</script>\n";
     SPITNULLREQUIRE();
     SPITFOOTER();
-    flush();
-    sleep(3);
-    PAGEREPLACE("landing.php");
     return;
 }
 
