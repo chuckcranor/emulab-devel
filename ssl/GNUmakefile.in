@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -58,7 +58,7 @@ pems:	emulab.pem server.pem client.pem
 
 prebuild: dirsmade emulab.cnf emulab-geni.cnf
 
-emulab.pem:	dirsmade emulab.cnf emulab-geni.cnf emulab.key 
+emulab.pem:	dirsmade emulab.cnf emulab-geni.cnf emulab.key emulab.pub
 	#
 	# Create the Certificate Authority.
 	# The certificate is installed on both boss and remote nodes.
@@ -175,6 +175,12 @@ emulab_pubkey.pem:	emulab_privkey.pem
 %.key:
 	openssl genrsa -out $@ -rand .rand 2048
 
+#
+# Rule to extract public key from private key,
+#
+%.pub:
+	openssl rsa -in $*.key -pubout -out $@
+
 # The point of the this is to recover the keys from where they were
 # originally installed. We do this cause people often lose their
 # original build tree, but if want to rebuild the certs, we usually
@@ -243,6 +249,7 @@ boss-installX:	install-dirs \
 		$(INSTALL_DIR)/ssl/serial $(INSTALL_DIR)/ssl/index.txt \
 		$(INSTALL_ETCDIR)/emulab.pem \
 		$(INSTALL_ETCDIR)/emulab.key \
+		$(INSTALL_ETCDIR)/emulab.pub \
 		$(INSTALL_ETCDIR)/server.pem \
 		$(INSTALL_ETCDIR)/ctrlnode.pem \
 		$(INSTALL_ETCDIR)/capture.pem \
@@ -255,6 +262,7 @@ boss-installX:	install-dirs \
 	$(INSTALL_DATA) localnode.pem $(INSTALL_ETCDIR)/client.pem
 	chmod 644 $(INSTALL_ETCDIR)/emulab.pem
 	chmod 644 $(INSTALL_ETCDIR)/emulab.key
+	chmod 644 $(INSTALL_ETCDIR)/emulab.pub
 	chmod 640 $(INSTALL_ETCDIR)/server.pem
 	chmod 640 $(INSTALL_ETCDIR)/client.pem
 	chmod 640 $(INSTALL_ETCDIR)/ctrlnode.pem
@@ -272,6 +280,7 @@ remote-site-boss-install:	install-dirs \
 		$(INSTALL_DIR)/ssl/serial $(INSTALL_DIR)/ssl/index.txt \
 		$(INSTALL_ETCDIR)/emulab.pem \
 		$(INSTALL_ETCDIR)/emulab.key \
+		$(INSTALL_ETCDIR)/emulab.pub \
 		$(INSTALL_ETCDIR)/capture.pem \
 		$(INSTALL_ETCDIR)/capture.fingerprint \
 		$(INSTALL_ETCDIR)/capture.sha1fingerprint \
@@ -282,6 +291,7 @@ remote-site-boss-install:	install-dirs \
 	$(INSTALL_DATA) localnode.pem $(INSTALL_ETCDIR)/client.pem
 	chmod 644 $(INSTALL_ETCDIR)/emulab.pem
 	chmod 644 $(INSTALL_ETCDIR)/emulab.key
+	chmod 644 $(INSTALL_ETCDIR)/emulab.pub
 	chmod 640 $(INSTALL_ETCDIR)/capture.pem
 	chmod 644 $(INSTALL_ETCDIR)/capture.fingerprint
 	chmod 644 $(INSTALL_ETCDIR)/capture.sha1fingerprint

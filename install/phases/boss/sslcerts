@@ -86,6 +86,8 @@ sub Install($$$)
 			   "     mkdir -p ${ETC_EMULAB_DIR} ");
 	    ExecQuietFatal("$SCP $PREFIX/etc/$EMULAB_PEM ".
 			   "     ${USERNODE}:${ETC_EMULAB_DIR}");
+	    ExecQuietFatal("$SCP $PREFIX/etc/$EMULAB_PUB ".
+			   "     ${USERNODE}:${ETC_EMULAB_DIR}");
 	    ExecQuietFatal("$SCP $TOP_OBJDIR/ssl/$CTRLNODE_PEM".
 			   "     ${USERNODE}:${ETC_EMULAB_DIR}/${CLIENT_PEM}");
 	    ExecQuietFatal("$SSH -o 'BatchMode=yes' root\@${USERNODE} ".
