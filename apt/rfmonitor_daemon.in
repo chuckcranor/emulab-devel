@@ -469,11 +469,17 @@ sub HandleChild($)
 		print "$nodeid was just powered off, ignoring this report.\n";
 		next;
 	    }
+	    my $graphurl = "https://www.powderwireless.net" .
+		"/frequency-graph.php?node_id=$nodeid&iface=$iface" .
+		"&cluster=${POWDER_NICKNAME}&logid=$filestamp&archived=1";
+
 	    my $mesg =
 		"$nodeid is supposed to be powered off but is still ".
 		"transmitting on $iface.\n" .
-		"Frequency:" . $frequency . "MHZ, ".
-		"Power:" . $power . "dB";
+		"Frequency:" . sprintf("%.3f", $frequency) . "MHZ, ".
+		"Power:" . sprintf("%.3f", $power) . "dB" . "\n\n".
+		"Monitor Graph:\n" . $graphurl . "\n";
+
 	    print "$mesg\n";
 	    NodeNotify($nodeid, "system", $mesg);
 	    next;
@@ -870,7 +876,7 @@ sub WriteRawData($$$)
 	#
 	system("$FIND -E $RAWDATADIR -regex '^.*\-[0-9]+\.csv\.gz\$' ".
 	       "-mtime +24h -depth 1 -print " . ($impotent ? "" : "-delete"));
-	system("$FIND $RAWDATADIR/archive -mtime +7 -print ".
+	system("$FIND $RAWDATADIR/archive -type f -mtime +7 -print ".
 	       ($impotent ? "" : "-delete"));
 
 	if (open(CSV, "> $tmpname")) {
