@@ -1446,7 +1446,7 @@ sub ApplyExtensionPolicies($)
     my $uid_idx  = $self->creator_idx();
     my $current_disable = $self->extension_disabled();
     my $current_limit   = $self->extension_limit();
-    my $policy;
+    my $policy   = "Default";
     my $disabled = 0;
     my $limit    = 0;
     my $admin_after_limit = 0;
