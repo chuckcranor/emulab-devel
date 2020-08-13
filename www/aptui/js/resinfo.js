@@ -148,7 +148,7 @@ $(function ()
     {
 	_.each(amlist, function(details, urn) {
  	    var callback = function(json) {
-		console.log("LoadReservations", json);
+		console.log("LoadReservations " + details.nickname, json);
 		var graphid = 'resgraph-' + details.nickname;
 		var countid = details.nickname + " .counts-panel";
 
@@ -360,7 +360,6 @@ $(function ()
 	    console.log("Could not get reservation data for " +
 			details.name + ": " + json.value);
 	    FEresults[urn] = null;
-	    return;
 	}
 	else {
 	    FEresults[urn] = json.value;
