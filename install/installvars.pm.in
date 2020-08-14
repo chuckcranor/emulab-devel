@@ -406,6 +406,7 @@ $INIT_PRIVKEY		= "$main::TOP_SRCDIR/install/id_rsa";
 $INIT_PUBKEY		= "$main::TOP_SRCDIR/install/id_rsa.pub";
 $CACERT			= "$TBROOT/etc/emulab.pem";
 $EMULAB_PEM		= "emulab.pem";
+$EMULAB_PUB		= "emulab.pub";
 $CLIENT_PEM		= "client.pem";
 $CTRLNODE_PEM		= "ctrlnode.pem";
 $ETC_EMULAB_DIR		= "/etc/emulab";
