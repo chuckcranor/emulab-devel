@@ -4089,7 +4089,7 @@ sub CheckPreReserve($$$)
     #
     my $query_result =
 	DBQueryWarn("select reserved_pid,reservation_name, ".
-		    "  count,active,terminala,approved from nodes ".
+		    "  count,active,terminal,approved from nodes ".
 		    "left join project_reservations on ".
 		    "     project_reservations.pid=nodes.reserved_pid and ".
 		    "     project_reservations.name=nodes.reservation_name ".
