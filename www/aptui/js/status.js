@@ -2607,7 +2607,7 @@ $(function ()
 	    var itext = $('#instructions_text').html();
 
 	    _.each(json.value, function(plaintext, key) {
-		key = "{" + key + "}";
+		key = new RegExp("{" + key + "}", "g");
 		// replace in the instructions text.
 		itext = itext.replace(key, plaintext);
 	    });
