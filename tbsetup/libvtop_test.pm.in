@@ -834,9 +834,15 @@ sub LoadPhysInfo($)
 	DBQueryWarn("select distinct i.interface_type,n.type ".
 		    "  from interfaces as i ".
 		    "left join nodes as n on n.node_id=i.node_id ".
+		    "left join wires as w on ".
+		    "     (w.node_id1=i.node_id and w.iface1=i.iface) or ".
+		    "     (w.node_id2=i.node_id and w.iface2=i.iface) ".
 		    "where n.type is not null and ".
-		    "      (i.role='" . TBDB_IFACEROLE_EXPERIMENT . "' or ".
-		    "       i.role='" . TBDB_IFACEROLE_CONTROL . "')");
+		    "      (w.node_id2 is not null or ".
+		    #       This special case needs work. See ptopgen.
+		    "       i.interface_type='P2PLTE') and ".
+		    "      n.role='testnode' and ".
+		    "      i.role='" . TBDB_IFACEROLE_EXPERIMENT . "'");
 
     return -1
 	if (!$query_result);
