@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2004-2018 University of Utah and the Flux Group.
+# Copyright (c) 2004-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -45,7 +45,9 @@ SYMLINKS        = node_admin node_reboot os_load create_image node_list \
 		  template_export template_swapin template_swapout \
 		  template_stoprun template_instantiate template_startrun \
 		  template_checkout node_avail_list mkblob rmblob \
-		  createdataset deletedataset showdataset extenddataset
+		  createdataset deletedataset showdataset extenddataset \
+		  startExperiment terminateExperiment experimentStatus \
+		  experimentManifests
 
 LINKS		= cd $(INSTALL_BINDIR) && \
 		  list='$(SYMLINKS)'; for file in $$list; do \
