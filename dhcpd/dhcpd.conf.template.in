@@ -92,6 +92,9 @@ shared-network emulab {
 	# unknown nodes will get assigned a random IP in it
 	#range @DHCPD_DYNRANGE@;
 
+	# /usr/testbed/etc/dhcpd.conf.frag.control
+	%%fragment=control
+
 	# testbed PCs
 	group {
 		#
