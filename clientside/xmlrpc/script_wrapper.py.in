@@ -2988,17 +2988,20 @@ class startExperiment:
         return
 
     def apply(self):
+        print str(self.argv)
+        
         try:
-            opts, req_args = getopt.getopt(self.argv, "a:p:",
+            opts, req_args = getopt.getopt(self.argv, "a:p:Ps",
                                            [ "help", "name=", "duration=",
                                              "project=", "site=", "start=",
+                                             "bindings=",
                                              "stop=", "paramset=", "refspec="]);
             pass
         except getopt.error, e:
             print e.args[0]
             self.usage();
             return -1;
-        
+
         params = {};
         for opt, val in opts:
             if opt in ("-h", "--help"):
@@ -3007,13 +3010,19 @@ class startExperiment:
             elif opt == "-a":
                 params["aggregate"] = val
                 pass
+            elif opt == "-P":
+                params["nopending"] = 1
+                pass
+            elif opt == "-s":
+                params["noemail"] = 1
+                pass
             elif opt == "--name":
                 params["name"] = val;
                 pass
             elif opt == "--duration":
                 params["duration"] = val;
                 pass
-            if opt in ("-p", "--project"):
+            elif opt in ("-p", "--project"):
                 params["proj"] = val;
                 pass
             elif opt == "--start":
@@ -3024,6 +3033,9 @@ class startExperiment:
                 pass
             elif opt == "--paramset":
                 params["paramset"] = val;
+                pass
+            elif opt == "--bindings":
+                params["bindings"] = val;
                 pass
             elif opt == "--refspec":
                 params["refspec"] = val;
@@ -3048,14 +3060,16 @@ class startExperiment:
         print "where:"
         print " -d           - Turn on debugging (run in foreground)"
         print " -w           - Wait mode (wait for experiment to start)"
+        print " -s           - Do not send status email"
+        print " -P           - Do not pend deferrable aggregates"
         print " -a urn       - Override default aggregate URN"
-        print " --project    - pid[,gid]: project[,group] for new experiment"
         print " --project    - pid[,gid]: project[,group] for new experiment"
         print " --name       - Optional pithy name for experiment"
         print " --duration   - Number of hours for initial expiration"
         print " --start      - Schedule experiment to start at (unix) time"
         print " --stop       - Schedule experiment to stop at (unix) time"
         print " --paramset   - uid,name of a parameter set to apply"
+        print " --bindings   - json string of bindings to apply to parameters"
         print " --refspec    - refspec[:hash] of a repo based profile to use"
         print " --site       - Bind sites used in the profile"
         print "profile       - Either UUID or pid,name"
@@ -3114,7 +3128,7 @@ class experimentStatus:
 
     def apply(self):
         try:
-            opts, req_args = getopt.getopt(self.argv, "h", [ "help"]);
+            opts, req_args = getopt.getopt(self.argv, "hj", [ "help"]);
             pass
         except getopt.error, e:
             print e.args[0]
@@ -3126,6 +3140,9 @@ class experimentStatus:
             if opt in ("-h", "--help"):
                 self.usage()
                 return 0
+            elif opt == "-j":
+                params["asjson"] = 1
+                pass
             pass
 
         # Do this after so --help is seen.
@@ -3140,6 +3157,7 @@ class experimentStatus:
     def usage(self):
         print "Usage: experimentStatus <optons> <experiment>"
         print "where:"
+        print " -j            - json string instead of text"
         print "experiment     - Either UUID or pid,name"
         wrapperoptions();
         return

@@ -137,7 +137,7 @@ use EmulabFeatures;
 
 # Protos
 sub fatal($);
-sub UserError($);
+sub UserError($;$);
 sub DoSnapshot();
 sub DoConsole();
 sub DoTerminate();
@@ -233,7 +233,7 @@ if (defined($this_user)) {
 if (!defined($instance)) {
     # Lets not make this a fatal error; when coming from the web interface,
     # we do not need to send email. 
-    UserError("No such instance $token");
+    UserError("No such instance $token", GENIRESPONSE_SEARCHFAILED());
 }
 my $uuid = $instance->uuid();
 
@@ -6263,9 +6263,104 @@ sub DoApplyExtensionPolicy()
 #
 sub DoStatus()
 {
-    my $status = $instance->status();
+    my $asjson     = 0;
+    my $status     = $instance->status();
+    my $slice      = $instance->GetGeniSlice();
+    my $slice_uuid = $instance->slice_uuid();
+    my $blob;
 
-    print "Status: $status\n";
+    my $optlist = "j";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"j"})) {
+	$asjson = 1;
+    }
+
+    # Watch for canceled, tell the user that.
+    if ($instance->canceled()) {
+	$status = "canceled";
+    }
+
+    if ($asjson) {
+	$blob = {
+	    "status"  => $status,
+	    "uuid"    => $uuid,
+	    "wbstore" => $slice_uuid,
+	    "url"     => $instance->webURL(),
+	}
+    }
+    else {
+	print "Status: $status\n";
+	print "UUID: $uuid\n";
+	print "wbstore: $slice_uuid\n";
+    }
+
+    if ($status eq "failed") {
+	my $instance_webtask = $instance->webtask();
+	#
+	# The exitcode provides more info.
+	#
+	if ($instance_webtask->HasExited()) {
+	    $blob->{"failure_code"}    = $instance_webtask->exitcode();
+	    $blob->{"failure_message"} = $instance_webtask->output();
+	}
+    }
+    elsif ($status eq "ready") {
+	my $total    = 0;
+	my $running  = 0;
+	my $failed   = 0;
+	my $finished = 0;
+	
+	foreach my $ref ($instance->AggregateList()) {
+	    my $sliverstatus = $ref->SliverStatus();
+
+	    foreach my $status (values(%{$sliverstatus})) {
+		my $client_id   = $status->{"client_id"};
+		my $sliver_data = $status->{"sliver_data"};
+
+		if (exists($sliver_data->{"execute_state"})) {
+		    my $execute_state = $sliver_data->{"execute_state"};
+
+		    if ($execute_state eq "exited") {
+			my $execute_status = $sliver_data->{"execute_status"};
+			if ($execute_status == 0) {
+			    $finished++;
+			}
+			else {
+			    $failed++;
+			}
+		    }
+		    else {
+			$running++;
+		    }
+		    $total++;
+		}
+	    }
+	}
+	if ($finished || $running || $failed) {
+	    if ($asjson) {
+		$blob->{"execute_status"} = {
+		    "total"    => $total,
+		    "running"  => $running,
+		    "finished" => $finished,
+		    "failed"   => $failed,
+		}
+	    }
+	    else {
+		print "Execute Services (running/finished/failed): ".
+		    "$running/$finished/$failed\n";
+	    }
+	}
+    }
+    if ($asjson) {
+	my $json = eval { encode_json($blob); };
+	if ($@) {
+	    fatal($@);
+	}
+	print $json;
+    }
     return 0;
 }
 
@@ -6305,17 +6400,18 @@ sub fatal($)
     exit(-1);
 }
 
-sub UserError($)
+sub UserError($;$)
 {
-    my ($mesg) = @_;
+    my ($mesg,$code) = @_;
+    $code = 1 if (!defined($code));
 
     if (defined($webtask)) {
 	$webtask->output($mesg);
-	$webtask->Exited(1);
+	$webtask->Exited($code);
     }
     print STDERR "*** $0:\n".
 	         "    $mesg\n";
-    exit(1);
+    exit($code);
 }
 
 #

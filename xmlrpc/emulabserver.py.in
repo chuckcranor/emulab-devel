@@ -6066,6 +6066,21 @@ class portal:
                 argstr += " --paramset "
                 argstr += escapeshellarg(val)
                 pass
+            elif opt == "bindings":
+                argstr += " --bindings "
+                bindings = val
+            
+                if len(bindings) > (1024 * 16):
+                    return EmulabResponse(RESPONSE_TOOBIG,
+                                         output="Bindings way too big!");
+        
+                (fp, filename) = writensfile(bindings)
+                if not filename:
+                    return EmulabResponse(RESPONSE_SERVERERROR,
+                                         output="Server Error")
+
+                argstr += escapeshellarg(filename)
+                pass
             elif opt == "refspec":
                 argstr += " --refspec "
                 argstr += escapeshellarg(val)
@@ -6073,6 +6088,12 @@ class portal:
             elif opt == "aggregate":
                 argstr += " -a "
                 argstr += escapeshellarg(val)
+                pass
+            elif opt == "nopending":
+                argstr += " -P "
+                pass
+            elif opt == "noemail":
+                argstr += " -s "
                 pass
             elif opt == "profile":
                 profile = val
@@ -6156,16 +6177,19 @@ class portal:
         if (argerror):
             return argerror
 
-        argstr     = "status "
+        argstr     = ""
         experiment = None
         
         for opt, val in argdict.items():
             if opt == "experiment":
                 experiment = val
                 pass
+            elif opt == "asjson":
+                argstr += " -j "
+                pass
             pass
         
-        argstr += escapeshellarg(experiment)
+        argstr = "status " + escapeshellarg(experiment) + argstr
 
         # Slow down the polling.
         time.sleep(3)
