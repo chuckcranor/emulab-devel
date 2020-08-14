@@ -412,11 +412,14 @@ $webtask->SetProcessID($PID);
 #
 if (!defined($instance->started())) {
     $instance->Start();
-
+    my $opts = "-d -BI";
+    # Ick
+    $opts .= "M" if ($project->pid() ne "PMonitor");
+    
     #
     # First time we try to start things up, fire off syncthing
     #
-    system("$CREATEWBSTORE -d -BIM $uuid");
+    system("$CREATEWBSTORE $opts $uuid");
 }
 
 if ($usestitcher) {
