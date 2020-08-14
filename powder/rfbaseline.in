@@ -1,0 +1,667 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Data::Dumper;
+use Date::Parse;
+use JSON;
+
+#
+#
+sub usage()
+{
+    print "Usage: rfbaseline [-d] [-s [-S]] [-n] [endpoint [node]]\n";
+    exit(1);
+}
+my $optlist   = "dnsS";
+my $debug     = 0;
+my $impotent  = 0;
+my $oneshot   = 0;
+my $nostop    = 0;
+my $skew      = 50;
+
+#
+# Configure variables
+#
+my $TB		     = "@prefix@";
+my $TBOPS            = "@TBOPSEMAIL@";
+my $MAINSITE         = @TBMAINSITE@;
+my $LOGFILE          = "$TB/log/rfbaseline.log";
+my $STARTEXP         = "$TB/bin/startExperiment";
+my $TERMINATEEXP     = "$TB/bin/terminateExperiment";
+my $EXPSTATUS        = "$TB/bin/experimentStatus";
+my $TAR		     = "/usr/bin/tar";
+my $USER             = "leebee";
+my $PID              = "PMonitor";
+my $PROFILE          = "testbed,monitor";
+my $SLEEP_INTERVAL   = 30;
+
+#
+# We run the monitor on these endpoints.
+#
+my %endpoints = (
+    "bookstore" => {
+	"urn" => 'urn:publicid:IDN+bookstore.powderwireless.net+authority+cm',
+	# nuc1 does not have receive capability.
+	"nodes" => ["nuc2"],
+	"last"  => {},
+        "nickname" => "Bookstore",
+    },
+    "law73" => {
+        "urn" => 'urn:publicid:IDN+law73.powderwireless.net+authority+cm', 
+	"nodes" => ["nuc1", "nuc2"],
+	"last"  => {},
+        "nickname" => "Law73",
+    },
+    "humanities" => {
+        "urn" => 'urn:publicid:IDN+humanities.powderwireless.net+authority+cm', 
+	"nodes" => ["nuc1", "nuc2"],
+	"last"  => {},
+        "nickname" => "Humanities",
+    },
+    "madsen" => {
+        "urn" => 'urn:publicid:IDN+madsen.powderwireless.net+authority+cm',
+	# nuc1 does not have receive capability.
+	"nodes" => ["nuc2"],
+	"last"  => {},
+        "nickname" => "Madsen",
+    },
+    "moran" => {
+        "urn" => 'urn:publicid:IDN+moran.powderwireless.net+authority+cm', 
+	"nodes" => ["nuc1", "nuc2"],
+	"last"  => {},
+        "nickname" => "Moran",
+    },
+    "sagepoint" => {
+	"urn" => 'urn:publicid:IDN+sagepoint.powderwireless.net+authority+cm',
+	"nodes" => ["nuc1", "nuc2"],
+	"last"  => {},
+        "nickname" => "Sagepoint",
+    },
+    "web" => {
+        "urn" => 'urn:publicid:IDN+web.powderwireless.net+authority+cm', 
+	"nodes" => ["nuc1", "nuc2"],
+	"last"  => {},
+        "nickname" => "WEB",
+    },
+    "bustest2" => {
+	"urn" => 'urn:publicid:IDN+bus-test2.powderwireless.net+authority+cm',
+	"nodes" => ["ed1"],
+	"last"  => {},
+        "nickname" => "BusTest2",
+    },
+);
+my %results = ();
+
+#
+# This the binding string we pass along to startExperiment.
+#
+my $bindingsTemplate = '{"Where" : "%s", "NodeID" : "%s"}';
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Protos
+sub RunMonitor($$);
+sub GetStatus($$$);
+sub Wait($$$);
+sub WaitForData($$$$);
+sub Finished($$);
+sub Terminate($$);
+sub FlipTo($);
+sub fatal($);
+sub NotifyTBOPS($$);
+	  
+#
+# Turn off line buffering on output
+#
+$| = 1; 
+
+if ($UID != 0) {
+    fatal("Must be root to run this script\n");
+}
+if (!$MAINSITE) {
+    exit(0);
+}
+
+#
+# 
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"s"})) {
+    $oneshot = 1;
+}
+if (defined($options{"S"})) {
+    $nostop = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (@ARGV) {
+    if (!exists($endpoints{lc($ARGV[0])})) {
+	fatal("No such endpoint");
+    }
+    if (@ARGV > 1) {
+	if (! grep { $_ eq $ARGV[1] } @{$endpoints{lc($ARGV[0])}->{"nodes"}}) {
+	    fatal("No such node");
+	}
+    }
+}
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use libtestbed;
+use GeniResponse;
+
+if (! ($oneshot || $impotent)) {
+    if (CheckDaemonRunning("rfbaseline")) {
+	fatal("Not starting another rfbaseline daemon!");
+    }
+    # Go to ground.
+    if (! $debug) {
+	if (TBBackGround($LOGFILE)) {
+	    exit(0);
+	}
+    }
+    if (MarkDaemonRunning("rfbaseline")) {
+	fatal("Could not mark daemon as running!");
+    }
+}
+
+FlipTo($USER);
+
+my @targets = ();
+    
+if (@ARGV) {
+    my $id  = lc($ARGV[0]);
+    my $ref = $endpoints{$id};
+    my @nodes;
+
+    if (@ARGV > 1) {
+	@nodes = ($ARGV[1]);
+    }
+    else {
+	@nodes = @{$ref->{"nodes"}};
+    }
+    foreach my $node_id (@nodes) {
+	push(@targets, [$id, $node_id]);
+    }
+}
+else {
+    foreach my $id (keys(%endpoints)) {
+	my $ref = $endpoints{$id};
+
+	foreach my $node_id (@{$ref->{"nodes"}}) {
+	    push(@targets, [$id, $node_id]);
+	}
+    }
+}
+
+while (1) {
+    my @return_codes = ();
+    
+    print "Running at ".
+	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
+
+    my $coderef = sub {
+	my $ref = $_[0];
+	my ($id, $node_id) = @$ref;
+
+	return RunMonitor($id, $node_id);
+    };
+    
+
+    if (ParRun({"maxwaittime" => 3600, "maxchildren" => 5, "skew" => $skew},
+	       \@return_codes, $coderef, @targets)) {
+	fatal("ParRun failed!");
+    }
+    #
+    # Check the exit codes. 
+    #
+    foreach my $target (@targets) {
+	my ($id,$node_id) = @$target;
+	my $code = shift(@return_codes);
+
+	if ($code) {
+	    print "*** Failed on $id:$node_id\n";
+	    next;
+	}
+    }
+    exit(0)
+	if ($oneshot);
+
+  again:
+    sleep($SLEEP_INTERVAL);
+}
+exit(0);
+
+#
+# Run the monitor on one node at an endpoint.
+#
+sub RunMonitor($$)
+{
+    my ($id, $node_id) = @_;
+    my $urn  = $endpoints{$id}->{"urn"};
+    my $name = "m-" . substr($id, 0, 7) . "-${node_id}";
+    my $errmsg;
+    my $blob;
+
+    #
+    # Look for experiment still running, in case we got killed and are starting
+    # up again. 
+    #
+    my $rval = GetStatus($name, \$blob, \$errmsg);
+    if ($rval < 0) {
+	print "Could not get current status for $name: $errmsg\n";
+	return -1;
+    }
+    elsif ($rval != GENIRESPONSE_SEARCHFAILED) {
+	print "Experiment $name already exists.\n";
+	if ($blob->{'status'} eq "canceled") {
+	    print "Experiment $name has already been canceled.\n";
+	    return -1;
+	}
+	if ($impotent) {
+	    return 0;
+	}
+	#
+	# Lets (try to) be smart, if the monitor ran to completion, and is
+	# just hanging out, lets get the result file. But first terminate.
+	#
+	if (Terminate($name, \$errmsg)) {
+	    print "Experiment $name could not be terminated: $errmsg\n";
+	    return -1;
+	}
+	if (Finished($blob, \$errmsg) == 1) {
+	    if (WaitForData($id, $node_id, $blob, \$errmsg)) {
+		print "Could not get result data for $name: $errmsg\n";
+		return -1;
+	    }
+	}
+	# Since we just terminated the experiment, no point in trying
+	# to start another right away, need to wait at least a little
+	# while for reset.
+	return 1;
+    }
+
+    # Create the bindings to pass to startExperiment
+    my $bindings = sprintf($bindingsTemplate, $urn, $node_id);
+    my $stop = time() + (3600 * 2);
+
+    my $command = "$STARTEXP -s -P -p $PID --bindings='$bindings' ".
+	"--name='$name' --stop='$stop' $PROFILE";
+
+    if (!$impotent) {
+	print "Running: '$command'\n";
+	system($command);
+    }
+    else {
+	print "Would run: '$command'\n";
+	sleep(1);
+	return 0;
+    }
+    if ($?) {
+	#
+	# Issue the termination just in case. This is harmless.
+	#
+	print "Terminating $name after start failure\n";
+	
+	if (Terminate($name, \$errmsg)) {
+	    print "Experiment $name could not be terminated: $errmsg\n";
+	}
+	return -1;
+    }
+    print "Waiting for $name monitor to finish\n";
+    $rval = Wait($name, \$blob, \$errmsg);
+    if ($rval < 0) {
+	my $uuid = $blob->{'uuid'};
+	print "Experiment $name ($uuid) failure. ";
+	
+	#
+	# Need to notify here.
+	#
+	if ($blob->{'status'} eq "failed") {
+	    if (exists($blob->{'failure_code'})) {
+		print "Start exit code: " . $blob->{'failure_code'};
+	    }
+	    print "\n";
+	}
+	else {
+	    print "Monitor failure\n";
+	}
+	if ($oneshot && $nostop) {
+	    return -1;
+	}
+	if (Terminate($name, \$errmsg)) {
+	    print "Experiment $name could not be terminated: $errmsg\n";
+	}
+	return -1;
+    }
+    #
+    # Terminate the experiment and wait for the tarball to appear.
+    #
+    print "Terminating $name after successfull run\n";
+    if (Terminate($name, \$errmsg)) {
+	print "Experiment $name could not be terminated: $errmsg\n";
+	return -1;
+    }
+    if (WaitForData($id, $node_id, $blob, \$errmsg)) {
+	print "Failed to get results for $name: $errmsg\n";
+	return -1;
+    }
+    return 0;
+}
+
+#
+# Wait for the experiment to finish or fail. Or just take too long.
+#
+sub Wait($$$)
+{
+    my ($name, $pref, $pmsg) = @_;
+    my $tries = 30;
+
+    while ($tries) {
+	my $rval = GetStatus($name, $pref, $pmsg);
+	return $rval
+	    if ($rval < 0);
+
+	$rval = Finished($$pref, $pmsg);
+	return $rval
+	    if ($rval < 0 || $rval > 0);
+	
+	$tries--;
+	sleep(60);
+    }
+    $$pmsg = "Timed out waiting for monitor to finish";
+    return -1;
+}
+
+#
+# Wait for the data to appear after termination.
+#
+sub WaitForData($$$$)
+{
+    my ($id, $node_id, $blob, $pmsg) = @_;
+    my $wbstore = $blob->{'wbstore'};
+    my $tarfile = "/proj/$PID/wbstore/${wbstore}.tgz";
+    my $tries   = 90;
+    my $command;
+
+    while ($tries && ! -e $tarfile) {
+	$tries--;
+	sleep(10);
+    }
+    if (! -e $tarfile) {
+	$$pmsg = "$tarfile never arrived";
+	#
+	# Need to notify,
+	#
+	return -1;
+    }
+
+    #
+    # The files we want are down a few levels. 
+    #
+    my $targetdir = "$TB/www/rfbaseline/" . $endpoints{$id}->{"nickname"};
+    my $pattern   = "'*/${node_id}:*'";
+
+    $command = "$TAR --strip-components 3 -zxf $tarfile -C $targetdir $pattern";
+    print "Running '$command'\n";
+    system($command);
+    if ($?) {
+	$$pmsg = "could not untar results";
+	return -1;
+    }
+    unlink($tarfile);
+    return 0;
+}
+
+
+#
+# Check the status blob to see if the monitor ran successfully or has
+# failed.
+#
+sub Finished($$)
+{
+    my ($blob, $pmsg) = @_;
+
+    my $status = $blob->{"status"};
+    if ($status eq "failed") {
+	$$pmsg = "Experiment failed to setup";
+	return -1;
+    }
+    if ($status eq "canceled") {
+	$$pmsg = "Experiment has been canceled";
+	return -2;
+    }
+    if ($status eq "ready" && exists($blob->{"execute_status"})) {
+	#
+	# Waiting for the execute service to finish.
+	#
+	my $execute_status = $blob->{"execute_status"};
+	if ($execute_status->{"running"} == 0) {
+	    if ($execute_status->{"failed"} != 0) {
+		$$pmsg = "Execute service failed";
+		return -1;
+	    }
+	    return 1;
+	}
+    }
+    return 0;
+}
+
+#
+# Terminate. Have to watch for boss being offline.
+#
+sub Terminate($$)
+{
+    my ($name, $pmsg) = @_;
+    my $tries  = 30;
+    my $blob;
+
+    while (1) {
+	my $output = `$TERMINATEEXP $PID,$name`;
+	if ($?) {
+	    print $output;
+	    
+	    my $status = $? >> 8;
+	    if ($status == GENIRESPONSE_REFUSED()) {
+		print "Boss is offline, waiting for a bit\n";
+		sleep(60);
+		next;
+	    }
+	    elsif ($status == GENIRESPONSE_BUSY()) {
+		print "Experiment is busy, waiting for a bit\n";
+		$tries--;
+		sleep(30);
+		next;
+	    }
+	    elsif ($status == GENIRESPONSE_SEARCHFAILED) {
+		print STDERR "Experiment is gone\n";
+		return 0;
+	    }
+	    elsif ($status != 1) {
+		# Everything else is bad news. A positive error code
+		# typically means we could not get to the cluster. But
+		# the experiment it marked for cancel, and eventually
+		# it is going to happen.
+		$$pmsg = "Unexpected error: $status";
+		return -1;
+	    }
+	}
+	last;
+    }
+    $tries = 30;
+    # Now we wait until it really is gone.
+    while ($tries) {
+	my $rval = GetStatus($name, \$blob, $pmsg);
+	return $rval
+	    if ($rval < 0);
+	return 0
+	    if ($rval == GENIRESPONSE_SEARCHFAILED);
+	
+	# Experiment is still hanging on. Wait some more.
+	$tries--;
+	sleep(30);
+    }
+    # Experiment has not died. Need to think about this.
+    $$pmsg = "Timed out waiting for experiment to terminate";
+    return -1;
+}
+
+# Experiment status. Have to watch for boss going offline and keep
+# trying until it comes back online.
+#
+sub GetStatus($$$)
+{
+    my ($name, $pref, $pmsg) = @_;
+    my $tries = 15;
+
+    print "GetStatus: $name\n" if ($debug);
+
+    while ($tries) {
+	my $output = `$EXPSTATUS -j $PID,$name`;
+	if ($?) {
+	    my $status = $? >> 8;
+	    if ($status == GENIRESPONSE_REFUSED()) {
+		print "Boss is offline, waiting for a bit\n";
+		sleep(60);
+		next;
+	    }
+	    elsif ($status == GENIRESPONSE_BUSY()) {
+		print "Experiment is busy, waiting for a bit\n";
+		$tries--;
+		sleep(30);
+		next;
+	    }
+	    elsif ($status == GENIRESPONSE_SEARCHFAILED) {
+		return GENIRESPONSE_SEARCHFAILED;
+	    }
+	    else {
+		print $output;
+		# Everything else is bad news.
+		$$pmsg = "Unexpected error: $status";
+		return -1;
+	    }
+	}
+	print $output if ($debug);
+	
+	my $blob = eval { decode_json($output); };
+	if ($@) {
+	    $$pmsg = "Could not decode json data";
+	    return -1;
+	}
+	# Always set this so caller has debugging info.
+	$$pref = $blob;
+	return 0;
+    }
+    $$pmsg = "$name status timed out\n";
+    return -1;
+}
+
+sub fatal($)
+{
+    my ($msg) = @_;
+
+    if (! ($oneshot || $debug || $impotent)) {
+	#
+	# Send a message to the testbed list. 
+	#
+	SENDMAIL($TBOPS,
+		 "rfbaseline died",
+		 $msg,
+		 $TBOPS);
+    }
+    MarkDaemonStopped("rfbaseline")
+	if (! ($oneshot || $impotent));
+
+    die("*** $0:\n".
+	"    $msg\n");
+}
+
+#
+# Notify TBOPS
+#
+sub NotifyTBOPS($$)
+{
+    my ($subject, $message) = @_;
+
+    if ($impotent) {
+	print "$subject\n";
+	print "$message\n";
+	return;
+    }
+    SENDMAIL($TBOPS, $subject, $message, $TBOPS);
+}
+
+sub FlipTo($)
+{
+    my ($user) = @_;
+    
+    my (undef,undef,$unix_uid) = getpwnam($user) or
+	fatal("No such user $user");
+
+    #
+    # Need the entire group list for the user, cause of subgroups, and
+    # cause thats the correct thing to do. Too bad perl does not have a
+    # getgrouplist function like the C library.
+    #
+    my $unix_glist = `/usr/bin/id -G $user`;
+    if ($unix_glist =~ /^([\d ]*)$/) {
+	$unix_glist = $1;
+    }
+    else {
+	fatal("Unexpected results from 'id -G $user': $unix_glist");
+    }
+
+    # Need to split off the first group and create a proper list for $GUID.
+    my @gglist   = split(" ", $unix_glist);
+    my $unix_gid = $gglist[0];
+    $unix_glist  = "$unix_gid $unix_glist";
+
+    # Flip to user and never go back
+    $GID            = $unix_gid;
+    $EGID           = $unix_glist;
+    $EUID = $UID    = $unix_uid;
+    $ENV{'USER'}    = $user;
+    $ENV{'LOGNAME'} = $user;
+    $ENV{'HOME'}    = "/users/$user";
+
+    return 0;
+}
+

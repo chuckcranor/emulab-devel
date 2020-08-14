@@ -45,7 +45,8 @@ endif
 # Force dependencies on the scripts so that they will be rerun through
 # configure if the .in file is changed.
 # 
-all:	$(SBIN_SCRIPTS) $(LIBEXEC_SCRIPTS) listing.php powder_keepalive.sh
+all:	$(SBIN_SCRIPTS) $(LIBEXEC_SCRIPTS) listing.php \
+	powder_keepalive.sh rfbaseline
 
 subboss: 
 
