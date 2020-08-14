@@ -936,6 +936,11 @@ sub RegenCertificate($)
     # This file is deleted automatically.
     #
     my $keyfile = $self->GetCertificate()->WriteToFile(1);
+    #
+    # But gotta delete it first to avoid the duplicate uuid check
+    # in GeniCertificate.
+    #
+    $self->GetCertificate()->Delete();
 
     my $certificate =
 	GeniCertificate->Create({
@@ -947,7 +952,6 @@ sub RegenCertificate($)
     if (!defined($certificate)) {
 	return -1;
     }
-    $self->GetCertificate()->Delete();
     $certificate->Store();
     $self->{'CERTIFICATE'} = $certificate;
     return 0;
