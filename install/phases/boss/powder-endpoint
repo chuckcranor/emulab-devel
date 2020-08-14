@@ -129,10 +129,12 @@ sub Install($$$)
 	#
 	# Extra install
 	# 
-	Phase "extra", "Installing extra scripts", sub {
-	    ExecQuietFatal("cd $TOP_OBJDIR/install/$TARGETSYS_DIR; ".
-			   "$GMAKE; $GMAKE install");
-	};
+	if ($TARGETSYS_TARGET eq "POWDER-BUS") {
+	    Phase "extra", "Installing extra scripts", sub {
+		ExecQuietFatal("cd $TOP_OBJDIR/install/$TARGETSYS_DIR; ".
+			       "$GMAKE; $GMAKE install");
+	    };
+	}
 
 	#
 	# Need ipmi tools on the Buses
@@ -254,22 +256,20 @@ sub Install($$$)
 	# Need to do import the ANDROID image specially, and do it before
 	# we bring in the nexus type.
 	#
-	if ($TARGETSYS_TARGET eq "POWDER-BUS") {
-	    Phase "ANDROID444", "Fetching ANDROID444 image. Patience!", sub {
-		my $url   = $ANDROID444;
-		my $image = OSImage->Lookup(TBOPSPID(), "ANDROID444-STD");
-		PhaseSkip("already fetched")
-		    if (defined($image));
+	Phase "ANDROID444", "Fetching ANDROID444 image. Patience!", sub {
+	    my $url   = $ANDROID444;
+	    my $image = OSImage->Lookup(TBOPSPID(), "ANDROID444-STD");
+	    PhaseSkip("already fetched")
+		if (defined($image));
 
-		# Import with novalidate option.
-		ExecQuietFatal("$SUDO -u $PROTOUSER ".
-			       "         $WAP $IMAGEIMPORT -V -g '$url'");
-		# Then update the only thing we can (and must have).
-		ExecQuietFatal("$SUDO -u $PROTOUSER ".
-			       "         $WAP $IMAGEVALIDATE -u -V size ".
-			                 TBOPSPID() . ",ANDROID444-STD");
-	    };
-	}
+	    # Import with novalidate option.
+	    ExecQuietFatal("$SUDO -u $PROTOUSER ".
+			   "         $WAP $IMAGEIMPORT -V -g '$url'");
+	    # Then update the only thing we can (and must have).
+	    ExecQuietFatal("$SUDO -u $PROTOUSER ".
+			   "         $WAP $IMAGEVALIDATE -u -V size ".
+			   TBOPSPID() . ",ANDROID444-STD");
+	};
 
 	#
 	# Add the node types to the DB.
