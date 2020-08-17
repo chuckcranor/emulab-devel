@@ -6871,10 +6871,9 @@ sub CheckForDeprecatedImages($$$)
 #
 # Create rsa/ssh keys for experiment.
 #
-sub GenerateKeys($)
+sub GenerateKeys($;$)
 {
-    my ($self) = @_;
-    my $rsa_privkey = "";
+    my ($self,$rsa_privkey) = @_;
     my $rsa_pubkey;
     my $ssh_pubkey;
     my $errmsg;
@@ -6882,16 +6881,20 @@ sub GenerateKeys($)
     #
     # Generate unencrypted RSA key. 
     #
-    if (!open(RSA, "$OPENSSL genrsa 4096 2>/dev/null | ")) {
-	print STDERR "*** Could not start genrsa for RSA key\n";
-	return -1;
-    }
-    while (<RSA>) {
-	$rsa_privkey .= $_;
-    }
-    if (!close(RSA)) {
-	print STDERR "*** Could not generate RSA key\n";
-	return -1;
+    if (!defined($rsa_privkey)) {
+	$rsa_privkey = "";
+	
+	if (!open(RSA, "$OPENSSL genrsa 4096 2>/dev/null | ")) {
+	    print STDERR "*** Could not start genrsa for RSA key\n";
+	    return -1;
+	}
+	while (<RSA>) {
+	    $rsa_privkey .= $_;
+	}
+	if (!close(RSA)) {
+	    print STDERR "*** Could not generate RSA key\n";
+	    return -1;
+	}
     }
     #
     # Extract public key from it.
