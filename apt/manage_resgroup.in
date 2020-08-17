@@ -2040,7 +2040,9 @@ sub DoInfoOrWarn()
     $brand->SendEmail($email, $subject,
 		      $message . "\n\n" .
 		      $resgroup->InfoString() .
-		      "See: $url", $brand->ReservationsEmailAddress());
+		      "See: $url",
+		      $brand->ReservationsEmailAddress(),
+		      "BCC: " . $brand->ReservationsEmailAddress());
   done:
     if (defined($webtask)) {
 	$webtask->Exited(0);
