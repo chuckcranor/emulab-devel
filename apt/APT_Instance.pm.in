@@ -291,6 +291,7 @@ sub DESTROY {
     $self->{'AGGREGATES'} = undef;
     $self->{'HASH'}       = undef;
     $self->{'WEBTASK'}    = undef;
+    $self->{'ROUTES'}     = undef;
 }
 
 #
@@ -3028,6 +3029,19 @@ sub domain($)		{ return $_[0]->{'AGGURN'}->domain(); }
 sub isAL2S($)           { return $_[0]->{'ISAL2S'}; }
 sub isStitch($)         { return $_[0]->{'ISSTITCH'}; }
 
+# Break circular reference someplace to avoid exit errors.
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'INSTANCE'} = undef;
+    $self->{'DBROW'}    = undef;
+    $self->{'WEBTASK'}  = undef;
+    $self->{'HASH'}     = undef;
+    $self->{'AGGREGATE'}= undef;
+    $self->{'AGGURN'}   = undef;
+    $self->{'STATUS'}   = undef;
+}
+
 #
 # Grab the webtask.
 #
@@ -3171,17 +3185,6 @@ sub LookupByURN($$)
 	push(@result, $instance);
     }
     return @result;
-}
-
-# Break circular reference someplace to avoid exit errors.
-sub DESTROY {
-    my $self = shift;
-
-    $self->{'INSTANCE'} = undef;
-    $self->{'DBROW'}    = undef;
-    $self->{'WEBTASK'}  = undef;
-    $self->{'HASH'}     = undef;
-    $self->{'AGGREGATE'}= undef;
 }
 
 #

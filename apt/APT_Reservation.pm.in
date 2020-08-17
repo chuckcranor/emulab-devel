@@ -87,6 +87,10 @@ sub DESTROY {
 
     $self->{'DBROW'} = undef;
     $self->{'BRAND'} = undef;
+
+    $self->{'RESERVATIONS'}      = undef;
+    $self->{'RFRESERVATIONS'}    = undef;
+    $self->{'ROUTERESERVATIONS'} = undef;
 }
 
 #
@@ -875,7 +879,9 @@ sub IsRoute($)          { return 0; }
 sub DESTROY {
     my $self = shift;
 
-    $self->{'DBROW'} = undef;
+    $self->{'DBROW'}  = undef;
+    $self->{'GROUP'}  = undef;
+    $self->{'AGGURN'} = undef; 
 }
 
 #
@@ -1245,6 +1251,7 @@ sub DESTROY {
     my $self = shift;
 
     $self->{'DBROW'} = undef;
+    $self->{'GROUP'} = undef;
 }
 
 #
@@ -1925,6 +1932,7 @@ sub DESTROY {
     my $self = shift;
 
     $self->{'DBROW'} = undef;
+    $self->{'GROUP'} = undef;
 }
 
 #
