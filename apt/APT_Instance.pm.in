@@ -2966,6 +2966,7 @@ use APT_Geni;
 use Date::Parse;
 use Data::Dumper;
 use vars qw($AUTOLOAD);
+use Scalar::Util qw(weaken);
 use overload ('""' => 'Stringify');
 sub devurl($) { return APT_Instance::devurl($_[0]); }
 
@@ -2991,6 +2992,7 @@ sub Lookup($$$)
     $self->{'WEBTASK'}  = undef;
     $self->{'STATUS'}   = undef;
     $self->{'AGGREGATE'}= undef;
+    weaken($self->{'INSTANCE'});
     bless($self, $class);
 
     # Handy;

@@ -59,6 +59,7 @@ use Date::Parse;
 use Date::Format;
 use Data::Dumper;
 use vars qw($AUTOLOAD);
+use Scalar::Util qw(weaken);
 use overload ('""' => 'Stringify');
 
 AUTOLOAD {
@@ -805,6 +806,7 @@ use GeniHRN;
 use Date::Parse;
 use Data::Dumper;
 use vars qw($AUTOLOAD);
+use Scalar::Util qw(weaken);
 use overload ('""' => 'Stringify');
 
 sub Lookup($$$$)
@@ -822,6 +824,7 @@ sub Lookup($$$$)
     my $self            = {};
     $self->{'DBROW'}    = $query_result->fetchrow_hashref();
     $self->{'GROUP'}    = $group;
+    weaken($self->{'GROUP'});
     bless($self, $class);
 
     # Handy;
@@ -1175,6 +1178,7 @@ use GeniHRN;
 use Date::Parse;
 use Data::Dumper;
 use vars qw($AUTOLOAD);
+use Scalar::Util qw(weaken);
 use overload ('""' => 'Stringify');
 
 # Rules.
@@ -1200,6 +1204,7 @@ sub Lookup($$$)
     my $self            = {};
     $self->{'DBROW'}    = $query_result->fetchrow_hashref();
     $self->{'GROUP'}    = $group;
+    weaken($self->{'GROUP'});
     bless($self, $class);
 
     return $self;
@@ -1827,6 +1832,7 @@ use GeniHRN;
 use Date::Parse;
 use Data::Dumper;
 use vars qw($AUTOLOAD);
+use Scalar::Util qw(weaken);
 use overload ('""' => 'Stringify');
 
 #
@@ -1878,6 +1884,7 @@ sub Lookup($$$)
     my $self            = {};
     $self->{'DBROW'}    = $query_result->fetchrow_hashref();
     $self->{'GROUP'}    = $group;
+    weaken($self->{'GROUP'});
     bless($self, $class);
 
     return $self;
