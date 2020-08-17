@@ -362,7 +362,8 @@ while (1) {
     $sleeptime = $checkint;
 
     $passno++;
-    logit("=== Starting pass $passno.");
+    logit("=== Starting pass $passno.")
+	if (!$onceonly);
     my $now = time();
 
     # Find all the write-back stores we have metadata for.
@@ -372,48 +373,49 @@ while (1) {
     # Ensure all instances are running for current experiments
     #
     foreach my $uuid (keys %syncthing) {
-	if ($syncthing{$uuid}{'active'}) {
-	    logit("$uuid: found active experiment");
+	next
+	    if (!$syncthing{$uuid}{'active'});
 
-	    #
-	    # See if the syncthing daemon is running.
-	    # Mostly we do this to get the current pid.
-	    #
-	    my $inst = $syncthing{$uuid}{'obj'};
-	    my $pid = $syncthing{$uuid}{'pid'} = checksyncthing($inst, 0, 0);
-	    if ($pid < 0) {
-		logit("$uuid: WARNING: ".
-		      "Could not detect status of syncthing instance!");
-		next;
-	    }
+	logit("$uuid: found active experiment");
 
-	    #
-	    # Regardless of its current status, we make sure it is running
-	    # with the correct fsWather setting: enabled on aggregates,
-	    # disabled on mothership.
-	    #
-	    $fswe = ($MAINSITE ? "false" : "true");
-	    my $opid = $pid;
-	    $pid = checksyncthing($inst, 1, 0, { fsWatcherEnabled => $fswe });
-	    if ($pid <= 0) {
-		logit("$uuid: WARNING: ".
-		      "Error while (re)starting syncthing instance!");
-	    } elsif ($pid != $opid) {
-		logit("$uuid: (Re)starting syncthing for active instance");
-		# reset the event counter
-		delete $syncthing{$uuid}{'lastscan'};
-		#
-		# We shorten the wait time til the next pass, but not as
-		# much since restarting the syncthing will cause a complete
-		# scan to take place. For a wbstore of any consequences,
-		# it will likely still take longer than 120 seconds, but
-		# we can still catch a fair number with this.
-		#
-		$sleeptime = 120
-		    if ($checkint > 120);
-	    }
-	    $syncthing{$uuid}{'pid'} = $pid;
+	#
+	# See if the syncthing daemon is running.
+	# Mostly we do this to get the current pid.
+	#
+	my $inst = $syncthing{$uuid}{'obj'};
+	my $pid = $syncthing{$uuid}{'pid'} = checksyncthing($inst, 0, 0);
+	if ($pid < 0) {
+	    logit("$uuid: WARNING: ".
+		  "Could not detect status of syncthing instance!");
+	    next;
 	}
+
+	#
+	# Regardless of its current status, we make sure it is running
+	# with the correct fsWather setting: enabled on aggregates,
+	# disabled on mothership.
+	#
+	$fswe = ($MAINSITE ? "false" : "true");
+	my $opid = $pid;
+	$pid = checksyncthing($inst, 1, 0, { fsWatcherEnabled => $fswe });
+	if ($pid <= 0) {
+	    logit("$uuid: WARNING: ".
+		  "Error while (re)starting syncthing instance!");
+	} elsif ($pid != $opid) {
+	    logit("$uuid: (Re)starting syncthing for active instance");
+	    # reset the event counter
+	    delete $syncthing{$uuid}{'lastscan'};
+	    #
+	    # We shorten the wait time til the next pass, but not as
+	    # much since restarting the syncthing will cause a complete
+	    # scan to take place. For a wbstore of any consequences,
+	    # it will likely still take longer than 120 seconds, but
+	    # we can still catch a fair number with this.
+	    #
+	    $sleeptime = 120
+		if ($checkint > 120);
+	}
+	$syncthing{$uuid}{'pid'} = $pid;
     }
 
     #
@@ -421,7 +423,7 @@ while (1) {
     #
     foreach my $uuid (keys %syncthing) {
 	next
-	    if ($syncthing{$uuid}{'active'});
+	    if ($syncthing{$uuid}{'active'} || $syncthing{$uuid}{'unknown'});
 
 	logit("$uuid: found past experiment");
 
@@ -567,12 +569,26 @@ while (1) {
 	}
     }
 
-    logit("=== Finished pass $passno.");
+    #
+    # Finally, handle unknown instances. These should only happen on
+    # aggregates due to a race at experiment startup when the WBStore info
+    # lands before the experiment exists in the DB. If any of these exist,
+    # we just ignore them and arrange to check again soon.
+    #
+    foreach my $uuid (keys %syncthing) {
+	next
+	    if (!$syncthing{$uuid}{'unknown'});
+
+	logit("$uuid: found unknown experiment");
+	$sleeptime = 15;
+    }
 
     if ($onceonly) {
 	MarkDaemonStopped("wbstoremonitor");
 	exit(0)
     }
+
+    logit("=== Finished pass $passno, next pass in $sleeptime seconds");
 }
 fatal("forever just ended!");
 exit(1);
@@ -1071,6 +1087,14 @@ sub setdevicestates($)
 # we do is related to those processes. syncthing "objects" are indexed by
 # experiment instance UUIDs.
 #
+# XXX If an instance is "unknown", then it means that a legitimate WBStore
+# configuration exists, but there was no corresponding experiment in the
+# DB (current of past). This is a race that can happen at creation time
+# so we will add the configuration and note it in the log. It will either
+# show up as current or past on the next pass or else something odd happened
+# (e.g., an unfortunately-timed disconnect) and we will have to clean it
+# up manually.
+# 
 # XXX things are screwed up right now because we do not correctly distinguish
 # between our per instance+aggregate WBStore objects and the underlying
 # syncthing. I had been assuming they were one-to-one. As a result, some
@@ -1139,6 +1163,7 @@ sub getinstances()
 	    delete $syncthing{$st}{'found'};
 	    delete $syncthing{$st}{'active'};
 	    delete $syncthing{$st}{'done'};
+	    delete $syncthing{$st}{'unknown'};
 	}
     }
     
@@ -1312,6 +1337,7 @@ sub getinstances()
 
 	my $active = $inst->active();
 	my $done = $inst->done();
+	my $unknown = $inst->unknown();
 
 	#
 	# Propagate all the appropriate state from the syncthing to our
@@ -1328,8 +1354,9 @@ sub getinstances()
 
 	#
 	# And aggregate some state for the syncthing instance:
-	# - if any instance using this syncthing is active, syncthing is active
+	# - if any instance for this syncthing is active, syncthing is active
 	# - if any instance is not DONE, syncthing is not DONE
+	# - if any instance is unknown, syncthing is unknown
 	#
 	if (!exists($syncthing{$uuid}{'active'}) || $active) {
 	    $syncthing{$uuid}{'active'} = $active;
@@ -1337,12 +1364,16 @@ sub getinstances()
 	if (!exists($syncthing{$uuid}{'done'}) || !$done) {
 	    $syncthing{$uuid}{'done'} = $done;
 	}
+	if (!exists($syncthing{$uuid}{'unknown'}) || $unknown) {
+	    $syncthing{$uuid}{'unknown'} = $unknown;
+	}
     }
 
     # Report on what we found
     foreach my $uuid (sort keys %syncthing) {
 	my $STstate = $syncthing{$uuid}{'state'};
-	my $astr = $syncthing{$uuid}{'active'} ? "active" : "past";
+	my $astr = $syncthing{$uuid}{'unknown'} ? "UNKNOWN" :
+	    ($syncthing{$uuid}{'active'} ? "active" : "past");
 	my $dstr = $syncthing{$uuid}{'done'} ? "done" : "not done";
 	if ($STstate eq RUNNING) {
 	    my $pid = $syncthing{$uuid}{'pid'};

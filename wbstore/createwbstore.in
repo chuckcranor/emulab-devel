@@ -463,6 +463,11 @@ sub packageconfig($)
 # time of our call, we need to keep retrying periodically (in the background)
 # as long as the experiment is legit.
 #
+# XXX We make the first couple of retries pretty quick, since it might just
+# be a transient failure on aggregate LTE/WiFi link and we really want to
+# get this installed before any experiment nodes fire up and start trying to
+# use their wbstore directory.
+#
 sub distribconfigs()
 {
     # XXX we hardwire /usr/testbed here because we don't know the remote config
@@ -472,6 +477,9 @@ sub distribconfigs()
     my $pidfile = "$tmpdir/distrib.pid";
 
     $SSH_ARGS .= " -o ConnectTimeout=5";
+
+    my @retries = (5, 15, 30, 60);
+    my $try = 0;
 
     if ($background) {
 	if (($bgpid = TBBackGround($logfile)) != 0) {
@@ -526,6 +534,8 @@ sub distribconfigs()
 			"(stat=$rv), trying again later.\n";
 		}
 		next;
+	    } elsif ($try && $debug) {
+		print STDERR "$instance: copy succeeded after $try retries\n";
 	    }
 
 	    if ($install) {
@@ -540,6 +550,8 @@ sub distribconfigs()
 			    "(stat=$rv), trying again later.\n";
 		    }
 		    next;
+		} elsif ($try && $debug) {
+		    print STDERR "$instance: install succeeded after $try retries\n";
 		}
 	    }
 
@@ -564,7 +576,15 @@ sub distribconfigs()
 
 	# Wait awhile before trying again
 	else {
-	    sleep(60);
+	    my $stime;
+	    if ($try < scalar(@retries)) {
+		$stime = $retries[$try];
+	    } else {
+		$stime = $retries[$#retries];
+	    }
+
+	    sleep($stime);
+	    $try++;
 	    
 	    # Is experiment still valid?
 	    my $inst = APT_Instance->Lookup($exptuuid);

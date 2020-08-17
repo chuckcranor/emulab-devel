@@ -232,7 +232,7 @@ sub getids()
     # that really exists.
     #
     #
-    my $gid = $pid;
+    $gid = $pid;
     if (length($pid) > 16) {
 	require Group;
 

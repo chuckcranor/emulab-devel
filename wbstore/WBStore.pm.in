@@ -132,8 +132,16 @@ sub Lookup($$;$)
 
     #
     # For past experiments, UUID should be in apt_instance_history
-    # (slice_uuid) on the mothership. For an aggregate, we will have
-    # to find the pid from the syncthing config file.
+    # (slice_uuid) on the mothership. For an aggregate, a past experiment
+    # should have a record in the experiment_stats table.
+    #
+    # XXX again, as described above we run on mothership ops and cannot
+    # access the DB, so we do nothing here.
+    #
+    # XXX there is a race on the aggregate side where a wbstore configuration
+    # may show up before the experiment info is in the DB, so we have to be
+    # a little more careful about classifying an experiment as "past".
+    # If it shows up in neither table, we classify it as "unknown".
     #
     if (!$live) {
 	if ($MAINSITE) {
@@ -159,6 +167,18 @@ sub Lookup($$;$)
 			if ($debug);
 		    return undef;
 		}
+	    }
+	} else {
+	    $result = DBQueryWarn("select eid,pid from experiment_stats ".
+				  "where slice_uuid='$uuid'");
+	    if ($result && $result->numrows) {
+		($name,$pid) = $result->fetchrow_array();
+	    } else {
+		#
+		# Could be a new experiment, make sure it passes the
+		# remaining tests below. Otherwise, it is just bogus.
+		#
+		$live = -1;
 	    }
 	}
     }
@@ -221,7 +241,7 @@ sub Lookup($$;$)
 	# application will produce a file with this name.
 	#
 	my $sentinel = "$ddir/.$uuid-$domain";
-	if (-e "$sentinel") {
+	if ($live != -1 && -e "$sentinel") {
 	    $done = 1;
 	    #
 	    # XXX if an instance is DONE it is also not active.
@@ -251,8 +271,20 @@ sub Lookup($$;$)
     $self->{'WBSTORE'}->{'pid'} = $pid;
     $self->{'WBSTORE'}->{'confdir'} = $cdir;
     $self->{'WBSTORE'}->{'datadir'} = $ddir;
-    $self->{'WBSTORE'}->{'active'} = $live;
-    $self->{'WBSTORE'}->{'done'} = $done;
+    #
+    # If the configuration does not correspond to either a current or past
+    # experiment but is otherwise legit, then this must be a pre-born
+    # experiment. So mark it as unknown and let the caller deal with it.
+    #
+    if ($live == -1) {
+	$self->{'WBSTORE'}->{'active'} = 0;
+	$self->{'WBSTORE'}->{'done'} = 0;
+	$self->{'WBSTORE'}->{'unknown'} = 1;
+    } else {
+	$self->{'WBSTORE'}->{'active'} = $live;
+	$self->{'WBSTORE'}->{'done'} = $done;
+	$self->{'WBSTORE'}->{'unknown'} = 0;
+    }
     $self->{'WBSTORE'}->{'apitimeout'} = $apitimeout;
 
     # Caller supplied info
