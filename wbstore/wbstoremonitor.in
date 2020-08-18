@@ -1130,17 +1130,33 @@ sub getinstances()
 		if (!$onceonly);
 	    $instance{$token}{'obj'} = $ni;
 	} else {
-	    #
-	    # Active-ness and Done-ness can change, but only in one
-	    # direction--wbstores do not come back from the dead and
-	    # they are not undone.
-	    #
 	    my $ci = $instance{$token}{'obj'};
-	    if (!$ni->active()) {
+
+	    #
+	    # As long as an experiment is unknown, active and done do not
+	    # matter. Once it transitions to known, then we need to set
+	    # active and done.
+	    #
+	    if ($ni->unknown()) {
+		$ci->unknown(1);
 		$ci->active(0);
-	    }
-	    if ($ni->done()) {
-		$ci->done(1);
+		$ci->done(0);
+	    } elsif ($ci->unknown()) {
+		$ci->unknown(0);
+		$ci->active($ni->active());
+		$ci->done($ni->done());
+	    } else {
+		#
+		# For known experiments, Active-ness and Done-ness can change,
+		# but only in one direction--wbstores do not come back from
+		# the dead and they are not undone.
+		#
+		if (!$ni->active()) {
+		    $ci->active(0);
+		}
+		if ($ni->done()) {
+		    $ci->done(1);
+		}
 	    }
 	}
 	$instance{$token}{'found'} = 1;
