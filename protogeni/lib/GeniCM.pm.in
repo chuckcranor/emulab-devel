@@ -1227,6 +1227,7 @@ sub GetTicketAuxAux($)
 	my $isbridge    = 0;
 	my $isfirewall  = 0;
 	my $isvhost     = 0;
+	my $isblackbox  = 0;
 	my $xensettings;
 	my $dockersettings;
 	my $fwsettings;
@@ -1758,6 +1759,7 @@ sub GetTicketAuxAux($)
 						     "Blackbox OS error");
 		    goto bad;
 		}
+		$isblackbox = 1;
 	    }
 	}
 	#
@@ -1875,7 +1877,8 @@ sub GetTicketAuxAux($)
 	# Program agents. We have to watch for duplicate names, the event
 	# system assumes each one is uniquely named.
 	#
-	if (my @progagents = GeniXML::GetProgramAgents($ref)) {
+	if (!$isblackbox) {
+ 	 if (my @progagents = GeniXML::GetProgramAgents($ref)) {
 	    foreach my $agent (@progagents) {
 		my $vname = $agent->{"name"};
 		if (!defined($vname)) {
@@ -1893,8 +1896,8 @@ sub GetTicketAuxAux($)
 		goto bad
 		    if (GeniResponse::IsError($response));
 	    }
-	}
-	else {
+	 }
+	 else {
 	    # Stub program agent. Needed to keep everything happy, I think.
 	    $virtexperiment->NewTableRow("virt_programs",
 					 {"vnode"   => $node_nickname,
@@ -1903,10 +1906,10 @@ sub GetTicketAuxAux($)
 					  "dir"     => "",
 					  "timeout" => 0,
 					  "expected_exit_code" => 0});
-	}
+	 }
 	
-	# Tarball and startup command.
-	if (defined($tarfiles)) {
+	 # Tarball and startup command.
+	 if (defined($tarfiles)) {
 	    if (! TBcheck_dbslot($tarfiles, "virt_nodes", "tarfiles",
 				 TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
 		$response =
@@ -1915,8 +1918,8 @@ sub GetTicketAuxAux($)
 		goto bad;
 	    }
 	    $nodeblob->{'tarfiles'} = $tarfiles;
-	}
-	if (GeniXML::IsVersion0($ref)) {
+	 }
+	 if (GeniXML::IsVersion0($ref)) {
 	    my $startupcmd = GeniXML::GetStartupCommand($ref);
 	    if (defined($startupcmd)) {
 		if (! TBcheck_dbslot($startupcmd, "virt_nodes", "startupcmd",
@@ -1928,8 +1931,8 @@ sub GetTicketAuxAux($)
 		}
 		$nodeblob->{'startupcmd'} = $startupcmd;
 	    }
-	}
-	elsif ((my @services = GeniXML::GetExecuteServices($ref)) &&
+	 }
+	 elsif ((my @services = GeniXML::GetExecuteServices($ref)) &&
 	       (!defined($osinfo) || $osinfo->isImageAlias() || 
 		$osinfo->op_mode() ne
 		EmulabConstants::TBDB_NODEOPMODE_ALWAYSUP())) {
@@ -2045,8 +2048,8 @@ sub GetTicketAuxAux($)
 		}
 		$nodeblob->{'startupcmd'} = "/var/tmp/$startname";
 	    }
+	 }
 	}
-
 	my $elabsettings = GeniXML::GetElabInElabSettings($ref);
 	if (defined($elabsettings)) {
 	    my $extradisksize;

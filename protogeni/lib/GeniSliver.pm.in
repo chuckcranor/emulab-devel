@@ -937,6 +937,20 @@ sub AnnotateManifest($)
 	    GeniXML::SetText("username", $login, $localuser->{"login"});
 	}
     }
+    #
+    # Kill the execute/install services, these are not done on Blackbox
+    # nodes so lets reflect that fact.
+    #
+    if ($node->isblackbox()) {
+	my $execute = GeniXML::FindFirst("n:execute", $services);
+	if ($execute) {
+	    $services->removeChild($execute);
+	}
+	my $install = GeniXML::FindFirst("n:install", $services);
+	if ($install) {
+	    $services->removeChild($install);
+	}
+    }
     my $tipserver = undef;
     #
     # The tipline for a virtual node will not exist till its booted,
