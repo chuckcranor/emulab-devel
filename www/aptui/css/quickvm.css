@@ -300,6 +300,9 @@ fieldset[disabled] .nav > li > a.btn-success.active {
     width: 850px;
     margin: 30px auto;
   }
+  .modal-sm {
+    width: 425px;
+  }
 }
 
 @media (min-width: 910px) and (max-width: 969px) {

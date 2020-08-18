@@ -48,9 +48,17 @@
       </div>
       <div class='col-sm-9'>
 	<div class="panel panel-default">
-	  <div class='panel-heading'>
+	  <div class='panel-heading'
+	       style="padding-top: 5px; padding-bottom: 5px;">
 	    <center>
               <h3 class='panel-title'>PhantomNet RF Attenuator Matrix</h3>
+	      <div>
+		<a href="#"
+		   data-target='#matric-connections-modal'
+		   data-toggle='modal'>
+		  <span class=small>Matrix Connections</a>
+		  </span>
+	      </div>
 	    </center>
 	  </div>
 	  <div class='panel-body visavail' style="padding: 2px;"
@@ -139,6 +147,44 @@
 	      <a href="reserve.php">reservation</a> page.
 	  </ul>
 	</p>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- PhantomNet Matrix Connections -->
+<div id='matric-connections-modal' class='modal fade'>
+  <div class='modal-dialog modal-sm'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+	<button type="button" class="close" data-dismiss="modal"
+	  <span aria-hidden="true">&times;</span></button>	
+	<center>
+	  <small>
+	    <table class="table table-bordered table-condensed">
+	      <thead>
+		<tr>
+		  <th>Node ID1</th>
+		  <th>Node ID2</th>
+		</tr>
+	      </thead>
+	      <tbody>
+		<% var wires = {}; %>
+		<% _.each(matrixinfo, function(details, node_id1) { %>
+		  <% _.each(details.wires, function(node_id2) { %>
+		    <% if (!_.has(wires, node_id1 + ":" + node_id2) &&
+		      !_.has(wires, node_id2 + ":" + node_id1)) { %>
+		      <tr>
+			<td><%- node_id1 %></td>
+			<td><%- node_id2 %></td>
+		      </tr>
+		      <% wires[node_id2 + ":" + node_id1] = 1;
+		         wires[node_id1 + ":" + node_id2] = 1; } %>
+		    <% }) %>
+		  <% }) %>
+	      </tbody>
+	    </table>
+	  </small>
+	</center>
       </div>
     </div>
   </div>

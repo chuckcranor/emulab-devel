@@ -56,6 +56,7 @@ $(function ()
 	var html = mainTemplate({
 	    amlist:		amlist,
 	    isadmin:		isadmin,
+	    matrixinfo:         matrixinfo,
 	});
 	$('#main-body').html(html);
 	// Per clusters rows filled in with templates.

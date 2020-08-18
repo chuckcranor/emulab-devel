@@ -506,6 +506,7 @@ $(function ()
 	    isadmin:		isadmin,
 	    editing:		editing,
 	    default_pid:        window.PID !== undefined ? window.PID : null,
+	    matrixinfo:		matrixinfo,
 	});
 	html = aptforms.FormatFormFieldsHorizontal(html);
 	$('#main-body').html(html);

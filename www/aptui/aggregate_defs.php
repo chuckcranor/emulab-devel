@@ -553,22 +553,35 @@ class Aggregate
         $blob = array();
 
         $query_result =
-            DBQueryFatal("select node_id from node_features ".
-                         "where feature='rf-controlled'");
+            DBQueryFatal("select f.node_id,w1.node_id2,w2.node_id1 ".
+                         "  from node_features as f ".
+                         "left join nodes as n on n.node_id=f.node_id ".
+                         "left join wires as w1 on ".
+                         "   w1.node_id1=f.node_id and ".
+                         "   w1.external_wire is not null ".
+                         "left join wires as w2 on ".
+                         "   w2.node_id2=f.node_id and ".
+                         "   w2.external_wire is not null ".
+                         "where f.feature='rf-controlled' and ".
+                         "      n.node_id is not null");
 
         if (!mysql_num_rows($query_result)) {
             return $blob;
         }
         while ($row = mysql_fetch_array($query_result)) {
             $node_id  = $row["node_id"];
-            $node     = Node::Lookup($node_id);
+            $node_id1 = $row["node_id1"];
+            $node_id2 = $row["node_id2"];
 
-            if ($node) {
-                #
-                # Not really sure what info is needed yet. But need
-                # to know it is a node in the matrix.
-                #
-                $blob[$node_id] = array("node_id" => $node_id);
+            if (!array_key_exists($node_id, $blob)) {
+                $blob[$node_id] = array("node_id" => $node_id,
+                                        "wires"   => array());
+            }
+            if ($node_id1) {
+                $blob[$node_id]["wires"][] = $node_id1;
+            }
+            else {
+                $blob[$node_id]["wires"][] = $node_id2;
             }
         }
         return $blob;
