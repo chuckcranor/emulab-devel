@@ -3,9 +3,8 @@
 # Utah Network Testbed 
 #
 # PROVIDE: poweron
-# REQUIRE: testbed
+# REQUIRE: capture
 # BEFORE: apache24
-# KEYWORD: shutdown
 
 case "$1" in
     start|faststart|quietstart|onestart|forcestart)
