@@ -21,38 +21,51 @@
 # 
 # }}}
 #
-$TBDIR          = "@prefix@/";
-$RFDIR          = "$TBDIR/www/rfmonitor/";
-
-$listing = array();
-
-function getFileList($dir, $archive)
+function getFileList($dir)
 {
-    global $listing;
+    $listing = array();
+    chdir($dir);
 
     // open pointer to directory and read list of files
-    $d = dir($dir);
+    $d = dir(".");
     if (!$d) {
         exit("Failed to open $dir for reading");
     }
     while (($entry = $d->read()) !== FALSE) {
+        if (is_dir($entry)) {
+            if ($entry == "." || $entry == "..") {
+                continue;
+            }
+            $listing[] = [
+                'name'     => $entry,
+                'subdir'   => getFileList($entry),
+            ];
+            continue;
+        }
         #
-        # Only the ,gz files
+        # Ignore the symlinks, we want just the stamped entries.
+        #
+        if (is_link($entry)) {
+            continue;
+        }
+        #
+        # Only the .gz files
         #
         if (!preg_match("/\.gz$/", $entry)) {
             continue;
         }
         $listing[] = [
             'name'     => $entry,
-            'size'     => filesize("{$dir}{$entry}"),
-            'lastmod'  => filemtime("{$dir}{$entry}"),
-            'archived' => $archive,
+            'lastmod'  => filemtime($entry),
         ];
-    }        
+    }
     $d->close();
+    if ($dir != ".") {
+        chdir("..");
+    }
+    return $listing;
 }
-getFileList($RFDIR, 0);
-getFileList("$RFDIR/archive/", 1);
+$listing = getFileList(".");
 
 header("Content-Type: text/plain");
 header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
