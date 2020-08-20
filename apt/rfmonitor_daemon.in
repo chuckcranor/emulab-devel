@@ -469,9 +469,10 @@ sub HandleChild($)
 		print "$nodeid was just powered off, ignoring this report.\n";
 		next;
 	    }
+	    # This will not be archived. 
 	    my $graphurl = "https://www.powderwireless.net" .
 		"/frequency-graph.php?node_id=$nodeid&iface=$iface" .
-		"&cluster=${POWDER_NICKNAME}&logid=$filestamp&archived=1";
+		"&cluster=${POWDER_NICKNAME}&logid=$filestamp";
 
 	    my $mesg =
 		"$nodeid is supposed to be powered off but is still ".
