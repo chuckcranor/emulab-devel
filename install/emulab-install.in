@@ -256,7 +256,7 @@ elsif ($server eq "boss") {
 	      'boss/mfs', 'boss/images', 'boss/xen',
 	      'boss/experiments',
 	      'boss/protogeni', 'boss/firewall', 'boss/servers',
-	      'boss/shellinabox', 'boss/portal'
+	      'boss/shellinabox', 'boss/portal', 'boss/linuxmfs',
 	     );
 }
 elsif ($server eq "fs") {
