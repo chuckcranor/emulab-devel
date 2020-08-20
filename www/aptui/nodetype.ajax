@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -311,7 +311,8 @@ function SaveRow($which)
     }
     if ($which == "flag") {
         $query_result =
-            DBQueryWarn("update node_types set ${name}='$value'");
+            DBQueryWarn("update node_types set ${name}='$value' ".
+                        "where type='$type'");
     }
     elseif ($isnew) {
         if (mysql_num_rows($query_result)) {
