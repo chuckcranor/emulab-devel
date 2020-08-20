@@ -138,6 +138,7 @@ my $nomfs    = 0;
 my $quiet    = 0;
 my $signature= 0;
 my $deltapct = 0;
+my $imtracker= 0;
 my $update_prepare = 0;
 my $bsname;
 my $origin_uuid;
@@ -168,6 +169,7 @@ use libdb;
 use EmulabConstants;
 use libtestbed;
 use libadminmfs;
+use libEmulab;
 use Experiment;
 use Node;
 use User;
@@ -214,6 +216,7 @@ my $checkquota  = "$TB/sbin/checkquota";
 my $imagehash	= "$TB/bin/imagehash";
 my $imagevalidate = "$TB/sbin/imagevalidate";
 my $TRIGGERUPDATE = "$TB/sbin/protogeni/triggerimageupdate";
+my $POSTIMAGEDATA = "$TB/sbin/protogeni/postimagedata";
 my $SHA1	= "/sbin/sha1";
 my $SCP		= "/usr/bin/scp";
 my $def_devtype	= "ad";
@@ -457,6 +460,11 @@ $reportwait = $idlewait
     if ($idlewait < $reportwait);
 $checkwait = $reportwait
     if ($reportwait < $checkwait);
+
+# For posting the image data. 
+if (GetSiteVar("protogeni/use_imagetracker")) {
+    $imtracker = 1;
+}
 
 #
 # Verify user and get his DB uid and other info for later.
@@ -1637,6 +1645,14 @@ if (defined($origin_uuid)) {
     # This can fail, we will catch it later from the CM daemon when
     # we try again. Use the nolock option since we have it.
     system("$TRIGGERUPDATE -l $imageid");
+}
+elsif ($imtracker) {
+    #
+    # If we are using the image tracker, but but not copying the image
+    # back (copyback_uuid) then post the image data to the IMS. 
+    #
+    system("$POSTIMAGEDATA " . $image->versname());
+    # Failure is okay, the daemon will pick it up.
 }
 $image->Unlock();
 exit(0);

@@ -1639,7 +1639,7 @@ sub SliverAction($$$$$$)
 		$exitval = $object->Reload($API_VERSION);
 	    }
 	}
-	return GeniResponse->Create(GENIRESPONSE_ERROR, 
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Could not $action sliver")
 	    if ($exitval);
 	
@@ -4312,18 +4312,7 @@ sub CreateImage($)
 	print STDERR "Failed to take the snapshot of $node_id\n";
 	goto bad;
     }
-    
-    #
-    # If we are using the image tracker, but but not copying the image
-    # back (copyback_uuid) then post the image data to the IMS. We do
-    # this here since at the moment, only images created on this path
-    # should be reported to the IMS (global system images too).
-    #
-    if (GetSiteVar("protogeni/use_imagetracker") && !defined($copyback_uuid)) {
-	system("$POSTIMAGEDATA " . $image->versname());
-	# Failure is okay, the daemon will pick it up.
-    }
-    
+   
     # Sleep a little while to give the caller time to pick up status
     # since it is polling. Then delete the webtask.
     if (defined($webtask)) {
