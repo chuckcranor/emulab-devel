@@ -293,7 +293,7 @@ function Do_Create()
                 }
             }
             elseif ($action != "edit") {
-                fwrite($fp, ($who == "public" ? "1" : "0"));
+                fwrite($fp, "0");
             }
             fwrite($fp, "</value></attribute>\n");
         }
