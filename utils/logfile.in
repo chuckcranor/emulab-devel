@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2017 University of Utah and the Flux Group.
+# Copyright (c) 2003-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -337,6 +337,7 @@ sub PruneLogfiles()
 	# Only kill busy and no such slice logs.
 	if (!exists($logfile->Metadata()->{"Error"}) ||
 	    ($logfile->Metadata()->{"Error"} ne "14" &&
+	     $logfile->Metadata()->{"Error"} ne "7" &&
 	     $logfile->Metadata()->{"Error"} ne "12")) {
 	    print "Skipping $logfile\n";
 	    next
