@@ -16,7 +16,7 @@ my @TARBALLS  = (
     {
 	"name" => "configs",
 	"file" => "emulab-grub2-tftpboot-mfs-configs",
-	"args" => "--strip-components 2",
+	"args" => "--strip-components 1",
     },
     {
 	"name" => "buildroot",
