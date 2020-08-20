@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018, 2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1091,7 +1091,11 @@ sub UpdateSliverInfo($$)
 
     if (exists($fields->{'SLIVER_INFO_EXPIRATION'})) {
         my $new_expire_str = $fields->{'SLIVER_INFO_EXPIRATION'};
-        my $new_expire_dbdate = POSIX::strftime("%Y-%m-%d %H:%M:%S", localtime(str2time($new_expire_str))) 
+        my $new_expire_dbdate = POSIX::strftime("%Y-%m-%d %H:%M:%S", localtime(str2time($new_expire_str)));
+	if (!defined($new_expire_dbdate)) {
+            return GeniResponse->Create(GENIRESPONSE_BADARGS, undef, 
+                'Invalid sliver expire date, could not be parsed');
+	}
         print STDOUT "new_expire_dbdate=$new_expire_dbdate\n";
         my $update_success = $sliver->UpdateExpire($new_expire_dbdate) == 0;
         if (!$update_success) {
