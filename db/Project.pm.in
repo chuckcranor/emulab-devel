@@ -260,6 +260,14 @@ sub Stringify($)
     return "[Project: $pid, IDX: $pid_idx]";
 }
 
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'PROJECT'}  = undef;
+    $self->{'GROUP'}    = undef;
+    $self->{'BRAND'}    = undef; 
+}
+
 #
 # Perform some updates ...
 #
