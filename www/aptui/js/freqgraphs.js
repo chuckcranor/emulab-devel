@@ -312,10 +312,10 @@ window.ShowFrequencyGraph = (function ()
     function CreateBinGraph(args, data) {
 	var bins         = CreateBins(data);
 	var selector     = args.selector + " .frequency-graph-maingraph";
-	var parentWidth  = $(selector).width();
-	var parentHeight = $(selector).height();
-	var ParentTop    = $(selector).position().top;
-	var ParentLeft   = $(selector).position().left;
+	var parentWidth  = $(selector).parent().width();
+	var parentHeight = $(selector).parent().height();
+	var ParentTop    = $(selector).parent().position().top;
+	var ParentLeft   = $(selector).parent().position().left;
 
 	// Clear old graph
 	$(selector).html("");
@@ -692,8 +692,190 @@ window.ShowFrequencyGraph = (function ()
 		});
     }
 
+    function getRandomInt() {
+	var min = 10000;
+	var max = 99999999;
+	
+	return Math.floor(Math.random() * (max - min + 1)) + min;
+    }    
+
     function BuildMenu(args)
     {
+	// the graph we want to display (if specified).
+	var display = null;
+	var latest  = null;
+	// nuc2:rf0-1588699912.csv.gz
+	var re1 = /([^:]+):([^\-]+)\-(\d+)\.csv\.gz/;
+
+	// Process the returned list of files and directories.
+	var processDir = function (path, dirname, dirlist) {
+	    var path = path + "/" + dirname;
+	    console.info(path, dirname, dirlist);
+	    
+	    // Prune the csb files then sort them by the timestamp
+	    var files   = [];
+	    // Directories go at the top.
+	    var dirs    = [];
+	    // If more then one node, then a directory for each node.
+	    var nodes   = {};
+	    
+	    _.each(dirlist, function(info, index) {
+		var name    = info.name;
+		var logid   = null;
+		var match   = name.match(re1);
+		var node_id = null;
+
+		// Process a subdir.
+		if (_.has(info, "subdir")) {
+		    if (_.size(info.subdir)) {
+			var menu = processDir(path, info.name, info.subdir);
+			if (_.size(menu)) {
+			    info.submenu = menu;
+			    dirs.push(info);
+			}
+		    }
+		    return;
+		}
+		//console.info(name, match);
+		if (!match) {
+		    return;
+		}
+		// Prune out other radios and interfaces unless browsing
+		if (args.baseline) {
+		    info["node_id"] = node_id = match[1];
+		    info["iface"]   = match[2];
+		}
+		else {
+		    if ((args.node_id && match[1] != args.node_id) ||
+			(args.iface && match[2] != args.iface)) {
+			return;
+		    }
+		    info["node_id"] = node_id = match[1];
+		    info["iface"]   = match[2];
+		}
+		info["path"]      = path;
+		info["logid"]     = parseInt(match[3]);
+		info["id"]        = getRandomInt();
+		info["lastmod"]   = parseInt(info["lastmod"]);
+		info["archived"]  = dirname == "archive" ? 1 : 0;
+
+		if (!_.has(nodes, node_id)) {
+		    nodes[node_id] = [];
+		}
+		nodes[node_id].push(info);
+	    });
+	    if (! (_.size(nodes) || _.size(dirs))) {
+		return;
+	    }
+	    // Build the menu for this level. Directories first.
+	    var menu = $("<ul class='dropdown-menu'></ul>");
+	    
+	    // Directories alphabetically.
+	    if (_.size(dirs)) {
+		dirs.sort(function (a, b) {
+		    if (a.name < b.name) {return -1;}
+		    if (a.name > b.name) {return 1;}		    
+		    return 0;
+		});
+		_.each(dirs, function(info) {
+		    var item =
+			$("<li class='multilevel-menu-parent'>" +
+			  "  <a href='#'>" + info.name + "</a>" +
+			  "  <div class='multilevel-menu-wrapper dropdown'>" +
+			  "  </div> " +
+			  "</li>");
+		    $(item).find("div").append(info.submenu);
+		    $(menu).append(item);
+		});
+	    }
+	    // Sort and build a list for each node. Might be only one node.
+	    _.each(nodes, function(list, node_id) {
+		var menuitems = [];
+
+		// Sort files by timestamp.
+		list.sort(function (a, b) {
+		    var atime = (a.logid ? a.logid : a.lastmod);
+		    var btime = (b.logid ? b.logid : b.lastmod);
+
+		    return btime - atime;
+		});
+		_.each(list, function(info) {
+		    var html =
+			"<li class='fgraph-" + info.id  + "'>" +
+			" <a href='#'>" +
+			info.node_id + ":" + info.iface + " - " +
+			moment(info.logid ?
+			       info.logid : info.lastmod, "X").format("L LTS") +
+			"</a></li>";
+		    var item = $(html);
+		    $(item).click(function (event) {
+			event.preventDefault();
+			UpdateGraph(args, info);
+		    });
+		    // Lazily put in the href for the specific graph link.
+		    $(item).hover(function (event) {
+			var url = window.location.origin + "/" +
+			    window.location.pathname + "?logid=" + info.logid +
+			    "&node_id=" + info.node_id +
+			    "&iface=" + info.iface;
+
+			if (args.cluster) {
+			    url = url + "&cluster=" + args.cluster;
+			}
+			if (args.baseline) {
+			    url = url + "&baseline=1";
+			    
+			    if (!args.cluster) {
+				url = url + "&cluster=" + dirname;
+			    }
+			}
+			else if (dirname == "archive") {
+			    url = url + "&archived=1";
+			}
+			$(this).find("a").attr("href", url);
+		    });
+		    menuitems.push(item);
+
+		    // Watch for the one we want to display.
+		    if (args.logid) {
+			if (info.logid == args.logid &&
+			    info.node_id == args.node_id &&
+			    info.iface == args.iface) {
+			    display = info;
+			}
+		    }
+		    // Latest graph will be shown if nothing else.
+		    if (dirname != "archive" && 
+			(!latest || info.latest > latest.logid)) {
+			latest = info;
+		    }
+		});
+		if (_.size(nodes) > 1) {
+		    var item =
+			$("<li class='multilevel-menu-parent'>" +
+			  "  <a href='#'>" + node_id + "</a>" +
+			  "  <div class='multilevel-menu-wrapper dropdown'>" +
+			  "   <ul class='dropdown-menu'>" +
+			  "     <li class='disabled text-center'>" +
+			  "       <a href='#'>" + node_id + "</a></li>" +
+			  "     <li class='divider' role='separator' " +
+			  "         style='margin-top: 0;'>" +
+			  "   </ul> " +
+			  "  </div> " +
+			  "</li>");
+		    
+		    $(item).find("ul").append(menuitems);
+		    $(menu).append(item);
+		}
+		else {
+		    $(menu).append(menuitems);
+		}
+	    });
+
+	    //console.info(dirname, $(menu).html());
+	    return menu;
+	}
+	
 	var callback = function (value) {
 	    // XXX This will always be a string. Need to
 	    // figure out how to deal with errors.
@@ -702,90 +884,79 @@ window.ShowFrequencyGraph = (function ()
 		return;
 	    }
 	    var listing = JSON.parse(_.unescape(value));
-	    console.info("listing", listing);
-	    // Prune the items and then we sort them by the timestamp
-	    var items   = [];
-	    // nuc2:rf0-1588699912.csv.gz
-	    var re1 = /([^:]+):([^\-]+)\-(\d+)\.csv\.gz/;
-	    // nuc2:rf0.csv.gz
-	    var re2 = /([^:]+):([^\-]+)\.csv\.gz/;
-	    _.each(listing, function(info, index) {
-		var name  = info.name;
-		var match = name.match(re1);
-		//console.info(name, match);
-		if (!match) {
-		    if (!args.logid) {
-			/*
-			 * XXX we were loading whatever the latest file
-			 * was, so no timestamp in the timestamp. So find
-			 * it by name in the listing and use the modtime.
-			 * Need to stop using the file name for this.
-			 */
-			match = name.match(re2);
-			if (match) {
-			    $(".frequency-graph-date")
-				.html(moment(info.lastmod, "X").format("L LTS"))
-				.removeClass("hidden");
-			}
-		    }
-		    return;
-		}
-		// Prune out other radios and interfaces.
-		if (match[1] != args.node_id || match[2] != args.iface) {
-		    return;
-		}
-		info["node_id"]  = match[1];
-		info["iface"]    = match[2];
-		info["logid"]    = parseInt(match[3]);
-		info["cluster"]  = args.cluster;
-		info["selector"] = args.selector;
 
-		items.push(info)
-	    });
-	    // Sort by timestamp.
-	    items.sort(function (a, b) {
-		return b.logid - a.logid;
-	    });
-	    _.each(items, function(info, index) {
-		var url = "frequency-graph.php" +
-		    "?cluster="  + args.cluster +
-		    "&node_id="  + info.node_id +
-		    "&iface="    + info.iface +
-		    "&logid="    + info.logid;
-		if (info.archived) {
-		    url + "&archived=" + info.archived;
-		}
-		var html =
-		    "<li>" +
-		    " <a href='" + url + "' index='<%- index %>'>" +
-		    info.node_id + ":" + info.iface + " - " +
-		    moment(info.logid, "X").format("L LTS") + "</a></li>";
-		var item = $(html);
-		// If the incoming args match this listing, start it active.
-		if (args.logid &&
-		    info.node_id == args.node_id &&
-		    info.iface   == args.iface &&
-		    info.logid   == args.logid) {
-		    $(item).addClass("active");
-		}
-		$(item).find("a").click(function (event) {
-		    event.preventDefault();
-		    $('#moregraphs-dropdown').find("li").removeClass("active");
-		    $(item).addClass("active");
-		    $(".frequency-graph-date")
-			.html(moment(info.logid, "X").format("L LTS"))
-			.removeClass("hidden");
-		    UpdateGraph(info);
-		});
-		$('#moregraphs-dropdown').append(item);
-	    });
+	    var menu = processDir("", "", listing);
+	    //console.info($(menu).html());
+	    $(args.selector + ' .multilevel-menu').append(menu);
+
+	    $(menu).find(".multilevel-menu-parent")
+		.hover(
+		    function(event) {
+			// Offset of this menu item.
+			var offset  = $(this).offset();
+			// Offset of the menu.
+			var poffset = $(this).closest(".dropdown-menu").offset();
+			// Wrapper
+			var wrapper = $(this).children(".dropdown");
+			// Menu to be displayed
+			var menu    = $(wrapper).children(".dropdown-menu");
+		    
+			console.info(offset, poffset);
+
+			// Adjust the top of the menu.
+			var height = $(menu).height();
+			var top    = offset.top - poffset.top - 15;
+			console.info(height, top);
+			$(wrapper).css("top", top + "px");
+
+			// Adjust the left offset of the menu. Oddly, it has to
+			// to the left of the scrollbar or else the hover does
+			// not work.
+			var thiswidth = $(this).width();
+			var menuwidth = $(menu).width();
+			var left;
+		    
+			// Clear it so calculation below works right.
+			$(wrapper).css("left", '')
+
+			if (poffset.left + thiswidth + menuwidth + 30 >
+			    $(window).width()) {
+			    var left = 0 - menuwidth;      
+			}
+			else {
+			    left = thiswidth;
+			}
+			console.info("left", poffset.left, thiswidth, menuwidth,
+				     $(window).width(), left);
+			$(wrapper).css("left", left + "px")
+		    },
+		    function(event) {
+			var menu = $(event.target)
+			    .parent().find(".dropdown-menu");
+		    });
+	    
+	    if (display || latest) {
+		UpdateGraph(args, display ? display : latest);
+	    }
+	    else {
+		$(args.selector + " .frequency-graph-maingraph .spinner center")
+		    .html("Please select a graph to view");
+	    }
 	};
-	GetFrequencyData("html", "frequency-graph", "GetListing",
-			 {"cluster"    : args.cluster,
-			  "node_id"    : args.node_id,
-			  "iface"      : args.iface,
-			 },
-			 callback);
+	var url = args.url;
+	if (args.baseline) {
+	    url = url + "/rfbaseline/";
+	    if (args.cluster) {
+		url = url + args.cluster + "/";
+	    }
+	}
+	else {
+	    url = url + "/rfmonitor/";
+	}
+	url = url + "/listing.php";
+	console.info("BuildMenu", url);
+	
+	$.get(url, callback);
     }
 
     /*
@@ -844,35 +1015,81 @@ window.ShowFrequencyGraph = (function ()
 	var selector = args.selector + " .download-button";
 
 	$(selector)
-	    .attr("href", url + "&ajax_args[download]=1")
+	    .attr("href", url)
 	    .removeAttr("disabled");
     }
 
-    function UpdateGraph(args)
+    function SetGraphDetails(args, info)
+    {
+	// If no logid (timestamp) use the lastmod from the listing.
+	var when = (info.logid ? info.logid : info.lastmod);
+		    
+	$(args.selector + " .frequency-graph-date")
+	    .html(moment(when, "X").format("L LTS"))
+	    .removeClass("hidden");
+
+	$(args.selector + " .frequency-graph-nodeid")
+	    .html(info.node_id);
+
+	$(args.selector + " .frequency-graph-iface")
+	    .html(info.iface);
+
+	if (args.cluster) {
+	    $(args.selector + " .frequency-graph-cluster")
+		.html(args.cluster);
+	}
+	else if (_.has(info, "path")) {
+	    $(args.selector + " .frequency-graph-cluster")
+		.html(info.path.split('/').reverse()[0]);
+	}
+
+	$(args.selector + ' .moregraphs-dropdown')
+	    .find(".active").removeClass("active");
+	$(args.selector + ' .moregraphs-dropdown')
+	    .find(".fgraph-" + info.id).addClass("active");
+    }
+
+    function UpdateGraph(args, info)
     {
 	/*
-	 * Gack, we cannot get binary data with the jquery ajax call.
-	 * Well there is lots of noise from google about how to mess
-	 * with it, but instead I am just going to create a GET url
-	 * that talks ajax server routine.
+	 * It is a little difficult to get binary data, not directly
+	 * possible with jquery ajax call, so we have to something
+	 * special.
 	 */
-	var url = "server-ajax.php" +
-	    "?ajax_route=frequency-graph" +
-	    "&ajax_method=GetFrequencyData" +
-	    "&ajax_args[cluster]=" + args.cluster +
-	    "&ajax_args[node_id]=" + args.node_id +
-	    "&ajax_args[iface]="   + args.iface;
-	// Optional specific log.
-	if (args.logid) {
-	    url = url + "&ajax_args[logid]=" + args.logid;
+	var url = args.url;
+	if (args.baseline) {
+	    url = url + "/rfbaseline/";
+	    if (args.cluster) {
+		url = url + args.cluster + "/";
+	    }
+	    url = url + info["path"] + "/";
 	}
-	if (args.archived) {
-	    url = url + "&ajax_args[archived]=1";
+	else {
+	    url = url + "/rfmonitor/";
+	    
+	    if (info.archived) {
+		url = url + "/archive/";
+	    }
 	}
-	console.info(url);
+	url = url + info.node_id + ":" + info.iface;
+	if (info.logid) {
+	    url = url + "-" + info.logid;
+	}
+	url = url + ".csv.gz";
+			   
+	console.info("UpdateGraph", args, info, url);
 
 	// Disable the download button until we have the data.
 	$(args.selector + " .download-button").attr("disabled", "disabled");
+
+	// Clear the graph now and show the spinner.	
+	$(args.selector + " .frequency-graph-maingraph").html("");
+	$(args.selector + " .frequency-graph-subgraph").html("");
+
+	// Throw in the spinner
+	var spinner = $(args.selector + " .spinner").clone();
+	$(spinner).removeClass("hidden");
+	$(args.selector + " .frequency-graph-maingraph").append(spinner);
 
 	GetBlob(url,
 		function (arrayBuffer) {
@@ -881,7 +1098,9 @@ window.ShowFrequencyGraph = (function ()
 		    
 		    var data = d3.csvParse(output, type);
 		    CreateBinGraph(args, data);
+		    $(args.selector + " .spinner").addClass("hidden");
 		    SetupDownload(args, url);
+		    SetGraphDetails(args, info);
 		},
 		function () {
 		    alert("Could not get data file: " + url);
@@ -890,7 +1109,6 @@ window.ShowFrequencyGraph = (function ()
 
     return function(args) {
 	BuildMenu(args);
-	UpdateGraph(args);
     };
 }
 )();

@@ -1,19 +1,64 @@
 <style>
-  #moregraphs-dropdown {
-      max-height: 400px;
-      overflow-y: scroll;
-  }
+ .pull-right>.multilevel-menu {
+     right: 0;
+ }
+ .multilevel-menu {
+     position: absolute;
+ }
+ .multilevel-menu .multilevel-menu-wrapper {
+     position: relative;
+     bottom: auto !important;
+ }
+
+ .multilevel-menu ul {
+     position: static;
+     width: auto;
+     max-height: 400px;
+     overflow-x: hidden;
+     overflow-y: auto;
+ }
+
+ .multilevel-menu li {
+     position: static;
+ }
+ .multilevel-menu li .multilevel-menu-wrapper {
+     position: absolute;
+     z-index: 10;
+     display: none;
+ }
+ .multilevel-menu li.multilevel-menu-parent .dropdown-menu {
+     display: block;
+ }
+ .multilevel-menu li:hover > .multilevel-menu-wrapper {
+     display: block;
+ }
+
+ .multilevel-menu .multilevel-menu-parent>a:after {
+     display: block;
+     content: " ";
+     float: right;
+     width: 0;
+     height: 0;
+     border-bottom: 4px solid transparent;
+     border-top: 4px solid transparent;
+     border-left: 4px solid;
+     margin-top: 5px;
+     margin-right: -10px;
+ }
+
+ svg {
+     display: block;
+ }
 </style>
-<div class="frequency-graph-div">
-  <span class='dropdown pull-right'>
+<div class="frequency-graph-div col-sm-12">
+  <div class='pull-right moregraphs-dropdown'>
     <button id='action-menu-button' type='button'
 	    class='btn btn-default btn-xs dropdown-toggle'
-	    data-toggle='dropdown'>
+	    data-toggle='dropdown' data-target=".multilevel-menu">
       Older Graphs <span class="caret"></span>
     </button>
-    <ul class='dropdown-menu text-left' id="moregraphs-dropdown" role='menu'>
-    </ul>
-  </span>
+    <div class="multilevel-menu"></div>
+  </div>
   <a type='button' disabled
 	  style="margin-right: 10px"
 	  class='btn btn-default btn-xs download-button pull-right'>
@@ -21,7 +66,7 @@
   <center>
     <h4>
       Radio Monitoring Graph for
-      <%- cluster %> 
+      <span class="frequency-graph-cluster"></span>
       <span class="frequency-graph-nodeid">
 	<%- node_id %></span>:<span class="frequency-graph-iface"><%- iface %>
 	</span>
@@ -37,7 +82,12 @@
   <div class="panel panel-default" style="margin-bottom: 0px;">
     <div class="panel-body" style="padding: 0px;">
       <div class="frequency-graph frequency-graph-maingraph"
-	   style="height: 600px;"></div>
+	   style="height: 600px;">
+	<div class='spinner'>
+	  <center>
+	    <img src='images/spinner.gif' /></center>
+	</div>
+      </div>
     </div>
   </div>
   <div class="panel panel-default" style="margin-bottom: 0px;">
@@ -47,5 +97,8 @@
       <div id="tooltip-popover"></div>
     </div>
   </div>
+  <div class='spinner hidden'>
+    <center>
+      <img src='images/spinner.gif' /></center>
+  </div>
 </div>
-  

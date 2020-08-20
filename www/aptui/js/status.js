@@ -4261,11 +4261,14 @@ $(function ()
 		$("#" + tabname).remove();
 	    });
 	    var options = {
+		"url"      : amlist[info.aggregate_urn].weburl,
 		"selector" : "#" + tabname + " .frequency-graph-div",
 		"cluster"  : amlist[info.aggregate_urn].nickname,
 		"node_id"  : info.node_id,
 		"iface"    : "rf0",
 		"logid"    : null,
+		"archived" : false,
+		"baseline" : false,
 	    }
 	    var html = monitorTemplate(options);
 

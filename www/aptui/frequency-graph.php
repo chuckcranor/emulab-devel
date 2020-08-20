@@ -45,47 +45,86 @@ elseif (ISADMIN()) {
 #
 # Verify page arguments.
 #
-$reqargs = RequiredPageArguments("cluster",   PAGEARG_STRING,
+$optargs = OptionalPageArguments("cluster",   PAGEARG_STRING,
                                  "node_id",   PAGEARG_STRING,
-                                 "iface",     PAGEARG_STRING);
-$optargs = OptionalPageArguments("logid",     PAGEARG_STRING,
-                                 "archived",  PAGEARG_BOOLEAN);
+                                 "iface",     PAGEARG_STRING,
+                                 "logid",     PAGEARG_STRING,
+                                 "archived",  PAGEARG_BOOLEAN,
+                                 "baseline",  PAGEARG_BOOLEAN);
+if (!isset($archived)) {
+    $archived = 0;
+}
+if (!isset($baseline)) {
+    $baseline = 0;
+}
 
 #
 # The monitor looks at only one iface, rf0. That may change later.
-# We check the apt_aggregate_radioinfo table in the ajax call.
+# We always need the cluster argument. The others are optional.
 #
-if (!TBvalid_node_id($cluster)) {
-    SPITUSERERROR("Illegal characters in cluster");
-    exit();
+if (isset($cluster)) {
+    if (!TBvalid_node_id($cluster)) {
+        SPITUSERERROR("Illegal characters in cluster");
+        exit();
+    }
+    $aggregate = Aggregate::LookupByNickname($cluster);
+    if (!$aggregate) {
+        SPITUSERERROR("No such cluster: $cluster");
+        exit();
+    }
+    $cluster = "'$cluster'";
 }
-$aggregate = Aggregate::LookupByNickname($cluster);
-if (!$aggregate) {
-    SPITUSERERROR("No such cluster: $cluster");
-    exit();
+else {
+    if ($baseline) {
+        $cluster = "null";
+    }
+    else {
+        SPITUSERERROR("Missing cluster argument");
+        exit();
+    }
 }
-if (!TBvalid_node_id($node_id)) {
-    SPITUSERERROR("Illegal characters in node_id");
-    exit();
+if (isset($node_id)) {
+    if (!TBvalid_node_id($node_id)) {
+        SPITUSERERROR("Illegal characters in node_id");
+        exit();
+    }
+    $node_id = "'$node_id'";
 }
-if (!TBvalid_node_id($iface)) {
-    SPITUSERERROR("Illegal characters in iface");
-    exit();
+else {
+    $node_id = null;
 }
-if ($iface != "rf0") {
-    SPITUSERERROR("Illegal interface: $iface");
-    exit();
+#
+# Ignore the iface, it is always rf0 for now.
+#
+if (isset($iface)) {    
+    if (!TBvalid_node_id($iface)) {
+        SPITUSERERROR("Illegal characters in iface");
+        exit();
+    }
+    $iface = "'rf0'";
+}
+else {
+    $iface = null;
 }
 if (isset($logid)) {
     if (!TBvalid_userdata($logid)) {
         SPITUSERERROR("Illegal logid: $logid");
         exit();
     }
+    #
+    # If a logid, we have to have node_id. 
+    #
+    if (!$node_id) {
+        SPITUSERERROR("Missing node_id argument");
+        exit();
+    }
 }
-if (!isset($archived)) {
-    $archived = 0;
+if ($baseline) {
+    $url = "https://${USERNODE}";
 }
-$url = $aggregate->weburl() . "/rfmonitor";
+else {
+    $url = $aggregate->weburl();
+}
 SPITHEADER(1);
 
 echo "<link rel='stylesheet'
@@ -100,11 +139,12 @@ echo "<div id='oops_div'></div>
       <div id='waitwait_div'></div>\n";
 
 echo "<script type='text/javascript'>\n";
-echo "    window.CLUSTER     = '$cluster';\n";
-echo "    window.NODEID      = '$node_id';\n";
-echo "    window.IFACE       = '$iface';\n";
+echo "    window.CLUSTER     = $cluster;\n";
+echo "    window.NODEID      = " . ($node_id ? $node_id : "null") . ";\n";
+echo "    window.IFACE       = " . ($iface ? $iface : "null") . ";\n";
 echo "    window.URL         = '$url';\n";
 echo "    window.ARCHIVED    = $archived;\n";
+echo "    window.BASELINE    = $baseline;\n";
 if (isset($logid)) {
     echo "    window.LOGID       = '$logid';\n";
 }
