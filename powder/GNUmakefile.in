@@ -43,9 +43,10 @@ endif
 #
 # Force dependencies on the scripts so that they will be rerun through
 # configure if the .in file is changed.
-# 
-all:	$(SBIN_SCRIPTS) $(LIBEXEC_SCRIPTS) listing.php \
-	powder_keepalive.sh rfbaseline
+#
+TARGETS = $(SBIN_SCRIPTS) $(LIBEXEC_SCRIPTS) powder_keepalive.sh rfbaseline
+
+all:	$(TARGETS)
 
 subboss: 
 
@@ -100,6 +101,7 @@ $(WEB_SBIN_SCRIPTS): $(TESTBED_SRCDIR)/WEBtemplate.in
 	cat $< | sed -e 's,@PROGTOINVOKE@,$(word 2,$^)/$(subst web,,$@),' > $@
 
 clean:	clean-subdirs
+	-rm -f $(TARGETS) listing.php
 
 # How to recursively descend into subdirectories to make general
 # targets such as `all'.
