@@ -41,12 +41,14 @@
 <attribute name="attr_integer_trivlink_maxspeed"><value>10000000</value></attribute>
 <attribute name="attr_string_dom0mem">  <value>4096M</value></attribute>
 <attribute name="attr_integer_virtnode_capacity">  <value>0</value></attribute>
-<attribute name="attr_string_console_type">  <value>sio2</value></attribute>
+<attribute name="attr_string_console_type"> <value>sio2</value></attribute>
+<attribute name="attr_string_pxe_boot_path"> <value>/tftpboot/grub2pxe-bios-sio2/grub2pxe</value></attribute>
 <attribute name="attr_boolean_bootdisk_trim">  <value>1</value></attribute>
 <attribute name="attr_integer_bootdisk_trim_interval">  <value>86400</value></attribute>
-<attribute name="attr_string_adminmfs_osid">  <value>emulab-ops,FREEBSD-MFS</value></attribute>
+<attribute name="attr_string_adminmfs_osid">  <value>emulab-ops,ADMIN-LINUX</value></attribute>
 <attribute name="attr_string_default_osid">  <value>emulab-ops,UBUNTU18-64-STD</value></attribute>
 <attribute name="attr_string_delay_osid">  <value>emulab-ops,FBSD103-64-STD</value></attribute>
-<attribute name="attr_string_diskloadmfs_osid">  <value>emulab-ops,FRISBEE-MFS</value></attribute>
+<attribute name="attr_string_diskloadmfs_osid">  <value>emulab-ops,FRISBEE-LINUX</value></attribute>
+<attribute name="attr_string_recoverymfs_osid">  <value>emulab-ops,RECOVERY-LINUX</value></attribute>
 <attribute name="attr_string_default_imageid">  <value>emulab-ops:UBUNTU18-64-STD</value></attribute>
 </nodetype>
