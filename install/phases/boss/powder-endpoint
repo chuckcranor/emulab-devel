@@ -69,8 +69,8 @@ my %HOSTNAMES  = ();
 my %INTERFACES = ();
 
 if ($TARGETSYS_TARGET eq "POWDER-BUS") {
-    %INTERFACES  = ("xn1"     => "inet 10.10.11.2 netmask 255.255.255.0");
-    %HOSTNAMES   = ("sdrn300" => "10.10.11.4");
+    %INTERFACES  = ("xn1"        => "inet 10.10.11.2 netmask 255.255.255.0");
+    %HOSTNAMES   = ("n300-1-mng" => "10.10.11.6");
 }
 
 sub Install($$$)
