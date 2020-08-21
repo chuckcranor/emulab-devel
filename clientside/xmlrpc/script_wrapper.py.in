@@ -2988,8 +2988,6 @@ class startExperiment:
         return
 
     def apply(self):
-        print str(self.argv)
-        
         try:
             opts, req_args = getopt.getopt(self.argv, "a:p:Ps",
                                            [ "help", "name=", "duration=",
