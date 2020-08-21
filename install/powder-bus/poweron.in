@@ -25,6 +25,9 @@ use English;
 use strict;
 use Getopt::Std;
 use Data::Dumper;
+use POSIX qw(isatty);
+use File::Temp qw(tempfile);
+use IO::Handle;
 
 #
 # At boss boot power on the experimental node (real power, not ipmi).
@@ -38,6 +41,7 @@ sub usage()
 my $optlist   = "dn";
 my $debug     = 0;
 my $impotent  = 0;
+my $logfile;
 
 #
 # Configure variables
@@ -51,11 +55,14 @@ my $NODEREBOOT = "$TB/bin/node_reboot";
 my $POWER      = "$TB/bin/power";
 
 # Power Pins
-my $ED1_PIN    = "pin0";
-my $N3001_PIN  = "pin1";
+my $ED1_PIN       = "pin0";
+my $N3001_PIN     = "pin1";
+my $FRONTEND_PIN  = "pin2";
+my $SWITCH_PIN    = "pin3";
 
 use lib "@prefix@/lib";
 use emdb;
+use EmulabConstants;
 use WebTask;
 use Node;
 use power_powduino;
@@ -78,6 +85,21 @@ if (defined($options{"d"})) {
 }
 if (defined($options{"n"})) {
     $impotent = 1;
+}
+
+#
+# We want to mail output if this fails, which it seems to do.
+#
+if (!isatty(\*STDOUT)) {
+    $logfile = TBMakeTempFile("poweron");
+
+    open(STDOUT, ">> $logfile") or
+	die("opening $logfile for STDOUT: $!");
+    open(STDERR, ">> $logfile") or
+	die("opening $logfile for STDERR: $!");
+
+    STDOUT->autoflush(1);
+    STDERR->autoflush(1);
 }
 
 #
@@ -110,7 +132,7 @@ if ($childpid) {
 	    $cause = "failed with exit value ". ($ecode >> 8);
 	}
 	$webtask->Delete();
-	fatal("Could not get arduino power status");
+	fatal("Could not get arduino power status: $cause");
     }
     $webtask->Refresh();
 }
@@ -146,20 +168,70 @@ if ($status->{$ED1_PIN} eq "off") {
 	if ($?) {
 	    fatal("Could not power on ed1-real");
 	}
+	sleep(5);
     }
 }
 #
-# Ditto the N300, for now. 
+# The N300 uses a fair amount of power, do not turn it on if it is not
+# allocated. But need to make sure it lands in the correct idle power
+# state.
 #
-if (!exists($status->{$N3001_PIN})) {
-    fatal("No $N3001_PIN in powduino status");
+my $n300 = Node->Lookup("n300-1");
+if (defined($n300)) {
+    if (!$n300->IsReserved() ||
+	($n300->pid() eq NODEDEAD_PID() && $n300->eid() eq NODEDEAD_EID())) {
+	print "Forcing power off n300-1\n";
+	if (!$impotent) {
+	    system("$SUDO $POWER off n300-1");
+	    if ($?) {
+		fatal("Could not power off n300-1");
+	    }
+	}
+    }
+    elsif ($status->{$N3001_PIN} eq "off") {
+	print "Powering on n300-1\n";
+	if (!$impotent) {
+	    system("$SUDO $POWER on n300-1");
+	    if ($?) {
+		fatal("Could not power on n300-1");
+	    }
+	    sleep(5);
+	}
+    }
 }
-if ($status->{$N3001_PIN} eq "off") {
-    print "Powering on n300-1\n";
-    if (!$impotent) {
-	system("$SUDO $POWER on n300-1");
-	if ($?) {
-	    fatal("Could not power on n300-1");
+
+#
+# The new buses need the frontend and the switch turned on. Neither of these
+# use much power, nothing to worry about. Since these are not real nodes,
+# need to go look into the outlets table.
+#
+my $query_result =
+    DBQueryFatal("select node_id from outlets ".
+		 "where node_id='frontend' or node_id='switch'");
+
+while (my ($node_id) = $query_result->fetchrow_array()) {
+    if ($node_id eq "frontend") {
+	if ($status->{$FRONTEND_PIN} eq "off") {
+	    print "Powering on the front end\n";
+	    if (!$impotent) {
+		system("$SUDO $POWER on frontend");
+		if ($?) {
+		    fatal("Could not power on the frontend");
+		}
+		sleep(5);
+	    }
+	}
+    }
+    elsif ($node_id eq "switch") {
+	if ($status->{$SWITCH_PIN} eq "off") {
+	    print "Powering on the switch\n";
+	    if (!$impotent) {
+		system("$SUDO $POWER on switch");
+		if ($?) {
+		    fatal("Could not power on the switch");
+		}
+		sleep(5);
+	    }
 	}
     }
 }
@@ -175,7 +247,7 @@ sub fatal($)
     SENDMAIL($TBOPS,
 	     "Bus power on failed",
 	     $msg,
-	     $TBOPS);
+	     $TBOPS, undef, (defined($logfile) ? $logfile : ()));
 
     die("*** $0:\n".
 	"    $msg\n");
