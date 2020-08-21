@@ -646,7 +646,7 @@ findSmartctl() {
     if [ "$os" == "FreeBSD" ] ; then
 	findit=$(which smartctl$osrel)
 	if [ -z "${findit}" ] ; then
-	    if [ -x "/usrlocal/sbin/smartctl" ]; then
+	    if [ -x "/usr/local/sbin/smartctl" ]; then
 		findit="/usr/local/sbin/smartctl"
 	    else
 		findit=$NOSM
