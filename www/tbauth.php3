@@ -890,6 +890,10 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
     }
     $now = time();
 
+    if (0) {
+        TBMAIL("stoller@flux.utah.edu", "password $token: ", "'$password'");
+    }
+
     #
     # Check for a frozen IP address; too many failures.
     #
