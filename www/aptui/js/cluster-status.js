@@ -85,16 +85,11 @@ $(function ()
 			type = value.type;
 		    }
 		    html = html + "<tr><td>";
-		    if (isadmin) {
-			var url = json.value.url +
-			    "/portal/show-node.php?node_id=" + value.node_id;
-			html +=
-			    "<a href='" + url + "' target=_blank>" +
-			    value.node_id + "</a></td>";
-		    }
-		    else {
-			html += value.node_id + "</td>";
-		    }
+		    var url = json.value.url +
+			"/portal/show-node.php?node_id=" + value.node_id;
+		    html +=
+			"<a href='" + url + "' target=_blank>" +
+			value.node_id + "</a></td>";
 		    html += "<td>" + type + "</td>";
 
 		    if (isadmin) {
