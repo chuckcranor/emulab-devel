@@ -921,6 +921,50 @@ class imageid:
                               value=result,
                               output=str(result))
 
+    def info(self, version, argdict):
+        # Check for valid arguments.
+        argerror = CheckRequiredArgs(argdict, ("proj", "imagename"))
+        if argerror:
+            return argerror
+
+        permerror = CheckProjPermission(self.uid_idx, argdict["proj"])
+        if permerror:
+            return permerror
+
+        if not re.match("^[-\w\.]*$", argdict["imagename"]):
+            return EmulabResponse(RESPONSE_BADARGS,
+                                  output="Improperly formed imagename!")
+
+        res = DBQueryFatal("SELECT distinct v.*,i.locked FROM images as i "
+                           "left join image_versions as v on "
+                           "     v.imageid=i.imageid and v.version=i.version "
+                           "where i.imagename=%s and i.pid=%s ",
+                           (argdict["imagename"],
+                            argdict["proj"]), True)
+
+        if len(res) == 0:
+            return EmulabResponse(RESPONSE_ERROR,
+                                  output="Unknown Image ID?")
+
+        image = res[0]
+        result = {}
+        result["imagename"] = image["imagename"]
+        result["imageid"]   = image["imageid"]
+        result["version"]   = image["version"]
+        result["ready"]     = image["ready"]
+        result["isdataset"] = image["isdataset"]
+        if image["locked"]:
+            result["locked"] = image["locked"]
+        else:
+            result["locked"] = ""
+            pass
+
+        # No fast polling;
+        time.sleep(2)
+            
+        return EmulabResponse(RESPONSE_SUCCESS,
+                              value=result, output=str(result))
+
     pass
 
 

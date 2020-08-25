@@ -144,6 +144,8 @@ API = {
                             "help" : "Terminate an experiment" },
     "expinfo"           : { "func" : "expinfo",
                             "help" : "Get information about an experiment" },
+    "imageinfo"         : { "func" : "imageinfo",
+                            "help" : "Get information about an image" },
     "tbuisp"            : { "func" : "tbuisp",
                             "help" : "Upload code to a mote" },
     "expwait"           : { "func" : "expwait",
@@ -1753,6 +1755,64 @@ class expinfo:
         print "     -m   - Show node mapping";
         print "     -l   - Show link info";
         print "     -a   - Show all of the above";
+        wrapperoptions();
+        return
+    pass
+
+#
+# imageinfo
+#
+class imageinfo:
+    def __init__(self, argv=None):
+        self.argv = argv;
+        return
+
+    def apply(self):
+        try:
+            opts, req_args = getopt.getopt(self.argv, "", [ "help" ]);
+            pass
+        except getopt.error, e:
+            print e.args[0]
+            self.usage();
+            return -1;
+
+        params = {};
+        for opt, val in opts:
+            if opt in ("-h", "--help"):
+                self.usage()
+                return 0
+            elif opt == "-i":
+                pid,eid = string.split(val, ",")
+                params["proj"] = pid;
+                params["imagename"]  = eid;
+                pass
+            pass
+
+        #
+        # The point is to allow backwards compatable pid imagename
+        # arguments, but move to the better -i pid,imagename format
+        # eventually.
+        #
+        if not params.has_key("proj"):
+            if len(req_args) != 2:
+                self.usage();
+                return -1;
+            
+            params["proj"]  = req_args[0];
+            params["imagename"]  = req_args[1];
+            pass
+        elif len(req_args) or len(show) == 0:
+            self.usage();
+            return -1;
+
+        rval,response = do_method("imageid", "info", params);
+        return rval;
+
+    def usage(self):
+	print "expinfo -i pid,imagename";
+	print "expinfo pid imagename";
+	print "where:";
+ 	print "     -i   - Project and Image ID";
         wrapperoptions();
         return
     pass
