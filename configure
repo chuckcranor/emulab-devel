@@ -7180,7 +7180,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	backend/editgroup backend/newimageid_ez \
 	tbsetup/GNUmakefile tbsetup/console_setup tbsetup/spewlogfile \
 	tbsetup/snmpit/GNUmakefile  \
-	tbsetup/spewrpmtar tbsetup/gentopofile tbsetup/power_sgmote.pm \
+	tbsetup/spewrpmtar tbsetup/gentopofile tbsetup/power_5gstore.pm \
 	tbsetup/console_reset tbsetup/bwconfig tbsetup/power_rpc27.pm \
 	tbsetup/power_mail.pm tbsetup/power_whol.pm \
 	tbsetup/os_load tbsetup/os_setup tbsetup/os_select tbsetup/power \

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2018 University of Utah and the Flux Group.
+# Copyright (c) 2005-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,7 +47,6 @@ my $ELABINELAB = @ELABINELAB@;
 use lib "@prefix@/lib";
 use libdb;
 use power_rpc27;
-use power_sgmote;
 use power_mail;
 use power_whol;
 use power_apc;
