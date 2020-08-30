@@ -1116,6 +1116,8 @@ sub CreateSlivers()
 		print STDERR "$cluster says node able to map experiment yet; ".
 		    "deferring till later\n";
 		$aggobj->Defer("Unable to map resources, deferring till later");
+		# Reset status back to created since we have to try again.
+		$aggobj->SetStatus("created");
 		push(@deferred, $aggobj);
 		next;
 	    }
@@ -1148,16 +1150,6 @@ sub CreateSlivers()
 	#
 	$aggobj->ResolveDefer()
 	    if ($aggobj->deferred());
-    }
-    #
-    # No errors, but we have deferred aggregates. Need to schedule these
-    # for later retry. 
-    #
-    if (@deferred) {
-	foreach my $aggobj (@deferred) {
-	    # Reset status back to created since we have to try again.
-	    $aggobj->SetStatus("created");
-	}
     }
     return 0;
 }
