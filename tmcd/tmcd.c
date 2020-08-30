@@ -2462,9 +2462,9 @@ COMMAND_PROTOTYPE(doifconfig)
 		while (nrows) {
 			char *mtu = "";
 			char *bufp   = buf;
-			char *speed = row[2];
 
 			row = mysql_fetch_row(res);
+			char *speed = row[2];
 
 			/*
 			 * XXX we have to figure out if any vinterfaces

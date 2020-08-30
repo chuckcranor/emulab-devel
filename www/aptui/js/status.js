@@ -2801,7 +2801,7 @@ $(function ()
 
 	if (Object.keys(imageablenodes).length == 1) {
 	    // One node, stick that into the first sentence.
-	    var nodename = Object.keys(hostportList)[0];
+	    var nodename = Object.keys(imageablenodes)[0];
 	    $('#snapshot_modal .one-node .node_id')
 		.html(nodename + " (" + imageablenodes[nodename] + ")");
 	    $('#snapshot_modal .choose-node').addClass("hidden");
