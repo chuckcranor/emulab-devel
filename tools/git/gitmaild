@@ -225,9 +225,7 @@ sub run_gitmail($$) {
     #
     my $dir = old_fs_path($repoinfo);
     if (!-d $dir) {
-        if ($verbose) {
-            $dir = new_fs_path($repoinfo);
-        }
+        $dir = new_fs_path($repoinfo);
     }
 
     if ($verbose) {
