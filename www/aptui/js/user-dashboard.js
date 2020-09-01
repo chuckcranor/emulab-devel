@@ -85,6 +85,14 @@ $(function ()
 	});
     }
 
+    // Call back for bulk delete to remove the row from both tables.
+    function DeleteProfileRows(uuid, json)
+    {
+	// The profile will exist in two tables ...
+	$('#profiles_content tr[data-uuid="' + uuid + '"]').remove();
+	$('#projectprofiles_content tr[data-uuid="' + uuid + '"]').remove();
+    }
+
     function LoadUsage()
     {
 	var callback = function(json) {
@@ -210,7 +218,7 @@ $(function ()
 	var uuid = $(target).data("uuid");
 
 	var callback = function(json) {
-	    sup.HideModal("#waitwait-modal");
+	    sup.HideWaitWait();
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
 		return;
@@ -220,13 +228,13 @@ $(function ()
 	};
 	// Bind the confirm button in the modal. 
 	$('#terminate-modal #terminate-confirm').click(function () {
-	    sup.HideModal('#terminate-modal');
-	    sup.ShowModal('#waitwait-modal');
-
-	    var xmlthing = sup.CallServerMethod(null, "status",
-						"TerminateInstance",
-						{"uuid" : uuid});
-	    xmlthing.done(callback);
+	    sup.HideModal('#terminate-modal', function () {
+		sup.ShowModal('#waitwait-modal');
+		var xmlthing = sup.CallServerMethod(null, "status",
+						    "TerminateInstance",
+						    {"uuid" : uuid});
+		xmlthing.done(callback);
+	    });
 	});
 	// Handler so we know the user closed the modal. We need to
 	// clear the confirm button handler.
@@ -269,8 +277,8 @@ $(function ()
 		});
 	};
 	var xmlthing = sup.CallServerMethod(null,
-					    "user-dashboard", "ClassicExperimentList",
-					    {"uid" : window.TARGET_USER});
+				    "user-dashboard", "ClassicExperimentList",
+				    {"uid" : window.TARGET_USER});
 	xmlthing.done(callback);
     }
 
@@ -292,6 +300,7 @@ $(function ()
 	    $('#profiles_content')
 		.html(template({"profiles"    : json.value,
 				"tablename"   : "user-profiles",
+				"bulkdelete"  : true,
 				"showCreator" : false,
 				"showProject" : true}));
 	    
@@ -312,6 +321,18 @@ $(function ()
 		event.preventDefault();
 		ShowTopology($(this).data("profile"));
 	    });
+	    // Delete profile button
+	    $('#profiles_content .delete-profile-button')
+		.click(function (event) {
+		    event.preventDefault();
+		    var row = $(this).closest("tr");
+		    var profile_uuid = $(row).data("uuid");
+		    
+		    profileSupport
+			.Delete(profile_uuid, function () {
+			    $(row).remove();
+			});
+		});
 	    
 	    var table = $('#' + 'user-profiles-table')
 		.tablesorter({
@@ -336,6 +357,18 @@ $(function ()
 		});
 	    $.tablesorter.filter.bindSearch(table,
 					    $('#' + 'user-profiles-search'));
+
+	    // Delete multiple profiles via the checkbox column.
+	    $('#profiles_content .delete-selected-profiles')
+		.click(function (event) {
+		    event.preventDefault();
+		    profileSupport
+			.DeleteSelected('#profiles_content',
+					function (uuid, json) {
+					    DeleteProfileRows(uuid, json);
+					});
+		});
+	    
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "user-dashboard", "ProfileList",
@@ -360,6 +393,7 @@ $(function ()
 	    $('#projectprofiles_content')
 		.html(template({"profiles"    : json.value,
 				"tablename"   : "project-profiles",
+				"bulkdelete"  : false,
 				"showCreator" : true,
 				"showProject" : true}));
 	    
@@ -380,7 +414,20 @@ $(function ()
 		event.preventDefault();
 		ShowTopology($(this).data("profile"));
 	    });
-	    
+	    // Delete profile button
+	    $('#projectprofiles_content .delete-profile-button')
+		.click(function (event) {
+		    event.preventDefault();
+		    var row = $(this).closest("tr");
+		    var profile_uuid = $(row).data("uuid");
+		    
+		    profileSupport.Delete(profile_uuid, 
+					  function (uuid, json) {
+					      DeleteProfileRows(uuid, json);
+					  });
+		    
+		});
+
 	    var table = $('#' + 'project-profiles-table')
 		.tablesorter({
 		    theme : 'green',
@@ -404,6 +451,20 @@ $(function ()
 		});
 	    $.tablesorter.filter.bindSearch(table,
 					    $('#' + 'project-profiles-search'));
+
+	    // Lets not show this on the project profiles tab yet.
+	    if (0) {
+		// Delete multiple profiles via the checkbox column.
+		$('#projectprofiles_content .delete-selected-profiles')
+		    .click(function (event) {
+			event.preventDefault();
+			profileSupport
+			    .DeleteSelected('#projectprofiles_content',
+					    function (uuid, json) {
+						DeleteProfileRows(uuid, json);
+					    });
+		    });
+	    }
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "user-dashboard",
@@ -755,13 +816,13 @@ $(function ()
 
 	// These take longer to show the wait modal.
 	if (name == "admin" || name == "inactive") {
-	    sup.ShowModal("#waitwait-modal");
+	    sup.ShowWaitWait();
 	    wait = true;
 	}
 	var callback = function(json) {
 	    if (json.code) {
 		if (wait) {
-		    sup.HideModal("#waitwait-modal", function () {
+		    sup.HideWaitWait(function () {
 			sup.SpitOops("oops", json.value);
 		    });
 		}
@@ -771,7 +832,7 @@ $(function ()
 		return;
 	    }
 	    if (wait) {
-		sup.HideModal("#waitwait-modal");
+		sup.HideWaitWait();
 	    }
 	    LoadProfileTab();
 	};

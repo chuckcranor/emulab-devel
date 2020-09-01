@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'publish-modal', 'share-modal', 'gitrepo-picker','profile-list-modal','confirm-delete-profile', 'copy-repobased-profile']);
+    var templates = APT_OPTIONS.fetchTemplateList(['manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'publish-modal', 'share-modal', 'gitrepo-picker', 'copy-repobased-profile']);
     var manageString = templates['manage-profile'];
     var waitwaitString = templates['waitwait-modal'];
     var rendererString = templates['renderer-modal'];
@@ -12,8 +12,6 @@ $(function ()
     var publishString = templates['publish-modal'];
     var shareString = templates['share-modal'];
     var gitrepoString = templates['gitrepo-picker'];
-    var plistString = templates['profile-list-modal'];
-    var deleteString = templates['confirm-delete-profile'];
     var copyrepoString = templates['copy-repobased-profile'];
 
     var profile_uuid = null;
@@ -48,7 +46,6 @@ $(function ()
     var oopsTemplate      = _.template(oopsString);
     var shareTemplate     = _.template(shareString);
     var gitrepoTemplate   = _.template(gitrepoString);
-    var plistTemplate     = _.template(plistString);
     var stepsInitialized  = false;
     var portal_converted  = false;
 
@@ -185,11 +182,6 @@ $(function ()
 	$('#rspectext_div').html(rspectext_html);
 	$('#share_div').html(shareTemplate({formfields: fields}))
 	$('#copy_repobased_profile_div').html(copyrepoString);
-	$('#confirm_delete_div').html(deleteString);
-	// Extra warning in the confirm delete modal.
-	if (window.THIS_VERSION == window.LATEST_VERSION) {
-	    $('#confirm-delete-profile-warning').removeClass("hidden");
-	}
 
 	// Fireoff repo stuff now.
 	if (fromrepo) {
@@ -476,10 +468,18 @@ $(function ()
 	    $('#profile_steps_link').text("Hide Tour");
 	})
 	
-	// Confirm Delete profile.
-	$('#confirm-delete-button').click(function (event) {
+	// Delete profile button.
+	$('#profile_delete_button').click(function (event) {
 	    event.preventDefault();
-	    DeleteProfile();
+	    profileSupport
+		.DeleteVersion(version_uuid,
+			       // Extra warning in the confirm modal.
+			       window.THIS_VERSION == window.LATEST_VERSION,
+			       function (uuid, json) {
+				   // Successful deletion, we have to
+				   // go someplace else.
+				   window.location.replace(json.value);
+			       });
 	});
 
 	// Git repo URL modal.
@@ -1249,55 +1249,6 @@ $(function ()
     }
 
     //
-    // Delete profile.
-    //
-    function DeleteProfile(force, keepimages)
-    {
-	var delete_all = $('#delete-all-versions').is(':checked') ? 1 : 0;
-
-	var callback = function(json) {
-	    sup.HideWaitWait();
-	    console.info(json.value);
-
-	    if (json.code) {
-		if (json.code == 2) {
-		    ShowDeletionWarning(json.value);
-		    return;
-		}
-		sup.SpitOops("oops", json.value);
-		return;
-	    }
-	    window.location.replace(json.value);
-	}
-	var args = {
-	    "uuid"   : version_uuid,
-	    "all"    : delete_all,
-	};
-	if (force) {
-	    args["force"] = 1;
-	    if (keepimages) {
-		args["keepimages"] = 1;
-	    }
-	}
-	console.info("DeleteProfile", args);
-	
-	var xmlthing = sup.CallServerMethod(null, "manage_profile",
-					    "DeleteProfile", args);
-
-	// Came from ShowDeletionWarning() if force is set.
-	if (!force) {
-	    sup.HideModal('#confirm-delete-profile-modal');
-	}
-	if (force && !keepimages) {
-	    WaitWait("Deleting images takes a minute; patience please");
-	}
-	else {
-	    WaitWait();
-	}
-	xmlthing.done(callback);
-    }
-
-    //
     // Publish profile.
     //
     function PublishProfile()
@@ -1731,44 +1682,6 @@ $(function ()
 					    {"rspec" : rspec});
 	xmlthing.done(callback);
 
-    }
-
-    function ShowDeletionWarning(images)
-    {
-	/*
-	 * See if we have any profiles to warn about. If only images, then
-	 * the warning is different.
-	 */
-	var noprofiles = 1;
-	_.each(images, function(profiles, imagename) {
-	    _.each(profiles, function(value, name) {
-		noprofiles = 0;
-	    });
-	});
-	
-	var html = plistTemplate({
-	    "images"     : images,
-	    "noprofiles" : noprofiles,
-	});
-	$('#profile_list_modal_div').html(html);
-	
-	/*
-	 * Bind a handler for the force delete button.
-	 */
-	$('#confirm-force-delete').click(function (event) {
-	    event.preventDefault();
-	    // Keep images option.
-	    var keepimages = $('#keep-profile-images').is(':checked') ? 1 : 0;
-
-	    sup.HideModal('#profile-list-modal',
-			  function () { DeleteProfile(true, keepimages); });
-	})
-	sup.ShowModal('#profile-list-modal',
-		      // Delete handler no matter how it hides.
-		      function () {
-			  console.info("unbinding handler");
-			  $('#confirm-force-delete').off("click");
-		      });
     }
 
     function CreateJacksEditor()

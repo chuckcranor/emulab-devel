@@ -581,6 +581,10 @@ function Do_DeleteProfile()
             $opt .= "-k ";
         }
     }
+    # Impotent mode for testing
+    if (isset($ajax_args["impotent"]) && $ajax_args["impotent"]) {
+        $opt .= "-n ";
+    }
     $webtask = WebTask::CreateAnonymous();
     if (!$webtask) {
 	SPITAJAX_ERROR(-1, "Internal webtask Error");

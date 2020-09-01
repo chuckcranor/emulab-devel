@@ -171,7 +171,7 @@ $(function ()
 	var uuid = $(target).data("uuid");
 
 	var callback = function(json) {
-	    sup.HideModal("#waitwait-modal");
+	    sup.HideWaitWait();
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
 		return;
@@ -181,13 +181,14 @@ $(function ()
 	};
 	// Bind the confirm button in the modal. 
 	$('#terminate-modal #terminate-confirm').click(function () {
-	    sup.HideModal('#terminate-modal');
-	    sup.ShowModal('#waitwait-modal');
+	    sup.HideModal('#terminate-modal', function () {
+		sup.ShowModal('#waitwait-modal');
 
-	    var xmlthing = sup.CallServerMethod(null, "status",
-						"TerminateInstance",
-						{"uuid" : uuid});
-	    xmlthing.done(callback);
+		var xmlthing = sup.CallServerMethod(null, "status",
+						    "TerminateInstance",
+						    {"uuid" : uuid});
+		xmlthing.done(callback);
+	    });
 	});
 	// Handler so we know the user closed the modal. We need to
 	// clear the confirm button handler.
@@ -253,6 +254,9 @@ $(function ()
 	    $('#profiles_content')
 		.html(template({"profiles"    : json.value,
 				"tablename"   : "project-profiles",
+				"bulkdelete"  : (window.ISLEADER ||
+						 window.ISMANAGER ||
+						 window.ISADMIN ? 1 : 0),
 				"showCreator" : true,
 				"showProject" : false}));
 	    
@@ -273,6 +277,18 @@ $(function ()
 		event.preventDefault();
 		ShowTopology($(this).data("profile"));
 	    });
+	    // Delete profile button
+	    $('#profiles_content .delete-profile-button')
+		.click(function (event) {
+		    event.preventDefault();
+		    var row = $(this).closest("tr");
+		    var profile_uuid = $(row).data("uuid");
+		    
+		    profileSupport
+			.Delete(profile_uuid, function (uuid, json) {
+			    $(row).remove();
+			});
+		});
 	    
 	    var table = $('#' + 'project-profiles-table')
 		.tablesorter({
@@ -297,6 +313,22 @@ $(function ()
 		});
 	    $.tablesorter.filter.bindSearch(table,
 					    $('#' + 'project-profiles-search'));
+
+	    if (window.ISLEADER || window.ISMANAGER || window.ISADMIN) {
+		// Delete multiple profiles via the checkbox column.
+		$('#profiles_content .delete-selected-profiles')
+		    .click(function (event) {
+			event.preventDefault();
+			console.info("clicked");
+			profileSupport
+			    .DeleteSelected('#profiles_content',
+					  function (uuid, json) {
+					      $('#profiles_content ' +
+						'tr[data-uuid="' + uuid + '"]')
+						  .remove();
+					  });
+		    });
+	    }
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "show-project", "ProfileList",

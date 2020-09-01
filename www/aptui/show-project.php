@@ -82,6 +82,8 @@ REQUIRE_SUP();
 REQUIRE_MARKED();
 REQUIRE_MOMENT();
 AddLibrary("js/list-resgroups.js");
+AddLibrary("js/profile-support.js");
+AddTemplateList(array('confirm-delete-profile', 'profile-list-modal'));
 SPITREQUIRE("js/show-project.js",
             "<script src='js/lib/jquery.tablesorter.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".

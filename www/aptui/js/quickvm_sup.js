@@ -67,25 +67,23 @@ function HideModal(which, continuation)
     $(which).modal('hide');
 }
 
-function ShowWaitWait(message)
+function ShowWaitWait(message, hidefunction, showfunction)
 {
     if (message === undefined) {
-	ShowModal('#waitwait-modal');
+	$('#waitwait-modal .waitwait-message').addClass("hidden");
     }
     else {
-	$('#waitwait-modal-withmessage-message').html(message);
-	ShowModal('#waitwait-modal-withmessage');
+	if (message != null) {
+	    $('#waitwait-modal .waitwait-message span').html(message);
+	}
+	$('#waitwait-modal .waitwait-message').removeClass("hidden");
     }
+    ShowModal('#waitwait-modal', hidefunction, showfunction);
 }
 function HideWaitWait(continuation)
 {
-    if ($('#waitwait-modal').is(':visible')) {
-	HideModal('#waitwait-modal', continuation);
-    }
-    else {
-	$('#waitwait-modal-withmessage-message').html("");
-	HideModal('#waitwait-modal-withmessage', continuation);
-    }
+    $('#waitwait-modal .waitwait-message').addClass("hidden");
+    HideModal('#waitwait-modal', continuation);
 }
     
 function CallServerMethod(url, route, method, args, callback)

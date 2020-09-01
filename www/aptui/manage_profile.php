@@ -249,9 +249,11 @@ function SPITFORM($formfields, $errors)
     REQUIRE_GENILIB_EDITOR();
     AddLibrary("js/gitrepo.js");
     AddLibrary("js/paramhelp.js");
+    AddLibrary("js/profile-support.js");
+    AddTemplateList(array('confirm-delete-profile', 'profile-list-modal'));
     SPITREQUIRE("js/manage_profile.js");
 
-    AddTemplateList(array('manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'publish-modal', 'share-modal', 'gitrepo-picker', 'profile-list-modal', 'confirm-delete-profile', "copy-repobased-profile"));
+    AddTemplateList(array('manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'publish-modal', 'share-modal', 'gitrepo-picker', "copy-repobased-profile"));
     SPITFOOTER();
 }
 
