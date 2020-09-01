@@ -588,13 +588,42 @@ sub MapToLocalImage($$$$@)
 	if (!$use_imagetracker);
 
     #
-    # Now look for the URL. Note that URL is version specific, so if
-    # we find it, we know we have the image we want.
+    # Now look for the URL.
     #
     $image = OSImage->LookupByURL($url);
     if (defined($image)) {
+	#
+	# LookupByURL might return a local image. 
+	#
+	return &$setPerms($image)	
+	    if ($image->IsLocal());
+	
 	# Update this field.
 	$image->SetNoVersioning(!$blob->{'isversioned'});
+
+	#
+	# Prestaging change, we normally do this later in image_setup, but
+	# with prestaging we need to get the descriptor updated earlier.
+	#
+	# So ... if the source image is not versioned and the hash has
+	# changed then we need to trigger an update (we get the image file
+	# later). Because of backwards compat issues we only do this if the
+	# image is in the GeniSlices project (all new imports land there,
+	# but a long time ago they did not).
+	#
+	# Note that if the source is versioned we already have the latest
+	# image.
+	#
+	if (!$blob->{'isversioned'} &&
+	    $image->pid() eq "GeniSlices" &&
+	    $image->hash() ne $blob->{'sha1hash'}) {
+	    GeniUtil::ExecuteAsGeniUser("$IMPORTER -d -r ". $image->imageid());
+	    if ($?) {
+		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					    "Image importer failure for $urn");
+	    }
+	    $image->Refresh();
+	}
 	return &$setPerms($image);
     }
     
