@@ -1796,7 +1796,7 @@ okay:
 	if (exists($attributes->{'XEN_USBDEVICES'})) {
 	    my $devices = $attributes->{'XEN_USBDEVICES'};
 	    addConfig($vninfo, "usb=1", 2);
-	    addConfig($vninfo, "usbdevices = [".
+	    addConfig($vninfo, "usbdevice=[".
 		      join(",", map {"'" . $_ . "'"} split(",", $devices)) .
 		      "]", 2);
 	}
