@@ -540,7 +540,7 @@ foreach my $power_id (keys %outlets) {
 	# XXX a "cycle" operation will do nothing if the node is off.
 	# See comment above for forced power cycles.
 	# 
-	my $device = new power_5gstore($IP,$verbose);
+	my $device = new power_5gstore($power_id,$verbose);
 	if (!defined $device) {
 	    warn "Unable to contact controller for $nodestr. Skipping...\n";
 	    next;
@@ -1004,7 +1004,7 @@ sub dostatus(@) {
 	    }
 	    print "\n";
 	} elsif ($ctrls{$ctrl} eq "5gstore") {
-	    my $device = new power_5gstore($IPs{$ctrl}, $verbose);
+	    my $device = new power_5gstore($ctrl, $verbose);
 	    if (!defined $device) {
 		warn "Unable to contact controller $ctrl.\n";
 		$errors++;
