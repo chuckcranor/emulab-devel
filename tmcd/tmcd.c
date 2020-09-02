@@ -12815,7 +12815,8 @@ COMMAND_PROTOTYPE(dohwinfo)
 {
 	MYSQL_RES	*res;
 	MYSQL_ROW	row;
-	char		buf[MYBUFSIZE];
+	/* XXX "MYBUFSIZE*2" for Clemson nodes with 47 disks */
+	char		buf[MYBUFSIZE*2];
 	char		*bufp = buf, *ebufp = &buf[sizeof(buf)];
 	int		nrows;
 	int		collect = 0, check = 0;
