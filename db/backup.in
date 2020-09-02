@@ -347,8 +347,8 @@ if ($dohotcopy && -e "$BACKUPDIR/tbdb") {
 print "Backup at finished ".
     POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
 
-SENDMAIL("stoller\@flux.utah.edu",
-	 "DB Backup Finished", "", undef, undef, ($logname));
+#SENDMAIL("stoller\@flux.utah.edu",
+#	 "DB Backup Finished", "", undef, undef, ($logname));
 
 system("$SETSITEVAR web/message -")
     if (!$opsmode);
