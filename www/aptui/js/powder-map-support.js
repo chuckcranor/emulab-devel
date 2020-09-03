@@ -22,6 +22,8 @@ window.ShowPowderMap = (function()
 	"GetMapVehiclePoints?ApiKey=ride1791";
     var ROUTES_URL     = "https://www.uofubus.com/Services/JSONPRelay.svc/" +
 	"GetRoutesForMapWithScheduleWithEncodedLine?ApiKey=ride1791";
+    var LATITUDE       = 40.763451;
+    var LONGITUDE      = -111.84000;
 
     /*
      * These are layers we need to control externally.
@@ -98,7 +100,7 @@ window.ShowPowderMap = (function()
 		zoom: 15,
 		// Slightly shifted to the left to avoid being covered
 		// by the filter/layer widgets.
-		center: [-111.84000, 40.763451],
+		center: [LONGITUDE, LATITUDE],
 		container: Container,
 	    });
 	    // Do not show any of the the base layers in the Legend.
@@ -190,18 +192,33 @@ window.ShowPowderMap = (function()
 		DrawCoverageArea();
 		DrawDataCenters();
 		// Need to wait till these are done before we mark resources
-		// The return the promise.
-		$.when(DrawFixedEndpoints(), DrawBaseStations())
-		    .done(function (r1, r2) {
+		// They return the promise.
+		$.when(DrawFixedEndpoints(),
+		       DrawBaseStations(), DrawRoutes())
+		    .done(function (r1, r2, r3) {
+			console.info("done1", r1, r2, 3);
+			
 			if (_.has(Options, "experiment")) {
 			    MarkExperimentResources();
+			    if (Options.showmobile) {
+				// Need to show routes used by an experiment.
+			    }
 			    Loaded = true;
 			}
 			else if (_.has(Options, "location")) {
 			    MarkLocation(Options.location);
 			}
-			window.addEventListener("message",
-						receiveMessage, false);
+			else if (_.has(Options, "route")) {
+			    ShowRoute(Options.route);
+			}
+			else if (Options.showmobile) {
+			    ShowRoute(68);
+			}
+			if (window.opener) {
+			    window.addEventListener("message",
+						    receiveMessage, false);
+			    window.opener.postMessage("Ready Set Go");
+			}
 		    });
 
 		if (Options.showfilter) {
@@ -216,11 +233,6 @@ window.ShowPowderMap = (function()
 			expanded: true
 		    });
 		    View.ui.add(expand, "bottom-right");
-		}
-
-		// And now we can get the route data.
-		if (Options.showmobile) {
-		    GetRouteData(SetupRoutes);
 		}
 	    });
 
@@ -750,7 +762,7 @@ window.ShowPowderMap = (function()
 	});
 	if (!endpoint) {
 	    console.info("MarkFixedEndpoint: Could not find " + name);
-	    return;
+	    return null;
 	}
 	// First create a point geometry (location of the FE).
         var point = {
@@ -774,6 +786,7 @@ window.ShowPowderMap = (function()
 	    symbol:        symbol,
 	});
 	layer.add(graphic);
+	return endpoint;
     }
     function UnmarkFixedEndpoints()
     {
@@ -1137,7 +1150,7 @@ window.ShowPowderMap = (function()
 	});
 	if (!basestation) {
 	    console.info("MarkBaseStation: Could not find " + name);
-	    return;
+	    return null;
 	}
 	// First create a point geometry (location of the BS).
         var point = {
@@ -1162,6 +1175,7 @@ window.ShowPowderMap = (function()
 	    symbol:        symbol,
 	});
 	layer.add(graphic);
+	return basestation;
     }
     function UnmarkBaseStations()
     {
@@ -1243,20 +1257,18 @@ window.ShowPowderMap = (function()
     /*
      * Get the route lists and draw each route.
      */
-    function SetupRoutes(data)
+    function DrawRoutes()
     {
-	console.info("SetupRoutes", data);
-
-	var callback = function (json) {
-	    console.info(json);
+	var callback = function (routedata, json) {
 	    if (json.code) {
 		console.info("Could not get mobile endpoints " + json.value);
+		return;
 	    }
 	    OurBuses = json.value.buses;
 	    var routes = json.value.routes;
 	
 	    // Grab the routes we care about and draw the paths.
-	    _.each(data, function(route) {
+	    _.each(routedata, function(route) {
 		var routeID = route.RouteID;
 
 		// Not a route we care about.
@@ -1276,31 +1288,45 @@ window.ShowPowderMap = (function()
 		    "experiment" : routes[routeID].experiment,
 		};
 		DrawRoute(routeID);
-
-		// Show all routes used by an experiment, otherwise
-		// I like the Red route.
-		if (_.has(Options, "experiment")) {
-		    ShowRoute(routeID);
-		}
-		else if (routeID == 68) {
-		    ShowRoute(routeID);
-		}
 	    });
 	    console.info("routelist", routeList);
-	    console.info("view", View);
-	    console.info("map", Map);
 	    PollLocationData();
-	    
 	};
-	// Grab current bus info.
-	return sup.CallServerMethod(null, "map-support", "GetMobileEndpoints",
-				    null, callback);
+	return $.when(getJSON(ROUTES_URL),
+		      sup.CallServerMethod(null, "map-support",
+					   "GetMobileEndpoints", null))
+	    .done(function(routedata, json) {
+		console.info("done2", routedata, json);
+		callback(routedata, json);
+	    });
     }
-    function GetRouteData(handler)
+
+    function getJSON(url, callback)
     {
-	$.getJSON(ROUTES_URL, function (data) {
-	    handler(data);
+	var networkError = {
+	    "code"  : -1,
+	    "value" : "Server error, " +
+		"possible network failure. Try again later.",
+	};
+	var jqxhr = $.ajax({
+	    dataType  : "json",
+	    url       : url,
+	    success:  function (json) {
+		if (callback !== undefined) {
+		    callback(json);
+		}
+	    },
 	});
+	var defer = $.Deferred();
+    
+	jqxhr.done(function (data) {
+	    defer.resolve(data);
+	});
+	jqxhr.fail(function (jqXHR, textStatus, errorThrown) {
+	    networkError["jqXHR"] = jqXHR;
+	    defer.resolve(networkError);
+	});
+	return defer;
     }
 
     /*
@@ -1345,6 +1371,12 @@ window.ShowPowderMap = (function()
 	var layer = routeList[routeID].layer;
 	
 	layer.visible = false;
+    }
+    function HideAllRoutes()
+    {
+	_.each(routeList, function (route) {
+	    route.layer.visible = false;
+	});
     }
 
     /*
@@ -1599,32 +1631,41 @@ window.ShowPowderMap = (function()
     // Receive messages to mark locations.
     function receiveMessage(event)
     {
+	var details = null;
 	console.info(event.data);
 	
 	UnmarkFixedEndpoints();
 	UnmarkBaseStations();
-	
-	if (event.data.type == "BS") {
-	    MarkBaseStation(event.data.location, false);
+	if (View.popup) {
+	    View.popup.close();
+	}
+
+	if (event.data.type == "route") {
+	    View.goTo({
+		zoom: 15,
+		center: [LONGITUDE, LATITUDE]
+	    }).then(function() {
+		console.info(event.data.routeid);
+		HideAllRoutes();
+		ShowRoute(event.data.routeid);
+	    });
+	    return;
+	}
+	else if (event.data.type == "BS") {
+	    details = MarkBaseStation(event.data.location, false);
 	}
 	else if (event.data.type == "FE") {
-	    MarkFixedEndpoint(event.data.location, false);
-
-	    var endpoints = Layers["FE"].data;
-	    _.each(endpoints, function (details) {
-		if (details.name == event.data.location) {
-		    if (View.popup) {
-			View.popup.close();
-		    }
-		    View.goTo({
-			target:  details.graphic,
-			animate: true
-		    })
-			.then(function() {
-			    View.popup.open({features :[details.graphic]});
-			});
-		}
-	    });
+	    details = MarkFixedEndpoint(event.data.location, false);
+	}
+	if (details) {
+	    View.goTo(details.graphic)
+		.then(function() {
+		    View.popup.location = {
+			latitude: details.latitude,
+			longitude: details.longitude,
+		    };
+		    View.popup.open({features :[details.graphic]});
+		});
 	}
     }
 

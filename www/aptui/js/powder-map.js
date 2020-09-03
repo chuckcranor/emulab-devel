@@ -27,6 +27,9 @@ $(function ()
 	if (window.LOCATION !== undefined) {
 	    options["location"] = window.LOCATION;
 	}
+	if (window.ROUTE !== undefined) {
+	    options["route"] = window.ROUTE;
+	}
 	ShowPowderMap(".powder-mapview", options);
     }
     $(document).ready(initialize);

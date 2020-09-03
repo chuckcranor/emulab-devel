@@ -2,13 +2,12 @@ $(function ()
 {
     'use strict';
 
-    var template_list = ['radioinfo', "waitwait-modal", "oops-modal"];
+    var template_list = ['mobile-endpoints', "waitwait-modal", "oops-modal"];
     var templates     = APT_OPTIONS.fetchTemplateList(template_list);    
-    var mainTemplate  = _.template(templates['radioinfo']);
+    var mainTemplate  = _.template(templates['mobile-endpoints']);
     var amlist        = null;
     var radioInfo     = null;
     var map           = null;
-    var mobile        = null;
 
     function initialize()
     {
@@ -19,37 +18,57 @@ $(function ()
 	amlist    = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 	console.info("amlist", amlist);
 
+	$('#oops_div').html(templates["oops-modal"]);
+	$('#waitwait_div').html(templates["waitwait-modal"]);
+	
+	sup.CallServerMethod(null, "map-support", "GetMobileEndpoints",
+			     null, function (json) {
+				 console.info("mobile info", json);
+				 if (json.code) {
+				     sup.SpitOops("Failed to get mobile " +
+						  "endpoint info");
+				     return;
+				 }
+				 GeneratePage(json.value.buses,
+					      json.value.routes);
+			     });
+    }
+
+    function GeneratePage(endpoints, routes)
+    {
 	var options = {
+	    "endpoints" : endpoints,
+	    "routes"    : routes,
 	    "amlist"    : amlist,
 	    "radioinfo" : radioInfo
 	};
 	$('#main-body').html(mainTemplate(options));
-	// Now we can do this. 
-	$('#oops_div').html(templates["oops-modal"]);
-	$('#waitwait_div').html(templates["waitwait-modal"]);
 
-	$('#radioinfo-table')
+	// Format dates with moment before display.
+	$('#mobile-endpoints-table .format-date').each(function(){
+	    var date = $.trim($(this).html());
+	    if (date != "") {
+		$(this).html(moment($(this).html())
+			     .format("MMM D, h:mm:ss a"));
+	    }
+	});
+	
+	$('#mobile-endpoints-table')
 	    .tablesorter({
 		theme : 'green',
 		// initialize zebra
 		widgets: ["zebra"],
 	    });
 
-	$("#mobile-endpoints").click(function () {
-	    if (mobile && !mobile.closed) {
-		mobile.focus();
-		return;
-	    }
-	    mobile = window.open('mobile-endpoints.php', 'Mobile Endpoints');
-	});
-
 	$(".location").click(function (event) {
 	    event.preventDefault();
 	    var args = {
 		"urn"      : $(this).data("urn"),
-		"location" : $(this).data("location"),
-		"type"     : $(this).data("type"),
+		"routeid"  : $(this).data("routeid"),
+		"type"     : "route",
 	    };
+	    console.info("clicked", args);
+
 	    GetMapWindow(function (map) {
 		console.info("got map", map);
 		var foo = map;
@@ -59,14 +78,14 @@ $(function ()
 		foo.focus();
 		foo.postMessage(args);
 	    });
-	});
+	})
     }
 
     /*
      * Create the map window if it does not exist.
      */
     window.GetMapWindow = function(callback) {
-	console.info("radioinfo GetMapWindow");
+	console.info("mobile GetMapWindow");
 	if (map && !map.closed) {
 	    callback(map);
 	    return;

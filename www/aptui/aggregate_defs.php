@@ -85,7 +85,6 @@ class Aggregate
     function nickname()	    { return $this->field('nickname'); }
     function urn()	    { return $this->field('urn'); }
     function abbreviation() { return $this->field('abbreviation'); }
-    function weburl()	    { return $this->field('weburl'); }
     function ismobile()     { return $this->field('ismobile'); }
     function isFE()         { return $this->field('isFE'); }
     function disabled()     { return $this->field('disabled'); }
@@ -117,6 +116,13 @@ class Aggregate
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
 	return !is_null($this->aggregate);
+    }
+
+    # The weburl typically uses boss since that is the canonical name.
+    # Lets change that to www instead. 
+    function weburl() {
+        $url = preg_replace("/boss\./i", "www.", $this->field('weburl'));
+        return $url;
     }
 
     # Powder Portal, Emulab is not a "federate", all others are.

@@ -201,8 +201,11 @@ function Do_GetMobileEndpoints()
     global $this_user, $ajax_args;
 
     $query_result =
-        DBQueryFatal("select * from apt_mobile_aggregates as a ".
+        DBQueryFatal("select *,r.description as routename ".
+                     "   from apt_mobile_aggregates as a ".
                      "left join apt_mobile_buses as b on b.urn=a.urn ".
+                     "left join apt_mobile_bus_routes as r on ".
+                     "  r.routeid=b.routeid ".
                      "where b.busid!='6969' and b.busid!='4209' and ".
                      "      b.busid!='6996' and b.busid!='6970'");
     if (!mysql_num_rows($query_result)) {
