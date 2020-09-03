@@ -196,7 +196,6 @@ window.profileSupport = (function ()
 	var server_args = {
 	    "uuid"     : args.uuid,
 	    "all"      : args.all,
-	    "impotent" : 1,
 	};
 	if (force) {
 	    args["force"] = 1;
