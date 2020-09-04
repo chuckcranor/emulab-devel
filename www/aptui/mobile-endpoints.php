@@ -39,9 +39,6 @@ $isadmin   = (ISADMIN() ? 1 : 0);
 
 SPITHEADER(1);
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
 
@@ -79,11 +76,8 @@ echo "</script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 AddTemplateList(array("mobile-endpoints", "waitwait-modal", "oops-modal"));
-SPITREQUIRE("js/mobile-endpoints.js",
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+SPITREQUIRE("js/mobile-endpoints.js");
 SPITFOOTER();
 ?>

@@ -99,9 +99,6 @@ if (!ISADMIN()) {
 }
 $started = $instance->started() ? "true" : "false";
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-
 echo "<script type='text/javascript'>\n";
 echo "  window.UUID = '" . $uuid . "';\n";
 echo "  window.PID = '" . $pid . "';\n";
@@ -121,16 +118,13 @@ echo "<div id='main-body'></div>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 REQUIRE_IDLEGRAPHS();
 AddLibrary("js/resgraphs.js");
 AddLibrary("js/list-resgroups.js");
 SPITREQUIRE("js/adminextend.js",
             "<script src='js/lib/d3.v3.js'></script>".
-            "<script src='js/lib/nv.d3.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+            "<script src='js/lib/nv.d3.js'></script>");
 
 if ($instance->extension_reason() && $instance->extension_reason() != "") {
     echo "<pre class='hidden' id='extension-reason'>";

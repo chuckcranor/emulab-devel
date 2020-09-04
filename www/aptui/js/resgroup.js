@@ -1801,9 +1801,9 @@ $(function ()
 
 	    $('#allowed-ranges .tablesorter')
 		.tablesorter({
-		    theme : 'green',
-		    // initialize zebra
-		    widgets: ["zebra"],
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var ReservedRanges = function(json1, json2) {
@@ -1930,9 +1930,9 @@ $(function ()
 
 	    $('#reserved-ranges .tablesorter')
 		.tablesorter({
-		    theme : 'green',
-		    // initialize zebra
-		    widgets: ["zebra"],
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var xmlthing1 = sup.CallServerMethod(null, "rfrange", "ProjectRanges",

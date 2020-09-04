@@ -34,9 +34,9 @@ $(function ()
 
 		    $('#global-ranges .tablesorter')
 			.tablesorter({
-			    theme : 'green',
-			    // initialize zebra
-			    widgets: ["zebra"],
+			    theme : 'bootstrap',
+			    widgets: ["uitheme", "zebra"],
+			    headerTemplate : '{content} {icon}',
 			});
 		}
 		if (_.size(result2.value)) {
@@ -44,9 +44,9 @@ $(function ()
 
 		    $('#project-ranges .tablesorter')
 			.tablesorter({
-			    theme : 'green',
-			    // initialize zebra
-			    widgets: ["zebra"],
+			    theme : 'bootstrap',
+			    widgets: ["uitheme", "zebra"],
+			    headerTemplate : '{content} {icon}',
 			});
 		}
 		if (_.size(result3.value)) {
@@ -54,9 +54,9 @@ $(function ()
 
 		    $('#inuse-ranges .tablesorter')
 			.tablesorter({
-			    theme : 'green',
-			    // initialize zebra
-			    widgets: ["zebra"],
+			    theme : 'bootstrap',
+			    widgets: ["uitheme", "zebra"],
+			    headerTemplate : '{content} {icon}',
 			});
 		}
 	    });

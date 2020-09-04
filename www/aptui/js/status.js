@@ -2331,10 +2331,9 @@ $(function ()
 
 		$('#listview_table')
 		    .tablesorter({
-			theme : 'green',
-		    
-			// initialize zebra and filter widgets
-			widgets: ["zebra"],
+			theme : 'bootstrap',
+			widgets : [ "uitheme", "zebra"],
+			headerTemplate : '{content} {icon}',
 		    });
 
 		// Handler for select/deselect all rows in the list view.

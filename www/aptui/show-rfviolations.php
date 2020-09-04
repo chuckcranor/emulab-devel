@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -67,18 +67,11 @@ if ($experiment) {
 }
 echo "</script>\n";
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-
-
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
-SPITREQUIRE("js/show-rfviolations.js",
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+REQUIRE_TABLESORTER();
+SPITREQUIRE("js/show-rfviolations.js");
 AddTemplateList(array("show-rfviolations", "oops-modal", "waitwait-modal"));
 SPITFOOTER();
 

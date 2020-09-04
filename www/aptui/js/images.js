@@ -88,10 +88,9 @@ $(function ()
 
 	var table = $("#images-table")
 	    .tablesorter({
-		theme : 'blue',
-
-		// initialize zebra and filter widgets
-		widgets: ["zebra", "filter"],
+		theme : 'bootstrap',
+		widgets: ["uitheme", "zebra", "filter"],
+		headerTemplate : '{content} {icon}',
 
 		widgetOptions: {
 		    // include child row content while filtering, if true

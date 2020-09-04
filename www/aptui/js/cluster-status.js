@@ -161,6 +161,12 @@ $(function ()
 		      delay: {"hide" : 500, "show" : 150},
 		      placement: 'auto',
 		  });
+		$('#counts-panel-' + name + ' table')
+		    .tablesorter({
+			theme : 'bootstrap',
+			widgets: ["uitheme"],
+			headerTemplate : '{content} {icon}',
+		    });
 
 		// We reference the totals table in InitTable();
 		InitTable(name);
@@ -196,6 +202,12 @@ $(function ()
 		});
 		$('#prereserve-panel-' + name).html(html);
 
+		$('#prereserve-panel-' + name + ' table')
+		    .tablesorter({
+			theme : 'bootstrap',
+			widgets: ["uitheme"],
+			headerTemplate : '{content} {icon}',
+		    });
 		/*
 		 * Expand/collapse for each prereserve child (hidden) rows.
 		 */
@@ -251,8 +263,9 @@ $(function ()
 	
 	var table = $(tablename)
 		.tablesorter({
-		    theme : 'green',
-		    widgets: ["filter"],
+		    theme : 'bootstrap',
+		    widgets: ["uitheme", "filter"],
+		    headerTemplate : '{content} {icon}',
 
 		    widgetOptions: {
 			// include child row content while filtering, if true
@@ -260,7 +273,7 @@ $(function ()
 			// include all columns in the search.
 			filter_anyMatch   : true,
 			// class name applied to filter row and each input
-			filter_cssFilter  : 'form-control',
+			filter_cssFilter  : 'form-control input-sm',
 			// search from beginning
 			filter_startsWith : false,
 			// Set this option to false for case sensitive search

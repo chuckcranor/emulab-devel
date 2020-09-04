@@ -51,8 +51,6 @@ if (! (ISADMIN() || ISFOREIGN_ADMIN())) {
 SPITHEADER(1);
 
 echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-echo "<link rel='stylesheet'
             href='css/jQRangeSlider.css'>\n";
 
 function ShowByCreator()
@@ -523,13 +521,10 @@ echo "<script src='js/lib/jQRangeSlider/jQRangeSlider.js'></script>\n";
 echo "<script src='js/lib/jQRangeSlider/jQDateRangeSliderHandle.js'></script>\n";
 echo "<script src='js/lib/jQRangeSlider/jQDateRangeSlider.js'></script>\n";
 echo "<script src='js/lib/jQRangeSlider/jQRuler.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.widget-math.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.widget-output.js'></script>\n";
 
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER(array('js/lib/tablesorter/widgets/widget-output.js'));
 SPITREQUIRE("js/sumstats.js");
 
 AddTemplate("output-dropdown");

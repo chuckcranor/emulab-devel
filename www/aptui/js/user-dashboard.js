@@ -190,13 +190,17 @@ $(function ()
 	    if (json.value.user_experiments.length != 0) {
 		$('#experiments_content #experiments_table')
 		    .tablesorter({
-			theme : 'green',
+			theme : 'bootstrap',
+			widgets : [ "uitheme" ],
+			headerTemplate : '{content} {icon}',			
 		    });
 	    }
 	    if (json.value.project_experiments.length != 0) {
 		$('#project_experiments_content #experiments_table')
 		    .tablesorter({
-			theme : 'green',
+			theme : 'bootstrap',
+			widgets : [ "uitheme", ],
+			headerTemplate : '{content} {icon}',
 		    });
 	    }
 	    // Terminate an experiment.
@@ -273,7 +277,9 @@ $(function ()
 	    });
 	    var table = $('#classic_experiments_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", ],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var xmlthing = sup.CallServerMethod(null,
@@ -336,15 +342,16 @@ $(function ()
 	    
 	    var table = $('#' + 'user-profiles-table')
 		.tablesorter({
-		    theme : 'green',
-		    widgets: ["filter"],
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "filter"],
+		    headerTemplate : '{content} {icon}',
 		    widgetOptions: {
 			// include child row content while filtering, if true
 			filter_childRows  : true,
 			// include all columns in the search.
 			filter_anyMatch   : true,
 			// class name applied to filter row and each input
-			filter_cssFilter  : 'form-control',
+			filter_cssFilter  : 'form-control input-sm',
 			// search from beginning
 			filter_startsWith : false,
 			// Set this option to false for case sensitive search
@@ -430,15 +437,16 @@ $(function ()
 
 	    var table = $('#' + 'project-profiles-table')
 		.tablesorter({
-		    theme : 'green',
-		    widgets: ["filter"],
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "filter"],
+		    headerTemplate : '{content} {icon}',
 		    widgetOptions: {
 			// include child row content while filtering, if true
 			filter_childRows  : true,
 			// include all columns in the search.
 			filter_anyMatch   : true,
 			// class name applied to filter row and each input
-			filter_cssFilter  : 'form-control',
+			filter_cssFilter  : 'form-control input-sm',
 			// search from beginning
 			filter_startsWith : false,
 			// Set this option to false for case sensitive search
@@ -498,7 +506,9 @@ $(function ()
 	    });
 	    var table = $('#classic_profiles_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme"],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var xmlthing = sup.CallServerMethod(null,
@@ -548,7 +558,9 @@ $(function ()
 
 	    var table = $('#projects_table')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme"],
+		    headerTemplate : '{content} {icon}',
 		});
 	}
 	var xmlthing = sup.CallServerMethod(null,
@@ -653,7 +665,9 @@ $(function ()
 	    });
 	    var table = $('#datasets_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme"],
+		    headerTemplate : '{content} {icon}',
 		});
 	}
 	var xmlthing =
@@ -758,7 +772,9 @@ $(function ()
 	    
 	    paramsets_table = $('#paramsets_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme"],
+		    headerTemplate : '{content} {icon}',
 		});
 	}
 	var xmlthing =
@@ -797,7 +813,9 @@ $(function ()
 	    });
 	    var table = $('#classic_datasets_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme" ],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var xmlthing =

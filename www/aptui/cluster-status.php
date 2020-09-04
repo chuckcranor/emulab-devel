@@ -95,9 +95,6 @@ foreach ($agglist as $aggregate) {
         );
 }
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-
 # Place to hang the toplevel template.
 echo "<div id='page-body'></div>\n";
 
@@ -113,11 +110,8 @@ echo "</script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
-SPITREQUIRE("js/cluster-status.js",
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+REQUIRE_TABLESORTER();
+SPITREQUIRE("js/cluster-status.js");
 
 AddTemplateList(array("cluster-status", "cluster-status-templates"));
 SPITFOOTER();

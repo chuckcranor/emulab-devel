@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,9 +40,6 @@ if (! (ISADMIN() || ISFOREIGN_ADMIN())) {
 
 SPITHEADER(1);
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
 
@@ -52,13 +49,11 @@ $isfadmin = (ISFOREIGN_ADMIN() ? 1 : 0);
 echo "    window.ISADMIN    = $isadmin;\n";
 echo "    window.ISFOREIGN_ADMIN = $isfadmin;\n";
 echo "</script>\n";
-echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 AddTemplateList(array("list-profiles",
                       "profile-list", "oops-modal", "waitwait-modal"));
 SPITREQUIRE("js/list-profiles.js");

@@ -55,9 +55,9 @@ $(function ()
 	
 	$('#mobile-endpoints-table')
 	    .tablesorter({
-		theme : 'green',
-		// initialize zebra
-		widgets: ["zebra"],
+		theme : 'bootstrap',
+		widgets : [ "uitheme", "zebra"],
+		headerTemplate : '{content} {icon}',
 	    });
 
 	$(".location").click(function (event) {

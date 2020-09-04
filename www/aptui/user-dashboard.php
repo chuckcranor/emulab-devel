@@ -58,9 +58,6 @@ $emulablink = "$TBBASE/showuser.php3?user=" . $target_user->uid();
 
 SPITHEADER(1);
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-
 echo "<script type='text/javascript'>\n";
 echo "  window.ISADMIN     = $isadmin;\n";
 echo "  window.EMULAB_LINK = '$emulablink';\n";
@@ -78,15 +75,12 @@ echo "<div id='main-body'></div>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 AddLibrary("js/paramsets.js");
 AddLibrary("js/list-resgroups.js");
 AddLibrary("js/profile-support.js");
 AddTemplateList(array('confirm-delete-profile', 'profile-list-modal'));
-SPITREQUIRE("js/user-dashboard.js",
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+SPITREQUIRE("js/user-dashboard.js");
 
 AddTemplateList(array("user-dashboard", "experiment-list", "profile-list", "project-list", "dataset-list", "user-profile", "oops-modal", "waitwait-modal", "classic-explist", "conversion-help-modal", "paramsets-list", "resgroup-list"));
 SPITFOOTER();

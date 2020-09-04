@@ -139,8 +139,9 @@ $(function ()
 		    var table =
 			$('#' + name + ' #' + tablename)
 			.tablesorter({
-			    theme : 'green',
-			    widgets: ["zebra"],
+			    theme : 'bootstrap',
+			    widgets: ["uitheme", "zebra"],
+			    headerTemplate : '{content} {icon}',
 			    cssChildRow : 'tablesorter-childRow-versions',
 			});
 		    
@@ -463,8 +464,9 @@ $(function ()
 
 	    var table = $('#classic-images-table')
 		.tablesorter({
-		    theme : 'green',
-		    widgets: ["zebra", "filter"],
+		    theme : 'bootstrap',
+		    widgets: ["uitheme", "zebra", "filter"],
+		    headerTemplate : '{content} {icon}',
 		    
 		    widgetOptions: {
 			// search from beginning

@@ -86,10 +86,9 @@ $(function ()
 	});
 	$('.table-status')
 	    .tablesorter({
-		theme : 'green',
-		    
-		// initialize zebra and filter widgets
-		widgets: ["zebra", "resizable"],
+		theme : 'bootstrap',
+		widgets: ["uitheme", "zebra", "resizable"],
+		headerTemplate : '{content} {icon}',
 
 		headers: {
 		    0: {

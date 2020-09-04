@@ -67,9 +67,30 @@ $(function ()
 	if (window,ISPOWDER) {
 	    $('#powder-radios .counts-panel')
 		.html(totalsTemplate({"title" : "Radios"}));
+	    
+	    $('#powder-radios .counts-panel .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		});
 
 	    $('#powder-servers .counts-panel')
 		.html(totalsTemplate({"title" : "Servers"}));
+
+	    $('#powder-servers .counts-panel .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		});
+
+	    $('#powder-servers .counts-panel .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		});
 
   	    $('#powder-servers .resgraph-panel')
 		.html(graphTemplate({
@@ -82,6 +103,13 @@ $(function ()
 
 	    $('#powder-matrix .counts-panel')
 		.html(totalsTemplate({"title" : "Attenuator Matrix"}));
+
+	    $('#powder-matrix .counts-panel .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		});
 	}
 	_.each(amlist, function (details, urn) {
 	    var graphid = 'resgraph-' + details.nickname;
@@ -101,6 +129,13 @@ $(function ()
 	    $('#' + details.nickname + " .counts-panel")
 		.html(totalsTemplate({"title" : details.nickname}));
 
+	    $('#' + details.nickname + " .counts-panel .tablesorter")
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		});
+
 	    $('#' + details.nickname + " .resgraph-panel")
 		.html(graphTemplate({
 		    "details"        : details,
@@ -114,6 +149,13 @@ $(function ()
 	if (window.ISPOWDER && _.size(FEs)) {
 	    $('#fixed-endpoints .counts-panel')
 		.html(totalsTemplate({"title" : "Fixed Endpoints"}));
+
+	    $('#fixed-endpoints .counts-panel .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+	    });
 
 	    $("#fixed-endpoints .resgraph-panel")
 		.html(graphTemplate({"graphid"        : "resgraph-FEs",
@@ -340,7 +382,9 @@ $(function ()
 	if (asnodes) {
 	    $('#' + selector + ' .type-header').html("Node");
 	}
-	$('#' + selector + ' table').removeClass("hidden");
+	$('#' + selector + ' table')
+	    .removeClass("hidden")
+	    .trigger( 'updateAll', [ true, function () {} ] );	
     }
 
     /*
@@ -584,9 +628,9 @@ $(function ()
 	    });
 	    $('#range-list .tablesorter')
 		.tablesorter({
-		    theme : 'green',
-		    // initialize zebra
-		    widgets: ["zebra"],
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	    if (_.size(json2.value)) {
 		$('#range-list .experiment-reserved-ranges')

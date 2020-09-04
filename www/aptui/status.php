@@ -254,9 +254,6 @@ echo "<link rel='stylesheet'
 echo "<link rel='stylesheet'
             href='css/frequency-graph.css'>\n";
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-
 # Place to hang the toplevel template.
 echo "<div id='status-body'></div>\n";
 
@@ -297,15 +294,13 @@ echo "</script>\n";
 echo "<script src='js/lib/d3.v3.js'></script>\n";
 echo "<script src='js/lib/d3.v5.js'></script>\n";
 echo "<script src='js/lib/nv.d3.js'></script>\n";
-echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/jquery-ui.js'></script>\n";
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
 echo "<script src='js/lib/filesize.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 REQUIRE_MARKED();
 REQUIRE_URITEMPLATE();
 REQUIRE_IMAGE();

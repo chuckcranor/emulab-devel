@@ -56,9 +56,6 @@ $canbestow  = $project->AccessCheck($this_user,
 $isleader   = $project->IsLeader($this_user);
 $ismanager  = $project->IsManager($this_user);
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-
 echo "<script type='text/javascript'>\n";
 echo "  window.ISADMIN        = $isadmin;\n";
 echo "  window.ISLEADER       = $isleader;\n";
@@ -81,14 +78,11 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MARKED();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 AddLibrary("js/list-resgroups.js");
 AddLibrary("js/profile-support.js");
 AddTemplateList(array('confirm-delete-profile', 'profile-list-modal'));
-SPITREQUIRE("js/show-project.js",
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+SPITREQUIRE("js/show-project.js");
 
 AddTemplateList(array("show-project", "experiment-list", "profile-list", "member-list", "dataset-list", "project-profile", "classic-explist", "group-list", "waitwait-modal", "oops-modal", "conversion-help-modal", "resgroup-list"));
 SPITFOOTER();

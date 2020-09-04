@@ -85,8 +85,6 @@ SPITHEADER(1);
 echo "<link rel='stylesheet'
             href='css/jquery-ui.min.css'>\n";
 echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-echo "<link rel='stylesheet'
             href='css/nv.d3.css'>\n";
 echo "<link rel='stylesheet'
             href='https://fonts.googleapis.com/css?family=Muli'>\n";
@@ -231,6 +229,7 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_APTFORMS();
+REQUIRE_TABLESORTER();
 AddLibrary("js/resgraphs.js");
 AddTemplateList(array("resgroup", "reserve-faq", "reservation-graph",
                       "range-list", "route-list",
@@ -242,10 +241,6 @@ SPITREQUIRE("js/resgroup.js",
             "<script src='js/lib/d3.v5.js'></script>\n".
             "<script src='js/lib/nv.d3.js'></script>\n".
             "<script src='js/lib/visavail.js'></script>\n".
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>".
             "<script src='js/lib/jquery-ui.js'></script>");
 SPITFOOTER();
 ?>

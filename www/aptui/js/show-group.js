@@ -86,7 +86,9 @@ $(function ()
 	    });
 	    var table = $('#experiments_table')
 		.tablesorter({
-		    theme : 'blue',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	}
 	var xmlthing = sup.CallServerMethod(null,
@@ -125,7 +127,9 @@ $(function ()
 	    });
 	    var table = $('#classic_experiments_content .tablesorter')
 		.tablesorter({
-		    theme : 'blue',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var xmlthing = sup.CallServerMethod(null,
@@ -205,7 +209,9 @@ $(function ()
 	    });
 	    $('#members_table, #nonmembers_table')
 		.tablesorter({
-		    theme : 'blue',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 
 	    // Do this after converting table.

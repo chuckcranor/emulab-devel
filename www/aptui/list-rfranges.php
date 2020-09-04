@@ -41,22 +41,16 @@ if (!ISADMIN()) {
 
 SPITHEADER(1);
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 AddTemplateList(array("list-rfranges",
                       "oops-modal", "waitwait-modal"));
 SPITREQUIRE("js/list-rfranges.js",
-            "<script src='js/lib/d3.v3.js'></script>\n".
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+            "<script src='js/lib/d3.v3.js'></script>\n");
 SPITFOOTER();
 ?>

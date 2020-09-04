@@ -36,17 +36,11 @@ $this_user = CheckLoginOrRedirect();
 
 SPITHEADER(1);
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "</script>\n";
-echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
 
 $profiles = array();
 
@@ -86,6 +80,7 @@ echo "</script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 AddTemplateList(array("example-profiles"));
 SPITREQUIRE("js/example-profiles.js");
 

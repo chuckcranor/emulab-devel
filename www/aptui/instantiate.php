@@ -352,7 +352,6 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "<link rel='stylesheet' href='css/jquery-ui.min.css'>\n";
     echo "<link rel='stylesheet' href='css/picker.css'>\n";
     echo "<link rel='stylesheet' href='css/nv.d3.css'>\n";
-    echo "<link rel='stylesheet' href='css/tablesorter.css'>\n";
 
     # I think this will take care of XSS prevention?
     echo "<script type='text/plain' id='form-json'>\n";
@@ -456,24 +455,17 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "<script src='js/lib/nv.d3.js'></script>\n";
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
     echo "<script src='js/lib/jquery-ui.js'></script>\n";
-    echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
-    echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
-    echo "<script src='js/lib/sugar.min.js'></script>\n";
-    echo "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>\n";
    
-    REQUIRE_UNDERSCORE();
-    REQUIRE_SUP();
-    REQUIRE_PPWIZARDSTART();
-    REQUIRE_JACKS_EDITOR();
     REQUIRE_WIZARD_TEMPLATE();
     REQUIRE_PICKER();
     REQUIRE_FORMHELPERS();
     REQUIRE_FILESTYLE();
     REQUIRE_MARKED();
     REQUIRE_MOMENT();
-    REQUIRE_JACKSMOD();
-    REQUIRE_JACKS();
+    REQUIRE_TABLESORTER();
     REQUIRE_JQUERY_STEPS();
+    # This includes SUP (JACKS (JACKSMOD)), UNDERSCORE, and JACKS_EDITOR
+    REQUIRE_PPWIZARDSTART();
     # For the new ppwizardstart and Powder
     AddLibrary("js/powder-types.js");
     AddLibrary("js/resgraphs.js");

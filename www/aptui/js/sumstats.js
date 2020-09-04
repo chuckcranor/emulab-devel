@@ -52,13 +52,11 @@ $(function ()
 	var $this      = $('#output_dropdown');
 	
 	var table = $(tablename)
-		.tablesorter({
-		    theme : 'green',
-		    
-		    //cssChildRow: "tablesorter-childRow",
-
-		    // initialize zebra and filter widgets
-		    widgets: ["zebra", "filter", "resizable", "math", "output"],
+	    .tablesorter({
+		    theme : 'bootstrap',
+		    widgets: ["uitheme", "zebra", "filter",
+			      "resizable", "math", "output"],
+		    headerTemplate : '{content} {icon}',
 
 		    widgetOptions: {
 			// include child row content while filtering, if true
@@ -66,7 +64,7 @@ $(function ()
 			// include all columns in the search.
 			filter_anyMatch   : true,
 			// class name applied to filter row and each input
-			filter_cssFilter  : 'form-control',
+			filter_cssFilter  : 'form-control input-sm',
 			// search from beginning
 			filter_startsWith : false,
 			// Set this option to false for case sensitive search

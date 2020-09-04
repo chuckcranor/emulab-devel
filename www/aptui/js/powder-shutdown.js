@@ -109,7 +109,9 @@ $(function ()
 	    }
 	});
 	$('#experiments-table').tablesorter({
-	    theme : 'green',
+	    theme : 'bootstrap',
+	    widgets : [ "uitheme", "zebra"],
+	    headerTemplate : '{content} {icon}',
 	});
 	
 	$('#panic-listing-div .working').removeClass("hidden");		

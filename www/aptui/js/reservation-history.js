@@ -108,9 +108,9 @@ $(function ()
 		});
 		$('#' + name + ' .tablesorter')
 		    .tablesorter({
-			theme : 'green',
-			// initialize zebra
-			widgets: ["zebra"],
+			theme : 'bootstrap',
+			widgets : [ "uitheme", "zebra"],
+			headerTemplate : '{content} {icon}',
 		    });
 		// This activates the tooltip subsystem.
 		$('[data-toggle="tooltip"]').tooltip({

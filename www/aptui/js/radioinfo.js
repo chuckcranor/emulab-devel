@@ -30,9 +30,9 @@ $(function ()
 
 	$('#radioinfo-table')
 	    .tablesorter({
-		theme : 'green',
-		// initialize zebra
-		widgets: ["zebra"],
+		theme : 'bootstrap',
+		widgets : [ "uitheme", "zebra"],
+		headerTemplate : '{content} {icon}',
 	    });
 
 	$("#mobile-endpoints").click(function () {

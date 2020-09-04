@@ -44,9 +44,6 @@ elseif (ISADMIN()) {
 
 SPITHEADER(1);
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
 
@@ -84,11 +81,8 @@ echo "</script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 AddTemplateList(array("radioinfo", "waitwait-modal", "oops-modal"));
-SPITREQUIRE("js/radioinfo.js",
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+SPITREQUIRE("js/radioinfo.js");
 SPITFOOTER();
 ?>

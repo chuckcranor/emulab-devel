@@ -120,7 +120,6 @@ if (isset($portalonly) && $portalonly) {
     echo "    window.PORTALONLY = true;\n";
 }
 echo "</script>\n";
-echo "<link rel='stylesheet' href='css/tablesorter.css'>\n";
 echo "<link rel='stylesheet' href='css/jQRangeSlider.css'>\n";
 echo "<script src='js/lib/jquery-ui.js'></script>\n";
 echo "<script src='js/lib/jQRangeSlider/jQRangeSliderMouseTouch.js'></script>\n";
@@ -132,13 +131,11 @@ echo "<script src='js/lib/jQRangeSlider/jQRangeSlider.js'></script>\n";
 echo "<script src='js/lib/jQRangeSlider/jQDateRangeSliderHandle.js'></script>\n";
 echo "<script src='js/lib/jQRangeSlider/jQDateRangeSlider.js'></script>\n";
 echo "<script src='js/lib/jQRangeSlider/jQRuler.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.widget-math.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 SPITREQUIRE("js/activity.js");
 
 AddTemplateList(array("activity", "activity-table",

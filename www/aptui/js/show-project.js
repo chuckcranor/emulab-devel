@@ -148,7 +148,9 @@ $(function ()
 	    });
 	    var table = $('#experiments_table')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 
 	    // Terminate an experiment.
@@ -227,7 +229,9 @@ $(function ()
 	    });
 	    var table = $('#classic_experiments_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var xmlthing = sup.CallServerMethod(null,
@@ -292,15 +296,16 @@ $(function ()
 	    
 	    var table = $('#' + 'project-profiles-table')
 		.tablesorter({
-		    theme : 'green',
-		    widgets: ["filter"],
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra", "filter"],
+		    headerTemplate : '{content} {icon}',
 		    widgetOptions: {
 			// include child row content while filtering, if true
 			filter_childRows  : true,
 			// include all columns in the search.
 			filter_anyMatch   : true,
 			// class name applied to filter row and each input
-			filter_cssFilter  : 'form-control',
+			filter_cssFilter  : 'form-control input-sm',
 			// search from beginning
 			filter_startsWith : false,
 			// Set this option to false for case sensitive search
@@ -362,7 +367,9 @@ $(function ()
 	    });
 	    var table = $('#classic_profiles_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var xmlthing = sup.CallServerMethod(null,
@@ -451,7 +458,9 @@ $(function ()
 	    
 	    var table = $('#members_table')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 
 	    // Do this after converting table.
@@ -567,7 +576,9 @@ $(function ()
 	    
 	    var table = $('#groups_table')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	}
 	var xmlthing = sup.CallServerMethod(null,
@@ -646,7 +657,9 @@ $(function ()
 	    });
 	    var table = $('#datasets_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	}
 	var xmlthing =
@@ -709,7 +722,9 @@ $(function ()
 	    });
 	    var table = $('#classic_datasets_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var xmlthing =
@@ -751,7 +766,9 @@ $(function ()
 	    
 	    var table = $('#rfranges_content .allowed-rfranges .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var InuseRanges = function(json) {
@@ -780,7 +797,9 @@ $(function ()
 	    
 	    $('#rfranges_content .inuse-rfranges .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var xmlthing1 =

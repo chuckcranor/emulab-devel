@@ -85,9 +85,9 @@ $(function ()
 	});
 	$(selector + ' .tablesorter.resgroup-list')
 	    .tablesorter({
-		theme : 'green',
-		// initialize zebra
-		widgets: ["zebra"],
+		theme : 'bootstrap',
+		widgets : [ "uitheme", "zebra"],
+		headerTemplate : '{content} {icon}',
 	    });
 
 	// Show the proper status, for the group and for each reservation
@@ -111,10 +111,10 @@ $(function ()
 		    .addClass("sorter-false");
 	    }
 	    crow.find(".tablesorter").tablesorter({
-		    theme : 'green',
-		    // initialize zebra
-		    widgets: ["zebra"],
-		});
+		theme : 'bootstrap',
+		widgets : [ "uitheme", "zebra"],
+		headerTemplate : '{content} {icon}',
+	    });
 
 	    if (group.status == "approved") {
 		$(groupid + " .group-status-column .status-approved")
@@ -371,9 +371,9 @@ $(function ()
 	$('#groups-bytype .tablesorter, #groups-byrange .tablesorter,' +
 	  '#groups-byroute .tablesorter')
 	    .tablesorter({
-		theme : 'green',
-		// initialize zebra
-		widgets: ["zebra"],
+		theme : 'bootstrap',
+		widgets : [ "uitheme", "zebra"],
+		headerTemplate : '{content} {icon}',
 	    });
 
 	// This activates the tooltip subsystem.
