@@ -190,3 +190,21 @@
 	background-color: #e6bf99;
 }
 
+/* Modification to tablesorter Bootstrap theme */
+.tablesorter-bootstrap td {
+    font: 12px/18px Arial, Sans-serif;
+}
+.tablesorter-bootstrap thead th,
+.tablesorter-bootstrap thead td,
+.tablesorter-bootstrap tfoot th,
+.tablesorter-bootstrap tfoot td {
+    font: 12px/18px Arial, Sans-serif;
+    font-weight: bold;
+    padding: 6px !important;
+}
+.tablesorter-bootstrap .tablesorter-header-inner {
+	padding: 0px 18px 0px 4px;
+}
+.tablesorter-bootstrap .sorter-false .tablesorter-header-inner {
+	padding: 0px 4px 0px 4px;
+}
