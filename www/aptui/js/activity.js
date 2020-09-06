@@ -132,6 +132,12 @@ $(function () {
 			math_ignore   : [0],
 			// integers
 			math_mask     : '',
+			// complete executed after each function
+			math_completed : function(config) {
+			    console.info("math completed");
+			    $('#header-column-counts')
+				.html($('#footer-column-counts').html());
+			},
 		    }
 		});
 

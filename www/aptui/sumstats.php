@@ -159,7 +159,7 @@ function ShowByCreator()
            <th>PCs</th>
            <th>PHours</th>
           </tr>
-          <tr>
+          <tr id='header-column-counts'>
            <th class='filter-false sorter-false' data-math='col-count'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
@@ -188,7 +188,7 @@ function ShowByCreator()
           </tr>
          </thead>\n";
  echo"   <tfoot>
-          <tr>
+          <tr id='footer-column-counts'>
            <th class='filter-false sorter-false'>Totals</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
@@ -363,7 +363,7 @@ function ShowByProject()
            <th>PCs</th>
            <th>Phours</th>
           </tr>
-          <tr>
+          <tr id='header-column-counts'>
            <th class='filter-false sorter-false' data-math='col-count'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
@@ -396,7 +396,7 @@ function ShowByProject()
           </tr>
          </thead>\n";
  echo"   <tfoot>
-          <tr>
+          <tr id='footer-column-counts'>
            <th class='filter-false sorter-false'>Totals</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
