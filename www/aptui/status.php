@@ -301,6 +301,7 @@ echo "<script src='js/lib/filesize.min.js'></script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER();
+REQUIRE_JACKS();
 REQUIRE_MARKED();
 REQUIRE_URITEMPLATE();
 REQUIRE_IMAGE();

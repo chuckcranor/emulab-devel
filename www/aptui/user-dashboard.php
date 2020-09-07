@@ -74,6 +74,7 @@ echo "<div id='main-body'></div>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
+REQUIRE_JACKS();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER();
 AddLibrary("js/paramsets.js");

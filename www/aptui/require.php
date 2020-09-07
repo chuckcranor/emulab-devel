@@ -258,7 +258,6 @@ function REQUIRE_SUP()
 {
   REQUIRE_DATEFORMAT();
   REQUIRE_MARKED();
-  REQUIRE_JACKS();
   AddLibrary("js/quickvm_sup.js");
 }
 
