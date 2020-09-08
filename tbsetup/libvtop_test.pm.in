@@ -3170,7 +3170,7 @@ sub GenVirtLans($)
 		$encapval = $linkencap;
 	    }
 	    elsif ($globalencap eq "default") {
-		$encapval = "veth-ne";
+		$encapval = "vlan";
 	    }
 	    else {
 		$encapval = $globalencap;

@@ -1444,7 +1444,7 @@ sub GetTicketAuxAux($)
 			my $ptype = GeniXML::XenPtype($ref);
 			$pctype = $ptype
 			    if (defined($ptype));
-			$virtexperiment->encap_style("vlan");
+			#$virtexperiment->encap_style("vlan");
 
 			#
 			# Per-vnode firewall options.
@@ -1488,7 +1488,7 @@ sub GetTicketAuxAux($)
 			my $ptype = GeniXML::DockerPtype($ref);
 			$pctype = $ptype
 			    if (defined($ptype));
-			$virtexperiment->encap_style("vlan");
+			#$virtexperiment->encap_style("vlan");
 
 			#
 			# Per-vnode firewall options.
