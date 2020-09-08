@@ -1967,7 +1967,7 @@ $(function ()
 		sites[siteid] = siteid;
 	    }
 	});
-	console.info("CreateAggregateSelectors2: ", count, bound);
+	console.info("CreateAggregateSelectors2: ", count, bound, ammap);
 
 	// All nodes bound, no dropdown.
 	if (count == bound) {
@@ -1979,7 +1979,7 @@ $(function ()
 	    // Need to set the "where" form field so that we pass the
 	    // correct default aggregate to the backend.
 	    if (_.size(ammap) == 1) {
-		var manager = _.keys(ammap).first();
+		var manager = _.keys(ammap)[0];
 		var name    = amlist[manager].name;
 		
 		$("#cluster_selector")
