@@ -482,7 +482,10 @@ sub HandleChild($)
 		"Monitor Graph:\n" . $graphurl . "\n";
 
 	    print "$mesg\n";
-	    NodeNotify($nodeid, "system", $mesg);
+	    #
+	    # Do not notify, no one is paying any attention anyway.
+	    #
+	    #NodeNotify($nodeid, "system", $mesg);
 	    next;
 	}
 	
