@@ -1015,7 +1015,8 @@ sub AnnotateManifest($)
 					 $services, $GeniXML::EMULAB_NS);
     }
     # The imageable test does not generally work for virtnodes.
-    if (($node->isvirtnode() || $node->imageable()) && !$node->IsTainted()) {
+    if (($node->isvirtnode() || $node->imageable()) &&
+	(!$node->IsTainted() || $node->TaintIs(TB_TAINTSTATE_MUSTRELOAD()))) {
 	GeniXML::SetText("available", $imageable, "true");
     }
     else {
