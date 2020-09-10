@@ -86,6 +86,7 @@ my $distribute = 0;
 my $install = 0;
 my @fqdns;
 my %hosts;
+my %portsinuse = ();
 
 # Protos
 sub parseinstance($;$);
@@ -95,6 +96,7 @@ sub customizeconfig($);
 sub expandconfig($$$$@);
 sub packageconfig($);
 sub distribconfigs();
+sub portOK($);
 sub dumpinfo();
 sub fatal($);
 
@@ -248,7 +250,21 @@ if (@ARGV == 1 && ($exptuuid = parseinstance($ARGV[0], 1))) {
     # available or does not conflict with a current use. I expect to see me
     # back here soon!
     #
-    $portoffset = (TBGetUniqueIndex("syncthing_index", 0, 1) % 50);
+    # XXX ...and I'm back. Let's at least make sure we don't self-interfere.
+    # Check the existing syncthing configurations to make sure someone does
+    # not have our chosen port.
+    #
+    # Things to do in the future:
+    # - Use a unix-domain socket for the GUI.
+    # - Use a local discovery server to exchange service ports.
+    #
+    my $ix = 0;
+    do {
+	$portoffset = (TBGetUniqueIndex("syncthing_index", 0, 1) % 100);
+	if (++$ix >= 100) {
+	    fatal("createconfig: could not find available port!");
+	}
+    } while (!portOK(8384 + int($portoffset)));
     print STDERR "$exptuuid: using port offset $portoffset\n"
 	if ($debug);
 } else {
@@ -602,6 +618,9 @@ sub distribconfigs()
     if ($background) {
 	unlink($pidfile, $logfile);
     }
+
+    # This will remove the tmp directory once it is empty
+    rmdir($tmpdir);
 }
 
 #
@@ -774,6 +793,55 @@ sub expandconfig($$$$@)
     }
     close(OF);
     close(NF);
+}
+
+#
+# Is the given port available.
+#
+# XXX hack job. We just check existing syncthing configs.
+# Someday maybe this function will become legit...
+#
+sub portOK($)
+{
+    my ($port) = @_;
+
+    if (!exists($portsinuse{"0"})) {
+	$portsinuse{"0"} = 1;
+
+	#
+	# XXX This would be lovely...except, LookupAll() will only work on
+	# the mothership ops node, not on boss. We are going to have to hack
+	# to find the ports.
+	#
+	if (0) {
+	    require WBStore;
+
+	    my @wbstores = WBStore->LookupAll();
+	    foreach my $wbs (@wbstores) {
+		if ($wbs->apiaddress() =~ /:(\d+)$/) {
+		    $portsinuse{$1} = 1;
+		}
+		if ($wbs->listenport() =~ /^(\d+)$/) {
+		    $portsinuse{$1} = 1;		
+		}
+	    }
+	} else {
+	    # XXX grep n' parse
+	    my $wbdir = "/usr/testbed/opsdir/wbstore";
+	    my @lines = `grep -i address $wbdir/*/emulab.net/config.xml`;
+	    chomp @lines;
+	    foreach my $l (@lines) {
+		if ($l =~ /(?:\.emulab\.net|127\.0\.0\.1):(\d+)</) {
+		    $portsinuse{$1} = 1;
+		}
+	    }
+	}
+	print STDERR "ports in use: ",
+	    join(' ', sort { $a <=> $b } keys %portsinuse), "\n"
+	    if ($debug);
+    }
+
+    return (exists($portsinuse{$port}) ? 0 : 1);
 }
 
 sub dumpinfo()

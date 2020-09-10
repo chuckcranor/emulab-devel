@@ -510,8 +510,9 @@ sub IsRunning($)
 			      undef, undef, undef, undef, \$msg);
     $robj->SetTimeout($otimo);
     if (!$json) {
+	my $addr = $self->apiaddress();
 	$msg =~ s/.*Syncthing API error: (.*)/$1/s;
-	print STDERR "$self: IsRunning: $msg\n"
+	print STDERR "$self: IsRunning: $msg on $addr\n"
 	    if ($debug);
 	return undef;
     }
@@ -766,8 +767,11 @@ sub GetConfig($;$)
     }
 
     #
-    # Extract our device ID as it is useful in various places
-    # XXX the device with our domain in the name is us
+    # Extract our device ID as it is useful in various places.
+    # XXX the device with our domain in the name is us.
+    #
+    # While we are in here, we also get the mothership port used by the
+    # particular syncthing instance.
     #
     if (!$self->{'WBSTORE'}->{'devid'}) {
 	my $myid;
@@ -775,6 +779,9 @@ sub GetConfig($;$)
 	foreach my $dev (@$dref) {
 	    if ($dev->{'name'} =~ /$OURDOMAIN$/) {
 		$myid = $self->{'WBSTORE'}->{'devid'} = $dev->{'id'};
+		if ($dev->{'address'} =~ /:(\d+)$/) {
+		    $self->{'WBSTORE'}->{'listenport'} = $1;
+		}
 		last;
 	    }
 	}
@@ -812,7 +819,8 @@ sub GetConfig($;$)
 	    $myid =~ s/.*(....)$/$1/;
 	    my $rmid = $self->{'WBSTORE'}->{'remoteid'};
 	    $rmid =~ s/.*(....)$/$1/;
-	    print STDERR "$self: ...$myid -> ...$rmid\n";
+	    my $lp = $self->{'WBSTORE'}->{'listenport'};
+	    print STDERR "$self: ...$myid -> ...$rmid, listenport=$lp\n";
 	}
     }
 
@@ -980,7 +988,7 @@ sub apikey($;$)
 }
 
 #
-# Return (host,port) for the REST API server
+# Return "host:port" for the REST API server
 #
 sub apiaddress($;$)
 {
@@ -1001,6 +1009,32 @@ sub apiaddress($;$)
 
     return $val;
 }
+
+#
+# Return port that we are listening on.
+# XXX right now this is get only.
+#
+sub listenport($;$)
+{
+    my ($self, $val) = @_;
+    return undef
+	if (!ref($self));
+
+    my $config = $self->GetConfig();
+    return undef
+	if (!$config);
+
+    # XXX we stashed this away in GetConfig
+    if (scalar(@_) == 2) {
+	print STDERR "$self: cannot set listen port!\n";
+	return undef;
+    } else {
+	$val = $self->{'WBSTORE'}->{'listenport'};
+    }
+
+    return $val;
+}
+
 
 #
 # Get or set the fsWatcherEnabled attribute on the folder corresponding to

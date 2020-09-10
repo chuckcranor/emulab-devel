@@ -116,6 +116,7 @@ my  $optlist = "d:en1l:p:I:AEDK";
 my $TB       = "@prefix@";
 my $TBOPS    = "@TBOPSEMAIL@";
 my $OPSNODE  = "@USERNODE@";
+my $OURDOMAIN = "@OURDOMAIN@";
 my $MAINSITE  = @TBMAINSITE@;
 my $METADIR  = "$TB/wbstore";
 my $PROJDIR   = "@PROJROOT_DIR@";
@@ -627,6 +628,38 @@ sub cleanupinstance($)
     $datadir = $1;
 
     #
+    # XXX ensure that synchthing has gone away. We have seen problems on
+    # ops where the syncthing gets stuck in a state where only kill -9
+    # gets rid of it. If this is the case, kill -9 it and save off the
+    # config directory which has the syncthing log.
+    #
+    if ($MAINSITE) {
+	my $pidfile = "$confdir/$OURDOMAIN/syncthing.pid";
+
+	if (! -e $pidfile && -e "$pidfile.last") {
+	    my $stpid = `cat $pidfile.last`;
+	    chomp($stpid);
+	    if ($stpid =~ /^(\d+)$/) {
+		$stpid = $1;
+		if (kill(0, $stpid)) {
+		    logit("$uuid: WARNING: syncthing still running! ".
+			  "Killing hard and saving config directory.");
+		    kill('KILL', $stpid);
+
+		    my $cftarball = "${datadir}-conf.tgz";
+		    unlink($cftarball);
+		    if (system("tar -czf $cftarball $confdir >/dev/null 2>&1")) {
+			logit("$uuid: WARNING: cleanup could not save ".
+			      "config dir for debugging!");
+			unlink($cftarball);
+		    }
+		}
+	    }
+	    unlink("$pidfile.last");
+	}
+    }
+
+    #
     # If we are asked to archive, but there are no files in any instance
     # subdir related to this syncthing, mark datadir to be removed.
     #
@@ -809,7 +842,7 @@ sub isemptystore($$)
     # which is not in the instances.
     #
     if ($MAINSITE) {
-	push(@dlist, "$uuid/emulab.net");
+	push(@dlist, "$uuid/$OURDOMAIN");
     }
 
     foreach my $id (@dlist) {
@@ -1543,7 +1576,7 @@ sub checksyncthing($$$;$)
 	    return -1;
 	}
 	logit("$uuid: syncthing pid $pid stopped");
-	unlink($pidfile);
+	rename($pidfile, "$pidfile.last");
 	return 0;
     }
 
