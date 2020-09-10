@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -137,6 +137,7 @@ function Do_GetInfo()
     $blob["path"]         = $image->path();
     $blob["shared"]       = $image->shared() ? 1 : 0;
     $blob["global"]       = $image->isglobal() ? 1 : 0;
+    $blob["listed"]       = $image->listed() ? 1 : 0;
     $blob["ready"]        = $image->ready() ? 1 : 0;
     $blob["released"]     = $image->released() ? 1 : 0;
     $blob["isdataset"]    = $image->isdataset() ? 1 : 0;
@@ -207,7 +208,7 @@ function Do_GetInfo()
         }
         $blob["deprecated"] = $image->deprecated();
         if ($image->deprecated()) {
-            $blob["deprecated_iserror"] = $image->deprecated_iserror();
+            $blob["deprecated_iserror"] = $image->deprecated_iserror() ? 1 : 0;
             $blob["deprecated_message"] = $image->deprecated_message();
         }
     }
@@ -294,6 +295,7 @@ function Do_Modify()
     $allowed = array("reboot_waittime" => true,
                      "description"     => false,
                      "path"            => true,
+                     "listed"          => true,
                      "osfeatures"      => true,
     );
     if (!array_key_exists($field, $allowed)) {
@@ -332,6 +334,13 @@ function Do_Modify()
             DBQueryWarn("update os_info_versions set ${field}='$safe_value' ".
                         "where osid='$imageid' and vers='$version'");
     }
+    elseif ($field == "listed") {
+        $imageid = $image->imageid();
+
+        $query_result =
+            DBQueryWarn("update images set ${field}='$safe_value' ".
+                        "where imageid='$imageid'");
+    }
     else {
         $query_result =
             DBQueryWarn("update image_versions set ${field}='$safe_value' ".
@@ -341,6 +350,9 @@ function Do_Modify()
 	SPITAJAX_ERROR(-1, "Internal error updating database");
 	return -1;
     }
+    # Mark for IMS update. Ignored if not using the image tracker.
+    DBQueryWarn("update image_versions set ims_update=now() ".
+                "where uuid='$uuid'");
     
     SPITAJAX_RESPONSE(1);
 }

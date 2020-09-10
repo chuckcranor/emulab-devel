@@ -4,11 +4,12 @@ $(function ()
 
     var template_list   = ["image-list", "classic-image-list",
 			   "oops-modal", "confirm-delete-image",
-			   "waitwait-modal"];
+			   "waitwait-modal", "image-format-modal"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
     var listTemplate    = _.template(templates["image-list"]);
     var classicTemplate = _.template(templates["classic-image-list"]);
     var confirmTemplate = _.template(templates["confirm-delete-image"]);
+    var formatTemplate  = _.template(templates['image-format-modal']);
     var oopsString      = templates["oops-modal"];
     var waitwaitString  = templates["waitwait-modal"];
     var amlist = null;
@@ -24,6 +25,7 @@ $(function ()
 
 	$('#oops_div').html(oopsString);	
 	$('#waitwait_div').html(waitwaitString);
+	$('#image-format-modal_div').html(formatTemplate({}));
 
 	LoadData();
 	LoadClassic();

@@ -105,7 +105,8 @@ echo "<div id='main-body'>
 # Place to hang the modals for now
 echo "<div id='oops_div'></div>
       <div id='waitwait_div'></div>
-      <div id='confirm_div'></div>\n";
+      <div id='confirm_div'></div>
+      <div id='image-format-modal_div'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 if ($target_project) {
@@ -121,7 +122,7 @@ REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER(array('js/lib/tablesorter/widgets/widget-grouping.js'));
 AddTemplateList(array("image-list", "classic-image-list",
-                      "confirm-delete-image",
+                      "confirm-delete-image", "image-format-modal",
                       "oops-modal", "waitwait-modal"));
 SPITREQUIRE("js/list-images.js");
 SPITFOOTER();

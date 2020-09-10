@@ -2,8 +2,10 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['images']);
+    var templates = APT_OPTIONS.fetchTemplateList(['images',
+						   "image-format-modal"]);
     var mainTemplate = _.template(templates['images']);
+    var formatTemplate = _.template(templates['image-format-modal']);
     var filterindex = 7;
     var showformat = false;
 
@@ -58,6 +60,7 @@ $(function ()
 	    "showformat" : showformat,
 	});
 	$('#main-body').html(html);
+	$('#image-format-modal_div').html(formatTemplate({}));
 
 	// Format dates with moment before display.
 	$('.format-date').each(function() {

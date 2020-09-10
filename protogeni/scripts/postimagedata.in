@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -217,7 +217,8 @@ else {
 			   "       (v.pid='$TBOPSPID' and v.global=1)) and ".
 			   "      (ims_reported is null or ".
 			   "       created > ims_reported or ".
-			   "       updated > ims_reported) ".
+			   "       updated > ims_reported or ".
+			   "       ims_update > ims_reported) ".
 			   "order by v.imageid,v.version");
     }
     else {
@@ -367,9 +368,10 @@ sub PostImageInfo($)
 		"isdataset"      => $image->isdataset(),
 		"isversioned"    => $isversioned,
 		"issystem"       => $image->pid() eq TBOPSPID() ? '1' : '0',
+		"listed"         => $image->listed(),
 		"sha1hash"       => $image->hash(),
 		"creator_urn"    => $creator_urn,
-		"created"        => TBDateStringGMT(str2time($image->created())),
+		"created"        => TBDateStringGMT(str2time($image->updated())),
 		"description"    => $image->description(),
 		"filesize"       => $image->size() . ".0",
 		"lba_low"        => $image->lba_low() . ".0",

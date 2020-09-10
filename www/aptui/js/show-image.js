@@ -9,6 +9,7 @@ $(function ()
     var alltypes     = null;
     var curtypes     = null;
     var formfields   = null;
+    var YesNo        = function (val) { return (val ? "Yes" : "No"); };
 
     function JsonParse(id)
     {
@@ -78,7 +79,7 @@ $(function ()
 	    isadmin:		window.ISADMIN,
 	    canedit:            window.CANEDIT,
 	    candelete:          window.CANDELETE,
-	    "YesNo":            function (val) { return (val ? "Yes" : "No"); },
+	    "YesNo":            YesNo,
 	});
 	$('#main-body').html(html);
 
@@ -271,16 +272,37 @@ $(function ()
 
 	// Insert the edit buttons in a new span with input field.
 	$(td_field).append(
-	    "<span class=editing>" + cancelbutton + savebutton +
-		"<input type=text class=form-control value=''></span>");
+	    "<span class=editing>" + cancelbutton + savebutton + "</span>");
 
 	// This activates the new tooltips we added above
 	$(td_field).find('[data-toggle="tooltip"]').tooltip({
 	    trigger: 'hover',
 	});
-
+	
 	// Add set the value of the input field.
-	$(td_field).find("input").val(td_value);
+	if (td_type == "text") {
+	    $(td_field).find("span.editing").append(
+		"<input type=text class=form-control value=''>")
+	    $(td_field).find("input")
+		.val(td_value);
+	}
+	else if (td_type == "checkbox") {
+	    $(td_field).find("span.editing").append(
+		"<label style='display: block;'> " +
+		    "  <input type=checkbox style='margin-right: 5px;'>" +
+		    "Yes</label>");
+	    
+	    if (td_value == "Yes" || td_value == "1") {
+		$(td_field).find("input").prop("checked", "checked");
+	    }
+	    else {
+		$(td_field).find("input").prop("checked", false);
+	    }
+	}
+	else {
+	    alert("Bad fieldtype in edit");
+	    return;
+	}
 
 	// Bind a cancel button to set things back the way they were.
 	$(td_field).find(".cancel-button").click(function (event) {
@@ -296,8 +318,14 @@ $(function ()
 	// Bind the save button.
 	$(td_field).find(".save-button").click(function (event) {
 	    event.preventDefault();
-	    var newval = $(td_field).find("input").val();
+	    var newval;
 
+	    if (td_type == "text") {
+		newval = $(td_field).find("input").val();
+	    }
+	    else if (td_type == "checkbox") {
+		newval = $(td_field).find("input").is(":checked") ? 1 : 0;
+	    }
 	    sup.CallServerMethod(null, "image", "Modify",
 				 {"uuid"  : window.UUID,
 				  "field" : td_fname,
@@ -311,6 +339,9 @@ $(function ()
 				     // Kill the buttons/input field.
 				     $(td_field).find(".editing").remove();
 				     // Update and show the original
+				     if (td_type == "checkbox") {
+					 newval = YesNo(newval);
+				     }
 				     $(td_field).find("span")
 				         .text(newval)
 					 .removeClass("hidden");

@@ -90,6 +90,7 @@ CREATE TABLE `images` (
   `image_uuid` varchar(40) NOT NULL default '',
   `isdataset` tinyint(1) NOT NULL default '0',
   `issystem` tinyint(1) NOT NULL default '0',
+  `listed` tinyint(1) NOT NULL default '1',
   `isversioned` tinyint(1) NOT NULL default '0',
   `locked` datetime default NULL,
   `locker_pid` int(11) default '0',

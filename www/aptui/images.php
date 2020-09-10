@@ -83,14 +83,6 @@ if ($ISCLOUD) {
     #
     $dblink = DBConnect("ims");
     
-    if (ISADMIN() && $all) {
-        $joinclause  = "";
-        $whereclause = "";
-    }
-    else {
-        $joinclause  = "";
-        $whereclause = "(iv.visibility='public')";
-    }
     $query =
            "SELECT i.*, iv.* ".
            "FROM images as i ".
@@ -115,6 +107,15 @@ if ($ISCLOUD) {
         $pid_idx = 0;
         $blob    = array();
 
+        #
+        # Mere users only see listed. non-deprecated images
+        #
+        if (!ISADMIN()) {
+            if ($row["listed"] == 0 || $row["deprecated"]) {
+                continue;
+            }
+        }
+        
         # Need to map creator/project to local.
         list ($auth,$type,$id) = Instance::ParseURN($row["creator_urn"]);
         if ($auth == $domain) {
@@ -167,15 +168,23 @@ if ($ISCLOUD) {
         }
         $blob["description"] = $row["description"];
         $blob["imagename"]   = $row["imagename"];
-        $blob["created"]     = DateStringGMT($row["created"]);
+        $blob["updated"]     = DateStringGMT($row["created"]);
         $blob["pid"]         = $pid;
         $blob["pid_idx"]     = $pid_idx;
         $blob["global"]      = $row["visibility"] == "public" ? 1 : 0;
         $blob["creator"]     = $creator;
         $blob["creator_idx"] = $creator_idx;
         $blob["project_urn"] = $row["project_urn"];
-        $blob["format"]      = $row["format"];
         $blob["urn"]         = $row["urn"];
+        #
+        # Virtualization implies the format.
+        #
+        if ($row["virtualizaton"] == "emulab-docker") {
+            $blob["format"] = "docker";
+        }
+        else {
+            $blob["format"] = "ndz";
+        }
         if (ISADMIN() && isset($url)) {
             $blob["url"] = $url;
         }
@@ -189,7 +198,8 @@ else {
     }
     else {
         #
-        # User is allowed to view the list of all global images, and all images
+        # User is allowed to view the list of all global images that have the
+        # listed flag set (to pare down what user see), and all images
         # in his project. Include images in the subgroups too, since its okay
         # for the all project members to see the descriptors. They need proper 
         # permission to use/modify the image/descriptor of course, but that is
@@ -210,7 +220,7 @@ else {
                 "      g.gid_idx=p1.permission_idx) ";
     
         $whereclause = "and (iv.global or p2.imageid is not null or ".
-                     "g.uid_idx is not null) ";
+                     "g.uid_idx is not null) and i.listed!=0 ";
     }
     $query =
            "select distinct i.imagename,iv.*,ov.* from images as i ".
@@ -221,6 +231,7 @@ else {
            "left join osidtoimageid as map on map.osid=i.imageid ".
            $joinclause .
            "where (iv.ezid = 1 or iv.isdataset = 1) $whereclause ".
+           (ISADMIN() ? "" : "and deprecated is null ") .
            "order by i.imagename";
 
     $query_result = DBQueryFatal($query);
@@ -235,10 +246,11 @@ else {
         $blob["imageid"]     = $imageid;
         $blob["description"] = $row["description"];
         $blob["imagename"]   = $row["imagename"];
-        $blob["created"]     = DateStringGMT($row["created"]);
+        $blob["updated"]     = DateStringGMT($row["updated"]);
         $blob["pid"]         = $row["pid"];
         $blob["pid_idx"]     = $row["pid_idx"];
-        $blob["global"]      = $row["global"];
+        $blob["global"]      = $row["global"] ? 1 : 0;
+        $blob["listed"]      = $row["listed"] ? 1 : 0;
         $blob["creator"]     = $row["creator"];
         $blob["creator_idx"] = $row["creator_idx"];
         $blob["format"]      = $row["format"];
@@ -310,5 +322,6 @@ REQUIRE_TABLESORTER();
 SPITREQUIRE("js/images.js");
 
 AddTemplate("images");
+AddTemplate("image-format-modal");
 SPITFOOTER();
 ?>

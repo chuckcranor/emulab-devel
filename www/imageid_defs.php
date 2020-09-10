@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2019 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -480,6 +480,7 @@ class Image
     function ezid()		{ return $this->field("ezid"); }
     function shared()		{ return $this->field("shared"); }
     function isglobal()		{ return $this->field("global"); }
+    function listed()		{ return $this->field("listed"); }
     function updated()		{ return $this->field("updated"); }
     function updater()		{ return $this->field("updater"); }
     function updater_urn()	{ return $this->field("updater_urn"); }
