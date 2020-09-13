@@ -1373,6 +1373,8 @@ sub getinstances()
 	    elsif ($msstate eq "GONE") {
 		$inst->active(0);
 		$inst->done(1);
+		# XXX allow clean up an unknown instance
+		$inst->unknown(0);
 	    }
 	    elsif ($msstate eq "FAIL") {
 		my $rid = $inst->remoteid();
@@ -1381,6 +1383,8 @@ sub getinstances()
 		}
 		$inst->active(0);
 		$inst->done(1);
+		# XXX allow clean up an unknown instance
+		$inst->unknown(0);
 	    }
 	}
 
