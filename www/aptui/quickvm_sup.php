@@ -51,7 +51,7 @@ if (isset($_SERVER['SERVER_NAME'])) {
 #
 $PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
     global $drewheader, $ISCLOUD, $ISPNET, $ISEMULAB, $ISAPT, $ISPOWDER;
-    global $spatrequired, $TBMAINSITE, $PORTAL_HELPFORUM;
+    global $spatrequired, $TBMAINSITE, $PORTAL_HELPFORUM, $APTBASE;
     global $APTMAIL, $APTMAILTO, $PROTOGENI_GENIWEBLOGIN;
 
     if (! $drewheader) {
@@ -76,7 +76,7 @@ $PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
         "'https://groups.google.com/d/forum/${PORTAL_HELPFORUM}';\n";
     echo "</script>\n";
     if (!$spatrequired) {
-	echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+	echo "<script src='$APTBASE/js/lib/jquery.min.js'></script>\n";
 	SPITNULLREQUIRE();
     }
     SPITFOOTER();
@@ -88,7 +88,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
 {
     global $PORTAL_MANUAL, $PORTAL_HELPFORUM, $APTMAIL, $APTMAILTO;
     global $TBMAINSITE, $APTTITLE, $FAVICON, $APTLOGO, $APTSTYLE, $ISAPT;
-    global $GOOGLEUA, $ISCLOUD, $TBBASE, $PORTAL_GENESIS;
+    global $GOOGLEUA, $ISCLOUD, $TBBASE, $PORTAL_GENESIS, $APTBASE;
     global $ISPNET, $ISPOWDER, $ISEMULAB, $PROTOGENI_GENIWEBLOGIN;
     global $login_user, $login_status, $SUPPORT, $FIRSTUSER;
     global $disable_accounts, $page_title, $drewheader, $embedded;
@@ -169,11 +169,11 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     echo "<html>
       <head>
         <title>$title</title>
-        <link rel='shortcut icon' href='$FAVICON'
+        <link rel='shortcut icon' href='$APTBASE/$FAVICON'
               type='image/vnd.microsoft.icon'>
-        <link rel='stylesheet' href='css/bootstrap.css'>
-        <link rel='stylesheet' href='css/quickvm.css'>
-        <link rel='stylesheet' href='css/$APTSTYLE'>\n";
+        <link rel='stylesheet' href='$APTBASE/css/bootstrap.css'>
+        <link rel='stylesheet' href='$APTBASE/css/quickvm.css'>
+        <link rel='stylesheet' href='$APTBASE/css/$APTSTYLE'>\n";
     if ($ISPOWDER) {
         echo "<link href='https://www.powderwireless.net/powder/fonts/raleway/style.css' rel='stylesheet'>";
     }
@@ -184,10 +184,10 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
                 "content='emulab - network emulation testbed home'>\n";
         }
     }
-    echo "<script src='js/lib/jquery.min.js'></script>\n";
+    echo "<script src='$APTBASE/js/lib/jquery.min.js'></script>\n";
     echo "<script>APT_CACHE_TOKEN='" . Instance::CacheToken() . "';</script>";
-    echo "<script src='js/common.js?nocache=asdfasdf'></script>
-        <link rel='stylesheet' href='css/jquery-steps.css'>
+    echo "<script src='$APTBASE/js/common.js?nocache=asdfasdf'></script>
+        <link rel='stylesheet' href='$APTBASE/css/jquery-steps.css'>
         <script src='$TBBASE/emulab_sup.js'></script>
       </head>\n";
 
@@ -262,7 +262,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
 
                 $navbar_status .=
                     "<a href='/$url' class='admin-toggle'>
-                          <img src='images/redball.gif'
+                          <img src='$APTBASE/images/redball.gif'
                                style='height: 10px; $aptmargin'
                                border='0' alt='Admin On'></a>\n";
 	    }
@@ -272,7 +272,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
 
                 $navbar_status .=
                     "<a href='/$url' class='admin-toggle'>
-                          <img src='images/greenball.gif'
+                          <img src='$APTBASE/images/greenball.gif'
                                style='height: 10px; $aptmargin'
                                border='0' alt='Admin Off'></a>\n";
 	    }
@@ -441,7 +441,7 @@ function SPITHEADER($thinheader = 0,
 function SPITNAV($hiddenxs, $nonav, $navbar_status, $navbar_right, $login_uid)
 {
     global $PORTAL_MANUAL, $APTLOGO, $login_status, $login_user, $TBMAINSITE;
-    global $THISHOMEBASE, $ISEMULAB, $ISPNET, $ISPOWDER, $TBBASE;
+    global $THISHOMEBASE, $ISEMULAB, $ISPNET, $ISPOWDER, $TBBASE, $APTBASE;
     global $PORTAL_WIKI;
     global $UI_DISABLE_DATASETS, $UI_DISABLE_RESERVATIONS;
     global $UI_EXTERNAL_ACCOUNTS;
@@ -456,7 +456,8 @@ echo "
         <span class='icon-bar'></span>
         <span class='icon-bar'></span>
       </button>
-      <a class='navbar-brand' href='landing.php'><img src='images/$APTLOGO'/></a>";
+      <a class='navbar-brand' href='landing.php'>
+                <img src='$APTBASE/images/$APTLOGO'/></a>";
 echo "
     </div>
 
@@ -588,15 +589,14 @@ if ($UI_DISABLE_DATASETS == 0 || ($UI_DISABLE_DATASETS == 1 && ISADMIN()) ) {
                                echo " </ul>
         </li>\n";
     }
-   }
- 
-   if ($login_user && $login_user->APTNewNews()) {
-       echo "<li class='apt-left apt-nav-item'>
+    if ($login_user && $login_user->APTNewNews()) {
+        echo "<li class='apt-left apt-nav-item'>
               <a id='new-news-button' href='portal-news.php' target='_blank'
                  class='btn btn-quickvm-news navbar-btn'>News!</a></li>";
+    }
    }
    echo "</ul>";
-
+   if ($nonav < 2) {
    echo "  <ul class='nav navbar-nav navbar-right apt-right'>
     $navbar_status
     $navbar_right\n";
@@ -648,6 +648,7 @@ if ($UI_DISABLE_DATASETS == 0 || ($UI_DISABLE_DATASETS == 1 && ISADMIN()) ) {
            </li>";
     }
   echo "</ul>";
+  }
   echo "</div></div>";
 
 }
@@ -721,6 +722,7 @@ function GET_ANNOUNCEMENTS($user, $update = true)
 
 $PAGEFOOTER_FUNCTION = function($ignored = NULL) {
     global $PORTAL_HELPFORUM, $PORTAL_NSFNUMBER, $embedded, $PORTAL_TEMPLATES;
+    global $APTBASE;
 
     if (!$ignored) {
         echo "</div>\n";
@@ -737,7 +739,8 @@ $PAGEFOOTER_FUNCTION = function($ignored = NULL) {
             <div class='pull-left'>
               <a href='http://www.emulab.net' target='_blank'>
                  Powered by
-                 <img src='images/emulab-whiteout.png' id='elabpower'></a>
+                 <img src='$APTBASE/images/emulab-whiteout.png'
+                      id='elabpower'></a>
             </div>
             <span>Question or comment? Join the
                <a href='https://groups.google.com/forum/#!forum/${PORTAL_HELPFORUM}'

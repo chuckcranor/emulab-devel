@@ -21,34 +21,5 @@
 # 
 # }}}
 #
-chdir("..");
-include("defs.php3");
 chdir("apt");
-include("quickvm_sup.php");
-
-#
-# No menu, not hidden.
-#
-SPITHEADER(1, true, true);
-#
-# And minimal navigation.
-#
-SPITNAV("", 2, "", "", null);
-
-echo "<div class=container>\n";
-echo "<div class=jumbotron>\n";
-echo "<p>\n";
-
-echo "<b>" . htmlentities( $_SERVER["REQUEST_URI"] ) . "</b>
-           is not available or is broken.";
-
-echo "</p>\n";
-echo "</div>\n";
-
-echo "<span class=lead>";
-echo "Return to our <a href='$APTBASE/landing.php'>home page</a>.\n";
-echo "</span>\n";
-echo "</div>\n";
-
-SPITNULLREQUIRE();
-SPITFOOTER();
+include("error.php");

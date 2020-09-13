@@ -297,10 +297,10 @@ function REQUIRE_GENILIB_EDITOR()
 
 function SPITREQUIRE($main, $extras = "")
 {
-    global $spatrequired, $PORTAL_LIBRARIES;
+    global $spatrequired, $PORTAL_LIBRARIES, $APTBASE;
     
     echo $extras;
-    echo "<script src='js/lib/bootstrap.js'></script>\n";
+    echo "<script src='$APTBASE/js/lib/bootstrap.js'></script>\n";
     AddLibrary($main);
     EchoLibraryList($PORTAL_LIBRARIES);
     $spatrequired = 1;
@@ -308,8 +308,10 @@ function SPITREQUIRE($main, $extras = "")
 
 function SPITNULLREQUIRE()
 {
-    REQUIRE_SUP();
-    SPITREQUIRE("js/main.js");
+    global $APTBASE;
+    
+    AddLibrary("$APTBASE/js/quickvm_sup.js");
+    SPITREQUIRE("$APTBASE/js/main.js");
 }
 
 function SPITREQUIRE_DATASET()
