@@ -32,6 +32,7 @@ use English;
 use Getopt::Std;
 use Data::Dumper;
 use Date::Parse;
+use POSIX qw(strftime);
 use JSON;
 
 #
@@ -62,7 +63,7 @@ my $TAR		     = "/usr/bin/tar";
 my $USER             = "leebee";
 my $PID              = "PMonitor";
 my $PROFILE          = "testbed,monitor";
-my $SLEEP_INTERVAL   = 30;
+my $SLEEP_INTERVAL   = 3600 * 6;
 
 #
 # We run the monitor on these endpoints.
@@ -77,7 +78,8 @@ my %endpoints = (
     },
     "law73" => {
         "urn" => 'urn:publicid:IDN+law73.powderwireless.net+authority+cm', 
-	"nodes" => ["nuc1", "nuc2"],
+	# nuc1 does not have receive capability.
+	"nodes" => ["nuc2"],
 	"last"  => {},
         "nickname" => "Law73",
     },
@@ -134,13 +136,21 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 sub RunMonitor($$);
 sub GetStatus($$$);
 sub Wait($$$);
-sub WaitForData($$$$);
+sub WaitForData($$$$$);
 sub Finished($$);
 sub Terminate($$);
 sub FlipTo($);
 sub fatal($);
 sub NotifyTBOPS($$);
-	  
+
+sub logit($)
+{
+    my ($msg) = @_;
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+
+    print "$stamp: $msg\n";
+}
+
 #
 # Turn off line buffering on output
 #
@@ -188,7 +198,7 @@ use lib "@prefix@/lib";
 use libtestbed;
 use GeniResponse;
 
-if (! ($oneshot || $impotent)) {
+if (! ($impotent)) {
     if (CheckDaemonRunning("rfbaseline")) {
 	fatal("Not starting another rfbaseline daemon!");
     }
@@ -291,9 +301,9 @@ sub RunMonitor($$)
 	return -1;
     }
     elsif ($rval != GENIRESPONSE_SEARCHFAILED) {
-	print "Experiment $name already exists.\n";
+	logit("Experiment $name already exists.");
 	if ($blob->{'status'} eq "canceled") {
-	    print "Experiment $name has already been canceled.\n";
+	    logit("Experiment $name has already been canceled.");
 	    return -1;
 	}
 	if ($impotent) {
@@ -304,12 +314,12 @@ sub RunMonitor($$)
 	# just hanging out, lets get the result file. But first terminate.
 	#
 	if (Terminate($name, \$errmsg)) {
-	    print "Experiment $name could not be terminated: $errmsg\n";
+	    logit("Experiment $name could not be terminated: $errmsg");
 	    return -1;
 	}
 	if (Finished($blob, \$errmsg) == 1) {
-	    if (WaitForData($id, $node_id, $blob, \$errmsg)) {
-		print "Could not get result data for $name: $errmsg\n";
+	    if (WaitForData($id, $node_id, $blob, $name, \$errmsg)) {
+		logit("Could not get result data for $name: $errmsg");
 		return -1;
 	    }
 	}
@@ -327,7 +337,8 @@ sub RunMonitor($$)
 	"--name='$name' --stop='$stop' $PROFILE";
 
     if (!$impotent) {
-	print "Running: '$command'\n";
+	logit("Starting $name");
+	print "Running: '$command'\n" if ($debug);
 	system($command);
     }
     else {
@@ -339,49 +350,49 @@ sub RunMonitor($$)
 	#
 	# Issue the termination just in case. This is harmless.
 	#
-	print "Terminating $name after start failure\n";
+	logit("Terminating $name after start failure");
 	
 	if (Terminate($name, \$errmsg)) {
-	    print "Experiment $name could not be terminated: $errmsg\n";
+	    logit("Experiment $name could not be terminated: $errmsg");
 	}
 	return -1;
     }
-    print "Waiting for $name monitor to finish\n";
+    logit("Waiting for $name monitor to finish");
     $rval = Wait($name, \$blob, \$errmsg);
     if ($rval < 0) {
 	my $uuid = $blob->{'uuid'};
-	print "Experiment $name ($uuid) failure. ";
+	my $msg  = "Experiment $name ($uuid) failure";
 	
 	#
 	# Need to notify here.
 	#
 	if ($blob->{'status'} eq "failed") {
 	    if (exists($blob->{'failure_code'})) {
-		print "Start exit code: " . $blob->{'failure_code'};
+		$msg .= ": exit code: " . $blob->{'failure_code'};
 	    }
-	    print "\n";
 	}
 	else {
-	    print "Monitor failure\n";
+	    $msg .= ": monitor failure";
 	}
+	logit($msg);
 	if ($oneshot && $nostop) {
 	    return -1;
 	}
 	if (Terminate($name, \$errmsg)) {
-	    print "Experiment $name could not be terminated: $errmsg\n";
+	    logit("Experiment $name could not be terminated: $errmsg");
 	}
 	return -1;
     }
     #
     # Terminate the experiment and wait for the tarball to appear.
     #
-    print "Terminating $name after successfull run\n";
+    logit("Terminating $name after successfull run");
     if (Terminate($name, \$errmsg)) {
-	print "Experiment $name could not be terminated: $errmsg\n";
+	logit("Experiment $name could not be terminated: $errmsg");
 	return -1;
     }
-    if (WaitForData($id, $node_id, $blob, \$errmsg)) {
-	print "Failed to get results for $name: $errmsg\n";
+    if (WaitForData($id, $node_id, $blob, $name, \$errmsg)) {
+	logit("Failed to get results for $name: $errmsg");
 	return -1;
     }
     return 0;
@@ -407,16 +418,16 @@ sub Wait($$$)
 	$tries--;
 	sleep(60);
     }
-    $$pmsg = "Timed out waiting for monitor to finish";
+    $$pmsg = "timed out waiting for monitor to finish";
     return -1;
 }
 
 #
 # Wait for the data to appear after termination.
 #
-sub WaitForData($$$$)
+sub WaitForData($$$$$)
 {
-    my ($id, $node_id, $blob, $pmsg) = @_;
+    my ($id, $node_id, $blob, $name, $pmsg) = @_;
     my $wbstore = $blob->{'wbstore'};
     my $tarfile = "/proj/$PID/wbstore/${wbstore}.tgz";
     my $tries   = 90;
@@ -441,9 +452,12 @@ sub WaitForData($$$$)
     my $pattern   = "'*/${node_id}:*'";
 
     $command = "$TAR --strip-components 3 -zxf $tarfile -C $targetdir $pattern";
-    print "Running '$command'\n";
-    system($command);
+    logit("Copying data for $name into place");
+    print "Running '$command'\n" if ($debug);
+    my $output = `$command`;
     if ($?) {
+	print "'$command'\n";
+	print $output;
 	$$pmsg = "could not untar results";
 	return -1;
     }
@@ -497,22 +511,20 @@ sub Terminate($$)
     while (1) {
 	my $output = `$TERMINATEEXP $PID,$name`;
 	if ($?) {
-	    print $output;
-	    
 	    my $status = $? >> 8;
 	    if ($status == GENIRESPONSE_REFUSED()) {
-		print "Boss is offline, waiting for a bit\n";
+		logit("$name: boss is offline, waiting for a bit");
 		sleep(60);
 		next;
 	    }
 	    elsif ($status == GENIRESPONSE_BUSY()) {
-		print "Experiment is busy, waiting for a bit\n";
+		logit("$name: experiment is busy, waiting for a bit");
 		$tries--;
 		sleep(30);
 		next;
 	    }
 	    elsif ($status == GENIRESPONSE_SEARCHFAILED) {
-		print STDERR "Experiment is gone\n";
+		logit("$name: experiment is gone");
 		return 0;
 	    }
 	    elsif ($status != 1) {
@@ -520,7 +532,8 @@ sub Terminate($$)
 		# typically means we could not get to the cluster. But
 		# the experiment it marked for cancel, and eventually
 		# it is going to happen.
-		$$pmsg = "Unexpected error: $status";
+		print $output;
+		$$pmsg = "unexpected error: $status";
 		return -1;
 	    }
 	}
@@ -540,10 +553,11 @@ sub Terminate($$)
 	sleep(30);
     }
     # Experiment has not died. Need to think about this.
-    $$pmsg = "Timed out waiting for experiment to terminate";
+    $$pmsg = "timed out waiting for experiment to terminate";
     return -1;
 }
 
+#
 # Experiment status. Have to watch for boss going offline and keep
 # trying until it comes back online.
 #
@@ -559,12 +573,12 @@ sub GetStatus($$$)
 	if ($?) {
 	    my $status = $? >> 8;
 	    if ($status == GENIRESPONSE_REFUSED()) {
-		print "Boss is offline, waiting for a bit\n";
+		logit("$name: boss is offline, waiting for a bit");
 		sleep(60);
 		next;
 	    }
 	    elsif ($status == GENIRESPONSE_BUSY()) {
-		print "Experiment is busy, waiting for a bit\n";
+		logit("$name: experiment is busy, waiting for a bit");
 		$tries--;
 		sleep(30);
 		next;
@@ -575,7 +589,7 @@ sub GetStatus($$$)
 	    else {
 		print $output;
 		# Everything else is bad news.
-		$$pmsg = "Unexpected error: $status";
+		$$pmsg = "unexpected error: $status";
 		return -1;
 	    }
 	}
@@ -583,14 +597,15 @@ sub GetStatus($$$)
 	
 	my $blob = eval { decode_json($output); };
 	if ($@) {
-	    $$pmsg = "Could not decode json data";
+	    print $output;
+	    $$pmsg = "Could not decode json data for $name";
 	    return -1;
 	}
 	# Always set this so caller has debugging info.
 	$$pref = $blob;
 	return 0;
     }
-    $$pmsg = "$name status timed out\n";
+    $$pmsg = "status timed out\n";
     return -1;
 }
 
@@ -598,17 +613,14 @@ sub fatal($)
 {
     my ($msg) = @_;
 
-    if (! ($oneshot || $debug || $impotent)) {
+    if (! ($debug || $impotent)) {
 	#
 	# Send a message to the testbed list. 
 	#
-	SENDMAIL($TBOPS,
-		 "rfbaseline died",
-		 $msg,
-		 $TBOPS);
+	NotifyTBOPS("rfbaseline died", $msg);
     }
     MarkDaemonStopped("rfbaseline")
-	if (! ($oneshot || $impotent));
+	if (! ($impotent));
 
     die("*** $0:\n".
 	"    $msg\n");
@@ -626,7 +638,7 @@ sub NotifyTBOPS($$)
 	print "$message\n";
 	return;
     }
-    SENDMAIL($TBOPS, $subject, $message, $TBOPS);
+    SENDMAIL("stoller\@flux.utah.edu", $subject, $message, $TBOPS);
 }
 
 sub FlipTo($)
