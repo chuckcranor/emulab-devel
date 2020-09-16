@@ -218,6 +218,17 @@ class Image
     }
 
     #
+    # Check for the image tracker.
+    #
+    function UseImageTracker()
+    {
+        if (! TBSiteVarExists("protogeni/use_imagetracker")) {
+            return 0;
+        }
+        return TBGetSiteVar("protogeni/use_imagetracker");
+    }
+
+    #
     # Class function to create a new image descriptor.
     #
     function NewImageId($ez, $imagename, $args, $creator, $group,
@@ -508,6 +519,9 @@ class Image
     function deprecated()	{ return $this->field("deprecated"); }
     function deprecated_iserror(){ return $this->field("deprecated_iserror"); }
     function deprecated_message(){ return $this->field("deprecated_message"); }
+    function ims_reported()	{ return $this->field("ims_reported"); }
+    function ims_noreport()	{ return $this->field("ims_noreport"); }
+    function ims_update()	{ return $this->field("ims_update"); }
 
     # Return the DB data.
     function DBData()		{ return $this->image; }

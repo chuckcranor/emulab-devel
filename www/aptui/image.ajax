@@ -146,6 +146,11 @@ function Do_GetInfo()
     if ($embedded) {
         $blob["version_url"] .= "&embedded=1";
     }
+    if (Image::UseImageTracker()) {
+        $blob["ims_noreport"]  = $image->ims_noreport() ? 1 : 0;
+        $blob["ims_reported"]  = $image->ims_reported();
+        $blob["ims_update"]    = $image->ims_update();
+    }
     #
     # An imported image has a metadata_url and an imagefile_url.
     #
@@ -296,6 +301,7 @@ function Do_Modify()
                      "description"     => false,
                      "path"            => true,
                      "listed"          => true,
+                     "ims_noreport"    => true,
                      "osfeatures"      => true,
     );
     if (!array_key_exists($field, $allowed)) {
