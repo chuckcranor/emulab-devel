@@ -563,6 +563,9 @@ function ClassicImageList($target)
            "left join osidtoimageid as map on map.osid=i.imageid ".
            "where (iv.ezid = 1 and iv.isdataset=0) and ".
            "      iv.creator_urn is null and ".
+           "      iv.origin_urn is null and ".
+           #      Sigh, we have old images without origin_* settings.
+           "      iv.metadata_url is null and ".
            "      iv.creator_idx='$target_idx' ".
            "order by i.imagename";
 
