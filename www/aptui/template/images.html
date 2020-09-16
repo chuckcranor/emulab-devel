@@ -131,7 +131,8 @@
 	      <% _.each(images, function(value, index) { %>
 		<tr>
 		  <% if (_.has(value, "url")) { %>
-		    <td><a href="<%- value.url %>"><%= value.imagename %></a></td>
+		    <td><a href="<%- value.url %>" target="_blank">
+		      <%= value.imagename %></a></td>
 		  <% } else { %>
 		    <td><%= value.imagename %></td>
 	          <% } %>
