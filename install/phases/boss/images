@@ -57,7 +57,10 @@ if ($TARGETSYS_TARGET eq "POWDER-BUS") {
     $STDIMAGES{"UBUNTU18-64-GR38-PACK"} =
 	"https://www.emulab.net/image_metadata.php?uuid=1f67cefc-c375-11e9-b1eb-e4434b2381fc";
 }
-
+if ($TARGETSYS_TARGET eq "POWDER-BUS" || $TARGETSYS_TARGET eq "POWDER-FIXED") {
+    $STDIMAGES{"UBUNTU18-64-UHD-STD"} =
+	"https://www.emulab.net/image_metadata.php?uuid=b57f72bf-f7a0-11ea-b1eb-e4434b2381fc";
+}
 #
 # Old style mappings, but probably still in use someplace.
 #
