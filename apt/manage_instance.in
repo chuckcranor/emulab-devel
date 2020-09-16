@@ -1488,8 +1488,10 @@ sub DoTerminate()
     #
     # Tell syncthing the instance is terminating. 
     #
-    system("$DESTROYWBSTORE -B -s ".
-	   ($old_status eq "failed" ? "FAIL" : "DONE") . " $uuid");
+    if (-x $DESTROYWBSTORE) {
+	system("$DESTROYWBSTORE -B -s ".
+	       ($old_status eq "failed" ? "FAIL" : "DONE") . " $uuid");
+    }
 
     # Skip terminated aggregates, since we retry later on failure.
     my @agglist;

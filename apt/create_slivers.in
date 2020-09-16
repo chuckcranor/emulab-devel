@@ -419,7 +419,9 @@ if (!defined($instance->started())) {
     #
     # First time we try to start things up, fire off syncthing
     #
-    system("$CREATEWBSTORE $opts $uuid");
+    if (-x $CREATEWBSTORE) {
+	system("$CREATEWBSTORE $opts $uuid");
+    }
 }
 
 if ($usestitcher) {
