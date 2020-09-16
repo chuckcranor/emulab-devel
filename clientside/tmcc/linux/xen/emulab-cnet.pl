@@ -199,7 +199,7 @@ sub Online()
 	#
 	# And this clears the arp caches.
 	#
-	mysystem("$ARPING -c 4 -A -I $bridge $vnode_ip");
+	mysystem2("$ARPING -c 4 -A -I $bridge $vnode_ip");
     }
 
     @rules = ();
