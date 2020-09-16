@@ -26,6 +26,7 @@ include("defs.php3");
 include_once("geni_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
+include_once("aggregate_defs.php");
 $page_title = "Status";
 
 #
@@ -38,6 +39,17 @@ $isfadmin  = (ISFOREIGN_ADMIN() ? 1 : 0);
 
 if (! (ISADMIN() || ISFOREIGN_ADMIN())) {
     SPITUSERERROR("You do not have permission to view this page");
+}
+
+#
+# If only one aggregate, skip the summary page.
+#
+$am_array = Aggregate::AllAggregatesList();
+if (count($am_array) == 1) {
+    $us = Aggregate::ThisAggregate();
+    $nickname = $us->nickname();
+    header("Location: cluster-status.php?cluster=$nickname");
+    return;
 }
 SPITHEADER(1);
 
