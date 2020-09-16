@@ -30,14 +30,16 @@
 <attribute name="attr_integer_num_cores">  <value>4</value></attribute>
 <attribute name="attr_integer_num_cpus">  <value>8</value></attribute>
 <attribute name="attr_boolean_rebootable">  <value>1</value></attribute>
+<attribute name="attr_boolean_powercycleafterreload"><value>1</value></attribute>
+<attribute name="attr_boolean_delayreloadtillalloc"><value>1</value></attribute>
 <attribute name="attr_integer_simnode_capacity">  <value>0</value></attribute>
 <attribute name="attr_string_dom0mem">  <value>4096M</value></attribute>
 <attribute name="attr_integer_trivlink_maxspeed">  <value>10000000</value></attribute>
 <attribute name="attr_integer_virtnode_capacity">  <value>0</value></attribute>
 <attribute name="attr_string_console_type">  <value>vga</value></attribute>
 <attribute name="attr_string_adminmfs_osid">  <value>emulab-ops,FREEBSD-MFS</value></attribute>
-<attribute name="attr_string_default_osid">  <value>emulab-ops,UBUNTU18-64-STD</value></attribute>
+<attribute name="attr_string_default_osid">  <value>emulab-ops,UBUNTU18-64-UHD-STD</value></attribute>
 <attribute name="attr_string_delay_osid">  <value>emulab-ops,FBSD103-64-STD</value></attribute>
 <attribute name="attr_string_diskloadmfs_osid">  <value>emulab-ops,FRISBEE-MFS</value></attribute>
-<attribute name="attr_string_default_imageid">  <value>emulab-ops:UBUNTU18-64-STD</value></attribute>
+<attribute name="attr_string_default_imageid">  <value>emulab-ops:UBUNTU18-64-UHD-STD</value></attribute>
 </nodetype>
