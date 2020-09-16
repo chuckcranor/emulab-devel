@@ -1208,9 +1208,18 @@ sub handleCtrlEvent($$) {
 		$nodeobj->SyncDiskPartitionTaintStates();
 	    }
 	    if ($event eq $TBRELOADDONEV2) {
-		info("$node: Sending apod\n");
-		if ($nodeobj->SendApod(1)) {
-		    notify("Could not apod $node after $TBRELOADDONEV2!\n");
+		if (!$nodeobj->powercycleafterreload()) {
+		    info("$node: Sending apod\n");
+		    if ($nodeobj->SendApod(1)) {
+			notify("Could not apod $node after $TBRELOADDONEV2!\n");
+		    }
+		}
+		else {
+		    info("$node: power cycling\n");
+		    my $cmd = "$power -e cycle $node";
+		    system($cmd) and
+			notify("Could not power cycle".
+			       " $node after $TBRELOADDONEV2!\n");
 		}
 	    }
 	    last;

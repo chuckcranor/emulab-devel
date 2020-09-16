@@ -466,6 +466,9 @@ sub requires_frequency_reservation($;$) {
 sub delayreloadtillalloc($;$) {
     return GetAttribute($_[0], "delayreloadtillalloc", $_[1]);
 }
+sub powercycleafterreload($;$) {
+    return GetAttribute($_[0], "powercycleafterreload", $_[1]);
+}
 sub reservable($;$) {
     return GetAttribute($_[0], "reservable", $_[1]);
 }
