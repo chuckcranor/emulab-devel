@@ -3228,7 +3228,7 @@ sub GetTicketAuxAux($)
 	    my $rlossrate = 0.0;
 	    my $estbw     = undef;
 	    my $restbw    = undef;
-	    my $uselinkdelay = $forcedelay;
+	    my $uselinkdelay = 0;
 
 	    # Let linkwide property override defaults above.
 	    if (defined($linkwide_properties)) {
@@ -3449,6 +3449,7 @@ sub GetTicketAuxAux($)
 					  "trivial_ok"  => $trivial_ok,
 					  "emulated"    => $emulated,
 					  "nobwshaping" => $nobwshaping,
+					  "besteffort"  => $besteffort,
 					  "nointerswitch" => $nointerswitch,
 					  "ip"          => $ip,
 					  "delay"       => $latency,
@@ -3465,6 +3466,7 @@ sub GetTicketAuxAux($)
 					  "encap_style" => $encap,
 					  "fixed_iface" => $iface_name,
 					  "uselinkdelay"=> $uselinkdelay,
+					  "forcelinkdelay"=> $forcedelay,
 					  "protocol"    => $protocol,
 					  "layer"       => $layer,
 					 });
