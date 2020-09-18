@@ -578,6 +578,7 @@ $(function ()
 		window.location.replace("user-dashboard.php");
 	    }
 	};
+	sup.ShowWaitWait();
     	var xmlthing = sup.CallServerMethod(null, "image", "Delete",
 					    {"uuid"  : window.UUID,
 					     "purge" : purge});
