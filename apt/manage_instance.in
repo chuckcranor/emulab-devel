@@ -87,6 +87,7 @@ my $geniuser;
 #
 my $TB		   = "@prefix@";
 my $TBOPS          = "@TBOPSEMAIL@";
+my $TBLOGS         = "@TBLOGSEMAIL@";
 my $OURDOMAIN      = "@OURDOMAIN@";
 my $MYURN          = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $PROTOUSER      = "elabman";
@@ -98,6 +99,7 @@ my $IMPORTER       = "$TB/sbin/image_import";
 my $DESTROYWBSTORE = "$TB/sbin/destroywbstore";
 my $WAP            = "$TB/sbin/wap";
 my $TBACCT         = "$TB/sbin/tbacct";
+my @SAVEARGV       = @ARGV;
 
 #
 # Untaint the path
@@ -676,7 +678,7 @@ sub DoSnapshot()
 	#
 	# XXX Need to check if we can use the URN earlier in the process.
 	#
-	$copyback_urn = GeniHRN::GenerateImage($OURDOMAIN, $project->pid(),
+	$copyback_urn = GeniHRN::GenerateImage($OURDOMAIN, $instance->pid(),
 					       $imagename, undef);
     }
     
@@ -1409,6 +1411,11 @@ sub DoTerminate()
 	# No slice (typically) means we never got far enough to the
 	# get the sliver created on the backend cluster.
 	#
+	# Do this just in case, it is harmless.
+	#
+	if (-x $DESTROYWBSTORE) {
+	    system("$DESTROYWBSTORE -B -s FAIL $uuid");
+	}
 	goto killit;
     }
     #
@@ -1489,7 +1496,9 @@ sub DoTerminate()
     # Tell syncthing the instance is terminating. 
     #
     if (-x $DESTROYWBSTORE) {
-	system("$DESTROYWBSTORE -B -s ".
+	print STDERR "Calling $DESTROYWBSTORE\n";
+	
+	system("$DESTROYWBSTORE -d -B -s ".
 	       ($old_status eq "failed" ? "FAIL" : "DONE") . " $uuid");
     }
 
@@ -1571,6 +1580,16 @@ sub DoTerminate()
 
     $instance->SetStatus("terminated");
     $instance->RecordHistory($expired);
+    if (defined($logfile)) {
+	my $instance_name = $instance->name();
+	my $slice_uuid    = $slice->uuid();
+	my $brand         = $instance->Brand();
+	$brand->SendEmail($brand->LogsEmailAddress(),
+			  "manage_instance @SAVEARGV",
+			  "Name: $instance_name\n".
+			  "Slice: $slice_uuid\n\n",
+			  $brand->OpsEmailAddress(), undef, $logfile);
+    }
   killit:
     $slice->Delete() if (defined($slice));
     $instance->Delete();
