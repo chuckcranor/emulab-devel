@@ -1099,6 +1099,7 @@ REPLACE INTO table_regex VALUES ('images','path','text','regex','^[-_\\w\\.\\/:+
 REPLACE INTO table_regex VALUES ('images','shared','text','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('images','global','text','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('images','listed','text','redirect','default:boolean',0,0,NULL);
+REPLACE INTO table_regex VALUES ('images','ims_noreport','text','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('images','noexport','text','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('images','makedefault','text','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('images','mtype','text','redirect','default:boolean',0,0,NULL);

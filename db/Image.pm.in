@@ -1977,6 +1977,19 @@ sub ClearIMSReported($)
 
     return 0;
 }
+sub SetIMSNoReport($$)
+{
+    my ($self, $onoff) = @_;
+    my $imageid = $self->imageid();
+    my $version = $self->version();
+    $onoff = ($onoff ? 1 : 0);
+
+    return -1
+	if (! DBQueryWarn("update image_versions set ims_noreport='$onoff' " .
+			  "where imageid='$imageid' and version='$version'"));
+
+    return 0;
+}
 
 #
 # Set the hash.
@@ -2890,6 +2903,20 @@ sub SetCredential($$)
 			  "where imageid='$imageid'"));
 	    
     $self->{'IMAGE'}->{'credential_string'} = $credstr;
+    return 0;
+}
+
+sub SetListed($$)
+{
+    my ($self, $onoff) = @_;
+    $onoff = ($onoff ? 1 : 0);
+    my $imageid = $self->imageid();
+
+    return -1
+	if (! DBQueryWarn("update images set listed='$onoff' " .
+			  "where imageid='$imageid'"));
+	    
+    $self->{'IMAGE'}->{'listed'} = $onoff;
     return 0;
 }
 

@@ -734,6 +734,12 @@ sub ClearIMSReported($)
 
     return $self->image()->ClearIMSReported();
 }
+sub SetIMSNoReport($$)
+{
+    my ($self, $onoff) = @_;
+
+    return $self->image()->SetIMSNoReport($onoff);
+}
 
 #
 # Set the hash.
@@ -1116,6 +1122,13 @@ sub SetImageMetadataURL($$)
     my ($self, $url) = @_;
 
     return $self->image()->SetImageMetadataURL($url);
+}
+
+sub SetListed($$)
+{
+    my ($self, $onoff) = @_;
+
+    return $self->image()->SetListed($onoff);
 }
 
 sub SetFormat($$)
