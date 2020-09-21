@@ -72,7 +72,8 @@ rfmonitor-subdir:
 	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor
 	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor/archive
 
-install-mainsite: $(RCFILE)
+install-mainsite: $(RCFILE) \
+	 $(addprefix $(INSTALL_DIR)/opsdir/sbin/, rfbaseline)
 
 subboss-install: 
 
@@ -101,6 +102,11 @@ $(INSTALL_RCDIR)/%: %
 	@echo "Installing $<"
 	-mkdir -p $(INSTALL_RCDIR)
 	$(SUDO) $(INSTALL_PROGRAM) $< $@
+
+$(INSTALL_DIR)/opsdir/sbin/%: %
+	@echo "Installing $<"
+	-mkdir -p $(INSTALL_DIR)/opsdir/sbin
+	$(INSTALL) $< $@
 
 # This rule says what web* script depends on which installed binary directory.
 $(WEB_SBIN_SCRIPTS): $(INSTALL_SBINDIR)
