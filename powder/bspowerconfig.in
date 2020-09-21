@@ -37,9 +37,24 @@ use Date::Parse;
 # Generate config files for the local power control setup on the
 # base station cnucs.
 #
+# From Mike's notes
+#
+# /usr/testbed/etc/power-ctrlinfo
+#
+#  powder-pdu-meb  Raritan 10.11.12.217
+#
+# /usr/testbed/etc/power-outletmap
+#
+#  meb_roof_switch powder-pdu-meb  1
+#  meb_roof_n310_2 powder-pdu-meb  4
+#  meb_roof_n310_1 powder-pdu-meb  5
+#  fiveghzsdr1-meb powder-pdu-meb  6
+#  bbsdr1-meb      powder-pdu-meb  7
+#  meb_roof_nuc    powder-pdu-meb  8
+#
 sub usage()
 {
-    print "Usage: bspowerconfig bsname\n";
+    print "Usage: bspowerconfig [bsname]\n";
     exit(1);
 }
 my $optlist   = "d";
@@ -73,53 +88,6 @@ use emutil;
 use libEmulab;
 use Node;
 
-#
-# Load the radio info, which for now tells the node IDs of the radios.
-# From there we can find the pdu info in the outlets table.
-#
-my $query_result =
-    DBQueryFatal("select node_id,location from apt_aggregate_radioinfo ".
-		 "where installation_type='BS'");
-
-while (my ($node_id,$location) = $query_result->fetchrow_array()) {
-    my $node = Node->Lookup($node_id);
-    if (!defined($node)) {
-	fatal("No such node $node_id in the DB");
-    }
-    my $outlet_result =
-	DBQueryFatal("select power_id,outlet from outlets ".
-		     "where node_id='$node_id'");
-    if (!$outlet_result->numrows) {
-	print "No outlet info for $node_id, skipping\n";
-	next;
-    }
-    my ($power_id,$outlet) = $outlet_result->fetchrow_array();
-    my $powernode = Node->Lookup($power_id);
-    if (!defined($powernode)) {
-	fatal("No such node $power_id in the DB");
-    }
-    my $iface = $powernode
-}
-
-#
-# Hmm, we do not have anything in the DB that maps a base station
-# to its PDU name.
-#
-my %pdus = (
-    "powder-pdu-smt"
-    "powder-pdu-fm"
-    "powder-pdu-meb"
-    "powder-pdu-dentistry"
-    "powder-pdu-ustar"
-    "powder-pdu-honors"
-| powder-pdu-browning  |
-| powder-pdu-bes       |
-| powder-pdu-hospital    
-);
-
-#
-# 
-#
 my %options = ();
 if (! getopts($optlist, \%options)) {
     usage();
@@ -127,9 +95,70 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{"d"})) {
     $debug = 1;
 }
-usage()
-    if (!@ARGV);
 
+#
+# Get the list of base stations and their power id from the radioinfo table.
+#
+my $query_result =
+    DBQueryFatal("select distinct location,power_id,i.IP,n.type ".
+		 "  from apt_aggregate_radioinfo as a ".
+		 "left join interfaces as i on ".
+		 "  i.node_id=a.power_id and i.role='expt' ".
+		 "left join nodes as n on n.node_id=a.power_id ".
+		 "where installation_type='BS'");
+if (!$query_result->numrows) {
+    print "No Base Stations with a power controller\n";
+    exit(0);
+}
+while (my ($location,$power_id,$IP,$type) = $query_result->fetchrow_array()) {
+    $pduinfo{$location} = {
+	"power_id"   => $power_id,
+	"power_type" => $type,
+	"power_ip"   => $IP,
+	"outlets"    => {},
+    };
+    # Grab all the outlets, the duplicates are fine.
+    my $outlets_result =
+	DBQueryFatal("select node_id,outlet from outlets ".
+		     "where power_id='$power_id'");
+    if (!$outlets_result->numrows) {
+	print STDERR "No outlets on $power_id\n";
+	next;
+    }
+    while (my ($node_id,$outlet) = $outlets_result->fetchrow_array()) {
+	$pduinfo{$location}->{"outlets"}->{$node_id} = $outlet;
+    }
+}
+foreach my $location (sort(keys(%pduinfo))) {
+    my $info       = $pduinfo{$location};
+    my $power_id   = $info->{'power_id'};
+    my $power_ip   = $info->{'power_ip'};
+    my $power_type = $info->{'power_type'};
+    my $outlets    = $info->{'outlets'};
+
+    print "Creating $power_id directory\n";
+    if (!-e $power_id) {
+	mkdir($power_id) or
+	    fatal("Could not craete $power_id directory");
+    }
+    if (open(FILE, "> $power_id/power-ctrlinfo")) {
+	print FILE "$power_id,$power_type,$power_ip\n";
+	close(FILE);
+    }
+    else {
+	fatal("Could not open $power_id/power-ctrlinfo");
+    }
+    if (open(FILE, "> $power_id/power-outletmap")) {
+	foreach my $node_id (keys(%{$outlets})) {
+	    my $outlet = $outlets->{$node_id};
+	    print FILE "$node_id,$power_id,$outlet\n";
+	}
+	close(FILE);
+    }
+    else {
+	fatal("Could not open $power_id/power-outletmap");
+    }
+}
 exit(0);
 
 sub fatal($)

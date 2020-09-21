@@ -46,7 +46,7 @@ sub usage()
 my $optlist   = "dns";
 my $debug     = 0;
 my $impotent  = 0;
-my $donothing = 1;
+my $mailonly  = 1;
 my $oneshot   = 0;
 my $counter   = 0;
 my $lastping;
@@ -55,7 +55,8 @@ my $lastping;
 # Configure variables
 #
 my $TB		     = "@prefix@";
-my $TBOPS            = "@TBOPSEMAIL@";
+#my $TBOPS            = "@TBOPSEMAIL@";
+my $TBOPS            = "stoller@\flux.utah.edu";
 my $MAINSITE         = @TBMAINSITE@;
 my $POWDER_DEADMAN   = @POWDER_DEADMAN@;
 my $LOGFILE          = "$TB/log/powder_deadman.log";
@@ -290,6 +291,10 @@ sub PowerAll($)
     return
 	if (!@nodes);
     
+    if ($mailonly) {
+	NotifyTBOPS("Endpoint Deadman: nodes would be powered $onoff",
+		    "@nodes would be powered $onoff.");
+    }
     PowerControl($onoff, @nodes);
 }
 
@@ -304,29 +309,48 @@ sub PowerControl($@)
     
 	if ($onoff eq "on") {
 	    if ($node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
-		if ($donothing || $impotent) {
+		if ($mailonly || $impotent) {
 		    logit("Would power on $node_id");
 		}
 		else {
 		    logit("Powering on $node_id");
 		    system("$SUDO -u $PROTOUSER $WAP $POWER on $node_id");
-		    #
-		    # We want to notify if this fails ...
-		    #
+		    if ($?) {
+			NotifyTBOPS("Deadman: $node_id power on failed",
+				    "Could not power on $node_id");
+		    }
+		    else {
+			my $now = POSIX::strftime("%H:%M:%S", localtime());
+
+			NotifyUser($node, "$node_id power is back on",
+				   "$node_id turned back on at $now ".
+				   "since contact with the portal has\n".
+				   "been restored.");
+		    }
 		}
 	    }
 	}
 	else {
 	    if ($node->eventstate() ne TBDB_NODESTATE_POWEROFF()) {
-		if ($donothing || $impotent) {
+		if ($mailonly || $impotent) {
 		    logit("Would power off $node_id");
 		}
 		else {
 		    logit("Powering off $node_id");
 		    system("$SUDO -u $PROTOUSER $WAP $POWER off $node_id");
-		    #
-		    # We want to notify if this fails.
-		    #
+		    if ($?) {
+			NotifyTBOPS("Deadman: $node_id power off failed",
+				    "Could not power off $node_id");
+		    }
+		    else {
+			my $now = POSIX::strftime("%H:%M:%S", localtime());
+			
+			NotifyUser($node, "$node_id power has been turned off",
+				   "$node_id powered off at $now since ".
+				   "contact with the portal has been lost\n".
+				   "for more than ".
+				   ($NOALIVE_THRESHOLD / 60) . " minutes.");
+		    }
 		}
 	    }
 	}

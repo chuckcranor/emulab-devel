@@ -1,0 +1,433 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+# Requires libjson-perl snmp snmp-mibs-downloader libsnmp-perl
+# Need PDU2-MIB.txt and PowerNet-MIB.txt from the Mothership.
+#
+use strict;
+use English;
+use Errno;
+use Getopt::Std;
+use Data::Dumper;
+use Date::Parse;
+use IO::Socket::INET;
+use File::Temp qw(tempdir);
+use POSIX qw(strftime);
+use JSON;
+
+# Drag in path stuff so we can find emulab stuff.
+BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
+
+#
+# Deadman monitor to run on the base station cnucs.
+#
+sub usage()
+{
+    print "Usage: rfmonitor_daemon [-d] [-n] [-p port]\n";
+    exit(1);
+}
+my $optlist      = "dnp:";
+my $debug        = 0;
+my $impotent     = 0;
+my $mailonly     = 1;
+my $last_isalive = 0;
+my $counter      = 0;
+my $PORT         = 12487;
+my $SERVER       = "boss.emulab.net";
+my $TBOPS        = "stoller\@flux.utah.edu";
+my $LOGFILE      = "$LOGDIR/bs_deadman.log";
+my $DATAFILE     = "/var/run/bs_deadman.data";
+my $POWERLOCAL   = "/usr/local/bin/powerlocal";
+
+#
+# If we go this long without contact (upated timestamp) from the
+# Mothership, then we consider ourself motherless and must power down
+# the experimental nodes.
+#
+my $NOALIVE_THRESHOLD= 900;
+#
+# Once we start hearing from the Mothership again, we want this many
+# consecutive pings before we consider the link good, and we can power
+# the nodes back on.
+#
+my $ISALIVE_COUNT    = 3;
+#
+# But if we go too long between pings while waiting for the link to
+# come back solidly, then restart the count back at zero. 
+#
+my $ISALIVE_THRESHOLD= 90;
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Testbed libraries.
+use libtmcc;
+use libtestbed;
+
+# Protos
+sub fatal($);
+sub logit($);
+sub PowerAll($);
+sub NotifyTBOPS($$);
+sub NotifyUser($$$);
+
+#
+# Turn off line buffering on output
+#
+$| = 1; 
+
+if ($UID != 0) {
+    fatal("Must be root to run this script\n");
+}
+
+#
+# 
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"p"})) {
+    $PORT = $options{"p"};
+}
+
+if (! $impotent) {
+    if (CheckDaemonRunning("bs_deadman")) {
+	fatal("Not starting another bs_deadman daemon!");
+    }
+    # Go to ground.
+    if (! $debug) {
+	if (TBBackGround($LOGFILE)) {
+	    exit(0);
+	}
+    }
+    if (MarkDaemonRunning("bs_deadman")) {
+	fatal("Could not mark daemon as running!");
+    }
+}
+#
+# Setup a signal handler for newsyslog.
+#
+sub handler()
+{
+    ReOpenLog($LOGFILE);
+}
+$SIG{HUP} = \&handler
+    if (! ($debug || $impotent));
+
+my ($bossname, $bossip);
+for (my $i = 0; $i < 15; $i++) {
+    ($bossname, $bossip) = tmccbossinfo();
+    last
+	if (defined($bossname));
+    logit("Not able to resolve bossinfo yet");
+    sleep(5);
+}
+# For email.
+my $hostname = `hostname --short`;
+chomp($hostname);
+
+#
+# Bind a socket for incoming keepalive from boss.
+#
+my $ServerSocket =
+    new IO::Socket::INET(LocalPort => $PORT,
+			 Proto     => 'tcp',
+			 Timeout   => 5,
+			 Listen    => 10,
+			 Reuse     => 1);
+if (!$ServerSocket) {
+    fatal("Could not create socket on port $PORT");
+}
+
+#
+# When starting up, start from previous state. 
+#
+my $powder_isalive = time();
+my $powder_deadman = undef;
+my $powder_nodes   = {};
+
+#
+# Read in the previous run data, mostly in case we died and there are
+# no updates coming in.
+#
+if (-s $DATAFILE) {
+    my $stuff = "";
+    
+    open(DATA, $DATAFILE) or
+	fatal("Cannot open $DATAFILE: $!\n");
+    while (<DATA>) {
+	$stuff .= $_;
+    }
+    close(DATA);
+    if ($stuff eq "") {
+	logit("$DATAFILE has no data");
+    }
+    else {
+	my $tmp  = eval { decode_json($stuff) };
+	if ($@) {
+	    logit("Could not decode json data: $stuff");
+	}
+	else {
+	    $powder_deadman = $tmp->{"deadman"};
+	    if ($powder_deadman) {
+		logit("Still a deadman!");
+	    }
+	    if (exists($tmp->{"nodes"})) {
+		$powder_nodes = $tmp->{"nodes"};
+		logit(Dumper($powder_nodes));
+	    }
+	}
+    }
+}
+
+while (1)
+{
+    #
+    # Wait with timeout for the ping. We update the time only when
+    # we get a connection.
+    #
+    my $client_socket = $ServerSocket->accept();
+    if (!$client_socket) {
+	if (! $!{ETIMEDOUT}) {
+	    logit("Hmm, accept returned a bogus value");
+	    sleep(1);
+	    next;
+	}
+	# Timed out, continue below since time still goes on.
+	logit("Timed out waiting, continuing ...") if ($debug);
+    }
+    else {
+	# get information about a newly connected client
+	my $client_address = $client_socket->peerhost();
+	my $client_port = $client_socket->peerport();
+	logit("Connection from $client_address:$client_port") if ($debug);
+
+	# Only the Mothership.
+	if ($client_address ne $bossip) {
+	    logit("Not the mothership ($bossip), go away!");
+	    close($client_socket);
+	    sleep(1);
+	}
+	else {
+	    #
+	    # We get a node list and reserved status from the Mothership.
+	    #
+	    my $data = "";
+	    while (<$client_socket>) {
+		$data .= $_;
+	    }
+	    logit("Reservation status from Mom: $data") if ($debug);
+	    $powder_isalive = time();
+
+	    my $tmp  = eval { decode_json($data) };
+	    if ($@) {
+		logit("Could not decode json data: $data");
+	    }
+	    else {
+		$powder_nodes = $tmp;
+	    }
+	}
+	close($client_socket);
+    }
+
+    if ($powder_deadman) {
+	if ($last_isalive == $powder_isalive) {
+	    # Nothing changing. 
+	}
+	elsif (time() - $last_isalive > $ISALIVE_THRESHOLD) {
+	    # Nothing for a while, lets reset the counter, we want to
+	    # get three good keepalives within a smallish window.
+	    $last_isalive = $powder_isalive;
+	    $counter   = 0;
+	}
+	elsif ($counter < $ISALIVE_COUNT) {
+	    $counter++;
+	    $last_isalive = $powder_isalive;
+	}
+	else {
+	    #
+	    # Mother is alive. 
+	    #
+	    logit("Mothership is alive!");
+	    PowerAll("on");
+	    $powder_deadman = 0;
+	    $last_isalive   = undef;
+	    $counter        = 0;
+	}
+    }
+    elsif (time() - $powder_isalive > $NOALIVE_THRESHOLD) {
+	logit("No contact from Mom for $NOALIVE_THRESHOLD seconds");
+	$powder_deadman = 1;
+	$last_isalive   = $powder_isalive;
+	PowerAll("off");
+    }
+    #
+    # Update the datafile so we know our state and nodes if we lose contact.
+    #
+    my $blob = {
+	"deadman" => $powder_deadman,
+	"nodes"   => $powder_nodes,
+    };
+    my $string = eval { encode_json($blob) };
+    if ($@) {
+	logit("Could not encode json data");
+    }
+    elsif (open(DATA, ">$DATAFILE")) {
+	print DATA $string;
+	close(DATA);
+    }
+    else {
+	logit("Could not open $DATAFILE for writing: $!");
+    }
+}
+exit(0);
+
+#
+# We only deal with radios on base stations. 
+#
+sub PowerAll($)
+{
+    my ($onoff) = @_;
+    my @nodelist = ();
+
+    #
+    # We turn off everything, but turn on allocated only.
+    #
+    foreach my $node_id (keys(%{ $powder_nodes })) {
+	my $reserved = $powder_nodes->{$node_id}->{"reserved"};
+
+	if ($onoff eq "off") {
+	    push(@nodelist, $node_id)
+	}
+	elsif ($reserved) {
+	    push(@nodelist, $node_id)
+	}
+    }
+    if (!@nodelist) {
+	logit("PowerAll($onoff): nothing to do, no nodes");
+	return;
+    }
+    if ($impotent || $mailonly) {
+	if ($mailonly) {
+	    NotifyTBOPS("BS $hostname Deadman: nodes would be powered $onoff",
+			"@nodelist would be powered $onoff.");
+	}
+	logit("Would power $onoff @nodelist");
+    }
+    else {
+	system("$POWERLOCAL $onoff @nodelist");
+	if ($?) {
+	    NotifyTBOPS("BS $hostname Deadman: power $onoff failed",
+			"Could not power $onoff @nodelist");
+	}
+	else {
+	    my $now = POSIX::strftime("%H:%M:%S", localtime());
+
+	    foreach my $node_id (@nodelist) {
+		if ($onoff eq "off") {
+		    NotifyUser($node_id, "$node_id power has been turned off",
+			       "$node_id turned off at $now ".
+			       "since contact with the portal\n".
+			       "has been lost.");
+		}
+		else {
+		    NotifyUser($node_id, "$node_id power is back on",
+			       "$node_id turned back on at $now ".
+			       "since contact with the portal\n".
+			       "has been restored.");		
+		}
+	    }
+	}
+    }
+}
+
+sub fatal($)
+{
+    my ($msg) = @_;
+
+    if (! ($debug || $impotent)) {
+	#
+	# Send a message to the testbed list. 
+	#
+	NotifyTBOPS("bs_deadman died", $msg);
+    }
+    MarkDaemonStopped("bs_deadman")
+	if (! $impotent);
+
+    die("*** $0:\n".
+	"    $msg\n");
+}
+
+#
+# Notify TBOPS
+#
+sub NotifyTBOPS($$)
+{
+    my ($subject, $message) = @_;
+
+    if ($impotent) {
+	print "$subject\n";
+	print "$message\n";
+	return;
+    }
+    SENDMAIL($TBOPS, $subject, $message, $TBOPS);
+}
+
+#
+# Notify current holder of a node
+#
+sub NotifyUser($$$)
+{
+    my ($node_id, $subject, $message) = @_;
+    my $email = $powder_nodes->{$node_id}->{"user_email"};
+
+    if ($impotent) {
+	print "$email\n";
+	print "$subject\n";
+	print "$message\n";
+	return;
+    }
+    SENDMAIL($email, $subject, $message, $TBOPS);
+}
+
+sub logit($)
+{
+    my ($msg) = @_;
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+
+    print "$stamp: $msg\n";
+}

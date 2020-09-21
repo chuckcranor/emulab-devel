@@ -76,8 +76,21 @@ install-mainsite: $(RCFILE)
 
 subboss-install: 
 
-post-install: 
+post-install:
 
+# For install on a base station cnuc
+cnuc-install: /usr/local/sbin/bs_deadman
+
+/usr/local/sbin/bs_deadman: $(SRCDIR)/bs_deadman
+	$(INSTALL_PROGRAM) $(SRCDIR)/bs_deadman /usr/local/sbin/bs_deadman
+
+cnuc-systemd-install: $(DESTDIR)/etc/systemd/system/bs_deadman.service
+
+/etc/systemd/system/bs_deadman.service: $(SRCDIR)/bs_deadman.service
+	$(INSTALL) -m 644 $(SRCDIR)/bs_deadman.service \
+		/etc/systemd/system/bs_deadman.service
+	-systemctl daemon-reload
+	-systemctl enable bs_deadman
 #
 # Control node installation (aka, ops)
 #

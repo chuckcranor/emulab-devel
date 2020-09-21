@@ -1,0 +1,13 @@
+[Unit]
+Description=Deadman switch for Powder radios
+After=network.target network-online.target
+
+[Service]
+ExecStart=/usr/local/sbin/bs_deadman
+KillMode=process
+Restart=on-failure
+Type=forking
+PIDFile=/var/run/bs_deadman.pid
+
+[Install]
+WantedBy=multi-user.target
