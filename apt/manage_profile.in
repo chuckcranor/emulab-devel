@@ -315,7 +315,11 @@ sub CreateProfile()
 	my $repourl  = $new_args{'repourl'};
 	my $repohash;
 	my $checkout = ($this_user->IsAdmin() ? "-c" : "");
-
+	# Something recently broke in git, everyone gets --bare for now
+	# until we can figure out why git fetch fails to pick up new
+	# branches on a full checkout repo. This breaks submodules.
+	$checkout = "";
+	
 	my $output =
 	    emutil::ExecQuiet("$MANAGEGITREPO clone $checkout -n $reponame ".
 			      "  -S " . $new_args{"name"} . " '$repourl'");
