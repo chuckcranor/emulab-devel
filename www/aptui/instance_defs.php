@@ -875,6 +875,7 @@ class Instance
             $skiptypes["cellsdr1-ustar"]     = true;
             $skiptypes["cellsdr1-smt"]       = true;
             $skiptypes["cellsdr1-dentistry"] = true;
+            $skiptypes["cellsdr1-hospital"]  = true;
             $skiptypes["cbrssdr1-honors"]    = true;
             $skiptypes["cbrssdr1-ustar"]     = true;
             $skiptypes["cbrssdr1-browning"]  = true;
@@ -884,6 +885,7 @@ class Instance
             $skiptypes["cbrssdr1-ustar"]     = true;
             $skiptypes["cbrssdr1-smt"]       = true;
             $skiptypes["cbrssdr1-dentistry"] = true;
+            $skiptypes["cbrssdr1-hospital"]  = true;
             $skiptypes["nuc1"]               = true;
             $skiptypes["nuc2"]               = true;
             $skiptypes["nuc3"]               = true;
