@@ -45,12 +45,16 @@
 #
 # Configure variables
 #
-my $TB        = "@prefix@";
 my $TBLOG     = "@TBLOGFACIL@";
-my $POWERINFO = "$TB/etc/power-ctrlinfo";
-my $OUTLETMAP = "$TB/etc/power-outletmap";
+my $POWERINFO = "/etc/emulab/power-ctrlinfo";
+my $OUTLETMAP = "/etc/emulab/power-outletmap";
 
-use lib "@prefix@/lib";
+# Drag in path stuff if we are on an experimental node (cnuc).
+BEGIN {
+    if (-e "/etc/emulab/paths.pm") {
+	require "/etc/emulab/paths.pm"; import emulabpaths;
+    }
+}
 use power_apc;
 use power_raritan;
 use libtestbed;
@@ -441,8 +445,8 @@ sub getPowerInfo($)
 	    $lineno++;
 	    next;
 	}
-
-	my ($power_id, $type, $IP) = split;
+	
+	my ($power_id, $type, $IP) = split(",");
 	if ($power_id !~ /^([-\w]+)$/) {
 	    warn "Bogus power_id on line $lineno\n";
 	    $errors++;
@@ -481,7 +485,7 @@ sub getOutletInfo($)
 	    next;
 	}
 
-	my ($node_id, $power_id, $outlet) = split;
+	my ($node_id, $power_id, $outlet) = split(",");
 	if ($node_id !~ /^([-\w]+)$/) {
 	    warn "Bogus node_id on line $lineno\n";
 	    $errors++;

@@ -379,6 +379,13 @@ subdir-distclean:
 	@$(MAKE) -C checkup distclean
 	@$(MAKE) -C snmpit distclean
 
+# For install on a base station cnuc
+cnuc-install: powerlocal
+	$(INSTALL_PROGRAM) powerlocal /usr/local/bin/powerlocal
+	$(INSTALL) $(SRCDIR)/power_apc.pm /usr/local/etc/emulab/power_apc.pm
+	$(INSTALL) $(SRCDIR)/power_raritan.pm \
+		/usr/local/etc/emulab/power_raritan.pm
+
 #
 # XXX Create non .tcl files.
 #
