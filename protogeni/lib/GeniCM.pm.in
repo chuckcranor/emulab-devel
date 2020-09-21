@@ -9031,7 +9031,7 @@ sub HandleBlockstore($$$$$$@)
 		}
 		$size = int(($image->lba_high() -
 			     $image->lba_low() + 1) /
-			    (1024 / $image->lba_size())) . "KB";
+			    (1024 / $image->lba_size())) . "KiB";
 	    }
 	    if (defined($size)) {
 		$size = Blockstore::ConvertToMebi($size);

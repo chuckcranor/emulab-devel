@@ -5906,7 +5906,7 @@ sub DescribeDataset($)
 			      $image->lba_low() + 1) /
 			     (1024 / $image->lba_size()));
 	    $blob->{'size'} =
-		Blockstore::ConvertToMebi("$kbytes" . "KB");
+		Blockstore::ConvertToMebi("$kbytes" . "KiB");
 	}
 	#print STDERR Dumper($blob);
     }
