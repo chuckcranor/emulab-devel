@@ -132,6 +132,16 @@ if (! ($oneshot || $impotent)) {
     }
 }
 
+#
+# Setup a signal handler for newsyslog.
+#
+sub handler()
+{
+    ReOpenLog($LOGFILE);
+}
+$SIG{HUP} = \&handler
+    if (! ($debug || $oneshot));
+
 while (1) {
     #
     # We always run, we do not look at NoLogins().
@@ -208,9 +218,6 @@ sub PingBaseStations()
     while (my $row = $query_result->fetchrow_hashref()) {
 	my $node_id = $row->{"node_id"};
 	my $cnuc_id = $row->{"cnuc_id"};
-
-	next
-	    if ($cnuc_id ne "cnuc-meb");
 
 	if (!exists($basestations{$cnuc_id})) {
 	    $basestations{$cnuc_id} = {
