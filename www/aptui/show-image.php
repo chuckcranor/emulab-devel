@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -77,6 +77,7 @@ $alltypes = array();
 while ($row = mysql_fetch_array($types_result)) {
     $alltypes[] = $row["type"];
 }
+$alltypes[] = "pcvm";
 
 SPITHEADER(1);
 

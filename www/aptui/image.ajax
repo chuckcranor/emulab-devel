@@ -299,6 +299,7 @@ function Do_Modify()
     #
     $allowed = array("reboot_waittime" => true,
                      "description"     => false,
+                     "architecture"    => true,
                      "path"            => true,
                      "listed"          => true,
                      "ims_noreport"    => true,
@@ -340,7 +341,22 @@ function Do_Modify()
             DBQueryWarn("update os_info_versions set ${field}='$safe_value' ".
                         "where osid='$imageid' and vers='$version'");
     }
-    elseif ($field == "listed") {
+    elseif ($field == "architecture" && $value == "") {
+        $imageid = $image->imageid();
+        $osinfo  = $image->OSinfo();
+
+        $query_result =
+            DBQueryWarn("update images set architecture=NULL ".
+                        "where imageid='$imageid'");
+
+        # When clearing the architecture need to make sure the pcvm type
+        # gets into typelist.
+        if ($osinfo && $osinfo->def_parentosid()) {
+	    DBQuerywarn("replace into osidtoimageid set ".
+                        " osid='$imageid', type='pcvm', imageid='$imageid'");
+        }
+    }
+    elseif ($field == "listed" || $field == "architecture") {
         $imageid = $image->imageid();
 
         $query_result =

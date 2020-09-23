@@ -239,12 +239,16 @@
 	  <td><span class="original"><%- fields.path %></span></td>
 	</tr>
 	<% if (!fields.isdataset) { %>
-	  <% if (_.has(fields, "architecture")) { %>
-	    <tr>
-	      <td>Architecture</td>
-	      <td><%- fields.architecture %></td>
-	    </tr>
-	  <% } %>
+	  <tr>
+	    <td class="editable"
+		data-fieldname="architecture" data-fieldtype="text">
+	      Architecture</td>
+	    <td><span class="original">
+	      <% if (_.has(fields, "architecture")) { %>
+		<%- fields.architecture %>
+	      <% } %>
+	    </span></td>
+	  </tr>
 	  <tr class="typelist">
 	    <td>Types</td>
 	    <td><span class="original">

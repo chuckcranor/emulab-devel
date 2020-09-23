@@ -258,7 +258,7 @@ $(function ()
 
 	var td_name   = $(target).closest("td");
 	var td_field  = $(td_name).next();
-	var td_value  = $(td_field).find("span").text();
+	var td_value  = $.trim($(td_field).find("span").text());
 	var td_type   = $(td_name).data("fieldtype");
 	var td_fname  = $(td_name).data("fieldname");
 
@@ -321,7 +321,7 @@ $(function ()
 	    var newval;
 
 	    if (td_type == "text") {
-		newval = $(td_field).find("input").val();
+		newval = $.trim($(td_field).find("input").val());
 	    }
 	    else if (td_type == "checkbox") {
 		newval = $(td_field).find("input").is(":checked") ? 1 : 0;
@@ -347,6 +347,12 @@ $(function ()
 					 .removeClass("hidden");
 				     // Show the edit button again
 				     $(target).removeClass("invisible");
+
+				     // When changing architecture reload to 
+				     // make the page consistent wrt types
+				     if (td_fname == "architecture") {
+					 RegeneratePageBody();
+				     }
 				 });
 	});
     }
@@ -431,6 +437,10 @@ $(function ()
 			 .removeClass("hidden");
 		     // Show the edit button again
 		     $(target).removeClass("invisible");
+
+		     // When changing types reload to make the page
+		     // consistent wrt architecture
+		     RegeneratePageBody();
 		 });
 	});
     }
