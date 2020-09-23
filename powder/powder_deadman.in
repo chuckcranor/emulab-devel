@@ -56,7 +56,7 @@ my $lastping;
 #
 my $TB		     = "@prefix@";
 #my $TBOPS            = "@TBOPSEMAIL@";
-my $TBOPS            = "stoller@\flux.utah.edu";
+my $TBOPS            = "stoller\@flux.utah.edu";
 my $MAINSITE         = @TBMAINSITE@;
 my $POWDER_DEADMAN   = @POWDER_DEADMAN@;
 my $LOGFILE          = "$TB/log/powder_deadman.log";
