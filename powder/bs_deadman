@@ -337,15 +337,16 @@ sub PowerAll($)
 	    push(@nodelist, $node_id)
 	}
     }
+    if ($mailonly) {
+	NotifyTBOPS("BS $hostname Deadman: nodes would be powered $onoff",
+		    (@nodelist ? "@nodelist" : " No Nodes") .
+		    " would be powered $onoff.");
+    }
     if (!@nodelist) {
 	logit("PowerAll($onoff): nothing to do, no nodes");
 	return;
     }
     if ($impotent || $mailonly) {
-	if ($mailonly) {
-	    NotifyTBOPS("BS $hostname Deadman: nodes would be powered $onoff",
-			"@nodelist would be powered $onoff.");
-	}
 	logit("Would power $onoff @nodelist");
     }
     else {

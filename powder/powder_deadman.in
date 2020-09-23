@@ -288,13 +288,14 @@ sub PowerAll($)
 
 	push(@nodes, $node);
     }
+    if ($mailonly) {
+	NotifyTBOPS("Endpoint Deadman: nodes would be powered $onoff",
+		    (@nodes ? "@nodes" : "No nodes") .
+		    " would be powered $onoff.");
+    }
     return
 	if (!@nodes);
     
-    if ($mailonly) {
-	NotifyTBOPS("Endpoint Deadman: nodes would be powered $onoff",
-		    "@nodes would be powered $onoff.");
-    }
     PowerControl($onoff, @nodes);
 }
 
