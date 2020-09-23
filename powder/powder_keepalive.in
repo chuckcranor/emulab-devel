@@ -66,7 +66,7 @@ my $TBOPS            = "@TBOPSEMAIL@";
 my $MAINSITE         = @TBMAINSITE@;
 my $OURDOMAIN        = "@OURDOMAIN@";
 my $LOGFILE          = "$TB/log/powder_keepalive.log";
-my $SLEEP_INTERVAL   = 30;
+my $SLEEP_INTERVAL   = 15;
 my $CNUCPORT         = 12487;
 
 # un-taint path
