@@ -1010,8 +1010,6 @@ function Do_IdleDetection()
                      SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
     
-    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-
     if ($retval) {
         SUEXECERROR(SUEXEC_ACTION_CONTINUE);
         if (!$webtask->exited() || $retval < 0) {
