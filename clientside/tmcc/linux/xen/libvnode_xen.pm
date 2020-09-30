@@ -85,6 +85,7 @@ use File::Path;
 use File::Copy;
 use File::Temp;
 use POSIX qw(:signal_h);
+use Fcntl ':mode';
 
 # Pull in libvnode
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
@@ -379,6 +380,7 @@ sub FreeRouteTable($);
 sub downloadOneImage($$$);
 sub captureRunning($);
 sub checkForInterrupt();
+sub FixGrubConsole($$$$$);
 
 sub getXenInfo()
 {
@@ -1876,6 +1878,7 @@ sub vnodePreConfig($$$$$){
     my $vninfo = $private;
     my $retval = 0;
     my $fixups = 0;
+    my $ishvm = $private->{'ishvm'};
 
     #
     # XXX vnodeCreate is not called when a vnode was halted or is rebooting.
@@ -2053,13 +2056,34 @@ sub vnodePreConfig($$$$$){
 	mysystem2("sed -i -e '/swap/d' $vnoderoot/etc/fstab");
 
 	# enable the correct device for console
-	if (-f "$vnoderoot/etc/inittab") {
+	# NB: we must do this work here, because a single golden image
+	# might be booted for both the PV or HV case, and consoles are
+	# different for both.
+	if (!$ishvm && -f "$vnoderoot/etc/inittab") {
 	    mysystem2("sed -i.bak -e 's/xvc0/console/' ".
 		      "  $vnoderoot/etc/inittab");
 	}
-	if (-f "$vnoderoot/etc/init/ttyS0.conf") {
+	if (!$ishvm && -f "$vnoderoot/etc/init/ttyS0.conf") {
 	    mysystem2("sed -i.bak -e 's/ttyS./hvc0/' ".
 		      "  $vnoderoot/etc/init/ttyS0.conf");
+	}
+	# We need to have slightly different settings for HVM.  Note
+	# that we only handle grub2
+	if ($ishvm) {
+	    foreach my $gf ("$vnoderoot/boot/grub2/grub.cfg",
+			    "$vnoderoot/boot/grub/grub.cfg",
+			    "$vnoderoot/boot/grub/menu.lst") {
+		next if (! -f $gf);
+		my $mode = (stat($gf))[2] & 07777;
+		my $mode_reset = 0;
+		if (!($mode & S_IWUSR)) {
+		    chmod($mode | S_IWUSR,$gf);
+		    $mode_reset = 1;
+		}
+		FixGrubConsole($gf,"ttyS0",0,115200,"0x2f8");
+		chmod($mode,$gf)
+		    if ($mode_reset);
+	    }
 	}
 	#
 	# Change the password if possible. If something goes wrong,
@@ -5990,6 +6014,150 @@ sub FixRamFs($$$)
 done:
     mysystem2("/bin/rm -rf $tempdir");
     return $rval;
+}
+
+# This comes from tmcc/linux/linux_slicefix.pl .
+sub FixGrubConsole($$$$$)
+{
+    my ($file, $console, $sunit, $sspeed, $sport) = @_;
+    my $comunit = $sunit + 1;
+
+    if (!open(FILE, "+<$file")) {
+	print STDERR "FixGrubConsole: couldn't open $file: $!\n";
+	return -1;
+    }
+
+    my @buffer = ();
+    while (<FILE>) {
+	#
+	# Fix up serial --unit=N --speed=S line:
+	#  vga/null: comment out
+	#  sio*: uncomment and make sure N is correct (must exist!)
+	#
+	if (/^(#?)serial\s/) {
+	    my $com = $1;
+	    if ($sunit < 0) {
+		if ($com) {
+		    push @buffer, $_;
+		} else {
+		    push @buffer, "#$_";
+		}
+	    } elsif ($sport) {
+		push @buffer, "serial --unit=$sunit --port=$sport --speed=$sspeed\n";
+	    } else {
+		push @buffer, "serial --unit=$sunit --speed=$sspeed\n";
+	    }
+	    next;
+	}
+	#
+	# grub1 terminal lines
+	#
+	if (/^terminal\s/) {
+	    if ($sunit < 0) {
+		push @buffer, "terminal --timeout=5 console\n";
+	    } else {
+		push @buffer, "terminal --dumb --timeout=0 serial console\n";
+	    }
+	    next;
+	}
+	#
+	# grub2 terminal_{input,output} lines
+	#
+	if (/^terminal_(input|output)\s/) {
+	    my $dir = $1;
+	    if ($sunit < 0) {
+		push @buffer, "terminal_$dir console\n";
+	    } else {
+		push @buffer, "terminal_$dir serial\n";
+	    }
+	    next;
+	}
+	#
+	# Kernel and initrd command lines with VGA (tty0)
+	#
+	if (/console=tty0\s/) {
+	    # get rid of any existing serial console clauses
+	    s#console=ttyS\S+##g;
+	    if ($sunit >= 0) {
+		# change tty0 to appropriate serial device
+		s#console=tty0#console=ttyS$sunit,$sspeed#;
+	    }
+	    #
+	    # Virtual consoles (e.g. hvcX on POWER).  Not true
+	    # serial consoles, so must be handled specially.
+	    # Image grub.cfg must have console=tty0, or
+	    # console=$console, for this to work.
+	    #
+	    if ($console =~ /^hvc/) {
+		if (! /console=$console/) {
+		    s#console=tty0#console=tty0 console=$console#;
+		}
+	    }
+	    push @buffer, $_;
+	    next;
+	}
+	#
+	# Xen command lines with VGA (vga)
+	#
+	if (/console=vga\s/) {
+	    # get rid of any existing serial console clauses
+	    s#console=com\d\S*##g;
+	    s#com\d=\S+##g;
+	    if ($sunit >= 0) {
+		# change vga to appropriate serial device
+		s#console=vga#console=com$comunit com$comunit=$sspeed#;
+	    }
+	    push @buffer, $_;
+	    next;
+	}
+	#
+	# Kernel and initrd command lines with serial (ttyS*)
+	#
+	if (/console=ttyS(\d+)/) {
+	    # get rid of any existing VGA clause
+	    s#console=tty0##g;
+	    if ($sunit < 0) {
+		# replace serial with VGA
+		s#console=ttyS\S+#console=tty0#g;
+	    } else {
+		# fixup serial lines
+		s#console=ttyS\S+#console=ttyS$sunit,$sspeed#g;
+	    }
+	    push @buffer, $_;
+	    next;
+	}
+	#
+	# Xen command lines with serial (console=comN, comN=<speed>)
+	#
+	if (/console=com(\d)/) {
+	    # get rid of any existing VGA clause
+	    s#console=vga##g;
+	    if ($sunit < 0) {
+		# replace serial with VGA
+		s#console=com\d\S*#console=vga#g;
+		s#com\d=\S+##g;
+	    } else {
+		# fixup serial lines
+		s#console=com\d\S*#console=com$comunit#g;
+		s#com\d=\S+#com$comunit=$sspeed#g;
+	    }
+	    push @buffer, $_;
+	    next;
+	}
+	#
+	# Otherwise, just copy
+	#
+	push @buffer, $_;
+    }
+
+    seek FILE, 0, 0;
+    truncate FILE, 0;
+
+    print FILE @buffer;
+
+    close FILE;
+
+    return 0;
 }
 
 #
