@@ -991,8 +991,11 @@ sub GetTicketAuxAux($)
 		    goto bad;
 		}
 		print STDERR 'DEBUG: Adding row to virt_address_allocation';
+		my $pool_id = $pool->{'client_id'};
+		# Ug, this causes named to croak.
+		$pool_id =~ s/_/-/g;
 		$virtexperiment->NewTableRow("virt_address_allocation",
-					 {"pool_id" => $pool->{'client_id'},
+					 {"pool_id" => $pool_id,
 					  "count" => $pool->{'count'},
 					  "restriction" => $pool->{'type'},
 					  "version" => "ipv4" });
