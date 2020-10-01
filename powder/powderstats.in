@@ -108,6 +108,9 @@ $query_result =
     DBQueryFatal("select uuid from apt_instance_history as h ".
 		 "left join users as u on u.uid_idx=h.creator_idx ".
 		 "where h.portal='powder' and ".
+		 "     h.pid!='PMonitor' and ".
+		 "     h.pid!='emulab-ops' and ".
+		 "     h.pid!='testbed' and ".
 		 "     h.created < '$ENDTIME' and ".
 		 "     u.usr_email not like '%utah.edu' and ".
 		 "     u.usr_email not like '%rice.edu'");
@@ -183,6 +186,9 @@ $query_result =
 		 "      f.uuid is null and ".
 		 "      u.usr_email not like '%utah.edu' and ".
 		 "      u.usr_email not like '%rice.edu' and ".
+		 "      h.pid!='PMonitor' and ".
+		 "      h.pid!='emulab-ops' and ".
+		 "      h.pid!='testbed' and ".
 		 "      aa.isFE=1");
 
 while (my $row = $query_result->fetchrow_hashref()) {

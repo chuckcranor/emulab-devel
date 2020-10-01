@@ -296,6 +296,9 @@ my $query_result =
 		 "      f.uuid is null and ".
 		 "      u.usr_email not like '%utah.edu' and ".
 		 "      u.usr_email not like '%rice.edu' and ".
+		 "      h.pid!='PMonitor' and ".
+		 "      h.pid!='emulab-ops' and ".
+		 "      h.pid!='testbed' and ".
 		 "      aa.isFE=1");
 
 while (my ($uuid,$pid,$uid,$eid,$count,$nickname,$seconds,$started,$exptidx) =
