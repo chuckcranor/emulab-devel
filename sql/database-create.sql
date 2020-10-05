@@ -3103,6 +3103,7 @@ CREATE TABLE `image_versions` (
   `ims_noreport` tinyint(1) NOT NULL default '0',
   `nodetypes` text default NULL,
   `uploader_path` tinytext,
+  `uploader_status` tinytext,
   `notes` mediumtext,
   `deprecated` datetime default NULL,
   `deprecated_iserror` tinyint(1) NOT NULL default '0',
