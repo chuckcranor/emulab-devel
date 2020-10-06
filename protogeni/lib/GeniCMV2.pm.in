@@ -116,6 +116,7 @@ my $GRANTIMAGE     = "$TB/sbin/grantimage";
 my $WAP            = "$TB/sbin/withadminprivs";
 my $SHAREVLAN      = "$TB/sbin/sharevlan";
 my $PANIC          = "$TB/sbin/panic";
+my $CHECKQUOTA     = "$TB/sbin/checkquota";
 my $LINKTEST       = "$TB/sbin/linktest_control";
 my $NODEADMIN      = "$TB/bin/node_admin";
 my $XMLLINT	   = "/usr/local/bin/xmllint";
@@ -993,7 +994,7 @@ sub PrestageImages($)
 		    $webtask->Refresh();
 		    if ($?) {
 			my $code = $? >> 8;
-			if (!$webtask->HasExited() || $webtask->code() < 0) {
+			if (!$webtask->HasExited() || $webtask->exitcode() < 0){
 			    $pending->Failed($webtask->HasExited() ?
 					     $webtask->output() :
 					     "Internal error importing image");
@@ -4072,10 +4073,6 @@ sub CreateImage($)
 	$clone->Update({"origin_urn" => $image->origin_urn()});
 	$image = $clone;
     }
-    if (!defined(GeniCM::FlipToUser($slice, $user))) {
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "FlipToUser failed");
-    }
     if (defined($bsname)) {
 	#
 	# These always go into the current project.
@@ -4084,6 +4081,32 @@ sub CreateImage($)
 	    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 					"Dataset not in same project as node");
 	}
+    }
+    my $realuser = GeniCM::FlipToUser($slice, $user);
+    if (!defined($realuser)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "FlipToUser failed");
+    }
+    #
+    # Before doing anything else, check for overquota. 
+    #
+    my $copt;
+    if (defined($image)) {
+	$copt = ($image->pid() eq $image->gid() ?    
+		 "-p " . $image->pid() :
+		 "-g " . $image->pid() . "/" . $image->pid());
+    }
+    else {
+	$copt = ($experiment->pid() eq $experiment->gid() ?    
+		 "-p " . $experiment->pid() :
+		 "-g " . $experiment->pid() . "/" . $experiment->pid());
+    }
+    system("$CHECKQUOTA $copt -m 3GB " . $realuser->uid());
+    if ($?) {
+	return GeniResponse->Create(GENIRESPONSE_NOSPACE, undef,
+				    "You are over (or close to) disk quota, ".
+				    "please delete images you no longer need ".
+				    "so you can proceed");
     }
     
     #
@@ -4310,14 +4333,8 @@ sub CreateImage($)
     }
     if (!defined($webtask) || $webtask->exitcode()) {
 	print STDERR "Failed to take the snapshot of $node_id\n";
+	$webtask->Store();
 	goto bad;
-    }
-   
-    # Sleep a little while to give the caller time to pick up status
-    # since it is polling. Then delete the webtask.
-    if (defined($webtask)) {
-	sleep(30);
-	# $webtask->Delete();
     }
     if ($user->email()) {
 	libtestbed::SENDMAIL($user->email(),
@@ -4387,12 +4404,6 @@ sub CreateImage($)
 			     $user->email(),
 			     "Bcc: $TBOPS");
     }
-    # Sleep a little while to give the caller time to pick up status
-    # since it is polling. Then delete the webtask.
-    sleep(30);
-    $webtask->Delete()
-	if (defined($webtask));
-    
     return (defined($response) ? $response : -1);
 }
 
@@ -4628,18 +4639,84 @@ sub ImageInfo($)
     #
     my $webtask = $image->webtask();
     if (defined($webtask)) {
-	$blob->{'size'}   = $webtask->imagesize() . "KB";
-	$blob->{'status'} = $webtask->status();
+	my $logfile;
+	
+	if ($webtask->HasExited()) {
+	    if ($webtask->logfileid()) {
+		$logfile = Logfile->Lookup($webtask->logfileid());
+	    }
+	    
+	    #
+	    # Try to lock the image and get rid of the webtask.
+	    #
+	    if ($image->WaitLock(5) == 0) {
+		$image->Refresh();
+		if ($image->webtask_id() &&
+		    $image->webtask_id() eq $webtask->task_id()) {
+		    $image->ClearWebTask();
+		}
+		$image->Unlock();
+	    }
+	}
+	# Webtask is still okay to reference,
+	if (!$webtask->HasExited() || $webtask->exitcode() != 0) {
+	    $blob->{'status'} = $webtask->status();
+	    
+	    if (!$webtask->HasExited()) {
+		#
+		# Imaging still in progress.
+		#
+		$blob->{'size'} = $webtask->imagesize() . "KB";
+	    }
+	    else {
+		#
+		# Error.
+		#
+		if ($logfile) {
+		    my $tmp;
+		    $logfile->DumpFile(\$tmp);
+
+		    if (defined($tmp) && $tmp ne "") {
+			$blob->{'log'} = $tmp;
+		    }
+		    # Lets look for this special case. Not a good place to
+		    # to do this.
+		    if ($image->isdataset() && $tmp &&
+			$tmp =~ /^umount: (.*): .* busy/m) {	
+			$blob->{'output'} =
+			    "Unable to unmount $1; you need to make ".
+			    "sure you are not running any processes from ".
+			    "$1 and that you do not have any active ".
+			    "shells in a directory on $1";
+		    }
+		    elsif (defined($webtask->output())) {
+			$blob->{'output'} = $webtask->output();
+		    }
+		}
+	    }
+	    print STDERR Dumper($blob);
+	    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+	}
+	# Fall through to looking at the file.
+    }
+    #
+    # Get the file size on disk.
+    #
+    if ($image->size()) {
+	$blob->{"size"} = int($image->size() / 1024) . "KB";
     }
     else {
-	my $path = ($image->HaveDeltaImage() ?
-		    $image->DeltaImageFile() : $image->FullImageFile());
-
-	if (-r $path) {
-	    my $size = File::stat::stat($path)->size;
-	    $blob->{'size'} = int($size / 1024) . "KB";
+	my $iname = $image->versname();
+	my $isize = `$IMAGEINFO -s -U k $iname`;
+	if (!$?) {
+	    chomp($isize);
+	    $blob->{"size"} = "${isize}KB";
 	}
     }
+    if ($image->hash()) {
+	$blob->{"hash"} = $image->hash();
+    }
+    print STDERR Dumper($blob);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
@@ -4933,6 +5010,7 @@ sub ListImages($)
 		$blob->{"filesize"} = "${isize}MB";
 	    }
 	}
+	
 	#
 	# Add the project URN, that the caller can map to a local project.
 	#

@@ -162,6 +162,12 @@ function Do_GetInfo()
         $blob["version_url"]   = "$TBBASE/image_metadata.php?uuid=$uuid";
         $blob["image_url"]     = "$TBBASE/image_metadata.php?uuid=$image_uuid";
     }
+    if ($image->logfileid()) {
+        $logfile = Logfile::Lookup($image->logfileid());
+        if ($logfile) {
+            $blob["logfile_url"] = $logfile->URL();
+        }
+    }
 
     if (!$image->isdataset()) {
         if ($image->architecture()) {
@@ -839,6 +845,9 @@ function Do_SnapshotStatus()
     if ($webtask->exited()) {
 	$blob["exited"]   = $webtask->exited();
 	$blob["exitcode"] = $webtask->exitcode();
+        if (isset($taskdata["log"])) {
+            $blob["log"] = $taskdata["log"];
+        }
         # We want to say something in the web UI if imaging throws an error.
         if ($webtask->exitcode()) {
             $blob["errmsg"] = $webtask->output();

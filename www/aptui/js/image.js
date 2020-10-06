@@ -106,7 +106,7 @@ window.ShowImagingModal = (function()
 			$('#tracker-imaging').addClass('progtrckr-done');
 		    }
 		};
-		var errmsg = "Failed";
+		var errmsg = "Internal error creating image";
 		var status = null;
 		if (_.has(value, "image_status")) {
 		    status = value["image_status"];
@@ -118,13 +118,12 @@ window.ShowImagingModal = (function()
 		if (_.has(value, "exited")) {
 		    var exitcode = value["exitcode"];
 		    
-		    if (exitcode != 0) {
+		    if (exitcode != 0 || status == "failed") {
 			status = "failed";
 			errmsg = value["errmsg"];
 		    }
 		    else if (status != "ready") {
 			status = "failed";
-			errmsg = "Internal error creating image";
 		    }
 		}
 		if (status == "failed") {
@@ -154,6 +153,8 @@ window.ShowImagingModal = (function()
 				.removeClass("hidden");
 			}
 		    }
+		    $('#imaging_modal_node_status')
+			.parent().addClass("hidden");
 		    $('#imaging-spinner').addClass("hidden");
 		    $('#imaging-close').removeClass("hidden");
 		    completion_callback(0);

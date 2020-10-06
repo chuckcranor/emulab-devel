@@ -402,6 +402,12 @@
 	  </tr>
 	<% } %>
 	<% if (isadmin) { %>
+	  <% if (_.has(fields, "logfile_url")) { %>
+	    <tr>
+	      <td>Logfile</td>
+	      <td><a href="<%= fields.logfile_url %>">https://...</a></td>
+	    </tr>
+	  <% } %>
 	  <% if (_.has(fields, "ims_reported")) { %>
 	    <tr>
 	      <td class="editable"

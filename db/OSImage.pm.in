@@ -785,6 +785,12 @@ sub ClearUploaderPath($)
 
     return $self->image()->Update({"uploader_path" => ''});
 }
+sub ClearUploaderStatus($)
+{
+    my ($self) = @_;
+
+    return $self->image()->Update({"uploader_status" => undef});
+}
 
 #
 # Set the sector range of an image.
@@ -803,6 +809,12 @@ sub SetWebTask($$)
     my ($self,$webtask) = @_;
 
     return $self->image()->SetWebTask($webtask);
+}
+sub ClearWebTask($)
+{
+    my ($self) = @_;
+
+    return $self->image()->ClearWebTask();
 }
 
 #

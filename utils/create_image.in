@@ -843,6 +843,9 @@ if ($image->Lock()) {
 }
 $needunlock = 1;
 
+# Clear this so we not confused by an old one.
+$image->ClearWebTask() if ($image->webtask());
+
 # Now we can set the webtask.
 if (defined($webtask)) {
     $image->SetWebTask($webtask);
@@ -1147,6 +1150,11 @@ else {
     $command = "$script$sopts$oargs";
 }
 
+# Kill old logfile, no need to keep these around. We kill it even if in
+# the foreground to avoid confusion.
+$image->ClearLogFile()
+    if ($image->logfileid());
+
 #
 # Go to the background since this is going to take a while.
 # 
@@ -1160,6 +1168,15 @@ if (! $foreground) {
 
     # Logfile becomes the current spew.
     $image->SetLogFile($logfile);
+
+    #
+    # Oh, this is a pain. The webtask is in the image descriptor and the
+    # the logfile is in the version descriptor so that we can retain
+    # logfiles for each version. Turns out, not a great plan.
+    #
+    if (defined($webtask)) {
+	$webtask->logfileid($logfile->logid());
+    }
 
     if (my $childpid = TBBackGround($logfile->filename())) {
 	#
@@ -1206,6 +1223,10 @@ $needcleanup = 1;
 # This tells the master server what uploader path to use.
 $image->SetUploaderPath($filename) == 0
     or fatal("Could not set the uploader path");
+
+# Clear previous uploader status.
+$image->ClearUploaderStatus() == 0
+    or fatal("Could not clear the uploader status");
 
 # Clear the bootlog; see below.
 $node->ClearBootLog()
@@ -1451,16 +1472,34 @@ if (! cleanup()) {
 # If we timed out, if the result code was bad, or if the image size
 # grew too large.
 #
-if ($result eq "setupfailed") {
+if ($usefup &&
+    defined($image->uploader_status()) && $image->uploader_status() ne "") {
+    #
+    # There is some overlap with the checking done here, but if uploader
+    # reports an error we abort. Note that the most common errors are going
+    # over quota, running out of space (when no quotas) and exceeding the
+    # max size.
+    #
+    my $status = $image->uploader_status();
+    if ($status =~ / max /) {
+	$status .= " ($maximagesize bytes)";
+    }
+    elsif ($status =~ /quota/) {
+	$status .= "; please delete images you no longer need ".
+	    "so you can proceed";
+    }
+    fatal("Failed to store image: $status\n");
+}
+elsif ($result eq "setupfailed") {
     fatal("FAILED: Node setup failed ... \n");
 }
-if ($result eq "timeout") {
+elsif ($result eq "timeout") {
     fatal("FAILED: Timed out generating image ... \n");
 }
-if ($result eq "toobig") {
+elsif ($result eq "toobig") {
     fatal("FAILED: Maximum image size ($maximagesize bytes) exceeded ... \n");
 }
-if ($result ne "0") {
+elsif ($result ne "0") {
     fatal("FAILED: Returned error code $result generating image ... \n");
 }
 
@@ -1611,7 +1650,8 @@ SENDMAIL("$user_name <$user_email>",
 if (defined($logfile)) {
     # Close up the log file so the webpage stops.
     $logfile->Close();
-    $image->ClearLogFile();
+    # And store it so that we can look at it until the next create_image,
+    $logfile->Store();
 }
 if (defined($webtask)) {
     # Cause of the fork in run_with_ssh.
@@ -1735,7 +1775,8 @@ sub fatal($)
     if (defined($logfile)) {
 	# Close up the log file so the webpage stops.
 	$logfile->Close();
-	$image->ClearLogFile();
+	# And store it so that we can look at it until the next create_image,
+	$logfile->Store();
     }
 
     # This is a temporary file.
@@ -1745,10 +1786,13 @@ sub fatal($)
     if (defined($webtask)) {
 	# Cause of the fork in run_with_ssh.
 	$webtask->Refresh();
+	# Atomic update
+	$webtask->AutoStore(0);
 	$webtask->status("failed");
 	$webtask->imagesize(0);
 	$webtask->output($mesg);
 	$webtask->Exited(1);
+	$webtask->Store();
     }
     $image->Unlock()
 	if ($needunlock);
@@ -1933,9 +1977,13 @@ END {
 	# Cause of the fork in run_with_ssh.
 	$webtask->Refresh();
 	if (!$webtask->HasExited()) {
+	    # Atomic update
+	    $webtask->AutoStore(0);
 	    $webtask->status("failed");
 	    $webtask->imagesize(0);
+	    $webtask->output("Internal error creating image");
 	    $webtask->Exited(-1);
+	    $webtask->Store();
 	}
     }
     $? = $saved_exitcode;

@@ -367,6 +367,7 @@ sub DoSnapshot()
     my $update_profile;
     my $copyback_uuid;
     my $copyback_urn;
+    my $copyback_hash;
     my $swebtask;
     my $nosnapshot     = 0;
     my $mustnotexist   = 0;
@@ -375,7 +376,7 @@ sub DoSnapshot()
     my $doversions = 0;
     my $usetracker = 0;
     my $relocate   = 0;
-    my $operation = "image-only"; # Default to just snapshot.
+    my $operation  = "image-only"; # Default to just snapshot.
 
     my $optlist = "n:i:u:Uc:O:SseD:";
     my %options = ();
@@ -835,16 +836,21 @@ sub DoSnapshot()
 		$response->code() == GENIRESPONSE_NETWORK_ERROR);
 
 	my $imageblob = $response->value();
+	print Dumper($imageblob);
 	if (defined($swebtask)) {
 	    my %blobcopy = %{ $imageblob };
 
 	    #
 	    # If the image is ready, but needs to be copied back to
-	    # its origin, hold of ready till later. We will wait for
+	    # its origin, hold off ready till later. We will wait for
 	    # the copyback to finish, see below.
 	    #
 	    if ($imageblob->{'status'} eq "ready" && defined($copyback_urn)){
 		$blobcopy{'status'} = "copying";
+		# Until all clusters updated.
+		if (exists($imageblob->{'hash'})) {
+		    $copyback_hash = $imageblob->{'hash'};
+		}
 	    }
 	    # This is also being updated by the event system.
 	    $instance->UpdateImageStatus(\%blobcopy);
@@ -947,10 +953,9 @@ sub DoSnapshot()
 	# We know the copyback is done when the IMS has the info.
 	#
 	my $copied  = 0;
-	$seconds  = 1000;
+	$seconds  = 1200;
 
 	while ($seconds > 0) {
-	    sleep($interval);
 	    $seconds -= $interval;
 
 	    #
@@ -962,8 +967,17 @@ sub DoSnapshot()
 	    Genixmlrpc->SetContext(undef);
 	    # We get back undefined if the image is not posted yet.
 	    if (defined($blob)) {
-		$copied = 1;
-		last;
+		print Dumper($blob);
+		
+		#
+		# We actually wait for the hash since might not be
+		# a versioned image. 
+		#
+		if (!defined($copyback_hash) ||
+		    $copyback_hash eq $blob->{'sha1hash'}) {
+		    $copied = 1;
+		    last;
+		}
 	    }
 	    sleep($interval);
 	}
@@ -4862,6 +4876,11 @@ sub DoPrestageImages()
 
 	    $aggregateops{$agg->aggregate_urn()} = "status";
 	}
+	# For tracking (lack of) progress;
+	$agg->_lastchange(time());
+	# Last results.
+	$agg->_lastresult(undef);
+	
 	$aggregates{$agg->aggregate_urn()} = $agg;
     }
     if (!keys(%aggregates)) {
@@ -4996,7 +5015,7 @@ sub DoPrestageImages()
 	    #
 	    my $result = {
 		"status" => "ready",
-		    "images" => {},
+		"images" => {},
 	    };
 	    my $blob = $response->value()->{"status"};
 	    foreach my $urn (keys(%{$blob})) {
@@ -5049,6 +5068,50 @@ sub DoPrestageImages()
 		print Dumper($result);
 	    }
 	    $agg->Update({"prestage_data" => $text});
+
+	    #
+	    # Check for forward progress by comparing to previous call.
+	    # We expect to see something change at each aggregate within
+	    # a small number of minutes. 
+	    #
+	    if ($result->{"status"} ne "ready" && $agg->_lastresult()) {
+		my $last = $agg->_lastresult();
+
+		foreach my $urn (keys(%{ $result->{'images'} })) {
+		    my $this = $result->{'images'}->{$urn};
+		    next
+			if ($this->{'status'} eq "ready");
+
+		    my $prev = $last->{'images'}->{$urn};
+		    if ($prev->{'progress'} != $this->{'progress'}) {
+			# Forward motion
+			$agg->_lastchange(time());
+		    }
+		    else {
+			if (time() - $agg->_lastchange() > 120) {
+			    print Dumper($last);
+			    print Dumper($result);
+
+			    #
+			    # Needs more thought; what to do when this
+			    # happens. At the moment, we throw an error
+			    # back to create_slivers. 
+			    #
+			    $errmsg   = "Timed out, no progress on $urn ".
+				"at $agg";
+			    $exitcode = 1;
+			    $errcode  = GENIRESPONSE_TIMEDOUT();
+			    &$markAggregateFailure($agg, "error",
+						   $errcode, $errmsg);
+			    delete($aggregates{$agg->aggregate_urn()});
+			    last;
+			}
+		    }
+		}
+	    }
+	    # Save locally for next loop.
+	    $agg->_lastresult($result);
+
 	    #
 	    # Advance the status for the aggregate.
 	    #
@@ -5064,6 +5127,7 @@ sub DoPrestageImages()
 	}
 	last
 	    if (!$waitmode || $exitcode);
+	sleep(5);
     }
     if ($exitcode) {
 	$slice->UnLock() if (!$nolock);
@@ -6450,6 +6514,11 @@ sub ResponseErrorMessage($$)
     #
     if ($code == GENIRESPONSE_SEARCHFAILED) {
 	$errmsg = "Experiment is gone at " . $aggregate->AptAggregateName();
+    }
+    elsif ($code == GENIRESPONSE_NOSPACE) {
+	$errmsg = "You are over disk quota at " .
+	    $aggregate->AptAggregateName() .
+	    "; please log in and delete images you no longer need";
     }
     elsif ($code == GENIRESPONSE_BUSY) {
 	$errmsg = "Experiment is busy at " . $aggregate->AptAggregateName() .

@@ -620,7 +620,7 @@ function Do_DeleteDataset()
         }
         $webtask->Delete();
     }
-    SPITAJAX_RESPONSE("list-datasets.php");
+    SPITAJAX_RESPONSE("landing.php");
 }
 
 function Do_ApproveDataset()
@@ -900,6 +900,14 @@ function Do_GetInfo()
         $blob["image_status"] = $taskdata["image_status"];
         if (isset($taskdata["copyback_uuid"])) {
             $blob["copyback_uuid"] = $taskdata["copyback_uuid"];
+        }
+        if ($webtask->exited()) {
+            $blob["exited"]   = $webtask->exited();
+            $blob["exitcode"] = $webtask->exitcode();
+            
+            if (isset($taskdata["errmsg"])) {
+                $blob["errmsg"] = $taskdata["errmsg"];
+            }
         }
 
         #

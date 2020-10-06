@@ -35,6 +35,7 @@ use vars qw(@ISA @EXPORT $AUTOLOAD);
 use libdb;
 use EmulabConstants;
 use libtestbed;
+use Logfile;
 use WebTask;
 use English;
 use Data::Dumper;
@@ -1373,9 +1374,23 @@ sub Delete($;$)
 		"            osidtoimageid write, os_submap write, ".
 		"            image_permissions write, node_types read, ".
 		"            web_tasks write, ".
+		"            logfiles write, logfile_metadata write, ".
 		"            image_notifications write, ".
 		"            image_updates write")
 	or return -1;
+
+    my $query_result =
+	DBQueryWarn("select logfileid from image_versions ".
+		    "where imageid='$imageid' and logfileid is not null");
+    goto bad
+	if (!$query_result);
+
+    while (my ($logfileid) = $query_result->fetchrow_array()) {
+	my $logfile = Logfile->Lookup($logfileid);
+	if ($logfile) {
+	    $logfile->Delete(1);
+	}
+    }
 
     #
     # If provenance is on and not purging, then want to stash the
@@ -1466,6 +1481,10 @@ sub DeleteVersion($)
     my $imageid   = $self->imageid();
     my $version   = $self->version();
 
+    # Delete logfile before table lock.
+    $self->ClearLogFile()
+	if ($self->logfileid());
+
     DBQueryWarn("lock tables images write, image_versions write, ".
 		"            os_info write, os_info_versions write")
 	or return -1;
@@ -1513,8 +1532,11 @@ sub DeleteVersion($)
 sub PurgeVersion($)
 {
     my ($self) = @_;
-
     my $imageid   = $self->imageid();
+
+    # Delete logfile before table lock.
+    $self->ClearLogFile()
+	if ($self->logfileid());
 
     DBQueryWarn("lock tables images write, image_versions write, ".
 		"            os_info write, os_info_versions write")
@@ -2035,6 +2057,12 @@ sub ClearUploaderPath($)
 
     return $self->Update({"uploader_path" => ''});
 }
+sub ClearUploaderStatus($)
+{
+    my ($self) = @_;
+
+    return $self->Update({'uploader_status' => undef});
+}
 
 # Webtask.
 sub SetWebTask($$)
@@ -2053,6 +2081,18 @@ sub SetWebTask($$)
 	DBQueryWarn("update images set webtask_id=NULL " .
 		    "where imageid='$imageid'")
 	    or return -1;
+    }
+    return 0;
+}
+sub ClearWebTask($)
+{
+    my ($self) = @_;
+
+    if (defined($self->webtask_id())) {
+	my $webtask = $self->webtask();
+
+	$webtask->Delete();
+	$self->SetWebTask(undef);
     }
     return 0;
 }
@@ -2604,6 +2644,10 @@ sub SetLogFile($$)
     return -1
 	if ($self->Update({'logfileid' => $logfile->logid()}));
 
+    # Set the metadata so we can associate logfiles with this image.
+    $logfile->SetMetadata({"image_uuid"   => $self->image_uuid(),
+			   "version_uuid" => $self->uuid()});
+
     return 0;
 }
 
@@ -2696,7 +2740,8 @@ sub ClearLogFile($)
 		"where imageid='$imageid' and version='$version'")
 	or return -1;
 
-    return $self->Refresh();
+    $self->logfileid(undef);
+    return 0;
 }
 
 #
