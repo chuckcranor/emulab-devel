@@ -181,9 +181,11 @@ sub EmailTag($)              { return $_[0]->Brand()->EmailTag(); }
 sub wwwBase($)               { return $_[0]->Brand()->wwwBase(); }
 sub SignupURL($)             { return $_[0]->Brand()->SignupURL($_[0]); }
 # So we can localize MAILTAG variable.
-sub SendEmail($$$$;$$)
+sub SendEmail($$$$;$$@)
 {
-    return $_[0]->Brand()->SendEmail($_[1],$_[2],$_[3],$_[4],$_[5]);
+    my ($self, $e, $s, $b, $f, $h, @files) = @_;
+    
+    return $self->Brand()->SendEmail($e, $s, $b, $f, $h, @files);
 }
 
 #
