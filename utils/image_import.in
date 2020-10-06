@@ -653,9 +653,8 @@ if ($getimage) {
 		    "Image imported: $versname",
 		    "Image $name has been sucessfully ".
 	             ($relocate ?
-		      "relocated from" :
-		      "copied back from") . "\n" .
-		    $image->imagefile_url() . "\n".
+		      "relocated." :
+		      "copied back.") . "\n" .
 		    "\n".
 		    "Image URN: " . $image->urn() . "\n",
 		    $FROM, $CC);
