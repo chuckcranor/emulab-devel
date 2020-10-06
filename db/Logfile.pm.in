@@ -46,6 +46,7 @@ my $TB		  = "@prefix@";
 my $TBOPS         = "@TBOPSEMAIL@";
 my $TBBASE        = "@TBBASE@";
 my $GZIP	  = "/usr/bin/gzip";
+my $GUNZIP        = "/usr/bin/gunzip";
 
 #
 # Lookup by uuid. For now, just knowing the uuid says you can read the file. 
@@ -579,6 +580,49 @@ sub ReadFile($$)
     }
     $$pbuf = $buf;
     return $cc;
+}
+sub DumpFile($$)
+{
+    my ($self, $pbuf) = @_;
+    my $filename = $self->filename();
+    my $FP;
+    my $stuff = "";
+
+    return 0
+	if (!defined($filename) || ! -r $filename);
+
+    if ($self->compressed()) {
+	if (!open(ZIP, "$GUNZIP -c $filename |")) {
+	    print STDERR "Could unzip $filename for output\n";
+	    return -1;
+	}
+	$FP = *ZIP;
+    }
+    else {
+	if (!open(LOG, $filename)) {
+	    print STDERR "Could not open $filename for output\n";
+	    return -1;
+	}
+	$FP = *LOG;
+    }
+    # On this path always prine out private keys.
+    my $inkey = 0;
+	    
+    while (<$FP>) {
+	if ($_ =~ /-----BEGIN RSA PRIVATE KEY-----/) {
+	    $inkey = 1;
+	}
+	elsif ($_ =~ /-----END RSA PRIVATE KEY-----/) {
+	    $inkey = 0;
+	}
+	elsif ($inkey) {
+	    next;
+	}
+	$stuff .= $_;
+    }
+    close($FP);
+    $$pbuf = $stuff;
+    return 0;
 }
 
 #
