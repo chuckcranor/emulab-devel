@@ -71,7 +71,7 @@ if (isset($key) || isset($reset)) {
         if ((isset($keyB) && $keyB != "") && (!isset($keyA) || $keyA == "")) {
             SPITUSERERROR("Oops, not able to proceed!<br>".
                           "Please read this ".
-                          "<a href='$WIKIDOCURL/kb69'>Knowledge Base Entry</a>".
+                          "<a href='https://gitlab.flux.utah.edu/emulab/emulab-devel/-/wikis/faq/I-Forgot-My-Password'>FAQ Entry</a>".
                           "to see what the likely cause is.", 1);
             return;
         }
