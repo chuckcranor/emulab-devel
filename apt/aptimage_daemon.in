@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -136,6 +136,11 @@ $SIG{HUP} = \&handler
     if (! $debug);
 
 GeniUtil::FlipToGeniUser();
+
+if (!GetSiteVar("protogeni/use_imagetracker")) {
+    print STDERR "Image tracking is not enabled for this site\n";
+    exit(0);
+}
 
 #
 # Avoid duplicate email.
