@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2016 University of Utah and the Flux Group.
+# Copyright (c) 2004-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -688,8 +688,8 @@ sub process($$$$)
 		exists($iref->{'IMAGEHIGH'})) {
 		# Bad, but don't want to use bignums to get MBs.
 		$href->{'VOLSIZE'} = 
-		    int(($iref->{'IMAGEHIGH'} - $iref->{'IMAGELOW'} + 1) *
-			($iref->{'IMAGESSIZE'} / (1024.0 * 1024.0))) + 1;
+		    int((($iref->{'IMAGEHIGH'} - $iref->{'IMAGELOW'} + 1) *
+			 ($iref->{'IMAGESSIZE'} / (1024.0 * 1024.0))) + 0.5);
 	    }
 	}
     } else {
