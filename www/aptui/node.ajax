@@ -119,9 +119,9 @@ function Do_GetInfo()
     $blob["role"]            = $node->role();
     $blob["hasconsole"]      = $node->HasSerialConsole();
     $blob["attributes"]      = GetAttributes($node);
-    $blob["typeattributes"]  = GetTypeAttributes($node);
+    $blob["typeattributes"]  = GetTypeAttributes($node, $blob["attributes"]);
     $blob["features"]        = GetFeatures($node);
-    $blob["typefeatures"]    = GetTypeFeatures($node);
+    $blob["typefeatures"]    = GetTypeFeatures($node, $blob["features"]);
     $blob["interfaces"]      = $node->GetInterfaceInfo();
     $blob["op_mode"]         = $node->op_mode();
     $blob["control_ip"]      = $node->ControlIP();
@@ -254,7 +254,7 @@ function GetFeatures($node)
 #
 # Get the node type attributes (minus root password)
 #
-function GetTypeAttributes($node)
+function GetTypeAttributes($node, $prune = null)
 {
     $type = $node->type();
     $blob = array();
@@ -268,6 +268,9 @@ function GetTypeAttributes($node)
         return null;
     }
     while ($row = mysql_fetch_array($query_result)) {
+        if ($prune && array_key_exists($row["attrkey"], $prune)) {
+            continue;
+        }
         $blob[$row["attrkey"]] = $row["attrvalue"];
     }
     return $blob;
@@ -276,7 +279,7 @@ function GetTypeAttributes($node)
 #
 # Get the node type features.
 #
-function GetTypeFeatures($node)
+function GetTypeFeatures($node, $prune = null)
 {
     $type = $node->type();
     $blob = array();
@@ -288,6 +291,9 @@ function GetTypeFeatures($node)
         return null;
     }
     while ($row = mysql_fetch_array($query_result)) {
+        if ($prune && array_key_exists($row["feature"], $prune)) {
+            continue;
+        }
         $blob[$row["feature"]] = $row["weight"];
     }
     return $blob;
