@@ -354,7 +354,7 @@ sub PostImageInfo($)
 	return 0;
     }
     my $isversioned = 
-	($WITHPROVENANCE && 
+	($WITHPROVENANCE && !$image->noversioning() &&
 	 EmulabFeatures->FeatureEnabled("ImageProvenance",
 					undef, $group) ? 1 : 0);
 
