@@ -772,6 +772,7 @@ sub CreateSliver($)
 
 	if ($? || !$temp_webtask->HasExited()) {
 	    my $exitval = $? >> 8;
+	    $exitval = -1 if ($exitval == 255);
 
 	    if ($exitval < 0 || !$temp_webtask->HasExited()) {
 		my $errmsg = "Internal error staging images to the " .
