@@ -865,47 +865,16 @@ class Instance
             $skiptypes["iris030"]  = true;
             $skiptypes["d840"]     = true;
             $skiptypes["d740"]     = true;
-            $skiptypes["mmimo1"]   = true;
-            $skiptypes["cellsdr1-honors"]    = true;
-            $skiptypes["cellsdr1-ustar"]     = true;
-            $skiptypes["cellsdr1-browning"]  = true;
-            $skiptypes["cellsdr1-meb"]       = true;
-            $skiptypes["cellsdr1-fm"]        = true;
-            $skiptypes["cellsdr1-bes"]       = true;
-            $skiptypes["cellsdr1-ustar"]     = true;
-            $skiptypes["cellsdr1-smt"]       = true;
-            $skiptypes["cellsdr1-dentistry"] = true;
-            $skiptypes["cellsdr1-hospital"]  = true;
-            $skiptypes["cbrssdr1-honors"]    = true;
-            $skiptypes["cbrssdr1-ustar"]     = true;
-            $skiptypes["cbrssdr1-browning"]  = true;
-            $skiptypes["cbrssdr1-meb"]       = true;
-            $skiptypes["cbrssdr1-fm"]        = true;
-            $skiptypes["cbrssdr1-bes"]       = true;
-            $skiptypes["cbrssdr1-ustar"]     = true;
-            $skiptypes["cbrssdr1-smt"]       = true;
-            $skiptypes["cbrssdr1-dentistry"] = true;
-            $skiptypes["cbrssdr1-hospital"]  = true;
-            $skiptypes["nuc1"]               = true;
-            $skiptypes["nuc2"]               = true;
-            $skiptypes["nuc3"]               = true;
-            $skiptypes["nuc4"]               = true;
-            $skiptypes["nuc5"]               = true;
-            $skiptypes["nuc6"]               = true;
-            $skiptypes["nuc7"]               = true;
-            $skiptypes["nuc8"]               = true;
-            $skiptypes["nuc9"]               = true;
-            $skiptypes["nuc10"]              = true;
-            $skiptypes["ue1"]                = true;
-            $skiptypes["ue2"]                = true;
-            $skiptypes["ue3"]                = true;
-            $skiptypes["ue4"]                = true;
-            $skiptypes["pnbase1"]            = true;
-            $skiptypes["pnbase2"]            = true;
-            $skiptypes["pnbase3"]            = true;
-            $skiptypes["pnbase4"]            = true;
-            $skiptypes["iris03"]             = true;
-            $skiptypes["iris04"]             = true;
+            #
+            # Grab all the local individually reservable nodes.
+            #
+            $query_result =
+                DBQueryFatal("select node_id from nodes ".
+                             "where reservable=1");
+
+            while ($row = mysql_fetch_array($query_result)) {
+                $skiptypes[$row["node_id"]]    = true;                
+            }
         }
         return $skiptypes;
     }
