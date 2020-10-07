@@ -58,14 +58,24 @@ $(function ()
 
     function enableStepsMotion()
     {
+	console.info("enableStepsMotion");
+	
 	$('#stepsContainer').steps("enableMotion");
+	$('body').on("keyup.stepsNav", function (event) {
+	    if (event.keyCode === 13) {
+		$('#stepsContainer').steps('next');
+	    }
+	});
 	// For Selenium.
 	$('#stepsContainer').prepend("<div class='hidden' " +
 				     " id='steps-enabled'></div>");	
     }
     function disableStepsMotion()
     {
+	console.info("disableStepsMotion");
+	
 	$('#stepsContainer').steps("disableMotion");
+	$('body').off("keyup.stepsNav");
 	// For Selenium
 	$('#stepsContainer').find("#steps-enabled").remove();
     }
