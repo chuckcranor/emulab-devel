@@ -1768,11 +1768,7 @@ sub GenerateStatusBlob($)
 	if ($state eq "new");
 
     # See if booted into the recovery MFS (not admin or frisbee).
-    my $recovery = 0;
-    if ($node->recoverymfs_osid() && $node->temp_boot_osid() &&
-	$node->recoverymfs_osid() == $node->temp_boot_osid()) {
-	$recovery = 1;
-    }
+    my $recovery = $node->InRecovery();
 
     #
     # So we have a bunch of timestamps for various bits of state.
@@ -1820,6 +1816,22 @@ sub GenerateStatusBlob($)
 	}
     }
     return $blob;
+}
+
+#
+# Is the sliver (node) in recovery mode.
+#
+sub InRecovery($)
+{
+    my ($self) = @_;
+    my $resource_id = $self->resource_id();
+
+    my $node = Node->LookupSync($resource_id);
+    if (!defined($node)) {
+	print STDERR "Could not map node $resource_id to its object\n";
+	return 1;
+    }
+    return $node->InRecovery();
 }
 
 ##########################################################################

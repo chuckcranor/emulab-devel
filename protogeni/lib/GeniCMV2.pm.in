@@ -1598,6 +1598,15 @@ sub SliverAction($$$$$$)
 	    }
 	}
 	elsif ($action eq "reload") {
+	    # We want to make this check before the fork, which makes it messy
+	    if (ref($object) eq "GeniSliver::Node" ||
+		ref($object) eq "Aggregate") {
+		if ($object->InRecovery()) {
+		    return
+			GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
+				 "Must clear recovery mode before reload");
+		}
+	    }
 	    if ($object->state() ne "started" && $object->state() ne "stopped"){
 		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
 				    "Sliver is not started or stopped (yet)");

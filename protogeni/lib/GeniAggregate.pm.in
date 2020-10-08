@@ -3985,6 +3985,25 @@ sub RebootSwitches($@)
     return 0;
 }
 
+#
+# Are any nodes in recovery mode.
+#
+sub InRecovery($)
+{
+    my ($self) = @_;
+
+    my @slivers = ();
+    if ($self->SliverList(\@slivers) != 0) {
+	print STDERR "Could not get sliver list for $self\n";
+	return -1;
+    }
+    foreach my $sliver (@slivers) {
+	return 1
+	    if ($sliver->resource_type() eq "Node" && $sliver->InRecovery());
+    }
+    return 0;
+}
+
 ############################################################################
 #
 # Link aggregates need special handling.

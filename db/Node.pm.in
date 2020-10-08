@@ -4746,5 +4746,19 @@ sub AddSpectrum($$$)
     return 0;
 }
 
+#
+# Is a node in recovery
+#
+sub InRecovery($)
+{
+    my ($self) = @_;
+
+    return 1
+	if ($self->recoverymfs_osid() && $self->temp_boot_osid() &&
+	    $self->recoverymfs_osid() == $self->temp_boot_osid());
+
+    return 0;
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;
