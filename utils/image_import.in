@@ -432,7 +432,7 @@ else {
     }
     # If we got a -u argument and not running as that user, flip.
     if (!$user->SameUser(User->ThisUser())) {
-	$user->FlipTo($image->GetGroup());
+	$user->FlipTo($group);
 	$SAVEUID = $user->unix_uid();
     }
     #
