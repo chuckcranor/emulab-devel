@@ -5913,7 +5913,14 @@ sub ModifyDataset($)
     # Not a typical op, so always print debugging info;
     print STDERR $output;
     if ($?) {
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
+	my $val = $? >> 8;
+	if ($val == 255 || $val < 0) {
+	    $val = GENIRESPONSE_ERROR;
+	}
+	else {
+	    $val = GENIRESPONSE_REFUSED;
+	}
+	return GeniResponse->Create($val, undef, $output);
     }
   done:
     my $blob = {};
