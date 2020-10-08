@@ -244,6 +244,7 @@ while (<HIST>) {
             "uid"      => $uid,
 	    "types"    => {},
             "radios"   => 0,
+            "iris"     => 0,
             "compute"  => 0,
             "mmimo"    => 0,
             "rfenv"    => 0,
@@ -265,7 +266,7 @@ while (<HIST>) {
 	$stats{$pid}->{$exptidx}->{"mmimo"} += 1;
     }
     elsif ($type eq "iris030") {
-	$stats{$pid}->{$exptidx}->{"radios"} += 1;
+	$stats{$pid}->{$exptidx}->{"iris"} += 1;
     }
     elsif ($type eq "nuc5300") {
 	$stats{$pid}->{$exptidx}->{"rfenv"} += 1;
@@ -339,6 +340,7 @@ while (my ($uuid,$pid,$uid,$eid,$count,$nickname,$seconds,$started,$exptidx) =
             "uid"      => $uid,
 	    "types"    => {},
             "radios"   => 0,
+            "iris"     => 0,
             "compute"  => 0,
 	    "mmimo"    => 0,
             "rfenv"    => 0,
@@ -372,7 +374,7 @@ else {
     print $POUT "\n";
 }
 
-print "project,experiment,user,started,duration,radios,compute,shared,mmimo,Controlled RF";
+print "project,experiment,user,started,duration,radios,compute,shared,mmimo,iris,Controlled RF";
 foreach my $fe (@FEList) {
     print ",$fe";
 }
@@ -387,6 +389,7 @@ foreach my $pid (sort(keys(%stats))) {
 	my $radios   = $ref->{'radios'};
 	my $compute  = $ref->{'compute'};
 	my $mimos    = $ref->{'mmimo'};
+	my $iris     = $ref->{'iris'};
 	my $rfenv    = $ref->{'rfenv'};
 	my $FEs      = $ref->{'FEs'};
 	my $types    = $ref->{'types'};
@@ -400,7 +403,7 @@ foreach my $pid (sort(keys(%stats))) {
 	}
 
 	print "$pid,$eid,$uid,$started,$seconds,$radios,$compute,$shared,".
-	    "$mimos,$rfenv";
+	    "$mimos,$iris,$rfenv";
 	foreach my $fe (@FEList) {
 	    if (exists($FEs->{$fe})) {
 		print "," . $FEs->{$fe};
