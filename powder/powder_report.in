@@ -258,7 +258,7 @@ while (<HIST>) {
     #
     # Now combine usage into compute,radios,mmimo,etc
     #
-    if ($type eq "x310") {
+    if ($type eq "x310" || $type eq "n310") {
 	$stats{$pid}->{$exptidx}->{"radios"} += 1;
     }
     elsif ($type eq "faros_sfp") {
