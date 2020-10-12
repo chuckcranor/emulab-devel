@@ -385,7 +385,12 @@ sub fatal($)
 sub NotifyTBOPS($$)
 {
     my ($subject, $message) = @_;
-
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+    
+    # Append a timestamp to the end of the body, helpful for debugging
+    # since email will probably be delayed during a disconnect.
+    $message .= "\n\n" . $stamp . "\n";
+    
     if ($impotent) {
 	print "$subject\n";
 	print "$message\n";
