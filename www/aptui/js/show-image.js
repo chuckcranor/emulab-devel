@@ -204,6 +204,15 @@ $(function ()
 	    });
 	}
 
+	// Prefill for snapshot/clone buttons.
+	if (window.SNAPNODE !== undefined) {
+	    $('#snapshot-image-nodeid').val(window.SNAPNODE);
+
+	    var url = $('#image-clone-button').prop("href");
+	    url += "&node=" + window.SNAPNODE;
+	    $('#image-clone-button').prop("href", url);
+	}	    
+
 	// Check for imaging.
 	if (window.SHOWSNAPSTATUS) {
 	    sup.CallServerMethod(null, "image", "SnapshotStatus",
@@ -238,17 +247,7 @@ $(function ()
 		     });
 	}
 	else if (window.AUTOSNAP) {
-	    if (window.AUTOSNAPNODE !== undefined) {
-		$('#snapshot-image-nodeid').val(window.AUTOSNAPNODE);
-	    }
             $('#image-snapshot-button').trigger("click");
-	    // If the user decides to clone instead of snapshot, lets be
-	    // helpful and pass the nodeid along.
-	    if (window.AUTOSNAPNODE !== undefined) {
-		var url = $('#image-clone-button').prop("href");
-		url += "&node=" + window.AUTOSNAPNODE;
-		$('#image-clone-button').prop("href", url);
-	    }	    
 	}
     }
 

@@ -126,7 +126,7 @@ sub usage()
 	  "<node>      - nodeid to create the image from\n");
     exit(-1);
 }
-my $optlist  = "p:wsNdfeDSMA:Fb:UB:t:q";
+my $optlist  = "p:wsNdfeDSMA:Fb:UB:t:qC";
 my $waitmode = 0;
 my $usessh   = 0;
 my $usenfs   = 0;
@@ -135,6 +135,7 @@ my $noemail  = 0;
 my $delta    = 0;
 my $nodelta  = 0;
 my $nomfs    = 0;
+my $cleanmode= 0; # If there is an error, purge the descriptor and directory
 my $quiet    = 0;
 my $signature= 0;
 my $deltapct = 0;
@@ -250,6 +251,9 @@ my $hacksigfile;
 my %options = ();
 if (! getopts($optlist, \%options)) {
     usage();
+}
+if (defined($options{"C"})) {
+    $cleanmode = 1;
 }
 if (defined($options{"w"})) {
     $waitmode = 1;
@@ -1349,6 +1353,17 @@ $args{'name'}    = $me;
 $args{'prepare'} = 1;
 
 if ($usessh) {
+    if (0) {
+	$needcleanup = 0;
+	
+	# Mark webtask
+	$webtask->status("imaging")
+	    if (defined($webtask));
+
+	sleep(30);
+	fatal("Yuck");
+    }
+    
     #
     # Put the node in admin mode...
     #
@@ -1482,7 +1497,9 @@ if ($usefup &&
     #
     my $status = $image->uploader_status();
     if ($status =~ / max /) {
-	$status .= " ($maximagesize bytes)";
+	$status .= " ($maximagesize bytes); the amount of data (when ".
+	    "compressed) in your image exceeds the maximum allowed, please "
+	    "consider a different storage mechanism";
     }
     elsif ($status =~ /quota/) {
 	$status .= "; please delete images you no longer need ".
@@ -1794,8 +1811,16 @@ sub fatal($)
 	$webtask->Exited(1);
 	$webtask->Store();
     }
-    $image->Unlock()
-	if ($needunlock);
+    if ($cleanmode) {
+	# Give web page time to notice failure before deleting.
+	sleep(30) if (defined($webtask));
+	$image->DeleteImageDir();
+	$image->Delete(1);
+    }
+    else {
+	$image->Unlock()
+	    if ($needunlock);
+    }
     exit(-1);
 }
 

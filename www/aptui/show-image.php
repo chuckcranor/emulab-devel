@@ -47,8 +47,8 @@ $optargs = OptionalPageArguments("showsnapstatus", PAGEARG_BOOLEAN,
                                  "node",           PAGEARG_NODE);
 $showsnapstatus = (isset($showsnapstatus) ? $showsnapstatus : 0);
 $autosnap = (isset($autosnap) ? $autosnap : 0);
-if ($autosnap && isset($node)) {
-    $autosnapnode = $node->node_id();
+if (($autosnap || $showsnapstatus) && isset($node)) {
+    $snapnode = $node->node_id();
 }
 
 if (!$image) {
@@ -102,8 +102,8 @@ echo "    window.CANEDIT        = $canedit;\n";
 echo "    window.CANDELETE      = $candelete;\n";
 echo "    window.SHOWSNAPSTATUS = $showsnapstatus;\n";
 echo "    window.AUTOSNAP       = $autosnap;\n";
-if ($autosnap && isset($autosnapnode)) {
-    echo "    window.AUTOSNAPNODE   = '$autosnapnode';\n";
+if (isset($snapnode)) {
+    echo "    window.SNAPNODE   = '$snapnode';\n";
 }
 echo "</script>\n";
 

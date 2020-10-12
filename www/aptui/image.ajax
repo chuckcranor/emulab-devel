@@ -755,9 +755,14 @@ function Do_Clone()
         $webtask = WebTask::CreateAnonymous();
         $webtask->SetTaskValue("node_id", $node->node_id());
         $webtask->Store();
-        
+
+        #
+        # On this path, the image does not exist, so if this fails then
+        # we want to kill the descriptor to avoid cruft in the DB.
+        # Note that we created the descriptor above, so force with -C
+        #
         $retval = SUEXEC($this_uid, $unix_groups,
-                         "webclone_image -t " . $webtask->task_id() .
+                         "webclone_image -C -t " . $webtask->task_id() .
                          " " . escapeshellarg($formfields["imagename"]) .
                          " " . $node->node_id(),
                          SUEXEC_ACTION_IGNORE);
@@ -768,7 +773,10 @@ function Do_Clone()
             SUEXECERROR(SUEXEC_ACTION_CONTINUE);
             
             if (!$webtask->exited() || $retval < 0) {
-                SPITAJAX_ERROR(-1, "Internal error starting snapshot");
+                SPITAJAX_ERROR(-1,
+                               "Internal error starting snapshot" .
+                               ($webtask->output() ?
+                                ": " . $webtask->output() : ""));
             }
             else {
                 # Need to pass exitcode through on this one.
@@ -780,7 +788,7 @@ function Do_Clone()
     }
     $url = "show-image.php?imageid=" . $newimage->uuid();
     if (isset($node)) {
-        $url .= "&showsnapstatus=1";
+        $url .= "&showsnapstatus=1&node_id=" . $node->node_id();
     }
     SPITAJAX_RESPONSE($url);
 }

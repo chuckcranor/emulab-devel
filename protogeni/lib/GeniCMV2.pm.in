@@ -3838,6 +3838,7 @@ sub CreateImage($)
     my $wholedisk    = 0;
     my $nosnapshot   = 0;
     my $mustnotexist = 0;
+    my $purgeimage   = 0;
     my $update_prepare = 0;
     my ($bsname,$blockstore);
     my $copyback_uuid;
@@ -4081,6 +4082,7 @@ sub CreateImage($)
 	# Need this for copyback. 
 	$clone->Update({"origin_urn" => $image->origin_urn()});
 	$image = $clone;
+	$purgeimage = 1;
     }
     if (defined($bsname)) {
 	#
@@ -4175,6 +4177,7 @@ sub CreateImage($)
 	if (!$image->global()) {
 	    $image->Update({"shared" => 1});
 	}
+	$purgeimage = 1;
     }
     else {
 	# Cause of image versioning.
@@ -4231,6 +4234,7 @@ sub CreateImage($)
     # Do the snapshot.
     #
     $opt  = " -t " . $webtask->task_id();
+    $opt .= " -C " if ($purgeimage);
     $opt .= " -b $bsname" if (defined($bsname));
     $opt .= " -B $copyback_uuid" if (defined($copyback_uuid));
     $opt .= " -U " if ($update_prepare);
@@ -4342,7 +4346,6 @@ sub CreateImage($)
     }
     if (!defined($webtask) || $webtask->exitcode()) {
 	print STDERR "Failed to take the snapshot of $node_id\n";
-	$webtask->Store();
 	goto bad;
     }
     if ($user->email()) {
@@ -4379,7 +4382,7 @@ sub CreateImage($)
 	    print STDERR "Could not get image lock for relocation wait\n";
 	}
 	else {
-	    my $waitfor = 900;
+	    my $waitfor = 1200;
 	    
 	    print STDERR "Waiting for relocation: $relocate_urn\n";
 	    while ($waitfor >= 0) {

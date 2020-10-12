@@ -3257,21 +3257,50 @@ sub CreateImageDir($)
     }
     return 0;
 }
+#
+# Delete, after failure to avoid cruft.
+#
+sub DeleteImageDir($)
+{
+    my ($self) = @_;
+    
+    return 0
+	if (!$self->IsDirPath());
+
+    my $directory;
+
+    if ($self->IsSystemImage()) {
+	$directory = $self->SaveDir();
+    }
+    else {
+	$directory = $self->path();
+    }
+    return 0
+	if (! -e $directory);
+
+    #
+    # This can lead to bad things, so lets not try too hard.  Just do a
+    # rmdir, and if its not empty or not enough permission, fine. Might
+    # revisit later.
+    #
+    rmdir($directory);
+    
+    return 0;
+}
 
 sub CreateDirectory($$)
 {
     my ($self, $directory) = @_;
 
-    return 0
-	if (-e $directory);
-    
-    if (!mkdir($directory, 0775)) {
-	print STDERR "Could not mkdir $directory: $!\n";
-	return -1;
-    }
-    if (!chmod(0775, $directory)) {
-	print STDERR "Could not chmod $directory: $!\n";
-	return -1;
+    if (! -e $directory) {
+	if (!mkdir($directory, 0775)) {
+	    print STDERR "Could not mkdir $directory: $!\n";
+	    return -1;
+	}
+	if (!chmod(0775, $directory)) {
+	    print STDERR "Could not chmod $directory: $!\n";
+	    return -1;
+	}
     }
     
     # If we are root and had to create the directory, then the owner

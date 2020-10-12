@@ -1272,6 +1272,12 @@ sub CreateImageDir($)
 
     return $self->image()->CreateImageDir();
 }
+sub DeleteImageDir($)
+{
+    my ($self) = @_;
+
+    return $self->image()->DeleteImageDir();
+}
 sub SaveDir($)
 {
     my ($self) = @_;
