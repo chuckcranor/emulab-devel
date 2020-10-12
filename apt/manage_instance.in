@@ -3321,6 +3321,7 @@ sub DoDeleteNodes()
     my $errcode;
     my $exitcode = -1;
     my $response;
+    my $gotlock = 0;
 
     my $optlist    = "fNS";
     my $foreground = 0;
@@ -3416,6 +3417,20 @@ sub DoDeleteNodes()
 	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
 	$errcode  = GENIRESPONSE_BUSY;
 	$exitcode = 1;
+	goto bad;
+    }
+    $gotlock = 1;
+
+    #
+    # For efficiency, we ask for the credential bundle, and then pass
+    # it into DeleteNodes.
+    #
+    my $credentials;
+    if ($instance->GetAllCredentials(1, \$credentials, \$errmsg)) {
+	$errmsg   = "Cannot generate credentials";
+	$errcode  = GENIRESPONSE_ERROR;
+	$exitcode = -1;
+	goto bad;
     }
     
     #
@@ -3424,9 +3439,10 @@ sub DoDeleteNodes()
     my $coderef = sub {
 	my ($sliver) = @_;
 	my @nodes    = @{ $aggmap{$sliver->aggregate_urn()} };
+	my $creds    = $credentials->{$sliver->aggregate_urn()};
 
 	$sliver->SetStatus("provisioning");
-	my $response = $sliver->DeleteNodes(@nodes);
+	my $response = $sliver->DeleteNodes($creds, @nodes);
 	
 	# We get back a new manifest. Set it here and clear from the
 	# response structure so it does not copy through the webtask/db.
@@ -3528,7 +3544,7 @@ sub DoDeleteNodes()
     exit(0);
   bad:
     $instance->SetStatus("ready") if (!$nostatus);
-    $slice->UnLock() if (!$nolock);
+    $slice->UnLock() if (!$nolock && $gotlock);
     print STDERR $errmsg . "\n";
     if (defined($webtask)) {
 	$webtask->output($errmsg);

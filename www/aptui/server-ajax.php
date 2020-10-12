@@ -164,6 +164,8 @@ $routing = array("geni-login" =>
 						     "Do_ConsoleURL",
 						 "DeleteNodes" =>
 						     "Do_DeleteNodes",
+						 "DeleteSite" =>
+						     "Do_DeleteSite",
 						 "RequestExtension" =>
 						     "Do_RequestExtension",
 						 "DenyExtension" =>

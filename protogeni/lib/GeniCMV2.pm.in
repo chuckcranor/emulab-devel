@@ -2400,6 +2400,7 @@ sub AddNodes($)
 	if (GeniResponse::IsResponse($credential));
 
     $credential->HasPrivilege( "pi" ) or
+	$credential->HasPrivilege( "instantiate" ) or
 	$credential->HasPrivilege( "bind" ) or
 	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef,
 				     "Insufficient privilege" );
@@ -2771,6 +2772,7 @@ sub DeleteNodes($)
 	if (GeniResponse::IsResponse($credential));
 
     $credential->HasPrivilege( "pi" ) or
+	$credential->HasPrivilege( "instantiate" ) or
 	$credential->HasPrivilege( "bind" ) or
 	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef,
 				     "Insufficient privilege" );

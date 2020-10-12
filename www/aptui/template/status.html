@@ -1128,6 +1128,31 @@ pre {
       </div>
     </div>
   </div>
+  <div id='deletesite_modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <center><h3>Confirm to Delete Site</h3>
+	</div>
+	<div class='modal-body'>
+          <p>
+	    Are you <b>sure</b> you want to delete all the nodes from
+	    this site, from your experiment?  This operation cannot be
+	    stopped once it is started!
+	  </p>
+	  <center>
+            <button style='margin-right: 20px;'
+                    class='btn btn-primary btn-sm' 
+                    data-dismiss='modal' aria-hidden='true'>
+	      Cancel</button>
+            <button class='btn btn-danger btn-sm'; type='button'
+		    id='deletesite_confirm'>
+	      Confirm</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
   <div id="context-menu">
     <ul class="dropdown-menu" role="menu"
 	style='cursor: pointer; cursor: hand'>
@@ -1169,6 +1194,16 @@ pre {
 	   data-toggle='tooltip'
 	   title='Delete node from experiment, click for more info'
 	   data-trigger="hover">Delete Node</a></li>
+    </ul>
+  </div>
+  <div id="site-context-menu">
+    <ul class="dropdown-menu" role="menu"
+	style='cursor: pointer; cursor: hand'>
+      <li>
+	<a name="delete"
+	   data-toggle='tooltip'
+	   title='Delete site from experiment, click for more info'
+	   data-trigger="hover">Delete Site</a></li>
     </ul>
   </div>
   <div id="context"></div>

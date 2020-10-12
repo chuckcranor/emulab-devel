@@ -406,6 +406,8 @@ $(function ()
     
     function GetStatus()
     {
+	//console.info("GetStatus", statusBusy, statusHold);
+	
 	// Clearly not thread safe, but its okay.
 	if (statusBusy || statusHold)
 	    return;
@@ -679,6 +681,13 @@ $(function ()
 		    if (!_.has(json.value.sliverstatus, urn)) {
 			console.info("Topology has changed: " +
 				     urn + " removed");
+			changingtopo = true;
+		    }
+		});
+		$.each(json.value.sliverstatus, function (urn) {
+		    if (!_.has(lastSliverStatus, urn)) {
+			console.info("Topology has changed: " +
+				     urn + " added");
 			changingtopo = true;
 		    }
 		});
@@ -1729,6 +1738,46 @@ $(function ()
 	});
 	$('#context').contextmenu('show', event);
     }
+    
+    //
+    // Same operation, but for the Site tag context menu.
+    //
+    function SiteContextMenuShow(event, sitetag, urn)
+    {
+	// Foreign admins have no permission for anything.
+	if (isfadmin) {
+	    return;
+	}
+	var nickname = $(sitetag).text();
+	var cid = "site-context-menu";
+
+	if (currentContextMenu) {
+	    $('#context').contextmenu('closemenu');
+	    $('#context').contextmenu('destroy');
+	}
+
+	//
+	// We generate a new menu object each time causes it easier and
+	// not enough overhead to worry about.
+	//
+	$('#context').contextmenu({
+	    target: '#' + cid, 
+	    onItem: function(context,e) {
+		$('#context').contextmenu('closemenu');
+		$('#context').contextmenu('destroy');
+		// Disabled menu items, but we still want user to see them.
+		if ($(e.target).attr("disabled")) {
+		    return;
+		}
+		SiteActionHandler($(e.target).attr("name"), urn);
+	    }
+	})
+	currentContextMenu = cid;
+	$('#' + cid).one('hidden.bs.context', function (event) {
+	    currentContextMenu = null;
+	});
+	$('#context').contextmenu('show', event);
+    }
 
     //
     // Common handler for both the context menu and the listview menu.
@@ -1813,6 +1862,18 @@ $(function ()
 	}
 	else if (action == "monitor") {
 	    NewMonitorTab(clientList[0]);
+	}
+    }
+
+    //
+    // Handler for the Site context menu.
+    //
+    function SiteActionHandler(action, urn)
+    {
+	console.info(action, urn);
+	
+	if (action == "delete") {
+	    DoDeleteSite(urn);
 	}
     }
 
@@ -2277,20 +2338,24 @@ $(function ()
 	    // Update the snapshot modal with new nodes.
 	    UpdateSnapshotModal();
 
+	    // Site context menu setup.
+	    setTimeout(SetupSiteContextMenus, 3000);
+
 	    if (window.ISPOWDER) {
 		if (redrawpowdermap) {
 		    UpdatePowderMap()
-		    return;
 		}
-		var showmap = true;
+		else {
+		    var showmap = true;
 		
-		$.each(statusblob, function(urn) {
-		    if (!_.has(manifests, urn)) {
-			showmap = false;
+		    $.each(statusblob, function(urn) {
+			if (!_.has(manifests, urn)) {
+			    showmap = false;
+			}
+		    });
+		    if (showmap) {
+			ShowPowderMapTab();
 		    }
-		});
-		if (showmap) {
-		    ShowPowderMapTab();
 		}
 	    }
 	    // Signal GetStatus() looper that we are done, 
@@ -2619,6 +2684,78 @@ $(function ()
 					    {"uuid"   : uuid,
 					     "blocks" : blocks});
 	xmlthing.done(callback);
+    }
+
+    /*
+     * Add a context menu to the site tags
+     */
+    function SetupSiteContextMenus()
+    {
+	// We do not have Jacks support, so find the site blob labels.
+	var sitetags = {};
+
+	$('g.sitelabelgroup text.sitetext').each(function () {
+	    var tag = $(this).text();
+	    if (tag != "") {
+		sitetags[tag] = $(this);
+	    }
+	});
+	console.info("SetupSiteContextMenus", sitetags);
+	if (!_.size(sitetags)) {
+	    return;
+	}
+	
+	_.each(manifests, function (manifest, urn) {
+	    var nickname = amlist[urn].name;
+
+	    if (_.has(sitetags, nickname)) {
+		var sitetag  = sitetags[nickname];
+
+		$(sitetag).click(function (event) {
+		    SiteContextMenuShow(event, sitetag, urn);
+		});
+	    }
+	});
+    }
+
+    /*
+     * Delete a site.
+     */
+    function DoDeleteSite(urn)
+    {
+	var nickname = amlist[urn].nickname;
+
+	// Handler for hide modal to unbind the click handler.
+	$('#deletesite_modal').one('hidden.bs.modal', function (event) {
+	    $('#deletesite_confirm').unbind("click.deletesite");
+	});
+	
+	// Throw up a confirmation modal, with handler bound to confirm.
+	$('#deletesite_confirm').bind("click.deletesite", function (event) {
+	    sup.HideModal('#deletesite_modal');
+	
+	    var callback = function(json) {
+		console.info(json);
+		sup.HideWaitWait(function () {		
+		    if (json.code) {
+			sup.SpitOops("oops", json.value);
+			return;
+		    }
+		});
+		// Pickup the change before next interval timeout
+		GetStatus();
+	    }
+	    sup.ShowWaitWait("This will take several minutes. " +
+			     "Patience please.");
+	    var xmlthing = sup.CallServerMethod(ajaxurl,
+						"status",
+						"DeleteSite",
+						{"uuid"     : uuid,
+						 "cluster"  : nickname});
+	    xmlthing.done(callback);
+	});
+        $('#error_panel').addClass("hidden");
+	sup.ShowModal('#deletesite_modal');
     }
 
     function ShowProgressModal()

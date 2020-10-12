@@ -2151,6 +2151,78 @@ function Do_Top()
     return;
 }
 
+#
+# Delete nodes from an experiment
+#
+function Do_DeleteSite()
+{
+    global $this_user, $instance, $suexec_output;
+    global $ajax_args;
+
+    if (StatusSetupAjax(1)) {
+	return;
+    }
+    if ($instance->paniced()) {
+        SPITAJAX_ERROR(1, "This experiment has been quarantined.");
+        return;
+    }
+    $this_idx = $this_user->uid_idx();
+    $uuid = $ajax_args["uuid"];
+
+    if (!isset($ajax_args["cluster"])) {
+	SPITAJAX_ERROR(1, "Missing cluster list");
+	return;
+    }
+    $cluster = $ajax_args["cluster"];
+    if (!preg_match("/^[-\w]+$/", $cluster)) {
+
+        SPITAJAX_ERROR(1, "Illegal characters in cluster");
+        return;
+    }
+    if ($this_idx != $instance->creator_idx() && !ISADMIN()) {
+	SPITAJAX_ERROR(1, "Not enough permission.");
+	return;
+    }
+    if ($instance->status() != "ready") {
+	SPITAJAX_ERROR(1, "Experiment is currently busy");
+	return;
+    }
+    $aggregate = Aggregate::LookupByNickname($cluster);
+    if (!$aggregate) {
+	SPITAJAX_ERROR(1, "No such cluster");
+	return;
+    }
+    $sliver = InstanceSliver::Lookup($instance, $aggregate->urn());
+    if (!$sliver) {
+	SPITAJAX_ERROR(1, "Not a cluster in this instance");
+	return;
+    }
+    $urn = $aggregate->urn();
+    #
+    # Call out to the backend.
+    #
+    $webtask = WebTask::CreateAnonymous();
+    $retval = SUEXEC("nobody", "nobody",
+		     "webmanage_instance -t " . $webtask->task_id() .
+                     "  deleteaggregates $uuid '$urn'",
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error deleting site");
+        }
+        else {
+            SPITAJAX_ERROR(1, $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    $webtask->Delete();
+    SPITAJAX_RESPONSE("Success");
+}
+
 # Local Variables:
 # mode:php
 # End:

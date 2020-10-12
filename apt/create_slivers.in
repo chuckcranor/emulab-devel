@@ -312,37 +312,13 @@ if (!defined($context)) {
 Genixmlrpc->SetContext($context);
 
 #
-# Generate credentials we need.
+# Generate credentials we need, which include image and dataset and
+# spectrum. First argrument is "allowexpired" flag, which is not allowed
+# when creating a new sliver.
 #
-my ($slice_credential, $speaksfor_credential) =
-    APT_Geni::GenCredentials($genislice, $geniuser,
-			     $havespectrum ?
-			     ["use-spectrum", "instantiate"] : undef, 0);
-if (! (defined($speaksfor_credential) &&
-       defined($slice_credential))) {
-    fatal("Could not generate credentials");
-}
-
-#
-# Generate the extra credentials that tells the backend this experiment
-# can access the datasets.
-#
-my $dataset_credentials = {};
-my $retval = $instance->CreateDatasetCreds(\$errmsg, \$dataset_credentials);
-if ($retval) {
-    # Map user error to BADARGS,
-    $retval = GENIRESPONSE_BADARGS()
-	if ($retval == 1);
-    MyExit($retval, "Could not generate dataset credentials: $errmsg");
-}
-# Ditto images that are not global (also checks user permission).
-my $image_credentials = {};
-$retval = $instance->CreateImageCreds(\$errmsg, \$image_credentials);
-if ($retval) {
-    # Map user error to BADARGS,
-    $retval = GENIRESPONSE_BADARGS()
-	if ($retval == 1);
-    MyExit($retval, "Could not generate image credentials: $errmsg");
+my $credentials;
+if ($instance->GetAllCredentials(0, \$credentials, \$errmsg)) {
+    fatal("Could not generate credentials: $errmsg");
 }
 
 #
@@ -845,20 +821,12 @@ sub CreateSliver($)
 
     Genixmlrpc->SetTimeout(900);
 
-    my @allcreds = (
-	$slice_credential->asString(),
-	$speaksfor_credential->asString()
-    );
-    #
-    # Dataset and image credentials are per aggregate cause of speaksfor
-    # rules checking at the CM.
-    #
-    if (exists($dataset_credentials->{$authority->urn()})) {
-	@allcreds = (@allcreds, @{$dataset_credentials->{$authority->urn()}});
+    # Creds might already be strings.
+    my @allcreds = ();
+    foreach my $cred (@{ $credentials->{$authority->urn()} }) {
+	push(@allcreds, ref($cred) ? $cred->asString() : $cred);
     }
-    if (exists($image_credentials->{$authority->urn()})) {
-	@allcreds = (@allcreds, @{$image_credentials->{$authority->urn()}});
-    }
+
     #
     # This creates the sliver and starts it. We have to watch for the
     # server being too busy.
@@ -1170,10 +1138,18 @@ sub RunStitcher()
     my $rspecfile     = "$tmpdir/rspec.xml";
     my $stdoutfile    = "$tmpdir/stitcher.stdout";
     my $stderrfile    = "$tmpdir/stitcher.stderr";
-    # Who we are speaking for.
-    my $speaksfor_urn = $slice_credential->owner_urn();
     my $failed        = 0;
     my $errcode       = GENIRESPONSE_STITCHER_ERROR();
+
+    #
+    # Pick up the slice/speaksfor credentials from the first entry
+    # in the credentials list.
+    #
+    my ($slice_credential, $speaksfor_credential) =
+	@{ (values(%{$credentials}))[0] };
+    
+    # Who we are speaking for.
+    my $speaksfor_urn = $slice_credential->owner_urn();
 
     #
     # Mark the aggregates as doing something, we never retry these

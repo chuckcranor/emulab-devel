@@ -2054,6 +2054,61 @@ sub CreateImageCreds($$$;$)
     return 0;
 }
 
+#
+# Bundle up all credentials we need. We set them up per aggregate,
+# the caller will send only those credentials that are needed for
+# each aggregate.
+#
+sub GetAllCredentials($$$$)
+{
+    my ($self, $allowexpired, $pref, $perrmsg) = @_;
+    my $geniuser    = $self->GetGeniUser();
+    my $slice       = $self->GetGeniSlice();
+    my %credentials = ();
+    
+    my $dataset_credentials = {};
+    if ($self->CreateDatasetCreds($perrmsg, \$dataset_credentials)) {
+	return -1;
+    }
+    my $image_credentials = {};
+    if ($self->CreateImageCreds($perrmsg, \$image_credentials)) {
+	return -1;
+    }
+    #
+    # The spectrum credential has to go to all of the aggregates.
+    #
+    my $spectrum = [];
+    if (APT_Profile::GetSpectrum($self->rspec(), \$spectrum, $perrmsg)) {
+	return -1;
+    }
+
+    my ($slice_credential, $speaksfor_credential) =
+	APT_Geni::GenCredentials($slice, $geniuser,
+				 @$spectrum ?
+				 ["use-spectrum",
+				  "instantiate", "bind"] : undef,
+				 $allowexpired);
+    return -1
+	if (!defined($slice_credential));
+    return -1
+	if (!$allowexpired && !defined($speaksfor_credential));
+
+    foreach my $agg ($self->AggregateList()) {
+	my $urn = $agg->aggregate_urn();
+	my @creds = ($slice_credential, $speaksfor_credential);
+
+	if (exists($dataset_credentials->{$urn})) {
+	    @creds = (@creds, @{ $dataset_credentials->{$urn} });
+	}
+	if (exists($image_credentials->{$urn})) {
+	    @creds = (@creds, @{ $image_credentials->{$urn} });
+	}
+	$credentials{$urn} = \@creds;
+    }
+    $$pref = \%credentials;
+    return 0;
+}
+
 sub Schedule($$)
 {
     my ($self, $start) = @_;
@@ -4623,11 +4678,11 @@ sub UpdateKeys($$)
 }
 
 #
-# Delete some nodes
+# Delete some nodes. For efficiency, the caller provides the credentials
 #
-sub DeleteNodes($@)
+sub DeleteNodes($$@)
 {
-    my ($self, @nodes) = @_;
+    my ($self, $credentials, @nodes) = @_;
     my $authority = $self->GetGeniAuthority();
     my $geniuser  = $self->instance()->GetGeniUser();
     my $urn       = $self->aggregate_urn();
@@ -4637,18 +4692,14 @@ sub DeleteNodes($@)
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
-    my ($slice_credential, $speaksfor_credential) =
-	APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
-    return CredentialError()
-	if (!defined($slice_credential));
-
-    my $credentials = [$slice_credential->asString()];
-    if (defined($speaksfor_credential)) {
-	$credentials = [@$credentials, $speaksfor_credential->asString()];
+    # Creds might already be strings.
+    my @allcreds = ();
+    foreach my $cred (@{ $credentials }) {
+	push(@allcreds, ref($cred) ? $cred->asString() : $cred);
     }
     my $args = {
 	"slice_urn"   => $slice->urn(),
-	"credentials" => $credentials,
+	"credentials" => \@allcreds,
 	"nodes"       => \@nodes,
     };
     my $cmurl = $authority->url();
