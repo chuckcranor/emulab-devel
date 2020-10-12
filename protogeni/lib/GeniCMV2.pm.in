@@ -6839,8 +6839,8 @@ sub Recovery($)
     else {
 	$output = GeniUtil::ExecQuiet("$NODEADMIN -R on $node_id");
     }
+    print STDERR $output . "\n";
     if ($?) {
-	print STDERR $output . "\n";
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Failed to change recovery mode");
     }
