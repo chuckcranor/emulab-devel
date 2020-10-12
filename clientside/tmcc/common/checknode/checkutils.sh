@@ -395,7 +395,7 @@ compareunits() {
 	    unit_post_strip="\"*"
 	    unit_human_output="DISK"
 	    unit_human_case="upper"
-	    disregard_order=0
+	    disregard_order=1
 	    ;;
 	* )
 	    echo "Error in compareunits don't now type $unittype. Giving up."
