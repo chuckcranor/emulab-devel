@@ -27,7 +27,7 @@ SUBDIR		= install/powder-bus
 
 include $(OBJDIR)/Makeconf
 
-TARGETS		= dhcpd.conf.frag.one batterymon batterymon.sh \
+TARGETS		= dhcpd.conf.frag.one \
 		 idlefix idlefix.sh poweron poweron.sh batterystats
 
 #
@@ -39,9 +39,7 @@ all: $(TARGETS)
 include $(TESTBED_SRCDIR)/GNUmakerules
 
 install: $(INSTALL_ETCDIR)/dhcpd.conf.frag.one \
-	 $(INSTALL_SBINDIR)/run_capture \
-	 $(INSTALL_SBINDIR)/batterymon \
-	 $(INSTALL_RCDIR)/batterymon.sh
+	 $(INSTALL_SBINDIR)/run_capture 
 
 install-idlefix: $(INSTALL_SBINDIR)/idlefix \
 	 $(INSTALL_RCDIR)/idlefix.sh
