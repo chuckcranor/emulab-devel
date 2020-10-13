@@ -179,11 +179,13 @@ if ($debug) {
 	" experiment with aggregates: " . join(' ', @fqdns) . "\n";
 }
 
+my $tmpdir = "$CONFDIR/tarballs/$uuid";
+
 #
 # Since we are shutting things down, kill off any lingering background
 # attempt at distributing and installing the configurations.
 #
-my $pidfile = "$CONFDIR/tarballs/$uuid/distrib.pid";
+my $pidfile = "$tmpdir/distrib.pid";
 if (-e "$pidfile") {
     my $bgpid = `cat $pidfile`;
     if ($bgpid) {
@@ -200,8 +202,8 @@ if (-e "$pidfile") {
 #
 # If we need to go into the background to finish up, do so now.
 #
-$pidfile = "$CONFDIR/tarballs/$uuid/destroy.pid";
-my $logfile = "$CONFDIR/tarballs/$uuid/destroy.out";
+$pidfile = "$tmpdir/destroy.pid";
+my $logfile = "$tmpdir/destroy.out";
 if ($background) {
     my $bgpid;
 
@@ -225,6 +227,7 @@ if ($background) {
 # may not be up at the time of our call, this may not succeed.
 # We do ops first, since it is the one that matters most.
 #
+my $failed = 0;
 foreach my $h ($SERVER, @fqdns) {
     my ($host, $domain) = parsehostname($h);
 
@@ -245,6 +248,7 @@ foreach my $h ($SERVER, @fqdns) {
 	my $stat = ($? >> 8);
 	print STDERR "$exptuuid: WARNING: setting state=$state " .
 	    "for slice $uuid at $h failed ($stat)\n";
+	$failed++;
     } else {
 	print STDERR "$exptuuid: $domain done.\n"
 	    if ($debug);
@@ -252,8 +256,18 @@ foreach my $h ($SERVER, @fqdns) {
 }
 
 if ($background) {
-    unlink($pidfile, $logfile);
+    unlink($pidfile);
+    unlink($logfile)
+	if (!$failed);
 }
+
+#
+# Try once to remove the distribution directory. This will only succeed
+# if everything went according to plan (i.e., the directory is empty of
+# all files from either createwbstore or destroywbstore.
+#
+rmdir($tmpdir);
+
 exit(0);
 
 #

@@ -620,7 +620,8 @@ sub distribconfigs()
     }
 
     # This will remove the tmp directory once it is empty
-    rmdir($tmpdir);
+    # XXX leave the tmpdir around since destroywbstore will log into it.
+    #rmdir($tmpdir);
 }
 
 #
