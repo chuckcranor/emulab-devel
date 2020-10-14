@@ -960,6 +960,10 @@ function CheckStep3()
                 $end < time() + 3600) {
             $errors["end_day"] = "Too short, must be > 1 hour";
         }
+        elseif (($start && $end - $start > (3600 * 3 * 24)) ||
+                ($end - time() > (3600 * 3 * 24))) {
+            $errors["end_day"] = "No more then three days please";
+        }
     }
     else {
         if (!isset($formfields["duration"]) || $formfields["duration"] == "") {

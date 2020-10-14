@@ -262,6 +262,7 @@ $(function ()
 	});
 	$("#end_day").datepicker({
 	    minDate: 0,		/* earliest date is today */
+	    maxDate: "+3D",
 	    showButtonPanel: true,
 	    onSelect: function (dateString, dateobject) {
 		DateChange("#end_day");
