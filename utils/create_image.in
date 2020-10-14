@@ -1498,7 +1498,7 @@ if ($usefup &&
     my $status = $image->uploader_status();
     if ($status =~ / max /) {
 	$status .= " ($maximagesize bytes); the amount of data (when ".
-	    "compressed) in your image exceeds the maximum allowed, please "
+	    "compressed) in your image exceeds the maximum allowed, please ".
 	    "consider a different storage mechanism";
     }
     elsif ($status =~ /quota/) {
