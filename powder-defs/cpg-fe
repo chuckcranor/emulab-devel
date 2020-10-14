@@ -1,4 +1,4 @@
-e#
+#
 # Stub file for setting up elab in elab.
 #
 # Use the --with-TBDEFS=filename to specify your own file.
@@ -6,17 +6,17 @@ e#
 #
 TBDBNAME=tbdb
 TBADMINGROUP=tbadmin
-TBOPSEMAIL=testbed-ops@ops.cpg.powderwireless.net
-TBLOGSEMAIL=testbed-logs@ops.cpg.powderwireless.net
-TBWWWEMAIL=testbed-www@ops.cpg.powderwireless.net
-TBAPPROVALEMAIL=testbed-approval@ops.cpg.powderwireless.net
-TBAUDITEMAIL=testbed-audit@ops.cpg.powderwireless.net
-TBSTATEDEMAIL=testbed-stated@ops.cpg.powderwireless.net
-TBTESTSUITEEMAIL=testbed-testsuite@ops.cpg.powderwireless.net
-TBAUTOMAILEMAIL=testbed-automail@ops.cpg.powderwireless.net
-TBACTIVEARCHIVE=testbed-active-users-archive@ops.cpg.powderwireless.net
-TBUSERSARCHIVE=testbed-users-archive@ops.cpg.powderwireless.net
-TBERRORSEMAIL=testbed-errors@ops.cpg.powderwireless.net
+TBOPSEMAIL=testbed-ops@cpg.powderwireless.net
+TBLOGSEMAIL=testbed-logs@cpg.powderwireless.net
+TBWWWEMAIL=testbed-www@cpg.powderwireless.net
+TBAPPROVALEMAIL=testbed-approval@cpg.powderwireless.net
+TBAUDITEMAIL=testbed-audit@cpg.powderwireless.net
+TBSTATEDEMAIL=testbed-stated@cpg.powderwireless.net
+TBTESTSUITEEMAIL=testbed-testsuite@cpg.powderwireless.net
+TBAUTOMAILEMAIL=testbed-automail@cpg.powderwireless.net
+TBACTIVEARCHIVE=testbed-active-users-archive@cpg.powderwireless.net
+TBUSERSARCHIVE=testbed-users-archive@cpg.powderwireless.net
+TBERRORSEMAIL=testbed-errors@cpg.powderwireless.net
 TBCOOKIESUFFIX="POWDERCPG"
 JAILIPBASE=172.17.0.0
 JAILIPMASK=255.240.0.0
@@ -24,6 +24,8 @@ DELAYCAPACITY=1
 BOSSNODE=boss.cpg.powderwireless.net
 USERNODE=ops.cpg.powderwireless.net
 FSNODE=boss.cpg.powderwireless.net
+# This would typically not change, is usually ops. But can be boss too.
+MAILERNODE="boss"
 OURDOMAIN=cpg.powderwireless.net
 FSDIR_GROUPS=/ops/groups
 FSDIR_PROJ=/ops/proj
@@ -55,6 +57,8 @@ NTPSERVER=ntp1.emulab.net
 DISABLE_NSE=1
 # This means it is an inner elab!
 #ELABINELAB=1
+# For getting initial email setup
+#ELABINELAB_MAILTARGET="stoller@emulab.net"
 # If we can run old images ... depends on whther elvind is installed.
 ELVIN_COMPAT=0
 # The name of the outer boss for inner boss to request services from.
@@ -114,7 +118,7 @@ MIN_UNIX_GID=2000
 WITHZFS=1
 ZFS_ROOT="emulab"
 ZFS_QUOTA_USER="none"
-ZFS_QUOTA_PROJECT="10G"
+ZFS_QUOTA_PROJECT="none"
 ZFS_QUOTA_GROUP="none"
 WITHAMD=1
 # This will default to /.amd_mnt/ops in configure
@@ -150,12 +154,13 @@ CLUSTER_PORTAL="boss.emulab.net"
 CLUSTER_PUBSUBD_SSLPORT=16506
 CLUSTER_PUBSUBD_ALTPORT=16507
 EC2META_ENABLE=1
-# Mobile networking support (PhantomNet)
-MOBILESUPPORT=1
-POWDER_RFMONITOR=1
-POWDER_RFMONITOR_HOST="10.10.10.2"
-POWDER_NICKNAME="CPG"
-POWDER_WBSTORE=1
+# Added by Emulab - Version: POWDER-FIXED
 PROTOGENI_NOPORTALEXPIRE=1
 PROTOGENI_PORTALONLY=1
+
+POWDER_RFMONITOR=1
+POWDER_RFMONITOR_HOST="10.10.10.2"
 POWDER_DEADMAN=1
+POWDER_WBSTORE=1
+
+# End of Emulab added section
