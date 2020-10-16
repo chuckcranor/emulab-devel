@@ -770,6 +770,20 @@ sub Install($$$)
 	    }
 	};
 	
+	#
+	# WBStore.
+	#
+	Phase "newsyslog", "Updating $NEWSYSLOG_CONF", sub {
+	    DoneIfEdited($NEWSYSLOG_CONF);
+
+	    my @lines = (
+		"$LOGDIR/wbstoremonitor.log     644  7   10000  *     Z ".
+		"/var/run/wbstoremonitor.pid"
+		);
+	    
+	    AppendToFileFatal($NEWSYSLOG_CONF, @lines);
+	};
+	
 	PhaseSucceed("Powder Fixed Setup Done");
     };
     return 0;
