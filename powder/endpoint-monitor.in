@@ -26,6 +26,7 @@ use strict;
 use Getopt::Std;
 use Data::Dumper;
 use POSIX qw(strftime);
+use JSON;
 
 #
 # Monitor battery conditioner using the arduino.
@@ -35,71 +36,94 @@ sub usage()
     print "Usage: batterymon [-nsdv]\n";
     exit(1);
 }
-my $optlist   = "dvsnNT";
+my $optlist   = "dvsnNTB";
 my $debug     = 0;
-my $verbose   = 0;
+my $verbose   = 1;
 my $oneshot   = 0;
 my $impotent  = 0;
+my $mailonly  = 1;
 my $noshutdown= 0;
 my $tempdebug = 0;
+my $batdebug  = 0;
 
 #
-# To summarize the power situation on the shuttle:
+# To summarize the battery situation
 #
-#  Shuttle power on -> Shuttle power goes directly out the conditioner
-#  to our gear.
-#  Shuttle power off -> Conditioner battery provides power to our gear
-#       (for 15 minutes, after which it shuts of automatically)
+#  Bus power on  -> Power goes directly out the conditioner.
+#  Bus power off -> Battery provides power to our gear for 15 minutes.
 #
 #  Pin 0: ~100 when running on battery, ~800 when bus providing power. 
 #  Pin 1: Voltage we see. When bus power off, use this to determine the
 #         voltage of our battery. Voltage = Pin1/1024*5*3.
 #
+# Simple check for being bus.
+#
+my $ONBUS = 0;
 my $PIN0_THRESHOLD = 150;
 my $PIN1_THRESHOLD = 830;
+
 my $hostname = `hostname`;
-if ($hostname =~ /bus-test2/) {
-    $PIN1_THRESHOLD = 800;
+chomp($hostname);
+if ($hostname =~ /^boss.bus-\w/) {
+    $ONBUS = 1;
+    if ($hostname =~ /^boss.bus-test2/) {
+	$PIN1_THRESHOLD = 800;
+    }
 }
+# Lowest voltage we allow before shutdown.
+my $MIN_ONBATTERY_VOLTAGE = 12.0;
 
 # Max time we run before shutdown, so that we do not get too close to
 # the current 15 minute timer on the conditioner.
-my $MAX_BATTERYTIME = 60 * 12;
+my $MAX_ONBATTERY_TIME  = 60 * 12;
+
+# Time on battery at which we power down nodes and radios
+my $MAX_ONBATTERY_NODETIME = 30;
 
 # Min time we want to be back on bus power before we suspend shutdown.
-my $MIN_BUSTIME     = 60 * 1;
+my $MIN_ONBATTERY_TIME  = 60 * 1;
 
 # Temperature at which we warn and then start shutting down.
-my $WARN_TEMPF      = 100;
-my $SHUTDOWN_TEMPF  = 110;
-my $RESUME_TEMPF    = 95;
+my $TEMP_WARN       = 100;
+my $TEMP_SHUTDOWN   = 110;
+my $TEMP_RESUME     = 95;
 
-# Time on battery at which we power down the radio.
-my $MAX_RADIOTIME   = 30;
-my $MAX_NODETIME    = 60;
+#
+# Deadman
+#
+# If we go this long without contact (upated timestamp) from the
+# Mothership, then we consider ourself motherless and must power down
+# the experimental nodes.
+#
+my $NOALIVE_THRESHOLD = 120;
+#
+# Once we start hearing from the Mothership again, we want this many
+# consecutive pings before we consider the link good, and we can power
+# the nodes back on.
+#
+my $ISALIVE_COUNT = 3;
+#
+# But if we go too long between pings while waiting for the link to
+# come back solidly, then restart the count back at zero. 
+#
+my $ISALIVE_THRESHOLD = 90;
+#
+# Deadman port
+#
+my $DEADMAN_PORT = 12487;
 
-# Convert
-sub PinConvert($)
-{
-    my ($pin) = @_;
-    my $multiplier = 1024;
-    
-    return sprintf("%.3f", $pin / $multiplier * 5 * 3);
-}
-sub TempConvert($)
-{
-    my ($celcius) = @_;
-    
-    return sprintf("%.3f", ($celcius * 9.0/5.0) + 32);
-}
+# For email, trim to the tag,
+my $SHORTNAME = $hostname;
+$SHORTNAME =~ s/^boss\.([^\.]+).*$/$1/;
 
 #
 # Configure variables
 #
 my $TB         = "@prefix@";
 my $TBOPS      = "@TBOPSEMAIL@";
+$TBOPS = "stoller\@flux.utah.edu";
 my $BOSSNODE   = "@BOSSNODE@";
-my $LOGFILE    = "$TB/log/batterymon.log";
+my $LOGFILE    = "$TB/log/endpoint-monitor.log";
 my $WAP        = "$TB/sbin/wap";
 my $SUDO       = "/usr/local/bin/sudo";
 my $TEVC       = "$TB/bin/tevc";
@@ -109,7 +133,7 @@ my $DBNUM;
 use lib "@prefix@/lib";
 use emdb;
 use emdbi;
-use WebTask;
+use libEmulab;
 use Node;
 use EmulabConstants;
 use power_powduino;
@@ -121,14 +145,15 @@ my $PROTOUSER = PROTOUSER();
 # Protos
 sub logit($);
 sub fatal($);
+sub InitDeadman();
+sub InitTempAndBattery();
+sub CheckDeadman($$);
+sub CheckTempAndBattery($$);
+sub GetTempAndBattery($$$);
 sub NotifyTBOPS($$);
-sub NotifyUser($$);
-sub SendEvent($);
+sub NotifyUsers($$);
+sub PowerAll($);
 sub PowerControl($@);
-
-# For temp testing.
-my @fakeTemps = (80, 90, 95, 100, 105, 110, 115, 110, 105, 100, 90, 80);
-my $fakeTempIndex = 0;
 
 #
 # Turn off line buffering on output
@@ -158,16 +183,21 @@ if (defined($options{"N"})) {
 if (defined($options{"T"})) {
     $tempdebug = 1;
 }
+if (defined($options{"B"})) {
+    $batdebug   = 1;
+    $noshutdown = 1;
+    $MIN_ONBATTERY_VOLTAGE = 11.0;
+}
 die("Only root please\n")
     if ($UID != 0);
 
-if (emdbi::DBExists("battery_monitor")) {
+if ($ONBUS && emdbi::DBExists("battery_monitor")) {
     $DBNUM = emdbi::NewTBDBHandle("battery_monitor");
 }
 
 if (! $impotent) {
-    if (CheckDaemonRunning("battery_monitor")) {
-	fatal("Not starting another battery_monitor daemon!");
+    if (CheckDaemonRunning("endpoint_monitor")) {
+	fatal("Not starting another endpoint_monitor daemon!");
     }
     # Go to ground.
     if (! $debug) {
@@ -175,19 +205,217 @@ if (! $impotent) {
 	    exit(0);
 	}
     }
-    if (MarkDaemonRunning("battery_monitor")) {
+    if (MarkDaemonRunning("endpoint_monitor")) {
 	fatal("Could not mark daemon as running!");
     }
 }
+InitDeadman();
+InitTempAndBattery();
+
 # Wait for other services (capture) to start running.
 sleep(30) if (! $debug);
 
 #
-# Grab the nodes, we will need them through out. Generalize perhaps.
+# At the bottom of this loop, we will have decided if nodes need to be
+# powered on or off or left alone. Along the way we will generate (too
+# much) email.
 #
-my $ed1  = Node->Lookup("ed1");
-my $n300 = Node->Lookup("n300-1");
+my $POWER_OVERTTEMP   =	0x1;
+my $POWER_DEADMAN     = 0x2;
+my $POWER_LOWBATTERY  = 0x4;
+my $powerstate        = undef;
 
+while (1)
+{
+    my $newpowerstate = 0;
+
+    #
+    # Battery, deadman, and temperature checks all want to shutdown and
+    # turn on the nodes, but they interact. When turning nodeas off, we
+    # might end up with extra email, but off is off. Turning nodes on
+    # is a bit messier since we have to be below the temperature resume
+    # threshold, not in a deadman situation, and not on battery power.
+    # Be nice to avoid too much email ...
+    # 
+    CheckDeadman(\$newpowerstate, defined($powerstate));
+    CheckTempAndBattery(\$newpowerstate, defined($powerstate));
+
+    #
+    # Do we power control anything?
+    #
+    if (!defined($powerstate) || $newpowerstate != $powerstate) {
+	if (!$powerstate && $newpowerstate) {
+	    #
+	    # Going from power on to off.
+	    #
+	    PowerAll("off");
+	}
+	elsif ($powerstate && !$newpowerstate) {
+	    #
+	    # Going from power off to on.
+	    #
+	    PowerAll("on");
+	}
+    }
+    $powerstate = $newpowerstate;
+    exit(0)
+	if ($oneshot);
+    sleep($debug ? 10 : 30);
+}
+exit(0);
+
+#
+# Deadman handling
+#
+my $deadmanEnable    = 0;
+my $deadmanTime      = undef;
+my $deadmanLastPing  = undef;
+my $deadmanCounter   = undef;
+my $deadmanSocket    = undef;
+
+sub InitDeadman()
+{
+    #
+    # Deadman enable. 
+    #
+    if (GetSiteVar("powder/deadman_enable", \$deadmanEnable) &&
+	$deadmanEnable == 0) {
+	logit("Deadman currently disabled via sitevar powder/deadman_enable\n");
+	return 0;
+    }
+    #
+    # Bind a socket for incoming keepalive from boss.
+    #
+    $deadmanSocket =
+	new IO::Socket::INET(LocalPort => $DEADMAN_PORT,
+			     Proto     => 'udp',
+			     Timeout   => 10,
+			     Listen    => 10,
+			     Reuse     => 1);
+    if (!$deadmanSocket) {
+	fatal("Could not create socket on port $PORT");
+    }
+    $deadmanLastPing = time();
+    $deadmanCounter  = 0;
+}
+
+sub CheckDeadman($$)
+{
+    my ($pstatus, $doemail) = @_;
+    my $pingTime;
+    my $now = POSIX::strftime("%H:%M:%S\n", localtime());
+
+    if (!$deadmanEnable) {
+	$$pstatus = 0;
+	return;
+    }
+    #
+    # Wait with timeout for the ping. We update the time only when
+    # we get a connection.
+    #
+    my $client_socket = $deadmanSocket->accept();
+    if (!$client_socket) {
+	if (! $!{ETIMEDOUT}) {
+	    logit("Hmm, accept returned a bogus value, continuing ...\n");
+	}
+	else {
+	    # Timed out, continue below since time still goes on.
+	    logit("Timed out waiting, continuing ...\n") if ($debug);
+	}
+    }
+    else {
+	# get information about a newly connected client
+	my $client_address = $client_socket->peerhost();
+	my $client_port = $client_socket->peerport();
+	logit("Connection from $client_address:$client_port\n") if ($debug);
+
+	# Only the Mothership.
+	if ($client_address ne $bossip) {
+	    logit("Not the mothership ($bossip), go away!\n");
+	    # Continue below since time still goes on.
+	}
+	else {
+	    #
+	    # We get a node list and reserved status from the Mothership.
+	    #
+	    my $data = "";
+	    while (<$client_socket>) {
+		$data .= $_;
+	    }
+	    logit("Reservation status from Mom: $data\n") if ($debug);
+	    $pingTime = time();
+	}
+	close($client_socket);
+    }
+    if ($debug || $deadmanTime) {
+	logit("keepalive: " . ($pingTime ? $pingTime : 0) . "\n");
+	
+	if ($deadmanTime) {
+	    logit("deadman: $deadmanTime, counter: $deadmanCounter, ".
+		  "lastping: $deadmanLastPing\n");
+	}
+    }
+    #
+    # If we are already in a deadman state, we are waiting on getting
+    # keepalives from the MotherShip. We want to see isalive change a
+    # a few times in the last while before we power things on.
+    #
+    if ($deadmanTime) {
+	if (!defined($pingTime) || $deadmanLastPing == $pingTime) {
+	    # Nothing changing. 
+	}
+	elsif (time() - $deadmanLastPing > $ISALIVE_THRESHOLD) {
+	    # Nothing for a while, lets reset the counter, we want to
+	    # get three good keepalives within a smallish window.
+	    $deadmanLastPing = $pingTime;
+	    $deadmanCounter  = 0;
+	}
+	elsif ($deadmanCounter < $ISALIVE_COUNT) {
+	    $deadmanCounter++;
+	    $deadmanLastPing = $pingTime;
+	}
+	else {
+	    #
+	    # Mother is alive. 
+	    #
+	    logit("Mothership is alive at ".
+		  POSIX::strftime("20%y-%m-%d %H:%M:%S\n", localtime()));
+	    $deadmanTime     = undef;
+	    $deadmanLastPing = $pingTime;
+	    $deadmanCounter  = 0;
+
+	    NotifyTBOPS("$SHORTNAME Monitor: radios have been turned on",
+			"$SHORTNAME radios turned back on at $now ".
+			"since contact with the portal has resumed.\n");
+
+	    NotifyUsers("$SHORTNAME Monitor: radios have been turned on",
+			"$SHORTNAME radios turned back on at $now ".
+			"since contact with the portal has resumed.\n")
+		if ($doemail);
+	}
+    }
+    elsif (time() - $deadmanLastPing > $NOALIVE_THRESHOLD) {
+	logit("No contact from Mothership for $NOALIVE_THRESHOLD seconds\n");	
+	$deadmanTime     = time();
+
+	NotifyTBOPS("$SHORTNAME Monitor: radios have been turned off",
+		    "$SHORTNAME radios turned off at $now ".
+		    "since contact with the portal has been lost.\n");
+
+	    NotifyUsers("$SHORTNAME Monitor: radios have been turned off",
+			"$SHORTNAME radios turned off at $now ".
+			"since contact with the portal has been lost.\n")
+		if ($doemail);
+    }
+    elsif ($pingTime) {
+	$deadmanLastPing = $pingTime;
+    }
+    $$pstatus |= ($deadmanTime ? $POWER_DEADMAN : 0);
+    return 0;
+}
+
+#
+# Temp and Battery handling.
 #
 # We want to know how long since we went on battery power, since we do
 # not want to do anything for at least a minute or two. And then we want
@@ -199,34 +427,276 @@ my $n300 = Node->Lookup("n300-1");
 # that we get to the end of the day with an experiment still running. 
 #
 #
-my $onBatteryTime = undef;
-my $onBusTime     = time();
+my $onBatteryTime    = undef;
+my $onBusTime        = time();
 
-#
-# Temp handling.
-#
 my $tempWarningTime  = undef;
 my $tempShutdownTime = undef;
 my $tempOkayTime     = undef;
+my $tempLastCheck    = time();
+my $tempFailMail     = undef;
 
-while (1) {
-    #
-    # Protect the arduino access with a timeout. 
-    #
-    # Use a webtask to transmit the voltage values from the child to
-    # the parent.
-    #
-    my $webtask = WebTask->CreateAnonymous();
-    if (!defined($webtask)) {
-	goto again;
-    }
+# For temp testing.
+my @fakeTemps; 
+my $fakeTempIndex = 0;
+
+# For battery testing;
+my @fakeVoltages;
+my $fakeVoltageIndex = 0;
+
+sub InitTempAndBattery()
+{
+    $tempLastCheck = time();
+    $fakeTempIndex = 0;
+    @fakeTemps = (115, 80, 90, 95, 100, 105, 110, 115, 110, 105, 100, 90, 80);
+
+    $fakeVoltageIndex = 0;
+    @fakeVoltages = ([0, 12.5], [0, 12.4], [1, 12.3], [1, 12.2],
+		     [1, 12.3], [1, 12.2], [1, 12.3], [1, 12.2]);
+}
+
+sub CheckTempAndBattery($$)
+{
+    my ($pstatus, $doemail) = @_;
+    my $status = 0;
     
-    my $childpid = fork();
+    my ($tempF, $onbattery, $voltage) = @_;
+    if (GetTempAndBattery(\$tempF, \$onbattery, \$voltage)) {
+	if (time() - $tempLastCheck > 300) {
+	    if (!$tempFailMail || time() - $tempFailMail > (24 * 3600)) {
+		NotifyTBOPS("$SHORTNAME Monitor: temp/battery check failure",
+			    "Temperature/Battery checks are no longer working ".
+			    "on $SHORTNAME\n");
+		$tempFailMail = time();
+	    }
+	}
+    }
+    # Send email if we go too long without a response.
+    $tempLastCheck = time();
+
+    # Debugging with fake temps
+    if ($tempdebug) {
+	if ($fakeTempIndex < scalar(@fakeTemps) - 1) {
+	    $tempF = $fakeTemps[$fakeTempIndex];
+	    $fakeTempIndex++;
+	}
+    }
+    # Debugging with fake battery values
+    if ($batdebug) {
+	if ($fakeVoltageIndex < scalar(@fakeVoltages) - 1) {
+	    ($onbattery,$voltage) = @{ $fakeVoltages[$fakeVoltageIndex] };
+	    $fakeVoltageIndex++;
+	}
+    }
+
+    if ($verbose) {
+	my $tmp = "temp:$tempF";
+	if ($ONBUS) {
+	    $tmp .= ", onbat:$onbattery, voltage:$voltage";
+	}
+	$tmp .= "\n";
+	logit($tmp);
+    }
+
+    if ($tempF >= $TEMP_WARN) {
+	if ($tempF >= $TEMP_SHUTDOWN) {
+	    if (!defined($tempShutdownTime)) {
+		$tempShutdownTime = time();
+		$tempWarningTime  = time() if (!defined($tempWarningTime));
+		logit("Above the temperature shutdown threshold.\n");
+		
+		NotifyTBOPS("$SHORTNAME Monitor: Extreme Temperature Condition",
+			    "$SHORTNAME temperature is above $TEMP_SHUTDOWN\n".
+			    "Temp (F):  $tempF\n\n".
+			    "Powering off radios and nodes!\n");
+
+		NotifyUsers(
+		    "$SHORTNAME Monitor: Extreme Temperature Condition",
+		    "$SHORTNAME has reached $TEMP_SHUTDOWN degrees (F).\n\n".
+		    "Powering off radios and nodes!\n")
+		    if ($doemail);
+	    }
+	}
+	elsif (!defined($tempWarningTime)) {
+	    $tempWarningTime = time();
+	    logit("Above the temperature warning threshold.\n");
+
+	    NotifyTBOPS("$SHORTNAME Monitor: Temperature Warning",
+			"$SHORTNAME temperature has reached $TEMP_WARN (F)\n".
+			"Temp (F):  $tempF\n");
+
+	    NotifyUsers(
+		"$SHORTNAME Monitor: Temperature Warning",
+		"$SHORTNAME has reached $TEMP_WARN degrees (F).\n\n".
+		"This is okay for now, but if the temperature reaches ".
+		"$TEMP_SHUTDOWN degrees,\n".
+		"we will have to shutdown the radios and nodes in your ".
+		"experiment\n".
+		"to protect them from overheating.\n")
+		if ($doemail);
+	}
+    }
+    elsif ($tempF <= $TEMP_RESUME &&
+	   (defined($tempWarningTime) || defined($tempShutdownTime))) {
+	#
+	# Once the Temperature fails below the resume temp, we call
+	# off the emergency. Only do this if in a warning or shutdown
+	# situation. If running on battery, do not turn things on.
+	#
+	logit("Reached the temperature resume threshold.\n");
+
+	my $message =
+	    "$SHORTNAME temperature has fallen below $TEMP_RESUME\n".
+	    "Temp (F):  $tempF\n";
+	    
+	if (defined($tempShutdownTime)) {
+	    NotifyUsers("$SHORTNAME Monitor: temperature returning to normal",
+			"$SHORTNAME has cooled down to $tempF ".
+			"degrees (F).\n")
+		if ($doemail);
+	}
+	NotifyTBOPS("$SHORTNAME temperature is returning to normal", $message);
+	$tempShutdownTime = undef;
+	$tempWarningTime  = undef;
+    }
+    if ($tempShutdownTime) {
+	$status |= $POWER_OVERTTEMP;
+    }
+
+    if ($ONBUS) {
+	if (! $onbattery) {
+	    if (defined($onBatteryTime)) {
+		#
+		# We want to wait at least a little bit before powering
+		# things back on. 
+		#
+		if (!defined($onBusTime)) {
+		    $onBusTime = time();
+		    logit("Back on bus power, waiting $MIN_ONBATTERY_TIME ".
+			  "seconds to make sure\n");
+		    $status |= $POWER_OVERTTEMP;
+		}
+		elsif (time() - $onBusTime < $MIN_ONBATTERY_TIME) {
+		    logit("Waiting to make sure bus power will stay on\n");
+		    $status |= $POWER_OVERTTEMP;
+		}
+		else {
+		    logit("Bus power appears to be staying on\n");
+		    $onBatteryTime = undef;
+
+		    NotifyTBOPS("$SHORTNAME Monitor: back on bus power",
+				"$SHORTNAME is back on bus power\n".
+				"Voltage:   $voltage\n".
+				"Temp (F):  $tempF\n");
+		    
+		    NotifyUsers("$SHORTNAME Monitor: back on bus power",
+				"$SHORTNAME is back on bus power\n")
+			if ($doemail);
+		}
+	    }
+	}
+	else {
+	    logit("Running on battery: $voltage\n");
+	    if (defined($onBatteryTime) && defined($onBusTime)) {
+		# Clear this, it was a false alarm, we are staying on battery.
+		$onBusTime = undef;
+	    }
+	    if (!defined($onBatteryTime)) {
+		$onBatteryTime = time();
+		$onBusTime     = undef;
+
+		NotifyTBOPS("$SHORTNAME Monitor: running on battery",
+			    "$SHORTNAME is running on battery\n".
+			    "Voltage:   $voltage\n".
+			    "Temp (F):  $tempF\n");
+		
+		NotifyUsers(
+		    "$SHORTNAME Monitor: running on battery",
+		    "$SHORTNAME is running on battery\n\n".
+		    "Nodes and radios will be shut down in ".
+		    "$MAX_ONBATTERY_NODETIME seconds to ".
+		    "conserve battery power.\n" .
+		    "If power is not restored soon, the entire system will ".
+		    "have to be shutdown.\n".
+		    "When this happens depends entirely on how much ".
+		    "reserve power is in the battery.\n\n".
+		    "If power is restored soon enough, radios and nodes ".
+		    "will be powered back on.\n");
+	    }
+	    #
+	    # After a short time on battery we turn things off.  If go below
+	    # min voltage, we turn everything off. This will typically jump the
+	    # voltage backup, which is why we need to test again after turning
+	    # things off.
+	    #
+	    if (time() - $onBatteryTime > $MAX_ONBATTERY_NODETIME ||
+		$voltage < $MIN_ONBATTERY_VOLTAGE) {
+		$status |= $POWER_LOWBATTERY;
+	    }
+	}
+
+	#
+	# If we are going from power on to power off, then we want to wait
+	# one more loop to test the voltage for a shutdown.
+	#
+	if (($status && !$powerstate) || !$onbattery) {
+	    $$pstatus = $status;
+	    return 0;
+	}
+	if (time() - $onBatteryTime > $MAX_ONBATTERY_TIME ||
+	    $voltage < $MIN_ONBATTERY_VOLTAGE) {
+	    if ($impotent || $noshutdown) {
+		logit("Would shut down now!\n");
+	    }
+	    else {
+		logit("Shutting down now ...");
+
+		NotifyTBOPS(
+		    "$SHORTNAME Monitor: Shutting down $SHORTNAME",
+		    "Low voltage on $SHORTNAME\n".
+		    "Voltage:   $voltage\n".
+		    "OnBattery: " . (time() - $onBatteryTime) . " seconds\n".
+		    "Temp (F):  $tempF\n");
+		# Give it a moment to get out the door.
+		sleep(15);
+		system("/sbin/shutdown -p now &");
+	    }
+	    exit(0)
+		if (!$impotent);
+	}
+    }
+    $$pstatus = $status;
+    return 0;
+}    
+
+sub PinConvert($)
+{
+    my ($pin) = @_;
+    my $multiplier = 1024;
+    
+    return sprintf("%.3f", $pin / $multiplier * 5 * 3);
+}
+sub TempConvert($)
+{
+    my ($celcius) = @_;
+    
+    return sprintf("%.3f", ($celcius * 9.0/5.0) + 32);
+}
+
+sub GetTempAndBattery($$$)
+{
+    my ($ptemp, $ponbat, $pvoltage) = @_;
+    my $output = "";
+    
+    my $childpid = open(CHILD, "-|");
+    if (!defined($childpid)) {
+	logit("*** could not not fork: $!\n");
+	return -1;
+    }
+    # Protect Arduino read with a timeout.
     if ($childpid) {
-	#
-	# Allow a few seconds for this operation.
-	#
 	local $SIG{ALRM} = sub { kill("TERM", $childpid); };
+	
 	alarm 10;
 	waitpid($childpid, 0);
 	alarm 0;
@@ -239,312 +709,96 @@ while (1) {
 	    } else {
 		$cause = "failed with exit value ". ($ecode >> 8);
 	    }
-	    logit("*** Voltage fetch $cause\n");
-	    $webtask->Delete();
-	    goto again;
+	    logit("*** Powduino fetch failure: $cause\n");
+	    return -1;
 	}
-	$webtask->Refresh();
+	while (<CHILD>) {
+	    $output .= $_;
+	}
+	close(CHILD);
+	if ($verbose > 1) {
+	    logit($output);
+	}
     }
     else {
-	# The child ...
-	#
-	# Ask for the voltage.
-	#
-	my %voltage;
-	if (powduinovoltage("powduino", \%voltage)) {
-	    exit(1);
-	}
+	my $blob = {
+	};
 	my %temp;
 	if (powduinotemp("powduino", \%temp)) {
 	    exit(1);
 	}
-	if ($verbose > 1) {
-	    print Dumper(\%voltage);
-	    print Dumper(\%temp);
-	}
-	if (! (exists($voltage{"pin0"}) && exists($voltage{"pin1"}))) {
-	    logit("Incomplete voltage data from powduino");
-	    exit(1);
-	}
 	if (! exists($temp{"tempC"})) {
-	    logit("Incomplete temperature data from powduino");
+	    logit("Incomplete temperature data from powduino\n");
 	    exit(1);
 	}
-	$webtask->voltage(\%voltage);
-	$webtask->temp(\%temp);
-	$webtask->Store();
-	$webtask->Exited(0);
+	$blob->{"tempC"} = $temp{"tempC"};
+	#
+	# Ask for the voltage on a bus.
+	#
+	if ($ONBUS) {
+	    my %voltage;
+	    if (powduinovoltage("powduino", \%voltage)) {
+		exit(1);
+	    }
+	    if (! (exists($voltage{"pin0"}) && exists($voltage{"pin1"}))) {
+		logit("Incomplete voltage data from powduino\n");
+		exit(1);
+	    }
+	    my $pin0 = $voltage{"pin0"};
+	    my $pin1 = $voltage{"pin1"};
+	    
+	    #
+	    # Better both be a number between 0 and 1000 ... 
+	    #
+	    if ($pin0 !~ /^\d+$/ || $pin0 < 0 || $pin0 > 1000) {
+		logit("Bad value for pin0: $pin0");
+		exit(1);
+	    }
+	    if ($pin1 !~ /^\d+$/ || $pin1 < 0 || $pin1 > 1100) {
+		logit("Bad value for pin1: $pin1");
+		exit(1);
+	    }
+	    $blob->{"pin0"} = $pin0;
+	    $blob->{"pin1"} = $pin1;
+	}
+	if ($verbose > 1) {
+	    logit(Dumper($blob));
+	}
+	my $string = eval { encode_json($blob) };
+	if ($@) {
+	    logit("Could not encode powduino json data\n");
+	    exit(1);
+	}
+	print STDOUT $string;
 	exit(0);
     }
-    my $status = $webtask->voltage();
-    my $pin0   = $status->{"pin0"};
-    my $pin1   = $status->{"pin1"};
-    my $tempC  = $webtask->temp()->{"tempC"};
-    $webtask->Delete();
-    
-    #
-    # Better both be a number between 0 and 1000 ... 
-    #
-    if ($pin0 !~ /^\d+$/ || $pin0 < 0 || $pin0 > 1000) {
-	logit("Bad value for pin0: $pin0");
-	goto again;
+    my $tmp  = eval { decode_json($output) };
+    if ($@) {
+	logit("Could not decode json data: $output\n");
+	return -1;
     }
-    if ($pin1 !~ /^\d+$/ || $pin1 < 0 || $pin1 > 1100) {
-	logit("Bad value for pin1: $pin1");
-	goto again;
-    }
-    my $voltage = PinConvert($pin1);
-    my $tempF   = TempConvert($tempC);
+    $$ptemp = TempConvert($tmp->{'tempC'});
+    if ($ONBUS) {
+	$$ponbat = ($tmp->{'pin0'} < $PIN0_THRESHOLD ? 1 : 0);
+	$$pvoltage = PinConvert($tmp->{'pin1'});
 
-    # Debugging with fake temps
-    if ($tempdebug) {
-	if ($fakeTempIndex < scalar(@fakeTemps) - 1) {
-	    $tempF = $fakeTemps[$fakeTempIndex];
-	    $fakeTempIndex++;
+	if (defined($DBNUM) && !$impotent) {
+	    emdbi::DBQueryWarnN($DBNUM,
+				"insert into battery_monitor set ".
+				"  stamp=now(), onbattery='$$ponbat', ".
+				"  voltage='$$pvoltage', ".
+				"  pinval='" . $tmp->{'pin1'} . "', ".
+				"  temp='$$ptemp'");
 	}
     }
-
-    if ($verbose) {
-	logit("Pin0:$pin0, Pin1:$pin1, Voltage:$voltage, TempF: $tempF");
-    }
-    if (defined($DBNUM) && !$impotent) {
-	my $onbattery = ($pin0 < $PIN0_THRESHOLD ? 1 : 0);
-	
-	emdbi::DBQueryWarnN($DBNUM,
-			    "insert into battery_monitor set ".
-			    "  stamp=now(), onbattery=$onbattery, ".
-			    "  voltage='$voltage', pinval='$pin1', ".
-			    "  temp='$tempF'");
-    }
-    # We need to do this, for the current reservation.
-    $ed1->Refresh();
-    $n300->Refresh();
-
-    #
-    # Temperature checks need to come first. If we go on battery and
-    # we have already turned things off cause of overtemp, then we
-    # wait till we run out of battery power.
-    #
-    if ($tempF >= $WARN_TEMPF) {
-	if (!defined($tempWarningTime)) {
-	    $tempWarningTime = time();
-	    print "Above the temperature warning threshold.\n";
-
-	    NotifyTBOPS("$BOSSNODE Temperature Warning",
-			"$BOSSNODE temperature has reached $WARN_TEMPF\n".
-			"Temp (F):  $tempF\n".
-			"Voltage:   $voltage\n");
-
-	    if ($ed1->IsReserved()) {
-		my $client_id = $ed1->vname();
-		
-		NotifyUser(
-		    "Bus $client_id Temperature Warning",
-		    "Bus $client_id has reached $WARN_TEMPF degrees (F).\n\n".
-		    "This is okay for now, but if the temperature reaches ".
-		    "$SHUTDOWN_TEMPF degrees,\n".
-		    "we will have to shutdown the radios and nodes in your ".
-		    "experiment\n".
-		    "to protect them from overheating.\n");
-	    }
-	}
-	elsif ($tempF >= $SHUTDOWN_TEMPF) {
-	    if (!defined($tempShutdownTime)) {
-		$tempShutdownTime = time();
-		print "Above the temperature shutdown threshold.\n";
-		
-		NotifyTBOPS("$BOSSNODE Extreme Temperature Condition",
-			    "$BOSSNODE temperature is above $SHUTDOWN_TEMPF\n".
-			    "Temp (F):  $tempF\n".
-			    "Voltage:   $voltage\n\n".
-			    "Powering off radios and nodes!\n");
-		if ($ed1->IsReserved()) {
-		    my $client_id = $ed1->vname();
-		    
-		    NotifyUser(
-			"Bus $client_id Extreme Temperature Condition",
-			"Bus $client_id has reached $SHUTDOWN_TEMPF ".
-			"degrees (F).\n\n".
-			"Radios and nodes have been powered off.\n");
-		}
-		PowerControl("off", $n300, $ed1);
-	    }
-	}
-    }
-    elsif ($tempF <= $RESUME_TEMPF &&
-	   (defined($tempWarningTime) || defined($tempShutdownTime))) {
-	#
-	# Once the Temperature fails below the resume temp, we call
-	# off the emergency. Only do this if in a warning or shutdown
-	# situation. If running on battery, do not turn things on.
-	#
-	print "Reached the temperature resume threshold.\n";
-
-	my $message =
-	    "$BOSSNODE temperature has fallen below $RESUME_TEMPF\n".
-	    "Temp (F):  $tempF\n".
-	    "Voltage:   $voltage\n\n";
-	    
-	if (defined($tempShutdownTime) && !defined($onBatteryTime)) {
-	    #
-	    # Lets not power on nodes that are not allocated, they will
-	    # get turned on later when allocated.
-	    #
-	    if ($ed1->IsReserved()) {
-		my $client_id = $ed1->vname();
-		
-		NotifyUser("Bus $client_id temperature returning to normal",
-			   "Bus $client_id has cooled down to $tempF ".
-			   "degrees (F).\n\n".
-			   "Radios and nodes have been powered back on\n");
-		
-		$message .= "Powering on allocated radios and nodes\n";
-		PowerControl("on", $n300, $ed1);
-	    }
-	}
-	NotifyTBOPS("$BOSSNODE temperature is returning to normal", $message);
-	$tempShutdownTime = undef;
-	$tempWarningTime  = undef;
-    }
-    
-    if ($pin0 > $PIN0_THRESHOLD) {
-	#
-	# We are on bus power.
-	#
-	if (defined($onBatteryTime)) {
-	    #
-	    # We want to wait at least a little bit before powering
-	    # things back on. 
-	    #
-	    if (!defined($onBusTime)) {
-		$onBusTime = time();
-		print "Back on bus power, waiting $MIN_BUSTIME seconds ".
-		    "to make sure\n";
-	    }
-	    elsif (time() - $onBusTime < $MIN_BUSTIME) {
-		print "Still waiting to make sure bus power will stay on\n";
-	    }
-	    else {
-		my $client_id = $ed1->vname();
-		#
-		# We want to turn stuff back on and notify the user.
-		# But not if in a temperature induced shutdown.
-		#
-		print "Bus power appears to be staying on\n";
-		$onBatteryTime = undef;
-
-		if ($ed1->IsReserved()) {
-		    if (defined($tempShutdownTime)) {
-			NotifyUser("Bus $client_id is back on bus power",
-				   "Bus $client_id is back on bus power\n".
-				   "But still in a high temperature situation,".
-				   "radios and nodes are still powered off.");
-		    }
-		    else {
-			PowerControl("on", $ed1);
-			if ($n300->IsReserved()) {
-			    PowerControl("on", $n300);
-			}
-			NotifyUser("Bus $client_id is back on bus power",
-				   "Bus $client_id is back on bus power\n".
-				   "Radios and experimental nodes have been ".
-				   "powered on.\n");
-		    }
-		}
-		NotifyTBOPS("$BOSSNODE is back on bus power",
-			    "$BOSSNODE is back on bus power\n".
-			    "Voltage:   $voltage\n".
-			    "Pin0:      $pin0\n".
-			    "Pin1:      $pin1\n".
-			    "Temp (F):  $tempF\n");
-	    }
-	}
-	goto again;
-    }
-    
-    logit("Running on battery: $voltage ($pin1)");
-    if (defined($onBatteryTime) && defined($onBusTime)) {
-	# Clear this, it was a false alarm, we are staying on battery.
-	$onBusTime = undef;
-    }
-    if (!defined($onBatteryTime)) {
-	$onBatteryTime = time();
-	$onBusTime     = undef;
-
-	NotifyTBOPS("$BOSSNODE is running on battery",
-		    "$BOSSNODE is running on battery\n".
-		    "Voltage:   $voltage\n".
-		    "Pin0:      $pin0\n".
-		    "Pin1:      $pin1\n".
-		    "Temp (F):  $tempF\n");
-
-	# Lets see if we need to generate a user email. This is temporary
-	# since email is not really a useful notification.
-	if ($ed1->IsReserved()) {
-	    my $client_id = $ed1->vname();
-	    NotifyUser("Bus $client_id is running on battery",
-		       "Bus $client_id is running on battery\n\n".
-		       "Radios will be shut down in $MAX_RADIOTIME seconds ".
-		       "to conserve battery power.\n" .
-		       "Experimental nodes will be shut down in ".
-		       "$MAX_NODETIME seconds.\n\n".
-		       "If power is not restored soon, the entire system will ".
-		       "have to be shutdown.\n".
-		       "When this happens depends entirely on how much ".
-		       "reserve power is in the battery.\n\n".
-		       "If power is restored soon enough, radios and nodes ".
-		       "will be powered back on.\n");
-	}
-    }
-    #
-    # After a short time on battery, we power down the radio, it draws
-    # a lot of power even if it is not doing anything and we want to
-    # keep boss up as long as possible.
-    #
-    if (time() - $onBatteryTime > $MAX_RADIOTIME || $pin1 < $PIN1_THRESHOLD) {
-	PowerControl("off", $n300);
-    }
-    #
-    # And a little while later, the experiment node.
-    #
-    if (time() - $onBatteryTime > $MAX_NODETIME || $pin1 < $PIN1_THRESHOLD) {
-	PowerControl("off", $ed1);
-    }
-    if ($pin1 < $PIN1_THRESHOLD ||
-	time() - $onBatteryTime > $MAX_BATTERYTIME) {
-	if ($impotent || $noshutdown) {
-	    print "Would shut down now!\n";
-	}
-	else {
-	    logit("Shutting down now ...");
-	    SENDMAIL($TBOPS,
-		     "Shutting down $BOSSNODE",
-		     "Low voltage on $BOSSNODE\n".
-		     "Voltage:   $voltage\n".
-		     "Pin0:      $pin0\n".
-		     "Pin1:      $pin1\n".
-		     "OnBattery: " . (time() - $onBatteryTime) . " seconds\n".
-		     "Temp (F):  $tempF\n",
-		     $TBOPS);
-	    # Give it a moment to get out the door.
-	    sleep(15);
-	    system("/sbin/shutdown -p now &");
-	}
-	exit(0)
-	    if (!$impotent);
-    }
-  again:
-    exit(0)
-	if ($oneshot);
-    sleep($debug ? 10 : 30);
+    return 0;
 }
-exit(0);
 
 sub logit($) {
     my ($msg) = @_;
 
-    print strftime("%b %e %H:%M:%S : ", localtime);
-    print "$msg\n";
+    print STDERR strftime("%b %e %H:%M:%S : ", localtime());
+    print STDERR "$msg";
 }
 
 sub fatal($)
@@ -556,11 +810,11 @@ sub fatal($)
 	# Send a message to the testbed list. 
 	#
 	SENDMAIL($TBOPS,
-		 "battery_monitor died",
+		 "endpoint-monitor died",
 		 $msg,
 		 $TBOPS);
     }
-    MarkDaemonStopped("battery_monitor")
+    MarkDaemonStopped("endpoint-monitor")
 	if (! $impotent);
 
     die("*** $0:\n".
@@ -568,23 +822,45 @@ sub fatal($)
 }
 
 #
-# We notify a user if the experimental node is reserved. 
+# We notify users holding nodes.
 #
-sub NotifyUser($$)
+sub NotifyUsers($$)
 {
     my ($subject, $message) = @_;
-    my $experiment = $ed1->Reservation();
-    my $node_id    = $ed1->node_id();
-    my $creator    = $experiment->GetCreator();
-    my $user_email = $creator->email();
-    my $user_name  = $creator->name();
+    my %users = ();
 
-    if ($impotent) {
+    if ($impotent || $mailonly) {
 	print "$subject\n";
-	print "$message\n";
+	print "$message";
 	return;
+    }    
+
+    my $query_result =
+	DBQueryFatal("select node_id from nodes where role='testnode'");
+
+    while (my ($node_id) = $query_result->fetchrow_array()) {
+	my $node = Node->Lookup($node_id);
+	if (!defined($node)) {
+	    logit("Could not lookup node $node_id");
+	    next;
+	}
+	my $experiment = $node->Reservation();
+
+	next
+	    if (!$experiment);
+
+	my $creator = $experiment->GetCreator();
+	$users{$creator->uid()} = $creator;
     }
-    SENDMAIL("$user_name <$user_email>", $subject, $message, $TBOPS);
+    return
+	if (!keys(%users));
+
+    foreach my $user (values(%users)) {
+	my $user_email = $user->email();
+	my $user_name  = $user->name();
+
+	SENDMAIL("$user_name <$user_email>", $subject, $message, $TBOPS);
+    }
 }
 
 #
@@ -593,21 +869,59 @@ sub NotifyUser($$)
 sub NotifyTBOPS($$)
 {
     my ($subject, $message) = @_;
-
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+    
+    # Append a timestamp to the end of the body, helpful for debugging
+    # since email will probably be delayed during a disconnect.
+    $message .= "\n\n" . $stamp . "\n";
+    
     if ($impotent) {
-	print "$subject\n";
-	print "$message\n";
+	logit("$subject\n");
+	logit("$message");
 	return;
     }
     SENDMAIL($TBOPS, $subject, $message, $TBOPS);
 }
 
-sub SendEvent($)
+#
+# Put all active experiments into panic (with power off) mode.
+#
+sub PowerAll($)
 {
-    my ($event) = @_;
-    my $experiment = $ed1->Reservation();
-    my $pid = $experiment->pid();
-    my $eid = $experiment->eid();
+    my ($onoff) = @_;
+    my @nodes   = ();
+
+    my $query_result =
+	DBQueryFatal("select node_id from nodes where role='testnode'");
+
+    while (my ($node_id) = $query_result->fetchrow_array()) {
+	my $node = Node->Lookup($node_id);
+	if (!defined($node)) {
+	    logit("Could not lookup node $node_id");
+	    next;
+	}
+	if (!$node->HasOutlet()) {
+	    logit("$node_id does not have an outlet, skipping.");
+	    next;
+	}
+	# When powering on, only reserved nodes/radios
+	next 
+	    if ($onoff eq "on" && 
+		(!$node->IsReserved() ||
+		 ($node->pid() eq NODEDEAD_PID() &&
+		  $node->eid() eq NODEDEAD_EID())));
+
+	push(@nodes, $node);
+    }
+    if ($mailonly) {
+	NotifyTBOPS("$SHORTNAME Monitor: nodes would be powered $onoff",
+		    (@nodes ? "@nodes" : "No nodes") .
+		    " would be powered $onoff.");
+    }
+    return
+	if (!@nodes);
+    
+    PowerControl($onoff, @nodes);
 }
 
 sub PowerControl($@)
@@ -621,32 +935,37 @@ sub PowerControl($@)
     
 	if ($onoff eq "on") {
 	    if ($node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
-		if ($impotent) {
-		    print "Would power on $node_id\n";
+		if ($mailonly || $impotent) {
+		    logit("Would power on $node_id");
 		}
 		else {
 		    logit("Powering on $node_id");
 		    system("$SUDO -u $PROTOUSER $WAP $POWER on $node_id");
-		    #
-		    # We want to notify if this fails ...
-		    #
+		    if ($?) {
+			NotifyTBOPS("$SHORTNAME Monitor: ".
+				    "$node_id power on failed",
+				    "Could not power on $node_id");
+		    }
 		}
 	    }
 	}
 	else {
 	    if ($node->eventstate() ne TBDB_NODESTATE_POWEROFF()) {
-		if ($impotent) {
-		    print "Would power off $node_id\n";
+		if ($mailonly || $impotent) {
+		    logit("Would power off $node_id");
 		}
 		else {
 		    logit("Powering off $node_id");
 		    system("$SUDO -u $PROTOUSER $WAP $POWER off $node_id");
-		    #
-		    # Its okay of this fails, boss will not run as long.
-		    #
+		    if ($?) {
+			NotifyTBOPS("$SHORTNAME Monitor: ".
+				    "$node_id power off failed",
+				    "Could not power off $node_id");
+		    }
 		}
 	    }
 	}
     }
     return 0;
 }
+
