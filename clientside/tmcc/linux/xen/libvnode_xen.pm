@@ -1338,15 +1338,49 @@ sub vnodeCreate($$$$)
     #
     my $vdiskprefix = "sd";	# yes, this is right for FBSD too
     my $ishvm = 0;
+    my $ispvh = 0;
     my $os;
     
     if ($imagemetadata->{'PARTOS'} =~ /freebsd/i) {
 	$os = "FreeBSD";
 
-	# XXX we assume that all 10.0 and above will be PVHVM
-	if ($imagemetadata->{'OSVERSION'} >= 10) {
-	    $vdiskprefix = "hd";
+	#
+	# Allow explict specification of the virtualization tech.
+	# XXX this is not really FreeBSD specific.
+	#
+	if (exists($attributes->{'XEN_FORCE_HVM'})
+	    && "$attributes->{'XEN_FORCE_HVM'}" eq '1') {
 	    $ishvm = 1;
+	}
+	elsif (exists($attributes->{'XEN_FORCE_PVH'})
+	    && "$attributes->{'XEN_FORCE_PVH'}" eq '1') {
+	    $ispvh = 1;
+	}
+	#
+	# Otherwise use what we know about FreeBSD versions to choose
+	# the best case.
+	#
+	else {
+	    # If 12.x and above and Xen 4.11 or above, we use PVH...
+	    if ($imagemetadata->{'OSVERSION'} >= 12 &&
+		($xeninfo{xen_major} > 4 ||
+		 $xeninfo{xen_major} == 4 && $xeninfo{xen_minor} >= 11)) {
+		$vdiskprefix = "xvd";
+		$ispvh = 1;
+	    }
+	    # ...otherwise we assume that all 10.0 and above are PVHVM
+	    elsif ($imagemetadata->{'OSVERSION'} >= 10) {
+		$vdiskprefix = "hd";
+		$ishvm = 1;
+	    }
+	    #
+	    # XXX Hmm...it is unclear if pass-through or PV USB is available,
+	    # so if they want USB, force HVM instead.
+	    #
+	    if ($ispvh && exists($attributes->{'XEN_USBDEVICES'})) {
+		$ishvm = 1;
+		$ispvh = 0;
+	    }
 	}
     }
     else {
@@ -1358,6 +1392,7 @@ sub vnodeCreate($$$$)
     }
     $private->{'os'} = $os;
     $private->{'ishvm'} = $ishvm;
+    $private->{'ispvh'} = $ispvh;
 
     # All of the disk stanzas for the config file.
     my @alldisks = ();
@@ -1619,7 +1654,10 @@ okay:
 					  $private->{'rootpartition'},
 					  "$VMDIR/$vnode_id");
 	if (!defined($kernel)) {
-	    if ($imagemetadata->{'OSVERSION'} >= 10) {
+	    if ($ispvh) {
+		# Must have a kernel
+		;
+	    } elsif ($imagemetadata->{'OSVERSION'} >= 10) {
 		# we only support HVM for 10+ kernels
 		$kernel = "NO-PV-KERNELS";
 	    } elsif ($imagemetadata->{'OSVERSION'} >= 9) {
@@ -1757,6 +1795,8 @@ okay:
     # http://wiki.freebsd.org/AdrianChadd/XenHackery
     # BSD PVHVM stuff inspired by:
     # http://wiki.xen.org/wiki/Testing_FreeBSD_PVHVM
+    # BSD PVH stuff inspired by:
+    # https://pub.nethence.com/xen/guest-freebsd-full
     #
     $vninfo->{'cffile'} = [];
 
@@ -1777,7 +1817,11 @@ okay:
     }
     addConfig($vninfo, "disk = [" . join(",", @alldisks) . "]", 2);
 
-    if ($ishvm) {
+    if ($ispvh) {
+	addConfig($vninfo, "extra='vfs.root.mountfrom=ufs:xbd0s1a'", 2);
+	addConfig($vninfo, "type='pvh'", 2);
+	# XXX handle XEN_USBDEVICES?
+    } elsif ($ishvm) {
 	# XXX newer xen tools disallow command line params with direct boot
 	#addConfig($vninfo, "extra = 'boot_verbose=1'", 2);
 
@@ -2138,25 +2182,42 @@ sub vnodePreConfig($$$$$){
 		if ($?);
 	
 	my $ldisk = "da";
-	if ($vninfo->{'ishvm'}) {
+	if ($vninfo->{'ispvh'}) {
+	    $ldisk = "xbd";
+	} elsif ($vninfo->{'ishvm'}) {
 	    $ldisk = "ada";
 	}
 	if (-e "$vnoderoot/etc/dumpdates") {
-	    mysystem2("sed -i.bak -e 's;^/dev/\\(ada\\|ad\\);/dev/$ldisk;' ".
+	    mysystem2("sed -i.bak -e 's;^/dev/\\(ada\\|ad\\|da\\);/dev/$ldisk;' ".
 		      "  $vnoderoot/etc/dumpdates");
 	    goto bad
 		if ($?);
 	}
-	mysystem2("sed -i.bak -e 's;^/dev/\\(ada\\|ad\\);/dev/$ldisk;' ".
+	mysystem2("sed -i.bak -e 's;^/dev/\\(ada\\|ad\\|da\\);/dev/$ldisk;' ".
 		  "  $vnoderoot/etc/fstab");
 	goto bad
 	    if ($?);
 
 	#
+	# Need to fix up virtual serial console device for PVH
+	#
+	if ($vninfo->{'ispvh'}) {
+	    mysystem2("grep -q '^xc0' $vnoderoot/etc/ttys");
+	    if ($?) {
+		open(TTYS, ">>$vnoderoot/etc/ttys")
+		    or goto bad;
+		print TTYS "\n# Xen PV console\n";
+		print TTYS "xc0     \"/usr/libexec/getty std.115200\" vt100   onifconsole secure\n";
+		close(TTYS);
+	    }
+	}
+
+	#
 	# In HVM the emulated RTC is UTC.
 	# Make sure FreeBSD knows that.
+	# XXX apparently this is true for the PVH virtualized clock as well.
 	#
-	if ($vninfo->{'ishvm'}) {
+	if ($vninfo->{'ishvm'} || $vninfo->{'ispvh'}) {
 	    unlink("$vnoderoot/etc/wall_cmos_clock");
 	}
     }
@@ -3203,6 +3264,7 @@ sub vnodeHalt($$$$)
 {
     my ($vnode_id, $vmid, $vnconfig, $private) = @_;
     my $ishvm = $private->{'ishvm'};
+    my $ispvh = $private->{'ispvh'};
     my $domID;
 
     if ($vnode_id =~ m/(.*)/) {
@@ -5892,6 +5954,10 @@ sub ExtractKernelFromFreeBSDImage($$$)
 	    if ($?) {
 		# XXX PVHVM kernel
 		mysystem2("nm $kernelfile | grep -q xen_hvm_init");
+		if ($?) {
+		    # XXX PVH kernel
+		    mysystem2("nm $kernelfile | grep -q xen_pvh_init_ops");
+		}
 	    }
 	    goto skip
 		if ($?);
