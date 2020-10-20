@@ -1682,8 +1682,7 @@ okay:
 	undef $image{'ramdisk'};
     }
     elsif (exists($attributes->{'XEN_FORCE_HVM'})
-	&& "$attributes->{'XEN_FORCE_HVM'}" eq '1'
-	&& "$imagemetadata->{'PART'}" eq '0') {
+	&& "$attributes->{'XEN_FORCE_HVM'}") {
 	$private->{'ishvm'} = $ishvm = 1;
 	undef $image{'kernel'};
 	undef $image{'ramdisk'};
@@ -1732,6 +1731,28 @@ okay:
 		}
 	    }
 	    # Use the booted kernel. Works sometimes. 
+	}
+    }
+
+    if ($ishvm && $loadslice != 0 && $imagemetadata->{'PARTOS'} !~ /FreeBSD/i) {
+	#
+	# If this is not a whole-disk image, and if it's not FreeBSD, it
+        # needs a simple MBR loader to find the first bootable partition
+        # and load that.  LILO does that for us.  Really, we could do
+        # this whether $ishvm or not, but for now, just do ishvm.
+	#
+	# NB: LILO does not support running LV devices, so we cache an
+        # install of its standalone mode boot blocks.)
+	#
+	# NB: we do this here, instead of CreatePrimaryDisk, so that we
+	# can support both thin and regular volumes.
+	#
+	my $LILOFILE = "/etc/emulab/lilo.bootsector.dd";
+	if (! -f $LILOFILE) {
+	    fatal("libvnode_xen: HVM mode on Linux slice image requires (missing) LILO boot blocks");
+	}
+	if (mysystem2("dd if=$LILOFILE of=$rootvndisk")) {
+	    fatal("libvnode_xen: could not install non-FreeBSD LILO MBR loader");
 	}
     }
 
@@ -2124,7 +2145,8 @@ sub vnodePreConfig($$$$$){
 		    chmod($mode | S_IWUSR,$gf);
 		    $mode_reset = 1;
 		}
-		FixGrubConsole($gf,"ttyS0",0,115200,"0x2f8");
+		FixGrubConsole($gf,"ttyS0",0,115200,"0x3f8");
+		mysystem2("sed -i -e 's;root=/dev/[hs]d;root=/dev/${ldisk};' $gf");
 		chmod($mode,$gf)
 		    if ($mode_reset);
 	    }
