@@ -1730,7 +1730,23 @@ okay:
 		    $image{'ramdisk'} = $ramdisk;
 		}
 	    }
-	    # Use the booted kernel. Works sometimes. 
+	    # else... Use the booted kernel. Works sometimes. 
+
+	    # Some kernels (CentOS8) no longer support PV or PVH.  So,
+	    # attempt to handle that by falling back to HVM if PV is not
+	    # supported.
+	    if (defined($kernelconfig)) {
+		my $kconfig = ReadLinuxKernelConfig($kernelconfig);
+		if (defined($kconfig)
+		    && !exists($kconfig->{"CONFIG_XEN_PV"})) {
+		    print "Warning: detected $kernelconfig without XEN_PV support;".
+			" falling back to HVM!\n";
+		    $private->{'ishvm'} = $ishvm = 1;
+		    undef $image{'kernel'};
+		    undef $image{'ramdisk'};
+		    undef $image{'bootloader'};
+		}
+	    }
 	}
     }
 
@@ -5935,6 +5951,22 @@ sub ExtractKernelFromLinuxImage($$$)
 	      "--output-directory=$outdir $lvmpath");
 	exit(1);
     }
+}
+
+sub ReadLinuxKernelConfig($)
+{
+    my $ret = {};
+
+    open(FD,$_[0])
+	or return undef;
+    while (my $line = <FD>) {
+	if ($line =~ /^(CONFIG_[^=]+)=(.+)$/) {
+	    $ret->{$1} = $2;
+	}
+    }
+    close(FD);
+
+    return $ret;
 }
 
 sub ExtractKernelFromFreeBSDImage($$$)
