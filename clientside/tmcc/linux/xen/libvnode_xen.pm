@@ -1773,8 +1773,28 @@ okay:
 	if (! -f $LILOFILE) {
 	    fatal("libvnode_xen: HVM mode on Linux slice image requires (missing) LILO boot blocks");
 	}
-	if (mysystem2("dd if=$LILOFILE of=$rootvndisk")) {
+	if (mysystem2("dd if=$LILOFILE of=$rootvndisk oflag=sync")) {
 	    fatal("libvnode_xen: could not install non-FreeBSD LILO MBR loader");
+	}
+	if (RunWithLock("kpartx", "kpartx -dv -s $rootvndisk")) {
+	    print STDERR "Warning: libvnode_xen: could not update /dev/mapper entries after HVM LILO\n";
+	}
+	else {
+	    if (RunWithLock("kpartx", "kpartx -av -s $rootvndisk")) {
+		fatal("libvnode_xen: could not finish updating /dev/mapper entries after HVM LILO");
+	    }
+	    my $waittime = 60;
+	    while (--$waittime && ! -e $private->{'rootpartition'}) {
+		sleep(1);
+		if ($waittime % 4 == 0) {
+		    TBDebugTimeStamp("still waiting for $private->{'rootpartition'}".
+				     " to appear after kpartx...");
+		}
+	    }
+	    if (! -e $private->{'rootpartition'}) {
+		TBDebugTimeStamp("$private->{'rootpartition'} still does not exist,".
+				 " there will be problems!");
+	    }
 	}
     }
 
