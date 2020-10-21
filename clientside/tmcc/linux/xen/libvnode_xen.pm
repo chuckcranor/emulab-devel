@@ -6249,20 +6249,20 @@ sub FixGrubConsole($$$$$)
 	if (/console=tty0\s/) {
 	    # get rid of any existing serial console clauses
 	    s#console=ttyS\S+##g;
-	    if ($sunit >= 0) {
-		# change tty0 to appropriate serial device
-		s#console=tty0#console=ttyS$sunit,$sspeed#;
-	    }
-	    #
-	    # Virtual consoles (e.g. hvcX on POWER).  Not true
-	    # serial consoles, so must be handled specially.
-	    # Image grub.cfg must have console=tty0, or
-	    # console=$console, for this to work.
-	    #
 	    if ($console =~ /^hvc/) {
+		#
+		# Virtual consoles (e.g. hvcX on POWER).  Not true
+		# serial consoles, so must be handled specially.
+		# Image grub.cfg must have console=tty0, or
+		# console=$console, for this to work.
+		#
 		if (! /console=$console/) {
 		    s#console=tty0#console=tty0 console=$console#;
 		}
+	    }
+	    elsif ($sunit >= 0) {
+		# change tty0 to appropriate serial device
+		s#console=tty0#console=ttyS$sunit,$sspeed#;
 	    }
 	    push @buffer, $_;
 	    next;
@@ -6290,7 +6290,13 @@ sub FixGrubConsole($$$$$)
 	    if ($sunit < 0) {
 		# replace serial with VGA
 		s#console=ttyS\S+#console=tty0#g;
-	    } else {
+	    }
+	    elsif ($console =~ /^hvc/) {
+		if (! /console=$console/) {
+		    s#console=ttyS\d+#console=tty0 console=$console#;
+		}
+	    }
+	    else {
 		# fixup serial lines
 		s#console=ttyS\S+#console=ttyS$sunit,$sspeed#g;
 	    }
