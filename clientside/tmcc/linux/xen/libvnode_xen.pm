@@ -1687,6 +1687,12 @@ okay:
 	undef $image{'kernel'};
 	undef $image{'ramdisk'};
     }
+    elsif (exists($attributes->{'XEN_FORCE_PVH'})
+	&& "$attributes->{'XEN_FORCE_PVH'}") {
+	$private->{'ispvh'} = $ispvh = 1;
+	undef $image{'kernel'};
+	undef $image{'ramdisk'};
+    }
     else {
 	if ($imagemetadata->{'PARTOS'} =~ /fedora/i &&
 	    $imagemetadata->{'OSVERSION'} >= 8 &&
@@ -1772,6 +1778,40 @@ okay:
 	}
     }
 
+    if ($ispvh && $imagemetadata->{'PARTOS'} !~ /FreeBSD/i) {
+	$image{'kernel'} = "/usr/lib/grub-xen/grub-i386-xen_pvh.bin";
+	my @pvhgrubconfig = (
+	    "root='(xen/${rootvdisk}a)'",
+	    #root='hd0,msdos1'
+	    "insmod part_msdos",
+	    "#insmod part_gpt",
+	    "insmod search",
+	    "insmod configfile",
+	    "#insmod legacy_configfile",
+	    "if search -s root -f /boot/grub2/grub.cfg ; then",
+	    "  configfile /boot/grub2/grub.cfg",
+	    "elif search -s root -f /@/boot/grub2/grub.cfg ; then",
+	    "  configfile /@/boot/grub2/grub.cfg",
+	    "elif search -s root -f /boot/grub/grub.cfg ; then",
+	    "  configfile /boot/grub/grub.cfg",
+	    "elif search -s root -f /boot/grub/menu.lst ; then",
+	    "  legacy_configfile /boot/grub/menu.lst",
+	    "elif search -s root -f /grub2/grub.cfg ; then",
+	    "  configfile /grub2/grub.cfg",
+	    "elif search -s root -f /grub/menu.lst ; then",
+	    "  legacy_configfile /grub/menu.lst",
+	    "fi"
+	    );
+	my $pvhgrubpath = "$VMDIR/$vnode_id/grub-pvh.cfg";
+	open(FD,">$pvhgrubpath")
+	    or fatal("libvnode_xen: could not open >$pvhgrubpath ($!)");
+	for my $pvhgrubline (@pvhgrubconfig) {
+	    print FD $pvhgrubline . "\n";
+	}
+	close(FD);
+	$image{'extra'} = $pvhgrubpath;
+    }
+
     my $auxchar  = ord('b');
     #
     # Create a swap disk.
@@ -1840,6 +1880,7 @@ okay:
     my $kernel = $image{'kernel'};
     my $ramdisk = $image{'ramdisk'};
     my $bootloader = $image{'bootloader'};
+    my $extra = $image{'extra'};
 
     addConfig($vninfo, "# Xen configuration script for $os vnode $vnode_id", 2);
     addConfig($vninfo, "name = '$vnode_id'", 2);
@@ -1855,8 +1896,13 @@ okay:
     addConfig($vninfo, "disk = [" . join(",", @alldisks) . "]", 2);
 
     if ($ispvh) {
-	addConfig($vninfo, "extra='vfs.root.mountfrom=ufs:xbd0s1a'", 2);
 	addConfig($vninfo, "type='pvh'", 2);
+	if ($os eq "FreeBSD") {
+	    addConfig($vninfo, "extra='vfs.root.mountfrom=ufs:xbd0s1a'", 2);
+	}
+	elsif (defined($extra)) {
+	    addConfig($vninfo, "extra='$extra'", 2);
+	}
 	# XXX handle XEN_USBDEVICES?
     } elsif ($ishvm) {
 	# XXX newer xen tools disallow command line params with direct boot
@@ -1960,6 +2006,7 @@ sub vnodePreConfig($$$$$){
     my $retval = 0;
     my $fixups = 0;
     my $ishvm = $private->{'ishvm'};
+    my $ispvh = $private->{'ispvh'};
 
     #
     # XXX vnodeCreate is not called when a vnode was halted or is rebooting.
@@ -2150,7 +2197,7 @@ sub vnodePreConfig($$$$$){
 	}
 	# We need to have slightly different settings for HVM.  Note
 	# that we only handle grub2
-	if ($ishvm) {
+	if ($ishvm || $ispvh) {
 	    foreach my $gf ("$vnoderoot/boot/grub2/grub.cfg",
 			    "$vnoderoot/boot/grub/grub.cfg",
 			    "$vnoderoot/boot/grub/menu.lst") {
@@ -2161,7 +2208,11 @@ sub vnodePreConfig($$$$$){
 		    chmod($mode | S_IWUSR,$gf);
 		    $mode_reset = 1;
 		}
-		FixGrubConsole($gf,"ttyS0",0,115200,"0x3f8");
+		my $gconsole = "ttyS0";
+		if ($ispvh) {
+		    $gconsole = "hvc0";
+		}
+		FixGrubConsole($gf,$gconsole,0,115200,"0x3f8");
 		mysystem2("sed -i -e 's;root=/dev/[hs]d;root=/dev/${ldisk};' $gf");
 		chmod($mode,$gf)
 		    if ($mode_reset);
