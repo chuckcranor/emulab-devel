@@ -1744,7 +1744,9 @@ okay:
 	    if (defined($kernelconfig)) {
 		my $kconfig = ReadLinuxKernelConfig($kernelconfig);
 		if (defined($kconfig)
-		    && !exists($kconfig->{"CONFIG_XEN_PV"})) {
+		    && (exists($kconfig->{"CONFIG_XEN_PV"})
+			&& (!defined($kconfig->{"CONFIG_XEN_PV"})
+			    || $kconfig->{"CONFIG_XEN_PV"} eq 'n'))) {
 		    print "Warning: detected $kernelconfig without XEN_PV support;".
 			" falling back to HVM!\n";
 		    $private->{'ishvm'} = $ishvm = 1;
@@ -6033,6 +6035,9 @@ sub ReadLinuxKernelConfig($)
     while (my $line = <FD>) {
 	if ($line =~ /^(CONFIG_[^=]+)=(.+)$/) {
 	    $ret->{$1} = $2;
+	}
+	elsif ($line =~ /^#\s+(CONFIG_[^\s]+)\s+is\s+not\s+set/) {
+	    $ret->{$1} = undef;
 	}
     }
     close(FD);
