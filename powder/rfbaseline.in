@@ -76,6 +76,12 @@ my %endpoints = (
 	"last"  => {},
         "nickname" => "Bookstore",
     },
+    "cpg" => {
+	"urn" => 'urn:publicid:IDN+cpg.powderwireless.net+authority+cm',
+	"nodes" => ["nuc1", "nuc2"],
+	"last"  => {},
+        "nickname" => "Garage",
+    },
     "law73" => {
         "urn" => 'urn:publicid:IDN+law73.powderwireless.net+authority+cm', 
 	# nuc1 does not have receive capability.
