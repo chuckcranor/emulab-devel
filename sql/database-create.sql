@@ -150,6 +150,21 @@ CREATE TABLE `apt_aggregate_radioinfo` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_aggregate_nodes`
+--
+
+DROP TABLE IF EXISTS `apt_aggregate_nodes`;
+CREATE TABLE `apt_aggregate_nodes` (
+  `urn` varchar(128) NOT NULL default '',
+  `node_id` varchar(32) NOT NULL default '',
+  `type` varchar(30) NOT NULL default '',
+  `available` tinyint(1) NOT NULL default '0',
+  `reservable` tinyint(1) NOT NULL default '0',
+  `updated` datetime default NULL,
+  PRIMARY KEY  (`urn`,`node_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_aggregate_nodetypes`
 --
 
