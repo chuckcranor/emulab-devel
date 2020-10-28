@@ -416,25 +416,46 @@ compareunits() {
     else
 	tbdbcnt=0
     fi
-    [[ $localcnt > $tbdbcnt ]] && maxunits=$localcnt || maxunits=$tbdbcnt 
+    [[ $localcnt > $tbdbcnt ]] && maxunits=$localcnt || maxunits=$tbdbcnt
+    # only returning serial numbers
+    x=${tmccinfo["DISKINFO"]}
+    units=${x/#DISKINFO UNITS=/}
+    for ((n=0; n<$units; n++)) ; do
+	s=${tmccinfo[DISKUNIT$n]}
+	# turn space seperated string into array
+	unset -v d ; declare -a d=(${s// / })
+	numelm=${#d[*]}
+	for ((elm=1; elm<$numelm; elm++)) ; do
+	    objval=${d[$elm]}
+	    [[ -z $objval ]] && continue  # that's bad no tupil
+	    obj=${objval%%=*}
+	    val=${objval##*=}
+	    [[ -z $val ]] && continue # bad also no value (or empty s
+	    if [ "$obj" = "SN" ] ;  then
+		val=${val//=/}
+		val=${val//\"/}
+		printf "%s " "$val"
+	    fi
+	done
+    done
 
     # here we are pulling out just the address/serialnumber from each array and saving it in a list
-    for ((i=0; i<$maxunits; i++)) ; do
-	# gather just the units addresses 
-	devunit="${unit_str}${i}"
-        # following bash syntax: "${a+$a}" says use $a if exists else use nothing
-	if [ -n "${hwinv[$devunit]+${hwinv[$devunit]}}" ] ; then
-	    ckaddr=${hwinv[$devunit]}
-	    # add just the address/serialnumber
-	    addr=${ckaddr#${unit_pre_strip}}
-	    if [ "$ckaddr" != "$addr" ] ; then
-		# make sure that we have removed the pre_strip
-		# -- for example if a disk serial number is not removed cause we don't have it then we don't have anything to compare
-		addr=${addr%%${unit_post_strip}}
-		localunits+="$addr "
-	    fi
-	    localidx=${localidx/$devunit}
-	fi
+##    for ((i=0; i<$maxunits; i++)) ; do
+##	# gather just the units addresses 
+##	devunit="${unit_str}${i}"
+##        # following bash syntax: "${a+$a}" says use $a if exists else use nothing
+##	if [ -n "${hwinv[$devunit]+${hwinv[$devunit]}}" ] ; then
+##	    ckaddr=${hwinv[$devunit]}
+##	    # add just the address/serialnumber
+##	    addr=${ckaddr#${unit_pre_strip}}
+##	    if [ "$ckaddr" != "$addr" ] ; then
+##		# make sure that we have removed the pre_strip
+##		# -- for example if a disk serial number is not removed cause we don't have it then we don't have anything to compare
+##		addr=${addr%%${unit_post_strip}}
+##		localunits+="$addr "
+##	    fi
+##	    localidx=${localidx/$devunit}
+##	fi
 	if [ -n "${hwinvcopy[$devunit]+${hwinvcopy[$devunit]}}" ] ; then
 	    ckaddr=${hwinvcopy[$devunit]}
 	    addr=${ckaddr#${unit_pre_strip}}

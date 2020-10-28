@@ -67,7 +67,7 @@ main_diskcheck() {
     numberofdrives=${#drive[*]}
 
    # the index into dirveinv array
-    # DISKUNIT SN=<serial> TYPE=<PATA|SATA|SCSI|RAID> SECSIZE=<#> SECTORS=<#> RSPE ED=<MBs> WSPEED=<MBs> 
+   # DISKUNIT SN=<serial> TYPE=<PATA|SATA|SCSI|RAID> SECSIZE=<#> SECTORS=<#> RSPE ED=<MBs> WSPEED=<MBs> 
     declare -i -r header=0
     declare -i -r header_val=1
     declare -i -r name=2
@@ -82,8 +82,8 @@ main_diskcheck() {
     declare -i -r temp_val=11
     declare -i -r model=12
     declare -i -r model_val=13
-    declare -i -r serial=14 
-    declare -i -r serial_val=15
+##    declare -i -r serial=14 
+##    declare -i -r serial_val=15
     declare -i -r bpers=16
     declare -i -r bpers_val=17
     declare -i -r sectors=18
@@ -114,8 +114,8 @@ main_diskcheck() {
 	    $temp_val ) d[$temp_val]="unk" ;;
 	    $model ) d[$model]="Model=" ;;
 	    $model_val ) d[$model_val]="unk" ;;
-	    $serial  ) d[$serial]="SN=" ;;
-	    $serial_val ) d[$serial_val]="\"UNKNOWN\"" ;;
+##	    $serial  ) d[$serial]="SN=" ;;
+##	    $serial_val ) d[$serial_val]="\"UNKNOWN\"" ;;
 	    $wcache  ) d[$wcache]="wcache=" ;;
 	    $wcache_val ) d[$wcache_val]="\"UNKNOWN\"" ;;
 	    $bpers ) d[$bpers]="SECSIZE=" ;;
