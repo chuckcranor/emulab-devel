@@ -32,6 +32,6 @@ REPLACE INTO `interface_capabilities` VALUES ('P2PLTE','protocols','P2PLTE');
 REPLACE INTO `interface_capabilities` VALUES ('P2PLTE','P2PLTE_defspeed','10000');
 REPLACE INTO `interface_capabilities` VALUES ('P2PLTE','overtheair','1');
 
-INSERT INTO `node_type_features` VALUES ('nuc8650','?+disk_sysvol',215900);
-INSERT INTO `node_type_features` VALUES ('nuc8650','?+disk_any',215900);
-INSERT INTO `node_type_features` VALUES ('nuc8650','?+disk_nonsysvol',0);
+REPLACE INTO `node_type_features` VALUES ('nuc8650','?+disk_sysvol',215900);
+REPLACE INTO `node_type_features` VALUES ('nuc8650','?+disk_any',215900);
+REPLACE INTO `node_type_features` VALUES ('nuc8650','?+disk_nonsysvol',0);
