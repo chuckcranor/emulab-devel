@@ -22,8 +22,10 @@
 # 
 # }}}
 #
-
-
+# A little perl module for using Jon's arduino relay on a Powder node.
+#
+# We use this package on Powder control nucs.
+#
 package power_powduino;
 
 use strict;
@@ -34,17 +36,10 @@ use vars qw(@ISA @EXPORT);
 
 use Socket;
 use IO::Handle;
-use lib "@prefix@/lib";
-use libdb;
-use Node;
 use POSIX qw(strftime);
 
-#
-# A little perl module for using Jon's arduino relay on a Powder node.
-#
-
-# Turn off line buffering on output
-$| = 1;
+# We need to know if we are running on a boss node or client.
+my $LOCALMODE = (-e "/usr/testbed/etc/emulab.key" ? 0 : 1);
 
 # Number of times to try sending command in the face of "Input error"
 my $ntries = 3;
@@ -194,7 +189,9 @@ sub powduinoctrl {
 	}
 	return($exitstatus);
     }
-    TBdbfork();
+    if (!$LOCALMODE) {
+	libdb::TBdbfork();
+    }
 
     #
     # Form the connection to the controller via a "tip" line to the
@@ -352,24 +349,64 @@ sub tipconnect($) {
     my(%powerid_row);
     local *TIP;
 
-    my $query_result =
-      DBQueryWarn("select * from tiplines where node_id='$controller'");
+    if (!$LOCALMODE) {
+	my $query_result =
+	    libdb::DBQueryWarn("select * from tiplines ".
+			       "where node_id='$controller'");
 
-    if ($query_result->numrows < 1) {
-	print STDERR "*** No such tipline: $controller\n";
-	return 0;
+	if ($query_result->numrows < 1) {
+	    print STDERR "*** No such tipline: $controller\n";
+	    return 0;
+	}
+	%powerid_row = $query_result->fetchhash();
+
+	$server  = $powerid_row{'server'};
+	$portnum = $powerid_row{'portnum'};
+	$keylen  = $powerid_row{'keylen'};
+	$keydata = $powerid_row{'keydata'};
+	$disabled= $powerid_row{'disabled'};
+
+	if ($disabled) {
+	    print STDERR "*** $controller tipline is disabled\n";
+	    return 0;
+	}
     }
-    %powerid_row = $query_result->fetchhash();
-
-    $server  = $powerid_row{'server'};
-    $portnum = $powerid_row{'portnum'};
-    $keylen  = $powerid_row{'keylen'};
-    $keydata = $powerid_row{'keydata'};
-    $disabled= $powerid_row{'disabled'};
-
-    if ($disabled) {
-	print STDERR "*** $controller tipline is disabled\n";
-	return 0;
+    else {
+	#
+	# The stuff we need is in /var/log/tiplogs/$controller.acl
+	#
+	my $acl = "/var/log/tiplogs/${controller}.acl";
+	if (! -e $acl) {
+	    print STDERR "*** $acl does not exist\n";
+	    return 0;
+	}
+	if (open(ACL, $acl)) {
+	    while (<ACL>) {
+		if ($_ =~ /^([^:]+):\s+(.*)$/) {
+		    if ($1 eq "host") {
+			$server = $2;
+		    }
+		    elsif ($1 eq "port") {
+			$portnum = $2;
+		    }
+		    elsif ($1 eq "keylen") {
+			$keylen = $2;
+		    }
+		    elsif ($1 eq "key") {
+			$keydata = $2;
+		    }
+		}
+	    }
+	    close(ACL);
+	    if (!($server && $portnum && $keylen && $keydata)) {
+		print STDERR "*** $acl is missing stuff\n";
+		return 0;
+	    }
+	}
+	else {
+	    print STDERR "*** $acl could not be opened: $!\n";
+	    return 0;
+	}
     }
 
     if ($debug) {
