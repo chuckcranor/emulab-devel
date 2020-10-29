@@ -6390,6 +6390,7 @@ sub DoStatus()
 	    "uuid"    => $uuid,
 	    "wbstore" => $slice_uuid,
 	    "url"     => $instance->webURL(),
+	    "expires" => TBDateStringGMT($instance->Expires()),
 	}
     }
     else {

@@ -186,6 +186,8 @@ API = {
                             "help" : "Start a Portal experiment" },
     "terminateExperiment" : { "func" : "terminateExperiment",
                               "help" : "Terminate a Portal experiment" },
+    "extendExperiment"  : { "func" : "extendExperiment",
+                              "help" : "Extend a Portal experiment" },
     "experimentStatus"  : { "func" : "experimentStatus",
                             "help" : "Get status for a Portal experiment" },
     "experimentManifests" : { "func" : "experimentManifests",
@@ -3172,6 +3174,63 @@ class terminateExperiment:
         print "Usage: terminateExperiment <optons> <experiment>"
         print "where:"
         print "experiment     - Either UUID or pid,name"
+        wrapperoptions();
+        return
+    pass
+
+#
+# Extend a portal experiment
+#
+class extendExperiment:
+    def __init__(self, argv=None):
+        self.argv = argv;
+        return
+
+    def apply(self):
+        try:
+            opts, req_args = getopt.getopt(self.argv, "hm:f:", [ "help"]);
+            pass
+        except getopt.error, e:
+            print e.args[0]
+            self.usage();
+            return -1;
+
+        reason = ""
+        params = {}
+        for opt, val in opts:
+            if opt in ("-h", "--help"):
+                self.usage()
+                return 0
+            elif opt == "-m":
+                reason = val
+                pass
+            elif opt == "-f":
+                try:
+                    reason = open(val).read();
+                    pass
+                except:
+                    print "Could not open file: " + val;
+                    return -1;
+            pass
+
+        # Do this after so --help is seen.
+        if len(req_args) != 2:
+            self.usage();
+            return -1;
+
+        params["experiment"] = req_args[0]
+        params["wanted"]     = req_args[1]
+        params["reason"]     = reason
+        rval,response = do_method("portal", "extendExperiment", params)
+        return rval
+
+    def usage(self):
+        print "Usage: extendExperiment <optons> <experiment> <hours>"
+        print "where:"
+        print " -m str        - Your reason for the extension (a string)"
+        print " -f file       - A file containing your reason"
+        print "experiment     - Either UUID or pid,name"
+        print "hours          - Number of hours to extend"
         wrapperoptions();
         return
     pass

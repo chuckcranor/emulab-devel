@@ -219,6 +219,14 @@ sub AggregateHash($) { return $_[0]->{'AGGREGATES'}; }
 sub RouteList($) { return values(%{ $_[0]->{'ROUTES'} }); }
 sub RouteHash($) { return $_[0]->{'ROUTES'}; }
 
+sub Expires($)
+{
+    my ($self) = @_;
+    my $slice  = $self->GetGeniSlice();
+
+    return $slice->expires();
+}
+
 # For print statements.
 sub Printable($)
 {
