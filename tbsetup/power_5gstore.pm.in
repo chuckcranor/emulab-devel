@@ -187,9 +187,10 @@ sub MakeAuthStr($)
 sub Request($;$$)
 {
     my ($self,$outlet,$action) = @_;
-    my $url;
+    my ($url, $cookie);
 
     my $server = $self->{DEVICENAME};
+  again:
     if (!defined($outlet) || !defined($action)) {
 	$url = "http://$server/xml/outlet_status.xml";
     } else {
@@ -200,28 +201,50 @@ sub Request($;$$)
 
     my %headers = (
 	"Keep-Alive" => 300,
-	"Connection" => "keep-alive",
-	"Authorization" => $self->MakeAuthStr()
+	"Connection" => "keep-alive"
     );
+    if (defined($cookie)) {
+	$headers{'Cookie'} = $cookie;
+    } else {
+	$headers{'Authorization'} = $self->MakeAuthStr();
+    }
     my $http = HTTP::Tiny->new("timeout" => 30);
     my %options = ("headers" => \%headers);
 
     my $res = $http->request("GET", $url, \%options);
     print STDERR "RESPONSE: ", Dumper($res), "\n" if ($self->{DEBUG} > 2);
     if ($res->{'success'} && $res->{'status'} == "200") {
-	if (exists($res->{'headers'}{'content-type'}) &&
-	    $res->{'headers'}{'content-type'} eq "text/xml") {
-	    my $xml = eval { XMLin($res->{'content'},
-				   ForceArray => 0,
-				   KeepRoot => 0,
-				   KeyAttr => [],
-				   SuppressEmpty => undef); };
-	    if ($@) {
-		print STDERR
-		    "*** $server: XMLin failed on response string: $@\n";
-		return undef;
+	if (exists($res->{'headers'}{'content-type'})) {
+	    # XXX clunky hack to deal with new firmware
+	    if (!$cookie && exists($res->{'headers'}{'location'}) &&
+		$res->{'headers'}{'location'} eq "/login.asp?error=1") {
+		# XXX expecting a form with user/password info
+		my %form = (
+		    'login' => 1,
+		    'user' => $self->{USERNAME},
+		    'password' =>  $self->{PASSWORD}
+		    );
+		$url = "http://$server/goform/login";
+		$res = $http->post_form($url, \%form);
+		print STDERR "RESPONSE: ", Dumper($res), "\n" if ($self->{DEBUG} > 2);
+		if ($res->{'success'} && $res->{'status'} == "200") {
+		    $cookie = $res->{'headers'}{'set-cookie'};
+		    goto again;
+		}
 	    }
-	    return $xml;
+	    elsif ($res->{'headers'}{'content-type'} eq "text/xml") {
+		my $xml = eval { XMLin($res->{'content'},
+				       ForceArray => 0,
+				       KeepRoot => 0,
+				       KeyAttr => [],
+				       SuppressEmpty => undef); };
+		if ($@) {
+		    print STDERR
+			"*** $server: XMLin failed on response string: $@\n";
+		    return undef;
+		}
+		return $xml;
+	    }
 	}
 	print STDERR "*** $server: Non-XML content in response:\n";
 	print STDERR Dumper($res->{'content'});
