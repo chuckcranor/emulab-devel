@@ -65,9 +65,10 @@ my $TB		     = "@prefix@";
 my $TBOPS            = "@TBOPSEMAIL@";
 my $MAINSITE         = @TBMAINSITE@;
 my $OURDOMAIN        = "@OURDOMAIN@";
-my $LOGFILE          = "$TB/log/powder_keepalive.log";
-my $SLEEP_INTERVAL   = 15;
-my $CNUCPORT         = 12487;
+my $DAEMONTAG        = "powder_keepalive";
+my $LOGFILE          = "$TB/log/$DAEMONTAG.log";
+my $SLEEP_INTERVAL   = 10;
+my $PORT             = 12487;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -118,8 +119,8 @@ use APT_Aggregate;
 use Node;
 
 if (! ($oneshot || $impotent)) {
-    if (CheckDaemonRunning("powder_keepalive")) {
-	fatal("Not starting another powder_keepalive daemon!");
+    if (CheckDaemonRunning("${DAEMONTAG}.log")) {
+	fatal("Not starting another $DAEMONTAG daemon!");
     }
     # Go to ground.
     if (! $debug) {
@@ -127,7 +128,7 @@ if (! ($oneshot || $impotent)) {
 	    exit(0);
 	}
     }
-    if (MarkDaemonRunning("powder_keepalive")) {
+    if (MarkDaemonRunning("$DAEMONTAG")) {
 	fatal("Could not mark daemon as running!");
     }
 }
@@ -179,23 +180,26 @@ sub PingEndpoints()
 
     foreach my $aggregate (@aggregates) {
 	next
-	    if (!($aggregate->isFE() || $aggregate->ismobile()));
-	
-	# Skip if the monitor marked it as down.
-	next
-	    if (!$aggregate->IsUp());
-	
-	my $nickname = $aggregate->nickname();
-	if ($debug) {
-	    logit("Pinging $nickname");
+	    if (!($aggregate->isFE() || $aggregate->ismobile() ||
+		  $aggregate->nickname() eq "BusTest2"));
+
+	#
+	# Fire and forget udp packet.
+	#
+	my $boss = "boss." . $aggregate->Domain();
+	my $sock = IO::Socket::INET->new(PeerAddr => $boss,
+					 PeerPort => $PORT,
+					 Proto    => 'udp',
+					 Timeout  => 5);
+	if (!$sock) {
+	    logit("Could not send udp packet to $boss: $!");
 	}
-	my $error;
-	# Use the fastpath RPC. This will set the timeout to 10 seconds,
-	# and with mobile enpoints, we could see some transient delays
-	# in just getting through all of them.
-	if ($aggregate->CheckStatus(\$error, 1)) {
-	    logit("$nickname failure: $error");
+	else {
+	    logit("Sending alive to $boss") if ($debug);
+	    send($sock, "alive", 0);
+	    close($sock);
 	}
+	select(undef, undef, undef, 0.1);
     }
 }
 
@@ -206,7 +210,8 @@ sub PingBaseStations()
 {
     my $query_result =
 	DBQueryWarn("select * from apt_aggregate_radioinfo ".
-		    "where installation_type='BS' and cnuc_id is not null");
+		    "where installation_type='BS' and ".
+		    "      cnuc_id is not null");
     return
 	if (! (defined($query_result) && $query_result->numrows));
 
@@ -253,20 +258,21 @@ sub PingBaseStations()
 	    next;
 	}
 	#
-	# Connect with a short timeout, they are directly on our
-	# control fabric, so it will be quick.
+	# Fire and forget udp packet.
 	#
 	my $sock = IO::Socket::INET->new(PeerAddr => $cnuc_id,
-					 PeerPort => $CNUCPORT,
-					 Proto    => 'tcp',
+					 PeerPort => $PORT,
+					 Proto    => 'udp',
 					 Timeout  => 5);
 	if (!$sock) {
-	    logit("Could not connect to $cnuc_id: $!");
-	    next;
+	    logit("Could not send udp packet to $cnuc_id: $!");
 	}
-	logit("Sending data to $cnuc_id: '$string'") if ($debug);
-	send($sock, $string, 0);
-	close($sock);
+	else {
+	    logit("Sending data to $cnuc_id: '$string'") if ($debug);
+	    send($sock, $string, 0);
+	    close($sock);
+	}
+	select(undef, undef, undef, 0.1);
     }
 }
 
@@ -279,11 +285,11 @@ sub fatal($)
 	# Send a message to the testbed list. 
 	#
 	SENDMAIL($TBOPS,
-		 "powder_keepalive died",
+		 "$DAEMONTAG died",
 		 $msg,
 		 $TBOPS);
     }
-    MarkDaemonStopped("powder_keepalive")
+    MarkDaemonStopped("$DAEMONTAG")
 	if (! ($oneshot || $impotent));
 
     die("*** $0:\n".

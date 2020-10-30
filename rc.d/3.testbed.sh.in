@@ -206,11 +206,6 @@ case "$1" in
 			@prefix@/sbin/rfmonitor_daemon
 		fi
 
-		if [ "@POWDER_DEADMAN@" == "1" -a -x @prefix@/sbin/powder_deadman ]; then
-			echo -n " powder_deadman"
-			@prefix@/sbin/powder_deadman
-		fi
-
 		if [ -x @prefix@/sbin/portal_resources ]; then
 			echo -n " portal_resources"
 			@prefix@/sbin/portal_resources
@@ -371,9 +366,6 @@ case "$1" in
 		fi
 		if [ -r /var/run/rfmonitor_daemon.pid ]; then
 			kill `cat /var/run/rfmonitor_daemon.pid`
-		fi
-		if [ -r /var/run/powder_deadman.pid ]; then
-			kill `cat /var/run/powder_deadman.pid`
 		fi
 		if [ -r /var/run/portal_resources.pid ]; then
 			kill `cat /var/run/portal_resources.pid`

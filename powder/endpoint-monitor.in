@@ -25,23 +25,26 @@ use English;
 use strict;
 use Getopt::Std;
 use Data::Dumper;
+use Socket;
+use IO::Select;
+use IO::Socket::INET;
 use POSIX qw(strftime);
 use JSON;
 
 #
-# Monitor battery conditioner using the arduino.
+# Monitor deadman, temperature, and battery.
 #
 sub usage()
 {
-    print "Usage: batterymon [-nsdv]\n";
+    print "Usage: batterymon [-nsdvm]\n";
     exit(1);
 }
-my $optlist   = "dvsnNTB";
+my $optlist   = "dvsnNTBm";
 my $debug     = 0;
 my $verbose   = 1;
 my $oneshot   = 0;
 my $impotent  = 0;
-my $mailonly  = 1;
+my $mailonly  = 0;
 my $noshutdown= 0;
 my $tempdebug = 0;
 my $batdebug  = 0;
@@ -66,12 +69,13 @@ my $hostname = `hostname`;
 chomp($hostname);
 if ($hostname =~ /^boss.bus-\w/) {
     $ONBUS = 1;
-    if ($hostname =~ /^boss.bus-test2/) {
-	$PIN1_THRESHOLD = 800;
-    }
 }
 # Lowest voltage we allow before shutdown.
 my $MIN_ONBATTERY_VOLTAGE = 12.0;
+# Yuck
+if ($hostname =~ /bus-test2/) {
+    $MIN_ONBATTERY_VOLTAGE = 11.5;
+}
 
 # Max time we run before shutdown, so that we do not get too close to
 # the current 15 minute timer on the conditioner.
@@ -87,6 +91,7 @@ my $MIN_ONBATTERY_TIME  = 60 * 1;
 my $TEMP_WARN       = 100;
 my $TEMP_SHUTDOWN   = 110;
 my $TEMP_RESUME     = 95;
+my $TEMP_MAXCUTOFF  = 250;
 
 #
 # Deadman
@@ -95,18 +100,18 @@ my $TEMP_RESUME     = 95;
 # Mothership, then we consider ourself motherless and must power down
 # the experimental nodes.
 #
-my $NOALIVE_THRESHOLD = 120;
+my $NOALIVE_THRESHOLD = 900;
 #
 # Once we start hearing from the Mothership again, we want this many
 # consecutive pings before we consider the link good, and we can power
 # the nodes back on.
 #
-my $ISALIVE_COUNT = 3;
+my $ISALIVE_COUNT = 5;
 #
 # But if we go too long between pings while waiting for the link to
 # come back solidly, then restart the count back at zero. 
 #
-my $ISALIVE_THRESHOLD = 90;
+my $ISALIVE_THRESHOLD = 60;
 #
 # Deadman port
 #
@@ -121,8 +126,8 @@ $SHORTNAME =~ s/^boss\.([^\.]+).*$/$1/;
 #
 my $TB         = "@prefix@";
 my $TBOPS      = "@TBOPSEMAIL@";
-$TBOPS = "stoller\@flux.utah.edu";
 my $BOSSNODE   = "@BOSSNODE@";
+my $MOTHERIP   = "155.98.32.70";
 my $LOGFILE    = "$TB/log/endpoint-monitor.log";
 my $WAP        = "$TB/sbin/wap";
 my $SUDO       = "/usr/local/bin/sudo";
@@ -174,6 +179,9 @@ if (defined($options{"v"})) {
 if (defined($options{"s"})) {
     $oneshot = 1;
 }
+if (defined($options{"m"})) {
+    $mailonly = 1;
+}
 if (defined($options{"n"})) {
     $impotent = 1;
 }
@@ -196,8 +204,8 @@ if ($ONBUS && emdbi::DBExists("battery_monitor")) {
 }
 
 if (! $impotent) {
-    if (CheckDaemonRunning("endpoint_monitor")) {
-	fatal("Not starting another endpoint_monitor daemon!");
+    if (CheckDaemonRunning("endpoint-monitor")) {
+	fatal("Not starting another endpoint-monitor daemon!");
     }
     # Go to ground.
     if (! $debug) {
@@ -205,10 +213,22 @@ if (! $impotent) {
 	    exit(0);
 	}
     }
-    if (MarkDaemonRunning("endpoint_monitor")) {
+    if (MarkDaemonRunning("endpoint-monitor")) {
 	fatal("Could not mark daemon as running!");
     }
 }
+#
+# Setup a signal handler for newsyslog.
+#
+sub handler()
+{
+    ReOpenLog($LOGFILE);
+}
+$SIG{HUP} = \&handler
+    if (! ($debug || $impotent));
+
+logit("Starting at " . POSIX::strftime("20%y-%m-%d %H:%M:%S\n", localtime()));
+
 InitDeadman();
 InitTempAndBattery();
 
@@ -238,7 +258,14 @@ while (1)
     # Be nice to avoid too much email ...
     # 
     CheckDeadman(\$newpowerstate, defined($powerstate));
-    CheckTempAndBattery(\$newpowerstate, defined($powerstate));
+    if (CheckTempAndBattery(\$newpowerstate, defined($powerstate)) != 0) {
+	#
+	# Not able to contact the arduino, so we do not want to change
+	# anything until we can. Eventually we will send email if we
+	# cannot get to it for too long.
+	#
+	$newpowerstate |= ($powerstate & ($POWER_LOWBATTERY|$POWER_OVERTTEMP));
+    }
 
     #
     # Do we power control anything?
@@ -260,7 +287,6 @@ while (1)
     $powerstate = $newpowerstate;
     exit(0)
 	if ($oneshot);
-    sleep($debug ? 10 : 30);
 }
 exit(0);
 
@@ -289,11 +315,11 @@ sub InitDeadman()
     $deadmanSocket =
 	new IO::Socket::INET(LocalPort => $DEADMAN_PORT,
 			     Proto     => 'udp',
-			     Timeout   => 10,
-			     Listen    => 10,
-			     Reuse     => 1);
+			     Type      => SOCK_DGRAM,
+			     Timeout   => 5);
+
     if (!$deadmanSocket) {
-	fatal("Could not create socket on port $PORT");
+	fatal("Could not create socket on port $DEADMAN_PORT");
     }
     $deadmanLastPing = time();
     $deadmanCounter  = 0;
@@ -304,48 +330,48 @@ sub CheckDeadman($$)
     my ($pstatus, $doemail) = @_;
     my $pingTime;
     my $now = POSIX::strftime("%H:%M:%S\n", localtime());
+    my $data = "";
 
     if (!$deadmanEnable) {
+	sleep(10);
 	$$pstatus = 0;
 	return;
     }
     #
-    # Wait with timeout for the ping. We update the time only when
-    # we get a connection.
+    # Wait with timeout for the ping. 
     #
-    my $client_socket = $deadmanSocket->accept();
-    if (!$client_socket) {
-	if (! $!{ETIMEDOUT}) {
-	    logit("Hmm, accept returned a bogus value, continuing ...\n");
+    my (@ready) = IO::Select->new($deadmanSocket)->can_read(5);
+    if (@ready) {
+	my $client = $deadmanSocket->recv($data, 2048);
+	if (! $client) {
+	    if (! $!{ETIMEDOUT}) {
+		logit("Hmm, accept returned a bogus value, continuing ...\n");
+	    }
+	    else {
+		# Timed out, continue below since time still goes on.
+		logit("Timed out waiting, continuing ...\n") if ($debug);
+	    }
 	}
 	else {
-	    # Timed out, continue below since time still goes on.
-	    logit("Timed out waiting, continuing ...\n") if ($debug);
+	    my ($client_port, $client_addr) = sockaddr_in($client);
+	    my $client_ip = inet_ntoa($client_addr);
+
+	    logit("Connection from $client_ip:$client_port\n") if ($debug);
+
+	    # Only the Mothership.
+	    if ($client_ip ne $MOTHERIP) {
+		logit("Not the mothership ($MOTHERIP), go away!\n");
+		# Continue below since time still goes on.
+	    }
+	    else {
+		logit("Keep alive from Mom: $data\n") if ($debug);
+		$pingTime = time();
+	    }
 	}
     }
     else {
-	# get information about a newly connected client
-	my $client_address = $client_socket->peerhost();
-	my $client_port = $client_socket->peerport();
-	logit("Connection from $client_address:$client_port\n") if ($debug);
-
-	# Only the Mothership.
-	if ($client_address ne $bossip) {
-	    logit("Not the mothership ($bossip), go away!\n");
-	    # Continue below since time still goes on.
-	}
-	else {
-	    #
-	    # We get a node list and reserved status from the Mothership.
-	    #
-	    my $data = "";
-	    while (<$client_socket>) {
-		$data .= $_;
-	    }
-	    logit("Reservation status from Mom: $data\n") if ($debug);
-	    $pingTime = time();
-	}
-	close($client_socket);
+	# Timed out, continue below since time still goes on.
+	logit("Timed out waiting, continuing ...\n") if ($debug);
     }
     if ($debug || $deadmanTime) {
 	logit("keepalive: " . ($pingTime ? $pingTime : 0) . "\n");
@@ -355,6 +381,7 @@ sub CheckDeadman($$)
 		  "lastping: $deadmanLastPing\n");
 	}
     }
+    
     #
     # If we are already in a deadman state, we are waiting on getting
     # keepalives from the MotherShip. We want to see isalive change a
@@ -470,6 +497,8 @@ sub CheckTempAndBattery($$)
 		$tempFailMail = time();
 	    }
 	}
+	$$pstatus = $status;
+	return -1;
     }
     # Send email if we go too long without a response.
     $tempLastCheck = time();
@@ -498,7 +527,10 @@ sub CheckTempAndBattery($$)
 	logit($tmp);
     }
 
-    if ($tempF >= $TEMP_WARN) {
+    #
+    # The temp can go wonky. Igore anything that seems bogus.
+    #
+    if ($tempF >= $TEMP_WARN && $tempF < $TEMP_MAXCUTOFF) {
 	if ($tempF >= $TEMP_SHUTDOWN) {
 	    if (!defined($tempShutdownTime)) {
 		$tempShutdownTime = time();
@@ -590,7 +622,8 @@ sub CheckTempAndBattery($$)
 				"Temp (F):  $tempF\n");
 		    
 		    NotifyUsers("$SHORTNAME Monitor: back on bus power",
-				"$SHORTNAME is back on bus power\n")
+				"$SHORTNAME is back on bus power, nodes ".
+				"and radios are being turned back on.\n")
 			if ($doemail);
 		}
 	    }
@@ -640,6 +673,10 @@ sub CheckTempAndBattery($$)
 	# one more loop to test the voltage for a shutdown.
 	#
 	if (($status && !$powerstate) || !$onbattery) {
+	    if ($status && !$powerstate) {
+		NotifyUsers("$SHORTNAME Monitor: nodes are being powered off",
+			    "Your nodes are being powered off!");
+	    }
 	    $$pstatus = $status;
 	    return 0;
 	}
@@ -920,7 +957,7 @@ sub PowerAll($)
     }
     return
 	if (!@nodes);
-    
+
     PowerControl($onoff, @nodes);
 }
 
@@ -936,10 +973,10 @@ sub PowerControl($@)
 	if ($onoff eq "on") {
 	    if ($node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
 		if ($mailonly || $impotent) {
-		    logit("Would power on $node_id");
+		    logit("Would power on $node_id\n");
 		}
 		else {
-		    logit("Powering on $node_id");
+		    logit("Powering on $node_id\n");
 		    system("$SUDO -u $PROTOUSER $WAP $POWER on $node_id");
 		    if ($?) {
 			NotifyTBOPS("$SHORTNAME Monitor: ".
@@ -952,10 +989,10 @@ sub PowerControl($@)
 	else {
 	    if ($node->eventstate() ne TBDB_NODESTATE_POWEROFF()) {
 		if ($mailonly || $impotent) {
-		    logit("Would power off $node_id");
+		    logit("Would power off $node_id\n");
 		}
 		else {
-		    logit("Powering off $node_id");
+		    logit("Powering off $node_id\n");
 		    system("$SUDO -u $PROTOUSER $WAP $POWER off $node_id");
 		    if ($?) {
 			NotifyTBOPS("$SHORTNAME Monitor: ".

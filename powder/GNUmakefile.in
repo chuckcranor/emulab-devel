@@ -26,25 +26,35 @@ TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= ..
 SUBDIR		= powder
 ISMAINSITE	= @TBMAINSITE@
+DEADMAN         = @POWDER_DEADMAN@
 
 include $(OBJDIR)/Makeconf
 
 SUBDIRS		= 
 
-SBIN_SCRIPTS	= powder_deadman
+SBIN_SCRIPTS	= 
 LIBEXEC_SCRIPTS	= $(WEB_SBIN_SCRIPTS)
 
 ifeq ($(ISMAINSITE),1)
-SBIN_SCRIPTS   += powder_keepalive powder_shutdown powderstats powder_report
+SBIN_SCRIPTS   += powder_keepalive powder_shutdown powderstats powder_report \
+		  rfbaseline
 WEB_SBIN_SCRIPTS= webpowder_shutdown
 RCFILE          = $(INSTALL_RCDIR)/powder_keepalive.sh
+RCTARGET        = powder_keepalive.sh
+INSTALLTARGET   = mainsite-install
+endif
+ifeq ($(DEADMAN),1)
+SBIN_SCRIPTS   += endpoint-monitor
+RCFILE		= $(INSTALL_RCDIR)/endpoint-monitor.sh
+RCTARGET        = endpoint-monitor.sh
+INSTALLTARGET   = endpoint-install
 endif
 
 #
 # Force dependencies on the scripts so that they will be rerun through
 # configure if the .in file is changed.
 #
-TARGETS = $(SBIN_SCRIPTS) $(LIBEXEC_SCRIPTS) powder_keepalive.sh rfbaseline
+TARGETS = $(SBIN_SCRIPTS) $(LIBEXEC_SCRIPTS) $(RCTARGET)
 
 all:	$(TARGETS)
 
@@ -52,7 +62,7 @@ subboss:
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
-install: rfmonitor-install install-mainsite \
+install: rfmonitor-install $(INSTALLTARGET) \
 	$(addprefix $(INSTALL_SBINDIR)/, $(SBIN_SCRIPTS)) \
 	$(addprefix $(INSTALL_LIBEXECDIR)/, $(LIBEXEC_SCRIPTS))
 
@@ -72,26 +82,44 @@ rfmonitor-subdir:
 	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor
 	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor/archive
 
-install-mainsite: $(RCFILE) \
-	 $(addprefix $(INSTALL_DIR)/opsdir/sbin/, rfbaseline)
+mainsite-install: $(RCFILE) \
+	 $(INSTALL_DIR)/opsdir/sbin/rfbaseline
 
 subboss-install: 
 
 post-install:
 
+endpoint-install: $(RCFILE) $(INSTALL_SBINDIR)/endpoint-monitor
+
+endpoint-remove-old:
+	-$(INSTALL_RCDIR)/batterymon.sh stop
+	-rm -f $(INSTALL_RCDIR)/batterymon.sh
+	-pkill -l -f powder_deadman
+	rm -f $(INSTALL_SBINDIR)/powder_deadman
+
+$(RCFILE): $(RCTARGET)
+
 # For install on a base station cnuc
-cnuc-install: /usr/local/sbin/bs_deadman
+cnuc-install: /usr/local/sbin/bs-monitor
 
-/usr/local/sbin/bs_deadman: $(SRCDIR)/bs_deadman
-	$(INSTALL_PROGRAM) $(SRCDIR)/bs_deadman /usr/local/sbin/bs_deadman
+/usr/local/sbin/bs-monitor: $(SRCDIR)/bs-monitor
+	$(INSTALL_PROGRAM) $(SRCDIR)/bs-monitor /usr/local/sbin/bs-monitor
 
-cnuc-systemd-install: $(DESTDIR)/etc/systemd/system/bs_deadman.service
+cnuc-systemd-install: $(DESTDIR)/etc/systemd/system/bs-monitor.service
 
-/etc/systemd/system/bs_deadman.service: $(SRCDIR)/bs_deadman.service
-	$(INSTALL) -m 644 $(SRCDIR)/bs_deadman.service \
-		/etc/systemd/system/bs_deadman.service
+/etc/systemd/system/bs_deadman.service: $(SRCDIR)/bs-monitor.service
+	$(INSTALL) -m 644 $(SRCDIR)/bs-monitor.service \
+		/etc/systemd/system/bs-monitor.service
 	-systemctl daemon-reload
-	-systemctl enable bs_deadman
+	-systemctl enable bs-monitor
+	-systemctl start bs-monitor
+
+cnuc-systemd-remove-deadman:
+	-systemctl stop bs_deadman
+	-systemctl disable bs_deadman
+	-rm -f /etc/systemd/system/bs_deadman.service
+	-systemctl daemon-reload
+
 #
 # Control node installation (aka, ops)
 #

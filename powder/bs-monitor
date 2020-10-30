@@ -36,6 +36,8 @@ use Errno;
 use Getopt::Std;
 use Data::Dumper;
 use Date::Parse;
+use Socket;
+use IO::Select;
 use IO::Socket::INET;
 use File::Temp qw(tempdir);
 use POSIX qw(strftime);
@@ -71,23 +73,24 @@ my $POWERLOCAL   = "/usr/local/bin/powerlocal";
 # Mothership, then we consider ourself motherless and must power down
 # the experimental nodes.
 #
-my $NOALIVE_THRESHOLD = 90;
+my $NOALIVE_THRESHOLD = 900;
 #
 # Once we start hearing from the Mothership again, we want this many
 # consecutive pings before we consider the link good, and we can power
 # the nodes back on.
 #
-my $ISALIVE_COUNT = 3;
+my $ISALIVE_COUNT = 5;
 #
 # But if we go too long between pings while waiting for the link to
 # come back solidly, then restart the count back at zero. 
 #a
-my $ISALIVE_THRESHOLD = 90;
+my $ISALIVE_THRESHOLD = 60;
 
 # Temperature at which we warn and then start shutting down.
 my $TEMP_WARN       = 100;
 my $TEMP_SHUTDOWN   = 110;
 my $TEMP_RESUME     = 95;
+my $TEMP_MAXCUTOFF  = 250;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -251,6 +254,14 @@ while (1)
 	    $newpowerstate |= $POWER_OVERTTEMP;
 	}	
     }
+    else {
+	#
+	# Not able to contact the arduino, so we do not want to change
+	# anything until we can. Eventually we will send email if we
+	# cannot get to it for too long.
+	#
+	$newpowerstate |= ($powerstate & $POWER_OVERTTEMP);
+    }
 
     #
     # Do we power control anything?
@@ -306,10 +317,9 @@ sub InitDeadman()
     #
     $deadmanSocket =
 	new IO::Socket::INET(LocalPort => $PORT,
-			     Proto     => 'tcp',
-			     Timeout   => 10,
-			     Listen    => 10,
-			     Reuse     => 1);
+			     Proto     => 'udp',
+			     Type      => SOCK_DGRAM,
+			     Timeout   => 5);
     if (!$deadmanSocket) {
 	fatal("Could not create socket on port $PORT: $!");
     }
@@ -326,52 +336,51 @@ sub CheckDeadman($$)
     my ($pstatus, $doemail) = @_;
     my $now = POSIX::strftime("%H:%M:%S\n", localtime());
     my $pingTime;
+    my $data = "";
 
     #
-    # Wait with timeout for the ping. We update the time only when
-    # we get a connection.
+    # Wait with timeout for the ping. 
     #
-    my $client_socket = $deadmanSocket->accept();
-    if (!$client_socket) {
-	if (! $!{ETIMEDOUT}) {
-	    logit("Hmm, accept returned a bogus value, continuing ...\n");
+    my (@ready) = IO::Select->new($deadmanSocket)->can_read(5);
+    if (@ready) {
+	my $client = $deadmanSocket->recv($data, 2048);
+	if (! $client) {
+	    if (! $!{ETIMEDOUT}) {
+		logit("Hmm, accept returned a bogus value, continuing ...\n");
+	    }
+	    else {
+		# Timed out, continue below since time still goes on.
+		logit("Timed out waiting, continuing ...\n") if ($debug);
+	    }
 	}
 	else {
-	    # Timed out, continue below since time still goes on.
-	    logit("Timed out waiting, continuing ...\n") if ($debug);
+	    my ($client_port, $client_addr) = sockaddr_in($client);
+	    my $client_ip = inet_ntoa($client_addr);
+
+	    logit("Connection from $client_ip:$client_port\n") if ($debug);
+
+	    # Only the Mothership.
+	    if ($client_ip ne $bossip) {
+		logit("Not the mothership ($bossip), go away!\n");
+		# Continue below since time still goes on.
+	    }
+	    else {
+		logit("Keep alive from Mom: $data\n") if ($debug);
+		$pingTime = time();
+
+		my $tmp  = eval { decode_json($data) };
+		if ($@) {
+		    logit("Could not decode json data: $data\n");
+		}
+		else {
+		    $powder_nodes = $tmp;
+		}
+	    }
 	}
     }
     else {
-	# get information about a newly connected client
-	my $client_address = $client_socket->peerhost();
-	my $client_port = $client_socket->peerport();
-	logit("Connection from $client_address:$client_port\n") if ($debug);
-
-	# Only the Mothership.
-	if ($client_address ne $bossip) {
-	    logit("Not the mothership ($bossip), go away!\n");
-	    # Continue below since time still goes on.
-	}
-	else {
-	    #
-	    # We get a node list and reserved status from the Mothership.
-	    #
-	    my $data = "";
-	    while (<$client_socket>) {
-		$data .= $_;
-	    }
-	    logit("Reservation status from Mom: $data\n") if ($debug);
-	    $pingTime = time();
-
-	    my $tmp  = eval { decode_json($data) };
-	    if ($@) {
-		logit("Could not decode json data: $data\n");
-	    }
-	    else {
-		$powder_nodes = $tmp;
-	    }
-	}
-	close($client_socket);
+	# Timed out, continue below since time still goes on.
+	logit("Timed out waiting, continuing ...\n") if ($debug);
     }
     if ($debug || $deadmanTime) {
 	logit("keepalive: " . ($pingTime ? $pingTime : 0) . "\n");
@@ -475,6 +484,8 @@ sub CheckTemp($$)
 		$tempFailMail = time();
 	    }
 	}
+	$$pstatus = 0;
+	return -1;
     }
     # Send email if we go too long without a response.
     $tempLastCheck = time();
@@ -490,7 +501,10 @@ sub CheckTemp($$)
 	logit("Temp:$tempF\n");
     }
     
-    if ($tempF >= $TEMP_WARN) {
+    #
+    # The temp can go wonky. Igore anything that seems bogus.
+    #
+    if ($tempF >= $TEMP_WARN && $tempF < $TEMP_MAXCUTOFF) {
 	if ($tempF >= $TEMP_SHUTDOWN) {
 	    if (!defined($tempShutdownTime)) {
 		$tempShutdownTime = time();
