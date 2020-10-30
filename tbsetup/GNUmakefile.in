@@ -385,6 +385,8 @@ cnuc-install: powerlocal
 	$(INSTALL) $(SRCDIR)/power_apc.pm /usr/local/etc/emulab/power_apc.pm
 	$(INSTALL) $(SRCDIR)/power_raritan.pm \
 		/usr/local/etc/emulab/power_raritan.pm
+	$(INSTALL) $(SRCDIR)/power_powduino.pm \
+		/usr/local/etc/emulab/power_powduino.om
 
 #
 # XXX Create non .tcl files.
