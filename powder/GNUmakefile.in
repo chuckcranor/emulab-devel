@@ -78,14 +78,13 @@ rfmonitor-subdir:
 	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor
 	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor/archive
 
-mainsite-install: $(RCFILE) \
-	 $(INSTALL_DIR)/opsdir/sbin/rfbaseline
+mainsite-install: $(INSTALL_DIR)/opsdir/sbin/rfbaseline
 
 subboss-install: 
 
 post-install:
 
-endpoint-install: $(RCFILE) $(INSTALL_SBINDIR)/endpoint-monitor
+endpoint-install: $(INSTALL_SBINDIR)/endpoint-monitor
 
 endpoint-reinstall: endpoint-install
 	-sudo /usr/local/etc/rc.d/endpoint-monitor.sh stop
@@ -97,8 +96,6 @@ endpoint-remove-old:
 	-rm -f $(INSTALL_RCDIR)/batterymon.sh
 	-pkill -l -f powder_deadman
 	rm -f $(INSTALL_SBINDIR)/powder_deadman
-
-$(RCFILE): $(RCTARGET)
 
 # For install on a base station cnuc
 cnuc-install: /usr/local/sbin/bs-monitor
