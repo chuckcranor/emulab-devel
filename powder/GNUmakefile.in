@@ -39,14 +39,10 @@ ifeq ($(ISMAINSITE),1)
 SBIN_SCRIPTS   += powder_keepalive powder_shutdown powderstats powder_report \
 		  rfbaseline
 WEB_SBIN_SCRIPTS= webpowder_shutdown
-RCFILE          = $(INSTALL_RCDIR)/powder_keepalive.sh
-RCTARGET        = powder_keepalive.sh
 INSTALLTARGET   = mainsite-install
 endif
 ifeq ($(DEADMAN),1)
 SBIN_SCRIPTS   += endpoint-monitor
-RCFILE		= $(INSTALL_RCDIR)/endpoint-monitor.sh
-RCTARGET        = endpoint-monitor.sh
 INSTALLTARGET   = endpoint-install
 endif
 
@@ -54,7 +50,7 @@ endif
 # Force dependencies on the scripts so that they will be rerun through
 # configure if the .in file is changed.
 #
-TARGETS = $(SBIN_SCRIPTS) $(LIBEXEC_SCRIPTS) $(RCTARGET)
+TARGETS = $(SBIN_SCRIPTS) $(LIBEXEC_SCRIPTS) rfbaseline
 
 all:	$(TARGETS)
 

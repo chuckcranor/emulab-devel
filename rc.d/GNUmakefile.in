@@ -68,6 +68,11 @@ else
 RC_SCRIPTS	+= wbstore.sh
 endif
 
+# Powder
+ifeq ($(TBMAINSITE),1)
+RC_SCRIPTS	+= powder_keepalive.sh
+endif
+
 ifeq ($(SYSTEM),FreeBSD)
 FBSDVERSION   := $(shell uname -v | sed -e 's/FreeBSD \([0-9][0-9]*\).*/FreeBSD\1/')
 
