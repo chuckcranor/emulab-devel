@@ -51,7 +51,7 @@ BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
 #
 sub usage()
 {
-    print "Usage: bs_deadman [-d] [-n] [-p port]\n";
+    print "Usage: bs-monitor [-d] [-n] [-p port]\n";
     exit(1);
 }
 my $optlist      = "dnp:T";
@@ -63,7 +63,7 @@ my $tempdebug    = 0;
 my $last_isalive = 0;
 my $PORT         = 12487;
 my $SERVER       = "boss.emulab.net";
-my $TBOPS        = "stoller\@flux.utah.edu";
+my $TBOPS        = "testbed-logs\@flux.utah.edu";
 my $LOGFILE      = "$LOGDIR/bs-monitor.log";
 my $DATAFILE     = "/var/run/bs-monitor.data";
 my $POWERLOCAL   = "/usr/local/bin/powerlocal";
@@ -143,8 +143,8 @@ if (defined($options{"T"})) {
 }
 
 if (! $impotent) {
-    if (CheckDaemonRunning("bs_deadman")) {
-	fatal("Not starting another bs_deadman daemon!");
+    if (CheckDaemonRunning("bs-monitor")) {
+	fatal("Not starting another bs-monitor daemon!");
     }
     # Go to ground.
     if (! $debug) {
@@ -152,7 +152,7 @@ if (! $impotent) {
 	    exit(0);
 	}
     }
-    if (MarkDaemonRunning("bs_deadman")) {
+    if (MarkDaemonRunning("bs-monitor")) {
 	fatal("Could not mark daemon as running!");
     }
 }

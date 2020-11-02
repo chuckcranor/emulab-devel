@@ -91,6 +91,11 @@ post-install:
 
 endpoint-install: $(RCFILE) $(INSTALL_SBINDIR)/endpoint-monitor
 
+endpoint-reinstall: endpoint-install
+	-sudo /usr/local/etc/rc.d/endpoint-monitor.sh stop
+	sleep 1
+	-sudo /usr/local/etc/rc.d/endpoint-monitor.sh start
+
 endpoint-remove-old:
 	-$(INSTALL_RCDIR)/batterymon.sh stop
 	-rm -f $(INSTALL_RCDIR)/batterymon.sh
@@ -105,13 +110,17 @@ cnuc-install: /usr/local/sbin/bs-monitor
 /usr/local/sbin/bs-monitor: $(SRCDIR)/bs-monitor
 	$(INSTALL_PROGRAM) $(SRCDIR)/bs-monitor /usr/local/sbin/bs-monitor
 
-cnuc-systemd-install: $(DESTDIR)/etc/systemd/system/bs-monitor.service
+cnuc-reinstall: cnuc-install
+	-systemctl stop bs-monitor
+	-systemctl start bs-monitor
 
-/etc/systemd/system/bs_deadman.service: $(SRCDIR)/bs-monitor.service
+cnuc-systemd-install: /etc/systemd/system/bs-monitor.service
+
+/etc/systemd/system/bs-monitor.service: $(SRCDIR)/bs-monitor.service
 	$(INSTALL) -m 644 $(SRCDIR)/bs-monitor.service \
 		/etc/systemd/system/bs-monitor.service
-	-systemctl daemon-reload
 	-systemctl enable bs-monitor
+	-systemctl daemon-reload
 	-systemctl start bs-monitor
 
 cnuc-systemd-remove-deadman:
