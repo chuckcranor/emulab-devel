@@ -1,4 +1,26 @@
 #! /usr/local/bin/bash
+#
+# Copyright (c) 2013-2020 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
 
 # let the checkutils.sh script know we are running offline
 declare -i offline=1
@@ -494,6 +516,10 @@ ph4() {
 
 genreport_main() {
     reporting=1
+#CHECKNODE_CRONJOB=YES
+#CHECKNODE_MTA="sendmail -t"
+#CHECKNODE_MAILTO="nodecheck@flux.utah.edu"
+
     [[ -z "${CHECKNODE_CRONJOB-}" ]] && declare CHECKNODE_CRONJOB="NO"
     [[ -z "${CHECKNODE_MTA-}" ]] && declare CHECKNODE_MTA="sendmail -t"
     [[ -z "${CHECKNODE_MAILTO-}" ]] && declare CHECKNODE_MAILTO=""
@@ -515,8 +541,14 @@ genreport_main() {
 	h4=''
 #	echo "================================= $node =================================" >> /tmp/Report_CheckNode
 	if [ -s /proj/emulab-ops/nodecheck/$node/diff ] ; then
+	    dchop=$(grep UNKNOWN /proj/emulab-ops/nodecheck/$node/diff)
+	    if [ -n "$dchop" ] ; then
+	        tail -n +5 /proj/emulab-ops/nodecheck/$node/diff | grep -v UNKNOWN | grep -v 'DISKs:' | grep -v MISSING > /tmp/diffchop
+	    else
+		tail -n +5 /proj/emulab-ops/nodecheck/$node/diff | grep -v UNKNOWN | grep -v MISSING > /tmp/diffchop
+            fi
 	    # chop top off diff report and remove UNKNOWN lines
-	    tail -n +5 /proj/emulab-ops/nodecheck/$node/diff | grep -v UNKNOWN | grep -v MISSING > /tmp/diffchop
+#	    tail -n +5 /proj/emulab-ops/nodecheck/$node/diff | grep -v UNKNOWN | grep -v MISSING > /tmp/diffchop
 	    # do we still have something to report?
 	    if [ -s /tmp/diffchop ] ; then
 		diffDate=$(stat -f %Sm -t "%H:%M %d%b%g" /proj/emulab-ops/nodecheck/$node/diff)
@@ -528,13 +560,13 @@ genreport_main() {
 	    fi
 	fi
 
-	gentbsql_main $node > /tmp/genreport
-	if [ -s /tmp/genreport ] ; then
-	    ph4 $node
-	    echo ">>>> Run gen_sql for suggested db updates" >> /tmp/Report_CheckNode
+#	gentbsql_main $node > /tmp/genreport
+#	if [ -s /tmp/genreport ] ; then
+#	    ph4 $node
+#	    echo ">>>> Run gen_sql for suggested db updates" >> /tmp/Report_CheckNode
 #	    echo "--------------------------- suggested db updates  -----------------------" >> /tmp/Report_CheckNode
 #	    cat /tmp/genreport >> /tmp/Report_CheckNode
-	fi
+#	fi
 
 	checkdrift_main $node | grep -v '^$' > /tmp/driftreport
 	if [ -s /tmp/driftreport ] ; then

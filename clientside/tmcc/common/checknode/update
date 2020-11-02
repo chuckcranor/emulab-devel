@@ -1,5 +1,34 @@
 #!/usr/local/bin/bash
 
+sudo cp gen_sql /proj/emulab-ops/nodecheck/nodecheck/gen_sql
+sudo cp checkutils.sh /proj/emulab-ops/nodecheck/nodecheck/checkutils.sh
+sudo scp rc.nodecheck checkutils.sh diskcheck apt155:/etc/testbed
+exit 0
+
+
+#
+# Copyright (c) 2013-2020 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
 arg=$1
 
 #list="pc4 pc7 pc133 pc137 pc207 pc208 pc406 pc446 pc511 pc606"
