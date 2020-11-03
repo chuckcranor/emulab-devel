@@ -165,7 +165,8 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
     header("Cache-Control: no-cache, must-revalidate");
     header("Pragma: no-cache");
-
+    header("X-Frame-Options: SAMEORIGIN");
+    
     echo "<html>
       <head>
         <title>$title</title>
