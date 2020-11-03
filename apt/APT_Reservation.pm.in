@@ -1492,7 +1492,7 @@ sub Fits($$$$$)
 
 	    # If this reservation does not overlap in time, skip it.
 	    if (($start < $res_start && $end < $res_start) ||
-		($start > $res_end)) {
+		($start > $res_end - 1)) {
 		next;
 	    }
 	    # If this reservation does not overlap in freq, skip it.
