@@ -89,6 +89,12 @@ my %endpoints = (
 	"last"  => {},
         "nickname" => "Law73",
     },
+    "guesthouse" => {
+	"urn" => 'urn:publicid:IDN+guesthouse.powderwireless.net+authority+cm',
+	"nodes" => ["nuc1", "nuc2"],
+	"last"  => {},
+        "nickname" => "Guesthouse",
+    },
     "humanities" => {
         "urn" => 'urn:publicid:IDN+humanities.powderwireless.net+authority+cm', 
 	"nodes" => ["nuc1", "nuc2"],
