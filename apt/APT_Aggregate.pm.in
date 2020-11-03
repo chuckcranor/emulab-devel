@@ -587,6 +587,17 @@ sub ReservableNodes($)
     return $result;
 }
 
+#
+# Grab domain
+#
+sub Domain($)
+{
+    my ($self) = @_;
+    my $hrn    = GeniHRN->new($self->urn());
+
+    return $hrn->domain();
+}
+
 ###################################################################
 package APT_Aggregate::Mobile;
 use Carp;
