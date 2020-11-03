@@ -806,7 +806,8 @@ sub RunAssign($$)
 	    "Node $node_id ($node_type) requested, but is not ".
 	    "available because ";
 
-	if ($node->IsReserved() && $node->eid() ne $eid) {
+	if ($node->IsReserved() &&
+	    $node->pid() eq $pid && $node->eid() ne $eid) {
 	    $message .= "it is already allocated to another experiment in ".
 		"this project.\n";
 	}
