@@ -85,6 +85,11 @@ while (list($index, $aggregate) = each($ams)) {
     $urn = $aggregate->urn();
     $am  = $aggregate->name();
 
+    # Lets not show mobile nodes on this page.
+    if ($aggregate->ismobile()) {
+        continue;
+    }
+
     $amlist[$urn] = array("urn"      => $urn,
                           "name"     => $am,
                           "weburl"   => $aggregate->weburl(),

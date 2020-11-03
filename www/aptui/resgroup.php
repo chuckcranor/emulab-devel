@@ -141,6 +141,10 @@ while (list($index, $aggregate) = each($ams)) {
     $reservable_nodes = $aggregate->ReservableNodes();
     $typeinfo = $aggregate->typeinfo;
 
+    # Lets not show mobile nodes on this page.
+    if ($aggregate->ismobile()) {
+        continue;
+    }
     # Subtract out reservable nodes from the type count, do not want
     # to confuse users. 
     if ($reservable_nodes) {
