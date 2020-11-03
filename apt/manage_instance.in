@@ -936,7 +936,8 @@ sub DoSnapshot()
     if ($relocate) {
 	my $pid = $project->pid();
 
-	if (RelocateImage($pid, $imagename, $version_urn, $version_url) != 0) {
+	if (RelocateImage($instance->pid(),
+			  $imagename, $version_urn, $version_url) != 0) {
 	    $errmsg  = "Failed to copy image back to the Portal";
 	    $errcode = 1;
 	    goto bad;
@@ -2976,6 +2977,10 @@ sub DoRebootOrReload($)
     my %node_ids    = ();
     my @slivers     = ();
     foreach my $obj ($instance->AggregateList()) {
+	# Not finished or failure.
+	next
+	    if (!$obj->manifest());
+	
 	my $manifest = GeniXML::Parse($obj->manifest());
 	if (! defined($manifest)) {
 	    fatal("Could not parse manifest");
