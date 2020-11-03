@@ -375,7 +375,6 @@ sub DoCreate()
 	$errmsg = "Could not create webtask object";
 	goto failed;
     }
-    $dwebtask->AutoStore(1);
     $blob->{"webtask_id"} = $dwebtask->task_id();
 
     my $dataset = APT_Dataset->Create($blob);
@@ -392,6 +391,9 @@ sub DoCreate()
 	    goto failed;
 	}
     }
+    # Before we go into polling, make sure changes are written back.
+    $dataset->webtask()->AutoStore(1);
+    
     #
     # Ask the aggregate to create the dataset. 
     #
