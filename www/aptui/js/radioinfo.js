@@ -71,7 +71,7 @@ $(function ()
 	    callback(map);
 	    return;
 	}
-	if (window.opener) {
+	if (window.opener && window.opener.GetMapWindow) {
 	    console.info("calling into the opener");
 	    window.opener.GetMapWindow(callback);
 	    return;
