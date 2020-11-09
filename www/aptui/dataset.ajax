@@ -345,7 +345,8 @@ function Do_ModifyDataSet()
     }
     $project = $dataset->Project();
     
-    if ($this_uid != $dataset->owner_uid() && !ISADMIN()) {
+    if (!(ISADMIN() ||
+          $dataset->AccessCheck($this_user, $LEASE_ACCESS_MODIFYINFO))) {
 	SPITAJAX_ERROR(1, "Not enough permission");
 	return;
     }
@@ -363,6 +364,13 @@ function Do_ModifyDataSet()
     }
     $nodeid = null;
     if ($dataset->type() == "imdataset") {
+        if ($nodeid) {
+            if (!(ISADMIN() ||
+                  $dataset->AccessCheck($this_user, $LEASE_ACCESS_MODIFY))) {
+                SPITAJAX_ERROR(1, "Not enough permission");
+                return;
+            }
+        }
         #
         # Node and BS name are optional.
         #
@@ -566,7 +574,8 @@ function Do_DeleteDataset()
     }
     $project = $dataset->Project();
     
-    if ($this_uid != $dataset->owner_uid() && !ISADMIN()) {
+    if (!(ISADMIN() ||
+          $dataset->AccessCheck($this_user, $LEASE_ACCESS_DESTROY))) {
 	SPITAJAX_ERROR(1, "Not enough permission");
 	return;
     }
@@ -611,7 +620,7 @@ function Do_DeleteDataset()
         }
         $webtask->Delete();
     }
-    SPITAJAX_RESPONSE("list-datasets.php");
+    SPITAJAX_RESPONSE("landing.php");
 }
 
 function Do_ApproveDataset()
@@ -707,10 +716,12 @@ function Do_RefreshDataset()
 	SPITAJAX_ERROR(1, "Unknown dataset");
 	return;
     }
-    if ($this_uid != $dataset->owner_uid() && !ISADMIN()) {
+    if (!(ISADMIN() ||
+          $dataset->AccessCheck($this_user, $LEASE_ACCESS_READINFO))) {
 	SPITAJAX_ERROR(1, "Not enough permission");
 	return;
     }
+
     #
     # Invoke backend.
     #
@@ -763,7 +774,8 @@ function Do_ExtendDataset()
 	SPITAJAX_ERROR(1, "Unknown dataset");
 	return;
     }
-    if ($this_uid != $dataset->owner_uid() && !ISADMIN()) {
+    if (!(ISADMIN() ||
+          $dataset->AccessCheck($this_user, $LEASE_ACCESS_MODIFYINFO))) {
 	SPITAJAX_ERROR(1, "Not enough permission");
 	return;
     }
@@ -841,7 +853,8 @@ function Do_GetInfo()
 	SPITAJAX_ERROR(1, "Unknown dataset");
 	return;
     }
-    if ($this_uid != $dataset->owner_uid() && !ISADMIN()) {
+    if (!(ISADMIN() ||
+          $dataset->AccessCheck($this_user, $LEASE_ACCESS_READINFO))) {
 	SPITAJAX_ERROR(1, "Not enough permission");
 	return;
     }
@@ -887,6 +900,14 @@ function Do_GetInfo()
         $blob["image_status"] = $taskdata["image_status"];
         if (isset($taskdata["copyback_uuid"])) {
             $blob["copyback_uuid"] = $taskdata["copyback_uuid"];
+        }
+        if ($webtask->exited()) {
+            $blob["exited"]   = $webtask->exited();
+            $blob["exitcode"] = $webtask->exitcode();
+            
+            if (isset($taskdata["errmsg"])) {
+                $blob["errmsg"] = $taskdata["errmsg"];
+            }
         }
 
         #

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,6 +70,7 @@ if ($editing) {
                       "title"  => $row["title"],
                       "body"   => $row["body"],
                       "author" => $row["author"],
+                      "portals"=> $row["portals"],
                       "created"=> DateStringGMT($row["created"]));
 }
 

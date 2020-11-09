@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2019 University of Utah and the Flux Group.
+# Copyright (c) 2003-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -197,6 +197,7 @@ $CONFIG_TARGETSYS       = @CONFIG_TARGETSYS@;
 $TARGETSYS_TARGET       = "@TARGETSYS_TARGET@";
 $PORTAL_ENABLE          = @PORTAL_ENABLE@;
 $ELABINELAB		= @ELABINELAB@;
+$ELABINELAB_MAILTARGET	= "@ELABINELAB_MAILTARGET@";
 $DBNAME			= "@TBDBNAME@";
 $ERRORLOG_DBNAME	= "@TBERRORLOGDBNAME@";
 $FRISADDR		= '@FRISEBEEMCASTADDR@';
@@ -210,6 +211,7 @@ $USERNODE		= '@USERNODE@';
 $FSNODE			= '@FSNODE@';
 $BOSSNODE		= '@BOSSNODE@';
 $WWWHOST		= '@WWWHOST@';
+$MAILERNODE		= '@MAILERNODE@';
 $BOSSNODE_IP		= '@BOSSNODE_IP@';
 $USERNODE_IP		= '@USERNODE_IP@';
 $FSNODE_IP		= '@FSNODE_IP@';
@@ -242,6 +244,7 @@ $OPSVM_ENABLE		= @OPSVM_ENABLE@;
 $NEEDMROUTED		= 0;
 $ARCHSUPPORT		= @ARCHIVESUPPORT@;
 $BROWSER_CONSOLE_ENABLE = @BROWSER_CONSOLE_ENABLE@;
+$BROWSER_CONSOLE_PROXIED= @BROWSER_CONSOLE_PROXIED@;
 $WITHZFS		= @WITHZFS@;
 $WITHAMD		= @WITHAMD@;
 $IMAGEUPLOADTOFS	= @IMAGEUPLOADTOFS@;
@@ -389,6 +392,7 @@ $TBACCT			= "$PREFIX/sbin/tbacct";
 $GENTOPOFILE		= "$PREFIX/libexec/gentopofile";
 $UPDATESITEVARS		= "$PREFIX/sbin/update_sitevars";
 $IMAGEIMPORT            = "$PREFIX/sbin/image_import";
+$IMAGEVALIDATE          = "$PREFIX/sbin/imagevalidate";
 
 $PROTOUSER_DSAKEY	= "$main::TOP_SRCDIR/install/elabman_dsa.pub";
 $PROTOUSER_RSAKEY	= "$main::TOP_SRCDIR/install/elabman_rsa.pub";
@@ -402,6 +406,7 @@ $INIT_PRIVKEY		= "$main::TOP_SRCDIR/install/id_rsa";
 $INIT_PUBKEY		= "$main::TOP_SRCDIR/install/id_rsa.pub";
 $CACERT			= "$TBROOT/etc/emulab.pem";
 $EMULAB_PEM		= "emulab.pem";
+$EMULAB_PUB		= "emulab.pub";
 $CLIENT_PEM		= "client.pem";
 $CTRLNODE_PEM		= "ctrlnode.pem";
 $ETC_EMULAB_DIR		= "/etc/emulab";

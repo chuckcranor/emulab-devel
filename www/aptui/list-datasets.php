@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,9 +43,6 @@ if (!ISADMIN()) {
 }
 
 SPITHEADER(1);
-
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
 
 $whereclause1 = "where ad.uuid is null";
 $whereclause2 = "where v.isdataset=1";
@@ -206,8 +203,7 @@ echo "</script>\n";
 
 REQUIRE_SUP();
 REQUIRE_MOMENT();
-SPITREQUIRE("js/list-datasets.js",
-         "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
-         "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n");
+REQUIRE_TABLESORTER();
+SPITREQUIRE("js/list-datasets.js");
 SPITFOOTER();
 ?>

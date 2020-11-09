@@ -79,6 +79,12 @@
     <% }); %>
     <% if (isadmin) { %>
       <tr>
+	<td>For a Class?</td>
+	<td><% if (fields.forClass) { %>Yes<% } else { %>No<% } %>
+	  (<a class="toggle" data-name="project_forClass">Toggle</a>)
+	</td>
+      </tr>
+      <tr>
 	<td>Disabled</td>
 	<td><% if (fields.disabled) { %>Yes<% } else { %>No<% } %>
 	  (<a class="toggle" data-name="project_disable">Toggle</a>)

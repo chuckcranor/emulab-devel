@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -72,9 +72,6 @@ if ($TBMAINSITE) {
 
 SPITHEADER(1);
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter-blue.css'>\n";
-
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
 
@@ -86,14 +83,6 @@ if ($ISCLOUD) {
     #
     $dblink = DBConnect("ims");
     
-    if (ISADMIN() && $all) {
-        $joinclause  = "";
-        $whereclause = "";
-    }
-    else {
-        $joinclause  = "";
-        $whereclause = "(iv.visibility='public')";
-    }
     $query =
            "SELECT i.*, iv.* ".
            "FROM images as i ".
@@ -118,6 +107,15 @@ if ($ISCLOUD) {
         $pid_idx = 0;
         $blob    = array();
 
+        #
+        # Mere users only see listed. non-deprecated images
+        #
+        if (!ISADMIN()) {
+            if ($row["listed"] == 0 || $row["deprecated"]) {
+                continue;
+            }
+        }
+        
         # Need to map creator/project to local.
         list ($auth,$type,$id) = Instance::ParseURN($row["creator_urn"]);
         if ($auth == $domain) {
@@ -170,15 +168,23 @@ if ($ISCLOUD) {
         }
         $blob["description"] = $row["description"];
         $blob["imagename"]   = $row["imagename"];
-        $blob["created"]     = DateStringGMT($row["created"]);
+        $blob["updated"]     = DateStringGMT($row["created"]);
         $blob["pid"]         = $pid;
         $blob["pid_idx"]     = $pid_idx;
         $blob["global"]      = $row["visibility"] == "public" ? 1 : 0;
         $blob["creator"]     = $creator;
         $blob["creator_idx"] = $creator_idx;
         $blob["project_urn"] = $row["project_urn"];
-        $blob["format"]      = $row["format"];
         $blob["urn"]         = $row["urn"];
+        #
+        # Virtualization implies the format.
+        #
+        if ($row["virtualizaton"] == "emulab-docker") {
+            $blob["format"] = "docker";
+        }
+        else {
+            $blob["format"] = "ndz";
+        }
         if (ISADMIN() && isset($url)) {
             $blob["url"] = $url;
         }
@@ -192,7 +198,8 @@ else {
     }
     else {
         #
-        # User is allowed to view the list of all global images, and all images
+        # User is allowed to view the list of all global images that have the
+        # listed flag set (to pare down what user see), and all images
         # in his project. Include images in the subgroups too, since its okay
         # for the all project members to see the descriptors. They need proper 
         # permission to use/modify the image/descriptor of course, but that is
@@ -213,10 +220,10 @@ else {
                 "      g.gid_idx=p1.permission_idx) ";
     
         $whereclause = "and (iv.global or p2.imageid is not null or ".
-                     "g.uid_idx is not null) ";
+                     "g.uid_idx is not null) and i.listed!=0 ";
     }
     $query =
-           "select distinct i.imagename,iv.*,ov.* from images as i ".
+           "select distinct i.imagename,iv.* from images as i ".
            "left join image_versions as iv on ".
            "          iv.imageid=i.imageid and iv.version=i.version ".
            "left join os_info_versions as ov on ".
@@ -224,6 +231,7 @@ else {
            "left join osidtoimageid as map on map.osid=i.imageid ".
            $joinclause .
            "where (iv.ezid = 1 or iv.isdataset = 1) $whereclause ".
+           (ISADMIN() ? "" : "and deprecated is null ") .
            "order by i.imagename";
 
     $query_result = DBQueryFatal($query);
@@ -238,10 +246,11 @@ else {
         $blob["imageid"]     = $imageid;
         $blob["description"] = $row["description"];
         $blob["imagename"]   = $row["imagename"];
-        $blob["created"]     = DateStringGMT($row["created"]);
+        $blob["updated"]     = DateStringGMT($row["updated"]);
         $blob["pid"]         = $row["pid"];
         $blob["pid_idx"]     = $row["pid_idx"];
-        $blob["global"]      = $row["global"];
+        $blob["global"]      = $row["global"] ? 1 : 0;
+        $blob["listed"]      = $row["listed"] ? 1 : 0;
         $blob["creator"]     = $row["creator"];
         $blob["creator_idx"] = $row["creator_idx"];
         $blob["format"]      = $row["format"];
@@ -301,9 +310,6 @@ $isadmin = (isset($this_user) && ISADMIN() ? 1 : 0);
 echo "    window.ISADMIN    = $isadmin;\n";
 echo "    window.ALL        = $all;\n";
 echo "</script>\n";
-echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
 
 echo "<script type='text/plain' id='images-json'>\n";
 echo htmlentities(json_encode($images)) . "\n";
@@ -312,8 +318,10 @@ echo "</script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 SPITREQUIRE("js/images.js");
 
 AddTemplate("images");
+AddTemplate("image-format-modal");
 SPITFOOTER();
 ?>

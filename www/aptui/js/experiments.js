@@ -37,6 +37,7 @@ $(function ()
 	    var html = template({"experiments" : json.value,
 				 "showCreator" : true,
 				 "showProject" : true,
+				 "showPortal"  : true,
 				 "searchUUID"  : true,
 				 "showterminate"  : false,
 				});
@@ -71,10 +72,9 @@ $(function ()
 
 	var table = $(tablename)
 		.tablesorter({
-		    theme : 'green',
-		    
-		    // initialize zebra and filter widgets
-		    widgets: ["zebra", "filter", "resizable"],
+		    theme : 'bootstrap',
+		    widgets: ["uitheme", "zebra", "filter", "resizable"],
+		    headerTemplate : '{content} {icon}',
 
 		    headers: {
 			0: {
@@ -88,7 +88,7 @@ $(function ()
 			// include all columns in the search.
 			filter_anyMatch   : true,
 			// class name applied to filter row and each input
-			filter_cssFilter  : 'form-control',
+			filter_cssFilter  : 'form-control input-sm',
 			// search from beginning
 			filter_startsWith : false,
 			// Set this option to false for case sensitive search
@@ -112,7 +112,7 @@ $(function ()
 	    search_timeout =
 		window.setTimeout(function() {
 		    var filters = $.tablesorter.getFilters(table);
-		    filters[13] = userInput;
+		    filters[14] = userInput;
 		    //console.info("Search", filters);
 		    $.tablesorter.setFilters(table, filters, true);
 		}, 500);
@@ -178,10 +178,10 @@ $(function ()
 
 	// Initial sort.
 	if (window.SORTYBY !== undefined && window.SORTYBY == "created") {
-	    table.find('th:eq(9)').trigger('sort');
+	    table.find('th:eq(10)').trigger('sort');
 	}
 	else if (hash === "#extending") {
-	    table.find('th:eq(10)').trigger('sort');
+	    table.find('th:eq(11)').trigger('sort');
 	}
 	else {
 	    table.find('th:eq(0)').trigger('sort');
@@ -207,8 +207,8 @@ $(function ()
 	var filters = $.tablesorter.getFilters(table);
 	// The "any" filter needs a value or everything disappears.
 	// If there is a term in the search box, it will have a value.
-	if (filters[13] === undefined) {
-	    filters[13] = "";
+	if (filters[14] === undefined) {
+	    filters[14] = "";
 	}
 	if ($('#radio-buttons [data-id="#extending"]').is(":checked")) {
 	    tmp.push("extending");
@@ -219,16 +219,19 @@ $(function ()
 	if ($('#radio-buttons [data-id="#expired"]').is(":checked")) {
 	    tmp.push("expired");
 	}
+	if ($('#radio-buttons [data-id="#portal"]').is(":checked")) {
+	    tmp.push("portal");
+	}
 	if ($('#radio-buttons [data-id="#old"]').is(":checked")) {
 	    tmp.push("old");
 	}
 	if (tmp.length) {
 	    // regex search, plain | does not work.
-	    filters[12] = "/" + tmp.join("|") + "/";
+	    filters[13] = "/" + tmp.join("|") + "/";
 	}
 	else {
 	    // Hmm, an empty string will get everything.
-	    filters[12] = "";
+	    filters[13] = "";
 	}
 	//console.info("SetFilters", filters);
 	$.tablesorter.setFilters(table, filters, true);
@@ -253,14 +256,14 @@ $(function ()
 		return;
 	    }
 	    sup.HideWaitWait();
-	    filters[12] = "";
-	    filters[13] = json.value;
+	    filters[13] = "";
+	    filters[14] = json.value;
 	    $.tablesorter.setFilters(table, filters, true);
 	}
 	// Clear this, we search for everything.
 	$("#experiments_search").val("");
-	filters[12] = "";
 	filters[13] = "";
+	filters[14] = "";
 	$.tablesorter.setFilters(table, filters, true);
 	
 	sup.ShowWaitWait();
@@ -301,10 +304,9 @@ $(function ()
 
 	    $('#classic_experiments_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
-
-		    // initialize zebra and filter widgets
-		    widgets: ["zebra"],
+		    theme : 'bootstrap',
+		    widgets: ["uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var xmlthing = sup.CallServerMethod(null, "experiments",

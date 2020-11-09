@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2015 University of Utah and the Flux Group.
+# Copyright (c) 2015-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -80,14 +80,12 @@ my @DEF_EDIT_OPTS   = ("merge","replace","none");
 # hostname and username components are required.  password, port & debug level
 # are optional.
 #
-sub new($$$;$$$) {
+sub new($$;$) {
     my $proto = shift;
     my $class = ref($proto) || $proto;
 
     my $name = shift;
-    my $username = shift;
-    my $password = shift;
-    my $port = shift;
+    my $options = shift;
     my $debuglevel = shift;
 
     # Create the actual object
@@ -104,18 +102,25 @@ sub new($$$;$$$) {
     $self->{NAME} = $name;
 
     # Must pass in some kind of user name.
-    $self->{USERNAME} = $username;
+    $self->{USERNAME} = $options->{USERNAME};
     if (!$self->{USERNAME}) {
 	warn "libNetconf: ERROR: must supply username!\n";
 	return undef;
     }
 
-    # Not strictly required if SSH keys are in use.
-    $self->{PASSWORD} = defined($password) ? $password : "";
+    if (exists($options->{SSHKEY})) {
+	$self->{SSHKEY} = $options->{SSHKEY};
+    }
+    elsif (defined($options->{"PASSWORD"})) {
+	$self->{PASSWORD} = $options->{PASSWORD};
+    }
+    else {
+	$self->{PASSWORD} = "";
+    }
 
     # Different port?
-    if (defined($port)) {
-	$self->{PORT} = $port;
+    if (defined($options->{PORT})) {
+	$self->{PORT} = $options->{PORT};
     } else {
 	$self->{PORT} = $NCSSHPORT;
     }
@@ -214,7 +219,14 @@ sub _expectConnect($)
     my $self = shift;
     my $id = "$self->{NAME}::expectConnect()";
     my $error = "";
-    my $spawn_cmd = "ssh -s -o StrictHostKeyChecking=no -p $self->{PORT} -l $self->{USERNAME} $self->{NAME} netconf";
+    my $spawn_cmd =
+	"ssh -s -o StrictHostKeyChecking=no -o IdentitiesOnly=yes ".
+	"-o UserKnownHostsFile=/dev/null ".
+	"-p $self->{PORT} -l $self->{USERNAME} ".
+	(exists($self->{SSHKEY}) ? "-i " . $self->{SSHKEY} . " " : "") .
+	"$self->{NAME} netconf";
+
+    $self->debugpr("$id: $spawn_cmd\n", 2);
 
     # Create Expect object and initialize it:
     my $exp = new Expect();

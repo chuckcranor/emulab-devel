@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,6 +46,7 @@ function Do_Search()
     global $ajax_args, $portals, $APTHOST;
     $isadmin     = (ISADMIN() || ISFOREIGN_ADMIN() ? 1 : 0);
     $results     = array();
+    $aggregate   = null;
 
     if (!$isadmin) {
         if (isset($ajax_args["target_user"])) {
@@ -88,6 +89,13 @@ function Do_Search()
         $target_user = User::LookupByUid($ajax_args["target_user"]);
         if (!$target_user) {
             SPITAJAX_ERROR(1, "No such user");
+            return;
+        }
+    }
+    if ($isadmin && isset($ajax_args["cluster"])) {
+        $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
+        if (!$aggregate) {
+            SPITAJAX_ERROR(1, "No such cluster");
             return;
         }
     }
@@ -152,7 +160,8 @@ function Do_Search()
                  "    truncate(h.physnode_count * ".
                  "      ((UNIX_TIMESTAMP(h.destroyed) - ".
                  "        UNIX_TIMESTAMP(h.started)) / 3600.0),2) as phours, ".
-                 "    GROUP_CONCAT(aa.abbreviation) as clusters ".
+                 "    GROUP_CONCAT(aa.abbreviation) as clusters, ".
+                 "    GROUP_CONCAT(aa.nickname) as nicknames ".
 		 "  from apt_instance_history as h ".
                  "left join apt_instance_aggregate_history as ia ".
                  "     on ia.uuid=h.uuid ".
@@ -165,6 +174,10 @@ function Do_Search()
 		 "group by h.uuid order by h.started desc");
 
     while ($row = mysql_fetch_array($query_result)) {
+        if ($aggregate &&
+            strpos($row["nicknames"], $aggregate->nickname()) === FALSE) {
+            continue;
+        }
         $uuid      = $row["uuid"];
 	$pname     = $row["profile_name"];
         $iname     = $row["instance_name"];
@@ -347,4 +360,7 @@ function SearchForIP($ip, $min, $max)
     SPITAJAX_RESPONSE($results);    
 }
 
+# Local Variables:
+# mode:php
+# End:
 ?>

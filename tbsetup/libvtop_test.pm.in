@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2019 University of Utah and the Flux Group.
+# Copyright (c) 2005-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -115,6 +115,7 @@ sub Create($$$$;$)
     $self->{'VIRTEXPT'}   = $virtexperiment;
     $self->{'FLAGS'}      = $flags;
     $self->{'TYPES'}      = {};
+    $self->{'FIXED'}      = {};
     $self->{'VNODES'}     = {};
     $self->{'DELAYNODES'} = {};
     $self->{'LANNODES'}   = {};
@@ -174,7 +175,9 @@ sub user($)             { return $_[0]->{'USER'}; }
 sub realuser($)         { return $_[0]->{'REALUSER'}; }
 sub virtexperiment($)   { return $_[0]->{'VIRTEXPT'}; }
 sub flags($)            { return $_[0]->{'FLAGS'}; }
+# These two go back to the mapper for admission control.
 sub types($)            { return $_[0]->{'TYPES'}; }
+sub fixed($)            { return $_[0]->{'FIXED'}; }
 sub vnodes($)           { return $_[0]->{'VNODES'}; }
 sub delaynodes($)       { return $_[0]->{'DELAYNODES'}; }
 sub bridges($)          { return $_[0]->{'BRIDGES'}; }
@@ -831,9 +834,15 @@ sub LoadPhysInfo($)
 	DBQueryWarn("select distinct i.interface_type,n.type ".
 		    "  from interfaces as i ".
 		    "left join nodes as n on n.node_id=i.node_id ".
+		    "left join wires as w on ".
+		    "     (w.node_id1=i.node_id and w.iface1=i.iface) or ".
+		    "     (w.node_id2=i.node_id and w.iface2=i.iface) ".
 		    "where n.type is not null and ".
-		    "      (i.role='" . TBDB_IFACEROLE_EXPERIMENT . "' or ".
-		    "       i.role='" . TBDB_IFACEROLE_CONTROL . "')");
+		    "      (w.node_id2 is not null or ".
+		    #       This special case needs work. See ptopgen.
+		    "       i.interface_type='P2PLTE') and ".
+		    "      n.role='testnode' and ".
+		    "      i.role='" . TBDB_IFACEROLE_EXPERIMENT . "'");
 
     return -1
 	if (!$query_result);
@@ -1311,6 +1320,21 @@ sub LoadVirtNodes($)
 		$self->types()->{$t} = 0;
 	    }
 	    $self->types()->{$t}++;
+
+	    #
+	    # If the node is fixed to a physical node, we want to pass that
+	    # info back to the mapper for admission control and reservation
+	    # checks, wrt reservable nodes. But at this point, we do not
+	    # know if this is a VM fixed to another node in the topology,
+	    # so just record it, and down below in the post pass we will
+	    # clean it up.
+	    #
+	    # Note that we do not use fixednodes(), since that includes
+	    # more then just what is specified in topology.
+	    #
+	    if (defined($fixed)) {
+		$self->fixed()->{$fixed} = $t;
+	    }
 	}
 	elsif (defined($self->forcedarchitecture())) {
 	    my $arch = $self->forcedarchitecture();
@@ -1624,6 +1648,11 @@ sub LoadVirtNodes($)
 	$vnode->_fixedvm($fixnode);
 
 	$self->printdb("Fixing VM $vname to $fixnode, $osimage\n");
+	#
+	# Clear from the fixed() list since this is not a physical node.
+	# See comment above.
+	#
+	delete($self->fixed()->{$fixnode})
     }
 
     #
@@ -1919,7 +1948,9 @@ sub LoadVirtLans($)
 	my $widearea       = $vlanmember->widearea();
 	my $isemulated     = $vlanmember->emulated();
 	my $uselinkdelay   = $vlanmember->uselinkdelay();
+	my $forcelinkdelay = $vlanmember->forcelinkdelay();
 	my $nobwshaping    = $vlanmember->nobwshaping();
+	my $besteffort     = $vlanmember->besteffort();
 	my $nointerswitch  = $vlanmember->nointerswitch();
 	my $trivial_ok     = $vlanmember->trivial_ok();
 	my $protocol       = $vlanmember->protocol();
@@ -1948,12 +1979,14 @@ sub LoadVirtLans($)
 	$virtlan->_emulated($isemulated);
 	# User has requested "endnodeshaping" (dummynet on end nodes).
 	$virtlan->_uselinkdelay($uselinkdelay);
+	$virtlan->_forcelinkdelay($forcelinkdelay);
         # The nobwshaping flag is used in conjunction with emulated
         # links to turn off actual bw traffic shaping on an emulated
         # link. This allows assign to match the specified bws, but not
         # force them to be such with delay nodes (leaves it up to the
         # user to moderate the bw).
 	$virtlan->_nobwshaping($nobwshaping);
+	$virtlan->_besteffort($besteffort);
 	$virtlan->_encapstyle($encap);
 	# User has said that colocating is okay. Not typical.
 	$virtlan->_trivial_ok($trivial_ok);
@@ -2833,12 +2866,15 @@ sub GenVirtLans($)
 	my $sharednodes  = 0;
 	my $geninodes    = 0;
 	my %nodesdo      = ("alias"=>0, "veth"=>0, "vlan"=>0, "ldelay"=>0,
-			    "veth-ne"=>0, "veth-en"=>0, "rem-bstore"=>0);
+			    "veth-ne"=>0, "veth-en"=>0, "rem-bstore"=>0,
+			    "none"=>0);
 	my $trivial_ok   = 0;
 	my $emulated     = $vlan->_emulated();
         my $uselinkdelay = $vlan->_uselinkdelay();
+        my $forcelinkdelay = $vlan->_forcelinkdelay();
 	my $mustdelay    = $vlan->_mustdelay();
 	my $nobwshaping  = $vlan->_nobwshaping();
+	my $besteffort   = $vlan->_besteffort();
 	my $nointerswitch= $vlan->_nointerswitch();
 	my $protocol     = $vlan->_protocol();
 	my $linkencap    = $vlan->_encapstyle();
@@ -2963,6 +2999,9 @@ sub GenVirtLans($)
 	    $nodesdo{"alias"}++
 		# All OSs support this. 
 		if (1);
+	    $nodesdo{"none"}++
+		# All OSs support no encap
+		if (1);
 	    $nodesdo{"veth"}++
 		if ($osdoesveth{$osid});
 	    $nodesdo{"veth-ne"}++
@@ -2987,6 +3026,7 @@ sub GenVirtLans($)
 	#
 	if ($layer == 1 &&
 	    ($trivial_ok || $emulated || $uselinkdelay || $nointerswitch ||
+	     $forcelinkdelay || $besteffort ||
 	     $mustdelay || $nobwshaping || $sharednodes || $simnodes)) {
 	    tberror("$vname is a layer 1 link, no options please.\n");
 	    return -1;
@@ -3100,6 +3140,24 @@ sub GenVirtLans($)
 	    $errors++;
 	    next;
 	}
+	if ($protocol eq "P2PLTE") {
+	    #
+	    # These links do not get any shaping or encapsulation.
+	    #
+	    $linkencap   = "none";
+	    $nobwshaping = 1;
+	    $emulated    = 0;
+
+	    #
+	    # Someone was trying to create a P2PLTE link with VMs, which we
+	    # cannot do, and were silently turning that into a vlan. Lets
+	    # throw an error instead and burst their bubble.
+	    #
+	    if ($virtnodes) {
+		tberror("$vname: P2PLTE links cannot be used with VMs!\n");
+		return -1;
+	    }
+	}
 	if ($virtnodes) {
 	    #
 	    # At the present time, links with virtnodes require that we 
@@ -3119,7 +3177,7 @@ sub GenVirtLans($)
 		$encapval = $linkencap;
 	    }
 	    elsif ($globalencap eq "default") {
-		$encapval = "veth-ne";
+		$encapval = "vlan";
 	    }
 	    else {
 		$encapval = $globalencap;
@@ -3169,6 +3227,12 @@ sub GenVirtLans($)
 	}
 	$self->printdb("$vname: global/link = ".
 		       "$globalencap/$linkencap => $encapval\n");
+	$self->printdb("        nobwshaping:$nobwshaping,".
+		       "trivial_ok:$trivial_ok,".
+		       "besteffort:$besteffort,emulated:$emulated\n");
+	$self->printdb("        mustdelay:$mustdelay,".
+		       "uselinkdelay:$uselinkdelay,".
+		       "forcelinkdelay:$forcelinkdelay\n");
 
 	#
 	# Update the per-link values for emulated and encapsulation style.
@@ -3460,7 +3524,7 @@ sub GenVirtLans($)
 		 # Link must be shaped for other reasons (q_red).
 		 $mustdelay ||
 		 # Global force, or per-link force. 
-		 $self->option('forcelinkdelays') || $uselinkdelay) &&
+		 $self->option('forcelinkdelays') || $forcelinkdelay) &&
 		# No shaping on bridged lans.
 		!$vlan->_bridged() &&
 		# No shaping of geni nodes.
@@ -3611,7 +3675,8 @@ sub GenVirtLans($)
 				     'virtual_interface_id' => "$member1" },
 				    ($top_bw == 0 ? "*" : 
 				     max($top_bw, $top_rbw)),
-				    ($emulated ? $vlan->_wiretype() :
+				    ($emulated ?
+				     $vlan->_wiretype() :
 				     $self->GetWiretype($vlan->_wiretype(),
 						 max($top_bw, $top_rbw))),
 				    $others);
@@ -3693,7 +3758,7 @@ sub GenVirtLans($)
 		my $others = {'isgeninode' => $vlan->_geninodes()};
 		my $wiretype = $vlan->_wiretype();
 
-		if (!$emulated) {
+		if (! ($emulated || $besteffort)) {
 		    # Let assign choose bw if top_bw is zero.
 		    $vtbw = ($top_bw == 0 ? "*" : $vtbw);
 		    $wiretype = $self->GetWiretype($wiretype,
@@ -3825,7 +3890,7 @@ sub GenVirtLans($)
 		     # Link must be shaped for other reasons (q_red).
 		     $mustdelay ||
 		     # Global force, or per-lan force. 
-		     $self->option('forcelinkdelays') || $uselinkdelay) &&
+		     $self->option('forcelinkdelays') || $forcelinkdelay) &&
 		    # No shaping on bridged lans.
 		    !$vlan->_bridged() &&
 		    # No shaping for geni nodes.
@@ -3945,6 +4010,13 @@ sub GenVirtLans($)
 					 $rdelay,$rbw,$rbackfill,$rloss,0);
 			
 			my $others = {};
+			my $wiretype = $vlan->_wiretype();
+
+			if (! ($emulated || $besteffort)) {
+			    $wiretype =
+				$self->GetWiretype($wiretype,
+						   max($top_bw, $top_rbw));
+			}
 			if ($emulated) {
 			    $others->{'emulated'} = 1 if ($member->_emulated());
 			    $others->{'virtualization_type'} =
@@ -3978,10 +4050,7 @@ sub GenVirtLans($)
 				      {'virtual_node_id' => "$lannode" },
 				      ($top_bw == 0 ? "*" : 
 				       max($top_bw,$top_rbw)),
-				      ($emulated ? $vlan->_wiretype() :
-				       $self->GetWiretype($vlan->_wiretype(),
-					      max($top_bw, $top_rbw))),
-					      $others);
+				      $wiretype, $others);
 			}
 			
 			$self->printdb("Delay link $plink = " .
@@ -4057,14 +4126,14 @@ sub GenVirtLans($)
 		    my $plink = "linklan/$vname/$member";
 		    my $others = {'isgeninode' => $vlan->_geninodes()};
 		    my $wiretype = $vlan->_wiretype();
-		    
+
+		    if (! ($emulated || $besteffort)) {
+			$wiretype = $self->GetWiretype($wiretype, $top_bw);
+		    }
 		    if ($emulated) {
 			$others->{'emulated'} = 1 if ($member->_emulated());
 			$others->{'virtualization_type'} =
 			    $member->_encapstyle();
-		    }
-		    else {
-			$wiretype = $self->GetWiretype($wiretype, $top_bw);
 		    }
 		    if ($trivial_ok) {
 			$others->{'trivial_ok'} = 1;
@@ -4542,7 +4611,7 @@ sub requires_delay($$$$)
     # Therefore, no delay is needed since assign picks the native bw.
     #
     goto norequire
-	if ($targetbw == 0);
+	if ($targetbw == 0 || $virtlan->_besteffort());
 	
     if (!exists($linkbws->{$node_type}{$protocol})) {    
 	warn("requires_delay(): $virtnode - invalid type $node_type!\n");
@@ -4597,14 +4666,18 @@ sub virtlantopbw($$$) {
     }
     else {
 	#
-	# If this is an emulated link, or one on which we are doing end node
-        # shaping we put in only the bandwidth from the virtual topology -
-	# otherwise, we put in the bandwidth of the type of physical interface
-	# it is likely to get mapped to.
+	# If this is an emulated link or a best effort link, we put in only
+	# the bandwidth from the virtual topology - otherwise, we put in
+	# the bandwidth of the type of physical interface it is likely to
+	# get mapped to.
 	#
         my $shaped = $virtlan->membershaped($member);
 	
-	if ($virtlan->_emulated() ||
+	if ($virtlan->_besteffort()) {
+	    # 1G, which is guaranteed to map on all our clusters.
+	    $return_bw = 1000000;
+	}
+	elsif ($virtlan->_emulated() ||
 	    $self->virtlan_use_linkdelay($virtlan, $shaped)) {
 	    $return_bw = $bw;
 	}
@@ -4618,13 +4691,17 @@ sub virtlantopbw($$$) {
     }
     else {
 	#
-	# If this is an emulated link, we put in only the reported
-	# bandwidth - otherwise, we put in the bandwidth of the type
-	# of physical interface it is likely to get mapped to
+	# If this is an emulated link or a best effort link, we put in only
+	# the reported bandwidth - otherwise, we put in the bandwidth of
+	# the type of physical interface it is likely to get mapped to.
 	#
         my $shaped = $virtlan->membershaped($member);
 
-	if ($virtlan->_emulated() ||
+	if ($virtlan->_besteffort()) {
+	    # 1G, which is guaranteed to map on all our clusters.
+	    $return_rbw = 1000000;
+	}
+	elsif ($virtlan->_emulated() ||
 	    $self->virtlan_use_linkdelay($virtlan, $shaped)) {
 	    $return_rbw = $rbw;
 	}
@@ -4657,8 +4734,9 @@ sub virtlan_use_linkdelay($$$) {
          # shaped (note - in this case, non-shaped virtlans don't get
          # linkdelays)
          ($self->option('uselinkdelays') && $shaped) ||
+         ($virtlan->_uselinkdelay() && $shaped) ||
          # The user forced linkdelays for this specific virtlan
-         $virtlan->_uselinkdelay()) {
+         $virtlan->_forcelinkdelay()) {
         # Yep, use linkdelays
 	#$self->printdb("Using linkdelay for $virtlan\n");
         return 1;

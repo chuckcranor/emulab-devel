@@ -6,7 +6,7 @@
      overflow-y: auto;
      position: relative;
      height: auto;
-     max-height: 150px;
+     max-height: 175px;
      min-height: 24px;
  } 
 }
@@ -468,6 +468,10 @@
 		  <div class="textarea hidden">
 		    <div class="form-control textdiv scrolly"></div>
 		    <div class="geni-lib-warning">
+		      <small class="pull-left">
+			<a href="mdrender.php" target="_blank">
+			  Test your markdown</a>
+		      </small>
 		      <small class="pull-right">
 			Description set by geni-lib script
 			<a href='#' class='btn btn-xs'
@@ -493,11 +497,16 @@
  		              to see a rendering.'>
 		<div id='profile_instructions'>
 		  <textarea class="form-control hidden" rows=3
-			    placeholder="Provide optional instructions for users of your profile."
+			    placeholder="Provide optional instructions
+					 for users of your profile."
 			    type='textarea'></textarea>
 		  <div class="textarea hidden">
 		    <div class="form-control textdiv scrolly"></div>
 		    <div class="geni-lib-warning">
+		      <small class="pull-left">
+			<a href="mdrender.php" target="_blank">
+			  Test your markdown</a>
+		      </small>
 		      <small class="pull-right">
 			Instructions set by geni-lib script
 			<a href='#' class='btn btn-xs'
@@ -507,6 +516,26 @@
 				class='glyphicon glyphicon-question-sign'>
 			  </span>
 			</a>
+		      </small>
+		    </div>
+		  </div>
+		</div>
+	      </div>
+	    </div>
+	    <div class="form-group hidden">
+	      <div class='format-me'
+		   data-key='profile_parameters'
+		   data-label='Parameters'
+		   data-help='Parameter help text that will be displayed when
+			      your profile is instantiated.'>
+		<div>
+		  <div class="textarea">
+		    <div id='profile_parameters'
+			 style="padding-inline-start: 10px;"
+			 class="form-control textdiv scrolly"></div>
+		    <div class="geni-lib-warning">
+		      <small class="pull-right">
+			Parameters set by geni-lib script
 		      </small>
 		    </div>
 		  </div>
@@ -541,24 +570,6 @@
 
 	  <fieldset id="metadata-fields"
 		    <% if (!viewing || !gotrspec) { %>class="hidden" <% } %> >
-	    <!-- Public listing checkbox -->
-	    <% if (isadmin) { %>
-	      <div class='row'>
-		<div class='col-sm-9 col-sm-offset-3'>
-		  <div class='checkbox format-me' data-compact='yep'>
-                    <label>
-		      <input name='profile_listed'
-			     <%- formfields.profile_listed %>
-			     data-key='profile_listed'
-			     id='profile_listed' value='checked'
-			     type='checkbox'>List on the home page for
-		      anyone to view.
-		    </label>
-		  </div>
-		</div>
-	      </div>
-	    <% } %>
-
 	    <!-- Permission checkboxes. -->
 	    <div class='row'>
 	      <div class='col-sm-9 col-sm-offset-3' style="margin-top: 5px">
@@ -646,6 +657,27 @@
 	    <% if (isadmin) { %>
 	      <div class='row'>
 		<div class='col-sm-9 col-sm-offset-3'>
+		  <hr style="margin-top: 5px; margin-bottom: 0px;"></div>
+	      </div>
+	      
+	      <!-- Public listing checkbox -->
+	      <div class='row'>
+		<div class='col-sm-9 col-sm-offset-3'>
+		  <div class='checkbox format-me' data-compact='yep'>
+                    <label>
+		      <input name='profile_listed'
+			     <%- formfields.profile_listed %>
+			     data-key='profile_listed'
+			     id='profile_listed' value='checked'
+			     type='checkbox'>List on the home page for
+		      anyone to view.
+		    </label>
+		  </div>
+		</div>
+	      </div>
+	      
+	      <div class='row'>
+		<div class='col-sm-9 col-sm-offset-3'>
 		  <div class='checkbox format-me' data-key='profile_topdog'
 		       data-compact='yep'>
                     <label>
@@ -721,6 +753,85 @@
 		  </div>
 		</div>
 	      </div>
+	      <div class='row'>
+		<div class='col-sm-9 col-sm-offset-3'>
+		  <div class='checkbox format-me' data-key='examples_portals'
+		       data-compact='yep'>
+		    <% if (window.MAINSITE) { %>
+		      <span style="margin-right: 10px;">List in Examples:</span>
+                      <label>
+			<input name='profile_example_emulab'
+			       class="examples_portals_checkbox"
+			       data-portal="emulab"
+			       <% if (_.has(formfields, "examples_portals") &&
+				      formfields.examples_portals
+				      .indexOf("emulab") >= 0) { %>
+			       checked
+			       <% } %>
+			       type='checkbox'>Emulab
+		      </label>
+                      <label>
+			<input name='profile_example_cloudlab'
+			       class="examples_portals_checkbox"
+			       data-portal="cloudlab"
+			       <% if (_.has(formfields, "examples_portals") &&
+				      formfields.examples_portals
+				       .indexOf("cloudlab") >= 0) { %>
+			         checked
+			       <% } %>
+			       type='checkbox'>Cloudlab
+		      </label>
+                      <label>
+			<input name='profile_example_phantomnet'
+			       class="examples_portals_checkbox"
+			       data-portal="phantomnet"
+			       <% if (_.has(formfields, "examples_portals") &&
+				 formfields.examples_portals
+				 .indexOf("phantomnet") >= 0) { %>
+			       checked
+			       <% } %>
+			       type='checkbox'>PhantomNet
+		      </label>
+                      <label>
+			<input name='profile_example_powder'
+			       class="examples_portals_checkbox"
+			       data-portal="powder"
+			       <% if (_.has(formfields, "examples_portals") &&
+				 formfields.examples_portals
+				 .indexOf("powder") >= 0) { %>
+			       checked
+			       <% } %>
+			       type='checkbox'>Powder
+		      </label>
+		    <% } else { %>
+                      <label>
+			<input name='profile_example_emulab'
+			       class="examples_portals_checkbox"
+			       data-portal="emulab"
+			       <% if (_.has(formfields, "examples_portals") &&
+				 formfields.examples_portals
+				 .indexOf("emulab") >= 0) { %>
+			       checked
+			       <% } %>
+			       type='checkbox'>List in Examples
+			<a href='#' class='btn btn-xs'
+			   style="padding-left: 0px"
+			   data-toggle='popover'
+			   data-html='true'
+			   data-delay='{"hide":500}'
+			   data-content="List this profile on the
+					 Examples page">
+			  <span class='glyphicon glyphicon-question-sign'
+				style='margin-bottom: 4px;'></span>
+			</a>
+		      </label>
+		    <% } %>
+		    <input name='examples_portals'
+			   value="<%- formfields.examples_portals %>"
+			   type='hidden'>
+		  </div>
+		</div>
+	      </div>
 	    <% } %>
 
 	    <!-- The private URL -->
@@ -761,8 +872,6 @@
 		<button class='btn btn-danger btn-xs pull-left' disabled
 			id='profile_delete_button'
 			style='margin-right: 10px;'
-     			data-toggle='modal'
-			data-target='#confirm-delete-profile-modal'
 			type='button' name='delete'>Delete
 		</button>
 	      <% } %>
@@ -803,7 +912,10 @@
 		    </button>
 		  </span>
 		  <% if (!disabled && gotrspec) { %>
+		    <% 	var url = "instantiate.php?profile=" +
+		           version_uuid + "&from=manage-profile"; %>
 		    <a class='btn btn-primary btn-xs pull-left' disabled
+		       href="<%- url %>"
                        id='profile_instantiate_button'
                        style='margin-right: 10px;'
                        type='submit' name='create'>Instantiate
@@ -1269,10 +1381,10 @@ Instructions are optional.
   <div id='publish_div'></div>
   <div id='instantiate_div'></div>
   <div id='ppmodal_div'></div>
-  <div id='profile_list_modal_div'></div>
   <div id='share_div'></div>
-  <div id='confirm_delete_div'></div>
   <div id='copy_repobased_profile_div'></div>
+  <div id='profile-imagelist-modal-div'></div>
+  <div id='confirm-delete-profile-div'></div>
 </div>
 <% if (viewing && Object.keys(versions).length > 1) { %>
 <div class='row'>

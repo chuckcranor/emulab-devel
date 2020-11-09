@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,6 +26,7 @@ include("defs.php3");
 include_once("geni_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
+include_once("aggregate_defs.php");
 $page_title = "Status";
 
 #
@@ -39,10 +40,18 @@ $isfadmin  = (ISFOREIGN_ADMIN() ? 1 : 0);
 if (! (ISADMIN() || ISFOREIGN_ADMIN())) {
     SPITUSERERROR("You do not have permission to view this page");
 }
-SPITHEADER(1);
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
+#
+# If only one aggregate, skip the summary page.
+#
+$am_array = Aggregate::AllAggregatesList();
+if (count($am_array) == 1) {
+    $us = Aggregate::ThisAggregate();
+    $nickname = $us->nickname();
+    header("Location: cluster-status.php?cluster=$nickname");
+    return;
+}
+SPITHEADER(1);
 
 echo "<div id='page-body'>
         <div id='waitwait_div'></div>
@@ -54,13 +63,10 @@ echo "    window.ISADMIN    = $isadmin;\n";
 echo "    window.ISFADMIN   = $isfadmin;\n";
 echo "</script>\n";
 
-echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
-
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 SPITREQUIRE("js/aggregate-status");
 
 AddTemplateList(array("aggregate-status", "waitwait-modal", "oops-modal"));

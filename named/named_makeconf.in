@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -172,10 +172,17 @@ while (<IF>) {
 	    }
 	    elsif ($2 eq "alsonotify") {
 		if ($NAMED_ALSONOTIFY eq "") {
-		    print "";
+		    print $1 . "allow-transfer {\n";
+		    print $1 . $1 . "none;\n";
+		    print $1 . "};\n";
 		}
 		else {
 		    print $1 . "also-notify {\n";
+		    foreach my $notify (split(" ", $NAMED_ALSONOTIFY)) {
+			print $1 . $1 . "$notify;\n";
+		    }
+		    print $1 . "};\n";
+		    print $1 . "allow-transfer {\n";
 		    foreach my $notify (split(" ", $NAMED_ALSONOTIFY)) {
 			print $1 . $1 . "$notify;\n";
 		    }
@@ -259,6 +266,11 @@ while (<IF>) {
 		    close(EXTRA);
 		    print $1 .
 			"# End of fragment included from external.named.conf\n";
+		}
+	    }
+	    elsif ($2 eq "nonroutable_network_hack") {
+		if (@OPSVM_ENABLE@ && $USERNODE_IP eq "10.10.10.3") {
+		    print $1 . "10.10.10.0/29;\n";
 		}
 	    }
 	    else {

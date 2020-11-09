@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -423,7 +423,7 @@ sub osload($$$) {
     $flags{noreboot}    = 0;
     $flags{asyncmode}   = 0;
     $flags{zerofree}    = 0;
-    $flags{prepare}     = 0;
+    $flags{prepare}     = 0; # Now a level (0,1,2)
     $flags{swapinfo}    = 0;
     $flags{usedefault}  = 1;
 
@@ -681,7 +681,9 @@ sub osload($$$) {
 	# Check to see if the node is tainted.  If so, then the disk
 	# needs to be cleaned up (zeroed).
 	if ($nodeobject->IsTainted()) {
-	    $nargs{'zerofree'} = 2;
+	    if (!$nodeobject->TaintIs(TB_TAINTSTATE_MUSTRELOAD())) {
+		$nargs{'zerofree'} = 2;
+	    }
 	}
 
 	# Wait, don't do this -- waitmode is global; nowait is per-node!
@@ -1886,7 +1888,7 @@ sub _LoadDefaultImages($$)
 	push @default_images, $default_image;
     }
     # XXX -- should do elsewhere?  Seems wrong.
-    $self->nodeflag($nodeobject,'prepare',1);
+    $self->nodeflag($nodeobject,'prepare', 1); 
 
     $self->{'IMAGES'}->{$node_id} = \@default_images;
 
@@ -2615,7 +2617,7 @@ sub SetupReload($$)
 	my $version = $image->version();
 
 	# only prepare the first image
-	my $prepare0 = $idx == 1 && $prepare ? 1 : 0;
+	my $prepare0 = $idx == 1 && $prepare ? $prepare : 0;
 	# only zero when loading full images
 	my $zerofree0 = $image->HaveFullImage() ? $zerofree : 0;
 

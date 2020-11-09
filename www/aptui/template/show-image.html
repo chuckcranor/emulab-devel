@@ -224,6 +224,13 @@
 		"/" + YesNo(fields.released)); %>
 	    </td>
 	  </tr>
+	  <tr>
+	    <td class="editable"
+		data-fieldname="listed" data-fieldtype="checkbox">
+	      Listed</td>
+	    <td><span class="original"><% print(YesNo(fields.listed)); %></span>
+	    </td>
+	  </tr>
 	<% } %>
 	<tr>
 	  <td class="editable adminonly"
@@ -232,12 +239,16 @@
 	  <td><span class="original"><%- fields.path %></span></td>
 	</tr>
 	<% if (!fields.isdataset) { %>
-	  <% if (_.has(fields, "architecture")) { %>
-	    <tr>
-	      <td>Architecture</td>
-	      <td><%- fields.architecture %></td>
-	    </tr>
-	  <% } %>
+	  <tr>
+	    <td class="editable"
+		data-fieldname="architecture" data-fieldtype="text">
+	      Architecture</td>
+	    <td><span class="original">
+	      <% if (_.has(fields, "architecture")) { %>
+		<%- fields.architecture %>
+	      <% } %>
+	    </span></td>
+	  </tr>
 	  <tr class="typelist">
 	    <td>Types</td>
 	    <td><span class="original">
@@ -377,19 +388,44 @@
 	  <td>ID</td>
 	  <td><%- fields.imageid %></td>
 	</tr>
+	<% if (fields.deprecated) { %>
+	  <tr>
+	    <td>Deprecated</td>
+	    <td>
+	      <span class="format-date"><%- fields.deprecated %></span>
+	      <% if (fields.deprecated_iserror) { %>
+		(With error)
+	      <% } else { %>
+		(With warning)
+	      <% } %>
+	    </td>
+	  </tr>
+	<% } %>
 	<% if (isadmin) { %>
-	  <% if (fields.deprecated) { %>
+	  <% if (_.has(fields, "logfile_url")) { %>
 	    <tr>
-	      <td>Deprecated</td>
-	      <td>
-		<span class="format-date"><%- fields.deprecated %></span>
-		<% if (fields.deprecated_iserror) { %>
-		  (With error)
-		<% } else { %>
-		  (With warning)
-		<% } %>
+	      <td>Logfile</td>
+	      <td><a href="<%= fields.logfile_url %>">https://...</a></td>
+	    </tr>
+	  <% } %>
+	  <% if (_.has(fields, "ims_reported")) { %>
+	    <tr>
+	      <td class="editable"
+		  data-fieldname="ims_noreport" data-fieldtype="checkbox">
+		IMS NoReport</td>
+	      <td><span
+	          class="original"><% print(YesNo(fields.ims_noreport)); %>
+	      </span>
 	      </td>
 	    </tr>
+	    <% if (fields.ims_reported) { %>
+	      <tr>
+		<td>IMS Reported</td>
+		<td>
+		  <span class="format-date"><%- fields.ims_reported %></span>
+		</td>
+	      </tr>
+	    <% } %>
 	  <% } %>
 	  <tr class="adminnotes">
 	    <td>

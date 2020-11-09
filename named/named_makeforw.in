@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,6 +39,7 @@ sub usage {
 #
 my $OURDOMAIN                = "@OURDOMAIN@";
 my $CONFIG_TARGETSYS         = @CONFIG_TARGETSYS@;
+my $TARGETSYS_TARGET         = "@TARGETSYS_TARGET@";
 my ($BOSSTOKEN)              = ("@BOSSNODE@" =~ /^([-\w]+).*$/);
 my ($USERTOKEN)              = ("@USERNODE@" =~ /^([-\w]+).*$/);
 my ($FSTOKEN)                = ("@FSNODE@" =~ /^([-\w]+).*$/);
@@ -65,7 +66,8 @@ my $PUBLIC_ROUTER      = "@PUBLIC_ROUTER@";
 my $PUBLIC_NETMASK     = "@PUBLIC_NETMASK@";
 my $NAMED_FORWARDERS   = "@NAMED_FORWARDERS@";
 
-my $MXSTR = "\t\tIN\tMX 10\tops\n";
+my $MXHOST = (@OPSVM_ENABLE@ ? "boss" : "ops");
+my $MXSTR  = "\t\tIN\tMX 10\t${MXHOST}\n";
 
 # Testbed libraries.
 use lib "@prefix@/lib";
@@ -107,16 +109,26 @@ while (<IF>) {
 	    elsif ($2 eq "usernode_ina") {
                 $internal_strings .=
                     "${USERTOKEN}\t\tIN\tA\t\t${USERNODE_IP}\n";
-                $external_strings .=
-                    "${USERTOKEN}\t\tIN\tA\t\t${EXTERNAL_USERNODE_IP}\n";
+		if ($MXHOST ne "ops") {
+		    $internal_strings .= ${MXSTR};
+		}
+		if (isroutable($EXTERNAL_USERNODE_IP)) {
+		    $external_strings .=
+			"${USERTOKEN}\t\tIN\tA\t\t${EXTERNAL_USERNODE_IP}\n";
+		    if ($MXHOST ne "ops") {
+			$external_strings .= ${MXSTR};
+		    }
+		}
 		#
 		# If name is not "ops", we need an A record for that as well
 		#
 		if ($USERTOKEN ne "ops") {
 		    $internal_strings .=
 			"${MXSTR}ops\t\tIN\tA\t\t${USERNODE_IP}\n";
-		    $external_strings .=
-			"${MXSTR}ops\t\tIN\tA\t\t${EXTERNAL_USERNODE_IP}\n";
+		    if (isroutable($EXTERNAL_USERNODE_IP)) {
+			$external_strings .=
+			    "${MXSTR}ops\t\tIN\tA\t\t${EXTERNAL_USERNODE_IP}\n";
+		    }
 		}
 		#
 		# If name is not "users" we need a CNAME for that
@@ -124,8 +136,23 @@ while (<IF>) {
 		if ($USERTOKEN ne "users") {
 		    $internal_strings .=
 			"users\t\tIN\tCNAME\tops\n";
+		    if (isroutable($EXTERNAL_USERNODE_IP)) {		    
+			$external_strings .=
+			    "users\t\tIN\tCNAME\tops\n";
+		    }
+		}
+		# Other names ops is known by.
+		$internal_strings .=
+		    "event-server\tIN\tCNAME\tops\n";
+		if (isroutable($EXTERNAL_USERNODE_IP)) {
 		    $external_strings .=
-			"users\t\tIN\tCNAME\tops\n";
+			"event-server\tIN\tCNAME\tops\n";
+		}
+		$internal_strings .=
+		    "wiki\t\tIN\tCNAME\tops\n";
+		if (isroutable($EXTERNAL_USERNODE_IP)) {
+		    $external_strings .=
+			"wiki\t\tIN\tCNAME\tops\n";
 		}
 	    }
 	    elsif ($2 eq "bossnode_ina") {
@@ -172,6 +199,10 @@ while (<IF>) {
                           "${FSTOKEN}\t\tIN\tA\t\t${EXTERNAL_FSNODE_IP}\n";
 		}
 	    }
+	    elsif ($2 eq "bossnode_mx") {
+		$internal_strings .= ${MXSTR};
+		$external_strings .= ${MXSTR};
+	    }
 	    elsif ($2 eq "fsnode_mx") {
 		if ("$USERNODE_IP" ne "$FSNODE_IP" &&
                     "$BOSSNODE_IP" ne "$FSNODE_IP") {
@@ -210,10 +241,28 @@ while (<IF>) {
 		$external_strings .= $foo
                     if (isroutable($CONTROL_ROUTER_IP));
 	    }
+	    elsif ($2 eq "primaries") {
+		my $foo = "	IN	NS	ns.${OURDOMAIN}.\n";
+		
+		if ($which eq "-internal") {
+		    $internal_strings .= $foo;
+		}
+		else {
+		    # This needs to come from configure
+		    if (!$CONFIG_TARGETSYS || $TARGETSYS_TARGET !~ /^POWDER/) {
+			$external_strings .= $foo;
+		    }
+		}
+	    }
 	    elsif ($2 eq "secondaries") {
 		if ($CONFIG_TARGETSYS) {
 		    my $foo = "	IN	NS	ns.emulab.net.\n";
 
+		    # This needs to come from configure
+		    if ($TARGETSYS_TARGET =~ /^POWDER/) {
+			$foo .= "	IN	NS	ns2.emulab.net.\n";
+			$foo .= "	IN	NS	ns5.emulab.net.\n";
+		    }
 		    $internal_strings .= $foo;
 		    $external_strings .= $foo;
 		}

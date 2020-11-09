@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -137,6 +137,7 @@ function Do_GetInfo()
     $blob["path"]         = $image->path();
     $blob["shared"]       = $image->shared() ? 1 : 0;
     $blob["global"]       = $image->isglobal() ? 1 : 0;
+    $blob["listed"]       = $image->listed() ? 1 : 0;
     $blob["ready"]        = $image->ready() ? 1 : 0;
     $blob["released"]     = $image->released() ? 1 : 0;
     $blob["isdataset"]    = $image->isdataset() ? 1 : 0;
@@ -144,6 +145,11 @@ function Do_GetInfo()
     $blob["version_url"]  = "show-image.php?imageid=${id}&version=${vers}";
     if ($embedded) {
         $blob["version_url"] .= "&embedded=1";
+    }
+    if (Image::UseImageTracker()) {
+        $blob["ims_noreport"]  = $image->ims_noreport() ? 1 : 0;
+        $blob["ims_reported"]  = $image->ims_reported();
+        $blob["ims_update"]    = $image->ims_update();
     }
     #
     # An imported image has a metadata_url and an imagefile_url.
@@ -155,6 +161,12 @@ function Do_GetInfo()
     else {
         $blob["version_url"]   = "$TBBASE/image_metadata.php?uuid=$uuid";
         $blob["image_url"]     = "$TBBASE/image_metadata.php?uuid=$image_uuid";
+    }
+    if ($image->logfileid()) {
+        $logfile = Logfile::Lookup($image->logfileid());
+        if ($logfile) {
+            $blob["logfile_url"] = $logfile->URL();
+        }
     }
 
     if (!$image->isdataset()) {
@@ -207,7 +219,7 @@ function Do_GetInfo()
         }
         $blob["deprecated"] = $image->deprecated();
         if ($image->deprecated()) {
-            $blob["deprecated_iserror"] = $image->deprecated_iserror();
+            $blob["deprecated_iserror"] = $image->deprecated_iserror() ? 1 : 0;
             $blob["deprecated_message"] = $image->deprecated_message();
         }
     }
@@ -293,7 +305,10 @@ function Do_Modify()
     #
     $allowed = array("reboot_waittime" => true,
                      "description"     => false,
+                     "architecture"    => true,
                      "path"            => true,
+                     "listed"          => true,
+                     "ims_noreport"    => true,
                      "osfeatures"      => true,
     );
     if (!array_key_exists($field, $allowed)) {
@@ -332,6 +347,28 @@ function Do_Modify()
             DBQueryWarn("update os_info_versions set ${field}='$safe_value' ".
                         "where osid='$imageid' and vers='$version'");
     }
+    elseif ($field == "architecture" && $value == "") {
+        $imageid = $image->imageid();
+        $osinfo  = $image->OSinfo();
+
+        $query_result =
+            DBQueryWarn("update images set architecture=NULL ".
+                        "where imageid='$imageid'");
+
+        # When clearing the architecture need to make sure the pcvm type
+        # gets into typelist.
+        if ($osinfo && $osinfo->def_parentosid()) {
+	    DBQuerywarn("replace into osidtoimageid set ".
+                        " osid='$imageid', type='pcvm', imageid='$imageid'");
+        }
+    }
+    elseif ($field == "listed" || $field == "architecture") {
+        $imageid = $image->imageid();
+
+        $query_result =
+            DBQueryWarn("update images set ${field}='$safe_value' ".
+                        "where imageid='$imageid'");
+    }
     else {
         $query_result =
             DBQueryWarn("update image_versions set ${field}='$safe_value' ".
@@ -341,6 +378,9 @@ function Do_Modify()
 	SPITAJAX_ERROR(-1, "Internal error updating database");
 	return -1;
     }
+    # Mark for IMS update. Ignored if not using the image tracker.
+    DBQueryWarn("update image_versions set ims_update=now() ".
+                "where uuid='$uuid'");
     
     SPITAJAX_RESPONSE(1);
 }
@@ -715,9 +755,14 @@ function Do_Clone()
         $webtask = WebTask::CreateAnonymous();
         $webtask->SetTaskValue("node_id", $node->node_id());
         $webtask->Store();
-        
+
+        #
+        # On this path, the image does not exist, so if this fails then
+        # we want to kill the descriptor to avoid cruft in the DB.
+        # Note that we created the descriptor above, so force with -C
+        #
         $retval = SUEXEC($this_uid, $unix_groups,
-                         "webclone_image -t " . $webtask->task_id() .
+                         "webclone_image -C -t " . $webtask->task_id() .
                          " " . escapeshellarg($formfields["imagename"]) .
                          " " . $node->node_id(),
                          SUEXEC_ACTION_IGNORE);
@@ -728,7 +773,10 @@ function Do_Clone()
             SUEXECERROR(SUEXEC_ACTION_CONTINUE);
             
             if (!$webtask->exited() || $retval < 0) {
-                SPITAJAX_ERROR(-1, "Internal error starting snapshot");
+                SPITAJAX_ERROR(-1,
+                               "Internal error starting snapshot" .
+                               ($webtask->output() ?
+                                ": " . $webtask->output() : ""));
             }
             else {
                 # Need to pass exitcode through on this one.
@@ -740,7 +788,7 @@ function Do_Clone()
     }
     $url = "show-image.php?imageid=" . $newimage->uuid();
     if (isset($node)) {
-        $url .= "&showsnapstatus=1";
+        $url .= "&showsnapstatus=1&node_id=" . $node->node_id();
     }
     SPITAJAX_RESPONSE($url);
 }
@@ -805,6 +853,9 @@ function Do_SnapshotStatus()
     if ($webtask->exited()) {
 	$blob["exited"]   = $webtask->exited();
 	$blob["exitcode"] = $webtask->exitcode();
+        if (isset($taskdata["log"])) {
+            $blob["log"] = $taskdata["log"];
+        }
         # We want to say something in the web UI if imaging throws an error.
         if ($webtask->exitcode()) {
             $blob["errmsg"] = $webtask->output();

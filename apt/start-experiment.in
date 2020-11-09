@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -72,6 +72,7 @@ use Project;
 use Group;
 use WebTask;
 use emutil;
+use GeniHRN;
 
 # Protos
 sub fatal($);
@@ -87,6 +88,8 @@ sub usage()
     print " -d           - Turn on debugging (run in foreground)\n";
     print " -w           - Wait mode (wait for experiment to finish starting)\n";
     print " -S           - Force using the stitcher, typically for debuging.\n";
+    print " -P           - Do not pend deferrable aggregates.\n";
+    print " -s           - Do not send status email\n";
     print " -a urn       - Override default aggregate URN.\n";
     print " -k file      - Alternate CA private key file.\n";
     print " --project    - pid[,gid]: project[,group] for new experiment\n";
@@ -97,6 +100,7 @@ sub usage()
     print " --start      - Schedule experiment to start at time (unix time).\n";
     print " --stop       - Schedule experiment to stop at time (unix time).\n";
     print " --paramset   - uid,name of a parameter set to apply.\n";
+    print " --bindings   - file containting json string of bindings to apply\n";
     print " --refspec    - refspec[:hash] of a repo based profile to use.\n";
     print "profile       - Either UUID or pid,name\n";
 
@@ -105,6 +109,8 @@ sub usage()
 my $debug	   = 0;
 my $waitmode       = 0;
 my $usestitcher    = 0;
+my $nopending      = 0;
+my $noemail        = 0;
 my $portal;
 my $privkeyfile;
 my $start_at;
@@ -115,6 +121,8 @@ my $gid;
 my $name;
 my $duration;
 my $paramset;
+my $bindingfile;
+my $bindingstr;
 my ($refspec, $repohash, $reporef, $script, $rspec, $bindings);
 my $default_urn;
 my $logfile;
@@ -123,7 +131,7 @@ my $project;
 #
 # So many options ...
 #
-my @optlist = ('d', 'w', 'a=s', 'S', 'k=s',
+my @optlist = ('d', 'w', 'a=s', 'S', 'k=s', 'P', 's',
 	       "name=s"      => \$name,
 	       "duration=i"  => \$duration,
 	       "portal=s"    => \$portal,
@@ -132,6 +140,7 @@ my @optlist = ('d', 'w', 'a=s', 'S', 'k=s',
 	       "start=i"     => \$start_at,
 	       "stop=i"      => \$stop_at,
 	       "paramset=s"  => \$paramset,
+	       "bindings=s"  => \$bindingfile,
 	       "refspec=i"   => \$refspec,
     );
 #
@@ -145,6 +154,12 @@ if (! GetOptions(\%options, @optlist)) {
 }
 if (defined($options{"d"})) {
     $debug = 1;
+}
+if (defined($options{"P"})) {
+    $nopending = 1;
+}
+if (defined($options{"s"})) {
+    $noemail = 1;
 }
 usage()
     if (@ARGV != 1 || !defined($pid));
@@ -171,9 +186,57 @@ if (!defined($portal)) {
 	$portal = "emulab";
     }
 }
+if (defined($duration)) {
+    if ($duration !~ /^\d+$/) {
+	fatal("Duration is not an integer");
+    }
+}
+if (defined($name)) {
+    if (length($name) > 16) {
+	fatal("Experiment name is too long: must be <= 16 characters");
+    }
+    elsif (! TBcheck_dbslot($name, "experiments", "eid",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	fatal("Invalid experiment name");
+    }
+}
+if (defined($options{"a"})) {
+    if (!GeniHRN::IsValid($options{"a"})) {
+	fatal("Ivalid aggregate URN");
+    }
+}
+if (defined($start_at)) {
+    if ($start_at !~ /^\d+$/) {
+	$start_at = str2time($start_at);
+	if (!$start_at) {
+	    fatal("Could not parse the start time");
+	}
+    }
+}
+if (defined($stop_at)) {
+    if ($stop_at !~ /^\d+$/) {
+	$stop_at = str2time($stop_at);
+	if (!$stop_at) {
+	    fatal("Could not parse the stop time");
+	}
+    }
+}
+if (defined($bindingfile)) {
+    if (! -e $bindingfile) {
+	fatal("Binding file does not exist");
+    }
+    $bindingstr = emutil::ReadFile($bindingfile);
+    if ($bindingstr eq "") {
+	fatal("Binding file could not be read or is empty");
+    }
+}
+
 # This was a dumb mistake, I need to convert from servername to portal.
 $ENV{"SERVER_NAME"} = $project->Brand()->Server();
 
+#
+# Bindings can come from a paramset or as a json string on the command line.
+#
 if (defined($paramset)) {
     my ($uid,$name) = @_;
     my $profileid   = $profile->profileid();
@@ -186,15 +249,17 @@ if (defined($paramset)) {
 	fatal("Invalid parameter set uid,name");
     }
     my $query_result =
-	DBQueryFatal("select * from apt_parameter_sets ".
+	DBQueryFatal("select bindings from apt_parameter_sets ".
 		     "where uid='$uid' and profileid='$profileid' and ".
 		     "      name='$name'");
     if (!$query_result->numrows) {
 	fatal("No such parameter set for profile");
     }
-    my $row = $query_result->fetchrow_hashref();
-    
-    $bindings = eval { decode_json($row->{'bindings'}); };
+    ($bindingstr) = $query_result->fetchrow_array();
+}
+
+if (defined($bindingstr)) {
+    $bindings = eval { decode_json($bindingstr); };
     if ($@) {
 	fatal("Could not json decode the bindings\n");
     }
@@ -265,7 +330,7 @@ if (defined($refspec)) {
 # If we have a parameter set, we need the script so we can run geni-lib
 # to apply the parameters.
 #
-if (defined($paramset) && !defined($script)) {
+if (defined($bindings) && !defined($script)) {
     if (! ($profile->paramdefs() && $profile->paramdefs() ne "")) {
 	fatal("Not a parameterized profile!");
     }
@@ -275,9 +340,9 @@ if (defined($paramset) && !defined($script)) {
 }
 
 #
-# Apply the parameter set to the geni-lib script.
+# Apply the bindings to the geni-lib script.
 #
-if (defined($paramset)) {
+if (defined($bindings)) {
     my ($pfp, $paramfile)  = tempfile(UNLINK => 0);
     my ($sfp, $scriptfile) = tempfile(UNLINK => 0);
 
@@ -291,7 +356,7 @@ if (defined($paramset)) {
     close($pfp);
     close($sfp);
 
-    my $output = emutil::ExecQuiet("$RUNGENILIB -N -b $paramfile $scriptfile");
+    my $output = emutil::ExecQuiet("$RUNGENILIB -b $paramfile $scriptfile");
     if ($?) {
 	print STDERR "Could not apply parameter set to script\n";
 	print STDERR $output;
@@ -359,6 +424,9 @@ my @args = ("-u $uuid -t " . $webtask->task_id());
 if (defined($options{"d"})) {
     @args = (@args, "-d");
 }
+if ($nopending) {
+    @args = (@args, "-P");
+}
 if (defined($options{"a"})) {
     @args = (@args, "-a", $options{"a"});
 }
@@ -366,10 +434,10 @@ if (defined($options{"S"})) {
     @args = (@args, "-S");
 }
 if (defined($start_at)) {
-    @args = (@args, "--start_at", $start_at);
+    @args = (@args, "--start", $start_at);
 }
 if (defined($stop_at)) {
-    @args = (@args, "--stop_at", $stop_at);
+    @args = (@args, "--stop", $stop_at);
 }
 @args = (@args, $xmlfile);
 
@@ -416,6 +484,7 @@ system("$CREATEINSTANCE " . join(" ", @args) . " $xmlfile");
 my $instance = APT_Instance->Lookup($uuid);
 
 if ($?) {
+    my $status = $? >> 8;
     my $body = "";
     
     $webtask->Refresh();
@@ -428,7 +497,7 @@ if ($?) {
     else {
 	$body = "Unknown error!";
     }
-    if (1 || !isatty(\*STDOUT)) {
+    if (!isatty(\*STDOUT) && !$noemail) {
 	$project->SendEmail($this_user->email(),
 			    "Failed to start portal experiment",
 			    "Failed to start portal experiment for profile ".
@@ -446,7 +515,7 @@ if ($?) {
     chomp($body);
     print STDERR $body . "\n";
     print STDERR "Could not start experiment\n";
-    exit(1);
+    exit($status);
 }
 unlink($xmlfile);
 
@@ -517,9 +586,10 @@ else {
     }
 }
 $body .= "\n" . $instance->webURL() . "\n";
-$project->SendEmail($this_user->email(), $subject, $body,
-		    $project->OpsEmailAddress());
-
+if (!$noemail) {
+    $project->SendEmail($this_user->email(), $subject, $body,
+			$project->OpsEmailAddress());
+}
 unlink($logfile) if (defined($logfile));
 exit(0);
 

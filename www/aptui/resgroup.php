@@ -80,24 +80,10 @@ if (isset($cluster)) {
         exit();
     }
 }
-# Spit out the route list.
-$query_result =
-    DBQueryFatal("select * from apt_mobile_bus_routes");
-$routelist = array();
-while ($row = mysql_fetch_array($query_result)) {
-    $routename = $row["description"];
-    $routeid   = $row["routeid"];
-    $routelist[$routename] = array(
-        "routename" => $routename,
-        "routeid"   => $routeid,
-    );
-}
 SPITHEADER(1);
 
 echo "<link rel='stylesheet'
             href='css/jquery-ui.min.css'>\n";
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
 echo "<link rel='stylesheet'
             href='css/nv.d3.css'>\n";
 echo "<link rel='stylesheet'
@@ -129,9 +115,6 @@ $plist = array();
 while (list($p) = each($projlist)) {
     $plist[] = $p;
 }
-if (ISADMIN() && isset($project)) {
-    $plist[] = $project->pid();
-}
 echo "<script type='text/plain' id='projects-json'>\n";
 echo htmlentities(json_encode($plist));
 echo "</script>\n";
@@ -158,6 +141,10 @@ while (list($index, $aggregate) = each($ams)) {
     $reservable_nodes = $aggregate->ReservableNodes();
     $typeinfo = $aggregate->typeinfo;
 
+    # Lets not show mobile nodes on this page.
+    if ($aggregate->ismobile()) {
+        continue;
+    }
     # Subtract out reservable nodes from the type count, do not want
     # to confuse users. 
     if ($reservable_nodes) {
@@ -170,26 +157,58 @@ while (list($index, $aggregate) = each($ams)) {
             }
         }
     }
+    #
+    # Each cluster should have its own set of types to skip depending
+    # on the Portal and the phases of the moon, but that is not what
+    # we got. 
+    #
+    $prunelist = Instance::NodeTypePruneList($aggregate);
+    
     $amlist[$urn] = array("urn"      => $urn,
                           "name"     => $am,
                           "nickname" => $aggregate->nickname(),
                           "typeinfo" => $typeinfo,
+                          "prunelist"=> $prunelist,
                           "radiotypes"       => $aggregate->RadioTypes(),
                           "abbreviation"     => $aggregate->nickname(),
                           "reservable_nodes" => $reservable_nodes,
-                          "ismobile"         => $aggregate->ismobile(),
+                          "isME"             => $aggregate->ismobile(),
                           "isFE"             => $aggregate->isFE());
+                          
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
 echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
 echo "</script>\n";
-echo "<script type='text/plain' id='routelist-json'>\n";
-echo htmlentities(json_encode($routelist, JSON_NUMERIC_CHECK));
-echo "</script>\n";
+if ($ISPOWDER) {
+    $radioinfo = Aggregate::RadioInfo();
+    echo "<script type='text/plain' id='radioinfo-json'>\n";
+    echo htmlentities(json_encode($radioinfo, JSON_NUMERIC_CHECK));
+    echo "</script>\n";
+    $matrixinfo = Aggregate::MatrixInfo();
+    echo "<script type='text/plain' id='matrixinfo-json'>\n";
+    echo htmlentities(json_encode($matrixinfo, JSON_NUMERIC_CHECK));
+    echo "</script>\n";
+
+    # Spit out the route list.
+    $query_result =
+        DBQueryFatal("select * from apt_mobile_bus_routes");
+    $routelist = array();
+    while ($row = mysql_fetch_array($query_result)) {
+        $routename = $row["description"];
+        $routeid   = $row["routeid"];
+        $routelist[$routename] = array(
+            "routename" => $routename,
+            "routeid"   => $routeid,
+        );
+    }
+    echo "<script type='text/plain' id='routelist-json'>\n";
+    echo htmlentities(json_encode($routelist, JSON_NUMERIC_CHECK));
+    echo "</script>\n";
+}
 
 $default_pid = "";
 # Default project.
-if (ISADMIN() && isset($project)) {
+if (isset($project)) {
     $default_pid = $project->pid();
 }
 elseif (count($plist) == 1) {
@@ -214,6 +233,7 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_APTFORMS();
+REQUIRE_TABLESORTER();
 AddLibrary("js/resgraphs.js");
 AddTemplateList(array("resgroup", "reserve-faq", "reservation-graph",
                       "range-list", "route-list",
@@ -225,10 +245,6 @@ SPITREQUIRE("js/resgroup.js",
             "<script src='js/lib/d3.v5.js'></script>\n".
             "<script src='js/lib/nv.d3.js'></script>\n".
             "<script src='js/lib/visavail.js'></script>\n".
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>".
             "<script src='js/lib/jquery-ui.js'></script>");
 SPITFOOTER();
 ?>

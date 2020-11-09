@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 #
-# Copyright (c) 2004-2019 University of Utah and the Flux Group.
+# Copyright (c) 2004-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -307,6 +307,10 @@ if not os.access(certificate, os.R_OK):
     pass
     
 ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+try:
+    ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
+except:
+    pass
 ctx.load_cert_chain(certificate)
 if not verify:
     ctx.check_hostname = False

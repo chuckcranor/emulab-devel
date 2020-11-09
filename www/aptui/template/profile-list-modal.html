@@ -1,10 +1,8 @@
-<div id='profile-list-modal' class='modal fade'>
+<div id='profile-list-modal' class='modal fade'
+     data-keyboard='false' data-backdrop='static'>
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
-        <div class='clearfix'></div>
 	<div style="margin-bottom: 10px;">
 	  <b>Warning:</b> This profile has the following images
 	  associated with it:
@@ -77,8 +75,7 @@
 		  style='margin-right: 10px;'
 		  id='confirm-force-delete'>Confirm</button>
 	  <button class='btn btn-default btn-sm'
-		  data-dismiss='modal'
-                  type='button'>Cancel</button>
+		  id='cancel-force-delete'>Cancel</button>
 	</center>
       </div>
     </div>

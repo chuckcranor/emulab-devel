@@ -205,6 +205,7 @@ sub DoShow()
     print "Deferrable:      " . ($aggregate->deferrable() ? "Yes" : "No") . "\n";
     print "Datasets:        " . ($aggregate->has_datasets() ? "Yes" : "No") ."\n";
     print "Reservations:    " . ($aggregate->reservations() ? "Yes" : "No") ."\n";
+    print "SyncThing:       " . ($aggregate->does_syncthing() ? "Yes" : "No") ."\n";
     print "LocalImages:     " . ($aggregate->nolocalimages() ? "No" : "Yes")."\n";
     print "PrestageImages:  " . ($aggregate->prestageimages() ? "Yes":"No")."\n";
     print "PanicPowerOff:   " . ($aggregate->panicpoweroff() ? "Yes" : "No")."\n";
@@ -310,6 +311,11 @@ sub DoFlags()
 	/^precalcmaxext$/ && do {
 	    $aggregate->Update({"precalcmaxext" => $onoff}) == 0
 		or fatal("Could not update flag");
+	    last;
+	};
+	/^syncthing$/ && do {
+	    $aggregate->Update({"does_syncthing" => $onoff}) == 0
+		or fatal("Could not update flafg");
 	    last;
 	};
 	fatal("Unknown flag");

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -137,6 +137,11 @@ $SIG{HUP} = \&handler
 
 GeniUtil::FlipToGeniUser();
 
+if (!GetSiteVar("protogeni/use_imagetracker")) {
+    print STDERR "Image tracking is not enabled for this site\n";
+    exit(0);
+}
+
 #
 # Avoid duplicate email.
 #
@@ -227,14 +232,6 @@ sub HandleImport($)
 sub HandleRelocation($)
 {
     my ($pending) = @_;
-    my $image = $pending->GetImage();
-    if (!defined($image)) {
-	print STDERR "Cannot lookup image for $pending\n";
-	return;
-    }
-    # No point if image is locked.
-    return
-	if ($image->locked());
 
     my $command = "$IMPORTER -d -g -P " . " " . $pending->idx();
     if ($impotent) {
@@ -263,7 +260,7 @@ sub HandleRelocation($)
 
 	    NotifyOnce($pending->idx(),
 		       "Could not relocate image",
-		       "Could not relocate for $pending: $image\n\n".
+		       "Could not relocate for $pending\n\n".
 		       $output);
 	}
 	# Otherwise we will try again in a little while.

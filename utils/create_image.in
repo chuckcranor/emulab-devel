@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -126,7 +126,7 @@ sub usage()
 	  "<node>      - nodeid to create the image from\n");
     exit(-1);
 }
-my $optlist  = "p:wsNdfeDSMA:Fb:UB:t:q";
+my $optlist  = "p:wsNdfeDSMA:Fb:UB:t:qC";
 my $waitmode = 0;
 my $usessh   = 0;
 my $usenfs   = 0;
@@ -135,9 +135,11 @@ my $noemail  = 0;
 my $delta    = 0;
 my $nodelta  = 0;
 my $nomfs    = 0;
+my $cleanmode= 0; # If there is an error, purge the descriptor and directory
 my $quiet    = 0;
 my $signature= 0;
 my $deltapct = 0;
+my $imtracker= 0;
 my $update_prepare = 0;
 my $bsname;
 my $origin_uuid;
@@ -168,6 +170,7 @@ use libdb;
 use EmulabConstants;
 use libtestbed;
 use libadminmfs;
+use libEmulab;
 use Experiment;
 use Node;
 use User;
@@ -214,6 +217,7 @@ my $checkquota  = "$TB/sbin/checkquota";
 my $imagehash	= "$TB/bin/imagehash";
 my $imagevalidate = "$TB/sbin/imagevalidate";
 my $TRIGGERUPDATE = "$TB/sbin/protogeni/triggerimageupdate";
+my $POSTIMAGEDATA = "$TB/sbin/protogeni/postimagedata";
 my $SHA1	= "/sbin/sha1";
 my $SCP		= "/usr/bin/scp";
 my $def_devtype	= "ad";
@@ -247,6 +251,9 @@ my $hacksigfile;
 my %options = ();
 if (! getopts($optlist, \%options)) {
     usage();
+}
+if (defined($options{"C"})) {
+    $cleanmode = 1;
 }
 if (defined($options{"w"})) {
     $waitmode = 1;
@@ -458,6 +465,11 @@ $reportwait = $idlewait
 $checkwait = $reportwait
     if ($reportwait < $checkwait);
 
+# For posting the image data. 
+if (GetSiteVar("protogeni/use_imagetracker")) {
+    $imtracker = 1;
+}
+
 #
 # Verify user and get his DB uid and other info for later.
 #
@@ -485,7 +497,7 @@ if (defined($bsname)) {
     $image = Image->Lookup($imagepid, $imagename);
     if (!defined($image)) {
 	die("*** $0:\n".
-	    "Dataset must does not exist\n");
+	    "Dataset $imagepid/$imagename does not exist\n");
     }
     elsif (!$image->isdataset()) {
 	die("*** $0:\n".
@@ -835,6 +847,9 @@ if ($image->Lock()) {
 }
 $needunlock = 1;
 
+# Clear this so we not confused by an old one.
+$image->ClearWebTask() if ($image->webtask());
+
 # Now we can set the webtask.
 if (defined($webtask)) {
     $image->SetWebTask($webtask);
@@ -1139,6 +1154,11 @@ else {
     $command = "$script$sopts$oargs";
 }
 
+# Kill old logfile, no need to keep these around. We kill it even if in
+# the foreground to avoid confusion.
+$image->ClearLogFile()
+    if ($image->logfileid());
+
 #
 # Go to the background since this is going to take a while.
 # 
@@ -1152,6 +1172,15 @@ if (! $foreground) {
 
     # Logfile becomes the current spew.
     $image->SetLogFile($logfile);
+
+    #
+    # Oh, this is a pain. The webtask is in the image descriptor and the
+    # the logfile is in the version descriptor so that we can retain
+    # logfiles for each version. Turns out, not a great plan.
+    #
+    if (defined($webtask)) {
+	$webtask->logfileid($logfile->logid());
+    }
 
     if (my $childpid = TBBackGround($logfile->filename())) {
 	#
@@ -1198,6 +1227,10 @@ $needcleanup = 1;
 # This tells the master server what uploader path to use.
 $image->SetUploaderPath($filename) == 0
     or fatal("Could not set the uploader path");
+
+# Clear previous uploader status.
+$image->ClearUploaderStatus() == 0
+    or fatal("Could not clear the uploader status");
 
 # Clear the bootlog; see below.
 $node->ClearBootLog()
@@ -1320,6 +1353,17 @@ $args{'name'}    = $me;
 $args{'prepare'} = 1;
 
 if ($usessh) {
+    if (0) {
+	$needcleanup = 0;
+	
+	# Mark webtask
+	$webtask->status("imaging")
+	    if (defined($webtask));
+
+	sleep(30);
+	fatal("Yuck");
+    }
+    
     #
     # Put the node in admin mode...
     #
@@ -1443,16 +1487,36 @@ if (! cleanup()) {
 # If we timed out, if the result code was bad, or if the image size
 # grew too large.
 #
-if ($result eq "setupfailed") {
+if ($usefup &&
+    defined($image->uploader_status()) && $image->uploader_status() ne "") {
+    #
+    # There is some overlap with the checking done here, but if uploader
+    # reports an error we abort. Note that the most common errors are going
+    # over quota, running out of space (when no quotas) and exceeding the
+    # max size.
+    #
+    my $status = $image->uploader_status();
+    if ($status =~ / max /) {
+	$status .= " ($maximagesize bytes); the amount of data (when ".
+	    "compressed) in your image exceeds the maximum allowed, please ".
+	    "consider a different storage mechanism";
+    }
+    elsif ($status =~ /quota/) {
+	$status .= "; please delete images you no longer need ".
+	    "so you can proceed";
+    }
+    fatal("Failed to store image: $status\n");
+}
+elsif ($result eq "setupfailed") {
     fatal("FAILED: Node setup failed ... \n");
 }
-if ($result eq "timeout") {
+elsif ($result eq "timeout") {
     fatal("FAILED: Timed out generating image ... \n");
 }
-if ($result eq "toobig") {
+elsif ($result eq "toobig") {
     fatal("FAILED: Maximum image size ($maximagesize bytes) exceeded ... \n");
 }
-if ($result ne "0") {
+elsif ($result ne "0") {
     fatal("FAILED: Returned error code $result generating image ... \n");
 }
 
@@ -1603,7 +1667,8 @@ SENDMAIL("$user_name <$user_email>",
 if (defined($logfile)) {
     # Close up the log file so the webpage stops.
     $logfile->Close();
-    $image->ClearLogFile();
+    # And store it so that we can look at it until the next create_image,
+    $logfile->Store();
 }
 if (defined($webtask)) {
     # Cause of the fork in run_with_ssh.
@@ -1637,6 +1702,14 @@ if (defined($origin_uuid)) {
     # This can fail, we will catch it later from the CM daemon when
     # we try again. Use the nolock option since we have it.
     system("$TRIGGERUPDATE -l $imageid");
+}
+elsif ($imtracker) {
+    #
+    # If we are using the image tracker, but but not copying the image
+    # back (copyback_uuid) then post the image data to the IMS. 
+    #
+    system("$POSTIMAGEDATA " . $image->versname());
+    # Failure is okay, the daemon will pick it up.
 }
 $image->Unlock();
 exit(0);
@@ -1719,7 +1792,8 @@ sub fatal($)
     if (defined($logfile)) {
 	# Close up the log file so the webpage stops.
 	$logfile->Close();
-	$image->ClearLogFile();
+	# And store it so that we can look at it until the next create_image,
+	$logfile->Store();
     }
 
     # This is a temporary file.
@@ -1729,13 +1803,24 @@ sub fatal($)
     if (defined($webtask)) {
 	# Cause of the fork in run_with_ssh.
 	$webtask->Refresh();
+	# Atomic update
+	$webtask->AutoStore(0);
 	$webtask->status("failed");
 	$webtask->imagesize(0);
 	$webtask->output($mesg);
 	$webtask->Exited(1);
+	$webtask->Store();
     }
-    $image->Unlock()
-	if ($needunlock);
+    if ($cleanmode) {
+	# Give web page time to notice failure before deleting.
+	sleep(30) if (defined($webtask));
+	$image->DeleteImageDir();
+	$image->Delete(1);
+    }
+    else {
+	$image->Unlock()
+	    if ($needunlock);
+    }
     exit(-1);
 }
 
@@ -1854,6 +1939,7 @@ sub run_with_ssh($$)
 	my $stat = 0;
 	if (system($cmd)) {
 	    $stat = $?;
+	    print STDERR "Image creation failed, status=$stat\n";
 	}
 	if ($stat & 127) {
 	    # died with a signal, return the signal
@@ -1916,9 +2002,13 @@ END {
 	# Cause of the fork in run_with_ssh.
 	$webtask->Refresh();
 	if (!$webtask->HasExited()) {
+	    # Atomic update
+	    $webtask->AutoStore(0);
 	    $webtask->status("failed");
 	    $webtask->imagesize(0);
+	    $webtask->output("Internal error creating image");
 	    $webtask->Exited(-1);
+	    $webtask->Store();
 	}
     }
     $? = $saved_exitcode;

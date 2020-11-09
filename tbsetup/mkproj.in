@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -498,17 +498,17 @@ if (! ($ELABINELAB || $isnonlocal)) {
 	    }
 	}
     }
-
-    #
-    # Always need to update the permissions table on new projects.
-    #
-    $EUID = $UID;
-
-    system("$UPDATEPERMS") == 0 or
-	fatal("Could not update permissions table!");
-		
-    $EUID = 0;
 }
+
+#
+# Always need to update the permissions table on new projects.
+#
+$EUID = $UID;
+
+system("$UPDATEPERMS") == 0 or
+    fatal("Could not update permissions table!");
+		
+$EUID = 0;
 
 #
 # Close proj admin list and remove testbed-approval as a member

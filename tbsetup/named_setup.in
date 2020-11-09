@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,6 +24,7 @@
 use English;
 use Socket;
 use strict;
+use Data::Dumper;
 
 #
 # Suck out virtual names and create CNAME map entries.
@@ -245,6 +246,47 @@ while (my ($node_id,$pid,$eid,$vname,$erole) = $db_result->fetchrow_array()) {
 	    push @{$cnames{$node_id}}, "$extra.$eid.$pid";
 	}
     }
+}
+
+#
+# Lets create entries for both unused dynanic entries, and pool entries
+# that are in use.
+#
+$db_result =
+    DBQueryFatal("select IP,pool_id,pid,eid ".
+		 "from virt_node_public_addr where node_id is null");
+while (my ($IP,$pool_id,$pid,$eid) = $db_result->fetchrow_array()) {
+    my $dynid;
+    
+    #
+    # Same record as below in process_nodes
+    #
+    my $node_rec = {
+	IP   => $IP,
+	role => "dynaddr",
+	inner_elab_role => undef,
+    };
+
+    if ($IP =~ /(\d+)\.(\d+)\.(\d+)\.(\d+)/) {
+	my $subnet = "${1}.${2}.${3}";
+	
+	if (defined($pool_id)) {
+	    $dynid = "pool-${pool_id}-${1}-${2}-${3}-${4}";
+	}
+	else {
+	    $dynid = "dyn-${1}-${2}-${3}-${4}";
+	}
+	$routable{$dynid} = $node_rec;    
+	push @{$reverse{$subnet}}, [$4, $dynid];
+    }
+    else {
+	warn "Poorly formed IP address $IP\n";
+    }
+}
+if (0) {
+    print Dumper(\%routable);
+    print Dumper(\%reverse);
+    exit(0);
 }
 
 #
@@ -491,6 +533,7 @@ sub assemble_zonefile($) {
     my $mapfilehead = "$mapfile.head";
     my $mapfiletail = "$mapfile.tail";
     my $mapfilefrag = "$mapfile.local";
+    my $mapfilecert = "$mapfile.certbot";
 
     #
     # Concat the head and tail files to create the new map.
@@ -542,6 +585,17 @@ sub assemble_zonefile($) {
 	system("cat $mapfilefrag >> $mapfile") == 0 or
 	    fatal("Failed to concat $mapfilefrag to $mapfile\n");
 	system("echo '; End of local fragment; $mapfilefrag' >> $mapfile");
+	system("echo '' >> $mapfile");
+    }
+    # This is for certbot DNS renew
+    if (-e $mapfilecert) {
+	system("echo '' >> $mapfile");
+	system("echo ';' >> $mapfile");
+	system("echo '; This is a local fragment; $mapfilecert' >> $mapfile");
+	system("echo ';' >> $mapfile");
+	system("cat $mapfilecert >> $mapfile") == 0 or
+	    fatal("Failed to concat $mapfilecert to $mapfile\n");
+	system("echo '; End of local fragment; $mapfilecert' >> $mapfile");
 	system("echo '' >> $mapfile");
     }
 

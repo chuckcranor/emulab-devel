@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2019 University of Utah and the Flux Group.
+# Copyright (c) 2007-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,6 +35,7 @@ use vars qw(@ISA @EXPORT $AUTOLOAD);
 use libdb;
 use EmulabConstants;
 use libtestbed;
+use Logfile;
 use WebTask;
 use English;
 use Data::Dumper;
@@ -1373,9 +1374,23 @@ sub Delete($;$)
 		"            osidtoimageid write, os_submap write, ".
 		"            image_permissions write, node_types read, ".
 		"            web_tasks write, ".
+		"            logfiles write, logfile_metadata write, ".
 		"            image_notifications write, ".
 		"            image_updates write")
 	or return -1;
+
+    my $query_result =
+	DBQueryWarn("select logfileid from image_versions ".
+		    "where imageid='$imageid' and logfileid is not null");
+    goto bad
+	if (!$query_result);
+
+    while (my ($logfileid) = $query_result->fetchrow_array()) {
+	my $logfile = Logfile->Lookup($logfileid);
+	if ($logfile) {
+	    $logfile->Delete(1);
+	}
+    }
 
     #
     # If provenance is on and not purging, then want to stash the
@@ -1466,6 +1481,10 @@ sub DeleteVersion($)
     my $imageid   = $self->imageid();
     my $version   = $self->version();
 
+    # Delete logfile before table lock.
+    $self->ClearLogFile()
+	if ($self->logfileid());
+
     DBQueryWarn("lock tables images write, image_versions write, ".
 		"            os_info write, os_info_versions write")
 	or return -1;
@@ -1513,8 +1532,11 @@ sub DeleteVersion($)
 sub PurgeVersion($)
 {
     my ($self) = @_;
-
     my $imageid   = $self->imageid();
+
+    # Delete logfile before table lock.
+    $self->ClearLogFile()
+	if ($self->logfileid());
 
     DBQueryWarn("lock tables images write, image_versions write, ".
 		"            os_info write, os_info_versions write")
@@ -1977,6 +1999,19 @@ sub ClearIMSReported($)
 
     return 0;
 }
+sub SetIMSNoReport($$)
+{
+    my ($self, $onoff) = @_;
+    my $imageid = $self->imageid();
+    my $version = $self->version();
+    $onoff = ($onoff ? 1 : 0);
+
+    return -1
+	if (! DBQueryWarn("update image_versions set ims_noreport='$onoff' " .
+			  "where imageid='$imageid' and version='$version'"));
+
+    return 0;
+}
 
 #
 # Set the hash.
@@ -2022,6 +2057,12 @@ sub ClearUploaderPath($)
 
     return $self->Update({"uploader_path" => ''});
 }
+sub ClearUploaderStatus($)
+{
+    my ($self) = @_;
+
+    return $self->Update({'uploader_status' => undef});
+}
 
 # Webtask.
 sub SetWebTask($$)
@@ -2040,6 +2081,18 @@ sub SetWebTask($$)
 	DBQueryWarn("update images set webtask_id=NULL " .
 		    "where imageid='$imageid'")
 	    or return -1;
+    }
+    return 0;
+}
+sub ClearWebTask($)
+{
+    my ($self) = @_;
+
+    if (defined($self->webtask_id())) {
+	my $webtask = $self->webtask();
+
+	$webtask->Delete();
+	$self->SetWebTask(undef);
     }
     return 0;
 }
@@ -2591,6 +2644,10 @@ sub SetLogFile($$)
     return -1
 	if ($self->Update({'logfileid' => $logfile->logid()}));
 
+    # Set the metadata so we can associate logfiles with this image.
+    $logfile->SetMetadata({"image_uuid"   => $self->image_uuid(),
+			   "version_uuid" => $self->uuid()});
+
     return 0;
 }
 
@@ -2683,7 +2740,8 @@ sub ClearLogFile($)
 		"where imageid='$imageid' and version='$version'")
 	or return -1;
 
-    return $self->Refresh();
+    $self->logfileid(undef);
+    return 0;
 }
 
 #
@@ -2890,6 +2948,20 @@ sub SetCredential($$)
 			  "where imageid='$imageid'"));
 	    
     $self->{'IMAGE'}->{'credential_string'} = $credstr;
+    return 0;
+}
+
+sub SetListed($$)
+{
+    my ($self, $onoff) = @_;
+    $onoff = ($onoff ? 1 : 0);
+    my $imageid = $self->imageid();
+
+    return -1
+	if (! DBQueryWarn("update images set listed='$onoff' " .
+			  "where imageid='$imageid'"));
+	    
+    $self->{'IMAGE'}->{'listed'} = $onoff;
     return 0;
 }
 
@@ -3185,21 +3257,50 @@ sub CreateImageDir($)
     }
     return 0;
 }
+#
+# Delete, after failure to avoid cruft.
+#
+sub DeleteImageDir($)
+{
+    my ($self) = @_;
+    
+    return 0
+	if (!$self->IsDirPath());
+
+    my $directory;
+
+    if ($self->IsSystemImage()) {
+	$directory = $self->SaveDir();
+    }
+    else {
+	$directory = $self->path();
+    }
+    return 0
+	if (! -e $directory);
+
+    #
+    # This can lead to bad things, so lets not try too hard.  Just do a
+    # rmdir, and if its not empty or not enough permission, fine. Might
+    # revisit later.
+    #
+    rmdir($directory);
+    
+    return 0;
+}
 
 sub CreateDirectory($$)
 {
     my ($self, $directory) = @_;
 
-    return 0
-	if (-e $directory);
-    
-    if (!mkdir($directory, 0775)) {
-	print STDERR "Could not mkdir $directory: $!\n";
-	return -1;
-    }
-    if (!chmod(0775, $directory)) {
-	print STDERR "Could not chmod $directory: $!\n";
-	return -1;
+    if (! -e $directory) {
+	if (!mkdir($directory, 0775)) {
+	    print STDERR "Could not mkdir $directory: $!\n";
+	    return -1;
+	}
+	if (!chmod(0775, $directory)) {
+	    print STDERR "Could not chmod $directory: $!\n";
+	    return -1;
+	}
     }
     
     # If we are root and had to create the directory, then the owner
@@ -3263,6 +3364,7 @@ sub ConvertToLocal($)
 	"origin_uuid"    => undef,
 	"origin_urn"     => undef,
     };
+    $self->SetNoVersioning(0);
     return $self->Update($args);
 }
 
@@ -3311,6 +3413,37 @@ sub ImportImageFileSize($)
     $cursize = int($cursize / 1024);
     $UID = $SAVEUID;
     return $cursize;
+}
+
+#
+# Is an image in use and should not be deleted.
+#
+sub InUse($)
+{
+    my ($self) = @_;
+    my $imageid = $self->imageid();
+    my $version = $self->version();
+
+    my $query_result =
+	DBQueryWarn("select node_id from nodes ".
+		    "where def_boot_osid='$imageid' and ".
+		    "      def_boot_osid_vers='$version'");
+    return 1
+	if (!$query_result || $query_result->numrows);
+
+    $query_result =
+	DBQueryWarn("select * from current_reloads ".
+		    "where image_id='$imageid' and imageid_version='$version'");
+    return 1
+	if (!$query_result || $query_result->numrows);
+
+    $query_result =
+	DBQueryWarn("select * from scheduled_reloads ".
+		    "where image_id='$imageid'");
+    return 1
+	if (!$query_result || $query_result->numrows);
+
+    return 0;
 }
 
 #############################################################################

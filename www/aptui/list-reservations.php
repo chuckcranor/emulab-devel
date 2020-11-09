@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -79,8 +79,6 @@ echo htmlentities(json_encode($amlist));
 echo "</script>\n";
 
 echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-echo "<link rel='stylesheet'
             href='css/nv.d3.css'>\n";
 
 # Place to hang the toplevel template.
@@ -93,6 +91,7 @@ echo "</script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 AddLibrary("js/resgraphs.js");
 AddTemplateList(array("list-reservations", "reservation-list",
                       "prereservation-list",
@@ -100,10 +99,6 @@ AddTemplateList(array("list-reservations", "reservation-list",
                       "oops-modal", "waitwait-modal"));
 SPITREQUIRE("js/list-reservations.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
-            "<script src='js/lib/nv.d3.js'></script>\n".
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+            "<script src='js/lib/nv.d3.js'></script>\n");
 SPITFOOTER();
 ?>

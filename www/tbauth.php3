@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018, 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -88,6 +88,7 @@ define("DOLOGIN_STATUS_WEBFREEZE",	-3);
 define("DOLOGIN_STATUS_INACTIVE",	-4);
 define("DOLOGIN_STATUS_FROZEN", 	-5);
 define("DOLOGIN_STATUS_PROJDISABLED", 	-6);
+define("DOLOGIN_STATUS_NOGENIUSER", 	-7);
 
 # So we can redefine this in the APT pages.
 $CHANGEPSWD_PAGE = "moduserinfo.php3";
@@ -889,6 +890,10 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
     }
     $now = time();
 
+    if (0) {
+        TBMAIL("stoller@flux.utah.edu", "password $token: ", "'$password'");
+    }
+
     #
     # Check for a frozen IP address; too many failures.
     #
@@ -941,6 +946,15 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
         $ga_userid   = $user->ga_userid();
         $lastlogin   = $user->weblogin_last();
 
+        #
+        # Yuck.
+        #
+        if (preg_match("/impscet\.net$/", $usr_email) ||
+            preg_match("/ril\.com$/", $usr_email) ||
+            preg_match("/gavilan\.edu$/", $usr_email)) {
+            break;
+        }
+
 	# Check for frozen accounts. We do not update the IP record when
 	# an account is frozen.
 	if ($frozen) {
@@ -952,6 +966,11 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
         if (count($plist)) {
             return DOLOGIN_STATUS_PROJDISABLED;
         }
+        # Check for a geni user trying to login with a password.
+        if (!$nopassword && $user->nonlocal_id()) {
+            return DOLOGIN_STATUS_NOGENIUSER;
+        }
+        
 	if (!$nopassword) {
 	    $encoding = crypt("$password", $db_encoding);
 	    if (strcmp($encoding, $db_encoding)) {

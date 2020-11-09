@@ -38,7 +38,7 @@ DHCP=yes
 
 [DHCP]
 UseNTP=yes
-UseHostname=yes
+UseHostname=no
 UseDomains=yes
 EOF
 

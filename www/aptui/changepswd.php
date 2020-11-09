@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -71,7 +71,7 @@ if (isset($key) || isset($reset)) {
         if ((isset($keyB) && $keyB != "") && (!isset($keyA) || $keyA == "")) {
             SPITUSERERROR("Oops, not able to proceed!<br>".
                           "Please read this ".
-                          "<a href='$WIKIDOCURL/kb69'>Knowledge Base Entry</a>".
+                          "<a href='https://gitlab.flux.utah.edu/emulab/emulab-devel/-/wikis/faq/I-Forgot-My-Password'>FAQ Entry</a>".
                           "to see what the likely cause is.", 1);
             return;
         }
@@ -119,7 +119,13 @@ else {
     # admins do not need to provide an old password when changing another
     # user password, but they need it to change their own password.
     #
-    $needold = (!ISADMIN() || $this_user->SameUser($user) ? 1 : 0);
+    if ((ISADMIN() && !$this_user->SameUser($user)) ||
+        ($user->nonlocal_id() && $user->pswd() == "*")) {
+        $needold = 0;
+    }
+    else {
+        $needold = 1;
+    }
     $key = "null";
 }
 $uid = $user->uid();

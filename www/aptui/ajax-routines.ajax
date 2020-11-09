@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,11 +22,12 @@
 # }}}
 #
 chdir("..");
-include("lease_defs.php");
-include("blockstore_defs.php");
-include("imageid_defs.php");
+include_once("lease_defs.php");
+include_once("blockstore_defs.php");
+include_once("imageid_defs.php");
 chdir("apt");
-include("dataset_defs.php");
+include_once("dataset_defs.php");
+include_once("profile_defs.php");
 
 function ClassicExperimentList($which, $target, $state = "active")
 {
@@ -351,6 +352,10 @@ function ProfileListAux($query_result)
         $privacy = ($public ? "Public" : "Project");
         $desc    = "";
 
+        $profile = Profile::Lookup($idx);
+        if (!$profile) {
+            continue;
+        }
         $parsed_xml = simplexml_load_string($rspec);
         if ($parsed_xml &&
             $parsed_xml->rspec_tour && $parsed_xml->rspec_tour->description) {
@@ -370,17 +375,9 @@ function ProfileListAux($query_result)
         $blob["project"]      = $pid;
         $blob["creator"]      = $creator;
         $blob["last_use"]     = $last_use;
-
-        if (ISADMIN() ||
-            ($which == "user" && $creator == $target->uid()) ||
-            ($which == "project" && $creator == $this_user->uid())) {
-            $blob["link"] =
-                "<a href='manage_profile.php?action=edit&uuid=$uuid'>$name</a>";
-        }
-        else {
-            $blob["link"] =
-                "<a href='show-profile.php?uuid=$uuid'>$name</a>";
-        }
+        $blob["canedit"]      = $profile->CanEdit($this_user);
+        $blob["candelete"]    = $profile->CanDelete($this_user);
+        
         $results["$pid:$name"] = $blob;
     }
     return $results;
@@ -566,6 +563,9 @@ function ClassicImageList($target)
            "left join osidtoimageid as map on map.osid=i.imageid ".
            "where (iv.ezid = 1 and iv.isdataset=0) and ".
            "      iv.creator_urn is null and ".
+           "      iv.origin_urn is null and ".
+           #      Sigh, we have old images without origin_* settings.
+           "      iv.metadata_url is null and ".
            "      iv.creator_idx='$target_idx' ".
            "order by i.imagename";
 

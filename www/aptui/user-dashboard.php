@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -58,9 +58,6 @@ $emulablink = "$TBBASE/showuser.php3?user=" . $target_user->uid();
 
 SPITHEADER(1);
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-
 echo "<script type='text/javascript'>\n";
 echo "  window.ISADMIN     = $isadmin;\n";
 echo "  window.EMULAB_LINK = '$emulablink';\n";
@@ -68,6 +65,8 @@ echo "  window.TARGET_USER = '" . $target_user->uid() . "';\n";
 echo "  window.UI_DISABLE_DATASETS = '" . $UI_DISABLE_DATASETS . "';\n";
 echo "  window.UI_DISABLE_RESERVATIONS = '" .
         $UI_DISABLE_RESERVATIONS . "';\n";
+echo "  window.EMBEDDED_RESGROUPS = true;\n";
+echo "  window.EMBEDDED_RESGROUPS_SELECT = false;\n";
 echo "</script>\n";
 
 # Place to hang the toplevel template.
@@ -75,14 +74,15 @@ echo "<div id='main-body'></div>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
+REQUIRE_JACKS();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 AddLibrary("js/paramsets.js");
-SPITREQUIRE("js/user-dashboard.js",
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+AddLibrary("js/list-resgroups.js");
+AddLibrary("js/profile-support.js");
+AddTemplateList(array('confirm-delete-profile', 'profile-list-modal'));
+SPITREQUIRE("js/user-dashboard.js");
 
-AddTemplateList(array("user-dashboard", "experiment-list", "profile-list", "project-list", "dataset-list", "user-profile", "oops-modal", "waitwait-modal", "classic-explist", "conversion-help-modal", "paramsets-list"));
+AddTemplateList(array("user-dashboard", "experiment-list", "profile-list", "project-list", "dataset-list", "user-profile", "oops-modal", "waitwait-modal", "classic-explist", "conversion-help-modal", "paramsets-list", "resgroup-list"));
 SPITFOOTER();
 ?>

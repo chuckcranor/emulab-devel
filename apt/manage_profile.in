@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -201,6 +201,8 @@ my %xmlfields =
      "script"		   => ["script",	$SLOT_OPTIONAL|$SLOT_UPDATE],
      "repourl"		   => ["repourl",	$SLOT_OPTIONAL],
      "portal_converted"	   => ["portal_converted", $SLOT_OPTIONAL|$SLOT_UPDATE],
+     "examples_portals"	   => ["examples_portals", $SLOT_OPTIONAL|
+			                          $SLOT_UPDATE|$SLOT_ADMINONLY],
 );
 
 if ($action eq "update") {
@@ -313,7 +315,11 @@ sub CreateProfile()
 	my $repourl  = $new_args{'repourl'};
 	my $repohash;
 	my $checkout = ($this_user->IsAdmin() ? "-c" : "");
-
+	# Something recently broke in git, everyone gets --bare for now
+	# until we can figure out why git fetch fails to pick up new
+	# branches on a full checkout repo. This breaks submodules.
+	$checkout = "";
+	
 	my $output =
 	    emutil::ExecQuiet("$MANAGEGITREPO clone $checkout -n $reponame ".
 			      "  -S " . $new_args{"name"} . " '$repourl'");

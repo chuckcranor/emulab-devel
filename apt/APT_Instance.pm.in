@@ -33,7 +33,7 @@ use JSON;
 use Exporter;
 use vars qw(@ISA @EXPORT $AUTOLOAD
 	    $RECORDHISTORY_TERMINATED $RECORDHISTORY_EXPIRED
-	    $APT_HOLDINGPROJECT $CLOUD_HOLDINGPROJECT);
+	    $APT_HOLDINGPROJECT $PROTOGENI_HOLDINGPROJECT);
 
 @ISA    = "Exporter";
 
@@ -43,10 +43,10 @@ $RECORDHISTORY_EXPIRED		= 0x01;
 
 # Names of the holding projects.
 $APT_HOLDINGPROJECT   = "aptguests";
-$CLOUD_HOLDINGPROJECT = "CloudLab";
+$PROTOGENI_HOLDINGPROJECT = "@PROTOGENI_HOLDINGPROJECT@";
 
 @EXPORT = qw($RECORDHISTORY_TERMINATED $RECORDHISTORY_EXPIRED
-             $APT_HOLDINGPROJECT $CLOUD_HOLDINGPROJECT);
+             $APT_HOLDINGPROJECT $PROTOGENI_HOLDINGPROJECT);
 
 # Must come after package declaration!
 use EmulabConstants;
@@ -58,6 +58,7 @@ use APT_Aggregate;
 use APT_Geni;
 use APT_Utility;
 use APT_Reservation;
+use EmulabFeatures;
 use Genixmlrpc;
 use GeniResponse;
 use GeniCertificate;
@@ -146,6 +147,7 @@ sub Lookup($$)
     $self->{'BRAND'}      = Brand->Create($self->{'INSTANCE'}->{'servername'});
     $self->{'HASH'}       = {};
     $self->{'AGGREGATES'} = {};
+    $self->{'ROUTES'}     = {};
     $self->{'WEBTASK'}    = undef;
     bless($self, $class);
 
@@ -153,6 +155,9 @@ sub Lookup($$)
     # Lookup existing aggregates.
     #
     $self->{'AGGREGATES'} = APT_Instance::Aggregate->LookupForInstance($self);
+    # Ditto routes
+    $self->{'ROUTES'} =
+	APT_Instance::Aggregate::BusRoute->LookupForInstance($self);
     
     # Add to cache. 
     $instances{$self->uuid()} = $self;
@@ -211,6 +216,26 @@ sub isPNet($)	{ return $_[0]->Brand()->isPNet() ? 1 : 0; }
 sub isPowder($)	{ return $_[0]->Brand()->isPowder() ? 1 : 0; }
 sub AggregateList($) { return values(%{ $_[0]->{'AGGREGATES'} }); }
 sub AggregateHash($) { return $_[0]->{'AGGREGATES'}; }
+sub RouteList($) { return values(%{ $_[0]->{'ROUTES'} }); }
+sub RouteHash($) { return $_[0]->{'ROUTES'}; }
+
+sub Expires($)
+{
+    my ($self) = @_;
+    my $slice  = $self->GetGeniSlice();
+
+    return $slice->expires();
+}
+
+# For print statements.
+sub Printable($)
+{
+    my ($self) = @_;
+    my $pid    = $self->pid();
+    my $name   = $self->name();
+
+    return "$pid/$name";
+}
 
 #
 # Grab specific aggregate
@@ -274,6 +299,7 @@ sub DESTROY {
     $self->{'AGGREGATES'} = undef;
     $self->{'HASH'}       = undef;
     $self->{'WEBTASK'}    = undef;
+    $self->{'ROUTES'}     = undef;
 }
 
 #
@@ -302,6 +328,13 @@ sub Purge($)
     $self->Flush();
 }
 
+sub SameInstance($$)
+{
+    my ($this, $that) = @_;
+
+    return $this->uuid() eq $that->uuid() ? 1 : 0;
+}
+
 #
 # Refresh a class instance by reloading from the DB.
 #
@@ -321,8 +354,16 @@ sub Refresh($)
 	if (!$query_result || !$query_result->numrows);
 
     $self->{'INSTANCE'} = $query_result->fetchrow_hashref();
-    $self->{'AGGREGATES'} = APT_Instance::Aggregate->LookupForInstance($self);
 
+    #
+    # We do not want to replace existing aggregate objects, the caller
+    # might have a handle on them. Note that add/delete aggregate will
+    # add/remove them from the hash, so we do not worry about the
+    # membership changing as a result of the refresh.
+    #
+    foreach my $agg ($self->AggregateList()) {
+	$agg->Refresh();
+    }
     return 0;
 }
 
@@ -477,6 +518,12 @@ sub Delete($)
     DBQueryWarn("delete from apt_deferred_instances where uuid='$uuid'") or
 	return -1;
 
+    DBQueryWarn("delete from apt_instance_bus_routes where uuid='$uuid'") or
+	return -1;
+
+    DBQueryWarn("delete from apt_instance_rfranges where uuid='$uuid'") or
+	return -1;
+
     # We do not "own" the webtask until create_sliver exits successfully.
     $self->webtask()->Delete() if (defined($self->{'WEBTASK'}));
     
@@ -583,7 +630,7 @@ sub ActiveAggregateList($)
     foreach my $agg ($self->AggregateList()) {
 	push(@result, $agg)
 	    if ($agg->status() ne "terminated" &&
-		$agg->status() ne "deferred");
+		$agg->deferred() == 0);
     }
     return @result;
 }
@@ -594,7 +641,7 @@ sub DeferredAggregateList($)
 
     foreach my $agg ($self->AggregateList()) {
 	push(@result, $agg)
-	    if ($agg->status() eq "deferred");
+	    if ($agg->deferred() != 0);
     }
     return @result;
 }
@@ -923,7 +970,7 @@ sub ComputeNodeCounts($)
     }
     foreach my $sliver (@slivers) {
 	next
-	    if ($sliver->status() eq "deferred");
+	    if ($sliver->deferred());
 	
 	my $manifest = GeniXML::Parse($sliver->manifest());
 	if (! defined($manifest)) {
@@ -1222,7 +1269,8 @@ sub GetSSHKeys($$;$)
 	if (defined($target_user));
 
     if (! ($project->pid() eq $APT_HOLDINGPROJECT ||
-	   $project->pid() eq $CLOUD_HOLDINGPROJECT)) {
+	   $project->pid() eq $PROTOGENI_HOLDINGPROJECT ||
+	   $project->pid() eq "cord-testdrive")) {
 	#
 	# Get other users from the project. Real local users are easy,
 	# nonlocal users from the GPO portal are messy.
@@ -1236,6 +1284,10 @@ sub GetSSHKeys($$;$)
 		next
 		    if ($member->SameUser($geniuser->emulab_user()));
 	    
+		# Skip frozen users.
+		next
+		    if ($member->frozen());
+
 		my $guser = GeniUser->CreateFromLocal($member);
 		next
 		    if (!defined($guser));
@@ -1403,7 +1455,7 @@ sub ApplyExtensionPolicies($)
     my $uid_idx  = $self->creator_idx();
     my $current_disable = $self->extension_disabled();
     my $current_limit   = $self->extension_limit();
-    my $policy;
+    my $policy   = "Default";
     my $disabled = 0;
     my $limit    = 0;
     my $admin_after_limit = 0;
@@ -1569,7 +1621,7 @@ sub CheckProvisioned($)
 
 	# Skip deferred for now, not sure how to handle this.
 	next
-	    if ($agg->status() eq "deferred");
+	    if ($agg->deferred());
 
 	$provisioned = 0
 	    if (!defined($agg->manifest()));
@@ -1651,7 +1703,7 @@ sub CreateDatasetCreds($$$)
 			# errors early.  The CM will do its own check
 			# of course.
 			#
-			if (!$image->global() &&
+			if ($image && !$image->global() &&
 			    $PROTOGENI_LOCALUSER && $geniuser->IsLocal() &&
 			    !$image->AccessCheck($geniuser->emulab_user(),
 						   TB_IMAGEID_READINFO())) {
@@ -1705,21 +1757,30 @@ sub CreateDatasetCreds($$$)
 	    # credential from the CM where the dataset lives. We do that by
 	    # requesting a credential, and delegating it to the target CM.
 	    #
-	    my $pid = $dataset->pid();
-	    my $id  = $dataset->dataset_id();
-	    my $cmd = "$MANAGEDATASET getcredential -a $manager_urn $pid/$id";
+	    my $wtask = WebTask->CreateAnonymous();
+	    my $pid   = $dataset->pid();
+	    my $id    = $dataset->dataset_id();
+	    my $cmd   = "$MANAGEDATASET -t " . $wtask->task_id() . " -- " .
+		"getcredential -a $manager_urn $pid/$id";
 	    my $output = emutil::ExecQuiet($cmd);
+	    $wtask->Refresh();
 	    if ($?) {
-		$$pmsg = "Could not generate credential for $dataset_urn";
-		if (($? >> 8) > 0) {
-		    if ($output ne "") {
-			$$pmsg = "$dataset_urn" . ": " . $output;
-		    }
-		    return 1;
+		print STDERR $output;
+		my $rval;
+		$$pmsg = "Could not generate credential for $dataset_urn: ";
+		if (!$wtask->HasExited()) {
+		    $$pmsg .= "internal error";
+		    $rval   = -1;
 		}
-		return -1;
+		else {
+		    $$pmsg .= $wtask->output();
+		    $rval   = $wtask->exitcode();
+		}
+		$wtask->Delete();
+		return $rval;
 	    }
-	    $credentials{$manager_urn}->{$dataset_urn} = $output;
+	    $credentials{$manager_urn}->{$dataset_urn} = $wtask->credential();
+	    $wtask->Delete();
 	}
     }
     #
@@ -2002,21 +2063,89 @@ sub CreateImageCreds($$$;$)
 }
 
 #
-# Defer aggregate setup until missing aggregates come online.
-# Optional start time indicates we are deferring the entire experiment
-# till a later time.
+# Bundle up all credentials we need. We set them up per aggregate,
+# the caller will send only those credentials that are needed for
+# each aggregate.
 #
-sub Defer($$)
+sub GetAllCredentials($$$$)
+{
+    my ($self, $allowexpired, $pref, $perrmsg) = @_;
+    my $geniuser    = $self->GetGeniUser();
+    my $slice       = $self->GetGeniSlice();
+    my %credentials = ();
+    
+    my $dataset_credentials = {};
+    if ($self->CreateDatasetCreds($perrmsg, \$dataset_credentials)) {
+	return -1;
+    }
+    my $image_credentials = {};
+    if ($self->CreateImageCreds($perrmsg, \$image_credentials)) {
+	return -1;
+    }
+    #
+    # The spectrum credential has to go to all of the aggregates.
+    #
+    my $spectrum = [];
+    if (APT_Profile::GetSpectrum($self->rspec(), \$spectrum, $perrmsg)) {
+	return -1;
+    }
+
+    my ($slice_credential, $speaksfor_credential) =
+	APT_Geni::GenCredentials($slice, $geniuser,
+				 @$spectrum ?
+				 ["use-spectrum",
+				  "instantiate", "bind"] : undef,
+				 $allowexpired);
+    return -1
+	if (!defined($slice_credential));
+    return -1
+	if (!$allowexpired && !defined($speaksfor_credential));
+
+    foreach my $agg ($self->AggregateList()) {
+	my $urn = $agg->aggregate_urn();
+	my @creds = ($slice_credential, $speaksfor_credential);
+
+	if (exists($dataset_credentials->{$urn})) {
+	    @creds = (@creds, @{ $dataset_credentials->{$urn} });
+	}
+	if (exists($image_credentials->{$urn})) {
+	    @creds = (@creds, @{ $image_credentials->{$urn} });
+	}
+	$credentials{$urn} = \@creds;
+    }
+    $$pref = \%credentials;
+    return 0;
+}
+
+sub Schedule($$)
 {
     my ($self, $start) = @_;
+    my $uuid  = $self->uuid();
+    my $name  = $self->name();
+
+    if ($start !~ /^\d+$/) {
+	$start = str2time($start);
+    }
+    DBQueryWarn("insert into apt_deferred_instances set ".
+		" uuid='$uuid', name='$name', ".
+		"  start_at=FROM_UNIXTIME($start)")
+	or return -1;
+    
+    foreach my $agg ($self->AggregateList()) {
+	$agg->Schedule();
+    }
+    return 0;
+}
+
+#
+# Defer instance setup while we wait (poll) for missing deferrable
+# aggregates to come online.
+#
+sub Defer($)
+{
+    my ($self) = @_;
     my $uuid   = $self->uuid();
     my $name   = $self->name();
-
-    if (defined($start)) {
-	if ($start !~ /^\d+$/) {
-	    $start = str2time($start);
-	}
-    }
 
     my $query_result =
 	DBQueryWarn("select uuid from apt_deferred_instances ".
@@ -2031,10 +2160,8 @@ sub Defer($$)
 	    or return -1;
     }
     else {
-	DBQueryWarn("replace into apt_deferred_instances set ".
-		    " uuid='$uuid', name='$name'" .
-		    (defined($start) ?
-		     ", start_at=FROM_UNIXTIME($start)" : ""))
+	DBQueryWarn("insert into apt_deferred_instances set ".
+		    " uuid='$uuid', name='$name', last_retry=now()")
 	    or return -1;
     }
     return 0;
@@ -2291,9 +2418,9 @@ sub GetSpectrum($$)
 # Check that we have reservations for any spectrum used.
 # This check uses the current time and current experiment end,
 #
-sub CheckSpectrumReserved($$)
+sub CheckSpectrum($$$)
 {
-    my ($self, $perrmsg) = @_;
+    my ($self, $perrmsg, $pflag) = @_;
     my $rspecstr = $self->rspec();
     my $project  = $self->GetProject();
     my $slice    = $self->GetGeniSlice();
@@ -2303,20 +2430,48 @@ sub CheckSpectrumReserved($$)
     if (APT_Profile::GetSpectrum($rspecstr, \$spectrum, $perrmsg)) {
 	return -1;
     }
+    return 0
+	if (!@$spectrum);
+
+    # Top level check for OTA access (might have been revoked)
+    if (!EmulabFeatures->FeatureEnabled("OTA-allowed", undef, $project)) {
+	$$perrmsg = "Not enough permission to use OTA resources.";
+	return -1;
+    }
+    my $rfrange  = APT_RFRange::Project->Lookup($project);
 
     foreach my $request (@{$spectrum}) {
 	my $frequency_low  = $request->{"frequency_low"};
 	my $frequency_high = $request->{"frequency_high"};
-	my $power          = $request->{"power"};
-
-	if (!APT_Reservation::Group::RFReservation->RangeReserved($project,
-		      time(), $expires, $frequency_high, $frequency_low)) {
-	    $$perrmsg = "Frequency range $frequency_low,$frequency_high ".
-		    "is not reserved by your project for the duration of your ".
-		    "experiment.";
-	    return 1;
+	
+	if (!$rfrange->Allowed($frequency_low, $frequency_high)) {
+	    $$perrmsg = "Not enough permission to use ".
+		"frequency range $frequency_low,$frequency_high ".
+		"in your project.";
+	    return -1;
 	}
     }
+    if (!APT_Reservation::Group::RFReservation->CanStart($project,
+			 time(), $expires, $spectrum, $perrmsg)) {
+	return -1;
+    }
+    #
+    # Add the spectrum to this instance (we are starting it).
+    #
+    foreach my $request (@{$spectrum}) {
+	my $frequency_low  = $request->{"frequency_low"};
+	my $frequency_high = $request->{"frequency_high"};
+	
+	if (!APT_Instance::RFRanges->Lookup($self,
+					    $frequency_low, $frequency_high)) {
+	    if (!APT_Instance::RFRanges->Create($self,
+				       $frequency_low, $frequency_high)) {
+		$$perrmsg = "Could not create rfrange entry";
+		return -1;
+	    }
+	}
+    }
+    $$pflag = 1;
     return 0;
 }
 
@@ -2365,10 +2520,46 @@ sub CheckRoutesReserved($$)
     return 0;
 }
 
+#
+# Check that a specific route is currently allocated to the experiment for
+# the duration of the experiment.
+#
+sub CheckRouteReserved($$$)
+{
+    my ($self, $routename) = @_;
+    my $rspecstr = $self->rspec();
+    my $project  = $self->GetProject();
+    my $slice    = $self->GetGeniSlice();
+    my $expires  = str2time($slice->expires());
+    my $routes   = [];
+    my $errmsg;
+
+    if ($self->GetRoutes(\$routes, \$errmsg)) {
+	return -1;
+    }
+
+    foreach my $request (@{$routes}) {
+	my $name = $request->{"name"};
+
+	next
+	    if ($name ne $routename);
+
+	if (APT_Reservation::Group::RouteReservation->RouteReserved($project,
+		      time(), $expires, $name)) {
+	    return 1;
+	}
+	else {
+	    return 0;
+	}
+    }
+    return 0;
+}
+
 sub AddRouteNodes($$)
 {
     my ($self, $perrmsg) = @_;
     my $modified = 0;
+    my $repocommand;
     my $routes;
     if ($self->GetRoutes(\$routes, $perrmsg)) {
 	return -1;
@@ -2378,6 +2569,11 @@ sub AddRouteNodes($$)
 	$$perrmsg = "Could not parse rspec for $self\n";
 	return -1;
     }
+    # Need to add this to nodes as we add new nodes.
+    if ($self->repourl()) {
+	$repocommand = APT_Profile::GetRepoCommand($rspec);
+    }
+    
     my %routes = ();
     foreach my $ref (@$routes) {
 	# This is from the manifest.
@@ -2387,14 +2583,26 @@ sub AddRouteNodes($$)
 	    $$perrmsg = "AddRouteNodes: No such route $name";
 	    return -1;
 	}
+	# Add the route to the instance if not already there. This is
+	# for the route daemon.
+	if (!APT_Instance::Aggregate::BusRoute->Lookup($self, $id)) {
+	    my $obj = $self->AddRoute($name);
+	    if (!defined($obj)) {
+		$$perrmsg = "AddRouteNodes: Could not add route $name";
+		return -1;
+	    }
+	}
 	foreach my $bus (APT_Aggregate::Mobile::Bus->LookupForRoute($id)) {
 	    my $client_id = "bus-" . $bus->busid();
 	    my $node      = GeniXML::GetNodeByVirtualId($client_id, $rspec);
 
 	    if (!defined($node)) {
-		my $fragment = APT_Profile::RSpecNodeFragment($bus->urn(),
-							      $client_id);
-		$node = GeniXML::Parse($fragment);
+		my $node = APT_Profile::RSpecNodeFragment($bus->urn(),
+							  $client_id,
+							  $ref->{'dom'});
+		if (defined($repocommand)) {
+		    APT_Profile::SetRepoOnNode($node, $repocommand);
+		}
 		$rspec->appendChild($node);
 		$modified = 1;
 	    }
@@ -2415,6 +2623,22 @@ sub AddRouteNodes($$)
 	$self->Update({"rspec" => GeniXML::Serialize($rspec)});
     }
     return 0;
+}
+
+#
+# Add an route to an instance. So we can quickly find running instances
+# using routes.
+#
+sub AddRoute($$)
+{
+    my ($self, $routename) = @_;
+
+    my $obj = APT_Instance::Aggregate::BusRoute->Create($self, $routename);
+    return undef
+	if (!defined($obj));
+
+    $self->{'ROUTES'}->{$obj->routeid()} = $obj;
+    return $obj;
 }
 
 ###################################################################
@@ -2509,6 +2733,42 @@ AUTOLOAD {
 }
 sub AggregateList($) { return values(%{ $_[0]->{'AGGREGATES'} }); }
 sub AggregateHash($) { return $_[0]->{'AGGREGATES'}; }
+
+
+sub LookupBySlice($$)
+{
+    my ($class, $token) = @_;
+    my $slice_uuid;
+
+    if ($token =~ /^\w+\-\w+\-\w+\-\w+\-\w+$/) {
+	$slice_uuid = $token;
+    }
+    elsif (GeniHRN::IsValid($token)) {
+	#
+	# We should put the slice_urn into the apt_instances table.
+	#
+	require GeniSlice;
+	my $slice = GeniSlice->Lookup($token);
+	return undef
+	    if (!defined($slice));
+	$slice_uuid = $slice->uuid();
+	$slice->Flush();
+    }
+    else {
+	return undef;
+    }
+
+    my $query_result =
+	DBQueryWarn("select uuid from apt_instance_history ".
+		    "where slice_uuid='$slice_uuid'");
+	
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my ($uuid) = $query_result->fetchrow_array();
+    my $foo = APT_Instance::History->Lookup($uuid);
+    return $foo;
+}
 
 #
 # Stringify for output.
@@ -2616,6 +2876,13 @@ sub DESTROY {
     my $self = shift;
 
     $self->{'DBROW'}   = undef;
+}
+
+sub GetAptAggregate($)
+{
+    my ($self) = @_;
+
+    return APT_Aggregate->Lookup($self->aggregate_urn());
 }
 
 ###################################################################
@@ -2762,6 +3029,7 @@ use APT_Geni;
 use Date::Parse;
 use Data::Dumper;
 use vars qw($AUTOLOAD);
+use Scalar::Util qw(weaken);
 use overload ('""' => 'Stringify');
 sub devurl($) { return APT_Instance::devurl($_[0]); }
 
@@ -2787,6 +3055,7 @@ sub Lookup($$$)
     $self->{'WEBTASK'}  = undef;
     $self->{'STATUS'}   = undef;
     $self->{'AGGREGATE'}= undef;
+    weaken($self->{'INSTANCE'});
     bless($self, $class);
 
     # Handy;
@@ -2824,6 +3093,19 @@ sub instance($)	        { return $_[0]->{'INSTANCE'}; }
 sub domain($)		{ return $_[0]->{'AGGURN'}->domain(); }
 sub isAL2S($)           { return $_[0]->{'ISAL2S'}; }
 sub isStitch($)         { return $_[0]->{'ISSTITCH'}; }
+
+# Break circular reference someplace to avoid exit errors.
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'INSTANCE'} = undef;
+    $self->{'DBROW'}    = undef;
+    $self->{'WEBTASK'}  = undef;
+    $self->{'HASH'}     = undef;
+    $self->{'AGGREGATE'}= undef;
+    $self->{'AGGURN'}   = undef;
+    $self->{'STATUS'}   = undef;
+}
 
 #
 # Grab the webtask.
@@ -2970,17 +3252,6 @@ sub LookupByURN($$)
     return @result;
 }
 
-# Break circular reference someplace to avoid exit errors.
-sub DESTROY {
-    my $self = shift;
-
-    $self->{'INSTANCE'} = undef;
-    $self->{'DBROW'}    = undef;
-    $self->{'WEBTASK'}  = undef;
-    $self->{'HASH'}     = undef;
-    $self->{'AGGREGATE'}= undef;
-}
-
 #
 # Stringify for output.
 #
@@ -3100,16 +3371,50 @@ sub Update($$)
 }
 
 #
-# Mark as deferred.
+# Mark as deferred after trying to start.
 #
-sub Defer($)
+sub Defer($;$)
+{
+    my ($self, $reason) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    if (defined($reason)) {
+	$reason = ",deferred_reason=" . DBQuoteSpecial($reason);
+    }
+    else {
+	$reason = "";
+    }
+
+    DBQueryWarn("update apt_instance_aggregates set deferred=1, ".
+		"  last_retry=now(),retry_count=retry_count+1 $reason ".
+		"where uuid='$uuid' and aggregate_urn='$urn'")
+	or return -1;
+    
+    return Refresh($self);
+}
+sub Schedule($)
+{
+    my ($self) = @_;
+    my $uuid   = $self->uuid();
+    my $urn    = $self->aggregate_urn();
+    my $reason = "Scheduled to start later";
+
+    DBQueryWarn("update apt_instance_aggregates set deferred=1, ".
+		"  deferred_reason='$reason' ".
+		"where uuid='$uuid' and aggregate_urn='$urn'")
+	or return -1;
+    
+    return Refresh($self);
+}
+sub ResolveDefer($)
 {
     my ($self) = @_;
     my $uuid = $self->uuid();
     my $urn  = $self->aggregate_urn();
 
-    DBQueryWarn("update apt_instance_aggregates set status='deferred', ".
-		"  last_retry=now(),retry_count=retry_count+1 ".
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  deferred=0,deferred_reason=null ".
 		"where uuid='$uuid' and aggregate_urn='$urn'")
 	or return -1;
     
@@ -4141,7 +4446,9 @@ sub SliverAction($$;@)
 {
     my ($self, $which, @slivers) = @_;
     my $method    = ($which eq "reboot" ? "RestartSliver" :
-		     ($which eq "start" ? "StartSliver" : "ReloadSliver"));
+		     ($which eq "start" ? "StartSliver" :
+		      ($which eq "powercycle" ? "PowerCycleSliver" :
+		       "ReloadSliver")));
     my $authority = $self->GetGeniAuthority();
     my $geniuser  = $self->instance()->GetGeniUser();
     my $urn       = $self->aggregate_urn();
@@ -4379,11 +4686,11 @@ sub UpdateKeys($$)
 }
 
 #
-# Delete some nodes
+# Delete some nodes. For efficiency, the caller provides the credentials
 #
-sub DeleteNodes($@)
+sub DeleteNodes($$@)
 {
-    my ($self, @nodes) = @_;
+    my ($self, $credentials, @nodes) = @_;
     my $authority = $self->GetGeniAuthority();
     my $geniuser  = $self->instance()->GetGeniUser();
     my $urn       = $self->aggregate_urn();
@@ -4393,18 +4700,14 @@ sub DeleteNodes($@)
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
-    my ($slice_credential, $speaksfor_credential) =
-	APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
-    return CredentialError()
-	if (!defined($slice_credential));
-
-    my $credentials = [$slice_credential->asString()];
-    if (defined($speaksfor_credential)) {
-	$credentials = [@$credentials, $speaksfor_credential->asString()];
+    # Creds might already be strings.
+    my @allcreds = ();
+    foreach my $cred (@{ $credentials }) {
+	push(@allcreds, ref($cred) ? $cred->asString() : $cred);
     }
     my $args = {
 	"slice_urn"   => $slice->urn(),
-	"credentials" => $credentials,
+	"credentials" => \@allcreds,
 	"nodes"       => \@nodes,
     };
     my $cmurl = $authority->url();
@@ -4782,9 +5085,26 @@ sub PrestageImages($$$@)
     return Genixmlrpc::CallMethod($cmurl, $context, "PrestageImages", $args);
 }
 
+#
+# Grab a "top"
+#
+sub Top($$)
+{
+    my ($self, $component_id) = @_;
+    my $authority = $self->GetGeniAuthority();
+    return ContextError()
+	if (! (defined($authority)));
+
+    my $args = {
+	"component_id" => $component_id,
+    };
+    return APT_Geni::PortalRPC($authority, undef, "NodeTop", $args);
+}
+
 ###################################################################
 #
-# This sub package is not currently used. 
+# Record what instances are currently using rf ranges routes. Faster then
+# parsing the manifests every time.
 #
 package APT_Instance::Aggregate::BusRoute;
 use emdb;
@@ -4795,6 +5115,7 @@ use English;
 use GeniHRN;
 use APT_Geni;
 use APT_Aggregate;
+use APT_Reservation;
 use Date::Parse;
 use Data::Dumper;
 use vars qw($AUTOLOAD);
@@ -4805,12 +5126,22 @@ use overload ('""' => 'Stringify');
 #
 sub Lookup($$$)
 {
-    my ($class, $instance, $routeid) = @_;
+    my ($class, $instance, $token) = @_;
     my $uuid = $instance->uuid();
+    my $query_result;
 
-    my $query_result =
-	DBQueryWarn("select * from apt_instance_bus_routes ".
-		    "where uuid='$uuid' and routeid='$routeid'");
+    if ($token =~ /^\d+$/) {
+	$query_result =
+	    DBQueryWarn("select * from apt_instance_bus_routes ".
+			"where uuid='$uuid' and routeid='$token'");
+    }
+    else {
+	my $safe_token = DBQuoteSpecial($token);
+	$query_result =
+	    DBQueryWarn("select * from apt_instance_bus_routes ".
+			"where uuid='$uuid' and ".
+			"      routedescription=$safe_token");
+    }
     return undef
 	if (! (defined($query_result) && $query_result->numrows));
 
@@ -4827,10 +5158,11 @@ sub Lookup($$$)
 #
 sub Create($$$)
 {
-    my ($class, $instance, $routeid, $description) = @_;
-    my $safe_desc     = DBQuoteSpecial($description);
+    my ($class, $instance, $routename) = @_;
+    my $safe_desc     = DBQuoteSpecial($routename);
     my $instance_uuid = $instance->uuid();
     my $instance_name = $instance->name();
+    my $routeid = APT_Reservation::Group::RouteReservation::RouteID($routename);
 
     DBQueryWarn("insert into apt_instance_bus_routes set ".
 		"  uuid='$instance_uuid', name='$instance_name', ".
@@ -4838,6 +5170,201 @@ sub Create($$$)
 	or return undef;
 
     return Lookup($class, $instance, $routeid);
+}
+
+AUTOLOAD {
+    my $self  = $_[0];
+    my $type  = ref($self) or confess "$self is not an object";
+    my $name  = $AUTOLOAD;
+    $name =~ s/.*://;   # strip fully-qualified portion
+
+    # A DB row proxy method call.
+    if (exists($self->{'DBROW'}->{$name})) {
+	return $self->{'DBROW'}->{$name};
+    }
+    carp("No such slot '$name' field in class $type");
+    return undef;
+}
+sub instance($)	        { return $_[0]->{'INSTANCE'}; }
+sub routename($)        { return $_[0]->routedescription(); }
+
+# Break circular reference someplace to avoid exit errors.
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'DBROW'}    = undef;
+    $self->{'INSTANCE'} = undef;
+}
+
+sub Delete($)
+{
+    my ($self) = @_;
+    my $uuid     = $self->uuid();
+    my $routeid  = $self->routeid();
+
+    DBQueryWarn("delete from apt_instance_bus_routes ".
+		"where uuid='$uuid' and routeid='$routeid'")
+	or return -1;
+    
+    return 0;
+}
+
+#
+# Stringify for output.
+#
+sub Stringify($)
+{
+    my ($self) = @_;
+    
+    my $uuid     = $self->uuid();
+    my $routeid  = $self->routeid();
+
+    return "[APT_Instance::Aggregate::BusRoute: $uuid, $routeid]";
+}
+
+#
+# Lookup up instance using a route
+#
+sub LookupByRoute($$)
+{
+    my ($class, $routeid) = @_;
+
+    my $query_result =
+	DBQueryWarn("select uuid from apt_instance_bus_routes ".
+		    "where routeid='$routeid'");
+    return undef
+	if (! (defined($query_result) && $query_result->numrows));
+
+    my ($uuid) = $query_result->fetchrow_array();
+    return APT_Instance->Lookup($uuid);
+}
+
+#
+# Lookup all routes for an instance
+#
+sub LookupForInstance($$)
+{
+    my ($class, $instance) = @_;
+    my $result = {};
+    my $uuid   = $instance->uuid();
+
+    my $query_result =
+	DBQueryWarn("select routeid from apt_instance_bus_routes ".
+		    "where uuid='$uuid'");
+    return $result
+	if (! (defined($query_result) && $query_result->numrows));
+
+    while (my ($routeid) = $query_result->fetchrow_array()) {
+	my $route = Lookup($class, $instance, $routeid);
+	if (!defined($route)) {
+	    print STDERR "No apt_instance_bus_route for $uuid/$routeid\n";
+	    next;
+	}
+	$result->{$routeid} = $route;
+    }
+    return $result;
+}
+
+#
+# Lookup all instances that are using bus routes.
+#
+sub LookupActive($)
+{
+    my ($class) = @_;
+    my @result  = ();
+
+    my $query_result =
+	DBQueryWarn("select distinct uuid from apt_instance_bus_routes");
+    return ()
+	if (! (defined($query_result) && $query_result->numrows));
+
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $instance = APT_Instance->Lookup($uuid);
+	if (!defined($instance)) {
+	    print STDERR "No apt_instance for $uuid\n";
+	    next;
+	}
+	push(@result, $instance);
+    }
+    return @result;
+}
+
+###################################################################
+#
+# Record what instances are currently using RF ranges. Faster then
+# parsing the manifests every time.
+#
+package APT_Instance::RFRanges;
+use emdb;
+use Carp;
+use WebTask;
+use libtestbed;
+use English;
+use GeniHRN;
+use APT_Geni;
+use APT_Aggregate;
+use APT_Reservation;
+use Date::Parse;
+use Data::Dumper;
+use vars qw($AUTOLOAD);
+use overload ('""' => 'Stringify');
+
+#
+# Lookup and create a class instance to return.
+#
+sub Lookup($$$;$)
+{
+    my ($class, $instance, $token, $freq_high) = @_;
+    my $uuid = $instance->uuid();
+    my $query_result;
+
+    if (!defined($freq_high) &&	$token =~ /^\d+$/ ) {
+	$query_result = 
+	    DBQueryWarn("select * from apt_instance_rfranges ".
+			"where uuid='$uuid' and idx='$token'");
+    }
+    elsif (defined($token) && defined($freq_high)) {
+	$query_result = 
+	    DBQueryWarn("select * from apt_instance_rfranges ".
+			"where uuid='$uuid' and ".
+			"      freq_low=$token and ".
+			"      freq_high=$freq_high");
+    }
+    else {
+	return undef;
+    }
+    return undef
+	if (! (defined($query_result) && $query_result->numrows));
+
+    my $self            = {};
+    $self->{'DBROW'}    = $query_result->fetchrow_hashref();
+    $self->{'INSTANCE'} = $instance;
+    bless($self, $class);
+
+    return $self;
+}
+
+#
+# Add an rfrange to an instance.
+#
+sub Create($$$)
+{
+    my ($class, $instance, $freq_low, $freq_high) = @_;
+    my $instance_uuid = $instance->uuid();
+    my $instance_name = $instance->name();
+
+    DBQueryWarn("insert into apt_instance_rfranges set ".
+		"  uuid='$instance_uuid', name='$instance_name', ".
+		"  freq_low='$freq_low', freq_high='$freq_high'")
+	or return undef;
+
+    # Add to the history table.
+    DBQueryWarn("insert into apt_instance_rfrange_history set ".
+		"  uuid='$instance_uuid', ".
+		"  freq_low='$freq_low', freq_high='$freq_high'")
+	or return undef;
+
+    return Lookup($class, $instance, $freq_low, $freq_high);
 }
 
 AUTOLOAD {
@@ -4863,6 +5390,19 @@ sub DESTROY {
     $self->{'INSTANCE'} = undef;
 }
 
+sub Delete($)
+{
+    my ($self) = @_;
+    my $uuid     = $self->uuid();
+    my $idx      = $self->idx();
+
+    DBQueryWarn("delete from apt_instance_rfranges ".
+		"where uuid='$uuid' and idx='$idx'")
+	or return -1;
+    
+    return 0;
+}
+
 #
 # Stringify for output.
 #
@@ -4870,60 +5410,71 @@ sub Stringify($)
 {
     my ($self) = @_;
     
-    my $uuid     = $self->uuid();
-    my $routeid  = $self->routeid();
+    my $uuid      = $self->uuid();
+    my $freq_low  = $self->freq_low();
+    my $freq_high = $self->freq_high();
 
-    return "[APT_Instance::Aggregate::BusRoute: $uuid, $routeid]";
+    return "[APT_Instance::RFRanges: $uuid, $freq_low,$freq_high]";
 }
 
 #
-# Lookup all routes for an instance
+# Lookup all rfranges for an instance
 #
 sub LookupForInstance($$)
 {
     my ($class, $instance) = @_;
-    my @result = ();
+    my $result = {};
     my $uuid   = $instance->uuid();
 
     my $query_result =
-	DBQueryWarn("select routeid from apt_instance_bus_routes ".
+	DBQueryWarn("select idx from apt_instance_rfranges ".
 		    "where uuid='$uuid'");
-    return ()
+    return $result
 	if (! (defined($query_result) && $query_result->numrows));
 
-    while (my ($routeid) = $query_result->fetchrow_array()) {
-	my $route = Lookup($class, $instance, $routeid);
-	if (!defined($route)) {
-	    print STDERR "No apt_instance_bus_route for $uuid/$routeid\n";
+    while (my ($idx) = $query_result->fetchrow_array()) {
+	my $range = Lookup($class, $instance, $idx);
+	if (!defined($range)) {
+	    print STDERR "No apt_instance_rfrange $uuid/$idx\n";
 	    next;
 	}
-	push(@result, $route);
+	$result->{$idx} = $range;
     }
-    return @result;
+    return $result;
 }
 
 #
-# Lookup all instances that are using bus routes.
+# Is a range currently in use by a running experiment, for the requested
+# start/end time, by a different project.
 #
-sub LookupActive($)
+sub InUse($$$$$$)
 {
-    my ($class) = @_;
-    my @result  = ();
+    my ($class, $project, $freq_low, $freq_high, $start, $end) = @_;
+    my $pid_idx = $project->pid_idx();
 
+    #
+    # mysql floats are stupid.
+    # https://dev.mysql.com/doc/refman/5.7/en/problems-with-float.html
+    #
     my $query_result =
-	DBQueryWarn("select distinct uuid from apt_instance_bus_routes");
-    return ()
-	if (! (defined($query_result) && $query_result->numrows));
-
-    while (my ($uuid) = $query_result->fetchrow_array()) {
-	my $instance = APT_Instance->Lookup($uuid);
-	if (!defined($instance)) {
-	    print STDERR "No apt_instance for $uuid\n";
-	    next;
+	DBQueryWarn("select rf.uuid,rf.freq_low,rf.freq_high ".
+		    "   from apt_instance_rfranges as rf ".
+		    "left join apt_instances as i on ".
+		    "   rf.uuid=i.uuid ".
+		    "left join geni.geni_slices as s on ".
+		    "     s.uuid=i.slice_uuid ".
+		    "where i.pid_idx!='$pid_idx' and ".
+		    "      $start <= UNIX_TIMESTAMP(s.expires)");
+    
+    while (my ($uuid,$inuse_lower,$inuse_upper) =
+	   $query_result->fetchrow_array()) {
+	print "Inuse: $freq_low, $freq_high, $inuse_lower, $inuse_upper\n";
+	if ($freq_high > $inuse_lower &&
+	    $freq_low  <= $inuse_upper) {
+	    return 1;
 	}
-	push(@result, $instance);
     }
-    return @result;
+    return 0;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

@@ -1,7 +1,7 @@
 <nodetype>
 <attribute name="node_type">  <value>nexus5</value></attribute>
 <attribute name="new_type">  <value>1</value></attribute>
-<attribute name="class">  <value>pc</value></attribute>
+<attribute name="class">  <value>ue</value></attribute>
 <attribute name="isvirtnode">  <value>0</value></attribute>
 <attribute name="isjailed">  <value>0</value></attribute>
 <attribute name="isdynamic">  <value>0</value></attribute>

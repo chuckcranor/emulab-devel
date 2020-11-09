@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2019 University of Utah and the Flux Group.
+# Copyright (c) 2007-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -734,6 +734,12 @@ sub ClearIMSReported($)
 
     return $self->image()->ClearIMSReported();
 }
+sub SetIMSNoReport($$)
+{
+    my ($self, $onoff) = @_;
+
+    return $self->image()->SetIMSNoReport($onoff);
+}
 
 #
 # Set the hash.
@@ -779,6 +785,12 @@ sub ClearUploaderPath($)
 
     return $self->image()->Update({"uploader_path" => ''});
 }
+sub ClearUploaderStatus($)
+{
+    my ($self) = @_;
+
+    return $self->image()->Update({"uploader_status" => undef});
+}
 
 #
 # Set the sector range of an image.
@@ -797,6 +809,12 @@ sub SetWebTask($$)
     my ($self,$webtask) = @_;
 
     return $self->image()->SetWebTask($webtask);
+}
+sub ClearWebTask($)
+{
+    my ($self) = @_;
+
+    return $self->image()->ClearWebTask();
 }
 
 #
@@ -1118,6 +1136,13 @@ sub SetImageMetadataURL($$)
     return $self->image()->SetImageMetadataURL($url);
 }
 
+sub SetListed($$)
+{
+    my ($self, $onoff) = @_;
+
+    return $self->image()->SetListed($onoff);
+}
+
 sub SetFormat($$)
 {
     my ($self, $format) = @_;
@@ -1246,6 +1271,12 @@ sub CreateImageDir($)
     my ($self) = @_;
 
     return $self->image()->CreateImageDir();
+}
+sub DeleteImageDir($)
+{
+    my ($self) = @_;
+
+    return $self->image()->DeleteImageDir();
 }
 sub SaveDir($)
 {
@@ -1534,6 +1565,11 @@ sub ConvertToImported($$)
 sub ImportImageFileSize($)
 {
     return $_[0]->image()->ImportImageFileSize();
+}
+
+sub InUse($)
+{
+    return $_[0]->image()->InUse();
 }
 
 #############################################################################

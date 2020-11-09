@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2003, 2006, 2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,6 +22,7 @@
 # }}}
 #
 include("defs.php3");
+include("lease_defs.php");
 
 #
 # Only known and logged in users can end experiments.
@@ -61,6 +62,12 @@ if ($project->ExperimentList(0)) {
     USERERROR("Project '$pid' has active experiments.<br>".
 	      "You must terminate ".
 	      "those experiments before you can remove the project!", 1);
+}
+# Ditto Leases.
+if (Lease::LookupAllByProject($project)) {
+    USERERROR("Project '$pid' has active leases.<br>".
+	      "You must delete ".
+	      "those leases before you can remove the project!", 1);
 }
 
 #

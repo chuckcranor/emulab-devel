@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -77,7 +77,7 @@ AC_SUBST(PATH)
 CPPFLAGS="-I/usr/local/include"
 
 # BEGIN Python detection. For the event library.
-AC_PATH_PROGS(PYTHON, python python2.7 python2.6 python2.5 python2.4 python2.3 python2.2)
+AC_PATH_PROGS(PYTHON, python python2.7 python2.6 python2.5 python2.4 python2.3 python2.2 python3)
 
 if test x"$PYTHON" = x""; then
     AC_MSG_ERROR([python not detected])
@@ -212,6 +212,7 @@ AC_SUBST(TBMAINSITE)
 AC_SUBST(FANCYBANNER)
 AC_SUBST(SFSSUPPORT)
 AC_SUBST(ELABINELAB)
+AC_SUBST(ELABINELAB_MAILTARGET)
 AC_SUBST(OUTERBOSS_NODENAME)
 AC_SUBST(OUTERBOSS_XMLRPCPORT)
 AC_SUBST(OUTERBOSS_SSLCERTNAME)
@@ -284,6 +285,7 @@ AC_SUBST(ISOLATEADMINS)
 AC_SUBST(DYNAMICROOTPASSWORDS)
 AC_SUBST(TPM)
 AC_SUBST(REMOTEWIKIDOCS)
+AC_SUBST(POWDER_DEADMAN)
 AC_SUBST(PROTOGENI_SUPPORT)
 AC_SUBST(PROTOGENI_NOPORTALEXPIRE)
 AC_SUBST(PROTOGENI_PORTALONLY)
@@ -294,8 +296,10 @@ AC_SUBST(PROTOGENI_DOMAIN)
 AC_SUBST(PROTOGENI_RPCPORT)
 AC_SUBST(PROTOGENI_RPCNAME)
 AC_SUBST(PROTOGENI_LOCALUSER)
+AC_SUBST(PROTOGENI_PGERRORS)
 AC_SUBST(PROTOGENI_MAXSERVERLOAD)
 AC_SUBST(PROTOGENI_GENIWEBLOGIN)
+AC_SUBST(PROTOGENI_HOLDINGPROJECT)
 AC_SUBST(PROTOGENI_NONFSMOUNTS)
 AC_SUBST(GENI_PUBRPCPORT)
 AC_SUBST(PROTOGENI_URL)
@@ -336,6 +340,7 @@ AC_SUBST(SPEWFROMOPS)
 AC_SUBST(NOSITECHECKIN)
 AC_SUBST(EC2META_ENABLE)
 AC_SUBST(BROWSER_CONSOLE_ENABLE)
+AC_SUBST(BROWSER_CONSOLE_PROXIED)
 AC_SUBST(IPV6_ENABLED)
 AC_SUBST(IPV6_SUBNET_PREFIX)
 AC_SUBST(NFSMAPTOUSER)
@@ -374,6 +379,10 @@ AC_SUBST(UI_DISABLE_RESERVATIONS)
 AC_SUBST(UI_EXTERNAL_ACCOUNTS)
 AC_SUBST(POWDER_RFMONITOR)
 AC_SUBST(POWDER_RFMONITOR_HOST)
+AC_SUBST(POWDER_NICKNAME)
+AC_SUBST(POWDER_WBSTORE)
+AC_SUBST(DISABLE_RESERVATION_EMAIL)
+AC_SUBST(MAILERNODE)
 
 #
 # Offer both versions of the email addresses that have the @ escaped
@@ -430,6 +439,7 @@ JAILIPMASK=$VIRTNODE_NETMASK
 IPBASE=10
 SFSSUPPORT=0
 ELABINELAB=0
+ELABINELAB_MAILTARGET=""
 OUTERBOSS_NODENAME=""
 OUTERBOSS_XMLRPCPORT=3069
 OUTERBOSS_SSLCERTNAME="/etc/outer_emulab.pem"
@@ -476,6 +486,7 @@ ISOLATEADMINS=1
 DYNAMICROOTPASSWORDS=1
 TPM=0
 REMOTEWIKIDOCS=1
+POWDER_DEADMAN=0
 PROTOGENI_SUPPORT=0
 PROTOGENI_NOPORTALEXPIRE=0
 PROTOGENI_PORTALONLY=0
@@ -486,7 +497,9 @@ PROTOGENI_DOMAIN="unknown"
 PROTOGENI_RPCPORT=12369
 PROTOGENI_RPCNAME=""
 PROTOGENI_LOCALUSER=0
+PROTOGENI_PGERRORS="protogeni-errors@flux.utah.edu"
 PROTOGENI_GENIWEBLOGIN=0
+PROTOGENI_HOLDINGPROJECT=""
 PROTOGENI_MAXSERVERLOAD=12
 PROTOGENI_NONFSMOUNTS=0
 GENI_PUBRPCPORT=12370
@@ -526,6 +539,7 @@ SPEWFROMOPS=0
 NOSITECHECKIN=0
 EC2META_ENABLE=0
 BROWSER_CONSOLE_ENABLE=0
+BROWSER_CONSOLE_PROXIED=0
 IPV6_ENABLED=0
 IPV6_SUBNET_PREFIX=""
 MANAGEMENT_NETWORK="10.249.249.0"
@@ -567,6 +581,10 @@ UI_DISABLE_RESERVATIONS=0
 UI_EXTERNAL_ACCOUNTS=0
 POWDER_RFMONITOR=0
 POWDER_RFMONITOR_HOST="0.0.0.0"
+POWDER_WBSTORE=0
+POWDER_NICKNAME=""
+DISABLE_RESERVATION_EMAIL=0
+MAILERNODE="ops"
 
 #
 # XXX You really don't want to change these!
@@ -624,7 +642,7 @@ fi
 # for backward compatibility (nobody used to care what they were called)
 if test x"$PROTOGENI_NICKNAME" = x"unknown"; then
     case $OURDOMAIN in
-    *gpolab.bbn.com) PROTOGENI_NICKNAME="gpo-ig";;
+    *bbn.instageni.net) PROTOGENI_NICKNAME="gpo-ig";;
     *northwestern.edu) PROTOGENI_NICKNAME="northwestern-ig";;
     *lan.sdn.uky.edu) PROTOGENI_NICKNAME="uky-ig";;
     *kettering.edu) PROTOGENI_NICKNAME="kettering-ig";;
@@ -864,6 +882,10 @@ fi
 if test -n "$PROTOGENI_EMAIL"; then
     PROTOGENI_EMAIL="`echo $PROTOGENI_EMAIL | sed -e 's/@/\\\@/'`"
 fi
+if test -n "ELABINELAB_MAILTARGET"; then
+    ELABINELAB_MAILTARGET="`echo $ELABINELAB | sed -e 's/@/\\\@/'`"
+fi
+PROTOGENI_PGERRORS="`echo $PROTOGENI_PGERRORS | sed -e 's/@/\\\@/'`"
 
 # Default OURDOMAIN to the domain name of the boss node
 # This is gross beyond all description - autoconf changes m4's quote characters
@@ -1393,7 +1415,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	backend/editgroup backend/newimageid_ez \
 	tbsetup/GNUmakefile tbsetup/console_setup tbsetup/spewlogfile \
 	tbsetup/snmpit/GNUmakefile  \
-	tbsetup/spewrpmtar tbsetup/gentopofile tbsetup/power_sgmote.pm \
+	tbsetup/spewrpmtar tbsetup/gentopofile tbsetup/power_5gstore.pm \
 	tbsetup/console_reset tbsetup/bwconfig tbsetup/power_rpc27.pm \
 	tbsetup/power_mail.pm tbsetup/power_whol.pm \
 	tbsetup/os_load tbsetup/os_setup tbsetup/os_select tbsetup/power \
@@ -1473,6 +1495,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	utils/addvpubaddr utils/attend utils/atten utils/addrfdevice \
 	utils/addrfpath utils/reserve utils/predict utils/notify-reservations \
 	utils/setzfsquotas \
+	wbstore/GNUmakefile \
 	www/GNUmakefile www/defs.php3 www/dbdefs.php3 www/xmlrpc.php3 \
 	www/xmlrpcpipe.php3 \
 	www/swish.conf www/websearch \
@@ -1525,6 +1548,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	protogeni/rspec-emulab/0.2/GNUmakefile \
 	protogeni/rspec-emulab/2/GNUmakefile \
         apt/GNUmakefile \
+        powder/GNUmakefile \
         collab/GNUmakefile \
 	collab/exp-vis/GNUmakefile collab/exp-vis/fetch-vis \
 	node_usage/GNUmakefile node_usage/mk-plots \
@@ -1600,6 +1624,10 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/ubuntu16-ms/GNUmakefile \
  clientside/tmcc/ubuntu18/GNUmakefile \
  clientside/tmcc/ubuntu18-ms/GNUmakefile \
+ clientside/tmcc/ubuntu18-ppc64le/GNUmakefile \
+ clientside/tmcc/ubuntu20/GNUmakefile \
+ clientside/tmcc/ubuntu20-ms/GNUmakefile \
+ clientside/tmcc/ubuntu20-ppc64le/GNUmakefile \
  clientside/tmcc/linux-ms/GNUmakefile \
  clientside/tmcc/archlinux/GNUmakefile \
  clientside/tmcc/alpine/GNUmakefile \

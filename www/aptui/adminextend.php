@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -99,15 +99,14 @@ if (!ISADMIN()) {
 }
 $started = $instance->started() ? "true" : "false";
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-
 echo "<script type='text/javascript'>\n";
 echo "  window.UUID = '" . $uuid . "';\n";
 echo "  window.PID = '" . $pid . "';\n";
 echo "  window.CREATOR = '" . $creator . "';\n";
 echo "  window.HOURS = $hours;\n";
 echo "  window.STARTED = $started;\n";
+echo "  window.EMBEDDED_RESGROUPS = true;\n";
+echo "  window.EMBEDDED_RESGROUPS_SELECT = false;\n";
 echo "</script>\n";
 
 echo "<link rel='stylesheet'
@@ -119,15 +118,13 @@ echo "<div id='main-body'></div>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 REQUIRE_IDLEGRAPHS();
 AddLibrary("js/resgraphs.js");
+AddLibrary("js/list-resgroups.js");
 SPITREQUIRE("js/adminextend.js",
             "<script src='js/lib/d3.v3.js'></script>".
-            "<script src='js/lib/nv.d3.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+            "<script src='js/lib/nv.d3.js'></script>");
 
 if ($instance->extension_reason() && $instance->extension_reason() != "") {
     echo "<pre class='hidden' id='extension-reason'>";
@@ -147,6 +144,6 @@ if (count($extensions)) {
     echo "</script>\n";
 }
 
-AddTemplateList(array("adminextend", "oops-modal", "waitwait-modal", "admin-history", "admin-firstrow", "admin-secondrow", "admin-utilization", "admin-summary", "reservation-list"));
+AddTemplateList(array("adminextend", "oops-modal", "waitwait-modal", "admin-history", "admin-firstrow", "admin-secondrow", "admin-utilization", "admin-summary", "resgroup-list"));
 SPITFOOTER();
 ?>

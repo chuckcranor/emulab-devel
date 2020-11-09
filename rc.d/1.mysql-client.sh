@@ -2,7 +2,7 @@
 
 # PROVIDE: mysql-client
 # REQUIRE: NETWORKING SERVERS ldconfig
-# BEFORE: mysql apache
+# BEFORE: mysql-testbed apache24
 # KEYWORD: shutdown
 
 case "$1" in

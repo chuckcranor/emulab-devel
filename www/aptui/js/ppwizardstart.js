@@ -1002,12 +1002,16 @@ $(function () {
 			_.each(slot["errors"], function (i) {
 			    var message = bindings.errors[i].message;
 			    paramErrors.push(message);
+			    // Mark the error/warning as being spit out
+			    bindings.errors[i]["notified"] = true;
 			});
 		    }
 		    if (_.has(slot, "warnings")) {
 			_.each(slot["warnings"], function (i) {
 			    var message = bindings.warnings[i].message;
 			    paramWarnings.push(message);
+			    // Mark the error/warning as being spit out
+			    bindings.warnings[i]["notified"] = true;
 			});
 		    }
 		    if (_.has(slot, "fixedValue")) {
@@ -2056,6 +2060,9 @@ $(function () {
 				message += "<br>";
 			    }
 			    message += text;
+			    
+			    // Mark the error/warning as being spit out
+			    bindings.errors[i]["notified"] = true;
 			}
 			structdiv.addClass('has-error');
 
@@ -2082,6 +2089,8 @@ $(function () {
 				message += "<br>";
 			    }
 			    message += text;
+			    // Mark the error/warning as being spit out
+			    bindings.warnings[i]["notified"] = true;
 			}
 			structdiv.addClass('has-warning');
 
@@ -2231,6 +2240,9 @@ $(function () {
 			    message += "<br>";
 			}
 			message += text;
+
+			// Mark the error/warning as being spit out
+			bindings.errors[i]["notified"] = true;
 		    }
 		    groupdiv.addClass('has-error');
 
@@ -2257,6 +2269,9 @@ $(function () {
 			    message += "<br>";
 			}
 			message += text;
+
+			// Mark the error/warning as being spit out
+			bindings.warnings[i]["notified"] = true;
 		    }
 		    groupdiv.addClass('has-warning');
 
@@ -2852,16 +2867,29 @@ $(function () {
 
 		if (numParameterWarnings > 1) {
 		    ht = '<b>There were ' + numParameterWarnings +
-			' ParameterWarnings</b>.  Please check the warning' +
+			' Parameter Warnings</b>.  Please check the warning' +
 			' messages near each affected parameter; you will' +
 			' <b>not</b> be notified about subsequent warnings.';
 		}
 		else if (numParameterWarnings > 0) {
-		    ht = '<b>There was 1 ParameterWarning</b>.  Please check' +
+		    ht = '<b>There was 1 Parameter Warning</b>.  Please check' +
 			' the warning message near the affected parameter; ' +
 			' you will <b>not</b> be notified about subsequent ' +
 			' warnings.';
 		}
+		/*
+		 * Ick, if the user messed up the arguments to the
+		 * warning in the script, it might not show up alongside
+		 * the parameter, and the instantiator will be
+		 * confused. So dump any "unconsumed" warnings with this
+		 * message at the top.
+		 */
+		_.each(bindings.warnings, function (warning) {
+		    if (!_.has(warning, "notified")) {
+			ht += "<br><b>Oops, warning not associated with a " +
+			    "parameter:</b> " + warning.message;
+		    }
+		});
 		addMessage("warning", ht);
 	    }
 	    if (numParameterErrors > 0) {
@@ -2869,15 +2897,28 @@ $(function () {
 
 		if (numParameterErrors > 1) {
 		    ht += '<b>There were ' + numParameterErrors +
-			' ParameterErrors</b>.  Please check the error' +
+			' Parameter Errors</b>.  Please check the error' +
 			' messages near each affected parameter and fix the' +
 			' errors.';
 		}
 		else if (numParameterErrors > 0) {
-		    ht += '<b>There was 1 ParameterError</b>.  Please check' +
+		    ht += '<b>There was 1 Parameter Error</b>.  Please check' +
 			' the error message near the affected parameter and' +
 			' fix it.';
 		}
+		/*
+		 * Ick, if the user messed up the arguments to the
+		 * error in the script, it might not show up alongside
+		 * the parameter, and the instantiator will be
+		 * confused. So dump any "unconsumed" errors with this
+		 * message at the top.
+		 */
+		_.each(bindings.errors, function (error) {
+		    if (!_.has(error, "notified")) {
+			ht += "<br><b>Oops, error not associated with a " +
+			    "parameter:</b> " + error.message;
+		    }
+		});
 		addMessage("error", ht);
 	    }
 	    if (rerun_bindings) {
@@ -3013,6 +3054,9 @@ $(function () {
 	    $('#ppform-buttons .p-last')
 		.click(function (event) {
 		    event.preventDefault();
+		    // Hide the popover
+		    $(this).popover("hide");
+		    
 		    var callback = function(json) {
 			console.info("GetPreviousBindings", json);
 			if (json.code) {
@@ -3091,7 +3135,15 @@ $(function () {
 		    $('#ppform-buttons .p-choose ul').append(item);
 
 		});
-		$('#ppform-buttons .p-choose').removeClass("hidden");
+		$('#ppform-buttons .p-choose')
+		    .removeClass("hidden");
+		
+		$('#ppform-buttons .p-choose .btn')
+		    .click(function () {
+			console.info("foo");
+ 			// Hide the popover
+			$('#ppform-buttons .p-choose').popover("hide");
+		    });
 	    }
 	}
 	    

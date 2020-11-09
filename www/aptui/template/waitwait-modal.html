@@ -1,17 +1,5 @@
 <!-- This is the Please Wait modal -->
-<div id='waitwait-modal' class='modal fade' data-keyboard='false' data-backdrop='static'>
-  <div class='modal-dialog'>
-    <div class='modal-content'>
-      <div class='modal-header'>
-        <center><h3>Please Wait</h3></center>
-      </div>
-      <div class='modal-body'>
-        <center><img src='images/spinner.gif' /></center>
-      </div>
-    </div>
-  </div>
-</div>
-<div id='waitwait-modal-withmessage' class='modal fade'
+<div id='waitwait-modal' class='modal fade'
      data-keyboard='false' data-backdrop='static'>
   <div class='modal-dialog'>
     <div class='modal-content'>
@@ -20,9 +8,11 @@
       </div>
       <div class='modal-body'>
         <center>
-	  <span id="waitwait-modal-withmessage-message"></span>
-	  <br>
-	  <br>
+	  <span class="waitwait-message hidden">
+	    <span></span>
+	    <br>
+	    <br>
+	  </span>
 	  <img src='images/spinner.gif' />
 	</center>
       </div>

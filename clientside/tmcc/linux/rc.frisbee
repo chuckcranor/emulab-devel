@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -313,15 +313,19 @@ tweakmbr()
 	#elif [ ! "$pttype" = "$newpttype" ]; then
 	#    echo "New partition table type $newpttype does not match on-disk type $pttype, installing new version $new_mbr_ver"
 	elif [ -n "$newsize" -a $size -eq $newsize ]; then
-	    echo "On-disk partition 1 size $size and new version $new_mbr_ver match, not installing $newpttype over old $pttype"
-	    return 0
+	    if [ $always -ne 0 ]; then
+		echo "WARNING: overwriting (always!=0) matching $pttype/$size on $disk with new version $new_mbr_ver ($newpttype/$size)!"
+	    else
+		echo "On-disk partition 1 size $size and new version $new_mbr_ver match, not installing $newpttype over old $pttype"
+		return 0
+	    fi
 	# NB: this is the one new case over the old version of these checks.
 	# Better make sure this code recognizes any mbr/gpt files in the MFS!
 	elif [ -z "$newpttype" -o -z "$newsize" ]; then
 	    echo "Unrecognizeable new partition table type $newpttype or size $newsize; installing anyway!"
 	elif [ ! $size -eq $newsize ]; then
-	    if [ $always -eq 1 ]; then
-		echo "WARNING: overwriting (always=1) mismatched $pttype/$size on $disk with new version $new_mbr_ver ($newpttype/$size)!"
+	    if [ $always -ne 0 ]; then
+		echo "WARNING: overwriting (always!=0) mismatched $pttype/$size on $disk with new version $new_mbr_ver ($newpttype/$size)!"
 	    else
 		echo "WARNING: custom $pttype/$size on $disk, not always-installing version $new_mbr_ver ($newpttype/$newsize)"
 		return 0
@@ -557,6 +561,14 @@ handle_loadinfo()
 	local DOM0MEM=`get_value "$LOADINFO" DOM0MEM`
 
 	#
+	# Initial sanity check
+	#
+	if [ ! -e /dev/$DISK ]; then
+	    echo "No such disk /dev/$DISK; is disk type set correctly for this node type?"
+	    return 1
+	fi
+
+	#
 	# XXX check for secure diskloading info.
 	# XXX only return info for a single image right now
 	#
@@ -643,7 +655,7 @@ handle_loadinfo()
 	# MBR being the same as the MBR being layed down.  While not
 	# a reasonable assumption in general, it mostly works in our
 	# environment and at least won't hurt anything if not true.
-	if [ $PREPARE -eq 1 ] || [ $IS_REMOTE -eq 0 -a $PARTITION -eq 0 \
+	if [ $PREPARE -ne 0 ] || [ $IS_REMOTE -eq 0 -a $PARTITION -eq 0 \
 	                           -a $ZFILL -eq 0 ]; then
 		zapsuperblocks /dev/$DISK
 	fi
@@ -826,9 +838,28 @@ fi
 # NOTE: make sure you install the latest frisbee client for -k!
 FRISBEE_OPTS="$FRISBEE_OPTS -k $MAXSOCKBUF"
 
-# Wipe the MBR and partition boot blocks on all disks if reloading
+#
+# Wipe the MBR and partition boot blocks on all disks.
+# This is implied when a node is in the reloading experiment
+# but can also be explicitly specified by setting PREPARE=2.
+#
+RELOADALL=0
+NODECHECK=0
 case $STATUS in
 *ALLOCATED=emulab-ops/reloading*)
+    RELOADALL=1
+    NODECHECK=1
+    ;;
+*)
+    read line < /tmp/loadinfo.out
+    PREPARE=`getvar PREPARE "$line" 0`
+    if [ $PREPARE -eq 2 ]; then
+	RELOADALL=1
+    fi
+    ;;
+esac
+
+if [ $RELOADALL -eq 1 ]; then
     disks=`find_disks`
     for d in $disks; do
 	#[ $d = $DISK ] && continue
@@ -857,11 +888,10 @@ case $STATUS in
     # (if nodecheck "collect" is enabled in the DB) and to run a destructive
     # disk write speed test (as part of a nodecheck "check" operation).
     #
-    if [ -x $BINDIR/rc.nodecheck ]; then
+    if [ -x $BINDIR/rc.nodecheck -a $NODECHECK -eq 1 ]; then
 	$BINDIR/rc.nodecheck boot
     fi
-    ;;
-esac
+fi
 
 #
 # Load each image in turn.

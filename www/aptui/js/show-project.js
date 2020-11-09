@@ -62,7 +62,11 @@ $(function ()
 	LoadGroupsTab();
 	LoadProjectTab();
 	LoadDatasetTab();
+	LoadResgroupTab();
 	LoadClassicDatasets();
+	if (window.ISPOWDER) {
+	    LoadRFRanges();
+	}
     }
 
     function LoadUsage()
@@ -131,6 +135,7 @@ $(function ()
 		.html(template({"experiments" : json.value,
 				"showCreator" : true,
 				"showProject" : false,
+				"showPortal"  : false,
 				"searchUUID"  : false,
 				"showterminate" : showterm}));
 	    
@@ -143,7 +148,9 @@ $(function ()
 	    });
 	    var table = $('#experiments_table')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 
 	    // Terminate an experiment.
@@ -166,7 +173,7 @@ $(function ()
 	var uuid = $(target).data("uuid");
 
 	var callback = function(json) {
-	    sup.HideModal("#waitwait-modal");
+	    sup.HideWaitWait();
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
 		return;
@@ -176,13 +183,14 @@ $(function ()
 	};
 	// Bind the confirm button in the modal. 
 	$('#terminate-modal #terminate-confirm').click(function () {
-	    sup.HideModal('#terminate-modal');
-	    sup.ShowModal('#waitwait-modal');
+	    sup.HideModal('#terminate-modal', function () {
+		sup.ShowModal('#waitwait-modal');
 
-	    var xmlthing = sup.CallServerMethod(null, "status",
-						"TerminateInstance",
-						{"uuid" : uuid});
-	    xmlthing.done(callback);
+		var xmlthing = sup.CallServerMethod(null, "status",
+						    "TerminateInstance",
+						    {"uuid" : uuid});
+		xmlthing.done(callback);
+	    });
 	});
 	// Handler so we know the user closed the modal. We need to
 	// clear the confirm button handler.
@@ -221,7 +229,9 @@ $(function ()
 	    });
 	    var table = $('#classic_experiments_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var xmlthing = sup.CallServerMethod(null,
@@ -248,6 +258,9 @@ $(function ()
 	    $('#profiles_content')
 		.html(template({"profiles"    : json.value,
 				"tablename"   : "project-profiles",
+				"bulkdelete"  : (window.ISLEADER ||
+						 window.ISMANAGER ||
+						 window.ISADMIN ? 1 : 0),
 				"showCreator" : true,
 				"showProject" : false}));
 	    
@@ -268,18 +281,31 @@ $(function ()
 		event.preventDefault();
 		ShowTopology($(this).data("profile"));
 	    });
+	    // Delete profile button
+	    $('#profiles_content .delete-profile-button')
+		.click(function (event) {
+		    event.preventDefault();
+		    var row = $(this).closest("tr");
+		    var profile_uuid = $(row).data("uuid");
+		    
+		    profileSupport
+			.Delete(profile_uuid, function (uuid, json) {
+			    $(row).remove();
+			});
+		});
 	    
 	    var table = $('#' + 'project-profiles-table')
 		.tablesorter({
-		    theme : 'green',
-		    widgets: ["filter"],
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra", "filter"],
+		    headerTemplate : '{content} {icon}',
 		    widgetOptions: {
 			// include child row content while filtering, if true
 			filter_childRows  : true,
 			// include all columns in the search.
 			filter_anyMatch   : true,
 			// class name applied to filter row and each input
-			filter_cssFilter  : 'form-control',
+			filter_cssFilter  : 'form-control input-sm',
 			// search from beginning
 			filter_startsWith : false,
 			// Set this option to false for case sensitive search
@@ -292,6 +318,22 @@ $(function ()
 		});
 	    $.tablesorter.filter.bindSearch(table,
 					    $('#' + 'project-profiles-search'));
+
+	    if (window.ISLEADER || window.ISMANAGER || window.ISADMIN) {
+		// Delete multiple profiles via the checkbox column.
+		$('#profiles_content .delete-selected-profiles')
+		    .click(function (event) {
+			event.preventDefault();
+			console.info("clicked");
+			profileSupport
+			    .DeleteSelected('#profiles_content',
+					  function (uuid, json) {
+					      $('#profiles_content ' +
+						'tr[data-uuid="' + uuid + '"]')
+						  .remove();
+					  });
+		    });
+	    }
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "show-project", "ProfileList",
@@ -325,7 +367,9 @@ $(function ()
 	    });
 	    var table = $('#classic_profiles_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var xmlthing = sup.CallServerMethod(null,
@@ -414,7 +458,9 @@ $(function ()
 	    
 	    var table = $('#members_table')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 
 	    // Do this after converting table.
@@ -530,7 +576,9 @@ $(function ()
 	    
 	    var table = $('#groups_table')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	}
 	var xmlthing = sup.CallServerMethod(null,
@@ -609,12 +657,37 @@ $(function ()
 	    });
 	    var table = $('#datasets_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	}
 	var xmlthing =
 	    sup.CallServerMethod(null,
 				 "show-project", "DatasetList",
+				 {"pid" : window.TARGET_PROJECT});
+	xmlthing.done(callback);
+    }
+
+    function LoadResgroupTab()
+    {
+	var callback = function(json) {
+	    console.info("resgroups", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (!_.size(json.value)) {
+		return;
+	    }
+	    $(".resgroups-hidden").removeClass("hidden");
+	    window.DrawResGroupList("#resgroups_content", json.value);
+	    $("#resgroups_content .expando").trigger("click");
+	}
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "show-project", "ResgroupList",
 				 {"pid" : window.TARGET_PROJECT});
 	xmlthing.done(callback);
     }
@@ -649,7 +722,9 @@ $(function ()
 	    });
 	    var table = $('#classic_datasets_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var xmlthing =
@@ -658,6 +733,90 @@ $(function ()
 				 {"pid" : window.TARGET_PROJECT});
 	xmlthing.done(callback);
     }
+
+    function LoadRFRanges()
+    {
+	var ProjectRanges = function(json) {
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (!_.size(json.value)) {
+		return;
+	    }
+	    var html = "";
+
+	    _.each(json.value, function(range) {
+		html = html + "<tr>";
+
+		if (window.ISADMIN) {
+		    var id = range.range_id ? range.range_id : range.idx;
+		    html = html +
+			" <td> " + id + "</td>";
+		}
+		html = html +
+		    " <td> " + range.freq_low + "</td>" +
+		    " <td> " + range.freq_high + "</td>" +
+		    " <td> " + (range.global ? "Yes" : "No") + "</td>" +
+		    "</tr>";
+	    });
+	    $('#rfranges_content .allowed-rfranges ' +
+	      '.tablesorter tbody').html(html)
+	    $('.rfranges-hidden').removeClass("hidden");
+	    
+	    var table = $('#rfranges_content .allowed-rfranges .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		});
+	};
+	var InuseRanges = function(json) {
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (!_.size(json.value)) {
+		return;
+	    }
+	    var html = "";
+	    _.each(json.value, function(info) {
+		var url = "status.php?uuid=" + info.uuid;
+		
+		html = html + "<tr>" +
+		    "<td><a href='" + url + "'>" + info.name + "</a></td>" +
+		    "<td>" + info.freq_low + "</td>" +
+		    "<td>" + info.freq_high + "</td>" +
+		    "<td>" + moment(info.expires).format("MMM Do, h:m A") +
+		    "</td>" +
+		    "</tr>";
+	    });
+	    $('#rfranges_content .inuse-rfranges ' +
+	      '.tablesorter tbody').html(html)
+	    $('#rfranges_content .inuse-rfranges').removeClass("hidden");
+	    
+	    $('#rfranges_content .inuse-rfranges .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		});
+	};
+	var xmlthing1 =
+	    sup.CallServerMethod(null, "rfrange", "ProjectRanges",
+				 {"pid" : window.TARGET_PROJECT});
+	var xmlthing2 =
+	    sup.CallServerMethod(null, "rfrange", "ProjectInuseRanges",
+				 {"pid" : window.TARGET_PROJECT});
+
+	$.when(xmlthing1, xmlthing2)
+	    .done(function(result1, result2) {
+		console.info("LoadRFRanges", result1, result2);
+		ProjectRanges(result1);
+		InuseRanges(result2);
+	    });
+    }
+    
     //
     // Toggle flags.
     //

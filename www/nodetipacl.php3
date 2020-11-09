@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -203,6 +203,7 @@ echo "<script>\n";
 echo "var tbbaseurl  = '$referrer';\n";
 echo "var closekills = $closekills;\n";
 echo "var noclose    = $noclose;\n";
+echo "var proxied    = $BROWSER_CONSOLE_PROXIED;\n";
 ?>
 function StartConsole(id, authobject)
 {
@@ -212,8 +213,16 @@ function StartConsole(id, authobject)
         var split   = stuff.split(':');
         var session = split[0];
     	var port    = split[1];
+        var url     = jsonauth.baseurl;
 
-        var url   = jsonauth.baseurl + ':' + port + '/' + '#' +
+        if (proxied) {
+            // mod_proxy/mod_rewrite rule
+            url = url + '/shellinabox/' + port;
+        }
+        else {
+            url = url + ':' + port;
+        }
+        url = url + '/' + '#' +
             encodeURIComponent(document.location.href) + ',' + session;
         console.log(url);
         var iwidth  = $('#' + id).width();

@@ -97,12 +97,11 @@ function Do_CreateSecret()
     #
     # Destroy any existing session data to prevent replay.
     #
-    if (!(session_start() &&
-	  session_destroy())) {
-	SPITAJAX_ERROR(-1, "Internal session error 1");
-	return;
-    }
+    session_start();
+    session_unset();
+    session_destroy();
     session_commit();
+
     if (!session_start()) {
 	SPITAJAX_ERROR(-1, "Internal session error 2");
 	return;
@@ -198,7 +197,8 @@ function Do_CreateSecret()
 function Do_VerifySpeaksfor()
 {
     global $ajax_args;
-    global $TBDIR, $COOKDIEDOMAIN, $TBMAINSITE, $PROTOGENI_GENIWEBLOGIN;
+    global $TBDIR, $COOKDIEDOMAIN, $TBMAINSITE;
+    global $PROTOGENI_GENIWEBLOGIN, $PROTOGENI_HOLDINGPROJECT;
     global $TBAUTHCOOKIE, $TBLOGINCOOKIE, $TBAUTHTIMEOUT, $TBNAMECOOKIE;
     global $OURDOMAIN, $TBMAILADDR;
     $embedded = 0;
@@ -288,6 +288,20 @@ function Do_VerifySpeaksfor()
     }
 
     #
+    # Yuck.
+    #
+    if ($info["email"] == "" ||
+        preg_match("/impscet\.net$/", $info["email"]) ||
+        preg_match("/ril\.com$/", $info["email"]) ||
+        preg_match("/gavilan\.edu$/", $info["email"])) {
+	TBERROR("Warning: Geni login attempt with enail: " .
+                $info["email"] . "\n", 0);
+	SPITAJAX_ERROR(-1, "Not permitted");
+	session_destroy();
+	return;
+    }
+
+    #
     # Find the user and log them in, returning the cookies to the caller.
     # If the user is actually a user with a real local account, we use
     # that account, we do not want to create a new user.
@@ -335,7 +349,7 @@ function Do_VerifySpeaksfor()
         }
 
         if (!$this_user) {
-            if (!$TBMAINSITE) {
+            if (!$PROTOGENI_GENIWEBLOGIN) {
                 SPITAJAX_ERROR(1, "You do not have an account at this site");
                 session_destroy();
                 return;
@@ -358,12 +372,9 @@ function Do_VerifySpeaksfor()
             # we have a user record but they might not be a member of the
             # Cloudlab holding project. 
             #
-            if ($TBMAINSITE) {
-                $project = Project::Lookup("CloudLab");
-                if (! $project->IsMember($this_user, $ignored)) {
-                    $project->AddNewMember($this_user,
-                                           TBDB_TRUSTSTRING_LOCALROOT);
-                }
+            $project = Project::Lookup($PROTOGENI_HOLDINGPROJECT);
+            if (! $project->IsMember($this_user, $ignored)) {
+                $project->AddNewMember($this_user, TBDB_TRUSTSTRING_LOCALROOT);
             }
             if ($this_user->status() == TBDB_USERSTATUS_INACTIVE) {
                 SPITAJAX_ERROR(1, "Your account has gone inactive. Please ".
@@ -428,7 +439,7 @@ function Do_VerifySpeaksfor()
 #
 function CreateNonLocalUser($urn, $email)
 {
-    global $TBOPSPID;
+    global $TBOPSPID, $PROTOGENI_HOLDINGPROJECT;
     $safe_urn = escapeshellarg($urn);
     $safe_email = escapeshellarg($email);
     
@@ -437,7 +448,8 @@ function CreateNonLocalUser($urn, $email)
     # non-negative value if the user already exists.
     #
     $retval = SUEXEC("elabman", $TBOPSPID,
-		     "webcreategeniuser -p CloudLab $safe_urn $safe_email",
+		     "webcreategeniuser -p $PROTOGENI_HOLDINGPROJECT ".
+                     "   -m $safe_urn $safe_email",
 		     SUEXEC_ACTION_CONTINUE);
     if ($retval < 0)
 	return -1;
@@ -450,7 +462,7 @@ function CreateNonLocalUser($urn, $email)
 # 
 function CheckCredentials($cert, $cred, $info)
 {
-    global $TBMAINSITE, $suexec_output;
+    global $suexec_output;
 
     $credfile = tempnam("/tmp", "cert");
     $certfile = tempnam("/tmp", "cred");
@@ -468,10 +480,12 @@ function CheckCredentials($cert, $cred, $info)
 		     "webcheckgeniuser $credfile $certfile",
 		     SUEXEC_ACTION_IGNORE);
 
-    if ($retval) {
+    if ($retval < 0) {
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
         TBERROR("checkgeniuser failed.\n ".
                 print_r($info, TRUE) . "\n" .
-                "Cred:\n${$cred}\n", 0);
+                "Cred:\n${cred}\n", 0);
+        return -1;
     }
     unlink($credfile);
     unlink($certfile);
@@ -484,13 +498,13 @@ function CheckCredentials($cert, $cred, $info)
 # 
 function UpdateCredentials($user, $cert, $cred, &$error)
 {
-    global $TBMAINSITE, $suexec_output;
+    global $PROTOGENI_GENIWEBLOGIN, $suexec_output;
 
     $uid = $user->uid();
     $project = $user->FirstApprovedProject();
     $pid = (isset($project) ? $project->pid() : "nobody");
     # Update keys on main site, no need to do this on backend clusters.
-    $arg = ($TBMAINSITE ? "-s" : "");
+    $arg = ($PROTOGENI_GENIWEBLOGIN ? "-s" : "");
     
     $credfile = tempnam("/tmp", "cert");
     $certfile = tempnam("/tmp", "cred");
@@ -507,15 +521,16 @@ function UpdateCredentials($user, $cert, $cred, &$error)
     $retval = SUEXEC($uid, $pid,
 		     "webupdategeniuser -p -u ".
                      "  -c $credfile -e $certfile $arg $uid",
-		     SUEXEC_ACTION_CONTINUE);
+		     SUEXEC_ACTION_IGNORE);
 
-    if ($retval) {
+    if ($retval < 0) {
         $cred = file_get_contents($credfile);
         $cert = file_get_contents($certfile);
         TBERROR("webupdategeniuser failed.\n ".
                 "Cert:\n${cert}\n\n".
                 "Cred:\n${$cred}\n", 0);
-        $error = $suexec_output;
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        return -1;
     }
     unlink($credfile);
     unlink($certfile);

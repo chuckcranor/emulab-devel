@@ -34,7 +34,7 @@
  .table th, .table td { 
      border-top: none !important;
      border-left: none !important;
-     padding-left: 0px !important;
+     padding-left: 2px !important;
  }
  .table > tbody + tbody {
      border-top: 0px;
@@ -396,18 +396,80 @@
     <div id="history-graphs"></div>
   </div>
   <div class='col-lg-5 col-md-5'>
-    <div id="range-list" class="hidden"></div>
-    <div id="route-list" class="hidden"></div>
     <div id="reservation-lists">
-      <div class='panel panel-default hidden' id="radio-graph-div">
-	<div class='panel-heading'>
-	  <center>
-            <h3 class='panel-title'>Powder Radio Availability</h3>
-	  </center>
+      <div id="range-info-div" class="hidden" style="margin-bottom: 20px;">
+	<ul class="nav nav-tabs" role="tablist">
+	  <li role="presentation" class="allowed-ranges-hidden hidden">
+	    <a href="#allowed-ranges" role="tab" 
+	       data-toggle="tab">Allowed Ranges</a>
+	  </li>
+	  <li role="presentation" class="reserved-ranges-hidden hidden">
+	    <a href="#reserved-ranges" role="tab"
+	       data-toggle="tab">Reserved/Inuse Ranges</a>
+	  </li>
+	</ul>
+	<div class="tab-content">
+	  <div role="tabpanel" id="allowed-ranges"
+	       class="tab-pane allowed-ranges-hidden hidden">
+	    <table class='tablesorter'>
+	      <thead>
+		<th>ID</th>
+		<th>Low (MHz)</th>
+		<th>High (MHz)</th>
+	      </thead>
+	      <tbody>
+	      </tbody>
+	    </table>
+	  </div>
+	  <div role="tabpanel" id="reserved-ranges"
+	       class="tab-pane reserved-ranges-hidden hidden">
+	    <table class='tablesorter'>
+	      <thead>
+		<th>Low (MHz)</th>
+		<th>High (MHz)</th>
+		<th>Start</th>
+		<th>End</th>
+	      </thead>
+	      <tbody>
+	      </tbody>
+	    </table>
+	    <small class="experiment-reserved-ranges hidden">
+	      <span class='glyphicon glyphicon-asterisk'></span>
+	      Currently running experiments</caption></small>
+	  </div>
 	</div>
-	<div class='panel-body visavail' style="padding: 2px;"
-	     id="radio-graph-body">
-	  <div id="radio-graph-visavail"></div>
+      </div>
+      <div id="powder-graph-div">
+	<div class='panel panel-default hidden' id="radio-graph-div">
+	  <div class='panel-heading'>
+	    <center>
+              <h3 class='panel-title'>Powder Radio Availability</h3>
+	    </center>
+	  </div>
+	  <div class='panel-body visavail' style="padding: 2px;"
+	       id="radio-graph-body">
+	    <div id="radio-graph-visavail"></div>
+	  </div>
+	</div>
+	<div class='panel panel-default hidden' id="matrix-graph-div">
+	  <div class='panel-heading'
+	       style="padding-top: 5px; padding-bottom: 5px;">
+	    <center>
+              <h3 class='panel-title'>
+		PhantomNet RF Attenuator Matrix Availability</h3>
+	      <div>
+		<a href="#"
+		   data-target='#matric-connections-modal'
+		   data-toggle='modal'>
+		  <span class=small>Matrix Connections</a>
+		  </span>
+	      </div>
+	    </center>
+	  </div>
+	  <div class='panel-body visavail' style="padding: 2px;"
+	       id="matrix-graph-body">
+	    <div id="matrix-graph-visavail"></div>
+	  </div>
 	</div>
       </div>
       <div class='panel panel-default hidden' id="FE-graph-div">
@@ -452,11 +514,24 @@
 		  data-dismiss='modal' aria-hidden='true'>Submit</button>
 	</center>
 	<div style="margin-top: 5px;" class="needs-approval hidden">
-	  NOTE: This reservation request can be accomodated, but the
-	  size and/or duration means that the reservation needs to
-	  be approved by an administrator before it is fully active.
-	  The administrator will be notified when you submit this
-	  request, and will act on this request as soon as possible.</div>
+	  <b>This reservation request can be accomodated, but the
+	    size and/or duration means that the reservation needs to
+	    be approved by an administrator before it is fully active.</b>
+	  <div style="margin-top: 5px;">
+	    <% if (window.ISPOWDER) { %>
+	      <em>Reservations that require administrative approval
+		take time for review.  During normal business hours (8
+		AM - 5 PM Mountain Time), these are typically handled
+		within an hour or two.  Outside of business hours and on
+		weekends, administrative review may be delayed until the
+		next business day.  Please plan accordingly when
+		submitting your reservation requests.</em>
+	    <% } else { %>
+	      The administrator will be notified when you submit this
+	      request, and will act on this request as soon as possible.
+	    <% } %>
+	  </div>	  
+	</div>
       </div>
     </div>
   </div>
@@ -620,6 +695,10 @@
           <button class='btn btn-danger btn-sm'
 		  id='confirm-delete'>Confirm</a></button>
 	</center>
+	<% if (window.ISADMIN) { %>
+	    <input type=checkbox class="nolongerfits" value=yes>
+	    No longer fits the schedule
+	<% } %>
       </div>
     </div>
   </div>
@@ -695,6 +774,44 @@
 	  <br>
           <button class='btn btn-danger btn-sm'
 		  id='confirm-uncancel'>Confirm</a>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- PhantomNet Matrix Connections -->
+<div id='matric-connections-modal' class='modal fade'>
+  <div class='modal-dialog modal-sm'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+	<button type="button" class="close" data-dismiss="modal"
+	  <span aria-hidden="true">&times;</span></button>	
+	<center>
+	  <small>
+	    <table class="table table-bordered table-condensed">
+	      <thead>
+		<tr>
+		  <th>Node ID1</th>
+		  <th>Node ID2</th>
+		</tr>
+	      </thead>
+	      <tbody>
+		<% var wires = {}; %>
+		<% _.each(matrixinfo, function(details, node_id1) { %>
+		  <% _.each(details.wires, function(node_id2) { %>
+		    <% if (!_.has(wires, node_id1 + ":" + node_id2) &&
+		      !_.has(wires, node_id2 + ":" + node_id1)) { %>
+		      <tr>
+			<td><%- node_id1 %></td>
+			<td><%- node_id2 %></td>
+		      </tr>
+		      <% wires[node_id2 + ":" + node_id1] = 1;
+		      wires[node_id1 + ":" + node_id2] = 1; } %>
+		    <% }) %>
+		  <% }) %>
+	      </tbody>
+	    </table>
+	  </small>
 	</center>
       </div>
     </div>

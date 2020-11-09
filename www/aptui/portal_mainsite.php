@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2019 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -96,6 +96,7 @@ elseif ($_SERVER["SERVER_NAME"] == "www.cloudlab.us") {
     $DEFAULT_AGGREGATE   = "Utah Cloudlab";
     $PORTAL_GENESIS      = "cloudlab";
     $PORTAL_NAME         = "CloudLab";
+    $PROTOGENI_GENIWEBLOGIN = 1;
 }
 elseif ($ISALTDOMAIN && $_SERVER["SERVER_NAME"] == "www.phantomnet.org") {
     $ISVSERVER    = 1;
@@ -130,6 +131,7 @@ elseif ($ISALTDOMAIN && $_SERVER["SERVER_NAME"] == "www.phantomnet.org") {
     $DEFAULT_AGGREGATE_URN = "urn:publicid:IDN+emulab.net+authority+cm";
     $PORTAL_GENESIS        = "phantomnet";
     $PORTAL_NAME           = "PhantomNet";
+    $PROTOGENI_GENIWEBLOGIN = 1;
 }
 elseif ($_SERVER["SERVER_NAME"] == "www.powderwireless.net") {
     $ISVSERVER    = 1;
@@ -164,6 +166,7 @@ elseif ($_SERVER["SERVER_NAME"] == "www.powderwireless.net") {
     $DEFAULT_AGGREGATE_URN = "urn:publicid:IDN+emulab.net+authority+cm";
     $PORTAL_GENESIS        = "powder";
     $PORTAL_NAME           = "Powder";
+    $PROTOGENI_GENIWEBLOGIN = 0;
 }
 
 #

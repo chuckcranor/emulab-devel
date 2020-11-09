@@ -48,6 +48,7 @@ use Logfile;
 use English;
 use Data::Dumper;
 use EmulabFeatures;
+use EmulabConstants;
 
 # Configure variables
 my $TB		= "@prefix@";
@@ -105,6 +106,7 @@ sub New($$$@)
     $self->{'FAILCOUNT'}  = 0;
     $self->{'OSMAP'}      = {};
     $self->{'TYPECACHE'}  = {};
+    $self->{'CLASSCACHE'} = {};
     $self->{'OPLIST'}     = {};
 
     # For informing users of failed nodes.
@@ -120,6 +122,7 @@ sub New($$$@)
 	$node->_vnodecount(0);
 	$node->_reloaded(0);
 	$node->_bootlog(undef);
+	$node->_reloadordie(0);
     }
 
     bless($self, $class);
@@ -212,7 +215,8 @@ sub OperationList($)
 {
     my ($self) = @_;
     
-    return [ values(%{ $self->{'TYPECACHE'} }) ];
+    return [ values(%{ $self->{'TYPECACHE'} }),
+	     values(%{ $self->{'CLASSCACHE'} })];
 }
 
 #
@@ -661,6 +665,13 @@ sub LightUpNodes($@)
 		$nodeflags{$node_id}{'nowait'} = 1;
 	    }
 
+	    #
+	    # If a node needs prepare, then force that node.
+	    #
+	    if ($node->_reloadordie()) {
+		$nodeflags{$node_id}{'prepare'} = 2;  # level 2, all disks.
+	    }
+
 	    $node->SetAllocState(TBDB_ALLOCSTATE_RES_RELOAD());
 	    # No point in reboot/reconfig obviously, since node will reboot!
 	    delete $reboots{$node_id};
@@ -772,8 +783,23 @@ sub LightUpNodes($@)
 	    if ($pid == 0);
 
 	if ($pid > 0) {
-	    next
-		if (! &$waitfunc($pid));
+	    if (! &$waitfunc($pid)) {
+		foreach my $node_id (@{ $listref }) {
+		    my $node = $self->node($node_id);
+
+		    #
+		    # Slightly cumbersome place to do this. But we want
+		    # to clear this taint as soon as possible instead of
+		    # after all the waiting, in case the user wants the
+		    # console. 
+		    #
+		    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_RELOAD() &&
+			$node->IsTainted(TB_TAINTSTATE_MUSTRELOAD())) {
+			$node->RemoveTaintState(TB_TAINTSTATE_MUSTRELOAD());
+		    }
+		}
+		next;
+	    }
 	}
 	
 	#
@@ -788,8 +814,23 @@ sub LightUpNodes($@)
 	}
 	else {
 	    foreach my $node_id (keys(%{ $hashref })) {
-		push(@nlist, $node_id)
-		    if ($hashref->{$node_id});
+		if ($hashref->{$node_id}) {
+		    push(@nlist, $node_id);
+		}
+		else {
+		    my $node = $self->node($node_id);
+
+		    #
+		    # Slightly cumbersome place to do this. But we want
+		    # to clear this taint as soon as possible instead of
+		    # after all the waiting, in case the user wants the
+		    # console. 
+		    #
+		    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_RELOAD() &&
+			$node->IsTainted(TB_TAINTSTATE_MUSTRELOAD())) {
+			$node->RemoveTaintState(TB_TAINTSTATE_MUSTRELOAD());
+		    }
+		}
 	    }
 	}
 
@@ -1034,7 +1075,6 @@ sub NewType($$)
 	    return undef;
 	}
     }
-    $self->{'TYPECACHE'}->{$type} = $newtype;
     
 #    print STDERR "Created type object $type with parent $self\n"
 #	if ($self->debug());
@@ -1047,27 +1087,36 @@ sub NewType($$)
 sub TypeLookup($$)
 {
     my ($self, $node) = @_;
-
     my $type  = $node->type();
-    my $class = $node->class();
 
-    #
-    # These special cases will eventually be encoded in the DB.
-    #
-    if ($type eq "pcfedphys" || $type eq "pcfed") {
-	$type = "protogeni";
-    }
-    elsif ($node->issubnode()) {
+    if ($node->issubnode()) {
 	$type = "subnode";
     }
-
     return $self->{'TYPECACHE'}->{$type}
         if (exists($self->{'TYPECACHE'}->{$type}));
 
-    return $self->{'TYPECACHE'}->{$class}
-        if (exists($self->{'TYPECACHE'}->{$class}));
+    my $newtype = $self->NewType($type);
+    if (defined($newtype)) {
+	$self->{'TYPECACHE'}->{$type} = $newtype;
+    }
+    return $newtype;
+}
+#
+# Return the cached class object.
+#
+sub ClassLookup($$)
+{
+    my ($self, $node) = @_;
+    my $class = $node->class();
 
-    return undef;
+    return $self->{'CLASSCACHE'}->{$class}
+        if (exists($self->{'CLASSCACHE'}->{$class}));
+
+    my $newtype = $self->NewType($class);
+    if (defined($newtype)) {
+	$self->{'CLASSCACHE'}->{$class} = $newtype;
+    }
+    return $newtype;
 }
 
 #
@@ -1140,6 +1189,16 @@ sub AddNode($$)
     $node->_typehandler($self);
     $node->_setupoperation($libossetup::NOSTATE);
 
+    #
+    # If the node is tainted with MUSTRELOAD, then we must succeed.
+    #
+    if ($node->IsTainted(TB_TAINTSTATE_MUSTRELOAD())) {
+	print "$node_id is tainted, reload failure is not an option\n";
+	$node->_reloadordie(1);
+    }
+    else {
+	$node->_reloadordie(0);
+    }
     #
     # This sets the OS that should boot, as well as any reloads, reboots
     # and reconfigs that are needed.
@@ -1415,6 +1474,7 @@ sub WaitDone($@)
 	    print "$node_id is alive and well\n";
 	    $node->SetBootStatus(NODEBOOTSTATUS_OKAY);
 	    $node->SetAllocState(TBDB_ALLOCSTATE_RES_READY());
+
 	    # Set this so we know a successful reboot was done.
 	    # Important for VMs that depend on this node.
 	    $node->_rebooted(1)
@@ -1459,6 +1519,21 @@ sub WaitDone($@)
 	if ($firewalled && $node_id eq $firewall) {
 	    tbnotice("Firewall failed to boot!\n");
 	    $parent->aborted(1);
+	}
+
+	#
+	# If reload failed on a reloadordie() node, we clear canfail
+	# (ignore failureaction). It is okay if it failed later.
+	#
+	if ($node->_reloadordie()) {
+	    #
+	    # We removed the MUSTRELOAD taint if reload was successful,
+	    # so it is still tainted, something went wrong.
+	    # 
+	    if ($setupstatus == $libossetup::RELOAD_FAILED ||
+		$node->IsTainted(TB_TAINTSTATE_MUSTRELOAD())) {
+		$node->_canfail(0);
+	    }
 	}
 
 	#
@@ -1529,14 +1604,18 @@ sub WaitDone($@)
 	# doing the nfree on nodes with a DOWN allocstate).
 	#
 	my $osinfo = $node->_bootosinfo();
-	if (! defined($osinfo->pid()) || $osinfo->pid() eq TBOPSPID()) {
+	if (! defined($osinfo->pid()) || $osinfo->pid() eq TBOPSPID() ||
+	    $node->_reloadordie()) {
 	    $node->MarkAsIll();
 	    $node->InsertNodeLogEntry($parent->user(),
 				      TB_DEFAULT_NODELOGTYPE(),
 				      "'Moved to hwcheckup by os_setup; ".
 				      "failed to boot image for $osinfo " .
 				      "in $pid/$eid'");
-
+	    if ($node->_reloadordie()) {
+		# Force the partition table back to cleared so it cannot boot
+		$node->ClearPartitions();
+	    }
 	    $parent->add_failed_node_inform_tbopsfatal($node_id);
 	}
 	else {
@@ -2387,31 +2466,61 @@ sub AddNode($$)
 {
     my ($self, $node) = @_;
 
-    return $self->SUPER::AddNode($node);
+    $self->SUPER::AddNode($node);
+
+    # Need something, should be in ISUP by the time we get there
+    # but stated might be delayed.
+    $node->_maxwait(60);
+    return 0;
 }
 
 #
 # Kirk says we always want to power cycle the SDRs when entering an experiment.
 # We pass -e option to power so it does not change the eventstate.
 #
+# Also handle the case where we have put the node into idle POWEROFF, in
+# that case, we just do the power on. 
+#
 sub LightUpNodes($@)
 {
     my ($self, @nodelist)  = @_;
     my $parent     = $self->parent();
-    my @nodeids    = ();
+    my @cycles     = ();
+    my @ons        = ();
 
     foreach my $node (@nodelist) {
-	push(@nodeids, $node->node_id())
-	    if ($node->allocstate() ne TBDB_ALLOCSTATE_RES_READY());
-    }
-    tbnotice("Power cycling SDR nodes: @nodeids\n");
-    system("$POWER -e cycle @nodeids");
-    my $exitval = $?;
+	next
+	    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_READY());
 
-    if ($exitval) {
-	# This is very unusual.
-	$parent->noretry(1);
-	return -1;
+	if ($node->eventstate() eq TBDB_NODESTATE_POWEROFF()) {
+	    push(@ons, $node->node_id())
+	}
+	else {
+	    push(@cycles, $node->node_id())
+	}
+    }
+    if (@ons) {
+	tbnotice("Power on SDR nodes: @ons\n");
+	# We need the event state change here.
+	system("$POWER on @ons");
+	my $exitval = $?;
+
+	if ($exitval) {
+	    # This is very unusual.
+	    $parent->noretry(1);
+	    return -1;
+	}
+    }
+    if (@cycles) {
+	tbnotice("Power cycling SDR nodes: @cycles\n");
+	system("$POWER -e cycle @cycles");
+	my $exitval = $?;
+
+	if ($exitval) {
+	    # This is very unusual.
+	    $parent->noretry(1);
+	    return -1;
+	}
     }
     #
     # If the eventstate somewhow managed to get out of ISUP, send it.
@@ -2428,10 +2537,20 @@ sub LightUpNodes($@)
 	}
     }
     return 0;
-    
 }
 
 package libossetup_x310;
+use base qw(libossetup_sdr);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
+package libossetup_n300;
 use base qw(libossetup_sdr);
 
 use libdb;

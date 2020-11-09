@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2002-2017 University of Utah and the Flux Group.
+# Copyright (c) 2002-2017, 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -152,6 +152,10 @@ control-install: install-dirs install-scripts httpd.conf-ops.fixed
 else
 install: install-dirs install-scripts httpd.conf pgeni-install
 	$(INSTALL_DATA) httpd.conf $(INSTALL_APACHE_CONFIG)/httpd.conf
+
+install-utah-nets:
+	$(INSTALL_DATA) $(SRCDIR)/utah-nets.conf \
+		$(INSTALL_APACHE_CONFIG)/utah-nets.conf
 
 control-install: install-dirs install-scripts httpd.conf-ops
 	$(INSTALL_DATA) httpd.conf-ops $(INSTALL_APACHE_CONFIG)/httpd.conf

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -143,11 +143,22 @@ while (1) {
     print "Running at ".
 	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
 
+    #
+    # The are the different cases to look for.
+    #
+    # * A scheduled experiment that is past its scheduled start time.
+    # * A scheduled experiment that needs images prestaged before
+    #   its scheduled start time.
+    # * Any experiment with deferred aggregates (those that could not
+    #   be started cause they were offline).
+    #
+
     my $query_result =
-	DBQueryWarn("select d.uuid from apt_deferred_instances as d ".
-		    "left join apt_instances as i on i.uuid=d.uuid ".
-		    "where (d.start_at is null or now() >= d.start_at or ".
-		    "       i.status='prestage' or i.status='staging')");
+	DBQueryWarn("select distinct d.uuid from apt_deferred_instances as d ".
+		    "left join apt_instance_aggregates a on ".
+		    "  a.uuid= d.uuid ".
+		    "where (d.start_at is null or now() >= d.start_at) and ".
+		    "      a.deferred!=0");
     
     if ($query_result && $query_result->numrows) {
 	while (my ($uuid) = $query_result->fetchrow_array()) {

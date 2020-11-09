@@ -29,6 +29,7 @@ use JSON;
 use POSIX ":sys_wait_h";
 use POSIX qw(:signal_h ceil);
 use Date::Parse;
+use Date::Format;
 
 #
 # Back-end script to manage APT profiles.
@@ -76,10 +77,13 @@ use Brand;
 use User;
 use Project;
 use EmulabConstants;
+use EmulabFeatures;
 use libEmulab;
 use libtestbed;
 use WebTask;
+use APT_Instance;
 use APT_Reservation;
+use APT_RFRange;
 use APT_Aggregate;
 use APT_Utility;
 use GeniResponse;
@@ -92,6 +96,7 @@ sub DoGroupReserve();
 sub DoRefresh();
 sub DoDelete();
 sub DoApprove();
+sub DoInfoOrWarn();
 sub DoCancel();
 sub DoIdleDetection();
 sub DoConvertReservationsToGroups();
@@ -143,6 +148,9 @@ elsif ($action eq "approve") {
 elsif ($action eq "cancel") {
     DoCancel();
 }
+elsif ($action eq "infowarn") {
+    DoInfoOrWarn();
+}
 elsif ($action eq "idledetection") {
     DoIdleDetection();
 }
@@ -163,13 +171,13 @@ sub DoGroupReserve()
     my $optlist    = "s:e:nN:u:p:O";
     my @argvcopy   = @ARGV[0..$#ARGV-1];
     my $update     = 0;
-    my $checkonly  = 0;
     my $exitcode   = 0;
-    my $autoapprove= 0;
+    my $autoapprove= 1; # This might be turned off below
     my $updateall  = 0;
     my $override   = 0;	# Only range reservations can be overridden. 
     my ($clusters, $ranges, $routes);
     my ($start, $end, $errmsg, $errcode, $reason, $resgroup, $portal, $brand);
+    my $checkonly;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -238,6 +246,7 @@ sub DoGroupReserve()
     }
     if (defined($options{"n"})) {
 	$checkonly = 1;
+	@argvcopy = map { "$_" ne "-n" ? $_ : () } @argvcopy;
     }
     if ($update) {
 	usage()
@@ -350,12 +359,6 @@ sub DoGroupReserve()
 		fatal("Invalid range uuid: " . $range->{"uuid"});
 	    }
 	}
-	#
-	# For now, autoapprove short requests, even if they include ranges.
-	#
-	if ($end - $start < (3600 * 24)) {
-	    $autoapprove = 1;
-	}
     }
     if (exists($blob->{'routes'})) {
 	$routes = $blob->{'routes'};
@@ -376,7 +379,8 @@ sub DoGroupReserve()
 	    }
 	}
 	# For now, force autoapprove off whenever a route is requested.
-	$autoapprove = 0;
+	$autoapprove = 0
+	    if (!$this_user->IsAdmin());
     }
 
     #
@@ -413,7 +417,12 @@ sub DoGroupReserve()
 	}
 	if (defined($reason) && $reason ne $resgroup->reason()) {
 	    print "Reason has changed\n";
-	    $updateall = 1;
+	    #
+	    # Lets not worry about updating the reservations, hardly
+	    # anyone ever edits the reason, just update locally and
+	    # call it good.
+	    #
+	    $resgroup->UpdateReason($reason);
 	}
     }
     
@@ -455,48 +464,64 @@ sub DoGroupReserve()
 	    }
 	}
 	if (defined($ranges)) {
+	    my @autocheck = ();
+	    
 	    foreach my $range_uuid (keys(%{$ranges})) {
 		my $range       = $ranges->{$range_uuid};
 		my $freq_uuid   = $range->{"uuid"};
 		my $reservation = $resgroup->Reservation($freq_uuid);
-
+		
 		if (defined($reservation)) {
 		    # We ignore the low/high that came in, in case the
 		    # client tried to change it. See below.
 		    $range->{"freq_low"}  = $reservation->freq_low();
 		    $range->{"freq_high"} = $reservation->freq_high();
-		
+
+		    #
+		    # We need to send the entire set of ranges through the
+		    # autoapprove check below (if not an admin), even if
+		    # the range is already approved, since the additional
+		    # ranges might tip it over one of the thresholds. The
+		    # already approved ones will stay approved of course.
+		    #
+		    push(@autocheck, $range);
+
+		    #
+		    # If updateall is set, its a start/end date change.
+		    #
 		    if ($updateall) {
 			push(@range_reservations, $range);
-			# Flag for below.
-			$range->{'update'} = 1;
-			# If an admin is changing a reservation, we keep the
-			# approved flag as is.
-			if ($this_user->IsAdmin()) {
-			    $range->{'approved'} = $reservation->approved();
-			}
-			else {
-			    $range->{'approved'} = 0;
-			}
 		    }
-		    else {
-			$range->{'approved'} = $reservation->approved();
-			$range->{'valid'}    = 1;
-		    }
+		    $range->{'autoapprove'} = $this_user->IsAdmin();
+		    $range->{'valid'}       = 1;
+		    # This goes back to the web UI for all ranges.
+		    $range->{'approved'}    = $reservation->approved();
 		}
 		else {
-		    # A new range request. See autoapprove above.
-		    if ($this_user->IsAdmin() ||
-			($autoapprove &&
-			 APT_Reservation::Group::RFReservation->RangeAutoApprove
-			 ($range))) {
-			$range->{'approved'} = 1;
-		    }
-		    else  {
-			$range->{'approved'} = 0;
-		    }
-		    $range->{'valid'} = 0;
+		    # A new range request. 
+		    $range->{'autoapprove'} = $this_user->IsAdmin();
+		    $range->{'valid'}       = 0;
 		    push(@range_reservations, $range);
+		    push(@autocheck, $range);
+		}
+	    }
+	    #
+	    # Update the approval flags based on auto approve check.
+	    #
+	    if (! $this_user->IsAdmin()) {
+		APT_Reservation::Group::RFReservation->SetAutoApprove(
+		    $start, $end, @autocheck);
+
+		#
+		# If any of the ranges cannot be auto approved, turn off
+		# autoapprove for the entire group.
+		#
+		my $count = 0;
+		map { $count += $_->{'autoapprove'} } @range_reservations;
+		if ($count != scalar(@range_reservations)) {
+		    print "Turning off autoapprove cause some ranges cannot ".
+			"be auto approved\n";
+		    $autoapprove = 0;
 		}
 	    }
 	}
@@ -514,31 +539,13 @@ sub DoGroupReserve()
 		
 		    if ($updateall) {
 			push(@route_reservations, $route);
-			# Flag for below.
-			$route->{'update'} = 1;
-			# If an admin is changing a reservation, we keep the
-			# approved flag as is.
-			if ($this_user->IsAdmin()) {
-			    $route->{'approved'} = $reservation->approved();
-			}
-			else {
-			    $route->{'approved'} = 0;
-			}
 		    }
-		    else {
-			$route->{'approved'} = $reservation->approved();
-			$route->{'valid'}    = 1;
-		    }
+		    $route->{'valid'}    = 1;
+		    # This goes back to the web UI for all ranges.
+		    $route->{'approved'} = $reservation->approved();
 		}
 		else {
-		    # A new route request. Never autoapprove
-		    if ($this_user->IsAdmin()) {
-			$route->{'approved'} = 1;
-		    }
-		    else  {
-			$route->{'approved'} = 0;
-		    }
-		    $route->{'valid'} = 0;
+		    $route->{'valid'}       = 0;
 		    push(@route_reservations, $route);
 		}
 	    }
@@ -550,32 +557,39 @@ sub DoGroupReserve()
 	    foreach my $range_uuid (keys(%{$ranges})) {
 		my $range = $ranges->{$range_uuid};
 
-		# A new range request. See autoapprove above.
-		if ($this_user->IsAdmin() ||
-		    ($autoapprove &&
-		     APT_Reservation::Group::RFReservation->RangeAutoApprove
-		     ($range))) {
-		    $range->{'approved'} = 1;
+		# A new range request. 
+		if (! $this_user->IsAdmin()) {
+		    $range->{'autoapprove'} = 0;
 		}
-		else  {
-		    $range->{'approved'} = 0;
-		}
-		$range->{'valid'}    = 0;
+		$range->{'valid'} = 0;
 		push(@range_reservations, $range);
 	    }
+	    #
+	    # Mark per range autoapprove.
+	    #
+	    if (! $this_user->IsAdmin()) {
+		# This will update the "autoapprove" slot in each range
+		APT_Reservation::Group::RFReservation->SetAutoApprove(
+		    $start, $end, @range_reservations);
+
+		#
+		# If any of the ranges cannot be auto approved, turn off
+		# autoapprove for the entire group.
+		#
+		my $count = 0;
+		map { $count += $_->{'autoapprove'} } @range_reservations;
+		if ($count != scalar(@range_reservations)) {
+		    print "Turning off autoapprove cause some ranges cannot ".
+			"be auto approved\n";
+		    $autoapprove = 0;
+		}
+	    }
 	}
+	# autoapprove is always off when using routes. See above.
 	if (defined($routes)) {
 	    foreach my $res_uuid (keys(%{$routes})) {
 		my $route = $routes->{$res_uuid};
-
-		# A new route request. Never autoapprove
-		if ($this_user->IsAdmin()) {
-		    $route->{'approved'} = 1;
-		}
-		else  {
-		    $route->{'approved'} = 0;
-		}
-		$route->{'valid'}    = 0;
+		$route->{'valid'} = 0;
 		push(@route_reservations, $route);
 	    }
 	}
@@ -619,85 +633,7 @@ sub DoGroupReserve()
 	};
 	$result->{"route_results"} = $route_results;
     }
-    
-    # Ranges first since the are fast and easy.
-    if (@range_reservations) {
-	#
-	# Since all ranges require admin approval, there is no need to
-	# lock the tables here. We will do that later in approve.
-	#
-	# For each (new or modified) reservation see if it fits the schedule
-	#
-	my @allgroups = APT_Reservation::Group->LookupAll();
-    
-	foreach my $ref (@range_reservations) {
-	    # These flags go back to the web interface.
-	    # We never auto approve frequency reservations.
-	    if (!($this_user->IsAdmin() ||
-		  APT_Reservation::Group::RFReservation->RangeAllowed($project,
-								      $ref))) {
-		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
-		$ref->{'output'}   = "Not allowed to use this frequency range";
-		$ref->{'valid'}    = 0;
-		$range_results->{'errors'}++;
-	    }
-	    elsif (! ($override ||
-		      APT_Reservation::Group::RFReservation->Fits(\@allgroups,
-								  $start, $end,
-								  $ref))) {
-		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
-		$ref->{'output'}   = "Does not fit the schedule";
-		$ref->{'valid'}    = 0;
-		$range_results->{'errors'}++;
-	    }
-	    else {
-		# We set approval above.
-		$ref->{'valid'}    = 1;
-		if ($ref->{'approved'}) {
-		    $range_results->{'approved'}++;
-		}
-	    }
-	}
-    }
-    # Ditto routes
-    if (@route_reservations) {
-	#
-	# Since all routes require admin approval, there is no need to
-	# lock the tables here. We will do that later in approve.
-	#
-	# For each (new or modified) reservation see if it fits the schedule
-	#
-	my @allgroups = APT_Reservation::Group->LookupAll();
-    
-	foreach my $ref (@route_reservations) {
-	    # These flags go back to the web interface.
-	    # We never auto approve route reservations.
-	    if (!($this_user->IsAdmin() ||
-		  APT_Reservation::Group::RouteReservation->RouteAllowed(
-		      $project, $ref))) {
-		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
-		$ref->{'output'}   = "Not allowed to use this route";
-		$ref->{'valid'}    = 0;
-		$route_results->{'errors'}++;
-	    }
-	    elsif (! ($override ||
-		      APT_Reservation::Group::RouteReservation->Fits(
-			  \@allgroups, $start, $end, $ref))) {
-		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
-		$ref->{'output'}   = "Does not fit the schedule";
-		$ref->{'valid'}    = 0;
-		$route_results->{'errors'}++;
-	    }
-	    else {
-		# We set approval above.
-		$ref->{'valid'}    = 1;
-		if ($ref->{'approved'}) {
-		    $route_results->{'approved'}++;
-		}
-	    }
-	}
-    }
-    
+
     #
     # Called for each reference in the @cluster_reservations list,
     # with a webtask to use when calling manage_reservations.
@@ -733,8 +669,10 @@ sub DoGroupReserve()
 	    @argvcopy = @tmp;
 	}
 	$command .= "-a $urn reserve -S -t $type ";
-	# When there are unapproved ranges/routes, autoapprove is forced off.
-	if ((defined($ranges) || defined($routes)) && !$autoapprove) {
+	$command .= "-n " if ($checkonly);
+	# Global autoapprove might have been turned off but in check mode
+	# we *do* want to know if the reservation is possible
+	if (!$checkonly && !$autoapprove) {
 	    $command .= "-P ";
 	}
 	$command .= " @argvcopy $count";
@@ -747,16 +685,14 @@ sub DoGroupReserve()
     };
     my $responses;
 
-    if (@cluster_reservations) {
+    my $submitClusters = sub {
 	$errcode = CallMethodOnReservations($coderef, \$responses,
 					    @cluster_reservations);
 	if ($errcode) {
 	    $errmsg   = $responses;
 	    $exitcode = -1;
-	    $resgroup->Unlock();
-	    goto bad;
+	    return -1;
 	}
-
 	#
 	# Look at all the responses.
 	#
@@ -791,14 +727,192 @@ sub DoGroupReserve()
 		$cluster_results->{'errors'}++;		
 	    }
 	    else {
-		$res->{"approved"} = $webtask->approved();
-		if ($webtask->approved()) {
+		$res->{"approved"} = int($webtask->approved());
+		if ($res->{"approved"}) {
 		    $cluster_results->{'approved'}++;
 		}
 	    }
 	    # Remote uuid of reservation, needed below for local record.
 	    if (! $checkonly) {
 		$res->{"uuid"} = $webtask->uuid();
+	    }
+	}
+	return 0;
+    };
+    
+    if (@cluster_reservations) {
+	#
+	# In checkonly mode we do one pass. In submit mode we do two
+	# passes, the first is a checkonly pass to see if any clusters
+	# are going to say the reservation needs approval. So always
+	# start with a checkonly call.
+	#
+	my $submitting = !$checkonly;
+	$checkonly = 1;
+	if (&$submitClusters()) {
+	    $resgroup->Unlock();
+	    goto bad;
+	}
+	$checkonly = 0 if ($submitting);
+
+	#
+	# In checkonly mode if some of the reservations cannot be auto
+	# approved, we want to mark all the reservations as needing to
+	# be approved (no partial approvals). Refused reservations do
+	# not count, since the user has to delete them or change them,
+	# and so do not ultimately affect the outcome.
+	#
+	# If autoapprove was turned off up above on routes/ranges, same.
+	#
+	if (!$this_user->IsAdmin() &&
+	    (!$autoapprove ||
+	     ($cluster_results->{'approved'} + $cluster_results->{'errors'}
+	      != scalar(@cluster_reservations)))) {
+	    # Turn off all auto approval for ranges/routes below.
+	    $autoapprove = 0;
+	    #
+	    # Turn off approval, but indicate why an approved reservation
+	    # cannot be auto approved (all or nothing)
+	    #
+	    foreach my $res (@cluster_reservations) {
+		if ($res->{'approved'}) {
+		    $res->{'noautoapprove_reason'} =
+			"Auto approval denied on another reservation";
+		}
+		$res->{'approved'} = 0;
+	    }
+	    $cluster_results->{'approved'} = 0;
+	}
+	#
+	# OK, user was doing a submit. If the checkonly pass returned some
+	# errors, then abort and switch to checkonly/noautoapprove so that
+	# the user gets back the results, just like it was an initial
+	# check. The user will have to change things and Check again.
+	# If no errors, then really submit.
+	#
+	if (!$checkonly) {
+	    if ($cluster_results->{'errors'}) {
+		# Turn off all auto approval for ranges/routes below.
+		$autoapprove = 0;
+		map { $_->{'approved'} = 0 } @cluster_reservations;
+		$cluster_results->{'approved'} = 0;
+		$checkonly = 1;
+	    }
+	    else {
+		# Clear these since we are going to redo it.
+		$cluster_results->{'errors'}   = 0;
+		$cluster_results->{'approved'} = 0;
+
+		if (&$submitClusters()) {
+		    $resgroup->Unlock();
+		    goto bad;
+		}
+		#
+		# If we got errors this time, some of the reservations
+		# might have been approved. We could clean this up, but
+		# not sure its worth the trouble, I think it will be rare.
+		# 
+	    }
+	}
+    }
+    if (@range_reservations) {
+	#
+	# Since all ranges require admin approval, there is no need to
+	# lock the tables here. We will do that later in approve.
+	#
+	# For each (new or modified) reservation see if it fits the schedule
+	#
+	my @allgroups = APT_Reservation::Group->LookupAll();
+	my $rfrange   = APT_RFRange::Project->Lookup($project);
+    
+	foreach my $ref (@range_reservations) {
+	    my $freq_low  = $ref->{"freq_low"};
+	    my $freq_high = $ref->{"freq_high"};
+		
+	    # These flags go back to the web interface.
+	    if (!($this_user->IsAdmin() ||
+		  $rfrange->Allowed($ref->{'freq_low'}, $ref->{'freq_high'}))) {
+		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
+		$ref->{'output'}   = "Not allowed to use this frequency range";
+		$ref->{'valid'}    = 0;
+		$range_results->{'errors'}++;
+	    }
+	    elsif (! ($override ||
+		      APT_Reservation::Group::RFReservation->Fits(\@allgroups,
+								  $start, $end,
+								  $ref))) {
+		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
+		$ref->{'output'}   = "Does not fit the schedule";
+		$ref->{'valid'}    = 0;
+		$range_results->{'errors'}++;
+	    }
+	    elsif (!$override &&
+		   APT_Instance::RFRanges->InUse($project, $freq_low,
+						 $freq_high, $start, $end)) {
+		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
+		$ref->{'output'}   = "Currently in use by another project";
+		$ref->{'valid'}    = 0;
+		$range_results->{'errors'}++;
+	    }
+	    else {
+		$ref->{'valid'} = 1;
+		#
+		# If autoapprove is on, mark this is as approved since it
+		# passes all the other criteria.
+		#
+		if ($autoapprove || $this_user->IsAdmin()) {
+		    $ref->{'approved'} = 1;
+		    $range_results->{'approved'}++;
+		}
+		else {
+		    if ($ref->{'autoapprove'}) {
+			# Would have been autoapproved, but another reservation
+			# failed autoapprove.
+			$ref->{'noautoapprove_reason'} =
+			    "Auto approval denied on another reservation";
+		    }
+		    $ref->{'approved'} = 0;
+		}
+	    }
+	}
+    }
+    if (@route_reservations) {
+	#
+	# Since all routes require admin approval, there is no need to
+	# lock the tables here. We will do that later in approve.
+	#
+	# For each (new or modified) reservation see if it fits the schedule
+	#
+	my @allgroups = APT_Reservation::Group->LookupAll();
+    
+	foreach my $ref (@route_reservations) {
+	    # These flags go back to the web interface.
+	    # We never auto approve route reservations.
+	    if (!($this_user->IsAdmin() ||
+		  APT_Reservation::Group::RouteReservation->RouteAllowed(
+		      $project, $ref))) {
+		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
+		$ref->{'output'}   = "Not allowed to use this route";
+		$ref->{'valid'}    = 0;
+		$route_results->{'errors'}++;
+	    }
+	    elsif (! ($override ||
+		      APT_Reservation::Group::RouteReservation->Fits(
+			  \@allgroups, $start, $end, $ref))) {
+		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
+		$ref->{'output'}   = "Does not fit the schedule";
+		$ref->{'valid'}    = 0;
+		$route_results->{'errors'}++;
+	    }
+	    else {
+		$ref->{'valid'} = 1;
+		if ($autoapprove || $this_user->IsAdmin()) {
+		    $ref->{'approved'} = 1;
+		    $route_results->{'approved'}++;
+		}
+		else {
+		    $ref->{'approved'} = 0;
+		}
 	    }
 	}
     }
@@ -824,7 +938,7 @@ sub DoGroupReserve()
 	    if ($update) {
 		# One of start/end/reason changed, update resgroup
 		if ($updateall) {
-		    $resgroup->UpdateMeta($start, $end, $reason);
+		    $resgroup->UpdateMeta($start, $end);
 		}
 	    }
 	    else {
@@ -845,6 +959,7 @@ sub DoGroupReserve()
 		    "start"       => $start,
 		    "end"         => $end,
 		    "reason"      => $reason,
+		    "portal"      => $brand->brand(),
 		};
 		$resgroup = APT_Reservation::Group->Create($args);
 		if (!defined($resgroup)) {
@@ -941,15 +1056,19 @@ sub DoGroupReserve()
 	    if ($resgroup->NeedsApproval()) {
 		my $this_uid   = $this_user->uid();
 		my $this_email = $this_user->email();
-		my $url        = $brand->wwwBase() . "/list-resgroups.php";
+		my $url        = $resgroup->WebURL();
     
 		$brand->SendEmail($brand->ReservationsEmailAddress(),
 			  "Pending reservation group request needs approval",
 			  "A reservation group request was made by $this_uid, ".
 			  "but it needs approval.".
 			  "\n\n".
+			  $resgroup->InfoString() . "\n" .
 			  "See: $url", $this_email);
-	    }	    
+	    }
+	    else {
+		$resgroup->AddAnnouncement($update);
+	    }
 	}
     }
     $resgroup->Unlock() if (defined($resgroup));
@@ -979,9 +1098,11 @@ sub DoDelete()
     my $optlist   = "N:LM";
     my $takelock  = 0;
     my $nolock    = 0;	# Caller holds the lock.
+    my $noemail   = 0;
     my @cluster_reservations = ();
     my @range_reservations   = ();
     my @route_reservations   = ();
+    my $reason;
     my $errmsg;
     my $errcode;
     my $errors   = 0;
@@ -994,9 +1115,12 @@ sub DoDelete()
     if (defined($options{"N"})) {
 	fatal("Cannot read reason file")
 	    if (! -e $options{"N"});
+
+	$reason = emutil::ReadFile($options{"N"});
     }
     if (defined($options{"L"})) {
 	$takelock = 1;
+	$noemail  = 1;
     }
     if (defined($options{"M"})) {
 	$nolock = 1;
@@ -1035,16 +1159,15 @@ sub DoDelete()
     # are using this reservation; not allowed to delete the reservation
     # until the experiments are terminated.
     #
-    if ($resgroup->RFReservationList() || $resgroup->RouteReservationList()) {
+    if ($resgroup->RouteReservationList()) {
 	my $current;
 	if (APT_Instance->LookupForProject($project, \$current)) {
 	    $resgroup->Unlock() if (!$nolock);
 	    fatal("Could not look up experiments for $project");
 	}
 	foreach my $instance (@$current) {
-	    # Only RF/Route reservations actually matter here
-	    if ($resgroup->RFInUse($instance) ||
-		$resgroup->RoutesInUse($instance)) { 
+	    # Only Route reservations actually matter here
+	    if ($resgroup->RoutesInUse($instance)) { 
 		$resgroup->Unlock() if (!$nolock);
 		UserError("You have experiments running that are using this ".
 			  "reservation, please terminate those first");
@@ -1097,6 +1220,24 @@ sub DoDelete()
 		    $res->MarkDeleted();
 		}
 	    }
+	    if (!$noemail) {
+		#
+		# Notify the user that a resgroup has been deleted.
+		#
+		my $brand      = $resgroup->Brand();
+		my $creator    = $resgroup->GetCreator();
+		my $email      = $creator->email();
+		my $pid        = $project->pid();
+		my $string     = $resgroup->InfoString(\@cluster_reservations,
+						       \@range_reservations,
+						       \@route_reservations);
+		$brand->SendEmail($email,
+		  "Resources in reservation group have been removed",
+		  "Resources in your reservation group in project $pid ".
+		  "have been removed from the group.\n".
+		  (defined($reason) ? "\n$reason\n" : "\n") . $string,
+		  $brand->ReservationsEmailAddress());
+	    }
 	}
     }
     else {
@@ -1112,6 +1253,24 @@ sub DoDelete()
 	#
 	if (!$resgroup->Expired() && !$resgroup->deleted()) {
 	    $resgroup->MarkDeleted();
+
+	    if (!$noemail) {
+		#
+		# Notify the user that a resgroup has been deleted.
+		#
+		my $brand      = $resgroup->Brand();
+		my $creator    = $resgroup->GetCreator();
+		my $email      = $creator->email();
+		my $pid        = $project->pid();
+
+		$brand->SendEmail($email,
+			  "Reservation group has been deleted",
+			  "Your reservation group in project $pid ".
+			  "has been deleted.\n".
+			  (defined($reason) ? "\n$reason\n" : "\n"). 
+			  $resgroup->InfoString(),
+			  $brand->ReservationsEmailAddress());
+	    }
 	}
     }
     if (@range_reservations) {
@@ -1430,12 +1589,15 @@ sub DoApprove()
     my @cluster_reservations = ();
     my @range_reservations   = ();
     my @route_reservations   = ();
+    my @approved_reservations= ();
     my $errmsg;
     my $results   = {};
     my $takelock  = 0;
     my $checkonly = 0;
     my $nopush    = 0;  # debugging flag only.
-    my $override  = 0;	# Only range/route reservations can be overridden. 
+    my $override  = 0;	# Only range/route reservations can be overridden.
+    my $noemail   = 0;
+    my $reason;
 
     if (! $this_user->IsAdmin()) {
 	fatal("No permission to approve this reservation")
@@ -1447,6 +1609,7 @@ sub DoApprove()
     if (defined($options{"F"})) {
 	fatal("Cannot read reason file")
 	    if (! -e $options{"F"});
+	$reason = emutil::ReadFile($options{"F"});
     }
     if (defined($options{"n"})) {
 	$checkonly = 1;
@@ -1459,6 +1622,7 @@ sub DoApprove()
     }
     if (defined($options{"L"})) {
 	$takelock = 1;
+	$noemail  = 1;
     }
     usage()
 	if (@ARGV < 1);
@@ -1495,6 +1659,11 @@ sub DoApprove()
     foreach my $res ($resgroup->RouteReservationList()) {
 	push(@route_reservations, $res)
 	    if (!$res->approved());
+    }
+    if (!(@cluster_reservations || @range_reservations || @route_reservations)){
+	print "Nothing to approve\n";
+	$resgroup->Unlock();
+	exit(0);
     }
 
     #
@@ -1568,7 +1737,7 @@ sub DoApprove()
 	my $webtask_id  = $webtask->task_id();
 	my $urn         = $reservation->aggregate_urn();
 	my $remote_uuid = $reservation->remote_uuid();
-	my $portal      = $project->Brand()->brand();
+	my $portal      = $resgroup->Brand()->brand();
 	# Hmm, might be "classic", which is not a portal. Ick.
 	$portal = "emulab" if ($portal eq "classic");
 	
@@ -1647,18 +1816,19 @@ sub DoApprove()
 		}
 		next;
 	    }
-	    $res->MarkApprovedPushed() if (!$checkonlyflag);
+	    if (!$checkonlyflag) {
+		$res->MarkApprovedPushed();
+		push(@approved_reservations, $res);
+	    }
 	}
 	return $errors;
     };
 
     #
-    # Prelim check if both cluster and range/route reservations, or if told
-    # to do so on the command line.
+    # Prelim check to make sure all cluster reservations still fit.
+    # We do not want a partially approved reservation.
     #
-    if (($checkonly && @cluster_reservations) ||
-	((@range_reservations || @route_reservations)
-	 && @cluster_reservations)) {
+    if ($checkonly || @cluster_reservations) {
 	$checkonlyflag = 1;
 
 	my $responses;
@@ -1699,7 +1869,7 @@ sub DoApprove()
 		$resgroup->Unlock();
 		goto bad;
 	    }
-	    # We will skip range approval if any failures here.
+	    # We will skip range/route approval if any failures here.
 	    if (&$checkResponses($responses)) {
 		goto done;
 	    }
@@ -1733,6 +1903,7 @@ sub DoApprove()
 	    }
 	    else {
 		$res->MarkApproved();
+		push(@approved_reservations, $res);
 	    }
 	}
     }
@@ -1758,6 +1929,7 @@ sub DoApprove()
 	    }
 	    else {
 		$res->MarkApproved();
+		push(@approved_reservations, $res);
 	    }
 	}
     }
@@ -1765,6 +1937,30 @@ sub DoApprove()
 	APT_Reservation::Group->UnlockTables();
     }
   done:
+    if (!$checkonly && @approved_reservations && !$noemail) {
+	#
+	# Notify the user that a resgroup was approved. The wrinkle is
+	# partial approval, but that should be a rare case, so lets now
+	# worry for now.
+	#
+	my $brand      = $resgroup->Brand();
+	my $creator    = $resgroup->GetCreator();
+	my $email      = $creator->email();
+	my $pid        = $project->pid();
+	my $url        = $resgroup->WebURL();
+
+	$brand->SendEmail($email,
+			  "Pending reservation group request has been approved",
+			  "Your reservation group request in project $pid ".
+			  "has been approved.\n".
+			  (defined($reason) ? "\n$reason\n" : "") . "\n" .
+			  $resgroup->InfoString() .
+			  "\n".
+			  "See: $url", $brand->ReservationsEmailAddress());
+
+	# Schedule an announcement for the user.
+	$resgroup->AddAnnouncement();
+    }
     print Dumper($results);
     if (defined($webtask)) {
 	$webtask->results($results);
@@ -1780,6 +1976,78 @@ sub DoApprove()
 	$webtask->Exited(-1);
     }
     exit(-1);
+}
+
+#
+# Ask for info or warn user.
+#
+sub DoInfoOrWarn()
+{
+    my $optlist = "N:w";
+    my $warning = 0;
+    my $reason;
+
+    if (!$this_user->IsAdmin()) {
+	fatal("No permission to send info/warn email")
+    }    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"N"})) {
+	fatal("Cannot read reason file")
+	    if (! -e $options{"N"});
+	$reason = emutil::ReadFile($options{"N"});
+    }
+    if (defined($options{"w"})) {
+	$warning = 1;
+    }
+    elsif (!defined($reason)) {
+	fatal("Must provide a message for the user");
+    }
+    usage()
+	if (@ARGV != 1);
+    my $uuid = shift(@ARGV);
+
+    my $resgroup = APT_Reservation::Group->Lookup($uuid);
+    if (!defined($resgroup)) {
+	fatal("No such reservation group");
+    }
+    my $brand      = $resgroup->Brand();
+    my $creator    = $resgroup->GetCreator();
+    my $email      = $creator->email();
+    my $pid        = $resgroup->pid();
+    my $url        = $resgroup->WebURL();
+    my $subject;
+    my $message;
+
+    if ($warning) {
+        $subject = "Unused Reservation Warning";
+	$message =
+	    "Your reservation group in project $pid is currently either\n".
+            "underused or unused. Tying up resources in this manner means\n".
+            "other users may not be able to get their work done.\n\n".
+	    (defined($reason) ? "$reason\n\n" : "").
+	    "If your reservation is still underused in 24 hours, it\n".
+	    "will be canceled. You may also reduce/shorten and/or split the\n".
+	    "reservation so that you are not wasting resources.\n";
+    }
+    else {
+        $subject = "Reservation Info Request";
+	$message = "We need information about your reservation group ".
+	    "in project $pid.\n\n" . $reason;
+    }
+    $brand->SendEmail($email, $subject,
+		      $message . "\n\n" .
+		      $resgroup->InfoString() .
+		      "See: $url",
+		      $brand->ReservationsEmailAddress(),
+		      "BCC: " . $brand->ReservationsEmailAddress());
+  done:
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    exit(0);
 }
 
 #
@@ -1799,6 +2067,7 @@ sub DoCancel()
     my $purge   = 0;
     my $nopush  = 0;  # debugging flag only.
     my $takelock= 0;
+    my $noemail = 0;
     my $when;
     my $reason;
     my $errmsg;
@@ -1815,12 +2084,14 @@ sub DoCancel()
     if (defined($options{"N"})) {
 	fatal("Cannot read reason file")
 	    if (! -e $options{"N"});
+	$reason = emutil::ReadFile($options{"N"});
     }
     if (defined($options{"D"})) {
 	$nopush = 1;
     }
     if (defined($options{"L"})) {
 	$takelock = 1;
+	$noemail  = 1;
     }
     if (defined($options{"P"})) {
 	$purge = 1;
@@ -1876,6 +2147,44 @@ sub DoCancel()
 		fatal("Missing the termination (-e) argument");
 	    }
 	    $resgroup->MarkCanceled($when);
+	}
+    }
+
+    #
+    # Send mail now. Failure is not an option.
+    #
+    if (! ($noemail || $purge)) {
+	my $project    = $resgroup->GetProject();
+	my $brand      = $resgroup->Brand();
+	my $creator    = $resgroup->GetCreator();
+	my $email      = $creator->email();
+	my $pid        = $resgroup->pid();
+	my $url        = $resgroup->WebURL();
+
+	if ($clear) {
+	    $brand->SendEmail($email,
+			  "Reservation group cancellation rescinded!",
+			  "Your reservation group in project $pid that was\n".
+			  "scheduled for cancellation, is no longer scheduled ".
+			  "for cancellation.\n\n".
+			  $resgroup->InfoString() .
+			  "See: $url", $brand->ReservationsEmailAddress());
+	}
+	else {
+	    my $whentime = TBDateStringGMT($when);
+		
+	    $brand->SendEmail($email,
+		"Reservation group is scheduled to be canceled!",
+		"Your reservation in project $pid is currently either\n".
+                "underused or unused. Tying up resources in this manner\n".
+                "means other users may not be able to get their work done.\n".
+		(defined($reason) ? "\n$reason\n\n" : "") .
+                "Your reservation is now scheduled to be canceled ".
+                "at $whentime.\n ".
+                "Please contact the support staff if you would like to keep\n".
+		"your reservation.\n\n".
+		$resgroup->InfoString() .
+		"See: $url", $brand->ReservationsEmailAddress());
 	}
     }
     
@@ -1957,7 +2266,7 @@ sub DoCancel()
 	
 	my $command = "$RESCOMMAND -t $webtask_id -a $urn ";
 	if (defined($options{"N"})) {
-	    $command .= "-F " . $options{"N"} . " ";
+	    $command .= "-N " . $options{"N"} . " ";
 	}
 	if ($clear) {
 	    $command .= "cancel -c ";

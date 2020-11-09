@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,8 +22,11 @@
 # }}}
 #
 chdir("..");
+include("defs.php3");
+chdir("apt");
+include("quickvm_sup.php");
 # See this variable in getsslcert.php3
 $FILENAME = "cloudlab";
 
-include("getsslcert.php3");
+include("../getsslcert.php3");
 ?>

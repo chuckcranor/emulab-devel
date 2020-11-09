@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,13 +59,14 @@ sub usage()
 	  "       -w      Wait for image to be created\n");
     exit(-1);
 }
-my $optlist     = "densg:wFr:b:UB:t:";
-my $debug       = 0;
+my $optlist     = "densg:wFr:b:UB:t:C";
+my $debug       = 1;
 my $wholedisk   = 0;
 my $impotent    = 0;
 my $nosnapshot  = 0;
 my $isvirtnode  = 0;
 my $waitmode    = 0;
+my $cleanmode   = 0; # Force descriptor removal if create_image fails.
 my $nodelta     = 0; # To pass to create_image.
 my $global      = 0;
 my $shared      = 0;
@@ -106,6 +107,7 @@ $| = 1;
 use lib "@prefix@/lib";
 use EmulabConstants;
 use emutil;
+use libEmulab;
 use User;
 use Project;
 use OSImage;
@@ -142,6 +144,9 @@ if (defined($options{"w"})) {
 }
 if (defined($options{"F"})) {
     $nodelta = 1;
+}
+if (defined($options{"C"})) {
+    $cleanmode = 1;
 }
 if (defined($options{"U"})) {
     $update_prepare = 1;
@@ -419,6 +424,7 @@ if (defined($image)) {
     }
     my $opts = "-p $pid ";
     $opts   .= "-t $webtask_id " if (defined($webtask));
+    $opts   .= "-C " if ($cleanmode);
     $opts   .= "-w " if ($waitmode);
     $opts   .= "-F " if ($nodelta);
     $opts   .= "-U " if ($update_prepare);
@@ -435,7 +441,7 @@ if (defined($image)) {
     my $output = emutil::ExecQuiet("$CREATEIMAGE $opts $imagename $node_id");
     if ($?) {
 	$image->PurgeVersion()
-	    if ($needdelete);
+	    if ($needdelete && !$cleanmode);
 	print STDERR $output;
 	fatal("Failed to create image");
     }
@@ -701,6 +707,16 @@ if ($DOPROVENANCE && $doprovenance) {
 	$image->SetNoVersioning(1);
     }
 }
+#
+# New images in emulab-ops do not get listed until an admin marks it.
+# Ditto reporting to the IMS (which is relevant to Utah only).
+#
+if ($image->pid() eq TBOPSPID()) {
+    if (! GetSiteVar("images/listed_default")) {
+	$image->SetListed(0);
+    }
+    $image->SetIMSNoReport(1);
+}
 if ($debug) {
     print "Created $image\n";
 }
@@ -719,7 +735,7 @@ if ($nosnapshot) {
 #
 $nodelta = 1;
 
-my $opts = "-p $pid ";
+my $opts = "-C -p $pid ";
 $opts   .= "-t $webtask_id " if (defined($webtask));
 $opts   .= "-w " if ($waitmode);
 $opts   .= "-F " if ($nodelta);
@@ -729,6 +745,13 @@ $opts   .= "-b $bsname " if (defined($bsname));
 $output  = emutil::ExecQuiet("$CREATEIMAGE $opts $imagename $node_id");
 if ($?) {
     print STDERR $output;
+    
+    #
+    # Since this is a new image, purge the desciptor to avoid cruft
+    # piling up in the database. 
+    #
+    $image->DeleteImageDir();
+    $image->Delete(1);
     fatal("Failed to create image");
 }
 print "Image is being created. This can take 15-30 minutes.\n";

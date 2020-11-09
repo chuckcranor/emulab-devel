@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,6 +56,25 @@ OPS_SCRIPTS    += 2.elvind.sh 3.elvin_gateway.sh
 endif
 FS_SCRIPTS	= arplock-opsfs.sh
 TIP_SCRIPTS	=
+
+#
+# A bit of wonkyness for the write back monitor:
+# runs on ops on the mothership
+# runs on boss on participating aggregates
+#
+ifeq ($(TBMAINSITE),1)
+OPS_SCRIPTS	+= wbstore.sh
+else
+RC_SCRIPTS	+= wbstore.sh
+endif
+
+# Powder
+ifeq ($(TBMAINSITE),1)
+RC_SCRIPTS	+= powder_keepalive.sh
+endif
+ifeq ($(DEADMAN),1)
+RC_SCRIPTS	+= endpoint-monitor.sh
+endif
 
 ifeq ($(SYSTEM),FreeBSD)
 FBSDVERSION   := $(shell uname -v | sed -e 's/FreeBSD \([0-9][0-9]*\).*/FreeBSD\1/')

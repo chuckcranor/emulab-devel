@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -87,8 +87,6 @@ echo htmlentities(json_encode($amlist));
 echo "</script>\n";
 
 echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-echo "<link rel='stylesheet'
             href='css/tablesorter-widget-grouping.css'>\n";
 
 # Place to hang the toplevel template.
@@ -107,7 +105,8 @@ echo "<div id='main-body'>
 # Place to hang the modals for now
 echo "<div id='oops_div'></div>
       <div id='waitwait_div'></div>
-      <div id='confirm_div'></div>\n";
+      <div id='confirm_div'></div>
+      <div id='image-format-modal_div'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 if ($target_project) {
@@ -121,14 +120,10 @@ echo "</script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER(array('js/lib/tablesorter/widgets/widget-grouping.js'));
 AddTemplateList(array("image-list", "classic-image-list",
-                      "confirm-delete-image",
+                      "confirm-delete-image", "image-format-modal",
                       "oops-modal", "waitwait-modal"));
-SPITREQUIRE("js/list-images.js",
-        "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
-        "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-        "<script src='js/lib/jquery.tablesorter.widget-grouping.js'></script>".
-        "<script src='js/lib/sugar.min.js'></script>".
-        "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+SPITREQUIRE("js/list-images.js");
 SPITFOOTER();
 ?>

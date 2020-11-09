@@ -1,19 +1,272 @@
 Making boss/ops/fs/etc. packages. This is only for the latest FreeBSD
-(as of this writing, 10.2/10.3). If you need help with older packages,
+(as of this writing, 11.3). If you need help with older packages,
 check out the initial version of this document.
 
 As of FreeBSD 10, I started using the quarterly ports release at the time
-of the OS release and then update the packages quarterly. E.g., 10.2 shipped
-with 2015Q3 and I have updated through 2016Q2.
+of the OS release and then update the packages quarterly. For the 11.3 release,
+I am currently using 2020Q2.
 
-*** SKIP TO SECTION 10 ("10. Updating the Emulab package repo") BELOW
-    FOR FAST 10.3 REPO UPDATING INSTRUCTIONS.
+################ TL;DR ################
 
-0a. Make sure the ports tree in /share/freebsd/X.Y/ports has the current
+This is a condensed version of the steps below.
+
+0. Updating the Emulab package repo (11.3 specific).
+
+   Occasionally you will want to make sure the ports are up to date.
+   We track the "quarterly" branch of ports, so within a three month
+   period, it should only be updated for security fixes and critical
+   problems. I am sure that using "poudriere" is the way to do this,
+   but here is what I am currently doing: I just build a new set of
+   packages from scratch and replace the old ones! "pkg upgrade" on
+   a client seems smart enough to avoid reinstalling everything just
+   because the package times have changed. It still seems to do a
+   couple of mysterious updates of things that didn't change, but I
+   can live with that...
+
+   a. Make sure the ports tree in /share/freebsd/11.3/ports on ops
+      is up to date. [ Note that there is not actually an svn repo branch
+      called "quarterly" so you have to make sure you are tracking the
+      current quarter. ]
+
+      cd /share/freebsd/11.3/ports
+      sudo svn update
+
+   b. Make sure the Emulab ports are up to date.
+
+      cd /share/freebsd/11.3/ports/misc
+      diff -r ~mike/testbed-clean/install/ports .
+      <update anything that is out of sync>
+
+   c. Swapin a FreeBSD 11.3 node (experiment emulab-ops/freebsd112-64).
+      This will give you a d430 which is the best thing to use.
+
+   d. Mount the ports and source trees.
+
+      cd /usr
+      sudo mount -o ro fs:/share/freebsd/11.3/ports /usr/ports
+      sudo mount -o ro fs:/share/freebsd/11.3/src /usr/src
+      
+   e. Make sure /etc/make.conf is up to date. It should have:
+
+  DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
+  DEFAULT_VERSIONS+=ssl=base
+
+   f. (NEW for 2020!) Create a /usr/obj filesystem. There is not enough
+      space in the root filesystem to hold all the build trees. You need
+      on the order of 25GB, so just use the rest of the root disk
+      (YOU MUST DO THIS BEFORE REMOVING /usr/local!):
+
+      sudo /usr/local/etc/emulab/mkextrafs.pl /usr/obj
+
+      Okay, so you screwed up and didn't do this before you removed
+      /usr/local. You can still do it manaully on the node with:
+
+      sudo gpart add -i 4 -t freebsd ada0
+      sudo newfs /dev/ada0s4
+      sudo mount /dev/ada0s4 /usr/obj
+
+   g. Cleanse the port environment:
+
+      sudo tcsh
+      setenv ASSUME_ALWAYS_YES true
+      pkg delete -af
+      rm -rf /usr/local/*
+      rm -rf /var/db/ports/*
+      rm -rf /usr/obj/ports/usr/ports/*
+
+   h. Make sure the package tool is installed. Sometimes you can just:
+
+      pkg info
+
+      and it will reinstall the pkg tool. However, sometimes you will
+      run up against certificate issues, the it won't reinstall it.
+      In that case, I have found the easiest thing to do is:
+
+      pushd /share/freebsd/11.3/packages-64
+      pkg add pkg-*
+      pkg add ca_root*
+      popd
+
+   i. Make sure port options are correctly set:
+
+      NOTE: if you get a message about "unsupported release" when you
+      try to do a make, it might be because /usr/include/sys/param.h
+      is out of date. Diff it with /usr/src/sys/sys/param.h and update
+      as necessary.
+
+      - make -C devel/boost-all config
+        and deselect:
+          DOCS
+      - make -C editors/emacs config
+        and deselect:
+          DBUS
+          GCONF, GSETTINGS, LCMS2, M17N, OTF, SCROLLBARS, XFT, XIM,
+	  GIF, MAGICK, PNG, SVG, TIFF, XPM,
+	  OSS,
+	  GTK3
+        and select:
+	  XAW
+      - make -C graphics/cairo config
+        and deselect OPENGL.
+      - make -C graphics/jasper config
+        and deselect OPENGL.
+      - make -C www/apache24 config
+        and select SUEXEC.
+      - make -C x11-toolkits/pango config
+        and deselect DOCS.
+      - make -C devel/subversion config
+        and deselect GPG_AGENT
+
+   j. Build em all:
+
+       setenv PACKAGES /usr/obj/ports/packages
+       rm -f $PACKAGES/All/*
+       setenv myFLAGS DISABLE_VULNERABILITIES=1
+       foreach d (boss ops fs protogeni genilib tipserv extras)
+           (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean all install)
+	   (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean)
+       end
+
+   k. Check for vulnerabilities. If any are revealed, you can either try
+      to update /share/freebsd/11.3/ports with a newer version of the port
+      (e.g., from /share/freebsd/current/ports) or just live with the
+      vulnerability for now.
+
+       pkg audit -F
+
+   l. Create the packages:
+
+       pkg create -a -o $PACKAGES/All/
+
+   m. Create the alternate ipmitool package. The Moonshot chassis require
+      an older ipmitool embodied in the emulab-ipmitool-old port. It conflicts
+      with the regular packages so we have to remove that first.
+
+       pkg delete -f ipmitool
+       cd /usr/ports/misc/emulab-ipmitool-old
+       make BATCH=1 clean all install ; make BATCH=1 package clean
+
+   n. Save packages and update tarball and repo. On boss:
+
+       set www=/usr/testbed/www
+       cd /share/freebsd/11.3
+       mkdir packages
+       scp pcXXX:/usr/obj/ports/packages/All/\* packages/
+       sudo chown -R root:wheel packages
+
+      For testing purposes (see next step), start with the ports in
+      "Emulab-devel" repo.
+
+       sudo mv $www/FreeBSD/11.3-devel/{packages,Opackages}
+       sudo cp -rp packages $www/FreeBSD/11.3-devel/
+       sudo pkg repo $www/FreeBSD/11.3-devel/packages
+
+      Do the following when you are sure everything is good.
+      
+       set tball="FreeBSD-11.3-packages-64-`date +%Y%m%d`.tar.gz"
+       sudo tar czf $tball packages
+       sudo cp $tball $www/downloads/
+       sudo ln -sf $tball $www/downloads/FreeBSD-11.3-packages-64.tar.gz
+       sudo mv $www/FreeBSD/11.3/{packages,Opackages}
+       sudo cp -rp packages $www/FreeBSD/11.3/
+       sudo pkg repo $www/FreeBSD/11.3/packages
+
+       # tar up the ports tree that corresponds to these packages
+       set tball="FreeBSD-11.3-ports.tar.gz"
+       sudo tar --exclude=ports/.svn -czf $tball ports
+       sudo cp $tball $www/downloads/
+
+   o. Assuming you have put out the new repo in Emulab-devel above, you
+      can test it by creating a config file on your test node. Put this in
+      /etc/pkg/Emulab-devel.conf:
+      
+Emulab-devel: {
+  url: "https://www.emulab.net/FreeBSD/11.3-devel/packages",
+  mirror_type: NONE,
+  enabled: yes
+}
+
+      Make really, really sure you are logged into the node:
+
+        sudo tcsh
+        hostname -s | grep -Eq '^(boss|ops)$' && \
+            (echo 'STOP! you are on boss or ops, ^C now!'; sleep 100000; exit)
+
+      Define some handy aliases:
+
+        setenv ASSUME_ALWAYS_YES true
+        alias PA "pkg install -r Emulab-devel"
+        alias PD "pkg delete -af"
+        alias PC "pkg check -Bda"
+        alias PL "pkg install bsdadminscripts2 ; /usr/local/sbin/pkg_libchk"
+
+      avoid problems with pkg:
+
+        pkg lock pkg ca_root_nss
+
+      and cycle through likely install combos:
+
+        # all possible boss-install packages
+        PD
+        PA emulab-boss
+        PA emulab-protogeni
+        PA emulab-fs
+        PA emulab-tipserv
+        PA emulab-extras
+        PC
+	PL
+
+        # all possible ops-install packages
+        PD
+        PA emulab-ops
+        PA emulab-fs
+        PA emulab-genilib
+        PA emulab-tipserv
+        PA emulab-extras
+        PC
+	PL
+
+        # all possible fs-install packages
+        PD
+        PA emulab-fs
+        PA emulab-extras
+        PC
+	PL
+
+        # all (someday) possible tipserv-install packages
+        PD
+        PA emulab-tipserv
+        PA emulab-extras
+        PC
+	PL
+
+   p. Random useful commands to run on the package files.
+
+      For comparing with older package sets, it is sometimes useful to
+      trim off the version number, etc. if you want to see the difference
+      in which ports are installed in each, regardless of version. To
+      make a list of package name only:
+
+        cd packages
+        echo *.txz | xargs -n 1 -J % pkg query -F % '%n' | sort > /tmp/list
+
+      To see what other packages "foo" needs:
+
+        pkg info -F foo.txz -d
+
+      To see what other packages need "foo":
+
+        pkg info -F foo.txz -r
+
+################ End of TL;DR ################
+
+0. Align your ducks.
+
+a. Make sure the ports tree in /share/freebsd/X.Y/ports has the current
    Emulab ports. They are all in the "misc" subdir. If they are out of
    date, update them and remake the ports.tar.gz tarball.
 
-0b. Allocate a node on which to build everything and load the appropriate
+b. Allocate a node on which to build everything and load the appropriate
    OS on it. Pick a d430 if possible, for the speed and for the SSD. If you
    don't have an SSD, pick a node with multiple disks. I have an experiment
    "emulab-ops/package-builder" that allocates a d820 with three local
@@ -217,7 +470,7 @@ with 2015Q3 and I have updated through 2016Q2.
        alias PA "pkg add"
        alias PD "pkg delete -af ; pkg info"
        alias PC "pkg check -Bda"
-       alias PL "pkg install bsdadminscripts ; /usr/local/sbin/pkg_libchk"
+       alias PL "pkg install bsdadminscripts2 ; /usr/local/sbin/pkg_libchk"
 
        # make sure you are not on boss or ops!
        hostname -s | grep -Eq '^(boss|ops)$' && \
@@ -327,7 +580,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
     alias PA "pkg install -r Emulab"
     alias PD "pkg delete -af"
     alias PC "pkg check -Bda"
-    alias PL "pkg install bsdadminscripts ; /usr/local/sbin/pkg_libchk"
+    alias PL "pkg install bsdadminscripts2 ; /usr/local/sbin/pkg_libchk"
 
   If you have an /etc/pkg/Emulab.conf, move it out of the way:
     mv /etc/pkg/Emulab.conf /tmp/
@@ -383,167 +636,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
        PC
        PL
 
-10. Updating the Emulab package repo (11.3 specific).
-
-   [ This is a condensed version of the steps above. ]
-   
-   Occasionally you will want to make sure the ports are up to date.
-   We track the "quarterly" branch of ports, so within a three month
-   period, it should only be updated for security fixes and critical
-   problems. I am sure that using "poudriere" is the way to do this,
-   but here is what I am currently doing: I just build a new set of
-   packages from scratch and replace the old ones! "pkg upgrade" on
-   a client seems smart enough to avoid reinstalling everything just
-   because the package times have changed. It still seems to do a
-   couple of mysterious updates of things that didn't change, but I
-   can live with that...
-
-   a. Make sure the ports tree in /share/freebsd/11.3/ports on ops
-      is up to date. [ Note that there is not actually an svn repo branch
-      called "quarterly" so you have to make sure you are tracking the
-      current quarter. ]
-
-      cd /share/freebsd/11.3/ports
-      sudo svn update
-
-   b. Make sure the Emulab ports are up to date.
-
-      cd /share/freebsd/11.3/ports/misc
-      diff -r ~mike/testbed-clean/install/ports .
-      <update anything that is out of sync>
-
-   c. Swapin a FreeBSD 11.3 node (experiment emulab-ops/freebsd112-64). This will
-      give you a d430 which is the best thing to use.
-
-   d. Mount the ports and source trees.
-
-      cd /usr
-      sudo mount -o ro fs:/share/freebsd/11.3/ports /usr/ports
-      sudo mount -o ro fs:/share/freebsd/11.3/src /usr/src
-      
-   e. Make sure /etc/make.conf is up to date. It should have:
-
-  DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
-  DEFAULT_VERSIONS+=ssl=base
-
-   f. Cleanse the port environment:
-
-      sudo tcsh
-      setenv ASSUME_ALWAYS_YES true
-      pkg delete -af
-      rm -rf /usr/local/*
-      rm -rf /var/db/ports/*
-      rm -rf /usr/obj/ports/usr/ports/*
-
-   g. Make sure the package tool is installed. Sometimes you can just:
-
-      pkg info
-
-      and it will reinstall the pkg tool. However, sometimes you will
-      run up against certificate issues, the it won't reinstall it.
-      In that case, I have found the easiest thing to do is:
-
-      pushd /share/freebsd/11.3/packages-64
-      pkg add pkg-*
-      pkg add ca_root*
-      popd
-
-   h. Make sure port options are correctly set:
-
-      NOTE: if you get a message about "unsupported release" when you
-      try to do a make, it might be because /usr/include/sys/param.h
-      is out of date. Diff it with /usr/src/sys/sys/param.h and update
-      as necessary.
-
-      - make -C devel/boost-all config
-        and deselect:
-          DOCS
-      - make -C editors/emacs config
-        and deselect:
-          DBUS
-          GCONF, GSETTINGS, LCMS2, M17N, OTF, SCROLLBARS, XFT, XIM,
-	  GIF, MAGICK, PNG, SVG, TIFF, XPM,
-	  OSS,
-	  GTK3
-        and select:
-	  XAW
-      - make -C graphics/cairo config
-        and deselect OPENGL.
-      - make -C www/apache24 config
-        and select SUEXEC.
-      - make -C x11-toolkits/pango config
-        and deselect DOCS.
-
-   i. Build em all:
-
-       setenv PACKAGES /usr/obj/ports/packages
-       rm -f $PACKAGES/All/*
-       setenv myFLAGS DISABLE_VULNERABILITIES=1
-       foreach d (boss ops fs protogeni genilib tipserv extras)
-           (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean all install)
-	   (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean)
-       end
-
-   j. Check for vulnerabilities. If any are revealed, you can either try
-      to update /share/freebsd/11.3/ports with a newer version of the port
-      (e.g., from /share/freebsd/current/ports) or just live with the
-      vulnerability for now.
-
-       pkg audit -F
-
-   k. Create the packages:
-
-       pkg create -a -o $PACKAGES/All/
-
-   l. Create the alternate ipmitool package. The Moonshot chassis require
-      an older ipmitool embodied in the emulab-ipmitool-old port. It conflicts
-      with the regular packages so we have to remove that first.
-
-       pkg delete -f ipmitool
-       cd /usr/ports/misc/emulab-ipmitool-old
-       env BATCH=1 make clean all install ; make package clean
-
-   m. Save packages and update tarball and repo. On boss:
-
-      cd /share/freebsd/11.3
-      mkdir packages
-      scp pcXXX:/usr/obj/ports/packages/All/\* packages/
-      sudo chown -R root:wheel packages
-
-      set www=/usr/testbed/www
-      set tball="FreeBSD-11.3-packages-64-`date +%Y%m%d`.tar.gz"
-
-      sudo tar czf $tball packages
-      sudo cp $tball $www/downloads/
-      sudo ln -sf $tball $www/downloads/FreeBSD-11.3-packages-64.tar.gz
-      sudo mv $www/FreeBSD/11.3/{packages,Opackages}
-      sudo cp -rp packages $www/FreeBSD/11.3/
-      sudo pkg repo $www/FreeBSD/11.3/packages
-
-      # tar up the ports tree that corresponds to these packages
-      set tball="FreeBSD-11.3-ports.tar.gz"
-      sudo tar --exclude=ports/.svn -czf $tball ports
-      sudo cp $tball $www/downloads/
-
-   n. Random useful commands to run on the package files.
-
-      For comparing with older package sets, it is sometimes useful to
-      trim off the version number, etc. if you want to see the difference
-      in which ports are installed in each, regardless of version. To
-      make a list of package name only:
-
-        cd packages
-        echo *.txz | xargs -n 1 -J % pkg query -F % '%n' | sort > /tmp/list
-
-      To see what other packages "foo" needs:
-
-        pkg info -F foo.txz -d
-
-      To see what other packages need "foo":
-
-        pkg info -F foo.txz -r
-
-11. Client node packages.
+10. Client node packages.
 
    Someday we will want to make an emulab-client meta port and packages.
    Here are some notes from when I installed a fresh a set of packages on
@@ -600,7 +693,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
 
    d. Don't forget to make /usr/bin/perl symlink!
 
-12. Diffing packages. Assuming old (current) packages are in packages
+11. Diffing packages. Assuming old (current) packages are in packages
     and new packages in packages.tmp. Note that the file diff does not
     include the hashes as they seem to change just when a file is rebuilt.
     For options, we do not include the version so that we can detect changes

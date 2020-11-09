@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000- 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -68,7 +68,7 @@ else {
 if (!$dataset) {
     SPITUSERERROR("No such dataset!");
 }
-if (!$dataset->AccessCheck($this_user, $LEASE_ACCESS_MODIFY)) {
+if (!$dataset->AccessCheck($this_user, $LEASE_ACCESS_MODIFYINFO)) {
     SPITUSERERROR("Not enough permission!");
 }
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,9 +56,6 @@ $canbestow  = $project->AccessCheck($this_user,
 $isleader   = $project->IsLeader($this_user);
 $ismanager  = $project->IsManager($this_user);
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
-
 echo "<script type='text/javascript'>\n";
 echo "  window.ISADMIN        = $isadmin;\n";
 echo "  window.ISLEADER       = $isleader;\n";
@@ -70,6 +67,8 @@ echo "  window.TARGET_PROJECT = '" . $project->pid() . "';\n";
 echo "  window.UI_DISABLE_DATASETS = '" . $UI_DISABLE_DATASETS . "';\n";
 echo "  window.UI_DISABLE_RESERVATIONS = '" .
         $UI_DISABLE_RESERVATIONS . "';\n";
+echo "  window.EMBEDDED_RESGROUPS = true;\n";
+echo "  window.EMBEDDED_RESGROUPS_SELECT = false;\n";
 echo "</script>\n";
 
 # Place to hang the toplevel template.
@@ -77,14 +76,15 @@ echo "<div id='main-body'></div>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
+REQUIRE_JACKS();
 REQUIRE_MARKED();
 REQUIRE_MOMENT();
-SPITREQUIRE("js/show-project.js",
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+REQUIRE_TABLESORTER();
+AddLibrary("js/list-resgroups.js");
+AddLibrary("js/profile-support.js");
+AddTemplateList(array('confirm-delete-profile', 'profile-list-modal'));
+SPITREQUIRE("js/show-project.js");
 
-AddTemplateList(array("show-project", "experiment-list", "profile-list", "member-list", "dataset-list", "project-profile", "classic-explist", "group-list", "waitwait-modal", "oops-modal", "conversion-help-modal"));
+AddTemplateList(array("show-project", "experiment-list", "profile-list", "member-list", "dataset-list", "project-profile", "classic-explist", "group-list", "waitwait-modal", "oops-modal", "conversion-help-modal", "resgroup-list"));
 SPITFOOTER();
 ?>

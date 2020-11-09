@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2018 University of Utah and the Flux Group.
+# Copyright (c) 2010-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -240,7 +240,7 @@ elsif ($server eq "boss") {
     @files = ('perl', 'usersgroups', 'dirs', 'tftp',
 	      'boss/ports', 'boss/portfix', 'boss/patches', 'cracklib',
 	      'apache', 'boss/rcfiles', 'ntpd', 'boss/rcconf', 'boss/syslog',
-	      'boss/database', 'etchosts', 'resolvetest',
+	      'sendmail', 'boss/database', 'etchosts', 'resolvetest',
 	      'exports', 'automount', 'nfsmounts',
 	      'boss/mibs', 'boss/crontab', 'sudoers',
 	      'samba', 'boss/ssh', 'boss/hostkeys',
@@ -256,7 +256,7 @@ elsif ($server eq "boss") {
 	      'boss/mfs', 'boss/images', 'boss/xen',
 	      'boss/experiments',
 	      'boss/protogeni', 'boss/firewall', 'boss/servers',
-	      'boss/shellinabox', 'boss/portal'
+	      'boss/shellinabox', 'boss/portal', 'boss/linuxmfs',
 	     );
 }
 elsif ($server eq "fs") {
@@ -268,7 +268,7 @@ elsif ($server eq "fs") {
 elsif ($server eq "ops") {
     @files = ('perl', 'usersgroups', 'dirs', 'etchosts', 'resolvetest',
 	      'ops/ports', 'ops/portfix', 'ops/patches', 'ntpd', 'ops/rcconf',
-	      'ops/sendmail', 'ops/syslog',
+	      'sendmail', 'ops/syslog',
 	      'exports', 'automount', 'nfsmounts',
 	      'ops/crontab', 'sudoers', 'samba', 'ops/ssh', 'capture',
 	      'ops/rcfiles', 'apache', 'ops/database',

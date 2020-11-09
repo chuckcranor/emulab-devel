@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2010, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -111,11 +111,15 @@ while (<CMD>) {
 if (!defined($runcmd) || !defined($login)) {
     fatal(TMSTARTUPCMD . " not in proper format!");
 }
-(undef,undef,$uid,$gid,undef,undef,undef,undef) = getpwnam($login) or
+(undef,undef,$uid,$gid,undef,undef,undef,$homedir) = getpwnam($login) or
     fatal("Could not determine UID for $login");
 
 chown($uid, $gid, $logname) or
     fatal("Could not chown $logname to $uid/$gid: $!\n");
+
+# Convenient.
+$ENV{"HOME"} = $homedir;
+$ENV{"USER"} = $login;
 
 #
 # Fork a child so that we can run the command as the user and wait for it.

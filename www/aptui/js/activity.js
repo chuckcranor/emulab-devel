@@ -73,6 +73,9 @@ $(function () {
 	if (window.PORTALONLY) {
 	    args["portalonly"] = true;
 	}
+	if (window.CLUSTER) {
+	    args["cluster"] = window.CLUSTER;
+	}
 	var ip = $.trim($('#search-ip input').val());
 	if (ip != "") {
 	    var rx = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
@@ -83,6 +86,7 @@ $(function () {
 		alert("Invalid IP address");
 	    }
 	}
+	console.info(args);
 	sup.CallServerMethod(null, "activity", "Search", args, callback);
     }
 
@@ -103,13 +107,10 @@ $(function () {
 	var searchname = "#activity_table_search";
 	
 	var table = $(tablename)
-		.tablesorter({
-		    theme : 'green',
-		    
-		    //cssChildRow: "tablesorter-childRow",
-
-		    // initialize zebra and filter widgets
-		    widgets: ["zebra", "filter", "math"],
+	    .tablesorter({
+		    theme : 'bootstrap',
+		    headerTemplate : '{content} {icon}',
+		    widgets: ["uitheme", "zebra", "filter", "math"],
 
 		    widgetOptions: {
 			// include child row content while filtering, if true
@@ -117,7 +118,7 @@ $(function () {
 			// include all columns in the search.
 			filter_anyMatch   : true,
 			// class name applied to filter row and each input
-			filter_cssFilter  : 'form-control',
+			filter_cssFilter  : 'form-control input-sm',
 			// search from beginning
 			filter_startsWith : false,
 			// Set this option to false for case sensitive search
@@ -131,6 +132,12 @@ $(function () {
 			math_ignore   : [0],
 			// integers
 			math_mask     : '',
+			// complete executed after each function
+			math_completed : function(config) {
+			    console.info("math completed");
+			    $('#header-column-counts')
+				.html($('#footer-column-counts').html());
+			},
 		    }
 		});
 

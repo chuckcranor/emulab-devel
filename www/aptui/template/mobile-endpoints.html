@@ -1,0 +1,38 @@
+<div class='row'>
+  <div class='col-sm-12'>
+    <table id="mobile-endpoints-table" class="tablesorter">
+      <thead>
+	<tr>
+	  <th class="text-nowrap">ID</th>
+	  <th class="text-nowrap">Route</th>
+	  <th>Route Change</th>
+	  <th>Location Change</th>
+	  <th>Latitude</th>
+	  <th>Longitude</th>
+	  <th>Speed</th>
+	  <th>Heading</th>
+	</tr>
+      </thead>
+      <tbody>
+	<% _.each(endpoints, function(info, id) { %>
+	  <tr>
+	    <td><%- id %></td>
+	    <td>
+	      <a href="powder-map.php?route=<%- id %>"
+		 class="location"
+		 data-urn="<%- info.urn %>"
+		 data-routeid="<%- info.routeid %>">
+		<%- info.routename %></a>
+	    </td>
+	    <td class="format-date"><%- info.route_changed %></td>
+	    <td class="format-date"><%- info.location_stamp %></td>
+	    <td><%- info.latitude %></td>
+	    <td><%- info.longitude %></td>
+	    <td><%- info.speed %></td>
+	    <td><%- info.heading %></td>
+	  </tr>
+	<% }); %>
+      </tbody>
+    </table>
+  </div>
+</div>

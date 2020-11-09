@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2019 University of Utah and the Flux Group.
+# Copyright (c) 2005-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1600,9 +1600,10 @@ sub GetNodeAttributes($)
 # Set an attribute for a node, overwriting the same attribute if it
 # already exists.
 #
-sub SetNodeAttribute($$$) {
-    my ($self, $attrkey, $attrval) = @_;
+sub SetNodeAttribute($$$;$) {
+    my ($self, $attrkey, $attrval, $hidden) = @_;
     my $node_id = $self->node_id();
+    $hidden  = (defined($hidden) && $hidden ? 1 : 0);
 
     return -1
 	if (!$attrkey || !$attrval);
@@ -1614,7 +1615,8 @@ sub SetNodeAttribute($$$) {
 	if (!DBQueryWarn("replace into node_attributes set".
 			 "  node_id='$node_id',".
 			 "  attrkey=$attrkey,".
-			 "  attrvalue=$attrval"));
+			 "  attrvalue=$attrval,".
+			 "  hidden='$hidden'"));
 
     if (!defined($self->{"ATTRS"})) {
 	if ($self->LoadNodeAttributes()) {
@@ -1623,6 +1625,25 @@ sub SetNodeAttribute($$$) {
     }
     $self->{"ATTRS"}->{$attrkey} = $attrval;
 
+    return 0;
+}
+sub ClearNodeAttribute($$)
+{
+    my ($self, $attrkey) = @_;
+    my $node_id = $self->node_id();
+
+    return -1
+	if (!$attrkey);
+
+    my $safe_key = DBQuoteSpecial($attrkey);
+
+    return -1
+	if (!DBQueryWarn("delete from node_attributes ".
+			 "where node_id='$node_id' and attrkey=$safe_key"));
+	    
+    if (defined($self->{"ATTRS"})) {
+	delete($self->{"ATTRS"}->{$attrkey});
+    }
     return 0;
 }
 
@@ -1895,6 +1916,17 @@ sub cyclewhenoff($;$) {
     return NodeTypeInfo($self)->cyclewhenoff($stuff);
 }
 
+sub brokenipmi($;$) {
+    my ($self,$stuff) = @_;
+    my $val = undef;
+
+    if (NodeAttribute($self, "brokenipmi", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
+	return $val;
+    }
+    return NodeTypeInfo($self)->brokenipmi($stuff);
+}
+
 sub rebootable($;$) {
     my ($self,$stuff) = @_;
     my $val = undef;
@@ -1904,6 +1936,30 @@ sub rebootable($;$) {
 	return $val;
     }
     return NodeTypeInfo($self)->rebootable($stuff);
+}
+
+sub delayreloadtillalloc($;$) {
+    my ($self,$stuff) = @_;
+    my $val = undef;
+
+    if (NodeAttribute($self, "delayreloadtillalloc", \$val) == 0 &&
+	defined($val)) {
+	$$stuff = $val if (defined($stuff));
+	return $val;
+    }
+    return NodeTypeInfo($self)->delayreloadtillalloc($stuff);
+}
+
+sub powercycleafterreload($;$) {
+    my ($self,$stuff) = @_;
+    my $val = undef;
+
+    if (NodeAttribute($self, "powercycleafterreload", \$val) == 0 &&
+	defined($val)) {
+	$$stuff = $val if (defined($stuff));
+	return $val;
+    }
+    return NodeTypeInfo($self)->powercycleafterreload($stuff);
 }
 
 sub root_password($) {
@@ -3251,6 +3307,21 @@ sub ClearPartitions($)
     return 0;
 }
 
+# Boolean, does the node have any partitions setup.
+sub HasPartitions($)
+{
+    my ($self) = @_;
+    my $node_id = $self->node_id();
+
+    my $query_result = 
+	DBQueryWarn("select * from `partitions` where node_id='$node_id'");
+
+    return 0
+	if (!$query_result);
+
+    return $query_result->numrows;
+}
+
 sub ClearReservation($)
 {
     my ($self) = @_;
@@ -4024,14 +4095,17 @@ sub CheckPreReserve($$$)
     # Need to check for existing reserved_pid, but have to go to the DB,
     # not look in the object ($self) since it might be stale.
     #
+    # There is a builtin assumption that we get back a row if the
+    # node still exists, although it will be a row of nulls if there
+    # is no prereserve marking. 
+    #
     my $query_result =
 	DBQueryWarn("select reserved_pid,reservation_name, ".
-		    "  count,active,terminal from nodes ".
+		    "  count,active,terminal,approved from nodes ".
 		    "left join project_reservations on ".
 		    "     project_reservations.pid=nodes.reserved_pid and ".
 		    "     project_reservations.name=nodes.reservation_name ".
-		    "where nodes.node_id='$node_id' and ".
-		    "      project_reservations.approved is not null");
+		    "where nodes.node_id='$node_id'");
 
     # numrows would be zero if the node was suddenly deleted.
     goto done
@@ -4042,7 +4116,7 @@ sub CheckPreReserve($$$)
     # if the reservation request is still active. If not, we can clear it,
     # which will allow it to be set again below, if needed.
     #
-    my ($pid,$resname,$count,$active,$terminal) =
+    my ($pid,$resname,$count,$active,$terminal,$approved) =
 	$query_result->fetchrow_array();
     if (defined($pid)) {
 	# There is an active pre-reserve for this node.
@@ -4199,6 +4273,20 @@ sub GetOutletAuthInfo($$)
     return ($login, $auxinfo);
 }
 
+sub HasOutlet($)
+{
+    my ($self) = @_;
+    my $node_id = $self->node_id();
+
+    my $query_result =
+	DBQueryWarn("select node_id from outlets ".
+		    "where node_id='$node_id'");
+    return 0
+	if (!defined($query_result) || !$query_result->numrows);
+
+    return 1;
+}
+
 #
 # Get the currently running os/image for a node.
 #
@@ -4338,6 +4426,12 @@ sub IsTainted($;$) {
     require libTaintStates;
 
     return libTaintStates::IsTainted($self, $taint);
+}
+sub TaintIs($@) {
+    my ($self, @taint_states) = @_;
+    require libTaintStates;
+
+    return libTaintStates::TaintIs($self, @taint_states);
 }
 sub SetTaintStates($@) {
     my ($self, @taint_states) = @_;
@@ -4637,14 +4731,32 @@ sub AddSpectrum($$$)
 	    my $frequency_high = DBQuoteSpecial($request->{"frequency_high"});
 	    my $power          = DBQuoteSpecial($request->{"power"});
 
+	    #
+	    # Lets not worry about duplicates across the three different,
+	    # we insert global first, then per-node, then per-interface.
+	    #
 	    return -1
-		if (!DBQueryWarn("insert into interfaces_rf_limit set ".
+		if (!DBQueryWarn("replace into interfaces_rf_limit set ".
 				 "  node_id='$node_id', iface='$iface_id', ".
 				 "  freq_low=$frequency_low, ".
 				 "  freq_high=$frequency_high, ".
 				 "  power=$power"));
 	}
     }
+    return 0;
+}
+
+#
+# Is a node in recovery
+#
+sub InRecovery($)
+{
+    my ($self) = @_;
+
+    return 1
+	if ($self->recoverymfs_osid() && $self->temp_boot_osid() &&
+	    $self->recoverymfs_osid() == $self->temp_boot_osid());
+
     return 0;
 }
 

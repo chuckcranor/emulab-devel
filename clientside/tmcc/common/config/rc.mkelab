@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2019 University of Utah and the Flux Group.
+# Copyright (c) 2004-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1976,19 +1976,6 @@ sub SetupOpsNode($)
     mysystem("cd $TBDIR/obj/testbed; gmake $itarget");
 
     #
-    # Lets populate the mail lists with the creator of the experiment so
-    # that email goes someplace useful.
-    # 
-    opendir(DIR, "/etc/mail/lists") or
-	SetupFatal("Cannot opendir /etc/mail/lists: $!");
-    my @lists = grep { $_ ne "." && $_ ne ".." } readdir(DIR);
-    closedir(DIR);
-
-    foreach my $list (@lists) {
-	mysystem("echo ${creator}\@${outer_domain} > /etc/mail/lists/$list");
-    }
-
-    #
     # We do need to restart nfs services so that boss-install can work
     # (it requires mounting our filesystems; and yes this is true even
     # if we are not the FS server).
@@ -2814,6 +2801,12 @@ sub SetupBossNode($)
     # Restart sendmail since boss-install wants to send email
     #
     if ($FBSD_VERSION >= 5) {
+	#
+	# XXX force regeneration of a key and cert for sendmail
+	#
+	if ($FBSD_VERSION >= 10) {
+	    mysystem("rm -f /etc/mail/certs/[ch]*");
+	}
 	mysystem("/etc/rc.d/sendmail start");
     } else {
 	# XXX FBSD4 is such a pain...
@@ -3021,6 +3014,7 @@ sub CreateOpsJail($)
     print CONF "ops {\n";
     print CONF "       path = \"/ops\";\n";
     print CONF "       interface = \"${outer_controlif}\";\n";
+    print CONF "       allow.chflags = 1;\n";
     print CONF "       allow.mount.procfs = 1;\n";
     print CONF "       allow.mount.devfs = 1;\n";
     print CONF "       mount.devfs;\n";
@@ -3416,19 +3410,6 @@ sub SetupOpsJail()
     mysystem("cd $TBDIR/obj/testbed; gmake ops-install");
 
     #
-    # Lets populate the mail lists with the creator of the experiment so
-    # that email goes someplace useful.
-    # 
-    opendir(DIR, "/etc/mail/lists") or
-	SetupFatal("Cannot opendir /etc/mail/lists: $!");
-    my @lists = grep { $_ ne "." && $_ ne ".." } readdir(DIR);
-    closedir(DIR);
-
-    foreach my $list (@lists) {
-	mysystem("echo ${creator}\@${outer_domain} > /etc/mail/lists/$list");
-    }
-
-    #
     # We do need to restart nfs services so that boss-install can work
     # (it requires mounting our filesystems; and yes this is true even
     # if we are not the FS server).
@@ -3489,6 +3470,7 @@ sub CreateDefsFile($)
     my $bossnode_hostname  = $emulabconfig{"BOSSNODE"}; 
     my $opsnode_hostname   = $emulabconfig{"OPSNODE"}; 
     my $fsnode_hostname    = $emulabconfig{"FSNODE"};
+    my $wwwnode_hostname   = "www";
     my $ourdomain	   = $domain;
     my $thishomebase       = $eid;
     my $cookiesuffix       = $eid;
@@ -3518,6 +3500,7 @@ sub CreateDefsFile($)
 	$control_netmask    = $emulabconfig{"TARGETSYS_NETMASK"};
 	$bossnode_hostname  = "boss";
 	$opsnode_hostname   = "ops";
+	$wwwnode_hostname   = "www";
 	$fsnode_hostname    = ($opsvm ? "boss" : "ops");
 	$ourdomain	    = $emulabconfig{"TARGETSYS_DOMAIN"};
 	$thishomebase       = $emulabconfig{"TARGETSYS_HOMEBASE"}
@@ -3562,7 +3545,16 @@ sub CreateDefsFile($)
 	    # Look for things that include "changeme". Emails are special.
 	    #
 	    if ($val =~ /^(.*)\@(changeme)$/) {
-		print OUTDEFS "${key}=${1}\@${opsnode_hostname}.${ourdomain}\n";
+		my $mailtarget;
+		
+		if (exists($emulabconfig{"MAILERNODE"}) &&
+		    $emulabconfig{"MAILERNODE"} eq "boss") {
+		    $mailtarget = "${ourdomain}";
+		}
+		else {
+		    $mailtarget = "${opsnode_hostname}.${ourdomain}";
+		}
+		print OUTDEFS "${key}=${1}\@${mailtarget}\n";
 		next;
 	    }
 	    if (! ($val =~ /changeme/)) {
@@ -3597,7 +3589,7 @@ sub CreateDefsFile($)
 		    last SWITCH;
 		};
 		/^WWWHOST$/ && do {
-		    print OUTDEFS "WWWHOST=${bossnode_hostname}.${ourdomain}\n";
+		    print OUTDEFS "WWWHOST=${wwwnode_hostname}.${ourdomain}\n";
 		    last SWITCH;
 		};
 		/^THISHOMEBASE$/ && do {
@@ -3850,6 +3842,19 @@ sub CreateDefsFile($)
 			my $amdroot = $emulabconfig{"AMD_ROOT"};
 			print OUTDEFS "AMD_ROOT=\"$amdroot\"\n";
 		    }
+		    last SWITCH;
+		};
+		/^MAILERNODE$/ && do {
+		    # If not provided, we get the value from configure.
+		    if (exists($emulabconfig{"MAILERNODE"})) {
+			my $mailernode = $emulabconfig{"MAILERNODE"};
+			print OUTDEFS "MAILERNODE=\"$mailernode\"\n";
+		    }
+		    last SWITCH;
+		};
+		/^ELABINELAB_MAILTARGET$/ && do {
+		    my $target = "${creator}\@${outer_domain}";
+		    print OUTDEFS "ELABINELAB_MAILTARGET=\"$target\"\n";
 		    last SWITCH;
 		};
 

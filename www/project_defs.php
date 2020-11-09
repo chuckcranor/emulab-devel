@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2019 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -141,6 +141,7 @@ class Project
 	return (is_null($this->project) ? -1 : $this->project[$name]);
     }
     function pid_idx()	     { return $this->field("pid_idx"); }
+    function gid_idx()	     { return $this->field("pid_idx"); }
     function pid()	     { return $this->field("pid"); }
     function created()       { return $this->field("created"); }
     function expires()       { return $this->field("expires"); }
@@ -170,6 +171,7 @@ class Project
     function default_user_interface()
 	                     { return $this->field("default_user_interface"); }
     function linked_to_us()  { return $this->field("linked_to_us"); }
+    function forClass()      { return $this->field("forClass"); }
     function cvsrepo_public(){ return $this->field("cvsrepo_public"); }
     function allow_workbench(){ return $this->field("allow_workbench"); }
     function nonlocal_id()   { return $this->field("nonlocal_id"); }
@@ -738,6 +740,16 @@ class Project
 		     "where pid_idx='$idx'");
 
 	$this->project["disabled"] = $onoff;
+	return 0;
+    }
+    function SetforClass($onoff) {
+	$idx    = $this->pid_idx();
+	$onoff  = ($onoff ? 1 : 0);
+
+	DBQueryFatal("update projects set forClass='$onoff' ".
+		     "where pid_idx='$idx'");
+
+	$this->project["forClass"] = $onoff;
 	return 0;
     }
     function SetBoundPortal($onoff) {

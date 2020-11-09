@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -85,6 +85,7 @@ use File::Path;
 use File::Copy;
 use File::Temp;
 use POSIX qw(:signal_h);
+use Fcntl ':mode';
 
 # Pull in libvnode
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
@@ -379,6 +380,7 @@ sub FreeRouteTable($);
 sub downloadOneImage($$$);
 sub captureRunning($);
 sub checkForInterrupt();
+sub FixGrubConsole($$$$$);
 
 sub getXenInfo()
 {
@@ -526,7 +528,7 @@ sub init($)
 
     # See which sfdisk we have. Version 2.26 removed some options we used.
     my $out = `sfdisk -v`;
-    if (defined($out) && $out =~ /2\.(\d+)(\.\d+)$/) {
+    if (defined($out) && $out =~ /2\.(\d+)(\.\d+)?$/) {
 	if (int($1) >= 26) {
 	    $newsfdisk = 1;
 	}
@@ -686,8 +688,12 @@ sub rootPreConfig($;$)
     mysystem("$OVSSTART --delete-bridges start");
 
     # For gre tunnels to work with iptables
-    mysystem("$MODPROBE nf_conntrack_proto_gre");
-    mysystem("$MODPROBE nf_conntrack_pptp");
+    if (system("modinfo nf_conntrack_proto_gre") == 0) {
+        mysystem("$MODPROBE nf_conntrack_proto_gre");
+    }
+    if (system("modinfo nf_conntrack_pptp") == 0) {
+        mysystem("$MODPROBE nf_conntrack_pptp");
+    }
 
     # For bandwidth contraints.
     mysystem("$MODPROBE ifb numifbs=$MAXIFB");
@@ -1007,6 +1013,40 @@ sub rootPreConfig($;$)
     mysystem2("$SYSCTL -w ".
 	      " net.ipv4.netfilter.ip_conntrack_tcp_timeout_established=54000");
 
+    # Kernels and initramfses are getting larger and larger, and because
+    # pygrub uses a tmpfile inside /run, and because dom0_mem is usually
+    # quite low (and thus so is the default /run tmpfs allocation), we
+    # have to increase the max size of /run.  128M should be fine for
+    # now, and that is below dom0_mem in all of our cases.  Someday we
+    # might need to be more intelligent about how we set /run's size.
+    my $runsize;
+    foreach my $runline (`cat /proc/mounts`) {
+	if ($runline =~ /^tmpfs\s+\/run\s+.*size=(\d+)([kKmMgG]?).*$/) {
+	    TBDebugTimeStamp("detected /run size $1$2");
+	    $runsize = int($1);
+	    if (defined($2) && $2 ne '') {
+		if ($2 eq 'k' || $2 eq 'K') {
+		    $runsize /= 1024;
+		}
+		elsif ($2 eq 'g' || $2 eq 'G') {
+		    $runsize *= 1024;
+		}
+		elsif ($2 eq 'm' || $2 eq 'M') { }
+		else {
+		    # Not going to risk making a mistake with a size
+		    # we're uncertain of.
+		    $runsize = undef;
+		}
+	    }
+	    last;
+	}
+    }
+    # I suppose this might fail in the dom0_mem=512M, so be best-effort.
+    if (defined($runsize) && $runsize < 128.0) {
+	TBDebugTimeStamp("detected /run size below threshold 128M; increasing");
+	mysystem2("mount -o remount,size=128M /run");
+    }
+
     mysystem("touch /var/run/xen.ready");
     TBDebugTimeStamp("  releasing global lock")
 	if ($lockdebug);
@@ -1298,15 +1338,49 @@ sub vnodeCreate($$$$)
     #
     my $vdiskprefix = "sd";	# yes, this is right for FBSD too
     my $ishvm = 0;
+    my $ispvh = 0;
     my $os;
     
     if ($imagemetadata->{'PARTOS'} =~ /freebsd/i) {
 	$os = "FreeBSD";
 
-	# XXX we assume that all 10.0 and above will be PVHVM
-	if ($imagemetadata->{'OSVERSION'} >= 10) {
-	    $vdiskprefix = "hd";
+	#
+	# Allow explict specification of the virtualization tech.
+	# XXX this is not really FreeBSD specific.
+	#
+	if (exists($attributes->{'XEN_FORCE_HVM'})
+	    && "$attributes->{'XEN_FORCE_HVM'}" eq '1') {
 	    $ishvm = 1;
+	}
+	elsif (exists($attributes->{'XEN_FORCE_PVH'})
+	    && "$attributes->{'XEN_FORCE_PVH'}" eq '1') {
+	    $ispvh = 1;
+	}
+	#
+	# Otherwise use what we know about FreeBSD versions to choose
+	# the best case.
+	#
+	else {
+	    # If 12.x and above and Xen 4.11 or above, we use PVH...
+	    if ($imagemetadata->{'OSVERSION'} >= 12 &&
+		($xeninfo{xen_major} > 4 ||
+		 $xeninfo{xen_major} == 4 && $xeninfo{xen_minor} >= 11)) {
+		$vdiskprefix = "xvd";
+		$ispvh = 1;
+	    }
+	    # ...otherwise we assume that all 10.0 and above are PVHVM
+	    elsif ($imagemetadata->{'OSVERSION'} >= 10) {
+		$vdiskprefix = "hd";
+		$ishvm = 1;
+	    }
+	    #
+	    # XXX Hmm...it is unclear if pass-through or PV USB is available,
+	    # so if they want USB, force HVM instead.
+	    #
+	    if ($ispvh && exists($attributes->{'XEN_USBDEVICES'})) {
+		$ishvm = 1;
+		$ispvh = 0;
+	    }
 	}
     }
     else {
@@ -1318,6 +1392,7 @@ sub vnodeCreate($$$$)
     }
     $private->{'os'} = $os;
     $private->{'ishvm'} = $ishvm;
+    $private->{'ispvh'} = $ispvh;
 
     # All of the disk stanzas for the config file.
     my @alldisks = ();
@@ -1579,7 +1654,10 @@ okay:
 					  $private->{'rootpartition'},
 					  "$VMDIR/$vnode_id");
 	if (!defined($kernel)) {
-	    if ($imagemetadata->{'OSVERSION'} >= 10) {
+	    if ($ispvh) {
+		# Must have a kernel
+		;
+	    } elsif ($imagemetadata->{'OSVERSION'} >= 10) {
 		# we only support HVM for 10+ kernels
 		$kernel = "NO-PV-KERNELS";
 	    } elsif ($imagemetadata->{'OSVERSION'} >= 9) {
@@ -1604,9 +1682,14 @@ okay:
 	undef $image{'ramdisk'};
     }
     elsif (exists($attributes->{'XEN_FORCE_HVM'})
-	&& "$attributes->{'XEN_FORCE_HVM'}" eq '1'
-	&& "$imagemetadata->{'PART'}" eq '0') {
+	&& "$attributes->{'XEN_FORCE_HVM'}") {
 	$private->{'ishvm'} = $ishvm = 1;
+	undef $image{'kernel'};
+	undef $image{'ramdisk'};
+    }
+    elsif (exists($attributes->{'XEN_FORCE_PVH'})
+	&& "$attributes->{'XEN_FORCE_PVH'}") {
+	$private->{'ispvh'} = $ispvh = 1;
 	undef $image{'kernel'};
 	undef $image{'ramdisk'};
     }
@@ -1653,8 +1736,102 @@ okay:
 		    $image{'ramdisk'} = $ramdisk;
 		}
 	    }
-	    # Use the booted kernel. Works sometimes. 
+	    # else... Use the booted kernel. Works sometimes. 
+
+	    # Some kernels (CentOS8) no longer support PV or PVH.  So,
+	    # attempt to handle that by falling back to HVM if PV is not
+	    # supported.
+	    if (defined($kernelconfig)) {
+		my $kconfig = ReadLinuxKernelConfig($kernelconfig);
+		if (defined($kconfig)
+		    && (exists($kconfig->{"CONFIG_XEN_PV"})
+			&& (!defined($kconfig->{"CONFIG_XEN_PV"})
+			    || $kconfig->{"CONFIG_XEN_PV"} eq 'n'))) {
+		    print "Warning: detected $kernelconfig without XEN_PV support;".
+			" falling back to HVM!\n";
+		    $private->{'ishvm'} = $ishvm = 1;
+		    undef $image{'kernel'};
+		    undef $image{'ramdisk'};
+		    undef $image{'bootloader'};
+		}
+	    }
 	}
+    }
+
+    if ($ishvm && $loadslice != 0 && $imagemetadata->{'PARTOS'} !~ /FreeBSD/i) {
+	#
+	# If this is not a whole-disk image, and if it's not FreeBSD, it
+        # needs a simple MBR loader to find the first bootable partition
+        # and load that.  LILO does that for us.  Really, we could do
+        # this whether $ishvm or not, but for now, just do ishvm.
+	#
+	# NB: LILO does not support running LV devices, so we cache an
+        # install of its standalone mode boot blocks.)
+	#
+	# NB: we do this here, instead of CreatePrimaryDisk, so that we
+	# can support both thin and regular volumes.
+	#
+	my $LILOFILE = "/etc/emulab/lilo.bootsector.dd";
+	if (! -f $LILOFILE) {
+	    fatal("libvnode_xen: HVM mode on Linux slice image requires (missing) LILO boot blocks");
+	}
+	if (mysystem2("dd if=$LILOFILE of=$rootvndisk oflag=sync")) {
+	    fatal("libvnode_xen: could not install non-FreeBSD LILO MBR loader");
+	}
+	if (RunWithLock("kpartx", "kpartx -dv -s $rootvndisk")) {
+	    print STDERR "Warning: libvnode_xen: could not update /dev/mapper entries after HVM LILO\n";
+	}
+	else {
+	    if (RunWithLock("kpartx", "kpartx -av -s $rootvndisk")) {
+		fatal("libvnode_xen: could not finish updating /dev/mapper entries after HVM LILO");
+	    }
+	    my $waittime = 60;
+	    while (--$waittime && ! -e $private->{'rootpartition'}) {
+		sleep(1);
+		if ($waittime % 4 == 0) {
+		    TBDebugTimeStamp("still waiting for $private->{'rootpartition'}".
+				     " to appear after kpartx...");
+		}
+	    }
+	    if (! -e $private->{'rootpartition'}) {
+		TBDebugTimeStamp("$private->{'rootpartition'} still does not exist,".
+				 " there will be problems!");
+	    }
+	}
+    }
+
+    if ($ispvh && $imagemetadata->{'PARTOS'} !~ /FreeBSD/i) {
+	$image{'kernel'} = "/usr/lib/grub-xen/grub-i386-xen_pvh.bin";
+	my @pvhgrubconfig = (
+	    "root='(xen/${rootvdisk}a)'",
+	    #root='hd0,msdos1'
+	    "insmod part_msdos",
+	    "#insmod part_gpt",
+	    "insmod search",
+	    "insmod configfile",
+	    "#insmod legacy_configfile",
+	    "if search -s root -f /boot/grub2/grub.cfg ; then",
+	    "  configfile /boot/grub2/grub.cfg",
+	    "elif search -s root -f /@/boot/grub2/grub.cfg ; then",
+	    "  configfile /@/boot/grub2/grub.cfg",
+	    "elif search -s root -f /boot/grub/grub.cfg ; then",
+	    "  configfile /boot/grub/grub.cfg",
+	    "elif search -s root -f /boot/grub/menu.lst ; then",
+	    "  legacy_configfile /boot/grub/menu.lst",
+	    "elif search -s root -f /grub2/grub.cfg ; then",
+	    "  configfile /grub2/grub.cfg",
+	    "elif search -s root -f /grub/menu.lst ; then",
+	    "  legacy_configfile /grub/menu.lst",
+	    "fi"
+	    );
+	my $pvhgrubpath = "$VMDIR/$vnode_id/grub-pvh.cfg";
+	open(FD,">$pvhgrubpath")
+	    or fatal("libvnode_xen: could not open >$pvhgrubpath ($!)");
+	for my $pvhgrubline (@pvhgrubconfig) {
+	    print FD $pvhgrubline . "\n";
+	}
+	close(FD);
+	$image{'extra'} = $pvhgrubpath;
     }
 
     my $auxchar  = ord('b');
@@ -1717,12 +1894,15 @@ okay:
     # http://wiki.freebsd.org/AdrianChadd/XenHackery
     # BSD PVHVM stuff inspired by:
     # http://wiki.xen.org/wiki/Testing_FreeBSD_PVHVM
+    # BSD PVH stuff inspired by:
+    # https://pub.nethence.com/xen/guest-freebsd-full
     #
     $vninfo->{'cffile'} = [];
 
     my $kernel = $image{'kernel'};
     my $ramdisk = $image{'ramdisk'};
     my $bootloader = $image{'bootloader'};
+    my $extra = $image{'extra'};
 
     addConfig($vninfo, "# Xen configuration script for $os vnode $vnode_id", 2);
     addConfig($vninfo, "name = '$vnode_id'", 2);
@@ -1737,7 +1917,16 @@ okay:
     }
     addConfig($vninfo, "disk = [" . join(",", @alldisks) . "]", 2);
 
-    if ($ishvm) {
+    if ($ispvh) {
+	addConfig($vninfo, "type='pvh'", 2);
+	if ($os eq "FreeBSD") {
+	    addConfig($vninfo, "extra='vfs.root.mountfrom=ufs:xbd0s1a'", 2);
+	}
+	elsif (defined($extra)) {
+	    addConfig($vninfo, "extra='$extra'", 2);
+	}
+	# XXX handle XEN_USBDEVICES?
+    } elsif ($ishvm) {
 	# XXX newer xen tools disallow command line params with direct boot
 	#addConfig($vninfo, "extra = 'boot_verbose=1'", 2);
 
@@ -1758,7 +1947,7 @@ okay:
 	if (exists($attributes->{'XEN_USBDEVICES'})) {
 	    my $devices = $attributes->{'XEN_USBDEVICES'};
 	    addConfig($vninfo, "usb=1", 2);
-	    addConfig($vninfo, "usbdevices = [".
+	    addConfig($vninfo, "usbdevice=[".
 		      join(",", map {"'" . $_ . "'"} split(",", $devices)) .
 		      "]", 2);
 	}
@@ -1771,7 +1960,7 @@ okay:
 	else {
 	    addConfig($vninfo, "root = '/dev/$rootvdisk ro'", 2);
 	    addConfig($vninfo, "extra = ".
-		      "        'console=hvc0 xencons=tty apparmor=0 selinux=0'", 2);
+		      "        'console=hvc0 xencons=tty'", 2);
 	}
     }
   done:
@@ -1838,6 +2027,8 @@ sub vnodePreConfig($$$$$){
     my $vninfo = $private;
     my $retval = 0;
     my $fixups = 0;
+    my $ishvm = $private->{'ishvm'};
+    my $ispvh = $private->{'ispvh'};
 
     #
     # XXX vnodeCreate is not called when a vnode was halted or is rebooting.
@@ -2015,13 +2206,39 @@ sub vnodePreConfig($$$$$){
 	mysystem2("sed -i -e '/swap/d' $vnoderoot/etc/fstab");
 
 	# enable the correct device for console
-	if (-f "$vnoderoot/etc/inittab") {
+	# NB: we must do this work here, because a single golden image
+	# might be booted for both the PV or HV case, and consoles are
+	# different for both.
+	if (!$ishvm && -f "$vnoderoot/etc/inittab") {
 	    mysystem2("sed -i.bak -e 's/xvc0/console/' ".
 		      "  $vnoderoot/etc/inittab");
 	}
-	if (-f "$vnoderoot/etc/init/ttyS0.conf") {
+	if (!$ishvm && -f "$vnoderoot/etc/init/ttyS0.conf") {
 	    mysystem2("sed -i.bak -e 's/ttyS./hvc0/' ".
 		      "  $vnoderoot/etc/init/ttyS0.conf");
+	}
+	# We need to have slightly different settings for HVM.  Note
+	# that we only handle grub2
+	if ($ishvm || $ispvh) {
+	    foreach my $gf ("$vnoderoot/boot/grub2/grub.cfg",
+			    "$vnoderoot/boot/grub/grub.cfg",
+			    "$vnoderoot/boot/grub/menu.lst") {
+		next if (! -f $gf);
+		my $mode = (stat($gf))[2] & 07777;
+		my $mode_reset = 0;
+		if (!($mode & S_IWUSR)) {
+		    chmod($mode | S_IWUSR,$gf);
+		    $mode_reset = 1;
+		}
+		my $gconsole = "ttyS0";
+		if ($ispvh) {
+		    $gconsole = "hvc0";
+		}
+		FixGrubConsole($gf,$gconsole,0,115200,"0x3f8");
+		mysystem2("sed -i -e 's;root=/dev/[hs]d;root=/dev/${ldisk};' $gf");
+		chmod($mode,$gf)
+		    if ($mode_reset);
+	    }
 	}
 	#
 	# Change the password if possible. If something goes wrong,
@@ -2076,25 +2293,42 @@ sub vnodePreConfig($$$$$){
 		if ($?);
 	
 	my $ldisk = "da";
-	if ($vninfo->{'ishvm'}) {
+	if ($vninfo->{'ispvh'}) {
+	    $ldisk = "xbd";
+	} elsif ($vninfo->{'ishvm'}) {
 	    $ldisk = "ada";
 	}
 	if (-e "$vnoderoot/etc/dumpdates") {
-	    mysystem2("sed -i.bak -e 's;^/dev/\\(ada\\|ad\\);/dev/$ldisk;' ".
+	    mysystem2("sed -i.bak -e 's;^/dev/\\(ada\\|ad\\|da\\);/dev/$ldisk;' ".
 		      "  $vnoderoot/etc/dumpdates");
 	    goto bad
 		if ($?);
 	}
-	mysystem2("sed -i.bak -e 's;^/dev/\\(ada\\|ad\\);/dev/$ldisk;' ".
+	mysystem2("sed -i.bak -e 's;^/dev/\\(ada\\|ad\\|da\\);/dev/$ldisk;' ".
 		  "  $vnoderoot/etc/fstab");
 	goto bad
 	    if ($?);
 
 	#
+	# Need to fix up virtual serial console device for PVH
+	#
+	if ($vninfo->{'ispvh'}) {
+	    mysystem2("grep -q '^xc0' $vnoderoot/etc/ttys");
+	    if ($?) {
+		open(TTYS, ">>$vnoderoot/etc/ttys")
+		    or goto bad;
+		print TTYS "\n# Xen PV console\n";
+		print TTYS "xc0     \"/usr/libexec/getty std.115200\" vt100   onifconsole secure\n";
+		close(TTYS);
+	    }
+	}
+
+	#
 	# In HVM the emulated RTC is UTC.
 	# Make sure FreeBSD knows that.
+	# XXX apparently this is true for the PVH virtualized clock as well.
 	#
-	if ($vninfo->{'ishvm'}) {
+	if ($vninfo->{'ishvm'} || $vninfo->{'ispvh'}) {
 	    unlink("$vnoderoot/etc/wall_cmos_clock");
 	}
     }
@@ -3141,6 +3375,7 @@ sub vnodeHalt($$$$)
 {
     my ($vnode_id, $vmid, $vnconfig, $private) = @_;
     my $ishvm = $private->{'ishvm'};
+    my $ispvh = $private->{'ispvh'};
     my $domID;
 
     if ($vnode_id =~ m/(.*)/) {
@@ -4741,19 +4976,15 @@ sub createExpBridges($$$)
 		    if ($?);
 
 		if (! -d "/sys/class/net/$pdev") {
-		    mysystem2("$VLANCONFIG set_name_type DEV_PLUS_VID_NO_PAD");
-		    mysystem2("$VLANCONFIG add $iface $tag");
-		    goto bad
-			if ($?);
-		    mysystem2("$VLANCONFIG set_name_type VLAN_PLUS_VID_NO_PAD");
-
 		    #
 		    # We do not want the vlan device to have the same
 		    # mac as the physical device, since that will confuse
 		    # findif later.
 		    #
 		    my $bmac = fixupMac(GenFakeMac());
-		    mysystem2("$IPBIN link set $pdev address $bmac");
+		    
+		    mysystem2("$IPBIN link add link $iface name $pdev ".
+			      " address $bmac type vlan id $tag");
 		    goto bad
 			if ($?);
 		    
@@ -5795,6 +6026,25 @@ sub ExtractKernelFromLinuxImage($$$)
     }
 }
 
+sub ReadLinuxKernelConfig($)
+{
+    my $ret = {};
+
+    open(FD,$_[0])
+	or return undef;
+    while (my $line = <FD>) {
+	if ($line =~ /^(CONFIG_[^=]+)=(.+)$/) {
+	    $ret->{$1} = $2;
+	}
+	elsif ($line =~ /^#\s+(CONFIG_[^\s]+)\s+is\s+not\s+set/) {
+	    $ret->{$1} = undef;
+	}
+    }
+    close(FD);
+
+    return $ret;
+}
+
 sub ExtractKernelFromFreeBSDImage($$$)
 {
     my ($lvname, $lvmpath, $outdir) = @_;
@@ -5834,6 +6084,10 @@ sub ExtractKernelFromFreeBSDImage($$$)
 	    if ($?) {
 		# XXX PVHVM kernel
 		mysystem2("nm $kernelfile | grep -q xen_hvm_init");
+		if ($?) {
+		    # XXX PVH kernel
+		    mysystem2("nm $kernelfile | grep -q xen_pvh_init_ops");
+		}
 	    }
 	    goto skip
 		if ($?);
@@ -5956,6 +6210,156 @@ sub FixRamFs($$$)
 done:
     mysystem2("/bin/rm -rf $tempdir");
     return $rval;
+}
+
+# This comes from tmcc/linux/linux_slicefix.pl .
+sub FixGrubConsole($$$$$)
+{
+    my ($file, $console, $sunit, $sspeed, $sport) = @_;
+    my $comunit = $sunit + 1;
+
+    if (!open(FILE, "+<$file")) {
+	print STDERR "FixGrubConsole: couldn't open $file: $!\n";
+	return -1;
+    }
+
+    my @buffer = ();
+    while (<FILE>) {
+	#
+	# Fix up serial --unit=N --speed=S line:
+	#  vga/null: comment out
+	#  sio*: uncomment and make sure N is correct (must exist!)
+	#
+	if (/^(#?)serial\s/) {
+	    my $com = $1;
+	    if ($sunit < 0) {
+		if ($com) {
+		    push @buffer, $_;
+		} else {
+		    push @buffer, "#$_";
+		}
+	    } elsif ($sport) {
+		push @buffer, "serial --unit=$sunit --port=$sport --speed=$sspeed\n";
+	    } else {
+		push @buffer, "serial --unit=$sunit --speed=$sspeed\n";
+	    }
+	    next;
+	}
+	#
+	# grub1 terminal lines
+	#
+	if (/^terminal\s/) {
+	    if ($sunit < 0) {
+		push @buffer, "terminal --timeout=5 console\n";
+	    } else {
+		push @buffer, "terminal --dumb --timeout=0 serial console\n";
+	    }
+	    next;
+	}
+	#
+	# grub2 terminal_{input,output} lines
+	#
+	if (/^terminal_(input|output)\s/) {
+	    my $dir = $1;
+	    if ($sunit < 0) {
+		push @buffer, "terminal_$dir console\n";
+	    } else {
+		push @buffer, "terminal_$dir serial\n";
+	    }
+	    next;
+	}
+	#
+	# Kernel and initrd command lines with VGA (tty0)
+	#
+	if (/console=tty0\s/) {
+	    # get rid of any existing serial console clauses
+	    s#console=ttyS\S+##g;
+	    if ($console =~ /^hvc/) {
+		#
+		# Virtual consoles (e.g. hvcX on POWER).  Not true
+		# serial consoles, so must be handled specially.
+		# Image grub.cfg must have console=tty0, or
+		# console=$console, for this to work.
+		#
+		if (! /console=$console/) {
+		    s#console=tty0#console=tty0 console=$console#;
+		}
+	    }
+	    elsif ($sunit >= 0) {
+		# change tty0 to appropriate serial device
+		s#console=tty0#console=ttyS$sunit,$sspeed#;
+	    }
+	    push @buffer, $_;
+	    next;
+	}
+	#
+	# Xen command lines with VGA (vga)
+	#
+	if (/console=vga\s/) {
+	    # get rid of any existing serial console clauses
+	    s#console=com\d\S*##g;
+	    s#com\d=\S+##g;
+	    if ($sunit >= 0) {
+		# change vga to appropriate serial device
+		s#console=vga#console=com$comunit com$comunit=$sspeed#;
+	    }
+	    push @buffer, $_;
+	    next;
+	}
+	#
+	# Kernel and initrd command lines with serial (ttyS*)
+	#
+	if (/console=ttyS(\d+)/) {
+	    # get rid of any existing VGA clause
+	    s#console=tty0##g;
+	    if ($sunit < 0) {
+		# replace serial with VGA
+		s#console=ttyS\S+#console=tty0#g;
+	    }
+	    elsif ($console =~ /^hvc/) {
+		if (! /console=$console/) {
+		    s#console=ttyS\d+#console=tty0 console=$console#;
+		}
+	    }
+	    else {
+		# fixup serial lines
+		s#console=ttyS\S+#console=ttyS$sunit,$sspeed#g;
+	    }
+	    push @buffer, $_;
+	    next;
+	}
+	#
+	# Xen command lines with serial (console=comN, comN=<speed>)
+	#
+	if (/console=com(\d)/) {
+	    # get rid of any existing VGA clause
+	    s#console=vga##g;
+	    if ($sunit < 0) {
+		# replace serial with VGA
+		s#console=com\d\S*#console=vga#g;
+		s#com\d=\S+##g;
+	    } else {
+		# fixup serial lines
+		s#console=com\d\S*#console=com$comunit#g;
+		s#com\d=\S+#com$comunit=$sspeed#g;
+	    }
+	    push @buffer, $_;
+	    next;
+	}
+	#
+	# Otherwise, just copy
+	#
+	push @buffer, $_;
+    }
+
+    seek FILE, 0, 0;
+    truncate FILE, 0;
+
+    print FILE @buffer;
+
+    close FILE;
+
+    return 0;
 }
 
 #

@@ -164,6 +164,8 @@ $routing = array("geni-login" =>
 						     "Do_ConsoleURL",
 						 "DeleteNodes" =>
 						     "Do_DeleteNodes",
+						 "DeleteSite" =>
+						     "Do_DeleteSite",
 						 "RequestExtension" =>
 						     "Do_RequestExtension",
 						 "DenyExtension" =>
@@ -176,6 +178,8 @@ $routing = array("geni-login" =>
 						     "Do_Snapshot",
 						 "SnapshotStatus" =>
                                                      "Do_SnapshotStatus",
+						 "PowerCycle" =>
+                                                     "Do_PowerCycle",
 						 "Reboot" =>
                                                      "Do_Reboot",
 						 "Reload" =>
@@ -208,6 +212,8 @@ $routing = array("geni-login" =>
 						     "Do_GetRspec",
 						 "IgnoreFailure" =>
 						     "Do_IgnoreFailure",
+						 "Top" =>
+						     "Do_Top",
 						 "dismissExtensionDenied" =>
                                                  "Do_DismissExtensionDenied")),
 		 "approveuser" =>
@@ -282,6 +288,8 @@ $routing = array("geni-login" =>
                                                       "Do_ProfileList",
                                                  "ProjectProfileList" =>
                                                       "Do_ProjectProfileList",
+                                                 "ResgroupList" =>
+                                                      "Do_ResgroupList",
                                                  "Toggle" =>
                                                      "Do_Toggle",
                                                  "FreezeOrThaw" =>
@@ -323,12 +331,16 @@ $routing = array("geni-login" =>
                                                       "Do_MemberList",
                                                  "GroupList" =>
                                                       "Do_GroupList",
+                                                 "ResgroupList" =>
+                                                      "Do_ResgroupList",
                                                  "UsageSummary" =>
                                                       "Do_UsageSummary",
                                                  "Toggle" =>
                                                      "Do_Toggle",
                                                  "ProjectProfile" =>
-                                                      "Do_ProjectProfile")),
+                                                      "Do_ProjectProfile"
+                              )
+                        ),
 		 "groups" =>
 			array("file"    => "groups.ajax",
 			      "guest"   => false,
@@ -538,7 +550,10 @@ $routing = array("geni-login" =>
 						 "delete" =>
 						      "Do_DeleteNews",
 						 "getnews" =>
-						      "Do_GetNews")),
+                                                      "Do_GetNews",
+						 "gotnews" =>
+                                                      "Do_GotNews",
+                              )),
 		 "experiments" =>
 			array("file"    => "experiments.ajax",
 			      "guest"   => false,
@@ -573,6 +588,8 @@ $routing = array("geni-login" =>
 			      "guest"   => true,
 			      "methods" => array("GetHealthStatus" =>
 						    "Do_GetHealthStatus",
+						 "GetHealthStatusExtended" =>
+                                                   "Do_GetHealthStatusExtended",
 						 "GetWirelessStatus" =>
 						    "Do_GetWirelessStatus")),
 		 "memlane" =>
@@ -627,7 +644,35 @@ $routing = array("geni-login" =>
                                                  "GetBaseStations" =>
                                                      "Do_GetBaseStations",
                                                  "GetMobileEndpoints" =>
-                                                     "Do_GetMobileEndpoints")),
+                                                     "Do_GetMobileEndpoints",
+                                                 "GetRadioInfo" =>
+                                                     "Do_GetRadioInfo",
+                              )
+                        ),
+		 "frequency-graph" =>
+			array("file"    => "frequency-graph.ajax",
+			      "guest"   => true,
+			      "methods" => array("GetFrequencyData" =>
+						     "Do_GetFrequencyData",
+                                                 "GetListing" =>
+						     "Do_GetListing",
+                              )
+                        ),
+		 "rfrange" =>
+			array("file"    => "rfrange.ajax",
+			      "guest"   => false,
+			      "methods" => array("ProjectRanges" =>
+                                                     "Do_ProjectRanges",
+                                                 "GlobalRanges" =>
+                                                     "Do_GlobalRanges",
+                                                 "AllProjectRanges" =>
+                                                     "Do_AllProjectRanges",
+                                                 "ProjectInuseRanges" =>
+                                                     "Do_ProjectInuseRanges",
+                                                 "AllInuseRanges" =>
+                                                     "Do_AllInuseRanges"
+                              )
+                        ),
 );
 
 #

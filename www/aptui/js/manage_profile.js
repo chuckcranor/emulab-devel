@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'publish-modal', 'share-modal', 'gitrepo-picker','profile-list-modal','confirm-delete-profile', 'copy-repobased-profile']);
+    var templates = APT_OPTIONS.fetchTemplateList(['manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'publish-modal', 'share-modal', 'gitrepo-picker', 'copy-repobased-profile']);
     var manageString = templates['manage-profile'];
     var waitwaitString = templates['waitwait-modal'];
     var rendererString = templates['renderer-modal'];
@@ -12,8 +12,6 @@ $(function ()
     var publishString = templates['publish-modal'];
     var shareString = templates['share-modal'];
     var gitrepoString = templates['gitrepo-picker'];
-    var plistString = templates['profile-list-modal'];
-    var deleteString = templates['confirm-delete-profile'];
     var copyrepoString = templates['copy-repobased-profile'];
 
     var profile_uuid = null;
@@ -48,7 +46,6 @@ $(function ()
     var oopsTemplate      = _.template(oopsString);
     var shareTemplate     = _.template(shareString);
     var gitrepoTemplate   = _.template(gitrepoString);
-    var plistTemplate     = _.template(plistString);
     var stepsInitialized  = false;
     var portal_converted  = false;
 
@@ -185,11 +182,6 @@ $(function ()
 	$('#rspectext_div').html(rspectext_html);
 	$('#share_div').html(shareTemplate({formfields: fields}))
 	$('#copy_repobased_profile_div').html(copyrepoString);
-	$('#confirm_delete_div').html(deleteString);
-	// Extra warning in the confirm delete modal.
-	if (window.THIS_VERSION == window.LATEST_VERSION) {
-	    $('#confirm-delete-profile-warning').removeClass("hidden");
-	}
 
 	// Fireoff repo stuff now.
 	if (fromrepo) {
@@ -476,10 +468,18 @@ $(function ()
 	    $('#profile_steps_link').text("Hide Tour");
 	})
 	
-	// Confirm Delete profile.
-	$('#confirm-delete-button').click(function (event) {
+	// Delete profile button.
+	$('#profile_delete_button').click(function (event) {
 	    event.preventDefault();
-	    DeleteProfile();
+	    profileSupport
+		.DeleteVersion(version_uuid,
+			       // Extra warning in the confirm modal.
+			       window.THIS_VERSION == window.LATEST_VERSION,
+			       function (uuid, json) {
+				   // Successful deletion, we have to
+				   // go someplace else.
+				   window.location.replace(json.value);
+			       });
 	});
 
 	// Git repo URL modal.
@@ -607,6 +607,7 @@ $(function ()
 	$('#profile_disabled').change(function() { ProfileModified(); });
 	$('#profile_nodelete').change(function() { ProfileModified(); });
 	$('#profile_project_write').change(function() { ProfileModified(); });
+	$('.examples_portals_checkbox').change(function(){ProfileModified(); });
 	
 	/*
 	 * A double click handler that will render the instructions or
@@ -623,12 +624,6 @@ $(function ()
 		$('#renderer_modal_div').html($(this).html());
 		sup.ShowModal("#renderer_modal");
 	    });
-	// Handler for normal instantiate submit button, which is in
-	// the modal.
-	$('#instantiate_submit_button').click(function (event) {
-	    event.preventDefault();
-	    Instantiate();
-	});
 	// Handler for publish submit button, which is in the modal.
 	$('#publish_submit_button').click(function (event) {
 	    event.preventDefault();
@@ -643,21 +638,38 @@ $(function ()
 	    }
 	    sup.ShowModal("#share_profile_modal");
 	});
+	// Handler for updates to the example portals field, on the
+	// the Mothership, where we have multiple portals.
+	$('.examples_portals_checkbox').click(function(event) {
+	    // Gotta be public to list in examples page.
+	    if ($('.examples_portals_checkbox:checked').length &&
+		!$('#profile_who_public').is(":checked")) {
+		event.preventDefault();
+		alert("Only public profiles can be listed on "+
+		      "the Examples page. Please click that first.");
+		return false;
+	    }
+	    var portals =
+		$('.examples_portals_checkbox:checked')
+		    .map(function() {
+			return $(this).data("portal");
+		    })
+		    .get()
+		    .join();
 
-	/*
-	 * The instantiate button.
-	 */
-	$('#profile_instantiate_button').click(function (event) {
-	    window.location.replace("instantiate.php?profile=" +
-				    version_uuid + "&from=manage-profile");
+	    $('#quickvm_create_profile_form ' +
+	      '[name=examples_portals]').val(portals);
 	});
-	
+
 	/*
 	 * If we were given an rspec, suck the description and instructions
 	 * out of the rspec and put them into the text boxes.
 	 */
 	if (gotrspec) {
 	    ExtractFromRspec();
+	}
+	if (gotscript && _.has(fields, "profile_paramdefs")) {
+	    paramHelp.ShowParameterHelp(JSON.parse(fields.profile_paramdefs));
 	}
 	UpdateButtons();
 	
@@ -883,7 +895,7 @@ $(function ()
 	});
 	
 	// Show the steps area.
-	$('#profile_steps_div').removeClass("hidden");
+	// $('#profile_steps_div').removeClass("hidden");
     }
 
     //
@@ -1159,32 +1171,6 @@ $(function ()
     }
 
     //
-    // Instantiate a profile.
-    //
-    function Instantiate()
-    {
-	var callback = function(json) {
-	    sup.HideModal("#waitwait-modal");
-	    
-	    if (json.code) {
-		sup.SpitOops("oops", json.value);
-		return;
-	    }
-	    window.location.replace(json.value);
-	}
-
-	var blob = {"uuid" : version_uuid};
-	if (amlist.length) {
-	    blob.where = $('#instantiate_where').val();
-	}
-	WaitWait();
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "instantiate",
-					    "Instantiate", blob);
-	xmlthing.done(callback);
-    }
-
-    //
     // Progress Modal
     //
     function ShowProgressModal()
@@ -1263,55 +1249,6 @@ $(function ()
     }
 
     //
-    // Delete profile.
-    //
-    function DeleteProfile(force, keepimages)
-    {
-	var delete_all = $('#delete-all-versions').is(':checked') ? 1 : 0;
-
-	var callback = function(json) {
-	    sup.HideWaitWait();
-	    console.info(json.value);
-
-	    if (json.code) {
-		if (json.code == 2) {
-		    ShowDeletionWarning(json.value);
-		    return;
-		}
-		sup.SpitOops("oops", json.value);
-		return;
-	    }
-	    window.location.replace(json.value);
-	}
-	var args = {
-	    "uuid"   : version_uuid,
-	    "all"    : delete_all,
-	};
-	if (force) {
-	    args["force"] = 1;
-	    if (keepimages) {
-		args["keepimages"] = 1;
-	    }
-	}
-	console.info("DeleteProfile", args);
-	
-	var xmlthing = sup.CallServerMethod(null, "manage_profile",
-					    "DeleteProfile", args);
-
-	// Came from ShowDeletionWarning() if force is set.
-	if (!force) {
-	    sup.HideModal('#confirm-delete-profile-modal');
-	}
-	if (force && !keepimages) {
-	    WaitWait("Deleting images takes a minute; patience please");
-	}
-	else {
-	    WaitWait();
-	}
-	xmlthing.done(callback);
-    }
-
-    //
     // Publish profile.
     //
     function PublishProfile()
@@ -1375,6 +1312,13 @@ $(function ()
 		// Kill the rspec so that we always use the new one.
 		$('#profile_rspec_textarea').val("");
 		NewRspecHandler(json.value.rspec);
+		if (_.has(json.value, "paramdefs")) {
+		    paramHelp.ShowParameterHelp(
+			JSON.parse(json.value.paramdefs));
+		}
+		else {
+		    paramHelp.HideParameterHelp();
+		}
 		if (repoupdate_callback !== undefined) {
 		    repoupdate_callback(true /* modified */);
 		}
@@ -1399,6 +1343,7 @@ $(function ()
 	var args = {
 	    "script"   : script,
 	    "pid"      : $('#profile_pid').val(),
+	    "getparams": true,
 	};
 	if (profile_uuid) {
 	    args["profile_uuid"] = profile_uuid;
@@ -1559,6 +1504,7 @@ $(function ()
 			       function(which) {
 				   // So we remember what the user selected.
 				   reporefspec = which;
+				   UpdateInstantiateButton();
 				   SelectRepoTarget(which);
 			       });
     }
@@ -1569,7 +1515,7 @@ $(function ()
      */
     function SelectRepoTarget(which)
     {
-	console.info("SelectRepoTarget");
+	console.info("SelectRepoTarget: ", which);
 
 	var callback = function (source, hash) {
 	    if (source) {
@@ -1738,44 +1684,6 @@ $(function ()
 
     }
 
-    function ShowDeletionWarning(images)
-    {
-	/*
-	 * See if we have any profiles to warn about. If only images, then
-	 * the warning is different.
-	 */
-	var noprofiles = 1;
-	_.each(images, function(profiles, imagename) {
-	    _.each(profiles, function(value, name) {
-		noprofiles = 0;
-	    });
-	});
-	
-	var html = plistTemplate({
-	    "images"     : images,
-	    "noprofiles" : noprofiles,
-	});
-	$('#profile_list_modal_div').html(html);
-	
-	/*
-	 * Bind a handler for the force delete button.
-	 */
-	$('#confirm-force-delete').click(function (event) {
-	    event.preventDefault();
-	    // Keep images option.
-	    var keepimages = $('#keep-profile-images').is(':checked') ? 1 : 0;
-
-	    sup.HideModal('#profile-list-modal',
-			  function () { DeleteProfile(true, keepimages); });
-	})
-	sup.ShowModal('#profile-list-modal',
-		      // Delete handler no matter how it hides.
-		      function () {
-			  console.info("unbinding handler");
-			  $('#confirm-force-delete').off("click");
-		      });
-    }
-
     function CreateJacksEditor()
     {
         var isViewer = window.ISPOWDER || (gotscript && !portal_converted);
@@ -1909,5 +1817,19 @@ $(function ()
 	xmlthing.done(callback);
     }
 
+    /*
+     * Update the instantiate button when we switch repo targets.
+     */
+    function UpdateInstantiateButton()
+    {
+	var url = "instantiate.php?profile=" +
+	    version_uuid + "&from=manage-profile";
+
+	if (reporefspec) {
+	    url += "&refspec=" + reporefspec;
+	}
+	$('#profile_instantiate_button').attr("href", url);
+    }
+    
     $(document).ready(initialize);
 });

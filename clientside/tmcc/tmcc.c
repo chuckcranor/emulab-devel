@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2014, 2018 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2020 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -1258,8 +1258,11 @@ beproxy(int tcpsock, int udpsock, struct in_addr serverip, char *partial)
 				timerem.tv_nsec = notime.tv_usec * 1000;
 				nanosleep(&timerem,NULL);
 			}
-			if (retries == 0)
+			if (retries == 0) {
+				if (newsock >= 0)
+					close(newsock);
 				continue;
+			}
 		}
 		if (waitfor) {
 			if (sigsetjmp(progtimo, 1) != 0) {

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -79,13 +79,14 @@ getvar() {
 #
 # Update the MBR of the given disk to the indicated "version."
 #
-# XXX this is somewhat of a hack right now.  We recognize two
+# XXX this is somewhat of a hack right now.  We recognize three
 # versions of the MBR:
 #	v1 (partition 1 size 6281352)
 #	v2 (partition 1 size 12305790)
 #	v3 (partition 1 size 33554432)
 # Currently we only install a new MBR if the existing one is the
-# wrong size, just in case the user has customized the boot program.
+# wrong size or if ALWAYS is specified, just in case the user has
+# customized the boot program.
 #
 tweakmbr() {
     _DSK=$1
@@ -114,7 +115,7 @@ tweakmbr() {
 	_CUR=1000000
 	;;
     *)
-        if [ $_ALWAYS -eq 1 ]; then
+        if [ $_ALWAYS -ne 0 ]; then
 	    echo "WARNING: overwriting unknown MBR on $_DSK with version $_NEW"
 	    _CUR=1000000
 	else
@@ -124,7 +125,7 @@ tweakmbr() {
     	;;
     esac
 
-    if [ $_CUR = $_NEW ]; then
+    if [ $_ALWAYS -eq 0 -a $_CUR = $_NEW ]; then
 	return
     fi
 
@@ -479,7 +480,7 @@ loadone() {
     # a reasonable assumption in general, it mostly works in our
     # environment and at least won't hurt anything if not true.
     #
-    if [ $PREPARE -eq 1 -o \
+    if [ $PREPARE -ne 0 -o \
          \( $isrem -eq 0 -a x"$ZFILL" = x -a "$PART" = "0" \) ]; then
 	zapsuperblocks $DISK
     fi
@@ -562,11 +563,15 @@ $BINDIR/tmcc state RELOADSETUP
 
 BOSSINFO=`$BINDIR/tmcc bossinfo`
 
+# Can we run nodecheck?
+NODECHECK=0
+
 # See if we are in the reloading experiment
 INRELOADING=0
 case `$BINDIR/tmcc status` in
 *ALLOCATED=emulab-ops/reloading*)
     INRELOADING=1
+    NODECHECK=1
     ;;
 esac
 
@@ -601,6 +606,20 @@ if [ -z "$1" ]; then
 fi
 
 $BINDIR/tmcc state RELOADING
+
+#
+# Handle full reloads when not in the reloading experiment. This is
+# indicated by PREPARE=2.
+#
+# Since the PREPARE= attribute will be the same for each line of the image,
+# we only need look at the first line.
+#
+if [ $INRELOADING -eq 0 ]; then
+    _PREPARE=`getvar PREPARE "$1" 0`
+    if [ $_PREPARE -eq 2 ]; then
+	INRELOADING=1
+    fi
+fi
 
 #
 # Handle disk TRIMing.
@@ -662,7 +681,7 @@ if [ $INRELOADING -eq 1 ]; then
     # (if nodecheck "collect" is enabled in the DB) and to run a destructive
     # disk write speed test (as part of a nodecheck "check" operation).
     #
-    if [ -x $BINDIR/rc.nodecheck ]; then
+    if [ -x $BINDIR/rc.nodecheck -a $NODECHECK -eq 1 ]; then
 	$BINDIR/rc.nodecheck boot
     fi
 fi

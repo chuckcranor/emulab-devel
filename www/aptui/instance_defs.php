@@ -533,17 +533,18 @@ class Instance
         return TBMinTrust(TBGrpTrust($uid, $pid, $pid), $TBDB_TRUST_GROUPROOT);
     }
     function CanDoSSH($user) {
+        global $PROTOGENI_HOLDINGPROJECT;
+        
 	if ($this->creator_idx() == $user->uid_idx()) {
 	    return 1;
 	}
         #
         # These are the guest projects.
         #
-        $APT_HOLDINGPROJECT   = "aptguests";
-        $CLOUD_HOLDINGPROJECT = "CloudLab";
+        $APT_HOLDINGPROJECT = "aptguests";
         
         if ($this->pid() == $APT_HOLDINGPROJECT ||
-            $this->pid() == $CLOUD_HOLDINGPROJECT) {
+            $this->pid() == $PROTOGENI_HOLDINGPROJECT) {
             return 0;
         }
         
@@ -839,7 +840,18 @@ class Instance
                            "e200-8d"   => true,
                            "e300-8d"   => true,
                            "sequoia-v8"=> true,
-                           "pc2400w"   => true);
+                           "pc2400w"   => true,
+                           "nexus5"    => true,
+                           "sdr"       => true,
+                           "enodeb"    => true,
+                           "nuc5300"   => true,
+                           "nuc6260"   => true,
+                           "nuc8650"   => true,
+                           "nuc8559"   => true,
+                           "nuc7100"   => true,
+                           "x310"      => true,
+                           "n310"      => true,
+        );
 
         #
         # If showing nodes from another cluster, then we show them
@@ -849,38 +861,42 @@ class Instance
         if ($TBMAINSITE && 
             !($ISPOWDER || $ISPNET) &&
             ($all || $aggregate_urn == $DEFAULT_AGGREGATE_URN)) {
-            $skiptypes["sdr"]      = true;
             $skiptypes["nuc5300"]  = true;
-            $skiptypes["enodeb"]   = true;
-            $skiptypes["nuc6260"]  = true;
-            $skiptypes["nuc8650"]  = true;
-            $skiptypes["nuc8559"]  = true;
-            $skiptypes["nuc7100"]  = true;
             $skiptypes["iris030"]  = true;
             $skiptypes["d840"]     = true;
             $skiptypes["d740"]     = true;
-            $skiptypes["x310"]     = true;
-            $skiptypes["n310"]     = true;
-            $skiptypes["cellsdr1-honors"]    = true;
-            $skiptypes["cellsdr1-ustar"]     = true;
-            $skiptypes["cellsdr1-browning"]  = true;
-            $skiptypes["cellsdr1-meb"]       = true;
-            $skiptypes["cellsdr1-fm"]        = true;
-            $skiptypes["cellsdr1-bes"]       = true;
-            $skiptypes["cellsdr1-ustar"]     = true;
-            $skiptypes["cellsdr1-smt"]       = true;
-            $skiptypes["cellsdr1-dentistry"] = true;
-            $skiptypes["cbrssdr1-honors"]    = true;
-            $skiptypes["cbrssdr1-ustar"]     = true;
-            $skiptypes["cbrssdr1-browning"]  = true;
-            $skiptypes["cbrssdr1-meb"]       = true;
-            $skiptypes["cbrssdr1-fm"]        = true;
-            $skiptypes["cbrssdr1-bes"]       = true;
-            $skiptypes["cbrssdr1-ustar"]     = true;
-            $skiptypes["cbrssdr1-smt"]       = true;
-            $skiptypes["cbrssdr1-dentistry"] = true;
+            #
+            # Grab all the local individually reservable nodes.
+            #
+            $query_result =
+                DBQueryFatal("select node_id from nodes ".
+                             "where reservable=1");
+
+            while ($row = mysql_fetch_array($query_result)) {
+                $skiptypes[$row["node_id"]]    = true;                
+            }
         }
         return $skiptypes;
+    }
+    
+    #
+    # Return a list of frequency ranges in use.
+    #
+    # Used for the front page code!
+    #
+    function RFRangesUnUse()
+    {
+        global $PORTAL_HEALTH;
+        $result = array();
+
+        $query_result =
+            DBQueryFatal("select freq_low,freq_high ".
+                         "from apt_instance_rfranges");
+	while ($row = mysql_fetch_array($query_result)) {
+            $result[] = array("freq_low"  => $row["freq_low"],
+                              "freq_high" => $row["freq_high"]);
+        }
+        return $result;
     }
 }
 
@@ -986,6 +1002,10 @@ class InstanceHistory
     function IsPNet() {
 	return preg_match('/phantomnet/', $this->servername());
     }
+    # Project of instance.
+    function Project() {
+        return Project::Lookup($this->pid_idx());
+    }
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
 	return !is_null($this->record);
@@ -1084,6 +1104,11 @@ class InstanceSliver
     function status()	    { return $this->field('status'); }
     function public_url()   { return $this->field('public_url'); }
     function webtask_id()   { return $this->field('webtask_id'); }
+    function prestage_data(){ return $this->field('prestage_data'); }
+    function deferred()     { return $this->field('deferred'); }
+    function deferred_reason(){ return $this->field('deferred_reason'); }
+    function last_retry()   { return $this->field('last_retry'); }
+    function retry_count()  { return $this->field('retry_count'); }
     function manifest()	    { return $this->field('manifest'); }
     function physnode_count() { return $this->field('physnode_count'); }
     function virtnode_count() { return $this->field('virtnode_count'); }
@@ -1167,6 +1192,14 @@ class InstanceSliver
             $result[] = $row;
         }
         return $result;
+    }
+
+    # Grab the webtask. 
+    function WebTask() {
+        if ($this->webtask_id()) {
+            return WebTask::Lookup($this->webtask_id());
+        }
+        return null;
     }
 }
 
@@ -1274,9 +1307,10 @@ class ExtensionInfo
 
 # $amlist, $fedlist, and $status are all output arrays
 function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
-                                  $extended = false, $user = null) {
+                                  $extended = false, $user = null,
+                                  $frontpage = false) {
     global $TBMAINSITE, $DEFAULT_AGGREGATE_URN, $CHECKLOGIN_USER;
-    $am_array = Instance::DefaultAggregateList($user);
+    $am_array = Aggregate::DefaultAggregateList($user, $frontpage);
 
     #
     # If not the Cloudlab Portal then we get local status only.

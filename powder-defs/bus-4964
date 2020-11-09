@@ -6,17 +6,17 @@
 #
 TBDBNAME=tbdb
 TBADMINGROUP=tbadmin
-TBOPSEMAIL=testbed-ops@ops.bus-4964.powderwireless.net
-TBLOGSEMAIL=testbed-logs@ops.bus-4964.powderwireless.net
-TBWWWEMAIL=testbed-www@ops.bus-4964.powderwireless.net
-TBAPPROVALEMAIL=testbed-approval@ops.bus-4964.powderwireless.net
-TBAUDITEMAIL=testbed-audit@ops.bus-4964.powderwireless.net
-TBSTATEDEMAIL=testbed-stated@ops.bus-4964.powderwireless.net
-TBTESTSUITEEMAIL=testbed-testsuite@ops.bus-4964.powderwireless.net
-TBAUTOMAILEMAIL=testbed-automail@ops.bus-4964.powderwireless.net
-TBACTIVEARCHIVE=testbed-active-users-archive@ops.bus-4964.powderwireless.net
-TBUSERSARCHIVE=testbed-users-archive@ops.bus-4964.powderwireless.net
-TBERRORSEMAIL=testbed-errors@ops.bus-4964.powderwireless.net
+TBOPSEMAIL=testbed-ops@bus-4964.powderwireless.net
+TBLOGSEMAIL=testbed-logs@bus-4964.powderwireless.net
+TBWWWEMAIL=testbed-www@bus-4964.powderwireless.net
+TBAPPROVALEMAIL=testbed-approval@bus-4964.powderwireless.net
+TBAUDITEMAIL=testbed-audit@bus-4964.powderwireless.net
+TBSTATEDEMAIL=testbed-stated@bus-4964.powderwireless.net
+TBTESTSUITEEMAIL=testbed-testsuite@bus-4964.powderwireless.net
+TBAUTOMAILEMAIL=testbed-automail@bus-4964.powderwireless.net
+TBACTIVEARCHIVE=testbed-active-users-archive@bus-4964.powderwireless.net
+TBUSERSARCHIVE=testbed-users-archive@bus-4964.powderwireless.net
+TBERRORSEMAIL=testbed-errors@bus-4964.powderwireless.net
 TBCOOKIESUFFIX="POWDERBUS4964"
 JAILIPBASE=172.17.0.0
 JAILIPMASK=255.240.0.0
@@ -24,6 +24,7 @@ DELAYCAPACITY=1
 BOSSNODE=boss.bus-4964.powderwireless.net
 USERNODE=ops.bus-4964.powderwireless.net
 FSNODE=boss.bus-4964.powderwireless.net
+MAILERNODE=boss
 OURDOMAIN=bus-4964.powderwireless.net
 FSDIR_GROUPS=/ops/groups
 FSDIR_PROJ=/ops/proj
@@ -47,11 +48,11 @@ SFSSUPPORT=0
 CVSSUPPORT=0
 NFSTRACESUPPORT=0
 ARCHIVESUPPORT=0
-NTPSERVER=ntp1.emulab.net
-#EXTERNAL_NTPSERVER1=ntp1.emulab.net
-#EXTERNAL_NTPSERVER2=ntp1.emulab.net
-#EXTERNAL_NTPSERVER3=ntp1.emulab.net
-#EXTERNAL_NTPSERVER4=ntp1.emulab.net
+NTPSERVER=boss
+EXTERNAL_NTPSERVER1=ntp1.emulab.net
+EXTERNAL_NTPSERVER2=ntp1.emulab.net
+EXTERNAL_NTPSERVER3=ntp1.emulab.net
+EXTERNAL_NTPSERVER4=ntp1.emulab.net
 DISABLE_NSE=1
 # This means it is an inner elab!
 #ELABINELAB=1
@@ -114,7 +115,7 @@ MIN_UNIX_GID=2000
 WITHZFS=1
 ZFS_ROOT="emulab"
 ZFS_QUOTA_USER="none"
-ZFS_QUOTA_PROJECT="none"
+ZFS_QUOTA_PROJECT="10G"
 ZFS_QUOTA_GROUP="none"
 WITHAMD=1
 # This will default to /.amd_mnt/ops in configure
@@ -130,6 +131,7 @@ IMAGEDIRECTORIES=1
 
 # Fancy new browser in the console support
 BROWSER_CONSOLE_ENABLE=1
+BROWSER_CONSOLE_PROXIED=1
 
 # Do not expire passwords.
 EXPIRE_PASSWORDS=0
@@ -162,5 +164,11 @@ PROTOGENI_PORTALONLY=1
 
 POWDER_RFMONITOR=1
 POWDER_RFMONITOR_HOST="10.10.10.2"
+POWDER_NICKNAME="Bus4964"
+
+POWDER_WBSTORE=1
 
 # End of Emulab added section
+
+DISABLE_RESERVATION_EMAIL=1
+POWDER_DEADMAN=1

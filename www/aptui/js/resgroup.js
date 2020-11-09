@@ -3,7 +3,6 @@ $(function ()
     'use strict';
 
     var template_list   = ["resgroup", "reserve-faq", "range-list",
-			   "route-list",
 			   "reservation-graph", "oops-modal", "waitwait-modal",
 			   "resusage-graph"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
@@ -13,12 +12,13 @@ $(function ()
     var graphTemplate   = _.template(templates["reservation-graph"]);
     var usageTemplate   = _.template(templates["resusage-graph"]);
     var rangeTemplate   = _.template(templates["range-list"]);
-    var routeTemplate   = _.template(templates["route-list"]);
+    var current_pid  = null;
     var projlist     = null;
     var amlist       = null;
-    var routelist    = null;
-    var FEs          = {};	    // Powder thing
-    var Radios       = {};	    // Powder thing
+    var routelist    = null;	// Powder
+    var FEs          = {};	// Powder
+    var radioinfo    = {};	// Powder
+    var matrixinfo   = {};	// Powder
     var isadmin      = false;
     var editing      = false;
     var buttonstate  = "check";
@@ -26,6 +26,7 @@ $(function ()
     var routeforecast= null;
     var allranges    = [];
     var allroutes    = [];
+    var JACKS_NS     = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
     var IDEAL_STARTHOUR = 7;	// 7am start time preferred.
 
     var RouteColors = {
@@ -41,7 +42,7 @@ $(function ()
 	' <tbody data-uuid="<%- remote_uuid %>" class="new-cluster">' +
 	'    <tr>' +
 	'      <td>' +
-	'        <div>' +
+	'       <div class="cluster-select-div form-control-div"> ' +
 	'  	   <select class="form-control cluster-select"' +
 	'	   	   placeholder="Please Select">' +
 	'	     <option value="">Select Cluster</option>' +
@@ -59,7 +60,7 @@ $(function ()
 	'        </div>' +
 	'      </td>' +
 	'      <td>' +
-	'       <div> ' +
+	'       <div class="hardware-select-div form-control-div"> ' +
 	'	  <select class="form-control hardware-select"' +
 	'	  	placeholder="Select Hardware">' +
 	'	    <option value="">Select Hardware</option>' +
@@ -69,7 +70,7 @@ $(function ()
 	'       </div> '+
 	'      </td>' +
 	'      <td>' +
-	'       <div> ' +
+	'       <div class="node-count-div form-control-div"> ' +
 	'	  <input placeholder="#Nodes"' +
 	'	         value="<%- count %>"' +
 	'	         size="4"' +
@@ -420,9 +421,21 @@ $(function ()
 	editing  = window.EDITING; 
 	projlist = JSON.parse(_.unescape($('#projects-json')[0].textContent));
 	amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
-	routelist= JSON.parse(_.unescape($('#routelist-json')[0].textContent));
 	console.info("amlist", amlist);
-
+	
+	if (window.ISPOWDER) {
+	    routelist= JSON.parse(
+		_.unescape($('#routelist-json')[0].textContent));
+	    console.info("routelist", routelist);
+	    
+	    radioinfo = JSON.parse(
+		_.unescape($('#radioinfo-json')[0].textContent));
+	    console.info("radioinfo", radioinfo);
+	    
+	    matrixinfo = JSON.parse(
+		_.unescape($('#matrixinfo-json')[0].textContent));
+	    console.info("matrixinfo", matrixinfo);
+	}
 	GeneratePageBody();
 
 	// Now we can do this. 
@@ -493,6 +506,7 @@ $(function ()
 	    isadmin:		isadmin,
 	    editing:		editing,
 	    default_pid:        window.PID !== undefined ? window.PID : null,
+	    matrixinfo:		matrixinfo,
 	});
 	html = aptforms.FormatFormFieldsHorizontal(html);
 	$('#main-body').html(html);
@@ -523,7 +537,6 @@ $(function ()
 	    }
 	}
 	// Graph list(s).
-	html = "";
 	_.each(amlist, function(details, urn) {
 	    var graphid = 'resgraph-' + details.nickname;
 
@@ -532,14 +545,20 @@ $(function ()
 		FEs[urn] = details;
 		return;
 	    }
-	    html += graphTemplate({"details"        : details,
-				   "graphid"        : graphid,
-				   "title"          : details.name,
-				   "urn"            : urn,
-				   "showhelp"       : true,
-				   "showfullscreen" : true});
+	    var html = graphTemplate({"details"        : details,
+				      "graphid"        : graphid,
+				      "title"          : details.name,
+				      "urn"            : urn,
+				      "showhelp"       : true,
+				      "showfullscreen" : true});
+	    
+	    if (window.ISPOWDER && details.nickname == "Emulab") {
+		$('#powder-graph-div').prepend(html);
+	    }
+	    else {
+		$('#reservation-lists').append(html);
+	    }
 	});
-	$('#reservation-lists').append(html);
 
 	// Handler for the Help button
 	$('#reservation-help-button').click(function (event) {
@@ -595,19 +614,26 @@ $(function ()
 	$("#reserve-request-form #start_day").datepicker({
 	    minDate: 0,		/* earliest date is today */
 	    showButtonPanel: true,
-	    onSelect: function (dateString, dateobject) {
-		DateChange("#start_day");
+	    onClose: function (dateString, dateobject) {
+		DateChange("start");
 		modified_callback();
 	    }
 	});
 	$("#reserve-request-form #end_day").datepicker({
 	    minDate: 0,		/* earliest date is today */
 	    showButtonPanel: true,
-	    onSelect: function (dateString, dateobject) {
-		DateChange("#end_day");
+	    onClose: function (dateString, dateobject) {
+		DateChange("end");
 		modified_callback();
 	    }
 	});
+	$("#reserve-request-form #start_hour").change(function () {
+	    UpdateFormTime("start");
+	});
+	$("#reserve-request-form #end_hour").change(function () {
+	    UpdateFormTime("end");
+	});
+	
 	$('#admin-override').change(function() {
 	    // This is messy; if the admin clicks this to force an approval
 	    // we do not want to flip the button from approve to check.
@@ -641,8 +667,10 @@ $(function ()
 	row.find('.cluster-select').change(function (event) {
 	    $(this).find('option:selected')
 		.each(function() {
-		    console.info("cluster change: " + $(this).val());
-		    HandleClusterChange(row, $(this).val());
+		    if ($(this).val() != "") {
+			console.info("cluster change: " + $(this).val());
+			HandleClusterChange(row, $(this).val());
+		    }
 		});
 	});
 
@@ -778,6 +806,9 @@ $(function ()
 	row.find('input.freq-low, input.freq-high').change(function () {
 	    modified_callback();
 	});
+	row.find('input.freq-low, input.freq-high').focus(function () {
+	    ReorderGraphs("ranges");
+	});
 	// See above
 	updateButtons();
     }
@@ -806,10 +837,13 @@ $(function ()
 	    $(this).find('option:selected')
 		.each(function() {
 		    console.info("route change: " + $(this).val());
-		    ReorderGraphs("routes")
 		    RegenCombinedGraph();
 		});
 	});
+	row.find('.routename').focus(function (event) {
+	    ReorderGraphs("routes")
+	});
+	
 	$('#route-table').append(row);
 
 	/*
@@ -878,20 +912,24 @@ $(function ()
      */
     function DateChange(which)
     {
-	var date = $("#reserve-request-form " + which).datepicker("getDate");
+	console.info("DateChange");
+	
 	var now = new Date();
+	var date;
 	var selecter;
 
-	if (which == "#start_day") {
+	if (which == "start") {
+	    date     = $("#reserve-request-form #start_day").datepicker("getDate");
 	    selecter = "#reserve-request-form #start_hour";
 	}
 	else {
+	    date     = $("#reserve-request-form #end_day").datepicker("getDate");
 	    selecter = "#reserve-request-form #end_hour";
 	}
 	// Remember if the user already set the hour.
 	var hourset =
 	    ($(selecter + " option:selected").val() == "" ? false : true);
-	
+
 	if (moment(date).isSame(Date.now(), "day")) {
 	    for (var i = 0; i <= now.getHours(); i++) {
 
@@ -907,7 +945,7 @@ $(function ()
 	    }
 	}
 	else {
-	    for (var i = 0; i <= now.getHours(); i++) {
+	    for (var i = 0; i <= 23; i++) {
 		$(selecter + " option[value='" + i + "']")
 		    .removeAttr("disabled");
 	    }
@@ -919,8 +957,104 @@ $(function ()
 	    $(selecter + ' option[value=' + IDEAL_STARTHOUR + ']')
 		.prop('selected', 'selected');
 	}
+	UpdateFormTime(which);
     }
 
+    /*
+     * Update the real form start/end values whenever the day/hour changes.
+     */
+    function UpdateFormTime(which)
+    {
+	console.info("UpdateFormTime");
+
+	if (which == "start") {
+	    var start_day  = $('#reserve-request-form [name=start_day]').val();
+	    var start_hour = $('#reserve-request-form [name=start_hour]').val();
+	    if (start_day && start_hour) {
+		var start = moment(start_day, "MM/DD/YYYY");
+		start.hour(start_hour);
+		$('#reserve-request-form [name=start]').val(start.format());
+		console.info("UpdateFormTime start: " + start.format());
+	    }
+	    else {
+		$('#reserve-request-form [name=start]').val("");
+		console.info("UpdateFormTime clear start");
+	    }
+	}
+	else {
+	    var end_day  = $('#reserve-request-form [name=end_day]').val();
+	    var end_hour = $('#reserve-request-form [name=end_hour]').val();
+	    if (end_day && end_hour) {
+		var end = moment(end_day, "MM/DD/YYYY");
+		end.hour(end_hour);
+		$('#reserve-request-form [name=end]').val(end.format());
+		console.info("UpdateFormTime end: " + end.format());
+	    }
+	    else {
+		$('#reserve-request-form [name=end]').val("");
+		console.info("UpdateFormTime clear end");
+	    }
+	}
+    }
+
+    /*
+     * Mark a cluster field with an error.
+     */
+    function MarkClusterRowField(tbody, which, message) {
+	var classname;
+
+	if (which == "count") {
+	    classname = ".count-error";
+	}
+	else if (which == "type") {
+	    classname = ".hardware-error";
+	}
+	else if (which == "cluster") {
+	    classname = ".cluster-error";
+	}
+	$(tbody).find(classname + " label")
+	    .html(message);
+	$(tbody).find(classname)
+	    .removeClass("has-warning")
+	    .addClass("has-error")
+	    .removeClass("hidden");
+    }
+
+    /*
+     * Precheck the cluster rows for inconsistencies
+     */
+    function PreCheckClusterRows()
+    {
+	var errors = 0;
+	
+	$('#cluster-table tbody.new-cluster').each(function () {
+	    var tbody   = $(this);
+	    var count   = tbody.find(".node-count").val();
+	    var cluster = tbody.find(".cluster-select option:selected").val();
+	    var type    = tbody.find(".hardware-select option:selected").val();
+	    
+	    // Skip an empty row
+	    if (cluster == "" && type == "" && count == "") {
+		return;
+	    }
+	    // Skip a complete row
+	    if (cluster != "" && type != "" && count != "") {
+		return;
+	    }
+	    if (cluster == "") {
+		MarkClusterRowField(tbody, "cluster", "Missing Field");
+	    }
+	    if (type == "") {
+		MarkClusterRowField(tbody, "type", "Missing Field");
+	    }
+	    if (count == "") {
+		MarkClusterRowField(tbody, "count", "Missing Field");
+	    }
+	    errors++;
+	});
+	return errors;
+    }
+    
     /*
      * Generate errors in the cluster table.
      */
@@ -935,24 +1069,65 @@ $(function ()
 	    var tbody = $('#cluster-table tbody[data-uuid="' + uuid + '"]');
 
 	    _.each(cluster.errors, function (error, key) {
-		var classname;
-			    
-		if (key == "count") {
-		    classname = ".count-error";
-		}
-		else if (key == "type") {
-		    classname = ".hardware-error";
-		}
-		else if (key == "cluster") {
-		    classname = ".cluster-error";
-		}
-		tbody.find(classname + " label")
-		    .html(error);
-		tbody.find(classname)
-		    .removeClass("hidden");
+		MarkClusterRowField(tbody, key, error);
 	    });
 	});
     }
+
+    /*
+     * Mark a cluster field with an error.
+     */
+    function MarkRangeRowField(tbody, which, message) {
+	var classname;
+
+	if (which == "freq_low") {
+	    classname = ".freq-low-error";
+	}
+	else if (which == "freq_high") {
+	    classname = ".freq-high-error";
+	}
+	$(tbody).find(classname + " label")
+	    .html(message);
+	$(tbody).find(classname)
+	    .removeClass("has-warning")
+	    .addClass("has-error")
+	    .removeClass("hidden");
+    }
+
+    /*
+     * Precheck the cluster rows for inconsistencies
+     */
+    function PreCheckRangeRows()
+    {
+	var errors = 0;
+
+	/*
+	 * Collect the range rows into an array.
+	 */
+	$('#range-table tbody.new-range').each(function () {
+	    var tbody   = $(this);
+	    var low     = tbody.find(".freq-low").val();
+	    var high    = tbody.find(".freq-high").val();
+
+	    // Skip an empty row
+	    if (low == "" && high == "") {
+		return;
+	    }
+	    // Skip a complete row
+	    if (low != "" && high != "") {
+		return;
+	    }
+	    if (low == "") {
+		MarkRangeRowField(tbody, "freq_low", "Missing Field");
+	    }
+	    if (high == "") {
+		MarkRangeRowField(tbody, "freq_high", "Missing Field");
+	    }
+	    errors++;
+	});
+	return errors;
+    }
+    
     /*
      * Generate errors in the ranges table.
      */
@@ -967,18 +1142,7 @@ $(function ()
 	    var tbody = $('#range-table tbody[data-uuid="' + uuid + '"]');
 
 	    _.each(range.errors, function (error, key) {
-		var classname;
-			    
-		if (key == "freq_low") {
-		    classname = ".freq-low-error";
-		}
-		else if (key == "freq_high") {
-		    classname = ".freq-high-error";
-		}
-		tbody.find(classname + " label")
-		    .html(error);
-		tbody.find(classname)
-		    .removeClass("hidden");
+		MarkRangeRowField(tbody, key, "Missing Field");
 	    });
 	});
     }
@@ -1033,8 +1197,15 @@ $(function ()
 		    .addClass("hidden");
 	    }
 	    else {
-		tbody.find(".reservation-error span label")
-		    .html("Approval is required");
+		if (_.has(reservation, "noautoapprove_reason")) {
+		    tbody.find(".reservation-error span label")
+			.html("Approval is required: " +
+			      reservation.noautoapprove_reason);
+		}
+		else {
+		    tbody.find(".reservation-error span label")
+			.html("Approval is required");
+		}
 		tbody.find(".reservation-error span")
 		    .addClass("has-warning")
 		    .removeClass("has-error")
@@ -1068,8 +1239,15 @@ $(function ()
 		    .addClass("hidden");
 	    }
 	    else {
-		tbody.find(".reservation-error span label")
-		    .html("Approval is required");
+		if (_.has(reservation, "noautoapprove_reason")) {
+		    tbody.find(".reservation-error span label")
+			.html("Approval is required: " +
+			      reservation.noautoapprove_reason);
+		}
+		else {
+		    tbody.find(".reservation-error span label")
+			.html("Approval is required");
+		}
 		tbody.find(".reservation-error span")
 		    .addClass("has-warning")
 		    .removeClass("has-error")
@@ -1219,6 +1397,7 @@ $(function ()
 	var clusters = {};
 	var ranges   = {};
 	var routes   = {};
+	var errors   = 0;
 	
 	var checkonly_callback = function(json) {
 	    if (json.code) {
@@ -1244,51 +1423,45 @@ $(function ()
 	    }
 	    // Set the number of days, so that user can then search if
 	    // the start/end selected do not work.
-	    var hours = end.diff(start ? start : moment(), "hours");
-	    var days  = hours / 24;
+	    var res_start = start ? moment(start) : moment();
+	    var res_end   = moment(end);
+	    var hours     = res_end.diff(res_start, "hours");
+	    var days      = hours / 24;
 	    $('#reserve-request-form [name=days]')
 		.val(days.toFixed(1));
 	    
 	    // Now check the actual reservation validity.
 	    ValidateReservation(clusters, ranges, routes);
 	}
+	// Clear (hide) previous cluster table errors
+	aptforms.ClearFormErrors('#reserve-request-form');
+	$('#reserve-request-form .form-group-sm').addClass("hidden");	
+	$('#reserve-request-form tbody').removeClass("has-warning has-error");
+	$('#reserve-request-form .form-control-div')
+	    .removeClass("has-warning has-error");
+	
+	errors += PreCheckClusterRows();
+	errors += PreCheckRangeRows();
+	
 	/*
-	 * Before we submit, set the start/end fields to UTC time.
+	 * On a new reservation, start is optional. Must always have end
 	 */
-	var start_day  = $('#reserve-request-form [name=start_day]').val();
-	var start_hour = $('#reserve-request-form [name=start_hour]').val();
-	if (start_day && !start_hour) {
+	start = $('#reserve-request-form [name=start]').val();
+	end   = $('#reserve-request-form [name=end]').val();
+	if (editing && !start) {
 	    aptforms.GenerateFormErrors('#reserve-request-form',
-					{"start" : "Missing hour"});
+					{"start" : "Missing start date/hour"});
+	    errors++;
+	}
+	if (!end) {
+	    aptforms.GenerateFormErrors('#reserve-request-form',
+					{"end" : "Missing end date/hour"});
+	    errors++;
+	}
+	if (errors) {
 	    return;
 	}
-	else if (!start_day && start_hour) {
-	    aptforms.GenerateFormErrors('#reserve-request-form',
-					{"start" : "Missing day"});
-	    return;
-	}
-	else if (start_day && start_hour) {
-	    start = moment(start_day, "MM/DD/YYYY");
-	    start.hour(start_hour);
-	    $('#reserve-request-form [name=start]').val(start.format());
-	}
-	var end_day  = $('#reserve-request-form [name=end_day]').val();
-	var end_hour = $('#reserve-request-form [name=end_hour]').val();
-	if (end_day && !end_hour) {
-	    aptforms.GenerateFormErrors('#reserve-request-form',
-					{"end" : "Missing hour"});
-	    return;
-	}
-	else if (!end_day && end_hour) {
-	    aptforms.GenerateFormErrors('#reserve-request-form',
-					{"end" : "Missing day"});
-	    return;
-	}
-	else if (end_day && end_hour) {
-	    end = moment(end_day, "MM/DD/YYYY");
-	    end.hour(end_hour);
-	    $('#reserve-request-form [name=end]').val(end.format());
-	}
+	
 	// Collect the cluster and range/route rows into an array.
 	clusters = GetClusterRows();
 	ranges   = GetRangeRows();
@@ -1310,10 +1483,6 @@ $(function ()
 		args["override"] = 1;
 	    }
 	}
-	// Clear (hide) previous cluster table errors
-	$('#reserve-request-form .form-group-sm').addClass("hidden");	
-	$('#reserve-request-form tbody').removeClass("has-warning has-error");
-	
 	aptforms.CheckForm('#reserve-request-form', "resgroup",
 			   "Validate", checkonly_callback, args);
     }
@@ -1421,27 +1590,28 @@ $(function ()
 		}
 		ProcessForecast(urn, json.value.forecast);
 
-		// Powder combined graph.
-		if (_.has(FEs, urn)) {
-		    RegenFEGraph();
-		    return;
+		// Copy of the prunelist.
+		var prunelist = {};
+		Object.assign(prunelist, details.prunelist);
+
+		// Powder special case for radios and the matrix and FEs.
+		if (window.ISPOWDER) {
+		    // Combined graph.
+		    if (_.has(FEs, urn)) {
+			RegenFEGraph();
+			return;
+		    }
+		    if (details.nickname == "Emulab") {
+			ProcessPowder(urn, json, prunelist);
+			Object.assign(prunelist, details.radiotypes);
+		    }
+		    // Fall through to generating Emulab server graph
+		    // with updated prunelist.
 		}
-		// Another special case; seperate out Emulab reservable
-		// radios into a different graph using the new graph code.
-		if (window.ISPOWDER && details.nickname == "Emulab") {
-		    _.each(json.value.forecast, function (stuff, key) {
-			if (_.has(details.reservable_nodes, key)) {
-			    Radios[key] = stuff;
-			    delete json.value.forecast[key];
-			}
-		    });
-		    GenerateRadioGraph();
-		}
-		
 		ShowResGraph({"forecast"  : json.value.forecast,
 			      "selector"  : id,
 			      "resize"    : true,
-			      "skiptypes"      : json.value.prunelist,
+			      "skiptypes"      : prunelist,
 			      "click_callback" : function(when, type) {
 				  if (!editing) {
 				      // Needs work for res groups.
@@ -1462,7 +1632,7 @@ $(function ()
 			$('#resgraph-modal').on('shown.bs.modal', function() {
 			    ShowResGraph({"forecast"  : json.value.forecast,
 					  "selector"  : "resgraph-modal",
-					  "skiptypes" : json.value.prunelist,
+					  "skiptypes" : prunelist,
 					  "click_callback" : GraphClick});
 			});
 			sup.ShowModal('#resgraph-modal', function () {
@@ -1532,42 +1702,279 @@ $(function ()
     }
 
     /*
+     * Handle the radio/matrix graphs and updating the prunelist for the
+     * server graph.
+     */
+    function ProcessPowder(urn, json, prunelist)
+    {
+	var details  = amlist[urn];
+	var forecast = {};
+
+	/*
+	 * The radio graph consists of individually reservable nodes that
+	 * are in the radioinfo object. No others.
+	 */
+	_.each(json.value.forecast, function (info, key) {
+	    if (_.has(radioinfo[urn], key)) {
+		forecast[key]  = info;
+		prunelist[key] = true;
+	    }
+	});
+	$('#radio-graph-div').removeClass("hidden");
+	ShowNewGraph(forecast, "radio-graph-body", "radio-graph-visavail")
+
+	/*
+	 * The matrix graph consists of nodes in the matrixinfo object
+	 */
+	forecast = {};
+	_.each(json.value.forecast, function (info, key) {
+	    if (_.has(matrixinfo, key)) {
+		forecast[key] = info;
+		prunelist[key] = true;
+	    }
+	});
+	$('#matrix-graph-div').removeClass("hidden");
+	ShowNewGraph(forecast, "matrix-graph-body", "matrix-graph-visavail")
+    }
+
+    /*
      * Load the range reservation info.
      */
     function LoadRangeReservations()
     {
-	var callback = function(json) {
-	    console.log("LoadRangeReservations", json);
-	    if (json.code) {
-		console.info("Could not get range info");
-		return;
-	    }
-	    if (!_.size(json.value)) {
-		return;
-	    }
-	    allranges = json.value;
-	    
-	    var html = rangeTemplate({"ranges" : json.value});
-	    $('#range-list').html(html).removeClass("hidden");
+	var this_pid = (editing ? current_pid : $('#pid').val());
+	var project_ranges = null;
 
-	    // Format dates with moment before display.
-	    $('#range-list .format-date').each(function() {
-		var date = $.trim($(this).html());
-		if (date != "") {
-		    $(this).html(moment(date).format("lll"));
+	var OverLaps = function(x, y) {
+	    var x1 = +x.freq_low;
+	    var x2 = +x.freq_high;
+	    var y1 = +y.freq_low;
+	    var y2 = +y.freq_high;
+	    
+	    return x1 <= y2 && y1 <= x2;
+	};
+	var Within = function(x, y) {
+	    var x1 = +x.freq_low;
+	    var x2 = +x.freq_high;
+	    var y1 = +y.freq_low;
+	    var y2 = +y.freq_high;
+
+	    // Check frequencies for x being a subrange of y
+	    if (x1 >= y1 && x2 <= y2) {
+		// OK, then check if a temporal subrange.
+		if (moment(x.start).isSameOrAfter(y.start) &&
+		    moment(x.end).isSameOrBefore(y.end)) {
+		    return 1;
 		}
+	    }
+	    return 0;
+	};
+	
+	var ProjectRanges = function(json) {
+	    if (json.code || !_.size(json.value)) {
+		if (json.code) {
+		    console.info("Could not get project range info");
+		}
+		project_ranges = null;
+		$('#allowed-ranges table tbody').html("");
+		$('.allowed-ranges-hidden').addClass("hidden");
+		return;
+	    }
+	    project_ranges = json.value;
+	    var html = "";
+
+	    _.each(json.value, function(range) {
+		var range_id = range.range_id ? range.range_id : range.idx;
+		
+		html = html +
+		    "<tr>" +
+		    "<td>" + range_id + "</td>" +
+		    "<td>" + range.freq_low + "</td>" +
+		    "<td>" + range.freq_high + "</td>" +
+		    "</tr>";
 	    });
-	    $('#range-list .tablesorter')
+	    $('#allowed-ranges table tbody').html(html);
+	    $('#range-info-div').removeClass("hidden");
+	    $('.allowed-ranges-hidden').removeClass("hidden");
+	    // Activate the tab,
+	    $('#range-info-div a[href="#allowed-ranges"]').tab('show');
+
+	    $('#allowed-ranges .tablesorter')
 		.tablesorter({
-		    theme : 'green',
-		    // initialize zebra
-		    widgets: ["zebra"],
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
+	var ReservedRanges = function(json1, json2) {
+	    $('#reserved-ranges table tbody').html("");
+	    $('.reserved-ranges-hidden').addClass("hidden");
+	    
+	    if (json1.code || json2.code) {
+		if (json1.code) {
+		    console.info("Could not get reserved range info");
+		}
+		else {
+		    console.info("Could not get inuse info");
+		}
+		// Do not include stale info in search
+		allranges = [];
+		return;
+	    }
+	    if (!_.size(json1.value) && !_.size(json2.value)) {
+		// Do not include stale info in search
+		allranges = [];
+		return;
+	    }
+	    var html = "";
+	    var reserved = [];
+	    
+	    if (_.size(json1.value)) {
+		// For the search button
+		allranges = json1.value;
+	    
 
-	var xmlthing = sup.CallServerMethod(null, "resgroup",
-					    "RangeReservations");
-	xmlthing.done(callback);
+		_.each(allranges, function(info) {
+		    /*
+		     * If this range does not overlap with any of the ranges
+		     * the projet is allowed to use, then skip it.
+		     */
+		    var overlaps = 0;
+		
+		    for (var i = 0; i < project_ranges.length; i++) {
+			var that = project_ranges[i];
+		    
+			if (OverLaps(info, that)) {
+			    overlaps = 1;
+			    break;
+			}
+		    }
+		    if (!overlaps) {
+			return;
+		    }
+		    reserved.push(info);
+		    
+		    html = html +
+			"<tr>" +
+			"<td>" + info.freq_low + "</td>" +
+			"<td>" + info.freq_high + "</td>" +
+			"<td>" + moment(info.start).format("lll") + "</td>" +
+			"<td>" + moment(info.end).format("lll") + "</td>" +
+			"</tr>";
+		});
+	    }
+	    if (_.size(json2.value)) {
+		var inuse = "";
+		
+		_.each(json2.value, function(range) {
+		    /*
+		     * If this range does not overlap with any of the ranges
+		     * the project is allowed to use, then skip it.
+		     */
+		    var overlaps = 0;
+		
+		    for (var i = 0; i < project_ranges.length; i++) {
+			var that = project_ranges[i];
+
+			if (OverLaps(range, that)) {
+			    overlaps = 1;
+			    break;
+			}
+		    }
+		    if (!overlaps) {
+			return;
+		    }
+		    /*
+		     * Well, the problem with putting these in the same table
+		     * is that inuse ranges can be a duplicate (or a subrange)
+		     * of a reserved range. With two tables it did not really
+		     * matter much, but now we need to try to cull those out.
+		     * I am looking for proper subranges only. 
+		     */
+		    var isdup = 0;
+
+		    for (var i = 0; i < reserved.length; i++) {
+			var that = reserved[i];
+
+			if (Within(range, that)) {
+			    isdup = 1;
+			    break;
+			}
+		    }
+		    if (isdup) {
+			return;
+		    }
+		    inuse = inuse +
+			"<tr>" +
+			"<td>" + range.freq_low + "<small>" +
+			"   <span class='inuse-range pull-right " +
+			"        glyphicon glyphicon-asterisk'>" +
+			"   </span></small>" + "</td>" +
+			"<td>" + range.freq_high + "</td>" +
+			"<td>" + moment(range.start).format("lll") + "</td>" +
+			"<td>" + moment(range.end).format("lll") + "</td>" +
+			"</tr>";
+		});
+		if (inuse != "") {
+		    html += inuse;
+		    $('#reserved-ranges .experiment-reserved-ranges')
+			.removeClass("hidden");
+		}
+	    }
+	    if (html == "") {
+		return;
+	    }
+	    $('#reserved-ranges table tbody').html(html);
+	    $('#range-info-div').removeClass("hidden");
+	    $('.reserved-ranges-hidden').removeClass("hidden");
+
+	    $('#reserved-ranges .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		});
+	};
+	var xmlthing1 = sup.CallServerMethod(null, "rfrange", "ProjectRanges",
+					     {"pid" : this_pid});
+	var xmlthing2 = sup.CallServerMethod(null, "resgroup",
+					     "RangeReservations");
+	var xmlthing3 = sup.CallServerMethod(null, "rfrange",
+					     "AllInuseRanges");
+					     
+	$.when(xmlthing1, xmlthing2, xmlthing3)
+	    .done(function(result1, result2, result3) {
+		console.info("LoadRangeReservations",
+			     result1, result2, result3);
+
+		if (!editing) {
+		    // If the project changed while we were gone,
+		    // abort this one and go again.
+		    if (this_pid != $('#pid').val()) {
+			console.info("LoadRangeReservations: project changed " +
+				     "from " + current_pid +
+				     " to " + selected_pid);
+			LoadRangeReservations();
+			return;
+		    }
+		}
+		// If no project ranges allowed, then hide the div.
+		ProjectRanges(result1);
+		if ($('#range-info-div ' +
+		      '.allowed-ranges-hidden').hasClass("hidden")) {
+		    $('#range-info-div').addClass("hidden");
+		}
+		else {
+		    ReservedRanges(result2, result3);
+		}
+
+		if (!editing) {
+		    // Reload range reservations after project change.
+		    $('#pid').one("change", function () {
+			LoadRangeReservations();
+		    });
+		}
+	    });
     }
     
     /*
@@ -1586,25 +1993,6 @@ $(function ()
 
 	    if (!_.size(json.value.list)) {
 		return;
-	    }
-	    if (0) {
-		allroutes = json.value.list;
-		var html = routeTemplate({"routes" : allroutes});
-		$('#route-list').html(html).removeClass("hidden");
-
-		// Format dates with moment before display.
-		$('#route-list .format-date').each(function() {
-		    var date = $.trim($(this).html());
-		    if (date != "") {
-			$(this).html(moment(date).format("lll"));
-		    }
-		});
-		$('#route-list .tablesorter')
-		    .tablesorter({
-			theme : 'green',
-			// initialize zebra
-			widgets: ["zebra"],
-		    });
 	    }
 	};
 	var xmlthing = sup.CallServerMethod(null, "resgroup",
@@ -1789,7 +2177,7 @@ $(function ()
 			else {
 			    // Last one, has enough nodes, just move past
 			    // lower bound and be done.
-			    if (0 && starttime < lower) {
+			    if (starttime < lower) {
 				starttime = lower + 60;
 			    }
 			}
@@ -1881,6 +2269,9 @@ $(function ()
 	    if (!fit || _.size(ranges) == 0) {
 		continue;
 	    }
+	    // Set lower in case we have to go around again, we bump it below.
+	    lower = fit["starttime"];
+	    
 	    /*
 	     * Ok, we have something that works for the clusters, lets look
 	     * at the ranges. This is a bit easier since current ranges
@@ -1897,13 +2288,13 @@ $(function ()
 
 		for (var r = 0; r < allranges.length; r++) {
 		    var existing = allranges[r];
-		    var lower    = parseFloat(existing.freq_low);
-		    var upper    = parseFloat(existing.freq_high);
+		    var low      = parseFloat(existing.freq_low);
+		    var high     = parseFloat(existing.freq_high);
 		    var starts   = moment(existing.start).unix();
 		    var ends     = moment(existing.end).unix();
 		    var fitend   = fit.starttime + (3600 * 24 * days) + 3600;
 
-		    console.info("Existing:" + r, lower,upper,starts,ends);
+		    console.info("Existing:" + r, low,high,starts,ends);
 
 		    // If this range does not overlap in time, keep going
 		    if ((fit.starttime < starts && fitend < starts) ||
@@ -1911,18 +2302,18 @@ $(function ()
 			continue;
 		    }
 		    // If this range does not overlap in frequency, keep going
-		    if ((freq_low < lower && freq_high < lower) ||
-			(freq_low > upper)) {
+		    if ((freq_low < low && freq_high < low) ||
+			(freq_low > high)) {
 			continue;
 		    }
-		    // Does not fit! Move past the conflicting reservation.
+		    // Does not fit!
 		    console.info("Range does not fit");
 		    fit   = null;
-		    lower = ends + (3600 * 4);
 		    break;
 		}
 		// No point in continuing, start over.
 		if (!fit) {
+		    lower = lower + (3600 * 4);
 		    break;
 		}
 	    }
@@ -1980,8 +2371,12 @@ $(function ()
 	$('#reserve-request-form [name=end_hour]').val(new_end_hour);
 
 	// And if we actually changed anything.
-	if (start_day != new_start_day || start_hour != new_start_hour ||
-	    end_day != new_end_day || end_hour != new_end_hour) {
+	if (start_day != new_start_day || start_hour != new_start_hour) {
+	    UpdateFormTime("start");
+	    modified_callback();
+	}
+	if (end_day != new_end_day || end_hour != new_end_hour) {
+	    UpdateFormTime("start");
 	    modified_callback();
 	}
     }
@@ -2051,12 +2446,32 @@ $(function ()
 	    // Make sure we still warn about an unsaved form.
 	    aptforms.MarkFormUnsaved();
 
-	    if ((cluster_results &&
-		 cluster_results.approved != _.size(clusters)) ||
-		(range_results &&
-		 range_results.approved != _.size(ranges)) ||
-		(route_results &&
-		 route_results.approved != _.size(routes))) {
+	    // Gotta search all the requests looking to see if any
+	    // are not approved and need admin intervention.
+	    var needsApproval = 0;
+
+	    if (cluster_results) {
+		_.each(cluster_results.clusters, function (result) {
+		    if (!result.approved) {
+			needsApproval++;
+		    }
+		});
+	    }
+	    if (range_results) {
+		_.each(range_results.ranges, function (result) {
+		    if (!result.approved) {
+			needsApproval++;
+		    }
+		});
+	    }
+	    if (route_results) {
+		_.each(route_results.routes, function (result) {
+		    if (!result.approved) {
+			needsApproval++;
+		    }
+		});
+	    }
+	    if (needsApproval) {
 		$('#confirm-reservation .needs-approval')
 		    .removeClass("hidden");
 	    }
@@ -2079,6 +2494,8 @@ $(function ()
 	// Clear (hide) previous cluster table errors
 	$('#reserve-request-form .form-group-sm').addClass("hidden");
 	$('#reserve-request-form tbody').removeClass("has-warning has-error");
+	$('#reserve-request-form .form-control-div')
+	    .removeClass("has-warning has-error");
 	
 	aptforms.SubmitForm('#reserve-request-form', "resgroup",
 			    "Validate", callback,
@@ -2169,6 +2586,7 @@ $(function ()
 		return;
 	    }
 	    if (window.FROMRSPEC) {
+		UpdateRspec();
 		window.parent.CloseMyIframe(json.value.uuid);
 		return;
 	    }
@@ -2200,6 +2618,8 @@ $(function ()
 	// Clear (hide) previous cluster table errors
 	$('#reserve-request-form .form-group-sm').addClass("hidden");
 	$('#reserve-request-form tbody').removeClass("has-warning has-error");
+	$('#reserve-request-form .form-control-div')
+	    .removeClass("has-warning has-error");
 
 	aptforms.SubmitForm('#reserve-request-form', "resgroup",
 			    "Reserve", reserve_callback,
@@ -2220,7 +2640,11 @@ $(function ()
 	    $('#reserve-request-form [name=uuid]').val(details.uuid);
 	    $('#reserve-request-form [name=reason]').val(details.notes);
 	    var start = moment(details.start);
-	    var end = moment(details.end);	
+	    var end = moment(details.end);
+	    // Populate the form for submit. Updated when date/hour changes.
+	    $('#reserve-request-form [name=start]').val(start.format());
+	    $('#reserve-request-form [name=end]').val(end.format());
+
 	    $('#reserve-request-form [name=start_day]')
 		.val(start.format("MM/DD/YYYY"));
 	    $('#reserve-request-form [name=start_hour]')
@@ -2378,6 +2802,7 @@ $(function ()
 	    else {
 		$('#pid').html(details.pid);
 	    }
+	    current_pid = details.pid;
 	    
 	    if (isadmin) {
 		/*
@@ -2808,11 +3233,20 @@ $(function ()
 		xmlthing.done(callback);
 	    });
 	});
+	// Helper for common issue;
+	$('#delete-reservation-modal .nolongerfits').click(function (e) {
+	    e.preventDefault();
+	    $('#delete-reason').val("This reservation no longer fits the " +
+				    "schedule. Please login and create a " +
+				    "new one, and we will get it approved " +
+				    "as soon as possible.");
+	});
 	
 	// Handler so we know the user closed the modal. We need to
 	// clear the confirm button handler.
 	$('#delete-reservation-modal').on('hidden.bs.modal', function (e) {
 	    $('#delete-reservation-modal #confirm-delete').unbind("click");
+	    $('#delete-reservation-modal .nolongerfits').unbind("click");
 	    $('#delete-reservation-modal').off('hidden.bs.modal');
 	})
 	sup.ShowModal("#delete-reservation-modal");
@@ -2876,7 +3310,7 @@ $(function ()
 	var callback = function (json) {
 	    console.log(method, json);
 	    if (json.code) {
-		if (!warning) {
+		if (cancel) {
 		    sup.HideWaitWait(function () {
 			sup.SpitOops("oops", json.value);
 		    });
@@ -2886,10 +3320,8 @@ $(function ()
 		}
 		return;
 	    }
-	    if (!warning) {
-		sup.HideWaitWait();
-	    }
 	    if (cancel) {
+		sup.HideWaitWait();
 		RefreshTables(json.value);
 	    }
 	};
@@ -2909,7 +3341,7 @@ $(function ()
 	    console.info("warninfo", args);
 	    
 	    sup.HideModal(modal, function () {
-		if (!warning) {
+		if (cancel) {
 		    // This will take a few moments.
 		    sup.ShowWaitWait();
 		}
@@ -3001,16 +3433,23 @@ $(function ()
 	var typelist = amlist[selected_cluster].typeinfo;
 	var nodelist = amlist[selected_cluster].reservable_nodes;
 	var nickname = amlist[selected_cluster].nickname;
+	var prunelist= amlist[selected_cluster].prunelist;
 	var id       = "resgraph-" + nickname;
 
 	_.each(typelist, function(details, type) {
 	    var count = details.count;
-	    
+
+	    if (_.has(prunelist, type)) {
+		return;
+	    }
 	    options = options +
 		"<option value='" + type + "' >" +
 		type + " (" + count + ")</option>";
 	});
 	_.each(nodelist, function(details, node_id) {
+	    if (_.has(prunelist, node_id)) {
+		return;
+	    }
 	    options = options +
 		"<option value='" + node_id + "' >" + node_id + "</option>";
 	});
@@ -3061,9 +3500,12 @@ $(function ()
 		.prop("readonly", true);
 	}
 	else {
-	    $(row).find(".node-count")
-		.val("")
-		.prop("readonly", false);
+	    // Do not reset count for the special unbound-types rows.
+	    if (! $(row).hasClass("untyped-nodes")) {
+		$(row).find(".node-count")
+		    .val("")
+		    .prop("readonly", false);
+	    }
 	}
 	RegenCombinedGraph();
 	modified_callback();
@@ -3114,8 +3556,8 @@ $(function ()
 	if (which == "routes") {
 	    graphid = "route-graph-div";
 	}
-	else if (which == "radios") {
-	    graphid = "radio-graph-div";
+	else if (which == "ranges") {
+	    graphid = "range-info-div";
 	}
 	else {
 	    if (_.has(FEs, which)) {
@@ -3123,10 +3565,12 @@ $(function ()
 	    }
 	    else {
 		var nickname = amlist[which].nickname;
-		graphid = "resgraph-" + nickname;
 
-		if (window.ISPOWDER && nickname == "Emulab" && _.size(Radios)) {
-		    ReorderGraphs("radios");
+		if (window.ISPOWDER && nickname == "Emulab") {
+		    graphid = "powder-graph-div";
+		}
+		else {
+		    graphid = "resgraph-" + nickname;
 		}
 	    }
 	}
@@ -3222,12 +3666,12 @@ $(function ()
 	    if (!_.has(amlist, urn)) {
 		return;
 	    }
-	    if (!_.has(forecasts[urn], type)) {
+	    if (!_.has(forecasts, urn)) {
 		waiting = waiting + 1;
 		return;
 	    }
 	    var id   = amlist[urn].abbreviation + "/" + type;
-	    
+
 	    combinedForecasts[id] = forecasts[urn][type];
 	})
 	_.each(routes, function (details) {
@@ -3270,11 +3714,9 @@ $(function ()
     {
 	$('#FE-graph-div').removeClass("hidden");
 	$('#FE-graph-visavail').html("");
+	var combinedForecasts = {};
 
-	var dataset = [];
-	var now     = new Date();
-	var maxend  = now;
-
+	// Combine into a single forecast
 	Object.keys(FEs)
 	    .sort()
 	    .forEach(function(urn, index) {
@@ -3282,111 +3724,42 @@ $(function ()
 		if (!_.has(forecasts, urn)) {
 		    return;
 		}
-		var details = FEs[urn];
-
 		Object.keys(forecasts[urn])
 		    .sort()
 		    .forEach(function(type, index) {
 			var forecast = forecasts[urn][type];
 			var id = amlist[urn].abbreviation + " " + type;
-
-			var series = {
-			    "measure"   : id,
-			    "interval_s": 3600,
-			    "data"      : [],
-			    "categories": {
-				"Busy": { "color": "black" },
-				"Free": { "color": "green"},
-			    },
-			};
-			for (var i = 0; i < forecast.length; i++) {
-			    var info  = forecast[i];
-			    var start = moment(info.stamp).toDate();
-			    var state = info.free ? "Free" : "Busy";
-			    var end;
-
-			    if (i < forecast.length - 1) {
-				end = moment(forecast[i + 1].stamp).toDate();
-			    }
-			    else {
-				end = new Date(start.getTime());
-				end.setMonth(end.getMonth()+2);
-			    }
-			    // Upper bound on the end of the last entry, so
-			    // we can even things out on the very right
-			    // side.
-			    if (end > maxend) {
-				maxend = end;
-			    }
-			    series.data.push([start, state, end]);
-			}
-			dataset.push(series);
+			
+			combinedForecasts[id] = forecast;
 		    });
 	    });
-	ShowNewGraph(dataset, maxend, "FE-graph-body", "FE-graph-visavail")
+	ShowNewGraph(combinedForecasts, "FE-graph-body", "FE-graph-visavail");
     }
 
     function GenerateRouteGraph()
     {
 	$('#route-graph-div').removeClass("hidden");
-	
-	var dataset = [];
-	var now     = new Date();
-	var maxend  = now;
 
-	Object.keys(routeforecast)
-	    .sort()
-	    .forEach(function(route, index) {
-		var forecast = routeforecast[route];
-		var series = {
-		    "measure"   : route,
-		    "interval_s": 3600,
-		    "data"      : [],
-		    "categories": {
-			"Busy": { "color": "black" },
-			"Free": { "color": "green" },
-		    },
-		};
-		for (var i = 0; i < forecast.length; i++) {
-		    var info  = forecast[i];
-		    var start = moment(info.stamp).toDate();
-		    var state = info.free ? "Free" : "Busy";
-		    var end;
-
-		    if (i < forecast.length - 1) {
-			end = moment(forecast[i + 1].stamp).toDate();
-		    }
-		    else {
-			end = new Date(start.getTime());
-			end.setMonth(end.getMonth()+2);
-		    }
-		    // Upper bound on the end of the last entry, so we can
-		    // even things out on the very right side.
-		    if (end > maxend) {
-			maxend = end;
-		    }
-		    series.data.push([start, state, end]);
-		}
-		dataset.push(series);
-	    });
-	ShowNewGraph(dataset, maxend,
-		     "route-graph-body", "route-graph-visavail");
+	ShowNewGraph(routeforecast, "route-graph-body", "route-graph-visavail");
     }
 
-    function GenerateRadioGraph()
+    /*
+     * Generate a new style graph in the provide container.
+     */
+    function ShowNewGraph(forecasts, container, graph)
     {
-	$('#radio-graph-div').removeClass("hidden");
-	
 	var dataset = [];
 	var now     = new Date();
 	var maxend  = now;
-
-	Object.keys(Radios)
+	
+	Object.keys(forecasts)
 	    .sort()
-	    .forEach(function(node_id, index) {
-		var forecast = Radios[node_id];
+	    .forEach(function(id, index) {
+		var forecast = forecasts[id];
+		console.info(id, forecast);
+
 		var series = {
-		    "measure"   : node_id,
+		    "measure"   : id,
 		    "interval_s": 3600,
 		    "data"      : [],
 		    "categories": {
@@ -3407,8 +3780,9 @@ $(function ()
 			end = new Date(start.getTime());
 			end.setMonth(end.getMonth()+2);
 		    }
-		    // Upper bound on the end of the last entry, so we can
-		    // even things out on the very right side.
+		    // Upper bound on the end of the last entry, so
+		    // we can even things out on the very right
+		    // side.
 		    if (end > maxend) {
 			maxend = end;
 		    }
@@ -3416,15 +3790,7 @@ $(function ()
 		}
 		dataset.push(series);
 	    });
-	ShowNewGraph(dataset, maxend,
-		     "radio-graph-body", "radio-graph-visavail");
-    }
-
-    /*
-     * Generate a new style graph in the provide container.
-     */
-    function ShowNewGraph(dataset, maxend, container, graph)
-    {
+	
 	// Even out the right side.
 	_.each(dataset, function(series) {
 	    var last = series.data[series.data.length - 1];
@@ -3492,35 +3858,65 @@ $(function ()
      */
     function PopulateFromRspec()
     {
-	var rspec     = $('#rspec textarea').val();	
+	var rspec     = $('#rspec textarea').val();
 	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
-	var xmlDoc    = $.parseXML(rspec);
+	var xmlDoc    = $.parseXML(rspec.replace('&', '&amp;'));
 	var spectrum  = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'spectrum');
 	var routes    = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'busroutes');
-	var tcounts   = {"_unbounded" : 0};
-	console.info("PopulateFromRspec", spectrum, routes);
+	var tcounts   = {};
+	var untyped   = {};
 
-	_.each(spectrum, function(range) {
-	    var freq_low  = $(range).attr("frequency_low");
-	    var freq_high = $(range).attr("frequency_high");
-	    console.info(freq_low,freq_high);
+	// Cluster selections passed in.
+	var cluster_selections =
+	    JSON.parse(_.unescape($('#cluster-selections')[0].textContent));
+	
+	console.info("PopulateFromRspec", rspec,
+		     cluster_selections, spectrum, routes);
 
-	    AddRangeRow(freq_low, freq_high);
-	});
-	_.each(routes, function(route) {
-	    var routename  = $(route).attr("routename");
-	    console.info(routename);
+	if (spectrum.length) {
+	    _.each(spectrum, function(range) {
+		var freq_low  = $(range).attr("frequency_low");
+		var freq_high = $(range).attr("frequency_high");
+		console.info(freq_low,freq_high);
 
-	    AddRouteRow(routename);
-	});
+		AddRangeRow(freq_low, freq_high);
+	    });
+	}
+	else if (window.ISPOWDER) {
+	    AddRangeRow();
+	}
+
+	if (routes.length) {
+	    _.each(routes, function(route) {
+		var routename  = $(route).attr("routename");
+		console.info(routename);
+
+		AddRouteRow(routename);
+	    });
+	}
+	else if (window.ISPOWDER && isadmin) {
+	    // For now, only admins see routes
+	    AddRouteRow();
+	}	
 
 	// Find all the nodes, gather up type info.
 	$(xmlDoc).find("node").each(function() {
 	    var htype        = $(this).find("hardware_type");
 	    var component_id = $(this).attr("component_id");
 	    var manager_id   = $(this).attr("component_manager_id");
+	    var site         = this.getElementsByTagNameNS(JACKS_NS, 'site');
 
-	    console.info("ids", component_id, manager_id);
+	    if (component_id) {
+		var hrn = sup.ParseURN(component_id);
+		if (hrn) {
+		    component_id = hrn.id;
+		    if (!manager_id) {
+			manager_id = sup.CreateURN(hrn.domain,
+						   "authority", "cm");
+		    }
+		}
+	    }
+	    console.info("node", htype, component_id, manager_id, site);
 
 	    // Reservable nodes are easy.
 	    if (component_id && manager_id &&
@@ -3536,9 +3932,27 @@ $(function ()
 	    }
 	    // Otherwise, we dig inside and find the hardware type.
 	    // We want to count up how many of each type, and how many
-	    // are unbounded.
+	    // are untyped
 	    if (!htype.length) {
-		tcounts["_unbounded"]++;
+		var tag;
+		
+		if (manager_id) {
+		    tag = manager_id;
+		}
+		else if (site.length) {
+		    var siteid = $(site).attr("id");
+		    if (siteid === undefined) {
+			console.error("No site ID in " + site);
+		    }
+		    tag = siteid;
+		}
+		else {
+		    tag = "nosite_selector";
+		}
+		if (!_.has(untyped, tag)) {
+		    untyped[tag] = 0;
+		}
+		untyped[tag]++;
 		return;
 	    }
 	    var type = $(htype).attr("name");
@@ -3560,7 +3974,105 @@ $(function ()
 		}
 	    });
 	});
-	console.info("tcounts", tcounts);
+	console.info("untyped", untyped);
+	
+	_.each(untyped, function (count, tag) {
+	    var row = AddClusterRow();
+	    var urn;
+
+	    if (tag == "nosite_selector") {
+		urn = cluster_selections["nosite_selector"];
+	    }
+	    else if (tag.startsWith("urn:")) {
+		urn = tag;
+	    }
+	    else {
+		urn = cluster_selections[tag];
+	    }
+	    row.find(".cluster-select").val(urn).change();
+	    row.find(".node-count").val(count).change();
+	    row.find(".hardware-select").focus();
+	    row.find(".error-row label")
+		.html("Please select a hardware type for your "+
+		      "compute nodes");
+	    row.find(".reservation-error span")
+		.removeClass("has-error")
+		.addClass("has-warning")
+		.removeClass("hidden");
+	    row.find(".hardware-select-div")
+		.removeClass("has-warning")
+		.addClass("has-error");
+	    // Mark this so we can find it later.
+	    row.addClass("untyped-nodes");
+	});
+    }
+
+    /*
+     * Update untyped nodes before returning back to the instantiate page.
+     */
+    function UpdateRspec()
+    {
+	var rows = $('.untyped-nodes');
+
+	console.info("UpdateRspec", rows);
+
+	if (!rows.length) {
+	    return;
+	}
+	var rspec     = $('#rspec textarea').val();
+	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+	var xmlDoc    = $.parseXML(rspec.replace('&', '&amp;'));
+	var changed   = false;
+
+	// Find all the nodes, gather up type info.
+	$(xmlDoc).find("node").each(function() {
+	    var htype        = $(this).find("hardware_type");
+	    var component_id = $(this).attr("component_id");
+	    var manager_id   = $(this).attr("component_manager_id");
+	    var stype        = $(this).find("sliver_type");
+
+	    if (component_id) {
+		var hrn = sup.ParseURN(component_id);
+		if (hrn) {
+		    component_id = hrn.id;
+		    if (!manager_id) {
+			manager_id = sup.CreateURN(hrn.domain,
+						   "authority", "cm");
+		    }
+		}
+	    }
+	    // Skip reservable nodes.
+	    if (component_id && manager_id &&
+		_.has(amlist, manager_id) &&
+		_.has(amlist[manager_id].reservable_nodes, component_id)) {
+		return;
+	    }
+	    // Only untyped nodes.
+	    if (htype.length) {
+		return;
+	    }
+	    // And they have to raw nodes, we do not want to change the
+	    // type of nodes indiscriminately.
+	    if (! (stype.len && $(stype).attr("name") === "raw")) {
+		return;
+	    }
+	    
+	    // Find the selector.
+	    var row   = rows[0];
+	    var stype = $(row).find(".hardware-select option:selected").val();
+	    console.info("UpdateRspec", this, stype);
+
+	    var ns      = xmlDoc.getElementsByTagName("rspec")[0].namespaceURI
+	    var element = xmlDoc.createElementNS(ns, "hardware_type");
+	    element.setAttribute("name", stype);
+	    this.appendChild(element);
+	    changed = true;
+	});
+	if (changed) {
+	    rspec = (new XMLSerializer()).serializeToString(xmlDoc);
+	    console.info("UpdateRspec", rspec);
+	    $('#rspec textarea').val(rspec);
+	}
     }
 
     function isNumber(value) {

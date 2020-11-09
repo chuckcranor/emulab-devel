@@ -70,6 +70,7 @@ $(function ()
 	LoadProjectsTab();
 	LoadProfileTab();
 	LoadDatasetTab();
+	LoadResgroupTab();
 	LoadParameterSetsTab();
 	LoadClassicDatasets();
 
@@ -82,6 +83,14 @@ $(function ()
 	$('#sendpasswordreset').click(function () {
 	    SendPasswordReset();
 	});
+    }
+
+    // Call back for bulk delete to remove the row from both tables.
+    function DeleteProfileRows(uuid, json)
+    {
+	// The profile will exist in two tables ...
+	$('#profiles_content tr[data-uuid="' + uuid + '"]').remove();
+	$('#projectprofiles_content tr[data-uuid="' + uuid + '"]').remove();
     }
 
     function LoadUsage()
@@ -152,6 +161,7 @@ $(function ()
 		    .html(template({"experiments" : json.value.user_experiments,
 				    "showCreator" : false,
 				    "showProject" : true,
+				    "showPortal"  : false,
 				    "searchUUID"  : false,
 				    "showterminate" : true}));
 	    }
@@ -163,6 +173,7 @@ $(function ()
 				        json.value.project_experiments,
 				    "showCreator" : true,
 				    "showProject" : true,
+				    "showPortal"  : false,
 				    "searchUUID"  : false,
 				    "showterminate" : false}) +
 			  "</div>");
@@ -179,13 +190,17 @@ $(function ()
 	    if (json.value.user_experiments.length != 0) {
 		$('#experiments_content #experiments_table')
 		    .tablesorter({
-			theme : 'green',
+			theme : 'bootstrap',
+			widgets : [ "uitheme" ],
+			headerTemplate : '{content} {icon}',			
 		    });
 	    }
 	    if (json.value.project_experiments.length != 0) {
 		$('#project_experiments_content #experiments_table')
 		    .tablesorter({
-			theme : 'green',
+			theme : 'bootstrap',
+			widgets : [ "uitheme", ],
+			headerTemplate : '{content} {icon}',
 		    });
 	    }
 	    // Terminate an experiment.
@@ -207,7 +222,7 @@ $(function ()
 	var uuid = $(target).data("uuid");
 
 	var callback = function(json) {
-	    sup.HideModal("#waitwait-modal");
+	    sup.HideWaitWait();
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
 		return;
@@ -217,13 +232,13 @@ $(function ()
 	};
 	// Bind the confirm button in the modal. 
 	$('#terminate-modal #terminate-confirm').click(function () {
-	    sup.HideModal('#terminate-modal');
-	    sup.ShowModal('#waitwait-modal');
-
-	    var xmlthing = sup.CallServerMethod(null, "status",
-						"TerminateInstance",
-						{"uuid" : uuid});
-	    xmlthing.done(callback);
+	    sup.HideModal('#terminate-modal', function () {
+		sup.ShowModal('#waitwait-modal');
+		var xmlthing = sup.CallServerMethod(null, "status",
+						    "TerminateInstance",
+						    {"uuid" : uuid});
+		xmlthing.done(callback);
+	    });
 	});
 	// Handler so we know the user closed the modal. We need to
 	// clear the confirm button handler.
@@ -262,12 +277,14 @@ $(function ()
 	    });
 	    var table = $('#classic_experiments_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", ],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var xmlthing = sup.CallServerMethod(null,
-					    "user-dashboard", "ClassicExperimentList",
-					    {"uid" : window.TARGET_USER});
+				    "user-dashboard", "ClassicExperimentList",
+				    {"uid" : window.TARGET_USER});
 	xmlthing.done(callback);
     }
 
@@ -289,6 +306,7 @@ $(function ()
 	    $('#profiles_content')
 		.html(template({"profiles"    : json.value,
 				"tablename"   : "user-profiles",
+				"bulkdelete"  : true,
 				"showCreator" : false,
 				"showProject" : true}));
 	    
@@ -309,18 +327,31 @@ $(function ()
 		event.preventDefault();
 		ShowTopology($(this).data("profile"));
 	    });
+	    // Delete profile button
+	    $('#profiles_content .delete-profile-button')
+		.click(function (event) {
+		    event.preventDefault();
+		    var row = $(this).closest("tr");
+		    var profile_uuid = $(row).data("uuid");
+		    
+		    profileSupport
+			.Delete(profile_uuid, function () {
+			    $(row).remove();
+			});
+		});
 	    
 	    var table = $('#' + 'user-profiles-table')
 		.tablesorter({
-		    theme : 'green',
-		    widgets: ["filter"],
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "filter"],
+		    headerTemplate : '{content} {icon}',
 		    widgetOptions: {
 			// include child row content while filtering, if true
 			filter_childRows  : true,
 			// include all columns in the search.
 			filter_anyMatch   : true,
 			// class name applied to filter row and each input
-			filter_cssFilter  : 'form-control',
+			filter_cssFilter  : 'form-control input-sm',
 			// search from beginning
 			filter_startsWith : false,
 			// Set this option to false for case sensitive search
@@ -333,6 +364,18 @@ $(function ()
 		});
 	    $.tablesorter.filter.bindSearch(table,
 					    $('#' + 'user-profiles-search'));
+
+	    // Delete multiple profiles via the checkbox column.
+	    $('#profiles_content .delete-selected-profiles')
+		.click(function (event) {
+		    event.preventDefault();
+		    profileSupport
+			.DeleteSelected('#profiles_content',
+					function (uuid, json) {
+					    DeleteProfileRows(uuid, json);
+					});
+		});
+	    
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "user-dashboard", "ProfileList",
@@ -357,6 +400,7 @@ $(function ()
 	    $('#projectprofiles_content')
 		.html(template({"profiles"    : json.value,
 				"tablename"   : "project-profiles",
+				"bulkdelete"  : false,
 				"showCreator" : true,
 				"showProject" : true}));
 	    
@@ -377,18 +421,32 @@ $(function ()
 		event.preventDefault();
 		ShowTopology($(this).data("profile"));
 	    });
-	    
+	    // Delete profile button
+	    $('#projectprofiles_content .delete-profile-button')
+		.click(function (event) {
+		    event.preventDefault();
+		    var row = $(this).closest("tr");
+		    var profile_uuid = $(row).data("uuid");
+		    
+		    profileSupport.Delete(profile_uuid, 
+					  function (uuid, json) {
+					      DeleteProfileRows(uuid, json);
+					  });
+		    
+		});
+
 	    var table = $('#' + 'project-profiles-table')
 		.tablesorter({
-		    theme : 'green',
-		    widgets: ["filter"],
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "filter"],
+		    headerTemplate : '{content} {icon}',
 		    widgetOptions: {
 			// include child row content while filtering, if true
 			filter_childRows  : true,
 			// include all columns in the search.
 			filter_anyMatch   : true,
 			// class name applied to filter row and each input
-			filter_cssFilter  : 'form-control',
+			filter_cssFilter  : 'form-control input-sm',
 			// search from beginning
 			filter_startsWith : false,
 			// Set this option to false for case sensitive search
@@ -401,6 +459,20 @@ $(function ()
 		});
 	    $.tablesorter.filter.bindSearch(table,
 					    $('#' + 'project-profiles-search'));
+
+	    // Lets not show this on the project profiles tab yet.
+	    if (0) {
+		// Delete multiple profiles via the checkbox column.
+		$('#projectprofiles_content .delete-selected-profiles')
+		    .click(function (event) {
+			event.preventDefault();
+			profileSupport
+			    .DeleteSelected('#projectprofiles_content',
+					    function (uuid, json) {
+						DeleteProfileRows(uuid, json);
+					    });
+		    });
+	    }
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "user-dashboard",
@@ -434,7 +506,9 @@ $(function ()
 	    });
 	    var table = $('#classic_profiles_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme"],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var xmlthing = sup.CallServerMethod(null,
@@ -484,7 +558,9 @@ $(function ()
 
 	    var table = $('#projects_table')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme"],
+		    headerTemplate : '{content} {icon}',
 		});
 	}
 	var xmlthing = sup.CallServerMethod(null,
@@ -589,12 +665,56 @@ $(function ()
 	    });
 	    var table = $('#datasets_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme"],
+		    headerTemplate : '{content} {icon}',
 		});
 	}
 	var xmlthing =
 	    sup.CallServerMethod(null,
 				 "user-dashboard", "DatasetList",
+				 {"uid" : window.TARGET_USER});
+	xmlthing.done(callback);
+    }
+
+    function LoadResgroupTab()
+    {
+	var callback = function(json) {
+	    console.info("resgroup", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    var userlist = json.value.user;
+	    var projlist = json.value.project;
+	    
+	    if (! (_.size(userlist) || _.size(projlist))) {
+		return;
+	    }
+	    $(".resgroups-hidden").removeClass("hidden");
+	    window.DrawResGroupList("#resgroups_content", userlist);
+	    $("#resgroups_content .expando").trigger("click");
+
+	    /*
+	     * Prune out project reservations in the table above,
+	     * and if any left, show those in another table below.
+	     */
+	    for (var uuid in userlist) {
+		if (_.has(projlist, uuid)) {
+		    delete projlist[uuid];
+		}
+	    }
+	    if (! _.size(projlist)) {
+		return;
+	    }
+	    $("#project_resgroups").removeClass("hidden");
+	    console.info("new projlist", projlist);
+	    window.DrawResGroupList("#project_resgroups_content", projlist);
+	}
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "user-dashboard", "ResgroupList",
 				 {"uid" : window.TARGET_USER});
 	xmlthing.done(callback);
     }
@@ -652,7 +772,9 @@ $(function ()
 	    
 	    paramsets_table = $('#paramsets_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme"],
+		    headerTemplate : '{content} {icon}',
 		});
 	}
 	var xmlthing =
@@ -691,7 +813,9 @@ $(function ()
 	    });
 	    var table = $('#classic_datasets_content .tablesorter')
 		.tablesorter({
-		    theme : 'green',
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme" ],
+		    headerTemplate : '{content} {icon}',
 		});
 	};
 	var xmlthing =
@@ -710,13 +834,13 @@ $(function ()
 
 	// These take longer to show the wait modal.
 	if (name == "admin" || name == "inactive") {
-	    sup.ShowModal("#waitwait-modal");
+	    sup.ShowWaitWait();
 	    wait = true;
 	}
 	var callback = function(json) {
 	    if (json.code) {
 		if (wait) {
-		    sup.HideModal("#waitwait-modal", function () {
+		    sup.HideWaitWait(function () {
 			sup.SpitOops("oops", json.value);
 		    });
 		}
@@ -726,7 +850,7 @@ $(function ()
 		return;
 	    }
 	    if (wait) {
-		sup.HideModal("#waitwait-modal");
+		sup.HideWaitWait();
 	    }
 	    LoadProfileTab();
 	};
@@ -761,12 +885,19 @@ $(function ()
 		LoadProfileTab();
 	    };
 	    var doit = function () {
+		var args = {
+		    "uid"   : window.TARGET_USER,
+		    "which" : tag,
+		};
+		var message = $('#confirm-freezethaw-modal .user-message')
+		    .val().trim();
+		if (message != "") {
+		    args["message"] = message;
+		}
 		sup.ShowWaitWait("This will take a minute. Patience please.");
 		var xmlthing =
 		    sup.CallServerMethod(null, "user-dashboard",
-					 "FreezeOrThaw",
-					 {"uid"   : window.TARGET_USER,
-					  "which" : tag});
+					 "FreezeOrThaw", args);
 		xmlthing.done(callback);
 	    };
 	    sup.HideModal('#confirm-freezethaw-modal', doit);

@@ -937,6 +937,15 @@ class Logfile
     function isopen()        { return $this->field("isopen"); }
     function uid_idx()       { return $this->field("uid_idx"); }
     function gid_idx()       { return $this->field("gid_idx"); }
+
+    #
+    # Return a logfile URL.
+    #
+    function URL() {
+        global $TBBASE;
+        
+        return "$TBBASE/spewlogfile.php3?logfile=" . $this->logid(); 
+    }
 }
 
 function FeatureEnabled($feature, $user, $group, $experiment = null)

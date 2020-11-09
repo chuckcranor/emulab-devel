@@ -119,7 +119,9 @@ $(function ()
 
 	$('#history-table')
 	    .tablesorter({
-		theme : 'green',
+		theme : 'bootstrap',
+		widgets : [ "uitheme", "zebra"],
+		headerTemplate : '{content} {icon}',
 	    });
     }
 

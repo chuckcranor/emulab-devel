@@ -22,6 +22,9 @@
 # }}}
 #
 #
+chdir("..");
+include_once("node_defs.php");
+chdir("apt");
 
 # Set this variable when fetching health status of portal
 # aggregates instead of using them.
@@ -82,7 +85,6 @@ class Aggregate
     function nickname()	    { return $this->field('nickname'); }
     function urn()	    { return $this->field('urn'); }
     function abbreviation() { return $this->field('abbreviation'); }
-    function weburl()	    { return $this->field('weburl'); }
     function ismobile()     { return $this->field('ismobile'); }
     function isFE()         { return $this->field('isFE'); }
     function disabled()     { return $this->field('disabled'); }
@@ -114,6 +116,13 @@ class Aggregate
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
 	return !is_null($this->aggregate);
+    }
+
+    # The weburl typically uses boss since that is the canonical name.
+    # Lets change that to www instead. 
+    function weburl() {
+        $url = preg_replace("/boss\./i", "www.", $this->field('weburl'));
+        return $url;
     }
 
     # Powder Portal, Emulab is not a "federate", all others are.
@@ -197,6 +206,10 @@ class Aggregate
 			"Could not load aggregate $urn!", 1);
 	    }
             if ($aggregate->adminonly() && !(ISADMIN() || STUDLY())) {
+                continue;
+            }
+            # Hack for Mike.
+            if ($aggregate->nickname() == "APT" && !ISADMIN()) {
                 continue;
             }
 	    $result[] = $aggregate;
@@ -285,19 +298,30 @@ class Aggregate
     #
     # Return the list of allowed aggregates based on the portal in use.
     #
-    function DefaultAggregateList($user = null) {
-        global $PORTAL_GENESIS, $PORTAL_HEALTH;
-	$genesis = $PORTAL_GENESIS;
-	if ($PORTAL_HEALTH)
-	{
-	  $genesis = "cloudlab";
-	}
+    function DefaultAggregateList($user = null, $frontpage = false) {
+        global $PORTAL_GENESIS, $PORTAL_HEALTH, $TBMAINSITE;
 	$am_array = array();
 
+        if ($frontpage && $PORTAL_HEALTH) {
+            $query_result =
+                DBQueryFatal("select urn from apt_aggregates ".
+                             "where disabled=0 and adminonly=0");
+        
+            while ($row = mysql_fetch_array($query_result)) {
+                $urn = $row["urn"];
+
+                if (! ($aggregate = Aggregate::Lookup($urn))) {
+                    TBERROR("Aggregate::DefaultAggregateList: ".
+                            "Could not load aggregate $urn!", 1);
+                }
+                $am_array[$urn] = $aggregate;
+            }
+            return $am_array;
+        }
         $query_result =
             DBQueryFatal("select urn from apt_aggregates ".
                          "where disabled=0 and ".
-                         "      FIND_IN_SET('$genesis', portals)");
+                         "      FIND_IN_SET('$PORTAL_GENESIS', portals)");
         
 	while ($row = mysql_fetch_array($query_result)) {
             $urn       = $row["urn"];
@@ -311,7 +335,11 @@ class Aggregate
             if (ISADMIN()) {
                 $allowed = 1;
             }
-            elseif ($aggregate->adminonly() && !(ISADMIN() || STUDLY())) {
+            # For the frontpage code, send everything.
+            elseif ($frontpage || $PORTAL_HEALTH) {
+                $allowed = 1;
+            }
+            elseif ($aggregate->adminonly() && !ISADMIN()) {
                 $allowed = 0;
             }
             elseif ($user && $aggregate->canuse_feature()) {
@@ -338,6 +366,18 @@ class Aggregate
                             break;
 
                         }
+                    }
+                }
+            }
+            elseif ($user && $TBMAINSITE) {
+                $project = Project::Lookup("OCTatMGHPCC");
+                if ($project && $project->IsMember($user, $approved) &&
+                    !$project->IsLeader($user)) {
+                    if ($aggregate->nickname() == "Mass") {
+                        $allowed = 1;
+                    }
+                    else {
+                        $allowed = 0;
                     }
                 }
             }
@@ -452,18 +492,105 @@ class Aggregate
     #
     function RadioTypes()
     {
-        global $ISPOWDER;
-
-        if ($ISPOWDER && $this->nickname() == "Emulab") {
-            return array("nuc5300" => true,
-                         "nuc6260" => true,
-                         "iris030" => true,
+        #
+        # Return this for all Portals, at the moment the JS
+        # code decides if it needs it for the current portal.
+        #
+        if ($this->nickname() == "Emulab") {
+            return array("iris030" => true,
+                         "nexus5"  => true,
+                         "nuc5300" => true,
                          "enodeb"  => true,
                          "x310"    => true,
                          "n310"    => true,
-                         "sdr"     => true);
+                         "sdr"     => true,
+                         "faros_sfp" => true);
         }
         return null;
+    }
+
+    # Class method. 
+    function RadioInfo()
+    {
+        $blob = array();
+
+        $query_result =
+            DBQueryFatal("select i.*,r.available from ".
+                         "  apt_aggregate_radioinfo as i ".
+                         "join apt_aggregate_reservable_nodes as r on ".
+                         "  r.urn=i.aggregate_urn and r.node_id=i.node_id");
+
+        while ($row = mysql_fetch_array($query_result)) {
+            $urn      = $row["aggregate_urn"];
+            $node_id  = $row["node_id"];
+            $alive    = true;
+
+            #
+            # Grab the aggregate. We use the status info to determine if the
+            # aggregate is alive (reachable).
+            #
+            if ($aggregate = Aggregate::Lookup($urn)) {
+                if (!array_key_exists($urn, $blob)) {
+                    $blob[$urn] = array();
+                }
+                if ($row["installation_type"] == "BS") {
+                    #
+                    # The CNUC determines if a base station is alive.
+                    #
+                    $cnuc = Node::Lookup($row["cnuc_id"]);
+                    if ($cnuc && $cnuc->RealNodeStatus() != "up") {
+                        $alive = false;
+                    }
+                }
+                elseif ($aggregate->status() != "up" || $aggregate->disabled()){
+                    $alive = false;
+                }
+                $row["alive"] = $alive;
+                $row["reachable"] = $alive;
+                $blob[$urn][$node_id] = $row;
+            }
+        }
+        return $blob;
+    }
+
+    # Class method to get info about Phantomnet matrix nodes. 
+    function MatrixInfo()
+    {
+        $blob = array();
+
+        $query_result =
+            DBQueryFatal("select f.node_id,w1.node_id2,w2.node_id1 ".
+                         "  from node_features as f ".
+                         "left join nodes as n on n.node_id=f.node_id ".
+                         "left join wires as w1 on ".
+                         "   w1.node_id1=f.node_id and ".
+                         "   w1.external_wire is not null ".
+                         "left join wires as w2 on ".
+                         "   w2.node_id2=f.node_id and ".
+                         "   w2.external_wire is not null ".
+                         "where f.feature='rf-controlled' and ".
+                         "      n.node_id is not null");
+
+        if (!mysql_num_rows($query_result)) {
+            return $blob;
+        }
+        while ($row = mysql_fetch_array($query_result)) {
+            $node_id  = $row["node_id"];
+            $node_id1 = $row["node_id1"];
+            $node_id2 = $row["node_id2"];
+
+            if (!array_key_exists($node_id, $blob)) {
+                $blob[$node_id] = array("node_id" => $node_id,
+                                        "wires"   => array());
+            }
+            if ($node_id1) {
+                $blob[$node_id]["wires"][] = $node_id1;
+            }
+            else {
+                $blob[$node_id]["wires"][] = $node_id2;
+            }
+        }
+        return $blob;
     }
 }
 

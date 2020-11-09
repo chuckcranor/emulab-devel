@@ -69,9 +69,9 @@ $(function ()
 
 	$('.tablesorter')
 	    .tablesorter({
-		theme : 'green',
-		// initialize zebra
-		widgets: ["zebra"],
+		theme : 'bootstrap',
+		widgets : [ "uitheme", "zebra"],
+		headerTemplate : '{content} {icon}',
 	    });
 
 	// See https://stackoverflow.com/questions/21168521/table-fixed-header-and-scrollable-body

@@ -80,17 +80,29 @@ else {
     $instance = Instance::LookupBySlice($slice_uuid);
 }
 if (!$instance) {
+    $instance = InstanceHistory::Lookup($uuid);
+    
     SPITHEADER(1);
-    echo "<div class='align-center'>
+    echo "<div class='align-center' style='margin-top: 15px;'>
             <p class='lead text-center'>
-              Experiment does not exist. Redirecting to the front page.
+              Experiment does not exist.
+              Redirecting to the front page in a few seconds ...
             </p>
           </div>\n";
+    if ($instance && (ISADMIN() || $instance->CanView($this_user))) {
+        $url = "memlane.php?uuid=$uuid";
+        echo "<div class='align-center' style='margin-top: 15px;'>
+               <p class='text-center'>
+                 You can also visit the
+                 <a href='$url'>history page</a> for this experiment.
+               </p>
+             </div>\n";
+    }
+    echo "<script type='text/javascript'>\n";
+    echo "  window.APT_OPTIONS.PAGEREPLACE = 'landing.php';\n";
+    echo "</script>\n";
     SPITNULLREQUIRE();
     SPITFOOTER();
-    flush();
-    sleep(3);
-    PAGEREPLACE("landing.php");
     return;
 }
 
@@ -197,7 +209,6 @@ $registered      = (isset($this_user) ? "true" : "false");
 $snapping        = 0;
 $oneonly         = (isset($oneonly) && $oneonly ? 1 : 0);
 $isadmin         = (ISADMIN() ? 1 : 0);
-$slivers         = InstanceSliver::LookupForInstance($instance);
 $isstud          = (isset($this_user) && $this_user->stud() ? 1 : 0);
 $wholedisk       = FeatureEnabled("WholeDiskImage",$creator,$instance->Group());
 
@@ -240,6 +251,9 @@ SPITHEADER(1);
 echo "<link rel='stylesheet'
             href='css/nv.d3.css'>\n";
 
+echo "<link rel='stylesheet'
+            href='css/frequency-graph.css'>\n";
+
 # Place to hang the toplevel template.
 echo "<div id='status-body'></div>\n";
 
@@ -278,14 +292,16 @@ else {
 
 echo "</script>\n";
 echo "<script src='js/lib/d3.v3.js'></script>\n";
+echo "<script src='js/lib/d3.v5.js'></script>\n";
 echo "<script src='js/lib/nv.d3.js'></script>\n";
-echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/jquery-ui.js'></script>\n";
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
 echo "<script src='js/lib/filesize.min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
+REQUIRE_JACKS();
 REQUIRE_MARKED();
 REQUIRE_URITEMPLATE();
 REQUIRE_IMAGE();
@@ -296,6 +312,10 @@ REQUIRE_CONTEXTMENU();
 REQUIRE_SUP();
 AddLibrary("js/bindings.js");
 AddLibrary("js/paramsets.js");
+if ($ISPOWDER) {
+    AddLibrary("js/freqgraphs.js");
+    AddLibrary("js/lib/pako/pako.min.js");
+}
 SPITREQUIRE("js/status.js");
 
 echo "<link rel='stylesheet'
@@ -309,6 +329,18 @@ echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
 # list in case new aggregates are added.
 #
 $aggregates = Aggregate::DefaultAggregateList($this_user);
+#
+# Because of cross portal linking on the Mothership, make sure there
+# are no missing aggregates.
+#
+foreach ($instance->slivers() as $sliver) {
+    $aggregate_urn = $sliver->aggregate_urn();
+
+    if (!array_key_exists($aggregate_urn, $aggregates)) {
+        $aggregate = Aggregate::Lookup($aggregate_urn);
+        $aggregates[$aggregate_urn] = $aggregate;
+    }
+}
 $blob = array();
 
 foreach ($aggregates as $aggregate) {
@@ -319,12 +351,37 @@ foreach ($aggregates as $aggregate) {
         array("weburl"       => $weburl,
               "name"         => $aggregate->name(),
               "nickname"     => $aggregate->nickname(),
-              "abbreviation" => $aggregate->abbreviation());
+              "abbreviation" => $aggregate->abbreviation(),
+              "ismobile"     => $aggregate->ismobile(),
+              "isFE"         => $aggregate->isFE());
 }
-
 echo "<script type='text/plain' id='amlist-json'>\n";
 echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
 echo "</script>\n";
+
+#
+# For Powder, send the radio info.
+#
+if ($ISPOWDER) {
+    $blob = array();
+
+    $query_result =
+        DBQueryFatal("select * from apt_aggregate_radioinfo");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $urn      = $row["aggregate_urn"];
+        $node_id  = $row["node_id"];
+
+        if (!array_key_exists($urn, $blob)) {
+            $blob[$urn] = array();
+        }
+        $blob[$urn][$node_id] = $row;
+    }
+    echo "<script type='text/plain' id='radioinfo-json'>\n";
+    echo json_encode($blob,
+                     JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
+    echo "</script>\n";
+}
 
 # This is for Clone.
 if (isset($this_user)) {
@@ -342,7 +399,7 @@ AddTemplateList(array("status", "waitwait-modal", "oops-modal",
                       "register-modal", "terminate-modal", "oneonly-modal",
                       "approval-modal", "linktest-modal",
                       "destroy-experiment", "save-paramset-modal",
-                      "prestage-table"));
+                      "prestage-table", "frequency-graph"));
 
 AddTemplateKey("linktest-md", "template/linktest.md");
 SPITFOOTER();

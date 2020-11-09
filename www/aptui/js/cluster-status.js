@@ -17,6 +17,34 @@ $(function ()
 	isadmin = window.ISADMIN || window.ISFADMIN;
 	amlist = JSON.parse(_.unescape($('#agglist-json')[0].textContent));
 	
+	/*
+	 * We want things ordered specially in Powder, alphabetic no good. :-(
+	 */
+	if (window.ISPOWDER) {
+	    var ordered = {};
+	    if (_.has(amlist, "Emulab")) {
+		ordered["Emulab"] = amlist["Emulab"];
+		amlist["Emulab"]  = undefined;
+	    }
+	    _.each(amlist, function (details, nickname) {
+		if (details && !(details.isFE || details.isME)) {
+		    ordered[nickname] = amlist[nickname];
+		    amlist[nickname]  = undefined;
+		}
+	    });
+	    _.each(amlist, function (details, nickname) {
+		if (details && details.isFE) {
+		    ordered[nickname] = amlist[nickname];
+		    amlist[nickname]  = undefined;
+		}
+	    });
+	    _.each(amlist, function (details, nickname) {
+		if (details) {
+		    ordered[nickname] = amlist[nickname];
+		}
+	    });
+	    amlist = ordered;
+	}
 	var html = mainTemplate({
 	    "amlist"  : amlist,
 	    "isadmin" : isadmin,
@@ -57,16 +85,11 @@ $(function ()
 			type = value.type;
 		    }
 		    html = html + "<tr><td>";
-		    if (isadmin) {
-			var url = json.value.url +
-			    "/portal/show-node.php?node_id=" + value.node_id;
-			html +=
-			    "<a href='" + url + "' target=_blank>" +
-			    value.node_id + "</a></td>";
-		    }
-		    else {
-			html += value.node_id + "</td>";
-		    }
+		    var url = json.value.url +
+			"/portal/show-node.php?node_id=" + value.node_id;
+		    html +=
+			"<a href='" + url + "' target=_blank>" +
+			value.node_id + "</a></td>";
 		    html += "<td>" + type + "</td>";
 
 		    if (isadmin) {
@@ -138,6 +161,12 @@ $(function ()
 		      delay: {"hide" : 500, "show" : 150},
 		      placement: 'auto',
 		  });
+		$('#counts-panel-' + name + ' table')
+		    .tablesorter({
+			theme : 'bootstrap',
+			widgets: ["uitheme"],
+			headerTemplate : '{content} {icon}',
+		    });
 
 		// We reference the totals table in InitTable();
 		InitTable(name);
@@ -173,6 +202,12 @@ $(function ()
 		});
 		$('#prereserve-panel-' + name).html(html);
 
+		$('#prereserve-panel-' + name + ' table')
+		    .tablesorter({
+			theme : 'bootstrap',
+			widgets: ["uitheme"],
+			headerTemplate : '{content} {icon}',
+		    });
 		/*
 		 * Expand/collapse for each prereserve child (hidden) rows.
 		 */
@@ -228,8 +263,9 @@ $(function ()
 	
 	var table = $(tablename)
 		.tablesorter({
-		    theme : 'green',
-		    widgets: ["filter"],
+		    theme : 'bootstrap',
+		    widgets: ["uitheme", "filter"],
+		    headerTemplate : '{content} {icon}',
 
 		    widgetOptions: {
 			// include child row content while filtering, if true
@@ -237,7 +273,7 @@ $(function ()
 			// include all columns in the search.
 			filter_anyMatch   : true,
 			// class name applied to filter row and each input
-			filter_cssFilter  : 'form-control',
+			filter_cssFilter  : 'form-control input-sm',
 			// search from beginning
 			filter_startsWith : false,
 			// Set this option to false for case sensitive search

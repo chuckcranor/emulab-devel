@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,7 +29,7 @@ function Do_CreateNews($idx = null)
 {
     global $this_user;
     global $ajax_args;
-    global $DBFieldErrstr, $PORTAL_GENESIS;
+    global $DBFieldErrstr, $PORTAL_GENESIS, $TBMAINSITE;
 
     if (!ISADMIN()) {
 	SPITAJAX_ERROR(1, "Only admins please");
@@ -47,6 +47,7 @@ function Do_CreateNews($idx = null)
     }
     $formfields = $ajax_args["formfields"];
     $errors  = array();
+    $pclause = "portals='$PORTAL_GENESIS'";
 
     $required = array("title", "body");
     foreach ($required as $field) {
@@ -64,6 +65,22 @@ function Do_CreateNews($idx = null)
     if (!TBvalid_html_fulltext($formfields["body"])) {
 	$errors["body"] = $DBFieldErrstr;
     }
+    if ($TBMAINSITE) {
+	if (!isset($formfields["portals"])) {
+	    $errors["portals"] = "Missing field";
+        }
+        elseif ($formfields["portals"] == "") {
+	    $errors["portals"] = "Select one or more portals";
+        }
+        elseif (!TBcheck_dbslot($formfields["portals"],
+                                "apt_profiles", "examples_portals",
+                                TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+            $errors["portals"] = $DBFieldErrstr;
+        }
+        else {
+            $pclause = "portals='" . $formfields["portals"] . "'";
+        }
+    }
     if (count($errors)) {
 	SPITAJAX_ERROR(2, $errors);
 	return;
@@ -78,21 +95,21 @@ function Do_CreateNews($idx = null)
     if ($idx) {
         $query_result =
             DBQueryWarn("update apt_news set ".
-                        "  title='$title',body='$body' ".
+                        "  title='$title',body='$body', $pclause ".
                         "where idx='$idx'");
     }
     else {
         $query_result =
             DBQueryWarn("insert into apt_news set ".
                         "  title='$title',created=now(),author='$this_uid', ".
-                        "  portals='$PORTAL_GENESIS', ".
+                        "  $pclause, ".
                         "  author_idx='$this_idx',body='$body'");
     }
     if (!$query_result) {
 	SPITAJAX_ERROR(-1, "Could not insert new news item");
 	return;
     }
-    SPITAJAX_RESPONSE("news.php");
+    SPITAJAX_RESPONSE("portal-news.php");
 }
 
 #
@@ -153,7 +170,7 @@ function Do_GetNews()
     global $this_user;
     global $ajax_args, $PORTAL_GENESIS;
     
-    $idxclause= "";
+    $clause   = "";
     $count    = 6;
 
     if (isset($ajax_args["idx"]) && $ajax_args["idx"] != -1) {
@@ -162,7 +179,16 @@ function Do_GetNews()
             return;
         }
         $idx = $ajax_args["idx"];
-        $idxclause = "idx<=$idx and ";
+        $clause = "idx<=$idx";
+    }
+    if (!ISADMIN()) {
+        if ($clause != "") {
+            $clause .= " and ";
+        }
+        $clause .= "FIND_IN_SET('$PORTAL_GENESIS',portals)";
+    }
+    if ($clause != "") {
+        $clause = "where $clause";
     }
     if (isset($ajax_args["count"])) {
         if (!TBvalid_integer($ajax_args["count"])) {
@@ -172,8 +198,7 @@ function Do_GetNews()
         $count = $ajax_args["count"];
     }
     $query_result = DBQueryWarn("select * from apt_news ".
-                                "where $idxclause ".
-                                "      FIND_IN_SET('$PORTAL_GENESIS',portals) ".
+                                "$clause ".
                                 "order by idx desc limit $count");
     if (!$query_result) {
         SPITAJAX_ERROR(1, "Could not get news items");
@@ -185,12 +210,24 @@ function Do_GetNews()
                       "title"  => $row["title"],
                       "body"   => $row["body"],
                       "author" => $row["author"],
+                      "portals"=> $row["portals"],
                       "created"=> DateStringGMT($row["created"]));
         $news[] = $blob;
     }
     SPITAJAX_RESPONSE($news);
 }
 
+#
+# Does the user have new news to read.
+#
+function Do_GotNews()
+{
+    global $this_user, $ajax_args;
+
+    $newnews = $this_user->APTNewNews();
+
+    SPITAJAX_RESPONSE($newnews == 1 ? true : false);
+}
 # Local Variables:
 # mode:php
 # End:

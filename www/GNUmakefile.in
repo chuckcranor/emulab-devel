@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -157,6 +157,10 @@ APTUIFILES += $(wildcard $(SRCDIR)/aptui/.htaccess)
 APTJSFILES  = $(wildcard $(SRCDIR)/aptui/js/*.js)
 APTLIBFILES = $(wildcard $(SRCDIR)/aptui/js/lib/*.js)
 APTJQRFILES = $(wildcard $(SRCDIR)/aptui/js/lib/jQRangeSlider/*.js)
+APTSORTFILES = $(wildcard $(SRCDIR)/aptui/js/lib/tablesorter/*.js)
+APTSORTFILES += $(wildcard $(SRCDIR)/aptui/js/lib/tablesorter/widgets/*.js)
+APTSORTFILES += $(wildcard $(SRCDIR)/aptui/js/lib/tablesorter/parsers/*.js)
+APTPAKOFILES = $(wildcard $(SRCDIR)/aptui/js/lib/pako/*.js)
 APTTEMPLATES = $(wildcard $(SRCDIR)/aptui/template/*.html)
 APTTEMPLATES += $(wildcard $(SRCDIR)/aptui/template/*.md)
 APTCSSFILES = $(wildcard $(SRCDIR)/aptui/css/*.css)
@@ -227,11 +231,13 @@ ALLAPTUI  = $(notdir $(APTUIFILES))
 ALLAPTJS  = $(notdir $(APTJSFILES))
 ALLAPTLIB = $(notdir $(APTLIBFILES))
 ALLAPTJQR = $(notdir $(APTJQRFILES))
+ALLAPTPAKO = $(notdir $(APTPAKOFILES))
 ALLAPTTEMPLATES = $(notdir $(APTTEMPLATES))
 ALLAPTCSS = $(notdir $(APTCSSFILES))
 ALLAPTFONTS = $(notdir $(APTFONTS))
 ALLAPTIMAGES = $(notdir $(APTIMAGES))
 ALLJSTREE = $(notdir $(JSTREE))
+ALLAPTSORT = $(subst $(SRCDIR)/aptui/js/lib/,,$(APTSORTFILES))
 
 ALLAPTNEWJS  = $(notdir $(APTNEWJSFILES))
 ALLAPTNEWTEMPLATES = $(notdir $(APTNEWTEMPLATES))
@@ -281,6 +287,8 @@ apt-install: 	$(addprefix $(INSTALL_WWWDIR)/apt/, $(ALLAPTUI)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/js/, $(ALLAPTJS)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/js/lib/, $(ALLAPTLIB)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/js/lib/jQRangeSlider/, $(ALLAPTJQR)) \
+	$(addprefix $(INSTALL_WWWDIR)/apt/js/lib/pako/, $(ALLAPTPAKO)) \
+	$(addprefix $(INSTALL_WWWDIR)/apt/js/lib/, $(ALLAPTSORT)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/template/, $(ALLAPTTEMPLATES)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/css/, $(ALLAPTCSS)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/fonts/, $(ALLAPTFONTS)) \

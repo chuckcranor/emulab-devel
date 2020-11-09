@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -43,7 +43,7 @@ $PORT_FORMAT_PORTINDEX= 5;
 @EXPORT = qw( macport portnum portiface Dev vlanmemb vlanid
 		getTestSwitches getControlSwitches getSwitchesInStack
                 getSwitchesInStacks
-		getVlanPorts
+		getVlanPorts getAllVlanPorts
 		getExperimentTrunks setVlanStack
 		getExperimentVlans getDeviceNames getDeviceType
 		getInterfaceSettings mapPortsToDevices getSwitchPrimaryStack
@@ -67,6 +67,7 @@ $PORT_FORMAT_PORTINDEX= 5;
 		getTrunksForVlan getExperimentTrunksForVlan
 		getSwitchTrunkPath setSwitchTrunkPath
 		mapPortsToSwitches findAndDumpLan
+	        getTrunkedStitchPorts
 		$PORT_FORMAT_IFINDEX $PORT_FORMAT_MODPORT
                 $PORT_FORMAT_NODEPORT $PORT_FORMAT_PORT $PORT_FORMAT_PORTINDEX
 );
@@ -852,6 +853,25 @@ sub getExperimentPorts ($$) {
     my ($pid, $eid) = @_;
 
     return getVlanPorts(getExperimentVlans($pid,$eid));
+}
+
+#
+# Returns all ports for a vlan, from lans and from vlans.
+# Cause of syncVlansFromTables ...
+#
+sub getAllVlanPorts($)
+{
+    my ($vlan_id) = @_;
+    my @ports    = ();
+
+    if (VLan->Lookup($vlan_id)) {
+	@ports = uniq_ports(getVlanPorts($vlan_id),
+			    getExperimentVlanPorts($vlan_id));
+    }
+    else {
+	@ports = getExperimentVlanPorts($vlan_id);
+    }
+    return @ports;
 }
 
 #
@@ -1689,6 +1709,38 @@ sub getTrunkHash() {
         }
     }
     return %trunkhash;
+}
+
+#
+# Look for trunked stitch ports.
+#
+sub getTrunkedStitchPorts()
+{
+    my @stitchPorts = ();
+
+    #
+    # Use the external interfaces table. We are looking for those
+    # ports with the LAG flag set. 
+    #
+    my $query_result =
+	DBQueryWarn("select n.node_id,w.iface1 from external_networks as n ".
+		    "left join wires as w on ".
+		    "     w.node_id1=n.node_id ".
+		    "left join interfaces as i on ".
+		    "     i.node_id=w.node_id2 and i.iface=w.iface2 ".
+		    "where i.LAG=1");
+    return ()
+	if (!$query_result->numrows);
+
+    while (my ($node_id,$iface) = $query_result->fetchrow_array()) {
+	my $port = Port->LookupByIface($node_id, $iface);
+	if (!$port) {
+	    print STDERR "Could not get Port for $node_id:$iface\n";
+	    return ();
+	}
+	push(@stitchPorts, $port);
+    }
+    return @stitchPorts;
 }
 
 #

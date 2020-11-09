@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -210,6 +210,12 @@ function Do_Create()
             $errors["error"] = "Invalid node_id for snapshot!";
         }
     }
+    # Sanity check examples portals and public setting.
+    if ($formfields["examples_portals"] != "" &&
+        $formfields["profile_who"] != "public") {
+        $errors["examples_portals"] =
+            "Profile must be public to list on the Examples page";
+    }
   bad:    
     if (count($errors)) {
 	SPITAJAX_ERROR(2, $errors);
@@ -287,7 +293,7 @@ function Do_Create()
                 }
             }
             elseif ($action != "edit") {
-                fwrite($fp, ($who == "public" ? "1" : "0"));
+                fwrite($fp, "0");
             }
             fwrite($fp, "</value></attribute>\n");
         }
@@ -355,6 +361,11 @@ function Do_Create()
                 fwrite($fp, "0");
             }
             fwrite($fp, "</value></attribute>\n");
+            if (isset($formfields["examples_portals"])) {
+                fwrite($fp, "<attribute name='examples_portals'><value>");
+                fwrite($fp, $formfields["examples_portals"]);
+                fwrite($fp, "</value></attribute>\n");
+            }
         }
         fwrite($fp, "</profile>\n");
         fclose($fp);
@@ -569,6 +580,10 @@ function Do_DeleteProfile()
         if (isset($ajax_args["keepimages"]) && $ajax_args["keepimages"]) {
             $opt .= "-k ";
         }
+    }
+    # Impotent mode for testing
+    if (isset($ajax_args["impotent"]) && $ajax_args["impotent"]) {
+        $opt .= "-n ";
     }
     $webtask = WebTask::CreateAnonymous();
     if (!$webtask) {

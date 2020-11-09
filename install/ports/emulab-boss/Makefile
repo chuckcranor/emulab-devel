@@ -107,7 +107,7 @@ RUN_DEPENDS+=	\
 	git:${PORTSDIR}/devel/git \
 	gmake:${PORTSDIR}/devel/gmake \
 	hg:${PORTSDIR}/devel/mercurial \
-	kmetis:${PORTSDIR}/math/metis4 \
+	ipmitool:${PORTSDIR}/sysutils/ipmitool \
 	libtool:${PORTSDIR}/devel/libtool \
 	neato:${PORTSDIR}/graphics/graphviz \
 	otclsh:${PORTSDIR}/misc/otcl \
@@ -118,10 +118,22 @@ RUN_DEPENDS+=	\
 	swig${SWIG_VER}:${PORTSDIR}/${SWIG_PORT} \
 	sudo:${PORTSDIR}/security/sudo \
 	medusa:${PORTSDIR}/security/medusa \
+	nmap:${PORTSDIR}/security/nmap \
 	wget:${PORTSDIR}/ftp/wget \
 	xvcg:${PORTSDIR}/graphics/vcg \
 	${LOCALBASE}/libexec/mysqld:${PORTSDIR}/databases/mysql${MYSQL_VER}-server \
 	${LOCALBASE}/include/boost/config.hpp:${PORTSDIR}/devel/boost-all
+
+#
+# Metis version changed
+.if (${EMULAB_PORTVERSION} == "7.3")
+RUN_DEPENDS+=	\
+	gpmetis:${PORTSDIR}/math/metis
+.else
+RUN_DEPENDS+=	\
+	kmetis:${PORTSDIR}/math/metis4
+.endif
+
 
 # perl packages
 # XXX all the versions listed here are ones that are known to work
@@ -154,7 +166,8 @@ RUN_DEPENDS+=	\
 	p5-Tree-Binary>=1.05:${PORTSDIR}/devel/p5-Tree-Binary \
 	p5-XML-LibXML>=2.0107:${PORTSDIR}/textproc/p5-XML-LibXML \
 	p5-XML-Parser>=2.41:${PORTSDIR}/textproc/p5-XML-Parser \
-	p5-XML-Simple>=2.20:${PORTSDIR}/textproc/p5-XML-Simple
+	p5-XML-Simple>=2.20:${PORTSDIR}/textproc/p5-XML-Simple \
+        p5-RRDTool-OO>=0.36:${PORTSDIR}/devel/p5-RRDTool-OO
 
 # python packages
 RUN_DEPENDS+=	\
@@ -162,6 +175,11 @@ RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}dateutil>0:${PORTSDIR}/devel/py-dateutil \
 	${PYTHON_PKGNAMEPREFIX}cryptography>0:${PORTSDIR}/security/py-cryptography \
 	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml
+
+.if (${EMULAB_PORTVERSION} == "7.3")
+RUN_DEPENDS+=	\
+	${PYTHON_PKGNAMEPREFIX}certbot>0:${PORTSDIR}/security/py-certbot
+.endif
 
 # apache related ports
 RUN_DEPENDS+=	\
@@ -174,9 +192,19 @@ RUN_DEPENDS+=	\
 	dhcpd:${PORTSDIR}/net/isc-dhcp44-server \
 	${LOCALBASE}/sbin/rndc:${PORTSDIR}/dns/bind911
 
+.if (${EMULAB_PORTVERSION} == "7.3")
+# dig and friends
+RUN_DEPENDS+=	\
+	${LOCALBASE}/bin/dig:${PORTSDIR}/dns/bind-tools
+.endif
+
 # XXX For building loghole doc from www/tutorial
 RUN_DEPENDS+=	\
 	man2html:${PORTSDIR}/textproc/man2html
+
+# XXX For Powder end point boss nodes, maybe they should have their own port
+RUN_DEPENDS+= \
+	syncthing:${PORTSDIR}/net/syncthing
 
 #USE_PERL5=	yes
 USES=		perl5 python:2.7 php

@@ -19,6 +19,9 @@
 	<% } %>
 	<th>Status</th>
 	<th>Cluster</th>
+	<% if (showPortal !== undefined && showPortal) { %>
+	  <th>Portal</th>
+	<% } %>
 	<th>PCs</th>
 	<th>PHours<b>[1]</b></th>
 	<th>VMs</th>
@@ -62,6 +65,9 @@
 	  <% } %>
 	  <td><%- value.status %></td>
 	  <td><%- value.cluster %></td>
+	  <% if (showPortal !== undefined && showPortal) { %>
+	    <td><%- value.portal %></td>
+	  <% } %>
 	  <td><%- value.pcount %></td>
 	  <td><%- value.phours %></td>
 	  <td><%- value.vcount %></td>

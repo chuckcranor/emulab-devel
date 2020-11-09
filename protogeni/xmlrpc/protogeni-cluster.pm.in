@@ -63,6 +63,7 @@ $GENI_METHODS = {
     "ReservationIdleDetection" => \&GeniCluster::ReservationIdleDetection,
     "GetImageCredential"   => \&GeniCluster::GetImageCredential,
     "AllSliceMaxExtensions"=> \&GeniCluster::AllSliceMaxExtensions,
+    "NodeTop"              => \&GeniCluster::NodeTop,
 };
 
 1;

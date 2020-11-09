@@ -205,10 +205,24 @@ sub find_serial($)
     # Try using "smartctl -i" first
     #
     if (-x "$SMARTCTL") {
-	@lines = `$SMARTCTL -i /dev/$dev 2>&1`;
+	my $opt = "";
+      again:
+	@lines = `$SMARTCTL -i /dev/$dev $opt 2>&1`;
 	foreach (@lines) {
 	    if (/^serial number:\s+(\S.*)/i) {
 		return $1;
+	    }
+	    #
+	    # XXX hack to get around Dell raid controllers.
+	    # If smartctl suggests using "-d megaraid,N", do so but only once.
+	    #
+	    # XXX this will only work for the first 26 drives (a-z), sorry.
+	    #
+	    if (!$opt &&
+		m#/dev/sd([a-z]) failed: DELL or MegaRaid controller#) {
+		my $dn = ord($1) - ord('a');
+		$opt = "-d megaraid,$dn";
+		goto again;
 	    }
 	}
     }

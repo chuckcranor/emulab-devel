@@ -16,6 +16,7 @@
 	<th class="sorter-false">&nbsp</th>
 	<% if (showuser) { %><th>Creator</th><% } %>
 	<% if (showproject) { %><th>Project</th><% } %>
+	<% if (showportal) { %><th>Portal</th><% } %>
 	<th>Created</th>
 	<th>Starts</th>
 	<th>Ends</th>
@@ -105,7 +106,8 @@
 	    <% } else { %>
 	      <% if (showselect) { %>
 		<input type="checkbox" class="select-reservation"
-		       style='margin-bottom: 4px; margin-left: 0px;'
+		       style='margin-bottom: 4px; margin-top: 0px; 
+			      margin-left: 0px;'
 		       value="<%- value.uuid %>">
 	      <% } %>
 	      <a href="resgroup.php?edit=1&uuid=<%- value.uuid %>"
@@ -139,6 +141,9 @@
 		<%- value.remote_pid %>
 	      <% } %>
 	    </td>
+	  <% } %>
+	  <% if (showportal) { %>	  
+	    <td><%- value.portal %></td>
 	  <% } %>
 	  <td class="format-date"><%- value.created %></td>
 	  <td>

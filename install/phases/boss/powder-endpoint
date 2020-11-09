@@ -15,6 +15,7 @@ use emdb;
 use NodeType;
 use Node;
 use Interface;
+use OSImage;
 use Image;
 
 my $CONFIGVARS   = "$PREFIX/configvars.txt";
@@ -54,13 +55,22 @@ elsif ($TARGETSYS_TARGET eq "POWDER-BUS") {
 		      "$TOP_SRCDIR/install/$TARGETSYS_DIR/n300.xml");
     $DEFAULTTYPE = "e300-8d";
 }
+elsif ($TARGETSYS_TARGET eq "POWDER-PORTABLE") {
+    %TYPEFILES  = ("nexus5" =>
+		       "$TOP_SRCDIR/install/powder-fixed/nexus5.xml");
+    $DEFAULTTYPE = "nexus5";
+}
+# For UEs. 
+my $ANDROID444 = "https://www.emulab.net/image_metadata.php".
+    "?uuid=c40718d8-e56f-11e5-b570-99cadac50270";
+
 # Placeholders. 
 my %HOSTNAMES  = ();
 my %INTERFACES = ();
 
 if ($TARGETSYS_TARGET eq "POWDER-BUS") {
-    %INTERFACES  = ("xn1"     => "inet 10.10.11.2 netmask 255.255.255.0");
-    %HOSTNAMES   = ("sdrn300" => "10.10.11.4");
+    %INTERFACES  = ("xn1"        => "inet 10.10.11.2 netmask 255.255.255.0");
+    %HOSTNAMES   = ("n300-1-mng" => "10.10.11.6");
 }
 
 sub Install($$$)
@@ -119,10 +129,12 @@ sub Install($$$)
 	#
 	# Extra install
 	# 
-	Phase "extra", "Installing extra scripts", sub {
-	    ExecQuietFatal("cd $TOP_OBJDIR/install/$TARGETSYS_DIR; ".
-			   "$GMAKE; $GMAKE install");
-	};
+	if ($TARGETSYS_TARGET eq "POWDER-BUS") {
+	    Phase "extra", "Installing extra scripts", sub {
+		ExecQuietFatal("cd $TOP_OBJDIR/install/$TARGETSYS_DIR; ".
+			       "$GMAKE; $GMAKE install install-poweron");
+	    };
+	}
 
 	#
 	# Need ipmi tools on the Buses
@@ -241,6 +253,25 @@ sub Install($$$)
 	}
 
 	#
+	# Need to do import the ANDROID image specially, and do it before
+	# we bring in the nexus type.
+	#
+	Phase "ANDROID444", "Fetching ANDROID444 image. Patience!", sub {
+	    my $url   = $ANDROID444;
+	    my $image = OSImage->Lookup(TBOPSPID(), "ANDROID444-STD");
+	    PhaseSkip("already fetched")
+		if (defined($image));
+
+	    # Import with novalidate option.
+	    ExecQuietFatal("$SUDO -u $PROTOUSER ".
+			   "         $WAP $IMAGEIMPORT -V -g '$url'");
+	    # Then update the only thing we can (and must have).
+	    ExecQuietFatal("$SUDO -u $PROTOUSER ".
+			   "         $WAP $IMAGEVALIDATE -u -V size ".
+			   TBOPSPID() . ",ANDROID444-STD");
+	};
+
+	#
 	# Add the node types to the DB.
 	#
 	foreach my $type (keys(%TYPEFILES)) {
@@ -271,6 +302,21 @@ sub Install($$$)
 	    ExecQuietFatal("$PREFIX/sbin/setsitevar ".
 			   "images/default_typelist $DEFAULTTYPE");
 	};
+	if ($TARGETSYS_TARGET eq "POWDER-BUS") {
+	    Phase "idlepower", "Enabling idlepower", sub {
+		ExecQuietFatal("$PREFIX/sbin/setsitevar ".
+			       "general/idlepower_enable 1");
+	    };
+	    Phase "idlepower", "Setting idletime", sub {
+		ExecQuietFatal("$PREFIX/sbin/setsitevar ".
+			       "general/idlepower_idletime 900");
+	    };
+	    Phase "crontab", "Adding idlepower to crontab", sub {
+		DoneIfEdited($CRONTAB);
+		AppendToFileFatal($CRONTAB,
+		      "0/5\t*\t*\t*\t*\troot\t$PREFIX/sbin/idlepower -r");
+	    };
+	}
 
 	# We need tiplines and tipserver entries.
 	Phase "tip", "Adding tiplines and tipservers to DB", sub {
@@ -368,8 +414,8 @@ sub Install($$$)
 	    Phase "named", "Restarting named", sub {
 		ExecQuietFatal($NAMED_SETUP);
 	    };
-	    Phase "dhcpd", "Restarting dhcpd", sub {
-		ExecQuietFatal("$DHCPD_MAKECONF -r -i");
+	    Phase "dhcpd", "Regenerating dhcpd.conf", sub {
+		ExecQuietFatal("$DHCPD_MAKECONF -i");
 	    };
 	    PhaseSucceed("Nodes Done");
 	};
@@ -478,6 +524,8 @@ sub Install($$$)
 	    ExecQuietFatal("$GMAKE -C $TOP_OBJDIR/rc.d tipserv-install");
 	};
 	Phase "run_capture", "Installing capture run file", sub {
+	    PhaseSkip("No capture file to install")
+		if (! -e $RUNCAPTURE);
 	    DoneIfExists("$PREFIX/sbin/run_capture");
 	    ExecQuietFatal("/bin/cp -f $RUNCAPTURE $PREFIX/sbin");
 	};
@@ -649,6 +697,93 @@ sub Install($$$)
 	    DoneIfEdited($RCCONF);
 	    UpdateFileFatal($RCCONF, \@patterns, @strings);
 	};
+
+	#
+	# Reset the mailing lists. We do this late so that we do not
+	# all see a bunch of email until we are really ready.
+	#
+	Phase "emaillists", "Changing target for email lists", sub {
+	    PhaseSkip("Not the mailer node")
+		if ($server ne $MAILERNODE);
+	    
+	    opendir(DIR, "/etc/mail/lists") or
+		PhaseFail("Cannot opendir /etc/mail/lists: $!");
+	    my @lists = grep { $_ ne "." && $_ ne ".." } readdir(DIR);
+	    closedir(DIR);
+
+	    my $ops  = "powder-ops\@flux.utah.edu";
+	    my $logs = "powder-logs\@flux.utah.edu";
+	    
+	    foreach my $list (@lists) {
+		my $where;
+		my $fname = "/etc/mail/lists/$list";
+
+		DoneIfEdited($fname)
+		    if (-e $fname);
+		DeleteFileFatal($fname)
+		    if (-e $fname);
+		CreateFileFatal($fname, "# $list")
+		    if (! -e $fname);
+	
+		Phase "emaillist", "Changing target for $list", sub {
+		  SWITCH: for ($list) {
+		      /approval$/ && do {
+			  $where = $ops;
+			  last SWITCH;
+		      };
+		      /audit$/ && do {
+			  $where = "powder-audit\@flux.utah.edu";
+			  last SWITCH;
+		      };
+		      /automail$/ && do {
+			  $where = $logs;
+			  last SWITCH;
+		      };
+		      /errors$/ && do {
+			  $where = "powder-errors\@flux.utah.edu";
+			  last SWITCH;
+		      };
+		      /logs$/ && do {
+			  $where = $logs;
+			  last SWITCH;
+		      };
+		      /ops$/ && do {
+			  $where = $ops;
+			  last SWITCH;
+		      };
+		      /stated$/ && do {
+			  $where = $ops;
+			  last SWITCH;
+		      };
+		      /testsuite$/ && do {
+			  $where = $logs;
+			  last SWITCH;
+		      };
+		      /www$/ && do {
+			  $where = "powder-www\@flux.utah.edu";;
+			  last SWITCH;
+		      };
+		  }
+		    AppendToFileFatal($fname, $where)
+		      if (defined($where));
+		};
+	    }
+	};
+	
+	#
+	# WBStore.
+	#
+	Phase "newsyslog", "Updating $NEWSYSLOG_CONF", sub {
+	    DoneIfEdited($NEWSYSLOG_CONF);
+
+	    my @lines = (
+		"$LOGDIR/wbstoremonitor.log     644  7   10000  *     Z ".
+		"/var/run/wbstoremonitor.pid"
+		);
+	    
+	    AppendToFileFatal($NEWSYSLOG_CONF, @lines);
+	};
+	
 	PhaseSucceed("Powder Fixed Setup Done");
     };
     return 0;

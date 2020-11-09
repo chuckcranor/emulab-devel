@@ -27,7 +27,8 @@ SUBDIR		= install/powder-bus
 
 include $(OBJDIR)/Makeconf
 
-TARGETS		= dhcpd.conf.frag.one
+TARGETS		= dhcpd.conf.frag.one \
+		 idlefix idlefix.sh poweron poweron.sh batterystats
 
 #
 # Force dependencies on the scripts so that they will be rerun through
@@ -38,8 +39,19 @@ all: $(TARGETS)
 include $(TESTBED_SRCDIR)/GNUmakerules
 
 install: $(INSTALL_ETCDIR)/dhcpd.conf.frag.one \
-	 $(INSTALL_SBINDIR)/run_capture \
-	 $(INSTALL_SBINDIR)/batterymon
+	 $(INSTALL_SBINDIR)/run_capture 
+
+install-idlefix: $(INSTALL_SBINDIR)/idlefix \
+	 $(INSTALL_RCDIR)/idlefix.sh
+
+install-poweron: $(INSTALL_SBINDIR)/poweron \
+	 $(INSTALL_RCDIR)/poweron.sh
+
+# Like the INSTALL_BINDIR target
+$(INSTALL_RCDIR)/%: %
+	@echo "Installing $<"
+	-mkdir -p $(INSTALL_RCDIR)
+	$(INSTALL_PROGRAM) $< $@
 
 clean: 
 	rm -f $(TARGETS)

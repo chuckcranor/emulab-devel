@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,6 +24,7 @@
 use strict;
 use English;
 use Getopt::Std;
+use POSIX qw(strftime);
 
 #
 # Back up the DB, rolling the base and update logs. The approach is to
@@ -178,6 +179,9 @@ if ($logname =~ /^([-\@\w.\/]+)$/) {
 # 
 open(STDERR, ">> $logname") or die("opening $logname for STDERR: $!");
 open(STDOUT, ">> $logname") or die("opening $logname for STDOUT: $!");
+
+print "Starting backup at ".
+    POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
 
 if ($opsmode) {
     require libtbdb;
@@ -340,8 +344,10 @@ if ($dohotcopy && -e "$BACKUPDIR/tbdb") {
     system("/bin/rm -r $BACKUPDIR/tbdb") == 0
 	or fatal("Could not remove old backup directory!");
 }
+print "Backup at finished ".
+    POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
 
-#SENDMAIL("stoller@flux.utah.edu",
+#SENDMAIL("stoller\@flux.utah.edu",
 #	 "DB Backup Finished", "", undef, undef, ($logname));
 
 system("$SETSITEVAR web/message -")

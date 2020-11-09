@@ -48,6 +48,8 @@ $(function ()
     var prunetypes    = null;
     var hardware      = null;
     var resinfo       = null;
+    var radioinfo     = null;
+    var usingRadios   = false;
     var currentStep   = 0;
     var deprecatedList = [];
     var mainTemplate  = _.template(instantiateString);
@@ -56,14 +58,24 @@ $(function ()
 
     function enableStepsMotion()
     {
+	console.info("enableStepsMotion");
+	
 	$('#stepsContainer').steps("enableMotion");
+	$('body').on("keyup.stepsNav", function (event) {
+	    if (event.keyCode === 13) {
+		$('#stepsContainer').steps('next');
+	    }
+	});
 	// For Selenium.
 	$('#stepsContainer').prepend("<div class='hidden' " +
 				     " id='steps-enabled'></div>");	
     }
     function disableStepsMotion()
     {
+	console.info("disableStepsMotion");
+	
 	$('#stepsContainer').steps("disableMotion");
+	$('body').off("keyup.stepsNav");
 	// For Selenium
 	$('#stepsContainer').find("#steps-enabled").remove();
     }
@@ -111,6 +123,10 @@ $(function ()
 	var profileToArray = _.pairs(profilelist);
 	prunetypes = decodejson('#prunelist-json');
 	console.info(prunetypes);
+	if ($('#radioinfo-json').length) {
+	    radioinfo = decodejson('#radioinfo-json');
+	    console.info("radioinfo", radioinfo);
+	}
 
 	/*
 	 * Sort the entire list by recently used if a registered user,
@@ -246,6 +262,7 @@ $(function ()
 	});
 	$("#end_day").datepicker({
 	    minDate: 0,		/* earliest date is today */
+	    maxDate: "+3D",
 	    showButtonPanel: true,
 	    onSelect: function (dateString, dateobject) {
 		DateChange("#end_day");
@@ -742,6 +759,9 @@ $(function ()
 		// the height change. Had to also add to Jacks root.
 		$('#inline_jacks').css('height',
 				   $('#finalize_container').outerHeight() - 15);
+	    }
+	    if (priorIndex < currentIndex) {
+		CheckForRadioUsage();
 	    }
 	}
 	else if (currentIndex == 3) {
@@ -1958,7 +1978,7 @@ $(function ()
 		sites[siteid] = siteid;
 	    }
 	});
-	console.info("CreateAggregateSelectors2: ", count, bound);
+	console.info("CreateAggregateSelectors2: ", count, bound, ammap);
 
 	// All nodes bound, no dropdown.
 	if (count == bound) {
@@ -1970,7 +1990,7 @@ $(function ()
 	    // Need to set the "where" form field so that we pass the
 	    // correct default aggregate to the backend.
 	    if (_.size(ammap) == 1) {
-		var manager = _.keys(ammap).first();
+		var manager = _.keys(ammap)[0];
 		var name    = amlist[manager].name;
 		
 		$("#cluster_selector")
@@ -1998,7 +2018,7 @@ $(function ()
 		/*
 		 * Temp; do not show mobile if not an admin
 		 */
-		if (details.ismobile == 1 && !isadmin) {
+		if (0 && details.ismobile == 1 && !isadmin) {
 		    return;
 		}
 		var name = details.name;
@@ -2011,8 +2031,12 @@ $(function ()
 	    return options;
 	};
 
+	console.info(sites);
+	console.info(ammap);
+
 	// If multisite is disabled for the user, or no sites or 1 site.
-	if (!multisite || Object.keys(sites).length <= 1) {
+	if (!multisite ||
+	    (Object.keys(sites).length <= 1))  {
 	    var siteid;
 	    if (Object.keys(sites).length == 0) {
 		siteid = "Site 1";
@@ -2030,6 +2054,12 @@ $(function ()
 		selected = $('#finalize_options .cluster-group ' +
 			     'select option:selected').text();
 	    }
+	    else {
+		// Always default Powder dropdown to Emulab
+		if (window.ISPOWDER) {
+		    selected = "Emulab";
+		}
+	    }
 	    var options = createDropdowns(selected);
 	    
 	    html = 
@@ -2041,6 +2071,7 @@ $(function ()
 		"    </label> " +
 		"    <div class='col-sm-6 site-selector'>" +
 		"      <select id='site"+sitenum+"_selector' name='where' " +
+		"              data-siteid='nosite_selector' " +
 		"              class='form-control select_where'>" +
 		"        <option value=''>Please Select</option>" +
 		options +
@@ -2081,6 +2112,7 @@ $(function ()
 		    "    </label> " +
 		    "    <div class='col-sm-6 site-selector'>" +
 		    "      <select id='" + selectID + "' " +
+		    "              data-siteid='" + siteid + "' " +
 		    "              name=\"sites[" + siteid + "]\"" +
 		    "              class='form-control select_where'>" +
 		    "        <option value=''>Please Select</option>" +
@@ -2124,6 +2156,19 @@ $(function ()
 	    }
 	});
 	return allgood;
+    }
+    // Cluster selection mapping by selector id.
+    function ClusterSelections()
+    {
+	var clusters = {};
+	
+	$('#cluster_selector').find('select').each(function () {
+	    var cluster = $(this).val();
+	    var urn     = amValueToKey[cluster];
+	    
+	    clusters[$(this).data("siteid")] = urn;
+	});
+	return clusters;
     }
 
     var constraints;
@@ -2428,6 +2473,9 @@ $(function ()
 
     function updateSiteConstraints(nodes, domNode)
     {
+	if (1) {
+	    return 0;
+	}
       var allowed = [];
       var rejected = [];
       var breakdown = {};
@@ -2734,6 +2782,61 @@ $(function ()
     }
 
     /*
+     * Check for radio usage and no spectrum defined
+     */
+    function CheckForRadioUsage()
+    {
+	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+	var xmlDoc    = $.parseXML(selected_rspec);
+	var spectrum  = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'spectrum');
+
+	console.info("CheckForRadioUsage");
+
+	// In case user changes profile late.
+	usingRadios = false;
+
+	if (radioinfo) {
+	    var usingTransmitter = false;
+	    
+	    /*
+	     * Check for radio usage, alert the user that using radios
+	     * without a spectrum specification is bad news.
+	     */
+	    $(xmlDoc).find("node").each(function() {
+		// Gotta have a manager to know anything.
+		var manager_urn = $(this).attr("component_manager_id");
+		if (!manager_urn) {
+		    return;
+		}
+		// Ditto the component ID
+		var component_id = $(this).attr("component_id");
+		if (!component_id) {
+		    return;
+		}
+		// Might be a urn.
+		var hrn = sup.ParseURN(component_id);
+		if (hrn) {
+		    component_id = hrn.id;
+		}
+		if (_.has(radioinfo, manager_urn) &&
+		    _.has(radioinfo[manager_urn], component_id)) {
+		    usingRadios = true;
+		    
+		    var txfreqs =
+			radioinfo[manager_urn][component_id]
+			.transmit_frequencies;
+		    if (txfreqs != "") {
+			usingTransmitter = true;
+		    }
+		}
+	    });
+	    if (usingTransmitter && !spectrum.length) {
+		sup.ShowModal('#nospectrum-warning');
+	    }
+	}
+    }
+     
+    /*
      * Check for spectrum used.
      */
     function CheckForSpectrum()
@@ -2745,13 +2848,30 @@ $(function ()
 
 	console.info("CheckForSpectrum", spectrum);
 
-	if (!spectrum.length) {
-	    $('#step3-div .reserve-resources-button').off("click");
-	    $('#step3-div .schedule-experiment').removeClass("hidden");
-	    $('#step3-div .reserve-resources').addClass("hidden");
-	    $('#groups-div').addClass("hidden");
-	    $('#groups').html("");
+	/*
+	 * Kirk requested that we do not predicate this on using spectrum
+	 * but always on the Powder portal.
+	 */
+	if (!window.ISPOWDER) {
+            $('#step3-div .reserve-resources-button').off("click");
+            $('#step3-div .schedule-experiment').removeClass("hidden");
+            $('#step3-div .reserve-resources').addClass("hidden");
+            $('#groups-div').addClass("hidden");
+            $('#groups').html("");
 	    return;
+	}
+	// But if not using radios, different warning text, it worries people.
+	if (usingRadios) {
+	    $('#step3-div .reserve-resources .radio-warning')
+		.removeClass("hidden");
+	    $('#step3-div .reserve-resources .noradio-warning')
+		.addClass("hidden");
+	}
+	else {
+	    $('#step3-div .reserve-resources .radio-warning')
+		.addClass("hidden");
+	    $('#step3-div .reserve-resources .noradio-warning')
+		.removeClass("hidden");
 	}
 
 	/*
@@ -2830,7 +2950,7 @@ $(function ()
 	 */
 	var showResgroupList = function (uuid) {
 	    sup.CallServerMethod(null, "resgroup", "ListReservationGroups",
-				 {"useronly" : true},
+				 {"project" : $('#profile_pid').val()},
 				 function (json) {
 				     if (json.code) {
 					 console.info(json.value);
@@ -2839,7 +2959,8 @@ $(function ()
 				     var groups = json.value;
 				     if (_.size(groups)) {
 					 $('#groups-div').removeClass("hidden");
-					 window.DrawResGroupList(groups);
+					 window.DrawResGroupList('#groups-div',
+								 groups);
 					 setupCheckboxes(json.value, uuid);
 				     }
 				     else {
@@ -2879,7 +3000,8 @@ $(function ()
 	    /*
 	     * Place into an iframe in the panel body,
 	     */
-	    var url  = "resgroup.php?fromrspec=1&embedded=1";
+	    var url  = "resgroup.php?fromrspec=1&embedded=1" +
+		"&project=" + $('#profile_pid').val();
 	
 	    var html = '<iframe id="reservation-iframe" class=col-xs-12 ' +
 		'style="padding-left: 0px; padding-right: 0px; border: 0px;" ' +
@@ -2894,16 +3016,22 @@ $(function ()
 				iframe.contentDocument.defaultView);
 
 	    iframewindow.addEventListener('DOMContentLoaded', function (event) {
-		var html = "<div id=rspec class=hidden>" +
-		    "<textarea type='textarea'>" + selected_rspec +
-		    "</textarea></div>";
+		var html =
+		    "<div id=rspec class=hidden>" +
+		    "  <textarea type='textarea'>" +
+		        selected_rspec + "</textarea>" +
+		    "</div>" +
+		    "<script type='text/plain' id='cluster-selections'>" +
+		       JSON.stringify(ClusterSelections()) +
+		    "</script>";
 		$("body", iframewindow.document).append(html);
 		$("#wrap", iframewindow.document).css("padding", "0px");
 	    });
 
 	    // Slow timer to expand the iframe so no scroll bar.
 	    var timer = setInterval(function() {
-		var height = $("#wrap", iframewindow.document).css("height");
+		var doc    = iframewindow.document;
+		var height = $("#main-body", doc).css("height");
 		var now    = $('#reservation-iframe').css("height");
 		if (height != now) {
 		    console.info("height", height);
@@ -2949,6 +3077,15 @@ $(function ()
 		clearInterval(timer);
 
 		if (uuid) {
+		    // Look for updated rspec.
+		    var rspec = $("#rspec textarea",
+				  iframewindow.document).val();
+
+		    if (rspec != selected_rspec) {
+			console.info("RSpec changed", rspec);
+			$('#rspec_textarea').val(rspec);
+			selected_rspec = rspec;
+		    }
 		    // Redraw the list.
 		    showResgroupList(uuid);
 		    // Ask for the reservation info so we can set start/end.
@@ -2995,7 +3132,7 @@ $(function ()
 		return;
 	    }
 	    // Otherwise, we dig inside and find the hardware type.
-	    if (!htype.length) {
+	    if (!htype) {
 		return;
 	    }
 	    var type = $(htype).attr("name");

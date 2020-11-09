@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,6 +44,7 @@ use Carp;
 use Date::Parse;
 use Time::Local;
 use Data::Dumper;
+use Socket;
 use POSIX qw(:signal_h);
 
 # Configure variables.
@@ -590,11 +591,19 @@ sub UpdateVersionInfo($$)
 {
     my ($name, $value) = @_;
     my $safe_name  = DBQuoteSpecial($name);
-    my $safe_value = DBQuoteSpecial($value);
 
-    return -1
-	if (!DBQueryWarn("replace into version_info set ".
-			 "  name=$safe_name, value=$safe_value"));
+    if (!defined($value)) {
+	return -1
+	    if (!DBQueryWarn("delete from version_info ".
+			     "where name=$safe_name"));
+    }
+    else {
+	my $safe_value = DBQuoteSpecial($value);
+
+	return -1
+	    if (!DBQueryWarn("replace into version_info set ".
+			     "  name=$safe_name, value=$safe_value"));
+    }
     return 0;
 }
 
@@ -1165,6 +1174,35 @@ sub escapeshellarg($)
 	$result = $result . "$ch";
     }
     return "'$result'";
+}
+
+#
+# Is an IP routable?
+#
+sub isRoutable($)
+{
+    my ($IP)  = @_;
+    my $IPREGEX = '^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$';
+    my ($a,$b,$c,$d) = ($IP =~ /$IPREGEX/);
+
+    #
+    # These are unroutable:
+    # 10.0.0.0        -   10.255.255.255  (10/8 prefix)
+    # 172.16.0.0      -   172.31.255.255  (172.16/12 prefix)
+    # 192.168.0.0     -   192.168.255.255 (192.168/16 prefix)
+    #
+
+    # Easy tests.
+    return 0
+	if (($a eq "10") ||
+	    ($a eq "192" && $b eq "168"));
+
+    # Lastly
+    return 0
+	if (inet_ntoa((inet_aton($IP) & inet_aton("255.240.0.0"))) eq
+	    "172.16.0.0");
+
+    return 1;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

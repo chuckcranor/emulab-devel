@@ -27,7 +27,7 @@ include("node_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
-$page_title = "Bus Stuff";
+$page_title = "POWDER Map";
 
 #
 # Get current user.
@@ -47,9 +47,18 @@ $showmobile    = ($this_user ? 1 : 0);
 
 # Optional views
 $optargs = OptionalPageArguments("baseonly",   PAGEARG_BOOLEAN,
-                                 "nomobile",   PAGEARG_BOOLEAN);
+                                 "experiment", PAGEARG_UUID,
+                                 "nomobile",   PAGEARG_BOOLEAN,
+                                 "location",   PAGEARG_STRING,
+                                 "route",      PAGEARG_STRING);
 
-if ($baseonly) {
+if ($experiment) {
+    $baseonly   = 0;
+    $showfilter = $showreserved = 0;
+    $showlegend = 1;
+    $showmobile = 1;
+}
+elseif ($baseonly) {
     $baseonly   = 1;
     $showlegend = $showmobile = $showreserved = 0;
 }
@@ -74,6 +83,15 @@ echo "window.SHOWAVAILABLE = $showavailable;\n";
 echo "window.SHOWRESERVED  = $showreserved;\n";
 echo "window.SHOWMOBILE    = $showmobile;\n";
 echo "window.BASEONLY      = $baseonly;\n";
+if ($experiment) {
+    echo "window.EXPERIMENT = '$experiment';\n";
+}
+if ($location) {
+    echo "window.LOCATION   = '$location';\n";
+}
+if ($route) {
+    echo "window.ROUTE   = '$route';\n";
+}
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

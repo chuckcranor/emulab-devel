@@ -109,9 +109,16 @@
 		<th>Name</th>
 		<th>Creator</th>
 		<th>Project</th>
-		<th>Created</th>
+		<th>Updated</th>
 		<% if (showformat) { %>
-		  <th>Format</th>
+		  <th>Format
+		    <a href='#' class='btn btn-xs tablesorter-noSort'
+		       data-toggle='modal'
+		       data-target='#image-format-modal'>
+		      <span class='glyphicon glyphicon-question-sign'
+			    style='margin-bottom: 4px;'>
+		      </span></a>		    
+		  </th>
 		<% } %>
 		<th class="sorter-false">Description</th>
 		<th class="sorter-false">URN</th>
@@ -124,7 +131,8 @@
 	      <% _.each(images, function(value, index) { %>
 		<tr>
 		  <% if (_.has(value, "url")) { %>
-		    <td><a href="<%- value.url %>"><%= value.imagename %></a></td>
+		    <td><a href="<%- value.url %>" target="_blank">
+		      <%= value.imagename %></a></td>
 		  <% } else { %>
 		    <td><%= value.imagename %></td>
 	          <% } %>
@@ -140,9 +148,11 @@
 		  <% } else { %>
 		     <td><%= value.pid %></td>
                   <% } %>
-		  <td class="format-date"><%- value.created %></td>
+		  <td class="format-date"><%- value.updated %></td>
 		  <% if (showformat) { %>
-		    <td><%- value.format %></td>
+		    <td>
+		      <%- value.format == "ndz" ? "standard" : value.format %>
+		    </td>
 		  <% } %>
 		  <td><%- value.description %></td>
 		  <td align="center">
@@ -198,3 +208,5 @@
     </div>
   </div>
 </div>
+<div id='image-format-modal_div'></div>
+

@@ -170,6 +170,7 @@ CHECKMASK(char *arg)
 #define TB_TAINTSTATE_BLACKBOX  1
 #define TB_TAINTSTATE_USERONLY  2
 #define TB_TAINTSTATE_DANGEROUS 4
+#define TB_TAINTSTATE_MUSTRELOAD  8
 #define HAS_ANY_TAINTS(tset, tcheck) (tset & tcheck)
 #define HAS_ALL_TAINTS(tset, tcheck) ((tset & tcheck) == tcheck)
 #define HAS_TAINT(tset, tcheck) HAS_ALL_TAINTS(tset, tcheck)
@@ -407,6 +408,7 @@ COMMAND_PROTOTYPE(doserviceinfo);
 COMMAND_PROTOTYPE(dosubbossinfo);
 COMMAND_PROTOTYPE(dopublicaddrinfo);
 COMMAND_PROTOTYPE(dohwcollect);
+COMMAND_PROTOTYPE(dowbstore);
 #if PROTOGENI_SUPPORT
 COMMAND_PROTOTYPE(dogeniclientid);
 COMMAND_PROTOTYPE(dogenisliceurn);
@@ -550,6 +552,7 @@ struct command {
 	{ "subbossinfo",  FULLCONFIG_NONE, 0, dosubbossinfo },
 	{ "publicaddrinfo",  FULLCONFIG_NONE, F_ALLOCATED, dopublicaddrinfo },
 	{ "hwcollect",	  FULLCONFIG_NONE, 0, dohwcollect},
+	{ "wbstore",	  FULLCONFIG_NONE, 0, dowbstore},
 #if PROTOGENI_SUPPORT
 	{ "geni_client_id", FULLCONFIG_NONE, 0, dogeniclientid },
 	{ "geni_slice_urn", FULLCONFIG_NONE, 0, dogenisliceurn },
@@ -2196,6 +2199,40 @@ COMMAND_PROTOTYPE(doifconfig)
 				mtu = "9000";
 
 			/*
+			 * XXX As of 2020, our clientside will still attempt
+			 * to explicitly set the speed of an interface based
+			 * on the SPEED= value we return. If that fails, the
+			 * script falls back on auto-negotiation. However, we
+			 * have now hit a situation where we have interfaces
+			 * that _must_ auto-negotiate or there is no link.
+			 *
+			 * Fortunately we can do that by passing zero as the
+			 * speed. So look for the magic (anti-)capability
+			 * on the interface type and change the speed to zero
+			 * if it is set. Why wait all the wait til now to do
+			 * this instead of just recording a zero speed in the
+			 * DB? Well, we need the real speed as part of our
+			 * MTU setting hack which is also done here.
+			 *
+			 * Don't hate on me.
+			 */
+			if (atoi(speed) > 0) {
+				MYSQL_RES *res2;
+				MYSQL_ROW row2;
+				res2 = mydb_query("select capval from "
+						  "interface_capabilities "
+						  "where type='%s'", 1, type);
+				if (res2 && (int)mysql_num_rows(res2) > 0) {
+					row2 = mysql_fetch_row(res2);
+					if (row2[0] &&
+					    strcmp(row2[0], "force") == 0)
+						speed = "0";
+				}
+				if (res2)
+					mysql_free_result(res2);
+			}
+
+			/*
 			 * We now use the MAC to determine the interface, but
 			 * older images still want that tag at the front.
 			 */
@@ -2427,6 +2464,7 @@ COMMAND_PROTOTYPE(doifconfig)
 			char *bufp   = buf;
 
 			row = mysql_fetch_row(res);
+			char *speed = row[2];
 
 			/*
 			 * XXX we have to figure out if any vinterfaces
@@ -2444,10 +2482,10 @@ COMMAND_PROTOTYPE(doifconfig)
 			 * XXX we also always set jumbo frames for 50Gb
 			 * and above.
 			 */
-			if (atoi(row[2]) >= 50000)
+			if (atoi(speed) >= 50000)
 				mtu= "9000";
 			else if (vers >= 44 && allowjumboframes &&
-				 atoi(row[2]) >= 10000) {
+				 atoi(speed) >= 10000) {
 				MYSQL_RES *res2;
 				MYSQL_ROW row2;
 				res2 = mydb_query("select max(vls.capval) "
@@ -2482,12 +2520,32 @@ COMMAND_PROTOTYPE(doifconfig)
 					mysql_free_result(res2);
 			}
 
+			/*
+			 * XXX see if we need to force auto-negotiation on
+			 * the physical link. See comment above for details.
+			 */
+			if (atoi(speed) > 0) {
+				MYSQL_RES *res2;
+				MYSQL_ROW row2;
+				res2 = mydb_query("select capval from "
+						  "interface_capabilities "
+						  "where type='%s'", 1, row[0]);
+				if (res2 && (int)mysql_num_rows(res2) > 0) {
+					row2 = mysql_fetch_row(res2);
+					if (row2[0] &&
+					    strcmp(row2[0], "force") == 0)
+						speed = "0";
+				}
+				if (res2)
+					mysql_free_result(res2);
+			}
+
 			bufp += OUTPUT(bufp, ebufp - bufp,
 				       "INTERFACE IFACETYPE=%s "
 				       "INET= MASK= MAC=%s "
 				       "SPEED=%sMbps DUPLEX=%s "
 				       "%sIFACE= RTABID= LAN=",
-				       row[0], row[1], row[2], row[3],
+				       row[0], row[1], speed, row[3],
 				       aliasstr);
 
 			/*
@@ -8233,6 +8291,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				reqp->taintstates |= TB_TAINTSTATE_USERONLY;
 			} else if (strcmp(tok,"dangerous") == 0) {
 				reqp->taintstates |= TB_TAINTSTATE_DANGEROUS;
+			} else if (strcmp(tok,"mustreload") == 0) {
+				reqp->taintstates |= TB_TAINTSTATE_MUSTRELOAD;
 			} else {
 				error("iptonodeid: %s: Unknown taintstate: '%s'\n", reqp->nodeid, tok);
 			}
@@ -12755,7 +12815,8 @@ COMMAND_PROTOTYPE(dohwinfo)
 {
 	MYSQL_RES	*res;
 	MYSQL_ROW	row;
-	char		buf[MYBUFSIZE];
+	/* XXX "MYBUFSIZE*2" for Clemson nodes with 47 disks */
+	char		buf[MYBUFSIZE*2];
 	char		*bufp = buf, *ebufp = &buf[sizeof(buf)];
 	int		nrows;
 	int		collect = 0, check = 0;
@@ -13191,6 +13252,39 @@ COMMAND_PROTOTYPE(dohwcollect)
 	mydb_update("replace into node_attributes values "
 		    "('%s','hwcollect_last','%u',0)",
 		    reqp->nodeid, (unsigned)now.tv_sec);
+
+	return 0;
+}
+
+/*
+ * Return info about write-back store.
+ */
+COMMAND_PROTOTYPE(dowbstore)
+{
+	MYSQL_RES	*res;
+	MYSQL_ROW	row;
+	char		buf[MYBUFSIZE];
+	char		*bufp = buf, *ebufp = &buf[sizeof(buf)];
+
+	if (!reqp->allocated)
+		return 0;
+
+	res = mydb_query("select eid_uuid from experiments "
+			 "where pid='%s' and eid='%s'",
+			 1, reqp->pid, reqp->eid);
+	if (!res || (int)mysql_num_rows(res) == 0) {
+		if (res)
+			mysql_free_result(res);
+		return 0;
+	}
+
+	row = mysql_fetch_row(res);
+	if (row[0] && row[0][0]) {
+		bufp += OUTPUT(bufp, ebufp - bufp,
+			       "UUID=%s PID=%s\n", row[0], reqp->pid);
+		client_writeback(sock, buf, strlen(buf), tcp);
+	}
+	mysql_free_result(res);
 
 	return 0;
 }

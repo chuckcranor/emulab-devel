@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -188,6 +188,7 @@ if (! isset($create)) {
     else {
         $defaults["startorjoin"] = "start";
     }
+    $defaults["proj_class"] = 0;
 
     if (count($license_defs)) {
         foreach ($license_defs as $name => $value) {
@@ -282,6 +283,11 @@ if (!$this_user || $promoting) {
     }
     elseif (! TBvalid_email($formfields["email"])) {
 	$errors["email"] = TBFieldErrorString();
+    }
+    elseif (preg_match("/impscet\.net$/", $formfields["email"]) ||
+            preg_match("/ril\.com$/", $formfields["email"]) ||
+            preg_match("/gavilan\.edu$/", $formfields["email"])) {
+        $errors["email"] = "Not permitted";
     }
     elseif (!$promoting &&
             User::LookupByEmail($formfields["email"])) {
@@ -407,6 +413,10 @@ if (!$joinproject) {
     elseif (! TBvalid_why($formfields["proj_why"])) {
 	$errors["proj_why"] = TBFieldErrorString();
     }
+    if (isset($formfields["proj_class"]) &&
+        !TBvalid_boolean($formfields["proj_class"])) {
+	$errors["proj_class"] = TBFieldErrorString();
+    }
     if (count($license_defs)) {
         foreach ($license_defs as $name => $value) {
             $fname = "license_" . $name;
@@ -455,12 +465,12 @@ if (!$this_user || $promoting) {
     if (!isset($_SESSION["verified"])) {
 	if (!isset($verify) || $verify == "" ||
 	    $verify != $_SESSION["verify_key"]) {
-	    mail($formfields["email"],
-		 "Confirm your email to create your account",
-		 "Here is your user verification code. Please copy and\n".
-		 "paste this code into the box on the account page.\n\n".
-		 "\t" . $_SESSION["verify_key"] . "\n",
-		 "From: $APTMAIL");
+	    TBMAIL($formfields["email"],
+                   "Confirm your email to create your account",
+                   "Here is your user verification code. Please copy and\n".
+                   "paste this code into the box on the account page.\n\n".
+                   "\t" . $_SESSION["verify_key"] . "\n",
+                   "From: $APTMAIL");
 	
 	    #
             # Respit complete form but show the verify email modal.
@@ -627,11 +637,14 @@ $args["portal"] 	   = $PORTAL_GENESIS;
 foreach ($licenses as $name => $value) {
     $args["license_" . $name] = $value;
 }
+if (isset($formfields["proj_class"])) {
+    $args["class"]  = $formfields["proj_class"];
+}
 
 if (! ($project = Project::NewNewProject($args, $error))) {
     $errors["error"] = $error;
     if ($suexec_retval < 0) {
-	TBERROR("Error Creating APT/CloudLab Project\n${error}\n\n" .
+	TBERROR("Error Creating New Project\n${error}\n\n" .
 		print_r($args, TRUE), 0);
 
         SUEXECERROR(SUEXEC_ACTION_CONTINUE);

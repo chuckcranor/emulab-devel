@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,13 +26,29 @@ include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
 
-# No page arguments, but make sure that the environment is clean
-RequiredPageArguments();
+#
+# No menu, not hidden.
+#
+SPITHEADER(1, true, true);
+#
+# And minimal navigation.
+#
+SPITNAV("", 2, "", "", null);
 
-SPITHEADER();
-echo "The URL you gave: <b>" . htmlentities( $_SERVER["REQUEST_URI"] ) . "</b>
+echo "<div class=container>\n";
+echo "<div class=jumbotron>\n";
+echo "<p>\n";
+
+echo "<b>" . htmlentities( $_SERVER["REQUEST_URI"] ) . "</b>
            is not available or is broken.";
-echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+
+echo "</p>\n";
+echo "</div>\n";
+
+echo "<span class=lead>";
+echo "Return to our <a href='$APTBASE/landing.php'>home page</a>.\n";
+echo "</span>\n";
+echo "</div>\n";
+
 SPITNULLREQUIRE();
 SPITFOOTER();
-

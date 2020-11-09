@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2019 University of Utah and the Flux Group.
+# Copyright (c) 2005-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1151,11 +1151,11 @@ sub Update($$)
     foreach my $key (keys(%{$argref})) {
 	my $val = $argref->{$key};
 
-	# Treat NULL special.
-	push (@sets, "${key}=" . ($val eq "NULL" ?
-				  "NULL" : DBQuoteSpecial($val)));
+	if ($val ne "NULL" && $val ne "now()") {
+	    $val = DBQuoteSpecial($val);
+	}
+	push (@sets, "${key}=${val}");
     }
-
     my $query = "update users set usr_modified=now(), " . join(",", @sets) .
 	" where uid_idx='$uid_idx'";
 
@@ -1247,8 +1247,20 @@ sub SetStatus($$)
     return -1
 	if (! ref($self));
 
+    # Mark frozen with some additional info.
     my %args = ("status" => $status);
-
+    if ($status eq USERSTATUS_FROZEN()) {
+	my $this_user = User->ThisUser();
+	if (defined($this_user)) {
+	    $args{"frozen_by"} = $this_user->uid();
+	}
+	$args{"frozen_stamp"} = "now()";
+    }
+    elsif ($self->status() eq USERSTATUS_FROZEN() &&
+	   $status eq USERSTATUS_ACTIVE()) {
+	$args{"frozen_stamp"} = "NULL";
+	$args{"frozen_by"}    = "NULL";
+    }
     return $self->Update(\%args);
 }
 

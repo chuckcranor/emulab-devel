@@ -1,4 +1,4 @@
-#
+e#
 # Stub file for setting up elab in elab.
 #
 # Use the --with-TBDEFS=filename to specify your own file.
@@ -6,17 +6,17 @@
 #
 TBDBNAME=tbdb
 TBADMINGROUP=tbadmin
-TBOPSEMAIL=testbed-ops@ops.web.powderwireless.net
-TBLOGSEMAIL=testbed-logs@ops.web.powderwireless.net
-TBWWWEMAIL=testbed-www@ops.web.powderwireless.net
-TBAPPROVALEMAIL=testbed-approval@ops.web.powderwireless.net
-TBAUDITEMAIL=testbed-audit@ops.web.powderwireless.net
-TBSTATEDEMAIL=testbed-stated@ops.web.powderwireless.net
-TBTESTSUITEEMAIL=testbed-testsuite@ops.web.powderwireless.net
-TBAUTOMAILEMAIL=testbed-automail@ops.web.powderwireless.net
-TBACTIVEARCHIVE=testbed-active-users-archive@ops.web.powderwireless.net
-TBUSERSARCHIVE=testbed-users-archive@ops.web.powderwireless.net
-TBERRORSEMAIL=testbed-errors@ops.web.powderwireless.net
+TBOPSEMAIL=testbed-ops@web.powderwireless.net
+TBLOGSEMAIL=testbed-logs@web.powderwireless.net
+TBWWWEMAIL=testbed-www@web.powderwireless.net
+TBAPPROVALEMAIL=testbed-approval@web.powderwireless.net
+TBAUDITEMAIL=testbed-audit@web.powderwireless.net
+TBSTATEDEMAIL=testbed-stated@web.powderwireless.net
+TBTESTSUITEEMAIL=testbed-testsuite@web.powderwireless.net
+TBAUTOMAILEMAIL=testbed-automail@web.powderwireless.net
+TBACTIVEARCHIVE=testbed-active-users-archive@web.powderwireless.net
+TBUSERSARCHIVE=testbed-users-archive@web.powderwireless.net
+TBERRORSEMAIL=testbed-errors@web.powderwireless.net
 TBCOOKIESUFFIX="POWDERFEWEB"
 JAILIPBASE=172.17.0.0
 JAILIPMASK=255.240.0.0
@@ -24,6 +24,7 @@ DELAYCAPACITY=1
 BOSSNODE=boss.web.powderwireless.net
 USERNODE=ops.web.powderwireless.net
 FSNODE=boss.web.powderwireless.net
+MAILERNODE=boss
 OURDOMAIN=web.powderwireless.net
 FSDIR_GROUPS=/ops/groups
 FSDIR_PROJ=/ops/proj
@@ -47,11 +48,11 @@ SFSSUPPORT=0
 CVSSUPPORT=0
 NFSTRACESUPPORT=0
 ARCHIVESUPPORT=0
-NTPSERVER=ntp1.emulab.net
-#EXTERNAL_NTPSERVER1=ntp1.emulab.net
-#EXTERNAL_NTPSERVER2=ntp1.emulab.net
-#EXTERNAL_NTPSERVER3=ntp1.emulab.net
-#EXTERNAL_NTPSERVER4=ntp1.emulab.net
+NTPSERVER=boss
+EXTERNAL_NTPSERVER1=ntp1.emulab.net
+EXTERNAL_NTPSERVER2=ntp1.emulab.net
+EXTERNAL_NTPSERVER3=ntp1.emulab.net
+EXTERNAL_NTPSERVER4=ntp1.emulab.net
 DISABLE_NSE=1
 # This means it is an inner elab!
 #ELABINELAB=1
@@ -114,7 +115,7 @@ MIN_UNIX_GID=2000
 WITHZFS=1
 ZFS_ROOT="emulab"
 ZFS_QUOTA_USER="none"
-ZFS_QUOTA_PROJECT="none"
+ZFS_QUOTA_PROJECT="10G"
 ZFS_QUOTA_GROUP="none"
 WITHAMD=1
 AMD_ROOT=
@@ -149,8 +150,13 @@ EC2META_ENABLE=1
 MOBILESUPPORT=1
 POWDER_RFMONITOR=1
 POWDER_RFMONITOR_HOST="10.10.10.2"
+POWDER_NICKNAME="WEB"
+POWDER_WBSTORE=1
 # Collect idle statistics by default, and store in RRD files.
 SDCOLLECTD_DOSTATS=1
 SDCOLLECTD_USE_RRDTOOL=1
 PROTOGENI_NOPORTALEXPIRE=1
 PROTOGENI_PORTALONLY=1
+
+DISABLE_RESERVATION_EMAIL=1
+POWDER_DEADMAN=1

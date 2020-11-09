@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -153,6 +153,7 @@ echo "<script src='js/lib/codemirror-min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
+REQUIRE_JACKS();
 REQUIRE_MOMENT();
 REQUIRE_MARKED();
 REQUIRE_URITEMPLATE();

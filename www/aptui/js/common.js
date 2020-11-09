@@ -93,7 +93,7 @@ window.APT_OPTIONS.initialize = function (sup)
 	$('#loginbutton').click(function (event) {
 	    event.preventDefault();
 	    sup.ShowModal('#quickvm_login_modal');
-	    if (window.ISCLOUD || window.ISPNET || window.ISPOWDER) {
+	    if (window.PGENILOGIN) {
 		console.info("Loading geni auth code");
 		sup.InitGeniLogin(embedded);
 	        $('#quickvm_geni_login_button').removeAttr("disabled");
@@ -101,6 +101,15 @@ window.APT_OPTIONS.initialize = function (sup)
 	    return false;
 	});
     }
+    /*
+     * When the clicks to read new news, tell the server and hide the button
+     */
+    if ($('#new-news-button').length) {
+	$('#new-news-button').click(function (event) {
+	    $('#new-news-button').addClass("hidden");
+	});
+    }
+    
     /*
      * Setup a timer to ask for announcements.
      */

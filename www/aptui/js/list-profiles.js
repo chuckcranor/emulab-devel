@@ -17,9 +17,9 @@ $(function ()
 	// Start out as empty table.
 	$('#search-profiles-table')
 	    .tablesorter({
-		theme : 'green',
-		// initialize zebra
-		widgets: ["zebra"],
+		theme : 'bootstrap',
+		widgets: ["uitheme", "zebra"],
+		headerTemplate : '{content} {icon}',
 	    });
 
 	// Search box key change handler.

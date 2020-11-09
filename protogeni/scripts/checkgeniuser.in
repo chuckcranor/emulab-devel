@@ -189,6 +189,10 @@ sub GetProjectMembership($$)
 	$url = "https://ch.geni.net/SA";
 	@params = ($user_urn, @params);
     }
+    elsif ($auth =~ /ilabt\.imec\.be/) {
+	$url = "https://account.ilabt.imec.be:8443/SA";
+	@params = ($user_urn, @params);
+    }
     elsif ($auth =~ /iminds\.be/) {
 	$url = $certificate->url();
 	$url =~ s/sa$/geni-sa/;

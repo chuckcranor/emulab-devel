@@ -153,6 +153,10 @@
 	      <td>Event State</td>
 	      <td class=""><%- fields.eventstate %></td>
 	    </tr>
+	    <tr>
+	      <td>Alloc State</td>
+	      <td class=""><%- fields.allocstate %></td>
+	    </tr>
 	    <% if (_.has(fields, "def_boot_image_uuid")) { %>
 	      <tr>
 		<td>Boot Image</td>
@@ -341,7 +345,8 @@
 		<% }); %>
 		<% _.each(fields.typeattributes, function(val, key) { %>
 		  <% if (!(key == "processor" ||
-		          key.startsWith("hw_"))) { return; } %>
+		           key == "dom0mem" ||
+		           key.startsWith("hw_"))) { return; } %>
 		  <tr>
 		    <td><%- key %></td>
 		    <td><%- val %></td>
@@ -431,7 +436,9 @@
 		      <% } else { %>
 			<td><a href="<%- url %>"><%- info.switch_id %></a></td>
 		      <% } %>
-		      <td><%- info.switch_iface %>
+		      <td <%- (info.wire_type == 'Unused' ?
+			       "class=text-danger" : "") %> >
+			<%- info.switch_iface %>
 			(<%- info.switch_card %>,<%- info.switch_port %>)</td>
 		    <% } else { %>
 		      <td></td>

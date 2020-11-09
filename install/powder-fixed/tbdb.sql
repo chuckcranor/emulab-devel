@@ -18,8 +18,20 @@ REPLACE into node_attributes
   VALUES ('nuc1', 'reservation_autoapprove_limit', '0', '0');
 REPLACE into node_attributes
   VALUES ('nuc2', 'reservation_autoapprove_limit', '0', '0');
+REPLACE INTO `node_attributes`
+   VALUES ('nuc1','delayreloadtillalloc','1',0);
+REPLACE INTO `node_attributes`
+   VALUES ('nuc2','delayreloadtillalloc','1',0);
+REPLACE INTO `node_attributes`
+   VALUES ('nuc1','powercycleafterreload','1',0);
+REPLACE INTO `node_attributes`
+   VALUES ('nuc2','powercycleafterreload','1',0);
 
 REPLACE INTO `interface_types` VALUES ('P2PLTE',100000,1,'NA','NA',1,'Wireless');
 REPLACE INTO `interface_capabilities` VALUES ('P2PLTE','protocols','P2PLTE');
 REPLACE INTO `interface_capabilities` VALUES ('P2PLTE','P2PLTE_defspeed','10000');
 REPLACE INTO `interface_capabilities` VALUES ('P2PLTE','overtheair','1');
+
+REPLACE INTO `node_type_features` VALUES ('nuc8650','?+disk_sysvol',215900);
+REPLACE INTO `node_type_features` VALUES ('nuc8650','?+disk_any',215900);
+REPLACE INTO `node_type_features` VALUES ('nuc8650','?+disk_nonsysvol',0);

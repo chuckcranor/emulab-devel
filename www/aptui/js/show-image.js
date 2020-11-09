@@ -9,6 +9,7 @@ $(function ()
     var alltypes     = null;
     var curtypes     = null;
     var formfields   = null;
+    var YesNo        = function (val) { return (val ? "Yes" : "No"); };
 
     function JsonParse(id)
     {
@@ -78,7 +79,7 @@ $(function ()
 	    isadmin:		window.ISADMIN,
 	    canedit:            window.CANEDIT,
 	    candelete:          window.CANDELETE,
-	    "YesNo":            function (val) { return (val ? "Yes" : "No"); },
+	    "YesNo":            YesNo,
 	});
 	$('#main-body').html(html);
 
@@ -203,6 +204,15 @@ $(function ()
 	    });
 	}
 
+	// Prefill for snapshot/clone buttons.
+	if (window.SNAPNODE !== undefined) {
+	    $('#snapshot-image-nodeid').val(window.SNAPNODE);
+
+	    var url = $('#image-clone-button').prop("href");
+	    url += "&node=" + window.SNAPNODE;
+	    $('#image-clone-button').prop("href", url);
+	}	    
+
 	// Check for imaging.
 	if (window.SHOWSNAPSTATUS) {
 	    sup.CallServerMethod(null, "image", "SnapshotStatus",
@@ -237,17 +247,7 @@ $(function ()
 		     });
 	}
 	else if (window.AUTOSNAP) {
-	    if (window.AUTOSNAPNODE !== undefined) {
-		$('#snapshot-image-nodeid').val(window.AUTOSNAPNODE);
-	    }
             $('#image-snapshot-button').trigger("click");
-	    // If the user decides to clone instead of snapshot, lets be
-	    // helpful and pass the nodeid along.
-	    if (window.AUTOSNAPNODE !== undefined) {
-		var url = $('#image-clone-button').prop("href");
-		url += "&node=" + window.AUTOSNAPNODE;
-		$('#image-clone-button').prop("href", url);
-	    }	    
 	}
     }
 
@@ -257,7 +257,7 @@ $(function ()
 
 	var td_name   = $(target).closest("td");
 	var td_field  = $(td_name).next();
-	var td_value  = $(td_field).find("span").text();
+	var td_value  = $.trim($(td_field).find("span").text());
 	var td_type   = $(td_name).data("fieldtype");
 	var td_fname  = $(td_name).data("fieldname");
 
@@ -271,16 +271,37 @@ $(function ()
 
 	// Insert the edit buttons in a new span with input field.
 	$(td_field).append(
-	    "<span class=editing>" + cancelbutton + savebutton +
-		"<input type=text class=form-control value=''></span>");
+	    "<span class=editing>" + cancelbutton + savebutton + "</span>");
 
 	// This activates the new tooltips we added above
 	$(td_field).find('[data-toggle="tooltip"]').tooltip({
 	    trigger: 'hover',
 	});
-
+	
 	// Add set the value of the input field.
-	$(td_field).find("input").val(td_value);
+	if (td_type == "text") {
+	    $(td_field).find("span.editing").append(
+		"<input type=text class=form-control value=''>")
+	    $(td_field).find("input")
+		.val(td_value);
+	}
+	else if (td_type == "checkbox") {
+	    $(td_field).find("span.editing").append(
+		"<label style='display: block;'> " +
+		    "  <input type=checkbox style='margin-right: 5px;'>" +
+		    "Yes</label>");
+	    
+	    if (td_value == "Yes" || td_value == "1") {
+		$(td_field).find("input").prop("checked", "checked");
+	    }
+	    else {
+		$(td_field).find("input").prop("checked", false);
+	    }
+	}
+	else {
+	    alert("Bad fieldtype in edit");
+	    return;
+	}
 
 	// Bind a cancel button to set things back the way they were.
 	$(td_field).find(".cancel-button").click(function (event) {
@@ -296,8 +317,14 @@ $(function ()
 	// Bind the save button.
 	$(td_field).find(".save-button").click(function (event) {
 	    event.preventDefault();
-	    var newval = $(td_field).find("input").val();
+	    var newval;
 
+	    if (td_type == "text") {
+		newval = $.trim($(td_field).find("input").val());
+	    }
+	    else if (td_type == "checkbox") {
+		newval = $(td_field).find("input").is(":checked") ? 1 : 0;
+	    }
 	    sup.CallServerMethod(null, "image", "Modify",
 				 {"uuid"  : window.UUID,
 				  "field" : td_fname,
@@ -311,11 +338,20 @@ $(function ()
 				     // Kill the buttons/input field.
 				     $(td_field).find(".editing").remove();
 				     // Update and show the original
+				     if (td_type == "checkbox") {
+					 newval = YesNo(newval);
+				     }
 				     $(td_field).find("span")
 				         .text(newval)
 					 .removeClass("hidden");
 				     // Show the edit button again
 				     $(target).removeClass("invisible");
+
+				     // When changing architecture reload to 
+				     // make the page consistent wrt types
+				     if (td_fname == "architecture") {
+					 RegeneratePageBody();
+				     }
 				 });
 	});
     }
@@ -400,6 +436,10 @@ $(function ()
 			 .removeClass("hidden");
 		     // Show the edit button again
 		     $(target).removeClass("invisible");
+
+		     // When changing types reload to make the page
+		     // consistent wrt architecture
+		     RegeneratePageBody();
 		 });
 	});
     }
@@ -547,6 +587,7 @@ $(function ()
 		window.location.replace("user-dashboard.php");
 	    }
 	};
+	sup.ShowWaitWait();
     	var xmlthing = sup.CallServerMethod(null, "image", "Delete",
 					    {"uuid"  : window.UUID,
 					     "purge" : purge});

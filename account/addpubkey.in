@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -422,20 +422,20 @@ sub ParseKey($) {
 	$key     = $1;
     }
     elsif ($keyline =~
-	   /^(ssh-rsa|ssh-dss|ssh-ed25519) ([-\w\.\@\+\/\=]*) ([-\w\@\.:\ ]*)$/) {
+	   /^(ssh-rsa|ssh-ed25519) ([-\w\.\@\+\/\=]*) ([-\w\@\.:\ ]*)$/) {
         # Protocol 2
 	$type    = $1;
 	$key     = "$1 $2";
 	$comment = $3;
     }
-    elsif ($keyline =~ /^(ssh-rsa|ssh-dss|ssh-ed25519) ([-\w\.\@\+\/\=:]*)$/) {
+    elsif ($keyline =~ /^(ssh-rsa|ssh-ed25519) ([-\w\.\@\+\/\=:]*)$/) {
         # Protocol 2 but no comment field
 	$type    = $1;
 	$key     = "$1 $2";
     }
 
     if (!defined($key)) {
-	print STDERR "Key cannot be parsed!\n";
+	print STDERR "Key cannot be parsed, we accept rsa and ed25519 only!\n";
 	return 0;
     }
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -119,13 +119,14 @@ function Do_GetInfo()
     $blob["role"]            = $node->role();
     $blob["hasconsole"]      = $node->HasSerialConsole();
     $blob["attributes"]      = GetAttributes($node);
-    $blob["typeattributes"]  = GetTypeAttributes($node);
+    $blob["typeattributes"]  = GetTypeAttributes($node, $blob["attributes"]);
     $blob["features"]        = GetFeatures($node);
-    $blob["typefeatures"]    = GetTypeFeatures($node);
+    $blob["typefeatures"]    = GetTypeFeatures($node, $blob["features"]);
     $blob["interfaces"]      = $node->GetInterfaceInfo();
     $blob["op_mode"]         = $node->op_mode();
     $blob["control_ip"]      = $node->ControlIP();
     $blob["eventstate"]      = $node->eventstate();
+    $blob["allocstate"]      = $node->allocstate();
     if ($this_user) {
         $blob["management_ip"] = $node->ManagementIP();
         $blob["expinfo"]       = GetExpInfo($node);
@@ -253,7 +254,7 @@ function GetFeatures($node)
 #
 # Get the node type attributes (minus root password)
 #
-function GetTypeAttributes($node)
+function GetTypeAttributes($node, $prune = null)
 {
     $type = $node->type();
     $blob = array();
@@ -267,6 +268,9 @@ function GetTypeAttributes($node)
         return null;
     }
     while ($row = mysql_fetch_array($query_result)) {
+        if ($prune && array_key_exists($row["attrkey"], $prune)) {
+            continue;
+        }
         $blob[$row["attrkey"]] = $row["attrvalue"];
     }
     return $blob;
@@ -275,7 +279,7 @@ function GetTypeAttributes($node)
 #
 # Get the node type features.
 #
-function GetTypeFeatures($node)
+function GetTypeFeatures($node, $prune = null)
 {
     $type = $node->type();
     $blob = array();
@@ -287,6 +291,9 @@ function GetTypeFeatures($node)
         return null;
     }
     while ($row = mysql_fetch_array($query_result)) {
+        if ($prune && array_key_exists($row["feature"], $prune)) {
+            continue;
+        }
         $blob[$row["feature"]] = $row["weight"];
     }
     return $blob;
@@ -704,7 +711,9 @@ function Do_GetRFViolations()
     
     # Guest users not allowed to see data if not reserved.
     if (!$this_user && !$experiment) {
-	SPITAJAX_ERROR(-1, "Not enough permission for guest user");
+	SPITAJAX_ERROR(-1, "Not enough permission for guest users to see ".
+                       "RF violations since $node_id is not allocated to ".
+                       "an experiment.");
         return;
     }
     # Mere (guest) users see only as far back as the current experiment start.

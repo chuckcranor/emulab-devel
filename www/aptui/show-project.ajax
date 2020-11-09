@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,6 +26,8 @@ chdir("apt");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
 include_once("ajax-routines.ajax");
+include_once("rfrange_defs.php");
+include_once("resgroup_defs.php");
 
 # We set this in CheckPageArgs
 $target_project = null;
@@ -117,6 +119,21 @@ function Do_DatasetList()
     }
     $results = DatasetList("project", $target_project);
     SPITAJAX_RESPONSE($results);
+}
+
+function Do_ResgroupList()
+{
+    global $this_user, $target_project;
+    $reservations = array();
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $resgroups = ReservationGroup::LookupForProject($target_project);
+    foreach ($resgroups as $resgroup) {
+        $reservations[$resgroup->uuid()] = $resgroup->Blob();
+    }
+    SPITAJAX_RESPONSE($reservations);
 }
 
 function Do_ClassicDatasetList()
@@ -226,6 +243,7 @@ function Do_ProjectProfile()
     $results["url"]         = $target_project->URL();
     $results["description"] = $target_project->name();
     $results["why"]         = $target_project->why();
+    $results["forClass"]    = $target_project->forClass() ? true : false;
     $results["licenses"]    = array();
 
     if ($ISPOWDER) {
@@ -336,6 +354,9 @@ function Do_Toggle()
                 $user->SetBoundPortal(1);
             }
         }
+    }
+    elseif ($toggle == "project_forClass") {
+        $target_project->SetforClass($target_project->forClass() ? 0 : 1);
     }
     else {
 	SPITAJAX_ERROR(-1, "Unknown toggle name: $toggle");

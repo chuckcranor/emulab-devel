@@ -2,7 +2,7 @@
 
 # PROVIDE: cluster-status
 # REQUIRE: NETWORKING
-# BEFORE: apache22
+# BEFORE: apache24
 # KEYWORD: nojail shutdown
 
 logfile=@prefix@/log/cluster-status.log

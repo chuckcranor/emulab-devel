@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,8 +50,6 @@ if (! (ISADMIN() || ISFOREIGN_ADMIN())) {
 }
 SPITHEADER(1);
 
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
 echo "<link rel='stylesheet'
             href='css/jQRangeSlider.css'>\n";
 
@@ -114,9 +112,6 @@ function ShowByCreator()
                                      "APT"    => array("ecount" => 0,
                                                        "pcount" => 0,
                                                        "phours" => 0),
-                                     "DDC"    => array("ecount" => 0,
-                                                       "pcount" => 0,
-                                                       "phours" => 0),
                                      "Emulab" => array("ecount" => 0,
                                                        "pcount" => 0,
                                                        "phours" => 0));
@@ -141,7 +136,6 @@ function ShowByCreator()
            <th colspan=3>Wisc</th>
            <th colspan=3>Clem</th>
            <th colspan=3>Emulab</th>
-           <th colspan=3>DDC</th>
           </tr>
           <tr>
            <th class='filter-false sorter-false'
@@ -164,16 +158,9 @@ function ShowByCreator()
            <th>Expt</th>
            <th>PCs</th>
            <th>PHours</th>
-           <th>Expt</th>
-           <th>PCs</th>
-           <th>PHours</th>
           </tr>
-          <tr>
+          <tr id='header-column-counts'>
            <th class='filter-false sorter-false' data-math='col-count'>0</th>
-           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
-           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
-           <th class='filter-false sorter-false' 
-                  data-math='col-sum' data-math-mask='##0'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' 
@@ -201,12 +188,8 @@ function ShowByCreator()
           </tr>
          </thead>\n";
  echo"   <tfoot>
-          <tr>
+          <tr id='footer-column-counts'>
            <th class='filter-false sorter-false'>Totals</th>
-           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
-           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
-           <th class='filter-false sorter-false' 
-                  data-math='col-sum' data-math-mask='##0'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' 
@@ -258,9 +241,6 @@ function ShowByCreator()
             "<td>" . $ref["Emulab"]["ecount"] . "</td> ".
             "<td>" . $ref["Emulab"]["pcount"] . "</td> ".
             "<td>" . $ref["Emulab"]["phours"] . "</td> ".
-            "<td>" . $ref["DDC"]["ecount"] . "</td> ".
-            "<td>" . $ref["DDC"]["pcount"] . "</td> ".
-            "<td>" . $ref["DDC"]["phours"] . "</td> ".
             "</tr>\n";
     }
     echo "</table>";
@@ -383,7 +363,7 @@ function ShowByProject()
            <th>PCs</th>
            <th>Phours</th>
           </tr>
-          <tr>
+          <tr id='header-column-counts'>
            <th class='filter-false sorter-false' data-math='col-count'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
@@ -416,7 +396,7 @@ function ShowByProject()
           </tr>
          </thead>\n";
  echo"   <tfoot>
-          <tr>
+          <tr id='footer-column-counts'>
            <th class='filter-false sorter-false'>Totals</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
@@ -541,13 +521,10 @@ echo "<script src='js/lib/jQRangeSlider/jQRangeSlider.js'></script>\n";
 echo "<script src='js/lib/jQRangeSlider/jQDateRangeSliderHandle.js'></script>\n";
 echo "<script src='js/lib/jQRangeSlider/jQDateRangeSlider.js'></script>\n";
 echo "<script src='js/lib/jQRangeSlider/jQRuler.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.widget-math.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.widget-output.js'></script>\n";
 
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER(array('js/lib/tablesorter/widgets/widget-output.js'));
 SPITREQUIRE("js/sumstats.js");
 
 AddTemplate("output-dropdown");

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -95,6 +95,15 @@ MDSUBDIR  = linux
 endif
 ifeq ($(MDSUBDIR),redhat9)
 MDSUBDIR  = linux9
+endif
+ifeq ($(MDSUBDIR),PPC64leUbuntu20)
+MDSUBDIR  = ubuntu20-ppc64le
+endif
+ifeq ($(MDSUBDIR),PPC64leUbuntu18)
+MDSUBDIR  = ubuntu18-ppc64le
+endif
+ifeq ($(MDSUBDIR),MoonshotUbuntu20)
+MDSUBDIR  = ubuntu20-ms
 endif
 ifeq ($(MDSUBDIR),MoonshotUbuntu18)
 MDSUBDIR  = ubuntu18-ms
@@ -223,6 +232,9 @@ newnode-mfs: client
 
 newnode-mfs-install: newnode-mfs
 	@$(MAKE) -C $(MDSUBDIR) newnode-mfs-install
+
+mobile-control-install:
+	$(MAKE) -C common mobile-control-install
 
 #
 # XXX argh!  assumes FreeBSD inner boss

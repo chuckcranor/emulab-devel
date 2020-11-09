@@ -196,7 +196,7 @@ CREATE TABLE `geni_crls` (
   `uuid` varchar(40) NOT NULL default '',
   `created` datetime default NULL,
   `expires` datetime default NULL,
-  `cert` text,
+  `cert` mediumtext,
   `DN` text,
   PRIMARY KEY  (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;

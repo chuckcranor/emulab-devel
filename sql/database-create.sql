@@ -142,8 +142,26 @@ CREATE TABLE `apt_aggregate_radioinfo` (
   `radio_type` tinytext,
   `transmit_frequencies` text,
   `receive_frequencies` text,
+  `power_id` varchar(32) default NULL,
+  `cnuc_id` varchar(32) default NULL,
+  `monitored` tinyint(1) NOT NULL default '0',
   `notes` text,
   PRIMARY KEY  (`aggregate_urn`,`node_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_aggregate_nodes`
+--
+
+DROP TABLE IF EXISTS `apt_aggregate_nodes`;
+CREATE TABLE `apt_aggregate_nodes` (
+  `urn` varchar(128) NOT NULL default '',
+  `node_id` varchar(32) NOT NULL default '',
+  `type` varchar(30) NOT NULL default '',
+  `available` tinyint(1) NOT NULL default '0',
+  `reservable` tinyint(1) NOT NULL default '0',
+  `updated` datetime default NULL,
+  PRIMARY KEY  (`urn`,`node_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -240,6 +258,7 @@ CREATE TABLE `apt_aggregates` (
   `updated` datetime NOT NULL default '0000-00-00 00:00:00',
   `weburl` tinytext,
   `has_datasets` tinyint(1) NOT NULL default '0',
+  `does_syncthing` tinyint(1) NOT NULL default '0',
   `reservations` tinyint(1) NOT NULL default '0',
   `panicpoweroff` tinyint(1) NOT NULL default '0',
   `precalcmaxext` tinyint(1) NOT NULL default '0',
@@ -360,11 +379,14 @@ CREATE TABLE `apt_instance_aggregate_history` (
   `started` datetime default NULL,
   `physnode_count` smallint(5) unsigned NOT NULL default '0',
   `virtnode_count` smallint(5) unsigned NOT NULL default '0',
+  `deferred` tinyint(1) NOT NULL default '0',
+  `deferred_reason` tinytext,
   `retry_count` smallint(5) unsigned NOT NULL default '0',
   `last_retry` datetime default NULL,
   `public_url` tinytext,
   `webtask_id` varchar(128) NOT NULL default '',
   `extension_needpush` datetime default NULL,
+  `prestage_data` mediumtext,  
   `manifest` mediumtext,
   PRIMARY KEY (`uuid`,`aggregate_urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -382,11 +404,14 @@ CREATE TABLE `apt_instance_aggregates` (
   `started` datetime default NULL,
   `physnode_count` smallint(5) unsigned NOT NULL default '0',
   `virtnode_count` smallint(5) unsigned NOT NULL default '0',
+  `deferred` tinyint(1) NOT NULL default '0',
+  `deferred_reason` tinytext,
   `retry_count` smallint(5) unsigned NOT NULL default '0',
   `last_retry` datetime default NULL,
   `public_url` tinytext,
   `webtask_id` varchar(128) NOT NULL default '',
   `extension_needpush` datetime default NULL,
+  `prestage_data` mediumtext,  
   `manifest` mediumtext,
   PRIMARY KEY (`uuid`,`aggregate_urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -770,6 +795,8 @@ CREATE TABLE `apt_reservation_groups` (
   `noidledetection` datetime DEFAULT NULL,
   `locked` datetime DEFAULT NULL,
   `locker_pid` int(11) default '0',
+  `notified` datetime DEFAULT NULL,
+  `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `reason` mediumtext,
   PRIMARY KEY (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -796,7 +823,7 @@ CREATE TABLE `apt_reservation_group_reservations` (
   `deleted` datetime DEFAULT NULL,
   `deleted_pushed` datetime DEFAULT NULL,
   `noidledetection_needpush` tinyint(1) NOT NULL default '0',
-  `jsondata` text,
+  `jsondata` mediumtext,
   PRIMARY KEY (`uuid`,`aggregate_urn`,`type`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -814,6 +841,90 @@ CREATE TABLE `apt_reservation_group_rf_reservations` (
   `approved` datetime DEFAULT NULL,
   `canceled` datetime DEFAULT NULL,
   PRIMARY KEY (`uuid`,`freq_uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_project_rfranges`
+--
+
+DROP TABLE IF EXISTS `apt_project_rfranges`;
+CREATE TABLE `apt_project_rfranges` (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `pid` varchar(48) NOT NULL default '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `range_id` varchar(32) default NULL,
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  `disabled` tinyint(1) NOT NULL default '0',
+  PRIMARY KEY (`pid_idx`,`idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_global_rfranges`
+--
+
+DROP TABLE IF EXISTS `apt_global_rfranges`;
+CREATE TABLE `apt_global_rfranges` (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `range_id` varchar(32) default NULL,
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  `disabled` tinyint(1) NOT NULL default '0',
+  PRIMARY KEY (`idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_named_rfranges`
+--
+
+DROP TABLE IF EXISTS `apt_named_rfranges`;
+CREATE TABLE `apt_named_rfranges` (
+  `range_id` varchar(32) NOT NULL DEFAULT '',
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  PRIMARY KEY (`range_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_rfrange_sets`
+--
+
+DROP TABLE IF EXISTS `apt_rfrange_sets`;
+CREATE TABLE `apt_rfrange_sets` (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `setname` varchar(32) NOT NULL DEFAULT '',
+  `range_id` varchar(32) default NULL,
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  `disabled` tinyint(1) NOT NULL default '0',
+  PRIMARY KEY (`setname`,`idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_instance_rfranges`
+--
+
+DROP TABLE IF EXISTS `apt_instance_rfranges`;
+CREATE TABLE `apt_instance_rfranges` (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `uuid` varchar(40) NOT NULL default '',
+  `name` varchar(16) default NULL,
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  PRIMARY KEY (`uuid`,`idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_instance_rfrange_history`
+--
+
+DROP TABLE IF EXISTS `apt_instance_rfrange_history`;
+CREATE TABLE `apt_instance_rfrange_history` (
+  `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `uuid` varchar(40) NOT NULL default '',
+  `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
+  `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  PRIMARY KEY (`uuid`,`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -848,6 +959,7 @@ CREATE TABLE `apt_reservation_group_history` (
   `created` datetime DEFAULT NULL,
   `canceled` datetime DEFAULT NULL,
   `deleted` datetime DEFAULT NULL,
+  `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `reason` mediumtext,
   PRIMARY KEY (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -3002,9 +3114,11 @@ CREATE TABLE `image_versions` (
   `isdataset` tinyint(1) NOT NULL default '0',
   `released` tinyint(1) NOT NULL default '0',
   `ims_reported` datetime default NULL,
+  `ims_update` datetime default NULL,
   `ims_noreport` tinyint(1) NOT NULL default '0',
   `nodetypes` text default NULL,
   `uploader_path` tinytext,
+  `uploader_status` tinytext,
   `notes` mediumtext,
   `deprecated` datetime default NULL,
   `deprecated_iserror` tinyint(1) NOT NULL default '0',
@@ -3079,6 +3193,7 @@ CREATE TABLE `images` (
   `gid_idx` mediumint(8) unsigned NOT NULL default '0',
   `uuid` varchar(40) NOT NULL default '',
   `webtask_id` varchar(128) default NULL,
+  `listed` tinyint(1) NOT NULL default '1',
   `nodelta` tinyint(1) NOT NULL default '0',
   `noversioning` tinyint(1) NOT NULL default '0',
   `metadata_url` tinytext,
@@ -3174,6 +3289,7 @@ CREATE TABLE `interfaces` (
   `whol` tinyint(4) NOT NULL default '0',
   `trunk` tinyint(1) NOT NULL default '0',
   `trunk_mode` enum('equal','dual') NOT NULL default 'equal',
+  `LAG` tinyint(1) NOT NULL default '0',
   `uuid` varchar(40) NOT NULL default '',
   `logical` tinyint(1) unsigned NOT NULL default '0',
   `autocreated` tinyint(1) unsigned NOT NULL default '0',
@@ -4236,7 +4352,7 @@ CREATE TABLE `nodes` (
   `reserved_memory` int(10) unsigned default '0',
   `nonfsmounts` tinyint(1) NOT NULL default '0',
   `nfsmounts` enum('emulabdefault','genidefault','all','none') default NULL,
-  `taint_states` set('useronly','blackbox','dangerous') default NULL,
+  `taint_states` set('useronly','blackbox','dangerous','mustreload') default NULL,
   PRIMARY KEY  (`node_id`),
   KEY `phys_nodeid` (`phys_nodeid`),
   KEY `node_id` (`node_id`,`phys_nodeid`),
@@ -4477,7 +4593,7 @@ CREATE TABLE `os_info_versions` (
   `mfs` tinyint(4) NOT NULL default '0',
   `reboot_waittime` int(10) unsigned default NULL,
   `protogeni_export` tinyint(1) NOT NULL default '0',
-  `taint_states` set('useronly','blackbox','dangerous') default NULL,
+  `taint_states` set('useronly','blackbox','dangerous','mustreload') default NULL,
   PRIMARY KEY  (`osid`,`vers`),
   KEY `pid` (`pid`,`osname`,`vers`),
   KEY `OS` (`OS`),
@@ -5076,6 +5192,7 @@ CREATE TABLE `projects` (
   `hidden` tinyint(1) default '0',
   `disabled` tinyint(1) default '0',
   `inactive` tinyint(4) default '0',
+  `forClass` tinyint(1) default '0',
   `date_inactive` datetime default NULL,
   `public` tinyint(4) NOT NULL default '0',
   `public_whynot` tinytext,
@@ -5918,6 +6035,8 @@ CREATE TABLE `users` (
   `usr_w_pswd` tinytext,
   `unix_uid` int(10) unsigned NOT NULL default '0',
   `status` enum('newuser','unapproved','unverified','active','frozen','archived','nonlocal','inactive','other') NOT NULL default 'newuser',
+  `frozen_stamp` datetime default NULL,
+  `frozen_by` varchar(8) default NULL,
   `admin` tinyint(4) default '0',
   `foreign_admin` tinyint(4) default '0',
   `dbedit` tinyint(4) default '0',
@@ -5954,6 +6073,7 @@ CREATE TABLE `users` (
   `accepted_aup` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `ga_userid` varchar(32) default NULL,
   `portal_interface_warned` tinyint(1) NOT NULL default '0',
+  `news_read` datetime NOT NULL default '0000-00-00 00:00:00',
   PRIMARY KEY  (`uid_idx`),
   KEY `unix_uid` (`unix_uid`),
   KEY `status` (`status`),
@@ -6310,7 +6430,9 @@ CREATE TABLE `virt_lans` (
   `widearea` tinyint(4) default '0',
   `emulated` tinyint(4) default '0',
   `uselinkdelay` tinyint(4) default '0',
+  `forcelinkdelay` tinyint(1) default '0',
   `nobwshaping` tinyint(4) default '0',
+  `besteffort` tinyint(1) default '0',
   `nointerswitch` tinyint(1) default '0',
   `mustdelay` tinyint(1) default '0',
   `usevethiface` tinyint(4) default '0',

@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -62,11 +62,22 @@ sub new($$;$) {
 
     $SNMP::debugging = ($debug - 5) if $debug > 5;
     my $mibpath = "/usr/local/share/snmp/mibs";
-    &SNMP::addMibDirs($mibpath);
-    &SNMP::addMibFiles("$mibpath/SNMPv2-SMI.txt",
-		       "$mibpath/SNMPv2-MIB.txt",
-		       "$mibpath/RFC1155-SMI.txt",
-		       "$mibpath/PDU2-MIB.txt");
+    # Ubuntu, powerlocal ...
+    my $mibpathalt = "/var/lib/snmp/mibs/ietf";
+
+    foreach my $mib ("SNMPv2-SMI.txt",
+		     "SNMPv2-MIB.txt",
+		     "RFC1155-SMI.txt",
+		     "PDU2-MIB.txt") {
+	if (-e "$mibpath/$mib") {
+	    &SNMP::addMibDirs($mibpath);
+	    &SNMP::addMibFiles("$mibpath/$mib");
+	}
+	elsif (-e "$mibpathalt/$mib") {
+	    &SNMP::addMibDirs($mibpathalt);
+	    &SNMP::addMibFiles("$mibpathalt/$mib");
+	}
+    }
     $SNMP::save_descriptions = 1; # must be set prior to mib initialization
     SNMP::initMib();              # parses default list of Mib modules
     $SNMP::use_enums = 1;         #use enum values instead of only ints

@@ -3,7 +3,12 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['status', 'waitwait-modal', 'oops-modal', 'register-modal', 'terminate-modal', 'oneonly-modal', 'approval-modal', 'linktest-modal', 'linktest-md', "destroy-experiment", "prestage-table"]);
+    var templates = APT_OPTIONS
+	.fetchTemplateList(['status', 'waitwait-modal',
+			    'oops-modal', 'register-modal', 'terminate-modal',
+			    'oneonly-modal', 'approval-modal', 'linktest-modal',
+			    'linktest-md', "destroy-experiment",
+			    "prestage-table", "frequency-graph"]);
 
     var statusString = templates['status'];
     var waitwaitString = templates['waitwait-modal'];
@@ -51,6 +56,9 @@ $(function ()
     var jacksInstance     = null;
     var changingtopo      = false;
     var slowdown          = false;
+    var radioinfo         = null;
+    var radios            = {};
+    var monitorTemplate   = null;
     var EMULAB_OPS        = "emulab-ops";
     var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
     var GENIRESPONSE_REFUSED = 7;
@@ -94,6 +102,11 @@ $(function ()
 	    // console.info(projlist);
 	}
 	amlist = decodejson('#amlist-json');
+	console.info(amlist);
+	if (window.ISPOWDER) {
+	    radioinfo = decodejson('#radioinfo-json');
+	    monitorTemplate = _.template(templates['frequency-graph']);
+	}
 
 	/*
 	 * Need to grab the experiment info so we can draw the page.
@@ -282,40 +295,6 @@ $(function ()
 	    xmlthing.done(callback);
 	});
 	SetupWarnKill();
-
-	// Handler for select/deselect all rows in the list view.
-	$('#select-all').change(function () {
-	    if ($(this).prop("checked")) {
-		$('#listview_table [name=select]')
-		    .prop("checked", true);
-	    }
-	    else {
-		$('#listview_table [name=select]')
-		    .prop("checked", false);
-	    }
-	});
-	// Handler for the action menu next to the select-all checkbox:
-	// Foreign admins do not get a menu, but easier to just hide it.
-	if (isfadmin) {
-	    $('#listview-action-menu').addClass("invisible");
-	}
-	else {
-	    $('#listview-action-menu li a')
-		.click(function (e) {
-		    window.APT_OPTIONS.gaButtonEvent(e);
-		    var checked = [];
-
-		    // Get the list of checked nodes.
-		    $('#listview_table [name=select]').each(function() {
-			if ($(this).prop("checked")) {
-			    checked.push($(this).attr("id"));
-			}
-		    });
-		    if (checked.length) {
-			ActionHandler($(e.target).attr("name"), checked);
-		    }
-		});
-	}
 	SetupSnapshotModal();
 
 	/*
@@ -427,6 +406,8 @@ $(function ()
     
     function GetStatus()
     {
+	//console.info("GetStatus", statusBusy, statusHold);
+	
 	// Clearly not thread safe, but its okay.
 	if (statusBusy || statusHold)
 	    return;
@@ -525,12 +506,9 @@ $(function ()
 		ProgressBarUpdate();
 		status_message = "Your experiment is scheduled to start later";
 	    }
-	    else if (instanceStatus == 'prestage' ||
-		     instanceStatus == 'staging' ||
-		     instanceStatus == 'staged') {
-		// We label this as provisioning, but change the message
-		// if we have to copy images.
-		status_html = "provisioning";
+	    else if (instanceStatus == 'prestaging') {
+		status_html = "prestaging";
+		status_message = "Copying images to target clusters";
 		ProgressBarUpdate();
 	    }
 	    else if (instanceStatus == 'provisioning') {
@@ -675,9 +653,6 @@ $(function ()
 	 */
 	if (_.has(json.value, "prestageStatus")) {
 	    ShowPrestageInfo(json.value.prestageStatus);
-	    status_message = "Copying images to target clusters " +
-		"before starting experiment";
-	    status_html = "prestaging";
 	}
 	else {
 	    HidePrestageInfo();
@@ -706,6 +681,13 @@ $(function ()
 		    if (!_.has(json.value.sliverstatus, urn)) {
 			console.info("Topology has changed: " +
 				     urn + " removed");
+			changingtopo = true;
+		    }
+		});
+		$.each(json.value.sliverstatus, function (urn) {
+		    if (!_.has(lastSliverStatus, urn)) {
+			console.info("Topology has changed: " +
+				     urn + " added");
 			changingtopo = true;
 		    }
 		});
@@ -753,12 +735,8 @@ $(function ()
 	        destroy = 0;
   	        break;
 
-	    case 'staging':
-	    case 'prestage':
-	    case 'staged':
 	    case 'provisioned':
 	    case 'scheduled':
-	    case 'deferred':
 	    case 'pending':
 	        refresh = reloadtopo = extend = snapshot = destroy = 0;
   	        terminate = 1;
@@ -1055,8 +1033,8 @@ $(function ()
 	$.each(statusblob , function(urn, iblob) {
 	    // Will not have node details until manifest is ready.
 	    if (!_.has(iblob, "details")) {
-		if (iblob.status == "deferred") {
-		    deferAggregate(urn);
+		if (iblob.deferred != 0) {
+		    deferAggregate(iblob);
 		}
 		return;
 	    }
@@ -1213,6 +1191,8 @@ $(function ()
 				      "placement" : "auto right",
 				     });
 		    }
+		    $('#listview-row-' + node_id + ' td[name="startup"]')
+			.html(tag);
 		}
 		html += "</tbody></table>";
 		UpdateNodePopover(node_id, jacksID, html);
@@ -1272,22 +1252,35 @@ $(function ()
 	}
     }
 
-    function deferAggregate(urn)
+    function deferAggregate(sliver)
     {
+	var urn    = sliver.aggregate_urn;
+	var reason = sliver.deferred_reason;
+	var cause  = sliver.deferred_cause;
+	    
 	if (!_.has(jacksSites, urn)) {
 	    // Manifest not processed yet.
 	    return;
 	}
 	$.each(jacksSites[urn], function(node_id, jacksID) {
+	    var html;
+	    
 	    //console.info("deferAggregate: ", urn, node_id, jacksID);
 	    $('#' + jacksID + ' .node .nodebox')
-		.css("fill", "blue");
+		.css("fill", "#ff9248");
 
-	    var html =
-		"This node is currently unavailable and cannot be added " +
-		"to your experiment. We will continue trying to contact " +
-		"this node.";
-
+	    if (reason) {
+		html = reason;
+	    }
+	    else {
+		html =
+		    "This node is currently unavailable and cannot be added " +
+		    "to your experiment. We will continue trying to contact " +
+		    "this node.";
+	    }
+	    if (cause) {
+		html = html + "<br><pre>" + cause + "</pre>";
+	    }
 	    UpdateNodePopover(node_id, jacksID, html);
 	});
     }
@@ -1354,8 +1347,7 @@ $(function ()
     {
 	if (_.has(blob, "sliverstatus")) {
 	    for (var urn in blob.sliverstatus) {
-		var status = blob.sliverstatus[urn].status;
-		if (status == "deferred") {
+		if (blob.sliverstatus[urn].deferred != 0) {
 		    return 1;
 		}
 	    }
@@ -1372,11 +1364,27 @@ $(function ()
     }
     function DoReload(nodeList)
     {
+	for (var i = 0; i < nodeList.length; i++) {
+	    var node = nodeList[i];
+
+	    if (_.has(inrecovery, node) && inrecovery[node]) {
+		alert(node + " is in recovery mode, you cannot reload a node " +
+		      "while it is in recovery mode");
+		return;
+	    }
+	}
 	DoRebootReload("reload", nodeList);
+    }
+    function DoPowerCycle(nodeList)
+    {
+	DoRebootReload("powercycle", nodeList);
     }
     function DoRebootReload(which, nodeList)
     {
-	var tag = (which == "reload" ? "Reload" : "Reboot");
+	var method = (which == "reload" ? "Reload" :
+		      which == "powercycle" ? "PowerCycle" : "Reboot");
+	var tag    = (which == "reload" ? "Reload" :
+		      which == "powercycle" ? "Power Cycle" : "Reboot");
 	
 	// Handler for hide modal to unbind the click handler.
 	$('#confirm_reload_modal').on('hidden.bs.modal', function (event) {
@@ -1400,7 +1408,7 @@ $(function ()
 		GetStatus();
 	    }
 	    sup.ShowModal('#waitwait-modal');
-	    var xmlthing = sup.CallServerMethod(ajaxurl, "status", tag,
+	    var xmlthing = sup.CallServerMethod(ajaxurl, "status", method,
 						{"uuid"     : uuid,
 						 "node_ids" : nodeList});
 	    xmlthing.done(callback);
@@ -1730,12 +1738,54 @@ $(function ()
 	});
 	$('#context').contextmenu('show', event);
     }
+    
+    //
+    // Same operation, but for the Site tag context menu.
+    //
+    function SiteContextMenuShow(event, sitetag, urn)
+    {
+	// Foreign admins have no permission for anything.
+	if (isfadmin) {
+	    return;
+	}
+	var nickname = $(sitetag).text();
+	var cid = "site-context-menu";
+
+	if (currentContextMenu) {
+	    $('#context').contextmenu('closemenu');
+	    $('#context').contextmenu('destroy');
+	}
+
+	//
+	// We generate a new menu object each time causes it easier and
+	// not enough overhead to worry about.
+	//
+	$('#context').contextmenu({
+	    target: '#' + cid, 
+	    onItem: function(context,e) {
+		$('#context').contextmenu('closemenu');
+		$('#context').contextmenu('destroy');
+		// Disabled menu items, but we still want user to see them.
+		if ($(e.target).attr("disabled")) {
+		    return;
+		}
+		SiteActionHandler($(e.target).attr("name"), urn);
+	    }
+	})
+	currentContextMenu = cid;
+	$('#' + cid).one('hidden.bs.context', function (event) {
+	    currentContextMenu = null;
+	});
+	$('#context').contextmenu('show', event);
+    }
 
     //
     // Common handler for both the context menu and the listview menu.
     //
     function ActionHandler(action, clientList)
     {
+	console.info(action,clientList);
+	
 	//
 	// Do not show in the terminating or terminated state.
 	//
@@ -1795,6 +1845,9 @@ $(function ()
 	else if (action == "reboot") {
 	    DoReboot(clientList);
 	}
+	else if (action == "powercycle") {
+	    DoPowerCycle(clientList);
+	}
 	else if (action == "delete") {
 	    DoDeleteNodes(clientList);
 	}
@@ -1804,21 +1857,40 @@ $(function ()
 	else if (action == "recovery") {
 	    DoRecovery(clientList[0]);
 	}
+	else if (action == "nodetop") {
+	    DoTop(clientList[0]);
+	}
+	else if (action == "monitor") {
+	    NewMonitorTab(clientList[0]);
+	}
+    }
+
+    //
+    // Handler for the Site context menu.
+    //
+    function SiteActionHandler(action, urn)
+    {
+	console.info(action, urn);
+	
+	if (action == "delete") {
+	    DoDeleteSite(urn);
+	}
     }
 
     var listview_row = 
 	"<tr id='listview-row'>" +
 	" <td name='client_id'>n/a</td>" +
 	" <td name='node_id'>n/a</td>" +
-	" <td name='status'>n/a</td>" +
 	" <td name='type'>n/a</td>" +
+	" <td name='status'>n/a</td>" +
+	" <td name='startup'>n/a</td>" +
 	" <td name='image'>n/a</td>" +
 	" <td name='sshurl'>n/a</td>" +
 	" <td align=left><input name='select' type=checkbox>" +
 	" <td name='menu' align=center> " +
 	"  <div name='action-menu' class='dropdown'>" +
 	"  <button id='action-menu-button' type='button' " +
-	"          class='btn btn-primary btn-sm dropdown-toggle' " +
+	"          class='btn btn-primary btn-xs dropdown-toggle' " +
 	"          data-toggle='dropdown'> " +
 	"      <span class='glyphicon glyphicon-cog'></span> " +
 	"  </button> " +
@@ -1826,6 +1898,13 @@ $(function ()
 	"    <li><a href='#' name='shell'>Shell</a></li> " +
 	"    <li><a href='#' name='console'>Console</a></li> " +
 	"    <li><a href='#' name='consolelog'>Console Log</a></li> " +
+	"    <li><a href='#' name='recovery'>Recovery</a></li> " +
+	"    <li class='hidden'> " +
+	"       <a href='#' name='monitor'>Monitor Graph</a></li> " +
+	"    <li class='hidden'> " +
+	"       <a href='#' name='nodetop'>Top Processes</a></li> " +
+	"    <li class='hidden'> " +
+	"       <a href='#' name='powercycle'>Power Cycle</a></li> " +
 	"    <li><a href='#' name='delete'>Delete Node</a></li> " +
 	"  </ul>" +
 	"  </div>" +
@@ -1839,6 +1918,9 @@ $(function ()
     function ShowTopo(statusblob, donefunc)
     {
 	//console.info("ShowTopo", changingtopo, statusblob);
+
+	// For Powder map redraw after topology change.
+	var redrawpowdermap = false;
 
 	//
 	// Maybe this should come from rspec? Anyway, we might have
@@ -1870,8 +1952,7 @@ $(function ()
 			    text = text.replace(regex, host);
 			});
 		    }
-		    // Stick the text in
-		    // Stick the text in
+		    // Stick the text in. 
 		    try {
 			$('#instructions_text').html(marked(text));
 		    }
@@ -1910,6 +1991,7 @@ $(function ()
 		var stype  = $(this).find("sliver_type");
 		var login  = $(this).find("login");
 		var coninfo= this.getElementsByTagNameNS(EMULAB_NS, 'console');
+		var pcycle = this.getElementsByTagNameNS(EMULAB_NS, 'powercycle');
 		var recover= this.getElementsByTagNameNS(EMULAB_NS, 'recovery');
 		var vnode  = this.getElementsByTagNameNS(EMULAB_NS, 'vnode');
 		var imageable =
@@ -1921,6 +2003,8 @@ $(function ()
 		var node_id= null;
 		var hwtype = null;
 		var clone  = $(listview_row);
+		var CMclone= $("#context-menu").clone();
+		
 		// Cause of nodes in the emulab namespace (vhost).
 		if (!login.length) {
 		    login = this.getElementsByTagNameNS(EMULAB_NS, 'login');
@@ -2039,6 +2123,11 @@ $(function ()
 			    return false;
 			});		    
 		}
+		else {
+		    // Need to do this on the context menu too, but painful.
+		    clone.find(' [name=shell]')
+			.parent().addClass('disabled');		    
+		}
 
 		//
 		// Foreign admins do not get a menu, but easier to just
@@ -2089,51 +2178,110 @@ $(function ()
 		    clone.find(' [name=delete]')
 			.parent().addClass('disabled');		    
 		}
+		if (canrecover) {
+		    // Recovery button handler
+		    clone.find(' [name=recovery]')
+			.click(function (e) {
+			    ActionHandler("recovery", [node]);
+			});
+		}
+		else {
+		    clone.find(' [name=recovery]')
+			.parent().addClass('disabled');		    
+		}
+
+		/*
+		 * Powder; if the node is a radio (or hosts a radio)
+		 * enable the option to load the monitor graph into
+		 * a tab.
+		 */
+		if (window.ISPOWDER && radioinfo && node_id) {
+		    var info = IsPowderRadio(manager_urn, node_id);
+		    if (info) {
+			clone.find(' [name=monitor]')
+			    .click(function (e) {
+				ActionHandler("monitor", [node]);
+			    });
+			clone.find(' [name=monitor]')
+			    .parent().removeClass('hidden');
+
+			// Context menu option
+			CMclone.find("li[id=monitor]").removeClass("hidden");
+
+			// Mark it as a radio with its info. 
+			radios[node] = info;
+		    }
+		}
+
+		//
+		// Power cycle handler
+		//
+		if (pcycle.length) {
+		    // Attach handler to the menu button.
+		    clone.find(' [name=powercycle]')
+			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
+			    ActionHandler("powercycle", [node]);
+			});
+		    clone.find(' [name=powercycle]')
+			.parent().removeClass('hidden');
+
+		    // Context menu option
+		    CMclone.find("li[id=powercycle]").removeClass("hidden");
+		}
+
+		// Node "top"
+		clone.find(' [name=nodetop]')
+		    .click(function (e) {
+			ActionHandler("nodetop", [node]);
+		    });
+		clone.find(' [name=nodetop]')
+		    .parent().removeClass('hidden');
+		// Context menu option
+		CMclone.find("li[id=nodetop]").removeClass("hidden");
 
 		// Insert into the table, we will attach the handlers below.
 		$('#listview_table > tbody:last').append(clone);
 
-		/*
-		 * Make a copy of the master context menu and init.
-		 */
-		var clone = $("#context-menu").clone();
-
 		// Change the ID of the clone so its unique.
-		clone.attr('id', "context-menu-" + node);
+		CMclone.attr('id', "context-menu-" + node);
 
 		// Activate tooltips in the menu.
-		clone.find('[data-toggle="tooltip"]')
+		CMclone.find('[data-toggle="tooltip"]')
 		    .tooltip({"trigger"   : "hover",
 			      "container" : "body",
 			      "placement" : "auto right",
 			     });
 	    
 		// Insert into the context-menus div.
-		$('#context-menus').append(clone);
+		$('#context-menus').append(CMclone);
 
 		// If no console, then grey out the options.
 		if (!_.has(consolenodes, node)) {
-		    $(clone).find("li[id=console]").addClass("disabled");
-		    $(clone).find("li[id=consolelog]").addClass("disabled");
+		    $(CMclone).find("li[id=console]").addClass("disabled");
+		    $(CMclone).find("li[id=consolelog]").addClass("disabled");
 		    // For ActionHandler()
-		    $(clone).find("[name=console]").attr("disabled", true);
-		    $(clone).find("[name=consolelog]").attr("disabled", true);
+		    $(CMclone).find("[name=console]").attr("disabled", true);
+		    $(CMclone).find("[name=consolelog]").attr("disabled", true);
 		}
 		// If no recovery mode, grey out the option.
 		if (!canrecover) {
-		    $(clone).find("li[id=recovery]").addClass("disabled");
+		    $(CMclone).find("li[id=recovery]").addClass("disabled");
 		    // For ActionHandler()
-		    $(clone).find("[name=recovery]").attr("disabled", true);
+		    $(CMclone).find("[name=recovery]").attr("disabled", true);
+		}
+		if (! (login.length && dossh)) {
+		    $(CMclone).find("li[id=shell]").addClass("disabled");
 		}
 		
 		// If a vhost/firewall, then grey out options. Or if there
 		// is just one node at this site.
 		if (isvhost || isfw || rawcount == 1) {
-		    $(clone).find("li[id=delete]").addClass("disabled");
+		    $(CMclone).find("li[id=delete]").addClass("disabled");
 		    // For ActionHandler()
-		    $(clone).find("[name=delete]").attr("disabled", true);
+		    $(CMclone).find("[name=delete]").attr("disabled", true);
 		}
-		contextMenus[node] = clone;
+		contextMenus[node] = CMclone;
 		nodecount++;
 	    });
 	}
@@ -2150,6 +2298,7 @@ $(function ()
 	    // Need to redo the lists.
 	    clientid2nodeid = {};
 	    imageablenodes  = {};
+	    redrawpowdermap = true;
 	}
 	/*
 	 * If we have all the manifests then nothing to do.
@@ -2189,6 +2338,26 @@ $(function ()
 	    // Update the snapshot modal with new nodes.
 	    UpdateSnapshotModal();
 
+	    // Site context menu setup.
+	    setTimeout(SetupSiteContextMenus, 3000);
+
+	    if (window.ISPOWDER) {
+		if (redrawpowdermap) {
+		    UpdatePowderMap()
+		}
+		else {
+		    var showmap = true;
+		
+		    $.each(statusblob, function(urn) {
+			if (!_.has(manifests, urn)) {
+			    showmap = false;
+			}
+		    });
+		    if (showmap) {
+			ShowPowderMapTab();
+		    }
+		}
+	    }
 	    // Signal GetStatus() looper that we are done, 
 	    donefunc();
 	};
@@ -2216,10 +2385,57 @@ $(function ()
 	    $("#showtopo_container").removeClass("invisible");
 	    $('#quicktabs_ul a[href="#manifest"]')
 		.parent().removeClass("hidden");
-	    $('#quicktabs_ul a[href="#listview"]')
-		.parent().removeClass("hidden");
 	    $('#quicktabs_content #manifest').removeClass("hidden");
-	    $('#quicktabs_content #listview').removeClass("hidden");
+	    /*
+	     * Cannot be hidden to initialize tablesorter
+	     */
+	    if ($('#quicktabs_content #listview').hasClass("hidden")) {
+	   	$('#quicktabs_ul a[href="#listview"]')
+		    .parent().removeClass("hidden");
+		$('#quicktabs_content #listview').removeClass("hidden");
+
+		$('#listview_table')
+		    .tablesorter({
+			theme : 'bootstrap',
+			widgets : [ "uitheme", "zebra"],
+			headerTemplate : '{content} {icon}',
+		    });
+
+		// Handler for select/deselect all rows in the list view.
+		$('#select-all').change(function () {
+		    if ($(this).prop("checked")) {
+			$('#listview_table [name=select]')
+			    .prop("checked", true);
+		    }
+		    else {
+			$('#listview_table [name=select]')
+			    .prop("checked", false);
+		    }
+		});
+		// Handler for the action menu next to the select-all checkbox:
+		// Foreign admins do not get a menu, but easier to just hide it.
+		if (isfadmin) {
+		    $('#listview-action-menu').addClass("invisible");
+		}
+		else {
+		    $('#listview-action-menu li a')
+			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
+			    var checked = [];
+
+			    // Get the list of checked nodes.
+			    $('#listview_table [name=select]').each(function() {
+				if ($(this).prop("checked")) {
+				    checked.push($(this).attr("id"));
+				}
+			    });
+			    if (checked.length) {
+				ActionHandler($(e.target).attr("name"),
+					      checked);
+			    }
+			});
+		}
+	    }
 
 	    if (Object.keys(statusblob).length > 1 ||
 		nodecount < MAXJACKSNODES) {
@@ -2234,7 +2450,6 @@ $(function ()
 		else if (changingtopo) {
 		    // When we get first new manifest, clear the viewer palette.
 		    ClearViewer(manifest);
-		    changingtopo = false;
 		}
 		else {
 		    AddToViewer(manifest);
@@ -2243,6 +2458,10 @@ $(function ()
 	    else {
 		$('#quicktabs_ul a[href="#listview"]').tab('show');
 		ShowManifest(manifest);
+	    }
+	    // Clear changingtopo state on first new manifest.
+	    if (changingtopo) {
+		changingtopo = false;
 	    }
 
 	    /*
@@ -2452,7 +2671,7 @@ $(function ()
 	    var itext = $('#instructions_text').html();
 
 	    _.each(json.value, function(plaintext, key) {
-		key = "{" + key + "}";
+		key = new RegExp("{" + key + "}", "g");
 		// replace in the instructions text.
 		itext = itext.replace(key, plaintext);
 	    });
@@ -2465,6 +2684,78 @@ $(function ()
 					    {"uuid"   : uuid,
 					     "blocks" : blocks});
 	xmlthing.done(callback);
+    }
+
+    /*
+     * Add a context menu to the site tags
+     */
+    function SetupSiteContextMenus()
+    {
+	// We do not have Jacks support, so find the site blob labels.
+	var sitetags = {};
+
+	$('g.sitelabelgroup text.sitetext').each(function () {
+	    var tag = $(this).text();
+	    if (tag != "") {
+		sitetags[tag] = $(this);
+	    }
+	});
+	console.info("SetupSiteContextMenus", sitetags);
+	if (!_.size(sitetags)) {
+	    return;
+	}
+	
+	_.each(manifests, function (manifest, urn) {
+	    var nickname = amlist[urn].name;
+
+	    if (_.has(sitetags, nickname)) {
+		var sitetag  = sitetags[nickname];
+
+		$(sitetag).click(function (event) {
+		    SiteContextMenuShow(event, sitetag, urn);
+		});
+	    }
+	});
+    }
+
+    /*
+     * Delete a site.
+     */
+    function DoDeleteSite(urn)
+    {
+	var nickname = amlist[urn].nickname;
+
+	// Handler for hide modal to unbind the click handler.
+	$('#deletesite_modal').one('hidden.bs.modal', function (event) {
+	    $('#deletesite_confirm').unbind("click.deletesite");
+	});
+	
+	// Throw up a confirmation modal, with handler bound to confirm.
+	$('#deletesite_confirm').bind("click.deletesite", function (event) {
+	    sup.HideModal('#deletesite_modal');
+	
+	    var callback = function(json) {
+		console.info(json);
+		sup.HideWaitWait(function () {		
+		    if (json.code) {
+			sup.SpitOops("oops", json.value);
+			return;
+		    }
+		});
+		// Pickup the change before next interval timeout
+		GetStatus();
+	    }
+	    sup.ShowWaitWait("This will take several minutes. " +
+			     "Patience please.");
+	    var xmlthing = sup.CallServerMethod(ajaxurl,
+						"status",
+						"DeleteSite",
+						{"uuid"     : uuid,
+						 "cluster"  : nickname});
+	    xmlthing.done(callback);
+	});
+        $('#error_panel').addClass("hidden");
+	sup.ShowModal('#deletesite_modal');
     }
 
     function ShowProgressModal()
@@ -2646,7 +2937,7 @@ $(function ()
 
 	if (Object.keys(imageablenodes).length == 1) {
 	    // One node, stick that into the first sentence.
-	    var nodename = Object.keys(hostportList)[0];
+	    var nodename = Object.keys(imageablenodes)[0];
 	    $('#snapshot_modal .one-node .node_id')
 		.html(nodename + " (" + imageablenodes[nodename] + ")");
 	    $('#snapshot_modal .choose-node').addClass("hidden");
@@ -2719,7 +3010,6 @@ $(function ()
 	    });
 	    $('#confirm-update-systemimage').click(function() {
 		sup.HideModal('#confirm-update-systemimage-modal');
-		$('#snapshot_update_prepare_option').addClass("hidden");
 		DoSnapshotNodeAux();
 	    });
 	    sup.ShowModal('#confirm-update-systemimage-modal',
@@ -3187,6 +3477,68 @@ $(function ()
 	xmlthing.done(callback);
     }
 
+    //
+    // Node Top. 
+    //
+    function DoTop(client_id)
+    {
+	var callback = function(json) {
+	    console.info(json);
+	    if (json.code) {
+		sup.HideModal('#waitwait-modal', function () {
+		    sup.SpitOops("oops", json.value);
+		});
+		return;
+	    }
+	    sup.HideModal('#waitwait-modal', function () {
+		$('#top-processes-modal pre').text(json.value.result);
+		sup.ShowModal('#top-processes-modal');
+	    });
+	}
+	sup.ShowModal('#waitwait-modal');
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "status", "Top",
+					    {"uuid" : uuid,
+					     "node" : client_id});
+	xmlthing.done(callback);
+    }
+
+    //
+    // Show the powder map in a tab, inside an iframe.
+    //
+    function ShowPowderMapTab()
+    {
+	// Do nothing if already visible.
+	if (!$('#quicktabs_content #powder-map').hasClass("hidden")) {
+	    return;
+	}
+	
+	// Show the tab.
+	$('#quicktabs_ul a[href="#powder-map"]')
+	    .parent().removeClass("hidden");
+	$('#quicktabs_content #powder-map').removeClass("hidden");
+
+	DrawPowderMapTab();
+    }
+    function DrawPowderMapTab()
+    {
+	// Create the powder map iframe inside the tab
+	var iwidth  = "100%";
+	var iheight = 850;
+	var url     = "powder-map.php?embedded=1&experiment=" + uuid;
+		
+	var html = '<iframe id="powder-map_iframe" ' +
+	    'width=' + iwidth + ' ' +
+	    'height=' + iheight + ' ' +
+	    'src=\'' + url + '\'>';
+	    
+	$('#powder-map .powder-mapview').html(html);
+    }
+    function UpdatePowderMap()
+    {
+	$('#powder-map_iframe')[0].contentWindow.PowderMapUpdate();
+    }
+
     var jacksInput;
     var jacksOutput;
     var jacksRspecs;
@@ -3587,14 +3939,11 @@ $(function ()
 	//
 	var spinwidth = null;
 	
-	if (instanceStatus == "staging" ||
-	    instanceStatus == "prestage" ||
-	    instanceStatus == "staged") {
-	    spinwidth = "15";
+	if (instanceStatus == "created") {
+	    spinwidth = "25";
 	}
-	else if (instanceStatus == "created" ||
-	    instanceStatus == "provisioning" ||
-	    instanceStatus == "stitching") {
+	else if (instanceStatus == "provisioning" ||
+		 instanceStatus == "stitching") {
 	    spinwidth = "33";
 	}
 	else if (instanceStatus == "provisioned") {
@@ -3998,6 +4347,84 @@ $(function ()
     {
 	sup.HideModal('#prestage-info-modal');
 	$('#prestage-panel').addClass("hidden");
+    }
+
+    /*
+     * On the Powder Portal, we want a link to the monitoring graph
+     * for nodes marked as a radio (or hosting a radio).
+     */
+    function IsPowderRadio(aggregate_urn, node_id)
+    {
+	if (_.has(radioinfo, aggregate_urn) &&
+	    _.has(radioinfo[aggregate_urn], node_id)) {
+	    return radioinfo[aggregate_urn][node_id];
+	}
+	return null;
+    }
+
+    /*
+     * Create a tab for a monitoring graph
+     */
+    function NewMonitorTab(client_id)
+    {
+	var info = radios[client_id];
+	
+	//
+	// Create the tab. The template inserted into the tab has a defined
+	// height, so do not worry about that here.
+	//
+	var tabname = client_id + "monitor_tab";
+	if (! $("#" + tabname).length) {
+	    // The tab.
+	    var html = "<li><a href='#" + tabname + "' data-toggle='tab'>" +
+		client_id + "-Graph" +
+		"<button class='close' type='button' " +
+		"        id='" + tabname + "_kill'>x</button>" +
+		"</a>" +
+		"</li>";	
+
+	    // Append to end of tabs
+	    $("#quicktabs_ul").append(html);
+
+	    // Install a kill click handler for the X button.
+	    $("#" + tabname + "_kill").click(function(e) {
+		e.preventDefault();
+		// remove the li from the ul. this=ul.li.a.button
+		$(this).parent().parent().remove();
+		// Activate the "profile" tab.
+		$('#quicktabs_ul li a:first').tab('show');
+		// Remove the content div. Have to delay this though.
+		$("#" + tabname).remove();
+	    });
+	    var options = {
+		"url"      : amlist[info.aggregate_urn].weburl,
+		"selector" : "#" + tabname + " .frequency-graph-div",
+		"cluster"  : amlist[info.aggregate_urn].nickname,
+		"node_id"  : info.node_id,
+		"iface"    : "rf0",
+		"logid"    : null,
+		"archived" : false,
+		"baseline" : false,
+	    }
+	    var html = monitorTemplate(options);
+
+	    // The content div.
+	    html = "<div class='tab-pane' id='" + tabname + "'>" +
+		html + "</div>";
+
+	    $("#quicktabs_content").append(html);
+
+	    // And make it active
+	    $('#quicktabs_ul a:last').tab('show') // Select last tab
+
+	    // Now we can create the graph.
+	    ShowFrequencyGraph(options);
+	}
+	else {
+	    // Switch back to it.
+	    $('#quicktabs_ul a[href="#' + tabname + '"]').tab('show');
+	    return;
+	}
     }
 
     // Helper.

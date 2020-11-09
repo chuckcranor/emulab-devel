@@ -23,8 +23,16 @@ $(function ()
             var split   = json.split(':');
             var session = split[0];
     	    var port    = split[1];
+            var url     = baseurl;
 
-            var url   = baseurl + ':' + port + '/' + '#' +
+            if (window.PROXIED) {
+		// mod_proxy/mod_rewrite rule
+		url = url + '/shellinabox/' + port;
+            }
+            else {
+		url = url + ':' + port;
+            }
+            url = url + '/' + '#' +
 		encodeURIComponent(document.location.href) + ',' + session;
             console.log(url);
 

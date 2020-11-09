@@ -333,6 +333,7 @@ $(function () {
 	    "DisableUnsavedWarning"      : DisableUnsavedWarning,
 	    "MarkFormUnsaved"            : MarkFormUnsaved,
 	    "UpdateForm"                 : UpdateForm,
+	    "ClearFormErrors"            : ClearFormErrors,
 	};
     }
 )();

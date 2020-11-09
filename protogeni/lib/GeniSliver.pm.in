@@ -920,7 +920,7 @@ sub AnnotateManifest($)
     if (! defined($services)) {
 	$services = GeniXML::AddElement("services", $rspec);
     }
-    if ($experiment->HasNonLocalUsers()) {
+    if ($experiment->HasNonLocalUsers() && !$node->isblackbox()) {
 	my $login = GeniXML::FindFirst("n:login", $services);
 	while (defined($login)) {
 	    $services->removeChild($login);
@@ -937,6 +937,20 @@ sub AnnotateManifest($)
 	    GeniXML::SetText("username", $login, $localuser->{"login"});
 	}
     }
+    #
+    # Kill the execute/install services, these are not done on Blackbox
+    # nodes so lets reflect that fact.
+    #
+    if ($node->isblackbox()) {
+	my $execute = GeniXML::FindFirst("n:execute", $services);
+	if ($execute) {
+	    $services->removeChild($execute);
+	}
+	my $install = GeniXML::FindFirst("n:install", $services);
+	if ($install) {
+	    $services->removeChild($install);
+	}
+    }
     my $tipserver = undef;
     #
     # The tipline for a virtual node will not exist till its booted,
@@ -945,7 +959,7 @@ sub AnnotateManifest($)
     # one, expecting it to be available by the time the user might
     # want to use it.
     #
-    if (!$node->IsTainted()) {
+    if (!$node->IsTainted() || $node->TaintIs(TB_TAINTSTATE_MUSTRELOAD())) {
 	if ($node->TipServer(\$tipserver) == 0 && defined($tipserver) ||
 	    $node->isvirtnode()) {
 	    my $console = GeniXML::FindNodesNS("n:console", $services,
@@ -975,6 +989,24 @@ sub AnnotateManifest($)
 	    }
 	}
     }
+    #
+    # Can a physical node be power cycled
+    #
+    if (!$node->isvirtnode()) {
+	my $powercycle = GeniXML::FindNodesNS("n:powercycle", $services,
+					      $GeniXML::EMULAB_NS)->pop();
+	if ($node->HasOutlet()) {
+	    if (!defined($powercycle)) {
+		$powercycle = GeniXML::AddElement("powercycle",
+					$services, $GeniXML::EMULAB_NS);
+	    }
+	    GeniXML::SetText("available", $powercycle, "true");
+	}
+	elsif (defined($powercycle)) {
+	    $services->removeChild($powercycle);
+	}
+    }
+    
     # Always add this.
     my $imageable = GeniXML::FindNodesNS("n:imageable", $services,
 					 $GeniXML::EMULAB_NS)->pop();
@@ -983,7 +1015,8 @@ sub AnnotateManifest($)
 					 $services, $GeniXML::EMULAB_NS);
     }
     # The imageable test does not generally work for virtnodes.
-    if (($node->isvirtnode() || $node->imageable()) && !$node->IsTainted()) {
+    if (($node->isvirtnode() || $node->imageable()) &&
+	(!$node->IsTainted() || $node->TaintIs(TB_TAINTSTATE_MUSTRELOAD()))) {
 	GeniXML::SetText("available", $imageable, "true");
     }
     else {
@@ -1357,13 +1390,20 @@ sub Reload($$)
     return $self->Action($version, "reload");
 }
 
+sub PowerCycle($$)
+{
+    my ($self, $version) = @_;
+
+    return $self->Action($version, "powercycle");
+}
+
 #
 # Start, Restart, and Reload.
 #
 sub Action($$$)
 {
     my ($self, $version, $action) = @_;
-    my $restart = ($action eq "restart" ? 1 : 0);
+    my $restart = ($action eq "restart" || $action eq "powercycle" ? 1 : 0);
     my $reload  = ($action eq "reload" ? 1 : 0);
 
     return -1
@@ -1418,7 +1458,9 @@ sub Action($$$)
 		system("$POWER on $node_id");
 	    }
 	    elsif ($restart) {
-		system("$NODEREBOOT $node_id");
+		my $opt = ($action eq "powercycle" ? "-f" : "");
+		
+		system("$NODEREBOOT $opt $node_id");
 	    }
 	}
 	return -1
@@ -1726,11 +1768,7 @@ sub GenerateStatusBlob($)
 	if ($state eq "new");
 
     # See if booted into the recovery MFS (not admin or frisbee).
-    my $recovery = 0;
-    if ($node->recoverymfs_osid() && $node->temp_boot_osid() &&
-	$node->recoverymfs_osid() == $node->temp_boot_osid()) {
-	$recovery = 1;
-    }
+    my $recovery = $node->InRecovery();
 
     #
     # So we have a bunch of timestamps for various bits of state.
@@ -1778,6 +1816,22 @@ sub GenerateStatusBlob($)
 	}
     }
     return $blob;
+}
+
+#
+# Is the sliver (node) in recovery mode.
+#
+sub InRecovery($)
+{
+    my ($self) = @_;
+    my $resource_id = $self->resource_id();
+
+    my $node = Node->LookupSync($resource_id);
+    if (!defined($node)) {
+	print STDERR "Could not map node $resource_id to its object\n";
+	return 1;
+    }
+    return $node->InRecovery();
 }
 
 ##########################################################################

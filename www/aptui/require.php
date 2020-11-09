@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -218,6 +218,23 @@ function REQUIRE_MOMENT()
   AddLibrary("js/lib/moment.js");
 }
 
+function REQUIRE_TABLESORTER($extras = null)
+{
+    echo "<link rel='stylesheet'
+                href='css/tablesorter-bootstrap_3.css'>\n";
+    
+  AddLibrary("js/lib/tablesorter/jquery.tablesorter.min.js");
+  AddLibrary("js/lib/tablesorter/jquery.tablesorter.widgets.js");
+  AddLibrary("js/lib/sugar.min.js");
+  AddLibrary("js/lib/tablesorter/parsers/parser-date.js");
+  AddLibrary("js/lib/tablesorter/widgets/widget-math.js");
+  if ($extras) {
+      foreach ($extras as $extra) {
+          AddLibrary($extra);
+      }
+  }
+}
+
 function REQUIRE_OPENSTACKGRAPHS()
 {
   REQUIRE_UNDERSCORE();
@@ -241,7 +258,6 @@ function REQUIRE_SUP()
 {
   REQUIRE_DATEFORMAT();
   REQUIRE_MARKED();
-  REQUIRE_JACKS();
   AddLibrary("js/quickvm_sup.js");
 }
 
@@ -281,10 +297,10 @@ function REQUIRE_GENILIB_EDITOR()
 
 function SPITREQUIRE($main, $extras = "")
 {
-    global $spatrequired, $PORTAL_LIBRARIES;
+    global $spatrequired, $PORTAL_LIBRARIES, $APTBASE;
     
     echo $extras;
-    echo "<script src='js/lib/bootstrap.js'></script>\n";
+    echo "<script src='$APTBASE/js/lib/bootstrap.js'></script>\n";
     AddLibrary($main);
     EchoLibraryList($PORTAL_LIBRARIES);
     $spatrequired = 1;
@@ -292,8 +308,10 @@ function SPITREQUIRE($main, $extras = "")
 
 function SPITNULLREQUIRE()
 {
-    REQUIRE_SUP();
-    SPITREQUIRE("js/main.js");
+    global $APTBASE;
+    
+    AddLibrary("$APTBASE/js/quickvm_sup.js");
+    SPITREQUIRE("$APTBASE/js/main.js");
 }
 
 function SPITREQUIRE_DATASET()

@@ -6,8 +6,8 @@
      margin: 1px;
  }
  .resgraph-size {
-     max-height:500px;
-     height:500px;
+     max-height:475px;
+     height:475px;
  }
  .counts-size {
      max-height:475px;
@@ -15,37 +15,103 @@
  }
 </style>
 <div>
-  <% _.each(amlist, function(details, urn) { %>
-    <% if (details.isFE) { return; } %>
-    <div class='row' id='<%- details.nickname %>'>
-      <div class='col-sm-2 counts-panel'>
+  <% if (window.ISPOWDER) { %>
+    <div class='row' id='powder-radios'>
+      <div class='col-sm-3 counts-panel'>
 	<!-- Template goes here -->	    
       </div>
-      <% if (window.ISPOWDER && details.radiotypes) { %>
-	<div class='col-sm-5 resgraph-panel-radios'
-	     style="padding: 0px;">
-	  <!-- Template goes here -->	    
+      <div class='col-sm-9'>
+	<div class="panel panel-default">
+	  <div class='panel-heading'>
+	    <center>
+              <h3 class='panel-title'>Powder Radio Availability</h3>
+	    </center>
+	  </div>
+	  <div class='panel-body visavail' style="padding: 2px;"
+	       id="radio-graph-body">
+	    <div id="radio-graph-visavail"></div>
+	  </div>
 	</div>
-	<div class='col-sm-5 resgraph-panel-servers'
-	     style="padding: 0px;">
-	  <!-- Template goes here -->	    
+      </div>
+    </div>
+    <div class='row' id='powder-servers'>
+      <div class='col-sm-3 counts-panel'>
+	<!-- Template goes here -->	    
+      </div>
+      <div class='col-sm-9 resgraph-panel'>
+	<!-- Template goes here -->	    
+      </div>
+    </div>
+    <div class='row' id='powder-matrix'>
+      <div class='col-sm-3 counts-panel'>
+	<!-- Template goes here -->	    
+      </div>
+      <div class='col-sm-9'>
+	<div class="panel panel-default">
+	  <div class='panel-heading'
+	       style="padding-top: 5px; padding-bottom: 5px;">
+	    <center>
+              <h3 class='panel-title'>PhantomNet RF Attenuator Matrix</h3>
+	      <div>
+		<a href="#"
+		   data-target='#matric-connections-modal'
+		   data-toggle='modal'>
+		  <span class=small>Matrix Connections</a>
+		  </span>
+	      </div>
+	    </center>
+	  </div>
+	  <div class='panel-body visavail' style="padding: 2px;"
+	       id="matrix-graph-body">
+	    <div id="matrix-graph-visavail"></div>
+	  </div>
 	</div>
-      <% } else { %>
-	<div class='col-sm-10 resgraph-panel-servers'>
-	  <!-- Template goes here -->	    
+      </div>
+    </div>
+    <div class='row hidden' id='fixed-endpoints'>
+      <div class='col-sm-3 counts-panel'>
+	<!-- Template goes here -->	    
+      </div>
+      <div class='col-sm-9'>
+	<div class="panel panel-default">
+	  <div class='panel-heading'>
+	    <center>
+              <h3 class='panel-title'>Fixed Endpoint Availability</h3>
+	    </center>
+	  </div>
+	  <div class='panel-body visavail' style="padding: 2px;"
+	       id="FE-graph-body">
+	    <div id="FE-graph-visavail"></div>
+	  </div>
 	</div>
-      <% } %>
+      </div>
     </div>
-  <% }) %>
-  <div class='row hidden' id='fixed-endpoints'>
-    <div class='col-sm-2 counts-panel'>
-      <!-- Template goes here -->	    
+  <% } %>
+  <% Object.keys(amlist)
+         .sort(function (a, b) {
+	   var nicka = amlist[a].nickname;
+	   var nickb = amlist[b].nickname;
+
+	   return (nicka > nickb ? 1 : (nickb > nicka ? -1 : 0));
+	 })
+         .forEach(function(urn, index) {
+	   var details = amlist[urn];
+
+	   if (window.ISPOWDER &&
+             (details.isFE || details.nickname == "Emulab")) { return; }
+  %>
+    <div class='row' id='<%- details.nickname %>'>
+      <div class='col-sm-3 counts-panel'>
+	<!-- Template goes here -->	    
+      </div>
+      <div class='col-sm-9 resgraph-panel'>
+	<!-- Template goes here -->	    
+      </div>
     </div>
-    <div class='col-sm-10 resgraph-panel-servers'>
-      <!-- Template goes here -->	    
-    </div>
-  </div>
-  <div class='row col-xs-6 col-xs-offset-3 hidden' id='range-list'></div>
+  <% }); %>
+  <% if (window.ISPOWDER) { %>
+    <div class='row col-xs-6 col-xs-offset-3 hidden' id='range-list'></div>
+  <% } %>
   <div id='waitwait_div'></div>
   <div id='oops_div'></div>
 </div>
@@ -81,6 +147,44 @@
 	      <a href="reserve.php">reservation</a> page.
 	  </ul>
 	</p>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- PhantomNet Matrix Connections -->
+<div id='matric-connections-modal' class='modal fade'>
+  <div class='modal-dialog modal-sm'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+	<button type="button" class="close" data-dismiss="modal"
+	  <span aria-hidden="true">&times;</span></button>	
+	<center>
+	  <small>
+	    <table class="table table-bordered table-condensed">
+	      <thead>
+		<tr>
+		  <th>Node ID1</th>
+		  <th>Node ID2</th>
+		</tr>
+	      </thead>
+	      <tbody>
+		<% var wires = {}; %>
+		<% _.each(matrixinfo, function(details, node_id1) { %>
+		  <% _.each(details.wires, function(node_id2) { %>
+		    <% if (!_.has(wires, node_id1 + ":" + node_id2) &&
+		      !_.has(wires, node_id2 + ":" + node_id1)) { %>
+		      <tr>
+			<td><%- node_id1 %></td>
+			<td><%- node_id2 %></td>
+		      </tr>
+		      <% wires[node_id2 + ":" + node_id1] = 1;
+		         wires[node_id1 + ":" + node_id2] = 1; } %>
+		    <% }) %>
+		  <% }) %>
+	      </tbody>
+	    </table>
+	  </small>
+	</center>
       </div>
     </div>
   </div>

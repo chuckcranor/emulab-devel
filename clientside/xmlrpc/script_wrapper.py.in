@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 #
-# Copyright (c) 2004-2019 University of Utah and the Flux Group.
+# Copyright (c) 2004-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -144,6 +144,8 @@ API = {
                             "help" : "Terminate an experiment" },
     "expinfo"           : { "func" : "expinfo",
                             "help" : "Get information about an experiment" },
+    "imageinfo"         : { "func" : "imageinfo",
+                            "help" : "Get information about an image" },
     "tbuisp"            : { "func" : "tbuisp",
                             "help" : "Upload code to a mote" },
     "expwait"           : { "func" : "expwait",
@@ -184,8 +186,12 @@ API = {
                             "help" : "Start a Portal experiment" },
     "terminateExperiment" : { "func" : "terminateExperiment",
                               "help" : "Terminate a Portal experiment" },
+    "extendExperiment"  : { "func" : "extendExperiment",
+                              "help" : "Extend a Portal experiment" },
     "experimentStatus"  : { "func" : "experimentStatus",
                             "help" : "Get status for a Portal experiment" },
+    "experimentManifests" : { "func" : "experimentManifests",
+                            "help" : "Get manifests for a Portal experiment" },
 };
 
 #
@@ -238,6 +244,10 @@ def do_method(module, method, params):
     URI = "https://" + xmlrpc_server + ":" + str(xmlrpc_port) + SERVER_PATH
 
     ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+    try:
+        ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
+    except:
+        pass
     ctx.load_cert_chain(certificate)
     if not verify:
         ctx.check_hostname = False
@@ -1751,6 +1761,64 @@ class expinfo:
         return
     pass
 
+#
+# imageinfo
+#
+class imageinfo:
+    def __init__(self, argv=None):
+        self.argv = argv;
+        return
+
+    def apply(self):
+        try:
+            opts, req_args = getopt.getopt(self.argv, "", [ "help" ]);
+            pass
+        except getopt.error, e:
+            print e.args[0]
+            self.usage();
+            return -1;
+
+        params = {};
+        for opt, val in opts:
+            if opt in ("-h", "--help"):
+                self.usage()
+                return 0
+            elif opt == "-i":
+                pid,eid = string.split(val, ",")
+                params["proj"] = pid;
+                params["imagename"]  = eid;
+                pass
+            pass
+
+        #
+        # The point is to allow backwards compatable pid imagename
+        # arguments, but move to the better -i pid,imagename format
+        # eventually.
+        #
+        if not params.has_key("proj"):
+            if len(req_args) != 2:
+                self.usage();
+                return -1;
+            
+            params["proj"]  = req_args[0];
+            params["imagename"]  = req_args[1];
+            pass
+        elif len(req_args) or len(show) == 0:
+            self.usage();
+            return -1;
+
+        rval,response = do_method("imageid", "info", params);
+        return rval;
+
+    def usage(self):
+	print "expinfo -i pid,imagename";
+	print "expinfo pid imagename";
+	print "where:";
+ 	print "     -i   - Project and Image ID";
+        wrapperoptions();
+        return
+    pass
+
 class tbuisp:
     def __init__(self, argv=None):
         self.argv = argv
@@ -2983,16 +3051,17 @@ class startExperiment:
 
     def apply(self):
         try:
-            opts, req_args = getopt.getopt(self.argv, "a:p:",
+            opts, req_args = getopt.getopt(self.argv, "a:p:Ps",
                                            [ "help", "name=", "duration=",
                                              "project=", "site=", "start=",
+                                             "bindings=",
                                              "stop=", "paramset=", "refspec="]);
             pass
         except getopt.error, e:
             print e.args[0]
             self.usage();
             return -1;
-        
+
         params = {};
         for opt, val in opts:
             if opt in ("-h", "--help"):
@@ -3001,13 +3070,19 @@ class startExperiment:
             elif opt == "-a":
                 params["aggregate"] = val
                 pass
+            elif opt == "-P":
+                params["nopending"] = 1
+                pass
+            elif opt == "-s":
+                params["noemail"] = 1
+                pass
             elif opt == "--name":
                 params["name"] = val;
                 pass
             elif opt == "--duration":
                 params["duration"] = val;
                 pass
-            if opt in ("-p", "--project"):
+            elif opt in ("-p", "--project"):
                 params["proj"] = val;
                 pass
             elif opt == "--start":
@@ -3018,6 +3093,9 @@ class startExperiment:
                 pass
             elif opt == "--paramset":
                 params["paramset"] = val;
+                pass
+            elif opt == "--bindings":
+                params["bindings"] = val;
                 pass
             elif opt == "--refspec":
                 params["refspec"] = val;
@@ -3042,14 +3120,16 @@ class startExperiment:
         print "where:"
         print " -d           - Turn on debugging (run in foreground)"
         print " -w           - Wait mode (wait for experiment to start)"
+        print " -s           - Do not send status email"
+        print " -P           - Do not pend deferrable aggregates"
         print " -a urn       - Override default aggregate URN"
-        print " --project    - pid[,gid]: project[,group] for new experiment"
         print " --project    - pid[,gid]: project[,group] for new experiment"
         print " --name       - Optional pithy name for experiment"
         print " --duration   - Number of hours for initial expiration"
         print " --start      - Schedule experiment to start at (unix) time"
         print " --stop       - Schedule experiment to stop at (unix) time"
         print " --paramset   - uid,name of a parameter set to apply"
+        print " --bindings   - json string of bindings to apply to parameters"
         print " --refspec    - refspec[:hash] of a repo based profile to use"
         print " --site       - Bind sites used in the profile"
         print "profile       - Either UUID or pid,name"
@@ -3099,9 +3179,111 @@ class terminateExperiment:
     pass
 
 #
+# Extend a portal experiment
+#
+class extendExperiment:
+    def __init__(self, argv=None):
+        self.argv = argv;
+        return
+
+    def apply(self):
+        try:
+            opts, req_args = getopt.getopt(self.argv, "hm:f:", [ "help"]);
+            pass
+        except getopt.error, e:
+            print e.args[0]
+            self.usage();
+            return -1;
+
+        reason = ""
+        params = {}
+        for opt, val in opts:
+            if opt in ("-h", "--help"):
+                self.usage()
+                return 0
+            elif opt == "-m":
+                reason = val
+                pass
+            elif opt == "-f":
+                try:
+                    reason = open(val).read();
+                    pass
+                except:
+                    print "Could not open file: " + val;
+                    return -1;
+            pass
+
+        # Do this after so --help is seen.
+        if len(req_args) != 2:
+            self.usage();
+            return -1;
+
+        params["experiment"] = req_args[0]
+        params["wanted"]     = req_args[1]
+        params["reason"]     = reason
+        rval,response = do_method("portal", "extendExperiment", params)
+        return rval
+
+    def usage(self):
+        print "Usage: extendExperiment <optons> <experiment> <hours>"
+        print "where:"
+        print " -m str        - Your reason for the extension (a string)"
+        print " -f file       - A file containing your reason"
+        print "experiment     - Either UUID or pid,name"
+        print "hours          - Number of hours to extend"
+        wrapperoptions();
+        return
+    pass
+
+#
 # Get status for a portal experiment
 #
 class experimentStatus:
+    def __init__(self, argv=None):
+        self.argv = argv;
+        return
+
+    def apply(self):
+        try:
+            opts, req_args = getopt.getopt(self.argv, "hj", [ "help"]);
+            pass
+        except getopt.error, e:
+            print e.args[0]
+            self.usage();
+            return -1;
+        
+        params = {};
+        for opt, val in opts:
+            if opt in ("-h", "--help"):
+                self.usage()
+                return 0
+            elif opt == "-j":
+                params["asjson"] = 1
+                pass
+            pass
+
+        # Do this after so --help is seen.
+        if len(req_args) != 1:
+            self.usage();
+            return -1;
+
+        params["experiment"] = req_args[0]
+        rval,response = do_method("portal", "experimentStatus", params)
+        return rval
+
+    def usage(self):
+        print "Usage: experimentStatus <optons> <experiment>"
+        print "where:"
+        print " -j            - json string instead of text"
+        print "experiment     - Either UUID or pid,name"
+        wrapperoptions();
+        return
+    pass
+
+#
+# Get manifests for a portal experiment
+#
+class experimentManifests:
     def __init__(self, argv=None):
         self.argv = argv;
         return
@@ -3128,11 +3310,11 @@ class experimentStatus:
             return -1;
 
         params["experiment"] = req_args[0]
-        rval,response = do_method("portal", "experimentStatus", params)
+        rval,response = do_method("portal", "experimentManifests", params)
         return rval
 
     def usage(self):
-        print "Usage: terminateExperiment <optons> <experiment>"
+        print "Usage: experimentManifests <optons> <experiment>"
         print "where:"
         print "experiment     - Either UUID or pid,name"
         wrapperoptions();

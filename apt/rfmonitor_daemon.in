@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -68,9 +68,13 @@ my $OURDOMAIN        = "@OURDOMAIN@";
 my $TBBASE           = "@TBBASE@";
 my $MAINSITE         = @TBMAINSITE@;
 my $POWDER_RFMONITOR = @POWDER_RFMONITOR@;
+my $POWDER_NICKNAME  = "@POWDER_NICKNAME@";
 my $PGENISUPPORT     = @PROTOGENI_SUPPORT@;
 my $LOGFILE          = "$TB/log/rfmonitor_daemon.log";
+my $RAWDATADIR       = "$TB/www/rfmonitor";
 my $POWER            = "$TB/bin/power";
+my $GZIP             = "/usr/bin/gzip";
+my $FIND             = "/usr/bin/find";
 my $FORMAT           = "portid,timestamp,frequency,power";
 my $MAILDELAY        = 3600;
 
@@ -86,7 +90,36 @@ sub ShouldNotify($$);
 sub NodeNotified($$$);
 sub HandleChild($);
 sub LoadNodeData($);
-sub HandleViolations($$);
+sub HandleViolations($$$);
+sub WriteRawData($$$);
+
+#
+# Explanatory text.
+#
+my $explain = 
+    "Our monitoring has detected transmissions from a radio in your\n ".
+    "experiment that are above our 'noise floor' threshold.  These may be a\n".
+    "direct result of signals you are transmitting, including:\n".
+    "\n".
+    " * Signal extending beyond the low or high ends of your experiment's\n".
+    "   allocated/declared spectrum.\n".
+    " * Spurious emissions introduced in the analog transmission path\n".
+    "   (harmonics, inter-modulation products, etc.)\n".
+    " * Intentional or accidental transmission in spectrum you do not have\n".
+    "   allocated.\n".
+    "\n".
+    "Other things outside of your control that may trigger the monitor ".
+    "include:\n".
+    "\n".
+    " * Errant detection\n".
+    " * Third-party signals\n".
+    "\n".
+    "As we are still tuning our monitoring system, we will not automatically\n".
+    "halt your transmissions.  Please stop your transmitters and reconfigure\n".
+    "them to avoid the violations if they appear related to what you are\n".
+    "doing. Email support\@powderwireless.net if you are unsure of how to\n".
+    "proceed, or if you think this detection is in error.\n";
+
 #
 # Turn off line buffering on output
 #
@@ -264,6 +297,8 @@ sub HandleChild($)
     my $nextdata   = {};
     my $noisefloor = $NOISEFLOOR;
     my @dbinserts  = ();
+    my %csvdata    = ();
+    my $filestamp  = time();
 
     # Add a DB insert to the list of violations to store in the DB.
     my $addInsert = sub {
@@ -392,12 +427,23 @@ sub HandleChild($)
 	my $power     = $measurement->{"power"} + 0.0;
 	my $timestamp = $measurement->{"timestamp"};
 	my $key       = "${nodeid}:${iface}:${frequency}";
-	
+
 	my $node = Node->Lookup($nodeid);
 	if (!$node) {
 	    print STDERR "No such node $nodeid\n";
 	    next;
 	}
+	#print "$nodeid:$iface: $frequency,$power\n";
+
+	#
+	# Raw data is going to go into a csv file for graphing.
+	# We assume already sorted (by frequency) data.
+	#
+	if (!exists($csvdata{"${nodeid}:${iface}"})) {
+	    $csvdata{"${nodeid}:${iface}"} = [];
+	}
+	push(@{ $csvdata{"${nodeid}:${iface}"} }, [$frequency, $power]);
+	
 	#
 	# This is bogus, I was expecting the monitor to only send me
 	# messages for actual transmission, not 1000s of lines. So I
@@ -423,13 +469,23 @@ sub HandleChild($)
 		print "$nodeid was just powered off, ignoring this report.\n";
 		next;
 	    }
+	    # This will not be archived. 
+	    my $graphurl = "https://www.powderwireless.net" .
+		"/frequency-graph.php?node_id=$nodeid&iface=$iface" .
+		"&cluster=${POWDER_NICKNAME}&logid=$filestamp";
+
 	    my $mesg =
 		"$nodeid is supposed to be powered off but is still ".
 		"transmitting on $iface.\n" .
-		"Frequency:" . $frequency . "MHZ, ".
-		"Power:" . $power . "dB";
+		"Frequency:" . sprintf("%.3f", $frequency) . "MHZ, ".
+		"Power:" . sprintf("%.3f", $power) . "dB" . "\n\n".
+		"Monitor Graph:\n" . $graphurl . "\n";
+
 	    print "$mesg\n";
-	    NodeNotify($nodeid, "system", $mesg);
+	    #
+	    # Do not notify, no one is paying any attention anyway.
+	    #
+	    #NodeNotify($nodeid, "system", $mesg);
 	    next;
 	}
 	
@@ -514,8 +570,16 @@ sub HandleChild($)
 	    $nextdata->{$key} = $measurement;		    
 	}
     }
+    #
+    # Write the raw data file(s)
+    #
+    WriteRawData(\%csvdata, $filestamp, scalar(keys(%violaters)));
+
+    #
+    # We send links to the data and the graph page in the email.
+    #
     if (keys(%violaters)) {
-	HandleViolations(\%violaters, \%rflimits);
+	HandleViolations(\%violaters, \%rflimits, $filestamp);
     }
     if (@dbinserts) {
 	my $query = "insert into node_rf_violations ".
@@ -585,15 +649,15 @@ sub LoadNodeData($)
 # List of nodes, and interfaces that are in violation. We want to generate
 # an informative email message and turn off the nodes.
 #
-sub HandleViolations($$)
+sub HandleViolations($$$)
 {
-    my ($violations, $rflimits) = @_;
+    my ($violations, $rflimits, $filestamp) = @_;
 
     #
     # Simple, send a message per node.
     #
     foreach my $nodeid (keys(%{$violations})) {
-	my ($TO, $subject, $body, $portalurl, $rfurl);
+	my ($TO, $subject, $body, $portalurl, $rfurl, $graphurl);
 	my $forcemail = 0;
 	my $headers;
 
@@ -639,7 +703,12 @@ sub HandleViolations($$)
 	    $TO = $TBRFOPS;
 	}
 	$subject = "Transmit frequency/power violations on $nodeid";
-	$body    = "Transmit violations on ${nodeid}\@${OURDOMAIN}:\n\n";
+	$body    = "Transmit violations on ${nodeid}\@${OURDOMAIN}!\n\n";
+
+	# Help user to understand why they got the message.
+	if ($node->IsReserved()) {
+	    $body .= $explain . "\n";
+	}
 
 	foreach my $iface (keys(%{$violations->{$nodeid}})) {
 	    if (!exists($rflimits->{$nodeid}->{$iface})) {
@@ -660,7 +729,6 @@ sub HandleViolations($$)
 			"max power $power dB\n";
 		}
 	    }
-	    $body .= "\n";
 	    $body .= " Violations:\n";
 	    
 	    foreach my $measurement (@{$violations->{$nodeid}->{$iface}}) {
@@ -674,19 +742,27 @@ sub HandleViolations($$)
 		    if ($measurement->{'repeatcount'} == 1);
 	    }
 	    $body .= "\n";
+	    #
+	    # This will need to change when there is more then one TX
+	    # iface per node.
+	    #
+	    $graphurl = "https://www.powderwireless.net" .
+		"/frequency-graph.php?node_id=$nodeid&iface=$iface" .
+		"&cluster=${POWDER_NICKNAME}&logid=$filestamp&archived=1";
 	}
 	if (!$mailonly) {
 	    $body .= "\n" . "This node will be immediately powered off!\n";
 	}
 	# Link to the violation history page.
 	if ($MAINSITE) {
-	    my $brand = Brand->Lookup("powder");
+	    my $brand = Brand->Create("powder");
 	    $rfurl = $brand->wwwBase() .
 		"/show-rfviolations.php?node_id=$nodeid";
 	}
 	else {
 	    $rfurl = "$TBBASE/portal/show-rfviolations.php?node_id=$nodeid";
 	}
+	$body .= "\n" . "Monitor Graph:\n" . $graphurl . "\n";
 	$body .= "\n" . "Violation History:\n" . $rfurl . "\n";
 	
 	if ($portalurl) {
@@ -771,6 +847,82 @@ sub NodeNotify($$$)
 	     "BCC: $TBRFOPS");
     
     NodeNotified($nodeid, $which, $mesg);
+}
+
+#
+# Write RAW data to CSV files in /usr/testbed/www
+#
+sub WriteRawData($$$)
+{
+    my ($data, $filestamp, $violations) = @_;
+
+    foreach my $portid (keys(%{$data})) {
+	my @samples   = @{$data->{$portid}};
+	my $filename  = "${portid}-${filestamp}.csv";	
+	my $tmpname   = "$RAWDATADIR/${portid}.tmp";
+	my $csvname   = "$RAWDATADIR/${portid}.csv";
+	my $gzsymlink = "$RAWDATADIR/${portid}.csv.gz";
+	my ($gzipname);
+	#
+	# When there are violations, we archive the raw data for longer
+	# in the archive directory, and the symlink points there instead.
+	#
+	if ($violations) {
+	    $gzipname  = "$RAWDATADIR/archive/${filename}.gz";
+	}
+	else {
+	    $gzipname  = "$RAWDATADIR/${filename}.gz";
+	}
+
+	#
+	# Prune historical data older then 24 hours.
+	# Prune archived data older then 1 week.
+	#
+	system("$FIND -E $RAWDATADIR -regex '^.*\-[0-9]+\.csv\.gz\$' ".
+	       "-mtime +24h -depth 1 -print " . ($impotent ? "" : "-delete"));
+	system("$FIND $RAWDATADIR/archive -type f -mtime +7 -print ".
+	       ($impotent ? "" : "-delete"));
+
+	if (open(CSV, "> $tmpname")) {
+	    print CSV "frequency,power\n";
+	    
+	    foreach my $ref (@samples) {
+		my ($freq, $power) = @$ref;
+		$freq  = sprintf("%.3f", $freq);
+		$power = sprintf("%.3f", $power);
+		
+		print CSV "$freq,$power\n";
+	    }
+	    if (close(CSV)) {
+		system("$GZIP -c $tmpname > $gzipname");
+		if ($?) {
+		    print STDERR "Could not gzip $tmpname\n";
+		    return -1;
+		}
+		if (!rename($tmpname, $csvname)) {
+		    print STDERR "Could not rename new CSV file: $!\n";
+		    return -1;
+		}
+		# A violation, symlink into the
+		if ($violations &&
+		    system("/bin/ln -sf archive/${filename}.gz ".
+			   "                  $RAWDATADIR/${filename}.gz")) {
+		    print STDERR "Could not create archive symlink\n";
+		    return -1;
+		}
+		if (system("/bin/ln -sf ${filename}.gz $gzsymlink")) {
+		    print STDERR "Could not update $gzsymlink\n";
+		    return -1;
+		}
+	    }
+	    else {
+		print STDERR "Could not close new CSV file $tmpname: $!\n";
+	    }
+	}
+	else {
+	    print STDERR "Could not open new CSV file $tmpname: $!\n";
+	}
+    }
 }
 
 sub fatal($)

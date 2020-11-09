@@ -53,6 +53,24 @@ $(function ()
 	    $('#renderer_modal_div').html(marked(text));
 	    sup.ShowModal("#renderer_modal");
 	});
+
+	/*
+	 * Handler for updates to the example portals field, on the
+	 * the Mothership, where we have multiple portals.
+	 */
+	if (window.MAINSITE) {
+	    $('#edit-news-form .portals_checkbox').click(function(event) {
+		var portals =
+		    $('.portals_checkbox:checked')
+		        .map(function() {
+			    return $(this).data("portal");
+			})
+		        .get()
+		        .join();
+		
+		$('#edit-news-form [name=portals]').val(portals);
+	    });
+	}
 	
 	//
 	// Handle submit button.

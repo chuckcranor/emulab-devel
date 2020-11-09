@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1180,6 +1180,8 @@ sub handleCtrlEvent($$) {
 		notify("$node/$event: Could not clear next_boot_path!\n");
 	    }
 	    my ($bosid,$bopmode) = TBBootWhat($node, 0);
+	    $bosid = "UNDEF" if (!defined($bosid));
+	    $bopmode = "UNDEF" if (!defined($bopmode));
 	    info("$node: $TBRESET done, bootwhat returns $bopmode,$bosid\n");
 	    last;
 	};
@@ -1197,6 +1199,7 @@ sub handleCtrlEvent($$) {
 		if (defined($reserved_pid)) {
 		    info("$node: Setting pre reserve to $reserved_pid\n");
 		}
+		$nodeobj->SetAllocState(TBDB_ALLOCSTATE_FREE_CLEAN);
 		$nodeobj->ClearReservation();
 		$nodeobj->SetNodeHistory(TB_NODEHISTORY_OP_FREE,
 					 undef, $experiment);
@@ -1205,9 +1208,18 @@ sub handleCtrlEvent($$) {
 		$nodeobj->SyncDiskPartitionTaintStates();
 	    }
 	    if ($event eq $TBRELOADDONEV2) {
-		info("$node: Sending apod\n");
-		if ($nodeobj->SendApod(1)) {
-		    notify("Could not apod $node after $TBRELOADDONEV2!\n");
+		if (!$nodeobj->powercycleafterreload()) {
+		    info("$node: Sending apod\n");
+		    if ($nodeobj->SendApod(1)) {
+			notify("Could not apod $node after $TBRELOADDONEV2!\n");
+		    }
+		}
+		else {
+		    info("$node: power cycling\n");
+		    my $cmd = "$power -e cycle $node";
+		    system($cmd) and
+			notify("Could not power cycle".
+			       " $node after $TBRELOADDONEV2!\n");
 		}
 	    }
 	    last;
@@ -1282,7 +1294,12 @@ sub handleCtrlEvent($$) {
 
 	    foreach ($action) {
 		/^$TBTIMEOUTREBOOT/ && do {
-		    if ($timedout>3) {
+		    my $noreboot;
+		    if (!$nodeobj->NodeAttribute("stated_noreboot", \$noreboot)
+			&& $noreboot) {
+			info("Node $node: Ignoring timeout reboot as directed\n");
+		    }
+		    elsif ($timedout>3) {
 			# We've tried too many times...
 			notify("Node $node has timed out too many times!\n".
 			       "Giving up until it boots sucessfully.\n");

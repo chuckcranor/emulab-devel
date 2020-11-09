@@ -10,7 +10,7 @@ $TTL	30
 				900       ; Retry
 				3600000   ; Expire
 				1 )       ; No caching for negative answers
-	IN	NS	ns.@OURDOMAIN@.
+%primaries%
 %secondaries%
 
 $TTL	30
@@ -18,7 +18,7 @@ $TTL	30
 
 ; '@OURDOMAIN@' is implied in the line below
 		IN	A		%bossnode_ip%
-		IN	MX 10	ops
+%bossnode_mx%
 
 ; Apparently, CNAME NS records are a bad idea - so, ns.emulab.net
 ; and boss are both A records
@@ -30,10 +30,8 @@ www		IN	CNAME   boss
 db		IN	CNAME	boss
 cvsup		IN	CNAME	boss
 
-; Ops and names it is otherwise known as...
+; Ops and names it is otherwise known as... 
 %usernode_ina%
-event-server	IN	CNAME	ops
-wiki		IN	CNAME	ops
 
 ; Fs (may just be a CNAME for ops)
 %fsnode_ina%

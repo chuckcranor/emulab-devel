@@ -1,8 +1,14 @@
 #!/bin/sh
 
+#
+# capture needs the network (NETWORKING) for IPMI based captures.
+# It also needs the capserver running (testbed) on a boss node.
+# We start it up before apache so that we are capturing before
+# users can use the web-based console.
+#
 # PROVIDE: capture
-# REQUIRE: DAEMON testbed
-# BEFORE: LOGIN
+# REQUIRE: NETWORKING testbed
+# BEFORE: apache24
 # KEYWORD: shutdown
 
 #
@@ -22,7 +28,7 @@
 
 bindir=@prefix@/sbin
 if [ ! -x $bindir/capture ]; then
-    echo "*** capture.sh: $bindir/capture not installed"
+    echo "*** capture: $bindir/capture not installed"
     exit 1
 fi
 
@@ -42,6 +48,24 @@ stop|faststop|quietstop|onestop|forcestop)
     exit 1
     ;;
 esac
+
+#
+# If this is the boss node, make sure capserver is running or you could be
+# in for a lot of pain. If you have 500+ captures all (re)trying to contact
+# the capserver periodically, you will be hating life during boot.
+#
+# XXX note that the dependency on "testbed" above is not enough.
+# If `testbed-control` has been used to disable the system, then the testbed
+# service will run, but not start up many of the daemons (including capture).
+#
+hname=`hostname`
+if [ "$hname" = "@BOSSNODE@" ]; then
+    cspid=`pgrep capserver`
+    if [ $? -ne 0 -o -z "$cspid" ]; then
+	echo "*** capture: Capserver must be running first"
+	exit 1
+    fi
+fi
 
 #
 # run_capture contains the actual capture start lines that look like:

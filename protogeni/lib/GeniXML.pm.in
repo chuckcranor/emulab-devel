@@ -1974,7 +1974,8 @@ sub GetBusRoutes($)
     foreach my $element (FindNodesNS("n:busroute", $ref,
 				     $EMULAB_NS)->get_nodelist()) {
 	push(@result, {
-	    "name"  => GetText("name", $element)});
+	    "name"  => GetText("name", $element),
+	    "dom"   => $element});
     }
     return \@result;
 }

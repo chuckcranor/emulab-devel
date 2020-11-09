@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -601,12 +601,12 @@ sub RefreshDatasets($)
     }
 }
 
-if ($oneshot) {
+if (0 && $oneshot) {
     RefreshDatasets(0);
     exit(0);
 }
 # Wait a bit before making a bunch of noise.
-sleep($SLEEP_INTERVAL);
+sleep($SLEEP_INTERVAL) if (!$debug);
 
 my $reportcounter    = 0;
 my $lastdaily        = 0;
@@ -636,11 +636,11 @@ while (1) {
 	RefreshDatasets(0);
 	$lasthourly = time();
     }
-    exit(0)
-	if ($oneshot);
-
     emutil::FlushCaches();
     GeniUtil::FlushCaches();
+
+    exit(0)
+	if ($oneshot);
 
     print "Waiting for $SLEEP_INTERVAL seconds ...\n";
     sleep($SLEEP_INTERVAL);

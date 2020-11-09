@@ -114,6 +114,23 @@ class ReservationGroup
         return $result;
     }
 
+    # Lookup for a project.
+    function LookupForProject($project)
+    {
+        $pid_idx = $project->pid_idx();
+        $result = array();
+        
+        $query_result = DBQueryFatal("select uuid from apt_reservation_groups ".
+                                     "where pid_idx='$pid_idx'");
+	while ($row = mysql_fetch_array($query_result)) {
+            $reservation = ReservationGroup::Lookup($row["uuid"]);
+            if ($reservation) {
+                $result[] = $reservation;
+            }
+        }
+        return $result;
+    }
+
     # Lookup all (admin)
     function LookupAll()
     {
@@ -180,6 +197,11 @@ class ReservationGroup
                 return $reservation;
             }
         }
+        foreach ($this->routereservations() as $reservation) {
+            if ($reservation->route_uuid() == $uuid) {
+                return $reservation;
+            }
+        }
         return null;
     }
 
@@ -196,6 +218,11 @@ class ReservationGroup
                 return 1;
             }
         }
+        foreach ($this->routereservations() as $reservation) {
+            if ($reservation->approved()) {
+                return 1;
+            }
+        }
         return 0;
     }
 
@@ -208,6 +235,150 @@ class ReservationGroup
             return 1;
         }
         return 0;
+    }
+
+    function Blob()
+    {
+        $resgroup = $this;
+        $details  = array();
+        # Compute a status column based on reservations.
+        $status   = "approved";
+        $project  = Project::Lookup($resgroup->pid_idx());
+    
+        $details["uuid"]       = $resgroup->uuid();
+        $details["pid"]        = $resgroup->pid();
+        $details["pid_idx"]    = $resgroup->pid_idx();
+        $details["notes"]      = $resgroup->reason();
+        $details["created"]    = DateStringGMT($resgroup->created());
+        $details["start"]      = DateStringGMT($resgroup->start());
+        $details["end"]        = DateStringGMT($resgroup->end());
+        $details["approved"]   = 1;
+        $details["pending"]    = 0;
+        $details["canceled"]   = 0;
+        $details["uid"]        = $resgroup->creator_uid();
+        $details["uid_idx"]    = $resgroup->creator_idx();
+        $details["idledetection"] = $resgroup->noidledetection() ? false : true;
+        $details["portal"]     = ($project->portal() ?
+                                  $project->portal() : "emulab");
+        $clusters = array();
+        foreach ($resgroup->reservations() as $reservation) {
+            $blob = array(
+                "type"        => $reservation->type(),
+                "count"       => intval($reservation->count()),
+                "cluster_id"  => $reservation->Aggregate()->nickname(),
+                "cluster_urn" => $reservation->Aggregate()->urn(),
+                "remote_uuid" => $reservation->remote_uuid(),
+                "submitted"   => DateStringGMT($reservation->submitted()),
+                "approved"    => DateStringGMT($reservation->approved()),
+                "canceled"    => DateStringGMT($reservation->canceled()),
+                "deleted"     => DateStringGMT($reservation->deleted()),
+                "jsondata"    => $reservation->jsondata(),
+                "using"       => null,
+                "utilization" => null,
+                "approved_pushed" => DateStringGMT(
+                    $reservation->approved_pushed()),
+                "canceled_pushed" => DateStringGMT(
+                    $reservation->canceled_pushed()),
+                "cancel_canceled" => DateStringGMT(
+                    $reservation->cancel_canceled()),
+                "deleted_pushed"  => DateStringGMT(
+                    $reservation->deleted_pushed())
+            );
+            if (!is_null($reservation->using())) {
+                $blob["using"] = intval($reservation->using());
+            }
+            if (!is_null($reservation->utilization())) {
+                $blob["utilization"] = intval($reservation->utilization());
+            }
+            if (time() > strtotime($resgroup->start()) &&
+                $reservation->approved()) {
+                $blob["active"] = true;
+            }
+            else {
+                $blob["active"] = false;
+            }
+            $clusters[$reservation->remote_uuid()] = $blob;
+
+            if (! $reservation->approved()) {
+                $status = "pending";
+            }
+            elseif ($reservation->canceled()) {
+                $status = "canceled";
+            }
+            if (!$reservation->approved()) {
+                $details["approved"] = 0;
+                $details["pending"] += 1;
+            }
+            if ($reservation->canceled()) {
+                $details["canceled"] += 1;
+            }
+        }
+        $ranges = array();
+        foreach ($resgroup->rfreservations() as $reservation) {
+            $blob = array(
+                "freq_uuid"   => $reservation->freq_uuid(),
+                "freq_low"    => $reservation->freq_low(),
+                "freq_high"   => $reservation->freq_high(),
+                "submitted"   => DateStringGMT($reservation->submitted()),
+                "approved"    => DateStringGMT($reservation->approved()),
+                "canceled"    => DateStringGMT($reservation->canceled()));
+            
+            if (time() > strtotime($resgroup->start()) &&
+                $reservation->approved()) {
+                $blob["active"] = true;
+            }
+            else {
+                $blob["active"] = false;
+            }
+            $ranges[$reservation->freq_uuid()] = $blob;
+
+            if (! $reservation->approved()) {
+                $status = "pending";
+            }
+            if (!$reservation->approved()) {
+                $details["approved"] = 0;
+                $details["pending"] += 1;
+            }
+        }
+        $routes = array();
+        foreach ($resgroup->routereservations() as $reservation) {
+            $blob = array(
+                "route_uuid"  => $reservation->route_uuid(),
+                "routename"   => $reservation->routename(),
+                "routeid"     => $reservation->routeid(),
+                "submitted"   => DateStringGMT($reservation->submitted()),
+                "approved"    => DateStringGMT($reservation->approved()),
+                "canceled"    => DateStringGMT($reservation->canceled()));
+            
+            if (time() > strtotime($resgroup->start()) &&
+                $reservation->approved()) {
+                $blob["active"] = true;
+            }
+            else {
+                $blob["active"] = false;
+            }
+            $routes[$reservation->route_uuid()] = $blob;
+
+            if (! $reservation->approved()) {
+                $status = "pending";
+            }
+            if (!$reservation->approved()) {
+                $details["approved"] = 0;
+                $details["pending"] += 1;
+            }
+        }
+        $details["status"] = $status;
+        if (time() > strtotime($resgroup->start()) &&
+            ($status == "approved" || $details["pending"] > 0)) {
+            $details["active"] = true;
+        }
+        else {
+            $details["active"] = false;
+        }
+        $details["clusters"] = $clusters;
+        $details["ranges"]   = $ranges;
+        $details["routes"]   = $routes;
+        return $details;
     }
 }
 

@@ -462,6 +462,8 @@ REPLACE INTO state_transitions VALUES ('ONIE','PXEWAKEUP','BOOTING','');
 REPLACE INTO state_transitions VALUES ('ONIE','ISUP','ISUP','');
 REPLACE INTO state_transitions VALUES ('ALWAYSUP','ISUP','SHUTDOWN','Reboot');
 REPLACE INTO state_transitions VALUES ('ALWAYSUP','SHUTDOWN','ISUP','BootDone');
+REPLACE INTO state_transitions VALUES ('ALWAYSUP','ISUP','POWEROFF','');
+REPLACE INTO state_transitions VALUES ('ALWAYSUP','POWEROFF','SHUTDOWN','');
 REPLACE INTO state_transitions VALUES ('PCVM','ISUP','BOOTING','Crash');
 REPLACE INTO state_transitions VALUES ('EXPTSTATE','TERMINATING','SWAPPED','Error');
 REPLACE INTO state_transitions VALUES ('EXPTSTATE','TERMINATING','ENDED','NoError');
@@ -822,6 +824,7 @@ REPLACE INTO table_regex VALUES ('projects','name','text','redirect','default:ti
 REPLACE INTO table_regex VALUES ('projects','funders','text','redirect','default:tinytext',0,256,NULL);
 REPLACE INTO table_regex VALUES ('projects','public','int','redirect','default:tinyint',0,1,NULL);
 REPLACE INTO table_regex VALUES ('projects','linked_to_us','int','redirect','default:tinyint',0,1,NULL);
+REPLACE INTO table_regex VALUES ('projects','forClass','int','redirect','default:tinyint',0,1,NULL);
 REPLACE INTO table_regex VALUES ('projects','public_whynot','text','redirect','default:tinytext',0,256,NULL);
 REPLACE INTO table_regex VALUES ('projects','default_user_interface','text','regex','^(emulab|plab)$',2,12,NULL);
 REPLACE INTO table_regex VALUES ('projects','pid','text','regex','^[-\\w]+$',2,48,NULL);
@@ -901,7 +904,9 @@ REPLACE INTO table_regex VALUES ('virt_lans','cost','float','redirect','default:
 REPLACE INTO table_regex VALUES ('virt_lans','widearea','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_lans','emulated','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_lans','uselinkdelay','int','redirect','default:boolean',0,0,NULL);
+REPLACE INTO table_regex VALUES ('virt_lans','forcelinkdelay','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_lans','nobwshaping','int','redirect','default:boolean',0,0,NULL);
+REPLACE INTO table_regex VALUES ('virt_lans','besteffort','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_lans','nointerswitch','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_lans','usevethiface','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_lans','encap_style','text','redirect','experiments:encap_style',0,0,NULL);
@@ -1093,6 +1098,8 @@ REPLACE INTO table_regex VALUES ('images','default_osid','text','redirect','os_i
 REPLACE INTO table_regex VALUES ('images','path','text','regex','^[-_\\w\\.\\/:+]*$',1,256,NULL);
 REPLACE INTO table_regex VALUES ('images','shared','text','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('images','global','text','redirect','default:boolean',0,0,NULL);
+REPLACE INTO table_regex VALUES ('images','listed','text','redirect','default:boolean',0,0,NULL);
+REPLACE INTO table_regex VALUES ('images','ims_noreport','text','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('images','noexport','text','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('images','makedefault','text','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('images','mtype','text','redirect','default:boolean',0,0,NULL);
@@ -1359,6 +1366,7 @@ REPLACE INTO table_regex VALUES ('apt_profiles','script','text','redirect','defa
 REPLACE INTO table_regex VALUES ('apt_profiles','repourl','text','redirect','default:tinytext',0,0,NULL);
 REPLACE INTO table_regex VALUES ('apt_profiles','repohash','text','regex','^[\\w]+$',0,64,NULL);
 REPLACE INTO table_regex VALUES ('apt_profiles','portal_converted','int','redirect','default:boolean',0,0,NULL);
+REPLACE INTO table_regex VALUES ('apt_profiles','examples_portals','text','regex','^((emulab|cloudlab|powder|phantomnet),?+){0,4}$',0,128,NULL);
 --
 -- Dumping data for table `testsuite_preentables`
 --

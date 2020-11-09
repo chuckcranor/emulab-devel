@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -88,7 +88,7 @@ sub osload ($$) {
     my $noreboot    = 0;
     my $asyncmode   = 0;
     my $zerofree    = 0;
-    my $prepare     = 0;
+    my $prepare     = 0; # Now a level (0,1,2)
     my $swapinfo    = 0;
     my %nodeflags   = ();
 
@@ -268,7 +268,12 @@ sub osload ($$) {
 	# to zero all node disks, then capture that here too.
 	my $zeronode = 0;
 	if ($nodeobject->IsTainted()) {
-	    $zeronode = 2;
+	    if ($nodeobject->TaintIs(TB_TAINTSTATE_MUSTRELOAD())) {
+		$zeronode = $zerofree;
+	    }
+	    else {
+		$zeronode = 2;
+	    }
 	}
 	elsif ($zerofree) {
 	    $zeronode = $zerofree;
@@ -299,7 +304,8 @@ sub osload ($$) {
 		    }
 		    push @default_images, $default_image;
 		}
-		$prepare = 1;
+		# prepare is now a level (0,1,2). Force if not set. 
+		$prepare  = 1 if (!$prepare); 
 		@images   = @default_images;
 	    }
 	}
@@ -361,7 +367,12 @@ sub osload ($$) {
 	# be invalidated, so we start with an empty hash. Otherwise
 	# we read the current DB values to initialize it.
 	#
-	if (!$prepare) {
+	my $nodeprepare = $prepare;
+	if (defined($nodeflags{$node}) 
+	    && defined($nodeflags{$node}{'prepare'})) {
+	    $nodeprepare = $nodeflags{$node}{'prepare'};
+	}
+	if (!$nodeprepare) {
 	    my $dbresult =
 		DBQueryWarn("select p.*,v.mbr_version ".
 			    " from `partitions` as p,image_versions as v ".
@@ -696,7 +707,7 @@ sub osload ($$) {
 	    'reboot'   => $reboot_required,
 	    'wait'     => $wait_required,
 	    'zerofree' => $zeronode,
-	    'prepare'  => $prepare,
+	    'prepare'  => $nodeprepare,
 	    'maxwait'  => $maxwait,
 	    'isremote' => $isremote,
 	    'isvirtnode' => $isvirtnode
@@ -889,7 +900,7 @@ sub osload ($$) {
     }
   done:
     print "osload: Done! There were $failures failures.\n";
-    
+
     #
     # Since we use this in long running daemons, be sure to release
     # the event system connection, or else we stack up lots of handles
@@ -1170,7 +1181,7 @@ sub SetupReloadFrisbee($)
 	my $version = $image->version();
 
 	# only prepare on first image
-	my $prepare0 = $idx == 1 && $prepare ? 1 : 0;
+	my $prepare0 = $idx == 1 && $prepare ? $prepare : 0;
 	# only zero on full images
 	my $zerofree0 = $image->HaveFullImage() ? $zerofree : 0;
 

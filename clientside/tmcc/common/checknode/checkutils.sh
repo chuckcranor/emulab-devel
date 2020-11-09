@@ -348,6 +348,7 @@ comparetmcinfo() {
 	fi
     done
 
+#ls -l ${fileout}_local ${fileout}_local_pre ${fileout}_tbdb_pre ${fileout}_tbdb 
     if [ -f ${fileout}_local -o -f ${fileout}_local_pre ] ; then
 	printf "Only found in local search and not in testbed database\n" >> $fileout
 	[[ -f ${fileout}_local_pre ]] && cat ${fileout}_local_pre >> ${fileout}
@@ -395,7 +396,7 @@ compareunits() {
 	    unit_post_strip="\"*"
 	    unit_human_output="DISK"
 	    unit_human_case="upper"
-	    disregard_order=0
+	    disregard_order=1
 	    ;;
 	* )
 	    echo "Error in compareunits don't now type $unittype. Giving up."
@@ -644,20 +645,15 @@ inithostname() {
 findSmartctl() {
     local findit=$(which smartctl)
     if [ "$os" == "FreeBSD" ] ; then
-	if [ "$osrel" == "9" ] ; then
-	    findit=$(which smartctl9)
-	elif [ "$osrel" == "10" ] ; then
-	    findit=$(which smartctl10)
+	findit=$(which smartctl$osrel)
+	if [ -z "${findit}" ] ; then
+	    if [ -x "/usr/local/sbin/smartctl" ]; then
+		findit="/usr/local/sbin/smartctl"
+	    else
+		findit=$NOSM
+	    fi
 	fi
-    fi
-    if [ -z "${findit}" ] ; then
-	if [ -x "/usr/sbin/smartctl" ]; then
-	    findit="/usr/sbin/smartctl"
-	else
-	    findit=$NOSM
-	fi
-    fi
-
+    fi	
     echo $findit
     return 0
 }
@@ -774,7 +770,7 @@ getdrivenames() {
 
     case $os in
 	Linux )
-	    list="a b c d e f g h i j k l m n o p"
+	    list="a b c d e f g h i j k l m n o p q r s t u v w x y z aa ab ac ad ae af ai ag ah ai aj ak al am an ao ap aq ar as at au av aw"
 	    for i in $list
 	    do
 		if [ -b /dev/sd${i} ] ; then
@@ -783,7 +779,7 @@ getdrivenames() {
 	    done
 	    ;;
 	FreeBSD )
-	    list="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15"
+	    list="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49"
 	    for i in $list
 	    do
 		[[ ! -L /dev/ad${i} ]] &&  [[ -c /dev/ad${i} ]] && drivelist+="/dev/ad${i} "

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2019 University of Utah and the Flux Group.
+# Copyright (c) 2005-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1022,14 +1022,14 @@ sub SendApprovalEmail($$$)
     else {
 	$message .= "$pid/$gid with '$trust' permission.";
     }
-    $project->AnonSendEmail("$usr_name '$usr_uid' <$usr_email>",
-			    $subject,
-			    "$message\n".
-			    "\n".
-			    "Thanks\n",
-			    $project->ApprovalEmailAddress(),
-			    "CC: $allleaders\n".
-			    "Bcc: $TBAUDIT");
+    $project->SendEmail("$usr_name '$usr_uid' <$usr_email>",
+			$subject,
+			"$message\n".
+			"\n".
+			"Thanks\n",
+			$project->ApprovalEmailAddress(),
+			"CC: $allleaders\n".
+			"Bcc: $TBAUDIT");
 
     return 0;
 }

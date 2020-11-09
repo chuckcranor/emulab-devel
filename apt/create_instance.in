@@ -45,11 +45,12 @@ sub usage()
     print "Usage: quickvm [-u uuid] [--site site:1=aggregate ...] <xmlfile>\n";
     exit(1);
 }
-my @optlist = ('d', 'v', 'f', 'u=s', 'a=s', 'S', 'k=s', 'i', 't=s');
+my @optlist = ('d', 'v', 'f', 'u=s', 'a=s', 'S', 'k=s', 'i', 't=s', 'P');
 my $debug   = 0;
 my $verbose = 1;
 my $foreground     = 0;
 my $ignorefailures = 0;
+my $nopending      = 0;
 my $xmlfile;
 my $webtask;
 my $webtask_id;
@@ -71,7 +72,7 @@ my @prestage = ();
 
 # Protos
 sub fatal($);
-sub UserError($);
+sub UserError($;$);
 
 #
 # Configure variables
@@ -173,6 +174,9 @@ if (defined($options{"S"})) {
 }
 if (defined($options{"u"})) {
     $quickuuid = $options{"u"};
+}
+if (defined($options{"P"})) {
+    $nopending = 1;
 }
 if (defined($start_at) && $start_at !~ /^\d+$/) {
     fatal("Invalid --start_at parameter");
@@ -454,17 +458,18 @@ if ($tmp) {
     ($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
 }
 #
+# Powder; see if there are routes; we will bind the nodes later.
+#
+my $routes;
+$tmp = APT_Profile::GetRoutes($rspecstr, \$routes, \$errmsg);
+if ($tmp) {
+    ($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
+}
+
+#
 # Yep, this can happen when users do not put any nodes in their rspec.
 #
 if (!@aggregate_urns) {
-    #
-    # Powder; see if there are routes; we will bind the nodes later.
-    #
-    my $routes;
-    $tmp = APT_Profile::GetRoutes($rspecstr, \$routes, \$errmsg);
-    if ($tmp) {
-	($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
-    }
     if (!@$routes) {
 	UserError("There are no nodes in your experiment, syntax error?");
     }
@@ -711,7 +716,7 @@ if ($localuser) {
     $gid = $group->gid();
 
     # Hack for Kobus' class, generalize someday.
-    if ($pid eq "CS4480-2020") {
+    if (0 && $pid eq "CS4480-2020") {
 	my $termination = str2time("2020-03-28");
 	# convert to hours till then
 	$duration = int(($termination - time()) / 3600);
@@ -845,7 +850,8 @@ if (GeniSlice->Lookup($slice_hrn) || GeniSlice->Lookup($slice_urn) ||
     if (defined($userslice_id)) {
 	UserError("Experiment name already in use, please use another. If you ".
 		  "just terminated an experiment with this name, it takes a ".
-		  "minute or two for the name to become available again.");
+		  "minute or two for the name to become available again.",
+		  GENIRESPONSE_ALREADYEXISTS());
     }
     else {
 	fatal("Could not form a unique slice name");
@@ -986,6 +992,7 @@ foreach my $aggregate_urn (@aggregate_urns) {
 	if ($aptaggregate->CheckStatus(\$errmsg)) {
 	    if ($usestitcher ||
 		!$aptaggregate->deferrable() ||
+		$nopending ||
 		# CheckStatus catches this and sets the error message.
 		$aptaggregate->disabled()) {
 		$slice->Delete();
@@ -1064,22 +1071,19 @@ print STDERR "$rspecstr\n";
 #
 # Check to see if any of the aggregates need a prestage check, if so
 # set the status to "prestage" to flag create_slivers to do that first.
-# We will catch the start_at deferment later after we are done with
-# precheck/prestage.
 #
 if (@prestage) {
     foreach my $agg (@prestage) {
 	$agg->SetStatus("prestage");
     }
-    $instance->Defer();
 }
-elsif (defined($start_at)) {
-    #
-    # If scheduled, then mark it and exit immediately.
-    #
-    $instance->SetAggregateStatus("deferred");
+#
+# If scheduled, then mark it and exit immediately. If there are also prestage
+# aggregates, the scheduler will pick it up as needed.
+#
+if (defined($start_at)) {
     $instance->SetStatus("scheduled");
-    $instance->Defer($start_at);
+    $instance->Schedule($start_at);
     $slice->UnLock();
     exit(0);
 }
@@ -1135,16 +1139,17 @@ sub fatal($) {
 	         "    $mesg\n";
     exit(-1);
 }
-sub UserError($) {
-    my($mesg) = $_[0];
+sub UserError($;$) {
+    my($mesg,$code) = @_;
+    $code = 1 if (!defined($code));
 
     if (defined($webtask)) {
 	$webtask->output($mesg);
-	$webtask->Exited(1);
+	$webtask->Exited($code);
     }
     AuditAbort()
 	if (!$debug);
     print $mesg . "\n";
-    exit(1);
+    exit($code);
 }
 

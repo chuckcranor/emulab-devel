@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017, 2019, 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -69,6 +69,7 @@ use Node;
 use OSImage;
 use Lan;
 use EmulabFeatures;
+use EmulabConstants;
 
 # Local stuff
 my $consetup	    = "$TB/libexec/console_setup";
@@ -78,6 +79,7 @@ my $makeconf        = "$TB/sbin/dhcpd_makeconf";
 my $snmpit          = "$TB/bin/snmpit";
 my $dynmfssetup     = "$TB/sbin/nfsmfs_setup";
 my $tbadb           = "$TB/bin/tbadb";
+my $power           = "$TB/bin/power";
 my $reloadpid	    = "emulab-ops";
 my $pendingeid      = "reloadpending";
 my $rppendingeid    = "repositionpending";
@@ -92,6 +94,11 @@ my @dynmfsnodes     = ();
 my $error           = 0;
 my %mustzero        = ();
 my $mustmakeconf    = 0;
+
+my @reloading_clear_attributes = (
+    "cnetwatch_disable",
+    "stated_noreboot"
+);
 
 #
 # Parse command arguments. Once we return from getopts, all that should
@@ -666,6 +673,7 @@ foreach my $node (@freed_nodes) {
 	next;
     }
     elsif (!$TESTMODE && !exists($ENV{'NORELOAD'}) &&
+	   !$node->delayreloadtillalloc() && 
 	   ((!$isvirt && $imageable) || # XXX force reload hack!
 	    $inreloads || $mustzero{$node_id})) { # XXX Garcia hack
 	print "Moving $node to $reloading_experiment\n"
@@ -674,6 +682,12 @@ foreach my $node (@freed_nodes) {
 	if ($node->MoveReservation($reloading_experiment) == 0) {
 	    $node->SetNodeHistory(TB_NODEHISTORY_OP_MOVE, $this_user,
 				  $reloading_experiment);
+
+	    # Clear experiment-lifetime node attributes
+	    foreach my $na (@reloading_clear_attributes) {
+		$node->ClearNodeAttribute($na) == 0
+		    or $error++;
+	    }
 
 	    # This little sillyness is for disk reloading.
 	    # Kill the last reservation since this path is special.
@@ -687,6 +701,7 @@ foreach my $node (@freed_nodes) {
 	next;
     }
 
+    #
     # No reloads or reservation changes, so really free the node
     #
     # This little sillyness is for disk reloading. Remember the last
@@ -701,6 +716,42 @@ foreach my $node (@freed_nodes) {
     # Handle pre-reserve.
     my $rpid = $node->CheckPreReserve(1, $quiet);
 
+    #
+    # Delay reload till next allocation. We want to clear the partition
+    # table in the DB so it cannot boot from disk again by mistake.
+    # Then power off the node until next allocation. We also "taint"
+    # node since the user should not have access in the next experiment
+    # until it is reloaded.
+    #
+    if ($node->delayreloadtillalloc()) {
+	$node->ClearPartitions();
+	$node->SetTaintStates(TB_TAINTSTATE_MUSTRELOAD());
+	
+	# Clear experiment-lifetime node attributes
+	foreach my $na (@reloading_clear_attributes) {
+	    $node->ClearNodeAttribute($na) == 0
+		or $error++;
+	}
+
+	#
+	# The project still has the node, so this will be allowed. 
+	#
+	print "Powering off '$node_id' instead of reloading\n";
+	system("$power -a off $node_id");
+	#
+	# If this fails, fall back to immediate reload. 
+	#
+	if ($?) {
+	    if ($node->MoveReservation($reloading_experiment) == 0) {
+		$node->SetNodeHistory(TB_NODEHISTORY_OP_MOVE, $this_user,
+				      $reloading_experiment);
+	    }
+	    else {
+		$error++;
+	    }
+	    next;
+	}
+    }
     print "Releasing node '$node_id' ...\n"
 	if (!$quiet);
     if (DBQueryWarn("delete from reserved where node_id='$node_id'")) {

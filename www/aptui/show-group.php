@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -61,8 +61,6 @@ if ($group->pid() == $group->gid()) {
 }
 
 echo "<link rel='stylesheet'
-            href='css/tablesorter-blue.css'>\n";
-echo "<link rel='stylesheet'
             href='css/jquery.smartmenus.bootstrap.css'>\n";
 
 echo "<script type='text/javascript'>\n";
@@ -81,13 +79,11 @@ echo "<div id='main-body'></div>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
+REQUIRE_JACKS();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 REQUIRE_APTFORMS();
-SPITREQUIRE("js/show-group.js",
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+SPITREQUIRE("js/show-group.js");
 
 AddTemplateList(array("show-group", "experiment-list", "member-list", "group-profile", "classic-explist", "oops-modal", "waitwait-modal"));
 SPITFOOTER();

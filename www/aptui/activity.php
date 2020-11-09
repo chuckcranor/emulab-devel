@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,6 +34,7 @@ $page_title = "Activity";
 $optargs = OptionalPageArguments("target_user",    PAGEARG_USER,
 				 "target_project", PAGEARG_PROJECT,
                                  "portalonly",     PAGEARG_BOOLEAN,
+                                 "cluster",        PAGEARG_STRING,
                                  "min",            PAGEARG_INTEGER,
                                  "max",            PAGEARG_INTEGER);
 #
@@ -61,6 +62,15 @@ if (!$isadmin) {
         $target_user = $this_user;
     }
 }
+else {
+    if (isset($cluster)) {
+        $aggregate = Aggregate::LookupByNickname($cluster);
+        if (!$aggregate) {
+            SPITUSERERROR("No such cluster: $cluster");
+            exit();
+        }
+    }
+}    
 #
 # Allow for targeted searches
 #
@@ -103,11 +113,13 @@ if (isset($target_user)) {
 elseif (isset($target_project)) {
     echo "    window.TARGET_PROJECT = '$target_pid';\n";
 }
+if (isset($aggregate)) {
+    echo "    window.CLUSTER = '$cluster';\n";
+}
 if (isset($portalonly) && $portalonly) {
     echo "    window.PORTALONLY = true;\n";
 }
 echo "</script>\n";
-echo "<link rel='stylesheet' href='css/tablesorter.css'>\n";
 echo "<link rel='stylesheet' href='css/jQRangeSlider.css'>\n";
 echo "<script src='js/lib/jquery-ui.js'></script>\n";
 echo "<script src='js/lib/jQRangeSlider/jQRangeSliderMouseTouch.js'></script>\n";
@@ -119,13 +131,11 @@ echo "<script src='js/lib/jQRangeSlider/jQRangeSlider.js'></script>\n";
 echo "<script src='js/lib/jQRangeSlider/jQDateRangeSliderHandle.js'></script>\n";
 echo "<script src='js/lib/jQRangeSlider/jQDateRangeSlider.js'></script>\n";
 echo "<script src='js/lib/jQRangeSlider/jQRuler.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
-echo "<script src='js/lib/jquery.tablesorter.widget-math.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 SPITREQUIRE("js/activity.js");
 
 AddTemplateList(array("activity", "activity-table",

@@ -8,7 +8,7 @@ use emdb;
 use EmulabConstants;
 
 my $MYURN           = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
-my $GENILIB_REPO    = "https://bitbucket.org/emulab/geni-lib";
+my $GENILIB_REPO    = "https://gitlab.flux.utah.edu/emulab/geni-lib.git";
 my $GENILIB_SRCDIR  = "$TOP_SRCDIR/../geni-lib";
 my $APACHEPREFIX    = ("$APACHE_VERSION" == "24" ? "apache24" : "apache22");
 my $PROFILE_ONEVM   = "$TOP_SRCDIR/install/onevm.xml";
@@ -48,9 +48,7 @@ sub Install($$$)
 		PhaseSkip("Already cloned")
 		    if (-e "$GENILIB_SRCDIR/.hg");
 		ExecQuietFatal("cd $TOP_SRCDIR/..; ".
-			       "hg clone $GENILIB_REPO");
-		ExecQuietFatal("cd $GENILIB_SRCDIR; ".
-			       "hg update 0.9-EMULAB");
+			       "git clone $GENILIB_REPO");
 	    };
 	    Phase "rsync-one", "Copying geni-lib to /usr/local", sub {
 		ExecQuietFatal("cd $TOP_SRCDIR/..; ".

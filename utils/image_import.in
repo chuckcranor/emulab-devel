@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2019 University of Utah and the Flux Group.
+# Copyright (c) 2010-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -49,7 +49,7 @@ sub usage()
     print(" -c      - With -r update ndz file using the updates table\n");
     exit(-1);
 }
-my $optlist = "dvu:p:gi:I:rfcRC:Lt:P:G";
+my $optlist = "dvu:p:gi:I:rfcRC:Lt:P:GV";
 my $debug   = 0;
 my $verify  = 0;
 my $getimage= 0;
@@ -60,6 +60,7 @@ my $relocate= 0;
 my $takelock= 0;
 my $resume  = 0;
 my $noupdate= 0;
+my $validate= 1;
 my $pending;
 my $user;
 my $group;
@@ -179,6 +180,9 @@ if (defined($options{"d"})) {
 }
 if (defined($options{"v"})) {
     $verify = 1;
+}
+if (defined($options{"V"})) {
+    $validate = 0;
 }
 if (defined($options{"g"})) {
     $getimage = 1;
@@ -428,7 +432,7 @@ else {
     }
     # If we got a -u argument and not running as that user, flip.
     if (!$user->SameUser(User->ThisUser())) {
-	$user->FlipTo($image->GetGroup());
+	$user->FlipTo($group);
 	$SAVEUID = $user->unix_uid();
     }
     #
@@ -598,13 +602,15 @@ if ($getimage) {
 		fatal("wget reported non-zero status $status, giving up");
 	    }
 	    $downloaded = 1;
-	    
-	    # Update DB info. 
-	    # Run as root to access /proj
-	    $EUID = $UID = 0;
-	    if (system("$IMAGEVALIDATE -u $versname")) {
-		# XXX should this be fatal?
-		print STDERR "Could not update DB info for $image\n";
+
+	    if ($validate) {
+		# Update DB info. 
+		# Run as root to access /proj
+		$EUID = $UID = 0;
+		if (system("$IMAGEVALIDATE -u $versname")) {
+		    # XXX should this be fatal?
+		    print STDERR "Could not update DB info for $image\n";
+		}
 	    }
 	}
 	$EUID = $UID = $SAVEUID;
@@ -647,9 +653,8 @@ if ($getimage) {
 		    "Image imported: $versname",
 		    "Image $name has been sucessfully ".
 	             ($relocate ?
-		      "relocated from" :
-		      "copied back from") . "\n" .
-		    $image->imagefile_url() . "\n".
+		      "relocated." :
+		      "copied back.") . "\n" .
 		    "\n".
 		    "Image URN: " . $image->urn() . "\n",
 		    $FROM, $CC);
@@ -927,10 +932,12 @@ sub DownLoadImage($$$$)
     #
     # Use imagedump to verify the ndz file.
     #
-    print "Verifying ndz file format ...\n";
-    system("$IMAGEDUMP $localfile");
-    if ($?) {
-	return -1;
+    if ($validate) {
+	print "Verifying ndz file format ...\n";
+	system("$IMAGEDUMP $localfile");
+	if ($?) {
+	    return -1;
+	}
     }
     return 0
 	if ($verify);

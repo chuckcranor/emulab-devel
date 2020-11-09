@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -226,10 +226,12 @@ sub Update()
 	fatal("Could not chdir to $REPODIR/$reponame");
 
     if (-e ".git") {
-	$command = "$GIT fetch -q";
+	$command = "$GIT fetch -u -f -t --prune-tags ".
+	    "origin '+refs/*:refs/*'";
     }
     else {
-	$command = "$GIT fetch -q -u -f -t origin '+refs/*:refs/*'";
+	$command = "$GIT fetch -u -f -t --prune --prune-tags ".
+	    "origin '+refs/*:refs/*'";
     }
     my $status = RunCommand($command);
     if ($status) {
@@ -242,6 +244,12 @@ sub Update()
     # Local checkout.
     #
     if (-e ".git") {
+	# Prune dead branches
+	$command = "$GIT remote prune origin";
+	my $status = RunCommand($command);
+	if ($status) {
+	    fatal("Not able to prune dead branches");
+	}
 	$command = "$GIT merge -q origin/$current_refspec";
 	my $status = RunCommand($command);
 	if ($status) {

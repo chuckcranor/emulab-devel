@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -154,6 +154,10 @@ if ($user = User::Lookup($username)) {
     }
     elseif (strtolower($user->email()) != strtolower($email)) {
 	$errors["email"] = "Wrong email address for user";
+    }
+    # Safety
+    elseif ($user->nonlocal_id()) {
+	$errors["email"] = "This account is not allowed to do this";
     }
 }
 else {

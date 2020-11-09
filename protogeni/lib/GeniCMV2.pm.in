@@ -116,6 +116,7 @@ my $GRANTIMAGE     = "$TB/sbin/grantimage";
 my $WAP            = "$TB/sbin/withadminprivs";
 my $SHAREVLAN      = "$TB/sbin/sharevlan";
 my $PANIC          = "$TB/sbin/panic";
+my $CHECKQUOTA     = "$TB/sbin/checkquota";
 my $LINKTEST       = "$TB/sbin/linktest_control";
 my $NODEADMIN      = "$TB/bin/node_admin";
 my $XMLLINT	   = "/usr/local/bin/xmllint";
@@ -586,11 +587,33 @@ sub CreateSliver($)
     # generic openssl key/cert that is stored on the nodes (and from
     # which an ssh key pair can be derived).
     #
-    if (exists($argref->{'certificate'}) || exists($argref->{'key'})) {
+    if (exists($argref->{'certificate'}) && exists($argref->{'key'})) {
 	$slice->AddGenericCert((exists($argref->{'certificate'}) ?
 				$argref->{'certificate'} : undef),
 			       (exists($argref->{'key'}) ?
 				$argref->{'key'} : undef));
+	
+	#
+	# Okay, change of plans. Take key/cert pair we got and use that
+	# to generate the root ssh key that will get pushed to all nodes
+	# if the user requests it. Turns out, its easier to tell users
+	# how to do this, then how to use the key/cert to extract thier
+	# own ssh key pair.
+	#
+	if (length($argref->{'key'}) > 4096) {
+	    print STDERR "SSL key too long\n";
+	}
+	else {
+	    my $slice_experiment = $slice->GetExperiment();
+	    if (defined($slice_experiment)) {
+		if ($slice_experiment->GenerateKeys($argref->{'key'})) {
+		    print STDERR "Could not add private key to experiment\n";
+		}
+	    }
+	    else {
+		print STDERR "Cannot get slice experiment. Odd\n";
+	    }
+	}
     }
 
     # Make sure that the next phase sees all changes.
@@ -971,7 +994,7 @@ sub PrestageImages($)
 		    $webtask->Refresh();
 		    if ($?) {
 			my $code = $? >> 8;
-			if (!$webtask->HasExited() || $webtask->code() < 0) {
+			if (!$webtask->HasExited() || $webtask->exitcode() < 0){
 			    $pending->Failed($webtask->HasExited() ?
 					     $webtask->output() :
 					     "Internal error importing image");
@@ -1432,6 +1455,20 @@ sub ReloadSliver($)
 			$asyncmode);
 }
 
+sub PowerCycleSliver($)
+{
+    my ($argref) = @_;
+    my $slice_urn    = $argref->{'slice_urn'};
+    my $sliver_urns  = $argref->{'sliver_urns'} || $argref->{'component_urns'};
+    my $credentials  = $argref->{'credentials'};
+    my $asyncmode    = (exists($argref->{'asyncmode'}) ?
+			$argref->{'asyncmode'} : 0);
+
+    return SliverAction("powercycle",
+			$slice_urn, $sliver_urns, $credentials, undef,
+			$asyncmode);
+}
+
 sub SliverAction($$$$$$)
 {
     my ($action, $slice_urn, $sliver_urns, $credentials,
@@ -1554,7 +1591,22 @@ sub SliverAction($$$$$$)
 					    "Sliver is not started (yet)");
 	    }
 	}
+	elsif ($action eq "powercycle") {
+	    if ($object->state() ne "started" && $object->state() ne "mixed") {
+		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
+					    "Sliver is not started (yet)");
+	    }
+	}
 	elsif ($action eq "reload") {
+	    # We want to make this check before the fork, which makes it messy
+	    if (ref($object) eq "GeniSliver::Node" ||
+		ref($object) eq "Aggregate") {
+		if ($object->InRecovery()) {
+		    return
+			GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
+				 "Must clear recovery mode before reload");
+		}
+	    }
 	    if ($object->state() ne "started" && $object->state() ne "stopped"){
 		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
 				    "Sliver is not started or stopped (yet)");
@@ -1581,6 +1633,14 @@ sub SliverAction($$$$$$)
 		$exitval = $object->Restart($API_VERSION);
 	    }
 	}
+	elsif ($action eq "powercycle") {
+	    if (@slivers) {
+		$exitval = $object->BatchAction("powercycle", @slivers);
+	    }
+	    else {
+		$exitval = $object->PowerCycle($API_VERSION);
+	    }
+	}
 	elsif ($action eq "reload") {
 	    if (@slivers) {
 		$exitval = $object->BatchAction("reload", @slivers);
@@ -1589,7 +1649,7 @@ sub SliverAction($$$$$$)
 		$exitval = $object->Reload($API_VERSION);
 	    }
 	}
-	return GeniResponse->Create(GENIRESPONSE_ERROR, 
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Could not $action sliver")
 	    if ($exitval);
 	
@@ -2340,6 +2400,7 @@ sub AddNodes($)
 	if (GeniResponse::IsResponse($credential));
 
     $credential->HasPrivilege( "pi" ) or
+	$credential->HasPrivilege( "instantiate" ) or
 	$credential->HasPrivilege( "bind" ) or
 	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef,
 				     "Insufficient privilege" );
@@ -2711,6 +2772,7 @@ sub DeleteNodes($)
 	if (GeniResponse::IsResponse($credential));
 
     $credential->HasPrivilege( "pi" ) or
+	$credential->HasPrivilege( "instantiate" ) or
 	$credential->HasPrivilege( "bind" ) or
 	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef,
 				     "Insufficient privilege" );
@@ -3778,6 +3840,7 @@ sub CreateImage($)
     my $wholedisk    = 0;
     my $nosnapshot   = 0;
     my $mustnotexist = 0;
+    my $purgeimage   = 0;
     my $update_prepare = 0;
     my ($bsname,$blockstore);
     my $copyback_uuid;
@@ -4021,10 +4084,7 @@ sub CreateImage($)
 	# Need this for copyback. 
 	$clone->Update({"origin_urn" => $image->origin_urn()});
 	$image = $clone;
-    }
-    if (!defined(GeniCM::FlipToUser($slice, $user))) {
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "FlipToUser failed");
+	$purgeimage = 1;
     }
     if (defined($bsname)) {
 	#
@@ -4034,6 +4094,32 @@ sub CreateImage($)
 	    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 					"Dataset not in same project as node");
 	}
+    }
+    my $realuser = GeniCM::FlipToUser($slice, $user);
+    if (!defined($realuser)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "FlipToUser failed");
+    }
+    #
+    # Before doing anything else, check for overquota. 
+    #
+    my $copt;
+    if (defined($image)) {
+	$copt = ($image->pid() eq $image->gid() ?    
+		 "-p " . $image->pid() :
+		 "-g " . $image->pid() . "/" . $image->pid());
+    }
+    else {
+	$copt = ($experiment->pid() eq $experiment->gid() ?    
+		 "-p " . $experiment->pid() :
+		 "-g " . $experiment->pid() . "/" . $experiment->pid());
+    }
+    system("$CHECKQUOTA $copt -m 3GB " . $realuser->uid());
+    if ($?) {
+	return GeniResponse->Create(GENIRESPONSE_NOSPACE, undef,
+				    "You are over (or close to) disk quota, ".
+				    "please delete images you no longer need ".
+				    "so you can proceed");
     }
     
     #
@@ -4093,6 +4179,7 @@ sub CreateImage($)
 	if (!$image->global()) {
 	    $image->Update({"shared" => 1});
 	}
+	$purgeimage = 1;
     }
     else {
 	# Cause of image versioning.
@@ -4149,6 +4236,7 @@ sub CreateImage($)
     # Do the snapshot.
     #
     $opt  = " -t " . $webtask->task_id();
+    $opt .= " -C " if ($purgeimage);
     $opt .= " -b $bsname" if (defined($bsname));
     $opt .= " -B $copyback_uuid" if (defined($copyback_uuid));
     $opt .= " -U " if ($update_prepare);
@@ -4262,24 +4350,6 @@ sub CreateImage($)
 	print STDERR "Failed to take the snapshot of $node_id\n";
 	goto bad;
     }
-    
-    #
-    # If we are using the image tracker, but but not copying the image
-    # back (copyback_uuid) then post the image data to the IMS. We do
-    # this here since at the moment, only images created on this path
-    # should be reported to the IMS (global system images too).
-    #
-    if (GetSiteVar("protogeni/use_imagetracker") && !defined($copyback_uuid)) {
-	system("$POSTIMAGEDATA " . $image->versname());
-	# Failure is okay, the daemon will pick it up.
-    }
-    
-    # Sleep a little while to give the caller time to pick up status
-    # since it is polling. Then delete the webtask.
-    if (defined($webtask)) {
-	sleep(30);
-	# $webtask->Delete();
-    }
     if ($user->email()) {
 	libtestbed::SENDMAIL($user->email(),
 			     ($image->isdataset() ?
@@ -4314,7 +4384,7 @@ sub CreateImage($)
 	    print STDERR "Could not get image lock for relocation wait\n";
 	}
 	else {
-	    my $waitfor = 900;
+	    my $waitfor = 1200;
 	    
 	    print STDERR "Waiting for relocation: $relocate_urn\n";
 	    while ($waitfor >= 0) {
@@ -4348,12 +4418,6 @@ sub CreateImage($)
 			     $user->email(),
 			     "Bcc: $TBOPS");
     }
-    # Sleep a little while to give the caller time to pick up status
-    # since it is polling. Then delete the webtask.
-    sleep(30);
-    $webtask->Delete()
-	if (defined($webtask));
-    
     return (defined($response) ? $response : -1);
 }
 
@@ -4422,6 +4486,15 @@ sub DeleteImage($)
     if (!defined($project)) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "No project for image");
+    }
+
+    #
+    # Check to make sure image is not in use by a node, it is bad to the
+    # image a node is running.
+    #
+    if ($image->InUse()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+				    "Image is currently in use");
     }
 
     if (! ((defined($creator_urn) &&
@@ -4580,18 +4653,84 @@ sub ImageInfo($)
     #
     my $webtask = $image->webtask();
     if (defined($webtask)) {
-	$blob->{'size'}   = $webtask->imagesize() . "KB";
-	$blob->{'status'} = $webtask->status();
+	my $logfile;
+	
+	if ($webtask->HasExited()) {
+	    if ($webtask->logfileid()) {
+		$logfile = Logfile->Lookup($webtask->logfileid());
+	    }
+	    
+	    #
+	    # Try to lock the image and get rid of the webtask.
+	    #
+	    if ($image->WaitLock(5) == 0) {
+		$image->Refresh();
+		if ($image->webtask_id() &&
+		    $image->webtask_id() eq $webtask->task_id()) {
+		    $image->ClearWebTask();
+		}
+		$image->Unlock();
+	    }
+	}
+	# Webtask is still okay to reference,
+	if (!$webtask->HasExited() || $webtask->exitcode() != 0) {
+	    $blob->{'status'} = $webtask->status();
+	    
+	    if (!$webtask->HasExited()) {
+		#
+		# Imaging still in progress.
+		#
+		$blob->{'size'} = $webtask->imagesize() . "KB";
+	    }
+	    else {
+		#
+		# Error.
+		#
+		if ($logfile) {
+		    my $tmp;
+		    $logfile->DumpFile(\$tmp);
+
+		    if (defined($tmp) && $tmp ne "") {
+			$blob->{'log'} = $tmp;
+		    }
+		    # Lets look for this special case. Not a good place to
+		    # to do this.
+		    if ($image->isdataset() && $tmp &&
+			$tmp =~ /^umount: (.*): .* busy/m) {	
+			$blob->{'output'} =
+			    "Unable to unmount $1; you need to make ".
+			    "sure you are not running any processes from ".
+			    "$1 and that you do not have any active ".
+			    "shells in a directory on $1";
+		    }
+		    elsif (defined($webtask->output())) {
+			$blob->{'output'} = $webtask->output();
+		    }
+		}
+	    }
+	    print STDERR Dumper($blob);
+	    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+	}
+	# Fall through to looking at the file.
+    }
+    #
+    # Get the file size on disk.
+    #
+    if ($image->size()) {
+	$blob->{"size"} = int($image->size() / 1024) . "KB";
     }
     else {
-	my $path = ($image->HaveDeltaImage() ?
-		    $image->DeltaImageFile() : $image->FullImageFile());
-
-	if (-r $path) {
-	    my $size = File::stat::stat($path)->size;
-	    $blob->{'size'} = int($size / 1024) . "KB";
+	my $iname = $image->versname();
+	my $isize = `$IMAGEINFO -s -U k $iname`;
+	if (!$?) {
+	    chomp($isize);
+	    $blob->{"size"} = "${isize}KB";
 	}
     }
+    if ($image->hash()) {
+	$blob->{"hash"} = $image->hash();
+    }
+    print STDERR Dumper($blob);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
@@ -4885,6 +5024,7 @@ sub ListImages($)
 		$blob->{"filesize"} = "${isize}MB";
 	    }
 	}
+	
 	#
 	# Add the project URN, that the caller can map to a local project.
 	#
@@ -5773,7 +5913,14 @@ sub ModifyDataset($)
     # Not a typical op, so always print debugging info;
     print STDERR $output;
     if ($?) {
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
+	my $val = $? >> 8;
+	if ($val == 255 || $val < 0) {
+	    $val = GENIRESPONSE_ERROR;
+	}
+	else {
+	    $val = GENIRESPONSE_REFUSED;
+	}
+	return GeniResponse->Create($val, undef, $output);
     }
   done:
     my $blob = {};
@@ -5858,7 +6005,7 @@ sub DescribeDataset($)
 			      $image->lba_low() + 1) /
 			     (1024 / $image->lba_size()));
 	    $blob->{'size'} =
-		Blockstore::ConvertToMebi("$kbytes" . "KB");
+		Blockstore::ConvertToMebi("$kbytes" . "KiB");
 	}
 	#print STDERR Dumper($blob);
     }
@@ -6701,8 +6848,8 @@ sub Recovery($)
     else {
 	$output = GeniUtil::ExecQuiet("$NODEADMIN -R on $node_id");
     }
+    print STDERR $output . "\n";
     if ($?) {
-	print STDERR $output . "\n";
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Failed to change recovery mode");
     }

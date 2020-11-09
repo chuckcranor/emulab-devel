@@ -21,6 +21,7 @@ $(function ()
     var gotrspec     = 0;
     var gotscript    = 0;
     var fromrepo     = 0;
+    var reporefspec  = null;
     var ajaxurl      = "";
     var amlist       = null;
     var isppprofile  = false;
@@ -44,6 +45,8 @@ $(function ()
 
 	var fields = JSON.parse(_.unescape($('#form-json')[0].textContent));
 	amlist     = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
+
+	console.info("profile", fields);
 
 	if (_.has(fields, "profile_rspec") && fields["profile_rspec"] != "") {
 	    gotrspec = 1;
@@ -212,13 +215,6 @@ $(function ()
 	    $('#modal_profile_rspec_textarea').val("");
 	});
 
-	/*
-	 * The instantiate button.
-	 */
-	$('#profile_instantiate_button').click(function (event) {
-	    window.location.replace("instantiate.php?profile=" +
-				    version_uuid + "&from=show-profile");
-	});
 	// Handler for normal instantiate submit button, which is in
 	// the modal.
 	$('#instantiate_submit_button').click(function (event) {
@@ -234,6 +230,10 @@ $(function ()
 	// We also got a geni-lib script, so show the XML button.
 	if (gotscript) {
 	    $('#show_xml_modal_button').removeClass("hidden");
+	}
+	if (gotscript &&
+	    _.has(fields, "paramdefs") && fields["paramdefs"] != "") {
+	    paramHelp.ShowParameterHelp(fields["paramdefs"]);
 	}
     }
 
@@ -321,6 +321,11 @@ $(function ()
      */
     function SelectRepoTarget(which)
     {
+	console.info("SelectRepoTarget: ", which);
+
+	reporefspec = which;
+	UpdateInstantiateButton();
+	
 	var callback = function (source, hash) {
 	    console.info(source);
 
@@ -348,7 +353,7 @@ $(function ()
 
 	var callback = function(json) {
 	    sup.HideWaitWait();
-	    //console.info(json.value);
+	    console.info("ConvertScript", json.value);
 
 	    if (json.code) {
 		sup.SpitOops("oops",
@@ -361,6 +366,12 @@ $(function ()
 		$('#profile_rspec_textarea').val(json.value.rspec);
 		ExtractFromRspec();
 	    }
+	    if (_.has(json.value, "paramdefs")) {
+		paramHelp.ShowParameterHelp(JSON.parse(json.value.paramdefs));
+	    }
+	    else {
+		paramHelp.HideParameterHelp();
+	    }
 	}
 	sup.ShowWaitWait("We are converting the geni-lib script");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
@@ -368,9 +379,23 @@ $(function ()
 					    "CheckScript",
 					    {"script"   : script,
 					     "refspec"  : refspec,
+					     "getparams": true,
 					     "profile_uuid" : profile_uuid});
 	xmlthing.done(callback);
     }
-    
+
+    /*
+     * Update the instantiate button when we switch repo targets.
+     */
+    function UpdateInstantiateButton()
+    {
+	var url = "instantiate.php?profile=" +
+	    version_uuid + "&from=manage-profile";
+
+	if (reporefspec) {
+	    url += "&refspec=" + reporefspec;
+	}
+	$('#profile_instantiate_button').attr("href", url);
+    }
     $(document).ready(initialize);
 });

@@ -117,6 +117,9 @@ sub Install($$$)
 	# admins do not see a bunch of email until we are really ready.
 	#
 	Phase "emaillists", "Changing target for email lists", sub {
+	    PhaseSkip("Not the mailer node")
+		if ($server ne $MAILERNODE);
+	    
 	    opendir(DIR, "/etc/mail/lists") or
 		PhaseFail("Cannot opendir /etc/mail/lists: $!");
 	    my @lists = grep { $_ ne "." && $_ ne ".." } readdir(DIR);

@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -45,12 +45,16 @@
 #
 # Configure variables
 #
-my $TB        = "@prefix@";
 my $TBLOG     = "@TBLOGFACIL@";
-my $POWERINFO = "$TB/etc/power-ctrlinfo";
-my $OUTLETMAP = "$TB/etc/power-outletmap";
+my $POWERINFO = "/etc/emulab/power-ctrlinfo";
+my $OUTLETMAP = "/etc/emulab/power-outletmap";
 
-use lib "@prefix@/lib";
+# Drag in path stuff if we are on an experimental node (cnuc).
+BEGIN {
+    if (-e "/etc/emulab/paths.pm") {
+	require "/etc/emulab/paths.pm"; import emulabpaths;
+    }
+}
 use power_apc;
 use power_raritan;
 use libtestbed;
@@ -197,6 +201,22 @@ foreach my $nodeid (@machines) {
     }
     my ($power_id, $outlet) = @{$outletmap{$nodeid}};
 
+    #
+    # A power "cycle" operation on some types of power controllers
+    # (e.g., IPMI) will fail if the node is off. While I can see reasons
+    # why you would want that behavior, it does mean that if someone
+    # powers the node off from the OS (i.e., such that Emulab doesn't
+    # know about it) and then we attempt to power cycle it because it
+    # appears down, it will fail. We get a lot of nodes that fail
+    # reloading because of this and wind up in hwdown.
+    #
+    # XXX In the database-controlled version of power, there is a per-node
+    # attribute to decide whether to force a node on if it fails a cycle.
+    # In the absense of a DB, we just assume we want to try forcing the
+    # node on.
+    #
+    my $forcecycle = ($op eq "cycle") ? 1 : 0;
+
     # XXX no rate-limiting right now. Add as needed.
     my $time_ok = 1;
 
@@ -217,7 +237,7 @@ foreach my $nodeid (@machines) {
     #
     # Associate this node with the power controller it is attached to
     #
-    push @{$outlets{$power_id}}, [$nodeid, $outlet];
+    push @{$outlets{$power_id}}, [$nodeid, $outlet, $forcecycle];
 }
 
 print "machines= ",join(" ",@machines),"\n" if $verbose;
@@ -228,12 +248,27 @@ foreach my $power_id (keys %outlets) {
     #
     # Get the list of outlet numbers used on this power controller
     #
-    my @outlets = ();
+    # We build two additional lists of outlets for the controller, one for
+    # nodes where we might need to do an explicit power "on" if a "cycle"
+    # operation fails. How and if this happens depends on the controller type.
+    #
     my @nodes = ();
+    my @outlets = ();
+    my @forceoutlets = ();
+    my @unforceoutlets = ();
+    my @forcenodes = ();
+    my @unforcenodes = ();
     foreach my $node (@{$outlets{$power_id}}) {
-	my ($node_id, $outlet) = @$node;
-	push @outlets, $outlet;
+	my ($node_id, $outlet, $force) = @$node;
 	push @nodes, $node_id;
+	push @outlets, $outlet;
+	if ($force) {
+	    push @forceoutlets, $outlet;
+	    push @forcenodes, $node_id;
+	} else {
+	    push @unforceoutlets, $outlet;
+	    push @unforcenodes, $node_id;
+	}
     }
     my $nodestr = join(",",@nodes);
 
@@ -249,7 +284,6 @@ foreach my $power_id (keys %outlets) {
 	$IP = "";
     }
     else {
-
 	#
 	# Find out some information about this power controller
 	#
@@ -318,6 +352,36 @@ foreach my $power_id (keys %outlets) {
 	    print "Control of $nodestr failed.\n"; $exitval++;
 	    $errors++;
 	}
+    } elsif ($type eq "5gstore") {
+	#
+	# XXX a "cycle" operation will do nothing if the node is off.
+	# See comment above for forced power cycles.
+	# 
+	my $device = new power_5gstore($IP,$verbose);
+	if (!defined $device) {
+	    warn "Unable to contact controller for $nodestr. Skipping...\n";
+	    next;
+	}
+	if (@forceoutlets) {
+	    $nodestr = join(',', @forcenodes);
+	    print "Calling device->power(forcecycle, @forceoutlets)\n"
+		if $verbose > 1;
+	    if ($device->power("forcecycle", @forceoutlets)) {
+		print "Control of $nodestr failed.\n";
+		$exitval++;
+		$errors++;
+	    }
+	}
+	if (@unforceoutlets) {
+	    $nodestr = join(',', @unforcenodes);
+	    print "Calling device->power($op, @unforceoutlets)\n"
+		if $verbose > 1;
+	    if ($device->power($op, @unforceoutlets)) {
+		print "Control of $nodestr failed.\n";
+		$exitval++;
+		$errors++;
+	    }
+	}
     } elsif ($type eq "ue") {
 	if (uectrl($op,@nodes)) {
 	    print "Control of $nodestr failed.\n"; $exitval++;
@@ -326,26 +390,8 @@ foreach my $power_id (keys %outlets) {
     } elsif ($type eq 'ipmi15' || $type eq 'ipmi20') {
 	#
 	# XXX a "cycle" operation on IPMI will fail if the node is off.
-	# I can see reasons why you would want that behavior, but it means
-	# that if someone powers the node off from the OS (i.e., such that
-	# Emulab doesn't know about it) and then we attempt to power cycle
-	# it because it appears down, it will fail. We get a lot of nodes
-	# stuck in reloading or hwdown because of this.
-	#
-	# To allow either, we add a node attribute, "cyclewhenoff", that
-	# will cause us to do an "on" if a "cycle" fails. This is signified
-	# here by a "forcecycle" op passed to iloctrl.
-	#
-	# XXX always assume cyclewhenoff for now.
+	# See comment above for forced power cycles.
 	# 
-	my (@forcenodes, @unforcenodes);
-	if ($op eq "cycle") {
-	    foreach my $nodeid (@nodes) {
-		push @forcenodes, $nodeid;
-	    }
-	} else {
-	    @unforcenodes = @nodes;
-	}
 	if (@forcenodes) {
 	    $nodestr = join(',', @forcenodes);
 	    if (iloctrl($type,"forcecycle",@forcenodes)) {
@@ -399,8 +445,8 @@ sub getPowerInfo($)
 	    $lineno++;
 	    next;
 	}
-
-	my ($power_id, $type, $IP) = split;
+	
+	my ($power_id, $type, $IP) = split(",");
 	if ($power_id !~ /^([-\w]+)$/) {
 	    warn "Bogus power_id on line $lineno\n";
 	    $errors++;
@@ -439,7 +485,7 @@ sub getOutletInfo($)
 	    next;
 	}
 
-	my ($node_id, $power_id, $outlet) = split;
+	my ($node_id, $power_id, $outlet) = split(",");
 	if ($node_id !~ /^([-\w]+)$/) {
 	    warn "Bogus node_id on line $lineno\n";
 	    $errors++;
@@ -485,7 +531,6 @@ sub dostatus(@) {
     my %ctrls = ();
     my %IPs = ();
     my $errors = 0;
-
 
     my $doall = (@wanted == 1 && $wanted[0] eq "all");
 
@@ -623,6 +668,27 @@ sub dostatus(@) {
 	    for my $pin (0..3) {
 		my $ostr = "pin$pin";
 		print "$ctrl Pin $pin: ", $status{$ostr}, "\n"
+		    if (defined($status{$ostr}));
+	    }
+	    print "\n";
+	} elsif ($ctrls{$ctrl} eq "5gstore") {
+	    my $device = new power_5gstore($IPs{$ctrl}, $verbose);
+	    if (!defined $device) {
+		warn "Unable to contact controller $ctrl.\n";
+		$errors++;
+		next;
+	    } else {
+		print "Calling device->status()\n"
+		    if $verbose > 1;
+		if ($device->status(\%status)) {
+		    print "Could not get status for $ctrl.\n";
+		    $errors++;
+		    next;
+		}
+	    }
+	    for my $outlet (1..2) {
+		my $ostr = "outlet$outlet";
+		print "$ctrl Outlet $outlet: ", $status{$ostr}, "\n"
 		    if (defined($status{$ostr}));
 	    }
 	    print "\n";

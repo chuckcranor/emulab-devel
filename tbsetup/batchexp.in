@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -388,7 +388,12 @@ tblog_set_info($pid,$eid,$UID);
 #
 # Create the per-experiment RSA key pair and derived ssh pubkey
 #
-if ($experiment->GenerateKeys() != 0) {
+# Not for geni experiments, if we need it we will generate it
+# later when we go to push the key. We allow for the caller to
+# provide a key to use, so that all nodes in a multi aggregate
+# slice have the same root key. 
+#
+if (!$genimode && $experiment->GenerateKeys() != 0) {
     fatal({type => 'secondary', severity => SEV_SECONDARY,
 	   error => ['create_experiment_keys_failed']},
 	  "Failed to create experiment RSA/SSH keys");

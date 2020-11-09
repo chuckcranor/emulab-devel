@@ -295,6 +295,12 @@ sub UpdateSSHKeys()
 	@params = ("KEY", @params);
 	$isportal = 1;
     }
+    elsif ($auth =~ /ilabt\.imec\.be/) {
+	$url = "https://account.ilabt.imec.be:8443/MA";
+	$method = "lookup";
+	@params = ("KEY", @params);
+	$isportal = 1;
+    }
     elsif ($auth =~ /iminds\.be/) {
 	$url = $certificate->url();
 	$url =~ s/sa$/geni-ma/;
@@ -497,6 +503,14 @@ sub UpdatePersonalData()
     
     if ($auth =~ /geni\.net/) {
 	$url = "https://ch.geni.net/MA";
+	$method = "lookup";
+	$param2->{'filter'} = ['MEMBER_FIRSTNAME',
+			       '_GENI_MEMBER_DISPLAYNAME',
+			       'MEMBER_LASTNAME'];
+	@params = ("MEMBER", $param1, $param2);
+    }
+    elsif ($auth =~ /ilabt\.imec\.be/) {
+	$url = "https://account.ilabt.imec.be:8443/MA";
 	$method = "lookup";
 	$param2->{'filter'} = ['MEMBER_FIRSTNAME',
 			       '_GENI_MEMBER_DISPLAYNAME',

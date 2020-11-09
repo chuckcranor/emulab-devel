@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -110,7 +110,7 @@ LIBEXEC_STUFF	= wanlinksolve wanlinkinfo os_setup mkexpdir console_setup \
 
 LIB_STUFF       = libtbsetup.pm exitonwarn.pm libtestbed.pm \
                   power_rpc27.pm power_apc.pm power_ue.pm power_powduino.pm \
-		  power_sgmote.pm power_racktivity.pm power_raritan.pm \
+		  power_5gstore.pm power_racktivity.pm power_raritan.pm \
 		  libaudit.pm libreboot.pm libosload.pm libtestbed.py \
 		  libadminmfs.pm libtblog.pm libtblog_simple.pm libArchive.pm \
 		  power_mail.pm power_whol.pm Template.pm power_rmcp.pm \
@@ -124,7 +124,7 @@ LIB_STUFF       = libtbsetup.pm exitonwarn.pm libtestbed.pm \
                   libosload_mlnx_sn2410.pm libosload_dell.pm \
                   libosload_hp5406.pm \
 		  libimageops.pm libimageops_ndz.pm libimageops_docker.pm \
-		  libimageops_ec2.pm
+		  libimageops_ec2.pm libSignedURL.pm
 
 
 # These scripts installed setuid, with sudo. 
@@ -138,10 +138,10 @@ SETUID_SBIN_SCRIPTS  = mkproj rmgroup mkgroup frisbeehelper \
 SETUID_LIBX_SCRIPTS  = console_setup spewrpmtar_verify
 SETUID_SUEXEC_SCRIPTS= spewlogfile
 
-ifeq ($(SYSTEM),FreeBSD)
-SUBDIRS  += ipassign
-IPASSIGN  = Yes
-endif
+#ifeq ($(SYSTEM),FreeBSD)
+#SUBDIRS  += ipassign
+#IPASSIGN  = Yes
+#endif
 
 #
 # Targets
@@ -260,6 +260,7 @@ script-install:	$(addprefix $(INSTALL_BINDIR)/, $(BIN_STUFF)) \
 	 $(addprefix $(INSTALL_LIBEXECDIR)/, $(LIBEXEC_STUFF)) \
 	 $(addprefix $(INSTALL_DIR)/opsdir/lib/, libtestbed.pm) \
 	 $(addprefix $(INSTALL_DIR)/opsdir/lib/, libtestbed.py) \
+	 $(addprefix $(INSTALL_DIR)/opsdir/lib/, libSignedURL.pm) \
 	 $(addprefix $(INSTALL_DIR)/opsdir/cgi-bin/, spewrpmtar_cgi) \
 	 $(addprefix $(INSTALL_DIR)/opsdir/bin/, $(CTRLBIN_STUFF)) \
 	 $(addprefix $(INSTALL_DIR)/opsdir/sbin/, $(CTRLSBIN_STUFF))\
@@ -329,7 +330,8 @@ endif
 #
 control-install:	$(addprefix $(INSTALL_SBINDIR)/, $(CTRLSBIN_STUFF)) \
 			$(addprefix $(INSTALL_BINDIR)/, $(CTRLBIN_STUFF)) \
-			$(addprefix $(INSTALL_LIBDIR)/, libtestbed.pm)
+			$(addprefix $(INSTALL_LIBDIR)/, libtestbed.pm) \
+			$(addprefix $(INSTALL_LIBDIR)/, libSignedURL.pm)
 	@$(MAKE) -C ns2ir control-install
 ifeq ($(NSVERIFY),1)
 	@$(MAKE) -C nsverify control-install
@@ -376,6 +378,15 @@ subdir-distclean:
 	@$(MAKE) -C ipassign distclean
 	@$(MAKE) -C checkup distclean
 	@$(MAKE) -C snmpit distclean
+
+# For install on a base station cnuc
+cnuc-install: powerlocal
+	$(INSTALL_PROGRAM) powerlocal /usr/local/bin/powerlocal
+	$(INSTALL) $(SRCDIR)/power_apc.pm /usr/local/etc/emulab/power_apc.pm
+	$(INSTALL) $(SRCDIR)/power_raritan.pm \
+		/usr/local/etc/emulab/power_raritan.pm
+	$(INSTALL) $(SRCDIR)/power_powduino.pm \
+		/usr/local/etc/emulab/power_powduino.pm
 
 #
 # XXX Create non .tcl files.

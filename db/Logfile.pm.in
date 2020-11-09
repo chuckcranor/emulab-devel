@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2019 University of Utah and the Flux Group.
+# Copyright (c) 2007-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,6 +46,7 @@ my $TB		  = "@prefix@";
 my $TBOPS         = "@TBOPSEMAIL@";
 my $TBBASE        = "@TBBASE@";
 my $GZIP	  = "/usr/bin/gzip";
+my $GUNZIP        = "/usr/bin/gunzip";
 
 #
 # Lookup by uuid. For now, just knowing the uuid says you can read the file. 
@@ -469,11 +470,26 @@ sub SetMetadata($$$)
     my $coderef = sub {
 	my ($key,$val) = @_;
 
-	$key = DBQuoteSpecial($key);
-	$val = DBQuoteSpecial($val);
+	#
+	# Ug, the value is a tinytext and some errors are longer.
+	# Changing the field to a bigger slot would churn the Mothership
+	# for days cause of the number of rows (and cause boss is slow).
+	# So instead, just trim it. Also need to leave room for quoting.
+	# In general, whatever error lands here has also landed in the 
+	# logfile itself, so we are not losing any real info. 
+	#
+	my $safe_key = DBQuoteSpecial($key);
+	my $safe_val = DBQuoteSpecial($val);
+
+	# Need room for (at least) beginning/end quotes added by DBQuoteSpecial
+	if (length($safe_val) >= 255) {
+	    my $len = 255 - (strlen($safe_val) - strlen($val));
+	    $safe_val = DBQuoteSpecial(substr($val, 0, $len));
+	}
 	return -1
 	    if (! DBQueryWarn("replace into logfile_metadata set ".
-			      "  logidx='$logidx',metakey=$key,metaval=$val"));
+			      "  logidx='$logidx',".
+			      "  metakey=$safe_key,metaval=$safe_val"));
 	return 0;
     };
 
@@ -564,6 +580,49 @@ sub ReadFile($$)
     }
     $$pbuf = $buf;
     return $cc;
+}
+sub DumpFile($$)
+{
+    my ($self, $pbuf) = @_;
+    my $filename = $self->filename();
+    my $FP;
+    my $stuff = "";
+
+    return 0
+	if (!defined($filename) || ! -r $filename);
+
+    if ($self->compressed()) {
+	if (!open(ZIP, "$GUNZIP -c $filename |")) {
+	    print STDERR "Could unzip $filename for output\n";
+	    return -1;
+	}
+	$FP = *ZIP;
+    }
+    else {
+	if (!open(LOG, $filename)) {
+	    print STDERR "Could not open $filename for output\n";
+	    return -1;
+	}
+	$FP = *LOG;
+    }
+    # On this path always prine out private keys.
+    my $inkey = 0;
+	    
+    while (<$FP>) {
+	if ($_ =~ /-----BEGIN RSA PRIVATE KEY-----/) {
+	    $inkey = 1;
+	}
+	elsif ($_ =~ /-----END RSA PRIVATE KEY-----/) {
+	    $inkey = 0;
+	}
+	elsif ($inkey) {
+	    next;
+	}
+	$stuff .= $_;
+    }
+    close($FP);
+    $$pbuf = $stuff;
+    return 0;
 }
 
 #

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -89,11 +89,11 @@ foreach ($agglist as $aggregate) {
               "name"         => $aggregate->name(),
               "nickname"     => $aggregate->nickname(),
               "url"          => $aggregate->weburl(),
-              "abbreviation" => $aggregate->nickname());
+              "abbreviation" => $aggregate->nickname(),
+              "isFE"         => $aggregate->isFE(),
+              "isME"         => $aggregate->ismobile(),
+        );
 }
-
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
 
 # Place to hang the toplevel template.
 echo "<div id='page-body'></div>\n";
@@ -104,17 +104,14 @@ echo "    window.ISFADMIN   = $isfadmin;\n";
 echo "</script>\n";
 
 echo "<script type='text/plain' id='agglist-json'>\n";
-echo htmlentities(json_encode($aggregates)) . "\n";
+echo htmlentities(json_encode($aggregates, JSON_NUMERIC_CHECK)) . "\n";
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
-SPITREQUIRE("js/cluster-status.js",
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+REQUIRE_TABLESORTER();
+SPITREQUIRE("js/cluster-status.js");
 
 AddTemplateList(array("cluster-status", "cluster-status-templates"));
 SPITFOOTER();

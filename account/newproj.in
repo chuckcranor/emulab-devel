@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -207,6 +207,7 @@ my %optional = ("newuser_xml"    => "newuser_xml",
 		"members"	 => "num_members",
 		"ron"            => "num_ron",
 		"plab"           => "num_pcplab",
+		"class"          => "forClass",
 		"whynotpublic"	 => "public_whynot",
 		"user_interface" => "default_user_interface");
 
@@ -376,12 +377,21 @@ if (exists($newproj_args{'newuser_xml'})) {
 #
 # Now do special checks.
 #
-UserError("Project already exists; pick another name!")
-    if (Project->Lookup($newproj_args{'pid'}));
-
 my $leader = User->Lookup($newproj_args{'head_uid'});
 UserError("Project leader does not exist!")
     if (!defined($leader));
+
+#
+# Need a big lock to avoid double click errors, too much stuff going on in
+# Project->Create() to lock tables. This lock is automatically dropped.
+#
+my $lock_result = DBQueryWarn("select GET_LOCK('NewProjectLock', 60)");
+if (!$lock_result ||
+    !$lock_result->numrows) {
+    fatal("Could not get the new project lock for a long time");
+}
+UserError("Project already exists; pick another name!")
+    if (Project->Lookup($newproj_args{'pid'}));
 
 exit(0)
     if ($impotent);
@@ -403,6 +413,7 @@ if (!defined($newproj)) {
     fatal("Could not create new project!");
 }
 my $new_idx = $newproj->pid_idx();
+DBQueryWarn("select RELEASE_LOCK('NewProjectLock')");
 
 #
 # Add any licenses.

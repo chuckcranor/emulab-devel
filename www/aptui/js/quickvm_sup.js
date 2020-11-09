@@ -27,7 +27,10 @@ function ParseURN(urn)
     }
     return hrn;
 }
-
+function CreateURN(domain, authority, id)
+{
+    return "urn:publicid:IDN+" + domain + "+" + authority + "+" + id;
+}
 function IsUUID(uuid)
 {
     return /^[\w]{8}-[\w]{4}-[\w]{4}-[\w]{4}-[\w]{12}$/.test(uuid);
@@ -64,25 +67,23 @@ function HideModal(which, continuation)
     $(which).modal('hide');
 }
 
-function ShowWaitWait(message)
+function ShowWaitWait(message, hidefunction, showfunction)
 {
     if (message === undefined) {
-	ShowModal('#waitwait-modal');
+	$('#waitwait-modal .waitwait-message').addClass("hidden");
     }
     else {
-	$('#waitwait-modal-withmessage-message').html(message);
-	ShowModal('#waitwait-modal-withmessage');
+	if (message != null) {
+	    $('#waitwait-modal .waitwait-message span').html(message);
+	}
+	$('#waitwait-modal .waitwait-message').removeClass("hidden");
     }
+    ShowModal('#waitwait-modal', hidefunction, showfunction);
 }
 function HideWaitWait(continuation)
 {
-    if ($('#waitwait-modal').is(':visible')) {
-	HideModal('#waitwait-modal', continuation);
-    }
-    else {
-	$('#waitwait-modal-withmessage-message').html("");
-	HideModal('#waitwait-modal-withmessage', continuation);
-    }
+    $('#waitwait-modal .waitwait-message').addClass("hidden");
+    HideModal('#waitwait-modal', continuation);
 }
     
 function CallServerMethod(url, route, method, args, callback)
@@ -354,7 +355,7 @@ function StartGeniLogin()
 function VerifySpeaksfor(speaksfor, signature)
 {
     var callback = function(json) {
-	HideModal("#waitwait-modal");
+	HideWaitWait();
 	    
 	if (json.code) {
 	    alert("Could not verify speaksfor: " + json.value);
@@ -405,7 +406,7 @@ function VerifySpeaksfor(speaksfor, signature)
 	    window.location.replace(json.value.url);
 	}
     }
-    ShowModal("#waitwait-modal");
+    ShowWaitWait("This will take a minute; patience please!");
     var $xmlthing = CallServerMethod(null,
 				     "geni-login", "VerifySpeaksfor",
 				     {"speaksfor" : speaksfor,
@@ -492,6 +493,7 @@ function newUUID()
 // Exports from this module for use elsewhere
 return {
     ParseURN: ParseURN,
+    CreateURN: CreateURN,
     IsUUID: IsUUID,
     newUUID: newUUID,
     ShowModal: ShowModal,

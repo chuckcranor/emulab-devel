@@ -159,9 +159,9 @@ $(function ()
 	});
 	$(panelid + ' .tablesorter')
 	    .tablesorter({
-		theme : 'green',
-		// initialize zebra
-		widgets: ["zebra"],
+		theme : 'bootstrap',
+		widgets: ["uitheme". "zebra"],
+		headerTemplate : '{content} {icon}',
 	    });
 	// Bind a delete handler.
 	$(panelid + ' .delete-button').click(function() {
@@ -316,9 +316,9 @@ $(function ()
 	});
 	$(panelid + ' .tablesorter')
 	    .tablesorter({
-		theme : 'green',
-		// initialize zebra
-		widgets: ["zebra"],
+		theme : 'bootstrap',
+		widgets: ["uitheme", "zebra"],
+		headerTemplate : '{content} {icon}',
 	    });
 	$(panelid + ' .tablesorter .tablesorter-childRow>td').hide();	
 	$(panelid + ' .tablesorter .show-childrow').click(function (event) {

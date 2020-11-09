@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017, 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -314,15 +314,12 @@ foreach my $node (@nodelist) {
     #
     my $object = $MyStruct->TypeLookup($node);
     if (!defined($object)) {
-	$object = $MyStruct->NewType($type);
+	#
+	# Otherwise use the class.
+	#
+	$object = $MyStruct->ClassLookup($node);
 	if (!defined($object)) {
-	    #
-	    # Otherwise use the class.
-	    #
-	    $object = $MyStruct->NewType($class);
-	    if ($@) {
-		die_noretry("No type/class specific setup module for $node");
-	    }
+	    die_noretry("No type/class specific setup module for $node");
 	}
     }
     print STDERR "Adding $node_id to type object " . $object->type() . "\n"

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,9 +50,6 @@ if (!ISADMIN() && !ISFOREIGN_ADMIN()) {
     SPITUSERERROR("You do not have permission to view this information!");
     return;
 }
-
-echo "<link rel='stylesheet'
-            href='css/tablesorter.css'>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "    window.DAYS = $days;\n";
@@ -154,12 +151,8 @@ echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
-SPITREQUIRE("js/ranking.js",
-            "<script src='js/lib/jquery.tablesorter.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
-            "<script src='js/lib/sugar.min.js'></script>".
-            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
-
+REQUIRE_TABLESORTER();
+SPITREQUIRE("js/ranking.js");
 AddTemplate("ranking");
 SPITFOOTER();
 ?>

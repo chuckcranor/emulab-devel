@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -629,7 +629,7 @@ sub TBPxelinuxConfig($;$)
 	}
 
 	# argh...gotta use a setuid script to install a new pxelinux config!
-	if (!system("$TB/sbin/pxelinux_makeconf -d -a $action $nodeid >>/tmp/pxelinux_makeconf.log 2>&1")) {
+	if (!system("$TB/sbin/pxelinux_makeconf -d -a $action $nodeid")) {
 	    print("$nodeid: set pxelinux boot to '$action'\n");
 	    return;
 	}

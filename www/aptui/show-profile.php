@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -105,6 +105,9 @@ if ($profile->script() && $profile->script() != "") {
 if ($profile->repourl() && $profile->repourl() != "") {
     $defaults["profile_repourl"] = $profile->repourl();
 }
+if ($profile->isParameterized()) {
+    $defaults["paramdefs"] = json_decode($profile->paramdefs());
+}
 $latest_profile = Profile::Lookup($profile->profile_uuid());
 $defaults["latest_uuid"] = $latest_profile->uuid();
 $defaults["latest_version"] = $latest_profile->version();
@@ -173,11 +176,13 @@ echo "<script src='js/lib/codemirror-min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
+REQUIRE_JACKS();
 REQUIRE_MOMENT();
 REQUIRE_APTFORMS();
 REQUIRE_MARKED();
 REQUIRE_GENILIB_EDITOR();
 AddLibrary("js/gitrepo.js");
+AddLibrary("js/paramhelp.js");
 SPITREQUIRE("js/show-profile.js",
             "<script src='js/lib/jquery-ui.js'></script>\n".
             "<script src='js/lib/jquery.appendGrid-1.3.1.min.js'></script>");

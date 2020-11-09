@@ -5,6 +5,9 @@
 ## This file is intended for use by sites running the emulab software. It
 ## was installed by the testbed installation process.
 ##
+<If "@BROWSER_CONSOLE_PROXIED@ == 1">
+Define BROWSER_CONSOLE_PROXIED
+</If>
 
 #
 # This is the main Apache server configuration file.  It contains the
@@ -179,11 +182,10 @@ LoadModule speling_module libexec/apache24/mod_speling.so
 LoadModule userdir_module libexec/apache24/mod_userdir.so
 LoadModule alias_module libexec/apache24/mod_alias.so
 LoadModule rewrite_module libexec/apache24/mod_rewrite.so
-#LoadModule proxy_module libexec/apache24/mod_proxy.so
-#LoadModule proxy_balancer_module libexec/apache24/mod_proxy_balancer.so
-#LoadModule proxy_ftp_module libexec/apache24/mod_proxy_ftp.so
-#LoadModule proxy_http_module libexec/apache24/mod_proxy_http.so
-#LoadModule proxy_connect_module libexec/apache24/mod_proxy_connect.so
+<IfDefine BROWSER_CONSOLE_PROXIED>
+LoadModule proxy_module libexec/apache24/mod_proxy.so
+LoadModule proxy_http_module libexec/apache24/mod_proxy_http.so
+</IfDefine>
 LoadModule cache_module libexec/apache24/mod_cache.so
 LoadModule suexec_module libexec/apache24/mod_suexec.so
 #LoadModule disk_cache_module libexec/apache24/mod_disk_cache.so
@@ -403,6 +405,7 @@ DocumentRoot "@prefix@/www/"
     Order deny,allow
     deny from all
     # Add your allow statements here.
+    IncludeOptional /usr/local/etc/apache24/utah-nets.conf
 </Directory>
 
 #
@@ -1117,7 +1120,7 @@ SSLEngine on
 #   SSL Protocol support:
 # List the enable protocol levels with which clients will be able to
 # connect.  Disable SSLv2 access by default:
-SSLProtocol all -SSLv2 -SSLv3
+SSLProtocol all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1
 
 #   SSL Cipher Suite:
 # List the ciphers that the client is permitted to negotiate.
@@ -1258,4 +1261,28 @@ SetEnvIf User-Agent ".*MSIE.*" \
 #   compact non-error SSL logfile on a virtual host basis.
 CustomLog @prefix@/log/apache_ssl_request_log \
           "%t %h %{SSL_PROTOCOL}x %{SSL_CIPHER}x \"%r\" %b"
+
+<IfDefine BROWSER_CONSOLE_PROXIED>
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+	
+    # Rewrite shellinabox startup
+    RewriteRule ^/d77e8041d1ad$	    https://@USERNODE@/d77e8041d1ad [P,L]
+
+    # Proxy to the per console shellinabox server
+    RewriteRule ^/shellinabox/([0-9]*)/(.*)$  https://@USERNODE@:$1/$2 [L,P]
+</IfModule>
+<IfModule mod_proxy.c>
+    ProxyRequests Off
+    ProxyVia On
+
+    SSLProxyEngine On
+    SSLProxyCACertificateFile @prefix@/etc/emulab.pem
+    
+    # prevent the webserver from beeing used as proxy
+    <LocationMatch "^[^/]">
+        Deny from all
+    </LocationMatch>
+</IfModule>
+</IfDefine>
 </VirtualHost>

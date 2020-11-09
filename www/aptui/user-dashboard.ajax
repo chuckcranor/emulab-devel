@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,6 +26,7 @@ chdir("apt");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
 include_once("ajax-routines.ajax");
+include_once("resgroup_defs.php");
 
 # We set this in CheckPageArgs
 $target_user = null;
@@ -136,6 +137,37 @@ function Do_DatasetList()
     SPITAJAX_RESPONSE($results);
 }
 
+function Do_ResgroupList()
+{
+    global $this_user, $target_user;
+    $result  = array();
+    $listing = array();
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $resgroups = ReservationGroup::LookupForUser($target_user);
+    foreach ($resgroups as $resgroup) {
+        $listing[$resgroup->uuid()] = $resgroup->Blob();
+    }
+    $result["user"] = $listing;
+
+    #
+    # Also all resgroups in projects the user belongs to. 
+    #
+    $projlist  = $target_user->ProjectMembershipList();
+    $listing   = array();
+
+    foreach ($projlist as $project) {
+        $resgroups = ReservationGroup::LookupForProject($project);
+        foreach ($resgroups as $resgroup) {
+            $listing[$resgroup->uuid()] = $resgroup->Blob();
+        }
+    }
+    $result["project"] = $listing;
+    SPITAJAX_RESPONSE($result);
+}
+
 function Do_ClassicDatasetList()
 {
     global $this_user, $target_user;
@@ -230,10 +262,13 @@ function Do_AccountDetails()
 
     if (ISADMIN()) {
         $results["uid_idx"]       = $target_user->uid_idx();
-        $results["portal"]        = $target_user->portal();
+        $results["portal"]        = ($target_user->portal() ?
+                                     $target_user->portal() : "classic");
         $results["bound_portal"]  = $target_user->bound_portal() ? true:false;
         $results["created"]       = DateStringGMT($target_user->created());
         $results["status"]        = $target_user->status();
+        $results["frozen_stamp"]  = DateStringGMT($target_user->frozen_stamp());
+        $results["frozen_by"]     = $target_user->frozen_by();
         $results["stud"]          = $target_user->stud() ? true : false;
         $results["admin"]         = $target_user->admin() ? true : false;
         $results["foreign_admin"] = $target_user->foreign_admin() ? true:false;
@@ -420,6 +455,28 @@ function Do_FreezeOrThaw()
         SPITAJAX_ERROR(-1, $suexec_output);
         return -1;
     }
+    $target_email = $target_user->email();
+    $target_name  = $target_user->name();
+    $adminemail   = $target_user->adminEmail();
+
+    if ($which == "freeze") {
+        $tag = "frozen";
+        $message = 
+            "To discuss this matter in further detail, ".
+            "please respond to this message.\n";
+    }
+    else {
+        $tag = "unfrozen";
+        $message = "";
+    }
+    if (isset($ajax_args["message"]) && $ajax_args["message"] != "") {
+        $message = $ajax_args["message"] . "\n\n" . $message;
+    }    
+    TBMAIL("$target_name '$target_uid' <$target_email>",
+           "Your account has been $tag",
+           "Your account has been ${tag}.\n\n" . $message,
+           "From: $adminemail\n".
+           "Bcc: $adminemail");
     SPITAJAX_RESPONSE(1);
 }
 
@@ -504,7 +561,7 @@ function Do_SendTestMessage()
            "\n".
            "Thank you very much!\n",
            "From: $adminemail\n".
-           "Bcc: stoller");
+           "Bcc: $adminemail");
            
     SPITAJAX_RESPONSE(1);
 }

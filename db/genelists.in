@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -80,6 +80,7 @@ my $PROJECTMAILLISTS = @PROJECTMAILLISTS@;
 my $MMPROG	= "$TB/sbin/setmmlistmembers";
 my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 my $MAINSITE    = @TBMAINSITE@;
+my $MAILERNODE  = "@MAILERNODE@";
 
 # Note no -n option. We redirect stdin from the new exports file below.
 my $SSH		= "$TB/bin/sshtb -l root -host $USERS";
@@ -501,7 +502,7 @@ sub ProjectLists($$)
     if ($query_result->numrows) {
 	if ($pid eq $gid) {
 	    genelist($query_result, undef, "$pid-users",
-		     ($pid eq "CloudLab" ? 0 : 1));
+		     ($pid eq "@PROTOGENI_HOLDINGPROJECT@" ? 0 : 1));
 	}
 	else {
 	    genelist($query_result, undef, "$pid-$gid-users",
@@ -614,8 +615,14 @@ sub genelist($$$$)
 	}
 	else {
 	    $UID = 0;
-	    system("$SSH $PROG $listname < $tempfile") == 0 or
-		fatal("Failed: $SSH $PROG $listname < $tempfile: $?");
+	    if ($MAILERNODE eq "boss") {
+		system("$PROG $listname < $tempfile") == 0 or
+		    fatal("Failed: $PROG $listname < $tempfile: $?");
+	    }
+	    else {
+		system("$SSH $PROG $listname < $tempfile") == 0 or
+		    fatal("Failed: $SSH $PROG $listname < $tempfile: $?");
+	    }
 	    $UID = $SAVEUID;
 	}
     }

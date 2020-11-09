@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,13 +50,15 @@ sub usage()
 	  "       style==1: let frisbee do the zeroing\n".
 	  "       style==2: zero disk before running frisbee\n".
           "Use -P to prepare the disk as if a whole disk image was loaded\n".
+	  "Use -Z to prepare like -P but also invalidates metadata on all ".
+	  "other disks\n".
           "Use -V to load JUST the physical nodes in an experiment\n".
           "Use -R to push a reconfig to the node after the reload\n".
           "Use -D to set a specific debug level\n".
           "Use -o <opt1=foo,opt2=bar,...> to set custom options\n");
     exit(-1);
 }
-my $optlist   = "swldD:i:e:p:m:rz:PcRFo:V";
+my $optlist   = "swldD:i:e:p:m:rz:PZcRFo:V";
 my $waitmode  = 1;
 my $listonly  = 0;
 my $debug     = 0;
@@ -128,8 +130,11 @@ $noreboot = 1
     if (defined($options{"r"}));
 $zerofree = $options{"z"}
     if (defined($options{"z"}));
+# Prepare is now a level indicator.
 $prepare = 1
     if (defined($options{"P"}));
+$prepare = 2
+    if (defined($options{"Z"}));
 $physonly = 1
     if (defined($options{"V"}));
 $usecurrent = 1
@@ -458,7 +463,7 @@ sub dolisting() {
     if ($UID && !TBAdmin($UID)) {
 	my ($me) = getpwuid($UID);
 	$query_result =
-	    DBQueryFatal("select distinct i.pid,i.imagename from images as i ".
+	    DBQueryFatal("select distinct i.pid,i.imagename,i.imageid from images as i ".
 			 "left join image_versions as v on ".
 			 "     v.imageid=i.imageid and v.version=i.version ".
 			 "left join group_membership as g on ".
@@ -467,7 +472,7 @@ sub dolisting() {
 			 "order by i.pid,i.imageid");
     } else {
 	$query_result =
-	    DBQueryFatal("SELECT distinct pid,imagename FROM images ".
+	    DBQueryFatal("SELECT distinct pid,imagename,imageid FROM images ".
 			 "order by imageid");
     }
 

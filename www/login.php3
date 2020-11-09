@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -291,6 +291,17 @@ else {
               to have your account restored. <br> <br>
               Please do not attempt to login again; it will not work!
               </h4>\n";
+	PAGEFOOTER($view);
+	die("");
+    }
+    else if ($dologin_status == DOLOGIN_STATUS_NOGENIUSER) {
+	# Short delay.
+	sleep(1);
+
+	PAGEHEADER("Login", $view);
+	echo "<h4>
+              This account was created by logging in via the <b>Geni Login</b>
+              button. Login not allowed.</h4>\n";
 	PAGEFOOTER($view);
 	die("");
     }

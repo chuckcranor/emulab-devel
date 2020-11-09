@@ -564,13 +564,13 @@ getwcache() {
 #set -x
 	if [ "${cmc/camcontrol}" != "${cmc}" ] ; then
 	    sd=${1#/dev/}		
-	    x=$(camcontrol modepage $sd -m8 2>/dev/null | grep WCE)
+	    x=$($cmc modepage $sd -m8 2>/dev/null | grep WCE)
 	    if [ "${x/1}" != "$x" ] ; then
 		res="enabled"
 	    elif [ "${x/0}" != "$x" ] ; then
 		res="disabled"
-#		printf " %s:%s\n"  "Setting WCE" "$sd" >> ${logfile4tb}
-		/usr/local/etc/emulab/camwce -P on $sd  > /dev/null 2>&1
+		printf " %s:%s\n"  "Setting WCE" "$sd" >> ${logfile4tb}
+		echo "WCE: 1" | $cmc modepage $sd -m8 -P3 -e > /dev/null 2>&1
 	    fi
 	fi
 #set +x

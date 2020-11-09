@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2016-2019 University of Utah and the Flux Group.
+# Copyright (c) 2016-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -613,6 +613,10 @@ sub LookupAll($$;$$)
 				"FROM nodes AS n " .
 				"LEFT OUTER JOIN " .
 				"reserved AS r ON n.node_id=r.node_id " .
+				"LEFT OUTER JOIN " .
+				"node_attributes AS a ON ".
+	                        "   n.node_id=a.node_id and " .
+	                        "   a.attrkey='not_reservable' " .
 				"LEFT OUTER JOIN experiments AS e ON " .
 				"r.pid=e.pid AND r.eid=e.eid " .
 				"LEFT OUTER JOIN experiment_stats AS stats ON ".
@@ -626,8 +630,9 @@ sub LookupAll($$;$$)
 				"LEFT OUTER JOIN" .
 				"`geni-cm`.geni_slices AS s ON " .
 				"e.eid_uuid=s.uuid " .
-				"WHERE (n.reservable=0 and n.type='$type') or ".
-				"      (n.reservable=1 and n.node_id='$type') ".
+				"WHERE ((n.reservable=0 and n.type='$type') or ".
+				"      (n.reservable=1 and n.node_id='$type')) ".
+	                        "  and a.attrvalue is null ".
 				"GROUP BY " .
 				"e.pid, e.eid, n.reserved_pid, nr.pid, " .
 				"UNIX_TIMESTAMP( pr.end )" :
@@ -642,6 +647,10 @@ sub LookupAll($$;$$)
 				"FROM nodes AS n " .
 				"LEFT OUTER JOIN " .
 				"reserved AS r ON n.node_id=r.node_id " .
+				"LEFT OUTER JOIN " .
+				"node_attributes AS a ON ".
+	                        "   n.node_id=a.node_id and " .
+	                        "   a.attrkey='not_reservable' " .
 				"LEFT OUTER JOIN experiments AS e ON " .
 				"r.pid=e.pid AND r.eid=e.eid " .
 				"LEFT OUTER JOIN experiment_stats AS stats ON ".
@@ -653,8 +662,9 @@ sub LookupAll($$;$$)
 				"n.reserved_pid=pr.pid AND " .
 				"n.reservation_name=pr.name AND " .
 	                        "pr.approved is not null ".
-				"WHERE (n.reservable=0 and n.type='$type') or ".
-				"      (n.reservable=1 and n.node_id='$type') ".
+				"WHERE ((n.reservable=0 and n.type='$type') or ".
+				"      (n.reservable=1 and n.node_id='$type')) ".
+	                        "  and a.attrvalue is null ".
 				"GROUP BY e.pid, e.eid, n.reserved_pid, " .
 				"nr.pid, UNIX_TIMESTAMP( pr.end )";
     my $query_result = DBQueryWarn( $query );
@@ -1784,8 +1794,13 @@ sub MaxSwapIn($$$) {
     my ($class, $experiment, $type) = @_;
     my $MAX = 10000;
     my $overflow;
+    my $details;
+
+    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read");        
     
-    my $reservations = LookupAll( $class, $type );
+    my $reservations = LookupAll( $class, $type, undef, \$details );
+    #print $details . "\n" if ($type eq "d430");
+
     foreach my $res ( @$reservations ) {
 	if( defined( $res->pid() ) && defined( $res->eid() ) &&
 	    $res->pid() eq $experiment->pid() &&
@@ -1812,6 +1827,7 @@ sub MaxSwapIn($$$) {
 	   !IsFeasible( $class, $reservations, undef, undef, \$overflow ) ) {
 	$reservation->SetNodes( $reservation->nodes() - $overflow );
     }
+    DBQueryFatal("unlock tables");
 
     my $avail = $reservation->nodes() > 0 ? $reservation->nodes() : 0;
 
@@ -1858,18 +1874,22 @@ sub ReservableTypes($)
     
     foreach my $type (@alltypes) {
 	next
-	    if ($type->class() ne "pc");
-	
+	    if ($type->class() ne "pc" && !$type->reservable());
+
 	my $typename = $type->type();
 	
 	#
 	# Skip if no physical testnodes of this type.
 	#
 	my $query_result =
-	    DBQueryWarn("select count(node_id) from nodes ".
-			"where type='$typename' and ".
-			"      role='" . $Node::NODEROLE_TESTNODE . "' and ".
-			"      reservable=0");
+	    DBQueryWarn("select count(n.node_id) from nodes as n ".
+			"left join node_attributes as a on ".
+			"     a.node_id=n.node_id and ".
+			"     a.attrkey='not_reservable' ".
+			"where n.type='$typename' and ".
+			"      n.role='" . $Node::NODEROLE_TESTNODE . "' and ".
+			"      n.reservable=0 and ".
+			"      a.attrvalue is null");
 	return ()
 	    if (!$query_result);
 	next
@@ -1895,8 +1915,12 @@ sub ReservableNodes($)
     # Skip if no physical testnodes of this type.
     #
     my $query_result =
-	DBQueryWarn("select node_id from nodes ".
-		    "where reservable=1");
+	DBQueryWarn("select n.node_id from nodes as n ".
+		    "left join node_attributes as a on ".
+		    "     a.node_id=n.node_id and ".
+		    "     a.attrkey='not_reservable' ".
+		    "where n.reservable=1 and ".
+		    "      a.attrvalue is null");
     return ()
 	if (!$query_result || !$query_result->numrows);
 

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2008-2013 University of Utah and the Flux Group.
+# Copyright (c) 2008-2013, 2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -351,6 +351,10 @@ def do_method(module, method, params, URI=None, quiet=False, version=None,
         port = url.port if url.port else 443
 
         ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+        try:
+            ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
+        except:
+            pass
         if authenticate:
             ctx.load_cert_chain(CERTIFICATE,password=passphrase)
         if not verify:

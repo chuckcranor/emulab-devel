@@ -32,6 +32,10 @@ pre {
 .table-condensed > tbody > tr > td,
 .table-condensed > tfoot > tr > td {
     padding: 2px;
+ }
+.popover
+{
+    min-width: 500px !important;
 }
 </style>
 <div class='row'>
@@ -403,7 +407,7 @@ pre {
 	      page.
 	    </li>
 	    <li> Still cannot get enough nodes right away? Try making a
-	      <a href="reserve.php" target="_blank">reservation</a>
+	      <a href="resgroup.php" target="_blank">reservation</a>
 	      for the future.
 	    </li>
 	  </ul>
@@ -486,6 +490,10 @@ pre {
 		 data-toggle='tab'>List View</a>
             </li>
 	    <li class='hidden'>
+              <a href='#powder-map' id='show_powder-map_tab'
+		 data-toggle='tab'>Powder Map</a>
+            </li>
+	    <li class='hidden'>
               <a href='#rspec' id='show_rspec_tab'
 		 data-toggle='tab'>Rspec</a>
             </li>
@@ -555,23 +563,24 @@ pre {
 	    </div>
             <div class='tab-pane hidden' id='listview'>
 	      <div id='showtopo_listview'>
-		<table class='table table-striped table-hover table-condensed'
-                       id='listview_table'>
+		<table class='tablesorter' id='listview_table'>
                   <thead>
                     <tr>
                       <th>ID</th>
                       <th>Node</th>
-                      <th>Status</th>
                       <th>Type</th>
+                      <th>Status</th>
+                      <th>Startup</th>
                       <th>Image</th>
-                      <th>SSH command <small>
+                      <th class='filter-false sorter-false'>SSH command <small>
 			(if you provided your own key)</small>
                       </th>
-                      <th style='text-align: left;'>
+                      <th class='filter-false sorter-false'
+			  style='text-align: left;'>
 			<div id='listview-action-menu' class='dropdown'>
 			  <input type="checkbox" id="select-all">
 			  <button id='action-menu-button' type='button'
-				  class='btn btn-primary btn-sm dropdown-toggle'
+				  class='btn btn-primary btn-xs dropdown-toggle'
 				  data-toggle='dropdown'>
 			    <span class='glyphicon glyphicon-cog'></span>
 			  </button>
@@ -585,7 +594,8 @@ pre {
 			  </ul>
 			</div>
 		      </th>
-		      <th style='text-align: center;'>Actions</th>
+		      <th class='filter-false sorter-false'
+			  style='text-align: center;'>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -595,6 +605,9 @@ pre {
             </div>
 	    <div class='tab-pane hidden' id='manifest'>
               <div id='manifest_textarea' style='width: 100%;'></div>
+	    </div>
+	    <div class='tab-pane hidden' id='powder-map'>
+	      <div class="powder-mapview" style='width: 100%;'></div>
 	    </div>
 	    <div class='tab-pane hidden' id='rspec'>
               <div id='rspec_textarea' style='width: 100%;'></div>
@@ -949,7 +962,7 @@ pre {
 			style='margin-bottom: 4px;'></span>
 		</a></li>
 	      <li id='snapshot_update_prepare_option'>
-		<input type=checkbox
+		<input type=checkbox checked
 		       id='snapshot_update_prepare' value=yes>
 		<b>Did you add any accounts or groups to your node?</b>
 		<a href='#' class='btn btn-xs'
@@ -1115,6 +1128,31 @@ pre {
       </div>
     </div>
   </div>
+  <div id='deletesite_modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <center><h3>Confirm to Delete Site</h3>
+	</div>
+	<div class='modal-body'>
+          <p>
+	    Are you <b>sure</b> you want to delete all the nodes from
+	    this site, from your experiment?  This operation cannot be
+	    stopped once it is started!
+	  </p>
+	  <center>
+            <button style='margin-right: 20px;'
+                    class='btn btn-primary btn-sm' 
+                    data-dismiss='modal' aria-hidden='true'>
+	      Cancel</button>
+            <button class='btn btn-danger btn-sm'; type='button'
+		    id='deletesite_confirm'>
+	      Confirm</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
   <div id="context-menu">
     <ul class="dropdown-menu" role="menu"
 	style='cursor: pointer; cursor: hand'>
@@ -1136,11 +1174,36 @@ pre {
 	   data-toggle='tooltip'
 	   title='Boot node into (or out of) recovery mode, click for more info'
 	   data-trigger="hover">Recovery</a></li>
+      <li id="monitor" class="hidden">
+	<a name="monitor"
+	   data-toggle='tooltip'
+	   title='Radio monitoring graph'
+	   data-trigger="hover">Monitor Graph</a></li>
+      <li id="nodetop" class="hidden">
+	<a name="nodetop"
+	   data-toggle='tooltip'
+	   title='Top Processes'
+	   data-trigger="hover">Top Processes</a></li>
+      <li id="powercycle" class="hidden">
+	<a name="powercycle"
+	   data-toggle='tooltip'
+	   title='Power cycle node, click to confirm'
+	   data-trigger="hover">Power Cycle</a></li>
       <li id="delete">
 	<a name="delete"
 	   data-toggle='tooltip'
 	   title='Delete node from experiment, click for more info'
 	   data-trigger="hover">Delete Node</a></li>
+    </ul>
+  </div>
+  <div id="site-context-menu">
+    <ul class="dropdown-menu" role="menu"
+	style='cursor: pointer; cursor: hand'>
+      <li>
+	<a name="delete"
+	   data-toggle='tooltip'
+	   title='Delete site from experiment, click for more info'
+	   data-trigger="hover">Delete Site</a></li>
     </ul>
   </div>
   <div id="context"></div>
@@ -1639,6 +1702,20 @@ pre {
 		    id='ignore-failure-confirm'>
 	      Ignore Failure</button>
 	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='top-processes-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+          <button type='button' class="close"
+                  data-dismiss='modal' aria-hidden='true'>&times;</button>
+	  <pre>
+	  </pre>
+	  Idle processes not shown, top run as:
+	  <tt>top -c -b -n 1 -i -w 120</tt>
 	</div>
       </div>
     </div>

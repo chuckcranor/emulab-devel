@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,7 +30,7 @@
 
 # PROVIDE: netif-emulab
 # REQUIRE: atm1 FILESYSTEMS serial sppp sysctl
-# REQUIRE: ipfilter ipfs netoptions
+# REQUIRE: hostid ipfilter ipfs
 # BEFORE: netif
 # KEYWORD: nojailvnet
 

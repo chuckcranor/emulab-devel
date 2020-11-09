@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -94,7 +94,7 @@ function SPITFORM($uid, $referrer, $error)
 {
     global $PORTAL_PASSWORD_HELP;
     global $TBDB_UIDLEN, $TBBASE, $refer;
-    global $ISAPT, $ISCLOUD, $ISPNET, $ISPOWDER;
+    global $ISAPT, $ISCLOUD, $ISPNET, $ISPOWDER, $PROTOGENI_GENIWEBLOGIN;
     global $adminmode, $cleanmode;
     global $UI_EXTERNAL_ACCOUNTS;
 
@@ -178,7 +178,7 @@ function SPITFORM($uid, $referrer, $error)
              <div class='form-group'>
                <div class='col-sm-offset-2 col-sm-10'>
 <?php
-    if ($ISCLOUD || $ISPNET || $ISPOWDER) {
+    if ($PROTOGENI_GENIWEBLOGIN) {
 	?>
                  <button class='btn btn-info btn-sm pull-left'
 		    type='button'
@@ -324,6 +324,22 @@ else {
               to have your account restored. <br> <br>
               Please do not attempt to login again; it will not work!
               </h4>\n";
+        echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+	SPITNULLREQUIRE();
+	SPITFOOTER();
+	return;
+    }
+    else if ($dologin_status == DOLOGIN_STATUS_NOGENIUSER) {
+	# Short delay.
+	sleep(1);
+
+	SPITHEADER();
+	echo "<h4>
+              This account was created by logging in via the <b>Geni Login</b>
+              button. Please go back to the <a href=login.php>login page</a>
+              and click on the <b>Geni Login</b> button. If you would like
+              to change your account to <em>direct login</em> please
+              contact $SUPPORT.</h4>\n";
         echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 	SPITNULLREQUIRE();
 	SPITFOOTER();

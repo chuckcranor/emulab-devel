@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2017-2018 University of Utah and the Flux Group.
+# Copyright (c) 2017-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,6 +43,7 @@ my $impotent = 0;
 #
 my $SITE  = "@THISHOMEBASE@";
 my $TBOPS = "@TBOPSEMAIL@";
+my $DISABLE_EMAIL= @DISABLE_RESERVATION_EMAIL@;
 
 #
 # Testbed Support libraries
@@ -127,7 +128,8 @@ while( my ($idx, $pid, $count, $type, $end, $email) =
 	      "reservation system to $TBOPS.\n" .
 	      "Thank you for your assistance in debugging this\n" .
 	      "feature!\n",
-	      $TBOPS);
+	      $TBOPS)
+	if (!$DISABLE_EMAIL);
     DBQueryFatal( "UPDATE future_reservations SET notified=NOW() WHERE idx=$idx" );
 }
 
@@ -174,7 +176,8 @@ while( my ($idx, $pid, $count, $type, $start, $end, $email) =
 	      "reservation system to $TBOPS.\n" .
 	      "Thank you for your assistance in debugging this\n" .
 	      "feature!\n",
-	      $TBOPS);
+	      $TBOPS)
+	if (!$DISABLE_EMAIL);
     DBQueryFatal( "UPDATE future_reservations SET notified=NOW() WHERE idx=$idx" );
 }
 

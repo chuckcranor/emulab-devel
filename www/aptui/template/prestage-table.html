@@ -1,6 +1,6 @@
 <div>
   <table class='table table-condensed table-bordered'
-	 style="font-size: 12px;">
+	 style="font-size: 12px; margin-bottom: 0px;">
     <thead>
       <tr>
 	<th>Location</th>
@@ -20,10 +20,13 @@
 	    <td><%- Math.floor(image.size / 1000) %>MB</td>
 	    <td style="width: 15%;">
 	      <div class="progress" style="margin-bottom: 0px;">
-		<% if (image.status != "ready") { %>
+		<% if (image.status != "ready") {
+		  var width = (image.progress != 0 ?
+		    (image.progress/image.size) * 100 : 3);
+		%>
 		  <div class="progress-bar progress-bar-striped active"
 		       role="progressbar"
-		       style="width: <%- (image.progress/image.size) * 100 %>%;">
+		       style="width: <%- width %>%;">
 		  </div>
 		<% } else { %>
 		  <div class="progress-bar progress-bar-success"

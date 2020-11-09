@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,7 +27,8 @@ SUBDIR		= install/powder-fixed
 
 include $(OBJDIR)/Makeconf
 
-TARGETS		= dhcpd.conf.frag.one telegraf.conf
+TARGETS		= dhcpd.conf.frag.one telegraf.conf \
+			temp_monitor temp_monitor.sh
 
 #
 # Force dependencies on the scripts so that they will be rerun through
@@ -38,7 +39,15 @@ all: $(TARGETS)
 include $(TESTBED_SRCDIR)/GNUmakerules
 
 install: $(INSTALL_ETCDIR)/dhcpd.conf.frag.one \
-	 $(INSTALL_SBINDIR)/run_capture
+	 $(INSTALL_SBINDIR)/run_capture \
+	 $(INSTALL_SBINDIR)/temp_monitor \
+	 $(INSTALL_RCDIR)/temp_monitor.sh
+
+# Like the INSTALL_BINDIR target
+$(INSTALL_RCDIR)/%: %
+	@echo "Installing $<"
+	-mkdir -p $(INSTALL_RCDIR)
+	$(INSTALL_PROGRAM) $< $@
 
 clean: 
 	rm -f $(TARGETS)

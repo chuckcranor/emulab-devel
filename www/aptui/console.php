@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -112,6 +112,7 @@ echo " <button class='btn btn-danger btn-sm hidden'
 echo "<script type='text/javascript'>\n";
 echo "    window.NODE_ID        = '$node_id';\n";
 echo "    window.ISADMIN        = $isadmin;\n";
+echo "    window.PROXIED        = $BROWSER_CONSOLE_PROXIED;\n";
 echo "</script>\n";
 
 echo "<script type='text/plain' id='auth-json'>\n";

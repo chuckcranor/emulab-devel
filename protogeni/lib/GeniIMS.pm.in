@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -83,7 +83,8 @@ my $SERVERVERSION = 1;
 my @X86TYPES = ("C240M4","C220M4","pcvm","r320","c6220","dl360","r720",
 		"c8220","c8220x","d2100","d710","d820","d430","pc3000",
 		"c220g1", "c220g2", "c6320", "m510", "c4130", "nuc6260",
-		"c220g5", "c240g5", "c240g2", "c6420", "xl170");
+		"c220g5", "c240g5", "c240g2", "c6420", "xl170",
+		"rs440", "rs630", "d6515", "r7525");
 
 # We are using a different DB.
 my $DB;
@@ -255,13 +256,21 @@ sub VerifyBlob($)
 	$blob->{$key} = int($blob->{$key});
     }
     # Integer checks.
-    foreach my $key ("version", "lba_size",
+    foreach my $key ("version", "lba_size", 
 		     "mbr_version", "isdataset", "issystem", "isversioned") {
 	return GeniResponse->MalformedArgsResponse("Missing $key")
 	    if (! (exists($blob->{$key}) && defined($blob->{$key})));
 
 	return GeniResponse->MalformedArgsResponse("Malformed: $key")
 	    if ($blob->{$key} !~ /^\d+$/);
+    }
+    # Optional until all sites updated.
+    if (exists($blob->{"listed"}) && defined($blob->{"listed"})) {
+	return GeniResponse->MalformedArgsResponse("Malformed: listed")
+	    if ($blob->{"listed"} !~ /^\d+$/);
+    }
+    else {
+	$blob->{"listed"} = 1;
     }
     # UUID checks.
     foreach my $key ("image_uuid", "version_uuid") {
@@ -535,6 +544,11 @@ sub UpdateImage($$)
 			 "where image_uuid='$image_uuid'")) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
+    my $listed = $blob->{'listed'};
+    if (! $DB->QueryWarn("update images set listed='$listed' ".
+			 "where image_uuid='$image_uuid'")) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR);
+    }
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
 
@@ -604,6 +618,7 @@ sub NewImage($)
 	    "image_uuid" => $image_uuid,
 	    "isdataset" => $blob->{'isdataset'},
 	    "issystem" => $blob->{'issystem'},
+	    "listed" => $blob->{'listed'},
 	    "isversioned" => $blob->{'isversioned'},
 	);
 	$DB->QueryWarn("insert into images set ".
@@ -799,6 +814,7 @@ sub GetImageInfo($)
 		    "isdataset"      => $row->{'isdataset'},
 		    "isversioned"    => $row->{'isversioned'},
 		    "issystem"       => $row->{'issystem'},
+		    "listed"         => $row->{'listed'},
 		    "visibility"     => $row->{'visibility'},
 		    "project_urn"    => $row->{'project_urn'},
 	};

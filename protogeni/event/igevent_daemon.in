@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -374,10 +374,22 @@ sub HandleNotification($$)
     # up).
     #
     if ($CLUSTER_PORTAL ne "") {
+	#
+	# If the slice is local, it needs to go to local aptevent_daemon.
+	# On the $CLUSTER_PORTAL itself (equal to $BOSSNODE), it is
+	# listening to the SSL version of pubsubd directly, so events
+	# have to go there. 
+	#
 	if ($slice_urn->IsOurDomain()) {
-	    # This slice is local, so events go to the local pubsubd
-	    # (picked up by aptevent_daemon).
-	    $genievent->SetHandle($localhandle);
+	    # This slice is local.
+	    if ($CLUSTER_PORTAL eq $BOSSNODE) {
+		# picked up by aptevent_daemon on ssl handle.
+		$genievent->SetHandle($portalhandle);
+	    }
+	    else {
+		# picked up by aptevent_daemon on local handle.
+		$genievent->SetHandle($localhandle);
+	    }
 	}
 	else {
 	    # This slice belongs to another SA, maybe the Portal, so

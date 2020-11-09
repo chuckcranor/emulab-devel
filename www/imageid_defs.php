@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2019 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -215,6 +215,17 @@ class Image
 	}
 	$this->image = mysql_fetch_array($query_result);
 	return 0;
+    }
+
+    #
+    # Check for the image tracker.
+    #
+    function UseImageTracker()
+    {
+        if (! TBSiteVarExists("protogeni/use_imagetracker")) {
+            return 0;
+        }
+        return TBGetSiteVar("protogeni/use_imagetracker");
     }
 
     #
@@ -480,6 +491,7 @@ class Image
     function ezid()		{ return $this->field("ezid"); }
     function shared()		{ return $this->field("shared"); }
     function isglobal()		{ return $this->field("global"); }
+    function listed()		{ return $this->field("listed"); }
     function updated()		{ return $this->field("updated"); }
     function updater()		{ return $this->field("updater"); }
     function updater_urn()	{ return $this->field("updater_urn"); }
@@ -507,6 +519,9 @@ class Image
     function deprecated()	{ return $this->field("deprecated"); }
     function deprecated_iserror(){ return $this->field("deprecated_iserror"); }
     function deprecated_message(){ return $this->field("deprecated_message"); }
+    function ims_reported()	{ return $this->field("ims_reported"); }
+    function ims_noreport()	{ return $this->field("ims_noreport"); }
+    function ims_update()	{ return $this->field("ims_update"); }
 
     # Return the DB data.
     function DBData()		{ return $this->image; }
