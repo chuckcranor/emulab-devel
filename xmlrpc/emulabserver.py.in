@@ -6289,6 +6289,9 @@ class portal:
             elif opt == "asjson":
                 argstr += " -j "
                 pass
+            elif opt == "refresh":
+                argstr += " -r "
+                pass
             pass
         
         argstr = "status " + escapeshellarg(experiment) + argstr

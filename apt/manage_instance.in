@@ -6370,12 +6370,13 @@ sub DoApplyExtensionPolicy()
 sub DoStatus()
 {
     my $asjson     = 0;
+    my $refresh    = 0;
     my $status     = $instance->status();
     my $slice      = $instance->GetGeniSlice();
     my $slice_uuid = $instance->slice_uuid();
     my $blob;
 
-    my $optlist = "j";
+    my $optlist = "jr";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
@@ -6383,10 +6384,16 @@ sub DoStatus()
     if (defined($options{"j"})) {
 	$asjson = 1;
     }
+    if (defined($options{"r"})) {
+	$refresh = 1;
+    }
 
     # Watch for canceled, tell the user that.
     if ($instance->canceled()) {
 	$status = "canceled";
+    }
+    elsif ($refresh) {
+
     }
 
     if ($asjson) {

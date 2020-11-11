@@ -3245,7 +3245,7 @@ class experimentStatus:
 
     def apply(self):
         try:
-            opts, req_args = getopt.getopt(self.argv, "hj", [ "help"]);
+            opts, req_args = getopt.getopt(self.argv, "hjr", [ "help"]);
             pass
         except getopt.error, e:
             print e.args[0]
@@ -3259,6 +3259,9 @@ class experimentStatus:
                 return 0
             elif opt == "-j":
                 params["asjson"] = 1
+                pass
+            elif opt == "-r":
+                params["refresh"] = 1
                 pass
             pass
 
