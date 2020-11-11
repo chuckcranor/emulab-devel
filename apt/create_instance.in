@@ -783,13 +783,16 @@ if ($tmp) {
 }
 
 #
-# Check frequency ranges. If the experiment is scheduled to start more then
-# an hour in the future, then it is okay to not have a reservation, we will
-# check again in create_slivers.
+# New approach; if less then max duration, no reservations are needed.  But
+# if more then max duration (powder portal only), then user must have valid
+# reservations for the resources and time frame specified.
 #
-my $noresokay = 0;
-if (defined($start_at) && $start_at - time() > 3600) {
-    $noresokay = 1;
+my $noresokay = 1;
+if (defined($stop_at)) {
+    $duration = $stop_at - (defined($start_at) ? $start_at : time());
+    if ($duration > $maxduration * 3600) {
+	$noresokay = 0;
+    }
 }
 if (APT_Profile::CheckResources($rspec, $project,
 				(defined($start_at) ? $start_at : time()),
