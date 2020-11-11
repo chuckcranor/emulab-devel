@@ -986,10 +986,15 @@ if (!defined($instance)) {
     fatal(defined($errmsg) ? $errmsg :
 	  "Could not create instance record for $quickvm_uuid");
 }
-# Apply policies,
-if ($instance->ApplyExtensionPolicies()) {
+
+#
+# We never made use of the extension policies, so lets use them to
+# limit extensions on reservable nodes.
+#
+if (!$this_user->IsAdmin() && 
+    $instance->CheckForExtensionLimit($rspec, \$errmsg)) {
     $instance->Delete();
-    fatal("Error applying policies");
+    fatal("Error checking extension limits: $errmsg");
 }
 
 # We use this list of references for ParRun below.

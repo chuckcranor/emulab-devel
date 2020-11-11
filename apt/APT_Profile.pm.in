@@ -1669,6 +1669,136 @@ sub CheckLicenses($$$$$)
 }
 
 #
+# Get the resource counts from an rspec
+#
+sub GetResources($$$)
+{
+    my ($rspec, $pmsg, $pcounts) = @_;
+
+    if (!ref($rspec)) {
+	$rspec = GeniXML::Parse($rspec);
+	if (! defined($rspec)) {
+	    $$pmsg = "CheckResources: Could not parse rspec";
+	    return -1;
+	}
+    }
+    #
+    # Build up counts for each reservable type (or reservable node).
+    #
+    my %typeCounts = ();
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $client_id    = GetVirtualId($ref);
+	my $hardtype     = GeniXML::FindFirst("n:hardware_type", $ref);
+	my $component_id = GeniXML::GetNodeId($ref);
+	my $manager_urn  = GetManagerId($ref);
+	my $aggregate;
+	my $restoken;
+
+	if (!defined($manager_urn)) {
+	    $$pmsg = "No component_manager_urn for $client_id";
+	    return -1;
+	}
+	$aggregate = APT_Aggregate->Lookup($manager_urn);
+	if (!$aggregate) {
+	    $$pmsg = "No such aggregate: $manager_urn";
+	    return -1;
+	}
+	if (defined($component_id)) {
+	    if (GeniHRN::IsValid($component_id)) {
+		my $hrn = GeniHRN->new($component_id);
+		$component_id = $hrn->id();
+
+		if ($hrn->domain() ne $aggregate->Domain()) {
+		    $$pmsg = "Domain mismatch: $client_id";
+		    return -1;
+		}
+	    }
+	    if (!TBcheck_dbslot($component_id, "virt_nodes", "fixed",
+				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+		$$pmsg = "Invalid component_id: $component_id";
+		return 1;
+	    }
+	}
+	if ($component_id && $aggregate->IsReservableNode($component_id)) {
+	    $restoken = $component_id;
+	}
+	elsif ($hardtype) {
+	    my $type = GeniXML::GetText("name", $hardtype);
+	    if (!TBcheck_dbslot($type, "virt_nodes", "type",
+				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+		$$pmsg = "Invalid type: $type";
+		return 1;
+	    }
+	    if (!$aggregate->IsReservableType($type)) {
+		print STDERR "CheckResources: not a reservable type: $type\n";
+		$restoken = "pc";
+	    }
+	    else {
+		$restoken = $type;
+	    }
+	}
+	if (!exists($typeCounts{$manager_urn})) {
+	    $typeCounts{$manager_urn} = {};
+	}
+	if (!exists($typeCounts{$manager_urn}->{$restoken})) {
+	    $typeCounts{$manager_urn}->{$restoken} = 0;
+	}
+	$typeCounts{$manager_urn}->{$restoken} += 1;
+    }
+    $$pcounts = \%typeCounts;
+    return 0;
+}
+
+#
+# Check resources (types and nodes).
+#
+sub CheckResources($$$$$$;$)
+{
+    my ($rspec, $project, $start, $end, $noresokay, $pmsg, $pcounts) = @_;
+
+    if (!ref($rspec)) {
+	$rspec = GeniXML::Parse($rspec);
+	if (! defined($rspec)) {
+	    $$pmsg = "CheckResources: Could not parse rspec";
+	    return -1;
+	}
+    }
+    my $typeCounts;
+    if (APT_Profile::GetResources($rspec, $pmsg, \$typeCounts)) {
+	return -1;
+    }
+    foreach my $urn (keys(%{$typeCounts})) {
+	my $nickname = APT_Aggregate->Lookup($urn)->nickname();
+	
+	foreach my $type (keys(%{ $typeCounts->{$urn} })) {
+	    my $count = $typeCounts->{$urn}->{$type};
+
+	    #
+	    # Just a marker for a node that is not using a reservable
+	    # node or type. Generally fine, unless noresokay is false.
+	    #
+	    if ($type eq "pc") {
+		if (!$noresokay) {
+		    $$pmsg = "Not all nodes at $nickname are reserved for ".
+			"the duration of the experiment";
+		    return 1;
+		}
+		next;
+	    }
+	    if (!$noresokay &&
+		!APT_Reservation::Group::Reservation::Reserved(
+		     $project, $start, $end, $urn, $type, $count)) {
+		$$pmsg = "$count $type node(s) at $nickname are not reserved ".
+		    "for the duration of the experiment";
+		return 1;
+	    }	    
+	}
+    }
+    $$pcounts = $typeCounts if (defined($pcounts));
+    return 0;
+}
+
+#
 # Check spectrum validity. We no longer require spectrum to be reserved,
 # but the project but needs to have permission to use the spectrum. We still
 # need to check that usage does not conflict with existing reservations and
@@ -1717,11 +1847,19 @@ sub CheckSpectrum($$$$$$)
 		    "in your project.";
 		return 1;
 	    }
+	    if (!$noresokay &&
+		!APT_Reservation::Group::RFReservation->RangeReserved(
+		     $project, $start, $end, $frequency_low, $frequency_high)) {
+		$$pmsg = "Range $frequency_low,$frequency_high ".
+		    "is not reserved by your project for the duration of your ".
+		    "experiment.";
+		return 1;
+	    }
 	}
 	return 0;
     };
 
-    if (APT_Profile::GetSpectrum($xml, \$spectrum, $pmsg)) {
+    if (APT_Profile::GetSpectrum($rspec, \$spectrum, $pmsg)) {
 	return -1;
     }
     return 0

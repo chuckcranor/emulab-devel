@@ -317,8 +317,9 @@ Genixmlrpc->SetContext($context);
 # when creating a new sliver.
 #
 my $credentials;
-if ($instance->GetAllCredentials(0, \$credentials, \$errmsg)) {
-    fatal("Could not generate credentials: $errmsg");
+my $retval = $instance->GetAllCredentials(0, \$credentials, \$errmsg);
+if ($retval) {
+    MyExit($retval, "Could not generate credentials: $errmsg");
 }
 
 #
