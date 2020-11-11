@@ -1184,12 +1184,14 @@ sub CheckNodeConstraints($$$)
 #
 sub CheckDatasets($$)
 {
-    my ($xml, $pmsg) = @_;
-    
-    my $rspec = GeniXML::Parse($xml);
-    if (! defined($rspec)) {
-	print STDERR "CheckDatasets: Could not parse rspec\n";
-	return -1;
+    my ($rspec, $pmsg) = @_;
+
+    if (!ref($rspec)) {
+	$rspec = GeniXML::Parse($rspec);
+	if (! defined($rspec)) {
+	    print STDERR "CheckDatasets: Could not parse rspec\n";
+	    return -1;
+	}
     }
     foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	my $manager_urn = GetManagerId($ref);	
@@ -1295,7 +1297,7 @@ sub CheckDatasets($$)
 #
 sub SetSites($$$$$$)
 {
-    my ($prspecstr, $sitemap, $default_aggregate_urn, $paggregate_urns,
+    my ($prspec, $sitemap, $default_aggregate_urn, $paggregate_urns,
 	$pneedstitcher, $perrmsg) = @_;
     my %interface_map   = ();
     my %aggregates      = ();
@@ -1307,10 +1309,13 @@ sub SetSites($$$$$$)
 	APT_Aggregate->LookupAll();
     }
 
-    my $rspec = GeniXML::Parse($$prspecstr);
-    if (! defined($rspec)) {
-	$$perrmsg = "Could not parse rspec\n";
-	return -1;
+    my $rspec = $$prspec;
+    if (!ref($rspec)) {
+	$rspec = GeniXML::Parse($rspec);
+	if (! defined($rspec)) {
+	    $$perrmsg = "Could not parse rspec\n";
+	    return -1;
+	}
     }
     foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	my $client_id   = GetVirtualId($ref);
@@ -1392,7 +1397,7 @@ sub SetSites($$$$$$)
 	}
 	# if more then one site for a link, must use the stitcher.
 	if (keys(%linksites) > 1) {
-	    $$pneedstitcher = 1;
+	    $$pneedstitcher = 1 if (defined($pneedstitcher));
 
 	    #
 	    # Oh, ugly. The stitcher will not accept the link if its
@@ -1439,9 +1444,13 @@ sub SetSites($$$$$$)
 	    GeniXML::SetJacksSiteManagerId($ref, $manager_urn);
 	}
     }
-    
-    $$prspecstr = GeniXML::Serialize($rspec);
-    @$paggregate_urns = keys(%aggregates);
+    if (ref($$prspec)) {
+	$$prspec = $rspec;
+    }
+    else {
+	$$prspec = GeniXML::Serialize($rspec);
+    }
+    @$paggregate_urns = keys(%aggregates) if (defined($paggregate_urns));
     return 0;
 }
 
@@ -1484,15 +1493,10 @@ sub NeedStitcher($$)
 #
 sub CheckLicenses($$$$$)
 {
-    my ($rspecstr, $user, $project, $plicenses, $perrmsg) = @_;
+    my ($rspec, $user, $project, $plicenses, $perrmsg) = @_;
     my $uid_idx = $user->uid_idx();
     my %licenses = ();
     
-    my $rspec = GeniXML::Parse($rspecstr);
-    if (! defined($rspec)) {
-	$$perrmsg = "Could not parse rspec\n";
-	return -1;
-    }
     my $isAccepted = sub ($) {
 	my ($license_idx) = @_;
 
@@ -1672,9 +1676,17 @@ sub CheckLicenses($$$$$)
 #
 sub CheckSpectrum($$$$$$)
 {
-    my ($xml, $project, $start, $end, $noresokay, $pmsg) = @_;
+    my ($rspec, $project, $start, $end, $noresokay, $pmsg) = @_;
     my $rfrange  = APT_RFRange::Project->Lookup($project);
     my $spectrum = [];
+
+    if (!ref($rspec)) {
+	$rspec = GeniXML::Parse($rspec);
+	if (! defined($rspec)) {
+	    $$pmsg = "CheckSpectrum: Could not parse rspec";
+	    return -1;
+	}
+    }
     
     my $check = sub () {
 	my ($spectrum) = @_;
@@ -1736,11 +1748,6 @@ sub CheckSpectrum($$$$$$)
     # bandaid to force the user to tell us what they are doing. Of course,
     # the user can do anything they like once we let them have the node.
     #
-    my $rspec = GeniXML::Parse($xml);
-    if (! defined($rspec)) {
-	$$pmsg = "CheckSpectrum: Could not parse rspec";
-	return -1;
-    }
     foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	my $manager_urn  = GetManagerId($ref);
 	my $component_id = GeniXML::GetNodeId($ref);
@@ -1798,13 +1805,15 @@ sub CheckSpectrum($$$$$$)
 #
 sub GetSpectrum($$$)
 {
-    my ($xml, $pref, $perrmsg) = @_;
+    my ($rspec, $pref, $perrmsg) = @_;
     my @ranges = ();
 
-    my $rspec = GeniXML::Parse($xml);
-    if (! defined($rspec)) {
-	$$perrmsg = "GetSpectrum: Could not parse rspec";
-	return -1;
+    if (!ref($rspec)) {
+	$rspec = GeniXML::Parse($rspec);
+	if (! defined($rspec)) {
+	    $$perrmsg = "GetSpectrum: Could not parse rspec";
+	    return -1;
+	}
     }
 
     my $collect = sub () {
@@ -1852,12 +1861,14 @@ sub GetSpectrum($$$)
 #
 sub CheckForBuses($$$)
 {
-    my ($xml, $project, $perrmsg) = @_;
+    my ($rspec, $project, $perrmsg) = @_;
     
-    my $rspec = GeniXML::Parse($xml);
-    if (! defined($rspec)) {
-	$$perrmsg = "CheckForBuses: Could not parse rspec";
-	return -1;
+    if (!ref($rspec)) {
+	my $rspec = GeniXML::Parse($rspec);
+	if (! defined($rspec)) {
+	    $$perrmsg = "CheckForBuses: Could not parse rspec";
+	    return -1;
+	}
     }
     foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	my $manager_urn  = GetManagerId($ref);
@@ -1892,10 +1903,17 @@ sub CheckForBuses($$$)
 #
 sub CheckRoutes($$$$$$)
 {
-    my ($xml, $project, $start, $end, $noresokay, $pmsg) = @_;
+    my ($rspec, $project, $start, $end, $noresokay, $pmsg) = @_;
     my $routes = [];
 
-    if (APT_Profile::GetRoutes($xml, \$routes, $pmsg)) {
+    if (!ref($rspec)) {
+	my $rspec = GeniXML::Parse($rspec);
+	if (! defined($rspec)) {
+	    $$pmsg = "CheckRoutes: Could not parse rspec";
+	    return -1;
+	}
+    }
+    if (APT_Profile::GetRoutes($rspec, \$routes, $pmsg)) {
 	return -1;
     }
     foreach my $request (@{$routes}) {
@@ -1926,12 +1944,14 @@ sub CheckRoutes($$$$$$)
 #
 sub GetRoutes($$$)
 {
-    my ($xml, $pref, $perrmsg) = @_;
+    my ($rspec, $pref, $perrmsg) = @_;
 
-    my $rspec = GeniXML::Parse($xml);
-    if (! defined($rspec)) {
-	$$perrmsg = "GetRoutes: Could not parse rspec";
-	return -1;
+    if (!ref($rspec)) {
+	$rspec = GeniXML::Parse($rspec);
+	if (! defined($rspec)) {
+	    $$perrmsg = "GetRoutes: Could not parse rspec";
+	    return -1;
+	}
     }
     #
     # All bus routes are top level.
@@ -1948,13 +1968,8 @@ sub GetRoutes($$$)
 #
 sub SetRepo($$$$$$)
 {
-    my ($prspecstr, $repourl, $reporef, $repohash, $geniuser, $perrmsg) = @_;
+    my ($rspec, $repourl, $reporef, $repohash, $geniuser, $perrmsg) = @_;
 
-    my $rspec = GeniXML::Parse($$prspecstr);
-    if (! defined($rspec)) {
-	$$perrmsg = "Could not parse rspec\n";
-	return -1;
-    }
     #
     # Temporary, lets just throw an execute service onto each node.
     # We put it before any existing execute services.
@@ -2003,7 +2018,6 @@ sub SetRepo($$$$$$)
     foreach my $node (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	SetRepoOnNode($node, $command);
     }
-    $$prspecstr = GeniXML::Serialize($rspec);
     return 0;
 }
 
@@ -2053,14 +2067,9 @@ sub GetRepoCommand($)
 #
 sub EncryptBlocks($$$)
 {
-    my ($pxml, $certificate, $pmsg) = @_;
+    my ($rspec, $certificate, $pmsg) = @_;
     my @encrypt = ();
     
-    my $rspec = GeniXML::Parse($$pxml);
-    if (! defined($rspec)) {
-	print STDERR "EncryptBlocks: Could not parse rspec\n";
-	return -1;
-    }
     foreach my $encref (GeniXML::FindNodesNS("n:encrypt", $rspec,
 				    $GeniXML::EMULAB_NS)->get_nodelist()) {
 	my $text = $encref->textContent();
@@ -2100,7 +2109,6 @@ sub EncryptBlocks($$$)
 	    $ref->appendText($encrypted);
 	    unlink($tempname);
 	}
-	$$pxml = GeniXML::Serialize($rspec);
     }
     return 0;
 }
@@ -2127,7 +2135,7 @@ sub ClearPortalTag($$)
     
     my $rspec = GeniXML::Parse($$pxml);
     if (! defined($rspec)) {
-	$$pmsg = "AddPortalTag: Could not parse rspec";
+	$$pmsg = "ClearPortalTag: Could not parse rspec";
 	return -1;
     }
     GeniXML::ClearPortal($rspec);
