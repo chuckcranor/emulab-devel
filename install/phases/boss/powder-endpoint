@@ -770,17 +770,15 @@ sub Install($$$)
 	    }
 	};
 	
-	#
-	# WBStore.
-	#
 	Phase "newsyslog", "Updating $NEWSYSLOG_CONF", sub {
 	    DoneIfEdited($NEWSYSLOG_CONF);
 
 	    my @lines = (
 		"$LOGDIR/wbstoremonitor.log     644  7   10000  *     Z ".
-		"/var/run/wbstoremonitor.pid"
+		"/var/run/wbstoremonitor.pid",
+		"$LOGDIR/endpoint-monitor.log   644  7   10000  *     Z ".
+		"/var/run/endpoint-monitor.pid");
 		);
-	    
 	    AppendToFileFatal($NEWSYSLOG_CONF, @lines);
 	};
 	
