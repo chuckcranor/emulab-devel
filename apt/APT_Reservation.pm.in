@@ -38,6 +38,8 @@ my $OURDOMAIN     = "@OURDOMAIN@";
 my $MYURN         = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $ANNOUNCE      = "$TB/sbin/announce";
 my $MAINSITE      = @TBMAINSITE@;
+my $PADDING       = (10 * 60);
+my $MAXDURATION   = 16; # Hours
 
 #
 # Nothing in the main package at the moment.
@@ -155,6 +157,28 @@ sub LookupAll($)
         
     my $query_result =
 	DBQueryWarn("select uuid from apt_reservation_groups");
+    return ()
+	if (!defined($query_result));
+
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $resgroup = APT_Reservation::Group->Lookup($uuid);
+	if ($resgroup) {
+	    push(@result, $resgroup);
+        }
+    }
+    return @result;
+}
+
+# Lookup all reservations for a project
+sub LookupForProject($$)
+{
+    my ($class, $project) = @_;
+    my $pid_idx = $project->pid_idx();
+    my @result  = ();
+        
+    my $query_result =
+	DBQueryWarn("select uuid from apt_reservation_groups ".
+		    "where pid_idx='$pid_idx'");
     return ()
 	if (!defined($query_result));
 
@@ -1164,6 +1188,144 @@ sub Update($$$)
     return 0;
 }
 
+sub Reserved($$$$$$)
+{
+    my ($project, $start, $end, $urn, $type, $count) = @_;
+    my $pid_idx = $project->pid_idx();
+
+    my $query_result =
+	DBQueryWarn("select g.uuid,r.type ".
+		    "   from apt_reservation_groups as g ".
+		    "left join ".
+		    "   apt_reservation_group_reservations as r on ".
+		    "   r.uuid=g.uuid ".
+		    "where g.pid_idx='$pid_idx' and ".
+		    "      r.type=" . DBQuoteSpecial($type) . " and ".
+		    "      r.aggregate_urn='$urn' and ".
+		    "      r.count>='$count' and ".
+		    "      $start >= UNIX_TIMESTAMP(g.start) and ".
+		    "      $end <= UNIX_TIMESTAMP(g.end) and ".
+		    "      r.approved is not null");
+    return 0
+	if (!defined($query_result) || !$query_result->numrows);
+
+    return $query_result->numrows;
+}
+
+
+#
+# Determine a max duration for an experiment.
+#
+sub MaxDuration($$$$$)
+{
+    my ($project, $start, $pend, $resources, $pmsg) = @_;
+    my $counts   = undef;
+    my $newend   = undef;
+
+    #
+    # Look at all existing project reservations.
+    #
+    my @groups = APT_Reservation::Group->LookupAll();
+
+    #
+    # Default max duration if no reservations
+    #
+    if (!@groups) {
+	return 0;
+    }
+
+    foreach my $urn (keys(%{$resources})) {
+	my $aggregate = APT_Aggregate->Lookup($urn);
+	
+	foreach my $type (keys(%{ $resources->{$urn} })) {
+	    my $count = $resources->{$urn}->{$type};
+
+	    print "$type, $count\n";
+
+	    foreach my $group (@groups) {
+		my $res_project = $group->GetProject();
+		my $pid = $res_project->pid();
+
+		print "$group\n";
+		
+		next
+		    if (! $group->ReservationList());
+
+		my $res_start   = str2time($group->start());
+		my $res_end     = str2time($group->end());
+
+		print "$pid, $urn\n";
+
+		foreach my $existing ($group->ReservationList()) {
+		    next
+			if (!$existing->approved());
+		    next
+			if ($existing->aggregate_urn() ne $urn);
+		    next
+			if ($existing->type() ne $type);
+			   
+		    # Only reservable nodes for now, it would be pretty
+		    # messy to figure this out for compute nodes (more the
+		    # one)
+		    next
+			if (! $aggregate->IsReservableNode($type));
+
+		    printf("%s, %s\n",
+			   $existing->aggregate_urn(), $existing->type());
+		    
+		    if ($project->SameProject($res_project)) {
+			#
+			# The two cases that matter here are:
+			#
+			# * The start time is within this reservation, in which
+			#   case, the end of the reservation is the upper bound.
+			#
+			# * The start is before the reservation, but still
+			#   close enough to fall within the default
+			#   maxduration (so, the experiment can start and
+			#   run until the start of the reservation).
+			#
+			if ($start >= $res_start && $start < $res_end) {
+			    if (!defined($newend) || $res_end < $newend) {
+				$newend = $res_end;
+			    }
+			}
+			elsif ($start <= $res_start &&
+			       $res_start - $start <= $MAXDURATION * 3600) {
+			    if (!defined($newend)) {
+				$newend = $res_end;
+			    }
+			    elsif ($newend >= $res_start &&
+				   $res_end < $newend) {
+				$newend = $res_end;
+			    }
+			}
+		    }
+		    else {
+			print "$start, $res_start, $res_end\n";
+			
+			#
+			# Reservation in another project, experiment must stop
+			# before the other one starts.
+			#
+			if ($start >= $res_start && $start < $res_end) {
+			    $newend = 0;
+			}
+			elsif ($start < $res_start &&
+			    $res_start - $start <= $MAXDURATION * 3600) {
+			    if (!defined($newend) || $res_start < $newend) {
+				$newend = $res_start;
+			    }
+			}
+		    }
+		}
+	    }
+	}
+    }
+    $$pend = $newend;
+    return 0;
+}
+
 ###################################################################
 package APT_Reservation::Group::RFReservation;
 use emdb;
@@ -1597,7 +1759,7 @@ sub CanStart($$$$$)
 
 		# If this reservation does not overlap in time, skip it.
 		if (($start < $res_start && $end < $res_start) ||
-		    ($start > $res_end)) {
+		    ($start > $res_end - 1)) {
 		    next;
 		}
 		# If this reservation does not overlap in freq, skip it.
@@ -1816,6 +1978,111 @@ sub MaxExtension($$)
     # frequency ranges? Who wins? For now the running experiment wins.
     #
     return $newmax;
+}
+
+#
+# Determine a max duration for an experiment.
+#
+sub MaxDuration($$$$$)
+{
+    my ($project, $start, $pend, $spectrum, $pmsg) = @_;
+    my @spectrum = @{$spectrum};
+    my $newend   = undef;
+
+    return 0
+	if (! @spectrum);
+    
+    #
+    # Look at all existing project reservations.
+    #
+    my @groups = APT_Reservation::Group->LookupAll();
+
+    #
+    # Default max duration if no reservations
+    #
+    if (!@groups) {
+	return 0;
+    }
+
+    foreach my $ref (@$spectrum) {
+	my $freq_low  = $ref->{'frequency_low'};
+	my $freq_high = $ref->{'frequency_low'};
+
+	foreach my $group (@groups) {
+	    my $res_project = $group->GetProject();
+
+	    next
+		if (! $group->RFReservationList());
+
+	    my $res_start   = str2time($group->start());
+	    my $res_end     = str2time($group->end());
+
+	    foreach my $existing ($group->RFReservationList()) {
+		next
+		    if (!$existing->approved());
+
+		my $res_low   = $existing->freq_low();
+		my $res_high  = $existing->freq_high();
+
+		# If this reservation does not overlap in freq, skip it.
+		if (($freq_low < $res_low && $freq_high < $res_low) ||
+		    ($freq_low > $res_high)) {
+		    next;
+		}
+
+		if ($project->SameProject($res_project)) {
+		    #
+		    # The two cases that matter here are:
+		    #
+		    # * The start time is within this reservation, in which
+		    #   case, the end of the reservation is the upper bound.
+		    # * The start is before the reservation, but still close
+		    #   enough to fall within the default maxduration (so, the
+		    #   experiment can start and run until the start of the
+		    #   reservation).
+		    #
+		    if ($start >= $res_start && $start < $res_end) {
+			if (!defined($newend) || $res_end < $newend) {
+			    $newend = $res_end;
+			}
+		    }
+		    elsif ($start <= $res_start &&
+			   $res_start - $start <= $MAXDURATION * 3600) {
+			if (!defined($newend)) {
+			    $newend = $res_end;
+			}
+			elsif ($newend >= $res_start && $res_end < $newend) {
+			    $newend = $res_end;
+			}
+		    }
+		}
+		else {
+		    # Reservation in another project, experiment must stop
+		    # before the other one starts
+		    if ($start >= $res_start && $start < $res_end) {
+			$newend = 0;
+		    }
+		    elsif ($start < $res_start &&
+			$res_start - $start <= $MAXDURATION * 3600) {
+			if (!defined($newend) || $res_start < $newend) {
+			    $newend = $res_start;
+			}
+		    }
+		}
+	    }
+	}
+    }
+    return 0
+	if (!defined($newend));
+
+    if (defined($$pend)) {
+	$$pend = $newend
+	    if ($newend < $$pend);
+    }
+    else {
+	$$pend = $newend;
+    }
+    return 0;
 }
 
 ###################################################################
@@ -2145,7 +2412,7 @@ sub Fits($$$$$)
 
 	    # If this reservation does not overlap in time, skip it.
 	    if (($start < $res_start && $end < $res_start) ||
-		($start > $res_end)) {
+		($start > $res_end - 1)) {
 		next;
 	    }
 	    # If this reservation is a different route, skip it.
@@ -2275,6 +2542,104 @@ sub MaxExtension($)
 	}
     }
     return $newmax;
+}
+
+#
+# Determine a max duration for an experiment.
+#
+sub MaxDuration($$$$$)
+{
+    my ($project, $start, $pend, $routes, $pmsg) = @_;
+    my @routes  = @{$routes};
+    my $newend  = ($$pend ? $$pend : undef);
+
+    return 0
+	if (! @routes);
+    
+    #
+    # Look at all existing project reservations.
+    #
+    my @groups = APT_Reservation::Group->LookupAll();
+
+    #
+    # Default max duration if no reservations
+    #
+    if (!@groups) {
+	return 0;
+    }
+
+    foreach my $ref (@$routes) {
+	my $routename  = $ref->{'name'};
+
+	foreach my $group (@groups) {
+	    my $res_project = $group->GetProject();
+	    
+	    next
+		if (! $group->RouteReservationList());
+
+	    my $res_start   = str2time($group->start());
+	    my $res_end     = str2time($group->end());
+
+	    foreach my $existing ($group->RouteReservationList()) {
+		my $res_name = $existing->routename();
+		next
+		    if (!$existing->approved());
+
+		# The experiment must start within the reservation.
+		if (! ($start >= $res_start && $start < $res_end)) {
+		    next;
+		}
+		# If this reservation is not the route, skip it.
+		if ($res_name ne $routename) {
+		    next;
+		}
+
+		if ($project->SameProject($res_project)) {
+		    #
+		    # The two cases that matter here are:
+		    #
+		    # * The start time is within this reservation, in which
+		    #   case, the end of the reservation is the upper bound.
+		    #
+		    # * The start is before the reservation, but still
+		    #   close enough to fall within the default
+		    #   maxduration (so, the experiment can start and
+		    #   run until the start of the reservation).
+		    #
+		    if ($start >= $res_start && $start < $res_end) {
+			if (!defined($newend) || $res_end < $newend) {
+			    $newend = $res_end;
+			}
+		    }
+		    elsif ($start <= $res_start &&
+			   $res_start - $start <= $MAXDURATION * 3600) {
+			if (!defined($newend)) {
+			    $newend = $res_end;
+			}
+			elsif ($newend >= $res_start &&
+			       $res_end < $newend) {
+			    $newend = $res_end;
+			}
+		    }
+		}
+		else {
+		    # Reservation in another project, experiment must stop
+		    # before the other one starts,
+		    if ($start >= $res_start && $start < $res_end) {
+			$newend = 0;
+		    }
+		    elsif ($start < $res_start &&
+			$res_start - $start <= $MAXDURATION * 3600) {
+			if (!defined($newend) || $res_start < $newend) {
+			    $newend = $res_start;
+			}
+		    }
+		}
+	    }
+	}
+    }
+    $$pend = $newend;
+    return 0;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...
