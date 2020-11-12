@@ -34,6 +34,8 @@ include_once("profile_defs.php");
 include_once("../session.php");
 $page_title = "Instantiate a Profile";
 $dblink = GetDBLink("sa");
+# Feature for new scheduling step.
+$usenewschedule = 0;
 
 #
 # Get current user but make sure coming in on SSL. Guest users allowed
@@ -86,6 +88,9 @@ if ($this_user) {
         $proj = Project::Lookup($pid);
         if ($proj && !$proj->IsNonLocal()) {
             $tmp[$pid] = $projlist[$pid];
+            if (FeatureEnabled("NewScheduleStep", $this_user, $proj)) {
+                $usenewschedule = 1;
+            }
         }
     }
     $projlist = $tmp;
@@ -328,6 +333,7 @@ function SPITFORM($formfields, $newuser, $errors)
     global $profile_array, $this_user, $profilename, $profile;
     global $projlist, $skipfirststep, $maxduration, $TBMAINSITE;
     global $refspec, $ISPOWDER, $ISEMULAB, $rerun_instance, $rerun_paramset;
+    global $usenewschedule;
     
     $showabout  = ($ISAPT && !$this_user ? 1 : 0);
     $registered = (isset($this_user) ? "true" : "false");
@@ -446,8 +452,8 @@ function SPITFORM($formfields, $newuser, $errors)
     }
     if (isset($rerun_paramset)) {
         echo "    window.RERUN_PARAMSET = '$rerun_paramset';\n";
-
     }
+    echo "    window.USENEWSCHEDULE = $usenewschedule;\n";
     echo "    window.EMBEDDED_RESGROUPS = true;\n";
     echo "    window.EMBEDDED_RESGROUPS_SELECT = true;\n";
     echo "</script>\n";

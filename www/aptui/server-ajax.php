@@ -90,6 +90,8 @@ $routing = array("geni-login" =>
 						     "Do_Submit",
 						 "Instantiate" =>
 						     "Do_Instantiate",
+						 "MaxDuration" =>
+						     "Do_MaxDuration",
 						 "GetParameters" =>
                                                      "Do_GetParameters",
 						 "GetPreviousBindings" =>

@@ -262,11 +262,14 @@ $(function ()
 	});
 	$("#end_day").datepicker({
 	    minDate: 0,		/* earliest date is today */
-	    maxDate: "+3D",
+	    maxDate: "+3d",
 	    showButtonPanel: true,
 	    onSelect: function (dateString, dateobject) {
 		DateChange("#end_day");
 	    }
+	});
+	$("#start_hour").change(function () {
+	    DateChange("#start_hour");
 	});
 	$('#start-hour-help, #end-hour-help').popover({
 	    trigger: 'hover',
@@ -861,6 +864,7 @@ $(function ()
 	SubmitForm(1, 2, function (json) {
 	    if (json.code == 0) {
 		step_callback(true);
+		DateChange("#start_day");
 		return;
 	    }
 	    // Internal error.
@@ -901,11 +905,6 @@ $(function ()
 	    step_callback(false);
 	    return;
 	}
-	else if (start_day && start_hour) {
-	    var start = moment(start_day, "MM/DD/YYYY");
-	    start.hour(start_hour);
-	    $('#step3-form [name=start]').val(start.format());
-	}
 	var end_day  = $('#step3-form [name=end_day]').val();
 	var end_hour = $('#step3-form [name=end_hour]').val();
 	if (end_day && !end_hour) {
@@ -917,11 +916,6 @@ $(function ()
 	    ShowFormErrors({"end_day" : "Missing day"});
 	    step_callback(false);
 	    return;
-	}
-	else if (end_day && end_hour) {
-	    var end = moment(end_day, "MM/DD/YYYY");
-	    end.hour(end_hour);
-	    $('#step3-form [name=end]').val(end.format());
 	}
 	SubmitForm(1, 3, function (json) {
 	    if (json.code == 0) {
@@ -1080,20 +1074,34 @@ $(function ()
 	$('#general_error').html("");
     }
 
-    //
-    // Submit the form. The step matters only when checking.
-    //
-    function SubmitForm(checkonly, step, callback)
+    function SerializeForm()
     {
 	// Current form contents as formfields array.
 	var formfields  = {};
 	var sites       = {};
 	
-	var rpc_callback = function(json) {
-	    console.info(json);
-	    callback(json);
+	// The dates are special
+	var start_day  = $('#step3-form [name=start_day]').val();
+	var start_hour = $('#step3-form [name=start_hour]').val();
+	if (start_day && start_hour) {
+	    var start = moment(start_day, "MM/DD/YYYY");
+	    start.hour(start_hour);
+	    $('#step3-form [name=start]').val(start.format());
 	}
-	ClearFormErrors();
+	else {
+	    $('#step3-form [name=start]').val("");
+	}
+	var end_day  = $('#step3-form [name=end_day]').val();
+	var end_hour = $('#step3-form [name=end_hour]').val();
+	if (end_day && end_hour) {
+	    var end = moment(end_day, "MM/DD/YYYY");
+	    end.hour(end_hour);
+	    $('#step3-form [name=end]').val(end.format());
+	}
+	else {
+	    $('#step3-form [name=end]').val("");
+	}
+	
 	// Convert form data into formfields array, like all our
 	// form handler pages expect.
 	var fields = $('.step-forms').serializeArray();
@@ -1115,7 +1123,24 @@ $(function ()
 	if (Object.keys(sites).length) {
 	    formfields["sites"] = sites;
 	}
-	console.info("submitform", formfields);
+	console.info("SerializeForm", formfields);
+	return formfields;
+    }
+
+    //
+    // Submit the form. The step matters only when checking.
+    //
+    function SubmitForm(checkonly, step, callback)
+    {
+	// Current form contents as formfields array.
+	var formfields  = SerializeForm();
+	
+	var rpc_callback = function(json) {
+	    console.info(json);
+	    callback(json);
+	}
+	ClearFormErrors();
+
 	var xmlthing = sup.CallServerMethod(null, "instantiate",
 					    (checkonly ?
 					     "CheckForm" : "Submit"),
@@ -2698,45 +2723,168 @@ $(function ()
 
     /*
      * When the date selected is today, need to disable the hours
-     * before the current hour. Also set the initial hour to a
-     * reasonable hour, like 7am since that is a good start work time
-     * for most people. Basically, try to avoid unused reservations
-     * between midnight and 7am, unless people specifically want that
-     * time.
+     * before the current hour.
      */
     function DateChange(which)
     {
 	var date = $("#step3-form " + which).datepicker("getDate");
 	var now = new Date();
-	var selecter;
 
-	if (which == "#start_day") {
-	    selecter = "#step3-form #start_hour";
-	}
-	else {
-	    selecter = "#step3-form #end_hour";
-	}
-	if (moment(date).isSame(Date.now(), "day")) {
-	    for (var i = 0; i <= now.getHours(); i++) {
+	if (which == "#start_day" || which == "#end_day") {
+	    var selecter;
+	    if (which == "#start_day") {
+		selecter = "#step3-form #start_hour";
+	    }
+	    else {
+		selecter = "#step3-form #end_hour";
+	    }
+	    if (date == null || moment(date).isSame(Date.now(), "day")) {
+		for (var i = 0; i <= now.getHours(); i++) {
 
-		/*
-		 * Before we disable the option, see if it is selected.
-		 * If so, we want make the user re-select the hour.
-		 */
-		if ($(selecter + " option:selected").val() == i) {
-		    $(selecter).val("");
+		    /*
+		     * Before we disable the option, see if it is selected.
+		     * If so, we want to make the user re-select the hour.
+		     */
+		    if ($(selecter + " option:selected").val() == i) {
+			$(selecter).val("");
+		    }
+		    $(selecter + " option[value='" + i + "']")
+			.attr("disabled", "disabled");
 		}
-		$(selecter + " option[value='" + i + "']")
-		    .attr("disabled", "disabled");
+	    }
+	    else {
+		for (var i = 0; i <= now.getHours(); i++) {
+		    $(selecter + " option[value='" + i + "']")
+			.removeAttr("disabled");
+		}
 	    }
 	}
-	else {
-	    for (var i = 0; i <= now.getHours(); i++) {
-		$(selecter + " option[value='" + i + "']")
-		    .removeAttr("disabled");
+	if (window.ISPOWDER &&
+	    (which == "#start_day" || which == "#start_hour")) {
+	    if (isadmin || window.USENEWSCHEDULE) {
+		/*
+		 * The powder portal gets a termination datepicker. Whenever
+		 * the start time is changed, recalc the maximum allowed
+		 * duration and modify the termination accordingly. Also need
+		 * to do this when the project changes.
+		 */
+		UpdateMaxDuration();
+	    }
+	    else if ($("#start_day").datepicker("getDate") &&
+		     $('#start_hour').val()) {
+		var mindate = $("#start_day").datepicker("getDate");
+		mindate.setHours($('#start_hour').val());
+		var maxdate = new Date(mindate.getTime());
+		maxdate.setHours(maxdate.getHours() + window.MAXDURATION);
+	    
+		console.info(mindate, maxdate);
+		$("#end_day").datepicker("option", "minDate", mindate);
+		$("#end_day").datepicker("setDate", mindate);
+		$("#end_day").datepicker("option", "maxDate", maxdate);
+		$("#end_day").datepicker("refresh");
+		$("#end_hour").val(maxdate.getHours());
 	    }
 	}
     }
+
+    /*
+     * Ask for the max duration of this experiment, based on reservations
+     * approved, to the project selected and the current start date/time
+     * in the picker. Any time the project or the start time changes, we
+     * update the end date.
+     */
+    function UpdateMaxDuration()
+    {
+	var start_day  = $('#step3-form [name=start_day]').val();
+	var start_hour = $('#step3-form [name=start_hour]').val();
+
+	console.info("UpdateMaxDuration", start_day, start_hour);
+	$('#doesnotfit-warning').addClass("hidden");
+
+	// Only if start time properly set.
+	if (! ((start_day && start_hour) || (!start_day && !start_hour))) {
+	    return;
+	}
+	// Current form contents as formfields array.
+	var formfields = SerializeForm();
+
+	// Update pickers.
+	var callback = function (json) {
+	    console.info(json);
+	    if (json.code) {
+		console.info("UpdateMaxDuration: " . json.value);
+		return;
+	    }
+	    var maxdate = json.value;
+	    var mindate = $("#start_day").datepicker("getDate");
+
+	    if (!maxdate) {
+		if (start_day) {
+		    $('#doesnotfit-warning-now').addClass("hidden");
+		    $('#doesnotfit-warning-datetime').removeClass("hidden");
+		}
+		else {
+		    $('#doesnotfit-warning-now').removeClass("hidden");
+		    $('#doesnotfit-warning-datetime').addClass("hidden");
+		}
+		$('#doesnotfit-warning').removeClass("hidden");
+		return;
+	    }
+	    if (!mindate) {
+		mindate = new Date();
+	    }
+	    maxdate = new Date(maxdate);
+	    console.info("UpdateMaxDuration: ", mindate, maxdate);
+	    
+	    $("#end_day").datepicker("option", "minDate", mindate);
+	    $("#end_day").datepicker("option", "maxDate", maxdate);
+	    $("#end_day").datepicker("setDate", maxdate);
+	    $("#end_day").datepicker("refresh");
+
+	    /*
+	     * Enable all hours,
+	     */
+	    for (var i = 0; i <= 24; i++) {
+		$("#end_hour option[value='" + i + "']")
+		    .removeAttr("disabled");
+	    }
+	    /*
+	     * If today, disable all hours up to current.
+	     */
+	    if (moment(maxdate).isSame(Date.now(), "day")) {
+		var now = new Date();
+		
+		for (var i = 0; i <= now.getHours(); i++) {
+		    $("#end_hour option[value='" + i + "']")
+			.attr("disabled", "disabled");
+		}
+	    }
+	    /*
+	     * Disable all hours in the selector beyond the max hour.
+	     */
+	    for (var i = maxdate.getHours() + 1; i < 24; i++) {
+		/*
+		 * Before we disable the option, see if it is selected.
+		 * If so, we want to make the user re-select the hour.
+		 */
+		if ($("#end_hour option:selected").val() == i) {
+		    $("#end_hour").val("");
+		}
+		$("#end_hour option[value='" + i + "']")
+		    .attr("disabled", "disabled");
+	    }
+	    /*
+	     * And select the max hour for the user.
+	     */
+	    $("#end_hour").val(maxdate.getHours());
+	};
+	var xmlthing = sup.CallServerMethod(null, "instantiate",
+					    "MaxDuration", 
+					    {"formfields" : formfields,
+					     "rspec"      : selected_rspec});
+	xmlthing.done(callback);
+    }
+    
 
     /*
      * Handle License requirements.
@@ -3162,6 +3310,6 @@ $(function ()
 	//console.info("SetClusters done", rspec);
 	return rspec;
     }
-    
+
     $(document).ready(initialize);
 });
