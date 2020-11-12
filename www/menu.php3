@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1208,6 +1208,7 @@ $PAGEHEADER_FUNCTION = function($title, $view = NULL, $extra_headers = NULL,
     
     header('Content-type: text/html; charset=utf-8');
     header("Last-Modified: " . gmdate("D, d M Y H:i:s") . " GMT");
+    header("X-Frame-Options: SAMEORIGIN");
     
     if (1) {
 	header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
