@@ -1687,6 +1687,7 @@ sub DoDelete()
 sub DoExtend()
 {
     my $force    = 0;
+    my $doperms  = 0;
     my $errcode  = 1;
     my $autoextend_maximum = GetSiteVar("aptui/autoextend_maximum");
     my $autoextend_maxage  = GetSiteVar("aptui/autoextend_maxage");
@@ -1715,7 +1716,7 @@ sub DoExtend()
     usage()
 	if (!@ARGV);
 
-    my $optlist = "m:f:hFe:";
+    my $optlist = "m:f:hFe:X";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
@@ -1730,6 +1731,9 @@ sub DoExtend()
 	    fatal("Only admins can use the -F option");
 	}
 	$force = 1;
+    }
+    if (defined($options{"X"})) {
+	$doperms = 1;
     }
     if (defined($options{"m"})) {
 	$reason = $options{"m"};
@@ -1755,6 +1759,20 @@ sub DoExtend()
 	    $errcode = -1;
 	    goto bad;
 	}	
+    }
+
+    #
+    # NOTE: This is called from legacy XMLRPC server, so do a permission
+    # check here for it. Only the creator on this path, the web interface
+    # will suffice for anyone else.
+    #
+    if ($doperms) {
+	if (!defined($creator)) {
+	    fatal("Cannot lookup creator");
+	}
+	if (!$this_user->SameUser($creator->emulab_user())) {
+	    UserError("Not enough permission to extend experiment");
+	}
     }
 
     #
@@ -2963,9 +2981,33 @@ sub DoRebootOrReload($)
     my $errmsg;
     my $errcode;
     my $exitcode = -1;
-    
+    my $doperms  = 0;
+
+    my $optlist = "X";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"X"})) {
+	$doperms = 1;
+    }
     usage()
 	if (!@ARGV);
+
+    #
+    # NOTE: This is called from legacy XMLRPC server, so do a permission
+    # check here for it. Only the creator on this path, the web interface
+    # will suffice for anyone else.
+    #
+    if ($doperms) {
+	my $creator = $instance->GetGeniUser();
+	if (!defined($creator)) {
+	    fatal("Cannot lookup creator");
+	}
+	if (!$this_user->SameUser($creator->emulab_user())) {
+	    UserError("Not enough permission to reboot nodes");
+	}
+    }
 
     my $slice = $instance->GetGeniSlice();
     if (!defined($slice)) {
@@ -3009,7 +3051,13 @@ sub DoRebootOrReload($)
 	    }
 	}
     }
-    
+    if (!@slivers) {
+	$errmsg   = "Cannot find any nodes to reboot";
+	$errcode  = GENIRESPONSE_SEARCHFAILED;
+	$exitcode = 1;
+	goto bad;
+    }
+
     #
     # Lock the slice in case it is doing something else, like taking
     # a disk image.
@@ -6371,12 +6419,13 @@ sub DoStatus()
 {
     my $asjson     = 0;
     my $refresh    = 0;
+    my $doperms    = 1;
     my $status     = $instance->status();
     my $slice      = $instance->GetGeniSlice();
     my $slice_uuid = $instance->slice_uuid();
     my $blob;
 
-    my $optlist = "jr";
+    my $optlist = "jrX";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
@@ -6384,8 +6433,26 @@ sub DoStatus()
     if (defined($options{"j"})) {
 	$asjson = 1;
     }
+    if (defined($options{"X"})) {
+	$doperms = 1;
+    }
     if (defined($options{"r"})) {
 	$refresh = 1;
+    }
+
+    #
+    # NOTE: This is called from legacy XMLRPC server, so do a permission
+    # check here for it. Only the creator on this path, the web interface
+    # will suffice for anyone else.
+    #
+    if ($doperms) {
+	my $creator = $instance->GetGeniUser();
+	if (!defined($creator)) {
+	    fatal("Cannot lookup creator");
+	}
+	if (!$this_user->SameUser($creator->emulab_user())) {
+	    UserError("Not enough permission to get experiment status");
+	}
     }
 
     # Watch for canceled, tell the user that.

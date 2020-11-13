@@ -47,7 +47,8 @@ SYMLINKS        = node_admin node_reboot os_load create_image node_list \
 		  template_checkout node_avail_list mkblob rmblob \
 		  createdataset deletedataset showdataset extenddataset \
 		  startExperiment terminateExperiment experimentStatus \
-		  extendExperiment experimentManifests imageinfo
+		  extendExperiment experimentManifests imageinfo \
+		  experimentReboot
 
 LINKS		= cd $(INSTALL_BINDIR) && \
 		  list='$(SYMLINKS)'; for file in $$list; do \

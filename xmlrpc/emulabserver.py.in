@@ -6245,7 +6245,7 @@ class portal:
         (fp, filename) = writensfile(reason)
         if not filename:
             return EmulabResponse(RESPONSE_SERVERERROR, output="Server Error")
-        argstr += " -f " + escapeshellarg(filename) + " "
+        argstr += " -X -f " + escapeshellarg(filename) + " "
         argstr += escapeshellarg(wanted)
         
         (exitval, output) = runcommand(TBDIR +
@@ -6279,7 +6279,7 @@ class portal:
         if (argerror):
             return argerror
 
-        argstr     = ""
+        argstr     = "-X "
         experiment = None
         
         for opt, val in argdict.items():
@@ -6342,6 +6342,61 @@ class portal:
         # Tell manage_instance to do permission checks.
         argstr += " -X -j "
 
+        (exitval, output) = runcommand(TBDIR +
+                                       "/bin/manage_instance " + argstr)
+
+        if exitval:
+            return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
+        
+        return EmulabResponse(RESPONSE_SUCCESS, output=output)
+    
+    #
+    # Reboot nodes in a portal experiment.
+    #
+    def reboot(self, version, argdict):
+        if version != self.VERSION:
+            return EmulabResponse(RESPONSE_BADVERSION,
+                                  output="Client version mismatch!")
+
+        if self.readonly:
+            return EmulabResponse(RESPONSE_FORBIDDEN,
+                              output="Insufficient privledge to invoke method")
+        
+        try:
+            checknologins()
+            pass
+        except NoLoginsError, e:
+            return EmulabResponse(RESPONSE_REFUSED, output=str(e))
+
+        argerror = CheckRequiredArgs(argdict, ("experiment",))
+        if (argerror):
+            return argerror
+
+        method     = "reboot"
+        experiment = None
+        nodes      = ""
+
+        for opt, val in argdict.items():
+            if opt == "experiment":
+                experiment = val
+                pass
+            elif opt == "power":
+                method = "powercycle"
+                pass
+            elif opt == "nodes":
+                tokens = val.split(",")
+                for token in tokens:
+                    nodes += " " + escapeshellarg(token)
+                    pass
+                pass
+            pass
+
+        argstr  = method + " "
+        argstr += escapeshellarg(experiment)
+        argstr += " -X " + nodes
+
+        logit(0, argstr);
+        
         (exitval, output) = runcommand(TBDIR +
                                        "/bin/manage_instance " + argstr)
 
