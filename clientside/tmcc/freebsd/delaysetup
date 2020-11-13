@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -331,7 +331,7 @@ sub DelaySetup
 
 	# ipfw pipes
 	print DEL "    ipfw -f pipe flush\n";
-	print DEL "    ipfw -f flush\n";
+	print DEL "    ipfw -q flush\n";
 	if ($FBSD_VERSION >= 6) {
 	    print DEL "    ipfw add 65534 allow all from any to any\n";
 	}
@@ -484,7 +484,7 @@ sub DelaySetup
 	    }
 	}
 	print DEL "ipfw -f pipe flush\n";
-	print DEL "ipfw -f flush\n";
+	print DEL "ipfw -q flush\n";
 	if ($FBSD_VERSION >= 6) {
 	    print DEL "ipfw add 65534 allow all from any to any\n";
 	}
@@ -1034,7 +1034,7 @@ sub LinkDelaySetup
 	# Main boot only.
 	if (!defined($vnodeid)) {
 	    print DEL "ipfw -f pipe flush\n";
-	    print DEL "ipfw -f flush\n";
+	    print DEL "ipfw -q flush\n";
 	    if ($FBSD_VERSION >= 6) {
 		print DEL "ipfw add 65534 allow all from any to any\n";
 	    }
