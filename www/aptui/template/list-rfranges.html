@@ -2,7 +2,7 @@
      class='row hidden col-sm-6 col-sm-offset-3'>
   <center>
     <h4 class="text-center">
-      Frequency Ranges Currently Inuse</h4>
+      Frequency Ranges Currently In Use</h4>
     <table class='tablesorter'>
       <thead>
 	<tr>
@@ -16,7 +16,7 @@
       <tbody>
 	<% _.each(inuse_ranges, function(range) { %>
 	  <tr>
-	    <td><a href="status.php?uid=<%- range.uuid %>">
+	    <td><a href="status.php?uuid=<%- range.uuid %>">
 	      <%- range.name %></a></td>
 	    <td><a href="show-project.php?project=<%- range.pid %>">
 	      <%- range.pid %></a></td>
