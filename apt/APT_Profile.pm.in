@@ -2017,7 +2017,7 @@ sub CheckForBuses($$$)
 
 	my $aggregate = APT_Aggregate->Lookup($manager_urn);
 	if (!defined($aggregate)) {
-	    $$perrmsg = "CheckForBuses: Could not parse rspec";
+	    $$perrmsg = "CheckForBuses: unknown aggregate: $manager_urn";
 	    return -1;
 	}
 	next
