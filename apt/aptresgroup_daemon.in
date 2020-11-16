@@ -301,6 +301,9 @@ sub PushGroups()
 	elsif ($op eq "uncancel") {
 	    $command .= "cancel -c ";
 	}
+	elsif ($op eq "delete") {
+	    $command .= "delete -p ";
+	}
 	elsif ($op eq "noidledetection") {
 	    $command .= "noidledetection -p ";
 	}

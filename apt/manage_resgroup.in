@@ -1106,10 +1106,11 @@ sub DoDelete()
     # is an expiration, initiated by the daemon when it sees a reservation
     # group is done. 
     #
-    my $optlist   = "N:LM";
+    my $optlist   = "N:LMp";
     my $takelock  = 0;
     my $nolock    = 0;	# Caller holds the lock.
     my $noemail   = 0;
+    my $pushonly  = 0;
     my @cluster_reservations = ();
     my @range_reservations   = ();
     my @route_reservations   = ();
@@ -1135,6 +1136,9 @@ sub DoDelete()
     }
     if (defined($options{"M"})) {
 	$nolock = 1;
+    }
+    if (defined($options{"p"})) {
+	$pushonly = 1;
     }
     usage()
 	if (@ARGV < 1);
@@ -1189,7 +1193,15 @@ sub DoDelete()
     #
     # See if we got specific reservations to delete.
     #
-    if (@ARGV) {
+    if ($pushonly) {
+	# Only cluster reservations will need to be pushed.
+	foreach my $res ($resgroup->ReservationList()) {
+	    if ($res->deleted() && !$res->deleted_pushed()) {
+		push(@cluster_reservations, $res);
+	    }
+	}
+    }
+    elsif (@ARGV) {
 	while (@ARGV) {
 	    # Do not want to send these to manage_reservations
 	    my $res_uuid = shift(@ARGV);
@@ -2053,6 +2065,7 @@ sub DoInfoOrWarn()
 		      $resgroup->InfoString() .
 		      "See: $url",
 		      $brand->ReservationsEmailAddress(),
+		      "CC: "  . $brand->OpsEmailAddress() . "\n" .
 		      "BCC: " . $brand->ReservationsEmailAddress());
   done:
     if (defined($webtask)) {
