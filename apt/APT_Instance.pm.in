@@ -1472,7 +1472,7 @@ sub CheckForExtensionLimit($$$)
 	my $reason = "Using $limited special nodes or radios";
 	
 	if ($self->Update({"extension_disabled"     => 0,
-			   "extension_limit"        => 5,
+			   "extension_limit"        => 5 * 24,
 			   "extension_limit_reason" => $reason,
 			   "extension_admin_after_limit" => 1})) {
 	    $$pmsg = "Could not update extension limits";
