@@ -71,8 +71,7 @@ my $SLEEP_INTERVAL   = 3600 * 6;
 my %endpoints = (
     "bookstore" => {
 	"urn" => 'urn:publicid:IDN+bookstore.powderwireless.net+authority+cm',
-	# nuc1 does not have receive capability.
-	"nodes" => ["nuc2"],
+	"nodes" => ["nuc1", "nuc2"],
 	"last"  => {},
         "nickname" => "Bookstore",
     },
@@ -82,10 +81,15 @@ my %endpoints = (
 	"last"  => {},
         "nickname" => "Garage",
     },
+    "ebc" => {
+	"urn" => 'urn:publicid:IDN+ebc.powderwireless.net+authority+cm',
+	"nodes" => ["nuc1", "nuc2"],
+	"last"  => {},
+        "nickname" => "EBC",
+    },
     "law73" => {
         "urn" => 'urn:publicid:IDN+law73.powderwireless.net+authority+cm', 
-	# nuc1 does not have receive capability.
-	"nodes" => ["nuc2"],
+	"nodes" => ["nuc1", "nuc2"],
 	"last"  => {},
         "nickname" => "Law73",
     },
@@ -103,8 +107,7 @@ my %endpoints = (
     },
     "madsen" => {
         "urn" => 'urn:publicid:IDN+madsen.powderwireless.net+authority+cm',
-	# nuc1 does not have receive capability.
-	"nodes" => ["nuc2"],
+	"nodes" => ["nuc1", "nuc2"],
 	"last"  => {},
         "nickname" => "Madsen",
     },
@@ -116,7 +119,7 @@ my %endpoints = (
     },
     "sagepoint" => {
 	"urn" => 'urn:publicid:IDN+sagepoint.powderwireless.net+authority+cm',
-	"nodes" => ["nuc1", "nuc2"],
+	"nodes" => ["nuc1"],
 	"last"  => {},
         "nickname" => "Sagepoint",
     },
@@ -579,7 +582,7 @@ sub GetStatus($$$$)
 {
     my ($name, $refresh, $pref, $pmsg) = @_;
     my $tries = 15;
-    my $opts  = "-j " . ($refresh "-r" : "");
+    my $opts  = "-j " . ($refresh ? "-r" : "");
 
     print "GetStatus: $name\n" if ($debug);
 
