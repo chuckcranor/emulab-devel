@@ -6279,7 +6279,7 @@ class portal:
         if (argerror):
             return argerror
 
-        argstr     = "-X "
+        argstr     = " -X "
         experiment = None
         
         for opt, val in argdict.items():
