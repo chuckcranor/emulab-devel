@@ -6460,7 +6460,9 @@ sub DoStatus()
 	$status = "canceled";
     }
     elsif ($refresh) {
-
+	system("$MANAGEINSTANCE " .
+	       (defined($webtask) ? "-t $webtask_id " : "").
+	       "  -d -- refresh $uuid");
     }
 
     if ($asjson) {
