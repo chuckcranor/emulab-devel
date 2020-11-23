@@ -57,6 +57,11 @@ ifeq ($(OSREL),11.4)
 ISBROKEN = 1
 endif
 endif
+ifeq ($(OSTAG),freebsd12)
+ifeq ($(OSREL),12.2)
+ISBROKEN = 1
+endif
+endif
 ifeq ($(OSTAG),freebsd13)
 ISBROKEN = 1
 endif
