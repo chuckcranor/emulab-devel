@@ -1912,6 +1912,7 @@ sub ReservationPrediction($)
     my $forecast    = {};
     my $current     = {};
     my $upcoming    = {};
+    my $pforecasts  = {};
 
     my @types = Reservation->ReservableTypes();
     foreach my $type (@types) {
@@ -1945,8 +1946,26 @@ sub ReservationPrediction($)
 	    my $hrn  = $projlist{$pid};
 	    my $epid = $hrn->project();
 	    $pressure->{$type}->{$epid} = \@pairs;
+
+	    if (!exists($pforecasts->{$pid})) {
+		$pforecasts->{$pid} = {};
+	    }
+	    $pforecasts->{$pid}->{$type} =
+		[ Reservation->Forecast($type, [$pid]) ];
 	}
     }
+    foreach my $node (@nodes) {
+	my $node_id = $node->node_id();
+	
+	foreach my $pid (@projlist) {
+	    if (!exists($pforecasts->{$pid})) {
+		$pforecasts->{$pid} = {};
+	    }
+	    $pforecasts->{$pid}->{$node_id} =
+		[ Reservation->Forecast($node_id, [$pid]) ];
+	}
+    }
+    
     foreach my $pid (@projlist) {
 	my $hrn  = $projlist{$pid};
 	my $epid = $hrn->project();
@@ -1984,6 +2003,7 @@ sub ReservationPrediction($)
     my $blob = {
 	"freecounts"   => $freecounts,
 	"forecast"     => $forecast,
+	"pforecasts"   => $pforecasts,
 	"pressure"     => $pressure,
 	"reservations" => $outstanding,
 	"upcoming"     => $upcoming,
