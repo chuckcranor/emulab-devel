@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1154,7 +1154,8 @@ sub CheckIdle()
 			"           last_net_act, last_cpu_act, ".
 			"           last_ext_act)))/60,1) as idle_time, ".
 			"  (unix_timestamp(now()) - ".
-			"   unix_timestamp(last_report)) as staleness ".
+			"   unix_timestamp(last_report)) as staleness, ".
+			"  unix_timestamp(last_report) as last_report ".
 			"from reserved as r ".
 			"left join node_activity as na on ".
 			"     na.node_id=r.node_id ".
@@ -1196,16 +1197,18 @@ sub CheckIdle()
 	    my $idletime  = $noderow->{'idle_time'};
 	    # staleness in in seconds
 	    my $staleness = $noderow->{'staleness'};
+	    # This indicates if the node_activity is getting updates.
+	    my $last_report = $noderow->{'last_report'};
 	    $node_idledata{$node_id} = $noderow;
 
 	    #
-	    # staleness; if null, the node is not reporting any idle
+	    # if last_report is null, the node is not reporting any idle
 	    # data since inception; lets skip it since we do not know
 	    # anything. We view these nodes at not idle for now. Needs
 	    # more thought.
 	    #
 	    next
-		if (!defined($staleness));
+		if (!defined($staleness) || $last_report == 0);
 
 	    $reporting++;
 
@@ -1542,7 +1545,7 @@ sub NotifyPortal()
 }
 
 if ($oneshot) {
-    WarnSlices();
+    CheckIdle();
     exit(0);
 }
 
