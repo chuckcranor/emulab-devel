@@ -108,6 +108,7 @@ sub DoApprove();
 sub DoSnapshot();
 sub DoDestroy();
 sub DoSnapShotInternal($$$$$);
+sub CheckIMDataset($$$$$);
 sub PollDatasetStatus($$$);
 sub DoImageTrackerStuff($$$$$);
 sub ExitWithError($);
@@ -201,6 +202,7 @@ sub DoCreate()
 	exit(-1);
     };
     my $aggregate_urn;
+    my $sliver_urn;
     my $errmsg;
     my $pid;
     my $expires;
@@ -263,6 +265,16 @@ sub DoCreate()
 	#
 	if ($aggregate->GetAptAggregate()->nolocalimages()) {
 	    UserError("Not allowed to create a new dataset on this cluster");
+	}
+	my $rval = CheckIMDataset($aggregate, $bsname,
+				  $nodeid, \$sliver_urn, \$errmsg);
+	if ($rval) {
+	    if ($rval < 0) {
+		fatal($errmsg);
+	    }
+	    else {
+		UserError($errmsg);
+	    }
 	}
     }
     else {
@@ -767,7 +779,7 @@ sub DoSnapshot()
 {
     my $errmsg;
     my $errcode = -1;
-    my ($copyback_uuid, $sha1hash);
+    my ($copyback_uuid, $sha1hash, $sliver_urn);
     
     my $usage = sub {
 	print STDERR "Usage: manage_dataset snapshot ".
@@ -800,10 +812,21 @@ sub DoSnapshot()
     if (!defined($aggregate)) {
 	fatal("Could not find aggregate for $nodeid");
     }
+    $errcode = CheckIMDataset($aggregate, $bsname,
+			      $nodeid, \$sliver_urn, \$errmsg);
+    if ($errcode) {
+	if ($errcode < 0) {
+	    fatal($errmsg);
+	}
+	else {
+	    UserError($errmsg);
+	}
+    }
     # Check if the aggregate is online and reachable. 
     if ($aggregate->CheckStatus(\$errmsg)) {
 	UserError($errmsg);
     }
+    
     if (GetSiteVar("protogeni/use_imagetracker")) {
 	if (DoImageTrackerStuff($dataset, $aggregate,
 				\$copyback_uuid,\$sha1hash,\$errmsg)) {
@@ -835,7 +858,7 @@ sub DoSnapshot()
     $dataset->webtask()->AutoStore(1);
 
     $errcode = DoSnapShotInternal($dataset, $aggregate,
-				  $bsname, $nodeid, \$errmsg);
+				  $bsname, $sliver_urn, \$errmsg);
     goto failed
 	if ($errcode);
 
@@ -859,15 +882,17 @@ sub DoSnapshot()
     }
 }
 
-sub DoSnapShotInternal($$$$$)
+#
+# Check IM dataset blockstore, return the sliver urn.
+#
+sub CheckIMDataset($$$$$)
 {
-    my ($dataset, $aggregate, $bsname, $nodeid, $perrmsg) = @_;
-    my $errmsg;
-    
+    my ($aggregate, $bsname, $nodeid, $psliver, $perrmsg) = @_;
+
     my $manifest = GeniXML::Parse($aggregate->manifest());
     if (! defined($manifest)) {
-	$errmsg = "Could not parse manifest";
-	goto failed;
+	$$perrmsg = "Could not parse manifest";
+	return -1;
     }
     my $sliver_urn;
     my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
@@ -882,23 +907,42 @@ sub DoSnapShotInternal($$$$$)
 	    foreach my $blockref
 		(GeniXML::FindNodesNS("n:blockstore", $node,
 				      $GeniXML::EMULAB_NS)->get_nodelist()) {
-		    my $name = GeniXML::GetText("name", $blockref);
+		    my $name       = GeniXML::GetText("name", $blockref);
+		    my $dataset_id = GeniXML::GetText("dataset", $blockref);
+		    my $size       = GeniXML::GetText("size", $blockref);
+
 		    if ($name eq $bsname) {
+			if (!defined($dataset_id) &&
+			    (!defined($size) || $size == 0)) {
+			    $$perrmsg = "Not allowed to create an image ".
+				"backed dataset from a blcokstore that uses ".
+				"all available disk space ".
+				"(no size or size == 0)";
+			    return 1;
+			}
 			$found = 1;
 			last;
 		    }
 	    }
 	    if (!$found) {
-		$errmsg = "No such blockstore $bsname on node $nodeid";
-		goto failed;
+		$$perrmsg = "No such blockstore $bsname on node $nodeid";
+		return 1;
 	    }
 	    last;
 	}
     }
     if (!defined($sliver_urn)) {
-	$errmsg = "Could not find node '$nodeid' in manifest";
-	goto failed;
+	$$perrmsg = "Could not find node '$nodeid' in manifest";
+	return 1;
     }
+    $$psliver = $sliver_urn;
+    return 0;
+}
+
+sub DoSnapShotInternal($$$$$)
+{
+    my ($dataset, $aggregate, $bsname, $sliver_urn, $perrmsg) = @_;
+
     my $response = $aggregate->CreateImage($sliver_urn,
 					   $dataset->dataset_id(), 0,
 					   $dataset->_copyback_uuid(),
@@ -920,12 +964,7 @@ sub DoSnapShotInternal($$$$$)
     # For ImageInfo.
     my ($image_urn) = @{ $response->value() };	
     $dataset->_image_urn($image_urn);
-
     return 0;
-
-  failed:
-    $$perrmsg = $errmsg;
-    return -1;
 }
 
 #
