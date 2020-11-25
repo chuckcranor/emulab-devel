@@ -1786,7 +1786,7 @@ $(function ()
 	     * Change the project; if the user's project list includes
 	     * the project the profile belongs to, that becomes the default.
 	     */
-	    if (projlist && _.has(projlist, profile_blob.pid)) {
+	    if (0 && projlist && _.has(projlist, profile_blob.pid)) {
 		$('#project_selector #profile_pid').val(profile_blob.pid);
 		UpdateGroupSelector();
 	    }
