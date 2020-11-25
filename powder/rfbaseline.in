@@ -119,7 +119,7 @@ my %endpoints = (
     },
     "sagepoint" => {
 	"urn" => 'urn:publicid:IDN+sagepoint.powderwireless.net+authority+cm',
-	"nodes" => ["nuc1"],
+	"nodes" => ["nuc1", "nuc2"],
 	"last"  => {},
         "nickname" => "Sagepoint",
     },
@@ -421,7 +421,7 @@ sub Wait($$$)
 {
     my ($name, $pref, $pmsg) = @_;
     my $refresh = 0;
-    my $tries   = 30;
+    my $tries   = 60;
 
     while ($tries) {
 	my $rval = GetStatus($name, $refresh, $pref, $pmsg);
