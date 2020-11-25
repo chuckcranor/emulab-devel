@@ -1873,6 +1873,10 @@ sub ReservableTypes($)
     my @alltypes = NodeType->AllTypes();
     
     foreach my $type (@alltypes) {
+	#
+	# In general only class=pc types are reservable, but we allow
+	# for override using a type attribute.
+	#
 	next
 	    if ($type->class() ne "pc" && !$type->reservable());
 
@@ -1915,12 +1919,8 @@ sub ReservableNodes($)
     # Skip if no physical testnodes of this type.
     #
     my $query_result =
-	DBQueryWarn("select n.node_id from nodes as n ".
-		    "left join node_attributes as a on ".
-		    "     a.node_id=n.node_id and ".
-		    "     a.attrkey='not_reservable' ".
-		    "where n.reservable=1 and ".
-		    "      a.attrvalue is null");
+	DBQueryWarn("select node_id from nodes ".
+		    "where reservable=1");
     return ()
 	if (!$query_result || !$query_result->numrows);
 
