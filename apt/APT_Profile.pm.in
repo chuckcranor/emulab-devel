@@ -383,6 +383,22 @@ sub isLocked($)
 
     return ($self->nodelete() || $self->profile_nodelete() ? 1 : 0);
 }
+# Is a profile is use by an running or scheduled experiment.
+sub inUse($)
+{
+    my ($self) = @_;
+    my $profileid = $self->profileid();
+    my $version   = $self->version();
+
+    my $query_result =
+	DBQueryWarn("select uuid from apt_instances ".
+		    "where profile_id='$profileid' and ".
+		    "      profile_version='$version'");
+    return 1
+	if (!$query_result);
+
+    return $query_result->numrows;
+}
 
 #
 # Refresh a class instance by reloading from the DB.

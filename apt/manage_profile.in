@@ -1256,6 +1256,27 @@ sub DeleteProfile()
     }
     }
 
+    #
+    # Do not allow profiles in use to be deleted. 
+    #
+    if ($all && $profile->VersionCount() > 1) {
+	foreach my $p ($profile->AllVersions()) {
+	    if ($p->inUse()) {
+		$errmsg = "Not allowed to delete this profile because ".
+		    "version " . $p->version() . " is ".
+		    "currently in use by a running experiment";
+		goto uerror;
+	    }
+	}
+    }
+    else {
+	if ($profile->inUse()) {
+	    $errmsg = "Not allowed to delete this profile because it is ".
+		"currently in use by a running experiment";
+	    goto uerror;
+	}
+    }
+
     # If deleting the only version of a profile, then force $all.
     if ($profile->VersionCount() == 1) {
 	$all = 1;
