@@ -1139,6 +1139,15 @@ sub DoImageTrackerStuff($$$$$$$$)
 	}
     }
     #
+    # We can look for a deprecated image here and warn the user early.
+    #
+    if (exists($blob->{'deprecated'}) && $blob->{'deprecated'}) {
+	$$perrmsg = "$image_token is deprecated; not allowed to clone ".
+	    "or snapshot";
+	return 1;
+    }
+        
+    #
     # System Image? We use the URN we get back from CreateImage().
     # Image aliases are always system images.
     # The cluster will be the origin for the new image unless it
