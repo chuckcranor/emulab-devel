@@ -370,6 +370,11 @@ else {
     }
     $rspecstr = $profile->CheckFirewall(!$localuser);
 }
+my $rspec = GeniXML::Parse($rspecstr);
+if (! defined($rspec)) {
+    fatal("Could not parse rspec");
+}
+
 #
 # Optional rspec and/or script, as for a repo-based profile.
 #
@@ -422,7 +427,7 @@ if ($profile->repourl()) {
 # active, for display purposes.
 #
 if (defined($paramdefs)) {
-    my $retval = APT_Profile::GetBindings($rspecstr, \$bindings, \$errmsg);
+    my $retval = APT_Profile::GetBindings($rspec, \$bindings, \$errmsg);
     if ($retval) {
 	if ($retval < 0) {
 	    fatal($errmsg);
@@ -431,7 +436,7 @@ if (defined($paramdefs)) {
     }
 }
 elsif ($profile->paramdefs() && $profile->paramdefs() ne "") {
-    my $retval = APT_Profile::GetBindings($rspecstr, \$bindings, \$errmsg);
+    my $retval = APT_Profile::GetBindings($rspec, \$bindings, \$errmsg);
     if ($retval) {
 	if ($retval < 0) {
 	    fatal($errmsg);
@@ -452,7 +457,7 @@ if (defined($bindings)) {
 # SetSites will tell us if we must use stitcher.
 #
 my $needstitcher = 0;
-my $tmp = APT_Profile::SetSites(\$rspecstr, $sitemap, $default_aggregate_urn,
+my $tmp = APT_Profile::SetSites(\$rspec, $sitemap, $default_aggregate_urn,
 				\@aggregate_urns, \$needstitcher, \$errmsg);
 if ($tmp) {
     ($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
@@ -461,7 +466,7 @@ if ($tmp) {
 # Powder; see if there are routes; we will bind the nodes later.
 #
 my $routes;
-$tmp = APT_Profile::GetRoutes($rspecstr, \$routes, \$errmsg);
+$tmp = APT_Profile::GetRoutes($rspec, \$routes, \$errmsg);
 if ($tmp) {
     ($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
 }
@@ -484,7 +489,7 @@ $usestitcher = 1 if ($needstitcher);
 # below when we generate the credentials.
 #
 $errmsg = "Bad dataset";
-if (APT_Profile::CheckDatasets($rspecstr, \$errmsg)) {
+if (APT_Profile::CheckDatasets($rspec, \$errmsg)) {
     UserError($errmsg);
 }
 
@@ -749,7 +754,7 @@ if (defined($profile->repourl())) {
     if ($?) {
 	UserError($check);
     }
-    $tmp = APT_Profile::SetRepo(\$rspecstr, $profile->repourl(),
+    $tmp = APT_Profile::SetRepo($rspec, $profile->repourl(),
 				$reporef, $repohash, $geniuser, \$errmsg);
     if ($tmp) {
 	($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
@@ -761,7 +766,7 @@ if (defined($profile->repourl())) {
 #
 my $licenses;
 
-$tmp = APT_Profile::CheckLicenses($rspecstr, $geniuser->emulab_user(), $project,
+$tmp = APT_Profile::CheckLicenses($rspec, $geniuser->emulab_user(), $project,
 				  \$licenses, \$errmsg);
 if ($tmp) {
     if ($tmp < 0) {
@@ -778,22 +783,32 @@ if ($tmp) {
 }
 
 #
-# Check frequency ranges. If the experiment is scheduled to start more then
-# an hour in the future, then it is okay to not have a reservation, we will
-# check again in create_slivers.
+# New approach; if less then max duration, no reservations are needed.  But
+# if more then max duration (powder portal only), then user must have valid
+# reservations for the resources and time frame specified.
 #
-my $noresokay = 0;
-if (defined($start_at) && $start_at - time() > 3600) {
-    $noresokay = 1;
+my $noresokay = 1;
+if (defined($stop_at)) {
+    $duration = $stop_at - (defined($start_at) ? $start_at : time());
+    if ($duration > $maxduration * 3600) {
+	$noresokay = 0;
+    }
 }
-if (APT_Profile::CheckSpectrum($rspecstr, $project,
+if (APT_Profile::CheckResources($rspec, $project,
+				(defined($start_at) ? $start_at : time()),
+				(defined($stop_at) ? $stop_at :
+				 time() + ($duration * 3600)),
+				$noresokay, \$errmsg)) {
+    UserError($errmsg);
+}
+if (APT_Profile::CheckSpectrum($rspec, $project,
 			       (defined($start_at) ? $start_at : time()),
 			       (defined($stop_at) ? $stop_at :
 				time() + ($duration * 3600)),
 			       $noresokay, \$errmsg)) {
     UserError($errmsg);
 }
-if (APT_Profile::CheckRoutes($rspecstr, $project,
+if (APT_Profile::CheckRoutes($rspec, $project,
 			       (defined($start_at) ? $start_at : time()),
 			       (defined($stop_at) ? $stop_at :
 				time() + ($duration * 3600)),
@@ -808,12 +823,13 @@ if (!$debug) {
     AddAuditInfo("cc", $project->LogsEmailAddress());
     if ($MAINSITE) {
 	AddAuditInfo("cc", "stoller\@flux.utah.edu");
+	# AddAuditInfo("cc", "mike\@flux.utah.edu");
     }
     AddAuditInfo("brand", $project->Brand());
 }
 
 # Very temporary!
-my $foo = APT_Profile::CheckForBuses($rspecstr, $project, \$errmsg);
+my $foo = APT_Profile::CheckForBuses($rspec, $project, \$errmsg);
 if ($foo) {
     ($foo < 0 ? fatal($errmsg) : UserError($errmsg));
 }
@@ -916,10 +932,11 @@ fatal("Could not create alt certificate")
 #
 # Encrypt blocks.
 #
-$tmp = APT_Profile::EncryptBlocks(\$rspecstr, $alt_certificate, \$errmsg);
+$tmp = APT_Profile::EncryptBlocks($rspec, $alt_certificate, \$errmsg);
 if ($tmp) {
     ($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
 }
+$rspecstr = GeniXML::Serialize($rspec);
 
 #
 # Got this far, lets create a quickvm record.
@@ -969,10 +986,15 @@ if (!defined($instance)) {
     fatal(defined($errmsg) ? $errmsg :
 	  "Could not create instance record for $quickvm_uuid");
 }
-# Apply policies,
-if ($instance->ApplyExtensionPolicies()) {
+
+#
+# We never made use of the extension policies, so lets use them to
+# limit extensions on reservable nodes.
+#
+if (!$this_user->IsAdmin() && 
+    $instance->CheckForExtensionLimit($rspec, \$errmsg)) {
     $instance->Delete();
-    fatal("Error applying policies");
+    fatal("Error checking extension limits: $errmsg");
 }
 
 # We use this list of references for ParRun below.

@@ -198,14 +198,15 @@ $(function ()
 		window.location.replace(json.value);
 	    }
 	}
-	sup.HideModal('#delete_modal');
-	sup.ShowModal("#waitwait-modal");
-	var xmlthing = sup.CallServerMethod(null,
-					    "dataset",
-					    "delete",
-					    {"uuid" : dataset_uuid,
-					     "embedded" : embedded});
-	xmlthing.done(callback);
+	sup.HideModal('#delete_modal', function () {
+	    sup.ShowModal("#waitwait-modal");
+	    var xmlthing = sup.CallServerMethod(null,
+						"dataset",
+						"delete",
+						{"uuid" : dataset_uuid,
+						 "embedded" : embedded});
+	    xmlthing.done(callback);
+	});
     }
     //
     // Refresh

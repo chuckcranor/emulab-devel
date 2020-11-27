@@ -71,8 +71,7 @@ my $SLEEP_INTERVAL   = 3600 * 6;
 my %endpoints = (
     "bookstore" => {
 	"urn" => 'urn:publicid:IDN+bookstore.powderwireless.net+authority+cm',
-	# nuc1 does not have receive capability.
-	"nodes" => ["nuc2"],
+	"nodes" => ["nuc1", "nuc2"],
 	"last"  => {},
         "nickname" => "Bookstore",
     },
@@ -82,10 +81,15 @@ my %endpoints = (
 	"last"  => {},
         "nickname" => "Garage",
     },
+    "ebc" => {
+	"urn" => 'urn:publicid:IDN+ebc.powderwireless.net+authority+cm',
+	"nodes" => ["nuc1", "nuc2"],
+	"last"  => {},
+        "nickname" => "EBC",
+    },
     "law73" => {
         "urn" => 'urn:publicid:IDN+law73.powderwireless.net+authority+cm', 
-	# nuc1 does not have receive capability.
-	"nodes" => ["nuc2"],
+	"nodes" => ["nuc1", "nuc2"],
 	"last"  => {},
         "nickname" => "Law73",
     },
@@ -103,8 +107,7 @@ my %endpoints = (
     },
     "madsen" => {
         "urn" => 'urn:publicid:IDN+madsen.powderwireless.net+authority+cm',
-	# nuc1 does not have receive capability.
-	"nodes" => ["nuc2"],
+	"nodes" => ["nuc1", "nuc2"],
 	"last"  => {},
         "nickname" => "Madsen",
     },
@@ -146,7 +149,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 # Protos
 sub RunMonitor($$);
-sub GetStatus($$$);
+sub GetStatus($$$$);
 sub Wait($$$);
 sub WaitForData($$$$$);
 sub Finished($$);
@@ -308,7 +311,7 @@ sub RunMonitor($$)
     # Look for experiment still running, in case we got killed and are starting
     # up again. 
     #
-    my $rval = GetStatus($name, \$blob, \$errmsg);
+    my $rval = GetStatus($name, 0, \$blob, \$errmsg);
     if ($rval < 0) {
 	print "Could not get current status for $name: $errmsg\n";
 	return -1;
@@ -417,10 +420,11 @@ sub RunMonitor($$)
 sub Wait($$$)
 {
     my ($name, $pref, $pmsg) = @_;
-    my $tries = 30;
+    my $refresh = 0;
+    my $tries   = 60;
 
     while ($tries) {
-	my $rval = GetStatus($name, $pref, $pmsg);
+	my $rval = GetStatus($name, $refresh, $pref, $pmsg);
 	return $rval
 	    if ($rval < 0);
 
@@ -555,7 +559,7 @@ sub Terminate($$)
     $tries = 30;
     # Now we wait until it really is gone.
     while ($tries) {
-	my $rval = GetStatus($name, \$blob, $pmsg);
+	my $rval = GetStatus($name, 0, \$blob, $pmsg);
 	return $rval
 	    if ($rval < 0);
 	return 0
@@ -574,15 +578,16 @@ sub Terminate($$)
 # Experiment status. Have to watch for boss going offline and keep
 # trying until it comes back online.
 #
-sub GetStatus($$$)
+sub GetStatus($$$$)
 {
-    my ($name, $pref, $pmsg) = @_;
+    my ($name, $refresh, $pref, $pmsg) = @_;
     my $tries = 15;
+    my $opts  = "-j " . ($refresh ? "-r" : "");
 
     print "GetStatus: $name\n" if ($debug);
 
     while ($tries) {
-	my $output = `$EXPSTATUS -j $PID,$name`;
+	my $output = `$EXPSTATUS $opts $PID,$name`;
 	if ($?) {
 	    my $status = $? >> 8;
 	    if ($status == GENIRESPONSE_REFUSED()) {

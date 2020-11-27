@@ -417,7 +417,7 @@ sub ParRun($$$@)
 	#
 	if (@objects && keys(%children) < $maxchildren && !$signaled) {
 	    # Space out the invocation of child processes a little.
-	    sleep(1);
+	    select(undef, undef, undef, 0.35);	    
 
 	    my $newsigset = POSIX::SigSet->new(SIGQUIT,SIGINT,SIGTERM,SIGHUP);
 	    my $oldsigset = POSIX::SigSet->new;

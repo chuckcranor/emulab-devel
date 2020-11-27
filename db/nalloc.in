@@ -421,13 +421,17 @@ if (!$error && (!$noalloc || $partial) && @nodes) {
     print "Resetting node activity\n"
 	if ($debug);
 
-    # It isn't an error if this fails...
-    DBQueryWarn("update node_activity set ".
-		"  last_ext_act=now(), last_report=now() ".
-		"where ".
-		join(" or ",
-		     map("node_id='" . $_->node_id() . "'", @nodes)));
+    # We do not want to update node_activity on blackbox nodes.
+    my @nonblackbox = map {$_->isblackbox() ? () : $_}  @nodes;
 
+    # It isn't an error if this fails...
+    if (@nonblackbox) {
+	DBQueryWarn("update node_activity set ".
+		    "  last_ext_act=now(), last_report=now() ".
+		    "where ".
+		    join(" or ",
+			 map("node_id='" . $_->node_id() . "'", @nonblackbox)));
+    }
     foreach my $node (@nodes) {
 	$node->NewRootPasswd();
     }

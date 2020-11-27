@@ -657,7 +657,7 @@ if ($expire == 0) {
 if (!$approveme) {
     # Note that the lease daemon sends out periodic email about
     # unapproved leases.
-    SENDMAIL($TBOPS, "Lease approval required",
+    SENDMAIL($TBOPS, "Lease approval required: $pid/$lname",
 	     "Lease '$pid/$gid/$lname' requires approval.\n".
 	     (defined($unapproved_reason) ? "$unapproved_reason\n\n" : "\n") .
 	     "You can view it at\n".

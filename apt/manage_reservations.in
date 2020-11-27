@@ -1100,6 +1100,20 @@ sub DoPrediction()
 		    "is currently disabled, please try again later.\n";
 		next;
 	    }
+	    #
+	    # Mobile nodes are special here, we just ping the boss.
+	    # So if the ping looks stale, the boss is not running.
+	    # If it does ping, it might still timeout, but we avoid
+	    # wasting a lot of time on buses that are turned off.
+	    #
+	    if ($agg->ismobile()) {
+		my $last_ping = $agg->LastPing();
+		if ($last_ping <= 0 || time() - $last_ping > 600) {
+		    print STDERR "Mobile node " . $agg->name() . " ".
+			"is currently offline, please try again later.\n";
+		    next;
+		}
+	    }
 	    if (!$agg->IsUp()) {
 		print STDERR "The " . $agg->name() . " cluster ".
 		    "is currently offline, please try again later.\n";

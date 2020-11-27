@@ -155,12 +155,7 @@ $(function ()
 				       "weburl" : info.url,
 				       "isadmin": isadmin});
 		$('#counts-panel-' + name).html(html);
-		// This activates the tooltip subsystem.
-		$('#counts-panel-' + name + ' ' +
-		  '[data-toggle="tooltip"]').tooltip({
-		      delay: {"hide" : 500, "show" : 150},
-		      placement: 'auto',
-		  });
+
 		$('#counts-panel-' + name + ' table')
 		    .tablesorter({
 			theme : 'bootstrap',
@@ -172,6 +167,13 @@ $(function ()
 		InitTable(name);
 		$('#cluster-status-' + name + ' .resgraph-spinner')
 		    .addClass("hidden");
+
+		// This activates the tooltip subsystem.
+		$('#counts-panel-' + name + ' ' +
+		  '[data-toggle="tooltip"]').tooltip({
+		      delay: {"hide" : 500, "show" : 150},
+		      placement: 'auto',
+		  });		
 	    }
 	    var xmlthing = sup.CallServerMethod(null, "cluster-status",
 						"GetStatus",

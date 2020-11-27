@@ -602,6 +602,11 @@ function Do_CheckForm()
             SPITAJAX_RESPONSE(0);
         }
     }
+    if ($ajax_args["step"] == 2.5) {
+        if (CheckMaxxDuration() == 0) {
+            SPITAJAX_RESPONSE(0);
+        }
+    }
     if ($ajax_args["step"] == 3) {
         if (CheckStep3() == 0) {
             SPITAJAX_RESPONSE(0);
@@ -959,10 +964,6 @@ function CheckStep3()
         elseif (($start && $end < $start + 3600) ||
                 $end < time() + 3600) {
             $errors["end_day"] = "Too short, must be > 1 hour";
-        }
-        elseif (($start && $end - $start > (3600 * 3 * 24)) ||
-                (!$start && $end - time() > (3600 * 3 * 24))) {
-            $errors["end_day"] = "No more then three days please";
         }
     }
     else {
@@ -1325,6 +1326,108 @@ function Do_Submit()
     }
     session_destroy();
     SPITAJAX_RESPONSE($blob);
+    return;
+}
+
+#
+# Max Duration based on existing reservations.
+#
+#
+function Do_MaxDuration()
+{
+    global $this_user;
+    global $ajax_args;
+    global $PORTAL_GENESIS, $DEFAULT_AGGREGATE_URN;
+    global $TBAUTHDOMAIN, $ISAPT, $ISPNET, $ISEMULAB, $ISPOWDER;
+
+    if (!isset($ajax_args["formfields"])) {
+	SPITAJAX_ERROR(1, "Missing formfields");
+	return;
+    }
+    #
+    # Must recheck form values of course. 
+    #
+    if (CheckStep0()) {
+        return;
+    }
+    # Step1 is for a parameterized profile, handled elsewhere. 
+    if (CheckStep2()) {
+        return;
+    }
+    $formfields = $ajax_args["formfields"];
+    $amlist     = Instance::DefaultAggregateList();
+    $am_array   = array();
+    $sitemap    = array();
+    $options    = "-p " . $formfields["pid"];
+
+    while (list($index, $aggregate) = each($amlist)) {
+        $urn  = $aggregate->urn();
+        $name = $aggregate->name();
+        $am_array[$name] = $urn;
+    }
+
+    if (!isset($formfields["rspec"]) || $formfields["rspec"] == "") {
+        SPITAJAX_ERROR(-1, "Missing rspec");
+        return;
+    }
+    $rspec = $formfields["rspec"];
+
+    if (isset($formfields["sites"]) && is_array($formfields["sites"])) {
+        while (list($siteid, $am) = each($formfields["sites"])) {
+            if (array_key_exists($am, $am_array)) {
+                $sitemap[$siteid] = $am_array[$am];
+            }
+        }
+        if (count($sitemap)) {
+            while (list($siteid, $urn) = each($sitemap)) {
+                $options .= " --site 'site:${siteid}=${urn}' ";
+            }
+        }
+        else {
+            SPITAJAX_ERROR(-1, "Bad site list");
+            return;
+        }
+    }
+    # Scheduled start time if set.
+    if (isset($formfields["start"]) && $formfields["start"] != "") {
+        $start = strtotime($formfields["start"]);
+        if (!$start) {
+            SPITAJAX_ERROR(-1, "Bad start time");
+            return;
+        }
+        $options .= " -s $start ";
+    }
+    $filename = tempnam("/tmp", "rspec");
+    $fp = fopen($filename, "w");
+    fwrite($fp, $rspec);
+    fclose($fp);
+    chmod($filename, 0666);
+    $options .= " -f $filename";
+
+    $webtask      = WebTask::CreateAnonymous();
+    $webtask_id   = $webtask->task_id();
+
+    $retval = SUEXEC($this_user->uid(), "nobody",
+                     "webmanage_resgroup -t $webtask_id -- ".
+                     "  maxduration $options",
+                     SUEXEC_ACTION_CONTINUE);
+    $webtask->Refresh();
+        
+    if ($retval) {
+        if (!$webtask->exited() || $retval < 0) {
+            SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
+        }
+        else {
+            SPITAJAX_ERROR(1, $webtask->output());
+        }
+        unlink($filename);
+        $webtask->Delete();
+        return;
+    }
+    unlink($filename);
+    $maxend = DateStringGMT(intval($webtask->TaskValue("maxend")));
+    $webtask->Delete();
+    SPITAJAX_RESPONSE($maxend);
     return;
 }
 

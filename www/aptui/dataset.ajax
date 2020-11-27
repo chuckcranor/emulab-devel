@@ -908,6 +908,9 @@ function Do_GetInfo()
             if (isset($taskdata["errmsg"])) {
                 $blob["errmsg"] = $taskdata["errmsg"];
             }
+            elseif (isset($taskdata["output"])) {
+                $blob["errmsg"] = $taskdata["output"];
+            }
         }
 
         #

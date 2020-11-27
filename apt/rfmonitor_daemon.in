@@ -454,6 +454,14 @@ sub HandleChild($)
 	    if ($power < $floor);
 
 	print "Above floor:$noisefloor $nodeid:$iface: $frequency,$power\n";
+
+	#
+	# Temporary measure; lets ignore violations below 1Gz, Alex says
+	# those are harmonics that are not actually going OTA, so lets not
+	# worry users about them. I still dump them into log though.
+	#
+	next
+	    if ($frequency < 1000.0);
 	
 	#
 	# Check for a report that comes in after we have powered off the

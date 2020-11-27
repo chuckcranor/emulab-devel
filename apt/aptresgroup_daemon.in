@@ -260,7 +260,7 @@ sub PushGroups()
 	    foreach my $res ($resgroup->ReservationList()) {
 		if ($res->deleted() && !$res->deleted_pushed()) {
 		    print "$res is marked for deletion and needs a push\n";
-		    $op = "delete";
+		    $op = "deletepush";
 		}
 		elsif ($res->canceled() && !$res->canceled_pushed()) {
 		    print "$res is marked for cancel and needs a push\n";
@@ -291,7 +291,6 @@ sub PushGroups()
 	}
 	if ($impotent) {
 	    $resgroup->Unlock();
-	    next;
 	}
 	print "Invoking $op on $resgroup\n";
 	my $command = "$SUDO -u $PROTOUSER $WAP $MANAGERESGROUP ";
@@ -301,6 +300,12 @@ sub PushGroups()
 	elsif ($op eq "uncancel") {
 	    $command .= "cancel -c ";
 	}
+	elsif ($op eq "delete") {
+	    $command .= "delete ";
+	}
+	elsif ($op eq "deletepush") {
+	    $command .= "delete -p ";
+	}
 	elsif ($op eq "noidledetection") {
 	    $command .= "noidledetection -p ";
 	}
@@ -309,10 +314,12 @@ sub PushGroups()
 	}
 	$command .= "-L $uuid";
 	print "Running '$command'\n";
-        my $output = emutil::ExecQuiet($command);
-	my $status = $?;
-	print STDERR "$output\n"
-	    if ($output ne "");
+	if (!$impotent) {
+	    my $output = emutil::ExecQuiet($command);
+	    my $status = $?;
+	    print STDERR "$output\n"
+		if ($output ne "");
+	}
     }
 }
 
@@ -732,7 +739,7 @@ sub CheckRangesAndRoutes()
 }
 
 if ($oneshot) {
-    NotifyUsers();
+    PushGroups();
     exit(0);
 }
 # Wait a bit before making a bunch of noise.

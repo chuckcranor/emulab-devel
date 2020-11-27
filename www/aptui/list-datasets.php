@@ -105,6 +105,7 @@ function SPITTABLE($which, $results, $where) {
         }
         echo "     <th>State</th>
                    <th>Size (GB)</th>
+                   <th>Created</th>
                    <th>Expires</th>
               </tr>
             </thead>
@@ -129,6 +130,7 @@ function SPITTABLE($which, $results, $where) {
             $pid     = $dataset->pid();
             $creator = $dataset->owner_uid();
             $expires = $dataset->expires();
+            $created = $dataset->created();
             $size    = $dataset->size() ? $dataset->size() : 0;
             # Convert to GB.
             $size     = sprintf('%0.2f', $size * 0.00104858);
@@ -161,6 +163,7 @@ function SPITTABLE($which, $results, $where) {
             }
             echo "  <td>$state</td>
                     <td>$size</td>
+                    <td class='format-date'>$created</td>
                     <td class='format-date'>$expires</td>
                  </tr>\n";
         }

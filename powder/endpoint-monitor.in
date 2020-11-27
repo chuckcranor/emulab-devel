@@ -373,7 +373,7 @@ sub CheckDeadman($$)
 	# Timed out, continue below since time still goes on.
 	logit("Timed out waiting, continuing ...\n") if ($debug);
     }
-    if ($debug || $deadmanTime) {
+    if ($debug || $deadmanTime || $verbose) {
 	logit("keepalive: " . ($pingTime ? $pingTime : 0) . "\n");
 	
 	if ($deadmanTime) {

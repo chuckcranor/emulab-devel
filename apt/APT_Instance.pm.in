@@ -31,7 +31,7 @@ use Date::Parse;
 use File::Temp qw(tempfile tmpnam);
 use JSON;
 use Exporter;
-use vars qw(@ISA @EXPORT $AUTOLOAD
+use vars qw(@ISA @EXPORT $AUTOLOAD $DEFAULT_DURATION
 	    $RECORDHISTORY_TERMINATED $RECORDHISTORY_EXPIRED
 	    $APT_HOLDINGPROJECT $PROTOGENI_HOLDINGPROJECT);
 
@@ -45,8 +45,12 @@ $RECORDHISTORY_EXPIRED		= 0x01;
 $APT_HOLDINGPROJECT   = "aptguests";
 $PROTOGENI_HOLDINGPROJECT = "@PROTOGENI_HOLDINGPROJECT@";
 
+# Default duration for experiments;
+$DEFAULT_DURATION = 16; # hours
+
 @EXPORT = qw($RECORDHISTORY_TERMINATED $RECORDHISTORY_EXPIRED
-             $APT_HOLDINGPROJECT $PROTOGENI_HOLDINGPROJECT);
+             $APT_HOLDINGPROJECT $PROTOGENI_HOLDINGPROJECT
+	     $DEFAULT_DURATION);
 
 # Must come after package declaration!
 use EmulabConstants;
@@ -1442,7 +1446,47 @@ sub AptAggregateList($)
 }
 
 #
-# Apply extension policies.
+# Use the extension limits to prevent reservable nodes from getting
+# extended for too long. Pass in the parsed rspec to avoid doing it again.
+#
+sub CheckForExtensionLimit($$$)
+{
+    my ($self, $rspec, $pmsg)   = @_;
+    my $limited = 0;
+    my $typeCounts;
+    
+    if (APT_Profile::GetResources($rspec, $pmsg, \$typeCounts)) {
+	return -1;
+    }
+    foreach my $urn (keys(%{$typeCounts})) {
+	my $aggregate = APT_Aggregate->Lookup($urn);
+	
+	foreach my $type (keys(%{ $typeCounts->{$urn} })) {
+	    if ($type eq "d740" || $type eq "d820" ||
+		$aggregate->IsReservableNode($type)) {
+		$limited++;
+	    }
+	}
+    }
+    if ($limited) {
+	my $reason = "Using $limited special nodes or radios";
+	
+	if ($self->Update({"extension_disabled"     => 0,
+			   "extension_limit"        => 5 * 24,
+			   "extension_limit_reason" => $reason,
+			   "extension_admin_after_limit" => 1})) {
+	    $$pmsg = "Could not update extension limits";
+	    return -1;
+	}
+    }
+    print "Limiting free extensions to five days, ".
+	"using $limited reservable nodes or radios or types\n";
+    return 0;
+}
+
+#
+# Apply extension policies. Not using this function anymore.
+# See CheckForExtensionLimit();
 #
 sub ApplyExtensionPolicies($)
 {
@@ -2072,23 +2116,26 @@ sub GetAllCredentials($$$$)
     my ($self, $allowexpired, $pref, $perrmsg) = @_;
     my $geniuser    = $self->GetGeniUser();
     my $slice       = $self->GetGeniSlice();
+    my $retval;
     my %credentials = ();
     
     my $dataset_credentials = {};
-    if ($self->CreateDatasetCreds($perrmsg, \$dataset_credentials)) {
-	return -1;
-    }
+    $retval = $self->CreateDatasetCreds($perrmsg, \$dataset_credentials);
+    return $retval
+	if ($retval);
+
     my $image_credentials = {};
-    if ($self->CreateImageCreds($perrmsg, \$image_credentials)) {
-	return -1;
-    }
+    $retval = $self->CreateImageCreds($perrmsg, \$image_credentials);
+    return $retval
+	if ($retval);
+
     #
     # The spectrum credential has to go to all of the aggregates.
     #
     my $spectrum = [];
-    if (APT_Profile::GetSpectrum($self->rspec(), \$spectrum, $perrmsg)) {
-	return -1;
-    }
+    $retval = APT_Profile::GetSpectrum($self->rspec(), \$spectrum, $perrmsg);
+    return $retval
+	if ($retval);
 
     my ($slice_credential, $speaksfor_credential) =
 	APT_Geni::GenCredentials($slice, $geniuser,

@@ -35,6 +35,7 @@ PROTOGENI       = @PROTOGENI_SUPPORT@
 CLUSTER_PORTAL  = @CLUSTER_PORTAL@
 CONFIG_TARGETSYS= @CONFIG_TARGETSYS@
 BOSSNODE        = @BOSSNODE@
+POWDER_DEADMAN  = @POWDER_DEADMAN@
 
 SYSTEM         := $(shell uname -s)
 
@@ -72,7 +73,7 @@ endif
 ifeq ($(TBMAINSITE),1)
 RC_SCRIPTS	+= powder_keepalive.sh
 endif
-ifeq ($(DEADMAN),1)
+ifeq ($(POWDER_DEADMAN),1)
 RC_SCRIPTS	+= endpoint-monitor.sh
 endif
 

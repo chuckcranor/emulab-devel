@@ -187,6 +187,7 @@ emulab_pubkey.pem:	emulab_privkey.pem
 # want the original keys. 
 recover-keys:
 	-cp $(INSTALL_DIR)/etc/emulab.key emulab.key
+	-cp $(INSTALL_DIR)/etc/emulab_privkey.pem emulab_privkey.pem
 	-cp $(APACHE_KEYFILE) apache.key
 	-openssl rsa -in $(INSTALL_DIR)/etc/server.pem -out server.key
 	-openssl rsa -in $(INSTALL_DIR)/etc/capture.pem -out capture.key

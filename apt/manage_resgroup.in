@@ -23,6 +23,7 @@
 #
 use English;
 use strict;
+use Getopt::Long;
 use Getopt::Std;
 use Data::Dumper;
 use JSON;
@@ -36,8 +37,7 @@ use Date::Format;
 #
 sub usage()
 {
-    print("Usage: manage_resgroup ...\n");
-    exit(-1);
+    die("Usage: manage_resgroup ...\n");
 }
 my $optlist     = "dt:";
 my $debug       = 0;
@@ -81,12 +81,15 @@ use EmulabFeatures;
 use libEmulab;
 use libtestbed;
 use WebTask;
+use APT_Profile;
 use APT_Instance;
 use APT_Reservation;
 use APT_RFRange;
 use APT_Aggregate;
 use APT_Utility;
 use GeniResponse;
+use GeniHRN;
+use GeniXML;
 
 # Protos
 sub fatal($);
@@ -100,6 +103,8 @@ sub DoInfoOrWarn();
 sub DoCancel();
 sub DoIdleDetection();
 sub DoConvertReservationsToGroups();
+sub DoCheckReserved();
+sub DoMaxDuration();
 sub CallMethodOnReservations($$@);
 
 #
@@ -156,6 +161,12 @@ elsif ($action eq "idledetection") {
 }
 elsif ($action eq "convert") {
     DoConvertReservationsToGroups();
+}
+elsif ($action eq "checkreserved") {
+    DoCheckReserved();
+}
+elsif ($action eq "maxduration") {
+    DoMaxDuration();
 }
 else {
     usage();
@@ -1095,10 +1106,11 @@ sub DoDelete()
     # is an expiration, initiated by the daemon when it sees a reservation
     # group is done. 
     #
-    my $optlist   = "N:LM";
+    my $optlist   = "N:LMp";
     my $takelock  = 0;
     my $nolock    = 0;	# Caller holds the lock.
     my $noemail   = 0;
+    my $pushonly  = 0;
     my @cluster_reservations = ();
     my @range_reservations   = ();
     my @route_reservations   = ();
@@ -1124,6 +1136,9 @@ sub DoDelete()
     }
     if (defined($options{"M"})) {
 	$nolock = 1;
+    }
+    if (defined($options{"p"})) {
+	$pushonly = 1;
     }
     usage()
 	if (@ARGV < 1);
@@ -1178,7 +1193,15 @@ sub DoDelete()
     #
     # See if we got specific reservations to delete.
     #
-    if (@ARGV) {
+    if ($pushonly) {
+	# Only cluster reservations will need to be pushed.
+	foreach my $res ($resgroup->ReservationList()) {
+	    if ($res->deleted() && !$res->deleted_pushed()) {
+		push(@cluster_reservations, $res);
+	    }
+	}
+    }
+    elsif (@ARGV) {
 	while (@ARGV) {
 	    # Do not want to send these to manage_reservations
 	    my $res_uuid = shift(@ARGV);
@@ -2042,6 +2065,7 @@ sub DoInfoOrWarn()
 		      $resgroup->InfoString() .
 		      "See: $url",
 		      $brand->ReservationsEmailAddress(),
+		      "CC: "  . $brand->OpsEmailAddress() . "\n" .
 		      "BCC: " . $brand->ReservationsEmailAddress());
   done:
     if (defined($webtask)) {
@@ -2655,6 +2679,205 @@ sub DoConvertReservationsToGroups()
 	$webtask->Exited($errcode);
     }
     exit(-1);
+}
+
+#
+# Given an rspec check to see if the resources are reserved for the
+# given 
+#
+sub DoCheckReserved()
+{
+    my @optlist = ('f=s', 's=s', 'e=s', 'p=s');
+    my ($start, $end, $rspec, $project, $errmsg, $sitemap);
+
+    Getopt::Long::Configure("no_ignore_case");
+    my %options = ();
+    if (! GetOptions(\%options, @optlist,
+		     "site=s%" => \$sitemap)) {
+	usage();
+    }
+    if (defined($options{"f"})) {
+	fatal("Cannot read rspec file")
+	    if (! -e $options{"f"});
+	$rspec = emutil::ReadFile($options{"f"});
+    }
+    if (defined($options{"p"})) {
+	$project = Project->Lookup($options{"p"});
+
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+    }
+    if (defined($options{"s"})) {
+	$start = $options{"s"};
+	if ($start !~ /^\d+$/) {
+	    $start = str2time($start);
+	    if (!$start) {
+		fatal("Start is not a unix timestamp or datetime");
+	    }
+	}
+    }
+    else {
+	$start = time();
+    }
+    if (defined($options{"e"})) {
+	$end = $options{"e"};
+	if ($end !~ /^\d+$/) {
+	    $end = str2time($end);
+	    if (!$end) {
+		fatal("End is not a unix timestamp or datetime");
+	    }
+	}
+    }
+    usage()
+	if (!(defined($rspec) && defined($end) && defined($project)));
+
+    #
+    # Update rspec with site aggregate urns so it is fully bound.
+    #
+    my $tmp = APT_Profile::SetSites(\$rspec, $sitemap, $MYURN,
+				    undef, undef, \$errmsg);
+    if ($tmp) {
+	($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
+    }
+    $rspec = GeniXML::Parse($rspec);
+    if (!defined($rspec)) {
+	fatal("Could not parse rspec");
+    }
+    my $noresokay = 0;
+    if (APT_Profile::CheckResources($rspec, $project, $start, $end,
+				    $noresokay, \$errmsg)) {
+	UserError($errmsg);
+    }
+    if (APT_Profile::CheckSpectrum($rspec, $project, $start, $end,
+				   $noresokay, \$errmsg)) {
+	UserError($errmsg);
+    }
+    if (APT_Profile::CheckRoutes($rspec, $project, $start, $end,
+				 $noresokay, \$errmsg)) {
+	UserError($errmsg);
+    }
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    exit(0);
+}
+
+#
+# Given an rspec determine a max duration based on existing reservation.
+#
+sub DoMaxDuration()
+{
+    my @optlist = ('f=s', 's=s', 'p=s');
+    my ($start, $end, $rspec, $project, $errmsg, $sitemap, $portal);
+
+    Getopt::Long::Configure("no_ignore_case");
+    my %options = ();
+    if (! GetOptions(\%options, @optlist,
+		     "site=s%"  => \$sitemap,
+		     "portal=s" => \$portal)) {
+	usage();
+    }
+    if (defined($options{"f"})) {
+	fatal("Cannot read rspec file")
+	    if (! -e $options{"f"});
+	$rspec = emutil::ReadFile($options{"f"});
+    }
+    if (defined($options{"p"})) {
+	$project = Project->Lookup($options{"p"});
+
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+    }
+    if (defined($options{"s"})) {
+	$start = $options{"s"};
+	if ($start !~ /^\d+$/) {
+	    $start = str2time($start);
+	    if (!$start) {
+		fatal("Start is not a unix timestamp or datetime");
+	    }
+	}
+    }
+    else {
+	$start = time();
+    }
+    usage()
+	if (!(defined($rspec) && defined($project)));
+
+    #
+    # Update rspec with site aggregate urns so it is fully bound.
+    #
+    my $tmp = APT_Profile::SetSites(\$rspec, $sitemap, $MYURN,
+				    undef, undef, \$errmsg);
+    if ($tmp) {
+	($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
+    }
+    $rspec = GeniXML::Parse($rspec);
+    if (!defined($rspec)) {
+	fatal("Could not parse rspec");
+    }
+    #
+    # Use this to get the type counts and do error checking. 
+    #
+    my $resources = {};
+    if (APT_Profile::CheckResources($rspec, $project, $start, $end,
+				    1, $errmsg, \$resources)) {
+	fatal($errmsg);
+    }
+    if (keys(%{$resources})) {
+	if (APT_Reservation::Group::Reservation::MaxDuration(
+		$project, $start, \$end, $resources, \$errmsg)) {
+	    fatal($errmsg);
+	}
+	if (defined($end)) {
+	    print POSIX::strftime("B %m/%d/20%y %H:%M", localtime($end)) . "\n";
+	}
+	else {
+	    print "undef\n";
+	}
+    }
+    my $spectrum = [];
+    if (APT_Profile::GetSpectrum($rspec, \$spectrum, \$errmsg)) {
+	fatal($errmsg);
+    }
+    if (@{$spectrum}) {
+	if (APT_Reservation::Group::RFReservation::MaxDuration(
+		$project, $start, \$end, $spectrum, \$errmsg)) {
+	    fatal($errmsg);
+	}
+	if (defined($end)) {
+	    print POSIX::strftime("%m/%d/20%y %H:%M", localtime($end)) . "\n";
+	}
+	else {
+	    print "undef\n";
+	}
+    }
+    my $routes = [];
+    if (APT_Profile::GetRoutes($rspec, \$routes, \$errmsg)) {
+	fatal($errmsg);
+    }
+    if (@{$routes}) {
+	if (APT_Reservation::Group::RouteReservation::MaxDuration(
+		$project, $start, \$end, $routes, \$errmsg)) {
+	    fatal($errmsg);
+	}
+    }
+    if (!defined($end)) {
+	print "Using default max duration\n";
+	$end = $start + ($DEFAULT_DURATION * 3600);
+    }
+    elsif ($end < $start) {
+	$end = 0;
+    }
+    print "Max duration is $end (" .
+	POSIX::strftime("%m/%d/20%y %H:%M", localtime($end)) . ")\n";
+    
+    if (defined($webtask)) {
+	$webtask->maxend($end);
+	$webtask->Exited(0);
+    }
+    exit(0);
 }
 
 #

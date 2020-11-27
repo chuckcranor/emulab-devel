@@ -103,6 +103,8 @@ window.ShowResGraph = (function ()
 			    nextdata = array[i];
 			    if (! (data.free == nextdata.free &&
 				   data.held == nextdata.held)) {
+				// Back up for outer loop
+				i--;
 				break;
 			    }
 			    //console.info("toss2-B", nextdata);
