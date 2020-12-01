@@ -2827,8 +2827,13 @@ $(function ()
 		    $('#doesnotfit-warning-now').removeClass("hidden");
 		    $('#doesnotfit-warning-datetime').addClass("hidden");
 		}
+		$('#bestguess-info').addClass("hidden");
 		$('#doesnotfit-warning').removeClass("hidden");
 		return;
+	    }
+	    else {
+		$('#doesnotfit-warning').addClass("hidden");
+		$('#bestguess-info').removeClass("hidden");
 	    }
 	    if (!mindate) {
 		mindate = new Date();
@@ -2878,10 +2883,26 @@ $(function ()
 	     */
 	    $("#end_hour").val(maxdate.getHours());
 	};
+	var args = {"formfields" : formfields,
+		    "rspec"      : selected_rspec};
+	// Hopefully the prediction info has returned in time.
+	if (resinfo) {
+	    var pid = $('#profile_pid').val();
+	    var forecasts = {};
+	    _.each(resinfo, function (info, urn) {
+		console.info(urn, info);
+		// Ick.
+		if (!_.has(info, "pforecasts")) {
+		    return;
+		}
+		forecasts[urn] = {};
+		forecasts[urn]["forecast"] = info["pforecasts"][pid];
+	    });
+	    args["prediction"] = JSON.stringify(forecasts);
+	}
+	console.info("UpdateMaxDuration args:", args);
 	var xmlthing = sup.CallServerMethod(null, "instantiate",
-					    "MaxDuration", 
-					    {"formfields" : formfields,
-					     "rspec"      : selected_rspec});
+					    "MaxDuration", args);
 	xmlthing.done(callback);
     }
     

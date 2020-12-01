@@ -2768,8 +2768,9 @@ sub DoCheckReserved()
 #
 sub DoMaxDuration()
 {
-    my @optlist = ('f=s', 's=s', 'p=s');
+    my @optlist = ('f=s', 's=s', 'p=s', 'P=s');
     my ($start, $end, $rspec, $project, $errmsg, $sitemap, $portal);
+    my $prediction_info;
 
     Getopt::Long::Configure("no_ignore_case");
     my %options = ();
@@ -2782,6 +2783,18 @@ sub DoMaxDuration()
 	fatal("Cannot read rspec file")
 	    if (! -e $options{"f"});
 	$rspec = emutil::ReadFile($options{"f"});
+    }
+    if (defined($options{"P"})) {
+	fatal("Cannot read prediction file")
+	    if (! -e $options{"P"});
+	my $tmp = emutil::ReadFile($options{"P"});
+	$prediction_info = eval { decode_json($tmp) };
+	if ($@) {
+	    fatal("Could not decode json prediction data: $@\n");
+	}
+	if (ref($prediction_info) ne "HASH") {
+	    fatal("prediction data is not a HASH");
+	}
     }
     if (defined($options{"p"})) {
 	$project = Project->Lookup($options{"p"});
@@ -2804,6 +2817,7 @@ sub DoMaxDuration()
     }
     usage()
 	if (!(defined($rspec) && defined($project)));
+    my $pid = $project->pid();
 
     #
     # Update rspec with site aggregate urns so it is fully bound.
@@ -2817,6 +2831,7 @@ sub DoMaxDuration()
     if (!defined($rspec)) {
 	fatal("Could not parse rspec");
     }
+
     #
     # Use this to get the type counts and do error checking. 
     #
@@ -2825,9 +2840,32 @@ sub DoMaxDuration()
 				    1, $errmsg, \$resources)) {
 	fatal($errmsg);
     }
+    #
+    # Ask for prediction info from the clusters referenced in the rspec.
+    #
+    my $urns = join(",", keys(%{$resources}));
+
+    #
+    # Get the prediction info. 
+    #
+    if (!defined($prediction_info)) {
+	my $local_webtask = WebTask->CreateAnonymous();
+	my $local_task_id = $local_webtask->task_id();
+	system("$RESCOMMAND -t $local_task_id prediction -a '$urns' $pid");
+	if ($?) {
+	    $local_webtask->Delete();
+	    fatal("Could not get prediction info");
+	}
+	$local_webtask->Refresh();
+	$prediction_info = $local_webtask->value();
+	$local_webtask->Delete();
+	#print Dumper($prediction_info);
+    }
+    
     if (keys(%{$resources})) {
 	if (APT_Reservation::Group::Reservation::MaxDuration(
-		$project, $start, \$end, $resources, \$errmsg)) {
+		$project, $start, \$end, $resources,
+		$prediction_info, \$errmsg)) {
 	    fatal($errmsg);
 	}
 	if (defined($end)) {

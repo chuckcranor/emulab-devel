@@ -1045,7 +1045,7 @@ sub DoIdleDetection()
 #
 sub DoPrediction()
 {
-    my $optlist = "p:";
+    my $optlist = "p:a:";
     my $portal;
     my $errmsg;
     my @aggregates  = ($aggregate);
@@ -1071,7 +1071,7 @@ sub DoPrediction()
 	    push(@projlist, $project->urn());
 	}
     }
-    elsif (!$this_user->IsAdmin()) {
+    else {
 	my @plist;
 	if ($this_user->ProjectMembershipList(\@plist)) {
 	    fatal("Could not get project membership list");
@@ -1089,11 +1089,23 @@ sub DoPrediction()
     # Portal argument says to ignore aggregate argument, and contact
     # all aggregates listed for the portal. 
     #
-    if (defined($portal)) {
+    if (defined($portal) || defined($options{"a"})) {
+	my @list;
 	@authorities = ();
 	@aggregates  = ();
 	
-	my @list = APT_Aggregate->LookupForPortal($portal);
+	if (defined($portal)) {
+	    @list = APT_Aggregate->LookupForPortal($portal);
+	}
+	else {
+	    foreach my $urn (split(",", $options{"a"})) {
+		my $agg = APT_Aggregate->Lookup($urn);
+		if (!defined($agg)) {
+		    fatal("No such aggregate: $urn");
+		}
+		push(@list, $agg);
+	    }
+	}
 	foreach my $agg (@list) {
 	    if ($agg->disabled()) {
 		print STDERR "The " . $agg->name() . " cluster ".
@@ -1226,7 +1238,7 @@ sub DoPrediction()
 			"webtask"   => $temptask});
     }
     if (ParRun({"maxwaittime" => 30,
-		"maxchildren" => scalar(@agglist)},
+		"maxchildren" => 5},
 	       \@return_codes, $coderef, @agglist)) {
 	       
 	map { $_->Delete(); } @webtasks;
@@ -1265,8 +1277,8 @@ sub DoPrediction()
 	    my $msg = "Could not get reservation data: ".
 		$response->error();
 	    
-	    $blob->{$auth->urn()} = $msg;
 	    print STDERR $msg . "\n";
+	    next;
 	}
 	$blob->{$auth->urn()} = $response->value();
     }
