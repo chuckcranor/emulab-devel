@@ -131,6 +131,8 @@ my $RFLINKS	   = "$TB/bin/rflinks";
 my $DOCKERCLI      = "/usr/local/bin/docker-registry-cli";
 my $FWNAME	   = "fw";
 my $API_VERSION    = 1;
+my $POWDER_RFMONITOR = @POWDER_RFMONITOR@;
+my $POKEFRONTEND     = "$TB/sbin/pokerffe";
 my $PROTOGENI_LOCALUSER   = @PROTOGENI_LOCALUSER@;
 my $PROTOGENI_NONFSMOUNTS = @PROTOGENI_NONFSMOUNTS@;
 
@@ -1281,6 +1283,57 @@ sub GetTicketAuxAux($)
 		my $response = CheckSpectrum($spectrum, $credentials);
 		goto bad
 		    if (GeniResponse::IsError($response));
+	    }
+
+	    #
+	    # Frontend stuff. The portal sanity checked this, But lets
+	    # make sure,
+	    #
+	    my $frontend = GeniXML::GetFrontend($linkref);
+	    if ($frontend) {
+		my $component_id = GeniXML::GetNodeId($linkref);
+		if (!defined($component_id)) {
+		    $response =
+			GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				"Must supply component_id (interface) when ".
+				"specifying a frontend on $virtual_id");
+		    goto bad;
+		}
+		print STDERR "Frontend $virtual_id:$component_id $frontend\n";
+		#
+		# Check to see if the node has the interface and it is the
+		# right kind of frontend. Basic naming convention for now.
+		#
+		my $node = GeniUtil::LookupNode($vnode_id);
+		if (!defined($node)) {
+		    $response =
+			GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+			     "No physical node $vnode_id for frontend on".
+			     "on $virtual_id");
+		    goto bad;
+		}
+		my $interface = Interface->LookupByIface($node, $component_id);
+		if (!defined($interface)) {
+		    $response =
+			GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+			     "No interface $component_id on $vnode_id for ".
+			     "frontend on $virtual_id");
+		    goto bad;
+		}
+		#
+		# Naming convention.
+		#
+		my $interface_type = $interface->type();
+		my $required_type  = "RFF-" . $frontend;
+						 
+		if (lc($interface_type) ne lc($required_type)) {
+		    $response =
+			GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+			     "$component_id on $vnode_id does not have the ".
+			     "correct interface type for frontend on ". 
+			     "$virtual_id");
+		    goto bad;
+		}
 	    }
 	}
 
@@ -5274,6 +5327,25 @@ sub SliverWorkAux($)
 		    goto bad;
 		}
 	    }
+
+	    #
+	    # Frontend stuff. This was sanity checked above.
+	    #
+	    my $frontend = GeniXML::GetFrontend($ifaceref);
+	    if ($frontend) {
+		my $component_id = GeniXML::GetNodeId($ifaceref);
+		my $interface = Interface->LookupByIface($node, $component_id);
+
+		#
+		# Set the speed to a non-zero value which flags the
+		# interface as in use, this will be used when turning
+		# frontends on and off. The value does not matter, and
+		# is brutal anyway.
+		#
+		print STDERR "Enabling frontend ".
+		    "$virtual_id:$component_id:$frontend\n";
+		$interface->Update({"current_speed" => "10000"});
+	    }
 	}
 
 	my $node_manifest = $sliver->AnnotateManifest();
@@ -7794,6 +7866,13 @@ sub CleanupDeadSlice($;$)
 	if ($?) {
 	    print STDERR "Could not tear down vlans\n";
 	    return -1;
+	}
+
+	# The monitor is a proxy for needing this
+	if ($POWDER_RFMONITOR) {
+	    if (system("$POKEFRONTEND -d -e $pid,$eid disable")) {
+		print STDERR "Failed to turn off RF frontends\n";
+	    }
 	}
 
 	#

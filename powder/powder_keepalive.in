@@ -209,9 +209,8 @@ sub PingEndpoints()
 sub PingBaseStations()
 {
     my $query_result =
-	DBQueryWarn("select * from apt_aggregate_radioinfo ".
-		    "where installation_type='BS' and ".
-		    "      cnuc_id is not null");
+	DBQueryWarn("select cnuc_id,node_id from apt_aggregate_radio_info ".
+		    "where cnuc_id is not null");
     return
 	if (! (defined($query_result) && $query_result->numrows));
 

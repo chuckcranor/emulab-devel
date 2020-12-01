@@ -642,6 +642,16 @@ sub Domain($)
     return $hrn->domain();
 }
 
+#
+# Get a radio on this aggregate
+#
+sub Radio($$)
+{
+    my ($self, $node_id) = @_;
+
+    return APT_Aggregate::Radio->Lookup($self, $node_id);
+}
+
 ###################################################################
 package APT_Aggregate::Mobile;
 use Carp;
@@ -1055,6 +1065,160 @@ sub LastPing($)
     $last_ping = 0
 	if (!defined($last_ping));
     return $last_ping;
+}
+
+###################################################################
+package APT_Aggregate::Radio;
+use Carp;
+use English;
+use Date::Parse;
+use Data::Dumper;
+use vars qw($AUTOLOAD);
+use overload ('""' => 'Stringify');
+
+use emdb;
+use libtestbed;
+use GeniXML;
+use GeniHRN;
+
+sub Lookup($$$)
+{
+    my ($class, $aggregate, $node_id) = @_;
+    my $urn = $aggregate->urn();
+    my $query_result;
+
+    if ($node_id =~/^[-\w]*$/) {
+	$query_result =
+	    DBQueryWarn("select * from apt_aggregate_radio_info ".
+			"where aggregate_urn='$urn' and ".
+			"      node_id='$node_id'");
+    }
+    else {
+	return undef;
+    }
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my $self             = {};
+    $self->{'RADIO'}     = $query_result->fetchrow_hashref();
+    $self->{'AGGREGATE'} = $aggregate;
+
+    bless($self, $class);    
+    return $self;
+}
+sub aggregate($$)	{ return $_[0]->{'AGGREGATE'}; }
+
+AUTOLOAD {
+    my $self  = $_[0];
+    my $type  = ref($self) or croak "$self is not an object";
+    my $name  = $AUTOLOAD;
+    $name =~ s/.*://;   # strip fully-qualified portion
+
+    # A DB row proxy method call.
+    if (exists($self->{'RADIO'}->{$name})) {
+	return $self->{'RADIO'}->{$name};
+    }
+    carp("No such slot '$name' field in class $type");
+    return undef;
+}
+
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'RADIO'}     = undef;
+    $self->{'AGGREGATE'} = undef;
+}
+sub Stringify($)
+{
+    my ($self)    = @_;
+    my $node_id   = $self->node_id();
+
+    return "[Radio: $node_id]";
+}
+
+#
+# Get a frontend on this radio
+#
+sub Frontend($$$)
+{
+    my ($self, $iface, $frontend) = @_;
+
+    return APT_Aggregate::Radio::Frontend->Lookup($self, $iface, $frontend);
+}
+
+###################################################################
+package APT_Aggregate::Radio::Frontend;
+use Carp;
+use English;
+use Date::Parse;
+use Data::Dumper;
+use vars qw($AUTOLOAD);
+use overload ('""' => 'Stringify');
+
+use emdb;
+use libtestbed;
+use GeniXML;
+use GeniHRN;
+
+sub Lookup($$$$)
+{
+    my ($class, $radio, $iface, $frontend) = @_;
+    my $urn      = $radio->aggregate()->urn();
+    my $node_id  = $radio->node_id();
+    my $query_result;
+
+    if ($frontend =~/^[-\w]*$/ && $iface =~/^[-\w]*$/) {
+	$query_result =
+	    DBQueryWarn("select * from apt_aggregate_radio_frontends ".
+			"where aggregate_urn='$urn' and ".
+			"      node_id='$node_id' and ".
+			"      iface='$iface' and ".
+			"      frontend='$frontend'");
+    }
+    else {
+	return undef;
+    }
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my $self             = {};
+    $self->{'FRONTEND'}  = $query_result->fetchrow_hashref();
+    $self->{'RADIO'}     = $radio;
+
+    bless($self, $class);    
+    return $self;
+}
+sub radio($$)		{ return $_[0]->{'RADIO'}; }
+sub aggregate($$)	{ return $_[0]->radio()->aggregate(); }
+
+AUTOLOAD {
+    my $self  = $_[0];
+    my $type  = ref($self) or croak "$self is not an object";
+    my $name  = $AUTOLOAD;
+    $name =~ s/.*://;   # strip fully-qualified portion
+
+    # A DB row proxy method call.
+    if (exists($self->{'FRONTEND'}->{$name})) {
+	return $self->{'FRONTEND'}->{$name};
+    }
+    carp("No such slot '$name' field in class $type");
+    return undef;
+}
+
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'FRONTEND'} = undef;
+    $self->{'RADIO'}    = undef;
+}
+sub Stringify($)
+{
+    my ($self)    = @_;
+    my $node_id   = $self->node_id();
+    my $iface     = $self->iface();
+    my $frontend  = $self->node_id();
+
+    return "[Frontend: $node_id:$iface:$frontend";
 }
 
 # _Always_ make sure that this 1 is at the end of the file...
