@@ -471,11 +471,14 @@ window.ShowExtendModal = (function()
 		sup.HideModal('#restricted_extend_modal');
 		sup.ShowWaitWait("This will take a minute; patience please!");
 
+		var reason = "Max allowed extension of " + hours + " hours";
 		var xmlthing = sup.CallServerMethod(null,
 						    "status",
 						    "RequestExtension",
 						    {"uuid"   : uuid,
-						     "howlong": hours});
+						     "howlong": hours,
+						     "reason" : reason,
+						    });
 		xmlthing.done(requestcallback);
 	    });
 	    sup.ShowModal('#restricted_extend_modal');
