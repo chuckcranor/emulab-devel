@@ -647,8 +647,6 @@ $routing = array("geni-login" =>
                                                      "Do_GetBaseStations",
                                                  "GetMobileEndpoints" =>
                                                      "Do_GetMobileEndpoints",
-                                                 "GetRadioInfo" =>
-                                                     "Do_GetRadioInfo",
                               )
                         ),
 		 "frequency-graph" =>

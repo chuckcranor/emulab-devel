@@ -29,7 +29,6 @@ $(function () {
         var imagePicker   = null;
 	var amlist        = null;
 	var prunetypes    = null;
-	var debug         = true;
 	var rerun_bindings= null;
 	var rerun_warnings= null;
 	var setStepsMotion= null;
@@ -654,7 +653,7 @@ $(function () {
 	    if (! details.multiValue) {
 		var name = details.name;
 
-		console.info("foo", name, details);
+		//console.info("foo", name, details);
 
 		if (rerun_bindings && _.has(rerun_bindings, name)) {
 		    if (Array.isArray(rerun_bindings[name])) {
@@ -3140,7 +3139,6 @@ $(function () {
 		
 		$('#ppform-buttons .p-choose .btn')
 		    .click(function () {
-			console.info("foo");
  			// Hide the popover
 			$('#ppform-buttons .p-choose').popover("hide");
 		    });
@@ -3411,8 +3409,6 @@ $(function () {
 	     * the bindings to tell geni-lib that it went to zero. 
 	     */
 	    _.each(formFields, function (details, idx) {
-		console.info("foo", details);
-		
 		if (details.multiValue) {
 		    if (!_.has(bindings, details.name)) {
 			bindings[details.name] = {"value" : "", "index" : []};

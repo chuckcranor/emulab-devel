@@ -2966,15 +2966,19 @@ $(function ()
 		if (hrn) {
 		    component_id = hrn.id;
 		}
+		//console.info("CheckForRadioUsage", manager_urn, component_id);
+		
 		if (_.has(radioinfo, manager_urn) &&
 		    _.has(radioinfo[manager_urn], component_id)) {
 		    usingRadios = true;
-		    
-		    var txfreqs =
-			radioinfo[manager_urn][component_id]
-			.transmit_frequencies;
-		    if (txfreqs != "") {
-			usingTransmitter = true;
+		    var radio = radioinfo[manager_urn][component_id];
+
+		    if (_.has(radio, "frontends")) {
+			_.each(radio.frontends, function (frontend, iface) {
+			    if (frontend.transmit_frequencies != "") {
+				usingTransmitter = true;
+			    }
+			});
 		    }
 		}
 	    });

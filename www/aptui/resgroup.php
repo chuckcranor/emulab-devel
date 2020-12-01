@@ -180,7 +180,7 @@ echo "<script type='text/plain' id='amlist-json'>\n";
 echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
 echo "</script>\n";
 if ($ISPOWDER) {
-    $radioinfo = Aggregate::RadioInfo();
+    $radioinfo = Aggregate::RadioInfoNew();
     echo "<script type='text/plain' id='radioinfo-json'>\n";
     echo htmlentities(json_encode($radioinfo, JSON_NUMERIC_CHECK));
     echo "</script>\n";

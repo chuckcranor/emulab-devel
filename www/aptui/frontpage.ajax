@@ -51,7 +51,7 @@ function Do_GetHealthStatusExtended()
     $amlist     = array();
     $fedlist    = array();
     $status     = array();
-    $radioinfo  = Aggregate::RadioInfo();
+    $radioinfo  = Aggregate::RadioInfoNew();
     $rfranges   = Instance::RFRangesUnUse();
     $PORTAL_HEALTH = 1;
     CalculateAggregateStatus($amlist, $fedlist, $status, true, null, true);

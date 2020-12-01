@@ -2196,7 +2196,7 @@ $(function ()
 		 * a tab.
 		 */
 		if (window.ISPOWDER && radioinfo && node_id) {
-		    var info = IsPowderRadio(manager_urn, node_id);
+		    var info = IsPowderTransmitter(manager_urn, node_id);
 		    if (info) {
 			clone.find(' [name=monitor]')
 			    .click(function (e) {
@@ -4351,15 +4351,27 @@ $(function ()
 
     /*
      * On the Powder Portal, we want a link to the monitoring graph
-     * for nodes marked as a radio (or hosting a radio).
+     * for nodes marked as a radio (or hosting a radio), that can
+     * transmit and is monitored.
      */
-    function IsPowderRadio(aggregate_urn, node_id)
+    function IsPowderTransmitter(aggregate_urn, node_id)
     {
+	var radio = null;
+	
 	if (_.has(radioinfo, aggregate_urn) &&
-	    _.has(radioinfo[aggregate_urn], node_id)) {
-	    return radioinfo[aggregate_urn][node_id];
+	    _.has(radioinfo[aggregate_urn], node_id) &&
+	    _.has(radioinfo[aggregate_urn][node_id], "frontends")) {
+	    // Look through through the frontends to see if any can
+	    // transmit and are monitored.
+	    _.each(radioinfo[aggregate_urn][node_id]["frontends"],
+		   function (frontend, iface) {
+		       if (frontend.transmit_frequencies != "" &&
+			   frontend.monitored) {
+			   radio = radioinfo[aggregate_urn][node_id];
+		       }
+		   });
 	}
-	return null;
+	return radio;
     }
 
     /*

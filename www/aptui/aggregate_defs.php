@@ -509,7 +509,7 @@ class Aggregate
         return null;
     }
 
-    # Class method. 
+    # Class method.
     function RadioInfo()
     {
         $blob = array();
@@ -547,6 +547,80 @@ class Aggregate
                 }
                 $row["alive"] = $alive;
                 $row["reachable"] = $alive;
+                $blob[$urn][$node_id] = $row;
+            }
+        }
+        return $blob;
+    }
+    function RadioInfoNew()
+    {
+        $blob = array();
+
+        $query_result =
+            DBQueryFatal("select *,r.available ".
+                         " from apt_aggregate_radio_locations as l ".
+                         "left join apt_aggregate_radio_info as i on ".
+                         "  i.aggregate_urn=l.aggregate_urn and ".
+                         "  i.location=l.location ".
+                         "join apt_aggregate_reservable_nodes as r on ".
+                         "  r.urn=i.aggregate_urn and r.node_id=i.node_id ".
+                         "order by itype desc, l.location asc");
+
+        while ($row = mysql_fetch_array($query_result)) {
+            $urn      = $row["aggregate_urn"];
+            $node_id  = $row["node_id"];
+            $alive    = true;
+
+            #
+            # Grab the aggregate. We use the status info to determine if the
+            # aggregate is alive (reachable).
+            #
+            if ($aggregate = Aggregate::Lookup($urn)) {
+                if (!array_key_exists($urn, $blob)) {
+                    $blob[$urn] = array();
+                }
+                # Backwards compat for the frontpage.
+                $row["installation_type"] = $row["itype"];
+                
+                if ($row["itype"] == "BS") {
+                    #
+                    # The CNUC determines if a base station is alive.
+                    #
+                    $cnuc = Node::Lookup($row["cnuc_id"]);
+                    if ($cnuc && $cnuc->RealNodeStatus() != "up") {
+                        $alive = false;
+                    }
+                }
+                elseif ($aggregate->status() != "up" || $aggregate->disabled()){
+                    $alive = false;
+                }
+                $row["alive"]     = $alive;
+                $row["reachable"] = $alive;
+                $row["frontends"] = array();
+
+                #
+                # Grab the frontend info for the radio.
+                #
+                $frontend_result =
+                    DBQueryFatal("select * from apt_aggregate_radio_frontends ".
+                                 "where aggregate_urn='$urn' and ".
+                                 "      node_id='$node_id'");
+                while ($frow = mysql_fetch_array($frontend_result)) {
+                    #
+                    # At the moment iface/frontend is one-to-one. I guess
+                    # there is a future plan to be able to switch between
+                    # multiple frontends on the same TX channel but not
+                    # going to worry about that now.
+                    #
+                    #
+                    # If no frontend notes, use the radio notes
+                    #
+                    if (!$frow["notes"]) {
+                        $frow["notes"] = $row["notes"];
+                    }
+                    $iface = $frow["iface"];
+                    $row["frontends"][$iface] = $frow;
+                }
                 $blob[$urn][$node_id] = $row;
             }
         }
