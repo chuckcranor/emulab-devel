@@ -2837,7 +2837,7 @@ sub DoMaxDuration()
     #
     my $resources = {};
     if (APT_Profile::CheckResources($rspec, $project, $start, $end,
-				    1, $errmsg, \$resources)) {
+				    1, \$errmsg, \$resources)) {
 	fatal($errmsg);
     }
     #
