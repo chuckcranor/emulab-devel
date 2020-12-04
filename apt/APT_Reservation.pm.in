@@ -1242,6 +1242,14 @@ sub MaxDuration($$$$$$)
 	    print "$urn, $type, $count\n";
 
 	    #
+	    # If no forecast, just skip it.
+	    #
+	    if (! exists($forecasts->{$urn}->{'forecast'}->{$type})) {
+		print STDERR "No forecast info for $type at $urn\n";
+		next;
+	    }
+
+	    #
 	    # Process the forecast info so we can use it.
 	    #
 	    my @forecast = @{ $forecasts->{$urn}->{'forecast'}->{$type} };

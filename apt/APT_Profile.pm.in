@@ -1634,8 +1634,7 @@ sub CheckLicenses($$$$$)
 		
 		my $nodetype = NodeType->Lookup($hardtype);
 		if (! $nodetype) {
-		    $$perrmsg = "Not a valid hardware type: $hardtype";
-		    return 1;
+		    next;
 		}
 		if ($nodetype->required_license()) {
 		    my $idx = $nodetype->required_license();
