@@ -141,7 +141,7 @@ my @optlist = ('d', 'w', 'a=s', 'S', 'k=s', 'P', 's',
 	       "stop=i"      => \$stop_at,
 	       "paramset=s"  => \$paramset,
 	       "bindings=s"  => \$bindingfile,
-	       "refspec=i"   => \$refspec,
+	       "refspec=s"   => \$refspec,
     );
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -287,13 +287,14 @@ if (defined($refspec)) {
     
     #
     # refspec[:hash]
+    # create_instance will sanity check these.
     #
-    if ($refspec =~ /^refs\/[^\:]\:([\w]+)$/) {
+    if ($refspec =~ /^(refs\/[^\:]+)\:([\w]+)$/) {
 	$reporef  = $1;
 	$repohash = $2;
 	$which    = $repohash;
     }
-    elsif ($refspec =~ /^refs\/.*$/) {
+    elsif ($refspec =~ /^(refs\/.*)$/) {
 	$reporef  = $1;
 	$which    = $reporef;
     }
@@ -309,7 +310,7 @@ if (defined($refspec)) {
 	fatal("Could not create webtask");
     }
     my $webtask_id = $webtask->task_id();
-    my $output = emutil::ExecQuiet("$MANAGEGITREPO getsource ".
+    my $output = emutil::ExecQuiet("$MANAGEGITREPO -t $webtask_id getsource ".
 				   "  -n $reponame $which");
     if ($?) {
 	print STDERR "Could not get source from repo\n";
