@@ -2887,7 +2887,9 @@ $(function ()
 		    "rspec"      : selected_rspec};
 	// Hopefully the prediction info has returned in time.
 	if (resinfo) {
-	    var pid = $('#profile_pid').val();
+	    // Prediction info comes back with pid lowercase cause of
+	    // HRN normalization rules.
+	    var pid = $('#profile_pid').val().toLowerCase();
 	    var forecasts = {};
 	    _.each(resinfo, function (info, urn) {
 		console.info(urn, info);
