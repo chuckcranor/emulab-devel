@@ -426,6 +426,16 @@ class User
                ($this->isPNet() ? "powder-approval@powderwireless.net" :
                 $TBMAIL_APPROVAL))));
     }
+    function opsEmail() {
+        global $TBMAIL_OPS;
+        
+        return 
+            ($this->isAPT() ? "portal-ops@aptlab.net" :
+             ($this->isCloud() ? "portal-ops@cloudlab.us" :
+              ($this->isPNet() ? "portal-ops@phantomnet.org" :
+               ($this->isPNet() ? "portal-ops@powderwireless.net" :
+                $TBMAIL_OPS))));
+    }
 
     #
     # Class function to create new user and return object.

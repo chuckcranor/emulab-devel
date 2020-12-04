@@ -457,7 +457,7 @@ function Do_FreezeOrThaw()
     }
     $target_email = $target_user->email();
     $target_name  = $target_user->name();
-    $adminemail   = $target_user->adminEmail();
+    $adminemail   = $target_user->opsEmail();
 
     if ($which == "freeze") {
         $tag = "frozen";
