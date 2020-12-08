@@ -71,69 +71,94 @@ my $SLEEP_INTERVAL   = 3600 * 6;
 my %endpoints = (
     "bookstore" => {
 	"urn" => 'urn:publicid:IDN+bookstore.powderwireless.net+authority+cm',
-	"nodes" => ["nuc1", "nuc2"],
+	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
 	"last"  => {},
         "nickname" => "Bookstore",
     },
     "cpg" => {
 	"urn" => 'urn:publicid:IDN+cpg.powderwireless.net+authority+cm',
-	"nodes" => ["nuc1", "nuc2"],
+	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
 	"last"  => {},
         "nickname" => "Garage",
     },
     "ebc" => {
 	"urn" => 'urn:publicid:IDN+ebc.powderwireless.net+authority+cm',
-	"nodes" => ["nuc1", "nuc2"],
+	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
 	"last"  => {},
         "nickname" => "EBC",
     },
     "law73" => {
         "urn" => 'urn:publicid:IDN+law73.powderwireless.net+authority+cm', 
-	"nodes" => ["nuc1", "nuc2"],
+	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
 	"last"  => {},
         "nickname" => "Law73",
     },
     "guesthouse" => {
 	"urn" => 'urn:publicid:IDN+guesthouse.powderwireless.net+authority+cm',
-	"nodes" => ["nuc1", "nuc2"],
+	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
 	"last"  => {},
         "nickname" => "Guesthouse",
     },
     "humanities" => {
         "urn" => 'urn:publicid:IDN+humanities.powderwireless.net+authority+cm', 
-	"nodes" => ["nuc1", "nuc2"],
+	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
 	"last"  => {},
         "nickname" => "Humanities",
     },
     "madsen" => {
         "urn" => 'urn:publicid:IDN+madsen.powderwireless.net+authority+cm',
-	"nodes" => ["nuc1", "nuc2"],
+	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
 	"last"  => {},
         "nickname" => "Madsen",
     },
     "moran" => {
         "urn" => 'urn:publicid:IDN+moran.powderwireless.net+authority+cm', 
-	"nodes" => ["nuc1", "nuc2"],
+	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
 	"last"  => {},
         "nickname" => "Moran",
     },
     "sagepoint" => {
 	"urn" => 'urn:publicid:IDN+sagepoint.powderwireless.net+authority+cm',
-	"nodes" => ["nuc1", "nuc2"],
+	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
 	"last"  => {},
         "nickname" => "Sagepoint",
     },
     "web" => {
         "urn" => 'urn:publicid:IDN+web.powderwireless.net+authority+cm', 
-	"nodes" => ["nuc1", "nuc2"],
+	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
 	"last"  => {},
         "nickname" => "WEB",
     },
     "bustest2" => {
 	"urn" => 'urn:publicid:IDN+bus-test2.powderwireless.net+authority+cm',
-	"nodes" => ["ed1"],
+	"nodes" => {"ed1" => "B210"},
 	"last"  => {},
-        "nickname" => "BusTest2",
+	"nickname" => "BusTest2",
+    },
+    "emulab" => {
+	"urn" => 'urn:publicid:IDN+emulab.net+authority+cm',
+	"nodes" => {
+	    "cellsdr1-bes"       => "X310",
+	    "cbrssdr1-bes"       => "X310",
+	    "cellsdr1-browning"  => "X310",
+	    "cbrssdr1-browning"  => "X310",
+	    "cellsdr1-dentistry" => "X310",
+	    "cbrssdr1-dentistry" => "X310",
+	    "cellsdr1-fm"        => "X310",
+	    "cbrssdr1-fm"        => "X310",
+	    "cellsdr1-honors"    => "X310",
+	    "cbrssdr1-honors"    => "X310",
+	    "cellsdr1-hospital"  => "X310",
+	    "cbrssdr1-hospital"  => "X310",
+	    "cellsdr1-meb"       => "X310",
+	    "cbrssdr1-meb"       => "X310",
+	    "cellsdr1-smt"       => "X310",
+	    "cbrssdr1-smt"       => "X310",
+	    "cellsdr1-ustar"     => "X310",
+	    "cbrssdr1-ustar"     => "X310",
+	},
+	"last"  => {},
+        "nickname" => "Emulab",
     },
 );
 my %results = ();
@@ -141,7 +166,7 @@ my %results = ();
 #
 # This the binding string we pass along to startExperiment.
 #
-my $bindingsTemplate = '{"Where" : "%s", "NodeID" : "%s"}';
+my $bindingsTemplate = '{"Where" : "%s", "NodeID" : "%s", "Type" : "%s"}';
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -203,7 +228,8 @@ if (@ARGV) {
 	fatal("No such endpoint");
     }
     if (@ARGV > 1) {
-	if (! grep { $_ eq $ARGV[1] } @{$endpoints{lc($ARGV[0])}->{"nodes"}}) {
+	if (! grep { $_ eq $ARGV[1] }
+	    keys(%{$endpoints{lc($ARGV[0])}->{"nodes"}})) {
 	    fatal("No such node");
 	}
     }
@@ -234,25 +260,26 @@ FlipTo($USER);
 my @targets = ();
     
 if (@ARGV) {
-    my $id  = lc($ARGV[0]);
+    my $id  = lc(shift(@ARGV));
     my $ref = $endpoints{$id};
     my @nodes;
 
-    if (@ARGV > 1) {
-	@nodes = ($ARGV[1]);
+    if (@ARGV) {
+	@nodes = @ARGV;
     }
     else {
-	@nodes = @{$ref->{"nodes"}};
+	@nodes = keys(%{$ref->{"nodes"}});
     }
     foreach my $node_id (@nodes) {
 	push(@targets, [$id, $node_id]);
     }
+    #$skew = 10;
 }
 else {
     foreach my $id (keys(%endpoints)) {
 	my $ref = $endpoints{$id};
 
-	foreach my $node_id (@{$ref->{"nodes"}}) {
+	foreach my $node_id (keys(%{$ref->{"nodes"}})) {
 	    push(@targets, [$id, $node_id]);
 	}
     }
@@ -303,9 +330,15 @@ sub RunMonitor($$)
 {
     my ($id, $node_id) = @_;
     my $urn  = $endpoints{$id}->{"urn"};
+    my $type = $endpoints{$id}->{"nodes"}->{$node_id};
     my $name = "m-" . substr($id, 0, 7) . "-${node_id}";
     my $errmsg;
     my $blob;
+
+    # Another mod for the Mothership.
+    if ($urn =~ /emulab\.net/) {
+	$name = substr($node_id, 0, 16);
+    }
 
     #
     # Look for experiment still running, in case we got killed and are starting
@@ -346,11 +379,11 @@ sub RunMonitor($$)
     }
 
     # Create the bindings to pass to startExperiment
-    my $bindings = sprintf($bindingsTemplate, $urn, $node_id);
+    my $bindings = sprintf($bindingsTemplate, $urn, $node_id, $type);
     my $stop = time() + (3600 * 2);
 
     my $command = "$STARTEXP -s -P -p $PID --bindings='$bindings' ".
-	"--name='$name' --stop='$stop' $PROFILE";
+	"--name='$name' --stop='$stop' --refspec='refs/heads/UHD4' $PROFILE";
 
     if (!$impotent) {
 	logit("Starting $name");
@@ -446,9 +479,18 @@ sub WaitForData($$$$$)
 {
     my ($id, $node_id, $blob, $name, $pmsg) = @_;
     my $wbstore = $blob->{'wbstore'};
+    my $urn     = $endpoints{$id}->{"urn"};
     my $tarfile = "/proj/$PID/wbstore/${wbstore}.tgz";
     my $tries   = 90;
     my $command;
+
+    #
+    # Ick, The MotherShip is not a wbstore client, so the tar file
+    # is written into /proj/pid/exp/eid instead.
+    #
+    if ($urn =~ /emulab\.net/) {
+	$tarfile = "/proj/$PID/monitor/${name}.gz";
+    }
 
     while ($tries && ! -e $tarfile) {
 	$tries--;
