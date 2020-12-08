@@ -417,6 +417,24 @@ sub Delete($$)
 }
 
 #
+# Refresh instance.
+#
+sub Refresh($)
+{
+    my ($self) = @_;
+    my $idx = $self->idx();
+    
+    my $query_result =
+	DBQueryWarn("select * from geni_aggregates where idx='$idx'");
+    
+    return -1
+	if (!$query_result || !$query_result->numrows);
+
+    $self->{'AGGREGATE'} = $query_result->fetchrow_hashref();
+    return 0;
+}
+
+#
 # Cons up an hrn.
 #
 sub hrn($)

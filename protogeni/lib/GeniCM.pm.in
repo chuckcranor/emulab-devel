@@ -6535,6 +6535,7 @@ sub DeleteSliverAux($$$)
     if ($slice->Lock() != 0) {
 	return GeniResponse->BusyResponse();
     }
+    $aggregate->Refresh();
 
     my $experiment = $slice->GetExperiment();
     my $pid = $experiment->pid();
@@ -7796,7 +7797,7 @@ sub CleanupDeadSlice($;$)
     # we do not leave it behind on a slice/experiment that is
     # now gone.
     #
-    if ($slice->monitor_pid()) {
+    if ($slice->GetMonitorPid()) {
 	my $response = KillMonitor($slice);
 	if (GeniResponse::IsResponse($response)) {
 	    print STDERR "CleanupDeadSlice: Could not kill monitor process\n";
@@ -7909,6 +7910,9 @@ sub CleanupDeadSlice($;$)
 	}
     }
     my $topaggregate = GeniAggregate->SliceAggregate($slice);
+    $topaggregate->Refresh()
+	if (defined($topaggregate));
+    
     if (defined($topaggregate) && $topaggregate->registered()) {
 	# Unregister the slice at the SA.
 	UnRegisterSliver($slice);

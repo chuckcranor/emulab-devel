@@ -144,19 +144,6 @@ sub Lookup($$)
     $self->{'RSPEC'}       = undef;	# server
     $self->{'CERTIFICATE'} = undef;
 
-    #
-    # Grab the certificate, since we will probably want it.
-    #
-    my $uuid = $self->{'SLIVER'}->{'uuid'};
-    if (0) {
-    my $certificate = GeniCertificate->Lookup($uuid);
-    if (!defined($certificate)) {
-	print STDERR "Could not find certificate for sliver $idx ($uuid)\n";
-	return undef;
-    }
-    $self->{'CERTIFICATE'} = $certificate;
-    }
-
     # Bless into sub package if called for.
     my $resource_type = $self->{'SLIVER'}->{'resource_type'};
     if (defined($resource_type) && $resource_type ne "") {
@@ -368,6 +355,23 @@ sub Delete($$)
     # Delete from cache. 
     delete($slivers{$idx});
     
+    return 0;
+}
+
+#
+# Refresh the DB contents.
+#
+sub Refresh($)
+{
+    my ($self) = @_;
+    my $idx = $self->idx();
+    
+    my $query_result = DBQueryWarn("select * from geni_slivers ".
+				   "where idx='$idx'");
+    return -1
+	if (!$query_result || !$query_result->numrows);
+
+    $self->{'SLIVER'} = $query_result->fetchrow_hashref();
     return 0;
 }
 
@@ -1534,6 +1538,9 @@ sub ComputeStatus($;$)
 
     return -1
 	if (! ref($self));
+
+    $self->Refresh() == 0
+	or return -1;
 
     #
     # If the sliver is "broken" then call it failed. It might be failed,
