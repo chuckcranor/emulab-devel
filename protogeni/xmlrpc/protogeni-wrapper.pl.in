@@ -743,6 +743,8 @@ push(@metadata, ["Method", $method]);
 push(@metadata, ["Version", $GENI_VERSION]) if (defined($GENI_VERSION));
 push(@metadata, ["StartTime", TBTimeStamp()]);
 push(@metadata, ["Project", $PROJECT]) if (defined($PROJECT));
+# To assist debugging, push the initial metadata so that it is in the DB.
+$logfile->SetMetadata(\@metadata, 1);
 
 my $starttime = [gettimeofday()];
 eval { $result = &{ $GENI_METHODS->{$method} }(@{ $call->{'value'} }) };
@@ -762,7 +764,7 @@ if ($@) {
     push(@metadata, ["Error", GENIRESPONSE_RPCERROR()]);
     push(@metadata, ["Output", "Internal error executing method $method"]);
     
-    $logfile->SetMetadata(\@metadata, 0);
+    $logfile->SetMetadata(\@metadata, 1);
     foreach my $foo (@metadata) {
 	my ($key,$val) = @{$foo};
 	$message .= sprintf("%-15s: %s\n", $key, $val);
