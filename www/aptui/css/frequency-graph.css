@@ -22,7 +22,9 @@
     stroke: #000;
 }
 
-.frequency-graph .tooltip-freq, .frequency-graph .tooltip-power {
+.frequency-graph .tooltip-freq,
+.frequency-graph .tooltip-power,
+.frequency-graph .tooltip-center {
     font-weight: bold;
 }
 .frequency-graph .tooltip-popover

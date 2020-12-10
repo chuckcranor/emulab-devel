@@ -144,8 +144,8 @@ window.ShowFrequencyGraph = (function ()
 
 	toolbox.append("rect")
 	    .attr("class", "tooltip-rect")
-	    .attr("width", 125)
-	    .attr("height", 50)
+	    .attr("width", 130)
+	    .attr("height", 75)
             .attr("y", -22)
 	    .attr("rx", 4)
 	    .attr("ry", 4);
@@ -169,6 +169,16 @@ window.ShowFrequencyGraph = (function ()
 	    .attr("class", "tooltip-power")
 	    .attr("x", 65)
 	    .attr("y", 18);
+
+	toolbox.append("text")
+	    .attr("x", 5)
+	    .attr("y", 38)
+	    .text("Center:");
+
+	toolbox.append("text")
+	    .attr("class", "tooltip-center")
+	    .attr("x", 65)
+	    .attr("y", 38);
 
 	context.append("path")
 	    .datum(data)
@@ -219,6 +229,13 @@ window.ShowFrequencyGraph = (function ()
 			 "," + y(d.power) + ")");
 	    tooltip.select(".tooltip-freq").text(formatter(d.frequency));
 	    tooltip.select(".tooltip-power").text(formatter(d.power));
+	    if (_.has(d, "center_freq")) {
+		tooltip.select(".tooltip-center")
+		    .text(formatter(d.center_freq));
+	    }
+	    else {
+		tooltip.select(".tooltip-center").text("n/a");
+	    }
 	}
 
 	function brushed() {

@@ -49,6 +49,7 @@ $(function ()
     var hardware      = null;
     var resinfo       = null;
     var radioinfo     = null;
+    var maxEndDate    = null;
     var usingRadios   = false;
     var currentStep   = 0;
     var deprecatedList = [];
@@ -2738,24 +2739,36 @@ $(function ()
 	    else {
 		selecter = "#step3-form #end_hour";
 	    }
-	    if (date == null || moment(date).isSame(Date.now(), "day")) {
-		for (var i = 0; i <= now.getHours(); i++) {
+	    console.info(moment(date), moment(now));
 
-		    /*
-		     * Before we disable the option, see if it is selected.
-		     * If so, we want to make the user re-select the hour.
-		     */
-		    if ($(selecter + " option:selected").val() == i) {
-			$(selecter).val("");
-		    }
+	    /*
+	     * Enable all hours,
+	     */
+	    for (var i = 0; i <= 24; i++) {
+		$(selecter + " option[value='" + i + "']")
+		    .removeAttr("disabled");
+	    }
+	    // Zero out the current choice.
+	    $(selecter).val("");
+
+	    // If today, cannot select anything before the current time.
+	    if (date == null || moment(date).isSame(moment(now), "day")) {
+		for (var i = 0; i <= now.getHours(); i++) {
 		    $(selecter + " option[value='" + i + "']")
 			.attr("disabled", "disabled");
 		}
 	    }
-	    else {
-		for (var i = 0; i <= now.getHours(); i++) {
+	    console.info("bar", maxEndDate);
+	    // If there is a max duration set and is equal to the
+	    // selected day, must disable everything after the max
+	    // hour.
+	    if (which == "#end_day" && maxEndDate &&
+		moment(date).isSame(moment(maxEndDate), "day")) {
+		console.info("foo");
+
+		for (var i = maxEndDate.getHours() + 1; i < 24; i++) {
 		    $(selecter + " option[value='" + i + "']")
-			.removeAttr("disabled");
+			.attr("disabled", "disabled");
 		}
 	    }
 	}
@@ -2815,6 +2828,7 @@ $(function ()
 		console.info("UpdateMaxDuration: " . json.value);
 		return;
 	    }
+	    // Saved globally for above
 	    var maxdate = json.value;
 	    var mindate = $("#start_day").datepicker("getDate");
 
@@ -2838,7 +2852,7 @@ $(function ()
 	    if (!mindate) {
 		mindate = new Date();
 	    }
-	    maxdate = new Date(maxdate);
+	    maxdate = maxEndDate = new Date(maxdate);
 	    console.info("UpdateMaxDuration: ", mindate, maxdate);
 	    
 	    $("#end_day").datepicker("option", "minDate", mindate);
