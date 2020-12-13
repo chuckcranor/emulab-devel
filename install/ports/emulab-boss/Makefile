@@ -27,7 +27,7 @@ WANT_PHP_MOD=	yes
 # PHP modules to build.
 # XXX based on current boss install.
 #
-.if (${EMULAB_PORTVERSION} == "7.3")
+.if (${EMULAB_PORTVERSION} == "7.3" || ${EMULAB_PORTVERSION} == "8.1")
 USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt mysqli \
 		openssl pdo phar posix session simplexml sockets tokenizer \
 		xml xmlreader xmlrpc xmlwriter
@@ -40,22 +40,9 @@ USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt mysql \
 #
 # Various ports need to agree on what version of apache.
 #
-.if (${EMULAB_PORTVERSION} == "7.1" || ${EMULAB_PORTVERSION} == "7.2" || ${EMULAB_PORTVERSION} == "7.3")
 www_apache24_SET=	SUEXEC
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
 .MAKEFLAGS+=	WITH_SUEXEC=yes
-.else
-www_apache22_SET=	SUEXEC
-.MAKEFLAGS+=	APACHE_PORT=www/apache22
-.MAKEFLAGS+=	WITH_SUEXEC=yes
-.endif
-
-.if (${EMULAB_PORTVERSION} != "7.1" && ${EMULAB_PORTVERSION} != "7.2" && ${EMULAB_PORTVERSION} != "7.3")
-#
-# Use the base version of openssl
-#
-.MAKEFLAGS+=	WITH_OPENSSL_BASE=yes
-.endif
 
 #
 # This prevents any ports from trying to configure interactively.
@@ -94,7 +81,7 @@ RUN_DEPENDS+=	\
 #
 RUN_DEPENDS+=	\
 	${LOCALBASE}/libexec/tftpd:${PORTSDIR}/misc/emulab-tftp-hpa
-.if (${EMULAB_PORTVERSION} != "7.3")
+.if (${EMULAB_PORTVERSION} != "7.3" && ${EMULAB_PORTVERSION} != "8.1")
 RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}m2crypto>0:${PORTSDIR}/misc/emulab-py-m2crypto
 .endif
@@ -126,7 +113,7 @@ RUN_DEPENDS+=	\
 
 #
 # Metis version changed
-.if (${EMULAB_PORTVERSION} == "7.3")
+.if (${EMULAB_PORTVERSION} == "7.3" || ${EMULAB_PORTVERSION} == "8.1")
 RUN_DEPENDS+=	\
 	gpmetis:${PORTSDIR}/math/metis
 .else
@@ -170,13 +157,19 @@ RUN_DEPENDS+=	\
         p5-RRDTool-OO>=0.36:${PORTSDIR}/devel/p5-RRDTool-OO
 
 # python packages
+.if (${EMULAB_PORTVERSION} == "8.1")
 RUN_DEPENDS+=	\
-	${PYTHON_PKGNAMEPREFIX}MySQLdb>0:${PORTSDIR}/databases/py-MySQLdb \
+	${PYTHON_PKGNAMEPREFIX}mysqlclient>0:${PORTSDIR}/databases/py-mysqlclient
+.else
+RUN_DEPENDS+=	\
+	${PYTHON_PKGNAMEPREFIX}MySQLdb>0:${PORTSDIR}/databases/py-MySQLdb
+.endif
+RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}dateutil>0:${PORTSDIR}/devel/py-dateutil \
 	${PYTHON_PKGNAMEPREFIX}cryptography>0:${PORTSDIR}/security/py-cryptography \
 	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml
 
-.if (${EMULAB_PORTVERSION} == "7.3")
+.if (${EMULAB_PORTVERSION} == "7.3" || ${EMULAB_PORTVERSION} == "8.1")
 RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}certbot>0:${PORTSDIR}/security/py-certbot
 .endif
@@ -192,7 +185,7 @@ RUN_DEPENDS+=	\
 	dhcpd:${PORTSDIR}/net/isc-dhcp44-server \
 	${LOCALBASE}/sbin/rndc:${PORTSDIR}/dns/bind911
 
-.if (${EMULAB_PORTVERSION} == "7.3")
+.if (${EMULAB_PORTVERSION} == "7.3" || ${EMULAB_PORTVERSION} == "8.1")
 # dig and friends
 RUN_DEPENDS+=	\
 	${LOCALBASE}/bin/dig:${PORTSDIR}/dns/bind-tools
@@ -207,7 +200,7 @@ RUN_DEPENDS+= \
 	syncthing:${PORTSDIR}/net/syncthing
 
 #USE_PERL5=	yes
-USES=		perl5 python:2.7 php
+USES=		perl5 python:$(PY_VER) php
 
 NO_BUILD=	yes
 

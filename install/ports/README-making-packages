@@ -51,6 +51,15 @@ This is a condensed version of the steps below.
   DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
   DEFAULT_VERSIONS+=ssl=base
 
+      Also, to save a bunch of changing port options below, add:
+
+  OPTIONS_UNSET=DOCS OPENGL DTRACE
+
+      The last (DTRACE) seems to be new (as of 12/8/20) and broke a couple
+      of ports:
+      - perl5.32 (configure error)
+      - tcl86 (build error)
+
    f. (NEW for 2020!) Create a /usr/obj filesystem. There is not enough
       space in the root filesystem to hold all the build trees. You need
       on the order of 25GB, so just use the rest of the root disk
@@ -94,13 +103,10 @@ This is a condensed version of the steps below.
       is out of date. Diff it with /usr/src/sys/sys/param.h and update
       as necessary.
 
-      - make -C devel/boost-all config
-        and deselect:
-          DOCS
       - make -C editors/emacs config
         and deselect:
           DBUS
-          GCONF, GSETTINGS, LCMS2, M17N, OTF, SCROLLBARS, XFT, XIM,
+          GCONF, GSETTINGS, HARFBUZZ LCMS2, M17N, OTF, SCROLLBARS, XFT, XIM,
 	  GIF, MAGICK, PNG, SVG, TIFF, XPM,
 	  OSS,
 	  GTK3
@@ -112,10 +118,14 @@ This is a condensed version of the steps below.
         and deselect OPENGL.
       - make -C www/apache24 config
         and select SUEXEC.
-      - make -C x11-toolkits/pango config
-        and deselect DOCS.
       - make -C devel/subversion config
         and deselect GPG_AGENT
+      - make -C devel/cmake config
+        and deselect MANPAGES
+      - make -C devel/doxygen config
+        and deselect LATEX
+      - make -C security/py-certbot config
+        and deselect MANPAGES
 
    j. Build em all:
 
@@ -362,6 +372,15 @@ b. Allocate a node on which to build everything and load the appropriate
    DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
    DEFAULT_VERSIONS+=ssl=base
 
+   # for 12.1
+   DEFAULT_VERSIONS=perl5=5.32 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
+   DEFAULT_VERSIONS+=ssl=base
+
+   # for 12.2
+   DEFAULT_VERSIONS=perl5=5.32 python=3.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
+   DEFAULT_VERSIONS+=ssl=base
+
+   To avoid 
 5. Set non-standard options on some ports.
 
     * Perl. For perl 5.20 make sure that THREADS is defined. It should be,
