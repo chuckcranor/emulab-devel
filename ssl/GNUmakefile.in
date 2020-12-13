@@ -37,12 +37,10 @@ APACHE_KEYFILE_OPS  = $(APACHE_ETCDIR)/ssl.key/$(USERNODE).key
 include $(OBJDIR)/Makeconf
 
 all:	emulab.pem server.pem localnode.pem ctrlnode.pem \
-	capture.pem capture.fingerprint capture.sha1fingerprint \
-	keys mksig updatecert
+	capture.pem capture.fingerprint keys mksig updatecert
 
 remote-site:	emulab.pem capture.pem capture.fingerprint server.pem \
-	localnode.pem capture.sha1fingerprint apache.pem apache-ops.pem \
-	ctrlnode.pem updatecert
+	localnode.pem apache.pem apache-ops.pem ctrlnode.pem updatecert
 
 clearinghouse:	emulab.pem apache.pem
 
@@ -131,14 +129,17 @@ capture.pem:	dirsmade mkserial capture.cnf ca.cnf capture.key capture.req
 # Generate the fingerprint of the capture certificate
 # NOTE: I'd rather use SHA1 than SHA, but we've widely distributed the
 # tiptunnel binary, and it needs SHA
+# NOTE: We have no choice anymore, openssl no longer supports SHA.
+# We continue to do this on the mothership for now.
 #
 capture.fingerprint:	capture.pem
+ifeq (@TBMAINSITE@,1)
 	openssl x509 -sha -noout -fingerprint -in capture.pem \
-	    > capture.fingerprint
-
-capture.sha1fingerprint:	capture.pem
+	    > capture.shafingerprint
+else
 	openssl x509 -sha1 -noout -fingerprint -in capture.pem \
-	    > capture.sha1fingerprint
+	    > capture.fingerprint
+endif
 
 localnode.pem:	dirsmade mkserial localnode.cnf ca.cnf localnode.key localnode.req
 	cat localnode.key >> localnode.req
@@ -173,7 +174,7 @@ emulab_pubkey.pem:	emulab_privkey.pem
 # by you and writable. 
 #
 %.key:
-	openssl genrsa -out $@ -rand .rand 2048
+	openssl genrsa -out $@ 2048
 
 #
 # Rule to extract public key from private key,
@@ -255,7 +256,6 @@ boss-installX:	install-dirs \
 		$(INSTALL_ETCDIR)/ctrlnode.pem \
 		$(INSTALL_ETCDIR)/capture.pem \
 		$(INSTALL_ETCDIR)/capture.fingerprint \
-		$(INSTALL_ETCDIR)/capture.sha1fingerprint \
 		$(INSTALL_ETCDIR)/emulab_privkey.pem \
 		$(INSTALL_ETCDIR)/emulab_pubkey.pem \
 		$(INSTALL_SBINDIR)/updatecert \
@@ -270,7 +270,6 @@ boss-installX:	install-dirs \
 	chmod 640 $(INSTALL_ETCDIR)/emulab_privkey.pem
 	chmod 640 $(INSTALL_ETCDIR)/capture.pem
 	chmod 644 $(INSTALL_ETCDIR)/capture.fingerprint
-	chmod 644 $(INSTALL_ETCDIR)/capture.sha1fingerprint
 
 install-conf:	usercert.cnf syscert.cnf ca.cnf
 	$(INSTALL_DATA) usercert.cnf $(INSTALL_LIBDIR)/ssl/usercert.cnf
@@ -284,7 +283,6 @@ remote-site-boss-install:	install-dirs \
 		$(INSTALL_ETCDIR)/emulab.pub \
 		$(INSTALL_ETCDIR)/capture.pem \
 		$(INSTALL_ETCDIR)/capture.fingerprint \
-		$(INSTALL_ETCDIR)/capture.sha1fingerprint \
 		$(INSTALL_ETCDIR)/ctrlnode.pem \
 		$(INSTALL_ETCDIR)/server.pem \
 		$(INSTALL_SBINDIR)/updatecert \
@@ -295,7 +293,6 @@ remote-site-boss-install:	install-dirs \
 	chmod 644 $(INSTALL_ETCDIR)/emulab.pub
 	chmod 640 $(INSTALL_ETCDIR)/capture.pem
 	chmod 644 $(INSTALL_ETCDIR)/capture.fingerprint
-	chmod 644 $(INSTALL_ETCDIR)/capture.sha1fingerprint
 	chmod 640 $(INSTALL_ETCDIR)/server.pem
 	chmod 640 $(INSTALL_ETCDIR)/client.pem
 	chmod 640 $(INSTALL_ETCDIR)/ctrlnode.pem

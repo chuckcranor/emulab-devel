@@ -89,6 +89,9 @@ if test ! -d "$PYTHON_PATH/include"; then
     PYTHON_PATH=`dirname ${PYTHON_PATH}`
 fi
 PYTHON_INCLUDE="${PYTHON_PATH}/include/python${PYTHON_VERSION}"
+if test ! -d "$PYTHON_INCLUDE" -a -d "${PYTHON_INCLUDE}m"; then
+      PYTHON_INCLUDE="${PYTHON_INCLUDE}m"
+fi
 CPPFLAGS="${CPPFLAGS} -I${PYTHON_INCLUDE}"
 AC_CHECK_HEADERS([Python.h],
 		 [],

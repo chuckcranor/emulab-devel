@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -173,6 +173,15 @@ if ($user =~ /^([-\w]+)$/i) {
 }
 else {
     die("Tainted argument: $user\n");
+}
+
+# Figure out what version of OpenSSL
+my $sslversion = `$OPENSSL version`;
+if ($sslversion =~ /^OpenSSL\s+(\d+)\.(\d+)\./) {
+    $sslversion = "$1.$2";
+} else {
+    print STDERR "Cannot parse OpenSSL version, assuming 1.0\n";
+    $sslversion = "1.0";
 }
 
 # Map target user to object.
@@ -461,7 +470,11 @@ sub CreateNewCert() {
     # We store the DN in the DB too, for creating the crl index file without
     # having to reparse all the certs.
     #
-    my $DN = `$OPENSSL x509 -subject -noout -in usercert_cert.pem`;
+    my $args = "-subject -noout";
+    if ($sslversion > 1.0) {
+	$args .= " -nameopt=compat";
+    }
+    my $DN = `$OPENSSL x509 $args -in usercert_cert.pem`;
     chomp($DN);
     if ($DN =~ /^subject=\s*(\/[-\/\=\w\@\.,\s]+)$/) {
 	$DN = $1;

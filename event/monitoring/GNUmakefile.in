@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2014 University of Utah and the Flux Group.
+# Copyright (c) 2014-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -52,7 +52,7 @@ CFLAGS   += -I/usr/local/include
 LDFLAGS  += -L$(TESTBED_LIBOBJDIR)
 LDFLAGS  += -L$(TESTBED_LIBOBJDIR)/event
 LIBS      = -levent -lcrypto
-LIBS     += -L/usr/local/lib -lpubsub -lm
+LIBS     += -L/usr/local/lib -lpubsub -lssl -lm
 LIBS     += -L/usr/local/lib/mysql -lmysqlclient
 LDFLAGS  += $(LDSTATIC)
 

@@ -591,11 +591,11 @@ sub GenerateKeyFile()
     }
     close(AUTHKEYS);
 
-    $UID = 0;
+    $EUID = $UID = 0;
     system("$SSH -host $CONTROL ".
 	   "'$ACCOUNTPROXY dropfile $user_uid $user_gid 0600 $sshdir ".
 	   "authorized_keys' < $outfile");
-    $UID = $SAVEUID;
+    $EUID = $UID = $SAVEUID;
 
     if ($?) {
 	unlink($outfile);

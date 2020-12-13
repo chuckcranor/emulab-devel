@@ -19,6 +19,9 @@ sub Install($$$)
     my $localtarfile  = "/tmp/shellinabox.tar.gz";
     my $LOGFILE       = "$PREFIX/log/shellinabox.log";
 
+    if ($FBSD_MAJOR > 11) {
+	$SOURCEURL = "http://$OUTER_BOSS/downloads/shellinabox-new.tar.Z";
+    }
     Phase "shellinabox", "Installing shellinabox", sub {
 	PhaseSkip("shellinabox not enabled")
 	    if (!$BROWSER_CONSOLE_ENABLE);

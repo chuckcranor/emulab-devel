@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -71,7 +71,7 @@ BI_DBOBJ += event-support.o
 
 CFLAGS  += -DEVENTSYS
 LFLAGS  += $(TESTBED_LIBOBJDIR)/event/libevent.a
-LFLAGS  += -L/usr/local/lib -lpubsub -lcrypto
+LFLAGS  += -L/usr/local/lib -lpubsub -lcrypto -lssl
 ifeq ($(BOOTINFO_PXEEVENTS),1)
 CFLAGS  += -DBOOTINFO_PXEEVENTS
 endif
