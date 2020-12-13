@@ -286,8 +286,13 @@ if { $opsmem != {} } {
 # XXX The use of specific devices like da2 is not the best approach.
 # Note that the FreeBSD guest starts with the root disk on da0,
 # so we start at da2 ...
+#
 # XXX Really bad idea because now FreeBSD VMs use "ada" rather than "da"
 # (because we use "hd" rather than "sd" in the xm.conf file..long story)
+#
+# XXX Really, really bad idea because now with PVH for FreeBSD VMs, the
+# disk name is "xbd". So now we are going to leave it up to rc.mkelab to
+# map "ada" into whatever the actual type is.
 #
 tb-set-elabinelab-role-attribute "boss" "EXTRADISKS" "ada1:/usr/testbed,ada2:/usr/testbed/data,ada3:/usr/testbed/log"
 tb-set-elabinelab-role-attribute "ops"  "EXTRADISKS" "ada1:/usr/testbed,ada2:/q,ada3:/share"
