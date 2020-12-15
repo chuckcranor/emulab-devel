@@ -26,6 +26,7 @@ TESTBED_SRCDIR	= @top_srcdir@
 EVENTSYS	= @EVENTSYS@
 OBJDIR		= ..
 SUBDIR		= ssl
+RANDFILE        = ./.rnd
 
 # Installed certs and keys.
 APACHE_ETCDIR	    = @INSTALL_APACHE_CONFIG@
@@ -155,12 +156,13 @@ ctrlnode.pem:	dirsmade mkserial ctrlnode.cnf ca.cnf ctrlnode.key ctrlnode.req
 
 keys:		emulab_privkey.pem emulab_pubkey.pem
 
-emulab_privkey.pem:
+emulab_privkey.pem: $(RANDFILE)
 	#
 	# Generate a priv key for signing stuff. This one gets a
 	# passphrase.
 	# 
-	openssl genrsa -out emulab_privkey.pem -des3 2048
+	(RANDFILE=$(RANDFILE) \
+	 openssl genrsa -out emulab_privkey.pem -rand $(RANDFILE) -des3 2048)
 
 emulab_pubkey.pem:	emulab_privkey.pem
 	#
@@ -173,14 +175,17 @@ emulab_pubkey.pem:	emulab_privkey.pem
 # If this fails, check to make sure that ~/.rnd is owned
 # by you and writable. 
 #
-%.key:
-	openssl genrsa -out $@ 2048
+%.key:	$(RANDFILE)
+	(RANDFILE=$(RANDFILE) openssl genrsa -out $@ -rand $(RANDFILE) 2048)
 
 #
 # Rule to extract public key from private key,
 #
 %.pub:
 	openssl rsa -in $*.key -pubout -out $@
+
+$(RANDFILE):
+	dd if=/dev/urandom of=$(RANDFILE) bs=256 count=4
 
 # The point of the this is to recover the keys from where they were
 # originally installed. We do this cause people often lose their
@@ -336,7 +341,7 @@ clean:
 	@echo "BE VERY CAREFUL! CLEANING THE SSL DIR CAN CAUSE DISASTER!"
 
 cleanX: clean-certs clean-keys
-	rm -f serial index.txt *.old dirsmade *.cnf
+	rm -f serial index.txt *.old dirsmade *.cnf .rnd
 	rm -f mkserial updatecert mksig
 	rm -rf newcerts certs crl
 
