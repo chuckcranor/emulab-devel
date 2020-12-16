@@ -1,6 +1,6 @@
 # -*- python -*-
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2014, 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,6 +22,7 @@
 # }}}
 #
 
+from __future__ import print_function
 import sys
 import os
 import time
@@ -29,7 +30,10 @@ import signal
 import syslog
 import socket
 import traceback
-import xmlrpclib
+try:
+    import xmlrpclib
+except:
+    import xmlrpc.client as xmlrpclib
 
 from optparse import OptionParser
 from warnings import warn
@@ -112,10 +116,10 @@ def SENDMAIL(To, Subj, Msg, From = None, Headers = None, Files = ()):
     # Sendmail will figure this out if not given.
     # 
     if From:
-	sm.write("From: %s\n" % From)
+        sm.write("From: %s\n" % From)
         
     if Headers:
-	sm.write("%s\n" % Headers)
+        sm.write("%s\n" % Headers)
         
     sm.write("X-NetBed: %s\n" % SCRIPTNAME)
     sm.write("To: %s\n" % To)
@@ -155,7 +159,7 @@ def SENDMAIL(To, Subj, Msg, From = None, Headers = None, Files = ()):
 #
 def TIMESTAMP(msgstr = ""):
     mytime = time.strftime("%H:%M:%S")
-    print "TIMESTAMP: %s %s" % (mytime, msgstr)
+    print("TIMESTAMP: %s %s" % (mytime, msgstr))
     
 #
 # Termination signals, and global var to track if we got one when
@@ -178,7 +182,7 @@ def localSigHandler(signum, frame):
     global gotsig
     gotsig = signum
     if verbose:
-        print "Caught signal %s" % signum
+        print("Caught signal %s" % signum)
 
 def disable_sigs(sigs):
     """
@@ -214,7 +218,7 @@ def enable_sigs(osigs):
 class TimeoutError: pass
 def alrmhandler(signum, frame):
     if debug:
-        print "Timeout! Raising TimeoutError."
+        print("Timeout! Raising TimeoutError.")
     raise TimeoutError
 
 oalrmhandlerstk = []  # alarm handler stack
@@ -287,11 +291,11 @@ def ForkCmd(cmd, args=(), timeout=DEF_TIMEOUT,
             try:
                 exval = os.waitpid(childpid, 0)[1]
             except TimeoutError:
-                print "Timeout waiting for command completion: %s" % \
-                      cmd.func_name
+                print("Timeout waiting for command completion: %s" % \
+                      cmd.__name__)
                 gotexc = 1
                 break
-            except OSError, e:
+            except OSError as e:
                 # Interrupted syscall: just jump back on it.
                 if e.errno == 4:
                     continue
@@ -307,8 +311,8 @@ def ForkCmd(cmd, args=(), timeout=DEF_TIMEOUT,
         signal.alarm(0)
         if gotexc:
             tb = "".join(traceback.format_exception_only(*sys.exc_info()[:2]))
-            print "Exception caught while trying to " \
-                  "run command %s\n%s" % (cmd.func_name, tb)
+            print("Exception caught while trying to " \
+                  "run command %s\n%s" % (cmd.__name__, tb))
             try: os.kill(childpid, signal.SIGUSR1)
             except: pass
             try: exval = os.wait()[1]
@@ -316,11 +320,11 @@ def ForkCmd(cmd, args=(), timeout=DEF_TIMEOUT,
         else:
             if debug:
                 if os.WIFEXITED(exval):
-                    print "Process complete, exit value: %d" % \
-                          os.WEXITSTATUS(exval)
+                    print("Process complete, exit value: %d" % \
+                          os.WEXITSTATUS(exval))
                 if os.WIFSIGNALED(exval):
-                    print "Process signalled: %d" % \
-                          os.WTERMSIG(exval)
+                    print("Process signalled: %d" % \
+                          os.WTERMSIG(exval))
 
         disable_alarm()
         if osigs:
@@ -331,7 +335,7 @@ def ForkCmd(cmd, args=(), timeout=DEF_TIMEOUT,
     else:
         def sigusrexit(signum, frame):
             if debug:
-                print "Received SIGUSR1, bailing out"
+                print("Received SIGUSR1, bailing out")
             os._exit(1)
 
         retval = 1
@@ -393,8 +397,8 @@ def tryXmlrpcCmd(cmd, args = (),
     tries = inittries
     
     if debug:
-        print "About to perform command %s with args:\n\t%s" % \
-              (cmd, args)
+        print("About to perform command %s with args:\n\t%s" % \
+              (cmd, args))
 
     while 1:
         tries = tries - 1
@@ -412,7 +416,7 @@ def tryXmlrpcCmd(cmd, args = (),
                 return cmd()
             pass
         # RPC returned a fault - process it here.
-        except xmlrpclib.Fault, e:
+        except xmlrpclib.Fault as e:
 
             # If a callback fault handler was passed, then call it to assess
             # the damage first.
@@ -437,45 +441,45 @@ def tryXmlrpcCmd(cmd, args = (),
                     raise
                 pass
             
-            print "XML-RPC Fault happened while executing agent " \
-                  "command: %s" % cmd.func_name
-            print "\tCode: %s, Error: %s" % (e.faultCode, e.faultString)
+            print("XML-RPC Fault happened while executing agent " \
+                  "command: %s" % cmd.__name__)
+            print("\tCode: %s, Error: %s" % (e.faultCode, e.faultString))
             # Raise xmlrpc exception, if requested.  Report tries left in
             # fault object.
             # XXX: this really should be removed once we've determined that
             #      no existing code uses this facility.
             if raisefault:
                 e.triesleft = tries
-                raise xmlrpclib.Fault, e
+                raise xmlrpclib.Fault(e)
             pass
 
         # Jump out if we receive a timeout exception.
-        except TimeoutError, e:
+        except TimeoutError as e:
             if debug:
-                print "Caught a timeout error, setting triesleft and raising."
+                print("Caught a timeout error, setting triesleft and raising.")
             e.triesleft = tries
-            raise TimeoutError, e
+            raise TimeoutError(e)
 
         # Communications errors are non-fatal unless they occur
         # several times in a row.
-        except (socket.error, xmlrpclib.ProtocolError), e:
-            print "Encountered problem communicating with agent " \
-                  "while executing command: %s" % cmd.func_name
+        except (socket.error, xmlrpclib.ProtocolError) as e:
+            print("Encountered problem communicating with agent " \
+                  "while executing command: %s" % cmd.__name__)
             if debug:
-                print "Exception is of type: %s" % e
+                print("Exception is of type: %s" % e)
                 pass
             pass
 
         if tries > 0:
-            print "Sleeping for %s seconds, then retrying %s command" % \
-                  (sleepint, cmd.func_name)
+            print("Sleeping for %s seconds, then retrying %s command" % \
+                  (sleepint, cmd.__name__))
             time.sleep(sleepint)
             pass
         
         else:
             # XXX: perhaps this should raise its own, new type of
             # exception.
-            print "Giving up after %s tries" % inittries
+            print("Giving up after %s tries" % inittries)
             raise
 
 
@@ -556,7 +560,7 @@ class pydaemon:
             sys.stdout = sys.stderr = outfile
             pass
         else:
-            print "Couldn't open output log"
+            print("Couldn't open output log")
             pass
 
         return
@@ -576,27 +580,27 @@ class pydaemon:
             try:
                 func()
                 pass
-            except SignalInterrupt, e:
-                print "Received signal %s in daemon loop, exiting." % e.signum
+            except SignalInterrupt as e:
+                print("Received signal %s in daemon loop, exiting." % e.signum)
                 sys.exit(0)
                 pass
             except KeyboardInterrupt:
-                print "Received keyboard interrupt in daemon loop, exiting."
+                print("Received keyboard interrupt in daemon loop, exiting.")
                 sys.exit(1)
                 pass
             except:
-                print "Exception caught in plab daemon loop:"
-                print "".join(traceback.format_exception(*sys.exc_info()))
+                print("Exception caught in plab daemon loop:")
+                print("".join(traceback.format_exception(*sys.exc_info())))
                 consecexc -= 1
                 if consecexc > 0:
-                    print "Going back to sleep until next scheduled run"
+                    print("Going back to sleep until next scheduled run")
                 else:
-                    print "Too many consecutive exceptions seen, bailing out!"
+                    print("Too many consecutive exceptions seen, bailing out!")
                     SENDMAIL(TBOPS, "%s Exiting",
                              "The plab %s daemon has seen too many "
                              "consecutive exceptions and is bailing out."
                              "Someone needs to check the log!" %
-                             (SCRIPTNAME, func.func_name), TBOPS)
+                             (SCRIPTNAME, func.__name__), TBOPS)
                     raise
                 pass
             else:
@@ -606,7 +610,7 @@ class pydaemon:
             end = time.clock()
             if end - start < period:
                 wait = period - (end - start)
-                print "Sleeping %g seconds" % wait
+                print("Sleeping %g seconds" % wait)
                 time.sleep(wait)
                 pass
             pass

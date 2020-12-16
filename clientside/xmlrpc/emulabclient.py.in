@@ -75,7 +75,7 @@ def readnsfile(nsfilename, debug):
         fp = os.open(nsfilename, os.O_RDONLY)
 
         while True:
-	    str = os.read(fp, 1024)
+            str = os.read(fp, 1024)
 
             if not str:
                 break
@@ -86,10 +86,10 @@ def readnsfile(nsfilename, debug):
 
     except:
         if debug:
-            print "%s:%s" % (sys.exc_type, sys.exc_value)
+            print("%s:%s" % (sys.exc_info()[0], sys.exc_info()[1]))
             pass
 
-        print "batchexp: Cannot read NS file '" + nsfilename + "'"
+        print("batchexp: Cannot read NS file '" + nsfilename + "'")
         return None
         pass
 

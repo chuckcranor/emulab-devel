@@ -21,6 +21,7 @@
 # 
 # }}}
 #
+
 import sys
 import socket
 import os
@@ -33,14 +34,16 @@ import string
 import pwd
 import grp
 import errno
-import exceptions
-import xmlrpclib
 import signal
 import types
 import datetime
 import syslog
 import subprocess
 import json
+try:
+    import xmlrpclib
+except:
+    import xmlrpc.client as xmlrpclib
 
 # Configure variables
 TBDIR = "@prefix@"
@@ -149,7 +152,7 @@ virtual_tables = {
     }
     
 # Base class for emulab specific exceptions.
-class EmulabError(exceptions.Exception):
+class EmulabError(Exception):
     pass
 
 # Exception thrown when logins are not allowed.
@@ -165,11 +168,11 @@ class TimedOutError(EmulabError):
     pass
 
 def TimeoutHandler(signum, frame):
-    raise TimedOutError, 'Timer Expired'
+    raise TimedOutError('Timer Expired')
 
 def logit(debug, msg):
     if debug:
-        print msg
+        print(msg)
         pass
     else:
         syslog.syslog(syslog.LOG_INFO, msg);
@@ -186,19 +189,19 @@ def logit(debug, msg):
 #
 def CheckRequiredArgs(argdict, arglist):
     # proj,group,exp are aliases for pid,gid,eid
-    if (argdict.has_key("pid") and not argdict.has_key("proj")):
+    if ("pid" in argdict and "proj" not in argdict):
         argdict["proj"] = argdict["pid"]
         pass
-    if (argdict.has_key("gid") and not argdict.has_key("group")):
+    if ("gid" in argdict and "group" not in argdict):
         argdict["group"] = argdict["gid"]
         pass
-    if (argdict.has_key("eid") and not argdict.has_key("exp")):
+    if ("eid" in argdict and "exp" not in argdict):
         argdict["exp"] = argdict["eid"]
         pass
 
     # Okay, now check.
     for arg in arglist:
-        if not argdict.has_key(arg):
+        if arg not in argdict:
             return EmulabResponse(RESPONSE_BADARGS,
                                   output="Must supply '" + arg + "'")
         pass
@@ -353,7 +356,7 @@ class EmulabServer:
         dotted = name.split(".");
         if len(dotted) != 2:
             raise AttributeError("Bad name '%s'" % name)
-        if not self.instances.has_key(dotted[0]):
+        if dotted[0] not in self.instances:
             raise AttributeError("unknown method '%s' (readonly=%d)" %
                                  (name, self.readonly))
         
@@ -400,7 +403,7 @@ class emulab:
 
         # Process optional arguments.
         starting = None;
-        if argdict.has_key("starting"):
+        if "starting" in argdict:
             if not re.match("^[-:\w]*$", str(argdict["starting"])):
                 return EmulabResponse(RESPONSE_BADARGS,
                                       output="Improperly formed 'starting'!")
@@ -408,7 +411,7 @@ class emulab:
             pass
 
         ending = None
-        if argdict.has_key("ending"):
+        if "ending" in argdict:
             if not re.match("^[-:\w]*$", str(argdict["ending"])):
                 return EmulabResponse(RESPONSE_BADARGS,
                                       output="Improperly formed 'ending'!")
@@ -513,7 +516,7 @@ class emulab:
             return EmulabResponse(RESPONSE_BADARGS,
                                   output="Improperly formed 'area'!")
 
-        if not argdict.has_key("units"):
+        if "units" not in argdict:
             argdict["units"] = "pixels"
             pass
         
@@ -575,7 +578,7 @@ class user:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         res = DBQueryFatal(
@@ -604,11 +607,11 @@ class user:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         permission = "readinfo"
-        if argdict.has_key("permission"):
+        if "permission" in argdict:
             permission = argdict["permission"]
             pass
 
@@ -641,7 +644,7 @@ class user:
 
         result = {}
         for proj in res:
-            if result.has_key(proj[0]):
+            if proj[0] in result:
                 # Add group to existing project list
                 tmp = result[proj[0]]
                 tmp.append(proj[1])
@@ -668,7 +671,7 @@ class user:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         res = DBQueryFatal("select mailman_password from users where uid_idx=%s",
@@ -709,7 +712,7 @@ class fs:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("permission", "path"))
@@ -744,7 +747,7 @@ class fs:
             return EmulabResponse(RESPONSE_SUCCESS,
                                   value=res,
                                   output=str(res))
-        except OSError, e:
+        except OSError as e:
             return EmulabResponse(RESPONSE_ERROR,
                                   value=e,
                                   output=(e.strerror + ": " + e.filename))
@@ -764,7 +767,7 @@ class fs:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("path",))
@@ -818,7 +821,7 @@ class fs:
                                     value=result,
                                     output=str(result))
             pass
-        except OSError, e:
+        except OSError as e:
             retval = EmulabResponse(RESPONSE_ERROR,
                                     value=e,
                                     output=(e.strerror + ": " + e.filename))
@@ -837,7 +840,7 @@ class fs:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         # Start with the default set of exports, then
@@ -891,7 +894,7 @@ class imageid:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         # Get the listing that is accessible to this user and
@@ -989,7 +992,7 @@ class osid:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         # Get the listing that is accessible to this user and
@@ -1013,7 +1016,7 @@ class osid:
             osid["fullosid"] = osid["osid"]
             osid["osid"] = osid["osname"]
 
-            if not osid.has_key("OS") or len(osid["OS"]) == 0:
+            if "OS" not in osid or len(osid["OS"]) == 0:
                 osid["OS"] = "(None)"
                 pass
 
@@ -1053,7 +1056,7 @@ class osid:
         osid["fullosid"] = osid["osid"]
         osid["osid"] = osid["osname"]
         
-        if not osid.has_key("OS") or len(osid["OS"]) == 0:
+        if "OS" not in osid or len(osid["OS"]) == 0:
             osid["OS"] = "(None)"
             pass
 
@@ -1087,7 +1090,7 @@ class experiment:
     # @return The 'msg' value with this machine's name prepended.
     #
     def echo(self, version, argdict):
-        if not argdict.has_key("str"):
+        if "str" not in argdict:
             return EmulabResponse(RESPONSE_BADARGS,
                                   output="Must supply a string to echo!")
         
@@ -1110,7 +1113,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         result = {
@@ -1137,11 +1140,11 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         # Figure out the format for the returned data.
-        if argdict.has_key("format"):
+        if "format" in argdict:
             format = argdict["format"]
             pass
         else:
@@ -1174,12 +1177,12 @@ class experiment:
             maximum_nodes = res[7]
             actual_nodes = res[8]
             # ... make sure 'result' has the proper slots,
-            if not result.has_key(pid):
+            if pid not in result:
                 result[pid] = {
                     gid : list()
                     }
                 pass
-            elif not result[pid].has_key(gid):
+            elif gid not in result[pid]:
                 result[pid][gid] = list()
                 pass
 
@@ -1226,7 +1229,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("proj", "exp"))
@@ -1235,7 +1238,7 @@ class experiment:
 
         nsfilename = None
         argstr     = "-q -R"
-	extrainfo  = False
+        extrainfo  = False
         
         for opt, val in argdict.items():
             if opt == "batch":
@@ -1261,7 +1264,7 @@ class experiment:
                 pass
             elif opt == "swappable":
                 if not xbool(val):
-                    if not argdict.has_key("noswap_reason"):
+                    if "noswap_reason" not in argdict:
                         return EmulabResponse(RESPONSE_BADARGS,
                                        output="Must supply noswap reason!");
                     argstr += " -S "
@@ -1272,7 +1275,7 @@ class experiment:
                 pass
             elif opt == "idleswap":
                 if val == 0:
-                    if not argdict.has_key("noidleswap_reason"):
+                    if "noidleswap_reason" not in argdict:
                         return EmulabResponse(RESPONSE_BADARGS,
                                       output="Must supply noidleswap reason!");
                     argstr += " -L "
@@ -1320,11 +1323,11 @@ class experiment:
                     argstr += " -N "
                     pass
                 pass
-	    elif opt == "extrainfo":
-		if xbool(val):
-		    argstr += " -X "
-		    extrainfo = True
-		    pass
+            elif opt == "extrainfo":
+                if xbool(val):
+                    argstr += " -X "
+                    extrainfo = True
+                    pass
                 pass
             pass
 
@@ -1336,19 +1339,19 @@ class experiment:
         (exitval, output, errout) = runcommand(TBDIR + "/bin/batchexp " + argstr, 
                                                separate_stderr=extrainfo);
         if exitval:
-	    if extrainfo:
-		try:
-		    value = xmlrpclib.loads(output)[0][0]
-		except:
-		    output = errout + output
-		    return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
-		value["exitval"] = exitval >> 8
-		output = value["output"]
-		del value["output"]
-		value["errout"] = errout
-		return EmulabResponse(RESPONSE_ERROR, value, output=output)
-	    else:
-            	return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
+            if extrainfo:
+                try:
+                    value = xmlrpclib.loads(output)[0][0]
+                except:
+                    output = errout + output
+                    return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
+                value["exitval"] = exitval >> 8
+                output = value["output"]
+                del value["output"]
+                value["errout"] = errout
+                return EmulabResponse(RESPONSE_ERROR, value, output=output)
+            else:
+                return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
         
         return EmulabResponse(RESPONSE_SUCCESS, output=output)
 
@@ -1373,7 +1376,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("proj", "exp", "direction"))
@@ -1394,7 +1397,7 @@ class experiment:
                                   output="direction must be 'in' or 'out'");
 
         argstr = "-q"
-	extrainfo = False
+        extrainfo = False
 
         for opt, val in argdict.items():
             if opt == "wait":
@@ -1407,11 +1410,11 @@ class experiment:
                     argstr += " -N "
                     pass
                 pass
-	    elif opt == "extrainfo":
-		if xbool(val):
-		    argstr += " -X "
-		    extrainfo = True
-		    pass
+            elif opt == "extrainfo":
+                if xbool(val):
+                    argstr += " -X "
+                    extrainfo = True
+                    pass
                 pass
             pass
 
@@ -1422,18 +1425,18 @@ class experiment:
         (exitval, output, errout) = runcommand(TBDIR + "/bin/swapexp " + argstr,
                                                separate_stderr=extrainfo);
         if exitval:
-	    if extrainfo:
-		try:
-		    value = xmlrpclib.loads(output)[0][0]
-		except:
-		    output = errout + output
-		    return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
-		value["exitval"] = exitval >> 8
-		output = value["output"]
-		del value["output"]
-		value["errout"] = errout
-		return EmulabResponse(RESPONSE_ERROR, value, output=output)
-	    else:
+            if extrainfo:
+                try:
+                    value = xmlrpclib.loads(output)[0][0]
+                except:
+                    output = errout + output
+                    return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
+                value["exitval"] = exitval >> 8
+                output = value["output"]
+                del value["output"]
+                value["errout"] = errout
+                return EmulabResponse(RESPONSE_ERROR, value, output=output)
+            else:
             	return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
         
         return EmulabResponse(RESPONSE_SUCCESS, output=output)
@@ -1454,7 +1457,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("proj", "exp"))
@@ -1471,7 +1474,7 @@ class experiment:
 
         nsfilename = None
         argstr     = "-q"
-	extrainfo  = False
+        extrainfo  = False
         
         for opt, val in argdict.items():
             if opt == "wait":
@@ -1510,11 +1513,11 @@ class experiment:
                     argstr += " -N "
                     pass
                 pass
-	    elif opt == "extrainfo":
-		if xbool(val):
-		    argstr += " -X "
-		    extrainfo = True
-		    pass
+            elif opt == "extrainfo":
+                if xbool(val):
+                    argstr += " -X "
+                    extrainfo = True
+                    pass
                 pass
             pass
 
@@ -1529,18 +1532,18 @@ class experiment:
         (exitval, output, errout) = runcommand(TBDIR + "/bin/swapexp " + argstr, 
                                                separate_stderr=extrainfo)
         if exitval:
-	    if extrainfo:
-		try:
-		    value = xmlrpclib.loads(output)[0][0]
-		except:
-		    output = errout + output
-		    return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
-		value["exitval"] = exitval >> 8
-		output = value["output"]
-		del value["output"]
-		value["errout"] = errout
-		return EmulabResponse(RESPONSE_ERROR, value, output=output)
-	    else:
+            if extrainfo:
+                try:
+                    value = xmlrpclib.loads(output)[0][0]
+                except:
+                    output = errout + output
+                    return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
+                value["exitval"] = exitval >> 8
+                output = value["output"]
+                del value["output"]
+                value["errout"] = errout
+                return EmulabResponse(RESPONSE_ERROR, value, output=output)
+            else:
             	return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
         
         return EmulabResponse(RESPONSE_SUCCESS, output=output)
@@ -1560,7 +1563,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("proj", "exp"))
@@ -1613,7 +1616,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("proj", "exp"))
@@ -1670,7 +1673,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("proj", "exp", "show"))
@@ -1828,14 +1831,14 @@ class experiment:
                                   output="Improperly formed proj/exp!")
 
         # ... timeout arguments.
-        if (argdict.has_key("timeout") and
-            isinstance(argdict["timeout"], types.StringType) and
+        if ("timeout" in argdict and
+            isinstance(argdict["timeout"], str) and
             not re.match("^[\d]*$", argdict["timeout"])):
             return EmulabResponse(RESPONSE_BADARGS,
                                   output="Improperly formed timeout!")
 
         # Make sure the state argument is a list.
-        if (not isinstance(argdict["state"], types.ListType)):
+        if (not isinstance(argdict["state"], list)):
             argdict["state"] = [argdict["state"],]
             pass
         
@@ -1867,7 +1870,7 @@ class experiment:
         try:
             import tbevent
             pass
-        except ImportError, e:
+        except ImportError as e:
             return EmulabResponse(RESPONSE_ERROR, output="System Error")
 
         at = tbevent.address_tuple()
@@ -1899,7 +1902,7 @@ class experiment:
         if (state in argdict["state"]):
             return EmulabResponse(RESPONSE_SUCCESS, value=state, output=state)
 
-        if (argdict.has_key("timeout")):
+        if ("timeout" in argdict):
             signal.signal(signal.SIGALRM, TimeoutHandler)
             signal.alarm(int(argdict["timeout"]))
             pass
@@ -1921,12 +1924,12 @@ class experiment:
 
                 pass
             pass
-        except TimedOutError, e:
+        except TimedOutError as e:
             return EmulabResponse(RESPONSE_TIMEDOUT,
                                   output=("Timed out waiting for states: "
-                                          + `argdict["state"]`))
+                                          + repr(argdict["state"])))
 
-        if (argdict.has_key("timeout")):
+        if ("timeout" in argdict):
             signal.alarm(0)
             pass
 
@@ -1953,7 +1956,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("proj", "exp", "aspect"))
@@ -2010,7 +2013,7 @@ class experiment:
                 tmp["node"] = res[1]
                 tmp["type"] = res[2]
                 tmp["pnode"] = res[10]
-                if not osmappings.has_key(res[3]):
+                if res[3] not in osmappings:
                     osres = DBQuery(
                         "SELECT osname from os_info where osid=%s", (res[3],))
                     osmappings[res[3]] = osres[0][0]
@@ -2152,12 +2155,12 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argstr = ""
 
-        if argdict.has_key("nsfilestr"):
+        if "nsfilestr" in argdict:
             nsfilestr = argdict["nsfilestr"]
             
             if len(nsfilestr) > (1024 * 512):
@@ -2171,7 +2174,7 @@ class experiment:
 
             argstr += nsfilename
             pass
-        elif argdict.has_key("nsfilepath"):
+        elif "nsfilepath" in argdict:
             # Backend script will verify this local path. 
             argstr += escapeshellarg(argdict["nsfilepath"])
             pass
@@ -2200,7 +2203,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict,
@@ -2263,7 +2266,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict,
@@ -2327,7 +2330,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("proj", "exp"))
@@ -2385,7 +2388,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("proj", "exp"))
@@ -2513,10 +2516,10 @@ class experiment:
             tag  = val["tag"]
             rows = []
 
-            if argdict.has_key("tables") and (tag not in argdict["tables"]):
+            if "tables" in argdict and (tag not in argdict["tables"]):
                 continue
             
-            if argdict.has_key("exclude") and (tag in argdict["exclude"]):
+            if "exclude" in argdict and (tag in argdict["exclude"]):
                 continue
             
             res = DBQuery("SELECT * FROM " + key + " " +
@@ -2604,7 +2607,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("proj", "exp"))
@@ -2661,7 +2664,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         # Check for valid arguments.
@@ -2716,7 +2719,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         # Check for valid arguments.
@@ -2770,7 +2773,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("proj", "exp", "action"))
@@ -2825,7 +2828,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("proj", "exp"))
@@ -2871,7 +2874,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         #
@@ -2926,7 +2929,7 @@ class experiment:
             pass
 
         if (proj or expt):
-            if ((not (proj and expt)) or argdict.has_key("physnames")):
+            if ((not (proj and expt)) or "physnames" in argdict):
                 return EmulabResponse(RESPONSE_BADARGS,
                                       output="pid/eid/physnames")
             argstr += " " + escapeshellarg(proj);
@@ -2959,7 +2962,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         #
@@ -2999,7 +3002,7 @@ class experiment:
             pass
 
         if (proj or expt):
-            if ((not (proj and expt)) or argdict.has_key("physnames")):
+            if ((not (proj and expt)) or "physnames" in argdict):
                 return EmulabResponse(RESPONSE_BADARGS,
                                       output="pid/eid/physnames")
             argstr += " " + escapeshellarg(proj);
@@ -3046,7 +3049,7 @@ class experiment:
         #
         result = []
 
-	res = DBQuery("select vi.vname,vi.vnode,r.node_id,o.type "
+        res = DBQuery("select vi.vname,vi.vnode,r.node_id,o.type "
                       " from virt_agents as vi "
                       "left join reserved as r on "
                       " r.vname=vi.vnode and r.pid=vi.pid and "
@@ -3129,7 +3132,7 @@ class experiment:
         #
         result = []
 
-	res = DBQuery("select group_name,agent_name from event_groups "
+        res = DBQuery("select group_name,agent_name from event_groups "
                       "where pid=%s and eid=%s",
                       (argdict["proj"], argdict["exp"]))
 
@@ -3169,7 +3172,7 @@ class experiment:
         #
         result = []
 
-	res = DBQuery("SELECT ex.idx,ex.time,ex.vname,"
+        res = DBQuery("SELECT ex.idx,ex.time,ex.vname,"
                       "ot.type,et.type,ex.arguments,ex.parent,etr.type "
                       "FROM eventlist AS ex "
                       "LEFT JOIN event_triggertypes AS etr ON "
@@ -3205,7 +3208,7 @@ class experiment:
 
         tl_clause = ""
         tl_insert = ""
-        if argdict.has_key("timeline"):
+        if "timeline" in argdict:
             if not re.match("^[-\w]*$", argdict["timeline"]):
                 return EmulabResponse(RESPONSE_BADARGS,
                                       output="Improperly formed timeline!")
@@ -3228,7 +3231,7 @@ class experiment:
         if (permerror):
             return permerror
 
-        if argdict.has_key("time"):
+        if "time" in argdict:
             value = float(argdict["time"])
             
             # XXX remove hardcoded event/object types.
@@ -3258,7 +3261,7 @@ class experiment:
                                       output="Event time has not started yet")
             pass
         
-        return EmulabResponse(RESPONSE_SUCCESS, output=`result`, value=result)
+        return EmulabResponse(RESPONSE_SUCCESS, output=repr(result), value=result)
     
     #
     # Return DP info.
@@ -3270,7 +3273,7 @@ class experiment:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("proj", "exp"))
@@ -3333,10 +3336,10 @@ class node:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
-        if not argdict.has_key("class"):
+        if "class" not in argdict:
             argdict["class"] = "pc"
             pass
 
@@ -3345,7 +3348,7 @@ class node:
                                   output="Improperly formed node class")
         
         type_test = ""
-        if argdict.has_key("type"):
+        if "type" in argdict:
             if not re.match("^[-\w]*$", str(argdict["type"])):
                 return EmulabResponse(RESPONSE_BADARGS,
                                       output="Improperly formed node type")
@@ -3354,7 +3357,7 @@ class node:
             pass
 
         pid_clause = ""
-        if argdict.has_key("proj"):
+        if "proj" in argdict:
             permerror = CheckProjPermission(self.uid_idx, argdict["proj"])
             if permerror:
                 return permerror
@@ -3364,7 +3367,7 @@ class node:
 
         intf_join = ""
         intf_clause = ""
-        if argdict.has_key("nic"):
+        if "nic" in argdict:
             nic = argdict["nic"]
             if "wireless" in nic:
                 intf_join = (
@@ -3406,7 +3409,7 @@ class node:
             return EmulabResponse(RESPONSE_BADVERSION,
                                   output="Client version mismatch!")
  
-        if argdict.has_key("class"):
+        if "class" in argdict:
             if not re.match("^[-\w]*$", str(argdict["class"])):
                 return EmulabResponse(RESPONSE_BADARGS,
                                       output="Improperly formed node class")
@@ -3418,7 +3421,7 @@ class node:
             pass
 
         type_test = ""
-        if argdict.has_key("type"):
+        if "type" in argdict:
             if not re.match("^[-\w]*$", str(argdict["type"])):
                 return EmulabResponse(RESPONSE_BADARGS,
                                       output="Improperly formed node type")
@@ -3428,7 +3431,7 @@ class node:
 
         pid_clause = ""
         pid_clause_list = ""
-        if argdict.has_key("proj"):
+        if "proj" in argdict:
             permerror = CheckProjPermission(self.uid_idx, argdict["proj"])
             if permerror:
                 return permerror
@@ -3443,7 +3446,7 @@ class node:
             pass
 
         node_clause = ""
-        if argdict.has_key("nodes"):
+        if "nodes" in argdict:
             if not re.match("^[-\w]+(,[-\w]+)*$", str(argdict["nodes"])):
                 return EmulabResponse(RESPONSE_BADARGS,
                                       output="Bad chars in node list!")
@@ -3489,13 +3492,13 @@ class node:
 
             predict_cmd = [ PREDICT, "-n" ]
                 
-            if argdict.has_key( "start" ):
+            if "start" in argdict:
                 if not re.match( "^[-:0-9 ]+*$", str( argdict[ "start" ] ) ):
                     return EmulabResponse( RESPONSE_BADARGS,
                                            output="Bad chars in start time" )
                 predict_cmd.append( "-t " + argdict[ "start" ] )
             
-            if argdict.has_key( "duration" ):
+            if "duration" in argdict:
                 if not re.match( "^[0-9]+*$", str( argdict[ "duration" ] ) ):
                     return EmulabResponse( RESPONSE_BADARGS,
                                            output="Bad chars in duration" )
@@ -3544,7 +3547,7 @@ class node:
             return EmulabResponse(RESPONSE_BADVERSION,
                                   output="Client version mismatch!")
 
-        if argdict.has_key("type"):
+        if "type" in argdict:
             if not re.match("^[-\w]*$", str(argdict["type"])):
                 return EmulabResponse(RESPONSE_BADARGS,
                                       output="Improperly formed node type")
@@ -3670,11 +3673,11 @@ class node:
         if (argerror1 and argerror2):
             return argerror1
 
-        if (argdict.has_key("node") and
+        if ("node" in argdict and
             not re.match("^[-\w]*$", str(argdict["node"]))):
             return EmulabResponse(RESPONSE_BADARGS,
                                   output="Improperly formed node value!")
-        elif argdict.has_key("node"):
+        elif "node" in argdict:
             # XXX Refactor the trust stuff
             res = DBQueryFatal("SELECT e.pid,e.gid,e.eid FROM reserved AS r "
                                "left join experiments as e on "
@@ -3693,12 +3696,12 @@ class node:
             clause_args = (argdict["node"],)
             pass
         
-        if (argdict.has_key("proj") and
+        if ("proj" in argdict and
             not (re.match("^[-\w]*$", argdict["proj"]) and
                  re.match("^[-\w]*$", argdict["exp"]))):
             return EmulabResponse(RESPONSE_BADARGS,
                                   output="Improperly formed proj/exp!")
-        elif argdict.has_key("proj"):
+        elif "proj" in argdict:
             pid = argdict["proj"]
             eid = argdict["exp"]
             res = DBQueryFatal("SELECT gid,state FROM experiments "
@@ -3768,7 +3771,7 @@ class node:
             result[node_id] = node_data
             pass
 
-        if argdict.has_key("node"):
+        if "node" in argdict:
             result = result[argdict["node"]]
             pass
         
@@ -3791,7 +3794,7 @@ class node:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         if not re.match("^[-\w]*$", str(argdict["node"])):
@@ -3857,7 +3860,7 @@ class node:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("nodes",))
@@ -3927,7 +3930,7 @@ class node:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("imagename", "node"))
@@ -3963,7 +3966,7 @@ class node:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("nodes",))
@@ -4034,7 +4037,7 @@ class node:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("mode", "node"))
@@ -4078,7 +4081,7 @@ class node:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("op", "filestr", "nodes"))
@@ -4105,7 +4108,7 @@ class node:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("node", "state"))
@@ -4118,14 +4121,14 @@ class node:
                                   output="Improperly formed node value!")
 
         # ... timeout arguments.
-        if (argdict.has_key("timeout") and
-            isinstance(argdict["timeout"], types.StringType) and
+        if ("timeout" in argdict and
+            isinstance(argdict["timeout"], str) and
             not re.match("^[\d]*$", argdict["timeout"])):
             return EmulabResponse(RESPONSE_BADARGS,
                                   output="Improperly formed timeout!")
 
         # Make sure the state argument is a list.
-        if (not isinstance(argdict["state"], types.ListType)):
+        if (not isinstance(argdict["state"], list)):
             argdict["state"] = [argdict["state"],]
             pass
         
@@ -4158,7 +4161,7 @@ class node:
         try:
             import tbevent
             pass
-        except ImportError, e:
+        except ImportError as e:
             return EmulabResponse(RESPONSE_ERROR, output="System Error")
 
         at = tbevent.address_tuple()
@@ -4186,7 +4189,7 @@ class node:
             return EmulabResponse(RESPONSE_ERROR,
                                   output="No such node: " + argdict["node"])
 
-        if (argdict.has_key("timeout")):
+        if ("timeout" in argdict):
             signal.signal(signal.SIGALRM, TimeoutHandler)
             signal.alarm(int(argdict["timeout"]))
             pass
@@ -4215,12 +4218,12 @@ class node:
 
                 pass
             pass
-        except TimedOutError, e:
+        except TimedOutError as e:
             return EmulabResponse(RESPONSE_TIMEDOUT,
                                   output=("Timed out waiting for states: "
-                                          + `argdict["state"]`))
+                                          + repr(argdict["state"])))
 
-        if (argdict.has_key("timeout")):
+        if ("timeout" in argdict):
             signal.alarm(0)
             pass
 
@@ -4308,7 +4311,7 @@ class node:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("file", "node", "key"))
@@ -4404,7 +4407,7 @@ class subboss:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("subboss_id", "imageid",))
@@ -4423,12 +4426,12 @@ class subboss:
 
         res = DBQueryFatal("select load_address,frisbee_pid "
                            " from subboss_images "
-		           "where imageid=%s and subboss_id=%s",
+                           "where imageid=%s and subboss_id=%s",
                            (str(argdict["imageid"]), argdict["subboss_id"]))
 
         if len(res) == 0:
- 	       unlock_tables()
-	       return EmulabResponse(RESPONSE_ERROR, output="No such image")
+            unlock_tables()
+            return EmulabResponse(RESPONSE_ERROR, output="No such image")
 
         unlock_tables()
         result = {}
@@ -4450,7 +4453,7 @@ class subboss:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("subboss_id", "imageid",))
@@ -4468,44 +4471,44 @@ class subboss:
 
         status, msg = next_mcast_address()
         if not status:
-	       return EmulabResponse(RESPONSE_ERROR, output=msg)
+            return EmulabResponse(RESPONSE_ERROR, output=msg)
         else:
- 	       mcast_address = msg
+            mcast_address = msg
 
         lock_subboss_image_table()
 
         res = DBQueryFatal("select load_address,frisbee_pid "
                            " from subboss_images"
- 		           "where subboss_id=%s and imageid=%s",
+                           "where subboss_id=%s and imageid=%s",
                            (argdict["subboss_id"], str(argdict["imageid"])))
         if len(res) == 0:
-	       # This pair doesn't exist in the table yet.  Better insert it
-	       res = DBQueryFatal("insert into subboss_images "
-                                  " values (%s,%s,'',0,1,0)",
-				  (argdict["subboss_id"], argdict["imageid"]))
+            # This pair doesn't exist in the table yet.  Better insert it
+            res = DBQueryFatal("insert into subboss_images "
+                               " values (%s,%s,'',0,1,0)",
+                               (argdict["subboss_id"], argdict["imageid"]))
         elif res[0][0] != "":
-	       # Subboss is already running a frisbeed for this image,
-               # so just update the busy flag
-	       subboss_image_set_busy(argdict["subboss_id"],
+            # Subboss is already running a frisbeed for this image,
+            # so just update the busy flag
+            subboss_image_set_busy(argdict["subboss_id"],
                                       argdict["imageid"])
-	       unlock_tables()
-	       return EmulabResponse(RESPONSE_ERROR,
+            unlock_tables()
+            return EmulabResponse(RESPONSE_ERROR,
                                      output="Frisbee server already running")
         elif res[0][1] != 0:
-	       unlock_tables()
-	       return EmulabResponse(RESPONSE_ERROR,
+            unlock_tables()
+            return EmulabResponse(RESPONSE_ERROR,
                                      output="Bad DB state: "
                                      "frisbeed PID without load_address")
 
 
-	res = DBQueryFatal("update subboss_images "
+        res = DBQueryFatal("update subboss_images "
                            " set load_address = %s, load_busy = 1 "
-			   "where subboss_id=%s and imageid=%s",
+                           "where subboss_id=%s and imageid=%s",
                            (mcast_address,
                             argdict["subboss_id"], argdict["imageid"]))
-	unlock_tables()
+        unlock_tables()
 
-	return EmulabResponse(RESPONSE_SUCCESS,
+        return EmulabResponse(RESPONSE_SUCCESS,
                               value=mcast_address, output=mcast_address)
 
     #
@@ -4519,7 +4522,7 @@ class subboss:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("subboss_id", "imageid",))
@@ -4541,16 +4544,16 @@ class subboss:
                            "where subboss_id=%s and imageid=%s",
                            (argdict["subboss_id"], str(argdict["imageid"])))
         if len(res) == 0:
-	       unlock_tables()
-	       return EmulabResponse(RESPONSE_ERROR, output="No such image")
+            unlock_tables()
+            return EmulabResponse(RESPONSE_ERROR, output="No such image")
 
- 	res = DBQueryFatal("update subboss_images "
+        res = DBQueryFatal("update subboss_images "
                            " set load_address='',frisbee_pid=0, load_busy=0 "
-	                   "where subboss_id=%s and imageid=%s",
+	                       "where subboss_id=%s and imageid=%s",
                            (argdict["subboss_id"], str(argdict["imageid"])))
-	unlock_tables()
+        unlock_tables()
 
-	return EmulabResponse(RESPONSE_SUCCESS)
+        return EmulabResponse(RESPONSE_SUCCESS)
 
     #
     # Set process ID for subboss frisbeed
@@ -4563,7 +4566,7 @@ class subboss:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict,
@@ -4586,21 +4589,21 @@ class subboss:
 		          "where subboss_id=%s and imageid=%s",
                            (argdict["subboss_id"], str(argdict["imageid"])))
         if len(res) == 0:
-	       unlock_tables()
-	       return EmulabResponse(RESPONSE_ERROR, output="No such image")
+            unlock_tables()
+            return EmulabResponse(RESPONSE_ERROR, output="No such image")
         elif res[0][0] == "":
-	       unlock_tables()
-	       return EmulabResponse(RESPONSE_ERROR,
+            unlock_tables()
+            return EmulabResponse(RESPONSE_ERROR,
                                      output="No address for image")
 
-	res = DBQueryFatal("update subboss_images "
+        res = DBQueryFatal("update subboss_images "
                            " set frisbee_pid=%s "
                            "where subboss_id=%s and imageid=%s",
                            (argdict["frisbee_pid"], argdict["subboss_id"],
                             str(argdict["imageid"])))
-	unlock_tables()
+        unlock_tables()
 
-	return EmulabResponse(RESPONSE_SUCCESS)
+        return EmulabResponse(RESPONSE_SUCCESS)
 
     #
     # Set sync flag for an image
@@ -4613,7 +4616,7 @@ class subboss:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict,
@@ -4635,20 +4638,20 @@ class subboss:
                            "where subboss_id=%s and imageid=%s",
                            (argdict["subboss_id"], str(argdict["imageid"])))
         if len(res) == 0:
-	       # This pair doesn't exist in the table yet.  Better insert it
-	       res = DBQueryFatal("insert into subboss_images "
-                                  " values (%s,%s,'',0,0,%d)",
-				  (argdict["subboss_id"],
-                                   str(argdict["imageid"]), argdict["sync"]))
+            # This pair doesn't exist in the table yet.  Better insert it
+            res = DBQueryFatal("insert into subboss_images "
+                               " values (%s,%s,'',0,0,%d)",
+                               (argdict["subboss_id"],
+                                str(argdict["imageid"]), argdict["sync"]))
         else:
-		res = DBQueryFatal("update subboss_images "
+            res = DBQueryFatal("update subboss_images "
                                    " set sync=%s "
                                    "where subboss_id=%s and imageid=%s",
                                    (argdict["sync"], argdict["subboss_id"],
                                     str(argdict["imageid"])))
-	unlock_tables()
+        unlock_tables()
 
-	return EmulabResponse(RESPONSE_SUCCESS)
+        return EmulabResponse(RESPONSE_SUCCESS)
 
     #
     # See if subboss image 'busy' flag is set;
@@ -4662,7 +4665,7 @@ class subboss:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("subboss_id", "imageid"))
@@ -4685,28 +4688,28 @@ class subboss:
                            "where subboss_id=%s and imageid=%s",
                            (argdict["subboss_id"], str(argdict["imageid"])))
         if len(res) == 0:
-	       unlock_tables()
-	       return EmulabResponse(RESPONSE_ERROR, output="No such image")
+            unlock_tables()
+            return EmulabResponse(RESPONSE_ERROR, output="No such image")
         elif res[0][0] == "":
-	       unlock_tables()
-	       return EmulabResponse(RESPONSE_ERROR,
+            unlock_tables()
+            return EmulabResponse(RESPONSE_ERROR,
                                      output="No address for image")
         elif res[0][1] == 0:
-	       unlock_tables()
-	       return EmulabResponse(RESPONSE_ERROR,
+            unlock_tables()
+            return EmulabResponse(RESPONSE_ERROR,
                                      output="PID not set for image")
 
         if res[0][2] > 0:
-	       busy = 1
-	       res = DBQueryFatal("update subboss_images "
+            busy = 1
+            res = DBQueryFatal("update subboss_images "
                                   " set load_busy=0 "
                                   "where subboss_id=%s and imageid=%s",
                                   (argdict["subboss_id"],
                                    str(argdict["imageid"])))
 
-	unlock_tables()
+        unlock_tables()
 
-	return EmulabResponse(RESPONSE_SUCCESS, value=busy, output=str(busy))
+        return EmulabResponse(RESPONSE_SUCCESS, value=busy, output=str(busy))
 
     #
     # Fire up a frisbeed for an image,
@@ -4721,7 +4724,7 @@ class subboss:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("imageid",))
@@ -4789,7 +4792,7 @@ class elabinelab:
         self.clientip = server.clientip;
         self.pid      = None;
         self.eid      = None;
-	self.node     = None;
+        self.node     = None;
         return
 
     #
@@ -4850,13 +4853,13 @@ class elabinelab:
         
         # Must be the boss node that is making the request.
         if (not (res[0][6] == "boss" or res[0][6] == "boss+router"
-		 or res[0][6] == "boss+fs+router")):
+            or res[0][6] == "boss+fs+router")):
             return EmulabResponse(RESPONSE_FORBIDDEN,
                                   output="Must be boss node accessing " +
                                   "elabinelab method for " +
                                   res[0][1] + "/" + res[0][2]);
         
-	self.node = res[0][0];
+        self.node = res[0][0];
 
         return None;
 
@@ -4871,7 +4874,7 @@ class elabinelab:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("nodes", "op"))
@@ -4912,7 +4915,7 @@ class elabinelab:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("node",))
@@ -4938,7 +4941,7 @@ class elabinelab:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("xmldoc",))
@@ -4969,7 +4972,7 @@ class elabinelab:
         argstr += "-p " + self.pid + " -e " + self.eid + " " + xmlfilename;
 
         (exitval,output) = runcommand("/usr/testbed/sbin/snmpit.proxyv3 " + argstr)
-	if exitval:
+        if exitval:
             return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
 
         #
@@ -4993,7 +4996,7 @@ class elabinelab:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("imageid",))
@@ -5018,12 +5021,12 @@ class elabinelab:
         #
         # Success. Load address was output so parse it out.
         #
-	m = re.search("^Address is (.*)$", output)
-	if m == None or m.group(1) == None:
+        m = re.search("^Address is (.*)$", output)
+        if m == None or m.group(1) == None:
             return EmulabResponse(RESPONSE_ERROR,
                                   output="Could not image info for: " +
                                   argdict["imageid"])
-	addr = m.group(1)
+        addr = m.group(1)
         return EmulabResponse(RESPONSE_SUCCESS, value=str(addr))
     
     #
@@ -5039,7 +5042,7 @@ class elabinelab:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
         
         verifyerror = self.verifystuff();
@@ -5120,7 +5123,7 @@ class elabinelab:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
         
         argerror = CheckRequiredArgs(argdict, ("mac",))
@@ -5217,7 +5220,7 @@ class template:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict,
@@ -5282,7 +5285,7 @@ class template:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argstr  = "-q"
@@ -5310,7 +5313,7 @@ class template:
                 pass
             pass
 
-        if argdict.has_key("guid"):
+        if "guid" in argdict:
             if not (re.match("^[-\w\/]*$", argdict["guid"])):
                 return EmulabResponse(RESPONSE_BADARGS,
                                       output="Improperly formed arguments")
@@ -5318,7 +5321,7 @@ class template:
             argstr += " "
             argstr += str(argdict["guid"])
             pass
-        elif argdict.has_key("path"):
+        elif "path" in argdict:
             argstr += " -q -f "
             argstr += escapeshellarg(argdict["path"]);
             pass
@@ -5345,7 +5348,7 @@ class template:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("guid", "path"))
@@ -5381,7 +5384,7 @@ class template:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("instance",))
@@ -5427,7 +5430,7 @@ class template:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("guid", "exp"))
@@ -5454,7 +5457,7 @@ class template:
                 pass
             elif opt == "swappable":
                 if not xbool(val):
-                    if not argdict.has_key("noswap_reason"):
+                    if "noswap_reason" not in argdict:
                         return EmulabResponse(RESPONSE_BADARGS,
                                        output="Must supply noswap reason!");
                     argstr += " -S "
@@ -5465,7 +5468,7 @@ class template:
                 pass
             elif opt == "idleswap":
                 if val == 0:
-                    if not argdict.has_key("noidleswap_reason"):
+                    if "noidleswap_reason" not in argdict:
                         return EmulabResponse(RESPONSE_BADARGS,
                                       output="Must supply noidleswap reason!");
                     argstr += " -L "
@@ -5534,7 +5537,7 @@ class template:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("guid", "exp"))
@@ -5581,7 +5584,7 @@ class template:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("exp", ))
@@ -5639,7 +5642,7 @@ class template:
                 pass
             pass
 
-        if pid == None and not argdict.has_key("guid"):
+        if pid == None and "guid" not in argdict:
             return EmulabResponse(RESPONSE_BADARGS,
                                   output="Must supply pid or guid")
 
@@ -5685,7 +5688,7 @@ class template:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("exp",))
@@ -5720,7 +5723,7 @@ class template:
                 pass
             pass
         
-        if pid == None and not argdict.has_key("guid"):
+        if pid == None and "guid" not in argdict:
             return EmulabResponse(RESPONSE_BADARGS,
                                   output="Must supply pid or guid")
 
@@ -5756,7 +5759,7 @@ class template:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("guid", "exp"))
@@ -5807,7 +5810,7 @@ class blob:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
         
         argerror = CheckRequiredArgs(argdict, ("filename",))
@@ -5829,7 +5832,7 @@ class blob:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
         
         argerror = CheckRequiredArgs(argdict, ("uuid",))
@@ -5868,7 +5871,7 @@ class dataset:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
         
         argerror = CheckRequiredArgs(argdict, ("size","dataset"))
@@ -5920,7 +5923,7 @@ class dataset:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
         
         argerror = CheckRequiredArgs(argdict, ("dataset",))
@@ -5956,7 +5959,7 @@ class dataset:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
         
         argerror = CheckRequiredArgs(argdict, ("dataset",))
@@ -5983,7 +5986,7 @@ class dataset:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
         
         #
@@ -6051,7 +6054,7 @@ class portal:
     # @return The 'msg' value with this machine's name prepended.
     #
     def echo(self, version, argdict):
-        if not argdict.has_key("str"):
+        if "str" not in argdict:
             return EmulabResponse(RESPONSE_BADARGS,
                                   output="Must supply a string to echo!")
         
@@ -6075,7 +6078,7 @@ class portal:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("proj", "profile"))
@@ -6170,7 +6173,7 @@ class portal:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("experiment",))
@@ -6214,7 +6217,7 @@ class portal:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("experiment","wanted","reason"))
@@ -6272,7 +6275,7 @@ class portal:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("experiment",))
@@ -6322,7 +6325,7 @@ class portal:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("experiment",))
@@ -6365,7 +6368,7 @@ class portal:
         try:
             checknologins()
             pass
-        except NoLoginsError, e:
+        except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
         argerror = CheckRequiredArgs(argdict, ("experiment",))
@@ -6428,20 +6431,19 @@ def escapeshellarg(s):
 #
 # Run a command. args is a list of strings to pass as arguments to cmd.
 # Return the exitcode and the output as a tuple.
-# 
+#
 def runcommand(cmd, separate_stderr=None):
-    from subprocess import *
     if separate_stderr == True:
-    	p = Popen(cmd, stdin=None, stdout=PIPE, stderr=PIPE, shell=True, close_fds=True)
-    	(stdoutdata, stderrdata) = p.communicate()
+        p = subprocess.Popen(cmd, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, close_fds=True)
+        (stdoutdata, stderrdata) = p.communicate()
         return (p.returncode << 8, stdoutdata, stderrdata)
     elif separate_stderr == False:
-    	p = Popen(cmd, stdin=None, stdout=PIPE, stderr=STDOUT, shell=True, close_fds=True)
-    	(stdoutdata, stderrdata) = p.communicate()
+        p = subprocess.Popen(cmd, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, close_fds=True)
+        (stdoutdata, stderrdata) = p.communicate()
         return (p.returncode << 8, stdoutdata, stderrdata)
     else:
-    	p = Popen(cmd, stdin=None, stdout=PIPE, stderr=STDOUT, shell=True, close_fds=True)
-    	(stdoutdata, stderrdata) = p.communicate()
+        p = Popen(cmd, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, close_fds=True)
+        (stdoutdata, stderrdata) = p.communicate()
         return (p.returncode << 8, stdoutdata)
 
 def writensfile(str):
@@ -6454,7 +6456,7 @@ def writensfile(str):
     except:
         SENDMAIL(TBOPS, "writensfile failed",
                  "Could not write temporary NS file:\n" +
-                 "%s:%s" % (sys.exc_type, sys.exc_value))
+                 "%s:%s" % (sys.exc_info()[0], sys.exc_info()[1]))
         return None
 
     # Yuck. Need to maintain a ref so that the file is not deleted!
@@ -6465,7 +6467,7 @@ def writensfile(str):
 #
 def checknologins():
     if TBGetSiteVar("web/nologins") != "0":
-        raise NoLoginsError, TBGetSiteVar("web/message")
+        raise NoLoginsError(TBGetSiteVar("web/message"))
     return
 
 #
@@ -6477,7 +6479,7 @@ def TBGetSiteVar(name):
                        (name,))
 
     if len(res) == 0:
-        raise ValueError, "Unknown site variable: " + str(name)
+        raise ValueError("Unknown site variable: " + str(name))
 
     if res[0][0]:
         retval = res[0][0]
@@ -6566,8 +6568,6 @@ def nfspath(value):
 
     return retval
 
-from sets import Set
-
 ##
 # Scrub a dictionary returned by an SQL query so that it can be sent through
 # the XML-RPC marshaller without error.
@@ -6586,7 +6586,7 @@ def scrubdict(retval, prunelist=[], defaultvals={}):
                 del retval[key]
                 pass
             pass
-        elif isinstance(retval[key], Set):
+        elif isinstance(retval[key], set):
             retval[key] = list(retval[key])
             pass
         elif isinstance(retval[key], datetime.datetime):
@@ -6615,7 +6615,7 @@ def next_mcast_address():
 	res = DBQueryFatal("select LAST_INSERT_ID()")
 	idx = res[0][0] # XXX what is the right way to do this?
 
-	dotted = map(int, BASEADDR.split("."))
+	dotted = list(map(int, BASEADDR.split(".")))
 	if len(dotted) < 4:
 		dotted.extend([1, 1, 1])
 		dotted = dotted[0:4]
