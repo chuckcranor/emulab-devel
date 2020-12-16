@@ -64,6 +64,7 @@ my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 my $CONTROL	= "@USERNODE@";
 my $BOSSNODE	= "@BOSSNODE@";
 my $OU          = "sslxmlrpc";	# orgunit
+my $RANDFILE    = "./.rnd";
 
 # Locals
 my $USERDIR	= USERROOT();
@@ -262,6 +263,22 @@ TBScriptLock("mkusercert") == 0 or
     fatal("Could not get the lock!");
 
 #
+# Some sillyness to deal with changes to .rnd file handling across
+# versions of openssl.
+#
+if (! -e $RANDFILE) {
+    system("/bin/dd if=/dev/urandom of=${RANDFILE} bs=256 count=4");
+    if ($?) {
+	fatal("Could not generate $RANDFILE");
+    }
+}
+#
+# Older versions of openssl ignore -rand option, but use this environment
+# variable. New versions ignore the environment variable but use -rand.
+#
+$ENV{"RANDFILE"} = $RANDFILE;
+
+#
 # Create a client side cert. Reuse the original key if are told to,
 # and it actually exists, and the password is valid.
 #
@@ -407,7 +424,7 @@ sub CreateNewCert() {
     # Create a client side private key and certificate request.
     #
     if (!$reusekey) {
-	my $genopts =
+	my $genopts = " -rand $RANDFILE " .
 	    ($encrypted ? " -passout 'pass:${sh_password}' -des3 " : "");
 
 	system("$OPENSSL genrsa $genopts -out usercert_key.pem 2048")
@@ -665,7 +682,7 @@ if ($encrypted) {
     #
     system("$OPENSSL pkcs12 -export -in usercert.pem -des3 ".
 	   "-passin 'pass:${sh_password}' -passout 'pass:${sh_password}' ".
-	   "-out usercert.p12 -rand ./.rnd")
+	   "-out usercert.p12 -rand $RANDFILE")
 	== 0 or fatal("Could not create usercert.p12");
 
     # Drop the file into the user .ssl directory.

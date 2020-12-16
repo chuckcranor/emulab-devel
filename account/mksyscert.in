@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -87,6 +87,7 @@ my $EMULAB_CERT = "$TB/etc/emulab.pem";
 my $EMULAB_KEY  = "$TB/etc/emulab.key";
 my $OPENSSL     = "/usr/bin/openssl";
 my $WORKDIR     = "$TB/ssl";
+my $RANDFILE    = "./.rnd";
 my $SAVEUID	= $UID;
 my $certfile    = $EMULAB_CERT;
 my $keyfile     = $EMULAB_KEY;
@@ -208,6 +209,22 @@ chdir("$WORKDIR") or
     fatal("Could not chdir to $WORKDIR: $!");
 
 #
+# Some sillyness to deal with changes to .rnd file handling across
+# versions of openssl.
+#
+if (! -e $RANDFILE) {
+    system("/bin/dd if=/dev/urandom of=${RANDFILE} bs=256 count=4");
+    if ($?) {
+	fatal("Could not generate $RANDFILE");
+    }
+}
+#
+# Older versions of openssl ignore -rand option, but use this environment
+# variable. New versions ignore the environment variable but use -rand.
+#
+$ENV{"RANDFILE"} = $RANDFILE;
+
+#
 # Need an index file, which is the openssl version of the DB.
 #
 if (! -e "index.txt") {
@@ -295,7 +312,7 @@ if( defined( $oldkeyfile ) ) {
     #
     # Create a client side private key and certificate request.
     #
-    my $genopts =
+    my $genopts = " -rand $RANDFILE " .
 	($encrypted ? " -passout 'pass:${sh_password}' -des3 " : "");
 
     my $output =
