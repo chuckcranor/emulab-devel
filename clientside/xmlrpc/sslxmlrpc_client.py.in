@@ -132,7 +132,7 @@ def do_method(server, method_and_args):
     # 
     params = {}
     for param in method_and_args:
-        plist = string.split(param, "=", 1)
+        plist = param.split("=", 1)
         if len(plist) != 2:
             print("error: Parameter, '"
                   + param
@@ -209,7 +209,7 @@ try:
             sys.exit()
             pass
         elif opt in ("-s", "--server"):
-	    xmlrpc_server = val
+            xmlrpc_server = val
             #
             # Allow port spec here too.
             #
@@ -218,22 +218,22 @@ try:
                 pass
             pass
         elif opt in ("-p", "--port"):
-	    xmlrpc_port = val
+            xmlrpc_port = val
             pass
         elif opt in ("-c", "--cert"):
-	    certificate = val
+            certificate = val
             pass
         elif opt in ("-m", "--module"):
-	    module = val
+            module = val
             pass
         elif opt in ("-d", "--debug"):
-	    debug = 1
+            debug = 1
             pass
         elif opt in ("--path",):
-	    path = val
+            path = val
             pass
         elif opt in ("-r", "--rawmode"):
-	    rawmode = 1
+            rawmode = 1
             pass
         elif opt in ("--verify"):
             verify = True
@@ -266,7 +266,7 @@ class RawTransport(xmlrpclib.SafeTransport):
         ret = ''
         while 1:
             data = stream.read(1024)
-            ret += data
+            ret += data.decode("utf-8")
             if not data:
                 break
             if self.verbose:
@@ -291,8 +291,8 @@ class MyServerProxy(xmlrpclib.ServerProxy):
         host      = self.__dict__["_ServerProxy__host"]
         handler   = self.__dict__["_ServerProxy__handler"]
         verbose   = self.__dict__["_ServerProxy__verbose"]
-        
-        response = transport.request(host, handler, xmlgoo, verbose)
+
+        response = transport.request(host, handler, xmlgoo.encode("utf-8", 'xmlcharrefreplace'), verbose)
 
         if len(response) == 1:
             response = response[0]
