@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,15 +35,7 @@ ARCH	       := $(shell uname -m)
 
 SUBDIRS		= proxy
 ifeq ($(SYSTEM),FreeBSD)
-ifeq ($(ARCH),amd64)
-SUBDIRS	       += new_sched
-else
-SUBDIRS	       += sched
-ifeq ($(ISMAINSITE),1)
-SUBDIRS        += new_sched
-endif
-endif
-SUBDIRS	       += stated
+SUBDIRS	       += new_sched stated
 ifeq ($(PROTOGENI),1)
 SUBDIRS        += monitoring
 endif

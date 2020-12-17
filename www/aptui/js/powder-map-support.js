@@ -39,6 +39,11 @@ window.ShowPowderMap = (function()
 	    "all"    : null,
 	    "filter" : null,
 	},
+	"Links"  : {
+	    "data"   : null,	// Raw data
+	    "all"    : null,
+	    "filter" : null,
+	},
     };
 
     // x,y is the point to test
@@ -198,6 +203,10 @@ window.ShowPowderMap = (function()
 		       DrawBaseStations(), DrawRoutes())
 		    .done(function (r1, r2, r3) {
 			console.info("done1", r1, r2, 3);
+
+			if (Options.showlinks) {
+			    DrawLinks(Options.showlinks);
+			}
 			
 			if (_.has(Options, "experiment")) {
 			    MarkExperimentResources();
@@ -1657,6 +1666,57 @@ window.ShowPowderMap = (function()
             coordinates.push([lng / factor, lat / factor]);
 	}
 	return coordinates;
+    }
+
+    function DrawLinks(which)
+    {
+	var url = "https://www.powderwireless.net/powder-link-" +
+	    which + ".csv";
+	var layer = GraphicsLayer({
+	    title: "Links",
+	})
+	Map.add(layer);
+	Layers["Links"].all = layer;
+
+	var callback = function (data) {
+	    console.info("DrawLinks", data);
+	    Layers["Links"].data = data;
+
+	    _.each(data, function (line) {
+		var color = line.color;
+	    
+		var simpleLineSymbol = {
+		    type: "simple-line",
+		    color: "#" + color,
+		    width: 1
+		};
+
+		var polyline = {
+		    type: "polyline",
+		    paths: [
+			[line.longitude1, line.latitude1],
+			[line.longitude2, line.latitude2],
+		    ]
+		};
+
+		var polylineGraphic = new Graphic({
+		    geometry: polyline,
+		    symbol: simpleLineSymbol
+		});
+
+		layer.add(polylineGraphic);
+	    });
+	};
+	$.ajax({
+	    type: "GET",  
+	    url: url,
+	    dataType: "text",       
+	    success: function(response)  
+	    {
+		var data = $.csv.toObjects(response);
+		callback(data);
+	    }   
+	});	
     }
 
     // Helper for Emulab Namespace

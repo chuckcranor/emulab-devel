@@ -20,6 +20,7 @@ $(function ()
 	    // What the user has reserved.
 	    "showreserved"  : window.SHOWRESERVED,
 	    "showlegend"    : window.SHOWLEGEND,
+	    "showlinks"     : window.SHOWLINKS,
 	};
 	if (window.EXPERIMENT !== undefined) {
 	    options["experiment"] = window.EXPERIMENT;
