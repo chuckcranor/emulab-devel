@@ -1,6 +1,6 @@
 #!/usr/local/bin/python
 #
-# Copyright (c) 2008 University of Utah and the Flux Group.
+# Copyright (c) 2008, 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,13 +28,19 @@
 
 import os
 import pwd
-import xmlrpclib
-import SimpleXMLRPCServer
-import SocketServer
 import sys
 import types
 import exceptions
 import traceback
+
+try:
+    from SocketServer import ThreadingMixIn
+    from SimpleXMLRPCServer import (SimpleXMLRPCServer, SimpleXMLRPCDispatcher)
+    import xmlrpclib
+except:
+    from socketserver import ThreadingMixIn
+    from xmlrpc.server import (SimpleXMLRPCServer, SimpleXMLRPCDispatcher)
+    import xmlrpc.client as xmlrpclib
 
 debug = True
 
@@ -43,7 +49,7 @@ debug = True
 # SimpleXMLRPCServer.SimpleXMLRPCDispatcher._marshaled_dispatch method
 # so that we can marshal None values.  If SimpleXMLRPCDispatcher changes,
 # this will need to be hacked so it complies again...
-class AllowNoneOptXMLRPCDispatcher(SimpleXMLRPCServer.SimpleXMLRPCDispatcher):
+class AllowNoneOptXMLRPCDispatcher(SimpleXMLRPCDispatcher):
     #
     # Taken straight from SimpleXMLRPCServer.py in the python stdlib.
     #
@@ -77,7 +83,7 @@ class NetworkAuthFault(xmlrpclib.Fault):
     pass
 
 class SimpleObjectXMLRPCServer(SocketServer.ThreadingMixIn,
-                               SimpleXMLRPCServer.SimpleXMLRPCServer,
+                               SimpleXMLRPCServer,
                                AllowNoneOptXMLRPCDispatcher,
                                object):
     """
@@ -117,14 +123,14 @@ class SimpleObjectXMLRPCServer(SocketServer.ThreadingMixIn,
     rpc methods added via register_class_functions; else use normal _dispatch.
     """
     def _dispatch(self,method,params):
-        if self.classfuncs.has_key(method):
+        if method in self.classfuncs:
             try:
                 myclass = self.classfuncs[method]
                 myargs = self.classinitargs[method]
                 obj = myclass(*myargs)
                 # ugh, nasty way to get reflectiveness
-                return myclass.__dict__[self.funcs[method].func_name](obj,
-                                                                      *params)
+                return myclass.__dict__[self.funcs[method].__name__](obj,
+                                                                     *params)
             except:
                 traceback.print_exc()
             pass
@@ -188,8 +194,8 @@ class InetAclXMLRPCServer(SimpleObjectXMLRPCServer):
             # now we can check addresses via
             # if ((addr|netbits)&mask == netbits); then valid.
             if debug:
-                print "allowing from %s: net=%s,mask=%s" \
-                      % (str(acl),str(netbits),str(mask))
+                print("allowing from %s: net=%s,mask=%s"
+                      % (str(acl),str(netbits),str(mask)))
             self.acllist.append((netbits,mask))
             pass
         
@@ -197,13 +203,13 @@ class InetAclXMLRPCServer(SimpleObjectXMLRPCServer):
 
     def verify_request(self,request,client_address):
         if debug:
-            print "request = '" + str(request) + "'"
-            print "client_address = '" + str(client_address) + "'"
+            print("request = '" + str(request) + "'")
+            print("client_address = '" + str(client_address) + "'")
             pass
 
         if self.acllist == None or self.acllist == []:
             if debug:
-                print "no acls, verify_request returning True"
+                print("no acls, verify_request returning True")
                 pass
             return True
 
@@ -218,7 +224,7 @@ class InetAclXMLRPCServer(SimpleObjectXMLRPCServer):
             pass
 
         if debug:
-            print "client "+cip+": clientbits="+str(clientbits)
+            print("client "+cip+": clientbits="+str(clientbits))
         
         for (netbits,mask) in self.acllist:
             if clientbits & mask == netbits & mask:
@@ -226,7 +232,7 @@ class InetAclXMLRPCServer(SimpleObjectXMLRPCServer):
                 break
             pass
         if debug:
-            print "verify_request returning " + str(match)
+            print("verify_request returning " + str(match))
         
         return match
 

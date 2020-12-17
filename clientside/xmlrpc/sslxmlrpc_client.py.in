@@ -22,11 +22,17 @@
 # }}}
 # 
 
+from __future__ import print_function
 import sys
 import getopt
 import os, os.path
-import xmlrpclib
 import ssl
+try:
+    import xmlrpclib
+except:
+    import xmlrpc.client as xmlrpclib
+    from builtins import input
+    raw_input = input
 
 TBROOT = "@prefix@"
 TBPATH = os.path.join(TBROOT, "lib")
@@ -80,29 +86,29 @@ rawmode         = 0
 # Print the usage statement to stdout.
 #
 def usage():
-    print "Make a request to the Emulab XML-RPC (SSL-based) server."
-    print ("Usage: " + sys.argv[0] 
-                     + " [-hV] [-s server] [-m module] [--verify] [--cacert cacertfile]"
-                     + "<method> [param=value ...]")
-    print
-    print "Options:"
-    print "  -h, --help\t\t  Display this help message"
-    print "  -V, --version\t\t  Show the version number"
-    print "  -s, --server\t\t  Set the server hostname"
-    print "  -p, --port\t\t  Set the server port"
-    print "  -c, --cert\t\t  Set the certificate to use"
-    print "      --cacert\t\t  Set the CA certificate to use for server verification"
-    print "  -m, --module\t\t  Set the RPC module (defaults to experiment)"
-    print "      --verify\t\t  Force SSL verification; defaults to disabled"
-    print
-    print "Required arguments:"
-    print "  method\t\t  The method to execute on the server"
-    print "  params\t\t\t  The method arguments in param=value format"
-    print
-    print "Example:"
-    print ("  "
-           + sys.argv[0]
-           + " -s boss.emulab.net echo str=\"Hello World!\"")
+    print("Make a request to the Emulab XML-RPC (SSL-based) server.")
+    print("Usage: " + sys.argv[0] 
+                    + " [-hV] [-s server] [-m module] [--verify] [--cacert cacertfile]"
+                    + "<method> [param=value ...]")
+    print()
+    print("Options:")
+    print("  -h, --help\t\t  Display this help message")
+    print("  -V, --version\t\t  Show the version number")
+    print("  -s, --server\t\t  Set the server hostname")
+    print("  -p, --port\t\t  Set the server port")
+    print("  -c, --cert\t\t  Set the certificate to use")
+    print("      --cacert\t\t  Set the CA certificate to use for server verification")
+    print("  -m, --module\t\t  Set the RPC module (defaults to experiment)")
+    print("      --verify\t\t  Force SSL verification; defaults to disabled")
+    print()
+    print("Required arguments:")
+    print("  method\t\t  The method to execute on the server")
+    print("  params\t\t\t  The method arguments in param=value format")
+    print()
+    print("Example:")
+    print("  "
+          + sys.argv[0]
+          + " -s boss.emulab.net echo str=\"Hello World!\"")
     return
 
 #
@@ -126,11 +132,11 @@ def do_method(server, method_and_args):
     # 
     params = {}
     for param in method_and_args:
-        plist = string.split(param, "=", 1)
+        plist = param.split("=", 1)
         if len(plist) != 2:
-            print ("error: Parameter, '"
-                   + param
-                   + "', is not of the form: param=value!")
+            print("error: Parameter, '"
+                  + param
+                  + "', is not of the form: param=value!")
             return -1
         value = plist[1]
 
@@ -150,10 +156,10 @@ def do_method(server, method_and_args):
     # Make the call. 
     #
     try:
-        response = apply(meth, meth_args)
+        response = meth(*meth_args)
         pass
-    except xmlrpclib.Fault, e:
-        print e.faultString
+    except xmlrpclib.Fault as e:
+        print(e.faultString)
         return -1
 
     #
@@ -162,7 +168,7 @@ def do_method(server, method_and_args):
     # Dictionary, hence the code below. 
     # 
     if len(response["output"]):
-        print response["output"]
+        print(response["output"])
         pass
 
     rval = response["code"]
@@ -178,7 +184,7 @@ def do_method(server, method_and_args):
         pass
 
     if debug and response["value"]:
-        print str(response["value"])
+        print(str(response["value"]))
         pass
         
     return rval
@@ -199,11 +205,11 @@ try:
             sys.exit()
             pass
         elif opt in ("-V", "--version"):
-            print PACKAGE_VERSION
+            print(PACKAGE_VERSION)
             sys.exit()
             pass
         elif opt in ("-s", "--server"):
-	    xmlrpc_server = val
+            xmlrpc_server = val
             #
             # Allow port spec here too.
             #
@@ -212,22 +218,22 @@ try:
                 pass
             pass
         elif opt in ("-p", "--port"):
-	    xmlrpc_port = val
+            xmlrpc_port = val
             pass
         elif opt in ("-c", "--cert"):
-	    certificate = val
+            certificate = val
             pass
         elif opt in ("-m", "--module"):
-	    module = val
+            module = val
             pass
         elif opt in ("-d", "--debug"):
-	    debug = 1
+            debug = 1
             pass
         elif opt in ("--path",):
-	    path = val
+            path = val
             pass
         elif opt in ("-r", "--rawmode"):
-	    rawmode = 1
+            rawmode = 1
             pass
         elif opt in ("--verify"):
             verify = True
@@ -237,8 +243,8 @@ try:
             pass
         pass
     pass
-except getopt.error, e:
-    print e.args[0]
+except getopt.error as e:
+    print(e.args[0])
     usage()
     sys.exit(2)
     pass
@@ -260,11 +266,11 @@ class RawTransport(xmlrpclib.SafeTransport):
         ret = ''
         while 1:
             data = stream.read(1024)
-            ret += data
+            ret += data.decode("utf-8")
             if not data:
                 break
             if self.verbose:
-                print "body:", repr(data)
+                print("body:", repr(data))
 
         if stream is not response:
             stream.close()
@@ -285,8 +291,8 @@ class MyServerProxy(xmlrpclib.ServerProxy):
         host      = self.__dict__["_ServerProxy__host"]
         handler   = self.__dict__["_ServerProxy__handler"]
         verbose   = self.__dict__["_ServerProxy__verbose"]
-        
-        response = transport.request(host, handler, xmlgoo, verbose)
+
+        response = transport.request(host, handler, xmlgoo.encode("utf-8", 'xmlcharrefreplace'), verbose)
 
         if len(response) == 1:
             response = response[0]
@@ -302,7 +308,7 @@ if certificate == None:
     certificate = os.environ["HOME"] + default_cert
     pass
 if not os.access(certificate, os.R_OK):
-    print "Certificate cannot be accessed: " + certificate
+    print("Certificate cannot be accessed: " + certificate)
     sys.exit(-1);
     pass
     
@@ -322,7 +328,7 @@ else:
                 ca_certificate = p
                 break
     if ca_certificate is not None and not os.access(ca_certificate, os.R_OK):
-        print "CA Certificate cannot be accessed: " + ca_certificate
+        print("CA Certificate cannot be accessed: " + ca_certificate)
         sys.exit(-1);
         pass
     ctx.load_verify_locations(cafile=ca_certificate)
@@ -332,7 +338,7 @@ else:
 # This is parsed by the Proxy object.
 URI = "https://" + xmlrpc_server + ":" + str(xmlrpc_port) + path
 if debug:
-    print >>sys.stderr, URI
+    print(URL, file=sys.stderr)
     pass
 
 if rawmode:
@@ -353,12 +359,12 @@ if rawmode:
     try:
         response = server.raw_request(stuff)
         pass
-    except xmlrpclib.Fault, e:
-        print e.faultString
+    except xmlrpclib.Fault as e:
+        print(e.faultString)
         sys.exit(-1);
         pass
 
-    print str(response);
+    print(str(response))
     sys.exit(0);
 elif len(req_args):
     # Get a handle on the server,
@@ -374,12 +380,12 @@ else:
             line = raw_input("$ ")
             tokens = line.split(" ")
             if len(tokens) >= 1 and len(tokens[0]) > 0:
-                print str(do_method(server, tokens))
+                print(str(do_method(server, tokens)))
                 pass
             pass
         pass
     except EOFError:
         pass
-    print
+    print()
     pass
 

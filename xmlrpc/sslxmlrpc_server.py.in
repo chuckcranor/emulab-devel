@@ -1,6 +1,6 @@
 #!/usr/local/bin/python
 #
-# Copyright (c) 2005-2019 University of Utah and the Flux Group.
+# Copyright (c) 2005-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,8 @@
 # 
 # }}}
 #
+
+from __future__ import print_function
 import sys
 import getopt
 import os, os.path
@@ -30,11 +32,16 @@ import traceback
 import syslog
 import string
 import socket
-import BaseHTTPServer
 import ssl
-import SocketServer
 
-from SimpleXMLRPCServer import SimpleXMLRPCDispatcher
+try:
+    from BaseHTTPServer import BaseHTTPRequestHandler
+    from SocketServer import ForkingTCPServer
+    from SimpleXMLRPCServer import SimpleXMLRPCDispatcher
+except:
+    from http.server import BaseHTTPRequestHandler
+    from socketserver import ForkingTCPServer
+    from xmlrpc.server import SimpleXMLRPCDispatcher
 
 # Testbed specific stuff
 TBDIR = "@prefix@"
@@ -107,23 +114,23 @@ WITHZFS            = @WITHZFS@
 ZFS_NOEXPORT       = @ZFS_NOEXPORT@
 
 def usage():
-    print ("Usage: " + sys.argv[0] 
-                     + " [-hd] [-s server] [-p port] [-c certfile] [--cacert cacertfile]")
-    print
-    print "Options:"
-    print "  -h, --help\t\t  Display this help message"
-    print "  -d, --debug\t\t  Stay in foreground and print to stdout"
-    print "  -s, --server-address\t\t  Set the server listen address"
-    print "  -p, --port\t\t  Set the server port"
-    print "  -c, --cert\t\t  Set the certificate to use (default %s)" % (server_cert)
-    print "      --cacert\t\t  Set the CA certificate (default %s)" % (ca_cert)
+    print("Usage: " + sys.argv[0] 
+                    + " [-hd] [-s server] [-p port] [-c certfile] [--cacert cacertfile]")
+    print()
+    print("Options:")
+    print("  -h, --help\t\t  Display this help message")
+    print("  -d, --debug\t\t  Stay in foreground and print to stdout")
+    print("  -s, --server-address\t\t  Set the server listen address")
+    print("  -p, --port\t\t  Set the server port")
+    print("  -c, --cert\t\t  Set the certificate to use (default %s)" % (server_cert))
+    print("      --cacert\t\t  Set the CA certificate (default %s)" % (ca_cert))
     return
 
 ##
 # Taken from the SimpleXMLRPCServer module in the python installation and
 # modified to support persistent connections.
 #
-class MyXMLRPCRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+class MyXMLRPCRequestHandler(BaseHTTPRequestHandler):
     """Simple XML-RPC request handler class.
 
     Handles all HTTP POST requests and attempts to decode them as
@@ -180,10 +187,14 @@ class MyXMLRPCRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         """Selectively log an accepted request."""
 
         if self.server.logRequests:
-            BaseHTTPServer.BaseHTTPRequestHandler.log_request(self, code, size)
+            BaseHTTPRequestHandler.log_request(self, code, size)
 
 
 class MySSLSocket(ssl.SSLSocket):
+
+    #def __init__(self,*args,**kwargs):
+    #    super(MySSLSocket,self)._create(*args,**kwargs)
+
     def accept(self):
         """Accepts a new connection from a remote client, and returns
         a tuple containing that new connection wrapped with a server-side
@@ -200,7 +211,7 @@ class MySSLSocket(ssl.SSLSocket):
 # A simple server based on the forking version SSLServer. We fork cause
 # we want to change our uid/gid to that of the person on the other end.
 # 
-class MyServer(SocketServer.ForkingTCPServer, SimpleXMLRPCDispatcher):
+class MyServer(ForkingTCPServer, SimpleXMLRPCDispatcher):
     def __init__(self, debug):
         self.debug         = debug
         self.logRequests   = 0
@@ -216,7 +227,7 @@ class MyServer(SocketServer.ForkingTCPServer, SimpleXMLRPCDispatcher):
         ctx.verify_mode = ssl.CERT_REQUIRED
         self.ssl_ctx = ctx
 
-        SocketServer.ForkingTCPServer.__init__(
+        ForkingTCPServer.__init__(
             self, (ADDR,PORT), MyXMLRPCRequestHandler, bind_and_activate=False)
         # Oh, so glad this is built into TCPServer.
         self.allow_reuse_address = True
@@ -235,11 +246,20 @@ class MyServer(SocketServer.ForkingTCPServer, SimpleXMLRPCDispatcher):
         # happens *after* both the socket accept and the SSL handshake.
         # See above MySSLSocket class, and how we wrap the server socket
         # manually here, instead of using wrap_socket:
-        #self.socket = ctx.wrap_socket(self.socket,do_handshake_on_connect=False)
-        self.socket = MySSLSocket(
-            sock=self.socket,server_side=False,
-            do_handshake_on_connect=True,suppress_ragged_eofs=True,
-            server_hostname=None,_context=self.ssl_ctx)
+        #self.socket = ctx.wrap_socket(self.socket,#do_handshake_on_connect=False)
+        #self.socket.accept = MySSLSocket.accept
+        if getattr(ctx,'sslsocket_class',None):
+            ctx.sslsocket_class = MySSLSocket
+            self.socket = ctx.wrap_socket(
+                self.socket,server_side=False,
+                do_handshake_on_connect=True,suppress_ragged_eofs=True,
+                server_hostname=None)
+        else:
+            self.socket = MySSLSocket(
+                sock=self.socket,server_side=False,
+                do_handshake_on_connect=True,suppress_ragged_eofs=True,
+                server_hostname=None,_context=self.ssl_ctx)
+
         if LIMIT_SSL_ACCEPT_TIME:
             self.logit("setting socket timeout to %s" % (
                 str(SSL_CLIENT_ACCEPT_TIMEOUT)))
@@ -256,7 +276,7 @@ class MyServer(SocketServer.ForkingTCPServer, SimpleXMLRPCDispatcher):
     #
     def logit(self, msg, facility=syslog.LOG_INFO):
         if debug:
-            print msg
+            print(msg)
             pass
         else:
             syslog.syslog(facility, msg);
@@ -309,7 +329,7 @@ class MyServer(SocketServer.ForkingTCPServer, SimpleXMLRPCDispatcher):
             raise Exception('method "%s" is not supported' % method)
         else:
             self.logit("Calling method '" + method + "'");
-            return apply(meth, params);
+            return meth(*params)
         pass
 
     #
@@ -367,7 +387,7 @@ class MyServer(SocketServer.ForkingTCPServer, SimpleXMLRPCDispatcher):
         for group in res:
             self.glist.append(int(group[1]))
             # List of all projects, with a list of gids per project.
-            if not self.plist.has_key(group[0]):
+            if group[0] not in self.plist:
                 self.plist[group[0]] = []
                 pass
             self.plist[group[0]].append(int(group[1]))
@@ -414,9 +434,8 @@ class MyServer(SocketServer.ForkingTCPServer, SimpleXMLRPCDispatcher):
         self.stud = self.isstuduser(self.uid_idx)
         if self.stud:
             try:
-                ALLOWED_PATHS.extend(map(lambda x:
-                                         os.path.join(STD_DEVEL_PATH, x),
-                                         os.listdir(STD_DEVEL_PATH)))
+                ALLOWED_PATHS.extend([os.path.join(STD_DEVEL_PATH, x)
+                                          for x in os.listdir(STD_DEVEL_PATH)])
                 pass
             except OSError:
                 pass
@@ -492,16 +511,16 @@ class MyServer(SocketServer.ForkingTCPServer, SimpleXMLRPCDispatcher):
             argdict = params[1]
             project = None
 
-            if argdict.has_key("pid"):
+            if "pid" in argdict:
                 project = argdict["pid"]
-            elif argdict.has_key("proj"):
+            elif "proj" in argdict:
                 project = argdict["proj"]
             else:
                 self.logit('Too many groups and no project given as an arg',facility=syslog.LOG_ERR)
                 pass
             
             if project:
-                if self.plist.has_key(project):
+                if project in self.plist:
                     self.glist = self.plist[project]
                     self.logit("Setting groups from project %s" % project,facility=syslog.LOG_ERR)
                 else:
@@ -553,8 +572,7 @@ class MyServer(SocketServer.ForkingTCPServer, SimpleXMLRPCDispatcher):
                         self.active_children = set()
                         pass
                 else:
-                    print "Only python version 2"
-                    sys.exit(1);
+                    self.active_children = set()
                     pass
                 pass
             if type(self.active_children) is list:
@@ -657,8 +675,8 @@ try:
             pass
         pass
     pass
-except getopt.error, e:
-    print e.args[0]
+except getopt.error as e:
+    print(e.args[0])
     usage()
     sys.exit(2)
     pass
@@ -687,7 +705,7 @@ if not debug:
             sys.stdin.close();
             pass
         except:
-            print "Could not open log file for append"
+            print("Could not open log file for append")
             sys.exit(1);
             pass
         
@@ -699,7 +717,7 @@ if not debug:
         os.setsid();
         pass
 else:
-    print "SSL XMLRPC server starting up"
+    print("SSL XMLRPC server starting up")
 
 #
 # Create the server and serve forever. We register the instance above
