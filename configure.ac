@@ -1520,10 +1520,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	$mobilefiles \
 	apache/GNUmakefile apache/php.ini \
         xmlrpc/GNUmakefile xmlrpc/emulabserver.py \
-	xmlrpc/sslxmlrpc_server.py \
-	xmlrpc/webxmlrpc \
-	xmlrpc/emulab xmlrpc/node xmlrpc/experiment xmlrpc/fs xmlrpc/user \
-	xmlrpc/imageid xmlrpc/osid xmlrpc/server xmlrpc/xmlrpcbag \
+	xmlrpc/sslxmlrpc_server.py xmlrpc/webxmlrpc xmlrpc/xmlrpcbag \
 	cdrom/GNUmakefile cdrom/tbbootconfig/GNUmakefile \
 	cdrom/groklilo/GNUmakefile \
 	autofs/GNUmakefile flash/GNUmakefile \
