@@ -1026,11 +1026,9 @@ sub runBusyLoop($)
 	    close(PIPE);
 	    print $output;
 	    return 0
-		if (!$?);
-	    if ($output =~ /(group|db) file is busy/m) {
-		print "runBusyLoop; waiting a few seconds before trying again\n";
-		sleep(3);
-	    }
+		if (!$? || $output !~ /(group|db) file is busy/m);
+	    print "runBusyLoop; waiting a few seconds before trying again\n";
+	    sleep(3);
 	}
 	else {
 	    open(STDERR, ">&STDOUT");
