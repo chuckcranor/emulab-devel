@@ -1520,7 +1520,6 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	$mobilefiles \
 	apache/GNUmakefile apache/php.ini \
         xmlrpc/GNUmakefile xmlrpc/emulabserver.py \
-	xmlrpc/sshxmlrpc_client.py xmlrpc/sshxmlrpc_server.py \
 	xmlrpc/sslxmlrpc_server.py \
 	xmlrpc/webxmlrpc \
 	xmlrpc/emulab xmlrpc/node xmlrpc/experiment xmlrpc/fs xmlrpc/user \
